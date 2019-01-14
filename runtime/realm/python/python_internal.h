@@ -150,6 +150,12 @@ namespace Realm {
                                CodeDescriptor& codedesc,
                                const ByteArrayRef& user_data);
 
+#ifdef __linux__
+    // temporary interface - returns kernel cpu_set_t on which this processor 
+    //  may execute tasks on whether it has exclusive access to those cores
+    virtual bool get_kernel_cpu_set(cpu_set_t *allowed_cpus, bool& exclusive);
+#endif
+
     //void worker_main(void);
 
     struct TaskRegistration {

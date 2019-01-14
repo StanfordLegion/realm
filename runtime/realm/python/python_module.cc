@@ -929,6 +929,15 @@ namespace Realm {
     }
   }
 
+#ifdef __linux__
+  // temporary interface - returns kernel cpu_set_t on which this processor 
+  //  may execute tasks on whether it has exclusive access to those cores
+  bool LocalPythonProcessor::get_kernel_cpu_set(cpu_set_t *allowed_cpus, bool& exclusive)
+  {
+    return core_rsrv->get_kernel_cpu_set(allowed_cpus, exclusive);
+  }
+#endif
+
   namespace Python {
 
     ////////////////////////////////////////////////////////////////////////
