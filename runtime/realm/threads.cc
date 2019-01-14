@@ -146,6 +146,19 @@ namespace Realm {
     }
   }
 
+#ifdef __linux__
+  // temporary interface - returns kernel cpu_set_t on which this reservation
+  //  may execute tasks on whether it has exclusive access to those cores
+  bool CoreReservation::get_kernel_cpu_set(cpu_set_t *allowed_cpus, bool& exclusive)
+  {
+    if(!allocation) return false;
+    if(!allocation->restrict_cpus) return false;
+
+    exclusive = allocation->exclusive_ownership;
+    memcpy(allowed_cpus, &allocation->allowed_cpus, sizeof(cpu_set_t));
+    return true;
+  }
+#endif
 
   ////////////////////////////////////////////////////////////////////////
   //

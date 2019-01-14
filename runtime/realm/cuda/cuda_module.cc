@@ -1406,6 +1406,15 @@ namespace Realm {
       delete core_rsrv;
     }
 
+#ifdef __linux__
+    // temporary interface - returns kernel cpu_set_t on which this processor 
+    //  may execute tasks on whether it has exclusive access to those cores
+    bool GPUProcessor::get_kernel_cpu_set(cpu_set_t *allowed_cpus, bool& exclusive)
+    {
+      return core_rsrv->get_kernel_cpu_set(allowed_cpus, exclusive);
+    }
+#endif
+
     void GPU::copy_to_fb(off_t dst_offset, const void *src, size_t bytes,
 			 GPUCompletionNotification *notification /*= 0*/)
     {

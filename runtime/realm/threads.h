@@ -29,6 +29,11 @@
 
 #include <stddef.h>
 
+#ifdef __linux__
+// for cpu_set_t
+#include <sched.h>
+#endif
+
 #include <string>
 #include <list>
 #include <set>
@@ -350,6 +355,11 @@ namespace Realm {
     };
 
     void add_listener(NotificationListener *listener);
+
+#ifdef __linux__
+    // temporary interface
+    bool get_kernel_cpu_set(cpu_set_t *allowed_cpus, bool& exclusive);
+#endif
 
   public:
     std::string name;

@@ -63,6 +63,12 @@ namespace Realm {
 				 CodeDescriptor& codedesc,
 				 const ByteArrayRef& user_data);
 
+#ifdef __linux__
+      // temporary interface - returns kernel cpu_set_t on which this processor 
+      //  may execute tasks on whether it has exclusive access to those cores
+      virtual bool get_kernel_cpu_set(cpu_set_t *allowed_cpus, bool& exclusive)  = 0;
+#endif
+
     protected:
       friend class Task;
 
@@ -136,6 +142,13 @@ namespace Realm {
       LocalCPUProcessor(Processor _me, CoreReservationSet& crs,
 			size_t _stack_size, bool _force_kthreads);
       virtual ~LocalCPUProcessor(void);
+
+#ifdef __linux__
+      // temporary interface - returns kernel cpu_set_t on which this processor 
+      //  may execute tasks on whether it has exclusive access to those cores
+      virtual bool get_kernel_cpu_set(cpu_set_t *allowed_cpus, bool& exclusive);
+#endif
+
     protected:
       CoreReservation *core_rsrv;
     };
@@ -146,6 +159,13 @@ namespace Realm {
 			    size_t _stack_size, bool _force_kthreads,
                             bool _pin_util_proc);
       virtual ~LocalUtilityProcessor(void);
+
+#ifdef __linux__
+      // temporary interface - returns kernel cpu_set_t on which this processor 
+      //  may execute tasks on whether it has exclusive access to those cores
+      virtual bool get_kernel_cpu_set(cpu_set_t *allowed_cpus, bool& exclusive);
+#endif
+
     protected:
       CoreReservation *core_rsrv;
     };
@@ -155,6 +175,13 @@ namespace Realm {
       LocalIOProcessor(Processor _me, CoreReservationSet& crs, size_t _stack_size,
 		       int _concurrent_io_threads);
       virtual ~LocalIOProcessor(void);
+
+#ifdef __linux__
+      // temporary interface - returns kernel cpu_set_t on which this processor 
+      //  may execute tasks on whether it has exclusive access to those cores
+      virtual bool get_kernel_cpu_set(cpu_set_t *allowed_cpus, bool& exclusive);
+#endif
+
     protected:
       CoreReservation *core_rsrv;
     };
@@ -173,6 +200,12 @@ namespace Realm {
                               const ProfilingRequestSet &reqs,
 			      Event start_event, Event finish_event,
                               int priority);
+
+#ifdef __linux__
+      // temporary interface - returns kernel cpu_set_t on which this processor 
+      //  may execute tasks on whether it has exclusive access to those cores
+      virtual bool get_kernel_cpu_set(cpu_set_t *allowed_cpus, bool& exclusive);
+#endif
     };
 
     class ProcessorGroup : public ProcessorImpl {
@@ -198,6 +231,12 @@ namespace Realm {
                               const ProfilingRequestSet &reqs,
 			      Event start_event, Event finish_event,
                               int priority);
+
+#ifdef __linux__
+      // temporary interface - returns kernel cpu_set_t on which this processor 
+      //  may execute tasks on whether it has exclusive access to those cores
+      virtual bool get_kernel_cpu_set(cpu_set_t *allowed_cpus, bool& exclusive);
+#endif
 
     public: //protected:
       bool members_valid;

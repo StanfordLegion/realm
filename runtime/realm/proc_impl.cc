@@ -344,6 +344,16 @@ namespace Realm {
       return finish_event;
     }
 
+#ifdef __linux__
+    // temporary interface - returns kernel cpu_set_t on which this processor 
+    //  may execute tasks on whether it has exclusive access to those cores
+    bool Processor::get_kernel_cpu_set(cpu_set_t *allowed_cpus, bool& exclusive)
+    {
+      ProcessorImpl *impl = get_runtime()->get_processor_impl(*this);
+      return impl->get_kernel_cpu_set(allowed_cpus, exclusive);
+    }
+#endif
+
     // reports an execution fault in the currently running task
     /*static*/ void Processor::report_execution_fault(int reason,
 						      const void *reason_data,
@@ -553,6 +563,31 @@ namespace Realm {
 	EventImpl::add_waiter(start_event, new DeferredTaskSpawn(this, task));
     }
 
+#ifdef __linux__
+    // temporary interface - returns kernel cpu_set_t on which this processor 
+    //  may execute tasks on whether it has exclusive access to those cores
+    bool ProcessorGroup::get_kernel_cpu_set(cpu_set_t *allowed_cpus, bool& exclusive)
+    {
+      if(!members_valid)
+	return false;
+
+      CPU_ZERO(allowed_cpus);
+      bool all_excl = true;
+      for(std::vector<ProcessorImpl *>::const_iterator it = members.begin();
+	  it != members.end();
+	  it++) {
+	cpu_set_t cpu_temp;
+	bool excl;
+	if(!(*it)->get_kernel_cpu_set(&cpu_temp, excl))
+	  return false;
+	CPU_OR(allowed_cpus, allowed_cpus, &cpu_temp);
+	if(!excl)
+	  all_excl = false;
+      }
+      exclusive = all_excl;
+      return true;
+    }
+#endif
 
   ////////////////////////////////////////////////////////////////////////
   //
@@ -798,6 +833,14 @@ namespace Realm {
 				     start_event, finish_event, priority);
     }
 
+#ifdef __linux__
+    // temporary interface - returns kernel cpu_set_t on which this processor 
+    //  may execute tasks on whether it has exclusive access to those cores
+    bool RemoteProcessor::get_kernel_cpu_set(cpu_set_t *allowed_cpus, bool& exclusive)
+    {
+      return false;
+    }
+#endif
   
   ////////////////////////////////////////////////////////////////////////
   //
@@ -1013,6 +1056,15 @@ namespace Realm {
     delete core_rsrv;
   }
 
+#ifdef __linux__
+  // temporary interface - returns kernel cpu_set_t on which this processor 
+  //  may execute tasks on whether it has exclusive access to those cores
+  bool LocalCPUProcessor::get_kernel_cpu_set(cpu_set_t *allowed_cpus, bool& exclusive)
+  {
+    return core_rsrv->get_kernel_cpu_set(allowed_cpus, exclusive);
+  }
+#endif
+
 
   ////////////////////////////////////////////////////////////////////////
   //
@@ -1061,6 +1113,15 @@ namespace Realm {
     delete core_rsrv;
   }
 
+#ifdef __linux__
+  // temporary interface - returns kernel cpu_set_t on which this processor 
+  //  may execute tasks on whether it has exclusive access to those cores
+  bool LocalUtilityProcessor::get_kernel_cpu_set(cpu_set_t *allowed_cpus, bool& exclusive)
+  {
+    return core_rsrv->get_kernel_cpu_set(allowed_cpus, exclusive);
+  }
+#endif
+
 
   ////////////////////////////////////////////////////////////////////////
   //
@@ -1094,6 +1155,15 @@ namespace Realm {
   {
     delete core_rsrv;
   }
+
+#ifdef __linux__
+  // temporary interface - returns kernel cpu_set_t on which this processor 
+  //  may execute tasks on whether it has exclusive access to those cores
+  bool LocalIOProcessor::get_kernel_cpu_set(cpu_set_t *allowed_cpus, bool& exclusive)
+  {
+    return core_rsrv->get_kernel_cpu_set(allowed_cpus, exclusive);
+  }
+#endif
 
 
   ////////////////////////////////////////////////////////////////////////

@@ -36,6 +36,13 @@ namespace Realm {
 		       size_t _stack_size, int _num_cores,
 		       bool _force_kthreads);
      virtual ~LocalProcessorSet(void);
+
+#ifdef __linux__
+     // temporary interface - returns kernel cpu_set_t on which this processor 
+     //  may execute tasks on whether it has exclusive access to those cores
+     virtual bool get_kernel_cpu_set(cpu_set_t *allowed_cpus, bool& exclusive);
+#endif
+
    protected:
      CoreReservation *core_rsrv;
    };
@@ -77,6 +84,14 @@ namespace Realm {
      delete core_rsrv;
    }
 
+#ifdef __linux__
+    // temporary interface - returns kernel cpu_set_t on which this processor 
+    //  may execute tasks on whether it has exclusive access to those cores
+    bool LocalProcessorSet::get_kernel_cpu_set(cpu_set_t *allowed_cpus, bool& exclusive)
+    {
+      return core_rsrv->get_kernel_cpu_set(allowed_cpus, exclusive);
+    }
+#endif
 
   namespace ProcSet {
 

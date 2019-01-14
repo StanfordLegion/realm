@@ -49,6 +49,12 @@ namespace Realm {
     virtual void execute_task(Processor::TaskFuncID func_id,
 			      const ByteArrayRef& task_args);
 
+#ifdef __linux__
+    // temporary interface - returns kernel cpu_set_t on which this processor 
+    //  may execute tasks on whether it has exclusive access to those cores
+    virtual bool get_kernel_cpu_set(cpu_set_t *allowed_cpus, bool& exclusive);
+#endif
+
   protected:
     int numa_node;
     int num_threads;
@@ -148,6 +154,28 @@ namespace Realm {
 
     LocalTaskProcessor::execute_task(func_id, task_args);
   }
+
+#ifdef __linux__
+  // temporary interface - returns kernel cpu_set_t on which this processor 
+  //  may execute tasks on whether it has exclusive access to those cores
+  bool LocalOpenMPProcessor::get_kernel_cpu_set(cpu_set_t *allowed_cpus, bool& exclusive)
+  {
+    bool all_excl = true;
+    CPU_ZERO(allowed_cpus);
+    for(std::vector<CoreReservation *>::const_iterator it = core_rsrvs.begin();
+	it != core_rsrvs.end();
+	++it) {
+      cpu_set_t cpu_temp;
+      bool excl;
+      if(!(*it)->get_kernel_cpu_set(&cpu_temp, excl))
+	return false;
+      if(!excl) all_excl = false;
+      CPU_OR(allowed_cpus, allowed_cpus, &cpu_temp);
+    }
+    exclusive = all_excl;
+    return true;
+  }
+#endif
 
 
   namespace OpenMP {
