@@ -4685,7 +4685,7 @@ namespace Legion {
 #endif
         for (int i = 0; runtime->safe_control_replication && (i < 2); i++)
         {
-          InnerContext::HashVerifier hasher(repl_ctx, 
+          ReplicateContext::HashVerifier hasher(repl_ctx, 
               runtime->safe_control_replication > 1, i > 0);
           hasher.hash(
               ReplicateContext::REPLICATE_FUTURE_MAP_GET_ALL_FUTURES, __func__);
@@ -4740,7 +4740,7 @@ namespace Legion {
       context->record_blocking_call(future_coordinate);
       for (int i = 0; runtime->safe_control_replication && (i < 2); i++)
       {
-        InnerContext::HashVerifier hasher(repl_ctx, 
+        ReplicateContext::HashVerifier hasher(repl_ctx, 
             runtime->safe_control_replication > 1, i > 0);
         hasher.hash(
             ReplicateContext::REPLICATE_FUTURE_MAP_WAIT_ALL_FUTURES, __func__);
@@ -13593,6 +13593,7 @@ namespace Legion {
           case SEND_CONTROL_REPLICATION_MASK_EXCHANGE:
           case SEND_CONTROL_REPLICATION_PREDICATE_EXCHANGE:
           case SEND_CONTROL_REPLICATION_CROSS_PRODUCT_EXCHANGE:
+          case SEND_CONTROL_REPLICATION_TRACING_SET_DEDUPLICATION:
           case SEND_CONTROL_REPLICATION_SLOW_BARRIER:
             {
               ShardManager::handle_collective_message(derez, runtime);
@@ -16863,6 +16864,7 @@ namespace Legion {
 #else
         unsafe_mapper(!config.safe_mapper),
 #endif
+        safe_tracing(config.safe_tracing),
         disable_independence_tests(config.disable_independence_tests),
         legion_spy_enabled(config.legion_spy_enabled),
         supply_default_mapper(default_mapper),
@@ -17081,6 +17083,7 @@ namespace Legion {
         resilient_mode(rhs.resilient_mode),
         unsafe_launch(rhs.unsafe_launch),
         unsafe_mapper(rhs.unsafe_mapper),
+        safe_tracing(rhs.safe_tracing),
         disable_independence_tests(rhs.disable_independence_tests),
         legion_spy_enabled(rhs.legion_spy_enabled),
         supply_default_mapper(rhs.supply_default_mapper),
@@ -17181,11 +17184,9 @@ namespace Legion {
       free_available(available_or_pred_ops);
       free_available(available_acquire_ops);
       free_available(available_release_ops);
-      free_available(available_capture_ops);
-      free_available(available_trace_ops);
-      free_available(available_replay_ops);
       free_available(available_begin_ops);
-      free_available(available_summary_ops);
+      free_available(available_recurrent_ops);
+      free_available(available_complete_ops);
       free_available(available_epoch_ops);
       free_available(available_pending_partition_ops);
       free_available(available_dependent_partition_ops);
@@ -17226,11 +17227,9 @@ namespace Legion {
       free_available(available_repl_index_detach_ops);
       free_available(available_repl_acquire_ops);
       free_available(available_repl_release_ops);
-      free_available(available_repl_capture_ops);
-      free_available(available_repl_trace_ops);
-      free_available(available_repl_replay_ops);
       free_available(available_repl_begin_ops);
-      free_available(available_repl_summary_ops);
+      free_available(available_repl_recurrent_ops);
+      free_available(available_repl_complete_ops);
       for (std::map<TaskID,TaskImpl*>::const_iterator it = 
             task_table.begin(); it != task_table.end(); it++)
       {
@@ -27909,27 +27908,6 @@ namespace Legion {
     }
 
     //--------------------------------------------------------------------------
-    TraceCaptureOp* Runtime::get_available_capture_op(void)
-    //--------------------------------------------------------------------------
-    {
-      return get_available(capture_op_lock, available_capture_ops);
-    }
-
-    //--------------------------------------------------------------------------
-    TraceCompleteOp* Runtime::get_available_trace_op(void)
-    //--------------------------------------------------------------------------
-    {
-      return get_available(trace_op_lock, available_trace_ops);
-    }
-
-    //--------------------------------------------------------------------------
-    TraceReplayOp* Runtime::get_available_replay_op(void)
-    //--------------------------------------------------------------------------
-    {
-      return get_available(replay_op_lock, available_replay_ops);
-    }
-
-    //--------------------------------------------------------------------------
     TraceBeginOp* Runtime::get_available_begin_op(void)
     //--------------------------------------------------------------------------
     {
@@ -27937,10 +27915,17 @@ namespace Legion {
     }
 
     //--------------------------------------------------------------------------
-    TraceSummaryOp* Runtime::get_available_summary_op(void)
+    TraceCompleteOp* Runtime::get_available_complete_op(void)
     //--------------------------------------------------------------------------
     {
-      return get_available(summary_op_lock, available_summary_ops);
+      return get_available(complete_op_lock, available_complete_ops);
+    }
+
+    //--------------------------------------------------------------------------
+    TraceRecurrentOp* Runtime::get_available_recurrent_op(void)
+    //--------------------------------------------------------------------------
+    {
+      return get_available(recurrent_op_lock, available_recurrent_ops);
     }
 
     //--------------------------------------------------------------------------
@@ -28299,27 +28284,6 @@ namespace Legion {
     }
 
     //--------------------------------------------------------------------------
-    ReplTraceCaptureOp* Runtime::get_available_repl_capture_op(void)
-    //--------------------------------------------------------------------------
-    {
-      return get_available(capture_op_lock, available_repl_capture_ops);
-    }
-
-    //--------------------------------------------------------------------------
-    ReplTraceCompleteOp* Runtime::get_available_repl_trace_op(void)
-    //--------------------------------------------------------------------------
-    {
-      return get_available(trace_op_lock, available_repl_trace_ops);
-    }
-
-    //--------------------------------------------------------------------------
-    ReplTraceReplayOp* Runtime::get_available_repl_replay_op(void)
-    //--------------------------------------------------------------------------
-    {
-      return get_available(replay_op_lock, available_repl_replay_ops);
-    }
-
-    //--------------------------------------------------------------------------
     ReplTraceBeginOp* Runtime::get_available_repl_begin_op(void)
     //--------------------------------------------------------------------------
     {
@@ -28327,10 +28291,17 @@ namespace Legion {
     }
 
     //--------------------------------------------------------------------------
-    ReplTraceSummaryOp* Runtime::get_available_repl_summary_op(void)
+    ReplTraceCompleteOp* Runtime::get_available_repl_complete_op(void)
     //--------------------------------------------------------------------------
     {
-      return get_available(summary_op_lock, available_repl_summary_ops);
+      return get_available(complete_op_lock, available_repl_complete_ops);
+    }
+
+    //--------------------------------------------------------------------------
+    ReplTraceRecurrentOp* Runtime::get_available_repl_recurrent_op(void)
+    //--------------------------------------------------------------------------
+    {
+      return get_available(recurrent_op_lock, available_repl_recurrent_ops);
     }
 
     //--------------------------------------------------------------------------
@@ -28543,31 +28514,7 @@ namespace Legion {
     {
       AutoLock r_lock(release_op_lock);
       release_operation<false>(available_release_ops, op);
-    }
-
-    //--------------------------------------------------------------------------
-    void Runtime::free_capture_op(TraceCaptureOp *op)
-    //--------------------------------------------------------------------------
-    {
-      AutoLock c_lock(capture_op_lock);
-      release_operation<false>(available_capture_ops, op);
-    }
-
-    //--------------------------------------------------------------------------
-    void Runtime::free_trace_op(TraceCompleteOp *op)
-    //--------------------------------------------------------------------------
-    {
-      AutoLock t_lock(trace_op_lock);
-      release_operation<false>(available_trace_ops, op);
-    }
-
-    //--------------------------------------------------------------------------
-    void Runtime::free_replay_op(TraceReplayOp *op)
-    //--------------------------------------------------------------------------
-    {
-      AutoLock t_lock(replay_op_lock);
-      release_operation<false>(available_replay_ops, op);
-    }
+    } 
 
     //--------------------------------------------------------------------------
     void Runtime::free_begin_op(TraceBeginOp *op)
@@ -28578,11 +28525,19 @@ namespace Legion {
     }
 
     //--------------------------------------------------------------------------
-    void Runtime::free_summary_op(TraceSummaryOp *op)
+    void Runtime::free_complete_op(TraceCompleteOp *op)
     //--------------------------------------------------------------------------
     {
-      AutoLock t_lock(summary_op_lock);
-      release_operation<false>(available_summary_ops, op);
+      AutoLock t_lock(complete_op_lock);
+      release_operation<false>(available_complete_ops, op);
+    }
+
+    //--------------------------------------------------------------------------
+    void Runtime::free_recurrent_op(TraceRecurrentOp *op)
+    //--------------------------------------------------------------------------
+    {
+      AutoLock t_lock(recurrent_op_lock);
+      release_operation<false>(available_recurrent_ops, op);
     }
 
     //--------------------------------------------------------------------------
@@ -28914,30 +28869,6 @@ namespace Legion {
     }
 
     //--------------------------------------------------------------------------
-    void Runtime::free_repl_capture_op(ReplTraceCaptureOp *op)
-    //--------------------------------------------------------------------------
-    {
-      AutoLock c_lock(capture_op_lock);
-      release_operation<false>(available_repl_capture_ops, op);
-    }
-
-    //--------------------------------------------------------------------------
-    void Runtime::free_repl_trace_op(ReplTraceCompleteOp *op)
-    //--------------------------------------------------------------------------
-    {
-      AutoLock t_lock(trace_op_lock);
-      release_operation<false>(available_repl_trace_ops, op);
-    }
-
-    //--------------------------------------------------------------------------
-    void Runtime::free_repl_replay_op(ReplTraceReplayOp *op)
-    //--------------------------------------------------------------------------
-    {
-      AutoLock t_lock(replay_op_lock);
-      release_operation<false>(available_repl_replay_ops, op);
-    } 
-
-    //--------------------------------------------------------------------------
     void Runtime::free_repl_begin_op(ReplTraceBeginOp *op)
     //--------------------------------------------------------------------------
     {
@@ -28946,11 +28877,19 @@ namespace Legion {
     }
 
     //--------------------------------------------------------------------------
-    void Runtime::free_repl_summary_op(ReplTraceSummaryOp *op)
+    void Runtime::free_repl_complete_op(ReplTraceCompleteOp *op)
     //--------------------------------------------------------------------------
     {
-      AutoLock t_lock(summary_op_lock);
-      release_operation<false>(available_repl_summary_ops, op);
+      AutoLock t_lock(complete_op_lock);
+      release_operation<false>(available_repl_complete_ops, op);
+    }
+
+    //--------------------------------------------------------------------------
+    void Runtime::free_repl_recurrent_op(ReplTraceRecurrentOp *op)
+    //--------------------------------------------------------------------------
+    {
+      AutoLock t_lock(recurrent_op_lock);
+      release_operation<false>(available_repl_recurrent_ops, op);
     }
 
     //--------------------------------------------------------------------------
@@ -29550,16 +29489,12 @@ namespace Legion {
           return "Acquire Op";
         case RELEASE_OP_ALLOC:
           return "Release Op";
-        case TRACE_CAPTURE_OP_ALLOC:
-          return "Trace Capture Op";
-        case TRACE_COMPLETE_OP_ALLOC:
-          return "Trace Complete Op";
-        case TRACE_REPLAY_OP_ALLOC:
-          return "Trace Replay";
         case TRACE_BEGIN_OP_ALLOC:
           return "Trace Begin";
-        case TRACE_SUMMARY_OP_ALLOC:
-          return "Trace Summary";
+        case TRACE_RECURRENT_OP_ALLOC:
+          return "Trace Recurrent";
+        case TRACE_COMPLETE_OP_ALLOC:
+          return "Trace Complete Op";
         case MUST_EPOCH_OP_ALLOC:
           return "Must Epoch Op";
         case PENDING_PARTITION_OP_ALLOC:
@@ -30401,6 +30336,7 @@ namespace Legion {
         .add_option_bool("-lg:unsafe_launch",config.unsafe_launch,!filter)
         .add_option_bool("-lg:unsafe_mapper",config.unsafe_mapper,!filter)
         .add_option_bool("-lg:safe_mapper",config.safe_mapper,!filter)
+        .add_option_bool("-lg:safe_tracing", config.safe_tracing, !filter)
         .add_option_int("-lg:safe_ctrlrepl",
                          config.safe_control_replication, !filter)
         .add_option_bool("-lg:inorder",config.program_order_execution,!filter)
@@ -32718,16 +32654,6 @@ namespace Legion {
             break;
           }
 #endif
-        case LG_DEFER_TRACE_PRECONDITION_TASK_ID:
-          {
-            TraceConditionSet::handle_precondition_test(args);
-            break;
-          }
-        case LG_DEFER_TRACE_POSTCONDITION_TASK_ID:
-          {
-            TraceConditionSet::handle_postcondition_test(args);
-            break;
-          }
         case LG_DEFER_TRACE_UPDATE_TASK_ID:
           {
             ShardedPhysicalTemplate::handle_deferred_trace_update(args,runtime);
