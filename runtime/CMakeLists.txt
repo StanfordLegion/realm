@@ -920,15 +920,17 @@ if(Legion_USE_CUDA)
     find_package(libcudacxx CONFIG)
     if(libcudacxx_FOUND)
       if(${LIBCUDACXX_VERSION} VERSION_LESS "1.4.0")
-        message(FATAL_ERROR "libcudacxx too old; need 1.4.0 for cuda::std::complex")
+        # Support for cuda::std::complex was introduced in libcudacxx 1.4.0
+        message(FATAL_ERROR "Legion_REDOP_COMPLEX requires libcudacxx >= 1.4.0 (found ${LIBCUDACXX_VERSION})")
       endif()
       target_link_libraries(LegionRuntime PUBLIC libcudacxx::libcudacxx)
     else()
       # If we can't find a standalone libcudacxx then don't do anything and just
       # let the build pick up the version that comes bundled with CUDA. But make
-      # sure CUDA is recent enough to include support for cuda::std::complex.
+      # sure CUDA is recent enough to include a libcudacxx with support for
+      # cuda::std::complex.
       if(${CUDAToolkit_VERSION} VERSION_LESS "11.3")
-        message(FATAL_ERROR "CUDA Toolkit too old; need 11.3 or libcudacxx 1.4.0 for cuda::std::complex")
+        message(FATAL_ERROR "Legion_REDOP_COMPLEX requires CUDA >= 11.3 (found ${CUDAToolkit_VERSION}) or libcudacxx >= 1.4.0")
       endif()
     endif()
     # complex reduction ops bring in a public dependency on cuda headers
