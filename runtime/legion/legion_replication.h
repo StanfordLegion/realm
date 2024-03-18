@@ -2073,7 +2073,7 @@ namespace Legion {
       virtual void deactivate(bool free = true);
     public:
       void set_repl_close_info(RtBarrier mapped_barrier);
-      virtual void trigger_mapping(void); 
+      virtual void trigger_ready(void);
     protected:
       RtBarrier mapped_barrier;
     };
@@ -3212,7 +3212,11 @@ namespace Legion {
       virtual void trigger_ready(void);
       virtual void trigger_mapping(void);
     protected:
+      void perform_template_creation_barrier(void);
+    protected:
       LogicalTrace *previous;
+      SlowBarrier *slow_barrier;
+      CollectiveID slow_barrier_id;
       bool has_blocking_call;
       bool has_intermediate_fence;
       bool remove_trace_reference;
@@ -3449,6 +3453,8 @@ namespace Legion {
       void send_trace_event_response(ShardedPhysicalTemplate *physical_template,
                           AddressSpaceID template_source, ApEvent event,
                           ApBarrier result, RtUserEvent done_event);
+      RtEvent send_trace_event_trigger(TraceID trace_id, AddressSpaceID target,
+          ApUserEvent lhs, ApEvent rhs, const TraceLocalID &tlid);
       void send_trace_frontier_request(
                           ShardedPhysicalTemplate *physical_template,
                           ShardID shard_source, AddressSpaceID template_source, 
@@ -3491,6 +3497,7 @@ namespace Legion {
       static void handle_trace_event_request(Deserializer &derez, Runtime *rt,
                                              AddressSpaceID request_source);
       static void handle_trace_event_response(Deserializer &derez);
+      static void handle_trace_event_trigger(Deserializer &derez, Runtime *rt);
       static void handle_trace_frontier_request(Deserializer &derez,Runtime *rt,
                                                 AddressSpaceID request_source);
       static void handle_trace_frontier_response(Deserializer &derez);

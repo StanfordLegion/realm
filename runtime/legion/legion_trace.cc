@@ -7005,15 +7005,12 @@ namespace Legion {
     }
 
     //--------------------------------------------------------------------------
-    void PhysicalTemplate::pack_recorder(Serializer &rez,
-                                         std::set<RtEvent> &applied_events)
+    void PhysicalTemplate::pack_recorder(Serializer &rez)
     //--------------------------------------------------------------------------
     {
       rez.serialize(trace->runtime->address_space);
       rez.serialize(this);
-      RtUserEvent remote_applied = Runtime::create_rt_user_event();
-      rez.serialize(remote_applied);
-      applied_events.insert(remote_applied);
+      rez.serialize<DistributedID>(0); // no coll
     }
 
     //--------------------------------------------------------------------------
@@ -7358,20 +7355,19 @@ namespace Legion {
     }
 
     //--------------------------------------------------------------------------
-    ShardID PhysicalTemplate::record_managed_barrier(ApBarrier bar,
-                                                     size_t total_arrivals)
+    ShardID PhysicalTemplate::record_barrier_creation(ApBarrier &bar,
+                                                      size_t total_arrivals)
     //--------------------------------------------------------------------------
     {
+#ifdef DEBUG_LEGION
+      assert(!bar.exists());
+#endif
+      bar = ApBarrier(Realm::Barrier::create_barrier(total_arrivals));
       AutoLock tpl_lock(template_lock);
 #ifdef DEBUG_LEGION
-      assert(bar.exists());
       assert(is_recording());
-      assert(event_map.find(bar) == event_map.end());
-      assert(managed_barriers.find(bar) == managed_barriers.end());
-      const unsigned lhs = convert_event(bar, false/*check*/);
-#else
-      const unsigned lhs = convert_event(bar);
 #endif
+      const unsigned lhs = convert_event(bar);
       BarrierAdvance *advance =
         new BarrierAdvance(*this, bar, lhs, total_arrivals, true/*owner*/);
       insert_instruction(advance);
@@ -8161,6 +8157,49 @@ namespace Legion {
     } 
 
     //--------------------------------------------------------------------------
+    void ShardedPhysicalTemplate::record_trigger_event(ApUserEvent lhs,
+                                          ApEvent rhs, const TraceLocalID &tlid)
+    //--------------------------------------------------------------------------
+    {
+#ifdef DEBUG_LEGION
+      assert(lhs.exists());
+#endif
+      const AddressSpaceID event_space = find_event_space(lhs);
+      if ((event_space == trace->runtime->address_space) &&
+          record_shard_event_trigger(lhs, rhs, tlid))
+        return;
+      RtEvent done = repl_ctx->shard_manager->send_trace_event_trigger(
+          trace->logical_trace->tid, event_space, lhs, rhs, tlid);
+      if (done.exists())
+        done.wait();
+    }
+
+    //--------------------------------------------------------------------------
+    bool ShardedPhysicalTemplate::record_shard_event_trigger(ApUserEvent lhs,
+        ApEvent rhs, const TraceLocalID &tlid)
+    //--------------------------------------------------------------------------
+    {
+#ifdef DEBUG_LEGION
+      assert(lhs.exists());
+#endif
+      AutoLock tpl_lock(template_lock);
+#ifdef DEBUG_LEGION
+      assert(is_recording());
+#endif
+      std::map<ApEvent,unsigned>::const_iterator finder = event_map.find(lhs);
+      if (finder == event_map.end())
+        return false;
+#ifdef DEBUG_LEGION
+      assert(finder->second != NO_INDEX);
+#endif
+      const unsigned rhs_ =
+        rhs.exists() ? find_event(rhs, tpl_lock) : fence_completion_id;
+      events.push_back(ApEvent());
+      insert_instruction(new TriggerEvent(*this, finder->second, rhs_, tlid));
+      return true;
+    }
+
+    //--------------------------------------------------------------------------
     void ShardedPhysicalTemplate::record_merge_events(ApEvent &lhs,
                          const std::set<ApEvent> &rhs, const TraceLocalID &tlid)
     //--------------------------------------------------------------------------
@@ -8446,11 +8485,11 @@ namespace Legion {
     }
 
     //--------------------------------------------------------------------------
-    ShardID ShardedPhysicalTemplate::record_managed_barrier(ApBarrier bar,
+    ShardID ShardedPhysicalTemplate::record_barrier_creation(ApBarrier &bar,
                                                           size_t total_arrivals)
     //--------------------------------------------------------------------------
     {
-      PhysicalTemplate::record_managed_barrier(bar, total_arrivals);
+      PhysicalTemplate::record_barrier_creation(bar, total_arrivals);
       return local_shard;
     }
 
@@ -9187,6 +9226,16 @@ namespace Legion {
       }
     }
 #endif
+
+    //--------------------------------------------------------------------------
+    void ShardedPhysicalTemplate::pack_recorder(Serializer &rez)
+    //--------------------------------------------------------------------------
+    {
+      rez.serialize(trace->runtime->address_space);
+      rez.serialize(this);
+      rez.serialize(repl_ctx->shard_manager->did);
+      rez.serialize(trace->logical_trace->tid);
+    }
 
     //--------------------------------------------------------------------------
     void ShardedPhysicalTemplate::initialize_replay(ApEvent completion,

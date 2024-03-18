@@ -206,8 +206,7 @@ namespace Legion {
       virtual bool is_recording(void) const = 0;
       virtual void add_recorder_reference(void) = 0;
       virtual bool remove_recorder_reference(void) = 0;
-      virtual void pack_recorder(Serializer &rez, 
-                                 std::set<RtEvent> &applied) = 0; 
+      virtual void pack_recorder(Serializer &rez) = 0;
     public:
       virtual void record_completion_event(ApEvent lhs,
                              unsigned op_kind, const TraceLocalID &tlid) = 0;
@@ -240,8 +239,8 @@ namespace Legion {
                  const std::pair<size_t,size_t> &key, size_t arrival_count) = 0;
       // This collective barrier is managed by the template and will be
       // refreshed as necessary when barrier generations are exhausted
-      virtual ShardID record_managed_barrier(ApBarrier bar,
-                                             size_t total_arrivals) = 0;
+      virtual ShardID record_barrier_creation(ApBarrier &bar,
+                                              size_t total_arrivals) = 0;
       virtual void record_barrier_arrival(ApBarrier bar, ApEvent pre,
                     size_t arrival_count, std::set<RtEvent> &applied,
                     ShardID owner_shard) = 0;
@@ -355,9 +354,10 @@ namespace Legion {
         REMOTE_TRACE_BARRIER_ARRIVAL,
       };
     public:
-      RemoteTraceRecorder(Runtime *rt, AddressSpaceID origin,AddressSpace local,
+      RemoteTraceRecorder(Runtime *rt, AddressSpaceID origin,
                           const TraceLocalID &tlid, PhysicalTemplate *tpl, 
-                          RtUserEvent applied_event);
+                          DistributedID repl_did, TraceID tid,
+                          std::set<RtEvent> &applied_events);
       RemoteTraceRecorder(const RemoteTraceRecorder &rhs) = delete;
       virtual ~RemoteTraceRecorder(void);
     public:
@@ -366,8 +366,7 @@ namespace Legion {
       virtual bool is_recording(void) const { return true; }
       virtual void add_recorder_reference(void);
       virtual bool remove_recorder_reference(void);
-      virtual void pack_recorder(Serializer &rez, 
-                                 std::set<RtEvent> &applied);
+      virtual void pack_recorder(Serializer &rez); 
     public:
       virtual void record_completion_event(ApEvent lhs, unsigned op_kind,
                                            const TraceLocalID &tlid);
@@ -396,8 +395,8 @@ namespace Legion {
                                        const TraceLocalID &tlid);
       virtual void record_collective_barrier(ApBarrier bar, ApEvent pre,
                     const std::pair<size_t,size_t> &key, size_t arrival_count);
-      virtual ShardID record_managed_barrier(ApBarrier bar,
-                                             size_t total_arrivals);
+      virtual ShardID record_barrier_creation(ApBarrier &bar,
+                                              size_t total_arrivals);
       virtual void record_barrier_arrival(ApBarrier bar, ApEvent pre,
                     size_t arrival_count, std::set<RtEvent> &applied,
                     ShardID owner_shard);
@@ -480,8 +479,9 @@ namespace Legion {
       virtual void record_future_allreduce(const TraceLocalID &tlid,
           const std::vector<Memory> &target_memories, size_t future_size);
     public:
-      static RemoteTraceRecorder* unpack_remote_recorder(Deserializer &derez,
-                                    Runtime *runtime, const TraceLocalID &tlid);
+      static PhysicalTraceRecorder* unpack_remote_recorder(Deserializer &derez,
+                                    Runtime *runtime, const TraceLocalID &tlid,
+                                    std::set<RtEvent> &applied_events);
       static void handle_remote_update(Deserializer &derez, 
                   Runtime *runtime, AddressSpaceID source);
       static void handle_remote_response(Deserializer &derez);
@@ -491,12 +491,12 @@ namespace Legion {
     public:
       Runtime *const runtime;
       const AddressSpaceID origin_space;
-      const AddressSpaceID local_space;
       PhysicalTemplate *const remote_tpl;
-      const RtUserEvent applied_event;
+      const DistributedID repl_did;
+      const TraceID trace_id;
     protected:
       mutable LocalLock applied_lock;
-      std::set<RtEvent> applied_events;
+      std::set<RtEvent> &applied_events;
     };
 
     /**
@@ -570,11 +570,11 @@ namespace Legion {
           base_sanity_check();
           rec->record_collective_barrier(bar, pre, key, arrival_count);
         }
-      inline ShardID record_managed_barrier(ApBarrier bar, 
-                                            size_t total_arrivals) const
+      inline ShardID record_barrier_creation(ApBarrier &bar,
+                                             size_t total_arrivals) const
         {
           base_sanity_check();
-          return rec->record_managed_barrier(bar, total_arrivals);
+          return rec->record_barrier_creation(bar, total_arrivals);
         }
       inline void record_barrier_arrival(ApBarrier bar, ApEvent pre,
           size_t arrival_count, std::set<RtEvent> &applied, ShardID owner) const
@@ -765,9 +765,9 @@ namespace Legion {
                           RegionNode *node, Operation *op,
                           std::set<RtEvent> &applied) const;
     public:
-      void pack_trace_info(Serializer &rez, std::set<RtEvent> &applied) const;
+      void pack_trace_info(Serializer &rez) const;
       static PhysicalTraceInfo unpack_trace_info(Deserializer &derez,
-                                                 Runtime *runtime);
+          Runtime *runtime, std::set<RtEvent> &applied_events);
     private:
       inline void sanity_check(void) const
         {
@@ -2296,7 +2296,8 @@ namespace Legion {
     public:
       RemoteCollectiveAnalysis(size_t ctx_index, unsigned req_index,
                                IndexSpaceID match_space, RemoteOp *op,
-                               Deserializer &derez, Runtime *runtime);
+                               Deserializer &derez, Runtime *runtime,
+                               std::set<RtEvent> &applied_events);
       virtual ~RemoteCollectiveAnalysis(void);
       virtual size_t get_context_index(void) const { return context_index; }
       virtual unsigned get_requirement_index(void) const
@@ -2309,7 +2310,7 @@ namespace Legion {
       virtual bool remove_analysis_reference(void) 
         { return remove_reference(); }
       static RemoteCollectiveAnalysis* unpack(Deserializer &derez,
-                                              Runtime *runtime);
+          Runtime *runtime, std::set<RtEvent> &applied_events);
     public:
       const size_t context_index;
       const unsigned requirement_index;
@@ -3410,7 +3411,7 @@ namespace Legion {
                                 std::set<RtEvent> &applied_events,
                                 const bool already_deferred = false);
       void update_set(UpdateAnalysis &analysis, IndexSpaceExpression *expr,
-                      const bool expr_covers, FieldMask user_mask,
+                      const bool expr_covers, const FieldMask &user_mask,
                       std::set<RtEvent> &deferral_events,
                       std::set<RtEvent> &applied_events,
                       const bool already_deferred = false);

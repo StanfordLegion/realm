@@ -915,6 +915,7 @@ namespace Legion {
       SEND_REPL_CREATED_REGIONS,
       SEND_REPL_TRACE_EVENT_REQUEST,
       SEND_REPL_TRACE_EVENT_RESPONSE,
+      SEND_REPL_TRACE_EVENT_TRIGGER,
       SEND_REPL_TRACE_FRONTIER_REQUEST,
       SEND_REPL_TRACE_FRONTIER_RESPONSE,
       SEND_REPL_TRACE_UPDATE,
@@ -1240,6 +1241,7 @@ namespace Legion {
         "Send Replicate Created Regions Return",                      \
         "Send Replicate Trace Event Request",                         \
         "Send Replicate Trace Event Response",                        \
+        "Send Replicate Trace Event Trigger",                         \
         "Send Replicate Trace Frontier Request",                      \
         "Send Replicate Trace Frontier Response",                     \
         "Send Replicate Trace Update",                                \
@@ -1988,7 +1990,7 @@ namespace Legion {
       COLLECTIVE_LOC_92 = 92,
       COLLECTIVE_LOC_93 = 93,
       COLLECTIVE_LOC_94 = 94,
-      //COLLECTIVE_LOC_95 = 95,
+      COLLECTIVE_LOC_95 = 95,
       COLLECTIVE_LOC_96 = 96,
       COLLECTIVE_LOC_97 = 97,
       COLLECTIVE_LOC_98 = 98,

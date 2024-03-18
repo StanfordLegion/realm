@@ -3382,6 +3382,8 @@ namespace Legion {
                                                       Serializer &rez);
       void send_control_replicate_trace_event_response(AddressSpaceID target,
                                                        Serializer &rez);
+      void send_control_replicate_trace_event_trigger(AddressSpaceID target,
+                                                      Serializer &rez);
       void send_control_replicate_trace_frontier_request(AddressSpaceID target,
                                                       Serializer &rez);
       void send_control_replicate_trace_frontier_response(AddressSpaceID target,
@@ -3903,6 +3905,7 @@ namespace Legion {
       void handle_control_replicate_trace_event_request(Deserializer &derez,
                                                         AddressSpaceID source);
       void handle_control_replicate_trace_event_response(Deserializer &derez);
+      void handle_control_replicate_trace_event_trigger(Deserializer &derez);
       void handle_control_replicate_trace_frontier_request(Deserializer &derez,
                                                         AddressSpaceID source);
       void handle_control_replicate_trace_frontier_response(
@@ -6101,6 +6104,8 @@ namespace Legion {
         case SEND_REPL_TRACE_EVENT_REQUEST:
           break;
         case SEND_REPL_TRACE_EVENT_RESPONSE:
+          break;
+        case SEND_REPL_TRACE_EVENT_TRIGGER:
           break;
         case SEND_REPL_TRACE_FRONTIER_REQUEST:
           break;
