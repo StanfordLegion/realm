@@ -4728,8 +4728,12 @@ namespace Legion {
       op->end_replayable_exchange(replayable);
       if (is_replayable())
       {
+        // The user can't ask for both no transitive reduction and inlining
+        // of the transitive reduction.
+        assert(!(trace->runtime->no_transitive_reduction &&
+               trace->runtime->inline_transitive_reduction));
         // Optimize will sync the idempotency computation
-        optimize(op, false/*do transitive reduction inline*/);
+        optimize(op, trace->runtime->inline_transitive_reduction);
         std::fill(events.begin(), events.end(), ApEvent::NO_AP_EVENT);
         event_map.clear();
         // Defer performing the transitive reduction because it might
@@ -4738,7 +4742,8 @@ namespace Legion {
         // optimizations are done so that they don't race on mutating
         // the instruction and event data structures
         if (!trace->runtime->no_trace_optimization &&
-            !trace->runtime->no_transitive_reduction)
+            !trace->runtime->no_transitive_reduction &&
+            !trace->runtime->inline_transitive_reduction)
         {
           TransitiveReductionState *state = 
             new TransitiveReductionState(Runtime::create_rt_user_event());
