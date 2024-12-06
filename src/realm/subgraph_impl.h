@@ -26,6 +26,9 @@
 
 namespace Realm {
 
+  // Forward declarations.
+  class LocalTaskProcessor;
+
   struct SubgraphScheduleEntry {
     SubgraphDefinition::OpKind op_kind;
     unsigned op_index;
@@ -97,7 +100,7 @@ namespace Realm {
     // TODO 9(rohany): Comment ...
     std::vector<int32_t> original_preconditions;
     std::vector<Processor> all_procs;
-
+    std::vector<LocalTaskProcessor*> all_proc_impls;
   };
 
   struct ProcSubgraphReplayState {

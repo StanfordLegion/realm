@@ -23,8 +23,6 @@
 #include "realm/proc_impl.h"
 #include "realm/subgraph_impl.h"
 
-#include <stdatomic.h>
-
 #if defined(REALM_USE_CACHING_ALLOCATOR)
 #include "realm/caching_allocator.h"
 #endif
@@ -1157,7 +1155,7 @@ namespace Realm {
       // TODO (rohany): Handle profiling responses etc later. This stuff
       //  is handled in the Task::execute_on_processor function.
       {
-        auto pimpl = get_runtime()->get_processor_impl(subgraph->all_procs[proc_index].id);
+        auto pimpl = subgraph->all_proc_impls[proc_index];
         pimpl->execute_task(taskDesc.task_id, ByteArrayRef(taskDesc.args.base(), taskDesc.args.size()));
       }
 
@@ -1180,13 +1178,8 @@ namespace Realm {
         // isn't us).
         int32_t remaining = trigger.fetch_sub(1) - 1;
         if (remaining == 0 && info.proc != proc_index) {
-          // TODO (rohany): We can hoist this to avoid the lookup
-          //  repeatedly if it's too expensive.
-          auto pimpl = get_runtime()->get_processor_impl(subgraph->all_procs[info.proc]);
           // std::cout << "About to wake up proc: " << info.proc << std::endl;
-          // We should be a LocalTaskProcessor?
-          auto lp = dynamic_cast<LocalTaskProcessor*>(pimpl);
-          assert(lp);
+          auto lp = subgraph->all_proc_impls[info.proc];
           lp->sched->work_counter.increment_counter();
         }
       }

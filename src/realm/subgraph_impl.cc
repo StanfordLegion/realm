@@ -640,6 +640,10 @@ namespace Realm {
           if (proc_to_index.find(task.proc) == proc_to_index.end()) {
             proc_to_index[task.proc] = int32_t(proc_to_index.size());
             all_procs.push_back(task.proc);
+            auto pimpl = get_runtime()->get_processor_impl(task.proc);
+            auto lp = dynamic_cast<LocalTaskProcessor*>(pimpl);
+            assert(lp);
+            all_proc_impls.push_back(lp);
           }
           break;
         }
@@ -814,7 +818,7 @@ namespace Realm {
       // Install the subgraph for each processor.
       for (size_t i = 0; i < all_procs.size(); i++) {
         Processor proc = all_procs[i];
-        ProcessorImpl* impl = get_runtime()->get_processor_impl(proc.id);
+        ProcessorImpl* impl = all_proc_impls[i];
         auto state = new ProcSubgraphReplayState();
         state->next_task_index = 0;
         state->subgraph = this;
