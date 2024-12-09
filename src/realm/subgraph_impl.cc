@@ -728,7 +728,7 @@ namespace Realm {
       auto key = std::make_pair(it.op_kind, it.op_index);
       for (auto& edge : incoming_edges[key]) {
         if (edge.first == SubgraphDefinition::OPKIND_EXT_PRECOND) {
-          CompletionInfo info(operation_procs[edge], operation_indices[edge]);
+          CompletionInfo info(operation_procs[key], operation_indices[key]);
           external_preconditions[edge.second].push_back(info);
           max_ext_precond_id = std::max(max_ext_precond_id, edge.second);
         }
@@ -860,9 +860,7 @@ namespace Realm {
                                  span<const Event> postconditions, Event start_event,
                                  Event finish_event, int priority_adjust)
   {
-
-    // TODO (rohany): Make this controllable via a command line parameter.
-    if (true) {
+    if (std::getenv("STATIC_SUBGRAPH_OPT")) {
       assert(!start_event.exists());
       // TODO (rohany): Handle preconditions.
 
