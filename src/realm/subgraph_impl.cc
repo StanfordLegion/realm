@@ -900,7 +900,7 @@ namespace Realm {
         state[i].proc_index = int32_t(i);
         state[i].args = copied_args;
         state[i].arglen = arglen;
-        event_impl->merger.add_precondition(state->finish_event);
+        event_impl->merger.add_precondition(state[i].finish_event);
       }
       event_impl->merger.arm_merger();
 
