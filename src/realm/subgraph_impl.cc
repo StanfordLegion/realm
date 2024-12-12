@@ -21,6 +21,8 @@
 #include "realm/runtime_impl.h"
 #include "realm/proc_impl.h"
 
+#include <unordered_set>
+
 namespace Realm {
 
   Logger log_subgraph("subgraph");
@@ -904,18 +906,9 @@ namespace Realm {
       }
       event_impl->merger.arm_merger();
 
-      // If there's nothing to defer, start the subgraph right away.
-      if (!start_event.exists() || start_event.has_triggered()) {
-        SubgraphWorkLauncher(state, this).launch();
-      } else {
-        // Otherwise, allocate a launcher and queue
-        // it up to be launched. The launcher will
-        // clean itself up.
-        auto launcher = new SubgraphWorkLauncher(state, this);
-        EventImpl::add_waiter(start_event, launcher);
-      }
-
-      std::set<Event> trigger_preconditions;
+      // Maintain a llvm::setvector<> of events to merge.
+      std::unordered_set<int32_t> trigger_procs;
+      std::vector<Event> trigger_preconditions;
       // Start event waiters to trigger the external preconditions.
       for (size_t i = 0; i < external_precond_waiters.size(); i++) {
         // Note that the user may not provide all the preconditions
@@ -935,13 +928,30 @@ namespace Realm {
         // in the merge.
         assert(!start_events.empty());
         // Collect the necessary processors to trigger.
-        trigger_preconditions.clear();
-        trigger_preconditions.insert(precond);
+        trigger_procs.clear();
         for (auto& info : waiter->to_trigger) {
-          trigger_preconditions.insert(start_events[info.proc]);
+          trigger_procs.insert(info.proc);
         }
+        trigger_preconditions.resize(trigger_procs.size() + 1);
+        size_t idx = 0;
+        for (auto proc : trigger_procs) {
+          trigger_preconditions[idx] = start_events[proc];
+          idx++;
+        }
+        trigger_preconditions[idx] = precond;
         Event wait = Event::merge_events(trigger_preconditions);
         EventImpl::add_waiter(wait, waiter);
+      }
+
+      // If there's nothing to defer, start the subgraph right away.
+      if (!start_event.exists() || start_event.has_triggered()) {
+        SubgraphWorkLauncher(state, this).launch();
+      } else {
+        // Otherwise, allocate a launcher and queue
+        // it up to be launched. The launcher will
+        // clean itself up.
+        auto launcher = new SubgraphWorkLauncher(state, this);
+        EventImpl::add_waiter(start_event, launcher);
       }
 
       // Issue a cleanup background work item. The item
