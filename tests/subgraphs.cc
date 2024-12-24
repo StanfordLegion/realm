@@ -355,10 +355,8 @@ RegionInstance::create_instance(dst_inst2, sysmems[0],
 
 
     // Add the necessary dependencies.
-    // sd.dependencies.resize(4);
-    sd.dependencies.resize(10);
-    // TODO (rohany): Not considering external pre/postconditions etc.
-    // Add the incoming and outgoing dependencies.
+    sd.dependencies.resize(13);
+
     sd.dependencies[0].src_op_kind = SubgraphDefinition::OPKIND_TASK;
     sd.dependencies[0].src_op_index = 0;
     sd.dependencies[0].tgt_op_kind = SubgraphDefinition::OPKIND_TASK;
@@ -414,8 +412,20 @@ RegionInstance::create_instance(dst_inst2, sysmems[0],
     sd.dependencies[9].tgt_op_kind = SubgraphDefinition::OPKIND_TASK;
     sd.dependencies[9].tgt_op_index = 1;
 
+    sd.dependencies[10].src_op_kind = SubgraphDefinition::OPKIND_TASK;
+    sd.dependencies[10].src_op_index = 2;
+    sd.dependencies[10].tgt_op_kind = SubgraphDefinition::OPKIND_EXT_POSTCOND;
+    sd.dependencies[10].tgt_op_index = 0;
 
-    // TODO (rohany): Let's just first add a copy and see if nothing explodes.
+    sd.dependencies[11].src_op_kind = SubgraphDefinition::OPKIND_COPY;
+    sd.dependencies[11].src_op_index = 0;
+    sd.dependencies[11].tgt_op_kind = SubgraphDefinition::OPKIND_EXT_POSTCOND;
+    sd.dependencies[11].tgt_op_index = 1;
+
+    sd.dependencies[12].src_op_kind = SubgraphDefinition::OPKIND_TASK;
+    sd.dependencies[12].src_op_index = 3;
+    sd.dependencies[12].tgt_op_kind = SubgraphDefinition::OPKIND_EXT_POSTCOND;
+    sd.dependencies[12].tgt_op_index = 1;
 
     Subgraph::create_subgraph(diamond, sd, ProfilingRequestSet()).wait();
   }
@@ -433,7 +443,8 @@ RegionInstance::create_instance(dst_inst2, sysmems[0],
   // e = diamond.instantiate(ser.get_buffer(), ser.bytes_used(), ProfilingRequestSet(), e);
   std::vector<Event> ext_preconds;
   ext_preconds.push_back(bar);
-  std::vector<Event> ext_postconds;
+  std::vector<Event> ext_postconds(2);
+  // First run will trigger the external post conds.
   e = diamond.instantiate(ser.get_buffer(), ser.bytes_used(), ProfilingRequestSet(), ext_preconds, ext_postconds);
 //  std::cout << "Starting second instantiation." << std::endl;
   ser.reset();
@@ -471,7 +482,8 @@ RegionInstance::create_instance(dst_inst2, sysmems[0],
 
   ext_preconds.clear();
   ext_preconds.push_back(next_bar);
-  e = diamond.instantiate(ser.get_buffer(), ser.bytes_used(), ProfilingRequestSet(), ext_preconds, ext_postconds, e);
+  std::vector<Event> ext_postconds_2(2);
+  e = diamond.instantiate(ser.get_buffer(), ser.bytes_used(), ProfilingRequestSet(), ext_preconds, ext_postconds_2, e);
   std::cout << "Starting third instantiation." << std::endl;
 //  interp = 3;
 //  e = diamond.instantiate(&interp, sizeof(interp), ProfilingRequestSet(), e);
@@ -484,6 +496,11 @@ RegionInstance::create_instance(dst_inst2, sysmems[0],
 
   e.wait();
   std::cout << "Done!" << std::endl;
+
+  for (auto& e : ext_postconds)
+    assert(e.exists() && e.has_triggered());
+  for (auto& e : ext_postconds_2)
+    assert(e.exists() && e.has_triggered());
 
   // See if the subgraph did the copy.
   {

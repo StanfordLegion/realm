@@ -736,7 +736,6 @@ namespace Realm {
     if (opt) {
       std::vector<SubgraphDefinition::OpKind> disallowed_edges;
       disallowed_edges.push_back(SubgraphDefinition::OPKIND_INSTANTIATION);
-      disallowed_edges.push_back(SubgraphDefinition::OPKIND_EXT_POSTCOND);
       for (auto& it : incoming_edges) {
         // For now, tasks should only depend on allowed operations.
         for (auto& edge : it.second) {
@@ -845,9 +844,10 @@ namespace Realm {
 
       std::vector<CompletionInfo> outgoing;
       for (auto& edge : outgoing_edges[key]) {
-        if (edge.first == SubgraphDefinition::OPKIND_EXT_POSTCOND) {
-          assert(false);
-        } else if (toposort.find(edge) != toposort.end()) {
+        if (toposort.find(edge) != toposort.end()) {
+          // NOTE: External postconditions are already included in the dynamic
+          //  schedule, and wouldn't be mapped into the static schedule. So
+          //  they are included implicitly in this case.
           auto idx = toposort.at(edge);
           static_to_dynamic_counts[idx]++;
           CompletionInfo info(-1, idx, CompletionInfo::EdgeKind::STATIC_TO_DYNAMIC);
@@ -867,9 +867,10 @@ namespace Realm {
         std::vector<CompletionInfo> to_trigger;
         for (auto& edge : outgoing_edges[key]) {
           // If the consumer of this operation is outside the static
-          // partition of the graph, then it is opaque to us and we have
+          // partition of the graph, then it is opaque to us, and we have
           // to wait for all effects of this task to complete before
-          // it can start.
+          // it can start. Note that external postconditions are also
+          // included by this case.
           if (toposort.find(edge) != toposort.end()) {
             auto idx = toposort.at(edge);
             static_to_dynamic_counts[idx]++;
