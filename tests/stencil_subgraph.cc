@@ -521,6 +521,9 @@ void top_level_task(const void *_args, size_t arglen,
   }
   assert(px * py <= cpus.size());
 
+  assert(nx % px == 0);
+  assert(ny % py == 0);
+
   // Break the grid into pieces.
   int64_t lxsize = nx / px, lysize = ny / py;
   std::map<std::pair<int64_t, int64_t>, IndexSpace<2>> local_spaces;
