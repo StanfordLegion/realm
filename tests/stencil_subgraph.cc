@@ -159,31 +159,52 @@ void run_stencil_direct(
       }
     }
 
+    std::vector<Event> deps;
     // Launch stencil tasks.
     for (int64_t i = 0; i < px; i++) {
       for (int64_t j = 0; j < py; j++) {
-        Event ec = task_postconds[{i, j}];
-        Event en = incoming_north[{i, j}];
-        Event es = incoming_south[{i, j}];
-        Event ew = incoming_east[{i, j}];
-        Event ee = incoming_west[{i, j}];
-        Event pred = Event::merge_events(ec, en, es, ew, ee);
+        deps.push_back(task_postconds[{i, j}]);
+        deps.push_back(incoming_north[{i, j}]);
+        deps.push_back(incoming_south[{i, j}]);
+        deps.push_back(incoming_east[{i, j}]);
+        deps.push_back(incoming_west[{i, j}]);
+        Event pred = Event::merge_events(deps);
         StencilArgs args;
         args.buffer = instances[{i, j}];
         args.local_space = local_spaces[{i, j}];
         args.hx = nx;
         args.hy = ny;
         task_postconds[{i, j}] = procs[{i, j}].spawn(STENCIL_TASK, &args, sizeof(StencilArgs), pred);
+
+        deps.clear();
       }
     }
 
     // Launch increment tasks.
     for (int64_t i = 0; i < px; i++) {
       for (int64_t j = 0; j < py; j++) {
+	// Make sure all outgoing copies are done before starting the task.
+	deps.push_back(task_postconds[{i, j}]);
+        if (i > 0) {
+	  deps.push_back(incoming_south[{i - 1, j}]);
+        }
+        if (i < px - 1) {
+	  deps.push_back(incoming_north[{i + 1, j}]);
+        }
+        if (j > 0) {
+	  deps.push_back(incoming_east[{i, j - 1}]);
+        }
+        if (j < py - 1) {
+	  deps.push_back(incoming_west[{i, j + 1}]);
+        }
+
+	Event pred = Event::merge_events(deps);
         IncrementArgs args;
         args.buffer = instances[{i, j}];
         args.local_space = local_spaces[{i, j}];
-        task_postconds[{i, j}] = procs[{i, j}].spawn(INCREMENT_TASK, &args, sizeof(IncrementArgs), task_postconds[{i, j}]);
+        task_postconds[{i, j}] = procs[{i, j}].spawn(INCREMENT_TASK, &args, sizeof(IncrementArgs), pred);
+
+	deps.clear();
       }
     }
   }
@@ -411,12 +432,47 @@ Subgraph compile_stencil(
 
     for (int64_t i = 0; i < px; i++) {
       for (int64_t j = 0; j < py; j++) {
-        SubgraphDefinition::Dependency d;
-        d.src_op_kind = SubgraphDefinition::OPKIND_TASK;
-        d.src_op_index = stencil_tasks[{i, j, step}];
-        d.tgt_op_kind = SubgraphDefinition::OPKIND_TASK;
-        d.tgt_op_index = increment_tasks[{i, j, step}];
-        sd.dependencies.push_back(d);
+	{
+          SubgraphDefinition::Dependency d;
+          d.src_op_kind = SubgraphDefinition::OPKIND_TASK;
+          d.src_op_index = stencil_tasks[{i, j, step}];
+          d.tgt_op_kind = SubgraphDefinition::OPKIND_TASK;
+          d.tgt_op_index = increment_tasks[{i, j, step}];
+          sd.dependencies.push_back(d);
+	}
+	// Anti-dependencies.
+        if (i > 0) {
+          SubgraphDefinition::Dependency d;
+          d.src_op_kind = SubgraphDefinition::OPKIND_COPY;
+          d.src_op_index = south_copies[{i - 1, j, step}];
+          d.tgt_op_kind = SubgraphDefinition::OPKIND_TASK;
+          d.tgt_op_index = increment_tasks[{i, j, step}];
+          sd.dependencies.push_back(d);
+        }
+        if (i < px - 1) {
+          SubgraphDefinition::Dependency d;
+          d.src_op_kind = SubgraphDefinition::OPKIND_COPY;
+          d.src_op_index = north_copies[{i + 1, j, step}];
+          d.tgt_op_kind = SubgraphDefinition::OPKIND_TASK;
+          d.tgt_op_index = increment_tasks[{i, j, step}];
+          sd.dependencies.push_back(d);
+        }
+        if (j > 0) {
+          SubgraphDefinition::Dependency d;
+          d.src_op_kind = SubgraphDefinition::OPKIND_COPY;
+          d.src_op_index = east_copies[{i, j - 1, step}];
+          d.tgt_op_kind = SubgraphDefinition::OPKIND_TASK;
+          d.tgt_op_index = increment_tasks[{i, j, step}];
+          sd.dependencies.push_back(d);
+        }
+        if (j < py - 1) {
+          SubgraphDefinition::Dependency d;
+          d.src_op_kind = SubgraphDefinition::OPKIND_COPY;
+          d.src_op_index = west_copies[{i, j + 1, step}];
+          d.tgt_op_kind = SubgraphDefinition::OPKIND_TASK;
+          d.tgt_op_index = increment_tasks[{i, j, step}];
+          sd.dependencies.push_back(d);
+        }
       }
     }
   }
@@ -463,8 +519,7 @@ void top_level_task(const void *_args, size_t arglen,
       mems[{i, j}] = sysmems[(i * py + j) % sysmems.size()];
     }
   }
-
-  assert(px * py == procs.size());
+  assert(px * py <= cpus.size());
 
   // Break the grid into pieces.
   int64_t lxsize = nx / px, lysize = ny / py;
@@ -531,6 +586,7 @@ void top_level_task(const void *_args, size_t arglen,
     e.wait();
   }
 
+  uint64_t us_start, us_end;
   // TODO (rohany): Make it a command line flag which one runs.
   if (args->use_subgraph) {
     log_app.print() << "Using subgraph!";
@@ -539,11 +595,17 @@ void top_level_task(const void *_args, size_t arglen,
     assert(steps % subgraph_steps == 0);
     Subgraph stencil_subgraph = compile_stencil(nx, ny, px, py, steps, subgraph_steps, procs, north_spaces, south_spaces, west_spaces, east_spaces, instances, local_spaces);
     // Instantiate the subgraph the correct number of times.
+    us_start = Clock::current_time_in_microseconds();
     run_stencil_subgraph(steps, subgraph_steps, stencil_subgraph);
+    us_end = Clock::current_time_in_microseconds();
   } else {
     log_app.print() << "Direct realm launch.";
+    us_start = Clock::current_time_in_microseconds();
     run_stencil_direct(nx, ny, px, py, steps, procs, north_spaces, south_spaces, west_spaces, east_spaces, instances, local_spaces);
+    us_end = Clock::current_time_in_microseconds();
   }
+
+  log_app.print() << "Took: " << (us_end - us_start) << " microseconds.";
 
 
   // Now, check that the computation was correct.
