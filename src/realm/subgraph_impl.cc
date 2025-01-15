@@ -73,6 +73,14 @@ namespace Realm {
     if(owner == Network::my_node_id) {
       SubgraphImpl *subgraph = get_runtime()->get_subgraph_impl(*this);
 
+      // Ensure that all pending executions finish before the
+      // deletion starts. This helps the user not have to worry
+      // about tracking graph instantiations.
+      if (subgraph->defn->concurrency_mode == SubgraphDefinition::INSTANTIATION_ORDER) {
+        AutoLock<Mutex> al(subgraph->instantiation_lock);
+        wait_on = Event::merge_events(wait_on, subgraph->previous_instantiation_completion);
+      }
+
       if(wait_on.has_triggered())
         subgraph->destroy();
       else
@@ -1094,7 +1102,8 @@ namespace Realm {
         for (auto& edge : incoming_edges[key]) {
           // Similar to below, case when operation doesn't respect the asynchrony
           // of the incoming edge.
-          if (!operation_has_async_effects(edge.first, edge.second) ||
+          if (toposort.find(edge) != toposort.end() ||
+              !operation_has_async_effects(edge.first, edge.second) ||
               !operation_respects_async_effects(edge.first, edge.second, it.op_kind, it.op_index)) {
             continue;
           }
@@ -1186,14 +1195,17 @@ namespace Realm {
         // incoming asynchronous operations.
         std::vector<CompletionInfo> will_trigger;
         for (auto& edge : incoming_edges[key]) {
-          if (!operation_has_async_effects(edge.first, edge.second) ||
+          if (toposort.find(edge) != toposort.end() ||
+              !operation_has_async_effects(edge.first, edge.second) ||
               !operation_respects_async_effects(edge.first, edge.second, it.op_kind, it.op_index)) {
-            // There are two cases in which we don't need to worry about
+            // There are three cases in which we don't need to worry about
             // asynchronous predecessors.
             // 1) The predecessor is not asynchronous.
             // 2) We don't know how to handle async effects. In this case,
             //    we've already registered ourselves as dependent on the
             //    asynchronous effects completing.
+            // 3) The operation is coming from the dynamic portion of
+            //    the subgraph, in which case there's nothing we can do.
             continue;
           }
           // If we do know how to handle the incoming async effect, then
@@ -2029,10 +2041,19 @@ namespace Realm {
   {
     SubgraphImpl *subgraph = get_runtime()->get_subgraph_impl(msg.subgraph);
 
-    if(msg.wait_on.has_triggered())
+    Event wait = msg.wait_on;
+    // Ensure that all pending executions finish before the
+    // deletion starts. This helps the user not have to worry
+    // about tracking graph instantiations.
+    if (subgraph->defn->concurrency_mode == SubgraphDefinition::INSTANTIATION_ORDER) {
+      AutoLock<Mutex> al(subgraph->instantiation_lock);
+      wait = Event::merge_events(msg.wait_on, subgraph->previous_instantiation_completion);
+    }
+
+    if(wait.has_triggered())
       subgraph->destroy();
     else
-      subgraph->deferred_destroy.defer(subgraph, msg.wait_on);
+      subgraph->deferred_destroy.defer(subgraph, wait);
   }
 
   ActiveMessageHandlerReg<SubgraphDestroyMessage> subgraph_destroy_message_handler;

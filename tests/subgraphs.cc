@@ -528,8 +528,9 @@ IndexSpace<1> pis2;
   std::vector<Event> ext_postconds_2(2);
   e = diamond.instantiate(ser.get_buffer(), ser.bytes_used(), ProfilingRequestSet(), ext_preconds, ext_postconds_2, e);
 
-  // Ensure the destruction doesn't affect in flight replays.
-  diamond.destroy(e);
+  // The subgraph itself should sequence deletions after pending replays
+  // complete, so test that here.
+  diamond.destroy();
 
   e = cpus[0].spawn(TEST_READ_TASK, &fill_inst, sizeof(fill_inst), e);
   e = cpus[0].spawn(TEST_READ_TASK, &fill_inst2, sizeof(fill_inst2), e);
