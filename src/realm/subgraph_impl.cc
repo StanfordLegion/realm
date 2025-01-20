@@ -2295,17 +2295,17 @@ namespace Realm {
         // operation into the target processors queue.
         int32_t remaining = trigger.fetch_sub_acqrel(1) - 1;
         if (remaining == 0) {
-          // Get a slot to insert at.
-          auto index = state.next_queue_slot.fetch_add(1);
-          // Write out the value.
-          state.queue[index].store_release(int64_t(info.index));
-
-          // Handle profiling.
+          // Handle profiling (before the task is enqueued).
           auto& op = subgraph->operations.data[local_index];
           auto prof = state.get_profiling_info(op.first, op.second);
           if (prof && prof->wants_timeline) {
             prof->timeline.record_ready_time();
           }
+
+          // Get a slot to insert at.
+          auto index = state.next_queue_slot.fetch_add(1);
+          // Write out the value.
+          state.queue[index].store_release(int64_t(info.index));
 
           // If requested to increment the scheduler's counter, do so.
           if (incr_counter) {
