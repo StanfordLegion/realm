@@ -1037,6 +1037,29 @@ namespace Realm {
       auto& it = bgwork_items[i];
       auto key = std::make_pair(it.op_kind, it.op_index);
       bgwork_preconditions[i] = int32_t(incoming_edges[key].size());
+
+      // This is an _extremely_ subtle change. The final event analysis
+      // is precise and sound in terms of marking operations as final events.
+      // The dependence analysis below is _also_ sound in terms of hooking
+      // up the correct async dependencies with each other. However, a subtle
+      // race can occur when considering the callbacks made by asynchronous
+      // bgwork items. In particular, consider the mark_completed call done
+      // by an XD. The XD will launch its async work, its dependencies will
+      // pick up on that, and those final events will get triggered. However,
+      // if the XD is not a final event, there is no one waiting on its
+      // other callbacks (like mark_completed) to run! There's a transitive
+      // dependence from the copy kernels it launches to the finish event,
+      // but not one from the finalizing callbacks to the finish event. As
+      // a result, non-final event copies could find themselves trying to run
+      // mark_completed after the subgraph instantiation had triggered its
+      // completion event, resulting in the call to mark_completed looking
+      // at some deleted data. The most sane way to get around this is to
+      // mark all asynchronous background work items as finish events to force
+      // all of these callbacks in the state machine to finish before the
+      // subgraph instantiation is considered done.
+      if (operation_has_async_effects(it.op_kind, it.op_index)) {
+        it.is_final_event = true;
+      }
     }
 
     // Next, identify where each async bgwork item should write their
