@@ -2215,10 +2215,20 @@ namespace Realm {
 
   void GPUProfInfoTrigger::request_completed() {
     if (start) {
-      info->timeline_gpu.record_start_time();
+    using timestamp_t = ProfilingMeasurements::OperationTimelineGPU::timestamp_t;
+      const timestamp_t INVALID_TIMESTAMP =
+          ProfilingMeasurements::OperationTimelineGPU::INVALID_TIMESTAMP;
+      uint64_t timestamp = Clock::current_time_in_nanoseconds();
+      info->timeline_gpu.start_time =
+          std::min<timestamp_t>(timestamp, info->timeline_gpu.start_time == INVALID_TIMESTAMP
+                                               ? timestamp
+                                               : info->timeline_gpu.start_time);
     } else {
       if (info->wants_gpu_timeline) {
-        info->timeline_gpu.record_end_time();
+        using timestamp_t = ProfilingMeasurements::OperationTimelineGPU::timestamp_t;
+
+        uint64_t timestamp = Clock::current_time_in_nanoseconds();
+        info->timeline_gpu.end_time = std::max<timestamp_t>(timestamp, info->timeline_gpu.end_time);
       }
       if (info->wants_timeline) {
         info->timeline.record_complete_time();
