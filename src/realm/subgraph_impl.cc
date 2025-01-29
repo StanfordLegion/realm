@@ -53,8 +53,8 @@ namespace Realm {
     // to not put this in the SubgraphDefinition copy constructor to avoid
     // accidentally copying these objects in other unsuspecting places and
     // leaking memory.
-    for (size_t i = 0; i < impl->defn.copies.size(); i++) {
-      auto& copy = impl->defn.copies[i];
+    for (size_t i = 0; i < impl->defn->copies.size(); i++) {
+      auto& copy = impl->defn->copies[i];
       for (size_t j = 0; j < copy.indirects.size(); j++) {
         copy.indirects[j] = reinterpret_cast<CopyIndirectionGeneric*>(copy.indirects[j])->clone();
       }
