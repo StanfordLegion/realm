@@ -947,6 +947,10 @@ namespace Realm {
   {
     TransferIteratorBase<N, T>::reset();
     piece_idx = 0;
+    addrs_in->reset();
+    addrs_in_offset = 0;
+    point_pos = 0;
+    num_points = 0;
   }
 
   template <int N, typename T>
@@ -1192,6 +1196,8 @@ namespace Realm {
   {
     TransferIteratorBase<N, T>::reset();
     addrs_in->reset();
+    point_pos = 0;
+    num_points = 0;
   }
 
   template <int N, typename T>
