@@ -2555,7 +2555,8 @@ namespace Realm {
     }
     // Initialize the offsets vector -- this allocation will only happen on
     // the first replay of the subgraph.
-    ib_offsets.assign(graph.ib_edges.size(), -1);
+    ib_offsets.resize(graph.ib_edges.size());
+    std::fill(ib_offsets.begin(), ib_offsets.end(), -1);
     // Use the same trick from TransferOperation::allocate_ibs() to ensure
     // that the allocation request doesn't trigger completion before we
     // leave this function.
