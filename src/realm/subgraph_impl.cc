@@ -1933,6 +1933,13 @@ namespace Realm {
         Event precond = Event::NO_EVENT;
         if (i < preconditions.size())
           precond = preconditions[i];
+        // Some trickiness here: we can't let this external precondition trigger
+        // before the subgraph start event triggers. This could inadvertently
+        // cause state to be reused across two back-to-back replays. Consider
+        // a copy that only has an external precondition. If this event waiter
+        // triggers early, the copy could be enqueued before the subgraph actually
+        // starts, meaning that a previous execution is already running.
+        precond = Event::merge_events(precond, start_event);
         auto meta = &external_precondition_info[i];
         auto waiter = new (&external_precondition_waiters[i]) ExternalPreconditionTriggerer(this, meta, precondition_ctrs, state);
         if (!precond.exists() || precond.has_triggered()) {
