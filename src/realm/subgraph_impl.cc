@@ -2843,7 +2843,7 @@ namespace Realm {
   void SubgraphIBAllocator::launch_copy_xds() {
     auto& offs = subgraph->planned_copy_xds.offsets;
 #ifdef REALM_USE_NVTX
-    nvtx_range_end(subgraph->nvtx_bgwork_iballocs[subgraph_index]);
+    nvtx_range_end(subgraph->nvtx_bgwork_launches[subgraph_index]);
     for (uint64_t i = offs[op_idx]; i < offs[op_idx + 1]; i++) {
       subgraph->nvtx_xd_ranges[i] = nvtx_range_start("subgraph", "xd execution");
     }
