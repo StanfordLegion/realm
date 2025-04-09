@@ -325,8 +325,8 @@ public:
   {
     graph.clear();
     Realm::Point<MAX_DIM> start_pnt(0, 0);
-    // Realm::Point<MAX_DIM> end_pnt(32, 32);
-    Realm::Point<MAX_DIM> end_pnt(8192, 8192);
+
+    Realm::Point<MAX_DIM> end_pnt(1, TestConfig::size);
     CopyIndexSpace is(Rect<MAX_DIM>{start_pnt, end_pnt});
 
     std::map<FieldID, size_t> src_fields;
@@ -412,30 +412,6 @@ public:
                           dst_fields[dst_field_ids[field_index]]);
         field_index++;
       }
-
-      /*const int max_fields = std::min<size_t>(32000, fields.size());
-      std::vector<Realm::CopySrcDstField> srcs(max_fields), dsts(max_fields);
-      {
-        int field_index = 0;
-        for(const auto [field_id, field_size] : src_fields) {
-          srcs[field_index++].set_field(src_inst.second, field_id, field_size);
-          if(field_index >= max_fields) {
-            break;
-          }
-        }
-      }
-      {
-        int field_index = 0;
-        for(const auto [field_id, field_size] : dst_fields) {
-          dsts[field_index++].set_field(dst_inst.second, field_id, field_size);
-          if(field_index >= max_fields) {
-            break;
-          }
-        }
-      }*/
-
-      // srcs[fi].set_field(src_inst.second, src_fields[0], field_sizes[i]);
-      // dsts[fi].set_field(dst_inst.second, dst_fields[0], field_sizes[i]);
 
       graph.emplace_back(is, dsts, srcs, src_inst.second.get_location());
     }
@@ -722,7 +698,7 @@ static void bench_timing_task(const void *args, size_t arglen, const void *userd
   }
   log_app.print("===================");
 
-  mq = mq.has_capacity(pow(TestConfig::size, MAX_DIM) * sizeof(ElementType));
+  // mq = mq.has_capacity(pow(TestConfig::size, MAX_DIM) * sizeof(ElementType));
   memories.assign(mq.begin(), mq.end());
   if(memories.size() == 0) {
     abort();
@@ -796,6 +772,7 @@ int main(int argc, char **argv)
       .add_option_int("-iter", TestConfig::num_iterations)
       .add_option_int("-samples", TestConfig::num_samples)
       .add_option_int("-size", TestConfig::size)
+      .add_option_int("-copy_fields", TestConfig::max_copy_fields)
       .add_option_int("-num_fields", TestConfig::num_fields)
       .add_option_int("-field_size", TestConfig::field_size)
       .add_option_int("-graphviz", TestConfig::graphviz)

@@ -177,7 +177,7 @@ namespace Realm {
   {
     size_t field_rel_offset;
     {
-      std::map<FieldID, InstanceLayoutGeneric::FieldLayout>::const_iterator it =
+      InstanceLayoutGeneric::FieldMap::const_iterator it =
           inst_layout->fields.find(field_id);
       assert(it != inst_layout->fields.end());
       assert((field_offset + field_size) <= size_t(it->second.size_in_bytes));
@@ -218,7 +218,7 @@ namespace Realm {
         checked_cast<const InstanceLayout<N, T> *>(inst_impl->metadata.layout);
 
     {
-      std::map<FieldID, InstanceLayoutGeneric::FieldLayout>::const_iterator it =
+      InstanceLayoutGeneric::FieldMap::const_iterator it =
           inst_layout->fields.find(cur_field_id);
       assert(it != inst_layout->fields.end());
       assert((cur_field_offset + cur_field_size) <= size_t(it->second.size_in_bytes));
@@ -369,7 +369,7 @@ namespace Realm {
     const InstanceLayoutPiece<N, T> *layout_piece;
     // int field_rel_offset;
     {
-      std::map<FieldID, InstanceLayoutGeneric::FieldLayout>::const_iterator it =
+      InstanceLayoutGeneric::FieldMap::const_iterator it =
           inst_layout->fields.find(cur_field_id);
       assert(it != inst_layout->fields.end());
       assert((cur_field_offset == 0) &&
@@ -532,7 +532,7 @@ namespace Realm {
       const InstanceLayoutPiece<N, T> *layout_piece;
       size_t field_rel_offset;
       {
-        std::map<FieldID, InstanceLayoutGeneric::FieldLayout>::const_iterator it =
+        InstanceLayoutGeneric::FieldMap::const_iterator it =
             inst_layout->fields.find(cur_field_id);
         assert(it != inst_layout->fields.end());
         assert((cur_field_offset + cur_field_size) <= size_t(it->second.size_in_bytes));
@@ -973,7 +973,7 @@ namespace Realm {
         checked_cast<const InstanceLayout<N, T> *>(this->inst_impl->metadata.layout);
 
     assert(inst_layout);
-    std::map<FieldID, InstanceLayoutGeneric::FieldLayout>::const_iterator it =
+    InstanceLayoutGeneric::FieldMap::const_iterator it =
         inst_layout->fields.find(cur_field_id);
     assert(it != inst_layout->fields.end());
     size_t pieces = inst_layout->piece_lists[it->second.list_idx].pieces.size();
@@ -1770,7 +1770,7 @@ namespace Realm {
     assert(impl->metadata.is_valid());
     const InstanceLayout<N, T> *layout =
         checked_cast<const InstanceLayout<N, T> *>(impl->metadata.layout);
-    std::map<FieldID, InstanceLayoutGeneric::FieldLayout>::const_iterator it =
+    InstanceLayoutGeneric::FieldMap::const_iterator it =
         layout->fields.find(field_id);
     assert(it != layout->fields.end());
     const InstancePieceList<N, T> &ipl = layout->piece_lists[it->second.list_idx];
@@ -1930,7 +1930,7 @@ namespace Realm {
 
       const InstancePieceList<N, T> *ipl;
       {
-        std::map<FieldID, InstanceLayoutGeneric::FieldLayout>::const_iterator it =
+        InstanceLayoutGeneric::FieldMap::const_iterator it =
             inst_layout->fields.find(fid);
         assert(it != inst_layout->fields.end());
         ipl = &inst_layout->piece_lists[it->second.list_idx];
