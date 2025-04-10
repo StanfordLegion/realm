@@ -271,16 +271,18 @@ namespace Realm {
     IndexSpaceIterator<N, T> iter;
     bool iter_init_deferred{false};
     std::vector<FieldID> fields;
+
+    const InstanceLayoutPiece<N, T> *layout_piece{nullptr};
+
     size_t field_size{0};
     size_t field_idx{0};
 
-    const InstanceLayoutPiece<N, T> *layout_piece{nullptr};
-    int cur_dim{0};
-    size_t bytes{0};
+    int ndims{0};
+    int rect_idx{-1};
+    size_t contig_bytes{0};
     size_t total_bytes{0};
-    size_t global_offset{0};
+    size_t base_offset{0};
     std::unordered_map<int, std::pair<size_t, size_t>> count_strides;
-    int rect_idx{0};
   };
 
   template <int N, typename T>

@@ -572,6 +572,7 @@ namespace Realm {
 #endif
 
       // TODO: remove now-redundant condition here
+      // TODO: use flatten_affine_dimensions
       if(layout_piece->layout_type == PieceLayoutTypes::AffineLayoutType) {
         const AffineLayoutPiece<N, T> *affine =
             static_cast<const AffineLayoutPiece<N, T> *>(layout_piece);
@@ -939,6 +940,8 @@ namespace Realm {
     }
     iter_init_deferred = false;
     this->is_done = !iter.valid;
+
+    count_strides.clear();
   }
 
   template <int N, typename T>
@@ -952,75 +955,19 @@ namespace Realm {
         return false;
       }
 
-      if(rect_idx == 0) {
-        Rect<N, T> target_subrect;
-        this->have_rect =
-            compute_target_subrect(layout_piece->bounds, this->cur_rect, this->cur_point,
-                                   target_subrect, &this->dim_order[0]);
+      Rect<N, T> target_subrect;
+      this->have_rect =
+          compute_target_subrect(layout_piece->bounds, this->cur_rect, this->cur_point,
+                                 target_subrect, &this->dim_order[0]);
 
 #ifdef DEBUG_REALM
-        assert(layout_piece->bounds.contains(target_subrect));
+      assert(layout_piece->bounds.contains(target_subrect));
+      assert(layout_piece->layout_type == PieceLayoutTypes::AffineLayoutType);
 #endif
-
-        assert(layout_piece->layout_type == PieceLayoutTypes::AffineLayoutType);
-
-        const AffineLayoutPiece<N, T> *affine =
-            static_cast<const AffineLayoutPiece<N, T> *>(layout_piece);
-
-        global_offset = this->inst_impl->metadata.inst_offset + affine->offset +
-                        affine->strides.dot(target_subrect.lo);
-
-        bytes = field_size;
-        cur_dim = 1;
-        // int cur_dim = 1;
-        int di = 0;
-        for(; di < N; di++) {
-          int d = this->dim_order[di];
-
-          if(target_subrect.lo[d] == target_subrect.hi[d]) {
-            continue;
-          }
-
-          if(affine->strides[d] != bytes) {
-            break;
-          }
-
-          bytes *= (target_subrect.hi[d] - target_subrect.lo[d] + 1);
-          assert(bytes != 0);
-        }
-
-        count_strides.clear();
-
-        // if any dimensions are left, they need to become count/stride pairs
-        // size_t total_bytes = bytes;
-        total_bytes = bytes;
-
-        while(di < N) {
-          size_t total_count = 1;
-          size_t stride = affine->strides[this->dim_order[di]];
-
-          for(; di < N; di++) {
-            int d = this->dim_order[di];
-
-            if(target_subrect.lo[d] == target_subrect.hi[d]) {
-              continue;
-            }
-
-            size_t count = (target_subrect.hi[d] - target_subrect.lo[d] + 1);
-
-            if(affine->strides[d] != (stride * total_count)) {
-              break;
-            }
-
-            total_count *= count;
-          }
-
-          count_strides[cur_dim] = {total_count, stride};
-
-          total_bytes *= total_count;
-          cur_dim++;
-        }
-      }
+      flatten_affine_dimensions(
+          static_cast<const AffineLayoutPiece<N, T> *>(layout_piece), target_subrect,
+          this->dim_order, 0, this->inst_impl->metadata.inst_offset, field_size,
+          base_offset, total_bytes, contig_bytes, ndims, count_strides);
 
       assert(total_bytes != 0);
 
@@ -1035,15 +982,15 @@ namespace Realm {
         size_t field_rel_offset =
             layout_piece->bounds.volume() * field_size * fields[field_idx];
 
-        address[1] = (global_offset + field_rel_offset);
+        address[1] = (base_offset + field_rel_offset);
 
         for(auto &[dim, count_stride] : count_strides) {
           address[dim * 2] = count_stride.first;
           address[dim * 2 + 1] = count_stride.second;
         }
 
-        address[0] = (bytes << 4) + cur_dim;
-        addrlist.commit_nd_entry(cur_dim, total_bytes);
+        address[0] = (contig_bytes << 4) + ndims;
+        addrlist.commit_nd_entry(ndims, total_bytes);
       }
     }
 
@@ -1055,9 +1002,7 @@ namespace Realm {
                                                           size_t &offset, size_t &fsize)
   {
     if(iter_init_deferred) {
-      // index space must be valid now (i.e. somebody should have waited)
       reset_internal();
-      rect_idx = 0;
       if(!iter.valid) {
         this->is_done = true;
         return false;
@@ -1069,12 +1014,10 @@ namespace Realm {
     }
 
     r = iter.rect;
-    rect_idx++;
 
     iter.step();
     if(!iter.valid) {
       reset_internal();
-      rect_idx = 0;
       this->is_done = true;
     }
     return true;
