@@ -626,6 +626,7 @@ namespace Realm {
 
           addr_data[cur_dim * 2] = total_count;
           addr_data[cur_dim * 2 + 1] = stride;
+
           log_dma.debug() << "Add addr data dim=" << cur_dim
                           << " total_count=" << total_count << " stride=" << stride;
           total_bytes *= total_count;
@@ -803,6 +804,293 @@ namespace Realm {
     if(!((serializer << iter.space) && (serializer << this->inst_impl->me) &&
          (serializer << fields) && (serializer << fld_offsets) &&
          (serializer << fld_sizes))) {
+      return false;
+    }
+
+    for(int i = 0; i < N; i++) {
+      if(!(serializer << this->dim_order[i])) {
+        return false;
+      }
+    }
+
+    return true;
+  }
+
+  ////////////////////////////////////////////////////////////////////////
+  //
+  // class UniformFieldsTransferIterator<N,T>
+  //
+
+  template <int N, typename T>
+  UniformFieldsTransferIterator<N, T>::UniformFieldsTransferIterator(
+      const int _dim_order[N], const std::vector<FieldID> &_fields, size_t _field_size,
+      RegionInstanceImpl *_inst_impl, const IndexSpace<N, T> &_is)
+    : TransferIteratorBase<N, T>(_inst_impl, _dim_order)
+    , is(_is)
+  {
+    if(is.is_valid()) {
+      reset_internal();
+    } else {
+      iter_init_deferred = true;
+    }
+
+    if(iter_init_deferred || iter.valid) {
+      fields = _fields;
+      field_size = _field_size;
+      prefill();
+    }
+  }
+
+  template <int N, typename T>
+  void UniformFieldsTransferIterator<N, T>::prefill(void)
+  {
+    assert(!fields.empty());
+    const InstanceLayout<N, T> *inst_layout =
+        checked_cast<const InstanceLayout<N, T> *>(this->inst_impl->metadata.layout);
+    const InstancePieceList<N, T> &piece_list =
+        inst_layout->piece_lists[inst_layout->fields.begin()->second.list_idx];
+    layout_piece = piece_list.find_piece(Point<N, T>(0));
+  }
+
+  /*template <int N, typename T>
+  UniformFieldsTransferIterator<N, T>::UniformFieldsTransferIterator(
+      const int _dim_order[N], const std::vector<FieldID> &_fields,
+      const std::vector<size_t> &_fld_offsets, const std::vector<size_t> &_fld_sizes,
+      RegionInstanceImpl *_inst_impl, const Rect<N, T> &_bounds,
+      SparsityMapImpl<N, T> *_sparsity_impl)
+    : TransferIteratorBase<N, T>(_inst_impl, _dim_order)
+    , is(_bounds, _sparsity_impl->me)
+    , sparsity_impl(_sparsity_impl)
+  {
+    assert(sparsity_impl);
+    reset_internal();
+    if(iter.valid) {
+      fields = _fields;
+      fld_offsets = _fld_offsets;
+      fld_sizes = _fld_sizes;
+    }
+  }*/
+
+  template <int N, typename T>
+  UniformFieldsTransferIterator<N, T>::UniformFieldsTransferIterator(void)
+  {}
+
+  template <int N, typename T>
+  template <typename S>
+  /*static*/ TransferIterator *
+  UniformFieldsTransferIterator<N, T>::deserialize_new(S &deserializer)
+  {
+    IndexSpace<N, T> is;
+    RegionInstance inst;
+    std::vector<FieldID> fields;
+    size_t field_size;
+    int dim_order[N];
+
+    if(!((deserializer >> is) && (deserializer >> inst) && (deserializer >> fields) &&
+         (deserializer >> field_size))) {
+      return 0;
+    }
+
+    for(int i = 0; i < N; i++) {
+      if(!(deserializer >> dim_order[i])) {
+        return 0;
+      }
+    }
+
+    UniformFieldsTransferIterator<N, T> *tiis = new UniformFieldsTransferIterator<N, T>(
+        dim_order, fields, field_size, get_runtime()->get_instance_impl(inst), is);
+    return tiis;
+  }
+
+  template <int N, typename T>
+  UniformFieldsTransferIterator<N, T>::~UniformFieldsTransferIterator(void)
+  {}
+
+  template <int N, typename T>
+  Event UniformFieldsTransferIterator<N, T>::request_metadata(void)
+  {
+    Event e = TransferIteratorBase<N, T>::request_metadata();
+
+    if(iter_init_deferred) {
+      e = Event::merge_events(e, is.make_valid());
+    }
+
+    return e;
+  }
+
+  template <int N, typename T>
+  void UniformFieldsTransferIterator<N, T>::reset(void)
+  {
+    TransferIteratorBase<N, T>::reset();
+    field_idx = 0;
+    reset_internal();
+  }
+
+  template <int N, typename T>
+  void UniformFieldsTransferIterator<N, T>::reset_internal(void)
+  {
+    // assert(!iter_init_deferred);
+    if(!sparsity_impl) {
+      assert(is.is_valid());
+      iter.reset(is);
+    } else {
+      iter.reset(is.bounds, is.bounds,
+                 reinterpret_cast<SparsityMapPublicImpl<N, T> *>(sparsity_impl));
+    }
+    iter_init_deferred = false;
+    this->is_done = !iter.valid;
+  }
+
+  template <int N, typename T>
+  bool UniformFieldsTransferIterator<N, T>::get_addresses(
+      AddressList &addrlist, const InstanceLayoutPieceBase *&nonaffine)
+  {
+    nonaffine = 0;
+
+    while(!this->done()) {
+      if(!this->have_rect) {
+        return false;
+      }
+
+      if(rect_idx == 0) {
+        Rect<N, T> target_subrect;
+        this->have_rect =
+            compute_target_subrect(layout_piece->bounds, this->cur_rect, this->cur_point,
+                                   target_subrect, &this->dim_order[0]);
+
+#ifdef DEBUG_REALM
+        assert(layout_piece->bounds.contains(target_subrect));
+#endif
+
+        assert(layout_piece->layout_type == PieceLayoutTypes::AffineLayoutType);
+
+        const AffineLayoutPiece<N, T> *affine =
+            static_cast<const AffineLayoutPiece<N, T> *>(layout_piece);
+
+        global_offset = this->inst_impl->metadata.inst_offset + affine->offset +
+                        affine->strides.dot(target_subrect.lo);
+
+        bytes = field_size;
+        cur_dim = 1;
+        // int cur_dim = 1;
+        int di = 0;
+        for(; di < N; di++) {
+          int d = this->dim_order[di];
+
+          if(target_subrect.lo[d] == target_subrect.hi[d]) {
+            continue;
+          }
+
+          if(affine->strides[d] != bytes) {
+            break;
+          }
+
+          bytes *= (target_subrect.hi[d] - target_subrect.lo[d] + 1);
+          assert(bytes != 0);
+        }
+
+        count_strides.clear();
+
+        // if any dimensions are left, they need to become count/stride pairs
+        // size_t total_bytes = bytes;
+        total_bytes = bytes;
+
+        while(di < N) {
+          size_t total_count = 1;
+          size_t stride = affine->strides[this->dim_order[di]];
+
+          for(; di < N; di++) {
+            int d = this->dim_order[di];
+
+            if(target_subrect.lo[d] == target_subrect.hi[d]) {
+              continue;
+            }
+
+            size_t count = (target_subrect.hi[d] - target_subrect.lo[d] + 1);
+
+            if(affine->strides[d] != (stride * total_count)) {
+              break;
+            }
+
+            total_count *= count;
+          }
+
+          count_strides[cur_dim] = {total_count, stride};
+
+          total_bytes *= total_count;
+          cur_dim++;
+        }
+      }
+
+      assert(total_bytes != 0);
+
+      for(; field_idx < fields.size(); field_idx++) {
+        size_t *address = addrlist.begin_nd_entry(N);
+
+        if(!address) {
+          this->have_rect = true;
+          return true; // out of space for now
+        }
+
+        size_t field_rel_offset =
+            layout_piece->bounds.volume() * field_size * fields[field_idx];
+
+        address[1] = (global_offset + field_rel_offset);
+
+        for(auto &[dim, count_stride] : count_strides) {
+          address[dim * 2] = count_stride.first;
+          address[dim * 2 + 1] = count_stride.second;
+        }
+
+        address[0] = (bytes << 4) + cur_dim;
+        addrlist.commit_nd_entry(cur_dim, total_bytes);
+      }
+    }
+
+    return true; // we have no more addresses to produce
+  }
+
+  template <int N, typename T>
+  bool UniformFieldsTransferIterator<N, T>::get_next_rect(Rect<N, T> &r, FieldID &fid,
+                                                          size_t &offset, size_t &fsize)
+  {
+    if(iter_init_deferred) {
+      // index space must be valid now (i.e. somebody should have waited)
+      reset_internal();
+      rect_idx = 0;
+      if(!iter.valid) {
+        this->is_done = true;
+        return false;
+      }
+    }
+
+    if(this->is_done) {
+      return false;
+    }
+
+    r = iter.rect;
+    rect_idx++;
+
+    iter.step();
+    if(!iter.valid) {
+      reset_internal();
+      rect_idx = 0;
+      this->is_done = true;
+    }
+    return true;
+  }
+
+  template <int N, typename T>
+  /*static*/ Serialization::PolymorphicSerdezSubclass<TransferIterator,
+                                                      UniformFieldsTransferIterator<N, T>>
+      UniformFieldsTransferIterator<N, T>::serdez_subclass;
+
+  template <int N, typename T>
+  template <typename S>
+  bool UniformFieldsTransferIterator<N, T>::serialize(S &serializer) const
+  {
+    if(!((serializer << iter.space) && (serializer << this->inst_impl->me) &&
+         (serializer << fields) && (serializer << field_size))) {
       return false;
     }
 
@@ -1770,8 +2058,7 @@ namespace Realm {
     assert(impl->metadata.is_valid());
     const InstanceLayout<N, T> *layout =
         checked_cast<const InstanceLayout<N, T> *>(impl->metadata.layout);
-    InstanceLayoutGeneric::FieldMap::const_iterator it =
-        layout->fields.find(field_id);
+    InstanceLayoutGeneric::FieldMap::const_iterator it = layout->fields.find(field_id);
     assert(it != layout->fields.end());
     const InstancePieceList<N, T> &ipl = layout->piece_lists[it->second.list_idx];
     std::vector<int> preferred;
@@ -2015,8 +2302,15 @@ namespace Realm {
   {
     assert(dim_order.size() == N);
     RegionInstanceImpl *impl = get_runtime()->get_instance_impl(inst);
-    return new TransferIteratorIndexSpace<N, T>(dim_order.data(), fields, fld_offsets,
-                                                fld_sizes, impl, is);
+    const InstanceLayout<N, T> *inst_layout =
+        checked_cast<const InstanceLayout<N, T> *>(impl->metadata.layout);
+    if(inst_layout->uniform_mutlifield_layout) {
+      return new UniformFieldsTransferIterator<N, T>(dim_order.data(), fields,
+                                                     fld_sizes.front(), impl, is);
+    } else {
+      return new TransferIteratorIndexSpace<N, T>(dim_order.data(), fields, fld_offsets,
+                                                  fld_sizes, impl, is);
+    }
   }
 
   template <int N, typename T>
@@ -5054,6 +5348,7 @@ namespace Realm {
       const ProfilingRequestSet &, Event, int) const;                                    \
   template class TransferIteratorIndexSpace<N, T>;                                       \
   template class TransferIteratorIndirect<N, T>;                                         \
+  template class UniformFieldsTransferIterator<N, T>;                                    \
   template class WrappingTransferIteratorIndirect<N, T>;                                 \
   template class TransferIteratorIndirectRange<N, T>;                                    \
   template class AddressSplitXferDesFactory<N, T>;                                       \
@@ -5066,5 +5361,4 @@ namespace Realm {
   template IndirectionInfo *CopyIndirection<N, T>::Unstructured<N2, T2>::create_info(    \
       const IndexSpace<N, T> &is) const;
   FOREACH_NTNT(DOIT2)
-
 }; // namespace Realm

@@ -712,7 +712,7 @@ static void bench_timing_task(const void *args, size_t arglen, const void *userd
   } else if(TestConfig::graph_type == 2) {
     std::map<FieldID, size_t> fields;
     for(size_t i = 0; i < TestConfig::num_fields; i++) {
-      fields[100 + i] = TestConfig::field_size;
+      fields[i] = TestConfig::field_size;
     }
     test_factory = new KVCacheTestGraphFactory(memories, TestConfig::size, fields);
   } else {

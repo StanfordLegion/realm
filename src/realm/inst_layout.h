@@ -224,8 +224,9 @@ namespace Realm {
       int size_in_bytes;
     };
 
-    using FieldMap = std::unordered_map<FieldID, FieldLayout>;
+    using FieldMap = std::map<FieldID, FieldLayout>;
     FieldMap fields;
+    bool uniform_mutlifield_layout{false};
   };
 
   REALM_PUBLIC_API

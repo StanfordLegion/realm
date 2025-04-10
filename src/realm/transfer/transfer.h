@@ -217,6 +217,72 @@ namespace Realm {
     size_t field_idx{0};
   };
 
+  ////////////////////////////////////////////////////////////////////////
+  //
+  // class UniformFieldsTransferIterator<N,T>
+  //
+
+  template <int N, typename T>
+  class UniformFieldsTransferIterator : public TransferIteratorBase<N, T> {
+  protected:
+    UniformFieldsTransferIterator(void);
+
+  public:
+    UniformFieldsTransferIterator(const int _dim_order[N],
+                                  const std::vector<FieldID> &_fields, size_t _field_size,
+                                  RegionInstanceImpl *_inst_impl,
+                                  const IndexSpace<N, T> &_is);
+
+    /*UniformFieldsTransferIterator(const int _dim_order[N],
+                               const std::vector<FieldID> &_fields,
+                               const std::vector<size_t> &_fld_offsets,
+                               const std::vector<size_t> &_fld_sizes,
+                               RegionInstanceImpl *_inst_impl, const Rect<N, T> &_bounds,
+                               SparsityMapImpl<N, T> *_sparsity_impl);*/
+
+    template <typename S>
+    static TransferIterator *deserialize_new(S &deserializer);
+
+    virtual ~UniformFieldsTransferIterator(void);
+
+    virtual Event request_metadata(void);
+
+    virtual void reset(void);
+
+    static Serialization::PolymorphicSerdezSubclass<TransferIterator,
+                                                    UniformFieldsTransferIterator<N, T>>
+        serdez_subclass;
+
+    template <typename S>
+    bool serialize(S &serializer) const;
+
+    virtual bool get_addresses(AddressList &addrlist,
+                               const InstanceLayoutPieceBase *&nonaffine);
+
+  protected:
+    void reset_internal(void);
+    void prefill(void);
+
+    virtual bool get_next_rect(Rect<N, T> &r, FieldID &fid, size_t &offset,
+                               size_t &fsize);
+
+    IndexSpace<N, T> is;
+    SparsityMapImpl<N, T> *sparsity_impl{nullptr};
+    IndexSpaceIterator<N, T> iter;
+    bool iter_init_deferred{false};
+    std::vector<FieldID> fields;
+    size_t field_size{0};
+    size_t field_idx{0};
+
+    const InstanceLayoutPiece<N, T> *layout_piece{nullptr};
+    int cur_dim{0};
+    size_t bytes{0};
+    size_t total_bytes{0};
+    size_t global_offset{0};
+    std::unordered_map<int, std::pair<size_t, size_t>> count_strides;
+    int rect_idx{0};
+  };
+
   template <int N, typename T>
   class TransferIteratorIndirect : public TransferIteratorBase<N, T> {
   protected:

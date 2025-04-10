@@ -138,6 +138,9 @@ namespace Realm {
     //  track that
     std::map<std::pair<size_t, size_t>, size_t> pl_indexes, pl_starts, pl_sizes;
 
+    size_t field_stride = 0;
+    layout->uniform_mutlifield_layout = true;
+
     // reserve space so that we don't have to copy piece lists as we grow
     layout->piece_lists.reserve(ilc.field_groups.size());
     for(size_t i = 0; i < ilc.field_groups.size(); i++) {
@@ -147,6 +150,7 @@ namespace Realm {
       //  pieces
       size_t gsize = 0;
       size_t galign = 1;
+
       // we can't set field offsets in a single pass because we don't know
       //  the whole group's alignment until we look at every field
       std::map<FieldID, size_t> field_offsets;
@@ -166,6 +170,7 @@ namespace Realm {
         }
         // increase size and alignment if needed
         gsize = max(gsize, offset + it2->size);
+
         if((it2->alignment > 1) && ((galign % it2->alignment) != 0))
           galign = lcm(galign, size_t(it2->alignment));
         field_offsets[it2->field_id] = offset;
@@ -180,10 +185,11 @@ namespace Realm {
       }
 
       std::pair<size_t, size_t> pl_key(gsize, galign);
-      std::map<std::pair<size_t, size_t>, size_t>::const_iterator it =
-          pl_indexes.find(pl_key);
+      std::map<std::pair<size_t, size_t>, size_t>::const_iterator it = pl_indexes.find(pl_key);
+
       size_t li;
       size_t reuse_offset;
+
       if(it != pl_indexes.end()) {
         li = it->second;
         size_t piece_start = round_up(layout->bytes_used, galign);
@@ -229,6 +235,7 @@ namespace Realm {
           // final value of stride is total bytes used by piece - use that
           //  to set new instance footprint
           layout->bytes_used = piece_start + stride;
+          if (field_stride == 0) { field_stride = stride; }
 
           pl.pieces.push_back(piece);
         }
@@ -242,6 +249,10 @@ namespace Realm {
           it2 != field_offsets.end(); ++it2) {
         // should not have seen this field before
         assert(layout->fields.count(it2->first) == 0);
+
+        layout->uniform_mutlifield_layout &=
+            (static_cast<size_t>(it2->first * field_stride) == reuse_offset);
+
         InstanceLayoutGeneric::FieldLayout &fl = layout->fields[it2->first];
         fl.list_idx = li;
         fl.rel_offset = /*group_offset +*/ it2->second + reuse_offset;
