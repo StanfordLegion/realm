@@ -1071,6 +1071,7 @@ namespace Realm {
           static_cast<unsigned int>(
               func_info.occ_num_blocks)); // Cap the grid based on the given volume
 
+      num_blocks = 2;
       CHECK_CU(CUDA_DRIVER_FNPTR(cuLaunchKernel)(func_info.func, num_blocks, 1, 1,
                                                  num_threads, 1, 1, 0,
                                                  stream->get_stream(), args, nullptr));

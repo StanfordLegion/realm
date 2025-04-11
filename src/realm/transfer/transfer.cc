@@ -945,6 +945,92 @@ namespace Realm {
   }
 
   template <int N, typename T>
+  bool populate_packed_rect(const AffineLayoutPiece<N, T> *layout_piece,
+                            const Rect<N, T> &target_subrect, const int dim_order[N],
+                            size_t field_size, const std::vector<FieldID> &fields,
+                            size_t inst_offset, PackedRectAddressList &packed_list)
+  {
+    SharedRectLayout layout;
+    layout.base_offset =
+        inst_offset + layout_piece->offset + layout_piece->strides.dot(target_subrect.lo);
+
+    size_t bytes = field_size;
+    int cur_dim = 1;
+    int di = 0;
+
+    for(; di < N; di++) {
+      int d = dim_order[di];
+      if(target_subrect.lo[d] == target_subrect.hi[d])
+        continue;
+      if(layout_piece->strides[d] != bytes)
+        break;
+      bytes *= (target_subrect.hi[d] - target_subrect.lo[d] + 1);
+    }
+
+    layout.contig_bytes = bytes;
+    layout.total_bytes = bytes;
+
+    while(di < N) {
+      size_t total_count = 1;
+      size_t stride = layout_piece->strides[dim_order[di]];
+
+      for(; di < N; di++) {
+        int d = dim_order[di];
+        if(target_subrect.lo[d] == target_subrect.hi[d])
+          continue;
+        size_t count = (target_subrect.hi[d] - target_subrect.lo[d] + 1);
+        if(layout_piece->strides[d] != (stride * total_count))
+          break;
+        total_count *= count;
+      }
+
+      if(cur_dim >= REALM_MAX_DIM)
+        return false;
+      layout.count_strides[cur_dim] = {total_count, stride};
+      layout.total_bytes *= total_count;
+      cur_dim++;
+    }
+
+    layout.ndims = cur_dim;
+
+    packed_list.add_rect(layout, fields, field_size);
+    return true;
+  }
+
+  template <int N, typename T>
+  bool UniformFieldsTransferIterator<N, T>::get_uniform_addresses(
+      PackedRectAddressList &addrlist, const InstanceLayoutPieceBase *&nonaffine)
+  {
+
+    nonaffine = 0;
+
+    while(!this->done()) {
+      if(!this->have_rect) {
+        return false;
+      }
+      Rect<N, T> target_subrect;
+      this->have_rect =
+          compute_target_subrect(layout_piece->bounds, this->cur_rect, this->cur_point,
+                                 target_subrect, this->dim_order);
+
+#ifdef DEBUG_REALM
+      assert(layout_piece->layout_type == PieceLayoutTypes::AffineLayoutType);
+      assert(layout_piece->bounds.contains(target_subrect));
+#endif
+
+      bool ok = populate_packed_rect<N, T>(
+          static_cast<const AffineLayoutPiece<N, T> *>(layout_piece), target_subrect,
+          this->dim_order, field_size, fields, this->inst_impl->metadata.inst_offset,
+          addrlist);
+      if(!ok) {
+        nonaffine = layout_piece;
+        return true;
+      }
+    }
+    return true;
+  }
+
+  template <int N, typename T>
   bool UniformFieldsTransferIterator<N, T>::get_addresses(
       AddressList &addrlist, const InstanceLayoutPieceBase *&nonaffine)
   {
@@ -971,7 +1057,21 @@ namespace Realm {
 
       assert(total_bytes != 0);
 
-      for(; field_idx < fields.size(); field_idx++) {
+      size_t *entry = addrlist.begin_nd_entry(N, fields.size());
+      entry[1] = base_offset;
+      for(auto &[dim, count_stride] : count_strides) {
+        entry[dim * 2] = count_stride.first;
+        entry[dim * 2 + 1] = count_stride.second;
+      }
+      entry[ndims * 2] = fields.size();
+      std::copy(fields.begin(), fields.end(), entry + 2 * ndims + 1);
+      entry[0] = (contig_bytes << 4) + ndims;
+
+      std::cout << "total:" << total_bytes << " contig:" << contig_bytes << std::endl;
+
+      addrlist.commit_nd_entry(ndims, total_bytes, fields.size());
+
+      /*for(; field_idx < fields.size(); field_idx++) {
         size_t *address = addrlist.begin_nd_entry(N);
 
         if(!address) {
@@ -991,7 +1091,7 @@ namespace Realm {
 
         address[0] = (contig_bytes << 4) + ndims;
         addrlist.commit_nd_entry(ndims, total_bytes);
-      }
+      }*/
     }
 
     return true; // we have no more addresses to produce

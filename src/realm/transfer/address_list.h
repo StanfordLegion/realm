@@ -19,6 +19,7 @@
 #define ADDRESS_LIST
 
 #include "realm/realm_config.h"
+#include "realm/indexspace.h"
 #include "realm/id.h"
 
 namespace Realm {
@@ -27,8 +28,8 @@ namespace Realm {
   public:
     AddressList();
 
-    size_t *begin_nd_entry(int max_dim);
-    void commit_nd_entry(int act_dim, size_t bytes);
+    size_t *begin_nd_entry(int max_dim, size_t payload_size = 0);
+    void commit_nd_entry(int act_dim, size_t bytes, size_t payload_size = 0);
 
     size_t bytes_pending() const;
 
@@ -40,8 +41,19 @@ namespace Realm {
     size_t total_bytes;
     unsigned write_pointer;
     unsigned read_pointer;
-    static const size_t MAX_ENTRIES = 1000;
-    size_t data[MAX_ENTRIES];
+    constexpr static const size_t MAX_ENTRIES = 1000;
+    constexpr static size_t FLAG_HAS_EXTRA = (1UL << 63);
+    std::vector<size_t> data;
+    // size_t data[MAX_ENTRIES];
+  };
+
+  struct ParsedAddrlistEntry {
+    int dim;
+    size_t contig_bytes;
+    uintptr_t base_offset;
+    std::vector<std::pair<size_t, size_t>> count_strides;
+    const size_t *payload = nullptr;
+    size_t payload_count = 0;
   };
 
   class AddressListCursor {
@@ -58,6 +70,8 @@ namespace Realm {
 
     void skip_bytes(size_t bytes);
 
+    const size_t *get_payload(size_t &count);
+
   protected:
     AddressList *addrlist;
     bool partial;
@@ -67,6 +81,60 @@ namespace Realm {
     static const int MAX_DIM = REALM_MAX_DIM + 1;
     int partial_dim;
     size_t pos[MAX_DIM];
+  };
+
+  struct SharedRectLayout {
+    size_t base_offset;
+    size_t total_bytes;
+    size_t contig_bytes;
+    int ndims;
+    std::array<std::pair<size_t, size_t>, REALM_MAX_DIM> count_strides; // count, stride
+  };
+
+  struct PackedRect {
+    SharedRectLayout layout;
+    std::vector<FieldID> field_ids;
+    size_t field_size;
+  };
+
+  class PackedRectAddressList {
+  public:
+    void add_rect(const SharedRectLayout &layout, const std::vector<FieldID> &field_ids,
+                  size_t field_size)
+    {
+      rects.push_back(PackedRect{layout, field_ids, field_size});
+      total_bytes += layout.total_bytes * field_ids.size();
+    }
+
+    bool get_next(PackedRect &out)
+    {
+      if(read_index >= rects.size())
+        return false;
+      out = rects[read_index++];
+      return true;
+    }
+
+    size_t bytes_pending() const { return total_bytes; }
+
+    void reset()
+    {
+      read_index = 0;
+      rects.clear();
+      total_bytes = 0;
+    }
+
+    void advance(size_t bytes)
+    {
+      assert(bytes <= total_bytes);
+      total_bytes -= bytes;
+    }
+
+    bool done() const { return read_index >= rects.size(); }
+
+  private:
+    std::vector<PackedRect> rects;
+    size_t read_index = 0;
+    size_t total_bytes = 0;
   };
 
   std::ostream &operator<<(std::ostream &os, const AddressListCursor &alc);

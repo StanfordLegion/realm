@@ -20,6 +20,8 @@
 #include "realm/cuda/cuda_access.h"
 #include "realm/cuda/cuda_memcpy.h"
 
+#include <cstring>
+
 namespace Realm {
 
   extern Logger log_xd;
@@ -311,7 +313,144 @@ namespace Realm {
       return 1; // Unfortunately this can only be byte aligned :(
     }
 
-    static size_t populate_affine_copy_info(AffineCopyInfo<3> &copy_infos,
+    static inline size_t parse_multifield_rectlist(PackedRectAddressList &src_packed_list,
+                                                   PackedRectAddressList &dst_packed_list,
+                                                   size_t &min_align, uintptr_t in_base,
+                                                   uintptr_t out_base,
+                                                   AffineCopyInfo<3> &copy_infos)
+    {
+      AffineCopyPair<3> &pair = copy_infos.subrects[copy_infos.num_rects++];
+
+      PackedRect src_rect;
+      src_packed_list.get_next(src_rect);
+      pair.src.addr = in_base + src_rect.layout.base_offset;
+      min_align = std::min(min_align, calculate_type_alignment(pair.src.addr));
+      for(int i = 1; i < src_rect.layout.ndims; i++) {
+        pair.src.strides[i - 1] = src_rect.layout.count_strides[i].second;
+      }
+
+      PackedRect dst_rect;
+      dst_packed_list.get_next(dst_rect);
+      pair.dst.addr = out_base + dst_rect.layout.base_offset;
+      min_align = std::min(min_align, calculate_type_alignment(pair.dst.addr));
+      for(int i = 1; i < dst_rect.layout.ndims; i++) {
+        pair.dst.strides[i - 1] = dst_rect.layout.count_strides[i].second;
+      }
+
+      assert(src_rect.layout.total_bytes == dst_rect.layout.total_bytes);
+      // assert(src_rect.field_count == dst_rect.field_count);
+
+      pair.extents[0] =
+          std::min(src_rect.layout.contig_bytes, dst_rect.layout.contig_bytes);
+      pair.volume = std::min(src_rect.layout.total_bytes / src_rect.field_size,
+                             dst_rect.layout.total_bytes / dst_rect.field_size);
+
+      src_packed_list.advance(src_rect.layout.total_bytes);
+      dst_packed_list.advance(dst_rect.layout.total_bytes);
+      // TODO use bytes left
+
+      /*{
+        const auto &layout = src_rect.layout;
+
+        pair.src.addr = in_base + layout.base_offset;
+        //pair.dst.addr = out_base + layout.base_offset;
+
+        min_align = std::min(min_align, calculate_type_alignment(pair.src.addr));
+        //min_align = std::min(min_align, calculate_type_alignment(pair.dst.addr));
+        min_align = std::min(min_align, calculate_type_alignment(layout.contig_bytes));
+
+        pair.extents[0] = layout.contig_bytes;
+        for(int i = 1; i < layout.ndims; i++) {
+          pair.extents[i] = layout.count_strides[i].first;
+          pair.src.strides[i - 1] = layout.count_strides[i].second;
+          //pair.dst.strides[i - 1] = layout.count_strides[i].second;
+        }
+
+        pair.extents[layout.ndims] = rect.field_count;
+        pair.volume = layout.total_bytes * rect.field_count;
+
+        pair.field_ids = rect.field_ids.data();
+        pair.num_fields = rect.field_count;
+      }*/
+
+      return 0;
+    }
+
+    inline size_t populate_affine_copy_info(AffineCopyInfo<3> &copy_infos,
+                                            size_t &min_align,
+                                            MemcpyTransposeInfo<size_t> &transpose_info,
+                                            AddressListCursor &in_alc, uintptr_t in_base,
+                                            GPU *in_gpu, AddressListCursor &out_alc,
+                                            uintptr_t out_base, GPU *out_gpu,
+                                            size_t bytes_left)
+    {
+      size_t src_payload_count = 0;
+      const size_t *src_payload = in_alc.get_payload(src_payload_count);
+      assert(src_payload);
+      assert(src_payload_count > 0);
+
+      size_t dst_payload_count = 0;
+      const size_t *dst_payload = out_alc.get_payload(dst_payload_count);
+      assert(dst_payload);
+      assert(dst_payload_count > 0);
+
+      /*const size_t field_size = payload[0];
+      const size_t *field_ids = payload + 1;
+      const size_t num_fields = payload_count - 1;*/
+
+      // std::cout << "field_size:" << field_size << " num_fields:" << num_fields <<
+      // std::endl;
+
+      uintptr_t in_offset = in_alc.get_offset();
+      uintptr_t out_offset = out_alc.get_offset();
+      int in_dim = in_alc.get_dim();
+      int out_dim = out_alc.get_dim();
+      size_t icount = in_alc.remaining(0);
+      size_t ocount = out_alc.remaining(0);
+      size_t contig_bytes = std::min({icount, ocount, bytes_left});
+
+      std::cout << "contig_bytes:" << contig_bytes << std::endl;
+
+      AffineCopyPair<3> &copy_info = copy_infos.subrects[copy_infos.num_rects++];
+      copy_info.extents[1] = 1;
+      copy_info.extents[2] = 1;
+      copy_info.src.addr = static_cast<uintptr_t>(in_base + in_offset);
+      copy_info.dst.addr = static_cast<uintptr_t>(out_base + out_offset);
+
+      min_align = std::min({min_align, calculate_type_alignment(in_offset),
+                            calculate_type_alignment(out_offset),
+                            calculate_type_alignment(contig_bytes)});
+
+      if((contig_bytes == bytes_left) || ((contig_bytes == icount) && (in_dim == 1)) ||
+         ((contig_bytes == ocount) && (out_dim == 1))) {
+        copy_info.extents[0] = contig_bytes;
+        copy_info.src.strides[0] = contig_bytes;
+        copy_info.dst.strides[0] = contig_bytes;
+
+        copy_info.src.num_fields = src_payload_count;
+        copy_info.src.fields = (FieldID *)get_runtime()->repl_heap.alloc_obj(
+            sizeof(FieldID) * src_payload_count, 16);
+        std::memcpy(copy_info.src.fields, (FieldID *)(src_payload),
+                    sizeof(FieldID) * src_payload_count);
+
+        copy_info.dst.num_fields = dst_payload_count;
+        copy_info.dst.fields = (FieldID *)get_runtime()->repl_heap.alloc_obj(
+            sizeof(FieldID) * dst_payload_count, 16);
+        std::memcpy(copy_info.dst.fields, (FieldID *)(dst_payload),
+                    sizeof(FieldID) * dst_payload_count);
+
+        // TODO: add field size
+        copy_info.volume = contig_bytes / 2;
+
+        in_alc.advance(0, contig_bytes);
+        out_alc.advance(0, contig_bytes);
+        return contig_bytes;
+      }
+      assert(0);
+      return 0;
+    }
+
+    /*static size_t populate_affine_copy_info(AffineCopyInfo<3> &copy_infos,
                                             size_t &min_align,
                                             MemcpyTransposeInfo<size_t> &transpose_info,
                                             AddressListCursor &in_alc, uintptr_t in_base,
@@ -495,7 +634,7 @@ namespace Realm {
       in_alc.advance(id, planes * iscale);
       out_alc.advance(od, planes * oscale);
       return planes * lines * contig_bytes;
-    }
+    }*/
 
     bool GPU::is_accessible_host_mem(const MemoryImpl *mem) const
     {
@@ -686,6 +825,10 @@ namespace Realm {
               bytes_left = std::min(bytes_left, (size_t)(4U << 20U));
             }
 
+            /*const size_t bytes_to_copy = parse_multifield_rectlist(
+                in_port->packed_addrlist, out_port->packed_addrlist, min_align, in_base,
+                out_base, copy_infos); //, bytes_left);
+            assert(0);*/
             const size_t bytes_to_copy = populate_affine_copy_info(
                 copy_infos, min_align, transpose_copy, in_alc, in_base, in_gpu, out_alc,
                 out_base, out_gpu, bytes_left);
@@ -806,7 +949,9 @@ namespace Realm {
                             transpose_copy.extents[2];
         }
 
-        if((copy_infos.num_rects > 1) || needs_kernel_copy) {
+        bool multi_field = true;
+
+        if((copy_infos.num_rects > 1) || needs_kernel_copy || multi_field) {
           // Adjust all the rectangles' sizes to account for the element size based on the
           // calculated alignment
           for(size_t i = 0; (min_align > 1) && (i < copy_infos.num_rects); i++) {

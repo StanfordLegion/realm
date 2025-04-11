@@ -315,6 +315,7 @@ namespace Realm {
       size_t ib_offset, ib_size;
       AddressList addrlist;
       AddressListCursor addrcursor;
+      PackedRectAddressList packed_addrlist;
     };
     std::vector<XferPort> input_ports, output_ports;
     struct ControlPortState {

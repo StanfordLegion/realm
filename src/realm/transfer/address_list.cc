@@ -36,10 +36,20 @@ namespace Realm {
     , write_pointer(0)
     , read_pointer(0)
   {
-    memset(data, 0, MAX_ENTRIES * sizeof(size_t));
+    data.reserve(MAX_ENTRIES);
+    // memset(data, 0, MAX_ENTRIES * sizeof(size_t));
   }
 
-  size_t *AddressList::begin_nd_entry(int max_dim)
+  size_t *AddressList::begin_nd_entry(int max_dim, size_t payload_size)
+  {
+    size_t entries_needed = 2 * max_dim + (payload_size > 0 ? payload_size + 1 : 0);
+    if(data.size() < write_pointer + entries_needed) {
+      data.resize(write_pointer + entries_needed);
+    }
+    return data.data() + write_pointer;
+  }
+
+  /*size_t *AddressList::begin_nd_entry(int max_dim)
   {
     size_t entries_needed = max_dim * 2;
 
@@ -67,9 +77,9 @@ namespace Realm {
 
     // all good - return a pointer to the first available entry
     return (data + write_pointer);
-  }
+  }*/
 
-  void AddressList::commit_nd_entry(int act_dim, size_t bytes)
+  /*void AddressList::commit_nd_entry(int act_dim, size_t bytes)
   {
     size_t entries_used = act_dim * 2;
 
@@ -79,6 +89,22 @@ namespace Realm {
       write_pointer = 0;
     }
 
+    total_bytes += bytes;
+  }*/
+
+  void AddressList::commit_nd_entry(int act_dim, size_t bytes, size_t payload_size)
+  {
+    size_t entries_used = act_dim * 2;
+
+    if(payload_size > 0) {
+      data[write_pointer + entries_used] = payload_size;
+      entries_used += 1;
+    }
+
+    entries_used += payload_size;
+    data[write_pointer] |= (payload_size > 0 ? FLAG_HAS_EXTRA : 0);
+
+    write_pointer += entries_used;
     total_bytes += bytes;
   }
 
@@ -94,7 +120,7 @@ namespace Realm {
     // skip trailing 0's
     if(data[read_pointer] == 0)
       read_pointer = 0;
-    return (data + read_pointer);
+    return (data.data() + read_pointer);
   }
 
   ////////////////////////////////////////////////////////////////////////
@@ -150,6 +176,17 @@ namespace Realm {
     int act_dim = (entry[0] & 15);
     assert((dim > 0) && (dim < act_dim));
     return entry[2 * dim + 1];
+  }
+
+  const size_t *AddressListCursor::get_payload(size_t &count)
+  {
+    const size_t *entry = addrlist->read_entry();
+    int act_dim = (entry[0] & 15);
+    if(entry[0] & AddressList::FLAG_HAS_EXTRA) {
+      count = entry[act_dim * 2];
+      return entry + act_dim * 2 + 1;
+    }
+    return nullptr;
   }
 
   size_t AddressListCursor::remaining(int dim) const

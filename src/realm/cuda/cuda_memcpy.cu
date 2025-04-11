@@ -146,6 +146,9 @@ memcpy_affine_batch(Realm::Cuda::AffineCopyPair<N, Offset_t> *info,
     __restrict__ T *dst = reinterpret_cast<T *>(current_info.dst.addr);
     __restrict__ T *src = reinterpret_cast<T *>(current_info.src.addr);
 
+    assert(blockIdx.x < current_info.dst.num_fields);
+    Offset_t field_index = static_cast<Offset_t>(current_info.dst.fields[blockIdx.x]);
+
     while(offset < vol) {
       T tmp[MAX_UNROLL];
       unsigned i;
@@ -156,7 +159,7 @@ memcpy_affine_batch(Realm::Cuda::AffineCopyPair<N, Offset_t> *info,
         if((offset + i * grid_stride) >= vol) {
           break;
         }
-        index_to_coords<N, Offset_t>(src_coords, offset + i * grid_stride,
+        index_to_coords<N, Offset_t>(src_coords, offset + i * grid_stride + field_index,
                                      current_info.extents);
         const size_t src_idx =
             coords_to_index<N, Offset_t>(src_coords, current_info.src.strides);
@@ -166,7 +169,7 @@ memcpy_affine_batch(Realm::Cuda::AffineCopyPair<N, Offset_t> *info,
         Offset_t dst_coords[N];
 
         index_to_coords<N, Offset_t>(dst_coords,
-                                     (offset + j * grid_stride),
+                                     (offset + j * grid_stride + field_index),
                                      current_info.extents);
 
         const size_t dst_idx =

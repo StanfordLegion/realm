@@ -806,6 +806,7 @@ namespace Realm {
       size_t read_bytes_avail = in_port->addrlist.bytes_pending();
       if(read_bytes_avail < min_xfer_size) {
         bool flush = in_port->iter->get_addresses(in_port->addrlist, in_nonaffine);
+        ///bool flush = in_port->iter->get_uniform_addresses(in_port->packed_addrlist, in_nonaffine);
         read_bytes_avail = in_port->addrlist.bytes_pending();
         if(flush) {
           if(read_bytes_avail > 0) {
@@ -858,6 +859,7 @@ namespace Realm {
       size_t write_bytes_avail = out_port->addrlist.bytes_pending();
       if(write_bytes_avail < min_xfer_size) {
         bool flush = out_port->iter->get_addresses(out_port->addrlist, out_nonaffine);
+        //bool flush = out_port->iter->get_uniform_addresses(out_port->packed_addrlist, out_nonaffine);
         write_bytes_avail = out_port->addrlist.bytes_pending();
 
         // TODO(apryakhin@): We add this to handle scatter when both

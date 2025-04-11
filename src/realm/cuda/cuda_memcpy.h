@@ -23,6 +23,8 @@
 #include <vector>
 #include "realm/point.h"
 
+typedef int FieldID;
+
 #define CUDA_MAX_FIELD_BYTES 64
 #define CUDA_MAX_BLOCKS_PER_GRID 2048
 
@@ -35,6 +37,9 @@ namespace Realm {
       Offset_t strides[N - 1];
       // Address of the ND array
       uintptr_t addr;
+
+      FieldID *fields;
+      size_t num_fields;
     };
 
     template <size_t N, typename Offset_t = size_t>

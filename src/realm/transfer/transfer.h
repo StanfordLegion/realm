@@ -114,6 +114,13 @@ namespace Realm {
 
     virtual bool get_addresses(AddressList &addrlist,
                                const InstanceLayoutPieceBase *&nonaffine) = 0;
+
+    virtual bool get_uniform_addresses(PackedRectAddressList &addrlist,
+                                       const InstanceLayoutPieceBase *&nonaffine)
+    {
+      assert(0);
+      return false;
+    }
   };
 
   ////////////////////////////////////////////////////////////////////////
@@ -259,6 +266,9 @@ namespace Realm {
     virtual bool get_addresses(AddressList &addrlist,
                                const InstanceLayoutPieceBase *&nonaffine);
 
+    virtual bool get_uniform_addresses(PackedRectAddressList &addrlist,
+                                       const InstanceLayoutPieceBase *&nonaffine);
+
   protected:
     void reset_internal(void);
     void prefill(void);
@@ -278,7 +288,6 @@ namespace Realm {
     size_t field_idx{0};
 
     int ndims{0};
-    int rect_idx{-1};
     size_t contig_bytes{0};
     size_t total_bytes{0};
     size_t base_offset{0};
