@@ -359,6 +359,7 @@ public:
         Realm::RegionInstance::create_instance(dst_inst, memories_to_test[j], is,
                                                dst_fields, 0, ProfilingRequestSet())
             .wait();
+
         instances.push_back(src_inst);
         inst_to_fields.push_back(src_fields);
         instances.push_back(dst_inst);

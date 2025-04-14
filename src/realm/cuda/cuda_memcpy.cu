@@ -66,8 +66,9 @@ static __device__ inline size_t coords_to_index(Offset_t *coords, const Offset_t
 }
 
 template <typename T, typename Offset_t = size_t>
-static __device__ inline void memcpy_kernel_transpose(
-    Realm::Cuda::MemcpyTransposeInfo<Offset_t> info, T* tile) {
+static __device__ inline void
+memcpy_kernel_transpose(Realm::Cuda::MemcpyTransposeInfo<Offset_t> info, T *tile)
+{
   __restrict__ T *out_base = reinterpret_cast<T *>(info.dst);
   __restrict__ T *in_base = reinterpret_cast<T *>(info.src);
   const Offset_t tile_size = info.tile_size;
@@ -134,20 +135,30 @@ static __device__ inline void memcpy_kernel_transpose(
 
 template <typename T, size_t N, typename Offset_t = size_t>
 static __device__ inline void
-memcpy_affine_batch(Realm::Cuda::AffineCopyPair<N, Offset_t> *info,
-                    size_t nrects, size_t start_offset = 0)
+memcpy_affine_batch(Realm::Cuda::AffineCopyPair<N, Offset_t> *info, size_t nrects,
+                    size_t start_offset = 0)
 {
-  Offset_t offset = blockIdx.x * blockDim.x + threadIdx.x - start_offset;
   const unsigned grid_stride = gridDim.x * blockDim.x;
 
   for(size_t rect = 0; rect < nrects; rect++) {
     Realm::Cuda::AffineCopyPair<N, Offset_t> &current_info = info[rect];
+
+    Offset_t offset = threadIdx.x - start_offset;
+    Offset_t src_field_index = 0;
+    Offset_t dst_field_index = 0;
+
+    if(current_info.src.num_fields == 0 && current_info.dst.num_fields == 0) {
+      offset += blockIdx.x * blockDim.x;
+    } else {
+      assert(blockIdx.x < current_info.src.num_fields);
+      assert(blockIdx.x < current_info.dst.num_fields);
+      src_field_index = current_info.src.fields[blockIdx.x];
+      dst_field_index = current_info.dst.fields[blockIdx.x];
+    }
+
     const Offset_t vol = current_info.volume;
     __restrict__ T *dst = reinterpret_cast<T *>(current_info.dst.addr);
     __restrict__ T *src = reinterpret_cast<T *>(current_info.src.addr);
-
-    assert(blockIdx.x < current_info.dst.num_fields);
-    Offset_t field_index = static_cast<Offset_t>(current_info.dst.fields[blockIdx.x]);
 
     while(offset < vol) {
       T tmp[MAX_UNROLL];
@@ -159,8 +170,8 @@ memcpy_affine_batch(Realm::Cuda::AffineCopyPair<N, Offset_t> *info,
         if((offset + i * grid_stride) >= vol) {
           break;
         }
-        index_to_coords<N, Offset_t>(src_coords, offset + i * grid_stride + field_index,
-                                     current_info.extents);
+        index_to_coords<N, Offset_t>(
+            src_coords, offset + i * grid_stride + src_field_index, current_info.extents);
         const size_t src_idx =
             coords_to_index<N, Offset_t>(src_coords, current_info.src.strides);
         tmp[i] = src[src_idx];
@@ -169,11 +180,12 @@ memcpy_affine_batch(Realm::Cuda::AffineCopyPair<N, Offset_t> *info,
         Offset_t dst_coords[N];
 
         index_to_coords<N, Offset_t>(dst_coords,
-                                     (offset + j * grid_stride + field_index),
+                                     (offset + j * grid_stride + dst_field_index),
                                      current_info.extents);
 
         const size_t dst_idx =
             coords_to_index<N, Offset_t>(dst_coords, current_info.dst.strides);
+
         dst[dst_idx] = tmp[j];
       }
 
@@ -245,7 +257,7 @@ memcpy_indirect_points(Realm::Cuda::MemcpyIndirectInfo<3, Offset_t> info)
 
 template <int N, typename T, typename Offset_t = size_t>
 static __device__ inline void
-memfill_affine_batch(const Realm::Cuda::AffineFillInfo<N, Offset_t>& info)
+memfill_affine_batch(const Realm::Cuda::AffineFillInfo<N, Offset_t> &info)
 {
   Offset_t offset = blockIdx.x * blockDim.x + threadIdx.x;
   const unsigned grid_stride = gridDim.x * blockDim.x;
@@ -275,15 +287,17 @@ memfill_affine_batch(const Realm::Cuda::AffineFillInfo<N, Offset_t>& info)
   }
 }
 
-#define MEMCPY_TEMPLATE_INST(type, dim, offt, name)                            \
-  extern "C" __global__ __launch_bounds__(256, 4) void                         \
-      memcpy_affine_batch##name(Realm::Cuda::AffineCopyInfo<dim, offt> info) { \
-    memcpy_affine_batch<type, dim, offt>(info.subrects, info.num_rects);       \
+#define MEMCPY_TEMPLATE_INST(type, dim, offt, name)                                      \
+  extern "C" __global__ __launch_bounds__(256, 4) void memcpy_affine_batch##name(        \
+      Realm::Cuda::AffineCopyInfo<dim, offt> info)                                       \
+  {                                                                                      \
+    memcpy_affine_batch<type, dim, offt>(info.subrects, info.num_rects);                 \
   }
 
 #define FILL_TEMPLATE_INST(type, dim, offt, name)                                        \
   extern "C" __global__ void fill_affine_batch##name(                                    \
-      Realm::Cuda::AffineFillInfo<dim, offt> info) {                                     \
+      Realm::Cuda::AffineFillInfo<dim, offt> info)                                       \
+  {                                                                                      \
     memfill_affine_batch<dim, type, offt>(info);                                         \
   }
 
@@ -314,11 +328,11 @@ memfill_affine_batch(const Realm::Cuda::AffineFillInfo<N, Offset_t>& info)
   MEMCPY_INDIRECT_TEMPLATE_INST(int, type, dim, off, dim##D_##sz##32)                    \
   MEMCPY_INDIRECT_TEMPLATE_INST(long long, type, dim, off, dim##D_##sz##64)
 
-#define INST_TEMPLATES_FOR_TYPES(dim, off)                                     \
-  INST_TEMPLATES(unsigned char, 8, dim, off)                                   \
-  INST_TEMPLATES(unsigned short, 16, dim, off)                                 \
-  INST_TEMPLATES(unsigned int, 32, dim, off)                                   \
-  INST_TEMPLATES(unsigned long long, 64, dim, off)                             \
+#define INST_TEMPLATES_FOR_TYPES(dim, off)                                               \
+  INST_TEMPLATES(unsigned char, 8, dim, off)                                             \
+  INST_TEMPLATES(unsigned short, 16, dim, off)                                           \
+  INST_TEMPLATES(unsigned int, 32, dim, off)                                             \
+  INST_TEMPLATES(unsigned long long, 64, dim, off)                                       \
   INST_TEMPLATES(uint4, 128, dim, off)
 
 #define INST_TEMPLATES_FOR_DIMS()                                                        \

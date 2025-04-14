@@ -1055,6 +1055,7 @@ namespace Realm {
           this->dim_order, 0, this->inst_impl->metadata.inst_offset, field_size,
           base_offset, total_bytes, contig_bytes, ndims, count_strides);
 
+
       assert(total_bytes != 0);
 
       size_t *entry = addrlist.begin_nd_entry(N, fields.size());
@@ -1066,8 +1067,6 @@ namespace Realm {
       entry[ndims * 2] = fields.size();
       std::copy(fields.begin(), fields.end(), entry + 2 * ndims + 1);
       entry[0] = (contig_bytes << 4) + ndims;
-
-      std::cout << "total:" << total_bytes << " contig:" << contig_bytes << std::endl;
 
       addrlist.commit_nd_entry(ndims, total_bytes, fields.size());
 

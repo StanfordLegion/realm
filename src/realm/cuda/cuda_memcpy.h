@@ -38,7 +38,7 @@ namespace Realm {
       // Address of the ND array
       uintptr_t addr;
 
-      FieldID *fields;
+      size_t *fields;
       size_t num_fields;
     };
 
