@@ -315,7 +315,6 @@ namespace Realm {
       size_t ib_offset, ib_size;
       AddressList addrlist;
       AddressListCursor addrcursor;
-      PackedRectAddressList packed_addrlist;
     };
     std::vector<XferPort> input_ports, output_ports;
     struct ControlPortState {
@@ -731,7 +730,8 @@ namespace Realm {
     // the kind of XferDes this channel can accept
     XferDesKind kind;
 
-    virtual bool supports_redop(ReductionOpID redop_id) const;
+      virtual bool supports_redop(ReductionOpID redop_id) const;
+      virtual bool supports_fast_fields() const { return false; };
 
     // attempt to make progress on the specified xferdes
     virtual long progress_xd(XferDes *xd, long max_nr);

@@ -114,13 +114,6 @@ namespace Realm {
 
     virtual bool get_addresses(AddressList &addrlist,
                                const InstanceLayoutPieceBase *&nonaffine) = 0;
-
-    virtual bool get_uniform_addresses(PackedRectAddressList &addrlist,
-                                       const InstanceLayoutPieceBase *&nonaffine)
-    {
-      assert(0);
-      return false;
-    }
   };
 
   ////////////////////////////////////////////////////////////////////////
@@ -266,9 +259,6 @@ namespace Realm {
     virtual bool get_addresses(AddressList &addrlist,
                                const InstanceLayoutPieceBase *&nonaffine);
 
-    virtual bool get_uniform_addresses(PackedRectAddressList &addrlist,
-                                       const InstanceLayoutPieceBase *&nonaffine);
-
   protected:
     void reset_internal(void);
     void prefill(void);
@@ -371,11 +361,12 @@ namespace Realm {
                                  const std::vector<size_t> &fld_sizes,
                                  std::vector<size_t> &fragments) const = 0;
 
-    virtual TransferIterator *
-    create_iterator(RegionInstance inst, const std::vector<int> &dim_order,
-                    const std::vector<FieldID> &fields,
-                    const std::vector<size_t> &fld_offsets,
-                    const std::vector<size_t> &fld_sizes) const = 0;
+    virtual TransferIterator *create_iterator(RegionInstance inst,
+                                              const std::vector<int> &dim_order,
+                                              const std::vector<FieldID> &fields,
+                                              const std::vector<size_t> &fld_offsets,
+                                              const std::vector<size_t> &fld_sizes,
+                                              Channel *channel = nullptr) const = 0;
 
     virtual TransferIterator *
     create_iterator(RegionInstance inst, RegionInstance peer,

@@ -780,6 +780,7 @@ namespace Realm {
       GPUXferDes(uintptr_t _dma_op, Channel *_channel, NodeID _launch_node,
                  XferDesID _guid, const std::vector<XferDesPortInfo> &inputs_info,
                  const std::vector<XferDesPortInfo> &outputs_info, int _priority);
+      ~GPUXferDes();
 
       long get_requests(Request **requests, long nr);
 
@@ -788,6 +789,7 @@ namespace Realm {
     private:
       std::vector<GPU *> src_gpus, dst_gpus;
       std::vector<bool> dst_is_ipc;
+      std::vector<void*> replheap_allocs;
     };
 
     class GPUIndirectChannel;
@@ -903,6 +905,8 @@ namespace Realm {
 
       long submit(Request **requests, long nr);
       GPU *get_gpu() const { return src_gpu; }
+
+      virtual bool supports_fast_fields() const { return true; }
 
     private:
       GPU *src_gpu;

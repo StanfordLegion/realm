@@ -173,6 +173,13 @@ namespace Realm {
       }
     }
 
+    GPUXferDes::~GPUXferDes()
+    {
+      for(size_t i = 0; i < replheap_allocs.size(); i++) {
+        get_runtime()->repl_heap.free_obj(replheap_allocs[i]);
+      }
+    }
+
     long GPUXferDes::get_requests(Request **requests, long nr)
     {
       // unused
@@ -313,7 +320,7 @@ namespace Realm {
       return 1; // Unfortunately this can only be byte aligned :(
     }
 
-    inline size_t parse_address_list(AffineCopyInfo<3> &copy_infos, size_t &min_align,
+    /*inline size_t parse_address_list(AffineCopyInfo<3> &copy_infos, size_t &min_align,
                                      MemcpyTransposeInfo<size_t> &transpose_info,
                                      AddressListCursor &in_alc, uintptr_t in_base,
                                      GPU *in_gpu, AddressListCursor &out_alc,
@@ -328,10 +335,6 @@ namespace Realm {
       const size_t *dst_payload = out_alc.get_payload(dst_payload_count);
       assert(dst_payload);
       assert(dst_payload_count > 0);
-
-      /*const size_t field_size = payload[0];
-      const size_t *field_ids = payload + 1;
-      const size_t num_fields = payload_count - 1;*/
 
       uintptr_t in_offset = in_alc.get_offset();
       uintptr_t out_offset = out_alc.get_offset();
@@ -369,24 +372,23 @@ namespace Realm {
         std::memcpy(copy_info.dst.fields, (size_t *)(dst_payload),
                     sizeof(size_t) * dst_payload_count);
 
-        // TODO: add field size
-        copy_info.volume = contig_bytes; /// 2;
+        // TODO: this size accounts only for a single field..
+        copy_info.volume = contig_bytes;
 
         in_alc.advance(0, contig_bytes);
         out_alc.advance(0, contig_bytes);
         return contig_bytes;
       }
+
       assert(0);
       return 0;
-    }
+    }*/
 
-    static size_t populate_affine_copy_info(AffineCopyInfo<3> &copy_infos,
-                                            size_t &min_align,
-                                            MemcpyTransposeInfo<size_t> &transpose_info,
-                                            AddressListCursor &in_alc, uintptr_t in_base,
-                                            GPU *in_gpu, AddressListCursor &out_alc,
-                                            uintptr_t out_base, GPU *out_gpu,
-                                            size_t bytes_left)
+    static size_t read_address_list(AffineCopyInfo<3> &copy_infos, size_t &min_align,
+                                    MemcpyTransposeInfo<size_t> &transpose_info,
+                                    AddressListCursor &in_alc, uintptr_t in_base,
+                                    GPU *in_gpu, AddressListCursor &out_alc,
+                                    uintptr_t out_base, GPU *out_gpu, size_t bytes_left)
     {
       AffineCopyPair<3> &copy_info = copy_infos.subrects[copy_infos.num_rects++];
       uintptr_t in_offset = in_alc.get_offset();
@@ -738,7 +740,7 @@ namespace Realm {
           memset(&transpose_copy, 0, sizeof(transpose_copy));
         }
 
-        bool needs_multi_field = false;
+        bool needs_fast_multifield = false;
 
         // 2) Batch loop - Collect all the rectangles for this inport/outport pair by
         // iterating the address list cursor for each and figure out what copy we can do
@@ -747,13 +749,13 @@ namespace Realm {
           AddressListCursor &in_alc = in_port->addrcursor;
           AddressListCursor &out_alc = out_port->addrcursor;
 
-          {
-            size_t src_payload_count = 0;
-            in_alc.get_payload(src_payload_count);
-            size_t dst_payload_count = 0;
-            out_alc.get_payload(dst_payload_count);
-            needs_multi_field = (src_payload_count != 0 && dst_payload_count != 0);
-          }
+          size_t src_payload_count = 0;
+          size_t dst_payload_count = 0;
+          const size_t *src_payload = nullptr;
+          const size_t *dst_payload = nullptr;
+          src_payload = in_alc.get_payload(src_payload_count);
+          dst_payload = out_alc.get_payload(dst_payload_count);
+          needs_fast_multifield = (src_payload_count != 0 && dst_payload_count != 0);
 
           if(!in_nonaffine && !out_nonaffine) {
             log_gpudma.info() << "Affine -> Affine";
@@ -766,20 +768,27 @@ namespace Realm {
               bytes_left = std::min(bytes_left, (size_t)(4U << 20U));
             }
 
-            /*const size_t bytes_to_copy = parse_multifield_rectlist(
-                in_port->packed_addrlist, out_port->packed_addrlist, min_align, in_base,
-                out_base, copy_infos); //, bytes_left);
-            assert(0);*/
-
             size_t bytes_to_copy = 0;
-            if(needs_multi_field == false) {
-              bytes_to_copy = populate_affine_copy_info(
-                  copy_infos, min_align, transpose_copy, in_alc, in_base, in_gpu, out_alc,
-                  out_base, out_gpu, bytes_left);
-            } else {
-              bytes_to_copy = parse_address_list(copy_infos, min_align, transpose_copy,
-                                                 in_alc, in_base, in_gpu, out_alc,
-                                                 out_base, out_gpu, bytes_left);
+            bytes_to_copy =
+                read_address_list(copy_infos, min_align, transpose_copy, in_alc, in_base,
+                                  in_gpu, out_alc, out_base, out_gpu, bytes_left);
+
+            if(needs_fast_multifield) {
+              AffineCopyPair<3> &copy_info =
+                  copy_infos.subrects[copy_infos.num_rects - 1];
+              copy_info.src.num_fields = src_payload_count;
+              replheap_allocs.push_back(get_runtime()->repl_heap.alloc_obj(
+                  sizeof(size_t) * src_payload_count, 16));
+              copy_info.src.fields = static_cast<size_t *>(replheap_allocs.back());
+              std::memcpy(copy_info.src.fields, (size_t *)(src_payload),
+                          sizeof(size_t) * src_payload_count);
+
+              copy_info.dst.num_fields = dst_payload_count;
+              replheap_allocs.push_back(get_runtime()->repl_heap.alloc_obj(
+                  sizeof(size_t) * dst_payload_count, 16));
+              copy_info.dst.fields = static_cast<size_t *>(replheap_allocs.back());
+              std::memcpy(copy_info.dst.fields, (size_t *)(dst_payload),
+                          sizeof(size_t) * dst_payload_count);
             }
 
             // Either src or dst can't be accessed with a kernel, so just break out and
@@ -898,7 +907,7 @@ namespace Realm {
                             transpose_copy.extents[2];
         }
 
-        if((copy_infos.num_rects > 1) || needs_kernel_copy || needs_multi_field) {
+        if((copy_infos.num_rects > 1) || needs_kernel_copy || needs_fast_multifield) {
           // Adjust all the rectangles' sizes to account for the element size based on the
           // calculated alignment
           for(size_t i = 0; (min_align > 1) && (i < copy_infos.num_rects); i++) {

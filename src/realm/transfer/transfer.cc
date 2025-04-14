@@ -945,92 +945,6 @@ namespace Realm {
   }
 
   template <int N, typename T>
-  bool populate_packed_rect(const AffineLayoutPiece<N, T> *layout_piece,
-                            const Rect<N, T> &target_subrect, const int dim_order[N],
-                            size_t field_size, const std::vector<FieldID> &fields,
-                            size_t inst_offset, PackedRectAddressList &packed_list)
-  {
-    SharedRectLayout layout;
-    layout.base_offset =
-        inst_offset + layout_piece->offset + layout_piece->strides.dot(target_subrect.lo);
-
-    size_t bytes = field_size;
-    int cur_dim = 1;
-    int di = 0;
-
-    for(; di < N; di++) {
-      int d = dim_order[di];
-      if(target_subrect.lo[d] == target_subrect.hi[d])
-        continue;
-      if(layout_piece->strides[d] != bytes)
-        break;
-      bytes *= (target_subrect.hi[d] - target_subrect.lo[d] + 1);
-    }
-
-    layout.contig_bytes = bytes;
-    layout.total_bytes = bytes;
-
-    while(di < N) {
-      size_t total_count = 1;
-      size_t stride = layout_piece->strides[dim_order[di]];
-
-      for(; di < N; di++) {
-        int d = dim_order[di];
-        if(target_subrect.lo[d] == target_subrect.hi[d])
-          continue;
-        size_t count = (target_subrect.hi[d] - target_subrect.lo[d] + 1);
-        if(layout_piece->strides[d] != (stride * total_count))
-          break;
-        total_count *= count;
-      }
-
-      if(cur_dim >= REALM_MAX_DIM)
-        return false;
-      layout.count_strides[cur_dim] = {total_count, stride};
-      layout.total_bytes *= total_count;
-      cur_dim++;
-    }
-
-    layout.ndims = cur_dim;
-
-    packed_list.add_rect(layout, fields, field_size);
-    return true;
-  }
-
-  template <int N, typename T>
-  bool UniformFieldsTransferIterator<N, T>::get_uniform_addresses(
-      PackedRectAddressList &addrlist, const InstanceLayoutPieceBase *&nonaffine)
-  {
-
-    nonaffine = 0;
-
-    while(!this->done()) {
-      if(!this->have_rect) {
-        return false;
-      }
-      Rect<N, T> target_subrect;
-      this->have_rect =
-          compute_target_subrect(layout_piece->bounds, this->cur_rect, this->cur_point,
-                                 target_subrect, this->dim_order);
-
-#ifdef DEBUG_REALM
-      assert(layout_piece->layout_type == PieceLayoutTypes::AffineLayoutType);
-      assert(layout_piece->bounds.contains(target_subrect));
-#endif
-
-      bool ok = populate_packed_rect<N, T>(
-          static_cast<const AffineLayoutPiece<N, T> *>(layout_piece), target_subrect,
-          this->dim_order, field_size, fields, this->inst_impl->metadata.inst_offset,
-          addrlist);
-      if(!ok) {
-        nonaffine = layout_piece;
-        return true;
-      }
-    }
-    return true;
-  }
-
-  template <int N, typename T>
   bool UniformFieldsTransferIterator<N, T>::get_addresses(
       AddressList &addrlist, const InstanceLayoutPieceBase *&nonaffine)
   {
@@ -1055,7 +969,6 @@ namespace Realm {
           this->dim_order, 0, this->inst_impl->metadata.inst_offset, field_size,
           base_offset, total_bytes, contig_bytes, ndims, count_strides);
 
-
       assert(total_bytes != 0);
 
       size_t *entry = addrlist.begin_nd_entry(N, fields.size());
@@ -1069,28 +982,6 @@ namespace Realm {
       entry[0] = (contig_bytes << 4) + ndims;
 
       addrlist.commit_nd_entry(ndims, total_bytes, fields.size());
-
-      /*for(; field_idx < fields.size(); field_idx++) {
-        size_t *address = addrlist.begin_nd_entry(N);
-
-        if(!address) {
-          this->have_rect = true;
-          return true; // out of space for now
-        }
-
-        size_t field_rel_offset =
-            layout_piece->bounds.volume() * field_size * fields[field_idx];
-
-        address[1] = (base_offset + field_rel_offset);
-
-        for(auto &[dim, count_stride] : count_strides) {
-          address[dim * 2] = count_stride.first;
-          address[dim * 2 + 1] = count_stride.second;
-        }
-
-        address[0] = (contig_bytes << 4) + ndims;
-        addrlist.commit_nd_entry(ndims, total_bytes);
-      }*/
     }
 
     return true; // we have no more addresses to produce
@@ -1976,7 +1867,8 @@ namespace Realm {
                                               const std::vector<int> &dim_order,
                                               const std::vector<FieldID> &fields,
                                               const std::vector<size_t> &fld_offsets,
-                                              const std::vector<size_t> &fld_sizes) const;
+                                              const std::vector<size_t> &fld_sizes,
+                                              Channel *channel = nullptr) const;
 
     virtual TransferIterator *create_iterator(RegionInstance inst, RegionInstance peer,
                                               const std::vector<FieldID> &fields,
@@ -2340,13 +2232,15 @@ namespace Realm {
   TransferIterator *TransferDomainIndexSpace<N, T>::create_iterator(
       RegionInstance inst, const std::vector<int> &dim_order,
       const std::vector<FieldID> &fields, const std::vector<size_t> &fld_offsets,
-      const std::vector<size_t> &fld_sizes) const
+      const std::vector<size_t> &fld_sizes, Channel *channel) const
   {
     assert(dim_order.size() == N);
     RegionInstanceImpl *impl = get_runtime()->get_instance_impl(inst);
     const InstanceLayout<N, T> *inst_layout =
         checked_cast<const InstanceLayout<N, T> *>(impl->metadata.layout);
-    if(inst_layout->uniform_mutlifield_layout) {
+    if(inst_layout->uniform_mutlifield_layout && channel &&
+       channel->supports_fast_fields()) {
+      // if(channel && channel->supports_fast_fields()) {
       return new UniformFieldsTransferIterator<N, T>(dim_order.data(), fields,
                                                      fld_sizes.front(), impl, is);
     } else {
@@ -5007,7 +4901,8 @@ namespace Realm {
             src_sizes[k] = desc.src_fields[xdn.inputs[j].inst.fld_start + k].size;
           }
           ii.iter = desc.domain->create_iterator(xdn.inputs[j].inst.inst, desc.dim_order,
-                                                 src_fields, src_offsets, src_sizes);
+                                                 src_fields, src_offsets, src_sizes,
+                                                 xdn.channel);
           // use first field's serdez - they all have to be the same
           ii.serdez_id = desc.src_fields[xdn.inputs[j].inst.fld_start].serdez_id;
           ii.ib_offset = 0;
@@ -5137,7 +5032,8 @@ namespace Realm {
             dst_sizes[k] = desc.dst_fields[xdn.outputs[j].inst.fld_start + k].size;
           }
           oi.iter = desc.domain->create_iterator(xdn.outputs[j].inst.inst, desc.dim_order,
-                                                 dst_fields, dst_offsets, dst_sizes);
+                                                 dst_fields, dst_offsets, dst_sizes,
+                                                 xdn.channel);
           // use first field's serdez - they all have to be the same
           oi.serdez_id = desc.dst_fields[xdn.outputs[j].inst.fld_start].serdez_id;
           oi.ib_offset = 0;
