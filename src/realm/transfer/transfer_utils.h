@@ -63,21 +63,17 @@ namespace Realm {
    * @param affine Pointer to the affine layout piece being queried.
    * @param subrect Subrectangle to compute addressing for.
    * @param dim_order Ordering of dimensions to compact/iterate over.
-   * @param field_rel_offset Offset of the field within the layout.
-   * @param inst_offset Base offset of the instance in memory.
-   * @param[out] base_offset Final byte offset to the start of the subrect.
    * @param[out] total_bytes Total bytes represented by the subrect.
    * @param[out] contig_bytes Number of contiguous bytes in the compacted dimensions.
-   * @param[out] ndims_out Number of dimensions used in the compacted representation.
    * @param[out] count_strides Output stride/count pairs indexed by dimension.
    *                            count_strides[i][0] = count, count_strides[i][1] = stride.
    */
   template <int N, typename T>
-  inline void flatten_affine_dimensions(
+  inline int flatten_affine_dimensions(
       const AffineLayoutPiece<N, T> *affine, const Rect<N, T> &subrect,
-      const int dim_order[N], size_t field_rel_offset, size_t inst_offset,
-      size_t field_size, size_t &base_offset, size_t &total_bytes, size_t &contig_bytes,
-      int &ndims_out, std::unordered_map<int, std::pair<size_t, size_t>> &count_strides);
+      const int dim_order[N], size_t field_size, size_t &total_bytes,
+      size_t &contig_bytes,
+      std::unordered_map<int, std::pair<size_t, size_t>> &count_strides);
 
 } // namespace Realm
 

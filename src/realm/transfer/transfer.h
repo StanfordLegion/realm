@@ -276,12 +276,6 @@ namespace Realm {
 
     size_t field_size{0};
     size_t field_idx{0};
-
-    int ndims{0};
-    size_t contig_bytes{0};
-    size_t total_bytes{0};
-    size_t base_offset{0};
-    std::unordered_map<int, std::pair<size_t, size_t>> count_strides;
   };
 
   template <int N, typename T>

@@ -940,8 +940,6 @@ namespace Realm {
     }
     iter_init_deferred = false;
     this->is_done = !iter.valid;
-
-    count_strides.clear();
   }
 
   template <int N, typename T>
@@ -960,18 +958,30 @@ namespace Realm {
           compute_target_subrect(layout_piece->bounds, this->cur_rect, this->cur_point,
                                  target_subrect, &this->dim_order[0]);
 
+      size_t contig_bytes = 0;
+      size_t total_bytes = 0;
+
+      const AffineLayoutPiece<N, T> *affine =
+          static_cast<const AffineLayoutPiece<N, T> *>(layout_piece);
+
+      size_t base_offset = this->inst_impl->metadata.inst_offset + affine->offset +
+                           affine->strides.dot(target_subrect.lo); //+ field_rel_offset;
+
 #ifdef DEBUG_REALM
       assert(layout_piece->bounds.contains(target_subrect));
       assert(layout_piece->layout_type == PieceLayoutTypes::AffineLayoutType);
 #endif
-      flatten_affine_dimensions(
+      // TODO(apryakhin@): If that's the same rec consider caching it
+      std::unordered_map<int, std::pair<size_t, size_t>> count_strides;
+      int ndims = flatten_affine_dimensions(
           static_cast<const AffineLayoutPiece<N, T> *>(layout_piece), target_subrect,
-          this->dim_order, 0, this->inst_impl->metadata.inst_offset, field_size,
-          base_offset, total_bytes, contig_bytes, ndims, count_strides);
-
+          this->dim_order, field_size, total_bytes, contig_bytes, count_strides);
       assert(total_bytes != 0);
+      assert(contig_bytes != 0);
 
       size_t *entry = addrlist.begin_nd_entry(N, fields.size());
+      assert(entry);
+
       entry[1] = base_offset;
       for(auto &[dim, count_stride] : count_strides) {
         entry[dim * 2] = count_stride.first;
@@ -984,7 +994,7 @@ namespace Realm {
       addrlist.commit_nd_entry(ndims, total_bytes, fields.size());
     }
 
-    return true; // we have no more addresses to produce
+    return true;
   }
 
   template <int N, typename T>
@@ -2240,7 +2250,7 @@ namespace Realm {
         checked_cast<const InstanceLayout<N, T> *>(impl->metadata.layout);
     if(inst_layout->uniform_mutlifield_layout && channel &&
        channel->supports_fast_fields()) {
-      // if(channel && channel->supports_fast_fields()) {
+      //if(channel && channel->supports_fast_fields()) {
       return new UniformFieldsTransferIterator<N, T>(dim_order.data(), fields,
                                                      fld_sizes.front(), impl, is);
     } else {
