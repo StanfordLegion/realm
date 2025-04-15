@@ -980,16 +980,18 @@ namespace Realm {
       assert(contig_bytes != 0);
 
       size_t *entry = addrlist.begin_nd_entry(N, fields.size(), /*wrap_mode=*/false);
-      assert(entry);
 
+      assert(entry);
       entry[1] = base_offset;
       for(auto &[dim, count_stride] : count_strides) {
-        entry[dim * 2] = count_stride.first;
-        entry[dim * 2 + 1] = count_stride.second;
+        entry[dim * AddressList::ADDRLIST_DIM_SLOTS] = count_stride.first;
+        entry[dim * AddressList::ADDRLIST_DIM_SLOTS + 1] = count_stride.second;
       }
-      entry[ndims * 2] = fields.size();
-      std::copy(fields.begin(), fields.end(), entry + 2 * ndims + 1);
-      entry[0] = (contig_bytes << 4) + ndims;
+      entry[ndims * AddressList::ADDRLIST_DIM_SLOTS] = fields.size();
+      std::copy(fields.begin(), fields.end(),
+                entry + AddressList::ADDRLIST_DIM_SLOTS * ndims + 1);
+      // entry[0] = (contig_bytes << 4) + ndims;
+      entry[0] = AddressList::pack_entry_header(contig_bytes, ndims);
 
       addrlist.commit_nd_entry(ndims, total_bytes, fields.size());
     }

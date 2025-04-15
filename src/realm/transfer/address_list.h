@@ -30,10 +30,18 @@ namespace Realm {
 
     size_t *begin_nd_entry(int max_dim, size_t payload_size = 0, bool wrap_mode = true);
     void commit_nd_entry(int act_dim, size_t bytes, size_t payload_size = 0);
-
     size_t bytes_pending() const;
 
+    // entry packs the contiguous byte count (contig_bytes) in the upper bits the actual
+    // dimension count (act_dim) in the lower 4 bits
+    static size_t pack_entry_header(size_t contig_bytes, int dims);
+
+    constexpr static size_t ADDRLIST_DIM_SLOTS = 2;
   protected:
+    constexpr static size_t FLAG_HAS_EXTRA = (1UL << 63);
+    constexpr static size_t ADDRLIST_DIM_MASK = 0xF;
+    constexpr static size_t ADDRLIST_CONTIG_SHIFT = 4;
+
     friend class AddressListCursor;
 
     const size_t *read_entry();
@@ -41,18 +49,8 @@ namespace Realm {
     size_t total_bytes;
     unsigned write_pointer;
     unsigned read_pointer;
-    constexpr static size_t FLAG_HAS_EXTRA = (1UL << 63);
     std::vector<size_t> data;
     size_t max_entries;
-  };
-
-  struct ParsedAddrlistEntry {
-    int dim;
-    size_t contig_bytes;
-    uintptr_t base_offset;
-    std::vector<std::pair<size_t, size_t>> count_strides;
-    const size_t *payload = nullptr;
-    size_t payload_count = 0;
   };
 
   class AddressListCursor {
