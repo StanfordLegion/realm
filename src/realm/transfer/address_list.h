@@ -26,9 +26,9 @@ namespace Realm {
 
   class AddressList {
   public:
-    AddressList();
+    AddressList(size_t _max_entries = 1000);
 
-    size_t *begin_nd_entry(int max_dim, size_t payload_size = 0);
+    size_t *begin_nd_entry(int max_dim, size_t payload_size = 0, bool wrap_mode = true);
     void commit_nd_entry(int act_dim, size_t bytes, size_t payload_size = 0);
 
     size_t bytes_pending() const;
@@ -41,10 +41,9 @@ namespace Realm {
     size_t total_bytes;
     unsigned write_pointer;
     unsigned read_pointer;
-    constexpr static const size_t MAX_ENTRIES = 1000;
     constexpr static size_t FLAG_HAS_EXTRA = (1UL << 63);
     std::vector<size_t> data;
-    // size_t data[MAX_ENTRIES];
+    size_t max_entries;
   };
 
   struct ParsedAddrlistEntry {

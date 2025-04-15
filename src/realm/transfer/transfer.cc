@@ -979,7 +979,7 @@ namespace Realm {
       assert(total_bytes != 0);
       assert(contig_bytes != 0);
 
-      size_t *entry = addrlist.begin_nd_entry(N, fields.size());
+      size_t *entry = addrlist.begin_nd_entry(N, fields.size(), /*wrap_mode=*/false);
       assert(entry);
 
       entry[1] = base_offset;
@@ -2250,7 +2250,7 @@ namespace Realm {
         checked_cast<const InstanceLayout<N, T> *>(impl->metadata.layout);
     if(inst_layout->uniform_mutlifield_layout && channel &&
        channel->supports_fast_fields()) {
-      //if(channel && channel->supports_fast_fields()) {
+      // if(channel && channel->supports_fast_fields()) {
       return new UniformFieldsTransferIterator<N, T>(dim_order.data(), fields,
                                                      fld_sizes.front(), impl, is);
     } else {

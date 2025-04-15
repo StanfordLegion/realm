@@ -31,66 +31,49 @@ namespace Realm {
   // class AddressList
   //
 
-  AddressList::AddressList()
+  AddressList::AddressList(size_t _max_entries)
     : total_bytes(0)
     , write_pointer(0)
     , read_pointer(0)
+    , max_entries(_max_entries)
   {
-    data.reserve(MAX_ENTRIES);
-    // memset(data, 0, MAX_ENTRIES * sizeof(size_t));
+    data.reserve(max_entries);
   }
 
-  size_t *AddressList::begin_nd_entry(int max_dim, size_t payload_size)
+  size_t *AddressList::begin_nd_entry(int max_dim, size_t payload_size, bool wrap_mode)
   {
     size_t entries_needed = 2 * max_dim + (payload_size > 0 ? payload_size + 1 : 0);
-    if(data.size() < write_pointer + entries_needed) {
-      data.resize(write_pointer + entries_needed);
-    }
-    return data.data() + write_pointer;
-  }
 
-  /*size_t *AddressList::begin_nd_entry(int max_dim)
-  {
-    size_t entries_needed = max_dim * 2;
+    if(wrap_mode) {
+      size_t new_wp = write_pointer + entries_needed;
+      if(new_wp > max_entries) {
+        if((read_pointer <= entries_needed) || (write_pointer < read_pointer))
+          return nullptr;
 
-    size_t new_wp = write_pointer + entries_needed;
-    if(new_wp > MAX_ENTRIES) {
-      // have to wrap around
-      if((read_pointer <= entries_needed) || (write_pointer < read_pointer))
-        return 0;
+        // fill remaining entries with 0's so reader skips
+        while(write_pointer < max_entries)
+          data[write_pointer++] = 0;
 
-      // fill remaining entries with 0's so reader skips over them
-      while(write_pointer < MAX_ENTRIES)
-        data[write_pointer++] = 0;
+        write_pointer = 0;
+        new_wp = entries_needed;
+      } else {
+        if((write_pointer < read_pointer) && (new_wp >= read_pointer))
+          return nullptr;
+        if((new_wp == max_entries) && (read_pointer == 0))
+          return nullptr;
+      }
 
-      write_pointer = 0;
+      // ensure capacity upfront for max_entries once
+      if(data.size() < max_entries)
+        data.resize(max_entries);
+
+      return data.data() + write_pointer;
     } else {
-      // if the write pointer would cross over the read pointer, we have to wait
-      if((write_pointer < read_pointer) && (new_wp >= read_pointer))
-        return 0;
-
-      // special case: if the write pointer would wrap and read is at 0, that'd
-      //  be a collision too
-      if((new_wp == MAX_ENTRIES) && (read_pointer == 0))
-        return 0;
+      if(data.size() < write_pointer + entries_needed)
+        data.resize(write_pointer + entries_needed);
+      return data.data() + write_pointer;
     }
-
-    // all good - return a pointer to the first available entry
-    return (data + write_pointer);
-  }*/
-
-  /*void AddressList::commit_nd_entry(int act_dim, size_t bytes)
-  {
-    size_t entries_used = act_dim * 2;
-
-    write_pointer += entries_used;
-    if(write_pointer >= MAX_ENTRIES) {
-      assert(write_pointer == MAX_ENTRIES);
-      write_pointer = 0;
-    }
-
-    total_bytes += bytes;
-  }*/
+  }
 
   void AddressList::commit_nd_entry(int act_dim, size_t bytes, size_t payload_size)
   {
@@ -113,8 +96,8 @@ namespace Realm {
   const size_t *AddressList::read_entry()
   {
     assert(total_bytes > 0);
-    if(read_pointer >= MAX_ENTRIES) {
-      assert(read_pointer == MAX_ENTRIES);
+    if(read_pointer >= max_entries) {
+      assert(read_pointer == max_entries);
       read_pointer = 0;
     }
     // skip trailing 0's
