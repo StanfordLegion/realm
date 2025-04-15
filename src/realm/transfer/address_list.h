@@ -28,29 +28,30 @@ namespace Realm {
   public:
     AddressList(size_t _max_entries = 1000);
 
-    size_t *begin_nd_entry(int max_dim, size_t payload_size = 0, bool wrap_mode = true);
-    void commit_nd_entry(int act_dim, size_t bytes, size_t payload_size = 0);
+    size_t *being_entry(int max_dim, size_t payload_size = 0, bool wrap_mode = true);
+    void commit_entry(int act_dim, size_t bytes, size_t payload_size = 0);
     size_t bytes_pending() const;
 
-    // entry packs the contiguous byte count (contig_bytes) in the upper bits the actual
-    // dimension count (act_dim) in the lower 4 bits
+    // entry packs:
+    // the contiguous byte count (contig_bytes) in the upper bitsthe
+    // the actual dimension count (act_dim) in the lower 4 bits
     static size_t pack_entry_header(size_t contig_bytes, int dims);
 
     constexpr static size_t ADDRLIST_DIM_SLOTS = 2;
+
   protected:
-    constexpr static size_t FLAG_HAS_EXTRA = (1UL << 63);
+    constexpr static size_t ADDRLIST_HAS_EXTRA = (1UL << 63);
     constexpr static size_t ADDRLIST_DIM_MASK = 0xF;
     constexpr static size_t ADDRLIST_CONTIG_SHIFT = 4;
 
     friend class AddressListCursor;
-
     const size_t *read_entry();
 
-    size_t total_bytes;
-    unsigned write_pointer;
-    unsigned read_pointer;
+    size_t total_bytes{0};
+    size_t write_pointer{0};
+    size_t read_pointer{0};
+    size_t max_entries{0};
     std::vector<size_t> data;
-    size_t max_entries;
   };
 
   class AddressListCursor {
@@ -66,18 +67,16 @@ namespace Realm {
     void advance(int dim, size_t amount);
 
     void skip_bytes(size_t bytes);
-
     const size_t *get_payload(size_t &count);
 
   protected:
-    AddressList *addrlist;
-    bool partial;
+    AddressList *addrlist{nullptr};
+    bool partial{false};
     // we need to be one larger than any index space realm supports, since
     //  we use the contiguous bytes within a field as a "dimension" in some
     //  cases
-    static const int MAX_DIM = REALM_MAX_DIM + 1;
-    int partial_dim;
-    size_t pos[MAX_DIM];
+    int partial_dim{0};
+    std::array<size_t, REALM_MAX_DIM + 1> pos{};
   };
 
   std::ostream &operator<<(std::ostream &os, const AddressListCursor &alc);

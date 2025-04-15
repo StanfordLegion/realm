@@ -523,7 +523,7 @@ namespace Realm {
 
       // we may be able to compact dimensions, but ask for space to write a
       //  an address record of the maximum possible dimension (i.e. N)
-      size_t *addr_data = addrlist.begin_nd_entry(N);
+      size_t *addr_data = addrlist.being_entry(N);
       if(!addr_data) {
         return true; // out of space for now
       }
@@ -637,7 +637,7 @@ namespace Realm {
         // now that we know the compacted dimension, we can finish the address
         //  record
         addr_data[0] = (bytes << 4) + cur_dim;
-        addrlist.commit_nd_entry(cur_dim, total_bytes);
+        addrlist.commit_entry(cur_dim, total_bytes);
         log_dma.debug() << "Finalize addr data dim=" << cur_dim << " total_bytes"
                         << total_bytes;
       } else {
@@ -979,7 +979,7 @@ namespace Realm {
       assert(total_bytes != 0);
       assert(contig_bytes != 0);
 
-      size_t *entry = addrlist.begin_nd_entry(N, fields.size(), /*wrap_mode=*/false);
+      size_t *entry = addrlist.being_entry(N, fields.size(), /*wrap_mode=*/false);
 
       assert(entry);
       entry[1] = base_offset;
@@ -990,10 +990,9 @@ namespace Realm {
       entry[ndims * AddressList::ADDRLIST_DIM_SLOTS] = fields.size();
       std::copy(fields.begin(), fields.end(),
                 entry + AddressList::ADDRLIST_DIM_SLOTS * ndims + 1);
-      // entry[0] = (contig_bytes << 4) + ndims;
-      entry[0] = AddressList::pack_entry_header(contig_bytes, ndims);
 
-      addrlist.commit_nd_entry(ndims, total_bytes, fields.size());
+      entry[0] = AddressList::pack_entry_header(contig_bytes, ndims);
+      addrlist.commit_entry(ndims, total_bytes, fields.size());
     }
 
     return true;
@@ -1253,7 +1252,7 @@ namespace Realm {
         return false;
       }
 
-      size_t *addr_data = addrlist.begin_nd_entry(1);
+      size_t *addr_data = addrlist.being_entry(1);
       if(!addr_data) {
         return true;
       }
@@ -1262,7 +1261,7 @@ namespace Realm {
       size_t total_bytes = this->cur_rect.volume() * this->cur_field_size;
       this->have_rect = false;
       addr_data[0] = ((total_bytes) << 4) + cur_dim;
-      addrlist.commit_nd_entry(cur_dim, total_bytes);
+      addrlist.commit_entry(cur_dim, total_bytes);
       log_dma.debug() << "Finalize gather/scatter addr data dim=" << cur_dim
                       << " total_bytes=" << total_bytes;
       break;

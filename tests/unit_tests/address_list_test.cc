@@ -30,9 +30,10 @@ TEST(AddressListTestsWithParams, Create1DEntry)
   assert(stride <= bytes);
 
   AddressList addrlist;
-  size_t *addr_data = addrlist.begin_nd_entry(dim);
-  addr_data[0] = (bytes << 4) + dim;
-  addrlist.commit_nd_entry(dim, bytes);
+  size_t *addr_data = addrlist.being_entry(dim);
+  // addr_data[0] = (bytes << 4) + dim;
+  addr_data[0] = AddressList::pack_entry_header(bytes, dim);
+  addrlist.commit_entry(dim, bytes);
 
   AddressListCursor addrcursor;
   addrcursor.set_addrlist(&addrlist);
@@ -59,17 +60,19 @@ TEST(AddressListTestsWithParams, Create3DEntry)
   const size_t stride = 8;
   const size_t bytes = 1024;
   const std::vector<size_t> strides{stride, stride * stride, stride * stride * stride};
-  size_t *addr_data = addrlist.begin_nd_entry(dim);
+  size_t *addr_data = addrlist.being_entry(dim);
 
   size_t cur_dim = 1;
   for(size_t i = 0; i < strides.size() - 1; i++) {
-    addr_data[cur_dim * 2] = bytes / strides[i];
-    addr_data[cur_dim * 2 + 1] = strides[i];
+    addr_data[cur_dim * AddressList::ADDRLIST_DIM_SLOTS] = bytes / strides[i];
+    addr_data[cur_dim * AddressList::ADDRLIST_DIM_SLOTS + 1] = strides[i];
     cur_dim++;
   }
 
-  addr_data[0] = (strides[0] << 4) + cur_dim;
-  addrlist.commit_nd_entry(cur_dim, bytes);
+  // addr_data[0] = (strides[0] << 4) + cur_dim;
+
+  addr_data[0] = AddressList::pack_entry_header(strides[0], cur_dim);
+  addrlist.commit_entry(cur_dim, bytes);
 
   AddressListCursor addrcursor;
   addrcursor.set_addrlist(&addrlist);
@@ -91,10 +94,11 @@ TEST(AddressListTestsWithParams, CommitMax1DEntries)
 
   AddressList addrlist;
   for(size_t i = 0; i < max_entries; i++) {
-    size_t *addr_data = addrlist.begin_nd_entry(dim);
+    size_t *addr_data = addrlist.being_entry(dim);
     EXPECT_NE(addr_data, nullptr);
-    addr_data[0] = (bytes << 4) + dim;
-    addrlist.commit_nd_entry(dim, bytes);
+    // addr_data[0] = (bytes << 4) + dim;
+    addr_data[0] = AddressList::pack_entry_header(bytes, dim);
+    addrlist.commit_entry(dim, bytes);
   }
 
   AddressListCursor addrcursor;

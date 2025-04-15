@@ -32,15 +32,12 @@ namespace Realm {
   //
 
   AddressList::AddressList(size_t _max_entries)
-    : total_bytes(0)
-    , write_pointer(0)
-    , read_pointer(0)
-    , max_entries(_max_entries)
+    : max_entries(_max_entries)
   {
     data.reserve(max_entries);
   }
 
-  size_t *AddressList::begin_nd_entry(int max_dim, size_t payload_size, bool wrap_mode)
+  size_t *AddressList::being_entry(int max_dim, size_t payload_size, bool wrap_mode)
   {
     size_t entries_needed =
         ADDRLIST_DIM_SLOTS * max_dim + (payload_size > 0 ? payload_size + 1 : 0);
@@ -76,7 +73,7 @@ namespace Realm {
     }
   }
 
-  void AddressList::commit_nd_entry(int act_dim, size_t bytes, size_t payload_size)
+  void AddressList::commit_entry(int act_dim, size_t bytes, size_t payload_size)
   {
     size_t entries_used = act_dim * ADDRLIST_DIM_SLOTS;
 
@@ -86,7 +83,7 @@ namespace Realm {
     }
 
     entries_used += payload_size;
-    data[write_pointer] |= (payload_size > 0 ? FLAG_HAS_EXTRA : 0);
+    data[write_pointer] |= (payload_size > 0 ? ADDRLIST_HAS_EXTRA : 0);
 
     write_pointer += entries_used;
     total_bytes += bytes;
@@ -117,14 +114,7 @@ namespace Realm {
   // class AddressListCursor
   //
 
-  AddressListCursor::AddressListCursor()
-    : addrlist(0)
-    , partial(false)
-    , partial_dim(0)
-  {
-    for(int i = 0; i < MAX_DIM; i++)
-      pos[i] = 0;
-  }
+  AddressListCursor::AddressListCursor() { pos.fill(0); }
 
   void AddressListCursor::set_addrlist(AddressList *_addrlist) { addrlist = _addrlist; }
 
@@ -171,7 +161,7 @@ namespace Realm {
   {
     const size_t *entry = addrlist->read_entry();
     int act_dim = (entry[0] & AddressList::ADDRLIST_DIM_MASK);
-    if(entry[0] & AddressList::FLAG_HAS_EXTRA) {
+    if(entry[0] & AddressList::ADDRLIST_HAS_EXTRA) {
       count = entry[act_dim * AddressList::ADDRLIST_DIM_SLOTS];
       return entry + act_dim * AddressList::ADDRLIST_DIM_SLOTS + 1;
     }
