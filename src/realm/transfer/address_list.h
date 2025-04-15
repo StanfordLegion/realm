@@ -30,6 +30,7 @@ namespace Realm {
 
     size_t *being_entry(int max_dim, size_t payload_size = 0, bool wrap_mode = true);
     void commit_entry(int act_dim, size_t bytes, size_t payload_size = 0);
+
     size_t bytes_pending() const;
 
     // entry packs:
@@ -40,7 +41,7 @@ namespace Realm {
     constexpr static size_t ADDRLIST_DIM_SLOTS = 2;
 
   protected:
-    constexpr static size_t ADDRLIST_HAS_EXTRA = (1UL << 63);
+    constexpr static size_t ADDRLIST_HAS_EXTRA = (1UL << (sizeof(size_t) * 8 - 1));
     constexpr static size_t ADDRLIST_DIM_MASK = 0xF;
     constexpr static size_t ADDRLIST_CONTIG_SHIFT = 4;
 

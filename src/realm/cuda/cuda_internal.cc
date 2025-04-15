@@ -320,11 +320,11 @@ namespace Realm {
       return 1; // Unfortunately this can only be byte aligned :(
     }
 
-    static size_t read_address_list(AffineCopyInfo<3> &copy_infos, size_t &min_align,
-                                    MemcpyTransposeInfo<size_t> &transpose_info,
-                                    AddressListCursor &in_alc, uintptr_t in_base,
-                                    GPU *in_gpu, AddressListCursor &out_alc,
-                                    uintptr_t out_base, GPU *out_gpu, size_t bytes_left)
+    static size_t read_address_entry(AffineCopyInfo<3> &copy_infos, size_t &min_align,
+                                     MemcpyTransposeInfo<size_t> &transpose_info,
+                                     AddressListCursor &in_alc, uintptr_t in_base,
+                                     GPU *in_gpu, AddressListCursor &out_alc,
+                                     uintptr_t out_base, GPU *out_gpu, size_t bytes_left)
     {
       AffineCopyPair<3> &copy_info = copy_infos.subrects[copy_infos.num_rects++];
       uintptr_t in_offset = in_alc.get_offset();
@@ -706,8 +706,8 @@ namespace Realm {
 
             size_t bytes_to_copy = 0;
             bytes_to_copy =
-                read_address_list(copy_infos, min_align, transpose_copy, in_alc, in_base,
-                                  in_gpu, out_alc, out_base, out_gpu, bytes_left);
+                read_address_entry(copy_infos, min_align, transpose_copy, in_alc, in_base,
+                                   in_gpu, out_alc, out_base, out_gpu, bytes_left);
 
             if(needs_fast_multifield) {
               AffineCopyPair<3> &copy_info =

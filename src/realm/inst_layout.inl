@@ -520,10 +520,12 @@ namespace Realm {
   template <typename S>
   /*static*/ InstanceLayoutGeneric *InstanceLayout<N, T>::deserialize_new(S &s)
   {
-    InstanceLayout<N, T> *il = new InstanceLayout<N, T>;
-    if((s >> il->bytes_used) && (s >> il->alignment_reqd) &&
-       //(s >> il->fields) &&
-       (s >> il->space) && (s >> il->piece_lists)) {
+    InstanceLayout<N,T> *il = new InstanceLayout<N,T>;
+    if((s >> il->bytes_used) &&
+       (s >> il->alignment_reqd) &&
+       (s >> il->fields) &&
+       (s >> il->space) &&
+       (s >> il->piece_lists)) {
       return il;
     } else {
       delete il;
@@ -611,7 +613,7 @@ namespace Realm {
   {
     return ((s << bytes_used) &&
 	    (s << alignment_reqd) &&
-	    //(s << fields) &&
+	    (s << fields) &&
 	    (s << space) &&
 	    (s << piece_lists));
   }
