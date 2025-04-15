@@ -327,6 +327,132 @@ namespace Realm {
                                      uintptr_t out_base, GPU *out_gpu, size_t bytes_left)
     {
       AffineCopyPair<3> &copy_info = copy_infos.subrects[copy_infos.num_rects++];
+
+      const uintptr_t in_offset = in_alc.get_offset();
+      const uintptr_t out_offset = out_alc.get_offset();
+
+      const int in_dim = in_alc.get_dim();
+      const int out_dim = out_alc.get_dim();
+      size_t icount = in_alc.remaining(0);
+      size_t ocount = out_alc.remaining(0);
+      const size_t contig_bytes = std::min({icount, ocount, bytes_left});
+
+      log_gpudma.info() << "IN: " << in_dim << ' ' << icount << ' ' << in_offset << ' '
+                        << contig_bytes;
+      log_gpudma.info() << "OUT: " << out_dim << ' ' << ocount << ' ' << out_offset << ' '
+                        << contig_bytes;
+
+      assert(in_dim > 0 && out_dim > 0);
+
+      copy_info.src.addr = in_base + in_offset;
+      copy_info.dst.addr = out_base + out_offset;
+      copy_info.extents[1] = 1;
+      copy_info.extents[2] = 1;
+
+      min_align = std::min({min_align, calculate_type_alignment(copy_info.src.addr),
+                            calculate_type_alignment(copy_info.dst.addr),
+                            calculate_type_alignment(contig_bytes)});
+
+      // Handle 1D case directly
+      if((contig_bytes == bytes_left) || ((contig_bytes == icount) && (in_dim == 1)) ||
+         ((contig_bytes == ocount) && (out_dim == 1))) {
+        copy_info.extents[0] = contig_bytes;
+        copy_info.src.strides[0] = contig_bytes;
+        copy_info.dst.strides[0] = contig_bytes;
+        copy_info.volume = contig_bytes;
+        in_alc.advance(0, contig_bytes);
+        out_alc.advance(0, contig_bytes);
+        return contig_bytes;
+      }
+
+      // Compute 2D strides
+      int id = (contig_bytes < icount) ? 0 : 1;
+      int od = (contig_bytes < ocount) ? 0 : 1;
+
+      size_t iscale = (id == 0) ? contig_bytes : 1;
+      size_t oscale = (od == 0) ? contig_bytes : 1;
+
+      uintptr_t in_lstride = (id == 0) ? contig_bytes : in_alc.get_stride(1);
+      uintptr_t out_lstride = (od == 0) ? contig_bytes : out_alc.get_stride(1);
+
+      if((id == 0) && (icount % contig_bytes != 0))
+        id = 1;
+      if((od == 0) && (ocount % contig_bytes != 0))
+        od = 1;
+
+      icount = (id == 0) ? icount / contig_bytes : in_alc.remaining(id);
+      ocount = (od == 0) ? ocount / contig_bytes : out_alc.remaining(od);
+
+      const size_t lines = std::min({icount, ocount, bytes_left / contig_bytes});
+
+      min_align = std::min({min_align, calculate_type_alignment(in_lstride),
+                            calculate_type_alignment(out_lstride)});
+
+      // Check if 2D copy is sufficient
+      if(((contig_bytes * lines) == bytes_left) ||
+         ((lines == icount) && (id == in_dim - 1)) ||
+         ((lines == ocount) && (od == out_dim - 1))) {
+        copy_info.src.strides[0] = in_lstride;
+        copy_info.src.strides[1] = lines;
+        copy_info.dst.strides[0] = out_lstride;
+        copy_info.dst.strides[1] = lines;
+        copy_info.extents[0] = contig_bytes;
+        copy_info.extents[1] = lines;
+        copy_info.volume = lines * contig_bytes;
+        in_alc.advance(id, lines * iscale);
+        out_alc.advance(od, lines * oscale);
+        return copy_info.volume;
+      }
+
+      // Compute 3D strides
+      uintptr_t in_pstride =
+          (lines < icount) ? in_lstride * lines : in_alc.get_stride(++id);
+      uintptr_t out_pstride =
+          (lines < ocount) ? out_lstride * lines : out_alc.get_stride(++od);
+
+      iscale *= (lines < icount) ? lines : 1;
+      oscale *= (lines < ocount) ? lines : 1;
+
+      icount = (lines < icount) ? icount / lines : in_alc.remaining(id);
+      ocount = (lines < ocount) ? ocount / lines : out_alc.remaining(od);
+
+      const size_t planes =
+          std::min({icount, ocount, bytes_left / (contig_bytes * lines)});
+
+      if(needs_transpose(in_lstride, in_pstride, out_lstride, out_pstride)) {
+        transpose_info.src = in_base + in_offset;
+        transpose_info.dst = out_base + out_offset;
+        transpose_info.src_strides[0] = in_lstride;
+        transpose_info.src_strides[1] = in_pstride;
+        transpose_info.dst_strides[0] = out_lstride;
+        transpose_info.dst_strides[1] = out_pstride;
+        transpose_info.extents[0] = contig_bytes;
+        transpose_info.extents[1] = lines;
+        transpose_info.extents[2] = planes;
+        copy_infos.num_rects--;
+      } else {
+        copy_info.src.strides[0] = in_lstride;
+        copy_info.src.strides[1] = in_pstride / in_lstride;
+        copy_info.dst.strides[0] = out_lstride;
+        copy_info.dst.strides[1] = out_pstride / out_lstride;
+        copy_info.extents[0] = contig_bytes;
+        copy_info.extents[1] = lines;
+        copy_info.extents[2] = planes;
+        copy_info.volume = planes * lines * contig_bytes;
+      }
+
+      in_alc.advance(id, planes * iscale);
+      out_alc.advance(od, planes * oscale);
+      return planes * lines * contig_bytes;
+    }
+
+    /*static size_t read_address_entry(AffineCopyInfo<3> &copy_infos, size_t &min_align,
+                                     MemcpyTransposeInfo<size_t> &transpose_info,
+                                     AddressListCursor &in_alc, uintptr_t in_base,
+                                     GPU *in_gpu, AddressListCursor &out_alc,
+                                     uintptr_t out_base, GPU *out_gpu, size_t bytes_left)
+    {
+      AffineCopyPair<3> &copy_info = copy_infos.subrects[copy_infos.num_rects++];
       uintptr_t in_offset = in_alc.get_offset();
       uintptr_t out_offset = out_alc.get_offset();
       // the reported dim is reduced for partially consumed address
@@ -502,7 +628,7 @@ namespace Realm {
       in_alc.advance(id, planes * iscale);
       out_alc.advance(od, planes * oscale);
       return planes * lines * contig_bytes;
-    }
+    }*/
 
     bool GPU::is_accessible_host_mem(const MemoryImpl *mem) const
     {
