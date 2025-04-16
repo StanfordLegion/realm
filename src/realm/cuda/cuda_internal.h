@@ -906,7 +906,7 @@ namespace Realm {
       long submit(Request **requests, long nr);
       GPU *get_gpu() const { return src_gpu; }
 
-      virtual bool supports_fast_fields() const { return true; }
+      virtual bool supports_fat_transfers() const { return true; }
 
     private:
       GPU *src_gpu;

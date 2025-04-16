@@ -731,7 +731,7 @@ namespace Realm {
     XferDesKind kind;
 
       virtual bool supports_redop(ReductionOpID redop_id) const;
-      virtual bool supports_fast_fields() const { return false; };
+      virtual bool supports_fat_transfers() const { return false; };
 
     // attempt to make progress on the specified xferdes
     virtual long progress_xd(XferDes *xd, long max_nr);

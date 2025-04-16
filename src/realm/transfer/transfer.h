@@ -219,21 +219,21 @@ namespace Realm {
 
   ////////////////////////////////////////////////////////////////////////
   //
-  // class UniformFieldsTransferIterator<N,T>
+  // class TransferIteratorUniformFields<N,T>
   //
 
   template <int N, typename T>
-  class UniformFieldsTransferIterator : public TransferIteratorBase<N, T> {
+  class TransferIteratorUniformFields : public TransferIteratorBase<N, T> {
   protected:
-    UniformFieldsTransferIterator(void);
+    TransferIteratorUniformFields(void);
 
   public:
-    UniformFieldsTransferIterator(const int _dim_order[N],
+    TransferIteratorUniformFields(const int _dim_order[N],
                                   const std::vector<FieldID> &_fields, size_t _field_size,
                                   RegionInstanceImpl *_inst_impl,
                                   const IndexSpace<N, T> &_is);
 
-    /*UniformFieldsTransferIterator(const int _dim_order[N],
+    /*TransferIteratorUniformFields(const int _dim_order[N],
                                const std::vector<FieldID> &_fields,
                                const std::vector<size_t> &_fld_offsets,
                                const std::vector<size_t> &_fld_sizes,
@@ -243,14 +243,14 @@ namespace Realm {
     template <typename S>
     static TransferIterator *deserialize_new(S &deserializer);
 
-    virtual ~UniformFieldsTransferIterator(void);
+    virtual ~TransferIteratorUniformFields(void);
 
     virtual Event request_metadata(void);
 
     virtual void reset(void);
 
     static Serialization::PolymorphicSerdezSubclass<TransferIterator,
-                                                    UniformFieldsTransferIterator<N, T>>
+                                                    TransferIteratorUniformFields<N, T>>
         serdez_subclass;
 
     template <typename S>
