@@ -98,7 +98,7 @@ namespace Realm {
 
   const size_t *AddressList::read_entry()
   {
-    assert(total_bytes > 0);
+    // assert(total_bytes > 0);
     if(read_pointer >= max_entries) {
       assert(read_pointer == max_entries);
       read_pointer = 0;
@@ -174,8 +174,12 @@ namespace Realm {
     int act_dim = (entry[0] & AddressList::ADDRLIST_DIM_MASK);
     assert(dim < act_dim);
     size_t r = entry[AddressList::ADDRLIST_DIM_SLOTS * dim];
-    if(dim == 0)
+
+    if(dim == 0) {
+      r &= ~AddressList::ADDRLIST_HAS_EXTRA;
       r >>= AddressList::ADDRLIST_CONTIG_SHIFT;
+    }
+
     if(partial) {
       if(dim > partial_dim)
         r = 1;
@@ -193,8 +197,11 @@ namespace Realm {
     int act_dim = (entry[0] & AddressList::ADDRLIST_DIM_MASK);
     assert(dim < act_dim);
     size_t r = entry[AddressList::ADDRLIST_DIM_SLOTS * dim];
-    if(dim == 0)
+
+    if(dim == 0) {
+      r &= ~AddressList::ADDRLIST_HAS_EXTRA;
       r >>= AddressList::ADDRLIST_CONTIG_SHIFT;
+    }
 
     size_t bytes = amount;
     if(dim > 0) {
