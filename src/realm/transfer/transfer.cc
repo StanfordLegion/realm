@@ -2246,12 +2246,12 @@ namespace Realm {
       const std::vector<size_t> &fld_sizes, Channel *channel) const
   {
     assert(dim_order.size() == N);
+    constexpr int MIN_UNIFORM_FIELDS = 2;
     RegionInstanceImpl *impl = get_runtime()->get_instance_impl(inst);
     const InstanceLayout<N, T> *inst_layout =
         checked_cast<const InstanceLayout<N, T> *>(impl->metadata.layout);
     if(inst_layout->uniform_mutlifield_layout && channel &&
-       channel->supports_fat_transfers()) {
-      // if(channel && channel->supports_fat_transfers()) {
+       channel->supports_fat_transfers() && fields.size() >= MIN_UNIFORM_FIELDS) {
       return new TransferIteratorUniformFields<N, T>(dim_order.data(), fields,
                                                      fld_sizes.front(), impl, is);
     } else {

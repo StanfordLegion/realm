@@ -803,6 +803,7 @@ namespace Realm {
         }
 
         bool needs_fast_multifield = false;
+        size_t fields_total = 0;
 
         // 2) Batch loop - Collect all the rectangles for this inport/outport pair by
         // iterating the address list cursor for each and figure out what copy we can do
@@ -817,7 +818,9 @@ namespace Realm {
           const size_t *dst_payload = nullptr;
           src_payload = in_alc.get_payload(src_payload_count);
           dst_payload = out_alc.get_payload(dst_payload_count);
-          needs_fast_multifield = (src_payload_count != 0 && dst_payload_count != 0);
+          needs_fast_multifield =
+              (src_payload_count != 0 && src_payload_count == dst_payload_count);
+          fields_total += src_payload_count;
 
           if(!in_nonaffine && !out_nonaffine) {
             log_gpudma.info() << "Affine -> Affine";
@@ -984,8 +987,10 @@ namespace Realm {
           log_gpudma.info() << "\tLaunching kernel for rects=" << copy_infos.num_rects
                             << " bytes=" << copy_info_total
                             << " out_is_ipc=" << out_is_ipc;
+          fields_total = std::max<size_t>(1, fields_total);
           stream->get_gpu()->launch_batch_affine_kernel(
-              &copy_infos, 3, min_align, copy_info_total / min_align, stream);
+              &copy_infos, 3, min_align, (copy_info_total / min_align) * (fields_total),
+              stream);
           bytes_to_fence += copy_info_total;
         } else if(copy_infos.num_rects == 1) {
           // Then the affine copies to/from the device

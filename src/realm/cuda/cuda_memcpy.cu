@@ -131,186 +131,72 @@ memcpy_kernel_transpose(Realm::Cuda::MemcpyTransposeInfo<Offset_t> info, T *tile
   }
 }
 
-#define MAX_UNROLL (1)
-
-/*template <typename T, size_t N, typename Offset_t = size_t>
-static __device__ inline void
-memcpy_affine_batch(Realm::Cuda::AffineCopyPair<N, Offset_t> *info, size_t nrects,
-                    size_t start_offset = 0)
-{
-  size_t global_thread_id = blockIdx.x * blockDim.x + threadIdx.x - start_offset;
-  size_t global_stride = gridDim.x * blockDim.x;
-
-  for (size_t rect = 0; rect < nrects; rect++) {
-    Realm::Cuda::AffineCopyPair<N, Offset_t>& current_info = info[rect];
-    const Offset_t vol = current_info.volume;
-
-    Offset_t num_src_fields = current_info.src.num_fields;
-    Offset_t num_dst_fields = current_info.dst.num_fields;
-    Offset_t num_fields = max(num_src_fields, num_dst_fields);
-
-    // Default to single field copy if num_fields == 0
-    if (num_fields == 0) num_fields = 1;
-
-    __restrict__ T* dst = reinterpret_cast<T*>(current_info.dst.addr);
-    __restrict__ T* src = reinterpret_cast<T*>(current_info.src.addr);
-
-    for (Offset_t f = global_thread_id; f < vol * num_fields; f += global_stride) {
-      Offset_t field_index = f / vol;
-      Offset_t offset = f % vol;
-
-      Offset_t src_field_index = (num_src_fields > 0) ?
-current_info.src.fields[field_index] : 0; Offset_t dst_field_index = (num_dst_fields > 0)
-? current_info.dst.fields[field_index] : 0;
-
-      Offset_t src_coords[N], dst_coords[N];
-
-      index_to_coords<N, Offset_t>(src_coords, offset + src_field_index,
-current_info.extents); index_to_coords<N, Offset_t>(dst_coords, offset + dst_field_index,
-current_info.extents);
-
-      const size_t src_idx = coords_to_index<N, Offset_t>(src_coords,
-current_info.src.strides); const size_t dst_idx = coords_to_index<N, Offset_t>(dst_coords,
-current_info.dst.strides);
-
-      dst[dst_idx] = src[src_idx];
-    }
-  }
-}*/
-
-/*template <typename T, size_t N, typename Offset_t = size_t>
-static __device__ inline void
-memcpy_affine_batch(Realm::Cuda::AffineCopyPair<N, Offset_t> *info, size_t nrects,
-                    size_t start_offset = 0)
-{
-
-  for(size_t rect = 0; rect < nrects; rect++) {
-    Realm::Cuda::AffineCopyPair<N, Offset_t> &current_info = info[rect];
-
-    Offset_t offset = threadIdx.x - start_offset;
-    Offset_t src_field_index = 0;
-    Offset_t dst_field_index = 0;
-
-    unsigned grid_stride = 0;
-
-    if(current_info.src.num_fields == 0 && current_info.dst.num_fields == 0) {
-      offset += blockIdx.x * blockDim.x;
-      grid_stride = gridDim.x * blockDim.x;
-    } else {
-      assert(blockIdx.x < current_info.src.num_fields);
-      assert(blockIdx.x < current_info.dst.num_fields);
-      src_field_index = current_info.src.fields[blockIdx.x];
-      dst_field_index = current_info.dst.fields[blockIdx.x];
-      grid_stride = blockDim.x;
-    }
-
-    const Offset_t vol = current_info.volume;
-    __restrict__ T *dst = reinterpret_cast<T *>(current_info.dst.addr);
-    __restrict__ T *src = reinterpret_cast<T *>(current_info.src.addr);
-
-    while(offset < vol) {
-      T tmp[MAX_UNROLL];
-      unsigned i;
-
-#pragma unroll
-      for(i = 0; i < MAX_UNROLL; i++) {
-        Offset_t src_coords[N];
-        if((offset + i * grid_stride) >= vol) {
-          break;
-        }
-        index_to_coords<N, Offset_t>(
-            src_coords, offset + i * grid_stride + src_field_index, current_info.extents);
-        const size_t src_idx =
-            coords_to_index<N, Offset_t>(src_coords, current_info.src.strides);
-        tmp[i] = src[src_idx];
-      }
-      for(unsigned j = 0; j < i; j++) {
-        Offset_t dst_coords[N];
-
-        index_to_coords<N, Offset_t>(dst_coords,
-                                     (offset + j * grid_stride + dst_field_index),
-                                     current_info.extents);
-
-        const size_t dst_idx =
-            coords_to_index<N, Offset_t>(dst_coords, current_info.dst.strides);
-
-
-        dst[dst_idx] = tmp[j];
-      }
-
-      offset += i * grid_stride;
-    }
-
-    // Skip this rectangle as it's covered by another thread
-    // This can split the warp, and it may not coalesce again unless we sync them
-    offset -= vol;
-  }
-}*/
+#define MAX_UNROLL (4)
 
 template <typename T, size_t N, typename Offset_t = size_t>
-static __device__ inline void
-memcpy_affine_batch(Realm::Cuda::AffineCopyPair<N, Offset_t> *info, size_t nrects,
-                    size_t start_offset = 0)
+__device__ void memcpy_affine_batch(Realm::Cuda::AffineCopyPair<N, Offset_t> *info,
+                                    size_t nrects, size_t start_offset = 0)
 {
-  const size_t thread_id = threadIdx.x;
-  const size_t global_block_id = blockIdx.x;
-  const size_t num_blocks = gridDim.x;
-  const size_t threads_per_block = blockDim.x;
+  //constexpr int MAX_UNROLL = 4; // keep register pressure low
 
-  for(size_t rect = 0; rect < nrects; ++rect) {
-    Realm::Cuda::AffineCopyPair<N, Offset_t> &current_info = info[rect];
+  const Offset_t blk_stride = blockDim.x;
 
-    const Offset_t vol = current_info.volume;
-    const Offset_t num_src_fields = current_info.src.num_fields;
-    const Offset_t num_dst_fields = current_info.dst.num_fields;
-    Offset_t num_fields = max(num_src_fields, num_dst_fields);
+  /* -------- iterate over copy rectangles -------- */
+  for(size_t r = 0; r < nrects; ++r) {
+    auto &cp = info[r];
+    Offset_t v = cp.volume;                                     // elements in one field
+    Offset_t n = cp.src.num_fields > 0 ? cp.src.num_fields : 1; // total fields
 
-    if (num_fields == 0) num_fields = 1;
+    const Offset_t tid_global =
+        cp.src.num_fields > 0 ? threadIdx.x
+                              : blockIdx.x * blockDim.x + threadIdx.x - start_offset;
+    const Offset_t grid_stride =
+        cp.src.num_fields > 0 ? blockDim.x : gridDim.x * blockDim.x;
 
-    __restrict__ T *dst = reinterpret_cast<T *>(current_info.dst.addr);
-    __restrict__ T *src = reinterpret_cast<T *>(current_info.src.addr);
+    /* -------- iterate over fields handled by this block -------- */
+    for(Offset_t f = blockIdx.x; f < n; f += gridDim.x) {
+      const Offset_t src_field_base =
+          cp.src.num_fields > 0 ? cp.src.fields[f] * cp.src.strides[0] : 0;
+      const Offset_t dst_field_base =
+          cp.dst.num_fields > 0 ? cp.dst.fields[f] * cp.dst.strides[0] : 0;
 
-    // Iterate over fields this block is responsible for
-    for(Offset_t f = global_block_id; f < num_fields; f += num_blocks) {
-      Offset_t src_field_index = (num_src_fields > 0) ? current_info.src.fields[f] : 0;
-      Offset_t dst_field_index = (num_dst_fields > 0) ? current_info.dst.fields[f] : 0;
+      T *__restrict__ dst = reinterpret_cast<T *>(cp.dst.addr);
+      const T *__restrict__ src = reinterpret_cast<const T *>(cp.src.addr);
 
-      Offset_t offset = thread_id - start_offset;
-      Offset_t grid_stride = threads_per_block;
+      Offset_t off = tid_global; // element offset inside the current field
 
-      while(offset < vol) {
-        T tmp[MAX_UNROLL];
-        unsigned i;
+      while(off < v) {
+        /* -------- issue up to MAX_UNROLL loads ---------- */
+        T buf[MAX_UNROLL];
+        unsigned loaded = 0;
 
 #pragma unroll
-        for(i = 0; i < MAX_UNROLL; ++i) {
-          Offset_t src_coords[N];
-          Offset_t idx = offset + i * grid_stride;
-          if(idx >= vol)
+        for(unsigned i = 0; i < MAX_UNROLL; ++i) {
+          Offset_t idx = off + i * grid_stride;
+          if(idx >= v)
             break;
 
-          index_to_coords<N, Offset_t>(src_coords, idx + src_field_index,
-                                       current_info.extents);
-          size_t src_idx =
-              coords_to_index<N, Offset_t>(src_coords, current_info.src.strides);
-          tmp[i] = src[src_idx];
+          Offset_t src_coords[N];
+          index_to_coords<N>(src_coords, idx, cp.extents);
+          Offset_t src_lin = coords_to_index<N>(src_coords, cp.src.strides);
+          buf[i] = src[src_field_base + src_lin];
+          ++loaded;
         }
 
-        for(unsigned j = 0; j < i; ++j) {
+/* -------- corresponding stores ------------------ */
+#pragma unroll
+        for(unsigned i = 0; i < loaded; ++i) {
+          Offset_t idx = off + i * grid_stride;
           Offset_t dst_coords[N];
-          Offset_t idx = offset + j * grid_stride;
-
-          index_to_coords<N, Offset_t>(dst_coords, idx + dst_field_index,
-                                       current_info.extents);
-          size_t dst_idx =
-              coords_to_index<N, Offset_t>(dst_coords, current_info.dst.strides);
-          dst[dst_idx] = tmp[j];
+          index_to_coords<N>(dst_coords, idx, cp.extents);
+          Offset_t dst_lin = coords_to_index<N>(dst_coords, cp.dst.strides);
+          dst[dst_field_base + dst_lin] = buf[i];
         }
 
-        offset += i * grid_stride;
-      }
-    }
-  }
+        off += loaded * grid_stride; // advance by what we really processed
+      } // while off < v
+    } // for each field handled by this block
+  } // for each rect
 }
 
 /*
