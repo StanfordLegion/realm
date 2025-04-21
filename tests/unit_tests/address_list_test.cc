@@ -39,7 +39,7 @@ namespace {
   {
     size_t *e = alist.begin_entry(1);
     ASSERT_NE(e, nullptr);
-    e[0] = AddressList::pack_entry_header(bytes, 1);
+    e[AddressList::SLOT_HEADER] = AddressList::pack_entry_header(bytes, 1);
     alist.commit_entry(1, bytes);
   }
 
@@ -54,7 +54,7 @@ namespace {
 
     size_t *entry = addrlist.begin_entry(1);
     ASSERT_NE(entry, nullptr);
-    entry[0] = AddressList::pack_entry_header(kBytes, 1);
+    entry[AddressList::SLOT_HEADER] = AddressList::pack_entry_header(kBytes, 1);
     addrlist.commit_entry(1, kBytes);
 
     ASSERT_NE(fb, nullptr);
@@ -202,12 +202,12 @@ namespace {
     al.set_field_block(fb);
 
     size_t *entry = al.begin_entry(3);
-    entry[0] = AddressList::pack_entry_header(kBytes, 3);
-    entry[1] = 0;    // base offset
-    entry[2] = 8;    // dim1 count
-    entry[3] = 1024; // dim1 stride
-    entry[4] = 2;    // dim2 count
-    entry[5] = 8192; // dim2 stride
+    entry[AddressList::SLOT_HEADER] = AddressList::pack_entry_header(kBytes, 3);
+    entry[AddressList::SLOT_BASE] = 0;            // base offset
+    entry[AddressList::DIM_SLOTS * 1] = 8;        // dim1 count
+    entry[AddressList::DIM_SLOTS * 1 + 1] = 1024; // dim1 stride
+    entry[AddressList::DIM_SLOTS * 2] = 2;        // dim2 count
+    entry[AddressList::DIM_SLOTS * 2 + 1] = 8192; // dim2 stride
     const size_t volume = kBytes * 8 * 2;
     al.commit_entry(3, volume);
 
@@ -236,12 +236,12 @@ namespace {
     al.set_field_block(fb);
 
     size_t *entry = al.begin_entry(3);
-    entry[0] = AddressList::pack_entry_header(kBytes, 3);
-    entry[1] = 0;    // base offset
-    entry[2] = 8;    // dim1 count
-    entry[3] = 1024; // dim1 stride
-    entry[4] = 2;    // dim2 count
-    entry[5] = 8192; // dim2 stride
+    entry[AddressList::SLOT_HEADER] = AddressList::pack_entry_header(kBytes, 3);
+    entry[AddressList::SLOT_BASE] = 0;            // base offset
+    entry[AddressList::DIM_SLOTS * 1] = 8;        // dim1 count
+    entry[AddressList::DIM_SLOTS * 1 + 1] = 1024; // dim1 stride
+    entry[AddressList::DIM_SLOTS * 2] = 2;        // dim2 count
+    entry[AddressList::DIM_SLOTS * 2 + 1] = 8192; // dim2 stride
     const size_t volume = kBytes * 8 * 2;
     al.commit_entry(3, volume);
 
@@ -310,12 +310,12 @@ namespace {
     AddressList addrlist;
 
     size_t *entry = addrlist.begin_entry(3);
-    entry[0] = AddressList::pack_entry_header(kBytes, 3);
-    entry[1] = 0;    // base offset
-    entry[2] = 8;    // dim1 count
-    entry[3] = 1024; // dim1 stride
-    entry[4] = 2;    // dim2 count
-    entry[5] = 8192; // dim2 stride
+    entry[AddressList::SLOT_HEADER] = AddressList::pack_entry_header(kBytes, 3);
+    entry[AddressList::SLOT_BASE] = 0;            // base offset
+    entry[AddressList::DIM_SLOTS * 1] = 8;        // dim1 count
+    entry[AddressList::DIM_SLOTS * 1 + 1] = 1024; // dim1 stride
+    entry[AddressList::DIM_SLOTS * 2] = 2;        // dim2 count
+    entry[AddressList::DIM_SLOTS * 2 + 1] = 8192; // dim2 stride
     const size_t volume = kBytes * 8 * 2;
     addrlist.commit_entry(3, volume);
 
