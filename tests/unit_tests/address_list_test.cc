@@ -37,10 +37,10 @@ namespace {
 
   static void make_1d_entry(AddressList &alist, size_t bytes, int payload = 0)
   {
-    size_t *e = alist.being_entry(1, payload);
+    size_t *e = alist.begin_entry(1);
     ASSERT_NE(e, nullptr);
     e[0] = AddressList::pack_entry_header(bytes, 1);
-    alist.commit_entry(1, bytes, payload);
+    alist.commit_entry(1, bytes);
   }
 
   TEST(AddressListTests, AdvanceWithFieldsBasic)
@@ -52,7 +52,7 @@ namespace {
     auto *fb = FieldBlock::create(heap, fields.data(), fields.size());
     addrlist.set_field_block(fb);
 
-    size_t *entry = addrlist.being_entry(1);
+    size_t *entry = addrlist.begin_entry(1);
     ASSERT_NE(entry, nullptr);
     entry[0] = AddressList::pack_entry_header(kBytes, 1);
     addrlist.commit_entry(1, kBytes);
@@ -201,7 +201,7 @@ namespace {
     auto *fb = FieldBlock::create(heap, ids.data(), ids.size());
     al.set_field_block(fb);
 
-    size_t *entry = al.being_entry(3);
+    size_t *entry = al.begin_entry(3);
     entry[0] = AddressList::pack_entry_header(kBytes, 3);
     entry[1] = 0;    // base offset
     entry[2] = 8;    // dim1 count
@@ -235,7 +235,7 @@ namespace {
     auto *fb = FieldBlock::create(heap, ids.data(), ids.size());
     al.set_field_block(fb);
 
-    size_t *entry = al.being_entry(3);
+    size_t *entry = al.begin_entry(3);
     entry[0] = AddressList::pack_entry_header(kBytes, 3);
     entry[1] = 0;    // base offset
     entry[2] = 8;    // dim1 count
@@ -260,7 +260,7 @@ namespace {
     AddressList addrlist;
     const int dim = 1;
 
-    size_t *entry = addrlist.being_entry(dim);
+    size_t *entry = addrlist.begin_entry(dim);
     ASSERT_NE(entry, nullptr);
     entry[0] = AddressList::pack_entry_header(kBytes, dim);
     addrlist.commit_entry(dim, kBytes);
@@ -282,38 +282,13 @@ namespace {
     EXPECT_EQ(addrlist.bytes_pending(), 0);
   }
 
-  TEST(AddressListTests, Basic1DEntryWithPayload)
-  {
-    AddressList addrlist;
-    const int dim = 1;
-    std::vector<size_t> payload = {10, 20, 30};
-
-    size_t *entry = addrlist.being_entry(dim, payload.size());
-    ASSERT_NE(entry, nullptr);
-
-    entry[dim * AddressList::DIM_SLOTS] = payload.size();
-    std::copy(payload.begin(), payload.end(), entry + dim * AddressList::DIM_SLOTS + 1);
-    entry[0] = AddressList::pack_entry_header(kBytes, dim);
-    addrlist.commit_entry(dim, kBytes, payload.size());
-
-    AddressListCursor cursor;
-    cursor.set_addrlist(&addrlist);
-
-    size_t payload_count = 0;
-    const size_t *loaded_payload = cursor.get_payload(payload_count);
-    ASSERT_NE(loaded_payload, nullptr);
-    ASSERT_EQ(payload_count, payload.size());
-    for(size_t i = 0; i < payload.size(); ++i)
-      EXPECT_EQ(payload[i], loaded_payload[i]);
-  }
-
   TEST(AddressListTests, Multiple1DEntries)
   {
     AddressList addrlist;
     const size_t entries = 10;
 
     for(size_t i = 0; i < entries; ++i) {
-      size_t *entry = addrlist.being_entry(1);
+      size_t *entry = addrlist.begin_entry(1);
       ASSERT_NE(entry, nullptr);
       entry[0] = AddressList::pack_entry_header(kBytes, 1);
       addrlist.commit_entry(1, kBytes);
@@ -334,7 +309,7 @@ namespace {
   {
     AddressList addrlist;
 
-    size_t *entry = addrlist.being_entry(3);
+    size_t *entry = addrlist.begin_entry(3);
     entry[0] = AddressList::pack_entry_header(kBytes, 3);
     entry[1] = 0;    // base offset
     entry[2] = 8;    // dim1 count
@@ -363,7 +338,7 @@ namespace {
 
     size_t successful = 0;
     while(true) {
-      size_t *entry = addrlist.being_entry(1);
+      size_t *entry = addrlist.begin_entry(1);
       if(!entry)
         break;
       entry[0] = AddressList::pack_entry_header(kBytes, 1);

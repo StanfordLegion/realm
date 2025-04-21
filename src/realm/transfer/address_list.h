@@ -43,12 +43,16 @@ namespace Realm {
     }
   };
 
+  // =================================================================================================
+  //                                             AddressList
+  // =================================================================================================
   class AddressList {
   public:
     AddressList(size_t _max_entries = 1000);
 
-    size_t *being_entry(int max_dim, size_t payload_size = 0, bool wrap_mode = true);
-    void commit_entry(int act_dim, size_t bytes, size_t payload_size = 0);
+    // ─── entry construction ──────────────────────────────────────────────────────
+    size_t *begin_entry(int max_dim, bool wrap_mode = true);
+    void commit_entry(int act_dim, size_t bytes);
 
     size_t bytes_pending() const;
     void set_field_block(const FieldBlock *_field_block) { field_block = _field_block; }
@@ -58,11 +62,12 @@ namespace Realm {
     // the actual dimension count (act_dim) in the lower 4 bits
     static size_t pack_entry_header(size_t contig_bytes, int dims);
 
-    constexpr static size_t SLOT_HEADER = 0;
-    constexpr static size_t DIM_SLOTS = 2;
-    constexpr static size_t HAS_EXTRA = (1UL << (sizeof(size_t) * 8 - 1));
-    constexpr static size_t DIM_MASK = 0xF;
-    constexpr static size_t CONTIG_SHIFT = 4;
+    // ─── layout constants ───────────────────────────────────────────────────────
+    static constexpr size_t SLOT_HEADER = 0;
+    static constexpr size_t SLOT_BASE = 1;
+    static constexpr size_t DIM_SLOTS = 2;
+    static constexpr size_t DIM_MASK = 0xF;
+    static constexpr size_t CONTIG_SHIFT = 4;
 
   protected:
     friend class AddressListCursor;
@@ -77,6 +82,9 @@ namespace Realm {
     std::vector<size_t> data;
   };
 
+  // =================================================================================================
+  //                                           AddressListCursor
+  // =================================================================================================
   class AddressListCursor {
   public:
     AddressListCursor();
@@ -90,7 +98,6 @@ namespace Realm {
     void advance(int dim, size_t amount, int f = 1);
 
     void skip_bytes(size_t bytes);
-    const size_t *get_payload(size_t &count);
 
     const FieldBlock *field_block() const { return addrlist->field_block; }
     const FieldID *fields_data() const
@@ -108,12 +115,9 @@ namespace Realm {
 
   protected:
     AddressList *addrlist{nullptr};
-    bool partial{false};
-    // we need to be one larger than any index space realm supports, since
-    //  we use the contiguous bytes within a field as a "dimension" in some
-    //  cases
-    int partial_dim{0};
-    int partial_fields{0};
+    bool partial{false}; // inside a dimension
+    int partial_dim{0};  // dimension index
+    size_t partial_fields{0};
     std::array<size_t, REALM_MAX_DIM + 1> pos{};
   };
 

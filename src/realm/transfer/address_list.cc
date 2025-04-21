@@ -37,10 +37,9 @@ namespace Realm {
     data.reserve(max_entries);
   }
 
-  size_t *AddressList::being_entry(int max_dim, size_t payload_size, bool wrap_mode)
+  size_t *AddressList::begin_entry(int max_dim, bool wrap_mode)
   {
-    size_t entries_needed =
-        DIM_SLOTS * max_dim + (payload_size > 0 ? payload_size + 1 : 0);
+    size_t entries_needed = DIM_SLOTS * max_dim;
 
     if(wrap_mode) {
       size_t new_wp = write_pointer + entries_needed;
@@ -73,27 +72,14 @@ namespace Realm {
     }
   }
 
-  void AddressList::commit_entry(int act_dim, size_t bytes, size_t payload_size)
+  void AddressList::commit_entry(int act_dim, size_t bytes)
   {
     size_t entries_used = act_dim * DIM_SLOTS;
-
-    if(payload_size > 0) {
-      data[write_pointer + entries_used] = payload_size;
-      entries_used += 1;
-    }
-
-    entries_used += payload_size;
-    data[write_pointer] |= (payload_size > 0 ? HAS_EXTRA : 0);
-
     write_pointer += entries_used;
-
     total_bytes += bytes * (field_block ? field_block->count : 1);
   }
 
-  size_t AddressList::bytes_pending() const
-  {
-    return total_bytes;
-  }
+  size_t AddressList::bytes_pending() const { return total_bytes; }
 
   size_t AddressList::pack_entry_header(size_t contig_bytes, int dims)
   {
@@ -142,17 +128,15 @@ namespace Realm {
     if(partial) {
       return (partial_dim + 1);
     } else {
-      const size_t *entry = addrlist->read_entry();
-      int act_dim = (entry[0] & AddressList::DIM_MASK);
-      return act_dim;
+      return detail::actdim(addrlist->read_entry());
     }
   }
 
   uintptr_t AddressListCursor::get_offset() const
   {
     const size_t *entry = addrlist->read_entry();
-    int act_dim = (entry[0] & AddressList::DIM_MASK);
-    uintptr_t ofs = entry[1];
+    int act_dim = detail::actdim(entry);
+    uintptr_t ofs = entry[AddressList::SLOT_BASE];
     if(partial) {
       for(int i = partial_dim; i < act_dim; i++)
         if(i == 0) {
@@ -169,20 +153,9 @@ namespace Realm {
   uintptr_t AddressListCursor::get_stride(int dim) const
   {
     const size_t *entry = addrlist->read_entry();
-    int act_dim = (entry[0] & AddressList::DIM_MASK);
+    int act_dim = detail::actdim(entry);
     assert((dim > 0) && (dim < act_dim));
     return entry[AddressList::DIM_SLOTS * dim + 1];
-  }
-
-  const size_t *AddressListCursor::get_payload(size_t &count)
-  {
-    const size_t *entry = addrlist->read_entry();
-    int act_dim = (entry[0] & AddressList::DIM_MASK);
-    if(entry[0] & AddressList::HAS_EXTRA) {
-      count = entry[act_dim * AddressList::DIM_SLOTS];
-      return entry + act_dim * AddressList::DIM_SLOTS + 1;
-    }
-    return nullptr;
   }
 
   size_t AddressListCursor::remaining(int dim) const
@@ -193,7 +166,6 @@ namespace Realm {
     size_t r = entry[AddressList::DIM_SLOTS * dim];
 
     if(dim == 0) {
-      r &= ~AddressList::HAS_EXTRA;
       r >>= AddressList::CONTIG_SHIFT;
     }
 
@@ -208,94 +180,15 @@ namespace Realm {
     return r;
   }
 
-  /*void AddressListCursor::advance(int dim, size_t amount, int f)
-  {
-    const size_t *entry = addrlist->read_entry();
-    int act_dim = (entry[0] & AddressList::DIM_MASK);
-    assert(dim < act_dim);
-    size_t r = entry[AddressList::DIM_SLOTS * dim];
-
-    if(dim == 0) {
-      r &= ~AddressList::HAS_EXTRA;
-      r >>= AddressList::CONTIG_SHIFT;
-    }
-
-    size_t bytes = amount;
-    if(dim > 0) {
-#ifdef DEBUG_REALM
-      for(int i = 0; i < dim; i++)
-        assert(pos[i] == 0);
-#endif
-      bytes *= (entry[0] >> AddressList::CONTIG_SHIFT);
-      for(int i = 1; i < dim; i++)
-        bytes *= entry[AddressList::DIM_SLOTS * i];
-    }
-
-#ifdef DEBUG_REALM
-    assert(addrlist->total_bytes >= bytes * f);
-#endif
-    addrlist->total_bytes -= bytes * f;
-
-    const FieldBlock *fields = field_block();
-    if(fields && partial_dim == 0 && f > 0) {
-      partial_fields += f;
-    }
-
-    bool fields_complete = (!fields || (partial_fields == fields->count));
-
-    if(!partial) {
-      if((dim == (act_dim - 1)) && (amount == r) && fields_complete) {
-        partial_fields = 0;
-        // simple case - we consumed the whole thing
-        addrlist->read_pointer += AddressList::DIM_SLOTS * act_dim;
-        return;
-      } else {
-        // record partial consumption
-        partial = true;
-        partial_dim = dim;
-        pos[partial_dim] = amount;
-      }
-    } else {
-      // update a partial consumption in progress
-      assert(dim <= partial_dim);
-      partial_dim = dim;
-      pos[partial_dim] += amount;
-    }
-
-    while(pos[partial_dim] == r) {
-      pos[partial_dim++] = 0;
-
-      if(partial_dim == act_dim) {
-        partial = false;
-
-        if(fields_complete) {
-          partial_fields = 0;
-          // all done
-          addrlist->read_pointer += AddressList::DIM_SLOTS * act_dim;
-        } else {
-          partial_dim = 0;
-          pos.fill(0);
-        }
-
-        break;
-      } else {
-        pos[partial_dim]++; // carry into next dimension
-        r = entry[AddressList::DIM_SLOTS *
-                  partial_dim]; // no shift because partial_dim > 0
-      }
-    }
-  }*/
-
   void AddressListCursor::advance(int dim, size_t amount, int f)
   {
     const size_t *entry = addrlist->read_entry();
-    int act_dim = (entry[0] & AddressList::DIM_MASK);
+    int act_dim = detail::actdim(entry); // entry[0] & AddressList::DIM_MASK);
     assert(dim < act_dim);
 
     // size of this “slice” in dim
     size_t r = entry[AddressList::DIM_SLOTS * dim];
     if(dim == 0) {
-      r &= ~AddressList::HAS_EXTRA;
       r >>= AddressList::CONTIG_SHIFT;
     }
 
@@ -306,7 +199,7 @@ namespace Realm {
       for(int i = 0; i < dim; i++)
         assert(pos[i] == 0);
 #endif
-      bytes *= (entry[0] >> AddressList::CONTIG_SHIFT);
+      bytes *= detail::contig_bytes(entry);
       for(int i = 1; i < dim; i++)
         bytes *= entry[AddressList::DIM_SLOTS * i];
     }

@@ -857,7 +857,7 @@ namespace Realm {
     //  the same location twice)
     size_t lines = std::max<size_t>((1 << 30) / size, 1);
     int dim = (lines > 1) ? 2 : 1;
-    size_t *data = addrlist.being_entry(dim);
+    size_t *data = addrlist.begin_entry(dim);
     if(!data)
       return true; // can't add more until some is consumed
 

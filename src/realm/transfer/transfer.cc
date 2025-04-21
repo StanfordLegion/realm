@@ -523,7 +523,7 @@ namespace Realm {
 
       // we may be able to compact dimensions, but ask for space to write a
       //  an address record of the maximum possible dimension (i.e. N)
-      size_t *addr_data = addrlist.being_entry(N);
+      size_t *addr_data = addrlist.begin_entry(N);
       if(!addr_data) {
         return true; // out of space for now
       }
@@ -985,9 +985,7 @@ namespace Realm {
       assert(total_bytes != 0);
       assert(contig_bytes != 0);
 
-      //size_t *entry = addrlist.being_entry(N, fields.size(), /*wrap_mode=*/false);
-
-      size_t *entry = addrlist.being_entry(N, 0, /*wrap_mode=*/false);
+      size_t *entry = addrlist.begin_entry(N, /*wrap_mode=*/false);
 
       assert(entry);
       entry[1] = base_offset;
@@ -995,12 +993,9 @@ namespace Realm {
         entry[dim * AddressList::DIM_SLOTS] = count_stride.first;
         entry[dim * AddressList::DIM_SLOTS + 1] = count_stride.second;
       }
-      //entry[ndims * AddressList::DIM_SLOTS] = fields.size();
-      //std::copy(fields.begin(), fields.end(),
-                //entry + AddressList::DIM_SLOTS * ndims + 1);
 
       entry[0] = AddressList::pack_entry_header(contig_bytes, ndims);
-      addrlist.commit_entry(ndims, total_bytes);///, fields.size());
+      addrlist.commit_entry(ndims, total_bytes);
     }
 
     return true;
@@ -1261,7 +1256,7 @@ namespace Realm {
         return false;
       }
 
-      size_t *addr_data = addrlist.being_entry(1);
+      size_t *addr_data = addrlist.begin_entry(1);
       if(!addr_data) {
         return true;
       }
