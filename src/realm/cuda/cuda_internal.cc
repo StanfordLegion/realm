@@ -325,7 +325,7 @@ namespace Realm {
                                      AddressListCursor &in_alc, uintptr_t in_base,
                                      GPU *in_gpu, AddressListCursor &out_alc,
                                      uintptr_t out_base, GPU *out_gpu, size_t bytes_left,
-                                     bool &needs_kernel)
+                                     size_t max_xfer_fields, bool &needs_kernel)
     {
       AffineCopyPair<3> &copy_info = copy_infos.subrects[copy_infos.num_rects++];
 
@@ -353,19 +353,16 @@ namespace Realm {
       const FieldBlock *src_field_block = in_alc.field_block();
       const FieldBlock *dst_field_block = out_alc.field_block();
 
-      // TODO: move under GPUXferDes or AddressList?..
-      constexpr size_t MAX_FIELDS = 2000;
-
       size_t fields_total = 1;
 
       if(src_field_block) {
-        copy_info.src.num_fields = std::min(MAX_FIELDS, in_alc.remaining_fields());
+        copy_info.src.num_fields = std::min(max_xfer_fields, in_alc.remaining_fields());
         copy_info.src.fields = in_alc.fields_data(); // src_field_block->fields;
         fields_total = std::max(fields_total, copy_info.src.num_fields);
       }
 
       if(dst_field_block) {
-        copy_info.dst.num_fields = std::min(MAX_FIELDS, out_alc.remaining_fields());
+        copy_info.dst.num_fields = std::min(max_xfer_fields, out_alc.remaining_fields());
         copy_info.dst.fields = out_alc.fields_data(); // dst_field_block->fields;
         fields_total = std::max(fields_total, copy_info.dst.num_fields);
       }
@@ -386,6 +383,10 @@ namespace Realm {
 
         in_alc.advance(0, contig_bytes, std::max(size_t(1), copy_info.src.num_fields));
         out_alc.advance(0, contig_bytes, std::max(size_t(1), copy_info.dst.num_fields));
+
+        ///std::cout << "run_volume:" << copy_info.volume << " fields:" << fields_total
+                  //<< " in_offset:" << in_offset << " out_offset:" << out_offset
+                  //<< std::endl;
         return contig_bytes * fields_total;
       }
 
@@ -697,17 +698,6 @@ namespace Realm {
 
     bool GPUXferDes::progress_xd(GPUChannel *channel, TimeLimit work_until)
     {
-      // Mininum amount to transfer in a single quantum before returning in order to
-      // ensure forward progress
-      // TODO: make controllable
-      const size_t MIN_XFER_SIZE = 4 << 20;
-      // Maximum amount to transfer in a single quantum in order to ensure other requests
-      // have a chance to make forward progress.  This should be large enough that the
-      // overhead of splitting the copy shouldn't be noticable in terms of latency (4GiB
-      // should be good here for most purposes)
-      // TODO: make controllable
-      const size_t flow_control_bytes = 4ULL * 1024ULL * 1024ULL * 1024ULL;
-
       ReadSequenceCache rseqcache(this, 2 << 20);
       WriteSequenceCache wseqcache(this, 2 << 20);
       GPUStream *stream = 0;
@@ -742,15 +732,15 @@ namespace Realm {
 
         const InstanceLayoutPieceBase *in_nonaffine, *out_nonaffine;
 
-        if(((total_bytes >= MIN_XFER_SIZE) && work_until.is_expired()) ||
-           (total_bytes >= flow_control_bytes)) {
+        if(((total_bytes >= min_xfer_size) && work_until.is_expired()) ||
+           (total_bytes >= max_xfer_size)) {
           log_gpudma.info() << "Flow control hit, copied " << total_bytes
                             << " leave the rest for later!";
           break;
         }
 
         const size_t max_bytes =
-            get_addresses(MIN_XFER_SIZE, &rseqcache, in_nonaffine, out_nonaffine);
+            get_addresses(min_xfer_size, &rseqcache, in_nonaffine, out_nonaffine);
         if(max_bytes == 0) {
           break;
         }
@@ -817,7 +807,7 @@ namespace Realm {
         size_t copy_info_total = 0;
         size_t min_align = 16; // Hope for the highest type alignment we can get, 16 bytes
         copy_infos.num_rects = 0;
-        size_t bytes_left = std::min(flow_control_bytes - total_bytes, max_bytes);
+        size_t bytes_left = std::min(max_xfer_size - total_bytes, max_bytes);
 
         if(cuda_copy.WidthInBytes != 0) {
           memset(&cuda_copy, 0, sizeof(cuda_copy));
@@ -848,9 +838,9 @@ namespace Realm {
             }
 
             size_t bytes_to_copy = 0;
-            bytes_to_copy = read_address_entry(copy_infos, min_align, transpose_copy,
-                                               in_alc, in_base, in_gpu, out_alc, out_base,
-                                               out_gpu, bytes_left, needs_kernel_copy);
+            bytes_to_copy = read_address_entry(
+                copy_infos, min_align, transpose_copy, in_alc, in_base, in_gpu, out_alc,
+                out_base, out_gpu, bytes_left, max_xfer_fields, needs_kernel_copy);
 
             // Either src or dst can't be accessed with a kernel, so just break out and
             // perform a standard cuMemcpy
@@ -977,6 +967,7 @@ namespace Realm {
             copy_infos.subrects[i].extents[0] /= min_align;
             copy_infos.subrects[i].volume /= min_align;
           }
+
           // TODO: add some heuristics here, like if some rectangles are very large, do a
           // cuMemcpy instead, possibly utilizing the copy engines or better optimized
           // kernels

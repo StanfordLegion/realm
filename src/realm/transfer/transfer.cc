@@ -975,6 +975,10 @@ namespace Realm {
       const AffineLayoutPiece<N, T> *affine =
           static_cast<const AffineLayoutPiece<N, T> *>(layout_piece);
 
+      std::cout << "INST_OFFSET:" << this->inst_impl->metadata.inst_offset
+                << " affine:" << affine->offset << std::endl;
+
+      assert(this->inst_impl->metadata.is_valid());
       size_t base_offset = this->inst_impl->metadata.inst_offset + affine->offset +
                            affine->strides.dot(target_subrect.lo); //+ field_rel_offset;
 
@@ -1890,7 +1894,7 @@ namespace Realm {
                                               const std::vector<FieldID> &fields,
                                               const std::vector<size_t> &fld_offsets,
                                               const std::vector<size_t> &fld_sizes,
-                                              Channel *channel = nullptr) const;
+                                              bool uniform_fields = false) const;
 
     virtual TransferIterator *create_iterator(RegionInstance inst, RegionInstance peer,
                                               const std::vector<FieldID> &fields,
@@ -2254,15 +2258,15 @@ namespace Realm {
   TransferIterator *TransferDomainIndexSpace<N, T>::create_iterator(
       RegionInstance inst, const std::vector<int> &dim_order,
       const std::vector<FieldID> &fields, const std::vector<size_t> &fld_offsets,
-      const std::vector<size_t> &fld_sizes, Channel *channel) const
+      const std::vector<size_t> &fld_sizes, bool uniform_fields) const
   {
     assert(dim_order.size() == N);
     constexpr int MIN_UNIFORM_FIELDS = 2;
     RegionInstanceImpl *impl = get_runtime()->get_instance_impl(inst);
     const InstanceLayout<N, T> *inst_layout =
         checked_cast<const InstanceLayout<N, T> *>(impl->metadata.layout);
-    if(inst_layout->uniform_mutlifield_layout && channel &&
-       channel->supports_fat_transfers() && fields.size() >= MIN_UNIFORM_FIELDS) {
+    if(uniform_fields && inst_layout->uniform_mutlifield_layout &&
+       fields.size() >= MIN_UNIFORM_FIELDS || 1 == 1) {
       return new TransferIteratorUniformFields<N, T>(
           dim_order.data(), fields, fld_sizes.front(), impl, is,
           FieldBlock::create(get_runtime()->repl_heap, fields.data(), fields.size()));
@@ -3790,20 +3794,20 @@ namespace Realm {
   {
     log_xplan.info() << "created: plan=" << (void *)this << " domain=" << *domain
                      << " srcs=" << srcs.size() << " dsts=" << dsts.size();
-    if(log_xplan.want_debug()) {
-      for(size_t i = 0; i < srcs.size(); i++) {
-        log_xplan.debug() << "created: plan=" << (void *)this << " srcs[" << i
-                          << "]=" << srcs[i];
-      }
-      for(size_t i = 0; i < dsts.size(); i++) {
-        log_xplan.debug() << "created: plan=" << (void *)this << " dsts[" << i
-                          << "]=" << dsts[i];
-      }
-      for(size_t i = 0; i < indirects.size(); i++) {
-        log_xplan.debug() << "created: plan=" << (void *)this << " indirects[" << i
-                          << "]=" << *indirects[i];
-      }
+    // if(log_xplan.want_debug()) {
+    for(size_t i = 0; i < srcs.size(); i++) {
+      log_xplan.info() << "created: plan=" << (void *)this << " srcs[" << i
+                       << "]=" << srcs[i];
     }
+    for(size_t i = 0; i < dsts.size(); i++) {
+      log_xplan.info() << "created: plan=" << (void *)this << " dsts[" << i
+                       << "]=" << dsts[i];
+    }
+    for(size_t i = 0; i < indirects.size(); i++) {
+      log_xplan.info() << "created: plan=" << (void *)this << " indirects[" << i
+                       << "]=" << *indirects[i];
+    }
+    //}
 
     std::vector<Event> preconditions;
 
@@ -4284,6 +4288,8 @@ namespace Realm {
               xdn.gather_control_input = -1;
               xdn.scatter_control_input = -1;
               xdn.target_node = path_info.xd_channels[j]->node;
+              xdn.uniform_fields =
+                  path_info.xd_channels[j]->supports_fat_transfers(src_mem, dst_mem);
               xdn.channel = path_info.xd_channels[j];
               xdn.inputs.resize(1);
               xdn.inputs[0] = ((j == 0) ? TransferGraph::XDTemplate::mk_inst(
@@ -4450,47 +4456,47 @@ namespace Realm {
                 IBAllocOrderSorter(graph.ib_edges));
     }
 
-    if(log_xplan.want_debug()) {
-      log_xplan.debug() << "analysis: plan=" << (void *)this
-                        << " dim_order=" << PrettyVector<int>(dim_order)
-                        << " xds=" << graph.xd_nodes.size()
-                        << " ibs=" << graph.ib_edges.size();
+    // if(log_xplan.want_debug()) {
+    log_xplan.info() << "analysis: plan=" << (void *)this
+                     << " dim_order=" << PrettyVector<int>(dim_order)
+                     << " xds=" << graph.xd_nodes.size()
+                     << " ibs=" << graph.ib_edges.size();
 
-      for(size_t i = 0; i < graph.xd_nodes.size(); i++) {
-        if(graph.xd_nodes[i].redop.id != 0) {
-          log_xplan.debug()
-              << "analysis: plan=" << (void *)this << " xds[" << i
-              << "]: target=" << graph.xd_nodes[i].target_node << " inputs="
-              << PrettyVector<TransferGraph::XDTemplate::IO>(graph.xd_nodes[i].inputs)
-              << " outputs="
-              << PrettyVector<TransferGraph::XDTemplate::IO>(graph.xd_nodes[i].outputs)
-              << " channel="
-              << ((graph.xd_nodes[i].channel) ? graph.xd_nodes[i].channel->kind : -1)
-              << " redop=(" << graph.xd_nodes[i].redop.id << ","
-              << graph.xd_nodes[i].redop.is_fold << ","
-              << graph.xd_nodes[i].redop.in_place << ")";
-        } else {
-          log_xplan.debug()
-              << "analysis: plan=" << (void *)this << " xds[" << i
-              << "]: target=" << graph.xd_nodes[i].target_node << " inputs="
-              << PrettyVector<TransferGraph::XDTemplate::IO>(graph.xd_nodes[i].inputs)
-              << " outputs="
-              << PrettyVector<TransferGraph::XDTemplate::IO>(graph.xd_nodes[i].outputs)
-              << " channel="
-              << ((graph.xd_nodes[i].channel) ? graph.xd_nodes[i].channel->kind : -1);
-        }
+    for(size_t i = 0; i < graph.xd_nodes.size(); i++) {
+      if(graph.xd_nodes[i].redop.id != 0) {
+        log_xplan.info()
+            << "analysis: plan=" << (void *)this << " xds[" << i
+            << "]: target=" << graph.xd_nodes[i].target_node << " inputs="
+            << PrettyVector<TransferGraph::XDTemplate::IO>(graph.xd_nodes[i].inputs)
+            << " outputs="
+            << PrettyVector<TransferGraph::XDTemplate::IO>(graph.xd_nodes[i].outputs)
+            << " channel="
+            << ((graph.xd_nodes[i].channel) ? graph.xd_nodes[i].channel->kind : -1)
+            << " redop=(" << graph.xd_nodes[i].redop.id << ","
+            << graph.xd_nodes[i].redop.is_fold << "," << graph.xd_nodes[i].redop.in_place
+            << ")";
+      } else {
+        log_xplan.info()
+            << "analysis: plan=" << (void *)this << " xds[" << i
+            << "]: target=" << graph.xd_nodes[i].target_node << " inputs="
+            << PrettyVector<TransferGraph::XDTemplate::IO>(graph.xd_nodes[i].inputs)
+            << " outputs="
+            << PrettyVector<TransferGraph::XDTemplate::IO>(graph.xd_nodes[i].outputs)
+            << " channel="
+            << ((graph.xd_nodes[i].channel) ? graph.xd_nodes[i].channel->kind : -1);
       }
+      // }
 
       for(size_t i = 0; i < graph.ib_edges.size(); i++) {
-        log_xplan.debug() << "analysis: plan=" << (void *)this << " ibs[" << i
-                          << "]: memory=" << graph.ib_edges[i].memory << ":"
-                          << graph.ib_edges[i].memory.kind()
-                          << " size=" << graph.ib_edges[i].size;
+        log_xplan.info() << "analysis: plan=" << (void *)this << " ibs[" << i
+                         << "]: memory=" << graph.ib_edges[i].memory << ":"
+                         << graph.ib_edges[i].memory.kind()
+                         << " size=" << graph.ib_edges[i].size;
       }
 
       if(!graph.ib_edges.empty()) {
-        log_xplan.debug() << "analysis: plan=" << (void *)this
-                          << " ib_alloc=" << PrettyVector<unsigned>(graph.ib_alloc_order);
+        log_xplan.info() << "analysis: plan=" << (void *)this
+                         << " ib_alloc=" << PrettyVector<unsigned>(graph.ib_alloc_order);
       }
     }
 
@@ -4925,7 +4931,7 @@ namespace Realm {
           }
           ii.iter = desc.domain->create_iterator(xdn.inputs[j].inst.inst, desc.dim_order,
                                                  src_fields, src_offsets, src_sizes,
-                                                 xdn.channel);
+                                                 xdn.uniform_fields);
           // use first field's serdez - they all have to be the same
           ii.serdez_id = desc.src_fields[xdn.inputs[j].inst.fld_start].serdez_id;
           ii.ib_offset = 0;
@@ -5056,7 +5062,7 @@ namespace Realm {
           }
           oi.iter = desc.domain->create_iterator(xdn.outputs[j].inst.inst, desc.dim_order,
                                                  dst_fields, dst_offsets, dst_sizes,
-                                                 xdn.channel);
+                                                 xdn.uniform_fields);
           // use first field's serdez - they all have to be the same
           oi.serdez_id = desc.dst_fields[xdn.outputs[j].inst.fld_start].serdez_id;
           oi.ib_offset = 0;

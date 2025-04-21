@@ -25,7 +25,8 @@
 using namespace Realm;
 
 const size_t MAX_DIM = 1;
-typedef size_t ElementType;
+// typedef size_t ElementType;
+typedef unsigned short ElementType;
 
 typedef Realm::IndexSpace<MAX_DIM, int> CopyIndexSpace;
 
@@ -40,6 +41,7 @@ enum
 };
 
 namespace TestConfig {
+  bool verify = true;
   bool enable_profiling = true;
   bool enable_remote_copy = false;
   bool graphviz = false;
@@ -52,6 +54,52 @@ namespace TestConfig {
   size_t field_size = sizeof(long long);
   size_t size = 4ULL * 256ULL; // 1024ULL * 4ULL;//1024ULL;
 }; // namespace TestConfig
+
+template <int N, typename T, typename FT>
+inline void copy(RegionInstance src_inst, RegionInstance dst_inst,
+                 const std::vector<FieldID> &fields, IndexSpace<N, T> index_space)
+{
+  std::vector<CopySrcDstField> srcs(fields.size()), dsts(fields.size());
+  for(size_t i = 0; i < fields.size(); i++) {
+    srcs[i].set_field(src_inst, fields[i], sizeof(FT));
+    dsts[i].set_field(dst_inst, fields[i], sizeof(FT));
+  }
+  index_space.copy(srcs, dsts, ProfilingRequestSet()).wait();
+}
+
+template <int N, typename T, typename DT>
+static void dump_and_verify(RegionInstance inst, RegionInstance proxy_inst,
+                            const std::vector<FieldID> &fields,
+                            const IndexSpace<N, T> &is, size_t row_size, DT value,
+                            bool verbose = false)
+{
+  copy<N, T, DT>(inst, proxy_inst, fields, is);
+  for(FieldID fid : fields) {
+    GenericAccessor<DT, N, T> acc(proxy_inst, fid);
+    size_t i = 0;
+    size_t fail_count = 0;
+    size_t max_fail_count = 30;
+    for(IndexSpaceIterator<N, T> it(is); it.valid; it.step()) {
+      for(PointInRectIterator<N, T> it2(it.rect); it2.valid; it2.step()) {
+        DT v = acc[it2.p];
+        if(value != DT(-1) && v != value) {
+          std::cout << "v:" << int(v) << " p:" << it2.p << std::endl;
+          fail_count++;
+        }
+        if(verbose) {
+          if((i++) % row_size == 0)
+            std::cout << std::endl;
+          std::cout << it2.p << ": " << v << " ";
+        }
+        if(fail_count >= max_fail_count)
+          break;
+      }
+      if(verbose)
+        std::cout << "\n";
+      assert(fail_count == 0);
+    }
+  }
+}
 
 class Stat {
 public:
@@ -232,6 +280,7 @@ class TestGraphFactory {
 public:
   virtual ~TestGraphFactory() {}
   virtual void create(std::vector<CopyOperation> &graph) = 0;
+  virtual void verify() = 0;
 };
 
 class IsolatedDenseTestGraphFactory : public TestGraphFactory {
@@ -243,6 +292,8 @@ public:
     : memories_to_test(mems)
     , size(sz)
   {}
+
+  void verify() override {}
 
   /*virtual*/
   void create(std::vector<CopyOperation> &graph) override
@@ -306,27 +357,49 @@ protected:
   std::uniform_int_distribution<> dist;
 };
 
-class KVCacheTestGraphFactory : public TestGraphFactory {
+class MultiFieldTestGraphFactory : public TestGraphFactory {
 public:
   std::vector<Realm::Memory> memories_to_test;
   size_t size;
   std::map<FieldID, size_t> fields;
   std::vector<std::map<FieldID, size_t>> inst_to_fields;
+  std::vector<
+      std::tuple<CopyIndexSpace, RegionInstance, ElementType, std::vector<FieldID>>>
+      validate_queue;
 
-  KVCacheTestGraphFactory(std::vector<Realm::Memory> &_mems, size_t _sz,
-                          std::map<FieldID, size_t> _fields)
+  MultiFieldTestGraphFactory(std::vector<Realm::Memory> &_mems, size_t _sz,
+                             std::map<FieldID, size_t> _fields)
     : memories_to_test(_mems)
     , size(_sz)
     , fields(_fields)
   {}
+
+  void verify() override
+  {
+    Realm::Machine::MemoryQuery mq(Realm::Machine::get_machine());
+    mq.only_kind(Memory::SYSTEM_MEM).has_capacity(1);
+    std::vector<Realm::Memory> memories(mq.begin(), mq.end());
+
+    for(const auto &[index_space, inst, value, fields] : validate_queue) {
+      RegionInstance validate_instance;
+      std::map<FieldID, size_t> src_fields;
+      for(FieldID fid : fields)
+        src_fields[fid] = sizeof(value);
+      Realm::RegionInstance::create_instance(validate_instance, *mq.begin(), index_space,
+                                             src_fields, 0, ProfilingRequestSet())
+          .wait();
+      dump_and_verify<MAX_DIM, int, ElementType>(inst, validate_instance, fields,
+                                                 index_space, 1, value);
+    }
+  }
 
   /*virtual*/
   void create(std::vector<CopyOperation> &graph) override
   {
     graph.clear();
 
-    //Realm::Point<MAX_DIM> start_pnt(0, 0);
-    //Realm::Point<MAX_DIM> end_pnt(1, TestConfig::size);
+    // Realm::Point<MAX_DIM> start_pnt(0, 0);
+    // Realm::Point<MAX_DIM> end_pnt(1, TestConfig::size);
 
     Realm::Point<MAX_DIM> start_pnt(0);
     Realm::Point<MAX_DIM> end_pnt(TestConfig::size);
@@ -363,6 +436,19 @@ public:
                                                dst_fields, 0, ProfilingRequestSet())
             .wait();
 
+        if(i == j) {
+          std::vector<Realm::CopySrcDstField> srcs(src_fields.size()),
+              dsts(src_fields.size());
+          int index = 0;
+          for(const auto &[field_id, field_size] : src_fields) {
+            srcs[index].set_fill<ElementType>(7);
+            assert(field_size == sizeof(ElementType));
+            dsts[index].set_field(src_inst, field_id, field_size);
+            index++;
+          }
+          //is.copy(srcs, dsts, ProfilingRequestSet()).wait();
+        }
+
         instances.push_back(src_inst);
         inst_to_fields.push_back(src_fields);
         instances.push_back(dst_inst);
@@ -375,11 +461,11 @@ public:
     RandomPicker inst_picker(instances);
 
     for(size_t i = 0; i < max_concurrent_ops; i++) {
-      auto src_inst = inst_picker(i);
+      auto src_inst = instances.front();
       auto dst_inst = inst_picker(i);
 
-      auto src_fields = inst_to_fields[src_inst.first];
-      auto dst_fields = inst_to_fields[dst_inst.first];
+      // auto src_fields = src_fields;//inst_to_fields[0];
+      // auto dst_fields = dst_fields;//inst_to_fields[dst_inst.first];
 
       const size_t max_fields =
           std::min<size_t>(TestConfig::max_copy_fields, fields.size());
@@ -404,7 +490,7 @@ public:
       // Pick `max_fields` random fields for the source
       size_t field_index = 0;
       for(size_t i = 0; i < max_fields && field_index < src_field_ids.size(); i++) {
-        srcs[i].set_field(src_inst.second, src_field_ids[field_index],
+        srcs[i].set_field(src_inst, src_field_ids[field_index],
                           src_fields[src_field_ids[field_index]]);
         field_index++;
       }
@@ -417,7 +503,11 @@ public:
         field_index++;
       }
 
-      graph.emplace_back(is, dsts, srcs, src_inst.second.get_location());
+      auto sub =
+          std::vector<FieldID>(dst_field_ids.begin(), dst_field_ids.begin() + max_fields);
+      validate_queue.emplace_back(std::make_tuple(is, dst_inst.second, 7, sub));
+
+      graph.emplace_back(is, dsts, srcs, src_inst.get_location());
     }
 
     graph[0].owned_instances = instances;
@@ -433,6 +523,8 @@ public:
     : memories_to_test(mems)
     , size(sz)
   {}
+
+  void verify() override {}
 
   /*virtual*/
   void create(std::vector<CopyOperation> &graph) override
@@ -718,7 +810,7 @@ static void bench_timing_task(const void *args, size_t arglen, const void *userd
     for(size_t i = 0; i < TestConfig::num_fields; i++) {
       fields[i] = TestConfig::field_size;
     }
-    test_factory = new KVCacheTestGraphFactory(memories, TestConfig::size, fields);
+    test_factory = new MultiFieldTestGraphFactory(memories, TestConfig::size, fields);
   } else {
     log_app.error("Unsupported graph type %d", TestConfig::graph_type);
     assert(0);
@@ -739,6 +831,10 @@ static void bench_timing_task(const void *args, size_t arglen, const void *userd
     trigger_event.trigger();    // Start the graphs
     current_graph_event.wait(); // Wait for them to finish
     size_t end_time = Clock::current_time_in_microseconds();
+
+    if(TestConfig::verify) {
+      test_factory->verify();
+    }
 
     if(sample_iter != 0) {
       graph_time.sample(double(end_time - start_time) / TestConfig::num_iterations);
@@ -781,6 +877,7 @@ int main(int argc, char **argv)
       .add_option_int("-field_size", TestConfig::field_size)
       .add_option_int("-graphviz", TestConfig::graphviz)
       .add_option_int("-max_ops", TestConfig::max_ops)
+      .add_option_int("-verify", TestConfig::verify)
       .add_option_int("-graph-type", TestConfig::graph_type);
   ok = cp.parse_command_line(argc, (const char **)argv);
   assert(ok);

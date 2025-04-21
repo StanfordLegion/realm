@@ -790,6 +790,18 @@ namespace Realm {
       std::vector<GPU *> src_gpus, dst_gpus;
       std::vector<bool> dst_is_ipc;
       std::vector<void*> replheap_allocs;
+
+      // Mininum amount to transfer in a single quantum before returning in order to
+      // ensure forward progress
+      // TODO: make controllable
+      static constexpr size_t min_xfer_size = 4 << 20;
+      // Maximum amount to transfer in a single quantum in order to ensure other requests
+      // have a chance to make forward progress.  This should be large enough that the
+      // overhead of splitting the copy shouldn't be noticable in terms of latency (4GiB
+      // should be good here for most purposes)
+      // TODO: make controllable
+      static constexpr size_t max_xfer_size = 4ULL * 1024ULL * 1024ULL * 1024ULL;
+      static constexpr size_t max_xfer_fields = 2000;
     };
 
     class GPUIndirectChannel;
@@ -906,7 +918,8 @@ namespace Realm {
       long submit(Request **requests, long nr);
       GPU *get_gpu() const { return src_gpu; }
 
-      virtual bool supports_fat_transfers() const { return true; }
+      virtual bool supports_fat_transfers(Memory src_mem, Memory dst_mem) const { 
+          return src_mem.kind() == Memory::GPU_FB_MEM && dst_mem.kind() == Memory::GPU_FB_MEM; }
 
     private:
       GPU *src_gpu;

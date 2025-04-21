@@ -363,7 +363,7 @@ namespace Realm {
                                               const std::vector<FieldID> &fields,
                                               const std::vector<size_t> &fld_offsets,
                                               const std::vector<size_t> &fld_sizes,
-                                              Channel *channel = nullptr) const = 0;
+                                              bool uniform_fields = false) const = 0;
 
     virtual TransferIterator *
     create_iterator(RegionInstance inst, RegionInstance peer,
@@ -389,6 +389,7 @@ namespace Realm {
       int scatter_control_input;
       XferDesRedopInfo redop;
       Channel *channel = nullptr;
+      bool uniform_fields = false;
 
       enum IOType
       {

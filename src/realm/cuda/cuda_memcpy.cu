@@ -145,20 +145,27 @@ __device__ void memcpy_affine_batch(Realm::Cuda::AffineCopyPair<N, Offset_t> *in
   for(size_t r = 0; r < nrects; ++r) {
     auto &cp = info[r];
     Offset_t v = cp.volume;                                     // elements in one field
-    Offset_t n = cp.src.num_fields > 0 ? cp.src.num_fields : 1; // total fields
+    Offset_t n = max(size_t(1), max(cp.src.num_fields, cp.dst.num_fields));
 
     const Offset_t tid_global =
         cp.src.num_fields > 0 ? threadIdx.x
                               : blockIdx.x * blockDim.x + threadIdx.x - start_offset;
+
     const Offset_t grid_stride =
         cp.src.num_fields > 0 ? blockDim.x : gridDim.x * blockDim.x;
 
     /* -------- iterate over fields handled by this block -------- */
     for(Offset_t f = blockIdx.x; f < n; f += gridDim.x) {
+
+      // TODO: Stride should be more that strde[0]
+
       const Offset_t src_field_base =
           cp.src.num_fields > 0 ? cp.src.fields[f] * cp.src.strides[0] : 0;
+
       const Offset_t dst_field_base =
           cp.dst.num_fields > 0 ? cp.dst.fields[f] * cp.dst.strides[0] : 0;
+
+      //printf("field_id:%d\n", cp.src.fields[f]);
 
       T *__restrict__ dst = reinterpret_cast<T *>(cp.dst.addr);
       const T *__restrict__ src = reinterpret_cast<const T *>(cp.src.addr);
@@ -180,6 +187,7 @@ __device__ void memcpy_affine_batch(Realm::Cuda::AffineCopyPair<N, Offset_t> *in
           index_to_coords<N>(src_coords, idx, cp.extents);
           Offset_t src_lin = coords_to_index<N>(src_coords, cp.src.strides);
           buf[i] = src[src_field_base + src_lin];
+          printf("src_ln:%d\n", src_lin);
           ++loaded;
         }
 
