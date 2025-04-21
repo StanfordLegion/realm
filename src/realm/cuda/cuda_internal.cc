@@ -324,7 +324,8 @@ namespace Realm {
                                      MemcpyTransposeInfo<size_t> &transpose_info,
                                      AddressListCursor &in_alc, uintptr_t in_base,
                                      GPU *in_gpu, AddressListCursor &out_alc,
-                                     uintptr_t out_base, GPU *out_gpu, size_t bytes_left)
+                                     uintptr_t out_base, GPU *out_gpu, size_t bytes_left,
+                                     bool &needs_kernel)
     {
       AffineCopyPair<3> &copy_info = copy_infos.subrects[copy_infos.num_rects++];
 
@@ -349,6 +350,28 @@ namespace Realm {
       copy_info.extents[1] = 1;
       copy_info.extents[2] = 1;
 
+      const FieldBlock *src_field_block = in_alc.field_block();
+      const FieldBlock *dst_field_block = out_alc.field_block();
+
+      // TODO: move under GPUXferDes or AddressList?..
+      constexpr size_t MAX_FIELDS = 2000;
+
+      size_t fields_total = 1;
+
+      if(src_field_block) {
+        copy_info.src.num_fields = std::min(MAX_FIELDS, in_alc.fields());
+        copy_info.src.fields = in_alc.fields_data(); // src_field_block->fields;
+        fields_total = std::max(fields_total, copy_info.src.num_fields);
+      }
+
+      if(dst_field_block) {
+        copy_info.dst.num_fields = std::min(MAX_FIELDS, out_alc.fields());
+        copy_info.dst.fields = out_alc.fields_data(); // dst_field_block->fields;
+        fields_total = std::max(fields_total, copy_info.dst.num_fields);
+      }
+
+      needs_kernel = (fields_total > 1);
+
       min_align = std::min({min_align, calculate_type_alignment(copy_info.src.addr),
                             calculate_type_alignment(copy_info.dst.addr),
                             calculate_type_alignment(contig_bytes)});
@@ -360,9 +383,10 @@ namespace Realm {
         copy_info.src.strides[0] = contig_bytes;
         copy_info.dst.strides[0] = contig_bytes;
         copy_info.volume = contig_bytes;
-        in_alc.advance(0, contig_bytes);
-        out_alc.advance(0, contig_bytes);
-        return contig_bytes;
+
+        in_alc.advance(0, contig_bytes, std::max(size_t(1), copy_info.src.num_fields));
+        out_alc.advance(0, contig_bytes, std::max(size_t(1), copy_info.dst.num_fields));
+        return contig_bytes * fields_total;
       }
 
       // Compute 2D strides
@@ -812,16 +836,6 @@ namespace Realm {
           AddressListCursor &in_alc = in_port->addrcursor;
           AddressListCursor &out_alc = out_port->addrcursor;
 
-          size_t src_payload_count = 0;
-          size_t dst_payload_count = 0;
-          const size_t *src_payload = nullptr;
-          const size_t *dst_payload = nullptr;
-          src_payload = in_alc.get_payload(src_payload_count);
-          dst_payload = out_alc.get_payload(dst_payload_count);
-          needs_fast_multifield =
-              (src_payload_count != 0 && src_payload_count == dst_payload_count);
-          fields_total += src_payload_count;
-
           if(!in_nonaffine && !out_nonaffine) {
             log_gpudma.info() << "Affine -> Affine";
             // limit transfer size for host<->device copies
@@ -834,27 +848,9 @@ namespace Realm {
             }
 
             size_t bytes_to_copy = 0;
-            bytes_to_copy =
-                read_address_entry(copy_infos, min_align, transpose_copy, in_alc, in_base,
-                                   in_gpu, out_alc, out_base, out_gpu, bytes_left);
-
-            if(needs_fast_multifield) {
-              AffineCopyPair<3> &copy_info =
-                  copy_infos.subrects[copy_infos.num_rects - 1];
-              copy_info.src.num_fields = src_payload_count;
-              replheap_allocs.push_back(get_runtime()->repl_heap.alloc_obj(
-                  sizeof(size_t) * src_payload_count, 16));
-              copy_info.src.fields = static_cast<size_t *>(replheap_allocs.back());
-              std::memcpy(copy_info.src.fields, (size_t *)(src_payload),
-                          sizeof(size_t) * src_payload_count);
-
-              copy_info.dst.num_fields = dst_payload_count;
-              replheap_allocs.push_back(get_runtime()->repl_heap.alloc_obj(
-                  sizeof(size_t) * dst_payload_count, 16));
-              copy_info.dst.fields = static_cast<size_t *>(replheap_allocs.back());
-              std::memcpy(copy_info.dst.fields, (size_t *)(dst_payload),
-                          sizeof(size_t) * dst_payload_count);
-            }
+            bytes_to_copy = read_address_entry(copy_infos, min_align, transpose_copy,
+                                               in_alc, in_base, in_gpu, out_alc, out_base,
+                                               out_gpu, bytes_left, needs_kernel_copy);
 
             // Either src or dst can't be accessed with a kernel, so just break out and
             // perform a standard cuMemcpy

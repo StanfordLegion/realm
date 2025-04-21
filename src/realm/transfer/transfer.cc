@@ -838,6 +838,8 @@ namespace Realm {
     if(iter_init_deferred || iter.valid) {
       fields = _fields;
       field_size = _field_size;
+      field_block =
+          FieldBlock::create(get_runtime()->repl_heap, fields.data(), fields.size());
       prefill();
     }
   }
@@ -923,7 +925,7 @@ namespace Realm {
   void TransferIteratorUniformFields<N, T>::reset(void)
   {
     TransferIteratorBase<N, T>::reset();
-    field_idx = 0;
+    rect_idx = 0;
     reset_internal();
   }
 
@@ -947,6 +949,10 @@ namespace Realm {
       AddressList &addrlist, const InstanceLayoutPieceBase *&nonaffine)
   {
     nonaffine = 0;
+
+    if(rect_idx == 0) {
+      addrlist.set_field_block(field_block);
+    }
 
     while(!this->done()) {
       if(!this->have_rect) {
@@ -979,20 +985,22 @@ namespace Realm {
       assert(total_bytes != 0);
       assert(contig_bytes != 0);
 
-      size_t *entry = addrlist.being_entry(N, fields.size(), /*wrap_mode=*/false);
+      //size_t *entry = addrlist.being_entry(N, fields.size(), /*wrap_mode=*/false);
+
+      size_t *entry = addrlist.being_entry(N, 0, /*wrap_mode=*/false);
 
       assert(entry);
       entry[1] = base_offset;
       for(auto &[dim, count_stride] : count_strides) {
-        entry[dim * AddressList::ADDRLIST_DIM_SLOTS] = count_stride.first;
-        entry[dim * AddressList::ADDRLIST_DIM_SLOTS + 1] = count_stride.second;
+        entry[dim * AddressList::DIM_SLOTS] = count_stride.first;
+        entry[dim * AddressList::DIM_SLOTS + 1] = count_stride.second;
       }
-      entry[ndims * AddressList::ADDRLIST_DIM_SLOTS] = fields.size();
-      std::copy(fields.begin(), fields.end(),
-                entry + AddressList::ADDRLIST_DIM_SLOTS * ndims + 1);
+      //entry[ndims * AddressList::DIM_SLOTS] = fields.size();
+      //std::copy(fields.begin(), fields.end(),
+                //entry + AddressList::DIM_SLOTS * ndims + 1);
 
       entry[0] = AddressList::pack_entry_header(contig_bytes, ndims);
-      addrlist.commit_entry(ndims, total_bytes, fields.size());
+      addrlist.commit_entry(ndims, total_bytes);///, fields.size());
     }
 
     return true;
@@ -1015,6 +1023,7 @@ namespace Realm {
     }
 
     r = iter.rect;
+    rect_idx++;
 
     iter.step();
     if(!iter.valid) {

@@ -24,6 +24,236 @@ namespace {
 
   constexpr size_t kStride = 8;
   constexpr size_t kBytes = 1024;
+  constexpr int kFieldsPerEntry = 4;
+
+  struct MockHeap {
+    void *alloc_obj(std::size_t bytes, std::size_t align = 16)
+    {
+      void *ptr = nullptr;
+      posix_memalign(&ptr, align, bytes);
+      return ptr;
+    }
+  };
+
+  static void make_1d_entry(AddressList &alist, size_t bytes, int payload = 0)
+  {
+    size_t *e = alist.being_entry(1, payload);
+    ASSERT_NE(e, nullptr);
+    e[0] = AddressList::pack_entry_header(bytes, 1);
+    alist.commit_entry(1, bytes, payload);
+  }
+
+  TEST(AddressListTests, AdvanceWithFieldsBasic)
+  {
+    AddressList addrlist;
+
+    std::vector<int> fields = {100, 101, 102, 103};
+    MockHeap heap;
+    auto *fb = FieldBlock::create(heap, fields.data(), fields.size());
+    addrlist.set_field_block(fb);
+
+    size_t *entry = addrlist.being_entry(1);
+    ASSERT_NE(entry, nullptr);
+    entry[0] = AddressList::pack_entry_header(kBytes, 1);
+    addrlist.commit_entry(1, kBytes);
+
+    ASSERT_NE(fb, nullptr);
+    ASSERT_EQ(fb->count, fields.size());
+    ASSERT_NE(fb->fields, nullptr);
+
+    AddressListCursor cursor;
+    cursor.set_addrlist(&addrlist);
+
+    EXPECT_EQ(addrlist.bytes_pending(), kBytes * fields.size());
+
+    ASSERT_EQ(cursor.fields(), fields.size());
+    cursor.advance(0, 128, 1);
+    EXPECT_EQ(addrlist.bytes_pending(), kBytes * fields.size() - 128);
+    ASSERT_EQ(cursor.fields(), fields.size());
+
+    cursor.advance(0, 128, 1);
+    EXPECT_EQ(addrlist.bytes_pending(), kBytes * fields.size() - 256);
+    ASSERT_EQ(cursor.fields(), fields.size());
+
+    cursor.advance(0, kBytes - 256, 1);
+    EXPECT_EQ(addrlist.bytes_pending(), kBytes * (fields.size() - 1));
+    ASSERT_EQ(cursor.fields(), fields.size() - 1);
+
+    cursor.advance(0, kBytes, fields.size() - 1);
+    EXPECT_EQ(addrlist.bytes_pending(), 0);
+    ASSERT_EQ(cursor.fields(), 0);
+
+    delete fb;
+  }
+
+  TEST(AdvanceTests, WithFields_PartialDoesNotIncrementField)
+  {
+    AddressList al;
+    std::vector<int> ids = {1, 2, 3, 4};
+    MockHeap heap;
+    auto *fb = FieldBlock::create(heap, ids.data(), ids.size());
+    al.set_field_block(fb);
+    make_1d_entry(al, kBytes, ids.size());
+
+    AddressListCursor cur;
+    cur.set_addrlist(&al);
+
+    // small amt < full rect: field stays at 0
+    cur.advance(0, 128, 1);
+    EXPECT_EQ(cur.fields_data(), fb->fields + 0);
+    EXPECT_EQ(al.bytes_pending(), kBytes * ids.size() - 128);
+    ASSERT_EQ(cur.fields(), ids.size());
+
+    delete fb;
+  }
+
+  TEST(AdvanceTests, WithFields_FullRectSingleField)
+  {
+    AddressList al;
+    std::vector<int> ids = {1, 2, 3, 4};
+    MockHeap heap;
+    auto *fb = FieldBlock::create(heap, ids.data(), ids.size());
+    al.set_field_block(fb);
+    make_1d_entry(al, kBytes, ids.size());
+
+    AddressListCursor cur;
+    cur.set_addrlist(&al);
+
+    // full rect for 1 field
+    cur.advance(0, kBytes, 1);
+    EXPECT_EQ(cur.fields_data(), fb->fields + 1);
+    // entry still pending until all 4 fields done
+    EXPECT_EQ(al.bytes_pending(), kBytes * ids.size() - kBytes);
+    ASSERT_EQ(cur.fields(), ids.size() - 1);
+
+    delete fb;
+  }
+
+  TEST(AdvanceTests, WithFields_FullRectMultipleFieldsAtOnce)
+  {
+    AddressList al;
+    std::vector<int> ids = {1, 2, 3, 4};
+    MockHeap heap;
+    auto *fb = FieldBlock::create(heap, ids.data(), ids.size());
+    al.set_field_block(fb);
+    make_1d_entry(al, kBytes, ids.size());
+
+    AddressListCursor cur;
+    cur.set_addrlist(&al);
+
+    // consume 2 fields in one go
+    cur.advance(0, kBytes, 2);
+    EXPECT_EQ(cur.fields_data(), fb->fields + 2);
+    EXPECT_EQ(al.bytes_pending(), kBytes * ids.size() - 2 * kBytes);
+    ASSERT_EQ(cur.fields(), ids.size() - 2);
+
+    delete fb;
+  }
+
+  TEST(AdvanceTests, WithFields_ConsumeAllFieldsAtOnce)
+  {
+    AddressList al;
+    std::vector<int> ids = {1, 2, 3, 4};
+    MockHeap heap;
+    auto *fb = FieldBlock::create(heap, ids.data(), ids.size());
+    al.set_field_block(fb);
+    make_1d_entry(al, kBytes, ids.size());
+
+    AddressListCursor cur;
+    cur.set_addrlist(&al);
+
+    // consume all fields => entry consumed
+    cur.advance(0, kBytes, ids.size());
+    EXPECT_EQ(al.bytes_pending(), 0);
+    EXPECT_EQ(cur.fields_data(), fb->fields + ids.size());
+    ASSERT_EQ(cur.fields(), 0);
+
+    delete fb;
+  }
+
+  TEST(AdvanceTests, WithFields_SequentialFullRect)
+  {
+    AddressList al;
+    std::vector<int> ids = {1, 2, 3, 4};
+    MockHeap heap;
+    auto *fb = FieldBlock::create(heap, ids.data(), ids.size());
+    al.set_field_block(fb);
+    make_1d_entry(al, kBytes, ids.size());
+
+    AddressListCursor cur;
+    cur.set_addrlist(&al);
+
+    // call advance(full,1) four times
+    for(int i = 0; i < (int)ids.size(); i++) {
+      EXPECT_EQ(cur.fields_data(), (i < (int)ids.size() ? fb->fields + i : fb->fields));
+      cur.advance(0, kBytes, 1);
+    }
+    EXPECT_EQ(al.bytes_pending(), 0);
+
+    delete fb;
+  }
+
+  TEST(AdvanceTests, MultiDim_WithFields)
+  {
+    AddressList al;
+    std::vector<int> ids = {7, 8, 9};
+    MockHeap heap;
+    auto *fb = FieldBlock::create(heap, ids.data(), ids.size());
+    al.set_field_block(fb);
+
+    size_t *entry = al.being_entry(3);
+    entry[0] = AddressList::pack_entry_header(kBytes, 3);
+    entry[1] = 0;    // base offset
+    entry[2] = 8;    // dim1 count
+    entry[3] = 1024; // dim1 stride
+    entry[4] = 2;    // dim2 count
+    entry[5] = 8192; // dim2 stride
+    const size_t volume = kBytes * 8 * 2;
+    al.commit_entry(3, volume);
+
+    AddressListCursor cur;
+    cur.set_addrlist(&al);
+
+    EXPECT_EQ(al.bytes_pending(), volume * ids.size());
+    cur.advance(2, 2);
+    EXPECT_EQ(al.bytes_pending(), volume * (ids.size() - 1));
+
+    cur.advance(2, 2);
+    EXPECT_EQ(al.bytes_pending(), volume * (ids.size() - 2));
+
+    cur.advance(2, 2);
+    EXPECT_EQ(al.bytes_pending(), volume * (ids.size() - 3));
+
+    delete fb;
+  }
+
+  TEST(AdvanceTests, MultiDim_WithFieldsSingleAdvance)
+  {
+    AddressList al;
+    std::vector<int> ids = {7, 8, 9};
+    MockHeap heap;
+    auto *fb = FieldBlock::create(heap, ids.data(), ids.size());
+    al.set_field_block(fb);
+
+    size_t *entry = al.being_entry(3);
+    entry[0] = AddressList::pack_entry_header(kBytes, 3);
+    entry[1] = 0;    // base offset
+    entry[2] = 8;    // dim1 count
+    entry[3] = 1024; // dim1 stride
+    entry[4] = 2;    // dim2 count
+    entry[5] = 8192; // dim2 stride
+    const size_t volume = kBytes * 8 * 2;
+    al.commit_entry(3, volume);
+
+    AddressListCursor cur;
+    cur.set_addrlist(&al);
+
+    EXPECT_EQ(al.bytes_pending(), volume * ids.size());
+    cur.advance(2, 2, ids.size());
+    EXPECT_EQ(al.bytes_pending(), 0);
+
+    delete fb;
+  }
 
   TEST(AddressListTests, Basic1DEntryNoPayload)
   {
@@ -61,9 +291,8 @@ namespace {
     size_t *entry = addrlist.being_entry(dim, payload.size());
     ASSERT_NE(entry, nullptr);
 
-    entry[dim * AddressList::ADDRLIST_DIM_SLOTS] = payload.size();
-    std::copy(payload.begin(), payload.end(),
-              entry + dim * AddressList::ADDRLIST_DIM_SLOTS + 1);
+    entry[dim * AddressList::DIM_SLOTS] = payload.size();
+    std::copy(payload.begin(), payload.end(), entry + dim * AddressList::DIM_SLOTS + 1);
     entry[0] = AddressList::pack_entry_header(kBytes, dim);
     addrlist.commit_entry(dim, kBytes, payload.size());
 

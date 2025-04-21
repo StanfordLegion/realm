@@ -275,7 +275,9 @@ namespace Realm {
     const InstanceLayoutPiece<N, T> *layout_piece{nullptr};
 
     size_t field_size{0};
-    size_t field_idx{0};
+    size_t rect_idx{0};
+
+    const FieldBlock* field_block{nullptr};
   };
 
   template <int N, typename T>
