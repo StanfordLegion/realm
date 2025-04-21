@@ -825,7 +825,8 @@ namespace Realm {
   template <int N, typename T>
   TransferIteratorUniformFields<N, T>::TransferIteratorUniformFields(
       const int _dim_order[N], const std::vector<FieldID> &_fields, size_t _field_size,
-      RegionInstanceImpl *_inst_impl, const IndexSpace<N, T> &_is)
+      RegionInstanceImpl *_inst_impl, const IndexSpace<N, T> &_is,
+      const FieldBlock *_field_block)
     : TransferIteratorBase<N, T>(_inst_impl, _dim_order)
     , is(_is)
   {
@@ -838,8 +839,10 @@ namespace Realm {
     if(iter_init_deferred || iter.valid) {
       fields = _fields;
       field_size = _field_size;
-      field_block =
-          FieldBlock::create(get_runtime()->repl_heap, fields.data(), fields.size());
+      field_block = _field_block;
+      // TODO(apryakhin): That needs to be freed
+      // field_block = FieldBlock::create(*repl_heap, fields.data(), fields.size());
+      // get_runtime()->repl_heap, fields.data(), fields.size());
       prefill();
     }
   }
@@ -901,7 +904,9 @@ namespace Realm {
     }
 
     TransferIteratorUniformFields<N, T> *tiis = new TransferIteratorUniformFields<N, T>(
-        dim_order, fields, field_size, get_runtime()->get_instance_impl(inst), is);
+        dim_order, fields, field_size, get_runtime()->get_instance_impl(inst), is,
+        FieldBlock::create(get_runtime()->repl_heap, fields.data(), fields.size()));
+
     return tiis;
   }
 
@@ -982,8 +987,9 @@ namespace Realm {
       int ndims = flatten_affine_dimensions(
           static_cast<const AffineLayoutPiece<N, T> *>(layout_piece), target_subrect,
           this->dim_order, field_size, total_bytes, contig_bytes, count_strides);
-      assert(total_bytes != 0);
-      assert(contig_bytes != 0);
+      assert(ndims > 0);
+      assert(total_bytes > 0);
+      assert(contig_bytes > 0);
 
       size_t *entry = addrlist.begin_entry(N, /*wrap_mode=*/false);
 
@@ -2257,8 +2263,9 @@ namespace Realm {
         checked_cast<const InstanceLayout<N, T> *>(impl->metadata.layout);
     if(inst_layout->uniform_mutlifield_layout && channel &&
        channel->supports_fat_transfers() && fields.size() >= MIN_UNIFORM_FIELDS) {
-      return new TransferIteratorUniformFields<N, T>(dim_order.data(), fields,
-                                                     fld_sizes.front(), impl, is);
+      return new TransferIteratorUniformFields<N, T>(
+          dim_order.data(), fields, fld_sizes.front(), impl, is,
+          FieldBlock::create(get_runtime()->repl_heap, fields.data(), fields.size()));
     } else {
       return new TransferIteratorIndexSpace<N, T>(dim_order.data(), fields, fld_offsets,
                                                   fld_sizes, impl, is);

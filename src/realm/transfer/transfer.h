@@ -231,7 +231,8 @@ namespace Realm {
     TransferIteratorUniformFields(const int _dim_order[N],
                                   const std::vector<FieldID> &_fields, size_t _field_size,
                                   RegionInstanceImpl *_inst_impl,
-                                  const IndexSpace<N, T> &_is);
+                                  const IndexSpace<N, T> &_is,
+                                  const FieldBlock *_field_block);
 
     /*TransferIteratorUniformFields(const int _dim_order[N],
                                const std::vector<FieldID> &_fields,
@@ -277,7 +278,7 @@ namespace Realm {
     size_t field_size{0};
     size_t rect_idx{0};
 
-    const FieldBlock* field_block{nullptr};
+    const FieldBlock *field_block{nullptr};
   };
 
   template <int N, typename T>
