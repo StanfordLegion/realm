@@ -359,13 +359,13 @@ namespace Realm {
       size_t fields_total = 1;
 
       if(src_field_block) {
-        copy_info.src.num_fields = std::min(MAX_FIELDS, in_alc.fields());
+        copy_info.src.num_fields = std::min(MAX_FIELDS, in_alc.remaining_fields());
         copy_info.src.fields = in_alc.fields_data(); // src_field_block->fields;
         fields_total = std::max(fields_total, copy_info.src.num_fields);
       }
 
       if(dst_field_block) {
-        copy_info.dst.num_fields = std::min(MAX_FIELDS, out_alc.fields());
+        copy_info.dst.num_fields = std::min(MAX_FIELDS, out_alc.remaining_fields());
         copy_info.dst.fields = out_alc.fields_data(); // dst_field_block->fields;
         fields_total = std::max(fields_total, copy_info.dst.num_fields);
       }

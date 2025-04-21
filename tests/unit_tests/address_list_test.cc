@@ -66,22 +66,22 @@ namespace {
 
     EXPECT_EQ(addrlist.bytes_pending(), kBytes * fields.size());
 
-    ASSERT_EQ(cursor.fields(), fields.size());
+    ASSERT_EQ(cursor.remaining_fields(), fields.size());
     cursor.advance(0, 128, 1);
     EXPECT_EQ(addrlist.bytes_pending(), kBytes * fields.size() - 128);
-    ASSERT_EQ(cursor.fields(), fields.size());
+    ASSERT_EQ(cursor.remaining_fields(), fields.size());
 
     cursor.advance(0, 128, 1);
     EXPECT_EQ(addrlist.bytes_pending(), kBytes * fields.size() - 256);
-    ASSERT_EQ(cursor.fields(), fields.size());
+    ASSERT_EQ(cursor.remaining_fields(), fields.size());
 
     cursor.advance(0, kBytes - 256, 1);
     EXPECT_EQ(addrlist.bytes_pending(), kBytes * (fields.size() - 1));
-    ASSERT_EQ(cursor.fields(), fields.size() - 1);
+    ASSERT_EQ(cursor.remaining_fields(), fields.size() - 1);
 
     cursor.advance(0, kBytes, fields.size() - 1);
     EXPECT_EQ(addrlist.bytes_pending(), 0);
-    ASSERT_EQ(cursor.fields(), 0);
+    ASSERT_EQ(cursor.remaining_fields(), 0);
 
     delete fb;
   }
@@ -102,7 +102,7 @@ namespace {
     cur.advance(0, 128, 1);
     EXPECT_EQ(cur.fields_data(), fb->fields + 0);
     EXPECT_EQ(al.bytes_pending(), kBytes * ids.size() - 128);
-    ASSERT_EQ(cur.fields(), ids.size());
+    ASSERT_EQ(cur.remaining_fields(), ids.size());
 
     delete fb;
   }
@@ -124,7 +124,7 @@ namespace {
     EXPECT_EQ(cur.fields_data(), fb->fields + 1);
     // entry still pending until all 4 fields done
     EXPECT_EQ(al.bytes_pending(), kBytes * ids.size() - kBytes);
-    ASSERT_EQ(cur.fields(), ids.size() - 1);
+    ASSERT_EQ(cur.remaining_fields(), ids.size() - 1);
 
     delete fb;
   }
@@ -145,7 +145,7 @@ namespace {
     cur.advance(0, kBytes, 2);
     EXPECT_EQ(cur.fields_data(), fb->fields + 2);
     EXPECT_EQ(al.bytes_pending(), kBytes * ids.size() - 2 * kBytes);
-    ASSERT_EQ(cur.fields(), ids.size() - 2);
+    ASSERT_EQ(cur.remaining_fields(), ids.size() - 2);
 
     delete fb;
   }
@@ -166,7 +166,7 @@ namespace {
     cur.advance(0, kBytes, ids.size());
     EXPECT_EQ(al.bytes_pending(), 0);
     EXPECT_EQ(cur.fields_data(), fb->fields + ids.size());
-    ASSERT_EQ(cur.fields(), 0);
+    ASSERT_EQ(cur.remaining_fields(), 0);
 
     delete fb;
   }

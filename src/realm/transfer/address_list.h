@@ -105,7 +105,7 @@ namespace Realm {
       return addrlist->field_block->fields + partial_fields;
     }
 
-    size_t fields() const
+    size_t remaining_fields() const
     {
       if(addrlist->field_block) {
         return addrlist->field_block->count - partial_fields;

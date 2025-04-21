@@ -988,13 +988,14 @@ namespace Realm {
       size_t *entry = addrlist.begin_entry(N, /*wrap_mode=*/false);
 
       assert(entry);
-      entry[1] = base_offset;
+      entry[AddressList::SLOT_BASE] = base_offset;
       for(auto &[dim, count_stride] : count_strides) {
         entry[dim * AddressList::DIM_SLOTS] = count_stride.first;
         entry[dim * AddressList::DIM_SLOTS + 1] = count_stride.second;
       }
 
-      entry[0] = AddressList::pack_entry_header(contig_bytes, ndims);
+      entry[AddressList::SLOT_HEADER] =
+          AddressList::pack_entry_header(contig_bytes, ndims);
       addrlist.commit_entry(ndims, total_bytes);
     }
 
