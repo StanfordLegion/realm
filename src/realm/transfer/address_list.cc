@@ -119,6 +119,11 @@ namespace Realm {
     total_bytes += bytes * (field_block ? field_block->count : 1);
   }
 
+  void AddressList::attach_field_block(const FieldBlock *_field_block)
+  {
+    field_block = _field_block;
+  }
+
   size_t AddressList::bytes_pending() const { return total_bytes; }
 
   size_t AddressList::pack_entry_header(size_t contig_bytes, int dims)
@@ -330,6 +335,24 @@ namespace Realm {
         }
       }
     }
+  }
+
+  const FieldBlock *AddressListCursor::field_block() const
+  {
+    return addrlist->field_block;
+  }
+
+  const FieldID *AddressListCursor::fields_data() const
+  {
+    return addrlist->field_block->fields + partial_fields;
+  }
+
+  size_t AddressListCursor::remaining_fields() const
+  {
+    if(addrlist->field_block) {
+      return addrlist->field_block->count - partial_fields;
+    }
+    return 1;
   }
 
   std::ostream &operator<<(std::ostream &os, const AddressListCursor &alc)

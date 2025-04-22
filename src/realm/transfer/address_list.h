@@ -51,21 +51,21 @@ namespace Realm {
     AddressList(size_t _max_entries = 1000);
 
     // ─── entry construction ──────────────────────────────────────────────────────
-    bool
+    [[nodiscard]] bool
     append_entry(int dims, size_t contig_bytes, size_t total_bytes, size_t base_offset,
                  const std::unordered_map<int, std::pair<size_t, size_t>> &count_strides,
                  bool wrap_around = false);
 
-    size_t *begin_entry(int max_dim, bool wrap_mode = true);
+    [[nodiscard]] size_t *begin_entry(int max_dim, bool wrap_mode = true);
     void commit_entry(int act_dim, size_t bytes);
+    void attach_field_block(const FieldBlock *_field_block);
 
-    size_t bytes_pending() const;
-    void set_field_block(const FieldBlock *_field_block) { field_block = _field_block; }
+    [[nodiscard]] size_t bytes_pending() const;
 
     // entry packs:
     // the contiguous byte count (contig_bytes) in the upper bitsthe
     // the actual dimension count (act_dim) in the lower 4 bits
-    static size_t pack_entry_header(size_t contig_bytes, int dims);
+    [[nodiscard]] static size_t pack_entry_header(size_t contig_bytes, int dims);
 
     // ─── layout constants ───────────────────────────────────────────────────────
     static constexpr size_t SLOT_HEADER = 0;
@@ -76,7 +76,7 @@ namespace Realm {
 
   protected:
     friend class AddressListCursor;
-    const size_t *read_entry();
+    [[nodiscard]] const size_t *read_entry();
 
     const FieldBlock *field_block{nullptr};
 
@@ -96,27 +96,20 @@ namespace Realm {
 
     void set_addrlist(AddressList *_addrlist);
 
-    int get_dim() const;
-    uintptr_t get_offset() const;
-    uintptr_t get_stride(int dim) const;
-    size_t remaining(int dim) const;
-    void advance(int dim, size_t amount, int f = 1);
+    // ─── layout accessors ──────────────────────────────────────────────────────
+    [[nodiscard]] int get_dim() const;
+    [[nodiscard]] uintptr_t get_offset() const;
+    [[nodiscard]] uintptr_t get_stride(int dim) const;
+    [[nodiscard]] size_t remaining(int dim) const;
 
+    // ─── progress───────────────────────────────────────────────────────────────
+    void advance(int dim, size_t amount, int f = 1);
     void skip_bytes(size_t bytes);
 
-    const FieldBlock *field_block() const { return addrlist->field_block; }
-    const FieldID *fields_data() const
-    {
-      return addrlist->field_block->fields + partial_fields;
-    }
-
-    size_t remaining_fields() const
-    {
-      if(addrlist->field_block) {
-        return addrlist->field_block->count - partial_fields;
-      }
-      return 1;
-    }
+    // ─── field accessors ──────────────────────────────────────────────────────
+    [[nodiscard]] const FieldBlock *field_block() const;
+    [[nodiscard]] const FieldID *fields_data() const;
+    [[nodiscard]] size_t remaining_fields() const;
 
   protected:
     AddressList *addrlist{nullptr};

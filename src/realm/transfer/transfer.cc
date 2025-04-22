@@ -957,7 +957,7 @@ namespace Realm {
     nonaffine = 0;
 
     if(rect_idx == 0) {
-      addrlist.set_field_block(field_block);
+      addrlist.attach_field_block(field_block);
     }
 
     while(!this->done()) {

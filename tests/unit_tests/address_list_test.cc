@@ -50,7 +50,7 @@ namespace {
     std::vector<int> fields = {100, 101, 102, 103};
     MockHeap heap;
     auto *fb = FieldBlock::create(heap, fields.data(), fields.size());
-    addrlist.set_field_block(fb);
+    addrlist.attach_field_block(fb);
 
     size_t *entry = addrlist.begin_entry(1);
     ASSERT_NE(entry, nullptr);
@@ -92,7 +92,7 @@ namespace {
     std::vector<int> ids = {1, 2, 3, 4};
     MockHeap heap;
     auto *fb = FieldBlock::create(heap, ids.data(), ids.size());
-    al.set_field_block(fb);
+    al.attach_field_block(fb);
     make_1d_entry(al, kBytes, ids.size());
 
     AddressListCursor cur;
@@ -113,7 +113,7 @@ namespace {
     std::vector<int> ids = {1, 2, 3, 4};
     MockHeap heap;
     auto *fb = FieldBlock::create(heap, ids.data(), ids.size());
-    al.set_field_block(fb);
+    al.attach_field_block(fb);
     make_1d_entry(al, kBytes, ids.size());
 
     AddressListCursor cur;
@@ -135,7 +135,7 @@ namespace {
     std::vector<int> ids = {1, 2, 3, 4};
     MockHeap heap;
     auto *fb = FieldBlock::create(heap, ids.data(), ids.size());
-    al.set_field_block(fb);
+    al.attach_field_block(fb);
     make_1d_entry(al, kBytes, ids.size());
 
     AddressListCursor cur;
@@ -156,7 +156,7 @@ namespace {
     std::vector<int> ids = {1, 2, 3, 4};
     MockHeap heap;
     auto *fb = FieldBlock::create(heap, ids.data(), ids.size());
-    al.set_field_block(fb);
+    al.attach_field_block(fb);
     make_1d_entry(al, kBytes, ids.size());
 
     AddressListCursor cur;
@@ -177,7 +177,7 @@ namespace {
     std::vector<int> ids = {1, 2, 3, 4};
     MockHeap heap;
     auto *fb = FieldBlock::create(heap, ids.data(), ids.size());
-    al.set_field_block(fb);
+    al.attach_field_block(fb);
     make_1d_entry(al, kBytes, ids.size());
 
     AddressListCursor cur;
@@ -199,7 +199,7 @@ namespace {
     std::vector<int> ids = {7, 8, 9};
     MockHeap heap;
     auto *fb = FieldBlock::create(heap, ids.data(), ids.size());
-    al.set_field_block(fb);
+    al.attach_field_block(fb);
 
     size_t *entry = al.begin_entry(3);
     entry[AddressList::SLOT_HEADER] = AddressList::pack_entry_header(kBytes, 3);
@@ -233,7 +233,7 @@ namespace {
     std::vector<int> ids = {7, 8, 9};
     MockHeap heap;
     auto *fb = FieldBlock::create(heap, ids.data(), ids.size());
-    al.set_field_block(fb);
+    al.attach_field_block(fb);
 
     size_t *entry = al.begin_entry(3);
     entry[AddressList::SLOT_HEADER] = AddressList::pack_entry_header(kBytes, 3);
