@@ -138,9 +138,8 @@ static __device__ inline void
 memcpy_multi_affine_batch(Realm::Cuda::AffineCopyPair<N, Offset_t> *info, size_t nrects,
                           size_t start_offset = 0)
 {
-  // constexpr int MAX_UNROLL = 4; // keep register pressure low
-
   const Offset_t blk_stride = blockDim.x;
+  const Offset_t tid_global = threadIdx.x;
 
   /* -------- iterate over copy rectangles -------- */
   for(size_t r = 0; r < nrects; ++r) {
@@ -148,29 +147,33 @@ memcpy_multi_affine_batch(Realm::Cuda::AffineCopyPair<N, Offset_t> *info, size_t
     Offset_t v = cp.volume; // elements in one field
     Offset_t n = max(size_t(1), max(cp.src.num_fields, cp.dst.num_fields));
 
-    const Offset_t tid_global =
-        cp.src.num_fields > 0 ? threadIdx.x
-                              : blockIdx.x * blockDim.x + threadIdx.x - start_offset;
+    const T *__restrict__ src = reinterpret_cast<const T *>(cp.src.addr);
+    T *__restrict__ dst = reinterpret_cast<T *>(cp.dst.addr);
 
-    const Offset_t grid_stride =
-        cp.src.num_fields > 0 ? blockDim.x : gridDim.x * blockDim.x;
+    // cp.src.num_fields > 0 ? threadIdx.x
+    //: blockIdx.x * blockDim.x + threadIdx.x - start_offset;
+
+    // const Offset_t grid_stride =
+    // cp.src.num_fields > 0 ? blockDim.x : gridDim.x * blockDim.x;
 
     /* -------- iterate over fields handled by this block -------- */
     for(Offset_t f = blockIdx.x; f < n; f += gridDim.x) {
-      // TODO: Stride should be more that strde[0]
 
-      const Offset_t src_field_base =
-          cp.src.num_fields > 0 ? cp.src.fields[f] * v : 0; // cp.src.strides[0] : 0;
+      Offset_t src_field_base =
+          cp.src.num_fields > 0 ? cp.src.fields[f] * v : f * v; // cp.src.strides[0] : 0;
 
-      const Offset_t dst_field_base =
-          cp.dst.num_fields > 0 ? cp.dst.fields[f] * v : 0; // cp.dst.strides[0] : 0;
+      Offset_t dst_field_base =
+          cp.dst.num_fields > 0 ? cp.dst.fields[f] * v : f * v; // cp.dst.strides[0] : 0;
 
-      // printf("field_id:%d\n", cp.src.fields[f]);
+      /*if(cp.src.num_fields > 0 && cp.dst.num_fields == 0) {
+        dst_field_base = f * v;
+      }
 
-      T *__restrict__ dst = reinterpret_cast<T *>(cp.dst.addr);
-      const T *__restrict__ src = reinterpret_cast<const T *>(cp.src.addr);
+      if(cp.dst.num_fields > 0 && cp.src.num_fields == 0) {
+        src_field_base = f * v;
+      }*/
 
-      Offset_t off = tid_global; // element offset inside the current field
+      Offset_t off = tid_global;
 
       while(off < v) {
         /* -------- issue up to MAX_UNROLL loads ---------- */
@@ -179,7 +182,7 @@ memcpy_multi_affine_batch(Realm::Cuda::AffineCopyPair<N, Offset_t> *info, size_t
 
 #pragma unroll
         for(unsigned i = 0; i < MAX_UNROLL; ++i) {
-          Offset_t idx = off + i * grid_stride;
+          Offset_t idx = off + i * blk_stride;
           if(idx >= v) {
             break;
           }
@@ -194,14 +197,14 @@ memcpy_multi_affine_batch(Realm::Cuda::AffineCopyPair<N, Offset_t> *info, size_t
 /* -------- corresponding stores ------------------ */
 #pragma unroll
         for(unsigned i = 0; i < loaded; ++i) {
-          Offset_t idx = off + i * grid_stride;
+          Offset_t idx = off + i * blk_stride;
           Offset_t dst_coords[N];
           index_to_coords<N>(dst_coords, idx, cp.extents);
           Offset_t dst_lin = coords_to_index<N>(dst_coords, cp.dst.strides);
           dst[dst_field_base + dst_lin] = buf[i];
         }
 
-        off += loaded * grid_stride;
+        off += loaded * blk_stride;
       } // while off < v
     } // for each field handled by this block
   } // for each rect
@@ -347,7 +350,7 @@ memfill_affine_batch(const Realm::Cuda::AffineFillInfo<N, Offset_t> &info)
 }
 
 #define MEMCPY_MULTI_TEMPLATE_INST(type, dim, offt, name)                                \
-  extern "C" __global__ __launch_bounds__(256, 4) void multi_affine_batch##name(  \
+  extern "C" __global__ __launch_bounds__(256, 4) void multi_affine_batch##name(         \
       Realm::Cuda::AffineCopyInfo<dim, offt> info)                                       \
   {                                                                                      \
     memcpy_multi_affine_batch<type, dim, offt>(info.subrects, info.num_rects);           \

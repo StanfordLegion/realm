@@ -921,7 +921,8 @@ namespace Realm {
       GPU *get_gpu() const { return src_gpu; }
 
       virtual bool supports_fat_transfers(Memory src_mem, Memory dst_mem) const { 
-          return src_mem.kind() == Memory::GPU_FB_MEM && dst_mem.kind() == Memory::GPU_FB_MEM; }
+          return true;}
+          //return src_mem.kind() == Memory::GPU_FB_MEM && dst_mem.kind() == Memory::GPU_FB_MEM; }
 
     private:
       GPU *src_gpu;

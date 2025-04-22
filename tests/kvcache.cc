@@ -83,7 +83,7 @@ static void dump_and_verify(RegionInstance inst, RegionInstance proxy_inst,
       for(PointInRectIterator<N, T> it2(it.rect); it2.valid; it2.step()) {
         DT v = acc[it2.p];
         if(value != DT(-1) && v != value) {
-          // std::cout << "v:" << int(v) << " p:" << it2.p << " fid:" << fid << std::endl;
+          std::cout << "v:" << int(v) << " p:" << it2.p << " fid:" << fid << std::endl;
           fail_count++;
         }
         if(verbose) {
