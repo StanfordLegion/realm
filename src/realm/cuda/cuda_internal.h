@@ -413,8 +413,9 @@ namespace Realm {
 
       void launch_batch_affine_fill_kernel(void *fill_info, size_t dim, size_t elemSize,
                                            size_t volume, GPUStream *stream);
-      void launch_batch_affine_kernel(void *copy_info, size_t dim, size_t elemSize,
-                                      size_t volume, GPUStream *stream);
+      void launch_batch_affine_kernel(void *copy_info, size_t dim,
+                                      size_t elemSize, size_t volume, size_t fields,
+                                      GPUStream *stream);
       void launch_transpose_kernel(MemcpyTransposeInfo<size_t> &copy_info,
                                    size_t elemSize, GPUStream *stream);
 
@@ -464,6 +465,7 @@ namespace Realm {
       GPUFuncInfo indirect_copy_kernels[REALM_MAX_DIM][CUDA_MEMCPY_KERNEL_MAX2_LOG2_BYTES]
                                        [CUDA_MEMCPY_KERNEL_MAX2_LOG2_BYTES];
       GPUFuncInfo batch_affine_kernels[REALM_MAX_DIM][CUDA_MEMCPY_KERNEL_MAX2_LOG2_BYTES];
+      GPUFuncInfo multi_batch_affine_kernels[REALM_MAX_DIM][CUDA_MEMCPY_KERNEL_MAX2_LOG2_BYTES];
       GPUFuncInfo batch_fill_affine_kernels[REALM_MAX_DIM]
                                            [CUDA_MEMCPY_KERNEL_MAX2_LOG2_BYTES];
       GPUFuncInfo fill_affine_large_kernels[REALM_MAX_DIM]

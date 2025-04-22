@@ -83,7 +83,7 @@ static void dump_and_verify(RegionInstance inst, RegionInstance proxy_inst,
       for(PointInRectIterator<N, T> it2(it.rect); it2.valid; it2.step()) {
         DT v = acc[it2.p];
         if(value != DT(-1) && v != value) {
-          std::cout << "v:" << int(v) << " p:" << it2.p << std::endl;
+          // std::cout << "v:" << int(v) << " p:" << it2.p << " fid:" << fid << std::endl;
           fail_count++;
         }
         if(verbose) {
@@ -398,6 +398,8 @@ public:
   {
     graph.clear();
 
+    constexpr ElementType value = 9;
+
     // Realm::Point<MAX_DIM> start_pnt(0, 0);
     // Realm::Point<MAX_DIM> end_pnt(1, TestConfig::size);
 
@@ -441,12 +443,12 @@ public:
               dsts(src_fields.size());
           int index = 0;
           for(const auto &[field_id, field_size] : src_fields) {
-            srcs[index].set_fill<ElementType>(7);
+            srcs[index].set_fill<ElementType>(value);
             assert(field_size == sizeof(ElementType));
             dsts[index].set_field(src_inst, field_id, field_size);
             index++;
           }
-          //is.copy(srcs, dsts, ProfilingRequestSet()).wait();
+          is.copy(srcs, dsts, ProfilingRequestSet()).wait();
         }
 
         instances.push_back(src_inst);
@@ -461,8 +463,8 @@ public:
     RandomPicker inst_picker(instances);
 
     for(size_t i = 0; i < max_concurrent_ops; i++) {
-      auto src_inst = instances.front();
-      auto dst_inst = inst_picker(i);
+      auto src_inst = instances[0];
+      auto dst_inst = instances[1]; // inst_picker(i);
 
       // auto src_fields = src_fields;//inst_to_fields[0];
       // auto dst_fields = dst_fields;//inst_to_fields[dst_inst.first];
@@ -498,14 +500,14 @@ public:
       // Pick `max_fields` random fields for the destination
       field_index = 0;
       for(size_t i = 0; i < max_fields && field_index < dst_field_ids.size(); i++) {
-        dsts[i].set_field(dst_inst.second, dst_field_ids[field_index],
+        dsts[i].set_field(dst_inst, dst_field_ids[field_index],
                           dst_fields[dst_field_ids[field_index]]);
         field_index++;
       }
 
       auto sub =
           std::vector<FieldID>(dst_field_ids.begin(), dst_field_ids.begin() + max_fields);
-      validate_queue.emplace_back(std::make_tuple(is, dst_inst.second, 7, sub));
+      validate_queue.emplace_back(std::make_tuple(is, dst_inst, value, sub));
 
       graph.emplace_back(is, dsts, srcs, src_inst.get_location());
     }

@@ -325,7 +325,7 @@ namespace Realm {
                                      AddressListCursor &in_alc, uintptr_t in_base,
                                      GPU *in_gpu, AddressListCursor &out_alc,
                                      uintptr_t out_base, GPU *out_gpu, size_t bytes_left,
-                                     size_t max_xfer_fields, bool &needs_kernel)
+                                     size_t max_xfer_fields, size_t& fields_total)
     {
       AffineCopyPair<3> &copy_info = copy_infos.subrects[copy_infos.num_rects++];
 
@@ -353,8 +353,6 @@ namespace Realm {
       const FieldBlock *src_field_block = in_alc.field_block();
       const FieldBlock *dst_field_block = out_alc.field_block();
 
-      size_t fields_total = 1;
-
       if(src_field_block) {
         copy_info.src.num_fields = std::min(max_xfer_fields, in_alc.remaining_fields());
         copy_info.src.fields = in_alc.fields_data(); // src_field_block->fields;
@@ -366,8 +364,6 @@ namespace Realm {
         copy_info.dst.fields = out_alc.fields_data(); // dst_field_block->fields;
         fields_total = std::max(fields_total, copy_info.dst.num_fields);
       }
-
-      needs_kernel = (fields_total > 1);
 
       min_align = std::min({min_align, calculate_type_alignment(copy_info.src.addr),
                             calculate_type_alignment(copy_info.dst.addr),
@@ -384,7 +380,7 @@ namespace Realm {
         in_alc.advance(0, contig_bytes, std::max(size_t(1), copy_info.src.num_fields));
         out_alc.advance(0, contig_bytes, std::max(size_t(1), copy_info.dst.num_fields));
 
-        ///std::cout << "run_volume:" << copy_info.volume << " fields:" << fields_total
+        //std::cout << "run_volume:" << copy_info.volume << " fields:" << fields_total
                   //<< " in_offset:" << in_offset << " out_offset:" << out_offset
                   //<< std::endl;
         return contig_bytes * fields_total;
@@ -816,8 +812,8 @@ namespace Realm {
           memset(&transpose_copy, 0, sizeof(transpose_copy));
         }
 
-        bool needs_fast_multifield = false;
-        size_t fields_total = 0;
+        //bool needs_fast_multifield = false;
+        size_t fields_total = 1;
 
         // 2) Batch loop - Collect all the rectangles for this inport/outport pair by
         // iterating the address list cursor for each and figure out what copy we can do
@@ -840,7 +836,7 @@ namespace Realm {
             size_t bytes_to_copy = 0;
             bytes_to_copy = read_address_entry(
                 copy_infos, min_align, transpose_copy, in_alc, in_base, in_gpu, out_alc,
-                out_base, out_gpu, bytes_left, max_xfer_fields, needs_kernel_copy);
+                out_base, out_gpu, bytes_left, max_xfer_fields, fields_total);
 
             // Either src or dst can't be accessed with a kernel, so just break out and
             // perform a standard cuMemcpy
@@ -958,7 +954,8 @@ namespace Realm {
                             transpose_copy.extents[2];
         }
 
-        if((copy_infos.num_rects > 1) || needs_kernel_copy || needs_fast_multifield) {
+        // if(needs_fast_multifield) {
+        if((copy_infos.num_rects > 1) || needs_kernel_copy || fields_total > 1) {
           // Adjust all the rectangles' sizes to account for the element size based on the
           // calculated alignment
           for(size_t i = 0; (min_align > 1) && (i < copy_infos.num_rects); i++) {
@@ -976,8 +973,8 @@ namespace Realm {
                             << " out_is_ipc=" << out_is_ipc;
           fields_total = std::max<size_t>(1, fields_total);
           stream->get_gpu()->launch_batch_affine_kernel(
-              &copy_infos, 3, min_align, (copy_info_total / min_align) * (fields_total),
-              stream);
+              &copy_infos, 3, min_align, (copy_info_total / min_align),
+              fields_total, stream);
           bytes_to_fence += copy_info_total;
         } else if(copy_infos.num_rects == 1) {
           // Then the affine copies to/from the device
@@ -2919,5 +2916,4 @@ namespace Realm {
     }
 
   }; // namespace Cuda
-
 }; // namespace Realm

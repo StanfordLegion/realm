@@ -975,9 +975,6 @@ namespace Realm {
       const AffineLayoutPiece<N, T> *affine =
           static_cast<const AffineLayoutPiece<N, T> *>(layout_piece);
 
-      std::cout << "INST_OFFSET:" << this->inst_impl->metadata.inst_offset
-                << " affine:" << affine->offset << std::endl;
-
       assert(this->inst_impl->metadata.is_valid());
       size_t base_offset = this->inst_impl->metadata.inst_offset + affine->offset +
                            affine->strides.dot(target_subrect.lo); //+ field_rel_offset;
@@ -2266,7 +2263,7 @@ namespace Realm {
     const InstanceLayout<N, T> *inst_layout =
         checked_cast<const InstanceLayout<N, T> *>(impl->metadata.layout);
     if(uniform_fields && inst_layout->uniform_mutlifield_layout &&
-       fields.size() >= MIN_UNIFORM_FIELDS || 1 == 1) {
+       fields.size() >= MIN_UNIFORM_FIELDS) {
       return new TransferIteratorUniformFields<N, T>(
           dim_order.data(), fields, fld_sizes.front(), impl, is,
           FieldBlock::create(get_runtime()->repl_heap, fields.data(), fields.size()));
