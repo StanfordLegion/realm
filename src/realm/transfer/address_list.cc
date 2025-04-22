@@ -33,6 +33,7 @@ namespace Realm {
     {
       return ((e[AddressList::SLOT_HEADER] >> AddressList::CONTIG_SHIFT));
     }
+
     inline int actdim(const size_t *e)
     {
       return int(e[AddressList::SLOT_HEADER] & AddressList::DIM_MASK);

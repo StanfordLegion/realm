@@ -36,10 +36,10 @@ namespace Realm {
     {
       const std::size_t bytes = sizeof(FieldBlock) + (n - 1) * sizeof(FieldID);
       void *mem = heap.alloc_obj(bytes, align);
-      auto *fb = new(mem) FieldBlock;
-      fb->count = n;
-      std::copy_n(src, n, fb->fields);
-      return fb;
+      FieldBlock *field_block = new(mem) FieldBlock;
+      field_block->count = n;
+      std::copy_n(src, n, field_block->fields);
+      return field_block;
     }
   };
 
@@ -56,7 +56,7 @@ namespace Realm {
                  const std::unordered_map<int, std::pair<size_t, size_t>> &count_strides,
                  bool wrap_around = false);
 
-    [[nodiscard]] size_t *begin_entry(int max_dim, bool wrap_mode = true);
+    [[nodiscard]] size_t *begin_entry(int max_dim, bool wrap_around = true);
     void commit_entry(int act_dim, size_t bytes);
     void attach_field_block(const FieldBlock *_field_block);
 
