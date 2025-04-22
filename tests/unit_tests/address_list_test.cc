@@ -24,7 +24,6 @@ namespace {
 
   constexpr size_t kStride = 8;
   constexpr size_t kBytes = 1024;
-  constexpr int kFieldsPerEntry = 4;
 
   struct MockHeap {
     void *alloc_obj(std::size_t bytes, std::size_t align = 16)

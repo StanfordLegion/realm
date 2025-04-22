@@ -22,6 +22,9 @@
 #include "realm/indexspace.h"
 #include "realm/id.h"
 
+#include <array>
+#include <unordered_map>
+
 namespace Realm {
 
   struct FieldBlock {
