@@ -54,6 +54,29 @@ namespace Realm {
     data.reserve(max_entries);
   }
 
+  bool AddressList::append_entry(
+      int dims, size_t contig_bytes, size_t total_bytes, size_t base_offset,
+      const std::unordered_map<int, std::pair<size_t, size_t>> &count_strides,
+      bool wrap_around)
+  {
+    size_t *entry = begin_entry(dims, wrap_around);
+
+    if(entry == nullptr) {
+      return false;
+    }
+
+    entry[AddressList::SLOT_BASE] = base_offset;
+
+    for(auto &[dim, count_stride] : count_strides) {
+      entry[detail::count_index(dim)] = count_stride.first;
+      entry[detail::stride_index(dim)] = count_stride.second;
+    }
+
+    entry[AddressList::SLOT_HEADER] = pack_entry_header(contig_bytes, dims);
+    commit_entry(dims, total_bytes);
+    return true;
+  }
+
   size_t *AddressList::begin_entry(int max_dim, bool wrap_mode)
   {
     size_t entries_needed = detail::count_index(max_dim);

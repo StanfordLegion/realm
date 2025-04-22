@@ -305,6 +305,29 @@ namespace {
     EXPECT_EQ(addrlist.bytes_pending(), 0);
   }
 
+  TEST(AddressListTests, AppendComplex3DEntry)
+  {
+    AddressList addrlist;
+
+    std::unordered_map<int, std::pair<size_t, size_t>> count_strides;
+    count_strides[1] = {8, 1024};
+    count_strides[2] = {2, 8192};
+    bool commited = addrlist.append_entry(3, kBytes, kBytes * 8 * 2, /*base_offset=*/0,
+                                          count_strides);
+    ASSERT_TRUE(commited);
+
+    AddressListCursor cursor;
+    cursor.set_addrlist(&addrlist);
+
+    EXPECT_EQ(cursor.remaining(0), kBytes);
+    EXPECT_EQ(cursor.remaining(1), 8);
+    EXPECT_EQ(cursor.remaining(2), 2);
+    EXPECT_EQ(cursor.get_offset(), 0);
+
+    cursor.advance(2, 2);
+    EXPECT_EQ(addrlist.bytes_pending(), 0);
+  }
+
   TEST(AddressListTests, Complex3DEntry)
   {
     AddressList addrlist;

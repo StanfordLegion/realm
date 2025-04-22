@@ -51,6 +51,11 @@ namespace Realm {
     AddressList(size_t _max_entries = 1000);
 
     // ─── entry construction ──────────────────────────────────────────────────────
+    bool
+    append_entry(int dims, size_t contig_bytes, size_t total_bytes, size_t base_offset,
+                 const std::unordered_map<int, std::pair<size_t, size_t>> &count_strides,
+                 bool wrap_around = false);
+
     size_t *begin_entry(int max_dim, bool wrap_mode = true);
     void commit_entry(int act_dim, size_t bytes);
 

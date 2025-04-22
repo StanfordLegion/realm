@@ -993,9 +993,12 @@ namespace Realm {
       assert(total_bytes > 0);
       assert(contig_bytes > 0);
 
-      size_t *entry = addrlist.begin_entry(N, /*wrap_mode=*/false);
+      bool commited = addrlist.append_entry(ndims, contig_bytes, total_bytes, base_offset,
+                                            count_strides);
+      assert(commited);
 
-      assert(entry);
+      // size_t *entry = addrlist.begin_entry(N, /*wrap_mode=*/false);
+      /*assert(entry);
       entry[AddressList::SLOT_BASE] = base_offset;
       for(auto &[dim, count_stride] : count_strides) {
         entry[dim * AddressList::DIM_SLOTS] = count_stride.first;
@@ -1004,7 +1007,7 @@ namespace Realm {
 
       entry[AddressList::SLOT_HEADER] =
           AddressList::pack_entry_header(contig_bytes, ndims);
-      addrlist.commit_entry(ndims, total_bytes);
+      addrlist.commit_entry(ndims, total_bytes);*/
     }
 
     return true;
