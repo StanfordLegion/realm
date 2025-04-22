@@ -219,22 +219,20 @@ namespace Realm {
 
   ////////////////////////////////////////////////////////////////////////
   //
-  // class TransferIteratorUniformFields<N,T>
+  // class IDIndexedFieldsIterator<N,T>
   //
 
   template <int N, typename T>
-  class TransferIteratorUniformFields : public TransferIteratorBase<N, T> {
+  class IDIndexedFieldsIterator : public TransferIteratorBase<N, T> {
   protected:
-    TransferIteratorUniformFields(void);
+    IDIndexedFieldsIterator(void);
 
   public:
-    TransferIteratorUniformFields(const int _dim_order[N],
-                                  const std::vector<FieldID> &_fields, size_t _field_size,
-                                  RegionInstanceImpl *_inst_impl,
-                                  const IndexSpace<N, T> &_is,
-                                  const FieldBlock *_field_block);
+    IDIndexedFieldsIterator(const int _dim_order[N], const std::vector<FieldID> &_fields,
+                            size_t _field_size, RegionInstanceImpl *_inst_impl,
+                            const IndexSpace<N, T> &_is, const FieldBlock *_field_block);
 
-    /*TransferIteratorUniformFields(const int _dim_order[N],
+    /*IDIndexedFieldsIterator(const int _dim_order[N],
                                const std::vector<FieldID> &_fields,
                                const std::vector<size_t> &_fld_offsets,
                                const std::vector<size_t> &_fld_sizes,
@@ -244,14 +242,14 @@ namespace Realm {
     template <typename S>
     static TransferIterator *deserialize_new(S &deserializer);
 
-    virtual ~TransferIteratorUniformFields(void);
+    virtual ~IDIndexedFieldsIterator(void);
 
     virtual Event request_metadata(void);
 
     virtual void reset(void);
 
     static Serialization::PolymorphicSerdezSubclass<TransferIterator,
-                                                    TransferIteratorUniformFields<N, T>>
+                                                    IDIndexedFieldsIterator<N, T>>
         serdez_subclass;
 
     template <typename S>

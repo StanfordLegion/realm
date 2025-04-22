@@ -819,11 +819,11 @@ namespace Realm {
 
   ////////////////////////////////////////////////////////////////////////
   //
-  // class TransferIteratorUniformFields<N,T>
+  // class IDIndexedFieldsIterator<N,T>
   //
 
   template <int N, typename T>
-  TransferIteratorUniformFields<N, T>::TransferIteratorUniformFields(
+  IDIndexedFieldsIterator<N, T>::IDIndexedFieldsIterator(
       const int _dim_order[N], const std::vector<FieldID> &_fields, size_t _field_size,
       RegionInstanceImpl *_inst_impl, const IndexSpace<N, T> &_is,
       const FieldBlock *_field_block)
@@ -848,7 +848,7 @@ namespace Realm {
   }
 
   template <int N, typename T>
-  void TransferIteratorUniformFields<N, T>::prefill(void)
+  void IDIndexedFieldsIterator<N, T>::prefill(void)
   {
     assert(!fields.empty());
     const InstanceLayout<N, T> *inst_layout =
@@ -859,7 +859,7 @@ namespace Realm {
   }
 
   /*template <int N, typename T>
-  TransferIteratorUniformFields<N, T>::TransferIteratorUniformFields(
+  IDIndexedFieldsIterator<N, T>::IDIndexedFieldsIterator(
       const int _dim_order[N], const std::vector<FieldID> &_fields,
       const std::vector<size_t> &_fld_offsets, const std::vector<size_t> &_fld_sizes,
       RegionInstanceImpl *_inst_impl, const Rect<N, T> &_bounds,
@@ -878,13 +878,13 @@ namespace Realm {
   }*/
 
   template <int N, typename T>
-  TransferIteratorUniformFields<N, T>::TransferIteratorUniformFields(void)
+  IDIndexedFieldsIterator<N, T>::IDIndexedFieldsIterator(void)
   {}
 
   template <int N, typename T>
   template <typename S>
   /*static*/ TransferIterator *
-  TransferIteratorUniformFields<N, T>::deserialize_new(S &deserializer)
+  IDIndexedFieldsIterator<N, T>::deserialize_new(S &deserializer)
   {
     IndexSpace<N, T> is;
     RegionInstance inst;
@@ -903,7 +903,7 @@ namespace Realm {
       }
     }
 
-    TransferIteratorUniformFields<N, T> *tiis = new TransferIteratorUniformFields<N, T>(
+    IDIndexedFieldsIterator<N, T> *tiis = new IDIndexedFieldsIterator<N, T>(
         dim_order, fields, field_size, get_runtime()->get_instance_impl(inst), is,
         FieldBlock::create(get_runtime()->repl_heap, fields.data(), fields.size()));
 
@@ -911,11 +911,11 @@ namespace Realm {
   }
 
   template <int N, typename T>
-  TransferIteratorUniformFields<N, T>::~TransferIteratorUniformFields(void)
+  IDIndexedFieldsIterator<N, T>::~IDIndexedFieldsIterator(void)
   {}
 
   template <int N, typename T>
-  Event TransferIteratorUniformFields<N, T>::request_metadata(void)
+  Event IDIndexedFieldsIterator<N, T>::request_metadata(void)
   {
     Event e = TransferIteratorBase<N, T>::request_metadata();
 
@@ -927,7 +927,7 @@ namespace Realm {
   }
 
   template <int N, typename T>
-  void TransferIteratorUniformFields<N, T>::reset(void)
+  void IDIndexedFieldsIterator<N, T>::reset(void)
   {
     TransferIteratorBase<N, T>::reset();
     rect_idx = 0;
@@ -935,7 +935,7 @@ namespace Realm {
   }
 
   template <int N, typename T>
-  void TransferIteratorUniformFields<N, T>::reset_internal(void)
+  void IDIndexedFieldsIterator<N, T>::reset_internal(void)
   {
     // assert(!iter_init_deferred);
     if(!sparsity_impl) {
@@ -950,8 +950,9 @@ namespace Realm {
   }
 
   template <int N, typename T>
-  bool TransferIteratorUniformFields<N, T>::get_addresses(
-      AddressList &addrlist, const InstanceLayoutPieceBase *&nonaffine)
+  bool
+  IDIndexedFieldsIterator<N, T>::get_addresses(AddressList &addrlist,
+                                               const InstanceLayoutPieceBase *&nonaffine)
   {
     nonaffine = 0;
 
@@ -975,7 +976,7 @@ namespace Realm {
       const AffineLayoutPiece<N, T> *affine =
           static_cast<const AffineLayoutPiece<N, T> *>(layout_piece);
 
-      //assert(this->inst_impl->metadata.is_valid());
+      // assert(this->inst_impl->metadata.is_valid());
       size_t base_offset = this->inst_impl->metadata.inst_offset + affine->offset +
                            affine->strides.dot(target_subrect.lo); //+ field_rel_offset;
 
@@ -1010,8 +1011,8 @@ namespace Realm {
   }
 
   template <int N, typename T>
-  bool TransferIteratorUniformFields<N, T>::get_next_rect(Rect<N, T> &r, FieldID &fid,
-                                                          size_t &offset, size_t &fsize)
+  bool IDIndexedFieldsIterator<N, T>::get_next_rect(Rect<N, T> &r, FieldID &fid,
+                                                    size_t &offset, size_t &fsize)
   {
     if(iter_init_deferred) {
       reset_internal();
@@ -1038,12 +1039,12 @@ namespace Realm {
 
   template <int N, typename T>
   /*static*/ Serialization::PolymorphicSerdezSubclass<TransferIterator,
-                                                      TransferIteratorUniformFields<N, T>>
-      TransferIteratorUniformFields<N, T>::serdez_subclass;
+                                                      IDIndexedFieldsIterator<N, T>>
+      IDIndexedFieldsIterator<N, T>::serdez_subclass;
 
   template <int N, typename T>
   template <typename S>
-  bool TransferIteratorUniformFields<N, T>::serialize(S &serializer) const
+  bool IDIndexedFieldsIterator<N, T>::serialize(S &serializer) const
   {
     if(!((serializer << iter.space) && (serializer << this->inst_impl->me) &&
          (serializer << fields) && (serializer << field_size))) {
@@ -2262,9 +2263,9 @@ namespace Realm {
     RegionInstanceImpl *impl = get_runtime()->get_instance_impl(inst);
     const InstanceLayout<N, T> *inst_layout =
         checked_cast<const InstanceLayout<N, T> *>(impl->metadata.layout);
-    if(uniform_fields && inst_layout->uniform_mutlifield_layout &&
+    if(uniform_fields && inst_layout->idindexed_fields &&
        fields.size() >= MIN_UNIFORM_FIELDS) {
-      return new TransferIteratorUniformFields<N, T>(
+      return new IDIndexedFieldsIterator<N, T>(
           dim_order.data(), fields, fld_sizes.front(), impl, is,
           FieldBlock::create(get_runtime()->repl_heap, fields.data(), fields.size()));
     } else {
@@ -5312,7 +5313,7 @@ namespace Realm {
       const ProfilingRequestSet &, Event, int) const;                                    \
   template class TransferIteratorIndexSpace<N, T>;                                       \
   template class TransferIteratorIndirect<N, T>;                                         \
-  template class TransferIteratorUniformFields<N, T>;                                    \
+  template class IDIndexedFieldsIterator<N, T>;                                          \
   template class WrappingTransferIteratorIndirect<N, T>;                                 \
   template class TransferIteratorIndirectRange<N, T>;                                    \
   template class AddressSplitXferDesFactory<N, T>;                                       \

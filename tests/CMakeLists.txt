@@ -111,7 +111,7 @@ list(
   repl_heap_test.cc
   nodeset_test.cc
   transfer_iterator_test.cc
-  transfer_iterator_unifields_test.cc
+  idindexed_fields_iterator_test.cc
   lowlevel_dma_test.cc
   circ_queue_test.cc
   gather_scatter_test.cc

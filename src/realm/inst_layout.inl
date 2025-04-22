@@ -139,7 +139,7 @@ namespace Realm {
     std::map<std::pair<size_t, size_t>, size_t> pl_indexes, pl_starts, pl_sizes;
 
     size_t field_stride = 0;
-    layout->uniform_mutlifield_layout = true;
+    layout->idindexed_fields = true;
 
     // reserve space so that we don't have to copy piece lists as we grow
     layout->piece_lists.reserve(ilc.field_groups.size());
@@ -250,7 +250,7 @@ namespace Realm {
         // should not have seen this field before
         assert(layout->fields.count(it2->first) == 0);
 
-        layout->uniform_mutlifield_layout &=
+        layout->idindexed_fields &=
             (static_cast<size_t>(it2->first * field_stride) == reuse_offset);
 
         InstanceLayoutGeneric::FieldLayout &fl = layout->fields[it2->first];

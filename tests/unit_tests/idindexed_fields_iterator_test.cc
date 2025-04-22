@@ -1,4 +1,4 @@
-// TransferIteratorUniformFieldsTest.cpp
+// IDIndexedFieldsIteratorTest.cpp
 
 #include "realm/transfer/transfer.h"
 #include "realm/inst_layout.h"
@@ -8,13 +8,13 @@
 using namespace Realm;
 
 // Base class for parameterized test cases
-struct BaseUniformTransferItTestCaseData {
-  virtual ~BaseUniformTransferItTestCaseData() = default;
+struct BaseIDIndexedIteratorTestCaseData {
+  virtual ~BaseIDIndexedIteratorTestCaseData() = default;
   virtual int get_dim() const = 0;
 };
 
 template <int N>
-struct UniformTransferItTestCaseData {
+struct IDIndexedIteratorTestCaseData {
   // The iteration space
   Rect<N, int> domain;
   // The expected subrects from get_addresses (for uniform fields it's just the full
@@ -29,16 +29,16 @@ struct UniformTransferItTestCaseData {
 };
 
 template <int N>
-struct WrappedUniformTransferItTestCaseData : public BaseUniformTransferItTestCaseData {
-  UniformTransferItTestCaseData<N> data;
-  explicit WrappedUniformTransferItTestCaseData(UniformTransferItTestCaseData<N> d)
+struct WrappedIDIndexedIteratorTestCaseData : public BaseIDIndexedIteratorTestCaseData {
+  IDIndexedIteratorTestCaseData<N> data;
+  explicit WrappedIDIndexedIteratorTestCaseData(IDIndexedIteratorTestCaseData<N> d)
     : data(std::move(d))
   {}
   int get_dim() const override { return N; }
 };
 
-class TransferIteratorUniformFieldsGetAddressesTest
-  : public ::testing::TestWithParam<BaseUniformTransferItTestCaseData *> {
+class IDIndexedFieldsIteratorGetAddressesTest
+  : public ::testing::TestWithParam<BaseIDIndexedIteratorTestCaseData *> {
 protected:
   void TearDown() override { delete GetParam(); }
 };
@@ -53,7 +53,7 @@ struct MockHeap {
 };
 
 template <int N>
-void run_uniform_test_case(const UniformTransferItTestCaseData<N> &tc)
+void run_uniform_test_case(const IDIndexedIteratorTestCaseData<N> &tc)
 {
   using T = int;
 
@@ -64,8 +64,8 @@ void run_uniform_test_case(const UniformTransferItTestCaseData<N> &tc)
   MockHeap mock_heap;
   auto *field_block = FieldBlock::create(mock_heap, tc.fields.data(), tc.fields.size());
 
-  // Build the TransferIteratorUniformFields
-  auto it = std::make_unique<TransferIteratorUniformFields<N, T>>(
+  // Build the IDIndexedFieldsIterator
+  auto it = std::make_unique<IDIndexedFieldsIterator<N, T>>(
       tc.dim_order.data(), tc.fields, tc.field_size, inst_impl, tc.domain, field_block);
 
   const InstanceLayoutPieceBase *nonaffine = nullptr;
@@ -100,25 +100,24 @@ void run_uniform_test_case(const UniformTransferItTestCaseData<N> &tc)
   }
 }
 
-TEST_P(TransferIteratorUniformFieldsGetAddressesTest, Base)
+TEST_P(IDIndexedFieldsIteratorGetAddressesTest, Base)
 {
-  BaseUniformTransferItTestCaseData const *base = GetParam();
+  BaseIDIndexedIteratorTestCaseData const *base = GetParam();
   dispatch_for_dimension(
       base->get_dim(),
       [&](auto Dim) {
         constexpr int N = Dim;
         auto const &tc =
-            static_cast<WrappedUniformTransferItTestCaseData<N> const *>(base)->data;
+            static_cast<WrappedIDIndexedIteratorTestCaseData<N> const *>(base)->data;
         run_uniform_test_case(tc);
       },
       std::make_index_sequence<REALM_MAX_DIM>{});
 }
 
-INSTANTIATE_TEST_SUITE_P(UniformFieldsCases,
-                         TransferIteratorUniformFieldsGetAddressesTest,
+INSTANTIATE_TEST_SUITE_P(UniformFieldsCases, IDIndexedFieldsIteratorGetAddressesTest,
                          ::testing::Values(
                              // 1D: empty domain
-                             new WrappedUniformTransferItTestCaseData<1>({
+                             new WrappedIDIndexedIteratorTestCaseData<1>({
                                  /* domain */ Rect<1, int>::make_empty(),
                                  /* expected */ {},
                                  /* dim_order */ {0},
@@ -126,7 +125,7 @@ INSTANTIATE_TEST_SUITE_P(UniformFieldsCases,
                                  /* field_size */ sizeof(int),
                              }),
                              // 1D: single field, full domain
-                             new WrappedUniformTransferItTestCaseData<1>({
+                             new WrappedIDIndexedIteratorTestCaseData<1>({
                                  /* domain */ Rect<1, int>(0, 14),
                                  /* expected */ {Rect<1, int>(0, 14)},
                                  /* dim_order */ {0},
@@ -134,7 +133,7 @@ INSTANTIATE_TEST_SUITE_P(UniformFieldsCases,
                                  /* field_size */ sizeof(int),
                              }),
                              // 1D: two uniform fields, full domain
-                             new WrappedUniformTransferItTestCaseData<1>({
+                             new WrappedIDIndexedIteratorTestCaseData<1>({
                                  /* domain */ Rect<1, int>(0, 14),
                                  /* expected */ {Rect<1, int>(0, 14)},
                                  /* dim_order */ {0},
@@ -142,7 +141,7 @@ INSTANTIATE_TEST_SUITE_P(UniformFieldsCases,
                                  /* field_size */ sizeof(int),
                              }),
                              // 2D: single field, full rectangular domain
-                             new WrappedUniformTransferItTestCaseData<2>({
+                             new WrappedIDIndexedIteratorTestCaseData<2>({
                                  /* domain */ Rect<2, int>({0, 0}, {10, 10}),
                                  /* expected */ {Rect<2, int>({0, 0}, {10, 10})},
                                  /* dim_order */ {0, 1},
@@ -150,7 +149,7 @@ INSTANTIATE_TEST_SUITE_P(UniformFieldsCases,
                                  /* field_size */ sizeof(int),
                              }),
                              // 2D: single field, reverse dims
-                             new WrappedUniformTransferItTestCaseData<2>({
+                             new WrappedIDIndexedIteratorTestCaseData<2>({
                                  /* domain */ Rect<2, int>({0, 0}, {10, 10}),
                                  /* expected */ {Rect<2, int>({0, 0}, {10, 10})},
                                  /* dim_order */ {1, 0},
@@ -158,7 +157,7 @@ INSTANTIATE_TEST_SUITE_P(UniformFieldsCases,
                                  /* field_size */ sizeof(int),
                              }),
                              // 3D: single field, small cube
-                             new WrappedUniformTransferItTestCaseData<3>({
+                             new WrappedIDIndexedIteratorTestCaseData<3>({
                                  /* domain */ Rect<3, int>({0, 0, 0}, {1, 1, 1}),
                                  /* expected */ {Rect<3, int>({0, 0, 0}, {1, 1, 1})},
                                  /* dim_order */ {0, 1, 2},

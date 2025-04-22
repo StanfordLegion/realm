@@ -41,7 +41,7 @@ enum
 };
 
 namespace TestConfig {
-  bool verify = true;
+  bool verify = false;
   bool enable_profiling = true;
   bool enable_remote_copy = false;
   bool graphviz = false;

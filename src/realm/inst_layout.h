@@ -226,7 +226,7 @@ namespace Realm {
 
     using FieldMap = std::map<FieldID, FieldLayout>;
     FieldMap fields;
-    bool uniform_mutlifield_layout{false};
+    bool idindexed_fields{false};
   };
 
   REALM_PUBLIC_API
