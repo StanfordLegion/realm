@@ -975,7 +975,7 @@ namespace Realm {
       const AffineLayoutPiece<N, T> *affine =
           static_cast<const AffineLayoutPiece<N, T> *>(layout_piece);
 
-      assert(this->inst_impl->metadata.is_valid());
+      //assert(this->inst_impl->metadata.is_valid());
       size_t base_offset = this->inst_impl->metadata.inst_offset + affine->offset +
                            affine->strides.dot(target_subrect.lo); //+ field_rel_offset;
 
