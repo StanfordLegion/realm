@@ -302,15 +302,9 @@ namespace Realm {
       }
     }
 
-    /*static bool needs_transpose(size_t in_lstride, size_t in_pstride, size_t
-    out_lstride, size_t out_pstride)
-    {
-      return in_lstride > in_pstride || out_lstride > out_pstride;
-    }
-
     // Calculates the maximum alignment native type alignment the GPU supports that will
     // work with the given size.
-    static size_t calculate_type_alignment(size_t v)
+    /*static size_t calculate_type_alignment(size_t v)
     {
       // We don't need a full log2 here
       for(size_t a = 16; a > 1; a >>= 1) {
@@ -320,7 +314,7 @@ namespace Realm {
       return 1; // Unfortunately this can only be byte aligned :(
     }*/
 
-    static size_t read_address_entry(AffineCopyInfo<3> &info, size_t &min_align,
+    /*static size_t read_address_entry(AffineCopyInfo<3> &info, size_t &min_align,
                                      MemcpyTransposeInfo<size_t> &transpose,
                                      AddressListCursor &in_cur, uintptr_t in_base,
                                      GPU *in_gpu, AddressListCursor &out_cur,
@@ -476,29 +470,48 @@ namespace Realm {
       in_cur.advance(id, planes * iscale);
       out_cur.advance(od, planes * oscale);
       return rect.volume * fields_total;
-    }
+    }*/
 
-    /*static size_t read_address_entry(
-        AffineCopyInfo<3> &copy_infos, size_t &min_align,
-        MemcpyTransposeInfo<size_t> &transpose_info, AddressListCursor &in_alc,
-        uintptr_t in_base, GPU *in_gpu, AddressListCursor &out_alc, uintptr_t out_base,
-        GPU *out_gpu, size_t bytes_left, size_t max_xfer_fields, size_t &fields_total)
+    static size_t read_address_entry(AffineCopyInfo<3> &copy_infos, size_t &min_align,
+                                     MemcpyTransposeInfo<size_t> &transpose_info,
+                                     AddressListCursor &in_alc, uintptr_t in_base,
+                                     GPU *in_gpu, AddressListCursor &out_alc,
+                                     uintptr_t out_base, GPU *out_gpu, size_t bytes_left,
+                                     size_t max_xfer_fields, size_t &fields_total)
     {
       AffineCopyPair<3> &copy_info = copy_infos.subrects[copy_infos.num_rects++];
+
+      using std::max;
+      using std::min;
+
+      // ---------------------------------------------------------------------------
+      // helpers
+      // ---------------------------------------------------------------------------
+      const auto upd_align = [&](size_t v) {
+        for(size_t a = 16; a > 1; a >>= 1)
+          if((v & (a - 1)) == 0) {
+            min_align = min(min_align, a);
+            break;
+          }
+      };
+
+      const auto attach_fields = [&](AddressListCursor &c, AffineSubRect<3> &subr) {
+        if(c.field_block()) {
+          subr.num_fields = min(max_xfer_fields, c.remaining_fields());
+          subr.fields = c.fields_data();
+          fields_total = max(fields_total, subr.num_fields);
+        }
+      };
 
       const uintptr_t in_offset = in_alc.get_offset();
       const uintptr_t out_offset = out_alc.get_offset();
 
       const int in_dim = in_alc.get_dim();
       const int out_dim = out_alc.get_dim();
+
       size_t icount = in_alc.remaining(0);
       size_t ocount = out_alc.remaining(0);
-      const size_t contig_bytes = std::min({icount, ocount, bytes_left});
-
-      log_gpudma.info() << "IN: " << in_dim << ' ' << icount << ' ' << in_offset << ' '
-                        << contig_bytes;
-      log_gpudma.info() << "OUT: " << out_dim << ' ' << ocount << ' ' << out_offset << ' '
-                        << contig_bytes;
+      const size_t contig_bytes = min({icount, ocount, bytes_left});
 
       assert(in_dim > 0 && out_dim > 0);
 
@@ -507,7 +520,15 @@ namespace Realm {
       copy_info.extents[1] = 1;
       copy_info.extents[2] = 1;
 
-      const FieldBlock *src_field_block = in_alc.field_block();
+      attach_fields(in_alc, copy_info.src);
+      attach_fields(out_alc, copy_info.dst);
+
+      log_gpudma.info() << "IN: " << in_dim << ' ' << icount << ' ' << in_offset << ' '
+                        << contig_bytes;
+      log_gpudma.info() << "OUT: " << out_dim << ' ' << ocount << ' ' << out_offset << ' '
+                        << contig_bytes;
+
+      /*const FieldBlock *src_field_block = in_alc.field_block();
       const FieldBlock *dst_field_block = out_alc.field_block();
 
       if(src_field_block) {
@@ -520,16 +541,19 @@ namespace Realm {
         copy_info.dst.num_fields = std::min(max_xfer_fields, out_alc.remaining_fields());
         copy_info.dst.fields = out_alc.fields_data(); // dst_field_block->fields;
         fields_total = std::max(fields_total, copy_info.dst.num_fields);
-      }
+      }*/
 
-      // std::cout << "src_fields:" << copy_info.src.num_fields << std::endl;
-      // std::cout << "dst_fields:" << copy_info.dst.num_fields << std::endl;
+      upd_align(copy_info.src.addr);
+      upd_align(copy_info.dst.addr);
+      upd_align(contig_bytes);
 
-      min_align = std::min({min_align, calculate_type_alignment(copy_info.src.addr),
+      /*min_align = std::min({min_align, calculate_type_alignment(copy_info.src.addr),
                             calculate_type_alignment(copy_info.dst.addr),
-                            calculate_type_alignment(contig_bytes)});
+                            calculate_type_alignment(contig_bytes)});*/
 
-      // Handle 1D case directly
+      // ---------------------------------------------------------------------------
+      // fast path – pure 1‑D
+      // ---------------------------------------------------------------------------
       if((contig_bytes == bytes_left) || ((contig_bytes == icount) && (in_dim == 1)) ||
          ((contig_bytes == ocount) && (out_dim == 1))) {
         copy_info.extents[0] = contig_bytes;
@@ -537,12 +561,14 @@ namespace Realm {
         copy_info.dst.strides[0] = contig_bytes;
         copy_info.volume = contig_bytes;
 
-        in_alc.advance(0, contig_bytes, std::max(size_t(1), copy_info.src.num_fields));
-        out_alc.advance(0, contig_bytes, std::max(size_t(1), copy_info.dst.num_fields));
+        in_alc.advance(0, contig_bytes, max(size_t(1), copy_info.src.num_fields));
+        out_alc.advance(0, contig_bytes, max(size_t(1), copy_info.dst.num_fields));
         return contig_bytes * fields_total;
       }
 
-      // Compute 2D strides
+      // ---------------------------------------------------------------------------
+      // grow to 2‑D  (id/od == sub‑dimension chosen for “lines’’)
+      // ---------------------------------------------------------------------------
       int id = (contig_bytes < icount) ? 0 : 1;
       int od = (contig_bytes < ocount) ? 0 : 1;
 
@@ -560,12 +586,13 @@ namespace Realm {
       icount = (id == 0) ? icount / contig_bytes : in_alc.remaining(id);
       ocount = (od == 0) ? ocount / contig_bytes : out_alc.remaining(od);
 
-      const size_t lines = std::min({icount, ocount, bytes_left / contig_bytes});
+      const size_t lines = min({icount, ocount, bytes_left / contig_bytes});
 
-      min_align = std::min({min_align, calculate_type_alignment(in_lstride),
-                            calculate_type_alignment(out_lstride)});
+      upd_align(in_lstride);
+      upd_align(out_lstride);
 
-      // Check if 2D copy is sufficient
+      // min_align = std::min({min_align, calculate_type_alignment(in_lstride),
+      // calculate_type_alignment(out_lstride)});
       if(((contig_bytes * lines) == bytes_left) ||
          ((lines == icount) && (id == in_dim - 1)) ||
          ((lines == ocount) && (od == out_dim - 1))) {
@@ -592,11 +619,10 @@ namespace Realm {
 
       icount = (lines < icount) ? icount / lines : in_alc.remaining(id);
       ocount = (lines < ocount) ? ocount / lines : out_alc.remaining(od);
+      const size_t planes = min({icount, ocount, bytes_left / (contig_bytes * lines)});
 
-      const size_t planes =
-          std::min({icount, ocount, bytes_left / (contig_bytes * lines)});
-
-      if(needs_transpose(in_lstride, in_pstride, out_lstride, out_pstride)) {
+      const bool do_transpose = (in_lstride > in_pstride) || (out_lstride > out_pstride);
+      if(do_transpose) {
         transpose_info.src = in_base + in_offset;
         transpose_info.dst = out_base + out_offset;
         transpose_info.src_strides[0] = in_lstride;
@@ -621,7 +647,7 @@ namespace Realm {
       in_alc.advance(id, planes * iscale);
       out_alc.advance(od, planes * oscale);
       return planes * lines * contig_bytes;
-    }*/
+    }
 
     /*static size_t read_address_entry(AffineCopyInfo<3> &copy_infos, size_t &min_align,
                                      MemcpyTransposeInfo<size_t> &transpose_info,
