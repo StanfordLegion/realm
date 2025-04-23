@@ -69,11 +69,11 @@ namespace Realm {
    *                            count_strides[i][0] = count, count_strides[i][1] = stride.
    */
   template <int N, typename T>
-  inline int flatten_affine_dimensions(
-      const AffineLayoutPiece<N, T> *affine, const Rect<N, T> &subrect,
-      const int dim_order[N], size_t field_size, size_t &total_bytes,
-      size_t &contig_bytes,
-      std::unordered_map<int, std::pair<size_t, size_t>> &count_strides);
+  inline int
+  compact_affine_dims(const AffineLayoutPiece<N, T> *affine, const Rect<N, T> &subrect,
+                      const int dim_order[N], size_t field_size, size_t &total_bytes,
+                      size_t &contig_bytes,
+                      std::unordered_map<int, std::pair<size_t, size_t>> &count_strides);
 
 } // namespace Realm
 

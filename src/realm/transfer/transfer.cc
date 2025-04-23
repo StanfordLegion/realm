@@ -572,7 +572,7 @@ namespace Realm {
 #endif
 
       // TODO: remove now-redundant condition here
-      // TODO: use flatten_affine_dimensions
+      // TODO: use compact_affine_dims
       if(layout_piece->layout_type == PieceLayoutTypes::AffineLayoutType) {
         const AffineLayoutPiece<N, T> *affine =
             static_cast<const AffineLayoutPiece<N, T> *>(layout_piece);
@@ -986,7 +986,7 @@ namespace Realm {
 #endif
       // TODO(apryakhin@): If that's the same rec consider caching it
       std::unordered_map<int, std::pair<size_t, size_t>> count_strides;
-      int ndims = flatten_affine_dimensions(
+      int ndims = compact_affine_dims(
           static_cast<const AffineLayoutPiece<N, T> *>(layout_piece), target_subrect,
           this->dim_order, field_size, total_bytes, contig_bytes, count_strides);
       assert(ndims > 0);
