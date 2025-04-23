@@ -302,18 +302,6 @@ namespace Realm {
       }
     }
 
-    // Calculates the maximum alignment native type alignment the GPU supports that will
-    // work with the given size.
-    /*static size_t calculate_type_alignment(size_t v)
-    {
-      // We don't need a full log2 here
-      for(size_t a = 16; a > 1; a >>= 1) {
-        if((v & (a - 1)) == 0)
-          return a;
-      }
-      return 1; // Unfortunately this can only be byte aligned :(
-    }*/
-
     /*static size_t read_address_entry(AffineCopyInfo<3> &info, size_t &min_align,
                                      MemcpyTransposeInfo<size_t> &transpose,
                                      AddressListCursor &in_cur, uintptr_t in_base,
@@ -511,7 +499,12 @@ namespace Realm {
 
       size_t icount = in_alc.remaining(0);
       size_t ocount = out_alc.remaining(0);
-      const size_t contig_bytes = min({icount, ocount, bytes_left});
+      const size_t contig_bytes = std::min({icount, ocount, bytes_left});
+
+      log_gpudma.info() << "IN: " << in_dim << ' ' << icount << ' ' << in_offset << ' '
+                        << contig_bytes;
+      log_gpudma.info() << "OUT: " << out_dim << ' ' << ocount << ' ' << out_offset << ' '
+                        << contig_bytes;
 
       assert(in_dim > 0 && out_dim > 0);
 
@@ -520,36 +513,12 @@ namespace Realm {
       copy_info.extents[1] = 1;
       copy_info.extents[2] = 1;
 
-      attach_fields(in_alc, copy_info.src);
-      attach_fields(out_alc, copy_info.dst);
-
-      log_gpudma.info() << "IN: " << in_dim << ' ' << icount << ' ' << in_offset << ' '
-                        << contig_bytes;
-      log_gpudma.info() << "OUT: " << out_dim << ' ' << ocount << ' ' << out_offset << ' '
-                        << contig_bytes;
-
-      /*const FieldBlock *src_field_block = in_alc.field_block();
-      const FieldBlock *dst_field_block = out_alc.field_block();
-
-      if(src_field_block) {
-        copy_info.src.num_fields = std::min(max_xfer_fields, in_alc.remaining_fields());
-        copy_info.src.fields = in_alc.fields_data(); // src_field_block->fields;
-        fields_total = std::max(fields_total, copy_info.src.num_fields);
-      }
-
-      if(dst_field_block) {
-        copy_info.dst.num_fields = std::min(max_xfer_fields, out_alc.remaining_fields());
-        copy_info.dst.fields = out_alc.fields_data(); // dst_field_block->fields;
-        fields_total = std::max(fields_total, copy_info.dst.num_fields);
-      }*/
-
       upd_align(copy_info.src.addr);
       upd_align(copy_info.dst.addr);
       upd_align(contig_bytes);
 
-      /*min_align = std::min({min_align, calculate_type_alignment(copy_info.src.addr),
-                            calculate_type_alignment(copy_info.dst.addr),
-                            calculate_type_alignment(contig_bytes)});*/
+      attach_fields(in_alc, copy_info.src);
+      attach_fields(out_alc, copy_info.dst);
 
       // ---------------------------------------------------------------------------
       // fast path – pure 1‑D
@@ -591,8 +560,6 @@ namespace Realm {
       upd_align(in_lstride);
       upd_align(out_lstride);
 
-      // min_align = std::min({min_align, calculate_type_alignment(in_lstride),
-      // calculate_type_alignment(out_lstride)});
       if(((contig_bytes * lines) == bytes_left) ||
          ((lines == icount) && (id == in_dim - 1)) ||
          ((lines == ocount) && (od == out_dim - 1))) {
@@ -608,20 +575,23 @@ namespace Realm {
         return copy_info.volume;
       }
 
-      // Compute 3D strides
+      // ---------------------------------------------------------------------------
+      // need full 3‑D or transpose
+      // ---------------------------------------------------------------------------
       uintptr_t in_pstride =
           (lines < icount) ? in_lstride * lines : in_alc.get_stride(++id);
       uintptr_t out_pstride =
           (lines < ocount) ? out_lstride * lines : out_alc.get_stride(++od);
 
-      iscale *= (lines < icount) ? lines : 1;
-      oscale *= (lines < ocount) ? lines : 1;
+      iscale = (lines < icount) ? iscale * lines : 1;
+      oscale = (lines < ocount) ? oscale * lines : 1;
 
       icount = (lines < icount) ? icount / lines : in_alc.remaining(id);
       ocount = (lines < ocount) ? ocount / lines : out_alc.remaining(od);
-      const size_t planes = min({icount, ocount, bytes_left / (contig_bytes * lines)});
 
+      const size_t planes = min({icount, ocount, bytes_left / (contig_bytes * lines)});
       const bool do_transpose = (in_lstride > in_pstride) || (out_lstride > out_pstride);
+
       if(do_transpose) {
         transpose_info.src = in_base + in_offset;
         transpose_info.dst = out_base + out_offset;
@@ -648,190 +618,6 @@ namespace Realm {
       out_alc.advance(od, planes * oscale);
       return planes * lines * contig_bytes;
     }
-
-    /*static size_t read_address_entry(AffineCopyInfo<3> &copy_infos, size_t &min_align,
-                                     MemcpyTransposeInfo<size_t> &transpose_info,
-                                     AddressListCursor &in_alc, uintptr_t in_base,
-                                     GPU *in_gpu, AddressListCursor &out_alc,
-                                     uintptr_t out_base, GPU *out_gpu, size_t bytes_left)
-    {
-      AffineCopyPair<3> &copy_info = copy_infos.subrects[copy_infos.num_rects++];
-      uintptr_t in_offset = in_alc.get_offset();
-      uintptr_t out_offset = out_alc.get_offset();
-      // the reported dim is reduced for partially consumed address
-      // ranges - whatever we get can be assumed to be regular
-      int in_dim = in_alc.get_dim();
-      int out_dim = out_alc.get_dim();
-      size_t icount = in_alc.remaining(0);
-      size_t ocount = out_alc.remaining(0);
-      // contig bytes is always the min of the first dimensions
-      size_t contig_bytes = std::min(std::min(icount, ocount), bytes_left);
-
-      log_gpudma.info() << "IN: " << in_dim << ' ' << icount << ' ' << in_offset << ' '
-                        << contig_bytes;
-      log_gpudma.info() << "OUT: " << out_dim << ' ' << ocount << ' ' << out_offset << ' '
-                        << contig_bytes;
-
-      assert(in_dim > 0);
-      assert(out_dim > 0);
-
-      copy_info.src.addr = static_cast<uintptr_t>(in_base + in_offset);
-      copy_info.dst.addr = static_cast<uintptr_t>(out_base + out_offset);
-      copy_info.extents[1] = 1;
-      copy_info.extents[2] = 1;
-      min_align = std::min(min_align, calculate_type_alignment(copy_info.src.addr));
-      min_align = std::min(min_align, calculate_type_alignment(copy_info.dst.addr));
-
-      // Calculate the minimum alignment for contig bytes
-      min_align = std::min(min_align, calculate_type_alignment(contig_bytes));
-
-      // catch simple 1D case first
-      if((contig_bytes == bytes_left) || ((contig_bytes == icount) && (in_dim == 1)) ||
-         ((contig_bytes == ocount) && (out_dim == 1))) {
-        copy_info.extents[0] = contig_bytes;
-        copy_info.src.strides[0] = contig_bytes;
-        copy_info.dst.strides[0] = contig_bytes;
-        copy_info.volume = contig_bytes;
-
-        in_alc.advance(0, contig_bytes);
-        out_alc.advance(0, contig_bytes);
-        return contig_bytes;
-      }
-
-      // grow to a 2D copy
-      int id;
-      size_t iscale;
-      uintptr_t in_lstride;
-      if(contig_bytes < icount) {
-        // second input dim comes from splitting first
-        id = 0;
-        in_lstride = contig_bytes;
-        size_t ilines = icount / contig_bytes;
-        if((ilines * contig_bytes) != icount)
-          in_dim = 1; // leftover means we can't go beyond this
-        icount = ilines;
-        iscale = contig_bytes;
-      } else {
-        assert(in_dim > 1);
-        id = 1;
-        icount = in_alc.remaining(id);
-        in_lstride = in_alc.get_stride(id);
-        iscale = 1;
-      }
-
-      int od;
-      size_t oscale;
-      uintptr_t out_lstride;
-      if(contig_bytes < ocount) {
-        // second output dim comes from splitting first
-        od = 0;
-        out_lstride = contig_bytes;
-        size_t olines = ocount / contig_bytes;
-        if((olines * contig_bytes) != ocount)
-          out_dim = 1; // leftover means we can't go beyond this
-        ocount = olines;
-        oscale = contig_bytes;
-      } else {
-        assert(out_dim > 1);
-        od = 1;
-        ocount = out_alc.remaining(od);
-        out_lstride = out_alc.get_stride(od);
-        oscale = 1;
-      }
-
-      size_t lines = std::min(std::min(icount, ocount), bytes_left / contig_bytes);
-
-      // *_lstride is the number of bytes for each line, so recalculate
-      // the minimum alignment to make sure the alignment matches the
-      // byte alignment across all lines.
-      min_align = std::min(min_align, calculate_type_alignment(in_lstride));
-      min_align = std::min(min_align, calculate_type_alignment(out_lstride));
-
-      // see if we need to stop at 2D
-      if(((contig_bytes * lines) == bytes_left) ||
-         ((lines == icount) && (id == (in_dim - 1))) ||
-         ((lines == ocount) && (od == (out_dim - 1)))) {
-        copy_info.src.strides[0] = in_lstride;
-        copy_info.src.strides[1] = lines;
-        copy_info.dst.strides[0] = out_lstride;
-        copy_info.dst.strides[1] = lines;
-        copy_info.extents[0] = contig_bytes;
-        copy_info.extents[1] = lines;
-        copy_info.volume = lines * contig_bytes;
-
-        in_alc.advance(id, lines * iscale);
-        out_alc.advance(od, lines * oscale);
-        return lines * contig_bytes;
-      }
-
-      // Grow to a 3D copy
-      uintptr_t in_pstride;
-      if(lines < icount) {
-        // third input dim comes from splitting current
-        in_pstride = in_lstride * lines;
-        size_t iplanes = icount / lines;
-        // check for leftovers here if we go beyond 3D!
-        icount = iplanes;
-        iscale *= lines;
-      } else {
-        id++;
-        assert(in_dim > id);
-        icount = in_alc.remaining(id);
-        in_pstride = in_alc.get_stride(id);
-        iscale = 1;
-      }
-
-      uintptr_t out_pstride;
-      if(lines < ocount) {
-        // third output dim comes from splitting current
-        out_pstride = out_lstride * lines;
-        size_t oplanes = ocount / lines;
-        // check for leftovers here if we go beyond 3D!
-        ocount = oplanes;
-        oscale *= lines;
-      } else {
-        od++;
-        assert(out_dim > od);
-        ocount = out_alc.remaining(od);
-        out_pstride = out_alc.get_stride(od);
-        oscale = 1;
-      }
-
-      const size_t planes =
-          std::min(std::min(icount, ocount), (bytes_left / (contig_bytes * lines)));
-
-      if(needs_transpose(in_lstride, in_pstride, out_lstride, out_pstride)) {
-        transpose_info.src = static_cast<uintptr_t>(in_base + in_offset);
-        transpose_info.dst = static_cast<uintptr_t>(out_base + out_offset);
-
-        transpose_info.src_strides[0] = in_lstride;
-        transpose_info.src_strides[1] = in_pstride;
-
-        transpose_info.dst_strides[0] = out_lstride;
-        transpose_info.dst_strides[1] = out_pstride;
-
-        transpose_info.extents[0] = contig_bytes;
-        transpose_info.extents[1] = lines;
-        transpose_info.extents[2] = planes;
-        copy_infos.num_rects--;
-      } else {
-        copy_info.dst.strides[0] = out_lstride;
-        copy_info.dst.strides[1] = out_pstride / out_lstride;
-
-        copy_info.extents[0] = contig_bytes;
-        copy_info.extents[1] = lines;
-        copy_info.extents[2] = planes;
-
-        copy_info.src.strides[0] = in_lstride;
-        copy_info.src.strides[1] = in_pstride / in_lstride;
-
-        copy_info.volume = planes * lines * contig_bytes;
-      }
-
-      in_alc.advance(id, planes * iscale);
-      out_alc.advance(od, planes * oscale);
-      return planes * lines * contig_bytes;
-    }*/
 
     bool GPU::is_accessible_host_mem(const MemoryImpl *mem) const
     {
