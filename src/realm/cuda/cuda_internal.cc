@@ -463,9 +463,9 @@ namespace Realm {
     static size_t read_address_entry(AffineCopyInfo<3> &copy_infos, size_t &min_align,
                                      MemcpyTransposeInfo<size_t> &transpose_info,
                                      AddressListCursor &in_alc, uintptr_t in_base,
-                                     GPU *in_gpu, AddressListCursor &out_alc,
-                                     uintptr_t out_base, GPU *out_gpu, size_t bytes_left,
-                                     size_t max_xfer_fields, size_t &fields_total)
+                                     AddressListCursor &out_alc, uintptr_t out_base,
+                                     size_t bytes_left, size_t max_xfer_fields,
+                                     size_t &fields_total)
     {
       AffineCopyPair<3> &copy_info = copy_infos.subrects[copy_infos.num_rects++];
 
@@ -882,9 +882,9 @@ namespace Realm {
             }
 
             size_t bytes_to_copy = 0;
-            bytes_to_copy = read_address_entry(
-                copy_infos, min_align, transpose_copy, in_alc, in_base, in_gpu, out_alc,
-                out_base, out_gpu, bytes_left, max_xfer_fields, fields_total);
+            bytes_to_copy = read_address_entry(copy_infos, min_align, transpose_copy,
+                                               in_alc, in_base, out_alc, out_base,
+                                               bytes_left, max_xfer_fields, fields_total);
 
             // Either src or dst can't be accessed with a kernel, so just break out and
             // perform a standard cuMemcpy
