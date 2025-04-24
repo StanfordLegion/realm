@@ -788,6 +788,13 @@ namespace Realm {
 
       bool progress_xd(GPUChannel *channel, TimeLimit work_until);
 
+      static size_t read_address_entry(AffineCopyInfo<3> &copy_infos, size_t &min_align,
+                                       MemcpyTransposeInfo<size_t> &transpose_info,
+                                       AddressListCursor &in_alc, uintptr_t in_base,
+                                       AddressListCursor &out_alc, uintptr_t out_base,
+                                       size_t bytes_left, size_t max_xfer_fields,
+                                       size_t &fields_total);
+
     private:
       std::vector<GPU *> src_gpus, dst_gpus;
       std::vector<bool> dst_is_ipc;
@@ -920,7 +927,7 @@ namespace Realm {
       long submit(Request **requests, long nr);
       GPU *get_gpu() const { return src_gpu; }
 
-      RemoteChannelInfo *construct_remote_info() const override;
+      virtual RemoteChannelInfo *construct_remote_info() const;
 
       virtual bool supports_fat_transfers(Memory src_mem, Memory dst_mem) const {
           return true;}

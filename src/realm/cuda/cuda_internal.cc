@@ -460,12 +460,13 @@ namespace Realm {
       return rect.volume * fields_total;
     }*/
 
-    static size_t read_address_entry(AffineCopyInfo<3> &copy_infos, size_t &min_align,
-                                     MemcpyTransposeInfo<size_t> &transpose_info,
-                                     AddressListCursor &in_alc, uintptr_t in_base,
-                                     AddressListCursor &out_alc, uintptr_t out_base,
-                                     size_t bytes_left, size_t max_xfer_fields,
-                                     size_t &fields_total)
+    size_t GPUXferDes::read_address_entry(AffineCopyInfo<3> &copy_infos,
+                                          size_t &min_align,
+                                          MemcpyTransposeInfo<size_t> &transpose_info,
+                                          AddressListCursor &in_alc, uintptr_t in_base,
+                                          AddressListCursor &out_alc, uintptr_t out_base,
+                                          size_t bytes_left, size_t max_xfer_fields,
+                                          size_t &fields_total)
     {
       AffineCopyPair<3> &copy_info = copy_infos.subrects[copy_infos.num_rects++];
 
@@ -628,6 +629,7 @@ namespace Realm {
         copy_info.extents[0] = contig_bytes;
         copy_info.extents[1] = lines;
         copy_info.volume = lines * contig_bytes;
+
         in_alc.advance(id, lines * iscale);
         out_alc.advance(od, lines * oscale);
         return copy_info.volume;

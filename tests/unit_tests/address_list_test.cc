@@ -29,7 +29,8 @@ namespace {
     void *alloc_obj(std::size_t bytes, std::size_t align = 16)
     {
       void *ptr = nullptr;
-      posix_memalign(&ptr, align, bytes);
+      int ret = posix_memalign(&ptr, align, bytes);
+      assert(ret == 0);
       return ptr;
     }
   };

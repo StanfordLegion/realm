@@ -467,11 +467,10 @@ public:
 
     RandomPicker inst_picker(instances);
 
-    assert(dst_instances.size() >= 2);
-
     for(size_t i = 0; i < max_concurrent_ops; i++) {
       auto src_inst = src_instances[0];
-      auto dst_inst = dst_instances[1]; // inst_picker(i);
+      auto dst_inst =
+          dst_instances[std::max(size_t(0), dst_instances.size() - 1)]; // inst_picker(i);
 
       // auto src_fields = src_fields;//inst_to_fields[0];
       // auto dst_fields = dst_fields;//inst_to_fields[dst_inst.first];
