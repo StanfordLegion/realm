@@ -494,8 +494,8 @@ namespace Realm {
       const uintptr_t in_offset = in_alc.get_offset();
       const uintptr_t out_offset = out_alc.get_offset();
 
-      const int in_dim = in_alc.get_dim();
-      const int out_dim = out_alc.get_dim();
+      int in_dim = in_alc.get_dim();
+      int out_dim = out_alc.get_dim();
 
       size_t icount = in_alc.remaining(0);
       size_t ocount = out_alc.remaining(0);
@@ -538,22 +538,45 @@ namespace Realm {
       // ---------------------------------------------------------------------------
       // grow to 2‑D  (id/od == sub‑dimension chosen for “lines’’)
       // ---------------------------------------------------------------------------
-      int id = (contig_bytes < icount) ? 0 : 1;
-      int od = (contig_bytes < ocount) ? 0 : 1;
-
-      size_t iscale = (id == 0) ? contig_bytes : 1;
-      size_t oscale = (od == 0) ? contig_bytes : 1;
-
-      uintptr_t in_lstride = (id == 0) ? contig_bytes : in_alc.get_stride(1);
-      uintptr_t out_lstride = (od == 0) ? contig_bytes : out_alc.get_stride(1);
-
-      if((id == 0) && (icount % contig_bytes != 0))
+      int id;
+      size_t iscale;
+      uintptr_t in_lstride;
+      if(contig_bytes < icount) {
+        // second input dim comes from splitting first
+        id = 0;
+        in_lstride = contig_bytes;
+        size_t ilines = icount / contig_bytes;
+        if((ilines * contig_bytes) != icount)
+          in_dim = 1; // leftover means we can't go beyond this
+        icount = ilines;
+        iscale = contig_bytes;
+      } else {
+        assert(in_dim > 1);
         id = 1;
-      if((od == 0) && (ocount % contig_bytes != 0))
-        od = 1;
+        icount = in_alc.remaining(id);
+        in_lstride = in_alc.get_stride(id);
+        iscale = 1;
+      }
 
-      icount = (id == 0) ? icount / contig_bytes : in_alc.remaining(id);
-      ocount = (od == 0) ? ocount / contig_bytes : out_alc.remaining(od);
+      int od;
+      size_t oscale;
+      uintptr_t out_lstride;
+      if(contig_bytes < ocount) {
+        // second output dim comes from splitting first
+        od = 0;
+        out_lstride = contig_bytes;
+        size_t olines = ocount / contig_bytes;
+        if((olines * contig_bytes) != ocount)
+          out_dim = 1; // leftover means we can't go beyond this
+        ocount = olines;
+        oscale = contig_bytes;
+      } else {
+        assert(out_dim > 1);
+        od = 1;
+        ocount = out_alc.remaining(od);
+        out_lstride = out_alc.get_stride(od);
+        oscale = 1;
+      }
 
       const size_t lines = min({icount, ocount, bytes_left / contig_bytes});
 
@@ -578,16 +601,37 @@ namespace Realm {
       // ---------------------------------------------------------------------------
       // need full 3‑D or transpose
       // ---------------------------------------------------------------------------
-      uintptr_t in_pstride =
-          (lines < icount) ? in_lstride * lines : in_alc.get_stride(++id);
-      uintptr_t out_pstride =
-          (lines < ocount) ? out_lstride * lines : out_alc.get_stride(++od);
+      uintptr_t in_pstride;
+      if(lines < icount) {
+        // third input dim comes from splitting current
+        in_pstride = in_lstride * lines;
+        size_t iplanes = icount / lines;
+        // check for leftovers here if we go beyond 3D!
+        icount = iplanes;
+        iscale *= lines;
+      } else {
+        id++;
+        assert(in_dim > id);
+        icount = in_alc.remaining(id);
+        in_pstride = in_alc.get_stride(id);
+        iscale = 1;
+      }
 
-      iscale = (lines < icount) ? iscale * lines : 1;
-      oscale = (lines < ocount) ? oscale * lines : 1;
-
-      icount = (lines < icount) ? icount / lines : in_alc.remaining(id);
-      ocount = (lines < ocount) ? ocount / lines : out_alc.remaining(od);
+      uintptr_t out_pstride;
+      if(lines < ocount) {
+        // third output dim comes from splitting current
+        out_pstride = out_lstride * lines;
+        size_t oplanes = ocount / lines;
+        // check for leftovers here if we go beyond 3D!
+        ocount = oplanes;
+        oscale *= lines;
+      } else {
+        od++;
+        assert(out_dim > od);
+        ocount = out_alc.remaining(od);
+        out_pstride = out_alc.get_stride(od);
+        oscale = 1;
+      }
 
       const size_t planes = min({icount, ocount, bytes_left / (contig_bytes * lines)});
       const bool do_transpose = (in_lstride > in_pstride) || (out_lstride > out_pstride);
@@ -938,7 +982,7 @@ namespace Realm {
           // kernels
           log_gpudma.info() << "\tLaunching kernel for rects=" << copy_infos.num_rects
                             << " bytes=" << copy_info_total
-                            << " out_is_ipc=" << out_is_ipc;
+                            << " out_is_ipc=" << out_is_ipc << " fields=" << fields_total;
           fields_total = std::max<size_t>(1, fields_total);
           stream->get_gpu()->launch_batch_affine_kernel(&copy_infos, 3, min_align,
                                                         (copy_info_total / min_align),

@@ -2265,7 +2265,7 @@ namespace Realm {
       const std::vector<size_t> &fld_sizes, bool uniform_fields) const
   {
     assert(dim_order.size() == N);
-    constexpr int MIN_UNIFORM_FIELDS = 500;
+    constexpr int MIN_UNIFORM_FIELDS = 4;
     RegionInstanceImpl *impl = get_runtime()->get_instance_impl(inst);
     const InstanceLayout<N, T> *inst_layout =
         checked_cast<const InstanceLayout<N, T> *>(impl->metadata.layout);
