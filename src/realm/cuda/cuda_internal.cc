@@ -491,6 +491,33 @@ namespace Realm {
         }
       };
 
+      // After we know the volume of the rectangle, decide how many
+      // fields we can really move without exceeding bytes_left and
+      // update both sub-rects’ num_fields accordingly.
+      //
+      // The lambda returns the final field‐count so callers can pass
+      // it straight to `AddressListCursor::advance`.
+      const auto final_field_count = [&](size_t rect_volume) -> size_t {
+        // At least one field if no block was attached.
+        size_t rect_fields =
+            max<size_t>(1, max(copy_info.src.num_fields, copy_info.dst.num_fields));
+
+        // Obey flow-control: don’t over-commit more bytes than we still
+        // may transfer in this iteration.
+        size_t max_by_bytes = (rect_volume == 0) ? 0 : (bytes_left / rect_volume);
+        rect_fields = min(rect_fields, max_by_bytes);
+
+        if(copy_info.src.num_fields) {
+          copy_info.src.num_fields = min(copy_info.src.num_fields, rect_fields);
+        }
+        if(copy_info.dst.num_fields) {
+          copy_info.dst.num_fields = min(copy_info.dst.num_fields, rect_fields);
+        }
+
+        fields_total = rect_fields;
+        return rect_fields;
+      };
+
       const uintptr_t in_offset = in_alc.get_offset();
       const uintptr_t out_offset = out_alc.get_offset();
 
@@ -499,7 +526,7 @@ namespace Realm {
 
       size_t icount = in_alc.remaining(0);
       size_t ocount = out_alc.remaining(0);
-      const size_t contig_bytes = std::min({icount, ocount, bytes_left});
+      const size_t contig_bytes = min({icount, ocount, bytes_left});
 
       log_gpudma.info() << "IN: " << in_dim << ' ' << icount << ' ' << in_offset << ' '
                         << contig_bytes;
@@ -530,9 +557,17 @@ namespace Realm {
         copy_info.dst.strides[0] = contig_bytes;
         copy_info.volume = contig_bytes;
 
-        in_alc.advance(0, contig_bytes, max(size_t(1), copy_info.src.num_fields));
-        out_alc.advance(0, contig_bytes, max(size_t(1), copy_info.dst.num_fields));
-        return contig_bytes * fields_total;
+        // TODO: same needs to be done for 2/3D
+        size_t rect_fields = final_field_count(copy_info.volume);
+        fields_total = rect_fields;
+        // TODO: same rect_fields for both src and dst?
+        in_alc.advance(0, contig_bytes, rect_fields);
+        out_alc.advance(0, contig_bytes, rect_fields);
+        return contig_bytes * rect_fields;
+
+        // in_alc.advance(0, contig_bytes, max(size_t(1), copy_info.src.num_fields));
+        // out_alc.advance(0, contig_bytes, max(size_t(1), copy_info.dst.num_fields));
+        // return contig_bytes * fields_total;
       }
 
       // ---------------------------------------------------------------------------
@@ -830,7 +865,8 @@ namespace Realm {
         // 2) Batch loop - Collect all the rectangles for this inport/outport pair by
         // iterating the address list cursor for each and figure out what copy we can do
         // that best fits the layout of the source and destinations
-        while(bytes_left > 0 && copy_infos.num_rects < AffineCopyInfo<3>::MAX_NUM_RECTS) {
+        while(bytes_left > 0 && copy_infos.num_rects < AffineCopyInfo<3>::MAX_NUM_RECTS &&
+              fields_total == 1) {
           AddressListCursor &in_alc = in_port->addrcursor;
           AddressListCursor &out_alc = out_port->addrcursor;
 
@@ -857,8 +893,9 @@ namespace Realm {
               break;
             }
 
-            log_gpudma.info() << "\tAdded " << bytes_to_copy
-                              << " Bytes left= " << (bytes_left - bytes_to_copy);
+            log_gpudma.print() << "\tAdded " << bytes_to_copy
+                               << " Bytes left= " << (bytes_left - bytes_to_copy);
+
             assert(bytes_to_copy <= bytes_left);
             copy_info_total += bytes_to_copy;
             bytes_left -= bytes_to_copy;
