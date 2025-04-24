@@ -989,7 +989,7 @@ namespace Realm {
 
       // TODO(apryakhin@): If that's the same rec consider caching it
       std::unordered_map<int, std::pair<size_t, size_t>> count_strides;
-      int ndims = compact_affine_dims(
+      int ndims = compact_affine_dims<N, T>(
           static_cast<const AffineLayoutPiece<N, T> *>(layout_piece), target_subrect,
           this->dim_order, field_size, total_bytes, contig_bytes, count_strides);
       assert(ndims > 0);
