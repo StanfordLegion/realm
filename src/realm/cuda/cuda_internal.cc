@@ -893,7 +893,7 @@ namespace Realm {
               break;
             }
 
-            log_gpudma.print() << "\tAdded " << bytes_to_copy
+            log_gpudma.info() << "\tAdded " << bytes_to_copy
                                << " Bytes left= " << (bytes_left - bytes_to_copy);
 
             assert(bytes_to_copy <= bytes_left);
