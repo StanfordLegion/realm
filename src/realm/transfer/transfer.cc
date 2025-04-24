@@ -856,6 +856,7 @@ namespace Realm {
     const InstancePieceList<N, T> &piece_list =
         inst_layout->piece_lists[inst_layout->fields.begin()->second.list_idx];
     layout_piece = piece_list.find_piece(Point<N, T>(0));
+    assert(layout_piece->layout_type == PieceLayoutTypes::AffineLayoutType);
   }
 
   /*template <int N, typename T>
@@ -982,8 +983,10 @@ namespace Realm {
 
 #ifdef DEBUG_REALM
       assert(layout_piece->bounds.contains(target_subrect));
-      assert(layout_piece->layout_type == PieceLayoutTypes::AffineLayoutType);
 #endif
+
+      assert(layout_piece->layout_type == PieceLayoutTypes::AffineLayoutType);
+
       // TODO(apryakhin@): If that's the same rec consider caching it
       std::unordered_map<int, std::pair<size_t, size_t>> count_strides;
       int ndims = compact_affine_dims(
@@ -2262,7 +2265,7 @@ namespace Realm {
       const std::vector<size_t> &fld_sizes, bool uniform_fields) const
   {
     assert(dim_order.size() == N);
-    constexpr int MIN_UNIFORM_FIELDS = 2;
+    constexpr int MIN_UNIFORM_FIELDS = 500;
     RegionInstanceImpl *impl = get_runtime()->get_instance_impl(inst);
     const InstanceLayout<N, T> *inst_layout =
         checked_cast<const InstanceLayout<N, T> *>(impl->metadata.layout);
