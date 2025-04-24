@@ -999,21 +999,44 @@ namespace Realm {
       bool commited = addrlist.append_entry(ndims, contig_bytes, total_bytes, base_offset,
                                             count_strides);
       assert(commited);
-
-      // size_t *entry = addrlist.begin_entry(N, /*wrap_mode=*/false);
-      /*assert(entry);
-      entry[AddressList::SLOT_BASE] = base_offset;
-      for(auto &[dim, count_stride] : count_strides) {
-        entry[dim * AddressList::DIM_SLOTS] = count_stride.first;
-        entry[dim * AddressList::DIM_SLOTS + 1] = count_stride.second;
-      }
-
-      entry[AddressList::SLOT_HEADER] =
-          AddressList::pack_entry_header(contig_bytes, ndims);
-      addrlist.commit_entry(ndims, total_bytes);*/
     }
 
     return true;
+  }
+
+  template <int N, typename T>
+  size_t IDIndexedFieldsIterator<N, T>::step(size_t max_bytes,
+                                             TransferIterator::AddressInfo &info,
+                                             unsigned flags, bool tentative /*= false*/)
+  {
+    // NOT SUPPORTED
+    assert(0);
+    return 0;
+  }
+
+  template <int N, typename T>
+  size_t
+  IDIndexedFieldsIterator<N, T>::step_custom(size_t max_bytes,
+                                             TransferIterator::AddressInfoCustom &info,
+                                             bool tentative /*= false*/)
+  {
+    // NOT SUPPORTED
+    assert(0);
+    return 0;
+  }
+
+  template <int N, typename T>
+  void IDIndexedFieldsIterator<N, T>::confirm_step(void)
+  {
+    // NOT SUPPORTED
+    assert(0);
+  }
+
+  template <int N, typename T>
+  void IDIndexedFieldsIterator<N, T>::cancel_step(void)
+  {
+    // NOT SUPPORTED
+    assert(0);
   }
 
   template <int N, typename T>
@@ -2269,7 +2292,7 @@ namespace Realm {
     RegionInstanceImpl *impl = get_runtime()->get_instance_impl(inst);
     const InstanceLayout<N, T> *inst_layout =
         checked_cast<const InstanceLayout<N, T> *>(impl->metadata.layout);
-    if(uniform_fields && inst_layout->idindexed_fields &&
+    if(uniform_fields && inst_layout->idindexed_fields && is.dense() &&
        fields.size() >= MIN_UNIFORM_FIELDS) {
       return new IDIndexedFieldsIterator<N, T>(
           dim_order.data(), fields, fld_sizes.front(), impl, is,

@@ -244,9 +244,8 @@ namespace Realm {
 
     virtual ~IDIndexedFieldsIterator(void);
 
-    virtual Event request_metadata(void);
-
-    virtual void reset(void);
+    Event request_metadata(void) override;
+    void reset(void) override;
 
     static Serialization::PolymorphicSerdezSubclass<TransferIterator,
                                                     IDIndexedFieldsIterator<N, T>>
@@ -255,15 +254,22 @@ namespace Realm {
     template <typename S>
     bool serialize(S &serializer) const;
 
-    virtual bool get_addresses(AddressList &addrlist,
-                               const InstanceLayoutPieceBase *&nonaffine);
+    bool get_addresses(AddressList &addrlist,
+                       const InstanceLayoutPieceBase *&nonaffine) override;
+
+    size_t step(size_t max_bytes, TransferIterator::AddressInfo &info, unsigned flags,
+                bool tentative = false) override;
+    size_t step_custom(size_t max_bytes, TransferIterator::AddressInfoCustom &info,
+                       bool tentative = false) override;
+    void confirm_step(void) override;
+    void cancel_step(void) override;
 
   protected:
     void reset_internal(void);
     void prefill(void);
 
-    virtual bool get_next_rect(Rect<N, T> &r, FieldID &fid, size_t &offset,
-                               size_t &fsize);
+    bool get_next_rect(Rect<N, T> &r, FieldID &fid, size_t &offset,
+                       size_t &fsize) override;
 
     IndexSpace<N, T> is;
     SparsityMapImpl<N, T> *sparsity_impl{nullptr};
