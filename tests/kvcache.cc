@@ -428,6 +428,9 @@ public:
 
     std::vector<Realm::RegionInstance> instances;
 
+    std::vector<Realm::RegionInstance> src_instances;
+    std::vector<Realm::RegionInstance> dst_instances;
+
     for(size_t i = 0; i < memories_to_test.size(); i++) {
       for(size_t j = 0; j < memories_to_test.size(); j++) {
         Realm::RegionInstance src_inst, dst_inst;
@@ -452,8 +455,10 @@ public:
         }
 
         instances.push_back(src_inst);
+        src_instances.push_back(src_inst);
         inst_to_fields.push_back(src_fields);
         instances.push_back(dst_inst);
+        dst_instances.push_back(dst_inst);
         inst_to_fields.push_back(dst_fields);
       }
     }
@@ -462,9 +467,11 @@ public:
 
     RandomPicker inst_picker(instances);
 
+    assert(dst_instances.size() >= 2);
+
     for(size_t i = 0; i < max_concurrent_ops; i++) {
-      auto src_inst = instances[0];
-      auto dst_inst = instances[1]; // inst_picker(i);
+      auto src_inst = src_instances[0];
+      auto dst_inst = dst_instances[1]; // inst_picker(i);
 
       // auto src_fields = src_fields;//inst_to_fields[0];
       // auto dst_fields = dst_fields;//inst_to_fields[dst_inst.first];

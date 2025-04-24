@@ -894,7 +894,7 @@ namespace Realm {
             }
 
             log_gpudma.info() << "\tAdded " << bytes_to_copy
-                               << " Bytes left= " << (bytes_left - bytes_to_copy);
+                              << " Bytes left= " << (bytes_left - bytes_to_copy);
 
             assert(bytes_to_copy <= bytes_left);
             copy_info_total += bytes_to_copy;
@@ -1872,6 +1872,69 @@ namespace Realm {
       assert(0);
       return 0;
     }
+
+    RemoteChannelInfo *GPUChannel::construct_remote_info() const
+    {
+      return new GPURemoteChannelInfo(node, kind, reinterpret_cast<uintptr_t>(this),
+                                      paths);
+    }
+
+    ////////////////////////////////////////////////////////////////////////
+    //
+    // class GPURemoteChannelInfo
+    //
+
+    GPURemoteChannelInfo::GPURemoteChannelInfo(
+        NodeID _owner, XferDesKind _kind, uintptr_t _remote_ptr,
+        const std::vector<Channel::SupportedPath> &_paths)
+      : SimpleRemoteChannelInfo(_owner, _kind, _remote_ptr, _paths)
+    {}
+
+    RemoteChannel *GPURemoteChannelInfo::create_remote_channel()
+    {
+      GPURemoteChannel *rc = new GPURemoteChannel(remote_ptr);
+      rc->node = owner;
+      rc->kind = kind;
+      rc->paths.swap(paths);
+      return rc;
+    }
+
+    // these templates can go here because they're only used by the helper below
+    template <typename S>
+    bool GPURemoteChannelInfo::serialize(S &serializer) const
+    {
+      return ((serializer << owner) && (serializer << kind) &&
+              (serializer << remote_ptr) && (serializer << paths));
+    }
+
+    template <typename S>
+    /*static*/ RemoteChannelInfo *GPURemoteChannelInfo::deserialize_new(S &deserializer)
+    {
+      NodeID owner;
+      XferDesKind kind;
+      uintptr_t remote_ptr;
+      std::vector<Channel::SupportedPath> paths;
+
+      if((deserializer >> owner) && (deserializer >> kind) &&
+         (deserializer >> remote_ptr) && (deserializer >> paths)) {
+        return new GPURemoteChannelInfo(owner, kind, remote_ptr, paths);
+      } else {
+        return 0;
+      }
+    }
+
+    /*static*/ Serialization::PolymorphicSerdezSubclass<RemoteChannelInfo,
+                                                        GPURemoteChannelInfo>
+        GPURemoteChannelInfo::serdez_subclass;
+
+    ////////////////////////////////////////////////////////////////////////
+    //
+    // class GPURemoteChannel
+    //
+
+    GPURemoteChannel::GPURemoteChannel(uintptr_t _remote_ptr)
+      : RemoteChannel(_remote_ptr)
+    {}
 
     ////////////////////////////////////////////////////////////////////////
     //
