@@ -81,7 +81,8 @@ namespace {
 
     cursor.advance(0, kBytes, fields.size() - 1);
     EXPECT_EQ(addrlist.bytes_pending(), 0);
-    ASSERT_EQ(cursor.remaining_fields(), 0);
+    // Fields should be reset once we finished the rect entry
+    ASSERT_EQ(cursor.remaining_fields(), fields.size());
 
     delete fb;
   }
@@ -165,8 +166,8 @@ namespace {
     // consume all fields => entry consumed
     cur.advance(0, kBytes, ids.size());
     EXPECT_EQ(al.bytes_pending(), 0);
-    EXPECT_EQ(cur.fields_data(), fb->fields + ids.size());
-    ASSERT_EQ(cur.remaining_fields(), 0);
+    EXPECT_EQ(cur.fields_data(), fb->fields);
+    ASSERT_EQ(cur.remaining_fields(), ids.size());
 
     delete fb;
   }

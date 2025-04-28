@@ -74,17 +74,21 @@ static void dump_and_verify(RegionInstance inst, RegionInstance proxy_inst,
                             bool verbose = false)
 {
   copy<N, T, DT>(inst, proxy_inst, fields, is);
+  size_t max_fail_count = 10;
+  size_t fail_count = 0;
   for(FieldID fid : fields) {
     GenericAccessor<DT, N, T> acc(proxy_inst, fid);
     size_t i = 0;
-    size_t fail_count = 0;
-    size_t max_fail_count = 30;
     for(IndexSpaceIterator<N, T> it(is); it.valid; it.step()) {
       for(PointInRectIterator<N, T> it2(it.rect); it2.valid; it2.step()) {
         DT v = acc[it2.p];
         if(value != DT(-1) && v != value) {
-          std::cout << "v:" << int(v) << " p:" << it2.p << " fid:" << fid << std::endl;
+          std::cout << "bad v:" << int(v) << " p:" << it2.p << " fid:" << fid
+                    << std::endl;
           fail_count++;
+        } else {
+          //std::cout << "good v:" << int(v) << " p:" << it2.p << " fid:" << fid
+                    //<< std::endl;
         }
         if(verbose) {
           if((i++) % row_size == 0)
@@ -96,9 +100,9 @@ static void dump_and_verify(RegionInstance inst, RegionInstance proxy_inst,
       }
       if(verbose)
         std::cout << "\n";
-      assert(fail_count == 0);
     }
   }
+  assert(fail_count == 0);
 }
 
 class Stat {

@@ -334,32 +334,8 @@ namespace Realm {
         }
       };
 
-      // After we know the volume of the rectangle, decide how many
-      // fields we can really move without exceeding bytes_left and
-      // update both sub-rects’ num_fields accordingly.
-      //
-      // The lambda returns the final field‐count so callers can pass
-      // it straight to `AddressListCursor::advance`.
-      const auto final_field_count = [&](size_t rect_volume) -> size_t {
-        // At least one field if no block was attached.
-        size_t rect_fields =
-            max<size_t>(1, max(copy_info.src.num_fields, copy_info.dst.num_fields));
-
-        // Obey flow-control: don’t over-commit more bytes than we still
-        // may transfer in this iteration.
-        size_t max_by_bytes = (rect_volume == 0) ? 0 : (bytes_left / rect_volume);
-        rect_fields = min(rect_fields, max_by_bytes);
-
-        if(copy_info.src.num_fields) {
-          copy_info.src.num_fields = min(copy_info.src.num_fields, rect_fields);
-        }
-        if(copy_info.dst.num_fields) {
-          copy_info.dst.num_fields = min(copy_info.dst.num_fields, rect_fields);
-        }
-
-        fields_total = rect_fields;
-        return rect_fields;
-      };
+      size_t icount = in_alc.remaining(0);
+      size_t ocount = out_alc.remaining(0);
 
       const uintptr_t in_offset = in_alc.get_offset();
       const uintptr_t out_offset = out_alc.get_offset();
@@ -367,14 +343,63 @@ namespace Realm {
       int in_dim = in_alc.get_dim();
       int out_dim = out_alc.get_dim();
 
-      size_t icount = in_alc.remaining(0);
-      size_t ocount = out_alc.remaining(0);
       const size_t contig_bytes = min({icount, ocount, bytes_left});
+
+      // After we know the volume of the rectangle, decide how many
+      // fields we can really move without exceeding bytes_left and
+      // update both sub-rects’ num_fields accordingly.
+      //
+      // The lambda returns the final field‐count so callers can pass
+      // it straight to `AddressListCursor::advance`.
+      const auto final_field_count = [&](size_t rect_volume) -> size_t {
+        size_t rect_fields =
+            max<size_t>(1, max(copy_info.src.num_fields, copy_info.dst.num_fields));
+
+        size_t left = bytes_left;
+        if(in_alc.field_block()) {
+          left =
+              min(left, in_alc.partial
+                            ? icount
+                            : icount * max(size_t(1), icount * copy_info.src.num_fields));
+        } else {
+          left = min(left, icount);
+        }
+
+        if(out_alc.field_block()) {
+          left =
+              min(left, out_alc.partial
+                            ? ocount
+                            : ocount * max(size_t(1), ocount * copy_info.dst.num_fields));
+        } else {
+          left = min(left, ocount);
+        }
+
+        size_t max_by_bytes = (rect_volume == 0) ? 0 : (left / rect_volume);
+        rect_fields = min(rect_fields, max_by_bytes);
+
+        /*log_gpudma.print() << "---rectf:" << rect_fields << " max:" << max_by_bytes
+                           << " left:" << left << " bytes_left:" << bytes_left
+                           << " srcf:" << copy_info.src.num_fields
+                           << " dstf:" << copy_info.dst.num_fields << " icount:" << icount
+                           << " in_part:" << in_alc.partial
+                           << " out_part:" << out_alc.partial << " ocount:" << ocount;*/
+        //<< " xd=" << std::hex << guid << std::dec;
+
+        if(copy_info.src.num_fields) {
+          copy_info.src.num_fields = min(copy_info.src.num_fields, rect_fields);
+        }
+
+        if(copy_info.dst.num_fields) {
+          copy_info.dst.num_fields = min(copy_info.dst.num_fields, rect_fields);
+        }
+
+        return rect_fields;
+      };
 
       log_gpudma.info() << "IN: " << in_dim << ' ' << icount << ' ' << in_offset << ' '
                         << contig_bytes;
       log_gpudma.info() << "OUT: " << out_dim << ' ' << ocount << ' ' << out_offset << ' '
-                        << contig_bytes;
+                        << contig_bytes << " left:" << bytes_left;
 
       assert(in_dim > 0 && out_dim > 0);
 
@@ -390,6 +415,17 @@ namespace Realm {
       attach_fields(in_alc, copy_info.src);
       attach_fields(out_alc, copy_info.dst);
 
+      if(in_alc.field_block() && out_alc.field_block()) {
+        copy_info.src.field_stride = in_alc.addrlist->full_field_bytes();
+        copy_info.dst.field_stride = out_alc.addrlist->full_field_bytes();
+      } else if(in_alc.field_block()) {
+        copy_info.src.field_stride = copy_info.dst.field_stride =
+            in_alc.addrlist->full_field_bytes();
+      } else if(out_alc.field_block()) {
+        copy_info.dst.field_stride = copy_info.src.field_stride =
+            out_alc.addrlist->full_field_bytes();
+      }
+
       // ---------------------------------------------------------------------------
       // fast path – pure 1‑D
       // ---------------------------------------------------------------------------
@@ -402,15 +438,36 @@ namespace Realm {
 
         // TODO: same needs to be done for 2/3D
         size_t rect_fields = final_field_count(copy_info.volume);
+        rect_fields = std::min(rect_fields, bytes_left / copy_info.volume);
         fields_total = rect_fields;
-        // TODO: same rect_fields for both src and dst?
-        in_alc.advance(0, contig_bytes, rect_fields);
-        out_alc.advance(0, contig_bytes, rect_fields);
-        return contig_bytes * rect_fields;
 
-        // in_alc.advance(0, contig_bytes, max(size_t(1), copy_info.src.num_fields));
-        // out_alc.advance(0, contig_bytes, max(size_t(1), copy_info.dst.num_fields));
-        // return contig_bytes * fields_total;
+        // TODO(apryakhin@): possible move inside address list
+        if(in_alc.field_block()) {
+          in_alc.advance(0, contig_bytes, rect_fields);
+        } else {
+          assert(icount >= contig_bytes * rect_fields);
+          in_alc.advance(0, contig_bytes * rect_fields);
+        }
+
+        if(out_alc.field_block()) {
+          out_alc.advance(0, contig_bytes, rect_fields);
+        } else {
+          assert(ocount >= contig_bytes * rect_fields);
+          out_alc.advance(0, contig_bytes * rect_fields);
+        }
+        
+        std::cout << "DO 1D" << std::endl;
+
+        /*log_gpudma.print() << "----OUT_OFFSET:" << out_offset << " ocount:" << ocount
+                           << " in_offset:" << in_offset << " contig:" << contig_bytes
+                           << " rect_fields:" << rect_fields << " left:" << bytes_left
+                           << " tot:" << contig_bytes * rect_fields << " xd=" << std::hex
+                           << " in_pending:" << in_alc.addrlist->bytes_pending() << guid
+                           << " ou_pending:" << out_alc.addrlist->bytes_pending() <<
+           guid*/
+        // << std::dec;
+
+        return contig_bytes * rect_fields;
       }
 
       // ---------------------------------------------------------------------------
@@ -471,6 +528,20 @@ namespace Realm {
         copy_info.extents[0] = contig_bytes;
         copy_info.extents[1] = lines;
         copy_info.volume = lines * contig_bytes;
+
+        size_t rect_fields = final_field_count(copy_info.volume);
+        std::cout << "Do2D rect_fields:" << rect_fields << " volume:" << copy_info.volume << std::endl;
+        /*if(in_alc.field_block()) {
+          in_alc.advance(id, lines * iscale, rect_fields);
+       } else {
+          in_alc.advance(id, (lines * iscale) * rect_fields);
+        }
+
+        if(out_alc.field_block()) {
+          out_alc.advance(od, lines * oscale, rect_fields);
+        } else {
+          out_alc.advance(od, (lines * oscale) * rect_fields);
+        }*/
 
         in_alc.advance(id, lines * iscale);
         out_alc.advance(od, lines * oscale);
@@ -537,6 +608,8 @@ namespace Realm {
         copy_info.volume = planes * lines * contig_bytes;
       }
 
+      std::cout << "Do3D" << std::endl;
+
       in_alc.advance(id, planes * iscale);
       out_alc.advance(od, planes * oscale);
       return planes * lines * contig_bytes;
@@ -599,12 +672,13 @@ namespace Realm {
       memset(&copy_infos, 0, sizeof(copy_infos));
 
       // The general algorithm here can be described in three loops:
-      // 1) Outer loop - iterates over all the addresses for each request.  This typically
-      // corresponds to each rectangle in an index space transfer. 2) Batch loop - Map the
-      // address list that can be a mix of different rectangle sizes to a batch of copies
-      // that can be pushed in a single launch (either kernel or cuMemcpy call)
-      //   2.a) At this point advancing the address list commits us to submitting the copy
-      //   in #3, thus flow control happens here.
+      // 1) Outer loop - iterates over all the addresses for each request.  This
+      // typically corresponds to each rectangle in an index space transfer. 2) Batch
+      // loop - Map the address list that can be a mix of different rectangle sizes to a
+      // batch of copies that can be pushed in a single launch (either kernel or
+      // cuMemcpy call)
+      //   2.a) At this point advancing the address list commits us to submitting the
+      //   copy in #3, thus flow control happens here.
       // 3) Copy loop  - Based on the batch, descide the best copy to push.
 
       // 1) Outer loop - iterate over all the addresses for each request
@@ -622,12 +696,15 @@ namespace Realm {
         if(((total_bytes >= min_xfer_size) && work_until.is_expired()) ||
            (total_bytes >= max_xfer_size)) {
           log_gpudma.info() << "Flow control hit, copied " << total_bytes
-                            << " leave the rest for later!";
+                            << " max_xfer_size:" << max_xfer_size
+                            << " min_xfer_size:" << min_xfer_size << " xd=" << std::hex
+                            << guid << std::dec;
           break;
         }
 
         const size_t max_bytes =
             get_addresses(min_xfer_size, &rseqcache, in_nonaffine, out_nonaffine);
+
         if(max_bytes == 0) {
           break;
         }
@@ -650,10 +727,11 @@ namespace Realm {
           out_is_ipc = dst_is_ipc[output_control.current_io_port];
         }
 
-        // We need a kernel copy if this is a H2H copy, as CUDA forces the calling thread
-        // to perform H2H copies synchronously with cuMemcpyAsync.  We have decided that
-        // the GPU is the best one to do this (either via a faster inter-connect than one
-        // CPU thread can saturate or the fact it can be done asynchronously)
+        // We need a kernel copy if this is a H2H copy, as CUDA forces the calling
+        // thread to perform H2H copies synchronously with cuMemcpyAsync.  We have
+        // decided that the GPU is the best one to do this (either via a faster
+        // inter-connect than one CPU thread can saturate or the fact it can be done
+        // asynchronously)
         needs_kernel_copy =
             (in_port != nullptr) && (in_gpu->is_accessible_host_mem(in_port->mem)) &&
             (out_port != nullptr) && (out_gpu->is_accessible_host_mem(out_port->mem));
@@ -662,8 +740,10 @@ namespace Realm {
           if(in_port) {
             in_port->addrcursor.skip_bytes(max_bytes);
             rseqcache.add_span(input_control.current_io_port, in_span_start, max_bytes);
+
           } else if(out_port) {
             out_port->addrcursor.skip_bytes(max_bytes);
+
           } else {
             wseqcache.add_span(output_control.current_io_port, out_span_start, max_bytes);
           }
@@ -703,24 +783,24 @@ namespace Realm {
           memset(&transpose_copy, 0, sizeof(transpose_copy));
         }
 
-        // bool needs_fast_multifield = false;
+        bool needs_fast_multifield = false;
         size_t fields_total = 1;
 
         // 2) Batch loop - Collect all the rectangles for this inport/outport pair by
         // iterating the address list cursor for each and figure out what copy we can do
         // that best fits the layout of the source and destinations
         while(bytes_left > 0 && copy_infos.num_rects < AffineCopyInfo<3>::MAX_NUM_RECTS &&
-              fields_total == 1) {
+              !needs_fast_multifield) {
           AddressListCursor &in_alc = in_port->addrcursor;
           AddressListCursor &out_alc = out_port->addrcursor;
 
           if(!in_nonaffine && !out_nonaffine) {
-            log_gpudma.info() << "Affine -> Affine";
-            // limit transfer size for host<->device copies
-            // this is because CUDA stages these copies through a staging buffer and is a
-            // blocking call. Thus to limit the amount of time spent within the cuda
-            // driver and to allow us to time out early if needed, split these larger
-            // copies into smaller ones ourselves
+            // log_gpudma.info() << "Affine -> Affine";
+            //  limit transfer size for host<->device copies
+            //  this is because CUDA stages these copies through a staging buffer and is
+            //  a blocking call. Thus to limit the amount of time spent within the cuda
+            //  driver and to allow us to time out early if needed, split these larger
+            //  copies into smaller ones ourselves
             if(!in_gpu || (!out_gpu && !out_is_ipc)) {
               bytes_left = std::min(bytes_left, (size_t)(4U << 20U));
             }
@@ -738,17 +818,24 @@ namespace Realm {
             }
 
             log_gpudma.info() << "\tAdded " << bytes_to_copy
-                              << " Bytes left= " << (bytes_left - bytes_to_copy);
+                              << " Bytes left= " << (bytes_left - bytes_to_copy)
+                              << " xd=" << std::hex << guid << std::dec;
 
             assert(bytes_to_copy <= bytes_left);
             copy_info_total += bytes_to_copy;
             bytes_left -= bytes_to_copy;
+
+            if(in_alc.field_block() || out_alc.field_block()) {
+              needs_fast_multifield = true;
+              break;
+            }
+
           } else { // Non-affine transfers
             AddressInfoCudaArray ainfo;
 
             if(in_nonaffine) {
               assert(!out_nonaffine);
-              log_gpudma.info() << "Array -> Affine";
+              /// log_gpudma.info() << "Array -> Affine";
               size_t bytes = in_port->iter->step_custom(bytes_left, ainfo, false);
               if(bytes == 0)
                 break; // flow control or end of array
@@ -789,10 +876,11 @@ namespace Realm {
           }
         }
         // 3) Copy loop - Actually perform the copies enumerated earlier and track their
-        // completion This logic will determine which path was ultimately chosen based on
-        // the enumeration logic and should only be one launch API call, regardless of the
-        // size of the batch.  These copies *must* be submitted and cannot be interrupted,
-        // as we've already updated the addresslistcursor and committed to submitting them
+        // completion This logic will determine which path was ultimately chosen based
+        // on the enumeration logic and should only be one launch API call, regardless
+        // of the size of the batch.  These copies *must* be submitted and cannot be
+        // interrupted, as we've already updated the addresslistcursor and committed to
+        // submitting them
         size_t bytes_to_fence = 0;
         if(cuda_copy.WidthInBytes != 0) {
           // First the non-affine copies
@@ -848,26 +936,30 @@ namespace Realm {
         }
 
         // if(needs_fast_multifield) {
-        if((copy_infos.num_rects > 1) || needs_kernel_copy || fields_total > 1) {
-          // Adjust all the rectangles' sizes to account for the element size based on the
-          // calculated alignment
+        if((copy_infos.num_rects > 1) || needs_kernel_copy || needs_fast_multifield) {
+          // Adjust all the rectangles' sizes to account for the element size based on
+          // the calculated alignment
           for(size_t i = 0; (min_align > 1) && (i < copy_infos.num_rects); i++) {
             copy_infos.subrects[i].dst.strides[0] /= min_align;
             copy_infos.subrects[i].src.strides[0] /= min_align;
+            copy_infos.subrects[i].src.field_stride /= min_align;
+            copy_infos.subrects[i].dst.field_stride /= min_align;
             copy_infos.subrects[i].extents[0] /= min_align;
             copy_infos.subrects[i].volume /= min_align;
           }
 
-          // TODO: add some heuristics here, like if some rectangles are very large, do a
-          // cuMemcpy instead, possibly utilizing the copy engines or better optimized
+          // TODO: add some heuristics here, like if some rectangles are very large, do
+          // a cuMemcpy instead, possibly utilizing the copy engines or better optimized
           // kernels
           log_gpudma.info() << "\tLaunching kernel for rects=" << copy_infos.num_rects
+                            << " xd=" << std::hex << guid << std::dec
                             << " bytes=" << copy_info_total
-                            << " out_is_ipc=" << out_is_ipc << " fields=" << fields_total;
-          fields_total = std::max<size_t>(1, fields_total);
+                            << " out_is_ipc=" << out_is_ipc << " fields=" << fields_total
+                            << " needs_multi:" << needs_fast_multifield;
+
           stream->get_gpu()->launch_batch_affine_kernel(&copy_infos, 3, min_align,
                                                         (copy_info_total / min_align),
-                                                        fields_total, stream);
+                                                        needs_fast_multifield, stream);
           bytes_to_fence += copy_info_total;
         } else if(copy_infos.num_rects == 1) {
           // Then the affine copies to/from the device
@@ -1532,8 +1624,8 @@ namespace Realm {
 
         if(src_gpu->info->pageable_access_supported &&
            (src_gpu->module->config->cfg_pageable_access != 0)) {
-          // GPU can access all host memories, so add a path for each memory kind that is
-          // accessible to the host as the source
+          // GPU can access all host memories, so add a path for each memory kind that
+          // is accessible to the host as the source
           // TODO(cperry): Add a query for the memory kind that it is CPU accessible.
           size_t num_kinds = 0;
 #define COUNTER(kind, desc) num_kinds++;
@@ -1581,8 +1673,8 @@ namespace Realm {
 
         if(src_gpu->info->pageable_access_supported &&
            (src_gpu->module->config->cfg_pageable_access != 0)) {
-          // GPU can access all host memories, so add a path for each memory kind that is
-          // accessible to the host as the source
+          // GPU can access all host memories, so add a path for each memory kind that
+          // is accessible to the host as the source
           // TODO(cperry): Add a query for the memory kind that it is CPU accessible.
           size_t num_kinds = 0;
 #define COUNTER(kind, desc) num_kinds++;
@@ -1595,8 +1687,8 @@ namespace Realm {
             case GPU_FB_MEM:
               continue;
             default:
-              add_path(local_gpu_mems, static_cast<Memory::Kind>(i), /*src_global=*/false,
-                       bw, latency, frag_overhead, XFER_GPU_FROM_FB)
+              add_path(local_gpu_mems, static_cast<Memory::Kind>(i),
+                       /*src_global=*/false, bw, latency, frag_overhead, XFER_GPU_TO_FB)
                   .set_max_dim(2);
               break;
             }
@@ -1985,7 +2077,8 @@ namespace Realm {
                 lines = std::max<size_t>(1, max_bytes / bytes);
               }
 
-              // Fill repeated patterns of the reduced fill size so we can expand it later
+              // Fill repeated patterns of the reduced fill size so we can expand it
+              // later
               fill_info.subrects[fill_info.num_rects].addr = out_base + out_offset;
               fill_info.subrects[fill_info.num_rects].volume =
                   (bytes * lines) / reduced_fill_size;
@@ -2243,8 +2336,8 @@ namespace Realm {
           .set_max_dim(2);
       bw = std::max(gpu->info->c2c_bandwidth, gpu->info->pci_bandwidth);
 
-      // TODO(cperry): Even though this is a HOST fill, mark it as a GPU_TO_FB xfer kind.
-      // Is it really necesscary to annotate the kind of transfer?
+      // TODO(cperry): Even though this is a HOST fill, mark it as a GPU_TO_FB xfer
+      // kind. Is it really necesscary to annotate the kind of transfer?
       if(gpu->info->pageable_access_supported &&
          (gpu->module->config->cfg_pageable_access != 0)) {
         // GPU can access all host memories, so add a path for each memory kind that is

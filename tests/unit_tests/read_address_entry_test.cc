@@ -28,31 +28,33 @@ namespace {
     }
   };
 
-  static void append_entry_1d(AddressList &al, size_t contig_bytes, size_t base = 0)
+  static void append_entry_1d(AddressList &al, size_t contig_bytes, size_t base = 0,
+                              bool wrap_mode = true)
   {
-    bool ret = al.append_entry(/*dims=*/1, contig_bytes, contig_bytes, base, {});
+    bool ret =
+        al.append_entry(/*dims=*/1, contig_bytes, contig_bytes, base, {}, wrap_mode);
     assert(ret);
   }
 
   static void append_entry_2d(AddressList &al, size_t contig_bytes, size_t lines,
-                              size_t base = 0)
+                              size_t base = 0, bool wrap_mode = true)
   {
     std::unordered_map<int, std::pair<size_t, size_t>> count_strides;
     // dim 1 : {count, stride}
     count_strides[1] = {lines, contig_bytes};
     bool ret = al.append_entry(/*dims=*/2, contig_bytes, contig_bytes * lines, base,
-                               count_strides);
+                               count_strides, wrap_mode);
     assert(ret);
   }
 
   static void append_entry_3d(AddressList &al, size_t contig_bytes, size_t lines,
-                              size_t planes, size_t base = 0)
+                              size_t planes, size_t base = 0, bool wrap_mode = true)
   {
     std::unordered_map<int, std::pair<size_t, size_t>> count_strides;
     count_strides[1] = {lines, contig_bytes};
     count_strides[2] = {planes, contig_bytes * lines};
     bool ret = al.append_entry(/*dims=*/3, contig_bytes, contig_bytes * lines * planes,
-                               base, count_strides);
+                               base, count_strides, wrap_mode);
     assert(ret);
   }
 
@@ -408,3 +410,236 @@ TEST(ReadAddressEntry, TwoDimensional_SplitDim0_OneShot)
   EXPECT_EQ(in_al.bytes_pending(), (SRC_CONTIG - DST_CONTIG) * LINES);
   EXPECT_EQ(out_al.bytes_pending(), 0);
 }
+
+TEST(ReadAddressEntryTests, SrcWithFields_DstNoFields_Partial)
+{
+  constexpr size_t kContig = 64;
+  constexpr int kSrcFields = 5;
+  constexpr int kMoveFields = 2;
+  constexpr int kLeft = 3;
+  constexpr size_t kBytesLeft = kContig * 5; // allow exactly one field worth of bytes
+
+  // Build address lists
+  AddressList in_al, out_al;
+
+  // Attach field block to **source** only
+  std::vector<int> src_field_ids(kSrcFields);
+  std::iota(src_field_ids.begin(), src_field_ids.end(), 0);
+  MockHeap heap;
+  auto *fb_src = FieldBlock::create(heap, src_field_ids.data(), src_field_ids.size());
+  in_al.attach_field_block(fb_src);
+
+  append_entry_1d(in_al, kContig);
+  append_entry_1d(out_al, kContig * kMoveFields + kLeft, 0);
+
+  AddressListCursor ic, oc;
+  ic.set_addrlist(&in_al);
+  oc.set_addrlist(&out_al);
+
+  AffineCopyInfo<3> infos{};
+  MemcpyTransposeInfo<size_t> tr{};
+  size_t min_align = 16, fields_total = 0;
+
+  const size_t max_fields = 8; // not the limiting factor here
+
+  EXPECT_EQ(ic.get_offset(), 0);
+  EXPECT_EQ(oc.get_offset(), 0);
+
+  {
+    size_t moved = GPUXferDes::read_address_entry(infos, min_align, tr, ic, 0, oc, 0,
+                                                  kBytesLeft, max_fields, fields_total);
+    // Expectations
+    ASSERT_EQ(infos.num_rects, 1u);
+    const auto &ci = infos.subrects[0];
+    EXPECT_EQ(ci.extents[0], kContig);
+    EXPECT_EQ(ci.volume, kContig);
+
+    // Only one field can be moved because bytes_left == contig
+    EXPECT_EQ(fields_total, kMoveFields);
+    EXPECT_EQ(ci.src.num_fields, kMoveFields);
+    EXPECT_EQ(ci.dst.num_fields, 0u);
+    EXPECT_EQ(moved, kContig * kMoveFields);
+
+    // Pending bytes: src started with 3*64, dst with 64
+    EXPECT_EQ(in_al.bytes_pending(), kContig * (kSrcFields - kMoveFields));
+    EXPECT_EQ(out_al.bytes_pending(), kLeft);
+
+    EXPECT_EQ(ic.get_offset(), 0);
+    EXPECT_EQ(oc.get_offset(), kContig * kMoveFields);
+  }
+
+  infos.num_rects = 0;
+
+  {
+    size_t moved = GPUXferDes::read_address_entry(infos, min_align, tr, ic, 0, oc, 0,
+                                                  kLeft, max_fields, fields_total);
+
+    // Expectations
+    ASSERT_EQ(infos.num_rects, 1u);
+    const auto &ci = infos.subrects[0];
+    EXPECT_EQ(ci.extents[0], kLeft);
+    EXPECT_EQ(ci.volume, kLeft);
+
+    EXPECT_EQ(fields_total, 1);
+    EXPECT_EQ(ci.src.num_fields, 1);
+    EXPECT_EQ(ci.dst.num_fields, 0u);
+    EXPECT_EQ(moved, kLeft);
+
+    EXPECT_EQ(in_al.bytes_pending(), kContig * (kSrcFields - kMoveFields) - kLeft);
+    EXPECT_EQ(out_al.bytes_pending(), 0);
+
+    EXPECT_EQ(ic.get_offset(), kLeft);
+    EXPECT_EQ(oc.get_offset(), 0); // WrapAround
+    EXPECT_EQ(oc.remaining(0), kContig * kMoveFields + kLeft);
+  }
+
+  delete fb_src;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  2-D branch with field blocks on both sides, bytes_left moves two fields
+// ─────────────────────────────────────────────────────────────────────────────
+TEST(ReadAddressEntry, FieldBlock_2D_MoveTwoFields)
+{
+  constexpr size_t CONTIG = 32;
+  constexpr size_t LINES = 4; // volume per field = 128
+  constexpr int FIELDS = 4;
+  constexpr size_t BYTES_LEFT = CONTIG * LINES * 2; // allow exactly 2 fields (256)
+
+  AddressList in_al, out_al;
+  std::vector<int> ids(FIELDS);
+  std::iota(ids.begin(), ids.end(), 0);
+  MockHeap h;
+  auto *fb_in = FieldBlock::create(h, ids.data(), ids.size());
+  auto *fb_out = FieldBlock::create(h, ids.data(), ids.size());
+  in_al.attach_field_block(fb_in);
+  out_al.attach_field_block(fb_out);
+
+  append_entry_2d(in_al, CONTIG, LINES);
+  append_entry_2d(out_al, CONTIG, LINES);
+
+  AddressListCursor ic, oc;
+  ic.set_addrlist(&in_al);
+  oc.set_addrlist(&out_al);
+  AffineCopyInfo<3> info{};
+  MemcpyTransposeInfo<size_t> tr{};
+  size_t min_align = 16, fields_total = 0;
+
+  size_t moved = GPUXferDes::read_address_entry(
+      info, min_align, tr, ic, 0, oc, 0, BYTES_LEFT, /*max_fields=*/8, fields_total);
+
+  // We should hit the 2-D branch (one rectangle) and move exactly two fields
+  ASSERT_EQ(info.num_rects, 1u);
+  const auto &ci = info.subrects[0];
+  EXPECT_EQ(ci.extents[0], CONTIG);
+  EXPECT_EQ(ci.extents[1], LINES);
+  EXPECT_EQ(ci.volume, CONTIG * LINES);
+  EXPECT_EQ(fields_total, 2u);
+  EXPECT_EQ(ci.src.num_fields, 2u);
+  EXPECT_EQ(ci.dst.num_fields, 2u);
+  EXPECT_EQ(moved, BYTES_LEFT);
+
+  const size_t BYTES_PER_FIELD = CONTIG * LINES; // 128
+  EXPECT_EQ(in_al.bytes_pending(), BYTES_PER_FIELD * (FIELDS - 2));
+  EXPECT_EQ(out_al.bytes_pending(), BYTES_PER_FIELD * (FIELDS - 2));
+
+  delete fb_in;
+  delete fb_out;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  3-D branch with destination field block only, moves three fields
+// ─────────────────────────────────────────────────────────────────────────────
+TEST(ReadAddressEntry, DstFieldBlock_3D_MoveThreeFields)
+{
+  constexpr size_t CONTIG = 16;
+  constexpr size_t LINES = 2;
+  constexpr size_t PLANES = 3; // volume per field = 96
+  constexpr size_t DST_FIELDS = 5;
+  constexpr size_t BYTES_LEFT = CONTIG * LINES * PLANES * 3; // 288 bytes → 3 fields
+
+  AddressList in_al, out_al;
+  std::vector<int> ids(DST_FIELDS);
+  std::iota(ids.begin(), ids.end(), 0);
+  MockHeap h;
+  auto *fb_dst = FieldBlock::create(h, ids.data(), ids.size());
+  out_al.attach_field_block(fb_dst);
+
+  append_entry_3d(in_al, CONTIG, LINES, PLANES);
+  append_entry_3d(out_al, CONTIG, LINES, PLANES);
+
+  AddressListCursor ic, oc;
+  ic.set_addrlist(&in_al);
+  oc.set_addrlist(&out_al);
+  AffineCopyInfo<3> info{};
+  MemcpyTransposeInfo<size_t> tr{};
+  size_t min_align = 16, fields_total = 0;
+
+  size_t moved = GPUXferDes::read_address_entry(
+      info, min_align, tr, ic, 0, oc, 0, BYTES_LEFT, /*max_fields=*/8, fields_total);
+
+  // Expect 3-D branch (one rect) transferring three destination fields
+  ASSERT_EQ(info.num_rects, 1u);
+  const auto &ci = info.subrects[0];
+  EXPECT_EQ(ci.extents[0], CONTIG);
+  EXPECT_EQ(ci.extents[1], LINES);
+  EXPECT_EQ(ci.extents[2], PLANES);
+  EXPECT_EQ(ci.volume, CONTIG * LINES * PLANES);
+  EXPECT_EQ(fields_total, 3u);
+  EXPECT_EQ(ci.src.num_fields, 0u);
+  EXPECT_EQ(ci.dst.num_fields, 3u);
+  EXPECT_EQ(moved, BYTES_LEFT);
+
+  const size_t VOL = CONTIG * LINES * PLANES; // 96
+  EXPECT_EQ(in_al.bytes_pending(), 0u);
+  EXPECT_EQ(out_al.bytes_pending(), VOL * (DST_FIELDS - 3));
+
+  delete fb_dst;
+}
+
+/*TEST(ReadAddressEntryTests, FieldBlock_BytesLimitedTransfer)
+{
+  constexpr size_t kContig = 32;
+  constexpr int kTotalFields = 5;
+  constexpr size_t kBytesLeft = kContig * 3; // allow only 3 fields worth of bytes
+
+  AddressList in_al, out_al;
+  std::vector<int> ids(kTotalFields);
+  std::iota(ids.begin(), ids.end(), 0);
+
+  MockHeap h;
+  auto *fb_in = FieldBlock::create(h, ids.data(), ids.size());
+  auto *fb_out = FieldBlock::create(h, ids.data(), ids.size());
+  in_al.attach_field_block(fb_in);
+  out_al.attach_field_block(fb_out);
+
+  append_entry_1d(in_al, kContig);
+  append_entry_1d(out_al, kContig);
+
+  AddressListCursor ic, oc;
+  ic.set_addrlist(&in_al);
+  oc.set_addrlist(&out_al);
+
+  AffineCopyInfo<3> infos{};
+  MemcpyTransposeInfo<size_t> tr{};
+  size_t min_align = 16, fields_total = 0;
+
+  const size_t max_fields = 8; // bigger than bytes will allow
+  size_t moved = GPUXferDes::read_address_entry(infos, min_align, tr, ic, 0, oc, 0,
+                                                kBytesLeft, max_fields, fields_total);
+
+  ASSERT_EQ(infos.num_rects, 1u);
+  const auto &ci = infos.subrects[0];
+
+  EXPECT_EQ(fields_total, 3u);
+  EXPECT_EQ(ci.src.num_fields, 3u);
+  EXPECT_EQ(ci.dst.num_fields, 3u);
+  EXPECT_EQ(moved, kBytesLeft);
+
+  // Remaining bytes: (5-3)*32 = 64 on each list
+  EXPECT_EQ(in_al.bytes_pending(), kContig * (kTotalFields - 3));
+  EXPECT_EQ(out_al.bytes_pending(), kContig * (kTotalFields - 3));
+
+  delete fb_in;
+  delete fb_out;
+}*/

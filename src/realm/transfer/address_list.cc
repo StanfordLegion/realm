@@ -127,6 +127,19 @@ namespace Realm {
 
   size_t AddressList::bytes_pending() const { return total_bytes; }
 
+  size_t AddressList::full_field_bytes()
+  {
+    const size_t *entry = read_entry();
+    // decode header
+    const size_t contig = entry[AddressList::SLOT_HEADER] >> AddressList::CONTIG_SHIFT;
+    const int dims = int(entry[AddressList::SLOT_HEADER] & AddressList::DIM_MASK);
+    size_t bytes = contig;
+    for(int d = 1; d < dims; d++) {
+      bytes *= entry[detail::count_index(d)];
+    }
+    return bytes;
+  }
+
   size_t AddressList::pack_entry_header(size_t contig_bytes, int dims)
   {
     return (contig_bytes << CONTIG_SHIFT) | (dims & DIM_MASK);
@@ -139,6 +152,7 @@ namespace Realm {
       assert(read_pointer == max_entries);
       read_pointer = 0;
     }
+
     // skip trailing 0's
     if(data[read_pointer] == 0)
       read_pointer = 0;
@@ -213,19 +227,19 @@ namespace Realm {
     return r;
   }
 
-  void AddressListCursor::advance(int dim, size_t amount, int f)
+  /*void AddressListCursor::advance(int dim, size_t amount, int f)
   {
     const size_t *entry = addrlist->read_entry();
     int act_dim = detail::actdim(entry);
     assert(dim < act_dim);
 
-    // size of this “slice” in dim
+    // size of this "slice" in dim
     size_t r = entry[detail::count_index(dim)];
     if(dim == 0) {
       r >>= AddressList::CONTIG_SHIFT;
     }
 
-    // compute how many bytes we’re really removing
+    // compute how many bytes we're really removing
     size_t bytes = amount;
     if(dim > 0) {
 #ifdef DEBUG_REALM
@@ -247,7 +261,7 @@ namespace Realm {
     // ——— NEW: if this call exactly finishes *one* rect (the last dim)
     if(dim == (act_dim - 1) && amount == r) {
       if(fields && f > 0) {
-        // bump fields only on a full‐rect consume
+        // bump fields only on a full-rect consume
         partial_fields += f;
         if(partial_fields >= fields->count) {
           if(addrlist->bytes_pending() > 0)
@@ -258,14 +272,14 @@ namespace Realm {
         // no fields at all: consume entry immediately
         addrlist->read_pointer += detail::count_index(act_dim);
       }
-      // reset any in‐flight partial state
+      // reset any in-flight partial state
       partial = false;
       partial_dim = 0;
       pos.fill(0);
       return;
     }
 
-    // ——— otherwise fall back to the existing “partial” logic
+    // ——— otherwise fall back to the existing "partial" logic
     if(!partial) {
       partial = true;
       partial_dim = dim;
@@ -299,6 +313,93 @@ namespace Realm {
       } else {
         pos[partial_dim]++;                          // carry into next dimension
         r = entry[detail::count_index(partial_dim)]; // no shift because partial_dim > 0
+      }
+    }
+  }*/
+
+  void AddressListCursor::advance(int dim, size_t amount, int f)
+  {
+    const size_t *entry = addrlist->read_entry();
+    int act_dim = detail::actdim(entry);
+    assert(dim < act_dim);
+
+    // size of this "slice" in dim
+    size_t r = entry[detail::count_index(dim)];
+    if(dim == 0) {
+      r >>= AddressList::CONTIG_SHIFT;
+    }
+
+    // compute how many bytes we're really removing
+    size_t bytes = amount;
+    if(dim > 0) {
+#ifdef DEBUG_REALM
+      for(int i = 0; i < dim; i++)
+        assert(pos[i] == 0);
+#endif
+      bytes *= detail::contig_bytes(entry);
+      for(int i = 1; i < dim; i++)
+        bytes *= entry[detail::count_index(i)];
+    }
+
+#ifdef DEBUG_REALM
+    assert(addrlist->total_bytes >= bytes * f);
+#endif
+    addrlist->total_bytes -= bytes * f;
+
+    const FieldBlock *fields = field_block();
+
+    // ——— NEW: if this call exactly finishes *one* rect (the last dim)
+    if(dim == (act_dim - 1) && amount == r) {
+      if(fields && f > 0) {
+        // bump fields only on a full-rect consume
+        partial_fields += f;
+        if(partial_fields >= fields->count) {
+          partial_fields = 0;
+          addrlist->read_pointer += detail::count_index(act_dim);
+        }
+      } else {
+        // no fields at all: consume entry immediately
+        addrlist->read_pointer += detail::count_index(act_dim);
+      }
+      // reset any in-flight partial state
+      partial = false;
+      partial_dim = 0;
+      pos.fill(0);
+      return;
+    }
+
+    // ——— otherwise fall back to the existing "partial" logic
+    if(!partial) {
+      partial = true;
+      partial_dim = dim;
+      pos[dim] = amount;
+    } else {
+      assert(dim <= partial_dim);
+      partial_dim = dim;
+      pos[dim] += amount;
+    }
+
+    while(pos[partial_dim] == r) {
+      pos[partial_dim++] = 0;
+
+      if(partial_dim == act_dim) {
+        // we have finished the rect described by this entry
+        partial = false;
+
+        if(fields && (f > 0)) {
+          partial_fields += f;
+          if(partial_fields >= fields->count) {
+            partial_fields = 0;
+            addrlist->read_pointer += detail::count_index(act_dim);
+          }
+        } else {
+          addrlist->read_pointer += detail::count_index(act_dim);
+        }
+        break;
+      } else {
+        // carry into the next higher dimension
+        pos[partial_dim]++; // increment that dimension
+        r = entry[detail::count_index(partial_dim)];
       }
     }
   }

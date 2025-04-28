@@ -64,6 +64,7 @@ namespace Realm {
     void attach_field_block(const FieldBlock *_field_block);
 
     [[nodiscard]] size_t bytes_pending() const;
+    [[nodiscard]] size_t full_field_bytes();
 
     // entry packs:
     // the contiguous byte count (contig_bytes) in the upper bitsthe
@@ -114,10 +115,11 @@ namespace Realm {
     [[nodiscard]] const FieldID *fields_data() const;
     [[nodiscard]] size_t remaining_fields() const;
 
-  protected:
     AddressList *addrlist{nullptr};
     bool partial{false}; // inside a dimension
-    int partial_dim{0};  // dimension index
+
+  protected:
+    int partial_dim{0}; // dimension index
     size_t partial_fields{0};
     std::array<size_t, REALM_MAX_DIM + 1> pos{};
   };

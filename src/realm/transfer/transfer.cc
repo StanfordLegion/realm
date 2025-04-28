@@ -2288,7 +2288,7 @@ namespace Realm {
       const std::vector<size_t> &fld_sizes, bool uniform_fields) const
   {
     assert(dim_order.size() == N);
-    constexpr int MIN_UNIFORM_FIELDS = 4;
+    constexpr int MIN_UNIFORM_FIELDS = 2;
     RegionInstanceImpl *impl = get_runtime()->get_instance_impl(inst);
     const InstanceLayout<N, T> *inst_layout =
         checked_cast<const InstanceLayout<N, T> *>(impl->metadata.layout);
@@ -4722,7 +4722,9 @@ namespace Realm {
           while(((immed_count + same_mem) < tg.ib_edges.size()) &&
                 (tgt_mem ==
                  tg.ib_edges[tg.ib_alloc_order[immed_count + same_mem]].memory)) {
+
             sizes.push_back(tg.ib_edges[tg.ib_alloc_order[immed_count + same_mem]].size);
+
             same_mem += 1;
           }
 

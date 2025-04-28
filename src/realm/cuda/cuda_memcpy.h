@@ -39,6 +39,7 @@ namespace Realm {
 
       const FieldID *fields;
       size_t num_fields;
+      Offset_t field_stride;
     };
 
     template <size_t N, typename Offset_t = size_t>

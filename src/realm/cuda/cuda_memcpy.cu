@@ -150,28 +150,16 @@ memcpy_multi_affine_batch(Realm::Cuda::AffineCopyPair<N, Offset_t> *info, size_t
     const T *__restrict__ src = reinterpret_cast<const T *>(cp.src.addr);
     T *__restrict__ dst = reinterpret_cast<T *>(cp.dst.addr);
 
-    // cp.src.num_fields > 0 ? threadIdx.x
-    //: blockIdx.x * blockDim.x + threadIdx.x - start_offset;
-
-    // const Offset_t grid_stride =
-    // cp.src.num_fields > 0 ? blockDim.x : gridDim.x * blockDim.x;
-
     /* -------- iterate over fields handled by this block -------- */
     for(Offset_t f = blockIdx.x; f < n; f += gridDim.x) {
 
-      Offset_t src_field_base =
-          cp.src.num_fields > 0 ? cp.src.fields[f] * v : f * v; // cp.src.strides[0] : 0;
+      Offset_t src_field_base = cp.src.num_fields > 0
+                                    ? cp.src.fields[f] * cp.src.field_stride
+                                    : f * cp.src.field_stride;
 
-      Offset_t dst_field_base =
-          cp.dst.num_fields > 0 ? cp.dst.fields[f] * v : f * v; // cp.dst.strides[0] : 0;
-
-      /*if(cp.src.num_fields > 0 && cp.dst.num_fields == 0) {
-        dst_field_base = f * v;
-      }
-
-      if(cp.dst.num_fields > 0 && cp.src.num_fields == 0) {
-        src_field_base = f * v;
-      }*/
+      Offset_t dst_field_base = cp.dst.num_fields > 0
+                                    ? cp.dst.fields[f] * cp.dst.field_stride
+                                    : f * cp.dst.field_stride;
 
       Offset_t off = tid_global;
 
