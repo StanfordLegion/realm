@@ -1894,6 +1894,7 @@ namespace Realm {
   class TransferDomainIndexSpace : public TransferDomain {
   public:
     TransferDomainIndexSpace(IndexSpace<N, T> _is);
+    ~TransferDomainIndexSpace();
 
     template <typename S>
     static TransferDomain *deserialize_new(S &deserializer);
@@ -1921,12 +1922,12 @@ namespace Realm {
                                               const std::vector<FieldID> &fields,
                                               const std::vector<size_t> &fld_offsets,
                                               const std::vector<size_t> &fld_sizes,
-                                              bool uniform_fields = false) const;
+                                              bool uniform_fields = false);
 
     virtual TransferIterator *create_iterator(RegionInstance inst, RegionInstance peer,
                                               const std::vector<FieldID> &fields,
                                               const std::vector<size_t> &fld_offsets,
-                                              const std::vector<size_t> &fld_sizes) const;
+                                              const std::vector<size_t> &fld_sizes);
 
     virtual void print(std::ostream &os) const;
 
@@ -1937,14 +1938,25 @@ namespace Realm {
     template <typename S>
     bool serialize(S &serializer) const;
 
+    static constexpr size_t MIN_UNIFORM_FIELDS = 2;
+
     // protected:
     IndexSpace<N, T> is;
+    std::vector<FieldBlock *> rheap_allocs;
   };
 
   template <int N, typename T>
   TransferDomainIndexSpace<N, T>::TransferDomainIndexSpace(IndexSpace<N, T> _is)
     : is(_is)
   {}
+
+  template <int N, typename T>
+  TransferDomainIndexSpace<N, T>::~TransferDomainIndexSpace()
+  {
+    for(size_t i = 0; i < rheap_allocs.size(); i++) {
+      get_runtime()->repl_heap.free_obj(rheap_allocs[i]);
+    }
+  }
 
   template <int N, typename T>
   template <typename S>
@@ -2285,18 +2297,22 @@ namespace Realm {
   TransferIterator *TransferDomainIndexSpace<N, T>::create_iterator(
       RegionInstance inst, const std::vector<int> &dim_order,
       const std::vector<FieldID> &fields, const std::vector<size_t> &fld_offsets,
-      const std::vector<size_t> &fld_sizes, bool uniform_fields) const
+      const std::vector<size_t> &fld_sizes, bool uniform_fields)
   {
     assert(dim_order.size() == N);
-    constexpr int MIN_UNIFORM_FIELDS = 2;
     RegionInstanceImpl *impl = get_runtime()->get_instance_impl(inst);
     const InstanceLayout<N, T> *inst_layout =
         checked_cast<const InstanceLayout<N, T> *>(impl->metadata.layout);
     if(uniform_fields && inst_layout->idindexed_fields && is.dense() &&
        fields.size() >= MIN_UNIFORM_FIELDS) {
-      return new IDIndexedFieldsIterator<N, T>(
-          dim_order.data(), fields, fld_sizes.front(), impl, is,
-          FieldBlock::create(get_runtime()->repl_heap, fields.data(), fields.size()));
+
+      FieldBlock *field_block =
+          FieldBlock::create(get_runtime()->repl_heap, fields.data(), fields.size());
+
+      return new IDIndexedFieldsIterator<N, T>(dim_order.data(), fields,
+                                               fld_sizes.front(), impl, is, field_block);
+      rheap_allocs.emplace_back(field_block);
+      // FieldBlock::create(get_runtime()->repl_heap, fields.data(), fields.size()));
     } else {
       return new TransferIteratorIndexSpace<N, T>(dim_order.data(), fields, fld_offsets,
                                                   fld_sizes, impl, is);
@@ -2306,7 +2322,7 @@ namespace Realm {
   template <int N, typename T>
   TransferIterator *TransferDomainIndexSpace<N, T>::create_iterator(
       RegionInstance inst, RegionInstance peer, const std::vector<FieldID> &fields,
-      const std::vector<size_t> &fld_offsets, const std::vector<size_t> &fld_sizes) const
+      const std::vector<size_t> &fld_offsets, const std::vector<size_t> &fld_sizes)
   {
     std::vector<int> dim_order(N, -1);
     bool have_ordering = false;

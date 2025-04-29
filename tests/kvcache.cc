@@ -70,21 +70,23 @@ inline void copy(RegionInstance src_inst, RegionInstance dst_inst,
 template <int N, typename T, typename DT>
 static void dump_and_verify(RegionInstance inst, RegionInstance proxy_inst,
                             const std::vector<FieldID> &fields,
-                            const IndexSpace<N, T> &is, size_t row_size, DT value,
-                            bool verbose = false)
+                            const IndexSpace<N, T> &is, size_t row_size,
+                            const std::vector<DT> &values, bool verbose = false)
 {
   copy<N, T, DT>(inst, proxy_inst, fields, is);
-  size_t max_fail_count = 10;
+  size_t max_fail_count = 50;
   size_t fail_count = 0;
+  int index = 0;
   for(FieldID fid : fields) {
     GenericAccessor<DT, N, T> acc(proxy_inst, fid);
     size_t i = 0;
+    DT value = values[index++];
     for(IndexSpaceIterator<N, T> it(is); it.valid; it.step()) {
       for(PointInRectIterator<N, T> it2(it.rect); it2.valid; it2.step()) {
         DT v = acc[it2.p];
         if(value != DT(-1) && v != value) {
           std::cout << "bad v:" << int(v) << " p:" << it2.p << " fid:" << fid
-                    << std::endl;
+                    << " expv:" << value << std::endl;
           fail_count++;
         } else {
           // std::cout << "good v:" << int(v) << " p:" << it2.p << " fid:" << fid
@@ -367,8 +369,8 @@ public:
   size_t size;
   std::map<FieldID, size_t> fields;
   std::vector<std::map<FieldID, size_t>> inst_to_fields;
-  std::vector<
-      std::tuple<CopyIndexSpace, RegionInstance, ElementType, std::vector<FieldID>>>
+  std::vector<std::tuple<CopyIndexSpace, RegionInstance, std::vector<ElementType>,
+                         std::vector<FieldID>>>
       validate_queue;
 
   MultiFieldTestGraphFactory(std::vector<Realm::Memory> &_mems, size_t _sz,
@@ -387,8 +389,9 @@ public:
     for(const auto &[index_space, inst, value, fields] : validate_queue) {
       RegionInstance validate_instance;
       std::map<FieldID, size_t> src_fields;
+      assert(value.empty() == false);
       for(FieldID fid : fields)
-        src_fields[fid] = sizeof(value);
+        src_fields[fid] = sizeof(value.front());
       Realm::RegionInstance::create_instance(validate_instance, *mq.begin(), index_space,
                                              src_fields, 0, ProfilingRequestSet())
           .wait();
@@ -413,25 +416,20 @@ public:
 
     std::map<FieldID, size_t> src_fields;
     for(const auto [field_id, field_size] : fields) {
-      // if(count++ > fields.size() / 2) {
-      // break;
-      //}
       src_fields[field_id] = field_size;
     }
 
     std::map<FieldID, size_t> dst_fields;
-    // count = 0;
     for(const auto [field_id, field_size] : fields) {
-      // if(count++ >= fields.size() / 2) {
       dst_fields[field_id] = field_size;
-      //}
     }
 
     assert(src_fields.empty() == false);
     assert(dst_fields.empty() == false);
 
-    std::vector<Realm::RegionInstance> instances;
+    std::map<FieldID, ElementType> values;
 
+    std::vector<Realm::RegionInstance> instances;
     std::vector<Realm::RegionInstance> src_instances;
     std::vector<Realm::RegionInstance> dst_instances;
 
@@ -446,7 +444,26 @@ public:
             .wait();
 
         if(i == j) {
-          std::vector<Realm::CopySrcDstField> srcs(src_fields.size()),
+          int index = 1;
+          std::vector<Event> fill_events;
+          for(const auto &[field_id, field_size] : src_fields) {
+            std::vector<Realm::CopySrcDstField> srcs(1), dsts(1);
+            ElementType fill_value = value + index++;
+            values[field_id] = fill_value;
+            srcs[0].set_fill<ElementType>(fill_value); // this needs conversion
+            assert(field_size == sizeof(ElementType));
+            std::cout << "FID:" << field_id << " val:" << fill_value << std::endl;
+            dsts[0].set_field(src_inst, field_id, field_size);
+            fill_events.emplace_back(is.copy(srcs, dsts, ProfilingRequestSet()));
+          }
+
+          Event::merge_events(fill_events).wait();
+
+          /*this->template fill<MAX_DIM, int, ElementType>(
+              is, src_fields,
+              [&](Point<MAX_DIM, int> p) -> ElementType { return ElementType(p.x()); });*/
+
+          /*std::vector<Realm::CopySrcDstField> srcs(src_fields.size()),
               dsts(src_fields.size());
           int index = 0;
           for(const auto &[field_id, field_size] : src_fields) {
@@ -455,7 +472,7 @@ public:
             dsts[index].set_field(src_inst, field_id, field_size);
             index++;
           }
-          is.copy(srcs, dsts, ProfilingRequestSet()).wait();
+          is.copy(srcs, dsts, ProfilingRequestSet()).wait();*/
         }
 
         instances.push_back(src_inst);
@@ -499,11 +516,14 @@ public:
       std::shuffle(dst_field_ids.begin(), dst_field_ids.end(),
                    std::mt19937(std::random_device()()));
 
+      std::vector<ElementType> verify_values;
+
       // Pick `max_fields` random fields for the source
       size_t field_index = 0;
       for(size_t i = 0; i < max_fields && field_index < src_field_ids.size(); i++) {
         srcs[i].set_field(src_inst, src_field_ids[field_index],
                           src_fields[src_field_ids[field_index]]);
+        verify_values.push_back(values[src_field_ids[field_index]]);
         field_index++;
       }
 
@@ -517,7 +537,7 @@ public:
 
       auto sub =
           std::vector<FieldID>(dst_field_ids.begin(), dst_field_ids.begin() + max_fields);
-      validate_queue.emplace_back(std::make_tuple(is, dst_inst, value, sub));
+      validate_queue.emplace_back(std::make_tuple(is, dst_inst, verify_values, sub));
 
       graph.emplace_back(is, dsts, srcs, src_inst.get_location());
     }
