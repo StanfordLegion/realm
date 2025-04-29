@@ -266,7 +266,7 @@ namespace Realm {
 
   protected:
     void reset_internal(void);
-    void prefill(void);
+    // void prefetch(void);
 
     bool get_next_rect(Rect<N, T> &r, FieldID &fid, size_t &offset,
                        size_t &fsize) override;
@@ -277,7 +277,8 @@ namespace Realm {
     bool iter_init_deferred{false};
     std::vector<FieldID> fields;
 
-    const InstanceLayoutPiece<N, T> *layout_piece{nullptr};
+    // const InstanceLayoutPiece<N, T> *layout_piece{nullptr};
+    const InstanceLayout<N, T> *inst_layout{nullptr};
 
     size_t field_size{0};
     size_t rect_idx{0};

@@ -840,24 +840,25 @@ namespace Realm {
       fields = _fields;
       field_size = _field_size;
       field_block = _field_block;
-      // TODO(apryakhin): That needs to be freed
-      // field_block = FieldBlock::create(*repl_heap, fields.data(), fields.size());
-      // get_runtime()->repl_heap, fields.data(), fields.size());
-      prefill();
+      inst_layout =
+          checked_cast<const InstanceLayout<N, T> *>(this->inst_impl->metadata.layout);
+      // prefetch();
     }
   }
 
-  template <int N, typename T>
-  void IDIndexedFieldsIterator<N, T>::prefill(void)
+  /*template <int N, typename T>
+  void IDIndexedFieldsIterator<N, T>::prefetch(void)
   {
     assert(!fields.empty());
     const InstanceLayout<N, T> *inst_layout =
         checked_cast<const InstanceLayout<N, T> *>(this->inst_impl->metadata.layout);
+
     const InstancePieceList<N, T> &piece_list =
         inst_layout->piece_lists[inst_layout->fields.begin()->second.list_idx];
     layout_piece = piece_list.find_piece(Point<N, T>(0));
+
     assert(layout_piece->layout_type == PieceLayoutTypes::AffineLayoutType);
-  }
+  }*/
 
   /*template <int N, typename T>
   IDIndexedFieldsIterator<N, T>::IDIndexedFieldsIterator(
@@ -965,6 +966,13 @@ namespace Realm {
       if(!this->have_rect) {
         return false;
       }
+
+      const InstancePieceList<N, T> &piece_list =
+          inst_layout->piece_lists[inst_layout->fields.begin()->second.list_idx];
+      const InstanceLayoutPiece<N, T> *layout_piece =
+          piece_list.find_piece(this->cur_point);
+
+      assert(layout_piece->layout_type == PieceLayoutTypes::AffineLayoutType);
 
       Rect<N, T> target_subrect;
       this->have_rect =

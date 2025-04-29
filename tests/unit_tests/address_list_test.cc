@@ -418,4 +418,97 @@ namespace {
     EXPECT_EQ(addrlist.full_field_bytes(), expected_volume);
   }
 
+  TEST(AddressListTests, WithFields_2D_PartialLine_NoFieldAdvance)
+  {
+    constexpr size_t BYTES = 64, LINES = 3;
+    AddressList al;
+    std::vector<int> f = {1, 2, 3};
+    MockHeap h;
+    FieldBlock *fb = FieldBlock::create(h, f.data(), f.size());
+    al.attach_field_block(fb);
+
+    size_t *e = al.begin_entry(2);
+    e[AddressList::SLOT_HEADER] = AddressList::pack_entry_header(BYTES, 2);
+    e[AddressList::DIM_SLOTS * 1] = LINES;
+    e[AddressList::DIM_SLOTS * 1 + 1] = BYTES;
+    al.commit_entry(2, BYTES * LINES);
+
+    AddressListCursor c;
+    c.set_addrlist(&al);
+
+    // Consume half a line – must NOT change field index
+    c.advance(0, BYTES / 2, 1);
+    EXPECT_EQ(c.fields_data(), fb->fields);
+    EXPECT_EQ(al.bytes_pending(), BYTES * LINES * f.size() - BYTES / 2);
+
+    delete fb;
+  }
+
+  TEST(AddressListTests, WithFields_PartialThenFullRect)
+  {
+    constexpr size_t BYTES = 32;
+    AddressList al;
+    std::vector<int> f = {0, 1, 2};
+    MockHeap h;
+    FieldBlock *fb = FieldBlock::create(h, f.data(), f.size());
+    al.attach_field_block(fb);
+    make_1d_entry(al, BYTES);
+
+    AddressListCursor cur;
+    cur.set_addrlist(&al);
+
+    // (1) move full rect for two fields at once
+    cur.advance(0, BYTES, 2);
+    EXPECT_EQ(cur.fields_data(), fb->fields + 2);
+    EXPECT_EQ(al.bytes_pending(), BYTES * (f.size() - 2));
+
+    // (2) move half-rect – must stay on field #2
+    cur.advance(0, BYTES / 2, 1);
+    EXPECT_EQ(cur.fields_data(), fb->fields + 2);
+    EXPECT_EQ(al.bytes_pending(), BYTES * (f.size() - 2) - BYTES / 2);
+
+    // (3) finish the rect – now field pointer wraps to beginning
+    cur.advance(0, BYTES / 2, 1);
+    EXPECT_EQ(cur.fields_data(), fb->fields);
+    EXPECT_EQ(al.bytes_pending(), 0u);
+
+    delete fb;
+  }
+
+  TEST(AddressListTests, WithFields_3D_PlaneWisePartial)
+  {
+    constexpr size_t BYTES = 16, LINES = 2, PLANES = 3;
+    AddressList al;
+    std::vector<int> f = {9, 9};
+    MockHeap h;
+    FieldBlock *fb = FieldBlock::create(h, f.data(), f.size());
+    al.attach_field_block(fb);
+
+    size_t *e = al.begin_entry(3);
+    e[AddressList::SLOT_HEADER] = AddressList::pack_entry_header(BYTES, 3);
+    e[AddressList::DIM_SLOTS * 1] = LINES;
+    e[AddressList::DIM_SLOTS * 1 + 1] = BYTES;
+    e[AddressList::DIM_SLOTS * 2] = PLANES;
+    e[AddressList::DIM_SLOTS * 2 + 1] = BYTES * LINES;
+    al.commit_entry(3, BYTES * LINES * PLANES);
+
+    AddressListCursor c;
+    c.set_addrlist(&al);
+
+    // consume one plane at a time – still field 0
+    for(int p = 0; p < PLANES; ++p) {
+      c.advance(2, 1);
+    }
+
+    EXPECT_EQ(al.bytes_pending(), BYTES * LINES * PLANES * (f.size() - 1));
+    EXPECT_EQ(c.fields_data(), fb->fields + 1);
+
+    // now full rect for one field
+    c.advance(2, PLANES, 1);
+    EXPECT_EQ(al.bytes_pending(), 0u);
+    EXPECT_EQ(c.fields_data(), fb->fields);
+
+    delete fb;
+  }
+
 } // namespace
