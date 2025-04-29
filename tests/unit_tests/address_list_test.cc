@@ -381,4 +381,41 @@ namespace {
     EXPECT_EQ(addrlist.bytes_pending(), 0);
   }
 
+  TEST(AddressListTests, FullFieldBytes1D)
+  {
+    AddressList addrlist;
+
+    // Create a simple 1-D entry with kBytes contiguous bytes
+    size_t *entry = addrlist.begin_entry(1);
+    ASSERT_NE(entry, nullptr);
+    entry[AddressList::SLOT_HEADER] = AddressList::pack_entry_header(kBytes, 1);
+    addrlist.commit_entry(1, kBytes);
+
+    // full_field_bytes should return the contiguous byte count for 1-D entries
+    EXPECT_EQ(addrlist.full_field_bytes(), kBytes);
+  }
+
+  TEST(AddressListTests, FullFieldBytes3D)
+  {
+    AddressList addrlist;
+
+    // Build a 3-D entry: dim0 has kBytes contiguous bytes, dim1 has 8 elements,
+    // and dim2 has 2 elements. The expected volume (per field) is kBytes * 8 * 2.
+    size_t *entry = addrlist.begin_entry(3);
+    ASSERT_NE(entry, nullptr);
+    entry[AddressList::SLOT_HEADER] = AddressList::pack_entry_header(kBytes, 3);
+    entry[AddressList::SLOT_BASE] = 0;     // base offset (unused by full_field_bytes)
+    entry[AddressList::DIM_SLOTS * 1] = 8; // dim1 count
+    entry[AddressList::DIM_SLOTS * 1 + 1] =
+        1024;                              // dim1 stride (unused by full_field_bytes)
+    entry[AddressList::DIM_SLOTS * 2] = 2; // dim2 count
+    entry[AddressList::DIM_SLOTS * 2 + 1] =
+        8192; // dim2 stride (unused by full_field_bytes)
+    const size_t expected_volume = kBytes * 8 * 2;
+    addrlist.commit_entry(3, expected_volume);
+
+    // full_field_bytes should compute the volume across all dimensions
+    EXPECT_EQ(addrlist.full_field_bytes(), expected_volume);
+  }
+
 } // namespace
