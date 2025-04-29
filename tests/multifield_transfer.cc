@@ -19,6 +19,7 @@
 #include <realm.h>
 #include <realm/cmdline.h>
 
+#include <random>
 #include <unistd.h>
 #include <limits>
 
@@ -289,58 +290,6 @@ public:
   virtual void verify() = 0;
 };
 
-class IsolatedDenseTestGraphFactory : public TestGraphFactory {
-public:
-  std::vector<Realm::Memory> memories_to_test;
-  size_t size;
-
-  IsolatedDenseTestGraphFactory(std::vector<Realm::Memory> &mems, size_t sz)
-    : memories_to_test(mems)
-    , size(sz)
-  {}
-
-  void verify() override {}
-
-  /*virtual*/
-  void create(std::vector<CopyOperation> &graph) override
-  {
-    graph.clear();
-    Realm::Point<MAX_DIM> start_pnt(0);
-    Realm::Point<MAX_DIM> end_pnt(size - 1);
-    CopyIndexSpace is(Realm::Rect<MAX_DIM>(start_pnt, end_pnt));
-    std::vector<size_t> fields(1, sizeof(ElementType));
-
-    std::vector<Realm::RegionInstance> instances(memories_to_test.size());
-    for(size_t i = 0; i < memories_to_test.size(); i++) {
-      Realm::RegionInstance::create_instance(instances[i], memories_to_test[i], is,
-                                             fields, 0, ProfilingRequestSet())
-          .wait();
-    }
-
-    for(size_t i = 0; i < memories_to_test.size(); i++) {
-      for(size_t j = 0; j < memories_to_test.size(); j++) {
-        std::vector<Realm::CopySrcDstField> srcs(1), dsts(1);
-        if(i == j) {
-          srcs[0].set_fill<ElementType>(0);
-        } else {
-          srcs[0].set_field(instances[i], 0, fields[0]);
-        }
-        dsts[0].set_field(instances[j], 0, fields[0]);
-        graph.emplace_back(is, dsts, srcs, memories_to_test[i]);
-      }
-    }
-
-    // Now that we have all the graph nodes set up, add the edges.
-    for(size_t i = 1; i < graph.size(); i++) {
-      graph[i].add_dependency(&graph[i - 1]);
-    }
-    // Just tie up all the instances for the graph in the first node.
-    graph[0].owned_instances = instances;
-  }
-};
-
-#include <random>
-
 template <typename T>
 class RandomPicker {
 public:
@@ -541,57 +490,6 @@ public:
       graph.emplace_back(is, dsts, srcs, src_inst.get_location());
     }
 
-    graph[0].owned_instances = instances;
-  }
-};
-
-class ConcurrentDenseTestGraphFactory : public TestGraphFactory {
-public:
-  std::vector<Realm::Memory> memories_to_test;
-  size_t size;
-
-  ConcurrentDenseTestGraphFactory(std::vector<Realm::Memory> &mems, size_t sz)
-    : memories_to_test(mems)
-    , size(sz)
-  {}
-
-  void verify() override {}
-
-  /*virtual*/
-  void create(std::vector<CopyOperation> &graph) override
-  {
-    graph.clear();
-    Realm::Point<MAX_DIM> start_pnt(0);
-    Realm::Point<MAX_DIM> end_pnt(size - 1);
-    CopyIndexSpace is(Realm::Rect<MAX_DIM>(start_pnt, end_pnt));
-    std::vector<size_t> fields(1, sizeof(ElementType));
-
-    std::vector<Realm::RegionInstance> instances;
-
-    for(size_t i = 0; i < memories_to_test.size(); i++) {
-      for(size_t j = 0; j < memories_to_test.size(); j++) {
-        Realm::RegionInstance src_inst, dst_inst;
-        Realm::RegionInstance::create_instance(src_inst, memories_to_test[i], is, fields,
-                                               0, ProfilingRequestSet())
-            .wait();
-        Realm::RegionInstance::create_instance(dst_inst, memories_to_test[j], is, fields,
-                                               0, ProfilingRequestSet())
-            .wait();
-        instances.push_back(src_inst);
-        instances.push_back(dst_inst);
-        std::vector<Realm::CopySrcDstField> srcs(1), dsts(1);
-        if(i == j) {
-          srcs[0].set_fill<ElementType>(0);
-        } else {
-          srcs[0].set_field(src_inst, 0, fields[0]);
-        }
-        dsts[0].set_field(dst_inst, 0, fields[0]);
-
-        graph.emplace_back(is, dsts, srcs, memories_to_test[i]);
-      }
-    }
-
-    // Just tie up all the instances for the graph in the first node.
     graph[0].owned_instances = instances;
   }
 };
@@ -832,20 +730,12 @@ static void bench_timing_task(const void *args, size_t arglen, const void *userd
   }
 
   TestGraphFactory *test_factory = nullptr;
-  if(TestConfig::graph_type == 0) {
-    test_factory = new IsolatedDenseTestGraphFactory(memories, TestConfig::size);
-  } else if(TestConfig::graph_type == 1) {
-    test_factory = new ConcurrentDenseTestGraphFactory(memories, TestConfig::size);
-  } else if(TestConfig::graph_type == 2) {
-    std::map<FieldID, size_t> fields;
-    for(size_t i = 0; i < TestConfig::num_fields; i++) {
-      fields[i] = TestConfig::field_size;
-    }
-    test_factory = new MultiFieldTestGraphFactory(memories, TestConfig::size, fields);
-  } else {
-    log_app.error("Unsupported graph type %d", TestConfig::graph_type);
-    assert(0);
+  std::map<FieldID, size_t> fields;
+  for(size_t i = 0; i < TestConfig::num_fields; i++) {
+    fields[i] = TestConfig::field_size;
   }
+  test_factory = new MultiFieldTestGraphFactory(memories, TestConfig::size, fields);
+
   std::vector<CopyOperation> graph;
   test_factory->create(graph);
 
@@ -908,8 +798,7 @@ int main(int argc, char **argv)
       .add_option_int("-field_size", TestConfig::field_size)
       .add_option_int("-graphviz", TestConfig::graphviz)
       .add_option_int("-max_ops", TestConfig::max_ops)
-      .add_option_int("-verify", TestConfig::verify)
-      .add_option_int("-graph-type", TestConfig::graph_type);
+      .add_option_int("-verify", TestConfig::verify);
   ok = cp.parse_command_line(argc, (const char **)argv);
   assert(ok);
 

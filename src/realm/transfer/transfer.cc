@@ -2312,7 +2312,6 @@ namespace Realm {
       return new IDIndexedFieldsIterator<N, T>(dim_order.data(), fields,
                                                fld_sizes.front(), impl, is, field_block);
       rheap_allocs.emplace_back(field_block);
-      // FieldBlock::create(get_runtime()->repl_heap, fields.data(), fields.size()));
     } else {
       return new TransferIteratorIndexSpace<N, T>(dim_order.data(), fields, fld_offsets,
                                                   fld_sizes, impl, is);
