@@ -53,7 +53,7 @@ namespace TestConfig {
   size_t num_fields = 1;
   size_t field_size = sizeof(long long);
   size_t size = 4ULL * 256ULL; // 1024ULL * 4ULL;//1024ULL;
-};
+};                             // namespace TestConfig
 
 template <int N, typename T, typename FT>
 inline void copy(RegionInstance src_inst, RegionInstance dst_inst,
