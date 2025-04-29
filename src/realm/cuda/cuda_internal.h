@@ -930,7 +930,7 @@ namespace Realm {
 
       virtual RemoteChannelInfo *construct_remote_info() const;
 
-      virtual bool supports_fat_transfers(Memory src_mem, Memory dst_mem) const
+      virtual bool support_idindexed_fields(Memory src_mem, Memory dst_mem) const
       {
         return true;
       }
@@ -964,7 +964,7 @@ namespace Realm {
       GPURemoteChannel(uintptr_t _remote_ptr);
 
     public:
-      virtual bool supports_fat_transfers(Memory src_mem, Memory dst_mem) const
+      virtual bool support_idindexed_fields(Memory src_mem, Memory dst_mem) const
       {
         return true;
       }

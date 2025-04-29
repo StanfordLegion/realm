@@ -732,7 +732,7 @@ namespace Realm {
 
       virtual bool supports_redop(ReductionOpID redop_id) const;
 
-      virtual bool supports_fat_transfers(Memory src_mem, Memory dst_mem) const
+      virtual bool support_idindexed_fields(Memory src_mem, Memory dst_mem) const
       {
         return false;
       };

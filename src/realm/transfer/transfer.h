@@ -367,13 +367,12 @@ namespace Realm {
                                               const std::vector<FieldID> &fields,
                                               const std::vector<size_t> &fld_offsets,
                                               const std::vector<size_t> &fld_sizes,
-                                              bool uniform_fields = false) = 0;
+                                              bool idindexed_fields = false) = 0;
 
-    virtual TransferIterator *
-    create_iterator(RegionInstance inst, RegionInstance peer,
-                    const std::vector<FieldID> &fields,
-                    const std::vector<size_t> &fld_offsets,
-                    const std::vector<size_t> &fld_sizes) = 0;
+    virtual TransferIterator *create_iterator(RegionInstance inst, RegionInstance peer,
+                                              const std::vector<FieldID> &fields,
+                                              const std::vector<size_t> &fld_offsets,
+                                              const std::vector<size_t> &fld_sizes) = 0;
 
     virtual void print(std::ostream &os) const = 0;
   };
@@ -393,7 +392,7 @@ namespace Realm {
       int scatter_control_input;
       XferDesRedopInfo redop;
       Channel *channel = nullptr;
-      bool uniform_fields = false;
+      bool idindexed_fields = false;
 
       enum IOType
       {

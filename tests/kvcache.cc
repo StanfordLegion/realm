@@ -452,7 +452,6 @@ public:
             values[field_id] = fill_value;
             srcs[0].set_fill<ElementType>(fill_value); // this needs conversion
             assert(field_size == sizeof(ElementType));
-            std::cout << "FID:" << field_id << " val:" << fill_value << std::endl;
             dsts[0].set_field(src_inst, field_id, field_size);
             fill_events.emplace_back(is.copy(srcs, dsts, ProfilingRequestSet()));
           }

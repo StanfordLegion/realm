@@ -1922,7 +1922,7 @@ namespace Realm {
                                               const std::vector<FieldID> &fields,
                                               const std::vector<size_t> &fld_offsets,
                                               const std::vector<size_t> &fld_sizes,
-                                              bool uniform_fields = false);
+                                              bool idindexed_fields = false);
 
     virtual TransferIterator *create_iterator(RegionInstance inst, RegionInstance peer,
                                               const std::vector<FieldID> &fields,
@@ -1938,7 +1938,7 @@ namespace Realm {
     template <typename S>
     bool serialize(S &serializer) const;
 
-    static constexpr size_t MIN_UNIFORM_FIELDS = 2;
+    static constexpr size_t MIN_idindexed_fields = 2;
 
     // protected:
     IndexSpace<N, T> is;
@@ -2297,14 +2297,14 @@ namespace Realm {
   TransferIterator *TransferDomainIndexSpace<N, T>::create_iterator(
       RegionInstance inst, const std::vector<int> &dim_order,
       const std::vector<FieldID> &fields, const std::vector<size_t> &fld_offsets,
-      const std::vector<size_t> &fld_sizes, bool uniform_fields)
+      const std::vector<size_t> &fld_sizes, bool idindexed_fields)
   {
     assert(dim_order.size() == N);
     RegionInstanceImpl *impl = get_runtime()->get_instance_impl(inst);
     const InstanceLayout<N, T> *inst_layout =
         checked_cast<const InstanceLayout<N, T> *>(impl->metadata.layout);
-    if(uniform_fields && inst_layout->idindexed_fields && is.dense() &&
-       fields.size() >= MIN_UNIFORM_FIELDS) {
+    if(idindexed_fields && inst_layout->idindexed_fields && is.dense() &&
+       fields.size() >= MIN_idindexed_fields) {
 
       FieldBlock *field_block =
           FieldBlock::create(get_runtime()->repl_heap, fields.data(), fields.size());
@@ -4331,8 +4331,16 @@ namespace Realm {
               xdn.gather_control_input = -1;
               xdn.scatter_control_input = -1;
               xdn.target_node = path_info.xd_channels[j]->node;
-              xdn.uniform_fields =
-                  path_info.xd_channels[j]->supports_fat_transfers(src_mem, dst_mem);
+
+              bool enable_multi_field = false;
+              bool success = get_runtime()->get_module_config("core")->get_property(
+                  "dma_multi_field", enable_multi_field);
+              assert(success);
+
+              xdn.idindexed_fields =
+                  enable_multi_field &&
+                  path_info.xd_channels[j]->support_idindexed_fields(src_mem, dst_mem);
+
               xdn.channel = path_info.xd_channels[j];
               xdn.inputs.resize(1);
               xdn.inputs[0] = ((j == 0) ? TransferGraph::XDTemplate::mk_inst(
@@ -4976,7 +4984,7 @@ namespace Realm {
           }
           ii.iter = desc.domain->create_iterator(xdn.inputs[j].inst.inst, desc.dim_order,
                                                  src_fields, src_offsets, src_sizes,
-                                                 xdn.uniform_fields);
+                                                 xdn.idindexed_fields);
           // use first field's serdez - they all have to be the same
           ii.serdez_id = desc.src_fields[xdn.inputs[j].inst.fld_start].serdez_id;
           ii.ib_offset = 0;
@@ -5107,7 +5115,7 @@ namespace Realm {
           }
           oi.iter = desc.domain->create_iterator(xdn.outputs[j].inst.inst, desc.dim_order,
                                                  dst_fields, dst_offsets, dst_sizes,
-                                                 xdn.uniform_fields);
+                                                 xdn.idindexed_fields);
           // use first field's serdez - they all have to be the same
           oi.serdez_id = desc.dst_fields[xdn.outputs[j].inst.fld_start].serdez_id;
           oi.ib_offset = 0;
