@@ -604,6 +604,43 @@ TEST(ReadAddressEntry, DstFieldBlock_3D_MoveThreeFields)
   delete fb_dst;
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+//  Mis-aligned base addresses must force min_align down to 1
+// ─────────────────────────────────────────────────────────────────────────────
+TEST(ReadAddressEntry, MisalignedBase_ByteAlignment)
+{
+  constexpr size_t CONTIG = 64; // 64-byte 1-D rectangle (16-aligned size)
+  // 1-byte-mis-aligned bases
+  constexpr uintptr_t IN_BASE = 1;  // 0x…01
+  constexpr uintptr_t OUT_BASE = 3; // 0x…03
+
+  AddressList in_al, out_al;
+  append_entry_1d(in_al, CONTIG);
+  append_entry_1d(out_al, CONTIG);
+
+  AddressListCursor ic, oc;
+  ic.set_addrlist(&in_al);
+  oc.set_addrlist(&out_al);
+
+  AffineCopyInfo<3> info{};
+  MemcpyTransposeInfo<size_t> tr{};
+  size_t min_align = 16; // starts optimistic
+  size_t fields_total = 0;
+
+  size_t moved =
+      GPUXferDes::read_address_entry(info, min_align, tr, ic, IN_BASE, // <-- mis-aligned
+                                     oc, OUT_BASE,                     // <-- mis-aligned
+                                     CONTIG,                           // bytes_left
+                                     /*max_fields*/ 8, fields_total);
+
+  ASSERT_EQ(moved, CONTIG);      // full rectangle copied
+  ASSERT_EQ(info.num_rects, 1u); // fast path 1-D
+  EXPECT_EQ(min_align, 1u);      // **critical check**
+  EXPECT_EQ(fields_total, 1u);
+  EXPECT_EQ(in_al.bytes_pending(), 0u);
+  EXPECT_EQ(out_al.bytes_pending(), 0u);
+}
+
 TEST(ReadAddressEntryTests, DISABLED_Misaligned3D_NoFieldBlock)
 {
   constexpr size_t CONTIG = 48; // not 16-byte aligned
@@ -627,5 +664,4 @@ TEST(ReadAddressEntryTests, DISABLED_Misaligned3D_NoFieldBlock)
                                                 CONTIG * LINES * PLANES,
                                                 /*max_fields*/ 1, fields_tot);
   EXPECT_EQ(moved, 0u);
-  assert(0);
 }

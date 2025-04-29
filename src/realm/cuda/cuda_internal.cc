@@ -302,6 +302,16 @@ namespace Realm {
       }
     }
 
+    static size_t calculate_type_alignment(size_t v)
+    {
+      // We don't need a full log2 here
+      for(size_t a = 16; a > 1; a >>= 1) {
+        if((v & (a - 1)) == 0)
+          return a;
+      }
+      return 1; // Unfortunately this can only be byte aligned :(
+    }
+
     size_t GPUXferDes::read_address_entry(AffineCopyInfo<3> &copy_infos,
                                           size_t &min_align,
                                           MemcpyTransposeInfo<size_t> &transpose_info,
@@ -318,13 +328,6 @@ namespace Realm {
       // ---------------------------------------------------------------------------
       // helpers
       // ---------------------------------------------------------------------------
-      const auto upd_align = [&](size_t v) {
-        for(size_t a = 16; a > 1; a >>= 1)
-          if((v & (a - 1)) == 0) {
-            min_align = min(min_align, a);
-            break;
-          }
-      };
 
       const auto attach_fields = [&](AddressListCursor &c, AffineSubRect<3> &subr) {
         if(c.field_block()) {
@@ -351,12 +354,13 @@ namespace Realm {
       //
       // The lambda returns the final field‐count so callers can pass
       // it straight to `AddressListCursor::advance`.
-      const auto final_field_count = [&](size_t rect_volume, size_t left, size_t ic,
+      const auto final_field_count = [&](size_t rect_volume, size_t left_bytes, size_t ic,
                                          size_t oc) -> size_t {
         size_t rect_fields =
             max<size_t>(1, max(copy_info.src.num_fields, copy_info.dst.num_fields));
 
-        left = bytes_left;
+        // TODO(apryakhin:): Use left_bytes
+        size_t left = bytes_left;
 
         if(src_cur.field_block()) {
           left = min(left, src_cur.partial
@@ -408,9 +412,9 @@ namespace Realm {
       copy_info.extents[1] = 1;
       copy_info.extents[2] = 1;
 
-      upd_align(copy_info.src.addr);
-      upd_align(copy_info.dst.addr);
-      upd_align(contig_bytes);
+      min_align = min(min_align, calculate_type_alignment(copy_info.src.addr));
+      min_align = min(min_align, calculate_type_alignment(copy_info.dst.addr));
+      min_align = min(min_align, calculate_type_alignment(contig_bytes));
 
       attach_fields(src_cur, copy_info.src);
       attach_fields(dst_cur, copy_info.dst);
@@ -486,10 +490,10 @@ namespace Realm {
         oscale = 1;
       }
 
-      const size_t lines = min({icount, ocount, bytes_left / contig_bytes});
+      const size_t lines = min(min(icount, ocount), bytes_left / contig_bytes);
 
-      upd_align(in_lstride);
-      upd_align(out_lstride);
+      min_align = min(min_align, calculate_type_alignment(in_lstride));
+      min_align = min(min_align, calculate_type_alignment(out_lstride));
 
       if(((contig_bytes * lines) == bytes_left) ||
          ((lines == icount) && (id == in_dim - 1)) ||
@@ -544,7 +548,8 @@ namespace Realm {
         oscale = 1;
       }
 
-      const size_t planes = min({icount, ocount, bytes_left / (contig_bytes * lines)});
+      const size_t planes =
+          min(min(icount, ocount), (bytes_left / (contig_bytes * lines)));
       const bool do_transpose = (in_lstride > in_pstride) || (out_lstride > out_pstride);
 
       if(do_transpose) {
@@ -905,8 +910,12 @@ namespace Realm {
           for(size_t i = 0; (min_align > 1) && (i < copy_infos.num_rects); i++) {
             copy_infos.subrects[i].dst.strides[0] /= min_align;
             copy_infos.subrects[i].src.strides[0] /= min_align;
-            copy_infos.subrects[i].src.field_stride /= min_align;
-            copy_infos.subrects[i].dst.field_stride /= min_align;
+            if(copy_infos.subrects[i].src.field_stride) {
+              copy_infos.subrects[i].src.field_stride /= min_align;
+            }
+            if(copy_infos.subrects[i].dst.field_stride) {
+              copy_infos.subrects[i].dst.field_stride /= min_align;
+            }
             copy_infos.subrects[i].extents[0] /= min_align;
             copy_infos.subrects[i].volume /= min_align;
           }

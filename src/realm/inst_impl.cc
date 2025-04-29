@@ -358,8 +358,7 @@ namespace Realm {
     std::map<int, size_t> piece_list_starts;
     std::map<int, PieceSplitNode<T> *> piece_list_plans;
     for(InstanceLayoutGeneric::FieldMap::const_iterator it = fields.begin();
-	it != fields.end();
-	++it) {
+        it != fields.end(); ++it) {
       // did we already do this piece list?
       if(piece_list_starts.count(it->second.list_idx) > 0)
         continue;
@@ -417,8 +416,7 @@ namespace Realm {
 
     // fill in per field info
     for(InstanceLayoutGeneric::FieldMap::const_iterator it = fields.begin();
-	it != fields.end();
-	++it) {
+        it != fields.end(); ++it) {
       PieceLookup::CompiledProgram::PerField &pf = p.fields[it->first];
       pf.start_inst = reinterpret_cast<const PieceLookup::Instruction *>(
           reinterpret_cast<uintptr_t>(base) + piece_list_starts[it->second.list_idx]);
@@ -1514,29 +1512,30 @@ namespace Realm {
     MemoryImpl *mem = get_runtime()->get_memory_impl(memory);
     assert(mem != nullptr && "invalid memory handle");
 
-    // this exists for compatibility and assumes N=1, T=long long
-    const InstanceLayout<1, long long> *inst_layout =
-        dynamic_cast<const InstanceLayout<1, long long> *>(metadata.layout);
-    assert(inst_layout != 0);
+      // this exists for compatibility and assumes N=1, T=long long
+      const InstanceLayout<1, long long> *inst_layout =
+          dynamic_cast<const InstanceLayout<1, long long> *>(metadata.layout);
+      assert(inst_layout != 0);
 
       // look up the right field
-      InstanceLayoutGeneric::FieldMap::const_iterator it = inst_layout->fields.find(field_offset);
+      InstanceLayoutGeneric::FieldMap::const_iterator it =
+          inst_layout->fields.find(field_offset);
       assert(it != inst_layout->fields.end());
 
-    // hand out a null pointer for empty instances (stride can be whatever
-    //  the caller wants)
-    if(inst_layout->piece_lists[it->second.list_idx].pieces.empty()) {
-      base = 0;
-      return true;
-    }
+      // hand out a null pointer for empty instances (stride can be whatever
+      //  the caller wants)
+      if(inst_layout->piece_lists[it->second.list_idx].pieces.empty()) {
+        base = 0;
+        return true;
+      }
 
-    // also only works for a single piece
-    assert(inst_layout->piece_lists[it->second.list_idx].pieces.size() == 1);
-    const InstanceLayoutPiece<1, long long> *piece =
-        inst_layout->piece_lists[it->second.list_idx].pieces[0];
-    assert((piece->layout_type == PieceLayoutTypes::AffineLayoutType));
-    const AffineLayoutPiece<1, long long> *affine =
-        static_cast<const AffineLayoutPiece<1, long long> *>(piece);
+      // also only works for a single piece
+      assert(inst_layout->piece_lists[it->second.list_idx].pieces.size() == 1);
+      const InstanceLayoutPiece<1, long long> *piece =
+          inst_layout->piece_lists[it->second.list_idx].pieces[0];
+      assert((piece->layout_type == PieceLayoutTypes::AffineLayoutType));
+      const AffineLayoutPiece<1, long long> *affine =
+          static_cast<const AffineLayoutPiece<1, long long> *>(piece);
 
     // if the caller wants a particular stride and we differ (and have more
     //  than one element), fail
@@ -1547,27 +1546,27 @@ namespace Realm {
       stride = affine->strides[0];
     }
 
-    // find the offset of the first and last elements and then try to
-    //  turn that into a direct memory pointer
-    size_t start_offset =
-        (metadata.inst_offset + affine->offset + affine->strides.dot(affine->bounds.lo) +
-         it->second.rel_offset);
-    size_t total_bytes =
-        (it->second.size_in_bytes +
-         affine->strides[0] * (affine->bounds.hi[0] - affine->bounds.lo[0]));
+      // find the offset of the first and last elements and then try to
+      //  turn that into a direct memory pointer
+      size_t start_offset =
+          (metadata.inst_offset + affine->offset +
+           affine->strides.dot(affine->bounds.lo) + it->second.rel_offset);
+      size_t total_bytes =
+          (it->second.size_in_bytes +
+           affine->strides[0] * (affine->bounds.hi[0] - affine->bounds.lo[0]));
 
-    base = mem->get_direct_ptr(start_offset, total_bytes);
-    if(!base)
-      return false;
+      base = mem->get_direct_ptr(start_offset, total_bytes);
+      if(!base)
+        return false;
 
-    // now adjust the base pointer so that we can use absolute indexing
-    //  again
-    // careful - have to use 'stride' instead of 'affine->strides' in
-    //  case we agreed to the caller's incorrect stride when size == 1
-    base = ((char *)base) - (stride * affine->bounds.lo[0]);
+      // now adjust the base pointer so that we can use absolute indexing
+      //  again
+      // careful - have to use 'stride' instead of 'affine->strides' in
+      //  case we agreed to the caller's incorrect stride when size == 1
+      base = ((char *)base) - (stride * affine->bounds.lo[0]);
 
-    return true;
-  }
+      return true;
+    }
 
   RegionInstanceImpl::Metadata::Metadata(ReplicatedHeap *repl_heap)
     : inst_offset(INSTOFFSET_UNALLOCATED)

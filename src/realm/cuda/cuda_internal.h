@@ -413,8 +413,8 @@ namespace Realm {
 
       void launch_batch_affine_fill_kernel(void *fill_info, size_t dim, size_t elemSize,
                                            size_t volume, GPUStream *stream);
-      void launch_batch_affine_kernel(void *copy_info, size_t dim,
-                                      size_t elemSize, size_t volume, bool multified_optimized,
+      void launch_batch_affine_kernel(void *copy_info, size_t dim, size_t elemSize,
+                                      size_t volume, bool multified_optimized,
                                       GPUStream *stream);
       void launch_transpose_kernel(MemcpyTransposeInfo<size_t> &copy_info,
                                    size_t elemSize, GPUStream *stream);
@@ -465,7 +465,8 @@ namespace Realm {
       GPUFuncInfo indirect_copy_kernels[REALM_MAX_DIM][CUDA_MEMCPY_KERNEL_MAX2_LOG2_BYTES]
                                        [CUDA_MEMCPY_KERNEL_MAX2_LOG2_BYTES];
       GPUFuncInfo batch_affine_kernels[REALM_MAX_DIM][CUDA_MEMCPY_KERNEL_MAX2_LOG2_BYTES];
-      GPUFuncInfo multi_batch_affine_kernels[REALM_MAX_DIM][CUDA_MEMCPY_KERNEL_MAX2_LOG2_BYTES];
+      GPUFuncInfo multi_batch_affine_kernels[REALM_MAX_DIM]
+                                            [CUDA_MEMCPY_KERNEL_MAX2_LOG2_BYTES];
       GPUFuncInfo batch_fill_affine_kernels[REALM_MAX_DIM]
                                            [CUDA_MEMCPY_KERNEL_MAX2_LOG2_BYTES];
       GPUFuncInfo fill_affine_large_kernels[REALM_MAX_DIM]
@@ -798,7 +799,7 @@ namespace Realm {
     private:
       std::vector<GPU *> src_gpus, dst_gpus;
       std::vector<bool> dst_is_ipc;
-      std::vector<void*> replheap_allocs;
+      std::vector<void *> replheap_allocs;
 
       // Mininum amount to transfer in a single quantum before returning in order to
       // ensure forward progress
@@ -929,9 +930,10 @@ namespace Realm {
 
       virtual RemoteChannelInfo *construct_remote_info() const;
 
-      virtual bool supports_fat_transfers(Memory src_mem, Memory dst_mem) const {
-          return true;}
-          //return src_mem.kind() == Memory::GPU_FB_MEM && dst_mem.kind() == Memory::GPU_FB_MEM; }
+      virtual bool supports_fat_transfers(Memory src_mem, Memory dst_mem) const
+      {
+        return true;
+      }
 
     private:
       GPU *src_gpu;
@@ -939,30 +941,33 @@ namespace Realm {
 
     class GPURemoteChannelInfo : public SimpleRemoteChannelInfo {
     public:
-      GPURemoteChannelInfo(NodeID _owner, XferDesKind _kind,
-                                 uintptr_t _remote_ptr,
-                                 const std::vector<Channel::SupportedPath>& _paths);
+      GPURemoteChannelInfo(NodeID _owner, XferDesKind _kind, uintptr_t _remote_ptr,
+                           const std::vector<Channel::SupportedPath> &_paths);
 
       virtual RemoteChannel *create_remote_channel();
 
       template <typename S>
-      bool serialize(S& serializer) const;
+      bool serialize(S &serializer) const;
 
       template <typename S>
-      static RemoteChannelInfo *deserialize_new(S& deserializer);
+      static RemoteChannelInfo *deserialize_new(S &deserializer);
 
     protected:
       static Serialization::PolymorphicSerdezSubclass<RemoteChannelInfo,
-                                                      GPURemoteChannelInfo> serdez_subclass;
+                                                      GPURemoteChannelInfo>
+          serdez_subclass;
     };
 
     class GPURemoteChannel : public RemoteChannel {
       friend class GPURemoteChannelInfo;
 
       GPURemoteChannel(uintptr_t _remote_ptr);
+
     public:
-      virtual bool supports_fat_transfers(Memory src_mem, Memory dst_mem) const {
-          return true;}
+      virtual bool supports_fat_transfers(Memory src_mem, Memory dst_mem) const
+      {
+        return true;
+      }
     };
 
     class GPUfillChannel;
