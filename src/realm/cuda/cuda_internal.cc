@@ -305,8 +305,8 @@ namespace Realm {
     size_t GPUXferDes::read_address_entry(AffineCopyInfo<3> &copy_infos,
                                           size_t &min_align,
                                           MemcpyTransposeInfo<size_t> &transpose_info,
-                                          AddressListCursor &in_alc, uintptr_t in_base,
-                                          AddressListCursor &out_alc, uintptr_t out_base,
+                                          AddressListCursor &src_cur, uintptr_t in_base,
+                                          AddressListCursor &dst_cur, uintptr_t out_base,
                                           size_t bytes_left, size_t max_xfer_fields,
                                           size_t &fields_total)
     {
@@ -334,14 +334,14 @@ namespace Realm {
         }
       };
 
-      size_t icount = in_alc.remaining(0);
-      size_t ocount = out_alc.remaining(0);
+      size_t icount = src_cur.remaining(0);
+      size_t ocount = dst_cur.remaining(0);
 
-      const uintptr_t in_offset = in_alc.get_offset();
-      const uintptr_t out_offset = out_alc.get_offset();
+      const uintptr_t in_offset = src_cur.get_offset();
+      const uintptr_t out_offset = dst_cur.get_offset();
 
-      int in_dim = in_alc.get_dim();
-      int out_dim = out_alc.get_dim();
+      int in_dim = src_cur.get_dim();
+      int out_dim = dst_cur.get_dim();
 
       const size_t contig_bytes = min({icount, ocount, bytes_left});
 
@@ -351,39 +351,31 @@ namespace Realm {
       //
       // The lambda returns the final field‐count so callers can pass
       // it straight to `AddressListCursor::advance`.
-      const auto final_field_count = [&](size_t rect_volume) -> size_t {
+      const auto final_field_count = [&](size_t rect_volume, size_t left, size_t ic,
+                                         size_t oc) -> size_t {
         size_t rect_fields =
             max<size_t>(1, max(copy_info.src.num_fields, copy_info.dst.num_fields));
 
-        size_t left = bytes_left;
-        if(in_alc.field_block()) {
-          left =
-              min(left, in_alc.partial
-                            ? icount
-                            : icount * max(size_t(1), icount * copy_info.src.num_fields));
+        left = bytes_left;
+
+        if(src_cur.field_block()) {
+          left = min(left, src_cur.partial
+                               ? ic
+                               : ic * max(size_t(1), ic * copy_info.src.num_fields));
         } else {
-          left = min(left, icount);
+          left = min(left, ic);
         }
 
-        if(out_alc.field_block()) {
-          left =
-              min(left, out_alc.partial
-                            ? ocount
-                            : ocount * max(size_t(1), ocount * copy_info.dst.num_fields));
+        if(dst_cur.field_block()) {
+          left = min(left, dst_cur.partial
+                               ? oc
+                               : oc * max(size_t(1), oc * copy_info.dst.num_fields));
         } else {
           left = min(left, ocount);
         }
 
         size_t max_by_bytes = (rect_volume == 0) ? 0 : (left / rect_volume);
-        rect_fields = min(rect_fields, max_by_bytes);
-
-        /*log_gpudma.print() << "---rectf:" << rect_fields << " max:" << max_by_bytes
-                           << " left:" << left << " bytes_left:" << bytes_left
-                           << " srcf:" << copy_info.src.num_fields
-                           << " dstf:" << copy_info.dst.num_fields << " icount:" << icount
-                           << " in_part:" << in_alc.partial
-                           << " out_part:" << out_alc.partial << " ocount:" << ocount;*/
-        //<< " xd=" << std::hex << guid << std::dec;
+        rect_fields = max(size_t(1), min(rect_fields, max_by_bytes));
 
         if(copy_info.src.num_fields) {
           copy_info.src.num_fields = min(copy_info.src.num_fields, rect_fields);
@@ -394,6 +386,14 @@ namespace Realm {
         }
 
         return rect_fields;
+      };
+
+      auto advance = [&](AddressListCursor &c, int dim, size_t amount, size_t scale,
+                         size_t fields) {
+        if(c.field_block())
+          c.advance(dim, amount * scale, fields);
+        else
+          c.advance(dim, amount * scale * fields);
       };
 
       log_gpudma.info() << "IN: " << in_dim << ' ' << icount << ' ' << in_offset << ' '
@@ -412,18 +412,18 @@ namespace Realm {
       upd_align(copy_info.dst.addr);
       upd_align(contig_bytes);
 
-      attach_fields(in_alc, copy_info.src);
-      attach_fields(out_alc, copy_info.dst);
+      attach_fields(src_cur, copy_info.src);
+      attach_fields(dst_cur, copy_info.dst);
 
-      if(in_alc.field_block() && out_alc.field_block()) {
-        copy_info.src.field_stride = in_alc.addrlist->full_field_bytes();
-        copy_info.dst.field_stride = out_alc.addrlist->full_field_bytes();
-      } else if(in_alc.field_block()) {
+      if(src_cur.field_block() && dst_cur.field_block()) {
+        copy_info.src.field_stride = src_cur.addrlist->full_field_bytes();
+        copy_info.dst.field_stride = dst_cur.addrlist->full_field_bytes();
+      } else if(src_cur.field_block()) {
         copy_info.src.field_stride = copy_info.dst.field_stride =
-            in_alc.addrlist->full_field_bytes();
-      } else if(out_alc.field_block()) {
+            src_cur.addrlist->full_field_bytes();
+      } else if(dst_cur.field_block()) {
         copy_info.dst.field_stride = copy_info.src.field_stride =
-            out_alc.addrlist->full_field_bytes();
+            dst_cur.addrlist->full_field_bytes();
       }
 
       // ---------------------------------------------------------------------------
@@ -436,38 +436,11 @@ namespace Realm {
         copy_info.dst.strides[0] = contig_bytes;
         copy_info.volume = contig_bytes;
 
-        // TODO: same needs to be done for 2/3D
-        size_t rect_fields = final_field_count(copy_info.volume);
-        rect_fields = std::min(rect_fields, bytes_left / copy_info.volume);
-        fields_total = rect_fields;
-
-        // TODO(apryakhin@): possible move inside address list
-        if(in_alc.field_block()) {
-          in_alc.advance(0, contig_bytes, rect_fields);
-        } else {
-          assert(icount >= contig_bytes * rect_fields);
-          in_alc.advance(0, contig_bytes * rect_fields);
-        }
-
-        if(out_alc.field_block()) {
-          out_alc.advance(0, contig_bytes, rect_fields);
-        } else {
-          assert(ocount >= contig_bytes * rect_fields);
-          out_alc.advance(0, contig_bytes * rect_fields);
-        }
-        
-        std::cout << "DO 1D" << std::endl;
-
-        /*log_gpudma.print() << "----OUT_OFFSET:" << out_offset << " ocount:" << ocount
-                           << " in_offset:" << in_offset << " contig:" << contig_bytes
-                           << " rect_fields:" << rect_fields << " left:" << bytes_left
-                           << " tot:" << contig_bytes * rect_fields << " xd=" << std::hex
-                           << " in_pending:" << in_alc.addrlist->bytes_pending() << guid
-                           << " ou_pending:" << out_alc.addrlist->bytes_pending() <<
-           guid*/
-        // << std::dec;
-
-        return contig_bytes * rect_fields;
+        fields_total = final_field_count(copy_info.src.field_stride, copy_info.volume,
+                                         icount, ocount);
+        advance(src_cur, 0, contig_bytes, 1, fields_total);
+        advance(dst_cur, 0, contig_bytes, 1, fields_total);
+        return contig_bytes * fields_total;
       }
 
       // ---------------------------------------------------------------------------
@@ -488,8 +461,8 @@ namespace Realm {
       } else {
         assert(in_dim > 1);
         id = 1;
-        icount = in_alc.remaining(id);
-        in_lstride = in_alc.get_stride(id);
+        icount = src_cur.remaining(id);
+        in_lstride = src_cur.get_stride(id);
         iscale = 1;
       }
 
@@ -508,8 +481,8 @@ namespace Realm {
       } else {
         assert(out_dim > 1);
         od = 1;
-        ocount = out_alc.remaining(od);
-        out_lstride = out_alc.get_stride(od);
+        ocount = dst_cur.remaining(od);
+        out_lstride = dst_cur.get_stride(od);
         oscale = 1;
       }
 
@@ -529,23 +502,11 @@ namespace Realm {
         copy_info.extents[1] = lines;
         copy_info.volume = lines * contig_bytes;
 
-        size_t rect_fields = final_field_count(copy_info.volume);
-        std::cout << "Do2D rect_fields:" << rect_fields << " volume:" << copy_info.volume << std::endl;
-        /*if(in_alc.field_block()) {
-          in_alc.advance(id, lines * iscale, rect_fields);
-       } else {
-          in_alc.advance(id, (lines * iscale) * rect_fields);
-        }
-
-        if(out_alc.field_block()) {
-          out_alc.advance(od, lines * oscale, rect_fields);
-        } else {
-          out_alc.advance(od, (lines * oscale) * rect_fields);
-        }*/
-
-        in_alc.advance(id, lines * iscale);
-        out_alc.advance(od, lines * oscale);
-        return copy_info.volume;
+        fields_total = final_field_count(copy_info.src.field_stride, copy_info.volume,
+                                         in_lstride * icount, ocount * out_lstride);
+        advance(src_cur, id, lines, iscale, fields_total);
+        advance(dst_cur, od, lines, oscale, fields_total);
+        return copy_info.volume * fields_total;
       }
 
       // ---------------------------------------------------------------------------
@@ -562,8 +523,8 @@ namespace Realm {
       } else {
         id++;
         assert(in_dim > id);
-        icount = in_alc.remaining(id);
-        in_pstride = in_alc.get_stride(id);
+        icount = src_cur.remaining(id);
+        in_pstride = src_cur.get_stride(id);
         iscale = 1;
       }
 
@@ -578,8 +539,8 @@ namespace Realm {
       } else {
         od++;
         assert(out_dim > od);
-        ocount = out_alc.remaining(od);
-        out_pstride = out_alc.get_stride(od);
+        ocount = dst_cur.remaining(od);
+        out_pstride = dst_cur.get_stride(od);
         oscale = 1;
       }
 
@@ -608,11 +569,13 @@ namespace Realm {
         copy_info.volume = planes * lines * contig_bytes;
       }
 
-      std::cout << "Do3D" << std::endl;
+      fields_total =
+          final_field_count(copy_info.src.field_stride, planes * lines * contig_bytes,
+                            in_pstride * icount, ocount * out_pstride);
 
-      in_alc.advance(id, planes * iscale);
-      out_alc.advance(od, planes * oscale);
-      return planes * lines * contig_bytes;
+      advance(src_cur, id, planes, iscale, fields_total);
+      advance(dst_cur, od, planes, oscale, fields_total);
+      return contig_bytes * lines * planes * fields_total;
     }
 
     bool GPU::is_accessible_host_mem(const MemoryImpl *mem) const
@@ -791,8 +754,8 @@ namespace Realm {
         // that best fits the layout of the source and destinations
         while(bytes_left > 0 && copy_infos.num_rects < AffineCopyInfo<3>::MAX_NUM_RECTS &&
               !needs_fast_multifield) {
-          AddressListCursor &in_alc = in_port->addrcursor;
-          AddressListCursor &out_alc = out_port->addrcursor;
+          AddressListCursor &src_cur = in_port->addrcursor;
+          AddressListCursor &dst_cur = out_port->addrcursor;
 
           if(!in_nonaffine && !out_nonaffine) {
             // log_gpudma.info() << "Affine -> Affine";
@@ -807,7 +770,7 @@ namespace Realm {
 
             size_t bytes_to_copy = 0;
             bytes_to_copy = read_address_entry(copy_infos, min_align, transpose_copy,
-                                               in_alc, in_base, out_alc, out_base,
+                                               src_cur, in_base, dst_cur, out_base,
                                                bytes_left, max_xfer_fields, fields_total);
 
             // Either src or dst can't be accessed with a kernel, so just break out and
@@ -825,7 +788,7 @@ namespace Realm {
             copy_info_total += bytes_to_copy;
             bytes_left -= bytes_to_copy;
 
-            if(in_alc.field_block() || out_alc.field_block()) {
+            if(src_cur.field_block() || dst_cur.field_block()) {
               needs_fast_multifield = true;
               break;
             }
@@ -846,9 +809,9 @@ namespace Realm {
               cuda_copy.srcZ = ainfo.pos[2];
               cuda_copy.dstMemoryType = CU_MEMORYTYPE_UNIFIED;
               cuda_copy.dstDevice =
-                  static_cast<CUdeviceptr>(out_base + out_alc.get_offset());
+                  static_cast<CUdeviceptr>(out_base + dst_cur.get_offset());
               get_nonaffine_strides(cuda_copy.dstPitch, cuda_copy.dstHeight, ainfo,
-                                    out_alc, bytes);
+                                    dst_cur, bytes);
             } else {
               assert(!in_nonaffine);
               log_gpudma.info() << "Affine -> Array";
@@ -862,9 +825,9 @@ namespace Realm {
               cuda_copy.dstZ = ainfo.pos[2];
               cuda_copy.srcMemoryType = CU_MEMORYTYPE_UNIFIED;
               cuda_copy.srcDevice =
-                  static_cast<CUdeviceptr>(in_base + in_alc.get_offset());
+                  static_cast<CUdeviceptr>(in_base + src_cur.get_offset());
               get_nonaffine_strides(cuda_copy.srcPitch, cuda_copy.srcHeight, ainfo,
-                                    in_alc, bytes);
+                                    src_cur, bytes);
             }
             cuda_copy.WidthInBytes = ainfo.width_in_bytes;
             cuda_copy.Height = ainfo.height;
@@ -1153,8 +1116,8 @@ namespace Realm {
 
         size_t addr_size = 0;
 
-        AddressListCursor &in_alc = in_port->addrcursor;
-        AddressListCursor &out_alc = out_port->addrcursor;
+        AddressListCursor &src_cur = in_port->addrcursor;
+        AddressListCursor &dst_cur = out_port->addrcursor;
 
         size_t write_ind_bytes = 0;
         uintptr_t dst_ind_base = 0;
@@ -1168,9 +1131,9 @@ namespace Realm {
                   out_port->iter->get_base_offset(), 0));
 
           out_base += addr_info.base_offset;
-          dst_ind_base += (out_alc.get_offset() / addr_info.bytes_per_chunk) * addr_size;
+          dst_ind_base += (dst_cur.get_offset() / addr_info.bytes_per_chunk) * addr_size;
         } else {
-          out_base += out_alc.get_offset();
+          out_base += dst_cur.get_offset();
         }
 
         size_t read_ind_bytes = 0;
@@ -1185,9 +1148,9 @@ namespace Realm {
                   in_port->iter->get_base_offset(), 0));
 
           in_base += addr_info.base_offset;
-          src_ind_base += (in_alc.get_offset() / addr_info.bytes_per_chunk) * addr_size;
+          src_ind_base += (src_cur.get_offset() / addr_info.bytes_per_chunk) * addr_size;
         } else {
-          in_base += in_alc.get_offset();
+          in_base += src_cur.get_offset();
         }
 
         log_gpudma.info() << "cuda gathe/scatter bytes_per_chunk="
@@ -1234,8 +1197,8 @@ namespace Realm {
                                max_bytes, strides, in_base, out_base, src_ind_base,
                                dst_ind_base);
 
-        in_alc.advance(0, max_bytes);
-        out_alc.advance(0, max_bytes);
+        src_cur.advance(0, max_bytes);
+        dst_cur.advance(0, max_bytes);
 
         // TODO(apryakhin@): Add control flow
         total_bytes += max_bytes;
@@ -2062,17 +2025,17 @@ namespace Realm {
           fill_info.num_rects = 0;
 
           while(total_bytes < max_bytes) {
-            AddressListCursor &out_alc = out_port->addrcursor;
+            AddressListCursor &dst_cur = out_port->addrcursor;
 
-            uintptr_t out_offset = out_alc.get_offset();
+            uintptr_t out_offset = dst_cur.get_offset();
 
             // the reported dim is reduced for partially consumed address
             //  ranges - whatever we get can be assumed to be regular
-            int out_dim = out_alc.get_dim();
+            int out_dim = dst_cur.get_dim();
             if((reduced_fill_size < sizeof(fill_info.fill_value)) &&
                ((reduced_fill_size & (reduced_fill_size - 1)) == 0)) {
-              const size_t bytes = std::min(out_alc.remaining(0), max_bytes);
-              size_t lines = (out_dim > 1 ? out_alc.remaining(1) : 1);
+              const size_t bytes = std::min(dst_cur.remaining(0), max_bytes);
+              size_t lines = (out_dim > 1 ? dst_cur.remaining(1) : 1);
               if((lines * bytes) > max_bytes) {
                 lines = std::max<size_t>(1, max_bytes / bytes);
               }
@@ -2086,7 +2049,7 @@ namespace Realm {
                   bytes / reduced_fill_size;
               fill_info.subrects[fill_info.num_rects].extents[1] = lines;
               fill_info.subrects[fill_info.num_rects].strides[0] =
-                  (out_dim > 1 ? out_alc.get_stride(1) : bytes) / reduced_fill_size;
+                  (out_dim > 1 ? dst_cur.get_stride(1) : bytes) / reduced_fill_size;
               fill_info.num_rects++;
               total_info_bytes += bytes;
 
@@ -2102,12 +2065,12 @@ namespace Realm {
               }
 
               total_bytes += bytes * lines;
-              out_alc.advance((out_dim == 1 ? 0 : 1), (out_dim == 1 ? bytes : lines));
+              dst_cur.advance((out_dim == 1 ? 0 : 1), (out_dim == 1 ? bytes : lines));
             } else {
               // more general approach - use strided 2d copies to fill the first
               //  line, and then we can use logarithmic doublings to deal with
               //  multiple lines and/or planes
-              size_t bytes = out_alc.remaining(0);
+              size_t bytes = dst_cur.remaining(0);
               size_t elems = bytes / reduced_fill_size;
 #ifdef DEBUG_REALM
               assert((bytes % reduced_fill_size) == 0);
@@ -2170,11 +2133,11 @@ namespace Realm {
 
               if(out_dim == 1) {
                 // all done
-                out_alc.advance(0, bytes);
+                dst_cur.advance(0, bytes);
                 total_bytes += bytes;
               } else {
-                size_t lines = out_alc.remaining(1);
-                size_t lstride = out_alc.get_stride(1);
+                size_t lines = dst_cur.remaining(1);
+                size_t lstride = dst_cur.get_stride(1);
 
                 CUDA_MEMCPY2D copy2d;
                 copy2d.srcMemoryType = CU_MEMORYTYPE_DEVICE;
@@ -2202,11 +2165,11 @@ namespace Realm {
                 }
 
                 if(out_dim == 2) {
-                  out_alc.advance(1, lines);
+                  dst_cur.advance(1, lines);
                   total_bytes += bytes * lines;
                 } else {
-                  size_t planes = out_alc.remaining(2);
-                  size_t pstride = out_alc.get_stride(2);
+                  size_t planes = dst_cur.remaining(2);
+                  size_t pstride = dst_cur.get_stride(2);
 
                   // logarithmic version requires that pstride be a multiple of
                   //  lstride
@@ -2244,7 +2207,7 @@ namespace Realm {
                       planes_done += todo;
                     }
 
-                    out_alc.advance(2, planes);
+                    dst_cur.advance(2, planes);
                     total_bytes += bytes * lines * planes;
                   } else {
                     // plane-at-a-time fallback - can reuse most of copy2d
@@ -2257,7 +2220,7 @@ namespace Realm {
                       CHECK_CU(CUDA_DRIVER_FNPTR(cuMemcpy2DAsync)(&copy2d,
                                                                   stream->get_stream()));
                     }
-                    out_alc.advance(2, planes);
+                    dst_cur.advance(2, planes);
                     total_bytes += bytes * lines * planes;
                   }
                 }
@@ -2563,36 +2526,36 @@ namespace Realm {
             assert(channel->gpu->can_access_peer(in_gpu));
 
             while(total_elems < max_elems) {
-              AddressListCursor &in_alc = in_port->addrcursor;
-              AddressListCursor &out_alc = out_port->addrcursor;
+              AddressListCursor &src_cur = in_port->addrcursor;
+              AddressListCursor &dst_cur = out_port->addrcursor;
 
-              uintptr_t in_offset = in_alc.get_offset();
-              uintptr_t out_offset = out_alc.get_offset();
+              uintptr_t in_offset = src_cur.get_offset();
+              uintptr_t out_offset = dst_cur.get_offset();
 
               // the reported dim is reduced for partially consumed address
               //  ranges - whatever we get can be assumed to be regular
-              int in_dim = in_alc.get_dim();
-              int out_dim = out_alc.get_dim();
+              int in_dim = src_cur.get_dim();
+              int out_dim = dst_cur.get_dim();
 
               // the current reduction op interface can reduce multiple elements
               //  with a fixed address stride, which looks to us like either
               //  1D (stride = elem_size), or 2D with 1 elem/line
 
-              size_t icount = in_alc.remaining(0) / in_elem_size;
-              size_t ocount = out_alc.remaining(0) / out_elem_size;
+              size_t icount = src_cur.remaining(0) / in_elem_size;
+              size_t ocount = dst_cur.remaining(0) / out_elem_size;
               size_t istride, ostride;
               if((in_dim > 1) && (icount == 1)) {
                 in_dim = 2;
-                icount = in_alc.remaining(1);
-                istride = in_alc.get_stride(1);
+                icount = src_cur.remaining(1);
+                istride = src_cur.get_stride(1);
               } else {
                 in_dim = 1;
                 istride = in_elem_size;
               }
               if((out_dim > 1) && (ocount == 1)) {
                 out_dim = 2;
-                ocount = out_alc.remaining(1);
-                ostride = out_alc.get_stride(1);
+                ocount = dst_cur.remaining(1);
+                ostride = dst_cur.get_stride(1);
               } else {
                 out_dim = 1;
                 ostride = out_elem_size;
@@ -2651,8 +2614,8 @@ namespace Realm {
               in_span_start += elems * in_elem_size;
               out_span_start += elems * out_elem_size;
 
-              in_alc.advance(in_dim - 1, elems * ((in_dim == 1) ? in_elem_size : 1));
-              out_alc.advance(out_dim - 1, elems * ((out_dim == 1) ? out_elem_size : 1));
+              src_cur.advance(in_dim - 1, elems * ((in_dim == 1) ? in_elem_size : 1));
+              dst_cur.advance(out_dim - 1, elems * ((out_dim == 1) ? out_elem_size : 1));
 
 #ifdef DEBUG_REALM
               assert(elems <= elems_left);

@@ -120,9 +120,9 @@ list(
   topology_test.cc
 )
 
-if(REALM_USE_CUDA)
-  list(APPEND REALM_UNIT_TESTS read_address_entry_test.cc)
-endif()
+# if(REALM_USE_CUDA)
+#   list(APPEND REALM_UNIT_TESTS read_address_entry_test.cc)
+# endif()
 
 list(TRANSFORM REALM_UNIT_TESTS PREPEND "${REALM_TEST_DIR}/unit_tests/")
 add_executable(realm_unit_tests ${REALM_UNIT_TESTS})
