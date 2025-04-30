@@ -826,9 +826,11 @@ namespace Realm {
   IDIndexedFieldsIterator<N, T>::IDIndexedFieldsIterator(
       const int _dim_order[N], const std::vector<FieldID> &_fields, size_t _field_size,
       RegionInstanceImpl *_inst_impl, const IndexSpace<N, T> &_is,
-      const FieldBlock *_field_block)
+      ReplicatedHeap *_repl_heap)
     : TransferIteratorBase<N, T>(_inst_impl, _dim_order)
     , is(_is)
+    , repl_heap(_repl_heap)
+    , field_block(FieldBlock::create(*_repl_heap, _fields.data(), _fields.size()))
   {
     if(is.is_valid()) {
       reset_internal();
@@ -839,7 +841,6 @@ namespace Realm {
     if(iter_init_deferred || iter.valid) {
       fields = _fields;
       field_size = _field_size;
-      field_block = _field_block;
       inst_layout =
           checked_cast<const InstanceLayout<N, T> *>(this->inst_impl->metadata.layout);
       // prefetch();
@@ -907,14 +908,18 @@ namespace Realm {
 
     IDIndexedFieldsIterator<N, T> *tiis = new IDIndexedFieldsIterator<N, T>(
         dim_order, fields, field_size, get_runtime()->get_instance_impl(inst), is,
-        FieldBlock::create(get_runtime()->repl_heap, fields.data(), fields.size()));
+        &get_runtime()->repl_heap);
 
     return tiis;
   }
 
   template <int N, typename T>
   IDIndexedFieldsIterator<N, T>::~IDIndexedFieldsIterator(void)
-  {}
+  {
+    if(field_block) {
+      repl_heap->free_obj(field_block);
+    }
+  }
 
   template <int N, typename T>
   Event IDIndexedFieldsIterator<N, T>::request_metadata(void)
@@ -1950,7 +1955,6 @@ namespace Realm {
 
     // protected:
     IndexSpace<N, T> is;
-    std::vector<FieldBlock *> rheap_allocs;
   };
 
   template <int N, typename T>
@@ -1960,11 +1964,7 @@ namespace Realm {
 
   template <int N, typename T>
   TransferDomainIndexSpace<N, T>::~TransferDomainIndexSpace()
-  {
-    for(size_t i = 0; i < rheap_allocs.size(); i++) {
-      get_runtime()->repl_heap.free_obj(rheap_allocs[i]);
-    }
-  }
+  {}
 
   template <int N, typename T>
   template <typename S>
@@ -2314,11 +2314,9 @@ namespace Realm {
     if(idindexed_fields && inst_layout->idindexed_fields && is.dense() &&
        fields.size() >= MIN_idindexed_fields) {
 
-      FieldBlock *field_block =
-          FieldBlock::create(get_runtime()->repl_heap, fields.data(), fields.size());
-      rheap_allocs.emplace_back(field_block);
       return new IDIndexedFieldsIterator<N, T>(dim_order.data(), fields,
-                                               fld_sizes.front(), impl, is, field_block);
+                                               fld_sizes.front(), impl, is,
+                                               &get_runtime()->repl_heap);
     } else {
       return new TransferIteratorIndexSpace<N, T>(dim_order.data(), fields, fld_offsets,
                                                   fld_sizes, impl, is);

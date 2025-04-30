@@ -34,10 +34,9 @@ namespace Realm {
 
     // allocate a FieldBlock via heap.alloc_obj and store n field IDs
     template <typename Heap>
-    static FieldBlock *create(Heap &heap, const FieldID *src, std::size_t n,
-                              std::size_t align = 16)
+    static FieldBlock *create(Heap &heap, const FieldID *src, size_t n, size_t align = 16)
     {
-      const std::size_t bytes = sizeof(FieldBlock) + (n - 1) * sizeof(FieldID);
+      const size_t bytes = sizeof(FieldBlock) + (n - 1) * sizeof(FieldID);
       void *mem = heap.alloc_obj(bytes, align);
       FieldBlock *field_block = new(mem) FieldBlock;
       field_block->count = n;

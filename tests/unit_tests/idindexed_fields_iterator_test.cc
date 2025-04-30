@@ -43,14 +43,16 @@ protected:
   void TearDown() override { delete GetParam(); }
 };
 
-struct MockHeap {
-  void *alloc_obj(std::size_t bytes, std::size_t align = 16)
+struct MockHeap : public ReplicatedHeap {
+  void *alloc_obj(std::size_t bytes, std::size_t align = 16) override
   {
     void *ptr = nullptr;
     int ret = posix_memalign(&ptr, align, bytes);
     assert(ret == 0);
     return ptr;
   }
+
+  void free_obj(void *ptr) override { free(ptr); }
 };
 
 template <int N>
@@ -63,11 +65,10 @@ void run_uniform_test_case(const IDIndexedIteratorTestCaseData<N> &tc)
   RegionInstanceImpl *inst_impl = create_inst<N, T>(tc.domain, tc.fields, field_sizes);
 
   MockHeap mock_heap;
-  auto *field_block = FieldBlock::create(mock_heap, tc.fields.data(), tc.fields.size());
 
   // Build the IDIndexedFieldsIterator
   auto it = std::make_unique<IDIndexedFieldsIterator<N, T>>(
-      tc.dim_order.data(), tc.fields, tc.field_size, inst_impl, tc.domain, field_block);
+      tc.dim_order.data(), tc.fields, tc.field_size, inst_impl, tc.domain, &mock_heap);
 
   const InstanceLayoutPieceBase *nonaffine = nullptr;
   AddressList addrlist;
