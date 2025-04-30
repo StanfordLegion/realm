@@ -496,7 +496,7 @@ namespace {
     c.set_addrlist(&al);
 
     // consume one plane at a time – still field 0
-    for(int p = 0; p < PLANES; ++p) {
+    for(size_t p = 0; p < PLANES; ++p) {
       c.advance(2, 1);
     }
 
