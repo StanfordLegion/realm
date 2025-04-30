@@ -23,27 +23,31 @@
 #include "realm/id.h"
 
 #include <array>
+#include <cstring>
 #include <unordered_map>
 
 namespace Realm {
 
-  struct FieldBlock {
-    using FieldID = int;
+  template <typename FieldID = int>
+  struct FieldBlockBase {
     std::size_t count;
     FieldID fields[1];
 
     // allocate a FieldBlock via heap.alloc_obj and store n field IDs
     template <typename Heap>
-    static FieldBlock *create(Heap &heap, const FieldID *src, size_t n, size_t align = 16)
+    static FieldBlockBase<FieldID> *create(Heap &heap, const FieldID *src, size_t n,
+                                           size_t align = 16)
     {
-      const size_t bytes = sizeof(FieldBlock) + (n - 1) * sizeof(FieldID);
+      const size_t bytes = sizeof(FieldBlockBase<FieldID>) + (n - 1) * sizeof(FieldID);
       void *mem = heap.alloc_obj(bytes, align);
-      FieldBlock *field_block = new(mem) FieldBlock;
+      FieldBlockBase<FieldID> *field_block = new(mem) FieldBlockBase<FieldID>;
       field_block->count = n;
       std::copy_n(src, n, field_block->fields);
       return field_block;
     }
   };
+
+  using FieldBlock = FieldBlockBase<int>;
 
   // =================================================================================================
   //                                             AddressList
