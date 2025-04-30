@@ -173,13 +173,6 @@ namespace Realm {
       }
     }
 
-    GPUXferDes::~GPUXferDes()
-    {
-      for(size_t i = 0; i < replheap_allocs.size(); i++) {
-        get_runtime()->repl_heap.free_obj(replheap_allocs[i]);
-      }
-    }
-
     long GPUXferDes::get_requests(Request **requests, long nr)
     {
       // unused

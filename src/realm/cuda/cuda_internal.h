@@ -780,10 +780,11 @@ namespace Realm {
 
     class GPUXferDes : public XferDes {
     public:
-      GPUXferDes(uintptr_t _dma_op, Channel *_channel, NodeID _launch_node,
-                 XferDesID _guid, const std::vector<XferDesPortInfo> &inputs_info,
-                 const std::vector<XferDesPortInfo> &outputs_info, int _priority);
-      ~GPUXferDes();
+      GPUXferDes(uintptr_t _dma_op, Channel *_channel,
+		 NodeID _launch_node, XferDesID _guid,
+		 const std::vector<XferDesPortInfo>& inputs_info,
+		 const std::vector<XferDesPortInfo>& outputs_info,
+		 int _priority);
 
       long get_requests(Request **requests, long nr);
 
@@ -799,7 +800,6 @@ namespace Realm {
     private:
       std::vector<GPU *> src_gpus, dst_gpus;
       std::vector<bool> dst_is_ipc;
-      std::vector<void *> replheap_allocs;
 
       // Mininum amount to transfer in a single quantum before returning in order to
       // ensure forward progress

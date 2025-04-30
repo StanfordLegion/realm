@@ -406,21 +406,6 @@ public:
           }
 
           Event::merge_events(fill_events).wait();
-
-          /*this->template fill<MAX_DIM, int, ElementType>(
-              is, src_fields,
-              [&](Point<MAX_DIM, int> p) -> ElementType { return ElementType(p.x()); });*/
-
-          /*std::vector<Realm::CopySrcDstField> srcs(src_fields.size()),
-              dsts(src_fields.size());
-          int index = 0;
-          for(const auto &[field_id, field_size] : src_fields) {
-            srcs[index].set_fill<ElementType>(value);
-            assert(field_size == sizeof(ElementType));
-            dsts[index].set_field(src_inst, field_id, field_size);
-            index++;
-          }
-          is.copy(srcs, dsts, ProfilingRequestSet()).wait();*/
         }
 
         instances.push_back(src_inst);
