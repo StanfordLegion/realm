@@ -843,23 +843,8 @@ namespace Realm {
       field_size = _field_size;
       inst_layout =
           checked_cast<const InstanceLayout<N, T> *>(this->inst_impl->metadata.layout);
-      // prefetch();
     }
   }
-
-  /*template <int N, typename T>
-  void IDIndexedFieldsIterator<N, T>::prefetch(void)
-  {
-    assert(!fields.empty());
-    const InstanceLayout<N, T> *inst_layout =
-        checked_cast<const InstanceLayout<N, T> *>(this->inst_impl->metadata.layout);
-
-    const InstancePieceList<N, T> &piece_list =
-        inst_layout->piece_lists[inst_layout->fields.begin()->second.list_idx];
-    layout_piece = piece_list.find_piece(Point<N, T>(0));
-
-    assert(layout_piece->layout_type == PieceLayoutTypes::AffineLayoutType);
-  }*/
 
   /*template <int N, typename T>
   IDIndexedFieldsIterator<N, T>::IDIndexedFieldsIterator(
