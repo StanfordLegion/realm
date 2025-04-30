@@ -131,8 +131,8 @@ namespace Realm {
   {
     const size_t *entry = read_entry();
     // decode header
-    const size_t contig = entry[AddressList::SLOT_HEADER] >> AddressList::CONTIG_SHIFT;
-    const int dims = int(entry[AddressList::SLOT_HEADER] & AddressList::DIM_MASK);
+    const size_t contig = detail::contig_bytes(entry);
+    const int dims = detail::actdim(entry);
     size_t bytes = contig;
     for(int d = 1; d < dims; d++) {
       bytes *= entry[detail::count_index(d)];

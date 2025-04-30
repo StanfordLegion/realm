@@ -28,7 +28,7 @@
 
 namespace Realm {
 
-  template <typename FieldID = int>
+  template <typename FieldID>
   struct FieldBlockBase {
     std::size_t count;
     FieldID fields[1];
