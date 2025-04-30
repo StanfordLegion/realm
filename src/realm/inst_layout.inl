@@ -243,6 +243,7 @@ namespace Realm {
         pl_sizes[pl_key] = layout->bytes_used - pl_start;
       }
 
+
       // now that the we know which piece list we are using, we can set the
       //  actual field offsets
       for(std::map<FieldID, size_t>::const_iterator it2 = field_offsets.begin();
@@ -544,6 +545,7 @@ namespace Realm {
     copy->bytes_used = bytes_used;
     copy->alignment_reqd = alignment_reqd;
     copy->fields = fields;
+    copy->idindexed_fields = idindexed_fields;
     copy->space = space;
     copy->piece_lists.resize(piece_lists.size());
     for(size_t i = 0; i < piece_lists.size(); i++) {
