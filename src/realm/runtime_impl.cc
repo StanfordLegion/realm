@@ -839,16 +839,16 @@ namespace Realm {
     std::vector<std::string> dummy_network_list;
 
     cp.add_option_int_units("-ll:rsize", reg_mem_size, 'm')
-      .add_option_int_units("-ll:ib_rsize", reg_ib_mem_size, 'm')
-      .add_option_int_units("-ll:dsize", disk_mem_size, 'm')
-      .add_option_int("-ll:dma", dma_worker_threads)
-      .add_option_int("-ll:dma_multi_field", dma_multi_field)
-      .add_option_bool("-ll:pin_dma", pin_dma_threads)
-      .add_option_int("-ll:dummy_rsrv_ok", dummy_reservation_ok)
-      .add_option_bool("-ll:show_rsrv", show_reservations)
-      .add_option_int("-ll:ht_sharing", hyperthread_sharing)
-      .add_option_int_units("-ll:bitset_chunk", bitset_chunk_size, 'k')
-      .add_option_int("-ll:bitset_twolevel", bitset_twolevel);
+        .add_option_int_units("-ll:ib_rsize", reg_ib_mem_size, 'm')
+        .add_option_int_units("-ll:dsize", disk_mem_size, 'm')
+        .add_option_int("-ll:dma", dma_worker_threads)
+        .add_option_int("-ll:dma_multi_field", dma_multi_field)
+        .add_option_bool("-ll:pin_dma", pin_dma_threads)
+        .add_option_int("-ll:dummy_rsrv_ok", dummy_reservation_ok)
+        .add_option_bool("-ll:show_rsrv", show_reservations)
+        .add_option_int("-ll:ht_sharing", hyperthread_sharing)
+        .add_option_int_units("-ll:bitset_chunk", bitset_chunk_size, 'k')
+        .add_option_int("-ll:bitset_twolevel", bitset_twolevel);
 
     cp.add_option_string("-ll:eventtrace", event_trace_file)
         .add_option_string("-ll:locktrace", lock_trace_file);
