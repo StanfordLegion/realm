@@ -1936,7 +1936,7 @@ namespace Realm {
     template <typename S>
     bool serialize(S &serializer) const;
 
-    static constexpr size_t MIN_idindexed_fields = 2;
+    static constexpr size_t MIN_IDINDEXED_FIELDS = 2;
 
     // protected:
     IndexSpace<N, T> is;
@@ -2297,8 +2297,10 @@ namespace Realm {
     const InstanceLayout<N, T> *inst_layout =
         checked_cast<const InstanceLayout<N, T> *>(impl->metadata.layout);
     if(idindexed_fields && inst_layout->idindexed_fields && is.dense() &&
-       fields.size() >= MIN_idindexed_fields) {
-
+       fields.size() >= MIN_IDINDEXED_FIELDS) {
+      // TODO(apryakhin@): There is an untested path where either src or dst
+      // might not have idindexed_fields layout. There aren't any checks that prevents
+      // this from running either.
       return new IDIndexedFieldsIterator<N, T>(dim_order.data(), fields,
                                                fld_sizes.front(), impl, is,
                                                &get_runtime()->repl_heap);
