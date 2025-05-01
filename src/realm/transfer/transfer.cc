@@ -3919,8 +3919,13 @@ namespace Realm {
       min_granularity = combined_field_size;
     }
 
+    size_t max_ib_size = 0;
+    bool success =
+        get_runtime()->get_module_config("core")->get_property("ib_regmem", max_ib_size);
+    assert(success);
+
     size_t ib_size = domain_size * element_size + serdez_pad;
-    const size_t IB_MAX_SIZE = 16 << 20; // 16MB
+    const size_t IB_MAX_SIZE = max_ib_size; // 16 << 20; // 16MB
     if(ib_size > IB_MAX_SIZE) {
       // take up to IB_MAX_SIZE, respecting the min granularity
       if(min_granularity > 1) {
