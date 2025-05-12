@@ -525,6 +525,7 @@ namespace Realm {
     if((s >> il->bytes_used) &&
        (s >> il->alignment_reqd) &&
        (s >> il->fields) &&
+       (s >> il->idindexed_fields) &&
        (s >> il->space) &&
        (s >> il->piece_lists)) {
       return il;
@@ -616,6 +617,7 @@ namespace Realm {
     return ((s << bytes_used) &&
 	    (s << alignment_reqd) &&
 	    (s << fields) &&
+	    (s << idindexed_fields) &&
 	    (s << space) &&
 	    (s << piece_lists));
   }
