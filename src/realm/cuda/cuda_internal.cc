@@ -1672,7 +1672,7 @@ namespace Realm {
         // self-path
         unsigned bw = src_gpu->info->logical_peer_bandwidth[_src_gpu->info->index];
         unsigned latency = src_gpu->info->logical_peer_latency[_src_gpu->info->index];
-        unsigned frag_overhead = 2000; // HACK - estimate at 2 us
+        unsigned frag_overhead = 1000; // HACK - estimate at 2 us
 
         add_path(local_gpu_mems, local_gpu_mems, bw, latency, frag_overhead,
                  XFER_GPU_IN_FB)
