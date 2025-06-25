@@ -43,9 +43,9 @@ jobs:
       - uses: Kaven-Universe/github-action-current-date-time@v1
         id: timestamp
         with:
-        format: "yyyy-MM-dd-HH-mm-ss-SSS"
+          format: "yyyy-MM-dd-HH-mm-ss-SSS"
 
-      - uses: actions/cache@1.1.0
+      - uses: actions/cache@v4
         name: Restore CPM source cache
         with:
           path: .cache/cpm
@@ -53,21 +53,21 @@ jobs:
           restore-keys: |
             cpm-
 
-      - uses: actions/cache@1.1.0
+      - uses: actions/cache@v4
         name: Restore ccache
         with:
           path: .cache/ccache
-          key: ${{ matrix.config.os }}-${{ matrix.config.cc }}-${{ matrix.config.build }}-${{ github.ref_name }}-ccache-${{ steps.timestamp.outputs.time }}
+          key: ${{ github.jobs[github.job].name }}-${{ github.ref_name }}-ccache-${{ steps.timestamp.outputs.time }}
           restore-keys: |
-            ${{ matrix.config.os }}-${{ matrix.config.cc }}-${{ matrix.config.build }}-${{ github.ref_name }}-ccache-
-            ${{ matrix.config.os }}-${{ matrix.config.cc }}-${{ matrix.config.build }}-main-ccache-
+            ${{ github.jobs[github.job].name }}-${{ github.ref_name }}-ccache-
+            ${{ github.jobs[github.job].name }}-main-ccache-
 
       - uses: seanmiddleditch/gha-setup-ninja@v5
 
       - uses: threeal/cmake-action@v2.1.0
         with:
           generator: Ninja
-          cc-compiler: ${{ matrix.config.cc }}
+          c-compiler: ${{ matrix.config.cc }}
           cxx-compiler: ${{ matrix.config.cxx }}
           options: |
             CMAKE_BUILD_TYPE=${{ matrix.config.build }}
@@ -78,7 +78,7 @@ jobs:
 
       - name: Run tests
         run: |
-          ctest --test-dir build
+          ctest --test-dir build --output-on-failure --parallel
 
       - name: Test Install
         run: |
