@@ -1,0 +1,85 @@
+name: CMake Build Matrix
+
+on: [push, pull_request]
+
+jobs:
+  build:
+    name: ${{ matrix.config.os }}-${{ matrix.config.cc }}-${{ matrix.config.build }}
+    runs-on: ${{ matrix.config.os }}
+    env:
+      CPM_SOURCE_CACHE: "${{ github.workspace }}/.cache/cpm"
+      CCACHE_BASE_DIR: "${{ github.workspace }}/.cache"
+      CCACHE_DIR: "${{ github.workspace }}/.cache/ccache"
+      CCACHE_COMPRESS: "true"
+      CCACHE_COMPRESS_LEVEL: "6"
+      CCACHE_MAXSIZE: "600M"
+    strategy:
+      fail-fast: false
+      matrix:
+        config:
+          - {
+              os: windows-latest,
+              cc: "cl", cxx: "cl",
+              build: Release,
+            }
+          - {
+              os: ubuntu-latest,
+              build: Release,
+              cc: "gcc", cxx: "g++"
+            }
+          - {
+              os: ubuntu-latest,
+              build: Debug,
+              cc: "gcc", cxx: "g++"
+            }
+          - {
+              os: macos-latest,
+              build: Release,
+              cc: "clang", cxx: "clang++"
+            }
+    steps:
+      - uses: actions/checkout@v4.2.2
+
+      - uses: Kaven-Universe/github-action-current-date-time@v1
+        id: timestamp
+        with:
+        format: "yyyy-MM-dd-HH-mm-ss-SSS"
+
+      - uses: actions/cache@1.1.0
+        name: Restore CPM source cache
+        with:
+          path: .cache/cpm
+          key: cpm-${{ steps.timestamp.outputs.time }}
+          restore-keys: |
+            cpm-
+
+      - uses: actions/cache@1.1.0
+        name: Restore ccache
+        with:
+          path: .cache/ccache
+          key: ${{ matrix.config.os }}-${{ matrix.config.cc }}-${{ matrix.config.build }}-${{ github.ref_name }}-ccache-${{ steps.timestamp.outputs.time }}
+          restore-keys: |
+            ${{ matrix.config.os }}-${{ matrix.config.cc }}-${{ matrix.config.build }}-${{ github.ref_name }}-ccache-
+            ${{ matrix.config.os }}-${{ matrix.config.cc }}-${{ matrix.config.build }}-main-ccache-
+
+      - uses: seanmiddleditch/gha-setup-ninja@v5
+
+      - uses: threeal/cmake-action@v2.1.0
+        with:
+          generator: Ninja
+          cc-compiler: ${{ matrix.config.cc }}
+          cxx-compiler: ${{ matrix.config.cxx }}
+          options: |
+            CMAKE_BUILD_TYPE=${{ matrix.config.build }}
+            REALM_ENABLE_BUILD_TESTS=ON
+            REALM_ENABLE_BUILD_BENCHMARKS=ON
+            REALM_ENABLE_BUILD_TUTORIALS=ON
+            REALM_ENABLE_BUILD_EXAMPLES=ON
+
+      - name: Run tests
+        run: |
+          ctest --test-dir build
+
+      - name: Test Install
+        run: |
+          cmake --install . -B build --prefix install --config ${{ matrix.config.build }}

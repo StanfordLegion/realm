@@ -1,0 +1,10 @@
+# CMake build directories
+build/
+install/
+
+# IDE-specific files (e.g., CLion)
+.idea/
+.vscode/
+
+# Core dumps
+*core
