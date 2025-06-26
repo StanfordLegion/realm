@@ -39,7 +39,7 @@ $('.dropbtn').html("Version " + url2label(thisvers));
 // https://stackoverflow.com/questions/39048654
 (async () => {
   const response = await fetch('/realm/doc/doc-versions');
-  entries = response.split('\n');
+  entries = await response.split('\n');
   entries.splice(entries.indexOf(thisvers), -1);
   if (thisvers != master) {
     entries.splice(entries.indexOf(master), -1);
