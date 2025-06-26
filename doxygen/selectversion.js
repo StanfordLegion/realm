@@ -9,7 +9,7 @@ let master = 'main';
 
 /// Pathname part of the URL containing the different versioned doxygen
 /// subdirectories. Must be browsable.
-let urlroot = '/@DOXYGEN_PROJECT_NAME@';
+let urlroot = '/doc';
 
 // Convert a url directory (e.g. "v620") to a version number displayed on the
 // web page (e.g. "6.20").
