@@ -1,6 +1,12 @@
-name: CMake Build Matrix
+name: ci
 
-on: [push, pull_request]
+on:
+  push:
+    branches-ignore:
+      - gh-pages
+  pull_request:
+    branches-ignore:
+      - gh-pages
 
 jobs:
   build:
@@ -73,7 +79,7 @@ jobs:
 
       - name: Configure
         run: |
-          cmake -S . -B build -DCMAKE_BUILD_TYPE=${{ matrix.config.build }} -DREALM_BUILD_TESTS=ON -DREALM_BUILD_BENCHMARKS=ON -DREALM_BUILD_TUTORIALS=ON -DREALM_BUILD_EXAMPLES=ON -DREALM_ENABLE_GASNETEX=OFF
+          cmake -S . -B build -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache -DCMAKE_BUILD_TYPE=${{ matrix.config.build }} -DREALM_BUILD_TESTS=ON -DREALM_BUILD_BENCHMARKS=ON -DREALM_BUILD_TUTORIALS=ON -DREALM_BUILD_EXAMPLES=ON -DREALM_ENABLE_GASNETEX=OFF
 
       - name: Build
         run: |
@@ -86,3 +92,59 @@ jobs:
       - name: Test Install
         run: |
           cmake --install build --parallel 4 --prefix install --config ${{ matrix.config.build }}
+
+  docs:
+    name: Build Docs
+    runs-on: ubuntu-latest
+    needs: build
+    permissions:
+      contents: write
+    strategy:
+      fail-fast: false
+    steps:
+      - uses: awalsh128/cache-apt-pkgs-action@latest
+        with:
+          packages: doxygen doxygen-latex graphviz cmake
+
+      - uses: actions/checkout@v4.2.2
+        with:
+          path: realm-src
+
+      - name: Get safe ref
+        id: safe
+        run: |
+          echo ref=${GITHUB_REF_NAME//\//-} >> ${GITHUB_OUTPUT}
+
+      - name: Build
+        run: |
+          cmake -S realm-src -B build -DCMAKE_BUILD_TYPE=Release -DREALM_ENABLE_UCX=OFF -DREALM_ENABLE_GASNETEX=OFF -DREALM_BUILD_DOCS=ON -DREALM_GENERATE_HTML=ON
+          make -C build docs
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: docs-${{ steps.safe.outputs.ref }}
+          path: build/docs/html
+          if-no-files-found: error
+          retention-days: 2
+          overwrite: true
+
+      - uses: actions/checkout@v4.2.2
+        #if: ${{ github.event_name == 'push' && (github.ref_name == 'main' || startsWith(github.ref, 'refs/tags/v')) }}
+        with:
+          ref: gh-pages
+          path: gh-pages
+
+      - name: 
+        #if: ${{ github.event_name == 'push' && (github.ref_name == 'main' || startsWith(github.ref, 'refs/tags/v')) }}
+        run: |
+          rm -rf gh-pages/docs/${{ steps.safe.outputs.ref }}
+          mv build/docs/html gh-pages/docs/${{ steps.safe.outputs.ref }}
+          cd gh-pages
+          git config --global user.name "GitHub Docs Builder"
+          git config --global user.email "docs-builder@users.noreply.github.com"
+          git add gh-pages/docs/${{ steps.safe.outputs.ref }}
+          git status
+          git commit -m "${{ env.CI_COMMIT_MESSAGE }}"
+          git fetch origin
+          git rebase --strategy-option=theirs origin/gh-pages --verbose
+          #git push --verbose
