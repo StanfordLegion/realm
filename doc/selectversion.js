@@ -38,19 +38,21 @@ $('.dropbtn').html("Version " + url2label(thisvers));
 
 // https://stackoverflow.com/questions/39048654
 (async () => {
-  const response = await fetch('/realm/doc/doc-versions');
-  entries = await response.text();
-  entries.split('\n');
-  entries.splice(entries.indexOf(thisvers), -1);
-  if (thisvers != master) {
-    entries.splice(entries.indexOf(master), -1);
-    entries.unshift(master);
-  }
-  entries.unshift(thisvers);
-  entries = entries.map((x) => '<a class="verslink" href="'
-                    + patharr.slice(0, urlrootdirs).join('/')
-                    + '/' + x + '/">'
-                    + url2label(x)
-                    + '</a>');
-  $('.dropdown-content').append(entries.join(''));
+  const response = await fetch('/realm/doc/doc-versions')
+    .then((response) => response.text())
+    .then((data) => {
+      entries = data.split('\n');
+      entries.splice(entries.indexOf(thisvers), -1);
+      if (thisvers != master) {
+        entries.splice(entries.indexOf(master), -1);
+        entries.unshift(master);
+      }
+      entries.unshift(thisvers);
+      entries = entries.map((x) => '<a class="verslink" href="'
+                        + patharr.slice(0, urlrootdirs).join('/')
+                        + '/' + x + '/">'
+                        + url2label(x)
+                        + '</a>');
+      $('.dropdown-content').append(entries.join(''));
+    });
 })();
