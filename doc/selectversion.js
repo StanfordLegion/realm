@@ -51,7 +51,7 @@ $('.dropbtn').html("Version " + url2label(thisvers));
   });
   entries = entries.map((x) => '<a class="verslink" href="'
                    + patharr.slice(0, urlrootdirs).join('/')
-                   + '/' + x + '/' + patharr[patharr.length-1] + '">'
+                   + '/' + x + '/">'
                    + url2label(x)
                    + '</a>');
 	$('.dropdown-content').append(entries.join(''));
