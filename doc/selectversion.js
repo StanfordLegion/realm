@@ -38,17 +38,14 @@ $('.dropbtn').html("Version " + url2label(thisvers));
 
 // https://stackoverflow.com/questions/39048654
 (async () => {
-  const response = await fetch('https://api.github.com/repos/stanfordlegion/realm/contents/doc?ref=gh-pages');
-  const data = await response.json();
-  entries=[thisvers];
+  const response = await fetch('/realm/doc/doc-versions');
+  entries = response.split('\n');
+  entries.splice(entries.indexOf(thisvers), -1);
   if (thisvers != master) {
-    entries.push(master);
+    entries.splice(entries.indexOf(master), -1);
+    entries.unshift(master);
   }
-  data.forEach(function(entry) {
-      if (entry.name.startsWith('v') && entry.name != thisvers) {
-        entries.push(entry.name);
-      }
-  });
+  entries.unshift(thisvers);
   entries = entries.map((x) => '<a class="verslink" href="'
                     + patharr.slice(0, urlrootdirs).join('/')
                     + '/' + x + '/">'
