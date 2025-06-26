@@ -13,6 +13,11 @@
 <link href="search/search.css" rel="stylesheet" type="text/css"/>
 <script type="text/javascript" src="search/searchdata.js"></script>
 <script type="text/javascript" src="search/search.js"></script>
+<script type="text/javascript">
+/* @license magnet:?xt=urn:btih:d3d9a9a6595521f9666a5e94cc830dab83b65699&amp;dn=expat.txt MIT */
+  $(document).ready(function() { init_search(); });
+/* @license-end */
+</script>
 <link href="doxygen.css" rel="stylesheet" type="text/css" />
 <link href="customdoxygen.css" rel="stylesheet" type="text/css"/>
 <!-- BEGIN version select -->
@@ -50,17 +55,33 @@
 var searchBox = new SearchBox("searchBox", "search/",'.html');
 /* @license-end */
 </script>
-<script type="text/javascript" src="menudata.js"></script>
-<script type="text/javascript" src="menu.js"></script>
-<script type="text/javascript">
-/* @license magnet:?xt=urn:btih:d3d9a9a6595521f9666a5e94cc830dab83b65699&amp;dn=expat.txt MIT */
-$(function() {
-  initMenu('',true,false,'search.php','Search');
-  $(document).ready(function() { init_search(); });
-});
-/* @license-end */
-</script>
-<div id="main-nav"></div>
+  <div id="navrow1" class="tabs">
+    <ul class="tablist">
+      <li><a href="index.html"><span>Main&#160;Page</span></a></li>
+      <li><a href="namespaces.html"><span>Namespaces</span></a></li>
+      <li><a href="annotated.html"><span>Classes</span></a></li>
+      <li class="current"><a href="files.html"><span>Files</span></a></li>
+      <li>
+        <div id="MSearchBox" class="MSearchBoxInactive">
+        <span class="left">
+          <span id="MSearchSelect"                onmouseover="return searchBox.OnSearchSelectShow()"                onmouseout="return searchBox.OnSearchSelectHide()">&#160;</span>
+          <input type="text" id="MSearchField" value="" placeholder="Search" accesskey="S"
+               onfocus="searchBox.OnSearchFieldFocus(true)" 
+               onblur="searchBox.OnSearchFieldFocus(false)" 
+               onkeyup="searchBox.OnSearchFieldChange(event)"/>
+          </span><span class="right">
+            <a id="MSearchClose" href="javascript:searchBox.CloseResultsWindow()"><img id="MSearchCloseImg" border="0" src="search/close.svg" alt=""/></a>
+          </span>
+        </div>
+      </li>
+    </ul>
+  </div>
+  <div id="navrow2" class="tabs2">
+    <ul class="tablist">
+      <li><a href="files.html"><span>File&#160;List</span></a></li>
+      <li><a href="globals.html"><span>File&#160;Members</span></a></li>
+    </ul>
+  </div>
 <!-- window showing the filter options -->
 <div id="MSearchSelectWindow"
      onmouseover="return searchBox.OnSearchSelectShow()"
@@ -104,44 +125,11 @@ $(function() {
 Include dependency graph for client.h:</div>
 <div class="dyncontent">
 <div class="center"><img src="client_8h__incl.png" border="0" usemap="#a_2home_2runner_2work_2realm_2realm_2realm-src_2realm_2ucx_2bootstrap_2client_8h" alt=""/></div>
-<map name="a_2home_2runner_2work_2realm_2realm_2realm-src_2realm_2ucx_2bootstrap_2client_8h" id="a_2home_2runner_2work_2realm_2realm_2realm-src_2realm_2ucx_2bootstrap_2client_8h">
-<area shape="rect" title=" " alt="" coords="232,5,419,60"/>
-<area shape="rect" title=" " alt="" coords="5,108,69,133"/>
-<area shape="poly" title=" " alt="" coords="238,63,83,108,82,103,237,58"/>
-<area shape="rect" title=" " alt="" coords="94,108,218,133"/>
-<area shape="poly" title=" " alt="" coords="275,62,192,104,190,99,272,58"/>
-<area shape="rect" title=" " alt="" coords="242,108,305,133"/>
-<area shape="poly" title=" " alt="" coords="312,61,290,98,285,95,307,59"/>
-<area shape="rect" title=" " alt="" coords="329,108,425,133"/>
-<area shape="poly" title=" " alt="" coords="343,59,366,95,361,98,339,61"/>
-<area shape="rect" href="logger_8h.html" title=" " alt="" coords="449,108,524,133"/>
-<area shape="poly" title=" " alt="" coords="376,58,454,99,451,104,373,62"/>
-<area shape="rect" href="types_8h.html" title=" " alt="" coords="595,108,666,133"/>
-<area shape="poly" title=" " alt="" coords="419,57,583,103,582,108,418,63"/>
-<area shape="rect" title=" " alt="" coords="296,181,376,207"/>
-<area shape="poly" title=" " alt="" coords="464,136,374,178,372,173,461,131"/>
-<area shape="rect" title=" " alt="" coords="400,181,477,207"/>
-<area shape="poly" title=" " alt="" coords="481,135,456,172,452,169,477,132"/>
-<area shape="rect" title=" " alt="" coords="502,181,575,207"/>
-<area shape="poly" title=" " alt="" coords="497,132,524,169,520,172,493,135"/>
-<area shape="rect" title=" " alt="" coords="600,181,661,207"/>
-<area shape="poly" title=" " alt="" coords="633,134,633,168,628,168,628,134"/>
-<area shape="rect" title=" " alt="" coords="685,181,744,207"/>
-<area shape="poly" title=" " alt="" coords="646,131,692,170,689,174,642,135"/>
-</map>
 </div>
 </div><div class="textblock"><div class="dynheader">
 This graph shows which files directly or indirectly include this file:</div>
 <div class="dyncontent">
 <div class="center"><img src="client_8h__dep__incl.png" border="0" usemap="#a_2home_2runner_2work_2realm_2realm_2realm-src_2realm_2ucx_2bootstrap_2client_8hdep" alt=""/></div>
-<map name="a_2home_2runner_2work_2realm_2realm_2realm-src_2realm_2ucx_2bootstrap_2client_8hdep" id="a_2home_2runner_2work_2realm_2realm_2realm-src_2realm_2ucx_2bootstrap_2client_8hdep">
-<area shape="rect" title=" " alt="" coords="13,5,200,60"/>
-<area shape="rect" href="p2p__comm_8h.html" title=" " alt="" coords="5,211,208,265"/>
-<area shape="poly" title=" " alt="" coords="84,73,69,109,65,135,69,162,78,187,91,209,86,212,74,189,64,163,60,135,64,107,79,71"/>
-<area shape="rect" href="worker_8h.html" title=" " alt="" coords="79,108,265,163"/>
-<area shape="poly" title=" " alt="" coords="133,70,157,106,153,109,129,73"/>
-<area shape="poly" title=" " alt="" coords="150,176,126,212,121,209,145,173"/>
-</map>
 </div>
 </div>
 <p><a href="client_8h_source.html">Go to the source code of this file.</a></p>

@@ -13,6 +13,11 @@
 <link href="search/search.css" rel="stylesheet" type="text/css"/>
 <script type="text/javascript" src="search/searchdata.js"></script>
 <script type="text/javascript" src="search/search.js"></script>
+<script type="text/javascript">
+/* @license magnet:?xt=urn:btih:d3d9a9a6595521f9666a5e94cc830dab83b65699&amp;dn=expat.txt MIT */
+  $(document).ready(function() { init_search(); });
+/* @license-end */
+</script>
 <link href="doxygen.css" rel="stylesheet" type="text/css" />
 <link href="customdoxygen.css" rel="stylesheet" type="text/css"/>
 <!-- BEGIN version select -->
@@ -50,17 +55,35 @@
 var searchBox = new SearchBox("searchBox", "search/",'.html');
 /* @license-end */
 </script>
-<script type="text/javascript" src="menudata.js"></script>
-<script type="text/javascript" src="menu.js"></script>
-<script type="text/javascript">
-/* @license magnet:?xt=urn:btih:d3d9a9a6595521f9666a5e94cc830dab83b65699&amp;dn=expat.txt MIT */
-$(function() {
-  initMenu('',true,false,'search.php','Search');
-  $(document).ready(function() { init_search(); });
-});
-/* @license-end */
-</script>
-<div id="main-nav"></div>
+  <div id="navrow1" class="tabs">
+    <ul class="tablist">
+      <li><a href="index.html"><span>Main&#160;Page</span></a></li>
+      <li><a href="namespaces.html"><span>Namespaces</span></a></li>
+      <li class="current"><a href="annotated.html"><span>Classes</span></a></li>
+      <li><a href="files.html"><span>Files</span></a></li>
+      <li>
+        <div id="MSearchBox" class="MSearchBoxInactive">
+        <span class="left">
+          <span id="MSearchSelect"                onmouseover="return searchBox.OnSearchSelectShow()"                onmouseout="return searchBox.OnSearchSelectHide()">&#160;</span>
+          <input type="text" id="MSearchField" value="" placeholder="Search" accesskey="S"
+               onfocus="searchBox.OnSearchFieldFocus(true)" 
+               onblur="searchBox.OnSearchFieldFocus(false)" 
+               onkeyup="searchBox.OnSearchFieldChange(event)"/>
+          </span><span class="right">
+            <a id="MSearchClose" href="javascript:searchBox.CloseResultsWindow()"><img id="MSearchCloseImg" border="0" src="search/close.svg" alt=""/></a>
+          </span>
+        </div>
+      </li>
+    </ul>
+  </div>
+  <div id="navrow2" class="tabs2">
+    <ul class="tablist">
+      <li><a href="annotated.html"><span>Class&#160;List</span></a></li>
+      <li><a href="classes.html"><span>Class&#160;Index</span></a></li>
+      <li><a href="inherits.html"><span>Class&#160;Hierarchy</span></a></li>
+      <li><a href="functions.html"><span>Class&#160;Members</span></a></li>
+    </ul>
+  </div>
 <!-- window showing the filter options -->
 <div id="MSearchSelectWindow"
      onmouseover="return searchBox.OnSearchSelectShow()"
@@ -102,25 +125,6 @@ $(function() {
 Inheritance diagram for Realm::ModuleConfig:</div>
 <div class="dyncontent">
 <div class="center"><img src="classRealm_1_1ModuleConfig__inherit__graph.png" border="0" usemap="#aRealm_1_1ModuleConfig_inherit__map" alt="Inheritance graph"/></div>
-<map name="aRealm_1_1ModuleConfig_inherit__map" id="aRealm_1_1ModuleConfig_inherit__map">
-<area shape="rect" title=" " alt="" coords="5,179,167,204"/>
-<area shape="rect" href="classRealm_1_1CoreModuleConfig.html" title=" " alt="" coords="243,5,433,31"/>
-<area shape="poly" title=" " alt="" coords="99,165,144,102,176,68,213,40,241,27,243,32,216,44,179,72,148,105,103,168"/>
-<area shape="rect" href="classRealm_1_1Cuda_1_1CudaModuleConfig.html" title=" " alt="" coords="221,55,455,80"/>
-<area shape="poly" title=" " alt="" coords="107,167,153,127,183,106,214,89,246,78,247,83,216,94,185,111,157,131,111,171"/>
-<area shape="rect" href="classRealm_1_1HDF5_1_1HDF5ModuleConfig.html" title=" " alt="" coords="217,104,459,129"/>
-<area shape="poly" title=" " alt="" coords="127,171,214,138,260,127,261,132,215,143,129,176"/>
-<area shape="rect" href="classRealm_1_1Hip_1_1HipModuleConfig.html" title=" " alt="" coords="231,153,445,179"/>
-<area shape="poly" title=" " alt="" coords="180,179,231,174,231,179,181,185"/>
-<area shape="rect" href="classRealm_1_1Numa_1_1NumaModuleConfig.html" title=" " alt="" coords="215,203,461,228"/>
-<area shape="poly" title=" " alt="" coords="180,198,214,201,214,206,180,203"/>
-<area shape="rect" href="classRealm_1_1OpenMP_1_1OpenMPModuleConfig.html" title=" " alt="" coords="220,253,456,293"/>
-<area shape="poly" title=" " alt="" coords="132,207,216,237,260,250,258,255,214,242,130,212"/>
-<area shape="rect" href="classRealm_1_1ProcSet_1_1ProcSetModuleConfig.html" title=" " alt="" coords="225,317,451,357"/>
-<area shape="poly" title=" " alt="" coords="109,212,155,258,184,282,216,302,243,314,241,319,213,307,181,286,151,262,105,216"/>
-<area shape="rect" href="classRealm_1_1Python_1_1PythonModuleConfig.html" title=" " alt="" coords="229,381,447,421"/>
-<area shape="poly" title=" " alt="" coords="101,215,119,250,144,291,177,332,216,366,238,378,235,383,213,371,173,336,140,294,114,252,96,218"/>
-</map>
 <center><span class="legend">[<a href="graph_legend.html">legend</a>]</span></center></div>
 <table class="memberdecls">
 <tr class="heading"><td colspan="2"><h2 class="groupheader"><a id="pub-methods" name="pub-methods"></a>

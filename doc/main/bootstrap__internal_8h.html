@@ -13,6 +13,11 @@
 <link href="search/search.css" rel="stylesheet" type="text/css"/>
 <script type="text/javascript" src="search/searchdata.js"></script>
 <script type="text/javascript" src="search/search.js"></script>
+<script type="text/javascript">
+/* @license magnet:?xt=urn:btih:d3d9a9a6595521f9666a5e94cc830dab83b65699&amp;dn=expat.txt MIT */
+  $(document).ready(function() { init_search(); });
+/* @license-end */
+</script>
 <link href="doxygen.css" rel="stylesheet" type="text/css" />
 <link href="customdoxygen.css" rel="stylesheet" type="text/css"/>
 <!-- BEGIN version select -->
@@ -50,17 +55,33 @@
 var searchBox = new SearchBox("searchBox", "search/",'.html');
 /* @license-end */
 </script>
-<script type="text/javascript" src="menudata.js"></script>
-<script type="text/javascript" src="menu.js"></script>
-<script type="text/javascript">
-/* @license magnet:?xt=urn:btih:d3d9a9a6595521f9666a5e94cc830dab83b65699&amp;dn=expat.txt MIT */
-$(function() {
-  initMenu('',true,false,'search.php','Search');
-  $(document).ready(function() { init_search(); });
-});
-/* @license-end */
-</script>
-<div id="main-nav"></div>
+  <div id="navrow1" class="tabs">
+    <ul class="tablist">
+      <li><a href="index.html"><span>Main&#160;Page</span></a></li>
+      <li><a href="namespaces.html"><span>Namespaces</span></a></li>
+      <li><a href="annotated.html"><span>Classes</span></a></li>
+      <li class="current"><a href="files.html"><span>Files</span></a></li>
+      <li>
+        <div id="MSearchBox" class="MSearchBoxInactive">
+        <span class="left">
+          <span id="MSearchSelect"                onmouseover="return searchBox.OnSearchSelectShow()"                onmouseout="return searchBox.OnSearchSelectHide()">&#160;</span>
+          <input type="text" id="MSearchField" value="" placeholder="Search" accesskey="S"
+               onfocus="searchBox.OnSearchFieldFocus(true)" 
+               onblur="searchBox.OnSearchFieldFocus(false)" 
+               onkeyup="searchBox.OnSearchFieldChange(event)"/>
+          </span><span class="right">
+            <a id="MSearchClose" href="javascript:searchBox.CloseResultsWindow()"><img id="MSearchCloseImg" border="0" src="search/close.svg" alt=""/></a>
+          </span>
+        </div>
+      </li>
+    </ul>
+  </div>
+  <div id="navrow2" class="tabs2">
+    <ul class="tablist">
+      <li><a href="files.html"><span>File&#160;List</span></a></li>
+      <li><a href="globals.html"><span>File&#160;Members</span></a></li>
+    </ul>
+  </div>
 <!-- window showing the filter options -->
 <div id="MSearchSelectWindow"
      onmouseover="return searchBox.OnSearchSelectShow()"
@@ -103,23 +124,11 @@ $(function() {
 Include dependency graph for bootstrap_internal.h:</div>
 <div class="dyncontent">
 <div class="center"><img src="bootstrap__internal_8h__incl.png" border="0" usemap="#a_2home_2runner_2work_2realm_2realm_2realm-src_2realm_2ucx_2bootstrap_2bootstrap__internal_8h" alt=""/></div>
-<map name="a_2home_2runner_2work_2realm_2realm_2realm-src_2realm_2ucx_2bootstrap_2bootstrap__internal_8h" id="a_2home_2runner_2work_2realm_2realm_2realm-src_2realm_2ucx_2bootstrap_2bootstrap__internal_8h">
-<area shape="rect" title=" " alt="" coords="15,5,202,75"/>
-<area shape="rect" title=" " alt="" coords="5,130,76,155"/>
-<area shape="poly" title=" " alt="" coords="88,77,58,120,54,117,83,74"/>
-<area shape="rect" href="bootstrap_8h.html" title=" " alt="" coords="100,123,253,163"/>
-<area shape="poly" title=" " alt="" coords="134,74,158,110,154,113,129,77"/>
-</map>
 </div>
 </div><div class="textblock"><div class="dynheader">
 This graph shows which files directly or indirectly include this file:</div>
 <div class="dyncontent">
 <div class="center"><img src="bootstrap__internal_8h__dep__incl.png" border="0" usemap="#a_2home_2runner_2work_2realm_2realm_2realm-src_2realm_2ucx_2bootstrap_2bootstrap__internal_8hdep" alt=""/></div>
-<map name="a_2home_2runner_2work_2realm_2realm_2realm-src_2realm_2ucx_2bootstrap_2bootstrap__internal_8hdep" id="a_2home_2runner_2work_2realm_2realm_2realm-src_2realm_2ucx_2bootstrap_2bootstrap__internal_8hdep">
-<area shape="rect" title=" " alt="" coords="5,5,192,75"/>
-<area shape="rect" href="ucp__internal_8h.html" title=" " alt="" coords="5,123,192,177"/>
-<area shape="poly" title=" " alt="" coords="101,88,101,122,96,122,96,88"/>
-</map>
 </div>
 </div>
 <p><a href="bootstrap__internal_8h_source.html">Go to the source code of this file.</a></p>

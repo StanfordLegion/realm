@@ -13,6 +13,11 @@
 <link href="search/search.css" rel="stylesheet" type="text/css"/>
 <script type="text/javascript" src="search/searchdata.js"></script>
 <script type="text/javascript" src="search/search.js"></script>
+<script type="text/javascript">
+/* @license magnet:?xt=urn:btih:d3d9a9a6595521f9666a5e94cc830dab83b65699&amp;dn=expat.txt MIT */
+  $(document).ready(function() { init_search(); });
+/* @license-end */
+</script>
 <link href="doxygen.css" rel="stylesheet" type="text/css" />
 <link href="customdoxygen.css" rel="stylesheet" type="text/css"/>
 <!-- BEGIN version select -->
@@ -50,17 +55,35 @@
 var searchBox = new SearchBox("searchBox", "search/",'.html');
 /* @license-end */
 </script>
-<script type="text/javascript" src="menudata.js"></script>
-<script type="text/javascript" src="menu.js"></script>
-<script type="text/javascript">
-/* @license magnet:?xt=urn:btih:d3d9a9a6595521f9666a5e94cc830dab83b65699&amp;dn=expat.txt MIT */
-$(function() {
-  initMenu('',true,false,'search.php','Search');
-  $(document).ready(function() { init_search(); });
-});
-/* @license-end */
-</script>
-<div id="main-nav"></div>
+  <div id="navrow1" class="tabs">
+    <ul class="tablist">
+      <li><a href="index.html"><span>Main&#160;Page</span></a></li>
+      <li><a href="namespaces.html"><span>Namespaces</span></a></li>
+      <li class="current"><a href="annotated.html"><span>Classes</span></a></li>
+      <li><a href="files.html"><span>Files</span></a></li>
+      <li>
+        <div id="MSearchBox" class="MSearchBoxInactive">
+        <span class="left">
+          <span id="MSearchSelect"                onmouseover="return searchBox.OnSearchSelectShow()"                onmouseout="return searchBox.OnSearchSelectHide()">&#160;</span>
+          <input type="text" id="MSearchField" value="" placeholder="Search" accesskey="S"
+               onfocus="searchBox.OnSearchFieldFocus(true)" 
+               onblur="searchBox.OnSearchFieldFocus(false)" 
+               onkeyup="searchBox.OnSearchFieldChange(event)"/>
+          </span><span class="right">
+            <a id="MSearchClose" href="javascript:searchBox.CloseResultsWindow()"><img id="MSearchCloseImg" border="0" src="search/close.svg" alt=""/></a>
+          </span>
+        </div>
+      </li>
+    </ul>
+  </div>
+  <div id="navrow2" class="tabs2">
+    <ul class="tablist">
+      <li><a href="annotated.html"><span>Class&#160;List</span></a></li>
+      <li><a href="classes.html"><span>Class&#160;Index</span></a></li>
+      <li><a href="inherits.html"><span>Class&#160;Hierarchy</span></a></li>
+      <li><a href="functions.html"><span>Class&#160;Members</span></a></li>
+    </ul>
+  </div>
 <!-- window showing the filter options -->
 <div id="MSearchSelectWindow"
      onmouseover="return searchBox.OnSearchSelectShow()"
@@ -103,39 +126,11 @@ $(function() {
 Inheritance diagram for Realm::RemoteChannel:</div>
 <div class="dyncontent">
 <div class="center"><img src="classRealm_1_1RemoteChannel__inherit__graph.png" border="0" usemap="#aRealm_1_1RemoteChannel_inherit__map" alt="Inheritance graph"/></div>
-<map name="aRealm_1_1RemoteChannel_inherit__map" id="aRealm_1_1RemoteChannel_inherit__map">
-<area shape="rect" title=" " alt="" coords="179,77,355,102"/>
-<area shape="rect" href="classRealm_1_1Cuda_1_1GPUIndirectRemoteChannel.html" title=" " alt="" coords="425,5,616,45"/>
-<area shape="poly" title=" " alt="" coords="331,71,440,43,441,48,332,76"/>
-<area shape="rect" href="classRealm_1_1Cuda_1_1GPUreduceRemoteChannel.html" title=" " alt="" coords="403,69,639,109"/>
-<area shape="poly" title=" " alt="" coords="368,87,402,87,402,92,368,92"/>
-<area shape="rect" href="classRealm_1_1Hip_1_1GPUreduceRemoteChannel.html" title=" " alt="" coords="408,133,633,173"/>
-<area shape="poly" title=" " alt="" coords="332,103,441,131,440,136,331,108"/>
-<area shape="rect" href="classRealm_1_1Channel.html" title=" " alt="" coords="5,77,131,102"/>
-<area shape="poly" title=" " alt="" coords="144,87,179,87,179,92,144,92"/>
-</map>
 <center><span class="legend">[<a href="graph_legend.html">legend</a>]</span></center></div>
 <div class="dynheader">
 Collaboration diagram for Realm::RemoteChannel:</div>
 <div class="dyncontent">
 <div class="center"><img src="classRealm_1_1RemoteChannel__coll__graph.png" border="0" usemap="#aRealm_1_1RemoteChannel_coll__map" alt="Collaboration graph"/></div>
-<map name="aRealm_1_1RemoteChannel_coll__map" id="aRealm_1_1RemoteChannel_coll__map">
-<area shape="rect" title=" " alt="" coords="405,168,581,193"/>
-<area shape="rect" href="classRealm_1_1Channel.html" title=" " alt="" coords="601,80,727,105"/>
-<area shape="poly" title=" " alt="" coords="645,117,607,146,576,160,545,170,543,165,574,155,604,142,642,113"/>
-<area shape="rect" href="classRealm_1_1RWLock.html" title=" " alt="" coords="189,80,313,105"/>
-<area shape="poly" title=" " alt="" coords="297,107,353,127,462,165,460,170,351,132,295,112"/>
-<area shape="rect" href="structRealm_1_1RWLock_1_1Writer.html" title=" " alt="" coords="209,168,381,193"/>
-<area shape="poly" title=" " alt="" coords="285,113,297,128,302,149,300,168,295,168,296,149,292,130,281,116"/>
-<area shape="rect" href="structRealm_1_1RWLock_1_1Reader.html" title=" " alt="" coords="5,168,184,193"/>
-<area shape="poly" title=" " alt="" coords="176,101,142,112,113,131,102,149,98,168,93,167,97,147,109,127,140,107,174,96"/>
-<area shape="poly" title=" " alt="" coords="261,161,250,145,245,124,246,105,251,105,250,124,254,143,266,158"/>
-<area shape="poly" title=" " alt="" coords="126,159,228,103,231,108,129,164"/>
-<area shape="rect" href="classRealm_1_1SimpleXferDesFactory.html" title=" " alt="" coords="361,80,577,105"/>
-<area shape="poly" title=" " alt="" coords="479,118,493,167,487,168,474,119"/>
-<area shape="rect" href="classRealm_1_1XferDesFactory.html" title=" " alt="" coords="384,5,555,31"/>
-<area shape="poly" title=" " alt="" coords="472,45,472,80,467,80,467,45"/>
-</map>
 <center><span class="legend">[<a href="graph_legend.html">legend</a>]</span></center></div>
 <table class="memberdecls">
 <tr class="heading"><td colspan="2"><h2 class="groupheader"><a id="pub-methods" name="pub-methods"></a>

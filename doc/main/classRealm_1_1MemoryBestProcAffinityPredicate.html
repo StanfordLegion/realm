@@ -13,6 +13,11 @@
 <link href="search/search.css" rel="stylesheet" type="text/css"/>
 <script type="text/javascript" src="search/searchdata.js"></script>
 <script type="text/javascript" src="search/search.js"></script>
+<script type="text/javascript">
+/* @license magnet:?xt=urn:btih:d3d9a9a6595521f9666a5e94cc830dab83b65699&amp;dn=expat.txt MIT */
+  $(document).ready(function() { init_search(); });
+/* @license-end */
+</script>
 <link href="doxygen.css" rel="stylesheet" type="text/css" />
 <link href="customdoxygen.css" rel="stylesheet" type="text/css"/>
 <!-- BEGIN version select -->
@@ -50,17 +55,35 @@
 var searchBox = new SearchBox("searchBox", "search/",'.html');
 /* @license-end */
 </script>
-<script type="text/javascript" src="menudata.js"></script>
-<script type="text/javascript" src="menu.js"></script>
-<script type="text/javascript">
-/* @license magnet:?xt=urn:btih:d3d9a9a6595521f9666a5e94cc830dab83b65699&amp;dn=expat.txt MIT */
-$(function() {
-  initMenu('',true,false,'search.php','Search');
-  $(document).ready(function() { init_search(); });
-});
-/* @license-end */
-</script>
-<div id="main-nav"></div>
+  <div id="navrow1" class="tabs">
+    <ul class="tablist">
+      <li><a href="index.html"><span>Main&#160;Page</span></a></li>
+      <li><a href="namespaces.html"><span>Namespaces</span></a></li>
+      <li class="current"><a href="annotated.html"><span>Classes</span></a></li>
+      <li><a href="files.html"><span>Files</span></a></li>
+      <li>
+        <div id="MSearchBox" class="MSearchBoxInactive">
+        <span class="left">
+          <span id="MSearchSelect"                onmouseover="return searchBox.OnSearchSelectShow()"                onmouseout="return searchBox.OnSearchSelectHide()">&#160;</span>
+          <input type="text" id="MSearchField" value="" placeholder="Search" accesskey="S"
+               onfocus="searchBox.OnSearchFieldFocus(true)" 
+               onblur="searchBox.OnSearchFieldFocus(false)" 
+               onkeyup="searchBox.OnSearchFieldChange(event)"/>
+          </span><span class="right">
+            <a id="MSearchClose" href="javascript:searchBox.CloseResultsWindow()"><img id="MSearchCloseImg" border="0" src="search/close.svg" alt=""/></a>
+          </span>
+        </div>
+      </li>
+    </ul>
+  </div>
+  <div id="navrow2" class="tabs2">
+    <ul class="tablist">
+      <li><a href="annotated.html"><span>Class&#160;List</span></a></li>
+      <li><a href="classes.html"><span>Class&#160;Index</span></a></li>
+      <li><a href="inherits.html"><span>Class&#160;Hierarchy</span></a></li>
+      <li><a href="functions.html"><span>Class&#160;Members</span></a></li>
+    </ul>
+  </div>
 <!-- window showing the filter options -->
 <div id="MSearchSelectWindow"
      onmouseover="return searchBox.OnSearchSelectShow()"
@@ -101,24 +124,11 @@ $(function() {
 Inheritance diagram for Realm::MemoryBestProcAffinityPredicate:</div>
 <div class="dyncontent">
 <div class="center"><img src="classRealm_1_1MemoryBestProcAffinityPredicate__inherit__graph.png" border="0" usemap="#aRealm_1_1MemoryBestProcAffinityPredicate_inherit__map" alt="Inheritance graph"/></div>
-<map name="aRealm_1_1MemoryBestProcAffinityPredicate_inherit__map" id="aRealm_1_1MemoryBestProcAffinityPredicate_inherit__map">
-<area shape="rect" title=" " alt="" coords="5,79,236,119"/>
-<area shape="rect" href="classRealm_1_1QueryPredicate.html" title=" " alt="" coords="33,5,209,31"/>
-<area shape="poly" title=" " alt="" coords="123,44,123,79,118,79,118,44"/>
-</map>
 <center><span class="legend">[<a href="graph_legend.html">legend</a>]</span></center></div>
 <div class="dynheader">
 Collaboration diagram for Realm::MemoryBestProcAffinityPredicate:</div>
 <div class="dyncontent">
 <div class="center"><img src="classRealm_1_1MemoryBestProcAffinityPredicate__coll__graph.png" border="0" usemap="#aRealm_1_1MemoryBestProcAffinityPredicate_coll__map" alt="Collaboration graph"/></div>
-<map name="aRealm_1_1MemoryBestProcAffinityPredicate_coll__map" id="aRealm_1_1MemoryBestProcAffinityPredicate_coll__map">
-<area shape="rect" title=" " alt="" coords="5,93,236,133"/>
-<area shape="rect" href="classRealm_1_1QueryPredicate.html" title=" " alt="" coords="11,5,187,31"/>
-<area shape="poly" title=" " alt="" coords="108,43,119,93,114,94,102,45"/>
-<area shape="rect" href="classRealm_1_1Processor.html" title=" " alt="" coords="212,5,347,31"/>
-<area shape="poly" title=" " alt="" coords="250,40,154,95,152,91,247,35"/>
-<area shape="poly" title=" " alt="" coords="362,10,373,18,365,26,347,28,347,23,363,21,368,18,359,14"/>
-</map>
 <center><span class="legend">[<a href="graph_legend.html">legend</a>]</span></center></div>
 <table class="memberdecls">
 <tr class="heading"><td colspan="2"><h2 class="groupheader"><a id="pub-methods" name="pub-methods"></a>

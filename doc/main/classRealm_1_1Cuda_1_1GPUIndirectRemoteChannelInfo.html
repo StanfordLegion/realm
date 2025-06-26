@@ -13,6 +13,11 @@
 <link href="search/search.css" rel="stylesheet" type="text/css"/>
 <script type="text/javascript" src="search/searchdata.js"></script>
 <script type="text/javascript" src="search/search.js"></script>
+<script type="text/javascript">
+/* @license magnet:?xt=urn:btih:d3d9a9a6595521f9666a5e94cc830dab83b65699&amp;dn=expat.txt MIT */
+  $(document).ready(function() { init_search(); });
+/* @license-end */
+</script>
 <link href="doxygen.css" rel="stylesheet" type="text/css" />
 <link href="customdoxygen.css" rel="stylesheet" type="text/css"/>
 <!-- BEGIN version select -->
@@ -50,17 +55,35 @@
 var searchBox = new SearchBox("searchBox", "search/",'.html');
 /* @license-end */
 </script>
-<script type="text/javascript" src="menudata.js"></script>
-<script type="text/javascript" src="menu.js"></script>
-<script type="text/javascript">
-/* @license magnet:?xt=urn:btih:d3d9a9a6595521f9666a5e94cc830dab83b65699&amp;dn=expat.txt MIT */
-$(function() {
-  initMenu('',true,false,'search.php','Search');
-  $(document).ready(function() { init_search(); });
-});
-/* @license-end */
-</script>
-<div id="main-nav"></div>
+  <div id="navrow1" class="tabs">
+    <ul class="tablist">
+      <li><a href="index.html"><span>Main&#160;Page</span></a></li>
+      <li><a href="namespaces.html"><span>Namespaces</span></a></li>
+      <li class="current"><a href="annotated.html"><span>Classes</span></a></li>
+      <li><a href="files.html"><span>Files</span></a></li>
+      <li>
+        <div id="MSearchBox" class="MSearchBoxInactive">
+        <span class="left">
+          <span id="MSearchSelect"                onmouseover="return searchBox.OnSearchSelectShow()"                onmouseout="return searchBox.OnSearchSelectHide()">&#160;</span>
+          <input type="text" id="MSearchField" value="" placeholder="Search" accesskey="S"
+               onfocus="searchBox.OnSearchFieldFocus(true)" 
+               onblur="searchBox.OnSearchFieldFocus(false)" 
+               onkeyup="searchBox.OnSearchFieldChange(event)"/>
+          </span><span class="right">
+            <a id="MSearchClose" href="javascript:searchBox.CloseResultsWindow()"><img id="MSearchCloseImg" border="0" src="search/close.svg" alt=""/></a>
+          </span>
+        </div>
+      </li>
+    </ul>
+  </div>
+  <div id="navrow2" class="tabs2">
+    <ul class="tablist">
+      <li><a href="annotated.html"><span>Class&#160;List</span></a></li>
+      <li><a href="classes.html"><span>Class&#160;Index</span></a></li>
+      <li><a href="inherits.html"><span>Class&#160;Hierarchy</span></a></li>
+      <li><a href="functions.html"><span>Class&#160;Members</span></a></li>
+    </ul>
+  </div>
 <!-- window showing the filter options -->
 <div id="MSearchSelectWindow"
      onmouseover="return searchBox.OnSearchSelectShow()"
@@ -102,32 +125,11 @@ $(function() {
 Inheritance diagram for Realm::Cuda::GPUIndirectRemoteChannelInfo:</div>
 <div class="dyncontent">
 <div class="center"><img src="classRealm_1_1Cuda_1_1GPUIndirectRemoteChannelInfo__inherit__graph.png" border="0" usemap="#aRealm_1_1Cuda_1_1GPUIndirectRemoteChannelInfo_inherit__map" alt="Inheritance graph"/></div>
-<map name="aRealm_1_1Cuda_1_1GPUIndirectRemoteChannelInfo_inherit__map" id="aRealm_1_1Cuda_1_1GPUIndirectRemoteChannelInfo_inherit__map">
-<area shape="rect" title=" " alt="" coords="33,152,224,192"/>
-<area shape="rect" href="classRealm_1_1SimpleRemoteChannelInfo.html" title=" " alt="" coords="5,79,252,104"/>
-<area shape="poly" title=" " alt="" coords="131,118,131,152,126,152,126,118"/>
-<area shape="rect" href="classRealm_1_1RemoteChannelInfo.html" title=" " alt="" coords="28,5,229,31"/>
-<area shape="poly" title=" " alt="" coords="131,44,131,79,126,79,126,44"/>
-</map>
 <center><span class="legend">[<a href="graph_legend.html">legend</a>]</span></center></div>
 <div class="dynheader">
 Collaboration diagram for Realm::Cuda::GPUIndirectRemoteChannelInfo:</div>
 <div class="dyncontent">
 <div class="center"><img src="classRealm_1_1Cuda_1_1GPUIndirectRemoteChannelInfo__coll__graph.png" border="0" usemap="#aRealm_1_1Cuda_1_1GPUIndirectRemoteChannelInfo_coll__map" alt="Collaboration graph"/></div>
-<map name="aRealm_1_1Cuda_1_1GPUIndirectRemoteChannelInfo_coll__map" id="aRealm_1_1Cuda_1_1GPUIndirectRemoteChannelInfo_coll__map">
-<area shape="rect" title=" " alt="" coords="1225,107,1416,147"/>
-<area shape="rect" href="classRealm_1_1SimpleRemoteChannelInfo.html" title=" " alt="" coords="929,77,1176,103"/>
-<area shape="poly" title=" " alt="" coords="1158,102,1226,111,1225,117,1158,107"/>
-<area shape="rect" href="classRealm_1_1RemoteChannelInfo.html" title=" " alt="" coords="309,5,511,31"/>
-<area shape="poly" title=" " alt="" coords="525,26,906,67,962,75,961,80,905,73,524,32"/>
-<area shape="rect" href="classRealm_1_1Serialization_1_1PolymorphicSerdezSubclass.html" title=" " alt="" coords="277,55,543,125"/>
-<area shape="poly" title=" " alt="" coords="556,87,929,87,929,93,556,93"/>
-<area shape="rect" href="classRealm_1_1Serialization_1_1PolymorphicSerdezIntfc.html" title=" " alt="" coords="5,126,228,166"/>
-<area shape="poly" title=" " alt="" coords="235,121,276,113,277,118,236,126"/>
-<area shape="rect" href="classRealm_1_1Serialization_1_1PolymorphicSerdezSubclass.html" title=" " alt="" coords="567,123,905,193"/>
-<area shape="poly" title=" " alt="" coords="242,146,566,152,566,157,242,151"/>
-<area shape="poly" title=" " alt="" coords="919,146,1225,130,1225,135,919,151"/>
-</map>
 <center><span class="legend">[<a href="graph_legend.html">legend</a>]</span></center></div>
 <table class="memberdecls">
 <tr class="heading"><td colspan="2"><h2 class="groupheader"><a id="pub-methods" name="pub-methods"></a>

@@ -13,6 +13,11 @@
 <link href="search/search.css" rel="stylesheet" type="text/css"/>
 <script type="text/javascript" src="search/searchdata.js"></script>
 <script type="text/javascript" src="search/search.js"></script>
+<script type="text/javascript">
+/* @license magnet:?xt=urn:btih:d3d9a9a6595521f9666a5e94cc830dab83b65699&amp;dn=expat.txt MIT */
+  $(document).ready(function() { init_search(); });
+/* @license-end */
+</script>
 <link href="doxygen.css" rel="stylesheet" type="text/css" />
 <link href="customdoxygen.css" rel="stylesheet" type="text/css"/>
 <!-- BEGIN version select -->
@@ -50,17 +55,33 @@
 var searchBox = new SearchBox("searchBox", "search/",'.html');
 /* @license-end */
 </script>
-<script type="text/javascript" src="menudata.js"></script>
-<script type="text/javascript" src="menu.js"></script>
-<script type="text/javascript">
-/* @license magnet:?xt=urn:btih:d3d9a9a6595521f9666a5e94cc830dab83b65699&amp;dn=expat.txt MIT */
-$(function() {
-  initMenu('',true,false,'search.php','Search');
-  $(document).ready(function() { init_search(); });
-});
-/* @license-end */
-</script>
-<div id="main-nav"></div>
+  <div id="navrow1" class="tabs">
+    <ul class="tablist">
+      <li><a href="index.html"><span>Main&#160;Page</span></a></li>
+      <li><a href="namespaces.html"><span>Namespaces</span></a></li>
+      <li><a href="annotated.html"><span>Classes</span></a></li>
+      <li class="current"><a href="files.html"><span>Files</span></a></li>
+      <li>
+        <div id="MSearchBox" class="MSearchBoxInactive">
+        <span class="left">
+          <span id="MSearchSelect"                onmouseover="return searchBox.OnSearchSelectShow()"                onmouseout="return searchBox.OnSearchSelectHide()">&#160;</span>
+          <input type="text" id="MSearchField" value="" placeholder="Search" accesskey="S"
+               onfocus="searchBox.OnSearchFieldFocus(true)" 
+               onblur="searchBox.OnSearchFieldFocus(false)" 
+               onkeyup="searchBox.OnSearchFieldChange(event)"/>
+          </span><span class="right">
+            <a id="MSearchClose" href="javascript:searchBox.CloseResultsWindow()"><img id="MSearchCloseImg" border="0" src="search/close.svg" alt=""/></a>
+          </span>
+        </div>
+      </li>
+    </ul>
+  </div>
+  <div id="navrow2" class="tabs2">
+    <ul class="tablist">
+      <li><a href="files.html"><span>File&#160;List</span></a></li>
+      <li><a href="globals.html"><span>File&#160;Members</span></a></li>
+    </ul>
+  </div>
 <!-- window showing the filter options -->
 <div id="MSearchSelectWindow"
      onmouseover="return searchBox.OnSearchSelectShow()"
@@ -99,32 +120,6 @@ $(function() {
 Include dependency graph for openmp_module.h:</div>
 <div class="dyncontent">
 <div class="center"><img src="openmp__module_8h__incl.png" border="0" usemap="#a_2home_2runner_2work_2realm_2realm_2realm-src_2realm_2openmp_2openmp__module_8h" alt=""/></div>
-<map name="a_2home_2runner_2work_2realm_2realm_2realm-src_2realm_2openmp_2openmp__module_8h" id="a_2home_2runner_2work_2realm_2realm_2realm-src_2realm_2openmp_2openmp__module_8h">
-<area shape="rect" title=" " alt="" coords="328,5,532,60"/>
-<area shape="rect" href="module_8h.html" title=" " alt="" coords="367,108,493,133"/>
-<area shape="poly" title=" " alt="" coords="433,60,433,94,427,94,427,60"/>
-<area shape="rect" href="realm__config_8h.html" title=" " alt="" coords="79,255,239,280"/>
-<area shape="poly" title=" " alt="" coords="407,136,310,184,192,250,189,245,307,179,404,131"/>
-<area shape="rect" href="module__config_8h.html" title=" " alt="" coords="345,181,515,207"/>
-<area shape="poly" title=" " alt="" coords="433,134,433,168,427,168,427,134"/>
-<area shape="rect" title=" " alt="" coords="263,255,322,280"/>
-<area shape="poly" title=" " alt="" coords="404,136,368,155,335,183,315,212,302,242,298,240,311,210,331,180,365,151,401,131"/>
-<area shape="rect" title=" " alt="" coords="697,255,760,280"/>
-<area shape="poly" title=" " alt="" coords="450,131,507,166,579,204,685,248,683,253,577,209,504,170,447,136"/>
-<area shape="rect" title=" " alt="" coords="590,181,641,207"/>
-<area shape="poly" title=" " alt="" coords="461,131,578,176,576,181,459,136"/>
-<area shape="rect" href="realm__defines_8h.html" title=" " alt="" coords="5,328,132,353"/>
-<area shape="poly" title=" " alt="" coords="146,282,96,321,93,317,143,278"/>
-<area shape="rect" href="compiler__support_8h.html" title=" " alt="" coords="157,328,346,353"/>
-<area shape="poly" title=" " alt="" coords="176,278,227,317,224,322,172,282"/>
-<area shape="poly" title=" " alt="" coords="387,209,217,254,216,249,386,204"/>
-<area shape="poly" title=" " alt="" coords="409,209,328,251,326,246,407,204"/>
-<area shape="rect" title=" " alt="" coords="549,255,673,280"/>
-<area shape="poly" title=" " alt="" coords="460,204,570,247,568,252,458,209"/>
-<area shape="poly" title=" " alt="" coords="482,204,685,252,683,257,481,209"/>
-<area shape="rect" title=" " alt="" coords="346,255,525,280"/>
-<area shape="poly" title=" " alt="" coords="434,207,436,241,431,241,428,207"/>
-</map>
 </div>
 </div>
 <p><a href="openmp__module_8h_source.html">Go to the source code of this file.</a></p>

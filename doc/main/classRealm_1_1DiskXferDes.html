@@ -13,6 +13,11 @@
 <link href="search/search.css" rel="stylesheet" type="text/css"/>
 <script type="text/javascript" src="search/searchdata.js"></script>
 <script type="text/javascript" src="search/search.js"></script>
+<script type="text/javascript">
+/* @license magnet:?xt=urn:btih:d3d9a9a6595521f9666a5e94cc830dab83b65699&amp;dn=expat.txt MIT */
+  $(document).ready(function() { init_search(); });
+/* @license-end */
+</script>
 <link href="doxygen.css" rel="stylesheet" type="text/css" />
 <link href="customdoxygen.css" rel="stylesheet" type="text/css"/>
 <!-- BEGIN version select -->
@@ -50,17 +55,35 @@
 var searchBox = new SearchBox("searchBox", "search/",'.html');
 /* @license-end */
 </script>
-<script type="text/javascript" src="menudata.js"></script>
-<script type="text/javascript" src="menu.js"></script>
-<script type="text/javascript">
-/* @license magnet:?xt=urn:btih:d3d9a9a6595521f9666a5e94cc830dab83b65699&amp;dn=expat.txt MIT */
-$(function() {
-  initMenu('',true,false,'search.php','Search');
-  $(document).ready(function() { init_search(); });
-});
-/* @license-end */
-</script>
-<div id="main-nav"></div>
+  <div id="navrow1" class="tabs">
+    <ul class="tablist">
+      <li><a href="index.html"><span>Main&#160;Page</span></a></li>
+      <li><a href="namespaces.html"><span>Namespaces</span></a></li>
+      <li class="current"><a href="annotated.html"><span>Classes</span></a></li>
+      <li><a href="files.html"><span>Files</span></a></li>
+      <li>
+        <div id="MSearchBox" class="MSearchBoxInactive">
+        <span class="left">
+          <span id="MSearchSelect"                onmouseover="return searchBox.OnSearchSelectShow()"                onmouseout="return searchBox.OnSearchSelectHide()">&#160;</span>
+          <input type="text" id="MSearchField" value="" placeholder="Search" accesskey="S"
+               onfocus="searchBox.OnSearchFieldFocus(true)" 
+               onblur="searchBox.OnSearchFieldFocus(false)" 
+               onkeyup="searchBox.OnSearchFieldChange(event)"/>
+          </span><span class="right">
+            <a id="MSearchClose" href="javascript:searchBox.CloseResultsWindow()"><img id="MSearchCloseImg" border="0" src="search/close.svg" alt=""/></a>
+          </span>
+        </div>
+      </li>
+    </ul>
+  </div>
+  <div id="navrow2" class="tabs2">
+    <ul class="tablist">
+      <li><a href="annotated.html"><span>Class&#160;List</span></a></li>
+      <li><a href="classes.html"><span>Class&#160;Index</span></a></li>
+      <li><a href="inherits.html"><span>Class&#160;Hierarchy</span></a></li>
+      <li><a href="functions.html"><span>Class&#160;Members</span></a></li>
+    </ul>
+  </div>
 <!-- window showing the filter options -->
 <div id="MSearchSelectWindow"
      onmouseover="return searchBox.OnSearchSelectShow()"
@@ -100,60 +123,11 @@ $(function() {
 Inheritance diagram for Realm::DiskXferDes:</div>
 <div class="dyncontent">
 <div class="center"><img src="classRealm_1_1DiskXferDes__inherit__graph.png" border="0" usemap="#aRealm_1_1DiskXferDes_inherit__map" alt="Inheritance graph"/></div>
-<map name="aRealm_1_1DiskXferDes_inherit__map" id="aRealm_1_1DiskXferDes_inherit__map">
-<area shape="rect" title=" " alt="" coords="5,79,159,104"/>
-<area shape="rect" href="classRealm_1_1XferDes.html" title=" " alt="" coords="20,5,144,31"/>
-<area shape="poly" title=" " alt="" coords="85,44,85,79,79,79,79,44"/>
-</map>
 <center><span class="legend">[<a href="graph_legend.html">legend</a>]</span></center></div>
 <div class="dynheader">
 Collaboration diagram for Realm::DiskXferDes:</div>
 <div class="dyncontent">
 <div class="center"><img src="classRealm_1_1DiskXferDes__coll__graph.png" border="0" usemap="#aRealm_1_1DiskXferDes_coll__map" alt="Collaboration graph"/></div>
-<map name="aRealm_1_1DiskXferDes_coll__map" id="aRealm_1_1DiskXferDes_coll__map">
-<area shape="rect" title=" " alt="" coords="1789,391,1943,417"/>
-<area shape="rect" href="classRealm_1_1XferDes.html" title=" " alt="" coords="1455,243,1579,269"/>
-<area shape="poly" title=" " alt="" coords="1541,277,1575,308,1617,336,1660,355,1705,370,1790,391,1789,396,1703,376,1658,360,1615,341,1572,312,1538,281"/>
-<area shape="rect" href="structRealm_1_1IntrusivePriorityListLink.html" title=" " alt="" coords="1764,265,1968,305"/>
-<area shape="poly" title=" " alt="" coords="1543,276,1576,302,1617,321,1669,330,1723,327,1773,316,1816,303,1818,308,1774,322,1723,332,1669,335,1615,327,1574,306,1540,281"/>
-<area shape="rect" href="classRealm_1_1XferDes_1_1DeferredXDEnqueue.html" title=" " alt="" coords="1771,164,1961,204"/>
-<area shape="poly" title=" " alt="" coords="1541,232,1575,209,1615,189,1654,180,1694,174,1771,173,1771,178,1695,180,1655,185,1617,195,1577,213,1544,237"/>
-<area shape="rect" href="classRealm_1_1XferDesQueue.html" title=" " alt="" coords="1063,126,1229,151"/>
-<area shape="poly" title=" " alt="" coords="1243,151,1343,169,1418,190,1465,215,1501,241,1498,245,1462,219,1416,194,1342,175,1243,156"/>
-<area shape="poly" title=" " alt="" coords="1243,133,1471,133,1606,140,1740,153,1785,161,1784,167,1740,159,1605,145,1470,138,1243,138"/>
-<area shape="rect" href="classRealm_1_1UnfairMutex.html" title=" " alt="" coords="682,85,835,110"/>
-<area shape="poly" title=" " alt="" coords="835,80,954,65,1027,61,1105,61,1185,67,1266,81,1345,104,1419,138,1450,161,1477,190,1511,242,1506,245,1473,194,1447,165,1416,142,1343,109,1265,86,1185,72,1105,66,1027,66,955,70,836,85"/>
-<area shape="poly" title=" " alt="" coords="830,110,890,120,979,129,1062,134,1062,139,978,134,889,125,830,115"/>
-<area shape="rect" href="classRealm_1_1noncopyable.html" title=" " alt="" coords="379,35,533,61"/>
-<area shape="poly" title=" " alt="" coords="548,60,682,82,681,88,547,65"/>
-<area shape="rect" href="classRealm_1_1atomic.html" title=" " alt="" coords="356,85,556,110"/>
-<area shape="poly" title=" " alt="" coords="570,95,682,95,682,100,570,100"/>
-<area shape="rect" href="classRealm_1_1DoorbellList.html" title=" " alt="" coords="381,134,531,159"/>
-<area shape="poly" title=" " alt="" coords="544,130,682,107,682,112,545,135"/>
-<area shape="rect" href="classRealm_1_1atomic.html" title=" " alt="" coords="5,134,208,159"/>
-<area shape="poly" title=" " alt="" coords="222,144,381,144,381,149,222,149"/>
-<area shape="rect" href="classRealm_1_1atomic.html" title=" " alt="" coords="652,157,865,182"/>
-<area shape="poly" title=" " alt="" coords="879,172,948,171,1018,165,1100,149,1101,154,1019,171,948,176,879,177"/>
-<area shape="rect" href="classRealm_1_1atomic.html" title=" " alt="" coords="1059,397,1233,422"/>
-<area shape="poly" title=" " alt="" coords="1247,419,1289,418,1332,414,1376,404,1416,387,1449,361,1476,328,1496,294,1508,268,1513,270,1500,297,1480,331,1453,365,1419,392,1377,409,1333,419,1289,424,1247,424"/>
-<area shape="rect" href="classRealm_1_1atomic.html" title=" " alt="" coords="1050,446,1242,471"/>
-<area shape="poly" title=" " alt="" coords="1227,470,1273,473,1322,470,1371,460,1416,439,1428,428,1441,409,1468,360,1508,268,1513,270,1473,363,1446,412,1432,431,1419,444,1373,465,1323,476,1273,478,1227,476"/>
-<area shape="rect" href="structRealm_1_1XferDes_1_1ControlPortState.html" title=" " alt="" coords="1043,189,1249,229"/>
-<area shape="poly" title=" " alt="" coords="1263,221,1455,246,1454,251,1262,227"/>
-<area shape="rect" href="classRealm_1_1ControlPort_1_1Decoder.html" title=" " alt="" coords="686,207,831,247"/>
-<area shape="poly" title=" " alt="" coords="845,220,1043,211,1043,217,845,225"/>
-<area shape="rect" href="classRealm_1_1Channel.html" title=" " alt="" coords="1083,254,1209,279"/>
-<area shape="poly" title=" " alt="" coords="1223,262,1454,255,1454,260,1223,267"/>
-<area shape="rect" href="classRealm_1_1atomic.html" title=" " alt="" coords="1043,337,1249,362"/>
-<area shape="poly" title=" " alt="" coords="1263,351,1340,345,1379,337,1416,326,1442,313,1465,298,1501,267,1505,271,1468,302,1444,318,1418,330,1380,342,1341,350,1263,357"/>
-<area shape="poly" title=" " alt="" coords="1750,278,1579,264,1579,258,1750,273"/>
-<area shape="poly" title=" " alt="" coords="1759,209,1579,246,1578,241,1758,204"/>
-<area shape="rect" href="classRealm_1_1EventWaiter.html" title=" " alt="" coords="1441,426,1592,451"/>
-<area shape="poly" title=" " alt="" coords="1529,412,1563,362,1587,335,1615,312,1648,297,1677,292,1706,288,1739,275,1751,264,1762,251,1831,202,1834,206,1766,255,1754,268,1741,280,1707,294,1678,298,1649,302,1617,317,1591,339,1568,365,1534,415"/>
-<area shape="rect" href="structRealm_1_1IntrusiveListLink.html" title=" " alt="" coords="1775,452,1957,492"/>
-<area shape="poly" title=" " alt="" coords="1555,455,1585,467,1616,476,1697,484,1775,481,1775,486,1697,489,1616,481,1583,472,1553,460"/>
-<area shape="poly" title=" " alt="" coords="1761,465,1592,448,1593,443,1762,459"/>
-</map>
 <center><span class="legend">[<a href="graph_legend.html">legend</a>]</span></center></div>
 <table class="memberdecls">
 <tr class="heading"><td colspan="2"><h2 class="groupheader"><a id="pub-methods" name="pub-methods"></a>

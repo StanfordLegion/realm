@@ -13,6 +13,11 @@
 <link href="search/search.css" rel="stylesheet" type="text/css"/>
 <script type="text/javascript" src="search/searchdata.js"></script>
 <script type="text/javascript" src="search/search.js"></script>
+<script type="text/javascript">
+/* @license magnet:?xt=urn:btih:d3d9a9a6595521f9666a5e94cc830dab83b65699&amp;dn=expat.txt MIT */
+  $(document).ready(function() { init_search(); });
+/* @license-end */
+</script>
 <link href="doxygen.css" rel="stylesheet" type="text/css" />
 <link href="customdoxygen.css" rel="stylesheet" type="text/css"/>
 <!-- BEGIN version select -->
@@ -50,17 +55,35 @@
 var searchBox = new SearchBox("searchBox", "search/",'.html');
 /* @license-end */
 </script>
-<script type="text/javascript" src="menudata.js"></script>
-<script type="text/javascript" src="menu.js"></script>
-<script type="text/javascript">
-/* @license magnet:?xt=urn:btih:d3d9a9a6595521f9666a5e94cc830dab83b65699&amp;dn=expat.txt MIT */
-$(function() {
-  initMenu('',true,false,'search.php','Search');
-  $(document).ready(function() { init_search(); });
-});
-/* @license-end */
-</script>
-<div id="main-nav"></div>
+  <div id="navrow1" class="tabs">
+    <ul class="tablist">
+      <li><a href="index.html"><span>Main&#160;Page</span></a></li>
+      <li><a href="namespaces.html"><span>Namespaces</span></a></li>
+      <li class="current"><a href="annotated.html"><span>Classes</span></a></li>
+      <li><a href="files.html"><span>Files</span></a></li>
+      <li>
+        <div id="MSearchBox" class="MSearchBoxInactive">
+        <span class="left">
+          <span id="MSearchSelect"                onmouseover="return searchBox.OnSearchSelectShow()"                onmouseout="return searchBox.OnSearchSelectHide()">&#160;</span>
+          <input type="text" id="MSearchField" value="" placeholder="Search" accesskey="S"
+               onfocus="searchBox.OnSearchFieldFocus(true)" 
+               onblur="searchBox.OnSearchFieldFocus(false)" 
+               onkeyup="searchBox.OnSearchFieldChange(event)"/>
+          </span><span class="right">
+            <a id="MSearchClose" href="javascript:searchBox.CloseResultsWindow()"><img id="MSearchCloseImg" border="0" src="search/close.svg" alt=""/></a>
+          </span>
+        </div>
+      </li>
+    </ul>
+  </div>
+  <div id="navrow2" class="tabs2">
+    <ul class="tablist">
+      <li><a href="annotated.html"><span>Class&#160;List</span></a></li>
+      <li><a href="classes.html"><span>Class&#160;Index</span></a></li>
+      <li><a href="inherits.html"><span>Class&#160;Hierarchy</span></a></li>
+      <li><a href="functions.html"><span>Class&#160;Members</span></a></li>
+    </ul>
+  </div>
 <!-- window showing the filter options -->
 <div id="MSearchSelectWindow"
      onmouseover="return searchBox.OnSearchSelectShow()"
@@ -105,48 +128,6 @@ $(function() {
 Collaboration diagram for Realm::OutbufMetadata:</div>
 <div class="dyncontent">
 <div class="center"><img src="classRealm_1_1OutbufMetadata__coll__graph.png" border="0" usemap="#aRealm_1_1OutbufMetadata_coll__map" alt="Collaboration graph"/></div>
-<map name="aRealm_1_1OutbufMetadata_coll__map" id="aRealm_1_1OutbufMetadata_coll__map">
-<area shape="rect" title=" " alt="" coords="782,63,961,88"/>
-<area shape="poly" title=" " alt="" coords="829,49,841,40,871,36,896,38,910,44,914,54,907,64,903,61,909,54,907,48,894,43,871,41,843,45,833,53"/>
-<area shape="rect" href="classRealm_1_1OutbufManager.html" title=" " alt="" coords="1235,176,1409,201"/>
-<area shape="poly" title=" " alt="" coords="903,94,954,124,1015,151,1056,160,1112,168,1236,180,1235,185,1111,174,1055,166,1014,157,952,129,900,98"/>
-<area shape="poly" title=" " alt="" coords="1299,167,1248,119,1214,95,1178,78,1117,63,1055,58,995,60,942,65,941,60,994,54,1055,53,1118,58,1180,73,1217,91,1251,115,1303,164"/>
-<area shape="rect" href="classRealm_1_1BackgroundWorkItem.html" title=" " alt="" coords="765,249,977,275"/>
-<area shape="poly" title=" " alt="" coords="963,244,1243,199,1243,204,964,250"/>
-<area shape="rect" href="classRealm_1_1BackgroundWorkManager.html" title=" " alt="" coords="1203,447,1441,472"/>
-<area shape="poly" title=" " alt="" coords="920,277,1015,306,1061,313,1099,315,1136,319,1180,334,1222,359,1260,390,1312,445,1308,448,1256,394,1219,364,1178,339,1134,324,1098,320,1061,319,1014,311,919,282"/>
-<area shape="poly" title=" " alt="" coords="1306,436,1285,402,1257,362,1220,324,1177,294,1143,282,1093,275,977,266,978,261,1094,269,1144,277,1180,289,1224,320,1261,359,1290,399,1310,433"/>
-<area shape="rect" href="structRealm_1_1BackgroundWorkManager_1_1Config.html" title=" " alt="" coords="752,457,991,497"/>
-<area shape="poly" title=" " alt="" coords="1004,477,1179,473,1220,469,1221,475,1179,478,1004,482"/>
-<area shape="rect" href="classRealm_1_1UnfairMutex.html" title=" " alt="" coords="795,344,948,369"/>
-<area shape="poly" title=" " alt="" coords="946,369,999,374,1059,375,1120,368,1178,349,1202,335,1225,317,1264,275,1294,233,1312,200,1317,203,1298,236,1268,278,1229,321,1205,339,1180,354,1121,373,1059,380,999,380,946,374"/>
-<area shape="poly" title=" " alt="" coords="936,370,991,386,1015,394,1097,411,1179,425,1267,444,1266,449,1178,430,1096,416,1014,399,990,391,935,376"/>
-<area shape="rect" href="classRealm_1_1noncopyable.html" title=" " alt="" coords="379,317,533,343"/>
-<area shape="poly" title=" " alt="" coords="547,333,795,349,794,354,547,338"/>
-<area shape="rect" href="classRealm_1_1atomic.html" title=" " alt="" coords="356,381,556,407"/>
-<area shape="poly" title=" " alt="" coords="570,400,1203,448,1202,453,570,405"/>
-<area shape="poly" title=" " alt="" coords="569,381,794,361,795,366,570,386"/>
-<area shape="rect" href="classRealm_1_1DoorbellList.html" title=" " alt="" coords="381,469,531,495"/>
-<area shape="poly" title=" " alt="" coords="542,494,642,509,752,521,871,527,990,521,1067,511,1144,497,1270,470,1271,475,1145,503,1068,516,991,526,871,533,752,526,642,515,541,500"/>
-<area shape="poly" title=" " alt="" coords="522,463,619,435,727,398,751,386,813,367,815,372,753,391,729,403,621,441,523,468"/>
-<area shape="rect" href="classRealm_1_1atomic.html" title=" " alt="" coords="5,469,208,495"/>
-<area shape="poly" title=" " alt="" coords="222,479,381,479,381,485,222,485"/>
-<area shape="rect" href="classRealm_1_1atomic.html" title=" " alt="" coords="768,584,975,609"/>
-<area shape="poly" title=" " alt="" coords="988,599,1083,591,1131,581,1178,566,1218,546,1254,519,1307,470,1311,474,1258,523,1221,550,1180,571,1133,586,1083,596,989,604"/>
-<area shape="rect" href="classRealm_1_1atomic.html" title=" " alt="" coords="771,683,971,708"/>
-<area shape="poly" title=" " alt="" coords="964,707,1015,709,1071,705,1126,694,1177,672,1206,651,1231,626,1271,569,1299,513,1314,472,1319,473,1304,515,1276,571,1235,630,1209,655,1180,676,1128,699,1071,710,1015,714,964,712"/>
-<area shape="rect" href="classRealm_1_1atomic.html" title=" " alt="" coords="374,160,538,185"/>
-<area shape="poly" title=" " alt="" coords="551,157,637,142,727,122,837,86,839,91,729,127,638,147,552,162"/>
-<area shape="poly" title=" " alt="" coords="552,170,707,172,891,183,980,192,1062,205,1130,221,1180,242,1209,264,1234,290,1275,348,1303,404,1319,445,1314,447,1298,406,1271,351,1230,293,1205,268,1177,247,1128,226,1061,210,980,197,890,188,707,178,552,175"/>
-<area shape="rect" href="classRealm_1_1DelegatingMutex.html" title=" " alt="" coords="779,633,963,659"/>
-<area shape="poly" title=" " alt="" coords="977,653,1026,652,1077,647,1129,636,1177,617,1202,602,1224,584,1263,543,1293,502,1312,471,1316,474,1297,505,1267,547,1228,588,1205,607,1180,622,1131,641,1078,652,1026,658,977,658"/>
-<area shape="rect" href="classRealm_1_1atomic.html" title=" " alt="" coords="356,633,556,659"/>
-<area shape="poly" title=" " alt="" coords="570,643,779,643,779,649,570,649"/>
-<area shape="rect" href="classRealm_1_1atomic.html" title=" " alt="" coords="369,55,543,95"/>
-<area shape="poly" title=" " alt="" coords="557,73,782,73,782,78,557,78"/>
-<area shape="rect" href="classRealm_1_1atomic.html" title=" " alt="" coords="357,5,555,31"/>
-<area shape="poly" title=" " alt="" coords="564,30,728,53,782,60,781,66,728,58,563,35"/>
-</map>
 <center><span class="legend">[<a href="graph_legend.html">legend</a>]</span></center></div>
 <table class="memberdecls">
 <tr class="heading"><td colspan="2"><h2 class="groupheader"><a id="pub-types" name="pub-types"></a>

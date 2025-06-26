@@ -13,6 +13,11 @@
 <link href="search/search.css" rel="stylesheet" type="text/css"/>
 <script type="text/javascript" src="search/searchdata.js"></script>
 <script type="text/javascript" src="search/search.js"></script>
+<script type="text/javascript">
+/* @license magnet:?xt=urn:btih:d3d9a9a6595521f9666a5e94cc830dab83b65699&amp;dn=expat.txt MIT */
+  $(document).ready(function() { init_search(); });
+/* @license-end */
+</script>
 <link href="doxygen.css" rel="stylesheet" type="text/css" />
 <link href="customdoxygen.css" rel="stylesheet" type="text/css"/>
 <!-- BEGIN version select -->
@@ -50,17 +55,35 @@
 var searchBox = new SearchBox("searchBox", "search/",'.html');
 /* @license-end */
 </script>
-<script type="text/javascript" src="menudata.js"></script>
-<script type="text/javascript" src="menu.js"></script>
-<script type="text/javascript">
-/* @license magnet:?xt=urn:btih:d3d9a9a6595521f9666a5e94cc830dab83b65699&amp;dn=expat.txt MIT */
-$(function() {
-  initMenu('',true,false,'search.php','Search');
-  $(document).ready(function() { init_search(); });
-});
-/* @license-end */
-</script>
-<div id="main-nav"></div>
+  <div id="navrow1" class="tabs">
+    <ul class="tablist">
+      <li><a href="index.html"><span>Main&#160;Page</span></a></li>
+      <li><a href="namespaces.html"><span>Namespaces</span></a></li>
+      <li class="current"><a href="annotated.html"><span>Classes</span></a></li>
+      <li><a href="files.html"><span>Files</span></a></li>
+      <li>
+        <div id="MSearchBox" class="MSearchBoxInactive">
+        <span class="left">
+          <span id="MSearchSelect"                onmouseover="return searchBox.OnSearchSelectShow()"                onmouseout="return searchBox.OnSearchSelectHide()">&#160;</span>
+          <input type="text" id="MSearchField" value="" placeholder="Search" accesskey="S"
+               onfocus="searchBox.OnSearchFieldFocus(true)" 
+               onblur="searchBox.OnSearchFieldFocus(false)" 
+               onkeyup="searchBox.OnSearchFieldChange(event)"/>
+          </span><span class="right">
+            <a id="MSearchClose" href="javascript:searchBox.CloseResultsWindow()"><img id="MSearchCloseImg" border="0" src="search/close.svg" alt=""/></a>
+          </span>
+        </div>
+      </li>
+    </ul>
+  </div>
+  <div id="navrow2" class="tabs2">
+    <ul class="tablist">
+      <li><a href="annotated.html"><span>Class&#160;List</span></a></li>
+      <li><a href="classes.html"><span>Class&#160;Index</span></a></li>
+      <li><a href="inherits.html"><span>Class&#160;Hierarchy</span></a></li>
+      <li><a href="functions.html"><span>Class&#160;Members</span></a></li>
+    </ul>
+  </div>
 <!-- window showing the filter options -->
 <div id="MSearchSelectWindow"
      onmouseover="return searchBox.OnSearchSelectShow()"
@@ -100,20 +123,6 @@ $(function() {
 Collaboration diagram for Realm::ReservationImpl::LocalSharedInfo:</div>
 <div class="dyncontent">
 <div class="center"><img src="structRealm_1_1ReservationImpl_1_1LocalSharedInfo__coll__graph.png" border="0" usemap="#aRealm_1_1ReservationImpl_1_1LocalSharedInfo_coll__map" alt="Collaboration graph"/></div>
-<map name="aRealm_1_1ReservationImpl_1_1LocalSharedInfo_coll__map" id="aRealm_1_1ReservationImpl_1_1LocalSharedInfo_coll__map">
-<area shape="rect" title=" " alt="" coords="879,29,1057,69"/>
-<area shape="rect" href="classRealm_1_1IntrusiveList.html" title=" " alt="" coords="564,14,777,83"/>
-<area shape="poly" title=" " alt="" coords="791,46,878,46,878,51,791,51"/>
-<area shape="rect" href="classRealm_1_1DummyLock.html" title=" " alt="" coords="299,5,453,31"/>
-<area shape="poly" title=" " alt="" coords="467,25,564,35,564,40,467,30"/>
-<area shape="rect" href="structRealm_1_1IntrusiveListLink.html" title=" " alt="" coords="287,58,465,98"/>
-<area shape="poly" title=" " alt="" coords="479,78,540,74,563,71,564,76,540,79,480,83"/>
-<area shape="rect" href="classRealm_1_1EventWaiter.html" title=" " alt="" coords="5,111,156,136"/>
-<area shape="poly" title=" " alt="" coords="169,107,286,89,287,94,170,112"/>
-<area shape="rect" href="structRealm_1_1IntrusiveListLink.html" title=" " alt="" coords="285,135,467,175"/>
-<area shape="poly" title=" " alt="" coords="170,130,285,143,285,148,170,136"/>
-<area shape="poly" title=" " alt="" coords="272,175,226,175,179,170,137,156,102,138,104,134,139,151,181,165,226,170,272,169"/>
-</map>
 <center><span class="legend">[<a href="graph_legend.html">legend</a>]</span></center></div>
 <table class="memberdecls">
 <tr class="heading"><td colspan="2"><h2 class="groupheader"><a id="pub-attribs" name="pub-attribs"></a>

@@ -13,6 +13,11 @@
 <link href="search/search.css" rel="stylesheet" type="text/css"/>
 <script type="text/javascript" src="search/searchdata.js"></script>
 <script type="text/javascript" src="search/search.js"></script>
+<script type="text/javascript">
+/* @license magnet:?xt=urn:btih:d3d9a9a6595521f9666a5e94cc830dab83b65699&amp;dn=expat.txt MIT */
+  $(document).ready(function() { init_search(); });
+/* @license-end */
+</script>
 <link href="doxygen.css" rel="stylesheet" type="text/css" />
 <link href="customdoxygen.css" rel="stylesheet" type="text/css"/>
 <!-- BEGIN version select -->
@@ -50,17 +55,35 @@
 var searchBox = new SearchBox("searchBox", "search/",'.html');
 /* @license-end */
 </script>
-<script type="text/javascript" src="menudata.js"></script>
-<script type="text/javascript" src="menu.js"></script>
-<script type="text/javascript">
-/* @license magnet:?xt=urn:btih:d3d9a9a6595521f9666a5e94cc830dab83b65699&amp;dn=expat.txt MIT */
-$(function() {
-  initMenu('',true,false,'search.php','Search');
-  $(document).ready(function() { init_search(); });
-});
-/* @license-end */
-</script>
-<div id="main-nav"></div>
+  <div id="navrow1" class="tabs">
+    <ul class="tablist">
+      <li><a href="index.html"><span>Main&#160;Page</span></a></li>
+      <li><a href="namespaces.html"><span>Namespaces</span></a></li>
+      <li class="current"><a href="annotated.html"><span>Classes</span></a></li>
+      <li><a href="files.html"><span>Files</span></a></li>
+      <li>
+        <div id="MSearchBox" class="MSearchBoxInactive">
+        <span class="left">
+          <span id="MSearchSelect"                onmouseover="return searchBox.OnSearchSelectShow()"                onmouseout="return searchBox.OnSearchSelectHide()">&#160;</span>
+          <input type="text" id="MSearchField" value="" placeholder="Search" accesskey="S"
+               onfocus="searchBox.OnSearchFieldFocus(true)" 
+               onblur="searchBox.OnSearchFieldFocus(false)" 
+               onkeyup="searchBox.OnSearchFieldChange(event)"/>
+          </span><span class="right">
+            <a id="MSearchClose" href="javascript:searchBox.CloseResultsWindow()"><img id="MSearchCloseImg" border="0" src="search/close.svg" alt=""/></a>
+          </span>
+        </div>
+      </li>
+    </ul>
+  </div>
+  <div id="navrow2" class="tabs2">
+    <ul class="tablist">
+      <li><a href="annotated.html"><span>Class&#160;List</span></a></li>
+      <li><a href="classes.html"><span>Class&#160;Index</span></a></li>
+      <li><a href="inherits.html"><span>Class&#160;Hierarchy</span></a></li>
+      <li><a href="functions.html"><span>Class&#160;Members</span></a></li>
+    </ul>
+  </div>
 <!-- window showing the filter options -->
 <div id="MSearchSelectWindow"
      onmouseover="return searchBox.OnSearchSelectShow()"
@@ -101,85 +124,11 @@ $(function() {
 Inheritance diagram for Realm::LocalChannel:</div>
 <div class="dyncontent">
 <div class="center"><img src="classRealm_1_1LocalChannel__inherit__graph.png" border="0" usemap="#aRealm_1_1LocalChannel_inherit__map" alt="Inheritance graph"/></div>
-<map name="aRealm_1_1LocalChannel_inherit__map" id="aRealm_1_1LocalChannel_inherit__map">
-<area shape="rect" title=" " alt="" coords="179,489,337,515"/>
-<area shape="rect" href="classRealm_1_1SingleXDQChannel.html" title=" " alt="" coords="421,5,627,60"/>
-<area shape="poly" title=" " alt="" coords="257,475,263,400,281,296,297,240,319,184,347,131,383,84,419,58,422,62,387,88,352,134,324,186,302,242,286,297,268,401,262,476"/>
-<area shape="rect" href="classRealm_1_1SingleXDQChannel.html" title=" " alt="" coords="413,98,635,138"/>
-<area shape="poly" title=" " alt="" coords="258,475,265,409,285,320,301,273,322,227,350,185,384,148,412,130,415,135,387,152,354,188,327,230,306,275,290,322,271,410,263,476"/>
-<area shape="rect" href="classRealm_1_1SingleXDQChannel.html" title=" " alt="" coords="427,163,621,217"/>
-<area shape="poly" title=" " alt="" coords="261,475,274,423,297,356,333,287,356,256,384,228,403,214,425,204,428,209,406,219,387,232,360,259,337,290,302,358,279,424,267,476"/>
-<area shape="rect" href="classRealm_1_1SingleXDQChannel.html" title=" " alt="" coords="397,242,651,282"/>
-<area shape="poly" title=" " alt="" coords="265,475,281,434,306,385,340,334,361,312,384,292,404,280,407,284,387,296,364,315,344,338,310,387,286,437,270,477"/>
-<area shape="rect" href="classRealm_1_1SingleXDQChannel.html" title=" " alt="" coords="403,307,645,361"/>
-<area shape="poly" title=" " alt="" coords="274,477,320,424,350,396,384,372,409,359,412,364,387,376,354,400,324,427,279,480"/>
-<area shape="rect" href="classRealm_1_1SingleXDQChannel.html" title=" " alt="" coords="413,386,635,426"/>
-<area shape="poly" title=" " alt="" coords="291,480,335,457,384,436,423,424,424,429,386,440,337,462,293,485"/>
-<area shape="rect" href="classRealm_1_1SingleXDQChannel.html" title=" " alt="" coords="419,450,629,490"/>
-<area shape="poly" title=" " alt="" coords="351,488,418,480,419,485,351,494"/>
-<area shape="rect" href="classRealm_1_1SingleXDQChannel.html" title=" " alt="" coords="391,514,657,554"/>
-<area shape="poly" title=" " alt="" coords="351,510,391,515,391,521,351,516"/>
-<area shape="rect" href="classRealm_1_1SingleXDQChannel.html" title=" " alt="" coords="405,578,643,618"/>
-<area shape="poly" title=" " alt="" coords="293,519,337,542,386,564,424,575,423,580,384,568,335,547,291,524"/>
-<area shape="rect" href="classRealm_1_1SingleXDQChannel.html" title=" " alt="" coords="385,642,663,682"/>
-<area shape="poly" title=" " alt="" coords="278,524,323,577,353,605,387,628,413,640,410,644,384,632,350,609,319,581,274,527"/>
-<area shape="rect" href="classRealm_1_1SingleXDQChannel.html" title=" " alt="" coords="393,706,655,746"/>
-<area shape="poly" title=" " alt="" coords="271,527,288,564,313,609,346,654,387,692,408,704,405,708,384,696,342,658,308,612,283,566,266,529"/>
-<area shape="rect" href="classRealm_1_1SingleXDQChannel.html" title=" " alt="" coords="398,771,650,825"/>
-<area shape="poly" title=" " alt="" coords="267,528,281,576,304,638,339,702,361,731,387,756,405,768,402,773,384,760,357,734,335,705,300,640,276,578,262,529"/>
-<area shape="rect" href="classRealm_1_1SingleXDQChannel.html" title=" " alt="" coords="427,849,621,904"/>
-<area shape="poly" title=" " alt="" coords="264,528,273,591,293,674,309,718,330,761,356,801,387,836,406,850,428,860,425,865,403,854,384,840,351,804,325,764,304,720,288,676,268,592,259,529"/>
-<area shape="rect" href="classRealm_1_1SingleXDQChannel.html" title=" " alt="" coords="427,929,621,969"/>
-<area shape="poly" title=" " alt="" coords="262,528,265,605,271,655,282,709,298,765,320,820,349,871,387,915,406,928,428,937,425,942,403,933,384,919,345,874,315,822,293,767,277,710,266,655,260,605,256,528"/>
-<area shape="rect" href="classRealm_1_1Channel.html" title=" " alt="" coords="5,489,131,515"/>
-<area shape="poly" title=" " alt="" coords="144,499,178,499,178,505,144,505"/>
-<area shape="rect" href="classRealm_1_1AddressSplitChannel.html" title=" " alt="" coords="727,8,933,33"/>
-<area shape="poly" title=" " alt="" coords="641,25,726,22,726,27,641,31"/>
-<area shape="rect" href="classRealm_1_1Cuda_1_1GPUChannel.html" title=" " alt="" coords="733,57,927,83"/>
-<area shape="poly" title=" " alt="" coords="648,96,748,80,749,85,649,101"/>
-<area shape="rect" href="classRealm_1_1Hip_1_1GPUChannel.html" title=" " alt="" coords="739,107,921,132"/>
-<area shape="poly" title=" " alt="" coords="649,116,738,116,738,122,648,121"/>
-<area shape="rect" href="classRealm_1_1Cuda_1_1GPUIndirectChannel.html" title=" " alt="" coords="735,157,925,197"/>
-<area shape="poly" title=" " alt="" coords="635,182,734,178,735,183,636,188"/>
-<area shape="rect" href="classRealm_1_1Cuda_1_1GPUfillChannel.html" title=" " alt="" coords="725,221,935,247"/>
-<area shape="poly" title=" " alt="" coords="664,246,724,241,725,246,665,252"/>
-<area shape="rect" href="classRealm_1_1Hip_1_1GPUfillChannel.html" title=" " alt="" coords="731,271,929,296"/>
-<area shape="poly" title=" " alt="" coords="665,269,731,274,730,279,664,274"/>
-<area shape="rect" href="classRealm_1_1Cuda_1_1GPUreduceChannel.html" title=" " alt="" coords="711,320,949,345"/>
-<area shape="poly" title=" " alt="" coords="659,331,710,331,710,336,659,336"/>
-<area shape="rect" href="classRealm_1_1Hip_1_1GPUreduceChannel.html" title=" " alt="" coords="717,369,943,395"/>
-<area shape="poly" title=" " alt="" coords="660,353,749,367,748,372,659,358"/>
-<area shape="rect" href="classRealm_1_1DiskChannel.html" title=" " alt="" coords="753,419,907,444"/>
-<area shape="poly" title=" " alt="" coords="649,414,753,422,752,428,649,419"/>
-<area shape="rect" href="classRealm_1_1FileChannel.html" title=" " alt="" coords="756,468,904,493"/>
-<area shape="poly" title=" " alt="" coords="644,471,756,475,756,481,643,477"/>
-<area shape="rect" href="classRealm_1_1GASNetChannel.html" title=" " alt="" coords="743,521,917,547"/>
-<area shape="poly" title=" " alt="" coords="671,531,743,531,743,537,671,537"/>
-<area shape="rect" href="classRealm_1_1HDF5_1_1HDF5Channel.html" title=" " alt="" coords="727,585,933,611"/>
-<area shape="poly" title=" " alt="" coords="657,595,727,595,727,601,657,601"/>
-<area shape="rect" href="classRealm_1_1MemcpyChannel.html" title=" " alt="" coords="739,649,921,675"/>
-<area shape="poly" title=" " alt="" coords="676,659,739,659,739,665,676,665"/>
-<area shape="rect" href="classRealm_1_1MemfillChannel.html" title=" " alt="" coords="743,713,917,739"/>
-<area shape="poly" title=" " alt="" coords="669,723,743,723,743,729,669,729"/>
-<area shape="rect" href="classRealm_1_1MemreduceChannel.html" title=" " alt="" coords="729,785,931,811"/>
-<area shape="poly" title=" " alt="" coords="664,795,729,795,729,801,664,801"/>
-<area shape="rect" href="classRealm_1_1RemoteWriteChannel.html" title=" " alt="" coords="725,864,935,889"/>
-<area shape="poly" title=" " alt="" coords="635,874,725,874,725,879,635,879"/>
-</map>
 <center><span class="legend">[<a href="graph_legend.html">legend</a>]</span></center></div>
 <div class="dynheader">
 Collaboration diagram for Realm::LocalChannel:</div>
 <div class="dyncontent">
 <div class="center"><img src="classRealm_1_1LocalChannel__coll__graph.png" border="0" usemap="#aRealm_1_1LocalChannel_coll__map" alt="Collaboration graph"/></div>
-<map name="aRealm_1_1LocalChannel_coll__map" id="aRealm_1_1LocalChannel_coll__map">
-<area shape="rect" title=" " alt="" coords="47,168,206,193"/>
-<area shape="rect" href="classRealm_1_1Channel.html" title=" " alt="" coords="5,80,131,105"/>
-<area shape="poly" title=" " alt="" coords="86,115,121,166,116,169,81,118"/>
-<area shape="rect" href="classRealm_1_1SimpleXferDesFactory.html" title=" " alt="" coords="155,80,371,105"/>
-<area shape="poly" title=" " alt="" coords="234,115,147,170,144,165,232,110"/>
-<area shape="rect" href="classRealm_1_1XferDesFactory.html" title=" " alt="" coords="177,5,348,31"/>
-<area shape="poly" title=" " alt="" coords="265,45,265,80,260,80,260,45"/>
-</map>
 <center><span class="legend">[<a href="graph_legend.html">legend</a>]</span></center></div>
 <table class="memberdecls">
 <tr class="heading"><td colspan="2"><h2 class="groupheader"><a id="pub-methods" name="pub-methods"></a>

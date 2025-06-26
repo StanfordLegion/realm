@@ -13,6 +13,11 @@
 <link href="search/search.css" rel="stylesheet" type="text/css"/>
 <script type="text/javascript" src="search/searchdata.js"></script>
 <script type="text/javascript" src="search/search.js"></script>
+<script type="text/javascript">
+/* @license magnet:?xt=urn:btih:d3d9a9a6595521f9666a5e94cc830dab83b65699&amp;dn=expat.txt MIT */
+  $(document).ready(function() { init_search(); });
+/* @license-end */
+</script>
 <link href="doxygen.css" rel="stylesheet" type="text/css" />
 <link href="customdoxygen.css" rel="stylesheet" type="text/css"/>
 <!-- BEGIN version select -->
@@ -50,17 +55,33 @@
 var searchBox = new SearchBox("searchBox", "search/",'.html');
 /* @license-end */
 </script>
-<script type="text/javascript" src="menudata.js"></script>
-<script type="text/javascript" src="menu.js"></script>
-<script type="text/javascript">
-/* @license magnet:?xt=urn:btih:d3d9a9a6595521f9666a5e94cc830dab83b65699&amp;dn=expat.txt MIT */
-$(function() {
-  initMenu('',true,false,'search.php','Search');
-  $(document).ready(function() { init_search(); });
-});
-/* @license-end */
-</script>
-<div id="main-nav"></div>
+  <div id="navrow1" class="tabs">
+    <ul class="tablist">
+      <li><a href="index.html"><span>Main&#160;Page</span></a></li>
+      <li><a href="namespaces.html"><span>Namespaces</span></a></li>
+      <li><a href="annotated.html"><span>Classes</span></a></li>
+      <li class="current"><a href="files.html"><span>Files</span></a></li>
+      <li>
+        <div id="MSearchBox" class="MSearchBoxInactive">
+        <span class="left">
+          <span id="MSearchSelect"                onmouseover="return searchBox.OnSearchSelectShow()"                onmouseout="return searchBox.OnSearchSelectHide()">&#160;</span>
+          <input type="text" id="MSearchField" value="" placeholder="Search" accesskey="S"
+               onfocus="searchBox.OnSearchFieldFocus(true)" 
+               onblur="searchBox.OnSearchFieldFocus(false)" 
+               onkeyup="searchBox.OnSearchFieldChange(event)"/>
+          </span><span class="right">
+            <a id="MSearchClose" href="javascript:searchBox.CloseResultsWindow()"><img id="MSearchCloseImg" border="0" src="search/close.svg" alt=""/></a>
+          </span>
+        </div>
+      </li>
+    </ul>
+  </div>
+  <div id="navrow2" class="tabs2">
+    <ul class="tablist">
+      <li><a href="files.html"><span>File&#160;List</span></a></li>
+      <li><a href="globals.html"><span>File&#160;Members</span></a></li>
+    </ul>
+  </div>
 <!-- window showing the filter options -->
 <div id="MSearchSelectWindow"
      onmouseover="return searchBox.OnSearchSelectShow()"
@@ -102,29 +123,11 @@ $(function() {
 Include dependency graph for oob_group_comm.h:</div>
 <div class="dyncontent">
 <div class="center"><img src="oob__group__comm_8h__incl.png" border="0" usemap="#a_2home_2runner_2work_2realm_2realm_2realm-src_2realm_2ucx_2oob__group__comm_8h" alt=""/></div>
-<map name="a_2home_2runner_2work_2realm_2realm_2realm-src_2realm_2ucx_2oob__group__comm_8h" id="a_2home_2runner_2work_2realm_2realm_2realm-src_2realm_2ucx_2oob__group__comm_8h">
-<area shape="rect" title=" " alt="" coords="100,5,287,60"/>
-<area shape="rect" title=" " alt="" coords="5,108,83,133"/>
-<area shape="poly" title=" " alt="" coords="149,62,77,103,75,99,146,58"/>
-<area shape="rect" title=" " alt="" coords="107,108,170,133"/>
-<area shape="poly" title=" " alt="" coords="179,62,156,98,151,95,174,59"/>
-<area shape="rect" title=" " alt="" coords="195,108,301,133"/>
-<area shape="poly" title=" " alt="" coords="212,59,235,95,231,98,208,62"/>
-<area shape="rect" href="bootstrap_8h.html" title=" " alt="" coords="325,108,488,133"/>
-<area shape="poly" title=" " alt="" coords="259,58,366,100,364,105,258,63"/>
-</map>
 </div>
 </div><div class="textblock"><div class="dynheader">
 This graph shows which files directly or indirectly include this file:</div>
 <div class="dyncontent">
 <div class="center"><img src="oob__group__comm_8h__dep__incl.png" border="0" usemap="#a_2home_2runner_2work_2realm_2realm_2realm-src_2realm_2ucx_2oob__group__comm_8hdep" alt=""/></div>
-<map name="a_2home_2runner_2work_2realm_2realm_2realm-src_2realm_2ucx_2oob__group__comm_8hdep" id="a_2home_2runner_2work_2realm_2realm_2realm-src_2realm_2ucx_2oob__group__comm_8hdep">
-<area shape="rect" title=" " alt="" coords="5,5,192,60"/>
-<area shape="rect" href="ucc__comm_8h.html" title=" " alt="" coords="5,108,192,163"/>
-<area shape="poly" title=" " alt="" coords="101,74,101,108,96,108,96,74"/>
-<area shape="rect" href="ucp__internal_8h.html" title=" " alt="" coords="5,211,192,265"/>
-<area shape="poly" title=" " alt="" coords="101,176,101,211,96,211,96,176"/>
-</map>
 </div>
 </div>
 <p><a href="oob__group__comm_8h_source.html">Go to the source code of this file.</a></p>
