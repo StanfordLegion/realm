@@ -79,7 +79,9 @@ endmacro()
 add_benchmark(memcpy "${REALM_BENCH_DIR}/memcpy/memcpy.cc")
 add_benchmark(event_latency "${REALM_BENCH_DIR}/event_latency/event_latency.cc")
 add_benchmark(event_throughput "${REALM_BENCH_DIR}/event_throughput/event_throughput.cc")
+#TODO(cperry): need to reduce the memory footprint of this test
 add_benchmark(event_ubench "${REALM_BENCH_DIR}/event_ubench/event_ubench.cc")
+set_tests_properties(event_ubench PROPERTIES DISABLED ON)
 add_benchmark(lock_chains "${REALM_BENCH_DIR}/lock_chains/lock_chains.cc")
 add_benchmark(lock_contention "${REALM_BENCH_DIR}/lock_contention/lock_contention.cc")
 set(reducetest_ARGS -batches 1) # Run short version

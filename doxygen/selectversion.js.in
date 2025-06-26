@@ -5,7 +5,7 @@
 /// Configurable section.
 
 // What the master is called. Leave untouched if master has no doc.
-let master = 'master';
+let master = 'main';
 
 /// Pathname part of the URL containing the different versioned doxygen
 /// subdirectories. Must be browsable.
