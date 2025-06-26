@@ -1,0 +1,21 @@
+var searchData=
+[
+  ['cancel_5foperation_5fmsgid_0',['CANCEL_OPERATION_MSGID',['../gasnetmsg_8h.html#acfed01decd1ab6d03b006f77b93dc9f8a5992a4782f3468be29707803f964e50c',1,'gasnetmsg.h']]],
+  ['cancelled_1',['CANCELLED',['../structRealm_1_1ProfilingMeasurements_1_1OperationStatus.html#a3180cee8f6ba9bd47b1b43301b8b0e13aee63461050171ae71f18eb45c4a03b4c',1,'Realm::ProfilingMeasurements::OperationStatus']]],
+  ['cancelled_5fallocation_2',['CANCELLED_ALLOCATION',['../structRealm_1_1ProfilingMeasurements_1_1InstanceStatus.html#a2312ad7dff3840ef16d11833c68c67ecaef9af3d1e3b3f42859d2b352d73677cc',1,'Realm::ProfilingMeasurements::InstanceStatus']]],
+  ['clear_5ftimer_5fmsgid_3',['CLEAR_TIMER_MSGID',['../gasnetmsg_8h.html#acfed01decd1ab6d03b006f77b93dc9f8aa858cbfa0247513298d49136535f7798',1,'gasnetmsg.h']]],
+  ['completed_5fsuccessfully_4',['COMPLETED_SUCCESSFULLY',['../structRealm_1_1ProfilingMeasurements_1_1OperationStatus.html#a3180cee8f6ba9bd47b1b43301b8b0e13abd9d2b00ad260dfb061be60cee50bff8',1,'Realm::ProfilingMeasurements::OperationStatus']]],
+  ['completed_5fwith_5ferrors_5',['COMPLETED_WITH_ERRORS',['../structRealm_1_1ProfilingMeasurements_1_1OperationStatus.html#a3180cee8f6ba9bd47b1b43301b8b0e13a3265204c2d5bef165f954b814758c97c',1,'Realm::ProfilingMeasurements::OperationStatus']]],
+  ['concurrent_6',['CONCURRENT',['../structRealm_1_1SubgraphDefinition.html#acd7ba5cf03a06ce94449c7b12fb4f25fabf1d253304f38085f5b9964b6da74e12',1,'Realm::SubgraphDefinition']]],
+  ['copy_7',['COPY',['../structRealm_1_1ProfilingMeasurements_1_1OperationCopyInfo.html#a4f9faadc6ae97dc62979a2901a3d9863a59a207087930e1c5e167a572a23c0e3a',1,'Realm::ProfilingMeasurements::OperationCopyInfo']]],
+  ['core_5fusage_5fexclusive_8',['CORE_USAGE_EXCLUSIVE',['../classRealm_1_1CoreReservationParameters.html#ac4b3ba7c0e9ee2f2848f63d75a74015da8a97a8ef5638c963d54d4894f5ff239c',1,'Realm::CoreReservationParameters']]],
+  ['core_5fusage_5fminimal_9',['CORE_USAGE_MINIMAL',['../classRealm_1_1CoreReservationParameters.html#ac4b3ba7c0e9ee2f2848f63d75a74015dae3d1f908371d43e39948f1cf19ae800b',1,'Realm::CoreReservationParameters']]],
+  ['core_5fusage_5fnone_10',['CORE_USAGE_NONE',['../classRealm_1_1CoreReservationParameters.html#ac4b3ba7c0e9ee2f2848f63d75a74015da8a49709435b5629360e1131b40744b69',1,'Realm::CoreReservationParameters']]],
+  ['core_5fusage_5fshared_11',['CORE_USAGE_SHARED',['../classRealm_1_1CoreReservationParameters.html#ac4b3ba7c0e9ee2f2848f63d75a74015da60950871dbcf7c5db35bfa8d469032f4',1,'Realm::CoreReservationParameters']]],
+  ['corrupted_12',['CORRUPTED',['../structRealm_1_1ProfilingMeasurements_1_1InstanceStatus.html#a2312ad7dff3840ef16d11833c68c67eca94ee3c4024099bb7aafa805cc004742e',1,'Realm::ProfilingMeasurements::InstanceStatus']]],
+  ['create_5falloc_5fmsgid_13',['CREATE_ALLOC_MSGID',['../gasnetmsg_8h.html#acfed01decd1ab6d03b006f77b93dc9f8a220562da54694856cdc7678503dceb96',1,'gasnetmsg.h']]],
+  ['create_5falloc_5frplid_14',['CREATE_ALLOC_RPLID',['../gasnetmsg_8h.html#acfed01decd1ab6d03b006f77b93dc9f8a25b9d83774d07c9e74b7bac0975b6795',1,'gasnetmsg.h']]],
+  ['create_5finst_5fmsgid_15',['CREATE_INST_MSGID',['../gasnetmsg_8h.html#acfed01decd1ab6d03b006f77b93dc9f8aff723eb23780ab8bde36cc2bd8163d01',1,'gasnetmsg.h']]],
+  ['create_5finst_5frplid_16',['CREATE_INST_RPLID',['../gasnetmsg_8h.html#acfed01decd1ab6d03b006f77b93dc9f8a7f95e94136e5d758539f5d5289736853',1,'gasnetmsg.h']]],
+  ['cyan_17',['cyan',['../namespaceRealm.html#a5e200e79f3ad2e43b2d41fbed27678e9a83b346ec98818a3030de6102cf4c124d',1,'Realm']]]
+];

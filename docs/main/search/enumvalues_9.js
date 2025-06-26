@@ -1,0 +1,28 @@
+var searchData=
+[
+  ['machine_5fshutdown_5fmsgid_0',['MACHINE_SHUTDOWN_MSGID',['../gasnetmsg_8h.html#acfed01decd1ab6d03b006f77b93dc9f8abd5566a1bada0016f5498e5124123127',1,'gasnetmsg.h']]],
+  ['magenta_1',['magenta',['../namespaceRealm.html#a5e200e79f3ad2e43b2d41fbed27678e9a0487d83d3e3f7b0fec7f0025c9ff432f',1,'Realm']]],
+  ['maroon_2',['maroon',['../namespaceRealm.html#a5e200e79f3ad2e43b2d41fbed27678e9aca7d7e5ed719cb3cd8d741567d0e3f46',1,'Realm']]],
+  ['max_5fnum_5frects_3',['max_num_rects',['../structRealm_1_1Cuda_1_1AffineCopyInfo.html#ab3373b8668b32d715febba406e4d4adfa6425c793eb1f298dab5938945dd9d9a0',1,'Realm::Cuda::AffineCopyInfo::MAX_NUM_RECTS'],['../structRealm_1_1Cuda_1_1AffineFillInfo.html#acdd7d69215af8f3d033f00014de41913aa7c58c9db612d90d1e08db0aaa5dcca5',1,'Realm::Cuda::AffineFillInfo::MAX_NUM_RECTS']]],
+  ['mem_5fstorage_5falloc_5freq_5fmsgid_4',['MEM_STORAGE_ALLOC_REQ_MSGID',['../gasnetmsg_8h.html#acfed01decd1ab6d03b006f77b93dc9f8a943620aa75f676e498ce9765700678f1',1,'gasnetmsg.h']]],
+  ['mem_5fstorage_5falloc_5fresp_5fmsgid_5',['MEM_STORAGE_ALLOC_RESP_MSGID',['../gasnetmsg_8h.html#acfed01decd1ab6d03b006f77b93dc9f8aaba6c4224a26dd0b4bc14bb66ecaf8e6',1,'gasnetmsg.h']]],
+  ['mem_5fstorage_5frelease_5freq_5fmsgid_6',['MEM_STORAGE_RELEASE_REQ_MSGID',['../gasnetmsg_8h.html#acfed01decd1ab6d03b006f77b93dc9f8a05b4546eb088f0e91d4b25bd18b6ada5',1,'gasnetmsg.h']]],
+  ['mem_5fstorage_5frelease_5fresp_5fmsgid_7',['MEM_STORAGE_RELEASE_RESP_MSGID',['../gasnetmsg_8h.html#acfed01decd1ab6d03b006f77b93dc9f8a8ba7d0d7410889b1cccfc768536c774d',1,'gasnetmsg.h']]],
+  ['memory_5fbitmask_8',['MEMORY_BITMASK',['../structRealm_1_1Channel_1_1SupportedPath.html#a4ec629af60519e1e194683a4fc75fdc1aa3764ad73041abd39178b79136693132',1,'Realm::Channel::SupportedPath']]],
+  ['memory_5flost_9',['MEMORY_LOST',['../structRealm_1_1ProfilingMeasurements_1_1InstanceStatus.html#a2312ad7dff3840ef16d11833c68c67eca8974cafa2cac056c2f376b22ac854db6',1,'Realm::ProfilingMeasurements::InstanceStatus']]],
+  ['metadata_5finvalidate_5fack_5fmsgid_10',['METADATA_INVALIDATE_ACK_MSGID',['../gasnetmsg_8h.html#acfed01decd1ab6d03b006f77b93dc9f8aac31bd6af7fd74f6e7e63b9a3987d262',1,'gasnetmsg.h']]],
+  ['metadata_5finvalidate_5fmsgid_11',['METADATA_INVALIDATE_MSGID',['../gasnetmsg_8h.html#acfed01decd1ab6d03b006f77b93dc9f8a4fe68b2657ddcb4069c7561e8322ce79',1,'gasnetmsg.h']]],
+  ['metadata_5frequest_5fmsgid_12',['METADATA_REQUEST_MSGID',['../gasnetmsg_8h.html#acfed01decd1ab6d03b006f77b93dc9f8adbeade67349ca6b00770a489e8e382d1',1,'gasnetmsg.h']]],
+  ['metadata_5fresponse_5fmsgid_13',['METADATA_RESPONSE_MSGID',['../gasnetmsg_8h.html#acfed01decd1ab6d03b006f77b93dc9f8adf0e842ce5bf1596603affad4fe7ffa5',1,'gasnetmsg.h']]],
+  ['mkind_5fdisk_14',['MKIND_DISK',['../classRealm_1_1MemoryImpl.html#a2556df02a71b9bf1ad4c3a2782db4e03a1db0b771f0156b8f5017b82cdf5ea4b7',1,'Realm::MemoryImpl']]],
+  ['mkind_5ffile_15',['MKIND_FILE',['../classRealm_1_1MemoryImpl.html#a2556df02a71b9bf1ad4c3a2782db4e03a853628ae2f2098cbe6d7a661dfd5d4e4',1,'Realm::MemoryImpl']]],
+  ['mkind_5fglobal_16',['MKIND_GLOBAL',['../classRealm_1_1MemoryImpl.html#a2556df02a71b9bf1ad4c3a2782db4e03acaca4430759b08dbbe8e222f41f35dbc',1,'Realm::MemoryImpl']]],
+  ['mkind_5fgpufb_17',['MKIND_GPUFB',['../classRealm_1_1MemoryImpl.html#a2556df02a71b9bf1ad4c3a2782db4e03a612035481da1da5705a2efc4dcdea0e6',1,'Realm::MemoryImpl']]],
+  ['mkind_5fmanaged_18',['MKIND_MANAGED',['../classRealm_1_1MemoryImpl.html#a2556df02a71b9bf1ad4c3a2782db4e03a6b53a80f6bc7b636c389c48cdf2236f3',1,'Realm::MemoryImpl']]],
+  ['mkind_5frdma_19',['MKIND_RDMA',['../classRealm_1_1MemoryImpl.html#a2556df02a71b9bf1ad4c3a2782db4e03a8fb2292c2d5714dc8e854a4e8472dcb1',1,'Realm::MemoryImpl']]],
+  ['mkind_5fremote_20',['MKIND_REMOTE',['../classRealm_1_1MemoryImpl.html#a2556df02a71b9bf1ad4c3a2782db4e03a5c6e8bcf2bf372921b81ec7fa6163b01',1,'Realm::MemoryImpl']]],
+  ['mkind_5fsysmem_21',['MKIND_SYSMEM',['../classRealm_1_1MemoryImpl.html#a2556df02a71b9bf1ad4c3a2782db4e03ad45784101cfd544a54fb3922322f4dcf',1,'Realm::MemoryImpl']]],
+  ['mkind_5fzerocopy_22',['MKIND_ZEROCOPY',['../classRealm_1_1MemoryImpl.html#a2556df02a71b9bf1ad4c3a2782db4e03abb5f7a2308cad0158a1e737fa008d173',1,'Realm::MemoryImpl']]],
+  ['mode_5fexcl_23',['MODE_EXCL',['../classRealm_1_1ReservationImpl.html#aa0119e3457b4cfecc6b2b16f4bfa06c5a3cb749495e301fa4b3feee5684b3d49c',1,'Realm::ReservationImpl']]],
+  ['msgid_5fnew_5factivemsg_24',['MSGID_NEW_ACTIVEMSG',['../gasnetmsg_8h.html#abed82baf7f470b522273a3e37c24c600a35e6222044311435b365e46be7268b3c',1,'gasnetmsg.h']]]
+];

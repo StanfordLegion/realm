@@ -1,0 +1,23 @@
+<map id="Graphical Class Hierarchy" name="Graphical Class Hierarchy">
+<area shape="rect" id="Node000000" href="$classRealm_1_1Operation.html" title=" " alt="" coords="5,247,141,273"/>
+<area shape="rect" id="Node000001" href="$classRealm_1_1PartitioningOperation.html" title=" " alt="" coords="189,173,400,198"/>
+<area shape="poly" id="edge225_Node000000_Node000001" title=" " alt="" coords="111,239,188,207,229,195,230,201,190,212,113,244"/>
+<area shape="rect" id="Node000008" href="$classRealm_1_1Task.html" title=" " alt="" coords="244,222,345,247"/>
+<area shape="poly" id="edge232_Node000000_Node000008" title=" " alt="" coords="155,248,244,238,244,243,155,253"/>
+<area shape="rect" id="Node000009" href="$classRealm_1_1TaskRegistration.html" title=" " alt="" coords="205,271,385,297"/>
+<area shape="poly" id="edge233_Node000000_Node000009" title=" " alt="" coords="155,266,205,272,204,277,154,271"/>
+<area shape="rect" id="Node000010" href="$classRealm_1_1TransferOperation.html" title=" " alt="" coords="201,321,389,346"/>
+<area shape="poly" id="edge234_Node000000_Node000010" title=" " alt="" coords="115,276,190,305,235,318,233,323,188,311,113,281"/>
+<area shape="rect" id="Node000002" href="$classRealm_1_1ByFieldOperation.html" title=" " alt="" coords="463,5,647,45"/>
+<area shape="poly" id="edge226_Node000001_Node000002" title=" " alt="" coords="315,161,371,108,408,80,447,55,473,43,475,48,449,60,411,84,375,112,319,165"/>
+<area shape="rect" id="Node000003" href="$classRealm_1_1DifferenceOperation.html" title=" " alt="" coords="453,69,656,109"/>
+<area shape="poly" id="edge227_Node000001_Node000003" title=" " alt="" coords="335,165,447,119,482,107,484,112,449,124,337,170"/>
+<area shape="rect" id="Node000004" href="$classRealm_1_1ImageOperation.html" title=" " alt="" coords="466,133,643,173"/>
+<area shape="poly" id="edge228_Node000001_Node000004" title=" " alt="" coords="411,168,466,162,466,167,412,174"/>
+<area shape="rect" id="Node000005" href="$classRealm_1_1IntersectionOperation.html" title=" " alt="" coords="448,197,661,237"/>
+<area shape="poly" id="edge229_Node000001_Node000005" title=" " alt="" coords="412,197,448,202,447,207,411,202"/>
+<area shape="rect" id="Node000006" href="$classRealm_1_1PreimageOperation.html" title=" " alt="" coords="455,261,654,301"/>
+<area shape="poly" id="edge230_Node000001_Node000006" title=" " alt="" coords="384,200,401,207,416,217,426,227,435,237,449,247,475,259,473,264,447,252,432,241,422,231,413,221,399,212,382,205"/>
+<area shape="rect" id="Node000007" href="$classRealm_1_1UnionOperation.html" title=" " alt="" coords="467,325,642,365"/>
+<area shape="poly" id="edge231_Node000001_Node000007" title=" " alt="" coords="395,202,402,207,414,220,421,234,427,260,432,287,439,299,450,311,469,324,466,328,446,315,434,302,427,288,422,261,416,235,410,223,398,211,392,207"/>
+</map>

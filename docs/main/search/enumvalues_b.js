@@ -1,0 +1,19 @@
+var searchData=
+[
+  ['olive_0',['olive',['../namespaceRealm.html#a5e200e79f3ad2e43b2d41fbed27678e9a992dbf45c11c767545327a1d240737b0',1,'Realm']]],
+  ['one_5fshot_1',['ONE_SHOT',['../structRealm_1_1SubgraphDefinition.html#acd7ba5cf03a06ce94449c7b12fb4f25fa1c7b9cc98ab3cb7948a59302a7cf813e',1,'Realm::SubgraphDefinition']]],
+  ['one_5ftask_5fonly_2',['ONE_TASK_ONLY',['../classRealm_1_1Runtime.html#a04186dbcbe4fa060b2b2eb58d41fadf9aafa7651fdd9cfc5a32256efac4b7a134',1,'Realm::Runtime']]],
+  ['one_5ftask_5fper_5fnode_3',['ONE_TASK_PER_NODE',['../classRealm_1_1Runtime.html#a04186dbcbe4fa060b2b2eb58d41fadf9a72b9d4c7e86b6408963e509d9c5d3979',1,'Realm::Runtime']]],
+  ['one_5ftask_5fper_5fproc_4',['ONE_TASK_PER_PROC',['../classRealm_1_1Runtime.html#a04186dbcbe4fa060b2b2eb58d41fadf9ae32d0a5b5fe46913d7b8e09c6571234d',1,'Realm::Runtime']]],
+  ['opkind_5facquire_5',['OPKIND_ACQUIRE',['../structRealm_1_1SubgraphDefinition.html#a211f0ec8d9d9652219f5420e9dc34cb6ad021cd9c337ce63193921e22166b8433',1,'Realm::SubgraphDefinition']]],
+  ['opkind_5farrival_6',['OPKIND_ARRIVAL',['../structRealm_1_1SubgraphDefinition.html#a211f0ec8d9d9652219f5420e9dc34cb6a2a78eaada4150368bff3b60c978691d7',1,'Realm::SubgraphDefinition']]],
+  ['opkind_5fcoll_5fpostcond_7',['OPKIND_COLL_POSTCOND',['../structRealm_1_1SubgraphDefinition.html#a211f0ec8d9d9652219f5420e9dc34cb6ac1908aa8a288094b86fa4a996c9cf218',1,'Realm::SubgraphDefinition']]],
+  ['opkind_5fcoll_5fprecond_8',['OPKIND_COLL_PRECOND',['../structRealm_1_1SubgraphDefinition.html#a211f0ec8d9d9652219f5420e9dc34cb6ab8417d008b1da573e05ba3ca2091209a',1,'Realm::SubgraphDefinition']]],
+  ['opkind_5fcopy_9',['OPKIND_COPY',['../structRealm_1_1SubgraphDefinition.html#a211f0ec8d9d9652219f5420e9dc34cb6a52912a61d31b0b70ecbf89c9c935d0a1',1,'Realm::SubgraphDefinition']]],
+  ['opkind_5fext_5fpostcond_10',['OPKIND_EXT_POSTCOND',['../structRealm_1_1SubgraphDefinition.html#a211f0ec8d9d9652219f5420e9dc34cb6af4cf0959164aa8db4f6d394e96636a38',1,'Realm::SubgraphDefinition']]],
+  ['opkind_5fext_5fprecond_11',['OPKIND_EXT_PRECOND',['../structRealm_1_1SubgraphDefinition.html#a211f0ec8d9d9652219f5420e9dc34cb6a8782658d194f6f6b3ce50863b9a31728',1,'Realm::SubgraphDefinition']]],
+  ['opkind_5finstantiation_12',['OPKIND_INSTANTIATION',['../structRealm_1_1SubgraphDefinition.html#a211f0ec8d9d9652219f5420e9dc34cb6a550637f5ba138d66fc2880e9a48c34b4',1,'Realm::SubgraphDefinition']]],
+  ['opkind_5finvalid_13',['OPKIND_INVALID',['../structRealm_1_1SubgraphDefinition.html#a211f0ec8d9d9652219f5420e9dc34cb6a1e16ca97ad5b6b2feec05a0dffc2eba5',1,'Realm::SubgraphDefinition']]],
+  ['opkind_5frelease_14',['OPKIND_RELEASE',['../structRealm_1_1SubgraphDefinition.html#a211f0ec8d9d9652219f5420e9dc34cb6addac0b482e42922a30adc6e26a56ba1b',1,'Realm::SubgraphDefinition']]],
+  ['opkind_5ftask_15',['OPKIND_TASK',['../structRealm_1_1SubgraphDefinition.html#a211f0ec8d9d9652219f5420e9dc34cb6accb391757686c81d01c1022ce17385da',1,'Realm::SubgraphDefinition']]]
+];
