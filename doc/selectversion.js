@@ -42,14 +42,14 @@ $('.dropbtn').html("Version " + url2label(thisvers));
     .then((response) => response.text())
     .then((data) => {
       entries = data.split('\n');
-      entries.splice(entries.indexOf(thisvers), -1);
+      entries = entries.splice(entries.indexOf(thisvers), -1);
       if (thisvers != master) {
-        entries.splice(entries.indexOf(master), -1);
+        entries = entries.splice(entries.indexOf(master), -1);
         entries.unshift(master);
       }
       entries.unshift(thisvers);
       entries = entries.map((x) => '<a class="verslink" href="'
-                        + urlroot + '/' + x + '/">'
+                        + '/' + urlroot + '/' + x + '/">'
                         + url2label(x)
                         + '</a>');
       $('.dropdown-content').append(entries.join(''));
