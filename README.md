@@ -76,24 +76,43 @@ find_package(Realm REQUIRED)
 ```
 
 ### 4. Try the tutorials
-The easiest way to get started is to walk through the hands-on tutorials.  Each one lives in its own directory with both **Make** and **CMake** build files:
+The easiest way to get started is to build the tutorials as part of your normal CMake build tree:
 
 ```bash
-# From the repository root
-cd tutorials/hello_world
-make            # or: cmake -B build && cmake --build build
-./hello_world -ll:cpu 4       # run with four CPU cores
-```
-Tutorials currently available:
-* Hello World
-* Events & Barriers
-* Reservations (locks)
-* Reductions
-* CUDA / HIP interoperability
-* Profiling & tracing
-* Machine model exploration
+# Configure (enable tutorials) if you did not already
+cmake -B build -DREALM_BUILD_TUTORIALS=ON
+cmake --build build --target realm_hello_world
 
-Each tutorial contains a detailed `.md` explaining the concepts being introduced.
+# Run it (path will be inside the build directory)
+./build/tutorials/hello_world/realm_hello_world -ll:cpu 4
+```
+
+If you have **installed** Realm (e.g. via `make install`) you can also build an individual tutorial stand-alone:
+
+```bash
+cd tutorials/hello_world         # Inside this repo or the copy installed under share/realm/tutorials
+cmake -B build -DCMAKE_PREFIX_PATH=/path/to/realm/install
+cmake --build build
+./build/realm_hello_world -ll:cpu 4
+```
+
+> Note • The tutorial directories only provide CMake build files. Traditional Makefiles are no longer shipped.
+
+**Tutorials currently available**
+
+* Hello World – minimal Realm program
+* Events & Barriers – synchronization primitives
+* Reservations (locks)
+* Reductions – collective operations
+* CUDA/HIP interoperability – calling GPU kernels from Realm tasks
+* Profiling & Tracing – using `-lg:prof` and Legion Prof
+* Machine Model Exploration – querying and printing the machine description
+* Index Space Operations – set algebra helpers for index spaces
+* Region Instances – creating and using logical/physical instances
+* Copy ⁄ Fill – DMA-style data movement between instances
+* Subgraph Launches – launching groups of tasks together
+* Deferred Allocation – lazy allocation of physical memory
+* Completion Queues – querying task completion programmatically
 
 ## Runtime command-line flags
 Realm and its modules share a common set of `-ll:<flag>` options to tune processor/memory counts at runtime:
