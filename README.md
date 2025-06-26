@@ -101,18 +101,18 @@ cmake --build build
 **Tutorials currently available**
 
 * Hello World – minimal Realm program
-* Events & Barriers – synchronization primitives
-* Reservations (locks)
-* Reductions – collective operations
+* Events & Barriers – synchronization primitive
+* Reservations - locks
+* Reductions
 * CUDA/HIP interoperability – calling GPU kernels from Realm tasks
 * Profiling & Tracing – using `-lg:prof` and Legion Prof
-* Machine Model Exploration – querying and printing the machine description
+* Machine Model Exploration – querying the machine model
 * Index Space Operations – set algebra helpers for index spaces
-* Region Instances – creating and using logical/physical instances
+* Region Instances – creating and using regional instances
 * Copy ⁄ Fill – DMA-style data movement between instances
 * Subgraph Launches – launching groups of tasks together
 * Deferred Allocation – lazy allocation of physical memory
-* Completion Queues – querying task completion programmatically
+* Completion Queues – querying event completion programmatically
 
 ## Runtime command-line flags
 Realm and its modules share a common set of `-ll:<flag>` options to tune processor/memory counts at runtime:
