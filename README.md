@@ -7,4 +7,152 @@
 ![macOS](https://img.shields.io/badge/mac%20os-000000?style=for-the-badge&logo=macos&logoColor=F0F0F0)
 ![Windows](https://img.shields.io/badge/Windows-0078D6?style=for-the-badge&logo=windows&logoColor=white)
 
-A distributed asynchronous tasking framework.  More technical details can be found in the published [whitepaper](https://cs.stanford.edu/~sjt/pubs/pact14.pdf).
+# Realm
+
+Realm is a distributed, **event–based tasking runtime** for building high-performance applications that span clusters of CPUs, GPUs, and other accelerators.  
+It began life as the low-level substrate underneath the [Legion](https://github.com/StanfordLegion/legion) programming system but is now maintained as a standalone project for developers who want direct, fine-grained control of parallel and heterogeneous machines.
+
+---
+
+## Why Realm?
+
+* **Asynchronous tasks & events** – Compose applications out of many light-weight tasks connected by events instead of blocking synchronization.
+* **Heterogeneous execution** – Target CPUs, NVIDIA CUDA/HIP GPUs, OpenMP threads, and specialized fabrics with a single API.
+* **Scalable networking** – Integrate GASNet-EX, UCX, MPI or shared memory transports for efficient inter-node communication.
+* **Extensible modules** – Enable/disable features (CUDA, HIP, LLVM JIT, NVTX, PAPI …) at build time with simple CMake flags.
+* **Portable performance** – Realm applications routinely scale from laptops to the world's largest supercomputers.
+
+The runtime follows a *data-flow* execution model: tasks are launched asynchronously and start when their pre-condition events trigger. This design hides network and device latency, maximizes overlap, and gives programmers explicit control over when work becomes runnable.
+
+For a deeper dive see the Realm white-paper published at PACT 2014:  
+https://cs.stanford.edu/~sjt/pubs/pact14.pdf
+
+---
+
+## Quick start
+
+### 1. Clone
+```bash
+git clone https://github.com/StanfordLegion/realm.git
+cd realm
+```
+
+### 2. Build with CMake (recommended)
+```bash
+# Create an out-of-tree build directory
+mkdir build && cd build
+# Configure – pick the options that match your system
+cmake .. \
+      -DCMAKE_BUILD_TYPE=Release \
+      -DREALM_ENABLE_OPENMP=ON \   # OpenMP support
+      -DREALM_ENABLE_CUDA=OFF       # flip ON to target NVIDIA GPUs
+
+# Compile everything
+make -j$(nproc)
+
+# (optional) run the unit tests
+ctest --output-on-failure
+```
+The full list of CMake toggles is documented inside [`CMakeLists.txt`](CMakeLists.txt).  Common switches include:
+
+| Option | Default | Purpose |
+| ------ | ------- | ------- |
+| `REALM_ENABLE_CUDA` | `ON`  | Build CUDA backend |
+| `REALM_ENABLE_HIP`  | `ON`  | Build HIP/ROCm backend |
+| `REALM_ENABLE_GASNETEX` | `ON on Linux` | GASNet-EX network |
+| `REALM_ENABLE_UCX` | `ON on Linux` | UCX network |
+| `REALM_ENABLE_MPI` | `OFF` | MPI network |
+| `REALM_LOG_LEVEL`  | `WARNING` | Compile-time log level |
+
+> **TIP:** combine `cmake -LAH` or `ccmake` to explore every option.
+
+### 3. Install (optional)
+```bash
+make install   # honour DESTDIR / CMAKE_INSTALL_PREFIX as usual
+```
+Libraries, headers and CMake packages will be placed under `include/realm`, `lib/`, and `share/realm/` so that external projects can consume Realm via
+```cmake
+find_package(Realm REQUIRED)
+```
+
+### 4. Try the tutorials
+The easiest way to get started is to walk through the hands-on tutorials.  Each one lives in its own directory with both **Make** and **CMake** build files:
+
+```bash
+# From the repository root
+cd tutorials/hello_world
+make            # or: cmake -B build && cmake --build build
+./hello_world -ll:cpu 4       # run with four CPU cores
+```
+Tutorials currently available:
+* Hello World
+* Events & Barriers
+* Reservations (locks)
+* Reductions
+* CUDA / HIP interoperability
+* Profiling & tracing
+* Machine model exploration
+
+Each tutorial contains a detailed `.md` explaining the concepts being introduced.
+
+## Runtime command-line flags
+Realm and its modules share a common set of `-ll:<flag>` options to tune processor/memory counts at runtime:
+
+```
+-ll:cpu <N>      # number of CPU cores per rank
+-ll:gpu <N>      # number of GPUs per rank
+-ll:util <N>     # number of util processors (communication helpers)
+-ll:csize <MB>   # DRAM memory per rank
+-ll:fsize <MB>   # framebuffer memory per GPU
+-ll:zsize <MB>   # zero-copy (pinned) memory per GPU
+-logfile <path>  # redirect logging (supports % for rank)
+-level <cat>=<n> # change logging level per category
+```
+Run any Realm executable with `-hl:help` (high-level) or `-ll:help` (low-level) to see everything that is available.
+
+---
+
+## Documentation
+* **API reference (Doxygen):** generate with `make docs` or `cmake --build . --target docs`.
+* **Tutorials:** see the [`tutorials/`](tutorials) directory listed above.
+* **Examples & Benchmarks:** under [`examples/`](examples) and [`benchmarks/`](benchmarks).
+
+Please file an issue or pull request if something is missing or outdated.
+
+---
+
+## Contributing
+We welcome contributions of all kinds – bug reports, documentation fixes, new features, and performance improvements.
+
+1. Fork the repository and create a feature branch.
+2. Follow the existing code style (clang-format is enforced in CI).
+3. Make sure `ctest` passes on your machine *and* with `REALM_ENABLE_SANITIZER` if possible.
+4. Open a pull request against `master` (or the feature branch you were asked to use).
+
+See [`CONTRIBUTING.md`](.github/CONTRIBUTING.md) for the full guidelines.
+
+---
+
+## License
+
+Realm is licensed under the **Apache License 2.0** – see [`LICENSE.txt`](LICENSE.txt) for details.
+
+Commercial and academic use is free; attribution in papers and derivative works is appreciated.
+
+---
+
+## Acknowledgements
+Realm is developed and maintained by the [Stanford Legion](https://legion.stanford.edu) team with significant contributions from NVIDIA, Los Alamos, Livermore, Sandia, and many members of the broader HPC community.
+
+If you use Realm in your work, please cite us!  
+BibTeX:
+```bibtex
+@inproceedings{realm_pact14,
+  author    = {Aumiller, Trevor and Bauer, Michael and Treichler, Sean and Lee, Wonchan and Pingali, Keshav},
+  title     = {Task Graphs and Scheduling Policies for Dynamically Asynchronous Execution},
+  booktitle = {Proceedings of the 2014 International Conference on Parallel Architectures and Compilation Techniques},
+  year      = {2014},
+  publisher = {ACM},
+  address   = {New York, NY, USA},
+}
+```
