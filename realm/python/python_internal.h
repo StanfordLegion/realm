@@ -1,0 +1,257 @@
+/* Copyright 2024 Stanford University, NVIDIA Corporation
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#ifndef REALM_PYTHON_INTERNAL_H
+#define REALM_PYTHON_INTERNAL_H
+
+#include "realm/proc_impl.h"
+
+#include "realm/python/python_source.h"
+
+#if defined(REALM_USE_OPENMP) && !defined(REALM_OPENMP_SYSTEM_RUNTIME)
+#include "realm/openmp/openmp_threadpool.h"
+#endif
+
+namespace Realm {
+
+#define USE_PYGILSTATE_CALLS
+
+  // these are all defined in Python.h, which we currently do not include
+  struct PyObject;
+  struct PyInterpreterState;
+  struct PyThreadState {
+    struct PyThreadState *prev;
+    struct PyThreadState *next;
+    struct PyInterpreterState *interp;
+    // lots more stuff here
+  };
+  typedef ssize_t Py_ssize_t;
+#ifdef USE_PYGILSTATE_CALLS
+  enum PyGILState_STATE {PyGILState_LOCKED, PyGILState_UNLOCKED};
+#endif
+
+  // This class contains interpreter-specific instances of Python API calls.
+  class PythonAPI {
+  public:
+    PythonAPI(void *handle);
+
+  protected:
+    template<typename T>
+    void get_symbol(T &fn, const char *symbol, bool missing_ok = false);
+
+  protected:
+    void *handle;
+
+  public:
+    // Python API calls
+    void (*Py_DecRef)(PyObject *); // non-macro version of PyDECREF
+    void (*Py_Finalize)(void);
+    void (*Py_InitializeEx)(int);
+
+    PyObject *(*PyByteArray_FromStringAndSize)(const char *, Py_ssize_t);
+
+    void (*PyEval_InitThreads)(void);
+
+#ifdef USE_PYGILSTATE_CALLS
+    PyGILState_STATE (*PyGILState_Ensure)(void);
+    void (*PyGILState_Release)(PyGILState_STATE);
+#else
+    PyThreadState *(*PyThreadState_New)(PyInterpreterState *);
+    void (*PyThreadState_Clear)(PyThreadState *);
+    void (*PyThreadState_Delete)(PyThreadState *);
+#endif
+    void (*PyEval_RestoreThread)(PyThreadState *);
+    PyThreadState *(*PyEval_SaveThread)(void);
+
+    PyThreadState *(*PyGILState_GetThisThreadState)(void);
+    PyThreadState *(*PyThreadState_Swap)(PyThreadState *);
+    PyThreadState *(*PyThreadState_Get)(void);
+    PyObject      *(*PyThreadState_GetDict)(void);
+
+    void (*PyErr_PrintEx)(int set_sys_last_vars);
+
+    PyObject *(*PyImport_ImportModule)(const char *);
+
+    PyObject *(*PyModule_GetDict)(PyObject *);
+
+    PyObject *(*PyLong_FromUnsignedLong)(unsigned long);
+
+    PyObject *(*PyObject_CallFunction)(PyObject *, const char *, ...);
+    PyObject *(*PyObject_CallObject)(PyObject *callable, PyObject *args);
+    PyObject *(*PyObject_GetAttrString)(PyObject *, const char *);
+    // PyObject_Print is not abi3 compatible and is used exclusively for debugging
+    // int (*PyObject_Print)(PyObject *, FILE *, int);
+
+    PyObject *(*Py_CompileString)(const char *, const char *, int);
+    PyObject *(*PyEval_EvalCode)(PyObject *, PyObject *, PyObject *);
+
+    PyObject *(*PyTuple_New)(Py_ssize_t len);
+    int (*PyTuple_SetItem)(PyObject *p, Py_ssize_t pos, PyObject *o);
+  };
+
+  class PythonInterpreter {
+  public:
+    PythonInterpreter();
+    ~PythonInterpreter();
+
+    PyObject *find_or_import_function(const PythonSourceImplementation *psi);
+
+    void import_module(const std::string& module_name);
+    void run_string(const std::string& script_text);
+    int check_gil_state();
+
+  protected:
+    void *handle;
+#ifdef REALM_USE_DLMOPEN
+    void *dlmproxy_handle;
+#endif
+    
+  public:
+    PythonAPI *api;
+  };
+
+  class PythonThreadTaskScheduler;
+  
+  // this is nearly identical to a LocalCPUProcessor, but it asks for its thread(s)
+  //  to run on the specified numa domain
+  class LocalPythonProcessor : public ProcessorImpl {
+  public:
+    LocalPythonProcessor(RuntimeImpl *runtime_impl, Processor _me, int _numa_node,
+                         CoreReservationSet &crs, size_t _stack_size,
+#ifdef REALM_USE_OPENMP
+                         int _omp_workers,
+#endif
+                         const std::vector<std::string> &_import_modules,
+                         const std::vector<std::string> &_init_scripts);
+    virtual ~LocalPythonProcessor(void);
+
+    virtual void enqueue_task(Task *task);
+    virtual void enqueue_tasks(Task::TaskList& tasks, size_t num_tasks);
+
+    virtual void spawn_task(Processor::TaskFuncID func_id,
+			    const void *args, size_t arglen,
+			    const ProfilingRequestSet &reqs,
+			    Event start_event,
+			    GenEventImpl *finish_event,
+			    EventImpl::gen_t finish_gen,
+			    int priority);
+    
+    virtual void execute_task(Processor::TaskFuncID func_id,
+			      const ByteArrayRef& task_args);
+
+    // starts worker threads and performs any per-processor initialization
+    virtual void start_threads(void);
+
+    virtual void shutdown(void);
+
+    virtual void add_to_group(ProcessorGroupImpl *group);
+    
+    virtual void remove_from_group(ProcessorGroupImpl *group);
+    
+    virtual bool register_task(Processor::TaskFuncID func_id,
+                               CodeDescriptor& codedesc,
+                               const ByteArrayRef& user_data);
+
+    //void worker_main(void);
+
+    class TaskRegistration : public InternalTask {
+    public:
+      virtual ~TaskRegistration() {}
+
+      virtual void execute_on_processor(Processor p)
+      {
+	proc->perform_task_registration(this);
+      }
+      
+      LocalPythonProcessor *proc;
+      Processor::TaskFuncID func_id;
+      CodeDescriptor *codedesc;
+      ByteArray user_data;
+    };
+
+
+  protected:
+    friend class PythonThreadTaskScheduler;
+    void create_interpreter(void);
+    void destroy_interpreter(void);
+    bool perform_task_registration(TaskRegistration *treg);
+
+    int numa_node;
+    CoreReservation *core_rsrv;
+#if defined(REALM_USE_OPENMP) && !defined(REALM_OPENMP_SYSTEM_RUNTIME)
+    ThreadPool *omp_threadpool;
+#endif
+    const std::vector<std::string>& import_modules;
+    const std::vector<std::string>& init_scripts;
+
+    PythonThreadTaskScheduler *sched;
+    PythonInterpreter *interpreter;
+    PyThreadState *master_thread;
+
+    struct TaskTableEntry {
+      PyObject *python_fnptr;
+      Processor::TaskFuncPtr cpp_fnptr;
+      ByteArray user_data;
+    };
+
+    std::map<Processor::TaskFuncID, TaskTableEntry> task_table;
+
+    TaskQueue task_queue; // ready tasks
+    ProfilingGauges::AbsoluteRangeGauge<int> ready_task_count;
+    DeferredSpawnCache deferred_spawn_cache;
+  };
+
+  // based on KernelThreadTaskScheduler, deals with the python GIL and thread
+  //  state changes as well
+
+  // Note! If you ever go to change the PythonThreadTaskScheduler to use the
+  // UserLevelTaskScheduler, you will need to update the implementation of
+  // how Python tasks are run. The CPython interpreter now has thread-local
+  // variables that track the PyThreadState object. It's not safe to use
+  // the same PyThreadState object across multiple live tasks running on
+  // the same kernel thread. Instead you'll need to modify the tasks running
+  // on the Python processor to each create their own PyThreadState object
+  // and then check that whenever they have been preempted (wait on an event)
+  // that this has been saved onto the stack and restored after the wait ends.
+  class PythonThreadTaskScheduler : public KernelThreadTaskScheduler {
+  public:
+    PythonThreadTaskScheduler(LocalPythonProcessor *_pyproc,
+			      CoreReservation& _core_rsrv);
+
+    // entry point for python worker threads - falls through to scheduler_loop
+    void python_scheduler_loop(void);
+
+    // called by a worker thread when it needs to wait for something (and we
+    //   should release the GIL)
+    virtual void thread_blocking(Thread *thread);
+
+    virtual void thread_ready(Thread *thread);
+
+  protected:
+    // both real and internal tasks need to be wrapped with acquires of the GIL
+    virtual bool execute_task(Task *task);
+    virtual void execute_internal_task(InternalTask *task);
+    
+    virtual Thread *worker_create(bool make_active);
+    virtual void worker_terminate(Thread *switch_to);
+
+    LocalPythonProcessor *pyproc;
+    bool interpreter_ready;
+    std::map<Thread *, PyThreadState *> pythreads;
+  };
+
+}; // namespace Realm
+
+#endif // defined REALM_PYTHON_INTERNAL_H

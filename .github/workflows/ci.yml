@@ -19,23 +19,27 @@ jobs:
         config:
           - {
               os: windows-latest,
-              cc: "cl", cxx: "cl",
               build: Release,
+              cc: "cl", cxx: "cl",
+              ccache: sccache,
             }
           - {
               os: ubuntu-latest,
               build: Release,
-              cc: "gcc", cxx: "g++"
+              cc: "gcc", cxx: "g++",
+              ccache: ccache,
             }
           - {
               os: ubuntu-latest,
               build: Debug,
-              cc: "gcc", cxx: "g++"
+              cc: "gcc", cxx: "g++",
+              ccache: ccache,
             }
           - {
               os: macos-latest,
               build: Release,
-              cc: "clang", cxx: "clang++"
+              cc: "clang", cxx: "clang++",
+              ccache: ccache,
             }
     steps:
       - uses: actions/checkout@v4.2.2
@@ -53,33 +57,32 @@ jobs:
           restore-keys: |
             cpm-
 
-      - uses: actions/cache@v4
-        name: Restore ccache
+      - uses: hendrikmuhs/ccache-action@v1.2
+        name: Restore ccache cache
         with:
-          path: .cache/ccache
+          variant: ${{ matrix.config.ccache }}
           key: ${{ github.jobs[github.job].name }}-${{ github.ref_name }}-ccache-${{ steps.timestamp.outputs.time }}
           restore-keys: |
             ${{ github.jobs[github.job].name }}-${{ github.ref_name }}-ccache-
             ${{ github.jobs[github.job].name }}-main-ccache-
 
-      - uses: seanmiddleditch/gha-setup-ninja@v5
+      - uses: microsoft/setup-msbuild@v2
+        if: ${{ matrix.config.os == 'windows-latest' }}
 
-      - uses: threeal/cmake-action@v2.1.0
-        with:
-          generator: Ninja
-          c-compiler: ${{ matrix.config.cc }}
-          cxx-compiler: ${{ matrix.config.cxx }}
-          options: |
-            CMAKE_BUILD_TYPE=${{ matrix.config.build }}
-            REALM_ENABLE_BUILD_TESTS=ON
-            REALM_ENABLE_BUILD_BENCHMARKS=ON
-            REALM_ENABLE_BUILD_TUTORIALS=ON
-            REALM_ENABLE_BUILD_EXAMPLES=ON
+      - uses: lukka/get-cmake@latest
+
+      - name: Configure
+        run: |
+          cmake -S . -B build -DCMAKE_BUILD_TYPE=${{ matrix.config.build }} -DREALM_BUILD_TESTS=ON -DREALM_BUILD_BENCHMARKS=ON -DREALM_BUILD_TUTORIALS=ON -DREALM_BUILD_EXAMPLES=ON -DREALM_ENABLE_GASNETEX=OFF
+
+      - name: Build
+        run: |
+          cmake --build build --parallel 4 --config ${{ matrix.config.build }}
 
       - name: Run tests
         run: |
-          ctest --test-dir build --output-on-failure --parallel
+          ctest --test-dir build --output-on-failure --parallel 4 --build-config ${{ matrix.config.build }}
 
       - name: Test Install
         run: |
-          cmake --install . -B build --prefix install --config ${{ matrix.config.build }}
+          cmake --install build --parallel 4 --prefix install --config ${{ matrix.config.build }}

@@ -1,0 +1,409 @@
+/* Copyright 2024 Stanford University, NVIDIA Corporation
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#include "realm/openmp/openmp_module.h"
+
+#include "realm/openmp/openmp_internal.h"
+
+#ifndef REALM_OPENMP_SYSTEM_RUNTIME
+#include "realm/openmp/openmp_threadpool.h"
+#endif
+
+#include "realm/numa/numasysif.h"
+#include "realm/logging.h"
+#include "realm/cmdline.h"
+#include "realm/proc_impl.h"
+#include "realm/mem_impl.h"
+#include "realm/threads.h"
+#include "realm/runtime_impl.h"
+#include "realm/utils.h"
+
+#ifdef REALM_OPENMP_SYSTEM_RUNTIME
+#include <omp.h>
+#endif
+
+namespace Realm {
+
+  Logger log_omp("openmp");
+
+#ifndef REALM_OPENMP_SYSTEM_RUNTIME
+  // defined in openmp_api.cc - refer to it to force linkage of that file
+  extern void openmp_api_force_linkage(void);
+#endif
+
+
+  ////////////////////////////////////////////////////////////////////////
+  //
+  // class LocalOpenMPProcessor
+
+  LocalOpenMPProcessor::LocalOpenMPProcessor(RuntimeImpl *runtime_impl, Processor _me,
+                                             int _numa_node, int _num_threads,
+                                             bool _fake_cpukind, CoreReservationSet &crs,
+                                             size_t _stack_size, bool _force_kthreads)
+    : LocalTaskProcessor(runtime_impl, _me,
+                         (_fake_cpukind ? Processor::LOC_PROC : Processor::OMP_PROC))
+    , numa_node(_numa_node)
+    , num_threads(_num_threads)
+    , ctxmgr(this)
+#ifdef REALM_OPENMP_SYSTEM_RUNTIME
+    , omp_threads_mapped(false)
+#endif
+  {
+    // master runs in a user threads if possible
+    {
+      CoreReservationParameters params;
+#ifdef REALM_OPENMP_SYSTEM_RUNTIME
+      params.set_num_cores(num_threads); // system omp runtime will use these
+#else
+      params.set_num_cores(1);
+#endif
+      params.set_numa_domain(numa_node);
+      params.set_alu_usage(params.CORE_USAGE_EXCLUSIVE);
+      params.set_fpu_usage(params.CORE_USAGE_EXCLUSIVE);
+      params.set_ldst_usage(params.CORE_USAGE_SHARED);
+      params.set_max_stack_size(_stack_size);
+
+      std::string name = stringbuilder() << "OMP" << numa_node << " proc " << _me << " (master)";
+
+      core_rsrv = new CoreReservation(name, crs, params);
+
+#ifdef REALM_USE_USER_THREADS
+      if(!_force_kthreads) {
+	UserThreadTaskScheduler *sched = new UserThreadTaskScheduler(me, *core_rsrv);
+	// no config settings we want to tweak yet
+	set_scheduler(sched);
+      } else
+#endif
+      {
+	KernelThreadTaskScheduler *sched = new KernelThreadTaskScheduler(me, *core_rsrv);
+	sched->cfg_max_idle_workers = 3; // keep a few idle threads around
+	set_scheduler(sched);
+      }
+      sched->add_task_context(&ctxmgr);
+    }
+
+#ifndef REALM_OPENMP_SYSTEM_RUNTIME
+    pool = new ThreadPool(me,
+                          num_threads - 1,
+			  stringbuilder() << "OMP" << numa_node << " proc " << _me,
+			  numa_node, _stack_size, crs);
+
+    // eagerly spin up worker threads
+    pool->start_worker_threads();
+#endif
+  }
+
+  LocalOpenMPProcessor::~LocalOpenMPProcessor(void)
+  {
+    delete core_rsrv;
+  }
+
+  void LocalOpenMPProcessor::shutdown(void)
+  {
+    log_omp.info() << "shutting down";
+#ifndef REALM_OPENMP_SYSTEM_RUNTIME
+    pool->stop_worker_threads();
+    delete pool;
+#endif
+
+    LocalTaskProcessor::shutdown();
+  }
+
+
+  ////////////////////////////////////////////////////////////////////////
+  //
+  // class LocalOpenMPProcessor::OpenMPContextManager
+
+  LocalOpenMPProcessor::OpenMPContextManager::OpenMPContextManager(LocalOpenMPProcessor *_proc)
+    : proc(_proc)
+  {}
+
+  void LocalOpenMPProcessor::OpenMPContextManager::lazy_init_affinity() const
+  {
+#ifdef REALM_OPENMP_SYSTEM_RUNTIME
+    // this must be set on the right thread
+    omp_set_num_threads(proc->num_threads);
+
+    bool affinity_result = true;
+    if(!proc->omp_threads_mapped) {
+      log_omp.info() << "Trying to bind proc " << proc->me << " onto core resv:["
+                     << (*proc->core_rsrv) << "]";
+    }
+
+    // make sure all of our workers know who we are
+    #pragma omp parallel
+    {
+      ThreadLocal::current_processor = proc->me;
+
+      if(!proc->omp_threads_mapped) {
+        int omp_tid = omp_get_thread_num();
+        bool local_affinity_result = proc->core_rsrv->set_affinity(omp_tid, omp_tid);
+        // Let's gather the result of setaffinity of each omp thread
+        int num_threads = omp_get_num_threads();
+#pragma omp for reduction(&& : affinity_result) schedule(static, 1)
+        for(int i = 0; i < num_threads; i++)
+          affinity_result = local_affinity_result && affinity_result;
+      }
+    }
+    if(!proc->omp_threads_mapped) {
+      if(!affinity_result) {
+        log_omp.warning("OMP Proc " IDFMT
+                        " failed setaffinity, which will lead to low performance.",
+                        proc->me.id);
+      }
+      proc->omp_threads_mapped = true;
+    }
+#else
+    proc->pool->associate_as_master();
+#endif
+  }
+
+  void *
+  LocalOpenMPProcessor::OpenMPContextManager::create_context(InternalTask *task) const
+  {
+    lazy_init_affinity();
+    return nullptr;
+  }
+  void *LocalOpenMPProcessor::OpenMPContextManager::create_context(Task *task) const
+  {
+    lazy_init_affinity();
+    return nullptr;
+  }
+
+  void LocalOpenMPProcessor::OpenMPContextManager::destroy_context(Task *task, void *context) const
+  {
+    // nothing to clean up
+  }
+
+  void LocalOpenMPProcessor::OpenMPContextManager::destroy_context(InternalTask *task,
+                                                                   void *context) const
+  {
+    // nothing to clean up
+  }
+
+  namespace OpenMP {
+
+    ////////////////////////////////////////////////////////////////////////
+    //
+    // class OpenMPModuleConfig
+
+    OpenMPModuleConfig::OpenMPModuleConfig(void)
+      : ModuleConfig("openmp")
+    {
+      config_map.insert({"ocpu", &cfg_num_openmp_cpus});
+      config_map.insert({"othr", &cfg_num_threads_per_cpu});
+      config_map.insert({"onuma", &cfg_use_numa});
+      config_map.insert({"ostack", &cfg_stack_size});
+    }
+
+    void OpenMPModuleConfig::configure_from_cmdline(std::vector<std::string>& cmdline)
+    {
+      // first order of business - read command line parameters
+      CommandLineParser cp;
+
+      cp.add_option_int("-ll:ocpu", cfg_num_openmp_cpus)
+        .add_option_int("-ll:othr", cfg_num_threads_per_cpu)
+        .add_option_int("-ll:onuma", cfg_use_numa)
+        .add_option_int_units("-ll:ostack", cfg_stack_size, 'm')
+        .add_option_bool("-ll:okindhack", cfg_fake_cpukind);
+
+      bool ok = cp.parse_command_line(cmdline);
+      if(!ok) {
+        log_omp.fatal() << "error reading OpenMP command line parameters";
+        assert(false);
+      }
+    }
+
+
+    ////////////////////////////////////////////////////////////////////////
+    //
+    // class OpenMPModule
+
+    OpenMPModule::OpenMPModule(void)
+      : Module("openmp")
+      , config(nullptr)
+    {
+    }
+      
+    OpenMPModule::~OpenMPModule(void)
+    {
+      assert(config != nullptr);
+      config = nullptr;
+    }
+
+    /*static*/ ModuleConfig *OpenMPModule::create_module_config(RuntimeImpl *runtime)
+    {
+      OpenMPModuleConfig *config = new OpenMPModuleConfig();
+      return config;
+    }
+
+    /*static*/ Module *OpenMPModule::create_module(RuntimeImpl *runtime)
+    {
+      // create a module to fill in with stuff - we'll delete it if numa is
+      //  disabled
+      OpenMPModule *m = new OpenMPModule;
+
+#ifndef REALM_OPENMP_SYSTEM_RUNTIME
+      openmp_api_force_linkage();
+#endif
+
+      OpenMPModuleConfig *config =
+          checked_cast<OpenMPModuleConfig *>(runtime->get_module_config("openmp"));
+      assert(config != nullptr);
+      assert(config->finish_configured);
+      assert(m->name == config->get_name());
+      assert(m->config == nullptr);
+      m->config = config;
+
+      // if no cpus were requested, there's no point
+      if(m->config->cfg_num_openmp_cpus == 0) {
+	log_omp.debug() << "no OpenMP cpus requested";
+	delete m;
+	return 0;
+      }
+
+      // get number/sizes of NUMA nodes -
+      //   disable (with a warning) numa binding if support not found
+      if(m->config->cfg_use_numa) {
+	std::map<int, NumaNodeCpuInfo> cpuinfo;
+	if(numasysif_numa_available() &&
+	   numasysif_get_cpu_info(cpuinfo) &&
+	   !cpuinfo.empty()) {
+          // Figure out how many OpenMP processors we need per NUMA domain
+          int openmp_cpus_per_numa_node = 
+            (m->config->cfg_num_openmp_cpus + cpuinfo.size() - 1) / cpuinfo.size();
+	  int cores_needed = (openmp_cpus_per_numa_node *
+			      m->config->cfg_num_threads_per_cpu);
+	  // filter out any numa domains with insufficient core counts
+	  for(std::map<int, NumaNodeCpuInfo>::const_iterator it = cpuinfo.begin();
+	      it != cpuinfo.end();
+	      ++it) {
+	    const NumaNodeCpuInfo& ci = it->second;
+	    if(ci.cores_available >= cores_needed) {
+	      m->active_numa_domains.push_back(ci.node_id);
+	    } else {
+	      log_omp.warning() << "not enough cores in NUMA domain " << ci.node_id << " (" << ci.cores_available << " < " << cores_needed << ")";
+	    }
+	  }
+	} else {
+	  log_omp.warning() << "numa support not found (or not working)";
+	  m->config->cfg_use_numa = false;
+	}
+      }
+
+      // if we don't end up with any active numa domains,
+      //  use NUMA_DOMAIN_DONTCARE
+      // actually, use the value (-1) since it seems to cause link errors!?
+      if(m->active_numa_domains.empty())
+	m->active_numa_domains.push_back(-1 /*CoreReservationParameters::NUMA_DOMAIN_DONTCARE*/);
+
+      return m;
+    }
+
+    // do any general initialization - this is called after all configuration is
+    //  complete
+    void OpenMPModule::initialize(RuntimeImpl *runtime)
+    {
+      assert(config != NULL);
+      Module::initialize(runtime);
+    }
+
+    // create any processors provided by the module (default == do nothing)
+    //  (each new ProcessorImpl should use a Processor from
+    //   RuntimeImpl::next_local_processor_id)
+    void OpenMPModule::create_processors(RuntimeImpl *runtime)
+    {
+      Module::create_processors(runtime);
+
+      assert(!active_numa_domains.empty());
+      for(int i = 0; i < config->cfg_num_openmp_cpus; i++) {
+        int cpu_node = active_numa_domains[i % active_numa_domains.size()];
+        Processor p = runtime->next_local_processor_id();
+        ProcessorImpl *pi = new LocalOpenMPProcessor(
+            runtime, p, cpu_node, config->cfg_num_threads_per_cpu,
+            config->cfg_fake_cpukind, runtime->core_reservation_set(),
+            config->cfg_stack_size, Config::force_kernel_threads);
+        runtime->add_processor(pi);
+
+        // FIXME: once the stuff in runtime_impl.cc is removed, remove
+        //  this 'continue' so that we create affinities here
+        if(config->cfg_fake_cpukind) continue;
+
+        // create affinities between this processor and system/reg memories
+        // if the memory is one we created, use the kernel-reported distance
+        // to adjust the answer
+        std::vector<MemoryImpl *>& local_mems = runtime->nodes[Network::my_node_id].memories;
+        for(std::vector<MemoryImpl *>::iterator it2 = local_mems.begin();
+            it2 != local_mems.end();
+            ++it2) {
+          Memory::Kind kind = (*it2)->get_kind();
+          if((kind != Memory::SYSTEM_MEM) && (kind != Memory::REGDMA_MEM) &&
+             (kind != Memory::SOCKET_MEM) && (kind != Memory::Z_COPY_MEM))
+            continue;
+
+          Machine::ProcessorMemoryAffinity pma;
+          pma.p = p;
+          pma.m = (*it2)->me;
+
+          // use the same made-up numbers as in
+          //  runtime_impl.cc
+          if(kind == Memory::SYSTEM_MEM) {
+            pma.bandwidth = 100;  // "large"
+            pma.latency = 5;      // "small"
+          } else if (kind == Memory::Z_COPY_MEM) {
+            pma.bandwidth = 40; // "large"
+            pma.latency = 3; // "small"
+          } else if (kind == Memory::REGDMA_MEM) {
+            pma.bandwidth = 80;   // "large"
+            pma.latency = 10;     // "small"
+          } else {
+            // This is a numa domain, see if it is the same as ours or not
+            if (config->cfg_use_numa) {
+              // Figure out which numa node the memory is in
+              LocalCPUMemory *cpu_mem = static_cast<LocalCPUMemory*>(*it2);
+              int mem_node = cpu_mem->numa_node;
+              assert(mem_node >= 0);
+              // We know our numa node
+              int distance = numasysif_get_distance(cpu_node, mem_node);
+              if (distance >= 0) {
+                pma.bandwidth = 150 - distance;
+                pma.latency = distance / 10;     // Linux uses a cost of ~10/hop
+              } else {
+                // same as random sysmem
+                pma.bandwidth = 100;
+                pma.latency = 5;
+              }
+            } else {
+              // NUMA not available so use system memory settings
+              pma.bandwidth = 100; // "large"
+              pma.latency = 5; // "small"
+            }
+          }
+          
+          runtime->add_proc_mem_affinity(pma);
+        }
+      }
+    }
+    
+    // clean up any common resources created by the module - this will be called
+    //  after all memories/processors/etc. have been shut down and destroyed
+    void OpenMPModule::cleanup(void)
+    {
+      Module::cleanup();
+    }
+
+  }; // namespace OpenMP
+
+}; // namespace Realm
