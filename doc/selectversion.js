@@ -40,21 +40,19 @@ $('.dropbtn').html("Version " + url2label(thisvers));
 (async () => {
   const response = await fetch('https://api.github.com/repos/stanfordlegion/realm/contents/doc?ref=gh-pages');
   const data = await response.json();
-  data.then((v) => {
-    entries=[thisvers];
-    if (thisvers != master) {
-      entries.push(master);
-    }
-    v.forEach(function(entry) {
-        if (entry.name.startsWith('v') && entry.name != thisvers) {
-          entries.push(entry.name);
-        }
-    });
-    entries = entries.map((x) => '<a class="verslink" href="'
-                     + patharr.slice(0, urlrootdirs).join('/')
-                     + '/' + x + '/">'
-                     + url2label(x)
-                     + '</a>');
-    $('.dropdown-content').append(entries.join(''));
+  entries=[thisvers];
+  if (thisvers != master) {
+    entries.push(master);
+  }
+  data.forEach(function(entry) {
+      if (entry.name.startsWith('v') && entry.name != thisvers) {
+        entries.push(entry.name);
+      }
   });
+  entries = entries.map((x) => '<a class="verslink" href="'
+                    + patharr.slice(0, urlrootdirs).join('/')
+                    + '/' + x + '/">'
+                    + url2label(x)
+                    + '</a>');
+  $('.dropdown-content').append(entries.join(''));
 })();
