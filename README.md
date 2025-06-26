@@ -143,16 +143,3 @@ Commercial and academic use is free; attribution in papers and derivative works 
 
 ## Acknowledgements
 Realm is developed and maintained by the [Stanford Legion](https://legion.stanford.edu) team with significant contributions from NVIDIA, Los Alamos, Livermore, Sandia, and many members of the broader HPC community.
-
-If you use Realm in your work, please cite us!  
-BibTeX:
-```bibtex
-@inproceedings{realm_pact14,
-  author    = {Aumiller, Trevor and Bauer, Michael and Treichler, Sean and Lee, Wonchan and Pingali, Keshav},
-  title     = {Task Graphs and Scheduling Policies for Dynamically Asynchronous Execution},
-  booktitle = {Proceedings of the 2014 International Conference on Parallel Architectures and Compilation Techniques},
-  year      = {2014},
-  publisher = {ACM},
-  address   = {New York, NY, USA},
-}
-```
