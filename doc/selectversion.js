@@ -36,58 +36,24 @@ let patharr = window.location.pathname.replace(/\/+/g, '/').split('/');
 let thisvers = url2version(patharr);
 $('.dropbtn').html("Version " + url2label(thisvers));
 
-// https://stackoverflow.com/questions/30622369
-$.get(urlroot + '/', (data) =>
-      {
-      let ret = parseDirectoryListing(data);
-      $('.dropdown-content').append(ret.join(''));
-
-      // Now check which links actually exist, and remove the href for those
-      // that don't.
-      $('.dropdown-content')
-      .find('.verslink')
-      .each(function() {
-            var el = $(this);
-            var request = new XMLHttpRequest();
-            request.open('HEAD', el.attr('href'), true);
-            request.onreadystatechange = function(){
-               if (request.readyState === 4){
-                  if (request.status === 404) {
-                     el.removeAttr('href');
-                     el.css({'color': "gray",
-                            'text-decoration': 'line-through'});
-                  }
-               }
-            };
-            request.send();
-         });
-      });
-
-function parseDirectoryListing(text)
-{
-   let docs = text.match(/href="([^/][^"]+)"/g)
-                  .filter(line => /\/"$/.test(line)); // only directories.
-   docs = docs.map((x) =>
-                   x.replace(/\/\//g, '/')
-                   .replace(/href="/,'')
-                   .replace(/\/"$/,''))
-              .sort().reverse();
-   docs = docs.filter(function(line) {
-                      // suppress link to current version
-                      return !RegExp(thisvers).test(line)
-                         // suppress hidden dirs
-                         && !/^[.]/.test(line);
-                      });
-
-   if (docs.includes(master)) {
-      // Move "master" first.
-      docs.splice(0, 0, docs[docs.length - 1]);
-      docs.pop();
-   }
-   docs = docs.map((x) => '<a class="verslink" href="'
+// https://stackoverflow.com/questions/39048654
+(async () => {
+  const response = await fetch('https://api.github.com/repos/stanfordlegion/realm/contents/doc?ref=gh-pages');
+  const data = await response.json();
+  entries=[thisver];
+  if (thisver != master) {
+    entries.push(master);
+  }
+  data.forEach(function(entry) {
+      if (entry.name.startsWith('v') && entry.name != thisver) {
+        entries.push(entry.name);
+      }
+  });
+  entries = entries.map((x) => '<a class="verslink" href="'
                    + patharr.slice(0, urlrootdirs).join('/')
                    + '/' + x + '/' + patharr[patharr.length-1] + '">'
                    + url2label(x)
                    + '</a>');
-   return docs;
-}
+	$('.dropdown-content').append(entries.join(''));
+
+})();
