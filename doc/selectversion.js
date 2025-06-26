@@ -40,12 +40,12 @@ $('.dropbtn').html("Version " + url2label(thisvers));
 (async () => {
   const response = await fetch('https://api.github.com/repos/stanfordlegion/realm/contents/doc?ref=gh-pages');
   const data = await response.json();
-  entries=[thisver];
-  if (thisver != master) {
+  entries=[thisvers];
+  if (thisvers != master) {
     entries.push(master);
   }
   data.forEach(function(entry) {
-      if (entry.name.startsWith('v') && entry.name != thisver) {
+      if (entry.name.startsWith('v') && entry.name != thisvers) {
         entries.push(entry.name);
       }
   });
