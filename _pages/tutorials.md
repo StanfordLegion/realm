@@ -2,6 +2,6 @@
 title: Realm Tutorials
 layout: collection
 permalink: /tutorials/
-collection: tutorial
+collection: tutorials
 classes: wide
 ---

@@ -314,6 +314,8 @@ defaults:
       comments: # true
       share: true
       related: true
+      sidebar:
+        nav: "main"
   # _tutorials
   - scope:
       path: ""
@@ -323,3 +325,5 @@ defaults:
       author_profile: false
       share: true
       related: true
+      sidebar:
+        nav: "main"
