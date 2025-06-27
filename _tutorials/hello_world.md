@@ -1,5 +1,5 @@
 ---
-title: Realm Hello World
+title: Hello World
 ---
 
 The tutorial begins with a simple "hello world" example that showcases the basics.

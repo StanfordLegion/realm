@@ -1,5 +1,5 @@
 ---
-title: Realm Region Instances
+title: Region Instances
 ---
 
 ## Introduction

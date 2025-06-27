@@ -1,5 +1,5 @@
 ---
-title: Realm Reservation
+title: Reservation
 tags: [Mermaid]
 mermaid: true
 ---

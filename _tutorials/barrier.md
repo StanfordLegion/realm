@@ -1,5 +1,5 @@
 ---
-title: Realm Barrier
+title: Barrier
 ---
 
 ## Introduction

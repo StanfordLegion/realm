@@ -1,7 +1,7 @@
 ---
 
 
-title: Realm Subgraph
+title: Subgraph
 tags: [Mermaid]
 mermaid: true
 ---

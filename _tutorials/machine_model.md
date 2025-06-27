@@ -1,5 +1,5 @@
 ---
-title: Realm Machine Model
+title: Machine Model
 ---
 
 

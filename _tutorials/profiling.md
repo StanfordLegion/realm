@@ -1,5 +1,5 @@
 ---
-title: Realm Profiling
+title: Profiling
 ---
 
 ## Introduction
