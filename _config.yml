@@ -289,6 +289,10 @@ compress_html:
   ignore:
     envs: development
 
+collections:
+  tutorials:
+    output: true
+    permalink: /:collection/:path/
 
 # Defaults
 defaults:
@@ -307,5 +311,14 @@ defaults:
       author_profile: true
       read_time: true
       comments: # true
+      share: true
+      related: true
+  # _tutorials
+  - scope:
+      path: ""
+      type: tutorials
+    values:
+      layout: single
+      author_profile: false
       share: true
       related: true
