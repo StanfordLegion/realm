@@ -1,7 +1,25 @@
 # main links
 main:
+  - title: "Blog"
+    url: /
+  - title: "Getting Started"
+    children:
+      - title: "Quick Start Guide"
+        url: /
+      - title: "Installation"
+        url: /
   - title: "Documentation"
-    url: doc/main
+    children:
+      - title: "API Documentation"
+        url: doc/main
+      - title: "Tutorials"
+        url: /
+  - title: "Misc"
+    children:
+      - title: "Changelog"
+        url: {{ github.site }}
+      - title: "License"
+        url: {{ github.site }}
   # - title: "About"
   #   url: https://mmistakes.github.io/minimal-mistakes/about/
   # - title: "Sample Posts"
