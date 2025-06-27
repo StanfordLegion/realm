@@ -132,6 +132,7 @@ Run any Realm executable with `-hl:help` (high-level) or `-ll:help` (low-level) 
 ---
 
 ## Documentation
+* Current public documentation can be found [here](https://legion.stanford.edu/realm/doc/main)
 * **API reference (Doxygen):** generate with `make docs` or `cmake --build . --target docs`.
 * **Tutorials:** see the [`tutorials/`](tutorials) directory listed above.
 * **Examples & Benchmarks:** under [`examples/`](examples) and [`benchmarks/`](benchmarks).
