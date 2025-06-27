@@ -1,27 +1,25 @@
 # main links
 main:
   - title: "Blog"
-    url: /
+    url: /index.html
   - title: "Getting Started"
     children:
       - title: "Quick Start Guide"
-        url: /
-      - title: "Installation"
-        url: /
+        url: /quick-start/
   - title: "Documentation"
     children:
       - title: "API Documentation"
-        url: doc/main
+        url: /doc/main/
       - title: "Tutorials"
-        url: /
+        url: /tutorials/
   - title: "Misc"
     children:
       - title: "Changelog"
-        url: {{ github.site }}
+        url: https://github.com/StanfordLegion/realm/releases
+      - title: "Issues"
+        url: https://github.com/StanfordLegion/realm/issues
       - title: "License"
-        url: {{ github.site }}
-  # - title: "About"
-  #   url: https://mmistakes.github.io/minimal-mistakes/about/
+        url: https://github.com/StanfordLegion/realm/blob/main/LICENSE.txt
   # - title: "Sample Posts"
   #   url: /year-archive/
   # - title: "Sample Collections"
