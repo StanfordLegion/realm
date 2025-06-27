@@ -1,6 +1,4 @@
 ---
-layout: page
-permalink: /tutorial/realm/reductions.html
 title: Realm Reductions
 ---
 

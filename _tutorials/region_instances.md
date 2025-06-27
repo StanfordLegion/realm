@@ -1,6 +1,4 @@
 ---
-layout: page
-permalink: /tutorial/realm/region_instances.html
 title: Realm Region Instances
 ---
 
@@ -176,4 +174,4 @@ piece, lookups are now constant time again).
 
 ## References
 
-1. [Instance public header file](https://github.com/StanfordLegion/legion/blob/stable/runtime/realm/instance.h)
+1. [Instance public header file](https://github.com/StanfordLegion/realm/blob/main/realm/instance.h)

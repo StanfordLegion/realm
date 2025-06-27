@@ -1,6 +1,4 @@
 ---
-layout: page
-permalink: /tutorial/realm/cuda_interop.html
 title: Realm CUDA Interop
 ---
 

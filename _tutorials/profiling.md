@@ -1,6 +1,4 @@
 ---
-layout: page
-permalink: /tutorial/realm/profiling.html
 title: Realm Profiling
 ---
 
@@ -139,4 +137,4 @@ It turns out the profiling guided one achieves better task load balance.
 
 ## References
 
-1. [profiling header file](https://github.com/StanfordLegion/legion/blob/stable/runtime/realm/profiling.h)
+1. [profiling header file](https://github.com/StanfordLegion/realm/blob/main/realm/profiling.h)

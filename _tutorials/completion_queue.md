@@ -1,6 +1,4 @@
 ---
-layout: page
-permalink: /tutorial/realm/completion_queue.html
 title: Realm Completion Queue
 ---
 
