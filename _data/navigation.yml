@@ -2,6 +2,15 @@
 main:
   - title: "Blog"
     url: /index.html
+  - title: "Documentation"
+    url: /doc/main/
+  - title: <i class="fab fa-fw fa-github" aria-hidden="true"></i>GitHub
+    url: https://github.com/StanfordLegion/realm
+  - title: <i class="fab fa-fw fa-youtube" aria-hidden="true"></i>YouTube
+    url: https://www.youtube.com/@stanfordlegion
+sidebar:
+  - title: "Blog"
+    url: /index.html
   - title: "Getting Started"
     children:
       - title: "Quick Start Guide"

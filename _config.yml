@@ -303,7 +303,7 @@ defaults:
       path: ""
     values:
       sidebar:
-        nav: "main"
+        nav: "sidebar"
   # _posts
   - scope:
       path: ""
@@ -316,7 +316,7 @@ defaults:
       share: true
       related: true
       sidebar:
-        nav: "main"
+        nav: "sidebar"
   # _tutorials
   - scope:
       path: ""
@@ -327,4 +327,4 @@ defaults:
       share: true
       related: true
       sidebar:
-        nav: "main"
+        nav: "sidebar"
