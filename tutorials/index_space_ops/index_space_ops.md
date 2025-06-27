@@ -1,5 +1,5 @@
 ---
-title: Realm Index Spaces
+title: Index Spaces
 ---
 
 ## Introduction

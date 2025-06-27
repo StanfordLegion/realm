@@ -1,5 +1,5 @@
 ---
-title: Realm Events
+title: Events
 ---
 
 ## Introduction

@@ -1,5 +1,5 @@
 ---
-title: Realm Reductions
+title: Reductions
 ---
 
 ## Introduction

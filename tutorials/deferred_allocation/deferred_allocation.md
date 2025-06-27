@@ -1,5 +1,5 @@
 ---
-title: Realm Deferred Allocation
+title: Deferred Allocation
 ---
 
 ## Introduction

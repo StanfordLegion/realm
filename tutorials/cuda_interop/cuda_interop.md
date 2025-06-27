@@ -1,5 +1,5 @@
 ---
-title: Realm CUDA Interop
+title: CUDA Interop
 ---
 
 ## Introduction

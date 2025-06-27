@@ -1,5 +1,5 @@
 ---
-title: Realm Completion Queue
+title: Completion Queue
 ---
 
 ## Introduction
