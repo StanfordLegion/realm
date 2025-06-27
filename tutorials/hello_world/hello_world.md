@@ -1,6 +1,4 @@
 ---
-layout: page
-permalink: /tutorial/realm/hello_realm.html
 title: Realm Hello World
 ---
 

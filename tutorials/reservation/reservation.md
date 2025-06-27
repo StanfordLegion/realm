@@ -1,6 +1,4 @@
 ---
-layout: page
-permalink: /tutorial/realm/reservation.html
 title: Realm Reservation
 tags: [Mermaid]
 mermaid: true

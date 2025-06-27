@@ -1,6 +1,4 @@
 ---
-layout: page
-permalink: /tutorial/realm/barrier.html
 title: Realm Barrier
 ---
 
