@@ -1,6 +1,9 @@
 ---
 permalink: /quick-start/
+layout: single
 toc: true
+toc_sticky: true
+title: Quick Start
 ---
 
 ### 1. Clone
