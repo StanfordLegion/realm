@@ -8,6 +8,10 @@ on:
     branches-ignore:
       - gh-pages
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   build:
     name: ${{ matrix.config.os }}-${{ matrix.config.cc }}-${{ matrix.config.build }}
@@ -146,11 +150,11 @@ jobs:
           rm -rf gh-pages/doc/${{ steps.safe.outputs.ref }}*
           mv install/share/doc/Realm/realm-* gh-pages/doc/${{ steps.safe.outputs.ref }}
           cp realm-src/tutorials/*/*.md gh-pages/_tutorials
-          cd gh-pages/doc
-          find * -maxdepth 0 -type d > doc-versions
+          cd gh-pages
+          (cd doc && find * -maxdepth 0 -type d | sort --version-sort) > doc/doc-versions
           git config --global user.name "GitHub Docs Builder"
           git config --global user.email "docs-builder@users.noreply.github.com"
-          git add ${{ steps.safe.outputs.ref }} doc-versions
+          git add doc/${{ steps.safe.outputs.ref }} doc/doc-versions _tutorials
           git status
           git commit --allow-empty -m "Update docs and tutorials for ${{ github.ref_name }}"
           git fetch origin
