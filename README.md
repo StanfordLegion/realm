@@ -1,11 +1,15 @@
 [![ci](https://github.com/stanfordlegion/realm/actions/workflows/ci.yml/badge.svg)](https://github.com/StanfordLegion/realm/actions/workflows/ci.yml)
 [![Release](https://img.shields.io/github/release/stanfordlegion/realm.svg)](https://github.com/StanfordLegion/realm/releases/latest)
-[![License](https://img.shields.io/github/license/stanfordlegion/realm)](https://github.com/StanfordLegion/realm/blob/main/LICENSE.txt)
+[![Documentation](https://img.shields.io/badge/docs-grey.svg?logo=doxygen&logoColor=white&labelColor=blue)](https://legion.stanford.edu/realm/doc)
+[![License](https://img.shields.io/github/license/stanfordlegion/realm.svg)](https://github.com/StanfordLegion/realm/blob/main/LICENSE.txt)
+[![Issues](https://img.shields.io/github/issues/stanfordlegion/realm.svg)](https://github.com/StanfordLegion/realm/issues)
+[![Chat](https://img.shields.io/badge/zulip-join_chat-brightgreen.svg)](https://legion.zulipchat.com)
 
-![CUDA](https://img.shields.io/badge/cuda-000000.svg?style=for-the-badge&logo=nVIDIA&logoColor=green)
-![Linux](https://img.shields.io/badge/Linux-FCC624?style=for-the-badge&logo=linux&logoColor=black)
-![macOS](https://img.shields.io/badge/mac%20os-000000?style=for-the-badge&logo=macos&logoColor=F0F0F0)
-![Windows](https://img.shields.io/badge/Windows-0078D6?style=for-the-badge&logo=windows&logoColor=white)
+[![CUDA](https://img.shields.io/badge/CUDA-76B900?logo=nvidia&logoColor=fff)](#)
+[![Linux](https://img.shields.io/badge/Linux-FCC624?logo=linux&logoColor=black)](#)
+[![macOS](https://img.shields.io/badge/macOS-000000?logo=apple&logoColor=F0F0F0)](#)
+[![Windows](https://custom-icon-badges.demolab.com/badge/Windows-0078D6?logo=windows11&logoColor=white)](#)
+[![ARM](https://img.shields.io/badge/ARM-white?logo=arm&logoColor=white&color=blue)](#)
 
 # Realm
 

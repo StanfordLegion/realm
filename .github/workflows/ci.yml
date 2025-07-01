@@ -14,7 +14,7 @@ concurrency:
 
 jobs:
   build:
-    name: ${{ matrix.config.os }}-${{ matrix.config.cc }}-${{ matrix.config.build }}
+    name: ${{ matrix.config.os }}-${{ matrix.config.cc }}-${{ matrix.config.cuda }}-${{ matrix.config.build }}
     runs-on: ${{ matrix.config.os }}
     env:
       CPM_SOURCE_CACHE: "${{ github.workspace }}/.cache/cpm"
@@ -30,42 +30,49 @@ jobs:
               build: Release,
               cc: "cl", cxx: "cl",
               ccache: sccache,
+              cuda: ''
             }
           - {
               os: ubuntu-24.04-arm,
               build: Release,
               cc: "gcc", cxx: "g++",
               ccache: ccache,
+              cuda: ''
             }
           - {
               os: ubuntu-24.04-arm,
               build: Release,
               cc: "clang", cxx: "clang++",
               ccache: ccache,
+              cuda: ''
             }
           - {
               os: ubuntu-latest,
               build: Release,
               cc: "gcc", cxx: "g++",
               ccache: ccache,
+              cuda: ''
             }
           - {
               os: ubuntu-latest,
               build: Release,
               cc: "clang", cxx: "clang++",
               ccache: ccache,
+              cuda: ''
             }
           - {
               os: ubuntu-latest,
               build: Debug,
               cc: "gcc", cxx: "g++",
               ccache: ccache,
+              cuda: ''
             }
           - {
               os: macos-latest,
               build: Release,
               cc: "clang", cxx: "clang++",
               ccache: ccache,
+              cuda: ''
             }
     steps:
       - uses: actions/checkout@v4.2.2
@@ -79,6 +86,13 @@ jobs:
         if: ${{ matrix.config.os == 'ubuntu-latest' }}
         with:
           packages: ${{ matrix.config.cc }} ${{ matrix.config.cxx }}
+
+      - uses: Jimver/cuda-toolkit@v0.2.25
+        if: ${{ matrix.config.cuda != '' }}
+        with:
+          cuda: ${{ matrix.config.cuda }}
+          sub-packages: '["nvcc", "cudart", "cupti", "nvtx", "nvml-dev"]'
+          method: 'network'
 
       - uses: actions/cache@v4
         name: Restore CPM source cache
@@ -94,10 +108,10 @@ jobs:
           variant: ${{ matrix.config.ccache }}
           append-timestamp: true
 
-          key: ${{ matrix.config.os }}-${{ matrix.config.cc }}-${{ matrix.config.build }}-${{ github.ref_name }}-ccache
+          key: ${{ matrix.config.os }}-${{ matrix.config.cc }}-${{ matrix.config.cuda }}-${{ matrix.config.build }}-${{ github.ref_name }}-ccache
           restore-keys: |
-            ${{ matrix.config.os }}-${{ matrix.config.cc }}-${{ matrix.config.build }}-${{ github.ref_name }}
-            ${{ matrix.config.os }}-${{ matrix.config.cc }}-${{ matrix.config.build }}-main
+            ${{ matrix.config.os }}-${{ matrix.config.cc }}-${{ matrix.config.cuda }}-${{ matrix.config.build }}-${{ github.ref_name }}
+            ${{ matrix.config.os }}-${{ matrix.config.cc }}-${{ matrix.config.cuda }}-${{ matrix.config.build }}-main
 
       - uses: microsoft/setup-msbuild@v2
         if: ${{ matrix.config.os == 'windows-latest' }}
