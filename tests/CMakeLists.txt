@@ -144,7 +144,7 @@ if(REALM_ENABLE_COVERAGE)
       COMMAND
         "${OPENCPPCOV_PATH}" "--export_type=cobertura:${NATIVE_BIN_DIR}\\coverage.xml"
         --cover_children --sources "${NATIVE_SRC_DIR}" --modules "${NATIVE_BIN_DIR}"
-        --excluded_sources "${NATIVE_BIN_DIR}\\_deps" -- "${CMAKE_CTEST_COMMAND}" -T Test -T
+        --excluded_sources "${NATIVE_BIN_DIR}\\_deps" -- "${CMAKE_CTEST_COMMAND}" --test-dir "${NATIVE_BIN_DIR}" -T Test -T
         Coverage -L unit
       BYPRODUCTS coverage.xml
       WORKING_DIRECTORY ${PROJECT_BINARY_DIR}
@@ -176,11 +176,9 @@ if(REALM_ENABLE_COVERAGE)
       unit
       DEPENDENCIES
       realm_unit_tests
-      BASE_DIRECTORY
-      "${REALM_TEST_DIR}/../.."
       EXCLUDE
       "${PROJECT_BINARY_DIR}/*"
-      "${REALM_TEST_DIR}/*"
+      "${CMAKE_CURRENT_SOURCE_DIR}/*"
     )
   endif()
 endif()

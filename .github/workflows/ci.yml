@@ -85,7 +85,7 @@ jobs:
       - uses: awalsh128/cache-apt-pkgs-action@latest
         if: ${{ matrix.config.os == 'ubuntu-latest' }}
         with:
-          packages: ${{ matrix.config.cc }} ${{ matrix.config.cxx }}
+          packages: ${{ matrix.config.cc }} ${{ matrix.config.cxx }} ccache
 
       - uses: Jimver/cuda-toolkit@v0.2.25
         if: ${{ matrix.config.cuda != '' }}

@@ -1,0 +1,101 @@
+name: Code Coverage
+
+on:
+  push:
+    branches-ignore:
+      - gh-pages
+    paths:
+      - '**.cc'
+      - '**.c'
+      - '**.h'
+      - '**.hpp'
+      - '**.inl'
+      - '**CMakeLists.txt'
+      - '**.cmake'
+  pull_request:
+    branches-ignore:
+      - gh-pages
+    paths:
+      - '**.cc'
+      - '**.c'
+      - '**.h'
+      - '**.hpp'
+      - '**.inl'
+      - '**CMakeLists.txt'
+      - '**.cmake'
+
+jobs:
+  build:
+    name: coverage-${{ matrix.config.os }}
+    runs-on:  ${{ matrix.config.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        config:
+          - {
+              os: windows-latest,
+              build: Debug,
+              cc: "cl", cxx: "cl",
+              ccache: sccache,
+            }
+          - {
+              os: ubuntu-latest,
+              build: Debug,
+              cc: "gcc", cxx: "g++",
+              ccache: ccache,
+            }
+    steps:
+      - uses: actions/checkout@v4.2.2
+
+      - uses: awalsh128/cache-apt-pkgs-action@latest
+        if: ${{ matrix.config.os == 'ubuntu-latest' }}
+        with:
+          packages: ${{ matrix.config.cc }} ${{ matrix.config.cxx }} gcovr ccache
+
+      - if: runner.os == 'Windows'
+        name: Install and setup OpenCppCoverage
+        run: |
+          choco upgrade --no-progress -y OpenCppCoverage
+          echo 'CTEST_LAUNCHER=C:\Program Files\OpenCppCoverage\OpenCppCoverage.exe --cover_children --modules ${{ github.workspace }}/build --sources ${{ github.workspace }} --excluded_sources ${{ github.workspace }}/build/_deps --' >> $GITHUB_ENV
+
+      - uses: actions/cache@v4
+        name: Restore CPM source cache
+        with:
+          path: .cache/cpm
+          key: cpm-${{ steps.timestamp.outputs.time }}
+          restore-keys: |
+            cpm-
+
+      - uses: hendrikmuhs/ccache-action@v1.2
+        name: Restore ccache cache
+        with:
+          variant: ${{ matrix.config.ccache }}
+          append-timestamp: true
+          key: ${{ matrix.config.os }}-${{ matrix.config.cc }}-${{ matrix.config.cuda }}-${{ matrix.config.build }}-${{ github.ref_name }}-ccache
+          restore-keys: |
+            ${{ matrix.config.os }}-${{ matrix.config.cc }}-${{ matrix.config.cuda }}-${{ matrix.config.build }}-${{ github.ref_name }}
+            ${{ matrix.config.os }}-${{ matrix.config.cc }}-${{ matrix.config.cuda }}-${{ matrix.config.build }}-main
+
+      - uses: microsoft/setup-msbuild@v2
+        if: ${{ matrix.config.os == 'windows-latest' }}
+
+      - uses: lukka/get-cmake@latest
+
+      - name: Configure
+        run: |
+          cmake -S . -B build -DCMAKE_C_COMPILER=${{ matrix.config.cc }} -DCMAKE_CXX_COMPILER=${{ matrix.config.cxx }} -DCMAKE_C_COMPILER_LAUNCHER=${{ matrix.config.ccache }} -DCMAKE_CXX_COMPILER_LAUNCHER=${{ matrix.config.ccache }} -DCMAKE_BUILD_TYPE=${{ matrix.config.build }} -DREALM_BUILD_TESTS=ON -DREALM_BUILD_BENCHMARKS=ON -DREALM_BUILD_TUTORIALS=ON -DREALM_BUILD_EXAMPLES=ON -DREALM_ENABLE_GASNETEX=OFF -DREALM_ENABLE_COVERAGE=ON
+
+      - name: Build
+        run: |
+          cmake --build build --parallel 4 --config ${{ matrix.config.build }}
+
+      - name: Run tests
+        run: |
+          cmake --build build --parallel 4 --config ${{ matrix.config.build }} --target coverage
+
+      #- name: Upload coverage results
+      # uses: codecov/codecov-action@v4.2.0
+      # with:
+      #   token: ${{ secrets.CODECOV_TOKEN }}
+      #   files: ${{ github.workspace }}/build/coverage.xml
+      #   verbose: true

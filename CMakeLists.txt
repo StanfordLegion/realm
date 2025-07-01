@@ -262,8 +262,9 @@ endif()
 if(REALM_ENABLE_COVERAGE)
   if(MSVC)
     find_program(
-      OPENCPPCOV OpenCppCoverage.exe REQUIRED HINTS $ENV{ProgramFiles\(x86\)}/OpenCppCoverage
-                                                    $ENV{ProgramFiles}/OpenCppCoverage
+      OPENCPPCOV_PATH OpenCppCoverage.exe REQUIRED 
+      HINTS $ENV{ProgramFiles\(x86\)}/OpenCppCoverage
+            $ENV{ProgramFiles}/OpenCppCoverage
     )
   else()
     include(${CMAKE_CURRENT_SOURCE_DIR}/cmake/CodeCoverage.cmake)
@@ -920,9 +921,6 @@ endif()
 
 #region Testing
 if(REALM_BUILD_TESTS OR REALM_BUILD_BENCHMARKS)
-  if(OPENCPPCOV_PATH)
-    list(APPEND CMAKE_TEST_LAUNCHER ${OPENCPPCOV} --sources ${REALM_SOURCE_DIR} --)
-  endif()
   include(CTest)
   enable_testing()
 endif()
