@@ -1,0 +1,36 @@
+# These checks are to be modified and made stricter as files are fixed
+Checks: >
+    -*,
+    clang-analyzer-*
+    bugprone-*,
+    portability-*,
+    concurrency-*,
+    misc-*,
+    readability-idenfifier-naming,
+    cppcoreguidelines-avoid-magic-numbers,
+    cppcoreguidelines-virtual-class-destructor,
+    modernize-use-override,
+    modernize-use-noexcept,
+    modernize-use-nullptr,
+    readability-simplify-boolean-expr,
+    readability-simplify-subscript-expr,
+    readability-uppercase-literal-suffix,
+    readability-static-definition-in-anonymous-namespace,
+    readability-braces-around-statements,
+    readability-container-*,
+    readability-delete-null-pointer,
+    readability-else-after-return,
+
+FormatStyle: file
+
+CheckOptions:
+  - { key: readability-identifier-naming.NamespaceCase,            value: CamelCase  }
+  - { key: readability-identifier-naming.ClassCase,                value: CamelCase  }
+  - { key: readability-identifier-naming.StructCase,               value: CamelCase  }
+  - { key: readability-identifier-naming.FunctionCase,             value: lower_case }
+  - { key: readability-identifier-naming.VariableCase,             value: lower_case }
+  - { key: readability-identifier-naming.ConstantCase,             value: UPPER_CASE }
+  - { key: readability-identifier-naming.LocalConstantCase,        value: UPPER_CASE }
+  - { key: readability-identifier-naming.ConstantParameterCase,    value: lower_case }
+  - { key: readability-identifier-naming.MacroCase,                value: UPPER_CASE }
+  - { key: readability-function-cognitive-complexity.IgnoreMacros, value: true       }

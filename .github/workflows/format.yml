@@ -1,0 +1,83 @@
+name: format
+
+on:
+  pull_request:
+    branches: main
+    paths:
+      - **.cc
+      - **.c
+      - **.h
+      - **.hpp
+      - **.inl
+      - **CMakeLists.txt
+      - **.cmake
+  push:
+    branches: main
+    paths:
+      - **.cc
+      - **.c
+      - **.h
+      - **.hpp
+      - **.inl
+      - **CMakeLists.txt
+      - **.cmake
+
+jobs:
+  formatting:
+    name: Formatting checks
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+    steps:
+      - uses: actions/checkout@v4.2.2
+        with:
+          fetch-depth: 0
+
+      - uses: awalsh128/cache-apt-pkgs-action@latest
+        with:
+          packages: clang-format-15 cmake-format
+
+      - name: PR base/head sha
+        if: github.event_name == 'pull_request'
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run:
+          echo BASE_SHA=$BASE_SHA >> "$GITHUB_ENV"
+          echo HEAD_SHA=$HEAD_SHA >> "$GITHUB_ENV"
+
+      - name: PR base/head sha
+        if: github.event_name == 'push'
+        env:
+          BASE_SHA: ${{ github.event.before }}
+          HEAD_SHA: ${{ github.event.after }}
+        run:
+          echo BASE_SHA=$BASE_SHA >> "$GITHUB_ENV"
+          echo HEAD_SHA=$HEAD_SHA >> "$GITHUB_ENV"
+
+      - name: Clang Format
+        run: |
+          git diff -U0 --no-color ${BASE_SHA}..${HEAD_SHA} > /tmp/patch.diff
+          cat /tmp/patch.diff | clang-format-diff-15 -p1 2>&1 > /tmp/not-formatted.diff
+          if grep -q '[^[:space:]]' /tmp/not-formatted.diff; then
+						echo 'Code is not formatted'
+						echo 'Run clang-format-diff on your changes to fix these:'
+						echo "    git diff -U0 --no-color ${BASE_SHA} | clang-format-diff-15 -p1 -i"
+						echo "Diff formatting result:"
+						cat /tmp/not-formatted.diff
+						exit 1
+          fi
+
+			- uses: tj-actions/changed-files@v46.0.5
+				id: changed-cmake-files
+				with:
+					files: |
+						**CMakeLists.txt
+						**.cmake
+
+			- name: CMake Format
+				if: steps.changed-cmake-files.outputs.test_any_changed == 'true'
+				env:
+					ALL_CHANGED_CMAKE: ${{ steps.changed-cmake-files.outputs.all_changed_files }}
+				run: |
+					cmake-format --check $ALL_CHANGED_CMAKE
