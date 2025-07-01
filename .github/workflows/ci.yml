@@ -32,6 +32,18 @@ jobs:
               ccache: sccache,
             }
           - {
+              os: ubuntu-24.04-arm,
+              build: Release,
+              cc: "gcc", cxx: "g++",
+              ccache: ccache,
+            }
+          - {
+              os: ubuntu-24.04-arm,
+              build: Release,
+              cc: "clang", cxx: "clang++",
+              ccache: ccache,
+            }
+          - {
               os: ubuntu-latest,
               build: Release,
               cc: "gcc", cxx: "g++",
