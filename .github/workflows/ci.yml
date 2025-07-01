@@ -39,6 +39,12 @@ jobs:
             }
           - {
               os: ubuntu-latest,
+              build: Release,
+              cc: "clang", cxx: "clang++",
+              ccache: ccache,
+            }
+          - {
+              os: ubuntu-latest,
               build: Debug,
               cc: "gcc", cxx: "g++",
               ccache: ccache,
@@ -56,6 +62,11 @@ jobs:
         id: timestamp
         with:
           format: "yyyy-MM-dd-HH-mm-ss-SSS"
+
+      - uses: awalsh128/cache-apt-pkgs-action@latest
+        if: ${{ matrix.config.os == 'ubuntu-latest' }}
+        with:
+          packages: ${{ matrix.config.cc }} ${{ matrix.config.cxx }}
 
       - uses: actions/cache@v4
         name: Restore CPM source cache
@@ -83,7 +94,7 @@ jobs:
 
       - name: Configure
         run: |
-          cmake -S . -B build -DCMAKE_C_COMPILER_LAUNCHER=${{ matrix.config.ccache }} -DCMAKE_CXX_COMPILER_LAUNCHER=${{ matrix.config.ccache }} -DCMAKE_BUILD_TYPE=${{ matrix.config.build }} -DREALM_BUILD_TESTS=ON -DREALM_BUILD_BENCHMARKS=ON -DREALM_BUILD_TUTORIALS=ON -DREALM_BUILD_EXAMPLES=ON -DREALM_ENABLE_GASNETEX=OFF
+          cmake -S . -B build -DCMAKE_C_COMPILER=${{ matrix.config.cc }} -DCMAKE_CXX_COMPILER=${{ matrix.config.cxx }} -DCMAKE_C_COMPILER_LAUNCHER=${{ matrix.config.ccache }} -DCMAKE_CXX_COMPILER_LAUNCHER=${{ matrix.config.ccache }} -DCMAKE_BUILD_TYPE=${{ matrix.config.build }} -DREALM_BUILD_TESTS=ON -DREALM_BUILD_BENCHMARKS=ON -DREALM_BUILD_TUTORIALS=ON -DREALM_BUILD_EXAMPLES=ON -DREALM_ENABLE_GASNETEX=OFF
 
       - name: Build
         run: |
