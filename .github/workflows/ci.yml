@@ -94,10 +94,10 @@ jobs:
           variant: ${{ matrix.config.ccache }}
           append-timestamp: true
 
-          key: ${{ github.jobs[github.job].name }}-${{ github.ref_name }}-ccache
+          key: ${{ matrix.config.os }}-${{ matrix.config.cc }}-${{ matrix.config.build }}-${{ github.ref_name }}-ccache
           restore-keys: |
-            ${{ github.jobs[github.job].name }}-${{ github.ref_name }}-ccache
-            ${{ github.jobs[github.job].name }}-main-ccache
+            ${{ matrix.config.os }}-${{ matrix.config.cc }}-${{ matrix.config.build }}-${{ github.ref_name }}
+            ${{ matrix.config.os }}-${{ matrix.config.cc }}-${{ matrix.config.build }}-main
 
       - uses: microsoft/setup-msbuild@v2
         if: ${{ matrix.config.os == 'windows-latest' }}
