@@ -42,7 +42,7 @@ jobs:
         env:
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
-        run:
+        run: |
           echo BASE_SHA=$BASE_SHA >> "$GITHUB_ENV"
           echo HEAD_SHA=$HEAD_SHA >> "$GITHUB_ENV"
 
@@ -51,7 +51,7 @@ jobs:
         env:
           BASE_SHA: ${{ github.event.before }}
           HEAD_SHA: ${{ github.event.after }}
-        run:
+        run: |
           echo BASE_SHA=$BASE_SHA >> "$GITHUB_ENV"
           echo HEAD_SHA=$HEAD_SHA >> "$GITHUB_ENV"
 
