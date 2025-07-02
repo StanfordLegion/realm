@@ -56,6 +56,13 @@ jobs:
           - {
               os: ubuntu-latest,
               build: Release,
+              cc: "gcc", cxx: "g++",
+              ccache: ccache,
+              cuda: '12.9.0'
+            }
+          - {
+              os: ubuntu-latest,
+              build: Release,
               cc: "clang", cxx: "clang++",
               ccache: ccache,
               cuda: ''
@@ -85,13 +92,13 @@ jobs:
       - uses: awalsh128/cache-apt-pkgs-action@latest
         if: ${{ matrix.config.os == 'ubuntu-latest' }}
         with:
-          packages: ${{ matrix.config.cc }} ${{ matrix.config.cxx }} ccache
+          packages: ${{ matrix.config.cc }} ${{ matrix.config.cxx }} ccache libucx-dev
 
       - uses: Jimver/cuda-toolkit@v0.2.25
         if: ${{ matrix.config.cuda != '' }}
         with:
           cuda: ${{ matrix.config.cuda }}
-          sub-packages: '["nvcc", "cudart", "cupti", "nvtx", "nvml-dev"]'
+          sub-packages: '["nvcc", "cudart-dev", "cupti-dev", "nvtx", "nvml-dev"]'
           method: 'network'
 
       - uses: actions/cache@v4
