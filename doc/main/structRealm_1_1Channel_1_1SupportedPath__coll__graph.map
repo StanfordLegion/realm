@@ -1,9 +1,0 @@
-<map id="Realm::Channel::SupportedPath" name="Realm::Channel::SupportedPath">
-<area shape="rect" id="Node000001" title=" " alt="" coords="179,123,406,148"/>
-<area shape="poly" id="edge4_Node000001_Node000001" title=" " alt="" coords="421,127,433,135,425,143,407,146,406,141,422,138,427,136,418,131"/>
-<area shape="rect" id="Node000002" href="$classRealm_1_1Memory.html" title=" " alt="" coords="5,13,132,38"/>
-<area shape="poly" id="edge1_Node000001_Node000002" title=" " alt="" coords="106,42,270,120,268,125,104,46"/>
-<area shape="poly" id="edge2_Node000002_Node000002" title=" " alt="" coords="147,14,155,18,159,26,151,35,133,39,132,33,148,30,153,25,151,22,145,19"/>
-<area shape="rect" id="Node000003" href="$structRealm_1_1Channel_1_1SupportedPath_1_1MemBitmask.html" title=" " alt="" coords="269,5,468,45"/>
-<area shape="poly" id="edge3_Node000001_Node000003" title=" " alt="" coords="350,58,303,124,299,121,345,55"/>
-</map>
