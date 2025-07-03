@@ -56,7 +56,7 @@ project(
   VERSION ${Realm_SHORT_VERSION}
   LANGUAGES CXX C
   DESCRIPTION "A distributed, event-based tasking library"
-  HOMEPAGE_URL https://gitlab.com/StanfordLegion/legion/
+  HOMEPAGE_URL https://github.com/StanfordLegion/realm
 )
 set(REALM_VERSION "${Realm_SHORT_VERSION}${Realm_VERSION_META}")
 
@@ -89,15 +89,20 @@ set(REALM_MAX_DIM
     3
     CACHE STRING "Maximum dimension compiled for"
 )
-if (BUILD_SHARED_LIBS)
+if(BUILD_SHARED_LIBS)
   set(REALM_LIMIT_SYMBOL_VISIBILITY 1)
 endif()
 set(REALM_CXX_STANDARD
     17
     CACHE STRING "C++ standard used"
 )
-set(REALM_LOG_LEVEL "WARNING" CACHE STRING "Compile-time logging level")
-set_property(CACHE REALM_LOG_LEVEL PROPERTY STRINGS "SPEW;DEBUG;INFO;PRINT;WARNING;ERROR;FATAL;NONE")
+set(REALM_LOG_LEVEL
+    "WARNING"
+    CACHE STRING "Compile-time logging level"
+)
+set_property(
+  CACHE REALM_LOG_LEVEL PROPERTY STRINGS "SPEW;DEBUG;INFO;PRINT;WARNING;ERROR;FATAL;NONE"
+)
 
 option(REALM_ENABLE_INSTALL "Enable installation support" ${PROJECT_IS_TOP_LEVEL})
 option(REALM_BUILD_TESTS "Build tests" ${PROJECT_IS_TOPLEVEL})
@@ -118,7 +123,9 @@ option(REALM_ENABLE_HWLOC "Compile with hwloc hardware discovery support" OFF)
 option(REALM_ENABLE_PAPI "Compile with PAPI thread profiling support" ON)
 option(REALM_ENABLE_CPPTRACE "Compile with cpptrace backtrace support" ON)
 option(REALM_ENABLE_PREALM "Compile with realm profiler" OFF)
-cmake_dependent_option(REALM_ENABLE_LIBDL "Compile with dynamic runtime linking support" ON "NOT WIN32" OFF)
+cmake_dependent_option(
+  REALM_ENABLE_LIBDL "Compile with dynamic runtime linking support" ON "NOT WIN32" OFF
+)
 cmake_dependent_option(REALM_ENABLE_GASNETEX "Compile with GASNetEx support" ON "NOT WIN32" OFF)
 cmake_dependent_option(
   REALM_ENABLE_GASNETEX_WRAPPER "Compile with dynamic GASNetEx ABI stability wrapper" OFF
@@ -262,9 +269,8 @@ endif()
 if(REALM_ENABLE_COVERAGE)
   if(MSVC)
     find_program(
-      OPENCPPCOV_PATH OpenCppCoverage.exe REQUIRED 
-      HINTS $ENV{ProgramFiles\(x86\)}/OpenCppCoverage
-            $ENV{ProgramFiles}/OpenCppCoverage
+      OPENCPPCOV_PATH OpenCppCoverage.exe REQUIRED HINTS $ENV{ProgramFiles\(x86\)}/OpenCppCoverage
+                                                         $ENV{ProgramFiles}/OpenCppCoverage
     )
   else()
     include(${CMAKE_CURRENT_SOURCE_DIR}/cmake/CodeCoverage.cmake)
@@ -290,7 +296,7 @@ if(REALM_ENABLE_HIP)
   if(HIP_PLATFORM STREQUAL "nvidia")
     set_target_properties(
       hip::host PROPERTIES INTERFACE_COMPILE_DEFINITIONS "__HIP_PLATFORM_NVIDIA__"
-      INTERFACE_LINK_LIBRARIES CUDA::cudart
+                           INTERFACE_LINK_LIBRARIES CUDA::cudart
     )
   endif()
   if(NOT HIP_ROOT_DIR)
@@ -344,7 +350,7 @@ if(REALM_ENABLE_CUDA OR (hip_FOUND AND HIP_PLATFORM STREQUAL "nvidia"))
     if(NOT TARGET CUDA::nvToolsExt AND TARGET CUDA::nvtx3)
       add_library(CUDA::nvToolsExt ALIAS CUDA::nvtx3)
     endif()
-    if (TARGET CUDA::nvToolsExt)
+    if(TARGET CUDA::nvToolsExt)
       list(APPEND REALM_LIBRARIES CUDA::nvToolsExt)
     endif()
     if(NOT REALM_CUDA_DYNAMIC_LOAD)
@@ -511,7 +517,7 @@ if(REALM_ENABLE_UCX)
     list(REMOVE_ITEM _NOT_FOUND ucx)
     set_property(GLOBAL PROPERTY PACKAGES_NOT_FOUND "${_NOT_FOUND}")
   endif()
-  if (TARGET ucx::ucp)
+  if(TARGET ucx::ucp)
     list(APPEND REALM_STATIC_DEPENDS ucx)
     list(APPEND REALM_LIBRARIES ucx::ucp)
   endif()
@@ -740,7 +746,7 @@ if(REALM_ENABLE_OPENMP)
 endif()
 add_feature_info(openmp REALM_USE_OPENMP "Enables OpenMP support")
 
-if (TARGET ZLIB::ZLIB)
+if(TARGET ZLIB::ZLIB)
   set(REALM_USE_PREALM ${REALM_ENABLE_PREALM})
 endif()
 add_feature_info(prealm REALM_USE_PREALM "Enables Realm Profiling support")
@@ -770,7 +776,10 @@ set(REALM_USE_SHM ${REALM_ENABLE_SHM})
 add_feature_info(shm REALM_USE_SHM "Enables use of shared memory for CPU IPC")
 set(REALM_TIMERS_USE_RDTSC ${REALM_ENABLE_RDTSC})
 add_feature_info(rdtsc REALM_TIMERS_USE_RDTSC "Enables use of rdtsc for Realm::Clock")
-add_feature_info(mpi_comm_split REALM_MPI_HAS_COMM_SPLIT_TYPE "Enables use of MPI_Comm_split_type in realm to identify shared peers")
+add_feature_info(
+  mpi_comm_split REALM_MPI_HAS_COMM_SPLIT_TYPE
+  "Enables use of MPI_Comm_split_type in realm to identify shared peers"
+)
 #endregion
 
 #region Source lists
