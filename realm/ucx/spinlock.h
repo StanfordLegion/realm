@@ -20,43 +20,38 @@
 #include <pthread.h>
 
 namespace Realm {
-namespace UCP {
+  namespace UCP {
 
-  class SpinLock {
-  public:
-    SpinLock()
-    {
-      int ret = pthread_spin_init(&pth_spinlock, PTHREAD_PROCESS_PRIVATE);
-      assert(ret == 0);
-    }
+    class SpinLock {
+    public:
+      SpinLock()
+      {
+        int ret = pthread_spin_init(&pth_spinlock, PTHREAD_PROCESS_PRIVATE);
+        assert(ret == 0);
+      }
 
-    ~SpinLock()
-    {
-      int ret = pthread_spin_destroy(&pth_spinlock);
-      assert(ret == 0);
-    }
+      ~SpinLock()
+      {
+        int ret = pthread_spin_destroy(&pth_spinlock);
+        assert(ret == 0);
+      }
 
-    int lock()
-    {
-      return pthread_spin_lock(&pth_spinlock);
-    }
+      int lock() { return pthread_spin_lock(&pth_spinlock); }
 
-    int unlock()
-    {
-      return pthread_spin_unlock(&pth_spinlock);
-    }
+      int unlock() { return pthread_spin_unlock(&pth_spinlock); }
 
-    int trylock()
-    {
-      if (pthread_spin_trylock(&pth_spinlock) == 0) return 1;
-      return 0;
-    }
+      int trylock()
+      {
+        if(pthread_spin_trylock(&pth_spinlock) == 0)
+          return 1;
+        return 0;
+      }
 
-  private:
-    pthread_spinlock_t pth_spinlock;
-  };
+    private:
+      pthread_spinlock_t pth_spinlock;
+    };
 
-}; // namespace UCP
+  }; // namespace UCP
 
 }; // namespace Realm
 

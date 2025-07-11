@@ -17,31 +17,26 @@
 #ifndef UCP_UTILS_H
 #define UCP_UTILS_H
 
-#define CHKERR_ACTION(_cond, _msg, _log, _action) \
-    do { \
-        if (_cond) { \
-            _log.error() << _msg; \
-            _action; \
-        } \
-    } while (0)
+#define CHKERR_ACTION(_cond, _msg, _log, _action)                                        \
+  do {                                                                                   \
+    if(_cond) {                                                                          \
+      _log.error() << _msg;                                                              \
+      _action;                                                                           \
+    }                                                                                    \
+  } while(0)
 
+#define CHKERR_JUMP(_cond, _msg, _log, _label)                                           \
+  CHKERR_ACTION(_cond, _msg, _log, goto _label)
 
-#define CHKERR_JUMP(_cond, _msg, _log, _label) \
-    CHKERR_ACTION(_cond, _msg, _log, goto _label)
+#define IS_POW2_OR_ZERO(_n) !((_n) & ((_n) - 1))
 
-#define IS_POW2_OR_ZERO(_n) \
-    !((_n) & ((_n) - 1))
+#define IS_POW2(_n) (((_n) > 0) && IS_POW2_OR_ZERO(_n))
 
-#define IS_POW2(_n) \
-    (((_n) > 0) && IS_POW2_OR_ZERO(_n))
+#define PADDING_TO_ALIGN(_n, _alignment)                                                 \
+  (((_alignment) - (_n) % (_alignment)) % (_alignment))
 
-#define PADDING_TO_ALIGN(_n, _alignment) \
-    ( ((_alignment) - (_n) % (_alignment)) % (_alignment) )
+#define ALIGN_DOWN_POW2(_n, _alignment) ((_n) & ~((_alignment) - 1))
 
-#define ALIGN_DOWN_POW2(_n, _alignment) \
-    ( (_n) & ~((_alignment) - 1) )
-
-#define ALIGN_UP_POW2(_n, _alignment) \
-    ALIGN_DOWN_POW2((_n) + (_alignment) - 1, _alignment)
+#define ALIGN_UP_POW2(_n, _alignment) ALIGN_DOWN_POW2((_n) + (_alignment) - 1, _alignment)
 
 #endif

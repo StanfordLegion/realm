@@ -25,19 +25,20 @@ namespace Realm {
   // defined in ucp_module.cc
   extern Logger log_ucp;
 
-namespace UCP {
+  namespace UCP {
 
-  int bootstrap_init(const BootstrapConfig *config, bootstrap_handle_t *handle) {
-    int status = 0;
+    int bootstrap_init(const BootstrapConfig *config, bootstrap_handle_t *handle)
+    {
+      int status = 0;
 
-    switch (config->mode) {
+      switch(config->mode) {
       case BOOTSTRAP_MPI:
-        if (config->plugin_name != NULL) {
+        if(config->plugin_name != NULL) {
           status = bootstrap_loader_init(config->plugin_name, NULL, handle);
         } else {
           status = bootstrap_loader_init(BOOTSTRAP_MPI_PLUGIN, NULL, handle);
         }
-        if (status != 0) {
+        if(status != 0) {
           log_ucp.error() << "bootstrap_loader_init failed";
         }
         break;
@@ -53,26 +54,27 @@ namespace UCP {
         break;
       case BOOTSTRAP_PLUGIN:
         status = bootstrap_loader_init(config->plugin_name, NULL, handle);
-        if (status != 0) {
+        if(status != 0) {
           log_ucp.error() << "bootstrap_loader_init failed";
         }
         break;
       default:
         status = BOOTSTRAP_ERROR_INTERNAL;
         log_ucp.error() << ("invalid bootstrap mode");
+      }
+
+      return status;
     }
 
-    return status;
-  }
-
-  int bootstrap_finalize(bootstrap_handle_t *handle) {
-    int status = bootstrap_loader_finalize(handle);
-    if (status != 0) {
-      log_ucp.error() << "bootstrap_finalize failed";
+    int bootstrap_finalize(bootstrap_handle_t *handle)
+    {
+      int status = bootstrap_loader_finalize(handle);
+      if(status != 0) {
+        log_ucp.error() << "bootstrap_finalize failed";
+      }
+      return status;
     }
-    return status;
-}
 
-}; // namespace UCP
+  }; // namespace UCP
 
 }; // namespace Realm
