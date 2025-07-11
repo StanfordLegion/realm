@@ -23,6 +23,14 @@
 #include "realm/logging.h"
 #include "unistd.h"
 #include <cstdint>
+#include <sys/socket.h>
+#include <netinet/in.h>
+#include <arpa/inet.h>
+#include <cerrno>
+#include <netdb.h>
+#include <ifaddrs.h>
+#include <arpa/inet.h>
+#include <net/if.h>
 
 #ifdef REALM_USE_CUDA
 #include "realm/cuda/cuda_module.h"
@@ -368,6 +376,55 @@ namespace UCP {
     assert(!initialized_ucp && !initialized_boot);
   }
 
+  static uint32_t discover_ip()
+  {
+    ifaddrs* ifa = nullptr;
+    if (getifaddrs(&ifa) == -1) assert(0);
+    for (auto p = ifa; p; p = p->ifa_next) {
+      if (!p->ifa_addr || p->ifa_addr->sa_family != AF_INET) continue;
+      if (!(p->ifa_flags & IFF_UP) || (p->ifa_flags & IFF_LOOPBACK)) continue;
+      auto sin = reinterpret_cast<sockaddr_in*>(p->ifa_addr);
+      uint32_t ip_be = sin->sin_addr.s_addr;          // network order
+      freeifaddrs(ifa);
+      return ntohl(ip_be);                            // host order if you really need it
+    }
+    freeifaddrs(ifa);
+    assert(0);
+    return 0;
+  }
+
+  bool UCPInternal::create_eps_cs(uint8_t priority)
+  {
+    struct NodeInfo {
+      uint32_t ip_be;
+      uint32_t port;
+    };
+
+    NodeInfo self{};
+    self.ip_be = htonl(discover_ip());
+    assert(config.num_priorities == 1);
+    self.port = config.cs_port + ucc_comm->get_rank();
+
+    int world_size = ucc_comm->get_world_size();
+    std::vector<NodeInfo> all(world_size);
+
+    ucc_status_t rc = ucc_comm->UCC_Allgather(&self,
+          sizeof(self), UCC_DT_UINT8, all.data(), sizeof(self) * world_size, UCC_DT_UINT8);
+    if (rc != UCC_OK) {
+      log_ucp.error() << "Failed all gather";
+      return false;
+    }
+
+    for (int peer = 0; peer < world_size; peer++) {
+      Realm::NodeMeta nm;
+      nm.ip = all[peer].ip_be;
+      nm.port_base = all[peer].port;
+      Network::node_registry.add_slot(peer, nm);
+    }
+
+    return true;
+  }
+
   bool UCPInternal::create_eps(uint8_t priority)
   {
     // the eps are created from a local send worker to a
@@ -506,7 +563,11 @@ err:
   bool UCPInternal::create_eps()
   {
     for (uint8_t priority = 0; priority < config.num_priorities; priority++) {
-      if (!create_eps(priority)) return false;
+      if (config.cs_mode) {
+        if (!create_eps_cs(priority)) return false;
+      } else {
+        if (!create_eps(priority)) return false;
+      }
     }
     return true;
   }
@@ -768,6 +829,14 @@ err:
     CHKERR_JUMP(!create_eps(),
         "failed to create ucp end points", log_ucp, err_destroy_workers);
 
+    if (config.cs_mode) {
+      for(uint8_t priority = 0; priority < config.num_priorities; priority++) {
+        for(const auto &context : ucp_contexts) {
+          open_listener(&context, priority);
+        }
+      }
+    }
+
     CHKERR_JUMP(!create_pollers(),
         "failed to create ucp pollers", log_ucp, err_destroy_workers);
 
@@ -952,6 +1021,10 @@ err:
 
     delete rcba_mp;
 
+    for (size_t i = 0; i < listener_cb_data.size(); i++) {
+      delete listener_cb_data[i];
+    }
+
     destroy_workers();
 
     if (initialized_ucp) {
@@ -977,6 +1050,109 @@ err:
       initialized_boot = false;
       log_ucp.info() << "finalized ucp bootstrap";
     }
+  }
+
+  void UCPInternal::on_conn_request(ucp_conn_request_h req, void *arg) {
+    auto *cb_data = static_cast<ListenerCallbackData *>(arg);
+    UCPInternal *self = cb_data->internal;
+    const UCPContext *ctx = cb_data->context;
+
+    //-------------------------------------------------------------------
+    // Build a server-side endpoint on the correct worker/context
+    //-------------------------------------------------------------------
+    ucp_ep_params_t ep_params{};
+    ep_params.field_mask   = UCP_EP_PARAM_FIELD_CONN_REQUEST;
+    ep_params.conn_request = req;
+
+    UCPWorker *worker = self->get_rx_worker(ctx, 0);
+
+    ucp_ep_h ep        = nullptr;
+    ucs_status_t status = ucp_ep_create(worker->get_ucp_worker(), &ep_params, &ep);
+    if (status != UCS_OK) {
+      log_ucp.fatal() << "ucp_ep_create failed in on_conn_request: " << status;
+      return;
+    }
+  }
+
+  uint16_t UCPInternal::open_listener(const UCPContext *context, uint8_t prio) {
+    sockaddr_in sin{};
+    sin.sin_family = AF_INET;
+
+    const auto nm = Network::node_registry.lookup(Network::my_node_id);
+    assert(nm != nullptr);
+
+    sin.sin_addr.s_addr = nm->ip;
+    sin.sin_port = htons(nm->port_base + prio);
+
+    int fd = socket(AF_INET, SOCK_STREAM, 0);
+    if (fd < 0) {
+      assert(0);
+      log_ucp.fatal() << "socket() failed: " << strerror(errno);
+      abort();
+    }
+
+    // avoid TIME_WAIT collisions during rapid restarts
+    int one = 1;
+    setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, &one, sizeof(one));
+
+    if (bind(fd, reinterpret_cast<sockaddr *>(&sin), sizeof(sin)) < 0) {
+      log_ucp.fatal() << "bind() failed: " << strerror(errno);
+      close(fd);
+      abort();
+    }
+
+    UCPWorker *worker = get_rx_worker(context, prio);
+
+    socklen_t sl = sizeof(sin);
+    getsockname(fd, reinterpret_cast<sockaddr *>(&sin), &sl);
+    uint16_t port = ntohs(sin.sin_port);
+    close(fd); // we only needed the number
+
+    /* ------------------------------------------------------------------
+     * Create a UCX listener on that port
+     * ----------------------------------------------------------------*/
+    ucp_listener_params_t lp{};
+    lp.field_mask = UCP_LISTENER_PARAM_FIELD_SOCK_ADDR |
+                    UCP_LISTENER_PARAM_FIELD_CONN_HANDLER;
+#ifdef UCP_LISTENER_PARAM_FIELD_USER_DATA // UCX ≥ 1.14
+    lp.field_mask |= UCP_LISTENER_PARAM_FIELD_USER_DATA;
+#endif
+
+    lp.sockaddr.addr = reinterpret_cast<sockaddr *>(&sin);
+    lp.sockaddr.addrlen = sizeof(sin);
+
+    // Allocate a callback context that carries both the owning UCPInternal
+    // instance and the UCPContext that this listener was created for.  This
+    // allows on_conn_request() to pick the correct worker without having to
+    // guess the context type (host vs. device).
+    ListenerCallbackData *cb_data = new ListenerCallbackData{this, context};
+    lp.conn_handler.cb  = &UCPInternal::on_conn_request;
+    lp.conn_handler.arg = cb_data;
+
+    // Remember the allocation so that we can release it in finalize().
+    listener_cb_data.push_back(cb_data);
+
+    ucp_listener_h lst = nullptr;
+    ucs_status_t st = ucp_listener_create(
+        /* worker      */ worker->get_ucp_worker(),
+        /* params      */ &lp,
+        /* out handle  */ &lst);
+
+    if (st != UCS_OK) {
+      assert(0);
+      log_ucp.fatal() << "ucp_listener_create failed: ";
+      abort();
+    }
+
+    /* ------------------------------------------------------------------
+     * 3. Remember the handle so we can destroy it at shutdown
+     * ----------------------------------------------------------------*/
+    if (listeners.size() <= prio) {
+      listeners.resize(prio + 1, nullptr);
+    }
+    listeners[prio] = lst;
+
+    return port; // caller stores port_base
   }
 
   ucs_status_t UCPInternal::am_remote_comp_handler(void *arg,
@@ -1384,6 +1560,8 @@ err:
     ucs_status_t status;
     uintptr_t alloc_base, offset;
     ByteArray alloc_rdma_info;
+
+    listeners.clear();
 
 #if defined(REALM_USE_CUDA)
     // Find the GPUs
