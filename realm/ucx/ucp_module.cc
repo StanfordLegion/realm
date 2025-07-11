@@ -44,16 +44,11 @@ namespace Realm {
     assert(internal);
   }
 
-  UCPModule::~UCPModule()
-  {
-    delete internal;
-  }
+  UCPModule::~UCPModule() { delete internal; }
 
   /*static*/
-  NetworkModule *UCPModule::create_network_module(
-          RuntimeImpl *runtime,
-          int *argc,
-		  const char ***argv)
+  NetworkModule *UCPModule::create_network_module(RuntimeImpl *runtime, int *argc,
+                                                  const char ***argv)
   {
     UCPModule *mod = new UCPModule(runtime);
     assert(mod);
@@ -63,7 +58,7 @@ namespace Realm {
 
     return mod;
 
-err_del_mod:
+  err_del_mod:
     delete mod;
     return NULL;
   }
@@ -118,8 +113,7 @@ err_del_mod:
     cp.add_option_int("-ucx:pb_init_count", config.pbuf_init_count);
     cp.add_option_int("-ucx:pb_max_count", config.pbuf_max_count);
     cp.add_option_int_units("-ucx:pb_max_size", config.pbuf_max_size);
-    cp.add_option_int_units("-ucx:pb_max_chunk_size",
-        config.pbuf_max_chunk_size);
+    cp.add_option_int_units("-ucx:pb_max_chunk_size", config.pbuf_max_chunk_size);
     cp.add_option_int_units("-ucx:pb_mp_thresh", config.pbuf_mp_thresh);
 
     // malloc mpool
@@ -154,12 +148,12 @@ err_del_mod:
     //// set internal config ////
 
     // am-with-remote-address config
-    if (!am_mode.empty()) {
-      if (am_mode == "auto") {
+    if(!am_mode.empty()) {
+      if(am_mode == "auto") {
         config.am_wra_mode = Realm::UCP::AM_WITH_REMOTE_ADDR_MODE_AUTO;
-      } else if (am_mode == "put") {
+      } else if(am_mode == "put") {
         config.am_wra_mode = Realm::UCP::AM_WITH_REMOTE_ADDR_MODE_PUT;
-      } else if (am_mode == "am") {
+      } else if(am_mode == "am") {
         config.am_wra_mode = Realm::UCP::AM_WITH_REMOTE_ADDR_MODE_AM;
       } else {
         log_ucp.fatal() << "invalid mode for am with remote address " << am_mode
@@ -168,20 +162,18 @@ err_del_mod:
       }
     }
 
-    if (!internal->init(config)) {
+    if(!internal->init(config)) {
       log_ucp.fatal() << "internal init failed";
       abort();
     }
   }
 
-  void UCPModule::attach(RuntimeImpl *runtime,
-      std::vector<NetworkSegment *>& segments)
+  void UCPModule::attach(RuntimeImpl *runtime, std::vector<NetworkSegment *> &segments)
   {
     internal->attach(segments);
   }
 
-  void UCPModule::detach(RuntimeImpl *runtime,
-      std::vector<NetworkSegment *>& segments)
+  void UCPModule::detach(RuntimeImpl *runtime, std::vector<NetworkSegment *> &segments)
   {
     internal->detach(segments);
     // Call finalize here because it uses other realm
@@ -190,23 +182,16 @@ err_del_mod:
     internal->finalize();
   }
 
-  void UCPModule::create_memories(RuntimeImpl *runtime)
-  {
-  }
+  void UCPModule::create_memories(RuntimeImpl *runtime) {}
 
-  void UCPModule::barrier(void)
-  {
-    internal->barrier();
-  }
+  void UCPModule::barrier(void) { internal->barrier(); }
 
-  void UCPModule::broadcast(NodeID root,
-      const void *val_in, void *val_out, size_t bytes)
+  void UCPModule::broadcast(NodeID root, const void *val_in, void *val_out, size_t bytes)
   {
     internal->broadcast(root, val_in, val_out, bytes);
   }
 
-  void UCPModule::gather(NodeID root,
-      const void *val_in, void *vals_out, size_t bytes)
+  void UCPModule::gather(NodeID root, const void *val_in, void *vals_out, size_t bytes)
   {
     internal->gather(root, val_in, vals_out, bytes);
   }
@@ -242,15 +227,10 @@ err_del_mod:
     return new Realm::UCP::UCPIBMemory(runtime, me, size, kind, rdma_info_ba, internal);
   }
 
-  ActiveMessageImpl* UCPModule::create_active_message_impl(NodeID target,
-      unsigned short msgid,
-      size_t header_size,
-      size_t max_payload_size,
-      const void *src_payload_addr,
-      size_t src_payload_lines,
-      size_t src_payload_line_stride,
-      void *storage_base,
-      size_t storage_size)
+  ActiveMessageImpl *UCPModule::create_active_message_impl(
+      NodeID target, unsigned short msgid, size_t header_size, size_t max_payload_size,
+      const void *src_payload_addr, size_t src_payload_lines,
+      size_t src_payload_line_stride, void *storage_base, size_t storage_size)
   {
     assert(storage_size >= sizeof(Realm::UCP::UCPMessageImpl));
     return new(storage_base) Realm::UCP::UCPMessageImpl(
@@ -282,41 +262,27 @@ err_del_mod:
         &dest_payload_addr, storage_size);
   }
 
-  ActiveMessageImpl* UCPModule::create_active_message_impl(const NodeSet& targets,
-      unsigned short msgid,
-      size_t header_size,
-      size_t max_payload_size,
-      const void *src_payload_addr,
-      size_t src_payload_lines,
-      size_t src_payload_line_stride,
-      void *storage_base,
-      size_t storage_size)
+  ActiveMessageImpl *UCPModule::create_active_message_impl(
+      const NodeSet &targets, unsigned short msgid, size_t header_size,
+      size_t max_payload_size, const void *src_payload_addr, size_t src_payload_lines,
+      size_t src_payload_line_stride, void *storage_base, size_t storage_size)
   {
     assert(storage_size >= sizeof(Realm::UCP::UCPMessageImpl));
     return new(storage_base) Realm::UCP::UCPMessageImpl(
-        internal,
-        targets,
-        msgid,
-        header_size,
-        max_payload_size,
-        src_payload_addr,
-        src_payload_lines,
-        src_payload_line_stride,
-        storage_size);
+        internal, targets, msgid, header_size, max_payload_size, src_payload_addr,
+        src_payload_lines, src_payload_line_stride, storage_size);
   }
 
-  size_t UCPModule::recommended_max_payload(NodeID target,
-      bool with_congestion,
-      size_t header_size)
+  size_t UCPModule::recommended_max_payload(NodeID target, bool with_congestion,
+                                            size_t header_size)
   {
     (void)target;
     return internal->recommended_max_payload(nullptr, nullptr, nullptr, with_congestion,
                                              header_size);
   }
 
-  size_t UCPModule::recommended_max_payload(const NodeSet& targets,
-      bool with_congestion,
-      size_t header_size)
+  size_t UCPModule::recommended_max_payload(const NodeSet &targets, bool with_congestion,
+                                            size_t header_size)
   {
     (void)targets;
     return internal->recommended_max_payload(nullptr, nullptr, nullptr, with_congestion,
@@ -324,9 +290,8 @@ err_del_mod:
   }
 
   size_t UCPModule::recommended_max_payload(NodeID target,
-      const RemoteAddress& dest_payload_addr,
-      bool with_congestion,
-      size_t header_size)
+                                            const RemoteAddress &dest_payload_addr,
+                                            bool with_congestion, size_t header_size)
   {
     (void)target;
     return internal->recommended_max_payload(nullptr, nullptr, &dest_payload_addr,

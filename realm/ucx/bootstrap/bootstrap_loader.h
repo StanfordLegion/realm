@@ -22,12 +22,12 @@
 #include "realm/ucx/bootstrap/bootstrap.h"
 
 namespace Realm {
-namespace UCP {
+  namespace UCP {
 
-  int bootstrap_loader_init(const char *plugin, void *arg, bootstrap_handle_t *handle);
-  int bootstrap_loader_finalize(bootstrap_handle_t *handle);
+    int bootstrap_loader_init(const char *plugin, void *arg, bootstrap_handle_t *handle);
+    int bootstrap_loader_finalize(bootstrap_handle_t *handle);
 
-}; // namespace UCP
+  }; // namespace UCP
 
 }; // namespace Realm
 
