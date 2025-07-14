@@ -48,8 +48,7 @@ namespace Realm {
 	uintptr_t extra;
       };
       unsigned char raw_bytes[384];
-    };
-  };
+    };};
 
   // a LocalAddress is used to name the local source of an RDMA write or target
   //  of an RDMA read
@@ -71,6 +70,7 @@ namespace Realm {
     // in most cases, there will be a single network module - if so, we set
     //  this so we don't have to do a per-node lookup
     extern NetworkModule *single_network;
+    extern NetworkModule* control_plane_network;
 
     // gets the network for a given node
     NetworkModule *get_network(NodeID node);
@@ -308,6 +308,7 @@ namespace Realm {
 
     // again, a single network puts itself here in addition to adding to the map
     NetworkModule *single_network;
+    NetworkModule* control_plane_network;
     ByteArray *single_network_data;
 
     // a map from each of the networks that successfully bound the segment to

@@ -83,6 +83,11 @@ REGISTER_REALM_MODULE_STATIC(Realm::HDF5::HDF5Module);
 REGISTER_REALM_NETWORK_MODULE_STATIC(Realm::UCPModule, "ucx", 1);
 #endif
 
+#ifdef REALM_USE_UDP_CONTROL
+#include "realm/udp/udp_module.h"
+REGISTER_REALM_NETWORK_MODULE_STATIC(Realm::UDPModule, "udp", 0);
+#endif
+
 #ifdef REALM_USE_GASNET1
 #include "realm/gasnet1/gasnet1_module.h"
 REGISTER_REALM_NETWORK_MODULE_STATIC(Realm::GASNet1Module, "gasnet1", 2);

@@ -115,6 +115,15 @@ if(TARGET ucx::ucp)
   )
 endif()
 
+if(REALM_USE_UDP_CONTROL)
+  list(
+    APPEND
+    REALM_SOURCES
+    udp/udp_module.cc
+    udp/udp_module.h
+  )
+endif()
+
 if(TARGET GASNet::GASNet)
   list(APPEND REALM_SOURCES gasnet1/gasnet1_module.cc gasnet1/gasnetmsg.cc)
   list(APPEND REALM_SOURCES gasnetex/gasnetex_module.cc gasnetex/gasnetex_internal.cc)

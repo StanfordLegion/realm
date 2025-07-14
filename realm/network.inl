@@ -97,7 +97,9 @@ namespace Realm {
       if(REALM_UNLIKELY(single_network == 0)) {
       } else
 #endif
-	return single_network->create_active_message_impl(target,
+        NetworkModule *module = single_network;
+        if (control_plane_network) module = control_plane_network;
+	return module->create_active_message_impl(target,
 							  msgid,
 							  header_size,
 							  max_payload_size,
