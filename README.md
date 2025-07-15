@@ -1,3 +1,4 @@
+# Realm
 [![ci](https://github.com/stanfordlegion/realm/actions/workflows/ci.yml/badge.svg)](https://github.com/StanfordLegion/realm/actions/workflows/ci.yml)
 [![Release](https://img.shields.io/github/release/stanfordlegion/realm.svg)](https://github.com/StanfordLegion/realm/releases/latest)
 [![Documentation](https://img.shields.io/badge/docs-grey.svg?logo=doxygen&logoColor=white&labelColor=blue)](https://legion.stanford.edu/realm/doc)
@@ -10,8 +11,6 @@
 [![macOS](https://img.shields.io/badge/macOS-000000?logo=apple&logoColor=F0F0F0)](#)
 [![Windows](https://custom-icon-badges.demolab.com/badge/Windows-0078D6?logo=windows11&logoColor=white)](#)
 [![ARM](https://img.shields.io/badge/ARM-white?logo=arm&logoColor=white&color=blue)](#)
-
-# Realm
 
 Realm is a distributed, **event–based tasking runtime** for building high-performance applications that span clusters of CPUs, GPUs, and other accelerators.  
 It began life as the low-level substrate underneath the [Legion](https://github.com/StanfordLegion/legion) programming system but is now maintained as a standalone project for developers who want direct, fine-grained control of parallel and heterogeneous machines.
