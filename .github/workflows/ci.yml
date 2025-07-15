@@ -183,10 +183,103 @@ jobs:
         run: |
           cmake --install build --parallel 4 --prefix install --config ${{ matrix.config.build }}
 
+  cross_build:
+    # Job for cross compiling non-native architectures and basic testing with qemu
+    name: ubuntu-24.04-ppc64le
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+    env:
+      CPM_SOURCE_CACHE: "${{ github.workspace }}/.cache/cpm"
+      CCACHE_BASEDIR: ${{ github.workspace }}
+      CCACHE_COMPRESS: "true"
+      CCACHE_COMPRESS_LEVEL: "6"
+
+    # TODO: add matrix for different configs here
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: Kaven-Universe/github-action-current-date-time@v1
+        name: Get Timestamp
+        id: timestamp
+        with:
+          format: "yyyy-MM-dd-HH-mm-ss-SSS"
+
+      - uses: awalsh128/cache-apt-pkgs-action@latest
+        name: Get Linux Packages
+        with:
+          packages: gcc-powerpc64le-linux-gnu g++-powerpc64le-linux-gnu ccache
+
+      - uses: actions/cache@v4
+        name: Restore CPM source cache
+        with:
+          path: .cache/cpm
+          key: cpm-${{ steps.timestamp.outputs.time }}
+          restore-keys: |
+            cpm-
+
+      - uses: hendrikmuhs/ccache-action@v1.2
+        name: Restore ccache Cache
+        with:
+          variant: ccache
+          append-timestamp: true
+
+          key: ubuntu-24.04-ppc64le-${{ github.ref_name }}
+          restore-keys: |
+            ubuntu-24.04-ppc64le-${{ github.ref_name }}
+            ubuntu-24.04-ppc64le-main
+
+      - uses: lukka/get-cmake@latest
+
+      - uses: docker/setup-qemu-action@v3.6.0
+        name: Setup qemu
+        with:
+          platforms: linux/ppc64le
+
+      - name: Configure
+        run:
+          cmake -S . -B build
+                -DCMAKE_TOOLCHAIN_FILE=cmake/toolchains/powerpc64le-linux-gnu.cmake
+                -DCMAKE_BUILD_TYPE=Release
+                -DCMAKE_C_COMPILER_LAUNCHER=ccache
+                -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
+                -DCPPTRACE_GET_SYMBOLS_WITH_NOTHING=ON
+                -DCPPTRACE_UNWIND_WITH_NOTHING=ON
+                -DREALM_BUILD_TESTS=ON -DREALM_BUILD_BENCHMARKS=ON -DREALM_BUILD_TUTORIALS=ON -DREALM_BUILD_EXAMPLES=ON
+                -DREALM_ENABLE_UCX=OFF
+                -DREALM_ENABLE_GASNETEX=OFF
+                -DREALM_ENABLE_HIP=OFF
+
+      - name: Build
+        run: |
+          cmake --build build --parallel 4 --config Release
+
+      - name: Run Tests
+        env:
+          QEMU_LD_PREFIX: "/usr/powerpc64le-linux-gnu"
+        run:
+          ctest --output-junit ${{ github.workspace }}/${{ github.sha }}-results.xml
+                --test-dir build
+                --build-config Release
+                --output-on-failure
+                --timeout 240
+                --parallel 4
+
+      - uses: test-summary/action@v2
+        name: Upload Test Results
+        if: always()
+        with:
+          paths: "${{ github.workspace }}/${{ github.sha }}-results.xml"
+
+      - name: Test Install
+        run: |
+          cmake --install build --parallel 4 --prefix install --config Release
+
   docs:
     name: Build Docs
     runs-on: ubuntu-latest
-    needs: build
+    needs: [ build, cross_build ]
     permissions:
       contents: write
     strategy:
