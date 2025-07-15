@@ -135,6 +135,28 @@ Run any Realm executable with `-hl:help` (high-level) or `-ll:help` (low-level) 
 
 ---
 
+## Using Realm in Projects with CMake
+
+Rather than separtely building and installing Realm directly as described above, you can use a
+dependency manager with CMake like [CPM.cmake](https://github.com/cpm-cmake/CPM.cmake) to retrieve,
+build, and reference Realm directly in a new or existing project.
+
+```cmake
+cmake_minimum_required(VERSION 3.22)
+project(hello_realm LANGUAGES CXX)
+
+include(cmake/CPM.cmake)
+CPMFindPackage(
+  NAME Realm
+  GITHUB_REPOSITORY "StanfordLegion/realm"
+)
+
+add_executable(hello_realm hello_realm.cpp)
+target_link_libraries(hello_realm Realm::Realm)
+```
+
+---
+
 ## Documentation
 * Current public documentation can be found [here](https://legion.stanford.edu/realm/doc/main)
 * **API reference (Doxygen):** generate with `make docs` or `cmake --build . --target docs`.
