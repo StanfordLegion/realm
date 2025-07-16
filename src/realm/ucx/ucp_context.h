@@ -90,7 +90,7 @@ namespace UCP {
     bool init();
     void finalize();
     bool ep_add(int target, ucp_address_t *addr, int remote_dev_index);
-    bool ep_get(int target, int remote_dev_index, ucp_ep_h *ep) const;
+    bool ep_get(int target, int remote_dev_index, ucp_ep_h *ep);
     void *request_get();
     void request_release(void *req);
     void *pbuf_get(size_t size);
@@ -109,6 +109,13 @@ namespace UCP {
         ucs_memory_type_t memtype);
     bool submit_req(Request *req);
     size_t num_eps() const;
+
+    struct EpEntry {
+      std::atomic<ucp_ep_h> ep{nullptr};
+      std::atomic<bool> pending{false};
+    };
+
+    EpEntry &ep_slot(int peer, int remote_dev) { return eps[peer][remote_dev]; }
 
   private:
     bool setup_worker_efd();
@@ -142,7 +149,7 @@ namespace UCP {
     SpinLock am_rdesc_q_spinlock;
     SpinLock mmp_spinlock;
     std::unordered_map<void*, ucp_mem_h> pbuf_mp_mem_hs;
-    std::unordered_map<int, std::unordered_map<int, ucp_ep_h>> eps;
+    std::unordered_map<int, std::unordered_map<int, EpEntry>> eps;
     size_t max_am_header;
     atomic<uint64_t> scount{0};
     atomic<uint64_t> pcount{0};

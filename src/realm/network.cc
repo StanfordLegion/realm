@@ -47,6 +47,7 @@ static void aligned_free(void *ptr)
 namespace Realm {
 
   namespace Network {
+    REALM_INTERNAL_API_EXTERNAL_LINKAGE NodeRegistry node_registry;
     REALM_INTERNAL_API_EXTERNAL_LINKAGE NodeID my_node_id = 0;
     REALM_INTERNAL_API_EXTERNAL_LINKAGE NodeID max_node_id = 0;
     REALM_INTERNAL_API_EXTERNAL_LINKAGE NodeSet all_peers;

@@ -58,7 +58,45 @@ namespace Realm {
     uintptr_t offset;
   };
 
+  struct NodeMeta {
+    uint32_t epoch{0};     // 0 = vacant, strictly monotonic
+    uint32_t ip{0};
+    uint32_t port_base{0}; // UCX listener base (port_base + priority)
+    uint32_t udp_port{0};  // control-plane socket
+    uint32_t flags{0};     // RETIRING, etc.
+    std::vector<uint8_t> worker_address;
+    ///std::array<char, 16> ip;
+    // MachineBlob  machine;      // compact description of procs/mems
+  };
+
+  class NodeRegistry {
+  public:
+    const NodeMeta *lookup(NodeID id) const noexcept
+    {
+      auto it = table_.find(id);
+      if (it == table_.end())
+        return nullptr;
+      return &it->second;
+    }
+
+    void add_slot(NodeID id, const NodeMeta &filled)
+    {
+      table_[id] = filled; // insert or overwrite
+    }
+
+    NodeID allocate_slot(const NodeMeta &filled);
+    void retire_slot(NodeID id);
+    uint32_t cluster_epoch() const noexcept;
+
+  private:
+    std::unordered_map<NodeID, NodeMeta> table_;
+    //std::unordered_map<NodeID, std::unique_ptr<NodeMeta>> table_;
+    std::atomic<uint32_t> next_epoch_{1};
+  };
+
   namespace Network {
+    extern NodeRegistry node_registry;
+
     // a few globals for efficiency
     extern NodeID my_node_id;
     extern NodeID max_node_id;
