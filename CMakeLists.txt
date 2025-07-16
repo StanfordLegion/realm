@@ -147,7 +147,7 @@ cmake_dependent_option(
   "REALM_SUPPORTS_LTO;CMAKE_BUILD_TYPE STREQUAL Release" OFF
 )
 cmake_dependent_option(
-  REALM_OPENMP_SYSTEM_RUNTIME "Use system openmp, rather than Realm's wrapper" OFF
+  REALM_OPENMP_SYSTEM_RUNTIME "Use system openmp, rather than Realm's wrapper" ON
   "REALM_ENABLE_OPENMP" OFF
 )
 cmake_dependent_option(
@@ -271,7 +271,7 @@ endif()
 if(REALM_ENABLE_COVERAGE)
   if(MSVC)
     find_program(
-      OPENCPPCOV OpenCppCoverage.exe REQUIRED HINTS $ENV{ProgramFiles\(x86\)}/OpenCppCoverage
+      OPENCPPCOV_PATH OpenCppCoverage.exe REQUIRED HINTS $ENV{ProgramFiles\(x86\)}/OpenCppCoverage
                                                     $ENV{ProgramFiles}/OpenCppCoverage
     )
   else()
@@ -745,7 +745,9 @@ if(TARGET MPI::MPI_CXX)
   set(REALM_USE_MPI TRUE)
 endif()
 if(REALM_ENABLE_OPENMP)
-  set(REALM_USE_OPENMP TRUE)
+  if (NOT REALM_OPENMP_SYSTEM_RUNTIME OR TARGET OpenMP::OpenMP_CXX)
+    set(REALM_USE_OPENMP TRUE)
+  endif()
 endif()
 add_feature_info(openmp REALM_USE_OPENMP "Enables OpenMP support")
 
@@ -934,7 +936,7 @@ target_compile_options(
 )
 if(REALM_ENABLE_COVERAGE AND NOT OPENCPPCOV_PATH)
   append_coverage_compiler_flags_to_target(realm_obj)
-  append_coverage_compiler_flags_to_target(realm)
+  append_coverage_compiler_flags_to_target(Realm)
 endif()
 #endregion
 

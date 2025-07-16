@@ -22,5 +22,10 @@ if(NOT TARGET Realm::Realm)
   find_package(Realm REQUIRED)
 endif()
 
+find_package(OpenMP COMPONENTS C CXX)
+
 add_executable(hello_world hello_world.cc)
-target_link_libraries(hello_world Realm::Realm)
+target_link_libraries(hello_world Realm::Realm $<TARGET_NAME_IF_EXISTS:OpenMP::OpenMP_CXX>)
+if (OpenMP_FOUND)
+  target_compile_definitions(hello_world PRIVATE HELLO_WORLD_ENABLE_OPENMP=1)
+endif()

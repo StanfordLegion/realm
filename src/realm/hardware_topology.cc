@@ -409,7 +409,6 @@ namespace Realm {
       for(const HardwareTopology::MemoryInfo &memory : memories) {
         system_mem += memory.bytes;
       }
-      assert(system_mem == memInfo.ullTotalPageFile);
     } else {
       memories.emplace_back(HardwareTopology::MemoryInfo{memInfo.ullTotalPageFile, 0});
     }

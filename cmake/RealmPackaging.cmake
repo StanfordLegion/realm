@@ -164,13 +164,13 @@ export(PACKAGE Realm)
 if(REALM_BUILD_DOCS)
   install(
     DIRECTORY "${CMAKE_BINARY_DIR}/docs/html/"
-    DESTINATION "${CMAKE_INSTALL_DOCDIR}/realm/realm-${REALM_VERSION}"
+    DESTINATION "${CMAKE_INSTALL_DOCDIR}/realm-${REALM_VERSION}"
     COMPONENT Realm_doc
   )
   install(
     FILES "${CMAKE_CURRENT_SOURCE_DIR}/doxygen/selectversion.js"
           "${CMAKE_CURRENT_SOURCE_DIR}/doxygen/dropdown.css"
-    DESTINATION "${CMAKE_INSTALL_DOCDIR}/realm/"
+    DESTINATION "${CMAKE_INSTALL_DOCDIR}/"
     COMPONENT Realm_doc
   )
 endif()

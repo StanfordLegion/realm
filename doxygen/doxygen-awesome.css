@@ -584,7 +584,7 @@ a.anchor {
 
 .tabs #MSearchBox {
     position: absolute;
-    right: var(--spacing-medium);
+    left: var(--spacing-medium);
 }
 
 @media screen and (max-width: 767px) {

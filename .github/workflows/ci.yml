@@ -157,11 +157,12 @@ jobs:
                 -DCMAKE_CXX_COMPILER_LAUNCHER=${{ matrix.config.ccache }}
                 -DCMAKE_BUILD_TYPE=${{ matrix.config.build }}
                 -DREALM_BUILD_TESTS=ON -DREALM_BUILD_BENCHMARKS=ON -DREALM_BUILD_TUTORIALS=ON -DREALM_BUILD_EXAMPLES=ON
+                -DREALM_ENABLE_UCX=OFF
                 -DREALM_ENABLE_GASNETEX=OFF
 
       - name: Build
         run: |
-          cmake --build build --parallel 4 --config ${{ matrix.config.build }}
+          cmake --build build --parallel 4 --config ${{ matrix.config.build }} --verbose 
 
       - name: Run Tests
         if: matrix.config.cuda == '' || steps.check_gpu.outputs.no_gpu != '1'

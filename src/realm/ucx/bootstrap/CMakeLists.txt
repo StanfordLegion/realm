@@ -50,10 +50,10 @@ function(add_backend_plugin backend)
     ${arg_NAME} MODULE ${arg_SOURCES}
   )
   target_link_libraries(${arg_NAME} ${arg_LIBRARIES})
+  target_compile_features(${arg_NAME} PRIVATE cxx_std_17)
   set_target_properties(
     ${arg_NAME}
     PROPERTIES PREFIX ""
-               VERSION ${Realm_VERSION}
                SOVERSION ${Realm_VERSION_MAJOR}
   )
   list(APPEND UCX_BACKENDS ${arg_NAME})
@@ -62,7 +62,9 @@ endfunction()
 
 if(UCX_BOOTSTRAP_ENABLE_MPI)
   find_package(MPI)
-  add_backend_plugin(NAME realm_ucp_bootstrap_mpi SOURCES ${UCX_BOOTSTRAP_ROOT_DIR}/bootstrap_mpi.c LIBRARIES MPI::MPI_C)
+  if (MPI_FOUND)
+    add_backend_plugin(NAME realm_ucp_bootstrap_mpi SOURCES ${UCX_BOOTSTRAP_ROOT_DIR}/bootstrap_mpi.c LIBRARIES MPI::MPI_C)
+  endif()
 endif()
 add_backend_plugin(NAME realm_bootstrap_p2p SOURCES ${UCX_BOOTSTRAP_ROOT_DIR}/bootstrap_p2p.cc)
 #endregion

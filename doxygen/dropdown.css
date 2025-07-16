@@ -3,7 +3,7 @@
 /* SPDX-License-Identifier: LGPL-3.0-only */
 /* Adapted from https://www.w3schools.com/howto/howto_css_dropdown.asp */
 .dropbtn {
-  margin-left: 30px;
+  margin-left: 0px;
   border: 1px solid lightgray;
   color: white;
   background-color: #346295;

@@ -16,8 +16,9 @@
 #include "realm.h"
 #include "realm/cmdline.h"
 
-#include <assert.h>
-#include <unistd.h>
+#include <thread>
+#include <chrono>
+#include <cassert>
 
 using namespace Realm;
 
@@ -197,7 +198,7 @@ void compute_task(const void *args, size_t arglen,
   assert(arglen == sizeof(ComputeTaskArgs));
   const ComputeTaskArgs *task_args = static_cast<const ComputeTaskArgs *>(args);
   log_app.info("compute_task %d is executed on Processor %llx, idx %d", task_args->idx, p.id, task_args->cpu_idx);
-  usleep(task_args->idx % 4 * 1000);
+  std::this_thread::sleep_for(std::chrono::microseconds(task_args->idx % 4 * 1000));
 }
 
 int find_the_best_cpu(std::vector<std::pair<int, double>> &cpu_status, std::vector<double> &batch_task_runtime, int task_idx, bool use_profile)

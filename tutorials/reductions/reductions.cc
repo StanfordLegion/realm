@@ -12,8 +12,6 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-#include <time.h>
-
 #include <cassert>
 #include <cmath>
 #include <csignal>
@@ -66,7 +64,11 @@ class SumReduction {
     if (EXCLUSIVE)
       rhs1 += rhs2;
     else {
-    __sync_fetch_and_add(&rhs1, rhs2);
+#if defined(_MSC_VER)
+      InterlockedAdd((volatile LONG *)&rhs1, rhs2);
+#else
+      __sync_fetch_and_add(&rhs1, rhs2);
+#endif
     }
   }
 };
