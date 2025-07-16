@@ -113,4 +113,8 @@ html {
         left: var(--spacing-medium) !important;
         right: auto;
     }
+
+    #navrow1 .tablist > li:last-child {
+        height: 16px;
+    }
 }
