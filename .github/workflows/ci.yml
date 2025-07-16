@@ -94,7 +94,7 @@ jobs:
         name: Get Linux Packages
         if: ${{ matrix.config.os == 'ubuntu-latest' }}
         with:
-          packages: ${{ matrix.config.cc }} ${{ matrix.config.cxx }} ccache
+          packages: ${{ matrix.config.cc }} ${{ matrix.config.cxx }} ccache libopenmpi-dev
 
       - uses: Jimver/cuda-toolkit@v0.2.25
         name: Get CUDA
