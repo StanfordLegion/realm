@@ -1,7 +1,7 @@
 ---
-
-
-title: Subgraph
+layout: page
+permalink: /tutorial/realm/subgraph.html
+title: Realm Subgraph
 tags: [Mermaid]
 mermaid: true
 ---
@@ -159,4 +159,4 @@ to describe the dependency between Task 3 and Task 4.
 ## References
 
 <div id="subgraph-header-file"></div>
-[1]: [subgraph header file](https://github.com/StanfordLegion/realm/blob/main/realm/subgraph.h)
+[1]: [subgraph header file](https://github.com/StanfordLegion/legion/blob/stable/runtime/realm/subgraph.h)

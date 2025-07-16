@@ -1,5 +1,7 @@
 ---
-title: Hello World
+layout: page
+permalink: /tutorial/realm/hello_realm.html
+title: Realm Hello World
 ---
 
 The tutorial begins with a simple "hello world" example that showcases the basics.

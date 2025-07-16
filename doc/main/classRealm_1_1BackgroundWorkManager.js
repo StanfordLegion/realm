@@ -1,0 +1,27 @@
+var classRealm_1_1BackgroundWorkManager =
+[
+    [ "Config", "structRealm_1_1BackgroundWorkManager_1_1Config.html", "structRealm_1_1BackgroundWorkManager_1_1Config" ],
+    [ "Worker", "classRealm_1_1BackgroundWorkManager_1_1Worker.html", "classRealm_1_1BackgroundWorkManager_1_1Worker" ],
+    [ "BitMask", "classRealm_1_1BackgroundWorkManager.html#a7f14fe61ae3cd6fb3f504e9d10e06222", null ],
+    [ "BackgroundWorkManager", "classRealm_1_1BackgroundWorkManager.html#a0a3c4e98de65837fc6a03727ca59cbf4", null ],
+    [ "~BackgroundWorkManager", "classRealm_1_1BackgroundWorkManager.html#a4db4ff42eafe16db08ff3339ab55d071", null ],
+    [ "advertise_work", "classRealm_1_1BackgroundWorkManager.html#afbec516c540c4c0f4573cbc0ae967875", null ],
+    [ "assign_slot", "classRealm_1_1BackgroundWorkManager.html#ae62a27ac764bca1602172fcbe585c655", null ],
+    [ "configure_from_cmdline", "classRealm_1_1BackgroundWorkManager.html#aaab83e2b552fdf521d393197e6a0f631", null ],
+    [ "release_slot", "classRealm_1_1BackgroundWorkManager.html#a79d19ac278ae0bbdb6bcdaf1d38b484c", null ],
+    [ "start_dedicated_workers", "classRealm_1_1BackgroundWorkManager.html#a9504e6080c2fe7c7363ab97a67111079", null ],
+    [ "stop_dedicated_workers", "classRealm_1_1BackgroundWorkManager.html#a1f6f8cf030b7fc726ac6f310298b3f7f", null ],
+    [ "BackgroundWorkItem", "classRealm_1_1BackgroundWorkManager.html#aefdaa6bdac57e80fe41be055a3a7f90b", null ],
+    [ "BackgroundWorkManager::Worker", "classRealm_1_1BackgroundWorkManager.html#addf1a1c0cc26c708cff8e2da0b7e630e", null ],
+    [ "BackgroundWorkThread", "classRealm_1_1BackgroundWorkManager.html#a9d91e3691ae4847799c7109f3161481a", null ],
+    [ "active_work_item_mask", "classRealm_1_1BackgroundWorkManager.html#a2a9d7bcf62721d68da275c462046aa9c", null ],
+    [ "cfg", "classRealm_1_1BackgroundWorkManager.html#a702da57777336c1fe19cc0f3163780c6", null ],
+    [ "db_list", "classRealm_1_1BackgroundWorkManager.html#aaf26e9e58f9328842a512696b600ddac", null ],
+    [ "db_mutex", "classRealm_1_1BackgroundWorkManager.html#ad31863115b677120261e182d4d786fc9", null ],
+    [ "dedicated_workers", "classRealm_1_1BackgroundWorkManager.html#ab0ee36d14b5ef62c3e3f2f0e0412f734", null ],
+    [ "mutex", "classRealm_1_1BackgroundWorkManager.html#ae061a84464a202d04d57f39b68b78c22", null ],
+    [ "num_work_items", "classRealm_1_1BackgroundWorkManager.html#a0ec8082b20914470a033f904d11f5879", null ],
+    [ "work_item_usecounts", "classRealm_1_1BackgroundWorkManager.html#accb3b8b5159ca9775ca0816a38420b73", null ],
+    [ "work_items", "classRealm_1_1BackgroundWorkManager.html#a9239ef9e7eeacff5ce46803d9c6410b9", null ],
+    [ "worker_state", "classRealm_1_1BackgroundWorkManager.html#ac17dfefffd57e552df01b6729bc74487", null ]
+];

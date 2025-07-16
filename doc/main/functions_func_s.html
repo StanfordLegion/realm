@@ -10,6 +10,10 @@
 <link href="tabs.css" rel="stylesheet" type="text/css"/>
 <script type="text/javascript" src="jquery.js"></script>
 <script type="text/javascript" src="dynsections.js"></script>
+<link href="navtree.css" rel="stylesheet" type="text/css"/>
+<script type="text/javascript" src="resize.js"></script>
+<script type="text/javascript" src="navtreedata.js"></script>
+<script type="text/javascript" src="navtree.js"></script>
 <link href="search/search.css" rel="stylesheet" type="text/css"/>
 <script type="text/javascript" src="search/searchdata.js"></script>
 <script type="text/javascript" src="search/search.js"></script>
@@ -20,6 +24,8 @@
 </script>
 <link href="doxygen.css" rel="stylesheet" type="text/css" />
 <link href="customdoxygen.css" rel="stylesheet" type="text/css"/>
+<link href="doxygen-awesome.css" rel="stylesheet" type="text/css"/>
+<link href="doxygen-awesome-sidebar-only.css" rel="stylesheet" type="text/css"/>
 <!-- BEGIN version select -->
 <link rel="stylesheet" type="text/css" href="../dropdown.css">
 <script type="text/javascript" src="https://ajax.googleapis.com/ajax/libs/jquery/3.2.1/jquery.min.js">
@@ -32,11 +38,13 @@
 <table cellspacing="0" cellpadding="0">
  <tbody>
  <tr style="height: 56px;">
+  <td id="projectlogo"><img alt="Logo" src="logo.png"/></td>
   <td id="projectalign" style="padding-left: 0.5em;">
    <div id="projectname">Realm
    <!-- BEGIN version select -->
+    <br />
     <div class="dropdown">
-     <button class="dropbtn">Version 0.0.1</button>
+     <button class="dropbtn">Version 0.0.1+6ce58b75</button>
      <div class="dropdown-content"></div>
     </div>
     <script type="text/javascript" src="../selectversion.js"></script>
@@ -127,6 +135,22 @@ var searchBox = new SearchBox("searchBox", "search/",'.html');
     </ul>
   </div>
 </div><!-- top -->
+<div id="side-nav" class="ui-resizable side-nav-resizable">
+  <div id="nav-tree">
+    <div id="nav-tree-contents">
+      <div id="nav-sync" class="sync"></div>
+    </div>
+  </div>
+  <div id="splitbar" style="-moz-user-select:none;" 
+       class="ui-resizable-handle">
+  </div>
+</div>
+<script type="text/javascript">
+/* @license magnet:?xt=urn:btih:d3d9a9a6595521f9666a5e94cc830dab83b65699&amp;dn=expat.txt MIT */
+$(document).ready(function(){initNavTree('functions_func_s.html',''); initResizable(); });
+/* @license-end */
+</script>
+<div id="doc-content">
 <!-- window showing the filter options -->
 <div id="MSearchSelectWindow"
      onmouseover="return searchBox.OnSearchSelectShow()"
@@ -170,12 +194,12 @@ var searchBox = new SearchBox("searchBox", "search/",'.html');
 <li>send_contribute()&#160;:&#160;<a class="el" href="classRealm_1_1SparsityMapCommunicator.html#a88f3c734e493f63d128e4793b9817990">Realm::SparsityMapCommunicator&lt; N, T &gt;</a></li>
 <li>send_metadata()&#160;:&#160;<a class="el" href="classRealm_1_1RegionInstanceImpl.html#aa3dc6693d4f81096a0fdb0c7a504d1b9">Realm::RegionInstanceImpl</a></li>
 <li>send_profiling_data()&#160;:&#160;<a class="el" href="classRealm_1_1Operation.html#ae0ae99f9ff2a86a79a5e500fe8220882">Realm::Operation</a></li>
-<li>send_request()&#160;:&#160;<a class="el" href="structRealm_1_1NotifyXferDesCompleteMessage.html#acf75c2c9fdebf88ca4f7097c3c86660d">Realm::NotifyXferDesCompleteMessage</a>, <a class="el" href="classRealm_1_1SparsityMapCommunicator.html#a84df9fd934fb9ccc3e43c9946877d4a5">Realm::SparsityMapCommunicator&lt; N, T &gt;</a>, <a class="el" href="structRealm_1_1UpdateBytesReadMessage.html#adab766960b2faa41ce4cf0ab2c1e92b5">Realm::UpdateBytesReadMessage</a>, <a class="el" href="structRealm_1_1UpdateBytesWriteMessage.html#aa5da952fd62fc4f8c119d0f61d310ec0">Realm::UpdateBytesWriteMessage</a>, <a class="el" href="structRealm_1_1XferDesDestroyMessage.html#a1f3fe53754eef09d693b20a90c4063d5">Realm::XferDesDestroyMessage</a></li>
+<li>send_request()&#160;:&#160;<a class="el" href="structRealm_1_1BarrierTriggerMessage.html#a8499c3ac8c35a0e748a4005c7a979fbf">Realm::BarrierTriggerMessage</a>, <a class="el" href="structRealm_1_1NotifyXferDesCompleteMessage.html#acf75c2c9fdebf88ca4f7097c3c86660d">Realm::NotifyXferDesCompleteMessage</a>, <a class="el" href="classRealm_1_1SparsityMapCommunicator.html#a84df9fd934fb9ccc3e43c9946877d4a5">Realm::SparsityMapCommunicator&lt; N, T &gt;</a>, <a class="el" href="structRealm_1_1UpdateBytesReadMessage.html#adab766960b2faa41ce4cf0ab2c1e92b5">Realm::UpdateBytesReadMessage</a>, <a class="el" href="structRealm_1_1UpdateBytesWriteMessage.html#aa5da952fd62fc4f8c119d0f61d310ec0">Realm::UpdateBytesWriteMessage</a>, <a class="el" href="structRealm_1_1XferDesDestroyMessage.html#a1f3fe53754eef09d693b20a90c4063d5">Realm::XferDesDestroyMessage</a></li>
 <li>send_response()&#160;:&#160;<a class="el" href="classRealm_1_1ProfilingMeasurementCollection.html#a657e7e7a744fe2f531b3aa56fe0ee83c">Realm::ProfilingMeasurementCollection</a></li>
 <li>send_responses()&#160;:&#160;<a class="el" href="classRealm_1_1ProfilingMeasurementCollection.html#a3f54c47751ac703a33f17c00dbda1690">Realm::ProfilingMeasurementCollection</a></li>
 <li>SequenceAssembler()&#160;:&#160;<a class="el" href="classRealm_1_1SequenceAssembler.html#a89a345af2bd281206f20eeeb74b9cf7c">Realm::SequenceAssembler</a></li>
 <li>SequenceCache()&#160;:&#160;<a class="el" href="classRealm_1_1XferDes_1_1SequenceCache.html#af06f623c1e4686055f7ccb26143c07a3">Realm::XferDes::SequenceCache&lt; UPDATE &gt;</a></li>
-<li>serialize()&#160;:&#160;<a class="el" href="classRealm_1_1AffineLayoutPiece.html#ac8d4a43d84245786f28047c9a239ea47">Realm::AffineLayoutPiece&lt; N, T &gt;</a>, <a class="el" href="classRealm_1_1CodeDescriptor.html#a6fc7b0a8cdf4bbfc7fc67fc018f4fc57">Realm::CodeDescriptor</a>, <a class="el" href="classRealm_1_1Cuda_1_1GPUIndirectRemoteChannelInfo.html#a4d33ba9475ca229401fa5138e99ea15b">Realm::Cuda::GPUIndirectRemoteChannelInfo</a>, <a class="el" href="classRealm_1_1Cuda_1_1GPUreduceRemoteChannelInfo.html#a78898db28da0985e4a8b20175ef7ef0a">Realm::Cuda::GPUreduceRemoteChannelInfo</a>, <a class="el" href="classRealm_1_1CudaArrayLayoutPiece.html#a8d6c74e299d65a1f7031007062d2a02e">Realm::CudaArrayLayoutPiece&lt; N, T &gt;</a>, <a class="el" href="classRealm_1_1CustomSerdezUntyped.html#aa1a451bfb5443ebbaded176c966c0df7">Realm::CustomSerdezUntyped</a>, <a class="el" href="classRealm_1_1ExternalCudaArrayResource.html#a132a6e849090770ad843010c50b8ecd0">Realm::ExternalCudaArrayResource</a>, <a class="el" href="classRealm_1_1ExternalCudaMemoryResource.html#a52011e40a8b1608ece5537982a428e2e">Realm::ExternalCudaMemoryResource</a>, <a class="el" href="classRealm_1_1ExternalCudaPinnedHostResource.html#adca7212a74008f573c585d0ce30668ae">Realm::ExternalCudaPinnedHostResource</a>, <a class="el" href="classRealm_1_1ExternalFileResource.html#a6fcb9f1ef9181f84aec6f7fff0a9fdbc">Realm::ExternalFileResource</a>, <a class="el" href="classRealm_1_1ExternalHDF5Resource.html#a955cc21bba1af4d3d13afbeaa0acef71">Realm::ExternalHDF5Resource</a>, <a class="el" href="classRealm_1_1ExternalHipMemoryResource.html#abb9d9dd62432e908bf691dab3a47848c">Realm::ExternalHipMemoryResource</a>, <a class="el" href="classRealm_1_1ExternalHipPinnedHostResource.html#a416893a5c7ad3de2679004916d284559">Realm::ExternalHipPinnedHostResource</a>, <a class="el" href="classRealm_1_1ExternalMemoryResource.html#a92d5ce3dd1fd03d4b50ad9cba63f2c1d">Realm::ExternalMemoryResource</a>, <a class="el" href="classRealm_1_1FunctionPointerImplementation.html#adc49e8e7d3973b793c30164d75052be2">Realm::FunctionPointerImplementation</a>, <a class="el" href="classRealm_1_1HDF5LayoutPiece.html#a48148afa2e8b2b9286b7e3d35da3a075">Realm::HDF5LayoutPiece&lt; N, T &gt;</a>, <a class="el" href="classRealm_1_1Hip_1_1GPUreduceRemoteChannelInfo.html#aec339aeec3a880f91444bdc8dfd087b1">Realm::Hip::GPUreduceRemoteChannelInfo</a>, <a class="el" href="classRealm_1_1InstanceLayout.html#afbb5a66a7b417ed0a95a0a0842987d71">Realm::InstanceLayout&lt; N, T &gt;</a>, <a class="el" href="classRealm_1_1InstancePieceList.html#a65fc08b64e38796c8c1dcef35f808ea8">Realm::InstancePieceList&lt; N, T &gt;</a>, <a class="el" href="classRealm_1_1LLVMIRImplementation.html#a83175137c6ddfd1ffa68ac4325a86a71">Realm::LLVMIRImplementation</a>, <a class="el" href="classRealm_1_1PythonSourceImplementation.html#a3e5797960a974bc7776d50b5e5c283a9">Realm::PythonSourceImplementation</a>, <a class="el" href="classRealm_1_1RegionInstanceImpl_1_1Metadata.html#a87bfd56e3c92dc1320795e063a110776">Realm::RegionInstanceImpl::Metadata</a>, <a class="el" href="classRealm_1_1SerdezObject.html#afdcb8f7945243446b396b04fd92e408b">Realm::SerdezObject&lt; T &gt;</a>, <a class="el" href="classRealm_1_1Serialization_1_1PolymorphicSerdezHelper.html#ae6077517e0aabd8af08e1b8be7facddb">Realm::Serialization::PolymorphicSerdezHelper&lt; T &gt;</a>, <a class="el" href="classRealm_1_1Serialization_1_1PolymorphicSerdezIntfc.html#ae204f3fd047f1295126a690425c3aba0">Realm::Serialization::PolymorphicSerdezIntfc&lt; T &gt;</a>, <a class="el" href="classRealm_1_1Serialization_1_1PolymorphicSerdezSubclass.html#a7b843268c0b1171298c644ae05d15ef7">Realm::Serialization::PolymorphicSerdezSubclass&lt; T1, T2 &gt;</a>, <a class="el" href="classRealm_1_1SimpleRemoteChannelInfo.html#ab17d2aff170922caa4aae033e4c07834">Realm::SimpleRemoteChannelInfo</a>, <a class="el" href="classRealm_1_1SimpleSerdez.html#a8ac8f00a10ec0095d3e987f709aa5e52">Realm::SimpleSerdez&lt; T, MAX_SER_SIZE &gt;</a>, <a class="el" href="classRealm_1_1TransferIteratorIndexSpace.html#ad59d48c2106a2af05cf0a2d707396f31">Realm::TransferIteratorIndexSpace&lt; N, T &gt;</a>, <a class="el" href="classRealm_1_1TransferIteratorIndirect.html#a953c8713db04cd9d3aa526e71a61a901">Realm::TransferIteratorIndirect&lt; N, T &gt;</a>, <a class="el" href="classRealm_1_1WrappingFIFOIterator.html#a009fc4a6d74479dc0e98a32c136d0716">Realm::WrappingFIFOIterator</a></li>
+<li>serialize()&#160;:&#160;<a class="el" href="classRealm_1_1AffineLayoutPiece.html#ac8d4a43d84245786f28047c9a239ea47">Realm::AffineLayoutPiece&lt; N, T &gt;</a>, <a class="el" href="classRealm_1_1CodeDescriptor.html#a6fc7b0a8cdf4bbfc7fc67fc018f4fc57">Realm::CodeDescriptor</a>, <a class="el" href="classRealm_1_1Cuda_1_1GPUIndirectRemoteChannelInfo.html#a4d33ba9475ca229401fa5138e99ea15b">Realm::Cuda::GPUIndirectRemoteChannelInfo</a>, <a class="el" href="classRealm_1_1Cuda_1_1GPUreduceRemoteChannelInfo.html#a78898db28da0985e4a8b20175ef7ef0a">Realm::Cuda::GPUreduceRemoteChannelInfo</a>, <a class="el" href="classRealm_1_1CudaArrayLayoutPiece.html#a8d6c74e299d65a1f7031007062d2a02e">Realm::CudaArrayLayoutPiece&lt; N, T &gt;</a>, <a class="el" href="classRealm_1_1CustomSerdezUntyped.html#aa1a451bfb5443ebbaded176c966c0df7">Realm::CustomSerdezUntyped</a>, <a class="el" href="classRealm_1_1ExternalCudaArrayResource.html#a132a6e849090770ad843010c50b8ecd0">Realm::ExternalCudaArrayResource</a>, <a class="el" href="classRealm_1_1ExternalCudaMemoryResource.html#a52011e40a8b1608ece5537982a428e2e">Realm::ExternalCudaMemoryResource</a>, <a class="el" href="classRealm_1_1ExternalCudaPinnedHostResource.html#adca7212a74008f573c585d0ce30668ae">Realm::ExternalCudaPinnedHostResource</a>, <a class="el" href="classRealm_1_1ExternalFileResource.html#a6fcb9f1ef9181f84aec6f7fff0a9fdbc">Realm::ExternalFileResource</a>, <a class="el" href="classRealm_1_1ExternalHDF5Resource.html#a955cc21bba1af4d3d13afbeaa0acef71">Realm::ExternalHDF5Resource</a>, <a class="el" href="classRealm_1_1ExternalHipMemoryResource.html#abb9d9dd62432e908bf691dab3a47848c">Realm::ExternalHipMemoryResource</a>, <a class="el" href="classRealm_1_1ExternalHipPinnedHostResource.html#a416893a5c7ad3de2679004916d284559">Realm::ExternalHipPinnedHostResource</a>, <a class="el" href="classRealm_1_1ExternalMemoryResource.html#a92d5ce3dd1fd03d4b50ad9cba63f2c1d">Realm::ExternalMemoryResource</a>, <a class="el" href="classRealm_1_1FunctionPointerImplementation.html#adc49e8e7d3973b793c30164d75052be2">Realm::FunctionPointerImplementation</a>, <a class="el" href="classRealm_1_1HDF5LayoutPiece.html#a48148afa2e8b2b9286b7e3d35da3a075">Realm::HDF5LayoutPiece&lt; N, T &gt;</a>, <a class="el" href="classRealm_1_1Hip_1_1GPUreduceRemoteChannelInfo.html#aec339aeec3a880f91444bdc8dfd087b1">Realm::Hip::GPUreduceRemoteChannelInfo</a>, <a class="el" href="classRealm_1_1InstanceLayout.html#afbb5a66a7b417ed0a95a0a0842987d71">Realm::InstanceLayout&lt; N, T &gt;</a>, <a class="el" href="classRealm_1_1InstancePieceList.html#a65fc08b64e38796c8c1dcef35f808ea8">Realm::InstancePieceList&lt; N, T &gt;</a>, <a class="el" href="classRealm_1_1LLVMIRImplementation.html#a83175137c6ddfd1ffa68ac4325a86a71">Realm::LLVMIRImplementation</a>, <a class="el" href="classRealm_1_1PythonSourceImplementation.html#a3e5797960a974bc7776d50b5e5c283a9">Realm::PythonSourceImplementation</a>, <a class="el" href="classRealm_1_1RegionInstanceImpl_1_1Metadata.html#a87bfd56e3c92dc1320795e063a110776">Realm::RegionInstanceImpl::Metadata</a>, <a class="el" href="classRealm_1_1SerdezObject.html#afdcb8f7945243446b396b04fd92e408b">Realm::SerdezObject&lt; T &gt;</a>, <a class="el" href="classRealm_1_1Serialization_1_1PolymorphicSerdezHelper.html#ae6077517e0aabd8af08e1b8be7facddb">Realm::Serialization::PolymorphicSerdezHelper&lt; T &gt;</a>, <a class="el" href="classRealm_1_1Serialization_1_1PolymorphicSerdezIntfc.html#ae204f3fd047f1295126a690425c3aba0">Realm::Serialization::PolymorphicSerdezIntfc&lt; T &gt;</a>, <a class="el" href="classRealm_1_1Serialization_1_1PolymorphicSerdezSubclass.html#a200d7166b18e7f0d401b404cff39a1e5">Realm::Serialization::PolymorphicSerdezSubclass&lt; T1, T2 &gt;</a>, <a class="el" href="classRealm_1_1SimpleRemoteChannelInfo.html#ab17d2aff170922caa4aae033e4c07834">Realm::SimpleRemoteChannelInfo</a>, <a class="el" href="classRealm_1_1SimpleSerdez.html#a8ac8f00a10ec0095d3e987f709aa5e52">Realm::SimpleSerdez&lt; T, MAX_SER_SIZE &gt;</a>, <a class="el" href="classRealm_1_1TransferIteratorIndexSpace.html#ad59d48c2106a2af05cf0a2d707396f31">Realm::TransferIteratorIndexSpace&lt; N, T &gt;</a>, <a class="el" href="classRealm_1_1TransferIteratorIndirect.html#a953c8713db04cd9d3aa526e71a61a901">Realm::TransferIteratorIndirect&lt; N, T &gt;</a>, <a class="el" href="classRealm_1_1WrappingFIFOIterator.html#a009fc4a6d74479dc0e98a32c136d0716">Realm::WrappingFIFOIterator</a></li>
 <li>serialize_msg()&#160;:&#160;<a class="el" href="classRealm_1_1RegionInstanceImpl_1_1Metadata.html#a362b25af7c9174f61b056a80f7eff880">Realm::RegionInstanceImpl::Metadata</a></li>
 <li>serialize_scalar()&#160;:&#160;<a class="el" href="structRealm_1_1Serialization_1_1SerializationHelper_3_01T_00_01false_01_4.html#a2659be0903609d592b71f915b5252d9f">Realm::Serialization::SerializationHelper&lt; T, false &gt;</a>, <a class="el" href="structRealm_1_1Serialization_1_1SerializationHelper_3_01T_00_01true_01_4.html#a9decb582fff6a589b8318bdce3b93b03">Realm::Serialization::SerializationHelper&lt; T, true &gt;</a></li>
 <li>serialize_span()&#160;:&#160;<a class="el" href="structRealm_1_1Serialization_1_1SerializationHelper_3_01T_00_01false_01_4.html#ad4530e6d25250eb69ce78d3613560995">Realm::Serialization::SerializationHelper&lt; T, false &gt;</a>, <a class="el" href="structRealm_1_1Serialization_1_1SerializationHelper_3_01T_00_01true_01_4.html#ab0e6c699fa3e76c45ad5acdae2c60bfe">Realm::Serialization::SerializationHelper&lt; T, true &gt;</a></li>
@@ -192,6 +216,7 @@ var searchBox = new SearchBox("searchBox", "search/",'.html');
 <li>set_bit()&#160;:&#160;<a class="el" href="classRealm_1_1NodeSetBitmask.html#a4d1d97aa05b5fde89f88b9297bc374a7">Realm::NodeSetBitmask</a></li>
 <li>set_cached_mem()&#160;:&#160;<a class="el" href="classRealm_1_1ProcessorQueryImpl.html#a1f2b6855f12ab1697aacef0415b57688">Realm::ProcessorQueryImpl</a></li>
 <li>set_capacity()&#160;:&#160;<a class="el" href="classRealm_1_1CompQueueImpl.html#a866ed0941d07f965527c7b4da1aa8b07">Realm::CompQueueImpl</a></li>
+<li>set_constructor()&#160;:&#160;<a class="el" href="classRealm_1_1DynamicTable.html#a63157a7a524d2f3d4dd768c2740e0518">Realm::DynamicTable&lt; ALLOCATOR &gt;</a></li>
 <li>set_contributor_count()&#160;:&#160;<a class="el" href="classRealm_1_1SparsityMapImpl.html#a30ab57b9ffb33fe705d785de7be639fa">Realm::SparsityMapImpl&lt; N, T &gt;</a></li>
 <li>set_current_task_priority()&#160;:&#160;<a class="el" href="classRealm_1_1Processor.html#ae471b6dc140c9e2ba67f98ee3b279a09">Realm::Processor</a></li>
 <li>set_databuf()&#160;:&#160;<a class="el" href="classRealm_1_1GASNetEXEvent.html#aaa0d464d840d27d47be787f990b9321b">Realm::GASNetEXEvent</a></li>
@@ -247,7 +272,7 @@ var searchBox = new SearchBox("searchBox", "search/",'.html');
 <li>setup()&#160;:&#160;<a class="el" href="classRealm_1_1Task_1_1DeferredSpawn.html#a69e5c902902875efbc26588bf2b2d8a4">Realm::Task::DeferredSpawn</a></li>
 <li>setup_perf_counters()&#160;:&#160;<a class="el" href="classRealm_1_1Thread.html#ad2241bee14f4f926a73334409690c13c">Realm::Thread</a></li>
 <li>share_memories()&#160;:&#160;<a class="el" href="classRealm_1_1RuntimeImpl.html#ab497f253a4391954e94d298ec7eabdbe">Realm::RuntimeImpl</a></li>
-<li>SharedMemoryInfo()&#160;:&#160;<a class="el" href="classRealm_1_1SharedMemoryInfo.html#af6a964046369a037c34b9f712130900d">Realm::SharedMemoryInfo</a></li>
+<li>SharedMemoryInfo()&#160;:&#160;<a class="el" href="classRealm_1_1SharedMemoryInfo.html#adbc56613c01b5641c914da720ccf79a5">Realm::SharedMemoryInfo</a></li>
 <li>short_message_complete()&#160;:&#160;<a class="el" href="classRealm_1_1GASNetEXInternal.html#a93191c55fcf42627bc3362c317fd790a">Realm::GASNetEXInternal</a></li>
 <li>shortstringbuf()&#160;:&#160;<a class="el" href="classRealm_1_1shortstringbuf.html#a3a4dbaa5e13b225db07f987092621cd6">Realm::shortstringbuf&lt; _INTERNAL_BUFFER_SIZE, _INITIAL_EXTERNAL_SIZE &gt;</a></li>
 <li>shutdown()&#160;:&#160;<a class="el" href="classmesh_1_1Client.html#a30ca47ea33b3e779213c5cfc0e45a351">mesh::Client</a>, <a class="el" href="classmesh_1_1Server.html#a252f928346b82d2e64e79de4affc794b">mesh::Server</a>, <a class="el" href="classmesh_1_1Worker.html#ab1b6dd93b08fbba199b1fa83124ebf29">mesh::Worker</a></li>
@@ -261,7 +286,7 @@ var searchBox = new SearchBox("searchBox", "search/",'.html');
 <li>SimpleXferDesFactory()&#160;:&#160;<a class="el" href="classRealm_1_1SimpleXferDesFactory.html#a5cb11902248690dac0a76ad6824c4cb5">Realm::SimpleXferDesFactory</a></li>
 <li>SingleXDQChannel()&#160;:&#160;<a class="el" href="classRealm_1_1SingleXDQChannel.html#a7adab18ffe9827a1fa7611c931c704b3">Realm::SingleXDQChannel&lt; CHANNEL, XD &gt;</a></li>
 <li>size()&#160;:&#160;<a class="el" href="classRealm_1_1AffineLinearizedIndexSpace.html#a02f8b337be56cff6307210ad0c1abf58">Realm::AffineLinearizedIndexSpace&lt; N, T &gt;</a>, <a class="el" href="classRealm_1_1Backtrace.html#a6886b3a332dcde1df0da6f722acd15f1">Realm::Backtrace</a>, <a class="el" href="classRealm_1_1ByteArrayRef.html#a76b562840f6d8112f9700d000676d4b8">Realm::ByteArrayRef</a>, <a class="el" href="classRealm_1_1CircularQueue.html#a858e1831a7ade2dc0ec82caf58a87a4e">Realm::CircularQueue&lt; T, INTSIZE &gt;</a>, <a class="el" href="classRealm_1_1CompletionCallback.html#aa9ec73bd392483ed53048b451645edf2">Realm::CompletionCallback&lt; CALLABLE &gt;</a>, <a class="el" href="classRealm_1_1CompletionCallbackBase.html#abaedfcbf50c1cc5d120e3df7ac299e55">Realm::CompletionCallbackBase</a>, <a class="el" href="classRealm_1_1FragmentedMessage.html#ab66d43e2c1a430cfb454ab2b48970b43">Realm::FragmentedMessage</a>, <a class="el" href="classRealm_1_1IntervalTree.html#af6bb67f331f7bd798ff83abe90bcd83c">Realm::IntervalTree&lt; IT, LT &gt;</a>, <a class="el" href="classRealm_1_1IntrusivePriorityList.html#aa6b9a1032662f80260790713e61a302a">Realm::IntrusivePriorityList&lt; T, PT,,, LT &gt;</a>, <a class="el" href="classRealm_1_1LinearizedIndexSpaceIntfc.html#a5aca808ce75f5211beb952ca8e68bc2b">Realm::LinearizedIndexSpaceIntfc</a>, <a class="el" href="classRealm_1_1NodeSet.html#a0d76df3dfc996bcc4cd40e28a032c252">Realm::NodeSet</a>, <a class="el" href="classRealm_1_1shortstringbuf.html#a57426f9cbc403651bff8b6b040d9e892">Realm::shortstringbuf&lt; _INTERNAL_BUFFER_SIZE, _INITIAL_EXTERNAL_SIZE &gt;</a>, <a class="el" href="classRealm_1_1span_3_01T_00_01dynamic__extent_01_4.html#acc02f9e2a5efaaca537e5d513c6e76de">Realm::span&lt; T, dynamic_extent &gt;</a></li>
-<li>size_bits()&#160;:&#160;<a class="el" href="classRealm_1_1Type.html#a0bf3e0c8463afe3a7128841116506fe5">Realm::Type</a></li>
+<li>size_bits()&#160;:&#160;<a class="el" href="classRealm_1_1Type.html#a656472cd8e35bbb4c5b6de7d9cc29db3">Realm::Type</a></li>
 <li>skip()&#160;:&#160;<a class="el" href="structRealm_1_1PieceLookup_1_1Instruction.html#a84d3a5a8ae2f9d010e1bab1677d4d635">Realm::PieceLookup::Instruction</a></li>
 <li>skip_bytes()&#160;:&#160;<a class="el" href="classRealm_1_1AddressListCursor.html#a3d7d6290d4017b39c414f56aa9dca56f">Realm::AddressListCursor</a></li>
 <li>slice()&#160;:&#160;<a class="el" href="classRealm_1_1bitpack.html#a329820d06bf7f421f933fcca71def557">Realm::bitpack&lt; T &gt;</a></li>
@@ -295,7 +320,7 @@ var searchBox = new SearchBox("searchBox", "search/",'.html');
 <li>start_worker_threads()&#160;:&#160;<a class="el" href="classRealm_1_1PartitioningOpQueue.html#a1e7eb004fae5d3dbef38d1bce110819d">Realm::PartitioningOpQueue</a>, <a class="el" href="classRealm_1_1ThreadPool.html#ad801688e31d1b504b7159c28e0463f50">Realm::ThreadPool</a></li>
 <li>StaticRegistration()&#160;:&#160;<a class="el" href="classRealm_1_1ModuleRegistrar_1_1StaticRegistration.html#a91710436f8b403a736e1a3b20efc78c6">Realm::ModuleRegistrar::StaticRegistration&lt; T &gt;</a></li>
 <li>StaticRegistrationBase()&#160;:&#160;<a class="el" href="classRealm_1_1ModuleRegistrar_1_1StaticRegistrationBase.html#acac09de6ed07cf19eb17fb0422e4924c">Realm::ModuleRegistrar::StaticRegistrationBase</a></li>
-<li>steal_freelist_element()&#160;:&#160;<a class="el" href="classRealm_1_1DynamicTableAllocator.html#abc5e81389e93628ba555d4934f6a4ebb">Realm::DynamicTableAllocator&lt; _ET, _INNER_BITS, _LEAF_BITS &gt;</a></li>
+<li>steal_freelist_element()&#160;:&#160;<a class="el" href="classRealm_1_1DynamicTableAllocator.html#a3e21b4e07da17f4015e9a521c7656d72">Realm::DynamicTableAllocator&lt; _ET, _INNER_BITS, _LEAF_BITS, CONSTRUCTOR &gt;</a></li>
 <li>step()&#160;:&#160;<a class="el" href="structRealm_1_1IndexSpaceIterator.html#a137e0a60bf62956e2c6d1d52e52aa87d">Realm::IndexSpaceIterator&lt; N, T &gt;</a>, <a class="el" href="classRealm_1_1PointInRectIterator.html#a46ce208fdf101d02101c7e3a5b1bb570">Realm::PointInRectIterator&lt; N, T &gt;</a>, <a class="el" href="classRealm_1_1TransferIterator.html#a514da8cc0af0443aa0513cb9de97d09d">Realm::TransferIterator</a>, <a class="el" href="classRealm_1_1TransferIteratorBase.html#a8563b30690b9cbaade64ea3b1bf56ad5">Realm::TransferIteratorBase&lt; N, T &gt;</a>, <a class="el" href="classRealm_1_1WrappingFIFOIterator.html#a3789e39d32cbbc9a3ffdc0d2f510712d">Realm::WrappingFIFOIterator</a></li>
 <li>step_custom()&#160;:&#160;<a class="el" href="classRealm_1_1TransferIterator.html#a2ab41faf17e47e7c4d8f4b7470276408">Realm::TransferIterator</a>, <a class="el" href="classRealm_1_1TransferIteratorBase.html#af0d89273f885eef739b25bd51a0802d9">Realm::TransferIteratorBase&lt; N, T &gt;</a>, <a class="el" href="classRealm_1_1WrappingFIFOIterator.html#aa85edb03e2dd8d350ba22492ad453c75">Realm::WrappingFIFOIterator</a></li>
 <li>stop_dedicated_workers()&#160;:&#160;<a class="el" href="classRealm_1_1BackgroundWorkManager.html#a1f6f8cf030b7fc726ac6f310298b3f7f">Realm::BackgroundWorkManager</a></li>
@@ -329,10 +354,13 @@ var searchBox = new SearchBox("searchBox", "search/",'.html');
 <li>system_memory()&#160;:&#160;<a class="el" href="classRealm_1_1HardwareTopology.html#a3acedfa1f65e577b95e2bb8db8c0bc4d">Realm::HardwareTopology</a></li>
 </ul>
 </div><!-- contents -->
+</div><!-- doc-content -->
 <!-- HTML footer for doxygen 1.9.1-->
 <!-- start footer part -->
-<hr class="footer"/><address class="footer"><small>
-Generated by&#160;<a href="https://www.doxygen.org/index.html"><img class="footer" src="doxygen.svg" width="104" height="31" alt="doxygen"/></a> 1.9.8
-</small></address>
+<div id="nav-path" class="navpath"><!-- id is needed for treeview function! -->
+  <ul>
+    <li class="footer">Generated by <a href="https://www.doxygen.org/index.html"><img class="footer" src="doxygen.svg" width="104" height="31" alt="doxygen"/></a> 1.9.8 </li>
+  </ul>
+</div>
 </body>
 </html>

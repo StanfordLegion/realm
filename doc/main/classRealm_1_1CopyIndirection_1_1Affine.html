@@ -10,6 +10,10 @@
 <link href="tabs.css" rel="stylesheet" type="text/css"/>
 <script type="text/javascript" src="jquery.js"></script>
 <script type="text/javascript" src="dynsections.js"></script>
+<link href="navtree.css" rel="stylesheet" type="text/css"/>
+<script type="text/javascript" src="resize.js"></script>
+<script type="text/javascript" src="navtreedata.js"></script>
+<script type="text/javascript" src="navtree.js"></script>
 <link href="search/search.css" rel="stylesheet" type="text/css"/>
 <script type="text/javascript" src="search/searchdata.js"></script>
 <script type="text/javascript" src="search/search.js"></script>
@@ -20,6 +24,8 @@
 </script>
 <link href="doxygen.css" rel="stylesheet" type="text/css" />
 <link href="customdoxygen.css" rel="stylesheet" type="text/css"/>
+<link href="doxygen-awesome.css" rel="stylesheet" type="text/css"/>
+<link href="doxygen-awesome-sidebar-only.css" rel="stylesheet" type="text/css"/>
 <!-- BEGIN version select -->
 <link rel="stylesheet" type="text/css" href="../dropdown.css">
 <script type="text/javascript" src="https://ajax.googleapis.com/ajax/libs/jquery/3.2.1/jquery.min.js">
@@ -32,11 +38,13 @@
 <table cellspacing="0" cellpadding="0">
  <tbody>
  <tr style="height: 56px;">
+  <td id="projectlogo"><img alt="Logo" src="logo.png"/></td>
   <td id="projectalign" style="padding-left: 0.5em;">
    <div id="projectname">Realm
    <!-- BEGIN version select -->
+    <br />
     <div class="dropdown">
-     <button class="dropbtn">Version 0.0.1</button>
+     <button class="dropbtn">Version 0.0.1+6ce58b75</button>
      <div class="dropdown-content"></div>
     </div>
     <script type="text/javascript" src="../selectversion.js"></script>
@@ -84,6 +92,23 @@ var searchBox = new SearchBox("searchBox", "search/",'.html');
       <li><a href="functions.html"><span>Class&#160;Members</span></a></li>
     </ul>
   </div>
+</div><!-- top -->
+<div id="side-nav" class="ui-resizable side-nav-resizable">
+  <div id="nav-tree">
+    <div id="nav-tree-contents">
+      <div id="nav-sync" class="sync"></div>
+    </div>
+  </div>
+  <div id="splitbar" style="-moz-user-select:none;" 
+       class="ui-resizable-handle">
+  </div>
+</div>
+<script type="text/javascript">
+/* @license magnet:?xt=urn:btih:d3d9a9a6595521f9666a5e94cc830dab83b65699&amp;dn=expat.txt MIT */
+$(document).ready(function(){initNavTree('classRealm_1_1CopyIndirection_1_1Affine.html',''); initResizable(); });
+/* @license-end */
+</script>
+<div id="doc-content">
 <!-- window showing the filter options -->
 <div id="MSearchSelectWindow"
      onmouseover="return searchBox.OnSearchSelectShow()"
@@ -105,11 +130,6 @@ var searchBox = new SearchBox("searchBox", "search/",'.html');
 </div>
 </div>
 
-<div id="nav-path" class="navpath">
-  <ul>
-<li class="navelem"><a class="el" href="namespaceRealm.html">Realm</a></li><li class="navelem"><a class="el" href="classRealm_1_1CopyIndirection.html">CopyIndirection</a></li><li class="navelem"><a class="el" href="classRealm_1_1CopyIndirection_1_1Affine.html">Affine</a></li>  </ul>
-</div>
-</div><!-- top -->
 <div class="header">
   <div class="summary">
 <a href="#pub-methods">Public Member Functions</a> &#124;
@@ -123,34 +143,13 @@ var searchBox = new SearchBox("searchBox", "search/",'.html');
 <div class="dynheader">
 Inheritance diagram for Realm::CopyIndirection&lt; N, T &gt;::Affine&lt; N2, T2 &gt;:</div>
 <div class="dyncontent">
-<div class="center"><img src="classRealm_1_1CopyIndirection_1_1Affine__inherit__graph.png" border="0" usemap="#aRealm_1_1CopyIndirection_3_01N_00_01T_01_4_1_1Affine_3_01N2_00_01T2_01_4_inherit__map" alt="Inheritance graph"/></div>
-<map name="aRealm_1_1CopyIndirection_3_01N_00_01T_01_4_1_1Affine_3_01N2_00_01T2_01_4_inherit__map" id="aRealm_1_1CopyIndirection_3_01N_00_01T_01_4_1_1Affine_3_01N2_00_01T2_01_4_inherit__map">
-<area shape="rect" title=" " alt="" coords="5,93,201,133"/>
-<area shape="rect" href="classRealm_1_1CopyIndirection_1_1Base.html" title=" " alt="" coords="16,5,191,45"/>
-<area shape="poly" title=" " alt="" coords="106,59,106,93,101,93,101,59"/>
-</map>
-<center><span class="legend">[<a href="graph_legend.html">legend</a>]</span></center></div>
+<div class="center"><!-- SVG 0 --></div>
+<center><span class="legend">[<a target="top" href="graph_legend.html">legend</a>]</span></center></div>
 <div class="dynheader">
 Collaboration diagram for Realm::CopyIndirection&lt; N, T &gt;::Affine&lt; N2, T2 &gt;:</div>
 <div class="dyncontent">
-<div class="center"><img src="classRealm_1_1CopyIndirection_1_1Affine__coll__graph.png" border="0" usemap="#aRealm_1_1CopyIndirection_3_01N_00_01T_01_4_1_1Affine_3_01N2_00_01T2_01_4_coll__map" alt="Collaboration graph"/></div>
-<map name="aRealm_1_1CopyIndirection_3_01N_00_01T_01_4_1_1Affine_3_01N2_00_01T2_01_4_coll__map" id="aRealm_1_1CopyIndirection_3_01N_00_01T_01_4_1_1Affine_3_01N2_00_01T2_01_4_coll__map">
-<area shape="rect" title=" " alt="" coords="596,128,792,168"/>
-<area shape="rect" href="classRealm_1_1CopyIndirection_1_1Base.html" title=" " alt="" coords="262,5,437,45"/>
-<area shape="poly" title=" " alt="" coords="444,47,573,88,655,125,653,130,571,93,442,52"/>
-<area shape="rect" href="classRealm_1_1CopyIndirection.html" title=" " alt="" coords="262,69,437,109"/>
-<area shape="poly" title=" " alt="" coords="451,104,596,129,595,134,450,109"/>
-<area shape="rect" href="structRealm_1_1Matrix.html" title=" " alt="" coords="265,133,434,173"/>
-<area shape="poly" title=" " alt="" coords="448,149,596,147,596,152,448,154"/>
-<area shape="rect" href="structRealm_1_1Point.html" title=" " alt="" coords="5,170,176,195"/>
-<area shape="poly" title=" " alt="" coords="189,169,264,160,265,166,190,174"/>
-<area shape="rect" href="structRealm_1_1Rect.html" title=" " alt="" coords="262,199,437,225"/>
-<area shape="poly" title=" " alt="" coords="158,195,200,203,262,208,261,213,200,208,157,201"/>
-<area shape="rect" href="structRealm_1_1Point.html" title=" " alt="" coords="260,255,439,281"/>
-<area shape="poly" title=" " alt="" coords="452,265,512,257,571,240,601,225,628,205,672,166,676,170,632,210,604,229,573,245,513,263,453,271"/>
-<area shape="poly" title=" " alt="" coords="436,194,572,169,595,165,596,170,572,175,437,199"/>
-</map>
-<center><span class="legend">[<a href="graph_legend.html">legend</a>]</span></center></div>
+<div class="center"><!-- SVG 1 --></div>
+<center><span class="legend">[<a target="top" href="graph_legend.html">legend</a>]</span></center></div>
 <table class="memberdecls">
 <tr class="heading"><td colspan="2"><h2 class="groupheader"><a id="pub-methods" name="pub-methods"></a>
 Public Member Functions</h2></td></tr>
@@ -391,13 +390,17 @@ template&lt;int N2, typename T2  = int&gt; </div>
 </div>
 </div>
 <hr/>The documentation for this class was generated from the following file:<ul>
-<li>/home/runner/work/realm/realm/realm-src/realm/<a class="el" href="indexspace_8h_source.html">indexspace.h</a></li>
+<li>/home/runner/work/realm/realm/realm-src/src/realm/<a class="el" href="indexspace_8h_source.html">indexspace.h</a></li>
 </ul>
 </div><!-- contents -->
+</div><!-- doc-content -->
 <!-- HTML footer for doxygen 1.9.1-->
 <!-- start footer part -->
-<hr class="footer"/><address class="footer"><small>
-Generated by&#160;<a href="https://www.doxygen.org/index.html"><img class="footer" src="doxygen.svg" width="104" height="31" alt="doxygen"/></a> 1.9.8
-</small></address>
+<div id="nav-path" class="navpath"><!-- id is needed for treeview function! -->
+  <ul>
+    <li class="navelem"><a class="el" href="namespaceRealm.html">Realm</a></li><li class="navelem"><a class="el" href="classRealm_1_1CopyIndirection.html">CopyIndirection</a></li><li class="navelem"><a class="el" href="classRealm_1_1CopyIndirection_1_1Affine.html">Affine</a></li>
+    <li class="footer">Generated by <a href="https://www.doxygen.org/index.html"><img class="footer" src="doxygen.svg" width="104" height="31" alt="doxygen"/></a> 1.9.8 </li>
+  </ul>
+</div>
 </body>
 </html>

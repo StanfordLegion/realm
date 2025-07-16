@@ -10,6 +10,10 @@
 <link href="tabs.css" rel="stylesheet" type="text/css"/>
 <script type="text/javascript" src="jquery.js"></script>
 <script type="text/javascript" src="dynsections.js"></script>
+<link href="navtree.css" rel="stylesheet" type="text/css"/>
+<script type="text/javascript" src="resize.js"></script>
+<script type="text/javascript" src="navtreedata.js"></script>
+<script type="text/javascript" src="navtree.js"></script>
 <link href="search/search.css" rel="stylesheet" type="text/css"/>
 <script type="text/javascript" src="search/searchdata.js"></script>
 <script type="text/javascript" src="search/search.js"></script>
@@ -20,6 +24,8 @@
 </script>
 <link href="doxygen.css" rel="stylesheet" type="text/css" />
 <link href="customdoxygen.css" rel="stylesheet" type="text/css"/>
+<link href="doxygen-awesome.css" rel="stylesheet" type="text/css"/>
+<link href="doxygen-awesome-sidebar-only.css" rel="stylesheet" type="text/css"/>
 <!-- BEGIN version select -->
 <link rel="stylesheet" type="text/css" href="../dropdown.css">
 <script type="text/javascript" src="https://ajax.googleapis.com/ajax/libs/jquery/3.2.1/jquery.min.js">
@@ -32,11 +38,13 @@
 <table cellspacing="0" cellpadding="0">
  <tbody>
  <tr style="height: 56px;">
+  <td id="projectlogo"><img alt="Logo" src="logo.png"/></td>
   <td id="projectalign" style="padding-left: 0.5em;">
    <div id="projectname">Realm
    <!-- BEGIN version select -->
+    <br />
     <div class="dropdown">
-     <button class="dropbtn">Version 0.0.1</button>
+     <button class="dropbtn">Version 0.0.1+6ce58b75</button>
      <div class="dropdown-content"></div>
     </div>
     <script type="text/javascript" src="../selectversion.js"></script>
@@ -128,6 +136,22 @@ var searchBox = new SearchBox("searchBox", "search/",'.html');
     </ul>
   </div>
 </div><!-- top -->
+<div id="side-nav" class="ui-resizable side-nav-resizable">
+  <div id="nav-tree">
+    <div id="nav-tree-contents">
+      <div id="nav-sync" class="sync"></div>
+    </div>
+  </div>
+  <div id="splitbar" style="-moz-user-select:none;" 
+       class="ui-resizable-handle">
+  </div>
+</div>
+<script type="text/javascript">
+/* @license magnet:?xt=urn:btih:d3d9a9a6595521f9666a5e94cc830dab83b65699&amp;dn=expat.txt MIT */
+$(document).ready(function(){initNavTree('functions_r.html',''); initResizable(); });
+/* @license-end */
+</script>
+<div id="doc-content">
 <!-- window showing the filter options -->
 <div id="MSearchSelectWindow"
      onmouseover="return searchBox.OnSearchSelectShow()"
@@ -249,7 +273,7 @@ var searchBox = new SearchBox("searchBox", "search/",'.html');
 <li>redistrict_sizes&#160;:&#160;<a class="el" href="structRealm_1_1LocalManagedMemory_1_1PendingRelease.html#af7b776795af26adb6dee6af11bb35795">Realm::LocalManagedMemory::PendingRelease</a></li>
 <li>redistrict_tags&#160;:&#160;<a class="el" href="structRealm_1_1LocalManagedMemory_1_1PendingRelease.html#ac6061b4839528b616fad15a487eec14c">Realm::LocalManagedMemory::PendingRelease</a></li>
 <li>redop&#160;:&#160;<a class="el" href="classRealm_1_1BarrierImpl.html#a23b79b4e2389790fccb5c8e0c0f38315">Realm::BarrierImpl</a>, <a class="el" href="classRealm_1_1Cuda_1_1GPUreduceXferDes.html#ad387e947135ab4f62f8f317b04439c9d">Realm::Cuda::GPUreduceXferDes</a>, <a class="el" href="classRealm_1_1Hip_1_1GPUreduceXferDes.html#ab759e31cf9052ab3d28a6de4f2c580c4">Realm::Hip::GPUreduceXferDes</a>, <a class="el" href="classRealm_1_1MemreduceXferDes.html#ad6281b65ee44ef29b1f454e5083699b1">Realm::MemreduceXferDes</a>, <a class="el" href="structRealm_1_1TransferGraph_1_1XDTemplate.html#a3e740fdae16df0a574b509c95a63f226">Realm::TransferGraph::XDTemplate</a></li>
-<li>redop_id&#160;:&#160;<a class="el" href="structPRealm_1_1CopySrcDstField.html#ac0a83bb6fabf161a47cf019d14d35147">PRealm::CopySrcDstField</a>, <a class="el" href="classRealm_1_1BarrierImpl.html#ab4c3ae6c4284c98b5709c72eb4daa28e">Realm::BarrierImpl</a>, <a class="el" href="structRealm_1_1BarrierTriggerMessageArgsInternal.html#a64c296b0edbd53d7f1e6b49c5702850a">Realm::BarrierTriggerMessageArgsInternal</a>, <a class="el" href="structRealm_1_1CopySrcDstField.html#ab4618a24d08e2b27cd5a432421d08ba5">Realm::CopySrcDstField</a>, <a class="el" href="structRealm_1_1Cuda_1_1CudaRedOpDesc.html#af2c58c9174809454bf591e27c4782a60">Realm::Cuda::CudaRedOpDesc</a>, <a class="el" href="structRealm_1_1SubgraphDefinition_1_1CopyDesc.html#a749676d2755a1af8ef67394b6555d454">Realm::SubgraphDefinition::CopyDesc</a>, <a class="el" href="structRealm_1_1SubgraphDefinition_1_1Interpolation.html#a5d0f11d1fbd5dd1ba593e2d346b56d5e">Realm::SubgraphDefinition::Interpolation</a></li>
+<li>redop_id&#160;:&#160;<a class="el" href="structPRealm_1_1CopySrcDstField.html#ac0a83bb6fabf161a47cf019d14d35147">PRealm::CopySrcDstField</a>, <a class="el" href="classRealm_1_1BarrierImpl.html#ab4c3ae6c4284c98b5709c72eb4daa28e">Realm::BarrierImpl</a>, <a class="el" href="structRealm_1_1BarrierTriggerMessage.html#a16f0e889aec5fbd834f78e9d6bf1a7fb">Realm::BarrierTriggerMessage</a>, <a class="el" href="structRealm_1_1BarrierTriggerMessageArgsInternal.html#a64c296b0edbd53d7f1e6b49c5702850a">Realm::BarrierTriggerMessageArgsInternal</a>, <a class="el" href="structRealm_1_1CopySrcDstField.html#ab4618a24d08e2b27cd5a432421d08ba5">Realm::CopySrcDstField</a>, <a class="el" href="structRealm_1_1Cuda_1_1CudaRedOpDesc.html#af2c58c9174809454bf591e27c4782a60">Realm::Cuda::CudaRedOpDesc</a>, <a class="el" href="structRealm_1_1SubgraphDefinition_1_1CopyDesc.html#a749676d2755a1af8ef67394b6555d454">Realm::SubgraphDefinition::CopyDesc</a>, <a class="el" href="structRealm_1_1SubgraphDefinition_1_1Interpolation.html#a5d0f11d1fbd5dd1ba593e2d346b56d5e">Realm::SubgraphDefinition::Interpolation</a></li>
 <li>redop_info&#160;:&#160;<a class="el" href="classRealm_1_1Cuda_1_1GPUreduceXferDes.html#a929d115e6a6907ee0d4dfb12ce825a60">Realm::Cuda::GPUreduceXferDes</a>, <a class="el" href="classRealm_1_1Hip_1_1GPUreduceXferDes.html#a6c3bb787c955b6b088ab8581461c4a22">Realm::Hip::GPUreduceXferDes</a>, <a class="el" href="classRealm_1_1MemreduceXferDes.html#aefe82506001e17d2786d5a9f78e5efab">Realm::MemreduceXferDes</a></li>
 <li>redops_allowed&#160;:&#160;<a class="el" href="structRealm_1_1Channel_1_1SupportedPath.html#ae0b881f220639a515760aa7ffe2953a2">Realm::Channel::SupportedPath</a></li>
 <li>REDUCE&#160;:&#160;<a class="el" href="structRealm_1_1ProfilingMeasurements_1_1OperationCopyInfo.html#a4f9faadc6ae97dc62979a2901a3d9863ab86e68059118d0aa2e35aeb78cb516f4">Realm::ProfilingMeasurements::OperationCopyInfo</a></li>
@@ -276,21 +300,21 @@ var searchBox = new SearchBox("searchBox", "search/",'.html');
 <li>RegionInstance()&#160;:&#160;<a class="el" href="classPRealm_1_1RegionInstance.html#a7e4c0489632dcba566cbc37b8423c705">PRealm::RegionInstance</a>, <a class="el" href="classRealm_1_1RegionInstanceImpl.html#a2db5f9fa36ccf01f673171605c4015e1">Realm::RegionInstanceImpl</a></li>
 <li>RegionInstanceImpl()&#160;:&#160;<a class="el" href="classRealm_1_1RegionInstanceImpl.html#a96d6a2e96dd9300d32d31b52d8da2aed">Realm::RegionInstanceImpl</a></li>
 <li>register_allocation()&#160;:&#160;<a class="el" href="classRealm_1_1Cuda_1_1GPUAllocation.html#a2a694c12956fa9cf2b6245e60fbd1124">Realm::Cuda::GPUAllocation</a></li>
-<li>register_custom_serdez()&#160;:&#160;<a class="el" href="classRealm_1_1Runtime.html#a436af9a8a6c8080f3ad9456afbdf0f14">Realm::Runtime</a>, <a class="el" href="classRealm_1_1RuntimeImpl.html#a095fd50d456afdedebbd8b86299c5ecf">Realm::RuntimeImpl</a></li>
+<li>register_custom_serdez()&#160;:&#160;<a class="el" href="classRealm_1_1Runtime.html#a52b3cf11e7f096270b5e5fad28c679ae">Realm::Runtime</a>, <a class="el" href="classRealm_1_1RuntimeImpl.html#a095fd50d456afdedebbd8b86299c5ecf">Realm::RuntimeImpl</a></li>
 <li>register_fat_binary()&#160;:&#160;<a class="el" href="classRealm_1_1Cuda_1_1GlobalRegistrations.html#ae20113c9ade49a668c9f6d362cab830a">Realm::Cuda::GlobalRegistrations</a>, <a class="el" href="classRealm_1_1Hip_1_1GlobalRegistrations.html#ad5e8479de4322769a36e5071caa9e0af">Realm::Hip::GlobalRegistrations</a></li>
-<li>register_freelist()&#160;:&#160;<a class="el" href="classRealm_1_1DynamicTableAllocator.html#adbf88782b7635d9002ad857c281ab333">Realm::DynamicTableAllocator&lt; _ET, _INNER_BITS, _LEAF_BITS &gt;</a></li>
+<li>register_freelist()&#160;:&#160;<a class="el" href="classRealm_1_1DynamicTableAllocator.html#a4add93c11a6a2687191a8e820441775e">Realm::DynamicTableAllocator&lt; _ET, _INNER_BITS, _LEAF_BITS, CONSTRUCTOR &gt;</a></li>
 <li>register_function()&#160;:&#160;<a class="el" href="classRealm_1_1Cuda_1_1GlobalRegistrations.html#ad1a166669da0571dd6dbe665776fd7ef">Realm::Cuda::GlobalRegistrations</a>, <a class="el" href="classRealm_1_1Hip_1_1GlobalRegistrations.html#a57e7f829fd87703177cd107d23b349c2">Realm::Hip::GlobalRegistrations</a></li>
 <li>register_function_under_lock()&#160;:&#160;<a class="el" href="classRealm_1_1Cuda_1_1GlobalRegistrations.html#a1ff9765babc5e586ac6056e9f8cd4244">Realm::Cuda::GlobalRegistrations</a></li>
 <li>register_handlers()&#160;:&#160;<a class="el" href="classRealm_1_1OperationTable.html#a79bb100f9141152da67f2012dacc2314">Realm::OperationTable</a></li>
 <li>register_redop()&#160;:&#160;<a class="el" href="classRealm_1_1RemoteChannel.html#aa863caf4c042c0af013037e40fcfc627">Realm::RemoteChannel</a></li>
-<li>register_reduction()&#160;:&#160;<a class="el" href="classRealm_1_1Cuda_1_1CudaModule.html#aa77c22edc93a6511ef2c710ea9326ceb">Realm::Cuda::CudaModule</a>, <a class="el" href="classRealm_1_1Cuda_1_1GPU.html#a1363ce4fb591152ace942b61be658c35">Realm::Cuda::GPU</a>, <a class="el" href="classRealm_1_1Runtime.html#a09f3fe2451864b5e8d25b16d8d479e09">Realm::Runtime</a>, <a class="el" href="classRealm_1_1RuntimeImpl.html#a81200a68b69204562f86c3d867c29930">Realm::RuntimeImpl</a></li>
+<li>register_reduction()&#160;:&#160;<a class="el" href="classRealm_1_1Cuda_1_1CudaModule.html#aa77c22edc93a6511ef2c710ea9326ceb">Realm::Cuda::CudaModule</a>, <a class="el" href="classRealm_1_1Cuda_1_1GPU.html#a1363ce4fb591152ace942b61be658c35">Realm::Cuda::GPU</a>, <a class="el" href="classRealm_1_1Runtime.html#a78214e1908e9cd18dcad4311e28798e9">Realm::Runtime</a>, <a class="el" href="classRealm_1_1RuntimeImpl.html#a81200a68b69204562f86c3d867c29930">Realm::RuntimeImpl</a></li>
 <li>register_task()&#160;:&#160;<a class="el" href="classPRealm_1_1Processor.html#a5b0bb910c89f1013e35cd4434fa3dc7d">PRealm::Processor</a>, <a class="el" href="classPRealm_1_1Runtime.html#a1dee69457527f3f9a8fe7418dcdaa69f">PRealm::Runtime</a>, <a class="el" href="classRealm_1_1Cuda_1_1GPUProcessor.html#a8820f2515dc796709e217cba4630183a">Realm::Cuda::GPUProcessor</a>, <a class="el" href="classRealm_1_1Hip_1_1GPUProcessor.html#a41dc814f80a865359bc8ad48e212e4b9">Realm::Hip::GPUProcessor</a>, <a class="el" href="classRealm_1_1LocalPythonProcessor.html#a0b4e5b63db087a8bac0a859be7898d84">Realm::LocalPythonProcessor</a>, <a class="el" href="classRealm_1_1LocalTaskProcessor.html#a0c75156915d9a30a5ec262fa7e25ad67">Realm::LocalTaskProcessor</a>, <a class="el" href="classRealm_1_1Processor.html#a552b1db5f5daf6802dc12400110e5241">Realm::Processor</a>, <a class="el" href="classRealm_1_1ProcessorImpl.html#a808ce40d2f4b542e8f4b44dab0d170f7">Realm::ProcessorImpl</a>, <a class="el" href="classRealm_1_1Runtime.html#a248988db3e87b549976b1e9dfa2aa7a2">Realm::Runtime</a>, <a class="el" href="classRealm_1_1RuntimeImpl.html#ae54d5e34105af6c3e7f665822235fbf3">Realm::RuntimeImpl</a></li>
 <li>register_task_by_kind()&#160;:&#160;<a class="el" href="classPRealm_1_1Processor.html#a2d083c274229c482f53baeea6a224a39">PRealm::Processor</a>, <a class="el" href="classRealm_1_1Processor.html#a770e6b219023216a9ad195f93ab31707">Realm::Processor</a></li>
 <li>register_variable()&#160;:&#160;<a class="el" href="classRealm_1_1Cuda_1_1GlobalRegistrations.html#a07f3369cfea50a95f85f63591d54eae1">Realm::Cuda::GlobalRegistrations</a>, <a class="el" href="classRealm_1_1Hip_1_1GlobalRegistrations.html#a9280c5f3d3383914fb0dfba29fd668fe">Realm::Hip::GlobalRegistrations</a></li>
 <li>register_variable_under_lock()&#160;:&#160;<a class="el" href="classRealm_1_1Cuda_1_1GlobalRegistrations.html#a5db3ce2fdb2462f792d359928ec043c2">Realm::Cuda::GlobalRegistrations</a></li>
 <li>registered_host_ptrs&#160;:&#160;<a class="el" href="classRealm_1_1Hip_1_1HipModule.html#abda3069dfeba7ce4dd0b07c2635643bd">Realm::Hip::HipModule</a></li>
 <li>RegisteredFunction()&#160;:&#160;<a class="el" href="structRealm_1_1Cuda_1_1RegisteredFunction.html#accd82652fc1eca70b94eba7210a767e5">Realm::Cuda::RegisteredFunction</a>, <a class="el" href="structRealm_1_1Hip_1_1RegisteredFunction.html#afcda3f7c7d117e58631e596193c9a439">Realm::Hip::RegisteredFunction</a></li>
-<li>RegisteredVariable()&#160;:&#160;<a class="el" href="structRealm_1_1Cuda_1_1RegisteredVariable.html#ab80aa0fd23d91215fa6927380bf4fc2f">Realm::Cuda::RegisteredVariable</a>, <a class="el" href="structRealm_1_1Hip_1_1RegisteredVariable.html#a91f4f58f61ec05215c16c8b69e3ff5ad">Realm::Hip::RegisteredVariable</a></li>
+<li>RegisteredVariable()&#160;:&#160;<a class="el" href="structRealm_1_1Cuda_1_1RegisteredVariable.html#a28b565951cb7c4a5638f51d8398c80cf">Realm::Cuda::RegisteredVariable</a>, <a class="el" href="structRealm_1_1Hip_1_1RegisteredVariable.html#a91f4f58f61ec05215c16c8b69e3ff5ad">Realm::Hip::RegisteredVariable</a></li>
 <li>rel_offset&#160;:&#160;<a class="el" href="classRealm_1_1GenericAccessor.html#aa24eca607638d3d7ae0ba99e3a988954">Realm::GenericAccessor&lt; FT, N, T &gt;</a>, <a class="el" href="structRealm_1_1InstanceLayoutGeneric_1_1FieldLayout.html#aed8c4b05ae3b3c245a088ccfc2bf4b62">Realm::InstanceLayoutGeneric::FieldLayout</a></li>
 <li>relative()&#160;:&#160;<a class="el" href="classRealm_1_1TimeLimit.html#a23b5c85769662881c43aa4df06f6d6d3">Realm::TimeLimit</a></li>
 <li>release()&#160;:&#160;<a class="el" href="classRealm_1_1AutoLock.html#a1fc906cd73f824373e1f147f448f872e">Realm::AutoLock&lt; LT &gt;</a>, <a class="el" href="structRealm_1_1LocalManagedMemory_1_1PendingRelease.html#aff0234bcea50888530eb078b70b0d9eb">Realm::LocalManagedMemory::PendingRelease</a>, <a class="el" href="classRealm_1_1Reservation.html#a615c1957823359c5ed280d3e084243b5">Realm::Reservation</a>, <a class="el" href="classRealm_1_1ReservationImpl.html#a3a37ff448aafa660431331efd8797376">Realm::ReservationImpl</a></li>
@@ -435,10 +459,8 @@ var searchBox = new SearchBox("searchBox", "search/",'.html');
 <li>restricted_min_capacity&#160;:&#160;<a class="el" href="classRealm_1_1MemoryQueryImpl.html#a745897052d3361e5878f1891878901ee">Realm::MemoryQueryImpl</a></li>
 <li>restricted_node_id&#160;:&#160;<a class="el" href="classRealm_1_1MemoryQueryImpl.html#a4bcbbbd94a98c3427cc96a003819378f">Realm::MemoryQueryImpl</a>, <a class="el" href="classRealm_1_1ProcessorQueryImpl.html#a0baf2777605685964cc87d0f8dad130b">Realm::ProcessorQueryImpl</a></li>
 <li>restriction&#160;:&#160;<a class="el" href="structRealm_1_1IndexSpaceIterator.html#a71c1cb7d9d8f37b450a81fa60abf3ea0">Realm::IndexSpaceIterator&lt; N, T &gt;</a></li>
-<li>result&#160;:&#160;<a class="el" href="classRealm_1_1MachineQueryIterator.html#ad060c6076cfa549e8bbedacfbff186e0">Realm::MachineQueryIterator&lt; QT, RT &gt;</a>, <a class="el" href="structRealm_1_1MemStorageAllocResponse.html#a0a3cf844bc2c87c0d811db521596361e">Realm::MemStorageAllocResponse</a></li>
-<li>Result&#160;:&#160;<a class="el" href="structRealm_1_1ProfilingMeasurements_1_1InstanceStatus.html#a2312ad7dff3840ef16d11833c68c67ec">Realm::ProfilingMeasurements::InstanceStatus</a></li>
-<li>result&#160;:&#160;<a class="el" href="structRealm_1_1ProfilingMeasurements_1_1InstanceStatus.html#a07497659068076456b74b3c2508d1a0d">Realm::ProfilingMeasurements::InstanceStatus</a></li>
-<li>Result&#160;:&#160;<a class="el" href="structRealm_1_1ProfilingMeasurements_1_1OperationStatus.html#a3180cee8f6ba9bd47b1b43301b8b0e13">Realm::ProfilingMeasurements::OperationStatus</a></li>
+<li>result&#160;:&#160;<a class="el" href="classRealm_1_1MachineQueryIterator.html#ad060c6076cfa549e8bbedacfbff186e0">Realm::MachineQueryIterator&lt; QT, RT &gt;</a>, <a class="el" href="structRealm_1_1MemStorageAllocResponse.html#a0a3cf844bc2c87c0d811db521596361e">Realm::MemStorageAllocResponse</a>, <a class="el" href="structRealm_1_1ProfilingMeasurements_1_1InstanceStatus.html#a07497659068076456b74b3c2508d1a0d">Realm::ProfilingMeasurements::InstanceStatus</a></li>
+<li>Result&#160;:&#160;<a class="el" href="structRealm_1_1ProfilingMeasurements_1_1InstanceStatus.html#a2312ad7dff3840ef16d11833c68c67ec">Realm::ProfilingMeasurements::InstanceStatus</a>, <a class="el" href="structRealm_1_1ProfilingMeasurements_1_1OperationStatus.html#a3180cee8f6ba9bd47b1b43301b8b0e13">Realm::ProfilingMeasurements::OperationStatus</a></li>
 <li>result&#160;:&#160;<a class="el" href="structRealm_1_1ProfilingMeasurements_1_1OperationStatus.html#a2c2c434019503aebfd564a3756dab121">Realm::ProfilingMeasurements::OperationStatus</a></li>
 <li>result_code&#160;:&#160;<a class="el" href="structRealm_1_1RuntimeShutdownMessage.html#a4a09e5fd4a9c68911a3470917f135630">Realm::RuntimeShutdownMessage</a>, <a class="el" href="structRealm_1_1RuntimeShutdownRequest.html#ad0d7087b3ed7d4e8a9a7bb27ea32ad7e">Realm::RuntimeShutdownRequest</a></li>
 <li>resumable_workers&#160;:&#160;<a class="el" href="classRealm_1_1ThreadedTaskScheduler.html#af607497c3c3645b6d909539aa2bf4322">Realm::ThreadedTaskScheduler</a></li>
@@ -489,10 +511,13 @@ var searchBox = new SearchBox("searchBox", "search/",'.html');
 <li>rwlock&#160;:&#160;<a class="el" href="structRealm_1_1RWLock_1_1Writer.html#a15b99a301c1a993e495565072217b089">Realm::RWLock::Writer</a></li>
 </ul>
 </div><!-- contents -->
+</div><!-- doc-content -->
 <!-- HTML footer for doxygen 1.9.1-->
 <!-- start footer part -->
-<hr class="footer"/><address class="footer"><small>
-Generated by&#160;<a href="https://www.doxygen.org/index.html"><img class="footer" src="doxygen.svg" width="104" height="31" alt="doxygen"/></a> 1.9.8
-</small></address>
+<div id="nav-path" class="navpath"><!-- id is needed for treeview function! -->
+  <ul>
+    <li class="footer">Generated by <a href="https://www.doxygen.org/index.html"><img class="footer" src="doxygen.svg" width="104" height="31" alt="doxygen"/></a> 1.9.8 </li>
+  </ul>
+</div>
 </body>
 </html>

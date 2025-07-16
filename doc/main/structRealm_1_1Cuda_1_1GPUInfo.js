@@ -1,0 +1,27 @@
+var structRealm_1_1Cuda_1_1GPUInfo =
+[
+    [ "c2c_bandwidth", "structRealm_1_1Cuda_1_1GPUInfo.html#abdf557c89868feb5c3f40d8e183425a4", null ],
+    [ "device", "structRealm_1_1Cuda_1_1GPUInfo.html#a3dd0e6c2a6c351f1cfe0c24025f7f894", null ],
+    [ "fabric_clique", "structRealm_1_1Cuda_1_1GPUInfo.html#a74f0bf1a94fb8de7dbc0f414dd40eeec", null ],
+    [ "fabric_supported", "structRealm_1_1Cuda_1_1GPUInfo.html#a7fb1ae3dea5d7458eab07c59226991cb", null ],
+    [ "fabric_uuid", "structRealm_1_1Cuda_1_1GPUInfo.html#ad7c627dda182cce99a812e332c841d2d", null ],
+    [ "has_numa_preference", "structRealm_1_1Cuda_1_1GPUInfo.html#a6103f8874d2bb173572ba00b1bf0eb52", null ],
+    [ "host_gpu_same_va", "structRealm_1_1Cuda_1_1GPUInfo.html#a68bc45156a6c2789f2ccd67be8f882b5", null ],
+    [ "index", "structRealm_1_1Cuda_1_1GPUInfo.html#ac13b074ec6af2705c980fa99715db2e0", null ],
+    [ "logical_peer_bandwidth", "structRealm_1_1Cuda_1_1GPUInfo.html#a4d74aef2f9c695815cf89cd2643cb3eb", null ],
+    [ "logical_peer_latency", "structRealm_1_1Cuda_1_1GPUInfo.html#a672ca38ae141202109b2e2efcee8e094", null ],
+    [ "major", "structRealm_1_1Cuda_1_1GPUInfo.html#a8523aab498267ccafff5cc61076953e9", null ],
+    [ "minor", "structRealm_1_1Cuda_1_1GPUInfo.html#ac1cbd8974c16698413ad35500747baf3", null ],
+    [ "name", "structRealm_1_1Cuda_1_1GPUInfo.html#a84d36e1743640f6062f38f896824eaee", null ],
+    [ "numa_node_affinity", "structRealm_1_1Cuda_1_1GPUInfo.html#abd16f65e1251bf7c75d3023f3b62261c", null ],
+    [ "nvml_dev", "structRealm_1_1Cuda_1_1GPUInfo.html#aac239ca838d1bdbbc26a20e0a8e1ce5f", null ],
+    [ "nvswitch_bandwidth", "structRealm_1_1Cuda_1_1GPUInfo.html#ace0ba53d70bcbc45dfe293ba38fade94", null ],
+    [ "pageable_access_supported", "structRealm_1_1Cuda_1_1GPUInfo.html#a625beff58597156bef70297fae166833", null ],
+    [ "pci_bandwidth", "structRealm_1_1Cuda_1_1GPUInfo.html#a47ff73f253e2c992f8a91f5a5fd94718", null ],
+    [ "pci_busid", "structRealm_1_1Cuda_1_1GPUInfo.html#a177e4e3758d949130c794bbd9f06b95a", null ],
+    [ "pci_deviceid", "structRealm_1_1Cuda_1_1GPUInfo.html#aaaf4f6d07f28824c733d0dc0b48d779f", null ],
+    [ "pci_domainid", "structRealm_1_1Cuda_1_1GPUInfo.html#a54c1ee4663f3cb47778cb21feebaa996", null ],
+    [ "peers", "structRealm_1_1Cuda_1_1GPUInfo.html#a5cf110a44fd93ed0f72e72f21de3ad54", null ],
+    [ "totalGlobalMem", "structRealm_1_1Cuda_1_1GPUInfo.html#aaa6dabc9006993551146858e16cbb5f6", null ],
+    [ "uuid", "structRealm_1_1Cuda_1_1GPUInfo.html#a54dfe7e54fe01e5e2512c735b0daaafb", null ]
+];

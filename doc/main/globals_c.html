@@ -10,6 +10,10 @@
 <link href="tabs.css" rel="stylesheet" type="text/css"/>
 <script type="text/javascript" src="jquery.js"></script>
 <script type="text/javascript" src="dynsections.js"></script>
+<link href="navtree.css" rel="stylesheet" type="text/css"/>
+<script type="text/javascript" src="resize.js"></script>
+<script type="text/javascript" src="navtreedata.js"></script>
+<script type="text/javascript" src="navtree.js"></script>
 <link href="search/search.css" rel="stylesheet" type="text/css"/>
 <script type="text/javascript" src="search/searchdata.js"></script>
 <script type="text/javascript" src="search/search.js"></script>
@@ -20,6 +24,8 @@
 </script>
 <link href="doxygen.css" rel="stylesheet" type="text/css" />
 <link href="customdoxygen.css" rel="stylesheet" type="text/css"/>
+<link href="doxygen-awesome.css" rel="stylesheet" type="text/css"/>
+<link href="doxygen-awesome-sidebar-only.css" rel="stylesheet" type="text/css"/>
 <!-- BEGIN version select -->
 <link rel="stylesheet" type="text/css" href="../dropdown.css">
 <script type="text/javascript" src="https://ajax.googleapis.com/ajax/libs/jquery/3.2.1/jquery.min.js">
@@ -32,11 +38,13 @@
 <table cellspacing="0" cellpadding="0">
  <tbody>
  <tr style="height: 56px;">
+  <td id="projectlogo"><img alt="Logo" src="logo.png"/></td>
   <td id="projectalign" style="padding-left: 0.5em;">
    <div id="projectname">Realm
    <!-- BEGIN version select -->
+    <br />
     <div class="dropdown">
-     <button class="dropbtn">Version 0.0.1</button>
+     <button class="dropbtn">Version 0.0.1+6ce58b75</button>
      <div class="dropdown-content"></div>
     </div>
     <script type="text/javascript" src="../selectversion.js"></script>
@@ -121,6 +129,22 @@ var searchBox = new SearchBox("searchBox", "search/",'.html');
     </ul>
   </div>
 </div><!-- top -->
+<div id="side-nav" class="ui-resizable side-nav-resizable">
+  <div id="nav-tree">
+    <div id="nav-tree-contents">
+      <div id="nav-sync" class="sync"></div>
+    </div>
+  </div>
+  <div id="splitbar" style="-moz-user-select:none;" 
+       class="ui-resizable-handle">
+  </div>
+</div>
+<script type="text/javascript">
+/* @license magnet:?xt=urn:btih:d3d9a9a6595521f9666a5e94cc830dab83b65699&amp;dn=expat.txt MIT */
+$(document).ready(function(){initNavTree('globals_c.html',''); initResizable(); });
+/* @license-end */
+</script>
+<div id="doc-content">
 <!-- window showing the filter options -->
 <div id="MSearchSelectWindow"
      onmouseover="return searchBox.OnSearchSelectShow()"
@@ -174,15 +198,53 @@ var searchBox = new SearchBox("searchBox", "search/",'.html');
 <li>CUDA_ENABLE_DEPRECATED&#160;:&#160;<a class="el" href="cuda__internal_8h.html#afbf9d7d322c72a1fe0cb4b23d07814bf">cuda_internal.h</a></li>
 <li>CUDA_MAX_BLOCKS_PER_GRID&#160;:&#160;<a class="el" href="cuda__memcpy_8h.html#adabe7a6d4ddbe0a8e2863db43004f135">cuda_memcpy.h</a></li>
 <li>CUDA_MAX_FIELD_BYTES&#160;:&#160;<a class="el" href="cuda__memcpy_8h.html#ae0888d7ca7c03872526b71699d8590e9">cuda_memcpy.h</a></li>
+<li>cudaBoundaryModeClamp&#160;:&#160;<a class="el" href="hip__cuda_8h.html#a3dffc28c73f5d7b41e5dac7d33939dab">hip_cuda.h</a></li>
+<li>cudaBoundaryModeTrap&#160;:&#160;<a class="el" href="hip__cuda_8h.html#a480f89c96ea1bef301b02608025c6c17">hip_cuda.h</a></li>
+<li>cudaBoundaryModeZero&#160;:&#160;<a class="el" href="hip__cuda_8h.html#aeb8eae8ecdf47beffd2c6d9a2b9cd915">hip_cuda.h</a></li>
+<li>cudaDeviceProp&#160;:&#160;<a class="el" href="hip__cuda_8h.html#a96105a2e43b036236409e7d00e20ff57">hip_cuda.h</a></li>
+<li>cudaDeviceReset&#160;:&#160;<a class="el" href="hip__cuda_8h.html#a7ca2035860dfebe6384dac115cde55ca">hip_cuda.h</a></li>
+<li>cudaDeviceSynchronize&#160;:&#160;<a class="el" href="hip__cuda_8h.html#a535823a44047329e1610f371fa7d660d">hip_cuda.h</a></li>
+<li>cudaError_t&#160;:&#160;<a class="el" href="hip__cuda_8h.html#af47e582d1110438a837fc3394f6791ab">hip_cuda.h</a></li>
+<li>cudaEvent_t&#160;:&#160;<a class="el" href="hip__cuda_8h.html#a32b4c230cc7c3a66496a02734d96ed4f">hip_cuda.h</a></li>
+<li>cudaEventCreate&#160;:&#160;<a class="el" href="hip__cuda_8h.html#a9dce4bc77e74f9956b554b7dc03710ac">hip_cuda.h</a></li>
+<li>cudaEventDestroy&#160;:&#160;<a class="el" href="hip__cuda_8h.html#af92b2f62fb7b9f604f3d3a90b35a9af1">hip_cuda.h</a></li>
+<li>cudaEventElapsedTime&#160;:&#160;<a class="el" href="hip__cuda_8h.html#a10874ab0aab74a3963b52e1df9855c20">hip_cuda.h</a></li>
+<li>cudaEventRecord&#160;:&#160;<a class="el" href="hip__cuda_8h.html#a36a320ff35868c17db14650e8315ab22">hip_cuda.h</a></li>
+<li>cudaEventSynchronize&#160;:&#160;<a class="el" href="hip__cuda_8h.html#a8f1bbf630b95f304b26f09effac58085">hip_cuda.h</a></li>
+<li>cudaFree&#160;:&#160;<a class="el" href="hip__cuda_8h.html#a0a87c1d891812c773254b2c73cb42da2">hip_cuda.h</a></li>
+<li>cudaFreeHost&#160;:&#160;<a class="el" href="hip__cuda_8h.html#ae1411b5f96c19b759240a08ff5ba6b50">hip_cuda.h</a></li>
+<li>cudaGetDevice&#160;:&#160;<a class="el" href="hip__cuda_8h.html#a8cf478cdfe55175ccf0d4d12b2835827">hip_cuda.h</a></li>
+<li>cudaGetDeviceProperties&#160;:&#160;<a class="el" href="hip__cuda_8h.html#a450c5afba3234b098f02bbe90f2d60d4">hip_cuda.h</a></li>
+<li>cudaGetErrorName&#160;:&#160;<a class="el" href="hip__cuda_8h.html#a5c0b794314f24198f9827f7a816d725c">hip_cuda.h</a></li>
+<li>cudaGetErrorString&#160;:&#160;<a class="el" href="hip__cuda_8h.html#afe8c41d4b71a220f0080dede2d3ba17a">hip_cuda.h</a></li>
+<li>cudaGetLastError&#160;:&#160;<a class="el" href="hip__cuda_8h.html#a517fee638f70b4706584f08ac3c5eabd">hip_cuda.h</a></li>
+<li>cudaMalloc&#160;:&#160;<a class="el" href="hip__cuda_8h.html#ad6daf0f08e51860d93bed23baaaab6e7">hip_cuda.h</a></li>
+<li>cudaMallocHost&#160;:&#160;<a class="el" href="hip__cuda_8h.html#a33617c801be71c10412c55826db2660b">hip_cuda.h</a></li>
+<li>cudaMemAdvise&#160;:&#160;<a class="el" href="hip__cuda_8h.html#a49364db19f57f906053f382c501b5272">hip_cuda.h</a></li>
+<li>cudaMemAdviseSetReadMostly&#160;:&#160;<a class="el" href="hip__cuda_8h.html#a533be18d9c9083a72e1846f9ad98e36e">hip_cuda.h</a></li>
+<li>cudaMemcpy&#160;:&#160;<a class="el" href="hip__cuda_8h.html#a003dbfc6e0d6d52d5e8b4f40d9a989a0">hip_cuda.h</a></li>
+<li>cudaMemcpyDeviceToHost&#160;:&#160;<a class="el" href="hip__cuda_8h.html#a0bb4ca0bbde27cb7a543afe5f79e8091">hip_cuda.h</a></li>
+<li>cudaMemcpyHostToDevice&#160;:&#160;<a class="el" href="hip__cuda_8h.html#a436143bca81d671a11aa0f481a4274b0">hip_cuda.h</a></li>
+<li>cudaMemPrefetchAsync&#160;:&#160;<a class="el" href="hip__cuda_8h.html#ae86b4227f3940364d5b6265a2cab69bb">hip_cuda.h</a></li>
+<li>cudaMemset&#160;:&#160;<a class="el" href="hip__cuda_8h.html#a66d1015175ec4b34c2be0930fe4849ec">hip_cuda.h</a></li>
+<li>cudaSetDevice&#160;:&#160;<a class="el" href="hip__cuda_8h.html#a5d89c821a3f4b019cf34b77c9c69300f">hip_cuda.h</a></li>
+<li>cudaStream_t&#160;:&#160;<a class="el" href="hip__cuda_8h.html#a9d6f45a66fe65d53dc925d8d89b88d38">hip_cuda.h</a></li>
+<li>cudaStreamCreate&#160;:&#160;<a class="el" href="hip__cuda_8h.html#aed097d4f30fabb68c6aa01a545eef49d">hip_cuda.h</a></li>
+<li>cudaStreamDestroy&#160;:&#160;<a class="el" href="hip__cuda_8h.html#ad293c1287feaa31f95cf3f729cb3ae73">hip_cuda.h</a></li>
+<li>cudaSuccess&#160;:&#160;<a class="el" href="hip__cuda_8h.html#a04a9de68edab0d52cdb600a2d76ca6ac">hip_cuda.h</a></li>
+<li>cudaSurfaceObject_t&#160;:&#160;<a class="el" href="hip__cuda_8h.html#aa3a398983780b7c2ad6304a09d0db4c5">hip_cuda.h</a></li>
 <li>CUPTI_APIS&#160;:&#160;<a class="el" href="cuda__internal_8h.html#a9db012d9f01205533fcf7cee4d7bfa2b">cuda_internal.h</a></li>
 <li>CUPTI_FNPTR&#160;:&#160;<a class="el" href="cuda__internal_8h.html#a9f35720fe8dea542282800e22467da4e">cuda_internal.h</a></li>
 <li>CUPTI_HAS_FNPTR&#160;:&#160;<a class="el" href="cuda__internal_8h.html#af09a82d4b8c11e8e6adc1aed4c54d036">cuda_internal.h</a></li>
 </ul>
 </div><!-- contents -->
+</div><!-- doc-content -->
 <!-- HTML footer for doxygen 1.9.1-->
 <!-- start footer part -->
-<hr class="footer"/><address class="footer"><small>
-Generated by&#160;<a href="https://www.doxygen.org/index.html"><img class="footer" src="doxygen.svg" width="104" height="31" alt="doxygen"/></a> 1.9.8
-</small></address>
+<div id="nav-path" class="navpath"><!-- id is needed for treeview function! -->
+  <ul>
+    <li class="footer">Generated by <a href="https://www.doxygen.org/index.html"><img class="footer" src="doxygen.svg" width="104" height="31" alt="doxygen"/></a> 1.9.8 </li>
+  </ul>
+</div>
 </body>
 </html>

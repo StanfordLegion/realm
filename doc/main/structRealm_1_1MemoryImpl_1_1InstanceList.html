@@ -10,6 +10,10 @@
 <link href="tabs.css" rel="stylesheet" type="text/css"/>
 <script type="text/javascript" src="jquery.js"></script>
 <script type="text/javascript" src="dynsections.js"></script>
+<link href="navtree.css" rel="stylesheet" type="text/css"/>
+<script type="text/javascript" src="resize.js"></script>
+<script type="text/javascript" src="navtreedata.js"></script>
+<script type="text/javascript" src="navtree.js"></script>
 <link href="search/search.css" rel="stylesheet" type="text/css"/>
 <script type="text/javascript" src="search/searchdata.js"></script>
 <script type="text/javascript" src="search/search.js"></script>
@@ -20,6 +24,8 @@
 </script>
 <link href="doxygen.css" rel="stylesheet" type="text/css" />
 <link href="customdoxygen.css" rel="stylesheet" type="text/css"/>
+<link href="doxygen-awesome.css" rel="stylesheet" type="text/css"/>
+<link href="doxygen-awesome-sidebar-only.css" rel="stylesheet" type="text/css"/>
 <!-- BEGIN version select -->
 <link rel="stylesheet" type="text/css" href="../dropdown.css">
 <script type="text/javascript" src="https://ajax.googleapis.com/ajax/libs/jquery/3.2.1/jquery.min.js">
@@ -32,11 +38,13 @@
 <table cellspacing="0" cellpadding="0">
  <tbody>
  <tr style="height: 56px;">
+  <td id="projectlogo"><img alt="Logo" src="logo.png"/></td>
   <td id="projectalign" style="padding-left: 0.5em;">
    <div id="projectname">Realm
    <!-- BEGIN version select -->
+    <br />
     <div class="dropdown">
-     <button class="dropbtn">Version 0.0.1</button>
+     <button class="dropbtn">Version 0.0.1+6ce58b75</button>
      <div class="dropdown-content"></div>
     </div>
     <script type="text/javascript" src="../selectversion.js"></script>
@@ -84,6 +92,23 @@ var searchBox = new SearchBox("searchBox", "search/",'.html');
       <li><a href="functions.html"><span>Class&#160;Members</span></a></li>
     </ul>
   </div>
+</div><!-- top -->
+<div id="side-nav" class="ui-resizable side-nav-resizable">
+  <div id="nav-tree">
+    <div id="nav-tree-contents">
+      <div id="nav-sync" class="sync"></div>
+    </div>
+  </div>
+  <div id="splitbar" style="-moz-user-select:none;" 
+       class="ui-resizable-handle">
+  </div>
+</div>
+<script type="text/javascript">
+/* @license magnet:?xt=urn:btih:d3d9a9a6595521f9666a5e94cc830dab83b65699&amp;dn=expat.txt MIT */
+$(document).ready(function(){initNavTree('structRealm_1_1MemoryImpl_1_1InstanceList.html',''); initResizable(); });
+/* @license-end */
+</script>
+<div id="doc-content">
 <!-- window showing the filter options -->
 <div id="MSearchSelectWindow"
      onmouseover="return searchBox.OnSearchSelectShow()"
@@ -105,11 +130,6 @@ var searchBox = new SearchBox("searchBox", "search/",'.html');
 </div>
 </div>
 
-<div id="nav-path" class="navpath">
-  <ul>
-<li class="navelem"><a class="el" href="namespaceRealm.html">Realm</a></li><li class="navelem"><a class="el" href="classRealm_1_1MemoryImpl.html">MemoryImpl</a></li><li class="navelem"><a class="el" href="structRealm_1_1MemoryImpl_1_1InstanceList.html">InstanceList</a></li>  </ul>
-</div>
-</div><!-- top -->
 <div class="header">
   <div class="summary">
 <a href="#pub-attribs">Public Attributes</a> &#124;
@@ -122,19 +142,8 @@ var searchBox = new SearchBox("searchBox", "search/",'.html');
 <div class="dynheader">
 Collaboration diagram for Realm::MemoryImpl::InstanceList:</div>
 <div class="dyncontent">
-<div class="center"><img src="structRealm_1_1MemoryImpl_1_1InstanceList__coll__graph.png" border="0" usemap="#aRealm_1_1MemoryImpl_1_1InstanceList_coll__map" alt="Collaboration graph"/></div>
-<map name="aRealm_1_1MemoryImpl_1_1InstanceList_coll__map" id="aRealm_1_1MemoryImpl_1_1InstanceList_coll__map">
-<area shape="rect" title=" " alt="" coords="5,93,168,133"/>
-<area shape="rect" href="classRealm_1_1RWLock.html" title=" " alt="" coords="265,5,389,31"/>
-<area shape="poly" title=" " alt="" coords="260,37,194,57,118,96,116,91,192,52,258,31"/>
-<area shape="rect" href="structRealm_1_1RWLock_1_1Writer.html" title=" " alt="" coords="193,101,365,126"/>
-<area shape="poly" title=" " alt="" coords="268,39,250,56,247,67,251,78,267,99,263,102,246,80,242,67,246,53,265,35"/>
-<area shape="rect" href="structRealm_1_1RWLock_1_1Reader.html" title=" " alt="" coords="389,101,568,126"/>
-<area shape="poly" title=" " alt="" coords="353,37,397,67,456,98,453,103,395,72,350,41"/>
-<area shape="poly" title=" " alt="" coords="288,87,318,29,323,32,293,90"/>
-<area shape="poly" title=" " alt="" coords="469,89,460,72,448,57,419,40,388,30,390,24,422,35,451,53,465,69,474,87"/>
-</map>
-<center><span class="legend">[<a href="graph_legend.html">legend</a>]</span></center></div>
+<div class="center"><!-- SVG 0 --></div>
+<center><span class="legend">[<a target="top" href="graph_legend.html">legend</a>]</span></center></div>
 <table class="memberdecls">
 <tr class="heading"><td colspan="2"><h2 class="groupheader"><a id="pub-attribs" name="pub-attribs"></a>
 Public Attributes</h2></td></tr>
@@ -189,13 +198,17 @@ Public Attributes</h2></td></tr>
 </div>
 </div>
 <hr/>The documentation for this struct was generated from the following file:<ul>
-<li>/home/runner/work/realm/realm/realm-src/realm/<a class="el" href="mem__impl_8h_source.html">mem_impl.h</a></li>
+<li>/home/runner/work/realm/realm/realm-src/src/realm/<a class="el" href="mem__impl_8h_source.html">mem_impl.h</a></li>
 </ul>
 </div><!-- contents -->
+</div><!-- doc-content -->
 <!-- HTML footer for doxygen 1.9.1-->
 <!-- start footer part -->
-<hr class="footer"/><address class="footer"><small>
-Generated by&#160;<a href="https://www.doxygen.org/index.html"><img class="footer" src="doxygen.svg" width="104" height="31" alt="doxygen"/></a> 1.9.8
-</small></address>
+<div id="nav-path" class="navpath"><!-- id is needed for treeview function! -->
+  <ul>
+    <li class="navelem"><a class="el" href="namespaceRealm.html">Realm</a></li><li class="navelem"><a class="el" href="classRealm_1_1MemoryImpl.html">MemoryImpl</a></li><li class="navelem"><a class="el" href="structRealm_1_1MemoryImpl_1_1InstanceList.html">InstanceList</a></li>
+    <li class="footer">Generated by <a href="https://www.doxygen.org/index.html"><img class="footer" src="doxygen.svg" width="104" height="31" alt="doxygen"/></a> 1.9.8 </li>
+  </ul>
+</div>
 </body>
 </html>

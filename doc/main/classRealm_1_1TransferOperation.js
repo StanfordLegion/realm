@@ -1,0 +1,25 @@
+var classRealm_1_1TransferOperation =
+[
+    [ "DeferredStart", "classRealm_1_1TransferOperation_1_1DeferredStart.html", "classRealm_1_1TransferOperation_1_1DeferredStart" ],
+    [ "XDLifetimeTracker", "classRealm_1_1TransferOperation_1_1XDLifetimeTracker.html", "classRealm_1_1TransferOperation_1_1XDLifetimeTracker" ],
+    [ "TransferOperation", "classRealm_1_1TransferOperation.html#a096b2877585afe4b8e894d0756729bed", null ],
+    [ "~TransferOperation", "classRealm_1_1TransferOperation.html#a40f7b6a1af33edabaa36f830e4934b3c", null ],
+    [ "allocate_ibs", "classRealm_1_1TransferOperation.html#aaa0d4b6a0f37f8106cc45c08dda8ef88", null ],
+    [ "create_xds", "classRealm_1_1TransferOperation.html#a60e967966975048bf9078b79f5b9cb87", null ],
+    [ "mark_completed", "classRealm_1_1TransferOperation.html#aa20012d24c5e1ff97a90e4b63be0b32d", null ],
+    [ "mark_ready", "classRealm_1_1TransferOperation.html#a50fa4aa1a2fb6c031976af9cbc1b68fb", null ],
+    [ "mark_started", "classRealm_1_1TransferOperation.html#aa3b79ee24c76069f5e76f3f8247e0d24", null ],
+    [ "notify_ib_allocation", "classRealm_1_1TransferOperation.html#ae68f06a0713a7cd76b1864acd7a4323c", null ],
+    [ "notify_ib_allocations", "classRealm_1_1TransferOperation.html#a39054c12b6c1b1313e60a96de9dad827", null ],
+    [ "notify_xd_completion", "classRealm_1_1TransferOperation.html#a72fa0d84922d45b243931e285919267e", null ],
+    [ "print", "classRealm_1_1TransferOperation.html#aa39d13abe7798b8b7b2c0cddbe9df4c2", null ],
+    [ "start_or_defer", "classRealm_1_1TransferOperation.html#abab80276830cc9b35d7b8eddc702363d", null ],
+    [ "deferred_start", "classRealm_1_1TransferOperation.html#a2f419bc32e091e97f53d3f03892ba2ec", null ],
+    [ "desc", "classRealm_1_1TransferOperation.html#a31d3b63a79fbef5d81b01ec818d12f39", null ],
+    [ "ib_offsets", "classRealm_1_1TransferOperation.html#a0476097727b350b7e0f026352db9f75f", null ],
+    [ "ib_responses_needed", "classRealm_1_1TransferOperation.html#a2a455737fee2aba3001a5ef04b7a7787", null ],
+    [ "precondition", "classRealm_1_1TransferOperation.html#a054564fc747fe72c5f89d7808b604d97", null ],
+    [ "priority", "classRealm_1_1TransferOperation.html#af72d628af9007eb7d6dfaf31b009d16e", null ],
+    [ "xd_ids", "classRealm_1_1TransferOperation.html#ae59f1edb60575a1ed8317754f22aa3ed", null ],
+    [ "xd_trackers", "classRealm_1_1TransferOperation.html#a32a7ddd7310d7a42b62f294334456fa6", null ]
+];

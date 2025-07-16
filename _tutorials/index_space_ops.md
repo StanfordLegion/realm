@@ -1,5 +1,7 @@
 ---
-title: Index Spaces
+layout: page
+permalink: /tutorial/realm/index_spaces.html
+title: Realm Index Spaces
 ---
 
 ## Introduction
@@ -155,4 +157,4 @@ lifetime. This will likely be fixed in one of the upcoming Realm
 releases but users should be aware of this fact.
 
 ## References
-1. [Index spaces header file](https://github.com/StanfordLegion/realm/blob/main/realm/indexspace.h)
+1. [Index spaces header file](https://github.com/StanfordLegion/legion/blob/stable/runtime/realm/indexspace.h)

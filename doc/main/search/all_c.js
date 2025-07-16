@@ -36,8 +36,8 @@ var searchData=
   ['ld_5finsts_33',['ld_insts',['../structRealm_1_1ProfilingMeasurements_1_1IPCPerfCounters.html#a893a5ed7fccd8d4d59e25bf9204c823f',1,'Realm::ProfilingMeasurements::IPCPerfCounters']]],
   ['ldst_5fusage_34',['ldst_usage',['../classRealm_1_1CoreReservationParameters.html#a22c37acf13f42b944753d49bc86b4df4',1,'Realm::CoreReservationParameters']]],
   ['leaf_35',['leaf',['../classRealm_1_1GASNetEXEvent.html#a241baaa3db5e926757e9ceccf57d88ac',1,'Realm::GASNetEXEvent']]],
-  ['leaf_5fbits_36',['LEAF_BITS',['../classRealm_1_1DynamicTableAllocator.html#a443dbe523dc762e0489be37510bcbcb5',1,'Realm::DynamicTableAllocator']]],
-  ['leaf_5ftype_37',['LEAF_TYPE',['../classRealm_1_1DynamicTableAllocator.html#aa12aebc03595bfa25261e3c8dda84c86',1,'Realm::DynamicTableAllocator']]],
+  ['leaf_5fbits_36',['LEAF_BITS',['../classRealm_1_1DynamicTableAllocator.html#ae998f7a45b5300be284f1f986e190238',1,'Realm::DynamicTableAllocator']]],
+  ['leaf_5ftype_37',['LEAF_TYPE',['../classRealm_1_1DynamicTableAllocator.html#a91f8c2477b4ea8ce71cdd70c91c5459b',1,'Realm::DynamicTableAllocator']]],
   ['least_5fstream_5fpriority_38',['least_stream_priority',['../classRealm_1_1Cuda_1_1GPU.html#a99f843735c13170f814ce70d4bdaf6aa',1,'Realm::Cuda::GPU::least_stream_priority'],['../classRealm_1_1Hip_1_1GPU.html#a8c6327e6d325475028c565ffa134b08f',1,'Realm::Hip::GPU::least_stream_priority']]],
   ['left_39',['left',['../structRealm_1_1IntervalTree_1_1TreeNode.html#a49341e0c1d88a32f48d0e89aceed5085',1,'Realm::IntervalTree::TreeNode']]],
   ['legion_5ffile_5fcreate_40',['LEGION_FILE_CREATE',['../realm__c_8h.html#a6663777586045606d96a968ee5f3fa98af56ccf49c506eca46da9e77e71b01052',1,'realm_c.h']]],
@@ -128,7 +128,7 @@ var searchData=
   ['localchannel_125',['localchannel',['../classRealm_1_1LocalChannel.html',1,'Realm::LocalChannel'],['../classRealm_1_1LocalChannel.html#ad8c18f3a373d4b2fce0c262354fa1b25',1,'Realm::LocalChannel::LocalChannel()']]],
   ['localcpumemory_126',['localcpumemory',['../classRealm_1_1LocalCPUMemory.html',1,'Realm::LocalCPUMemory'],['../classRealm_1_1LocalCPUMemory.html#a3dd8152e7f87f1469a46a9c618986f3d',1,'Realm::LocalCPUMemory::LocalCPUMemory()']]],
   ['localcpuprocessor_127',['localcpuprocessor',['../classRealm_1_1LocalCPUProcessor.html',1,'Realm::LocalCPUProcessor'],['../classRealm_1_1LocalCPUProcessor.html#aa38e57e5277a35dba2aa5070352206cd',1,'Realm::LocalCPUProcessor::LocalCPUProcessor()']]],
-  ['localeventtableallocator_128',['LocalEventTableAllocator',['../namespaceRealm.html#a66c7e8ac3048c3b76a9000f1832ae581',1,'Realm']]],
+  ['localeventtableallocator_128',['LocalEventTableAllocator',['../namespaceRealm.html#af5e9edc225767597d9f32ecb19c61130',1,'Realm']]],
   ['localioprocessor_129',['localioprocessor',['../classRealm_1_1LocalIOProcessor.html',1,'Realm::LocalIOProcessor'],['../classRealm_1_1LocalIOProcessor.html#a60e197c7d7622ce71623df250e2cb300',1,'Realm::LocalIOProcessor::LocalIOProcessor()']]],
   ['localmanagedmemory_130',['localmanagedmemory',['../classRealm_1_1LocalManagedMemory.html#ab118a6031ee0785577ee4b54ae5feabe',1,'Realm::LocalManagedMemory::LocalManagedMemory()'],['../classRealm_1_1LocalManagedMemory.html',1,'Realm::LocalManagedMemory']]],
   ['localopenmpprocessor_131',['localopenmpprocessor',['../classRealm_1_1LocalOpenMPProcessor.html#ac4690168836b3054443e3f8f19fa2034',1,'Realm::LocalOpenMPProcessor::LocalOpenMPProcessor()'],['../classRealm_1_1LocalOpenMPProcessor.html',1,'Realm::LocalOpenMPProcessor']]],
@@ -157,7 +157,7 @@ var searchData=
   ['log_5fnew_5fdma_154',['log_new_dma',['../namespaceRealm.html#a3dbb9226b0a26d1e15c655c8d1a8e3fe',1,'Realm']]],
   ['log_5fpoison_155',['log_poison',['../namespaceRealm.html#a0bc1e32fd83e0c414739bacdc5b3857f',1,'Realm']]],
   ['log_5ftag_156',['LOG_TAG',['../logger_8h.html#a47faad2c02d214b860576272cb3ba3e9',1,'logger.h']]],
-  ['logger_157',['logger',['../classRealm_1_1TimeStamp.html#a2dbb78fe7258088c6f19a0c2e665f7ab',1,'Realm::TimeStamp::logger'],['../classRealm_1_1LoggerMessage.html#a0a8ff69e9edf0ec9533de8154b7ead40',1,'Realm::LoggerMessage::logger'],['../classp2p_1_1Logger.html',1,'p2p::Logger'],['../classRealm_1_1Logger.html',1,'Realm::Logger'],['../classRealm_1_1Logger.html#abbdb7f47c6e9476894034f179b09a4c3',1,'Realm::Logger::Logger()'],['../classRealm_1_1LoggerMessage.html#aff02b76416d2846736b7ecd798921a0a',1,'Realm::LoggerMessage::Logger']]],
+  ['logger_157',['logger',['../classRealm_1_1Logger.html#abbdb7f47c6e9476894034f179b09a4c3',1,'Realm::Logger::Logger()'],['../classRealm_1_1LoggerMessage.html#aff02b76416d2846736b7ecd798921a0a',1,'Realm::LoggerMessage::Logger'],['../classp2p_1_1Logger.html',1,'p2p::Logger'],['../classRealm_1_1Logger.html',1,'Realm::Logger'],['../classRealm_1_1TimeStamp.html#a2dbb78fe7258088c6f19a0c2e665f7ab',1,'Realm::TimeStamp::logger'],['../classRealm_1_1LoggerMessage.html#a0a8ff69e9edf0ec9533de8154b7ead40',1,'Realm::LoggerMessage::logger']]],
   ['logger_2eh_158',['logger.h',['../logger_8h.html',1,'']]],
   ['loggerconfig_159',['LoggerConfig',['../classRealm_1_1Logger.html#a1e18f5ef85c38ee02042bd850d3bce64',1,'Realm::Logger']]],
   ['loggermessage_160',['loggermessage',['../classRealm_1_1LoggerMessage.html#a6b5ac61c3d9e77db001379e85a494197',1,'Realm::LoggerMessage::LoggerMessage(const LoggerMessage &amp;to_copy)'],['../classRealm_1_1LoggerMessage.html#adafdf0126e7a7f8d97de74a17d1d15ff',1,'Realm::LoggerMessage::LoggerMessage(Logger *_logger, bool _active, Logger::LoggingLevel _level)'],['../classRealm_1_1LoggerMessage.html#ae65b6361dd9e8245e4427c5bd99a920e',1,'Realm::LoggerMessage::LoggerMessage(void)'],['../classRealm_1_1Logger.html#a44fcf63a789ef48389281fc00157105a',1,'Realm::Logger::LoggerMessage'],['../classRealm_1_1LoggerMessage.html',1,'Realm::LoggerMessage']]],
@@ -192,5 +192,5 @@ var searchData=
   ['lowlevel_5fdma_2eh_189',['lowlevel_dma.h',['../lowlevel__dma_8h.html',1,'']]],
   ['lowlevel_5fkind_190',['lowlevel_kind',['../classRealm_1_1MemoryImpl.html#a256e747c1b6baa66184a5f1744afb314',1,'Realm::MemoryImpl']]],
   ['lrukey_191',['lrukey',['../classRealm_1_1PathLRU_1_1LRUKey.html#a7c92d7663fc52d453b0aed82636ae223',1,'Realm::PathLRU::LRUKey::LRUKey()'],['../classRealm_1_1PathLRU_1_1LRUKey.html',1,'Realm::PathLRU::LRUKey']]],
-  ['lt_192',['lt',['../classRealm_1_1DynamicTableAllocator.html#a89d383abe0a1cbf181c40fed35c37145',1,'Realm::DynamicTableAllocator::LT'],['../classRealm_1_1DynamicTableFreeList.html#a844bb9f05f5765872167d2e2468c7e1f',1,'Realm::DynamicTableFreeList::LT'],['../classRealm_1_1DynamicTable.html#a01069a937704d0f8bcec0b88ff31f0d8',1,'Realm::DynamicTable::LT']]]
+  ['lt_192',['lt',['../classRealm_1_1DynamicTableAllocator.html#a2a7a76cbdd22a55bae5ffd1d63ce0fa2',1,'Realm::DynamicTableAllocator::LT'],['../classRealm_1_1DynamicTableFreeList.html#a844bb9f05f5765872167d2e2468c7e1f',1,'Realm::DynamicTableFreeList::LT'],['../classRealm_1_1DynamicTable.html#a01069a937704d0f8bcec0b88ff31f0d8',1,'Realm::DynamicTable::LT']]]
 ];

@@ -1,0 +1,28 @@
+var structRealm_1_1UCP_1_1UCPInternal_1_1Config =
+[
+    [ "am_wra_mode", "structRealm_1_1UCP_1_1UCPInternal_1_1Config.html#aed3e9962f8b8010782f759e46a15c8bb", null ],
+    [ "bind_hostmem", "structRealm_1_1UCP_1_1UCPInternal_1_1Config.html#acb9a2349683f6bf64d9267520f4d6971", null ],
+    [ "crc_check", "structRealm_1_1UCP_1_1UCPInternal_1_1Config.html#afa0d5a859111343b97bc65cbd204f541", null ],
+    [ "fp_max", "structRealm_1_1UCP_1_1UCPInternal_1_1Config.html#a98446e3b794c109728eda056df4a085f", null ],
+    [ "hbuf_malloc", "structRealm_1_1UCP_1_1UCPInternal_1_1Config.html#ad7b934ee78949987abb247cafb96829d", null ],
+    [ "host_nics", "structRealm_1_1UCP_1_1UCPInternal_1_1Config.html#a382c2c566e620637257aa43c34c19245", null ],
+    [ "ib_seg_size", "structRealm_1_1UCP_1_1UCPInternal_1_1Config.html#a55dc0410517c1e712a35c1121a7a636a", null ],
+    [ "mmp_max_obj_size", "structRealm_1_1UCP_1_1UCPInternal_1_1Config.html#ad4abd0554cbea2e505d459729f8e4aca", null ],
+    [ "mpool_leakcheck", "structRealm_1_1UCP_1_1UCPInternal_1_1Config.html#ada6c5d50afdf560a67066dc21f8b705f", null ],
+    [ "num_priorities", "structRealm_1_1UCP_1_1UCPInternal_1_1Config.html#a5fd5f0e5c6d18c90a08b2bdc282a4b29", null ],
+    [ "outstanding_reqs_limit", "structRealm_1_1UCP_1_1UCPInternal_1_1Config.html#a27a373c7ac2d82cad5c5759955b28ca7", null ],
+    [ "pbuf_init_count", "structRealm_1_1UCP_1_1UCPInternal_1_1Config.html#a77523ea574124a3d2b627963aeb187cc", null ],
+    [ "pbuf_malloc", "structRealm_1_1UCP_1_1UCPInternal_1_1Config.html#a8500929f651c64c3fdaa7f5008343faa", null ],
+    [ "pbuf_max_chunk_size", "structRealm_1_1UCP_1_1UCPInternal_1_1Config.html#abb87e276aebb900d4c7b790c67e6f105", null ],
+    [ "pbuf_max_count", "structRealm_1_1UCP_1_1UCPInternal_1_1Config.html#a9256f254eb385bf56aabb06c2e145312", null ],
+    [ "pbuf_max_size", "structRealm_1_1UCP_1_1UCPInternal_1_1Config.html#a5732fbe6a7faf0ded67223dea989ef45", null ],
+    [ "pbuf_mp_thresh", "structRealm_1_1UCP_1_1UCPInternal_1_1Config.html#a7150289a1dc6d5648393a876fd3c0397", null ],
+    [ "pollers_max", "structRealm_1_1UCP_1_1UCPInternal_1_1Config.html#af2631ddbf3a80795649a591ce2d8a394", null ],
+    [ "priority_size_max", "structRealm_1_1UCP_1_1UCPInternal_1_1Config.html#aaf78fb902c332b04d5c048123095e75b", null ],
+    [ "prog_boff_max", "structRealm_1_1UCP_1_1UCPInternal_1_1Config.html#ac57a76aaf337724794de627a54cf9ec5", null ],
+    [ "prog_itr_max", "structRealm_1_1UCP_1_1UCPInternal_1_1Config.html#a6749a57bda7a22cab31dfb0d08f1ba43", null ],
+    [ "rdesc_rel_max", "structRealm_1_1UCP_1_1UCPInternal_1_1Config.html#a09b0b4cf36998cfff02f9bdafd07e621", null ],
+    [ "tls_host", "structRealm_1_1UCP_1_1UCPInternal_1_1Config.html#ab091d33a392bc352dc515c79e4ef026b", null ],
+    [ "use_wakeup", "structRealm_1_1UCP_1_1UCPInternal_1_1Config.html#a16653fdaaa4dbdc530d967b3797efd34", null ],
+    [ "zcopy_thresh_host", "structRealm_1_1UCP_1_1UCPInternal_1_1Config.html#a171a3a7a1e07e20e442061fb92753d61", null ]
+];

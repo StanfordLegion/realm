@@ -10,6 +10,10 @@
 <link href="tabs.css" rel="stylesheet" type="text/css"/>
 <script type="text/javascript" src="jquery.js"></script>
 <script type="text/javascript" src="dynsections.js"></script>
+<link href="navtree.css" rel="stylesheet" type="text/css"/>
+<script type="text/javascript" src="resize.js"></script>
+<script type="text/javascript" src="navtreedata.js"></script>
+<script type="text/javascript" src="navtree.js"></script>
 <link href="search/search.css" rel="stylesheet" type="text/css"/>
 <script type="text/javascript" src="search/searchdata.js"></script>
 <script type="text/javascript" src="search/search.js"></script>
@@ -20,6 +24,8 @@
 </script>
 <link href="doxygen.css" rel="stylesheet" type="text/css" />
 <link href="customdoxygen.css" rel="stylesheet" type="text/css"/>
+<link href="doxygen-awesome.css" rel="stylesheet" type="text/css"/>
+<link href="doxygen-awesome-sidebar-only.css" rel="stylesheet" type="text/css"/>
 <!-- BEGIN version select -->
 <link rel="stylesheet" type="text/css" href="../dropdown.css">
 <script type="text/javascript" src="https://ajax.googleapis.com/ajax/libs/jquery/3.2.1/jquery.min.js">
@@ -32,11 +38,13 @@
 <table cellspacing="0" cellpadding="0">
  <tbody>
  <tr style="height: 56px;">
+  <td id="projectlogo"><img alt="Logo" src="logo.png"/></td>
   <td id="projectalign" style="padding-left: 0.5em;">
    <div id="projectname">Realm
    <!-- BEGIN version select -->
+    <br />
     <div class="dropdown">
-     <button class="dropbtn">Version 0.0.1</button>
+     <button class="dropbtn">Version 0.0.1+6ce58b75</button>
      <div class="dropdown-content"></div>
     </div>
     <script type="text/javascript" src="../selectversion.js"></script>
@@ -84,6 +92,23 @@ var searchBox = new SearchBox("searchBox", "search/",'.html');
       <li><a href="functions.html"><span>Class&#160;Members</span></a></li>
     </ul>
   </div>
+</div><!-- top -->
+<div id="side-nav" class="ui-resizable side-nav-resizable">
+  <div id="nav-tree">
+    <div id="nav-tree-contents">
+      <div id="nav-sync" class="sync"></div>
+    </div>
+  </div>
+  <div id="splitbar" style="-moz-user-select:none;" 
+       class="ui-resizable-handle">
+  </div>
+</div>
+<script type="text/javascript">
+/* @license magnet:?xt=urn:btih:d3d9a9a6595521f9666a5e94cc830dab83b65699&amp;dn=expat.txt MIT */
+$(document).ready(function(){initNavTree('classRealm_1_1ProfilingGauges_1_1AbsoluteRangeGauge.html',''); initResizable(); });
+/* @license-end */
+</script>
+<div id="doc-content">
 <!-- window showing the filter options -->
 <div id="MSearchSelectWindow"
      onmouseover="return searchBox.OnSearchSelectShow()"
@@ -105,11 +130,6 @@ var searchBox = new SearchBox("searchBox", "search/",'.html');
 </div>
 </div>
 
-<div id="nav-path" class="navpath">
-  <ul>
-<li class="navelem"><a class="el" href="namespaceRealm.html">Realm</a></li><li class="navelem"><a class="el" href="namespaceRealm_1_1ProfilingGauges.html">ProfilingGauges</a></li><li class="navelem"><a class="el" href="classRealm_1_1ProfilingGauges_1_1AbsoluteRangeGauge.html">AbsoluteRangeGauge</a></li>  </ul>
-</div>
-</div><!-- top -->
 <div class="header">
   <div class="summary">
 <a href="#nested-classes">Classes</a> &#124;
@@ -127,145 +147,13 @@ var searchBox = new SearchBox("searchBox", "search/",'.html');
 <div class="dynheader">
 Inheritance diagram for Realm::ProfilingGauges::AbsoluteRangeGauge&lt; T &gt;:</div>
 <div class="dyncontent">
-<div class="center"><img src="classRealm_1_1ProfilingGauges_1_1AbsoluteRangeGauge__inherit__graph.png" border="0" usemap="#aRealm_1_1ProfilingGauges_1_1AbsoluteRangeGauge_3_01T_01_4_inherit__map" alt="Inheritance graph"/></div>
-<map name="aRealm_1_1ProfilingGauges_1_1AbsoluteRangeGauge_3_01T_01_4_inherit__map" id="aRealm_1_1ProfilingGauges_1_1AbsoluteRangeGauge_3_01T_01_4_inherit__map">
-<area shape="rect" title=" " alt="" coords="5,93,213,133"/>
-<area shape="rect" href="classRealm_1_1ProfilingGauges_1_1Gauge.html" title=" " alt="" coords="22,5,197,45"/>
-<area shape="poly" title=" " alt="" coords="112,59,112,93,107,93,107,59"/>
-</map>
-<center><span class="legend">[<a href="graph_legend.html">legend</a>]</span></center></div>
+<div class="center"><!-- SVG 0 --></div>
+<center><span class="legend">[<a target="top" href="graph_legend.html">legend</a>]</span></center></div>
 <div class="dynheader">
 Collaboration diagram for Realm::ProfilingGauges::AbsoluteRangeGauge&lt; T &gt;:</div>
 <div class="dyncontent">
-<div class="center"><img src="classRealm_1_1ProfilingGauges_1_1AbsoluteRangeGauge__coll__graph.png" border="0" usemap="#aRealm_1_1ProfilingGauges_1_1AbsoluteRangeGauge_3_01T_01_4_coll__map" alt="Collaboration graph"/></div>
-<map name="aRealm_1_1ProfilingGauges_1_1AbsoluteRangeGauge_3_01T_01_4_coll__map" id="aRealm_1_1ProfilingGauges_1_1AbsoluteRangeGauge_3_01T_01_4_coll__map">
-<area shape="rect" title=" " alt="" coords="2403,108,2611,148"/>
-<area shape="rect" href="classRealm_1_1ProfilingGauges_1_1Gauge.html" title=" " alt="" coords="1997,176,2172,216"/>
-<area shape="poly" title=" " alt="" coords="2185,177,2403,142,2403,147,2186,183"/>
-<area shape="rect" href="classRealm_1_1DelayedGaugeAddition.html" title=" " alt="" coords="2396,211,2619,237"/>
-<area shape="poly" title=" " alt="" coords="2186,200,2396,214,2396,219,2185,205"/>
-<area shape="rect" href="classRealm_1_1ProfilingGauges_1_1AbsoluteGauge.html" title=" " alt="" coords="2420,326,2595,381"/>
-<area shape="poly" title=" " alt="" coords="2147,219,2237,252,2275,262,2306,267,2337,274,2373,290,2386,300,2398,311,2422,324,2419,328,2394,316,2382,304,2371,294,2335,279,2305,272,2274,267,2235,257,2145,224"/>
-<area shape="rect" href="classRealm_1_1ProfilingGauges_1_1EventCounter.html" title=" " alt="" coords="2403,261,2611,301"/>
-<area shape="poly" title=" " alt="" coords="2186,214,2408,259,2407,264,2185,219"/>
-<area shape="rect" href="classRealm_1_1GaugeSampler.html" title=" " alt="" coords="3144,130,3312,155"/>
-<area shape="poly" title=" " alt="" coords="3146,130,3004,109,2817,90,2714,85,2608,84,2501,88,2396,99,2323,113,2250,134,2133,178,2131,173,2249,129,2321,108,2396,93,2500,82,2607,78,2714,79,2818,85,3005,104,3147,125"/>
-<area shape="poly" title=" " alt="" coords="3198,115,3207,107,3228,103,3246,106,3257,112,3260,122,3254,131,3250,129,3254,121,3252,115,3244,111,3228,109,3209,112,3201,119"/>
-<area shape="rect" href="classRealm_1_1SamplingProfilerImpl.html" title=" " alt="" coords="2791,341,2999,366"/>
-<area shape="poly" title=" " alt="" coords="3131,157,3076,173,3024,198,2983,232,2949,273,2905,342,2900,339,2944,270,2979,229,3021,194,3074,168,3130,152"/>
-<area shape="poly" title=" " alt="" coords="2927,331,3119,208,3205,153,3208,158,3121,213,2930,335"/>
-<area shape="rect" href="classRealm_1_1UnfairMutex.html" title=" " alt="" coords="769,470,922,495"/>
-<area shape="poly" title=" " alt="" coords="851,456,888,346,920,275,960,200,1010,131,1039,100,1070,72,1104,50,1140,32,1179,21,1221,17,2896,17,2944,21,2991,30,3081,61,3156,97,3208,127,3206,132,3154,102,3079,66,2990,35,2943,26,2896,23,1221,23,1180,26,1142,37,1106,54,1073,77,1043,104,1014,134,965,203,925,277,893,348,856,458"/>
-<area shape="poly" title=" " alt="" coords="893,463,956,442,1038,421,1128,404,1221,397,1873,397,2246,403,2409,401,2618,389,2725,378,2821,363,2822,369,2726,383,2619,395,2409,406,2246,408,1873,403,1221,403,1129,409,1039,426,958,448,894,468"/>
-<area shape="rect" href="classRealm_1_1Thread.html" title=" " alt="" coords="2449,638,2566,663"/>
-<area shape="poly" title=" " alt="" coords="935,471,976,468,1149,464,1323,468,1555,468,1656,472,1786,485,1986,519,2181,561,2347,603,2463,635,2462,640,2346,608,2179,566,1985,524,1785,491,1656,477,1555,473,1323,473,1149,470,976,473,936,476"/>
-<area shape="rect" href="classRealm_1_1GenEventImpl.html" title=" " alt="" coords="1588,1038,1752,1063"/>
-<area shape="poly" title=" " alt="" coords="936,482,1293,495,1455,506,1507,513,1532,521,1539,532,1544,551,1549,604,1549,752,1547,901,1550,955,1557,985,1571,1002,1588,1016,1626,1035,1624,1040,1585,1020,1567,1006,1552,988,1545,956,1542,901,1543,752,1543,605,1538,552,1534,534,1529,525,1506,518,1454,511,1293,500,936,487"/>
-<area shape="rect" href="classRealm_1_1EventTriggerNotifier.html" title=" " alt="" coords="1121,918,1323,943"/>
-<area shape="poly" title=" " alt="" coords="902,499,931,515,954,538,965,558,970,576,969,610,967,644,970,662,978,681,992,701,1006,715,1037,734,1069,753,1085,767,1100,787,1109,811,1111,832,1113,852,1123,873,1152,898,1184,915,1182,920,1149,903,1119,876,1108,853,1105,832,1104,812,1095,789,1081,770,1066,757,1034,738,1003,719,988,704,974,684,965,663,962,644,964,610,964,577,960,560,950,542,927,519,900,503"/>
-<area shape="rect" href="classRealm_1_1noncopyable.html" title=" " alt="" coords="386,605,541,630"/>
-<area shape="poly" title=" " alt="" coords="512,598,807,493,809,498,514,603"/>
-<area shape="rect" href="classRealm_1_1KernelMutex.html" title=" " alt="" coords="768,655,923,681"/>
-<area shape="poly" title=" " alt="" coords="555,628,595,633,768,656,767,661,594,639,554,633"/>
-<area shape="rect" href="classRealm_1_1KernelCondVar.html" title=" " alt="" coords="1139,606,1305,631"/>
-<area shape="poly" title=" " alt="" coords="554,615,1139,616,1139,621,554,620"/>
-<area shape="rect" href="classRealm_1_1atomic.html" title=" " alt="" coords="363,497,563,522"/>
-<area shape="poly" title=" " alt="" coords="577,502,714,493,768,488,769,494,715,499,578,507"/>
-<area shape="rect" href="classRealm_1_1DoorbellList.html" title=" " alt="" coords="388,447,539,473"/>
-<area shape="poly" title=" " alt="" coords="552,463,768,475,768,481,552,468"/>
-<area shape="rect" href="classRealm_1_1atomic.html" title=" " alt="" coords="5,447,208,473"/>
-<area shape="poly" title=" " alt="" coords="222,457,388,457,388,463,222,463"/>
-<area shape="rect" href="classRealm_1_1atomic.html" title=" " alt="" coords="1140,1247,1304,1273"/>
-<area shape="poly" title=" " alt="" coords="1266,1276,1354,1311,1483,1357,1643,1404,1827,1444,1924,1460,2024,1470,2126,1475,2228,1473,2329,1463,2428,1444,2525,1416,2618,1376,2668,1350,2705,1324,2735,1291,2764,1243,2780,1207,2794,1163,2819,1052,2840,920,2857,781,2880,522,2890,366,2895,367,2886,522,2863,781,2846,921,2825,1053,2799,1164,2785,1209,2769,1245,2739,1294,2709,1328,2671,1354,2620,1381,2527,1421,2430,1449,2330,1468,2228,1478,2126,1480,2024,1475,1923,1465,1826,1450,1642,1409,1481,1362,1352,1316,1264,1281"/>
-<area shape="poly" title=" " alt="" coords="1318,1264,1581,1280,1912,1293,2071,1295,2210,1291,2314,1280,2349,1271,2370,1261,2379,1249,2389,1228,2409,1164,2449,980,2483,787,2502,663,2507,664,2488,788,2455,981,2414,1165,2394,1230,2384,1252,2374,1265,2351,1276,2315,1285,2210,1296,2072,1300,1912,1299,1581,1286,1318,1270"/>
-<area shape="rect" href="classRealm_1_1Operation.html" title=" " alt="" coords="2017,757,2153,782"/>
-<area shape="poly" title=" " alt="" coords="1303,1242,1346,1235,1642,1196,1839,1167,1932,1150,1940,1138,1945,1122,1950,1080,1943,974,1936,867,1941,824,1947,807,1955,793,1983,773,2016,765,2017,770,1985,778,1959,797,1951,809,1946,825,1942,868,1949,974,1955,1080,1950,1123,1944,1140,1935,1154,1840,1173,1642,1201,1347,1240,1303,1248"/>
-<area shape="poly" title=" " alt="" coords="1247,1236,1291,1203,1346,1174,1397,1160,1439,1158,1480,1156,1530,1143,1588,1107,1650,1061,1654,1066,1591,1111,1532,1148,1481,1161,1439,1163,1397,1165,1348,1178,1294,1208,1250,1240"/>
-<area shape="rect" href="classRealm_1_1EventMerger.html" title=" " alt="" coords="2007,1191,2162,1217"/>
-<area shape="poly" title=" " alt="" coords="1318,1257,1532,1252,1785,1239,1902,1227,2007,1213,2007,1218,1902,1232,1786,1244,1532,1257,1318,1262"/>
-<area shape="poly" title=" " alt="" coords="2579,237,2619,247,2694,263,2768,286,2826,312,2873,338,2871,343,2823,317,2766,290,2693,268,2618,252,2578,242"/>
-<area shape="poly" title=" " alt="" coords="2469,197,2480,188,2507,185,2530,187,2543,193,2547,203,2540,213,2536,210,2542,202,2539,197,2528,192,2507,190,2482,193,2472,201"/>
-<area shape="rect" href="classRealm_1_1CoreReservation.html" title=" " alt="" coords="2417,1341,2597,1366"/>
-<area shape="poly" title=" " alt="" coords="2550,1332,2586,1310,2617,1280,2658,1219,2695,1154,2728,1086,2757,1017,2805,876,2839,738,2863,611,2878,502,2890,366,2895,367,2884,502,2868,612,2844,739,2810,877,2762,1019,2733,1089,2700,1156,2663,1222,2621,1283,2589,1314,2553,1337"/>
-<area shape="rect" href="classRealm_1_1CoreReservationParameters.html" title=" " alt="" coords="1957,1389,2212,1414"/>
-<area shape="poly" title=" " alt="" coords="2226,1395,2372,1381,2459,1363,2460,1369,2372,1387,2226,1400"/>
-<area shape="poly" title=" " alt="" coords="2535,627,2765,450,2875,364,2879,368,2768,454,2538,631"/>
-<area shape="rect" href="classRealm_1_1atomic.html" title=" " alt="" coords="1994,806,2175,831"/>
-<area shape="poly" title=" " alt="" coords="2174,801,2211,792,2293,772,2328,761,2371,742,2438,700,2489,661,2493,666,2441,705,2373,746,2330,766,2295,777,2213,797,2175,806"/>
-<area shape="rect" href="classRealm_1_1ThreadScheduler.html" title=" " alt="" coords="1994,438,2175,463"/>
-<area shape="poly" title=" " alt="" coords="2189,441,2234,443,2282,449,2329,461,2373,480,2398,496,2420,516,2457,560,2485,604,2502,636,2498,639,2481,606,2453,563,2416,520,2394,501,2371,485,2327,466,2281,454,2234,448,2189,446"/>
-<area shape="poly" title=" " alt="" coords="2143,750,2460,661,2461,666,2145,756"/>
-<area shape="poly" title=" " alt="" coords="2004,773,1980,782,1959,797,1945,817,1941,838,1942,859,1947,881,1954,925,1949,948,1935,971,1906,987,1851,1005,1723,1040,1722,1035,1849,1000,1904,982,1932,967,1944,946,1948,925,1942,881,1937,860,1935,837,1941,815,1955,793,1977,777,2002,768"/>
-<area shape="poly" title=" " alt="" coords="1766,1055,1865,1053,1906,1046,1931,1033,1941,1014,1946,987,1944,916,1941,844,1945,814,1955,793,1983,774,2015,765,2017,770,1985,779,1959,796,1950,816,1946,844,1949,916,1951,987,1947,1016,1935,1037,1907,1051,1866,1058,1766,1060"/>
-<area shape="poly" title=" " alt="" coords="1631,1024,1642,1015,1670,1011,1693,1014,1706,1020,1710,1030,1703,1039,1699,1036,1705,1029,1702,1023,1691,1019,1670,1017,1644,1020,1634,1028"/>
-<area shape="poly" title=" " alt="" coords="1745,1064,1860,1089,1934,1108,1974,1127,2011,1149,2068,1189,2065,1193,2008,1154,1971,1132,1932,1113,1859,1094,1744,1069"/>
-<area shape="rect" href="classRealm_1_1EventImpl.html" title=" " alt="" coords="1153,837,1291,862"/>
-<area shape="poly" title=" " alt="" coords="1306,850,1361,858,1420,873,1480,897,1532,931,1543,945,1546,959,1549,972,1557,985,1594,1015,1635,1035,1632,1040,1591,1019,1553,988,1544,974,1541,960,1538,947,1529,935,1477,901,1419,878,1360,863,1305,855"/>
-<area shape="rect" href="classRealm_1_1ID.html" title=" " alt="" coords="802,765,889,790"/>
-<area shape="poly" title=" " alt="" coords="903,786,977,800,1154,834,1153,839,975,805,902,791"/>
-<area shape="rect" href="classRealm_1_1bitpack.html" title=" " alt="" coords="366,746,561,771"/>
-<area shape="poly" title=" " alt="" coords="574,761,802,773,802,778,574,767"/>
-<area shape="rect" href="classRealm_1_1ProcessorImpl.html" title=" " alt="" coords="763,834,927,859"/>
-<area shape="poly" title=" " alt="" coords="941,845,976,845,1153,846,1153,852,976,851,941,850"/>
-<area shape="rect" href="classRealm_1_1DynamicTableFreeList.html" title=" " alt="" coords="356,884,571,924"/>
-<area shape="poly" title=" " alt="" coords="584,884,714,864,763,857,764,862,715,869,585,889"/>
-<area shape="rect" href="classRealm_1_1Processor.html" title=" " alt="" coords="396,834,531,859"/>
-<area shape="poly" title=" " alt="" coords="544,844,763,844,763,849,544,849"/>
-<area shape="poly" title=" " alt="" coords="428,820,438,811,463,807,484,810,496,816,500,826,493,835,489,832,495,825,492,819,482,815,463,813,441,816,431,824"/>
-<area shape="rect" href="classRealm_1_1atomic.html" title=" " alt="" coords="1131,659,1313,685"/>
-<area shape="poly" title=" " alt="" coords="1327,675,1455,687,1505,695,1532,706,1545,730,1551,763,1549,845,1545,927,1548,961,1557,985,1571,1002,1588,1016,1627,1036,1625,1040,1585,1020,1567,1006,1552,988,1543,962,1540,927,1544,844,1545,763,1540,731,1529,710,1504,700,1455,692,1327,680"/>
-<area shape="poly" title=" " alt="" coords="1993,1198,1947,1189,1899,1175,1851,1155,1808,1127,1798,1116,1795,1105,1792,1094,1784,1085,1748,1066,1750,1061,1787,1081,1796,1092,1800,1103,1803,1114,1811,1123,1854,1150,1901,1170,1949,1184,1994,1193"/>
-<area shape="rect" href="classRealm_1_1EventMerger_1_1MergeEventPrecondition.html" title=" " alt="" coords="2413,1229,2602,1269"/>
-<area shape="poly" title=" " alt="" coords="2131,1219,2181,1236,2236,1248,2327,1255,2412,1254,2412,1260,2326,1261,2236,1253,2180,1241,2129,1224"/>
-<area shape="poly" title=" " alt="" coords="2399,1239,2372,1236,2162,1214,2163,1209,2372,1231,2399,1234"/>
-<area shape="rect" href="classRealm_1_1EventWaiter.html" title=" " alt="" coords="31,1351,182,1377"/>
-<area shape="poly" title=" " alt="" coords="196,1371,322,1380,462,1385,1223,1385,1548,1386,1680,1384,1802,1379,1923,1369,2053,1352,2199,1328,2371,1293,2416,1281,2457,1267,2459,1272,2417,1287,2373,1299,2200,1333,2054,1358,1924,1374,1802,1384,1680,1389,1548,1391,1223,1391,462,1391,321,1386,195,1376"/>
-<area shape="rect" href="structRealm_1_1IntrusiveListLink.html" title=" " alt="" coords="374,1212,553,1252"/>
-<area shape="poly" title=" " alt="" coords="154,1344,407,1250,409,1254,156,1349"/>
-<area shape="rect" href="classRealm_1_1IntrusiveList.html" title=" " alt="" coords="739,976,952,1045"/>
-<area shape="poly" title=" " alt="" coords="966,1011,1225,1020,1531,1036,1588,1040,1588,1046,1530,1041,1225,1026,966,1017"/>
-<area shape="poly" title=" " alt="" coords="948,1051,954,1055,962,1064,966,1073,970,1081,977,1087,1014,1102,1046,1104,1079,1101,1121,1100,1456,1106,1674,1114,1750,1120,1787,1127,1798,1141,1800,1157,1802,1171,1811,1183,1835,1197,1861,1208,1917,1218,1973,1219,2023,1214,2023,1219,1973,1224,1917,1224,1860,1213,1833,1202,1808,1187,1797,1173,1795,1158,1793,1143,1784,1132,1749,1125,1674,1119,1456,1112,1121,1105,1079,1106,1046,1109,1013,1107,975,1092,966,1084,961,1075,957,1067,950,1059,945,1055"/>
-<area shape="poly" title=" " alt="" coords="966,997,1031,987,1097,973,1147,958,1190,941,1192,946,1148,963,1098,979,1032,992,966,1002"/>
-<area shape="rect" href="classRealm_1_1DummyLock.html" title=" " alt="" coords="386,998,541,1023"/>
-<area shape="poly" title=" " alt="" coords="555,1008,738,1008,738,1013,555,1013"/>
-<area shape="poly" title=" " alt="" coords="503,1202,607,1132,737,1055,761,1043,764,1048,740,1060,610,1137,506,1206"/>
-<area shape="poly" title=" " alt="" coords="1311,943,1417,965,1531,995,1640,1035,1639,1040,1530,1000,1416,970,1310,948"/>
-<area shape="rect" href="classRealm_1_1BackgroundWorkItem.html" title=" " alt="" coords="739,883,951,909"/>
-<area shape="poly" title=" " alt="" coords="965,899,1098,909,1144,915,1143,921,1097,915,965,904"/>
-<area shape="poly" title=" " alt="" coords="934,681,1085,712,1264,756,1350,783,1427,811,1490,843,1533,875,1543,890,1547,904,1547,931,1546,958,1549,971,1557,985,1572,1002,1591,1015,1630,1035,1627,1040,1588,1020,1569,1006,1553,988,1544,973,1540,958,1542,931,1542,905,1538,892,1529,879,1487,847,1425,816,1348,788,1263,761,1084,717,933,686"/>
-<area shape="poly" title=" " alt="" coords="936,663,1015,658,1097,648,1179,629,1180,634,1098,653,1015,663,937,668"/>
-<area shape="poly" title=" " alt="" coords="1287,601,1346,593,1412,594,1446,600,1477,610,1507,625,1533,646,1542,659,1548,675,1554,715,1550,814,1544,914,1547,956,1557,985,1571,1002,1588,1016,1627,1036,1624,1040,1585,1020,1567,1006,1552,988,1542,957,1539,914,1545,814,1548,715,1543,676,1537,661,1529,650,1504,630,1475,615,1444,605,1412,600,1347,599,1288,606"/>
-<area shape="rect" href="classRealm_1_1NodeSet.html" title=" " alt="" coords="1159,1065,1285,1090"/>
-<area shape="poly" title=" " alt="" coords="1299,1070,1588,1053,1588,1058,1299,1075"/>
-<area shape="rect" href="unionRealm_1_1NodeSet_1_1EncodingUnion.html" title=" " alt="" coords="748,1069,943,1109"/>
-<area shape="poly" title=" " alt="" coords="956,1083,1158,1077,1158,1082,956,1088"/>
-<area shape="rect" href="classRealm_1_1atomic.html" title=" " alt="" coords="1583,935,1757,975"/>
-<area shape="poly" title=" " alt="" coords="1770,953,1813,947,1856,936,1896,918,1931,891,1940,880,1943,869,1942,844,1942,818,1946,805,1956,793,1984,775,2016,766,2017,772,1986,780,1959,797,1951,808,1947,819,1948,844,1949,869,1945,882,1935,895,1899,922,1857,941,1814,952,1771,958"/>
-<area shape="rect" href="structRealm_1_1ProfilingMeasurements_1_1OperationStatus.html" title=" " alt="" coords="1559,500,1781,540"/>
-<area shape="poly" title=" " alt="" coords="1794,541,1866,565,1902,581,1935,600,1982,639,2023,683,2077,755,2073,758,2019,686,1979,643,1932,605,1899,586,1864,570,1793,546"/>
-<area shape="rect" href="classRealm_1_1ByteArray.html" title=" " alt="" coords="1153,553,1291,578"/>
-<area shape="poly" title=" " alt="" coords="1304,554,1558,529,1559,534,1305,560"/>
-<area shape="rect" href="classRealm_1_1ByteArrayRef.html" title=" " alt="" coords="766,553,925,578"/>
-<area shape="poly" title=" " alt="" coords="938,563,1153,563,1153,568,938,568"/>
-<area shape="rect" href="structRealm_1_1ProfilingMeasurements_1_1OperationTimeline.html" title=" " alt="" coords="1559,564,1781,604"/>
-<area shape="poly" title=" " alt="" coords="1757,605,1786,613,1862,630,1894,639,1935,656,1976,680,2014,707,2071,754,2068,759,2011,711,1973,684,1932,661,1893,644,1860,636,1785,619,1756,610"/>
-<area shape="rect" href="structRealm_1_1ProfilingMeasurements_1_1OperationTimelineGPU.html" title=" " alt="" coords="1559,628,1781,668"/>
-<area shape="poly" title=" " alt="" coords="1780,669,1934,709,2054,754,2052,759,1933,715,1779,674"/>
-<area shape="rect" href="structRealm_1_1ProfilingMeasurements_1_1OperationEventWaits.html" title=" " alt="" coords="1559,692,1781,732"/>
-<area shape="poly" title=" " alt="" coords="1795,727,2017,757,2016,763,1795,732"/>
-<area shape="rect" href="classRealm_1_1ProfilingRequestSet.html" title=" " alt="" coords="1571,757,1769,782"/>
-<area shape="poly" title=" " alt="" coords="1783,767,2016,767,2016,772,1783,772"/>
-<area shape="rect" href="classRealm_1_1ProfilingMeasurementCollection.html" title=" " alt="" coords="1563,807,1777,847"/>
-<area shape="poly" title=" " alt="" coords="1791,807,2016,776,2017,781,1791,813"/>
-<area shape="rect" href="classRealm_1_1atomic.html" title=" " alt="" coords="1555,871,1785,911"/>
-<area shape="poly" title=" " alt="" coords="1798,874,1867,854,1901,840,1932,823,1939,816,1943,809,1947,800,1956,792,1985,779,2016,771,2017,776,1987,784,1959,797,1952,804,1948,811,1943,819,1935,827,1903,845,1869,860,1800,879"/>
-<area shape="poly" title=" " alt="" coords="2609,351,2791,351,2791,356,2609,356"/>
-<area shape="rect" href="classRealm_1_1atomic.html" title=" " alt="" coords="2005,315,2165,355"/>
-<area shape="poly" title=" " alt="" coords="2179,344,2236,349,2420,353,2420,358,2236,355,2178,350"/>
-<area shape="poly" title=" " alt="" coords="2178,320,2403,292,2403,297,2179,326"/>
-<area shape="poly" title=" " alt="" coords="2626,300,2826,338,2825,343,2625,306"/>
-</map>
-<center><span class="legend">[<a href="graph_legend.html">legend</a>]</span></center></div>
+<div class="center"><!-- SVG 1 --></div>
+<center><span class="legend">[<a target="top" href="graph_legend.html">legend</a>]</span></center></div>
 <table class="memberdecls">
 <tr class="heading"><td colspan="2"><h2 class="groupheader"><a id="nested-classes" name="nested-classes"></a>
 Classes</h2></td></tr>
@@ -620,13 +508,17 @@ template&lt;typename T &gt; </div>
 </div>
 </div>
 <hr/>The documentation for this class was generated from the following file:<ul>
-<li>/home/runner/work/realm/realm/realm-src/realm/<a class="el" href="sampling_8h_source.html">sampling.h</a></li>
+<li>/home/runner/work/realm/realm/realm-src/src/realm/<a class="el" href="sampling_8h_source.html">sampling.h</a></li>
 </ul>
 </div><!-- contents -->
+</div><!-- doc-content -->
 <!-- HTML footer for doxygen 1.9.1-->
 <!-- start footer part -->
-<hr class="footer"/><address class="footer"><small>
-Generated by&#160;<a href="https://www.doxygen.org/index.html"><img class="footer" src="doxygen.svg" width="104" height="31" alt="doxygen"/></a> 1.9.8
-</small></address>
+<div id="nav-path" class="navpath"><!-- id is needed for treeview function! -->
+  <ul>
+    <li class="navelem"><a class="el" href="namespaceRealm.html">Realm</a></li><li class="navelem"><a class="el" href="namespaceRealm_1_1ProfilingGauges.html">ProfilingGauges</a></li><li class="navelem"><a class="el" href="classRealm_1_1ProfilingGauges_1_1AbsoluteRangeGauge.html">AbsoluteRangeGauge</a></li>
+    <li class="footer">Generated by <a href="https://www.doxygen.org/index.html"><img class="footer" src="doxygen.svg" width="104" height="31" alt="doxygen"/></a> 1.9.8 </li>
+  </ul>
+</div>
 </body>
 </html>

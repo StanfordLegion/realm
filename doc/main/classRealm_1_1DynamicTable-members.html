@@ -10,6 +10,10 @@
 <link href="tabs.css" rel="stylesheet" type="text/css"/>
 <script type="text/javascript" src="jquery.js"></script>
 <script type="text/javascript" src="dynsections.js"></script>
+<link href="navtree.css" rel="stylesheet" type="text/css"/>
+<script type="text/javascript" src="resize.js"></script>
+<script type="text/javascript" src="navtreedata.js"></script>
+<script type="text/javascript" src="navtree.js"></script>
 <link href="search/search.css" rel="stylesheet" type="text/css"/>
 <script type="text/javascript" src="search/searchdata.js"></script>
 <script type="text/javascript" src="search/search.js"></script>
@@ -20,6 +24,8 @@
 </script>
 <link href="doxygen.css" rel="stylesheet" type="text/css" />
 <link href="customdoxygen.css" rel="stylesheet" type="text/css"/>
+<link href="doxygen-awesome.css" rel="stylesheet" type="text/css"/>
+<link href="doxygen-awesome-sidebar-only.css" rel="stylesheet" type="text/css"/>
 <!-- BEGIN version select -->
 <link rel="stylesheet" type="text/css" href="../dropdown.css">
 <script type="text/javascript" src="https://ajax.googleapis.com/ajax/libs/jquery/3.2.1/jquery.min.js">
@@ -32,11 +38,13 @@
 <table cellspacing="0" cellpadding="0">
  <tbody>
  <tr style="height: 56px;">
+  <td id="projectlogo"><img alt="Logo" src="logo.png"/></td>
   <td id="projectalign" style="padding-left: 0.5em;">
    <div id="projectname">Realm
    <!-- BEGIN version select -->
+    <br />
     <div class="dropdown">
-     <button class="dropbtn">Version 0.0.1</button>
+     <button class="dropbtn">Version 0.0.1+6ce58b75</button>
      <div class="dropdown-content"></div>
     </div>
     <script type="text/javascript" src="../selectversion.js"></script>
@@ -84,6 +92,23 @@ var searchBox = new SearchBox("searchBox", "search/",'.html');
       <li><a href="functions.html"><span>Class&#160;Members</span></a></li>
     </ul>
   </div>
+</div><!-- top -->
+<div id="side-nav" class="ui-resizable side-nav-resizable">
+  <div id="nav-tree">
+    <div id="nav-tree-contents">
+      <div id="nav-sync" class="sync"></div>
+    </div>
+  </div>
+  <div id="splitbar" style="-moz-user-select:none;" 
+       class="ui-resizable-handle">
+  </div>
+</div>
+<script type="text/javascript">
+/* @license magnet:?xt=urn:btih:d3d9a9a6595521f9666a5e94cc830dab83b65699&amp;dn=expat.txt MIT */
+$(document).ready(function(){initNavTree('classRealm_1_1DynamicTable.html',''); initResizable(); });
+/* @license-end */
+</script>
+<div id="doc-content">
 <!-- window showing the filter options -->
 <div id="MSearchSelectWindow"
      onmouseover="return searchBox.OnSearchSelectShow()"
@@ -105,11 +130,6 @@ var searchBox = new SearchBox("searchBox", "search/",'.html');
 </div>
 </div>
 
-<div id="nav-path" class="navpath">
-  <ul>
-<li class="navelem"><a class="el" href="namespaceRealm.html">Realm</a></li><li class="navelem"><a class="el" href="classRealm_1_1DynamicTable.html">DynamicTable</a></li>  </ul>
-</div>
-</div><!-- top -->
 <div class="header">
   <div class="headertitle"><div class="title">Realm::DynamicTable&lt; ALLOCATOR &gt; Member List</div></div>
 </div><!--header-->
@@ -117,28 +137,35 @@ var searchBox = new SearchBox("searchBox", "search/",'.html');
 
 <p>This is the complete list of members for <a class="el" href="classRealm_1_1DynamicTable.html">Realm::DynamicTable&lt; ALLOCATOR &gt;</a>, including all inherited members.</p>
 <table class="directory">
-  <tr class="even"><td class="entry"><a class="el" href="classRealm_1_1DynamicTable.html#a8fb3f54c229da4775b27c554c81410ab">DynamicTable</a>(void)</td><td class="entry"><a class="el" href="classRealm_1_1DynamicTable.html">Realm::DynamicTable&lt; ALLOCATOR &gt;</a></td><td class="entry"></td></tr>
-  <tr class="odd"><td class="entry"><a class="el" href="classRealm_1_1DynamicTable.html#a2c8bac51ddb1ea4fe5d7f8492c796d4d">encode_root_and_level</a>(NodeBase *root, int level)</td><td class="entry"><a class="el" href="classRealm_1_1DynamicTable.html">Realm::DynamicTable&lt; ALLOCATOR &gt;</a></td><td class="entry"><span class="mlabel">protected</span><span class="mlabel">static</span></td></tr>
-  <tr class="even"><td class="entry"><a class="el" href="classRealm_1_1DynamicTable.html#a28b00073894e138122477b0a2ed7f139">ET</a> typedef</td><td class="entry"><a class="el" href="classRealm_1_1DynamicTable.html">Realm::DynamicTable&lt; ALLOCATOR &gt;</a></td><td class="entry"></td></tr>
-  <tr class="odd"><td class="entry"><a class="el" href="classRealm_1_1DynamicTable.html#a3b55d9ae499594371a2fd03b0d2d8508">extract_level</a>(intptr_t rlval)</td><td class="entry"><a class="el" href="classRealm_1_1DynamicTable.html">Realm::DynamicTable&lt; ALLOCATOR &gt;</a></td><td class="entry"><span class="mlabel">protected</span><span class="mlabel">static</span></td></tr>
-  <tr class="even"><td class="entry"><a class="el" href="classRealm_1_1DynamicTable.html#a68660b73ae2b42742d6cafd09f2ee484">extract_root</a>(intptr_t rlval)</td><td class="entry"><a class="el" href="classRealm_1_1DynamicTable.html">Realm::DynamicTable&lt; ALLOCATOR &gt;</a></td><td class="entry"><span class="mlabel">protected</span><span class="mlabel">static</span></td></tr>
-  <tr class="odd"><td class="entry"><a class="el" href="classRealm_1_1DynamicTable.html#a5a6ff4bd7b4bd79e8c21e84b9882080c">first_alloced_node</a></td><td class="entry"><a class="el" href="classRealm_1_1DynamicTable.html">Realm::DynamicTable&lt; ALLOCATOR &gt;</a></td><td class="entry"><span class="mlabel">protected</span></td></tr>
-  <tr class="even"><td class="entry"><a class="el" href="classRealm_1_1DynamicTable.html#adbade68d4bd308c4deffb14d99090006">has_entry</a>(IT index) const</td><td class="entry"><a class="el" href="classRealm_1_1DynamicTable.html">Realm::DynamicTable&lt; ALLOCATOR &gt;</a></td><td class="entry"></td></tr>
-  <tr class="odd"><td class="entry"><a class="el" href="classRealm_1_1DynamicTable.html#ac8b97aff4da914b336f9bad701619147">IT</a> typedef</td><td class="entry"><a class="el" href="classRealm_1_1DynamicTable.html">Realm::DynamicTable&lt; ALLOCATOR &gt;</a></td><td class="entry"></td></tr>
-  <tr class="even"><td class="entry"><a class="el" href="classRealm_1_1DynamicTable.html#ae84d972006a42f48888c4253cf5f0a06">lock</a></td><td class="entry"><a class="el" href="classRealm_1_1DynamicTable.html">Realm::DynamicTable&lt; ALLOCATOR &gt;</a></td><td class="entry"><span class="mlabel">protected</span></td></tr>
-  <tr class="odd"><td class="entry"><a class="el" href="classRealm_1_1DynamicTable.html#a337c591d478adea4658960e5d50be2c1">lookup_entry</a>(IT index, int owner, ET **free_list_head=0, ET **free_list_tail=0)</td><td class="entry"><a class="el" href="classRealm_1_1DynamicTable.html">Realm::DynamicTable&lt; ALLOCATOR &gt;</a></td><td class="entry"></td></tr>
-  <tr class="even"><td class="entry"><a class="el" href="classRealm_1_1DynamicTable.html#a01069a937704d0f8bcec0b88ff31f0d8">LT</a> typedef</td><td class="entry"><a class="el" href="classRealm_1_1DynamicTable.html">Realm::DynamicTable&lt; ALLOCATOR &gt;</a></td><td class="entry"></td></tr>
-  <tr class="odd"><td class="entry"><a class="el" href="classRealm_1_1DynamicTable.html#a161723781aacb580b872d07dcf38e2ea">max_entries</a>(void) const</td><td class="entry"><a class="el" href="classRealm_1_1DynamicTable.html">Realm::DynamicTable&lt; ALLOCATOR &gt;</a></td><td class="entry"></td></tr>
-  <tr class="even"><td class="entry"><a class="el" href="classRealm_1_1DynamicTable.html#afef37dc082c84f744c4911de51c8ec4f">new_tree_node</a>(int level, IT first_index, IT last_index, int owner, ET **free_list_head, ET **free_list_tail)</td><td class="entry"><a class="el" href="classRealm_1_1DynamicTable.html">Realm::DynamicTable&lt; ALLOCATOR &gt;</a></td><td class="entry"><span class="mlabel">protected</span></td></tr>
-  <tr class="odd"><td class="entry"><a class="el" href="classRealm_1_1DynamicTable.html#a3e8338eefb191826bb49d1139a8226da">NodeBase</a> typedef</td><td class="entry"><a class="el" href="classRealm_1_1DynamicTable.html">Realm::DynamicTable&lt; ALLOCATOR &gt;</a></td><td class="entry"></td></tr>
-  <tr class="even"><td class="entry"><a class="el" href="classRealm_1_1DynamicTable.html#adcfa7b9fd85b72621e6ee47fe6049d9f">prepend_alloced_node</a>(NodeBase *new_node)</td><td class="entry"><a class="el" href="classRealm_1_1DynamicTable.html">Realm::DynamicTable&lt; ALLOCATOR &gt;</a></td><td class="entry"><span class="mlabel">protected</span></td></tr>
-  <tr class="odd"><td class="entry"><a class="el" href="classRealm_1_1DynamicTable.html#ade6d5af214d8596cd2ea743e455f82aa">root_and_level</a></td><td class="entry"><a class="el" href="classRealm_1_1DynamicTable.html">Realm::DynamicTable&lt; ALLOCATOR &gt;</a></td><td class="entry"><span class="mlabel">protected</span></td></tr>
+  <tr class="even"><td class="entry"><a class="el" href="classRealm_1_1DynamicTable.html#a01e680626516b753f7a956d903088357">Constructor</a> typedef</td><td class="entry"><a class="el" href="classRealm_1_1DynamicTable.html">Realm::DynamicTable&lt; ALLOCATOR &gt;</a></td><td class="entry"></td></tr>
+  <tr class="odd"><td class="entry"><a class="el" href="classRealm_1_1DynamicTable.html#a8fb3f54c229da4775b27c554c81410ab">DynamicTable</a>(void)</td><td class="entry"><a class="el" href="classRealm_1_1DynamicTable.html">Realm::DynamicTable&lt; ALLOCATOR &gt;</a></td><td class="entry"></td></tr>
+  <tr class="even"><td class="entry"><a class="el" href="classRealm_1_1DynamicTable.html#a9c03125d520d1ab36c5678c54d24d61c">DynamicTable</a>(Constructor elem_ctor)</td><td class="entry"><a class="el" href="classRealm_1_1DynamicTable.html">Realm::DynamicTable&lt; ALLOCATOR &gt;</a></td><td class="entry"></td></tr>
+  <tr class="odd"><td class="entry"><a class="el" href="classRealm_1_1DynamicTable.html#a225993e1a6fb249073b4560cc6413102">elem_ctor</a></td><td class="entry"><a class="el" href="classRealm_1_1DynamicTable.html">Realm::DynamicTable&lt; ALLOCATOR &gt;</a></td><td class="entry"><span class="mlabel">protected</span></td></tr>
+  <tr class="even"><td class="entry"><a class="el" href="classRealm_1_1DynamicTable.html#a2c8bac51ddb1ea4fe5d7f8492c796d4d">encode_root_and_level</a>(NodeBase *root, int level)</td><td class="entry"><a class="el" href="classRealm_1_1DynamicTable.html">Realm::DynamicTable&lt; ALLOCATOR &gt;</a></td><td class="entry"><span class="mlabel">protected</span><span class="mlabel">static</span></td></tr>
+  <tr class="odd"><td class="entry"><a class="el" href="classRealm_1_1DynamicTable.html#a28b00073894e138122477b0a2ed7f139">ET</a> typedef</td><td class="entry"><a class="el" href="classRealm_1_1DynamicTable.html">Realm::DynamicTable&lt; ALLOCATOR &gt;</a></td><td class="entry"></td></tr>
+  <tr class="even"><td class="entry"><a class="el" href="classRealm_1_1DynamicTable.html#a3b55d9ae499594371a2fd03b0d2d8508">extract_level</a>(intptr_t rlval)</td><td class="entry"><a class="el" href="classRealm_1_1DynamicTable.html">Realm::DynamicTable&lt; ALLOCATOR &gt;</a></td><td class="entry"><span class="mlabel">protected</span><span class="mlabel">static</span></td></tr>
+  <tr class="odd"><td class="entry"><a class="el" href="classRealm_1_1DynamicTable.html#a68660b73ae2b42742d6cafd09f2ee484">extract_root</a>(intptr_t rlval)</td><td class="entry"><a class="el" href="classRealm_1_1DynamicTable.html">Realm::DynamicTable&lt; ALLOCATOR &gt;</a></td><td class="entry"><span class="mlabel">protected</span><span class="mlabel">static</span></td></tr>
+  <tr class="even"><td class="entry"><a class="el" href="classRealm_1_1DynamicTable.html#a5a6ff4bd7b4bd79e8c21e84b9882080c">first_alloced_node</a></td><td class="entry"><a class="el" href="classRealm_1_1DynamicTable.html">Realm::DynamicTable&lt; ALLOCATOR &gt;</a></td><td class="entry"><span class="mlabel">protected</span></td></tr>
+  <tr class="odd"><td class="entry"><a class="el" href="classRealm_1_1DynamicTable.html#adbade68d4bd308c4deffb14d99090006">has_entry</a>(IT index) const</td><td class="entry"><a class="el" href="classRealm_1_1DynamicTable.html">Realm::DynamicTable&lt; ALLOCATOR &gt;</a></td><td class="entry"></td></tr>
+  <tr class="even"><td class="entry"><a class="el" href="classRealm_1_1DynamicTable.html#ac8b97aff4da914b336f9bad701619147">IT</a> typedef</td><td class="entry"><a class="el" href="classRealm_1_1DynamicTable.html">Realm::DynamicTable&lt; ALLOCATOR &gt;</a></td><td class="entry"></td></tr>
+  <tr class="odd"><td class="entry"><a class="el" href="classRealm_1_1DynamicTable.html#ae84d972006a42f48888c4253cf5f0a06">lock</a></td><td class="entry"><a class="el" href="classRealm_1_1DynamicTable.html">Realm::DynamicTable&lt; ALLOCATOR &gt;</a></td><td class="entry"><span class="mlabel">protected</span></td></tr>
+  <tr class="even"><td class="entry"><a class="el" href="classRealm_1_1DynamicTable.html#a337c591d478adea4658960e5d50be2c1">lookup_entry</a>(IT index, int owner, ET **free_list_head=0, ET **free_list_tail=0)</td><td class="entry"><a class="el" href="classRealm_1_1DynamicTable.html">Realm::DynamicTable&lt; ALLOCATOR &gt;</a></td><td class="entry"></td></tr>
+  <tr class="odd"><td class="entry"><a class="el" href="classRealm_1_1DynamicTable.html#a01069a937704d0f8bcec0b88ff31f0d8">LT</a> typedef</td><td class="entry"><a class="el" href="classRealm_1_1DynamicTable.html">Realm::DynamicTable&lt; ALLOCATOR &gt;</a></td><td class="entry"></td></tr>
+  <tr class="even"><td class="entry"><a class="el" href="classRealm_1_1DynamicTable.html#a161723781aacb580b872d07dcf38e2ea">max_entries</a>(void) const</td><td class="entry"><a class="el" href="classRealm_1_1DynamicTable.html">Realm::DynamicTable&lt; ALLOCATOR &gt;</a></td><td class="entry"></td></tr>
+  <tr class="odd"><td class="entry"><a class="el" href="classRealm_1_1DynamicTable.html#afef37dc082c84f744c4911de51c8ec4f">new_tree_node</a>(int level, IT first_index, IT last_index, int owner, ET **free_list_head, ET **free_list_tail)</td><td class="entry"><a class="el" href="classRealm_1_1DynamicTable.html">Realm::DynamicTable&lt; ALLOCATOR &gt;</a></td><td class="entry"><span class="mlabel">protected</span></td></tr>
+  <tr class="even"><td class="entry"><a class="el" href="classRealm_1_1DynamicTable.html#a3e8338eefb191826bb49d1139a8226da">NodeBase</a> typedef</td><td class="entry"><a class="el" href="classRealm_1_1DynamicTable.html">Realm::DynamicTable&lt; ALLOCATOR &gt;</a></td><td class="entry"></td></tr>
+  <tr class="odd"><td class="entry"><a class="el" href="classRealm_1_1DynamicTable.html#adcfa7b9fd85b72621e6ee47fe6049d9f">prepend_alloced_node</a>(NodeBase *new_node)</td><td class="entry"><a class="el" href="classRealm_1_1DynamicTable.html">Realm::DynamicTable&lt; ALLOCATOR &gt;</a></td><td class="entry"><span class="mlabel">protected</span></td></tr>
+  <tr class="even"><td class="entry"><a class="el" href="classRealm_1_1DynamicTable.html#ade6d5af214d8596cd2ea743e455f82aa">root_and_level</a></td><td class="entry"><a class="el" href="classRealm_1_1DynamicTable.html">Realm::DynamicTable&lt; ALLOCATOR &gt;</a></td><td class="entry"><span class="mlabel">protected</span></td></tr>
+  <tr class="odd"><td class="entry"><a class="el" href="classRealm_1_1DynamicTable.html#a63157a7a524d2f3d4dd768c2740e0518">set_constructor</a>(Constructor &amp;_elem_ctor)</td><td class="entry"><a class="el" href="classRealm_1_1DynamicTable.html">Realm::DynamicTable&lt; ALLOCATOR &gt;</a></td><td class="entry"></td></tr>
   <tr class="even"><td class="entry"><a class="el" href="classRealm_1_1DynamicTable.html#abb398770f5682127c421dff5c0bf14b1">~DynamicTable</a>(void)</td><td class="entry"><a class="el" href="classRealm_1_1DynamicTable.html">Realm::DynamicTable&lt; ALLOCATOR &gt;</a></td><td class="entry"></td></tr>
 </table></div><!-- contents -->
+</div><!-- doc-content -->
 <!-- HTML footer for doxygen 1.9.1-->
 <!-- start footer part -->
-<hr class="footer"/><address class="footer"><small>
-Generated by&#160;<a href="https://www.doxygen.org/index.html"><img class="footer" src="doxygen.svg" width="104" height="31" alt="doxygen"/></a> 1.9.8
-</small></address>
+<div id="nav-path" class="navpath"><!-- id is needed for treeview function! -->
+  <ul>
+    <li class="footer">Generated by <a href="https://www.doxygen.org/index.html"><img class="footer" src="doxygen.svg" width="104" height="31" alt="doxygen"/></a> 1.9.8 </li>
+  </ul>
+</div>
 </body>
 </html>

@@ -6,10 +6,14 @@
 <meta http-equiv="X-UA-Compatible" content="IE=9"/>
 <meta name="generator" content="Doxygen 1.9.8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1"/>
-<title>Realm: Realm::DynamicTableAllocator&lt; _ET, _INNER_BITS, _LEAF_BITS &gt; Class Template Reference</title>
+<title>Realm: Realm::DynamicTableAllocator&lt; _ET, _INNER_BITS, _LEAF_BITS, CONSTRUCTOR &gt; Class Template Reference</title>
 <link href="tabs.css" rel="stylesheet" type="text/css"/>
 <script type="text/javascript" src="jquery.js"></script>
 <script type="text/javascript" src="dynsections.js"></script>
+<link href="navtree.css" rel="stylesheet" type="text/css"/>
+<script type="text/javascript" src="resize.js"></script>
+<script type="text/javascript" src="navtreedata.js"></script>
+<script type="text/javascript" src="navtree.js"></script>
 <link href="search/search.css" rel="stylesheet" type="text/css"/>
 <script type="text/javascript" src="search/searchdata.js"></script>
 <script type="text/javascript" src="search/search.js"></script>
@@ -20,6 +24,8 @@
 </script>
 <link href="doxygen.css" rel="stylesheet" type="text/css" />
 <link href="customdoxygen.css" rel="stylesheet" type="text/css"/>
+<link href="doxygen-awesome.css" rel="stylesheet" type="text/css"/>
+<link href="doxygen-awesome-sidebar-only.css" rel="stylesheet" type="text/css"/>
 <!-- BEGIN version select -->
 <link rel="stylesheet" type="text/css" href="../dropdown.css">
 <script type="text/javascript" src="https://ajax.googleapis.com/ajax/libs/jquery/3.2.1/jquery.min.js">
@@ -32,11 +38,13 @@
 <table cellspacing="0" cellpadding="0">
  <tbody>
  <tr style="height: 56px;">
+  <td id="projectlogo"><img alt="Logo" src="logo.png"/></td>
   <td id="projectalign" style="padding-left: 0.5em;">
    <div id="projectname">Realm
    <!-- BEGIN version select -->
+    <br />
     <div class="dropdown">
-     <button class="dropbtn">Version 0.0.1</button>
+     <button class="dropbtn">Version 0.0.1+6ce58b75</button>
      <div class="dropdown-content"></div>
     </div>
     <script type="text/javascript" src="../selectversion.js"></script>
@@ -84,6 +92,23 @@ var searchBox = new SearchBox("searchBox", "search/",'.html');
       <li><a href="functions.html"><span>Class&#160;Members</span></a></li>
     </ul>
   </div>
+</div><!-- top -->
+<div id="side-nav" class="ui-resizable side-nav-resizable">
+  <div id="nav-tree">
+    <div id="nav-tree-contents">
+      <div id="nav-sync" class="sync"></div>
+    </div>
+  </div>
+  <div id="splitbar" style="-moz-user-select:none;" 
+       class="ui-resizable-handle">
+  </div>
+</div>
+<script type="text/javascript">
+/* @license magnet:?xt=urn:btih:d3d9a9a6595521f9666a5e94cc830dab83b65699&amp;dn=expat.txt MIT */
+$(document).ready(function(){initNavTree('classRealm_1_1DynamicTableAllocator.html',''); initResizable(); });
+/* @license-end */
+</script>
+<div id="doc-content">
 <!-- window showing the filter options -->
 <div id="MSearchSelectWindow"
      onmouseover="return searchBox.OnSearchSelectShow()"
@@ -105,18 +130,13 @@ var searchBox = new SearchBox("searchBox", "search/",'.html');
 </div>
 </div>
 
-<div id="nav-path" class="navpath">
-  <ul>
-<li class="navelem"><a class="el" href="namespaceRealm.html">Realm</a></li><li class="navelem"><a class="el" href="classRealm_1_1DynamicTableAllocator.html">DynamicTableAllocator</a></li>  </ul>
-</div>
-</div><!-- top -->
 <div class="header">
   <div class="summary">
 <a href="#pub-types">Public Types</a> &#124;
 <a href="#pub-static-methods">Static Public Member Functions</a> &#124;
 <a href="#pub-static-attribs">Static Public Attributes</a> &#124;
 <a href="classRealm_1_1DynamicTableAllocator-members.html">List of all members</a>  </div>
-  <div class="headertitle"><div class="title">Realm::DynamicTableAllocator&lt; _ET, _INNER_BITS, _LEAF_BITS &gt; Class Template Reference</div></div>
+  <div class="headertitle"><div class="title">Realm::DynamicTableAllocator&lt; _ET, _INNER_BITS, _LEAF_BITS, CONSTRUCTOR &gt; Class Template Reference</div></div>
 </div><!--header-->
 <div class="contents">
 
@@ -124,128 +144,146 @@ var searchBox = new SearchBox("searchBox", "search/",'.html');
 <table class="memberdecls">
 <tr class="heading"><td colspan="2"><h2 class="groupheader"><a id="pub-types" name="pub-types"></a>
 Public Types</h2></td></tr>
-<tr class="memitem:ac8fd7d5299c6b82840e79e1bd45f690f" id="r_ac8fd7d5299c6b82840e79e1bd45f690f"><td class="memItemLeft" align="right" valign="top">typedef _ET&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="classRealm_1_1DynamicTableAllocator.html#ac8fd7d5299c6b82840e79e1bd45f690f">ET</a></td></tr>
-<tr class="separator:ac8fd7d5299c6b82840e79e1bd45f690f"><td class="memSeparator" colspan="2">&#160;</td></tr>
-<tr class="memitem:a89d383abe0a1cbf181c40fed35c37145" id="r_a89d383abe0a1cbf181c40fed35c37145"><td class="memItemLeft" align="right" valign="top">typedef <a class="el" href="namespaceRealm.html#a4713e57139284efc3da66bd4bbc20ebe">Mutex</a>&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="classRealm_1_1DynamicTableAllocator.html#a89d383abe0a1cbf181c40fed35c37145">LT</a></td></tr>
-<tr class="separator:a89d383abe0a1cbf181c40fed35c37145"><td class="memSeparator" colspan="2">&#160;</td></tr>
-<tr class="memitem:a00249df2a0fe9f97831e2fc56f46c693" id="r_a00249df2a0fe9f97831e2fc56f46c693"><td class="memItemLeft" align="right" valign="top">typedef <a class="el" href="classRealm_1_1ID.html#ad51ee555620cb292ec79334266f04972">ID::IDType</a>&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="classRealm_1_1DynamicTableAllocator.html#a00249df2a0fe9f97831e2fc56f46c693">IT</a></td></tr>
-<tr class="separator:a00249df2a0fe9f97831e2fc56f46c693"><td class="memSeparator" colspan="2">&#160;</td></tr>
-<tr class="memitem:a011d791673d0572b334adea062369248" id="r_a011d791673d0572b334adea062369248"><td class="memItemLeft" align="right" valign="top">typedef <a class="el" href="structRealm_1_1DynamicTableNode.html">DynamicTableNode</a>&lt; <a class="el" href="classRealm_1_1atomic.html">atomic</a>&lt; <a class="el" href="structRealm_1_1DynamicTableNodeBase.html">DynamicTableNodeBase</a>&lt; <a class="el" href="classRealm_1_1DynamicTableAllocator.html#a89d383abe0a1cbf181c40fed35c37145">LT</a>, <a class="el" href="classRealm_1_1DynamicTableAllocator.html#a00249df2a0fe9f97831e2fc56f46c693">IT</a> &gt; * &gt;, 1&lt;&lt; <a class="el" href="classRealm_1_1DynamicTableAllocator.html#a7033255d302c6f0d4fe16f583abad241">INNER_BITS</a>, <a class="el" href="classRealm_1_1DynamicTableAllocator.html#a89d383abe0a1cbf181c40fed35c37145">LT</a>, <a class="el" href="classRealm_1_1DynamicTableAllocator.html#a00249df2a0fe9f97831e2fc56f46c693">IT</a> &gt;&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="classRealm_1_1DynamicTableAllocator.html#a011d791673d0572b334adea062369248">INNER_TYPE</a></td></tr>
-<tr class="separator:a011d791673d0572b334adea062369248"><td class="memSeparator" colspan="2">&#160;</td></tr>
-<tr class="memitem:aa12aebc03595bfa25261e3c8dda84c86" id="r_aa12aebc03595bfa25261e3c8dda84c86"><td class="memItemLeft" align="right" valign="top">typedef <a class="el" href="structRealm_1_1DynamicTableNode.html">DynamicTableNode</a>&lt; <a class="el" href="classRealm_1_1DynamicTableAllocator.html#ac8fd7d5299c6b82840e79e1bd45f690f">ET</a>, 1&lt;&lt; <a class="el" href="classRealm_1_1DynamicTableAllocator.html#a443dbe523dc762e0489be37510bcbcb5">LEAF_BITS</a>, <a class="el" href="classRealm_1_1DynamicTableAllocator.html#a89d383abe0a1cbf181c40fed35c37145">LT</a>, <a class="el" href="classRealm_1_1DynamicTableAllocator.html#a00249df2a0fe9f97831e2fc56f46c693">IT</a> &gt;&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="classRealm_1_1DynamicTableAllocator.html#aa12aebc03595bfa25261e3c8dda84c86">LEAF_TYPE</a></td></tr>
-<tr class="separator:aa12aebc03595bfa25261e3c8dda84c86"><td class="memSeparator" colspan="2">&#160;</td></tr>
-<tr class="memitem:af741ae8154564c2ce7404f6ecbf95311" id="r_af741ae8154564c2ce7404f6ecbf95311"><td class="memItemLeft" align="right" valign="top">typedef <a class="el" href="classRealm_1_1DynamicTableFreeList.html">DynamicTableFreeList</a>&lt; <a class="el" href="classRealm_1_1DynamicTableAllocator.html">DynamicTableAllocator</a>&lt; <a class="el" href="classRealm_1_1DynamicTableAllocator.html#ac8fd7d5299c6b82840e79e1bd45f690f">ET</a>, _INNER_BITS, _LEAF_BITS &gt; &gt;&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="classRealm_1_1DynamicTableAllocator.html#af741ae8154564c2ce7404f6ecbf95311">FreeList</a></td></tr>
-<tr class="separator:af741ae8154564c2ce7404f6ecbf95311"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:a74428c0d440cc2df332860ba2f90b78b" id="r_a74428c0d440cc2df332860ba2f90b78b"><td class="memItemLeft" align="right" valign="top">typedef _ET&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="classRealm_1_1DynamicTableAllocator.html#a74428c0d440cc2df332860ba2f90b78b">ET</a></td></tr>
+<tr class="separator:a74428c0d440cc2df332860ba2f90b78b"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:a975bc46fbce24f261d40979be2708f5d" id="r_a975bc46fbce24f261d40979be2708f5d"><td class="memItemLeft" align="right" valign="top">using&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="classRealm_1_1DynamicTableAllocator.html#a975bc46fbce24f261d40979be2708f5d">Constructor</a> = CONSTRUCTOR</td></tr>
+<tr class="separator:a975bc46fbce24f261d40979be2708f5d"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:a2a7a76cbdd22a55bae5ffd1d63ce0fa2" id="r_a2a7a76cbdd22a55bae5ffd1d63ce0fa2"><td class="memItemLeft" align="right" valign="top">typedef <a class="el" href="namespaceRealm.html#a4713e57139284efc3da66bd4bbc20ebe">Mutex</a>&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="classRealm_1_1DynamicTableAllocator.html#a2a7a76cbdd22a55bae5ffd1d63ce0fa2">LT</a></td></tr>
+<tr class="separator:a2a7a76cbdd22a55bae5ffd1d63ce0fa2"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:accad69e67bccc1c2556a7573f54eea0a" id="r_accad69e67bccc1c2556a7573f54eea0a"><td class="memItemLeft" align="right" valign="top">typedef <a class="el" href="classRealm_1_1ID.html#ad51ee555620cb292ec79334266f04972">ID::IDType</a>&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="classRealm_1_1DynamicTableAllocator.html#accad69e67bccc1c2556a7573f54eea0a">IT</a></td></tr>
+<tr class="separator:accad69e67bccc1c2556a7573f54eea0a"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:a4f92af28b6e7e3a6e7e1040510fcdb53" id="r_a4f92af28b6e7e3a6e7e1040510fcdb53"><td class="memItemLeft" align="right" valign="top">typedef <a class="el" href="structRealm_1_1DynamicTableNode.html">DynamicTableNode</a>&lt; <a class="el" href="classRealm_1_1atomic.html">atomic</a>&lt; <a class="el" href="structRealm_1_1DynamicTableNodeBase.html">DynamicTableNodeBase</a>&lt; <a class="el" href="classRealm_1_1DynamicTableAllocator.html#a2a7a76cbdd22a55bae5ffd1d63ce0fa2">LT</a>, <a class="el" href="classRealm_1_1DynamicTableAllocator.html#accad69e67bccc1c2556a7573f54eea0a">IT</a> &gt; * &gt;, 1&lt;&lt; <a class="el" href="classRealm_1_1DynamicTableAllocator.html#a620a7467bab65ac6f6951b6ea4cf0fd7">INNER_BITS</a>, <a class="el" href="classRealm_1_1DynamicTableAllocator.html#a2a7a76cbdd22a55bae5ffd1d63ce0fa2">LT</a>, <a class="el" href="classRealm_1_1DynamicTableAllocator.html#accad69e67bccc1c2556a7573f54eea0a">IT</a> &gt;&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="classRealm_1_1DynamicTableAllocator.html#a4f92af28b6e7e3a6e7e1040510fcdb53">INNER_TYPE</a></td></tr>
+<tr class="separator:a4f92af28b6e7e3a6e7e1040510fcdb53"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:a91f8c2477b4ea8ce71cdd70c91c5459b" id="r_a91f8c2477b4ea8ce71cdd70c91c5459b"><td class="memItemLeft" align="right" valign="top">typedef <a class="el" href="structRealm_1_1DynamicTableNode.html">DynamicTableNode</a>&lt; <a class="el" href="classRealm_1_1DynamicTableAllocator.html#a74428c0d440cc2df332860ba2f90b78b">ET</a>, 1&lt;&lt; <a class="el" href="classRealm_1_1DynamicTableAllocator.html#ae998f7a45b5300be284f1f986e190238">LEAF_BITS</a>, <a class="el" href="classRealm_1_1DynamicTableAllocator.html#a2a7a76cbdd22a55bae5ffd1d63ce0fa2">LT</a>, <a class="el" href="classRealm_1_1DynamicTableAllocator.html#accad69e67bccc1c2556a7573f54eea0a">IT</a> &gt;&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="classRealm_1_1DynamicTableAllocator.html#a91f8c2477b4ea8ce71cdd70c91c5459b">LEAF_TYPE</a></td></tr>
+<tr class="separator:a91f8c2477b4ea8ce71cdd70c91c5459b"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:a6cb931a1aa0c275bb7fd77b4a780bf3d" id="r_a6cb931a1aa0c275bb7fd77b4a780bf3d"><td class="memItemLeft" align="right" valign="top">typedef <a class="el" href="classRealm_1_1DynamicTableFreeList.html">DynamicTableFreeList</a>&lt; <a class="el" href="classRealm_1_1DynamicTableAllocator.html">DynamicTableAllocator</a>&lt; <a class="el" href="classRealm_1_1DynamicTableAllocator.html#a74428c0d440cc2df332860ba2f90b78b">ET</a>, _INNER_BITS, _LEAF_BITS, <a class="el" href="classRealm_1_1DynamicTableAllocator.html#a975bc46fbce24f261d40979be2708f5d">Constructor</a> &gt; &gt;&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="classRealm_1_1DynamicTableAllocator.html#a6cb931a1aa0c275bb7fd77b4a780bf3d">FreeList</a></td></tr>
+<tr class="separator:a6cb931a1aa0c275bb7fd77b4a780bf3d"><td class="memSeparator" colspan="2">&#160;</td></tr>
 </table><table class="memberdecls">
 <tr class="heading"><td colspan="2"><h2 class="groupheader"><a id="pub-static-methods" name="pub-static-methods"></a>
 Static Public Member Functions</h2></td></tr>
-<tr class="memitem:a8a66e34038d96f16f6b12fda16ea7dc5" id="r_a8a66e34038d96f16f6b12fda16ea7dc5"><td class="memItemLeft" align="right" valign="top">static std::vector&lt; <a class="el" href="classRealm_1_1DynamicTableAllocator.html#af741ae8154564c2ce7404f6ecbf95311">FreeList</a> * &gt; &amp;&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="classRealm_1_1DynamicTableAllocator.html#a8a66e34038d96f16f6b12fda16ea7dc5">get_registered_freelists</a> (<a class="el" href="namespaceRealm.html#a4713e57139284efc3da66bd4bbc20ebe">Mutex</a> *&amp;lock)</td></tr>
-<tr class="separator:a8a66e34038d96f16f6b12fda16ea7dc5"><td class="memSeparator" colspan="2">&#160;</td></tr>
-<tr class="memitem:adbf88782b7635d9002ad857c281ab333" id="r_adbf88782b7635d9002ad857c281ab333"><td class="memItemLeft" align="right" valign="top">static void&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="classRealm_1_1DynamicTableAllocator.html#adbf88782b7635d9002ad857c281ab333">register_freelist</a> (<a class="el" href="classRealm_1_1DynamicTableAllocator.html#af741ae8154564c2ce7404f6ecbf95311">FreeList</a> *free_list)</td></tr>
-<tr class="separator:adbf88782b7635d9002ad857c281ab333"><td class="memSeparator" colspan="2">&#160;</td></tr>
-<tr class="memitem:abc5e81389e93628ba555d4934f6a4ebb" id="r_abc5e81389e93628ba555d4934f6a4ebb"><td class="memItemLeft" align="right" valign="top">static <a class="el" href="classRealm_1_1DynamicTableAllocator.html#ac8fd7d5299c6b82840e79e1bd45f690f">ET</a> *&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="classRealm_1_1DynamicTableAllocator.html#abc5e81389e93628ba555d4934f6a4ebb">steal_freelist_element</a> (<a class="el" href="classRealm_1_1DynamicTableAllocator.html#af741ae8154564c2ce7404f6ecbf95311">FreeList</a> *requestor=nullptr)</td></tr>
-<tr class="separator:abc5e81389e93628ba555d4934f6a4ebb"><td class="memSeparator" colspan="2">&#160;</td></tr>
-<tr class="memitem:ad593db170770ebd0156a9a0f71823b94" id="r_ad593db170770ebd0156a9a0f71823b94"><td class="memItemLeft" align="right" valign="top">static <a class="el" href="classRealm_1_1DynamicTableAllocator.html#aa12aebc03595bfa25261e3c8dda84c86">LEAF_TYPE</a> *&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="classRealm_1_1DynamicTableAllocator.html#ad593db170770ebd0156a9a0f71823b94">new_leaf_node</a> (<a class="el" href="classRealm_1_1DynamicTableAllocator.html#a00249df2a0fe9f97831e2fc56f46c693">IT</a> first_index, <a class="el" href="classRealm_1_1DynamicTableAllocator.html#a00249df2a0fe9f97831e2fc56f46c693">IT</a> last_index, int owner, <a class="el" href="classRealm_1_1DynamicTableAllocator.html#ac8fd7d5299c6b82840e79e1bd45f690f">ET</a> **free_list_head, <a class="el" href="classRealm_1_1DynamicTableAllocator.html#ac8fd7d5299c6b82840e79e1bd45f690f">ET</a> **free_list_tail)</td></tr>
-<tr class="separator:ad593db170770ebd0156a9a0f71823b94"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:a45191dc4f4f509dc6be879d2b33368d9" id="r_a45191dc4f4f509dc6be879d2b33368d9"><td class="memItemLeft" align="right" valign="top">static std::vector&lt; <a class="el" href="classRealm_1_1DynamicTableAllocator.html#a6cb931a1aa0c275bb7fd77b4a780bf3d">FreeList</a> * &gt; &amp;&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="classRealm_1_1DynamicTableAllocator.html#a45191dc4f4f509dc6be879d2b33368d9">get_registered_freelists</a> (<a class="el" href="namespaceRealm.html#a4713e57139284efc3da66bd4bbc20ebe">Mutex</a> *&amp;lock)</td></tr>
+<tr class="separator:a45191dc4f4f509dc6be879d2b33368d9"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:a4add93c11a6a2687191a8e820441775e" id="r_a4add93c11a6a2687191a8e820441775e"><td class="memItemLeft" align="right" valign="top">static void&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="classRealm_1_1DynamicTableAllocator.html#a4add93c11a6a2687191a8e820441775e">register_freelist</a> (<a class="el" href="classRealm_1_1DynamicTableAllocator.html#a6cb931a1aa0c275bb7fd77b4a780bf3d">FreeList</a> *free_list)</td></tr>
+<tr class="separator:a4add93c11a6a2687191a8e820441775e"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:a3e21b4e07da17f4015e9a521c7656d72" id="r_a3e21b4e07da17f4015e9a521c7656d72"><td class="memItemLeft" align="right" valign="top">static <a class="el" href="classRealm_1_1DynamicTableAllocator.html#a74428c0d440cc2df332860ba2f90b78b">ET</a> *&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="classRealm_1_1DynamicTableAllocator.html#a3e21b4e07da17f4015e9a521c7656d72">steal_freelist_element</a> (<a class="el" href="classRealm_1_1DynamicTableAllocator.html#a6cb931a1aa0c275bb7fd77b4a780bf3d">FreeList</a> *requestor=nullptr)</td></tr>
+<tr class="separator:a3e21b4e07da17f4015e9a521c7656d72"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:a7dc06ed57da414b87b7e0fb149e62dad" id="r_a7dc06ed57da414b87b7e0fb149e62dad"><td class="memItemLeft" align="right" valign="top">static <a class="el" href="classRealm_1_1DynamicTableAllocator.html#a91f8c2477b4ea8ce71cdd70c91c5459b">LEAF_TYPE</a> *&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="classRealm_1_1DynamicTableAllocator.html#a7dc06ed57da414b87b7e0fb149e62dad">new_leaf_node</a> (<a class="el" href="classRealm_1_1DynamicTableAllocator.html#accad69e67bccc1c2556a7573f54eea0a">IT</a> first_index, <a class="el" href="classRealm_1_1DynamicTableAllocator.html#accad69e67bccc1c2556a7573f54eea0a">IT</a> last_index, int owner, <a class="el" href="classRealm_1_1DynamicTableAllocator.html#a74428c0d440cc2df332860ba2f90b78b">ET</a> **free_list_head, <a class="el" href="classRealm_1_1DynamicTableAllocator.html#a74428c0d440cc2df332860ba2f90b78b">ET</a> **free_list_tail, const <a class="el" href="classRealm_1_1DynamicTableAllocator.html#a975bc46fbce24f261d40979be2708f5d">Constructor</a> &amp;elem_ctor_obj)</td></tr>
+<tr class="separator:a7dc06ed57da414b87b7e0fb149e62dad"><td class="memSeparator" colspan="2">&#160;</td></tr>
 </table><table class="memberdecls">
 <tr class="heading"><td colspan="2"><h2 class="groupheader"><a id="pub-static-attribs" name="pub-static-attribs"></a>
 Static Public Attributes</h2></td></tr>
-<tr class="memitem:a7033255d302c6f0d4fe16f583abad241" id="r_a7033255d302c6f0d4fe16f583abad241"><td class="memItemLeft" align="right" valign="top">static const size_t&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="classRealm_1_1DynamicTableAllocator.html#a7033255d302c6f0d4fe16f583abad241">INNER_BITS</a> = _INNER_BITS</td></tr>
-<tr class="separator:a7033255d302c6f0d4fe16f583abad241"><td class="memSeparator" colspan="2">&#160;</td></tr>
-<tr class="memitem:a443dbe523dc762e0489be37510bcbcb5" id="r_a443dbe523dc762e0489be37510bcbcb5"><td class="memItemLeft" align="right" valign="top">static const size_t&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="classRealm_1_1DynamicTableAllocator.html#a443dbe523dc762e0489be37510bcbcb5">LEAF_BITS</a> = _LEAF_BITS</td></tr>
-<tr class="separator:a443dbe523dc762e0489be37510bcbcb5"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:a620a7467bab65ac6f6951b6ea4cf0fd7" id="r_a620a7467bab65ac6f6951b6ea4cf0fd7"><td class="memItemLeft" align="right" valign="top">static const size_t&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="classRealm_1_1DynamicTableAllocator.html#a620a7467bab65ac6f6951b6ea4cf0fd7">INNER_BITS</a> = _INNER_BITS</td></tr>
+<tr class="separator:a620a7467bab65ac6f6951b6ea4cf0fd7"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:ae998f7a45b5300be284f1f986e190238" id="r_ae998f7a45b5300be284f1f986e190238"><td class="memItemLeft" align="right" valign="top">static const size_t&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="classRealm_1_1DynamicTableAllocator.html#ae998f7a45b5300be284f1f986e190238">LEAF_BITS</a> = _LEAF_BITS</td></tr>
+<tr class="separator:ae998f7a45b5300be284f1f986e190238"><td class="memSeparator" colspan="2">&#160;</td></tr>
 </table>
 <h2 class="groupheader">Member Typedef Documentation</h2>
-<a id="ac8fd7d5299c6b82840e79e1bd45f690f" name="ac8fd7d5299c6b82840e79e1bd45f690f"></a>
-<h2 class="memtitle"><span class="permalink"><a href="#ac8fd7d5299c6b82840e79e1bd45f690f">&#9670;&#160;</a></span>ET</h2>
+<a id="a975bc46fbce24f261d40979be2708f5d" name="a975bc46fbce24f261d40979be2708f5d"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a975bc46fbce24f261d40979be2708f5d">&#9670;&#160;</a></span>Constructor</h2>
 
 <div class="memitem">
 <div class="memproto">
 <div class="memtemplate">
-template&lt;typename _ET , size_t _INNER_BITS, size_t _LEAF_BITS&gt; </div>
+template&lt;typename _ET , size_t _INNER_BITS, size_t _LEAF_BITS, typename CONSTRUCTOR  = DefaultElementConstructor&lt;_ET&gt;&gt; </div>
       <table class="memname">
         <tr>
-          <td class="memname">typedef _ET <a class="el" href="classRealm_1_1DynamicTableAllocator.html">Realm::DynamicTableAllocator</a>&lt; _ET, _INNER_BITS, _LEAF_BITS &gt;::ET</td>
+          <td class="memname">using <a class="el" href="classRealm_1_1DynamicTableAllocator.html">Realm::DynamicTableAllocator</a>&lt; _ET, _INNER_BITS, _LEAF_BITS, CONSTRUCTOR &gt;::Constructor =  CONSTRUCTOR</td>
         </tr>
       </table>
 </div><div class="memdoc">
 
 </div>
 </div>
-<a id="af741ae8154564c2ce7404f6ecbf95311" name="af741ae8154564c2ce7404f6ecbf95311"></a>
-<h2 class="memtitle"><span class="permalink"><a href="#af741ae8154564c2ce7404f6ecbf95311">&#9670;&#160;</a></span>FreeList</h2>
+<a id="a74428c0d440cc2df332860ba2f90b78b" name="a74428c0d440cc2df332860ba2f90b78b"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a74428c0d440cc2df332860ba2f90b78b">&#9670;&#160;</a></span>ET</h2>
 
 <div class="memitem">
 <div class="memproto">
 <div class="memtemplate">
-template&lt;typename _ET , size_t _INNER_BITS, size_t _LEAF_BITS&gt; </div>
+template&lt;typename _ET , size_t _INNER_BITS, size_t _LEAF_BITS, typename CONSTRUCTOR  = DefaultElementConstructor&lt;_ET&gt;&gt; </div>
       <table class="memname">
         <tr>
-          <td class="memname">typedef <a class="el" href="classRealm_1_1DynamicTableFreeList.html">DynamicTableFreeList</a>&lt;<a class="el" href="classRealm_1_1DynamicTableAllocator.html">DynamicTableAllocator</a>&lt;<a class="el" href="classRealm_1_1DynamicTableAllocator.html#ac8fd7d5299c6b82840e79e1bd45f690f">ET</a>, _INNER_BITS, _LEAF_BITS&gt; &gt; <a class="el" href="classRealm_1_1DynamicTableAllocator.html">Realm::DynamicTableAllocator</a>&lt; _ET, _INNER_BITS, _LEAF_BITS &gt;::FreeList</td>
+          <td class="memname">typedef _ET <a class="el" href="classRealm_1_1DynamicTableAllocator.html">Realm::DynamicTableAllocator</a>&lt; _ET, _INNER_BITS, _LEAF_BITS, CONSTRUCTOR &gt;::ET</td>
         </tr>
       </table>
 </div><div class="memdoc">
 
 </div>
 </div>
-<a id="a011d791673d0572b334adea062369248" name="a011d791673d0572b334adea062369248"></a>
-<h2 class="memtitle"><span class="permalink"><a href="#a011d791673d0572b334adea062369248">&#9670;&#160;</a></span>INNER_TYPE</h2>
+<a id="a6cb931a1aa0c275bb7fd77b4a780bf3d" name="a6cb931a1aa0c275bb7fd77b4a780bf3d"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a6cb931a1aa0c275bb7fd77b4a780bf3d">&#9670;&#160;</a></span>FreeList</h2>
 
 <div class="memitem">
 <div class="memproto">
 <div class="memtemplate">
-template&lt;typename _ET , size_t _INNER_BITS, size_t _LEAF_BITS&gt; </div>
+template&lt;typename _ET , size_t _INNER_BITS, size_t _LEAF_BITS, typename CONSTRUCTOR  = DefaultElementConstructor&lt;_ET&gt;&gt; </div>
       <table class="memname">
         <tr>
-          <td class="memname">typedef <a class="el" href="structRealm_1_1DynamicTableNode.html">DynamicTableNode</a>&lt;<a class="el" href="classRealm_1_1atomic.html">atomic</a>&lt;<a class="el" href="structRealm_1_1DynamicTableNodeBase.html">DynamicTableNodeBase</a>&lt;<a class="el" href="classRealm_1_1DynamicTableAllocator.html#a89d383abe0a1cbf181c40fed35c37145">LT</a>, <a class="el" href="classRealm_1_1DynamicTableAllocator.html#a00249df2a0fe9f97831e2fc56f46c693">IT</a>&gt; *&gt;, 1 &lt;&lt; <a class="el" href="classRealm_1_1DynamicTableAllocator.html#a7033255d302c6f0d4fe16f583abad241">INNER_BITS</a>, <a class="el" href="classRealm_1_1DynamicTableAllocator.html#a89d383abe0a1cbf181c40fed35c37145">LT</a>, <a class="el" href="classRealm_1_1DynamicTableAllocator.html#a00249df2a0fe9f97831e2fc56f46c693">IT</a>&gt; <a class="el" href="classRealm_1_1DynamicTableAllocator.html">Realm::DynamicTableAllocator</a>&lt; _ET, _INNER_BITS, _LEAF_BITS &gt;::INNER_TYPE</td>
+          <td class="memname">typedef <a class="el" href="classRealm_1_1DynamicTableFreeList.html">DynamicTableFreeList</a>&lt; <a class="el" href="classRealm_1_1DynamicTableAllocator.html">DynamicTableAllocator</a>&lt;<a class="el" href="classRealm_1_1DynamicTableAllocator.html#a74428c0d440cc2df332860ba2f90b78b">ET</a>, _INNER_BITS, _LEAF_BITS, <a class="el" href="classRealm_1_1DynamicTableAllocator.html#a975bc46fbce24f261d40979be2708f5d">Constructor</a>&gt; &gt; <a class="el" href="classRealm_1_1DynamicTableAllocator.html">Realm::DynamicTableAllocator</a>&lt; _ET, _INNER_BITS, _LEAF_BITS, CONSTRUCTOR &gt;::FreeList</td>
         </tr>
       </table>
 </div><div class="memdoc">
 
 </div>
 </div>
-<a id="a00249df2a0fe9f97831e2fc56f46c693" name="a00249df2a0fe9f97831e2fc56f46c693"></a>
-<h2 class="memtitle"><span class="permalink"><a href="#a00249df2a0fe9f97831e2fc56f46c693">&#9670;&#160;</a></span>IT</h2>
+<a id="a4f92af28b6e7e3a6e7e1040510fcdb53" name="a4f92af28b6e7e3a6e7e1040510fcdb53"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a4f92af28b6e7e3a6e7e1040510fcdb53">&#9670;&#160;</a></span>INNER_TYPE</h2>
 
 <div class="memitem">
 <div class="memproto">
 <div class="memtemplate">
-template&lt;typename _ET , size_t _INNER_BITS, size_t _LEAF_BITS&gt; </div>
+template&lt;typename _ET , size_t _INNER_BITS, size_t _LEAF_BITS, typename CONSTRUCTOR  = DefaultElementConstructor&lt;_ET&gt;&gt; </div>
       <table class="memname">
         <tr>
-          <td class="memname">typedef <a class="el" href="classRealm_1_1ID.html#ad51ee555620cb292ec79334266f04972">ID::IDType</a> <a class="el" href="classRealm_1_1DynamicTableAllocator.html">Realm::DynamicTableAllocator</a>&lt; _ET, _INNER_BITS, _LEAF_BITS &gt;::IT</td>
+          <td class="memname">typedef <a class="el" href="structRealm_1_1DynamicTableNode.html">DynamicTableNode</a>&lt;<a class="el" href="classRealm_1_1atomic.html">atomic</a>&lt;<a class="el" href="structRealm_1_1DynamicTableNodeBase.html">DynamicTableNodeBase</a>&lt;<a class="el" href="classRealm_1_1DynamicTableAllocator.html#a2a7a76cbdd22a55bae5ffd1d63ce0fa2">LT</a>, <a class="el" href="classRealm_1_1DynamicTableAllocator.html#accad69e67bccc1c2556a7573f54eea0a">IT</a>&gt; *&gt;, 1 &lt;&lt; <a class="el" href="classRealm_1_1DynamicTableAllocator.html#a620a7467bab65ac6f6951b6ea4cf0fd7">INNER_BITS</a>, <a class="el" href="classRealm_1_1DynamicTableAllocator.html#a2a7a76cbdd22a55bae5ffd1d63ce0fa2">LT</a>, <a class="el" href="classRealm_1_1DynamicTableAllocator.html#accad69e67bccc1c2556a7573f54eea0a">IT</a>&gt; <a class="el" href="classRealm_1_1DynamicTableAllocator.html">Realm::DynamicTableAllocator</a>&lt; _ET, _INNER_BITS, _LEAF_BITS, CONSTRUCTOR &gt;::INNER_TYPE</td>
         </tr>
       </table>
 </div><div class="memdoc">
 
 </div>
 </div>
-<a id="aa12aebc03595bfa25261e3c8dda84c86" name="aa12aebc03595bfa25261e3c8dda84c86"></a>
-<h2 class="memtitle"><span class="permalink"><a href="#aa12aebc03595bfa25261e3c8dda84c86">&#9670;&#160;</a></span>LEAF_TYPE</h2>
+<a id="accad69e67bccc1c2556a7573f54eea0a" name="accad69e67bccc1c2556a7573f54eea0a"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#accad69e67bccc1c2556a7573f54eea0a">&#9670;&#160;</a></span>IT</h2>
 
 <div class="memitem">
 <div class="memproto">
 <div class="memtemplate">
-template&lt;typename _ET , size_t _INNER_BITS, size_t _LEAF_BITS&gt; </div>
+template&lt;typename _ET , size_t _INNER_BITS, size_t _LEAF_BITS, typename CONSTRUCTOR  = DefaultElementConstructor&lt;_ET&gt;&gt; </div>
       <table class="memname">
         <tr>
-          <td class="memname">typedef <a class="el" href="structRealm_1_1DynamicTableNode.html">DynamicTableNode</a>&lt;<a class="el" href="classRealm_1_1DynamicTableAllocator.html#ac8fd7d5299c6b82840e79e1bd45f690f">ET</a>, 1 &lt;&lt; <a class="el" href="classRealm_1_1DynamicTableAllocator.html#a443dbe523dc762e0489be37510bcbcb5">LEAF_BITS</a>, <a class="el" href="classRealm_1_1DynamicTableAllocator.html#a89d383abe0a1cbf181c40fed35c37145">LT</a>, <a class="el" href="classRealm_1_1DynamicTableAllocator.html#a00249df2a0fe9f97831e2fc56f46c693">IT</a>&gt; <a class="el" href="classRealm_1_1DynamicTableAllocator.html">Realm::DynamicTableAllocator</a>&lt; _ET, _INNER_BITS, _LEAF_BITS &gt;::LEAF_TYPE</td>
+          <td class="memname">typedef <a class="el" href="classRealm_1_1ID.html#ad51ee555620cb292ec79334266f04972">ID::IDType</a> <a class="el" href="classRealm_1_1DynamicTableAllocator.html">Realm::DynamicTableAllocator</a>&lt; _ET, _INNER_BITS, _LEAF_BITS, CONSTRUCTOR &gt;::IT</td>
         </tr>
       </table>
 </div><div class="memdoc">
 
 </div>
 </div>
-<a id="a89d383abe0a1cbf181c40fed35c37145" name="a89d383abe0a1cbf181c40fed35c37145"></a>
-<h2 class="memtitle"><span class="permalink"><a href="#a89d383abe0a1cbf181c40fed35c37145">&#9670;&#160;</a></span>LT</h2>
+<a id="a91f8c2477b4ea8ce71cdd70c91c5459b" name="a91f8c2477b4ea8ce71cdd70c91c5459b"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a91f8c2477b4ea8ce71cdd70c91c5459b">&#9670;&#160;</a></span>LEAF_TYPE</h2>
 
 <div class="memitem">
 <div class="memproto">
 <div class="memtemplate">
-template&lt;typename _ET , size_t _INNER_BITS, size_t _LEAF_BITS&gt; </div>
+template&lt;typename _ET , size_t _INNER_BITS, size_t _LEAF_BITS, typename CONSTRUCTOR  = DefaultElementConstructor&lt;_ET&gt;&gt; </div>
       <table class="memname">
         <tr>
-          <td class="memname">typedef <a class="el" href="namespaceRealm.html#a4713e57139284efc3da66bd4bbc20ebe">Mutex</a> <a class="el" href="classRealm_1_1DynamicTableAllocator.html">Realm::DynamicTableAllocator</a>&lt; _ET, _INNER_BITS, _LEAF_BITS &gt;::LT</td>
+          <td class="memname">typedef <a class="el" href="structRealm_1_1DynamicTableNode.html">DynamicTableNode</a>&lt;<a class="el" href="classRealm_1_1DynamicTableAllocator.html#a74428c0d440cc2df332860ba2f90b78b">ET</a>, 1 &lt;&lt; <a class="el" href="classRealm_1_1DynamicTableAllocator.html#ae998f7a45b5300be284f1f986e190238">LEAF_BITS</a>, <a class="el" href="classRealm_1_1DynamicTableAllocator.html#a2a7a76cbdd22a55bae5ffd1d63ce0fa2">LT</a>, <a class="el" href="classRealm_1_1DynamicTableAllocator.html#accad69e67bccc1c2556a7573f54eea0a">IT</a>&gt; <a class="el" href="classRealm_1_1DynamicTableAllocator.html">Realm::DynamicTableAllocator</a>&lt; _ET, _INNER_BITS, _LEAF_BITS, CONSTRUCTOR &gt;::LEAF_TYPE</td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+
+</div>
+</div>
+<a id="a2a7a76cbdd22a55bae5ffd1d63ce0fa2" name="a2a7a76cbdd22a55bae5ffd1d63ce0fa2"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a2a7a76cbdd22a55bae5ffd1d63ce0fa2">&#9670;&#160;</a></span>LT</h2>
+
+<div class="memitem">
+<div class="memproto">
+<div class="memtemplate">
+template&lt;typename _ET , size_t _INNER_BITS, size_t _LEAF_BITS, typename CONSTRUCTOR  = DefaultElementConstructor&lt;_ET&gt;&gt; </div>
+      <table class="memname">
+        <tr>
+          <td class="memname">typedef <a class="el" href="namespaceRealm.html#a4713e57139284efc3da66bd4bbc20ebe">Mutex</a> <a class="el" href="classRealm_1_1DynamicTableAllocator.html">Realm::DynamicTableAllocator</a>&lt; _ET, _INNER_BITS, _LEAF_BITS, CONSTRUCTOR &gt;::LT</td>
         </tr>
       </table>
 </div><div class="memdoc">
@@ -253,19 +291,19 @@ template&lt;typename _ET , size_t _INNER_BITS, size_t _LEAF_BITS&gt; </div>
 </div>
 </div>
 <h2 class="groupheader">Member Function Documentation</h2>
-<a id="a8a66e34038d96f16f6b12fda16ea7dc5" name="a8a66e34038d96f16f6b12fda16ea7dc5"></a>
-<h2 class="memtitle"><span class="permalink"><a href="#a8a66e34038d96f16f6b12fda16ea7dc5">&#9670;&#160;</a></span>get_registered_freelists()</h2>
+<a id="a45191dc4f4f509dc6be879d2b33368d9" name="a45191dc4f4f509dc6be879d2b33368d9"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a45191dc4f4f509dc6be879d2b33368d9">&#9670;&#160;</a></span>get_registered_freelists()</h2>
 
 <div class="memitem">
 <div class="memproto">
 <div class="memtemplate">
-template&lt;typename _ET , size_t _INNER_BITS, size_t _LEAF_BITS&gt; </div>
+template&lt;typename _ET , size_t _INNER_BITS, size_t _LEAF_BITS, typename CONSTRUCTOR  = DefaultElementConstructor&lt;_ET&gt;&gt; </div>
 <table class="mlabels">
   <tr>
   <td class="mlabels-left">
       <table class="memname">
         <tr>
-          <td class="memname">static std::vector&lt; <a class="el" href="classRealm_1_1DynamicTableAllocator.html#af741ae8154564c2ce7404f6ecbf95311">FreeList</a> * &gt; &amp; <a class="el" href="classRealm_1_1DynamicTableAllocator.html">Realm::DynamicTableAllocator</a>&lt; _ET, _INNER_BITS, _LEAF_BITS &gt;::get_registered_freelists </td>
+          <td class="memname">static std::vector&lt; <a class="el" href="classRealm_1_1DynamicTableAllocator.html#a6cb931a1aa0c275bb7fd77b4a780bf3d">FreeList</a> * &gt; &amp; <a class="el" href="classRealm_1_1DynamicTableAllocator.html">Realm::DynamicTableAllocator</a>&lt; _ET, _INNER_BITS, _LEAF_BITS, CONSTRUCTOR &gt;::get_registered_freelists </td>
           <td>(</td>
           <td class="paramtype"><a class="el" href="namespaceRealm.html#a4713e57139284efc3da66bd4bbc20ebe">Mutex</a> *&amp;&#160;</td>
           <td class="paramname"><em>lock</em></td><td>)</td>
@@ -281,27 +319,27 @@ template&lt;typename _ET , size_t _INNER_BITS, size_t _LEAF_BITS&gt; </div>
 
 </div>
 </div>
-<a id="ad593db170770ebd0156a9a0f71823b94" name="ad593db170770ebd0156a9a0f71823b94"></a>
-<h2 class="memtitle"><span class="permalink"><a href="#ad593db170770ebd0156a9a0f71823b94">&#9670;&#160;</a></span>new_leaf_node()</h2>
+<a id="a7dc06ed57da414b87b7e0fb149e62dad" name="a7dc06ed57da414b87b7e0fb149e62dad"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a7dc06ed57da414b87b7e0fb149e62dad">&#9670;&#160;</a></span>new_leaf_node()</h2>
 
 <div class="memitem">
 <div class="memproto">
 <div class="memtemplate">
-template&lt;typename _ET , size_t _INNER_BITS, size_t _LEAF_BITS&gt; </div>
+template&lt;typename _ET , size_t _INNER_BITS, size_t _LEAF_BITS, typename CONSTRUCTOR  = DefaultElementConstructor&lt;_ET&gt;&gt; </div>
 <table class="mlabels">
   <tr>
   <td class="mlabels-left">
       <table class="memname">
         <tr>
-          <td class="memname">static <a class="el" href="classRealm_1_1DynamicTableAllocator.html#aa12aebc03595bfa25261e3c8dda84c86">LEAF_TYPE</a> * <a class="el" href="classRealm_1_1DynamicTableAllocator.html">Realm::DynamicTableAllocator</a>&lt; _ET, _INNER_BITS, _LEAF_BITS &gt;::new_leaf_node </td>
+          <td class="memname">static <a class="el" href="classRealm_1_1DynamicTableAllocator.html#a91f8c2477b4ea8ce71cdd70c91c5459b">LEAF_TYPE</a> * <a class="el" href="classRealm_1_1DynamicTableAllocator.html">Realm::DynamicTableAllocator</a>&lt; _ET, _INNER_BITS, _LEAF_BITS, CONSTRUCTOR &gt;::new_leaf_node </td>
           <td>(</td>
-          <td class="paramtype"><a class="el" href="classRealm_1_1DynamicTableAllocator.html#a00249df2a0fe9f97831e2fc56f46c693">IT</a>&#160;</td>
+          <td class="paramtype"><a class="el" href="classRealm_1_1DynamicTableAllocator.html#accad69e67bccc1c2556a7573f54eea0a">IT</a>&#160;</td>
           <td class="paramname"><em>first_index</em>, </td>
         </tr>
         <tr>
           <td class="paramkey"></td>
           <td></td>
-          <td class="paramtype"><a class="el" href="classRealm_1_1DynamicTableAllocator.html#a00249df2a0fe9f97831e2fc56f46c693">IT</a>&#160;</td>
+          <td class="paramtype"><a class="el" href="classRealm_1_1DynamicTableAllocator.html#accad69e67bccc1c2556a7573f54eea0a">IT</a>&#160;</td>
           <td class="paramname"><em>last_index</em>, </td>
         </tr>
         <tr>
@@ -313,14 +351,20 @@ template&lt;typename _ET , size_t _INNER_BITS, size_t _LEAF_BITS&gt; </div>
         <tr>
           <td class="paramkey"></td>
           <td></td>
-          <td class="paramtype"><a class="el" href="classRealm_1_1DynamicTableAllocator.html#ac8fd7d5299c6b82840e79e1bd45f690f">ET</a> **&#160;</td>
+          <td class="paramtype"><a class="el" href="classRealm_1_1DynamicTableAllocator.html#a74428c0d440cc2df332860ba2f90b78b">ET</a> **&#160;</td>
           <td class="paramname"><em>free_list_head</em>, </td>
         </tr>
         <tr>
           <td class="paramkey"></td>
           <td></td>
-          <td class="paramtype"><a class="el" href="classRealm_1_1DynamicTableAllocator.html#ac8fd7d5299c6b82840e79e1bd45f690f">ET</a> **&#160;</td>
-          <td class="paramname"><em>free_list_tail</em>&#160;</td>
+          <td class="paramtype"><a class="el" href="classRealm_1_1DynamicTableAllocator.html#a74428c0d440cc2df332860ba2f90b78b">ET</a> **&#160;</td>
+          <td class="paramname"><em>free_list_tail</em>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype">const <a class="el" href="classRealm_1_1DynamicTableAllocator.html#a975bc46fbce24f261d40979be2708f5d">Constructor</a> &amp;&#160;</td>
+          <td class="paramname"><em>elem_ctor_obj</em>&#160;</td>
         </tr>
         <tr>
           <td></td>
@@ -337,21 +381,21 @@ template&lt;typename _ET , size_t _INNER_BITS, size_t _LEAF_BITS&gt; </div>
 
 </div>
 </div>
-<a id="adbf88782b7635d9002ad857c281ab333" name="adbf88782b7635d9002ad857c281ab333"></a>
-<h2 class="memtitle"><span class="permalink"><a href="#adbf88782b7635d9002ad857c281ab333">&#9670;&#160;</a></span>register_freelist()</h2>
+<a id="a4add93c11a6a2687191a8e820441775e" name="a4add93c11a6a2687191a8e820441775e"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a4add93c11a6a2687191a8e820441775e">&#9670;&#160;</a></span>register_freelist()</h2>
 
 <div class="memitem">
 <div class="memproto">
 <div class="memtemplate">
-template&lt;typename _ET , size_t _INNER_BITS, size_t _LEAF_BITS&gt; </div>
+template&lt;typename _ET , size_t _INNER_BITS, size_t _LEAF_BITS, typename CONSTRUCTOR  = DefaultElementConstructor&lt;_ET&gt;&gt; </div>
 <table class="mlabels">
   <tr>
   <td class="mlabels-left">
       <table class="memname">
         <tr>
-          <td class="memname">static void <a class="el" href="classRealm_1_1DynamicTableAllocator.html">Realm::DynamicTableAllocator</a>&lt; _ET, _INNER_BITS, _LEAF_BITS &gt;::register_freelist </td>
+          <td class="memname">static void <a class="el" href="classRealm_1_1DynamicTableAllocator.html">Realm::DynamicTableAllocator</a>&lt; _ET, _INNER_BITS, _LEAF_BITS, CONSTRUCTOR &gt;::register_freelist </td>
           <td>(</td>
-          <td class="paramtype"><a class="el" href="classRealm_1_1DynamicTableAllocator.html#af741ae8154564c2ce7404f6ecbf95311">FreeList</a> *&#160;</td>
+          <td class="paramtype"><a class="el" href="classRealm_1_1DynamicTableAllocator.html#a6cb931a1aa0c275bb7fd77b4a780bf3d">FreeList</a> *&#160;</td>
           <td class="paramname"><em>free_list</em></td><td>)</td>
           <td></td>
         </tr>
@@ -365,21 +409,21 @@ template&lt;typename _ET , size_t _INNER_BITS, size_t _LEAF_BITS&gt; </div>
 
 </div>
 </div>
-<a id="abc5e81389e93628ba555d4934f6a4ebb" name="abc5e81389e93628ba555d4934f6a4ebb"></a>
-<h2 class="memtitle"><span class="permalink"><a href="#abc5e81389e93628ba555d4934f6a4ebb">&#9670;&#160;</a></span>steal_freelist_element()</h2>
+<a id="a3e21b4e07da17f4015e9a521c7656d72" name="a3e21b4e07da17f4015e9a521c7656d72"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a3e21b4e07da17f4015e9a521c7656d72">&#9670;&#160;</a></span>steal_freelist_element()</h2>
 
 <div class="memitem">
 <div class="memproto">
 <div class="memtemplate">
-template&lt;typename _ET , size_t _INNER_BITS, size_t _LEAF_BITS&gt; </div>
+template&lt;typename _ET , size_t _INNER_BITS, size_t _LEAF_BITS, typename CONSTRUCTOR  = DefaultElementConstructor&lt;_ET&gt;&gt; </div>
 <table class="mlabels">
   <tr>
   <td class="mlabels-left">
       <table class="memname">
         <tr>
-          <td class="memname">static <a class="el" href="classRealm_1_1DynamicTableAllocator.html#ac8fd7d5299c6b82840e79e1bd45f690f">ET</a> * <a class="el" href="classRealm_1_1DynamicTableAllocator.html">Realm::DynamicTableAllocator</a>&lt; _ET, _INNER_BITS, _LEAF_BITS &gt;::steal_freelist_element </td>
+          <td class="memname">static <a class="el" href="classRealm_1_1DynamicTableAllocator.html#a74428c0d440cc2df332860ba2f90b78b">ET</a> * <a class="el" href="classRealm_1_1DynamicTableAllocator.html">Realm::DynamicTableAllocator</a>&lt; _ET, _INNER_BITS, _LEAF_BITS, CONSTRUCTOR &gt;::steal_freelist_element </td>
           <td>(</td>
-          <td class="paramtype"><a class="el" href="classRealm_1_1DynamicTableAllocator.html#af741ae8154564c2ce7404f6ecbf95311">FreeList</a> *&#160;</td>
+          <td class="paramtype"><a class="el" href="classRealm_1_1DynamicTableAllocator.html#a6cb931a1aa0c275bb7fd77b4a780bf3d">FreeList</a> *&#160;</td>
           <td class="paramname"><em>requestor</em> = <code>nullptr</code></td><td>)</td>
           <td></td>
         </tr>
@@ -394,19 +438,19 @@ template&lt;typename _ET , size_t _INNER_BITS, size_t _LEAF_BITS&gt; </div>
 </div>
 </div>
 <h2 class="groupheader">Member Data Documentation</h2>
-<a id="a7033255d302c6f0d4fe16f583abad241" name="a7033255d302c6f0d4fe16f583abad241"></a>
-<h2 class="memtitle"><span class="permalink"><a href="#a7033255d302c6f0d4fe16f583abad241">&#9670;&#160;</a></span>INNER_BITS</h2>
+<a id="a620a7467bab65ac6f6951b6ea4cf0fd7" name="a620a7467bab65ac6f6951b6ea4cf0fd7"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a620a7467bab65ac6f6951b6ea4cf0fd7">&#9670;&#160;</a></span>INNER_BITS</h2>
 
 <div class="memitem">
 <div class="memproto">
 <div class="memtemplate">
-template&lt;typename _ET , size_t _INNER_BITS, size_t _LEAF_BITS&gt; </div>
+template&lt;typename _ET , size_t _INNER_BITS, size_t _LEAF_BITS, typename CONSTRUCTOR  = DefaultElementConstructor&lt;_ET&gt;&gt; </div>
 <table class="mlabels">
   <tr>
   <td class="mlabels-left">
       <table class="memname">
         <tr>
-          <td class="memname">const size_t <a class="el" href="classRealm_1_1DynamicTableAllocator.html">Realm::DynamicTableAllocator</a>&lt; _ET, _INNER_BITS, _LEAF_BITS &gt;::INNER_BITS = _INNER_BITS</td>
+          <td class="memname">const size_t <a class="el" href="classRealm_1_1DynamicTableAllocator.html">Realm::DynamicTableAllocator</a>&lt; _ET, _INNER_BITS, _LEAF_BITS, CONSTRUCTOR &gt;::INNER_BITS = _INNER_BITS</td>
         </tr>
       </table>
   </td>
@@ -418,19 +462,19 @@ template&lt;typename _ET , size_t _INNER_BITS, size_t _LEAF_BITS&gt; </div>
 
 </div>
 </div>
-<a id="a443dbe523dc762e0489be37510bcbcb5" name="a443dbe523dc762e0489be37510bcbcb5"></a>
-<h2 class="memtitle"><span class="permalink"><a href="#a443dbe523dc762e0489be37510bcbcb5">&#9670;&#160;</a></span>LEAF_BITS</h2>
+<a id="ae998f7a45b5300be284f1f986e190238" name="ae998f7a45b5300be284f1f986e190238"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#ae998f7a45b5300be284f1f986e190238">&#9670;&#160;</a></span>LEAF_BITS</h2>
 
 <div class="memitem">
 <div class="memproto">
 <div class="memtemplate">
-template&lt;typename _ET , size_t _INNER_BITS, size_t _LEAF_BITS&gt; </div>
+template&lt;typename _ET , size_t _INNER_BITS, size_t _LEAF_BITS, typename CONSTRUCTOR  = DefaultElementConstructor&lt;_ET&gt;&gt; </div>
 <table class="mlabels">
   <tr>
   <td class="mlabels-left">
       <table class="memname">
         <tr>
-          <td class="memname">const size_t <a class="el" href="classRealm_1_1DynamicTableAllocator.html">Realm::DynamicTableAllocator</a>&lt; _ET, _INNER_BITS, _LEAF_BITS &gt;::LEAF_BITS = _LEAF_BITS</td>
+          <td class="memname">const size_t <a class="el" href="classRealm_1_1DynamicTableAllocator.html">Realm::DynamicTableAllocator</a>&lt; _ET, _INNER_BITS, _LEAF_BITS, CONSTRUCTOR &gt;::LEAF_BITS = _LEAF_BITS</td>
         </tr>
       </table>
   </td>
@@ -443,13 +487,17 @@ template&lt;typename _ET , size_t _INNER_BITS, size_t _LEAF_BITS&gt; </div>
 </div>
 </div>
 <hr/>The documentation for this class was generated from the following file:<ul>
-<li>/home/runner/work/realm/realm/realm-src/realm/<a class="el" href="dynamic__table_8h_source.html">dynamic_table.h</a></li>
+<li>/home/runner/work/realm/realm/realm-src/src/realm/<a class="el" href="dynamic__table_8h_source.html">dynamic_table.h</a></li>
 </ul>
 </div><!-- contents -->
+</div><!-- doc-content -->
 <!-- HTML footer for doxygen 1.9.1-->
 <!-- start footer part -->
-<hr class="footer"/><address class="footer"><small>
-Generated by&#160;<a href="https://www.doxygen.org/index.html"><img class="footer" src="doxygen.svg" width="104" height="31" alt="doxygen"/></a> 1.9.8
-</small></address>
+<div id="nav-path" class="navpath"><!-- id is needed for treeview function! -->
+  <ul>
+    <li class="navelem"><a class="el" href="namespaceRealm.html">Realm</a></li><li class="navelem"><a class="el" href="classRealm_1_1DynamicTableAllocator.html">DynamicTableAllocator</a></li>
+    <li class="footer">Generated by <a href="https://www.doxygen.org/index.html"><img class="footer" src="doxygen.svg" width="104" height="31" alt="doxygen"/></a> 1.9.8 </li>
+  </ul>
+</div>
 </body>
 </html>

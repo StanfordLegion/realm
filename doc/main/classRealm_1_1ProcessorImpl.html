@@ -10,6 +10,10 @@
 <link href="tabs.css" rel="stylesheet" type="text/css"/>
 <script type="text/javascript" src="jquery.js"></script>
 <script type="text/javascript" src="dynsections.js"></script>
+<link href="navtree.css" rel="stylesheet" type="text/css"/>
+<script type="text/javascript" src="resize.js"></script>
+<script type="text/javascript" src="navtreedata.js"></script>
+<script type="text/javascript" src="navtree.js"></script>
 <link href="search/search.css" rel="stylesheet" type="text/css"/>
 <script type="text/javascript" src="search/searchdata.js"></script>
 <script type="text/javascript" src="search/search.js"></script>
@@ -20,6 +24,8 @@
 </script>
 <link href="doxygen.css" rel="stylesheet" type="text/css" />
 <link href="customdoxygen.css" rel="stylesheet" type="text/css"/>
+<link href="doxygen-awesome.css" rel="stylesheet" type="text/css"/>
+<link href="doxygen-awesome-sidebar-only.css" rel="stylesheet" type="text/css"/>
 <!-- BEGIN version select -->
 <link rel="stylesheet" type="text/css" href="../dropdown.css">
 <script type="text/javascript" src="https://ajax.googleapis.com/ajax/libs/jquery/3.2.1/jquery.min.js">
@@ -32,11 +38,13 @@
 <table cellspacing="0" cellpadding="0">
  <tbody>
  <tr style="height: 56px;">
+  <td id="projectlogo"><img alt="Logo" src="logo.png"/></td>
   <td id="projectalign" style="padding-left: 0.5em;">
    <div id="projectname">Realm
    <!-- BEGIN version select -->
+    <br />
     <div class="dropdown">
-     <button class="dropbtn">Version 0.0.1</button>
+     <button class="dropbtn">Version 0.0.1+6ce58b75</button>
      <div class="dropdown-content"></div>
     </div>
     <script type="text/javascript" src="../selectversion.js"></script>
@@ -84,6 +92,23 @@ var searchBox = new SearchBox("searchBox", "search/",'.html');
       <li><a href="functions.html"><span>Class&#160;Members</span></a></li>
     </ul>
   </div>
+</div><!-- top -->
+<div id="side-nav" class="ui-resizable side-nav-resizable">
+  <div id="nav-tree">
+    <div id="nav-tree-contents">
+      <div id="nav-sync" class="sync"></div>
+    </div>
+  </div>
+  <div id="splitbar" style="-moz-user-select:none;" 
+       class="ui-resizable-handle">
+  </div>
+</div>
+<script type="text/javascript">
+/* @license magnet:?xt=urn:btih:d3d9a9a6595521f9666a5e94cc830dab83b65699&amp;dn=expat.txt MIT */
+$(document).ready(function(){initNavTree('classRealm_1_1ProcessorImpl.html',''); initResizable(); });
+/* @license-end */
+</script>
+<div id="doc-content">
 <!-- window showing the filter options -->
 <div id="MSearchSelectWindow"
      onmouseover="return searchBox.OnSearchSelectShow()"
@@ -105,11 +130,6 @@ var searchBox = new SearchBox("searchBox", "search/",'.html');
 </div>
 </div>
 
-<div id="nav-path" class="navpath">
-  <ul>
-<li class="navelem"><a class="el" href="namespaceRealm.html">Realm</a></li><li class="navelem"><a class="el" href="classRealm_1_1ProcessorImpl.html">ProcessorImpl</a></li>  </ul>
-</div>
-</div><!-- top -->
 <div class="header">
   <div class="summary">
 <a href="#nested-classes">Classes</a> &#124;
@@ -128,46 +148,13 @@ var searchBox = new SearchBox("searchBox", "search/",'.html');
 <div class="dynheader">
 Inheritance diagram for Realm::ProcessorImpl:</div>
 <div class="dyncontent">
-<div class="center"><img src="classRealm_1_1ProcessorImpl__inherit__graph.png" border="0" usemap="#aRealm_1_1ProcessorImpl_inherit__map" alt="Inheritance graph"/></div>
-<map name="aRealm_1_1ProcessorImpl_inherit__map" id="aRealm_1_1ProcessorImpl_inherit__map">
-<area shape="rect" title=" " alt="" coords="5,155,169,180"/>
-<area shape="rect" href="classRealm_1_1LocalPythonProcessor.html" title=" " alt="" coords="217,80,432,105"/>
-<area shape="poly" title=" " alt="" coords="129,147,217,114,259,103,260,108,218,119,131,152"/>
-<area shape="rect" href="classRealm_1_1LocalTaskProcessor.html" title=" " alt="" coords="225,129,424,155"/>
-<area shape="poly" title=" " alt="" coords="183,154,225,150,225,155,183,160"/>
-<area shape="rect" href="classRealm_1_1ProcessorGroupImpl.html" title=" " alt="" coords="223,179,426,204"/>
-<area shape="poly" title=" " alt="" coords="183,174,223,178,223,184,183,180"/>
-<area shape="rect" href="classRealm_1_1RemoteProcessor.html" title=" " alt="" coords="231,228,418,253"/>
-<area shape="poly" title=" " alt="" coords="133,183,218,213,265,225,263,230,217,218,131,188"/>
-<area shape="rect" href="classRealm_1_1Cuda_1_1GPUProcessor.html" title=" " alt="" coords="489,5,693,31"/>
-<area shape="poly" title=" " alt="" coords="419,121,430,115,446,97,453,78,461,59,478,40,500,28,503,33,482,44,466,61,458,80,451,100,434,119,422,126"/>
-<area shape="rect" href="classRealm_1_1Hip_1_1GPUProcessor.html" title=" " alt="" coords="495,55,688,80"/>
-<area shape="poly" title=" " alt="" coords="403,123,431,114,455,102,479,89,517,77,519,83,481,94,457,106,433,119,405,128"/>
-<area shape="rect" href="classRealm_1_1LocalCPUProcessor.html" title=" " alt="" coords="493,104,689,129"/>
-<area shape="poly" title=" " alt="" coords="437,129,493,123,493,129,438,134"/>
-<area shape="rect" href="classRealm_1_1LocalIOProcessor.html" title=" " alt="" coords="500,153,683,179"/>
-<area shape="poly" title=" " alt="" coords="438,150,500,155,500,160,438,155"/>
-<area shape="rect" href="classRealm_1_1LocalOpenMPProcessor.html" title=" " alt="" coords="480,203,703,228"/>
-<area shape="poly" title=" " alt="" coords="408,156,433,164,457,176,481,188,524,200,522,205,479,192,455,180,431,168,406,161"/>
-<area shape="rect" href="classRealm_1_1LocalUtilityProcessor.html" title=" " alt="" coords="487,252,696,277"/>
-<area shape="poly" title=" " alt="" coords="424,158,434,164,451,182,458,202,466,220,482,237,506,250,503,254,478,241,461,223,454,204,446,185,430,168,422,163"/>
-</map>
-<center><span class="legend">[<a href="graph_legend.html">legend</a>]</span></center></div>
+<div class="center"><!-- SVG 0 --></div>
+<center><span class="legend">[<a target="top" href="graph_legend.html">legend</a>]</span></center></div>
 <div class="dynheader">
 Collaboration diagram for Realm::ProcessorImpl:</div>
 <div class="dyncontent">
-<div class="center"><img src="classRealm_1_1ProcessorImpl__coll__graph.png" border="0" usemap="#aRealm_1_1ProcessorImpl_coll__map" alt="Collaboration graph"/></div>
-<map name="aRealm_1_1ProcessorImpl_coll__map" id="aRealm_1_1ProcessorImpl_coll__map">
-<area shape="rect" title=" " alt="" coords="129,196,293,221"/>
-<area shape="rect" href="classRealm_1_1DynamicTableFreeList.html" title=" " alt="" coords="5,93,220,133"/>
-<area shape="poly" title=" " alt="" coords="131,144,152,170,187,194,184,198,148,174,127,147"/>
-<area shape="rect" href="classRealm_1_1atomic.html" title=" " alt="" coords="25,5,200,31"/>
-<area shape="poly" title=" " alt="" coords="115,44,115,93,110,93,110,44"/>
-<area shape="rect" href="classRealm_1_1Processor.html" title=" " alt="" coords="244,101,379,126"/>
-<area shape="poly" title=" " alt="" coords="300,139,272,174,237,198,234,194,268,170,296,136"/>
-<area shape="poly" title=" " alt="" coords="394,104,405,113,397,122,380,125,379,120,395,117,400,114,391,108"/>
-</map>
-<center><span class="legend">[<a href="graph_legend.html">legend</a>]</span></center></div>
+<div class="center"><!-- SVG 1 --></div>
+<center><span class="legend">[<a target="top" href="graph_legend.html">legend</a>]</span></center></div>
 <table class="memberdecls">
 <tr class="heading"><td colspan="2"><h2 class="groupheader"><a id="nested-classes" name="nested-classes"></a>
 Classes</h2></td></tr>
@@ -226,7 +213,7 @@ Protected Member Functions</h2></td></tr>
 </table><table class="memberdecls">
 <tr class="heading"><td colspan="2"><h2 class="groupheader"><a id="pro-attribs" name="pro-attribs"></a>
 Protected Attributes</h2></td></tr>
-<tr class="memitem:ae9f6ffa6f7099d4f46c1d2c76f20f910" id="r_ae9f6ffa6f7099d4f46c1d2c76f20f910"><td class="memItemLeft" align="right" valign="top"><a class="el" href="classRealm_1_1DynamicTableAllocator.html#af741ae8154564c2ce7404f6ecbf95311">LocalEventTableAllocator::FreeList</a>&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="classRealm_1_1ProcessorImpl.html#ae9f6ffa6f7099d4f46c1d2c76f20f910">free_local_events</a></td></tr>
+<tr class="memitem:ae9f6ffa6f7099d4f46c1d2c76f20f910" id="r_ae9f6ffa6f7099d4f46c1d2c76f20f910"><td class="memItemLeft" align="right" valign="top"><a class="el" href="classRealm_1_1DynamicTableAllocator.html#a6cb931a1aa0c275bb7fd77b4a780bf3d">LocalEventTableAllocator::FreeList</a>&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="classRealm_1_1ProcessorImpl.html#ae9f6ffa6f7099d4f46c1d2c76f20f910">free_local_events</a></td></tr>
 <tr class="separator:ae9f6ffa6f7099d4f46c1d2c76f20f910"><td class="memSeparator" colspan="2">&#160;</td></tr>
 </table><table class="memberdecls">
 <tr class="heading"><td colspan="2"><h2 class="groupheader"><a id="friends" name="friends"></a>
@@ -811,7 +798,7 @@ Friends</h2></td></tr>
   <td class="mlabels-left">
       <table class="memname">
         <tr>
-          <td class="memname"><a class="el" href="classRealm_1_1DynamicTableAllocator.html#af741ae8154564c2ce7404f6ecbf95311">LocalEventTableAllocator::FreeList</a> Realm::ProcessorImpl::free_local_events</td>
+          <td class="memname"><a class="el" href="classRealm_1_1DynamicTableAllocator.html#a6cb931a1aa0c275bb7fd77b4a780bf3d">LocalEventTableAllocator::FreeList</a> Realm::ProcessorImpl::free_local_events</td>
         </tr>
       </table>
   </td>
@@ -866,13 +853,17 @@ Friends</h2></td></tr>
 </div>
 </div>
 <hr/>The documentation for this class was generated from the following file:<ul>
-<li>/home/runner/work/realm/realm/realm-src/realm/<a class="el" href="proc__impl_8h_source.html">proc_impl.h</a></li>
+<li>/home/runner/work/realm/realm/realm-src/src/realm/<a class="el" href="proc__impl_8h_source.html">proc_impl.h</a></li>
 </ul>
 </div><!-- contents -->
+</div><!-- doc-content -->
 <!-- HTML footer for doxygen 1.9.1-->
 <!-- start footer part -->
-<hr class="footer"/><address class="footer"><small>
-Generated by&#160;<a href="https://www.doxygen.org/index.html"><img class="footer" src="doxygen.svg" width="104" height="31" alt="doxygen"/></a> 1.9.8
-</small></address>
+<div id="nav-path" class="navpath"><!-- id is needed for treeview function! -->
+  <ul>
+    <li class="navelem"><a class="el" href="namespaceRealm.html">Realm</a></li><li class="navelem"><a class="el" href="classRealm_1_1ProcessorImpl.html">ProcessorImpl</a></li>
+    <li class="footer">Generated by <a href="https://www.doxygen.org/index.html"><img class="footer" src="doxygen.svg" width="104" height="31" alt="doxygen"/></a> 1.9.8 </li>
+  </ul>
+</div>
 </body>
 </html>

@@ -10,6 +10,10 @@
 <link href="tabs.css" rel="stylesheet" type="text/css"/>
 <script type="text/javascript" src="jquery.js"></script>
 <script type="text/javascript" src="dynsections.js"></script>
+<link href="navtree.css" rel="stylesheet" type="text/css"/>
+<script type="text/javascript" src="resize.js"></script>
+<script type="text/javascript" src="navtreedata.js"></script>
+<script type="text/javascript" src="navtree.js"></script>
 <link href="search/search.css" rel="stylesheet" type="text/css"/>
 <script type="text/javascript" src="search/searchdata.js"></script>
 <script type="text/javascript" src="search/search.js"></script>
@@ -20,6 +24,8 @@
 </script>
 <link href="doxygen.css" rel="stylesheet" type="text/css" />
 <link href="customdoxygen.css" rel="stylesheet" type="text/css"/>
+<link href="doxygen-awesome.css" rel="stylesheet" type="text/css"/>
+<link href="doxygen-awesome-sidebar-only.css" rel="stylesheet" type="text/css"/>
 <!-- BEGIN version select -->
 <link rel="stylesheet" type="text/css" href="../dropdown.css">
 <script type="text/javascript" src="https://ajax.googleapis.com/ajax/libs/jquery/3.2.1/jquery.min.js">
@@ -32,11 +38,13 @@
 <table cellspacing="0" cellpadding="0">
  <tbody>
  <tr style="height: 56px;">
+  <td id="projectlogo"><img alt="Logo" src="logo.png"/></td>
   <td id="projectalign" style="padding-left: 0.5em;">
    <div id="projectname">Realm
    <!-- BEGIN version select -->
+    <br />
     <div class="dropdown">
-     <button class="dropbtn">Version 0.0.1</button>
+     <button class="dropbtn">Version 0.0.1+6ce58b75</button>
      <div class="dropdown-content"></div>
     </div>
     <script type="text/javascript" src="../selectversion.js"></script>
@@ -84,6 +92,23 @@ var searchBox = new SearchBox("searchBox", "search/",'.html');
       <li><a href="functions.html"><span>Class&#160;Members</span></a></li>
     </ul>
   </div>
+</div><!-- top -->
+<div id="side-nav" class="ui-resizable side-nav-resizable">
+  <div id="nav-tree">
+    <div id="nav-tree-contents">
+      <div id="nav-sync" class="sync"></div>
+    </div>
+  </div>
+  <div id="splitbar" style="-moz-user-select:none;" 
+       class="ui-resizable-handle">
+  </div>
+</div>
+<script type="text/javascript">
+/* @license magnet:?xt=urn:btih:d3d9a9a6595521f9666a5e94cc830dab83b65699&amp;dn=expat.txt MIT */
+$(document).ready(function(){initNavTree('classRealm_1_1DynamicTableAllocator.html',''); initResizable(); });
+/* @license-end */
+</script>
+<div id="doc-content">
 <!-- window showing the filter options -->
 <div id="MSearchSelectWindow"
      onmouseover="return searchBox.OnSearchSelectShow()"
@@ -105,35 +130,34 @@ var searchBox = new SearchBox("searchBox", "search/",'.html');
 </div>
 </div>
 
-<div id="nav-path" class="navpath">
-  <ul>
-<li class="navelem"><a class="el" href="namespaceRealm.html">Realm</a></li><li class="navelem"><a class="el" href="classRealm_1_1DynamicTableAllocator.html">DynamicTableAllocator</a></li>  </ul>
-</div>
-</div><!-- top -->
 <div class="header">
-  <div class="headertitle"><div class="title">Realm::DynamicTableAllocator&lt; _ET, _INNER_BITS, _LEAF_BITS &gt; Member List</div></div>
+  <div class="headertitle"><div class="title">Realm::DynamicTableAllocator&lt; _ET, _INNER_BITS, _LEAF_BITS, CONSTRUCTOR &gt; Member List</div></div>
 </div><!--header-->
 <div class="contents">
 
-<p>This is the complete list of members for <a class="el" href="classRealm_1_1DynamicTableAllocator.html">Realm::DynamicTableAllocator&lt; _ET, _INNER_BITS, _LEAF_BITS &gt;</a>, including all inherited members.</p>
+<p>This is the complete list of members for <a class="el" href="classRealm_1_1DynamicTableAllocator.html">Realm::DynamicTableAllocator&lt; _ET, _INNER_BITS, _LEAF_BITS, CONSTRUCTOR &gt;</a>, including all inherited members.</p>
 <table class="directory">
-  <tr class="even"><td class="entry"><a class="el" href="classRealm_1_1DynamicTableAllocator.html#ac8fd7d5299c6b82840e79e1bd45f690f">ET</a> typedef</td><td class="entry"><a class="el" href="classRealm_1_1DynamicTableAllocator.html">Realm::DynamicTableAllocator&lt; _ET, _INNER_BITS, _LEAF_BITS &gt;</a></td><td class="entry"></td></tr>
-  <tr class="odd"><td class="entry"><a class="el" href="classRealm_1_1DynamicTableAllocator.html#af741ae8154564c2ce7404f6ecbf95311">FreeList</a> typedef</td><td class="entry"><a class="el" href="classRealm_1_1DynamicTableAllocator.html">Realm::DynamicTableAllocator&lt; _ET, _INNER_BITS, _LEAF_BITS &gt;</a></td><td class="entry"></td></tr>
-  <tr class="even"><td class="entry"><a class="el" href="classRealm_1_1DynamicTableAllocator.html#a8a66e34038d96f16f6b12fda16ea7dc5">get_registered_freelists</a>(Mutex *&amp;lock)</td><td class="entry"><a class="el" href="classRealm_1_1DynamicTableAllocator.html">Realm::DynamicTableAllocator&lt; _ET, _INNER_BITS, _LEAF_BITS &gt;</a></td><td class="entry"><span class="mlabel">static</span></td></tr>
-  <tr class="odd"><td class="entry"><a class="el" href="classRealm_1_1DynamicTableAllocator.html#a7033255d302c6f0d4fe16f583abad241">INNER_BITS</a></td><td class="entry"><a class="el" href="classRealm_1_1DynamicTableAllocator.html">Realm::DynamicTableAllocator&lt; _ET, _INNER_BITS, _LEAF_BITS &gt;</a></td><td class="entry"><span class="mlabel">static</span></td></tr>
-  <tr class="even"><td class="entry"><a class="el" href="classRealm_1_1DynamicTableAllocator.html#a011d791673d0572b334adea062369248">INNER_TYPE</a> typedef</td><td class="entry"><a class="el" href="classRealm_1_1DynamicTableAllocator.html">Realm::DynamicTableAllocator&lt; _ET, _INNER_BITS, _LEAF_BITS &gt;</a></td><td class="entry"></td></tr>
-  <tr class="odd"><td class="entry"><a class="el" href="classRealm_1_1DynamicTableAllocator.html#a00249df2a0fe9f97831e2fc56f46c693">IT</a> typedef</td><td class="entry"><a class="el" href="classRealm_1_1DynamicTableAllocator.html">Realm::DynamicTableAllocator&lt; _ET, _INNER_BITS, _LEAF_BITS &gt;</a></td><td class="entry"></td></tr>
-  <tr class="even"><td class="entry"><a class="el" href="classRealm_1_1DynamicTableAllocator.html#a443dbe523dc762e0489be37510bcbcb5">LEAF_BITS</a></td><td class="entry"><a class="el" href="classRealm_1_1DynamicTableAllocator.html">Realm::DynamicTableAllocator&lt; _ET, _INNER_BITS, _LEAF_BITS &gt;</a></td><td class="entry"><span class="mlabel">static</span></td></tr>
-  <tr class="odd"><td class="entry"><a class="el" href="classRealm_1_1DynamicTableAllocator.html#aa12aebc03595bfa25261e3c8dda84c86">LEAF_TYPE</a> typedef</td><td class="entry"><a class="el" href="classRealm_1_1DynamicTableAllocator.html">Realm::DynamicTableAllocator&lt; _ET, _INNER_BITS, _LEAF_BITS &gt;</a></td><td class="entry"></td></tr>
-  <tr class="even"><td class="entry"><a class="el" href="classRealm_1_1DynamicTableAllocator.html#a89d383abe0a1cbf181c40fed35c37145">LT</a> typedef</td><td class="entry"><a class="el" href="classRealm_1_1DynamicTableAllocator.html">Realm::DynamicTableAllocator&lt; _ET, _INNER_BITS, _LEAF_BITS &gt;</a></td><td class="entry"></td></tr>
-  <tr class="odd"><td class="entry"><a class="el" href="classRealm_1_1DynamicTableAllocator.html#ad593db170770ebd0156a9a0f71823b94">new_leaf_node</a>(IT first_index, IT last_index, int owner, ET **free_list_head, ET **free_list_tail)</td><td class="entry"><a class="el" href="classRealm_1_1DynamicTableAllocator.html">Realm::DynamicTableAllocator&lt; _ET, _INNER_BITS, _LEAF_BITS &gt;</a></td><td class="entry"><span class="mlabel">static</span></td></tr>
-  <tr class="even"><td class="entry"><a class="el" href="classRealm_1_1DynamicTableAllocator.html#adbf88782b7635d9002ad857c281ab333">register_freelist</a>(FreeList *free_list)</td><td class="entry"><a class="el" href="classRealm_1_1DynamicTableAllocator.html">Realm::DynamicTableAllocator&lt; _ET, _INNER_BITS, _LEAF_BITS &gt;</a></td><td class="entry"><span class="mlabel">static</span></td></tr>
-  <tr class="odd"><td class="entry"><a class="el" href="classRealm_1_1DynamicTableAllocator.html#abc5e81389e93628ba555d4934f6a4ebb">steal_freelist_element</a>(FreeList *requestor=nullptr)</td><td class="entry"><a class="el" href="classRealm_1_1DynamicTableAllocator.html">Realm::DynamicTableAllocator&lt; _ET, _INNER_BITS, _LEAF_BITS &gt;</a></td><td class="entry"><span class="mlabel">static</span></td></tr>
+  <tr class="even"><td class="entry"><a class="el" href="classRealm_1_1DynamicTableAllocator.html#a975bc46fbce24f261d40979be2708f5d">Constructor</a> typedef</td><td class="entry"><a class="el" href="classRealm_1_1DynamicTableAllocator.html">Realm::DynamicTableAllocator&lt; _ET, _INNER_BITS, _LEAF_BITS, CONSTRUCTOR &gt;</a></td><td class="entry"></td></tr>
+  <tr class="odd"><td class="entry"><a class="el" href="classRealm_1_1DynamicTableAllocator.html#a74428c0d440cc2df332860ba2f90b78b">ET</a> typedef</td><td class="entry"><a class="el" href="classRealm_1_1DynamicTableAllocator.html">Realm::DynamicTableAllocator&lt; _ET, _INNER_BITS, _LEAF_BITS, CONSTRUCTOR &gt;</a></td><td class="entry"></td></tr>
+  <tr class="even"><td class="entry"><a class="el" href="classRealm_1_1DynamicTableAllocator.html#a6cb931a1aa0c275bb7fd77b4a780bf3d">FreeList</a> typedef</td><td class="entry"><a class="el" href="classRealm_1_1DynamicTableAllocator.html">Realm::DynamicTableAllocator&lt; _ET, _INNER_BITS, _LEAF_BITS, CONSTRUCTOR &gt;</a></td><td class="entry"></td></tr>
+  <tr class="odd"><td class="entry"><a class="el" href="classRealm_1_1DynamicTableAllocator.html#a45191dc4f4f509dc6be879d2b33368d9">get_registered_freelists</a>(Mutex *&amp;lock)</td><td class="entry"><a class="el" href="classRealm_1_1DynamicTableAllocator.html">Realm::DynamicTableAllocator&lt; _ET, _INNER_BITS, _LEAF_BITS, CONSTRUCTOR &gt;</a></td><td class="entry"><span class="mlabel">static</span></td></tr>
+  <tr class="even"><td class="entry"><a class="el" href="classRealm_1_1DynamicTableAllocator.html#a620a7467bab65ac6f6951b6ea4cf0fd7">INNER_BITS</a></td><td class="entry"><a class="el" href="classRealm_1_1DynamicTableAllocator.html">Realm::DynamicTableAllocator&lt; _ET, _INNER_BITS, _LEAF_BITS, CONSTRUCTOR &gt;</a></td><td class="entry"><span class="mlabel">static</span></td></tr>
+  <tr class="odd"><td class="entry"><a class="el" href="classRealm_1_1DynamicTableAllocator.html#a4f92af28b6e7e3a6e7e1040510fcdb53">INNER_TYPE</a> typedef</td><td class="entry"><a class="el" href="classRealm_1_1DynamicTableAllocator.html">Realm::DynamicTableAllocator&lt; _ET, _INNER_BITS, _LEAF_BITS, CONSTRUCTOR &gt;</a></td><td class="entry"></td></tr>
+  <tr class="even"><td class="entry"><a class="el" href="classRealm_1_1DynamicTableAllocator.html#accad69e67bccc1c2556a7573f54eea0a">IT</a> typedef</td><td class="entry"><a class="el" href="classRealm_1_1DynamicTableAllocator.html">Realm::DynamicTableAllocator&lt; _ET, _INNER_BITS, _LEAF_BITS, CONSTRUCTOR &gt;</a></td><td class="entry"></td></tr>
+  <tr class="odd"><td class="entry"><a class="el" href="classRealm_1_1DynamicTableAllocator.html#ae998f7a45b5300be284f1f986e190238">LEAF_BITS</a></td><td class="entry"><a class="el" href="classRealm_1_1DynamicTableAllocator.html">Realm::DynamicTableAllocator&lt; _ET, _INNER_BITS, _LEAF_BITS, CONSTRUCTOR &gt;</a></td><td class="entry"><span class="mlabel">static</span></td></tr>
+  <tr class="even"><td class="entry"><a class="el" href="classRealm_1_1DynamicTableAllocator.html#a91f8c2477b4ea8ce71cdd70c91c5459b">LEAF_TYPE</a> typedef</td><td class="entry"><a class="el" href="classRealm_1_1DynamicTableAllocator.html">Realm::DynamicTableAllocator&lt; _ET, _INNER_BITS, _LEAF_BITS, CONSTRUCTOR &gt;</a></td><td class="entry"></td></tr>
+  <tr class="odd"><td class="entry"><a class="el" href="classRealm_1_1DynamicTableAllocator.html#a2a7a76cbdd22a55bae5ffd1d63ce0fa2">LT</a> typedef</td><td class="entry"><a class="el" href="classRealm_1_1DynamicTableAllocator.html">Realm::DynamicTableAllocator&lt; _ET, _INNER_BITS, _LEAF_BITS, CONSTRUCTOR &gt;</a></td><td class="entry"></td></tr>
+  <tr class="even"><td class="entry"><a class="el" href="classRealm_1_1DynamicTableAllocator.html#a7dc06ed57da414b87b7e0fb149e62dad">new_leaf_node</a>(IT first_index, IT last_index, int owner, ET **free_list_head, ET **free_list_tail, const Constructor &amp;elem_ctor_obj)</td><td class="entry"><a class="el" href="classRealm_1_1DynamicTableAllocator.html">Realm::DynamicTableAllocator&lt; _ET, _INNER_BITS, _LEAF_BITS, CONSTRUCTOR &gt;</a></td><td class="entry"><span class="mlabel">static</span></td></tr>
+  <tr class="odd"><td class="entry"><a class="el" href="classRealm_1_1DynamicTableAllocator.html#a4add93c11a6a2687191a8e820441775e">register_freelist</a>(FreeList *free_list)</td><td class="entry"><a class="el" href="classRealm_1_1DynamicTableAllocator.html">Realm::DynamicTableAllocator&lt; _ET, _INNER_BITS, _LEAF_BITS, CONSTRUCTOR &gt;</a></td><td class="entry"><span class="mlabel">static</span></td></tr>
+  <tr class="even"><td class="entry"><a class="el" href="classRealm_1_1DynamicTableAllocator.html#a3e21b4e07da17f4015e9a521c7656d72">steal_freelist_element</a>(FreeList *requestor=nullptr)</td><td class="entry"><a class="el" href="classRealm_1_1DynamicTableAllocator.html">Realm::DynamicTableAllocator&lt; _ET, _INNER_BITS, _LEAF_BITS, CONSTRUCTOR &gt;</a></td><td class="entry"><span class="mlabel">static</span></td></tr>
 </table></div><!-- contents -->
+</div><!-- doc-content -->
 <!-- HTML footer for doxygen 1.9.1-->
 <!-- start footer part -->
-<hr class="footer"/><address class="footer"><small>
-Generated by&#160;<a href="https://www.doxygen.org/index.html"><img class="footer" src="doxygen.svg" width="104" height="31" alt="doxygen"/></a> 1.9.8
-</small></address>
+<div id="nav-path" class="navpath"><!-- id is needed for treeview function! -->
+  <ul>
+    <li class="footer">Generated by <a href="https://www.doxygen.org/index.html"><img class="footer" src="doxygen.svg" width="104" height="31" alt="doxygen"/></a> 1.9.8 </li>
+  </ul>
+</div>
 </body>
 </html>

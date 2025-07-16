@@ -1,0 +1,27 @@
+var namespaceRealm_1_1ProfilingMeasurements =
+[
+    [ "BranchPredictionPerfCounters", "structRealm_1_1ProfilingMeasurements_1_1BranchPredictionPerfCounters.html", "structRealm_1_1ProfilingMeasurements_1_1BranchPredictionPerfCounters" ],
+    [ "CachePerfCounters", "structRealm_1_1ProfilingMeasurements_1_1CachePerfCounters.html", "structRealm_1_1ProfilingMeasurements_1_1CachePerfCounters" ],
+    [ "InstanceAbnormalStatus", "structRealm_1_1ProfilingMeasurements_1_1InstanceAbnormalStatus.html", null ],
+    [ "InstanceAllocResult", "structRealm_1_1ProfilingMeasurements_1_1InstanceAllocResult.html", "structRealm_1_1ProfilingMeasurements_1_1InstanceAllocResult" ],
+    [ "InstanceMemoryUsage", "structRealm_1_1ProfilingMeasurements_1_1InstanceMemoryUsage.html", "structRealm_1_1ProfilingMeasurements_1_1InstanceMemoryUsage" ],
+    [ "InstanceStatus", "structRealm_1_1ProfilingMeasurements_1_1InstanceStatus.html", "structRealm_1_1ProfilingMeasurements_1_1InstanceStatus" ],
+    [ "InstanceTimeline", "structRealm_1_1ProfilingMeasurements_1_1InstanceTimeline.html", "structRealm_1_1ProfilingMeasurements_1_1InstanceTimeline" ],
+    [ "IPCPerfCounters", "structRealm_1_1ProfilingMeasurements_1_1IPCPerfCounters.html", "structRealm_1_1ProfilingMeasurements_1_1IPCPerfCounters" ],
+    [ "OperationAbnormalStatus", "structRealm_1_1ProfilingMeasurements_1_1OperationAbnormalStatus.html", null ],
+    [ "OperationBacktrace", "structRealm_1_1ProfilingMeasurements_1_1OperationBacktrace.html", "structRealm_1_1ProfilingMeasurements_1_1OperationBacktrace" ],
+    [ "OperationCopyInfo", "structRealm_1_1ProfilingMeasurements_1_1OperationCopyInfo.html", "structRealm_1_1ProfilingMeasurements_1_1OperationCopyInfo" ],
+    [ "OperationEventWaits", "structRealm_1_1ProfilingMeasurements_1_1OperationEventWaits.html", "structRealm_1_1ProfilingMeasurements_1_1OperationEventWaits" ],
+    [ "OperationFinishEvent", "structRealm_1_1ProfilingMeasurements_1_1OperationFinishEvent.html", "structRealm_1_1ProfilingMeasurements_1_1OperationFinishEvent" ],
+    [ "OperationMemoryUsage", "structRealm_1_1ProfilingMeasurements_1_1OperationMemoryUsage.html", "structRealm_1_1ProfilingMeasurements_1_1OperationMemoryUsage" ],
+    [ "OperationProcessorUsage", "structRealm_1_1ProfilingMeasurements_1_1OperationProcessorUsage.html", "structRealm_1_1ProfilingMeasurements_1_1OperationProcessorUsage" ],
+    [ "OperationStatus", "structRealm_1_1ProfilingMeasurements_1_1OperationStatus.html", "structRealm_1_1ProfilingMeasurements_1_1OperationStatus" ],
+    [ "OperationSubgraphInfo", "structRealm_1_1ProfilingMeasurements_1_1OperationSubgraphInfo.html", "structRealm_1_1ProfilingMeasurements_1_1OperationSubgraphInfo" ],
+    [ "OperationTimeline", "structRealm_1_1ProfilingMeasurements_1_1OperationTimeline.html", "structRealm_1_1ProfilingMeasurements_1_1OperationTimeline" ],
+    [ "OperationTimelineGPU", "structRealm_1_1ProfilingMeasurements_1_1OperationTimelineGPU.html", "structRealm_1_1ProfilingMeasurements_1_1OperationTimelineGPU" ],
+    [ "TLBPerfCounters", "structRealm_1_1ProfilingMeasurements_1_1TLBPerfCounters.html", "structRealm_1_1ProfilingMeasurements_1_1TLBPerfCounters" ],
+    [ "L1DCachePerfCounters", "namespaceRealm_1_1ProfilingMeasurements.html#a85045a8c1b4e33b846311f5c10230dbb", null ],
+    [ "L1ICachePerfCounters", "namespaceRealm_1_1ProfilingMeasurements.html#a5caeaab0524172211c91bbbe95fc03e0", null ],
+    [ "L2CachePerfCounters", "namespaceRealm_1_1ProfilingMeasurements.html#a02febe6eec2bbc98588cc4e562328b12", null ],
+    [ "L3CachePerfCounters", "namespaceRealm_1_1ProfilingMeasurements.html#abcafc5c96ab2cc13b45a80362f113a0a", null ]
+];

@@ -10,6 +10,10 @@
 <link href="tabs.css" rel="stylesheet" type="text/css"/>
 <script type="text/javascript" src="jquery.js"></script>
 <script type="text/javascript" src="dynsections.js"></script>
+<link href="navtree.css" rel="stylesheet" type="text/css"/>
+<script type="text/javascript" src="resize.js"></script>
+<script type="text/javascript" src="navtreedata.js"></script>
+<script type="text/javascript" src="navtree.js"></script>
 <link href="search/search.css" rel="stylesheet" type="text/css"/>
 <script type="text/javascript" src="search/searchdata.js"></script>
 <script type="text/javascript" src="search/search.js"></script>
@@ -20,6 +24,8 @@
 </script>
 <link href="doxygen.css" rel="stylesheet" type="text/css" />
 <link href="customdoxygen.css" rel="stylesheet" type="text/css"/>
+<link href="doxygen-awesome.css" rel="stylesheet" type="text/css"/>
+<link href="doxygen-awesome-sidebar-only.css" rel="stylesheet" type="text/css"/>
 <!-- BEGIN version select -->
 <link rel="stylesheet" type="text/css" href="../dropdown.css">
 <script type="text/javascript" src="https://ajax.googleapis.com/ajax/libs/jquery/3.2.1/jquery.min.js">
@@ -32,11 +38,13 @@
 <table cellspacing="0" cellpadding="0">
  <tbody>
  <tr style="height: 56px;">
+  <td id="projectlogo"><img alt="Logo" src="logo.png"/></td>
   <td id="projectalign" style="padding-left: 0.5em;">
    <div id="projectname">Realm
    <!-- BEGIN version select -->
+    <br />
     <div class="dropdown">
-     <button class="dropbtn">Version 0.0.1</button>
+     <button class="dropbtn">Version 0.0.1+6ce58b75</button>
      <div class="dropdown-content"></div>
     </div>
     <script type="text/javascript" src="../selectversion.js"></script>
@@ -125,6 +133,22 @@ var searchBox = new SearchBox("searchBox", "search/",'.html');
     </ul>
   </div>
 </div><!-- top -->
+<div id="side-nav" class="ui-resizable side-nav-resizable">
+  <div id="nav-tree">
+    <div id="nav-tree-contents">
+      <div id="nav-sync" class="sync"></div>
+    </div>
+  </div>
+  <div id="splitbar" style="-moz-user-select:none;" 
+       class="ui-resizable-handle">
+  </div>
+</div>
+<script type="text/javascript">
+/* @license magnet:?xt=urn:btih:d3d9a9a6595521f9666a5e94cc830dab83b65699&amp;dn=expat.txt MIT */
+$(document).ready(function(){initNavTree('functions_vars_f.html',''); initResizable(); });
+/* @license-end */
+</script>
+<div id="doc-content">
 <!-- window showing the filter options -->
 <div id="MSearchSelectWindow"
      onmouseover="return searchBox.OnSearchSelectShow()"
@@ -204,7 +228,7 @@ var searchBox = new SearchBox("searchBox", "search/",'.html');
 <li>first_free&#160;:&#160;<a class="el" href="classPendingCompletionManager.html#a8fe487dacc238a6c5ec3d86e349d53a5">PendingCompletionManager</a>, <a class="el" href="classRealm_1_1DynamicTableFreeList.html#aa16feb9d932a349de8fdc03dfc213e58">Realm::DynamicTableFreeList&lt; ALLOCATOR &gt;</a>, <a class="el" href="classRealm_1_1PendingCompletionManager.html#a2babc1540d12b9692647ed298af2ecea">Realm::PendingCompletionManager</a>, <a class="el" href="classRealm_1_1ReservationImpl.html#a042893e490631c6261078ffdf777a7ae">Realm::ReservationImpl</a></li>
 <li>first_free_range&#160;:&#160;<a class="el" href="classRealm_1_1BasicRangeAllocator.html#a5f23e26949ad8e55f05aa43ab9816e93">Realm::BasicRangeAllocator&lt; RT, TT &gt;</a></li>
 <li>first_free_waiter&#160;:&#160;<a class="el" href="classRealm_1_1CompQueueImpl.html#a1827739aaee5ca90cca6dd8182e7f06a">Realm::CompQueueImpl</a></li>
-<li>first_generation&#160;:&#160;<a class="el" href="classRealm_1_1BarrierImpl.html#ae72252f699f2327c9eea276aa9412355">Realm::BarrierImpl</a>, <a class="el" href="structRealm_1_1BarrierTriggerMessageArgsInternal.html#ad576c162e7e9556b20b68f817b74dcdc">Realm::BarrierTriggerMessageArgsInternal</a></li>
+<li>first_generation&#160;:&#160;<a class="el" href="classRealm_1_1BarrierImpl.html#ae72252f699f2327c9eea276aa9412355">Realm::BarrierImpl</a>, <a class="el" href="structRealm_1_1BarrierTriggerMessage.html#ae8bf3797208ab41178eb35849db6825e">Realm::BarrierTriggerMessage</a>, <a class="el" href="structRealm_1_1BarrierTriggerMessageArgsInternal.html#ad576c162e7e9556b20b68f817b74dcdc">Realm::BarrierTriggerMessageArgsInternal</a></li>
 <li>first_index&#160;:&#160;<a class="el" href="structRealm_1_1DynamicTableNodeBase.html#a265b464662cbb06e493b494a9e83300c">Realm::DynamicTableNodeBase&lt; LT, IT &gt;</a>, <a class="el" href="structRealm_1_1RemoteIBAllocRequestMultiple.html#a7bd300ba0ed151750ec45cc7e9c2b680">Realm::RemoteIBAllocRequestMultiple</a>, <a class="el" href="structRealm_1_1RemoteIBAllocResponseMultiple.html#ad20a149ae8630374d8b2773660d1579b">Realm::RemoteIBAllocResponseMultiple</a></li>
 <li>first_interp&#160;:&#160;<a class="el" href="structRealm_1_1SubgraphScheduleEntry.html#a8eab3fb82eb152f5a05e17de6d5f9848">Realm::SubgraphScheduleEntry</a></li>
 <li>first_noncontig&#160;:&#160;<a class="el" href="classRealm_1_1SequenceAssembler.html#aaaf130edf041abbe4d0206723c4fc11b">Realm::SequenceAssembler</a></li>
@@ -254,10 +278,13 @@ var searchBox = new SearchBox("searchBox", "search/",'.html');
 <li>future_local_waiters&#160;:&#160;<a class="el" href="classRealm_1_1GenEventImpl.html#ac7d1cd82c23a00090f7479eae98d82da">Realm::GenEventImpl</a></li>
 </ul>
 </div><!-- contents -->
+</div><!-- doc-content -->
 <!-- HTML footer for doxygen 1.9.1-->
 <!-- start footer part -->
-<hr class="footer"/><address class="footer"><small>
-Generated by&#160;<a href="https://www.doxygen.org/index.html"><img class="footer" src="doxygen.svg" width="104" height="31" alt="doxygen"/></a> 1.9.8
-</small></address>
+<div id="nav-path" class="navpath"><!-- id is needed for treeview function! -->
+  <ul>
+    <li class="footer">Generated by <a href="https://www.doxygen.org/index.html"><img class="footer" src="doxygen.svg" width="104" height="31" alt="doxygen"/></a> 1.9.8 </li>
+  </ul>
+</div>
 </body>
 </html>

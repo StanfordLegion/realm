@@ -10,6 +10,10 @@
 <link href="tabs.css" rel="stylesheet" type="text/css"/>
 <script type="text/javascript" src="jquery.js"></script>
 <script type="text/javascript" src="dynsections.js"></script>
+<link href="navtree.css" rel="stylesheet" type="text/css"/>
+<script type="text/javascript" src="resize.js"></script>
+<script type="text/javascript" src="navtreedata.js"></script>
+<script type="text/javascript" src="navtree.js"></script>
 <link href="search/search.css" rel="stylesheet" type="text/css"/>
 <script type="text/javascript" src="search/searchdata.js"></script>
 <script type="text/javascript" src="search/search.js"></script>
@@ -20,6 +24,8 @@
 </script>
 <link href="doxygen.css" rel="stylesheet" type="text/css" />
 <link href="customdoxygen.css" rel="stylesheet" type="text/css"/>
+<link href="doxygen-awesome.css" rel="stylesheet" type="text/css"/>
+<link href="doxygen-awesome-sidebar-only.css" rel="stylesheet" type="text/css"/>
 <!-- BEGIN version select -->
 <link rel="stylesheet" type="text/css" href="../dropdown.css">
 <script type="text/javascript" src="https://ajax.googleapis.com/ajax/libs/jquery/3.2.1/jquery.min.js">
@@ -32,11 +38,13 @@
 <table cellspacing="0" cellpadding="0">
  <tbody>
  <tr style="height: 56px;">
+  <td id="projectlogo"><img alt="Logo" src="logo.png"/></td>
   <td id="projectalign" style="padding-left: 0.5em;">
    <div id="projectname">Realm
    <!-- BEGIN version select -->
+    <br />
     <div class="dropdown">
-     <button class="dropbtn">Version 0.0.1</button>
+     <button class="dropbtn">Version 0.0.1+6ce58b75</button>
      <div class="dropdown-content"></div>
     </div>
     <script type="text/javascript" src="../selectversion.js"></script>
@@ -84,6 +92,23 @@ var searchBox = new SearchBox("searchBox", "search/",'.html');
       <li><a href="functions.html"><span>Class&#160;Members</span></a></li>
     </ul>
   </div>
+</div><!-- top -->
+<div id="side-nav" class="ui-resizable side-nav-resizable">
+  <div id="nav-tree">
+    <div id="nav-tree-contents">
+      <div id="nav-sync" class="sync"></div>
+    </div>
+  </div>
+  <div id="splitbar" style="-moz-user-select:none;" 
+       class="ui-resizable-handle">
+  </div>
+</div>
+<script type="text/javascript">
+/* @license magnet:?xt=urn:btih:d3d9a9a6595521f9666a5e94cc830dab83b65699&amp;dn=expat.txt MIT */
+$(document).ready(function(){initNavTree('classRealm_1_1CompQueueImpl_1_1RemotePopRequest.html',''); initResizable(); });
+/* @license-end */
+</script>
+<div id="doc-content">
 <!-- window showing the filter options -->
 <div id="MSearchSelectWindow"
      onmouseover="return searchBox.OnSearchSelectShow()"
@@ -105,11 +130,6 @@ var searchBox = new SearchBox("searchBox", "search/",'.html');
 </div>
 </div>
 
-<div id="nav-path" class="navpath">
-  <ul>
-<li class="navelem"><a class="el" href="namespaceRealm.html">Realm</a></li><li class="navelem"><a class="el" href="classRealm_1_1CompQueueImpl.html">CompQueueImpl</a></li><li class="navelem"><a class="el" href="classRealm_1_1CompQueueImpl_1_1RemotePopRequest.html">RemotePopRequest</a></li>  </ul>
-</div>
-</div><!-- top -->
 <div class="header">
   <div class="summary">
 <a href="#pub-methods">Public Member Functions</a> &#124;
@@ -123,29 +143,8 @@ var searchBox = new SearchBox("searchBox", "search/",'.html');
 <div class="dynheader">
 Collaboration diagram for Realm::CompQueueImpl::RemotePopRequest:</div>
 <div class="dyncontent">
-<div class="center"><img src="classRealm_1_1CompQueueImpl_1_1RemotePopRequest__coll__graph.png" border="0" usemap="#aRealm_1_1CompQueueImpl_1_1RemotePopRequest_coll__map" alt="Collaboration graph"/></div>
-<map name="aRealm_1_1CompQueueImpl_1_1RemotePopRequest_coll__map" id="aRealm_1_1CompQueueImpl_1_1RemotePopRequest_coll__map">
-<area shape="rect" title=" " alt="" coords="321,357,503,397"/>
-<area shape="rect" href="classRealm_1_1UnfairMutex.html" title=" " alt="" coords="195,181,349,207"/>
-<area shape="poly" title=" " alt="" coords="267,220,263,257,265,276,272,293,287,314,307,330,351,355,349,360,303,335,283,317,267,296,260,277,257,257,262,219"/>
-<area shape="rect" href="classRealm_1_1UnfairCondVar.html" title=" " alt="" coords="329,269,495,295"/>
-<area shape="poly" title=" " alt="" coords="295,214,333,243,382,267,380,272,331,248,292,218"/>
-<area shape="rect" href="classRealm_1_1noncopyable.html" title=" " alt="" coords="405,93,560,119"/>
-<area shape="poly" title=" " alt="" coords="443,126,301,184,299,179,441,122"/>
-<area shape="poly" title=" " alt="" coords="478,133,453,208,421,270,417,268,448,206,473,131"/>
-<area shape="rect" href="classRealm_1_1atomic.html" title=" " alt="" coords="5,93,205,119"/>
-<area shape="poly" title=" " alt="" coords="141,123,251,179,248,183,139,127"/>
-<area shape="rect" href="classRealm_1_1DoorbellList.html" title=" " alt="" coords="230,93,381,119"/>
-<area shape="poly" title=" " alt="" coords="298,133,279,182,274,180,293,131"/>
-<area shape="poly" title=" " alt="" coords="333,126,346,141,368,175,387,211,410,268,406,270,382,214,364,178,342,144,329,130"/>
-<area shape="rect" href="classRealm_1_1atomic.html" title=" " alt="" coords="204,5,407,31"/>
-<area shape="poly" title=" " alt="" coords="308,45,308,93,303,93,303,45"/>
-<area shape="poly" title=" " alt="" coords="415,308,415,357,409,357,409,308"/>
-<area shape="rect" href="classRealm_1_1Event.html" title=" " alt="" coords="520,269,629,295"/>
-<area shape="poly" title=" " alt="" coords="544,304,446,359,444,355,541,299"/>
-<area shape="poly" title=" " alt="" coords="644,273,656,282,648,290,630,293,629,287,645,285,651,282,642,278"/>
-</map>
-<center><span class="legend">[<a href="graph_legend.html">legend</a>]</span></center></div>
+<div class="center"><!-- SVG 0 --></div>
+<center><span class="legend">[<a target="top" href="graph_legend.html">legend</a>]</span></center></div>
 <table class="memberdecls">
 <tr class="heading"><td colspan="2"><h2 class="groupheader"><a id="pub-methods" name="pub-methods"></a>
 Public Member Functions</h2></td></tr>
@@ -282,13 +281,17 @@ Public Attributes</h2></td></tr>
 </div>
 </div>
 <hr/>The documentation for this class was generated from the following file:<ul>
-<li>/home/runner/work/realm/realm/realm-src/realm/<a class="el" href="comp__queue__impl_8h_source.html">comp_queue_impl.h</a></li>
+<li>/home/runner/work/realm/realm/realm-src/src/realm/<a class="el" href="comp__queue__impl_8h_source.html">comp_queue_impl.h</a></li>
 </ul>
 </div><!-- contents -->
+</div><!-- doc-content -->
 <!-- HTML footer for doxygen 1.9.1-->
 <!-- start footer part -->
-<hr class="footer"/><address class="footer"><small>
-Generated by&#160;<a href="https://www.doxygen.org/index.html"><img class="footer" src="doxygen.svg" width="104" height="31" alt="doxygen"/></a> 1.9.8
-</small></address>
+<div id="nav-path" class="navpath"><!-- id is needed for treeview function! -->
+  <ul>
+    <li class="navelem"><a class="el" href="namespaceRealm.html">Realm</a></li><li class="navelem"><a class="el" href="classRealm_1_1CompQueueImpl.html">CompQueueImpl</a></li><li class="navelem"><a class="el" href="classRealm_1_1CompQueueImpl_1_1RemotePopRequest.html">RemotePopRequest</a></li>
+    <li class="footer">Generated by <a href="https://www.doxygen.org/index.html"><img class="footer" src="doxygen.svg" width="104" height="31" alt="doxygen"/></a> 1.9.8 </li>
+  </ul>
+</div>
 </body>
 </html>

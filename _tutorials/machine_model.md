@@ -1,5 +1,7 @@
 ---
-title: Machine Model
+layout: page
+permalink: /tutorial/realm/machine_model.html
+title: Realm Machine Model
 ---
 
 
@@ -133,10 +135,10 @@ is a processor.
 ## References
 
 <div id="full-proc-kind"></div>
-\[1]: [Full Processor Kind](https://github.com/StanfordLegion/realm/blob/main/realm/realm_c.h#L45)
+\[1]: [Full Processor Kind](https://github.com/StanfordLegion/legion/blob/stable/runtime/realm/realm_c.h#L45)
 
 <div id="full-mem-kind"></div>
-\[2]: [Full Memory Kind](https://github.com/StanfordLegion/realm/blob/main/realm/realm_c.h#L63)
+\[2]: [Full Memory Kind](https://github.com/StanfordLegion/legion/blob/stable/runtime/realm/realm_c.h#L63)
 
 <div id="id-header-file"></div>
-\[3]: [ID header file](https://github.com/StanfordLegion/realm/blob/main/realm/id.h)
+\[3]: [ID header file](https://github.com/StanfordLegion/legion/blob/stable/runtime/realm/id.h)

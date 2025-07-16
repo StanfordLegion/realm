@@ -10,6 +10,10 @@
 <link href="tabs.css" rel="stylesheet" type="text/css"/>
 <script type="text/javascript" src="jquery.js"></script>
 <script type="text/javascript" src="dynsections.js"></script>
+<link href="navtree.css" rel="stylesheet" type="text/css"/>
+<script type="text/javascript" src="resize.js"></script>
+<script type="text/javascript" src="navtreedata.js"></script>
+<script type="text/javascript" src="navtree.js"></script>
 <link href="search/search.css" rel="stylesheet" type="text/css"/>
 <script type="text/javascript" src="search/searchdata.js"></script>
 <script type="text/javascript" src="search/search.js"></script>
@@ -20,6 +24,8 @@
 </script>
 <link href="doxygen.css" rel="stylesheet" type="text/css" />
 <link href="customdoxygen.css" rel="stylesheet" type="text/css"/>
+<link href="doxygen-awesome.css" rel="stylesheet" type="text/css"/>
+<link href="doxygen-awesome-sidebar-only.css" rel="stylesheet" type="text/css"/>
 <!-- BEGIN version select -->
 <link rel="stylesheet" type="text/css" href="../dropdown.css">
 <script type="text/javascript" src="https://ajax.googleapis.com/ajax/libs/jquery/3.2.1/jquery.min.js">
@@ -32,11 +38,13 @@
 <table cellspacing="0" cellpadding="0">
  <tbody>
  <tr style="height: 56px;">
+  <td id="projectlogo"><img alt="Logo" src="logo.png"/></td>
   <td id="projectalign" style="padding-left: 0.5em;">
    <div id="projectname">Realm
    <!-- BEGIN version select -->
+    <br />
     <div class="dropdown">
-     <button class="dropbtn">Version 0.0.1</button>
+     <button class="dropbtn">Version 0.0.1+6ce58b75</button>
      <div class="dropdown-content"></div>
     </div>
     <script type="text/javascript" src="../selectversion.js"></script>
@@ -128,6 +136,22 @@ var searchBox = new SearchBox("searchBox", "search/",'.html');
     </ul>
   </div>
 </div><!-- top -->
+<div id="side-nav" class="ui-resizable side-nav-resizable">
+  <div id="nav-tree">
+    <div id="nav-tree-contents">
+      <div id="nav-sync" class="sync"></div>
+    </div>
+  </div>
+  <div id="splitbar" style="-moz-user-select:none;" 
+       class="ui-resizable-handle">
+  </div>
+</div>
+<script type="text/javascript">
+/* @license magnet:?xt=urn:btih:d3d9a9a6595521f9666a5e94cc830dab83b65699&amp;dn=expat.txt MIT */
+$(document).ready(function(){initNavTree('functions_g.html',''); initResizable(); });
+/* @license-end */
+</script>
+<div id="doc-content">
 <!-- window showing the filter options -->
 <div id="MSearchSelectWindow"
      onmouseover="return searchBox.OnSearchSelectShow()"
@@ -185,7 +209,7 @@ var searchBox = new SearchBox("searchBox", "search/",'.html');
 <li>gen_subscribed&#160;:&#160;<a class="el" href="classRealm_1_1BarrierImpl.html#a8674a20a3b216cb9746ab689eaefd643">Realm::BarrierImpl</a>, <a class="el" href="classRealm_1_1GenEventImpl.html#a22b3743025413df55dbd54de66e5bfcd">Realm::GenEventImpl</a></li>
 <li>gen_t&#160;:&#160;<a class="el" href="classRealm_1_1EventImpl.html#a4808c540801db9b44bbfd0633a212264">Realm::EventImpl</a></li>
 <li>generate_gather_paths()&#160;:&#160;<a class="el" href="classRealm_1_1IndirectionInfo.html#a1c6acbc042c500f68a0494a5ff23c382">Realm::IndirectionInfo</a>, <a class="el" href="classRealm_1_1IndirectionInfoBase.html#a596d9e1b4098e7f450b11859fb67efd7">Realm::IndirectionInfoBase</a></li>
-<li>generate_resource_info()&#160;:&#160;<a class="el" href="classRealm_1_1Cuda_1_1GPUDynamicFBMemory.html#af03a8e9fc482dce4c8cae588cd526625">Realm::Cuda::GPUDynamicFBMemory</a>, <a class="el" href="classRealm_1_1Cuda_1_1GPUFBMemory.html#ad2c16dc30b5ed02092e53d57ba164123">Realm::Cuda::GPUFBMemory</a>, <a class="el" href="classRealm_1_1Cuda_1_1GPUZCMemory.html#ad0e568314eae5230848da54b4a393175">Realm::Cuda::GPUZCMemory</a>, <a class="el" href="classRealm_1_1DiskMemory.html#aaf46b9be9bd921ee9216afc55e715033">Realm::DiskMemory</a>, <a class="el" href="classRealm_1_1FileMemory.html#a451392486e09d3124da6c59e2e497e86">Realm::FileMemory</a>, <a class="el" href="classRealm_1_1Hip_1_1GPUDynamicFBMemory.html#aa13f960cfc1741677f89a6b130196452">Realm::Hip::GPUDynamicFBMemory</a>, <a class="el" href="classRealm_1_1Hip_1_1GPUFBMemory.html#a2faefb3ffc11e1df7eb8a741c1d8bff6">Realm::Hip::GPUFBMemory</a>, <a class="el" href="classRealm_1_1Hip_1_1GPUZCMemory.html#a72d2cf75be462fdc298fefe73514af30">Realm::Hip::GPUZCMemory</a>, <a class="el" href="classRealm_1_1LocalCPUMemory.html#addd021c42fd12499b1dcec31b42fb591">Realm::LocalCPUMemory</a>, <a class="el" href="classRealm_1_1MemoryImpl.html#abb72f7944b649976dd147d49ef32b02e">Realm::MemoryImpl</a>, <a class="el" href="classRealm_1_1RegionInstance.html#ab1917c652cec3518d5d43c4eec027585">Realm::RegionInstance</a></li>
+<li>generate_resource_info()&#160;:&#160;<a class="el" href="classRealm_1_1Cuda_1_1GPUDynamicFBMemory.html#af03a8e9fc482dce4c8cae588cd526625">Realm::Cuda::GPUDynamicFBMemory</a>, <a class="el" href="classRealm_1_1Cuda_1_1GPUFBMemory.html#ad2c16dc30b5ed02092e53d57ba164123">Realm::Cuda::GPUFBMemory</a>, <a class="el" href="classRealm_1_1Cuda_1_1GPUZCMemory.html#ad0e568314eae5230848da54b4a393175">Realm::Cuda::GPUZCMemory</a>, <a class="el" href="classRealm_1_1DiskMemory.html#aaf46b9be9bd921ee9216afc55e715033">Realm::DiskMemory</a>, <a class="el" href="classRealm_1_1FileMemory.html#a451392486e09d3124da6c59e2e497e86">Realm::FileMemory</a>, <a class="el" href="classRealm_1_1Hip_1_1GPUDynamicFBMemory.html#aa13f960cfc1741677f89a6b130196452">Realm::Hip::GPUDynamicFBMemory</a>, <a class="el" href="classRealm_1_1Hip_1_1GPUFBMemory.html#a2faefb3ffc11e1df7eb8a741c1d8bff6">Realm::Hip::GPUFBMemory</a>, <a class="el" href="classRealm_1_1Hip_1_1GPUZCMemory.html#a72d2cf75be462fdc298fefe73514af30">Realm::Hip::GPUZCMemory</a>, <a class="el" href="classRealm_1_1LocalCPUMemory.html#addd021c42fd12499b1dcec31b42fb591">Realm::LocalCPUMemory</a>, <a class="el" href="classRealm_1_1MemoryImpl.html#abb72f7944b649976dd147d49ef32b02e">Realm::MemoryImpl</a>, <a class="el" href="classRealm_1_1RegionInstance.html#a3006586952f2015de8980139cd9dc4eb">Realm::RegionInstance</a></li>
 <li>generate_scatter_paths()&#160;:&#160;<a class="el" href="classRealm_1_1IndirectionInfo.html#a3668399e61cf86a8d8297200f196583e">Realm::IndirectionInfo</a>, <a class="el" href="classRealm_1_1IndirectionInfoBase.html#a4f7dfd8574e3e2f9e6baa46b6bd021c8">Realm::IndirectionInfoBase</a></li>
 <li>generation&#160;:&#160;<a class="el" href="classRealm_1_1BarrierImpl.html#aebaba1e328e43113bf943bccb59210c6">Realm::BarrierImpl</a></li>
 <li>Generation()&#160;:&#160;<a class="el" href="classRealm_1_1BarrierImpl_1_1Generation.html#a7cceb6dd58229eac560a5a31f594075e">Realm::BarrierImpl::Generation</a></li>
@@ -194,6 +218,7 @@ var searchBox = new SearchBox("searchBox", "search/",'.html');
 <li>generic_workers&#160;:&#160;<a class="el" href="structRealm_1_1BackgroundWorkManager_1_1Config.html#aba335d082e3df54b79ccc7930717802d">Realm::BackgroundWorkManager::Config</a></li>
 <li>GenericAccessor()&#160;:&#160;<a class="el" href="classPRealm_1_1GenericAccessor.html#ab8f183cae37f526339bfbea0b77bb733">PRealm::GenericAccessor&lt; FT, N, T &gt;</a>, <a class="el" href="classRealm_1_1GenericAccessor.html#ada1e5bab8df45e738d5033cec0544b79">Realm::GenericAccessor&lt; FT, N, T &gt;</a></li>
 <li>GenEventImpl()&#160;:&#160;<a class="el" href="classRealm_1_1GenEventImpl.html#a7db05486d3d824d9a92d5bb8f2b1e30b">Realm::GenEventImpl</a></li>
+<li>GenEventImplAllocator()&#160;:&#160;<a class="el" href="structRealm_1_1GenEventImpl_1_1GenEventImplAllocator.html#a86f719e756a541439c4989d4a27a9edf">Realm::GenEventImpl::GenEventImplAllocator</a></li>
 <li>get()&#160;:&#160;<a class="el" href="classRealm_1_1LockedMap.html#a059a89d1c9275bd869e19738f4ecfd62">Realm::LockedMap&lt; K, V, LT &gt;</a>, <a class="el" href="classRealm_1_1PriorityQueue.html#aeb8e9aa6cf8bb111c9a41e0331d063dc">Realm::PriorityQueue&lt; T, LT &gt;</a>, <a class="el" href="classRealm_1_1UCP_1_1MPool.html#a767c973d6ec5d143f3d5eb3d9522ae84">Realm::UCP::MPool</a>, <a class="el" href="classRealm_1_1UCP_1_1VMPool.html#a77329eb9903ce764923f2732818dbcda">Realm::UCP::VMPool</a></li>
 <li>get_address_size()&#160;:&#160;<a class="el" href="classRealm_1_1TransferIterator.html#a0c661da1c83062a200ce1d35ee9105c3">Realm::TransferIterator</a></li>
 <li>get_address_space_count()&#160;:&#160;<a class="el" href="classRealm_1_1Machine.html#ac7948c91639376667c1803378375cf13">Realm::Machine</a></li>
@@ -210,7 +235,7 @@ var searchBox = new SearchBox("searchBox", "search/",'.html');
 <li>get_best_ready_task()&#160;:&#160;<a class="el" href="classRealm_1_1ThreadedTaskScheduler.html#a432f1beb45ebeb44abc6d418867e113e">Realm::ThreadedTaskScheduler</a></li>
 <li>get_best_task()&#160;:&#160;<a class="el" href="classRealm_1_1TaskQueue.html#afb59737a6987af6f21a3c70801768705">Realm::TaskQueue</a></li>
 <li>get_buffer()&#160;:&#160;<a class="el" href="classRealm_1_1Serialization_1_1DynamicBufferSerializer.html#ab6451c6de7134524a9624474cb012d53">Realm::Serialization::DynamicBufferSerializer</a></li>
-<li>get_bytes()&#160;:&#160;<a class="el" href="classRealm_1_1Cuda_1_1GPUDynamicFBMemory.html#ace499c8f6b2d612cf19d38bf5f095891">Realm::Cuda::GPUDynamicFBMemory</a>, <a class="el" href="classRealm_1_1Cuda_1_1GPUFBMemory.html#ae03bdf67eaef7fcdc51a69d748adf1bc">Realm::Cuda::GPUFBMemory</a>, <a class="el" href="classRealm_1_1Cuda_1_1GPUZCMemory.html#af69783bf395d9dbf1dfc622731d636b4">Realm::Cuda::GPUZCMemory</a>, <a class="el" href="classRealm_1_1DiskMemory.html#ac25d7ad4630159b807b1cbb6a412739f">Realm::DiskMemory</a>, <a class="el" href="classRealm_1_1FileMemory.html#abd438ab1536a30400bafaceef2bb8611">Realm::FileMemory</a>, <a class="el" href="classRealm_1_1HDF5_1_1HDF5Memory.html#a2c0f3594092dfa616051b8039eaac543">Realm::HDF5::HDF5Memory</a>, <a class="el" href="classRealm_1_1Hip_1_1GPUDynamicFBMemory.html#a609dbb97a06e2a11b80dcdd034d430ea">Realm::Hip::GPUDynamicFBMemory</a>, <a class="el" href="classRealm_1_1Hip_1_1GPUFBMemory.html#a58f0ac03282b37a3de4cae4c2a6adaea">Realm::Hip::GPUFBMemory</a>, <a class="el" href="classRealm_1_1Hip_1_1GPUZCMemory.html#afb76ac57421bd9b19df9eadec8c7e34d">Realm::Hip::GPUZCMemory</a>, <a class="el" href="classRealm_1_1IBMemory.html#afab54fc94de0e677e7d753d48e40c0a0">Realm::IBMemory</a>, <a class="el" href="classRealm_1_1LocalCPUMemory.html#acae8ee95b2ab8ebc353cc66b6901014e">Realm::LocalCPUMemory</a>, <a class="el" href="classRealm_1_1MemoryImpl.html#a5db47240f3f0116e8f34812d74b42f38">Realm::MemoryImpl</a>, <a class="el" href="classRealm_1_1RemoteMemory.html#a61c3cd4c3b95c21e74f087138bcf20ae">Realm::RemoteMemory</a>, <a class="el" href="classRealm_1_1UCP_1_1UCPRemoteMemory.html#a7ded8c66b3b358284f83f3e6a704064f">Realm::UCP::UCPRemoteMemory</a></li>
+<li>get_bytes()&#160;:&#160;<a class="el" href="classRealm_1_1Cuda_1_1GPUDynamicFBMemory.html#ace499c8f6b2d612cf19d38bf5f095891">Realm::Cuda::GPUDynamicFBMemory</a>, <a class="el" href="classRealm_1_1Cuda_1_1GPUFBMemory.html#ae03bdf67eaef7fcdc51a69d748adf1bc">Realm::Cuda::GPUFBMemory</a>, <a class="el" href="classRealm_1_1Cuda_1_1GPUZCMemory.html#af69783bf395d9dbf1dfc622731d636b4">Realm::Cuda::GPUZCMemory</a>, <a class="el" href="classRealm_1_1DiskMemory.html#ac25d7ad4630159b807b1cbb6a412739f">Realm::DiskMemory</a>, <a class="el" href="classRealm_1_1FileMemory.html#a5e6cfb46ee942d79f46c039a1173aabb">Realm::FileMemory</a>, <a class="el" href="classRealm_1_1HDF5_1_1HDF5Memory.html#a2c0f3594092dfa616051b8039eaac543">Realm::HDF5::HDF5Memory</a>, <a class="el" href="classRealm_1_1Hip_1_1GPUDynamicFBMemory.html#a609dbb97a06e2a11b80dcdd034d430ea">Realm::Hip::GPUDynamicFBMemory</a>, <a class="el" href="classRealm_1_1Hip_1_1GPUFBMemory.html#a58f0ac03282b37a3de4cae4c2a6adaea">Realm::Hip::GPUFBMemory</a>, <a class="el" href="classRealm_1_1Hip_1_1GPUZCMemory.html#afb76ac57421bd9b19df9eadec8c7e34d">Realm::Hip::GPUZCMemory</a>, <a class="el" href="classRealm_1_1IBMemory.html#afab54fc94de0e677e7d753d48e40c0a0">Realm::IBMemory</a>, <a class="el" href="classRealm_1_1LocalCPUMemory.html#acae8ee95b2ab8ebc353cc66b6901014e">Realm::LocalCPUMemory</a>, <a class="el" href="classRealm_1_1MemoryImpl.html#a5db47240f3f0116e8f34812d74b42f38">Realm::MemoryImpl</a>, <a class="el" href="classRealm_1_1RemoteMemory.html#a61c3cd4c3b95c21e74f087138bcf20ae">Realm::RemoteMemory</a>, <a class="el" href="classRealm_1_1UCP_1_1UCPRemoteMemory.html#a7ded8c66b3b358284f83f3e6a704064f">Realm::UCP::UCPRemoteMemory</a></li>
 <li>get_calibration_error()&#160;:&#160;<a class="el" href="classRealm_1_1Clock.html#ae5d1328f168e75f7d95fcac1668b3ec5">Realm::Clock</a></li>
 <li>get_capacity()&#160;:&#160;<a class="el" href="classRealm_1_1CompQueueImpl.html#acb31679ab6083aaf08db0782543be005">Realm::CompQueueImpl</a></li>
 <li>get_code_translators()&#160;:&#160;<a class="el" href="classRealm_1_1RuntimeImpl.html#a9d504444fa32254b91a875ecd363fcca">Realm::RuntimeImpl</a></li>
@@ -247,7 +272,7 @@ var searchBox = new SearchBox("searchBox", "search/",'.html');
 <li>get_hptr()&#160;:&#160;<a class="el" href="classRealm_1_1Cuda_1_1GPUAllocation.html#a332020ed7112eb37c8748700305bd9b1">Realm::Cuda::GPUAllocation</a></li>
 <li>get_ib_memory_impl()&#160;:&#160;<a class="el" href="classRealm_1_1RuntimeImpl.html#a94719702c190955aea94f146a6355b90">Realm::RuntimeImpl</a></li>
 <li>get_impl()&#160;:&#160;<a class="el" href="classRealm_1_1FunctionPointerImplementation.html#a80c5dfe1f9c5670ecc4b0e7383fe99df">Realm::FunctionPointerImplementation</a></li>
-<li>get_indexspace()&#160;:&#160;<a class="el" href="classPRealm_1_1RegionInstance.html#a867d4ff17a6bc731dd134103b11a488d">PRealm::RegionInstance</a>, <a class="el" href="classRealm_1_1RegionInstance.html#ae6fb4b0cc775f8d556519372e10948dc">Realm::RegionInstance</a></li>
+<li>get_indexspace()&#160;:&#160;<a class="el" href="classPRealm_1_1RegionInstance.html#a67f19f4083142ec69d5d19c55ee89d36">PRealm::RegionInstance</a>, <a class="el" href="classRealm_1_1RegionInstance.html#ae6fb4b0cc775f8d556519372e10948dc">Realm::RegionInstance</a></li>
 <li>get_inst_ptr()&#160;:&#160;<a class="el" href="classRealm_1_1MemoryImpl.html#acbc569e17271b80d1cdcf5d5316ee8ad">Realm::MemoryImpl</a></li>
 <li>get_instance()&#160;:&#160;<a class="el" href="classRealm_1_1MemoryImpl.html#a73eb77c54451eabadcc0fdf0dc7791d5">Realm::MemoryImpl</a></li>
 <li>get_instance_impl()&#160;:&#160;<a class="el" href="classRealm_1_1RuntimeImpl.html#abeece74fe27a3bd6e1e0045e9ca0f805">Realm::RuntimeImpl</a></li>
@@ -269,7 +294,7 @@ var searchBox = new SearchBox("searchBox", "search/",'.html');
 <li>get_lookup_program()&#160;:&#160;<a class="el" href="classRealm_1_1RegionInstance.html#a7e1a0dee7396d8d08da7b659479155d3">Realm::RegionInstance</a>, <a class="el" href="classRealm_1_1RegionInstanceImpl.html#ae17ee41b03f840ade098cbb2a9b138db">Realm::RegionInstanceImpl</a></li>
 <li>get_machine()&#160;:&#160;<a class="el" href="classPRealm_1_1Machine.html#a6d2624f52ad72893769a0dd3e31deeaf">PRealm::Machine</a>, <a class="el" href="classRealm_1_1Machine.html#a2aa0b0501078028e1d894d99ef90f9f9">Realm::Machine</a></li>
 <li>get_max_am_header()&#160;:&#160;<a class="el" href="classRealm_1_1UCP_1_1UCPWorker.html#a98cab23c8811800dcb5e3bfea06dcd6c">Realm::UCP::UCPWorker</a></li>
-<li>get_measurement()&#160;:&#160;<a class="el" href="classRealm_1_1ProfilingResponse.html#a0af9eaaba5b77ddda7fea50d36d39c22">Realm::ProfilingResponse</a></li>
+<li>get_measurement()&#160;:&#160;<a class="el" href="classRealm_1_1ProfilingResponse.html#a674d30b25e26689dacc776d1ae9d36c6">Realm::ProfilingResponse</a></li>
 <li>get_mem_mem_affinity()&#160;:&#160;<a class="el" href="classRealm_1_1Machine.html#a11d1d937e3b5da01d8e8e1be49a9efc3">Realm::Machine</a>, <a class="el" href="classRealm_1_1MachineImpl.html#a9cd22af6e73d96cdeaeb976eb9bcc4e8">Realm::MachineImpl</a></li>
 <li>get_memory_impl()&#160;:&#160;<a class="el" href="classRealm_1_1RuntimeImpl.html#ae0c5ca61c1ed38969bd10116d921c234">Realm::RuntimeImpl</a></li>
 <li>get_memory_kind()&#160;:&#160;<a class="el" href="classRealm_1_1MemoryImpl.html#abcf18224d9c81d48664abe161205b30f">Realm::MemoryImpl</a></li>
@@ -313,7 +338,7 @@ var searchBox = new SearchBox("searchBox", "search/",'.html');
 <li>get_ptr()&#160;:&#160;<a class="el" href="classRealm_1_1AffineAccessor.html#ad6752e3c3d73921ef4900f1b5d798c9c">Realm::AffineAccessor&lt; FT, N, T &gt;</a>, <a class="el" href="classRealm_1_1SharedMemoryInfo.html#a4a72a0d65df5d5a833664fe5d1d55f93">Realm::SharedMemoryInfo</a></li>
 <li>get_rank()&#160;:&#160;<a class="el" href="classp2p_1_1P2PComm.html#ae4d52b92df69765827ee148e16b4918c">p2p::P2PComm</a>, <a class="el" href="classRealm_1_1ucc_1_1OOBGroupComm.html#a01c9b5c58918e21ae9557bc5adb01d73">Realm::ucc::OOBGroupComm</a>, <a class="el" href="classRealm_1_1ucc_1_1UCCComm.html#a148ded43f8c5bbffcff5dcd560b21aa2">Realm::ucc::UCCComm</a></li>
 <li>get_rdma_info()&#160;:&#160;<a class="el" href="classRealm_1_1MemoryImpl.html#a8931ddbb46423797259132d609250f16">Realm::MemoryImpl</a>, <a class="el" href="classRealm_1_1NetworkSegment.html#a376a12c7ec1a979526cc8af5eadc955b">Realm::NetworkSegment</a></li>
-<li>get_registered_freelists()&#160;:&#160;<a class="el" href="classRealm_1_1DynamicTableAllocator.html#a8a66e34038d96f16f6b12fda16ea7dc5">Realm::DynamicTableAllocator&lt; _ET, _INNER_BITS, _LEAF_BITS &gt;</a></li>
+<li>get_registered_freelists()&#160;:&#160;<a class="el" href="classRealm_1_1DynamicTableAllocator.html#a45191dc4f4f509dc6be879d2b33368d9">Realm::DynamicTableAllocator&lt; _ET, _INNER_BITS, _LEAF_BITS, CONSTRUCTOR &gt;</a></li>
 <li>get_remote_addr()&#160;:&#160;<a class="el" href="classRealm_1_1MemoryImpl.html#adffd3726bfae9556ff257d2d1f39991a">Realm::MemoryImpl</a>, <a class="el" href="classRealm_1_1UCP_1_1UCPIBMemory.html#abd0d8cd970d5f4a90a2a4cd6c81f7c3e">Realm::UCP::UCPIBMemory</a>, <a class="el" href="classRealm_1_1UCP_1_1UCPRemoteMemory.html#a28bd24fb962990e3b995a479fa5f0f24">Realm::UCP::UCPRemoteMemory</a>, <a class="el" href="classRealm_1_1UCP_1_1UCPRemoteMemoryCommon.html#a409aff2d9ef2f2f3ba5b982eb525d8b7">Realm::UCP::UCPRemoteMemoryCommon</a></li>
 <li>get_remote_ptr()&#160;:&#160;<a class="el" href="classRealm_1_1RemoteChannel.html#a32725b47d95751e883f90dfde006e466">Realm::RemoteChannel</a></li>
 <li>get_requests()&#160;:&#160;<a class="el" href="classRealm_1_1AddressSplitXferDesBase.html#aa392186cbb9f605d5c262bbd6a60f170">Realm::AddressSplitXferDesBase</a>, <a class="el" href="classRealm_1_1Cuda_1_1GPUfillXferDes.html#a92ca10b1d4714d1238bd0ae22b7486b3">Realm::Cuda::GPUfillXferDes</a>, <a class="el" href="classRealm_1_1Cuda_1_1GPUIndirectXferDes.html#a6020461bb4b19db00d080923adc3ab3a">Realm::Cuda::GPUIndirectXferDes</a>, <a class="el" href="classRealm_1_1Cuda_1_1GPUreduceXferDes.html#a030c6285a47ca90f94d43c721495ab3c">Realm::Cuda::GPUreduceXferDes</a>, <a class="el" href="classRealm_1_1Cuda_1_1GPUXferDes.html#afb06c45780a3537b5097bae5d7c154c0">Realm::Cuda::GPUXferDes</a>, <a class="el" href="classRealm_1_1DiskXferDes.html#a88d9f3ad3926b2cf80bbcf8d151ec3bf">Realm::DiskXferDes</a>, <a class="el" href="classRealm_1_1FileXferDes.html#a008702b7f1ca7bc30f584cd79ad87aff">Realm::FileXferDes</a>, <a class="el" href="classRealm_1_1GASNetXferDes.html#a1402ccfdca7c4dc14e9487f648ceefaa">Realm::GASNetXferDes</a>, <a class="el" href="classRealm_1_1HDF5_1_1HDF5XferDes.html#a073122041e8cce73395c87cf56a6ae54">Realm::HDF5::HDF5XferDes</a>, <a class="el" href="classRealm_1_1Hip_1_1GPUfillXferDes.html#ae580f2a3e8a086318f830dfbc65c5d28">Realm::Hip::GPUfillXferDes</a>, <a class="el" href="classRealm_1_1Hip_1_1GPUreduceXferDes.html#a34de3634f6fd449be9e61fb5e9a7b269">Realm::Hip::GPUreduceXferDes</a>, <a class="el" href="classRealm_1_1Hip_1_1GPUXferDes.html#afc92eeb588bad6b4229e1f91b5530822">Realm::Hip::GPUXferDes</a>, <a class="el" href="classRealm_1_1MemcpyXferDes.html#a37911507768e4b0408e67490dafac500">Realm::MemcpyXferDes</a>, <a class="el" href="classRealm_1_1MemfillXferDes.html#a9ab1160fa4c42a193fbbd3e1cf781d59">Realm::MemfillXferDes</a>, <a class="el" href="classRealm_1_1MemreduceXferDes.html#ab61f18be1c467c98c83d64a74be1e346">Realm::MemreduceXferDes</a>, <a class="el" href="classRealm_1_1RemoteWriteXferDes.html#a995b2fb3d105db4cc9449f03fbc5c029">Realm::RemoteWriteXferDes</a>, <a class="el" href="classRealm_1_1XferDes.html#ab8ce750a64d540d3151c2767d9e8e0fb">Realm::XferDes</a></li>
@@ -404,7 +429,7 @@ var searchBox = new SearchBox("searchBox", "search/",'.html');
 <li>gpu_modules&#160;:&#160;<a class="el" href="structRealm_1_1Cuda_1_1RegisteredModule.html#a029b24557acc172ed86ff4cf4a11d569">Realm::Cuda::RegisteredModule</a></li>
 <li>gpu_reduction_table&#160;:&#160;<a class="el" href="classRealm_1_1Cuda_1_1GPU.html#a266c3d1759b1a7869d250c89731917a3">Realm::Cuda::GPU</a></li>
 <li>gpu_task_table&#160;:&#160;<a class="el" href="classRealm_1_1Cuda_1_1GPUProcessor.html#ad2e294cd806779629b3aad76ba7c6aa6">Realm::Cuda::GPUProcessor</a>, <a class="el" href="classRealm_1_1Hip_1_1GPUProcessor.html#ae7d9dfea2076d1dd92c7505cdc08a21c">Realm::Hip::GPUProcessor</a></li>
-<li>GPUAllocation()&#160;:&#160;<a class="el" href="classRealm_1_1Cuda_1_1GPUAllocation.html#a614620ad5d83e44650be7be2b1f45baa">Realm::Cuda::GPUAllocation</a></li>
+<li>GPUAllocation()&#160;:&#160;<a class="el" href="classRealm_1_1Cuda_1_1GPUAllocation.html#ac76d481e1ca3852a931a92135cda7b16">Realm::Cuda::GPUAllocation</a></li>
 <li>GPUChannel()&#160;:&#160;<a class="el" href="classRealm_1_1Cuda_1_1GPUChannel.html#a4ceb88934f61a0ad3268c4719067be96">Realm::Cuda::GPUChannel</a>, <a class="el" href="classRealm_1_1Hip_1_1GPUChannel.html#a6de3ff78ca5aff90a07549f008f2d2c9">Realm::Hip::GPUChannel</a></li>
 <li>GPUContextManager()&#160;:&#160;<a class="el" href="classRealm_1_1Cuda_1_1GPUContextManager.html#a96f263cc6b1f9a440369580b4ab9b475">Realm::Cuda::GPUContextManager</a></li>
 <li>GPUDynamicFBMemory()&#160;:&#160;<a class="el" href="classRealm_1_1Cuda_1_1GPUDynamicFBMemory.html#a8927b99f2ad969257b73792c3608fce6">Realm::Cuda::GPUDynamicFBMemory</a>, <a class="el" href="classRealm_1_1Hip_1_1GPUDynamicFBMemory.html#ac747d80f2693ad9f8b181496cefa38b2">Realm::Hip::GPUDynamicFBMemory</a></li>
@@ -447,10 +472,13 @@ var searchBox = new SearchBox("searchBox", "search/",'.html');
 <li>guid_to_xd&#160;:&#160;<a class="el" href="classRealm_1_1XferDesQueue.html#a9e9e8874bb35766dac6e5d3988ebaa73">Realm::XferDesQueue</a></li>
 </ul>
 </div><!-- contents -->
+</div><!-- doc-content -->
 <!-- HTML footer for doxygen 1.9.1-->
 <!-- start footer part -->
-<hr class="footer"/><address class="footer"><small>
-Generated by&#160;<a href="https://www.doxygen.org/index.html"><img class="footer" src="doxygen.svg" width="104" height="31" alt="doxygen"/></a> 1.9.8
-</small></address>
+<div id="nav-path" class="navpath"><!-- id is needed for treeview function! -->
+  <ul>
+    <li class="footer">Generated by <a href="https://www.doxygen.org/index.html"><img class="footer" src="doxygen.svg" width="104" height="31" alt="doxygen"/></a> 1.9.8 </li>
+  </ul>
+</div>
 </body>
 </html>

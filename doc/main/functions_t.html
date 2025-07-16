@@ -10,6 +10,10 @@
 <link href="tabs.css" rel="stylesheet" type="text/css"/>
 <script type="text/javascript" src="jquery.js"></script>
 <script type="text/javascript" src="dynsections.js"></script>
+<link href="navtree.css" rel="stylesheet" type="text/css"/>
+<script type="text/javascript" src="resize.js"></script>
+<script type="text/javascript" src="navtreedata.js"></script>
+<script type="text/javascript" src="navtree.js"></script>
 <link href="search/search.css" rel="stylesheet" type="text/css"/>
 <script type="text/javascript" src="search/searchdata.js"></script>
 <script type="text/javascript" src="search/search.js"></script>
@@ -20,6 +24,8 @@
 </script>
 <link href="doxygen.css" rel="stylesheet" type="text/css" />
 <link href="customdoxygen.css" rel="stylesheet" type="text/css"/>
+<link href="doxygen-awesome.css" rel="stylesheet" type="text/css"/>
+<link href="doxygen-awesome-sidebar-only.css" rel="stylesheet" type="text/css"/>
 <!-- BEGIN version select -->
 <link rel="stylesheet" type="text/css" href="../dropdown.css">
 <script type="text/javascript" src="https://ajax.googleapis.com/ajax/libs/jquery/3.2.1/jquery.min.js">
@@ -32,11 +38,13 @@
 <table cellspacing="0" cellpadding="0">
  <tbody>
  <tr style="height: 56px;">
+  <td id="projectlogo"><img alt="Logo" src="logo.png"/></td>
   <td id="projectalign" style="padding-left: 0.5em;">
    <div id="projectname">Realm
    <!-- BEGIN version select -->
+    <br />
     <div class="dropdown">
-     <button class="dropbtn">Version 0.0.1</button>
+     <button class="dropbtn">Version 0.0.1+6ce58b75</button>
      <div class="dropdown-content"></div>
     </div>
     <script type="text/javascript" src="../selectversion.js"></script>
@@ -128,6 +136,22 @@ var searchBox = new SearchBox("searchBox", "search/",'.html');
     </ul>
   </div>
 </div><!-- top -->
+<div id="side-nav" class="ui-resizable side-nav-resizable">
+  <div id="nav-tree">
+    <div id="nav-tree-contents">
+      <div id="nav-sync" class="sync"></div>
+    </div>
+  </div>
+  <div id="splitbar" style="-moz-user-select:none;" 
+       class="ui-resizable-handle">
+  </div>
+</div>
+<script type="text/javascript">
+/* @license magnet:?xt=urn:btih:d3d9a9a6595521f9666a5e94cc830dab83b65699&amp;dn=expat.txt MIT */
+$(document).ready(function(){initNavTree('functions_t.html',''); initResizable(); });
+/* @license-end */
+</script>
+<div id="doc-content">
 <!-- window showing the filter options -->
 <div id="MSearchSelectWindow"
      onmouseover="return searchBox.OnSearchSelectShow()"
@@ -212,7 +236,7 @@ var searchBox = new SearchBox("searchBox", "search/",'.html');
 <li>tentative_valid&#160;:&#160;<a class="el" href="classRealm_1_1TransferIteratorBase.html#a8a02782f06fcf90519ba05c52c61610b">Realm::TransferIteratorBase&lt; N, T &gt;</a>, <a class="el" href="classRealm_1_1WrappingFIFOIterator.html#a7878809c89c1803ed1ff4ac7c777a95f">Realm::WrappingFIFOIterator</a></li>
 <li>TERMINATED_EARLY&#160;:&#160;<a class="el" href="structRealm_1_1ProfilingMeasurements_1_1OperationStatus.html#a3180cee8f6ba9bd47b1b43301b8b0e13a5e9d141df2d14acff9839f7f8a64a762">Realm::ProfilingMeasurements::OperationStatus</a></li>
 <li>terminating_workers&#160;:&#160;<a class="el" href="classRealm_1_1KernelThreadTaskScheduler.html#a36cb4c45b54a188afc0c3bf4bf7d9366">Realm::KernelThreadTaskScheduler</a></li>
-<li>test_interval()&#160;:&#160;<a class="el" href="classRealm_1_1IntervalTree.html#a3b275ecc7eba728164b8e09173f4eca5">Realm::IntervalTree&lt; IT, LT &gt;</a>, <a class="el" href="structRealm_1_1IntervalTree_1_1TreeNode.html#a66568d14d67c614462c14fe853fcf249">Realm::IntervalTree&lt; IT, LT &gt;::TreeNode</a></li>
+<li>test_interval()&#160;:&#160;<a class="el" href="classRealm_1_1IntervalTree.html#a5a6b8d79a5ac731d237a63375c61fb83">Realm::IntervalTree&lt; IT, LT &gt;</a>, <a class="el" href="structRealm_1_1IntervalTree_1_1TreeNode.html#a66568d14d67c614462c14fe853fcf249">Realm::IntervalTree&lt; IT, LT &gt;::TreeNode</a></li>
 <li>test_intervals()&#160;:&#160;<a class="el" href="classRealm_1_1IntervalTree.html#a4fc452c3fc4896ee6c866f43754a3d98">Realm::IntervalTree&lt; IT, LT &gt;</a></li>
 <li>test_overlap()&#160;:&#160;<a class="el" href="classRealm_1_1OverlapTester.html#a35e03cde06adb7b3b360db6de3839456">Realm::OverlapTester&lt; N, T &gt;</a>, <a class="el" href="classRealm_1_1OverlapTester_3_011_00_01T_01_4.html#aeb413b602982115900d251f031d560ef">Realm::OverlapTester&lt; 1, T &gt;</a></li>
 <li>test_sorted_intervals()&#160;:&#160;<a class="el" href="classRealm_1_1IntervalTree.html#a020c5a11137b3f28deee5063bf9d7241">Realm::IntervalTree&lt; IT, LT &gt;</a>, <a class="el" href="structRealm_1_1IntervalTree_1_1TreeNode.html#a45ec6909c9de2ceaed207a34d3ed92ca">Realm::IntervalTree&lt; IT, LT &gt;::TreeNode</a></li>
@@ -290,7 +314,8 @@ var searchBox = new SearchBox("searchBox", "search/",'.html');
 <li>trigger()&#160;:&#160;<a class="el" href="classPRealm_1_1UserEvent.html#a1894f73a7280a0287431b4aba27055b2">PRealm::UserEvent</a>, <a class="el" href="classRealm_1_1BarrierCommunicator.html#a1dfe1d113de4a6d7eb66acd0cd11f435">Realm::BarrierCommunicator</a>, <a class="el" href="classRealm_1_1EventCommunicator.html#a167f877de372326fd76ee4852573644e">Realm::EventCommunicator</a>, <a class="el" href="classRealm_1_1GASNetEXEvent.html#ac4d936610690c1bb462bcc5bd3fa6558">Realm::GASNetEXEvent</a>, <a class="el" href="classRealm_1_1GenEventImpl.html#a4e3f6c1d908e035dc3df21c6add9ef62">Realm::GenEventImpl</a>, <a class="el" href="classRealm_1_1UserEvent.html#a00a18001e001ce6bf8d4b4549b4aeca0">Realm::UserEvent</a></li>
 <li>trigger_event_waiters()&#160;:&#160;<a class="el" href="classRealm_1_1EventTriggerNotifier.html#abe70bd614c2b025a26822514a82c2ecc">Realm::EventTriggerNotifier</a></li>
 <li>trigger_finish_event()&#160;:&#160;<a class="el" href="classRealm_1_1Operation.html#a4cde6f2f2b654d4a22fb15cc290cab51">Realm::Operation</a></li>
-<li>trigger_gen&#160;:&#160;<a class="el" href="structRealm_1_1BarrierTriggerMessageArgsInternal.html#a439acbd5193445f22a21b40ca23a6f8c">Realm::BarrierTriggerMessageArgsInternal</a>, <a class="el" href="structRealm_1_1RemoteNotification.html#acb6dd7769c9150b1965664ab9f7e7e19">Realm::RemoteNotification</a></li>
+<li>trigger_gen&#160;:&#160;<a class="el" href="structRealm_1_1BarrierTriggerMessage.html#a0ccea2f0f9a48d78c40a5630f545c2ff">Realm::BarrierTriggerMessage</a>, <a class="el" href="structRealm_1_1BarrierTriggerMessageArgsInternal.html#a439acbd5193445f22a21b40ca23a6f8c">Realm::BarrierTriggerMessageArgsInternal</a>, <a class="el" href="structRealm_1_1RemoteNotification.html#acb6dd7769c9150b1965664ab9f7e7e19">Realm::RemoteNotification</a></li>
+<li>triggerer&#160;:&#160;<a class="el" href="structRealm_1_1GenEventImpl_1_1GenEventImplAllocator.html#aacfb559230487c08a4ed4c5e05105da3">Realm::GenEventImpl::GenEventImplAllocator</a></li>
 <li>try_acquire()&#160;:&#160;<a class="el" href="classPRealm_1_1Reservation.html#a6ec56b284a84606ba8776618e5b3c7bb">PRealm::Reservation</a>, <a class="el" href="classRealm_1_1Reservation.html#aeb9889be2ff8558610010de4152ece4f">Realm::Reservation</a></li>
 <li>try_consume_am_credit()&#160;:&#160;<a class="el" href="classRealm_1_1XmitSrcDestPair.html#a6f8aabf5047fa4ffbbe14441b3084430">Realm::XmitSrcDestPair</a></li>
 <li>try_update_state()&#160;:&#160;<a class="el" href="classRealm_1_1Thread.html#a96902fa11e66213e2481f0d0b9d7cee4">Realm::Thread</a></li>
@@ -307,17 +332,20 @@ var searchBox = new SearchBox("searchBox", "search/",'.html');
 <li>type()&#160;:&#160;<a class="el" href="classRealm_1_1CodeDescriptor.html#aebe0cb3550252b5bcddb2451bbadaf3a">Realm::CodeDescriptor</a>, <a class="el" href="classRealm_1_1DomainTransform.html#aae3013fe678314e1cd04d81365793856">Realm::DomainTransform&lt; N, T, N2, T2 &gt;</a></li>
 <li>TYPE&#160;:&#160;<a class="el" href="structRealm_1_1DynamicTemplates_1_1IntList_1_1IndexToType.html#a215df2fd9536b84dde7fbd94001abdcc">Realm::DynamicTemplates::IntList&lt; MIN, MAX &gt;::IndexToType&lt; N &gt;</a>, <a class="el" href="structRealm_1_1DynamicTemplates_1_1IntList_1_1TypeIndexHelper.html#a0977628f7b047fb6011b8642bfe36eb9">Realm::DynamicTemplates::IntList&lt; MIN, MAX &gt;::TypeIndexHelper&lt; N, OK &gt;</a>, <a class="el" href="structRealm_1_1DynamicTemplates_1_1IntList_1_1TypeIndexHelper_3_01N_00_01true_01_4.html#a1e475e13032fe3befde80f707ce0d143">Realm::DynamicTemplates::IntList&lt; MIN, MAX &gt;::TypeIndexHelper&lt; N, true &gt;</a>, <a class="el" href="structRealm_1_1DynamicTemplates_1_1TypeListElem_1_1IndexToType.html#a343b0ce60fffa4874cb8b5e9ba671d81">Realm::DynamicTemplates::TypeListElem&lt; _HEAD, _TAIL &gt;::IndexToType&lt; N, ORIG &gt;</a>, <a class="el" href="structRealm_1_1DynamicTemplates_1_1TypeListElem_1_1IndexToType_3_010_00_01ORIG_01_4.html#a2acface11ae605214881354695f0a598">Realm::DynamicTemplates::TypeListElem&lt; _HEAD, _TAIL &gt;::IndexToType&lt; 0, ORIG &gt;</a>, <a class="el" href="structRealm_1_1DynamicTemplates_1_1TypeListElem_1_1MaxSizeType.html#a6e007a4a95355ee6f3ec0a7a558f45c0">Realm::DynamicTemplates::TypeListElem&lt; _HEAD, _TAIL &gt;::MaxSizeType&lt; SIZE &gt;</a>, <a class="el" href="structRealm_1_1DynamicTemplates_1_1TypeListTerm_1_1MaxSizeType.html#ae602436fc4576a3b05d0aaff97ca67f9">Realm::DynamicTemplates::TypeListTerm::MaxSizeType&lt; SIZE &gt;</a></li>
 <li>type&#160;:&#160;<a class="el" href="structRealm_1_1MPI_1_1AM__msg.html#aa4178080fe4594d60c754a8f4f4d524e">Realm::MPI::AM_msg</a>, <a class="el" href="classRealm_1_1StructuredTransform.html#acc74cf3eb18dbbbc575ceb5b705e98e3">Realm::StructuredTransform&lt; N, T, N2, T2 &gt;</a></li>
-<li>Type()&#160;:&#160;<a class="el" href="classRealm_1_1Type.html#aef2e29b49ecd9160164e5dc99e758579">Realm::Type</a>, <a class="el" href="classRealm_1_1UCP_1_1UCPWorker.html#a3b004990e5fc98117a8eb03e082e10a5">Realm::UCP::UCPWorker</a></li>
+<li>Type()&#160;:&#160;<a class="el" href="classRealm_1_1Type.html#aa2cbede4a44422b3a88e46838078a7bc">Realm::Type</a>, <a class="el" href="classRealm_1_1UCP_1_1UCPWorker.html#a3b004990e5fc98117a8eb03e082e10a5">Realm::UCP::UCPWorker</a></li>
 <li>type_id&#160;:&#160;<a class="el" href="classRealm_1_1ExternalInstanceResource.html#af394918b5ab779c54b3d70155a0fb50a">Realm::ExternalInstanceResource</a></li>
 <li>type_tag&#160;:&#160;<a class="el" href="structRealm_1_1ID_1_1FMT__Barrier.html#acb1fa4b6322f8880e97f28df6ae8e44b">Realm::ID::FMT_Barrier</a>, <a class="el" href="structRealm_1_1ID_1_1FMT__CompQueue.html#ab73d0132ae3f5e44a5dc39b22ced2733">Realm::ID::FMT_CompQueue</a>, <a class="el" href="structRealm_1_1ID_1_1FMT__Event.html#a0761fed1446afe4a4ea48bfe4bba0ab8">Realm::ID::FMT_Event</a>, <a class="el" href="structRealm_1_1ID_1_1FMT__Instance.html#a07bc62cab104df434c7e1b2d9a0d9cbc">Realm::ID::FMT_Instance</a>, <a class="el" href="structRealm_1_1ID_1_1FMT__Memory.html#a0430a127c02ed530cf4290749d873710">Realm::ID::FMT_Memory</a>, <a class="el" href="structRealm_1_1ID_1_1FMT__Processor.html#a43aa1954db67cec87c8873f4b584e479">Realm::ID::FMT_Processor</a>, <a class="el" href="structRealm_1_1ID_1_1FMT__ProcGroup.html#a6ac2d1acb4f309ecc93ace4bef4ebaae">Realm::ID::FMT_ProcGroup</a>, <a class="el" href="structRealm_1_1ID_1_1FMT__Reservation.html#a1a05f46a953b3e0bdc62b2b92c6b492b">Realm::ID::FMT_Reservation</a>, <a class="el" href="structRealm_1_1ID_1_1FMT__Sparsity.html#a9ca462b92d9efa0345d44ea12aad15f1">Realm::ID::FMT_Sparsity</a>, <a class="el" href="structRealm_1_1ID_1_1FMT__Subgraph.html#a3d426f2ab9a9340f35b381cf1267b364">Realm::ID::FMT_Subgraph</a>, <a class="el" href="classRealm_1_1SparsityMapImplWrapper.html#a9301cd9ebdc62cc3d1d1cdcafed0bb74">Realm::SparsityMapImplWrapper</a></li>
 <li>TypeHash&#160;:&#160;<a class="el" href="classRealm_1_1ActiveMessageHandlerTable.html#ab85a41dfe5aa8e5936203586c906d9cf">Realm::ActiveMessageHandlerTable</a></li>
 <li>TypeTag&#160;:&#160;<a class="el" href="classRealm_1_1Serialization_1_1PolymorphicSerdezHelper.html#a2e6bae8479b32cabbec61db14cf61484">Realm::Serialization::PolymorphicSerdezHelper&lt; T &gt;</a></li>
 </ul>
 </div><!-- contents -->
+</div><!-- doc-content -->
 <!-- HTML footer for doxygen 1.9.1-->
 <!-- start footer part -->
-<hr class="footer"/><address class="footer"><small>
-Generated by&#160;<a href="https://www.doxygen.org/index.html"><img class="footer" src="doxygen.svg" width="104" height="31" alt="doxygen"/></a> 1.9.8
-</small></address>
+<div id="nav-path" class="navpath"><!-- id is needed for treeview function! -->
+  <ul>
+    <li class="footer">Generated by <a href="https://www.doxygen.org/index.html"><img class="footer" src="doxygen.svg" width="104" height="31" alt="doxygen"/></a> 1.9.8 </li>
+  </ul>
+</div>
 </body>
 </html>

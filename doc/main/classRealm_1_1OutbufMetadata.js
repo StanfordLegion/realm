@@ -1,0 +1,48 @@
+var classRealm_1_1OutbufMetadata =
+[
+    [ "PktType", "classRealm_1_1OutbufMetadata.html#a75bbb367fe68afa5074365d431ba0b3f", [
+      [ "PKTTYPE_INVALID", "classRealm_1_1OutbufMetadata.html#a75bbb367fe68afa5074365d431ba0b3faa7872c540828da072dab9768c157eae4", null ],
+      [ "PKTTYPE_INLINE", "classRealm_1_1OutbufMetadata.html#a75bbb367fe68afa5074365d431ba0b3fa8452a0cc6a91b7785e81219754584e14", null ],
+      [ "PKTTYPE_INLINE_SHORT", "classRealm_1_1OutbufMetadata.html#a75bbb367fe68afa5074365d431ba0b3fab6cdc8aa71579e26ae8221118d11cd57", null ],
+      [ "PKTTYPE_LONG", "classRealm_1_1OutbufMetadata.html#a75bbb367fe68afa5074365d431ba0b3fa1c9eeca0464cd02887734ad5be7bea1e", null ],
+      [ "PKTTYPE_RGET", "classRealm_1_1OutbufMetadata.html#a75bbb367fe68afa5074365d431ba0b3fa7782c404c3e3575b5dec88357a0269a6", null ],
+      [ "PKTTYPE_PUT", "classRealm_1_1OutbufMetadata.html#a75bbb367fe68afa5074365d431ba0b3faa3ced82ebb915a27dae9276b333249db", null ],
+      [ "PKTTYPE_CANCELLED", "classRealm_1_1OutbufMetadata.html#a75bbb367fe68afa5074365d431ba0b3faeaea4a9631a5ef2986fa068471310603", null ],
+      [ "PKTTYPE_COPY_IN_PROGRESS", "classRealm_1_1OutbufMetadata.html#a75bbb367fe68afa5074365d431ba0b3fa9932a4d39badbaf38adf9c1556987b59", null ]
+    ] ],
+    [ "State", "classRealm_1_1OutbufMetadata.html#ae4557239ff8015e12721cb950a5320e3", [
+      [ "STATE_IDLE", "classRealm_1_1OutbufMetadata.html#ae4557239ff8015e12721cb950a5320e3aa48bf2cccbdb874f7e58f440790e8bf5", null ],
+      [ "STATE_DATABUF", "classRealm_1_1OutbufMetadata.html#ae4557239ff8015e12721cb950a5320e3ab5d0cd8fdca5ee2689b57799ec65b216", null ],
+      [ "STATE_PKTBUF", "classRealm_1_1OutbufMetadata.html#ae4557239ff8015e12721cb950a5320e3a650643e56f5cec98368cf848358d88b2", null ]
+    ] ],
+    [ "OutbufMetadata", "classRealm_1_1OutbufMetadata.html#a76994d8d10e1e57400a13981908301f3", null ],
+    [ "databuf_close", "classRealm_1_1OutbufMetadata.html#aee1cb4efa153dbd44478e715ba16e177", null ],
+    [ "databuf_reserve", "classRealm_1_1OutbufMetadata.html#a7d179d1270fe3ef5a098b168f55ddcfd", null ],
+    [ "dec_usecount", "classRealm_1_1OutbufMetadata.html#a187d39d2d653298deb675c17c7e4874e", null ],
+    [ "pktbuf_close", "classRealm_1_1OutbufMetadata.html#a2ac4d1115ee9db55dc4bafb07a4d3728", null ],
+    [ "pktbuf_commit", "classRealm_1_1OutbufMetadata.html#a9e544b575385d60049711c8b3afaf2db", null ],
+    [ "pktbuf_get_offset", "classRealm_1_1OutbufMetadata.html#ac77a26ca47342a49b3b521ddbc166888", null ],
+    [ "pktbuf_reserve", "classRealm_1_1OutbufMetadata.html#a1ff7bb9496fada67a72ecfb5e22262b8", null ],
+    [ "set_state", "classRealm_1_1OutbufMetadata.html#a840bc04139ac4e7c2a354a1c94cd72a3", null ],
+    [ "OutbufManager", "classRealm_1_1OutbufMetadata.html#adff5aa12c3f98180fe9fde4b18a7dd08", null ],
+    [ "XmitSrcDestPair", "classRealm_1_1OutbufMetadata.html#a3305be6df13332855053de81a801567d", null ],
+    [ "baseptr", "classRealm_1_1OutbufMetadata.html#af7387351248a2ccaa20ac5349b3a4a14", null ],
+    [ "databuf_rsrv_offset", "classRealm_1_1OutbufMetadata.html#a4cc4c8c6134d2128f2850463f7512cce", null ],
+    [ "databuf_use_count", "classRealm_1_1OutbufMetadata.html#a0c134915bd0fbf6a84fbec0e24bbbf7d", null ],
+    [ "is_overflow", "classRealm_1_1OutbufMetadata.html#a12a16deb59c3e57a75f459f43973a3a3", null ],
+    [ "manager", "classRealm_1_1OutbufMetadata.html#a0d117cf9ff8f868aba25ea4e60aca333", null ],
+    [ "next_overflow", "classRealm_1_1OutbufMetadata.html#a5082ee927f440d0ed222120c400a0f6d", null ],
+    [ "nextbuf", "classRealm_1_1OutbufMetadata.html#abe11db9ffd7b6d7f548a36faff85d567", null ],
+    [ "pktbuf_pkt_ends", "classRealm_1_1OutbufMetadata.html#add02c98837e4a240ee12d9c59a167eef", null ],
+    [ "pktbuf_pkt_types", "classRealm_1_1OutbufMetadata.html#abc0fc749d10fa1b326dc161c50b412c6", null ],
+    [ "pktbuf_ready_packets", "classRealm_1_1OutbufMetadata.html#af4fb50510b82c9fcf4f9e991415892ec", null ],
+    [ "pktbuf_rsrv_offset", "classRealm_1_1OutbufMetadata.html#a13f50a40d7902c2a174492fad1249861", null ],
+    [ "pktbuf_sent_offset", "classRealm_1_1OutbufMetadata.html#a55e5118a48c8d9538c156407dd9f83bc", null ],
+    [ "pktbuf_sent_packets", "classRealm_1_1OutbufMetadata.html#ad8b33dfeecfa012f2bf505685094528d", null ],
+    [ "pktbuf_total_packets", "classRealm_1_1OutbufMetadata.html#a5bef71622fd07ec015bbe564ef32d005", null ],
+    [ "pktbuf_use_count", "classRealm_1_1OutbufMetadata.html#a73f359f2ba433309f30fa798ce4a28ad", null ],
+    [ "realbuf", "classRealm_1_1OutbufMetadata.html#a4caa242f3eb433fe0a7b3a53c5ca240a", null ],
+    [ "remain_count", "classRealm_1_1OutbufMetadata.html#a2157a3a9dcfba91afc04e6f19b9099e9", null ],
+    [ "size", "classRealm_1_1OutbufMetadata.html#aa87d98447cfb1639d29e790ee454b724", null ],
+    [ "state", "classRealm_1_1OutbufMetadata.html#a490cfea2d7b7f06e4940b004e55adc66", null ]
+];

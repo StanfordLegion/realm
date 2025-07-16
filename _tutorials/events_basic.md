@@ -1,5 +1,7 @@
 ---
-title: Events
+layout: page
+permalink: /tutorial/realm/realm_events.html
+title: Realm Events
 ---
 
 ## Introduction
@@ -137,5 +139,5 @@ Event::merge_events(events).wait()
 ```
 
 ## References
-1. [Event header file](https://github.com/StanfordLegion/realm/blob/main/realm/event.h)
+1. [Event header file](https://github.com/StanfordLegion/legion/blob/stable/runtime/realm/event.h)
 2. [Realm: Performance Portability through Composable Asynchrony](https://legion.stanford.edu/pdfs/treichler_thesis.pdf)

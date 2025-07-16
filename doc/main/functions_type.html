@@ -10,6 +10,10 @@
 <link href="tabs.css" rel="stylesheet" type="text/css"/>
 <script type="text/javascript" src="jquery.js"></script>
 <script type="text/javascript" src="dynsections.js"></script>
+<link href="navtree.css" rel="stylesheet" type="text/css"/>
+<script type="text/javascript" src="resize.js"></script>
+<script type="text/javascript" src="navtreedata.js"></script>
+<script type="text/javascript" src="navtree.js"></script>
 <link href="search/search.css" rel="stylesheet" type="text/css"/>
 <script type="text/javascript" src="search/searchdata.js"></script>
 <script type="text/javascript" src="search/search.js"></script>
@@ -20,6 +24,8 @@
 </script>
 <link href="doxygen.css" rel="stylesheet" type="text/css" />
 <link href="customdoxygen.css" rel="stylesheet" type="text/css"/>
+<link href="doxygen-awesome.css" rel="stylesheet" type="text/css"/>
+<link href="doxygen-awesome-sidebar-only.css" rel="stylesheet" type="text/css"/>
 <!-- BEGIN version select -->
 <link rel="stylesheet" type="text/css" href="../dropdown.css">
 <script type="text/javascript" src="https://ajax.googleapis.com/ajax/libs/jquery/3.2.1/jquery.min.js">
@@ -32,11 +38,13 @@
 <table cellspacing="0" cellpadding="0">
  <tbody>
  <tr style="height: 56px;">
+  <td id="projectlogo"><img alt="Logo" src="logo.png"/></td>
   <td id="projectalign" style="padding-left: 0.5em;">
    <div id="projectname">Realm
    <!-- BEGIN version select -->
+    <br />
     <div class="dropdown">
-     <button class="dropbtn">Version 0.0.1</button>
+     <button class="dropbtn">Version 0.0.1+6ce58b75</button>
      <div class="dropdown-content"></div>
     </div>
     <script type="text/javascript" src="../selectversion.js"></script>
@@ -120,6 +128,22 @@ var searchBox = new SearchBox("searchBox", "search/",'.html');
     </ul>
   </div>
 </div><!-- top -->
+<div id="side-nav" class="ui-resizable side-nav-resizable">
+  <div id="nav-tree">
+    <div id="nav-tree-contents">
+      <div id="nav-sync" class="sync"></div>
+    </div>
+  </div>
+  <div id="splitbar" style="-moz-user-select:none;" 
+       class="ui-resizable-handle">
+  </div>
+</div>
+<script type="text/javascript">
+/* @license magnet:?xt=urn:btih:d3d9a9a6595521f9666a5e94cc830dab83b65699&amp;dn=expat.txt MIT */
+$(document).ready(function(){initNavTree('functions_type.html',''); initResizable(); });
+/* @license-end */
+</script>
+<div id="doc-content">
 <!-- window showing the filter options -->
 <div id="MSearchSelectWindow"
      onmouseover="return searchBox.OnSearchSelectShow()"
@@ -163,6 +187,7 @@ var searchBox = new SearchBox("searchBox", "search/",'.html');
 <li>CallbackFnptr&#160;:&#160;<a class="el" href="classRealm_1_1IncomingMessageManager.html#aa9f7570bf3c35b239f3695c7ccf65f4c">Realm::IncomingMessageManager</a></li>
 <li>CondVar&#160;:&#160;<a class="el" href="classRealm_1_1FIFOMutex.html#aac005674cfeebff1c7691f805c8b8914">Realm::FIFOMutex</a>, <a class="el" href="classRealm_1_1KernelMutex.html#a4ff333e0cb953c240ef67c0e28085f56">Realm::KernelMutex</a>, <a class="el" href="classRealm_1_1UnfairMutex.html#a44c0f520b52e5a4c7f61844fd1bd9764">Realm::UnfairMutex</a></li>
 <li>const_iterator&#160;:&#160;<a class="el" href="classRealm_1_1CircularQueue.html#a34b2b653c1bf1974dd4ed50ea07de235">Realm::CircularQueue&lt; T, INTSIZE &gt;</a>, <a class="el" href="classRealm_1_1NodeSet.html#a84ceaa2bc382e05504659fb602573bfe">Realm::NodeSet</a></li>
+<li>Constructor&#160;:&#160;<a class="el" href="classRealm_1_1DynamicTable.html#a01e680626516b753f7a956d903088357">Realm::DynamicTable&lt; ALLOCATOR &gt;</a>, <a class="el" href="classRealm_1_1DynamicTableAllocator.html#a975bc46fbce24f261d40979be2708f5d">Realm::DynamicTableAllocator&lt; _ET, _INNER_BITS, _LEAF_BITS, CONSTRUCTOR &gt;</a></li>
 <li>cq_idx&#160;:&#160;<a class="el" href="structRealm_1_1ID_1_1FMT__CompQueue.html#ab6e09383bab2a769da657493c8adb24a">Realm::ID::FMT_CompQueue</a></li>
 <li>creator_node&#160;:&#160;<a class="el" href="structRealm_1_1ID_1_1FMT__Barrier.html#a4354795753aaf753e3fa767052b869e4">Realm::ID::FMT_Barrier</a>, <a class="el" href="structRealm_1_1ID_1_1FMT__Event.html#acd23b10a4a228fa51b367289a4260886">Realm::ID::FMT_Event</a>, <a class="el" href="structRealm_1_1ID_1_1FMT__Instance.html#a6b3d97cd3241e3eb387919c5099e1ec6">Realm::ID::FMT_Instance</a>, <a class="el" href="structRealm_1_1ID_1_1FMT__ProcGroup.html#aa0121317184e6ef84ec4b5fc7b838d35">Realm::ID::FMT_ProcGroup</a>, <a class="el" href="structRealm_1_1ID_1_1FMT__Reservation.html#a187bd5c46c1bcdbceb9b4ee385a9a651">Realm::ID::FMT_Reservation</a>, <a class="el" href="structRealm_1_1ID_1_1FMT__Sparsity.html#a56eebbf1daaf8fd268762d1fc83f47a8">Realm::ID::FMT_Sparsity</a>, <a class="el" href="structRealm_1_1ID_1_1FMT__Subgraph.html#ab240b30a3ab23b5a8b9802c1c5ce9096">Realm::ID::FMT_Subgraph</a></li>
 </ul>
@@ -175,7 +200,7 @@ var searchBox = new SearchBox("searchBox", "search/",'.html');
 
 
 <h3><a id="index_e" name="index_e"></a>- e -</h3><ul>
-<li>ET&#160;:&#160;<a class="el" href="classRealm_1_1DynamicTable.html#a28b00073894e138122477b0a2ed7f139">Realm::DynamicTable&lt; ALLOCATOR &gt;</a>, <a class="el" href="classRealm_1_1DynamicTableAllocator.html#ac8fd7d5299c6b82840e79e1bd45f690f">Realm::DynamicTableAllocator&lt; _ET, _INNER_BITS, _LEAF_BITS &gt;</a>, <a class="el" href="classRealm_1_1DynamicTableFreeList.html#a7eb0d07059926bb2e96fa10a74436676">Realm::DynamicTableFreeList&lt; ALLOCATOR &gt;</a></li>
+<li>ET&#160;:&#160;<a class="el" href="classRealm_1_1DynamicTable.html#a28b00073894e138122477b0a2ed7f139">Realm::DynamicTable&lt; ALLOCATOR &gt;</a>, <a class="el" href="classRealm_1_1DynamicTableAllocator.html#a74428c0d440cc2df332860ba2f90b78b">Realm::DynamicTableAllocator&lt; _ET, _INNER_BITS, _LEAF_BITS, CONSTRUCTOR &gt;</a>, <a class="el" href="classRealm_1_1DynamicTableFreeList.html#a7eb0d07059926bb2e96fa10a74436676">Realm::DynamicTableFreeList&lt; ALLOCATOR &gt;</a></li>
 <li>EventList&#160;:&#160;<a class="el" href="classRealm_1_1GASNetEXEvent.html#a4e899b3df5e439376237799c2c85f216">Realm::GASNetEXEvent</a></li>
 <li>EventWaiterList&#160;:&#160;<a class="el" href="classRealm_1_1EventWaiter.html#a96f9069fda005991627037a99ef995c4">Realm::EventWaiter</a></li>
 </ul>
@@ -186,7 +211,7 @@ var searchBox = new SearchBox("searchBox", "search/",'.html');
 <li>FIELD_TYPE&#160;:&#160;<a class="el" href="classRealm_1_1SerdezObject.html#a62c6df867da422e89fc40e81c61b3ee3">Realm::SerdezObject&lt; T &gt;</a>, <a class="el" href="classRealm_1_1SimpleSerdez.html#a957bd65fef3603d7aeba07ca3fb4e43f">Realm::SimpleSerdez&lt; T, MAX_SER_SIZE &gt;</a></li>
 <li>FieldGroup&#160;:&#160;<a class="el" href="classRealm_1_1InstanceLayoutConstraints.html#a9506a33aae4f5a4da2a0545bdd4ec7bf">Realm::InstanceLayoutConstraints</a></li>
 <li>FIELDTYPE&#160;:&#160;<a class="el" href="classRealm_1_1ByFieldMicroOp.html#a05a9e681ed5a2d1e54feb620c604608c">Realm::ByFieldMicroOp&lt; N, T, FT &gt;</a></li>
-<li>FreeList&#160;:&#160;<a class="el" href="classRealm_1_1DynamicTableAllocator.html#af741ae8154564c2ce7404f6ecbf95311">Realm::DynamicTableAllocator&lt; _ET, _INNER_BITS, _LEAF_BITS &gt;</a></li>
+<li>FreeList&#160;:&#160;<a class="el" href="classRealm_1_1DynamicTableAllocator.html#a6cb931a1aa0c275bb7fd77b4a780bf3d">Realm::DynamicTableAllocator&lt; _ET, _INNER_BITS, _LEAF_BITS, CONSTRUCTOR &gt;</a></li>
 </ul>
 
 
@@ -207,9 +232,9 @@ var searchBox = new SearchBox("searchBox", "search/",'.html');
 <li>IDType&#160;:&#160;<a class="el" href="classRealm_1_1ID.html#ad51ee555620cb292ec79334266f04972">Realm::ID</a></li>
 <li>IDXTYPE&#160;:&#160;<a class="el" href="classRealm_1_1ByFieldMicroOp.html#aea098e2bfd517c5554d1e461598a1736">Realm::ByFieldMicroOp&lt; N, T, FT &gt;</a>, <a class="el" href="classRealm_1_1DifferenceMicroOp.html#a50fcb25dfd6183b9118393258825e128">Realm::DifferenceMicroOp&lt; N, T &gt;</a>, <a class="el" href="classRealm_1_1ImageMicroOp.html#a0fbb1c58e65ddbec0a189c7ec9f70684">Realm::ImageMicroOp&lt; N, T, N2, T2 &gt;</a>, <a class="el" href="classRealm_1_1IntersectionMicroOp.html#acfbca777446369efa8e124c5e62b1106">Realm::IntersectionMicroOp&lt; N, T &gt;</a>, <a class="el" href="classRealm_1_1PreimageMicroOp.html#a05744a165adce45823e8414bb65ed8e5">Realm::PreimageMicroOp&lt; N, T, N2, T2 &gt;</a>, <a class="el" href="classRealm_1_1PreimageOperation.html#a2a849bfa7692fec6a85e980726b6dcc6">Realm::PreimageOperation&lt; N, T, N2, T2 &gt;</a>, <a class="el" href="classRealm_1_1StructuredPreimageMicroOp.html#ade1895597b15a1a1ed39113983e27b07">Realm::StructuredPreimageMicroOp&lt; N, T, N2, T2 &gt;</a>, <a class="el" href="classRealm_1_1UnionMicroOp.html#a1c872e11831b5e0619d7916c59a8950c">Realm::UnionMicroOp&lt; N, T &gt;</a></li>
 <li>IDXTYPE2&#160;:&#160;<a class="el" href="classRealm_1_1ImageMicroOp.html#ade8d613ba3d7055470d227be58686836">Realm::ImageMicroOp&lt; N, T, N2, T2 &gt;</a>, <a class="el" href="classRealm_1_1PreimageMicroOp.html#ab887e44cf55c9c4e87e0eed9355a7a52">Realm::PreimageMicroOp&lt; N, T, N2, T2 &gt;</a>, <a class="el" href="classRealm_1_1PreimageOperation.html#a7803977a290d2f6ccfc497f5644059ca">Realm::PreimageOperation&lt; N, T, N2, T2 &gt;</a>, <a class="el" href="classRealm_1_1StructuredPreimageMicroOp.html#a6abab326e5ef83b73a47902accac81fc">Realm::StructuredPreimageMicroOp&lt; N, T, N2, T2 &gt;</a></li>
-<li>INNER_TYPE&#160;:&#160;<a class="el" href="classRealm_1_1DynamicTableAllocator.html#a011d791673d0572b334adea062369248">Realm::DynamicTableAllocator&lt; _ET, _INNER_BITS, _LEAF_BITS &gt;</a></li>
+<li>INNER_TYPE&#160;:&#160;<a class="el" href="classRealm_1_1DynamicTableAllocator.html#a4f92af28b6e7e3a6e7e1040510fcdb53">Realm::DynamicTableAllocator&lt; _ET, _INNER_BITS, _LEAF_BITS, CONSTRUCTOR &gt;</a></li>
 <li>inst_idx&#160;:&#160;<a class="el" href="structRealm_1_1ID_1_1FMT__Instance.html#a12668f79794e1c6255a50a818e4944cd">Realm::ID::FMT_Instance</a></li>
-<li>IT&#160;:&#160;<a class="el" href="classRealm_1_1DynamicTable.html#ac8b97aff4da914b336f9bad701619147">Realm::DynamicTable&lt; ALLOCATOR &gt;</a>, <a class="el" href="classRealm_1_1DynamicTableAllocator.html#a00249df2a0fe9f97831e2fc56f46c693">Realm::DynamicTableAllocator&lt; _ET, _INNER_BITS, _LEAF_BITS &gt;</a>, <a class="el" href="classRealm_1_1DynamicTableFreeList.html#a51a2cfa4f7fc4339c4ead1735c61cfc3">Realm::DynamicTableFreeList&lt; ALLOCATOR &gt;</a></li>
+<li>IT&#160;:&#160;<a class="el" href="classRealm_1_1DynamicTable.html#ac8b97aff4da914b336f9bad701619147">Realm::DynamicTable&lt; ALLOCATOR &gt;</a>, <a class="el" href="classRealm_1_1DynamicTableAllocator.html#accad69e67bccc1c2556a7573f54eea0a">Realm::DynamicTableAllocator&lt; _ET, _INNER_BITS, _LEAF_BITS, CONSTRUCTOR &gt;</a>, <a class="el" href="classRealm_1_1DynamicTableFreeList.html#a51a2cfa4f7fc4339c4ead1735c61cfc3">Realm::DynamicTableFreeList&lt; ALLOCATOR &gt;</a></li>
 <li>ITEMTYPE&#160;:&#160;<a class="el" href="classRealm_1_1CircularQueue.html#aee69df6d8c93a8d090beb6528a3dba59">Realm::CircularQueue&lt; T, INTSIZE &gt;</a>, <a class="el" href="classRealm_1_1IntrusiveList.html#ac92182f1810d2dc5abde7ca951d2129a">Realm::IntrusiveList&lt; T,, LT &gt;</a>, <a class="el" href="classRealm_1_1IntrusivePriorityList.html#a0503e187ea9c55b3bfef8bf7d282e1eb">Realm::IntrusivePriorityList&lt; T, PT,,, LT &gt;</a>, <a class="el" href="classRealm_1_1PriorityQueue.html#ac0372acc324f917479530283aff7c60c">Realm::PriorityQueue&lt; T, LT &gt;</a></li>
 <li>iterator&#160;:&#160;<a class="el" href="classRealm_1_1CircularQueue.html#a6692921c33c1e0040e4c36de00090670">Realm::CircularQueue&lt; T, INTSIZE &gt;</a>, <a class="el" href="classRealm_1_1Machine.html#a5e310274ed9556247fcf1698506fe8d5">Realm::Machine</a></li>
 <li>iterator_category&#160;:&#160;<a class="el" href="classRealm_1_1CircularQueueIterator.html#ac97aabe69d67e6a69c844763b4f6189c">Realm::CircularQueueIterator&lt; T, INTSIZE &gt;</a>, <a class="el" href="classRealm_1_1MachineQueryIterator.html#af7e57c26fb2a9971192cbe8f05eb967e">Realm::MachineQueryIterator&lt; QT, RT &gt;</a>, <a class="el" href="classRealm_1_1NodeSetIterator.html#a3f17edbd3e7c5cc7de03ea6cda55560c">Realm::NodeSetIterator</a></li>
@@ -217,9 +242,9 @@ var searchBox = new SearchBox("searchBox", "search/",'.html');
 
 
 <h3><a id="index_l" name="index_l"></a>- l -</h3><ul>
-<li>LEAF_TYPE&#160;:&#160;<a class="el" href="classRealm_1_1DynamicTableAllocator.html#aa12aebc03595bfa25261e3c8dda84c86">Realm::DynamicTableAllocator&lt; _ET, _INNER_BITS, _LEAF_BITS &gt;</a></li>
+<li>LEAF_TYPE&#160;:&#160;<a class="el" href="classRealm_1_1DynamicTableAllocator.html#a91f8c2477b4ea8ce71cdd70c91c5459b">Realm::DynamicTableAllocator&lt; _ET, _INNER_BITS, _LEAF_BITS, CONSTRUCTOR &gt;</a></li>
 <li>LOCKTYPE&#160;:&#160;<a class="el" href="classRealm_1_1IntrusiveList.html#ad3b471d076bae90ca6687c16607324a8">Realm::IntrusiveList&lt; T,, LT &gt;</a>, <a class="el" href="classRealm_1_1IntrusivePriorityList.html#abd4da4784be579a2d47c19bee5b4eaa1">Realm::IntrusivePriorityList&lt; T, PT,,, LT &gt;</a></li>
-<li>LT&#160;:&#160;<a class="el" href="classRealm_1_1DynamicTable.html#a01069a937704d0f8bcec0b88ff31f0d8">Realm::DynamicTable&lt; ALLOCATOR &gt;</a>, <a class="el" href="classRealm_1_1DynamicTableAllocator.html#a89d383abe0a1cbf181c40fed35c37145">Realm::DynamicTableAllocator&lt; _ET, _INNER_BITS, _LEAF_BITS &gt;</a>, <a class="el" href="classRealm_1_1DynamicTableFreeList.html#a844bb9f05f5765872167d2e2468c7e1f">Realm::DynamicTableFreeList&lt; ALLOCATOR &gt;</a></li>
+<li>LT&#160;:&#160;<a class="el" href="classRealm_1_1DynamicTable.html#a01069a937704d0f8bcec0b88ff31f0d8">Realm::DynamicTable&lt; ALLOCATOR &gt;</a>, <a class="el" href="classRealm_1_1DynamicTableAllocator.html#a2a7a76cbdd22a55bae5ffd1d63ce0fa2">Realm::DynamicTableAllocator&lt; _ET, _INNER_BITS, _LEAF_BITS, CONSTRUCTOR &gt;</a>, <a class="el" href="classRealm_1_1DynamicTableFreeList.html#a844bb9f05f5765872167d2e2468c7e1f">Realm::DynamicTableFreeList&lt; ALLOCATOR &gt;</a></li>
 </ul>
 
 
@@ -307,10 +332,13 @@ var searchBox = new SearchBox("searchBox", "search/",'.html');
 <li>XmitPairList&#160;:&#160;<a class="el" href="classRealm_1_1XmitSrcDestPair.html#a8cc9a72331138a0c21c4f655f9975a68">Realm::XmitSrcDestPair</a></li>
 </ul>
 </div><!-- contents -->
+</div><!-- doc-content -->
 <!-- HTML footer for doxygen 1.9.1-->
 <!-- start footer part -->
-<hr class="footer"/><address class="footer"><small>
-Generated by&#160;<a href="https://www.doxygen.org/index.html"><img class="footer" src="doxygen.svg" width="104" height="31" alt="doxygen"/></a> 1.9.8
-</small></address>
+<div id="nav-path" class="navpath"><!-- id is needed for treeview function! -->
+  <ul>
+    <li class="footer">Generated by <a href="https://www.doxygen.org/index.html"><img class="footer" src="doxygen.svg" width="104" height="31" alt="doxygen"/></a> 1.9.8 </li>
+  </ul>
+</div>
 </body>
 </html>

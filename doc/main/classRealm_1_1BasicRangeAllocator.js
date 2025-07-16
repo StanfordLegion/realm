@@ -1,0 +1,26 @@
+var classRealm_1_1BasicRangeAllocator =
+[
+    [ "Range", "structRealm_1_1BasicRangeAllocator_1_1Range.html", "structRealm_1_1BasicRangeAllocator_1_1Range" ],
+    [ "BasicRangeAllocator", "classRealm_1_1BasicRangeAllocator.html#ad68e17f48364938effa2dbeb2505939f", null ],
+    [ "~BasicRangeAllocator", "classRealm_1_1BasicRangeAllocator.html#ac1a55aa7d7e9ed6d28758187e718e706", null ],
+    [ "BasicRangeAllocator", "classRealm_1_1BasicRangeAllocator.html#aa2715a5b2efe6272ad21210c2a170cae", null ],
+    [ "BasicRangeAllocator", "classRealm_1_1BasicRangeAllocator.html#ae3531af40e48ae06681873989608094c", null ],
+    [ "add_range", "classRealm_1_1BasicRangeAllocator.html#a6d4c512d40f5ebe38df7ae132f0a355a", null ],
+    [ "alloc_range", "classRealm_1_1BasicRangeAllocator.html#a56791b5fdb4c03632743126786b7922d", null ],
+    [ "allocate", "classRealm_1_1BasicRangeAllocator.html#a1e27d702357fdad90e1dd9cf79dc320f", null ],
+    [ "can_allocate", "classRealm_1_1BasicRangeAllocator.html#a31ee0d1320d3b59f80faa926ce4622d1", null ],
+    [ "deallocate", "classRealm_1_1BasicRangeAllocator.html#a2b1a42b126c7d63574d62b9c43768c46", null ],
+    [ "deallocate", "classRealm_1_1BasicRangeAllocator.html#a027bad090713e2f07127d874377525a1", null ],
+    [ "dump_allocator_status", "classRealm_1_1BasicRangeAllocator.html#ae9fa11e1ded7ed6e5ca87a42fa447879", null ],
+    [ "free_list_has_cycle", "classRealm_1_1BasicRangeAllocator.html#a49f1557deb3c672987886e36d6e6b1cd", null ],
+    [ "free_range", "classRealm_1_1BasicRangeAllocator.html#a828ec9d340561d85a97079b2966c596a", null ],
+    [ "has_invalid_ranges", "classRealm_1_1BasicRangeAllocator.html#a7e8d509c64114b0622f8c8157c69ca1e", null ],
+    [ "lookup", "classRealm_1_1BasicRangeAllocator.html#ac4898ee90b2e795783fb18302f180de3", null ],
+    [ "operator=", "classRealm_1_1BasicRangeAllocator.html#a5af8b1a71ed63fdce009fd594695d0aa", null ],
+    [ "operator=", "classRealm_1_1BasicRangeAllocator.html#adb0604d43b928de733e0bdda83002656", null ],
+    [ "split_range", "classRealm_1_1BasicRangeAllocator.html#addb4163ab55a9854c78ff2c1e647e792", null ],
+    [ "swap", "classRealm_1_1BasicRangeAllocator.html#a53fa6af3ff388ce3eddce078e232436f", null ],
+    [ "allocated", "classRealm_1_1BasicRangeAllocator.html#aa562f025f5f030ad1c06e2a9578b3488", null ],
+    [ "first_free_range", "classRealm_1_1BasicRangeAllocator.html#a5f23e26949ad8e55f05aa43ab9816e93", null ],
+    [ "ranges", "classRealm_1_1BasicRangeAllocator.html#aab28742be6bdb0e7612fbb872f391085", null ]
+];

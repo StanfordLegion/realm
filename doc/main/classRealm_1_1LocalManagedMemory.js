@@ -1,0 +1,28 @@
+var classRealm_1_1LocalManagedMemory =
+[
+    [ "PendingAlloc", "structRealm_1_1LocalManagedMemory_1_1PendingAlloc.html", "structRealm_1_1LocalManagedMemory_1_1PendingAlloc" ],
+    [ "PendingRelease", "structRealm_1_1LocalManagedMemory_1_1PendingRelease.html", "structRealm_1_1LocalManagedMemory_1_1PendingRelease" ],
+    [ "RangeAllocator", "classRealm_1_1LocalManagedMemory.html#a716562fc1b4edf0f148dffb3cd277a95", null ],
+    [ "LocalManagedMemory", "classRealm_1_1LocalManagedMemory.html#ab118a6031ee0785577ee4b54ae5feabe", null ],
+    [ "~LocalManagedMemory", "classRealm_1_1LocalManagedMemory.html#ad289148d308ec29f36deb6c9dfaab72d", null ],
+    [ "allocate_storage_deferrable", "classRealm_1_1LocalManagedMemory.html#a0a2237989ebd48d8d6a36f034aa2357b", null ],
+    [ "allocate_storage_immediate", "classRealm_1_1LocalManagedMemory.html#aac522a11f9d46d9b21403485b789bd1c", null ],
+    [ "attempt_deferrable_allocation", "classRealm_1_1LocalManagedMemory.html#ada5637044c0146189833e81bb97bb565", null ],
+    [ "attempt_release_reordering", "classRealm_1_1LocalManagedMemory.html#aa737edcf85c9debcc7f8433f39f3e56a", null ],
+    [ "release_storage_deferrable", "classRealm_1_1LocalManagedMemory.html#afaea9a04eca61c6425448455d404dc81", null ],
+    [ "release_storage_immediate", "classRealm_1_1LocalManagedMemory.html#a3a6dcb9beaa861ce4c5786cd7076cc98", null ],
+    [ "remove_pending_release", "classRealm_1_1LocalManagedMemory.html#a55f3cbd0faedba27ea226e618d12faa3", null ],
+    [ "reuse_storage_deferrable", "classRealm_1_1LocalManagedMemory.html#abb1dba2cab7d6dc78ec8552b2b41461e", null ],
+    [ "reuse_storage_immediate", "classRealm_1_1LocalManagedMemory.html#a2d24f5a954145d8767ea3d34bb6d54e4", null ],
+    [ "alignment", "classRealm_1_1LocalManagedMemory.html#a33a45bd124c5ae0ff724fcefaf9f8348", null ],
+    [ "allocator_mutex", "classRealm_1_1LocalManagedMemory.html#add03f8500df2de467bb4f032f9e27658", null ],
+    [ "cur_release_seqid", "classRealm_1_1LocalManagedMemory.html#a39a430130411981fb2fc40a39efe372d", null ],
+    [ "current_allocator", "classRealm_1_1LocalManagedMemory.html#aec90446ab15f751bd7c53e70fbcbb5ee", null ],
+    [ "future_allocator", "classRealm_1_1LocalManagedMemory.html#adfdabcd7e82d8846996abaf4316d7d16", null ],
+    [ "peak_footprint", "classRealm_1_1LocalManagedMemory.html#a6b040b10d88cce4a0b21eff4cb798f16", null ],
+    [ "peak_usage", "classRealm_1_1LocalManagedMemory.html#ac27a477b0767feaf4a3aec6288e3d4e7", null ],
+    [ "pending_allocs", "classRealm_1_1LocalManagedMemory.html#af3b679413a3bd9c7a594ec44e10c2ae3", null ],
+    [ "pending_releases", "classRealm_1_1LocalManagedMemory.html#a785392016ff4ed07f060072ca23b49d8", null ],
+    [ "release_allocator", "classRealm_1_1LocalManagedMemory.html#ad6871eb98496747a907175aa130061e3", null ],
+    [ "usage", "classRealm_1_1LocalManagedMemory.html#a10cda096bb3a3d51c34283c146838272", null ]
+];
