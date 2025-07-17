@@ -32,7 +32,7 @@ if(REALM_USE_GASNETEX
    AND REALM_USE_GASNETEX_WRAPPER
 )
   install(
-    TARGETS realm_gex_wrapper realm_gex_wrapper_objs
+    TARGETS realm_gex_wrapper
     EXPORT Realm_targets
     RUNTIME COMPONENT Realm_runtime
     LIBRARY COMPONENT Realm_runtime

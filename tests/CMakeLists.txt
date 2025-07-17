@@ -116,7 +116,7 @@ list(
   topology_test.cc
 )
 list(TRANSFORM REALM_UNIT_TESTS PREPEND "${REALM_TEST_DIR}/unit_tests/")
-add_executable(realm_unit_tests ${REALM_UNIT_TESTS})
+add_executable(realm_unit_tests ${REALM_UNIT_TESTS} ${REALM_EXTRA_OBJS})
 # Needed for designated initializers
 # TODO(apriakhin): to be removed
 target_compile_features(realm_unit_tests PUBLIC cxx_std_20)
@@ -133,7 +133,7 @@ list(APPEND
   c_processor_task.cc
   c_event.cc)
 list(TRANSFORM REALM_C_UNIT_TESTS PREPEND "${REALM_TEST_DIR}/unit_tests/")
-add_executable(realm_c_unit_tests ${REALM_C_UNIT_TESTS})
+add_executable(realm_c_unit_tests ${REALM_C_UNIT_TESTS} ${REALM_EXTRA_OBJS})
 # Needed for designated initializers
 # TODO(apriakhin): to be removed
 target_compile_features(realm_c_unit_tests PUBLIC cxx_std_20)

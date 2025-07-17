@@ -49,12 +49,12 @@ set(REALM_GASNETEX_WRAPPER_SRCS
 add_library(realm_gex_wrapper_objs OBJECT ${REALM_GASNETEX_WRAPPER_SRCS})
 
 if (${GEX_WRAPPER_BUILD_SHARED})
-  add_library(realm_gex_wrapper SHARED)
+  add_library(realm_gex_wrapper SHARED $<TARGET_OBJECTS:realm_gex_wrapper_objs>)
 else()
-  add_library(realm_gex_wrapper STATIC)
+  add_library(realm_gex_wrapper STATIC $<TARGET_OBJECTS:realm_gex_wrapper_objs>)
   target_compile_definitions(realm_gex_wrapper_objs PUBLIC GEX_STATIC_DEFINE)
 endif()
-target_link_libraries(realm_gex_wrapper PUBLIC realm_gex_wrapper_objs)
+add_dependencies(realm_gex_wrapper realm_gex_wrapper_objs)
 target_compile_definitions(realm_gex_wrapper PRIVATE <IF:$<BOOL:GEX_DEBUG>,DEBUG_REALM_GEX,>)
 
 generate_export_header(realm_gex_wrapper_objs BASE_NAME GEX EXPORT_FILE_NAME ${CMAKE_CURRENT_BINARY_DIR}/exports/gex_export.h)

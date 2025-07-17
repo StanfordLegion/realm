@@ -820,6 +820,18 @@ endif()
 #endregion
 
 #region Library compilation
+# Specifically for adding extra object libraries' target objects to prevent
+# needing to use target_link_libraries, which would add the object libraries
+# to the interface link libraries of the target, which is not what we want.
+set(REALM_EXTRA_OBJS)
+
+if (TARGET realm_gex_wrapper_objs AND NOT REALM_ENABLE_GASNETEX_WRAPPER)
+  # side rant(cperry) : it would be nice if object libraries were a little more
+  # seamless and weren't added part of the interface link libraries for
+  # concrete targets like static and shared libraries.
+  list(APPEND REALM_EXTRA_OBJS $<TARGET_OBJECTS:realm_gex_wrapper_objs>)
+endif()
+
 # Remove NDEBUG from definitions for cxx, c, and cuda release flags.
 # TODO(cperry): remove this once we clean up all the asserts that have side effects
 string(REPLACE "/DNDEBUG" "" CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE}")
@@ -838,7 +850,7 @@ set_target_properties(
             VISIBILITY_INLINES_HIDDEN ON
             POSITION_INDEPENDENT_CODE ON
 )
-add_library(Realm ${REALM_RC_SOURCES} $<TARGET_OBJECTS:realm_obj>)
+add_library(Realm ${REALM_RC_SOURCES} $<TARGET_OBJECTS:realm_obj> ${REALM_EXTRA_OBJS})
 add_library(Realm::Realm ALIAS Realm)
 set_target_properties(
   Realm
@@ -889,10 +901,6 @@ if(REALM_ENABLE_GASNETEX)
     PRIVATE $<TARGET_PROPERTY:realm_gex_wrapper_objs,INTERFACE_INCLUDE_DIRECTORIES>)
   target_include_directories(Realm
     PRIVATE $<TARGET_PROPERTY:realm_gex_wrapper_objs,INTERFACE_INCLUDE_DIRECTORIES>)
-  if (TARGET realm_gex_wrapper_objs AND NOT REALM_ENABLE_GASNETEX_WRAPPER)
-    target_link_libraries(realm_obj PRIVATE $<TARGET_OBJECTS:realm_gex_wrapper_objs>)
-    target_link_libraries(Realm PRIVATE $<TARGET_OBJECTS:realm_gex_wrapper_objs>)
-  endif()
 endif()
 
 if(TARGET realm_fatbin_tgt)
