@@ -23,4 +23,4 @@ Version: @REALM_VERSION@
 URL: @CMAKE_PROJECT_HOMEPAGE_URL@
 Requires.private: @REALM_PKGCONF_REQUIRES@
 Cflags: -I${includedir} @REALM_COMPILE_DEFINITIONS@
-Libs: -L${libdir} -lrealm @CMAKE_THREAD_LIBS_INIT@
+Libs: -L${libdir} -lrealm @REALM_PKGCONF_LFLAGS@ @CMAKE_THREAD_LIBS_INIT@

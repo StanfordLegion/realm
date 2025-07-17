@@ -106,13 +106,24 @@ write_basic_package_version_file(
 
 # Get a list of pkgconf dependencies
 if(NOT BUILD_SHARED_LIBS)
-  list(
-    TRANSFORM REALM_STATIC_DEPENDS
-    TOLOWER
-    OUTPUT_VARIABLE REALM_PKGCONF_REQUIRES
-  )
+  foreach(_dep IN LISTS REALM_MODULE_DEPENDS)
+    if (${_dep}_ADDED)
+      list(APPEND REALM_PKGCONF_LFLAGS ${_dep})
+    else()
+      list(APPEND REALM_PKGCONF_REQUIRES ${_dep})
+    endif()
+  endforeach()
+  list(TRANSFORM REALM_PKGCONF_REQUIRES TOLOWER)
+  list(TRANSFORM REALM_PKGCONF_LFLAGS TOLOWER)
+  # openmp isn't a valid module, so skip it
+  list(REMOVE_ITEM REALM_PKGCONF_REQUIRES openmp)
+  list(TRANSFORM REALM_PKGCONF_LFLAGS PREPEND "-l")
   string(REPLACE ";" " " REALM_PKGCONF_REQUIRES "${REALM_PKGCONF_REQUIRES}")
+  string(REPLACE ";" " " REALM_PKGCONF_LFLAGS "${REALM_PKGCONF_LFLAGS}")
 endif()
+
+get_target_property(REALM_COMPILE_DEFINITIONS Realm INTERFACE_COMPILE_DEFINITIONS)
+list(TRANSFORM REALM_COMPILE_DEFINITIONS PREPEND "-D")
 
 # Setup pkgconfig module
 configure_package_config_file(
@@ -156,6 +167,30 @@ install(
   FILE Realm-${lib_type}-targets.cmake
   COMPONENT Realm_devel
 )
+
+# Install all locally built dependencies
+# (Assumes the added target is named "dep::dep", e.g. cpptrace::cpptrace)
+foreach(_dep IN LISTS REALM_MODULE_DEPENDS)
+  if (${_dep}_ADDED)
+    set(_real_tgt ${_dep}::${_dep})
+    get_target_property(_aliased ${_real_tgt} ALIASED_TARGET)
+    if (_aliased)
+      set(_real_tgt ${_aliased})
+    endif()
+    install(
+      EXPORT ${_dep}_targets
+      DESTINATION "${CMAKE_INSTALL_LIBDIR}/cmake/realm"
+      NAMESPACE ${_dep}::
+      FILE ${_dep}-targets.cmake
+      COMPONENT Realm_devel
+    )
+    install(TARGETS ${_real_tgt}
+            EXPORT ${_dep}_targets
+            RUNTIME COMPONENT Realm_runtime
+            LIBRARY COMPONENT Realm_runtime
+            ARCHIVE COMPONENT Realm_runtime)
+  endif()
+endforeach()
 
 export(PACKAGE Realm)
 #endregion
