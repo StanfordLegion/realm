@@ -259,6 +259,61 @@ namespace Realm {
         fl.rel_offset = /*group_offset +*/ it2->second + reuse_offset;
         fl.size_in_bytes = field_sizes[it2->first];
       }
+     
+    }
+
+    // Compute preferred dimension ordering for idindexed_fields 
+    if (layout->idindexed_fields) {
+      layout->preferred_dim_order.clear();
+      std::vector<int> preferred;
+      preferred.reserve(N);
+      
+      // Consider all fields
+      for(InstanceLayoutGeneric::FieldMap::const_iterator it = layout->fields.begin();
+          it != layout->fields.end(); ++it) {
+        const InstancePieceList<N, T> &ipl = layout->piece_lists[it->second.list_idx];
+        
+        for(typename std::vector<InstanceLayoutPiece<N, T> *>::const_iterator it2 = ipl.pieces.begin();
+            it2 != ipl.pieces.end(); ++it2) {          
+          
+          const AffineLayoutPiece<N, T> *affine = static_cast<const AffineLayoutPiece<N, T> *>(*it2);
+          
+          preferred.clear();
+      for (int d = 0; d < N; d++) {
+            preferred.push_back(d);
+      }
+      
+          // Sort dimensions by stride
+          std::sort(preferred.begin(), preferred.end(), 
+                [&](int a, int b) {
+                  return affine->strides[a] < affine->strides[b];
+                });
+          
+          // Reconcile dimensions orders 
+          if(preferred.size() > layout->preferred_dim_order.size()) {
+            
+            if(std::equal(layout->preferred_dim_order.begin(), layout->preferred_dim_order.end(), preferred.begin())) {
+              layout->preferred_dim_order = preferred;
+            }
+          }
+          
+          preferred.clear();
+        }
+      }
+      
+      // If we didn't end up choosing all the dimensions, add the rest back in
+      //  in arbitrary (ascending, currently) order (matches transfer.cc logic)
+      if(layout->preferred_dim_order.size() != N) {
+        std::vector<bool> present(N, false);
+        for(size_t i = 0; i < layout->preferred_dim_order.size(); i++) {
+          present[layout->preferred_dim_order[i]] = true;
+        }
+        for(int i = 0; i < N; i++) {
+          if(!present[i]) {
+            layout->preferred_dim_order.push_back(i);
+          }
+        }
+      }
     }
 
     return layout;
@@ -527,7 +582,8 @@ namespace Realm {
        (s >> il->fields) &&
        (s >> il->idindexed_fields) &&
        (s >> il->space) &&
-       (s >> il->piece_lists)) {
+       (s >> il->piece_lists) &&
+       (s >> il->preferred_dim_order)) {
       return il;
     } else {
       delete il;
@@ -548,6 +604,7 @@ namespace Realm {
     copy->fields = fields;
     copy->idindexed_fields = idindexed_fields;
     copy->space = space;
+    copy->preferred_dim_order = preferred_dim_order;
     copy->piece_lists.resize(piece_lists.size());
     for(size_t i = 0; i < piece_lists.size(); i++) {
       copy->piece_lists[i].pieces.resize(piece_lists[i].pieces.size());
@@ -619,7 +676,8 @@ namespace Realm {
 	    (s << fields) &&
 	    (s << idindexed_fields) &&
 	    (s << space) &&
-	    (s << piece_lists));
+	    (s << piece_lists)&&
+      (s << preferred_dim_order));
   }
 
   ////////////////////////////////////////////////////////////////////////

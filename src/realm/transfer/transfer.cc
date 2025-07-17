@@ -2101,7 +2101,28 @@ namespace Realm {
     // allocate this vector once and we'll reuse it
     std::vector<int> preferred;
     preferred.reserve(N);
-
+    
+    RegionInstanceImpl *impl = get_runtime()->get_instance_impl(dsts[0].inst);
+    const InstanceLayout<N, T> *inst_layout = 
+        checked_cast<const InstanceLayout<N, T> *>(impl->metadata.layout);
+    
+    // Fast path for idindexed_fields with pre-computed ordering 
+    if (inst_layout->idindexed_fields && !inst_layout->preferred_dim_order.empty()) {
+      // Filter out trivial dimensions from pre-computed ordering for this specific copy
+      for (int d : inst_layout->preferred_dim_order) {
+        if (!trivial[d]) {
+          dim_order.push_back(d);
+        }
+      }
+      
+      // Add back trivial dimensions
+      for (int i = 0; i < N; i++) {
+        if (trivial[i]) {
+          dim_order.push_back(i);
+        }
+      }
+      return;
+    } 
     // consider destinations first
     for(size_t i = 0; i < dsts.size(); i++) {
       if((dsts[i].field_id != FieldID(-1)) && dsts[i].inst.exists()) {
@@ -2109,7 +2130,6 @@ namespace Realm {
                             max_stride);
         reconcile_dim_orders(dim_order, preferred);
         preferred.clear();
-        continue;
       }
 
       // TODO: ask opinion of indirections?
@@ -2122,7 +2142,6 @@ namespace Realm {
                             max_stride);
         reconcile_dim_orders(dim_order, preferred);
         preferred.clear();
-        continue;
       }
 
       // TODO: ask opinion of indirections?
@@ -4546,7 +4565,7 @@ namespace Realm {
                          << " ib_alloc=" << PrettyVector<unsigned>(graph.ib_alloc_order);
       }
     }
-
+    
     // mark that the analysis is complete and see if there are any pending
     //  ops that can start allocating ibs
     std::vector<TransferOperation *> to_alloc;
