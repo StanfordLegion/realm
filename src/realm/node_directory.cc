@@ -2,6 +2,7 @@
 #include "realm/runtime_impl.h"
 #include "realm/machine_impl.h"
 #include "realm/logging.h"
+#include <atomic>
 
 using namespace Realm;
 
@@ -67,6 +68,8 @@ void NodeDirectory::complete(NodeID id, uint64_t epoch, const void *blob, size_t
     }
   }
 
+  update_node_id(id);
+
   RuntimeImpl *rt = runtime_singleton;
   rt->machine->parse_node_announce_data(id, blob, bytes, /*remote*/ true);
   rt->machine->update_kind_maps();
@@ -88,6 +91,7 @@ void NodeDirectory::add_slot(NodeID id, const NodeMeta &meta)
     s.brief.epoch = meta.epoch;
   }
   update_epoch(meta.epoch);
+  update_node_id(id);
 }
 
 void NodeDirectory::remove_slot(NodeID id) { erase(id); }
@@ -126,6 +130,20 @@ void NodeDirectory::erase(NodeID id)
 {
   std::unique_lock ul(mtx_);
   slots_.erase(id);
+}
+
+bool NodeDirectory::update_node_id(NodeID id)
+{
+  NodeID cur = max_node_id_.load(std::memory_order_relaxed);
+  while(id < cur && !max_node_id_.compare_exchange_weak(
+                        cur, id, std::memory_order_release, std::memory_order_relaxed)) {
+  }
+
+  if(id > Network::max_node_id) {
+    Network::max_node_id = id;
+  }
+
+  return id > cur;
 }
 
 bool NodeDirectory::update_epoch(uint64_t new_ep)

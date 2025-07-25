@@ -39,7 +39,7 @@ namespace Realm {
     uint32_t ip{0};
     uint16_t udp_port{0};
     uint8_t flags{0};
-    uint8_t hash[16]{};
+    //uint8_t hash[16]{};
     std::vector<uint8_t> worker_address;
     uint32_t dev_index{0};
   };
@@ -60,6 +60,7 @@ namespace Realm {
     const NodeMeta *lookup(NodeID id) const noexcept;
     const NodeSlot *lookup_slot(NodeID id) const noexcept;
 
+    bool update_node_id(NodeID id);
     bool update_epoch(uint64_t new_ep);
     uint64_t bump_epoch(NodeID id);
 
@@ -79,6 +80,7 @@ namespace Realm {
 
     // data
     std::atomic<uint64_t> epoch_{1};
+    std::atomic<NodeID> max_node_id_{0};
     mutable std::shared_mutex mtx_;
     std::unordered_map<NodeID, NodeSlot> slots_;
 

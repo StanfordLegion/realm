@@ -11,6 +11,7 @@
 # the License.
 
 set(REALM_SOURCES
+    membership/membership.cc
     activemsg.cc
     node_directory.cc
     network.cc
@@ -122,6 +123,7 @@ if(REALM_USE_UDP)
     REALM_SOURCES
     udp/udp_module.cc
     udp/udp_module.h
+    membership/p2p_membership.cc
   )
 endif()
 

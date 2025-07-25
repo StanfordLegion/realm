@@ -39,6 +39,7 @@
 #include "realm/transfer/channel.h"
 #include "realm/transfer/memcpy_channel.h"
 #include "realm/transfer/channel_disk.h"
+#include "realm/membership/membership.h"
 
 #ifdef REALM_USE_KOKKOS
 #include "realm/kokkos_interop.h"
@@ -1669,7 +1670,7 @@ namespace Realm {
 #endif
     }
 
-    void JoinReqMessage::handle_message(NodeID sender, const JoinReqMessage &msg,
+    /*void JoinReqMessage::handle_message(NodeID sender, const JoinReqMessage &msg,
                                         const void *data, size_t datalen)
     {
       assert(sender != Network::my_node_id);
@@ -1680,7 +1681,7 @@ namespace Realm {
       if(datalen > 0 && datalen > msg.payload_bytes) {
         get_runtime()->machine->parse_node_announce_data(msg.wanted_id, data,
                                                          datalen - msg.payload_bytes,
-                                                         /*from_remote=*/true);
+                                                         true);
         get_runtime()->machine->update_kind_maps();
         get_runtime()->machine->enumerate_mem_mem_affinities();
         complete = true;
@@ -1781,7 +1782,7 @@ namespace Realm {
         assert(msg.seed_id == sender);
         get_runtime()->machine->parse_node_announce_data(sender, data,
                                                          datalen - msg.payload_bytes,
-                                                         /*from_remote=*/true);
+                                                         true);
         get_runtime()->machine->update_kind_maps();
         get_runtime()->machine->enumerate_mem_mem_affinities();
         complete = true;
@@ -1813,7 +1814,7 @@ namespace Realm {
       }
     }
 
-    ActiveMessageHandlerReg<JoinReqMessage> joinreq_request_handler;
+    ActiveMessageHandlerReg<JoinReqMessage> joinreq_request_handler;*/
 
     static void allgather_announcement(Realm::Serialization::DynamicBufferSerializer &dbs,
                                        const NodeSet &targets, MachineImpl *machine,
@@ -2492,6 +2493,35 @@ namespace Realm {
       }
 
       if(Network::my_node_id != 0) {
+        realmMembership_t membership;
+        realmMembershipCreateDefaultBackend(&membership);
+
+        const NodeMeta *nm = Network::node_directory.lookup(Network::my_node_id);
+
+        realmNodeMeta_t self_meta{};
+        self_meta.node_id     = Network::my_node_id;
+        self_meta.ip          = nm->ip;
+        self_meta.udp_port    = nm->udp_port;
+        self_meta.flags       = nm->flags;
+        self_meta.worker      = nm->worker_address.data();
+        self_meta.worker_len  = nm->worker_address.size();
+
+        uint64_t epoch_dummy = 0;
+        Realm::Event join_done = Realm::GenEventImpl::create_genevent()->current_event();
+        assert(realmJoin(membership, &self_meta, join_done, &epoch_dummy) == REALM_OK);
+        // join_done.wait();
+
+        {
+           AutoLock<> al(join_mutex);
+           while(!join_complete) {
+            join_condvar.wait();
+           }
+        }
+
+        return;
+      }
+
+      /*if(Network::my_node_id != 0) {
         const NodeMeta *self = Network::node_directory.lookup(Network::my_node_id);
         assert(self != nullptr);
 
@@ -2538,7 +2568,7 @@ namespace Realm {
             join_condvar.wait();
           }
         }
-      }
+      }*/
 
 #ifdef REALM_USE_KOKKOS
       // now that the threads are started up, we can spin up the kokkos runtime

@@ -496,7 +496,7 @@ namespace Realm {
 				 const void *data, size_t datalen);
     };
 
-    struct JoinReqMessage : ControlPlaneMessageTag {
+    /*struct JoinReqMessage : ControlPlaneMessageTag {
       Epoch_t epoch;
       NodeID wanted_id;
       uint32_t ip;
@@ -523,7 +523,7 @@ namespace Realm {
 
       static void handle_message(NodeID sender, const JoinAckMessage &msg,
 				 const void *data, size_t datalen);
-    };
+    };*/
 
     bool serialize_announcement(Realm::Serialization::DynamicBufferSerializer &serializer, const Node *node,
                                    const MachineImpl *machine_impl, NetworkModule *net);
