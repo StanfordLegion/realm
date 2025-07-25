@@ -51,6 +51,42 @@ struct JoinAcklMessage : ControlPlaneMessageTag {
 
 // JoinReq ------------------------------------------------------------------
 
+struct MemberInfo {
+  uint64_t epoch{0};
+  uint32_t ip{0};
+  uint16_t udp_port{0};
+  size_t mm_size{0};
+};
+
+void put_mm(NodeID me, MemberInfo minfo, const void *data, size_t datalen)
+{
+  if(minfo.mm_size > 0) {
+    Network::node_directory.complete(me, minfo.epoch, data, minfo.mm_size);
+  }
+
+  const size_t addr_len = datalen - minfo.mm_size;
+  std::vector<uint8_t> tmp(addr_len);
+  std::memcpy(tmp.data(), static_cast<const uint8_t *>(data) + addr_len, addr_len);
+
+  NodeMeta meta;
+  meta.epoch = minfo.epoch;
+  meta.ip = minfo.ip;
+  meta.udp_port = minfo.udp_port;
+  meta.worker_address.swap(tmp);
+  meta.flags = (minfo.mm_size > 0);
+  Network::node_directory.add_slot(me, meta);
+}
+
+static constexpr bool lazy_mode = true;
+
+void get_mm(NodeID me, Serialization::DynamicBufferSerializer &dbs)
+{
+  constexpr NodeID seed = NodeDirectory::UNKNOWN_NODE_ID;
+  bool ok = serialize_announcement(dbs, &get_runtime()->nodes[me], get_runtime()->machine,
+                                   Network::get_network(seed));
+  assert(ok);
+}
+
 void JoinRequestMessage::handle_message(NodeID sender, const JoinRequestMessage &msg,
                                         const void *data, size_t datalen)
 {
@@ -64,39 +100,19 @@ void JoinRequestMessage::handle_message(NodeID sender, const JoinRequestMessage 
     acks = Network::node_directory.size();
   }
 
-  bool complete = false;
-  if(datalen > 0 && datalen > msg.payload_bytes) {
-    Network::node_directory.complete(msg.wanted_id, msg.epoch, data,
-                                     datalen - msg.payload_bytes);
-    complete = true;
-  }
-
-  std::vector<uint8_t> tmp(msg.payload_bytes);
-  std::memcpy(tmp.data(),
-              static_cast<const uint8_t *>(data) + (datalen - msg.payload_bytes),
-              msg.payload_bytes);
-
-  NodeMeta meta;
-  meta.epoch = new_epoch;
-  meta.ip = msg.ip;
-  meta.udp_port = msg.udp_port;
-  meta.worker_address.swap(tmp);
-  meta.flags = complete;
-  Network::node_directory.add_slot(msg.wanted_id, meta);
+  put_mm(msg.wanted_id, {new_epoch, msg.ip, msg.udp_port, (datalen - msg.payload_bytes)},
+         data, datalen);
 
   Serialization::DynamicBufferSerializer dbs(4096);
   size_t bytes = 0;
   if(!msg.lazy_mode) {
-    bool ok = serialize_announcement(dbs, &get_runtime()->nodes[Network::my_node_id],
-                                     get_runtime()->machine,
-                                     Network::get_network(msg.wanted_id));
-    assert(ok);
+    get_mm(Network::my_node_id, dbs);
     bytes = dbs.bytes_used();
   }
 
   const NodeMeta *self = Network::node_directory.lookup(Network::my_node_id);
   assert(self != nullptr);
-  const void *blob_ptr = self->worker_address.data();
+
   size_t blob_size = self->worker_address.size();
   assert(blob_size > 0);
 
@@ -132,7 +148,7 @@ void JoinRequestMessage::handle_message(NodeID sender, const JoinRequestMessage 
   }
 
   if(blob_size > 0) {
-    am.add_payload(blob_ptr, blob_size);
+    am.add_payload(self->worker_address.data(), blob_size);
   }
 
   am.commit();
@@ -146,25 +162,8 @@ void JoinAcklMessage::handle_message(NodeID sender, const JoinAcklMessage &msg,
   assert(sender != Network::my_node_id);
   assert(msg.assigned_id != NodeDirectory::UNKNOWN_NODE_ID);
 
-  bool complete = false;
-
-  if(datalen > 0 && datalen > msg.payload_bytes) {
-    assert(msg.seed_id == sender);
-    Network::node_directory.complete(msg.seed_id, msg.epoch, data,
-                                     datalen - msg.payload_bytes);
-    complete = true;
-  }
-
-  NodeMeta new_meta;
-  new_meta.epoch = msg.epoch;
-  new_meta.ip = msg.ip;
-  new_meta.udp_port = msg.udp_port;
-  new_meta.flags = complete;
-
-  const uint8_t *blob =
-      static_cast<const uint8_t *>(data) + (datalen - msg.payload_bytes);
-  new_meta.worker_address.assign(blob, blob + msg.payload_bytes);
-  Network::node_directory.add_slot(msg.seed_id, new_meta);
+  put_mm(msg.seed_id, {msg.epoch, msg.ip, msg.udp_port, (datalen - msg.payload_bytes)},
+         data, datalen);
 
   RuntimeImpl *rt = runtime_singleton;
 
@@ -182,28 +181,21 @@ void JoinAcklMessage::handle_message(NodeID sender, const JoinAcklMessage &msg,
   }
 }
 
-/* rookie → seed */
 static realmStatus_t p2p_join(void *st, const realmNodeMeta_t *self, realmEvent_t done,
                               uint64_t *epoch_out)
 {
   constexpr NodeID seed = NodeDirectory::UNKNOWN_NODE_ID;
-  constexpr bool lazy_mode = true;
 
   P2PMB *state = static_cast<P2PMB *>(st);
   state->join_done = done;
   // state->done_fired = false;
-  RuntimeImpl *rt = runtime_singleton;
+  // RuntimeImpl *rt = runtime_singleton;
 
-  CoreModuleConfig *config =
-      dynamic_cast<CoreModuleConfig *>(rt->get_module_config("core"));
-  assert(config != nullptr);
   Serialization::DynamicBufferSerializer dbs(4096);
 
   size_t bytes = 0;
   if(!lazy_mode) {
-    bool ok = serialize_announcement(dbs, &get_runtime()->nodes[Network::my_node_id],
-                                     get_runtime()->machine, Network::get_network(seed));
-    assert(ok);
+    get_mm(Network::my_node_id, dbs);
     bytes = dbs.bytes_used();
   }
 
