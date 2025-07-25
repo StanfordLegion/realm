@@ -12,6 +12,7 @@
 
 set(REALM_SOURCES
     activemsg.cc
+    node_directory.cc
     network.cc
     codedesc.cc
     logging.cc
@@ -112,6 +113,15 @@ if(TARGET ucx::ucp)
     ucx/oob_group_comm.cc
     ucx/bootstrap/bootstrap.cc
     ucx/bootstrap/bootstrap_loader.cc
+  )
+endif()
+
+if(REALM_USE_UDP)
+  list(
+    APPEND
+    REALM_SOURCES
+    udp/udp_module.cc
+    udp/udp_module.h
   )
 endif()
 

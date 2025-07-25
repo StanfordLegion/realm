@@ -110,13 +110,6 @@ namespace UCP {
     bool submit_req(Request *req);
     size_t num_eps() const;
 
-    struct EpEntry {
-      std::atomic<ucp_ep_h> ep{nullptr};
-      std::atomic<bool> pending{false};
-    };
-
-    EpEntry &ep_slot(int peer, int remote_dev) { return eps[peer][remote_dev]; }
-
   private:
     bool setup_worker_efd();
     bool ep_close(ucp_ep_h ep);
@@ -149,7 +142,7 @@ namespace UCP {
     SpinLock am_rdesc_q_spinlock;
     SpinLock mmp_spinlock;
     std::unordered_map<void*, ucp_mem_h> pbuf_mp_mem_hs;
-    std::unordered_map<int, std::unordered_map<int, EpEntry>> eps;
+    std::unordered_map<int, std::unordered_map<int, ucp_ep_h>> eps;
     size_t max_am_header;
     atomic<uint64_t> scount{0};
     atomic<uint64_t> pcount{0};

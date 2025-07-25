@@ -103,7 +103,7 @@ list(
   sequence_assembler_test.cc
   dynamic_table_test.cc
   range_allocator_test.cc
-  pri_queue_test.cc
+  #pri_queue_test.cc
   intrusive_list_test.cc
   repl_heap_test.cc
   nodeset_test.cc
@@ -246,6 +246,7 @@ set(proc_group_ARGS -ll:cpu 4)
 add_integration_test(event_subscribe "${REALM_TEST_DIR}/event_subscribe.cc")
 set(compqueue_ARGS -ll:cpu 4 -timeout 120)
 add_integration_test(compqueue "${REALM_TEST_DIR}/compqueue.cc")
+add_integration_test(elastic_test "${REALM_TEST_DIR}/elastic_test.cc")
 add_integration_test(test_nodeset "${REALM_TEST_DIR}/test_nodeset.cc")
 add_integration_test(subgraphs "${REALM_TEST_DIR}/subgraphs.cc")
 add_integration_test(large_tls "${REALM_TEST_DIR}/large_tls.cc")

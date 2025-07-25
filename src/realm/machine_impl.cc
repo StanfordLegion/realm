@@ -524,6 +524,7 @@ namespace Realm {
               (fbd >> has_rdma_info));
         if(has_rdma_info)
           ok = ok && (fbd >> rdma_info);
+
         if(ok) {
           assert(NodeID(ID(m).memory_owner_node()) == node_id);
           log_annc.debug() << "adding memory " << m << " (kind = " << kind

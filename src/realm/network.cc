@@ -19,6 +19,7 @@
 #include "realm/cmdline.h"
 #include "realm/logging.h"
 #include "realm/activemsg.h"
+#include "realm/node_directory.h"
 
 #ifdef REALM_USE_DLFCN
 #include <dlfcn.h>
@@ -47,12 +48,13 @@ static void aligned_free(void *ptr)
 namespace Realm {
 
   namespace Network {
-    REALM_INTERNAL_API_EXTERNAL_LINKAGE NodeRegistry node_registry;
+    NodeDirectory node_directory;
     REALM_INTERNAL_API_EXTERNAL_LINKAGE NodeID my_node_id = 0;
     REALM_INTERNAL_API_EXTERNAL_LINKAGE NodeID max_node_id = 0;
     REALM_INTERNAL_API_EXTERNAL_LINKAGE NodeSet all_peers;
     REALM_INTERNAL_API_EXTERNAL_LINKAGE NodeSet shared_peers;
     NetworkModule *single_network = 0;
+    NetworkModule *control_plane_network = 0;
 
     bool check_for_quiescence(IncomingMessageManager *message_manager)
     {
@@ -677,6 +679,7 @@ namespace Realm {
         std::cerr << "Unable to parse network command line" << std::endl;
         abort();
       }
+
       for (const std::string& name : network_list) {
 
         // if -ll:networks is none, do not enable any networks
@@ -700,10 +703,16 @@ namespace Realm {
           abort();
         }
         modules.push_back(m);
-        Network::single_network = m;
+
+        if (name != "udp") {
+          Network::single_network = m;
+        } else {
+          Network::control_plane_network = m;
+        }
+
         need_loopback = false;
 #ifndef REALM_USE_MULTIPLE_NETWORKS
-        break;  // Found one network backend that works, no need to create the rest
+        // break;  // Found one network backend that works, no need to create the rest
 #endif
       }
     }

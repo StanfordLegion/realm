@@ -23,14 +23,6 @@
 #include "realm/logging.h"
 #include "unistd.h"
 #include <cstdint>
-#include <sys/socket.h>
-#include <netinet/in.h>
-#include <arpa/inet.h>
-#include <cerrno>
-#include <netdb.h>
-#include <ifaddrs.h>
-#include <arpa/inet.h>
-#include <net/if.h>
 
 #ifdef REALM_USE_CUDA
 #include "realm/cuda/cuda_module.h"
@@ -376,55 +368,6 @@ namespace UCP {
     assert(!initialized_ucp && !initialized_boot);
   }
 
-  static uint32_t discover_ip()
-  {
-    ifaddrs* ifa = nullptr;
-    if (getifaddrs(&ifa) == -1) assert(0);
-    for (auto p = ifa; p; p = p->ifa_next) {
-      if (!p->ifa_addr || p->ifa_addr->sa_family != AF_INET) continue;
-      if (!(p->ifa_flags & IFF_UP) || (p->ifa_flags & IFF_LOOPBACK)) continue;
-      auto sin = reinterpret_cast<sockaddr_in*>(p->ifa_addr);
-      uint32_t ip_be = sin->sin_addr.s_addr;          // network order
-      freeifaddrs(ifa);
-      return ntohl(ip_be);                            // host order if you really need it
-    }
-    freeifaddrs(ifa);
-    assert(0);
-    return 0;
-  }
-
-  bool UCPInternal::create_eps_cs(uint8_t priority)
-  {
-    struct NodeInfo {
-      uint32_t ip_be;
-      uint32_t port;
-    };
-
-    NodeInfo self{};
-    self.ip_be = htonl(discover_ip());
-    assert(config.num_priorities == 1);
-    self.port = config.cs_port + ucc_comm->get_rank();
-
-    int world_size = ucc_comm->get_world_size();
-    std::vector<NodeInfo> all(world_size);
-
-    ucc_status_t rc = ucc_comm->UCC_Allgather(&self,
-          sizeof(self), UCC_DT_UINT8, all.data(), sizeof(self) * world_size, UCC_DT_UINT8);
-    if (rc != UCC_OK) {
-      log_ucp.error() << "Failed all gather";
-      return false;
-    }
-
-    for (int peer = 0; peer < world_size; peer++) {
-      Realm::NodeMeta nm;
-      nm.ip = all[peer].ip_be;
-      nm.port_base = all[peer].port;
-      Network::node_registry.add_slot(peer, nm);
-    }
-
-    return true;
-  }
-
   bool UCPInternal::create_eps(uint8_t priority)
   {
     // the eps are created from a local send worker to a
@@ -453,6 +396,8 @@ namespace UCP {
       int           dev_index;
     };
 
+    assert(ucp_contexts.size() == 1);
+
     // get details of all rx workers of my own contexts
     std::vector<WorkerInfo> self_rx_workers_info;
     for (const auto &context : ucp_contexts) {
@@ -462,11 +407,24 @@ namespace UCP {
       status = UCP_FNPTR(ucp_worker_get_address)(wi.worker->get_ucp_worker(),
           &wi.addr, &wi.addrlen);
       CHKERR_JUMP(status != UCS_OK, "ucp_worker_get_address failed", log_ucp, err);
+
+      assert(config.rank_id == Network::my_node_id);
+      auto meta = *Network::node_directory.lookup(Network::my_node_id);
+
+      std::vector<uint8_t> tmp(1 + wi.addrlen);
+      tmp[0] = -1;
+
 #ifdef REALM_USE_CUDA
       if (context.gpu) {
         wi.dev_index = context.gpu->info->index;
+        tmp[0] = context.gpu->info->index;
       }
 #endif
+
+      std::memcpy(tmp.data() + 1, wi.addr, wi.addrlen);
+      meta.worker_address.swap(tmp);
+      Network::node_directory.add_slot(Network::my_node_id, meta);
+
       self_rx_workers_info.push_back(wi);
       self_max_addrlen = std::max(self_max_addrlen, wi.addrlen);
     }
@@ -563,11 +521,7 @@ err:
   bool UCPInternal::create_eps()
   {
     for (uint8_t priority = 0; priority < config.num_priorities; priority++) {
-      if (config.cs_mode) {
-        if (!create_eps_cs(priority)) return false;
-      } else {
-        if (!create_eps(priority)) return false;
-      }
+      if (!create_eps(priority)) return false;
     }
     return true;
   }
@@ -829,14 +783,6 @@ err:
     CHKERR_JUMP(!create_eps(),
         "failed to create ucp end points", log_ucp, err_destroy_workers);
 
-    if (config.cs_mode) {
-      for(uint8_t priority = 0; priority < config.num_priorities; priority++) {
-        for(const auto &context : ucp_contexts) {
-          open_listener(&context, priority);
-        }
-      }
-    }
-
     CHKERR_JUMP(!create_pollers(),
         "failed to create ucp pollers", log_ucp, err_destroy_workers);
 
@@ -949,6 +895,33 @@ err:
     return true;
   }
 
+  void UCPInternal::add_remote_ep(NodeID peer, const void* blob, size_t bytes) {
+    /* blob layout:  [1-byte dev_index | raw ucp_worker_address] */
+    if(bytes < 2) return;                      // malformed
+
+    const uint8_t      *p     = static_cast<const uint8_t*>(blob);
+    int           rdev  = *p++;          // remote device index
+    const ucp_address_t*addr  = reinterpret_cast<const ucp_address_t*>(p);
+    const size_t        alen  = bytes - 1;     // address length (may be unused)
+
+    rdev = -1; // TODO: FIX ME
+
+    (void)alen;                                // silences “unused” in release
+
+    /* Choose host context, priority 0 – identical to create_eps() */
+    const UCPContext *ctx = get_context_host();
+    UCPWorker        *w   = get_tx_worker(ctx, /*priority=*/0);
+    assert(w != nullptr);
+
+    /* Re-use the trusted helper that caches the EP internally */
+    bool ok = w->ep_add(peer,
+                        const_cast<ucp_address_t*>(addr),
+                        rdev);
+    if(!ok) {
+      log_ucp.error() << "ep_add failed while admitting peer " << peer;
+    }
+  }
+
 #ifdef REALM_UCX_DYNAMIC_LOAD
   bool UCPInternal::resolve_ucp_api_fnptrs()
   {
@@ -1021,10 +994,6 @@ err:
 
     delete rcba_mp;
 
-    for (size_t i = 0; i < listener_cb_data.size(); i++) {
-      delete listener_cb_data[i];
-    }
-
     destroy_workers();
 
     if (initialized_ucp) {
@@ -1050,109 +1019,6 @@ err:
       initialized_boot = false;
       log_ucp.info() << "finalized ucp bootstrap";
     }
-  }
-
-  void UCPInternal::on_conn_request(ucp_conn_request_h req, void *arg) {
-    auto *cb_data = static_cast<ListenerCallbackData *>(arg);
-    UCPInternal *self = cb_data->internal;
-    const UCPContext *ctx = cb_data->context;
-
-    //-------------------------------------------------------------------
-    // Build a server-side endpoint on the correct worker/context
-    //-------------------------------------------------------------------
-    ucp_ep_params_t ep_params{};
-    ep_params.field_mask   = UCP_EP_PARAM_FIELD_CONN_REQUEST;
-    ep_params.conn_request = req;
-
-    UCPWorker *worker = self->get_rx_worker(ctx, 0);
-
-    ucp_ep_h ep        = nullptr;
-    ucs_status_t status = ucp_ep_create(worker->get_ucp_worker(), &ep_params, &ep);
-    if (status != UCS_OK) {
-      log_ucp.fatal() << "ucp_ep_create failed in on_conn_request: " << status;
-      return;
-    }
-  }
-
-  uint16_t UCPInternal::open_listener(const UCPContext *context, uint8_t prio) {
-    sockaddr_in sin{};
-    sin.sin_family = AF_INET;
-
-    const auto nm = Network::node_registry.lookup(Network::my_node_id);
-    assert(nm != nullptr);
-
-    sin.sin_addr.s_addr = nm->ip;
-    sin.sin_port = htons(nm->port_base + prio);
-
-    int fd = socket(AF_INET, SOCK_STREAM, 0);
-    if (fd < 0) {
-      assert(0);
-      log_ucp.fatal() << "socket() failed: " << strerror(errno);
-      abort();
-    }
-
-    // avoid TIME_WAIT collisions during rapid restarts
-    int one = 1;
-    setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, &one, sizeof(one));
-
-    if (bind(fd, reinterpret_cast<sockaddr *>(&sin), sizeof(sin)) < 0) {
-      log_ucp.fatal() << "bind() failed: " << strerror(errno);
-      close(fd);
-      abort();
-    }
-
-    UCPWorker *worker = get_rx_worker(context, prio);
-
-    socklen_t sl = sizeof(sin);
-    getsockname(fd, reinterpret_cast<sockaddr *>(&sin), &sl);
-    uint16_t port = ntohs(sin.sin_port);
-    close(fd); // we only needed the number
-
-    /* ------------------------------------------------------------------
-     * Create a UCX listener on that port
-     * ----------------------------------------------------------------*/
-    ucp_listener_params_t lp{};
-    lp.field_mask = UCP_LISTENER_PARAM_FIELD_SOCK_ADDR |
-                    UCP_LISTENER_PARAM_FIELD_CONN_HANDLER;
-#ifdef UCP_LISTENER_PARAM_FIELD_USER_DATA // UCX ≥ 1.14
-    lp.field_mask |= UCP_LISTENER_PARAM_FIELD_USER_DATA;
-#endif
-
-    lp.sockaddr.addr = reinterpret_cast<sockaddr *>(&sin);
-    lp.sockaddr.addrlen = sizeof(sin);
-
-    // Allocate a callback context that carries both the owning UCPInternal
-    // instance and the UCPContext that this listener was created for.  This
-    // allows on_conn_request() to pick the correct worker without having to
-    // guess the context type (host vs. device).
-    ListenerCallbackData *cb_data = new ListenerCallbackData{this, context};
-    lp.conn_handler.cb  = &UCPInternal::on_conn_request;
-    lp.conn_handler.arg = cb_data;
-
-    // Remember the allocation so that we can release it in finalize().
-    listener_cb_data.push_back(cb_data);
-
-    ucp_listener_h lst = nullptr;
-    ucs_status_t st = ucp_listener_create(
-        /* worker      */ worker->get_ucp_worker(),
-        /* params      */ &lp,
-        /* out handle  */ &lst);
-
-    if (st != UCS_OK) {
-      assert(0);
-      log_ucp.fatal() << "ucp_listener_create failed: ";
-      abort();
-    }
-
-    /* ------------------------------------------------------------------
-     * 3. Remember the handle so we can destroy it at shutdown
-     * ----------------------------------------------------------------*/
-    if (listeners.size() <= prio) {
-      listeners.resize(prio + 1, nullptr);
-    }
-    listeners[prio] = lst;
-
-    return port; // caller stores port_base
   }
 
   ucs_status_t UCPInternal::am_remote_comp_handler(void *arg,
@@ -1560,8 +1426,6 @@ err:
     ucs_status_t status;
     uintptr_t alloc_base, offset;
     ByteArray alloc_rdma_info;
-
-    listeners.clear();
 
 #if defined(REALM_USE_CUDA)
     // Find the GPUs
@@ -2559,8 +2423,16 @@ err:
         goto err_update_pending;
       }
       *req = *req_prim;
-      CHKERR_JUMP(!worker->ep_get(target, remote_dev_index, &req->ucp.ep),
+
+      if (!worker->ep_get(target, remote_dev_index, &req->ucp.ep)) {
+        auto meta = Network::node_directory.lookup(target);
+        assert(meta != nullptr);
+        internal->add_remote_ep(
+            target, meta->worker_address.data(), meta->worker_address.size());
+         CHKERR_JUMP(!worker->ep_get(target, remote_dev_index, &req->ucp.ep),
           "failed to get ep", log_ucp, err);
+      }
+
       if (!UCPMessageImpl::send_request(req, AM_ID)) {
         log_ucp.error() << "failed to send multicast am request";
         goto err_update_pending;
@@ -2590,8 +2462,17 @@ err:
     bool ret;
     ucp_ep_h ep;
 
-    CHKERR_JUMP(!worker->ep_get(target, remote_dev_index, &ep),
+    if (!worker->ep_get(target, remote_dev_index, &ep)) {
+      auto meta = Network::node_directory.lookup(target);
+      assert(meta != nullptr);
+      internal->add_remote_ep(
+          target, meta->worker_address.data(), meta->worker_address.size());
+       CHKERR_JUMP(!worker->ep_get(target, remote_dev_index, &ep),
         "failed to get ep", log_ucp, err);
+    }
+
+    //CHKERR_JUMP(!worker->ep_get(target, remote_dev_index, &ep),
+        //"failed to get ep unicast", log_ucp, err);
 
     if (dest_payload_rdma_info == nullptr) {
       if (header_size + act_payload_size <= internal->config.fp_max) {

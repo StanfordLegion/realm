@@ -1056,6 +1056,7 @@ namespace Realm {
     , shutdown_result_code(0)
     , shutdown_initiated(false)
     , shutdown_in_progress(false)
+    , join_condvar(join_mutex)
     , core_reservations(0)
     , message_manager(0)
     , sampling_profiler(true /*system default*/)
@@ -1412,6 +1413,12 @@ namespace Realm {
                                    const MachineImpl *machine_impl, NetworkModule *net)
     {
       bool ok = true;
+
+      // TODO: EXPERIMENTAL
+      ok = ok && serialize_announce(serializer, node->memories,   net);
+      ok = ok && serialize_announce(serializer, node->ib_memories, net);
+      if(!ok) return false;
+
       std::vector<Machine::ProcessorMemoryAffinity> pmas;
       ok = serialize_announce(serializer, node->processors, net);
       if(!ok) {
@@ -1432,6 +1439,14 @@ namespace Realm {
           serializer, (machine_impl->nodeinfos.at(Network::my_node_id))->process_info,
           net);
       return ok;
+    }
+
+    bool serialize_announcement(Realm::Serialization::DynamicBufferSerializer &serializer,
+                                const Node *node, const MachineImpl *machine_impl,
+                                NetworkModule *net)
+    {
+      return serialize_announce<Realm::Serialization::DynamicBufferSerializer>(
+          serializer, node, machine_impl, net);
     }
 
     /// Internal auxilary class to handle active messages for sharing CPU memory objects
@@ -1654,6 +1669,152 @@ namespace Realm {
 #endif
     }
 
+    void JoinReqMessage::handle_message(NodeID sender, const JoinReqMessage &msg,
+                                        const void *data, size_t datalen)
+    {
+      assert(sender != Network::my_node_id);
+
+      Network::max_node_id = std::max(Network::max_node_id, msg.wanted_id);
+
+      bool complete = false;
+      if(datalen > 0 && datalen > msg.payload_bytes) {
+        get_runtime()->machine->parse_node_announce_data(msg.wanted_id, data,
+                                                         datalen - msg.payload_bytes,
+                                                         /*from_remote=*/true);
+        get_runtime()->machine->update_kind_maps();
+        get_runtime()->machine->enumerate_mem_mem_affinities();
+        complete = true;
+      }
+
+      size_t ann_len = datalen - msg.payload_bytes;
+      const void *blob = static_cast<const uint8_t *>(data) + ann_len;
+
+      std::vector<uint8_t> tmp(msg.payload_bytes);
+      std::memcpy(tmp.data(), blob, msg.payload_bytes);
+
+      int acks = 0;
+
+      Epoch_t new_epoch = Network::node_directory.cluster_epoch();
+      if(sender == msg.wanted_id) {
+        new_epoch = Network::node_directory.bump_epoch(Network::my_node_id);
+        acks = Network::node_directory.size();
+      } else {
+        new_epoch = msg.epoch;
+        acks = -1;
+      }
+
+      NodeMeta meta;
+      meta.epoch = new_epoch;
+      meta.ip = msg.ip;
+      meta.udp_port = msg.udp_port;
+      meta.worker_address.swap(tmp);
+      meta.flags = complete;
+
+      Network::node_directory.add_slot(msg.wanted_id, meta);
+
+      Serialization::DynamicBufferSerializer dbs(256);
+      size_t bytes = 0;
+      if(!msg.lazy_mode) {
+        bool ok = serialize_announce(dbs, &get_runtime()->nodes[Network::my_node_id],
+                                     get_runtime()->machine,
+                                     Network::get_network(msg.wanted_id));
+        assert(ok);
+        bytes = dbs.bytes_used();
+      }
+
+      const NodeMeta *self = Network::node_directory.lookup(Network::my_node_id);
+      assert(self != nullptr);
+      const void *blob_ptr = self->worker_address.data();
+      size_t blob_size = self->worker_address.size();
+      assert(blob_size > 0);
+
+      if(sender == msg.wanted_id) {
+        NodeSet multicast = Network::node_directory.get_members();
+        multicast.remove(sender);
+        multicast.remove(Network::my_node_id);
+        if(!multicast.empty()) {
+
+          ActiveMessage<JoinReqMessage> am(multicast, datalen);
+          am->wanted_id = msg.wanted_id;
+          am->ip = msg.ip;
+          am->udp_port = msg.udp_port;
+          am->epoch = new_epoch;
+          am->lazy_mode = msg.lazy_mode;
+          am->payload_bytes = msg.payload_bytes;
+          am.add_payload(data, datalen);
+          am.commit();
+        }
+      }
+
+      ActiveMessage<JoinAckMessage> am(msg.wanted_id, bytes + blob_size);
+      am->assigned_id = msg.wanted_id;
+      am->seed_id = Network::my_node_id;
+      am->payload_bytes = blob_size;
+      am->ip = self->ip;
+      am->udp_port = self->udp_port;
+      am->epoch = new_epoch;
+      am->acks = acks;
+
+      if (bytes > 0) {
+        am.add_payload(dbs.get_buffer(), bytes);
+      }
+
+      if(blob_size > 0) {
+        am.add_payload(blob_ptr, blob_size);
+      }
+
+      am.commit();
+    }
+
+    ActiveMessageHandlerReg<JoinAckMessage> joinack_request_handler;
+
+    void JoinAckMessage::handle_message(NodeID sender, const JoinAckMessage &msg,
+                                        const void *data, size_t datalen)
+    {
+      Network::max_node_id = std::max(Network::max_node_id, sender);
+
+      assert(sender != Network::my_node_id);
+      assert(msg.assigned_id != NodeDirectory::UNKNOWN_NODE_ID);
+
+      bool complete = false;
+      if(datalen > 0 && datalen > msg.payload_bytes) {
+        assert(msg.seed_id == sender);
+        get_runtime()->machine->parse_node_announce_data(sender, data,
+                                                         datalen - msg.payload_bytes,
+                                                         /*from_remote=*/true);
+        get_runtime()->machine->update_kind_maps();
+        get_runtime()->machine->enumerate_mem_mem_affinities();
+        complete = true;
+      }
+
+      NodeMeta new_meta;
+      new_meta.epoch = msg.epoch;
+      new_meta.ip = msg.ip;
+      new_meta.udp_port = msg.udp_port;
+      new_meta.flags = complete;
+
+      const uint8_t *blob =
+          static_cast<const uint8_t *>(data) + (datalen - msg.payload_bytes);
+      new_meta.worker_address.assign(blob, blob + msg.payload_bytes);
+      Network::node_directory.add_slot(msg.seed_id, new_meta);
+
+      RuntimeImpl *rt = runtime_singleton;
+      rt->join_acks++;
+
+      if(msg.acks > 0) {
+        rt->join_acks_total = msg.acks;
+      }
+
+      if(rt->join_acks == rt->join_acks_total) {
+        Network::node_directory.remove_slot(NodeDirectory::UNKNOWN_NODE_ID);
+        AutoLock<> al(rt->join_mutex);
+        rt->join_complete = true;
+        rt->join_condvar.broadcast();
+      }
+    }
+
+    ActiveMessageHandlerReg<JoinReqMessage> joinreq_request_handler;
+
     static void allgather_announcement(Realm::Serialization::DynamicBufferSerializer &dbs,
                                        const NodeSet &targets, MachineImpl *machine,
                                        NetworkModule *network_module)
@@ -1827,8 +1988,10 @@ namespace Realm {
 
       GenEventImpl::GenEventImplAllocator event_allocator(&event_triggerer);
 
-      nodes = new Node[Network::max_node_id + 1];
-      num_nodes = Network::max_node_id + 1;
+      // TODO: FIX Me
+      nodes = new Node[4096];//Network::max_node_id + 1];
+      num_nodes = 4096;//Network::max_node_id + 1;
+
       for(int i = 0; i < Network::max_node_id + 1; i++) {
         nodes[i].remote_events.set_constructor(event_allocator);
       }
@@ -1917,7 +2080,7 @@ namespace Realm {
       activemsg_handler_table.construct_handler_table();
 
       // and also our incoming active message manager
-      message_manager = new IncomingMessageManager(Network::max_node_id + 1,
+      message_manager = new IncomingMessageManager(256,
 						   config->active_msg_handler_threads,
 						   *core_reservations);
       if(config->active_msg_handler_bgwork)
@@ -2275,13 +2438,13 @@ namespace Realm {
         assert(ok && "Failed to serialize memories");
         ok = serialize_announce(dbs, n->ib_memories, module);
         assert(ok && "Failed to serialize ib memories");
-        allgather_announcement(dbs, targets, machine, module);
+        // allgather_announcement(dbs, targets, machine, module);
 
         // Stage 2: Announce everything else.
         dbs.reset();
         ok = serialize_announce(dbs, n, machine, module);
         assert(ok && "Failed to serialize node for announcement");
-        allgather_announcement(dbs, targets, machine, module);
+        // allgather_announcement(dbs, targets, machine, module);
       }
 
       // Now that we have full knowledge of the machine, update the machine model's
@@ -2322,10 +2485,60 @@ namespace Realm {
     {
       // all we have to do here is tell the processors to start up their
       //  threads...
-      for(std::vector<ProcessorImpl *>::const_iterator it = nodes[Network::my_node_id].processors.begin();
-	  it != nodes[Network::my_node_id].processors.end();
-	  ++it)
-	(*it)->start_threads();
+      for(std::vector<ProcessorImpl *>::const_iterator it =
+              nodes[Network::my_node_id].processors.begin();
+          it != nodes[Network::my_node_id].processors.end(); ++it) {
+        (*it)->start_threads();
+      }
+
+      if(Network::my_node_id != 0) {
+        const NodeMeta *self = Network::node_directory.lookup(Network::my_node_id);
+        assert(self != nullptr);
+
+        NodeID seed = NodeDirectory::UNKNOWN_NODE_ID;
+
+        CoreModuleConfig *config = dynamic_cast<CoreModuleConfig *>(get_module_config("core"));
+        assert(config != nullptr);
+
+        Serialization::DynamicBufferSerializer dbs(256);
+        size_t bytes = 0;
+        if(!config->lazy_mode) {
+          bool ok =
+              serialize_announce(dbs, &get_runtime()->nodes[Network::my_node_id],
+                                 get_runtime()->machine, Network::get_network(seed));
+          assert(ok);
+          bytes = dbs.bytes_used();
+        }
+
+        const void *blob_ptr = self->worker_address.data();
+        size_t blob_size = self->worker_address.size();
+        assert(blob_size > 0);
+
+        ActiveMessage<JoinReqMessage> am(seed, bytes + blob_size);
+        am->wanted_id = Network::my_node_id;
+        am->ip = self->ip;
+        am->udp_port = self->udp_port;
+        am->payload_bytes = blob_size;
+        am->epoch = Network::node_directory.cluster_epoch();
+        am->lazy_mode = config->lazy_mode;
+
+        if(bytes > 0) {
+          am.add_payload(dbs.get_buffer(), bytes);
+        }
+
+        if(blob_size > 0) {
+          am.add_payload(blob_ptr, blob_size);
+        }
+
+        am.commit();
+
+        {
+          AutoLock<> al(join_mutex);
+          while(!join_complete) {
+            join_condvar.wait();
+          }
+        }
+      }
 
 #ifdef REALM_USE_KOKKOS
       // now that the threads are started up, we can spin up the kokkos runtime
@@ -2663,9 +2876,9 @@ namespace Realm {
 	  if(i != Network::my_node_id)
 	    targets.add(i);
 
-	ActiveMessage<RuntimeShutdownMessage> amsg(targets);
-	amsg->result_code = shutdown_result_code;
-	amsg.commit();
+	// ActiveMessage<RuntimeShutdownMessage> amsg(targets);
+	// amsg->result_code = shutdown_result_code;
+	// amsg.commit();
       }
 
       {
@@ -2694,7 +2907,7 @@ namespace Realm {
                          << " code=" << result_code;
 
       // send a message to the shutdown master if it's not us
-      NodeID shutdown_master_node = 0;
+      NodeID shutdown_master_node = Network::my_node_id;
       if(Network::my_node_id != shutdown_master_node) {
         ActiveMessage<RuntimeShutdownRequest> amsg(shutdown_master_node);
         amsg->wait_on = wait_on;

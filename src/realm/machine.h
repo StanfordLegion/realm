@@ -20,6 +20,8 @@
 
 #include "realm/processor.h"
 #include "realm/memory.h"
+#include "realm/network.h"
+#include "realm/node_directory.h"
 
 #include <iterator>
 
@@ -38,6 +40,19 @@ namespace Realm {
       ~Machine(void) {}
 
       static Machine get_machine(void);
+
+      Epoch_t get_epoch() const noexcept {
+        return Network::node_directory.cluster_epoch();
+      }
+
+      Event update(uint64_t epoch) {
+        NodeSet members = Network::node_directory.get_members();
+        std::vector<Event> events;
+        for (NodeID id : members) {
+          events.emplace_back(Network::node_directory.request(id, epoch));
+        }
+        return Event::merge_events(events);
+      }
 
       class ProcessorQuery;
       class MemoryQuery;

@@ -29,9 +29,6 @@
 #include <unordered_map>
 #include <sys/epoll.h>
 #include <unistd.h>
-#include <sys/socket.h>
-#include <netinet/in.h>
-#include <atomic>
 
 namespace Realm {
 
@@ -436,9 +433,6 @@ err:
   {
     ucp_ep_h ep;
     ucp_ep_params_t ep_params;
-    assert(!eps[target].count(remote_dev_index));
-    EpEntry &slot = eps[target][remote_dev_index];
-
     ep_params.field_mask = UCP_EP_PARAM_FIELD_REMOTE_ADDRESS;
     ep_params.address    = addr;
 
@@ -450,8 +444,8 @@ err:
     CHKERR_JUMP(status != UCS_OK, "ucp_ep_create failed", log_ucp, err);
 
     // make sure we're not overwriting an existing ep
-    slot.ep.store(ep, std::memory_order_release);
-    slot.pending.store(false, std::memory_order_release);
+    assert(!eps[target].count(remote_dev_index));
+    eps[target][remote_dev_index] = ep;
 
     return true;
 err:
@@ -460,77 +454,14 @@ err:
 
   bool UCPWorker::ep_get(int target, int remote_dev_index, ucp_ep_h *ep)
   {
-    EpEntry &slot = eps[target][remote_dev_index];
-
-    if (ucp_ep_h e = slot.ep.load(std::memory_order_acquire)) {
-      *ep = e;
+    auto iter1 = eps.find(target);
+    if (iter1 != eps.end()) {
+      auto iter2 = iter1->second.find(remote_dev_index);
+      if (iter2 != iter1->second.end()) {
+        *ep = iter2->second;
+      }
       return true;
     }
-
-    bool expected = false;
-    if (!slot.pending.compare_exchange_strong(
-      expected, true, std::memory_order_acquire, std::memory_order_acq_rel)) {
-      while (slot.pending.load(std::memory_order_acquire)) {}
-      *ep = slot.ep.load(std::memory_order_acquire);
-    }
-
-    const auto nm = Network::node_registry.lookup(target);
-    assert(nm != nullptr);
-
-    ucp_ep_params_t ep_params{};
-
-    uint8_t prio = 0;
-
-    sockaddr_in sin{};
-    sin.sin_family      = AF_INET;
-    sin.sin_addr.s_addr = nm->ip;
-    sin.sin_port = htons(nm->port_base + prio);
-
-    ep_params.sockaddr.addr           = reinterpret_cast<sockaddr*>(&sin);
-    ep_params.sockaddr.addrlen        = sizeof(sin);
-
-    ep_params.field_mask = UCP_EP_PARAM_FIELD_SOCK_ADDR      |
-                           UCP_EP_PARAM_FIELD_FLAGS          |
-                           UCP_EP_PARAM_FIELD_USER_DATA;
-    ep_params.flags             = UCP_EP_PARAMS_FLAGS_CLIENT_SERVER;
-
-    ucs_status_t status = UCP_FNPTR(ucp_ep_create)(worker, &ep_params, ep);
-    assert(status == UCS_OK);
-    //CHKERR_JUMP(status != UCS_OK, "ucp_ep_create failed", log_ucp, err);
-
-    // Flush – this blocks until the wire-up handshake finishes
-    //------------------------------------------------------------------
-    ucp_request_param_t prm{};
-    prm.op_attr_mask = UCP_OP_ATTR_FIELD_FLAGS;  // no special flags
-    ucs_status_ptr_t  req = UCP_FNPTR(ucp_ep_flush_nbx)(*ep, &prm);
-
-    if (UCS_PTR_IS_ERR(req)) {
-      assert(0);
-      UCP_FNPTR(ucp_ep_destroy)(*ep);
-      slot.pending.store(false, std::memory_order_release);
-      return false;
-    }
-
-    if (req != NULL) {
-      do {
-        UCP_FNPTR(ucp_worker_progress)(worker);
-        status = UCP_FNPTR(ucp_request_check_status)(req);
-
-      } while (status == UCS_INPROGRESS);
-      UCP_FNPTR(ucp_request_free)(req);
-      if (status != UCS_OK) {
-        assert(0);
-        UCP_FNPTR(ucp_ep_destroy)(*ep);
-        slot.pending.store(false, std::memory_order_release);
-        return false;
-      }
-    }
-
-    slot.ep.store(*ep, std::memory_order_release);
-    slot.pending.store(false, std::memory_order_release);
-
-    return true;
-  err:
     return false;
   }
 

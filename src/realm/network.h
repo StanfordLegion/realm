@@ -23,6 +23,8 @@
 #include "realm/nodeset.h"
 #include "realm/memory.h"
 #include "realm/bytearray.h"
+#include "realm/mutex.h"
+// #include "realm/node_directory.h"
 
 #include <map>
 
@@ -37,6 +39,7 @@ namespace Realm {
   class ActiveMessageImpl;
   class IncomingMessageManager;
   class NetworkSegment;
+  class NodeDirectory;
 
   // a RemoteAddress is used to name the target of an RDMA operation - in some
   //  cases it's as simple as a pointer, but in others additional info is needed
@@ -48,8 +51,7 @@ namespace Realm {
 	uintptr_t extra;
       };
       unsigned char raw_bytes[384];
-    };
-  };
+    };};
 
   // a LocalAddress is used to name the local source of an RDMA write or target
   //  of an RDMA read
@@ -58,45 +60,10 @@ namespace Realm {
     uintptr_t offset;
   };
 
-  struct NodeMeta {
-    uint32_t epoch{0};     // 0 = vacant, strictly monotonic
-    uint32_t ip{0};
-    uint32_t port_base{0}; // UCX listener base (port_base + priority)
-    uint32_t udp_port{0};  // control-plane socket
-    uint32_t flags{0};     // RETIRING, etc.
-    std::vector<uint8_t> worker_address;
-    ///std::array<char, 16> ip;
-    // MachineBlob  machine;      // compact description of procs/mems
-  };
-
-  class NodeRegistry {
-  public:
-    const NodeMeta *lookup(NodeID id) const noexcept
-    {
-      auto it = table_.find(id);
-      if (it == table_.end())
-        return nullptr;
-      return &it->second;
-    }
-
-    void add_slot(NodeID id, const NodeMeta &filled)
-    {
-      table_[id] = filled; // insert or overwrite
-    }
-
-    NodeID allocate_slot(const NodeMeta &filled);
-    void retire_slot(NodeID id);
-    uint32_t cluster_epoch() const noexcept;
-
-  private:
-    std::unordered_map<NodeID, NodeMeta> table_;
-    //std::unordered_map<NodeID, std::unique_ptr<NodeMeta>> table_;
-    std::atomic<uint32_t> next_epoch_{1};
-  };
+  typedef uint64_t Epoch_t;
 
   namespace Network {
-    extern NodeRegistry node_registry;
-
+    extern NodeDirectory node_directory;
     // a few globals for efficiency
     extern NodeID my_node_id;
     extern NodeID max_node_id;
@@ -109,9 +76,28 @@ namespace Realm {
     // in most cases, there will be a single network module - if so, we set
     //  this so we don't have to do a per-node lookup
     extern NetworkModule *single_network;
+    extern NetworkModule* control_plane_network;
 
     // gets the network for a given node
     NetworkModule *get_network(NodeID node);
+
+    inline NetworkModule *choose_network(NodeID target,
+                                         bool want_control_plane)
+    {
+      if(want_control_plane && Network::control_plane_network) {
+        return control_plane_network;
+      }
+      return get_network(target);
+    }
+
+    inline NetworkModule *choose_network(NodeSet targets,
+                                         bool want_control_plane)
+    {
+      if(want_control_plane && Network::control_plane_network) {
+        return control_plane_network;
+      }
+      return get_network(Network::my_node_id);
+    }
 
     // and a few "global" operations that abstract over any/all networks
     void barrier(void);
@@ -142,7 +128,7 @@ namespace Realm {
 						  size_t src_payload_lines,
 						  size_t src_payload_line_stride,
 						  void *storage_base,
-						  size_t storage_size);
+						  size_t storage_size, bool want_control = false);
 
     ActiveMessageImpl *create_active_message_impl(
         NodeID target, unsigned short msgid, size_t header_size, size_t max_payload_size,
@@ -162,7 +148,7 @@ namespace Realm {
 						  size_t src_payload_lines,
 						  size_t src_payload_line_stride,
 						  void *storage_base,
-						  size_t storage_size);
+						  size_t storage_size, bool want_control = false);
 
     size_t recommended_max_payload(NodeID target, bool with_congestion,
 				   size_t header_size);
@@ -221,6 +207,11 @@ namespace Realm {
     // detaches from the network
     virtual void detach(RuntimeImpl *runtime,
 			std::vector<NetworkSegment *>& segments) = 0;
+
+    virtual void add_remote_ep(
+          NodeID peer, const void* blob, size_t bytes) {
+      assert(0);
+    }
 
     // collective communication within this network
     virtual void barrier(void) = 0;
@@ -346,6 +337,7 @@ namespace Realm {
 
     // again, a single network puts itself here in addition to adding to the map
     NetworkModule *single_network;
+    NetworkModule* control_plane_network;
     ByteArray *single_network_data;
 
     // a map from each of the networks that successfully bound the segment to
@@ -365,7 +357,6 @@ namespace Realm {
     bool in_segment(const void *range_base, size_t range_bytes) const;
     bool in_segment(uintptr_t range_base, size_t range_bytes) const;
   };
-
 }; // namespace Realm
 
 #include "realm/network.inl"

@@ -137,6 +137,8 @@ namespace Realm {
     long long cpu_bgwork_timeslice = 0, util_bgwork_timeslice = 0;
     bool use_ext_sysmem = true;
 
+    bool lazy_mode{true};
+
     // RuntimeImpl
     size_t reg_ib_mem_size = 0;
     size_t reg_mem_size = 0;
@@ -373,6 +375,10 @@ namespace Realm {
       std::unordered_map<realm_id_t, SharedMemoryInfo> remote_shared_memory_mappings;
       std::unordered_map<realm_id_t, SharedMemoryInfo> local_shared_memory_mappings;
 
+      Mutex join_mutex;
+      Mutex::CondVar join_condvar;
+      bool join_complete{false};
+
       HardwareTopology host_topology;
       bool topology_init = false; // TODO: REMOVE it
       CoreReservationSet *core_reservations;
@@ -387,6 +393,9 @@ namespace Realm {
       ReplicatedHeap repl_heap; // used for sparsity maps, instance layouts
 
       bool shared_peers_use_network_module = true;
+
+      int join_acks_total{1};
+      int join_acks{0};
 
       class DeferredShutdown : public EventWaiter {
       public:
@@ -486,6 +495,38 @@ namespace Realm {
       static void handle_message(NodeID sender,const RuntimeShutdownMessage &msg,
 				 const void *data, size_t datalen);
     };
+
+    struct JoinReqMessage : ControlPlaneMessageTag {
+      Epoch_t epoch;
+      NodeID wanted_id;
+      uint32_t ip;
+      uint16_t udp_port;
+
+      uint32_t payload_bytes;
+      bool lazy_mode{false};
+      //uint16_t ucx_port_base;
+
+      static void handle_message(NodeID sender, const JoinReqMessage &msg,
+				 const void *data, size_t datalen);
+    };
+
+    struct JoinAckMessage : ControlPlaneMessageTag {
+      Epoch_t epoch;
+      NodeID assigned_id;
+      NodeID seed_id;
+      uint32_t ip;
+      uint16_t udp_port;
+      int acks;
+
+      uint32_t payload_bytes;
+      // uint32_t udp_port;
+
+      static void handle_message(NodeID sender, const JoinAckMessage &msg,
+				 const void *data, size_t datalen);
+    };
+
+    bool serialize_announcement(Realm::Serialization::DynamicBufferSerializer &serializer, const Node *node,
+                                   const MachineImpl *machine_impl, NetworkModule *net);
       
 }; // namespace Realm
 

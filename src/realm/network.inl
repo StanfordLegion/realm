@@ -91,13 +91,15 @@ namespace Realm {
 							 size_t src_payload_lines,
 							 size_t src_payload_line_stride,
 							 void *storage_base,
-							 size_t storage_size)
+							 size_t storage_size,
+                                                         bool want_control)
     {
 #ifdef REALM_USE_MULTIPLE_NETWORKS
       if(REALM_UNLIKELY(single_network == 0)) {
       } else
 #endif
-	return single_network->create_active_message_impl(target,
+        NetworkModule *module = Network::choose_network(target, want_control);
+	return module->create_active_message_impl(target,
 							  msgid,
 							  header_size,
 							  max_payload_size,
@@ -164,13 +166,15 @@ namespace Realm {
 							 size_t src_payload_lines,
 							 size_t src_payload_line_stride,
 							 void *storage_base,
-							 size_t storage_size)
+							 size_t storage_size,
+                                                         bool want_control)
     {
 #ifdef REALM_USE_MULTIPLE_NETWORKS
       if(REALM_UNLIKELY(single_network == 0)) {
       } else
 #endif
-	return single_network->create_active_message_impl(targets,
+        NetworkModule *module = Network::choose_network(targets, want_control);
+	return module->create_active_message_impl(        targets,
 							  msgid,
 							  header_size,
 							  max_payload_size,

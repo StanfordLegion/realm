@@ -104,8 +104,9 @@ namespace UCP {
     struct Config {
       AmWithRemoteAddrMode am_wra_mode{AM_WITH_REMOTE_ADDR_MODE_AUTO};
       bool bind_hostmem{true};
+      int rank_id{0};
       int pollers_max{2};
-      int num_priorities{2};
+      int num_priorities{1};
       int prog_boff_max{4}; //progress thread maximum backoff
       int prog_itr_max{16};
       int rdesc_rel_max{16};
@@ -133,8 +134,6 @@ namespace UCP {
       std::string zcopy_thresh_dev;
       std::string tls_dev;
 #endif
-      int cs_port{5000};
-      bool cs_mode{true};
     };
 
     UCPInternal(Realm::UCPModule *_module, Realm::RuntimeImpl *_runtime);
@@ -172,6 +171,8 @@ namespace UCP {
 
     void notify_msg_sent(uint64_t count);
 
+    void add_remote_ep(NodeID peer, const void* blob, size_t bytes);
+
     const UCPContext *get_context(const NetworkSegment *segment) const;
     // the public interface exposes the tx worker only
     UCPWorker *get_tx_worker(const UCPContext *context, uint8_t priority) const;
@@ -208,7 +209,6 @@ namespace UCP {
     size_t get_num_workers();
     bool set_am_handlers();
     bool create_eps(uint8_t priority);
-    bool create_eps_cs(uint8_t priority);
     bool create_eps();
     bool create_pollers();
     const UCPContext *get_context_host() const;
@@ -227,10 +227,6 @@ namespace UCP {
     bool am_msg_recv_data_ready(UCPInternal *internal,
         UCPWorker *worker, const UCPMsgHdr *ucp_msg_hdr, size_t header_size,
         void *payload, size_t payload_size, int payload_mode);
-
-    uint16_t open_listener(const UCPContext *context, uint8_t prio);
-    static void on_conn_request(ucp_conn_request_h reg, void *args);
-
     static ucs_status_t am_remote_comp_handler(void *arg,
         const void *header, size_t header_size,
         void *data, size_t data_size,
@@ -282,14 +278,6 @@ namespace UCP {
     SpinLock                                rcba_mp_spinlock;
     size_t                                  ib_seg_size;
     size_t zcopy_thresh_host;
-
-    struct ListenerCallbackData {
-      UCPInternal    *internal;
-      const UCPContext *context;
-    };
-
-    std::vector<ListenerCallbackData*> listener_cb_data;
-    std::vector<ucp_listener_h> listeners;
   };
 
   class UCPMessageImpl : public ActiveMessageImpl {

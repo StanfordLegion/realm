@@ -57,6 +57,9 @@ namespace Realm {
     virtual void detach(RuntimeImpl *runtime,
         std::vector<NetworkSegment *>& segments);
 
+    virtual void add_remote_ep(
+        NodeID peer, const void* blob, size_t bytes);
+
     virtual void create_memories(RuntimeImpl *runtime);
 
     // collective communication within this network

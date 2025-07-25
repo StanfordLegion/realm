@@ -142,10 +142,11 @@ err_del_mod:
     cp.add_option_string("-ucx:tls_dev", config.tls_dev);
 #endif
 
-    cp.add_option_int("-ucx:cs_port", config.cs_port);
-    cp.add_option_int("-ucx:cs_mode", config.cs_mode);
+    cp.add_option_int_units("-ll:gsize", deprecated_gsize, 'm');
+    cp.add_option_int("-ll:id", config.rank_id);
 
-    bool ok = cp.parse_command_line(cmdline);
+    std::vector<std::string> cmd(cmdline);
+    bool ok = cp.parse_command_line(cmd);
     assert(ok);
 
     if(deprecated_gsize > 0) {
@@ -191,6 +192,11 @@ err_del_mod:
     // objects (e.g., gpu) which may be destroyed before
     // the network module's destructor is called.
     internal->finalize();
+  }
+
+  void UCPModule::add_remote_ep(
+      NodeID peer, const void* blob, size_t bytes) {
+    internal->add_remote_ep(peer, blob, bytes);
   }
 
   void UCPModule::create_memories(RuntimeImpl *runtime)
