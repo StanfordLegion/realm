@@ -2509,13 +2509,13 @@ namespace Realm {
         uint64_t epoch_dummy = 0;
         Realm::Event join_done = Realm::GenEventImpl::create_genevent()->current_event();
         assert(realmJoin(membership, &self_meta, join_done, &epoch_dummy) == REALM_OK);
-        // join_done.wait();
+        join_done.wait();
 
         {
-           AutoLock<> al(join_mutex);
-           while(!join_complete) {
-            join_condvar.wait();
-           }
+           //AutoLock<> al(join_mutex);
+           //while(!join_complete) {
+            //join_condvar.wait();
+           //}
         }
 
         return;

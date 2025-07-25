@@ -174,10 +174,10 @@ void JoinAcklMessage::handle_message(NodeID sender, const JoinAcklMessage &msg,
 
   if(rt->join_acks == rt->join_acks_total) {
     Network::node_directory.remove_slot(NodeDirectory::UNKNOWN_NODE_ID);
-    // GenEventImpl::trigger(p2p_backend->join_done, false);
-    AutoLock<> al(rt->join_mutex);
-    rt->join_complete = true;
-    rt->join_condvar.broadcast();
+    GenEventImpl::trigger(p2p_backend->join_done, false);
+    //AutoLock<> al(rt->join_mutex);
+    //rt->join_complete = true;
+    //rt->join_condvar.broadcast();
   }
 }
 
