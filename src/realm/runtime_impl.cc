@@ -2492,96 +2492,47 @@ namespace Realm {
         (*it)->start_threads();
       }
 
-        realmMembership_t membership;
-        realmMembershipCreateDefaultBackend(&membership);
+      realmMembership_t membership;
+      realmMembershipCreateDefaultBackend(&membership);
 
-        Serialization::DynamicBufferSerializer dbs(4096);
-        bool ok = serialize_announcement(dbs, &get_runtime()->nodes[Network::my_node_id], 
-                                         get_runtime()->machine,
-                                         Network::get_network(Network::my_node_id));
-        assert(ok);
+      Serialization::DynamicBufferSerializer dbs(4096);
+      bool ok = serialize_announcement(dbs, &get_runtime()->nodes[Network::my_node_id],
+                                       get_runtime()->machine,
+                                       Network::get_network(Network::my_node_id));
+      assert(ok);
 
-        NodeMeta *nm = Network::node_directory.lookup(Network::my_node_id);
-        assert(nm != nullptr);
+      NodeMeta *nm = Network::node_directory.lookup(Network::my_node_id);
+      assert(nm != nullptr);
 
-        const uint8_t* buffer = static_cast<const uint8_t*>(dbs.get_buffer());
-        nm->machine_model.assign(buffer, buffer + dbs.bytes_used());
+      const uint8_t *buffer = static_cast<const uint8_t *>(dbs.get_buffer());
+      nm->machine_model.assign(buffer, buffer + dbs.bytes_used());
 
-        realmNodeMeta_t self_meta{};
-        self_meta.node_id     = Network::my_node_id;
-        self_meta.ip          = nm->ip;
-        self_meta.udp_port    = nm->udp_port;
-        self_meta.flags       = nm->flags;
-        self_meta.worker      = nm->worker_address.data();
-        self_meta.worker_len  = nm->worker_address.size();
-        self_meta.mm = nm->machine_model.data();
-        self_meta.mm_len = nm->machine_model.size();
+      realmNodeMeta_t self_meta{};
+      self_meta.node_id = Network::my_node_id;
+      self_meta.ip = nm->ip;
+      self_meta.udp_port = nm->udp_port;
+      self_meta.flags = nm->flags;
+      self_meta.worker = nm->worker_address.data();
+      self_meta.worker_len = nm->worker_address.size();
+      self_meta.mm = nm->machine_model.data();
+      self_meta.mm_len = nm->machine_model.size();
 
-        uint64_t epoch_dummy = 0;
-        Realm::Event join_done = Realm::GenEventImpl::create_genevent()->current_event();
-        assert(realmJoin(membership, &self_meta, join_done, &epoch_dummy, false,
-                         /*cb_fn=*/nullptr, /*cb_arg=*/nullptr) == REALM_OK);
-        join_done.wait();
+      uint64_t epoch_dummy = 0;
+      Realm::Event join_done = Realm::GenEventImpl::create_genevent()->current_event();
+      assert(realmJoin(membership, &self_meta, join_done, &epoch_dummy, false,
+                       /*cb_fn=*/nullptr, /*cb_arg=*/nullptr) == REALM_OK);
+      join_done.wait();
 
-        // Realm::Event sub_done = Realm::GenEventImpl::create_genevent()->current_event();
-        // assert(realmSubscribe(membership, sub_done, true) == REALM_OK);
-        // sub_done.wait();
+      // Realm::Event sub_done = Realm::GenEventImpl::create_genevent()->current_event();
+      // assert(realmSubscribe(membership, sub_done, true) == REALM_OK);
+      // sub_done.wait();
 
-        {
-           //AutoLock<> al(join_mutex);
-           //while(!join_complete) {
-            //join_condvar.wait();
-           //}
+      {
+        // AutoLock<> al(join_mutex);
+        // while(!join_complete) {
+        // join_condvar.wait();
+        //}
         }
-
-      /*if(Network::my_node_id != 0) {
-        const NodeMeta *self = Network::node_directory.lookup(Network::my_node_id);
-        assert(self != nullptr);
-
-        NodeID seed = NodeDirectory::UNKNOWN_NODE_ID;
-
-        CoreModuleConfig *config = dynamic_cast<CoreModuleConfig *>(get_module_config("core"));
-        assert(config != nullptr);
-
-        Serialization::DynamicBufferSerializer dbs(256);
-        size_t bytes = 0;
-        if(!config->lazy_mode) {
-          bool ok =
-              serialize_announce(dbs, &get_runtime()->nodes[Network::my_node_id],
-                                 get_runtime()->machine, Network::get_network(seed));
-          assert(ok);
-          bytes = dbs.bytes_used();
-        }
-
-        const void *blob_ptr = self->worker_address.data();
-        size_t blob_size = self->worker_address.size();
-        assert(blob_size > 0);
-
-        ActiveMessage<JoinReqMessage> am(seed, bytes + blob_size);
-        am->wanted_id = Network::my_node_id;
-        am->ip = self->ip;
-        am->udp_port = self->udp_port;
-        am->payload_bytes = blob_size;
-        am->epoch = Network::node_directory.cluster_epoch();
-        am->lazy_mode = config->lazy_mode;
-
-        if(bytes > 0) {
-          am.add_payload(dbs.get_buffer(), bytes);
-        }
-
-        if(blob_size > 0) {
-          am.add_payload(blob_ptr, blob_size);
-        }
-
-        am.commit();
-
-        {
-          AutoLock<> al(join_mutex);
-          while(!join_complete) {
-            join_condvar.wait();
-          }
-        }
-      }*/
 
 #ifdef REALM_USE_KOKKOS
       // now that the threads are started up, we can spin up the kokkos runtime

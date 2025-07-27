@@ -4,7 +4,6 @@
 #include "realm/network.h"
 #include "realm/node_directory.h"
 #include "realm/runtime_impl.h"
-#include "realm/serialize.h"
 #include <cstring>
 #include <vector>
 
@@ -36,7 +35,7 @@ struct JoinRequestMessage : ControlPlaneMessageTag {
   NodeID wanted_id;
   uint32_t ip;
   uint16_t udp_port;
-  uint32_t payload_bytes;
+  uint32_t worker_len;
   bool lazy_mode{false};
   bool subscribe{true};
 
@@ -49,7 +48,7 @@ struct JoinAcklMessage : ControlPlaneMessageTag {
   uint32_t ip;
   uint16_t udp_port;
   int acks{-1};
-  uint32_t payload_bytes;
+  uint32_t worker_len;
 
   static void handle_message(NodeID sender, const JoinAcklMessage &msg, const void *data,
                              size_t datalen);
@@ -73,12 +72,34 @@ struct MemberUpdateMessage : ControlPlaneMessageTag {
   NodeID node_id;
   uint32_t ip;
   uint16_t udp_port;
-  uint32_t payload_bytes;
+  uint32_t worker_len;
   bool lazy_mode{false};
 
   static void handle_message(NodeID sender, const MemberUpdateMessage &msg,
                              const void *data, size_t datalen);
 };
+
+static inline void send_join_ack(NodeID dest, Epoch_t epoch, int acks, bool lazy_mode)
+{
+  const NodeMeta *self = Network::node_directory.lookup(Network::my_node_id);
+  assert(self != nullptr);
+
+  const size_t worker_len = self->worker_address.size();
+  const size_t mm_len = lazy_mode ? 0 : self->machine_model.size();
+
+  ActiveMessage<JoinAcklMessage> ack(dest, mm_len + worker_len);
+  ack->worker_len = worker_len;
+  ack->ip = self->ip;
+  ack->udp_port = self->udp_port;
+  ack->epoch = epoch;
+  ack->acks = acks;
+
+  if(mm_len > 0) {
+    ack.add_payload(self->machine_model.data(), mm_len);
+  }
+  ack.add_payload(self->worker_address.data(), worker_len);
+  ack.commit();
+}
 
 // JoinReq ------------------------------------------------------------------
 
@@ -114,7 +135,7 @@ void JoinRequestMessage::handle_message(NodeID sender, const JoinRequestMessage 
   assert(sender != Network::my_node_id);
 
   Epoch_t new_epoch = Network::node_directory.bump_epoch(Network::my_node_id);
-  put_mm(msg.wanted_id, {new_epoch, msg.ip, msg.udp_port, (datalen - msg.payload_bytes)},
+  put_mm(msg.wanted_id, {new_epoch, msg.ip, msg.udp_port, (datalen - msg.worker_len)},
          data, datalen);
 
   if(!p2p_state->subscribers.empty()) {
@@ -124,30 +145,13 @@ void JoinRequestMessage::handle_message(NodeID sender, const JoinRequestMessage 
     am->udp_port = msg.udp_port;
     am->epoch = new_epoch;
     am->lazy_mode = msg.lazy_mode;
-    am->payload_bytes = msg.payload_bytes;
+    am->worker_len = msg.worker_len;
     am.add_payload(data, datalen);
     am.commit();
   }
 
-  const NodeMeta *self = Network::node_directory.lookup(Network::my_node_id);
-  assert(self != nullptr);
-  size_t blob_size = self->worker_address.size();
-  assert(blob_size > 0);
-
-  ActiveMessage<JoinAcklMessage> am(msg.wanted_id,
-                                    self->machine_model.size() + blob_size);
-  am->payload_bytes = blob_size;
-  am->ip = self->ip;
-  am->udp_port = self->udp_port;
-  am->epoch = new_epoch;
-  am->acks = p2p_state->subscribers.size() + 1;
-
-  if(!msg.lazy_mode && !self->machine_model.empty()) {
-    am.add_payload(self->machine_model.data(), self->machine_model.size());
-  }
-
-  am.add_payload(self->worker_address.data(), blob_size);
-  am.commit();
+  send_join_ack(msg.wanted_id, new_epoch, p2p_state->subscribers.size() + 1,
+                msg.lazy_mode);
 
   if(msg.subscribe) {
     p2p_state->subscribers.add(msg.wanted_id);
@@ -159,7 +163,7 @@ void JoinRequestMessage::handle_message(NodeID sender, const JoinRequestMessage 
 void JoinAcklMessage::handle_message(NodeID sender, const JoinAcklMessage &msg,
                                      const void *data, size_t datalen)
 {
-  put_mm(sender, {msg.epoch, msg.ip, msg.udp_port, (datalen - msg.payload_bytes)}, data,
+  put_mm(sender, {msg.epoch, msg.ip, msg.udp_port, (datalen - msg.worker_len)}, data,
          datalen);
 
   p2p_state->join_acks++;
@@ -180,26 +184,9 @@ void JoinAcklMessage::handle_message(NodeID sender, const JoinAcklMessage &msg,
 void MemberUpdateMessage::handle_message(NodeID sender, const MemberUpdateMessage &msg,
                                          const void *data, size_t datalen)
 {
-  put_mm(msg.node_id, {msg.epoch, msg.ip, msg.udp_port, (datalen - msg.payload_bytes)},
-         data, datalen);
-
-  const NodeMeta *self = Network::node_directory.lookup(Network::my_node_id);
-  assert(self != nullptr);
-  size_t blob_size = self->worker_address.size();
-  assert(blob_size > 0);
-
-  ActiveMessage<JoinAcklMessage> am(msg.node_id, self->machine_model.size() + blob_size);
-  am->payload_bytes = blob_size;
-  am->ip = self->ip;
-  am->udp_port = self->udp_port;
-  am->epoch = msg.epoch;
-
-  if(!msg.lazy_mode && !self->machine_model.empty()) {
-    am.add_payload(self->machine_model.data(), self->machine_model.size());
-  }
-
-  am.add_payload(self->worker_address.data(), blob_size);
-  am.commit();
+  put_mm(msg.node_id, {msg.epoch, msg.ip, msg.udp_port, (datalen - msg.worker_len)}, data,
+         datalen);
+  send_join_ack(msg.node_id, msg.epoch, /*acks=*/-1, msg.lazy_mode);
 }
 
 static realmStatus_t join(void *st, const realmNodeMeta_t *self, realmEvent_t done,
@@ -218,15 +205,13 @@ static realmStatus_t join(void *st, const realmNodeMeta_t *self, realmEvent_t do
     return REALM_OK;
   }
 
-  const void *blob_ptr = self->worker;
-  size_t blob_size = self->worker_len;
-  assert(blob_size > 0);
+  assert(self->worker_len > 0);
 
-  ActiveMessage<JoinRequestMessage> am(seed, self->mm_len + blob_size);
+  ActiveMessage<JoinRequestMessage> am(seed, self->mm_len + self->worker_len);
   am->wanted_id = self->node_id;
   am->ip = self->ip;
   am->udp_port = self->udp_port;
-  am->payload_bytes = blob_size;
+  am->worker_len = self->worker_len;
   am->epoch = Network::node_directory.cluster_epoch();
   am->lazy_mode = lazy_mode;
 
@@ -235,10 +220,7 @@ static realmStatus_t join(void *st, const realmNodeMeta_t *self, realmEvent_t do
     am.add_payload(self->mm, self->mm_len);
   }
 
-  if(blob_size > 0) {
-    am.add_payload(blob_ptr, blob_size);
-  }
-
+  am.add_payload(self->worker, self->worker_len);
   am.commit();
 
   if(epoch_out) {
@@ -332,6 +314,7 @@ static realmStatus_t p2p_epoch(void *, uint64_t *e)
   *e = Network::node_directory.cluster_epoch();
   return REALM_OK;
 }
+
 static realmStatus_t p2p_members(void *, realmNodeMeta_t *buf, size_t *cnt)
 {
   NodeSet ns = Network::node_directory.get_members(true);
