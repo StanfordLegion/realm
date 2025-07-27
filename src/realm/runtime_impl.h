@@ -394,8 +394,8 @@ namespace Realm {
 
       bool shared_peers_use_network_module = true;
 
-      int join_acks_total{1};
-      int join_acks{0};
+      //int join_acks_total{1};
+      //int join_acks{0};
 
       class DeferredShutdown : public EventWaiter {
       public:

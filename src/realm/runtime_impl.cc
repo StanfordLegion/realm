@@ -2492,7 +2492,6 @@ namespace Realm {
         (*it)->start_threads();
       }
 
-      if(Network::my_node_id != 0) {
         realmMembership_t membership;
         realmMembershipCreateDefaultBackend(&membership);
 
@@ -2508,8 +2507,13 @@ namespace Realm {
 
         uint64_t epoch_dummy = 0;
         Realm::Event join_done = Realm::GenEventImpl::create_genevent()->current_event();
-        assert(realmJoin(membership, &self_meta, join_done, &epoch_dummy) == REALM_OK);
+        assert(realmJoin(membership, &self_meta, join_done, &epoch_dummy, false,
+                         /*cb_fn=*/nullptr, /*cb_arg=*/nullptr) == REALM_OK);
         join_done.wait();
+
+        // Realm::Event sub_done = Realm::GenEventImpl::create_genevent()->current_event();
+        // assert(realmSubscribe(membership, sub_done, true) == REALM_OK);
+        // sub_done.wait();
 
         {
            //AutoLock<> al(join_mutex);
@@ -2517,9 +2521,6 @@ namespace Realm {
             //join_condvar.wait();
            //}
         }
-
-        return;
-      }
 
       /*if(Network::my_node_id != 0) {
         const NodeMeta *self = Network::node_directory.lookup(Network::my_node_id);

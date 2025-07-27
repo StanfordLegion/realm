@@ -32,15 +32,25 @@ typedef Realm::Event realmEvent_t;
 typedef struct realmEvent_st realmEvent_t;
 #endif
 
+/* -------- membership change callback -------------------------- */
+/* `joined` == true  => node joined;  false => node left (future).  */
+typedef void (*realmMembershipChangeCB_fn)(const realmNodeMeta_t *node,
+                                           bool                   joined,
+                                           void                  *arg);
+
 /* -------- back-end v-table ---------------------------------- */
 typedef struct {
 
-  // realmStatus_t (*destroy)(void *state);
   realmStatus_t (*join_request)(void *state, const realmNodeMeta_t *self,
-                                realmEvent_t done, uint64_t *cluster_epoch_out);
+                                realmEvent_t done, uint64_t *cluster_epoch_out,
+                                bool lazy_mode,
+                                realmMembershipChangeCB_fn cb_fn,
+                                void *cb_arg);
 
+  realmStatus_t (*subscribe_request)(void *state, realmEvent_t done, bool lazy_mode);
+
+  // realmStatus_t (*destroy)(void *state);
   // realmStatus_t (*progress)(void *state);
-
   // realmStatus_t (*epoch)(void *state, uint64_t *epoch_out);
   // realmStatus_t (*members)(void *state, realmNodeMeta_t *buf, size_t *count_io);
 } realmMembershipOps_t;
@@ -71,7 +81,12 @@ extern "C" {
 #endif
 
 realmStatus_t realmJoin(realmMembership_t h, const realmNodeMeta_t *self,
-                        realmEvent_t done, uint64_t *epoch_out);
+                        realmEvent_t done, uint64_t *epoch_out, bool lazy_mode,
+                        realmMembershipChangeCB_fn cb_fn,
+                        void *cb_arg);
+
+realmStatus_t realmSubscribe(realmMembership_t h, realmEvent_t done, bool lazy_mode);
+
 realmStatus_t realmMembershipCreateDefaultBackend(realmMembership_t *out);
 
 #ifdef __cplusplus

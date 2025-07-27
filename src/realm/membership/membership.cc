@@ -51,9 +51,15 @@ realmStatus_t realmMembershipDestroy(realmMembership_t h)
   } while(0)
 
 realmStatus_t realmJoin(realmMembership_t h, const realmNodeMeta_t *s, realmEvent_t done,
-                        uint64_t *epoch_out)
+                        uint64_t *epoch_out, bool lazy_mode,
+                        realmMembershipChangeCB_fn cb_fn, void *cb_arg)
 {
-  CALL(h, join_request, s, done, epoch_out);
+  CALL(h, join_request, s, done, epoch_out, lazy_mode, cb_fn, cb_arg);
+}
+
+realmStatus_t realmSubscribe(realmMembership_t h, realmEvent_t done, bool lazy_mode)
+{
+  CALL(h, subscribe_request, done, lazy_mode);
 }
 
 /*realmStatus_t realmProgress(realmMembership_t h) { CALL(h, progress); }
