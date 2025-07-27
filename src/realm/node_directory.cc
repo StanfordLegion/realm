@@ -48,6 +48,7 @@ Event NodeDirectory::request(NodeID id, uint64_t min_epoch)
     if(auto it = pending_.find(id); it != pending_.end()) {
       return it->second.ev;
     }
+
     pending_[id] = {UserEvent::create_user_event(), min_epoch};
     send_dir_get(id, min_epoch);
     return pending_[id].ev;
@@ -96,7 +97,7 @@ void NodeDirectory::add_slot(NodeID id, const NodeMeta &meta)
 
 void NodeDirectory::remove_slot(NodeID id) { erase(id); }
 
-const NodeMeta *NodeDirectory::lookup(NodeID id) const noexcept
+NodeMeta *NodeDirectory::lookup(NodeID id) noexcept
 {
   std::shared_lock sl(mtx_);
   auto it = slots_.find(id);

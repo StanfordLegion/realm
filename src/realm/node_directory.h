@@ -42,6 +42,8 @@ namespace Realm {
     //uint8_t hash[16]{};
     std::vector<uint8_t> worker_address;
     uint32_t dev_index{0};
+
+    std::vector<uint8_t> machine_model;
   };
 
   struct NodeSlot {
@@ -57,7 +59,7 @@ namespace Realm {
     void add_slot(NodeID id, const NodeMeta &meta);
     void remove_slot(NodeID id);
 
-    const NodeMeta *lookup(NodeID id) const noexcept;
+    NodeMeta *lookup(NodeID id) noexcept;
     const NodeSlot *lookup_slot(NodeID id) const noexcept;
 
     bool update_node_id(NodeID id);

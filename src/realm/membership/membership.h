@@ -21,6 +21,9 @@ typedef struct {
   uint8_t flags;      /* bit 0 == heavy blob present   */
   const void *worker; /* UCX/whatever blob             */
   size_t worker_len;
+
+  const void *mm;
+  size_t mm_len;
 } realmNodeMeta_t;
 
 /* -------- opaque handles ------------------------------------ */
@@ -34,9 +37,11 @@ typedef struct realmEvent_st realmEvent_t;
 
 /* -------- membership change callback -------------------------- */
 /* `joined` == true  => node joined;  false => node left (future).  */
-typedef void (*realmMembershipChangeCB_fn)(const realmNodeMeta_t *node,
-                                           bool                   joined,
-                                           void                  *arg);
+typedef void (*realmMembershipChangeCB_fn)(const realmNodeMeta_t *n,
+                                           const void *machine_blob,
+                                           size_t machine_bytes,
+                                           bool joined,
+                                           void *arg);
 
 /* -------- back-end v-table ---------------------------------- */
 typedef struct {

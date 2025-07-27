@@ -17,15 +17,14 @@ struct P2PMB {
 
   Realm::Event sub_done;
   NodeSet subscribers;
-  Mutex sub_mutex;
+  // Mutex sub_mutex;
 
-  /* membership change callback */
   realmMembershipChangeCB_fn cb_fn{nullptr};
   void *cb_arg{nullptr};
 };
 
 namespace {
-  P2PMB *p2p_backend = nullptr;
+  P2PMB *p2p_state = nullptr;
 };
 
 /* ------------------------------------------------------------------ */
@@ -109,14 +108,6 @@ void put_mm(NodeID me, MemberInfo minfo, const void *data, size_t datalen)
   Network::node_directory.add_slot(me, meta);
 }
 
-void get_mm(NodeID me, Serialization::DynamicBufferSerializer &dbs)
-{
-  constexpr NodeID seed = NodeDirectory::UNKNOWN_NODE_ID;
-  bool ok = serialize_announcement(dbs, &get_runtime()->nodes[me], get_runtime()->machine,
-                                   Network::get_network(seed));
-  assert(ok);
-}
-
 void JoinRequestMessage::handle_message(NodeID sender, const JoinRequestMessage &msg,
                                         const void *data, size_t datalen)
 {
@@ -126,8 +117,8 @@ void JoinRequestMessage::handle_message(NodeID sender, const JoinRequestMessage 
   put_mm(msg.wanted_id, {new_epoch, msg.ip, msg.udp_port, (datalen - msg.payload_bytes)},
          data, datalen);
 
-  if(!p2p_backend->subscribers.empty()) {
-    ActiveMessage<MemberUpdateMessage> am(p2p_backend->subscribers, datalen);
+  if(!p2p_state->subscribers.empty()) {
+    ActiveMessage<MemberUpdateMessage> am(p2p_state->subscribers, datalen);
     am->node_id = msg.wanted_id;
     am->ip = msg.ip;
     am->udp_port = msg.udp_port;
@@ -143,28 +134,23 @@ void JoinRequestMessage::handle_message(NodeID sender, const JoinRequestMessage 
   size_t blob_size = self->worker_address.size();
   assert(blob_size > 0);
 
-  Serialization::DynamicBufferSerializer dbs(4096);
-
-  if(!msg.lazy_mode) {
-    get_mm(Network::my_node_id, dbs);
-  }
-
-  ActiveMessage<JoinAcklMessage> am(msg.wanted_id, dbs.bytes_used() + blob_size);
+  ActiveMessage<JoinAcklMessage> am(msg.wanted_id,
+                                    self->machine_model.size() + blob_size);
   am->payload_bytes = blob_size;
   am->ip = self->ip;
   am->udp_port = self->udp_port;
   am->epoch = new_epoch;
-  am->acks = p2p_backend->subscribers.size() + 1;
+  am->acks = p2p_state->subscribers.size() + 1;
 
-  if(dbs.bytes_used() > 0) {
-    am.add_payload(dbs.get_buffer(), dbs.bytes_used());
+  if(!msg.lazy_mode && !self->machine_model.empty()) {
+    am.add_payload(self->machine_model.data(), self->machine_model.size());
   }
 
   am.add_payload(self->worker_address.data(), blob_size);
   am.commit();
 
   if(msg.subscribe) {
-    p2p_backend->subscribers.add(msg.wanted_id);
+    p2p_state->subscribers.add(msg.wanted_id);
   }
 }
 
@@ -176,31 +162,19 @@ void JoinAcklMessage::handle_message(NodeID sender, const JoinAcklMessage &msg,
   put_mm(sender, {msg.epoch, msg.ip, msg.udp_port, (datalen - msg.payload_bytes)}, data,
          datalen);
 
-  p2p_backend->join_acks++;
+  p2p_state->join_acks++;
 
   if(msg.acks > 0) {
-    p2p_backend->join_acks_total = msg.acks;
+    p2p_state->join_acks_total = msg.acks;
   }
 
-  if(p2p_backend->join_acks == p2p_backend->join_acks_total) {
+  if(p2p_state->join_acks == p2p_state->join_acks_total) {
     Network::node_directory.remove_slot(NodeDirectory::UNKNOWN_NODE_ID);
-    GenEventImpl::trigger(p2p_backend->join_done, false);
+    GenEventImpl::trigger(p2p_state->join_done, false);
     // AutoLock<> al(rt->join_mutex);
     // rt->join_complete = true;
     // rt->join_condvar.broadcast();
   }
-
-  /* invoke user callback for a new member */
-  /*if(p2p_backend && p2p_backend->cb_fn) {
-    realmNodeMeta_t nm{};
-    nm.node_id = msg.seed_id;
-    nm.ip = msg.ip;
-    nm.udp_port = msg.udp_port;
-    nm.flags = 0;
-    nm.worker = nullptr;
-    nm.worker_len = 0;
-    p2p_backend->cb_fn(&nm, true, p2p_backend->cb_arg);
-  }*/
 }
 
 void MemberUpdateMessage::handle_message(NodeID sender, const MemberUpdateMessage &msg,
@@ -209,25 +183,19 @@ void MemberUpdateMessage::handle_message(NodeID sender, const MemberUpdateMessag
   put_mm(msg.node_id, {msg.epoch, msg.ip, msg.udp_port, (datalen - msg.payload_bytes)},
          data, datalen);
 
-  Serialization::DynamicBufferSerializer dbs(4096);
-
-  if(!msg.lazy_mode) {
-    get_mm(Network::my_node_id, dbs);
-  }
-
   const NodeMeta *self = Network::node_directory.lookup(Network::my_node_id);
   assert(self != nullptr);
   size_t blob_size = self->worker_address.size();
   assert(blob_size > 0);
 
-  ActiveMessage<JoinAcklMessage> am(msg.node_id, dbs.bytes_used() + blob_size);
+  ActiveMessage<JoinAcklMessage> am(msg.node_id, self->machine_model.size() + blob_size);
   am->payload_bytes = blob_size;
   am->ip = self->ip;
   am->udp_port = self->udp_port;
   am->epoch = msg.epoch;
 
-  if(dbs.bytes_used() > 0) {
-    am.add_payload(dbs.get_buffer(), dbs.bytes_used());
+  if(!msg.lazy_mode && !self->machine_model.empty()) {
+    am.add_payload(self->machine_model.data(), self->machine_model.size());
   }
 
   am.add_payload(self->worker_address.data(), blob_size);
@@ -249,22 +217,12 @@ static realmStatus_t join(void *st, const realmNodeMeta_t *self, realmEvent_t do
     GenEventImpl::trigger(done, false);
     return REALM_OK;
   }
-  // state->done_fired = false;
-  // RuntimeImpl *rt = runtime_singleton;
-
-  Serialization::DynamicBufferSerializer dbs(4096);
-
-  size_t bytes = 0;
-  if(!lazy_mode) {
-    get_mm(Network::my_node_id, dbs);
-    bytes = dbs.bytes_used();
-  }
 
   const void *blob_ptr = self->worker;
   size_t blob_size = self->worker_len;
   assert(blob_size > 0);
 
-  ActiveMessage<JoinRequestMessage> am(seed, bytes + blob_size);
+  ActiveMessage<JoinRequestMessage> am(seed, self->mm_len + blob_size);
   am->wanted_id = self->node_id;
   am->ip = self->ip;
   am->udp_port = self->udp_port;
@@ -272,8 +230,9 @@ static realmStatus_t join(void *st, const realmNodeMeta_t *self, realmEvent_t do
   am->epoch = Network::node_directory.cluster_epoch();
   am->lazy_mode = lazy_mode;
 
-  if(bytes > 0) {
-    am.add_payload(dbs.get_buffer(), bytes);
+  if(!lazy_mode && self->mm_len > 0) {
+    assert(self->mm != nullptr);
+    am.add_payload(self->mm, self->mm_len);
   }
 
   if(blob_size > 0) {
@@ -296,8 +255,8 @@ void SubscribeReqMessage::handle_message(NodeID sender, const SubscribeReqMessag
                                          const void *, size_t)
 {
   /*{
-    AutoLock<> al(p2p_backend->sub_mutex);
-    p2p_backend->subscribers.add(sender);
+    AutoLock<> al(p2p_state->sub_mutex);
+    p2p_state->subscribers.add(sender);
   }
 
   Serialization::DynamicBufferSerializer dbs(4096);
@@ -327,8 +286,8 @@ void SubscribeAckMessage::handle_message(NodeID, const SubscribeAckMessage &msg,
     Network::node_directory.complete(Network::my_node_id, msg.epoch, data, datalen);
   }
 
-  if(p2p_backend->sub_done.exists()) {
-    GenEventImpl::trigger(p2p_backend->sub_done, false);
+  if(p2p_state->sub_done.exists()) {
+    GenEventImpl::trigger(p2p_state->sub_done, false);
   }*/
 }
 
@@ -402,7 +361,7 @@ static const realmMembershipOps_t p2p_ops = {
 realmStatus_t realmCreateP2PMembershipBackend(realmMembership_t *out)
 {
   P2PMB *s = new P2PMB();
-  p2p_backend = s;
+  p2p_state = s;
   return realmMembershipCreate(&p2p_ops, s, out);
 }
 

@@ -2495,7 +2495,17 @@ namespace Realm {
         realmMembership_t membership;
         realmMembershipCreateDefaultBackend(&membership);
 
-        const NodeMeta *nm = Network::node_directory.lookup(Network::my_node_id);
+        Serialization::DynamicBufferSerializer dbs(4096);
+        bool ok = serialize_announcement(dbs, &get_runtime()->nodes[Network::my_node_id], 
+                                         get_runtime()->machine,
+                                         Network::get_network(Network::my_node_id));
+        assert(ok);
+
+        NodeMeta *nm = Network::node_directory.lookup(Network::my_node_id);
+        assert(nm != nullptr);
+
+        const uint8_t* buffer = static_cast<const uint8_t*>(dbs.get_buffer());
+        nm->machine_model.assign(buffer, buffer + dbs.bytes_used());
 
         realmNodeMeta_t self_meta{};
         self_meta.node_id     = Network::my_node_id;
@@ -2504,6 +2514,8 @@ namespace Realm {
         self_meta.flags       = nm->flags;
         self_meta.worker      = nm->worker_address.data();
         self_meta.worker_len  = nm->worker_address.size();
+        self_meta.mm = nm->machine_model.data();
+        self_meta.mm_len = nm->machine_model.size();
 
         uint64_t epoch_dummy = 0;
         Realm::Event join_done = Realm::GenEventImpl::create_genevent()->current_event();
