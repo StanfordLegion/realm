@@ -110,21 +110,19 @@ struct MemberInfo {
   size_t mm_size{0};
 };
 
-void put_mm(NodeID me, MemberInfo minfo, const void *data, size_t datalen)
+void install_remote(NodeID me, MemberInfo minfo, const void *data, size_t datalen)
 {
   if(minfo.mm_size > 0) {
     Network::node_directory.complete(me, minfo.epoch, data, minfo.mm_size);
   }
 
-  const size_t addr_len = datalen - minfo.mm_size;
-  std::vector<uint8_t> tmp(addr_len);
-  std::memcpy(tmp.data(), static_cast<const uint8_t *>(data) + addr_len, addr_len);
-
   NodeMeta meta;
   meta.epoch = minfo.epoch;
   meta.ip = minfo.ip;
   meta.udp_port = minfo.udp_port;
-  meta.worker_address.swap(tmp);
+  meta.worker_address.assign(static_cast<const uint8_t *>(data),
+                             static_cast<const uint8_t *>(data) +
+                                 (datalen - minfo.mm_size));
   meta.flags = (minfo.mm_size > 0);
   Network::node_directory.add_slot(me, meta);
 }
@@ -135,8 +133,9 @@ void JoinRequestMessage::handle_message(NodeID sender, const JoinRequestMessage 
   assert(sender != Network::my_node_id);
 
   Epoch_t new_epoch = Network::node_directory.bump_epoch(Network::my_node_id);
-  put_mm(msg.wanted_id, {new_epoch, msg.ip, msg.udp_port, (datalen - msg.worker_len)},
-         data, datalen);
+  install_remote(msg.wanted_id,
+                 {new_epoch, msg.ip, msg.udp_port, (datalen - msg.worker_len)}, data,
+                 datalen);
 
   if(!p2p_state->subscribers.empty()) {
     ActiveMessage<MemberUpdateMessage> am(p2p_state->subscribers, datalen);
@@ -163,8 +162,8 @@ void JoinRequestMessage::handle_message(NodeID sender, const JoinRequestMessage 
 void JoinAcklMessage::handle_message(NodeID sender, const JoinAcklMessage &msg,
                                      const void *data, size_t datalen)
 {
-  put_mm(sender, {msg.epoch, msg.ip, msg.udp_port, (datalen - msg.worker_len)}, data,
-         datalen);
+  install_remote(sender, {msg.epoch, msg.ip, msg.udp_port, (datalen - msg.worker_len)},
+                 data, datalen);
 
   p2p_state->join_acks++;
 
@@ -184,8 +183,9 @@ void JoinAcklMessage::handle_message(NodeID sender, const JoinAcklMessage &msg,
 void MemberUpdateMessage::handle_message(NodeID sender, const MemberUpdateMessage &msg,
                                          const void *data, size_t datalen)
 {
-  put_mm(msg.node_id, {msg.epoch, msg.ip, msg.udp_port, (datalen - msg.worker_len)}, data,
-         datalen);
+  install_remote(msg.node_id,
+                 {msg.epoch, msg.ip, msg.udp_port, (datalen - msg.worker_len)}, data,
+                 datalen);
   send_join_ack(msg.node_id, msg.epoch, /*acks=*/-1, msg.lazy_mode);
 }
 
@@ -343,8 +343,8 @@ static const realmMembershipOps_t p2p_ops = {
 
 realmStatus_t realmCreateP2PMembershipBackend(realmMembership_t *out)
 {
-  P2PMB *s = new P2PMB();
-  p2p_state = s;
+  P2PMB *state = new P2PMB();
+  p2p_state = state;
   return realmMembershipCreate(&p2p_ops, s, out);
 }
 
