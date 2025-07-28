@@ -1,11 +1,13 @@
 #include "realm/event.h"
-// #include "realm/event_impl.h"
 #include "realm/membership/membership.h"
 #include "realm/network.h"
 #include "realm/node_directory.h"
-#include "realm/runtime_impl.h"
 #include <cstring>
 #include "realm/serialize.h"
+#include "realm/activemsg.h"
+#include "realm/event_impl.h"
+
+#include "realm/runtime_impl.h" // TODO: REMOVE
 
 using namespace Realm;
 
