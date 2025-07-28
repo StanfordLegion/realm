@@ -33,13 +33,18 @@ typedef void (*realmMembershipChangeCB_fn)(const realmNodeMeta_t *n,
                                            const void *machine_blob, size_t machine_bytes,
                                            bool joined, void *arg);
 
+typedef struct realmMembershipHooks_t {
+  realmMembershipChangeCB_fn pre_join;
+  realmMembershipChangeCB_fn post_join;
+  void *user_arg;
+} realmMembershipHooks_t;
+
 /* -------- back-end v-table ---------------------------------- */
 typedef struct {
 
   realmStatus_t (*join_request)(void *state, const realmNodeMeta_t *self,
                                 realmEvent_t done, uint64_t *cluster_epoch_out,
-                                bool lazy_mode, realmMembershipChangeCB_fn cb_fn,
-                                void *cb_arg);
+                                bool lazy_mode, realmMembershipHooks_t hooks);
 
   // realmStatus_t (*subscribe_request)(void *state, realmEvent_t done, bool lazy_mode);
   // realmStatus_t (*destroy)(void *state);
@@ -66,7 +71,7 @@ extern "C" {
 
 realmStatus_t realmJoin(realmMembership_t h, const realmNodeMeta_t *self,
                         realmEvent_t done, uint64_t *epoch_out, bool lazy_mode,
-                        realmMembershipChangeCB_fn cb_fn, void *cb_arg);
+                        realmMembershipHooks_t hooks);
 realmStatus_t realmMembershipInit(realmMembership_t *out);
 // realmStatus_t realmSubscribe(realmMembership_t h, realmEvent_t done, bool lazy_mode);
 

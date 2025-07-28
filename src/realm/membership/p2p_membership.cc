@@ -200,6 +200,12 @@ void JoinAcklMessage::handle_message(NodeID, const JoinAcklMessage &msg, const v
   if(p2p_state->join_acks == p2p_state->join_acks_total) {
     Network::node_directory.remove_slot(NodeDirectory::UNKNOWN_NODE_ID);
     GenEventImpl::trigger(p2p_state->join_done, false);
+
+    if(p2p_state->cb_fn) {
+      realmNodeMeta_t meta{(int32_t)Network::my_node_id, 0};
+      p2p_state->cb_fn(&meta, nullptr, 0, /*joined=*/true, p2p_state->cb_arg);
+    }
+
     // AutoLock<> al(rt->join_mutex);
     // rt->join_complete = true;
     // rt->join_condvar.broadcast();
@@ -322,16 +328,15 @@ static realmStatus_t p2p_members(void *, realmNodeMeta_t *buf, size_t *cnt)
 
 namespace {
   realmStatus_t join(void *st, const realmNodeMeta_t *self, realmEvent_t done,
-                     uint64_t *epoch_out, bool lazy_mode,
-                     realmMembershipChangeCB_fn cb_fn, void *cb_arg)
+                     uint64_t *epoch_out, bool lazy_mode, realmMembershipHooks_t hooks)
   {
     AmProvider *am_provider = new AmProvider();
     Network::node_directory.set_provider(am_provider);
 
     P2PMB *state = static_cast<P2PMB *>(st);
     state->join_done = done;
-    state->cb_fn = cb_fn;
-    state->cb_arg = cb_arg;
+    state->cb_fn = hooks.post_join;
+    state->cb_arg = hooks.user_arg;
     // state->am_provider = am_provider;
 
     if(Network::my_node_id == 0) {
@@ -344,9 +349,16 @@ namespace {
     Serialization::DynamicBufferSerializer dbs(DBS_SIZE);
     Network::node_directory.export_node(self->node_id, !lazy_mode, dbs);
 
+
+    if(hooks.pre_join) {
+      realmNodeMeta_t meta{(int32_t)Network::my_node_id, 0};
+      hooks.pre_join(&meta, nullptr, 0, /*joined=*/true, hooks.user_arg);
+    }
+
     ActiveMessage<JoinRequestMessage> am(self->seed_id, dbs.bytes_used());
     am->epoch = Network::node_directory.cluster_epoch();
     am->lazy_mode = lazy_mode;
+    am->subscribe = (hooks.post_join != nullptr);
     am.add_payload(dbs.get_buffer(), dbs.bytes_used());
     am.commit();
 

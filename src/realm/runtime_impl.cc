@@ -2323,6 +2323,16 @@ namespace Realm {
     return true;
   }
 
+  static void membership_pre_cb(const realmNodeMeta_t *n, const void *, size_t, bool joined, void*)
+  {
+  }
+
+  static void membership_post_cb(const realmNodeMeta_t *n, const void *, size_t, bool joined, void*)
+  {
+    if(joined) { std::cout << "Joined Me:" << Network::my_node_id << std::endl; }
+  }
+
+
   void RuntimeImpl::start(void)
   {
     // all we have to do here is tell the processors to start up their
@@ -2354,8 +2364,10 @@ namespace Realm {
 
     uint64_t epoch_dummy = 0;
     Realm::Event join_done = Realm::GenEventImpl::create_genevent()->current_event();
-    assert(realmJoin(membership, &self_meta, join_done, &epoch_dummy, true,
-                     /*cb_fn=*/nullptr, /*cb_arg=*/nullptr) == REALM_OK);
+
+    realmMembershipHooks_t hooks{membership_pre_cb, membership_post_cb, nullptr};
+    assert(realmJoin(membership, &self_meta, join_done, &epoch_dummy, false,
+                     hooks) == REALM_OK);
     join_done.wait();
 
     // Realm::Event sub_done = Realm::GenEventImpl::create_genevent()->current_event();
