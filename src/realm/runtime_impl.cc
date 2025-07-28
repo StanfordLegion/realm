@@ -2323,29 +2323,27 @@ namespace Realm {
     return true;
   }
 
-
-
-
-  static void membership_pre_cb(const realmNodeMeta_t *n, const void *, size_t, bool joined, void*)
-  {
-  }
+  static void membership_pre_cb(const realmNodeMeta_t *n, const void *, size_t,
+                                bool joined, void *)
+  {}
 
   struct JoinContext {
     Realm::Event join_done;
   };
 
-  static void membership_post_cb(const realmNodeMeta_t *n, const void *, size_t, bool joined, void* arg)
+  static void membership_post_cb(const realmNodeMeta_t *n, const void *, size_t,
+                                 bool joined, void *arg)
   {
-    auto* ctx = static_cast<JoinContext*>(arg);
+    auto *ctx = static_cast<JoinContext *>(arg);
 
     Network::node_directory.remove_slot(NodeDirectory::UNKNOWN_NODE_ID);
 
     if(joined) {
       assert(ctx->join_done != Event::NO_EVENT);
       GenEventImpl::trigger(ctx->join_done, false);
-    // AutoLock<> al(rt->join_mutex);
-    // rt->join_complete = true;
-    // rt->join_condvar.broadcast();
+      // AutoLock<> al(rt->join_mutex);
+      // rt->join_complete = true;
+      // rt->join_condvar.broadcast();
     }
   }
 

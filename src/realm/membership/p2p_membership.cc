@@ -12,7 +12,7 @@
 
 using namespace Realm;
 
-struct P2PMB {
+struct MembershipP2P {
   int join_acks{0};
   int join_acks_total{0};
 
@@ -24,7 +24,7 @@ struct P2PMB {
 };
 
 namespace {
-  P2PMB *p2p_state = nullptr;
+  MembershipP2P *membership_state = nullptr;
 };
 
 namespace {
@@ -144,8 +144,6 @@ void DirectoryFetchMessage::handle_message(NodeID sender,
   rep.commit();
 }
 
-using namespace Realm;
-
 // JoinReq ------------------------------------------------------------------
 
 struct MemberInfo {
@@ -163,10 +161,10 @@ void JoinRequestMessage::handle_message(NodeID sender, const JoinRequestMessage 
   Network::node_directory.import_node(data, datalen, /*epoch=*/0);
   uint64_t new_epoch = Network::node_directory.cluster_epoch();
 
-  if(!p2p_state->subscribers.empty()) {
-    assert(p2p_state->subscribers.contains(Network::my_node_id) == false);
-    assert(p2p_state->subscribers.contains(sender) == false);
-    ActiveMessage<MemberUpdateMessage> am(p2p_state->subscribers, datalen);
+  if(!membership_state->subscribers.empty()) {
+    assert(membership_state->subscribers.contains(Network::my_node_id) == false);
+    assert(membership_state->subscribers.contains(sender) == false);
+    ActiveMessage<MemberUpdateMessage> am(membership_state->subscribers, datalen);
     am->node_id = sender;
     am->epoch = new_epoch;
     am->lazy_mode = msg.lazy_mode;
@@ -174,11 +172,12 @@ void JoinRequestMessage::handle_message(NodeID sender, const JoinRequestMessage 
     am.commit();
   }
 
-  send_join_ack(sender, new_epoch, p2p_state->subscribers.size() + 1, msg.lazy_mode);
+  send_join_ack(sender, new_epoch, membership_state->subscribers.size() + 1,
+                msg.lazy_mode);
 
   if(msg.subscribe) {
     assert(Network::my_node_id != sender);
-    p2p_state->subscribers.add(sender);
+    membership_state->subscribers.add(sender);
   }
 }
 
@@ -189,17 +188,17 @@ void JoinAcklMessage::handle_message(NodeID, const JoinAcklMessage &msg, const v
 {
   Network::node_directory.import_node(data, datalen, msg.epoch);
 
-  p2p_state->join_acks++;
+  membership_state->join_acks++;
 
   if(msg.acks > 0) {
-    p2p_state->join_acks_total = msg.acks;
+    membership_state->join_acks_total = msg.acks;
   }
 
-  if(p2p_state->join_acks == p2p_state->join_acks_total) {
-    if(p2p_state->hooks.post_join) {
+  if(membership_state->join_acks == membership_state->join_acks_total) {
+    if(membership_state->hooks.post_join) {
       realmNodeMeta_t meta{(int32_t)Network::my_node_id, 0, /*lazy_mode=*/false};
-      p2p_state->hooks.post_join(&meta, nullptr, 0, /*joined=*/true,
-                                 p2p_state->hooks.user_arg);
+      membership_state->hooks.post_join(&meta, nullptr, 0, /*joined=*/true,
+                                        membership_state->hooks.user_arg);
     }
   }
 }
@@ -232,13 +231,13 @@ void SubscribeAckMessage::handle_message(NodeID, const SubscribeAckMessage &msg,
 
 /*static realmStatus_t p2p_destroy(void *s)
 {
-  delete static_cast<P2PMB *>(s);
+  delete static_cast<MembershipP2P *>(s);
   return REALM_OK;
 }
 
 static realmStatus_t p2p_progress(void *st)
 {
-  auto *state = static_cast<P2PMB *>(st);
+  auto *state = static_cast<MembershipP2P *>(st);
 
   Network::get_module()->poll();
 
@@ -267,7 +266,7 @@ namespace {
 
     Network::node_directory.set_provider(am_provider);
 
-    P2PMB *state = static_cast<P2PMB *>(st);
+    MembershipP2P *state = static_cast<MembershipP2P *>(st);
     state->hooks = hooks;
     // state->am_provider = am_provider;
 
@@ -307,7 +306,7 @@ namespace {
 
 realmStatus_t realmMembershipP2PInit(realmMembership_t *out)
 {
-  P2PMB *state = new P2PMB();
-  p2p_state = state;
+  MembershipP2P *state = new MembershipP2P();
+  membership_state = state;
   return realmMembershipCreate(&p2p_ops, state, out);
 }
