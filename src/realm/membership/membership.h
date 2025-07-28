@@ -43,7 +43,7 @@ typedef struct realmMembershipHooks_t {
 typedef struct {
 
   realmStatus_t (*join_request)(void *state, const realmNodeMeta_t *self,
-                                realmEvent_t done, uint64_t *cluster_epoch_out,
+                                uint64_t *cluster_epoch_out,
                                 bool lazy_mode, realmMembershipHooks_t hooks);
 
   // realmStatus_t (*subscribe_request)(void *state, realmEvent_t done, bool lazy_mode);
@@ -70,7 +70,7 @@ extern "C" {
 #endif
 
 realmStatus_t realmJoin(realmMembership_t h, const realmNodeMeta_t *self,
-                        realmEvent_t done, uint64_t *epoch_out, bool lazy_mode,
+                        uint64_t *epoch_out, bool lazy_mode,
                         realmMembershipHooks_t hooks);
 realmStatus_t realmMembershipInit(realmMembership_t *out);
 // realmStatus_t realmSubscribe(realmMembership_t h, realmEvent_t done, bool lazy_mode);

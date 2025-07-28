@@ -1,18 +1,18 @@
 #include "realm/event.h"
+#include "realm/node_directory.h"
 #include "realm/membership/membership.h"
 #include "realm/network.h"
-#include "realm/node_directory.h"
-#include <cstring>
 #include "realm/serialize.h"
 #include "realm/activemsg.h"
 #include "realm/event_impl.h"
+
+#include <cstring>
 
 #include "realm/runtime_impl.h" // TODO: REMOVE
 
 using namespace Realm;
 
 struct P2PMB {
-  Realm::Event join_done;
   int join_acks{0};
   int join_acks_total{0};
 
@@ -20,8 +20,7 @@ struct P2PMB {
   NodeSet subscribers;
   // Mutex sub_mutex;
 
-  realmMembershipChangeCB_fn cb_fn{nullptr};
-  void *cb_arg{nullptr};
+  realmMembershipHooks_t hooks;
 };
 
 namespace {
@@ -51,7 +50,6 @@ namespace {
 
   struct JoinRequestMessage : ControlPlaneMessageTag {
     Epoch_t epoch;
-    // NodeID wanted_id;
     bool lazy_mode{false};
     bool subscribe{true};
 
@@ -198,17 +196,11 @@ void JoinAcklMessage::handle_message(NodeID, const JoinAcklMessage &msg, const v
   }
 
   if(p2p_state->join_acks == p2p_state->join_acks_total) {
-    Network::node_directory.remove_slot(NodeDirectory::UNKNOWN_NODE_ID);
-    GenEventImpl::trigger(p2p_state->join_done, false);
-
-    if(p2p_state->cb_fn) {
+    if(p2p_state->hooks.post_join) {
       realmNodeMeta_t meta{(int32_t)Network::my_node_id, 0};
-      p2p_state->cb_fn(&meta, nullptr, 0, /*joined=*/true, p2p_state->cb_arg);
+      p2p_state->hooks.post_join(&meta, nullptr, 0, /*joined=*/true,
+                                 p2p_state->hooks.user_arg);
     }
-
-    // AutoLock<> al(rt->join_mutex);
-    // rt->join_complete = true;
-    // rt->join_condvar.broadcast();
   }
 }
 
@@ -327,38 +319,38 @@ static realmStatus_t p2p_members(void *, realmNodeMeta_t *buf, size_t *cnt)
                                              .members = p2p_members};*/
 
 namespace {
-  realmStatus_t join(void *st, const realmNodeMeta_t *self, realmEvent_t done,
-                     uint64_t *epoch_out, bool lazy_mode, realmMembershipHooks_t hooks)
+  realmStatus_t join(void *st, const realmNodeMeta_t *self, uint64_t *epoch_out,
+                     bool lazy_mode, realmMembershipHooks_t hooks)
   {
     AmProvider *am_provider = new AmProvider();
+
     Network::node_directory.set_provider(am_provider);
 
     P2PMB *state = static_cast<P2PMB *>(st);
-    state->join_done = done;
-    state->cb_fn = hooks.post_join;
-    state->cb_arg = hooks.user_arg;
+    state->hooks = hooks;
     // state->am_provider = am_provider;
-
-    if(Network::my_node_id == 0) {
-      GenEventImpl::trigger(done, false);
-      return REALM_OK;
-    }
-
-    // assert(self->worker_len > 0);
 
     Serialization::DynamicBufferSerializer dbs(DBS_SIZE);
     Network::node_directory.export_node(self->node_id, !lazy_mode, dbs);
 
-
     if(hooks.pre_join) {
       realmNodeMeta_t meta{(int32_t)Network::my_node_id, 0};
-      hooks.pre_join(&meta, nullptr, 0, /*joined=*/true, hooks.user_arg);
+      hooks.pre_join(&meta, nullptr, 0, /*joined=*/false, hooks.user_arg);
+    }
+
+    if(Network::my_node_id == 0) {
+      realmNodeMeta_t meta{(int32_t)Network::my_node_id, 0};
+      hooks.post_join(&meta, nullptr, 0, /*joined=*/true, hooks.user_arg);
+      return REALM_OK;
     }
 
     ActiveMessage<JoinRequestMessage> am(self->seed_id, dbs.bytes_used());
-    am->epoch = Network::node_directory.cluster_epoch();
     am->lazy_mode = lazy_mode;
+    am->epoch = Network::node_directory.cluster_epoch();
+
+    // TODO: That's not how we should subscribe
     am->subscribe = (hooks.post_join != nullptr);
+
     am.add_payload(dbs.get_buffer(), dbs.bytes_used());
     am.commit();
 

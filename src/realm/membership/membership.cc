@@ -49,10 +49,10 @@ realmStatus_t realmMembershipDestroy(realmMembership_t h)
     return (h)->ops->fn((h)->state, __VA_ARGS__);                                        \
   } while(0)
 
-realmStatus_t realmJoin(realmMembership_t h, const realmNodeMeta_t *s, realmEvent_t done,
+realmStatus_t realmJoin(realmMembership_t h, const realmNodeMeta_t *s,
                         uint64_t *epoch_out, bool lazy_mode, realmMembershipHooks_t hooks)
 {
-  CALL(h, join_request, s, done, epoch_out, lazy_mode, hooks);
+  CALL(h, join_request, s, epoch_out, lazy_mode, hooks);
 }
 
 /*realmStatus_t realmSubscribe(realmMembership_t h, realmEvent_t done, bool lazy_mode)

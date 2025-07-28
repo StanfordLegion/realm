@@ -2323,15 +2323,31 @@ namespace Realm {
     return true;
   }
 
+
+
+
   static void membership_pre_cb(const realmNodeMeta_t *n, const void *, size_t, bool joined, void*)
   {
   }
 
-  static void membership_post_cb(const realmNodeMeta_t *n, const void *, size_t, bool joined, void*)
-  {
-    if(joined) { std::cout << "Joined Me:" << Network::my_node_id << std::endl; }
-  }
+  struct JoinContext {
+    Realm::Event join_done;
+  };
 
+  static void membership_post_cb(const realmNodeMeta_t *n, const void *, size_t, bool joined, void* arg)
+  {
+    auto* ctx = static_cast<JoinContext*>(arg);
+
+    Network::node_directory.remove_slot(NodeDirectory::UNKNOWN_NODE_ID);
+
+    if(joined) {
+      assert(ctx->join_done != Event::NO_EVENT);
+      GenEventImpl::trigger(ctx->join_done, false);
+    // AutoLock<> al(rt->join_mutex);
+    // rt->join_complete = true;
+    // rt->join_condvar.broadcast();
+    }
+  }
 
   void RuntimeImpl::start(void)
   {
@@ -2363,12 +2379,13 @@ namespace Realm {
     self_meta.seed_id = NodeDirectory::UNKNOWN_NODE_ID;
 
     uint64_t epoch_dummy = 0;
-    Realm::Event join_done = Realm::GenEventImpl::create_genevent()->current_event();
+    JoinContext ctx;
+    ctx.join_done = Realm::GenEventImpl::create_genevent()->current_event();
 
-    realmMembershipHooks_t hooks{membership_pre_cb, membership_post_cb, nullptr};
-    assert(realmJoin(membership, &self_meta, join_done, &epoch_dummy, false,
+    realmMembershipHooks_t hooks{membership_pre_cb, membership_post_cb, &ctx};
+    assert(realmJoin(membership, &self_meta, &epoch_dummy, false,
                      hooks) == REALM_OK);
-    join_done.wait();
+    ctx.join_done.wait();
 
     // Realm::Event sub_done = Realm::GenEventImpl::create_genevent()->current_event();
     // assert(realmSubscribe(membership, sub_done, true) == REALM_OK);
