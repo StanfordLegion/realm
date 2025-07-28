@@ -496,35 +496,6 @@ namespace Realm {
 				 const void *data, size_t datalen);
     };
 
-    /*struct JoinReqMessage : ControlPlaneMessageTag {
-      Epoch_t epoch;
-      NodeID wanted_id;
-      uint32_t ip;
-      uint16_t udp_port;
-
-      uint32_t payload_bytes;
-      bool lazy_mode{false};
-      //uint16_t ucx_port_base;
-
-      static void handle_message(NodeID sender, const JoinReqMessage &msg,
-				 const void *data, size_t datalen);
-    };
-
-    struct JoinAckMessage : ControlPlaneMessageTag {
-      Epoch_t epoch;
-      NodeID assigned_id;
-      NodeID seed_id;
-      uint32_t ip;
-      uint16_t udp_port;
-      int acks;
-
-      uint32_t payload_bytes;
-      // uint32_t udp_port;
-
-      static void handle_message(NodeID sender, const JoinAckMessage &msg,
-				 const void *data, size_t datalen);
-    };*/
-
     bool serialize_announcement(Realm::Serialization::DynamicBufferSerializer &serializer, const Node *node,
                                    const MachineImpl *machine_impl, NetworkModule *net);
       
