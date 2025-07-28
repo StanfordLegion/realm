@@ -2107,17 +2107,17 @@ namespace Realm {
         checked_cast<const InstanceLayout<N, T> *>(impl->metadata.layout);
     
     // Fast path for idindexed_fields with pre-computed ordering 
-    if (inst_layout->idindexed_fields && !inst_layout->preferred_dim_order.empty()) {
+    if(inst_layout->idindexed_fields && !inst_layout->preferred_dim_order.empty()) {
       // Filter out trivial dimensions from pre-computed ordering for this specific copy
-      for (int d : inst_layout->preferred_dim_order) {
-        if (!trivial[d]) {
+      for(int d : inst_layout->preferred_dim_order) {
+        if(!trivial[d]) {
           dim_order.push_back(d);
         }
       }
       
       // Add back trivial dimensions
-      for (int i = 0; i < N; i++) {
-        if (trivial[i]) {
+      for(int i = 0; i < N; i++) {
+        if(trivial[i]) {
           dim_order.push_back(i);
         }
       }
@@ -2222,10 +2222,30 @@ namespace Realm {
 
     fragments.assign(N + 2, 0);
 
-    for(size_t i = 0; i < fields.size(); i++) {
-      FieldID fid = fields[i];
-      size_t field_size = fld_sizes[i];
+    // Determine processing strategy: bulk (for idindexed_fields) or individual
+    bool use_bulk_processing = false;
+    size_t fields_to_process = fields.size(); // Process one field per iteration;
+    if(inst_layout->idindexed_fields && fields.size() >= 2) {
+      use_bulk_processing = true;
+      fields_to_process = 1; // Process all fields at once
+    }
 
+    for(size_t field_batch = 0; field_batch < fields_to_process; field_batch++) {
+      // Determine field info for this batch
+      FieldID fid;
+      size_t field_size, effective_field_count;
+      
+      if(use_bulk_processing) {
+        fid = fields[0];
+        field_size = fld_sizes[0];
+        effective_field_count = fields.size();
+      } else {
+        fid = fields[field_batch];
+        field_size = fld_sizes[field_batch];
+        effective_field_count = 1;
+      }
+
+      // Get layout pieces for representative field
       const InstancePieceList<N, T> *ipl;
       {
         InstanceLayoutGeneric::FieldMap::const_iterator it =
@@ -2241,18 +2261,18 @@ namespace Realm {
       assert(layout_piece != 0);
 
       if(layout_piece->bounds.contains(is)) {
-        // easy case: one piece covers our entire domain and the iteration order
+        // Easy case: one piece covers our entire domain and the iteration order
         //  doesn't impact the fragment count
         if(layout_piece->layout_type == PieceLayoutTypes::AffineLayoutType) {
           const AffineLayoutPiece<N, T> *affine =
               static_cast<const AffineLayoutPiece<N, T> *>(layout_piece);
           do {
-            add_fragments_for_rect(isi.rect, field_size, 1 /*field count*/,
+            add_fragments_for_rect(isi.rect, field_size, effective_field_count,
                                    affine->strides, dim_order, fragments);
             isi.step();
           } while(isi.valid);
         } else {
-          // not affine - add one fragment for each rectangle
+          // Not affine - add one fragment for each rectangle
           size_t num_rects;
           if(is.dense()) {
             num_rects = 1;
@@ -2270,7 +2290,7 @@ namespace Realm {
         do {
           Point<N, T> next_start = isi.rect.lo;
           while(true) {
-            // look up new piece if needed
+            // Look up new piece if needed
             if(!layout_piece->bounds.contains(next_start)) {
               layout_piece = ipl->find_piece(next_start);
               assert(layout_piece != 0);
@@ -2282,7 +2302,7 @@ namespace Realm {
             if(layout_piece->layout_type == PieceLayoutTypes::AffineLayoutType) {
               const AffineLayoutPiece<N, T> *affine =
                   static_cast<const AffineLayoutPiece<N, T> *>(layout_piece);
-              add_fragments_for_rect(isi.rect, field_size, 1 /*field count*/,
+              add_fragments_for_rect(isi.rect, field_size, effective_field_count,
                                      affine->strides, dim_order, fragments);
             } else {
               non_affine_rects++;
