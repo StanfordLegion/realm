@@ -22,12 +22,6 @@ typedef struct {
 
 /* -------- opaque handles ------------------------------------ */
 typedef struct realmMembership_ctx *realmMembership_t;
-#ifdef __cplusplus
-#include "realm/event.h"
-typedef Realm::Event realmEvent_t;
-#else
-typedef struct realmEvent_st realmEvent_t;
-#endif
 
 /* -------- membership change callback -------------------------- */
 typedef void (*realmMembershipChangeCB_fn)(const realmNodeMeta_t *n,
