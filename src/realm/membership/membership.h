@@ -16,14 +16,7 @@ typedef enum
 /* -------- light-weight node header -------------------------- */
 typedef struct {
   int32_t node_id;
-  uint32_t ip;        /* NBO                           */
-  uint16_t udp_port;  /* host order                    */
-  uint8_t flags;      /* bit 0 == heavy blob present   */
-  const void *worker; /* UCX/whatever blob             */
-  size_t worker_len;
-
-  const void *mm;
-  size_t mm_len;
+  int32_t seed_id;
 } realmNodeMeta_t;
 
 /* -------- opaque handles ------------------------------------ */
@@ -37,18 +30,15 @@ typedef struct realmEvent_st realmEvent_t;
 
 /* -------- membership change callback -------------------------- */
 typedef void (*realmMembershipChangeCB_fn)(const realmNodeMeta_t *n,
-                                           const void *machine_blob,
-                                           size_t machine_bytes,
-                                           bool joined,
-                                           void *arg);
+                                           const void *machine_blob, size_t machine_bytes,
+                                           bool joined, void *arg);
 
 /* -------- back-end v-table ---------------------------------- */
 typedef struct {
 
   realmStatus_t (*join_request)(void *state, const realmNodeMeta_t *self,
                                 realmEvent_t done, uint64_t *cluster_epoch_out,
-                                bool lazy_mode,
-                                realmMembershipChangeCB_fn cb_fn,
+                                bool lazy_mode, realmMembershipChangeCB_fn cb_fn,
                                 void *cb_arg);
 
   // realmStatus_t (*subscribe_request)(void *state, realmEvent_t done, bool lazy_mode);
@@ -76,12 +66,9 @@ extern "C" {
 
 realmStatus_t realmJoin(realmMembership_t h, const realmNodeMeta_t *self,
                         realmEvent_t done, uint64_t *epoch_out, bool lazy_mode,
-                        realmMembershipChangeCB_fn cb_fn,
-                        void *cb_arg);
-
-realmStatus_t realmSubscribe(realmMembership_t h, realmEvent_t done, bool lazy_mode);
-
-realmStatus_t realmMembershipCreateDefaultBackend(realmMembership_t *out);
+                        realmMembershipChangeCB_fn cb_fn, void *cb_arg);
+realmStatus_t realmMembershipInit(realmMembership_t *out);
+// realmStatus_t realmSubscribe(realmMembership_t h, realmEvent_t done, bool lazy_mode);
 
 #ifdef __cplusplus
 }

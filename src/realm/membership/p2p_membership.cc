@@ -323,8 +323,6 @@ namespace {
                      uint64_t *epoch_out, bool lazy_mode,
                      realmMembershipChangeCB_fn cb_fn, void *cb_arg)
   {
-    constexpr NodeID seed = NodeDirectory::UNKNOWN_NODE_ID;
-
     AmProvider *am_provider = new AmProvider();
     Network::node_directory.set_provider(am_provider);
 
@@ -339,12 +337,12 @@ namespace {
       return REALM_OK;
     }
 
-    assert(self->worker_len > 0);
+    // assert(self->worker_len > 0);
 
     Serialization::DynamicBufferSerializer dbs(DBS_SIZE);
     Network::node_directory.export_node(self->node_id, !lazy_mode, dbs);
 
-    ActiveMessage<JoinRequestMessage> am(seed, dbs.bytes_used());
+    ActiveMessage<JoinRequestMessage> am(self->seed_id, dbs.bytes_used());
     am->epoch = Network::node_directory.cluster_epoch();
     am->lazy_mode = lazy_mode;
     am.add_payload(dbs.get_buffer(), dbs.bytes_used());
@@ -356,14 +354,13 @@ namespace {
 
     return REALM_OK;
   }
+
+  const realmMembershipOps_t p2p_ops = {
+      .join_request = join,
+  };
 } // namespace
 
-static const realmMembershipOps_t p2p_ops = {
-    .join_request = join,
-    // subscribe_request can be added later when implemented fully
-};
-
-realmStatus_t realmCreateP2PMembershipBackend(realmMembership_t *out)
+realmStatus_t realmMembershipP2PInit(realmMembership_t *out)
 {
   P2PMB *state = new P2PMB();
   p2p_state = state;

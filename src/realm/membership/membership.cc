@@ -59,8 +59,9 @@ realmStatus_t realmJoin(realmMembership_t h, const realmNodeMeta_t *s, realmEven
 /*realmStatus_t realmSubscribe(realmMembership_t h, realmEvent_t done, bool lazy_mode)
 {
   CALL(h, subscribe_request, done, lazy_mode);
-}*/
-/*realmStatus_t realmProgress(realmMembership_t h) { CALL(h, progress); }
+}
+
+realmStatus_t realmProgress(realmMembership_t h) { CALL(h, progress); }
 realmStatus_t realmGetEpoch(realmMembership_t h, uint64_t *e) { CALL(h, epoch, e); }
 realmStatus_t realmGetMembers(realmMembership_t h, realmNodeMeta_t *b, size_t *c)
 {
@@ -73,13 +74,13 @@ realmStatus_t realmGetMembers(realmMembership_t h, realmNodeMeta_t *b, size_t *c
 /* ------------------------------------------------------------------ */
 
 #ifdef REALM_USE_UDP
-extern realmStatus_t realmCreateP2PMembershipBackend(realmMembership_t *out);
+extern realmStatus_t realmMembershipP2PInit(realmMembership_t *out);
 #endif
 
-realmStatus_t realmMembershipCreateDefaultBackend(realmMembership_t *out)
+realmStatus_t realmMembershipInit(realmMembership_t *out)
 {
 #if defined(REALM_USE_UDP)
-  return realmCreateP2PMembershipBackend(out);
+  return realmMembershipP2PInit(out);
 #else
   (void)out;
   return REALM_ERR_INTERNAL;
