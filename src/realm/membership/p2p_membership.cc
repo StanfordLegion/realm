@@ -1,14 +1,10 @@
-#include "realm/event.h"
 #include "realm/node_directory.h"
 #include "realm/membership/membership.h"
 #include "realm/network.h"
 #include "realm/serialize.h"
 #include "realm/activemsg.h"
-#include "realm/event_impl.h"
 
 #include <cstring>
-
-#include "realm/runtime_impl.h" // TODO: REMOVE
 
 using namespace Realm;
 
@@ -237,16 +233,6 @@ void SubscribeAckMessage::handle_message(NodeID, const SubscribeAckMessage &msg,
 
 static realmStatus_t p2p_progress(void *st)
 {
-  auto *state = static_cast<MembershipP2P *>(st);
-
-  Network::get_module()->poll();
-
-  if(state->join_done && !state->done_fired && runtime_singleton->join_complete) {
-    GenEventImpl::trigger(*(state->join_done), false);
-
-    state->done_fired = true;
-  }
-
   return REALM_OK;
 }
 
