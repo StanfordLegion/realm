@@ -7,30 +7,13 @@
 #include <vector>
 #include <shared_mutex>
 
+#include "realm/nodeset.h"
 #include "realm/event.h"
 #include "realm/nodeset.h"
 #include "realm/activemsg.h"
 
 namespace Realm {
-
-  // ------------------------------------------------------------------
-  // Active-message op-codes
-  // ------------------------------------------------------------------
-  struct DirGetRequest : ControlPlaneMessageTag {
-    NodeID id; // node we want
-    uint64_t expect_epoch;
-    static void handle_message(NodeID sender, const DirGetRequest &req, const void *,
-                               size_t);
-  };
-
-  struct DirGetReply : ControlPlaneMessageTag {
-    NodeID id;
-    uint64_t epoch;
-    static void handle_message(NodeID sender, const DirGetReply &rep, const void *payload,
-                               size_t bytes);
-  };
-
-  // ------------------------------------------------------------------
+  // -----------------------------------------------------------------
   // Small immutable header describing a peer
   // ------------------------------------------------------------------
   struct NodeMeta {
@@ -39,7 +22,7 @@ namespace Realm {
     uint32_t ip{0};
     uint16_t udp_port{0};
     uint8_t flags{0};
-    //uint8_t hash[16]{};
+    // uint8_t hash[16]{};
     std::vector<uint8_t> worker_address;
     uint32_t dev_index{0};
 
@@ -55,6 +38,10 @@ namespace Realm {
   public:
     [[nodiscard]] Event request(NodeID id, uint64_t min_epoch = 0);
     void complete(NodeID id, uint64_t epoch, const void *blob, size_t bytes);
+
+    void export_node(NodeID id, bool include_mm,
+                     Serialization::DynamicBufferSerializer &dbs);
+    void import_node(const void *blob, size_t bytes, uint64_t epoch = 0);
 
     void add_slot(NodeID id, const NodeMeta &meta);
     void remove_slot(NodeID id);

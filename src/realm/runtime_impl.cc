@@ -1839,6 +1839,7 @@ namespace Realm {
             // buffer pointer
             continue;
           }
+          assert(0);
           machine->parse_node_announce_data(node_id, buffer, lengths[rank], true);
         }
         // Increment to the next section of the buffer with data for the next node id

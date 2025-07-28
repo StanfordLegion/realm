@@ -1198,6 +1198,8 @@ namespace Realm {
       if(!ptr) {
         ptr = new MachineNodeInfo(node_id, runtime_impl);
       }
+
+      assert(ptr->process_info == nullptr);
       assert(ptr->add_process_info(process_info));
       if(!lock_held) {
         mutex.unlock();
