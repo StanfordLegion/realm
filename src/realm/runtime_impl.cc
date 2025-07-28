@@ -2377,14 +2377,13 @@ namespace Realm {
     realmNodeMeta_t self_meta{};
     self_meta.node_id = Network::my_node_id;
     self_meta.seed_id = NodeDirectory::UNKNOWN_NODE_ID;
+    self_meta.lazy_mode = false;
 
-    uint64_t epoch_dummy = 0;
     JoinContext ctx;
     ctx.join_done = Realm::GenEventImpl::create_genevent()->current_event();
 
     realmMembershipHooks_t hooks{membership_pre_cb, membership_post_cb, &ctx};
-    assert(realmJoin(membership, &self_meta, &epoch_dummy, false,
-                     hooks) == REALM_OK);
+    assert(realmJoin(membership, &self_meta, hooks) == REALM_OK);
     ctx.join_done.wait();
 
     // Realm::Event sub_done = Realm::GenEventImpl::create_genevent()->current_event();

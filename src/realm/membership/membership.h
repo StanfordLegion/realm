@@ -17,6 +17,7 @@ typedef enum
 typedef struct {
   int32_t node_id;
   int32_t seed_id;
+  bool lazy_mode;
 } realmNodeMeta_t;
 
 /* -------- opaque handles ------------------------------------ */
@@ -43,14 +44,12 @@ typedef struct realmMembershipHooks_t {
 typedef struct {
 
   realmStatus_t (*join_request)(void *state, const realmNodeMeta_t *self,
-                                uint64_t *cluster_epoch_out,
-                                bool lazy_mode, realmMembershipHooks_t hooks);
+                                realmMembershipHooks_t hooks);
 
   // realmStatus_t (*subscribe_request)(void *state, realmEvent_t done, bool lazy_mode);
   // realmStatus_t (*destroy)(void *state);
   // realmStatus_t (*progress)(void *state);
-  // realmStatus_t (*epoch)(void *state, uint64_t *epoch_out);
-  // realmStatus_t (*members)(void *state, realmNodeMeta_t *buf, size_t *count_io);
+
 } realmMembershipOps_t;
 
 realmStatus_t realmMembershipCreate(const realmMembershipOps_t *ops, void *state,
@@ -61,8 +60,6 @@ realmStatus_t realmMembershipDestroy(realmMembership_t h);
 //                       realmEvent_t done, uint64_t *epoch_out);
 
 // realmStatus_t realmProgress(realmMembership_t h);
-// realmStatus_t realmGetEpoch(realmMembership_t h, uint64_t *e);
-// realmStatus_t realmGetMembers(realmMembership_t h, realmNodeMeta_t *buf, size_t
 // *cnt_io);
 
 #ifdef __cplusplus
@@ -70,7 +67,6 @@ extern "C" {
 #endif
 
 realmStatus_t realmJoin(realmMembership_t h, const realmNodeMeta_t *self,
-                        uint64_t *epoch_out, bool lazy_mode,
                         realmMembershipHooks_t hooks);
 realmStatus_t realmMembershipInit(realmMembership_t *out);
 // realmStatus_t realmSubscribe(realmMembership_t h, realmEvent_t done, bool lazy_mode);

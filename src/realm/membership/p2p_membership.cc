@@ -197,7 +197,7 @@ void JoinAcklMessage::handle_message(NodeID, const JoinAcklMessage &msg, const v
 
   if(p2p_state->join_acks == p2p_state->join_acks_total) {
     if(p2p_state->hooks.post_join) {
-      realmNodeMeta_t meta{(int32_t)Network::my_node_id, 0};
+      realmNodeMeta_t meta{(int32_t)Network::my_node_id, 0, /*lazy_mode=*/false};
       p2p_state->hooks.post_join(&meta, nullptr, 0, /*joined=*/true,
                                  p2p_state->hooks.user_arg);
     }
@@ -216,57 +216,17 @@ void MemberUpdateMessage::handle_message(NodeID, const MemberUpdateMessage &msg,
 /* ------------------------------------------------------------------ */
 void SubscribeReqMessage::handle_message(NodeID sender, const SubscribeReqMessage &msg,
                                          const void *, size_t)
-{
-  /*{
-    AutoLock<> al(p2p_state->sub_mutex);
-    p2p_state->subscribers.add(sender);
-  }
-
-  Serialization::DynamicBufferSerializer dbs(4096);
-
-  if(!msg.lazy_mode) {
-    // get_mm(Network::my_node_id, dbs);
-  }
-
-  ActiveMessage<SubscribeAckMessage> ack(sender, dbs.bytes_used());
-  ack->epoch = Network::node_directory.cluster_epoch();
-
-  if(dbs.bytes_used() > 0) {
-    ack.add_payload(dbs.get_buffer(), dbs.bytes_used());
-  }
-
-  ack.commit();
-  */
-}
+{}
 
 /* ------------------------------------------------------------------ */
 /* SUBSCRIBE ACK handler (rookie)                                     */
 /* ------------------------------------------------------------------ */
 void SubscribeAckMessage::handle_message(NodeID, const SubscribeAckMessage &msg,
                                          const void *data, size_t datalen)
-{
-  /*if(datalen > 0) {
-    Network::node_directory.complete(Network::my_node_id, msg.epoch, data, datalen);
-  }
-
-  if(p2p_state->sub_done.exists()) {
-    GenEventImpl::trigger(p2p_state->sub_done, false);
-  }*/
-}
+{}
 
 /*static realmStatus_t p2p_subscribe(void *st, realmEvent_t done, bool lazy_mode)
 {
-  P2PMB *state = static_cast<P2PMB *>(st);
-  state->sub_done = done;
-
-  ActiveMessage<SubscribeReqMessage> sr(NodeDirectory::UNKNOWN_NODE_ID);
-  sr->lazy_mode = lazy_mode;
-  sr.commit();
-
-  if(Network::my_node_id == NodeDirectory::UNKNOWN_NODE_ID && done) {
-    GenEventImpl::trigger(done, false);
-  }
-
   return REALM_OK;
 }*/
 
@@ -291,24 +251,6 @@ static realmStatus_t p2p_progress(void *st)
   return REALM_OK;
 }
 
-static realmStatus_t p2p_epoch(void *, uint64_t *e)
-{
-  *e = Network::node_directory.cluster_epoch();
-  return REALM_OK;
-}
-
-static realmStatus_t p2p_members(void *, realmNodeMeta_t *buf, size_t *cnt)
-{
-  NodeSet ns = Network::node_directory.get_members(true);
-  if(*cnt < ns.size())
-    return REALM_ERR_BAD_ARG;
-  size_t i = 0;
-  for(NodeID id : ns) {
-    const NodeMeta *m = Network::node_directory.lookup(id);
-    buf[i++] = *m;
-  }
-  *cnt = i;
-  return REALM_OK;
 }*/
 
 /* ---------- v-table instance -------------------------------- */
@@ -319,8 +261,7 @@ static realmStatus_t p2p_members(void *, realmNodeMeta_t *buf, size_t *cnt)
                                              .members = p2p_members};*/
 
 namespace {
-  realmStatus_t join(void *st, const realmNodeMeta_t *self, uint64_t *epoch_out,
-                     bool lazy_mode, realmMembershipHooks_t hooks)
+  realmStatus_t join(void *st, const realmNodeMeta_t *self, realmMembershipHooks_t hooks)
   {
     AmProvider *am_provider = new AmProvider();
 
@@ -330,16 +271,18 @@ namespace {
     state->hooks = hooks;
     // state->am_provider = am_provider;
 
+    bool lazy_mode = self->lazy_mode;
+
     Serialization::DynamicBufferSerializer dbs(DBS_SIZE);
     Network::node_directory.export_node(self->node_id, !lazy_mode, dbs);
 
     if(hooks.pre_join) {
-      realmNodeMeta_t meta{(int32_t)Network::my_node_id, 0};
+      realmNodeMeta_t meta{(int32_t)Network::my_node_id, 0, lazy_mode};
       hooks.pre_join(&meta, nullptr, 0, /*joined=*/false, hooks.user_arg);
     }
 
     if(Network::my_node_id == 0) {
-      realmNodeMeta_t meta{(int32_t)Network::my_node_id, 0};
+      realmNodeMeta_t meta{(int32_t)Network::my_node_id, 0, lazy_mode};
       hooks.post_join(&meta, nullptr, 0, /*joined=*/true, hooks.user_arg);
       return REALM_OK;
     }
@@ -353,10 +296,6 @@ namespace {
 
     am.add_payload(dbs.get_buffer(), dbs.bytes_used());
     am.commit();
-
-    if(epoch_out) {
-      *epoch_out = Network::node_directory.cluster_epoch();
-    }
 
     return REALM_OK;
   }
