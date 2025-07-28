@@ -141,14 +141,6 @@ void DirectoryFetchMessage::handle_message(NodeID sender,
 }
 
 // JoinReq ------------------------------------------------------------------
-
-struct MemberInfo {
-  uint64_t epoch{0};
-  uint32_t ip{0};
-  uint16_t udp_port{0};
-  size_t mm_size{0};
-};
-
 void JoinRequestMessage::handle_message(NodeID sender, const JoinRequestMessage &msg,
                                         const void *data, size_t datalen)
 {

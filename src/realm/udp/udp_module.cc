@@ -85,11 +85,7 @@ namespace Realm {
       }
     }
 
-    Network::my_node_id = self_rank_id;
-
-    if(Network::max_node_id < self_rank_id) {
-      Network::max_node_id = self_rank_id;
-    }
+    Network::my_node_id = NodeDirectory::INVALID_NODE_ID;
 
     {
       sockaddr_in local{};
@@ -103,7 +99,7 @@ namespace Realm {
       meta.epoch = 1;
       meta.ip = inet_addr(local_ip.c_str());
       meta.udp_port = local_port;
-      Network::node_directory.add_slot(Network::my_node_id, meta);
+      Network::node_directory.add_slot(self_rank_id, meta);
     }
 
     assert(self_rank_id != -1);
@@ -168,15 +164,16 @@ namespace Realm {
                                             max_payload_size, storage_base, storage_size);
   }
 
-  ActiveMessageImpl *UDPModule::create_active_message_impl(
-      const NodeSet& targets, unsigned short msgid, size_t header_size, size_t max_payload_size,
-      const void *, size_t, size_t, void *storage_base, size_t storage_size)
+  ActiveMessageImpl *
+  UDPModule::create_active_message_impl(const NodeSet &targets, unsigned short msgid,
+                                        size_t header_size, size_t max_payload_size,
+                                        const void *, size_t, size_t, void *storage_base,
+                                        size_t storage_size)
   {
     (void)storage_size;
     return new(storage_base) UDPMessageImpl(this, targets, msgid, header_size,
                                             max_payload_size, storage_base, storage_size);
   }
-
 
   ActiveMessageImpl *UDPModule::create_active_message_impl(
       NodeID target, unsigned short msgid, size_t header_size, size_t max_payload_size,

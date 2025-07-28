@@ -21,7 +21,6 @@ namespace Realm {
     uint32_t ip{0};
     uint16_t udp_port{0};
     uint8_t flags{0};
-    // uint8_t hash[16]{};
     std::vector<uint8_t> worker_address;
     uint32_t dev_index{0};
 
@@ -51,10 +50,9 @@ namespace Realm {
     void add_slot(NodeID id, const NodeMeta &meta);
     void remove_slot(NodeID id);
     NodeMeta *lookup(NodeID id) noexcept;
+
     uint64_t cluster_epoch() const noexcept;
-
     NodeSet get_members(bool include_self = false) const;
-
     size_t size() const noexcept;
 
     class Provider {
@@ -68,11 +66,12 @@ namespace Realm {
     void set_provider(Provider *_provider) { provider = _provider; }
 
     static constexpr NodeID UNKNOWN_NODE_ID{NodeID(-1)};
+    static constexpr NodeID INVALID_NODE_ID{NodeID(-2)};
 
   private:
     const NodeSlot *lookup_slot(NodeID id) const noexcept;
     bool update_node_id(NodeID id);
-    NodeSlot &slot_rw(NodeID id); // creates if absent
+    NodeSlot &slot_rw(NodeID id);
     const NodeSlot *slot_ro(NodeID id) const noexcept;
 
     void erase(NodeID id);
@@ -83,6 +82,7 @@ namespace Realm {
     // data
     std::atomic<uint64_t> epoch_{1};
     std::atomic<NodeID> max_node_id_{0};
+
     mutable std::shared_mutex mtx_;
     std::unordered_map<NodeID, NodeSlot> slots_;
 

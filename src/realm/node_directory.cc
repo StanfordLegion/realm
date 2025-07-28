@@ -209,6 +209,10 @@ void NodeDirectory::erase(NodeID id)
 
 bool NodeDirectory::update_node_id(NodeID id)
 {
+  if(Network::my_node_id == NodeDirectory::INVALID_NODE_ID) {
+    Network::my_node_id = id;
+  }
+
   NodeID cur = max_node_id_.load(std::memory_order_relaxed);
   while(id < cur && !max_node_id_.compare_exchange_weak(
                         cur, id, std::memory_order_release, std::memory_order_relaxed)) {
