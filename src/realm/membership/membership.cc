@@ -1,6 +1,5 @@
 #include "membership.h"
 #include <stdlib.h>
-#include "realm/event.h"
 
 struct realmMembership_ctx {
   const realmMembershipOps_t *ops;
@@ -57,11 +56,10 @@ realmStatus_t realmJoin(realmMembership_t h, const realmNodeMeta_t *s, realmEven
   CALL(h, join_request, s, done, epoch_out, lazy_mode, cb_fn, cb_arg);
 }
 
-realmStatus_t realmSubscribe(realmMembership_t h, realmEvent_t done, bool lazy_mode)
+/*realmStatus_t realmSubscribe(realmMembership_t h, realmEvent_t done, bool lazy_mode)
 {
   CALL(h, subscribe_request, done, lazy_mode);
-}
-
+}*/
 /*realmStatus_t realmProgress(realmMembership_t h) { CALL(h, progress); }
 realmStatus_t realmGetEpoch(realmMembership_t h, uint64_t *e) { CALL(h, epoch, e); }
 realmStatus_t realmGetMembers(realmMembership_t h, realmNodeMeta_t *b, size_t *c)

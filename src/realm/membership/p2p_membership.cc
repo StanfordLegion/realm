@@ -5,7 +5,6 @@
 #include "realm/node_directory.h"
 #include "realm/runtime_impl.h"
 #include <cstring>
-#include <vector>
 #include "realm/serialize.h"
 
 using namespace Realm;
@@ -15,7 +14,7 @@ struct P2PMB {
   int join_acks{0};
   int join_acks_total{0};
 
-  Realm::Event sub_done;
+  // Realm::Event sub_done;
   NodeSet subscribers;
   // Mutex sub_mutex;
 
@@ -27,61 +26,125 @@ namespace {
   P2PMB *p2p_state = nullptr;
 };
 
-/* ------------------------------------------------------------------ */
-/* Active-message handlers for p2p membership                          */
-/* ------------------------------------------------------------------ */
+namespace {
+  constexpr int DBS_SIZE{4096};
 
-struct JoinRequestMessage : ControlPlaneMessageTag {
-  Epoch_t epoch;
-  // NodeID wanted_id;
-  bool lazy_mode{false};
-  bool subscribe{true};
+  struct DirectoryPutMessage : ControlPlaneMessageTag {
+    static void handle_message(NodeID, const DirectoryPutMessage &msg, const void *data,
+                               size_t datalen);
+  };
 
-  static void handle_message(NodeID sender, const JoinRequestMessage &msg,
-                             const void *data, size_t datalen);
+  struct DirectoryFetchMessage : ControlPlaneMessageTag {
+    NodeID id;
+    static void handle_message(NodeID sender, const DirectoryFetchMessage &msg,
+                               const void *data, size_t datalen);
+  };
+
+  ActiveMessageHandlerReg<DirectoryFetchMessage> diretory_fetch_msg;
+  ActiveMessageHandlerReg<DirectoryPutMessage> directory_put_msg;
+
+  /* ------------------------------------------------------------------ */
+  /* Active-message handlers for p2p membership                          */
+  /* ------------------------------------------------------------------ */
+
+  struct JoinRequestMessage : ControlPlaneMessageTag {
+    Epoch_t epoch;
+    // NodeID wanted_id;
+    bool lazy_mode{false};
+    bool subscribe{true};
+
+    static void handle_message(NodeID sender, const JoinRequestMessage &msg,
+                               const void *data, size_t datalen);
+  };
+
+  struct JoinAcklMessage : ControlPlaneMessageTag {
+    Epoch_t epoch;
+    int acks{-1};
+
+    static void handle_message(NodeID sender, const JoinAcklMessage &msg,
+                               const void *data, size_t datalen);
+  };
+
+  struct SubscribeReqMessage : ControlPlaneMessageTag {
+    bool lazy_mode;
+    static void handle_message(NodeID sender, const SubscribeReqMessage &msg,
+                               const void *data, size_t datalen);
+  };
+
+  struct SubscribeAckMessage : ControlPlaneMessageTag {
+    Epoch_t epoch;
+    static void handle_message(NodeID sender, const SubscribeAckMessage &msg,
+                               const void *data, size_t datalen);
+  };
+
+  struct MemberUpdateMessage : ControlPlaneMessageTag {
+    Epoch_t epoch;
+    NodeID node_id;
+    bool lazy_mode{false};
+
+    static void handle_message(NodeID sender, const MemberUpdateMessage &msg,
+                               const void *data, size_t datalen);
+  };
+
+  inline void send_join_ack(NodeID dest, Epoch_t epoch, int acks, bool lazy_mode)
+  {
+    Serialization::DynamicBufferSerializer dbs(DBS_SIZE);
+    Network::node_directory.export_node(Network::my_node_id, /*include_mm=*/!lazy_mode,
+                                        dbs);
+
+    ActiveMessage<JoinAcklMessage> ack(dest, dbs.bytes_used());
+    ack->acks = acks;
+    ack->epoch = epoch;
+    ack.add_payload(dbs.get_buffer(), dbs.bytes_used());
+    ack.commit();
+  }
+
+  ActiveMessageHandlerReg<JoinRequestMessage> joinreq_handler;
+  ActiveMessageHandlerReg<JoinAcklMessage> joinack_handler;
+  ActiveMessageHandlerReg<SubscribeReqMessage> p2p_subreq_handler;
+  ActiveMessageHandlerReg<SubscribeAckMessage> p2p_suback_handler;
+  ActiveMessageHandlerReg<MemberUpdateMessage> p2p_member_handler;
+} // namespace
+
+class AmProvider : public NodeDirectory::Provider {
+public:
+  void put(NodeSet peers, const void *blob, size_t bytes, uint64_t) override
+  {
+    ActiveMessage<DirectoryPutMessage> m(peers, bytes);
+    m.add_payload(blob, bytes);
+    m.commit();
+  }
+
+  void fetch(NodeID id) override
+  {
+    ActiveMessage<DirectoryFetchMessage> request(id);
+    request->id = id;
+    request.commit();
+  }
 };
 
-struct JoinAcklMessage : ControlPlaneMessageTag {
-  Epoch_t epoch;
-  int acks{-1};
-
-  static void handle_message(NodeID sender, const JoinAcklMessage &msg, const void *data,
-                             size_t datalen);
-};
-
-struct SubscribeReqMessage : ControlPlaneMessageTag {
-  bool lazy_mode;
-  static void handle_message(NodeID sender, const SubscribeReqMessage &msg,
-                             const void *data, size_t datalen);
-};
-
-struct SubscribeAckMessage : ControlPlaneMessageTag {
-  Epoch_t epoch;
-  static void handle_message(NodeID sender, const SubscribeAckMessage &msg,
-                             const void *data, size_t datalen);
-};
-
-struct MemberUpdateMessage : ControlPlaneMessageTag {
-  Epoch_t epoch;
-  NodeID node_id;
-  bool lazy_mode{false};
-
-  static void handle_message(NodeID sender, const MemberUpdateMessage &msg,
-                             const void *data, size_t datalen);
-};
-
-static inline void send_join_ack(NodeID dest, Epoch_t epoch, int acks, bool lazy_mode)
+void DirectoryPutMessage::handle_message(NodeID, const DirectoryPutMessage &,
+                                         const void *data, size_t datalen)
 {
-  Serialization::DynamicBufferSerializer dbs(4096);
-  Network::node_directory.export_node(Network::my_node_id, /*include_mm=*/!lazy_mode,
-                                      dbs);
-
-  ActiveMessage<JoinAcklMessage> ack(dest, dbs.bytes_used());
-  ack->acks = acks;
-  ack->epoch = epoch;
-  ack.add_payload(dbs.get_buffer(), dbs.bytes_used());
-  ack.commit();
+  Network::node_directory.import_node(data, datalen,
+                                      Network::node_directory.cluster_epoch());
 }
+
+void DirectoryFetchMessage::handle_message(NodeID sender,
+                                           const DirectoryFetchMessage &msg, const void *,
+                                           size_t)
+{
+  assert(msg.id == Network::my_node_id);
+
+  Serialization::DynamicBufferSerializer dbs(DBS_SIZE);
+  Network::node_directory.export_node(msg.id, true, dbs);
+
+  ActiveMessage<DirectoryPutMessage> rep(sender, dbs.bytes_used());
+  rep.add_payload(dbs.get_buffer(), dbs.bytes_used());
+  rep.commit();
+}
+
+using namespace Realm;
 
 // JoinReq ------------------------------------------------------------------
 
@@ -97,15 +160,14 @@ void JoinRequestMessage::handle_message(NodeID sender, const JoinRequestMessage 
 {
   assert(sender != Network::my_node_id);
 
-  Epoch_t new_epoch = Network::node_directory.bump_epoch(Network::my_node_id);
-
-  Network::node_directory.import_node(data, datalen, new_epoch);
+  Network::node_directory.import_node(data, datalen, /*epoch=*/0);
+  uint64_t new_epoch = Network::node_directory.cluster_epoch();
 
   if(!p2p_state->subscribers.empty()) {
     assert(p2p_state->subscribers.contains(Network::my_node_id) == false);
     assert(p2p_state->subscribers.contains(sender) == false);
     ActiveMessage<MemberUpdateMessage> am(p2p_state->subscribers, datalen);
-    am->node_id = sender; // msg.wanted_id;
+    am->node_id = sender;
     am->epoch = new_epoch;
     am->lazy_mode = msg.lazy_mode;
     am.add_payload(data, datalen);
@@ -122,8 +184,8 @@ void JoinRequestMessage::handle_message(NodeID sender, const JoinRequestMessage 
 
 // JoinAck ------------------------------------------------------------------
 
-void JoinAcklMessage::handle_message(NodeID sender, const JoinAcklMessage &msg,
-                                     const void *data, size_t datalen)
+void JoinAcklMessage::handle_message(NodeID, const JoinAcklMessage &msg, const void *data,
+                                     size_t datalen)
 {
   Network::node_directory.import_node(data, datalen, msg.epoch);
 
@@ -142,7 +204,7 @@ void JoinAcklMessage::handle_message(NodeID sender, const JoinAcklMessage &msg,
   }
 }
 
-void MemberUpdateMessage::handle_message(NodeID sender, const MemberUpdateMessage &msg,
+void MemberUpdateMessage::handle_message(NodeID, const MemberUpdateMessage &msg,
                                          const void *data, size_t datalen)
 {
   Network::node_directory.import_node(data, datalen, msg.epoch);
@@ -222,6 +284,7 @@ static realmStatus_t p2p_progress(void *st)
 
   if(state->join_done && !state->done_fired && runtime_singleton->join_complete) {
     GenEventImpl::trigger(*(state->join_done), false);
+
     state->done_fired = true;
   }
 
@@ -262,10 +325,14 @@ namespace {
   {
     constexpr NodeID seed = NodeDirectory::UNKNOWN_NODE_ID;
 
+    AmProvider *am_provider = new AmProvider();
+    Network::node_directory.set_provider(am_provider);
+
     P2PMB *state = static_cast<P2PMB *>(st);
     state->join_done = done;
     state->cb_fn = cb_fn;
     state->cb_arg = cb_arg;
+    // state->am_provider = am_provider;
 
     if(Network::my_node_id == 0) {
       GenEventImpl::trigger(done, false);
@@ -274,11 +341,10 @@ namespace {
 
     assert(self->worker_len > 0);
 
-    Serialization::DynamicBufferSerializer dbs(4096);
+    Serialization::DynamicBufferSerializer dbs(DBS_SIZE);
     Network::node_directory.export_node(self->node_id, !lazy_mode, dbs);
 
     ActiveMessage<JoinRequestMessage> am(seed, dbs.bytes_used());
-    // am->wanted_id = self->node_id;
     am->epoch = Network::node_directory.cluster_epoch();
     am->lazy_mode = lazy_mode;
     am.add_payload(dbs.get_buffer(), dbs.bytes_used());
@@ -303,11 +369,3 @@ realmStatus_t realmCreateP2PMembershipBackend(realmMembership_t *out)
   p2p_state = state;
   return realmMembershipCreate(&p2p_ops, state, out);
 }
-
-namespace {
-  ActiveMessageHandlerReg<JoinRequestMessage> joinreq_handler;
-  ActiveMessageHandlerReg<JoinAcklMessage> joinack_handler;
-  ActiveMessageHandlerReg<SubscribeReqMessage> p2p_subreq_handler;
-  ActiveMessageHandlerReg<SubscribeAckMessage> p2p_suback_handler;
-  ActiveMessageHandlerReg<MemberUpdateMessage> p2p_member_handler;
-}; // namespace

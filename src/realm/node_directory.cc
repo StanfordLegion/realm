@@ -2,7 +2,7 @@
 #include "realm/runtime_impl.h"
 #include "realm/machine_impl.h"
 #include "realm/logging.h"
-#include "realm/activemsg.h"
+// #include "realm/activemsg.h"
 #include <atomic>
 
 using namespace Realm;
@@ -12,26 +12,6 @@ namespace {
   Logger log_ndir("ndir");
 
   constexpr int DBS_SIZE{4096};
-
-  // ------------------------------------------------------------------
-  // Active-message op-codes
-  // ------------------------------------------------------------------
-  struct DirectoryGetRequest : ControlPlaneMessageTag {
-    NodeID id; // node we want
-    uint64_t expect_epoch;
-    static void handle_message(NodeID sender, const DirectoryGetRequest &req,
-                               const void *, size_t);
-  };
-
-  struct DirectoryGetReply : ControlPlaneMessageTag {
-    NodeID id;
-    uint64_t epoch;
-    static void handle_message(NodeID sender, const DirectoryGetReply &rep,
-                               const void *payload, size_t bytes);
-  };
-
-  ActiveMessageHandlerReg<DirectoryGetRequest> diretory_get_request_am;
-  ActiveMessageHandlerReg<DirectoryGetReply> directory_get_reply_am;
 
   struct WireHeader {
     NodeID id;
@@ -56,33 +36,15 @@ namespace {
     ok &= (s & h.wrk_len);
     return ok;
   }
-
-  inline void send_dir_get(NodeID target, uint64_t expect_epoch)
-  {
-    DirectoryGetRequest req;
-    req.id = target;
-    req.expect_epoch = expect_epoch;
-    ActiveMessage<DirectoryGetRequest> am(target);
-    am->id = req.id;
-    am->expect_epoch = req.expect_epoch;
-    am.commit();
-  }
-
 } // namespace
 
 TYPE_IS_SERIALIZABLE(WireHeader);
-
-// ------------------------------------------------------------------
-// wire helpers
-// ------------------------------------------------------------------
-namespace {} // namespace
 
 // ------------------------------------------------------------------
 // public API
 // ------------------------------------------------------------------
 Event NodeDirectory::request(NodeID id, uint64_t min_epoch)
 {
-  // fast path – requires *only* shared-lock
   {
     std::shared_lock sl(mtx_);
     const NodeSlot *s = slot_ro(id);
@@ -103,7 +65,9 @@ Event NodeDirectory::request(NodeID id, uint64_t min_epoch)
     }
 
     pending_[id] = {UserEvent::create_user_event(), min_epoch};
-    send_dir_get(id, min_epoch);
+    assert(provider);
+    // send_directory_get(id, min_epoch);
+    provider->fetch(id);
     return pending_[id].ev;
   }
 }
@@ -147,14 +111,16 @@ void NodeDirectory::import_node(const void *blob, size_t bytes, uint64_t epoch)
   const void *mm = p;
   const void *wrk = p + h.mm_len;
 
+  uint64_t new_epoch = (epoch > 0) ? epoch : bump_epoch(Network::my_node_id);
+
   if(h.mm_len) {
-    complete(h.id, h.epoch, mm, h.mm_len);
+    complete(h.id, new_epoch, mm, h.mm_len);
   }
 
   assert(h.id != Network::my_node_id);
 
   NodeMeta m;
-  m.epoch = epoch > 0 ? epoch : h.epoch;
+  m.epoch = new_epoch;
   m.ip = h.ip;
   m.udp_port = h.port;
   m.flags = h.flags;
@@ -286,37 +252,4 @@ NodeSet NodeDirectory::get_members(bool include_self) const
     }
   }
   return set;
-}
-
-// ------------------------------------------------------------------
-// Active-message handlers
-// ------------------------------------------------------------------
-
-void DirectoryGetRequest::handle_message(NodeID sender, const DirectoryGetRequest &req,
-                                         const void *, size_t)
-{
-  RuntimeImpl *rt = runtime_singleton;
-  if(req.id != Network::my_node_id) {
-    log_ndir.error() << "DirectoryGetRequest mis-routed: id=" << req.id
-                     << " dst=" << Network::my_node_id;
-    return;
-  }
-
-  Realm::Serialization::DynamicBufferSerializer dbs(DBS_SIZE);
-  if(!serialize_announcement(dbs, &rt->nodes[Network::my_node_id], rt->machine,
-                             Network::get_network(sender))) {
-    return;
-  }
-
-  ActiveMessage<DirectoryGetReply> rep(sender, dbs.bytes_used());
-  rep->id = req.id;
-  rep->epoch = Network::node_directory.lookup(req.id)->epoch;
-  rep.add_payload(dbs.get_buffer(), dbs.bytes_used());
-  rep.commit();
-}
-
-void DirectoryGetReply::handle_message(NodeID, const DirectoryGetReply &rep,
-                                       const void *payload, size_t bytes)
-{
-  Network::node_directory.complete(rep.id, rep.epoch, payload, bytes);
 }

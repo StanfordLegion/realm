@@ -36,7 +36,6 @@ typedef struct realmEvent_st realmEvent_t;
 #endif
 
 /* -------- membership change callback -------------------------- */
-/* `joined` == true  => node joined;  false => node left (future).  */
 typedef void (*realmMembershipChangeCB_fn)(const realmNodeMeta_t *n,
                                            const void *machine_blob,
                                            size_t machine_bytes,
@@ -52,22 +51,12 @@ typedef struct {
                                 realmMembershipChangeCB_fn cb_fn,
                                 void *cb_arg);
 
-  realmStatus_t (*subscribe_request)(void *state, realmEvent_t done, bool lazy_mode);
-
+  // realmStatus_t (*subscribe_request)(void *state, realmEvent_t done, bool lazy_mode);
   // realmStatus_t (*destroy)(void *state);
   // realmStatus_t (*progress)(void *state);
   // realmStatus_t (*epoch)(void *state, uint64_t *epoch_out);
   // realmStatus_t (*members)(void *state, realmNodeMeta_t *buf, size_t *count_io);
 } realmMembershipOps_t;
-
-typedef realmStatus_t (*realmSerializeMM_fn)(/*out*/ void **buf,
-                                             /*out*/ size_t *bytes);
-typedef realmStatus_t (*realmParseMM_fn)(const void *buf, size_t bytes, bool from_remote);
-
-typedef struct realmJoinHost {
-  realmSerializeMM_fn serialize_machine;
-  realmParseMM_fn upaate_machine;
-} realmJoinHost;
 
 realmStatus_t realmMembershipCreate(const realmMembershipOps_t *ops, void *state,
                                     realmMembership_t *out);

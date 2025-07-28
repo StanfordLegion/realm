@@ -10,7 +10,6 @@
 #include "realm/nodeset.h"
 #include "realm/event.h"
 #include "realm/nodeset.h"
-#include "realm/activemsg.h"
 
 namespace Realm {
   // -----------------------------------------------------------------
@@ -45,27 +44,35 @@ namespace Realm {
 
     void add_slot(NodeID id, const NodeMeta &meta);
     void remove_slot(NodeID id);
-
     NodeMeta *lookup(NodeID id) noexcept;
-    const NodeSlot *lookup_slot(NodeID id) const noexcept;
-
-    bool update_node_id(NodeID id);
-    bool update_epoch(uint64_t new_ep);
-    uint64_t bump_epoch(NodeID id);
+    uint64_t cluster_epoch() const noexcept;
 
     NodeSet get_members(bool include_self = false) const;
 
-    uint64_t cluster_epoch() const noexcept;
     size_t size() const noexcept;
+
+    class Provider {
+    public:
+      virtual ~Provider() = default;
+      virtual void put(NodeSet peers, const void *blob, size_t bytes,
+                       uint64_t ttl_sec = 0) = 0;
+      virtual void fetch(NodeID id) = 0;
+    };
+
+    void set_provider(Provider *_provider) { provider = _provider; }
 
     static constexpr NodeID UNKNOWN_NODE_ID{NodeID(-1)};
 
   private:
-    // helpers
+    const NodeSlot *lookup_slot(NodeID id) const noexcept;
+    bool update_node_id(NodeID id);
     NodeSlot &slot_rw(NodeID id); // creates if absent
     const NodeSlot *slot_ro(NodeID id) const noexcept;
 
     void erase(NodeID id);
+
+    uint64_t bump_epoch(NodeID id);
+    bool update_epoch(uint64_t new_ep);
 
     // data
     std::atomic<uint64_t> epoch_{1};
@@ -79,6 +86,8 @@ namespace Realm {
     };
     std::mutex pend_mtx_;
     std::unordered_map<NodeID, Pending> pending_;
+
+    Provider *provider;
   };
 
 } // namespace Realm
