@@ -149,41 +149,6 @@ void MemberUpdateMessage::handle_message(NodeID sender, const MemberUpdateMessag
   send_join_ack(msg.node_id, msg.epoch, /*acks=*/-1, msg.lazy_mode);
 }
 
-static realmStatus_t join(void *st, const realmNodeMeta_t *self, realmEvent_t done,
-                          uint64_t *epoch_out, bool lazy_mode,
-                          realmMembershipChangeCB_fn cb_fn, void *cb_arg)
-{
-  constexpr NodeID seed = NodeDirectory::UNKNOWN_NODE_ID;
-
-  P2PMB *state = static_cast<P2PMB *>(st);
-  state->join_done = done;
-  state->cb_fn = cb_fn;
-  state->cb_arg = cb_arg;
-
-  if(Network::my_node_id == 0) {
-    GenEventImpl::trigger(done, false);
-    return REALM_OK;
-  }
-
-  assert(self->worker_len > 0);
-
-  Serialization::DynamicBufferSerializer dbs(4096);
-  Network::node_directory.export_node(self->node_id, !lazy_mode, dbs);
-
-  ActiveMessage<JoinRequestMessage> am(seed, dbs.bytes_used());
-  // am->wanted_id = self->node_id;
-  am->epoch = Network::node_directory.cluster_epoch();
-  am->lazy_mode = lazy_mode;
-  am.add_payload(dbs.get_buffer(), dbs.bytes_used());
-  am.commit();
-
-  if(epoch_out) {
-    *epoch_out = Network::node_directory.cluster_epoch();
-  }
-
-  return REALM_OK;
-}
-
 /* ------------------------------------------------------------------ */
 /* SUBSCRIBE request handler (SEED)                                   */
 /* ------------------------------------------------------------------ */
@@ -289,6 +254,43 @@ static realmStatus_t p2p_members(void *, realmNodeMeta_t *buf, size_t *cnt)
                                              .progress = p2p_progress,
                                              .epoch = p2p_epoch,
                                              .members = p2p_members};*/
+
+namespace {
+  realmStatus_t join(void *st, const realmNodeMeta_t *self, realmEvent_t done,
+                     uint64_t *epoch_out, bool lazy_mode,
+                     realmMembershipChangeCB_fn cb_fn, void *cb_arg)
+  {
+    constexpr NodeID seed = NodeDirectory::UNKNOWN_NODE_ID;
+
+    P2PMB *state = static_cast<P2PMB *>(st);
+    state->join_done = done;
+    state->cb_fn = cb_fn;
+    state->cb_arg = cb_arg;
+
+    if(Network::my_node_id == 0) {
+      GenEventImpl::trigger(done, false);
+      return REALM_OK;
+    }
+
+    assert(self->worker_len > 0);
+
+    Serialization::DynamicBufferSerializer dbs(4096);
+    Network::node_directory.export_node(self->node_id, !lazy_mode, dbs);
+
+    ActiveMessage<JoinRequestMessage> am(seed, dbs.bytes_used());
+    // am->wanted_id = self->node_id;
+    am->epoch = Network::node_directory.cluster_epoch();
+    am->lazy_mode = lazy_mode;
+    am.add_payload(dbs.get_buffer(), dbs.bytes_used());
+    am.commit();
+
+    if(epoch_out) {
+      *epoch_out = Network::node_directory.cluster_epoch();
+    }
+
+    return REALM_OK;
+  }
+} // namespace
 
 static const realmMembershipOps_t p2p_ops = {
     .join_request = join,

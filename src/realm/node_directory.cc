@@ -86,11 +86,12 @@ Event NodeDirectory::request(NodeID id, uint64_t min_epoch)
   {
     std::shared_lock sl(mtx_);
     const NodeSlot *s = slot_ro(id);
-    const RuntimeImpl *rt = runtime_singleton;
-    const bool have_blob = !rt->nodes[id].processors.empty();
+    // const RuntimeImpl *rt = runtime_singleton;
+    // const bool have_blob = !rt->nodes[id].processors.empty();
 
     // TODO: NEEDS ATTENTION
-    if(s && ((s->brief.epoch >= min_epoch) && have_blob) || s->brief.flags) {
+    // if(s && ((s->brief.epoch >= min_epoch) && have_blob) || s->brief.flags) {
+    if(s && s->brief.flags) {
       return Event::NO_EVENT;
     }
   }
