@@ -50,7 +50,7 @@ namespace {
 
   struct JoinRequestMessage : ControlPlaneMessageTag {
     Epoch_t epoch;
-    bool lazy_mode{false};
+    bool announce_mm{false};
     bool subscribe{true};
 
     static void handle_message(NodeID sender, const JoinRequestMessage &msg,
@@ -66,7 +66,7 @@ namespace {
   };
 
   struct SubscribeReqMessage : ControlPlaneMessageTag {
-    bool lazy_mode;
+    bool announce_mm;
     static void handle_message(NodeID sender, const SubscribeReqMessage &msg,
                                const void *data, size_t datalen);
   };
@@ -80,16 +80,16 @@ namespace {
   struct MemberUpdateMessage : ControlPlaneMessageTag {
     Epoch_t epoch;
     NodeID node_id;
-    bool lazy_mode{false};
+    bool announce_mm{false};
 
     static void handle_message(NodeID sender, const MemberUpdateMessage &msg,
                                const void *data, size_t datalen);
   };
 
-  inline void send_join_ack(NodeID dest, Epoch_t epoch, int acks, bool lazy_mode)
+  inline void send_join_ack(NodeID dest, Epoch_t epoch, int acks, bool announce_mm)
   {
     Serialization::DynamicBufferSerializer dbs(DBS_SIZE);
-    Network::node_directory.export_node(Network::my_node_id, /*include_mm=*/!lazy_mode,
+    Network::node_directory.export_node(Network::my_node_id, /*include_mm=*/!announce_mm,
                                         dbs);
 
     ActiveMessage<JoinAcklMessage> ack(dest, dbs.bytes_used());
@@ -167,13 +167,13 @@ void JoinRequestMessage::handle_message(NodeID sender, const JoinRequestMessage 
     ActiveMessage<MemberUpdateMessage> am(membership_state->subscribers, datalen);
     am->node_id = sender;
     am->epoch = new_epoch;
-    am->lazy_mode = msg.lazy_mode;
+    am->announce_mm = msg.announce_mm;
     am.add_payload(data, datalen);
     am.commit();
   }
 
   send_join_ack(sender, new_epoch, membership_state->subscribers.size() + 1,
-                msg.lazy_mode);
+                msg.announce_mm);
 
   if(msg.subscribe) {
     assert(Network::my_node_id != sender);
@@ -196,7 +196,7 @@ void JoinAcklMessage::handle_message(NodeID, const JoinAcklMessage &msg, const v
 
   if(membership_state->join_acks == membership_state->join_acks_total) {
     if(membership_state->hooks.post_join) {
-      realmNodeMeta_t meta{(int32_t)Network::my_node_id, 0, /*lazy_mode=*/false};
+      realmNodeMeta_t meta{(int32_t)Network::my_node_id, 0, /*announce_mm=*/false};
       membership_state->hooks.post_join(&meta, nullptr, 0, /*joined=*/true,
                                         membership_state->hooks.user_arg);
     }
@@ -207,7 +207,7 @@ void MemberUpdateMessage::handle_message(NodeID, const MemberUpdateMessage &msg,
                                          const void *data, size_t datalen)
 {
   Network::node_directory.import_node(data, datalen, msg.epoch);
-  send_join_ack(msg.node_id, msg.epoch, /*acks=*/-1, msg.lazy_mode);
+  send_join_ack(msg.node_id, msg.epoch, /*acks=*/-1, msg.announce_mm);
 }
 
 /* ------------------------------------------------------------------ */
@@ -224,7 +224,7 @@ void SubscribeAckMessage::handle_message(NodeID, const SubscribeAckMessage &msg,
                                          const void *data, size_t datalen)
 {}
 
-/*static realmStatus_t p2p_subscribe(void *st, realmEvent_t done, bool lazy_mode)
+/*static realmStatus_t p2p_subscribe(void *st, realmEvent_t done, bool announce_mm)
 {
   return REALM_OK;
 }*/
@@ -270,24 +270,24 @@ namespace {
     state->hooks = hooks;
     // state->am_provider = am_provider;
 
-    bool lazy_mode = self->lazy_mode;
+    bool announce_mm = self->announce_mm;
 
     Serialization::DynamicBufferSerializer dbs(DBS_SIZE);
-    Network::node_directory.export_node(self->node_id, !lazy_mode, dbs);
+    Network::node_directory.export_node(self->node_id, !announce_mm, dbs);
 
     if(hooks.pre_join) {
-      realmNodeMeta_t meta{(int32_t)Network::my_node_id, 0, lazy_mode};
+      realmNodeMeta_t meta{(int32_t)Network::my_node_id, 0, announce_mm};
       hooks.pre_join(&meta, nullptr, 0, /*joined=*/false, hooks.user_arg);
     }
 
     if(Network::my_node_id == 0) {
-      realmNodeMeta_t meta{(int32_t)Network::my_node_id, 0, lazy_mode};
+      realmNodeMeta_t meta{(int32_t)Network::my_node_id, 0, announce_mm};
       hooks.post_join(&meta, nullptr, 0, /*joined=*/true, hooks.user_arg);
       return REALM_OK;
     }
 
     ActiveMessage<JoinRequestMessage> am(self->seed_id, dbs.bytes_used());
-    am->lazy_mode = lazy_mode;
+    am->announce_mm = announce_mm;
     am->epoch = Network::node_directory.cluster_epoch();
 
     // TODO: That's not how we should subscribe

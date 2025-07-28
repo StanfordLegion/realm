@@ -2375,7 +2375,7 @@ namespace Realm {
     realmNodeMeta_t self_meta{};
     self_meta.node_id = Network::my_node_id;
     self_meta.seed_id = NodeDirectory::UNKNOWN_NODE_ID;
-    self_meta.lazy_mode = false;
+    self_meta.announce_mm = false;
 
     JoinContext ctx;
     ctx.join_done = Realm::GenEventImpl::create_genevent()->current_event();

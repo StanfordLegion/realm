@@ -17,7 +17,7 @@ typedef enum
 typedef struct {
   int32_t node_id;
   int32_t seed_id;
-  bool lazy_mode;
+  bool announce_mm;
 } realmNodeMeta_t;
 
 /* -------- opaque handles ------------------------------------ */
@@ -46,7 +46,7 @@ typedef struct {
   realmStatus_t (*join_request)(void *state, const realmNodeMeta_t *self,
                                 realmMembershipHooks_t hooks);
 
-  // realmStatus_t (*subscribe_request)(void *state, realmEvent_t done, bool lazy_mode);
+  // realmStatus_t (*subscribe_request)(void *state, realmEvent_t done, bool announce_mm);
   // realmStatus_t (*destroy)(void *state);
   // realmStatus_t (*progress)(void *state);
 
@@ -69,7 +69,7 @@ extern "C" {
 realmStatus_t realmJoin(realmMembership_t h, const realmNodeMeta_t *self,
                         realmMembershipHooks_t hooks);
 realmStatus_t realmMembershipInit(realmMembership_t *out);
-// realmStatus_t realmSubscribe(realmMembership_t h, realmEvent_t done, bool lazy_mode);
+// realmStatus_t realmSubscribe(realmMembership_t h, realmEvent_t done, bool announce_mm);
 
 #ifdef __cplusplus
 }
