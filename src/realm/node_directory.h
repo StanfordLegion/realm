@@ -33,6 +33,12 @@ namespace Realm {
     std::atomic<uint8_t> state{0}; // 0 live, 1 retiring, 2 failed
   };
 
+  // TODO:
+  // 1. It needs to be fast, concurent, scalable
+  // 2. It needs to integrate well with custom-built DHT
+  // and other external membership solutions such as etcd, zookeeper
+  // 3. Interface and implementation needs to be cleaned up
+
   class NodeDirectory {
   public:
     [[nodiscard]] Event request(NodeID id, uint64_t min_epoch = 0);
