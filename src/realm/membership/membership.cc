@@ -60,12 +60,8 @@ realmStatus_t realmJoin(realmMembership_t h, const realmNodeMeta_t *s,
 /*realmStatus_t realmSubscribe(realmMembership_t h, realmEvent_t done, bool lazy_mode)
 {
   CALL(h, subscribe_request, done, lazy_mode);
-}
-
-realmStatus_t realmProgress(realmMembership_t h) { CALL(h, progress); }
-{
-  CALL(h, members, b, c);
 }*/
+
 #undef CALL
 
 #ifdef REALM_USE_UDP

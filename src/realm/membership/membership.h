@@ -42,7 +42,6 @@ typedef struct {
 
   // realmStatus_t (*subscribe_request)(void *state, realmEvent_t done, bool announce_mm);
   // realmStatus_t (*destroy)(void *state);
-  // realmStatus_t (*progress)(void *state);
 
 } realmMembershipOps_t;
 
@@ -50,11 +49,6 @@ realmStatus_t realmMembershipCreate(const realmMembershipOps_t *ops, void *state
                                     realmMembership_t *out);
 realmStatus_t realmMembershipDestroy(realmMembership_t h);
 
-// realmStatus_t realmJoin(realmMembership_t h, const realmNodeMeta_t *self,
-//                       realmEvent_t done, uint64_t *epoch_out);
-
-// realmStatus_t realmProgress(realmMembership_t h);
-// *cnt_io);
 
 #ifdef __cplusplus
 extern "C" {

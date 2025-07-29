@@ -229,23 +229,17 @@ void SubscribeAckMessage::handle_message(NodeID, const SubscribeAckMessage &msg,
   return REALM_OK;
 }
 
-static realmStatus_t p2p_progress(void *st)
-{
-  return REALM_OK;
-}
-
 }*/
 
 
 namespace {
   realmStatus_t join(void *st, const realmNodeMeta_t *self, realmMembershipHooks_t hooks)
   {
-    AmProvider *am_provider = new AmProvider();
-
-    Network::node_directory.set_provider(am_provider);
-
     MembershipP2P *state = static_cast<MembershipP2P *>(st);
     state->hooks = hooks;
+
+    AmProvider *am_provider = new AmProvider();
+    Network::node_directory.set_provider(am_provider);
     // state->am_provider = am_provider;
 
     bool announce_mm = self->announce_mm;

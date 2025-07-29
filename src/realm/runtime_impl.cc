@@ -2328,22 +2328,23 @@ namespace Realm {
   {}
 
   struct JoinContext {
-    Realm::Event join_done;
+    // Realm::Event join_done;
   };
 
   static void membership_post_cb(const realmNodeMeta_t *n, const void *, size_t,
                                  bool joined, void *arg)
   {
-    auto *ctx = static_cast<JoinContext *>(arg);
+    // auto *ctx = static_cast<JoinContext *>(arg);
 
     Network::node_directory.remove_slot(NodeDirectory::UNKNOWN_NODE_ID);
 
     if(joined) {
-      assert(ctx->join_done != Event::NO_EVENT);
-      GenEventImpl::trigger(ctx->join_done, false);
-      // AutoLock<> al(rt->join_mutex);
-      // rt->join_complete = true;
-      // rt->join_condvar.broadcast();
+      RuntimeImpl *rt = get_runtime();
+      // assert(ctx->join_done != Event::NO_EVENT);
+      // GenEventImpl::trigger(ctx->join_done, false);
+      AutoLock<> al(rt->join_mutex);
+      rt->join_complete = joined;
+      rt->join_condvar.broadcast();
     }
   }
 
@@ -2378,22 +2379,21 @@ namespace Realm {
     self_meta.announce_mm = false;
 
     JoinContext ctx;
-    ctx.join_done = Realm::GenEventImpl::create_genevent()->current_event();
+    // ctx.join_done = Realm::GenEventImpl::create_genevent()->current_event();
 
     realmMembershipHooks_t hooks{membership_pre_cb, membership_post_cb, &ctx};
-
     assert(realmJoin(membership, &self_meta, hooks) == REALM_OK);
-    ctx.join_done.wait();
+    // ctx.join_done.wait();
 
     // Realm::Event sub_done = Realm::GenEventImpl::create_genevent()->current_event();
     // assert(realmSubscribe(membership, sub_done, true) == REALM_OK);
     // sub_done.wait();
 
     {
-      // AutoLock<> al(join_mutex);
-      // while(!join_complete) {
-      // join_condvar.wait();
-      //}
+      AutoLock<> al(join_mutex);
+      while(!join_complete) {
+        join_condvar.wait();
+      }
     }
 
 #ifdef REALM_USE_KOKKOS
