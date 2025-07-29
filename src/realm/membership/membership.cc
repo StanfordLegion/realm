@@ -1,5 +1,7 @@
 #include "membership.h"
+#include "realm_defines.h"
 #include <stdlib.h>
+#include <cassert>
 
 struct realmMembership_ctx {
   const realmMembershipOps_t *ops;
@@ -66,19 +68,16 @@ realmStatus_t realmProgress(realmMembership_t h) { CALL(h, progress); }
 }*/
 #undef CALL
 
-/* ------------------------------------------------------------------ */
-/* Default backend selection                                           */
-/* ------------------------------------------------------------------ */
-
 #ifdef REALM_USE_UDP
 extern realmStatus_t realmMembershipP2PInit(realmMembership_t *out);
 #endif
 
 realmStatus_t realmMembershipInit(realmMembership_t *out)
 {
-#if defined(REALM_USE_UDP)
+#ifdef REALM_USE_UDP
   return realmMembershipP2PInit(out);
 #else
+  assert(0);
   (void)out;
   return REALM_ERR_INTERNAL;
 #endif

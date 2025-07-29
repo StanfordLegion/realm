@@ -77,6 +77,7 @@ namespace {
     Epoch_t epoch;
     NodeID node_id;
     bool announce_mm{false};
+    bool subscribe{true};
 
     static void handle_message(NodeID sender, const MemberUpdateMessage &msg,
                                const void *data, size_t datalen);
@@ -85,7 +86,7 @@ namespace {
   inline void send_join_ack(NodeID dest, Epoch_t epoch, int acks, bool announce_mm)
   {
     Serialization::DynamicBufferSerializer dbs(DBS_SIZE);
-    Network::node_directory.export_node(Network::my_node_id, /*include_mm=*/!announce_mm,
+    Network::node_directory.export_node(Network::my_node_id, /*include_mm=*/announce_mm,
                                         dbs);
 
     ActiveMessage<JoinAcklMessage> ack(dest, dbs.bytes_used());
@@ -156,6 +157,7 @@ void JoinRequestMessage::handle_message(NodeID sender, const JoinRequestMessage 
     am->node_id = sender;
     am->epoch = new_epoch;
     am->announce_mm = msg.announce_mm;
+    am->subscribe = msg.subscribe;
     am.add_payload(data, datalen);
     am.commit();
   }
@@ -196,6 +198,10 @@ void MemberUpdateMessage::handle_message(NodeID, const MemberUpdateMessage &msg,
 {
   Network::node_directory.import_node(data, datalen, msg.epoch);
   send_join_ack(msg.node_id, msg.epoch, /*acks=*/-1, msg.announce_mm);
+
+  if(msg.subscribe) {
+    membership_state->subscribers.add(msg.node_id);
+  }
 }
 
 /* ------------------------------------------------------------------ */
@@ -249,9 +255,8 @@ namespace {
     // state->am_provider = am_provider;
 
     bool announce_mm = self->announce_mm;
-
     Serialization::DynamicBufferSerializer dbs(DBS_SIZE);
-    Network::node_directory.export_node(self->node_id, !announce_mm, dbs);
+    Network::node_directory.export_node(self->node_id, announce_mm, dbs);
 
     if(hooks.pre_join) {
       realmNodeMeta_t meta{(int32_t)Network::my_node_id, 0, announce_mm};

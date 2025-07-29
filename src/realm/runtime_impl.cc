@@ -2381,6 +2381,7 @@ namespace Realm {
     ctx.join_done = Realm::GenEventImpl::create_genevent()->current_event();
 
     realmMembershipHooks_t hooks{membership_pre_cb, membership_post_cb, &ctx};
+
     assert(realmJoin(membership, &self_meta, hooks) == REALM_OK);
     ctx.join_done.wait();
 
