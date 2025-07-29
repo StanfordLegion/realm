@@ -1,7 +1,0 @@
-<map id="Realm::MemSpecificInfo" name="Realm::MemSpecificInfo">
-<area shape="rect" id="Node000001" title=" " alt="" coords="113,5,293,31"/>
-<area shape="rect" id="Node000002" href="$classRealm_1_1Cuda_1_1MemSpecificCudaArray.html" title=" " alt="" coords="5,79,201,119"/>
-<area shape="poly" id="edge1_Node000001_Node000002" title=" " alt="" coords="179,41,129,81,126,76,176,37"/>
-<area shape="rect" id="Node000003" href="$classRealm_1_1FileMemory_1_1OpenFileInfo.html" title=" " alt="" coords="225,79,381,119"/>
-<area shape="poly" id="edge2_Node000001_Node000003" title=" " alt="" coords="231,37,281,76,278,81,227,41"/>
-</map>
