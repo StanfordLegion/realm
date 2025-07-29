@@ -93,6 +93,10 @@ namespace Realm {
     std::mutex pend_mtx_;
     std::unordered_map<NodeID, Pending> pending_;
 
+    // std::atomic<uint64_t> subs_epoch_{0};
+    // NodeSet subscribers_;
+    // mutable std::shared_mutex subs_mtx_;
+
     Provider *provider;
   };
 

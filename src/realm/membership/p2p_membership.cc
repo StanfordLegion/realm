@@ -236,12 +236,6 @@ static realmStatus_t p2p_progress(void *st)
 
 }*/
 
-/* ---------- v-table instance -------------------------------- */
-/*static const realmMembershipOps_t p2p_ops = {.destroy = p2p_destroy,
-                                             .join_request = join,
-                                             .progress = p2p_progress,
-                                             .epoch = p2p_epoch,
-                                             .members = p2p_members};*/
 
 namespace {
   realmStatus_t join(void *st, const realmNodeMeta_t *self, realmMembershipHooks_t hooks)
@@ -275,10 +269,8 @@ namespace {
 
     // TODO: That's not how we should subscribe
     am->subscribe = (hooks.post_join != nullptr);
-
     am.add_payload(dbs.get_buffer(), dbs.bytes_used());
     am.commit();
-
     return REALM_OK;
   }
 

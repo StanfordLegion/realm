@@ -9,14 +9,16 @@
 
 #include <atomic>
 #include <map>
-#include <thread>
 
 #include <sys/socket.h>
 #include <netinet/in.h>
 
+#include "realm/bgwork.h"
+
 namespace Realm {
 
   class UDPMessageImpl;
+  class UDPWorker;
 
   class UDPModule : public NetworkModule {
   public:
@@ -99,7 +101,7 @@ namespace Realm {
       return nullptr;
     }
 
-  private:
+  protected:
     void init(uint16_t base_port, const std::string &address, NodeID rank_id);
 
     struct PeerAddr {
@@ -113,22 +115,22 @@ namespace Realm {
       uint32_t payload_size;
     } __attribute__((packed));
 
-    void rx_loop();
     void send_datagram(const PeerAddr &peer, const void *data, size_t len);
-
-    static constexpr size_t PAYLOAD_SIZE = 64 * 1024;
 
     Mutex peer_map_mutex;
 
     RuntimeImpl *runtime_;
     int sock_fd_{-1};
-    std::thread rx_thread_;
+
+    CoreReservation *core_rsrv_;
+    UDPWorker *worker_;
+
     std::atomic<bool> shutting_down_{false};
     std::atomic<size_t> rx_counter_{0};
 
     std::map<NodeID, PeerAddr> peer_map_;
-    Logger log_udp_;
     friend class UDPMessageImpl;
+    friend class UDPWorker;
 
     PeerAddr ensure_peer(NodeID id)
     {
@@ -145,6 +147,27 @@ namespace Realm {
 
       return peer_map_[id];
     }
+  };
+
+  class UDPWorker : public BackgroundWorkItem {
+  public:
+    UDPWorker(UDPModule *owner, int sock);
+    ~UDPWorker(void) = default;
+
+    bool do_work(TimeLimit work_until);
+    void begin_polling();
+    void end_polling();
+
+  private:
+
+    UDPModule *module;
+    int sock_fd;
+
+    std::atomic<size_t> rx_counter_{0};
+
+    Mutex shutdown_mutex;
+    atomic<bool> shutdown_flag;
+    Mutex::CondVar shutdown_cond;
   };
 
   /* ------------------------------------------------------------------ */

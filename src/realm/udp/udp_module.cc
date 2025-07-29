@@ -12,6 +12,77 @@ namespace Realm {
 
   Logger log_udp("udp");
 
+  namespace {
+    constexpr size_t PAYLOAD_SIZE = 64 * 1024;
+  }
+
+  UDPWorker::UDPWorker(UDPModule *owner, int sock)
+    : BackgroundWorkItem("udp rx")
+    , module(owner)
+    , sock_fd(sock)
+    , shutdown_flag(false)
+    , shutdown_cond(shutdown_mutex)
+  {}
+
+  bool UDPWorker::do_work(TimeLimit until)
+  {
+    uint8_t buf[PAYLOAD_SIZE];
+
+    if(shutdown_flag.load()) {
+      AutoLock<> al(shutdown_mutex);
+      shutdown_flag.store(false);
+      shutdown_cond.broadcast();
+      return false;
+    }
+
+    bool did_work = true;
+
+    while(!module->shutting_down_.load()) {
+      ssize_t n = recvfrom(sock_fd, buf, sizeof(buf), 0, nullptr, nullptr);
+      if(n <= 0) {
+        break;
+      }
+
+      if(static_cast<size_t>(n) < sizeof(UDPModule::UDPHeader)) {
+        assert(0);
+        // continue; /* malformed */
+      }
+
+      auto *uh = reinterpret_cast<const UDPModule::UDPHeader *>(buf);
+      const uint8_t *hdr = buf + sizeof(UDPModule::UDPHeader);
+      const uint8_t *pl = hdr + uh->hdr_size;
+
+      if(sizeof(UDPModule::UDPHeader) + uh->hdr_size + uh->payload_size !=
+         static_cast<size_t>(n)) {
+        assert(0);
+        // continue;
+      }
+
+      module->runtime_->message_manager->add_incoming_message(
+          uh->src, uh->msgid, hdr, uh->hdr_size, PAYLOAD_COPY, pl, uh->payload_size,
+          PAYLOAD_COPY, nullptr, 0, 0, until);
+
+      rx_counter_.fetch_add(1, std::memory_order_relaxed);
+      did_work = true;
+    }
+
+    return did_work;
+  }
+
+  void UDPWorker::begin_polling()
+  {
+    make_active();
+  }
+
+  void UDPWorker::end_polling()
+  {
+    AutoLock<> al(shutdown_mutex);
+
+    assert(!shutdown_flag.load());
+    shutdown_flag.store(true);
+    shutdown_cond.wait();
+  }
+
   /* ------------------------------------------------------------------ */
   /* UDPModule                                                          */
   /* ------------------------------------------------------------------ */
@@ -19,15 +90,14 @@ namespace Realm {
   UDPModule::UDPModule(RuntimeImpl *rt)
     : NetworkModule("udp")
     , runtime_(rt)
-    , log_udp_("udp")
   {}
 
   UDPModule::~UDPModule()
   {
     shutting_down_.store(true);
-    if(rx_thread_.joinable()) {
-      rx_thread_.join();
-    }
+    assert(worker_ != nullptr);
+    delete worker_;
+
     if(sock_fd_ >= 0) {
       close(sock_fd_);
     }
@@ -118,12 +188,17 @@ namespace Realm {
       register_peer(NodeDirectory::UNKNOWN_NODE_ID, seed_ip, seed_port);
     }
 
-    rx_thread_ = std::thread([this]() { rx_loop(); });
+    worker_ = new UDPWorker(this, sock_fd_);
+    worker_->add_to_manager(&runtime_->bgwork);
+    worker_->begin_polling();
   }
 
   void UDPModule::attach(RuntimeImpl *, std::vector<NetworkSegment *> &) {}
 
-  void UDPModule::detach(RuntimeImpl *, std::vector<NetworkSegment *> &) {}
+  void UDPModule::detach(RuntimeImpl *, std::vector<NetworkSegment *> &)
+  {
+    worker_->end_polling();
+  }
 
   void UDPModule::broadcast(NodeID root, const void *val_in, void *val_out, size_t bytes)
   {
@@ -248,42 +323,6 @@ namespace Realm {
                         reinterpret_cast<const sockaddr *>(&peer.sin), sizeof(peer.sin));
     if(status < 0) {
       log_udp.error() << "Failed to send datagram size:" << len;
-    }
-  }
-
-  /* ---------- rx loop ---------------------------------------------- */
-
-  void UDPModule::rx_loop()
-  {
-    uint8_t buf[PAYLOAD_SIZE];
-
-    while(!shutting_down_.load()) {
-      ssize_t n = recvfrom(sock_fd_, buf, sizeof(buf), 0, nullptr, nullptr);
-      if(n <= 0) {
-        /* nothing ready – cheap sleep */
-        usleep(1000);
-        continue;
-      }
-
-      if(static_cast<size_t>(n) < sizeof(UDPHeader)) {
-        continue; /* malformed */
-      }
-
-      auto *uh = reinterpret_cast<const UDPHeader *>(buf);
-      const uint8_t *hdr = buf + sizeof(UDPHeader);
-      const uint8_t *pl = hdr + uh->hdr_size;
-
-      /* simple sanity */
-      if(sizeof(UDPHeader) + uh->hdr_size + uh->payload_size != static_cast<size_t>(n)) {
-        continue;
-      }
-
-      /* hand to AM manager – copies header/payload */
-      runtime_->message_manager->add_incoming_message(
-          uh->src, uh->msgid, hdr, uh->hdr_size, PAYLOAD_COPY, pl, uh->payload_size,
-          PAYLOAD_COPY, nullptr, 0, 0, TimeLimit::relative(0));
-
-      rx_counter_.fetch_add(1, std::memory_order_relaxed);
     }
   }
 
