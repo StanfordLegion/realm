@@ -547,6 +547,13 @@ namespace Realm {
     static_cast<RuntimeImpl *>(impl)->start();
   }
 
+  void Runtime::elastic_start(void)
+  {
+    assert(impl != 0);
+    static_cast<RuntimeImpl *>(impl)->elastic_start();
+  }
+
+
   // single-call version of the above three calls
   bool Runtime::init(int *argc, char ***argv)
   {
@@ -2455,7 +2462,7 @@ namespace Realm {
     get_runtime()->initiate_shutdown();
   }
 
-  void RuntimeImpl::start(void)
+  void RuntimeImpl::elastic_start(void)
   {
     // all we have to do here is tell the processors to start up their
     //  threads...
@@ -2505,6 +2512,23 @@ namespace Realm {
         join_condvar.wait();
       }
     }
+
+#ifdef REALM_USE_KOKKOS
+    // now that the threads are started up, we can spin up the kokkos runtime
+    KokkosInterop::kokkos_initialize(nodes[Network::my_node_id].processors);
+#endif
+  }
+
+  void RuntimeImpl::start(void)
+  {
+    // all we have to do here is tell the processors to start up their
+    //  threads...
+    for(std::vector<ProcessorImpl *>::const_iterator it =
+            nodes[Network::my_node_id].processors.begin();
+        it != nodes[Network::my_node_id].processors.end(); ++it) {
+      (*it)->start_threads();
+    }
+
 
 #ifdef REALM_USE_KOKKOS
     // now that the threads are started up, we can spin up the kokkos runtime

@@ -79,8 +79,8 @@ void top_task(const void *args, size_t arglen, const void *userdata, size_t user
 
   sleep(8);
 
-  //Runtime::get_runtime().elastic_shutdown();
-  //return;
+  // Runtime::get_runtime().elastic_shutdown();
+  // return;
 
   if(Network::my_node_id == TestConfig::shutdown_node_id) {
     Runtime::get_runtime().elastic_shutdown();
@@ -108,7 +108,20 @@ void top_task(const void *args, size_t arglen, const void *userdata, size_t user
 int main(int argc, char **argv)
 {
   Runtime rt;
-  rt.init(&argc, &argv);
+
+  if(!rt.network_init(&argc, &argv)) {
+    return 0;
+  }
+
+  if(!rt.create_configs(argc, argv)) {
+    return 0;
+  }
+
+  if(!rt.configure_from_command_line(argc, argv)) {
+    return 0;
+  }
+
+  rt.elastic_start();
   rt.register_task(TOP_TASK_ID, top_task);
 
   Processor p = Machine::ProcessorQuery(Machine::get_machine())
