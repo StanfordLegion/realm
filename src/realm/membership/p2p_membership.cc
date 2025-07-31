@@ -13,9 +13,6 @@ struct MembershipP2P {
   std::atomic<int> join_acks{0};
   std::atomic<int> join_acks_total{0};
 
-  std::atomic<int> leave_acks{0};
-  std::atomic<int> leave_acks_total{0};
-
   Mutex subs_mutex;
   NodeSet subscribers;
 
@@ -55,7 +52,7 @@ namespace {
   struct JoinRequestMessage : ControlPlaneMessageTag {
     Epoch_t epoch;
     bool announce_mm{false};
-    bool subscribe{true};
+    bool subscribe_all{true};
 
     static void handle_message(NodeID sender, const JoinRequestMessage &msg,
                                const void *data, size_t datalen);
@@ -86,7 +83,6 @@ namespace {
     Epoch_t epoch;
     NodeID node_id;
     bool announce_mm{false};
-    bool subscribe{true};
 
     static void handle_message(NodeID sender, const MemberUpdateMessage &msg,
                                const void *data, size_t datalen);
@@ -192,14 +188,13 @@ void JoinRequestMessage::handle_message(NodeID sender, const JoinRequestMessage 
 
   {
     AutoLock<> al(membership_state->subs_mutex);
-    if(!membership_state->subscribers.empty()) {
+    if(!membership_state->subscribers.empty() && msg.subscribe_all) {
       assert(membership_state->subscribers.contains(Network::my_node_id) == false);
       assert(membership_state->subscribers.contains(sender) == false);
       ActiveMessage<MemberUpdateMessage> am(membership_state->subscribers, datalen);
       am->node_id = sender;
       am->epoch = new_epoch;
       am->announce_mm = msg.announce_mm;
-      am->subscribe = msg.subscribe;
       am.add_payload(data, datalen);
       am.commit();
     }
@@ -209,7 +204,7 @@ void JoinRequestMessage::handle_message(NodeID sender, const JoinRequestMessage 
   send_join_ack(sender, new_epoch, membership_state->subscribers.size() + 1,
                 msg.announce_mm);
 
-  if(msg.subscribe) {
+  if(msg.subscribe_all) {
     AutoLock<> al(membership_state->subs_mutex);
     membership_state->subscribers.add(sender);
   }
@@ -260,7 +255,7 @@ void MemberUpdateMessage::handle_message(NodeID, const MemberUpdateMessage &msg,
   Network::node_directory.import_node(data, datalen, msg.epoch);
   send_join_ack(msg.node_id, msg.epoch, /*acks=*/-1, msg.announce_mm);
 
-  if(msg.subscribe) {
+  {
     AutoLock<> al(membership_state->subs_mutex);
     membership_state->subscribers.add(msg.node_id);
   }
@@ -373,7 +368,7 @@ namespace {
       ActiveMessage<JoinRequestMessage> am(self->seed_id, dbs.bytes_used());
       am->epoch = Network::node_directory.cluster_epoch();
       // TODO: That's not how we should subscribe
-      am->subscribe = (hooks.post_join != nullptr);
+      am->subscribe_all = (hooks.post_join != nullptr);
       am->announce_mm = announce_mm;
       am.add_payload(dbs.get_buffer(), dbs.bytes_used());
       am.commit();
@@ -387,7 +382,6 @@ namespace {
     MembershipP2P *state = static_cast<MembershipP2P *>(st);
 
     state->hooks = hooks;
-    state->leave_acks = 0;
 
     if(hooks.pre_leave) {
       hooks.pre_leave(self, nullptr, 0, /*left=*/false, hooks.user_arg);
