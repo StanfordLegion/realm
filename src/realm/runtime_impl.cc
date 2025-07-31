@@ -17,7 +17,6 @@
 
 #include "realm/runtime_impl.h"
 
-#include "realm/network.h"
 #include "realm/proc_impl.h"
 #include "realm/mem_impl.h"
 #include "realm/inst_impl.h"
@@ -79,7 +78,10 @@
 
 #pragma comment(lib, "ws2_32.lib")
 
-static void sleep(int seconds) { Sleep(seconds * 1000); }
+static void sleep(int seconds)
+{
+  Sleep(seconds * 1000);
+}
 
 static char *strndup(const char *src, size_t maxlen)
 {
@@ -93,23 +95,21 @@ static char *strndup(const char *src, size_t maxlen)
 
 #include <fstream>
 
-#define CHECK_LIBC(cmd)                                                                  \
-  do {                                                                                   \
-    int ret = (cmd);                                                                     \
-    if(ret != 0) {                                                                       \
-      fprintf(stderr, "error: %s = %d (%s)\n", #cmd, ret, strerror(ret));                \
-      exit(1);                                                                           \
-    }                                                                                    \
-  } while(0)
+#define CHECK_LIBC(cmd) do { \
+  int ret = (cmd); \
+  if(ret != 0) { \
+    fprintf(stderr, "error: %s = %d (%s)\n", #cmd, ret, strerror(ret)); \
+    exit(1); \
+  } \
+} while(0)
 
-#define CHECK_PTHREAD(cmd)                                                               \
-  do {                                                                                   \
-    int ret = (cmd);                                                                     \
-    if(ret != 0) {                                                                       \
-      fprintf(stderr, "PTHREAD: %s = %d (%s)\n", #cmd, ret, strerror(ret));              \
-      exit(1);                                                                           \
-    }                                                                                    \
-  } while(0)
+#define CHECK_PTHREAD(cmd) do { \
+  int ret = (cmd); \
+  if(ret != 0) { \
+    fprintf(stderr, "PTHREAD: %s = %d (%s)\n", #cmd, ret, strerror(ret)); \
+    exit(1); \
+  } \
+} while(0)
 
 TYPE_IS_SERIALIZABLE(Realm::NodeAnnounceTag);
 TYPE_IS_SERIALIZABLE(Realm::Memory);
@@ -154,7 +154,7 @@ namespace Realm {
 
   Logger log_runtime("realm");
   Logger log_collective("collective");
-  extern Logger log_task;    // defined in proc_impl.cc
+  extern Logger log_task; // defined in proc_impl.cc
   extern Logger log_taskreg; // defined in proc_impl.cc
   extern Logger log_machine; // defined in machine_impl.cc
 
@@ -165,7 +165,8 @@ namespace Realm {
 
   extern int force_utils_cc_linkage;
 
-  int *linkage_forcing[] = {&force_utils_cc_linkage};
+  int *linkage_forcing[] = { &force_utils_cc_linkage };
+
 
   ////////////////////////////////////////////////////////////////////////
   //
@@ -186,12 +187,12 @@ namespace Realm {
     sigemptyset(&action.sa_mask);
     action.sa_flags = SA_ONSTACK;
 
-    CHECK_LIBC(sigaction(SIGINT, &action, 0));
-    CHECK_LIBC(sigaction(SIGABRT, &action, 0));
-    CHECK_LIBC(sigaction(SIGSEGV, &action, 0));
-    CHECK_LIBC(sigaction(SIGFPE, &action, 0));
-    CHECK_LIBC(sigaction(SIGBUS, &action, 0));
-    CHECK_LIBC(sigaction(SIGILL, &action, 0));
+    CHECK_LIBC( sigaction(SIGINT, &action, 0) );
+    CHECK_LIBC( sigaction(SIGABRT, &action, 0) );
+    CHECK_LIBC( sigaction(SIGSEGV, &action, 0) );
+    CHECK_LIBC( sigaction(SIGFPE, &action, 0) );
+    CHECK_LIBC( sigaction(SIGBUS, &action, 0) );
+    CHECK_LIBC( sigaction(SIGILL, &action, 0) );
 #endif
   }
 
@@ -204,94 +205,99 @@ namespace Realm {
     sigemptyset(&action.sa_mask);
     action.sa_flags = 0;
 
-    CHECK_LIBC(sigaction(SIGINT, &action, 0));
-    CHECK_LIBC(sigaction(SIGABRT, &action, 0));
-    CHECK_LIBC(sigaction(SIGSEGV, &action, 0));
-    CHECK_LIBC(sigaction(SIGFPE, &action, 0));
-    CHECK_LIBC(sigaction(SIGBUS, &action, 0));
-    CHECK_LIBC(sigaction(SIGILL, &action, 0));
+    CHECK_LIBC( sigaction(SIGINT, &action, 0) );
+    CHECK_LIBC( sigaction(SIGABRT, &action, 0) );
+    CHECK_LIBC( sigaction(SIGSEGV, &action, 0) );
+    CHECK_LIBC( sigaction(SIGFPE, &action, 0) );
+    CHECK_LIBC( sigaction(SIGBUS, &action, 0) );
+    CHECK_LIBC( sigaction(SIGILL, &action, 0) );
 #endif
   }
 
-  static void realm_freeze(int signal)
-  {
+    static void realm_freeze(int signal)
+    {
 #if defined(REALM_ON_LINUX) || defined(REALM_ON_MACOS) || defined(REALM_ON_FREEBSD)
-    assert((signal == SIGINT) || (signal == SIGABRT) || (signal == SIGSEGV) ||
-           (signal == SIGFPE) || (signal == SIGBUS) || (signal == SIGILL));
-    int process_id = getpid();
-    char hostname[128];
-    gethostname(hostname, 127);
-    fprintf(stderr, "Legion process received signal %d: %s\n", signal, strsignal(signal));
-    fprintf(stderr, "Process %d on node %s is frozen!\n", process_id, hostname);
-    fflush(stderr);
+      assert((signal == SIGINT) || (signal == SIGABRT) ||
+             (signal == SIGSEGV) || (signal == SIGFPE) ||
+             (signal == SIGBUS) || (signal == SIGILL));
+      int process_id = getpid();
+      char hostname[128];
+      gethostname(hostname, 127);
+      fprintf(stderr,"Legion process received signal %d: %s\n",
+                      signal, strsignal(signal));
+      fprintf(stderr,"Process %d on node %s is frozen!\n", 
+                      process_id, hostname);
+      fflush(stderr);
 
-    // now that we've stopped, don't catch any further SIGINTs
-    struct sigaction action;
-    action.sa_handler = SIG_DFL;
-    sigemptyset(&action.sa_mask);
-    action.sa_flags = 0;
+      // now that we've stopped, don't catch any further SIGINTs
+      struct sigaction action;
+      action.sa_handler = SIG_DFL;
+      sigemptyset(&action.sa_mask);
+      action.sa_flags = 0;
 
-    CHECK_LIBC(sigaction(SIGINT, &action, 0));
+      CHECK_LIBC( sigaction(SIGINT, &action, 0) );
 #endif
 
-    while(true)
-      sleep(1);
-  }
+      while (true)
+        sleep(1);
+    }
 
-  template <typename TABLE>
-  void show_event_table(std::ostream &os, NodeID nodeid, TABLE &events)
-  {
-    // Iterate over all the events and get their implementations
-    for(unsigned long j = 0; j < events.max_entries(); j++) {
-      if(!events.has_entry(j))
-        continue;
-      GenEventImpl *e = events.lookup_entry(j, nodeid);
-      AutoLock<> a2(e->mutex);
+    template <typename TABLE>
+    void show_event_table(std::ostream &os, NodeID nodeid, TABLE &events)
+    {
+      // Iterate over all the events and get their implementations
+      for(unsigned long j = 0; j < events.max_entries(); j++) {
+        if(!events.has_entry(j))
+          continue;
+        GenEventImpl *e = events.lookup_entry(j, nodeid);
+        AutoLock<> a2(e->mutex);
 
-      // print anything with either local or remote waiters
-      if(e->current_local_waiters.empty() && e->future_local_waiters.empty() &&
-         e->remote_waiters.empty())
-        continue;
+        // print anything with either local or remote waiters
+        if(e->current_local_waiters.empty() && e->future_local_waiters.empty() &&
+           e->remote_waiters.empty())
+          continue;
 
-      size_t clw_size = 0;
-      for(EventWaiter *pos = e->current_local_waiters.head.next; pos;
-          pos = pos->ew_list_link.next)
-        clw_size++;
-      EventImpl::gen_t gen = e->generation.load();
-      os << "Event " << e->me << ": gen=" << gen << " subscr=" << e->gen_subscribed.load()
-         << " local=" << clw_size // e->current_local_waiters.size()
-         << "+" << e->future_local_waiters.size()
-         << " remote=" << e->remote_waiters.size() << "\n";
-      for(EventWaiter *pos = e->current_local_waiters.head.next; pos;
-          pos = pos->ew_list_link.next) {
-        os << "  [" << (gen + 1) << "] L:" << pos /*(*it)*/ << " - ";
-        pos /*(*it)*/->print(os);
-        os << "\n";
-      }
-      for(std::map<EventImpl::gen_t, EventWaiter::EventWaiterList>::const_iterator it =
-              e->future_local_waiters.begin();
-          it != e->future_local_waiters.end(); it++) {
-        for(EventWaiter *pos = it->second.head.next; pos; pos = pos->ew_list_link.next) {
-          os << "  [" << (it->first) << "] L:" << pos /*(*it2)*/ << " - ";
-          pos /*(*it2)*/->print(os);
+        size_t clw_size = 0;
+        for(EventWaiter *pos = e->current_local_waiters.head.next; pos;
+            pos = pos->ew_list_link.next)
+          clw_size++;
+        EventImpl::gen_t gen = e->generation.load();
+        os << "Event " << e->me << ": gen=" << gen
+           << " subscr=" << e->gen_subscribed.load()
+           << " local=" << clw_size // e->current_local_waiters.size()
+           << "+" << e->future_local_waiters.size()
+           << " remote=" << e->remote_waiters.size() << "\n";
+        for(EventWaiter *pos = e->current_local_waiters.head.next; pos;
+            pos = pos->ew_list_link.next) {
+          os << "  [" << (gen + 1) << "] L:" << pos /*(*it)*/ << " - ";
+          pos /*(*it)*/->print(os);
           os << "\n";
         }
+        for(std::map<EventImpl::gen_t, EventWaiter::EventWaiterList>::const_iterator it =
+                e->future_local_waiters.begin();
+            it != e->future_local_waiters.end(); it++) {
+          for(EventWaiter *pos = it->second.head.next; pos;
+              pos = pos->ew_list_link.next) {
+            os << "  [" << (it->first) << "] L:" << pos /*(*it2)*/ << " - ";
+            pos /*(*it2)*/->print(os);
+            os << "\n";
+          }
+        }
+        // for(std::map<Event::gen_t, NodeMask>::const_iterator it =
+        // e->remote_waiters.begin();
+        //     it != e->remote_waiters.end();
+        //     it++) {
+        //   fprintf(f, "  [%d] R:", it->first);
+        //   for(int k = 0; k < MAX_NUM_NODES; k++)
+        //     if(it->second.is_set(k))
+        // 	fprintf(f, " %d", k);
+        //   fprintf(f, "\n");
+        // }
       }
-      // for(std::map<Event::gen_t, NodeMask>::const_iterator it =
-      // e->remote_waiters.begin();
-      //     it != e->remote_waiters.end();
-      //     it++) {
-      //   fprintf(f, "  [%d] R:", it->first);
-      //   for(int k = 0; k < MAX_NUM_NODES; k++)
-      //     if(it->second.is_set(k))
-      // 	fprintf(f, " %d", k);
-      //   fprintf(f, "\n");
-      // }
     }
-  }
 
   // not static so that it can be invoked manually from gdb
-  void show_event_waiters(std::ostream &os)
+  void show_event_waiters(std::ostream& os)
   {
     os << "PRINTING ALL PENDING EVENTS:\n";
     for(NodeID i = 0; i <= Network::max_node_id; i++) {
@@ -302,27 +308,28 @@ namespace Realm {
       else
         show_event_table(os, i, n->remote_events);
 
-      for(unsigned long j = 0; j < n->barriers.max_entries(); j++) {
-        if(!n->barriers.has_entry(j))
-          continue;
-        BarrierImpl *b = n->barriers.lookup_entry(j, i /*node*/);
-        AutoLock<> a2(b->mutex);
-        // skip any barriers with no waiters
-        if(b->generations.empty())
-          continue;
+      for (unsigned long j = 0; j < n->barriers.max_entries(); j++) {
+	if (!n->barriers.has_entry(j))
+	  continue;
+	BarrierImpl *b = n->barriers.lookup_entry(j, i/*node*/); 
+	AutoLock<> a2(b->mutex);
+	// skip any barriers with no waiters
+	if (b->generations.empty())
+	  continue;
 
-        os << "Barrier " << b->me << ": gen=" << b->generation.load()
-           << " subscr=" << b->gen_subscribed.load() << "\n";
-        for(std::map<EventImpl::gen_t, BarrierImpl::Generation *>::const_iterator git =
-                b->generations.begin();
-            git != b->generations.end(); git++) {
-          const EventWaiter::EventWaiterList &waiters = git->second->local_waiters;
-          for(EventWaiter *pos = waiters.head.next; pos; pos = pos->ew_list_link.next) {
-            os << "  [" << (git->first) << "] L:" << pos /*(*it)*/ << " - ";
-            pos /*(*it)*/->print(os);
-            os << "\n";
-          }
-        }
+	os << "Barrier " << b->me << ": gen=" << b->generation.load()
+	   << " subscr=" << b->gen_subscribed.load() << "\n";
+	for (std::map<EventImpl::gen_t, BarrierImpl::Generation*>::const_iterator git = 
+	       b->generations.begin(); git != b->generations.end(); git++) {
+	  const EventWaiter::EventWaiterList &waiters = git->second->local_waiters;
+	  for(EventWaiter *pos = waiters.head.next;
+	      pos;
+	      pos = pos->ew_list_link.next) {
+	    os << "  [" << (git->first) << "] L:" << pos/*(*it)*/ << " - ";
+	    pos/*(*it)*/->print(os);
+	    os << "\n";
+	  }
+	}
       }
     }
 
@@ -391,8 +398,7 @@ namespace Realm {
   // struct ReductionOpUntyped
   //
 
-  /*static*/ ReductionOpUntyped *
-  ReductionOpUntyped::clone_reduction_op(const ReductionOpUntyped *redop)
+  /*static*/ ReductionOpUntyped *ReductionOpUntyped::clone_reduction_op(const ReductionOpUntyped *redop)
   {
     void *ptr = malloc(redop->sizeof_this);
     assert(ptr);
@@ -400,203 +406,199 @@ namespace Realm {
     ReductionOpUntyped *cloned = static_cast<ReductionOpUntyped *>(ptr);
     // fix up identity and userdata fields, if non-null
     if(redop->identity)
-      cloned->identity = reinterpret_cast<void *>(
-          reinterpret_cast<uintptr_t>(redop->identity) -
-          reinterpret_cast<uintptr_t>(redop) + reinterpret_cast<uintptr_t>(cloned));
+      cloned->identity = reinterpret_cast<void *>(reinterpret_cast<uintptr_t>(redop->identity) -
+                                                  reinterpret_cast<uintptr_t>(redop) +
+                                                  reinterpret_cast<uintptr_t>(cloned));
     if(redop->userdata)
-      cloned->userdata = reinterpret_cast<void *>(
-          reinterpret_cast<uintptr_t>(redop->userdata) -
-          reinterpret_cast<uintptr_t>(redop) + reinterpret_cast<uintptr_t>(cloned));
+      cloned->userdata = reinterpret_cast<void *>(reinterpret_cast<uintptr_t>(redop->userdata) -
+                                                  reinterpret_cast<uintptr_t>(redop) +
+                                                  reinterpret_cast<uintptr_t>(cloned));
     return cloned;
   }
+
 
   ////////////////////////////////////////////////////////////////////////
   //
   // class Runtime
   //
 
-  Runtime::Runtime(void)
-    : impl(0)
-  {
-    // ok to construct extra ones - we will make sure only one calls init() though
-    if(runtime_singleton) {
-      impl = runtime_singleton;
-    } else {
-      impl = new RuntimeImpl;
-      runtime_singleton = static_cast<RuntimeImpl *>(impl);
+    Runtime::Runtime(void)
+      : impl(0)
+    {
+      // ok to construct extra ones - we will make sure only one calls init() though
+      if (runtime_singleton) {
+        impl = runtime_singleton;
+      } else {
+        impl = new RuntimeImpl;
+        runtime_singleton = static_cast<RuntimeImpl *>(impl);
+      }
     }
-  }
 
-  /*static*/ Runtime Runtime::get_runtime(void)
-  {
-    Runtime r;
-    // explicit namespace qualifier here due to name collision
-    r.impl = Realm::get_runtime();
-    return r;
-  }
+    /*static*/ Runtime Runtime::get_runtime(void)
+    {
+      Runtime r;
+      // explicit namespace qualifier here due to name collision
+      r.impl = Realm::get_runtime();
+      return r;
+    }
 
-  // returns a valid (but possibly empty) string pointer describing the
-  //  version of the Realm library - this can be compared against
-  //  REALM_VERSION in application code to detect a header/library mismatch
-  const char *realm_library_version = REALM_VERSION;
+    // returns a valid (but possibly empty) string pointer describing the
+    //  version of the Realm library - this can be compared against
+    //  REALM_VERSION in application code to detect a header/library mismatch
+    const char *realm_library_version = REALM_VERSION;
 
-  /*static*/ const char *Runtime::get_library_version() { return realm_library_version; }
+    /*static*/ const char *Runtime::get_library_version()
+    {
+      return realm_library_version;
+    }
 
-#if defined(REALM_USE_UCX) || defined(REALM_USE_MPI) || defined(REALM_USE_GASNET1) ||    \
-    defined(REALM_USE_GASNETEX) || defined(REALM_USE_KOKKOS)
-  // global flag that tells us if a realm runtime has already been
-  //  initialized in this process - some underlying libraries (e.g. mpi,
-  //  gasnet, kokkos) do not permit reinitialization
-  static bool runtime_initialized = false;
+#if defined(REALM_USE_UCX) || defined(REALM_USE_MPI) || defined(REALM_USE_GASNET1) || defined(REALM_USE_GASNETEX) || defined(REALM_USE_KOKKOS)
+    // global flag that tells us if a realm runtime has already been
+    //  initialized in this process - some underlying libraries (e.g. mpi,
+    //  gasnet, kokkos) do not permit reinitialization
+    static bool runtime_initialized = false;
 #endif
 
-  // performs any network initialization and, critically, makes sure
-  //  *argc and *argv contain the application's real command line
-  //  (instead of e.g. mpi spawner information)
-  bool Runtime::network_init(int *argc, char ***argv)
-  {
-#if defined(REALM_USE_UCX) || defined(REALM_USE_MPI) || defined(REALM_USE_GASNET1) ||    \
-    defined(REALM_USE_GASNETEX) || defined(REALM_USE_KOKKOS)
-    if(runtime_initialized) {
-      fprintf(stderr, "ERROR: reinitialization not supported by these Realm components:"
+    // performs any network initialization and, critically, makes sure
+    //  *argc and *argv contain the application's real command line
+    //  (instead of e.g. mpi spawner information)
+    bool Runtime::network_init(int *argc, char ***argv)
+    {
+#if defined(REALM_USE_UCX) || defined(REALM_USE_MPI) || defined(REALM_USE_GASNET1) || defined(REALM_USE_GASNETEX) || defined(REALM_USE_KOKKOS)
+      if(runtime_initialized) {
+        fprintf(stderr, "ERROR: reinitialization not supported by these Realm components:"
 #ifdef REALM_USE_UCX
-                      " ucx"
+                " ucx"
 #endif
 #ifdef REALM_USE_MPI
-                      " mpi"
+                " mpi"
 #endif
 #ifdef REALM_USE_GASNET1
-                      " gasnet1"
+                " gasnet1"
 #endif
 #ifdef REALM_USE_GASNETEX
-                      " gasnetex"
+                " gasnetex"
 #endif
 #ifdef REALM_USE_KOKKOS
-                      " kokkos"
+                " kokkos"
 #endif
-                      "\n");
-      return false;
+                "\n");
+        return false;
+      }
+      runtime_initialized = true;
+#endif
+
+      assert(runtime_singleton != 0);
+      return static_cast<RuntimeImpl *>(impl)->network_init(argc, argv);
     }
-    runtime_initialized = true;
-#endif
 
-    assert(runtime_singleton != 0);
-    return static_cast<RuntimeImpl *>(impl)->network_init(argc, argv);
-  }
-
-  void Runtime::parse_command_line(int argc, char **argv)
-  {
-    assert(impl != 0);
-    std::vector<std::string> cmdline;
-    cmdline.reserve(argc);
-    for(int i = 1; i < argc; i++)
-      cmdline.push_back(argv[i]);
-    static_cast<RuntimeImpl *>(impl)->parse_command_line(cmdline);
-  }
-
-  void Runtime::parse_command_line(std::vector<std::string> &cmdline,
-                                   bool remove_realm_args /*= false*/)
-  {
-    assert(impl != 0);
-    if(remove_realm_args) {
+        void Runtime::parse_command_line(int argc, char **argv)
+    {
+      assert(impl != 0);
+      std::vector<std::string> cmdline;
+      cmdline.reserve(argc);
+      for(int i = 1; i < argc; i++)
+        cmdline.push_back(argv[i]);
       static_cast<RuntimeImpl *>(impl)->parse_command_line(cmdline);
-    } else {
-      // pass in a copy so we don't mess up the original
-      std::vector<std::string> cmdline_copy(cmdline);
-      static_cast<RuntimeImpl *>(impl)->parse_command_line(cmdline_copy);
     }
-  }
 
-  void Runtime::finish_configure(void)
-  {
-    assert(impl != 0);
-    static_cast<RuntimeImpl *>(impl)->finish_configure();
-  }
+    void Runtime::parse_command_line(std::vector<std::string> &cmdline,
+                                                bool remove_realm_args /*= false*/)
+    {
+      assert(impl != 0);
+      if(remove_realm_args) {
+        static_cast<RuntimeImpl *>(impl)->parse_command_line(cmdline);
+      } else {
+        // pass in a copy so we don't mess up the original
+        std::vector<std::string> cmdline_copy(cmdline);
+        static_cast<RuntimeImpl *>(impl)->parse_command_line(cmdline_copy);
+      }
+    }
 
-  // configures the runtime from the provided command line - after this
-  //  call it is possible to create user events/reservations/etc,
-  //  perform registrations and query the machine model, but not spawn
-  //  tasks or create instances
-  bool Runtime::configure_from_command_line(int argc, char **argv)
-  {
-    assert(impl != 0);
-    std::vector<std::string> cmdline;
-    cmdline.reserve(argc);
-    for(int i = 1; i < argc; i++)
-      cmdline.push_back(argv[i]);
-    return static_cast<RuntimeImpl *>(impl)->configure_from_command_line(cmdline);
-  }
+    void Runtime::finish_configure(void)
+    {
+      assert(impl != 0);
+      static_cast<RuntimeImpl *>(impl)->finish_configure();
+    }
 
-  bool Runtime::configure_from_command_line(std::vector<std::string> &cmdline,
-                                            bool remove_realm_args /*= false*/)
-  {
-    assert(impl != 0);
-    if(remove_realm_args) {
+    // configures the runtime from the provided command line - after this 
+    //  call it is possible to create user events/reservations/etc, 
+    //  perform registrations and query the machine model, but not spawn
+    //  tasks or create instances
+    bool Runtime::configure_from_command_line(int argc, char **argv)
+    {
+      assert(impl != 0);
+      std::vector<std::string> cmdline;
+      cmdline.reserve(argc);
+      for(int i = 1; i < argc; i++)
+	cmdline.push_back(argv[i]);
       return static_cast<RuntimeImpl *>(impl)->configure_from_command_line(cmdline);
-    } else {
-      // pass in a copy so we don't mess up the original
-      std::vector<std::string> cmdline_copy(cmdline);
-      return static_cast<RuntimeImpl *>(impl)->configure_from_command_line(cmdline_copy);
-    }
-  }
-
-  // starts up the runtime, allowing task/instance creation
-  void Runtime::start(void)
-  {
-    assert(impl != 0);
-    static_cast<RuntimeImpl *>(impl)->start();
-  }
-
-  void Runtime::elastic_start(void)
-  {
-    assert(impl != 0);
-    static_cast<RuntimeImpl *>(impl)->elastic_start();
-  }
-
-  // single-call version of the above three calls
-  bool Runtime::init(int *argc, char ***argv)
-  {
-    // if we get null pointers for argc and argv, use a local version so
-    //  any changes from network_init are seen in configure_from_command_line
-    int my_argc = 0;
-    char **my_argv = 0;
-    if(!argc)
-      argc = &my_argc;
-    if(!argv)
-      argv = &my_argv;
-
-    if(!network_init(argc, argv))
-      return false;
-    if(!create_configs(*argc, *argv))
-      return false;
-    if(!configure_from_command_line(*argc, *argv))
-      return false;
-    start();
-    return true;
-  }
-
-  // this is now just a wrapper around Processor::register_task - consider switching to
-  //  that
-  bool Runtime::register_task(Processor::TaskFuncID taskid,
-                              Processor::TaskFuncPtr taskptr)
-  {
-    assert(impl != 0);
-
-    CodeDescriptor codedesc(taskptr);
-    ProfilingRequestSet prs;
-    std::vector<Event> events;
-    std::vector<ProcessorImpl *> &procs =
-        ((RuntimeImpl *)impl)->nodes[Network::my_node_id].processors;
-    for(std::vector<ProcessorImpl *>::iterator it = procs.begin(); it != procs.end();
-        it++) {
-      Event e = (*it)->me.register_task(taskid, codedesc, prs);
-      events.push_back(e);
     }
 
-    Event merged = Event::merge_events(events);
-    log_taskreg.info() << "waiting on event: " << merged;
-    merged.external_wait();
-    return true;
+    bool Runtime::configure_from_command_line(std::vector<std::string> &cmdline,
+					      bool remove_realm_args /*= false*/)
+    {
+      assert(impl != 0);
+      if(remove_realm_args) {
+	return static_cast<RuntimeImpl *>(impl)->configure_from_command_line(cmdline);
+      } else {
+	// pass in a copy so we don't mess up the original
+	std::vector<std::string> cmdline_copy(cmdline);
+	return static_cast<RuntimeImpl *>(impl)->configure_from_command_line(cmdline_copy);
+      }
+    }
+
+    // starts up the runtime, allowing task/instance creation
+    void Runtime::start(void)
+    {
+      assert(impl != 0);
+      static_cast<RuntimeImpl *>(impl)->start();
+    }
+
+    void Runtime::elastic_start(void)
+    {
+      assert(impl != 0);
+      static_cast<RuntimeImpl *>(impl)->elastic_start();
+    }
+
+    // single-call version of the above three calls
+    bool Runtime::init(int *argc, char ***argv)
+    {
+      // if we get null pointers for argc and argv, use a local version so
+      //  any changes from network_init are seen in configure_from_command_line
+      int my_argc = 0;
+      char **my_argv = 0;
+      if(!argc) argc = &my_argc;
+      if(!argv) argv = &my_argv;
+
+      if(!network_init(argc, argv)) return false;
+      if(!create_configs(*argc, *argv))
+        return false;
+      if(!configure_from_command_line(*argc, *argv)) return false;
+      start();
+      return true;
+    }
+    
+    // this is now just a wrapper around Processor::register_task - consider switching to
+    //  that
+    bool Runtime::register_task(Processor::TaskFuncID taskid, Processor::TaskFuncPtr taskptr)
+    {
+      assert(impl != 0);
+
+      CodeDescriptor codedesc(taskptr);
+      ProfilingRequestSet prs;
+      std::vector<Event> events;
+      std::vector<ProcessorImpl *>& procs = ((RuntimeImpl *)impl)->nodes[Network::my_node_id].processors;
+      for (std::vector<ProcessorImpl *>::iterator it = procs.begin();
+           it != procs.end(); it++) {
+        Event e = (*it)->me.register_task(taskid, codedesc, prs);
+        events.push_back(e);
+      }
+
+      Event merged = Event::merge_events(events);
+      log_taskreg.info() << "waiting on event: " << merged;
+      merged.external_wait();
+      return true;
 #if 0
       if(((RuntimeImpl *)impl)->task_table.count(taskid) > 0)
 	return false;
@@ -604,171 +606,175 @@ namespace Realm {
       ((RuntimeImpl *)impl)->task_table[taskid] = taskptr;
       return true;
 #endif
-  }
+    }
 
-  bool Runtime::register_reduction(Event &event, ReductionOpID redop_id,
-                                   const ReductionOpUntyped *redop)
-  {
-    assert(impl != nullptr);
-    return reinterpret_cast<RuntimeImpl *>(impl)->register_reduction(event, redop_id,
-                                                                     redop);
-  }
+    bool Runtime::register_reduction(Event &event, ReductionOpID redop_id,
+                                     const ReductionOpUntyped *redop)
+    {
+      assert(impl != nullptr);
+      return reinterpret_cast<RuntimeImpl *>(impl)->register_reduction(event, redop_id,
+                                                                       redop);
+    }
 
-  Event RuntimeImpl::notify_register_reduction(ReductionOpID redop_id)
-  {
-    Event event = Event::NO_EVENT;
-    // If we're all alone, no need to notify anybody
-    if(Network::all_peers.size() == 0) {
+    Event RuntimeImpl::notify_register_reduction(ReductionOpID redop_id)
+    {
+      Event event = Event::NO_EVENT;
+      // If we're all alone, no need to notify anybody
+      if(Network::all_peers.size() == 0) {
+        return event;
+      }
+
+      std::vector<uintptr_t> remote_handles;
+      const Node &node = get_runtime()->nodes[Network::my_node_id];
+
+      // Run through all the dma channels, if they support this redop, then add them to
+      // the list
+      for(const Channel *ch : node.dma_channels) {
+        if(ch->supports_redop(redop_id)) {
+          remote_handles.push_back(reinterpret_cast<uintptr_t>(ch));
+        }
+      }
+
+      event = UserEvent::create_user_event();
+      ReductionNotification::broadcast(
+          Network::my_node_id, ReductionNotification{Network::my_node_id, redop_id, 0},
+          remote_handles.data(), remote_handles.size() * sizeof(remote_handles[0]),
+          event);
+
       return event;
     }
 
-    std::vector<uintptr_t> remote_handles;
-    const Node &node = get_runtime()->nodes[Network::my_node_id];
+    bool RuntimeImpl::register_reduction(Event &event, ReductionOpID redop_id,
+                                         const ReductionOpUntyped *redop)
+    {
+      ReductionOpUntyped *cloned = ReductionOpUntyped::clone_reduction_op(redop);
+      event = Event::NO_EVENT;
+      bool conflict = reduce_op_table.put(redop_id, cloned);
+      if(conflict) {
+        log_runtime.error() << "duplicate registration of reduction op " << redop_id;
+        free(cloned);
+        return false;
+      }
 
-    // Run through all the dma channels, if they support this redop, then add them to
-    // the list
-    for(const Channel *ch : node.dma_channels) {
-      if(ch->supports_redop(redop_id)) {
-        remote_handles.push_back(reinterpret_cast<uintptr_t>(ch));
+      event = notify_register_reduction(redop_id);
+
+      return true;
+    }
+
+    bool Runtime::register_custom_serdez(CustomSerdezID serdez_id, const CustomSerdezUntyped *serdez)
+    {
+      assert(impl != 0);
+
+      CustomSerdezUntyped *cloned = serdez->clone();
+      bool conflict = ((RuntimeImpl *)impl)->custom_serdez_table.put(serdez_id, cloned);
+      if(conflict) {
+	log_runtime.error() << "duplicate registration of custom serdez " << serdez_id;
+	delete cloned;
+	return false;
+      }
+
+      return true;
+    }
+
+    Event Runtime::collective_spawn(Processor target_proc, Processor::TaskFuncID task_id, 
+				    const void *args, size_t arglen,
+				    Event wait_on /*= Event::NO_EVENT*/, int priority /*= 0*/)
+    {
+      return ((RuntimeImpl *)impl)->collective_spawn(target_proc, task_id, args, arglen,
+						     wait_on, priority);
+    }
+
+    Event Runtime::collective_spawn_by_kind(Processor::Kind target_kind, Processor::TaskFuncID task_id, 
+					    const void *args, size_t arglen,
+					    bool one_per_node /*= false*/,
+					    Event wait_on /*= Event::NO_EVENT*/, int priority /*= 0*/)
+    {
+      return ((RuntimeImpl *)impl)->collective_spawn_by_kind(target_kind, task_id,
+							     args, arglen,
+							     one_per_node,
+							     wait_on, priority);
+    }
+
+    void Runtime::run(Processor::TaskFuncID task_id /*= 0*/,
+		      RunStyle style /*= ONE_TASK_ONLY*/,
+		      const void *args /*= 0*/, size_t arglen /*= 0*/,
+                      bool background /*= false*/)
+    {
+      ((RuntimeImpl *)impl)->run(task_id, style, args, arglen, background);
+    }
+  
+    void RuntimeImpl::DeferredShutdown::defer(RuntimeImpl *_runtime,
+					      Event wait_on)
+    {
+      runtime = _runtime;
+      EventImpl::add_waiter(wait_on, this);
+    }
+
+    void RuntimeImpl::DeferredShutdown::event_triggered(bool poisoned,
+							TimeLimit work_until)
+    {
+      // no real good way to deal with a poisoned shutdown precondition
+      if(poisoned) {
+	log_poison.fatal() << "HELP!  poisoned precondition for runtime shutdown";
+	assert(false);
+      }
+      log_runtime.info() << "triggering deferred shutdown";
+      runtime->initiate_shutdown();
+    }
+
+    void RuntimeImpl::DeferredShutdown::print(std::ostream& os) const
+    {
+      os << "deferred shutdown";
+    }
+
+    Event RuntimeImpl::DeferredShutdown::get_finish_event(void) const
+    {
+      return Event::NO_EVENT;
+    }
+
+    void Runtime::shutdown(Event wait_on /*= Event::NO_EVENT*/,
+			   int result_code /*= 0*/)
+    {
+      static_cast<RuntimeImpl *>(impl)->shutdown(wait_on, result_code);
+    }
+
+    void Runtime::elastic_shutdown(Event wait_on /*= Event::NO_EVENT*/, int result_code /*= 0*/)
+    {
+      static_cast<RuntimeImpl *>(impl)->elastic_shutdown(wait_on, result_code);
+    }
+
+    int Runtime::wait_for_shutdown(void)
+    {
+      int result = ((RuntimeImpl *)impl)->wait_for_shutdown();
+
+      // after the shutdown, we nuke the RuntimeImpl
+      delete ((RuntimeImpl *)impl);
+      impl = 0;
+      runtime_singleton = 0;
+
+      return result;
+    }
+
+    bool Runtime::create_configs(int argc, char **argv)
+    {
+      return ((RuntimeImpl *)impl)->create_configs(argc, argv);
+    }
+
+    ModuleConfig *Runtime::get_module_config(const std::string &name) const
+    {
+      return (static_cast<const RuntimeImpl *>(impl))->get_module_config(name);
+    }
+
+    Module *Runtime::get_module_untyped(const char *name)
+    {
+      if(runtime_singleton) {
+	return runtime_singleton->get_module_untyped(name);
+      } else {
+	// modules don't exist if we're not initialized yet
+	return 0;
       }
     }
 
-    event = UserEvent::create_user_event();
-    ReductionNotification::broadcast(
-        Network::my_node_id, ReductionNotification{Network::my_node_id, redop_id, 0},
-        remote_handles.data(), remote_handles.size() * sizeof(remote_handles[0]), event);
-
-    return event;
-  }
-
-  bool RuntimeImpl::register_reduction(Event &event, ReductionOpID redop_id,
-                                       const ReductionOpUntyped *redop)
-  {
-    ReductionOpUntyped *cloned = ReductionOpUntyped::clone_reduction_op(redop);
-    event = Event::NO_EVENT;
-    bool conflict = reduce_op_table.put(redop_id, cloned);
-    if(conflict) {
-      log_runtime.error() << "duplicate registration of reduction op " << redop_id;
-      free(cloned);
-      return false;
-    }
-
-    event = notify_register_reduction(redop_id);
-
-    return true;
-  }
-
-  bool Runtime::register_custom_serdez(CustomSerdezID serdez_id,
-                                       const CustomSerdezUntyped *serdez)
-  {
-    assert(impl != 0);
-
-    CustomSerdezUntyped *cloned = serdez->clone();
-    bool conflict = ((RuntimeImpl *)impl)->custom_serdez_table.put(serdez_id, cloned);
-    if(conflict) {
-      log_runtime.error() << "duplicate registration of custom serdez " << serdez_id;
-      delete cloned;
-      return false;
-    }
-
-    return true;
-  }
-
-  Event Runtime::collective_spawn(Processor target_proc, Processor::TaskFuncID task_id,
-                                  const void *args, size_t arglen,
-                                  Event wait_on /*= Event::NO_EVENT*/,
-                                  int priority /*= 0*/)
-  {
-    return ((RuntimeImpl *)impl)
-        ->collective_spawn(target_proc, task_id, args, arglen, wait_on, priority);
-  }
-
-  Event Runtime::collective_spawn_by_kind(Processor::Kind target_kind,
-                                          Processor::TaskFuncID task_id, const void *args,
-                                          size_t arglen, bool one_per_node /*= false*/,
-                                          Event wait_on /*= Event::NO_EVENT*/,
-                                          int priority /*= 0*/)
-  {
-    return ((RuntimeImpl *)impl)
-        ->collective_spawn_by_kind(target_kind, task_id, args, arglen, one_per_node,
-                                   wait_on, priority);
-  }
-
-  void Runtime::run(Processor::TaskFuncID task_id /*= 0*/,
-                    RunStyle style /*= ONE_TASK_ONLY*/, const void *args /*= 0*/,
-                    size_t arglen /*= 0*/, bool background /*= false*/)
-  {
-    ((RuntimeImpl *)impl)->run(task_id, style, args, arglen, background);
-  }
-
-  void RuntimeImpl::DeferredShutdown::defer(RuntimeImpl *_runtime, Event wait_on)
-  {
-    runtime = _runtime;
-    EventImpl::add_waiter(wait_on, this);
-  }
-
-  void RuntimeImpl::DeferredShutdown::event_triggered(bool poisoned, TimeLimit work_until)
-  {
-    // no real good way to deal with a poisoned shutdown precondition
-    if(poisoned) {
-      log_poison.fatal() << "HELP!  poisoned precondition for runtime shutdown";
-      assert(false);
-    }
-    log_runtime.info() << "triggering deferred shutdown";
-    runtime->initiate_shutdown();
-  }
-
-  void RuntimeImpl::DeferredShutdown::print(std::ostream &os) const
-  {
-    os << "deferred shutdown";
-  }
-
-  Event RuntimeImpl::DeferredShutdown::get_finish_event(void) const
-  {
-    return Event::NO_EVENT;
-  }
-
-  void Runtime::shutdown(Event wait_on /*= Event::NO_EVENT*/, int result_code /*= 0*/)
-  {
-    static_cast<RuntimeImpl *>(impl)->shutdown(wait_on, result_code);
-  }
-
-  void Runtime::elastic_shutdown(Event wait_on /*= Event::NO_EVENT*/, int result_code /*= 0*/)
-  {
-    static_cast<RuntimeImpl *>(impl)->elastic_shutdown(wait_on, result_code);
-  }
-
-  int Runtime::wait_for_shutdown(void)
-  {
-    int result = ((RuntimeImpl *)impl)->wait_for_shutdown();
-
-    // after the shutdown, we nuke the RuntimeImpl
-    delete((RuntimeImpl *)impl);
-    impl = 0;
-    runtime_singleton = 0;
-
-    return result;
-  }
-
-  bool Runtime::create_configs(int argc, char **argv)
-  {
-    return ((RuntimeImpl *)impl)->create_configs(argc, argv);
-  }
-
-  ModuleConfig *Runtime::get_module_config(const std::string &name) const
-  {
-    return (static_cast<const RuntimeImpl *>(impl))->get_module_config(name);
-  }
-
-  Module *Runtime::get_module_untyped(const char *name)
-  {
-    if(runtime_singleton) {
-      return runtime_singleton->get_module_untyped(name);
-    } else {
-      // modules don't exist if we're not initialized yet
-      return 0;
-    }
-  }
 
   ////////////////////////////////////////////////////////////////////////
   //
@@ -780,7 +786,7 @@ namespace Realm {
     //  fall back to kernel threading
     bool force_kernel_threads = false;
     unsigned long long job_id = 0;
-  }; // namespace Config
+  };
 
   CoreModuleConfig::CoreModuleConfig(const HardwareTopology *topo)
     : ModuleConfig("core")
@@ -810,13 +816,12 @@ namespace Realm {
     // we should be able to safely assume they are larger than 0,
     // otherwise, something is wrong with resource detection
     assert(res_num_cpus > 0 && res_sysmem_size > 0);
-    log_runtime.info("Discover resource cpu cores %d, sysmem %zu", res_num_cpus,
-                     res_sysmem_size);
+    log_runtime.info("Discover resource cpu cores %d, sysmem %zu", res_num_cpus, res_sysmem_size);
     resource_discover_finished = true;
     return resource_discover_finished;
   }
 
-  void CoreModuleConfig::configure_from_cmdline(std::vector<std::string> &cmdline)
+  void CoreModuleConfig::configure_from_cmdline(std::vector<std::string>& cmdline)
   {
     assert(finish_configured == false);
     // parse command line arguments
@@ -844,23 +849,25 @@ namespace Realm {
     else
       reg_ib_mem_size = 64 << 20; // for local transposes/serdez
 
+
     // This dummy network list is actually handled in network_init()
     // this is just here to help verify low-level arguement
     std::vector<std::string> dummy_network_list;
 
     cp.add_option_int_units("-ll:rsize", reg_mem_size, 'm')
-        .add_option_int_units("-ll:ib_rsize", reg_ib_mem_size, 'm')
-        .add_option_int_units("-ll:dsize", disk_mem_size, 'm')
-        .add_option_int("-ll:dma", dma_worker_threads)
-        .add_option_bool("-ll:pin_dma", pin_dma_threads)
-        .add_option_int("-ll:dummy_rsrv_ok", dummy_reservation_ok)
-        .add_option_bool("-ll:show_rsrv", show_reservations)
-        .add_option_int("-ll:ht_sharing", hyperthread_sharing)
-        .add_option_int_units("-ll:bitset_chunk", bitset_chunk_size, 'k')
-        .add_option_int("-ll:bitset_twolevel", bitset_twolevel);
+      .add_option_int_units("-ll:ib_rsize", reg_ib_mem_size, 'm')
+      .add_option_int_units("-ll:dsize", disk_mem_size, 'm')
+      .add_option_int("-ll:dma", dma_worker_threads)
+      .add_option_bool("-ll:pin_dma", pin_dma_threads)
+      .add_option_int("-ll:dummy_rsrv_ok", dummy_reservation_ok)
+      .add_option_bool("-ll:show_rsrv", show_reservations)
+      .add_option_int("-ll:ht_sharing", hyperthread_sharing)
+      .add_option_int_units("-ll:bitset_chunk", bitset_chunk_size, 'k')
+      .add_option_int("-ll:bitset_twolevel", bitset_twolevel);
+
 
     cp.add_option_string("-ll:eventtrace", event_trace_file)
-        .add_option_string("-ll:locktrace", lock_trace_file);
+      .add_option_string("-ll:locktrace", lock_trace_file);
 
 #ifdef NODE_LOGGING
     cp.add_option_string("-ll:prefix", RuntimeImpl::prefix);
@@ -874,8 +881,7 @@ namespace Realm {
     cp.add_option_stringlist("-ll:networks", dummy_network_list);
     cp.add_option_int_units("-ll:replheap", replheap_size);
 
-    // The default of path_cache_size is 0, when it is set to non-zero, the caching is
-    // enabled.
+    // The default of path_cache_size is 0, when it is set to non-zero, the caching is enabled.
     cp.add_option_int("-ll:path_cache_size", Config::path_cache_lru_size);
 
     bool cmdline_ok = cp.parse_command_line(cmdline);
@@ -887,22 +893,19 @@ namespace Realm {
 
 #ifndef EVENT_TRACING
     if(!event_trace_file.empty()) {
-      fprintf(stderr,
-              "WARNING: event tracing requested, but not enabled at compile time!\n");
+      fprintf(stderr, "WARNING: event tracing requested, but not enabled at compile time!\n");
     }
 #endif
 
 #ifndef LOCK_TRACING
     if(!lock_trace_file.empty()) {
-      fprintf(stderr,
-              "WARNING: lock tracing requested, but not enabled at compile time!\n");
+        fprintf(stderr, "WARNING: lock tracing requested, but not enabled at compile time!\n");
     }
 #endif
 
 #ifndef NODE_LOGGING
     if(!dummy_prefix.empty()) {
-      fprintf(stderr,
-              "WARNING: prefix set, but NODE_LOGGING not enabled at compile time!\n");
+      fprintf(stderr,"WARNING: prefix set, but NODE_LOGGING not enabled at compile time!\n");
     }
 #endif
   }
@@ -1021,8 +1024,10 @@ namespace Realm {
     runtime->add_dma_channel(new FileChannel(&runtime->bgwork));
     runtime->add_dma_channel(new DiskChannel(&runtime->bgwork));
     // "GASNet" means global memory here
-    runtime->add_dma_channel(new GASNetChannel(&runtime->bgwork, XFER_GASNET_READ));
-    runtime->add_dma_channel(new GASNetChannel(&runtime->bgwork, XFER_GASNET_WRITE));
+    runtime->add_dma_channel(new GASNetChannel(&runtime->bgwork,
+					       XFER_GASNET_READ));
+    runtime->add_dma_channel(new GASNetChannel(&runtime->bgwork,
+					       XFER_GASNET_WRITE));
   }
 
   // create any code translators provided by the module (default == do nothing)
@@ -1043,6 +1048,7 @@ namespace Realm {
 
     Module::cleanup();
   }
+
 
   ////////////////////////////////////////////////////////////////////////
   //
@@ -1076,903 +1082,904 @@ namespace Realm {
     machine = new MachineImpl(this);
   }
 
-  RuntimeImpl::~RuntimeImpl(void)
-  {
-    delete machine;
-    delete core_reservations;
-
-    delete_container_contents_free(reduce_op_table.map);
-    delete_container_contents(custom_serdez_table.map);
-  }
-
-  Memory RuntimeImpl::next_local_memory_id(void)
-  {
-    Memory m =
-        ID::make_memory(Network::my_node_id, num_local_memories++).convert<Memory>();
-    return m;
-  }
-
-  Memory RuntimeImpl::next_local_ib_memory_id(void)
-  {
-    Memory m = ID::make_ib_memory(Network::my_node_id, num_local_ib_memories++)
-                   .convert<Memory>();
-    return m;
-  }
-
-  Processor RuntimeImpl::next_local_processor_id(void)
-  {
-    Processor p = ID::make_processor(Network::my_node_id, num_local_processors++)
-                      .convert<Processor>();
-    return p;
-  }
-
-  void RuntimeImpl::add_memory(MemoryImpl *m)
-  {
-    // right now expect this to always be for the current node and the next memory ID
-    ID id(m->me);
-    assert(NodeID(id.memory_owner_node()) == Network::my_node_id);
-    assert(id.memory_mem_idx() == nodes[Network::my_node_id].memories.size());
-
-    nodes[Network::my_node_id].memories.push_back(m);
-  }
-
-  void RuntimeImpl::add_ib_memory(IBMemory *m)
-  {
-    // right now expect this to always be for the current node and the next memory ID
-    ID id(m->me);
-    assert(NodeID(id.memory_owner_node()) == Network::my_node_id);
-    assert(id.memory_mem_idx() == nodes[Network::my_node_id].ib_memories.size());
-
-    nodes[Network::my_node_id].ib_memories.push_back(m);
-  }
-
-  void RuntimeImpl::add_processor(ProcessorImpl *p)
-  {
-    // right now expect this to always be for the current node and the next processor ID
-    ID id(p->me);
-    assert(NodeID(id.proc_owner_node()) == Network::my_node_id);
-    assert(id.proc_proc_idx() == nodes[Network::my_node_id].processors.size());
-
-    nodes[Network::my_node_id].processors.push_back(p);
-  }
-
-  void RuntimeImpl::add_dma_channel(Channel *c)
-  {
-    nodes[c->node].dma_channels.push_back(c);
-  }
-
-  void RuntimeImpl::add_code_translator(CodeTranslator *t)
-  {
-    code_translators.push_back(t);
-  }
-
-  void RuntimeImpl::add_proc_mem_affinity(const Machine::ProcessorMemoryAffinity &pma)
-  {
-    machine->add_proc_mem_affinity(pma);
-  }
-
-  CoreReservationSet &RuntimeImpl::core_reservation_set(void)
-  {
-    assert(core_reservations);
-    return *core_reservations;
-  }
-
-  const std::vector<CodeTranslator *> &RuntimeImpl::get_code_translators(void) const
-  {
-    return code_translators;
-  }
-
-  Module *RuntimeImpl::get_module_untyped(const char *name) const
-  {
-    if(!modules_created) {
-      log_runtime.fatal() << "request for '" << name
-                          << "' module before all modules have been created";
-      abort();
-    }
-
-    // TODO: worth building a map here instead?
-    for(std::vector<Module *>::const_iterator it = modules.begin(); it != modules.end();
-        ++it)
-      if(!strcmp(name, (*it)->get_name().c_str()))
-        return *it;
-
-    for(std::vector<NetworkModule *>::const_iterator it = network_modules.begin();
-        it != network_modules.end(); ++it)
-      if(!strcmp(name, (*it)->get_name().c_str()))
-        return *it;
-
-    return 0;
-  }
-
-  static void add_proc_mem_affinities(MachineImpl *machine,
-                                      const std::set<Processor> &procs,
-                                      const std::set<Memory> &mems, int bandwidth,
-                                      int latency)
-  {
-    for(std::set<Processor>::const_iterator it1 = procs.begin(); it1 != procs.end();
-        it1++)
-      for(std::set<Memory>::const_iterator it2 = mems.begin(); it2 != mems.end(); it2++) {
-        std::vector<Machine::ProcessorMemoryAffinity> pmas;
-        machine->get_proc_mem_affinity(pmas, *it1, *it2);
-        if(!pmas.empty())
-          continue;
-        log_runtime.debug() << "adding missing affinity: " << *it1 << " " << *it2 << " "
-                            << bandwidth << " " << latency;
-        Machine::ProcessorMemoryAffinity pma;
-        pma.p = *it1;
-        pma.m = *it2;
-        pma.bandwidth = bandwidth;
-        pma.latency = latency;
-        machine->add_proc_mem_affinity(pma);
-      }
-  }
-
-  bool RuntimeImpl::network_init(int *argc, char ***argv)
-  {
-    // if we're given empty or non-existent argc/argv, start from a
-    //  dummy command line with a single string (which is supposed to be
-    //  the name of the binary) so that the network module and/or the
-    //  REALM_DEFAULT_ARGS code below can safely modify it - (we can only
-    //  copy it back if the pointers are not null
-    int local_argc;
-    const char **local_argv;
-    if(argc && *argc && argv) {
-      local_argc = *argc;
-      local_argv = *const_cast<const char ***>(argv);
-    } else {
-      static const char *dummy_cmdline_args[] = {"unknown-binary", 0};
-
-      local_argc = 1;
-      local_argv = dummy_cmdline_args;
-    }
-
-    // TODO: this is here to match old behavior, but it'd probably be
-    //  better to have REALM_DEFAULT_ARGS only be visible to Realm...
-
-    // if the REALM_DEFAULT_ARGS environment variable is set, these arguments
-    //  are inserted at the FRONT of the command line (so they may still be
-    //  overridden by actual command line args)
+    RuntimeImpl::~RuntimeImpl(void)
     {
-      const char *e = getenv("REALM_DEFAULT_ARGS");
-      if(e) {
-        // find arguments first, then construct new argv of right size
-        std::vector<const char *> starts, ends;
-        while(*e) {
-          if(isspace(*e)) {
-            e++;
-            continue;
-          }
-          if(*e == '\'') {
-            // single quoted string
-            e++;
-            assert(*e);
-            starts.push_back(e);
-            // read until next single quote
-            while(*e && (*e != '\''))
-              e++;
-            ends.push_back(e++);
-            assert(!*e || isspace(*e));
-            continue;
-          }
-          if(*e == '\"') {
-            // double quoted string
-            e++;
-            assert(*e);
-            starts.push_back(e);
-            // read until next double quote
-            while(*e && (*e != '\"'))
-              e++;
-            ends.push_back(e++);
-            assert(!*e || isspace(*e));
-            continue;
-          }
-          // no quotes - just take until next whitespace
-          starts.push_back(e);
-          while(*e && !isspace(*e))
-            e++;
-          ends.push_back(e);
-        }
-        if(!starts.empty()) {
-          int new_argc = local_argc + starts.size();
-          const char **new_argv =
-              (const char **)(malloc((new_argc + 1) * sizeof(char *)));
-          // new args go after argv[0] and anything that looks like a
-          //  positional argument (i.e. doesn't start with -)
-          int before_new = 0;
-          while(before_new < local_argc) {
-            if((before_new > 0) && (local_argv[before_new][0] == '-'))
-              break;
-            new_argv[before_new] = local_argv[before_new];
-            before_new++;
-          }
-          for(size_t i = 0; i < starts.size(); i++)
-            new_argv[i + before_new] = strndup(starts[i], ends[i] - starts[i]);
-          for(int i = before_new; i < local_argc; i++)
-            new_argv[i + starts.size()] = local_argv[i];
-          new_argv[new_argc] = 0;
+      delete machine;
+      delete core_reservations;
 
-          local_argc = new_argc;
-          local_argv = new_argv;
-          // We intentionally leak this allocation so tell leak sanitizer
+      delete_container_contents_free(reduce_op_table.map);
+      delete_container_contents(custom_serdez_table.map);
+    }
+
+    Memory RuntimeImpl::next_local_memory_id(void)
+    {
+      Memory m = ID::make_memory(Network::my_node_id,
+				 num_local_memories++).convert<Memory>();
+      return m;
+    }
+
+    Memory RuntimeImpl::next_local_ib_memory_id(void)
+    {
+      Memory m = ID::make_ib_memory(Network::my_node_id,
+                                    num_local_ib_memories++).convert<Memory>();
+      return m;
+    }
+
+    Processor RuntimeImpl::next_local_processor_id(void)
+    {
+      Processor p = ID::make_processor(Network::my_node_id, 
+				       num_local_processors++).convert<Processor>();
+      return p;
+    }
+
+    void RuntimeImpl::add_memory(MemoryImpl *m)
+    {
+      // right now expect this to always be for the current node and the next memory ID
+      ID id(m->me);
+      assert(NodeID(id.memory_owner_node()) == Network::my_node_id);
+      assert(id.memory_mem_idx() == nodes[Network::my_node_id].memories.size());
+
+      nodes[Network::my_node_id].memories.push_back(m);
+    }
+
+    void RuntimeImpl::add_ib_memory(IBMemory *m)
+    {
+      // right now expect this to always be for the current node and the next memory ID
+      ID id(m->me);
+      assert(NodeID(id.memory_owner_node()) == Network::my_node_id);
+      assert(id.memory_mem_idx() == nodes[Network::my_node_id].ib_memories.size());
+
+      nodes[Network::my_node_id].ib_memories.push_back(m);
+    }
+
+    void RuntimeImpl::add_processor(ProcessorImpl *p)
+    {
+      // right now expect this to always be for the current node and the next processor ID
+      ID id(p->me);
+      assert(NodeID(id.proc_owner_node()) == Network::my_node_id);
+      assert(id.proc_proc_idx() == nodes[Network::my_node_id].processors.size());
+
+      nodes[Network::my_node_id].processors.push_back(p);
+    }
+
+    void RuntimeImpl::add_dma_channel(Channel *c)
+    {
+      nodes[c->node].dma_channels.push_back(c);
+    }
+
+    void RuntimeImpl::add_code_translator(CodeTranslator *t)
+    {
+      code_translators.push_back(t);
+    }
+
+    void RuntimeImpl::add_proc_mem_affinity(const Machine::ProcessorMemoryAffinity& pma)
+    {
+      machine->add_proc_mem_affinity(pma);
+    }
+
+    CoreReservationSet& RuntimeImpl::core_reservation_set(void)
+    {
+      assert(core_reservations);
+      return *core_reservations;
+    }
+
+    const std::vector<CodeTranslator *>& RuntimeImpl::get_code_translators(void) const
+    {
+      return code_translators;
+    }
+
+    Module *RuntimeImpl::get_module_untyped(const char *name) const
+    {
+      if(!modules_created) {
+        log_runtime.fatal() << "request for '" << name
+                            << "' module before all modules have been created";
+        abort();
+      }
+
+      // TODO: worth building a map here instead?
+      for(std::vector<Module *>::const_iterator it = modules.begin();
+          it != modules.end();
+          ++it)
+        if(!strcmp(name, (*it)->get_name().c_str()))
+          return *it;
+
+      for(std::vector<NetworkModule *>::const_iterator it = network_modules.begin();
+          it != network_modules.end();
+          ++it)
+        if(!strcmp(name, (*it)->get_name().c_str()))
+          return *it;
+
+      return 0;
+    }
+
+    static void add_proc_mem_affinities(MachineImpl *machine,
+					const std::set<Processor>& procs,
+					const std::set<Memory>& mems,
+					int bandwidth,
+					int latency)
+    {
+      for(std::set<Processor>::const_iterator it1 = procs.begin();
+	  it1 != procs.end();
+	  it1++) 
+	for(std::set<Memory>::const_iterator it2 = mems.begin();
+	    it2 != mems.end();
+	    it2++) {
+	  std::vector<Machine::ProcessorMemoryAffinity> pmas;
+	  machine->get_proc_mem_affinity(pmas, *it1, *it2);
+	  if(!pmas.empty()) continue;
+	  log_runtime.debug() << "adding missing affinity: " << *it1 << " " << *it2 << " " << bandwidth << " " << latency;
+	  Machine::ProcessorMemoryAffinity pma;
+	  pma.p = *it1;
+	  pma.m = *it2;
+	  pma.bandwidth = bandwidth;
+	  pma.latency = latency;
+	  machine->add_proc_mem_affinity(pma);
+	}
+    }
+
+    bool RuntimeImpl::network_init(int *argc, char ***argv)
+    {
+      // if we're given empty or non-existent argc/argv, start from a
+      //  dummy command line with a single string (which is supposed to be
+      //  the name of the binary) so that the network module and/or the
+      //  REALM_DEFAULT_ARGS code below can safely modify it - (we can only
+      //  copy it back if the pointers are not null
+      int local_argc;
+      const char **local_argv;
+      if(argc && *argc && argv) {
+        local_argc = *argc;
+        local_argv = *const_cast<const char ***>(argv);
+      } else {
+        static const char *dummy_cmdline_args[] = { "unknown-binary", 0 };
+
+        local_argc = 1;
+        local_argv = dummy_cmdline_args;
+      }
+
+      // TODO: this is here to match old behavior, but it'd probably be
+      //  better to have REALM_DEFAULT_ARGS only be visible to Realm...
+
+      // if the REALM_DEFAULT_ARGS environment variable is set, these arguments
+      //  are inserted at the FRONT of the command line (so they may still be
+      //  overridden by actual command line args)
+      {
+	const char *e = getenv("REALM_DEFAULT_ARGS");
+	if(e) {
+	  // find arguments first, then construct new argv of right size
+	  std::vector<const char *> starts, ends;
+	  while(*e) {
+	    if(isspace(*e)) { e++; continue; }
+	    if(*e == '\'') {
+	      // single quoted string
+	      e++; assert(*e);
+	      starts.push_back(e);
+	      // read until next single quote
+	      while(*e && (*e != '\'')) e++;
+	      ends.push_back(e++);
+	      assert(!*e || isspace(*e));
+	      continue;
+	    }
+	    if(*e == '\"') {
+	      // double quoted string
+	      e++; assert(*e);
+	      starts.push_back(e);
+	      // read until next double quote
+	      while(*e && (*e != '\"')) e++;
+	      ends.push_back(e++);
+	      assert(!*e || isspace(*e));
+	      continue;
+	    }
+	    // no quotes - just take until next whitespace
+	    starts.push_back(e);
+	    while(*e && !isspace(*e)) e++;
+	    ends.push_back(e);
+	  }
+	  if(!starts.empty()) {
+	    int new_argc = local_argc + starts.size();
+	    const char **new_argv = (const char **)(malloc((new_argc + 1) * sizeof(char *)));
+            // new args go after argv[0] and anything that looks like a
+            //  positional argument (i.e. doesn't start with -)
+            int before_new = 0;
+            while(before_new < local_argc) {
+              if((before_new > 0) && (local_argv[before_new][0] == '-'))
+                break;
+              new_argv[before_new] = local_argv[before_new];
+              before_new++;
+            }
+            for(size_t i = 0; i < starts.size(); i++)
+              new_argv[i + before_new] = strndup(starts[i], ends[i] - starts[i]);
+            for(int i = before_new; i < local_argc; i++)
+              new_argv[i + starts.size()] = local_argv[i];
+            new_argv[new_argc] = 0;
+
+            local_argc = new_argc;
+            local_argv = new_argv;
+            // We intentionally leak this allocation so tell leak sanitizer
 #ifdef __SANITIZE_ADDRESS__
 #if __SANITIZE_ADDRESS__
-          __lsan_ignore_object(new_argv);
+            __lsan_ignore_object(new_argv);
 #endif
 #elif defined(__has_feature)
 #if __has_feature(leak_sanitizer)
-          __lsan_ignore_object(new_argv);
+            __lsan_ignore_object(new_argv);
 #endif
 #endif
+          }
         }
       }
+
+      module_registrar.create_network_modules(network_modules, &local_argc, &local_argv);
+
+      if(argc) *argc = local_argc;
+      if(argv) *argv = const_cast<char **>(local_argv);
+
+      return true;
     }
 
-    module_registrar.create_network_modules(network_modules, &local_argc, &local_argv);
-
-    if(argc)
-      *argc = local_argc;
-    if(argv)
-      *argv = const_cast<char **>(local_argv);
-
-    return true;
-  }
-
-  template <typename T>
-  static bool serialize_announce(T &serializer, const Machine::ProcessInfo *process_info,
-                                 NetworkModule *net)
-  {
-    bool ok =
-        ((serializer << NODE_ANNOUNCE_PROCESS_INFO) && (serializer << *process_info));
-    return ok;
-  }
-
-  template <typename T>
-  static bool serialize_announce(T &serializer, const ProcessorImpl *impl,
-                                 NetworkModule *net)
-  {
-    Processor p = impl->me;
-    Processor::Kind k = impl->me.kind();
-    int num_cores = impl->num_cores;
-
-    bool ok = ((serializer << NODE_ANNOUNCE_PROC) && (serializer << p) &&
-               (serializer << k) && (serializer << num_cores));
-    return ok;
-  }
-
-  template <typename T>
-  static bool serialize_announce(T &serializer, const MemoryImpl *impl,
-                                 NetworkModule *net)
-  {
-    Memory m = impl->me;
-    Memory::Kind k = impl->me.kind();
-    size_t size = impl->size;
-    const ByteArray *rdma_info = impl->get_rdma_info(net);
-
-    bool ok =
-        ((serializer << NODE_ANNOUNCE_MEM) && (serializer << m) && (serializer << k) &&
-         (serializer << size) && (serializer << (rdma_info != 0)));
-    if(rdma_info != 0)
-      ok = ok && (serializer << *rdma_info);
-    return ok;
-  }
-
-  template <typename T>
-  static bool serialize_announce(T &serializer, const IBMemory *ibmem, NetworkModule *net)
-  {
-    Memory m = ibmem->me;
-    Memory::Kind k = ibmem->me.kind();
-    size_t size = ibmem->size;
-    const ByteArray *rdma_info = ibmem->get_rdma_info(net);
-
-    bool ok =
-        ((serializer << NODE_ANNOUNCE_IB_MEM) && (serializer << m) && (serializer << k) &&
-         (serializer << size) && (serializer << (rdma_info != 0)));
-    if(rdma_info != 0)
-      ok = ok && (serializer << *rdma_info);
-    return ok;
-  }
-
-  template <typename T>
-  static bool serialize_announce(T &serializer,
-                                 const Machine::ProcessorMemoryAffinity &pma,
-                                 NetworkModule *net)
-  {
-    bool ok = ((serializer << NODE_ANNOUNCE_PMA) && (serializer << pma));
-    return ok;
-  }
-
-  template <typename T>
-  static bool serialize_announce(T &serializer, const Channel *ch, NetworkModule *net)
-  {
-    RemoteChannelInfo *rci = ch->construct_remote_info();
-    bool ok = ((serializer << NODE_ANNOUNCE_DMA_CHANNEL) && (serializer << *rci));
-    // TODO: iterate the redop table, check for support and add it here.
-    if(ch->supports_redop(0)) {
-      ok = ((serializer << size_t(1)) && (serializer << ReductionOpID(0)));
-    } else {
-      ok = (serializer << size_t(0));
-    }
-    delete rci;
-    return ok;
-  }
-
-  template <typename T, typename Elem>
-  static bool serialize_announce(T &serializer, const std::vector<Elem> &elements,
-                                 NetworkModule *net)
-  {
-    // TODO: rather than have each element push a tag, we can instead push a tag and
-    // size once here, compacting the announcement data
-    bool ok = true;
-    for(const Elem &element : elements) {
-      ok = serialize_announce(serializer, element, net);
-      if(!ok) {
-        break;
-      }
-    }
-    return ok;
-  }
-
-  template <typename T>
-  static bool serialize_announce(T &serializer, const Node *node,
-                                 const MachineImpl *machine_impl, NetworkModule *net)
-  {
-    bool ok = true;
-
-    // TODO: EXPERIMENTAL
-    ok = ok && serialize_announce(serializer, node->memories, net);
-    ok = ok && serialize_announce(serializer, node->ib_memories, net);
-    if(!ok)
-      return false;
-
-    std::vector<Machine::ProcessorMemoryAffinity> pmas;
-    ok = serialize_announce(serializer, node->processors, net);
-    if(!ok) {
+    template <typename T>
+    static bool serialize_announce(T &serializer,
+                                   const Machine::ProcessInfo *process_info,
+                                   NetworkModule *net)
+    {
+      bool ok =
+          ((serializer << NODE_ANNOUNCE_PROCESS_INFO) && (serializer << *process_info));
       return ok;
     }
-    for(ProcessorImpl *proc : node->processors) {
-      get_machine()->get_proc_mem_affinity(pmas, proc->me);
-      ok = serialize_announce(serializer, pmas, net);
+
+    template <typename T>
+    static bool serialize_announce(T &serializer, const ProcessorImpl *impl,
+                                   NetworkModule *net)
+    {
+      Processor p = impl->me;
+      Processor::Kind k = impl->me.kind();
+      int num_cores = impl->num_cores;
+
+      bool ok = ((serializer << NODE_ANNOUNCE_PROC) &&
+                 (serializer << p) &&
+                 (serializer << k) &&
+                 (serializer << num_cores));
+      return ok;
+    }
+
+    template <typename T>
+    static bool serialize_announce(T &serializer, const MemoryImpl *impl,
+                                   NetworkModule *net)
+    {
+      Memory m = impl->me;
+      Memory::Kind k = impl->me.kind();
+      size_t size = impl->size;
+      const ByteArray *rdma_info = impl->get_rdma_info(net);
+
+      bool ok = ((serializer << NODE_ANNOUNCE_MEM) &&
+                 (serializer << m) &&
+                 (serializer << k) &&
+                 (serializer << size) &&
+                 (serializer << (rdma_info != 0)));
+      if(rdma_info != 0)
+        ok = ok && (serializer << *rdma_info);
+      return ok;
+    }
+
+    template <typename T>
+    static bool serialize_announce(T &serializer, const IBMemory *ibmem,
+                                   NetworkModule *net)
+    {
+      Memory m = ibmem->me;
+      Memory::Kind k = ibmem->me.kind();
+      size_t size = ibmem->size;
+      const ByteArray *rdma_info = ibmem->get_rdma_info(net);
+
+      bool ok = ((serializer << NODE_ANNOUNCE_IB_MEM) &&
+                 (serializer << m) &&
+                 (serializer << k) &&
+                 (serializer << size) &&
+                 (serializer << (rdma_info != 0)));
+      if(rdma_info != 0)
+        ok = ok && (serializer << *rdma_info);
+      return ok;
+    }
+
+    template <typename T>
+    static bool serialize_announce(T& serializer,
+                                   const Machine::ProcessorMemoryAffinity& pma,
+                                   NetworkModule *net)
+    {
+      bool ok = ((serializer << NODE_ANNOUNCE_PMA) && (serializer << pma));
+      return ok;
+    }
+
+    template <typename T>
+    static bool serialize_announce(T &serializer, const Channel *ch, NetworkModule *net)
+    {
+      RemoteChannelInfo *rci = ch->construct_remote_info();
+      bool ok = ((serializer << NODE_ANNOUNCE_DMA_CHANNEL) &&
+                 (serializer << *rci));
+      // TODO: iterate the redop table, check for support and add it here.
+      if(ch->supports_redop(0)) {
+        ok = ((serializer << size_t(1)) && (serializer << ReductionOpID(0)));
+      } else {
+        ok = (serializer << size_t(0));
+      }
+      delete rci;
+      return ok;
+    }
+
+    template <typename T, typename Elem>
+    static bool serialize_announce(T &serializer, const std::vector<Elem> &elements,
+                                   NetworkModule *net)
+    {
+      // TODO: rather than have each element push a tag, we can instead push a tag and
+      // size once here, compacting the announcement data
+      bool ok = true;
+      for(const Elem &element : elements) {
+        ok = serialize_announce(serializer, element, net);
+        if(!ok) {
+          break;
+        }
+      }
+      return ok;
+    }
+
+    template <typename T>
+    static bool serialize_announce(T &serializer, const Node *node,
+                                   const MachineImpl *machine_impl, NetworkModule *net)
+    {
+      bool ok = true;
+
+      // TODO: FIX ME
+      ok = ok && serialize_announce(serializer, node->memories, net);
+      ok = ok && serialize_announce(serializer, node->ib_memories, net);
+
       if(!ok) {
         return ok;
       }
-    }
-    ok = serialize_announce(serializer, node->dma_channels, net);
-    if(!ok) {
+
+      std::vector<Machine::ProcessorMemoryAffinity> pmas;
+      ok = serialize_announce(serializer, node->processors, net);
+      if(!ok) {
+        return ok;
+      }
+      for(ProcessorImpl *proc : node->processors) {
+        get_machine()->get_proc_mem_affinity(pmas, proc->me);
+        ok = serialize_announce(serializer, pmas, net);
+        if(!ok) {
+          return ok;
+        }
+      }
+      ok = serialize_announce(serializer, node->dma_channels, net);
+      if(!ok) {
+        return ok;
+      }
+      ok = serialize_announce(
+          serializer, (machine_impl->nodeinfos.at(Network::my_node_id))->process_info,
+          net);
       return ok;
     }
-    ok = serialize_announce(
-        serializer, (machine_impl->nodeinfos.at(Network::my_node_id))->process_info, net);
-    return ok;
-  }
 
-  bool serialize_announcement(Realm::Serialization::DynamicBufferSerializer &serializer,
-                              const Node *node, const MachineImpl *machine_impl,
-                              NetworkModule *net)
-  {
-    return serialize_announce<Realm::Serialization::DynamicBufferSerializer>(
-        serializer, node, machine_impl, net);
-  }
-
-  /// Internal auxilary class to handle active messages for sharing CPU memory objects
-  struct ShareableMemoryMessageHandler {
-    struct Payload {
-      realm_id_t memory_id; // The memory which is being shared
-      size_t sz;            // The size of the memory
-    };
-    static Mutex mutex;
-    static Mutex::CondVar cond_var;
-    static size_t num_msgs_handled;
-    static void handle_message(NodeID sender, const ShareableMemoryMessageHandler &args,
-                               const void *data, size_t len)
+    bool serialize_announcement(Realm::Serialization::DynamicBufferSerializer &serializer,
+                                const Node *node, const MachineImpl *machine_impl,
+                                NetworkModule *net)
     {
-      const Payload *msg = reinterpret_cast<const Payload *>(data);
-      const Payload *end_msg = msg + len / sizeof(*msg);
-      // Iterate all the payloads passed here.
-      AutoLock<> al(ShareableMemoryMessageHandler::mutex);
-      for(; msg != end_msg; ++msg) {
-        assert(ID(msg->memory_id).is_memory() && "Parsed id is not a memory id");
-        assert((sender == NodeID(ID(msg->memory_id).memory_owner_node())) &&
-               "Sender is not owner of sent memory");
-        SharedMemoryInfo shm;
-        std::string path = get_shm_name(msg->memory_id);
+      return serialize_announce<Realm::Serialization::DynamicBufferSerializer>(
+          serializer, node, machine_impl, net);
+    }
 
-        if(!SharedMemoryInfo::open(shm, path, msg->sz)) {
-          log_runtime.warning() << "Failed to open shared memory " << ID(msg->memory_id)
-                                << ':' << msg->sz << ' ' << path;
-        } else {
-          get_runtime()->remote_shared_memory_mappings.emplace(msg->memory_id,
-                                                               std::move(shm));
+    /// Internal auxilary class to handle active messages for sharing CPU memory objects
+    struct ShareableMemoryMessageHandler {
+      struct Payload {
+        realm_id_t memory_id; // The memory which is being shared
+        size_t sz;            // The size of the memory
+      };
+      static Mutex mutex;
+      static Mutex::CondVar cond_var;
+      static size_t num_msgs_handled;
+      static void handle_message(NodeID sender, const ShareableMemoryMessageHandler &args,
+                                 const void *data, size_t len)
+      {
+        const Payload *msg = reinterpret_cast<const Payload *>(data);
+        const Payload *end_msg = msg + len / sizeof(*msg);
+        // Iterate all the payloads passed here.
+        AutoLock<> al(ShareableMemoryMessageHandler::mutex);
+        for (; msg != end_msg; ++msg) {
+          assert(ID(msg->memory_id).is_memory() && "Parsed id is not a memory id");
+          assert((sender == NodeID(ID(msg->memory_id).memory_owner_node())) &&
+                 "Sender is not owner of sent memory");
+          SharedMemoryInfo shm;
+          std::string path = get_shm_name(msg->memory_id);
+
+          if(!SharedMemoryInfo::open(shm, path, msg->sz)) {
+            log_runtime.warning() << "Failed to open shared memory " << ID(msg->memory_id)
+                                  << ':' << msg->sz << ' ' << path;
+          }
+          else {
+            get_runtime()->remote_shared_memory_mappings.emplace(msg->memory_id, std::move(shm));
+          }
+        }
+        // Count the number of messages handled, there should be one for every shareable
+        // peer
+        num_msgs_handled++;
+        if (num_msgs_handled == Network::shared_peers.size()) {
+          // All done opening shared memory regions for all the shared peers, wake up the
+          // runtime initialization
+          ShareableMemoryMessageHandler::cond_var.signal();
         }
       }
-      // Count the number of messages handled, there should be one for every shareable
-      // peer
-      num_msgs_handled++;
-      if(num_msgs_handled == Network::shared_peers.size()) {
-        // All done opening shared memory regions for all the shared peers, wake up the
-        // runtime initialization
-        ShareableMemoryMessageHandler::cond_var.signal();
-      }
-    }
-  };
-  Mutex ShareableMemoryMessageHandler::mutex;
-  Mutex::CondVar
-      ShareableMemoryMessageHandler::cond_var(ShareableMemoryMessageHandler::mutex);
-  size_t ShareableMemoryMessageHandler::num_msgs_handled = 0;
+    };
+    Mutex ShareableMemoryMessageHandler::mutex;
+    Mutex::CondVar ShareableMemoryMessageHandler::cond_var(ShareableMemoryMessageHandler::mutex);
+    size_t ShareableMemoryMessageHandler::num_msgs_handled = 0;
 
-  static ActiveMessageHandlerReg<ShareableMemoryMessageHandler>
-      shareable_memory_message_handler;
+    static ActiveMessageHandlerReg<ShareableMemoryMessageHandler> shareable_memory_message_handler;
 
 #if defined(REALM_USE_SHM) && defined(REALM_USE_ANONYMOUS_SHARED_MEMORY)
-  static std::string get_mailbox_name(NodeID id)
-  {
-    return std::to_string(id) + '.' + std::to_string(Config::job_id);
-  }
+    static std::string get_mailbox_name(NodeID id) {
+      return std::to_string(id) + '.' + std::to_string(Config::job_id);
+    }
 #endif
 
-  void RuntimeImpl::create_shared_peers(void)
-  {
+    void RuntimeImpl::create_shared_peers(void)
+    {
 #if defined(REALM_USE_SHM) && defined(REALM_USE_ANONYMOUS_SHARED_MEMORY)
-    std::vector<OsHandle> handles;
-    OsHandle all_node_mailbox =
-        Realm::ipc_mailbox_create(get_mailbox_name(Network::my_node_id));
-    Network::barrier(); // Wait for everyone to create their ipc mailboxes
-    if(all_node_mailbox != Realm::INVALID_OS_HANDLE) {
-      NodeSet send_nodes;
-      for(NodeID node_id : Network::all_peers) {
-        std::string slot_name = get_mailbox_name(node_id);
-        if(!Realm::ipc_mailbox_send(all_node_mailbox, slot_name, handles,
-                                    &(Network::my_node_id), sizeof(NodeID))) {
-          log_runtime.info("Create shared_peers using ipc mailbox, but unable to "
-                           "send msg to node %u, skipping",
-                           (unsigned)node_id);
-          continue;
+      std::vector<OsHandle> handles;
+      OsHandle all_node_mailbox =
+          Realm::ipc_mailbox_create(get_mailbox_name(Network::my_node_id));
+      Network::barrier(); // Wait for everyone to create their ipc mailboxes
+      if(all_node_mailbox != Realm::INVALID_OS_HANDLE) {
+        NodeSet send_nodes;
+        for(NodeID node_id : Network::all_peers) {
+          std::string slot_name = get_mailbox_name(node_id);
+          if(!Realm::ipc_mailbox_send(all_node_mailbox, slot_name, handles,
+                                      &(Network::my_node_id), sizeof(NodeID))) {
+            log_runtime.info("Create shared_peers using ipc mailbox, but unable to "
+                             "send msg to node %u, skipping",
+                             (unsigned)node_id);
+            continue;
+          }
+          send_nodes.add(node_id);
         }
-        send_nodes.add(node_id);
-      }
-      for(NodeID node_id : send_nodes) {
-        NodeID recv_data = 0;
-        size_t data_sz;
-        std::string slot_name = get_mailbox_name(node_id);
-        if(!Realm::ipc_mailbox_recv(all_node_mailbox, slot_name, handles, &recv_data,
-                                    data_sz, sizeof(NodeID))) {
-          log_runtime.warning("Create shared_peers using ipc mailbox, but unable to "
-                              "recv msg from node %u, skipping",
-                              (unsigned)node_id);
-          continue;
+        for(NodeID node_id : send_nodes) {
+          NodeID recv_data = 0;
+          size_t data_sz;
+          std::string slot_name = get_mailbox_name(node_id);
+          if(!Realm::ipc_mailbox_recv(all_node_mailbox, slot_name, handles, &recv_data,
+                                      data_sz, sizeof(NodeID))) {
+            log_runtime.warning("Create shared_peers using ipc mailbox, but unable to "
+                                "recv msg from node %u, skipping",
+                                (unsigned)node_id);
+            continue;
+          }
+          assert(send_nodes.contains(recv_data) && "Received from unexpected node");
+          Network::shared_peers.add(node_id);
         }
-        assert(send_nodes.contains(recv_data) && "Received from unexpected node");
-        Network::shared_peers.add(node_id);
+        shared_peers_use_network_module = false;
+      } else {
+        log_runtime.warning("Failed to create ipc mailbox for building shared_peers, so "
+                            "fall back to use network modules");
       }
-      shared_peers_use_network_module = false;
-    } else {
-      log_runtime.warning("Failed to create ipc mailbox for building shared_peers, so "
-                          "fall back to use network modules");
-    }
 
-    // Wait for everyone to complete coordinating their shared_peers
-    Network::barrier();
-    close_handle(all_node_mailbox);
+      // Wait for everyone to complete coordinating their shared_peers
+      Network::barrier();
+      close_handle(all_node_mailbox);
 #endif
-    if(shared_peers_use_network_module) {
-      Network::shared_peers.empty();
-      for(NetworkModule *module : network_modules) {
-        module->get_shared_peers(Network::shared_peers);
+      if(shared_peers_use_network_module) {
+        Network::shared_peers.empty();
+        for(NetworkModule *module : network_modules) {
+          module->get_shared_peers(Network::shared_peers);
+        }
       }
     }
-  }
 
-  bool RuntimeImpl::share_memories(void)
-  {
+    bool RuntimeImpl::share_memories(void)
+    {
 #if defined(REALM_USE_SHM)
 #if defined(REALM_USE_ANONYMOUS_SHARED_MEMORY)
-    // Temporary structure defining the layout of the data sent along in the mailbox
-    struct MessagePayload {
-      realm_id_t mem;
-      size_t size;
-      MessagePayload() {}
-      MessagePayload(realm_id_t _mem, size_t _size)
-        : mem(_mem)
-        , size(_size)
-      {}
-    };
-    std::vector<OsHandle> my_handles, peer_handles;
-    std::vector<MessagePayload> my_mem_ids, peer_mem_ids;
-    static const size_t MAX_PEER_MEMORIES = 1024;
-    OsHandle intra_node_mailbox =
-        Realm::ipc_mailbox_create(get_mailbox_name(Network::my_node_id));
-    if(intra_node_mailbox == Realm::INVALID_OS_HANDLE) {
-      log_runtime.error("Failed to create ipc mailbox");
-      return false;
-    }
-    {
-      size_t idx = 0;
-      my_handles.resize(local_shared_memory_mappings.size(), Realm::INVALID_OS_HANDLE);
-      my_mem_ids.resize(local_shared_memory_mappings.size());
+      // Temporary structure defining the layout of the data sent along in the mailbox
+      struct MessagePayload {
+        realm_id_t mem;
+        size_t size;
+        MessagePayload() {}
+        MessagePayload(realm_id_t _mem, size_t _size)
+          : mem(_mem)
+          , size(_size)
+        {}
+      };
+      std::vector<OsHandle> my_handles, peer_handles;
+      std::vector<MessagePayload> my_mem_ids, peer_mem_ids;
+      static const size_t MAX_PEER_MEMORIES = 1024;
+      OsHandle intra_node_mailbox =
+          Realm::ipc_mailbox_create(get_mailbox_name(Network::my_node_id));
+      if(intra_node_mailbox == Realm::INVALID_OS_HANDLE) {
+        log_runtime.error("Failed to create ipc mailbox");
+        return false;
+      }
+      {
+        size_t idx = 0;
+        my_handles.resize(local_shared_memory_mappings.size(), Realm::INVALID_OS_HANDLE);
+        my_mem_ids.resize(local_shared_memory_mappings.size());
+        for(std::unordered_map<realm_id_t, SharedMemoryInfo>::iterator it =
+                local_shared_memory_mappings.begin();
+            it != local_shared_memory_mappings.end(); ++it) {
+          realm_id_t id = it->first;
+          SharedMemoryInfo &shm = it->second;
+          assert(shm.get_handle() != Realm::INVALID_OS_HANDLE);
+          my_handles[idx] = shm.get_handle();
+          my_mem_ids[idx] = MessagePayload(id, shm.get_size());
+          idx++;
+        }
+      }
+
+      log_runtime.info() << "Found " << my_handles.size() << " shared memories";
+
+      Network::barrier(); // Wait for everyone to create their ipc mailboxes
+                          // (TODO: only do on shared peers)
+      // Share all the sharable memories.  Do this AFTER the network barrier to ensure
+      // all the intra_node_mailboxes have been created
+      for(NodeSetIterator it = Network::shared_peers.begin();
+          it != Network::shared_peers.end(); ++it) {
+        size_t data_sz;
+        std::string slot_name = get_mailbox_name(*it);
+        if(!Realm::ipc_mailbox_send(intra_node_mailbox, slot_name, my_handles,
+                                    my_mem_ids.data(),
+                                    my_mem_ids.size() * sizeof(my_mem_ids[0]))) {
+          log_runtime.warning(
+              "Unable to send shared memory information to node %u, skipping",
+              (unsigned)*it);
+          continue;
+        }
+        // TODO: modify ipc_mailbox_recv to peek and resize the data buffer the same as
+        // the peer handles
+        peer_mem_ids.resize(MAX_PEER_MEMORIES);
+        if(!Realm::ipc_mailbox_recv(intra_node_mailbox, slot_name, peer_handles,
+                                    peer_mem_ids.data(), data_sz,
+                                    peer_mem_ids.size() * sizeof(peer_mem_ids[0]))) {
+          log_runtime.warning(
+              "Unable to recv shared memory information from node %u, skipping",
+              (unsigned)*it);
+          continue;
+        }
+        assert(peer_handles.size() * sizeof(peer_mem_ids[0]) == data_sz &&
+               "Mismatch in received handles and ids");
+        for(size_t p = 0; p < peer_handles.size(); p++) {
+          SharedMemoryInfo peer_shm;
+          if(!SharedMemoryInfo::open(peer_shm, peer_handles[p], peer_mem_ids[p].size)) {
+            log_runtime.warning()
+                << "Failed to open shared memory " << peer_mem_ids[p].mem;
+            close_handle(peer_handles[p]);
+          } else {
+            peer_shm.unlink(); // No need to keep the OS resources around
+            remote_shared_memory_mappings.emplace(peer_mem_ids[p].mem, std::move(peer_shm));
+          }
+        }
+      }
+      // Wait for everyone to complete opening their sharing
+      // TODO: only do on shared peers
+      Network::barrier();
+      close_handle(intra_node_mailbox);
+      return true;
+#else  // REALM_USE_ANONYMOUS_SHARED_MEMORY
+      ActiveMessage<ShareableMemoryMessageHandler> msg(
+          Network::shared_peers, local_shared_memory_mappings.size() *
+                                     sizeof(ShareableMemoryMessageHandler::Payload));
       for(std::unordered_map<realm_id_t, SharedMemoryInfo>::iterator it =
               local_shared_memory_mappings.begin();
           it != local_shared_memory_mappings.end(); ++it) {
-        realm_id_t id = it->first;
-        SharedMemoryInfo &shm = it->second;
-        assert(shm.get_handle() != Realm::INVALID_OS_HANDLE);
-        my_handles[idx] = shm.get_handle();
-        my_mem_ids[idx] = MessagePayload(id, shm.get_size());
-        idx++;
+        ShareableMemoryMessageHandler::Payload payload;
+        payload.memory_id = it->first;
+        payload.sz = it->second.get_size();
+        msg.add_payload(&payload, sizeof(payload));
       }
-    }
-
-    log_runtime.info() << "Found " << my_handles.size() << " shared memories";
-
-    Network::barrier(); // Wait for everyone to create their ipc mailboxes
-                        // (TODO: only do on shared peers)
-    // Share all the sharable memories.  Do this AFTER the network barrier to ensure
-    // all the intra_node_mailboxes have been created
-    for(NodeSetIterator it = Network::shared_peers.begin();
-        it != Network::shared_peers.end(); ++it) {
-      size_t data_sz;
-      std::string slot_name = get_mailbox_name(*it);
-      if(!Realm::ipc_mailbox_send(intra_node_mailbox, slot_name, my_handles,
-                                  my_mem_ids.data(),
-                                  my_mem_ids.size() * sizeof(my_mem_ids[0]))) {
-        log_runtime.warning(
-            "Unable to send shared memory information to node %u, skipping",
-            (unsigned)*it);
-        continue;
-      }
-      // TODO: modify ipc_mailbox_recv to peek and resize the data buffer the same as
-      // the peer handles
-      peer_mem_ids.resize(MAX_PEER_MEMORIES);
-      if(!Realm::ipc_mailbox_recv(intra_node_mailbox, slot_name, peer_handles,
-                                  peer_mem_ids.data(), data_sz,
-                                  peer_mem_ids.size() * sizeof(peer_mem_ids[0]))) {
-        log_runtime.warning(
-            "Unable to recv shared memory information from node %u, skipping",
-            (unsigned)*it);
-        continue;
-      }
-      assert(peer_handles.size() * sizeof(peer_mem_ids[0]) == data_sz &&
-             "Mismatch in received handles and ids");
-      for(size_t p = 0; p < peer_handles.size(); p++) {
-        SharedMemoryInfo peer_shm;
-        if(!SharedMemoryInfo::open(peer_shm, peer_handles[p], peer_mem_ids[p].size)) {
-          log_runtime.warning() << "Failed to open shared memory " << peer_mem_ids[p].mem;
-          close_handle(peer_handles[p]);
-        } else {
-          peer_shm.unlink(); // No need to keep the OS resources around
-          remote_shared_memory_mappings.emplace(peer_mem_ids[p].mem, std::move(peer_shm));
+      msg.commit();
+      { // Wait for everyone to send their mappings
+        AutoLock<> al(ShareableMemoryMessageHandler::mutex);
+        while(ShareableMemoryMessageHandler::num_msgs_handled !=
+              Network::shared_peers.size()) {
+          ShareableMemoryMessageHandler::cond_var.wait();
         }
       }
-    }
-    // Wait for everyone to complete opening their sharing
-    // TODO: only do on shared peers
-    Network::barrier();
-    close_handle(intra_node_mailbox);
-    return true;
-#else  // REALM_USE_ANONYMOUS_SHARED_MEMORY
-    ActiveMessage<ShareableMemoryMessageHandler> msg(
-        Network::shared_peers, local_shared_memory_mappings.size() *
-                                   sizeof(ShareableMemoryMessageHandler::Payload));
-    for(std::unordered_map<realm_id_t, SharedMemoryInfo>::iterator it =
-            local_shared_memory_mappings.begin();
-        it != local_shared_memory_mappings.end(); ++it) {
-      ShareableMemoryMessageHandler::Payload payload;
-      payload.memory_id = it->first;
-      payload.sz = it->second.get_size();
-      msg.add_payload(&payload, sizeof(payload));
-    }
-    msg.commit();
-    { // Wait for everyone to send their mappings
-      AutoLock<> al(ShareableMemoryMessageHandler::mutex);
-      while(ShareableMemoryMessageHandler::num_msgs_handled !=
-            Network::shared_peers.size()) {
-        ShareableMemoryMessageHandler::cond_var.wait();
-      }
-    }
-    Network::barrier(); // Wait for everyone to get all their mappings from us
-    return true;
+      Network::barrier(); // Wait for everyone to get all their mappings from us
+      return true;
 #endif // REALM_USE_ANONYMOUS_MEMORY
 #else  // REALM_USE_SHM
-    return true;
+      return true;
 #endif
-  }
-
-  static void allgather_announcement(Realm::Serialization::DynamicBufferSerializer &dbs,
-                                     const NodeSet &targets, MachineImpl *machine,
-                                     NetworkModule *network_module)
-  {
-    std::vector<char> all_announcements;
-    std::vector<size_t> lengths(targets.size() + 1);
-    char *buffer = nullptr;
-    size_t rank = 0;
-
-    // Use the networking module to exchange all the announcement information, by
-    // whatever optimal path is available.  We assume a non-symmetric machine here,
-    // so we use allgatherv.
-    network_module->allgatherv(reinterpret_cast<const char *>(dbs.get_buffer()),
-                               dbs.bytes_used(), all_announcements, lengths);
-    buffer = all_announcements.data();
-    // Traverse the nodes _in-order_, as their data is laid out in the same order
-    for(NodeID node_id = 0; node_id <= Network::max_node_id; node_id++) {
-      if(node_id != Network::my_node_id) {
-        if(!targets.contains(node_id)) {
-          // Not a node that's collaborating here, so skip it and don't update the
-          // buffer pointer
-          continue;
-        }
-        assert(0);
-        machine->parse_node_announce_data(node_id, buffer, lengths[rank], true);
-      }
-      // Increment to the next section of the buffer with data for the next node id
-      buffer += lengths[rank];
-      rank++;
     }
-  }
 
-  void RuntimeImpl::parse_command_line(std::vector<std::string> &cmdline)
-  {
-    // very first thing - let the logger initialization happen
-    Logger::configure_from_cmdline(cmdline);
-
-    // calibrate timers
-    int use_cpu_tsc = -1;            // dont care
-    uint64_t force_cpu_tsq_freq = 0; // no force
+    static void allgather_announcement(Realm::Serialization::DynamicBufferSerializer &dbs,
+                                       const NodeSet &targets, MachineImpl *machine,
+                                       NetworkModule *network_module)
     {
-      CommandLineParser cp;
-      cp.add_option_int("-ll:cputsc", use_cpu_tsc);
-      cp.add_option_int_units("-ll:tscfreq", force_cpu_tsq_freq, 'm', false /*!binary*/);
-      bool ok = cp.parse_command_line(cmdline);
-      assert(ok);
+      std::vector<char> all_announcements;
+      std::vector<size_t> lengths(targets.size() + 1);
+      char *buffer = nullptr;
+      size_t rank = 0;
+
+      // Use the networking module to exchange all the announcement information, by
+      // whatever optimal path is available.  We assume a non-symmetric machine here,
+      // so we use allgatherv.
+      network_module->allgatherv(reinterpret_cast<const char *>(dbs.get_buffer()),
+                                 dbs.bytes_used(), all_announcements, lengths);
+      buffer = all_announcements.data();
+      // Traverse the nodes _in-order_, as their data is laid out in the same order
+      for(NodeID node_id = 0; node_id <= Network::max_node_id; node_id++) {
+        if(node_id != Network::my_node_id) {
+          if(!targets.contains(node_id)) {
+            // Not a node that's collaborating here, so skip it and don't update the
+            // buffer pointer
+            continue;
+          }
+          machine->parse_node_announce_data(node_id, buffer, lengths[rank], true);
+        }
+        // Increment to the next section of the buffer with data for the next node id
+        buffer += lengths[rank];
+        rank++;
+      }
     }
-    Clock::calibrate(use_cpu_tsc, force_cpu_tsq_freq);
+
+    void RuntimeImpl::parse_command_line(std::vector<std::string> &cmdline)
+    {
+      // very first thing - let the logger initialization happen
+      Logger::configure_from_cmdline(cmdline);
+
+      // calibrate timers
+      int use_cpu_tsc = -1; // dont care
+      uint64_t force_cpu_tsq_freq = 0; // no force
+      {
+        CommandLineParser cp;
+        cp.add_option_int("-ll:cputsc", use_cpu_tsc);
+        cp.add_option_int_units("-ll:tscfreq", force_cpu_tsq_freq, 'm', false/*!binary*/);
+        bool ok = cp.parse_command_line(cmdline);
+        assert(ok);
+      }
+      Clock::calibrate(use_cpu_tsc, force_cpu_tsq_freq);
 
 #ifdef REALM_USE_NVTX
-    // need to init nvtx at the very beginning
-    std::vector<std::string> nvtx_module_list;
-    {
-      CommandLineParser cp;
-      // modules are defined as the key of the nvtx_categories_predefined in nvtx.cc
-      //   if all is passed, all modules will be enabled.
-      cp.add_option_stringlist("-ll:nvtx_modules", nvtx_module_list);
-      bool ok = cp.parse_command_line(cmdline);
-      assert(ok);
-    }
-    init_nvtx(nvtx_module_list);
+      // need to init nvtx at the very beginning
+      std::vector<std::string> nvtx_module_list;
+      {
+        CommandLineParser cp;
+        // modules are defined as the key of the nvtx_categories_predefined in nvtx.cc
+        //   if all is passed, all modules will be enabled. 
+        cp.add_option_stringlist("-ll:nvtx_modules", nvtx_module_list);
+        bool ok = cp.parse_command_line(cmdline);
+        assert(ok);
+      }
+      init_nvtx(nvtx_module_list);
 #endif
 
-    // configure network modules
-    for(std::vector<NetworkModule *>::const_iterator it = network_modules.begin();
-        it != network_modules.end(); it++)
-      (*it)->parse_command_line(this, cmdline);
+      // configure network modules
+      for(std::vector<NetworkModule *>::const_iterator it = network_modules.begin();
+          it != network_modules.end();
+          it++)
+        (*it)->parse_command_line(this, cmdline);
 
-    // configure module configs
-    std::map<std::string, ModuleConfig *>::iterator it;
-    for(it = module_configs.begin(); it != module_configs.end(); it++) {
-      ModuleConfig *module_config = it->second;
-      module_config->configure_from_cmdline(cmdline);
-    }
-
-    PartitioningOpQueue::configure_from_cmdline(cmdline);
-
-    // parse the global Config
-    {
-      CommandLineParser cp;
-      cp.add_option_int("-realm:eventloopcheck", Config::event_loop_detection_limit);
-      cp.add_option_bool("-ll:force_kthreads", Config::force_kernel_threads);
-      cp.add_option_bool("-ll:frsrv_fallback", Config::use_fast_reservation_fallback);
-      cp.add_option_int("-ll:machine_query_cache", Config::use_machine_query_cache);
-      cp.add_option_int("-ll:defalloc", Config::deferred_instance_allocation);
-      cp.add_option_int("-ll:amprofile", Config::profile_activemsg_handlers);
-      cp.add_option_int("-ll:aminline", Config::max_inline_message_time);
-      bool cmdline_ok = cp.parse_command_line(cmdline);
-      if(!cmdline_ok) {
-        fprintf(stderr, "ERROR: failure parsing command line options for Config\n");
-        exit(1);
+      // configure module configs
+      std::map<std::string, ModuleConfig*>::iterator it;
+      for (it = module_configs.begin(); it != module_configs.end(); it++) {
+        ModuleConfig *module_config = it->second;
+        module_config->configure_from_cmdline(cmdline);
       }
-    }
 
-    // load the CoreModuleConfig
-    CoreModuleConfig *config =
-        checked_cast<CoreModuleConfig *>(get_module_config("core"));
-    assert(config != nullptr);
+      PartitioningOpQueue::configure_from_cmdline(cmdline);
 
-    if(!config->hyperthread_sharing) {
-      host_topology.remove_hyperthreads();
-    }
-    core_reservations = new CoreReservationSet(&host_topology);
+      // parse the global Config
+      {
+        CommandLineParser cp;
+        cp.add_option_int("-realm:eventloopcheck", Config::event_loop_detection_limit);
+        cp.add_option_bool("-ll:force_kthreads", Config::force_kernel_threads);
+        cp.add_option_bool("-ll:frsrv_fallback", Config::use_fast_reservation_fallback);
+        cp.add_option_int("-ll:machine_query_cache", Config::use_machine_query_cache);
+        cp.add_option_int("-ll:defalloc", Config::deferred_instance_allocation);
+        cp.add_option_int("-ll:amprofile", Config::profile_activemsg_handlers);
+        cp.add_option_int("-ll:aminline", Config::max_inline_message_time);
+        bool cmdline_ok = cp.parse_command_line(cmdline);
+        if(!cmdline_ok) {
+          fprintf(stderr, "ERROR: failure parsing command line options for Config\n");
+          exit(1);
+        }
+      }
 
-    // std::vector<const HardwareTopology::Proc *> pm;
-    // pm = host_topology->distribute_procs_across_domains();
+      // load the CoreModuleConfig
+      CoreModuleConfig *config =
+          checked_cast<CoreModuleConfig *>(get_module_config("core"));
+      assert(config != nullptr);
 
-    sampling_profiler.configure_from_cmdline(cmdline, *core_reservations);
+      if(!config->hyperthread_sharing) {
+        host_topology.remove_hyperthreads();
+      }
+      core_reservations = new CoreReservationSet(&host_topology);
 
-    bgwork.configure_from_cmdline(cmdline);
+      // std::vector<const HardwareTopology::Proc *> pm;
+      // pm = host_topology->distribute_procs_across_domains();
 
-    // now that we've done all of our argument parsing, scan through what's
-    //  left and see if anything starts with -ll: - probably a misspelled
-    //  argument
-    for(std::vector<std::string>::const_iterator it = cmdline.begin();
-        it != cmdline.end(); it++)
+      sampling_profiler.configure_from_cmdline(cmdline, *core_reservations);
+
+      bgwork.configure_from_cmdline(cmdline);
+
+      // now that we've done all of our argument parsing, scan through what's
+      //  left and see if anything starts with -ll: - probably a misspelled
+      //  argument
+      for(std::vector<std::string>::const_iterator it = cmdline.begin();
+        it != cmdline.end();
+        it++)
       if(it->compare(0, 4, "-ll:") == 0) {
         fprintf(stderr, "ERROR: unrecognized lowlevel option: %s\n", it->c_str());
         assert(0);
       }
-  }
-
-  void RuntimeImpl::finish_configure(void)
-  {
-    // mark all module config as finished
-    std::map<std::string, ModuleConfig *>::iterator it;
-    for(it = module_configs.begin(); it != module_configs.end(); it++) {
-      ModuleConfig *module_config = it->second;
-      module_config->finish_configure();
     }
 
-    // start up the threading subsystem - modules will likely want threads
-    if(!Threading::initialize())
-      exit(1);
+    void RuntimeImpl::finish_configure(void)
+    {
+      // mark all module config as finished
+      std::map<std::string, ModuleConfig*>::iterator it;
+      for (it = module_configs.begin(); it != module_configs.end(); it++) {
+        ModuleConfig *module_config = it->second;
+        module_config->finish_configure();
+      }
 
-    // now load modules
-    module_registrar.create_static_modules(modules);
-    module_registrar.create_dynamic_modules(modules);
-    modules_created = true;
+      // start up the threading subsystem - modules will likely want threads
+      if(!Threading::initialize()) exit(1);
 
-    // load the CoreModuleConfig
-    CoreModuleConfig *config =
-        dynamic_cast<CoreModuleConfig *>(get_module_config("core"));
-    assert(config != nullptr);
-    assert(config->finish_configured);
+      // now load modules
+      module_registrar.create_static_modules(modules);
+      module_registrar.create_dynamic_modules(modules);
+      modules_created = true;
 
-    // Check that we have enough resources for the number of nodes we are using
-    if(Network::max_node_id > (NodeID)(ID::MAX_NODE_ID)) {
-      fprintf(stderr,
-              "ERROR: Launched %d nodes, but low-level IDs are only "
-              "configured for at most %d nodes. Update the allocation "
-              "of bits in ID",
-              Network::max_node_id + 1, (ID::MAX_NODE_ID + 1));
-      exit(1);
-    }
+      // load the CoreModuleConfig
+      CoreModuleConfig *config = dynamic_cast<CoreModuleConfig *>(get_module_config("core"));
+      assert(config != nullptr);
+      assert(config->finish_configured);
 
-    // if compiled in and not explicitly disabled, check our user threading
-    //  support
+      // Check that we have enough resources for the number of nodes we are using
+      if (Network::max_node_id > (NodeID)(ID::MAX_NODE_ID))
+      {
+        fprintf(stderr,"ERROR: Launched %d nodes, but low-level IDs are only "
+                       "configured for at most %d nodes. Update the allocation "
+		       "of bits in ID", Network::max_node_id+1, (ID::MAX_NODE_ID + 1));
+        exit(1);
+      }
+
+      // if compiled in and not explicitly disabled, check our user threading
+      //  support
 #ifdef REALM_USE_USER_THREADS
-    if(!Config::force_kernel_threads) {
-      bool ok = Thread::test_user_switch_support();
-      if(!ok) {
-        log_runtime.warning()
-            << "user switching not working - falling back to kernel threads";
-        Config::force_kernel_threads = true;
+      if(!Config::force_kernel_threads) {
+        bool ok = Thread::test_user_switch_support();
+        if(!ok) {
+          log_runtime.warning() << "user switching not working - falling back to kernel threads";
+          Config::force_kernel_threads = true;
+        }
       }
-    }
 #endif
 
-    event_triggerer.add_to_manager(&bgwork);
+      event_triggerer.add_to_manager(&bgwork);
 
-    // initialize barrier timestamp
-    BarrierImpl::barrier_adjustment_timestamp.store(
-        (((Barrier::timestamp_t)(Network::my_node_id))
-         << BarrierImpl::BARRIER_TIMESTAMP_NODEID_SHIFT) +
-        1);
+      // initialize barrier timestamp
+      BarrierImpl::barrier_adjustment_timestamp.store((((Barrier::timestamp_t)(Network::my_node_id)) << BarrierImpl::BARRIER_TIMESTAMP_NODEID_SHIFT) + 1);
 
-    GenEventImpl::GenEventImplAllocator event_allocator(&event_triggerer);
+      GenEventImpl::GenEventImplAllocator event_allocator(&event_triggerer);
 
-    // TODO: FIX Me
-    nodes = new Node[4096]; // Network::max_node_id + 1];
-    num_nodes = 4096;       // Network::max_node_id + 1;
-
-    for(int i = 0; i < Network::max_node_id + 1; i++) {
-      nodes[i].remote_events.set_constructor(event_allocator);
-    }
-
-    // configure the bit sets used by NodeSet
-    {
-      // choose a chunk size that's roughly the requested size, but
-      //  clamp to [8,1024]
-      size_t bitsets_per_chunk =
-          ((config->bitset_chunk_size << 3) / (Network::max_node_id + 1));
-      if(bitsets_per_chunk < 8)
-        bitsets_per_chunk = 8;
-      if(bitsets_per_chunk > 1024)
-        bitsets_per_chunk = 1024;
-      // negative values of bitset_twolevel are a threshold
-      bool use_twolevel = ((config->bitset_twolevel > 0) ||
-                           ((config->bitset_twolevel < 0) &&
-                            (Network::max_node_id >= -config->bitset_twolevel)));
-      NodeSetBitmask::configure_allocator(Network::max_node_id, bitsets_per_chunk,
-                                          use_twolevel);
-    }
-
-    // create allocators for local node events/locks/index spaces - do this before we
-    // start handling
-    //  active messages
-    {
-      Node &n = nodes[Network::my_node_id];
-      local_event_free_list =
-          new LocalEventTableAllocator::FreeList(local_events, Network::my_node_id);
-      local_barrier_free_list =
-          new BarrierTableAllocator::FreeList(n.barriers, Network::my_node_id);
-      local_reservation_free_list =
-          new ReservationTableAllocator::FreeList(n.reservations, Network::my_node_id);
-      local_compqueue_free_list =
-          new CompQueueTableAllocator::FreeList(n.compqueues, Network::my_node_id);
-
-      local_sparsity_map_free_lists.resize(Network::max_node_id + 1);
-      for(NodeID i = 0; i <= Network::max_node_id; i++) {
-        nodes[i].sparsity_maps.resize(
-            Network::max_node_id + 1,
-            atomic<DynamicTable<SparsityMapTableAllocator> *>(0));
-        DynamicTable<SparsityMapTableAllocator> *m =
-            new DynamicTable<SparsityMapTableAllocator>;
-        nodes[i].sparsity_maps[Network::my_node_id].store(m);
-        local_sparsity_map_free_lists[i] =
-            new SparsityMapTableAllocator::FreeList(*m, i /*owner_node*/);
+      constexpr int MAX_NODES = 4096;
+      nodes = new Node[MAX_NODES];
+      num_nodes = MAX_NODES;
+      for(int i = 0; i < Network::max_node_id + 1; i++) {
+        nodes[i].remote_events.set_constructor(event_allocator);
       }
 
-      local_subgraph_free_lists.resize(Network::max_node_id + 1);
-      for(NodeID i = 0; i <= Network::max_node_id; i++) {
-        nodes[i].subgraphs.resize(Network::max_node_id + 1,
-                                  atomic<DynamicTable<SubgraphTableAllocator> *>(0));
-        DynamicTable<SubgraphTableAllocator> *m =
-            new DynamicTable<SubgraphTableAllocator>;
-        nodes[i].subgraphs[Network::my_node_id].store(m);
-        local_subgraph_free_lists[i] =
-            new SubgraphTableAllocator::FreeList(*m, i /*owner_node*/);
+      // configure the bit sets used by NodeSet
+      {
+	// choose a chunk size that's roughly the requested size, but
+	//  clamp to [8,1024]
+	size_t bitsets_per_chunk = ((config->bitset_chunk_size << 3) /
+				    (Network::max_node_id + 1));
+	if(bitsets_per_chunk < 8)
+	  bitsets_per_chunk = 8;
+	if(bitsets_per_chunk > 1024)
+	  bitsets_per_chunk = 1024;
+	// negative values of bitset_twolevel are a threshold
+	bool use_twolevel = ((config->bitset_twolevel > 0) ||
+			     ((config->bitset_twolevel < 0) &&
+			      (Network::max_node_id >= -config->bitset_twolevel)));
+	NodeSetBitmask::configure_allocator(Network::max_node_id,
+					    bitsets_per_chunk,
+					    use_twolevel);
       }
 
-      local_proc_group_free_lists.resize(Network::max_node_id + 1);
-      for(NodeID i = 0; i <= Network::max_node_id; i++) {
-        nodes[i].proc_groups.resize(
-            Network::max_node_id + 1,
-            atomic<DynamicTable<ProcessorGroupTableAllocator> *>(0));
-        DynamicTable<ProcessorGroupTableAllocator> *m =
-            new DynamicTable<ProcessorGroupTableAllocator>;
-        nodes[i].proc_groups[Network::my_node_id].store(m);
-        local_proc_group_free_lists[i] =
-            new ProcessorGroupTableAllocator::FreeList(*m, i /*owner_node*/);
+      // TODO: FIX SIZING
+
+      // create allocators for local node events/locks/index spaces - do this before we start handling
+      //  active messages
+      {
+	Node& n = nodes[Network::my_node_id];
+        local_event_free_list =
+            new LocalEventTableAllocator::FreeList(local_events, Network::my_node_id);
+        local_barrier_free_list =
+            new BarrierTableAllocator::FreeList(n.barriers, Network::my_node_id);
+        local_reservation_free_list =
+            new ReservationTableAllocator::FreeList(n.reservations, Network::my_node_id);
+        local_compqueue_free_list =
+            new CompQueueTableAllocator::FreeList(n.compqueues, Network::my_node_id);
+
+        local_sparsity_map_free_lists.resize(Network::max_node_id + 1);
+        for(NodeID i = 0; i <= Network::max_node_id; i++) {
+          nodes[i].sparsity_maps.resize(
+              Network::max_node_id + 1,
+              atomic<DynamicTable<SparsityMapTableAllocator> *>(0));
+          DynamicTable<SparsityMapTableAllocator> *m =
+              new DynamicTable<SparsityMapTableAllocator>;
+          nodes[i].sparsity_maps[Network::my_node_id].store(m);
+          local_sparsity_map_free_lists[i] =
+              new SparsityMapTableAllocator::FreeList(*m, i /*owner_node*/);
+        }
+
+        local_subgraph_free_lists.resize(Network::max_node_id + 1);
+        for(NodeID i = 0; i <= Network::max_node_id; i++) {
+          nodes[i].subgraphs.resize(Network::max_node_id + 1,
+                                    atomic<DynamicTable<SubgraphTableAllocator> *>(0));
+          DynamicTable<SubgraphTableAllocator> *m =
+              new DynamicTable<SubgraphTableAllocator>;
+          nodes[i].subgraphs[Network::my_node_id].store(m);
+          local_subgraph_free_lists[i] =
+              new SubgraphTableAllocator::FreeList(*m, i /*owner_node*/);
+        }
+
+        local_proc_group_free_lists.resize(Network::max_node_id + 1);
+        for(NodeID i = 0; i <= Network::max_node_id; i++) {
+          nodes[i].proc_groups.resize(
+              Network::max_node_id + 1,
+              atomic<DynamicTable<ProcessorGroupTableAllocator> *>(0));
+          DynamicTable<ProcessorGroupTableAllocator> *m =
+              new DynamicTable<ProcessorGroupTableAllocator>;
+          nodes[i].proc_groups[Network::my_node_id].store(m);
+          local_proc_group_free_lists[i] =
+              new ProcessorGroupTableAllocator::FreeList(*m, i /*owner_node*/);
+        }
       }
-    }
 
-    // form requests for network-registered memory
-    if(config->reg_ib_mem_size > 0) {
-      reg_ib_mem_segment.request(NetworkSegmentInfo::HostMem, config->reg_ib_mem_size,
-                                 64);
-      network_segments.push_back(&reg_ib_mem_segment);
-    }
-    if(config->reg_mem_size > 0) {
-      reg_mem_segment.request(NetworkSegmentInfo::HostMem, config->reg_mem_size, 64);
-      network_segments.push_back(&reg_mem_segment);
-    }
+      // form requests for network-registered memory
+      if(config->reg_ib_mem_size > 0) {
+	reg_ib_mem_segment.request(NetworkSegmentInfo::HostMem,
+				   config->reg_ib_mem_size, 64);
+	network_segments.push_back(&reg_ib_mem_segment);
+      }
+      if(config->reg_mem_size > 0) {
+	reg_mem_segment.request(NetworkSegmentInfo::HostMem,
+				config->reg_mem_size, 64);
+	network_segments.push_back(&reg_mem_segment);
+      }
 
-    // construct active message handler table once before any network(s) init
-    activemsg_handler_table.construct_handler_table();
+      // construct active message handler table once before any network(s) init
+      activemsg_handler_table.construct_handler_table();
 
-    // and also our incoming active message manager
-    message_manager = new IncomingMessageManager(256, config->active_msg_handler_threads,
-                                                 *core_reservations);
-    if(config->active_msg_handler_bgwork)
-      message_manager->add_to_manager(&bgwork);
-    else
-      assert(config->active_msg_handler_threads > 0);
+      // and also our incoming active message manager
+      message_manager = new IncomingMessageManager(256,
+						   config->active_msg_handler_threads,
+						   *core_reservations);
+      if(config->active_msg_handler_bgwork)
+	message_manager->add_to_manager(&bgwork);
+      else
+	assert(config->active_msg_handler_threads > 0);
 
-    // Coordinate a job identifer across all the nodes in order to use it for
-    // generating names in the system namespace (like files or sockets).  This needs
-    // to come before the modules make their memories, but after the network is
-    // initialized.  This cannot be currently done if GASNET1 is enabled, as the
-    // broadcast function is not available until after Module::attach
+        // Coordinate a job identifer across all the nodes in order to use it for
+        // generating names in the system namespace (like files or sockets).  This needs
+        // to come before the modules make their memories, but after the network is
+        // initialized.  This cannot be currently done if GASNET1 is enabled, as the
+        // broadcast function is not available until after Module::attach
 #if !defined(REALM_USE_GASNET1)
-    {
-      Config::job_id =
-          Network::broadcast(0, Clock::current_time_in_nanoseconds(true) + rand());
-    }
+      {
+        Config::job_id =
+            Network::broadcast(0, Clock::current_time_in_nanoseconds(true) + rand());
+      }
 #endif
 
-    // create shared_peers either using ipc mailbox or network modules
-    create_shared_peers();
+      // create shared_peers either using ipc mailbox or network modules
+      create_shared_peers();
 
-    // initialize modules and create memories before we do network attach
-    //  so that we have a chance to register these other memories for
-    //  RDMA transfers
-    for(std::vector<Module *>::const_iterator it = modules.begin(); it != modules.end();
-        it++)
-      (*it)->initialize(this);
+      // initialize modules and create memories before we do network attach
+      //  so that we have a chance to register these other memories for
+      //  RDMA transfers
+      for(std::vector<Module *>::const_iterator it = modules.begin();
+	  it != modules.end();
+	  it++)
+	(*it)->initialize(this);
 
     for(std::vector<Module *>::const_iterator it = modules.begin(); it != modules.end();
         it++)
@@ -2004,524 +2011,535 @@ namespace Realm {
     }
 
 #ifdef DEADLOCK_TRACE
-    next_thread = 0;
-    signaled_threads = 0;
-    signal(SIGTERM, deadlock_catch);
-    signal(SIGINT, deadlock_catch);
+      next_thread = 0;
+      signaled_threads = 0;
+      signal(SIGTERM, deadlock_catch);
+      signal(SIGINT, deadlock_catch);
 #endif
-    const char *realm_freeze_env = getenv("REALM_FREEZE_ON_ERROR");
-    const char *legion_freeze_env = getenv("LEGION_FREEZE_ON_ERROR");
-    if(((legion_freeze_env != NULL) && (atoi(legion_freeze_env) != 0)) ||
-       ((realm_freeze_env != NULL) && (atoi(realm_freeze_env) != 0))) {
-      register_error_signal_handler(realm_freeze);
-    } else {
-      const char *realm_backtrace_env = getenv("REALM_BACKTRACE");
-      const char *legion_backtrace_env = getenv("LEGION_BACKTRACE");
-      if(((realm_backtrace_env != NULL) && (atoi(realm_backtrace_env) != 0)) ||
-         ((legion_backtrace_env != NULL) && (atoi(legion_backtrace_env) != 0)))
-        register_error_signal_handler(realm_backtrace);
-    }
-
-    // debugging tool to dump realm event graphs after a fixed delay
-    //  (easier than actually detecting a hang)
-#if defined(REALM_ON_LINUX) || defined(REALM_ON_MACOS) || defined(REALM_ON_FREEBSD)
-    {
-      const char *e = getenv("REALM_SHOW_EVENT_WAITERS");
-      if(e) {
-        const char *pos;
-        int delay = strtol(e, (char **)&pos, 10);
-        assert(delay > 0);
-        if(*pos == '+')
-          delay += Network::my_node_id * atoi(pos + 1);
-        log_runtime.info() << "setting show_event alarm for " << delay << " seconds";
-        signal(SIGALRM, realm_show_events);
-        alarm(delay);
+      const char *realm_freeze_env = getenv("REALM_FREEZE_ON_ERROR");
+      const char *legion_freeze_env = getenv("LEGION_FREEZE_ON_ERROR"); 
+      if (((legion_freeze_env != NULL) && (atoi(legion_freeze_env) != 0)) ||
+          ((realm_freeze_env != NULL) && (atoi(realm_freeze_env) != 0))) {
+	register_error_signal_handler(realm_freeze);
+      } else {
+        const char *realm_backtrace_env = getenv("REALM_BACKTRACE");
+        const char *legion_backtrace_env = getenv("LEGION_BACKTRACE"); 
+        if (((realm_backtrace_env != NULL) && (atoi(realm_backtrace_env) != 0)) ||
+            ((legion_backtrace_env != NULL) && (atoi(legion_backtrace_env) != 0)))
+          register_error_signal_handler(realm_backtrace);
       }
-    }
+
+      // debugging tool to dump realm event graphs after a fixed delay
+      //  (easier than actually detecting a hang)
+#if defined(REALM_ON_LINUX) || defined(REALM_ON_MACOS) || defined(REALM_ON_FREEBSD)
+      {
+	const char *e = getenv("REALM_SHOW_EVENT_WAITERS");
+	if(e) {
+	  const char *pos;
+	  int delay = strtol(e, (char **)&pos, 10);
+	  assert(delay > 0);
+	  if(*pos == '+')
+	    delay += Network::my_node_id * atoi(pos + 1);
+	  log_runtime.info() << "setting show_event alarm for " << delay << " seconds";
+	  signal(SIGALRM, realm_show_events);
+	  alarm(delay);
+	}
+      }
 #endif
+      
+      bgwork.start_dedicated_workers(*core_reservations);
 
-    bgwork.start_dedicated_workers(*core_reservations);
-
-    PartitioningOpQueue::start_worker_threads(*core_reservations, &bgwork);
+      PartitioningOpQueue::start_worker_threads(*core_reservations, &bgwork);
 
 #ifdef EVENT_TRACING
-    // Always initialize even if we won't dump to file, otherwise segfaults happen
-    // when we try to save event info
-    Tracer<EventTraceItem>::init_trace(event_trace_block_size, event_trace_exp_arrv_rate);
+      // Always initialize even if we won't dump to file, otherwise segfaults happen
+      // when we try to save event info
+      Tracer<EventTraceItem>::init_trace(event_trace_block_size,
+                                         event_trace_exp_arrv_rate);
 #endif
 #ifdef LOCK_TRACING
-    // Always initialize even if we won't dump to file, otherwise segfaults happen
-    // when we try to save lock info
-    Tracer<LockTraceItem>::init_trace(lock_trace_block_size, lock_trace_exp_arrv_rate);
+      // Always initialize even if we won't dump to file, otherwise segfaults happen
+      // when we try to save lock info
+      Tracer<LockTraceItem>::init_trace(lock_trace_block_size,
+                                        lock_trace_exp_arrv_rate);
 #endif
 
-    // gasnet_seginfo_t seginfos = new gasnet_seginfo_t[num_nodes];
-    // CHECK_GASNET( gasnet_getSegmentInfo(seginfos, num_nodes) );
+      //gasnet_seginfo_t seginfos = new gasnet_seginfo_t[num_nodes];
+      //CHECK_GASNET( gasnet_getSegmentInfo(seginfos, num_nodes) );
 
-    // network-specific memories are created after attachment
-    for(NetworkModule *module : network_modules) {
-      module->create_memories(this);
-    }
-    for(NodeID node_id : Network::shared_peers) {
-      log_runtime.debug() << Network::my_node_id << " is shareable with " << node_id;
-    }
-
-    LocalCPUMemory *regmem;
-    if(config->reg_mem_size > 0) {
-      void *regmem_base = reg_mem_segment.base;
-      assert(regmem_base != 0);
-      Memory m = get_runtime()->next_local_memory_id();
-      regmem =
-          new LocalCPUMemory(this, m, config->reg_mem_size, -1 /*don't care numa domain*/,
-                             Memory::REGDMA_MEM, regmem_base, &reg_mem_segment);
-      get_runtime()->add_memory(regmem);
-    } else
-      regmem = 0;
-
-    for(std::vector<Module *>::const_iterator it = modules.begin(); it != modules.end();
-        it++)
-      (*it)->create_processors(this);
-
-    IBMemory *reg_ib_mem;
-    if(config->reg_ib_mem_size > 0) {
-      void *reg_ib_mem_base = reg_ib_mem_segment.base;
-      assert(reg_ib_mem_base != 0);
-      Memory m = get_runtime()->next_local_ib_memory_id();
-      reg_ib_mem =
-          new IBMemory(this, m, config->reg_ib_mem_size, MemoryImpl::MKIND_SYSMEM,
-                       Memory::REGDMA_MEM, reg_ib_mem_base, &reg_ib_mem_segment);
-      get_runtime()->add_ib_memory(reg_ib_mem);
-    } else
-      reg_ib_mem = 0;
-
-    // create local disk memory
-    DiskMemory *diskmem;
-    if(config->disk_mem_size > 0) {
-      char file_name[30];
-      snprintf(file_name, sizeof file_name, "realm_disk_file%d.data",
-               Network::my_node_id);
-      std::filesystem::path disk_file = std::filesystem::temp_directory_path();
-      disk_file /= file_name;
-      Memory m = get_runtime()->next_local_memory_id();
-      diskmem = new DiskMemory(this, m, config->disk_mem_size, disk_file);
-      get_runtime()->add_memory(diskmem);
-    } else
-      diskmem = 0;
-
-    FileMemory *filemem;
-    filemem = new FileMemory(this, get_runtime()->next_local_memory_id());
-    get_runtime()->add_memory(filemem);
-
-    for(std::vector<Module *>::const_iterator it = modules.begin(); it != modules.end();
-        it++)
-      (*it)->create_code_translators(this);
-
-    // start dma system at the very ending of initialization
-    // since we need list of local gpus to create channels
-    if(config->dma_worker_threads > 0) {
-      // warn about use of old flags
-      log_runtime.warning()
-          << "-ll:dma specified on command line no longer has effect - use -ll:bgwork to "
-             "control background worker threads (which include dma work)";
-    }
-    start_dma_system(&bgwork);
-
-    // now that we've created all the processors/etc., we can try to come up with core
-    //  allocations that satisfy everybody's requirements - this will also start up any
-    //  threads that have already been requested
-    bool ok = core_reservations->satisfy_reservations(config->dummy_reservation_ok);
-    if(ok) {
-      if(config->show_reservations) {
-        std::cout << host_topology << std::endl;
-        core_reservations->report_reservations(std::cout);
+      // network-specific memories are created after attachment
+      for(NetworkModule *module : network_modules) {
+        module->create_memories(this);
       }
-    } else {
-      printf("HELP!  Could not satisfy all core reservations!\n");
-      exit(1);
-    }
-
-    // create the "replicated heap" that puts instance layouts and sparsity
-    //  maps where non-CPU devices can see them
-    repl_heap.init(config->replheap_size, 1 /*chunks*/);
-
-    if(!Network::shared_peers.empty() && local_shared_memory_mappings.size() > 0) {
-      if(!share_memories()) {
-        log_runtime.fatal("Failed to share memories with peers");
-        abort();
+      for(NodeID node_id : Network::shared_peers) {
+        log_runtime.debug() << Network::my_node_id << " is shareable with " << node_id;
       }
-      for(std::unordered_map<realm_id_t, SharedMemoryInfo>::iterator it =
-              local_shared_memory_mappings.begin();
-          it != local_shared_memory_mappings.end(); ++it) {
-        // We're done communicating our shared memories, so there's no need to keep the
-        // sharing handles active, so unlink them now.
-        it->second.unlink();
+
+      LocalCPUMemory *regmem;
+      if(config->reg_mem_size > 0) {
+	void *regmem_base = reg_mem_segment.base;
+	assert(regmem_base != 0);
+	Memory m = get_runtime()->next_local_memory_id();
+        regmem = new LocalCPUMemory(this, m, config->reg_mem_size,
+                                    -1 /*don't care numa domain*/, Memory::REGDMA_MEM,
+                                    regmem_base, &reg_mem_segment);
+        get_runtime()->add_memory(regmem);
+      } else
+	regmem = 0;
+
+      for(std::vector<Module *>::const_iterator it = modules.begin();
+	  it != modules.end();
+	  it++)
+	(*it)->create_processors(this);
+
+      IBMemory *reg_ib_mem;
+      if(config->reg_ib_mem_size > 0) {
+	void *reg_ib_mem_base = reg_ib_mem_segment.base;
+	assert(reg_ib_mem_base != 0);
+	Memory m = get_runtime()->next_local_ib_memory_id();
+        reg_ib_mem =
+            new IBMemory(this, m, config->reg_ib_mem_size, MemoryImpl::MKIND_SYSMEM,
+                         Memory::REGDMA_MEM, reg_ib_mem_base, &reg_ib_mem_segment);
+        get_runtime()->add_ib_memory(reg_ib_mem);
+      } else
+        reg_ib_mem = 0;
+
+      // create local disk memory
+      DiskMemory *diskmem;
+      if(config->disk_mem_size > 0) {
+        char file_name[30];
+        snprintf(file_name, sizeof file_name, "realm_disk_file%d.data",
+                 Network::my_node_id);
+        std::filesystem::path disk_file = std::filesystem::temp_directory_path();
+        disk_file /= file_name;
+        Memory m = get_runtime()->next_local_memory_id();
+        diskmem = new DiskMemory(this, m, config->disk_mem_size, disk_file);
+        get_runtime()->add_memory(diskmem);
+      } else
+        diskmem = 0;
+
+      FileMemory *filemem;
+      filemem = new FileMemory(this, get_runtime()->next_local_memory_id());
+      get_runtime()->add_memory(filemem);
+
+      for(std::vector<Module *>::const_iterator it = modules.begin();
+	  it != modules.end();
+	  it++)
+	(*it)->create_code_translators(this);
+      
+      // start dma system at the very ending of initialization
+      // since we need list of local gpus to create channels
+      if(config->dma_worker_threads > 0) {
+        // warn about use of old flags
+        log_runtime.warning() << "-ll:dma specified on command line no longer has effect - use -ll:bgwork to control background worker threads (which include dma work)";
       }
-    }
+      start_dma_system(&bgwork);
 
-    for(std::vector<Module *>::const_iterator it = modules.begin(); it != modules.end();
-        it++)
-      (*it)->create_dma_channels(this);
-
-    {
-      // iterate over all local processors and add affinities for them
-      // all of this should eventually be moved into appropriate modules
-      std::map<Processor::Kind, std::set<Processor>> procs_by_kind;
-
-      for(std::vector<ProcessorImpl *>::const_iterator it = n->processors.begin();
-          it != n->processors.end(); it++)
-        if(*it) {
-          Processor p = (*it)->me;
-          Processor::Kind k = (*it)->me.kind();
-
-          procs_by_kind[k].insert(p);
+      // now that we've created all the processors/etc., we can try to come up with core
+      //  allocations that satisfy everybody's requirements - this will also start up any
+      //  threads that have already been requested
+      bool ok = core_reservations->satisfy_reservations(config->dummy_reservation_ok);
+      if(ok) {
+	if(config->show_reservations) {
+          std::cout << host_topology << std::endl;
+          core_reservations->report_reservations(std::cout);
         }
-
-      // now iterate over memories too
-      std::map<Memory::Kind, std::set<Memory>> mems_by_kind;
-      for(std::vector<MemoryImpl *>::const_iterator it = n->memories.begin();
-          it != n->memories.end(); it++)
-        if(*it) {
-          Memory m = (*it)->me;
-          Memory::Kind k = (*it)->me.kind();
-
-          mems_by_kind[k].insert(m);
-        }
-
-      std::set<Processor::Kind> local_cpu_kinds;
-      local_cpu_kinds.insert(Processor::LOC_PROC);
-      local_cpu_kinds.insert(Processor::UTIL_PROC);
-      local_cpu_kinds.insert(Processor::IO_PROC);
-      local_cpu_kinds.insert(Processor::PROC_SET);
-
-      for(std::set<Processor::Kind>::const_iterator it = local_cpu_kinds.begin();
-          it != local_cpu_kinds.end(); it++) {
-        Processor::Kind k = *it;
-
-        add_proc_mem_affinities(machine, procs_by_kind[k],
-                                mems_by_kind[Memory::SYSTEM_MEM],
-                                100, // "large" bandwidth
-                                5    // "small" latency
-        );
-
-        add_proc_mem_affinities(machine, procs_by_kind[k],
-                                mems_by_kind[Memory::REGDMA_MEM],
-                                80, // "large" bandwidth
-                                10  // "small" latency
-        );
-
-        add_proc_mem_affinities(machine, procs_by_kind[k],
-                                mems_by_kind[Memory::SOCKET_MEM],
-                                100, // "large" bandwidth
-                                5    // "small" latency
-        );
-
-        add_proc_mem_affinities(machine, procs_by_kind[k], mems_by_kind[Memory::DISK_MEM],
-                                5,  // "low" bandwidth
-                                100 // "high" latency
-        );
-
-        add_proc_mem_affinities(machine, procs_by_kind[k], mems_by_kind[Memory::HDF_MEM],
-                                5,  // "low" bandwidth
-                                100 // "high" latency
-        );
-
-        add_proc_mem_affinities(machine, procs_by_kind[k], mems_by_kind[Memory::FILE_MEM],
-                                5,  // low bandwidth
-                                100 // high latency)
-        );
-
-        add_proc_mem_affinities(machine, procs_by_kind[k],
-                                mems_by_kind[Memory::GLOBAL_MEM],
-                                10, // "lower" bandwidth
-                                50  // "higher" latency
-        );
+      } else {
+	printf("HELP!  Could not satisfy all core reservations!\n");
+	exit(1);
       }
 
-      for(std::set<Processor::Kind>::const_iterator it = local_cpu_kinds.begin();
-          it != local_cpu_kinds.end(); it++) {
-        Processor::Kind k = *it;
+      // create the "replicated heap" that puts instance layouts and sparsity
+      //  maps where non-CPU devices can see them
+      repl_heap.init(config->replheap_size, 1 /*chunks*/);
 
-        add_proc_mem_affinities(machine, procs_by_kind[k],
-                                mems_by_kind[Memory::Z_COPY_MEM],
-                                40, // "large" bandwidth
-                                3   // "small" latency
-        );
-      }
-    }
-
-    // retrieve process info
-    {
-      Machine::ProcessInfo process_info;
-      int errcode =
-          gethostname(process_info.hostname, Machine::ProcessInfo::MAX_HOSTNAME_LENGTH);
-      if(errcode != 0) {
-        log_runtime.warning() << "gethostname failed with " << errno;
-      }
-#ifdef REALM_ON_WINDOWS
-      process_info.processid = GetCurrentProcessId();
-      std::hash<std::string> hostname_hasher;
-      process_info.hostid = hostname_hasher(process_info.hostname);
-#else
-      process_info.processid = getpid();
-      process_info.hostid = gethostid();
-#endif
-      machine->add_process_info(Network::my_node_id, process_info);
-    }
-
-    // announce by network type
-    Serialization::DynamicBufferSerializer dbs(4096);
-
-    for(NetworkModule *module : network_modules) {
-      // first, build the set of nodes we'll talk to
-      NodeSet targets;
-      for(NodeID i = 0; i <= Network::max_node_id; i++) {
-        if((i != Network::my_node_id) && (Network::get_network(i) == module)) {
-          targets.add(i);
-        }
-      }
-      if(targets.empty()) {
-        continue;
-      }
-
-      // Announcement needs to happen in two stages in order to ensure all memory
-      // information is available for later serialization information (like remote
-      // channels)
-      // Stage 1: Announce all the memories attributes
-      dbs.reset();
-      ok = serialize_announce(dbs, n->memories, module);
-      assert(ok && "Failed to serialize memories");
-      ok = serialize_announce(dbs, n->ib_memories, module);
-      assert(ok && "Failed to serialize ib memories");
-      // allgather_announcement(dbs, targets, machine, module);
-
-      // Stage 2: Announce everything else.
-      dbs.reset();
-      ok = serialize_announce(dbs, n, machine, module);
-      assert(ok && "Failed to serialize node for announcement");
-      // allgather_announcement(dbs, targets, machine, module);
-    }
-
-    // Now that we have full knowledge of the machine, update the machine model's
-    // internal representation.  Start with the kind maps
-    machine->update_kind_maps();
-    // and the mem_mem affinities
-    machine->enumerate_mem_mem_affinities();
-
-    if(log_machine.want_debug()) {
-      // Print the machine model
-      if(Network::my_node_id == 0) {
-        for(int i = 0; i < Network::max_node_id + 1; i++) {
-          const Node &node = nodes[i];
-          log_machine.debug() << "Node " << i << ":\n" << node;
-        }
-      }
-    }
-
-    // Then update the path caches
-    if(Config::path_cache_lru_size) {
-      assert(Config::path_cache_lru_size > 0);
-      init_path_cache();
-    }
-
-    // Ensure everyone gets to this point before continuing to ensure everyone has all
-    // the channels, memory kinds, and all metadata available
-    Network::barrier();
-  }
-
-  bool RuntimeImpl::configure_from_command_line(std::vector<std::string> &cmdline)
-  {
-    parse_command_line(cmdline);
-    finish_configure();
-    return true;
-  }
-
-  static void membership_pre_join_cb(const realmNodeMeta_t *self, const void *, size_t,
-                                     bool joined, void *)
-  {
-    assert(joined == false);
-
-    RuntimeImpl *rt = get_runtime();
-
-    if(Network::my_node_id == self->node_id) {
-    } else {
-      assert(rt->shutdown_in_progress.load() == false);
-    }
-  }
-
-  static void membership_post_join_cb(const realmNodeMeta_t *n, const void *, size_t,
-                                      bool joined, void *arg)
-  {
-    Network::node_directory.remove_slot(NodeDirectory::UNKNOWN_NODE_ID);
-
-    if(joined) {
-      RuntimeImpl *rt = get_runtime();
-      AutoLock<> al(rt->join_mutex);
-      rt->join_complete = joined;
-      rt->join_condvar.broadcast();
-    }
-  }
-
-  bool RuntimeImpl::remove_peer(NodeID id)
-  {
-    Node &n = nodes[id];
-
-    // TODO: TEST ME
-
-    for(size_t i = 0; i < n.remote_events.max_entries(); ++i) {
-      if(n.remote_events.has_entry(i)) {
-        GenEventImpl *e = n.remote_events.lookup_entry(i, id);
-        GenEventImpl::trigger(e->current_event(), /*poisoned=*/true);
-      }
-    }
-
-    for(size_t i = 0; i < n.barriers.max_entries(); ++i) {
-      if(n.barriers.has_entry(i)) {
-        // BarrierImpl *b = n.barriers.lookup_entry(i, id);
-        // b->cancel_generations(id);
-      }
-    }
-
-    {
-      Node &n = nodes[id];
-      n.processors.clear();
-      n.dma_channels.clear();
-      n.memories.clear();
-      n.ib_memories.clear();
-      // n.remote_events.clear();
-      // n.barriers.clear();
-      // n.reservations.clear();
-      // n.compqueues.clear();
-      // n.sparsity_maps.clear();
-      n.subgraphs.clear();
-      n.proc_groups.clear();
-    }
-
-    for(NetworkModule *nm : network_modules) {
-      if(nm) {
-        nm->delete_remote_ep(id);
-      }
-    }
-
-    machine->remove_node(id);
-
-    return true;
-  }
-
-  static void membership_pre_leave_cb(const realmNodeMeta_t *self, const void *, size_t,
-                                      bool /*left*/, void *)
-  {
-    RuntimeImpl *rt = get_runtime();
-
-    if(Network::my_node_id == self->node_id) {
-      // DRAIN LOCAL WORK
-      // ITERATE OVER EVENTS AND CANCEL THEM
-      constexpr int retry_count = 10;
-
-      int tries = 0;
-      while(true) {
-        tries++;
-        bool done = Network::check_for_quiescence(rt->message_manager);
-        if(done) {
-          break;
-        }
-
-        if(tries >= retry_count) {
-          assert(0);
+      if(!Network::shared_peers.empty() && local_shared_memory_mappings.size() > 0) {
+        if (!share_memories()) {
+          log_runtime.fatal("Failed to share memories with peers");
           abort();
         }
+        for(std::unordered_map<realm_id_t, SharedMemoryInfo>::iterator it =
+                local_shared_memory_mappings.begin();
+            it != local_shared_memory_mappings.end(); ++it) {
+          // We're done communicating our shared memories, so there's no need to keep the
+          // sharing handles active, so unlink them now.
+          it->second.unlink();
+        }
       }
 
-      rt->shutdown_in_progress.store(true);
+      for(std::vector<Module *>::const_iterator it = modules.begin();
+	  it != modules.end();
+	  it++)
+	(*it)->create_dma_channels(this);
 
-    } else {
-      if(!rt->shutdown_in_progress.load()) {
-        assert(rt->remove_peer(self->node_id));
+      {
+        // iterate over all local processors and add affinities for them
+	// all of this should eventually be moved into appropriate modules
+	std::map<Processor::Kind, std::set<Processor> > procs_by_kind;
+
+	for(std::vector<ProcessorImpl *>::const_iterator it = n->processors.begin();
+	    it != n->processors.end();
+	    it++)
+	  if(*it) {
+	    Processor p = (*it)->me;
+	    Processor::Kind k = (*it)->me.kind();
+
+	    procs_by_kind[k].insert(p);
+	  }
+
+	// now iterate over memories too
+	std::map<Memory::Kind, std::set<Memory> > mems_by_kind;
+	for(std::vector<MemoryImpl *>::const_iterator it = n->memories.begin();
+	    it != n->memories.end();
+	    it++)
+	  if(*it) {
+	    Memory m = (*it)->me;
+	    Memory::Kind k = (*it)->me.kind();
+
+	    mems_by_kind[k].insert(m);
+	  }
+
+	std::set<Processor::Kind> local_cpu_kinds;
+	local_cpu_kinds.insert(Processor::LOC_PROC);
+	local_cpu_kinds.insert(Processor::UTIL_PROC);
+	local_cpu_kinds.insert(Processor::IO_PROC);
+	local_cpu_kinds.insert(Processor::PROC_SET);
+
+        for(std::set<Processor::Kind>::const_iterator it = local_cpu_kinds.begin();
+            it != local_cpu_kinds.end(); it++) {
+          Processor::Kind k = *it;
+
+          add_proc_mem_affinities(machine, procs_by_kind[k],
+                                  mems_by_kind[Memory::SYSTEM_MEM],
+                                  100, // "large" bandwidth
+                                  5    // "small" latency
+          );
+
+          add_proc_mem_affinities(machine, procs_by_kind[k],
+                                  mems_by_kind[Memory::REGDMA_MEM],
+                                  80, // "large" bandwidth
+                                  10  // "small" latency
+          );
+
+          add_proc_mem_affinities(machine, procs_by_kind[k],
+                                  mems_by_kind[Memory::SOCKET_MEM],
+                                  100, // "large" bandwidth
+                                  5    // "small" latency
+          );
+
+          add_proc_mem_affinities(machine, procs_by_kind[k],
+                                  mems_by_kind[Memory::DISK_MEM],
+                                  5,  // "low" bandwidth
+                                  100 // "high" latency
+          );
+
+          add_proc_mem_affinities(machine, procs_by_kind[k],
+                                  mems_by_kind[Memory::HDF_MEM],
+                                  5,  // "low" bandwidth
+                                  100 // "high" latency
+          );
+
+          add_proc_mem_affinities(machine, procs_by_kind[k],
+                                  mems_by_kind[Memory::FILE_MEM],
+                                  5,  // low bandwidth
+                                  100 // high latency)
+          );
+
+          add_proc_mem_affinities(machine, procs_by_kind[k],
+                                  mems_by_kind[Memory::GLOBAL_MEM],
+                                  10, // "lower" bandwidth
+                                  50  // "higher" latency
+          );
+        }
+
+        for(std::set<Processor::Kind>::const_iterator it = local_cpu_kinds.begin();
+            it != local_cpu_kinds.end(); it++) {
+          Processor::Kind k = *it;
+
+	  add_proc_mem_affinities(machine,
+				  procs_by_kind[k],
+				  mems_by_kind[Memory::Z_COPY_MEM],
+				  40,  // "large" bandwidth
+				  3   // "small" latency
+				  );
+        }
       }
+
+      // retrieve process info
+      {
+        Machine::ProcessInfo process_info;
+        int errcode =
+            gethostname(process_info.hostname, Machine::ProcessInfo::MAX_HOSTNAME_LENGTH);
+        if(errcode != 0) {
+          log_runtime.warning() << "gethostname failed with " << errno;
+        }
+#ifdef REALM_ON_WINDOWS
+        process_info.processid = GetCurrentProcessId();
+        std::hash<std::string> hostname_hasher;
+        process_info.hostid = hostname_hasher(process_info.hostname);
+#else
+        process_info.processid = getpid();
+        process_info.hostid = gethostid();
+#endif
+        machine->add_process_info(Network::my_node_id, process_info);
+      }
+
+      // announce by network type
+      Serialization::DynamicBufferSerializer dbs(4096);
+
+      for(NetworkModule *module : network_modules) {
+        // first, build the set of nodes we'll talk to
+        NodeSet targets;
+        for(NodeID i = 0; i <= Network::max_node_id; i++) {
+          if((i != Network::my_node_id) && (Network::get_network(i) == module)) {
+            targets.add(i);
+          }
+        }
+        if(targets.empty()) {
+          continue;
+        }
+
+        // Announcement needs to happen in two stages in order to ensure all memory
+        // information is available for later serialization information (like remote
+        // channels)
+        // Stage 1: Announce all the memories attributes
+        dbs.reset();
+        ok = serialize_announce(dbs, n->memories, module);
+        assert(ok && "Failed to serialize memories");
+        ok = serialize_announce(dbs, n->ib_memories, module);
+        assert(ok && "Failed to serialize ib memories");
+        // TODO:FIX ME
+        // allgather_announcement(dbs, targets, machine, module);
+
+        // Stage 2: Announce everything else.
+        dbs.reset();
+        ok = serialize_announce(dbs, n, machine, module);
+        assert(ok && "Failed to serialize node for announcement");
+        // TODO:FIX ME
+        //allgather_announcement(dbs, targets, machine, module);
+      }
+
+      // Now that we have full knowledge of the machine, update the machine model's
+      // internal representation.  Start with the kind maps
+      machine->update_kind_maps();
+      // and the mem_mem affinities
+      machine->enumerate_mem_mem_affinities();
+
+      if(log_machine.want_debug()) {
+        // Print the machine model
+        if(Network::my_node_id == 0) {
+          for(int i = 0; i < Network::max_node_id + 1; i++) {
+            const Node &node = nodes[i];
+            log_machine.debug() << "Node " << i << ":\n" << node;
+          }
+        }
+      }
+
+      // Then update the path caches
+      if (Config::path_cache_lru_size) {
+        assert(Config::path_cache_lru_size > 0);
+        init_path_cache();
+      }
+
+      // Ensure everyone gets to this point before continuing to ensure everyone has all
+      // the channels, memory kinds, and all metadata available
+      Network::barrier();
     }
-  }
 
-  static void membership_post_leave_cb(const realmNodeMeta_t *self, const void *, size_t,
-                                       bool /*left*/, void *)
-  {
-    assert(Network::my_node_id == self->node_id);
-    get_runtime()->initiate_shutdown();
-  }
-
-  static bool membership_filter_cb(const realmNodeMeta_t *, void *) { return true; }
-
-  void RuntimeImpl::elastic_start(void)
-  {
-    for(std::vector<ProcessorImpl *>::const_iterator it =
-            nodes[Network::my_node_id].processors.begin();
-        it != nodes[Network::my_node_id].processors.end(); ++it) {
-      (*it)->start_threads();
-    }
-
-    realmMembershipInit(&membership);
-
-    Serialization::DynamicBufferSerializer dbs(4096);
-    bool ok = serialize_announcement(dbs, &get_runtime()->nodes[Network::my_node_id],
-                                     get_runtime()->machine,
-                                     Network::get_network(Network::my_node_id));
-    assert(ok);
-
-    NodeMeta *nm = Network::node_directory.lookup(Network::my_node_id);
-    assert(nm != nullptr);
-
-    const uint8_t *buffer = static_cast<const uint8_t *>(dbs.get_buffer());
-    nm->machine_model.assign(buffer, buffer + dbs.bytes_used());
-
-    realmNodeMeta_t self_meta{};
-    self_meta.node_id = Network::my_node_id;
-    self_meta.seed_id = Network::my_node_id == 0 ? NodeDirectory::INVALID_NODE_ID
-                                                 : NodeDirectory::UNKNOWN_NODE_ID;
-    self_meta.announce_mm = true;
-
-    hooks = realmMembershipHooks_t{membership_pre_join_cb,  membership_post_join_cb,
-                                   membership_pre_leave_cb, membership_post_leave_cb,
-                                   membership_filter_cb,    nullptr};
-    assert(realmJoin(membership, &self_meta, hooks) == REALM_OK);
-
+    bool RuntimeImpl::configure_from_command_line(std::vector<std::string> &cmdline)
     {
-      AutoLock<> al(join_mutex);
-      while(!join_complete) {
-        join_condvar.wait();
+      parse_command_line(cmdline);
+      finish_configure();
+      return true;
+    }
+
+    static void membership_pre_join_cb(const realmNodeMeta_t *self, const void *, size_t,
+                                       bool joined, void *)
+    {
+      assert(joined == false);
+
+      RuntimeImpl *rt = get_runtime();
+
+      if(Network::my_node_id == self->node_id) {
+      } else {
+        assert(rt->shutdown_in_progress.load() == false);
       }
     }
 
-#ifdef REALM_USE_KOKKOS
-    // now that the threads are started up, we can spin up the kokkos runtime
-    KokkosInterop::kokkos_initialize(nodes[Network::my_node_id].processors);
-#endif
-  }
+    static void membership_post_join_cb(const realmNodeMeta_t *n, const void *, size_t,
+                                        bool joined, void *arg)
+    {
+      Network::node_directory.remove_slot(NodeDirectory::UNKNOWN_NODE_ID);
 
-  void RuntimeImpl::start(void)
-  {
-    // all we have to do here is tell the processors to start up their
-    //  threads...
-    for(std::vector<ProcessorImpl *>::const_iterator it =
-            nodes[Network::my_node_id].processors.begin();
-        it != nodes[Network::my_node_id].processors.end(); ++it) {
-      (*it)->start_threads();
+      if(joined) {
+        RuntimeImpl *rt = get_runtime();
+        AutoLock<> al(rt->join_mutex);
+        rt->join_complete = joined;
+        rt->join_condvar.broadcast();
+      }
     }
 
+    bool RuntimeImpl::remove_peer(NodeID id)
+    {
+      Node &n = nodes[id];
+
+      // TODO: TEST ME
+
+      for(size_t i = 0; i < n.remote_events.max_entries(); ++i) {
+        if(n.remote_events.has_entry(i)) {
+          GenEventImpl *e = n.remote_events.lookup_entry(i, id);
+          GenEventImpl::trigger(e->current_event(), /*poisoned=*/true);
+        }
+      }
+
+      for(size_t i = 0; i < n.barriers.max_entries(); ++i) {
+        if(n.barriers.has_entry(i)) {
+          // BarrierImpl *b = n.barriers.lookup_entry(i, id);
+          // b->cancel_generations(id);
+        }
+      }
+
+      {
+        Node &n = nodes[id];
+        n.processors.clear();
+        n.dma_channels.clear();
+        n.memories.clear();
+        n.ib_memories.clear();
+        // n.remote_events.clear();
+        // n.barriers.clear();
+        // n.reservations.clear();
+        // n.compqueues.clear();
+        // n.sparsity_maps.clear();
+        n.subgraphs.clear();
+        n.proc_groups.clear();
+      }
+
+      for(NetworkModule *nm : network_modules) {
+        if(nm) {
+          nm->delete_remote_ep(id);
+        }
+      }
+
+      machine->remove_node(id);
+
+      return true;
+    }
+
+    static void membership_pre_leave_cb(const realmNodeMeta_t *self, const void *, size_t,
+                                        bool /*left*/, void *)
+    {
+      RuntimeImpl *rt = get_runtime();
+
+      if(Network::my_node_id == self->node_id) {
+        // DRAIN LOCAL WORK
+        // ITERATE OVER EVENTS AND CANCEL THEM
+        constexpr int retry_count = 10;
+
+        int tries = 0;
+        while(true) {
+          tries++;
+          bool done = Network::check_for_quiescence(rt->message_manager);
+          if(done) {
+            break;
+          }
+
+          if(tries >= retry_count) {
+            assert(0);
+            abort();
+          }
+        }
+
+        rt->shutdown_in_progress.store(true);
+
+      } else {
+        if(!rt->shutdown_in_progress.load()) {
+          assert(rt->remove_peer(self->node_id));
+        }
+      }
+    }
+
+    static void membership_post_leave_cb(const realmNodeMeta_t *self, const void *, size_t,
+                                         bool /*left*/, void *)
+    {
+      assert(Network::my_node_id == self->node_id);
+      get_runtime()->initiate_shutdown();
+    }
+
+    static bool membership_filter_cb(const realmNodeMeta_t *, void *) { return true; }
+
+    void RuntimeImpl::elastic_start(void)
+    {
+      for(std::vector<ProcessorImpl *>::const_iterator it =
+              nodes[Network::my_node_id].processors.begin();
+          it != nodes[Network::my_node_id].processors.end(); ++it) {
+        (*it)->start_threads();
+      }
+
+      realmMembershipInit(&membership);
+
+      Serialization::DynamicBufferSerializer dbs(4096);
+      bool ok = serialize_announcement(dbs, &get_runtime()->nodes[Network::my_node_id],
+                                       get_runtime()->machine,
+                                       Network::get_network(Network::my_node_id));
+      assert(ok);
+
+      NodeMeta *nm = Network::node_directory.lookup(Network::my_node_id);
+      assert(nm != nullptr);
+
+      const uint8_t *buffer = static_cast<const uint8_t *>(dbs.get_buffer());
+      nm->machine_model.assign(buffer, buffer + dbs.bytes_used());
+
+      realmNodeMeta_t self_meta{};
+      self_meta.node_id = Network::my_node_id;
+      self_meta.seed_id = Network::my_node_id == 0 ? NodeDirectory::INVALID_NODE_ID
+                                                   : NodeDirectory::UNKNOWN_NODE_ID;
+      self_meta.announce_mm = true;
+
+      hooks = realmMembershipHooks_t{membership_pre_join_cb,  membership_post_join_cb,
+                                     membership_pre_leave_cb, membership_post_leave_cb,
+                                     membership_filter_cb,    nullptr};
+      assert(realmJoin(membership, &self_meta, hooks) == REALM_OK);
+
+      {
+        AutoLock<> al(join_mutex);
+        while(!join_complete) {
+          join_condvar.wait();
+        }
+      }
 
 #ifdef REALM_USE_KOKKOS
-    // now that the threads are started up, we can spin up the kokkos runtime
-    KokkosInterop::kokkos_initialize(nodes[Network::my_node_id].processors);
+      // now that the threads are started up, we can spin up the kokkos runtime
+      KokkosInterop::kokkos_initialize(nodes[Network::my_node_id].processors);
 #endif
-  }
+    }
+
+    void RuntimeImpl::start(void)
+    {
+      // all we have to do here is tell the processors to start up their
+      //  threads...
+      for(std::vector<ProcessorImpl *>::const_iterator it = nodes[Network::my_node_id].processors.begin();
+	  it != nodes[Network::my_node_id].processors.end();
+	  ++it)
+	(*it)->start_threads();
+
+#ifdef REALM_USE_KOKKOS
+      // now that the threads are started up, we can spin up the kokkos runtime
+      KokkosInterop::kokkos_initialize(nodes[Network::my_node_id].processors);
+#endif
+    }
 
   template <typename T>
-  Event spawn_on_all(const T &container_of_procs, Processor::TaskFuncID func_id,
-                     const void *args, size_t arglen, Event start_event, int priority)
+  Event spawn_on_all(const T& container_of_procs,
+		     Processor::TaskFuncID func_id,
+		     const void *args, size_t arglen,
+		     Event start_event, int priority)
   {
     std::vector<Event> events;
-    for(typename T::const_iterator it = container_of_procs.begin();
-        it != container_of_procs.end(); it++) {
-      Event e = (*it)->me.spawn(func_id, args, arglen, ProfilingRequestSet(), start_event,
-                                priority);
-      events.push_back(e);
+    for (typename T::const_iterator it = container_of_procs.begin();
+         it != container_of_procs.end(); it++) {
+        Event e = (*it)->me.spawn(func_id, args, arglen, ProfilingRequestSet(),
+                                  start_event, priority);
+        events.push_back(e);
     }
     return Event::merge_events(events);
   }
@@ -2537,201 +2555,191 @@ namespace Realm {
 
 #ifdef DEBUG_COLLECTIVES
   template <typename T>
-  static void broadcast_check(const T &val, const char *name)
+  static void broadcast_check(const T& val, const char *name)
   {
     T bval = Network::broadcast(0 /*root*/, val);
     if(val != bval) {
-      log_collective.fatal() << "collective mismatch on node " << Network::my_node_id
-                             << " for " << name << ": " << val << " != " << bval;
+      log_collective.fatal() << "collective mismatch on node " << Network::my_node_id << " for " << name << ": " << val << " != " << bval;
       assert(false);
     }
   }
 #endif
 
-  Event RuntimeImpl::collective_spawn(Processor target_proc,
-                                      Processor::TaskFuncID task_id, const void *args,
-                                      size_t arglen, Event wait_on /*= Event::NO_EVENT*/,
-                                      int priority /*= 0*/)
-  {
-    log_collective.info() << "collective spawn: proc=" << target_proc
-                          << " func=" << task_id << " priority=" << priority
-                          << " before=" << wait_on;
+    Event RuntimeImpl::collective_spawn(Processor target_proc, Processor::TaskFuncID task_id, 
+					const void *args, size_t arglen,
+					Event wait_on /*= Event::NO_EVENT*/, int priority /*= 0*/)
+    {
+      log_collective.info() << "collective spawn: proc=" << target_proc << " func=" << task_id << " priority=" << priority << " before=" << wait_on;
 
 #ifdef DEBUG_COLLECTIVES
-    broadcast_check(target_proc, "target_proc");
-    broadcast_check(task_id, "task_id");
-    broadcast_check(priority, "priority");
+      broadcast_check(target_proc, "target_proc");
+      broadcast_check(task_id, "task_id");
+      broadcast_check(priority, "priority");
 #endif
 
-    // root node will be whoever owns the target proc
-    NodeID root = ID(target_proc).proc_owner_node();
+      // root node will be whoever owns the target proc
+      NodeID root = ID(target_proc).proc_owner_node();
 
-    if(Network::my_node_id == root) {
-      // ROOT NODE
+      if(Network::my_node_id == root) {
+	// ROOT NODE
 
-      // step 1: receive wait_on from every node
-      std::vector<Event> all_events;
-      Network::gather(root, wait_on, all_events);
+	// step 1: receive wait_on from every node
+	std::vector<Event> all_events;
+	Network::gather(root, wait_on, all_events);
 
-      // step 2: merge all the events
+	// step 2: merge all the events
+	std::vector<Event> events;
+	for(NodeID i = 0; i <= Network::max_node_id; i++) {
+	  //log_collective.info() << "ev " << i << ": " << all_events[i];
+	  if(all_events[i].exists())
+	    events.push_back(all_events[i]);
+	}
+
+	Event merged_event = Event::merge_events(events);
+	log_collective.info() << "merged precondition: proc=" << target_proc << " func=" << task_id << " priority=" << priority << " before=" << merged_event;
+
+	// step 3: run the task
+	Event finish_event = target_proc.spawn(task_id, args, arglen, merged_event, priority);
+
+	// step 4: broadcast the finish event to everyone else
+	(void) Network::broadcast(root, finish_event);
+
+	log_collective.info() << "collective spawn: proc=" << target_proc << " func=" << task_id << " priority=" << priority << " after=" << finish_event;
+
+	return finish_event;
+      } else {
+	// NON-ROOT NODE
+
+	// step 1: send our wait_on to the root for merging
+	Network::gather(root, wait_on);
+
+	// steps 2 and 3: twiddle thumbs
+
+	// step 4: receive finish event
+	Event finish_event = Network::broadcast(root, Event::NO_EVENT);
+
+	log_collective.info() << "collective spawn: proc=" << target_proc << " func=" << task_id << " priority=" << priority << " after=" << finish_event;
+
+	return finish_event;
+      }
+    }
+
+    Event RuntimeImpl::collective_spawn_by_kind(Processor::Kind target_kind, Processor::TaskFuncID task_id, 
+						const void *args, size_t arglen,
+						bool one_per_node /*= false*/,
+						Event wait_on /*= Event::NO_EVENT*/, int priority /*= 0*/)
+    {
+      log_collective.info()
+          << "collective spawn: kind=" << target_kind << " func=" << task_id
+          << " priority=" << priority << " before=" << wait_on;
+
+#ifdef DEBUG_COLLECTIVES
+      broadcast_check(target_kind, "target_kind");
+      broadcast_check(task_id, "task_id");
+      broadcast_check(one_per_node, "one_per_node");
+      broadcast_check(priority, "priority");
+#endif
+
+      // every node is involved in this one, so the root is arbitrary - we'll
+      // pick node 0
+
+      Event merged_event;
+
+      if (Network::my_node_id == 0) {
+        // ROOT NODE
+
+        // step 1: receive wait_on from every node
+        std::vector<Event> all_events;
+        Network::gather(0 /*root*/, wait_on, all_events);
+
+        // step 2: merge all the events
+        // Remove all the non-existant events
+        all_events.erase(std::remove_if(all_events.begin(), all_events.end(),
+                                        [](Event e) { return !e.exists(); }),
+                         all_events.end());
+
+        merged_event = Event::merge_events(all_events);
+
+        // step 3: broadcast the merged event back to everyone else
+        (void)Network::broadcast(0 /*root*/, merged_event);
+      } else {
+        // NON-ROOT NODE
+
+        // step 1: send our wait_on to the root for merging
+        Network::gather(0 /*root*/, wait_on);
+
+        // step 2: twiddle thumbs
+
+        // step 3: receive merged wait_on event
+        merged_event = Network::broadcast(0 /*root*/, Event::NO_EVENT);
+      }
+
+      // now spawn 0 or more local tasks
       std::vector<Event> events;
-      for(NodeID i = 0; i <= Network::max_node_id; i++) {
-        // log_collective.info() << "ev " << i << ": " << all_events[i];
-        if(all_events[i].exists())
-          events.push_back(all_events[i]);
+
+      const std::vector<ProcessorImpl *> &local_procs =
+          nodes[Network::my_node_id].processors;
+
+      for (std::vector<ProcessorImpl *>::const_iterator it =
+               local_procs.begin();
+           it != local_procs.end(); it++)
+        if ((target_kind == Processor::NO_KIND) ||
+            ((*it)->kind == target_kind)) {
+          Event e =
+              (*it)->me.spawn(task_id, args, arglen, ProfilingRequestSet(),
+                              merged_event, priority);
+          log_collective.info()
+              << "spawn by kind: proc=" << (*it)->me << " func=" << task_id
+              << " before=" << merged_event << " after=" << e;
+          if (e.exists())
+            events.push_back(e);
+
+          if (one_per_node)
+            break;
+        }
+
+      // local merge
+      Event my_finish = Event::merge_events(events);
+
+      if (Network::my_node_id == 0) {
+        // ROOT NODE
+
+        // step 1: receive wait_on from every node
+        std::vector<Event> all_events;
+        Network::gather(0 /*root*/, my_finish, all_events);
+        // Remove all the non-existant events
+        all_events.erase(std::remove_if(all_events.begin(), all_events.end(),
+                                        [](Event e) { return !e.exists(); }),
+                         all_events.end());
+
+        Event merged_finish = Event::merge_events(all_events);
+
+        // step 3: broadcast the merged event back to everyone
+        (void)Network::broadcast(0 /*root*/, merged_finish);
+
+        log_collective.info()
+            << "collective spawn: kind=" << target_kind << " func=" << task_id
+            << " priority=" << priority << " after=" << merged_finish;
+
+        return merged_finish;
+      } else {
+        // NON-ROOT NODE
+
+        // step 1: send our wait_on to the root for merging
+        Network::gather(0 /*root*/, my_finish);
+
+        // step 2: twiddle thumbs
+
+        // step 3: receive merged wait_on event
+        Event merged_finish = Network::broadcast(0 /*root*/, Event::NO_EVENT);
+
+        log_collective.info()
+            << "collective spawn: kind=" << target_kind << " func=" << task_id
+            << " priority=" << priority << " after=" << merged_finish;
+
+        return merged_finish;
       }
-
-      Event merged_event = Event::merge_events(events);
-      log_collective.info() << "merged precondition: proc=" << target_proc
-                            << " func=" << task_id << " priority=" << priority
-                            << " before=" << merged_event;
-
-      // step 3: run the task
-      Event finish_event =
-          target_proc.spawn(task_id, args, arglen, merged_event, priority);
-
-      // step 4: broadcast the finish event to everyone else
-      (void)Network::broadcast(root, finish_event);
-
-      log_collective.info() << "collective spawn: proc=" << target_proc
-                            << " func=" << task_id << " priority=" << priority
-                            << " after=" << finish_event;
-
-      return finish_event;
-    } else {
-      // NON-ROOT NODE
-
-      // step 1: send our wait_on to the root for merging
-      Network::gather(root, wait_on);
-
-      // steps 2 and 3: twiddle thumbs
-
-      // step 4: receive finish event
-      Event finish_event = Network::broadcast(root, Event::NO_EVENT);
-
-      log_collective.info() << "collective spawn: proc=" << target_proc
-                            << " func=" << task_id << " priority=" << priority
-                            << " after=" << finish_event;
-
-      return finish_event;
     }
-  }
-
-  Event RuntimeImpl::collective_spawn_by_kind(Processor::Kind target_kind,
-                                              Processor::TaskFuncID task_id,
-                                              const void *args, size_t arglen,
-                                              bool one_per_node /*= false*/,
-                                              Event wait_on /*= Event::NO_EVENT*/,
-                                              int priority /*= 0*/)
-  {
-    log_collective.info() << "collective spawn: kind=" << target_kind
-                          << " func=" << task_id << " priority=" << priority
-                          << " before=" << wait_on;
-
-#ifdef DEBUG_COLLECTIVES
-    broadcast_check(target_kind, "target_kind");
-    broadcast_check(task_id, "task_id");
-    broadcast_check(one_per_node, "one_per_node");
-    broadcast_check(priority, "priority");
-#endif
-
-    // every node is involved in this one, so the root is arbitrary - we'll
-    // pick node 0
-
-    Event merged_event;
-
-    if(Network::my_node_id == 0) {
-      // ROOT NODE
-
-      // step 1: receive wait_on from every node
-      std::vector<Event> all_events;
-      Network::gather(0 /*root*/, wait_on, all_events);
-
-      // step 2: merge all the events
-      // Remove all the non-existant events
-      all_events.erase(std::remove_if(all_events.begin(), all_events.end(),
-                                      [](Event e) { return !e.exists(); }),
-                       all_events.end());
-
-      merged_event = Event::merge_events(all_events);
-
-      // step 3: broadcast the merged event back to everyone else
-      (void)Network::broadcast(0 /*root*/, merged_event);
-    } else {
-      // NON-ROOT NODE
-
-      // step 1: send our wait_on to the root for merging
-      Network::gather(0 /*root*/, wait_on);
-
-      // step 2: twiddle thumbs
-
-      // step 3: receive merged wait_on event
-      merged_event = Network::broadcast(0 /*root*/, Event::NO_EVENT);
-    }
-
-    // now spawn 0 or more local tasks
-    std::vector<Event> events;
-
-    const std::vector<ProcessorImpl *> &local_procs =
-        nodes[Network::my_node_id].processors;
-
-    for(std::vector<ProcessorImpl *>::const_iterator it = local_procs.begin();
-        it != local_procs.end(); it++)
-      if((target_kind == Processor::NO_KIND) || ((*it)->kind == target_kind)) {
-        Event e = (*it)->me.spawn(task_id, args, arglen, ProfilingRequestSet(),
-                                  merged_event, priority);
-        log_collective.info() << "spawn by kind: proc=" << (*it)->me
-                              << " func=" << task_id << " before=" << merged_event
-                              << " after=" << e;
-        if(e.exists())
-          events.push_back(e);
-
-        if(one_per_node)
-          break;
-      }
-
-    // local merge
-    Event my_finish = Event::merge_events(events);
-
-    if(Network::my_node_id == 0) {
-      // ROOT NODE
-
-      // step 1: receive wait_on from every node
-      std::vector<Event> all_events;
-      Network::gather(0 /*root*/, my_finish, all_events);
-      // Remove all the non-existant events
-      all_events.erase(std::remove_if(all_events.begin(), all_events.end(),
-                                      [](Event e) { return !e.exists(); }),
-                       all_events.end());
-
-      Event merged_finish = Event::merge_events(all_events);
-
-      // step 3: broadcast the merged event back to everyone
-      (void)Network::broadcast(0 /*root*/, merged_finish);
-
-      log_collective.info() << "collective spawn: kind=" << target_kind
-                            << " func=" << task_id << " priority=" << priority
-                            << " after=" << merged_finish;
-
-      return merged_finish;
-    } else {
-      // NON-ROOT NODE
-
-      // step 1: send our wait_on to the root for merging
-      Network::gather(0 /*root*/, my_finish);
-
-      // step 2: twiddle thumbs
-
-      // step 3: receive merged wait_on event
-      Event merged_finish = Network::broadcast(0 /*root*/, Event::NO_EVENT);
-
-      log_collective.info() << "collective spawn: kind=" << target_kind
-                            << " func=" << task_id << " priority=" << priority
-                            << " after=" << merged_finish;
-
-      return merged_finish;
-    }
-  }
 
 #if 0
     struct MachineRunArgs {
@@ -2755,13 +2763,13 @@ namespace Realm {
     }
 #endif
 
-  void RuntimeImpl::run(Processor::TaskFuncID task_id /*= 0*/,
-                        Runtime::RunStyle style /*= ONE_TASK_ONLY*/,
-                        const void *args /*= 0*/, size_t arglen /*= 0*/,
-                        bool background /*= false*/)
-  {
-    // trigger legacy behavior (e.g. calling shutdown task on all processors)
-    run_method_called = true;
+    void RuntimeImpl::run(Processor::TaskFuncID task_id /*= 0*/,
+			  Runtime::RunStyle style /*= ONE_TASK_ONLY*/,
+			  const void *args /*= 0*/, size_t arglen /*= 0*/,
+			  bool background /*= false*/)
+    { 
+      // trigger legacy behavior (e.g. calling shutdown task on all processors)
+      run_method_called = true;
 #if 0
       if(background) {
         log_runtime.info("background operation requested\n");
@@ -2780,663 +2788,657 @@ namespace Realm {
 	CHECK_PTHREAD( pthread_attr_destroy(&attr) );
         background_pthread = threadp;
 #ifdef DEADLOCK_TRACE
-        this->add_thread(threadp);
+        this->add_thread(threadp); 
 #endif
 	return;
       }
 #endif
 
-    // step 1: a collective spawn to run the init task on all processors that care
-    Event init_event =
-        collective_spawn_by_kind(Processor::NO_KIND, Processor::TASK_ID_PROCESSOR_INIT, 0,
-                                 0, false /*run on all procs*/, Event::NO_EVENT,
-                                 INT_MAX); // runs with max priority
-
-    if(task_id != 0) {
-      if(style == Runtime::ONE_TASK_ONLY) {
-        // everybody needs to agree on this...
-        Processor p = nodes[0].processors[0]->me;
-        collective_spawn(p, task_id, args, arglen, init_event);
+      // step 1: a collective spawn to run the init task on all processors that care
+      Event init_event = collective_spawn_by_kind(Processor::NO_KIND, Processor::TASK_ID_PROCESSOR_INIT, 0, 0,
+						  false /*run on all procs*/,
+						  Event::NO_EVENT,
+						  INT_MAX); // runs with max priority
+      
+      if(task_id != 0) {
+	if(style == Runtime::ONE_TASK_ONLY) {
+	  // everybody needs to agree on this...
+	  Processor p = nodes[0].processors[0]->me;
+	  collective_spawn(p, task_id, args, arglen, init_event);
+	} else {
+	  collective_spawn_by_kind(Processor::NO_KIND, task_id, args, arglen,
+				   (style == Runtime::ONE_TASK_PER_NODE),
+				   init_event, 0 /*priority*/);
+	}
       } else {
-        collective_spawn_by_kind(Processor::NO_KIND, task_id, args, arglen,
-                                 (style == Runtime::ONE_TASK_PER_NODE), init_event,
-                                 0 /*priority*/);
-      }
-    } else {
-      // no main task!?
-      assert(0);
-    }
-
-    // if we're in background mode, we just return to the caller now
-    if(background)
-      return;
-
-    // otherwise, sleep until shutdown has been requested by somebody
-    int result = wait_for_shutdown();
-    exit(result);
-  }
-
-  bool RuntimeImpl::request_shutdown(Event wait_on, int result_code)
-  {
-    AutoLock<> al(shutdown_mutex);
-    // if this is a duplicate request, it has to match exactly
-    if(shutdown_request_received) {
-      if((wait_on != shutdown_precondition) || (result_code != shutdown_result_code)) {
-        log_runtime.fatal() << "inconsistent shutdown requests:"
-                            << " old=" << shutdown_precondition << "/"
-                            << shutdown_result_code << " new=" << wait_on << "/"
-                            << result_code;
-        abort();
+	// no main task!?
+	assert(0);
       }
 
-      return true;
-    } else {
-      shutdown_precondition = wait_on;
-      shutdown_result_code = result_code;
-      shutdown_request_received = true;
+      // if we're in background mode, we just return to the caller now
+      if(background)
+	return;
 
-      return false;
+      // otherwise, sleep until shutdown has been requested by somebody
+      int result = wait_for_shutdown();
+      exit(result);
     }
-  }
 
-  void RuntimeImpl::initiate_shutdown(void)
-  {
-    // if we're the master, we need to notify everyone else first
-    /*NodeID shutdown_master_node = 0;
-    if((Network::my_node_id == shutdown_master_node) && (Network::max_node_id > 0)) {
-      NodeSet targets;
-      for(NodeID i = 0; i <= Network::max_node_id; i++) 
-        if(i != Network::my_node_id)
-          targets.add(i);
-
-      // ActiveMessage<RuntimeShutdownMessage> amsg(targets);
-      // amsg->result_code = shutdown_result_code;
-      // amsg.commit();
-    }*/
-
+    bool RuntimeImpl::request_shutdown(Event wait_on, int result_code)
     {
       AutoLock<> al(shutdown_mutex);
-      assert(shutdown_request_received);
-      shutdown_initiated = true;
-      shutdown_condvar.broadcast();
-    }
-  }
-
-  void RuntimeImpl::elastic_shutdown(Event wait_on /*= Event::NO_EVENT*/, int result_code /*= 0*/)
-  {
-    assert(wait_on == Event::NO_EVENT);
-
-    bool failed = request_shutdown(wait_on, result_code);
-    assert(failed == false);
-
-    // realmMembership_t membership;
-    // realmMembershipInit(&membership);
-
-    realmNodeMeta_t self_meta{};
-    self_meta.node_id = Network::my_node_id;
-    //realmMembershipHooks_t hooks{nullptr, nullptr, membership_pre_leave_cb,
-                                //membership_post_leave_cb, nullptr};
-    
-    realmStatus_t status = realmLeave(membership, &self_meta, hooks);
-    assert(status == REALM_OK);
-  }
-
-  void RuntimeImpl::shutdown(Event wait_on /*= Event::NO_EVENT*/, int result_code /*= 0*/)
-  {
-    // if we're called from inside a task, automatically include the
-    //  task's finish event as well
-    if(Thread::self()) {
-      Operation *op = Thread::self()->get_operation();
-      if(op != 0) {
-        log_runtime.debug() << "shutdown merging finish event=" << op->get_finish_event();
-        wait_on = Event::merge_events(wait_on, op->get_finish_event());
-      }
-    }
-
-    log_runtime.info() << "shutdown requested - wait_on=" << wait_on
-                       << " code=" << result_code;
-
-    // send a message to the shutdown master if it's not us
-    NodeID shutdown_master_node = Network::my_node_id;
-    if(Network::my_node_id != shutdown_master_node) {
-      ActiveMessage<RuntimeShutdownRequest> amsg(shutdown_master_node);
-      amsg->wait_on = wait_on;
-      amsg->result_code = result_code;
-      amsg.commit();
-      return;
-    }
-
-    bool duplicate = request_shutdown(wait_on, result_code);
-    if(!duplicate) {
-      if(wait_on.has_triggered()) {
-        initiate_shutdown();
+      // if this is a duplicate request, it has to match exactly
+      if(shutdown_request_received) {
+	if((wait_on != shutdown_precondition) ||
+	   (result_code != shutdown_result_code)) {
+	  log_runtime.fatal() << "inconsistent shutdown requests:"
+			      << " old=" << shutdown_precondition << "/" << shutdown_result_code
+			      << " new=" << wait_on << "/" << result_code;
+	  abort();
+	}
+	
+	return true;
       } else {
-        deferred_shutdown.defer(this, wait_on);
-      }
-    }
-  }
-
-  int RuntimeImpl::wait_for_shutdown(void)
-  {
-    // sleep until shutdown has been requested by somebody
-    {
-      AutoLock<> al(shutdown_mutex);
-      while(!shutdown_initiated)
-        shutdown_condvar.wait();
-    }
-
-    log_runtime.info("shutdown request received - terminating");
-
-    // we need a task to run on each processor to ensure anything that was
-    //  running when the shutdown was initiated (e.g. the task that initiated
-    //  the shutdown) has finished - in legacy mode this is the "shutdown"
-    //  task, otherwise it's just a NOP (task 0)
-    {
-      Processor::TaskFuncID flush_task_id =
-          (run_method_called ? Processor::TASK_ID_PROCESSOR_SHUTDOWN
-                             : Processor::TASK_ID_PROCESSOR_NOP);
-
-      // legacy shutdown - call shutdown task on processors
-      log_runtime.info() << "local processor shutdown tasks initiated";
-
-      const std::vector<ProcessorImpl *> &local_procs =
-          nodes[Network::my_node_id].processors;
-      Event e = spawn_on_all(local_procs, flush_task_id, 0, 0, Event::NO_EVENT,
-                             INT_MIN); // runs with lowest priority
-      e.external_wait();
-      log_runtime.info() << "local processor shutdown tasks complete";
-    }
-
-    {
-      size_t n = num_untriggered_events.load();
-      if(n != 0) {
-        log_runtime.fatal() << n << " pending operations during shutdown!";
-        abort();
+	shutdown_precondition = wait_on;
+	shutdown_result_code = result_code;
+	shutdown_request_received = true;
+	
+	return false;
       }
     }
 
-    // the operation tables on every rank should be clear of work
-    optable.shutdown_check();
+    void RuntimeImpl::initiate_shutdown(void)
+    {
+      // if we're the master, we need to notify everyone else first
+      /*NodeID shutdown_master_node = 0;
+      if((Network::my_node_id == shutdown_master_node) &&
+	 (Network::max_node_id > 0)) {
+      	NodeSet targets;
+	for(NodeID i = 0; i <= Network::max_node_id; i++)
+	  if(i != Network::my_node_id)
+	    targets.add(i);
+	ActiveMessage<RuntimeShutdownMessage> amsg(targets);
+	amsg->result_code = shutdown_result_code;
+	amsg.commit();
+      }*/
 
-    // make sure the network is completely quiescent
-    if(Network::max_node_id > 0) {
-      int tries = 0;
-      while(true) {
-        tries++;
-        bool done = Network::check_for_quiescence(message_manager);
-        if(done) {
-          if(Network::my_node_id == 0)
-            log_runtime.info() << "quiescent after " << tries << " attempts";
-          break;
+      {
+	AutoLock<> al(shutdown_mutex);
+	assert(shutdown_request_received);
+	shutdown_initiated = true;
+	shutdown_condvar.broadcast();
+      }
+    }
+
+    void RuntimeImpl::elastic_shutdown(Event wait_on /*= Event::NO_EVENT*/, int result_code /*= 0*/)
+    {
+      assert(wait_on == Event::NO_EVENT);
+
+      bool failed = request_shutdown(wait_on, result_code);
+      assert(failed == false);
+
+      realmNodeMeta_t self_meta{};
+      self_meta.node_id = Network::my_node_id;
+      
+      realmStatus_t status = realmLeave(membership, &self_meta, hooks);
+      assert(status == REALM_OK);
+    }
+
+    void RuntimeImpl::shutdown(Event wait_on /*= Event::NO_EVENT*/,
+                               int result_code /*= 0*/)
+    {
+      // if we're called from inside a task, automatically include the
+      //  task's finish event as well
+      if(Thread::self()) {
+        Operation *op = Thread::self()->get_operation();
+        if(op != 0) {
+          log_runtime.debug() << "shutdown merging finish event="
+                              << op->get_finish_event();
+          wait_on = Event::merge_events(wait_on, op->get_finish_event());
         }
+      }
 
-        if(tries >= 10) {
-          log_runtime.fatal() << "network still not quiescent after " << tries
-                              << " attempts";
+      log_runtime.info() << "shutdown requested - wait_on=" << wait_on
+                         << " code=" << result_code;
+
+      // send a message to the shutdown master if it's not us
+      NodeID shutdown_master_node = Network::my_node_id; // TODO: FIX ME
+      if(Network::my_node_id != shutdown_master_node) {
+        ActiveMessage<RuntimeShutdownRequest> amsg(shutdown_master_node);
+        amsg->wait_on = wait_on;
+        amsg->result_code = result_code;
+        amsg.commit();
+        return;
+      }
+
+      bool duplicate = request_shutdown(wait_on, result_code);
+      if(!duplicate) {
+        if(wait_on.has_triggered())
+          initiate_shutdown();
+        else
+          deferred_shutdown.defer(this, wait_on);
+      }
+    }
+
+    int RuntimeImpl::wait_for_shutdown(void)
+    {
+      // sleep until shutdown has been requested by somebody
+      {
+        AutoLock<> al(shutdown_mutex);
+        while (!shutdown_initiated)
+          shutdown_condvar.wait();
+      }
+      log_runtime.info("shutdown request received - terminating");
+
+      // we need a task to run on each processor to ensure anything that was
+      //  running when the shutdown was initiated (e.g. the task that initiated
+      //  the shutdown) has finished - in legacy mode this is the "shutdown"
+      //  task, otherwise it's just a NOP (task 0)
+      {
+        Processor::TaskFuncID flush_task_id =
+            (run_method_called ? Processor::TASK_ID_PROCESSOR_SHUTDOWN
+                               : Processor::TASK_ID_PROCESSOR_NOP);
+
+        // legacy shutdown - call shutdown task on processors
+        log_runtime.info() << "local processor shutdown tasks initiated";
+
+        const std::vector<ProcessorImpl *> &local_procs =
+            nodes[Network::my_node_id].processors;
+        Event e =
+            spawn_on_all(local_procs, flush_task_id, 0, 0, Event::NO_EVENT,
+                         INT_MIN); // runs with lowest priority
+        e.external_wait();
+        log_runtime.info() << "local processor shutdown tasks complete";
+      }
+
+      {
+        size_t n = num_untriggered_events.load();
+        if (n != 0) {
+          log_runtime.fatal() << n << " pending operations during shutdown!";
           abort();
         }
       }
-    }
 
-    // mark that a shutdown is in progress so that we can hopefully catch
-    //  things that try to run during teardown
-    shutdown_in_progress.store(true);
+      // the operation tables on every rank should be clear of work
+      optable.shutdown_check();
+
+      // make sure the network is completely quiescent
+      if (Network::max_node_id > 0) {
+        int tries = 0;
+        while (true) {
+          tries++;
+          bool done = Network::check_for_quiescence(message_manager);
+          if (done) {
+            if (Network::my_node_id == 0)
+              log_runtime.info() << "quiescent after " << tries << " attempts";
+            break;
+          }
+
+          if (tries >= 10) {
+            log_runtime.fatal()
+                << "network still not quiescent after " << tries << " attempts";
+            abort();
+          }
+        }
+      }
+
+      // mark that a shutdown is in progress so that we can hopefully catch
+      //  things that try to run during teardown
+      shutdown_in_progress.store(true);
 
 #ifdef REALM_USE_KOKKOS
-    // finalize the kokkos runtime
-    KokkosInterop::kokkos_finalize(nodes[Network::my_node_id].processors);
+      // finalize the kokkos runtime
+      KokkosInterop::kokkos_finalize(nodes[Network::my_node_id].processors);
 #endif
 
-    // Shutdown all the threads
+      // Shutdown all the threads
 
-    // stop processors before most other things, as they may be helping with
-    //  background work
-    {
-      std::vector<ProcessorImpl *> &local_procs = nodes[Network::my_node_id].processors;
-      for(std::vector<ProcessorImpl *>::const_iterator it = local_procs.begin();
-          it != local_procs.end(); it++)
+      // stop processors before most other things, as they may be helping with
+      //  background work
+      {
+        std::vector<ProcessorImpl *> &local_procs =
+            nodes[Network::my_node_id].processors;
+        for (std::vector<ProcessorImpl *>::const_iterator it =
+                 local_procs.begin();
+             it != local_procs.end(); it++)
+          (*it)->shutdown();
+      }
+
+      // threads that cause inter-node communication have to stop first
+      PartitioningOpQueue::stop_worker_threads();
+
+      for (std::vector<Channel *>::iterator it =
+               nodes[Network::my_node_id].dma_channels.begin();
+           it != nodes[Network::my_node_id].dma_channels.end(); ++it)
         (*it)->shutdown();
-    }
+      stop_dma_system();
 
-    // threads that cause inter-node communication have to stop first
-    PartitioningOpQueue::stop_worker_threads();
+      repl_heap.cleanup();
 
-    for(std::vector<Channel *>::iterator it =
-            nodes[Network::my_node_id].dma_channels.begin();
-        it != nodes[Network::my_node_id].dma_channels.end(); ++it) {
-      (*it)->shutdown();
-    }
+      // let network-dependent cleanup happen before we detach
+      for (std::vector<Module *>::iterator it = modules.begin();
+           it != modules.end(); it++) {
+        (*it)->pre_detach_cleanup();
+      }
 
-    stop_dma_system();
-
-    repl_heap.cleanup();
-
-    // let network-dependent cleanup happen before we detach
-    for(std::vector<Module *>::iterator it = modules.begin(); it != modules.end(); it++) {
-      (*it)->pre_detach_cleanup();
-    }
-
-    // detach from the network
-    for(std::vector<NetworkModule *>::const_iterator it = network_modules.begin();
-        it != network_modules.end(); it++)
-      (*it)->detach(this, network_segments);
+      // detach from the network
+      for (std::vector<NetworkModule *>::const_iterator it =
+               network_modules.begin();
+           it != network_modules.end(); it++)
+        (*it)->detach(this, network_segments);
 
 #ifdef DEBUG_REALM
-    event_triggerer.shutdown_work_item();
+      event_triggerer.shutdown_work_item();
 #endif
-    bgwork.stop_dedicated_workers();
+      bgwork.stop_dedicated_workers();
 
-    // tear down the active message manager
-    message_manager->shutdown();
-    delete message_manager;
+      // tear down the active message manager
+      message_manager->shutdown();
+      delete message_manager;
 
-    sampling_profiler.shutdown();
+      sampling_profiler.shutdown();
 
-    if(Config::profile_activemsg_handlers)
-      activemsg_handler_table.report_message_handler_stats();
+      if (Config::profile_activemsg_handlers)
+        activemsg_handler_table.report_message_handler_stats();
 
 #ifdef EVENT_TRACING
-    if(event_trace_file) {
-      printf("writing event trace to %s\n", event_trace_file);
-      Tracer<EventTraceItem>::dump_trace(event_trace_file, false);
-      free(event_trace_file);
-      event_trace_file = 0;
-    }
+      if (event_trace_file) {
+        printf("writing event trace to %s\n", event_trace_file);
+        Tracer<EventTraceItem>::dump_trace(event_trace_file, false);
+        free(event_trace_file);
+        event_trace_file = 0;
+      }
 #endif
 #ifdef LOCK_TRACING
-    if(lock_trace_file) {
-      printf("writing lock trace to %s\n", lock_trace_file);
-      Tracer<LockTraceItem>::dump_trace(lock_trace_file, false);
-      free(lock_trace_file);
-      lock_trace_file = 0;
-    }
+      if (lock_trace_file) {
+        printf("writing lock trace to %s\n", lock_trace_file);
+        Tracer<LockTraceItem>::dump_trace(lock_trace_file, false);
+        free(lock_trace_file);
+        lock_trace_file = 0;
+      }
 #endif
 
 #ifdef REPORT_REALM_RESOURCE_USAGE
-    {
-      RuntimeImpl *rt = get_runtime();
-      printf("node %d realm resource usage: ev=%d, rsrv=%d, idx=%d, pg=%d\n",
-             Network::my_node_id, rt->local_event_free_list->next_alloc,
-             rt->local_reservation_free_list->next_alloc,
-             rt->local_index_space_free_list->next_alloc,
-             rt->local_proc_group_free_list->next_alloc);
-    }
+      {
+        RuntimeImpl *rt = get_runtime();
+        printf("node %d realm resource usage: ev=%d, rsrv=%d, idx=%d, pg=%d\n",
+               Network::my_node_id, rt->local_event_free_list->next_alloc,
+               rt->local_reservation_free_list->next_alloc,
+               rt->local_index_space_free_list->next_alloc,
+               rt->local_proc_group_free_list->next_alloc);
+      }
 #endif
-    cleanup_query_caches();
-    {
-      // Clean up all the modules before tearing down the runtime state.
-      for(std::vector<Module *>::iterator it = modules.begin(); it != modules.end();
-          it++) {
-        (*it)->cleanup();
-        delete(*it);
+      cleanup_query_caches();
+      {
+        // Clean up all the modules before tearing down the runtime state.
+        for (std::vector<Module *>::iterator it = modules.begin();
+             it != modules.end(); it++) {
+          (*it)->cleanup();
+          delete (*it);
+        }
+
+        for (std::vector<NetworkModule *>::iterator it =
+                 network_modules.begin();
+             it != network_modules.end(); it++) {
+          (*it)->cleanup();
+          delete (*it);
+        }
+        Network::single_network = 0;
+
+        delete[] nodes;
+        delete local_event_free_list;
+        delete local_barrier_free_list;
+        delete local_reservation_free_list;
+        delete local_compqueue_free_list;
+        delete_container_contents(local_sparsity_map_free_lists);
+        delete_container_contents(local_subgraph_free_lists);
+        delete_container_contents(local_proc_group_free_lists);
+
+        // same for code translators
+        delete_container_contents(code_translators);
+
+        // Clear the global nodesets that potentially reference dynamic bitmasks that will
+        // be free'd when we free the allocations.
+        // TODO: properly manage the life-time of the nodeset bitmask allocations to avoid
+        // this issue for future nodesets
+        Network::all_peers.clear();
+        Network::shared_peers.clear();
+
+        NodeSetBitmask::free_allocations();
+
+        // clean up all the module configs only after cleaning pu the local state in
+        // case some of them might still need to refer to it during deletion
+        // e.g. the sparsity map impl class
+        for(std::map<std::string, ModuleConfig *>::iterator it = module_configs.begin();
+            it != module_configs.end(); it++) {
+          delete(it->second);
+          it->second = nullptr;
+        }
+
+        // dlclose all dynamic module handles
+        module_registrar.unload_module_sofiles();
       }
 
-      for(std::vector<NetworkModule *>::iterator it = network_modules.begin();
-          it != network_modules.end(); it++) {
-        (*it)->cleanup();
-        delete(*it);
+      if (!Threading::cleanup())
+        exit(1);
+
+      // very last step - unregister our signal handlers
+      unregister_error_signal_handler();
+
+      if (Config::path_cache_lru_size) {
+        finalize_path_cache();
       }
-      Network::single_network = 0;
-
-      delete[] nodes;
-      delete local_event_free_list;
-      delete local_barrier_free_list;
-      delete local_reservation_free_list;
-      delete local_compqueue_free_list;
-      delete_container_contents(local_sparsity_map_free_lists);
-      delete_container_contents(local_subgraph_free_lists);
-      delete_container_contents(local_proc_group_free_lists);
-
-      // same for code translators
-      delete_container_contents(code_translators);
-
-      // Clear the global nodesets that potentially reference dynamic bitmasks that will
-      // be free'd when we free the allocations.
-      // TODO: properly manage the life-time of the nodeset bitmask allocations to avoid
-      // this issue for future nodesets
-      Network::all_peers.clear();
-      Network::shared_peers.clear();
-
-      NodeSetBitmask::free_allocations();
-
-      // clean up all the module configs only after cleaning pu the local state in
-      // case some of them might still need to refer to it during deletion
-      // e.g. the sparsity map impl class
-      for(std::map<std::string, ModuleConfig *>::iterator it = module_configs.begin();
-          it != module_configs.end(); it++) {
-        delete(it->second);
-        it->second = nullptr;
-      }
-
-      // dlclose all dynamic module handles
-      module_registrar.unload_module_sofiles();
-    }
-
-    if(!Threading::cleanup())
-      exit(1);
-
-    // very last step - unregister our signal handlers
-    unregister_error_signal_handler();
-
-    if(Config::path_cache_lru_size) {
-      finalize_path_cache();
-    }
 
 #ifdef REALM_USE_NVTX
-    // finalize nvtx
-    finalize_nvtx();
+      // finalize nvtx
+      finalize_nvtx();
 #endif
 
-    return shutdown_result_code;
-  }
-
-  bool RuntimeImpl::create_configs(int argc, char **argv)
-  {
-    // initialize topology
-    assert(topology_init == false);
-    host_topology = HardwareTopology::create_topology();
-    topology_init = true;
-
-    if(!module_configs_created) {
-      std::vector<std::string> cmdline;
-      cmdline.reserve(argc);
-      for(int i = 1; i < argc; i++)
-        cmdline.push_back(argv[i]);
-      module_registrar.create_static_module_configs(module_configs);
-      module_registrar.create_dynamic_module_configs(cmdline, module_configs);
-      module_configs_created = true;
+      return shutdown_result_code;
     }
-    return true;
-  }
 
-  ModuleConfig *RuntimeImpl::get_module_config(const std::string &name) const
-  {
-    std::map<std::string, ModuleConfig *>::const_iterator it;
-    it = module_configs.find(name);
-    if(it == module_configs.end()) {
-      return NULL;
-    } else {
-      return it->second;
-    }
-  }
-
-  EventImpl *RuntimeImpl::get_event_impl(Event e)
-  {
-    if(shutdown_in_progress.load()) {
-      log_runtime.fatal() << "looking up event after shutdown: " << e;
-      abort();
-    }
-    ID id(e);
-    if(id.is_event())
-      return get_genevent_impl(e);
-    if(id.is_barrier())
-      return get_barrier_impl(e);
-
-    log_runtime.fatal() << "invalid event handle: id=" << id;
-    assert(0 && "invalid event handle");
-    return 0;
-  }
-
-  GenEventImpl *RuntimeImpl::get_genevent_impl(Event e)
-  {
-    ID id(e);
-    assert(id.is_event());
-
-    GenEventImpl *impl;
-    if(NodeID(id.event_creator_node()) == Network::my_node_id) {
-      // use our shallower local event table
-      impl = local_events.lookup_entry(id.event_gen_event_idx(), id.event_creator_node());
-    } else {
-      Node *n = &nodes[id.event_creator_node()];
-      impl = n->remote_events.lookup_entry(id.event_gen_event_idx(),
-                                           id.event_creator_node());
-    }
+    bool RuntimeImpl::create_configs(int argc, char **argv)
     {
-      ID check(impl->me);
-      assert(check.event_creator_node() == id.event_creator_node());
-      assert(check.event_gen_event_idx() == id.event_gen_event_idx());
+      // initialize topology
+      assert(topology_init == false);
+      host_topology = HardwareTopology::create_topology();
+      topology_init = true;
+
+      if (!module_configs_created) {
+        std::vector<std::string> cmdline;
+        cmdline.reserve(argc);
+        for(int i = 1; i < argc; i++)
+          cmdline.push_back(argv[i]);
+        module_registrar.create_static_module_configs(module_configs);
+        module_registrar.create_dynamic_module_configs(cmdline, module_configs);
+        module_configs_created = true;
+      }
+      return true;
     }
-    return impl;
-  }
 
-  BarrierImpl *RuntimeImpl::get_barrier_impl(Event e)
-  {
-    ID id(e);
-    assert(id.is_barrier());
-
-    Node *n = &nodes[id.barrier_creator_node()];
-    BarrierImpl *impl =
-        n->barriers.lookup_entry(id.barrier_barrier_idx(), id.barrier_creator_node());
+    ModuleConfig *RuntimeImpl::get_module_config(const std::string &name) const
     {
-      ID check(impl->me);
-      assert(check.barrier_creator_node() == id.barrier_creator_node());
-      assert(check.barrier_barrier_idx() == id.barrier_barrier_idx());
-    }
-    return impl;
-  }
-
-  SparsityMapImplWrapper *RuntimeImpl::get_sparsity_impl(ID id)
-  {
-    if(!id.is_sparsity()) {
-      log_runtime.fatal() << "invalid index space sparsity handle: id=" << id;
-      assert(0 && "invalid index space sparsity handle");
+      std::map<std::string, ModuleConfig *>::const_iterator it;
+      it = module_configs.find(name);
+      if (it == module_configs.end()) {
+        return NULL;
+      } else {
+        return it->second;
+      }
     }
 
-    Node *n = &nodes[id.sparsity_owner_node()];
-    atomic<DynamicTable<SparsityMapTableAllocator> *> &m =
-        n->sparsity_maps[id.sparsity_creator_node()];
-    // might need to construct this (in a lock-free way)
-    DynamicTable<SparsityMapTableAllocator> *mptr = m.load();
-    if(mptr == 0) {
-      // construct one and try to swap it in
-      DynamicTable<SparsityMapTableAllocator> *newm =
-          new DynamicTable<SparsityMapTableAllocator>;
-      if(m.compare_exchange(mptr, newm))
-        mptr = newm; // we're using the one we made
-      else
-        delete newm; // somebody else made it faster (mptr has winner)
-    }
-    SparsityMapImplWrapper *impl =
-        mptr->lookup_entry(id.sparsity_sparsity_idx(), id.sparsity_owner_node());
-    // creator node isn't always right, so try to fix it
-    if(impl->me != id) {
-      if(impl->me.sparsity_creator_node() == 0)
-        impl->me.sparsity_creator_node() = NodeID(id.sparsity_creator_node());
-      assert(impl->me == id);
-    }
-    return impl;
-  }
+    EventImpl *RuntimeImpl::get_event_impl(Event e)
+    {
+      if(shutdown_in_progress.load()) {
+	log_runtime.fatal() << "looking up event after shutdown: " << e;
+	abort();
+      }
+      ID id(e);
+      if(id.is_event())
+	return get_genevent_impl(e);
+      if(id.is_barrier())
+	return get_barrier_impl(e);
 
-  SparsityMapImplWrapper *RuntimeImpl::get_available_sparsity_impl(NodeID target_node)
-  {
-    SparsityMapImplWrapper *wrap =
-        local_sparsity_map_free_lists[target_node]->alloc_entry();
-    wrap->me.sparsity_creator_node() = Network::my_node_id;
-    return wrap;
-  }
-
-  void RuntimeImpl::free_sparsity_impl(SparsityMapImplWrapper *impl)
-  {
-    assert(local_sparsity_map_free_lists[impl->me.sparsity_owner_node()]->table.has_entry(
-        impl->me.sparsity_sparsity_idx()));
-    local_sparsity_map_free_lists[impl->me.sparsity_owner_node()]->free_entry(impl);
-  }
-
-  SubgraphImpl *RuntimeImpl::get_subgraph_impl(ID id)
-  {
-    if(!id.is_subgraph()) {
-      log_runtime.fatal() << "invalid subgraph handle: id=" << id;
-      assert(0 && "invalid subgraph handle");
+      log_runtime.fatal() << "invalid event handle: id=" << id;
+      assert(0 && "invalid event handle");
+      return 0;
     }
 
-    Node *n = &nodes[id.subgraph_owner_node()];
-    atomic<DynamicTable<SubgraphTableAllocator> *> &m =
-        n->subgraphs[id.subgraph_creator_node()];
-    // might need to construct this (in a lock-free way)
-    DynamicTable<SubgraphTableAllocator> *mptr = m.load();
-    if(mptr == 0) {
-      // construct one and try to swap it in
-      DynamicTable<SubgraphTableAllocator> *newm =
-          new DynamicTable<SubgraphTableAllocator>;
-      if(m.compare_exchange(mptr, newm))
-        mptr = newm; // we're using the one we made
-      else
-        delete newm; // somebody else made it faster (mptr has winner)
-    }
-    SubgraphImpl *impl =
-        mptr->lookup_entry(id.subgraph_subgraph_idx(), id.subgraph_owner_node());
-    // creator node isn't always right, so try to fix it
-    if(impl->me != id) {
-      if(impl->me.subgraph_creator_node() == 0)
-        impl->me.subgraph_creator_node() = NodeID(id.subgraph_creator_node());
-      assert(impl->me == id);
-    }
-    return impl;
-  }
+    GenEventImpl *RuntimeImpl::get_genevent_impl(Event e)
+    {
+      ID id(e);
+      assert(id.is_event());
 
-  ReservationImpl *RuntimeImpl::get_lock_impl(ID id)
-  {
-    if(id.is_reservation()) {
-      Node *n = &nodes[id.rsrv_creator_node()];
-      ReservationImpl *impl =
-          n->reservations.lookup_entry(id.rsrv_rsrv_idx(), id.rsrv_creator_node());
-      assert(impl->me == id.convert<Reservation>());
+      GenEventImpl *impl;
+      if(NodeID(id.event_creator_node()) == Network::my_node_id) {
+	// use our shallower local event table
+        impl =
+            local_events.lookup_entry(id.event_gen_event_idx(), id.event_creator_node());
+      } else {
+	Node *n = &nodes[id.event_creator_node()];
+        impl = n->remote_events.lookup_entry(id.event_gen_event_idx(),
+                                             id.event_creator_node());
+      }
+      {
+	ID check(impl->me);
+	assert(check.event_creator_node() == id.event_creator_node());
+	assert(check.event_gen_event_idx() == id.event_gen_event_idx());
+      }
       return impl;
     }
 
-    if(id.is_instance())
-      return &(get_instance_impl(id)->lock);
+    BarrierImpl *RuntimeImpl::get_barrier_impl(Event e)
+    {
+      ID id(e);
+      assert(id.is_barrier());
 
-    if(id.is_procgroup())
-      return &(get_procgroup_impl(id)->lock);
+      Node *n = &nodes[id.barrier_creator_node()];
+      BarrierImpl *impl = n->barriers.lookup_entry(id.barrier_barrier_idx(),
+						   id.barrier_creator_node());
+      {
+	ID check(impl->me);
+	assert(check.barrier_creator_node() == id.barrier_creator_node());
+	assert(check.barrier_barrier_idx() == id.barrier_barrier_idx());
+      }
+      return impl;
+    }
 
-    log_runtime.fatal() << "invalid reservation handle: id=" << id;
-    assert(0 && "invalid reservation handle");
-    return 0;
-  }
+    SparsityMapImplWrapper *RuntimeImpl::get_sparsity_impl(ID id)
+    {
+      if(!id.is_sparsity()) {
+	log_runtime.fatal() << "invalid index space sparsity handle: id=" << id;
+	assert(0 && "invalid index space sparsity handle");
+      }
 
-  MemoryImpl *RuntimeImpl::get_memory_impl(ID id) const
-  {
-    size_t mem_idx;
-    if(id.is_memory()) {
+      Node *n = &nodes[id.sparsity_owner_node()];
+      atomic<DynamicTable<SparsityMapTableAllocator> *>& m = n->sparsity_maps[id.sparsity_creator_node()];
+      // might need to construct this (in a lock-free way)
+      DynamicTable<SparsityMapTableAllocator> *mptr = m.load();
+      if(mptr == 0) {
+	// construct one and try to swap it in
+	DynamicTable<SparsityMapTableAllocator> *newm = new DynamicTable<SparsityMapTableAllocator>;
+	if(m.compare_exchange(mptr, newm))
+	  mptr = newm;  // we're using the one we made
+	else
+	  delete newm;  // somebody else made it faster (mptr has winner)
+      }
+      SparsityMapImplWrapper *impl = mptr->lookup_entry(id.sparsity_sparsity_idx(),
+							id.sparsity_owner_node());
+      // creator node isn't always right, so try to fix it
+      if(impl->me != id) {
+	if(impl->me.sparsity_creator_node() == 0)
+	  impl->me.sparsity_creator_node() = NodeID(id.sparsity_creator_node());
+	assert(impl->me == id);
+      }
+      return impl;
+    }
+  
+    SparsityMapImplWrapper *RuntimeImpl::get_available_sparsity_impl(NodeID target_node)
+    {
+      SparsityMapImplWrapper *wrap = local_sparsity_map_free_lists[target_node]->alloc_entry();
+      wrap->me.sparsity_creator_node() = Network::my_node_id;
+      return wrap;
+    }
+
+    void RuntimeImpl::free_sparsity_impl(SparsityMapImplWrapper *impl)
+    {
+      assert(
+          local_sparsity_map_free_lists[impl->me.sparsity_owner_node()]->table.has_entry(
+              impl->me.sparsity_sparsity_idx()));
+      local_sparsity_map_free_lists[impl->me.sparsity_owner_node()]->free_entry(impl);
+    }
+
+    SubgraphImpl *RuntimeImpl::get_subgraph_impl(ID id)
+    {
+      if(!id.is_subgraph()) {
+	log_runtime.fatal() << "invalid subgraph handle: id=" << id;
+	assert(0 && "invalid subgraph handle");
+      }
+
+      Node *n = &nodes[id.subgraph_owner_node()];
+      atomic<DynamicTable<SubgraphTableAllocator> *>& m = n->subgraphs[id.subgraph_creator_node()];
+      // might need to construct this (in a lock-free way)
+      DynamicTable<SubgraphTableAllocator> *mptr = m.load();
+      if(mptr == 0) {
+	// construct one and try to swap it in
+	DynamicTable<SubgraphTableAllocator> *newm = new DynamicTable<SubgraphTableAllocator>;
+	if(m.compare_exchange(mptr, newm))
+	  mptr = newm;  // we're using the one we made
+	else
+	  delete newm;  // somebody else made it faster (mptr has winner)
+      }
+      SubgraphImpl *impl = mptr->lookup_entry(id.subgraph_subgraph_idx(),
+					      id.subgraph_owner_node());
+      // creator node isn't always right, so try to fix it
+      if(impl->me != id) {
+	if(impl->me.subgraph_creator_node() == 0)
+	  impl->me.subgraph_creator_node() = NodeID(id.subgraph_creator_node());
+	assert(impl->me == id);
+      }
+      return impl;
+    }
+  
+    ReservationImpl *RuntimeImpl::get_lock_impl(ID id)
+    {
+      if(id.is_reservation()) {
+	Node *n = &nodes[id.rsrv_creator_node()];
+	ReservationImpl *impl = n->reservations.lookup_entry(id.rsrv_rsrv_idx(),
+							     id.rsrv_creator_node());
+	assert(impl->me == id.convert<Reservation>());
+	return impl;
+      }
+
+      if(id.is_instance())
+	return &(get_instance_impl(id)->lock);
+
+      if(id.is_procgroup())
+	return &(get_procgroup_impl(id)->lock);
+
+      log_runtime.fatal() << "invalid reservation handle: id=" << id;
+      assert(0 && "invalid reservation handle");
+      return 0;
+    }
+
+    MemoryImpl *RuntimeImpl::get_memory_impl(ID id) const
+    {
+      size_t mem_idx;
+      if(id.is_memory()) {
+        size_t node_idx = id.memory_owner_node();
+        if(node_idx >= num_nodes) {
+          return nullptr;
+        }
+        mem_idx = id.memory_mem_idx();
+        if(mem_idx < nodes[node_idx].memories.size()) {
+          return nodes[node_idx].memories[mem_idx];
+        }
+      } else if(id.is_ib_memory()) {
+        size_t node_idx = id.memory_owner_node();
+        if(node_idx >= num_nodes) {
+          return nullptr;
+        }
+        mem_idx = id.memory_mem_idx();
+        if(mem_idx < nodes[node_idx].ib_memories.size()) {
+          return nodes[node_idx].ib_memories[mem_idx];
+        }
+      } else if(id.is_instance()) {
+        size_t node_idx = id.instance_owner_node();
+        if(node_idx >= num_nodes) {
+          return nullptr;
+        }
+        mem_idx = id.instance_mem_idx();
+        if(mem_idx < nodes[node_idx].memories.size()) {
+          return nodes[node_idx].memories[mem_idx];
+        }
+      }
+
+      return nullptr;
+    }
+
+    IBMemory *RuntimeImpl::get_ib_memory_impl(ID id) const
+    {
+      if(!id.is_ib_memory()) {
+        return nullptr;
+      }
+
       size_t node_idx = id.memory_owner_node();
       if(node_idx >= num_nodes) {
         return nullptr;
       }
-      mem_idx = id.memory_mem_idx();
-      if(mem_idx < nodes[node_idx].memories.size()) {
-        return nodes[node_idx].memories[mem_idx];
+
+      size_t mem_idx = id.memory_mem_idx();
+      if(mem_idx >= nodes[node_idx].ib_memories.size()) {
+        return nullptr;
       }
-    } else if(id.is_ib_memory()) {
-      size_t node_idx = id.memory_owner_node();
+
+      return nodes[node_idx].ib_memories[mem_idx];
+    }
+
+    ProcessorImpl *RuntimeImpl::get_processor_impl(ID id)
+    {
+      if(id.is_procgroup())
+	return get_procgroup_impl(id);
+
+      if(!id.is_processor()) {
+        return nullptr;
+      }
+
+      size_t node_idx = id.proc_owner_node();
       if(node_idx >= num_nodes) {
         return nullptr;
       }
-      mem_idx = id.memory_mem_idx();
-      if(mem_idx < nodes[node_idx].ib_memories.size()) {
-        return nodes[node_idx].ib_memories[mem_idx];
-      }
-    } else if(id.is_instance()) {
-      size_t node_idx = id.instance_owner_node();
-      if(node_idx >= num_nodes) {
+
+      size_t proc_idx = id.proc_proc_idx();
+      if(proc_idx >= nodes[node_idx].processors.size()) {
         return nullptr;
       }
-      mem_idx = id.instance_mem_idx();
-      if(mem_idx < nodes[node_idx].memories.size()) {
-        return nodes[node_idx].memories[mem_idx];
+
+      return nodes[node_idx].processors[proc_idx];
+    }
+
+    ProcessorGroupImpl *RuntimeImpl::get_procgroup_impl(ID id)
+    {
+      if(!id.is_procgroup()) {
+	log_runtime.fatal() << "invalid processor group handle: id=" << id;
+	assert(0 && "invalid processor group handle");
       }
-    }
 
-    return nullptr;
-  }
-
-  IBMemory *RuntimeImpl::get_ib_memory_impl(ID id) const
-  {
-    if(!id.is_ib_memory()) {
-      return nullptr;
-    }
-
-    size_t node_idx = id.memory_owner_node();
-    if(node_idx >= num_nodes) {
-      return nullptr;
-    }
-
-    size_t mem_idx = id.memory_mem_idx();
-    if(mem_idx >= nodes[node_idx].ib_memories.size()) {
-      return nullptr;
-    }
-
-    return nodes[node_idx].ib_memories[mem_idx];
-  }
-
-  ProcessorImpl *RuntimeImpl::get_processor_impl(ID id)
-  {
-    if(id.is_procgroup())
-      return get_procgroup_impl(id);
-
-    if(!id.is_processor()) {
-      return nullptr;
-    }
-
-    size_t node_idx = id.proc_owner_node();
-    if(node_idx >= num_nodes) {
-      return nullptr;
-    }
-
-    size_t proc_idx = id.proc_proc_idx();
-    if(proc_idx >= nodes[node_idx].processors.size()) {
-      return nullptr;
-    }
-
-    return nodes[node_idx].processors[proc_idx];
-  }
-
-  ProcessorGroupImpl *RuntimeImpl::get_procgroup_impl(ID id)
-  {
-    if(!id.is_procgroup()) {
-      log_runtime.fatal() << "invalid processor group handle: id=" << id;
-      assert(0 && "invalid processor group handle");
-    }
-
-    Node *n = &nodes[id.pgroup_owner_node()];
-    atomic<DynamicTable<ProcessorGroupTableAllocator> *> &m =
-        n->proc_groups[id.pgroup_creator_node()];
-    // might need to construct this (in a lock-free way)
-    DynamicTable<ProcessorGroupTableAllocator> *mptr = m.load();
-    if(mptr == 0) {
-      // construct one and try to swap it in
-      DynamicTable<ProcessorGroupTableAllocator> *newm =
-          new DynamicTable<ProcessorGroupTableAllocator>;
-      if(m.compare_exchange(mptr, newm))
-        mptr = newm; // we're using the one we made
-      else
-        delete newm; // somebody else made it faster (mptr has winner)
-    }
-    ProcessorGroupImpl *impl =
-        mptr->lookup_entry(id.pgroup_pgroup_idx(), id.pgroup_owner_node());
-    // creator node isn't always right, so try to fix it
-    if(ID(impl->me) != id) {
-      ID fixed = impl->me;
-      if(fixed.pgroup_creator_node() == 0) {
-        fixed.pgroup_creator_node() = NodeID(id.pgroup_creator_node());
-        impl->me = fixed.convert<Processor>();
+      Node *n = &nodes[id.pgroup_owner_node()];
+      atomic<DynamicTable<ProcessorGroupTableAllocator> *>& m = n->proc_groups[id.pgroup_creator_node()];
+      // might need to construct this (in a lock-free way)
+      DynamicTable<ProcessorGroupTableAllocator> *mptr = m.load();
+      if(mptr == 0) {
+	// construct one and try to swap it in
+	DynamicTable<ProcessorGroupTableAllocator> *newm = new DynamicTable<ProcessorGroupTableAllocator>;
+	if(m.compare_exchange(mptr, newm))
+	  mptr = newm;  // we're using the one we made
+	else
+	  delete newm;  // somebody else made it faster (mptr has winner)
       }
-      assert(impl->me == id.convert<Processor>());
+      ProcessorGroupImpl *impl = mptr->lookup_entry(id.pgroup_pgroup_idx(),
+						    id.pgroup_owner_node());
+      // creator node isn't always right, so try to fix it
+      if(ID(impl->me) != id) {
+	ID fixed = impl->me;
+	if(fixed.pgroup_creator_node() == 0) {
+	  fixed.pgroup_creator_node() = NodeID(id.pgroup_creator_node());
+	  impl->me = fixed.convert<Processor>();
+	}
+	assert(impl->me == id.convert<Processor>());
+      }
+      return impl;
     }
-    return impl;
-  }
 
-  RegionInstanceImpl *RuntimeImpl::get_instance_impl(ID id)
-  {
-    if(!id.is_instance()) {
-      log_runtime.fatal() << "invalid instance handle: id=" << id;
-      assert(0 && "invalid instance handle");
-    }
+    RegionInstanceImpl *RuntimeImpl::get_instance_impl(ID id)
+    {
+      if(!id.is_instance()) {
+	log_runtime.fatal() << "invalid instance handle: id=" << id;
+	assert(0 && "invalid instance handle");
+      }
 
-    MemoryImpl *mem = get_memory_impl(id);
-    assert(mem != nullptr && "invalid memory handle");
+      MemoryImpl *mem = get_memory_impl(id);
+      assert(mem != nullptr && "invalid memory handle");
 
-    return mem->get_instance(id);
+      return mem->get_instance(id);
 #if 0
       AutoLock<> al(mem->mutex);
 
@@ -3465,40 +3467,41 @@ namespace Realm {
 	  
       return mem->instances[id.instance.inst_idx];
 #endif
-  }
-
-  CompQueueImpl *RuntimeImpl::get_compqueue_impl(ID id)
-  {
-    if(!id.is_compqueue()) {
-      log_runtime.fatal() << "invalid completion queue handle: id=" << id;
-      assert(0 && "invalid completion queue handle");
     }
 
-    Node *n = &nodes[id.pgroup_owner_node()];
-    CompQueueImpl *impl =
-        n->compqueues.lookup_entry(id.compqueue_cq_idx(), id.compqueue_owner_node());
-    assert(impl->me == id.convert<CompletionQueue>());
-    return impl;
-  }
+    CompQueueImpl *RuntimeImpl::get_compqueue_impl(ID id)
+    {
+      if(!id.is_compqueue()) {
+	log_runtime.fatal() << "invalid completion queue handle: id=" << id;
+	assert(0 && "invalid completion queue handle");
+      }
 
-  /*static*/
-  void RuntimeImpl::realm_backtrace(int signal)
-  {
-    // the signal handler has been called before, it is called again because
-    // an error is occured during printing the trace, to avoid handling signals
-    // recursively, we just exit.
-    if(ThreadLocal::error_signal_value != 0) {
-      std::cerr << "Signal " << signal
-                << " raised inside realm signal handler, previous caught signal "
-                << ThreadLocal::error_signal_value << std::endl;
-      unregister_error_signal_handler();
-      // We could just call exit or abort, but reraising the signal sets the return
-      // status from the process correctly.
-      std::raise(signal);
+      Node *n = &nodes[id.pgroup_owner_node()];
+      CompQueueImpl *impl = n->compqueues.lookup_entry(id.compqueue_cq_idx(),
+						       id.compqueue_owner_node());
+      assert(impl->me == id.convert<CompletionQueue>());
+      return impl;
     }
+
+    /*static*/
+    void RuntimeImpl::realm_backtrace(int signal)
+    {
+      // the signal handler has been called before, it is called again because
+      // an error is occured during printing the trace, to avoid handling signals 
+      // recursively, we just exit.
+      if (ThreadLocal::error_signal_value != 0) {
+        std::cerr << "Signal " << signal 
+                  << " raised inside realm signal handler, previous caught signal " << ThreadLocal::error_signal_value
+                  << std::endl;
+        unregister_error_signal_handler();
+        // We could just call exit or abort, but reraising the signal sets the return
+        // status from the process correctly.
+        std::raise(signal);
+      }
 #if defined(REALM_ON_LINUX) || defined(REALM_ON_MACOS) || defined(REALM_ON_FREEBSD)
-    assert((signal == SIGINT) || (signal == SIGFPE) || (signal == SIGABRT) ||
-           (signal == SIGSEGV) || (signal == SIGBUS) || (signal == SIGILL));
+      assert((signal == SIGINT) || (signal == SIGFPE) ||
+             (signal == SIGABRT) || (signal == SIGSEGV) ||
+             (signal == SIGBUS) || (signal == SIGILL));
 #endif
 #if 0
       void *bt[256];
@@ -3562,123 +3565,126 @@ namespace Realm {
       free(buffer);
       free(funcname);
 #endif
-    ThreadLocal::error_signal_value = signal;
-    std::cerr << "Signal " << signal << " received by node " << Network::my_node_id
+      ThreadLocal::error_signal_value = signal;
+      std::cerr << "Signal " << signal << " received by node " << Network::my_node_id
 #ifdef REALM_ON_WINDOWS
-              << ", process " << GetCurrentProcessId() << " (thread "
-              << GetCurrentThreadId()
+                << ", process " << GetCurrentProcessId()
+                << " (thread " << GetCurrentThreadId()
 #else
-              << ", process " << getpid() << " (thread " << std::hex
-              << uintptr_t(pthread_self())
+                << ", process " << getpid()
+                << " (thread "  << std::hex << uintptr_t(pthread_self())
 #endif
-              << std::dec << ") - obtaining backtrace\n"
-              << std::flush;
+                << std::dec << ") - obtaining backtrace\n" << std::flush;
 
-    Backtrace bt;
-    bt.capture_backtrace(1 /* skip this handler */);
-    fflush(stdout);
-    fflush(stderr);
-    std::cout << std::flush;
-    std::cerr << "Signal " << signal
+      Backtrace bt;
+      bt.capture_backtrace(1 /* skip this handler */);
+      fflush(stdout);
+      fflush(stderr);
+      std::cout << std::flush;
+      std::cerr << "Signal " << signal
 #ifdef REALM_ON_WINDOWS
-              << " received by process " << GetCurrentProcessId() << " (thread "
-              << GetCurrentThreadId()
+                << " received by process " << GetCurrentProcessId() << " (thread "
+                << GetCurrentThreadId()
 #else
-              << " received by process " << getpid() << " (thread " << std::hex
-              << uintptr_t(pthread_self())
+                << " received by process " << getpid() << " (thread " << std::hex
+                << uintptr_t(pthread_self())
 #endif
-              << std::dec << ") at:" << std::endl;
-    std::cerr << bt;
-    std::cerr << std::flush;
-    // returning would almost certainly cause this signal to be raised again,
-    //  so sleep for a second in case other threads also want to chronicle
-    //  their own deaths, and then exit
-    sleep(1);
-    // don't bother trying to clean things up
-    unregister_error_signal_handler();
-    // We could just call exit or abort, but reraising the signal sets the return status
-    // from the process correctly.
-    std::raise(signal);
-  }
+                << std::dec << ") at:" << std::endl;
+      std::cerr << bt;
+      std::cerr << std::flush;
+      // returning would almost certainly cause this signal to be raised again,
+      //  so sleep for a second in case other threads also want to chronicle
+      //  their own deaths, and then exit
+      sleep(1);
+      // don't bother trying to clean things up
+      unregister_error_signal_handler();
+      // We could just call exit or abort, but reraising the signal sets the return status
+      // from the process correctly.
+      std::raise(signal);
+    }
 
+  
   ////////////////////////////////////////////////////////////////////////
   //
   // class Node
   //
 
-  Node::Node(void) {}
+    Node::Node(void) {}
 
-  Node::~Node(void)
-  {
-    // delete processors, memories, nodes, etc.
-    delete_container_contents(memories);
-    delete_container_contents(processors);
-    delete_container_contents(ib_memories);
-    delete_container_contents(dma_channels);
+    Node::~Node(void)
+    {
+      // delete processors, memories, nodes, etc.
+      delete_container_contents(memories);
+      delete_container_contents(processors);
+      delete_container_contents(ib_memories);
+      delete_container_contents(dma_channels);
 
-    for(atomic<DynamicTable<SparsityMapTableAllocator> *> &atomic_sparsity :
-        sparsity_maps) {
-      delete atomic_sparsity.load();
-    }
+      for(atomic<DynamicTable<SparsityMapTableAllocator> *> &atomic_sparsity :
+          sparsity_maps) {
+        delete atomic_sparsity.load();
+      }
 
-    for(atomic<DynamicTable<SubgraphTableAllocator> *> &atomic_subgraph : subgraphs) {
-      delete atomic_subgraph.load();
-    }
+      for(atomic<DynamicTable<SubgraphTableAllocator> *> &atomic_subgraph : subgraphs) {
+        delete atomic_subgraph.load();
+      }
 
-    for(atomic<DynamicTable<ProcessorGroupTableAllocator> *> &atomic_proc_group :
-        proc_groups) {
-      delete atomic_proc_group.load();
-    }
-  }
-
-  std::ostream &operator<<(std::ostream &os, const Node &node)
-  {
-    for(const ProcessorImpl *processor : node.processors) {
-      os << "Processor:" << processor->me << ", " << processor->kind << std::endl;
-    }
-    for(const MemoryImpl *memory : node.memories) {
-      os << "Memory:" << memory->me << ", " << memory->me.kind()
-         << ", capacity: " << memory->size << std::endl;
-    }
-    for(const MemoryImpl *memory : node.ib_memories) {
-      os << "IB Memory:" << memory->me << ", " << memory->me.kind()
-         << ", capacity: " << memory->size << std::endl;
-    }
-    for(const Channel *channel : node.dma_channels) {
-      os << "Channel: " << channel->kind << std::endl;
-      for(const Channel::SupportedPath &path : channel->get_paths()) {
-        os << "-Supported Path: " << path << std::endl;
+      for(atomic<DynamicTable<ProcessorGroupTableAllocator> *> &atomic_proc_group :
+          proc_groups) {
+        delete atomic_proc_group.load();
       }
     }
-    return os;
-  }
+
+    std::ostream &operator<<(std::ostream &os, const Node &node)
+    {
+      for(const ProcessorImpl *processor : node.processors) {
+        os << "Processor:" << processor->me << ", " << processor->kind << std::endl;
+      }
+      for(const MemoryImpl *memory : node.memories) {
+        os << "Memory:" << memory->me << ", " << memory->me.kind()
+           << ", capacity: " << memory->size << std::endl;
+      }
+      for(const MemoryImpl *memory : node.ib_memories) {
+        os << "IB Memory:" << memory->me << ", " << memory->me.kind()
+           << ", capacity: " << memory->size << std::endl;
+      }
+      for(const Channel *channel : node.dma_channels) {
+        os << "Channel: " << channel->kind << std::endl;
+        for(const Channel::SupportedPath &path : channel->get_paths()) {
+          os << "-Supported Path: " << path << std::endl;
+        }
+      }
+      return os;
+    }
 
   ////////////////////////////////////////////////////////////////////////
   //
   // class RuntimeShutdownMessage
   //
 
-  /*static*/ void RuntimeShutdownRequest::handle_message(
-      NodeID sender, const RuntimeShutdownRequest &args, const void *data, size_t datalen)
+  /*static*/ void RuntimeShutdownRequest::handle_message(NodeID sender,
+							 const RuntimeShutdownRequest &args,
+							 const void *data, size_t datalen)
   {
     log_runtime.info() << "shutdown request received: sender=" << sender
-                       << " wait_on=" << args.wait_on << " code=" << args.result_code;
+		       << " wait_on=" << args.wait_on
+		       << " code=" << args.result_code;
 
     RuntimeImpl *r_impl = runtime_singleton;
     bool duplicate = r_impl->request_shutdown(args.wait_on, args.result_code);
     if(!duplicate) {
       if(args.wait_on.has_triggered())
-        r_impl->initiate_shutdown();
+	r_impl->initiate_shutdown();
       else
-        r_impl->deferred_shutdown.defer(r_impl, args.wait_on);
+	r_impl->deferred_shutdown.defer(r_impl, args.wait_on);
     }
   }
 
-  /*static*/ void RuntimeShutdownMessage::handle_message(
-      NodeID sender, const RuntimeShutdownMessage &args, const void *data, size_t datalen)
+  /*static*/ void RuntimeShutdownMessage::handle_message(NodeID sender,
+							 const RuntimeShutdownMessage &args,
+							 const void *data, size_t datalen)
   {
     log_runtime.info() << "shutdown initiation received: sender=" << sender
-                       << " code=" << args.result_code;
+		       << " code=" << args.result_code;
 
     RuntimeImpl *r_impl = runtime_singleton;
     bool duplicate = r_impl->request_shutdown(Event::NO_EVENT, args.result_code);
