@@ -69,10 +69,7 @@ namespace Realm {
     return did_work;
   }
 
-  void UDPWorker::begin_polling()
-  {
-    make_active();
-  }
+  void UDPWorker::begin_polling() { make_active(); }
 
   void UDPWorker::end_polling()
   {
@@ -315,6 +312,12 @@ namespace Realm {
     pa.sin.sin_family = AF_INET;
     pa.sin.sin_port = htons(port);
     pa.sin.sin_addr.s_addr = ip;
+  }
+
+  void UDPModule::delete_remote_ep(NodeID id)
+  {
+    AutoLock<> al(peer_map_mutex);
+    peer_map_.erase(id);
   }
 
   void UDPModule::send_datagram(const PeerAddr &peer, const void *data, size_t len)

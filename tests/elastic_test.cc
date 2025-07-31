@@ -2,7 +2,7 @@
 #include "realm/id.h"
 #include "realm/cmdline.h"
 #include "realm/network.h"
-#include <unistd.h> // sleep
+#include <unistd.h>
 #include <cstdio>
 
 using namespace Realm;
@@ -13,8 +13,9 @@ enum
 };
 
 namespace TestConfig {
-  int expected_peers{3};
-};
+  int expected_peers{4};
+  int shutdown_node_id{2};
+}; // namespace TestConfig
 
 void top_task(const void *args, size_t arglen, const void *userdata, size_t userlen,
               Processor p)
@@ -78,9 +79,30 @@ void top_task(const void *args, size_t arglen, const void *userdata, size_t user
 
   sleep(8);
 
-  std::cout << "Done top task :" << Network::my_node_id
-            << " peers:" << Network::node_directory.size()
-            << " epoch:" << machine.get_epoch() << std::endl;
+  //Runtime::get_runtime().elastic_shutdown();
+  //return;
+
+  if(Network::my_node_id == TestConfig::shutdown_node_id) {
+    Runtime::get_runtime().elastic_shutdown();
+  } else {
+
+    while(true) {
+      size_t peers = Network::node_directory.size();
+      Epoch_t epoch = machine.get_epoch();
+      if(peers <= size_t(TestConfig::expected_peers - 1) &&
+         epoch >= size_t(TestConfig::expected_peers + 1)) {
+        break;
+      }
+
+      sleep(1);
+
+      std::cout << "WaitForShutDown Peers:" << Network::node_directory.size()
+                << " on node:" << Network::my_node_id << " epoch:" << machine.get_epoch()
+                << std::endl;
+    }
+
+    Runtime::get_runtime().elastic_shutdown();
+  }
 }
 
 int main(int argc, char **argv)
@@ -95,11 +117,9 @@ int main(int argc, char **argv)
                     .first();
   assert(p.exists());
 
-  // Launch the top task only on the selected local processor instead of
-  // using a collective spawn across all nodes.
   Event e = p.spawn(TOP_TASK_ID, /*args=*/nullptr, /*arglen=*/0);
-  rt.shutdown(e);
-  sleep(16);
+
+  // rt.shutdown(e);
   rt.wait_for_shutdown();
 
   return 0;

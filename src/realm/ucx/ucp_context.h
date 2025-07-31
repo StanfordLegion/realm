@@ -91,6 +91,7 @@ namespace UCP {
     void finalize();
     bool ep_add(int target, ucp_address_t *addr, int remote_dev_index);
     bool ep_get(int target, int remote_dev_index, ucp_ep_h *ep);
+    bool ep_close(ucp_ep_h ep);
     void *request_get();
     void request_release(void *req);
     void *pbuf_get(size_t size);
@@ -112,7 +113,6 @@ namespace UCP {
 
   private:
     bool setup_worker_efd();
-    bool ep_close(ucp_ep_h ep);
     bool needs_progress() const;
     bool progress_with_wakeup();
     bool progress_without_wakeup();

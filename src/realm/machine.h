@@ -42,6 +42,7 @@ namespace Realm {
       static Machine get_machine(void);
 
       Epoch_t get_epoch() const noexcept {
+        // TODO: FIX ME
         return Network::node_directory.cluster_epoch();
       }
 

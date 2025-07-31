@@ -57,6 +57,12 @@ realmStatus_t realmJoin(realmMembership_t h, const realmNodeMeta_t *s,
   CALL(h, join_request, s, hooks);
 }
 
+realmStatus_t realmLeave(realmMembership_t h, const realmNodeMeta_t *s,
+                         realmMembershipHooks_t hooks)
+{
+  CALL(h, leave_request, s, hooks);
+}
+
 /*realmStatus_t realmSubscribe(realmMembership_t h, realmEvent_t done, bool lazy_mode)
 {
   CALL(h, subscribe_request, done, lazy_mode);

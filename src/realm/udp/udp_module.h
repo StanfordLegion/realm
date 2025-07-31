@@ -88,6 +88,7 @@ namespace Realm {
 
     void register_peer(NodeID id, const std::string &ip, uint16_t port);
     void register_peer(NodeID id, uint32_t ip, uint16_t port);
+    void delete_remote_ep(NodeID id) override;
 
     virtual MemoryImpl *create_remote_memory(RuntimeImpl *, Memory, size_t, Memory::Kind,
                                              const ByteArray &) override

@@ -49,6 +49,7 @@
 #include "realm/activemsg.h"
 #include "realm/repl_heap.h"
 #include "realm/dynamic_table.h"
+#include "realm/membership/membership.h"
 
 #include "realm/shm.h"
 #include "realm/hardware_topology.h"
@@ -301,6 +302,9 @@ namespace Realm {
 
       // shutdown the runtime
       void shutdown(Event wait_on = Event::NO_EVENT, int result_code = 0);
+      void elastic_shutdown(Event wait_on = Event::NO_EVENT, int result_code = 0);
+
+      bool remove_peer(NodeID id);
 
       // returns value of result_code passed to shutdown()
       int wait_for_shutdown(void);
@@ -393,6 +397,9 @@ namespace Realm {
       ReplicatedHeap repl_heap; // used for sparsity maps, instance layouts
 
       bool shared_peers_use_network_module = true;
+
+      realmMembership_t membership;
+      realmMembershipHooks_t hooks;
 
       //int join_acks_total{1};
       //int join_acks{0};

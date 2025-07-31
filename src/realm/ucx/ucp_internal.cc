@@ -1,4 +1,3 @@
-
 /* Copyright 2024 NVIDIA Corporation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -897,7 +896,7 @@ err:
 
   void UCPInternal::add_remote_ep(NodeID peer, const void* blob, size_t bytes) {
     /* blob layout:  [1-byte dev_index | raw ucp_worker_address] */
-    if(bytes < 2) return;                      // malformed
+    if(bytes < 2) { return; }
 
     const uint8_t      *p     = static_cast<const uint8_t*>(blob);
     int           rdev  = *p++;          // remote device index
@@ -906,7 +905,7 @@ err:
 
     rdev = -1; // TODO: FIX ME
 
-    (void)alen;                                // silences “unused” in release
+    (void)alen;                                // silences "unused" in release
 
     /* Choose host context, priority 0 – identical to create_eps() */
     const UCPContext *ctx = get_context_host();
@@ -919,6 +918,28 @@ err:
                         rdev);
     if(!ok) {
       log_ucp.error() << "ep_add failed while admitting peer " << peer;
+    }
+  }
+
+  void UCPInternal::delete_remote_ep(NodeID peer)
+  {
+    // Iterate over all UCP contexts and their tx workers; if an endpoint that
+    // targets the given peer exists close it and let the worker forget it.
+    // All UCX operations are expected to be quiescent at this point so a
+    // synchronous close is acceptable.
+
+    for(const auto &ctx_pair : workers) {
+      // const UCPContext *ctx = ctx_pair.first;
+      const std::vector<UCPWorker*> &tws = ctx_pair.second.tx_workers;
+      for(UCPWorker *w : tws) {
+        // The current implementation of ep_add always stores the endpoint at
+        // remote_dev_index=-1 (TODO: multi-NIC).  Try to fetch it; if found
+        // close and ignore errors.
+        ucp_ep_h ep;
+        if(w->ep_get(peer, /*remote_dev_index=*/-1, &ep)) {
+          w->ep_close(ep);
+        }
+      }
     }
   }
 

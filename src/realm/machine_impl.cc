@@ -1287,7 +1287,7 @@ namespace Realm {
   Machine::ProcessorQuery& Machine::ProcessorQuery::same_address_space_as(Memory m)
   {
     impl = ((ProcessorQueryImpl *)impl)->writeable_reference();
-    ((ProcessorQueryImpl *)impl)->restrict_to_node(ID(m).proc_owner_node());
+    ((ProcessorQueryImpl *)impl)->restrict_to_node(ID(m).memory_owner_node());
     return *this;
   }
       
@@ -1394,7 +1394,7 @@ namespace Realm {
   Machine::MemoryQuery& Machine::MemoryQuery::same_address_space_as(Memory m)
   {
     impl = ((MemoryQueryImpl *)impl)->writeable_reference();
-    ((MemoryQueryImpl *)impl)->restrict_to_node(ID(m).memory_owner_node());
+    ((MemoryQueryImpl *)impl)->restrict_to_node(ID(m).proc_owner_node());
     return *this;
   }
       
@@ -3167,6 +3167,27 @@ namespace Realm {
     }
 #endif
     return chosen;
+  }
+
+  void MachineImpl::remove_node(NodeID node_id)
+  {
+    AutoLock<> al(mutex);
+    // Erase nodeinfo entry if exists
+    auto it = nodeinfos.find(node_id);
+    if(it != nodeinfos.end()) {
+      delete it->second;
+      nodeinfos.erase(it);
+    }
+    // Remove proc/mem affinities that reference the node
+    proc_mem_affinities.erase(
+        std::remove_if(proc_mem_affinities.begin(), proc_mem_affinities.end(),
+                       [node_id](const Machine::ProcessorMemoryAffinity &pma) {
+                         return (NodeID(ID(pma.p).proc_owner_node()) == node_id) ||
+                                (NodeID(ID(pma.m).memory_owner_node()) == node_id);
+                       }),
+        proc_mem_affinities.end());
+    // TODO: similar cleanup for mem_mem affinities if stored separately
+    invalidate_query_caches();
   }
 
 }; // namespace Realm

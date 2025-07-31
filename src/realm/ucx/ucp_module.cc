@@ -199,6 +199,10 @@ err_del_mod:
     internal->add_remote_ep(peer, blob, bytes);
   }
 
+  void UCPModule::delete_remote_ep(NodeID peer) {
+    internal->delete_remote_ep(peer);
+  }
+
   void UCPModule::create_memories(RuntimeImpl *runtime)
   {
   }

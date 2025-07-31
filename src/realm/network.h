@@ -213,6 +213,11 @@ namespace Realm {
       assert(0);
     }
 
+    virtual void delete_remote_ep(
+          NodeID peer) {
+      assert(0);
+    }
+
     // collective communication within this network
     virtual void barrier(void) = 0;
     virtual void broadcast(NodeID root,

@@ -65,6 +65,9 @@ namespace Realm {
 
     void set_provider(Provider *_provider) { provider = _provider; }
 
+    uint64_t bump_epoch(NodeID id);
+    bool update_epoch(uint64_t new_ep);
+
     static constexpr NodeID UNKNOWN_NODE_ID{NodeID(-1)};
     static constexpr NodeID INVALID_NODE_ID{NodeID(-2)};
 
@@ -75,9 +78,6 @@ namespace Realm {
     const NodeSlot *slot_ro(NodeID id) const noexcept;
 
     void erase(NodeID id);
-
-    uint64_t bump_epoch(NodeID id);
-    bool update_epoch(uint64_t new_ep);
 
     // data
     std::atomic<uint64_t> epoch_{1};

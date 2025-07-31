@@ -172,6 +172,7 @@ namespace UCP {
     void notify_msg_sent(uint64_t count);
 
     void add_remote_ep(NodeID peer, const void* blob, size_t bytes);
+    void delete_remote_ep(NodeID peer);
 
     const UCPContext *get_context(const NetworkSegment *segment) const;
     // the public interface exposes the tx worker only

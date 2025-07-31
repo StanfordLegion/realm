@@ -17,6 +17,7 @@
 
 #include "realm/runtime_impl.h"
 
+#include "realm/network.h"
 #include "realm/proc_impl.h"
 #include "realm/mem_impl.h"
 #include "realm/inst_impl.h"
@@ -724,6 +725,11 @@ namespace Realm {
   void Runtime::shutdown(Event wait_on /*= Event::NO_EVENT*/, int result_code /*= 0*/)
   {
     static_cast<RuntimeImpl *>(impl)->shutdown(wait_on, result_code);
+  }
+
+  void Runtime::elastic_shutdown(Event wait_on /*= Event::NO_EVENT*/, int result_code /*= 0*/)
+  {
+    static_cast<RuntimeImpl *>(impl)->elastic_shutdown(wait_on, result_code);
   }
 
   int Runtime::wait_for_shutdown(void)
@@ -2323,16 +2329,25 @@ namespace Realm {
     return true;
   }
 
-  static void membership_pre_cb(const realmNodeMeta_t *n, const void *, size_t,
-                                bool joined, void *)
-  {}
+  static void membership_pre_join_cb(const realmNodeMeta_t *self, const void *, size_t,
+                                     bool joined, void *)
+  {
+    assert(joined == false);
+
+    RuntimeImpl* rt = get_runtime();
+
+    if (Network::my_node_id == self->node_id) {
+    } else {
+      assert(rt->shutdown_in_progress.load() == false);
+    }
+  }
 
   struct JoinContext {
     // Realm::Event join_done;
   };
 
-  static void membership_post_cb(const realmNodeMeta_t *n, const void *, size_t,
-                                 bool joined, void *arg)
+  static void membership_post_join_cb(const realmNodeMeta_t *n, const void *, size_t,
+                                      bool joined, void *arg)
   {
     // auto *ctx = static_cast<JoinContext *>(arg);
 
@@ -2348,6 +2363,98 @@ namespace Realm {
     }
   }
 
+  bool RuntimeImpl::remove_peer(NodeID id)
+  {
+    Node &n = nodes[id];
+
+    // TODO: TEST ME
+
+    for(size_t i = 0; i < n.remote_events.max_entries(); ++i) {
+      if(n.remote_events.has_entry(i)) {
+        GenEventImpl *e = n.remote_events.lookup_entry(i, id);
+        GenEventImpl::trigger(e->current_event(), /*poisoned=*/true);
+      }
+    }
+
+    for(size_t i = 0; i < n.barriers.max_entries(); ++i) {
+      if(n.barriers.has_entry(i)) {
+        // BarrierImpl *b = n.barriers.lookup_entry(i, id);
+        //b->cancel_generations(id);
+      }
+    }
+
+    {
+      Node &n = nodes[id];
+      n.processors.clear();
+      n.dma_channels.clear();
+      n.memories.clear();
+      n.ib_memories.clear();
+      // n.remote_events.clear();
+      // n.barriers.clear();
+      // n.reservations.clear();
+      // n.compqueues.clear();
+      // n.sparsity_maps.clear();
+      n.subgraphs.clear();
+      n.proc_groups.clear();
+    }
+
+    for(NetworkModule *nm : network_modules) {
+      if(nm) {
+        nm->delete_remote_ep(id);
+      }
+    }
+
+    machine->remove_node(id);
+
+    return true;
+  }
+
+  static void membership_pre_leave_cb(const realmNodeMeta_t * self, const void *, size_t,
+                                       bool /*left*/, void *)
+  {
+    RuntimeImpl* rt = get_runtime();
+
+    if (Network::my_node_id == self->node_id) {
+      // DRAIN LOCAL WORK
+      // ITERATE OVER EVENTS AND CANCEL THEM
+      constexpr int retry_count = 10;
+
+      int tries = 0;
+      while(true) {
+        tries++;
+        bool done = Network::check_for_quiescence(rt->message_manager);
+        if(done) {
+          break;
+        }
+
+        if(tries >= retry_count) {
+          assert(0);
+          abort();
+        }
+      }
+
+      rt->shutdown_in_progress.store(true);
+
+    } else {
+      // DRAIN REMOTE WORK
+      // CLOSE UCX FOR LEAVING RANK
+      // REMOVE nodes, channels, machinee model
+      // FIX RACE CONDITIONS
+      // assert(rt->shutdown_in_progress.load() == false);
+      
+      if (!rt->shutdown_in_progress.load()) {
+        assert(rt->remove_peer(self->node_id));
+      }
+    }
+  }
+
+  static void membership_post_leave_cb(const realmNodeMeta_t * self, const void *, size_t,
+                                        bool /*left*/, void *)
+  {
+    assert(Network::my_node_id == self->node_id);
+    get_runtime()->initiate_shutdown();
+  }
+
   void RuntimeImpl::start(void)
   {
     // all we have to do here is tell the processors to start up their
@@ -2358,7 +2465,7 @@ namespace Realm {
       (*it)->start_threads();
     }
 
-    realmMembership_t membership;
+    //realmMembership_t membership;
     realmMembershipInit(&membership);
 
     Serialization::DynamicBufferSerializer dbs(4096);
@@ -2375,16 +2482,19 @@ namespace Realm {
 
     realmNodeMeta_t self_meta{};
     self_meta.node_id = Network::my_node_id;
-    self_meta.seed_id = NodeDirectory::UNKNOWN_NODE_ID;
-    self_meta.announce_mm = false;
+    self_meta.seed_id = Network::my_node_id == 0 ? NodeDirectory::INVALID_NODE_ID
+                                                 : NodeDirectory::UNKNOWN_NODE_ID;
+    self_meta.announce_mm = true;
 
     JoinContext ctx;
     // ctx.join_done = Realm::GenEventImpl::create_genevent()->current_event();
 
-    realmMembershipHooks_t hooks{membership_pre_cb, membership_post_cb, &ctx};
+    hooks = realmMembershipHooks_t{
+         membership_pre_join_cb, membership_post_join_cb, membership_pre_leave_cb,
+                                 membership_post_leave_cb, &ctx};
     assert(realmJoin(membership, &self_meta, hooks) == REALM_OK);
-    // ctx.join_done.wait();
 
+    // ctx.join_done.wait();
     // Realm::Event sub_done = Realm::GenEventImpl::create_genevent()->current_event();
     // assert(realmSubscribe(membership, sub_done, true) == REALM_OK);
     // sub_done.wait();
@@ -2732,17 +2842,17 @@ namespace Realm {
   void RuntimeImpl::initiate_shutdown(void)
   {
     // if we're the master, we need to notify everyone else first
-    NodeID shutdown_master_node = 0;
+    /*NodeID shutdown_master_node = 0;
     if((Network::my_node_id == shutdown_master_node) && (Network::max_node_id > 0)) {
       NodeSet targets;
-      for(NodeID i = 0; i <= Network::max_node_id; i++)
+      for(NodeID i = 0; i <= Network::max_node_id; i++) 
         if(i != Network::my_node_id)
           targets.add(i);
 
       // ActiveMessage<RuntimeShutdownMessage> amsg(targets);
       // amsg->result_code = shutdown_result_code;
       // amsg.commit();
-    }
+    }*/
 
     {
       AutoLock<> al(shutdown_mutex);
@@ -2750,6 +2860,25 @@ namespace Realm {
       shutdown_initiated = true;
       shutdown_condvar.broadcast();
     }
+  }
+
+  void RuntimeImpl::elastic_shutdown(Event wait_on /*= Event::NO_EVENT*/, int result_code /*= 0*/)
+  {
+    assert(wait_on == Event::NO_EVENT);
+
+    bool failed = request_shutdown(wait_on, result_code);
+    assert(failed == false);
+
+    // realmMembership_t membership;
+    // realmMembershipInit(&membership);
+
+    realmNodeMeta_t self_meta{};
+    self_meta.node_id = Network::my_node_id;
+    //realmMembershipHooks_t hooks{nullptr, nullptr, membership_pre_leave_cb,
+                                //membership_post_leave_cb, nullptr};
+    
+    realmStatus_t status = realmLeave(membership, &self_meta, hooks);
+    assert(status == REALM_OK);
   }
 
   void RuntimeImpl::shutdown(Event wait_on /*= Event::NO_EVENT*/, int result_code /*= 0*/)
@@ -2779,10 +2908,11 @@ namespace Realm {
 
     bool duplicate = request_shutdown(wait_on, result_code);
     if(!duplicate) {
-      if(wait_on.has_triggered())
+      if(wait_on.has_triggered()) {
         initiate_shutdown();
-      else
+      } else {
         deferred_shutdown.defer(this, wait_on);
+      }
     }
   }
 
@@ -2794,6 +2924,7 @@ namespace Realm {
       while(!shutdown_initiated)
         shutdown_condvar.wait();
     }
+
     log_runtime.info("shutdown request received - terminating");
 
     // we need a task to run on each processor to ensure anything that was
@@ -2872,8 +3003,10 @@ namespace Realm {
 
     for(std::vector<Channel *>::iterator it =
             nodes[Network::my_node_id].dma_channels.begin();
-        it != nodes[Network::my_node_id].dma_channels.end(); ++it)
+        it != nodes[Network::my_node_id].dma_channels.end(); ++it) {
       (*it)->shutdown();
+    }
+
     stop_dma_system();
 
     repl_heap.cleanup();
