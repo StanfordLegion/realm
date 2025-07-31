@@ -10,11 +10,10 @@
 
 namespace Realm {
 
-  Logger log_udp("udp");
-
   namespace {
     constexpr size_t PAYLOAD_SIZE = 64 * 1024;
-  }
+    Logger log_udp("udp");
+  } // namespace
 
   UDPWorker::UDPWorker(UDPModule *owner, int sock)
     : BackgroundWorkItem("udp rx")
@@ -329,16 +328,34 @@ namespace Realm {
     }
   }
 
+  UDPModule::PeerAddr UDPModule::ensure_peer(NodeID id)
+  {
+    AutoLock<> al(peer_map_mutex);
+    auto it = peer_map_.find(id);
+    if(it != peer_map_.end()) {
+      return it->second;
+    }
+
+    const NodeMeta *nm = Network::node_directory.lookup(id);
+
+    assert(nm != nullptr);
+    register_peer(id, nm->ip, nm->udp_port);
+
+    return peer_map_[id];
+  }
+
   /* ------------------------------------------------------------------ */
   /* UDPMessageImpl                                                     */
   /* ------------------------------------------------------------------ */
 
-  static void *reserve(std::vector<char> &vec, size_t size)
-  {
-    size_t off = vec.size();
-    vec.resize(off + ((size + 7) & ~size_t(7))); // 8-byte align
-    return vec.data() + off;
-  }
+  namespace {
+    void *reserve(std::vector<char> &vec, size_t size)
+    {
+      size_t off = vec.size();
+      vec.resize(off + ((size + 7) & ~size_t(7))); // 8-byte align
+      return vec.data() + off;
+    }
+  } // namespace
 
   UDPMessageImpl::UDPMessageImpl(UDPModule *mod, NodeID tgt, unsigned short msgid,
                                  size_t hdr_size, size_t max_payload, void *storage_base,

@@ -23,86 +23,76 @@ namespace Realm {
   class UDPModule : public NetworkModule {
   public:
     explicit UDPModule(RuntimeImpl *runtime);
-    virtual ~UDPModule();
+    ~UDPModule() override;
 
     static NetworkModule *create_network_module(RuntimeImpl *runtime, int *argc,
                                                 const char ***argv);
 
     /* ----- NetworkModule overrides ------------------------------------ */
-    virtual void get_shared_peers(NodeSet &shared_peers) override {}
-    virtual void parse_command_line(RuntimeImpl *runtime,
-                                    std::vector<std::string> &cmdline) override;
-    virtual void attach(RuntimeImpl *runtime,
-                        std::vector<NetworkSegment *> &segments) override;
-    virtual void detach(RuntimeImpl *runtime,
-                        std::vector<NetworkSegment *> &segments) override;
-    virtual void barrier(void) override {}
-    virtual void broadcast(NodeID root, const void *val_in, void *val_out,
-                           size_t bytes) override;
-    virtual void gather(NodeID root, const void *val_in, void *vals_out,
-                        size_t bytes) override;
-    virtual void allgatherv(const char *val_in, size_t bytes, std::vector<char> &vals_out,
-                            std::vector<size_t> &lengths) override;
+    void get_shared_peers(NodeSet &shared_peers) override {}
+    void parse_command_line(RuntimeImpl *runtime,
+                            std::vector<std::string> &cmdline) override;
+    void attach(RuntimeImpl *runtime, std::vector<NetworkSegment *> &segments) override;
+    void detach(RuntimeImpl *runtime, std::vector<NetworkSegment *> &segments) override;
+    void barrier(void) override {}
+    void broadcast(NodeID root, const void *val_in, void *val_out, size_t bytes) override;
+    void gather(NodeID root, const void *val_in, void *vals_out, size_t bytes) override;
+    void allgatherv(const char *val_in, size_t bytes, std::vector<char> &vals_out,
+                    std::vector<size_t> &lengths) override;
 
-    virtual size_t sample_messages_received_count(void) override;
-    virtual bool check_for_quiescence(size_t sampled) override;
+    size_t sample_messages_received_count(void) override;
+    bool check_for_quiescence(size_t sampled) override;
 
-    /* active-message factory – only the first two variants are used by
-       the control plane, the others abort for now. */
-    virtual ActiveMessageImpl *
+    ActiveMessageImpl *
     create_active_message_impl(NodeID target, unsigned short msgid, size_t header_size,
                                size_t max_payload_size, const void *src_payload_addr,
                                size_t src_payload_lines, size_t src_payload_line_stride,
                                void *storage_base, size_t storage_size) override;
 
-    virtual ActiveMessageImpl *create_active_message_impl(
+    ActiveMessageImpl *create_active_message_impl(
         NodeID target, unsigned short msgid, size_t header_size, size_t max_payload_size,
         const LocalAddress &src_payload_addr, size_t src_payload_lines,
         size_t src_payload_line_stride, const RemoteAddress &dest_payload_addr,
         void *storage_base, size_t storage_size) override;
 
-    virtual ActiveMessageImpl *create_active_message_impl(NodeID target, unsigned short,
-                                                          size_t, size_t,
-                                                          const RemoteAddress &, void *,
-                                                          size_t) override
+    ActiveMessageImpl *create_active_message_impl(NodeID target, unsigned short, size_t,
+                                                  size_t, const RemoteAddress &, void *,
+                                                  size_t) override
     {
       abort();
     }
 
-    virtual ActiveMessageImpl *create_active_message_impl(const NodeSet &, unsigned short,
-                                                          size_t, size_t, const void *,
-                                                          size_t, size_t, void *,
-                                                          size_t) override;
+    ActiveMessageImpl *create_active_message_impl(const NodeSet &, unsigned short, size_t,
+                                                  size_t, const void *, size_t, size_t,
+                                                  void *, size_t) override;
 
-    virtual size_t recommended_max_payload(NodeID, bool, size_t) override;
-    virtual size_t recommended_max_payload(const NodeSet &, bool, size_t) override;
-    virtual size_t recommended_max_payload(NodeID, const RemoteAddress &, bool,
-                                           size_t) override;
-    virtual size_t recommended_max_payload(NodeID, const void *, size_t, size_t, size_t,
-                                           bool, size_t) override;
-    virtual size_t recommended_max_payload(const NodeSet &, const void *, size_t, size_t,
-                                           size_t, bool, size_t) override;
-    virtual size_t recommended_max_payload(NodeID, const LocalAddress &, size_t, size_t,
-                                           size_t, const RemoteAddress &, bool,
-                                           size_t) override;
+    size_t recommended_max_payload(NodeID, bool, size_t) override;
+    size_t recommended_max_payload(const NodeSet &, bool, size_t) override;
+    size_t recommended_max_payload(NodeID, const RemoteAddress &, bool, size_t) override;
+    size_t recommended_max_payload(NodeID, const void *, size_t, size_t, size_t, bool,
+                                   size_t) override;
+    size_t recommended_max_payload(const NodeSet &, const void *, size_t, size_t, size_t,
+                                   bool, size_t) override;
+    size_t recommended_max_payload(NodeID, const LocalAddress &, size_t, size_t, size_t,
+                                   const RemoteAddress &, bool, size_t) override;
 
     void register_peer(NodeID id, const std::string &ip, uint16_t port);
     void register_peer(NodeID id, uint32_t ip, uint16_t port);
     void delete_remote_ep(NodeID id) override;
 
-    virtual MemoryImpl *create_remote_memory(RuntimeImpl *, Memory, size_t, Memory::Kind,
-                                             const ByteArray &) override
+    MemoryImpl *create_remote_memory(RuntimeImpl *, Memory, size_t, Memory::Kind,
+                                     const ByteArray &) override
     {
       return nullptr;
     }
 
-    virtual IBMemory *create_remote_ib_memory(RuntimeImpl *, Memory, size_t, Memory::Kind,
-                                              const ByteArray &) override
+    IBMemory *create_remote_ib_memory(RuntimeImpl *, Memory, size_t, Memory::Kind,
+                                      const ByteArray &) override
     {
       return nullptr;
     }
 
-  protected:
+  private:
     void init(uint16_t base_port, const std::string &address, NodeID rank_id);
 
     struct PeerAddr {
@@ -110,20 +100,20 @@ namespace Realm {
     };
 
     struct UDPHeader {
-      uint32_t src; // NodeID of sender
+      uint32_t src;
       uint16_t msgid;
       uint16_t hdr_size;
       uint32_t payload_size;
     } __attribute__((packed));
 
     void send_datagram(const PeerAddr &peer, const void *data, size_t len);
+    PeerAddr ensure_peer(NodeID id);
 
     Mutex peer_map_mutex;
 
     RuntimeImpl *runtime_;
     int sock_fd_{-1};
 
-    CoreReservation *core_rsrv_;
     UDPWorker *worker_;
 
     std::atomic<bool> shutting_down_{false};
@@ -132,22 +122,6 @@ namespace Realm {
     std::map<NodeID, PeerAddr> peer_map_;
     friend class UDPMessageImpl;
     friend class UDPWorker;
-
-    PeerAddr ensure_peer(NodeID id)
-    {
-      AutoLock<> al(peer_map_mutex);
-      auto it = peer_map_.find(id);
-      if(it != peer_map_.end()) {
-        return it->second;
-      }
-
-      const NodeMeta *nm = Network::node_directory.lookup(id);
-
-      assert(nm != nullptr);
-      register_peer(id, nm->ip, nm->udp_port);
-
-      return peer_map_[id];
-    }
   };
 
   class UDPWorker : public BackgroundWorkItem {
@@ -155,12 +129,11 @@ namespace Realm {
     UDPWorker(UDPModule *owner, int sock);
     ~UDPWorker(void) = default;
 
-    bool do_work(TimeLimit work_until);
+    bool do_work(TimeLimit work_until) override;
     void begin_polling();
     void end_polling();
 
   private:
-
     UDPModule *module;
     int sock_fd;
 
@@ -183,13 +156,12 @@ namespace Realm {
                    size_t header_size, size_t max_payload, void *storage_base,
                    size_t storage_size);
 
-    virtual ~UDPMessageImpl() {}
+    ~UDPMessageImpl() override {}
 
-    /* ActiveMessageImpl overrides */
-    virtual void *add_local_completion(size_t size) override;
-    virtual void *add_remote_completion(size_t size) override;
-    virtual void commit(size_t act_payload_size) override;
-    virtual void cancel() override;
+    void *add_local_completion(size_t size) override;
+    void *add_remote_completion(size_t size) override;
+    void commit(size_t act_payload_size) override;
+    void cancel() override;
 
   private:
     void dispatch(const void *buf, size_t len);
