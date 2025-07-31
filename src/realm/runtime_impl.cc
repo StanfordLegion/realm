@@ -2475,7 +2475,10 @@ namespace Realm {
         (*it)->start_threads();
       }
 
-      realmMembershipInit(&membership);
+      hooks = realmMembershipHooks_t{membership_pre_join_cb,  membership_post_join_cb,
+                                     membership_pre_leave_cb, membership_post_leave_cb,
+                                     membership_filter_cb,    nullptr};
+      realmMembershipInit(&membership, hooks);
 
       Serialization::DynamicBufferSerializer dbs(4096);
       bool ok = serialize_announcement(dbs, &get_runtime()->nodes[Network::my_node_id],
@@ -2495,10 +2498,7 @@ namespace Realm {
                                                    : NodeDirectory::UNKNOWN_NODE_ID;
       self_meta.announce_mm = true;
 
-      hooks = realmMembershipHooks_t{membership_pre_join_cb,  membership_post_join_cb,
-                                     membership_pre_leave_cb, membership_post_leave_cb,
-                                     membership_filter_cb,    nullptr};
-      assert(realmJoin(membership, &self_meta, hooks) == realm_status_t::REALM_SUCCESS);
+      assert(realmJoin(membership, &self_meta) == realm_status_t::REALM_SUCCESS);
 
       {
         AutoLock<> al(join_mutex);
@@ -2880,7 +2880,7 @@ namespace Realm {
       realmNodeMeta_t self_meta{};
       self_meta.node_id = Network::my_node_id;
       
-      realmStatus_t status = realmLeave(membership, &self_meta, hooks);
+      realmStatus_t status = realmLeave(membership, &self_meta);
       assert(status == realm_status_t::REALM_SUCCESS);
     }
 

@@ -51,28 +51,27 @@ realmStatus_t realmMembershipDestroy(realmMembership_t)
     return (h)->ops->fn((h)->state, __VA_ARGS__);                                        \
   } while(0)
 
-realmStatus_t realmJoin(realmMembership_t h, const realmNodeMeta_t *s,
-                        realmMembershipHooks_t hooks)
+realmStatus_t realmJoin(realmMembership_t h, const realmNodeMeta_t *s)
 {
-  CALL(h, join_request, s, hooks);
+  CALL(h, join_request, s);
 }
 
-realmStatus_t realmLeave(realmMembership_t h, const realmNodeMeta_t *s,
-                         realmMembershipHooks_t hooks)
+realmStatus_t realmLeave(realmMembership_t h, const realmNodeMeta_t *s)
 {
-  CALL(h, leave_request, s, hooks);
+  CALL(h, leave_request, s);
 }
 
 #undef CALL
 
 #ifdef REALM_USE_UDP
-extern realmStatus_t realmMembershipMeshInit(realmMembership_t *out);
+extern realmStatus_t realmMembershipMeshInit(realmMembership_t *out,
+                                             realmMembershipHooks_t hooks);
 #endif
 
-realmStatus_t realmMembershipInit(realmMembership_t *out)
+realmStatus_t realmMembershipInit(realmMembership_t *out, realmMembershipHooks_t hooks)
 {
 #ifdef REALM_USE_UDP
-  return realmMembershipMeshInit(out);
+  return realmMembershipMeshInit(out, hooks);
 #else
   assert(0);
   (void)out;

@@ -301,10 +301,10 @@ void LeaveAckMessage::handle_message(NodeID /*sender*/ sender, const LeaveAckMes
 }
 
 namespace {
-  realmStatus_t join(void *st, const realmNodeMeta_t *self, realmMembershipHooks_t hooks)
+  realmStatus_t join(void *st, const realmNodeMeta_t *self)
   {
-    MembershipMesh *state = static_cast<MembershipMesh *>(st);
-    state->hooks = hooks;
+    MembershipMesh *mesh_state = static_cast<MembershipMesh *>(st);
+    assert(mesh_state != nullptr);
 
     AmProvider *am_provider = new AmProvider();
     Network::node_directory.set_provider(am_provider);
@@ -314,14 +314,18 @@ namespace {
     Serialization::DynamicBufferSerializer dbs(DBS_SIZE);
     Network::node_directory.export_node(self->node_id, announce_mm, dbs);
 
-    if(hooks.pre_join) {
+    if(mesh_state->hooks.pre_join) {
       realmNodeMeta_t meta{(int32_t)Network::my_node_id, 0, announce_mm};
-      hooks.pre_join(&meta, nullptr, 0, /*joined=*/false, hooks.user_arg);
+      mesh_state->hooks.pre_join(&meta, nullptr, 0, /*joined=*/false,
+                                 mesh_state->hooks.user_arg);
     }
 
     if(self->seed_id == NodeDirectory::INVALID_NODE_ID) {
-      realmNodeMeta_t meta{(int32_t)Network::my_node_id, 0, announce_mm};
-      hooks.post_join(&meta, nullptr, 0, /*joined=*/true, hooks.user_arg);
+      if(mesh_state->hooks.post_join) {
+        realmNodeMeta_t meta{(int32_t)Network::my_node_id, 0, announce_mm};
+        mesh_state->hooks.post_join(&meta, nullptr, 0, /*joined=*/true,
+                                    mesh_state->hooks.user_arg);
+      }
     } else {
 
       ActiveMessage<JoinRequestMessage> am(self->seed_id, dbs.bytes_used());
@@ -335,35 +339,36 @@ namespace {
   }
 
   // TODO: FIX ALL RACE CONDITIONS
-  realmStatus_t leave(void *st, const realmNodeMeta_t *self, realmMembershipHooks_t hooks)
+  realmStatus_t leave(void *st, const realmNodeMeta_t *self)
   {
-    MembershipMesh *state = static_cast<MembershipMesh *>(st);
+    MembershipMesh *mesh_state = static_cast<MembershipMesh *>(st);
+    assert(mesh_state != nullptr);
 
-    state->hooks = hooks;
-
-    if(hooks.pre_leave) {
-      hooks.pre_leave(self, nullptr, 0, /*left=*/false, hooks.user_arg);
+    if(mesh_state->hooks.pre_leave) {
+      mesh_state->hooks.pre_leave(self, nullptr, 0, /*left=*/false,
+                                  mesh_state->hooks.user_arg);
     }
 
     NodeSet members;
 
     {
-      AutoLock<> al(state->pending_mutex);
-      assert(state->pending.empty());
-      state->pending = state->subscribers;
+      AutoLock<> al(mesh_state->pending_mutex);
+      assert(mesh_state->pending.empty());
+      mesh_state->pending = mesh_state->subscribers;
     }
 
-    state->leaving.store(true, std::memory_order_release);
+    mesh_state->leaving.store(true, std::memory_order_release);
 
     {
-      AutoLock<> al(state->pending_mutex);
-      if(!state->pending.empty()) {
-        ActiveMessage<LeaveReqMessage> am(state->pending);
+      AutoLock<> al(mesh_state->pending_mutex);
+      if(!mesh_state->pending.empty()) {
+        ActiveMessage<LeaveReqMessage> am(mesh_state->pending);
         am->epoch = Network::node_directory.bump_epoch(Network::my_node_id);
         am.commit();
       } else {
-        if(hooks.post_leave) {
-          hooks.post_leave(self, nullptr, 0, /*left=*/true, hooks.user_arg);
+        if(mesh_state->hooks.post_leave) {
+          mesh_state->hooks.post_leave(self, nullptr, 0, /*left=*/true,
+                                       mesh_state->hooks.user_arg);
         }
       }
     }
@@ -377,9 +382,11 @@ namespace {
   };
 } // namespace
 
-realmStatus_t realmMembershipMeshInit(realmMembership_t *out)
+realmStatus_t realmMembershipMeshInit(realmMembership_t *out,
+                                      realmMembershipHooks_t hooks)
 {
   MembershipMesh *state = new MembershipMesh();
   mesh_state = state;
+  mesh_state->hooks = hooks;
   return realmMembershipCreate(&operations, state, out);
 }
