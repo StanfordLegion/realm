@@ -9,8 +9,6 @@
 
 using namespace Realm;
 
-// Peer to peer membership mesh
-
 struct MembershipMesh {
   std::atomic<int> join_acks{0};
   std::atomic<int> join_acks_total{0};

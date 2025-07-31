@@ -66,13 +66,13 @@ realmStatus_t realmLeave(realmMembership_t h, const realmNodeMeta_t *s,
 #undef CALL
 
 #ifdef REALM_USE_UDP
-extern realmStatus_t realmMembershipP2PInit(realmMembership_t *out);
+extern realmStatus_t realmMembershipMeshInit(realmMembership_t *out);
 #endif
 
 realmStatus_t realmMembershipInit(realmMembership_t *out)
 {
 #ifdef REALM_USE_UDP
-  return realmMembershipP2PInit(out);
+  return realmMembershipMeshInit(out);
 #else
   assert(0);
   (void)out;

@@ -123,7 +123,7 @@ if(REALM_USE_UDP)
     REALM_SOURCES
     udp/udp_module.cc
     udp/udp_module.h
-    membership/p2p_membership.cc
+    membership/membership_mesh.cc
   )
 endif()
 
