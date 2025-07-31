@@ -97,7 +97,7 @@ jobs:
         name: Get Linux Packages
         if: ${{ matrix.config.os == 'ubuntu-latest' }}
         with:
-          packages: ${{ matrix.config.cc }} ${{ matrix.config.cxx }} ccache libopenmpi-dev
+          packages: ${{ matrix.config.cc }} ${{ matrix.config.cxx }} ccache libopenmpi-dev abi-compliance-checker abi-dumper
 
       - uses: Jimver/cuda-toolkit@v0.2.25
         name: Get CUDA
@@ -107,7 +107,7 @@ jobs:
           sub-packages: '["nvcc", "cudart-dev", "cupti-dev", "nvtx", "nvml-dev"]'
           method: 'network'
 
-      - uses: actions/cache@v4
+      - uses: actions/cache@v4.2.2
         name: Restore CPM source cache
         with:
           path: .cache/cpm
@@ -115,7 +115,7 @@ jobs:
           restore-keys: |
             cpm-
 
-      - uses: actions/cache@v4
+      - uses: actions/cache@v4.2.2
         name: Restore deps cache
         with:
           path: |
@@ -159,6 +159,7 @@ jobs:
                 -DCMAKE_C_COMPILER_LAUNCHER=${{ matrix.config.ccache }}
                 -DCMAKE_CXX_COMPILER_LAUNCHER=${{ matrix.config.ccache }}
                 -DCMAKE_BUILD_TYPE=${{ matrix.config.build }}
+                -DBUILD_SHARED_LIBS=ON
                 -DREALM_BUILD_TESTS=ON -DREALM_BUILD_BENCHMARKS=ON -DREALM_BUILD_TUTORIALS=ON -DREALM_BUILD_EXAMPLES=ON
                 -DREALM_ENABLE_UCX=OFF
                 -DREALM_ENABLE_GASNETEX=OFF
@@ -187,19 +188,57 @@ jobs:
         run: |
           cmake --install build --parallel 4 --prefix install --config ${{ matrix.config.build }}
 
+      # Check there are no ABI regressions on the installed librealm.so
+
+      - name: Dump ABI
+        if: runner.os == 'Linux' && matrix.config.build == 'Debug'
+        run:
+          abi-dumper ${{ github.workspace }}/install/lib/librealm.so -o ${{ github.workspace }}/abi-new.dump
+
+      - name: Retrieve Current ABI
+        id: cache-abi
+        if: runner.os == 'Linux' && matrix.config.build == 'Debug'
+        uses: actions/cache@v4.2.2
+        with:
+          path: ${{ github.workspace }}/abi.dump
+          key: ${{ runner.os }}-abi-dump
+
+      - name: Compare ABI dumps
+        if: runner.os == 'Linux' && matrix.config.build == 'Debug' && steps.cache-abi.outputs.cache-hit == 'true'
+        # Temporarily ignore errors here
+        continue-on-error: true
+        run:
+          abi-compliance-checker -lib realm -old ${{ github.workspace }}/abi.dump -new ${{ github.workspace }}/abi-new.dump
+
+      - name: Update ABI dump
+        if: success() && runner.os == 'Linux' && matrix.config.build == 'Debug' && (github.head_ref || github.ref_name) == 'main'
+        run:
+          mv ${{ github.workspace }}/abi-new.dump ${{ github.workspace }}/abi.dump
+
+      - name: Upload ABI failure artifact
+        if: failure() && runner.os == 'Linux' && matrix.config.build == 'Debug' && steps.cache-abi.outputs.cache-hit == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: abi-failure-log
+          path: compat_reports/**/compat_report.html
+
   cross_build:
     # Job for cross compiling non-native architectures and basic testing with qemu
-    name: ubuntu-24.04-ppc64le
+    name: ubuntu-24.04-${{ matrix.config.arch }}
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
+      matrix:
+        config:
+          - {
+              arch: ppc64le,
+              gcc_arch: powerpc64le
+            }
     env:
       CPM_SOURCE_CACHE: "${{ github.workspace }}/.cache/cpm"
       CCACHE_BASEDIR: ${{ github.workspace }}
       CCACHE_COMPRESS: "true"
       CCACHE_COMPRESS_LEVEL: "6"
-
-    # TODO: add matrix for different configs here
 
     steps:
       - uses: actions/checkout@v4.2.2
@@ -216,9 +255,9 @@ jobs:
       - uses: awalsh128/cache-apt-pkgs-action@latest
         name: Get Linux Packages
         with:
-          packages: gcc-powerpc64le-linux-gnu g++-powerpc64le-linux-gnu ccache
+          packages: gcc-${{ matrix.config.gcc_arch }}-linux-gnu g++-${{ matrix.config.gcc_arch }}-linux-gnu ccache
 
-      - uses: actions/cache@v4
+      - uses: actions/cache@v4.2.2
         name: Restore CPM source cache
         with:
           path: .cache/cpm
@@ -232,22 +271,22 @@ jobs:
           variant: ccache
           append-timestamp: true
 
-          key: ubuntu-24.04-ppc64le-${{ github.ref_name }}
+          key: ubuntu-24.04-${{ matrix.config.arch }}-${{ github.ref_name }}
           restore-keys: |
-            ubuntu-24.04-ppc64le-${{ github.ref_name }}
-            ubuntu-24.04-ppc64le-main
+            ubuntu-24.04-${{ matrix.config.arch }}-${{ github.ref_name }}
+            ubuntu-24.04-${{ matrix.config.arch }}-main
 
       - uses: lukka/get-cmake@latest
 
       - uses: docker/setup-qemu-action@v3.6.0
         name: Setup qemu
         with:
-          platforms: linux/ppc64le
+          platforms: linux/${{ matrix.config.arch }}
 
       - name: Configure
         run:
           cmake -S . -B build
-                -DCMAKE_TOOLCHAIN_FILE=cmake/toolchains/powerpc64le-linux-gnu.cmake
+                -DCMAKE_TOOLCHAIN_FILE=cmake/toolchains/${{ matrix.config.gcc_arch }}-linux-gnu.cmake
                 -DCMAKE_BUILD_TYPE=Release
                 -DCMAKE_C_COMPILER_LAUNCHER=ccache
                 -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
@@ -264,7 +303,7 @@ jobs:
 
       - name: Run Tests
         env:
-          QEMU_LD_PREFIX: "/usr/powerpc64le-linux-gnu"
+          QEMU_LD_PREFIX: "/usr/${{ matrix.config.gcc_arch }}-linux-gnu"
         run:
           ctest --output-junit ${{ github.workspace }}/${{ github.sha }}-results.xml
                 --test-dir build
@@ -282,6 +321,33 @@ jobs:
       - name: Test Install
         run: |
           cmake --install build --parallel 4 --prefix install --config Release
+
+  reuse:
+    # https://reuse.software/
+    name: Check REUSE & Copyright compliance
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+    steps:
+      - uses: actions/checkout@v4.2.2
+
+      - name: REUSE Compliance Check
+        uses: fsfe/reuse-action@v4
+        # Temporarily ignore any error from this step for now
+        continue-on-error: true
+
+      - uses: tj-actions/changed-files@v46.0.5
+        id: changed-files
+
+      - name: Check copyright year is current for changed files
+        if: steps.changed-files.outputs.test_any_changed
+        run: |
+          grep -H "Copyright " ${{ steps.changed-files.outputs.all_changed_files }} | grep -v $(date +%Y) > /tmp/copyright_lines.txt
+          if [ -s copyright_lines.txt ]; then
+            echo "Copyright information out of date for files:";
+            cut -d':' -f1 /tmp/copyright_lines.txt | sort | uniq
+            exit 1
+          fi
 
   docs:
     name: Build Docs
