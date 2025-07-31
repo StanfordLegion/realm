@@ -3,15 +3,9 @@
 
 #include <stdint.h>
 #include <stddef.h>
+#include "realm/realm_c.h"
 
-/* -------- status codes -------------------------------------- */
-typedef enum
-{
-  REALM_OK = 0,
-  REALM_ERR_BAD_ARG = -1,
-  REALM_ERR_NOMEM = -2,
-  REALM_ERR_INTERNAL = -3
-} realmStatus_t;
+typedef realm_status_t realmStatus_t;
 
 /* -------- light-weight node header -------------------------- */
 typedef struct {

@@ -14,22 +14,22 @@ realmStatus_t realmMembershipCreate(const realmMembershipOps_t *ops, void *state
                                     realmMembership_t *out)
 {
   if(!ops || !out) {
-    return REALM_ERR_BAD_ARG;
+    return realmStatus_t::REALM_ERROR;
   }
 
   realmMembership_t h = (realmMembership_t)malloc(sizeof(*h));
 
   if(!h) {
-    return REALM_ERR_NOMEM;
+    return realmStatus_t::REALM_ERROR;
   }
 
   h->ops = ops;
   h->state = state;
   *out = h;
-  return REALM_OK;
+  return realmStatus_t::REALM_SUCCESS;
 }
 
-realmStatus_t realmMembershipDestroy(realmMembership_t h)
+realmStatus_t realmMembershipDestroy(realmMembership_t)
 {
   /*if(!CHECK(h)) {
     return REALM_ERR_BAD_ARG;
@@ -40,14 +40,14 @@ realmStatus_t realmMembershipDestroy(realmMembership_t h)
   }
 
   free(h);*/
-  return REALM_OK;
+  return realmStatus_t::REALM_SUCCESS;
 }
 
 /* ----- wrappers (CALL macro) --------------------------------*/
 #define CALL(h, fn, ...)                                                                 \
   do {                                                                                   \
     if(!CHECK(h) || !(h)->ops->fn)                                                       \
-      return REALM_ERR_BAD_ARG;                                                          \
+      return realmStatus_t::REALM_ERROR;                                                 \
     return (h)->ops->fn((h)->state, __VA_ARGS__);                                        \
   } while(0)
 

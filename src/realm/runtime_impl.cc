@@ -2498,7 +2498,7 @@ namespace Realm {
       hooks = realmMembershipHooks_t{membership_pre_join_cb,  membership_post_join_cb,
                                      membership_pre_leave_cb, membership_post_leave_cb,
                                      membership_filter_cb,    nullptr};
-      assert(realmJoin(membership, &self_meta, hooks) == REALM_OK);
+      assert(realmJoin(membership, &self_meta, hooks) == realm_status_t::REALM_SUCCESS);
 
       {
         AutoLock<> al(join_mutex);
@@ -2881,7 +2881,7 @@ namespace Realm {
       self_meta.node_id = Network::my_node_id;
       
       realmStatus_t status = realmLeave(membership, &self_meta, hooks);
-      assert(status == REALM_OK);
+      assert(status == realm_status_t::REALM_SUCCESS);
     }
 
     void RuntimeImpl::shutdown(Event wait_on /*= Event::NO_EVENT*/,

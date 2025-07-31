@@ -332,7 +332,8 @@ namespace {
       am.add_payload(dbs.get_buffer(), dbs.bytes_used());
       am.commit();
     }
-    return REALM_OK;
+
+    return realmStatus_t::REALM_SUCCESS;
   }
 
   // TODO: FIX ALL RACE CONDITIONS
@@ -369,7 +370,7 @@ namespace {
       }
     }
 
-    return REALM_OK;
+    return realmStatus_t::REALM_SUCCESS;
   }
 
   const realmMembershipOps_t operations = {
