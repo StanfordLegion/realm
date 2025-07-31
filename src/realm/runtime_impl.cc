@@ -553,7 +553,6 @@ namespace Realm {
     static_cast<RuntimeImpl *>(impl)->elastic_start();
   }
 
-
   // single-call version of the above three calls
   bool Runtime::init(int *argc, char ***argv)
   {
@@ -2341,29 +2340,21 @@ namespace Realm {
   {
     assert(joined == false);
 
-    RuntimeImpl* rt = get_runtime();
+    RuntimeImpl *rt = get_runtime();
 
-    if (Network::my_node_id == self->node_id) {
+    if(Network::my_node_id == self->node_id) {
     } else {
       assert(rt->shutdown_in_progress.load() == false);
     }
   }
 
-  struct JoinContext {
-    // Realm::Event join_done;
-  };
-
   static void membership_post_join_cb(const realmNodeMeta_t *n, const void *, size_t,
                                       bool joined, void *arg)
   {
-    // auto *ctx = static_cast<JoinContext *>(arg);
-
     Network::node_directory.remove_slot(NodeDirectory::UNKNOWN_NODE_ID);
 
     if(joined) {
       RuntimeImpl *rt = get_runtime();
-      // assert(ctx->join_done != Event::NO_EVENT);
-      // GenEventImpl::trigger(ctx->join_done, false);
       AutoLock<> al(rt->join_mutex);
       rt->join_complete = joined;
       rt->join_condvar.broadcast();
@@ -2386,7 +2377,7 @@ namespace Realm {
     for(size_t i = 0; i < n.barriers.max_entries(); ++i) {
       if(n.barriers.has_entry(i)) {
         // BarrierImpl *b = n.barriers.lookup_entry(i, id);
-        //b->cancel_generations(id);
+        // b->cancel_generations(id);
       }
     }
 
@@ -2416,12 +2407,12 @@ namespace Realm {
     return true;
   }
 
-  static void membership_pre_leave_cb(const realmNodeMeta_t * self, const void *, size_t,
-                                       bool /*left*/, void *)
+  static void membership_pre_leave_cb(const realmNodeMeta_t *self, const void *, size_t,
+                                      bool /*left*/, void *)
   {
-    RuntimeImpl* rt = get_runtime();
+    RuntimeImpl *rt = get_runtime();
 
-    if (Network::my_node_id == self->node_id) {
+    if(Network::my_node_id == self->node_id) {
       // DRAIN LOCAL WORK
       // ITERATE OVER EVENTS AND CANCEL THEM
       constexpr int retry_count = 10;
@@ -2443,36 +2434,29 @@ namespace Realm {
       rt->shutdown_in_progress.store(true);
 
     } else {
-      // DRAIN REMOTE WORK
-      // CLOSE UCX FOR LEAVING RANK
-      // REMOVE nodes, channels, machinee model
-      // FIX RACE CONDITIONS
-      // assert(rt->shutdown_in_progress.load() == false);
-      
-      if (!rt->shutdown_in_progress.load()) {
+      if(!rt->shutdown_in_progress.load()) {
         assert(rt->remove_peer(self->node_id));
       }
     }
   }
 
-  static void membership_post_leave_cb(const realmNodeMeta_t * self, const void *, size_t,
-                                        bool /*left*/, void *)
+  static void membership_post_leave_cb(const realmNodeMeta_t *self, const void *, size_t,
+                                       bool /*left*/, void *)
   {
     assert(Network::my_node_id == self->node_id);
     get_runtime()->initiate_shutdown();
   }
 
+  static bool membership_filter_cb(const realmNodeMeta_t *, void *) { return true; }
+
   void RuntimeImpl::elastic_start(void)
   {
-    // all we have to do here is tell the processors to start up their
-    //  threads...
     for(std::vector<ProcessorImpl *>::const_iterator it =
             nodes[Network::my_node_id].processors.begin();
         it != nodes[Network::my_node_id].processors.end(); ++it) {
       (*it)->start_threads();
     }
 
-    //realmMembership_t membership;
     realmMembershipInit(&membership);
 
     Serialization::DynamicBufferSerializer dbs(4096);
@@ -2493,18 +2477,10 @@ namespace Realm {
                                                  : NodeDirectory::UNKNOWN_NODE_ID;
     self_meta.announce_mm = true;
 
-    JoinContext ctx;
-    // ctx.join_done = Realm::GenEventImpl::create_genevent()->current_event();
-
-    hooks = realmMembershipHooks_t{
-         membership_pre_join_cb, membership_post_join_cb, membership_pre_leave_cb,
-                                 membership_post_leave_cb, &ctx};
+    hooks = realmMembershipHooks_t{membership_pre_join_cb,  membership_post_join_cb,
+                                   membership_pre_leave_cb, membership_post_leave_cb,
+                                   membership_filter_cb,    nullptr};
     assert(realmJoin(membership, &self_meta, hooks) == REALM_OK);
-
-    // ctx.join_done.wait();
-    // Realm::Event sub_done = Realm::GenEventImpl::create_genevent()->current_event();
-    // assert(realmSubscribe(membership, sub_done, true) == REALM_OK);
-    // sub_done.wait();
 
     {
       AutoLock<> al(join_mutex);

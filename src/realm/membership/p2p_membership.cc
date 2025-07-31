@@ -52,7 +52,6 @@ namespace {
   struct JoinRequestMessage : ControlPlaneMessageTag {
     Epoch_t epoch;
     bool announce_mm{false};
-    bool subscribe_all{true};
 
     static void handle_message(NodeID sender, const JoinRequestMessage &msg,
                                const void *data, size_t datalen);
@@ -61,21 +60,8 @@ namespace {
   struct JoinAcklMessage : ControlPlaneMessageTag {
     Epoch_t epoch;
     int acks{-1};
-    bool subscribe{true};
 
     static void handle_message(NodeID sender, const JoinAcklMessage &msg,
-                               const void *data, size_t datalen);
-  };
-
-  struct SubscribeReqMessage : ControlPlaneMessageTag {
-    bool announce_mm;
-    static void handle_message(NodeID sender, const SubscribeReqMessage &msg,
-                               const void *data, size_t datalen);
-  };
-
-  struct SubscribeAckMessage : ControlPlaneMessageTag {
-    Epoch_t epoch;
-    static void handle_message(NodeID sender, const SubscribeAckMessage &msg,
                                const void *data, size_t datalen);
   };
 
@@ -102,14 +88,6 @@ namespace {
                                const void *data, size_t datalen);
   };
 
-  struct MemberRemoveMessage : ControlPlaneMessageTag {
-    Epoch_t epoch;
-    NodeID node_id;
-
-    static void handle_message(NodeID /*seed*/, const MemberRemoveMessage &msg,
-                               const void *data, size_t datalen);
-  };
-
   inline void send_join_ack(NodeID dest, Epoch_t epoch, int acks, bool announce_mm)
   {
     Serialization::DynamicBufferSerializer dbs(DBS_SIZE);
@@ -125,12 +103,9 @@ namespace {
 
   ActiveMessageHandlerReg<JoinRequestMessage> joinreq_handler;
   ActiveMessageHandlerReg<JoinAcklMessage> joinack_handler;
-  ActiveMessageHandlerReg<SubscribeReqMessage> p2p_subreq_handler;
-  ActiveMessageHandlerReg<SubscribeAckMessage> p2p_suback_handler;
   ActiveMessageHandlerReg<MemberUpdateMessage> p2p_member_handler;
   ActiveMessageHandlerReg<LeaveReqMessage> leavereq_handler;
   ActiveMessageHandlerReg<LeaveAckMessage> leaveack_handler;
-  ActiveMessageHandlerReg<MemberRemoveMessage> member_remove_handler;
 } // namespace
 
 class AmProvider : public NodeDirectory::Provider {
@@ -188,7 +163,7 @@ void JoinRequestMessage::handle_message(NodeID sender, const JoinRequestMessage 
 
   {
     AutoLock<> al(membership_state->subs_mutex);
-    if(!membership_state->subscribers.empty() && msg.subscribe_all) {
+    if(!membership_state->subscribers.empty()) {
       assert(membership_state->subscribers.contains(Network::my_node_id) == false);
       assert(membership_state->subscribers.contains(sender) == false);
       ActiveMessage<MemberUpdateMessage> am(membership_state->subscribers, datalen);
@@ -204,9 +179,12 @@ void JoinRequestMessage::handle_message(NodeID sender, const JoinRequestMessage 
   send_join_ack(sender, new_epoch, membership_state->subscribers.size() + 1,
                 msg.announce_mm);
 
-  if(msg.subscribe_all) {
-    AutoLock<> al(membership_state->subs_mutex);
-    membership_state->subscribers.add(sender);
+  if(membership_state->hooks.filter) {
+    realmNodeMeta_t meta{(int32_t)sender, 0, msg.announce_mm};
+    if(membership_state->hooks.filter(&meta, membership_state->hooks.user_arg)) {
+      AutoLock<> al(membership_state->subs_mutex);
+      membership_state->subscribers.add(sender);
+    }
   }
 }
 
@@ -221,9 +199,12 @@ void JoinAcklMessage::handle_message(NodeID sender, const JoinAcklMessage &msg,
     membership_state->join_acks_total.store(msg.acks, std::memory_order_relaxed);
   }
 
-  if(msg.subscribe) {
-    AutoLock<> al(membership_state->subs_mutex);
-    membership_state->subscribers.add(sender);
+  if(membership_state->hooks.filter) {
+    realmNodeMeta_t meta{(int32_t)sender, 0, false};
+    if(membership_state->hooks.filter(&meta, membership_state->hooks.user_arg)) {
+      AutoLock<> al(membership_state->subs_mutex);
+      membership_state->subscribers.add(sender);
+    }
   }
 
   if(membership_state->join_acks.load() == membership_state->join_acks_total.load()) {
@@ -244,7 +225,21 @@ void MemberUpdateMessage::handle_message(NodeID, const MemberUpdateMessage &msg,
     return;
   }
 
+  Network::node_directory.import_node(data, datalen, msg.epoch);
+
   assert(membership_state->leaving.load(std::memory_order_acquire) == false);
+  send_join_ack(msg.node_id, msg.epoch, /*acks=*/-1, msg.announce_mm);
+
+  if(membership_state->hooks.filter) {
+    realmNodeMeta_t meta{(int32_t)msg.node_id, 0, msg.announce_mm};
+    if(!membership_state->hooks.filter(&meta, membership_state->hooks.user_arg)) {
+      // TODO: we need import_node to send the ack back at the same time we
+      // don't need mm to be installed in case it has been and thus it needs
+      // to be removed as we ll.
+      Network::node_directory.remove_slot(msg.node_id);
+      return;
+    }
+  }
 
   if(membership_state->hooks.pre_join) {
     realmNodeMeta_t meta{(int32_t)msg.node_id, 0, false};
@@ -252,18 +247,11 @@ void MemberUpdateMessage::handle_message(NodeID, const MemberUpdateMessage &msg,
                                      membership_state->hooks.user_arg);
   }
 
-  Network::node_directory.import_node(data, datalen, msg.epoch);
-  send_join_ack(msg.node_id, msg.epoch, /*acks=*/-1, msg.announce_mm);
-
   {
     AutoLock<> al(membership_state->subs_mutex);
     membership_state->subscribers.add(msg.node_id);
   }
 }
-
-void MemberRemoveMessage::handle_message(NodeID, const MemberRemoveMessage &,
-                                         const void *, size_t)
-{}
 
 void LeaveReqMessage::handle_message(NodeID sender, const LeaveReqMessage &msg,
                                      const void *, size_t)
@@ -314,33 +302,6 @@ void LeaveAckMessage::handle_message(NodeID /*sender*/ sender, const LeaveAckMes
   }
 }
 
-/* ------------------------------------------------------------------ */
-/* SUBSCRIBE request handler (SEED)                                   */
-/* ------------------------------------------------------------------ */
-void SubscribeReqMessage::handle_message(NodeID sender, const SubscribeReqMessage &msg,
-                                         const void *, size_t)
-{}
-
-/* ------------------------------------------------------------------ */
-/* SUBSCRIBE ACK handler (rookie)                                     */
-/* ------------------------------------------------------------------ */
-void SubscribeAckMessage::handle_message(NodeID, const SubscribeAckMessage &msg,
-                                         const void *data, size_t datalen)
-{}
-
-/*static realmStatus_t p2p_subscribe(void *st, realmEvent_t done, bool announce_mm)
-{
-  return REALM_OK;
-}*/
-
-/*static realmStatus_t p2p_destroy(void *s)
-{
-  delete static_cast<MembershipP2P *>(s);
-  return REALM_OK;
-}
-
-}*/
-
 namespace {
   realmStatus_t join(void *st, const realmNodeMeta_t *self, realmMembershipHooks_t hooks)
   {
@@ -367,8 +328,6 @@ namespace {
 
       ActiveMessage<JoinRequestMessage> am(self->seed_id, dbs.bytes_used());
       am->epoch = Network::node_directory.cluster_epoch();
-      // TODO: That's not how we should subscribe
-      am->subscribe_all = (hooks.post_join != nullptr);
       am->announce_mm = announce_mm;
       am.add_payload(dbs.get_buffer(), dbs.bytes_used());
       am.commit();
@@ -413,7 +372,7 @@ namespace {
     return REALM_OK;
   }
 
-  const realmMembershipOps_t p2p_ops = {
+  const realmMembershipOps_t operations = {
       .join_request = join,
       .leave_request = leave,
   };
@@ -423,5 +382,5 @@ realmStatus_t realmMembershipP2PInit(realmMembership_t *out)
 {
   MembershipP2P *state = new MembershipP2P();
   membership_state = state;
-  return realmMembershipCreate(&p2p_ops, state, out);
+  return realmMembershipCreate(&operations, state, out);
 }

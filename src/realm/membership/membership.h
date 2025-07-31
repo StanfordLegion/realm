@@ -28,11 +28,15 @@ typedef void (*realmMembershipChangeCB_fn)(const realmNodeMeta_t *n,
                                            const void *machine_blob, size_t machine_bytes,
                                            bool joined, void *arg);
 
+typedef bool (*realmMembershipFilter_fn)(const realmNodeMeta_t *node,
+                                         void                  *arg);
+
 typedef struct realmMembershipHooks_t {
   realmMembershipChangeCB_fn pre_join;
   realmMembershipChangeCB_fn post_join;
   realmMembershipChangeCB_fn pre_leave;
   realmMembershipChangeCB_fn post_leave;
+  realmMembershipFilter_fn filter;
   void *user_arg;
 } realmMembershipHooks_t;
 
@@ -45,7 +49,6 @@ typedef struct {
   realmStatus_t (*leave_request)(void *st, const realmNodeMeta_t *self,
                                  realmMembershipHooks_t hooks);
 
-  // realmStatus_t (*subscribe_request)(void *state, realmEvent_t done, bool announce_mm);
   // realmStatus_t (*destroy)(void *state);
 
 } realmMembershipOps_t;
@@ -66,7 +69,6 @@ realmStatus_t realmLeave(realmMembership_t h, const realmNodeMeta_t *self,
                          realmMembershipHooks_t hooks);
 
 realmStatus_t realmMembershipInit(realmMembership_t *out);
-// realmStatus_t realmSubscribe(realmMembership_t h, realmEvent_t done, bool announce_mm);
 
 #ifdef __cplusplus
 }

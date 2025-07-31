@@ -63,11 +63,6 @@ realmStatus_t realmLeave(realmMembership_t h, const realmNodeMeta_t *s,
   CALL(h, leave_request, s, hooks);
 }
 
-/*realmStatus_t realmSubscribe(realmMembership_t h, realmEvent_t done, bool lazy_mode)
-{
-  CALL(h, subscribe_request, done, lazy_mode);
-}*/
-
 #undef CALL
 
 #ifdef REALM_USE_UDP
