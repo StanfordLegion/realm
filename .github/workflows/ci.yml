@@ -30,7 +30,7 @@ jobs:
               build: Release,
               cc: "cl", cxx: "cl",
               ccache: sccache,
-              cuda: ''
+              cuda: '',
               shared_lib: 'OFF'
             }
           - {
@@ -38,7 +38,7 @@ jobs:
               build: Release,
               cc: "gcc", cxx: "g++",
               ccache: ccache,
-              cuda: ''
+              cuda: '',
               shared_lib: 'OFF'
             }
           - {
@@ -46,7 +46,7 @@ jobs:
               build: Release,
               cc: "clang", cxx: "clang++",
               ccache: ccache,
-              cuda: ''
+              cuda: '',
               shared_lib: 'OFF'
             }
           - {
@@ -54,7 +54,7 @@ jobs:
               build: Release,
               cc: "gcc", cxx: "g++",
               ccache: ccache,
-              cuda: ''
+              cuda: '',
               shared_lib: 'OFF'
             }
           - {
@@ -62,7 +62,7 @@ jobs:
               build: Release,
               cc: "gcc", cxx: "g++",
               ccache: ccache,
-              cuda: '12.9.0'
+              cuda: '12.9.0',
               shared_lib: 'OFF'
             }
           - {
@@ -70,7 +70,7 @@ jobs:
               build: Release,
               cc: "clang", cxx: "clang++",
               ccache: ccache,
-              cuda: ''
+              cuda: '',
               shared_lib: 'OFF'
             }
           - {
@@ -78,7 +78,7 @@ jobs:
               build: Debug,
               cc: "gcc", cxx: "g++",
               ccache: ccache,
-              cuda: ''
+              cuda: '',
               shared_lib: 'ON'
             }
           - {
@@ -86,8 +86,8 @@ jobs:
               build: Release,
               cc: "clang", cxx: "clang++",
               ccache: ccache,
-              cuda: ''
-              shared_lib: 'ON'
+              cuda: '',
+              shared_lib: 'OFF'
             }
     steps:
       - uses: actions/checkout@v4.2.2
