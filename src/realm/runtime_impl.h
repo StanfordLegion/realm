@@ -138,8 +138,6 @@ namespace Realm {
     long long cpu_bgwork_timeslice = 0, util_bgwork_timeslice = 0;
     bool use_ext_sysmem = true;
 
-    bool lazy_mode{true};
-
     // RuntimeImpl
     size_t reg_ib_mem_size = 0;
     size_t reg_mem_size = 0;
@@ -403,9 +401,6 @@ namespace Realm {
       realmMembership_t membership;
       realmMembershipHooks_t hooks;
 
-      //int join_acks_total{1};
-      //int join_acks{0};
-
       class DeferredShutdown : public EventWaiter {
       public:
 	void defer(RuntimeImpl *_runtime, Event wait_on);
@@ -505,9 +500,10 @@ namespace Realm {
 				 const void *data, size_t datalen);
     };
 
-    bool serialize_announcement(Realm::Serialization::DynamicBufferSerializer &serializer, const Node *node,
-                                   const MachineImpl *machine_impl, NetworkModule *net);
-      
+    bool serialize_announcement(Realm::Serialization::DynamicBufferSerializer &serializer,
+                                const Node *node, const MachineImpl *machine_impl,
+                                NetworkModule *net);
+
 }; // namespace Realm
 
 #endif // ifndef REALM_RUNTIME_IMPL_H
