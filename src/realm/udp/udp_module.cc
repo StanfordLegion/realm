@@ -7,6 +7,7 @@
 #include <unistd.h>
 #include <cstring>
 #include <netinet/in.h>
+#include <netdb.h>
 
 namespace Realm {
 
@@ -15,6 +16,9 @@ namespace Realm {
     Logger log_udp("udp");
   } // namespace
 
+  /* ------------------------------------------------------------------ */
+  /* UDPWorker                                                          */
+  /* ------------------------------------------------------------------ */
   UDPWorker::UDPWorker(UDPModule *owner, int sock)
     : BackgroundWorkItem("udp rx")
     , module(owner)
@@ -107,23 +111,23 @@ namespace Realm {
   void UDPModule::parse_command_line(RuntimeImpl *runtime,
                                      std::vector<std::string> &cmdline)
   {
-    NodeID config_rank_id = -1;
-    int config_udp_port = 0;
-    std::string config_udp_address;
+    NodeID config_rank_id = NodeDirectory::INVALID_NODE_ID;
+    int config_self_port = 0;
+    std::string config_seed_address;
     CommandLineParser cp;
 
     cp.add_option_int("-ll:id", config_rank_id);
-    cp.add_option_int("-udp:bind", config_udp_port);
-    cp.add_option_string("-udp:seed", config_udp_address);
+    cp.add_option_string("-ll:seed", config_seed_address);
+    cp.add_option_int("-udp:bind", config_self_port);
 
     bool ok = cp.parse_command_line(cmdline);
     assert(ok);
 
-    if(config_udp_port == 0) {
-      config_udp_port = 50000;
+    if(config_self_port == 0) {
+      config_self_port = 50000;
     }
 
-    init(static_cast<uint16_t>(config_udp_port), config_udp_address, config_rank_id);
+    init(static_cast<uint16_t>(config_self_port), config_seed_address, config_rank_id);
   }
 
   void UDPModule::init(uint16_t base_port, const std::string &address,
@@ -143,7 +147,6 @@ namespace Realm {
     sin.sin_port = htons(base_port);
 
     if(bind(sock_fd_, reinterpret_cast<sockaddr *>(&sin), sizeof(sin)) < 0) {
-      // fall back to ephemeral if the chosen port is unavailable
       sin.sin_port = 0;
       if(bind(sock_fd_, reinterpret_cast<sockaddr *>(&sin), sizeof(sin)) < 0) {
         perror("bind");
@@ -168,19 +171,36 @@ namespace Realm {
       Network::node_directory.add_slot(self_rank_id, meta);
     }
 
-    assert(self_rank_id != -1);
+    assert(self_rank_id != NodeDirectory::INVALID_NODE_ID);
 
     if(!address.empty()) {
       size_t colon = address.find(':');
       std::string seed_ip = address.substr(0, colon);
       uint16_t seed_port = atoi(address.c_str() + colon + 1);
+      uint32_t seed_ipv4 = 0;
+
+      if(inet_pton(AF_INET, seed_ip.c_str(), &seed_ipv4) != 1) {
+        struct addrinfo hints{};
+        hints.ai_family = AF_INET;
+        hints.ai_socktype = SOCK_DGRAM;
+        struct addrinfo *res = nullptr;
+        int rc = getaddrinfo(seed_ip.c_str(), nullptr, &hints, &res);
+        if(rc == 0 && res != nullptr) {
+          auto *addr = reinterpret_cast<sockaddr_in *>(res->ai_addr);
+          seed_ipv4 = addr->sin_addr.s_addr;
+          freeaddrinfo(res);
+        } else {
+          log_udp.error() << "UDPModule::init: failed to resolve seed host '" << seed_ip
+                          << "' : " << gai_strerror(rc);
+          abort();
+        }
+      }
 
       NodeMeta meta;
       meta.epoch = 1;
-      meta.ip = inet_addr(seed_ip.c_str());
+      meta.ip = seed_ipv4;
       meta.udp_port = seed_port;
       Network::node_directory.add_slot(NodeDirectory::UNKNOWN_NODE_ID, meta);
-
       register_peer(NodeDirectory::UNKNOWN_NODE_ID, seed_ip, seed_port);
     }
 
@@ -296,7 +316,6 @@ namespace Realm {
   void UDPModule::register_peer(NodeID id, const std::string &ip, uint16_t port)
   {
     AutoLock<> al(peer_map_mutex);
-
     PeerAddr &pa = peer_map_[id];
     pa.sin.sin_family = AF_INET;
     pa.sin.sin_port = htons(port);
@@ -306,7 +325,6 @@ namespace Realm {
   void UDPModule::register_peer(NodeID id, uint32_t ip, uint16_t port)
   {
     // AutoLock<> al(peer_map_mutex);
-
     PeerAddr &pa = peer_map_[id];
     pa.sin.sin_family = AF_INET;
     pa.sin.sin_port = htons(port);
@@ -445,7 +463,6 @@ namespace Realm {
       mod_->send_datagram(pa, pkt.data(), pkt.size());
     }
 
-    /* invoke completions synchronously */
     CompletionCallbackBase::invoke_all(local_comp_.data(), local_comp_.size());
     CompletionCallbackBase::invoke_all(remote_comp_.data(), remote_comp_.size());
   }
