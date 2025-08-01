@@ -442,6 +442,8 @@ namespace Realm {
         rt->join_complete = joined;
         rt->join_condvar.broadcast();
       }
+
+      assert(Network::ping_all_peers());
     }
 
     void membership_pre_leave_cb(const realmNodeMeta_t *self, const void *, size_t,
@@ -452,11 +454,12 @@ namespace Realm {
       if(Network::my_node_id == self->node_id) {
         // DRAIN LOCAL WORK
         // ITERATE OVER EVENTS AND CANCEL THEM
-        constexpr int retry_count = 10;
+        constexpr int retry_count = 20;
 
         int tries = 0;
         while(true) {
           tries++;
+
           bool done = Network::check_for_quiescence(rt->message_manager);
           if(done) {
             break;

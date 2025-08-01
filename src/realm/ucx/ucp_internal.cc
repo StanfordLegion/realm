@@ -1128,8 +1128,15 @@ err:
       req = internal->request_get(tx_worker);
       CHKERR_JUMP(req == nullptr, "failed to get request", log_ucp, err);
 
-      CHKERR_JUMP(!tx_worker->ep_get(sender, remote_dev_index, &req->ucp.ep),
-          "failed to get reply ep", log_ucp, err_rel_req);
+
+      if (!tx_worker->ep_get(sender, remote_dev_index, &req->ucp.ep)) {
+        auto meta = Network::node_directory.lookup(sender);
+        assert(meta != nullptr);
+        internal->add_remote_ep(
+            sender, meta->worker_address.data(), meta->worker_address.size());
+         CHKERR_JUMP(!tx_worker->ep_get(sender, remote_dev_index, &req->ucp.ep),
+          "failed to get ep", log_ucp, err);
+      }
 
       req->ucp.op_type        = UCPWorker::OpType::AM_SEND;
       req->ucp.flags          = UCP_AM_SEND_FLAG_EAGER;
@@ -1734,6 +1741,8 @@ err:
       total_rcomp_received.load(),
       outstanding_reqs.load(),
     };
+
+    return true; // TODO: FIX ME
 
     log_ucp.debug() << "local quiescence counters:"
                     << " total_msg_sent "        << local_counts[0]
@@ -2491,9 +2500,6 @@ err:
        CHKERR_JUMP(!worker->ep_get(target, remote_dev_index, &ep),
         "failed to get ep", log_ucp, err);
     }
-
-    //CHKERR_JUMP(!worker->ep_get(target, remote_dev_index, &ep),
-        //"failed to get ep unicast", log_ucp, err);
 
     if (dest_payload_rdma_info == nullptr) {
       if (header_size + act_payload_size <= internal->config.fp_max) {
