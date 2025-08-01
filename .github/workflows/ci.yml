@@ -179,7 +179,7 @@ jobs:
       - name: Run Tests
         if: matrix.config.cuda == '' || steps.check_gpu.outputs.no_gpu != '1'
         run:
-          ctest --output-junit ${{ github.workspace }}/${{ github.sha }}-results.xml
+          ctest --output-junit test-results.xml
                 --test-dir build
                 --build-config ${{ matrix.config.build }}
                 --output-on-failure
@@ -188,9 +188,9 @@ jobs:
       
       - uses: test-summary/action@v2
         name: Upload Test Results
-        if: always() && ${{ hashFiles(${{ github.workspace }}/${{ github.sha }}-results.xml) != '' }}
+        if: always() && ${{ hashFiles(test-results.xml) != '' }}
         with:
-          paths: "${{ github.workspace }}/${{ github.sha }}-results.xml"
+          paths: "test-results.xml"
 
       - name: Test Install
         run: |
@@ -201,25 +201,25 @@ jobs:
       - name: Dump ABI
         if: runner.os == 'Linux' && matrix.config.build == 'Debug' && matrix.config.shared_libs == 'ON'
         run:
-          abi-dumper ${{ github.workspace }}/install/lib/librealm.so -o ${{ github.workspace }}/abi-new.dump
+          abi-dumper ${{ github.workspace }}/install/lib/librealm.so -o abi-new.dump
 
       - name: Retrieve Current ABI
         id: cache-abi
-        if: hashFiles(${{ github.workspace }}/abi-new.dump) != '' }}
+        if: hashFiles(abi-new.dump) != '' }}
         uses: actions/cache@v4.2.2
         with:
           path: ${{ github.workspace }}/abi.dump
           key: ${{ runner.os }}-abi-dump
 
       - name: Compare ABI dumps
-        if: ${{ hashFiles(${{ github.workspace }})/abi.dump) != '' }}
+        if: ${{ hashFiles(abi.dump) != '' }}
         # Temporarily ignore errors here
         continue-on-error: true
         run:
           abi-compliance-checker -lib realm -old ${{ github.workspace }}/abi.dump -new ${{ github.workspace }}/abi-new.dump
 
       - name: Update ABI dump
-        if: success() && ${{ hashFiles(${{ github.workspace }}/abi.dump) != '' }}
+        if: success() && ${{ hashFiles(abi.dump) != '' }}
         run:
           mv ${{ github.workspace }}/abi-new.dump ${{ github.workspace }}/abi.dump
 
