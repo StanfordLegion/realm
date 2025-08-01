@@ -183,6 +183,8 @@ namespace Realm {
       // barriers
       int barrier_broadcast_radix = 4;
 
+      bool enable_elasticity{false};
+
       // topology of the host
       const HardwareTopology *host_topology = nullptr;
   };
@@ -274,6 +276,7 @@ namespace Realm {
       bool configure_from_command_line(std::vector<std::string> &cmdline);
 
       void start(void);
+      void elastic_start(void);
 
       bool register_task(Processor::TaskFuncID taskid, Processor::TaskFuncPtr taskptr);
       Event notify_register_reduction(ReductionOpID redop_id);
@@ -298,13 +301,10 @@ namespace Realm {
       bool request_shutdown(Event wait_on, int result_code);
 
       // indicates shutdown has been initiated, wakes up a waiter if already present
-      void initiate_shutdown(void);
+      void initiate_shutdown(bool signal_only = false);
 
       // shutdown the runtime
       void shutdown(Event wait_on = Event::NO_EVENT, int result_code = 0);
-
-      void elastic_start(void);
-      void elastic_shutdown(Event wait_on = Event::NO_EVENT, int result_code = 0);
 
       bool remove_peer(NodeID id);
 

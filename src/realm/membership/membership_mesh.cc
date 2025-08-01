@@ -158,8 +158,7 @@ void JoinRequestMessage::handle_message(NodeID sender, const JoinRequestMessage 
                                mesh_state->hooks.user_arg);
   }
 
-  Network::node_directory.import_node(data, datalen, /*epoch=*/0);
-  uint64_t new_epoch = Network::node_directory.cluster_epoch();
+  uint64_t new_epoch = Network::node_directory.import_node(data, datalen, /*epoch=*/0);
 
   {
     AutoLock<> al(mesh_state->subs_mutex);

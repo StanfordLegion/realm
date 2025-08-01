@@ -45,7 +45,7 @@ namespace Realm {
 
     void export_node(NodeID id, bool include_mm,
                      Serialization::DynamicBufferSerializer &dbs);
-    void import_node(const void *blob, size_t bytes, uint64_t epoch = 0);
+    uint64_t import_node(const void *blob, size_t bytes, uint64_t epoch = 0);
 
     void add_slot(NodeID id, const NodeMeta &meta);
     void remove_slot(NodeID id);

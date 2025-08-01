@@ -97,7 +97,7 @@ void NodeDirectory::export_node(NodeID id, bool include_mm,
   dbs.append_bytes(n->worker_address.data(), h.wrk_len);
 }
 
-void NodeDirectory::import_node(const void *blob, size_t bytes, uint64_t epoch)
+uint64_t NodeDirectory::import_node(const void *blob, size_t bytes, uint64_t epoch)
 {
   Serialization::FixedBufferDeserializer dbs(blob, bytes);
 
@@ -127,6 +127,8 @@ void NodeDirectory::import_node(const void *blob, size_t bytes, uint64_t epoch)
   m.worker_address.assign(static_cast<const uint8_t *>(wrk),
                           static_cast<const uint8_t *>(wrk) + h.wrk_len);
   add_slot(h.id, m);
+
+  return new_epoch;
 }
 
 void NodeDirectory::complete(NodeID id, uint64_t epoch, const void *blob, size_t bytes)

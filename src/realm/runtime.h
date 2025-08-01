@@ -130,9 +130,6 @@ namespace Realm {
       // requests a shutdown of the runtime
       void shutdown(Event wait_on = Event::NO_EVENT, int result_code = 0);
 
-      void elastic_start();
-      void elastic_shutdown(Event wait_on = Event::NO_EVENT, int result_code = 0);
-
       // returns the result_code passed to shutdown()
       int wait_for_shutdown(void);
 
