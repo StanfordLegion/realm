@@ -179,7 +179,7 @@ jobs:
       - name: Run Tests
         if: matrix.config.cuda == '' || steps.check_gpu.outputs.no_gpu != '1'
         run:
-          ctest --output-junit test-results.xml
+          ctest --output-junit ${{ github.workspace }}/test-results.xml
                 --test-dir build
                 --build-config ${{ matrix.config.build }}
                 --output-on-failure
