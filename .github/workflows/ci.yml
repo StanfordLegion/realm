@@ -177,6 +177,7 @@ jobs:
           cmake --build build --parallel 4 --config ${{ matrix.config.build }} --verbose 
 
       - name: Run Tests
+        id: run-tests
         if: matrix.config.cuda == '' || steps.check_gpu.outputs.no_gpu != '1'
         run:
           ctest --output-junit ${{ github.workspace }}/test-results.xml
@@ -188,43 +189,45 @@ jobs:
       
       - uses: test-summary/action@v2
         name: Upload Test Results
-        if: always() && ${{ hashFiles('test-results.xml') != '' }}
+        if: steps.run-tests.outcome == 'failure'
         with:
           paths: "test-results.xml"
 
-      - name: Test Install
-        run: |
+      - name: Run Install
+        run:
           cmake --install build --parallel 4 --prefix install --config ${{ matrix.config.build }}
 
       # Check there are no ABI regressions on the installed librealm.so
 
       - name: Dump ABI
-        if: runner.os == 'Linux' && matrix.config.build == 'Debug' && matrix.config.shared_libs == 'ON'
+        if: runner.os == 'Linux' && matrix.config.build == 'Debug' && matrix.config.shared_lib == 'ON'
+        id: dump-abi
         run:
           abi-dumper ${{ github.workspace }}/install/lib/librealm.so -o abi-new.dump
 
       - name: Retrieve Current ABI
         id: cache-abi
-        if: hashFiles('abi-new.dump') != ''
+        if: steps.dump-abi.conclusion == 'success'
         uses: actions/cache@v4.2.2
         with:
           path: ${{ github.workspace }}/abi.dump
           key: ${{ runner.os }}-abi-dump
 
       - name: Compare ABI dumps
-        if: hashFiles('abi.dump') != ''
+        id: compare-abi
+        if: steps.cache-abi.outputs.cache-hit == 'true'
         # Temporarily ignore errors here
         continue-on-error: true
         run:
           abi-compliance-checker -lib realm -old ${{ github.workspace }}/abi.dump -new ${{ github.workspace }}/abi-new.dump
 
       - name: Update ABI dump
-        if: success() && ${{ hashFiles('abi.dump') != '' }}
+        if: steps.compare-abi.outcome == 'success'
         run:
           mv ${{ github.workspace }}/abi-new.dump ${{ github.workspace }}/abi.dump
 
       - name: Upload ABI failure artifact
-        if: failure() && ${{ hashFiles('compat_reports/**/compat_report.html') != '' }}
+        if: steps.compare-abi.outcome == 'failure'
         uses: actions/upload-artifact@v4
         with:
           name: abi-failure-log
@@ -310,10 +313,11 @@ jobs:
           cmake --build build --parallel 4 --config Release
 
       - name: Run Tests
+        id: run-tests
         env:
           QEMU_LD_PREFIX: "/usr/${{ matrix.config.gcc_arch }}-linux-gnu"
         run:
-          ctest --output-junit ${{ github.workspace }}/${{ github.sha }}-results.xml
+          ctest --output-junit ${{ github.workspace }}/test-results.xml
                 --test-dir build
                 --build-config Release
                 --output-on-failure
@@ -322,12 +326,12 @@ jobs:
 
       - uses: test-summary/action@v2
         name: Upload Test Results
-        if: always()
+        if: steps.run-tests.outcome == 'failure'
         with:
-          paths: "${{ github.workspace }}/${{ github.sha }}-results.xml"
+          paths: "${{ github.workspace }}/test-results.xml"
 
-      - name: Test Install
-        run: |
+      - name: Run Install
+        run:
           cmake --install build --parallel 4 --prefix install --config Release
 
   reuse:
