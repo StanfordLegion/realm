@@ -205,14 +205,14 @@ jobs:
 
       - name: Retrieve Current ABI
         id: cache-abi
-        if: hashFiles('abi-new.dump') != '' }}
+        if: hashFiles('abi-new.dump') != ''
         uses: actions/cache@v4.2.2
         with:
           path: ${{ github.workspace }}/abi.dump
           key: ${{ runner.os }}-abi-dump
 
       - name: Compare ABI dumps
-        if: ${{ hashFiles('abi.dump') != '' }}
+        if: hashFiles('abi.dump') != ''
         # Temporarily ignore errors here
         continue-on-error: true
         run:
