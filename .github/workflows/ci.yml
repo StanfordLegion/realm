@@ -188,7 +188,7 @@ jobs:
       
       - uses: test-summary/action@v2
         name: Upload Test Results
-        if: always() && ${{ hashFiles(test-results.xml) != '' }}
+        if: always() && ${{ hashFiles('test-results.xml') != '' }}
         with:
           paths: "test-results.xml"
 
@@ -205,26 +205,26 @@ jobs:
 
       - name: Retrieve Current ABI
         id: cache-abi
-        if: hashFiles(abi-new.dump) != '' }}
+        if: hashFiles('abi-new.dump') != '' }}
         uses: actions/cache@v4.2.2
         with:
           path: ${{ github.workspace }}/abi.dump
           key: ${{ runner.os }}-abi-dump
 
       - name: Compare ABI dumps
-        if: ${{ hashFiles(abi.dump) != '' }}
+        if: ${{ hashFiles('abi.dump') != '' }}
         # Temporarily ignore errors here
         continue-on-error: true
         run:
           abi-compliance-checker -lib realm -old ${{ github.workspace }}/abi.dump -new ${{ github.workspace }}/abi-new.dump
 
       - name: Update ABI dump
-        if: success() && ${{ hashFiles(abi.dump) != '' }}
+        if: success() && ${{ hashFiles('abi.dump') != '' }}
         run:
           mv ${{ github.workspace }}/abi-new.dump ${{ github.workspace }}/abi.dump
 
       - name: Upload ABI failure artifact
-        if: failure() && ${{ hashFiles(compat_reports/**/compat_report.html) != '' }}
+        if: failure() && ${{ hashFiles('compat_reports/**/compat_report.html') != '' }}
         uses: actions/upload-artifact@v4
         with:
           name: abi-failure-log
