@@ -443,7 +443,9 @@ namespace Realm {
         rt->join_condvar.broadcast();
       }
 
+#ifdef REALM_ENABLE_NETWORK_PING_TEST
       assert(Network::ping_all_peers());
+#endif
     }
 
     void membership_pre_leave_cb(const realmNodeMeta_t *self, const void *, size_t,

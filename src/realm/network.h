@@ -83,7 +83,7 @@ namespace Realm {
 #ifdef REALM_ENABLE_NETWORK_PING_TEST
     // Runs a one-way ActiveMessage ping to every peer and waits for remote
     // completions. Useful in unit tests to validate that the data plane is
-    // operational.  Returns true on success, false on timeout.
+    // operational.  Conside removing.
     bool ping_all_peers(unsigned timeout_ms = 5000);
 #endif
 
