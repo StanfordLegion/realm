@@ -1,4 +1,0 @@
-# Region
-
-## LogicalRegion
-## PhysicalRegion
