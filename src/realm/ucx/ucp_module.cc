@@ -142,6 +142,9 @@ err_del_mod:
     cp.add_option_string("-ucx:tls_dev", config.tls_dev);
 #endif
 
+    cp.add_option_int("-ucx:cs_port", config.cs_port);
+    cp.add_option_int("-ucx:cs_mode", config.cs_mode);
+
     bool ok = cp.parse_command_line(cmdline);
     assert(ok);
 
