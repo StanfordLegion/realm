@@ -20,7 +20,8 @@
 #include "realm.h"
 #include "realm/cmdline.h"
 
-#include <stdio.h>
+#include <cstdio>
+#include <cstdlib>
 #ifdef REALM_USE_CUDA
 #include "realm/cuda/cuda_access.h"
 #include <cuda_runtime.h>
