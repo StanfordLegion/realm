@@ -243,6 +243,12 @@ jobs:
         with:
           paths: "test-results.xml"
 
+      - name: Upload test results to Codecov
+        if: always() && hashFiles('test-results.xml')
+        uses: codecov/test-results-action@v1
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+
       - name: Run Install
         run:
           cmake --install build --parallel 4 --prefix install --config ${{ matrix.config.build }}

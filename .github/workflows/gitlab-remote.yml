@@ -1,0 +1,88 @@
+# Copyright 2025 Stanford University, NVIDIA Corporation
+# SPDX-License-Identifier: Apache-2.0
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+name: Legion-CI
+
+on:
+  workflow_dispatch:
+  push:
+    branches: main
+
+jobs:
+  Legion-CI:
+    name: Legion CI
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+    env:
+      GITLAB_URL: "https://gitlab.com/api/v4/projects/1447639"
+      GITLAB_REF: "master"
+      GITHUB_ARCHIVE: "${{ github.server_url }}/${{ github.repository }}/archive/${{ github.sha }}.tar.gz"
+    steps:
+      - name: Hide token in logs
+        run:
+          echo "::add-mask::${{ secrets.GITLAB_TRIGGER_TOKEN }}"
+          echo "::add-mask::${{ secrets.GITLAB_ACCESS_TOKEN }}"
+
+      - name: Retrieve archive to compute sha256
+        run: |
+          curl -sL $GITHUB_ARCHIVE -o realm.tar.gz
+          echo "REALM_SHA256=$(shasum -a 256 realm.tar.gz | cut -d' ' -f1)" >> "$GITHUB_ENV"
+
+      - name: Trigger remote pipeline
+        env:
+          GITLAB_TRIGGER_TOKEN: ${{ secrets.GITLAB_TRIGGER_TOKEN }}
+          GITLAB_ACCESS_TOKEN: ${{ secrets.GITLAB_ACCESS_TOKEN }}
+          REALM_COMMIT: ${{ github.sha }}
+          PYTHONUNBUFFERED: 1
+        shell: python
+        run: |
+          import requests, os, sys, time
+
+          GITLAB_URL = os.environ['GITLAB_URL']
+          GITLAB_REF = os.environ['GITLAB_REF']
+          GITLAB_TRIGGER_TOKEN = os.environ['GITLAB_TRIGGER_TOKEN']
+          GITLAB_ACCESS_TOKEN = os.environ['GITLAB_ACCESS_TOKEN']
+          GITHUB_ARCHIVE = os.environ['GITHUB_ARCHIVE']
+          REALM_SHA256 = os.environ['REALM_SHA256']
+          REALM_COMMIT = os.environ['REALM_COMMIT']
+
+          payload = {'token': GITLAB_TRIGGER_TOKEN,
+                     'ref': GITLAB_REF,
+                     'variable[REALM_URL]': GITHUB_ARCHIVE,
+                     'variable[REALM_SH256]': REALM_SHA256,
+                     'variable[REALM_COMMIT]': REALM_COMMIT
+                    }
+          r = requests.post(GITLAB_URL + '/trigger/pipeline', data=payload)
+          r.raise_for_status()
+          pipeline_info = r.json()
+          print('::notice::Triggered pipeline at', pipeline_info['web_url'])
+          pipeline_id = str(pipeline_info['id'])
+          hdrs = { 'PRIVATE-TOKEN': GITLAB_ACCESS_TOKEN }
+          old_status = pipeline_info['status']
+          while True:
+            r = requests.get(GITLAB_URL + '/pipelines/' + pipeline_id, headers=hdrs)
+            r.raise_for_status()
+            pipeline_status = r.json()
+            if pipeline_status['status'] != old_status:
+              print('::notice::Pipeline status:', pipeline_status['status'])
+              old_status = pipeline_status['status']
+            if pipeline_status['status'] == 'success':
+              break
+            elif pipeline_status['status'] in ['failed', 'canceled', 'skipped']:
+              print('::error::Pipeline', pipeline_status['status'], ':', pipeline_info['web_url'])
+              sys.exit(1)
+            time.sleep(300) # Check every 5 minutes
+
