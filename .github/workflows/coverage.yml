@@ -27,6 +27,7 @@ on:
       - '**.inl'
       - '**CMakeLists.txt'
       - '**.cmake'
+      - '.github/workflows/coverage.yml'
   pull_request:
     branches-ignore:
       - gh-pages
@@ -38,6 +39,7 @@ on:
       - '**.inl'
       - '**CMakeLists.txt'
       - '**.cmake'
+      - '.github/workflows/coverage.yml'
 
 jobs:
   build:
