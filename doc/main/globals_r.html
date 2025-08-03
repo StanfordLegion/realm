@@ -44,7 +44,7 @@
    <!-- BEGIN version select -->
     <br />
     <div class="dropdown">
-     <button class="dropbtn">Version 25.6.1-rc.1+289a756e</button>
+     <button class="dropbtn">Version 25.06.0+1b9dd28c</button>
      <div class="dropdown-content"></div>
     </div>
     <script type="text/javascript" src="../selectversion.js"></script>
@@ -188,10 +188,19 @@ $(document).ready(function(){initNavTree('globals_r.html',''); initResizable(); 
 <li>REALM_ATTR_DEPRECATED2&#160;:&#160;<a class="el" href="compiler__support_8h.html#abf9f7ea44d1cb1bdfd534995e4c84bdf">compiler_support.h</a></li>
 <li>REALM_ATTR_NORETURN&#160;:&#160;<a class="el" href="compiler__support_8h.html#a127f2afe94736c06b1d7d9740217bb96">compiler_support.h</a></li>
 <li>REALM_ATTR_PRINTF_FORMAT&#160;:&#160;<a class="el" href="compiler__support_8h.html#ae45607c35fc9579dd60fe7432653d02d">compiler_support.h</a></li>
-<li>REALM_ATTR_UNUSED&#160;:&#160;<a class="el" href="gasnetex__wrapper__internal_8h.html#a714dc8d038867871b4224de6035a143d">gasnetex_wrapper_internal.h</a>, <a class="el" href="compiler__support_8h.html#a714dc8d038867871b4224de6035a143d">compiler_support.h</a></li>
+<li>REALM_ATTR_UNUSED&#160;:&#160;<a class="el" href="compiler__support_8h.html#a714dc8d038867871b4224de6035a143d">compiler_support.h</a>, <a class="el" href="gasnetex__wrapper__internal_8h.html#a714dc8d038867871b4224de6035a143d">gasnetex_wrapper_internal.h</a></li>
 <li>REALM_ATTR_WARN_UNUSED&#160;:&#160;<a class="el" href="compiler__support_8h.html#ae3930864e704090441c1ab8f20919fd4">compiler_support.h</a></li>
 <li>realm_barrier_timestamp_t&#160;:&#160;<a class="el" href="realm__c_8h.html#a8743d4cb30f6ea5fcc3b30a917413d1d">realm_c.h</a></li>
+<li>realm_coord_t&#160;:&#160;<a class="el" href="realm__c_8h.html#ab94cf5ae0f2103be38e6d8d1cfdec3b7">realm_c.h</a></li>
+<li>realm_coord_type_enum&#160;:&#160;<a class="el" href="realm__c_8h.html#a183da6d0b7c26fcdbeefa7788163a4bf">realm_c.h</a></li>
+<li>REALM_COORD_TYPE_INT&#160;:&#160;<a class="el" href="realm__c_8h.html#a183da6d0b7c26fcdbeefa7788163a4bfad25a496c6e5b80c49eaa2d918df7fdbd">realm_c.h</a></li>
+<li>REALM_COORD_TYPE_LONG_LONG&#160;:&#160;<a class="el" href="realm__c_8h.html#a183da6d0b7c26fcdbeefa7788163a4bfa8807eb4854dca6edef9eaaf519baf537">realm_c.h</a></li>
+<li>REALM_COORD_TYPE_MAX&#160;:&#160;<a class="el" href="realm__c_8h.html#a183da6d0b7c26fcdbeefa7788163a4bfa2c1a4c772f613ee79f014c5093124c50">realm_c.h</a></li>
+<li>REALM_COORD_TYPE_NUM&#160;:&#160;<a class="el" href="realm__c_8h.html#a183da6d0b7c26fcdbeefa7788163a4bfa8f3e9d726dbe3f8971e3ebc65a1a3936">realm_c.h</a></li>
+<li>realm_coord_type_t&#160;:&#160;<a class="el" href="realm__c_8h.html#aa9af52279055cd868026bbed825007b5">realm_c.h</a></li>
+<li>realm_copy_src_dst_field_t&#160;:&#160;<a class="el" href="realm__c_8h.html#a582575bd17f4293890525606a73742d7">realm_c.h</a></li>
 <li>REALM_CUDA_DYNAMIC_LOAD&#160;:&#160;<a class="el" href="realm__defines_8h.html#aca81d26f41763ea5cd650fa129d1a895">realm_defines.h</a></li>
+<li>REALM_CUDA_ERROR_NOT_ENABLED&#160;:&#160;<a class="el" href="realm__c_8h.html#ab0dce9b9caa92d896ace3c1cf0b10941aac04f3e346e2c0fa561193d4c5c06a67">realm_c.h</a></li>
 <li>REALM_CUDA_HD&#160;:&#160;<a class="el" href="compiler__support_8h.html#abdece69c5acdf72040a4beb49743368d">compiler_support.h</a></li>
 <li>realm_custom_serdez_id_t&#160;:&#160;<a class="el" href="realm__c_8h.html#a22cba4ddbda378260a0f685da030800c">realm_c.h</a></li>
 <li>REALM_DEPRECATED&#160;:&#160;<a class="el" href="realm__exports_8h.html#a316b15f9ecf454faa63493fdacac0c16">realm_exports.h</a></li>
@@ -201,30 +210,50 @@ $(document).ready(function(){initNavTree('globals_r.html',''); initResizable(); 
 <li>REALM_ENTRY_EXIT&#160;:&#160;<a class="el" href="utils_8h.html#a804aca4c5d834fccaf24dadc0f0a6526">utils.h</a></li>
 <li>REALM_ERROR&#160;:&#160;<a class="el" href="realm__c_8h.html#ab0dce9b9caa92d896ace3c1cf0b10941a158cb7519a91d8f50de7d2f193308da2">realm_c.h</a></li>
 <li>REALM_ERROR_BUFFER_SIZE&#160;:&#160;<a class="el" href="realm__config_8h.html#af17b8da36c36291db01d2a3618d3ce6e">realm_config.h</a></li>
+<li>REALM_ERROR_INVALID_PARAMETER&#160;:&#160;<a class="el" href="realm__c_8h.html#ab0dce9b9caa92d896ace3c1cf0b10941a8b261123c9c29a716c48d65ea9513ba3">realm_c.h</a></li>
 <li>REALM_EVENT_ERROR_INVALID_EVENT&#160;:&#160;<a class="el" href="realm__c_8h.html#ab0dce9b9caa92d896ace3c1cf0b10941a62b2d18b05d5f55bb4aae0183591ddf5">realm_c.h</a></li>
 <li>realm_event_gen_t&#160;:&#160;<a class="el" href="realm__c_8h.html#abf40e9d0065a935065c02a0fd70c74b9">realm_c.h</a></li>
 <li>REALM_EVENT_GENERATION_BITS&#160;:&#160;<a class="el" href="realm__config_8h.html#a72a6ef73bb2820390916e81887a1b8b6">realm_config.h</a></li>
-<li>realm_event_merge()&#160;:&#160;<a class="el" href="realm__c_8h.html#af2fe3e31bc886f9c7b56d9cf87949774">realm_c.h</a></li>
+<li>realm_event_has_triggered()&#160;:&#160;<a class="el" href="realm__c_8h.html#aea9d2e971428f05eff708a529efb3f1a">realm_c.h</a></li>
+<li>realm_event_merge()&#160;:&#160;<a class="el" href="realm__c_8h.html#aefd62511c371d140d37eb14e3d63a171">realm_c.h</a></li>
 <li>realm_event_t&#160;:&#160;<a class="el" href="realm__c_8h.html#a6fd9ee4981b8ef6f230377d9c3f0bedd">realm_c.h</a></li>
-<li>realm_event_wait()&#160;:&#160;<a class="el" href="realm__c_8h.html#a9aa00ecf4164d4f588842e2036dfef1c">realm_c.h</a></li>
+<li>realm_event_wait()&#160;:&#160;<a class="el" href="realm__c_8h.html#a0d5065553dbefbc37b03f068426a3b1b">realm_c.h</a></li>
 <li>REALM_EXPECT&#160;:&#160;<a class="el" href="compiler__support_8h.html#a49d797745d9c76b9acc59fc7b2f24912">compiler_support.h</a></li>
 <li>REALM_EXPORT&#160;:&#160;<a class="el" href="realm__c_8h.html#a8318db725ba0c1c4a16d4a3e9c5e221c">realm_c.h</a>, <a class="el" href="realm__exports_8h.html#a8318db725ba0c1c4a16d4a3e9c5e221c">realm_exports.h</a></li>
+<li>realm_external_cuda_memory_resource_create_params_t&#160;:&#160;<a class="el" href="realm__c_8h.html#a7c04cb1649b2b69cab65260add5938e7">realm_c.h</a></li>
+<li>realm_external_instance_resource_create()&#160;:&#160;<a class="el" href="realm__c_8h.html#ac8100e4c380f3423187ce9e143c4906b">realm_c.h</a></li>
+<li>realm_external_instance_resource_create_params_t&#160;:&#160;<a class="el" href="realm__c_8h.html#a8f0061cbbf860a3830e7f48d2b9f14f9">realm_c.h</a></li>
+<li>realm_external_instance_resource_destroy()&#160;:&#160;<a class="el" href="realm__c_8h.html#a7def9ac22de2f734dac222fc26b2e7bc">realm_c.h</a></li>
+<li>REALM_EXTERNAL_INSTANCE_RESOURCE_ERROR_INVALID_BASE&#160;:&#160;<a class="el" href="realm__c_8h.html#ab0dce9b9caa92d896ace3c1cf0b10941a7f0006bd7491deff475bb44f5f3c258f">realm_c.h</a></li>
+<li>REALM_EXTERNAL_INSTANCE_RESOURCE_ERROR_INVALID_CUDA_DEVICE_ID&#160;:&#160;<a class="el" href="realm__c_8h.html#ab0dce9b9caa92d896ace3c1cf0b10941aaa4ad031b807dba015ef8051b2462453">realm_c.h</a></li>
+<li>REALM_EXTERNAL_INSTANCE_RESOURCE_ERROR_INVALID_PARAMS&#160;:&#160;<a class="el" href="realm__c_8h.html#ab0dce9b9caa92d896ace3c1cf0b10941a38e00ec6ca6f50f6ec08ddd03a413944">realm_c.h</a></li>
+<li>REALM_EXTERNAL_INSTANCE_RESOURCE_ERROR_INVALID_RESOURCE&#160;:&#160;<a class="el" href="realm__c_8h.html#ab0dce9b9caa92d896ace3c1cf0b10941ae8de848a77d25a2adbd3ec4534ba7ff8">realm_c.h</a></li>
+<li>REALM_EXTERNAL_INSTANCE_RESOURCE_ERROR_INVALID_SIZE&#160;:&#160;<a class="el" href="realm__c_8h.html#ab0dce9b9caa92d896ace3c1cf0b10941a9b10effff0a407507fedd2aa436a851a">realm_c.h</a></li>
+<li>REALM_EXTERNAL_INSTANCE_RESOURCE_ERROR_INVALID_TYPE&#160;:&#160;<a class="el" href="realm__c_8h.html#ab0dce9b9caa92d896ace3c1cf0b10941af22335de5df2fa9abd45bc9ad201a689">realm_c.h</a></li>
+<li>realm_external_instance_resource_suggested_memory()&#160;:&#160;<a class="el" href="realm__c_8h.html#a0d1b2bade680a9d9fd89e2ce713296f7">realm_c.h</a></li>
+<li>realm_external_instance_resource_t&#160;:&#160;<a class="el" href="realm__c_8h.html#a990aaa643eb93f5d796416de2928ff42">realm_c.h</a></li>
+<li>REALM_EXTERNAL_INSTANCE_RESOURCE_TYPE_CUDA_MEMORY&#160;:&#160;<a class="el" href="realm__c_8h.html#a376658e42676116efa6c19e70f3768ffaf33edd24abec203c495e0a4fb1e1cc77">realm_c.h</a></li>
+<li>realm_external_instance_resource_type_enum&#160;:&#160;<a class="el" href="realm__c_8h.html#a376658e42676116efa6c19e70f3768ff">realm_c.h</a></li>
+<li>REALM_EXTERNAL_INSTANCE_RESOURCE_TYPE_MAX&#160;:&#160;<a class="el" href="realm__c_8h.html#a376658e42676116efa6c19e70f3768ffad0edf2e40aec84d64305f4e212dd64b2">realm_c.h</a></li>
+<li>REALM_EXTERNAL_INSTANCE_RESOURCE_TYPE_NUM&#160;:&#160;<a class="el" href="realm__c_8h.html#a376658e42676116efa6c19e70f3768ffada37eb29cb7dd4c1bca42134ab8e2696">realm_c.h</a></li>
+<li>REALM_EXTERNAL_INSTANCE_RESOURCE_TYPE_SYSTEM_MEMORY&#160;:&#160;<a class="el" href="realm__c_8h.html#a376658e42676116efa6c19e70f3768ffa1e59212067469425f75963ed7dceacba">realm_c.h</a></li>
+<li>realm_external_instance_resource_type_t&#160;:&#160;<a class="el" href="realm__c_8h.html#a1f3021a5fe7e82202553a8b9e5840cf1">realm_c.h</a></li>
+<li>realm_external_system_memory_resource_create_params_t&#160;:&#160;<a class="el" href="realm__c_8h.html#a8f863b6f7dc07d47b0f829c5c575c164">realm_c.h</a></li>
 <li>realm_field_id_t&#160;:&#160;<a class="el" href="realm__c_8h.html#a0fa21120681896f57b9b13cad41e96c4">realm_c.h</a></li>
 <li>REALM_FILE_CREATE&#160;:&#160;<a class="el" href="realm__c_8h.html#a6663777586045606d96a968ee5f3fa98a7667cbb604deee9689c2f2e5939d1a1d">realm_c.h</a></li>
 <li>realm_file_mode_t&#160;:&#160;<a class="el" href="realm__c_8h.html#af6fdc8f2f9e549367fe3498c7e0d1bdb">realm_c.h</a></li>
 <li>REALM_FILE_READ_ONLY&#160;:&#160;<a class="el" href="realm__c_8h.html#a6663777586045606d96a968ee5f3fa98a8e7c1351198a8f200116f46993d4b2b0">realm_c.h</a></li>
 <li>REALM_FILE_READ_WRITE&#160;:&#160;<a class="el" href="realm__c_8h.html#a6663777586045606d96a968ee5f3fa98ae56c5b5136a4775b64e6b8865b52ddef">realm_c.h</a></li>
 <li>REALM_FNPTR&#160;:&#160;<a class="el" href="realm__c_8h.html#a4d5df9f312cda89244c3d1ec456648fc">realm_c.h</a></li>
+<li>realm_get_library_version()&#160;:&#160;<a class="el" href="realm__c_8h.html#ae960c636d1deaa2cea110402de6c2456">realm_c.h</a></li>
 <li>REALM_GEX_API&#160;:&#160;<a class="el" href="gasnetex__wrapper__internal_8h.html#adbb45dad59998a2756049470ae92dbd5">gasnetex_wrapper_internal.h</a></li>
 <li>REALM_GEX_MODULE_VERSION&#160;:&#160;<a class="el" href="gasnetex__internal_8h.html#a3ff8cc444156866a822e45603fe42864">gasnetex_internal.h</a></li>
 <li>REALM_GEX_RELEASE&#160;:&#160;<a class="el" href="gasnetex__wrapper__internal_8h.html#a7e634dec002c380404464d3cf9bd600c">gasnetex_wrapper_internal.h</a></li>
 <li>realm_gex_wrapper_init()&#160;:&#160;<a class="el" href="gasnetex__wrapper_8h.html#ad35c591a31afc429fa12663a06a59ace">gasnetex_wrapper.h</a></li>
-<li>REALM_HAS_POSIX_FALLOCATE64&#160;:&#160;<a class="el" href="realm__defines_8h.html#a8e22a8eb423f08f40a05bd0bfb6f4099">realm_defines.h</a></li>
 <li>REALM_HASH_TOKEN&#160;:&#160;<a class="el" href="utils_8h.html#ab4d98ccc8e3a760ce83db8fced159a52">utils.h</a></li>
 <li>REALM_HAVE_CXXABI_H&#160;:&#160;<a class="el" href="compiler__support_8h.html#a91fe9c5f9fdc41f02f005106a06993e4">compiler_support.h</a></li>
 <li>realm_hdr&#160;:&#160;<a class="el" href="ucp__internal_8h.html#a89400a26038d0a8ce4d22a72c8dde344">ucp_internal.h</a></li>
 <li>realm_id_t&#160;:&#160;<a class="el" href="realm__c_8h.html#a31948ee1e879c0b543581b44ee85f82b">realm_c.h</a></li>
-<li>realm_instance_t&#160;:&#160;<a class="el" href="realm__c_8h.html#a56f8f9475d29e1b91bcefddd6015b123">realm_c.h</a></li>
 <li>REALM_INTERNAL_API&#160;:&#160;<a class="el" href="compiler__support_8h.html#a7601fdf979a12f3b1b899a667e5b0f68">compiler_support.h</a></li>
 <li>REALM_INTERNAL_API_EXTERNAL_LINKAGE&#160;:&#160;<a class="el" href="compiler__support_8h.html#a0fcea358ba9f4a1ddd8bf87ae21772f7">compiler_support.h</a></li>
 <li>REALM_LIKELY&#160;:&#160;<a class="el" href="compiler__support_8h.html#aeb86ca07ef0e907b474f3303a114a1f0">compiler_support.h</a></li>
@@ -255,13 +284,17 @@ $(document).ready(function(){initNavTree('globals_r.html',''); initResizable(); 
 <li>realm_memory_query_restrict_to_kind()&#160;:&#160;<a class="el" href="realm__c_8h.html#a47a7cbf0ee5db99f90a344d3ce64cf59">realm_c.h</a></li>
 <li>realm_memory_query_t&#160;:&#160;<a class="el" href="realm__c_8h.html#a44c7f27d39bede79065e70b4216bb692">realm_c.h</a></li>
 <li>realm_memory_t&#160;:&#160;<a class="el" href="realm__c_8h.html#aae08d87b52c209e81420ddb4a647fec3">realm_c.h</a></li>
+<li>REALM_MODULE_CONFIG_ERROR_INVALID_NAME&#160;:&#160;<a class="el" href="realm__c_8h.html#ab0dce9b9caa92d896ace3c1cf0b10941ab028de04f18f2438f0c93a79143541d1">realm_c.h</a></li>
+<li>REALM_MODULE_CONFIG_ERROR_NO_RESOURCE&#160;:&#160;<a class="el" href="realm__c_8h.html#ab0dce9b9caa92d896ace3c1cf0b10941a692653d325e7202e3017f5117d08fe74">realm_c.h</a></li>
 <li>REALM_NO_EVENT&#160;:&#160;<a class="el" href="realm__c_8h.html#a98a2481bf288694a237b99a00c31b257">realm_c.h</a></li>
 <li>REALM_NO_EXPORT&#160;:&#160;<a class="el" href="realm__exports_8h.html#af432fd067700eefc9134adfbbf2f8d94">realm_exports.h</a></li>
+<li>REALM_NO_INST&#160;:&#160;<a class="el" href="realm__c_8h.html#a9c6190b5ba13ce16f7ddebde91df901f">realm_c.h</a></li>
 <li>REALM_NO_MEM&#160;:&#160;<a class="el" href="realm__c_8h.html#ab80c046b8e6e9d82b1c556536a68893a">realm_c.h</a></li>
 <li>REALM_NO_PROC&#160;:&#160;<a class="el" href="realm__c_8h.html#adb9829cce4add05640952cae1d3ef718">realm_c.h</a></li>
 <li>REALM_NO_USER_EVENT&#160;:&#160;<a class="el" href="realm__c_8h.html#a4f1f1857bcfc1398ba5aa806ffb5ec07">realm_c.h</a></li>
 <li>REALM_NOEXCEPT&#160;:&#160;<a class="el" href="compiler__support_8h.html#ae92a45b7ea6c5c4bbbde6ac048dfcb04">compiler_support.h</a></li>
-<li>REALM_OPENMP_SYSTEM_RUNTIME&#160;:&#160;<a class="el" href="realm__defines_8h.html#a2186e8d1259266ad749c9f5eba7bace4">realm_defines.h</a></li>
+<li>REALM_OPENMP_GOMP_SUPPORT&#160;:&#160;<a class="el" href="realm__defines_8h.html#ae40629d489769ec34cf29de6e5dabf62">realm_defines.h</a></li>
+<li>REALM_OPENMP_KMP_SUPPORT&#160;:&#160;<a class="el" href="realm__defines_8h.html#a05c20f7d9527a658fcca01733967a8ab">realm_defines.h</a></li>
 <li>REALM_PMTA_DECL&#160;:&#160;<a class="el" href="lists_8h.html#ad78f07910796d89006a04cf0b2d4568d">lists.h</a></li>
 <li>REALM_PMTA_DEFN&#160;:&#160;<a class="el" href="lists_8h.html#ae2f9dee15cb8deee4d42b8405fe26511">lists.h</a></li>
 <li>REALM_PMTA_DEREF&#160;:&#160;<a class="el" href="lists_8h.html#a06fb9f658a42457bd82329f08e7304d1">lists.h</a></li>
@@ -294,23 +327,45 @@ $(document).ready(function(){initNavTree('globals_r.html',''); initResizable(); 
 <li>realm_profiling_request_set_t&#160;:&#160;<a class="el" href="realm__c_8h.html#adfc953a6ac35a559ee86f6f9e7a9a684">realm_c.h</a></li>
 <li>REALM_PUBLIC_API&#160;:&#160;<a class="el" href="compiler__support_8h.html#ae64e2333a603c784e4c6d0eb99529c63">compiler_support.h</a></li>
 <li>realm_reduction_op_id_t&#160;:&#160;<a class="el" href="realm__c_8h.html#a92d4c462eefbda8e7250b4e1642f696e">realm_c.h</a></li>
+<li>realm_region_instance_copy()&#160;:&#160;<a class="el" href="realm__c_8h.html#a61e5a5764ba6a05428bb37f5f43980e0">realm_c.h</a></li>
+<li>realm_region_instance_copy_params_t&#160;:&#160;<a class="el" href="realm__c_8h.html#a13336a335be2b877f3f3bc9b65f88c26">realm_c.h</a></li>
+<li>realm_region_instance_create()&#160;:&#160;<a class="el" href="realm__c_8h.html#aa457ecd3b7da6350f23254aa3347f9ea">realm_c.h</a></li>
+<li>realm_region_instance_create_params_t&#160;:&#160;<a class="el" href="realm__c_8h.html#a245b479d198b2c2165113263ef6f568c">realm_c.h</a></li>
+<li>realm_region_instance_destroy()&#160;:&#160;<a class="el" href="realm__c_8h.html#a3d2c48ada758d8754501d00da98024bb">realm_c.h</a></li>
+<li>REALM_REGION_INSTANCE_ERROR_INVALID_COORD_TYPE&#160;:&#160;<a class="el" href="realm__c_8h.html#ab0dce9b9caa92d896ace3c1cf0b10941a4117b727539c3d1afe5682a3675674cf">realm_c.h</a></li>
+<li>REALM_REGION_INSTANCE_ERROR_INVALID_DIMS&#160;:&#160;<a class="el" href="realm__c_8h.html#ab0dce9b9caa92d896ace3c1cf0b10941a270e32c0fbccc7e92795dfa8fb4e76ed">realm_c.h</a></li>
+<li>REALM_REGION_INSTANCE_ERROR_INVALID_EVENT&#160;:&#160;<a class="el" href="realm__c_8h.html#ab0dce9b9caa92d896ace3c1cf0b10941a69edefe2229933000c379644b3d1bb58">realm_c.h</a></li>
+<li>REALM_REGION_INSTANCE_ERROR_INVALID_FIELDS&#160;:&#160;<a class="el" href="realm__c_8h.html#ab0dce9b9caa92d896ace3c1cf0b10941ac968bb9c0f44cc26a2e1fbeedc595dc6">realm_c.h</a></li>
+<li>REALM_REGION_INSTANCE_ERROR_INVALID_INSTANCE&#160;:&#160;<a class="el" href="realm__c_8h.html#ab0dce9b9caa92d896ace3c1cf0b10941a6d2fff8099664977de7697ef857921ce">realm_c.h</a></li>
+<li>REALM_REGION_INSTANCE_ERROR_INVALID_PARAMS&#160;:&#160;<a class="el" href="realm__c_8h.html#ab0dce9b9caa92d896ace3c1cf0b10941a51fa910a06d7eb60ebcc825a4b72539a">realm_c.h</a></li>
+<li>realm_region_instance_fetch_metadata()&#160;:&#160;<a class="el" href="realm__c_8h.html#adb12d0a858e86fa61a613e1eaf508b9d">realm_c.h</a></li>
+<li>realm_region_instance_t&#160;:&#160;<a class="el" href="realm__c_8h.html#a7734d86674ae6d37ca372f70fb77cc5e">realm_c.h</a></li>
 <li>REALM_REGISTER_TASK_DEFAULT&#160;:&#160;<a class="el" href="realm__c_8h.html#a5db2574681920dac936606b858e92895af255a142b81ed1d8e586d9fbcfe80d21">realm_c.h</a></li>
 <li>realm_register_task_flags&#160;:&#160;<a class="el" href="realm__c_8h.html#a5db2574681920dac936606b858e92895">realm_c.h</a></li>
 <li>realm_register_task_flags_t&#160;:&#160;<a class="el" href="realm__c_8h.html#a51a475512d3bf829e163701c92dd5930">realm_c.h</a></li>
 <li>REALM_REGISTER_TASK_GLOBAL&#160;:&#160;<a class="el" href="realm__c_8h.html#a5db2574681920dac936606b858e92895ab25482a9f940c75f580062c79d99df57">realm_c.h</a></li>
 <li>REALM_REGISTER_TASK_MAX&#160;:&#160;<a class="el" href="realm__c_8h.html#a5db2574681920dac936606b858e92895a9a5c8ed5d718b5ebf16b0f98451ca1d6">realm_c.h</a></li>
 <li>REALM_REGISTER_TASK_NUM&#160;:&#160;<a class="el" href="realm__c_8h.html#a5db2574681920dac936606b858e92895a2767bd71dfdce53968033adac5b729f0">realm_c.h</a></li>
+<li>REALM_RUNTIME_ATTR_ADDRESS_SPACE&#160;:&#160;<a class="el" href="realm__c_8h.html#aed39aa1581984eea6d75ce3010971110af1a2676b3c7683a494d1bbabc717f37b">realm_c.h</a></li>
+<li>realm_runtime_attr_enum&#160;:&#160;<a class="el" href="realm__c_8h.html#aed39aa1581984eea6d75ce3010971110">realm_c.h</a></li>
+<li>REALM_RUNTIME_ATTR_LOCAL_ADDRESS_SPACE&#160;:&#160;<a class="el" href="realm__c_8h.html#aed39aa1581984eea6d75ce3010971110ade51513674a22f578fad25f58a28c8d6">realm_c.h</a></li>
+<li>REALM_RUNTIME_ATTR_MAX&#160;:&#160;<a class="el" href="realm__c_8h.html#aed39aa1581984eea6d75ce3010971110a280306d026d548a17ba28779b25acb89">realm_c.h</a></li>
+<li>REALM_RUNTIME_ATTR_NUM&#160;:&#160;<a class="el" href="realm__c_8h.html#aed39aa1581984eea6d75ce3010971110a21a996a3c2b8a37dae47abbdd36ac806">realm_c.h</a></li>
+<li>realm_runtime_attr_t&#160;:&#160;<a class="el" href="realm__c_8h.html#a6d87809cfef85507af99928538a70298">realm_c.h</a></li>
 <li>realm_runtime_collective_spawn()&#160;:&#160;<a class="el" href="realm__c_8h.html#a2993ee3cc2943e3c01db77423ef8ba8e">realm_c.h</a></li>
 <li>realm_runtime_create()&#160;:&#160;<a class="el" href="realm__c_8h.html#a5548d296b0fe55b648cb6e4c8dfdaf61">realm_c.h</a></li>
 <li>realm_runtime_destroy()&#160;:&#160;<a class="el" href="realm__c_8h.html#a840eb9c3c26c1cee1a9ebb07c0bbf513">realm_c.h</a></li>
+<li>REALM_RUNTIME_ERROR_INVALID_ATTRIBUTE&#160;:&#160;<a class="el" href="realm__c_8h.html#ab0dce9b9caa92d896ace3c1cf0b10941a94d2f2fd3837a74891a1a3cd71f42308">realm_c.h</a></li>
 <li>REALM_RUNTIME_ERROR_INVALID_RUNTIME&#160;:&#160;<a class="el" href="realm__c_8h.html#ab0dce9b9caa92d896ace3c1cf0b10941a5c040c41c8af02005f303529398f1238">realm_c.h</a></li>
 <li>REALM_RUNTIME_ERROR_NOT_INITIALIZED&#160;:&#160;<a class="el" href="realm__c_8h.html#ab0dce9b9caa92d896ace3c1cf0b10941a5d697156e92f192f9aa047a2b0a955a2">realm_c.h</a></li>
+<li>realm_runtime_get_attributes()&#160;:&#160;<a class="el" href="realm__c_8h.html#ac8482e18974ecca15acedce5620e3325">realm_c.h</a></li>
 <li>realm_runtime_get_runtime()&#160;:&#160;<a class="el" href="realm__c_8h.html#a4daf7a44970c70e910594f1f95d735d6">realm_c.h</a></li>
 <li>realm_runtime_init()&#160;:&#160;<a class="el" href="realm__c_8h.html#a851427c60825f8f8a4b76102a95ddc26">realm_c.h</a></li>
 <li>realm_runtime_signal_shutdown()&#160;:&#160;<a class="el" href="realm__c_8h.html#a9faeb5684e9c0be5ed619df04f09119b">realm_c.h</a></li>
 <li>realm_runtime_t&#160;:&#160;<a class="el" href="realm__c_8h.html#a12244d6f588701745cab3b05915d8bc7">realm_c.h</a></li>
 <li>realm_runtime_wait_for_shutdown()&#160;:&#160;<a class="el" href="realm__c_8h.html#a2a31a30d4f6374d482c0cb0b9e50b091">realm_c.h</a></li>
 <li>REALM_SKIP_INLINES&#160;:&#160;<a class="el" href="indexspace_8h.html#a64d67d192e32729fba569d3b880f21bd">indexspace.h</a></li>
+<li>realm_sparsity_handle_t&#160;:&#160;<a class="el" href="realm__c_8h.html#a30755ab8049a1dd7e101be34fd92c9ff">realm_c.h</a></li>
 <li>REALM_SPIN_YIELD&#160;:&#160;<a class="el" href="utils_8h.html#a10497f97b4cefc9cf1735c4c350b6341">utils.h</a></li>
 <li>realm_status_enum&#160;:&#160;<a class="el" href="realm__c_8h.html#ab0dce9b9caa92d896ace3c1cf0b10941">realm_c.h</a></li>
 <li>realm_status_t&#160;:&#160;<a class="el" href="realm__c_8h.html#a2b6b74b69d9ab09086e991192d6a3b01">realm_c.h</a></li>
@@ -333,8 +388,8 @@ $(document).ready(function(){initNavTree('globals_r.html',''); initResizable(); 
 <li>REALM_TYPE_KINDS&#160;:&#160;<a class="el" href="codedesc_8h.html#af93baf03f4941d988dc61f65c3411059">codedesc.h</a></li>
 <li>REALM_UNLIKELY&#160;:&#160;<a class="el" href="compiler__support_8h.html#a3ea20fe1581dd087c9f9a5173c95f69c">compiler_support.h</a></li>
 <li>REALM_USE_CACHING_ALLOCATOR&#160;:&#160;<a class="el" href="realm__config_8h.html#a571d6437a806a5c3d1167cb3a5e97728">realm_config.h</a></li>
-<li>REALM_USE_CPPTRACE&#160;:&#160;<a class="el" href="realm__defines_8h.html#a72f1edd849bd138de14ba326a9bc0113">realm_defines.h</a></li>
 <li>REALM_USE_EXCEPTIONS&#160;:&#160;<a class="el" href="realm__config_8h.html#af53bd78a7a447623f737ebb4a5c0dafb">realm_config.h</a></li>
+<li>REALM_USE_LIBAIO&#160;:&#160;<a class="el" href="realm__defines_8h.html#a17f8cdc615b3b972fabbcf36d8697dc7">realm_defines.h</a></li>
 <li>REALM_USE_LIBDL&#160;:&#160;<a class="el" href="realm__defines_8h.html#a63caae09de4c60272b58e3734aa4866c">realm_defines.h</a></li>
 <li>REALM_USE_OPENMP&#160;:&#160;<a class="el" href="realm__defines_8h.html#acc460e306f2513b3eef46cb2ceadf1cd">realm_defines.h</a></li>
 <li>REALM_USE_OPERATION_TABLE&#160;:&#160;<a class="el" href="realm__config_8h.html#a50aeff7fafb6589a12a0e2b218d1b7e2">realm_config.h</a></li>
@@ -343,7 +398,7 @@ $(document).ready(function(){initNavTree('globals_r.html',''); initResizable(); 
 <li>REALM_USE_USER_THREADS&#160;:&#160;<a class="el" href="realm__config_8h.html#adad1880c564fd5d02a0dd3362bfe64c5">realm_config.h</a></li>
 <li>realm_user_event_create()&#160;:&#160;<a class="el" href="realm__c_8h.html#a8cce07af957790ae5f34fe30df96a5d9">realm_c.h</a></li>
 <li>realm_user_event_t&#160;:&#160;<a class="el" href="realm__c_8h.html#a6e89db0a59442989ae1ef7cda0ba963e">realm_c.h</a></li>
-<li>realm_user_event_trigger()&#160;:&#160;<a class="el" href="realm__c_8h.html#afa19f0c606a8fdb590d2bde5acda487f">realm_c.h</a></li>
+<li>realm_user_event_trigger()&#160;:&#160;<a class="el" href="realm__c_8h.html#a9fabb206e497c5b211bacf3dbb4c910b">realm_c.h</a></li>
 <li>REALM_VERSION&#160;:&#160;<a class="el" href="realm__defines_8h.html#a551ec9fa2e268a9fdc60cf21c977bce1">realm_defines.h</a></li>
 <li>REALM_VERSION_MAJOR&#160;:&#160;<a class="el" href="realm__defines_8h.html#af1b7ade633d14c4d9b748f0012350e06">realm_defines.h</a></li>
 <li>REALM_VERSION_META&#160;:&#160;<a class="el" href="realm__defines_8h.html#a0a56666a71a24d7645c4799e7ebabf56">realm_defines.h</a></li>

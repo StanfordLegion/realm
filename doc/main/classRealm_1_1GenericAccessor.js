@@ -9,7 +9,7 @@ var classRealm_1_1GenericAccessor =
     [ "read", "classRealm_1_1GenericAccessor.html#a947e44f1f17a1119421ebcf9953509e5", null ],
     [ "write", "classRealm_1_1GenericAccessor.html#a1f8db4540fac9f537b2224c47b3cfa86", null ],
     [ "inst", "classRealm_1_1GenericAccessor.html#a9d1c19ad8c49911f6317422f8399624f", null ],
-    [ "piece_list", "classRealm_1_1GenericAccessor.html#a32fb01f495d6c9fe7af3e984f3dc7d33", null ],
-    [ "prev_piece", "classRealm_1_1GenericAccessor.html#a70d7667ddd60888c8297b47251f5cf05", null ],
+    [ "piece_list", "classRealm_1_1GenericAccessor.html#aed67c545652866c76f6277bc9ea8c42c", null ],
+    [ "prev_piece", "classRealm_1_1GenericAccessor.html#a06dc32fb0b6aa7419ab83e8c03fbd611", null ],
     [ "rel_offset", "classRealm_1_1GenericAccessor.html#aa24eca607638d3d7ae0ba99e3a988954", null ]
 ];

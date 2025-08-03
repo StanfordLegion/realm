@@ -44,7 +44,7 @@
    <!-- BEGIN version select -->
     <br />
     <div class="dropdown">
-     <button class="dropbtn">Version 25.6.1-rc.1+289a756e</button>
+     <button class="dropbtn">Version 25.06.0+1b9dd28c</button>
      <div class="dropdown-content"></div>
     </div>
     <script type="text/javascript" src="../selectversion.js"></script>
@@ -143,7 +143,7 @@ $(document).ready(function(){initNavTree('hdf5__internal_8h.html',''); initResiz
 </div><div class="textblock"><div class="dynheader">
 Include dependency graph for hdf5_internal.h:</div>
 <div class="dyncontent">
-<div class="center"><!-- SVG 0 --></div>
+<div class="center"><iframe scrolling="no" frameborder="0" src="hdf5__internal_8h__incl.svg" width="2870" height="975"><p><b>This browser is not able to show SVG: try Firefox, Chrome, Safari, or Opera instead.</b></p></iframe></div>
 </div>
 </div>
 <p><a href="hdf5__internal_8h_source.html">Go to the source code of this file.</a></p>
@@ -191,13 +191,13 @@ Macros</h2></td></tr>
         </tr>
       </table>
 </div><div class="memdoc">
-<b>Value:</b><div class="fragment"><div class="line">  <span class="keywordflow">do</span> { \</div>
-<div class="line">    herr_t res = (cmd); \</div>
-<div class="line">    if(res &lt; 0) { \</div>
-<div class="line">      fprintf(stderr, <span class="stringliteral">&quot;HDF5 error on %s:\n&quot;</span>, #cmd); \</div>
-<div class="line">      H5Eprint2(H5E_DEFAULT, stderr); \</div>
-<div class="line">      assert(0); \</div>
-<div class="line">    } \</div>
+<b>Value:</b><div class="fragment"><div class="line">  <span class="keywordflow">do</span> {                                                                                   \</div>
+<div class="line">    herr_t res = (cmd);                                                                  \</div>
+<div class="line">    if(res &lt; 0) {                                                                        \</div>
+<div class="line">      fprintf(stderr, <span class="stringliteral">&quot;HDF5 error on %s:\n&quot;</span>, #cmd);                                      \</div>
+<div class="line">      H5Eprint2(H5E_DEFAULT, stderr);                                                    \</div>
+<div class="line">      assert(0);                                                                         \</div>
+<div class="line">    }                                                                                    \</div>
 <div class="line">  } <span class="keywordflow">while</span>(0)</div>
 </div><!-- fragment -->
 </div>

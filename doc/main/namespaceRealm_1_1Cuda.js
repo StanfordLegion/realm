@@ -55,7 +55,6 @@ var namespaceRealm_1_1Cuda =
     [ "RegisteredModule", "structRealm_1_1Cuda_1_1RegisteredModule.html", "structRealm_1_1Cuda_1_1RegisteredModule" ],
     [ "RegisteredVariable", "structRealm_1_1Cuda_1_1RegisteredVariable.html", "structRealm_1_1Cuda_1_1RegisteredVariable" ],
     [ "nvmlIntNvLinkDeviceType_t", "namespaceRealm_1_1Cuda.html#ad3f2b6de76383898e56a4823d7c3a99e", null ],
-    [ "PFN_cuCtxRecordEvent", "namespaceRealm_1_1Cuda.html#a6df9dcfab862f6cddf00f5533267aff8", null ],
     [ "StreamAwareTaskFuncPtr", "namespaceRealm_1_1Cuda.html#ad4bb01303881a0d71c52a260ab71395c", null ],
     [ "Uuid", "namespaceRealm_1_1Cuda.html#a7fae456339e27a1fedd11a9fed7f70a0", null ],
     [ "GPUMemcpyKind", "namespaceRealm_1_1Cuda.html#a6938136ba824ee88993d3962a440359a", [
@@ -72,6 +71,7 @@ var namespaceRealm_1_1Cuda =
     ] ],
     [ "cuCtxRecordEvent", "namespaceRealm_1_1Cuda.html#a5cae3cdde8c21f7814b427f0f8f2a984", null ],
     [ "CUDA_DRIVER_APIS", "namespaceRealm_1_1Cuda.html#a66c15905bd7bb0646f7e2cf6a15f130a", null ],
+    [ "cuGetProcAddress", "namespaceRealm_1_1Cuda.html#a5790b53895b13e62b3a9aa524d5168f8", null ],
     [ "get_cuda_device_id", "namespaceRealm_1_1Cuda.html#a3edeb3d005a57689e0987a2bb9f24ba4", null ],
     [ "get_cuda_device_uuid", "namespaceRealm_1_1Cuda.html#a9b5e4782ad227f966c8a6b262dbe06b0", null ],
     [ "get_task_cuda_stream", "namespaceRealm_1_1Cuda.html#a69437a55a5c2793c6f9d23bb2c8046ea", null ],

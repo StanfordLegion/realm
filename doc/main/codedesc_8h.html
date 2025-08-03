@@ -44,7 +44,7 @@
    <!-- BEGIN version select -->
     <br />
     <div class="dropdown">
-     <button class="dropbtn">Version 25.6.1-rc.1+289a756e</button>
+     <button class="dropbtn">Version 25.06.0+1b9dd28c</button>
      <div class="dropdown-content"></div>
     </div>
     <script type="text/javascript" src="../selectversion.js"></script>
@@ -146,12 +146,12 @@ $(document).ready(function(){initNavTree('codedesc_8h.html',''); initResizable()
 </div><div class="textblock"><div class="dynheader">
 Include dependency graph for codedesc.h:</div>
 <div class="dyncontent">
-<div class="center"><!-- SVG 0 --></div>
+<div class="center"><iframe scrolling="no" frameborder="0" src="codedesc_8h__incl.svg" width="1458" height="359"><p><b>This browser is not able to show SVG: try Firefox, Chrome, Safari, or Opera instead.</b></p></iframe></div>
 </div>
 </div><div class="textblock"><div class="dynheader">
 This graph shows which files directly or indirectly include this file:</div>
 <div class="dyncontent">
-<div class="center"><!-- SVG 1 --></div>
+<div class="center"><iframe scrolling="no" frameborder="0" src="codedesc_8h__dep__incl.svg" width="2262" height="476"><p><b>This browser is not able to show SVG: try Firefox, Chrome, Safari, or Opera instead.</b></p></iframe></div>
 </div>
 </div>
 <p><a href="codedesc_8h_source.html">Go to the source code of this file.</a></p>
@@ -243,11 +243,13 @@ Functions</h2></td></tr>
         </tr>
       </table>
 </div><div class="memdoc">
-<b>Value:</b><div class="fragment"><div class="line">      <span class="keywordtype">void</span> destroy(<span class="keywordtype">void</span>); \</div>
-<div class="line">      <span class="keywordtype">void</span> copy_from(<span class="keyword">const</span> classname &amp;rhs); \</div>
-<div class="line">      <span class="keywordtype">bool</span> is_equal(<span class="keyword">const</span> classname&amp; rhs) <span class="keyword">const</span>; \</div>
-<div class="line">      <span class="keyword">template</span> &lt;<span class="keyword">typename</span> S&gt; <span class="keywordtype">bool</span> serialize(S&amp; s) <span class="keyword">const</span>; \</div>
-<div class="line">      <span class="keyword">template</span> &lt;<span class="keyword">typename</span> S&gt; <span class="keywordtype">bool</span> deserialize(S&amp; s)</div>
+<b>Value:</b><div class="fragment"><div class="line">  <span class="keywordtype">void</span> destroy(<span class="keywordtype">void</span>);                                                                    \</div>
+<div class="line">  <span class="keywordtype">void</span> copy_from(<span class="keyword">const</span> classname &amp;rhs);                                                  \</div>
+<div class="line">  <span class="keywordtype">bool</span> is_equal(<span class="keyword">const</span> classname &amp;rhs) <span class="keyword">const</span>;                                             \</div>
+<div class="line">  <span class="keyword">template</span> &lt;<span class="keyword">typename</span> S&gt;                                                                  \</div>
+<div class="line">  <span class="keywordtype">bool</span> serialize(S &amp;s) <span class="keyword">const</span>;                                                            \</div>
+<div class="line">  <span class="keyword">template</span> &lt;<span class="keyword">typename</span> S&gt;                                                                  \</div>
+<div class="line">  <span class="keywordtype">bool</span> deserialize(S &amp;s)</div>
 </div><!-- fragment -->
 </div>
 </div>
@@ -334,11 +336,13 @@ Functions</h2></td></tr>
         </tr>
       </table>
 </div><div class="memdoc">
-<b>Value:</b><div class="fragment"><div class="line">    __func__(OpaqueKind, OpaqueFields, f_opaque) \</div>
-<div class="line">    __func__(IntegerKind, IntegerFields, f_integer) \</div>
-<div class="line">    __func__(FloatingPointKind, FloatingPointFields, f_float) \</div>
-<div class="line">    __func__(PointerKind, PointerFields, f_pointer) \</div>
-<div class="line">    __func__(FunctionPointerKind, FunctionPointerFields, f_funcptr)</div>
+<b>Value:</b><div class="fragment"><div class="line">  __func__(OpaqueKind, OpaqueFields, f_opaque) __func__(                                 \</div>
+<div class="line">      IntegerKind, IntegerFields,                                                        \</div>
+<div class="line">      f_integer) __func__(FloatingPointKind, FloatingPointFields,                        \</div>
+<div class="line">                          f_float) __func__(PointerKind, PointerFields,                  \</div>
+<div class="line">                                            f_pointer) __func__(FunctionPointerKind,     \</div>
+<div class="line">                                                                FunctionPointerFields,   \</div>
+<div class="line">                                                                f_funcptr)</div>
 </div><!-- fragment -->
 </div>
 </div>

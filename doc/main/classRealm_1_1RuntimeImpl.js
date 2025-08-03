@@ -70,7 +70,7 @@ var classRealm_1_1RuntimeImpl =
     [ "local_subgraph_free_lists", "classRealm_1_1RuntimeImpl.html#aa1e39a78101d86a9f18be389630ba9e6", null ],
     [ "machine", "classRealm_1_1RuntimeImpl.html#aba9159f422bb9fdbe46b202b05816b04", null ],
     [ "message_manager", "classRealm_1_1RuntimeImpl.html#ac2c2517c6e867ecdec1e0a2211ac4547", null ],
-    [ "module_configs", "classRealm_1_1RuntimeImpl.html#af5deb6c2ad924b0868c5e183c0f5f874", null ],
+    [ "module_configs", "classRealm_1_1RuntimeImpl.html#a61fcced4f8be879a19bb2cd8e775a171", null ],
     [ "module_configs_created", "classRealm_1_1RuntimeImpl.html#abdca2c0b7757443216536cfc702868f1", null ],
     [ "module_registrar", "classRealm_1_1RuntimeImpl.html#ac9071fbcd75ac1790b3c14eaaa71330e", null ],
     [ "modules", "classRealm_1_1RuntimeImpl.html#ade47857aa9ae1e9fbbb25f6e35171618", null ],

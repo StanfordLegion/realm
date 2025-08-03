@@ -44,7 +44,7 @@
    <!-- BEGIN version select -->
     <br />
     <div class="dropdown">
-     <button class="dropbtn">Version 25.6.1-rc.1+289a756e</button>
+     <button class="dropbtn">Version 25.06.0+1b9dd28c</button>
      <div class="dropdown-content"></div>
     </div>
     <script type="text/javascript" src="../selectversion.js"></script>
@@ -137,79 +137,81 @@ $(document).ready(function(){initNavTree('numasysif_8h_source.html',''); initRes
   <div class="headertitle"><div class="title">numasysif.h</div></div>
 </div><!--header-->
 <div class="contents">
-<a href="numasysif_8h.html">Go to the documentation of this file.</a><div class="fragment"><div class="line"><a id="l00001" name="l00001"></a><span class="lineno">    1</span><span class="comment">/* Copyright 2024 Stanford University, NVIDIA Corporation</span></div>
-<div class="line"><a id="l00002" name="l00002"></a><span class="lineno">    2</span><span class="comment"> *</span></div>
-<div class="line"><a id="l00003" name="l00003"></a><span class="lineno">    3</span><span class="comment"> * Licensed under the Apache License, Version 2.0 (the &quot;License&quot;);</span></div>
-<div class="line"><a id="l00004" name="l00004"></a><span class="lineno">    4</span><span class="comment"> * you may not use this file except in compliance with the License.</span></div>
-<div class="line"><a id="l00005" name="l00005"></a><span class="lineno">    5</span><span class="comment"> * You may obtain a copy of the License at</span></div>
-<div class="line"><a id="l00006" name="l00006"></a><span class="lineno">    6</span><span class="comment"> *</span></div>
-<div class="line"><a id="l00007" name="l00007"></a><span class="lineno">    7</span><span class="comment"> *     http://www.apache.org/licenses/LICENSE-2.0</span></div>
+<a href="numasysif_8h.html">Go to the documentation of this file.</a><div class="fragment"><div class="line"><a id="l00001" name="l00001"></a><span class="lineno">    1</span><span class="comment">/*</span></div>
+<div class="line"><a id="l00002" name="l00002"></a><span class="lineno">    2</span><span class="comment"> * Copyright 2025 Stanford University, NVIDIA Corporation</span></div>
+<div class="line"><a id="l00003" name="l00003"></a><span class="lineno">    3</span><span class="comment"> * SPDX-License-Identifier: Apache-2.0</span></div>
+<div class="line"><a id="l00004" name="l00004"></a><span class="lineno">    4</span><span class="comment"> *</span></div>
+<div class="line"><a id="l00005" name="l00005"></a><span class="lineno">    5</span><span class="comment"> * Licensed under the Apache License, Version 2.0 (the &quot;License&quot;);</span></div>
+<div class="line"><a id="l00006" name="l00006"></a><span class="lineno">    6</span><span class="comment"> * you may not use this file except in compliance with the License.</span></div>
+<div class="line"><a id="l00007" name="l00007"></a><span class="lineno">    7</span><span class="comment"> * You may obtain a copy of the License at</span></div>
 <div class="line"><a id="l00008" name="l00008"></a><span class="lineno">    8</span><span class="comment"> *</span></div>
-<div class="line"><a id="l00009" name="l00009"></a><span class="lineno">    9</span><span class="comment"> * Unless required by applicable law or agreed to in writing, software</span></div>
-<div class="line"><a id="l00010" name="l00010"></a><span class="lineno">   10</span><span class="comment"> * distributed under the License is distributed on an &quot;AS IS&quot; BASIS,</span></div>
-<div class="line"><a id="l00011" name="l00011"></a><span class="lineno">   11</span><span class="comment"> * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.</span></div>
-<div class="line"><a id="l00012" name="l00012"></a><span class="lineno">   12</span><span class="comment"> * See the License for the specific language governing permissions and</span></div>
-<div class="line"><a id="l00013" name="l00013"></a><span class="lineno">   13</span><span class="comment"> * limitations under the License.</span></div>
-<div class="line"><a id="l00014" name="l00014"></a><span class="lineno">   14</span><span class="comment"> */</span></div>
-<div class="line"><a id="l00015" name="l00015"></a><span class="lineno">   15</span> </div>
-<div class="line"><a id="l00016" name="l00016"></a><span class="lineno">   16</span><span class="comment">// portability wrapper over NUMA system interfaces</span></div>
+<div class="line"><a id="l00009" name="l00009"></a><span class="lineno">    9</span><span class="comment"> *     http://www.apache.org/licenses/LICENSE-2.0</span></div>
+<div class="line"><a id="l00010" name="l00010"></a><span class="lineno">   10</span><span class="comment"> *</span></div>
+<div class="line"><a id="l00011" name="l00011"></a><span class="lineno">   11</span><span class="comment"> * Unless required by applicable law or agreed to in writing, software</span></div>
+<div class="line"><a id="l00012" name="l00012"></a><span class="lineno">   12</span><span class="comment"> * distributed under the License is distributed on an &quot;AS IS&quot; BASIS,</span></div>
+<div class="line"><a id="l00013" name="l00013"></a><span class="lineno">   13</span><span class="comment"> * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.</span></div>
+<div class="line"><a id="l00014" name="l00014"></a><span class="lineno">   14</span><span class="comment"> * See the License for the specific language governing permissions and</span></div>
+<div class="line"><a id="l00015" name="l00015"></a><span class="lineno">   15</span><span class="comment"> * limitations under the License.</span></div>
+<div class="line"><a id="l00016" name="l00016"></a><span class="lineno">   16</span><span class="comment"> */</span></div>
 <div class="line"><a id="l00017" name="l00017"></a><span class="lineno">   17</span> </div>
-<div class="line"><a id="l00018" name="l00018"></a><span class="lineno">   18</span><span class="comment">// NOTE: this is nowhere near a full libnuma-style interface - it&#39;s just the</span></div>
-<div class="line"><a id="l00019" name="l00019"></a><span class="lineno">   19</span><span class="comment">//  calls that Realm&#39;s NUMA module needs</span></div>
-<div class="line"><a id="l00020" name="l00020"></a><span class="lineno">   20</span> </div>
-<div class="line"><a id="l00021" name="l00021"></a><span class="lineno">   21</span><span class="preprocessor">#ifndef NUMASYSIF_H</span></div>
-<div class="line"><a id="l00022" name="l00022"></a><span class="lineno">   22</span><span class="preprocessor">#define NUMASYSIF_H</span></div>
-<div class="line"><a id="l00023" name="l00023"></a><span class="lineno">   23</span> </div>
-<div class="line"><a id="l00024" name="l00024"></a><span class="lineno">   24</span><span class="preprocessor">#include &quot;<a class="code" href="realm__config_8h.html">realm/realm_config.h</a>&quot;</span></div>
+<div class="line"><a id="l00018" name="l00018"></a><span class="lineno">   18</span><span class="comment">// portability wrapper over NUMA system interfaces</span></div>
+<div class="line"><a id="l00019" name="l00019"></a><span class="lineno">   19</span> </div>
+<div class="line"><a id="l00020" name="l00020"></a><span class="lineno">   20</span><span class="comment">// NOTE: this is nowhere near a full libnuma-style interface - it&#39;s just the</span></div>
+<div class="line"><a id="l00021" name="l00021"></a><span class="lineno">   21</span><span class="comment">//  calls that Realm&#39;s NUMA module needs</span></div>
+<div class="line"><a id="l00022" name="l00022"></a><span class="lineno">   22</span> </div>
+<div class="line"><a id="l00023" name="l00023"></a><span class="lineno">   23</span><span class="preprocessor">#ifndef NUMASYSIF_H</span></div>
+<div class="line"><a id="l00024" name="l00024"></a><span class="lineno">   24</span><span class="preprocessor">#define NUMASYSIF_H</span></div>
 <div class="line"><a id="l00025" name="l00025"></a><span class="lineno">   25</span> </div>
-<div class="line"><a id="l00026" name="l00026"></a><span class="lineno">   26</span><span class="preprocessor">#include &lt;stdlib.h&gt;</span></div>
-<div class="line"><a id="l00027" name="l00027"></a><span class="lineno">   27</span><span class="preprocessor">#include &lt;map&gt;</span></div>
-<div class="line"><a id="l00028" name="l00028"></a><span class="lineno">   28</span> </div>
-<div class="line"><a id="l00029" name="l00029"></a><span class="lineno">   29</span><span class="keyword">namespace </span><a class="code hl_namespace" href="namespaceRealm.html">Realm</a> {</div>
+<div class="line"><a id="l00026" name="l00026"></a><span class="lineno">   26</span><span class="preprocessor">#include &quot;<a class="code" href="realm__config_8h.html">realm/realm_config.h</a>&quot;</span></div>
+<div class="line"><a id="l00027" name="l00027"></a><span class="lineno">   27</span> </div>
+<div class="line"><a id="l00028" name="l00028"></a><span class="lineno">   28</span><span class="preprocessor">#include &lt;stdlib.h&gt;</span></div>
+<div class="line"><a id="l00029" name="l00029"></a><span class="lineno">   29</span><span class="preprocessor">#include &lt;map&gt;</span></div>
 <div class="line"><a id="l00030" name="l00030"></a><span class="lineno">   30</span> </div>
-<div class="foldopen" id="foldopen00031" data-start="{" data-end="};">
-<div class="line"><a id="l00031" name="l00031"></a><span class="lineno"><a class="line" href="structRealm_1_1NumaNodeMemInfo.html">   31</a></span>  <span class="keyword">struct </span><a class="code hl_struct" href="structRealm_1_1NumaNodeMemInfo.html">NumaNodeMemInfo</a> {</div>
-<div class="line"><a id="l00032" name="l00032"></a><span class="lineno"><a class="line" href="structRealm_1_1NumaNodeMemInfo.html#ac368e73d29370f8aeb2a19216b0d73a4">   32</a></span>    <span class="keywordtype">int</span> <a class="code hl_variable" href="structRealm_1_1NumaNodeMemInfo.html#ac368e73d29370f8aeb2a19216b0d73a4">node_id</a>;</div>
-<div class="line"><a id="l00033" name="l00033"></a><span class="lineno"><a class="line" href="structRealm_1_1NumaNodeMemInfo.html#a02614b838eb3d9d719e1edd4866cb250">   33</a></span>    <span class="keywordtype">size_t</span> <a class="code hl_variable" href="structRealm_1_1NumaNodeMemInfo.html#a02614b838eb3d9d719e1edd4866cb250">bytes_available</a>;</div>
-<div class="line"><a id="l00034" name="l00034"></a><span class="lineno">   34</span>  };</div>
+<div class="line"><a id="l00031" name="l00031"></a><span class="lineno">   31</span><span class="keyword">namespace </span><a class="code hl_namespace" href="namespaceRealm.html">Realm</a> {</div>
+<div class="line"><a id="l00032" name="l00032"></a><span class="lineno">   32</span> </div>
+<div class="foldopen" id="foldopen00033" data-start="{" data-end="};">
+<div class="line"><a id="l00033" name="l00033"></a><span class="lineno"><a class="line" href="structRealm_1_1NumaNodeMemInfo.html">   33</a></span>  <span class="keyword">struct </span><a class="code hl_struct" href="structRealm_1_1NumaNodeMemInfo.html">NumaNodeMemInfo</a> {</div>
+<div class="line"><a id="l00034" name="l00034"></a><span class="lineno"><a class="line" href="structRealm_1_1NumaNodeMemInfo.html#ac368e73d29370f8aeb2a19216b0d73a4">   34</a></span>    <span class="keywordtype">int</span> <a class="code hl_variable" href="structRealm_1_1NumaNodeMemInfo.html#ac368e73d29370f8aeb2a19216b0d73a4">node_id</a>;</div>
+<div class="line"><a id="l00035" name="l00035"></a><span class="lineno"><a class="line" href="structRealm_1_1NumaNodeMemInfo.html#a02614b838eb3d9d719e1edd4866cb250">   35</a></span>    <span class="keywordtype">size_t</span> <a class="code hl_variable" href="structRealm_1_1NumaNodeMemInfo.html#a02614b838eb3d9d719e1edd4866cb250">bytes_available</a>;</div>
+<div class="line"><a id="l00036" name="l00036"></a><span class="lineno">   36</span>  };</div>
 </div>
-<div class="line"><a id="l00035" name="l00035"></a><span class="lineno">   35</span> </div>
-<div class="foldopen" id="foldopen00036" data-start="{" data-end="};">
-<div class="line"><a id="l00036" name="l00036"></a><span class="lineno"><a class="line" href="structRealm_1_1NumaNodeCpuInfo.html">   36</a></span>  <span class="keyword">struct </span><a class="code hl_struct" href="structRealm_1_1NumaNodeCpuInfo.html">NumaNodeCpuInfo</a> {</div>
-<div class="line"><a id="l00037" name="l00037"></a><span class="lineno"><a class="line" href="structRealm_1_1NumaNodeCpuInfo.html#acc872e3d1f46f08611bfe987cc5136e0">   37</a></span>    <span class="keywordtype">int</span> <a class="code hl_variable" href="structRealm_1_1NumaNodeCpuInfo.html#acc872e3d1f46f08611bfe987cc5136e0">node_id</a>;</div>
-<div class="line"><a id="l00038" name="l00038"></a><span class="lineno"><a class="line" href="structRealm_1_1NumaNodeCpuInfo.html#abc5a4ac72aa42a9408765d58e8d49947">   38</a></span>    <span class="keywordtype">int</span> <a class="code hl_variable" href="structRealm_1_1NumaNodeCpuInfo.html#abc5a4ac72aa42a9408765d58e8d49947">cores_available</a>;</div>
-<div class="line"><a id="l00039" name="l00039"></a><span class="lineno">   39</span>  };</div>
+<div class="line"><a id="l00037" name="l00037"></a><span class="lineno">   37</span> </div>
+<div class="foldopen" id="foldopen00038" data-start="{" data-end="};">
+<div class="line"><a id="l00038" name="l00038"></a><span class="lineno"><a class="line" href="structRealm_1_1NumaNodeCpuInfo.html">   38</a></span>  <span class="keyword">struct </span><a class="code hl_struct" href="structRealm_1_1NumaNodeCpuInfo.html">NumaNodeCpuInfo</a> {</div>
+<div class="line"><a id="l00039" name="l00039"></a><span class="lineno"><a class="line" href="structRealm_1_1NumaNodeCpuInfo.html#acc872e3d1f46f08611bfe987cc5136e0">   39</a></span>    <span class="keywordtype">int</span> <a class="code hl_variable" href="structRealm_1_1NumaNodeCpuInfo.html#acc872e3d1f46f08611bfe987cc5136e0">node_id</a>;</div>
+<div class="line"><a id="l00040" name="l00040"></a><span class="lineno"><a class="line" href="structRealm_1_1NumaNodeCpuInfo.html#abc5a4ac72aa42a9408765d58e8d49947">   40</a></span>    <span class="keywordtype">int</span> <a class="code hl_variable" href="structRealm_1_1NumaNodeCpuInfo.html#abc5a4ac72aa42a9408765d58e8d49947">cores_available</a>;</div>
+<div class="line"><a id="l00041" name="l00041"></a><span class="lineno">   41</span>  };</div>
 </div>
-<div class="line"><a id="l00040" name="l00040"></a><span class="lineno">   40</span> </div>
-<div class="line"><a id="l00041" name="l00041"></a><span class="lineno">   41</span>  <span class="comment">// is NUMA support available in the system?</span></div>
-<div class="line"><a id="l00042" name="l00042"></a><span class="lineno"><a class="line" href="namespaceRealm.html#ab07327d651762f047d5ea86ed2777a7e">   42</a></span>  <span class="keywordtype">bool</span> <a class="code hl_function" href="namespaceRealm.html#ab07327d651762f047d5ea86ed2777a7e">numasysif_numa_available</a>(<span class="keywordtype">void</span>);</div>
-<div class="line"><a id="l00043" name="l00043"></a><span class="lineno">   43</span> </div>
-<div class="line"><a id="l00044" name="l00044"></a><span class="lineno">   44</span>  <span class="comment">// return info on the memory and cpu in each NUMA node</span></div>
-<div class="line"><a id="l00045" name="l00045"></a><span class="lineno">   45</span>  <span class="comment">// default is to restrict to only those nodes enabled in the current affinity mask</span></div>
-<div class="line"><a id="l00046" name="l00046"></a><span class="lineno"><a class="line" href="namespaceRealm.html#a7f3a38533924e9847e2eb0538f4c65c6">   46</a></span>  <span class="keywordtype">bool</span> <a class="code hl_function" href="namespaceRealm.html#a7f3a38533924e9847e2eb0538f4c65c6">numasysif_get_mem_info</a>(std::map&lt;int, NumaNodeMemInfo&gt;&amp; info,</div>
-<div class="line"><a id="l00047" name="l00047"></a><span class="lineno">   47</span>                  <span class="keywordtype">bool</span> only_available = <span class="keyword">true</span>);</div>
-<div class="line"><a id="l00048" name="l00048"></a><span class="lineno"><a class="line" href="namespaceRealm.html#ae49c0b4b801399998398b3ec0cfbfcb7">   48</a></span>  <span class="keywordtype">bool</span> <a class="code hl_function" href="namespaceRealm.html#ae49c0b4b801399998398b3ec0cfbfcb7">numasysif_get_cpu_info</a>(std::map&lt;int, NumaNodeCpuInfo&gt;&amp; info,</div>
-<div class="line"><a id="l00049" name="l00049"></a><span class="lineno">   49</span>                  <span class="keywordtype">bool</span> only_available = <span class="keyword">true</span>);</div>
-<div class="line"><a id="l00050" name="l00050"></a><span class="lineno">   50</span> </div>
-<div class="line"><a id="l00051" name="l00051"></a><span class="lineno">   51</span>  <span class="comment">// return the &quot;distance&quot; between two nodes - try to normalize to Linux&#39;s model of</span></div>
-<div class="line"><a id="l00052" name="l00052"></a><span class="lineno">   52</span>  <span class="comment">//  10 being the same node and the cost for other nodes increasing by roughly 10</span></div>
-<div class="line"><a id="l00053" name="l00053"></a><span class="lineno">   53</span>  <span class="comment">//  per hop</span></div>
-<div class="line"><a id="l00054" name="l00054"></a><span class="lineno"><a class="line" href="namespaceRealm.html#ade3908d81403ff6664db2790dad22de9">   54</a></span>  <span class="keywordtype">int</span> <a class="code hl_function" href="namespaceRealm.html#ade3908d81403ff6664db2790dad22de9">numasysif_get_distance</a>(<span class="keywordtype">int</span> node1, <span class="keywordtype">int</span> node2);</div>
-<div class="line"><a id="l00055" name="l00055"></a><span class="lineno">   55</span> </div>
-<div class="line"><a id="l00056" name="l00056"></a><span class="lineno">   56</span>  <span class="comment">// allocate memory on a given NUMA node - pin if requested</span></div>
-<div class="line"><a id="l00057" name="l00057"></a><span class="lineno"><a class="line" href="namespaceRealm.html#a94ee8d552b7ca31537e81a4852a4b497">   57</a></span>  <span class="keywordtype">void</span> *<a class="code hl_function" href="namespaceRealm.html#a94ee8d552b7ca31537e81a4852a4b497">numasysif_alloc_mem</a>(<span class="keywordtype">int</span> node, <span class="keywordtype">size_t</span> bytes, <span class="keywordtype">bool</span> pin);</div>
-<div class="line"><a id="l00058" name="l00058"></a><span class="lineno">   58</span> </div>
-<div class="line"><a id="l00059" name="l00059"></a><span class="lineno">   59</span>  <span class="comment">// free memory allocated on a given NUMA node</span></div>
-<div class="line"><a id="l00060" name="l00060"></a><span class="lineno"><a class="line" href="namespaceRealm.html#a0b49c734631996a10360d1a229007f5b">   60</a></span>  <span class="keywordtype">bool</span> <a class="code hl_function" href="namespaceRealm.html#a0b49c734631996a10360d1a229007f5b">numasysif_free_mem</a>(<span class="keywordtype">int</span> node, <span class="keywordtype">void</span> *base, <span class="keywordtype">size_t</span> bytes);</div>
-<div class="line"><a id="l00061" name="l00061"></a><span class="lineno">   61</span> </div>
-<div class="line"><a id="l00062" name="l00062"></a><span class="lineno">   62</span>  <span class="comment">// bind already-allocated memory to a given node - pin if requested</span></div>
-<div class="line"><a id="l00063" name="l00063"></a><span class="lineno">   63</span>  <span class="comment">// may fail if the memory has already been touched</span></div>
-<div class="line"><a id="l00064" name="l00064"></a><span class="lineno"><a class="line" href="namespaceRealm.html#a40462b5a7b0da1ae3911988c48c59eb5">   64</a></span>  <span class="keywordtype">bool</span> <a class="code hl_function" href="namespaceRealm.html#a40462b5a7b0da1ae3911988c48c59eb5">numasysif_bind_mem</a>(<span class="keywordtype">int</span> node, <span class="keywordtype">void</span> *base, <span class="keywordtype">size_t</span> bytes, <span class="keywordtype">bool</span> pin);</div>
-<div class="line"><a id="l00065" name="l00065"></a><span class="lineno">   65</span> </div>
-<div class="line"><a id="l00066" name="l00066"></a><span class="lineno">   66</span>};</div>
+<div class="line"><a id="l00042" name="l00042"></a><span class="lineno">   42</span> </div>
+<div class="line"><a id="l00043" name="l00043"></a><span class="lineno">   43</span>  <span class="comment">// is NUMA support available in the system?</span></div>
+<div class="line"><a id="l00044" name="l00044"></a><span class="lineno"><a class="line" href="namespaceRealm.html#ab07327d651762f047d5ea86ed2777a7e">   44</a></span>  <span class="keywordtype">bool</span> <a class="code hl_function" href="namespaceRealm.html#ab07327d651762f047d5ea86ed2777a7e">numasysif_numa_available</a>(<span class="keywordtype">void</span>);</div>
+<div class="line"><a id="l00045" name="l00045"></a><span class="lineno">   45</span> </div>
+<div class="line"><a id="l00046" name="l00046"></a><span class="lineno">   46</span>  <span class="comment">// return info on the memory and cpu in each NUMA node</span></div>
+<div class="line"><a id="l00047" name="l00047"></a><span class="lineno">   47</span>  <span class="comment">// default is to restrict to only those nodes enabled in the current affinity mask</span></div>
+<div class="line"><a id="l00048" name="l00048"></a><span class="lineno"><a class="line" href="namespaceRealm.html#a7f3a38533924e9847e2eb0538f4c65c6">   48</a></span>  <span class="keywordtype">bool</span> <a class="code hl_function" href="namespaceRealm.html#a7f3a38533924e9847e2eb0538f4c65c6">numasysif_get_mem_info</a>(std::map&lt;int, NumaNodeMemInfo&gt; &amp;info,</div>
+<div class="line"><a id="l00049" name="l00049"></a><span class="lineno">   49</span>                              <span class="keywordtype">bool</span> only_available = <span class="keyword">true</span>);</div>
+<div class="line"><a id="l00050" name="l00050"></a><span class="lineno"><a class="line" href="namespaceRealm.html#ae49c0b4b801399998398b3ec0cfbfcb7">   50</a></span>  <span class="keywordtype">bool</span> <a class="code hl_function" href="namespaceRealm.html#ae49c0b4b801399998398b3ec0cfbfcb7">numasysif_get_cpu_info</a>(std::map&lt;int, NumaNodeCpuInfo&gt; &amp;info,</div>
+<div class="line"><a id="l00051" name="l00051"></a><span class="lineno">   51</span>                              <span class="keywordtype">bool</span> only_available = <span class="keyword">true</span>);</div>
+<div class="line"><a id="l00052" name="l00052"></a><span class="lineno">   52</span> </div>
+<div class="line"><a id="l00053" name="l00053"></a><span class="lineno">   53</span>  <span class="comment">// return the &quot;distance&quot; between two nodes - try to normalize to Linux&#39;s model of</span></div>
+<div class="line"><a id="l00054" name="l00054"></a><span class="lineno">   54</span>  <span class="comment">//  10 being the same node and the cost for other nodes increasing by roughly 10</span></div>
+<div class="line"><a id="l00055" name="l00055"></a><span class="lineno">   55</span>  <span class="comment">//  per hop</span></div>
+<div class="line"><a id="l00056" name="l00056"></a><span class="lineno"><a class="line" href="namespaceRealm.html#ade3908d81403ff6664db2790dad22de9">   56</a></span>  <span class="keywordtype">int</span> <a class="code hl_function" href="namespaceRealm.html#ade3908d81403ff6664db2790dad22de9">numasysif_get_distance</a>(<span class="keywordtype">int</span> node1, <span class="keywordtype">int</span> node2);</div>
+<div class="line"><a id="l00057" name="l00057"></a><span class="lineno">   57</span> </div>
+<div class="line"><a id="l00058" name="l00058"></a><span class="lineno">   58</span>  <span class="comment">// allocate memory on a given NUMA node - pin if requested</span></div>
+<div class="line"><a id="l00059" name="l00059"></a><span class="lineno"><a class="line" href="namespaceRealm.html#a94ee8d552b7ca31537e81a4852a4b497">   59</a></span>  <span class="keywordtype">void</span> *<a class="code hl_function" href="namespaceRealm.html#a94ee8d552b7ca31537e81a4852a4b497">numasysif_alloc_mem</a>(<span class="keywordtype">int</span> node, <span class="keywordtype">size_t</span> bytes, <span class="keywordtype">bool</span> pin);</div>
+<div class="line"><a id="l00060" name="l00060"></a><span class="lineno">   60</span> </div>
+<div class="line"><a id="l00061" name="l00061"></a><span class="lineno">   61</span>  <span class="comment">// free memory allocated on a given NUMA node</span></div>
+<div class="line"><a id="l00062" name="l00062"></a><span class="lineno"><a class="line" href="namespaceRealm.html#a0b49c734631996a10360d1a229007f5b">   62</a></span>  <span class="keywordtype">bool</span> <a class="code hl_function" href="namespaceRealm.html#a0b49c734631996a10360d1a229007f5b">numasysif_free_mem</a>(<span class="keywordtype">int</span> node, <span class="keywordtype">void</span> *base, <span class="keywordtype">size_t</span> bytes);</div>
+<div class="line"><a id="l00063" name="l00063"></a><span class="lineno">   63</span> </div>
+<div class="line"><a id="l00064" name="l00064"></a><span class="lineno">   64</span>  <span class="comment">// bind already-allocated memory to a given node - pin if requested</span></div>
+<div class="line"><a id="l00065" name="l00065"></a><span class="lineno">   65</span>  <span class="comment">// may fail if the memory has already been touched</span></div>
+<div class="line"><a id="l00066" name="l00066"></a><span class="lineno"><a class="line" href="namespaceRealm.html#a40462b5a7b0da1ae3911988c48c59eb5">   66</a></span>  <span class="keywordtype">bool</span> <a class="code hl_function" href="namespaceRealm.html#a40462b5a7b0da1ae3911988c48c59eb5">numasysif_bind_mem</a>(<span class="keywordtype">int</span> node, <span class="keywordtype">void</span> *base, <span class="keywordtype">size_t</span> bytes, <span class="keywordtype">bool</span> pin);</div>
 <div class="line"><a id="l00067" name="l00067"></a><span class="lineno">   67</span> </div>
-<div class="line"><a id="l00068" name="l00068"></a><span class="lineno">   68</span><span class="preprocessor">#endif</span></div>
-<div class="ttc" id="anamespaceRealm_html"><div class="ttname"><a href="namespaceRealm.html">Realm</a></div><div class="ttdef"><b>Definition</b> activemsg.h:36</div></div>
+<div class="line"><a id="l00068" name="l00068"></a><span class="lineno">   68</span>}; <span class="comment">// namespace Realm</span></div>
+<div class="line"><a id="l00069" name="l00069"></a><span class="lineno">   69</span> </div>
+<div class="line"><a id="l00070" name="l00070"></a><span class="lineno">   70</span><span class="preprocessor">#endif</span></div>
+<div class="ttc" id="anamespaceRealm_html"><div class="ttname"><a href="namespaceRealm.html">Realm</a></div><div class="ttdef"><b>Definition</b> activemsg.h:38</div></div>
 <div class="ttc" id="anamespaceRealm_html_a0b49c734631996a10360d1a229007f5b"><div class="ttname"><a href="namespaceRealm.html#a0b49c734631996a10360d1a229007f5b">Realm::numasysif_free_mem</a></div><div class="ttdeci">bool numasysif_free_mem(int node, void *base, size_t bytes)</div></div>
 <div class="ttc" id="anamespaceRealm_html_a40462b5a7b0da1ae3911988c48c59eb5"><div class="ttname"><a href="namespaceRealm.html#a40462b5a7b0da1ae3911988c48c59eb5">Realm::numasysif_bind_mem</a></div><div class="ttdeci">bool numasysif_bind_mem(int node, void *base, size_t bytes, bool pin)</div></div>
 <div class="ttc" id="anamespaceRealm_html_a7f3a38533924e9847e2eb0538f4c65c6"><div class="ttname"><a href="namespaceRealm.html#a7f3a38533924e9847e2eb0538f4c65c6">Realm::numasysif_get_mem_info</a></div><div class="ttdeci">bool numasysif_get_mem_info(std::map&lt; int, NumaNodeMemInfo &gt; &amp;info, bool only_available=true)</div></div>
@@ -218,12 +220,12 @@ $(document).ready(function(){initNavTree('numasysif_8h_source.html',''); initRes
 <div class="ttc" id="anamespaceRealm_html_ade3908d81403ff6664db2790dad22de9"><div class="ttname"><a href="namespaceRealm.html#ade3908d81403ff6664db2790dad22de9">Realm::numasysif_get_distance</a></div><div class="ttdeci">int numasysif_get_distance(int node1, int node2)</div></div>
 <div class="ttc" id="anamespaceRealm_html_ae49c0b4b801399998398b3ec0cfbfcb7"><div class="ttname"><a href="namespaceRealm.html#ae49c0b4b801399998398b3ec0cfbfcb7">Realm::numasysif_get_cpu_info</a></div><div class="ttdeci">bool numasysif_get_cpu_info(std::map&lt; int, NumaNodeCpuInfo &gt; &amp;info, bool only_available=true)</div></div>
 <div class="ttc" id="arealm__config_8h_html"><div class="ttname"><a href="realm__config_8h.html">realm_config.h</a></div></div>
-<div class="ttc" id="astructRealm_1_1NumaNodeCpuInfo_html"><div class="ttname"><a href="structRealm_1_1NumaNodeCpuInfo.html">Realm::NumaNodeCpuInfo</a></div><div class="ttdef"><b>Definition</b> numasysif.h:36</div></div>
-<div class="ttc" id="astructRealm_1_1NumaNodeCpuInfo_html_abc5a4ac72aa42a9408765d58e8d49947"><div class="ttname"><a href="structRealm_1_1NumaNodeCpuInfo.html#abc5a4ac72aa42a9408765d58e8d49947">Realm::NumaNodeCpuInfo::cores_available</a></div><div class="ttdeci">int cores_available</div><div class="ttdef"><b>Definition</b> numasysif.h:38</div></div>
-<div class="ttc" id="astructRealm_1_1NumaNodeCpuInfo_html_acc872e3d1f46f08611bfe987cc5136e0"><div class="ttname"><a href="structRealm_1_1NumaNodeCpuInfo.html#acc872e3d1f46f08611bfe987cc5136e0">Realm::NumaNodeCpuInfo::node_id</a></div><div class="ttdeci">int node_id</div><div class="ttdef"><b>Definition</b> numasysif.h:37</div></div>
-<div class="ttc" id="astructRealm_1_1NumaNodeMemInfo_html"><div class="ttname"><a href="structRealm_1_1NumaNodeMemInfo.html">Realm::NumaNodeMemInfo</a></div><div class="ttdef"><b>Definition</b> numasysif.h:31</div></div>
-<div class="ttc" id="astructRealm_1_1NumaNodeMemInfo_html_a02614b838eb3d9d719e1edd4866cb250"><div class="ttname"><a href="structRealm_1_1NumaNodeMemInfo.html#a02614b838eb3d9d719e1edd4866cb250">Realm::NumaNodeMemInfo::bytes_available</a></div><div class="ttdeci">size_t bytes_available</div><div class="ttdef"><b>Definition</b> numasysif.h:33</div></div>
-<div class="ttc" id="astructRealm_1_1NumaNodeMemInfo_html_ac368e73d29370f8aeb2a19216b0d73a4"><div class="ttname"><a href="structRealm_1_1NumaNodeMemInfo.html#ac368e73d29370f8aeb2a19216b0d73a4">Realm::NumaNodeMemInfo::node_id</a></div><div class="ttdeci">int node_id</div><div class="ttdef"><b>Definition</b> numasysif.h:32</div></div>
+<div class="ttc" id="astructRealm_1_1NumaNodeCpuInfo_html"><div class="ttname"><a href="structRealm_1_1NumaNodeCpuInfo.html">Realm::NumaNodeCpuInfo</a></div><div class="ttdef"><b>Definition</b> numasysif.h:38</div></div>
+<div class="ttc" id="astructRealm_1_1NumaNodeCpuInfo_html_abc5a4ac72aa42a9408765d58e8d49947"><div class="ttname"><a href="structRealm_1_1NumaNodeCpuInfo.html#abc5a4ac72aa42a9408765d58e8d49947">Realm::NumaNodeCpuInfo::cores_available</a></div><div class="ttdeci">int cores_available</div><div class="ttdef"><b>Definition</b> numasysif.h:40</div></div>
+<div class="ttc" id="astructRealm_1_1NumaNodeCpuInfo_html_acc872e3d1f46f08611bfe987cc5136e0"><div class="ttname"><a href="structRealm_1_1NumaNodeCpuInfo.html#acc872e3d1f46f08611bfe987cc5136e0">Realm::NumaNodeCpuInfo::node_id</a></div><div class="ttdeci">int node_id</div><div class="ttdef"><b>Definition</b> numasysif.h:39</div></div>
+<div class="ttc" id="astructRealm_1_1NumaNodeMemInfo_html"><div class="ttname"><a href="structRealm_1_1NumaNodeMemInfo.html">Realm::NumaNodeMemInfo</a></div><div class="ttdef"><b>Definition</b> numasysif.h:33</div></div>
+<div class="ttc" id="astructRealm_1_1NumaNodeMemInfo_html_a02614b838eb3d9d719e1edd4866cb250"><div class="ttname"><a href="structRealm_1_1NumaNodeMemInfo.html#a02614b838eb3d9d719e1edd4866cb250">Realm::NumaNodeMemInfo::bytes_available</a></div><div class="ttdeci">size_t bytes_available</div><div class="ttdef"><b>Definition</b> numasysif.h:35</div></div>
+<div class="ttc" id="astructRealm_1_1NumaNodeMemInfo_html_ac368e73d29370f8aeb2a19216b0d73a4"><div class="ttname"><a href="structRealm_1_1NumaNodeMemInfo.html#ac368e73d29370f8aeb2a19216b0d73a4">Realm::NumaNodeMemInfo::node_id</a></div><div class="ttdeci">int node_id</div><div class="ttdef"><b>Definition</b> numasysif.h:34</div></div>
 </div><!-- fragment --></div><!-- contents -->
 </div><!-- doc-content -->
 <!-- HTML footer for doxygen 1.9.1-->

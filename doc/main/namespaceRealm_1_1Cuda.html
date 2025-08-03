@@ -44,7 +44,7 @@
    <!-- BEGIN version select -->
     <br />
     <div class="dropdown">
-     <button class="dropbtn">Version 25.6.1-rc.1+289a756e</button>
+     <button class="dropbtn">Version 25.06.0+1b9dd28c</button>
      <div class="dropdown-content"></div>
     </div>
     <script type="text/javascript" src="../selectversion.js"></script>
@@ -253,8 +253,6 @@ Classes</h2></td></tr>
 </table><table class="memberdecls">
 <tr class="heading"><td colspan="2"><h2 class="groupheader"><a id="typedef-members" name="typedef-members"></a>
 Typedefs</h2></td></tr>
-<tr class="memitem:a6df9dcfab862f6cddf00f5533267aff8" id="r_a6df9dcfab862f6cddf00f5533267aff8"><td class="memItemLeft" align="right" valign="top">typedef decltype(&amp;<a class="el" href="namespaceRealm_1_1Cuda.html#a5cae3cdde8c21f7814b427f0f8f2a984">cuCtxRecordEvent</a>)&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="namespaceRealm_1_1Cuda.html#a6df9dcfab862f6cddf00f5533267aff8">PFN_cuCtxRecordEvent</a></td></tr>
-<tr class="separator:a6df9dcfab862f6cddf00f5533267aff8"><td class="memSeparator" colspan="2">&#160;</td></tr>
 <tr class="memitem:ad3f2b6de76383898e56a4823d7c3a99e" id="r_ad3f2b6de76383898e56a4823d7c3a99e"><td class="memItemLeft" align="right" valign="top">typedef enum <a class="el" href="namespaceRealm_1_1Cuda.html#acb8cb63b69f8ed18a4e13e6d6b3f36fe">Realm::Cuda::nvmlIntNvLinkDeviceType_enum</a>&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="namespaceRealm_1_1Cuda.html#ad3f2b6de76383898e56a4823d7c3a99e">nvmlIntNvLinkDeviceType_t</a></td></tr>
 <tr class="separator:ad3f2b6de76383898e56a4823d7c3a99e"><td class="memSeparator" colspan="2">&#160;</td></tr>
 <tr class="memitem:ad4bb01303881a0d71c52a260ab71395c" id="r_ad4bb01303881a0d71c52a260ab71395c"><td class="memItemLeft" align="right" valign="top">typedef void(*&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="namespaceRealm_1_1Cuda.html#ad4bb01303881a0d71c52a260ab71395c">StreamAwareTaskFuncPtr</a>) (const void *args, size_t arglen, const void *user_data, size_t user_data_len, <a class="el" href="classRealm_1_1Processor.html">Processor</a> proc, CUstream_st *stream)</td></tr>
@@ -279,6 +277,8 @@ Enumerations</h2></td></tr>
 </table><table class="memberdecls">
 <tr class="heading"><td colspan="2"><h2 class="groupheader"><a id="func-members" name="func-members"></a>
 Functions</h2></td></tr>
+<tr class="memitem:a5790b53895b13e62b3a9aa524d5168f8" id="r_a5790b53895b13e62b3a9aa524d5168f8"><td class="memItemLeft" align="right" valign="top">CUresult&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="namespaceRealm_1_1Cuda.html#a5790b53895b13e62b3a9aa524d5168f8">cuGetProcAddress</a> (const char *, void **, int, int)</td></tr>
+<tr class="separator:a5790b53895b13e62b3a9aa524d5168f8"><td class="memSeparator" colspan="2">&#160;</td></tr>
 <tr class="memitem:a5cae3cdde8c21f7814b427f0f8f2a984" id="r_a5cae3cdde8c21f7814b427f0f8f2a984"><td class="memItemLeft" align="right" valign="top">CUresult&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="namespaceRealm_1_1Cuda.html#a5cae3cdde8c21f7814b427f0f8f2a984">cuCtxRecordEvent</a> (CUcontext hctx, CUevent event)</td></tr>
 <tr class="separator:a5cae3cdde8c21f7814b427f0f8f2a984"><td class="memSeparator" colspan="2">&#160;</td></tr>
 <tr class="memitem:a66c15905bd7bb0646f7e2cf6a15f130a" id="r_a66c15905bd7bb0646f7e2cf6a15f130a"><td class="memItemLeft" align="right" valign="top">&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="namespaceRealm_1_1Cuda.html#a66c15905bd7bb0646f7e2cf6a15f130a">CUDA_DRIVER_APIS</a> (<a class="el" href="cuda__internal_8h.html#a78a46ca86d0f01cef0906ea35fb99b1a">DECL_FNPTR_EXTERN</a>)</td></tr>
@@ -312,20 +312,6 @@ Variables</h2></td></tr>
       <table class="memname">
         <tr>
           <td class="memname">typedef enum <a class="el" href="namespaceRealm_1_1Cuda.html#acb8cb63b69f8ed18a4e13e6d6b3f36fe">Realm::Cuda::nvmlIntNvLinkDeviceType_enum</a> <a class="el" href="namespaceRealm_1_1Cuda.html#ad3f2b6de76383898e56a4823d7c3a99e">Realm::Cuda::nvmlIntNvLinkDeviceType_t</a></td>
-        </tr>
-      </table>
-</div><div class="memdoc">
-
-</div>
-</div>
-<a id="a6df9dcfab862f6cddf00f5533267aff8" name="a6df9dcfab862f6cddf00f5533267aff8"></a>
-<h2 class="memtitle"><span class="permalink"><a href="#a6df9dcfab862f6cddf00f5533267aff8">&#9670;&#160;</a></span>PFN_cuCtxRecordEvent</h2>
-
-<div class="memitem">
-<div class="memproto">
-      <table class="memname">
-        <tr>
-          <td class="memname">typedef decltype(&amp;<a class="el" href="namespaceRealm_1_1Cuda.html#a5cae3cdde8c21f7814b427f0f8f2a984">cuCtxRecordEvent</a>) <a class="el" href="namespaceRealm_1_1Cuda.html#a6df9dcfab862f6cddf00f5533267aff8">Realm::Cuda::PFN_cuCtxRecordEvent</a></td>
         </tr>
       </table>
 </div><div class="memdoc">
@@ -442,6 +428,46 @@ Variables</h2></td></tr>
           <td class="paramtype"><a class="el" href="cuda__internal_8h.html#a78a46ca86d0f01cef0906ea35fb99b1a">DECL_FNPTR_EXTERN</a>&#160;</td>
           <td class="paramname"></td><td>)</td>
           <td></td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+
+</div>
+</div>
+<a id="a5790b53895b13e62b3a9aa524d5168f8" name="a5790b53895b13e62b3a9aa524d5168f8"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a5790b53895b13e62b3a9aa524d5168f8">&#9670;&#160;</a></span>cuGetProcAddress()</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname">CUresult Realm::Cuda::cuGetProcAddress </td>
+          <td>(</td>
+          <td class="paramtype">const char *&#160;</td>
+          <td class="paramname">, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype">void **&#160;</td>
+          <td class="paramname">, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype">int&#160;</td>
+          <td class="paramname">, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype">int&#160;</td>
+          <td class="paramname">&#160;</td>
+        </tr>
+        <tr>
+          <td></td>
+          <td>)</td>
+          <td></td><td></td>
         </tr>
       </table>
 </div><div class="memdoc">

@@ -2,6 +2,8 @@ var classRealm_1_1RegionInstance =
 [
     [ "DestroyedField", "structRealm_1_1RegionInstance_1_1DestroyedField.html", "structRealm_1_1RegionInstance_1_1DestroyedField" ],
     [ "id_t", "classRealm_1_1RegionInstance.html#a69b55241e697bdbfe9bf8b0dffe8e7f3", null ],
+    [ "RegionInstance", "classRealm_1_1RegionInstance.html#a4e4bf23f3aab3937c68e6abf6d30ffc1", null ],
+    [ "RegionInstance", "classRealm_1_1RegionInstance.html#ae772b95184110a6b0a776ab779f18c9a", null ],
     [ "address_space", "classRealm_1_1RegionInstance.html#a9284a84e1ce7b97dd3bea1740f7847e2", null ],
     [ "can_get_strided_access_parameters", "classRealm_1_1RegionInstance.html#a962b8b5916057d83e11b241206e7b92d", null ],
     [ "decrement_accessor_count", "classRealm_1_1RegionInstance.html#a986bd903e64396cbd087d1f2db036036", null ],
@@ -19,6 +21,7 @@ var classRealm_1_1RegionInstance =
     [ "get_lookup_program", "classRealm_1_1RegionInstance.html#a7e1a0dee7396d8d08da7b659479155d3", null ],
     [ "get_strided_access_parameters", "classRealm_1_1RegionInstance.html#a95fc966ccc2b2b41a93ef202b773bdfc", null ],
     [ "increment_accessor_count", "classRealm_1_1RegionInstance.html#a8cc539f114014fd218a38e6a9b728976", null ],
+    [ "operator id_t", "classRealm_1_1RegionInstance.html#a83296329ef40ff764f3c94bbf0b2964e", null ],
     [ "operator!=", "classRealm_1_1RegionInstance.html#aac95805dd9b89b167bde941388705ab6", null ],
     [ "operator<", "classRealm_1_1RegionInstance.html#a7ffb8e98f8fa33d03f163e70d76c7b3d", null ],
     [ "operator==", "classRealm_1_1RegionInstance.html#a955ab00bf8b3f2fa1ddfd51d0f2c1226", null ],

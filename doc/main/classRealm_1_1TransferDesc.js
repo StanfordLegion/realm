@@ -3,6 +3,7 @@ var classRealm_1_1TransferDesc =
     [ "DeferredAnalysis", "classRealm_1_1TransferDesc_1_1DeferredAnalysis.html", "classRealm_1_1TransferDesc_1_1DeferredAnalysis" ],
     [ "FieldInfo", "structRealm_1_1TransferDesc_1_1FieldInfo.html", "structRealm_1_1TransferDesc_1_1FieldInfo" ],
     [ "TransferDesc", "classRealm_1_1TransferDesc.html#ae3a20f4800b6edc43b69af6dd08ccf84", null ],
+    [ "TransferDesc", "classRealm_1_1TransferDesc.html#ad9a533767383771ad7d416ae9a7b33a8", null ],
     [ "~TransferDesc", "classRealm_1_1TransferDesc.html#a58cd81eba81b5b3b18e31c561851a702", null ],
     [ "add_reference", "classRealm_1_1TransferDesc.html#a47b437bbe969a0a88530fd8d0e79b8e6", null ],
     [ "cancel_analysis", "classRealm_1_1TransferDesc.html#a2a7ffb578d4f457af0e265dde75d82c9", null ],

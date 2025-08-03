@@ -44,7 +44,7 @@
    <!-- BEGIN version select -->
     <br />
     <div class="dropdown">
-     <button class="dropbtn">Version 25.6.1-rc.1+289a756e</button>
+     <button class="dropbtn">Version 25.06.0+1b9dd28c</button>
      <div class="dropdown-content"></div>
     </div>
     <script type="text/javascript" src="../selectversion.js"></script>
@@ -137,50 +137,52 @@ $(document).ready(function(){initNavTree('deppart__config_8h_source.html',''); i
   <div class="headertitle"><div class="title">deppart_config.h</div></div>
 </div><!--header-->
 <div class="contents">
-<a href="deppart__config_8h.html">Go to the documentation of this file.</a><div class="fragment"><div class="line"><a id="l00001" name="l00001"></a><span class="lineno">    1</span><span class="comment">/* Copyright 2024 Stanford University, NVIDIA Corporation</span></div>
-<div class="line"><a id="l00002" name="l00002"></a><span class="lineno">    2</span><span class="comment"> *</span></div>
-<div class="line"><a id="l00003" name="l00003"></a><span class="lineno">    3</span><span class="comment"> * Licensed under the Apache License, Version 2.0 (the &quot;License&quot;);</span></div>
-<div class="line"><a id="l00004" name="l00004"></a><span class="lineno">    4</span><span class="comment"> * you may not use this file except in compliance with the License.</span></div>
-<div class="line"><a id="l00005" name="l00005"></a><span class="lineno">    5</span><span class="comment"> * You may obtain a copy of the License at</span></div>
-<div class="line"><a id="l00006" name="l00006"></a><span class="lineno">    6</span><span class="comment"> *</span></div>
-<div class="line"><a id="l00007" name="l00007"></a><span class="lineno">    7</span><span class="comment"> *     http://www.apache.org/licenses/LICENSE-2.0</span></div>
+<a href="deppart__config_8h.html">Go to the documentation of this file.</a><div class="fragment"><div class="line"><a id="l00001" name="l00001"></a><span class="lineno">    1</span><span class="comment">/*</span></div>
+<div class="line"><a id="l00002" name="l00002"></a><span class="lineno">    2</span><span class="comment"> * Copyright 2025 Stanford University, NVIDIA Corporation</span></div>
+<div class="line"><a id="l00003" name="l00003"></a><span class="lineno">    3</span><span class="comment"> * SPDX-License-Identifier: Apache-2.0</span></div>
+<div class="line"><a id="l00004" name="l00004"></a><span class="lineno">    4</span><span class="comment"> *</span></div>
+<div class="line"><a id="l00005" name="l00005"></a><span class="lineno">    5</span><span class="comment"> * Licensed under the Apache License, Version 2.0 (the &quot;License&quot;);</span></div>
+<div class="line"><a id="l00006" name="l00006"></a><span class="lineno">    6</span><span class="comment"> * you may not use this file except in compliance with the License.</span></div>
+<div class="line"><a id="l00007" name="l00007"></a><span class="lineno">    7</span><span class="comment"> * You may obtain a copy of the License at</span></div>
 <div class="line"><a id="l00008" name="l00008"></a><span class="lineno">    8</span><span class="comment"> *</span></div>
-<div class="line"><a id="l00009" name="l00009"></a><span class="lineno">    9</span><span class="comment"> * Unless required by applicable law or agreed to in writing, software</span></div>
-<div class="line"><a id="l00010" name="l00010"></a><span class="lineno">   10</span><span class="comment"> * distributed under the License is distributed on an &quot;AS IS&quot; BASIS,</span></div>
-<div class="line"><a id="l00011" name="l00011"></a><span class="lineno">   11</span><span class="comment"> * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.</span></div>
-<div class="line"><a id="l00012" name="l00012"></a><span class="lineno">   12</span><span class="comment"> * See the License for the specific language governing permissions and</span></div>
-<div class="line"><a id="l00013" name="l00013"></a><span class="lineno">   13</span><span class="comment"> * limitations under the License.</span></div>
-<div class="line"><a id="l00014" name="l00014"></a><span class="lineno">   14</span><span class="comment"> */</span></div>
-<div class="line"><a id="l00015" name="l00015"></a><span class="lineno">   15</span> </div>
-<div class="line"><a id="l00016" name="l00016"></a><span class="lineno">   16</span><span class="comment">// implementation sparsity maps</span></div>
+<div class="line"><a id="l00009" name="l00009"></a><span class="lineno">    9</span><span class="comment"> *     http://www.apache.org/licenses/LICENSE-2.0</span></div>
+<div class="line"><a id="l00010" name="l00010"></a><span class="lineno">   10</span><span class="comment"> *</span></div>
+<div class="line"><a id="l00011" name="l00011"></a><span class="lineno">   11</span><span class="comment"> * Unless required by applicable law or agreed to in writing, software</span></div>
+<div class="line"><a id="l00012" name="l00012"></a><span class="lineno">   12</span><span class="comment"> * distributed under the License is distributed on an &quot;AS IS&quot; BASIS,</span></div>
+<div class="line"><a id="l00013" name="l00013"></a><span class="lineno">   13</span><span class="comment"> * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.</span></div>
+<div class="line"><a id="l00014" name="l00014"></a><span class="lineno">   14</span><span class="comment"> * See the License for the specific language governing permissions and</span></div>
+<div class="line"><a id="l00015" name="l00015"></a><span class="lineno">   15</span><span class="comment"> * limitations under the License.</span></div>
+<div class="line"><a id="l00016" name="l00016"></a><span class="lineno">   16</span><span class="comment"> */</span></div>
 <div class="line"><a id="l00017" name="l00017"></a><span class="lineno">   17</span> </div>
-<div class="line"><a id="l00018" name="l00018"></a><span class="lineno">   18</span><span class="preprocessor">#ifndef REALM_DEPPART_CONFIG_H</span></div>
-<div class="line"><a id="l00019" name="l00019"></a><span class="lineno">   19</span><span class="preprocessor">#define REALM_DEPPART_CONFIG_H</span></div>
-<div class="line"><a id="l00020" name="l00020"></a><span class="lineno">   20</span> </div>
-<div class="line"><a id="l00021" name="l00021"></a><span class="lineno">   21</span><span class="preprocessor">#include &lt;cstddef&gt;</span></div>
+<div class="line"><a id="l00018" name="l00018"></a><span class="lineno">   18</span><span class="comment">// implementation sparsity maps</span></div>
+<div class="line"><a id="l00019" name="l00019"></a><span class="lineno">   19</span> </div>
+<div class="line"><a id="l00020" name="l00020"></a><span class="lineno">   20</span><span class="preprocessor">#ifndef REALM_DEPPART_CONFIG_H</span></div>
+<div class="line"><a id="l00021" name="l00021"></a><span class="lineno">   21</span><span class="preprocessor">#define REALM_DEPPART_CONFIG_H</span></div>
 <div class="line"><a id="l00022" name="l00022"></a><span class="lineno">   22</span> </div>
-<div class="line"><a id="l00023" name="l00023"></a><span class="lineno">   23</span><span class="keyword">namespace </span><a class="code hl_namespace" href="namespaceRealm.html">Realm</a> {</div>
+<div class="line"><a id="l00023" name="l00023"></a><span class="lineno">   23</span><span class="preprocessor">#include &lt;cstddef&gt;</span></div>
 <div class="line"><a id="l00024" name="l00024"></a><span class="lineno">   24</span> </div>
-<div class="foldopen" id="foldopen00025" data-start="{" data-end="}">
-<div class="line"><a id="l00025" name="l00025"></a><span class="lineno"><a class="line" href="namespaceRealm_1_1DeppartConfig.html">   25</a></span>  <span class="keyword">namespace </span>DeppartConfig {</div>
+<div class="line"><a id="l00025" name="l00025"></a><span class="lineno">   25</span><span class="keyword">namespace </span><a class="code hl_namespace" href="namespaceRealm.html">Realm</a> {</div>
 <div class="line"><a id="l00026" name="l00026"></a><span class="lineno">   26</span> </div>
-<div class="line"><a id="l00027" name="l00027"></a><span class="lineno">   27</span>    <span class="keyword">extern</span> <span class="keywordtype">int</span> <a class="code hl_variable" href="namespaceRealm_1_1DeppartConfig.html#acfbe4fb45fd163b46772ae842d7f46ee">cfg_num_partitioning_workers</a>;</div>
-<div class="line"><a id="l00028" name="l00028"></a><span class="lineno">   28</span>    <span class="keyword">extern</span> <span class="keywordtype">bool</span> <a class="code hl_variable" href="namespaceRealm_1_1DeppartConfig.html#a5bae503d9eb4740282f9ddda81ac21aa">cfg_disable_intersection_optimization</a>;</div>
-<div class="line"><a id="l00029" name="l00029"></a><span class="lineno">   29</span>    <span class="keyword">extern</span> <span class="keywordtype">int</span> <a class="code hl_variable" href="namespaceRealm_1_1DeppartConfig.html#a24d5fcfa934f5f9c54c8b8be8acfbcb7">cfg_max_rects_in_approximation</a>;</div>
-<div class="line"><a id="l00030" name="l00030"></a><span class="lineno">   30</span>    <span class="keyword">extern</span> <span class="keywordtype">bool</span> <a class="code hl_variable" href="namespaceRealm_1_1DeppartConfig.html#ad9ed2483bfe1490eb86978e618907102">cfg_worker_threads_sleep</a>;</div>
-<div class="line"><a id="l00031" name="l00031"></a><span class="lineno">   31</span> </div>
-<div class="line"><a id="l00032" name="l00032"></a><span class="lineno">   32</span>  };</div>
-</div>
+<div class="foldopen" id="foldopen00027" data-start="{" data-end="}">
+<div class="line"><a id="l00027" name="l00027"></a><span class="lineno"><a class="line" href="namespaceRealm_1_1DeppartConfig.html">   27</a></span>  <span class="keyword">namespace </span>DeppartConfig {</div>
+<div class="line"><a id="l00028" name="l00028"></a><span class="lineno">   28</span> </div>
+<div class="line"><a id="l00029" name="l00029"></a><span class="lineno">   29</span>    <span class="keyword">extern</span> <span class="keywordtype">int</span> <a class="code hl_variable" href="namespaceRealm_1_1DeppartConfig.html#acfbe4fb45fd163b46772ae842d7f46ee">cfg_num_partitioning_workers</a>;</div>
+<div class="line"><a id="l00030" name="l00030"></a><span class="lineno">   30</span>    <span class="keyword">extern</span> <span class="keywordtype">bool</span> <a class="code hl_variable" href="namespaceRealm_1_1DeppartConfig.html#a5bae503d9eb4740282f9ddda81ac21aa">cfg_disable_intersection_optimization</a>;</div>
+<div class="line"><a id="l00031" name="l00031"></a><span class="lineno">   31</span>    <span class="keyword">extern</span> <span class="keywordtype">int</span> <a class="code hl_variable" href="namespaceRealm_1_1DeppartConfig.html#a24d5fcfa934f5f9c54c8b8be8acfbcb7">cfg_max_rects_in_approximation</a>;</div>
+<div class="line"><a id="l00032" name="l00032"></a><span class="lineno">   32</span>    <span class="keyword">extern</span> <span class="keywordtype">bool</span> <a class="code hl_variable" href="namespaceRealm_1_1DeppartConfig.html#ad9ed2483bfe1490eb86978e618907102">cfg_worker_threads_sleep</a>;</div>
 <div class="line"><a id="l00033" name="l00033"></a><span class="lineno">   33</span> </div>
-<div class="line"><a id="l00034" name="l00034"></a><span class="lineno">   34</span>}; <span class="comment">// namespace Realm</span></div>
+<div class="line"><a id="l00034" name="l00034"></a><span class="lineno">   34</span>  };</div>
+</div>
 <div class="line"><a id="l00035" name="l00035"></a><span class="lineno">   35</span> </div>
-<div class="line"><a id="l00036" name="l00036"></a><span class="lineno">   36</span><span class="preprocessor">#endif </span><span class="comment">// defined REALM_DEPPART_CONFIG_H</span></div>
+<div class="line"><a id="l00036" name="l00036"></a><span class="lineno">   36</span>}; <span class="comment">// namespace Realm</span></div>
 <div class="line"><a id="l00037" name="l00037"></a><span class="lineno">   37</span> </div>
+<div class="line"><a id="l00038" name="l00038"></a><span class="lineno">   38</span><span class="preprocessor">#endif </span><span class="comment">// defined REALM_DEPPART_CONFIG_H</span></div>
+<div class="line"><a id="l00039" name="l00039"></a><span class="lineno">   39</span> </div>
 <div class="ttc" id="anamespaceRealm_1_1DeppartConfig_html_a24d5fcfa934f5f9c54c8b8be8acfbcb7"><div class="ttname"><a href="namespaceRealm_1_1DeppartConfig.html#a24d5fcfa934f5f9c54c8b8be8acfbcb7">Realm::DeppartConfig::cfg_max_rects_in_approximation</a></div><div class="ttdeci">int cfg_max_rects_in_approximation</div></div>
 <div class="ttc" id="anamespaceRealm_1_1DeppartConfig_html_a5bae503d9eb4740282f9ddda81ac21aa"><div class="ttname"><a href="namespaceRealm_1_1DeppartConfig.html#a5bae503d9eb4740282f9ddda81ac21aa">Realm::DeppartConfig::cfg_disable_intersection_optimization</a></div><div class="ttdeci">bool cfg_disable_intersection_optimization</div></div>
 <div class="ttc" id="anamespaceRealm_1_1DeppartConfig_html_acfbe4fb45fd163b46772ae842d7f46ee"><div class="ttname"><a href="namespaceRealm_1_1DeppartConfig.html#acfbe4fb45fd163b46772ae842d7f46ee">Realm::DeppartConfig::cfg_num_partitioning_workers</a></div><div class="ttdeci">int cfg_num_partitioning_workers</div></div>
 <div class="ttc" id="anamespaceRealm_1_1DeppartConfig_html_ad9ed2483bfe1490eb86978e618907102"><div class="ttname"><a href="namespaceRealm_1_1DeppartConfig.html#ad9ed2483bfe1490eb86978e618907102">Realm::DeppartConfig::cfg_worker_threads_sleep</a></div><div class="ttdeci">bool cfg_worker_threads_sleep</div></div>
-<div class="ttc" id="anamespaceRealm_html"><div class="ttname"><a href="namespaceRealm.html">Realm</a></div><div class="ttdef"><b>Definition</b> activemsg.h:36</div></div>
+<div class="ttc" id="anamespaceRealm_html"><div class="ttname"><a href="namespaceRealm.html">Realm</a></div><div class="ttdef"><b>Definition</b> activemsg.h:38</div></div>
 </div><!-- fragment --></div><!-- contents -->
 </div><!-- doc-content -->
 <!-- HTML footer for doxygen 1.9.1-->

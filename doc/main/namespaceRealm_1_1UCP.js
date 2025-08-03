@@ -13,7 +13,7 @@ var namespaceRealm_1_1UCP =
     [ "UCPRemoteMemoryCommon", "classRealm_1_1UCP_1_1UCPRemoteMemoryCommon.html", "classRealm_1_1UCP_1_1UCPRemoteMemoryCommon" ],
     [ "UCPWorker", "classRealm_1_1UCP_1_1UCPWorker.html", "classRealm_1_1UCP_1_1UCPWorker" ],
     [ "VMPool", "classRealm_1_1UCP_1_1VMPool.html", "classRealm_1_1UCP_1_1VMPool" ],
-    [ "chunk_alloc_t", "namespaceRealm_1_1UCP.html#a9ed806d5f168c8b1a59ccb34c74e3758", null ],
+    [ "chunk_alloc_t", "namespaceRealm_1_1UCP.html#ac1437edcf9cb503d404913d2a8448de6", null ],
     [ "chunk_release_t", "namespaceRealm_1_1UCP.html#ab8ecfc3fdb9a846ad5eee7e59aa47e3a", null ],
     [ "obj_cleanup_t", "namespaceRealm_1_1UCP.html#a3d695ef19f8ac8754d82e941a7270f28", null ],
     [ "obj_init_t", "namespaceRealm_1_1UCP.html#adf98dc4377fd76d8ff77e2e3cdab44d7", null ],

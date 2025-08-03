@@ -20,5 +20,7 @@ var transfer_8h =
     [ "Realm::TransferOperation", "classRealm_1_1TransferOperation.html", "classRealm_1_1TransferOperation" ],
     [ "Realm::TransferOperation::XDLifetimeTracker", "classRealm_1_1TransferOperation_1_1XDLifetimeTracker.html", "classRealm_1_1TransferOperation_1_1XDLifetimeTracker" ],
     [ "Realm::TransferOperation::DeferredStart", "classRealm_1_1TransferOperation_1_1DeferredStart.html", "classRealm_1_1TransferOperation_1_1DeferredStart" ],
+    [ "Realm::CopyImplRouter< N, T >", "structRealm_1_1CopyImplRouter.html", null ],
+    [ "CopyImplFn", "transfer_8h.html#a162682e7931052a07f1b3f4c8a54f3b0", null ],
     [ "operator<<", "transfer_8h.html#a004356e3a6dc87f17531cb5839de9ee5", null ]
 ];

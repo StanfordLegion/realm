@@ -273,6 +273,7 @@ var hierarchy =
     [ "Realm::Hip::ContextSynchronizer", "classRealm_1_1Hip_1_1ContextSynchronizer.html", null ],
     [ "Realm::XferDes::ControlPortState", "structRealm_1_1XferDes_1_1ControlPortState.html", null ],
     [ "Realm::SubgraphDefinition::CopyDesc", "structRealm_1_1SubgraphDefinition_1_1CopyDesc.html", null ],
+    [ "Realm::CopyImplRouter< N, T >", "structRealm_1_1CopyImplRouter.html", null ],
     [ "Realm::CopyIndirection< N, T >", "classRealm_1_1CopyIndirection.html", null ],
     [ "Realm::CopyIndirection< N2, int >", "classRealm_1_1CopyIndirection.html", null ],
     [ "PRealm::CopySrcDstField", "structPRealm_1_1CopySrcDstField.html", null ],
@@ -941,6 +942,12 @@ var hierarchy =
     [ "QuiescenceChecker", "classQuiescenceChecker.html", null ],
     [ "Realm::BasicRangeAllocator< RT, TT >::Range", "structRealm_1_1BasicRangeAllocator_1_1Range.html", null ],
     [ "Realm::RWLock::Reader", "structRealm_1_1RWLock_1_1Reader.html", null ],
+    [ "realm_copy_src_dst_field_t", "structrealm__copy__src__dst__field__t.html", null ],
+    [ "realm_external_cuda_memory_resource_create_params_t", "structrealm__external__cuda__memory__resource__create__params__t.html", null ],
+    [ "realm_external_instance_resource_create_params_t", "structrealm__external__instance__resource__create__params__t.html", null ],
+    [ "realm_external_system_memory_resource_create_params_t", "structrealm__external__system__memory__resource__create__params__t.html", null ],
+    [ "realm_region_instance_copy_params_t", "structrealm__region__instance__copy__params__t.html", null ],
+    [ "realm_region_instance_create_params_t", "structrealm__region__instance__create__params__t.html", null ],
     [ "Realm::RealmEntryExitRAII", "classRealm_1_1RealmEntryExitRAII.html", null ],
     [ "Realm::Rect< N, T >", "structRealm_1_1Rect.html", [
       [ "PRealm::Rect< N, T >", "structPRealm_1_1Rect.html", null ]

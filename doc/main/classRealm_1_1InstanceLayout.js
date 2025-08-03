@@ -8,6 +8,6 @@ var classRealm_1_1InstanceLayout =
     [ "print", "classRealm_1_1InstanceLayout.html#aee8df22e99cadbce38fda61c0925f464", null ],
     [ "relocate", "classRealm_1_1InstanceLayout.html#abd215da38ef3fa047bd12797d07f9cb7", null ],
     [ "serialize", "classRealm_1_1InstanceLayout.html#afbb5a66a7b417ed0a95a0a0842987d71", null ],
-    [ "piece_lists", "classRealm_1_1InstanceLayout.html#a4045f3fae4a793aa131f5a6a2af201a0", null ],
-    [ "space", "classRealm_1_1InstanceLayout.html#a4a40b5cf1cc2c4afba89745265a1af9f", null ]
+    [ "piece_lists", "classRealm_1_1InstanceLayout.html#a465fb6cb52a6a091e98a26e1364d3ae7", null ],
+    [ "space", "classRealm_1_1InstanceLayout.html#a29c798ae1b1781c25e99e6423693eb5c", null ]
 ];

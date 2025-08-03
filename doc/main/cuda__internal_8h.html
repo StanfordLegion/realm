@@ -44,7 +44,7 @@
    <!-- BEGIN version select -->
     <br />
     <div class="dropdown">
-     <button class="dropbtn">Version 25.6.1-rc.1+289a756e</button>
+     <button class="dropbtn">Version 25.06.0+1b9dd28c</button>
      <div class="dropdown-content"></div>
     </div>
     <script type="text/javascript" src="../selectversion.js"></script>
@@ -160,7 +160,7 @@ $(document).ready(function(){initNavTree('cuda__internal_8h.html',''); initResiz
 </div><div class="textblock"><div class="dynheader">
 Include dependency graph for cuda_internal.h:</div>
 <div class="dyncontent">
-<div class="center"><!-- SVG 0 --></div>
+<div class="center"><iframe scrolling="no" frameborder="0" src="cuda__internal_8h__incl.svg" width="3564" height="799"><p><b>This browser is not able to show SVG: try Firefox, Chrome, Safari, or Opera instead.</b></p></iframe></div>
 </div>
 </div>
 <p><a href="cuda__internal_8h_source.html">Go to the source code of this file.</a></p>
@@ -282,14 +282,16 @@ Macros</h2></td></tr>
 <tr class="separator:a335626e129f6ebabcb7eb8b0f7094170"><td class="memSeparator" colspan="2">&#160;</td></tr>
 <tr class="memitem:a0eafdb0a44c9bc3de2750ec22974d26d" id="r_a0eafdb0a44c9bc3de2750ec22974d26d"><td class="memItemLeft" align="right" valign="top">#define&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="cuda__internal_8h.html#a0eafdb0a44c9bc3de2750ec22974d26d">CHECK_CUPTI</a>(cmd)</td></tr>
 <tr class="separator:a0eafdb0a44c9bc3de2750ec22974d26d"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:a9b9d1f0d8ea5d539f5972ac5803a453c" id="r_a9b9d1f0d8ea5d539f5972ac5803a453c"><td class="memItemLeft" align="right" valign="top">#define&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="cuda__internal_8h.html#a9b9d1f0d8ea5d539f5972ac5803a453c">CU_GET_PROC_ADDRESS_DEFAULT</a>&#160;&#160;&#160;0</td></tr>
+<tr class="separator:a9b9d1f0d8ea5d539f5972ac5803a453c"><td class="memSeparator" colspan="2">&#160;</td></tr>
 <tr class="memitem:a0a0796395b403440948cc2f911e0cd87" id="r_a0a0796395b403440948cc2f911e0cd87"><td class="memItemLeft" align="right" valign="top">#define&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="cuda__internal_8h.html#a0a0796395b403440948cc2f911e0cd87">CUDA_DRIVER_HAS_FNPTR</a>(name)&#160;&#160;&#160;((name##_fnptr) != nullptr)</td></tr>
 <tr class="separator:a0a0796395b403440948cc2f911e0cd87"><td class="memSeparator" colspan="2">&#160;</td></tr>
 <tr class="memitem:a42b26328691056b53df2f0f277ee9622" id="r_a42b26328691056b53df2f0f277ee9622"><td class="memItemLeft" align="right" valign="top">#define&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="cuda__internal_8h.html#a42b26328691056b53df2f0f277ee9622">CUDA_DRIVER_FNPTR</a>(name)&#160;&#160;&#160;(assert(name##_fnptr != nullptr), name##_fnptr)</td></tr>
 <tr class="separator:a42b26328691056b53df2f0f277ee9622"><td class="memSeparator" colspan="2">&#160;</td></tr>
-<tr class="memitem:a05853759c846bfa16f547f3f74230d11" id="r_a05853759c846bfa16f547f3f74230d11"><td class="memItemLeft" align="right" valign="top">#define&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="cuda__internal_8h.html#a05853759c846bfa16f547f3f74230d11">CUDA_DRIVER_APIS_BASE</a>(__op__)</td></tr>
-<tr class="separator:a05853759c846bfa16f547f3f74230d11"><td class="memSeparator" colspan="2">&#160;</td></tr>
-<tr class="memitem:a5a8b6266410d20e5e393ade45edb6c80" id="r_a5a8b6266410d20e5e393ade45edb6c80"><td class="memItemLeft" align="right" valign="top">#define&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="cuda__internal_8h.html#a5a8b6266410d20e5e393ade45edb6c80">CUDA_DRIVER_APIS_12050</a>(__op__)&#160;&#160;&#160;__op__(cuCtxRecordEvent, 12050);</td></tr>
-<tr class="separator:a5a8b6266410d20e5e393ade45edb6c80"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:a65df0cdc3c9ec27a015f25adabcaea57" id="r_a65df0cdc3c9ec27a015f25adabcaea57"><td class="memItemLeft" align="right" valign="top">#define&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="cuda__internal_8h.html#a65df0cdc3c9ec27a015f25adabcaea57">CUDA_VERSION_MIN</a>&#160;&#160;&#160;11080</td></tr>
+<tr class="separator:a65df0cdc3c9ec27a015f25adabcaea57"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:aa5eeaa29266a174c969a0f24173f5c32" id="r_aa5eeaa29266a174c969a0f24173f5c32"><td class="memItemLeft" align="right" valign="top">#define&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="cuda__internal_8h.html#aa5eeaa29266a174c969a0f24173f5c32">CUDA_VERSION_COMPAT</a>&#160;&#160;&#160;((CUDA_VERSION / 1000) * 1000)</td></tr>
+<tr class="separator:aa5eeaa29266a174c969a0f24173f5c32"><td class="memSeparator" colspan="2">&#160;</td></tr>
 <tr class="memitem:a0680682305e7899e824b79c24dcb5e2d" id="r_a0680682305e7899e824b79c24dcb5e2d"><td class="memItemLeft" align="right" valign="top">#define&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="cuda__internal_8h.html#a0680682305e7899e824b79c24dcb5e2d">CUDA_DRIVER_APIS</a>(__op__)</td></tr>
 <tr class="separator:a0680682305e7899e824b79c24dcb5e2d"><td class="memSeparator" colspan="2">&#160;</td></tr>
 <tr class="memitem:a78a46ca86d0f01cef0906ea35fb99b1a" id="r_a78a46ca86d0f01cef0906ea35fb99b1a"><td class="memItemLeft" align="right" valign="top">#define&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="cuda__internal_8h.html#a78a46ca86d0f01cef0906ea35fb99b1a">DECL_FNPTR_EXTERN</a>(name,  ver)&#160;&#160;&#160;extern decltype(&amp;name) name##_fnptr;</td></tr>
@@ -315,8 +317,6 @@ Macros</h2></td></tr>
 </table><table class="memberdecls">
 <tr class="heading"><td colspan="2"><h2 class="groupheader"><a id="typedef-members" name="typedef-members"></a>
 Typedefs</h2></td></tr>
-<tr class="memitem:a6df9dcfab862f6cddf00f5533267aff8" id="r_a6df9dcfab862f6cddf00f5533267aff8"><td class="memItemLeft" align="right" valign="top">typedef decltype(&amp;<a class="el" href="namespaceRealm_1_1Cuda.html#a5cae3cdde8c21f7814b427f0f8f2a984">cuCtxRecordEvent</a>)&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="namespaceRealm_1_1Cuda.html#a6df9dcfab862f6cddf00f5533267aff8">Realm::Cuda::PFN_cuCtxRecordEvent</a></td></tr>
-<tr class="separator:a6df9dcfab862f6cddf00f5533267aff8"><td class="memSeparator" colspan="2">&#160;</td></tr>
 <tr class="memitem:ad3f2b6de76383898e56a4823d7c3a99e" id="r_ad3f2b6de76383898e56a4823d7c3a99e"><td class="memItemLeft" align="right" valign="top">typedef enum <a class="el" href="namespaceRealm_1_1Cuda.html#acb8cb63b69f8ed18a4e13e6d6b3f36fe">Realm::Cuda::nvmlIntNvLinkDeviceType_enum</a>&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="namespaceRealm_1_1Cuda.html#ad3f2b6de76383898e56a4823d7c3a99e">Realm::Cuda::nvmlIntNvLinkDeviceType_t</a></td></tr>
 <tr class="separator:ad3f2b6de76383898e56a4823d7c3a99e"><td class="memSeparator" colspan="2">&#160;</td></tr>
 </table><table class="memberdecls">
@@ -337,6 +337,8 @@ Enumerations</h2></td></tr>
 </table><table class="memberdecls">
 <tr class="heading"><td colspan="2"><h2 class="groupheader"><a id="func-members" name="func-members"></a>
 Functions</h2></td></tr>
+<tr class="memitem:a5790b53895b13e62b3a9aa524d5168f8" id="r_a5790b53895b13e62b3a9aa524d5168f8"><td class="memItemLeft" align="right" valign="top">CUresult&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="namespaceRealm_1_1Cuda.html#a5790b53895b13e62b3a9aa524d5168f8">Realm::Cuda::cuGetProcAddress</a> (const char *, void **, int, int)</td></tr>
+<tr class="separator:a5790b53895b13e62b3a9aa524d5168f8"><td class="memSeparator" colspan="2">&#160;</td></tr>
 <tr class="memitem:a5cae3cdde8c21f7814b427f0f8f2a984" id="r_a5cae3cdde8c21f7814b427f0f8f2a984"><td class="memItemLeft" align="right" valign="top">CUresult&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="namespaceRealm_1_1Cuda.html#a5cae3cdde8c21f7814b427f0f8f2a984">Realm::Cuda::cuCtxRecordEvent</a> (CUcontext hctx, CUevent event)</td></tr>
 <tr class="separator:a5cae3cdde8c21f7814b427f0f8f2a984"><td class="memSeparator" colspan="2">&#160;</td></tr>
 <tr class="memitem:a66c15905bd7bb0646f7e2cf6a15f130a" id="r_a66c15905bd7bb0646f7e2cf6a15f130a"><td class="memItemLeft" align="right" valign="top">&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="namespaceRealm_1_1Cuda.html#a66c15905bd7bb0646f7e2cf6a15f130a">Realm::Cuda::CUDA_DRIVER_APIS</a> (<a class="el" href="cuda__internal_8h.html#a78a46ca86d0f01cef0906ea35fb99b1a">DECL_FNPTR_EXTERN</a>)</td></tr>
@@ -390,14 +392,14 @@ Variables</h2></td></tr>
         </tr>
       </table>
 </div><div class="memdoc">
-<b>Value:</b><div class="fragment"><div class="line">  <span class="keywordflow">do</span> {                                                                         \</div>
-<div class="line">    <span class="keywordtype">int</span> ret = (int)(cmd);                                                      \</div>
-<div class="line">    if (ret != 0) {                                                            \</div>
-<div class="line">      fprintf(stderr, <span class="stringliteral">&quot;CUDART: %s = %d\n&quot;</span>, #cmd, ret);                         \</div>
-<div class="line">      assert(0);                                                               \</div>
-<div class="line">      exit(1);                                                                 \</div>
-<div class="line">    }                                                                          \</div>
-<div class="line">  } <span class="keywordflow">while</span> (0)</div>
+<b>Value:</b><div class="fragment"><div class="line">  <span class="keywordflow">do</span> {                                                                                   \</div>
+<div class="line">    <span class="keywordtype">int</span> ret = (int)(cmd);                                                                \</div>
+<div class="line">    if(ret != 0) {                                                                       \</div>
+<div class="line">      fprintf(stderr, <span class="stringliteral">&quot;CUDART: %s = %d\n&quot;</span>, #cmd, ret);                                   \</div>
+<div class="line">      assert(0);                                                                         \</div>
+<div class="line">      exit(1);                                                                           \</div>
+<div class="line">    }                                                                                    \</div>
+<div class="line">  } <span class="keywordflow">while</span>(0)</div>
 </div><!-- fragment -->
 </div>
 </div>
@@ -451,6 +453,20 @@ Variables</h2></td></tr>
 </div><!-- fragment -->
 </div>
 </div>
+<a id="a9b9d1f0d8ea5d539f5972ac5803a453c" name="a9b9d1f0d8ea5d539f5972ac5803a453c"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a9b9d1f0d8ea5d539f5972ac5803a453c">&#9670;&#160;</a></span>CU_GET_PROC_ADDRESS_DEFAULT</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname">#define CU_GET_PROC_ADDRESS_DEFAULT&#160;&#160;&#160;0</td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+
+</div>
+</div>
 <a id="a0680682305e7899e824b79c24dcb5e2d" name="a0680682305e7899e824b79c24dcb5e2d"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#a0680682305e7899e824b79c24dcb5e2d">&#9670;&#160;</a></span>CUDA_DRIVER_APIS</h2>
 
@@ -459,45 +475,6 @@ Variables</h2></td></tr>
       <table class="memname">
         <tr>
           <td class="memname">#define CUDA_DRIVER_APIS</td>
-          <td>(</td>
-          <td class="paramtype">&#160;</td>
-          <td class="paramname">__op__</td><td>)</td>
-          <td></td>
-        </tr>
-      </table>
-</div><div class="memdoc">
-<b>Value:</b><div class="fragment"><div class="line">  <a class="code hl_define" href="cuda__internal_8h.html#a05853759c846bfa16f547f3f74230d11">CUDA_DRIVER_APIS_BASE</a>(__op__)                                                          \</div>
-<div class="line">  CUDA_DRIVER_APIS_12050(__op__)</div>
-<div class="ttc" id="acuda__internal_8h_html_a05853759c846bfa16f547f3f74230d11"><div class="ttname"><a href="cuda__internal_8h.html#a05853759c846bfa16f547f3f74230d11">CUDA_DRIVER_APIS_BASE</a></div><div class="ttdeci">#define CUDA_DRIVER_APIS_BASE(__op__)</div><div class="ttdef"><b>Definition</b> cuda_internal.h:1308</div></div>
-</div><!-- fragment -->
-</div>
-</div>
-<a id="a5a8b6266410d20e5e393ade45edb6c80" name="a5a8b6266410d20e5e393ade45edb6c80"></a>
-<h2 class="memtitle"><span class="permalink"><a href="#a5a8b6266410d20e5e393ade45edb6c80">&#9670;&#160;</a></span>CUDA_DRIVER_APIS_12050</h2>
-
-<div class="memitem">
-<div class="memproto">
-      <table class="memname">
-        <tr>
-          <td class="memname">#define CUDA_DRIVER_APIS_12050</td>
-          <td>(</td>
-          <td class="paramtype">&#160;</td>
-          <td class="paramname">__op__</td><td>)</td>
-          <td>&#160;&#160;&#160;__op__(cuCtxRecordEvent, 12050);</td>
-        </tr>
-      </table>
-</div><div class="memdoc">
-
-</div>
-</div>
-<a id="a05853759c846bfa16f547f3f74230d11" name="a05853759c846bfa16f547f3f74230d11"></a>
-<h2 class="memtitle"><span class="permalink"><a href="#a05853759c846bfa16f547f3f74230d11">&#9670;&#160;</a></span>CUDA_DRIVER_APIS_BASE</h2>
-
-<div class="memitem">
-<div class="memproto">
-      <table class="memname">
-        <tr>
-          <td class="memname">#define CUDA_DRIVER_APIS_BASE</td>
           <td>(</td>
           <td class="paramtype">&#160;</td>
           <td class="paramname">__op__</td><td>)</td>
@@ -552,6 +529,34 @@ Variables</h2></td></tr>
       <table class="memname">
         <tr>
           <td class="memname">#define CUDA_ENABLE_DEPRECATED&#160;&#160;&#160;1</td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+
+</div>
+</div>
+<a id="aa5eeaa29266a174c969a0f24173f5c32" name="aa5eeaa29266a174c969a0f24173f5c32"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#aa5eeaa29266a174c969a0f24173f5c32">&#9670;&#160;</a></span>CUDA_VERSION_COMPAT</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname">#define CUDA_VERSION_COMPAT&#160;&#160;&#160;((CUDA_VERSION / 1000) * 1000)</td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+
+</div>
+</div>
+<a id="a65df0cdc3c9ec27a015f25adabcaea57" name="a65df0cdc3c9ec27a015f25adabcaea57"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a65df0cdc3c9ec27a015f25adabcaea57">&#9670;&#160;</a></span>CUDA_VERSION_MIN</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname">#define CUDA_VERSION_MIN&#160;&#160;&#160;11080</td>
         </tr>
       </table>
 </div><div class="memdoc">

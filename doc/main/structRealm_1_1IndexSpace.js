@@ -14,6 +14,8 @@ var structRealm_1_1IndexSpace =
     [ "contains_approx", "structRealm_1_1IndexSpace.html#a89533c469f3d499077e0da7b6b9370f0", null ],
     [ "copy", "structRealm_1_1IndexSpace.html#a573d264b54b7467b4cc59f2a6d66fe19", null ],
     [ "copy", "structRealm_1_1IndexSpace.html#a6da6ab2fa0b43b5c7ae94e3688139970", null ],
+    [ "copy", "structRealm_1_1IndexSpace.html#a901bcbf6fcc90a66ebfb49ddb233dbf6", null ],
+    [ "copy", "structRealm_1_1IndexSpace.html#a4efe263e477ed8ed2021700dc646c65b", null ],
     [ "create_association", "structRealm_1_1IndexSpace.html#a5afa0eaf4ba8f12fd9bb4891e1d1d663", null ],
     [ "create_equal_subspace", "structRealm_1_1IndexSpace.html#af788dde73cf610804e797aca27013b91", null ],
     [ "create_equal_subspaces", "structRealm_1_1IndexSpace.html#a83f9d986b0c54e0217c922566bfa541e", null ],
@@ -52,6 +54,6 @@ var structRealm_1_1IndexSpace =
     [ "tighten", "structRealm_1_1IndexSpace.html#afe4a6af878e772057eb805f8b4598ecd", null ],
     [ "volume", "structRealm_1_1IndexSpace.html#ad15134fb33d3da3726784af23c753adf", null ],
     [ "volume_approx", "structRealm_1_1IndexSpace.html#a4d008eade8f26604fae4ff76cd6e7c01", null ],
-    [ "bounds", "structRealm_1_1IndexSpace.html#a99523cf1299bc9e1dc16e5bb50157b71", null ],
-    [ "sparsity", "structRealm_1_1IndexSpace.html#a6e5c37d6044cb8111700ca83113231f2", null ]
+    [ "bounds", "structRealm_1_1IndexSpace.html#a98c55e672ea231165da42f38cce758d4", null ],
+    [ "sparsity", "structRealm_1_1IndexSpace.html#ade8ba8cfd2d933d247438a71e60a3d39", null ]
 ];

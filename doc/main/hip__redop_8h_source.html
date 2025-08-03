@@ -44,7 +44,7 @@
    <!-- BEGIN version select -->
     <br />
     <div class="dropdown">
-     <button class="dropbtn">Version 25.6.1-rc.1+289a756e</button>
+     <button class="dropbtn">Version 25.06.0+1b9dd28c</button>
      <div class="dropdown-content"></div>
     </div>
     <script type="text/javascript" src="../selectversion.js"></script>
@@ -137,68 +137,68 @@ $(document).ready(function(){initNavTree('hip__redop_8h_source.html',''); initRe
   <div class="headertitle"><div class="title">hip_redop.h</div></div>
 </div><!--header-->
 <div class="contents">
-<a href="hip__redop_8h.html">Go to the documentation of this file.</a><div class="fragment"><div class="line"><a id="l00001" name="l00001"></a><span class="lineno">    1</span><span class="comment">/* Copyright 2024 Stanford University, NVIDIA Corporation</span></div>
-<div class="line"><a id="l00002" name="l00002"></a><span class="lineno">    2</span><span class="comment"> *</span></div>
-<div class="line"><a id="l00003" name="l00003"></a><span class="lineno">    3</span><span class="comment"> * Licensed under the Apache License, Version 2.0 (the &quot;License&quot;);</span></div>
-<div class="line"><a id="l00004" name="l00004"></a><span class="lineno">    4</span><span class="comment"> * you may not use this file except in compliance with the License.</span></div>
-<div class="line"><a id="l00005" name="l00005"></a><span class="lineno">    5</span><span class="comment"> * You may obtain a copy of the License at</span></div>
-<div class="line"><a id="l00006" name="l00006"></a><span class="lineno">    6</span><span class="comment"> *</span></div>
-<div class="line"><a id="l00007" name="l00007"></a><span class="lineno">    7</span><span class="comment"> *     http://www.apache.org/licenses/LICENSE-2.0</span></div>
+<a href="hip__redop_8h.html">Go to the documentation of this file.</a><div class="fragment"><div class="line"><a id="l00001" name="l00001"></a><span class="lineno">    1</span><span class="comment">/*</span></div>
+<div class="line"><a id="l00002" name="l00002"></a><span class="lineno">    2</span><span class="comment"> * Copyright 2025 Stanford University, NVIDIA Corporation</span></div>
+<div class="line"><a id="l00003" name="l00003"></a><span class="lineno">    3</span><span class="comment"> * SPDX-License-Identifier: Apache-2.0</span></div>
+<div class="line"><a id="l00004" name="l00004"></a><span class="lineno">    4</span><span class="comment"> *</span></div>
+<div class="line"><a id="l00005" name="l00005"></a><span class="lineno">    5</span><span class="comment"> * Licensed under the Apache License, Version 2.0 (the &quot;License&quot;);</span></div>
+<div class="line"><a id="l00006" name="l00006"></a><span class="lineno">    6</span><span class="comment"> * you may not use this file except in compliance with the License.</span></div>
+<div class="line"><a id="l00007" name="l00007"></a><span class="lineno">    7</span><span class="comment"> * You may obtain a copy of the License at</span></div>
 <div class="line"><a id="l00008" name="l00008"></a><span class="lineno">    8</span><span class="comment"> *</span></div>
-<div class="line"><a id="l00009" name="l00009"></a><span class="lineno">    9</span><span class="comment"> * Unless required by applicable law or agreed to in writing, software</span></div>
-<div class="line"><a id="l00010" name="l00010"></a><span class="lineno">   10</span><span class="comment"> * distributed under the License is distributed on an &quot;AS IS&quot; BASIS,</span></div>
-<div class="line"><a id="l00011" name="l00011"></a><span class="lineno">   11</span><span class="comment"> * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.</span></div>
-<div class="line"><a id="l00012" name="l00012"></a><span class="lineno">   12</span><span class="comment"> * See the License for the specific language governing permissions and</span></div>
-<div class="line"><a id="l00013" name="l00013"></a><span class="lineno">   13</span><span class="comment"> * limitations under the License.</span></div>
-<div class="line"><a id="l00014" name="l00014"></a><span class="lineno">   14</span><span class="comment"> */</span></div>
-<div class="line"><a id="l00015" name="l00015"></a><span class="lineno">   15</span> </div>
-<div class="line"><a id="l00016" name="l00016"></a><span class="lineno">   16</span><span class="preprocessor">#ifndef REALM_HIP_REDOP_H</span></div>
-<div class="line"><a id="l00017" name="l00017"></a><span class="lineno">   17</span><span class="preprocessor">#define REALM_HIP_REDOP_H</span></div>
-<div class="line"><a id="l00018" name="l00018"></a><span class="lineno">   18</span> </div>
-<div class="line"><a id="l00019" name="l00019"></a><span class="lineno">   19</span><span class="preprocessor">#include &quot;<a class="code" href="realm__config_8h.html">realm/realm_config.h</a>&quot;</span></div>
+<div class="line"><a id="l00009" name="l00009"></a><span class="lineno">    9</span><span class="comment"> *     http://www.apache.org/licenses/LICENSE-2.0</span></div>
+<div class="line"><a id="l00010" name="l00010"></a><span class="lineno">   10</span><span class="comment"> *</span></div>
+<div class="line"><a id="l00011" name="l00011"></a><span class="lineno">   11</span><span class="comment"> * Unless required by applicable law or agreed to in writing, software</span></div>
+<div class="line"><a id="l00012" name="l00012"></a><span class="lineno">   12</span><span class="comment"> * distributed under the License is distributed on an &quot;AS IS&quot; BASIS,</span></div>
+<div class="line"><a id="l00013" name="l00013"></a><span class="lineno">   13</span><span class="comment"> * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.</span></div>
+<div class="line"><a id="l00014" name="l00014"></a><span class="lineno">   14</span><span class="comment"> * See the License for the specific language governing permissions and</span></div>
+<div class="line"><a id="l00015" name="l00015"></a><span class="lineno">   15</span><span class="comment"> * limitations under the License.</span></div>
+<div class="line"><a id="l00016" name="l00016"></a><span class="lineno">   16</span><span class="comment"> */</span></div>
+<div class="line"><a id="l00017" name="l00017"></a><span class="lineno">   17</span> </div>
+<div class="line"><a id="l00018" name="l00018"></a><span class="lineno">   18</span><span class="preprocessor">#ifndef REALM_HIP_REDOP_H</span></div>
+<div class="line"><a id="l00019" name="l00019"></a><span class="lineno">   19</span><span class="preprocessor">#define REALM_HIP_REDOP_H</span></div>
 <div class="line"><a id="l00020" name="l00020"></a><span class="lineno">   20</span> </div>
-<div class="line"><a id="l00021" name="l00021"></a><span class="lineno">   21</span><span class="preprocessor">#if defined (__CUDACC__) || defined (__HIPCC__)</span></div>
-<div class="line"><a id="l00022" name="l00022"></a><span class="lineno">   22</span><span class="preprocessor">#ifdef REALM_USE_HIP</span></div>
-<div class="line"><a id="l00023" name="l00023"></a><span class="lineno">   23</span><span class="preprocessor">#include &lt;hip/hip_runtime.h&gt;</span></div>
-<div class="line"><a id="l00024" name="l00024"></a><span class="lineno">   24</span><span class="preprocessor">#endif</span></div>
-<div class="line"><a id="l00025" name="l00025"></a><span class="lineno">   25</span><span class="preprocessor">#endif</span></div>
-<div class="line"><a id="l00026" name="l00026"></a><span class="lineno">   26</span> </div>
-<div class="line"><a id="l00027" name="l00027"></a><span class="lineno">   27</span><span class="keyword">namespace </span><a class="code hl_namespace" href="namespaceRealm.html">Realm</a> {</div>
+<div class="line"><a id="l00021" name="l00021"></a><span class="lineno">   21</span><span class="preprocessor">#include &quot;<a class="code" href="realm__config_8h.html">realm/realm_config.h</a>&quot;</span></div>
+<div class="line"><a id="l00022" name="l00022"></a><span class="lineno">   22</span> </div>
+<div class="line"><a id="l00023" name="l00023"></a><span class="lineno">   23</span><span class="preprocessor">#if defined(__CUDACC__) || defined(__HIPCC__)</span></div>
+<div class="line"><a id="l00024" name="l00024"></a><span class="lineno">   24</span><span class="preprocessor">#ifdef REALM_USE_HIP</span></div>
+<div class="line"><a id="l00025" name="l00025"></a><span class="lineno">   25</span><span class="preprocessor">#include &lt;hip/hip_runtime.h&gt;</span></div>
+<div class="line"><a id="l00026" name="l00026"></a><span class="lineno">   26</span><span class="preprocessor">#endif</span></div>
+<div class="line"><a id="l00027" name="l00027"></a><span class="lineno">   27</span><span class="preprocessor">#endif</span></div>
 <div class="line"><a id="l00028" name="l00028"></a><span class="lineno">   28</span> </div>
-<div class="line"><a id="l00029" name="l00029"></a><span class="lineno">   29</span>  <span class="keyword">namespace </span>Hip {</div>
+<div class="line"><a id="l00029" name="l00029"></a><span class="lineno">   29</span><span class="keyword">namespace </span><a class="code hl_namespace" href="namespaceRealm.html">Realm</a> {</div>
 <div class="line"><a id="l00030" name="l00030"></a><span class="lineno">   30</span> </div>
-<div class="line"><a id="l00031" name="l00031"></a><span class="lineno">   31</span><span class="preprocessor">#if defined (__CUDACC__) || defined (__HIPCC__)</span></div>
-<div class="line"><a id="l00032" name="l00032"></a><span class="lineno">   32</span>    <span class="comment">// the ability to add CUDA kernels to a reduction op is only available</span></div>
-<div class="line"><a id="l00033" name="l00033"></a><span class="lineno">   33</span>    <span class="comment">//  when using a compiler that understands CUDA</span></div>
-<div class="line"><a id="l00034" name="l00034"></a><span class="lineno">   34</span>    <span class="keyword">namespace </span>ReductionKernels {</div>
-<div class="line"><a id="l00035" name="l00035"></a><span class="lineno">   35</span>      <span class="keyword">template</span> &lt;<span class="keyword">typename</span> REDOP, <span class="keywordtype">bool</span> EXCL&gt;</div>
-<div class="line"><a id="l00036" name="l00036"></a><span class="lineno">   36</span>      __global__ <span class="keywordtype">void</span> apply_hip_kernel(uintptr_t lhs_base,</div>
-<div class="line"><a id="l00037" name="l00037"></a><span class="lineno">   37</span>                                        uintptr_t lhs_stride,</div>
-<div class="line"><a id="l00038" name="l00038"></a><span class="lineno">   38</span>                                        uintptr_t rhs_base,</div>
-<div class="line"><a id="l00039" name="l00039"></a><span class="lineno">   39</span>                                        uintptr_t rhs_stride,</div>
-<div class="line"><a id="l00040" name="l00040"></a><span class="lineno">   40</span>                                        <span class="keywordtype">size_t</span> count,</div>
-<div class="line"><a id="l00041" name="l00041"></a><span class="lineno">   41</span>                                        REDOP redop)</div>
-<div class="line"><a id="l00042" name="l00042"></a><span class="lineno">   42</span>      {</div>
-<div class="line"><a id="l00043" name="l00043"></a><span class="lineno">   43</span>        <span class="keywordtype">size_t</span> tid = blockIdx.x * blockDim.x + threadIdx.x;</div>
-<div class="line"><a id="l00044" name="l00044"></a><span class="lineno">   44</span>        <span class="keywordflow">for</span>(<span class="keywordtype">size_t</span> idx = tid; tid &lt; count; tid += blockDim.x * gridDim.x)</div>
-<div class="line"><a id="l00045" name="l00045"></a><span class="lineno">   45</span>          redop.template apply_hip&lt;EXCL&gt;(*<span class="keyword">reinterpret_cast&lt;</span>typename REDOP::LHS *<span class="keyword">&gt;</span>(lhs_base + idx * lhs_stride),</div>
-<div class="line"><a id="l00046" name="l00046"></a><span class="lineno">   46</span>                                 *<span class="keyword">reinterpret_cast&lt;</span><span class="keyword">const </span>typename REDOP::RHS *<span class="keyword">&gt;</span>(rhs_base + idx * rhs_stride));</div>
-<div class="line"><a id="l00047" name="l00047"></a><span class="lineno">   47</span>      }</div>
-<div class="line"><a id="l00048" name="l00048"></a><span class="lineno">   48</span> </div>
-<div class="line"><a id="l00049" name="l00049"></a><span class="lineno">   49</span>      <span class="keyword">template</span> &lt;<span class="keyword">typename</span> REDOP, <span class="keywordtype">bool</span> EXCL&gt;</div>
-<div class="line"><a id="l00050" name="l00050"></a><span class="lineno">   50</span>      __global__ <span class="keywordtype">void</span> fold_hip_kernel(uintptr_t rhs1_base,</div>
-<div class="line"><a id="l00051" name="l00051"></a><span class="lineno">   51</span>                                       uintptr_t rhs1_stride,</div>
-<div class="line"><a id="l00052" name="l00052"></a><span class="lineno">   52</span>                                       uintptr_t rhs2_base,</div>
-<div class="line"><a id="l00053" name="l00053"></a><span class="lineno">   53</span>                                       uintptr_t rhs2_stride,</div>
-<div class="line"><a id="l00054" name="l00054"></a><span class="lineno">   54</span>                                       <span class="keywordtype">size_t</span> count,</div>
-<div class="line"><a id="l00055" name="l00055"></a><span class="lineno">   55</span>                                       REDOP redop)</div>
-<div class="line"><a id="l00056" name="l00056"></a><span class="lineno">   56</span>      {</div>
-<div class="line"><a id="l00057" name="l00057"></a><span class="lineno">   57</span>        <span class="keywordtype">size_t</span> tid = blockIdx.x * blockDim.x + threadIdx.x;</div>
-<div class="line"><a id="l00058" name="l00058"></a><span class="lineno">   58</span>        <span class="keywordflow">for</span>(<span class="keywordtype">size_t</span> idx = tid; tid &lt; count; tid += blockDim.x * gridDim.x)</div>
-<div class="line"><a id="l00059" name="l00059"></a><span class="lineno">   59</span>          redop.template fold_hip&lt;EXCL&gt;(*<span class="keyword">reinterpret_cast&lt;</span>typename REDOP::RHS *<span class="keyword">&gt;</span>(rhs1_base + idx * rhs1_stride),</div>
-<div class="line"><a id="l00060" name="l00060"></a><span class="lineno">   60</span>                                *<span class="keyword">reinterpret_cast&lt;</span><span class="keyword">const </span>typename REDOP::RHS *<span class="keyword">&gt;</span>(rhs2_base + idx * rhs2_stride));</div>
+<div class="line"><a id="l00031" name="l00031"></a><span class="lineno">   31</span>  <span class="keyword">namespace </span>Hip {</div>
+<div class="line"><a id="l00032" name="l00032"></a><span class="lineno">   32</span> </div>
+<div class="line"><a id="l00033" name="l00033"></a><span class="lineno">   33</span><span class="preprocessor">#if defined(__CUDACC__) || defined(__HIPCC__)</span></div>
+<div class="line"><a id="l00034" name="l00034"></a><span class="lineno">   34</span>    <span class="comment">// the ability to add CUDA kernels to a reduction op is only available</span></div>
+<div class="line"><a id="l00035" name="l00035"></a><span class="lineno">   35</span>    <span class="comment">//  when using a compiler that understands CUDA</span></div>
+<div class="line"><a id="l00036" name="l00036"></a><span class="lineno">   36</span>    <span class="keyword">namespace </span>ReductionKernels {</div>
+<div class="line"><a id="l00037" name="l00037"></a><span class="lineno">   37</span>      <span class="keyword">template</span> &lt;<span class="keyword">typename</span> REDOP, <span class="keywordtype">bool</span> EXCL&gt;</div>
+<div class="line"><a id="l00038" name="l00038"></a><span class="lineno">   38</span>      __global__ <span class="keywordtype">void</span> apply_hip_kernel(uintptr_t lhs_base, uintptr_t lhs_stride,</div>
+<div class="line"><a id="l00039" name="l00039"></a><span class="lineno">   39</span>                                       uintptr_t rhs_base, uintptr_t rhs_stride,</div>
+<div class="line"><a id="l00040" name="l00040"></a><span class="lineno">   40</span>                                       <span class="keywordtype">size_t</span> count, REDOP redop)</div>
+<div class="line"><a id="l00041" name="l00041"></a><span class="lineno">   41</span>      {</div>
+<div class="line"><a id="l00042" name="l00042"></a><span class="lineno">   42</span>        <span class="keywordtype">size_t</span> tid = blockIdx.x * blockDim.x + threadIdx.x;</div>
+<div class="line"><a id="l00043" name="l00043"></a><span class="lineno">   43</span>        <span class="keywordflow">for</span>(<span class="keywordtype">size_t</span> idx = tid; tid &lt; count; tid += blockDim.x * gridDim.x)</div>
+<div class="line"><a id="l00044" name="l00044"></a><span class="lineno">   44</span>          redop.template apply_hip&lt;EXCL&gt;(</div>
+<div class="line"><a id="l00045" name="l00045"></a><span class="lineno">   45</span>              *<span class="keyword">reinterpret_cast&lt;</span>typename REDOP::LHS *<span class="keyword">&gt;</span>(lhs_base + idx * lhs_stride),</div>
+<div class="line"><a id="l00046" name="l00046"></a><span class="lineno">   46</span>              *<span class="keyword">reinterpret_cast&lt;</span><span class="keyword">const </span>typename REDOP::RHS *<span class="keyword">&gt;</span>(rhs_base +</div>
+<div class="line"><a id="l00047" name="l00047"></a><span class="lineno">   47</span>                                                             idx * rhs_stride));</div>
+<div class="line"><a id="l00048" name="l00048"></a><span class="lineno">   48</span>      }</div>
+<div class="line"><a id="l00049" name="l00049"></a><span class="lineno">   49</span> </div>
+<div class="line"><a id="l00050" name="l00050"></a><span class="lineno">   50</span>      <span class="keyword">template</span> &lt;<span class="keyword">typename</span> REDOP, <span class="keywordtype">bool</span> EXCL&gt;</div>
+<div class="line"><a id="l00051" name="l00051"></a><span class="lineno">   51</span>      __global__ <span class="keywordtype">void</span> fold_hip_kernel(uintptr_t rhs1_base, uintptr_t rhs1_stride,</div>
+<div class="line"><a id="l00052" name="l00052"></a><span class="lineno">   52</span>                                      uintptr_t rhs2_base, uintptr_t rhs2_stride,</div>
+<div class="line"><a id="l00053" name="l00053"></a><span class="lineno">   53</span>                                      <span class="keywordtype">size_t</span> count, REDOP redop)</div>
+<div class="line"><a id="l00054" name="l00054"></a><span class="lineno">   54</span>      {</div>
+<div class="line"><a id="l00055" name="l00055"></a><span class="lineno">   55</span>        <span class="keywordtype">size_t</span> tid = blockIdx.x * blockDim.x + threadIdx.x;</div>
+<div class="line"><a id="l00056" name="l00056"></a><span class="lineno">   56</span>        <span class="keywordflow">for</span>(<span class="keywordtype">size_t</span> idx = tid; tid &lt; count; tid += blockDim.x * gridDim.x)</div>
+<div class="line"><a id="l00057" name="l00057"></a><span class="lineno">   57</span>          redop.template fold_hip&lt;EXCL&gt;(</div>
+<div class="line"><a id="l00058" name="l00058"></a><span class="lineno">   58</span>              *<span class="keyword">reinterpret_cast&lt;</span>typename REDOP::RHS *<span class="keyword">&gt;</span>(rhs1_base + idx * rhs1_stride),</div>
+<div class="line"><a id="l00059" name="l00059"></a><span class="lineno">   59</span>              *<span class="keyword">reinterpret_cast&lt;</span><span class="keyword">const </span>typename REDOP::RHS *<span class="keyword">&gt;</span>(rhs2_base +</div>
+<div class="line"><a id="l00060" name="l00060"></a><span class="lineno">   60</span>                                                             idx * rhs2_stride));</div>
 <div class="line"><a id="l00061" name="l00061"></a><span class="lineno">   61</span>      }</div>
-<div class="line"><a id="l00062" name="l00062"></a><span class="lineno">   62</span>    };</div>
+<div class="line"><a id="l00062" name="l00062"></a><span class="lineno">   62</span>    }; <span class="comment">// namespace ReductionKernels</span></div>
 <div class="line"><a id="l00063" name="l00063"></a><span class="lineno">   63</span> </div>
 <div class="line"><a id="l00064" name="l00064"></a><span class="lineno">   64</span>    <span class="comment">// this helper adds the appropriate kernels for REDOP to a ReductionOpUntyped,</span></div>
 <div class="line"><a id="l00065" name="l00065"></a><span class="lineno">   65</span>    <span class="comment">//  although the latter is templated to work around circular include deps</span></div>
@@ -207,19 +207,23 @@ $(document).ready(function(){initNavTree('hip__redop_8h_source.html',''); initRe
 <div class="line"><a id="l00068" name="l00068"></a><span class="lineno">   68</span>    {</div>
 <div class="line"><a id="l00069" name="l00069"></a><span class="lineno">   69</span>      <span class="comment">// store the host proxy function pointer, as it&#39;s the same for all</span></div>
 <div class="line"><a id="l00070" name="l00070"></a><span class="lineno">   70</span>      <span class="comment">//  devices - translation to actual cudaFunction_t&#39;s happens later</span></div>
-<div class="line"><a id="l00071" name="l00071"></a><span class="lineno">   71</span>      redop-&gt;hip_apply_excl_fn = <span class="keyword">reinterpret_cast&lt;</span><span class="keywordtype">void</span> *<span class="keyword">&gt;</span>(&amp;ReductionKernels::apply_hip_kernel&lt;REDOP, true&gt;);</div>
-<div class="line"><a id="l00072" name="l00072"></a><span class="lineno">   72</span>      redop-&gt;hip_apply_nonexcl_fn = <span class="keyword">reinterpret_cast&lt;</span><span class="keywordtype">void</span> *<span class="keyword">&gt;</span>(&amp;ReductionKernels::apply_hip_kernel&lt;REDOP, false&gt;);</div>
-<div class="line"><a id="l00073" name="l00073"></a><span class="lineno">   73</span>      redop-&gt;hip_fold_excl_fn = <span class="keyword">reinterpret_cast&lt;</span><span class="keywordtype">void</span> *<span class="keyword">&gt;</span>(&amp;ReductionKernels::fold_hip_kernel&lt;REDOP, true&gt;);</div>
-<div class="line"><a id="l00074" name="l00074"></a><span class="lineno">   74</span>      redop-&gt;hip_fold_nonexcl_fn = <span class="keyword">reinterpret_cast&lt;</span><span class="keywordtype">void</span> *<span class="keyword">&gt;</span>(&amp;ReductionKernels::fold_hip_kernel&lt;REDOP, false&gt;);</div>
-<div class="line"><a id="l00075" name="l00075"></a><span class="lineno">   75</span>    }</div>
-<div class="line"><a id="l00076" name="l00076"></a><span class="lineno">   76</span><span class="preprocessor">#endif</span></div>
-<div class="line"><a id="l00077" name="l00077"></a><span class="lineno">   77</span> </div>
-<div class="line"><a id="l00078" name="l00078"></a><span class="lineno">   78</span>  }; <span class="comment">// namespace Cuda</span></div>
-<div class="line"><a id="l00079" name="l00079"></a><span class="lineno">   79</span> </div>
-<div class="line"><a id="l00080" name="l00080"></a><span class="lineno">   80</span>}; <span class="comment">// namespace Realm</span></div>
+<div class="line"><a id="l00071" name="l00071"></a><span class="lineno">   71</span>      redop-&gt;hip_apply_excl_fn =</div>
+<div class="line"><a id="l00072" name="l00072"></a><span class="lineno">   72</span>          <span class="keyword">reinterpret_cast&lt;</span><span class="keywordtype">void</span> *<span class="keyword">&gt;</span>(&amp;ReductionKernels::apply_hip_kernel&lt;REDOP, true&gt;);</div>
+<div class="line"><a id="l00073" name="l00073"></a><span class="lineno">   73</span>      redop-&gt;hip_apply_nonexcl_fn =</div>
+<div class="line"><a id="l00074" name="l00074"></a><span class="lineno">   74</span>          <span class="keyword">reinterpret_cast&lt;</span><span class="keywordtype">void</span> *<span class="keyword">&gt;</span>(&amp;ReductionKernels::apply_hip_kernel&lt;REDOP, false&gt;);</div>
+<div class="line"><a id="l00075" name="l00075"></a><span class="lineno">   75</span>      redop-&gt;hip_fold_excl_fn =</div>
+<div class="line"><a id="l00076" name="l00076"></a><span class="lineno">   76</span>          <span class="keyword">reinterpret_cast&lt;</span><span class="keywordtype">void</span> *<span class="keyword">&gt;</span>(&amp;ReductionKernels::fold_hip_kernel&lt;REDOP, true&gt;);</div>
+<div class="line"><a id="l00077" name="l00077"></a><span class="lineno">   77</span>      redop-&gt;hip_fold_nonexcl_fn =</div>
+<div class="line"><a id="l00078" name="l00078"></a><span class="lineno">   78</span>          <span class="keyword">reinterpret_cast&lt;</span><span class="keywordtype">void</span> *<span class="keyword">&gt;</span>(&amp;ReductionKernels::fold_hip_kernel&lt;REDOP, false&gt;);</div>
+<div class="line"><a id="l00079" name="l00079"></a><span class="lineno">   79</span>    }</div>
+<div class="line"><a id="l00080" name="l00080"></a><span class="lineno">   80</span><span class="preprocessor">#endif</span></div>
 <div class="line"><a id="l00081" name="l00081"></a><span class="lineno">   81</span> </div>
-<div class="line"><a id="l00082" name="l00082"></a><span class="lineno">   82</span><span class="preprocessor">#endif</span></div>
-<div class="ttc" id="anamespaceRealm_html"><div class="ttname"><a href="namespaceRealm.html">Realm</a></div><div class="ttdef"><b>Definition</b> activemsg.h:36</div></div>
+<div class="line"><a id="l00082" name="l00082"></a><span class="lineno">   82</span>  }; <span class="comment">// namespace Hip</span></div>
+<div class="line"><a id="l00083" name="l00083"></a><span class="lineno">   83</span> </div>
+<div class="line"><a id="l00084" name="l00084"></a><span class="lineno">   84</span>}; <span class="comment">// namespace Realm</span></div>
+<div class="line"><a id="l00085" name="l00085"></a><span class="lineno">   85</span> </div>
+<div class="line"><a id="l00086" name="l00086"></a><span class="lineno">   86</span><span class="preprocessor">#endif</span></div>
+<div class="ttc" id="anamespaceRealm_html"><div class="ttname"><a href="namespaceRealm.html">Realm</a></div><div class="ttdef"><b>Definition</b> activemsg.h:38</div></div>
 <div class="ttc" id="arealm__config_8h_html"><div class="ttname"><a href="realm__config_8h.html">realm_config.h</a></div></div>
 </div><!-- fragment --></div><!-- contents -->
 </div><!-- doc-content -->

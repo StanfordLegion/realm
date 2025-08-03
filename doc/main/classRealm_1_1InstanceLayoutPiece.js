@@ -5,5 +5,5 @@ var classRealm_1_1InstanceLayoutPiece =
     [ "InstanceLayoutPiece", "classRealm_1_1InstanceLayoutPiece.html#aaab7d51ab1f3d6ee29e430c053f9643c", null ],
     [ "calculate_offset", "classRealm_1_1InstanceLayoutPiece.html#a85e34c49b4afb147cef953c4a7d31975", null ],
     [ "clone", "classRealm_1_1InstanceLayoutPiece.html#af7e8c777236e385e027fd3789785240f", null ],
-    [ "bounds", "classRealm_1_1InstanceLayoutPiece.html#a602ec861c0bc503a9905d52afc485587", null ]
+    [ "bounds", "classRealm_1_1InstanceLayoutPiece.html#afa9c02f059b3cc9c6331487bd572bdae", null ]
 ];

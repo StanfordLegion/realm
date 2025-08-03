@@ -47,12 +47,13 @@ var cuda__internal_8h =
     [ "CHECK_CUDART", "cuda__internal_8h.html#a347bfed4b338a2f3a450278b6bffd903", null ],
     [ "CHECK_CUPTI", "cuda__internal_8h.html#a0eafdb0a44c9bc3de2750ec22974d26d", null ],
     [ "CHECK_NVML", "cuda__internal_8h.html#a07ce36451737fb928ce3ffb973a642b4", null ],
+    [ "CU_GET_PROC_ADDRESS_DEFAULT", "cuda__internal_8h.html#a9b9d1f0d8ea5d539f5972ac5803a453c", null ],
     [ "CUDA_DRIVER_APIS", "cuda__internal_8h.html#a0680682305e7899e824b79c24dcb5e2d", null ],
-    [ "CUDA_DRIVER_APIS_12050", "cuda__internal_8h.html#a5a8b6266410d20e5e393ade45edb6c80", null ],
-    [ "CUDA_DRIVER_APIS_BASE", "cuda__internal_8h.html#a05853759c846bfa16f547f3f74230d11", null ],
     [ "CUDA_DRIVER_FNPTR", "cuda__internal_8h.html#a42b26328691056b53df2f0f277ee9622", null ],
     [ "CUDA_DRIVER_HAS_FNPTR", "cuda__internal_8h.html#a0a0796395b403440948cc2f911e0cd87", null ],
     [ "CUDA_ENABLE_DEPRECATED", "cuda__internal_8h.html#afbf9d7d322c72a1fe0cb4b23d07814bf", null ],
+    [ "CUDA_VERSION_COMPAT", "cuda__internal_8h.html#aa5eeaa29266a174c969a0f24173f5c32", null ],
+    [ "CUDA_VERSION_MIN", "cuda__internal_8h.html#a65df0cdc3c9ec27a015f25adabcaea57", null ],
     [ "CUPTI_APIS", "cuda__internal_8h.html#a9db012d9f01205533fcf7cee4d7bfa2b", null ],
     [ "CUPTI_FNPTR", "cuda__internal_8h.html#a9f35720fe8dea542282800e22467da4e", null ],
     [ "CUPTI_HAS_FNPTR", "cuda__internal_8h.html#af09a82d4b8c11e8e6adc1aed4c54d036", null ],
@@ -68,7 +69,6 @@ var cuda__internal_8h =
     [ "REPORT_CUPTI_ERROR", "cuda__internal_8h.html#a335626e129f6ebabcb7eb8b0f7094170", null ],
     [ "REPORT_NVML_ERROR", "cuda__internal_8h.html#a8632372a7716956c1143a6a18e311c89", null ],
     [ "nvmlIntNvLinkDeviceType_t", "cuda__internal_8h.html#ad3f2b6de76383898e56a4823d7c3a99e", null ],
-    [ "PFN_cuCtxRecordEvent", "cuda__internal_8h.html#a6df9dcfab862f6cddf00f5533267aff8", null ],
     [ "GPUMemcpyKind", "cuda__internal_8h.html#a6938136ba824ee88993d3962a440359a", [
       [ "GPU_MEMCPY_HOST_TO_DEVICE", "cuda__internal_8h.html#a6938136ba824ee88993d3962a440359aa8ae1812ef0b081fb4e78c06713a75430", null ],
       [ "GPU_MEMCPY_DEVICE_TO_HOST", "cuda__internal_8h.html#a6938136ba824ee88993d3962a440359aaa0100411617686f8f8e5751c9e10e28c", null ],
@@ -83,6 +83,7 @@ var cuda__internal_8h =
     ] ],
     [ "cuCtxRecordEvent", "cuda__internal_8h.html#a5cae3cdde8c21f7814b427f0f8f2a984", null ],
     [ "CUDA_DRIVER_APIS", "cuda__internal_8h.html#a66c15905bd7bb0646f7e2cf6a15f130a", null ],
+    [ "cuGetProcAddress", "cuda__internal_8h.html#a5790b53895b13e62b3a9aa524d5168f8", null ],
     [ "nvmlDeviceGetNvLinkRemoteDeviceType", "cuda__internal_8h.html#abb53bd09ad00ea5d8c6243bdf33170b0", null ],
     [ "cuda_module_singleton", "cuda__internal_8h.html#a32a9d24ca05f2256859cdbcba5f4bffc", null ]
 ];

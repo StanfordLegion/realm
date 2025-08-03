@@ -44,7 +44,7 @@
    <!-- BEGIN version select -->
     <br />
     <div class="dropdown">
-     <button class="dropbtn">Version 25.6.1-rc.1+289a756e</button>
+     <button class="dropbtn">Version 25.06.0+1b9dd28c</button>
      <div class="dropdown-content"></div>
     </div>
     <script type="text/javascript" src="../selectversion.js"></script>
@@ -137,77 +137,79 @@ $(document).ready(function(){initNavTree('llvmjit__internal_8h_source.html','');
   <div class="headertitle"><div class="title">llvmjit_internal.h</div></div>
 </div><!--header-->
 <div class="contents">
-<a href="llvmjit__internal_8h.html">Go to the documentation of this file.</a><div class="fragment"><div class="line"><a id="l00001" name="l00001"></a><span class="lineno">    1</span><span class="comment">/* Copyright 2024 Stanford University, NVIDIA Corporation</span></div>
-<div class="line"><a id="l00002" name="l00002"></a><span class="lineno">    2</span><span class="comment"> *</span></div>
-<div class="line"><a id="l00003" name="l00003"></a><span class="lineno">    3</span><span class="comment"> * Licensed under the Apache License, Version 2.0 (the &quot;License&quot;);</span></div>
-<div class="line"><a id="l00004" name="l00004"></a><span class="lineno">    4</span><span class="comment"> * you may not use this file except in compliance with the License.</span></div>
-<div class="line"><a id="l00005" name="l00005"></a><span class="lineno">    5</span><span class="comment"> * You may obtain a copy of the License at</span></div>
-<div class="line"><a id="l00006" name="l00006"></a><span class="lineno">    6</span><span class="comment"> *</span></div>
-<div class="line"><a id="l00007" name="l00007"></a><span class="lineno">    7</span><span class="comment"> *     http://www.apache.org/licenses/LICENSE-2.0</span></div>
+<a href="llvmjit__internal_8h.html">Go to the documentation of this file.</a><div class="fragment"><div class="line"><a id="l00001" name="l00001"></a><span class="lineno">    1</span><span class="comment">/*</span></div>
+<div class="line"><a id="l00002" name="l00002"></a><span class="lineno">    2</span><span class="comment"> * Copyright 2025 Stanford University, NVIDIA Corporation</span></div>
+<div class="line"><a id="l00003" name="l00003"></a><span class="lineno">    3</span><span class="comment"> * SPDX-License-Identifier: Apache-2.0</span></div>
+<div class="line"><a id="l00004" name="l00004"></a><span class="lineno">    4</span><span class="comment"> *</span></div>
+<div class="line"><a id="l00005" name="l00005"></a><span class="lineno">    5</span><span class="comment"> * Licensed under the Apache License, Version 2.0 (the &quot;License&quot;);</span></div>
+<div class="line"><a id="l00006" name="l00006"></a><span class="lineno">    6</span><span class="comment"> * you may not use this file except in compliance with the License.</span></div>
+<div class="line"><a id="l00007" name="l00007"></a><span class="lineno">    7</span><span class="comment"> * You may obtain a copy of the License at</span></div>
 <div class="line"><a id="l00008" name="l00008"></a><span class="lineno">    8</span><span class="comment"> *</span></div>
-<div class="line"><a id="l00009" name="l00009"></a><span class="lineno">    9</span><span class="comment"> * Unless required by applicable law or agreed to in writing, software</span></div>
-<div class="line"><a id="l00010" name="l00010"></a><span class="lineno">   10</span><span class="comment"> * distributed under the License is distributed on an &quot;AS IS&quot; BASIS,</span></div>
-<div class="line"><a id="l00011" name="l00011"></a><span class="lineno">   11</span><span class="comment"> * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.</span></div>
-<div class="line"><a id="l00012" name="l00012"></a><span class="lineno">   12</span><span class="comment"> * See the License for the specific language governing permissions and</span></div>
-<div class="line"><a id="l00013" name="l00013"></a><span class="lineno">   13</span><span class="comment"> * limitations under the License.</span></div>
-<div class="line"><a id="l00014" name="l00014"></a><span class="lineno">   14</span><span class="comment"> */</span></div>
-<div class="line"><a id="l00015" name="l00015"></a><span class="lineno">   15</span> </div>
-<div class="line"><a id="l00016" name="l00016"></a><span class="lineno">   16</span><span class="preprocessor">#ifndef LLVMJIT_INTERNAL_H</span></div>
-<div class="line"><a id="l00017" name="l00017"></a><span class="lineno">   17</span><span class="preprocessor">#define LLVMJIT_INTERNAL_H</span></div>
-<div class="line"><a id="l00018" name="l00018"></a><span class="lineno">   18</span> </div>
-<div class="line"><a id="l00019" name="l00019"></a><span class="lineno">   19</span><span class="preprocessor">#include &quot;<a class="code" href="realm__config_8h.html">realm/realm_config.h</a>&quot;</span></div>
-<div class="line"><a id="l00020" name="l00020"></a><span class="lineno">   20</span><span class="preprocessor">#include &quot;<a class="code" href="bytearray_8h.html">realm/bytearray.h</a>&quot;</span></div>
-<div class="line"><a id="l00021" name="l00021"></a><span class="lineno">   21</span> </div>
-<div class="line"><a id="l00022" name="l00022"></a><span class="lineno">   22</span><span class="preprocessor">#include &lt;string&gt;</span></div>
+<div class="line"><a id="l00009" name="l00009"></a><span class="lineno">    9</span><span class="comment"> *     http://www.apache.org/licenses/LICENSE-2.0</span></div>
+<div class="line"><a id="l00010" name="l00010"></a><span class="lineno">   10</span><span class="comment"> *</span></div>
+<div class="line"><a id="l00011" name="l00011"></a><span class="lineno">   11</span><span class="comment"> * Unless required by applicable law or agreed to in writing, software</span></div>
+<div class="line"><a id="l00012" name="l00012"></a><span class="lineno">   12</span><span class="comment"> * distributed under the License is distributed on an &quot;AS IS&quot; BASIS,</span></div>
+<div class="line"><a id="l00013" name="l00013"></a><span class="lineno">   13</span><span class="comment"> * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.</span></div>
+<div class="line"><a id="l00014" name="l00014"></a><span class="lineno">   14</span><span class="comment"> * See the License for the specific language governing permissions and</span></div>
+<div class="line"><a id="l00015" name="l00015"></a><span class="lineno">   15</span><span class="comment"> * limitations under the License.</span></div>
+<div class="line"><a id="l00016" name="l00016"></a><span class="lineno">   16</span><span class="comment"> */</span></div>
+<div class="line"><a id="l00017" name="l00017"></a><span class="lineno">   17</span> </div>
+<div class="line"><a id="l00018" name="l00018"></a><span class="lineno">   18</span><span class="preprocessor">#ifndef LLVMJIT_INTERNAL_H</span></div>
+<div class="line"><a id="l00019" name="l00019"></a><span class="lineno">   19</span><span class="preprocessor">#define LLVMJIT_INTERNAL_H</span></div>
+<div class="line"><a id="l00020" name="l00020"></a><span class="lineno">   20</span> </div>
+<div class="line"><a id="l00021" name="l00021"></a><span class="lineno">   21</span><span class="preprocessor">#include &quot;<a class="code" href="realm__config_8h.html">realm/realm_config.h</a>&quot;</span></div>
+<div class="line"><a id="l00022" name="l00022"></a><span class="lineno">   22</span><span class="preprocessor">#include &quot;<a class="code" href="bytearray_8h.html">realm/bytearray.h</a>&quot;</span></div>
 <div class="line"><a id="l00023" name="l00023"></a><span class="lineno">   23</span> </div>
-<div class="line"><a id="l00024" name="l00024"></a><span class="lineno">   24</span><span class="comment">// instead of including LLVM headers here, we just forward-declare the things</span></div>
-<div class="line"><a id="l00025" name="l00025"></a><span class="lineno">   25</span><span class="comment">//  that need to appear inside an LLVMJitInternal</span></div>
-<div class="line"><a id="l00026" name="l00026"></a><span class="lineno"><a class="line" href="llvmjit__internal_8h.html#a9c43e01525516ff6b4feab5166c5b1da">   26</a></span><span class="keyword">typedef</span> <span class="keyword">struct </span>LLVMOpaqueContext *<a class="code hl_typedef" href="llvmjit__internal_8h.html#a9c43e01525516ff6b4feab5166c5b1da">LLVMContextRef</a>;</div>
-<div class="line"><a id="l00027" name="l00027"></a><span class="lineno"><a class="line" href="llvmjit__internal_8h.html#a6b6396d4d249f6d63508014b66c3507e">   27</a></span><span class="keyword">typedef</span> <span class="keyword">struct </span>LLVMOpaqueExecutionEngine *<a class="code hl_typedef" href="llvmjit__internal_8h.html#a6b6396d4d249f6d63508014b66c3507e">LLVMExecutionEngineRef</a>;</div>
-<div class="line"><a id="l00028" name="l00028"></a><span class="lineno"><a class="line" href="llvmjit__internal_8h.html#a1ec4bda112ca57f7eb2ac766ce0ca54f">   28</a></span><span class="keyword">typedef</span> <span class="keyword">struct </span>LLVMTarget *<a class="code hl_typedef" href="llvmjit__internal_8h.html#a1ec4bda112ca57f7eb2ac766ce0ca54f">LLVMTargetRef</a>;</div>
-<div class="line"><a id="l00029" name="l00029"></a><span class="lineno">   29</span> </div>
-<div class="line"><a id="l00030" name="l00030"></a><span class="lineno">   30</span><span class="keyword">namespace </span><a class="code hl_namespace" href="namespaceRealm.html">Realm</a> {</div>
-<div class="foldopen" id="foldopen00031" data-start="{" data-end="}">
-<div class="line"><a id="l00031" name="l00031"></a><span class="lineno"><a class="line" href="namespaceRealm_1_1LLVMJit.html">   31</a></span>  <span class="keyword">namespace </span>LLVMJit {</div>
-<div class="line"><a id="l00032" name="l00032"></a><span class="lineno">   32</span> </div>
-<div class="foldopen" id="foldopen00033" data-start="{" data-end="};">
-<div class="line"><a id="l00033" name="l00033"></a><span class="lineno"><a class="line" href="classRealm_1_1LLVMJit_1_1LLVMJitInternal.html">   33</a></span>    <span class="keyword">class </span><a class="code hl_class" href="classRealm_1_1LLVMJit_1_1LLVMJitInternal.html">LLVMJitInternal</a> {</div>
-<div class="line"><a id="l00034" name="l00034"></a><span class="lineno">   34</span>    <span class="keyword">public</span>:</div>
-<div class="line"><a id="l00035" name="l00035"></a><span class="lineno"><a class="line" href="classRealm_1_1LLVMJit_1_1LLVMJitInternal.html#aa63e093e96735b397dd2b555b0a0ef5d">   35</a></span>      <a class="code hl_function" href="classRealm_1_1LLVMJit_1_1LLVMJitInternal.html#aa63e093e96735b397dd2b555b0a0ef5d">LLVMJitInternal</a>(<span class="keywordtype">void</span>);</div>
-<div class="line"><a id="l00036" name="l00036"></a><span class="lineno"><a class="line" href="classRealm_1_1LLVMJit_1_1LLVMJitInternal.html#a527b2cbbf3094cffcafbfe8f969e42d6">   36</a></span>      <a class="code hl_function" href="classRealm_1_1LLVMJit_1_1LLVMJitInternal.html#a527b2cbbf3094cffcafbfe8f969e42d6">~LLVMJitInternal</a>(<span class="keywordtype">void</span>);</div>
-<div class="line"><a id="l00037" name="l00037"></a><span class="lineno">   37</span> </div>
-<div class="line"><a id="l00038" name="l00038"></a><span class="lineno"><a class="line" href="classRealm_1_1LLVMJit_1_1LLVMJitInternal.html#af57fd0742ce969b9ee12d860df54989e">   38</a></span>      <span class="keywordtype">void</span> *<a class="code hl_function" href="classRealm_1_1LLVMJit_1_1LLVMJitInternal.html#af57fd0742ce969b9ee12d860df54989e">llvmir_to_fnptr</a>(<span class="keyword">const</span> <a class="code hl_class" href="classRealm_1_1ByteArray.html">ByteArray</a>&amp; ir, <span class="keyword">const</span> std::string&amp; entry_symbol);</div>
+<div class="line"><a id="l00024" name="l00024"></a><span class="lineno">   24</span><span class="preprocessor">#include &lt;string&gt;</span></div>
+<div class="line"><a id="l00025" name="l00025"></a><span class="lineno">   25</span> </div>
+<div class="line"><a id="l00026" name="l00026"></a><span class="lineno">   26</span><span class="comment">// instead of including LLVM headers here, we just forward-declare the things</span></div>
+<div class="line"><a id="l00027" name="l00027"></a><span class="lineno">   27</span><span class="comment">//  that need to appear inside an LLVMJitInternal</span></div>
+<div class="line"><a id="l00028" name="l00028"></a><span class="lineno"><a class="line" href="llvmjit__internal_8h.html#a9c43e01525516ff6b4feab5166c5b1da">   28</a></span><span class="keyword">typedef</span> <span class="keyword">struct </span>LLVMOpaqueContext *<a class="code hl_typedef" href="llvmjit__internal_8h.html#a9c43e01525516ff6b4feab5166c5b1da">LLVMContextRef</a>;</div>
+<div class="line"><a id="l00029" name="l00029"></a><span class="lineno"><a class="line" href="llvmjit__internal_8h.html#a6b6396d4d249f6d63508014b66c3507e">   29</a></span><span class="keyword">typedef</span> <span class="keyword">struct </span>LLVMOpaqueExecutionEngine *<a class="code hl_typedef" href="llvmjit__internal_8h.html#a6b6396d4d249f6d63508014b66c3507e">LLVMExecutionEngineRef</a>;</div>
+<div class="line"><a id="l00030" name="l00030"></a><span class="lineno"><a class="line" href="llvmjit__internal_8h.html#a1ec4bda112ca57f7eb2ac766ce0ca54f">   30</a></span><span class="keyword">typedef</span> <span class="keyword">struct </span>LLVMTarget *<a class="code hl_typedef" href="llvmjit__internal_8h.html#a1ec4bda112ca57f7eb2ac766ce0ca54f">LLVMTargetRef</a>;</div>
+<div class="line"><a id="l00031" name="l00031"></a><span class="lineno">   31</span> </div>
+<div class="line"><a id="l00032" name="l00032"></a><span class="lineno">   32</span><span class="keyword">namespace </span><a class="code hl_namespace" href="namespaceRealm.html">Realm</a> {</div>
+<div class="foldopen" id="foldopen00033" data-start="{" data-end="}">
+<div class="line"><a id="l00033" name="l00033"></a><span class="lineno"><a class="line" href="namespaceRealm_1_1LLVMJit.html">   33</a></span>  <span class="keyword">namespace </span>LLVMJit {</div>
+<div class="line"><a id="l00034" name="l00034"></a><span class="lineno">   34</span> </div>
+<div class="foldopen" id="foldopen00035" data-start="{" data-end="};">
+<div class="line"><a id="l00035" name="l00035"></a><span class="lineno"><a class="line" href="classRealm_1_1LLVMJit_1_1LLVMJitInternal.html">   35</a></span>    <span class="keyword">class </span><a class="code hl_class" href="classRealm_1_1LLVMJit_1_1LLVMJitInternal.html">LLVMJitInternal</a> {</div>
+<div class="line"><a id="l00036" name="l00036"></a><span class="lineno">   36</span>    <span class="keyword">public</span>:</div>
+<div class="line"><a id="l00037" name="l00037"></a><span class="lineno"><a class="line" href="classRealm_1_1LLVMJit_1_1LLVMJitInternal.html#aa63e093e96735b397dd2b555b0a0ef5d">   37</a></span>      <a class="code hl_function" href="classRealm_1_1LLVMJit_1_1LLVMJitInternal.html#aa63e093e96735b397dd2b555b0a0ef5d">LLVMJitInternal</a>(<span class="keywordtype">void</span>);</div>
+<div class="line"><a id="l00038" name="l00038"></a><span class="lineno"><a class="line" href="classRealm_1_1LLVMJit_1_1LLVMJitInternal.html#a527b2cbbf3094cffcafbfe8f969e42d6">   38</a></span>      <a class="code hl_function" href="classRealm_1_1LLVMJit_1_1LLVMJitInternal.html#a527b2cbbf3094cffcafbfe8f969e42d6">~LLVMJitInternal</a>(<span class="keywordtype">void</span>);</div>
 <div class="line"><a id="l00039" name="l00039"></a><span class="lineno">   39</span> </div>
-<div class="line"><a id="l00040" name="l00040"></a><span class="lineno">   40</span><span class="preprocessor">#ifdef REALM_ALLOW_MISSING_LLVM_LIBS</span></div>
-<div class="line"><a id="l00041" name="l00041"></a><span class="lineno">   41</span>      <span class="keyword">static</span> <span class="keywordtype">bool</span> detect_llvm_libraries(<span class="keywordtype">void</span>);</div>
-<div class="line"><a id="l00042" name="l00042"></a><span class="lineno">   42</span><span class="preprocessor">#endif</span></div>
-<div class="line"><a id="l00043" name="l00043"></a><span class="lineno">   43</span> </div>
-<div class="line"><a id="l00044" name="l00044"></a><span class="lineno">   44</span>    <span class="keyword">protected</span>:</div>
-<div class="line"><a id="l00045" name="l00045"></a><span class="lineno"><a class="line" href="classRealm_1_1LLVMJit_1_1LLVMJitInternal.html#a3b680c6e2916023a41c5b387ab7ed86e">   45</a></span>      <a class="code hl_typedef" href="llvmjit__internal_8h.html#a9c43e01525516ff6b4feab5166c5b1da">LLVMContextRef</a> <a class="code hl_variable" href="classRealm_1_1LLVMJit_1_1LLVMJitInternal.html#a3b680c6e2916023a41c5b387ab7ed86e">context</a>;</div>
-<div class="line"><a id="l00046" name="l00046"></a><span class="lineno"><a class="line" href="classRealm_1_1LLVMJit_1_1LLVMJitInternal.html#abf75c4f124e94b6ebcba760f3c246234">   46</a></span>      <a class="code hl_typedef" href="llvmjit__internal_8h.html#a6b6396d4d249f6d63508014b66c3507e">LLVMExecutionEngineRef</a> <a class="code hl_variable" href="classRealm_1_1LLVMJit_1_1LLVMJitInternal.html#abf75c4f124e94b6ebcba760f3c246234">host_exec_engine</a>;</div>
-<div class="line"><a id="l00047" name="l00047"></a><span class="lineno"><a class="line" href="classRealm_1_1LLVMJit_1_1LLVMJitInternal.html#a09ebf0c1418d2b020270a8a17625debd">   47</a></span>      <a class="code hl_typedef" href="llvmjit__internal_8h.html#a1ec4bda112ca57f7eb2ac766ce0ca54f">LLVMTargetRef</a> <a class="code hl_variable" href="classRealm_1_1LLVMJit_1_1LLVMJitInternal.html#a09ebf0c1418d2b020270a8a17625debd">nvptx_machine</a>;</div>
-<div class="line"><a id="l00048" name="l00048"></a><span class="lineno">   48</span>    };</div>
-</div>
-<div class="line"><a id="l00049" name="l00049"></a><span class="lineno">   49</span> </div>
-<div class="line"><a id="l00050" name="l00050"></a><span class="lineno">   50</span>  }; <span class="comment">// namespace LLVMJit</span></div>
+<div class="line"><a id="l00040" name="l00040"></a><span class="lineno"><a class="line" href="classRealm_1_1LLVMJit_1_1LLVMJitInternal.html#af57fd0742ce969b9ee12d860df54989e">   40</a></span>      <span class="keywordtype">void</span> *<a class="code hl_function" href="classRealm_1_1LLVMJit_1_1LLVMJitInternal.html#af57fd0742ce969b9ee12d860df54989e">llvmir_to_fnptr</a>(<span class="keyword">const</span> <a class="code hl_class" href="classRealm_1_1ByteArray.html">ByteArray</a> &amp;ir, <span class="keyword">const</span> std::string &amp;entry_symbol);</div>
+<div class="line"><a id="l00041" name="l00041"></a><span class="lineno">   41</span> </div>
+<div class="line"><a id="l00042" name="l00042"></a><span class="lineno">   42</span><span class="preprocessor">#ifdef REALM_ALLOW_MISSING_LLVM_LIBS</span></div>
+<div class="line"><a id="l00043" name="l00043"></a><span class="lineno">   43</span>      <span class="keyword">static</span> <span class="keywordtype">bool</span> detect_llvm_libraries(<span class="keywordtype">void</span>);</div>
+<div class="line"><a id="l00044" name="l00044"></a><span class="lineno">   44</span><span class="preprocessor">#endif</span></div>
+<div class="line"><a id="l00045" name="l00045"></a><span class="lineno">   45</span> </div>
+<div class="line"><a id="l00046" name="l00046"></a><span class="lineno">   46</span>    <span class="keyword">protected</span>:</div>
+<div class="line"><a id="l00047" name="l00047"></a><span class="lineno"><a class="line" href="classRealm_1_1LLVMJit_1_1LLVMJitInternal.html#a3b680c6e2916023a41c5b387ab7ed86e">   47</a></span>      <a class="code hl_typedef" href="llvmjit__internal_8h.html#a9c43e01525516ff6b4feab5166c5b1da">LLVMContextRef</a> <a class="code hl_variable" href="classRealm_1_1LLVMJit_1_1LLVMJitInternal.html#a3b680c6e2916023a41c5b387ab7ed86e">context</a>;</div>
+<div class="line"><a id="l00048" name="l00048"></a><span class="lineno"><a class="line" href="classRealm_1_1LLVMJit_1_1LLVMJitInternal.html#abf75c4f124e94b6ebcba760f3c246234">   48</a></span>      <a class="code hl_typedef" href="llvmjit__internal_8h.html#a6b6396d4d249f6d63508014b66c3507e">LLVMExecutionEngineRef</a> <a class="code hl_variable" href="classRealm_1_1LLVMJit_1_1LLVMJitInternal.html#abf75c4f124e94b6ebcba760f3c246234">host_exec_engine</a>;</div>
+<div class="line"><a id="l00049" name="l00049"></a><span class="lineno"><a class="line" href="classRealm_1_1LLVMJit_1_1LLVMJitInternal.html#a09ebf0c1418d2b020270a8a17625debd">   49</a></span>      <a class="code hl_typedef" href="llvmjit__internal_8h.html#a1ec4bda112ca57f7eb2ac766ce0ca54f">LLVMTargetRef</a> <a class="code hl_variable" href="classRealm_1_1LLVMJit_1_1LLVMJitInternal.html#a09ebf0c1418d2b020270a8a17625debd">nvptx_machine</a>;</div>
+<div class="line"><a id="l00050" name="l00050"></a><span class="lineno">   50</span>    };</div>
 </div>
 <div class="line"><a id="l00051" name="l00051"></a><span class="lineno">   51</span> </div>
-<div class="line"><a id="l00052" name="l00052"></a><span class="lineno">   52</span>}; <span class="comment">// namespace Realm</span></div>
+<div class="line"><a id="l00052" name="l00052"></a><span class="lineno">   52</span>  }; <span class="comment">// namespace LLVMJit</span></div>
+</div>
 <div class="line"><a id="l00053" name="l00053"></a><span class="lineno">   53</span> </div>
-<div class="line"><a id="l00054" name="l00054"></a><span class="lineno">   54</span><span class="preprocessor">#endif</span></div>
+<div class="line"><a id="l00054" name="l00054"></a><span class="lineno">   54</span>}; <span class="comment">// namespace Realm</span></div>
+<div class="line"><a id="l00055" name="l00055"></a><span class="lineno">   55</span> </div>
+<div class="line"><a id="l00056" name="l00056"></a><span class="lineno">   56</span><span class="preprocessor">#endif</span></div>
 <div class="ttc" id="abytearray_8h_html"><div class="ttname"><a href="bytearray_8h.html">bytearray.h</a></div></div>
-<div class="ttc" id="aclassRealm_1_1ByteArray_html"><div class="ttname"><a href="classRealm_1_1ByteArray.html">Realm::ByteArray</a></div><div class="ttdef"><b>Definition</b> bytearray.h:51</div></div>
-<div class="ttc" id="aclassRealm_1_1LLVMJit_1_1LLVMJitInternal_html"><div class="ttname"><a href="classRealm_1_1LLVMJit_1_1LLVMJitInternal.html">Realm::LLVMJit::LLVMJitInternal</a></div><div class="ttdef"><b>Definition</b> llvmjit_internal.h:33</div></div>
-<div class="ttc" id="aclassRealm_1_1LLVMJit_1_1LLVMJitInternal_html_a09ebf0c1418d2b020270a8a17625debd"><div class="ttname"><a href="classRealm_1_1LLVMJit_1_1LLVMJitInternal.html#a09ebf0c1418d2b020270a8a17625debd">Realm::LLVMJit::LLVMJitInternal::nvptx_machine</a></div><div class="ttdeci">LLVMTargetRef nvptx_machine</div><div class="ttdef"><b>Definition</b> llvmjit_internal.h:47</div></div>
-<div class="ttc" id="aclassRealm_1_1LLVMJit_1_1LLVMJitInternal_html_a3b680c6e2916023a41c5b387ab7ed86e"><div class="ttname"><a href="classRealm_1_1LLVMJit_1_1LLVMJitInternal.html#a3b680c6e2916023a41c5b387ab7ed86e">Realm::LLVMJit::LLVMJitInternal::context</a></div><div class="ttdeci">LLVMContextRef context</div><div class="ttdef"><b>Definition</b> llvmjit_internal.h:45</div></div>
+<div class="ttc" id="aclassRealm_1_1ByteArray_html"><div class="ttname"><a href="classRealm_1_1ByteArray.html">Realm::ByteArray</a></div><div class="ttdef"><b>Definition</b> bytearray.h:53</div></div>
+<div class="ttc" id="aclassRealm_1_1LLVMJit_1_1LLVMJitInternal_html"><div class="ttname"><a href="classRealm_1_1LLVMJit_1_1LLVMJitInternal.html">Realm::LLVMJit::LLVMJitInternal</a></div><div class="ttdef"><b>Definition</b> llvmjit_internal.h:35</div></div>
+<div class="ttc" id="aclassRealm_1_1LLVMJit_1_1LLVMJitInternal_html_a09ebf0c1418d2b020270a8a17625debd"><div class="ttname"><a href="classRealm_1_1LLVMJit_1_1LLVMJitInternal.html#a09ebf0c1418d2b020270a8a17625debd">Realm::LLVMJit::LLVMJitInternal::nvptx_machine</a></div><div class="ttdeci">LLVMTargetRef nvptx_machine</div><div class="ttdef"><b>Definition</b> llvmjit_internal.h:49</div></div>
+<div class="ttc" id="aclassRealm_1_1LLVMJit_1_1LLVMJitInternal_html_a3b680c6e2916023a41c5b387ab7ed86e"><div class="ttname"><a href="classRealm_1_1LLVMJit_1_1LLVMJitInternal.html#a3b680c6e2916023a41c5b387ab7ed86e">Realm::LLVMJit::LLVMJitInternal::context</a></div><div class="ttdeci">LLVMContextRef context</div><div class="ttdef"><b>Definition</b> llvmjit_internal.h:47</div></div>
 <div class="ttc" id="aclassRealm_1_1LLVMJit_1_1LLVMJitInternal_html_a527b2cbbf3094cffcafbfe8f969e42d6"><div class="ttname"><a href="classRealm_1_1LLVMJit_1_1LLVMJitInternal.html#a527b2cbbf3094cffcafbfe8f969e42d6">Realm::LLVMJit::LLVMJitInternal::~LLVMJitInternal</a></div><div class="ttdeci">~LLVMJitInternal(void)</div></div>
 <div class="ttc" id="aclassRealm_1_1LLVMJit_1_1LLVMJitInternal_html_aa63e093e96735b397dd2b555b0a0ef5d"><div class="ttname"><a href="classRealm_1_1LLVMJit_1_1LLVMJitInternal.html#aa63e093e96735b397dd2b555b0a0ef5d">Realm::LLVMJit::LLVMJitInternal::LLVMJitInternal</a></div><div class="ttdeci">LLVMJitInternal(void)</div></div>
-<div class="ttc" id="aclassRealm_1_1LLVMJit_1_1LLVMJitInternal_html_abf75c4f124e94b6ebcba760f3c246234"><div class="ttname"><a href="classRealm_1_1LLVMJit_1_1LLVMJitInternal.html#abf75c4f124e94b6ebcba760f3c246234">Realm::LLVMJit::LLVMJitInternal::host_exec_engine</a></div><div class="ttdeci">LLVMExecutionEngineRef host_exec_engine</div><div class="ttdef"><b>Definition</b> llvmjit_internal.h:46</div></div>
+<div class="ttc" id="aclassRealm_1_1LLVMJit_1_1LLVMJitInternal_html_abf75c4f124e94b6ebcba760f3c246234"><div class="ttname"><a href="classRealm_1_1LLVMJit_1_1LLVMJitInternal.html#abf75c4f124e94b6ebcba760f3c246234">Realm::LLVMJit::LLVMJitInternal::host_exec_engine</a></div><div class="ttdeci">LLVMExecutionEngineRef host_exec_engine</div><div class="ttdef"><b>Definition</b> llvmjit_internal.h:48</div></div>
 <div class="ttc" id="aclassRealm_1_1LLVMJit_1_1LLVMJitInternal_html_af57fd0742ce969b9ee12d860df54989e"><div class="ttname"><a href="classRealm_1_1LLVMJit_1_1LLVMJitInternal.html#af57fd0742ce969b9ee12d860df54989e">Realm::LLVMJit::LLVMJitInternal::llvmir_to_fnptr</a></div><div class="ttdeci">void * llvmir_to_fnptr(const ByteArray &amp;ir, const std::string &amp;entry_symbol)</div></div>
-<div class="ttc" id="allvmjit__internal_8h_html_a1ec4bda112ca57f7eb2ac766ce0ca54f"><div class="ttname"><a href="llvmjit__internal_8h.html#a1ec4bda112ca57f7eb2ac766ce0ca54f">LLVMTargetRef</a></div><div class="ttdeci">struct LLVMTarget * LLVMTargetRef</div><div class="ttdef"><b>Definition</b> llvmjit_internal.h:28</div></div>
-<div class="ttc" id="allvmjit__internal_8h_html_a6b6396d4d249f6d63508014b66c3507e"><div class="ttname"><a href="llvmjit__internal_8h.html#a6b6396d4d249f6d63508014b66c3507e">LLVMExecutionEngineRef</a></div><div class="ttdeci">struct LLVMOpaqueExecutionEngine * LLVMExecutionEngineRef</div><div class="ttdef"><b>Definition</b> llvmjit_internal.h:27</div></div>
-<div class="ttc" id="allvmjit__internal_8h_html_a9c43e01525516ff6b4feab5166c5b1da"><div class="ttname"><a href="llvmjit__internal_8h.html#a9c43e01525516ff6b4feab5166c5b1da">LLVMContextRef</a></div><div class="ttdeci">struct LLVMOpaqueContext * LLVMContextRef</div><div class="ttdef"><b>Definition</b> llvmjit_internal.h:26</div></div>
-<div class="ttc" id="anamespaceRealm_html"><div class="ttname"><a href="namespaceRealm.html">Realm</a></div><div class="ttdef"><b>Definition</b> activemsg.h:36</div></div>
+<div class="ttc" id="allvmjit__internal_8h_html_a1ec4bda112ca57f7eb2ac766ce0ca54f"><div class="ttname"><a href="llvmjit__internal_8h.html#a1ec4bda112ca57f7eb2ac766ce0ca54f">LLVMTargetRef</a></div><div class="ttdeci">struct LLVMTarget * LLVMTargetRef</div><div class="ttdef"><b>Definition</b> llvmjit_internal.h:30</div></div>
+<div class="ttc" id="allvmjit__internal_8h_html_a6b6396d4d249f6d63508014b66c3507e"><div class="ttname"><a href="llvmjit__internal_8h.html#a6b6396d4d249f6d63508014b66c3507e">LLVMExecutionEngineRef</a></div><div class="ttdeci">struct LLVMOpaqueExecutionEngine * LLVMExecutionEngineRef</div><div class="ttdef"><b>Definition</b> llvmjit_internal.h:29</div></div>
+<div class="ttc" id="allvmjit__internal_8h_html_a9c43e01525516ff6b4feab5166c5b1da"><div class="ttname"><a href="llvmjit__internal_8h.html#a9c43e01525516ff6b4feab5166c5b1da">LLVMContextRef</a></div><div class="ttdeci">struct LLVMOpaqueContext * LLVMContextRef</div><div class="ttdef"><b>Definition</b> llvmjit_internal.h:28</div></div>
+<div class="ttc" id="anamespaceRealm_html"><div class="ttname"><a href="namespaceRealm.html">Realm</a></div><div class="ttdef"><b>Definition</b> activemsg.h:38</div></div>
 <div class="ttc" id="arealm__config_8h_html"><div class="ttname"><a href="realm__config_8h.html">realm_config.h</a></div></div>
 </div><!-- fragment --></div><!-- contents -->
 </div><!-- doc-content -->

@@ -15,7 +15,7 @@ var machine__impl_8h =
     [ "Realm::MemoryBestMemAffinityPredicate", "classRealm_1_1MemoryBestMemAffinityPredicate.html", "classRealm_1_1MemoryBestMemAffinityPredicate" ],
     [ "Realm::MemoryQueryImpl", "classRealm_1_1MemoryQueryImpl.html", "classRealm_1_1MemoryQueryImpl" ],
     [ "MemoryQueryPredicate", "machine__impl_8h.html#af5685ecad651601b884c7805ff713eb6", null ],
-    [ "ProcQueryPredicate", "machine__impl_8h.html#abe51d3d76876678159bdff24584f391d", null ],
+    [ "ProcQueryPredicate", "machine__impl_8h.html#a8679df116d0c6b7c1a0d997fad645c39", null ],
     [ "NodeAnnounceTag", "machine__impl_8h.html#acb10330470b7e869f924ff63eb3e876b", [
       [ "NODE_ANNOUNCE_INVALID", "machine__impl_8h.html#acb10330470b7e869f924ff63eb3e876baed0d8c5b4d3e573b1bec268cd0f7c9b4", null ],
       [ "NODE_ANNOUNCE_PROC", "machine__impl_8h.html#acb10330470b7e869f924ff63eb3e876babc2246b3322dd63b3ac68d701bc208a1", null ],

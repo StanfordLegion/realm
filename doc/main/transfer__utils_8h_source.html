@@ -44,7 +44,7 @@
    <!-- BEGIN version select -->
     <br />
     <div class="dropdown">
-     <button class="dropbtn">Version 25.6.1-rc.1+289a756e</button>
+     <button class="dropbtn">Version 25.06.0+1b9dd28c</button>
      <div class="dropdown-content"></div>
     </div>
     <script type="text/javascript" src="../selectversion.js"></script>
@@ -137,54 +137,56 @@ $(document).ready(function(){initNavTree('transfer__utils_8h_source.html',''); i
   <div class="headertitle"><div class="title">transfer_utils.h</div></div>
 </div><!--header-->
 <div class="contents">
-<a href="transfer__utils_8h.html">Go to the documentation of this file.</a><div class="fragment"><div class="line"><a id="l00001" name="l00001"></a><span class="lineno">    1</span><span class="comment">/* Copyright 2024 Stanford University, NVIDIA Corporation</span></div>
-<div class="line"><a id="l00002" name="l00002"></a><span class="lineno">    2</span><span class="comment"> *</span></div>
-<div class="line"><a id="l00003" name="l00003"></a><span class="lineno">    3</span><span class="comment"> * Licensed under the Apache License, Version 2.0 (the &quot;License&quot;);</span></div>
-<div class="line"><a id="l00004" name="l00004"></a><span class="lineno">    4</span><span class="comment"> * you may not use this file except in compliance with the License.</span></div>
-<div class="line"><a id="l00005" name="l00005"></a><span class="lineno">    5</span><span class="comment"> * You may obtain a copy of the License at</span></div>
-<div class="line"><a id="l00006" name="l00006"></a><span class="lineno">    6</span><span class="comment"> *</span></div>
-<div class="line"><a id="l00007" name="l00007"></a><span class="lineno">    7</span><span class="comment"> *     http://www.apache.org/licenses/LICENSE-2.0</span></div>
+<a href="transfer__utils_8h.html">Go to the documentation of this file.</a><div class="fragment"><div class="line"><a id="l00001" name="l00001"></a><span class="lineno">    1</span><span class="comment">/*</span></div>
+<div class="line"><a id="l00002" name="l00002"></a><span class="lineno">    2</span><span class="comment"> * Copyright 2025 Stanford University, NVIDIA Corporation</span></div>
+<div class="line"><a id="l00003" name="l00003"></a><span class="lineno">    3</span><span class="comment"> * SPDX-License-Identifier: Apache-2.0</span></div>
+<div class="line"><a id="l00004" name="l00004"></a><span class="lineno">    4</span><span class="comment"> *</span></div>
+<div class="line"><a id="l00005" name="l00005"></a><span class="lineno">    5</span><span class="comment"> * Licensed under the Apache License, Version 2.0 (the &quot;License&quot;);</span></div>
+<div class="line"><a id="l00006" name="l00006"></a><span class="lineno">    6</span><span class="comment"> * you may not use this file except in compliance with the License.</span></div>
+<div class="line"><a id="l00007" name="l00007"></a><span class="lineno">    7</span><span class="comment"> * You may obtain a copy of the License at</span></div>
 <div class="line"><a id="l00008" name="l00008"></a><span class="lineno">    8</span><span class="comment"> *</span></div>
-<div class="line"><a id="l00009" name="l00009"></a><span class="lineno">    9</span><span class="comment"> * Unless required by applicable law or agreed to in writing, software</span></div>
-<div class="line"><a id="l00010" name="l00010"></a><span class="lineno">   10</span><span class="comment"> * distributed under the License is distributed on an &quot;AS IS&quot; BASIS,</span></div>
-<div class="line"><a id="l00011" name="l00011"></a><span class="lineno">   11</span><span class="comment"> * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.</span></div>
-<div class="line"><a id="l00012" name="l00012"></a><span class="lineno">   12</span><span class="comment"> * See the License for the specific language governing permissions and</span></div>
-<div class="line"><a id="l00013" name="l00013"></a><span class="lineno">   13</span><span class="comment"> * limitations under the License.</span></div>
-<div class="line"><a id="l00014" name="l00014"></a><span class="lineno">   14</span><span class="comment"> */</span></div>
-<div class="line"><a id="l00015" name="l00015"></a><span class="lineno">   15</span> </div>
-<div class="line"><a id="l00016" name="l00016"></a><span class="lineno">   16</span><span class="preprocessor">#ifndef REALM_TRANSFER_UTILS_H</span></div>
-<div class="line"><a id="l00017" name="l00017"></a><span class="lineno">   17</span><span class="preprocessor">#define REALM_TRANSFER_UTILS_H</span></div>
-<div class="line"><a id="l00018" name="l00018"></a><span class="lineno">   18</span> </div>
-<div class="line"><a id="l00019" name="l00019"></a><span class="lineno">   19</span><span class="preprocessor">#include &quot;<a class="code" href="point_8h.html">realm/point.h</a>&quot;</span></div>
+<div class="line"><a id="l00009" name="l00009"></a><span class="lineno">    9</span><span class="comment"> *     http://www.apache.org/licenses/LICENSE-2.0</span></div>
+<div class="line"><a id="l00010" name="l00010"></a><span class="lineno">   10</span><span class="comment"> *</span></div>
+<div class="line"><a id="l00011" name="l00011"></a><span class="lineno">   11</span><span class="comment"> * Unless required by applicable law or agreed to in writing, software</span></div>
+<div class="line"><a id="l00012" name="l00012"></a><span class="lineno">   12</span><span class="comment"> * distributed under the License is distributed on an &quot;AS IS&quot; BASIS,</span></div>
+<div class="line"><a id="l00013" name="l00013"></a><span class="lineno">   13</span><span class="comment"> * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.</span></div>
+<div class="line"><a id="l00014" name="l00014"></a><span class="lineno">   14</span><span class="comment"> * See the License for the specific language governing permissions and</span></div>
+<div class="line"><a id="l00015" name="l00015"></a><span class="lineno">   15</span><span class="comment"> * limitations under the License.</span></div>
+<div class="line"><a id="l00016" name="l00016"></a><span class="lineno">   16</span><span class="comment"> */</span></div>
+<div class="line"><a id="l00017" name="l00017"></a><span class="lineno">   17</span> </div>
+<div class="line"><a id="l00018" name="l00018"></a><span class="lineno">   18</span><span class="preprocessor">#ifndef REALM_TRANSFER_UTILS_H</span></div>
+<div class="line"><a id="l00019" name="l00019"></a><span class="lineno">   19</span><span class="preprocessor">#define REALM_TRANSFER_UTILS_H</span></div>
 <div class="line"><a id="l00020" name="l00020"></a><span class="lineno">   20</span> </div>
-<div class="line"><a id="l00021" name="l00021"></a><span class="lineno">   21</span><span class="keyword">namespace </span><a class="code hl_namespace" href="namespaceRealm.html">Realm</a> {</div>
-<div class="line"><a id="l00022" name="l00022"></a><span class="lineno">   22</span>  <span class="comment">// finds the largest subrectangle of &#39;domain&#39; that starts with &#39;start&#39;,</span></div>
-<div class="line"><a id="l00023" name="l00023"></a><span class="lineno">   23</span>  <span class="comment">//  lies entirely within &#39;restriction&#39;, and is consistent with an iteration</span></div>
-<div class="line"><a id="l00024" name="l00024"></a><span class="lineno">   24</span>  <span class="comment">//  order (over the original &#39;domain&#39;) of &#39;dim_order&#39;</span></div>
-<div class="line"><a id="l00025" name="l00025"></a><span class="lineno">   25</span>  <span class="comment">// the subrectangle is returned in &#39;subrect&#39;, the start of the next subrect</span></div>
-<div class="line"><a id="l00026" name="l00026"></a><span class="lineno">   26</span>  <span class="comment">//  is in &#39;next_start&#39;, and the return value indicates whether the &#39;domain&#39;</span></div>
-<div class="line"><a id="l00027" name="l00027"></a><span class="lineno">   27</span>  <span class="comment">//  has been fully covered</span></div>
-<div class="line"><a id="l00028" name="l00028"></a><span class="lineno">   28</span>  <span class="keyword">template</span> &lt;<span class="keywordtype">int</span> N, <span class="keyword">typename</span> T&gt;</div>
-<div class="line"><a id="l00029" name="l00029"></a><span class="lineno"><a class="line" href="namespaceRealm.html#aa8847e3eef24a3f67765318bdf2ca9d6">   29</a></span>  <span class="keywordtype">bool</span> <a class="code hl_function" href="namespaceRealm.html#aa8847e3eef24a3f67765318bdf2ca9d6">next_subrect</a>(<span class="keyword">const</span> <a class="code hl_struct" href="structRealm_1_1Rect.html">Rect&lt;N, T&gt;</a> &amp;domain, <span class="keyword">const</span> <a class="code hl_struct" href="structRealm_1_1Point.html">Point&lt;N, T&gt;</a> &amp;start,</div>
-<div class="line"><a id="l00030" name="l00030"></a><span class="lineno">   30</span>                    <span class="keyword">const</span> <a class="code hl_struct" href="structRealm_1_1Rect.html">Rect&lt;N, T&gt;</a> &amp;restriction, <span class="keyword">const</span> <span class="keywordtype">int</span> *dim_order,</div>
-<div class="line"><a id="l00031" name="l00031"></a><span class="lineno">   31</span>                    <a class="code hl_struct" href="structRealm_1_1Rect.html">Rect&lt;N, T&gt;</a> &amp;subrect, <a class="code hl_struct" href="structRealm_1_1Point.html">Point&lt;N, T&gt;</a> &amp;next_start);</div>
-<div class="line"><a id="l00032" name="l00032"></a><span class="lineno">   32</span> </div>
-<div class="line"><a id="l00044" name="l00044"></a><span class="lineno">   44</span>  <span class="keyword">template</span> &lt;<span class="keywordtype">int</span> N, <span class="keyword">typename</span> T&gt;</div>
-<div class="line"><a id="l00045" name="l00045"></a><span class="lineno"><a class="line" href="namespaceRealm.html#a07e1d9fa43445572de98ccefc7794582">   45</a></span>  <span class="keywordtype">bool</span> <a class="code hl_function" href="namespaceRealm.html#a07e1d9fa43445572de98ccefc7794582">compute_target_subrect</a>(<span class="keyword">const</span> <a class="code hl_struct" href="structRealm_1_1Rect.html">Rect&lt;N, T&gt;</a> &amp;layout_bounds, <span class="keyword">const</span> <a class="code hl_struct" href="structRealm_1_1Rect.html">Rect&lt;N, T&gt;</a> &amp;cur_rect,</div>
-<div class="line"><a id="l00046" name="l00046"></a><span class="lineno">   46</span>                              <a class="code hl_struct" href="structRealm_1_1Point.html">Point&lt;N, T&gt;</a> &amp;cur_point, <a class="code hl_struct" href="structRealm_1_1Rect.html">Rect&lt;N, T&gt;</a> &amp;target_subrect,</div>
-<div class="line"><a id="l00047" name="l00047"></a><span class="lineno">   47</span>                              <span class="keyword">const</span> <span class="keywordtype">int</span> *dim_order);</div>
-<div class="line"><a id="l00048" name="l00048"></a><span class="lineno">   48</span> </div>
-<div class="line"><a id="l00049" name="l00049"></a><span class="lineno">   49</span>} <span class="comment">// namespace Realm</span></div>
+<div class="line"><a id="l00021" name="l00021"></a><span class="lineno">   21</span><span class="preprocessor">#include &quot;<a class="code" href="point_8h.html">realm/point.h</a>&quot;</span></div>
+<div class="line"><a id="l00022" name="l00022"></a><span class="lineno">   22</span> </div>
+<div class="line"><a id="l00023" name="l00023"></a><span class="lineno">   23</span><span class="keyword">namespace </span><a class="code hl_namespace" href="namespaceRealm.html">Realm</a> {</div>
+<div class="line"><a id="l00024" name="l00024"></a><span class="lineno">   24</span>  <span class="comment">// finds the largest subrectangle of &#39;domain&#39; that starts with &#39;start&#39;,</span></div>
+<div class="line"><a id="l00025" name="l00025"></a><span class="lineno">   25</span>  <span class="comment">//  lies entirely within &#39;restriction&#39;, and is consistent with an iteration</span></div>
+<div class="line"><a id="l00026" name="l00026"></a><span class="lineno">   26</span>  <span class="comment">//  order (over the original &#39;domain&#39;) of &#39;dim_order&#39;</span></div>
+<div class="line"><a id="l00027" name="l00027"></a><span class="lineno">   27</span>  <span class="comment">// the subrectangle is returned in &#39;subrect&#39;, the start of the next subrect</span></div>
+<div class="line"><a id="l00028" name="l00028"></a><span class="lineno">   28</span>  <span class="comment">//  is in &#39;next_start&#39;, and the return value indicates whether the &#39;domain&#39;</span></div>
+<div class="line"><a id="l00029" name="l00029"></a><span class="lineno">   29</span>  <span class="comment">//  has been fully covered</span></div>
+<div class="line"><a id="l00030" name="l00030"></a><span class="lineno">   30</span>  <span class="keyword">template</span> &lt;<span class="keywordtype">int</span> N, <span class="keyword">typename</span> T&gt;</div>
+<div class="line"><a id="l00031" name="l00031"></a><span class="lineno"><a class="line" href="namespaceRealm.html#aa8847e3eef24a3f67765318bdf2ca9d6">   31</a></span>  <span class="keywordtype">bool</span> <a class="code hl_function" href="namespaceRealm.html#aa8847e3eef24a3f67765318bdf2ca9d6">next_subrect</a>(<span class="keyword">const</span> <a class="code hl_struct" href="structRealm_1_1Rect.html">Rect&lt;N, T&gt;</a> &amp;domain, <span class="keyword">const</span> <a class="code hl_struct" href="structRealm_1_1Point.html">Point&lt;N, T&gt;</a> &amp;start,</div>
+<div class="line"><a id="l00032" name="l00032"></a><span class="lineno">   32</span>                    <span class="keyword">const</span> <a class="code hl_struct" href="structRealm_1_1Rect.html">Rect&lt;N, T&gt;</a> &amp;restriction, <span class="keyword">const</span> <span class="keywordtype">int</span> *dim_order,</div>
+<div class="line"><a id="l00033" name="l00033"></a><span class="lineno">   33</span>                    <a class="code hl_struct" href="structRealm_1_1Rect.html">Rect&lt;N, T&gt;</a> &amp;subrect, <a class="code hl_struct" href="structRealm_1_1Point.html">Point&lt;N, T&gt;</a> &amp;next_start);</div>
+<div class="line"><a id="l00034" name="l00034"></a><span class="lineno">   34</span> </div>
+<div class="line"><a id="l00046" name="l00046"></a><span class="lineno">   46</span>  <span class="keyword">template</span> &lt;<span class="keywordtype">int</span> N, <span class="keyword">typename</span> T&gt;</div>
+<div class="line"><a id="l00047" name="l00047"></a><span class="lineno"><a class="line" href="namespaceRealm.html#a07e1d9fa43445572de98ccefc7794582">   47</a></span>  <span class="keywordtype">bool</span> <a class="code hl_function" href="namespaceRealm.html#a07e1d9fa43445572de98ccefc7794582">compute_target_subrect</a>(<span class="keyword">const</span> <a class="code hl_struct" href="structRealm_1_1Rect.html">Rect&lt;N, T&gt;</a> &amp;layout_bounds, <span class="keyword">const</span> <a class="code hl_struct" href="structRealm_1_1Rect.html">Rect&lt;N, T&gt;</a> &amp;cur_rect,</div>
+<div class="line"><a id="l00048" name="l00048"></a><span class="lineno">   48</span>                              <a class="code hl_struct" href="structRealm_1_1Point.html">Point&lt;N, T&gt;</a> &amp;cur_point, <a class="code hl_struct" href="structRealm_1_1Rect.html">Rect&lt;N, T&gt;</a> &amp;target_subrect,</div>
+<div class="line"><a id="l00049" name="l00049"></a><span class="lineno">   49</span>                              <span class="keyword">const</span> <span class="keywordtype">int</span> *dim_order);</div>
 <div class="line"><a id="l00050" name="l00050"></a><span class="lineno">   50</span> </div>
-<div class="line"><a id="l00051" name="l00051"></a><span class="lineno">   51</span><span class="preprocessor">#include &quot;realm/transfer/transfer_utils.inl&quot;</span></div>
+<div class="line"><a id="l00051" name="l00051"></a><span class="lineno">   51</span>} <span class="comment">// namespace Realm</span></div>
 <div class="line"><a id="l00052" name="l00052"></a><span class="lineno">   52</span> </div>
-<div class="line"><a id="l00053" name="l00053"></a><span class="lineno">   53</span><span class="preprocessor">#endif</span></div>
-<div class="ttc" id="anamespaceRealm_html"><div class="ttname"><a href="namespaceRealm.html">Realm</a></div><div class="ttdef"><b>Definition</b> activemsg.h:36</div></div>
+<div class="line"><a id="l00053" name="l00053"></a><span class="lineno">   53</span><span class="preprocessor">#include &quot;realm/transfer/transfer_utils.inl&quot;</span></div>
+<div class="line"><a id="l00054" name="l00054"></a><span class="lineno">   54</span> </div>
+<div class="line"><a id="l00055" name="l00055"></a><span class="lineno">   55</span><span class="preprocessor">#endif</span></div>
+<div class="ttc" id="anamespaceRealm_html"><div class="ttname"><a href="namespaceRealm.html">Realm</a></div><div class="ttdef"><b>Definition</b> activemsg.h:38</div></div>
 <div class="ttc" id="anamespaceRealm_html_a07e1d9fa43445572de98ccefc7794582"><div class="ttname"><a href="namespaceRealm.html#a07e1d9fa43445572de98ccefc7794582">Realm::compute_target_subrect</a></div><div class="ttdeci">bool compute_target_subrect(const Rect&lt; N, T &gt; &amp;layout_bounds, const Rect&lt; N, T &gt; &amp;cur_rect, Point&lt; N, T &gt; &amp;cur_point, Rect&lt; N, T &gt; &amp;target_subrect, const int *dim_order)</div></div>
 <div class="ttc" id="anamespaceRealm_html_aa8847e3eef24a3f67765318bdf2ca9d6"><div class="ttname"><a href="namespaceRealm.html#aa8847e3eef24a3f67765318bdf2ca9d6">Realm::next_subrect</a></div><div class="ttdeci">bool next_subrect(const Rect&lt; N, T &gt; &amp;domain, const Point&lt; N, T &gt; &amp;start, const Rect&lt; N, T &gt; &amp;restriction, const int *dim_order, Rect&lt; N, T &gt; &amp;subrect, Point&lt; N, T &gt; &amp;next_start)</div></div>
 <div class="ttc" id="apoint_8h_html"><div class="ttname"><a href="point_8h.html">point.h</a></div></div>
-<div class="ttc" id="astructRealm_1_1Point_html"><div class="ttname"><a href="structRealm_1_1Point.html">Realm::Point</a></div><div class="ttdef"><b>Definition</b> point.h:53</div></div>
-<div class="ttc" id="astructRealm_1_1Rect_html"><div class="ttname"><a href="structRealm_1_1Rect.html">Realm::Rect</a></div><div class="ttdef"><b>Definition</b> point.h:141</div></div>
+<div class="ttc" id="astructRealm_1_1Point_html"><div class="ttname"><a href="structRealm_1_1Point.html">Realm::Point</a></div><div class="ttdef"><b>Definition</b> point.h:55</div></div>
+<div class="ttc" id="astructRealm_1_1Rect_html"><div class="ttname"><a href="structRealm_1_1Rect.html">Realm::Rect</a></div><div class="ttdef"><b>Definition</b> point.h:143</div></div>
 </div><!-- fragment --></div><!-- contents -->
 </div><!-- doc-content -->
 <!-- HTML footer for doxygen 1.9.1-->

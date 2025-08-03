@@ -44,7 +44,7 @@
    <!-- BEGIN version select -->
     <br />
     <div class="dropdown">
-     <button class="dropbtn">Version 25.6.1-rc.1+289a756e</button>
+     <button class="dropbtn">Version 25.06.0+1b9dd28c</button>
      <div class="dropdown-content"></div>
     </div>
     <script type="text/javascript" src="../selectversion.js"></script>
@@ -167,8 +167,8 @@ template&lt;typename _HEAD , typename _TAIL &gt; </div>
   </tr>
 </table>
 </div><div class="memdoc">
-<b>Initial value:</b><div class="fragment"><div class="line">= <span class="keyword">sizeof</span>(_HEAD) &lt; _TAIL::MaxSize::value ?</div>
-<div class="line">          _TAIL::MaxSize::value : sizeof(_HEAD)</div>
+<b>Initial value:</b><div class="fragment"><div class="line">=</div>
+<div class="line">            <span class="keyword">sizeof</span>(_HEAD) &lt; _TAIL::MaxSize::value ? _TAIL::MaxSize::value : sizeof(_HEAD)</div>
 </div><!-- fragment -->
 </div>
 </div>

@@ -24,7 +24,7 @@ var classRealm_1_1MultiAffineAccessor =
     [ "operator", "classRealm_1_1MultiAffineAccessor.html#a078e0421e1a8392155276e4ce754d990", null ],
     [ "field_offset", "classRealm_1_1MultiAffineAccessor.html#acdf524ac97d9d5b01d1466f1a5f92051", null ],
     [ "piece_base", "classRealm_1_1MultiAffineAccessor.html#a47c78f6b826b74404fa009494b0ce956", null ],
-    [ "piece_bounds", "classRealm_1_1MultiAffineAccessor.html#af056772f4065cc877b794716e83552df", null ],
+    [ "piece_bounds", "classRealm_1_1MultiAffineAccessor.html#aded193c84967fe37ad275350b4fa5d53", null ],
     [ "piece_strides", "classRealm_1_1MultiAffineAccessor.html#a2aad6a7103082714196adeea44a57ac0", null ],
     [ "piece_valid", "classRealm_1_1MultiAffineAccessor.html#a99067eff4dd602448a76637032dacdf2", null ],
     [ "start_inst", "classRealm_1_1MultiAffineAccessor.html#a9adece466c412ac98b2f8c36bb166c91", null ]

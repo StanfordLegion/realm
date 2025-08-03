@@ -44,7 +44,7 @@
    <!-- BEGIN version select -->
     <br />
     <div class="dropdown">
-     <button class="dropbtn">Version 25.6.1-rc.1+289a756e</button>
+     <button class="dropbtn">Version 25.06.0+1b9dd28c</button>
      <div class="dropdown-content"></div>
     </div>
     <script type="text/javascript" src="../selectversion.js"></script>
@@ -152,7 +152,7 @@ $(document).ready(function(){initNavTree('hip__internal_8h.html',''); initResiza
 </div><div class="textblock"><div class="dynheader">
 Include dependency graph for hip_internal.h:</div>
 <div class="dyncontent">
-<div class="center"><!-- SVG 0 --></div>
+<div class="center"><iframe scrolling="no" frameborder="0" src="hip__internal_8h__incl.svg" width="4180" height="799"><p><b>This browser is not able to show SVG: try Firefox, Chrome, Safari, or Opera instead.</b></p></iframe></div>
 </div>
 </div>
 <p><a href="hip__internal_8h_source.html">Go to the source code of this file.</a></p>
@@ -280,14 +280,14 @@ Variables</h2></td></tr>
         </tr>
       </table>
 </div><div class="memdoc">
-<b>Value:</b><div class="fragment"><div class="line">  <span class="keywordflow">do</span> { \</div>
-<div class="line">  hipError_t ret = (cmd); \</div>
-<div class="line">  if(ret != hipSuccess) { \</div>
-<div class="line">    fprintf(stderr, <span class="stringliteral">&quot;HIP: %s = %d (%s)\n&quot;</span>, #cmd, ret, hipGetErrorString(ret)); \</div>
-<div class="line">    assert(0); \</div>
-<div class="line">    exit(1); \</div>
-<div class="line">  } \</div>
-<div class="line">} <span class="keywordflow">while</span>(0)</div>
+<b>Value:</b><div class="fragment"><div class="line">  <span class="keywordflow">do</span> {                                                                                   \</div>
+<div class="line">    hipError_t ret = (cmd);                                                              \</div>
+<div class="line">    if(ret != hipSuccess) {                                                              \</div>
+<div class="line">      fprintf(stderr, <span class="stringliteral">&quot;HIP: %s = %d (%s)\n&quot;</span>, #cmd, ret, hipGetErrorString(ret));         \</div>
+<div class="line">      assert(0);                                                                         \</div>
+<div class="line">      exit(1);                                                                           \</div>
+<div class="line">    }                                                                                    \</div>
+<div class="line">  } <span class="keywordflow">while</span>(0)</div>
 </div><!-- fragment -->
 </div>
 </div>
@@ -306,11 +306,11 @@ Variables</h2></td></tr>
         </tr>
       </table>
 </div><div class="memdoc">
-<b>Value:</b><div class="fragment"><div class="line">  <span class="keywordflow">do</span> {                      \</div>
-<div class="line">  hipError_t ret = (cmd); \</div>
-<div class="line">  if(ret != hipSuccess) <a class="code hl_define" href="hip__internal_8h.html#a6e45146997a4be05508065bef1338d8c">REPORT_HIP_ERROR</a>(#cmd, ret); \</div>
-<div class="line">} <span class="keywordflow">while</span>(0)</div>
-<div class="ttc" id="ahip__internal_8h_html_a6e45146997a4be05508065bef1338d8c"><div class="ttname"><a href="hip__internal_8h.html#a6e45146997a4be05508065bef1338d8c">REPORT_HIP_ERROR</a></div><div class="ttdeci">#define REPORT_HIP_ERROR(cmd, ret)</div><div class="ttdef"><b>Definition</b> hip_internal.h:43</div></div>
+<b>Value:</b><div class="fragment"><div class="line">  <span class="keywordflow">do</span> {                                                                                   \</div>
+<div class="line">    hipError_t ret = (cmd);                                                              \</div>
+<div class="line">    if(ret != hipSuccess)                                                                \</div>
+<div class="line">      REPORT_HIP_ERROR(#cmd, ret);                                                       \</div>
+<div class="line">  } <span class="keywordflow">while</span>(0)</div>
 </div><!-- fragment -->
 </div>
 </div>
@@ -339,12 +339,12 @@ Variables</h2></td></tr>
         </tr>
       </table>
 </div><div class="memdoc">
-<b>Value:</b><div class="fragment"><div class="line">  <span class="keywordflow">do</span> { \</div>
-<div class="line">    <span class="keyword">const</span> <span class="keywordtype">char</span> *name, *str; \</div>
-<div class="line">    name = hipGetErrorName(ret); \</div>
-<div class="line">    str = hipGetErrorString(ret); \</div>
-<div class="line">    fprintf(stderr, <span class="stringliteral">&quot;HIP: %s = %d (%s): %s\n&quot;</span>, cmd, ret, name, str); \</div>
-<div class="line">    abort(); \</div>
+<b>Value:</b><div class="fragment"><div class="line">  <span class="keywordflow">do</span> {                                                                                   \</div>
+<div class="line">    <span class="keyword">const</span> <span class="keywordtype">char</span> *name, *str;                                                              \</div>
+<div class="line">    name = hipGetErrorName(ret);                                                         \</div>
+<div class="line">    str = hipGetErrorString(ret);                                                        \</div>
+<div class="line">    fprintf(stderr, <span class="stringliteral">&quot;HIP: %s = %d (%s): %s\n&quot;</span>, cmd, ret, name, str);                     \</div>
+<div class="line">    abort();                                                                             \</div>
 <div class="line">  } <span class="keywordflow">while</span>(0)</div>
 </div><!-- fragment -->
 </div>

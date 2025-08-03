@@ -44,7 +44,7 @@
    <!-- BEGIN version select -->
     <br />
     <div class="dropdown">
-     <button class="dropbtn">Version 25.6.1-rc.1+289a756e</button>
+     <button class="dropbtn">Version 25.06.0+1b9dd28c</button>
      <div class="dropdown-content"></div>
     </div>
     <script type="text/javascript" src="../selectversion.js"></script>
@@ -138,7 +138,7 @@ $(document).ready(function(){initNavTree('bootstrap__util_8h.html',''); initResi
 </div><div class="textblock"><div class="dynheader">
 Include dependency graph for bootstrap_util.h:</div>
 <div class="dyncontent">
-<div class="center"><!-- SVG 0 --></div>
+<div class="center"><iframe scrolling="no" frameborder="0" src="bootstrap__util_8h__incl.svg" width="232" height="139"><p><b>This browser is not able to show SVG: try Firefox, Chrome, Safari, or Opera instead.</b></p></iframe></div>
 </div>
 </div>
 <p><a href="bootstrap__util_8h_source.html">Go to the source code of this file.</a></p>
@@ -170,10 +170,10 @@ Macros</h2></td></tr>
         </tr>
       </table>
 </div><div class="memdoc">
-<b>Value:</b><div class="fragment"><div class="line">  <span class="keywordflow">do</span> {                                                               \</div>
-<div class="line">    fprintf(stderr, <span class="stringliteral">&quot;%s:%s:%d: &quot;</span>, __FILE__, __FUNCTION__, __LINE__); \</div>
-<div class="line">    fprintf(stderr, __VA_ARGS__);                                    \</div>
-<div class="line">  } <span class="keywordflow">while</span> (0)</div>
+<b>Value:</b><div class="fragment"><div class="line">  <span class="keywordflow">do</span> {                                                                                   \</div>
+<div class="line">    fprintf(stderr, <span class="stringliteral">&quot;%s:%s:%d: &quot;</span>, __FILE__, __FUNCTION__, __LINE__);                     \</div>
+<div class="line">    fprintf(stderr, __VA_ARGS__);                                                        \</div>
+<div class="line">  } <span class="keywordflow">while</span>(0)</div>
 </div><!-- fragment -->
 </div>
 </div>
@@ -220,14 +220,14 @@ Macros</h2></td></tr>
         </tr>
       </table>
 </div><div class="memdoc">
-<b>Value:</b><div class="fragment"><div class="line">  <span class="keywordflow">do</span> {                                                                            \</div>
-<div class="line">    if (status != expected) {                                                     \</div>
-<div class="line">      fprintf(stderr, <span class="stringliteral">&quot;%s:%d: non-zero status: %d &quot;</span>, __FILE__, __LINE__, status); \</div>
-<div class="line">      fprintf(stderr, __VA_ARGS__);                                               \</div>
-<div class="line">      status = err;                                                               \</div>
-<div class="line">      <span class="keywordflow">goto</span> label;                                                                 \</div>
-<div class="line">    }                                                                             \</div>
-<div class="line">  } <span class="keywordflow">while</span> (0)</div>
+<b>Value:</b><div class="fragment"><div class="line">  <span class="keywordflow">do</span> {                                                                                   \</div>
+<div class="line">    if(status != expected) {                                                             \</div>
+<div class="line">      fprintf(stderr, <span class="stringliteral">&quot;%s:%d: non-zero status: %d &quot;</span>, __FILE__, __LINE__, status);        \</div>
+<div class="line">      fprintf(stderr, __VA_ARGS__);                                                      \</div>
+<div class="line">      status = err;                                                                      \</div>
+<div class="line">      <span class="keywordflow">goto</span> label;                                                                        \</div>
+<div class="line">    }                                                                                    \</div>
+<div class="line">  } <span class="keywordflow">while</span>(0)</div>
 </div><!-- fragment -->
 </div>
 </div>
@@ -274,14 +274,14 @@ Macros</h2></td></tr>
         </tr>
       </table>
 </div><div class="memdoc">
-<b>Value:</b><div class="fragment"><div class="line">  <span class="keywordflow">do</span> {                                                           \</div>
-<div class="line">    if (var == NULL) {                                           \</div>
-<div class="line">      fprintf(stderr, <span class="stringliteral">&quot;%s:%d: NULL value &quot;</span>, __FILE__, __LINE__); \</div>
-<div class="line">      fprintf(stderr, __VA_ARGS__);                              \</div>
-<div class="line">      status = err;                                              \</div>
-<div class="line">      <span class="keywordflow">goto</span> label;                                                \</div>
-<div class="line">    }                                                            \</div>
-<div class="line">  } <span class="keywordflow">while</span> (0)</div>
+<b>Value:</b><div class="fragment"><div class="line">  <span class="keywordflow">do</span> {                                                                                   \</div>
+<div class="line">    if(var == NULL) {                                                                    \</div>
+<div class="line">      fprintf(stderr, <span class="stringliteral">&quot;%s:%d: NULL value &quot;</span>, __FILE__, __LINE__);                         \</div>
+<div class="line">      fprintf(stderr, __VA_ARGS__);                                                      \</div>
+<div class="line">      status = err;                                                                      \</div>
+<div class="line">      <span class="keywordflow">goto</span> label;                                                                        \</div>
+<div class="line">    }                                                                                    \</div>
+<div class="line">  } <span class="keywordflow">while</span>(0)</div>
 </div><!-- fragment -->
 </div>
 </div>
@@ -322,14 +322,14 @@ Macros</h2></td></tr>
         </tr>
       </table>
 </div><div class="memdoc">
-<b>Value:</b><div class="fragment"><div class="line">  <span class="keywordflow">do</span> {                                                                            \</div>
-<div class="line">    if (status != 0) {                                                            \</div>
-<div class="line">      fprintf(stderr, <span class="stringliteral">&quot;%s:%d: non-zero status: %d &quot;</span>, __FILE__, __LINE__, status); \</div>
-<div class="line">      fprintf(stderr, __VA_ARGS__);                                               \</div>
-<div class="line">      status = err;                                                               \</div>
-<div class="line">      <span class="keywordflow">goto</span> label;                                                                 \</div>
-<div class="line">    }                                                                             \</div>
-<div class="line">  } <span class="keywordflow">while</span> (0)</div>
+<b>Value:</b><div class="fragment"><div class="line">  <span class="keywordflow">do</span> {                                                                                   \</div>
+<div class="line">    if(status != 0) {                                                                    \</div>
+<div class="line">      fprintf(stderr, <span class="stringliteral">&quot;%s:%d: non-zero status: %d &quot;</span>, __FILE__, __LINE__, status);        \</div>
+<div class="line">      fprintf(stderr, __VA_ARGS__);                                                      \</div>
+<div class="line">      status = err;                                                                      \</div>
+<div class="line">      <span class="keywordflow">goto</span> label;                                                                        \</div>
+<div class="line">    }                                                                                    \</div>
+<div class="line">  } <span class="keywordflow">while</span>(0)</div>
 </div><!-- fragment -->
 </div>
 </div>

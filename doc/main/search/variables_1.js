@@ -67,7 +67,7 @@ var searchData=
   ['approx_5foutput_5findex_64',['approx_output_index',['../structRealm_1_1ApproxImageResponseMessage.html#a344d69958c4ffd2431023e687cd63c79',1,'Realm::ApproxImageResponseMessage::approx_output_index'],['../classRealm_1_1ImageMicroOp.html#a7e778a70149c669603c2d51cd6cf0899',1,'Realm::ImageMicroOp::approx_output_index']]],
   ['approx_5foutput_5fop_65',['approx_output_op',['../classRealm_1_1ImageMicroOp.html#a1c7d77e977b0b85cd556a0485a187738',1,'Realm::ImageMicroOp::approx_output_op'],['../structRealm_1_1ApproxImageResponseMessage.html#ae50d5999f18a71da8245139e3c359509',1,'Realm::ApproxImageResponseMessage::approx_output_op']]],
   ['approx_5fready_5fevent_66',['approx_ready_event',['../classRealm_1_1SparsityMapImpl.html#add1e288ab16b2fafd6537f537fe90df3',1,'Realm::SparsityMapImpl']]],
-  ['approx_5frects_67',['approx_rects',['../classRealm_1_1SparsityMapPublicImpl.html#ad25abf08679724d866b0a5c833066b8d',1,'Realm::SparsityMapPublicImpl']]],
+  ['approx_5frects_67',['approx_rects',['../classRealm_1_1SparsityMapPublicImpl.html#a2c0f496f5c315608de48142e86affff2',1,'Realm::SparsityMapPublicImpl']]],
   ['approx_5frequested_68',['approx_requested',['../classRealm_1_1SparsityMapImpl.html#a42a18cdebe5762810e4610ce87239e8e',1,'Realm::SparsityMapImpl']]],
   ['approx_5fvalid_69',['approx_valid',['../classRealm_1_1SparsityMapPublicImpl.html#a1f4d33da488547a321e21034bc0194b0',1,'Realm::SparsityMapPublicImpl']]],
   ['approx_5fwaiters_70',['approx_waiters',['../classRealm_1_1SparsityMapImpl.html#a5be20673ec1b4f87abee03d0db9b055d',1,'Realm::SparsityMapImpl']]],
@@ -87,5 +87,5 @@ var searchData=
   ['available_5fblocks_84',['available_blocks',['../classRealm_1_1IncomingMessageManager.html#ae7cefea6f4406aee621b1e9471c2644b',1,'Realm::IncomingMessageManager']]],
   ['available_5fevents_85',['available_events',['../classRealm_1_1Cuda_1_1GPUEventPool.html#a8aa388406174e15c4660e3a1462c83e1',1,'Realm::Cuda::GPUEventPool::available_events'],['../classRealm_1_1Hip_1_1GPUEventPool.html#aef1764bec7ad41fb051b21895432440b',1,'Realm::Hip::GPUEventPool::available_events']]],
   ['available_5freq_5fmutex_86',['available_req_mutex',['../classRealm_1_1XferDes.html#a1c96e5f4bd5643e8e2aff1b6db590681',1,'Realm::XferDes']]],
-  ['available_5freqs_87',['available_reqs',['../classRealm_1_1XferDes.html#aefcfc1b1738bdb1351bf2904079e2751',1,'Realm::XferDes']]]
+  ['available_5freqs_87',['available_reqs',['../classRealm_1_1XferDes.html#a2b2b7923b6289c6964633e67fce57f9b',1,'Realm::XferDes']]]
 ];

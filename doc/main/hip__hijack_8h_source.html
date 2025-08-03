@@ -44,7 +44,7 @@
    <!-- BEGIN version select -->
     <br />
     <div class="dropdown">
-     <button class="dropbtn">Version 25.6.1-rc.1+289a756e</button>
+     <button class="dropbtn">Version 25.06.0+1b9dd28c</button>
      <div class="dropdown-content"></div>
     </div>
     <script type="text/javascript" src="../selectversion.js"></script>
@@ -137,27 +137,27 @@ $(document).ready(function(){initNavTree('hip__hijack_8h_source.html',''); initR
   <div class="headertitle"><div class="title">hip_hijack.h</div></div>
 </div><!--header-->
 <div class="contents">
-<a href="hip__hijack_8h.html">Go to the documentation of this file.</a><div class="fragment"><div class="line"><a id="l00001" name="l00001"></a><span class="lineno">    1</span><span class="comment">/* Copyright 2024 Stanford University, NVIDIA Corporation</span></div>
-<div class="line"><a id="l00002" name="l00002"></a><span class="lineno">    2</span><span class="comment"> *                Los Alamos National Laboratory</span></div>
-<div class="line"><a id="l00003" name="l00003"></a><span class="lineno">    3</span><span class="comment"> *</span></div>
-<div class="line"><a id="l00004" name="l00004"></a><span class="lineno">    4</span><span class="comment"> * Licensed under the Apache License, Version 2.0 (the &quot;License&quot;);</span></div>
-<div class="line"><a id="l00005" name="l00005"></a><span class="lineno">    5</span><span class="comment"> * you may not use this file except in compliance with the License.</span></div>
-<div class="line"><a id="l00006" name="l00006"></a><span class="lineno">    6</span><span class="comment"> * You may obtain a copy of the License at</span></div>
-<div class="line"><a id="l00007" name="l00007"></a><span class="lineno">    7</span><span class="comment"> *</span></div>
-<div class="line"><a id="l00008" name="l00008"></a><span class="lineno">    8</span><span class="comment"> *     http://www.apache.org/licenses/LICENSE-2.0</span></div>
-<div class="line"><a id="l00009" name="l00009"></a><span class="lineno">    9</span><span class="comment"> *</span></div>
-<div class="line"><a id="l00010" name="l00010"></a><span class="lineno">   10</span><span class="comment"> * Unless required by applicable law or agreed to in writing, software</span></div>
-<div class="line"><a id="l00011" name="l00011"></a><span class="lineno">   11</span><span class="comment"> * distributed under the License is distributed on an &quot;AS IS&quot; BASIS,</span></div>
-<div class="line"><a id="l00012" name="l00012"></a><span class="lineno">   12</span><span class="comment"> * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.</span></div>
-<div class="line"><a id="l00013" name="l00013"></a><span class="lineno">   13</span><span class="comment"> * See the License for the specific language governing permissions and</span></div>
-<div class="line"><a id="l00014" name="l00014"></a><span class="lineno">   14</span><span class="comment"> * limitations under the License.</span></div>
-<div class="line"><a id="l00015" name="l00015"></a><span class="lineno">   15</span><span class="comment"> */</span></div>
-<div class="line"><a id="l00016" name="l00016"></a><span class="lineno">   16</span> </div>
-<div class="line"><a id="l00017" name="l00017"></a><span class="lineno">   17</span><span class="comment">// helper objects related to Realm&#39;s hijacking of the HIP runtime API</span></div>
-<div class="line"><a id="l00018" name="l00018"></a><span class="lineno">   18</span> </div>
-<div class="line"><a id="l00019" name="l00019"></a><span class="lineno">   19</span><span class="preprocessor">#ifndef REALM_HIP_HIJACK_H</span></div>
-<div class="line"><a id="l00020" name="l00020"></a><span class="lineno">   20</span><span class="preprocessor">#define REALM_HIP_HIJACK_H</span></div>
-<div class="line"><a id="l00021" name="l00021"></a><span class="lineno">   21</span> </div>
+<a href="hip__hijack_8h.html">Go to the documentation of this file.</a><div class="fragment"><div class="line"><a id="l00001" name="l00001"></a><span class="lineno">    1</span><span class="comment">/*</span></div>
+<div class="line"><a id="l00002" name="l00002"></a><span class="lineno">    2</span><span class="comment"> * Copyright 2025 Stanford University, NVIDIA Corporation, Los Alamos National Laboratory</span></div>
+<div class="line"><a id="l00003" name="l00003"></a><span class="lineno">    3</span><span class="comment"> * SPDX-License-Identifier: Apache-2.0</span></div>
+<div class="line"><a id="l00004" name="l00004"></a><span class="lineno">    4</span><span class="comment"> *</span></div>
+<div class="line"><a id="l00005" name="l00005"></a><span class="lineno">    5</span><span class="comment"> * Licensed under the Apache License, Version 2.0 (the &quot;License&quot;);</span></div>
+<div class="line"><a id="l00006" name="l00006"></a><span class="lineno">    6</span><span class="comment"> * you may not use this file except in compliance with the License.</span></div>
+<div class="line"><a id="l00007" name="l00007"></a><span class="lineno">    7</span><span class="comment"> * You may obtain a copy of the License at</span></div>
+<div class="line"><a id="l00008" name="l00008"></a><span class="lineno">    8</span><span class="comment"> *</span></div>
+<div class="line"><a id="l00009" name="l00009"></a><span class="lineno">    9</span><span class="comment"> *     http://www.apache.org/licenses/LICENSE-2.0</span></div>
+<div class="line"><a id="l00010" name="l00010"></a><span class="lineno">   10</span><span class="comment"> *</span></div>
+<div class="line"><a id="l00011" name="l00011"></a><span class="lineno">   11</span><span class="comment"> * Unless required by applicable law or agreed to in writing, software</span></div>
+<div class="line"><a id="l00012" name="l00012"></a><span class="lineno">   12</span><span class="comment"> * distributed under the License is distributed on an &quot;AS IS&quot; BASIS,</span></div>
+<div class="line"><a id="l00013" name="l00013"></a><span class="lineno">   13</span><span class="comment"> * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.</span></div>
+<div class="line"><a id="l00014" name="l00014"></a><span class="lineno">   14</span><span class="comment"> * See the License for the specific language governing permissions and</span></div>
+<div class="line"><a id="l00015" name="l00015"></a><span class="lineno">   15</span><span class="comment"> * limitations under the License.</span></div>
+<div class="line"><a id="l00016" name="l00016"></a><span class="lineno">   16</span><span class="comment"> */</span></div>
+<div class="line"><a id="l00017" name="l00017"></a><span class="lineno">   17</span> </div>
+<div class="line"><a id="l00018" name="l00018"></a><span class="lineno">   18</span><span class="comment">// helper objects related to Realm&#39;s hijacking of the HIP runtime API</span></div>
+<div class="line"><a id="l00019" name="l00019"></a><span class="lineno">   19</span> </div>
+<div class="line"><a id="l00020" name="l00020"></a><span class="lineno">   20</span><span class="preprocessor">#ifndef REALM_HIP_HIJACK_H</span></div>
+<div class="line"><a id="l00021" name="l00021"></a><span class="lineno">   21</span><span class="preprocessor">#define REALM_HIP_HIJACK_H</span></div>
 <div class="line"><a id="l00022" name="l00022"></a><span class="lineno">   22</span> </div>
 <div class="line"><a id="l00023" name="l00023"></a><span class="lineno">   23</span><span class="preprocessor">#include &quot;<a class="code" href="mutex_8h.html">realm/mutex.h</a>&quot;</span></div>
 <div class="line"><a id="l00024" name="l00024"></a><span class="lineno">   24</span> </div>
@@ -172,7 +172,7 @@ $(document).ready(function(){initNavTree('hip__hijack_8h_source.html',''); initR
 <div class="line"><a id="l00032" name="l00032"></a><span class="lineno">   32</span>    <span class="comment">//  an application is linked with -lcudart, we will NOT be hijacking the</span></div>
 <div class="line"><a id="l00033" name="l00033"></a><span class="lineno">   33</span>    <span class="comment">//  application&#39;s calls, and the cuda module needs to know that)</span></div>
 <div class="line"><a id="l00034" name="l00034"></a><span class="lineno">   34</span>    <span class="keyword">extern</span> <span class="keywordtype">bool</span> <a class="code hl_variable" href="namespaceRealm_1_1Hip.html#abca423c1ffd726ee01a86911c0b917f3">cudart_hijack_active</a>;</div>
-<div class="line"><a id="l00035" name="l00035"></a><span class="lineno">   35</span>    </div>
+<div class="line"><a id="l00035" name="l00035"></a><span class="lineno">   35</span> </div>
 <div class="line"><a id="l00036" name="l00036"></a><span class="lineno">   36</span>    <span class="comment">// files compiled with nvcc will use global registrations of modules, variables, etc.</span></div>
 <div class="line"><a id="l00037" name="l00037"></a><span class="lineno">   37</span>    <span class="comment">//  that get broadcast to all contexts</span></div>
 <div class="line"><a id="l00038" name="l00038"></a><span class="lineno">   38</span> </div>
@@ -192,10 +192,10 @@ $(document).ready(function(){initNavTree('hip__hijack_8h_source.html',''); initR
 <div class="line"><a id="l00049" name="l00049"></a><span class="lineno"><a class="line" href="structRealm_1_1Hip_1_1RegisteredFunction.html#ac5796d6e09f692bd2cc5ed1a43e2da5b">   49</a></span>      <span class="keyword">const</span> <span class="keywordtype">char</span> *<a class="code hl_variable" href="structRealm_1_1Hip_1_1RegisteredFunction.html#ac5796d6e09f692bd2cc5ed1a43e2da5b">device_fun</a>;</div>
 <div class="line"><a id="l00050" name="l00050"></a><span class="lineno">   50</span> </div>
 <div class="line"><a id="l00051" name="l00051"></a><span class="lineno"><a class="line" href="structRealm_1_1Hip_1_1RegisteredFunction.html#afcda3f7c7d117e58631e596193c9a439">   51</a></span>      <a class="code hl_function" href="structRealm_1_1Hip_1_1RegisteredFunction.html#afcda3f7c7d117e58631e596193c9a439">RegisteredFunction</a>(<span class="keyword">const</span> <a class="code hl_struct" href="structRealm_1_1Hip_1_1FatBin.html">FatBin</a> *_fat_bin, <span class="keyword">const</span> <span class="keywordtype">void</span> *_host_fun,</div>
-<div class="line"><a id="l00052" name="l00052"></a><span class="lineno">   52</span>             <span class="keyword">const</span> <span class="keywordtype">char</span> *_device_fun);</div>
+<div class="line"><a id="l00052" name="l00052"></a><span class="lineno">   52</span>                         <span class="keyword">const</span> <span class="keywordtype">char</span> *_device_fun);</div>
 <div class="line"><a id="l00053" name="l00053"></a><span class="lineno">   53</span>    };</div>
 </div>
-<div class="line"><a id="l00054" name="l00054"></a><span class="lineno">   54</span>     </div>
+<div class="line"><a id="l00054" name="l00054"></a><span class="lineno">   54</span> </div>
 <div class="foldopen" id="foldopen00055" data-start="{" data-end="};">
 <div class="line"><a id="l00055" name="l00055"></a><span class="lineno"><a class="line" href="structRealm_1_1Hip_1_1RegisteredVariable.html">   55</a></span>    <span class="keyword">struct </span><a class="code hl_struct" href="structRealm_1_1Hip_1_1RegisteredVariable.html">RegisteredVariable</a> {</div>
 <div class="line"><a id="l00056" name="l00056"></a><span class="lineno"><a class="line" href="structRealm_1_1Hip_1_1RegisteredVariable.html#aba5f3c586a3fed871a06ff02bf32d01c">   56</a></span>      <span class="keyword">const</span> <a class="code hl_struct" href="structRealm_1_1Hip_1_1FatBin.html">FatBin</a> *<a class="code hl_variable" href="structRealm_1_1Hip_1_1RegisteredVariable.html#aba5f3c586a3fed871a06ff02bf32d01c">fat_bin</a>;</div>
@@ -221,7 +221,7 @@ $(document).ready(function(){initNavTree('hip__hijack_8h_source.html',''); initR
 <div class="line"><a id="l00074" name="l00074"></a><span class="lineno"><a class="line" href="classRealm_1_1Hip_1_1GlobalRegistrations.html#a18004b7cb65aacec356b580672b73bc0">   74</a></span>      <a class="code hl_function" href="classRealm_1_1Hip_1_1GlobalRegistrations.html#a18004b7cb65aacec356b580672b73bc0">GlobalRegistrations</a>(<span class="keywordtype">void</span>);</div>
 <div class="line"><a id="l00075" name="l00075"></a><span class="lineno"><a class="line" href="classRealm_1_1Hip_1_1GlobalRegistrations.html#ae9ef0e9a36eb7821f8734cf0b2ad2be5">   75</a></span>      <a class="code hl_function" href="classRealm_1_1Hip_1_1GlobalRegistrations.html#ae9ef0e9a36eb7821f8734cf0b2ad2be5">~GlobalRegistrations</a>(<span class="keywordtype">void</span>);</div>
 <div class="line"><a id="l00076" name="l00076"></a><span class="lineno">   76</span> </div>
-<div class="line"><a id="l00077" name="l00077"></a><span class="lineno"><a class="line" href="classRealm_1_1Hip_1_1GlobalRegistrations.html#a7fc9acc03a2b645325b02135e8bffed6">   77</a></span>      <span class="keyword">static</span> <a class="code hl_class" href="classRealm_1_1Hip_1_1GlobalRegistrations.html">GlobalRegistrations</a>&amp; <a class="code hl_function" href="classRealm_1_1Hip_1_1GlobalRegistrations.html#a7fc9acc03a2b645325b02135e8bffed6">get_global_registrations</a>(<span class="keywordtype">void</span>);</div>
+<div class="line"><a id="l00077" name="l00077"></a><span class="lineno"><a class="line" href="classRealm_1_1Hip_1_1GlobalRegistrations.html#a7fc9acc03a2b645325b02135e8bffed6">   77</a></span>      <span class="keyword">static</span> <a class="code hl_class" href="classRealm_1_1Hip_1_1GlobalRegistrations.html">GlobalRegistrations</a> &amp;<a class="code hl_function" href="classRealm_1_1Hip_1_1GlobalRegistrations.html#a7fc9acc03a2b645325b02135e8bffed6">get_global_registrations</a>(<span class="keywordtype">void</span>);</div>
 <div class="line"><a id="l00078" name="l00078"></a><span class="lineno">   78</span> </div>
 <div class="line"><a id="l00079" name="l00079"></a><span class="lineno">   79</span>    <span class="keyword">public</span>:</div>
 <div class="line"><a id="l00080" name="l00080"></a><span class="lineno">   80</span>      <span class="comment">// called by a GPU when it has created its context - will result in calls back</span></div>
@@ -247,12 +247,12 @@ $(document).ready(function(){initNavTree('hip__hijack_8h_source.html',''); initR
 <div class="line"><a id="l00100" name="l00100"></a><span class="lineno"><a class="line" href="classRealm_1_1Hip_1_1GlobalRegistrations.html#a23b5fdcc4e2beda9e7514f13b0cd9486">  100</a></span>      std::vector&lt;RegisteredFunction *&gt; <a class="code hl_variable" href="classRealm_1_1Hip_1_1GlobalRegistrations.html#a23b5fdcc4e2beda9e7514f13b0cd9486">functions</a>;</div>
 <div class="line"><a id="l00101" name="l00101"></a><span class="lineno">  101</span>    };</div>
 </div>
-<div class="line"><a id="l00102" name="l00102"></a><span class="lineno">  102</span>  };</div>
+<div class="line"><a id="l00102" name="l00102"></a><span class="lineno">  102</span>  }; <span class="comment">// namespace Hip</span></div>
 </div>
-<div class="line"><a id="l00103" name="l00103"></a><span class="lineno">  103</span>};</div>
+<div class="line"><a id="l00103" name="l00103"></a><span class="lineno">  103</span>};   <span class="comment">// namespace Realm</span></div>
 <div class="line"><a id="l00104" name="l00104"></a><span class="lineno">  104</span> </div>
 <div class="line"><a id="l00105" name="l00105"></a><span class="lineno">  105</span><span class="preprocessor">#endif</span></div>
-<div class="ttc" id="aclassRealm_1_1Hip_1_1GPU_html"><div class="ttname"><a href="classRealm_1_1Hip_1_1GPU.html">Realm::Hip::GPU</a></div><div class="ttdef"><b>Definition</b> hip_internal.h:313</div></div>
+<div class="ttc" id="aclassRealm_1_1Hip_1_1GPU_html"><div class="ttname"><a href="classRealm_1_1Hip_1_1GPU.html">Realm::Hip::GPU</a></div><div class="ttdef"><b>Definition</b> hip_internal.h:321</div></div>
 <div class="ttc" id="aclassRealm_1_1Hip_1_1GlobalRegistrations_html"><div class="ttname"><a href="classRealm_1_1Hip_1_1GlobalRegistrations.html">Realm::Hip::GlobalRegistrations</a></div><div class="ttdef"><b>Definition</b> hip_hijack.h:72</div></div>
 <div class="ttc" id="aclassRealm_1_1Hip_1_1GlobalRegistrations_html_a18004b7cb65aacec356b580672b73bc0"><div class="ttname"><a href="classRealm_1_1Hip_1_1GlobalRegistrations.html#a18004b7cb65aacec356b580672b73bc0">Realm::Hip::GlobalRegistrations::GlobalRegistrations</a></div><div class="ttdeci">GlobalRegistrations(void)</div></div>
 <div class="ttc" id="aclassRealm_1_1Hip_1_1GlobalRegistrations_html_a23b5fdcc4e2beda9e7514f13b0cd9486"><div class="ttname"><a href="classRealm_1_1Hip_1_1GlobalRegistrations.html#a23b5fdcc4e2beda9e7514f13b0cd9486">Realm::Hip::GlobalRegistrations::functions</a></div><div class="ttdeci">std::vector&lt; RegisteredFunction * &gt; functions</div><div class="ttdef"><b>Definition</b> hip_hijack.h:100</div></div>
@@ -268,10 +268,10 @@ $(document).ready(function(){initNavTree('hip__hijack_8h_source.html',''); initR
 <div class="ttc" id="aclassRealm_1_1Hip_1_1GlobalRegistrations_html_ad5e8479de4322769a36e5071caa9e0af"><div class="ttname"><a href="classRealm_1_1Hip_1_1GlobalRegistrations.html#ad5e8479de4322769a36e5071caa9e0af">Realm::Hip::GlobalRegistrations::register_fat_binary</a></div><div class="ttdeci">static void register_fat_binary(FatBin *fatbin)</div></div>
 <div class="ttc" id="aclassRealm_1_1Hip_1_1GlobalRegistrations_html_ae5d7c7419edd3665213a339acc755df1"><div class="ttname"><a href="classRealm_1_1Hip_1_1GlobalRegistrations.html#ae5d7c7419edd3665213a339acc755df1">Realm::Hip::GlobalRegistrations::mutex</a></div><div class="ttdeci">Mutex mutex</div><div class="ttdef"><b>Definition</b> hip_hijack.h:96</div></div>
 <div class="ttc" id="aclassRealm_1_1Hip_1_1GlobalRegistrations_html_ae9ef0e9a36eb7821f8734cf0b2ad2be5"><div class="ttname"><a href="classRealm_1_1Hip_1_1GlobalRegistrations.html#ae9ef0e9a36eb7821f8734cf0b2ad2be5">Realm::Hip::GlobalRegistrations::~GlobalRegistrations</a></div><div class="ttdeci">~GlobalRegistrations(void)</div></div>
-<div class="ttc" id="aclassRealm_1_1UnfairMutex_html"><div class="ttname"><a href="classRealm_1_1UnfairMutex.html">Realm::UnfairMutex</a></div><div class="ttdef"><b>Definition</b> mutex.h:220</div></div>
+<div class="ttc" id="aclassRealm_1_1UnfairMutex_html"><div class="ttname"><a href="classRealm_1_1UnfairMutex.html">Realm::UnfairMutex</a></div><div class="ttdef"><b>Definition</b> mutex.h:223</div></div>
 <div class="ttc" id="amutex_8h_html"><div class="ttname"><a href="mutex_8h.html">mutex.h</a></div></div>
 <div class="ttc" id="anamespaceRealm_1_1Hip_html_abca423c1ffd726ee01a86911c0b917f3"><div class="ttname"><a href="namespaceRealm_1_1Hip.html#abca423c1ffd726ee01a86911c0b917f3">Realm::Hip::cudart_hijack_active</a></div><div class="ttdeci">bool cudart_hijack_active</div></div>
-<div class="ttc" id="anamespaceRealm_html"><div class="ttname"><a href="namespaceRealm.html">Realm</a></div><div class="ttdef"><b>Definition</b> activemsg.h:36</div></div>
+<div class="ttc" id="anamespaceRealm_html"><div class="ttname"><a href="namespaceRealm.html">Realm</a></div><div class="ttdef"><b>Definition</b> activemsg.h:38</div></div>
 <div class="ttc" id="astructRealm_1_1Hip_1_1FatBin_html"><div class="ttname"><a href="structRealm_1_1Hip_1_1FatBin.html">Realm::Hip::FatBin</a></div><div class="ttdef"><b>Definition</b> hip_hijack.h:39</div></div>
 <div class="ttc" id="astructRealm_1_1Hip_1_1FatBin_html_a8d922fbfd488bdbffdf320383029dff1"><div class="ttname"><a href="structRealm_1_1Hip_1_1FatBin.html#a8d922fbfd488bdbffdf320383029dff1">Realm::Hip::FatBin::filename_or_fatbins</a></div><div class="ttdeci">void * filename_or_fatbins</div><div class="ttdef"><b>Definition</b> hip_hijack.h:43</div></div>
 <div class="ttc" id="astructRealm_1_1Hip_1_1FatBin_html_a9488fde6569357675e14282efb5cb1ca"><div class="ttname"><a href="structRealm_1_1Hip_1_1FatBin.html#a9488fde6569357675e14282efb5cb1ca">Realm::Hip::FatBin::version</a></div><div class="ttdeci">int version</div><div class="ttdef"><b>Definition</b> hip_hijack.h:41</div></div>

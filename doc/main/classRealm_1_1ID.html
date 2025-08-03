@@ -44,7 +44,7 @@
    <!-- BEGIN version select -->
     <br />
     <div class="dropdown">
-     <button class="dropbtn">Version 25.6.1-rc.1+289a756e</button>
+     <button class="dropbtn">Version 25.06.0+1b9dd28c</button>
      <div class="dropdown-content"></div>
     </div>
     <script type="text/javascript" src="../selectversion.js"></script>
@@ -148,7 +148,7 @@ $(document).ready(function(){initNavTree('classRealm_1_1ID.html',''); initResiza
 <div class="dynheader">
 Collaboration diagram for Realm::ID:</div>
 <div class="dyncontent">
-<div class="center"><!-- SVG 0 --></div>
+<div class="center"><iframe scrolling="no" frameborder="0" src="classRealm_1_1ID__coll__graph.svg" width="206" height="124"><p><b>This browser is not able to show SVG: try Firefox, Chrome, Safari, or Opera instead.</b></p></iframe></div>
 <center><span class="legend">[<a target="top" href="graph_legend.html">legend</a>]</span></center></div>
 <table class="memberdecls">
 <tr class="heading"><td colspan="2"><h2 class="groupheader"><a id="nested-classes" name="nested-classes"></a>
@@ -283,7 +283,7 @@ Public Attributes</h2></td></tr>
 Static Public Attributes</h2></td></tr>
 <tr class="memitem:aa7bd986d8fa4fed7396f63fccb3482df" id="r_aa7bd986d8fa4fed7396f63fccb3482df"><td class="memItemLeft" align="right" valign="top">static const int&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="classRealm_1_1ID.html#aa7bd986d8fa4fed7396f63fccb3482df">NODE_FIELD_WIDTH</a> = 16</td></tr>
 <tr class="separator:aa7bd986d8fa4fed7396f63fccb3482df"><td class="memSeparator" colspan="2">&#160;</td></tr>
-<tr class="memitem:a9f1e1e9498aee86c23d31210713721cb" id="r_a9f1e1e9498aee86c23d31210713721cb"><td class="memItemLeft" align="right" valign="top">static const unsigned&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="classRealm_1_1ID.html#a9f1e1e9498aee86c23d31210713721cb">MAX_NODE_ID</a> = (1U &lt;&lt; <a class="el" href="classRealm_1_1ID.html#aa7bd986d8fa4fed7396f63fccb3482df">NODE_FIELD_WIDTH</a>) - 2</td></tr>
+<tr class="memitem:a9f1e1e9498aee86c23d31210713721cb" id="r_a9f1e1e9498aee86c23d31210713721cb"><td class="memItemLeft" align="right" valign="top">static const unsigned&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="classRealm_1_1ID.html#a9f1e1e9498aee86c23d31210713721cb">MAX_NODE_ID</a></td></tr>
 <tr class="separator:a9f1e1e9498aee86c23d31210713721cb"><td class="memSeparator" colspan="2">&#160;</td></tr>
 <tr class="memitem:ac7a25d316c998091a2f254f816c468fb" id="r_ac7a25d316c998091a2f254f816c468fb"><td class="memItemLeft" align="right" valign="top">static const int&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="classRealm_1_1ID.html#ac7a25d316c998091a2f254f816c468fb">EVENT_GENERATION_WIDTH</a></td></tr>
 <tr class="separator:ac7a25d316c998091a2f254f816c468fb"><td class="memSeparator" colspan="2">&#160;</td></tr>
@@ -1209,8 +1209,8 @@ template&lt;class T &gt; </div>
 </table>
 </div><div class="memdoc">
 <b>Initial value:</b><div class="fragment"><div class="line">=</div>
-<div class="line">          <a class="code hl_define" href="realm__config_8h.html#a72a6ef73bb2820390916e81887a1b8b6">REALM_EVENT_GENERATION_BITS</a></div>
-<div class="ttc" id="arealm__config_8h_html_a72a6ef73bb2820390916e81887a1b8b6"><div class="ttname"><a href="realm__config_8h.html#a72a6ef73bb2820390916e81887a1b8b6">REALM_EVENT_GENERATION_BITS</a></div><div class="ttdeci">#define REALM_EVENT_GENERATION_BITS</div><div class="ttdef"><b>Definition</b> realm_config.h:28</div></div>
+<div class="line">        <a class="code hl_define" href="realm__config_8h.html#a72a6ef73bb2820390916e81887a1b8b6">REALM_EVENT_GENERATION_BITS</a></div>
+<div class="ttc" id="arealm__config_8h_html_a72a6ef73bb2820390916e81887a1b8b6"><div class="ttname"><a href="realm__config_8h.html#a72a6ef73bb2820390916e81887a1b8b6">REALM_EVENT_GENERATION_BITS</a></div><div class="ttdeci">#define REALM_EVENT_GENERATION_BITS</div><div class="ttdef"><b>Definition</b> realm_config.h:30</div></div>
 </div><!-- fragment -->
 </div>
 </div>
@@ -1282,7 +1282,7 @@ template&lt;class T &gt; </div>
   <td class="mlabels-left">
       <table class="memname">
         <tr>
-          <td class="memname">const unsigned Realm::ID::MAX_NODE_ID = (1U &lt;&lt; <a class="el" href="classRealm_1_1ID.html#aa7bd986d8fa4fed7396f63fccb3482df">NODE_FIELD_WIDTH</a>) - 2</td>
+          <td class="memname">const unsigned Realm::ID::MAX_NODE_ID</td>
         </tr>
       </table>
   </td>
@@ -1291,7 +1291,10 @@ template&lt;class T &gt; </div>
   </tr>
 </table>
 </div><div class="memdoc">
-
+<b>Initial value:</b><div class="fragment"><div class="line">=</div>
+<div class="line">        (1U &lt;&lt; <a class="code hl_variable" href="classRealm_1_1ID.html#aa7bd986d8fa4fed7396f63fccb3482df">NODE_FIELD_WIDTH</a>) - 2</div>
+<div class="ttc" id="aclassRealm_1_1ID_html_aa7bd986d8fa4fed7396f63fccb3482df"><div class="ttname"><a href="classRealm_1_1ID.html#aa7bd986d8fa4fed7396f63fccb3482df">Realm::ID::NODE_FIELD_WIDTH</a></div><div class="ttdeci">static const int NODE_FIELD_WIDTH</div><div class="ttdef"><b>Definition</b> id.h:53</div></div>
+</div><!-- fragment -->
 </div>
 </div>
 <a id="aa400a29200604b8595423a7bc0125919" name="aa400a29200604b8595423a7bc0125919"></a>

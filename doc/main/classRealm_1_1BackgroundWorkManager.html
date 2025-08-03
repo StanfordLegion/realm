@@ -44,7 +44,7 @@
    <!-- BEGIN version select -->
     <br />
     <div class="dropdown">
-     <button class="dropbtn">Version 25.6.1-rc.1+289a756e</button>
+     <button class="dropbtn">Version 25.06.0+1b9dd28c</button>
      <div class="dropdown-content"></div>
     </div>
     <script type="text/javascript" src="../selectversion.js"></script>
@@ -149,7 +149,7 @@ $(document).ready(function(){initNavTree('classRealm_1_1BackgroundWorkManager.ht
 <div class="dynheader">
 Collaboration diagram for Realm::BackgroundWorkManager:</div>
 <div class="dyncontent">
-<div class="center"><!-- SVG 0 --></div>
+<div class="center"><iframe scrolling="no" frameborder="0" src="classRealm_1_1BackgroundWorkManager__coll__graph.svg" width="1688" height="438"><p><b>This browser is not able to show SVG: try Firefox, Chrome, Safari, or Opera instead.</b></p></iframe></div>
 <center><span class="legend">[<a target="top" href="graph_legend.html">legend</a>]</span></center></div>
 <table class="memberdecls">
 <tr class="heading"><td colspan="2"><h2 class="groupheader"><a id="nested-classes" name="nested-classes"></a>
@@ -183,7 +183,7 @@ Static Public Attributes</h2></td></tr>
 <tr class="separator:aff33cdb8c2121710d296d603a99bd5e4"><td class="memSeparator" colspan="2">&#160;</td></tr>
 <tr class="memitem:a1fafdfc15d1ce51c6d2f614f7a46f895" id="r_a1fafdfc15d1ce51c6d2f614f7a46f895"><td class="memItemLeft" align="right" valign="top">static const size_t&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="classRealm_1_1BackgroundWorkManager.html#a1fafdfc15d1ce51c6d2f614f7a46f895">BITMASK_BITS</a> = 8 * sizeof(<a class="el" href="classRealm_1_1BackgroundWorkManager.html#a7f14fe61ae3cd6fb3f504e9d10e06222">BitMask</a>)</td></tr>
 <tr class="separator:a1fafdfc15d1ce51c6d2f614f7a46f895"><td class="memSeparator" colspan="2">&#160;</td></tr>
-<tr class="memitem:ac91d20205c558df6285d54e748e50c66" id="r_ac91d20205c558df6285d54e748e50c66"><td class="memItemLeft" align="right" valign="top">static const size_t&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="classRealm_1_1BackgroundWorkManager.html#ac91d20205c558df6285d54e748e50c66">BITMASK_ARRAY_SIZE</a> = (<a class="el" href="classRealm_1_1BackgroundWorkManager.html#aff33cdb8c2121710d296d603a99bd5e4">MAX_WORK_ITEMS</a> + <a class="el" href="classRealm_1_1BackgroundWorkManager.html#a1fafdfc15d1ce51c6d2f614f7a46f895">BITMASK_BITS</a> - 1) / <a class="el" href="classRealm_1_1BackgroundWorkManager.html#a1fafdfc15d1ce51c6d2f614f7a46f895">BITMASK_BITS</a></td></tr>
+<tr class="memitem:ac91d20205c558df6285d54e748e50c66" id="r_ac91d20205c558df6285d54e748e50c66"><td class="memItemLeft" align="right" valign="top">static const size_t&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="classRealm_1_1BackgroundWorkManager.html#ac91d20205c558df6285d54e748e50c66">BITMASK_ARRAY_SIZE</a></td></tr>
 <tr class="separator:ac91d20205c558df6285d54e748e50c66"><td class="memSeparator" colspan="2">&#160;</td></tr>
 </table><table class="memberdecls">
 <tr class="heading"><td colspan="2"><h2 class="groupheader"><a id="pro-methods" name="pro-methods"></a>
@@ -525,7 +525,7 @@ Friends</h2></td></tr>
   <td class="mlabels-left">
       <table class="memname">
         <tr>
-          <td class="memname">const size_t Realm::BackgroundWorkManager::BITMASK_ARRAY_SIZE = (<a class="el" href="classRealm_1_1BackgroundWorkManager.html#aff33cdb8c2121710d296d603a99bd5e4">MAX_WORK_ITEMS</a> + <a class="el" href="classRealm_1_1BackgroundWorkManager.html#a1fafdfc15d1ce51c6d2f614f7a46f895">BITMASK_BITS</a> - 1) / <a class="el" href="classRealm_1_1BackgroundWorkManager.html#a1fafdfc15d1ce51c6d2f614f7a46f895">BITMASK_BITS</a></td>
+          <td class="memname">const size_t Realm::BackgroundWorkManager::BITMASK_ARRAY_SIZE</td>
         </tr>
       </table>
   </td>
@@ -534,7 +534,11 @@ Friends</h2></td></tr>
   </tr>
 </table>
 </div><div class="memdoc">
-
+<b>Initial value:</b><div class="fragment"><div class="line">=</div>
+<div class="line">        (<a class="code hl_variable" href="classRealm_1_1BackgroundWorkManager.html#aff33cdb8c2121710d296d603a99bd5e4">MAX_WORK_ITEMS</a> + <a class="code hl_variable" href="classRealm_1_1BackgroundWorkManager.html#a1fafdfc15d1ce51c6d2f614f7a46f895">BITMASK_BITS</a> - 1) / <a class="code hl_variable" href="classRealm_1_1BackgroundWorkManager.html#a1fafdfc15d1ce51c6d2f614f7a46f895">BITMASK_BITS</a></div>
+<div class="ttc" id="aclassRealm_1_1BackgroundWorkManager_html_a1fafdfc15d1ce51c6d2f614f7a46f895"><div class="ttname"><a href="classRealm_1_1BackgroundWorkManager.html#a1fafdfc15d1ce51c6d2f614f7a46f895">Realm::BackgroundWorkManager::BITMASK_BITS</a></div><div class="ttdeci">static const size_t BITMASK_BITS</div><div class="ttdef"><b>Definition</b> bgwork.h:59</div></div>
+<div class="ttc" id="aclassRealm_1_1BackgroundWorkManager_html_aff33cdb8c2121710d296d603a99bd5e4"><div class="ttname"><a href="classRealm_1_1BackgroundWorkManager.html#aff33cdb8c2121710d296d603a99bd5e4">Realm::BackgroundWorkManager::MAX_WORK_ITEMS</a></div><div class="ttdeci">static const size_t MAX_WORK_ITEMS</div><div class="ttdef"><b>Definition</b> bgwork.h:58</div></div>
+</div><!-- fragment -->
 </div>
 </div>
 <a id="a1fafdfc15d1ce51c6d2f614f7a46f895" name="a1fafdfc15d1ce51c6d2f614f7a46f895"></a>
