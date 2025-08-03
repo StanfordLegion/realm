@@ -20,6 +20,7 @@ limitations under the License.
 [![Documentation](https://img.shields.io/badge/docs-grey.svg?logo=doxygen&logoColor=white&labelColor=blue)](https://legion.stanford.edu/realm/doc)
 [![License](https://img.shields.io/github/license/stanfordlegion/realm.svg)](https://github.com/StanfordLegion/realm/blob/main/LICENSE.txt)
 [![REUSE Compliance](https://img.shields.io/reuse/compliance/github.com%2FStanfordLegion%2Frealm)](https://api.reuse.software/info/github.com/StanfordLegion/realm)
+[![codecov](https://codecov.io/github/stanfordlegion/realm/graph/badge.svg?token=XMFNJ4B756)](https://codecov.io/github/stanfordlegion/realm)
 [![Issues](https://img.shields.io/github/issues/stanfordlegion/realm.svg)](https://github.com/StanfordLegion/realm/issues)
 [![Chat](https://img.shields.io/badge/zulip-join_chat-brightgreen.svg)](https://legion.zulipchat.com)
 

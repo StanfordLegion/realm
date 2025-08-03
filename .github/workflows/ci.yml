@@ -224,8 +224,7 @@ jobs:
       - name: Update build log cache
         if: success()
         run: |
-          rm -f build.log
-          mv build-new.log build.log
+          cmake -E copy_if_different build-new.log build.log
 
       - name: Run Tests
         id: run-tests
