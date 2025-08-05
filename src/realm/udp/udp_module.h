@@ -6,6 +6,7 @@
 #include "realm/runtime_impl.h"
 #include "realm/logging.h"
 #include "realm/mutex.h"
+#include "realm/udp/udp_shim.h"
 
 #include <atomic>
 #include <map>
@@ -17,8 +18,11 @@
 
 namespace Realm {
 
+  struct UDPPeerShim;
+  class UDPModule;
   class UDPMessageImpl;
-  class UDPWorker;
+  class RxWorker;
+  class TxWorker;
 
   class UDPModule : public NetworkModule {
   public:
@@ -32,8 +36,10 @@ namespace Realm {
     void get_shared_peers(NodeSet &shared_peers) override {}
     void parse_command_line(RuntimeImpl *runtime,
                             std::vector<std::string> &cmdline) override;
+
     void attach(RuntimeImpl *runtime, std::vector<NetworkSegment *> &segments) override;
     void detach(RuntimeImpl *runtime, std::vector<NetworkSegment *> &segments) override;
+
     void barrier(void) override {}
     void broadcast(NodeID root, const void *val_in, void *val_out, size_t bytes) override;
     void gather(NodeID root, const void *val_in, void *vals_out, size_t bytes) override;
@@ -76,19 +82,20 @@ namespace Realm {
     size_t recommended_max_payload(NodeID, const LocalAddress &, size_t, size_t, size_t,
                                    const RemoteAddress &, bool, size_t) override;
 
-    void register_peer(NodeID id, const std::string &ip, uint16_t port);
     void register_peer(NodeID id, uint32_t ip, uint16_t port);
     void delete_remote_ep(NodeID id) override;
 
     MemoryImpl *create_remote_memory(RuntimeImpl *, Memory, size_t, Memory::Kind,
                                      const ByteArray &) override
     {
+      assert(0);
       return nullptr;
     }
 
     IBMemory *create_remote_ib_memory(RuntimeImpl *, Memory, size_t, Memory::Kind,
                                       const ByteArray &) override
     {
+      assert(0);
       return nullptr;
     }
 
@@ -104,30 +111,47 @@ namespace Realm {
       uint16_t msgid;
       uint16_t hdr_size;
       uint32_t payload_size;
+      uint16_t seq;
+      uint16_t ack_bits;
     } __attribute__((packed));
 
     void send_datagram(const PeerAddr &peer, const void *data, size_t len);
-    PeerAddr ensure_peer(NodeID id);
+    UDPPeerShim *ensure_peer(NodeID id);
 
     Mutex peer_map_mutex;
 
     RuntimeImpl *runtime_;
     int sock_fd_{-1};
 
-    UDPWorker *worker_;
+    RxWorker *rx_worker_;
+    TxWorker *tx_worker_;
 
     std::atomic<bool> shutting_down_{false};
     std::atomic<size_t> rx_counter_{0};
 
-    std::map<NodeID, PeerAddr> peer_map_;
+    std::map<NodeID, UDPPeerShim *> peer_map_;
+
     friend class UDPMessageImpl;
-    friend class UDPWorker;
+    friend class RxWorker;
+    friend class TxWorker;
+    friend struct UDPPeerShim;
   };
 
-  class UDPWorker : public BackgroundWorkItem {
+  struct UDPPeerShim {
+    UDPModule::PeerAddr addr;
+    UDPShim retransmit;
+
+    explicit UDPPeerShim(UDPModule *owner)
+      : retransmit([owner, this](const void *buf, size_t len) {
+        owner->send_datagram(addr, buf, len);
+      })
+    {}
+  };
+
+  class RxWorker : public BackgroundWorkItem {
   public:
-    UDPWorker(UDPModule *owner, int sock);
-    ~UDPWorker(void) = default;
+    RxWorker(UDPModule *owner, int sock);
+    ~RxWorker(void) override {};
 
     bool do_work(TimeLimit work_until) override;
     void begin_polling();
@@ -144,14 +168,28 @@ namespace Realm {
     Mutex::CondVar shutdown_cond;
   };
 
+  class TxWorker : public BackgroundWorkItem {
+  public:
+    TxWorker(UDPModule *owner);
+    ~TxWorker(void) override {};
+
+    bool do_work(TimeLimit work_until) override;
+    void begin_polling();
+    void end_polling();
+
+  private:
+    UDPModule *module;
+    Mutex shutdown_mutex;
+    atomic<bool> shutdown_flag;
+    Mutex::CondVar shutdown_cond;
+  };
+
   /* ------------------------------------------------------------------ */
   class UDPMessageImpl : public ActiveMessageImpl {
   public:
-    /* unicast */
     UDPMessageImpl(UDPModule *mod, NodeID tgt, unsigned short msgid, size_t header_size,
                    size_t max_payload, void *storage_base, size_t storage_size);
 
-    /* multicast */
     UDPMessageImpl(UDPModule *mod, const NodeSet &tgts, unsigned short msgid,
                    size_t header_size, size_t max_payload, void *storage_base,
                    size_t storage_size);

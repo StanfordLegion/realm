@@ -1,5 +1,7 @@
 #include "realm/udp/udp_module.h"
 #include "realm/activemsg.h"
+#include "realm/network.h"
+#include "realm/udp/udp_shim.h"
 
 #include <arpa/inet.h>
 #include <fcntl.h>
@@ -17,9 +19,51 @@ namespace Realm {
   } // namespace
 
   /* ------------------------------------------------------------------ */
-  /* UDPWorker                                                          */
+  /* TxWorker                                                           */
   /* ------------------------------------------------------------------ */
-  UDPWorker::UDPWorker(UDPModule *owner, int sock)
+  TxWorker::TxWorker(UDPModule *owner)
+    : BackgroundWorkItem("udp rx")
+    , module(owner)
+    , shutdown_flag(false)
+    , shutdown_cond(shutdown_mutex)
+  {}
+
+  bool TxWorker::do_work(TimeLimit)
+  {
+    if(shutdown_flag.load()) {
+      AutoLock<> al(shutdown_mutex);
+      shutdown_flag.store(false);
+      shutdown_cond.broadcast();
+      return false;
+    }
+
+    bool did_work = true;
+
+    while(!module->shutting_down_.load()) {
+      AutoLock<> al(module->peer_map_mutex);
+      for(auto &kv : module->peer_map_) {
+        kv.second->retransmit.poll(Clock::current_time_in_microseconds());
+      }
+      break;
+    }
+
+    return did_work;
+  }
+
+  void TxWorker::begin_polling() { make_active(); }
+
+  void TxWorker::end_polling()
+  {
+    AutoLock<> al(shutdown_mutex);
+    assert(!shutdown_flag.load());
+    shutdown_flag.store(true);
+    shutdown_cond.wait();
+  }
+
+  /* ------------------------------------------------------------------ */
+  /* RxWorker                                                          */
+  /* ------------------------------------------------------------------ */
+  RxWorker::RxWorker(UDPModule *owner, int sock)
     : BackgroundWorkItem("udp rx")
     , module(owner)
     , sock_fd(sock)
@@ -27,7 +71,7 @@ namespace Realm {
     , shutdown_cond(shutdown_mutex)
   {}
 
-  bool UDPWorker::do_work(TimeLimit until)
+  bool RxWorker::do_work(TimeLimit until)
   {
     uint8_t buf[PAYLOAD_SIZE];
 
@@ -41,40 +85,61 @@ namespace Realm {
     bool did_work = true;
 
     while(!module->shutting_down_.load()) {
-      ssize_t n = recvfrom(sock_fd, buf, sizeof(buf), 0, nullptr, nullptr);
+      sockaddr_in src{};
+      socklen_t slen = sizeof(src);
+      ssize_t n = recvfrom(sock_fd, buf, sizeof(buf), 0,
+                           reinterpret_cast<sockaddr *>(&src), &slen);
+
       if(n <= 0) {
         break;
       }
 
       if(static_cast<size_t>(n) < sizeof(UDPModule::UDPHeader)) {
         assert(0);
-        // continue; /* malformed */
-      }
-
-      auto *uh = reinterpret_cast<const UDPModule::UDPHeader *>(buf);
-      const uint8_t *hdr = buf + sizeof(UDPModule::UDPHeader);
-      const uint8_t *pl = hdr + uh->hdr_size;
-
-      if(sizeof(UDPModule::UDPHeader) + uh->hdr_size + uh->payload_size !=
-         static_cast<size_t>(n)) {
-        assert(0);
         // continue;
       }
 
-      module->runtime_->message_manager->add_incoming_message(
-          uh->src, uh->msgid, hdr, uh->hdr_size, PAYLOAD_COPY, pl, uh->payload_size,
-          PAYLOAD_COPY, nullptr, 0, 0, until);
+      auto *uh = reinterpret_cast<const UDPModule::UDPHeader *>(buf);
 
-      rx_counter_.fetch_add(1, std::memory_order_relaxed);
-      did_work = true;
+      // Always send an ACK for every *data* packet that comes in – whether it is
+      // new or a duplicate – so the sender can make progress even if our
+      // previous ACK got lost.  Do NOT ACK pure-ACK packets themselves to avoid
+      // endless ACK ping-pong.
+      const bool is_ack = (uh->msgid == 0) && (uh->payload_size == 0);
+      module->register_peer(uh->src, src.sin_addr.s_addr, ntohs(src.sin_port));
+      UDPPeerShim *peer = module->ensure_peer(uh->src);
+
+      peer->retransmit.handle_tx(uh->seq, uh->ack_bits);
+      if(!is_ack) {
+        std::vector<char> packet(buf, buf + n);
+        peer->retransmit.handle_rx(uh->seq, packet);
+      }
+
+      while(true) {
+        auto vec = peer->retransmit.pull();
+        if(vec.empty()) {
+          break;
+        }
+
+        auto *vh = reinterpret_cast<const UDPModule::UDPHeader *>(vec.data());
+        const uint8_t *hdr =
+            reinterpret_cast<const uint8_t *>(vec.data()) + sizeof(UDPModule::UDPHeader);
+
+        module->runtime_->message_manager->add_incoming_message(
+            vh->src, vh->msgid, hdr, vh->hdr_size, PAYLOAD_COPY, hdr + uh->hdr_size,
+            vh->payload_size, PAYLOAD_COPY, nullptr, 0, 0, until);
+
+        rx_counter_.fetch_add(1, std::memory_order_relaxed);
+        did_work = true;
+      }
     }
 
     return did_work;
   }
 
-  void UDPWorker::begin_polling() { make_active(); }
+  void RxWorker::begin_polling() { make_active(); }
 
-  void UDPWorker::end_polling()
+  void RxWorker::end_polling()
   {
     AutoLock<> al(shutdown_mutex);
 
@@ -82,6 +147,29 @@ namespace Realm {
     shutdown_flag.store(true);
     shutdown_cond.wait();
   }
+
+  namespace {
+    bool parse_address(uint32_t &address, const std::string &host_info)
+    {
+      if(inet_pton(AF_INET, host_info.c_str(), &address) != 1) {
+        struct addrinfo hints{};
+        hints.ai_family = AF_INET;
+        hints.ai_socktype = SOCK_DGRAM;
+        struct addrinfo *res = nullptr;
+        int rc = getaddrinfo(host_info.c_str(), nullptr, &hints, &res);
+        if(rc == 0 && res != nullptr) {
+          auto *addr = reinterpret_cast<sockaddr_in *>(res->ai_addr);
+          address = addr->sin_addr.s_addr;
+          freeaddrinfo(res);
+        } else {
+          log_udp.error() << "UDPModule::init: failed to resolve seed host '" << host_info
+                          << "' : " << gai_strerror(rc);
+          return false;
+        }
+      }
+      return true;
+    }
+  } // namespace
 
   /* ------------------------------------------------------------------ */
   /* UDPModule                                                          */
@@ -95,8 +183,12 @@ namespace Realm {
   UDPModule::~UDPModule()
   {
     shutting_down_.store(true);
-    assert(worker_ != nullptr);
-    delete worker_;
+
+    assert(tx_worker_ != nullptr);
+    delete tx_worker_;
+
+    assert(rx_worker_ != nullptr);
+    delete rx_worker_;
 
     if(sock_fd_ >= 0) {
       close(sock_fd_);
@@ -130,7 +222,7 @@ namespace Realm {
     init(static_cast<uint16_t>(config_self_port), config_seed_address, config_rank_id);
   }
 
-  void UDPModule::init(uint16_t base_port, const std::string &address,
+  void UDPModule::init(uint16_t base_port, const std::string &seedinfo,
                        NodeID self_rank_id)
   {
     sock_fd_ = socket(AF_INET, SOCK_DGRAM, 0);
@@ -173,47 +265,38 @@ namespace Realm {
 
     assert(self_rank_id != NodeDirectory::INVALID_NODE_ID);
 
-    if(!address.empty()) {
-      size_t colon = address.find(':');
-      std::string seed_ip = address.substr(0, colon);
-      uint16_t seed_port = atoi(address.c_str() + colon + 1);
-      uint32_t seed_ipv4 = 0;
+    if(!seedinfo.empty()) {
+      size_t colon = seedinfo.find(':');
+      std::string host_info = seedinfo.substr(0, colon);
+      uint16_t port = atoi(seedinfo.c_str() + colon + 1);
 
-      if(inet_pton(AF_INET, seed_ip.c_str(), &seed_ipv4) != 1) {
-        struct addrinfo hints{};
-        hints.ai_family = AF_INET;
-        hints.ai_socktype = SOCK_DGRAM;
-        struct addrinfo *res = nullptr;
-        int rc = getaddrinfo(seed_ip.c_str(), nullptr, &hints, &res);
-        if(rc == 0 && res != nullptr) {
-          auto *addr = reinterpret_cast<sockaddr_in *>(res->ai_addr);
-          seed_ipv4 = addr->sin_addr.s_addr;
-          freeaddrinfo(res);
-        } else {
-          log_udp.error() << "UDPModule::init: failed to resolve seed host '" << seed_ip
-                          << "' : " << gai_strerror(rc);
-          abort();
-        }
-      }
+      uint32_t seed_address = 0;
+      bool ok = parse_address(seed_address, host_info);
+      assert(ok);
 
       NodeMeta meta;
       meta.epoch = 1;
-      meta.ip = seed_ipv4;
-      meta.udp_port = seed_port;
+      meta.ip = seed_address;
+      meta.udp_port = port;
       Network::node_directory.add_slot(NodeDirectory::UNKNOWN_NODE_ID, meta);
-      register_peer(NodeDirectory::UNKNOWN_NODE_ID, seed_ip, seed_port);
+      register_peer(NodeDirectory::UNKNOWN_NODE_ID, seed_address, port);
     }
 
-    worker_ = new UDPWorker(this, sock_fd_);
-    worker_->add_to_manager(&runtime_->bgwork);
-    worker_->begin_polling();
+    rx_worker_ = new RxWorker(this, sock_fd_);
+    rx_worker_->add_to_manager(&runtime_->bgwork);
+    rx_worker_->begin_polling();
+
+    tx_worker_ = new TxWorker(this);
+    tx_worker_->add_to_manager(&runtime_->bgwork);
+    tx_worker_->begin_polling();
   }
 
   void UDPModule::attach(RuntimeImpl *, std::vector<NetworkSegment *> &) {}
 
   void UDPModule::detach(RuntimeImpl *, std::vector<NetworkSegment *> &)
   {
-    worker_->end_polling();
+    rx_worker_->end_polling();
+    tx_worker_->end_polling();
   }
 
   void UDPModule::broadcast(NodeID root, const void *val_in, void *val_out, size_t bytes)
@@ -311,30 +394,37 @@ namespace Realm {
     return recommended_max_payload(0, false, hdr);
   }
 
-  /* ---------- peer registry ---------------------------------------- */
-
-  void UDPModule::register_peer(NodeID id, const std::string &ip, uint16_t port)
-  {
-    AutoLock<> al(peer_map_mutex);
-    PeerAddr &pa = peer_map_[id];
-    pa.sin.sin_family = AF_INET;
-    pa.sin.sin_port = htons(port);
-    inet_pton(AF_INET, ip.c_str(), &pa.sin.sin_addr);
-  }
-
   void UDPModule::register_peer(NodeID id, uint32_t ip, uint16_t port)
   {
-    // AutoLock<> al(peer_map_mutex);
-    PeerAddr &pa = peer_map_[id];
-    pa.sin.sin_family = AF_INET;
-    pa.sin.sin_port = htons(port);
-    pa.sin.sin_addr.s_addr = ip;
+    AutoLock<> al(peer_map_mutex);
+
+    auto it_unknown = peer_map_.find(NodeDirectory::UNKNOWN_NODE_ID);
+    if(it_unknown != peer_map_.end() && id != NodeDirectory::UNKNOWN_NODE_ID) {
+      peer_map_[id] = it_unknown->second;
+      peer_map_.erase(it_unknown);
+    }
+
+    UDPPeerShim *peer = nullptr;
+    auto it = peer_map_.find(id);
+    if(it == peer_map_.end()) {
+      peer = peer_map_[id] = new UDPPeerShim(this);
+    } else {
+      peer = it->second;
+    }
+
+    peer->addr.sin.sin_family = AF_INET;
+    peer->addr.sin.sin_port = htons(port);
+    peer->addr.sin.sin_addr.s_addr = ip;
   }
 
   void UDPModule::delete_remote_ep(NodeID id)
   {
     AutoLock<> al(peer_map_mutex);
-    peer_map_.erase(id);
+    auto it = peer_map_.find(id);
+    if(it != peer_map_.end()) {
+      delete it->second;
+      peer_map_.erase(it);
+    }
   }
 
   void UDPModule::send_datagram(const PeerAddr &peer, const void *data, size_t len)
@@ -342,23 +432,28 @@ namespace Realm {
     int status = sendto(sock_fd_, data, len, 0,
                         reinterpret_cast<const sockaddr *>(&peer.sin), sizeof(peer.sin));
     if(status < 0) {
-      log_udp.error() << "Failed to send datagram size:" << len;
+      log_udp.error() << "Failed to send datagram size:" << len
+                      << " me:" << Network::my_node_id;
     }
   }
 
-  UDPModule::PeerAddr UDPModule::ensure_peer(NodeID id)
+  UDPPeerShim *UDPModule::ensure_peer(NodeID id)
   {
-    AutoLock<> al(peer_map_mutex);
-    auto it = peer_map_.find(id);
-    if(it != peer_map_.end()) {
-      return it->second;
+    {
+      AutoLock<> al(peer_map_mutex);
+      auto it = peer_map_.find(id);
+      if(it != peer_map_.end()) {
+        return it->second;
+      }
     }
 
     const NodeMeta *nm = Network::node_directory.lookup(id);
-
-    assert(nm != nullptr);
-    register_peer(id, nm->ip, nm->udp_port);
-
+    if(nm != nullptr) {
+      register_peer(id, nm->ip, nm->udp_port);
+    } else {
+      assert(0);
+      peer_map_[id] = new UDPPeerShim(this);
+    }
     return peer_map_[id];
   }
 
@@ -438,7 +533,7 @@ namespace Realm {
 
   void UDPMessageImpl::commit(size_t act_payload_size)
   {
-    // assert(mod_->peer_map_.empty() == false);
+    // assert(mod_->peer_map_.empty() == false)
 
     size_t total = sizeof(UDPModule::UDPHeader) + hdr_sz_ + act_payload_size;
     std::vector<char> pkt(total);
@@ -455,12 +550,20 @@ namespace Realm {
 
     if(multicast_) {
       for(NodeSetIterator it(targets_); it != targets_.end(); ++it) {
-        const auto &pa = mod_->ensure_peer(*it);
-        mod_->send_datagram(pa, pkt.data(), pkt.size());
+        auto peer = mod_->ensure_peer(*it);
+        peer->retransmit.enqueue(pkt, [](void *h, uint16_t seq, uint16_t ack) {
+          auto *uh = reinterpret_cast<UDPModule::UDPHeader *>(h);
+          uh->seq = seq;
+          uh->ack_bits = ack;
+        });
       }
     } else {
-      const auto &pa = mod_->ensure_peer(target_);
-      mod_->send_datagram(pa, pkt.data(), pkt.size());
+      auto peer = mod_->ensure_peer(target_);
+      peer->retransmit.enqueue(pkt, [](void *h, uint16_t seq, uint16_t ack) {
+        auto *uh = reinterpret_cast<UDPModule::UDPHeader *>(h);
+        uh->seq = seq;
+        uh->ack_bits = ack;
+      });
     }
 
     CompletionCallbackBase::invoke_all(local_comp_.data(), local_comp_.size());

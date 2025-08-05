@@ -226,6 +226,7 @@ void MemberUpdateMessage::handle_message(NodeID, const MemberUpdateMessage &msg,
   Network::node_directory.import_node(data, datalen, msg.epoch);
 
   assert(mesh_state->leaving.load(std::memory_order_acquire) == false);
+
   send_join_ack(msg.node_id, msg.epoch, /*acks=*/-1, msg.announce_mm);
 
   if(mesh_state->hooks.filter) {
@@ -255,6 +256,7 @@ void LeaveReqMessage::handle_message(NodeID sender, const LeaveReqMessage &msg,
                                      const void *, size_t)
 {
   assert(sender != Network::my_node_id);
+
   Network::node_directory.update_epoch(msg.epoch);
 
   // TODO: thread-safety semantics here needs more thinking

@@ -3126,7 +3126,8 @@ namespace Realm {
 #endif
 
       std::cout << "Complete Shutdown Me:" << Network::my_node_id
-                << " code:" << shutdown_result_code << std::endl;
+                << " code:" << shutdown_result_code << " EPOCH:"
+        << Network::node_directory.cluster_epoch() << std::endl;
       return shutdown_result_code;
     }
 

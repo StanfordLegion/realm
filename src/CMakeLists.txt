@@ -122,6 +122,7 @@ if(REALM_USE_UDP)
     APPEND
     REALM_SOURCES
     udp/udp_module.cc
+    udp/udp_shim.cc
     udp/udp_module.h
     membership/membership_mesh.cc
   )
