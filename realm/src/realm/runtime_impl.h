@@ -49,6 +49,7 @@
 #include "realm/activemsg.h"
 #include "realm/repl_heap.h"
 #include "realm/dynamic_table.h"
+#include "realm/membership/membership.h"
 
 #include "realm/shm.h"
 #include "realm/hardware_topology.h"
@@ -180,6 +181,8 @@ namespace Realm {
     // barriers
     int barrier_broadcast_radix = 4;
 
+    bool enable_elasticity{false};
+
     // topology of the host
     const HardwareTopology *host_topology = nullptr;
   };
@@ -272,6 +275,7 @@ namespace Realm {
     bool configure_from_command_line(std::vector<std::string> &cmdline);
 
     void start(void);
+    void elastic_start(void);
 
     bool register_task(Processor::TaskFuncID taskid, Processor::TaskFuncPtr taskptr);
     Event notify_register_reduction(ReductionOpID redop_id);
@@ -297,10 +301,12 @@ namespace Realm {
     bool request_shutdown(Event wait_on, int result_code);
 
     // indicates shutdown has been initiated, wakes up a waiter if already present
-    void initiate_shutdown(void);
+    void initiate_shutdown(bool signal_only = false);
 
     // shutdown the runtime
     void shutdown(Event wait_on = Event::NO_EVENT, int result_code = 0);
+
+    bool remove_peer(NodeID id);
 
     // returns value of result_code passed to shutdown()
     int wait_for_shutdown(void);
@@ -375,6 +381,10 @@ namespace Realm {
     std::unordered_map<realm_id_t, SharedMemoryInfo> remote_shared_memory_mappings;
     std::unordered_map<realm_id_t, SharedMemoryInfo> local_shared_memory_mappings;
 
+    Mutex join_mutex;
+    Mutex::CondVar join_condvar;
+    bool join_complete{false};
+
     HardwareTopology host_topology;
     bool topology_init = false; // TODO: REMOVE it
     CoreReservationSet *core_reservations;
@@ -389,6 +399,9 @@ namespace Realm {
     ReplicatedHeap repl_heap; // used for sparsity maps, instance layouts
 
     bool shared_peers_use_network_module = true;
+
+    realmMembership_t membership;
+    realmMembershipHooks_t hooks;
 
     class DeferredShutdown : public EventWaiter {
     public:
@@ -494,6 +507,10 @@ namespace Realm {
     static void handle_message(NodeID sender, const RuntimeShutdownMessage &msg,
                                const void *data, size_t datalen);
   };
+
+  bool serialize_announcement(Realm::Serialization::DynamicBufferSerializer &serializer,
+                              const Node *node, const MachineImpl *machine_impl,
+                              NetworkModule *net);
 
 }; // namespace Realm
 

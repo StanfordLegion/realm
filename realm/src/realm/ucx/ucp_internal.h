@@ -106,8 +106,9 @@ namespace Realm {
       struct Config {
         AmWithRemoteAddrMode am_wra_mode{AM_WITH_REMOTE_ADDR_MODE_AUTO};
         bool bind_hostmem{true};
+        int rank_id{0};
         int pollers_max{2};
-        int num_priorities{2};
+        int num_priorities{1};
         int prog_boff_max{4}; // progress thread maximum backoff
         int prog_itr_max{16};
         int rdesc_rel_max{16};
@@ -171,6 +172,9 @@ namespace Realm {
       void pbuf_release(UCPWorker *worker, void *buf);
 
       void notify_msg_sent(uint64_t count);
+
+      void add_remote_ep(NodeID peer, const void *blob, size_t bytes);
+      void delete_remote_ep(NodeID peer);
 
       const UCPContext *get_context(const NetworkSegment *segment) const;
       // the public interface exposes the tx worker only

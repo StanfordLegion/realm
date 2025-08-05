@@ -19,6 +19,7 @@
 #include "realm/cmdline.h"
 #include "realm/logging.h"
 #include "realm/activemsg.h"
+#include "realm/node_directory.h"
 
 #ifdef REALM_USE_DLFCN
 #include <dlfcn.h>
@@ -47,11 +48,109 @@ static void aligned_free(void *ptr)
 namespace Realm {
 
   namespace Network {
+    NodeDirectory node_directory;
     REALM_INTERNAL_API_EXTERNAL_LINKAGE NodeID my_node_id = 0;
     REALM_INTERNAL_API_EXTERNAL_LINKAGE NodeID max_node_id = 0;
     REALM_INTERNAL_API_EXTERNAL_LINKAGE NodeSet all_peers;
     REALM_INTERNAL_API_EXTERNAL_LINKAGE NodeSet shared_peers;
     NetworkModule *single_network = 0;
+    NetworkModule *control_plane_network = 0;
+
+#ifdef REALM_ENABLE_NETWORK_PING_TEST
+
+    namespace {
+
+      struct PingTestAm {
+        NodeID node_id;
+        static void handle_message(NodeID sender, const PingTestAm &msg, const void *data,
+                                   size_t datalen)
+        {
+          assert(datalen == 0);
+          assert(data == nullptr);
+          assert(msg.node_id == sender);
+        }
+      };
+
+      ActiveMessageHandlerReg<PingTestAm> ping_test_am;
+
+      struct PingAck {
+        std::atomic<int> *acks;
+        int expected;
+        Mutex *mtx;
+        Mutex::CondVar *cv;
+        bool *done;
+
+        PingAck(std::atomic<int> *a, int e, Mutex *m, Mutex::CondVar *c, bool *d)
+          : acks(a)
+          , expected(e)
+          , mtx(m)
+          , cv(c)
+          , done(d)
+        {}
+
+        void check_and_signal(int val) const
+        {
+          if(val == expected) {
+            AutoLock<> al(*mtx);
+            *done = true;
+            cv->broadcast();
+          }
+        }
+
+        void operator()()
+        {
+          int val = ++(*acks);
+          check_and_signal(val);
+        }
+
+        void operator()() const
+        {
+          int val = ++(*acks);
+          check_and_signal(val);
+        }
+      };
+
+    } // anonymous namespace
+
+    bool ping_all_peers(unsigned timeout_ms)
+    {
+      NodeSet peers = node_directory.get_members();
+
+      if(peers.empty()) {
+        return true;
+      }
+
+      const int expected = peers.size();
+
+      std::atomic<int> acks{0};
+      bool done = false;
+      Mutex mtx;
+      Mutex::CondVar cv(mtx);
+
+      for(NodeID target : peers) {
+        ActiveMessage<PingTestAm> am(target);
+        am->node_id = my_node_id;
+        am.add_remote_completion(PingAck(&acks, expected, &mtx, &cv, &done));
+        am.commit();
+      }
+
+      AutoLock<> al(mtx);
+      if(!done) {
+        // very primitive wait loop with timeout checking
+        uint64_t start = Clock::current_time_in_microseconds();
+        while(!done) {
+          cv.wait();
+          uint64_t now = Clock::current_time_in_microseconds();
+          if(timeout_ms > 0 && (now - start) > static_cast<uint64_t>(timeout_ms) * 1000) {
+            return false; // timeout
+          }
+        }
+      }
+
+      return true;
+    }
+
+#endif // REALM_ENABLE_NETWORK_PING_TEST
 
     bool check_for_quiescence(IncomingMessageManager *message_manager)
     {
@@ -645,6 +744,7 @@ namespace Realm {
         std::cerr << "Unable to parse network command line" << std::endl;
         abort();
       }
+
       for(const std::string &name : network_list) {
 
         // if -ll:networks is none, do not enable any networks
@@ -672,10 +772,16 @@ namespace Realm {
           abort();
         }
         modules.push_back(m);
-        Network::single_network = m;
+
+        if(name != "udp") {
+          Network::single_network = m;
+        } else {
+          Network::control_plane_network = m;
+        }
+
         need_loopback = false;
 #ifndef REALM_USE_MULTIPLE_NETWORKS
-        break; // Found one network backend that works, no need to create the rest
+        // break;  // Found one network backend that works, no need to create the rest
 #endif
       }
     }

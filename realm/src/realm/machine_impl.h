@@ -143,6 +143,8 @@ namespace Realm {
     void add_process_info(int node_id, const Machine::ProcessInfo &process_info,
                           bool lock_held = false);
 
+    void remove_node(NodeID node_id);
+
     mutable Mutex mutex;
     std::vector<Machine::ProcessorMemoryAffinity> proc_mem_affinities;
     std::set<Machine::MachineUpdateSubscriber *> subscribers;
@@ -161,7 +163,7 @@ namespace Realm {
   template <typename T, typename T2>
   class QueryPredicate {
   public:
-    virtual ~QueryPredicate(void){};
+    virtual ~QueryPredicate(void) {};
 
     virtual QueryPredicate<T, T2> *clone(void) const = 0;
 
@@ -416,6 +418,6 @@ namespace Realm {
 
 }; // namespace Realm
 
-  // include "machine_impl.inl"
+// include "machine_impl.inl"
 
 #endif // ifndef REALM_MACHINE_IMPL_H

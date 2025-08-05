@@ -136,7 +136,11 @@ namespace Realm {
     cp.add_option_string("-ucx:tls_dev", config.tls_dev);
 #endif
 
-    bool ok = cp.parse_command_line(cmdline);
+    cp.add_option_int_units("-ll:gsize", deprecated_gsize, 'm');
+    cp.add_option_int("-ll:id", config.rank_id);
+
+    std::vector<std::string> cmd(cmdline);
+    bool ok = cp.parse_command_line(cmd);
     assert(ok);
 
     if(deprecated_gsize > 0) {
@@ -181,6 +185,13 @@ namespace Realm {
     // the network module's destructor is called.
     internal->finalize();
   }
+
+  void UCPModule::add_remote_ep(NodeID peer, const void *blob, size_t bytes)
+  {
+    internal->add_remote_ep(peer, blob, bytes);
+  }
+
+  void UCPModule::delete_remote_ep(NodeID peer) { internal->delete_remote_ep(peer); }
 
   void UCPModule::create_memories(RuntimeImpl *runtime) {}
 

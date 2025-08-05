@@ -439,17 +439,17 @@ namespace Realm {
       return false;
     }
 
-    bool UCPWorker::ep_get(int target, int remote_dev_index, ucp_ep_h *ep) const
+    bool UCPWorker::ep_get(int target, int remote_dev_index, ucp_ep_h *ep)
     {
       auto iter1 = eps.find(target);
-      assert(iter1 != eps.end());
-
-      auto iter2 = iter1->second.find(remote_dev_index);
-      assert(iter2 != iter1->second.end());
-
-      *ep = iter2->second;
-
-      return true;
+      if(iter1 != eps.end()) {
+        auto iter2 = iter1->second.find(remote_dev_index);
+        if(iter2 != iter1->second.end()) {
+          *ep = iter2->second;
+        }
+        return true;
+      }
+      return false;
     }
 
     bool UCPWorker::ep_close(ucp_ep_h ep)

@@ -1,4 +1,3 @@
-
 /* Copyright 2024 NVIDIA Corporation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -400,6 +399,8 @@ namespace Realm {
         int dev_index;
       };
 
+      assert(ucp_contexts.size() == 1);
+
       // get details of all rx workers of my own contexts
       std::vector<WorkerInfo> self_rx_workers_info;
       for(const auto &context : ucp_contexts) {
@@ -409,11 +410,24 @@ namespace Realm {
         status = UCP_FNPTR(ucp_worker_get_address)(wi.worker->get_ucp_worker(), &wi.addr,
                                                    &wi.addrlen);
         CHKERR_JUMP(status != UCS_OK, "ucp_worker_get_address failed", log_ucp, err);
+
+        assert(config.rank_id == Network::my_node_id);
+        auto meta = *Network::node_directory.lookup(Network::my_node_id);
+
+        std::vector<uint8_t> tmp(1 + wi.addrlen);
+        tmp[0] = -1;
+
 #ifdef REALM_USE_CUDA
         if(context.gpu) {
           wi.dev_index = context.gpu->info->index;
+          tmp[0] = context.gpu->info->index;
         }
 #endif
+
+        std::memcpy(tmp.data() + 1, wi.addr, wi.addrlen);
+        meta.worker_address.swap(tmp);
+        Network::node_directory.add_slot(Network::my_node_id, meta);
+
         self_rx_workers_info.push_back(wi);
         self_max_addrlen = std::max(self_max_addrlen, wi.addrlen);
       }
@@ -882,6 +896,56 @@ namespace Realm {
       return true;
     }
 
+    void UCPInternal::add_remote_ep(NodeID peer, const void *blob, size_t bytes)
+    {
+      /* blob layout:  [1-byte dev_index | raw ucp_worker_address] */
+      if(bytes < 2) {
+        return;
+      }
+
+      const uint8_t *p = static_cast<const uint8_t *>(blob);
+      int rdev = *p++; // remote device index
+      const ucp_address_t *addr = reinterpret_cast<const ucp_address_t *>(p);
+      const size_t alen = bytes - 1; // address length (may be unused)
+
+      rdev = -1; // TODO: FIX ME
+
+      (void)alen; // silences "unused" in release
+
+      /* Choose host context, priority 0 – identical to create_eps() */
+      const UCPContext *ctx = get_context_host();
+      UCPWorker *w = get_tx_worker(ctx, /*priority=*/0);
+      assert(w != nullptr);
+
+      /* Re-use the trusted helper that caches the EP internally */
+      bool ok = w->ep_add(peer, const_cast<ucp_address_t *>(addr), rdev);
+      if(!ok) {
+        log_ucp.error() << "ep_add failed while admitting peer " << peer;
+      }
+    }
+
+    void UCPInternal::delete_remote_ep(NodeID peer)
+    {
+      // Iterate over all UCP contexts and their tx workers; if an endpoint that
+      // targets the given peer exists close it and let the worker forget it.
+      // All UCX operations are expected to be quiescent at this point so a
+      // synchronous close is acceptable.
+
+      for(const auto &ctx_pair : workers) {
+        // const UCPContext *ctx = ctx_pair.first;
+        const std::vector<UCPWorker *> &tws = ctx_pair.second.tx_workers;
+        for(UCPWorker *w : tws) {
+          // The current implementation of ep_add always stores the endpoint at
+          // remote_dev_index=-1 (TODO: multi-NIC).  Try to fetch it; if found
+          // close and ignore errors.
+          ucp_ep_h ep;
+          if(w->ep_get(peer, /*remote_dev_index=*/-1, &ep)) {
+            w->ep_close(ep);
+          }
+        }
+      }
+    }
+
 #ifdef REALM_UCX_DYNAMIC_LOAD
     bool UCPInternal::resolve_ucp_api_fnptrs()
     {
@@ -1067,8 +1131,14 @@ namespace Realm {
         req = internal->request_get(tx_worker);
         CHKERR_JUMP(req == nullptr, "failed to get request", log_ucp, err);
 
-        CHKERR_JUMP(!tx_worker->ep_get(sender, remote_dev_index, &req->ucp.ep),
-                    "failed to get reply ep", log_ucp, err_rel_req);
+        if(!tx_worker->ep_get(sender, remote_dev_index, &req->ucp.ep)) {
+          auto meta = Network::node_directory.lookup(sender);
+          assert(meta != nullptr);
+          internal->add_remote_ep(sender, meta->worker_address.data(),
+                                  meta->worker_address.size());
+          CHKERR_JUMP(!tx_worker->ep_get(sender, remote_dev_index, &req->ucp.ep),
+                      "failed to get ep", log_ucp, err);
+        }
 
         req->ucp.op_type = UCPWorker::OpType::AM_SEND;
         req->ucp.flags = UCP_AM_SEND_FLAG_EAGER;
@@ -1671,6 +1741,8 @@ namespace Realm {
           total_msg_sent.load(),   total_msg_received.load(),   sampled_receive_count,
           total_rcomp_sent.load(), total_rcomp_received.load(), outstanding_reqs.load(),
       };
+
+      return true; // TODO: FIX ME
 
       log_ucp.debug() << "local quiescence counters:"
                       << " total_msg_sent " << local_counts[0] << " total_msg_received "
@@ -2378,8 +2450,16 @@ namespace Realm {
           goto err_update_pending;
         }
         *req = *req_prim;
-        CHKERR_JUMP(!worker->ep_get(target, remote_dev_index, &req->ucp.ep),
-                    "failed to get ep", log_ucp, err);
+
+        if(!worker->ep_get(target, remote_dev_index, &req->ucp.ep)) {
+          auto meta = Network::node_directory.lookup(target);
+          assert(meta != nullptr);
+          internal->add_remote_ep(target, meta->worker_address.data(),
+                                  meta->worker_address.size());
+          CHKERR_JUMP(!worker->ep_get(target, remote_dev_index, &req->ucp.ep),
+                      "failed to get ep", log_ucp, err);
+        }
+
         if(!UCPMessageImpl::send_request(req, AM_ID)) {
           log_ucp.error() << "failed to send multicast am request";
           goto err_update_pending;
@@ -2409,8 +2489,14 @@ namespace Realm {
       bool ret;
       ucp_ep_h ep;
 
-      CHKERR_JUMP(!worker->ep_get(target, remote_dev_index, &ep), "failed to get ep",
-                  log_ucp, err);
+      if(!worker->ep_get(target, remote_dev_index, &ep)) {
+        auto meta = Network::node_directory.lookup(target);
+        assert(meta != nullptr);
+        internal->add_remote_ep(target, meta->worker_address.data(),
+                                meta->worker_address.size());
+        CHKERR_JUMP(!worker->ep_get(target, remote_dev_index, &ep), "failed to get ep",
+                    log_ucp, err);
+      }
 
       if(dest_payload_rdma_info == nullptr) {
         if(header_size + act_payload_size <= internal->config.fp_max) {

@@ -23,6 +23,8 @@
 #include "realm/nodeset.h"
 #include "realm/memory.h"
 #include "realm/bytearray.h"
+#include "realm/mutex.h"
+// #include "realm/node_directory.h"
 
 #include <map>
 
@@ -37,6 +39,7 @@ namespace Realm {
   class ActiveMessageImpl;
   class IncomingMessageManager;
   class NetworkSegment;
+  class NodeDirectory;
 
   // a RemoteAddress is used to name the target of an RDMA operation - in some
   //  cases it's as simple as a pointer, but in others additional info is needed
@@ -58,7 +61,12 @@ namespace Realm {
     uintptr_t offset;
   };
 
+#define REALM_ENABLE_NETWORK_PING_TEST
+
+  typedef uint64_t Epoch_t;
+
   namespace Network {
+    extern NodeDirectory node_directory;
     // a few globals for efficiency
     extern NodeID my_node_id;
     extern NodeID max_node_id;
@@ -71,9 +79,33 @@ namespace Realm {
     // in most cases, there will be a single network module - if so, we set
     //  this so we don't have to do a per-node lookup
     extern NetworkModule *single_network;
+    extern NetworkModule *control_plane_network;
+
+#ifdef REALM_ENABLE_NETWORK_PING_TEST
+    // Runs a one-way ActiveMessage ping to every peer and waits for remote
+    // completions. Useful in unit tests to validate that the data plane is
+    // operational.  Conside removing.
+    bool ping_all_peers(unsigned timeout_ms = 5000);
+#endif
 
     // gets the network for a given node
     NetworkModule *get_network(NodeID node);
+
+    inline NetworkModule *choose_network(NodeID target, bool want_control_plane)
+    {
+      if(want_control_plane && Network::control_plane_network) {
+        return control_plane_network;
+      }
+      return get_network(target);
+    }
+
+    inline NetworkModule *choose_network(NodeSet targets, bool want_control_plane)
+    {
+      if(want_control_plane && Network::control_plane_network) {
+        return control_plane_network;
+      }
+      return get_network(Network::my_node_id);
+    }
 
     // and a few "global" operations that abstract over any/all networks
     void barrier(void);
@@ -100,7 +132,8 @@ namespace Realm {
     create_active_message_impl(NodeID target, unsigned short msgid, size_t header_size,
                                size_t max_payload_size, const void *src_payload_addr,
                                size_t src_payload_lines, size_t src_payload_line_stride,
-                               void *storage_base, size_t storage_size);
+                               void *storage_base, size_t storage_size,
+                               bool want_control = false);
 
     ActiveMessageImpl *create_active_message_impl(
         NodeID target, unsigned short msgid, size_t header_size, size_t max_payload_size,
@@ -112,10 +145,12 @@ namespace Realm {
         NodeID target, unsigned short msgid, size_t header_size, size_t max_payload_size,
         const RemoteAddress &dest_payload_addr, void *storage_base, size_t storage_size);
 
-    ActiveMessageImpl *create_active_message_impl(
-        const NodeSet &targets, unsigned short msgid, size_t header_size,
-        size_t max_payload_size, const void *src_payload_addr, size_t src_payload_lines,
-        size_t src_payload_line_stride, void *storage_base, size_t storage_size);
+    ActiveMessageImpl *
+    create_active_message_impl(const NodeSet &targets, unsigned short msgid,
+                               size_t header_size, size_t max_payload_size,
+                               const void *src_payload_addr, size_t src_payload_lines,
+                               size_t src_payload_line_stride, void *storage_base,
+                               size_t storage_size, bool want_control = false);
 
     size_t recommended_max_payload(NodeID target, bool with_congestion,
                                    size_t header_size);
@@ -168,6 +203,10 @@ namespace Realm {
     // detaches from the network
     virtual void detach(RuntimeImpl *runtime,
                         std::vector<NetworkSegment *> &segments) = 0;
+
+    virtual void add_remote_ep(NodeID peer, const void *blob, size_t bytes) { assert(0); }
+
+    virtual void delete_remote_ep(NodeID peer) { assert(0); }
 
     // collective communication within this network
     virtual void barrier(void) = 0;
@@ -279,6 +318,7 @@ namespace Realm {
 
     // again, a single network puts itself here in addition to adding to the map
     NetworkModule *single_network;
+    NetworkModule *control_plane_network;
     ByteArray *single_network_data;
 
     // a map from each of the networks that successfully bound the segment to
@@ -297,7 +337,6 @@ namespace Realm {
     bool in_segment(const void *range_base, size_t range_bytes) const;
     bool in_segment(uintptr_t range_base, size_t range_bytes) const;
   };
-
 }; // namespace Realm
 
 #include "realm/network.inl"
