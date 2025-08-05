@@ -38,21 +38,23 @@ namespace Realm {
 
   template <typename T, size_t INLINE_STORAGE>
   ActiveMessage<T, INLINE_STORAGE>::ActiveMessage(NodeID _target,
-                                                  size_t _max_payload_size /*= 0*/)
+                                                  size_t _max_payload_size /*= 0*/,
+                                                  bool want_control)
     : impl(0)
   {
-    init(_target, _max_payload_size);
+    init(_target, _max_payload_size, want_control);
   }
 
   template <typename T, size_t INLINE_STORAGE>
   void ActiveMessage<T, INLINE_STORAGE>::init(NodeID _target,
-                                              size_t _max_payload_size /*= 0*/)
+                                              size_t _max_payload_size /*= 0*/,
+                                              bool want_control)
   {
     assert(impl == 0);
     unsigned short msgid = activemsg_handler_table.lookup_message_id<T>();
-    impl = Network::create_active_message_impl(_target, msgid, sizeof(T),
-                                               _max_payload_size, 0, 0, 0,
-                                               &inline_capacity, sizeof(inline_capacity));
+    impl = Network::create_active_message_impl(
+        _target, msgid, sizeof(T), _max_payload_size, 0, 0, 0, &inline_capacity,
+        sizeof(inline_capacity), want_control);
     header = new(impl->header_base) T;
     fbs.reset(impl->payload_base, impl->payload_size);
   }
@@ -81,21 +83,23 @@ namespace Realm {
 
   template <typename T, size_t INLINE_STORAGE>
   ActiveMessage<T, INLINE_STORAGE>::ActiveMessage(const Realm::NodeSet &_targets,
-                                                  size_t _max_payload_size /*= 0*/)
+                                                  size_t _max_payload_size /*= 0*/,
+                                                  bool want_control)
     : impl(0)
   {
-    init(_targets, _max_payload_size);
+    init(_targets, _max_payload_size, want_control);
   }
 
   template <typename T, size_t INLINE_STORAGE>
   void ActiveMessage<T, INLINE_STORAGE>::init(const Realm::NodeSet &_targets,
-                                              size_t _max_payload_size /*= 0*/)
+                                              size_t _max_payload_size /*= 0*/,
+                                              bool want_control)
   {
     assert(impl == 0);
     unsigned short msgid = activemsg_handler_table.lookup_message_id<T>();
-    impl = Network::create_active_message_impl(_targets, msgid, sizeof(T),
-                                               _max_payload_size, 0, 0, 0,
-                                               &inline_capacity, sizeof(inline_capacity));
+    impl = Network::create_active_message_impl(
+        _targets, msgid, sizeof(T), _max_payload_size, 0, 0, 0, &inline_capacity,
+        sizeof(inline_capacity), want_control);
     header = new(impl->header_base) T;
     fbs.reset(impl->payload_base, impl->payload_size);
   }

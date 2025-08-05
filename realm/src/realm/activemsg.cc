@@ -842,6 +842,7 @@ namespace Realm {
       Message *current_msg = 0;
       Message **current_tail = 0;
       int sender = get_messages(current_msg, current_tail, true /*wait*/);
+
       if(sender == -1) {
 #ifdef DEBUG_INCOMING
         printf("received empty list - assuming shutdown!\n");
