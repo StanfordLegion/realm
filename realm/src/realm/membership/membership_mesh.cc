@@ -74,17 +74,31 @@ namespace {
                                const void *data, size_t datalen);
   };
 
-  struct LeaveReqMessage : ControlPlaneMessageTag {
+  struct LeavePrepareMessage : ControlPlaneMessageTag {
     Epoch_t epoch;
 
-    static void handle_message(NodeID sender, const LeaveReqMessage &msg,
+    static void handle_message(NodeID sender, const LeavePrepareMessage &msg,
                                const void *data, size_t datalen);
   };
 
-  struct LeaveAckMessage : ControlPlaneMessageTag {
+  struct LeavePrepareAckMessage : ControlPlaneMessageTag {
     Epoch_t epoch;
 
-    static void handle_message(NodeID sender, const LeaveAckMessage &msg,
+    static void handle_message(NodeID sender, const LeavePrepareAckMessage &msg,
+                               const void *data, size_t datalen);
+  };
+
+  struct LeavePrepareCommitMessage : ControlPlaneMessageTag {
+    Epoch_t epoch;
+
+    static void handle_message(NodeID sender, const LeavePrepareCommitMessage &msg,
+                               const void *data, size_t datalen);
+  };
+
+  struct LeavePrepareCommitAckMessage : ControlPlaneMessageTag {
+    Epoch_t epoch;
+
+    static void handle_message(NodeID sender, const LeavePrepareCommitAckMessage &msg,
                                const void *data, size_t datalen);
   };
 
@@ -104,8 +118,12 @@ namespace {
   ActiveMessageHandlerReg<JoinRequestMessage> joinreq_handler;
   ActiveMessageHandlerReg<JoinAcklMessage> joinack_handler;
   ActiveMessageHandlerReg<MemberUpdateMessage> p2p_member_handler;
-  ActiveMessageHandlerReg<LeaveReqMessage> leavereq_handler;
-  ActiveMessageHandlerReg<LeaveAckMessage> leaveack_handler;
+
+  ActiveMessageHandlerReg<LeavePrepareMessage> leaveprep_handler;
+  ActiveMessageHandlerReg<LeavePrepareAckMessage> leaveprep_ack_handler;
+
+  ActiveMessageHandlerReg<LeavePrepareCommitMessage> leaveprep_commit_handler;
+  ActiveMessageHandlerReg<LeavePrepareCommitAckMessage> leaveprep_commit_ack_handler;
 } // namespace
 
 class AmProvider : public NodeDirectory::Provider {
@@ -251,51 +269,101 @@ void MemberUpdateMessage::handle_message(NodeID, const MemberUpdateMessage &msg,
     mesh_state->subscribers.add(msg.node_id);
   }
 }
-
-void LeaveReqMessage::handle_message(NodeID sender, const LeaveReqMessage &msg,
-                                     const void *, size_t)
+void LeavePrepareMessage::handle_message(NodeID sender, const LeavePrepareMessage &msg,
+                                         const void * /*data*/, size_t /*datalen*/)
 {
+  // Stage-A of graceful shutdown.  We do NOT remove the sender yet – that happens
+  // in the Commit stage – but we notify higher layers that the peer intends to
+  // go away so they can stop scheduling new work there.
   assert(sender != Network::my_node_id);
 
-  Network::node_directory.update_epoch(msg.epoch);
-
-  // TODO: thread-safety semantics here needs more thinking
-
-  if(mesh_state->leaving.load(std::memory_order_acquire)) {
-    AutoLock<> al(mesh_state->pending_mutex);
-    mesh_state->pending.remove(sender);
-  } else {
-    AutoLock<> al(mesh_state->subs_mutex);
-    mesh_state->subscribers.remove(sender);
-  }
-
-  ActiveMessage<LeaveAckMessage> am(sender);
-  am.commit();
-
   if(mesh_state->hooks.pre_leave) {
-    realmNodeMeta_t meta{(int32_t)sender, 0, false};
+    realmNodeMeta_t meta{(int32_t)sender, 0, /*announce_mm=*/false};
     mesh_state->hooks.pre_leave(&meta, nullptr, 0, /*left=*/false,
                                 mesh_state->hooks.user_arg);
   }
 
-  Network::node_directory.remove_slot(sender);
+  // Record the intention – here we could mark the directory entry as
+  // PENDING_REMOVE, but for simplicity we just leave it untouched until commit.
+  (void)msg; // msg.epoch is currently unused, kept for future extensions.
+
+  // Acknowledge receipt so the leaver can move to the Commit phase.
+  ActiveMessage<LeavePrepareAckMessage> ack(sender);
+  ack->epoch = Network::node_directory.cluster_epoch();
+  ack.commit();
 }
 
-void LeaveAckMessage::handle_message(NodeID /*sender*/ sender, const LeaveAckMessage &,
-                                     const void *, size_t)
+void LeavePrepareAckMessage::handle_message(NodeID /*sender*/ sender,
+                                            const LeavePrepareAckMessage & /*msg*/,
+                                            const void * /*data*/, size_t /*datalen*/)
 {
+  // Executed only on the leaving node.  Track which peers have acknowledged the
+  // prepare stage.  Once everyone has responded we advance to Commit.
   {
     AutoLock<> al(mesh_state->pending_mutex);
     mesh_state->pending.remove(sender);
+    if(mesh_state->pending.empty()) {
+      // All peers acknowledged – begin Commit stage.
+      mesh_state->pending = mesh_state->subscribers; // reuse list for commit acks
+      if(!mesh_state->pending.empty()) {
+        ActiveMessage<LeavePrepareCommitMessage> commit(mesh_state->pending);
+        commit->epoch = Network::node_directory.bump_epoch(Network::my_node_id);
+        commit.commit();
+      } else {
+        // No peers – we can finish immediately.
+        if(mesh_state->hooks.post_leave) {
+          realmNodeMeta_t meta{(int32_t)Network::my_node_id, 0, false};
+          mesh_state->hooks.post_leave(&meta, nullptr, 0, /*left=*/true,
+                                       mesh_state->hooks.user_arg);
+        }
+      }
+    }
+  }
+}
+
+void LeavePrepareCommitMessage::handle_message(NodeID sender,
+                                               const LeavePrepareCommitMessage &msg,
+                                               const void * /*data*/, size_t /*datalen*/)
+{
+  // Final removal step executed on every remaining peer.
+  assert(sender != Network::my_node_id);
+
+  Network::node_directory.update_epoch(msg.epoch);
+
+  // Remove directory entry and subscriber record.
+  {
+    AutoLock<> al(mesh_state->subs_mutex);
+    mesh_state->subscribers.remove(sender);
   }
 
+  if(mesh_state->hooks.post_leave) {
+    realmNodeMeta_t meta{(int32_t)sender, 0, false};
+    mesh_state->hooks.post_leave(&meta, nullptr, 0, /*left=*/true,
+                                 mesh_state->hooks.user_arg);
+  }
+
+  // Acknowledge to the leaving node.
+  ActiveMessage<LeavePrepareCommitAckMessage> ack(sender);
+  ack->epoch = Network::node_directory.cluster_epoch();
+  ack.commit();
+
+  Network::node_directory.remove_slot(sender);
+}
+
+void LeavePrepareCommitAckMessage::handle_message(
+    NodeID /*sender*/ sender, const LeavePrepareCommitAckMessage & /*msg*/,
+    const void * /*data*/, size_t /*datalen*/)
+{
+  // Leaving node receives commit acknowledgements; when everyone is done we
+  // fire the post_leave hook.
   {
     AutoLock<> al(mesh_state->pending_mutex);
+    mesh_state->pending.remove(sender);
     if(mesh_state->pending.empty()) {
-      assert(mesh_state->hooks.post_leave);
       if(mesh_state->hooks.post_leave) {
         realmNodeMeta_t meta{(int32_t)Network::my_node_id, 0, false};
-        mesh_state->hooks.post_leave(&meta, nullptr, 0, true, mesh_state->hooks.user_arg);
+        mesh_state->hooks.post_leave(&meta, nullptr, 0, /*left=*/true,
+                                     mesh_state->hooks.user_arg);
       }
     }
   }
@@ -363,10 +431,11 @@ namespace {
     {
       AutoLock<> al(mesh_state->pending_mutex);
       if(!mesh_state->pending.empty()) {
-        ActiveMessage<LeaveReqMessage> am(mesh_state->pending);
-        am->epoch = Network::node_directory.bump_epoch(Network::my_node_id);
-        am.commit();
+        ActiveMessage<LeavePrepareMessage> prep(mesh_state->pending);
+        prep->epoch = Network::node_directory.bump_epoch(Network::my_node_id);
+        prep.commit();
       } else {
+        // No peers, complete leave immediately.
         if(mesh_state->hooks.post_leave) {
           mesh_state->hooks.post_leave(self, nullptr, 0, /*left=*/true,
                                        mesh_state->hooks.user_arg);

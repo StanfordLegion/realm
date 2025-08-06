@@ -469,8 +469,9 @@ namespace Realm {
         // rt->shutdown_in_progress.store(true);
 
       } else {
+        // TODO: mark and stop all the work for the leaving process
         if(!rt->shutdown_in_progress.load()) {
-          assert(rt->remove_peer(self->node_id));
+          // assert(rt->remove_peer(self->node_id));
         }
       }
     }
@@ -478,8 +479,15 @@ namespace Realm {
     void membership_post_leave_cb(const realmNodeMeta_t *self, const void *, size_t,
                                   bool /*left*/, void *)
     {
-      assert(Network::my_node_id == self->node_id);
-      get_runtime()->initiate_shutdown(/*signal_only=*/true);
+      RuntimeImpl *rt = get_runtime();
+
+      if(Network::my_node_id == self->node_id) {
+        rt->initiate_shutdown(/*signal_only=*/true);
+      } else {
+        if(!rt->shutdown_in_progress.load()) {
+          assert(rt->remove_peer(self->node_id));
+        }
+      }
     }
 
     bool membership_filter_cb(const realmNodeMeta_t *, void *) { return true; }
