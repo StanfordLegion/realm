@@ -1278,6 +1278,20 @@ namespace Realm {
     CUresult cuCtxRecordEvent(CUcontext hctx, CUevent event);
 #endif
 
+#if CUDA_VERSION >= 13000
+// Unfortunately, 13.0 violates it's own source compatibility rules versus
+// cuGetProcAddress, so fix that ourselves here.
+#if !defined(cuCtxGetDevice)
+#define cuCtxGetDevice cuCtxGetDevice_v2
+#endif
+#if !defined(cuCtxSynchronize)
+#define cuCtxSynchronize cuCtxSynchronize_v2
+#endif
+#if !defined(cuStreamGetCtx)
+#define cuStreamGetCtx cuStreamGetCtx_v2
+#endif
+#endif
+
     // cuda driver and/or runtime entry points
 #define CUDA_DRIVER_HAS_FNPTR(name) ((name##_fnptr) != nullptr)
 #define CUDA_DRIVER_FNPTR(name) (assert(name##_fnptr != nullptr), name##_fnptr)

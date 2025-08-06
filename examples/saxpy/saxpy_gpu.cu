@@ -24,6 +24,23 @@
 
 extern Logger log_app;
 
+// 13.0 changed some function signatures here
+#if CUDART_VERSION < 13000
+#define CUMEMADVISE(p, s, a, d) cudaMemAdvise((p), (s), (a), 0)
+#define CUMEMPREFETCHASYNC(p, sz, d, s) cudaMemPrefetchAsync((p), (sz), (d), (s))
+#else
+#define CUMEMADVISE(p, s, a, d)                                                          \
+  do {                                                                                   \
+    cudaMemLocation _loc = {cudaMemLocationTypeDevice, d};                               \
+    cudaMemAdvise((p), (s), (a), _loc);                                                  \
+  } while(0)
+#define CUMEMPREFETCHASYNC(p, sz, d, s)                                                  \
+  do {                                                                                   \
+    cudaMemLocation _loc = {cudaMemLocationTypeDevice, d};                               \
+    cudaMemPrefetchAsync((p), (sz), _loc, 0, (s));                                       \
+  } while(0)
+#endif
+
 namespace TestConfig {
 extern bool prefetch;
 };
@@ -65,28 +82,24 @@ __host__ void gpu_saxpy_task(const void *args, size_t arglen,
     int device;
     cudaGetDevice(&device);
 
-    if (saxpy_args->x_inst.get_location().kind() ==
-        Memory::Kind::GPU_MANAGED_MEM) {
-      cudaMemAdvise(&ra_x[saxpy_args->bounds.lo], num_elements * sizeof(float),
-                    cudaMemAdviseSetReadMostly, 0 /*unused*/);
-      cudaMemPrefetchAsync(&ra_x[saxpy_args->bounds.lo],
-                           num_elements * sizeof(float), device,
-                           0 /*default stream*/);
+    if(saxpy_args->x_inst.get_location().kind() == Memory::Kind::GPU_MANAGED_MEM) {
+      CUMEMADVISE(&ra_x[saxpy_args->bounds.lo], num_elements * sizeof(float),
+                  cudaMemAdviseSetReadMostly, device);
+      CUMEMPREFETCHASYNC(&ra_x[saxpy_args->bounds.lo], num_elements * sizeof(float),
+                           device, 0 /*default stream*/);
     }
 
-    if (saxpy_args->y_inst.get_location().kind() ==
-        Memory::Kind::GPU_MANAGED_MEM) {
-      cudaMemAdvise(&ra_y[saxpy_args->bounds.lo], num_elements * sizeof(float),
-                    cudaMemAdviseSetReadMostly, 0 /*unused*/);
-      cudaMemPrefetchAsync(&ra_y[saxpy_args->bounds.lo],
-                           num_elements * sizeof(float), device,
-                           0 /*default stream*/);
+    if(saxpy_args->y_inst.get_location().kind() == Memory::Kind::GPU_MANAGED_MEM) {
+      CUMEMADVISE(&ra_y[saxpy_args->bounds.lo], num_elements * sizeof(float),
+                  cudaMemAdviseSetReadMostly, device);
+      CUMEMPREFETCHASYNC(&ra_y[saxpy_args->bounds.lo], num_elements * sizeof(float),
+                           device, 0 /*default stream*/);
     }
 
     if (saxpy_args->z_inst.get_location().kind() ==
         Memory::Kind::GPU_MANAGED_MEM) {
       // z will be modified, and not-mostly-read-only is the default
-      cudaMemPrefetchAsync(&ra_z[saxpy_args->bounds.lo],
+      CUMEMPREFETCHASYNC(&ra_z[saxpy_args->bounds.lo],
                            num_elements * sizeof(float), device,
                            0 /*default stream*/);
     }
