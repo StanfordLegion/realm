@@ -33,6 +33,7 @@ set(REALM_SOURCES
     module.cc
     module_config.cc
     nodeset.cc
+    node_directory.cc
     operation.cc
     proc_impl.cc
     repl_heap.cc
@@ -46,6 +47,7 @@ set(REALM_SOURCES
     hardware_topology.cc
     realm_c.cc
     fragmented_message.cc
+    membership/membership.cc
     transfer/lowlevel_disk.cc
     transfer/address_list.cc
     transfer/channel_common.cc
@@ -112,6 +114,17 @@ if(TARGET ucx::ucp)
     ucx/oob_group_comm.cc
     ucx/bootstrap/bootstrap.cc
     ucx/bootstrap/bootstrap_loader.cc
+  )
+endif()
+
+if(REALM_USE_UDP)
+  list(
+    APPEND
+    REALM_SOURCES
+    udp/udp_module.cc
+    udp/udp_shim.cc
+    udp/udp_module.h
+    membership/membership_mesh.cc
   )
 endif()
 

@@ -135,6 +135,7 @@ option(REALM_ENABLE_MPI "Compile with MPI support" OFF)
 option(REALM_ENABLE_OPENMP "Compile with OpenMP support" ON)
 option(REALM_ENABLE_KOKKOS "Compile with kokkos support" OFF)
 cmake_dependent_option(REALM_ENABLE_UCX "Compile with UCX support" OFF "NOT WIN32" OFF)
+option(REALM_ENABLE_UDP, "Compile UDP support" ON)
 cmake_dependent_option(
   REALM_INSTALL_UCX_BOOTSTRAPS "Install UCX bootstraps" ON "REALM_ENABLE_INSTALL; REALM_ENABLE_UCX"
   OFF
@@ -269,6 +270,12 @@ endif()
 
 if(REALM_ENABLE_LIBDL)
   list(APPEND REALM_LIBRARIES ${CMAKE_DL_LIBS})
+endif()
+
+if (REALM_ENABLE_UDP)
+  set(REALM_USE_UDP TRUE)
+  # Record feature status for cmake --log-level=STATUS output
+  add_feature_info(udp REALM_USE_UDP "Enables UDP support")
 endif()
 
 if(REALM_ENABLE_CPPTRACE)

@@ -2477,7 +2477,8 @@ namespace Realm {
                                                  : NodeDirectory::UNKNOWN_NODE_ID;
     self_meta.announce_mm = true;
 
-    assert(realmJoin(membership, &self_meta) == realm_status_t::REALM_SUCCESS);
+    realm_status_t status = realmJoin(membership, &self_meta);
+    assert(status == realm_status_t::REALM_SUCCESS);
 
     {
       AutoLock<> al(join_mutex);
