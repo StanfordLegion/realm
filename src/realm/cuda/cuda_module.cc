@@ -722,7 +722,11 @@ namespace Realm {
         {
           AutoGPUContext agc(gpu);
 
+#if CUDA_VERSION >= 13000
+          CUresult res = CUDA_DRIVER_FNPTR(cuCtxSynchronize)(gpu->context);
+#else
           CUresult res = CUDA_DRIVER_FNPTR(cuCtxSynchronize)();
+#endif
 
           // complain loudly about any errors
           if(res != CUDA_SUCCESS) {
@@ -939,7 +943,11 @@ namespace Realm {
       }
 
       // we didn't use streams here, so synchronize the whole context
+#if CUDA_VERSION >= 13000
+      CHECK_CU(CUDA_DRIVER_FNPTR(cuCtxSynchronize)(gpu->context));
+#else
       CHECK_CU(CUDA_DRIVER_FNPTR(cuCtxSynchronize)());
+#endif
       ThreadLocal::block_on_synchronize = false;
 
       // pop the CUDA context for this GPU back off
@@ -2036,7 +2044,11 @@ namespace Realm {
       CUdevice dev;
       int numSMs;
 
+#if CUDA_VERSION >= 13000
+      CHECK_CU(CUDA_DRIVER_FNPTR(cuCtxGetDevice)(&dev, _context));
+#else
       CHECK_CU(CUDA_DRIVER_FNPTR(cuCtxGetDevice)(&dev));
+#endif
       CHECK_CU(CUDA_DRIVER_FNPTR(cuDeviceGetAttribute)(
           &numSMs, CU_DEVICE_ATTRIBUTE_MULTIPROCESSOR_COUNT, dev));
 
@@ -2165,7 +2177,11 @@ namespace Realm {
 
       ctxsync.shutdown_threads();
 
+#if CUDA_VERSION >= 13000
+      CHECK_CU(CUDA_DRIVER_FNPTR(cuCtxSynchronize)(context));
+#else
       CHECK_CU(CUDA_DRIVER_FNPTR(cuCtxSynchronize)());
+#endif
 
       pop_context();
 
@@ -3256,18 +3272,20 @@ namespace Realm {
 
         if(nvml_initialized) {
           for(GPUInfo *info : infos) {
+            // clang-format off
             nvmlFieldValue_t values[] = {
 #if CUDA_VERSION >= 12000
-              {NVML_FI_DEV_NVLINK_GET_SPEED, 0},
+              {NVML_FI_DEV_NVLINK_GET_SPEED, 0, 0, 0, NVML_VALUE_TYPE_COUNT, NVML_SUCCESS, { 0 }},
 #else
-              {NVML_FI_DEV_NVLINK_SPEED_MBPS_L0, 0}
+              {NVML_FI_DEV_NVLINK_SPEED_MBPS_L0, 0, 0, 0, NVML_VALUE_TYPE_COUNT, NVML_SUCCESS, { 0 }},
 #endif
 #if CUDA_VERSION >= 12030
-              {NVML_FI_DEV_C2C_LINK_GET_STATUS, 0},
-              {NVML_FI_DEV_C2C_LINK_COUNT, 0},
-              {NVML_FI_DEV_C2C_LINK_GET_MAX_BW, 0},
+              {NVML_FI_DEV_C2C_LINK_GET_STATUS, 0, 0, 0, NVML_VALUE_TYPE_COUNT, NVML_SUCCESS, { 0 }},
+              {NVML_FI_DEV_C2C_LINK_COUNT, 0, 0, 0, NVML_VALUE_TYPE_COUNT, NVML_SUCCESS, { 0 }},
+              {NVML_FI_DEV_C2C_LINK_GET_MAX_BW, 0, 0, 0, NVML_VALUE_TYPE_COUNT, NVML_SUCCESS, { 0 }},
 #endif
             };
+            // clang-format on
 
             CHECK_NVML(NVML_FNPTR(nvmlDeviceGetFieldValues)(
                 info->nvml_dev, sizeof(values) / sizeof(values[0]), values));
