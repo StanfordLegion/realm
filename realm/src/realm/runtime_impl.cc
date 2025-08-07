@@ -467,6 +467,8 @@ namespace Realm {
       RuntimeImpl *rt = get_runtime();
 
       if(Network::my_node_id == self->node_id) {
+        rt->shutdown_in_progress.store(true);
+
         NodeSet members = Network::node_directory.get_members();
         for(NodeID node : members) {
           bool ok = rt->cancel_work(node);
@@ -474,9 +476,6 @@ namespace Realm {
         }
 
         wait_for_quiescence();
-
-       // rt->shutdown_in_progress.store(true);
-
       } else {
         if(!rt->shutdown_in_progress.load()) {
           bool ok = rt->cancel_work(self->node_id);
@@ -3174,10 +3173,11 @@ namespace Realm {
 
   EventImpl *RuntimeImpl::get_event_impl(Event e)
   {
-    if(shutdown_in_progress.load()) {
+    // TODO: FIX ME
+    /*if(shutdown_in_progress.load()) {
       log_runtime.fatal() << "looking up event after shutdown: " << e;
       abort();
-    }
+    }*/
     ID id(e);
     if(id.is_event())
       return get_genevent_impl(e);

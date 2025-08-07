@@ -168,7 +168,12 @@ void JoinRequestMessage::handle_message(NodeID sender, const JoinRequestMessage 
                                         const void *data, size_t datalen)
 {
   assert(sender != Network::my_node_id);
-  assert(mesh_state->leaving.load(std::memory_order_acquire) == false);
+
+  if(mesh_state->leaving.load(std::memory_order_acquire)) {
+    // send_join_reject
+    assert(0); // TODO: TEST ME
+    return;
+  }
 
   if(mesh_state->hooks.pre_join) {
     realmNodeMeta_t meta{(int32_t)sender, 0, false};
@@ -192,7 +197,6 @@ void JoinRequestMessage::handle_message(NodeID sender, const JoinRequestMessage 
     }
   }
 
-  // TODO: FIX ME - what if ACK is leaving as well? That will deadlock.
   send_join_ack(sender, new_epoch, mesh_state->subscribers.size() + 1, msg.announce_mm);
 
   if(mesh_state->hooks.filter) {
@@ -235,16 +239,14 @@ void JoinAcklMessage::handle_message(NodeID sender, const JoinAcklMessage &msg,
 void MemberUpdateMessage::handle_message(NodeID, const MemberUpdateMessage &msg,
                                          const void *data, size_t datalen)
 {
-  if(msg.epoch <= Network::node_directory.cluster_epoch()) {
-    assert(0);
-    // send_rejeck_ack();
+  if(msg.epoch <= Network::node_directory.cluster_epoch() ||
+     mesh_state->leaving.load(std::memory_order_acquire)) {
+    // send_join_rejec();
+    assert(0); // TODO: TEST ME
     return;
   }
 
   Network::node_directory.import_node(data, datalen, msg.epoch);
-
-  assert(mesh_state->leaving.load(std::memory_order_acquire) == false);
-
   send_join_ack(msg.node_id, msg.epoch, /*acks=*/-1, msg.announce_mm);
 
   if(mesh_state->hooks.filter) {
@@ -269,6 +271,7 @@ void MemberUpdateMessage::handle_message(NodeID, const MemberUpdateMessage &msg,
     mesh_state->subscribers.add(msg.node_id);
   }
 }
+
 void LeavePrepareMessage::handle_message(NodeID sender, const LeavePrepareMessage &msg,
                                          const void * /*data*/, size_t /*datalen*/)
 {
