@@ -302,25 +302,17 @@ namespace Realm {
   void UDPModule::broadcast(NodeID root, const void *val_in, void *val_out, size_t bytes)
   {
     assert(0);
-    if(root == Network::my_node_id) {
-      memcpy(val_out, val_in, bytes);
-    }
   }
 
   void UDPModule::gather(NodeID root, const void *val_in, void *vals_out, size_t bytes)
   {
     assert(0);
-    if(root == Network::my_node_id) {
-      memcpy(vals_out, val_in, bytes);
-    }
   }
 
   void UDPModule::allgatherv(const char *val_in, size_t bytes,
                              std::vector<char> &vals_out, std::vector<size_t> &lengths)
   {
     assert(0);
-    vals_out.assign(val_in, val_in + bytes);
-    lengths.assign(1, bytes);
   }
 
   size_t UDPModule::sample_messages_received_count() { return rx_counter_.exchange(0); }

@@ -161,8 +161,22 @@ namespace Realm {
 #endif
       {
         size_t messages_received = single_network->sample_messages_received_count();
-        message_manager->drain_incoming_messages(messages_received);
-        return single_network->check_for_quiescence(messages_received);
+
+        size_t control_messages_received = 0;
+        if(control_plane_network) {
+          control_messages_received +=
+              control_plane_network->sample_messages_received_count();
+        }
+
+        message_manager->drain_incoming_messages(messages_received +
+                                                 control_messages_received);
+
+        bool status = single_network->check_for_quiescence(messages_received);
+        if(control_plane_network) {
+          status &=
+              control_plane_network->check_for_quiescence(control_messages_received);
+        }
+        return status;
       }
     }
   } // namespace Network
