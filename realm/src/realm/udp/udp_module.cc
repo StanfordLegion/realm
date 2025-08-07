@@ -317,7 +317,20 @@ namespace Realm {
 
   size_t UDPModule::sample_messages_received_count() { return rx_counter_.exchange(0); }
 
-  bool UDPModule::check_for_quiescence(size_t sampled) { return sampled == 0; }
+  bool UDPModule::check_for_quiescence(size_t sampled)
+  {
+    if(sampled != 0) {
+      return false;
+    }
+
+    AutoLock<> al(peer_map_mutex);
+    for(auto &kv : peer_map_) {
+      if(kv.second->retransmit.has_outstanding()) {
+        return false;
+      }
+    }
+    return true;
+  }
 
   /* ---------- AM factory -------------------------------------------- */
 
