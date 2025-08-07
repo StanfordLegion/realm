@@ -413,6 +413,8 @@ namespace {
     MembershipMesh *mesh_state = static_cast<MembershipMesh *>(st);
     assert(mesh_state != nullptr);
 
+    mesh_state->leaving.store(true, std::memory_order_release);
+
     if(mesh_state->hooks.pre_leave) {
       mesh_state->hooks.pre_leave(self, nullptr, 0, /*left=*/false,
                                   mesh_state->hooks.user_arg);
@@ -425,8 +427,6 @@ namespace {
       assert(mesh_state->pending.empty());
       mesh_state->pending = mesh_state->subscribers;
     }
-
-    mesh_state->leaving.store(true, std::memory_order_release);
 
     {
       AutoLock<> al(mesh_state->pending_mutex);

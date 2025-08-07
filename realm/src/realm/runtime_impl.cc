@@ -441,6 +441,26 @@ namespace Realm {
 #endif
     }
 
+    void wait_for_quiescence()
+    {
+      constexpr int MAX_RETRIES = 20;
+
+      int tries = 0;
+      while(true) {
+        tries++;
+
+        bool done = Network::check_for_quiescence(get_runtime()->message_manager);
+        if(done) {
+          break;
+        }
+
+        if(tries >= MAX_RETRIES) {
+          assert(0);
+          abort();
+        }
+      }
+    }
+
     void membership_pre_leave_cb(const realmNodeMeta_t *self, const void *, size_t,
                                  bool /*left*/, void *)
     {
@@ -452,11 +472,17 @@ namespace Realm {
           bool ok = rt->cancel_work(node);
           assert(ok);
         }
-        // rt->shutdown_in_progress.store(true);
+
+        wait_for_quiescence();
+
+       // rt->shutdown_in_progress.store(true);
+
       } else {
         if(!rt->shutdown_in_progress.load()) {
           bool ok = rt->cancel_work(self->node_id);
           assert(ok);
+          // TODO: we probably don't need to wait here
+          // wait_for_quiescence();
         }
       }
     }
