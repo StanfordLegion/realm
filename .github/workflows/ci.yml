@@ -47,7 +47,9 @@ jobs:
               ccache: sccache,
               shared_lib: 'OFF',
               cuda: '',
-              openmp: 'OFF'
+              openmp: 'OFF',
+              ucx: 'OFF',
+              gasnet: 'OFF'
             }
           - {
               os: ubuntu-24.04-arm,
@@ -56,7 +58,9 @@ jobs:
               ccache: ccache,
               shared_lib: 'OFF',
               cuda: '',
-              openmp: 'ON'
+              openmp: 'ON',
+              ucx: 'OFF',
+              gasnet: 'OFF'
             }
           - {
               os: ubuntu-24.04-arm,
@@ -65,7 +69,9 @@ jobs:
               ccache: ccache,
               shared_lib: 'OFF',
               cuda: '',
-              openmp: 'ON'
+              openmp: 'ON',
+              ucx: 'OFF',
+              gasnet: 'OFF'
             }
           - {
               os: ubuntu-latest,
@@ -74,7 +80,9 @@ jobs:
               ccache: ccache,
               shared_lib: 'OFF',
               cuda: '',
-              openmp: 'ON'
+              openmp: 'ON',
+              ucx: 'OFF',
+              gasnet: 'OFF'
             }
           - {
               os: ubuntu-latest,
@@ -83,7 +91,9 @@ jobs:
               ccache: ccache,
               shared_lib: 'OFF',
               cuda: '12.9.0',
-              openmp: 'ON'
+              openmp: 'ON',
+              ucx: 'ON',
+              gasnet: 'ON'
             }
           - {
               os: ubuntu-latest,
@@ -92,7 +102,9 @@ jobs:
               ccache: ccache,
               shared_lib: 'OFF',
               cuda: '',
-              openmp: 'ON'
+              openmp: 'ON',
+              ucx: 'OFF',
+              gasnet: 'OFF'
             }
           - {
               os: ubuntu-latest,
@@ -101,7 +113,9 @@ jobs:
               ccache: ccache,
               shared_lib: 'ON',
               cuda: '',
-              openmp: 'ON'
+              openmp: 'ON',
+              ucx: 'OFF',
+              gasnet: 'OFF'
             }
           - {
               os: macos-latest,
@@ -110,7 +124,9 @@ jobs:
               ccache: ccache,
               shared_lib: 'ON',
               cuda: '',
-              openmp: 'ON'
+              openmp: 'ON',
+              ucx: 'OFF',
+              gasnet: 'OFF'
             }
     steps:
       - uses: actions/checkout@v4.2.2
@@ -185,6 +201,7 @@ jobs:
       - name: Configure
         run:
           cmake -S . -B build
+                --debug-find
                 -DCMAKE_C_COMPILER=${{ matrix.config.cc }}
                 -DCMAKE_CXX_COMPILER=${{ matrix.config.cxx }}
                 -DCMAKE_C_COMPILER_LAUNCHER=${{ matrix.config.ccache }}
@@ -193,8 +210,9 @@ jobs:
                 -DBUILD_SHARED_LIBS=${{ matrix.config.shared_lib }}
                 -DREALM_BUILD_TESTS=ON -DREALM_BUILD_BENCHMARKS=ON -DREALM_BUILD_TUTORIALS=ON -DREALM_BUILD_EXAMPLES=ON
                 -DREALM_ENABLE_OPENMP=${{ matrix.config.openmp }}
-                -DREALM_ENABLE_UCX=OFF
-                -DREALM_ENABLE_GASNETEX=OFF
+                -DREALM_ENABLE_UCX=${{ matrix.config.ucx }}
+                -DGASNET_CONDUIT=mpi
+                -DREALM_ENABLE_GASNETEX=${{ matrix.config.gasnet }}
 
       - name: Build
         run:
