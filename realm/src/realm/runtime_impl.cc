@@ -447,36 +447,16 @@ namespace Realm {
       RuntimeImpl *rt = get_runtime();
 
       if(Network::my_node_id == self->node_id) {
-        constexpr int retry_count = 20;
-
         NodeSet members = Network::node_directory.get_members();
         for(NodeID node : members) {
-          bool ok = rt->cancel_work(self->node_id);
+          bool ok = rt->cancel_work(node);
           assert(ok);
         }
-
-        int tries = 0;
-        while(true) {
-          tries++;
-
-          bool done = Network::check_for_quiescence(rt->message_manager);
-          if(done) {
-            break;
-          }
-
-          if(tries >= retry_count) {
-            assert(0);
-            abort();
-          }
-        }
-
         // rt->shutdown_in_progress.store(true);
-
       } else {
         if(!rt->shutdown_in_progress.load()) {
           bool ok = rt->cancel_work(self->node_id);
           assert(ok);
-          // CHECK For quiscence
         }
       }
     }
