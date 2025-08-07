@@ -447,9 +447,13 @@ namespace Realm {
       RuntimeImpl *rt = get_runtime();
 
       if(Network::my_node_id == self->node_id) {
-        // DRAIN LOCAL WORK
-        // ITERATE OVER EVENTS AND CANCEL THEM
         constexpr int retry_count = 20;
+
+        NodeSet members = Network::node_directory.get_members();
+        for(NodeID node : members) {
+          bool ok = rt->cancel_work(self->node_id);
+          assert(ok);
+        }
 
         int tries = 0;
         while(true) {
@@ -469,9 +473,10 @@ namespace Realm {
         // rt->shutdown_in_progress.store(true);
 
       } else {
-        // TODO: mark and stop all the work for the leaving process
         if(!rt->shutdown_in_progress.load()) {
-          // assert(rt->remove_peer(self->node_id));
+          bool ok = rt->cancel_work(self->node_id);
+          assert(ok);
+          // CHECK For quiscence
         }
       }
     }
@@ -2414,7 +2419,7 @@ namespace Realm {
     return true;
   }
 
-  bool RuntimeImpl::remove_peer(NodeID id)
+  bool RuntimeImpl::cancel_work(NodeID id)
   {
     Node &n = nodes[id];
 
@@ -2429,11 +2434,14 @@ namespace Realm {
 
     for(size_t i = 0; i < n.barriers.max_entries(); ++i) {
       if(n.barriers.has_entry(i)) {
-        // BarrierImpl *b = n.barriers.lookup_entry(i, id);
-        // b->cancel_generations(id);
       }
     }
 
+    return true;
+  }
+
+  bool RuntimeImpl::remove_peer(NodeID id)
+  {
     {
       Node &n = nodes[id];
       n.processors.clear();
