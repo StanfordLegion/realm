@@ -411,7 +411,7 @@ namespace Realm {
 
   namespace {
 
-    void membership_pre_join_cb(const realmNodeMeta_t *self, const void *, size_t,
+    void membership_pre_join_cb(const node_meta_t *self, const void *, size_t,
                                 bool joined, void *)
     {
       assert(joined == false);
@@ -424,8 +424,8 @@ namespace Realm {
       }
     }
 
-    void membership_post_join_cb(const realmNodeMeta_t *, const void *, size_t,
-                                 bool joined, void *)
+    void membership_post_join_cb(const node_meta_t *, const void *, size_t, bool joined,
+                                 void *)
     {
       RuntimeImpl *rt = get_runtime();
       rt->node_directory->remove_slot(NodeDirectory::UNKNOWN_NODE_ID);
@@ -464,7 +464,7 @@ namespace Realm {
       }
     }
 
-    void membership_pre_leave_cb(const realmNodeMeta_t *self, const void *, size_t,
+    void membership_pre_leave_cb(const node_meta_t *self, const void *, size_t,
                                  bool /*left*/, void *)
     {
       RuntimeImpl *rt = get_runtime();
@@ -489,7 +489,7 @@ namespace Realm {
       }
     }
 
-    void membership_post_leave_cb(const realmNodeMeta_t *self, const void *, size_t,
+    void membership_post_leave_cb(const node_meta_t *self, const void *, size_t,
                                   bool /*left*/, void *)
     {
       RuntimeImpl *rt = get_runtime();
@@ -503,7 +503,7 @@ namespace Realm {
       }
     }
 
-    bool membership_filter_cb(const realmNodeMeta_t *, void *) { return true; }
+    bool membership_filter_cb(const node_meta_t *, void *) { return true; }
 
   } // namespace
 
@@ -2481,10 +2481,10 @@ namespace Realm {
 
   void RuntimeImpl::elastic_start(void)
   {
-    hooks = realmMembershipHooks_t{membership_pre_join_cb,  membership_post_join_cb,
-                                   membership_pre_leave_cb, membership_post_leave_cb,
-                                   membership_filter_cb,    nullptr};
-    realmMembershipInit(&membership, hooks);
+    hooks = membership_hooks_t{membership_pre_join_cb,  membership_post_join_cb,
+                               membership_pre_leave_cb, membership_post_leave_cb,
+                               membership_filter_cb,    nullptr};
+    membership_init(&membership, hooks);
 
     Serialization::DynamicBufferSerializer dbs(4096);
     bool ok = serialize_announcement(dbs, &get_runtime()->nodes[Network::my_node_id],
@@ -2498,13 +2498,13 @@ namespace Realm {
     const uint8_t *buffer = static_cast<const uint8_t *>(dbs.get_buffer());
     nm->machine_model.assign(buffer, buffer + dbs.bytes_used());
 
-    realmNodeMeta_t self_meta{};
+    node_meta_t self_meta{};
     self_meta.node_id = Network::my_node_id;
     self_meta.seed_id = Network::my_node_id == 0 ? NodeDirectory::INVALID_NODE_ID
                                                  : NodeDirectory::UNKNOWN_NODE_ID;
     self_meta.announce_mm = true;
 
-    realm_status_t status = realmJoin(membership, &self_meta);
+    realm_status_t status = membership_join(membership, &self_meta);
     assert(status == realm_status_t::REALM_SUCCESS);
 
     {
@@ -2870,9 +2870,9 @@ namespace Realm {
       CoreModuleConfig *config =
           checked_cast<CoreModuleConfig *>(get_module_config("core"));
       if(config->enable_elasticity) {
-        realmNodeMeta_t self_meta{};
+        node_meta_t self_meta{};
         self_meta.node_id = Network::my_node_id;
-        realmStatus_t status = realmLeave(membership, &self_meta);
+        realm_status_t status = membership_leave(membership, &self_meta);
         assert(status == realm_status_t::REALM_SUCCESS);
       } else {
 

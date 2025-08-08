@@ -3,33 +3,33 @@
 #include <stdlib.h>
 #include <cassert>
 
-struct realmMembership_ctx {
-  const realmMembershipOps_t *ops;
+struct membership_ctx {
+  const membership_ops_t *ops;
   void *state;
 };
 
 #define CHECK(h) ((h) && (h)->ops)
 
-realmStatus_t realmMembershipCreate(const realmMembershipOps_t *ops, void *state,
-                                    realmMembership_t *out)
+realm_status_t membership_create(const membership_ops_t *ops, void *state,
+                                 membership_handle_t *out)
 {
   if(!ops || !out) {
-    return realmStatus_t::REALM_ERROR;
+    return realm_status_t::REALM_ERROR;
   }
 
-  realmMembership_t h = (realmMembership_t)malloc(sizeof(*h));
+  membership_handle_t h = (membership_handle_t)malloc(sizeof(*h));
 
   if(!h) {
-    return realmStatus_t::REALM_ERROR;
+    return realm_status_t::REALM_ERROR;
   }
 
   h->ops = ops;
   h->state = state;
   *out = h;
-  return realmStatus_t::REALM_SUCCESS;
+  return realm_status_t::REALM_SUCCESS;
 }
 
-realmStatus_t realmMembershipDestroy(realmMembership_t)
+realm_status_t membership_destroy(membership_handle_t)
 {
   /*if(!CHECK(h)) {
     return REALM_ERR_BAD_ARG;
@@ -40,23 +40,23 @@ realmStatus_t realmMembershipDestroy(realmMembership_t)
   }
 
   free(h);*/
-  return realmStatus_t::REALM_SUCCESS;
+  return realm_status_t::REALM_SUCCESS;
 }
 
 /* ----- wrappers (CALL macro) --------------------------------*/
 #define CALL(h, fn, ...)                                                                 \
   do {                                                                                   \
     if(!CHECK(h) || !(h)->ops->fn)                                                       \
-      return realmStatus_t::REALM_ERROR;                                                 \
+      return realm_status_t::REALM_ERROR;                                                \
     return (h)->ops->fn((h)->state, __VA_ARGS__);                                        \
   } while(0)
 
-realmStatus_t realmJoin(realmMembership_t h, const realmNodeMeta_t *s)
+realm_status_t membership_join(membership_handle_t h, const node_meta_t *s)
 {
   CALL(h, join_request, s);
 }
 
-realmStatus_t realmLeave(realmMembership_t h, const realmNodeMeta_t *s)
+realm_status_t membership_leave(membership_handle_t h, const node_meta_t *s)
 {
   CALL(h, leave_request, s);
 }
@@ -64,14 +64,14 @@ realmStatus_t realmLeave(realmMembership_t h, const realmNodeMeta_t *s)
 #undef CALL
 
 #ifdef REALM_USE_UDP
-extern realmStatus_t realmMembershipMeshInit(realmMembership_t *out,
-                                             realmMembershipHooks_t hooks);
+extern realm_status_t membership_mesh_init(membership_handle_t *out,
+                                           membership_hooks_t hooks);
 #endif
 
-realmStatus_t realmMembershipInit(realmMembership_t *out, realmMembershipHooks_t hooks)
+realm_status_t membership_init(membership_handle_t *out, membership_hooks_t hooks)
 {
 #ifdef REALM_USE_UDP
-  return realmMembershipMeshInit(out, hooks);
+  return membership_mesh_init(out, hooks);
 #else
   assert(0);
   (void)out;

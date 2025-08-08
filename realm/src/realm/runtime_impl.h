@@ -401,8 +401,8 @@ namespace Realm {
 
     bool shared_peers_use_network_module = true;
 
-    realmMembership_t membership;
-    realmMembershipHooks_t hooks;
+    membership_handle_t membership;
+    membership_hooks_t hooks;
 
     NodeDirectory* node_directory{nullptr};
 

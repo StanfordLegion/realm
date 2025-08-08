@@ -21,7 +21,7 @@ struct MembershipMesh {
 
   std::atomic<bool> leaving{false};
 
-  realmMembershipHooks_t hooks;
+  membership_hooks_t hooks;
 };
 
 namespace {
@@ -176,7 +176,7 @@ void JoinRequestMessage::handle_message(NodeID sender, const JoinRequestMessage 
   }
 
   if(mesh_state->hooks.pre_join) {
-    realmNodeMeta_t meta{(int32_t)sender, 0, false};
+    node_meta_t meta{(int32_t)sender, 0, false};
     mesh_state->hooks.pre_join(&meta, nullptr, 0, /*joined=*/false,
                                mesh_state->hooks.user_arg);
   }
@@ -200,7 +200,7 @@ void JoinRequestMessage::handle_message(NodeID sender, const JoinRequestMessage 
   send_join_ack(sender, new_epoch, mesh_state->subscribers.size() + 1, msg.announce_mm);
 
   if(mesh_state->hooks.filter) {
-    realmNodeMeta_t meta{(int32_t)sender, 0, msg.announce_mm};
+    node_meta_t meta{(int32_t)sender, 0, msg.announce_mm};
     if(mesh_state->hooks.filter(&meta, mesh_state->hooks.user_arg)) {
       AutoLock<> al(mesh_state->subs_mutex);
       mesh_state->subscribers.add(sender);
@@ -220,7 +220,7 @@ void JoinAcklMessage::handle_message(NodeID sender, const JoinAcklMessage &msg,
   }
 
   if(mesh_state->hooks.filter) {
-    realmNodeMeta_t meta{(int32_t)sender, 0, false};
+    node_meta_t meta{(int32_t)sender, 0, false};
     if(mesh_state->hooks.filter(&meta, mesh_state->hooks.user_arg)) {
       AutoLock<> al(mesh_state->subs_mutex);
       mesh_state->subscribers.add(sender);
@@ -229,7 +229,7 @@ void JoinAcklMessage::handle_message(NodeID sender, const JoinAcklMessage &msg,
 
   if(mesh_state->join_acks.load() == mesh_state->join_acks_total.load()) {
     if(mesh_state->hooks.post_join) {
-      realmNodeMeta_t meta{(int32_t)Network::my_node_id, 0, /*announce_mm=*/false};
+      node_meta_t meta{(int32_t)Network::my_node_id, 0, /*announce_mm=*/false};
       mesh_state->hooks.post_join(&meta, nullptr, 0, /*joined=*/true,
                                   mesh_state->hooks.user_arg);
     }
@@ -250,7 +250,7 @@ void MemberUpdateMessage::handle_message(NodeID, const MemberUpdateMessage &msg,
   send_join_ack(msg.node_id, msg.epoch, /*acks=*/-1, msg.announce_mm);
 
   if(mesh_state->hooks.filter) {
-    realmNodeMeta_t meta{(int32_t)msg.node_id, 0, msg.announce_mm};
+    node_meta_t meta{(int32_t)msg.node_id, 0, msg.announce_mm};
     if(!mesh_state->hooks.filter(&meta, mesh_state->hooks.user_arg)) {
       // TODO: we need import_node to send the ack back at the same time we
       // don't need mm to be installed in case it has been and thus it needs
@@ -261,7 +261,7 @@ void MemberUpdateMessage::handle_message(NodeID, const MemberUpdateMessage &msg,
   }
 
   if(mesh_state->hooks.pre_join) {
-    realmNodeMeta_t meta{(int32_t)msg.node_id, 0, false};
+    node_meta_t meta{(int32_t)msg.node_id, 0, false};
     mesh_state->hooks.pre_join(&meta, nullptr, 0, /*joined=*/false,
                                mesh_state->hooks.user_arg);
   }
@@ -281,7 +281,7 @@ void LeavePrepareMessage::handle_message(NodeID sender, const LeavePrepareMessag
   assert(sender != Network::my_node_id);
 
   if(mesh_state->hooks.pre_leave) {
-    realmNodeMeta_t meta{(int32_t)sender, 0, /*announce_mm=*/false};
+    node_meta_t meta{(int32_t)sender, 0, /*announce_mm=*/false};
     mesh_state->hooks.pre_leave(&meta, nullptr, 0, /*left=*/false,
                                 mesh_state->hooks.user_arg);
   }
@@ -315,7 +315,7 @@ void LeavePrepareAckMessage::handle_message(NodeID /*sender*/ sender,
       } else {
         // No peers – we can finish immediately.
         if(mesh_state->hooks.post_leave) {
-          realmNodeMeta_t meta{(int32_t)Network::my_node_id, 0, false};
+          node_meta_t meta{(int32_t)Network::my_node_id, 0, false};
           mesh_state->hooks.post_leave(&meta, nullptr, 0, /*left=*/true,
                                        mesh_state->hooks.user_arg);
         }
@@ -340,7 +340,7 @@ void LeavePrepareCommitMessage::handle_message(NodeID sender,
   }
 
   if(mesh_state->hooks.post_leave) {
-    realmNodeMeta_t meta{(int32_t)sender, 0, false};
+    node_meta_t meta{(int32_t)sender, 0, false};
     mesh_state->hooks.post_leave(&meta, nullptr, 0, /*left=*/true,
                                  mesh_state->hooks.user_arg);
   }
@@ -364,7 +364,7 @@ void LeavePrepareCommitAckMessage::handle_message(
     mesh_state->pending.remove(sender);
     if(mesh_state->pending.empty()) {
       if(mesh_state->hooks.post_leave) {
-        realmNodeMeta_t meta{(int32_t)Network::my_node_id, 0, false};
+        node_meta_t meta{(int32_t)Network::my_node_id, 0, false};
         mesh_state->hooks.post_leave(&meta, nullptr, 0, /*left=*/true,
                                      mesh_state->hooks.user_arg);
       }
@@ -373,7 +373,7 @@ void LeavePrepareCommitAckMessage::handle_message(
 }
 
 namespace {
-  realmStatus_t join(void *st, const realmNodeMeta_t *self)
+  realm_status_t join(void *st, const node_meta_t *self)
   {
     MembershipMesh *mesh_state = static_cast<MembershipMesh *>(st);
     assert(mesh_state != nullptr);
@@ -387,14 +387,14 @@ namespace {
     Network::node_directory.export_node(self->node_id, announce_mm, dbs);
 
     if(mesh_state->hooks.pre_join) {
-      realmNodeMeta_t meta{(int32_t)Network::my_node_id, 0, announce_mm};
+      node_meta_t meta{(int32_t)Network::my_node_id, 0, announce_mm};
       mesh_state->hooks.pre_join(&meta, nullptr, 0, /*joined=*/false,
                                  mesh_state->hooks.user_arg);
     }
 
     if(self->seed_id == NodeDirectory::INVALID_NODE_ID) {
       if(mesh_state->hooks.post_join) {
-        realmNodeMeta_t meta{(int32_t)Network::my_node_id, 0, announce_mm};
+        node_meta_t meta{(int32_t)Network::my_node_id, 0, announce_mm};
         mesh_state->hooks.post_join(&meta, nullptr, 0, /*joined=*/true,
                                     mesh_state->hooks.user_arg);
       }
@@ -407,11 +407,11 @@ namespace {
       am.commit();
     }
 
-    return realmStatus_t::REALM_SUCCESS;
+    return realm_status_t::REALM_SUCCESS;
   }
 
   // TODO: FIX ALL RACE CONDITIONS
-  realmStatus_t leave(void *st, const realmNodeMeta_t *self)
+  realm_status_t leave(void *st, const node_meta_t *self)
   {
     MembershipMesh *mesh_state = static_cast<MembershipMesh *>(st);
     assert(mesh_state != nullptr);
@@ -446,20 +446,19 @@ namespace {
       }
     }
 
-    return realmStatus_t::REALM_SUCCESS;
+    return realm_status_t::REALM_SUCCESS;
   }
 
-  const realmMembershipOps_t operations = {
+  const membership_ops_t operations = {
       .join_request = join,
       .leave_request = leave,
   };
 } // namespace
 
-realmStatus_t realmMembershipMeshInit(realmMembership_t *out,
-                                      realmMembershipHooks_t hooks)
+realm_status_t membership_mesh_init(membership_handle_t *out, membership_hooks_t hooks)
 {
   MembershipMesh *state = new MembershipMesh();
   mesh_state = state;
   mesh_state->hooks = hooks;
-  return realmMembershipCreate(&operations, state, out);
+  return membership_create(&operations, state, out);
 }
