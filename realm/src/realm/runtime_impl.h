@@ -404,6 +404,8 @@ namespace Realm {
     realmMembership_t membership;
     realmMembershipHooks_t hooks;
 
+    NodeDirectory* node_directory{nullptr};
+
     class DeferredShutdown : public EventWaiter {
     public:
       void defer(RuntimeImpl *_runtime, Event wait_on);

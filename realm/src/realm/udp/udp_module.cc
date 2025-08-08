@@ -260,7 +260,7 @@ namespace Realm {
       meta.epoch = 1;
       meta.ip = inet_addr(local_ip.c_str());
       meta.udp_port = local_port;
-      Network::node_directory.add_slot(self_rank_id, meta);
+      runtime_->node_directory->add_slot(self_rank_id, meta);
     }
 
     assert(self_rank_id != NodeDirectory::INVALID_NODE_ID);
@@ -278,7 +278,7 @@ namespace Realm {
       meta.epoch = 1;
       meta.ip = seed_address;
       meta.udp_port = port;
-      Network::node_directory.add_slot(NodeDirectory::UNKNOWN_NODE_ID, meta);
+      runtime_->node_directory->add_slot(NodeDirectory::UNKNOWN_NODE_ID, meta);
       register_peer(NodeDirectory::UNKNOWN_NODE_ID, seed_address, port);
     }
 
@@ -452,7 +452,7 @@ namespace Realm {
       }
     }
 
-    const NodeMeta *nm = Network::node_directory.lookup(id);
+    const NodeMeta *nm = runtime_->node_directory->lookup(id);
     if(nm != nullptr) {
       register_peer(id, nm->ip, nm->udp_port);
     } else {

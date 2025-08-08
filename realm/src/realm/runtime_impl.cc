@@ -427,10 +427,10 @@ namespace Realm {
     void membership_post_join_cb(const realmNodeMeta_t *, const void *, size_t,
                                  bool joined, void *)
     {
-      Network::node_directory.remove_slot(NodeDirectory::UNKNOWN_NODE_ID);
+      RuntimeImpl *rt = get_runtime();
+      rt->node_directory->remove_slot(NodeDirectory::UNKNOWN_NODE_ID);
 
       if(joined) {
-        RuntimeImpl *rt = get_runtime();
         AutoLock<> al(rt->join_mutex);
         rt->join_complete = joined;
         rt->join_condvar.broadcast();
@@ -469,7 +469,7 @@ namespace Realm {
       if(Network::my_node_id == self->node_id) {
         rt->shutdown_in_progress.store(true);
 
-        NodeSet members = Network::node_directory.get_members();
+        NodeSet members = rt->node_directory->get_members();
         for(NodeID node : members) {
           bool ok = rt->cancel_work(node);
           assert(ok);
@@ -1155,6 +1155,7 @@ namespace Realm {
     , num_local_ib_memories(0)
     , num_local_processors(0)
     , module_registrar(this)
+    , node_directory(&Network::node_directory)
     , modules_created(false)
     , module_configs_created(false)
   {
@@ -2486,7 +2487,7 @@ namespace Realm {
                                      Network::get_network(Network::my_node_id));
     assert(ok);
 
-    NodeMeta *nm = Network::node_directory.lookup(Network::my_node_id);
+    NodeMeta *nm = node_directory->lookup(Network::my_node_id);
     assert(nm != nullptr);
 
     const uint8_t *buffer = static_cast<const uint8_t *>(dbs.get_buffer());

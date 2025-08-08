@@ -412,7 +412,7 @@ namespace Realm {
         CHKERR_JUMP(status != UCS_OK, "ucp_worker_get_address failed", log_ucp, err);
 
         assert(config.rank_id == Network::my_node_id);
-        auto meta = *Network::node_directory.lookup(Network::my_node_id);
+        auto meta = *runtime->node_directory->lookup(Network::my_node_id);
 
         std::vector<uint8_t> tmp(1 + wi.addrlen);
         tmp[0] = -1;
@@ -426,7 +426,7 @@ namespace Realm {
 
         std::memcpy(tmp.data() + 1, wi.addr, wi.addrlen);
         meta.worker_address.swap(tmp);
-        Network::node_directory.add_slot(Network::my_node_id, meta);
+        runtime->node_directory->add_slot(Network::my_node_id, meta);
 
         self_rx_workers_info.push_back(wi);
         self_max_addrlen = std::max(self_max_addrlen, wi.addrlen);
@@ -1132,7 +1132,7 @@ namespace Realm {
         CHKERR_JUMP(req == nullptr, "failed to get request", log_ucp, err);
 
         if(!tx_worker->ep_get(sender, remote_dev_index, &req->ucp.ep)) {
-          auto meta = Network::node_directory.lookup(sender);
+          auto meta = internal->runtime->node_directory->lookup(sender);
           assert(meta != nullptr);
           internal->add_remote_ep(sender, meta->worker_address.data(),
                                   meta->worker_address.size());
@@ -2452,7 +2452,7 @@ namespace Realm {
         *req = *req_prim;
 
         if(!worker->ep_get(target, remote_dev_index, &req->ucp.ep)) {
-          auto meta = Network::node_directory.lookup(target);
+          auto meta = internal->runtime->node_directory->lookup(target);
           assert(meta != nullptr);
           internal->add_remote_ep(target, meta->worker_address.data(),
                                   meta->worker_address.size());
@@ -2490,7 +2490,7 @@ namespace Realm {
       ucp_ep_h ep;
 
       if(!worker->ep_get(target, remote_dev_index, &ep)) {
-        auto meta = Network::node_directory.lookup(target);
+        auto meta = internal->runtime->node_directory->lookup(target);
         assert(meta != nullptr);
         internal->add_remote_ep(target, meta->worker_address.data(),
                                 meta->worker_address.size());
