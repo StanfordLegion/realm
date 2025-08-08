@@ -24,7 +24,7 @@
 #include "realm/memory.h"
 #include "realm/bytearray.h"
 #include "realm/mutex.h"
-// #include "realm/node_directory.h"
+#include "realm/quiescence.h"
 
 #include <map>
 
@@ -112,7 +112,8 @@ namespace Realm {
 
     // a quiescence check across all nodes (i.e. has anybody sent anything
     //  since the previous quiescence check)
-    bool check_for_quiescence(IncomingMessageManager *message_manager);
+    bool check_for_quiescence(IncomingMessageManager *message_manager,
+                              bool elastic = false);
 
     // collective communication across all nodes (TODO: subcommunicators?)
     template <typename T>
@@ -218,6 +219,12 @@ namespace Realm {
                             std::vector<size_t> &lengths) = 0;
 
     virtual size_t sample_messages_received_count(void) = 0;
+
+    virtual void collect_quiescence_counters(NodeID node, QuiescenceCounters &out)
+    {
+      assert(0);
+    }
+
     virtual bool check_for_quiescence(size_t sampled_receive_count) = 0;
 
     // used to create a remote proxy for a memory

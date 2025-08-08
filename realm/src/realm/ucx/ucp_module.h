@@ -71,6 +71,8 @@ namespace Realm {
                             std::vector<size_t> &lengths);
 
     virtual size_t sample_messages_received_count(void);
+
+    virtual void collect_quiescence_counters(NodeID node, QuiescenceCounters &out);
     virtual bool check_for_quiescence(size_t sampled_receive_count);
 
     // used to create a remote proxy for a memory

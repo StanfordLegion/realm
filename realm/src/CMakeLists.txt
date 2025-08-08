@@ -12,6 +12,7 @@
 
 set(REALM_SOURCES
     activemsg.cc
+    quiescence.cc
     network.cc
     codedesc.cc
     logging.cc

@@ -154,7 +154,10 @@ namespace Realm {
       void allgatherv(const char *val_in, size_t bytes, std::vector<char> &vals_out,
                       std::vector<size_t> &lengths);
       size_t sample_messages_received_count();
+
+      void collect_quiescence_counters(NodeID node, QuiescenceCounters &out);
       bool check_for_quiescence(size_t sampled_receive_count);
+
       size_t recommended_max_payload(const void *data, const NetworkSegment *src_segment,
                                      const RemoteAddress *dest_payload_addr,
                                      bool with_congestion, size_t header_size);
@@ -187,6 +190,16 @@ namespace Realm {
       RuntimeImpl *runtime;
 
     private:
+      Mutex peer_counters_mutex;
+      struct PeerCounters {
+        atomic<uint64_t> msg_sent{0};
+        atomic<uint64_t> msg_recv{0};
+        atomic<uint64_t> rcomp_sent{0};
+        atomic<uint64_t> rcomp_recv{0};
+        atomic<uint64_t> outstanding{0};
+      };
+      std::unordered_map<NodeID, std::shared_ptr<PeerCounters>> peer_counters;
+
       struct AmHandlersArgs {
         UCPInternal *internal;
         UCPWorker *worker;

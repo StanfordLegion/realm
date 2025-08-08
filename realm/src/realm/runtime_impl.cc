@@ -449,10 +449,13 @@ namespace Realm {
       while(true) {
         tries++;
 
-        bool done = Network::check_for_quiescence(get_runtime()->message_manager);
+        bool done = Network::check_for_quiescence(get_runtime()->message_manager,
+                                                  /*elastic=*/true);
         if(done) {
           break;
         }
+
+        sleep(1);
 
         if(tries >= MAX_RETRIES) {
           assert(0);
@@ -2412,6 +2415,8 @@ namespace Realm {
       assert(Config::path_cache_lru_size > 0);
       init_path_cache();
     }
+
+    quiescence_init(Network::single_network, &Network::node_directory);
 
     // Ensure everyone gets to this point before continuing to ensure everyone has all
     // the channels, memory kinds, and all metadata available

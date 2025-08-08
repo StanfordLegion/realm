@@ -20,6 +20,7 @@
 #include "realm/logging.h"
 #include "realm/activemsg.h"
 #include "realm/node_directory.h"
+#include "realm/quiescence.h"
 
 #ifdef REALM_USE_DLFCN
 #include <dlfcn.h>
@@ -152,13 +153,14 @@ namespace Realm {
 
 #endif // REALM_ENABLE_NETWORK_PING_TEST
 
-    bool check_for_quiescence(IncomingMessageManager *message_manager)
+    bool check_for_quiescence(IncomingMessageManager *message_manager, bool elastic)
     {
 #ifdef REALM_USE_MULTIPLE_NETWORKS
       if(REALM_UNLIKELY(single_network == 0)) {
         return false;
       } else
 #endif
+
       {
         size_t messages_received = single_network->sample_messages_received_count();
 
@@ -170,6 +172,10 @@ namespace Realm {
 
         message_manager->drain_incoming_messages(messages_received +
                                                  control_messages_received);
+
+        if(elastic && control_plane_network) {
+          return quiescence_exec(Network::my_node_id);
+        }
 
         bool status = single_network->check_for_quiescence(messages_received);
         if(control_plane_network) {
@@ -262,7 +268,8 @@ namespace Realm {
     static NetworkModule *create_network_module(RuntimeImpl *runtime, int *argc,
                                                 const char ***argv);
 
-    // Enumerates all the peers that the current node could potentially share memory with
+    // Enumerates all the peers that the current node could potentially share memory
+    // with
     virtual void get_shared_peers(NodeSet &shared_peers);
 
     // actual parsing of the command line should wait until here if at all
@@ -286,6 +293,8 @@ namespace Realm {
                             std::vector<size_t> &lengths);
 
     virtual size_t sample_messages_received_count(void);
+
+    virtual void collect_quiescence_counters(QuiescenceCounters &out);
     virtual bool check_for_quiescence(size_t sampled_receive_count);
 
     // used to create a remote proxy for a memory
@@ -430,6 +439,8 @@ namespace Realm {
   }
 
   size_t LoopbackNetworkModule::sample_messages_received_count(void) { return 0; }
+
+  void LoopbackNetworkModule::collect_quiescence_counters(QuiescenceCounters &out) {}
 
   bool LoopbackNetworkModule::check_for_quiescence(size_t sampled_receive_count)
   {

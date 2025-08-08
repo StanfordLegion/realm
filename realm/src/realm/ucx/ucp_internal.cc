@@ -1727,6 +1727,16 @@ namespace Realm {
       return total_msg_received.load();
     }
 
+    void UCPInternal::collect_quiescence_counters(NodeID node, QuiescenceCounters &out)
+    {
+      // TODO: add peer based counters
+      // out.msg_sent = total_msg_sent.load();
+      // out.msg_recv = total_msg_received.load();
+      // out.rcomp_sent = total_rcomp_sent.load();
+      // out.rcomp_recv = total_rcomp_received.load();
+      // out.outstanding = outstanding_reqs.load();
+    }
+
     bool UCPInternal::check_for_quiescence(size_t sampled_receive_count)
     {
       /* The check for outstanding_reqs must be collective. Otherwise,

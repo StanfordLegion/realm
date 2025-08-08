@@ -218,6 +218,11 @@ namespace Realm {
     return internal->sample_messages_received_count();
   }
 
+  void UCPModule::collect_quiescence_counters(NodeID node, QuiescenceCounters &out)
+  {
+    return internal->collect_quiescence_counters(node, out);
+  }
+
   bool UCPModule::check_for_quiescence(size_t sampled_receive_count)
   {
     return internal->check_for_quiescence(sampled_receive_count);
