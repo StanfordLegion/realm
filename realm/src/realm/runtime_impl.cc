@@ -2974,22 +2974,24 @@ namespace Realm {
     // the operation tables on every rank should be clear of work
     optable.shutdown_check();
 
-    // make sure the network is completely quiescent
-    if(Network::max_node_id > 0) {
-      int tries = 0;
-      while(true) {
-        tries++;
-        bool done = Network::check_for_quiescence(message_manager);
-        if(done) {
-          if(Network::my_node_id == 0)
-            log_runtime.info() << "quiescent after " << tries << " attempts";
-          break;
-        }
+    if(!checked_cast<CoreModuleConfig *>(get_module_config("core"))->enable_elasticity) {
+      // make sure the network is completely quiescent
+      if(Network::max_node_id > 0) {
+        int tries = 0;
+        while(true) {
+          tries++;
+          bool done = Network::check_for_quiescence(message_manager);
+          if(done) {
+            if(Network::my_node_id == 0)
+              log_runtime.info() << "quiescent after " << tries << " attempts";
+            break;
+          }
 
-        if(tries >= 10) {
-          log_runtime.fatal() << "network still not quiescent after " << tries
-                              << " attempts";
-          abort();
+          if(tries >= 10) {
+            log_runtime.fatal()
+                << "network still not quiescent after " << tries << " attempts";
+            abort();
+          }
         }
       }
     }
@@ -3725,8 +3727,9 @@ namespace Realm {
         ((Network::my_node_id > 0) && (parent_index != sender));
     size_t resp_handle = 0;
 
-    // Grab a handle for this reduction request, set the number of requests we expect back
-    // (1 or 2), and stash the sender in there to forward the response when it comes
+    // Grab a handle for this reduction request, set the number of requests we expect
+    // back (1 or 2), and stash the sender in there to forward the response when it
+    // comes
     if(num_outgoing > 0) {
       AutoLock<> al(ReductionNotification::response_data_mutex);
       resp_handle = response_data_counter++;
@@ -3779,8 +3782,8 @@ namespace Realm {
       // Find the dma channel for this handle
       bool found = false;
       for(Channel *ch : node.dma_channels) {
-        // We know that all channels for remote nodes are remote channels, so cast them as
-        // such so we can retrieve their remote pointers
+        // We know that all channels for remote nodes are remote channels, so cast them
+        // as such so we can retrieve their remote pointers
         RemoteChannel *rch = static_cast<RemoteChannel *>(ch);
         if(rch->get_remote_ptr() == handles[i]) {
           // Register the redop

@@ -1752,8 +1752,6 @@ namespace Realm {
           total_rcomp_sent.load(), total_rcomp_received.load(), outstanding_reqs.load(),
       };
 
-      return true; // TODO: FIX ME
-
       log_ucp.debug() << "local quiescence counters:"
                       << " total_msg_sent " << local_counts[0] << " total_msg_received "
                       << local_counts[1] << " sampled_receive_count " << local_counts[2]
