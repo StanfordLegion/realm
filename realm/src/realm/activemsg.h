@@ -59,6 +59,13 @@ namespace Realm {
 
   class ActiveMessageImpl;
 
+  struct ControlPlaneMessageTag {};
+
+  template <typename MSG>
+  struct ActiveMessageUseControlPlane {
+    static constexpr bool value = std::is_base_of_v<ControlPlaneMessageTag, MSG>;
+  };
+
   template <typename T, size_t INLINE_STORAGE = 256>
   class ActiveMessage {
   public:
@@ -69,10 +76,12 @@ namespace Realm {
     //  of recipients
     // in addition to the header struct (T), a message can include a variable
     //  payload which can be delivered to a particular destination address
-    ActiveMessage(NodeID _target, size_t _max_payload_size = 0);
+    ActiveMessage(NodeID _target, size_t _max_payload_size = 0,
+                  bool want_control = ActiveMessageUseControlPlane<T>::value);
     ActiveMessage(NodeID _target, size_t _max_payload_size,
                   const RemoteAddress &_dest_payload_addr);
-    ActiveMessage(const Realm::NodeSet &_targets, size_t _max_payload_size = 0);
+    ActiveMessage(const Realm::NodeSet &_targets, size_t _max_payload_size = 0,
+                  bool want_control = ActiveMessageUseControlPlane<T>::value);
 
     // providing the payload (as a 1D or 2D reference, which must be PAYLOAD_KEEP)
     //  up front can avoid a copy if the source location is directly accessible
@@ -92,10 +101,11 @@ namespace Realm {
     ~ActiveMessage(void);
 
     // a version of `init` for each constructor above
-    void init(NodeID _target, size_t _max_payload_size = 0);
+    void init(NodeID _target, size_t _max_payload_size = 0, bool want_control = false);
     void init(NodeID _target, size_t _max_payload_size,
               const RemoteAddress &_dest_payload_addr);
-    void init(const Realm::NodeSet &_targets, size_t _max_payload_size = 0);
+    void init(const Realm::NodeSet &_targets, size_t _max_payload_size = 0,
+              bool want_control = false);
     void init(NodeID _target, const void *_data, size_t _datalen);
     void init(NodeID _target, const LocalAddress &_src_payload_addr, size_t _datalen,
               const RemoteAddress &_dest_payload_addr);

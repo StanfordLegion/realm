@@ -249,6 +249,9 @@ set(ctxswitch_ARGS -ll:io 1 -t 30 -i 10000)
 add_integration_test(ctxswitch "${REALM_TEST_DIR}/ctxswitch.cc")
 add_integration_test(barrier_reduce "${REALM_TEST_DIR}/barrier_reduce.cc")
 add_integration_test(taskreg "${REALM_TEST_DIR}/taskreg.cc")
+
+add_integration_test(elastic_test "${REALM_TEST_DIR}/elastic_test.cc")
+
 add_integration_test(idcheck "${REALM_TEST_DIR}/idcheck.cc")
 add_integration_test(inst_reuse "${REALM_TEST_DIR}/inst_reuse.cc")
 set(transpose_ARGS -unit_test 1) # Run short test

@@ -19,6 +19,8 @@
 #include "realm/cmdline.h"
 #include "realm/logging.h"
 #include "realm/activemsg.h"
+#include "realm/node_directory.h"
+#include "realm/quiescence.h"
 
 #ifdef REALM_USE_DLFCN
 #include <dlfcn.h>
@@ -47,23 +49,140 @@ static void aligned_free(void *ptr)
 namespace Realm {
 
   namespace Network {
+    NodeDirectory node_directory;
     REALM_INTERNAL_API_EXTERNAL_LINKAGE NodeID my_node_id = 0;
     REALM_INTERNAL_API_EXTERNAL_LINKAGE NodeID max_node_id = 0;
     REALM_INTERNAL_API_EXTERNAL_LINKAGE NodeSet all_peers;
     REALM_INTERNAL_API_EXTERNAL_LINKAGE NodeSet shared_peers;
     NetworkModule *single_network = 0;
+    NetworkModule *control_plane_network = 0;
 
-    bool check_for_quiescence(IncomingMessageManager *message_manager)
+#ifdef REALM_ENABLE_NETWORK_PING_TEST
+
+    namespace {
+
+      struct PingTestAm {
+        NodeID node_id;
+        static void handle_message(NodeID sender, const PingTestAm &msg, const void *data,
+                                   size_t datalen)
+        {
+          assert(datalen == 0);
+          assert(data == nullptr);
+          assert(msg.node_id == sender);
+        }
+      };
+
+      ActiveMessageHandlerReg<PingTestAm> ping_test_am;
+
+      struct PingAck {
+        std::atomic<int> *acks;
+        int expected;
+        Mutex *mtx;
+        Mutex::CondVar *cv;
+        bool *done;
+
+        PingAck(std::atomic<int> *a, int e, Mutex *m, Mutex::CondVar *c, bool *d)
+          : acks(a)
+          , expected(e)
+          , mtx(m)
+          , cv(c)
+          , done(d)
+        {}
+
+        void check_and_signal(int val) const
+        {
+          if(val == expected) {
+            AutoLock<> al(*mtx);
+            *done = true;
+            cv->broadcast();
+          }
+        }
+
+        void operator()()
+        {
+          int val = ++(*acks);
+          check_and_signal(val);
+        }
+
+        void operator()() const
+        {
+          int val = ++(*acks);
+          check_and_signal(val);
+        }
+      };
+
+    } // anonymous namespace
+
+    bool ping_all_peers(unsigned timeout_ms)
+    {
+      NodeSet peers = node_directory.get_members();
+
+      if(peers.empty()) {
+        return true;
+      }
+
+      const int expected = peers.size();
+
+      std::atomic<int> acks{0};
+      bool done = false;
+      Mutex mtx;
+      Mutex::CondVar cv(mtx);
+
+      for(NodeID target : peers) {
+        ActiveMessage<PingTestAm> am(target);
+        am->node_id = my_node_id;
+        am.add_remote_completion(PingAck(&acks, expected, &mtx, &cv, &done));
+        am.commit();
+      }
+
+      AutoLock<> al(mtx);
+      if(!done) {
+        // very primitive wait loop with timeout checking
+        uint64_t start = Clock::current_time_in_microseconds();
+        while(!done) {
+          cv.wait();
+          uint64_t now = Clock::current_time_in_microseconds();
+          if(timeout_ms > 0 && (now - start) > static_cast<uint64_t>(timeout_ms) * 1000) {
+            return false; // timeout
+          }
+        }
+      }
+
+      return true;
+    }
+
+#endif // REALM_ENABLE_NETWORK_PING_TEST
+
+    bool check_for_quiescence(IncomingMessageManager *message_manager, bool elastic)
     {
 #ifdef REALM_USE_MULTIPLE_NETWORKS
       if(REALM_UNLIKELY(single_network == 0)) {
         return false;
       } else
 #endif
+
       {
         size_t messages_received = single_network->sample_messages_received_count();
-        message_manager->drain_incoming_messages(messages_received);
-        return single_network->check_for_quiescence(messages_received);
+
+        size_t control_messages_received = 0;
+        if(control_plane_network) {
+          control_messages_received +=
+              control_plane_network->sample_messages_received_count();
+        }
+
+        message_manager->drain_incoming_messages(messages_received +
+                                                 control_messages_received);
+
+        if(elastic && control_plane_network) {
+          return quiescence_exec(Network::my_node_id);
+        }
+
+        bool status = single_network->check_for_quiescence(messages_received);
+        if(control_plane_network) {
+          status &=
+              control_plane_network->check_for_quiescence(control_messages_received);
+        }
+        return status;
       }
     }
   } // namespace Network
@@ -149,7 +268,8 @@ namespace Realm {
     static NetworkModule *create_network_module(RuntimeImpl *runtime, int *argc,
                                                 const char ***argv);
 
-    // Enumerates all the peers that the current node could potentially share memory with
+    // Enumerates all the peers that the current node could potentially share memory
+    // with
     virtual void get_shared_peers(NodeSet &shared_peers);
 
     // actual parsing of the command line should wait until here if at all
@@ -173,6 +293,8 @@ namespace Realm {
                             std::vector<size_t> &lengths);
 
     virtual size_t sample_messages_received_count(void);
+
+    virtual void collect_quiescence_counters(QuiescenceCounters &out);
     virtual bool check_for_quiescence(size_t sampled_receive_count);
 
     // used to create a remote proxy for a memory
@@ -317,6 +439,8 @@ namespace Realm {
   }
 
   size_t LoopbackNetworkModule::sample_messages_received_count(void) { return 0; }
+
+  void LoopbackNetworkModule::collect_quiescence_counters(QuiescenceCounters &out) {}
 
   bool LoopbackNetworkModule::check_for_quiescence(size_t sampled_receive_count)
   {
@@ -645,6 +769,7 @@ namespace Realm {
         std::cerr << "Unable to parse network command line" << std::endl;
         abort();
       }
+
       for(const std::string &name : network_list) {
 
         // if -ll:networks is none, do not enable any networks
@@ -672,10 +797,16 @@ namespace Realm {
           abort();
         }
         modules.push_back(m);
-        Network::single_network = m;
+
+        if(name != "udp") {
+          Network::single_network = m;
+        } else {
+          Network::control_plane_network = m;
+        }
+
         need_loopback = false;
 #ifndef REALM_USE_MULTIPLE_NETWORKS
-        break; // Found one network backend that works, no need to create the rest
+        // break;  // Found one network backend that works, no need to create the rest
 #endif
       }
     }

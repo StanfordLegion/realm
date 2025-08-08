@@ -57,6 +57,10 @@ namespace Realm {
     // detaches from the network
     virtual void detach(RuntimeImpl *runtime, std::vector<NetworkSegment *> &segments);
 
+    virtual void add_remote_ep(NodeID peer, const void *blob, size_t bytes);
+
+    virtual void delete_remote_ep(NodeID peer);
+
     virtual void create_memories(RuntimeImpl *runtime);
 
     // collective communication within this network
@@ -67,6 +71,8 @@ namespace Realm {
                             std::vector<size_t> &lengths);
 
     virtual size_t sample_messages_received_count(void);
+
+    virtual void collect_quiescence_counters(NodeID node, QuiescenceCounters &out);
     virtual bool check_for_quiescence(size_t sampled_receive_count);
 
     // used to create a remote proxy for a memory
