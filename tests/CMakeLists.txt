@@ -428,6 +428,9 @@ if(TEST_USE_GPU)
   target_link_libraries(task_stream ${TEST_GPU_LIBS})
 endif()
 
+#### HPP API tests
+add_integration_test(hpp_runtime "${REALM_TEST_DIR}/hpp/test_runtime.cc")
+
 #### C API tests
 add_integration_test(c_runtime "${REALM_TEST_DIR}/c/test_runtime.cc")
 add_integration_test(c_processor_query "${REALM_TEST_DIR}/c/test_processor_query.cc")
