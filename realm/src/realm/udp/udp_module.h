@@ -62,6 +62,8 @@ namespace Realm {
                     std::vector<size_t> &lengths) override;
 
     size_t sample_messages_received_count(void) override;
+
+    void collect_quiescence_counters(NodeID node, QuiescenceCounters &out) override;
     bool check_for_quiescence(size_t sampled) override;
 
     ActiveMessageImpl *

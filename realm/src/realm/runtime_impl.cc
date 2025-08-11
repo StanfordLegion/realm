@@ -2416,7 +2416,8 @@ namespace Realm {
       init_path_cache();
     }
 
-    quiescence_init(Network::single_network, &Network::node_directory);
+    quiescence_init({Network::single_network, Network::control_plane_network},
+                    &Network::node_directory);
 
     // Ensure everyone gets to this point before continuing to ensure everyone has all
     // the channels, memory kinds, and all metadata available

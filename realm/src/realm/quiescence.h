@@ -34,7 +34,7 @@ namespace Realm {
   // TODO: Run for data & control plane
   //       control plane should exempt quiece messages
 
-  void quiescence_init(NetworkModule *net, NodeDirectory *ndir);
+  void quiescence_init(const std::vector<NetworkModule *> &net, NodeDirectory *ndir);
   bool quiescence_exec(NodeID node);
 } // namespace Realm
 

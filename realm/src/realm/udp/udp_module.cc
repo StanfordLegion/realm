@@ -332,6 +332,8 @@ namespace Realm {
 
   size_t UDPModule::sample_messages_received_count() { return rx_counter_.exchange(0); }
 
+  void UDPModule::collect_quiescence_counters(NodeID node, QuiescenceCounters &out) {}
+
   bool UDPModule::check_for_quiescence(size_t sampled)
   {
     if(sampled != 0) {

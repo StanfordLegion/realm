@@ -111,7 +111,22 @@ namespace Realm {
     std::atomic<uint64_t> g_done_round{0};
 
     NodeDirectory *s_node_dir;
-    NetworkModule *s_network;
+    std::vector<NetworkModule *> s_network;
+
+    inline void collect_all_counters(NodeID target, QuiescenceCounters &out)
+    {
+      for(NetworkModule *net : s_network) {
+        if(net) {
+          QuiescenceCounters tmp{};
+          net->collect_quiescence_counters(target, tmp);
+          out.msg_sent += tmp.msg_sent;
+          out.msg_recv += tmp.msg_recv;
+          out.rcomp_sent += tmp.rcomp_sent;
+          out.rcomp_recv += tmp.rcomp_recv;
+          out.outstanding += tmp.outstanding;
+        }
+      }
+    }
   } // namespace
 
   void QuiesceReqAM::handle_message(NodeID sender, const QuiesceReqAM &args, const void *,
@@ -121,17 +136,17 @@ namespace Realm {
       return;
     }
 
-    QuiescenceCounters c;
-    s_network->collect_quiescence_counters(args.leaving, c);
+    QuiescenceCounters counters;
+    collect_all_counters(args.leaving, counters);
 
     ActiveMessage<QuiesceRepAM> am(args.leaving);
     am->epoch = args.epoch;
     am->round_id = args.round_id;
-    am->msg_sent = c.msg_sent;
-    am->msg_recv = c.msg_recv;
-    am->rcomp_sent = c.rcomp_sent;
-    am->rcomp_recv = c.rcomp_recv;
-    am->outstanding = c.outstanding;
+    am->msg_sent = counters.msg_sent;
+    am->msg_recv = counters.msg_recv;
+    am->rcomp_sent = counters.rcomp_sent;
+    am->rcomp_recv = counters.rcomp_recv;
+    am->outstanding = counters.outstanding;
     am.commit();
   }
 
@@ -153,7 +168,7 @@ namespace Realm {
     g_done_round.store(args.round_id, std::memory_order_release);
   }
 
-  void quiescence_init(NetworkModule *net, NodeDirectory *ndir)
+  void quiescence_init(const std::vector<NetworkModule *> &net, NodeDirectory *ndir)
   {
     s_network = net;
     s_node_dir = ndir;
@@ -176,9 +191,7 @@ namespace Realm {
       if(quiesce_state.round_id == 0) {
 
         QuiescenceCounters local_counters;
-        if(s_network) {
-          s_network->collect_quiescence_counters(leaving, local_counters);
-        }
+        collect_all_counters(leaving, local_counters);
 
         const uint64_t new_round =
             g_next_round.fetch_add(1, std::memory_order_relaxed) + 1;
