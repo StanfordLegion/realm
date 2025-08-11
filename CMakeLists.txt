@@ -80,6 +80,8 @@ if(NOT CMAKE_BUILD_TYPE)
   set(CMAKE_BUILD_TYPE Release)
 endif()
 
+set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
+
 #region External built-ins
 include(GenerateExportHeader)
 include(GNUInstallDirs)
