@@ -80,6 +80,8 @@
 #cmakedefine REALM_USE_UCX
 #cmakedefine REALM_UCX_DYNAMIC_LOAD
 
+#cmakedefine REALM_USE_UDP
+
 #cmakedefine REALM_USE_LLVM
 #cmakedefine REALM_ALLOW_MISSING_LLVM_LIBS
 

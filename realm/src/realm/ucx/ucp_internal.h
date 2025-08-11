@@ -106,8 +106,9 @@ namespace Realm {
       struct Config {
         AmWithRemoteAddrMode am_wra_mode{AM_WITH_REMOTE_ADDR_MODE_AUTO};
         bool bind_hostmem{true};
+        int rank_id{0};
         int pollers_max{2};
-        int num_priorities{2};
+        int num_priorities{1};
         int prog_boff_max{4}; // progress thread maximum backoff
         int prog_itr_max{16};
         int rdesc_rel_max{16};
@@ -153,7 +154,10 @@ namespace Realm {
       void allgatherv(const char *val_in, size_t bytes, std::vector<char> &vals_out,
                       std::vector<size_t> &lengths);
       size_t sample_messages_received_count();
+
+      void collect_quiescence_counters(NodeID node, QuiescenceCounters &out);
       bool check_for_quiescence(size_t sampled_receive_count);
+
       size_t recommended_max_payload(const void *data, const NetworkSegment *src_segment,
                                      const RemoteAddress *dest_payload_addr,
                                      bool with_congestion, size_t header_size);
@@ -172,6 +176,9 @@ namespace Realm {
 
       void notify_msg_sent(uint64_t count);
 
+      void add_remote_ep(NodeID peer, const void *blob, size_t bytes);
+      void delete_remote_ep(NodeID peer);
+
       const UCPContext *get_context(const NetworkSegment *segment) const;
       // the public interface exposes the tx worker only
       UCPWorker *get_tx_worker(const UCPContext *context, uint8_t priority) const;
@@ -183,6 +190,16 @@ namespace Realm {
       RuntimeImpl *runtime;
 
     private:
+      Mutex peer_counters_mutex;
+      struct PeerCounters {
+        atomic<uint64_t> msg_sent{0};
+        atomic<uint64_t> msg_recv{0};
+        atomic<uint64_t> rcomp_sent{0};
+        atomic<uint64_t> rcomp_recv{0};
+        atomic<uint64_t> outstanding{0};
+      };
+      std::unordered_map<NodeID, std::shared_ptr<PeerCounters>> peer_counters;
+
       struct AmHandlersArgs {
         UCPInternal *internal;
         UCPWorker *worker;
