@@ -58,7 +58,7 @@ namespace Realm {
     std::vector<char> pull();
     uint16_t get_rx_seq() const { return last_rx_seq; }
     uint16_t get_rx_bitmap() const { return rx_bitmap; }
-    bool has_outstanding() const { return !in_flight_entries.empty(); }
+    size_t num_outstanding() const { return in_flight_entries.size(); }
 
     // Retransmit any packet whose ACK is overdue; must be polled periodically.
     void poll(uint64_t now_us);

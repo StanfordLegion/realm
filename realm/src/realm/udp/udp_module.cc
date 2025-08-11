@@ -332,21 +332,27 @@ namespace Realm {
 
   size_t UDPModule::sample_messages_received_count() { return rx_counter_.exchange(0); }
 
-  void UDPModule::collect_quiescence_counters(NodeID node, QuiescenceCounters &out) {}
+  void UDPModule::collect_quiescence_counters(NodeID node, QuiescenceCounters &out)
+  { // TODO: THIS NEEDS MORE WORK
+    AutoLock<> al(peer_map_mutex);
+    for(auto &kv : peer_map_) {
+      out.outstanding += kv.second->retransmit.num_outstanding();
+    }
+  }
 
   bool UDPModule::check_for_quiescence(size_t sampled)
   {
-    if(sampled != 0) {
-      return false;
-    }
-
-    AutoLock<> al(peer_map_mutex);
-    for(auto &kv : peer_map_) {
-      if(kv.second->retransmit.has_outstanding()) {
-        return false;
+    bool quiescent = false;
+    if(sampled) {
+      AutoLock<> al(peer_map_mutex);
+      for(auto &kv : peer_map_) {
+        if(kv.second->retransmit.num_outstanding() != 0) {
+          break;
+        }
       }
+      quiescent = true;
     }
-    return true;
+    return quiescent;
   }
 
   /* ---------- AM factory -------------------------------------------- */
