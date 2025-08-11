@@ -136,6 +136,7 @@ var realm__c_8h =
       [ "REALM_PROCESSOR_ERROR_INVALID_PROCESSOR_KIND", "realm__c_8h.html#ab0dce9b9caa92d896ace3c1cf0b10941ae3e57f4e9a30f9c1d1cefebc3e12533b", null ],
       [ "REALM_PROCESSOR_ERROR_INVALID_ATTRIBUTE", "realm__c_8h.html#ab0dce9b9caa92d896ace3c1cf0b10941a7873956f90f65c3b7c6eb318a69b487b", null ],
       [ "REALM_PROCESSOR_ERROR_INVALID_TASK_FUNCTION", "realm__c_8h.html#ab0dce9b9caa92d896ace3c1cf0b10941aa4dbe83d2e187e20a5c688ccddb72c27", null ],
+      [ "REALM_PROCESSOR_ERROR_OUTSIDE_TASK", "realm__c_8h.html#ab0dce9b9caa92d896ace3c1cf0b10941adda7b2a98e01298d77432986faaa76fc", null ],
       [ "REALM_MEMORY_ERROR_INVALID_MEMORY_KIND", "realm__c_8h.html#ab0dce9b9caa92d896ace3c1cf0b10941aa75511619a2320cc3c01b48ed78d88da", null ],
       [ "REALM_MEMORY_ERROR_INVALID_ATTRIBUTE", "realm__c_8h.html#ab0dce9b9caa92d896ace3c1cf0b10941aba2b3369a07fc1f0dbfbfae221ac4372", null ],
       [ "REALM_EVENT_ERROR_INVALID_EVENT", "realm__c_8h.html#ab0dce9b9caa92d896ace3c1cf0b10941a62b2d18b05d5f55bb4aae0183591ddf5", null ],

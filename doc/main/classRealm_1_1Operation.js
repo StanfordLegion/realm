@@ -5,6 +5,7 @@ var classRealm_1_1Operation =
     [ "Operation", "classRealm_1_1Operation.html#a2292d9c50da5d5a264fcd90a02d60044", null ],
     [ "~Operation", "classRealm_1_1Operation.html#ac9a071454315ba51e53369bb99faadab", null ],
     [ "add_async_work_item", "classRealm_1_1Operation.html#a2ecc645cc1b5cf4605947ec0bcc00801", null ],
+    [ "add_finish_event_precondition", "classRealm_1_1Operation.html#a4cf0c0ee1d38d5bd903e6184a0be9197", null ],
     [ "add_gpu_work_end", "classRealm_1_1Operation.html#a145bd7f568b943ae6ea26fbb1a213808", null ],
     [ "add_gpu_work_start", "classRealm_1_1Operation.html#a8f4c9293c4af3f9658ec679e8a360ab7", null ],
     [ "add_reference", "classRealm_1_1Operation.html#a548aca09147ee52dadbba79270e47ff4", null ],

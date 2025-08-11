@@ -44,7 +44,7 @@
    <!-- BEGIN version select -->
     <br />
     <div class="dropdown">
-     <button class="dropbtn">Version 25.06.0+2d0ad88b</button>
+     <button class="dropbtn">Version 25.06.0+c51f3526</button>
      <div class="dropdown-content"></div>
     </div>
     <script type="text/javascript" src="../selectversion.js"></script>
@@ -144,12 +144,12 @@ $(document).ready(function(){initNavTree('realm__c_8h.html',''); initResizable()
 </div><div class="textblock"><div class="dynheader">
 Include dependency graph for realm_c.h:</div>
 <div class="dyncontent">
-<div class="center"><iframe scrolling="no" frameborder="0" src="realm__c_8h__incl.svg" width="439" height="212"><p><b>This browser is not able to show SVG: try Firefox, Chrome, Safari, or Opera instead.</b></p></iframe></div>
+<div class="center"><!-- SVG 0 --></div>
 </div>
 </div><div class="textblock"><div class="dynheader">
 This graph shows which files directly or indirectly include this file:</div>
 <div class="dyncontent">
-<div class="center"><iframe scrolling="no" frameborder="0" src="realm__c_8h__dep__incl.svg" width="4882" height="1092"><p><b>This browser is not able to show SVG: try Firefox, Chrome, Safari, or Opera instead.</b></p></iframe></div>
+<div class="center"><!-- SVG 1 --></div>
 </div>
 </div>
 <p><a href="realm__c_8h_source.html">Go to the source code of this file.</a></p>
@@ -377,35 +377,36 @@ Enumerations</h2></td></tr>
 , <br />
 &#160;&#160;<a class="el" href="realm__c_8h.html#ab0dce9b9caa92d896ace3c1cf0b10941a7873956f90f65c3b7c6eb318a69b487b">REALM_PROCESSOR_ERROR_INVALID_ATTRIBUTE</a> = -6003
 , <a class="el" href="realm__c_8h.html#ab0dce9b9caa92d896ace3c1cf0b10941aa4dbe83d2e187e20a5c688ccddb72c27">REALM_PROCESSOR_ERROR_INVALID_TASK_FUNCTION</a> = -6004
+, <a class="el" href="realm__c_8h.html#ab0dce9b9caa92d896ace3c1cf0b10941adda7b2a98e01298d77432986faaa76fc">REALM_PROCESSOR_ERROR_OUTSIDE_TASK</a> = -6005
 , <a class="el" href="realm__c_8h.html#ab0dce9b9caa92d896ace3c1cf0b10941aa75511619a2320cc3c01b48ed78d88da">REALM_MEMORY_ERROR_INVALID_MEMORY_KIND</a> = -7001
-, <a class="el" href="realm__c_8h.html#ab0dce9b9caa92d896ace3c1cf0b10941aba2b3369a07fc1f0dbfbfae221ac4372">REALM_MEMORY_ERROR_INVALID_ATTRIBUTE</a> = -7002
 , <br />
-&#160;&#160;<a class="el" href="realm__c_8h.html#ab0dce9b9caa92d896ace3c1cf0b10941a62b2d18b05d5f55bb4aae0183591ddf5">REALM_EVENT_ERROR_INVALID_EVENT</a> = -8001
+&#160;&#160;<a class="el" href="realm__c_8h.html#ab0dce9b9caa92d896ace3c1cf0b10941aba2b3369a07fc1f0dbfbfae221ac4372">REALM_MEMORY_ERROR_INVALID_ATTRIBUTE</a> = -7002
+, <a class="el" href="realm__c_8h.html#ab0dce9b9caa92d896ace3c1cf0b10941a62b2d18b05d5f55bb4aae0183591ddf5">REALM_EVENT_ERROR_INVALID_EVENT</a> = -8001
 , <a class="el" href="realm__c_8h.html#ab0dce9b9caa92d896ace3c1cf0b10941a2d201a6f69c3b019090e109bd66204ea">REALM_PROCESSOR_QUERY_ERROR_INVALID_QUERY</a> = -9001
 , <a class="el" href="realm__c_8h.html#ab0dce9b9caa92d896ace3c1cf0b10941a5f951576063c0c7cf26434d45d338862">REALM_PROCESSOR_QUERY_ERROR_INVALID_CALLBACK</a> = -9002
-, <a class="el" href="realm__c_8h.html#ab0dce9b9caa92d896ace3c1cf0b10941aac9daa54d7e3e36cce5d43b8983f74cc">REALM_MEMORY_QUERY_ERROR_INVALID_QUERY</a> = -10001
 , <br />
-&#160;&#160;<a class="el" href="realm__c_8h.html#ab0dce9b9caa92d896ace3c1cf0b10941a4ad169fe8653a45fe99753a158707253">REALM_MEMORY_QUERY_ERROR_INVALID_CALLBACK</a> = -10002
+&#160;&#160;<a class="el" href="realm__c_8h.html#ab0dce9b9caa92d896ace3c1cf0b10941aac9daa54d7e3e36cce5d43b8983f74cc">REALM_MEMORY_QUERY_ERROR_INVALID_QUERY</a> = -10001
+, <a class="el" href="realm__c_8h.html#ab0dce9b9caa92d896ace3c1cf0b10941a4ad169fe8653a45fe99753a158707253">REALM_MEMORY_QUERY_ERROR_INVALID_CALLBACK</a> = -10002
 , <a class="el" href="realm__c_8h.html#ab0dce9b9caa92d896ace3c1cf0b10941afe56b422786c615500bd7ffab84977ca">REALM_ADDRESS_SPACE_INVALID</a> = -11001
 , <a class="el" href="realm__c_8h.html#ab0dce9b9caa92d896ace3c1cf0b10941a270e32c0fbccc7e92795dfa8fb4e76ed">REALM_REGION_INSTANCE_ERROR_INVALID_DIMS</a> = -12001
-, <a class="el" href="realm__c_8h.html#ab0dce9b9caa92d896ace3c1cf0b10941ac968bb9c0f44cc26a2e1fbeedc595dc6">REALM_REGION_INSTANCE_ERROR_INVALID_FIELDS</a> = -12002
 , <br />
-&#160;&#160;<a class="el" href="realm__c_8h.html#ab0dce9b9caa92d896ace3c1cf0b10941a6d2fff8099664977de7697ef857921ce">REALM_REGION_INSTANCE_ERROR_INVALID_INSTANCE</a> = -12003
+&#160;&#160;<a class="el" href="realm__c_8h.html#ab0dce9b9caa92d896ace3c1cf0b10941ac968bb9c0f44cc26a2e1fbeedc595dc6">REALM_REGION_INSTANCE_ERROR_INVALID_FIELDS</a> = -12002
+, <a class="el" href="realm__c_8h.html#ab0dce9b9caa92d896ace3c1cf0b10941a6d2fff8099664977de7697ef857921ce">REALM_REGION_INSTANCE_ERROR_INVALID_INSTANCE</a> = -12003
 , <a class="el" href="realm__c_8h.html#ab0dce9b9caa92d896ace3c1cf0b10941a69edefe2229933000c379644b3d1bb58">REALM_REGION_INSTANCE_ERROR_INVALID_EVENT</a> = -12004
 , <a class="el" href="realm__c_8h.html#ab0dce9b9caa92d896ace3c1cf0b10941a51fa910a06d7eb60ebcc825a4b72539a">REALM_REGION_INSTANCE_ERROR_INVALID_PARAMS</a> = -12005
-, <a class="el" href="realm__c_8h.html#ab0dce9b9caa92d896ace3c1cf0b10941a4117b727539c3d1afe5682a3675674cf">REALM_REGION_INSTANCE_ERROR_INVALID_COORD_TYPE</a> = -12006
 , <br />
-&#160;&#160;<a class="el" href="realm__c_8h.html#ab0dce9b9caa92d896ace3c1cf0b10941ae8de848a77d25a2adbd3ec4534ba7ff8">REALM_EXTERNAL_INSTANCE_RESOURCE_ERROR_INVALID_RESOURCE</a> = -13001
+&#160;&#160;<a class="el" href="realm__c_8h.html#ab0dce9b9caa92d896ace3c1cf0b10941a4117b727539c3d1afe5682a3675674cf">REALM_REGION_INSTANCE_ERROR_INVALID_COORD_TYPE</a> = -12006
+, <a class="el" href="realm__c_8h.html#ab0dce9b9caa92d896ace3c1cf0b10941ae8de848a77d25a2adbd3ec4534ba7ff8">REALM_EXTERNAL_INSTANCE_RESOURCE_ERROR_INVALID_RESOURCE</a> = -13001
 , <a class="el" href="realm__c_8h.html#ab0dce9b9caa92d896ace3c1cf0b10941a7f0006bd7491deff475bb44f5f3c258f">REALM_EXTERNAL_INSTANCE_RESOURCE_ERROR_INVALID_BASE</a> = -13002
 , <a class="el" href="realm__c_8h.html#ab0dce9b9caa92d896ace3c1cf0b10941a9b10effff0a407507fedd2aa436a851a">REALM_EXTERNAL_INSTANCE_RESOURCE_ERROR_INVALID_SIZE</a> = -13003
-, <a class="el" href="realm__c_8h.html#ab0dce9b9caa92d896ace3c1cf0b10941aaa4ad031b807dba015ef8051b2462453">REALM_EXTERNAL_INSTANCE_RESOURCE_ERROR_INVALID_CUDA_DEVICE_ID</a> = -13004
 , <br />
-&#160;&#160;<a class="el" href="realm__c_8h.html#ab0dce9b9caa92d896ace3c1cf0b10941af22335de5df2fa9abd45bc9ad201a689">REALM_EXTERNAL_INSTANCE_RESOURCE_ERROR_INVALID_TYPE</a> = -13005
+&#160;&#160;<a class="el" href="realm__c_8h.html#ab0dce9b9caa92d896ace3c1cf0b10941aaa4ad031b807dba015ef8051b2462453">REALM_EXTERNAL_INSTANCE_RESOURCE_ERROR_INVALID_CUDA_DEVICE_ID</a> = -13004
+, <a class="el" href="realm__c_8h.html#ab0dce9b9caa92d896ace3c1cf0b10941af22335de5df2fa9abd45bc9ad201a689">REALM_EXTERNAL_INSTANCE_RESOURCE_ERROR_INVALID_TYPE</a> = -13005
 , <a class="el" href="realm__c_8h.html#ab0dce9b9caa92d896ace3c1cf0b10941a38e00ec6ca6f50f6ec08ddd03a413944">REALM_EXTERNAL_INSTANCE_RESOURCE_ERROR_INVALID_PARAMS</a> = -13006
 , <a class="el" href="realm__c_8h.html#ab0dce9b9caa92d896ace3c1cf0b10941aac04f3e346e2c0fa561193d4c5c06a67">REALM_CUDA_ERROR_NOT_ENABLED</a> = -14001
-, <a class="el" href="realm__c_8h.html#ab0dce9b9caa92d896ace3c1cf0b10941ab028de04f18f2438f0c93a79143541d1">REALM_MODULE_CONFIG_ERROR_INVALID_NAME</a> = -16001
 , <br />
-&#160;&#160;<a class="el" href="realm__c_8h.html#ab0dce9b9caa92d896ace3c1cf0b10941a692653d325e7202e3017f5117d08fe74">REALM_MODULE_CONFIG_ERROR_NO_RESOURCE</a> = -16002
+&#160;&#160;<a class="el" href="realm__c_8h.html#ab0dce9b9caa92d896ace3c1cf0b10941ab028de04f18f2438f0c93a79143541d1">REALM_MODULE_CONFIG_ERROR_INVALID_NAME</a> = -16001
+, <a class="el" href="realm__c_8h.html#ab0dce9b9caa92d896ace3c1cf0b10941a692653d325e7202e3017f5117d08fe74">REALM_MODULE_CONFIG_ERROR_NO_RESOURCE</a> = -16002
 <br />
  }</td></tr>
 <tr class="separator:ab0dce9b9caa92d896ace3c1cf0b10941"><td class="memSeparator" colspan="2">&#160;</td></tr>
@@ -1577,6 +1578,7 @@ Functions</h2></td></tr>
 <tr><td class="fieldname"><a id="ab0dce9b9caa92d896ace3c1cf0b10941ae3e57f4e9a30f9c1d1cefebc3e12533b" name="ab0dce9b9caa92d896ace3c1cf0b10941ae3e57f4e9a30f9c1d1cefebc3e12533b"></a>REALM_PROCESSOR_ERROR_INVALID_PROCESSOR_KIND&#160;</td><td class="fielddoc"></td></tr>
 <tr><td class="fieldname"><a id="ab0dce9b9caa92d896ace3c1cf0b10941a7873956f90f65c3b7c6eb318a69b487b" name="ab0dce9b9caa92d896ace3c1cf0b10941a7873956f90f65c3b7c6eb318a69b487b"></a>REALM_PROCESSOR_ERROR_INVALID_ATTRIBUTE&#160;</td><td class="fielddoc"></td></tr>
 <tr><td class="fieldname"><a id="ab0dce9b9caa92d896ace3c1cf0b10941aa4dbe83d2e187e20a5c688ccddb72c27" name="ab0dce9b9caa92d896ace3c1cf0b10941aa4dbe83d2e187e20a5c688ccddb72c27"></a>REALM_PROCESSOR_ERROR_INVALID_TASK_FUNCTION&#160;</td><td class="fielddoc"></td></tr>
+<tr><td class="fieldname"><a id="ab0dce9b9caa92d896ace3c1cf0b10941adda7b2a98e01298d77432986faaa76fc" name="ab0dce9b9caa92d896ace3c1cf0b10941adda7b2a98e01298d77432986faaa76fc"></a>REALM_PROCESSOR_ERROR_OUTSIDE_TASK&#160;</td><td class="fielddoc"></td></tr>
 <tr><td class="fieldname"><a id="ab0dce9b9caa92d896ace3c1cf0b10941aa75511619a2320cc3c01b48ed78d88da" name="ab0dce9b9caa92d896ace3c1cf0b10941aa75511619a2320cc3c01b48ed78d88da"></a>REALM_MEMORY_ERROR_INVALID_MEMORY_KIND&#160;</td><td class="fielddoc"></td></tr>
 <tr><td class="fieldname"><a id="ab0dce9b9caa92d896ace3c1cf0b10941aba2b3369a07fc1f0dbfbfae221ac4372" name="ab0dce9b9caa92d896ace3c1cf0b10941aba2b3369a07fc1f0dbfbfae221ac4372"></a>REALM_MEMORY_ERROR_INVALID_ATTRIBUTE&#160;</td><td class="fielddoc"></td></tr>
 <tr><td class="fieldname"><a id="ab0dce9b9caa92d896ace3c1cf0b10941a62b2d18b05d5f55bb4aae0183591ddf5" name="ab0dce9b9caa92d896ace3c1cf0b10941a62b2d18b05d5f55bb4aae0183591ddf5"></a>REALM_EVENT_ERROR_INVALID_EVENT&#160;</td><td class="fielddoc"></td></tr>
@@ -2794,6 +2796,7 @@ Functions</h2></td></tr>
   <table class="params">
     <tr><td class="paramname">runtime</td><td>The runtime instance to use. </td></tr>
     <tr><td class="paramname">instance</td><td>The region instance to destroy. </td></tr>
+    <tr><td class="paramname">wait_on</td><td>The event to wait on before destroying the region instance. </td></tr>
   </table>
   </dd>
 </dl>

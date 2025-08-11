@@ -1,0 +1,25 @@
+digraph "Graphical Class Hierarchy"
+{
+ // LATEX_PDF_SIZE
+  bgcolor="transparent";
+  edge [fontname=Helvetica,fontsize=10,labelfontname=Helvetica,labelfontsize=10];
+  node [fontname=Helvetica,fontsize=10,shape=box,height=0.2,width=0.4];
+  rankdir="LR";
+  Node0 [id="Node000000",label="Realm::ModuleConfig",height=0.2,width=0.4,color="grey40", fillcolor="white", style="filled",URL="$classRealm_1_1ModuleConfig.html",tooltip=" "];
+  Node0 -> Node1 [id="edge205_Node000000_Node000001",dir="back",color="steelblue1",style="solid",tooltip=" "];
+  Node1 [id="Node000001",label="Realm::CoreModuleConfig",height=0.2,width=0.4,color="grey40", fillcolor="white", style="filled",URL="$classRealm_1_1CoreModuleConfig.html",tooltip=" "];
+  Node0 -> Node2 [id="edge206_Node000000_Node000002",dir="back",color="steelblue1",style="solid",tooltip=" "];
+  Node2 [id="Node000002",label="Realm::Cuda::CudaModuleConfig",height=0.2,width=0.4,color="grey40", fillcolor="white", style="filled",URL="$classRealm_1_1Cuda_1_1CudaModuleConfig.html",tooltip=" "];
+  Node0 -> Node3 [id="edge207_Node000000_Node000003",dir="back",color="steelblue1",style="solid",tooltip=" "];
+  Node3 [id="Node000003",label="Realm::HDF5::HDF5ModuleConfig",height=0.2,width=0.4,color="grey40", fillcolor="white", style="filled",URL="$classRealm_1_1HDF5_1_1HDF5ModuleConfig.html",tooltip=" "];
+  Node0 -> Node4 [id="edge208_Node000000_Node000004",dir="back",color="steelblue1",style="solid",tooltip=" "];
+  Node4 [id="Node000004",label="Realm::Hip::HipModuleConfig",height=0.2,width=0.4,color="grey40", fillcolor="white", style="filled",URL="$classRealm_1_1Hip_1_1HipModuleConfig.html",tooltip=" "];
+  Node0 -> Node5 [id="edge209_Node000000_Node000005",dir="back",color="steelblue1",style="solid",tooltip=" "];
+  Node5 [id="Node000005",label="Realm::Numa::NumaModuleConfig",height=0.2,width=0.4,color="grey40", fillcolor="white", style="filled",URL="$classRealm_1_1Numa_1_1NumaModuleConfig.html",tooltip=" "];
+  Node0 -> Node6 [id="edge210_Node000000_Node000006",dir="back",color="steelblue1",style="solid",tooltip=" "];
+  Node6 [id="Node000006",label="Realm::OpenMP::OpenMPModule\lConfig",height=0.2,width=0.4,color="grey40", fillcolor="white", style="filled",URL="$classRealm_1_1OpenMP_1_1OpenMPModuleConfig.html",tooltip=" "];
+  Node0 -> Node7 [id="edge211_Node000000_Node000007",dir="back",color="steelblue1",style="solid",tooltip=" "];
+  Node7 [id="Node000007",label="Realm::ProcSet::ProcSetModule\lConfig",height=0.2,width=0.4,color="grey40", fillcolor="white", style="filled",URL="$classRealm_1_1ProcSet_1_1ProcSetModuleConfig.html",tooltip=" "];
+  Node0 -> Node8 [id="edge212_Node000000_Node000008",dir="back",color="steelblue1",style="solid",tooltip=" "];
+  Node8 [id="Node000008",label="Realm::Python::PythonModule\lConfig",height=0.2,width=0.4,color="grey40", fillcolor="white", style="filled",URL="$classRealm_1_1Python_1_1PythonModuleConfig.html",tooltip=" "];
+}
