@@ -1,0 +1,20 @@
+<map id="/home/runner/work/realm/realm/realm&#45;src/src/realm/transfer/channel.h" name="/home/runner/work/realm/realm/realm&#45;src/src/realm/transfer/channel.h">
+<area shape="rect" id="Node000001" title=" " alt="" coords="612,5,807,60"/>
+<area shape="rect" id="Node000002" href="$cuda__internal_8h.html" title=" " alt="" coords="5,108,200,163"/>
+<area shape="poly" id="edge1_Node000001_Node000002" title=" " alt="" coords="598,51,420,77,219,111,201,114,200,109,218,105,419,72,598,46"/>
+<area shape="rect" id="Node000003" href="$hdf5__internal_8h.html" title=" " alt="" coords="541,211,736,265"/>
+<area shape="poly" id="edge2_Node000001_Node000003" title=" " alt="" coords="599,39,502,46,403,58,317,79,286,93,265,110,253,126,248,141,249,154,255,166,281,186,321,202,372,214,429,223,541,232,541,237,428,228,371,220,319,207,278,191,251,169,244,155,243,140,249,124,261,106,283,89,315,74,402,53,502,40,598,34"/>
+<area shape="rect" id="Node000004" href="$hip__internal_8h.html" title=" " alt="" coords="275,108,469,163"/>
+<area shape="poly" id="edge3_Node000001_Node000004" title=" " alt="" coords="609,66,461,111,459,105,608,61"/>
+<area shape="rect" id="Node000005" href="$addrsplit__channel_8h.html" title=" " alt="" coords="493,108,701,163"/>
+<area shape="poly" id="edge4_Node000001_Node000005" title=" " alt="" coords="672,71,628,110,625,106,668,67"/>
+<area shape="rect" id="Node000006" href="$channel__disk_8h.html" title=" " alt="" coords="725,108,920,163"/>
+<area shape="poly" id="edge5_Node000001_Node000006" title=" " alt="" coords="751,67,795,106,791,110,748,71"/>
+<area shape="rect" id="Node000007" href="$lowlevel__dma_8h.html" title=" " alt="" coords="944,108,1139,163"/>
+<area shape="poly" id="edge6_Node000001_Node000007" title=" " alt="" coords="809,61,956,105,954,110,808,66"/>
+<area shape="rect" id="Node000008" href="$memcpy__channel_8h.html" title=" " alt="" coords="1163,108,1371,163"/>
+<area shape="poly" id="edge8_Node000001_Node000008" title=" " alt="" coords="821,48,1151,105,1163,108,1162,113,1150,111,820,54"/>
+<area shape="rect" id="Node000009" href="$transfer_8h.html" title=" " alt="" coords="1395,108,1589,163"/>
+<area shape="poly" id="edge9_Node000001_Node000009" title=" " alt="" coords="821,39,1078,64,1231,82,1383,105,1395,108,1394,113,1382,111,1230,87,1078,69,820,45"/>
+<area shape="poly" id="edge7_Node000007_Node000003" title=" " alt="" coords="931,167,737,215,736,210,930,162"/>
+</map>
