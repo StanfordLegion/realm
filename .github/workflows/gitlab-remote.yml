@@ -17,6 +17,11 @@ name: Legion-CI
 
 on:
   workflow_dispatch:
+    inputs:
+      short:
+        type: boolean
+        description: Run short version
+        default: false
   push:
     branches: main
 
@@ -29,6 +34,7 @@ jobs:
     env:
       GITLAB_URL: "https://gitlab.com/api/v4/projects/1447639"
       GITLAB_REF: "master"
+      GITLAB_SHORT: ${{ github.event.inputs.short || false }}
       GITHUB_ARCHIVE: "${{ github.server_url }}/${{ github.repository }}/archive/${{ github.sha }}.tar.gz"
     steps:
       - name: Hide token in logs
@@ -53,14 +59,18 @@ jobs:
 
           GITLAB_URL = os.environ['GITLAB_URL']
           GITLAB_REF = os.environ['GITLAB_REF']
+          GITLAB_SHORT = '1' if os.environ['GITLAB_SHORT'] == 'true' else '0'
           GITLAB_TRIGGER_TOKEN = os.environ['GITLAB_TRIGGER_TOKEN']
           GITLAB_ACCESS_TOKEN = os.environ['GITLAB_ACCESS_TOKEN']
           GITHUB_ARCHIVE = os.environ['GITHUB_ARCHIVE']
           REALM_SHA256 = os.environ['REALM_SHA256']
           REALM_COMMIT = os.environ['REALM_COMMIT']
 
+          print('::notice::IS_SHORT', GITLAB_SHORT)
+
           payload = {'token': GITLAB_TRIGGER_TOKEN,
                      'ref': GITLAB_REF,
+                     'variable[IS_SHORT_JOB]': GITLAB_SHORT,
                      'variable[REALM_URL]': GITHUB_ARCHIVE,
                      'variable[REALM_SH256]': REALM_SHA256,
                      'variable[REALM_COMMIT]': REALM_COMMIT
