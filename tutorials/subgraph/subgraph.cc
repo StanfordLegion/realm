@@ -345,6 +345,8 @@ void main_task(const void *args, size_t arglen, const void *userdata, size_t use
     p.spawn(VERIFY_TASK, &verify_args, sizeof(VerifyTaskArgs)).wait();
   }
 
+  sg.destroy();
+
   for(int i = 0; i < 5; i++) {
     insts[i].destroy();
   }

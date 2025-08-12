@@ -223,7 +223,7 @@ namespace Realm {
       return false;
     }
     struct dirent *de;
-    while((de = readdir(cpudir)) != 0)
+    while((de = readdir(cpudir)) != 0) {
       if(!strncmp(de->d_name, "cpu", 3)) {
         int cpu_index = atoi(de->d_name + 3);
         if(only_available && !CPU_ISSET(cpu_index, &avail_cpus))
@@ -245,6 +245,9 @@ namespace Realm {
           }
         closedir(d2);
       }
+    }
+
+    closedir(cpudir);
 
     // any matches is "success"
     if(!cpu_counts.empty()) {
