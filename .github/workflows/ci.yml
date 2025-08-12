@@ -286,6 +286,7 @@ jobs:
                 -DREALM_ENABLE_OPENMP=${{ matrix.config.openmp }}
                 -DREALM_ENABLE_UCX=${{ matrix.config.ucx }}
                 -DREALM_ENABLE_PYTHON=${{ matrix.config.python }}
+                -DREALM_ENABLE_CUDA=${{ matrix.config.cuda != '' && 'ON' || 'OFF' }}
                 -DGASNET_CONDUIT=mpi
                 -DREALM_ENABLE_GASNETEX=${{ matrix.config.gasnet }}
                 -DREALM_SANITIZER=${{ matrix.config.sanitizer }}

@@ -1,0 +1,127 @@
+# Copyright 2025 Stanford University, NVIDIA Corporation
+# SPDX-License-Identifier: Apache-2.0
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+# Quick tests to make sure we don't regress legion builds
+
+name: Test Legion
+
+on:
+  push:
+    branches-ignore:
+      - gh-pages
+  pull_request:
+    branches-ignore:
+      - gh-pages
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref_name != 'main' && ! startsWith(github.ref, 'refs/tags/v') }}
+
+jobs:
+  build:
+    name: Legion Test
+    runs-on: ubuntu-latest
+    env:
+      CPM_SOURCE_CACHE: "${{ github.workspace }}/.cache/cpm"
+      CCACHE_BASEDIR: ${{ github.workspace }}
+      CCACHE_COMPRESS: "true"
+      CCACHE_COMPRESS_LEVEL: "6"
+      LEGION_REF: "legion-25.06.0"
+    strategy:
+      fail-fast: false
+    steps:
+      - uses: Kaven-Universe/github-action-current-date-time@v1
+        name: Get Timestamp
+        id: timestamp
+        with:
+          format: "yyyy-MM-dd-HH-mm-ss-SSS"
+
+      - uses: lukka/get-cmake@latest
+        with:
+          cmakeVersion: "~3.22.2"
+
+      - uses: awalsh128/cache-apt-pkgs-action@latest
+        name: Get Linux Packages
+        with:
+          packages: gcc g++ ccache
+          execute_install_scripts: true
+
+      # Unfortunately the openmpi package does a bunch of things that doesn't
+      # allow it to be cached
+      - name: Get Linux OpenMPI
+        run: $(which sudo) apt install -yy libopenmpi-dev
+
+      - name: Checkout Legion
+        run: git clone --depth=1 --branch ${{ env.LEGION_REF }} http://gitlab.com/StanfordLegion/legion.git ${{ github.workspace }}
+
+      - name: Remove realm subdir
+        run: rm -rf realm
+
+      - uses: actions/checkout@v4.2.2
+        with:
+          path: realm
+
+      - uses: actions/cache@v4.2.2
+        name: Restore CPM source cache
+        with:
+          path: .cache/cpm
+          key: cpm-${{ steps.timestamp.outputs.time }}
+          restore-keys: |
+            cpm-
+
+      - uses: hendrikmuhs/ccache-action@v1.2
+        name: Restore ccache Cache
+        with:
+          variant: ccache
+          append-timestamp: true
+
+          key: legion-${{ env.LEGION_REF }}-realm-${{ github.ref_name }}
+          restore-keys: |
+            legion-${{ env.LEGION_REF }}-realm-${{ github.ref_name }}
+            legion-${{ env.LEGION_REF }}-realm-main
+      
+      - name: Configure
+        run:
+          cmake -S . -B build
+                -DCMAKE_C_COMPILER=gcc
+                -DCMAKE_CXX_COMPILER=g++
+                -DCMAKE_C_COMPILER_LAUNCHER=ccache
+                -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
+                -DCMAKE_BUILD_TYPE=Release
+                -DLegion_BUILD_RUST_PROFILER=OFF
+                -DLegion_BUILD_TESTS=ON -DLegion_BUILD_EXAMPLES=ON -DLegion_BUILD_TUTORIAL=ON -DLegion_ENABLE_TESTING=ON
+                -DBUILD_SHARED_LIBS=ON
+                -DGASNET_CONDUIT=mpi
+                -DREALM_ENABLE_GASNETEX=ON
+
+      - name: Build
+        run:
+          cmake --build build --parallel 4 --config Release --verbose
+
+      - name: Run Tests
+        id: run-tests
+        run:
+          ctest --output-junit ${{ github.workspace }}/test-results.xml
+                --test-dir build
+                --build-config Release
+                --output-on-failure
+                --timeout 240
+                --parallel 4
+
+      - uses: test-summary/action@v2
+        name: Upload Test Results
+        if: always() && hashFiles('test-results.xml')
+        with:
+          paths: "test-results.xml"
