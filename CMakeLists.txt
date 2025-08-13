@@ -391,6 +391,10 @@ if(REALM_ENABLE_CUDA OR (REALM_ENABLE_HIP AND CMAKE_HIP_PLATFORM STREQUAL "nvidi
     endif()
     list(APPEND REALM_STATIC_DEPENDS CUDAToolkit)
   endif()
+  # Legacy, unsupported options
+  if (REALM_USE_CUDART_HIJACK)
+    message(FATAL_ERROR "REALM_USE_CUDART_HIJACK is no longer supported")
+  endif()
 endif()
 
 if(REALM_ENABLE_HIP)
@@ -434,6 +438,9 @@ if(REALM_ENABLE_HIP)
       #message(FATAL_ERROR ${HIP_INCLUDE_DIR})
     endif()
     enable_language(HIP)
+  endif()
+  if (REALM_USE_HIP_HIJACK)
+    message(FATAL_ERROR "REALM_USE_HIP_HIJACK is no longer supported")
   endif()
 endif()
 
