@@ -91,6 +91,10 @@ jobs:
           restore-keys: |
             legion-${{ env.LEGION_REF }}-realm-${{ github.ref_name }}
             legion-${{ env.LEGION_REF }}-realm-main
+
+      - name: Apply Legion patches
+        run:
+          git apply --verbose realm/.github/workflows/legion-patches/*.patch
       
       - name: Configure
         run:

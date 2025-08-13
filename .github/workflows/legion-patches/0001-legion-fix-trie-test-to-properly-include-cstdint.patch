@@ -1,0 +1,27 @@
+From 77c5224128920b2f4eeeda1da42c0c7ff146c2ca Mon Sep 17 00:00:00 2001
+From: Cory Perry <cperry@nvidia.com>
+Date: Tue, 12 Aug 2025 17:01:53 -0700
+Subject: [PATCH] legion: fix trie test to properly include cstdint
+
+SPDX-FileCopyrightText: Copyright 2025 NVIDIA Corporation
+SPDX-License-Identifier: Apache-2.0
+
+---
+ test/trie/trie.cc | 1 +
+ 1 file changed, 1 insertion(+)
+
+diff --git a/test/trie/trie.cc b/test/trie/trie.cc
+index e6fbbfcaf..8aee88d89 100644
+--- a/test/trie/trie.cc
++++ b/test/trie/trie.cc
+@@ -13,6 +13,7 @@
+  * limitations under the License.
+  */
+ 
++#include <cstdint>
+ #include <cstdlib>
+ #include <cassert>
+ #include <iostream>
+-- 
+2.34.1
+
