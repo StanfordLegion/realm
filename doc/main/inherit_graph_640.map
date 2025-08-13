@@ -1,0 +1,11 @@
+<map id="Graphical Class Hierarchy" name="Graphical Class Hierarchy">
+<area shape="rect" id="Node000000" href="$classRealm_1_1TransferIterator.html" title=" " alt="" coords="5,74,177,99"/>
+<area shape="rect" id="Node000001" href="$classRealm_1_1TransferIteratorBase.html" title=" " alt="" coords="229,37,433,77"/>
+<area shape="poly" id="edge332_Node000000_Node000001" title=" " alt="" coords="191,72,229,67,229,72,191,77"/>
+<area shape="rect" id="Node000004" href="$classRealm_1_1WrappingFIFOIterator.html" title=" " alt="" coords="225,102,437,127"/>
+<area shape="poly" id="edge335_Node000000_Node000004" title=" " alt="" coords="191,96,225,100,225,105,191,101"/>
+<area shape="rect" id="Node000002" href="$classRealm_1_1TransferIteratorIndexSpace.html" title=" " alt="" coords="492,5,700,45"/>
+<area shape="poly" id="edge333_Node000001_Node000002" title=" " alt="" coords="447,41,491,35,492,41,447,46"/>
+<area shape="rect" id="Node000003" href="$classRealm_1_1TransferIteratorIndirect.html" title=" " alt="" coords="485,69,707,109"/>
+<area shape="poly" id="edge334_Node000001_Node000003" title=" " alt="" coords="447,69,485,73,485,79,447,74"/>
+</map>
