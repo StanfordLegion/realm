@@ -191,7 +191,9 @@ namespace Realm {
       if(quiesce_state.round_id == 0) {
 
         QuiescenceCounters local_counters;
-        collect_all_counters(leaving, local_counters);
+        for(NodeID peer : members) {
+          collect_all_counters(peer, local_counters);
+        }
 
         const uint64_t new_round =
             g_next_round.fetch_add(1, std::memory_order_relaxed) + 1;

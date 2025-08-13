@@ -2506,6 +2506,7 @@ namespace Realm {
     self_meta.announce_mm = true;
 
     realm_status_t status = membership_join(membership, &self_meta);
+
     assert(status == realm_status_t::REALM_SUCCESS);
 
     {
