@@ -917,8 +917,8 @@ namespace Realm {
       UCPWorker *w = get_tx_worker(ctx, /*priority=*/0);
       assert(w != nullptr);
 
-      /* Re-use the trusted helper that caches the EP internally */
-      bool ok = w->ep_add(peer, const_cast<ucp_address_t *>(addr), rdev);
+      bool ok = w->ep_add(peer, const_cast<ucp_address_t *>(addr), rdev, module,
+                          /*enable_timeout=*/true);
       if(!ok) {
         log_ucp.error() << "ep_add failed while admitting peer " << peer;
       }

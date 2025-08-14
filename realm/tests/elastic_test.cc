@@ -14,7 +14,7 @@ enum
 
 namespace TestConfig {
   int expected_peers{4};
-  int shutdown_node_id{2};
+  int shutdown_node_id{1};
 }; // namespace TestConfig
 
 void top_task(const void *args, size_t arglen, const void *userdata, size_t userlen,

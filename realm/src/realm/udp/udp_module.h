@@ -148,6 +148,9 @@ namespace Realm {
 
     std::map<NodeID, UDPPeerShim *> peer_map_;
 
+    PeerFailureCB peer_fail_cb_{nullptr};
+    void *peer_fail_ud_{nullptr};
+
     friend class UDPMessageImpl;
     friend class RxWorker;
     friend class TxWorker;

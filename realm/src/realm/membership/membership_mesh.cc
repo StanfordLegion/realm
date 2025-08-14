@@ -449,6 +449,47 @@ namespace {
     return realm_status_t::REALM_SUCCESS;
   }
 
+  void mesh_on_peer_failed(NodeID peer, PeerFailureKind kind, void *user_data)
+  {
+    if(!mesh_state) {
+      return;
+    }
+
+    {
+      AutoLock<> al(mesh_state->subs_mutex);
+      mesh_state->subscribers.remove(peer);
+    }
+
+    bool fire_post = false;
+
+    {
+      AutoLock<> al(mesh_state->pending_mutex);
+      mesh_state->pending.remove(peer);
+      fire_post = mesh_state->pending.empty();
+    }
+
+    if(mesh_state->hooks.pre_leave) {
+      node_meta_t meta{(int32_t)peer, 0, false};
+      mesh_state->hooks.pre_leave(&meta, nullptr, 0, /*left=*/true,
+                                  mesh_state->hooks.user_arg);
+    }
+
+    if(mesh_state->hooks.post_leave) {
+      node_meta_t meta{(int32_t)peer, 0, false};
+      mesh_state->hooks.post_leave(&meta, nullptr, 0, /*left=*/true,
+                                   mesh_state->hooks.user_arg);
+    }
+
+    Network::node_directory.remove_slot(peer);
+    Network::node_directory.bump_epoch(peer);
+
+    if(fire_post && mesh_state->leaving.load(std::memory_order_acquire)) {
+      node_meta_t meta{(int32_t)Network::my_node_id, 0, false};
+      mesh_state->hooks.post_leave(&meta, nullptr, 0, /*left=*/true,
+                                   mesh_state->hooks.user_arg);
+    }
+  }
+
   const membership_ops_t operations = {
       .join_request = join,
       .leave_request = leave,
@@ -460,5 +501,8 @@ realm_status_t membership_mesh_init(membership_handle_t *out, membership_hooks_t
   MembershipMesh *state = new MembershipMesh();
   mesh_state = state;
   mesh_state->hooks = hooks;
+
+  Network::register_peer_failure_callback(&mesh_on_peer_failed, state);
+
   return membership_create(&operations, state, out);
 }

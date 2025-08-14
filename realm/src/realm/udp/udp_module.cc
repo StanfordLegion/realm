@@ -57,7 +57,11 @@ namespace Realm {
     while(!module->shutting_down_.load()) {
       AutoLock<> al(module->peer_map_mutex);
       for(auto &kv : module->peer_map_) {
-        kv.second->retransmit.poll(Clock::current_time_in_microseconds());
+        bool ok = kv.second->retransmit.poll(Clock::current_time_in_microseconds());
+        if(!ok) {
+          module->notify_peer_failure(kv.first, PeerFailureKind::TransportError);
+          return false;
+        }
       }
       break;
     }

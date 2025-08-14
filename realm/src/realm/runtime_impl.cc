@@ -17,6 +17,7 @@
 
 #include "realm/runtime_impl.h"
 
+#include "realm/network.h"
 #include "realm/proc_impl.h"
 #include "realm/mem_impl.h"
 #include "realm/inst_impl.h"
@@ -493,7 +494,6 @@ namespace Realm {
                                   bool /*left*/, void *)
     {
       RuntimeImpl *rt = get_runtime();
-
       if(Network::my_node_id == self->node_id) {
         rt->initiate_shutdown(/*signal_only=*/true);
       } else {
@@ -504,7 +504,6 @@ namespace Realm {
     }
 
     bool membership_filter_cb(const node_meta_t *, void *) { return true; }
-
   } // namespace
 
   ////////////////////////////////////////////////////////////////////////
@@ -662,6 +661,7 @@ namespace Realm {
       return false;
     if(!configure_from_command_line(*argc, *argv))
       return false;
+
     start();
     return true;
   }

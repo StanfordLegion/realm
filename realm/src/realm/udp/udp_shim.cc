@@ -107,17 +107,17 @@ namespace Realm {
     return {};
   }
 
-  void UDPShim::poll(uint64_t now_us)
+  bool UDPShim::poll(uint64_t now_us)
   {
     for(auto &entry : in_flight_entries) {
       if(entry.retries >= int(MAX_RETRIES)) {
-        assert(0);
-        continue;
+        return false;
       }
       if(now_us - entry.ts_last_send >= RETRY_USEC) {
         assert(entry.patch);
         send_now(entry);
       }
     }
+    return true;
   }
 } // namespace Realm
