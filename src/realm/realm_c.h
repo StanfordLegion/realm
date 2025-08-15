@@ -537,7 +537,7 @@ realm_status_t REALM_EXPORT realm_processor_get_attributes(realm_runtime_t runti
 /**
  * @brief Creates a new processor query.
  *
- * @param machine The machine instance.
+ * @param runtime The runtime instance.
  * @param[out] query The processor query to be created.
  * @return Realm status indicating success or failure.
  *
@@ -626,7 +626,7 @@ realm_status_t REALM_EXPORT realm_memory_get_attributes(realm_runtime_t runtime,
 /**
  * @brief Creates a new memory query.
  *
- * @param machine The machine instance.
+ * @param runtime The runtime instance.
  * @param[out] query The memory query to be created.
  * @return Realm status indicating success or failure.
  *
@@ -705,13 +705,17 @@ realm_status_t REALM_EXPORT realm_memory_query_iter(realm_memory_query_t query,
  * @brief Waits for a specific event to complete.
  *
  * @param runtime The runtime instance to use.
- * @param[out] event The event to wait for.
+ * @param event The event to wait for.
+ * @param max_ns The maximum number of nanoseconds to wait. Any value <= 0 means wait
+ * forever.
+ * @param[out] has_triggered Whether the event has triggered. Only valid if max_ns > 0.
  * @param[out] poisoned Whether the event is poisoned.
  * @return Realm status indicating success or failure.
  *
  * @ingroup Event
  */
 realm_status_t REALM_EXPORT realm_event_wait(realm_runtime_t runtime, realm_event_t event,
+                                             long long max_ns, int *has_triggered,
                                              int *poisoned);
 
 /**
@@ -746,6 +750,22 @@ realm_status_t REALM_EXPORT realm_event_has_triggered(realm_runtime_t runtime,
                                                       realm_event_t event,
                                                       int *has_triggered, int *poisoned);
 
+/**
+ * @brief Cancels the operation associated with an event and marks it as poisoned.
+ *
+ * @param runtime The runtime instance to use.
+ * @param event The event to cancel the operation of.
+ * @param reason_data The reason for the cancellation.
+ * @param reason_size The size of the reason data.
+ * @return Realm status indicating success or failure.
+ *
+ * @ingroup Event
+ */
+realm_status_t REALM_EXPORT realm_event_cancel_operation(realm_runtime_t runtime,
+                                                         realm_event_t event,
+                                                         const void *reason_data,
+                                                         size_t reason_size);
+
 /*
  * @defgroup UserEvent UserEvent API
  * @ingroup Realm
@@ -765,6 +785,7 @@ realm_status_t REALM_EXPORT realm_user_event_create(realm_runtime_t runtime,
 /**
  * @brief Triggers a user event.
  *
+ * @param runtime The runtime instance to use.
  * @param event The user event to be triggered.
  * @param wait_on The event to wait on.
  * @param ignore_faults Whether to ignore any poison on the input events.

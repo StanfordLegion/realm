@@ -44,100 +44,78 @@ void REALM_FNPTR top_level_task(const void *args, size_t arglen, const void *use
 {
   printf("top_level_task on proc " IDFMT, proc);
   realm_runtime_t runtime;
-  realm_status_t status;
-  status = realm_runtime_get_runtime(&runtime);
-  assert(status == REALM_SUCCESS);
+  CHECK_REALM(realm_runtime_get_runtime(&runtime));
 
   // Iterate over all CPU memories, and print their attributes
   realm_memory_query_t cpu_mem_query;
   realm_memory_query_create(runtime, &cpu_mem_query);
   // restrict to SYSTEM_MEM
-  status = realm_memory_query_restrict_to_kind(cpu_mem_query, SYSTEM_MEM);
-  assert(status == REALM_SUCCESS);
+  CHECK_REALM(realm_memory_query_restrict_to_kind(cpu_mem_query, SYSTEM_MEM));
   append_memory_args_t cpu_mem_query_args;
   // query all system memories
-  status = realm_memory_query_iter(cpu_mem_query, append_memory, &cpu_mem_query_args,
-                                   SIZE_MAX);
-  assert(status == REALM_SUCCESS);
+  CHECK_REALM(realm_memory_query_iter(cpu_mem_query, append_memory, &cpu_mem_query_args,
+                                      SIZE_MAX));
   // print the attributes of the memories
   for(realm_memory_t mem : cpu_mem_query_args.mems) {
     realm_memory_attr_t attrs[3] = {REALM_MEMORY_ATTR_KIND,
                                     REALM_MEMORY_ATTR_ADDRESS_SPACE,
                                     REALM_MEMORY_ATTR_CAPACITY};
     uint64_t values[3];
-    status = realm_memory_get_attributes(runtime, mem, attrs, values, 3);
-    assert(status == REALM_SUCCESS);
+    CHECK_REALM(realm_memory_get_attributes(runtime, mem, attrs, values, 3));
     log_app.info() << "Memory " << mem << " kind: " << values[0]
                    << ", address_space: " << values[1] << ", size: " << values[2];
   }
-  status = realm_memory_query_destroy(cpu_mem_query);
-  assert(status == REALM_SUCCESS);
+  CHECK_REALM(realm_memory_query_destroy(cpu_mem_query));
 
   // Iterate over all GPU FB memories, and print their attributes
   realm_memory_query_t gpu_mem_query;
-  status = realm_memory_query_create(runtime, &gpu_mem_query);
-  assert(status == REALM_SUCCESS);
-  status = realm_memory_query_restrict_to_kind(gpu_mem_query, GPU_FB_MEM);
-  assert(status == REALM_SUCCESS);
+  CHECK_REALM(realm_memory_query_create(runtime, &gpu_mem_query));
+  CHECK_REALM(realm_memory_query_restrict_to_kind(gpu_mem_query, GPU_FB_MEM));
   // query all GPU FB memories
   append_memory_args_t gpu_mem_query_args;
-  status = realm_memory_query_iter(gpu_mem_query, append_memory, &gpu_mem_query_args,
-                                   SIZE_MAX);
-  assert(status == REALM_SUCCESS);
+  CHECK_REALM(realm_memory_query_iter(gpu_mem_query, append_memory, &gpu_mem_query_args,
+                                      SIZE_MAX));
   // print the attributes of the memories
   for(realm_memory_t mem : gpu_mem_query_args.mems) {
     realm_memory_attr_t attrs[3] = {REALM_MEMORY_ATTR_KIND,
                                     REALM_MEMORY_ATTR_ADDRESS_SPACE,
                                     REALM_MEMORY_ATTR_CAPACITY};
     uint64_t values[3];
-    status = realm_memory_get_attributes(runtime, mem, attrs, values, 3);
-    assert(status == REALM_SUCCESS);
+    CHECK_REALM(realm_memory_get_attributes(runtime, mem, attrs, values, 3));
     log_app.info() << "Memory " << mem << " kind: " << values[0]
                    << ", address_space: " << values[1] << ", size: " << values[2];
   }
-  status = realm_memory_query_destroy(gpu_mem_query);
-  assert(status == REALM_SUCCESS);
+  CHECK_REALM(realm_memory_query_destroy(gpu_mem_query));
 }
 
 int main(int argc, char **argv)
 {
   realm_runtime_t runtime;
-  realm_status_t status;
-  status = realm_runtime_create(&runtime);
-  assert(status == REALM_SUCCESS);
-  status = realm_runtime_init(runtime, &argc, &argv);
-  assert(status == REALM_SUCCESS);
+  CHECK_REALM(realm_runtime_create(&runtime));
+  CHECK_REALM(realm_runtime_init(runtime, &argc, &argv));
 
   realm_event_t register_task_event;
-
-  status = realm_processor_register_task_by_kind(
+  CHECK_REALM(realm_processor_register_task_by_kind(
       runtime, LOC_PROC, REALM_REGISTER_TASK_DEFAULT, TOP_LEVEL_TASK, top_level_task, 0,
-      0, &register_task_event);
-  assert(status == REALM_SUCCESS);
-  status = realm_event_wait(runtime, register_task_event, nullptr);
-  assert(status == REALM_SUCCESS);
+      0, &register_task_event));
+  CHECK_REALM(realm_event_wait(runtime, register_task_event, 0, nullptr, nullptr));
 
   realm_processor_query_t proc_query;
-  status = realm_processor_query_create(runtime, &proc_query);
-  assert(status == REALM_SUCCESS);
-  status = realm_processor_query_restrict_to_kind(proc_query, LOC_PROC);
-  assert(status == REALM_SUCCESS);
+  CHECK_REALM(realm_processor_query_create(runtime, &proc_query));
+  CHECK_REALM(realm_processor_query_restrict_to_kind(proc_query, LOC_PROC));
+
   realm_processor_t proc;
   realm_processor_query_first(proc_query, &proc);
-  status = realm_processor_query_destroy(proc_query);
-  assert(status == REALM_SUCCESS);
+  CHECK_REALM(realm_processor_query_destroy(proc_query));
   assert(proc != REALM_NO_PROC);
 
   realm_event_t e;
-  status = realm_runtime_collective_spawn(runtime, proc, TOP_LEVEL_TASK, 0, 0, 0, 0, &e);
-  assert(status == REALM_SUCCESS);
+  CHECK_REALM(
+      realm_runtime_collective_spawn(runtime, proc, TOP_LEVEL_TASK, 0, 0, 0, 0, &e));
 
-  status = realm_runtime_signal_shutdown(runtime, e, 0);
-  assert(status == REALM_SUCCESS);
-  status = realm_runtime_wait_for_shutdown(runtime);
-  assert(status == REALM_SUCCESS);
-  status = realm_runtime_destroy(runtime);
-  assert(status == REALM_SUCCESS);
+  CHECK_REALM(realm_runtime_signal_shutdown(runtime, e, 0));
+  CHECK_REALM(realm_runtime_wait_for_shutdown(runtime));
+  CHECK_REALM(realm_runtime_destroy(runtime));
 
   return 0;
 }

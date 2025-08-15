@@ -256,7 +256,7 @@ namespace Realm {
       realm_runtime_t runtime;
       int poisoned;
       REALM_CHECK(realm_runtime_get_runtime(&runtime));
-      REALM_CHECK(realm_event_wait(runtime, id, &poisoned));
+      REALM_CHECK(realm_event_wait(runtime, id, 0, nullptr, &poisoned));
     }
 
     /**

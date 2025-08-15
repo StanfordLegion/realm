@@ -162,7 +162,8 @@ namespace Realm {
     void add_local_operation(Event finish_event, Operation *local_op);
     void add_remote_operation(Event finish_event, int remote_note);
 
-    void request_cancellation(Event finish_event, const void *reason_data,
+    // returns true if the operation was cancelled, false if it was not
+    bool request_cancellation(Event finish_event, const void *reason_data,
                               size_t reason_size);
 
     void set_priority(Event finish_event, int new_priority);

@@ -37,38 +37,34 @@ struct event_task_args_t {
 void test_merge(realm_runtime_t runtime, int ignore_faults, int *poisoned)
 {
   realm_user_event_t event_poisoned[10];
-  realm_status_t status;
   for(int i = 0; i < 10; i++) {
-    status = realm_user_event_create(runtime, &event_poisoned[i]);
-    assert(status == REALM_SUCCESS);
-    Realm::UserEvent(event_poisoned[i]).cancel();
+    CHECK_REALM(realm_user_event_create(runtime, &event_poisoned[i]));
+    CHECK_REALM(realm_event_cancel_operation(runtime, event_poisoned[i], nullptr, 0));
   }
+
   realm_event_t merged_event;
-  status = realm_event_merge(runtime, event_poisoned, 10, &merged_event, ignore_faults);
-  assert(status == REALM_SUCCESS);
-  status = realm_event_wait(runtime, merged_event, poisoned);
-  assert(status == REALM_SUCCESS);
+  CHECK_REALM(
+      realm_event_merge(runtime, event_poisoned, 10, &merged_event, ignore_faults));
+  CHECK_REALM(realm_event_wait(runtime, merged_event, 0, nullptr, poisoned));
 }
 
 void test_trigger(realm_runtime_t runtime, int ignore_faults, bool use_wait,
                   int *poisoned)
 {
   realm_user_event_t wait_on_event;
-  realm_status_t status = realm_user_event_create(runtime, &wait_on_event);
-  assert(status == REALM_SUCCESS);
-  Realm::UserEvent(wait_on_event).cancel();
+  CHECK_REALM(realm_user_event_create(runtime, &wait_on_event));
+  CHECK_REALM(realm_event_cancel_operation(runtime, wait_on_event, nullptr, 0));
+
   realm_user_event_t user_event;
-  status = realm_user_event_create(runtime, &user_event);
-  assert(status == REALM_SUCCESS);
-  status = realm_user_event_trigger(runtime, user_event, wait_on_event, ignore_faults);
-  assert(status == REALM_SUCCESS);
+  CHECK_REALM(realm_user_event_create(runtime, &user_event));
+  CHECK_REALM(
+      realm_user_event_trigger(runtime, user_event, wait_on_event, ignore_faults));
+
   if(use_wait) {
-    status = realm_event_wait(runtime, user_event, poisoned);
-    assert(status == REALM_SUCCESS);
+    CHECK_REALM(realm_event_wait(runtime, user_event, 0, nullptr, poisoned));
   } else {
     int has_triggered = 0;
-    status = realm_event_has_triggered(runtime, user_event, &has_triggered, poisoned);
-    assert(status == REALM_SUCCESS);
+    CHECK_REALM(realm_event_has_triggered(runtime, user_event, &has_triggered, poisoned));
     assert(has_triggered == 1);
   }
 }
@@ -80,9 +76,7 @@ void REALM_FNPTR main_task(const void *args, size_t arglen, const void *userdata
   realm_user_event_t user_events[10];
   realm_event_t task_events[10];
   realm_runtime_t runtime;
-  realm_status_t status;
-  status = realm_runtime_get_runtime(&runtime);
-  assert(status == REALM_SUCCESS);
+  CHECK_REALM(realm_runtime_get_runtime(&runtime));
 
   // test merge poisoned events
   int poisoned = 0;
@@ -107,42 +101,30 @@ void REALM_FNPTR main_task(const void *args, size_t arglen, const void *userdata
 int main(int argc, char **argv)
 {
   realm_runtime_t runtime;
-  realm_status_t status;
-  status = realm_runtime_create(&runtime);
-  assert(status == REALM_SUCCESS);
-  status = realm_runtime_init(runtime, &argc, &argv);
-  assert(status == REALM_SUCCESS);
+  CHECK_REALM(realm_runtime_create(&runtime));
+  CHECK_REALM(realm_runtime_init(runtime, &argc, &argv));
 
   realm_event_t register_task_event;
-
-  status = realm_processor_register_task_by_kind(runtime, LOC_PROC,
-                                                 REALM_REGISTER_TASK_DEFAULT, MAIN_TASK,
-                                                 main_task, 0, 0, &register_task_event);
-  assert(status == REALM_SUCCESS);
-  status = realm_event_wait(runtime, register_task_event, nullptr);
-  assert(status == REALM_SUCCESS);
+  CHECK_REALM(realm_processor_register_task_by_kind(
+      runtime, LOC_PROC, REALM_REGISTER_TASK_DEFAULT, MAIN_TASK, main_task, 0, 0,
+      &register_task_event));
+  CHECK_REALM(realm_event_wait(runtime, register_task_event, 0, nullptr, nullptr));
 
   realm_processor_query_t proc_query;
-  status = realm_processor_query_create(runtime, &proc_query);
-  assert(status == REALM_SUCCESS);
-  status = realm_processor_query_restrict_to_kind(proc_query, LOC_PROC);
-  assert(status == REALM_SUCCESS);
+  CHECK_REALM(realm_processor_query_create(runtime, &proc_query));
+  CHECK_REALM(realm_processor_query_restrict_to_kind(proc_query, LOC_PROC));
+
   realm_processor_t proc;
   realm_processor_query_first(proc_query, &proc);
-  status = realm_processor_query_destroy(proc_query);
-  assert(status == REALM_SUCCESS);
+  CHECK_REALM(realm_processor_query_destroy(proc_query));
   assert(proc != REALM_NO_PROC);
 
   realm_event_t e;
-  status = realm_runtime_collective_spawn(runtime, proc, MAIN_TASK, 0, 0, 0, 0, &e);
-  assert(status == REALM_SUCCESS);
+  CHECK_REALM(realm_runtime_collective_spawn(runtime, proc, MAIN_TASK, 0, 0, 0, 0, &e));
 
-  status = realm_runtime_signal_shutdown(runtime, e, 0);
-  assert(status == REALM_SUCCESS);
-  status = realm_runtime_wait_for_shutdown(runtime);
-  assert(status == REALM_SUCCESS);
-  status = realm_runtime_destroy(runtime);
-  assert(status == REALM_SUCCESS);
+  CHECK_REALM(realm_runtime_signal_shutdown(runtime, e, 0));
+  CHECK_REALM(realm_runtime_wait_for_shutdown(runtime));
+  CHECK_REALM(realm_runtime_destroy(runtime));
 
   return 0;
 }

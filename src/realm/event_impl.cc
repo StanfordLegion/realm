@@ -355,12 +355,22 @@ namespace Realm {
                                           reason_len);
       } else {
         // Fast path, triggering operation is local!
-        op->attempt_cancellation(Realm::Faults::ERROR_CANCELLED, reason_data, reason_len);
+        bool did_cancel = op->attempt_cancellation(Realm::Faults::ERROR_CANCELLED,
+                                                   reason_data, reason_len);
+        if(!did_cancel) {
+          // if this failed, just trigger with poison
+          GenEventImpl::trigger(*this, true /*poisoned*/);
+        }
         op->remove_reference();
       }
     } else {
-      // Slow path, triggering operation is remote
-      get_runtime()->optable.request_cancellation(*this, reason_data, reason_len);
+      // Slow path, triggering operation is possibly remote
+      bool did_cancel =
+          get_runtime()->optable.request_cancellation(*this, reason_data, reason_len);
+      if(!did_cancel) {
+        // if this failed, just trigger with poison
+        GenEventImpl::trigger(*this, true /*poisoned*/);
+      }
     }
   }
 

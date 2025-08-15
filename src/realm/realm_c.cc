@@ -732,27 +732,6 @@ realm_status_t realm_memory_query_iter(realm_memory_query_t query,
 
 /* Event API */
 
-realm_status_t realm_event_wait(realm_runtime_t runtime, realm_event_t event,
-                                int *poisoned)
-{
-  Realm::RuntimeImpl *runtime_impl = nullptr;
-  realm_status_t status = check_runtime_validity_and_assign(runtime, runtime_impl);
-  if(status != REALM_SUCCESS) {
-    return status;
-  }
-  status = check_event_validity(event);
-  if(status != REALM_SUCCESS) {
-    return status;
-  }
-  Realm::Event cxx_event = Realm::Event(event);
-  bool poisoned_cxx = false;
-  cxx_event.wait_faultaware(poisoned_cxx);
-  if(poisoned != nullptr) {
-    *poisoned = poisoned_cxx ? 1 : 0;
-  }
-  return REALM_SUCCESS;
-}
-
 realm_status_t realm_event_merge(realm_runtime_t runtime, const realm_event_t *wait_for,
                                  size_t num_events, realm_event_t *event,
                                  int ignore_faults)
@@ -804,6 +783,85 @@ realm_status_t realm_event_has_triggered(realm_runtime_t runtime, realm_event_t 
   if(poisoned != nullptr) {
     *poisoned = poisoned_cxx ? 1 : 0;
   }
+  return REALM_SUCCESS;
+}
+
+realm_status_t realm_event_wait(realm_runtime_t runtime, realm_event_t event,
+                                long long max_ns, int *has_triggered, int *poisoned)
+{
+  Realm::RuntimeImpl *runtime_impl = nullptr;
+  realm_status_t status = check_runtime_validity_and_assign(runtime, runtime_impl);
+  if(status != REALM_SUCCESS) {
+    return status;
+  }
+
+  status = check_event_validity(event);
+  if(status != REALM_SUCCESS) {
+    return status;
+  }
+
+  // has_triggered is required only when doing a timed wait (max_ns > 0)
+  if(max_ns > 0 && has_triggered == nullptr) {
+    return REALM_ERROR_INVALID_PARAMETER;
+  }
+
+  // special case: NO_EVENT is always triggered
+  if(event == REALM_NO_EVENT) {
+    if(has_triggered != nullptr) {
+      *has_triggered = 1;
+    }
+    if(poisoned != nullptr) {
+      *poisoned = 0;
+    }
+    return REALM_SUCCESS;
+  }
+
+  Realm::Event cxx_event = Realm::Event(event);
+  bool poisoned_cxx = false;
+  bool triggered = false;
+
+  if(max_ns <= 0) {
+    cxx_event.wait_faultaware(poisoned_cxx);
+    triggered = true;
+  } else {
+    triggered = cxx_event.external_timedwait_faultaware(poisoned_cxx, max_ns);
+  }
+
+  if(has_triggered != nullptr) {
+    *has_triggered = triggered ? 1 : 0;
+  }
+
+  if(poisoned != nullptr) {
+    *poisoned = poisoned_cxx ? 1 : 0;
+  }
+
+  return REALM_SUCCESS;
+}
+
+realm_status_t realm_event_cancel_operation(realm_runtime_t runtime, realm_event_t event,
+                                            const void *reason_data, size_t reason_size)
+{
+  Realm::RuntimeImpl *runtime_impl = nullptr;
+  realm_status_t status = check_runtime_validity_and_assign(runtime, runtime_impl);
+  if(status != REALM_SUCCESS) {
+    return status;
+  }
+  status = check_event_validity(event);
+  if(status != REALM_SUCCESS) {
+    return status;
+  }
+  // NO_EVENT is a no-op for cancellation
+  if(event == REALM_NO_EVENT) {
+    return REALM_SUCCESS;
+  }
+
+  Realm::Event cxx_event = Realm::Event(event);
+  // If already triggered, this call is pointless
+  bool poisoned = false;
+  if(cxx_event.has_triggered_faultaware(poisoned)) {
+    return REALM_SUCCESS;
+  }
+  cxx_event.cancel_operation(reason_data, reason_size);
   return REALM_SUCCESS;
 }
 

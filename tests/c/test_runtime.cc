@@ -52,115 +52,87 @@ void REALM_FNPTR top_level_task(const void *args, size_t arglen, const void *use
   log_app.info("top_level_task on proc " IDFMT, proc);
   realm_event_t event;
   realm_runtime_t runtime;
-  realm_status_t status;
-  status = realm_runtime_get_runtime(&runtime);
-  assert(status == REALM_SUCCESS);
+  CHECK_REALM(realm_runtime_get_runtime(&runtime));
 
   // get all cpu procs
   realm_processor_query_t proc_query;
-  status = realm_processor_query_create(runtime, &proc_query);
-  assert(status == REALM_SUCCESS);
+  CHECK_REALM(realm_processor_query_create(runtime, &proc_query));
   // restrict to LOC_PROC
-  status = realm_processor_query_restrict_to_kind(proc_query, LOC_PROC);
-  assert(status == REALM_SUCCESS);
+  CHECK_REALM(realm_processor_query_restrict_to_kind(proc_query, LOC_PROC));
   // query all LOC_PROC processors
   append_process_args_t cpu_proc_query_args;
-  status = realm_processor_query_iter(proc_query, append_process, &cpu_proc_query_args,
-                                      SIZE_MAX);
-  assert(status == REALM_SUCCESS);
-  status = realm_processor_query_destroy(proc_query);
-  assert(status == REALM_SUCCESS);
+  CHECK_REALM(realm_processor_query_iter(proc_query, append_process, &cpu_proc_query_args,
+                                         SIZE_MAX));
+  CHECK_REALM(realm_processor_query_destroy(proc_query));
   // spawn tasks on all cpu procs
   size_t num_cpus = cpu_proc_query_args.procs.size();
   std::vector<realm_event_t> events(num_cpus, REALM_NO_EVENT);
   for(size_t i = 0; i < num_cpus; i++) {
-    status = realm_processor_spawn(runtime, cpu_proc_query_args.procs[i], HELLO_TASK, 0,
-                                   0, NULL, 0, 0, &events[i]);
-    assert(status == REALM_SUCCESS);
+    CHECK_REALM(realm_processor_spawn(runtime, cpu_proc_query_args.procs[i], HELLO_TASK,
+                                      0, 0, NULL, 0, 0, &events[i]));
   }
-  status = realm_event_merge(runtime, events.data(), events.size(), &event, 0);
-  assert(status == REALM_SUCCESS);
-  status = realm_event_wait(runtime, event, nullptr);
-  assert(status == REALM_SUCCESS);
+  CHECK_REALM(realm_event_merge(runtime, events.data(), events.size(), &event, 0));
+  CHECK_REALM(realm_event_wait(runtime, event, 0, nullptr, nullptr));
 
 #ifdef REALM_USE_CUDA
-  status = realm_processor_query_create(runtime, &proc_query);
-  assert(status == REALM_SUCCESS);
-  status = realm_processor_query_restrict_to_kind(proc_query, TOC_PROC);
-  assert(status == REALM_SUCCESS);
+  CHECK_REALM(realm_processor_query_create(runtime, &proc_query));
+  CHECK_REALM(realm_processor_query_restrict_to_kind(proc_query, TOC_PROC));
 
   realm_processor_t gpu_proc;
   realm_processor_query_first(proc_query, &gpu_proc);
-  status = realm_processor_query_destroy(proc_query);
-  assert(status == REALM_SUCCESS);
+  CHECK_REALM(realm_processor_query_destroy(proc_query));
   assert(gpu_proc != REALM_NO_PROC);
 
-  status = realm_processor_spawn(runtime, gpu_proc, HELLO_TASK, 0, 0, NULL, 0, 0, &event);
-  assert(status == REALM_SUCCESS);
-  status = realm_event_wait(runtime, event, nullptr);
-  assert(status == REALM_SUCCESS);
+  CHECK_REALM(
+      realm_processor_spawn(runtime, gpu_proc, HELLO_TASK, 0, 0, NULL, 0, 0, &event));
+  CHECK_REALM(realm_event_wait(runtime, event, 0, nullptr, nullptr));
 #endif
 }
 
 int main(int argc, char **argv)
 {
   realm_runtime_t runtime;
-  realm_status_t status;
-  status = realm_runtime_create(&runtime);
-  assert(status == REALM_SUCCESS);
-  status = realm_runtime_init(runtime, &argc, &argv);
-  assert(status == REALM_SUCCESS);
+  CHECK_REALM(realm_runtime_create(&runtime));
+  CHECK_REALM(realm_runtime_init(runtime, &argc, &argv));
 
   realm_runtime_attr_t attrs[1] = {REALM_RUNTIME_ATTR_ADDRESS_SPACE};
   uint64_t values[1];
-  status = realm_runtime_get_attributes(runtime, attrs, values, 1);
-  assert(status == REALM_SUCCESS);
+  CHECK_REALM(realm_runtime_get_attributes(runtime, attrs, values, 1));
   log_app.info("address space: %lu", values[0]);
 
   realm_event_t register_task_event;
 
-  status = realm_processor_register_task_by_kind(
+  CHECK_REALM(realm_processor_register_task_by_kind(
       runtime, LOC_PROC, REALM_REGISTER_TASK_DEFAULT, TOP_LEVEL_TASK, top_level_task, 0,
-      0, &register_task_event);
-  assert(status == REALM_SUCCESS);
-  status = realm_event_wait(runtime, register_task_event, nullptr);
-  assert(status == REALM_SUCCESS);
+      0, &register_task_event));
+  CHECK_REALM(realm_event_wait(runtime, register_task_event, 0, nullptr, nullptr));
 
-  status = realm_processor_register_task_by_kind(runtime, LOC_PROC,
-                                                 REALM_REGISTER_TASK_DEFAULT, HELLO_TASK,
-                                                 hello_task, 0, 0, &register_task_event);
-  assert(status == REALM_SUCCESS);
-  status = realm_event_wait(runtime, register_task_event, nullptr);
-  assert(status == REALM_SUCCESS);
+  CHECK_REALM(realm_processor_register_task_by_kind(
+      runtime, LOC_PROC, REALM_REGISTER_TASK_DEFAULT, HELLO_TASK, hello_task, 0, 0,
+      &register_task_event));
+  CHECK_REALM(realm_event_wait(runtime, register_task_event, 0, nullptr, nullptr));
 
-  status = realm_processor_register_task_by_kind(runtime, TOC_PROC,
-                                                 REALM_REGISTER_TASK_DEFAULT, HELLO_TASK,
-                                                 hello_task, 0, 0, &register_task_event);
-  assert(status == REALM_SUCCESS);
-  status = realm_event_wait(runtime, register_task_event, nullptr);
-  assert(status == REALM_SUCCESS);
+  CHECK_REALM(realm_processor_register_task_by_kind(
+      runtime, TOC_PROC, REALM_REGISTER_TASK_DEFAULT, HELLO_TASK, hello_task, 0, 0,
+      &register_task_event));
+  CHECK_REALM(realm_event_wait(runtime, register_task_event, 0, nullptr, nullptr));
 
   realm_processor_query_t proc_query;
-  status = realm_processor_query_create(runtime, &proc_query);
-  assert(status == REALM_SUCCESS);
-  status = realm_processor_query_restrict_to_kind(proc_query, LOC_PROC);
-  assert(status == REALM_SUCCESS);
+  CHECK_REALM(realm_processor_query_create(runtime, &proc_query));
+  CHECK_REALM(realm_processor_query_restrict_to_kind(proc_query, LOC_PROC));
+
   realm_processor_t proc;
   realm_processor_query_first(proc_query, &proc);
-  status = realm_processor_query_destroy(proc_query);
-  assert(status == REALM_SUCCESS);
+  CHECK_REALM(realm_processor_query_destroy(proc_query));
   assert(proc != REALM_NO_PROC);
 
   realm_event_t e;
-  status = realm_runtime_collective_spawn(runtime, proc, TOP_LEVEL_TASK, 0, 0, 0, 0, &e);
-  assert(status == REALM_SUCCESS);
+  CHECK_REALM(
+      realm_runtime_collective_spawn(runtime, proc, TOP_LEVEL_TASK, 0, 0, 0, 0, &e));
 
-  status = realm_runtime_signal_shutdown(runtime, e, 0);
-  assert(status == REALM_SUCCESS);
-  status = realm_runtime_wait_for_shutdown(runtime);
-  assert(status == REALM_SUCCESS);
-  status = realm_runtime_destroy(runtime);
-  assert(status == REALM_SUCCESS);
+  CHECK_REALM(realm_runtime_signal_shutdown(runtime, e, 0));
+  CHECK_REALM(realm_runtime_wait_for_shutdown(runtime));
+  CHECK_REALM(realm_runtime_destroy(runtime));
 
   return 0;
 }

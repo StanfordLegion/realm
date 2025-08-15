@@ -586,7 +586,7 @@ namespace Realm {
 #endif
   }
 
-  void OperationTable::request_cancellation(Event finish_event, const void *reason_data,
+  bool OperationTable::request_cancellation(Event finish_event, const void *reason_data,
                                             size_t reason_size)
   {
 #ifdef REALM_USE_OPERATION_TABLE
@@ -595,20 +595,15 @@ namespace Realm {
     Mutex &mutex = mutexes[subtable];
     Table &table = tables[subtable];
 
-    bool found = false;
-    Operation *local_op = 0;
+    Operation *local_op = nullptr;
     int remote_node = -1;
+
+    // Look up table entry and capture what action we can take
     {
       AutoLock<> al(mutex);
-
       Table::iterator it = table.find(finish_event);
-
       if(it != table.end()) {
-        found = true;
-
-        // if there's a local op, we need to take a reference in case it completes
-        // successfully
-        //  before we get to it below
+        // take a reference on local op (if any) to keep it alive after we drop the lock
         if(it->second.local_op) {
           local_op = it->second.local_op;
           local_op->add_reference();
@@ -618,22 +613,18 @@ namespace Realm {
       }
     }
 
-    if(!found) {
-      // not found - who owns this event?
+    // If not present locally, forward to the owner (or ignore if already completed)
+    if((local_op == nullptr) && (remote_node == -1)) {
       int owner = ID(finish_event).event_creator_node();
-
       if(owner == Network::my_node_id) {
-        // if we're the owner, it's probably for an event that already completed
-        // successfully,
-        //  so ignore the request
         log_optable.info() << "event " << finish_event
                            << " cancellation ignored - not in table";
-      } else {
-        // let the owner of the event deal with it
-        remote_node = owner;
+        return false;
       }
+      remote_node = owner;
     }
 
+    // If a remote node is responsible, request remote cancellation first
     if(remote_node != -1) {
       log_optable.info() << "event " << finish_event
                          << " - requesting remote cancellation on node " << remote_node;
@@ -643,15 +634,22 @@ namespace Realm {
       amsg.commit();
     }
 
-    if(local_op) {
+    // Attempt local cancellation if we have a local operation
+    if(local_op != nullptr) {
       bool did_cancel = local_op->attempt_cancellation(Realm::Faults::ERROR_CANCELLED,
                                                        reason_data, reason_size);
       log_optable.info() << "event " << finish_event << " - operation "
                          << (void *)local_op << " cancelled=" << did_cancel;
       local_op->remove_reference();
+      return did_cancel;
     }
+
+    // if we get here, assume that the cancel was successfully forwarded and we should
+    // wait for the result
+    return true;
 #else
     assert(0);
+    return false;
 #endif
   }
 

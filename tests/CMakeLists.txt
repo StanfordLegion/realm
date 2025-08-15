@@ -429,6 +429,7 @@ add_integration_test(c_processor_query "${REALM_TEST_DIR}/c/test_processor_query
 add_integration_test(c_memory_query "${REALM_TEST_DIR}/c/test_memory_query.cc")
 add_integration_test(c_event "${REALM_TEST_DIR}/c/test_event.cc")
 add_integration_test(c_inst "${REALM_TEST_DIR}/c/test_c_inst.cc")
+add_integration_test(c_event_wait_cancel "${REALM_TEST_DIR}/c/test_event_wait_cancel.cc")
 # TODO(weiwu): designated initializers require c++20, should be removed
 target_compile_features(c_inst PUBLIC cxx_std_20)
 
