@@ -906,14 +906,14 @@ if(TARGET realm_gex_wrapper_objs AND NOT REALM_ENABLE_GASNETEX_WRAPPER)
   list(APPEND REALM_EXTRA_OBJS $<TARGET_OBJECTS:realm_gex_wrapper_objs>)
 endif()
 
-# Remove NDEBUG from definitions for cxx, c, and cuda release flags.
+# Remove NDEBUG from definitions for cxx, c, and cuda flags for those that might have it
 # TODO(cperry): remove this once we clean up all the asserts that have side effects
-string(REPLACE "/DNDEBUG" "" CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE}")
-string(REPLACE "-DNDEBUG" "" CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE}")
-string(REPLACE "/DNDEBUG" "" CMAKE_C_FLAGS_RELEASE "${CMAKE_C_FLAGS_RELEASE}")
-string(REPLACE "-DNDEBUG" "" CMAKE_C_FLAGS_RELEASE "${CMAKE_C_FLAGS_RELEASE}")
-string(REPLACE "/DNDEBUG" "" CMAKE_CUDA_FLAGS_RELEASE "${CMAKE_CUDA_FLAGS_RELEASE}")
-string(REPLACE "-DNDEBUG" "" CMAKE_CUDA_FLAGS_RELEASE "${CMAKE_CUDA_FLAGS_RELEASE}")
+foreach(_build RELEASE RELWITHDEBINFO MINSIZEREL)
+  foreach(_lang C CXX CUDA)
+    string(REPLACE "/DNDEBUG" "" CMAKE_${_lang}_FLAGS_${_build} "${CMAKE_${_lang}_FLAGS_${_build}}")
+    string(REPLACE "-DNDEBUG" "" CMAKE_${_lang}_FLAGS_${_build} "${CMAKE_${_lang}_FLAGS_${_build}}")
+  endforeach()
+endforeach()
 
 add_library(realm_obj OBJECT ${REALM_SOURCES})
 set_target_properties(
