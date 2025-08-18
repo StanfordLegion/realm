@@ -17,6 +17,7 @@
 
 #include "ucp_internal.h"
 #include "bootstrap/bootstrap_internal.h"
+#include "realm/network.h"
 #include "realm/runtime_impl.h"
 #include "realm/transfer/ib_memory.h"
 #include "realm/logging.h"
@@ -1134,6 +1135,7 @@ namespace Realm {
         if(!tx_worker->ep_get(sender, remote_dev_index, &req->ucp.ep)) {
           auto meta = internal->runtime->node_directory->lookup(sender);
           assert(meta != nullptr);
+          CHKERR_JUMP(meta == nullptr, "failed(1) to get node meta", log_ucp, err);
           internal->add_remote_ep(sender, meta->worker_address.data(),
                                   meta->worker_address.size());
           CHKERR_JUMP(!tx_worker->ep_get(sender, remote_dev_index, &req->ucp.ep),
@@ -1637,6 +1639,7 @@ namespace Realm {
           mem_hs.pop_back();
         }
       }
+
       log_ucp.info() << "unmapped attached segments";
     }
 
@@ -2462,6 +2465,7 @@ namespace Realm {
         if(!worker->ep_get(target, remote_dev_index, &req->ucp.ep)) {
           auto meta = internal->runtime->node_directory->lookup(target);
           assert(meta != nullptr);
+          CHKERR_JUMP(meta == nullptr, "failed(2) to get node meta", log_ucp, err);
           internal->add_remote_ep(target, meta->worker_address.data(),
                                   meta->worker_address.size());
           CHKERR_JUMP(!worker->ep_get(target, remote_dev_index, &req->ucp.ep),
@@ -2500,6 +2504,7 @@ namespace Realm {
       if(!worker->ep_get(target, remote_dev_index, &ep)) {
         auto meta = internal->runtime->node_directory->lookup(target);
         assert(meta != nullptr);
+        CHKERR_JUMP(meta == nullptr, "failed(3) to get node meta", log_ucp, err);
         internal->add_remote_ep(target, meta->worker_address.data(),
                                 meta->worker_address.size());
         CHKERR_JUMP(!worker->ep_get(target, remote_dev_index, &ep), "failed to get ep",

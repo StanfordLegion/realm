@@ -29,17 +29,13 @@ realm_status_t membership_create(const membership_ops_t *ops, void *state,
   return realm_status_t::REALM_SUCCESS;
 }
 
-realm_status_t membership_destroy(membership_handle_t)
+realm_status_t membership_delete(membership_handle_t h)
 {
-  /*if(!CHECK(h)) {
-    return REALM_ERR_BAD_ARG;
+  if(!h) {
+    return realm_status_t::REALM_ERROR;
   }
 
-  if(h->ops->destroy) {
-    h->ops->destroy(h->state);
-  }
-
-  free(h);*/
+  free(h);
   return realm_status_t::REALM_SUCCESS;
 }
 
@@ -66,12 +62,24 @@ realm_status_t membership_leave(membership_handle_t h, const node_meta_t *s)
 #ifdef REALM_USE_UDP
 extern realm_status_t membership_mesh_init(membership_handle_t *out,
                                            membership_hooks_t hooks);
+extern realm_status_t membership_mesh_destroy(membership_handle_t h);
 #endif
 
 realm_status_t membership_init(membership_handle_t *out, membership_hooks_t hooks)
 {
 #ifdef REALM_USE_UDP
   return membership_mesh_init(out, hooks);
+#else
+  assert(0);
+  (void)out;
+  return REALM_ERR_INTERNAL;
+#endif
+}
+
+realm_status_t membership_destroy(membership_handle_t h)
+{
+#ifdef REALM_USE_UDP
+  return membership_mesh_destroy(h);
 #else
   assert(0);
   (void)out;

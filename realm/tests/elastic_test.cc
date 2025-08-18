@@ -65,8 +65,9 @@ void top_task(const void *args, size_t arglen, const void *userdata, size_t user
   // Count PMA records per address space
   std::vector<Machine::ProcessorMemoryAffinity> pmas;
   machine.get_proc_mem_affinity(pmas);
-  for(const auto &a : pmas)
+  for(const auto &a : pmas) {
     pma_count[a.p.address_space()]++;
+  }
 
   for(NodeID n = 0; n < TestConfig::expected_peers; n++) {
     // Each rank must have at least one CPU
@@ -96,12 +97,16 @@ void top_task(const void *args, size_t arglen, const void *userdata, size_t user
 
       sleep(1);
 
-      std::cout << "WaitForShutDown Peers:" << Network::node_directory.size()
+      std::cout << "WAIT peers:" << Network::node_directory.size()
                 << " on node:" << Network::my_node_id << " epoch:" << machine.get_epoch()
                 << std::endl;
     }
     Runtime::get_runtime().shutdown();
   }
+
+  std::cout << "UNBLOCKED peers:" << Network::node_directory.size()
+            << " on node:" << Network::my_node_id << " epoch:" << machine.get_epoch()
+            << std::endl;
 }
 
 int main(int argc, char **argv)

@@ -452,6 +452,7 @@ namespace Realm {
 
         bool done = Network::check_for_quiescence(get_runtime()->message_manager,
                                                   /*elastic=*/true);
+        done = true;
         if(done) {
           break;
         }
@@ -495,7 +496,15 @@ namespace Realm {
     {
       RuntimeImpl *rt = get_runtime();
       if(Network::my_node_id == self->node_id) {
-        rt->initiate_shutdown(/*signal_only=*/true);
+
+        {
+          AutoLock<> al(rt->shutdown_mutex);
+          assert(rt->shutdown_request_received);
+          rt->shutdown_initiated = true;
+          rt->shutdown_condvar.broadcast();
+        }
+
+        // rt->initiate_shutdown(/*signal_only=*/true);
       } else {
         if(!rt->shutdown_in_progress.load()) {
           assert(rt->remove_peer(self->node_id));
@@ -2032,6 +2041,7 @@ namespace Realm {
       network_segments.push_back(&reg_mem_segment);
     }
 
+    // Ensure heartbeat AM handlers are registered before the handler table is
     // construct active message handler table once before any network(s) init
     activemsg_handler_table.construct_handler_table();
 
@@ -2454,6 +2464,7 @@ namespace Realm {
 
   bool RuntimeImpl::remove_peer(NodeID id)
   {
+
     {
       Node &n = nodes[id];
       n.processors.clear();
@@ -2891,12 +2902,13 @@ namespace Realm {
           amsg.commit();
         }
       }
-      {
+
+      /*{
         AutoLock<> al(shutdown_mutex);
         assert(shutdown_request_received);
         shutdown_initiated = true;
         shutdown_condvar.broadcast();
-      }
+      }*/
     }
   }
 
@@ -2982,7 +2994,7 @@ namespace Realm {
         int tries = 0;
         while(true) {
           tries++;
-          bool done = Network::check_for_quiescence(message_manager);
+          bool done = true; // Network::check_for_quiescence(message_manager);
           if(done) {
             if(Network::my_node_id == 0)
               log_runtime.info() << "quiescent after " << tries << " attempts";
@@ -3029,11 +3041,12 @@ namespace Realm {
 
     repl_heap.cleanup();
 
+    membership_destroy(membership);
+
     // let network-dependent cleanup happen before we detach
     for(std::vector<Module *>::iterator it = modules.begin(); it != modules.end(); it++) {
       (*it)->pre_detach_cleanup();
     }
-
     // detach from the network
     for(std::vector<NetworkModule *>::const_iterator it = network_modules.begin();
         it != network_modules.end(); it++)
@@ -3145,9 +3158,8 @@ namespace Realm {
     finalize_nvtx();
 #endif
 
-    std::cout << "Complete Shutdown Me:" << Network::my_node_id
-              << " code:" << shutdown_result_code
-              << " EPOCH:" << Network::node_directory.cluster_epoch() << std::endl;
+    std::cout << "&&&&&&&&&& SHUTDOWN me:" << Network::my_node_id
+              << " epoch:" << Network::node_directory.cluster_epoch() << std::endl;
     return shutdown_result_code;
   }
 

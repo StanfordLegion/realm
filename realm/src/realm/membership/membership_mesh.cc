@@ -1,13 +1,31 @@
 #include "realm/node_directory.h"
 #include "realm/membership/membership.h"
+#include "realm/membership/gossip.h"
 #include "realm/network.h"
 #include "realm/serialize.h"
 #include "realm/activemsg.h"
+
+#include "realm/runtime_impl.h"
 
 #include <cstring>
 #include <atomic>
 
 using namespace Realm;
+
+class GossipPoller;
+
+namespace MembershioConfig {
+  // dtpl - data_plane :)
+  bool enable_dtpl_timeouts{true};
+  bool enable_ctpl_timeouts{true};
+} // namespace MembershioConfig
+
+enum LeavingState
+{
+  NONE = 0,
+  PREPARE = 1,
+  COMMIT = 2
+};
 
 struct MembershipMesh {
   std::atomic<int> join_acks{0};
@@ -19,9 +37,12 @@ struct MembershipMesh {
   Mutex pending_mutex;
   NodeSet pending;
 
-  std::atomic<bool> leaving{false};
+  std::atomic<LeavingState> leaving_state{LeavingState::NONE};
 
   membership_hooks_t hooks;
+
+  GossipPoller *gossip_poller_{nullptr};
+  GossipMonitor gossip_;
 };
 
 namespace {
@@ -117,6 +138,7 @@ namespace {
 
   ActiveMessageHandlerReg<JoinRequestMessage> joinreq_handler;
   ActiveMessageHandlerReg<JoinAcklMessage> joinack_handler;
+
   ActiveMessageHandlerReg<MemberUpdateMessage> p2p_member_handler;
 
   ActiveMessageHandlerReg<LeavePrepareMessage> leaveprep_handler;
@@ -169,7 +191,7 @@ void JoinRequestMessage::handle_message(NodeID sender, const JoinRequestMessage 
 {
   assert(sender != Network::my_node_id);
 
-  if(mesh_state->leaving.load(std::memory_order_acquire)) {
+  if(mesh_state->leaving_state.load(std::memory_order_acquire) != LeavingState::NONE) {
     // send_join_reject
     assert(0); // TODO: TEST ME
     return;
@@ -205,6 +227,8 @@ void JoinRequestMessage::handle_message(NodeID sender, const JoinRequestMessage 
       AutoLock<> al(mesh_state->subs_mutex);
       mesh_state->subscribers.add(sender);
     }
+
+    mesh_state->gossip_.notify_join(meta);
   }
 }
 
@@ -212,7 +236,6 @@ void JoinAcklMessage::handle_message(NodeID sender, const JoinAcklMessage &msg,
                                      const void *data, size_t datalen)
 {
   Network::node_directory.import_node(data, datalen, msg.epoch);
-
   mesh_state->join_acks.fetch_add(1, std::memory_order_relaxed);
 
   if(msg.acks > 0) {
@@ -225,6 +248,8 @@ void JoinAcklMessage::handle_message(NodeID sender, const JoinAcklMessage &msg,
       AutoLock<> al(mesh_state->subs_mutex);
       mesh_state->subscribers.add(sender);
     }
+
+    mesh_state->gossip_.notify_join(meta);
   }
 
   if(mesh_state->join_acks.load() == mesh_state->join_acks_total.load()) {
@@ -240,7 +265,7 @@ void MemberUpdateMessage::handle_message(NodeID, const MemberUpdateMessage &msg,
                                          const void *data, size_t datalen)
 {
   if(msg.epoch <= Network::node_directory.cluster_epoch() ||
-     mesh_state->leaving.load(std::memory_order_acquire)) {
+     mesh_state->leaving_state.load(std::memory_order_acquire) != LeavingState::NONE) {
     // send_join_rejec();
     assert(0); // TODO: TEST ME
     return;
@@ -264,6 +289,8 @@ void MemberUpdateMessage::handle_message(NodeID, const MemberUpdateMessage &msg,
     node_meta_t meta{(int32_t)msg.node_id, 0, false};
     mesh_state->hooks.pre_join(&meta, nullptr, 0, /*joined=*/false,
                                mesh_state->hooks.user_arg);
+
+    mesh_state->gossip_.notify_join(meta);
   }
 
   {
@@ -307,8 +334,9 @@ void LeavePrepareAckMessage::handle_message(NodeID /*sender*/ sender,
     mesh_state->pending.remove(sender);
     if(mesh_state->pending.empty()) {
       // All peers acknowledged – begin Commit stage.
-      mesh_state->pending = mesh_state->subscribers; // reuse list for commit acks
+      mesh_state->pending = mesh_state->subscribers;
       if(!mesh_state->pending.empty()) {
+        mesh_state->leaving_state.store(LeavingState::COMMIT, std::memory_order_release);
         ActiveMessage<LeavePrepareCommitMessage> commit(mesh_state->pending);
         commit->epoch = Network::node_directory.bump_epoch(Network::my_node_id);
         commit.commit();
@@ -343,9 +371,9 @@ void LeavePrepareCommitMessage::handle_message(NodeID sender,
     node_meta_t meta{(int32_t)sender, 0, false};
     mesh_state->hooks.post_leave(&meta, nullptr, 0, /*left=*/true,
                                  mesh_state->hooks.user_arg);
+    mesh_state->gossip_.notify_leave(meta);
   }
 
-  // Acknowledge to the leaving node.
   ActiveMessage<LeavePrepareCommitAckMessage> ack(sender);
   ack->epoch = Network::node_directory.cluster_epoch();
   ack.commit();
@@ -416,7 +444,7 @@ namespace {
     MembershipMesh *mesh_state = static_cast<MembershipMesh *>(st);
     assert(mesh_state != nullptr);
 
-    mesh_state->leaving.store(true, std::memory_order_release);
+    mesh_state->leaving_state.store(LeavingState::PREPARE, std::memory_order_release);
 
     if(mesh_state->hooks.pre_leave) {
       mesh_state->hooks.pre_leave(self, nullptr, 0, /*left=*/false,
@@ -426,7 +454,7 @@ namespace {
     NodeSet members;
 
     {
-      AutoLock<> al(mesh_state->pending_mutex);
+      AutoLock<> al(mesh_state->subs_mutex);
       assert(mesh_state->pending.empty());
       mesh_state->pending = mesh_state->subscribers;
     }
@@ -460,12 +488,12 @@ namespace {
       mesh_state->subscribers.remove(peer);
     }
 
-    bool fire_post = false;
+    bool empty_members = false;
 
     {
       AutoLock<> al(mesh_state->pending_mutex);
       mesh_state->pending.remove(peer);
-      fire_post = mesh_state->pending.empty();
+      empty_members = mesh_state->pending.empty();
     }
 
     if(mesh_state->hooks.pre_leave) {
@@ -481,12 +509,40 @@ namespace {
     }
 
     Network::node_directory.remove_slot(peer);
-    Network::node_directory.bump_epoch(peer);
+    uint64_t epoch = Network::node_directory.bump_epoch(peer);
 
-    if(fire_post && mesh_state->leaving.load(std::memory_order_acquire)) {
-      node_meta_t meta{(int32_t)Network::my_node_id, 0, false};
-      mesh_state->hooks.post_leave(&meta, nullptr, 0, /*left=*/true,
-                                   mesh_state->hooks.user_arg);
+    LeavingState state = LeavingState::NONE;
+
+    if(empty_members) {
+
+      bool force_leave = false;
+
+      if(mesh_state->leaving_state.load(std::memory_order_acquire) ==
+         LeavingState::PREPARE) {
+        AutoLock<> al(mesh_state->subs_mutex);
+        mesh_state->pending = mesh_state->subscribers;
+
+        if(!mesh_state->pending.empty()) {
+          state = LeavingState::COMMIT;
+          ActiveMessage<LeavePrepareCommitMessage> commit(mesh_state->pending);
+          commit->epoch = epoch;
+          commit.commit();
+        } else {
+          force_leave = true;
+        }
+      }
+
+      if(force_leave || mesh_state->leaving_state.load(std::memory_order_acquire) ==
+                            LeavingState::COMMIT) {
+        AutoLock<> al(mesh_state->pending_mutex);
+        node_meta_t meta{(int32_t)Network::my_node_id, 0, false};
+        mesh_state->hooks.post_leave(&meta, nullptr, 0, /*left=*/true,
+                                     mesh_state->hooks.user_arg);
+      }
+    }
+
+    if(state != LeavingState::NONE) {
+      mesh_state->leaving_state.store(state, std::memory_order_release);
     }
   }
 
@@ -496,13 +552,84 @@ namespace {
   };
 } // namespace
 
+class GossipPoller : public BackgroundWorkItem {
+public:
+  explicit GossipPoller(GossipMonitor *m)
+    : BackgroundWorkItem("gossip")
+    , m_(m)
+    , cond_(mtx_)
+  {}
+
+  void begin_polling() { make_active(); }
+
+  void end_polling()
+  {
+    AutoLock<> al(mtx_);
+    shutdown_.store(true, std::memory_order_release);
+    cond_.wait();
+  }
+
+  bool do_work(TimeLimit) override
+  {
+    if(shutdown_.load(std::memory_order_acquire)) {
+      AutoLock<> al(mtx_);
+      shutdown_.store(false, std::memory_order_release);
+      cond_.broadcast();
+      return false;
+    }
+
+    if(m_) {
+      m_->poll(0);
+    }
+    return true;
+  }
+
+private:
+  GossipMonitor *m_;
+  Mutex mtx_;
+  Mutex::CondVar cond_;
+  std::atomic<bool> shutdown_{false};
+};
+
 realm_status_t membership_mesh_init(membership_handle_t *out, membership_hooks_t hooks)
 {
   MembershipMesh *state = new MembershipMesh();
   mesh_state = state;
   mesh_state->hooks = hooks;
 
-  Network::register_peer_failure_callback(&mesh_on_peer_failed, state);
+  if(MembershioConfig::enable_ctpl_timeouts) {
+    mesh_state->gossip_.set_state_callback([&](const node_meta_t &peer, bool alive) {
+      if(!alive) {
+        mesh_on_peer_failed(peer.node_id, PeerFailureKind::LivenessTimeout, nullptr);
+      }
+    });
+
+    mesh_state->gossip_.set_backend(make_default_gossip_backend(mesh_state->gossip_));
+
+    {
+      node_meta_t meta{(int32_t)Network::my_node_id, 0, false};
+      mesh_state->gossip_.start(meta);
+    }
+
+    mesh_state->gossip_poller_ = new GossipPoller(&mesh_state->gossip_);
+    mesh_state->gossip_poller_->add_to_manager(&get_runtime()->bgwork);
+    mesh_state->gossip_poller_->begin_polling();
+  }
+
+  if(MembershioConfig::enable_dtpl_timeouts) {
+    Network::register_peer_failure_callback(&mesh_on_peer_failed, state);
+  }
 
   return membership_create(&operations, state, out);
+}
+
+realm_status_t membership_mesh_destroy(membership_handle_t out)
+{
+  assert(mesh_state);
+
+  if(mesh_state->gossip_poller_) {
+    mesh_state->gossip_poller_->end_polling();
+  }
+
+  return membership_delete(out);
 }
