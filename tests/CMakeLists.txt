@@ -154,7 +154,10 @@ target_link_libraries(
 )
 
 include(GoogleTest)
-if((NOT REALM_SANITIZER OR REALM_SANITIZER STREQUAL "NONE") AND NOT WIN32 AND NOT CMAKE_CROSSCOMPILING)
+if((NOT REALM_SANITIZER OR REALM_SANITIZER STREQUAL "NONE")
+   AND NOT WIN32
+   AND NOT CMAKE_CROSSCOMPILING
+)
   gtest_discover_tests(realm_unit_tests NO_PRETTY_TYPES NO_PRETTY_VALUES PROPERTIES LABELS "unit")
   gtest_discover_tests(realm_c_unit_tests NO_PRETTY_TYPES NO_PRETTY_VALUES PROPERTIES LABELS "unit")
 else()
@@ -237,7 +240,7 @@ macro(add_integration_test target)
     set_source_files_properties(${SRC_LIST} PROPERTIES LANGUAGE HIP)
   endif()
   target_link_libraries(${target} Realm::Realm)
-  add_test(NAME ${target} COMMAND $<TARGET_FILE:${target}> ${TEST_ARGS} ${${target}_ARGS})
+  add_test(NAME ${target} COMMAND $<TARGET_FILE:${target}> ${${target}_ARGS})
   set_property(
     TEST ${target} PROPERTY RESOURCE_LOCK $<REMOVE_DUPLICATES:${TEST_RESOURCE_LOCK}
                             ${${target}_RESOURCE_LOCK}>
@@ -434,7 +437,7 @@ target_compile_features(c_inst PUBLIC cxx_std_20)
 
 add_integration_test(c_external_inst "${REALM_TEST_DIR}/c/test_c_external_inst.cc")
 # TODO(weiwu): test crashes on windows
-if (WIN32)
+if(WIN32)
   set_property(TEST c_external_inst PROPERTY DISABLED TRUE)
 endif()
 # TODO(weiwu): designated initializers require c++20, should be removed
@@ -470,14 +473,21 @@ set_tests_properties(
              "integration"
 )
 
+string(REPLACE ";" " " TEST_ARGS "${TEST_ARGS}")
+
 if(MSVC)
   set_tests_properties(
-    ${_integ_list} PROPERTIES ENVIRONMENT_MODIFICATION "PATH=path_list_append:${TEST_LIB_PATH}"
+    ${_integ_list}
+    PROPERTIES
+      ENVIRONMENT_MODIFICATION
+      "REALM_DEFAULT_ARGS=string_prepend:${TEST_ARGS};PATH=path_list_append:${TEST_LIB_PATH}"
   )
 else()
   set_tests_properties(
-    ${_integ_list} PROPERTIES ENVIRONMENT_MODIFICATION
-                              "LD_LIBRARY_PATH=path_list_append:${TEST_LIB_PATH}"
+    ${_integ_list}
+    PROPERTIES
+      ENVIRONMENT_MODIFICATION
+      "REALM_DEFAULT_ARGS=string_prepend:${TEST_ARGS};LD_LIBRARY_PATH=path_list_append:${TEST_LIB_PATH}"
   )
 endif()
 

@@ -64,7 +64,7 @@ endif()
 
 macro(add_example_test name)
   add_subdirectory(${name})
-  add_test(NAME example_${name} COMMAND $<TARGET_FILE:${name}> ${TEST_ARGS} ${${name}_ARGS})
+  add_test(NAME example_${name} COMMAND $<TARGET_FILE:${name}> ${${name}_ARGS})
   set_property(
     TEST example_${name} PROPERTY RESOURCE_LOCK $<REMOVE_DUPLICATES:${TEST_RESOURCE_LOCK}
                                   ${${target}_RESOURCE_LOCK}>
@@ -91,13 +91,20 @@ set_tests_properties(
              "example"
 )
 
+string(REPLACE ";" " " TEST_ARGS "${TEST_ARGS}")
+
 if(MSVC)
   set_tests_properties(
-    ${_example_list} PROPERTIES ENVIRONMENT_MODIFICATION "PATH=path_list_append:${TEST_LIB_PATH}"
+    ${_example_list}
+    PROPERTIES
+      ENVIRONMENT_MODIFICATION
+      "REALM_DEFAULT_ARGS=string_prepend:${TEST_ARGS};PATH=path_list_append:${TEST_LIB_PATH}"
   )
 else()
   set_tests_properties(
-    ${_example_list} PROPERTIES ENVIRONMENT_MODIFICATION
-                                "LD_LIBRARY_PATH=path_list_append:${TEST_LIB_PATH}"
+    ${_example_list}
+    PROPERTIES
+      ENVIRONMENT_MODIFICATION
+      "REALM_DEFAULT_ARGS=string_prepend:${TEST_ARGS};LD_LIBRARY_PATH=path_list_append:${TEST_LIB_PATH}"
   )
 endif()

@@ -76,7 +76,7 @@ macro(add_benchmark target)
     set_source_files_properties(${SRC_LIST} PROPERTIES LANGUAGE HIP)
   endif()
   target_link_libraries(${target} Realm::Realm)
-  add_test(NAME ${target} COMMAND $<TARGET_FILE:${target}> ${BENCHMARK_ARGS} ${${target}_ARGS})
+  add_test(NAME ${target} COMMAND $<TARGET_FILE:${target}> ${${target}_ARGS})
   # Benchmarks need to be run in isolation to get accurate results
   set_property(TEST ${target} PROPERTY RUN_SERIAL TRUE)
   if(REALM_USE_UCX)
@@ -102,8 +102,8 @@ add_benchmark(
 target_link_libraries(task_throughput ${TEST_GPU_LIBS})
 
 add_benchmark(
-  task_ubench "${REALM_BENCH_DIR}/task_throughput/task_throughput.cc"
-  "$<$<BOOL:BENCH_USE_GPU>:${REALM_BENCH_DIR}/task_throughput/task_throughput_gpu.cu>"
+  task_ubench "${REALM_BENCH_DIR}/task_ubench/task_ubench.cc"
+  "$<$<BOOL:BENCHMARK_USE_GPU>:${REALM_BENCH_DIR}/task_ubench/task_ubench_gpu.cu>"
 )
 target_link_libraries(task_ubench ${TEST_GPU_LIBS})
 
@@ -119,14 +119,21 @@ set_tests_properties(
              "benchmark"
 )
 
+string(REPLACE ";" " " BENCHMARK_ARGS "${BENCHMARK_ARGS}")
+
 if(MSVC)
   set_tests_properties(
-    ${_bench_list} PROPERTIES ENVIRONMENT_MODIFICATION "PATH=path_list_append:${TEST_LIB_PATH}"
+    ${_bench_list}
+    PROPERTIES
+      ENVIRONMENT_MODIFICATION
+      "REALM_DEFAULT_ARGS=string_prepend:${BENCHMARK_ARGS};PATH=path_list_append:${TEST_LIB_PATH}"
   )
 else()
   set_tests_properties(
-    ${_bench_list} PROPERTIES ENVIRONMENT_MODIFICATION
-                              "LD_LIBRARY_PATH=path_list_append:${TEST_LIB_PATH}"
+    ${_bench_list}
+    PROPERTIES
+      ENVIRONMENT_MODIFICATION
+      "REALM_DEFAULT_ARGS=string_prepend:${BENCHMARK_ARGS};LD_LIBRARY_PATH=path_list_append:${TEST_LIB_PATH}"
   )
 endif()
 
