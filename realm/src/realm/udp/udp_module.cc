@@ -60,7 +60,7 @@ namespace Realm {
         bool ok = kv.second->retransmit.poll(Clock::current_time_in_microseconds());
         if(!ok) {
           // module->notify_peer_failure(kv.first, PeerFailureKind::TransportError);
-          // return false;
+          return false;
         }
       }
       break;
