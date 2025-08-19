@@ -31,6 +31,8 @@ namespace Realm {
     uint64_t outstanding{0};
   };
 
+  void quiescence_on_peer_failed(NodeID peer);
+
   // TODO: Run for data & control plane
   //       control plane should exempt quiece messages
 

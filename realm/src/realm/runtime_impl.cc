@@ -444,7 +444,7 @@ namespace Realm {
 
     void wait_for_quiescence()
     {
-      constexpr int MAX_RETRIES = 20;
+      constexpr int MAX_RETRIES = 100;
 
       int tries = 0;
       while(true) {
@@ -452,7 +452,7 @@ namespace Realm {
 
         bool done = Network::check_for_quiescence(get_runtime()->message_manager,
                                                   /*elastic=*/true);
-        done = true;
+
         if(done) {
           break;
         }

@@ -1,6 +1,7 @@
 #include "realm/node_directory.h"
 #include "realm/membership/membership.h"
 #include "realm/membership/gossip.h"
+#include "realm/quiescence.h"
 #include "realm/network.h"
 #include "realm/serialize.h"
 #include "realm/activemsg.h"
@@ -16,7 +17,7 @@ class GossipPoller;
 
 namespace MembershioConfig {
   // dtpl - data_plane :)
-  bool enable_dtpl_timeouts{true};
+  bool enable_dtpl_timeouts{false};
   bool enable_ctpl_timeouts{true};
 } // namespace MembershioConfig
 
@@ -544,6 +545,8 @@ namespace {
     if(state != LeavingState::NONE) {
       mesh_state->leaving_state.store(state, std::memory_order_release);
     }
+
+    quiescence_on_peer_failed(peer);
   }
 
   const membership_ops_t operations = {

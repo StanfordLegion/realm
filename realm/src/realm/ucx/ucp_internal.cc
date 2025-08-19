@@ -1732,6 +1732,7 @@ namespace Realm {
 
     void UCPInternal::collect_quiescence_counters(NodeID node, QuiescenceCounters &out)
     {
+      // out.outstanding += 1;
       // TODO: add peer based counters
       // out.msg_sent = total_msg_sent.load();
       // out.msg_recv = total_msg_received.load();

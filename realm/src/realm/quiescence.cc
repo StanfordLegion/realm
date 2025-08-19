@@ -240,4 +240,17 @@ namespace Realm {
     }
     return false;
   }
+
+  void quiescence_on_peer_failed(NodeID peer)
+  {
+    AutoLock<> al(quiesce_state.mtx);
+    if(quiesce_state.round_id != 0) {
+      if(quiesce_state.peers.contains(peer)) {
+        quiesce_state.peers.remove(peer);
+        if(static_cast<size_t>(peer) < quiesce_state.responded.size()) {
+          quiesce_state.responded[peer] = 1;
+        }
+      }
+    }
+  }
 } // namespace Realm

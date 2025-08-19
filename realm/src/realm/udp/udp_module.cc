@@ -60,7 +60,7 @@ namespace Realm {
         bool ok = kv.second->retransmit.poll(Clock::current_time_in_microseconds());
         if(!ok) {
           // module->notify_peer_failure(kv.first, PeerFailureKind::TransportError);
-          return false;
+          // return false;
         }
       }
       break;
@@ -344,8 +344,8 @@ namespace Realm {
   void UDPModule::collect_quiescence_counters(NodeID node, QuiescenceCounters &out)
   { // TODO: THIS NEEDS MORE WORK
     AutoLock<> al(peer_map_mutex);
-    for(auto &kv : peer_map_) {
-      out.outstanding += kv.second->retransmit.num_outstanding();
+    if(peer_map_.find(node) != peer_map_.end()) {
+      out.outstanding += peer_map_[node]->retransmit.num_outstanding();
     }
   }
 
