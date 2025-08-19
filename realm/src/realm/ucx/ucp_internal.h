@@ -100,6 +100,14 @@ namespace Realm {
       Mutex::CondVar poll_notify_cond;
     };
 
+    struct PeerCounters {
+      std::atomic<uint64_t> msg_sent{0};
+      std::atomic<uint64_t> msg_recv{0};
+      std::atomic<uint64_t> rcomp_sent{0};
+      std::atomic<uint64_t> rcomp_recv{0};
+      std::atomic<uint64_t> outstanding{0};
+    };
+
     class UCPInternal {
     public:
       friend class UCPMessageImpl;
@@ -185,19 +193,22 @@ namespace Realm {
 
       size_t num_eps(const UCPContext &context) const;
 
+      void bump_peer(NodeID peer, std::function<void(PeerCounters &)> fn)
+      {
+        AutoLock<> al(peer_counters_mutex);
+        auto &sp = peer_counters[peer];
+        if(!sp) {
+          sp = std::make_shared<PeerCounters>();
+        }
+        fn(*sp);
+      }
+
     protected:
       UCPModule *module;
       RuntimeImpl *runtime;
 
     private:
       Mutex peer_counters_mutex;
-      struct PeerCounters {
-        atomic<uint64_t> msg_sent{0};
-        atomic<uint64_t> msg_recv{0};
-        atomic<uint64_t> rcomp_sent{0};
-        atomic<uint64_t> rcomp_recv{0};
-        atomic<uint64_t> outstanding{0};
-      };
       std::unordered_map<NodeID, std::shared_ptr<PeerCounters>> peer_counters;
 
       struct AmHandlersArgs {

@@ -218,13 +218,10 @@ namespace Realm {
         return false;
       }
 
-      const bool done = (quiesce_state.sum_outstanding == 0);
-
-      // const bool msgs_ok = (quiesce_state.sum_msg_sent == quiesce_state.sum_msg_recv);
-      // const bool rcmp_ok = (quiesce_state.sum_rcomp_sent ==
-      // quiesce_state.sum_rcomp_recv); const bool outs_ok =
-      // (quiesce_state.sum_outstanding == 0); const bool done = msgs_ok && rcmp_ok &&
-      // outs_ok;
+      const bool msgs_ok = (quiesce_state.sum_msg_sent == quiesce_state.sum_msg_recv);
+      const bool rcmp_ok = (quiesce_state.sum_rcomp_sent == quiesce_state.sum_rcomp_recv);
+      const bool outs_ok = (quiesce_state.sum_outstanding == 0);
+      const bool done = msgs_ok && rcmp_ok && outs_ok;
 
       if(done) {
         ActiveMessage<QuiesceDoneAM> am(members);

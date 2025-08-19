@@ -138,6 +138,7 @@ namespace Realm {
       UCPWorker::Request ucp;
       UCPInternal *internal;
       UCPWorker *worker;
+      NodeID target_peer{-1};
       union {
         struct {
           PayloadBaseType payload_base_type;
@@ -945,6 +946,10 @@ namespace Realm {
           }
         }
       }
+      {
+        AutoLock<> al(peer_counters_mutex);
+        peer_counters.erase(peer);
+      }
     }
 
 #ifdef REALM_UCX_DYNAMIC_LOAD
@@ -1076,6 +1081,12 @@ namespace Realm {
       }
 
       (void)internal->total_rcomp_received.fetch_add(1);
+      const UCPMsgHdr *hdr = reinterpret_cast<const UCPMsgHdr *>(header);
+      NodeID from = hdr->src;
+      internal->bump_peer(from, [](PeerCounters &pc) {
+        pc.rcomp_recv.fetch_add(1, std::memory_order_relaxed);
+      });
+
       return UCS_OK;
     }
 
@@ -1090,6 +1101,11 @@ namespace Realm {
       CHKERR_JUMP(status != UCS_OK, "failed to complete am reply", log_ucp, err);
 
       (void)internal->total_rcomp_sent.fetch_add(1);
+
+      internal->bump_peer(req->target_peer, [](PeerCounters &pc) {
+        pc.rcomp_sent.fetch_add(1, std::memory_order_relaxed);
+      });
+
       internal->request_release(req);
 
       return;
@@ -1197,6 +1213,10 @@ namespace Realm {
       log_ucp_am.debug() << "am_msg_recv_data_ready invoked. Sender " << ucp_msg_hdr->src;
 
       (void)internal->total_msg_received.fetch_add(1);
+      NodeID sender = ucp_msg_hdr->src;
+      internal->bump_peer(sender, [](PeerCounters &pc) {
+        pc.msg_recv.fetch_add(1, std::memory_order_relaxed);
+      });
 
       cb_args->remote_comp = ucp_msg_hdr->remote_comp;
 #ifdef REALM_USE_CUDA
@@ -1732,13 +1752,16 @@ namespace Realm {
 
     void UCPInternal::collect_quiescence_counters(NodeID node, QuiescenceCounters &out)
     {
-      // out.outstanding += 1;
-      // TODO: add peer based counters
-      // out.msg_sent = total_msg_sent.load();
-      // out.msg_recv = total_msg_received.load();
-      // out.rcomp_sent = total_rcomp_sent.load();
-      // out.rcomp_recv = total_rcomp_received.load();
-      // out.outstanding = outstanding_reqs.load();
+      AutoLock<> al(peer_counters_mutex);
+      auto it = peer_counters.find(node);
+      if(it != peer_counters.end()) {
+        const PeerCounters &pc = *it->second;
+        out.msg_sent = pc.msg_sent.load(std::memory_order_relaxed);
+        out.msg_recv = pc.msg_recv.load(std::memory_order_relaxed);
+        out.rcomp_sent = pc.rcomp_sent.load(std::memory_order_relaxed);
+        out.rcomp_recv = pc.rcomp_recv.load(std::memory_order_relaxed);
+        out.outstanding = pc.outstanding.load(std::memory_order_relaxed);
+      }
     }
 
     bool UCPInternal::check_for_quiescence(size_t sampled_receive_count)
@@ -1933,7 +1956,12 @@ namespace Realm {
 
       req->internal = this;
       req->worker = worker;
+
       (void)outstanding_reqs.fetch_add(1);
+      bump_peer(req->target_peer, [](PeerCounters &pc) {
+        pc.outstanding.fetch_add(1, std::memory_order_relaxed);
+      });
+
       log_ucp_ar.debug() << "acquired request " << req;
 
       return req;
@@ -1942,7 +1970,12 @@ namespace Realm {
     void UCPInternal::request_release(Request *req)
     {
       req->worker->request_release(req);
+
       (void)outstanding_reqs.fetch_sub(1);
+      bump_peer(req->target_peer, [](PeerCounters &pc) {
+        pc.outstanding.fetch_sub(1, std::memory_order_relaxed);
+      });
+
       log_ucp_ar.debug() << "released request " << req;
     }
 
@@ -2205,6 +2238,11 @@ namespace Realm {
       CHKERR_JUMP(status != UCS_OK, "failed to complete am locally", log_ucp, err);
 
       internal->notify_msg_sent(1);
+      if(req->target_peer >= 0) {
+        req->internal->bump_peer(req->target_peer, [](PeerCounters &pc) {
+          pc.msg_sent.fetch_add(1, std::memory_order_relaxed);
+        });
+      }
 
       if(req->am_send.mc_desc != nullptr) {
         local_pending = req->am_send.mc_desc->local_pending.fetch_sub(1);
@@ -2263,7 +2301,7 @@ namespace Realm {
     {
       Request *req = make_request(act_payload_size);
       CHKERR_JUMP(req == nullptr, "failed to make am request", log_ucp, err);
-
+      //
       req->ucp.ep = ep;
       req->ucp.flags |= flags;
 
@@ -2314,6 +2352,7 @@ namespace Realm {
       req->ucp.payload_size = act_payload_size;
       req->ucp.memtype = memtype;
       req->ucp.flags = 0;
+      req->target_peer = target;
 
       if(is_multicast) {
         req->am_send.mc_desc = new MCDesc(targets.size());
@@ -2511,6 +2550,10 @@ namespace Realm {
         CHKERR_JUMP(!worker->ep_get(target, remote_dev_index, &ep), "failed to get ep",
                     log_ucp, err);
       }
+
+      internal->bump_peer(target, [](PeerCounters &pc) {
+        pc.msg_sent.fetch_add(1, std::memory_order_relaxed);
+      });
 
       if(dest_payload_rdma_info == nullptr) {
         if(header_size + act_payload_size <= internal->config.fp_max) {

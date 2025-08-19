@@ -452,7 +452,6 @@ namespace Realm {
 
         bool done = Network::check_for_quiescence(get_runtime()->message_manager,
                                                   /*elastic=*/true);
-
         if(done) {
           break;
         }
