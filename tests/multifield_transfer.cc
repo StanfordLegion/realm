@@ -52,7 +52,7 @@ namespace TestConfig {
   size_t max_ops = 4;
   size_t max_copy_fields = 32000;
   size_t num_fields = 1;
-  size_t field_size = sizeof(long long);
+  size_t field_size = sizeof(ElementType);
   size_t size = 4ULL * 256ULL; // 1024ULL * 4ULL;//1024ULL;
 };                             // namespace TestConfig
 

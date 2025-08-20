@@ -20,6 +20,7 @@
 
 #include "realm/point.h"
 #include "realm/inst_layout.h"
+#include <unordered_map>
 
 namespace Realm {
   // finds the largest subrectangle of 'domain' that starts with 'start',
