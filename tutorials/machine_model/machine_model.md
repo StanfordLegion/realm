@@ -1,144 +1,320 @@
----
-layout: page
-permalink: /tutorial/realm/machine_model.html
-title: Realm Machine Model
----
+<!-- omit from toc -->
+# Realm Machine Model Tutorial
 
+This example illustrates how to query the machine model from Realm.
+It outlines various Realm types that define the resources of the
+underlying hardware and the affinities between these resources.
 
-This example illustrates how to query the machine model from Realm. In addition, it outlines
-various types that Realm uses to define resources of underlying hardware that an application
-occupies, as well as affinities between these resources.
+- [Why a machine model?](#why-a-machine-model)
+  - [Performance portability](#performance-portability)
+  - [Example system topology](#example-system-topology)
+- [Program Setup](#program-setup)
+- [Machine](#machine)
+- [Processor](#processor)
+- [Memory](#memory)
+- [Main function](#main-function)
 
-Here is a list of covered topics:
+## Why a machine model?
 
-* [Machine](#machine)
-* [Processor](#processor)
-* [Memory](#memory)
-* [Affinity](#affinity)
-* [ID](#id)
-* [References](#references)
+A machine model describes the structure of hardware resources available
+to Realm and enables applications, runtimes, or schedulers to make informed
+mapping decisions.
+
+Realm uses a flat, flexible, graph-based representation:
+
+- **Nodes**: Processors and Memories
+- **Edges**: Affinities (bandwidth and latency hints)
+
+This model captures real hardware topology more accurately than rigid hierarchies.
+For example, NUMA and GPU memory access paths may not align with CPU socket layouts.
+
+### Performance portability
+
+Applications can use Realm’s model to remap across different machines
+without rewriting core logic, thanks to this abstraction layer.
+
+### Example system topology
+
+```none
+  +------+      +------+      +------+      +------+      +-------+
+  | x86  |      | x86  |      | x86  |      | x86  |      | CUDA  |
+  +------+      +------+      +------+      +------+      +-------+
+     |              |              |              |            |
+     +--------------+--------------+--------------+------------+
+                    |              |              |
+                 +------+       +------+       +------+
+                 |NUMA1 |       |NUMA2 |       |  ZC  |  (Zero-Copy Memory)
+                 +------+       +------+       +------+
+                                               |
+                                            +------+
+                                            |  FB  | (GPU Framebuffer)
+                                            +------+
+```
+
+This structure represents processors, memory types, and connections (affinities).
+Realm can use this model to choose the best path for computation and data movement.
+
+## Program Setup
+
+```c++
+#include "realm.h"
+#include "realm/cmdline.h"
+#include "realm/id.h"
+#include <assert.h>
+
+using namespace Realm;
+
+Logger log_app("app");
+
+enum
+{
+  MAIN_TASK = Processor::TASK_ID_FIRST_AVAILABLE + 0,
+};
+
+/**
+ * The main task is launched on a CPU (LOC_PROC) and performs machine model
+ * inspection by querying available processors and their memory affinities.
+ */
+void main_task(const void *args, size_t arglen, const void *userdata, size_t userlen,
+               Processor)
+{
+```
 
 ## Machine
 
-In Realm, a Machine is a runtim object that represents all the computer nodes an application can occupy.
-It can be retrieved using the `Machine::get_machine()` function,
-which returns a singleton object.
-Processors, memories of the `Machine`, and affinity information can be queried from the `Machine` object.
+A `Machine` represents all compute nodes an application can occupy.
+Use `Machine::get_machine()` to access this singleton instance.
+
+```c++
+  Machine machine = Machine::get_machine();
+```
 
 ## Processor
 
-A `Processor` is a runtime object that represents any execution resource that can run a task, such as CPU, GPU, etc.
-To retrieve a `Processor`, the `Machine::ProcessorQuery` function can be used. In this example, we use `ProcessorQuery` to iterate over all
-enabled processors and print out their address space and ID (a unique identifier Realm assigns).
+ Any hardware or software entity capable of running a task.
+Examples:
+
+- CPU core (Pthread)
+- CPU socket (OpenMP)
+- GPU (CUDA)
+- Python interpreter.
+
+Realm enables consistent handling of diverse hardware (CPUs, GPUs, etc.) in
+distributed environments. Applications can be (re)mapped to different hardware
+targets without rewriting core logic.
+
+Use `Machine::ProcessorQuery` to enumerate processors.
+The address space shows which node (rank) the processor resides on.
+
+A `Processor` can also be queried by its kind and the runtime supports the following options:
+
+- `LOC_PROC` represents a latency processor,which is usually a CPU core. It can be specified by -ll:cpu.
+- `TOC_PROC` represents a throughput processor (GPU). Currently, Realm supports both NVIDIA and AMD GPUs. It can be specified by -ll:gpu.
+- `UTIL_PROC` represents a CPU processor that is designed for users to run their own background work. It can be specified by -ll:util.
+- `IO_PROC` represents a processor that is used for I/O, which is also a CPU core. It can be specified by -ll:io.
+- `PROC_GROUP` represents a group of processors.
+- `PROC_SET` represents a set of processors for OpenMP/Kokkos etc. It can be specified by -ll:mp_nodes.
+- `OMP_PROC` represents OpenMP thread pool. It can be specified by -ll:ocpu. The number of threads per OMP_PROC can be specified by -ll:othr.
+- `PY_PROC` represents a CPU processor that is used for Python interpreter. It can be specified by -ll:py. Currently, we only support a single `PY_PROC`.
 
 ```c++
-for(Machine::ProcessorQuery::iterator it = Machine::ProcessorQuery(machine).begin(); it; ++it) {
-  ...
-}
+  for(Machine::ProcessorQuery::iterator it = Machine::ProcessorQuery(machine).begin(); it;
+      ++it) {
+    Processor p = *it;
+    ID proc_id = ID(p.id);
+
+    /**
+     * ID
+     * --
+     * Realm uses 64-bit IDs to uniquely identify objects (processors, memories, etc).
+     * Use is_processor() or is_procgroup() to verify processor IDs.
+     */
+    assert(proc_id.is_processor() || proc_id.is_procgroup());
+
+    Processor::Kind kind = p.kind();
+    switch(kind) {
+    case Processor::LOC_PROC:
+    {
+      /** LOC_PROC: latency-optimized core (CPU), specified by -ll:cpu */
+      log_app.print("Rank %u, Processor ID " IDFMT " is CPU.", p.address_space(), p.id);
+      break;
+    }
+    case Processor::TOC_PROC:
+    {
+      /** TOC_PROC: throughput-optimized core (GPU), specified by -ll:gpu */
+      log_app.print("Rank %u, Processor ID " IDFMT " is GPU.", p.address_space(), p.id);
+      break;
+    }
+    case Processor::IO_PROC:
+    {
+      /** IO_PROC: used for file or socket I/O operations, specified by -ll:io */
+      log_app.print("Rank %u, Processor ID " IDFMT " is I/O Proc.", p.address_space(),
+                    p.id);
+      break;
+    }
+    case Processor::UTIL_PROC:
+    {
+      /** UTIL_PROC: utility thread for background Realm work, specified by -ll:util */
+      log_app.print("Rank %u, Processor ID " IDFMT " is utility.", p.address_space(),
+                    p.id);
+      break;
+    }
+    default:
+    {
+      log_app.print("Rank %u, Processor " IDFMT " is unknown (kind=%d)",
+                    p.address_space(), p.id, p.kind());
+      break;
+    }
+  }
 ```
-
-The address space of a Realm resource, such as Processor and Memory (introduced in the next section), indicates the process/rank where it resides.
-
-A `Processor` can also be queried by its `kind` and the runtime supports the following options:
-
-- `LOC_PROC` represents a latency processor,which is usually a CPU core.
-  It can be specified by `-ll:cpu`.
-- `TOC_PROC` represents a throughput processor (GPU).
-  Currently, Realm supports both NVIDIA and AMD GPUs.
-  It can be specified by `-ll:gpu`.
-- `UTIL_PROC` represents a CPU processor that is designed for users to run their own background work.
-  It can be specified by `-ll:util`.
-- `IO_PROC` represents a processor that is used for I/O, which is also a CPU core.
-  It can be specified by `-ll:io`.
-- `PROC_GROUP` represents a group of processors.
-- `PROC_SET` represents a set of processors for OpenMP/Kokkos etc.
-  It can be specified by `-ll:mp_nodes`.
-- `OMP_PROC` represents OpenMP thread pool.
-  It can be specified by `-ll:ocpu`.
-  The number of threads per `OMP_PROC` can be specified by `-ll:othr`.
-- `PY_PROC` represents a CPU processor that is used for Python interpreter.
-  It can be specified by `-ll:py`.
-  Currently, we only support a single `PY_PROC`.
-
-For a list of all the processors kind supported by Realm, please refer to [Full Processor Kind](#full-proc-kind).
 
 ## Memory
 
-`Memory` is used to describe the location of application data. `MemoryQuery` can be used to query
-the `Memory`. For example, a `MemoryQuery` can be created with the condition `has_affinity_to` to return
-all memories that are affixed to the given processor.
+Memories describe the location of application data
+
+- System memory (DRAM)
+- GPU framebuffer memory
+- NIC-registered (RDMA) memory
+- flash storage (e.g., burst buffers)
+- file-backed storage.
+
+`MemoryQuery` returns memory objects that have affinity to the given processor.
+`has_affinity_to(p)` filters memories accessible to processor `p`.
 
 ```c++
-Machine::MemoryQuery mq = Machine::MemoryQuery(machine).has_affinity_to(p, 0, 0);
+    log_app.print("Has Affinity with:");
+    Machine::MemoryQuery mq = Machine::MemoryQuery(machine).has_affinity_to(p, 0, 0);
+
+    for(Machine::MemoryQuery::iterator it = mq.begin(); it; ++it) {
+      Memory m = *it;
+      ID mem_id = ID(m.id);
+
+      assert(mem_id.is_memory() || mem_id.is_ib_memory());
+
+      size_t memory_size_in_kb = m.capacity() >> 10;
+
+      /**
+       * AFFINITY
+       * --------
+       * ProcessorMemoryAffinity describes the connection between a processor and memory.
+       * Includes bandwidth (in MB/s) and latency (in arbitrary units).
+       */
+      std::vector<Machine::ProcessorMemoryAffinity> pm_affinity;
+      machine.get_proc_mem_affinity(pm_affinity, p, m, true);
+      assert(pm_affinity.size() == 1);
+
+      unsigned bandwidth = pm_affinity[0].bandwidth;
+      unsigned latency = pm_affinity[0].latency;
+
+      /**
+       * MEMORY KIND
+       * -----------
+       * Realm supports many types of memory:
+       * SYSTEM_MEM, REGDMA_MEM, GPU_FB_MEM, Z_COPY_MEM, etc.
+       * Each has specific usage and visibility traits.
+       */
+      switch(m.kind()) {
+      case Memory::GLOBAL_MEM:
+        log_app.print("\tGASNet Global Memory ID " IDFMT
+                      " has %zd KB, bandwidth %u, latency %u, is IB_Mem %d.",
+                      m.id, memory_size_in_kb, bandwidth, latency, mem_id.is_ib_memory());
+        break;
+      case Memory::SYSTEM_MEM:
+        log_app.print("\tSystem Memory ID " IDFMT
+                      " has %zd KB, bandwidth %u, latency %u, is IB_Mem %d",
+                      m.id, memory_size_in_kb, bandwidth, latency, mem_id.is_ib_memory());
+        break;
+      case Memory::REGDMA_MEM:
+        log_app.print("\tPinned Memory ID " IDFMT
+                      " has %zd KB, bandwidth %u, latency %u, is IB_Mem %d",
+                      m.id, memory_size_in_kb, bandwidth, latency, mem_id.is_ib_memory());
+        break;
+      case Memory::SOCKET_MEM:
+        log_app.print("\tSocket Memory ID " IDFMT
+                      " has %zd KB, bandwidth %u, latency %u, is IB_Mem %d",
+                      m.id, memory_size_in_kb, bandwidth, latency, mem_id.is_ib_memory());
+        break;
+      case Memory::Z_COPY_MEM:
+        log_app.print("\tZero-Copy Memory ID " IDFMT
+                      " has %zd KB, bandwidth %u, latency %u, is IB_Mem %d",
+                      m.id, memory_size_in_kb, bandwidth, latency, mem_id.is_ib_memory());
+        break;
+      case Memory::GPU_FB_MEM:
+        log_app.print("\tGPU Frame Buffer Memory ID " IDFMT
+                      " has %zd KB, bandwidth %u, latency %u, is IB_Mem %d",
+                      m.id, memory_size_in_kb, bandwidth, latency, mem_id.is_ib_memory());
+        break;
+      case Memory::GPU_MANAGED_MEM:
+        log_app.print("\tGPU Managed Memory ID " IDFMT
+                      " has %zd KB, bandwidth %u, latency %u, is IB_Mem %d",
+                      m.id, memory_size_in_kb, bandwidth, latency, mem_id.is_ib_memory());
+        break;
+      case Memory::GPU_DYNAMIC_MEM:
+        log_app.print("\tGPU Dynamic-allocated Frame Buffer Memory ID " IDFMT
+                      " has %zd KB, bandwidth %u, latency %u, is IB_Mem %d",
+                      m.id, memory_size_in_kb, bandwidth, latency, mem_id.is_ib_memory());
+        break;
+      case Memory::DISK_MEM:
+        log_app.print("\tDisk Memory ID " IDFMT
+                      " has %zd KB, bandwidth %u, latency %u, is IB_Mem %d",
+                      m.id, memory_size_in_kb, bandwidth, latency, mem_id.is_ib_memory());
+        break;
+      case Memory::HDF_MEM:
+        log_app.print("\tHDF Memory ID " IDFMT
+                      " has %zd KB, bandwidth %u, latency %u, is IB_Mem %d",
+                      m.id, memory_size_in_kb, bandwidth, latency, mem_id.is_ib_memory());
+        break;
+      case Memory::FILE_MEM:
+        log_app.print("\tFile Memory ID " IDFMT
+                      " has %zd KB, bandwidth %u, latency %u, is IB_Mem %d",
+                      m.id, memory_size_in_kb, bandwidth, latency, mem_id.is_ib_memory());
+        break;
+      case Memory::LEVEL3_CACHE:
+        log_app.print("\tLevel 3 Cache ID " IDFMT
+                      " has %zd KB, bandwidth %u, latency %u, is IB_Mem %d",
+                      m.id, memory_size_in_kb, bandwidth, latency, mem_id.is_ib_memory());
+        break;
+      case Memory::LEVEL2_CACHE:
+        log_app.print("\tLevel 2 Cache ID " IDFMT
+                      " has %zd KB, bandwidth %u, latency %u, is IB_Mem %d",
+                      m.id, memory_size_in_kb, bandwidth, latency, mem_id.is_ib_memory());
+        break;
+      case Memory::LEVEL1_CACHE:
+        log_app.print("\tLevel 1 Cache ID " IDFMT
+                      " has %zd KB, bandwidth %u, latency %u, is IB_Mem %d",
+                      m.id, memory_size_in_kb, bandwidth, latency, mem_id.is_ib_memory());
+        break;
+      default:
+        log_app.print("\tMemory " IDFMT " is unknown (kind=%d).", it->id, it->kind());
+        break;
+      }
+    }
+  }
+}
 ```
 
-A `Memory` can also be queried by its `kind` and the runtime supports the following options:
+## Main function
 
-- `GLOBAL_MEM` represents CPU memory guaranteed to be visible to all processors on all nodes.
-  e.g. GASNet global memory. `GLOBAL_MEM` is usually slow.
-  `GLOBAL_MEM` is only used by MPI and GASNet1 modules, and it can be specified by `-ll:gsize`.
-- `SYSTEM_MEM` represents CPU memory visible to all processors on a node.
-  It can be specified by `-ll:csize`.
-- `REGDMA_MEM` represents registered memory visible to all processors on a node, and can be a target of RDMA.
-  It can be specified by `-ll:rsize`.
-- `SOCKET_MEM` represents CPU memory visible to all processors within a node.
-  It is NUMA-aware, so it provides better performance for processors on the same socket.
-- `Z_COPY_MEM` represents Zero-Copy memory visible to all CPUs within a node and one or more GPUs.
-  It can be specified by `-ll:zsize`.
-- `GPU_FB_MEM` represents framebuffer memory for a particular GPU.
-  It can be specified by `-ll:fsize`.
-- `GPU_MANAGED_MEM` represents managed memory that can be cached by either host or GPU.
-  It can be specified by `-ll:msize`.
-- `GPU_DYNAMIC_MEM` represents dynamically-allocated framebuffer memory for a particular GPU.
-  Its size is not fixed, but its maximum size can be specified by `-cuda:dynfb_max`.
-- `DISK_MEM` represents disk memory visible to all processors on a node.
-  It can be specified by `-ll:dsize`.
-- `HDF_MEM` and `FILE_MEM` represent HDF and file memory visible to all processors on a node, respectively.
-  They do not have memory space, so their sizes are always 0.
-  These I/O related memories allow users to create instances for I/O operations.
-
-For a list of all the memories kind supported by Realm, please refer to [Full Memory Kind](#full-mem-kind).
-
-## Affinity
-
-Realm provides `ProcessorMemoryAffinity` and `MemoryMemoryAffinity` to query the affinity information
-between processors and memories. In this example, we use `ProcessorMemoryAffinity` to retrieve the information,
-including latency and bandwidth between a pair of memory and processor.
+Putting everything together, we define a `main` function to launch our main task:
 
 ```c++
-std::vector<Machine::ProcessorMemoryAffinity> pm_affinity;
-machine.get_proc_mem_affinity(pm_affinity, p, m, true/*local_only*/);
-unsigned bandwidth = pm_affinity[0].bandwidth;
-unsigned latency = pm_affinity[0].latency;
+int main(int argc, char **argv)
+{
+  Runtime rt;
+  rt.init(&argc, (char ***)&argv);
+
+  Processor p = Machine::ProcessorQuery(Machine::get_machine())
+                    .only_kind(Processor::LOC_PROC)
+                    .first();
+  assert(p.exists());
+
+  Processor::register_task_by_kind(Processor::LOC_PROC, false /*!global*/, MAIN_TASK,
+                                   CodeDescriptor(main_task), ProfilingRequestSet())
+      .external_wait();
+
+  Event e = rt.collective_spawn(p, MAIN_TASK, 0, 0);
+  rt.shutdown(e);
+
+  return rt.wait_for_shutdown();
+}
 ```
-
-## ID
-
-Realm ID is a 64-bit value that uniquely encodes both the type of the referred-to Realm object and its identity.
-Once we convert an ID into a hexadecimal number, it can be decoded. The following is an example of a processor ID
-and a memory ID:
-
-```
-Processor ID 1d00010000000001 is CPU.
-System Memory ID 1e00010000000000 has 0 KB, bandwidth 100, latency 5.
-```
-The highest two digits (8 bits) are used to tell the type of an ID, e.g., `1d` represents Processor and `1e` represents Memory.
-The next four digits (16 bits) are used to tell the owner node of an ID, e.g., `0001` means the processor/memory is on
-node 1. The last two/three digits (8/12 bits) are used tell the local index of a Memory/Processor ID, e.g., `01` means
-the cpu index is 1 while `00` means the memory index is 0.
-Besides processor and memory, the ID of other Realm objects (e.g., Event and etc.) can also be decoded.
-For a complete introduction to Realm ID, please refer to the [ID header file](#id-header-file).
-
-Realm provides `is_TYPE` functions to test the type of an ID, e.g. in this example, `is_processor` is used to check if an ID
-is a processor.
-
-## References
-
-<div id="full-proc-kind"></div>
-\[1]: [Full Processor Kind](https://github.com/StanfordLegion/legion/blob/stable/runtime/realm/realm_c.h#L45)
-
-<div id="full-mem-kind"></div>
-\[2]: [Full Memory Kind](https://github.com/StanfordLegion/legion/blob/stable/runtime/realm/realm_c.h#L63)
-
-<div id="id-header-file"></div>
-\[3]: [ID header file](https://github.com/StanfordLegion/legion/blob/stable/runtime/realm/id.h)
