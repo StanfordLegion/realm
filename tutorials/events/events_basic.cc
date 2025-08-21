@@ -54,9 +54,9 @@
  *
  * When a new Event is created, the owning node allocates a data structure to track its
  * state, which is initially untriggered but will eventually become triggered or poisoned.
- * The data structure also includes a list of local waiters and remote waiters. Local waiters
- * are dependent operations on the owner node, and remote waiters are other nodes that are
- * interested in the Event (event dependencies).
+ * The data structure also includes a list of local waiters and remote waiters. Local
+ * waiters are dependent operations on the owner node, and remote waiters are other nodes
+ * that are interested in the Event (event dependencies).
  */
 
 #include <realm.h>
@@ -64,7 +64,8 @@
 
 using namespace Realm;
 
-enum {
+enum
+{
   MAIN_TASK = Processor::TASK_ID_FIRST_AVAILABLE + 0,
   READER_TASK_0,
   READER_TASK_1,
@@ -80,42 +81,47 @@ struct TaskArgs {
   int x;
 };
 
-void reader_task_0(const void *args, size_t arglen, const void *userdata,
-                   size_t userlen, Processor p) {
+void reader_task_0(const void *args, size_t arglen, const void *userdata, size_t userlen,
+                   Processor p)
+{
   const TaskArgs *task_args = reinterpret_cast<const TaskArgs *>(args);
   log_app.info() << "reader task 0: proc=" << p << " x=" << task_args->x;
 }
 
-void reader_task_1(const void *args, size_t arglen, const void *userdata,
-                   size_t userlen, Processor p) {
+void reader_task_1(const void *args, size_t arglen, const void *userdata, size_t userlen,
+                   Processor p)
+{
   const TaskArgs *task_args = reinterpret_cast<const TaskArgs *>(args);
   log_app.info() << "reader task 1: proc=" << p << " x=" << task_args->x;
 }
 
-void main_task(const void *args, size_t arglen, const void *userdata,
-                    size_t userlen, Processor p) {
+void main_task(const void *args, size_t arglen, const void *userdata, size_t userlen,
+               Processor p)
+{
   TaskArgs task_args{.x = 7};
 
   /**
    *
    * Creating Events
    * ---------------
-   * In this program, we launch several tasks (reader_task_0 and reader_task_1) responsible
-   * for printing an integer value x. Each task launch is a non-blocking asynchronous call
-   * that returns an internal event handle. Once created, the Event handle can be passed around
-   * through task arguments or shared data structures and eventually used as a pre- or post-
-   * condition for operations to be executed on other nodes.
+   * In this program, we launch several tasks (reader_task_0 and reader_task_1)
+   * responsible for printing an integer value x. Each task launch is a non-blocking
+   * asynchronous call that returns an internal event handle. Once created, the Event
+   * handle can be passed around through task arguments or shared data structures and
+   * eventually used as a pre- or post- condition for operations to be executed on other
+   * nodes.
    *
-   * When a remote node makes the first reference to task_event, it allocates the same data
-   * structure, sets its state to untriggered, and adds the dependent operation to its own
-   * local waiter list. Then, an event subscription active message is sent to the owner node
-   * to indicate that the remote node is interested and should be added to the list of remote
-   * waiters, so it can be informed when task_event triggers. Any additional dependent operations
-   * on a remote node are added to the list of local waiters without requiring communication with
-   * the owner node. When task_event eventually triggers, the owner node notifies all local waiters
-   * and sends an event trigger message to each subscribed node on the list of remote waiters.
-   * If the owner node receives additional subscription messages after it has been triggered,
-   * it immediately responds to the new subscribers with a trigger message as well.
+   * When a remote node makes the first reference to task_event, it allocates the same
+   * data structure, sets its state to untriggered, and adds the dependent operation to
+   * its own local waiter list. Then, an event subscription active message is sent to the
+   * owner node to indicate that the remote node is interested and should be added to the
+   * list of remote waiters, so it can be informed when task_event triggers. Any
+   * additional dependent operations on a remote node are added to the list of local
+   * waiters without requiring communication with the owner node. When task_event
+   * eventually triggers, the owner node notifies all local waiters and sends an event
+   * trigger message to each subscribed node on the list of remote waiters. If the owner
+   * node receives additional subscription messages after it has been triggered, it
+   * immediately responds to the new subscribers with a trigger message as well.
    *
    * ---------------------------
    * A UserEvent is created explicitly by the application. It starts in an
@@ -128,23 +134,24 @@ void main_task(const void *args, size_t arglen, const void *userdata,
 
   std::vector<Event> events;
 
-
- /* Creating Control Dependencies
+  /* Creating Control Dependencies
    * -----------------------------
-   * We demonstrate how to establish a control dependency using events by making reader_task_1
-   * dependent on the completion of reader_task_0. We achieve this by passing reader_event0 to the
-   * task invocation procedure:
+   * We demonstrate how to establish a control dependency using events by making
+   * reader_task_1 dependent on the completion of reader_task_0. We achieve this by
+   * passing reader_event0 to the task invocation procedure:
    *
-   *   Event reader_event0 = p.spawn(READER_TASK_0, &task_args, sizeof(TaskArgs), user_event);
-   *   Event reader_event1 = p.spawn(READER_TASK_1, &task_args, sizeof(TaskArgs), reader_event0);
+   *   Event reader_event0 = p.spawn(READER_TASK_0, &task_args, sizeof(TaskArgs),
+   * user_event); Event reader_event1 = p.spawn(READER_TASK_1, &task_args,
+   * sizeof(TaskArgs), reader_event0);
    *
-   * Often, it is necessary to spawn multiple tasks simultaneously and express a collective wait
-   * using a single event handle. To illustrate this, the program runs num_tasks, stores the events
-   * produced by reader_task_1 into an events vector, and combines them by calling:
+   * Often, it is necessary to spawn multiple tasks simultaneously and express a
+   * collective wait using a single event handle. To illustrate this, the program runs
+   * num_tasks, stores the events produced by reader_task_1 into an events vector, and
+   * combines them by calling:
    *
    *   Event::merge_events(events).wait();
    */
-  for (size_t i = 0; i < ProgramConfig::num_tasks; i++) {
+  for(size_t i = 0; i < ProgramConfig::num_tasks; i++) {
     /**
      * READER_TASK_0 runs once user_event is triggered.
      */
@@ -164,20 +171,22 @@ void main_task(const void *args, size_t arglen, const void *userdata,
   /**
    * Triggering Events
    * -----------------
-   * An event can be triggered from any node, not necessarily the owner node. One common scenario
-   * in which this happens is with UserEvent. These are created and triggered from the application
-   * code, where we create user_event to start an operation. User events offer greater flexibility
-   * in building the event graph by allowing users to connect different parts of the graph
-   * independently. However, it is important to note that using user events carries the risk of
-   * creating cycles, which can cause the program to hang. Therefore, it is the user’s responsibility
-   * to avoid creating cycles while leveraging user events.
+   * An event can be triggered from any node, not necessarily the owner node. One common
+   * scenario in which this happens is with UserEvent. These are created and triggered
+   * from the application code, where we create user_event to start an operation. User
+   * events offer greater flexibility in building the event graph by allowing users to
+   * connect different parts of the graph independently. However, it is important to note
+   * that using user events carries the risk of creating cycles, which can cause the
+   * program to hang. Therefore, it is the user’s responsibility to avoid creating cycles
+   * while leveraging user events.
    *
-   * When a user_event is triggered on a node that does not own it, a trigger message is sent
-   * from the trigger node to the owner node, which then forwards the message to all other
-   * subscribed nodes. If the triggering node has any local waiters, it immediately notifies them
-   * without sending a message back to the owner node. Although triggering a remote event incurs
-   * a latency of at least two active message flight times, it limits the number of active messages
-   * required per event trigger to 2*N - 2, where N is the number of nodes interested in the event.
+   * When a user_event is triggered on a node that does not own it, a trigger message is
+   * sent from the trigger node to the owner node, which then forwards the message to all
+   * other subscribed nodes. If the triggering node has any local waiters, it immediately
+   * notifies them without sending a message back to the owner node. Although triggering a
+   * remote event incurs a latency of at least two active message flight times, it limits
+   * the number of active messages required per event trigger to 2*N - 2, where N is the
+   * number of nodes interested in the event.
    *
    */
   user_event.trigger();
@@ -191,7 +200,8 @@ void main_task(const void *args, size_t arglen, const void *userdata,
   Runtime::get_runtime().shutdown(Event::NO_EVENT, 0 /*success*/);
 }
 
-int main(int argc, const char **argv) {
+int main(int argc, const char **argv)
+{
   Runtime rt;
   rt.init(&argc, (char ***)&argv);
 
@@ -199,24 +209,21 @@ int main(int argc, const char **argv) {
                     .only_kind(Processor::LOC_PROC)
                     .first();
 
-  if (!p.exists()) {
+  if(!p.exists()) {
     p = Machine::ProcessorQuery(Machine::get_machine()).first();
   }
   assert(p.exists());
 
   Processor::register_task_by_kind(p.kind(), false /*!global*/, MAIN_TASK,
-                                   CodeDescriptor(main_task),
-                                   ProfilingRequestSet())
+                                   CodeDescriptor(main_task), ProfilingRequestSet())
       .external_wait();
 
   Processor::register_task_by_kind(p.kind(), false /*!global*/, READER_TASK_0,
-                                   CodeDescriptor(reader_task_0),
-                                   ProfilingRequestSet())
+                                   CodeDescriptor(reader_task_0), ProfilingRequestSet())
       .external_wait();
 
   Processor::register_task_by_kind(p.kind(), false /*!global*/, READER_TASK_1,
-                                   CodeDescriptor(reader_task_1),
-                                   ProfilingRequestSet())
+                                   CodeDescriptor(reader_task_1), ProfilingRequestSet())
       .external_wait();
 
   rt.collective_spawn(p, MAIN_TASK, 0, 0);

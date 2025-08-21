@@ -70,7 +70,7 @@
 #include "realm/id.h"
 #include <assert.h>
 
-    using namespace Realm;
+using namespace Realm;
 
 Logger log_app("app");
 
