@@ -20,6 +20,9 @@
 #include <string.h>
 #include <stdlib.h>
 #include <assert.h>
+#include "../test_utils.h"
+
+#define CHECK_REALM(expr) ASSERT_REALM(expr)
 
 static realm_status_t REALM_FNPTR retrieve_processor(realm_processor_t p, void *user_data)
 {
@@ -31,12 +34,5 @@ static realm_status_t REALM_FNPTR retrieve_processor(realm_processor_t p, void *
 static void realm_processor_query_first(realm_processor_query_t query,
                                         realm_processor_t *proc)
 {
-  realm_status_t status = realm_processor_query_iter(query, retrieve_processor, proc, 1);
-  assert(status == REALM_SUCCESS);
+  CHECK_REALM(realm_processor_query_iter(query, retrieve_processor, proc, 1));
 }
-
-#define CHECK_REALM(expr)                                                                \
-  do {                                                                                   \
-    realm_status_t _status = (expr);                                                     \
-    assert(_status == REALM_SUCCESS);                                                    \
-  } while(0)
