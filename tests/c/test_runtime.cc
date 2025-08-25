@@ -69,7 +69,7 @@ void REALM_FNPTR top_level_task(const void *args, size_t arglen, const void *use
   std::vector<realm_event_t> events(num_cpus, REALM_NO_EVENT);
   for(size_t i = 0; i < num_cpus; i++) {
     CHECK_REALM(realm_processor_spawn(runtime, cpu_proc_query_args.procs[i], HELLO_TASK,
-                                      0, 0, NULL, 0, 0, &events[i]));
+                                      0, 0, nullptr, 0, REALM_NO_EVENT, 0, &events[i]));
   }
   CHECK_REALM(realm_event_merge(runtime, events.data(), events.size(), &event, 0));
   CHECK_REALM(realm_event_wait(runtime, event, REALM_WAIT_INFINITE, nullptr));
@@ -84,8 +84,8 @@ void REALM_FNPTR top_level_task(const void *args, size_t arglen, const void *use
   assert(gpu_proc != REALM_NO_PROC);
 
   CHECK_REALM(
-      realm_processor_spawn(runtime, gpu_proc, HELLO_TASK, 0, 0, NULL, 0, 0, &event));
-  CHECK_REALM(realm_event_wait(runtime, event, REALM_WAIT_INFINITE, nullptr));
+      realm_processor_spawn(runtime, gpu_proc, HELLO_TASK, 0, 0, nullptr, 0, REALM_NO_EVENT, 0, &event));
+  CHECK_REALM(realm_event_wait(runtime, event, nullptr));
 #endif
 }
 

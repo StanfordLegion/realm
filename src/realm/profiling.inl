@@ -260,6 +260,20 @@ namespace Realm {
     return *this;
   }
 
+  inline ProfilingRequest &ProfilingRequest::add_measurements(const ProfilingMeasurementID *measurement_ids, size_t num_measurements)
+  {
+    static_assert(sizeof(::realm_profiling_measurement_id_t) ==
+                         sizeof(ProfilingMeasurementID),
+                         "C and C++ profiling measurement enums must have the same size");
+
+    static_assert(std::is_same<
+          std::underlying_type<realm_profiling_measurement_id_t>::type,
+          std::underlying_type<ProfilingMeasurementID>::type>::value,
+        "Underlying enum types must match");
+    requested_measurements.insert(measurement_ids, measurement_ids + num_measurements);
+    return *this;
+  }
+
   template <typename S>
   bool serialize(S &s, const ProfilingRequest &pr)
   {

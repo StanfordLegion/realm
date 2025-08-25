@@ -3846,7 +3846,7 @@ namespace Realm {
             ProfilingMeasurements::OperationCopyInfo::InstInfo{
                 instinfo_src_insts, instinfo_dst_insts, RegionInstance::NO_INST,
                 RegionInstance::NO_INST, instinfo_src_field_ids, instinfo_dst_field_ids,
-                0, 0, ProfilingMeasurements::OperationCopyInfo::REDUCE,
+                0, 0, ProfilingMeasurements::OperationCopyInfo::RequestType::REDUCE,
                 unsigned(pathlen)});
         fld_start += 1;
       } else if(srcs[i].field_id == FieldID(-1)) {
@@ -3926,7 +3926,8 @@ namespace Realm {
             ProfilingMeasurements::OperationCopyInfo::InstInfo{
                 instinfo_src_insts, instinfo_dst_insts, RegionInstance::NO_INST,
                 RegionInstance::NO_INST, instinfo_src_field_ids, instinfo_dst_field_ids,
-                0, 0, ProfilingMeasurements::OperationCopyInfo::FILL, unsigned(pathlen)});
+                0, 0, ProfilingMeasurements::OperationCopyInfo::RequestType::FILL,
+                unsigned(pathlen)});
         fld_start += 1;
       } else {
         src_fields[fld_start] = FieldInfo{srcs[i].field_id, srcs[i].subfield_offset,
@@ -4059,7 +4060,8 @@ namespace Realm {
                 ProfilingMeasurements::OperationCopyInfo::InstInfo{
                     instinfo_src_insts, instinfo_dst_insts, RegionInstance::NO_INST,
                     RegionInstance::NO_INST, src_field_ids, dst_field_ids, 0, 0,
-                    ProfilingMeasurements::OperationCopyInfo::COPY, unsigned(pathlen)});
+                    ProfilingMeasurements::OperationCopyInfo::RequestType::COPY,
+                    unsigned(pathlen)});
             fld_start += num_fields;
           } else {
             // scatter
@@ -4087,7 +4089,7 @@ namespace Realm {
                     instinfo_src_insts, instinfo_dst_insts, RegionInstance::NO_INST,
                     scatter_info->get_pointer_instance(), instinfo_src_field_ids,
                     instinfo_dst_field_ids, 0, scatter_info->get_field(),
-                    ProfilingMeasurements::OperationCopyInfo::COPY,
+                    ProfilingMeasurements::OperationCopyInfo::RequestType::COPY,
                     unsigned(graph.xd_nodes.size() - prev_nodes)});
             fld_start += 1;
           }
@@ -4120,7 +4122,7 @@ namespace Realm {
                     gather_info->get_pointer_instance(), RegionInstance::NO_INST,
                     instinfo_src_field_ids, instinfo_dst_field_ids,
                     gather_info->get_field(), 0,
-                    ProfilingMeasurements::OperationCopyInfo::COPY,
+                    ProfilingMeasurements::OperationCopyInfo::RequestType::COPY,
                     unsigned(graph.xd_nodes.size() - prev_nodes)});
             fld_start += 1;
           } else {
@@ -4172,7 +4174,7 @@ namespace Realm {
                     scatter_info->get_pointer_instance(), instinfo_src_field_ids,
                     instinfo_dst_field_ids, gather_info->get_field(),
                     scatter_info->get_field(),
-                    ProfilingMeasurements::OperationCopyInfo::COPY,
+                    ProfilingMeasurements::OperationCopyInfo::RequestType::COPY,
                     unsigned(graph.xd_nodes.size() - prev_nodes)});
             fld_start += 1;
           }

@@ -37,32 +37,30 @@ namespace Realm {
   //  these IDs directly
   enum ProfilingMeasurementID
   {
-    PMID_OP_STATUS,            // completion status of operation
-    PMID_OP_STATUS_ABNORMAL,   // completion status only if abnormal
-    PMID_OP_BACKTRACE,         // backtrace of a failed operation
-    PMID_OP_TIMELINE,          // when task was ready, started, completed
-    PMID_OP_EVENT_WAITS,       // intervals when operation is waiting on events
-    PMID_OP_PROC_USAGE,        // processor used by task
-    PMID_OP_MEM_USAGE,         // memories used by a copy
-    PMID_INST_STATUS,          // "completion" status of an instance
-    PMID_INST_STATUS_ABNORMAL, // completion status only if abnormal
-    PMID_INST_ALLOCRESULT,     // success/failure of instance allocation
-    PMID_INST_TIMELINE,        // timeline for a physical instance
-    PMID_INST_MEM_USAGE,       // memory and size used by an instance
-    PMID_PCTRS_CACHE_L1I,      // L1 I$ performance counters
-    PMID_PCTRS_CACHE_L1D,      // L1 D$ performance counters
-    PMID_PCTRS_CACHE_L2,       // L2 D$ performance counters
-    PMID_PCTRS_CACHE_L3,       // L3 D$ performance counters
-    PMID_PCTRS_IPC,            // instructions/clocks performance counters
-    PMID_PCTRS_TLB,            // TLB miss counters
-    PMID_PCTRS_BP,             // branch predictor performance counters
-    PMID_OP_TIMELINE_GPU,      // when a task was started and completed on the GPU
-    PMID_OP_SUBGRAPH_INFO,     // identifying info for containing subgraph(s)
-    PMID_OP_FINISH_EVENT,      // finish event for an operation
-    PMID_OP_COPY_INFO,         // copy transfer details
-    // as the name suggests, this should always be last, allowing apps/runtimes
-    // sitting on top of Realm to use some of the ID space
-    PMID_REALM_LAST = 10000,
+    PMID_OP_STATUS = ::PMID_OP_STATUS,
+    PMID_OP_STATUS_ABNORMAL = ::PMID_OP_STATUS_ABNORMAL,
+    PMID_OP_BACKTRACE = ::PMID_OP_BACKTRACE,
+    PMID_OP_TIMELINE = ::PMID_OP_TIMELINE,
+    PMID_OP_EVENT_WAITS = ::PMID_OP_EVENT_WAITS,
+    PMID_OP_PROC_USAGE = ::PMID_OP_PROC_USAGE,
+    PMID_OP_MEM_USAGE = ::PMID_OP_MEM_USAGE,
+    PMID_INST_STATUS = ::PMID_INST_STATUS,
+    PMID_INST_STATUS_ABNORMAL = ::PMID_INST_STATUS_ABNORMAL,
+    PMID_INST_ALLOCRESULT = ::PMID_INST_ALLOCRESULT,
+    PMID_INST_TIMELINE = ::PMID_INST_TIMELINE,
+    PMID_INST_MEM_USAGE = ::PMID_INST_MEM_USAGE,
+    PMID_PCTRS_CACHE_L1I = ::PMID_PCTRS_CACHE_L1I,
+    PMID_PCTRS_CACHE_L1D = ::PMID_PCTRS_CACHE_L1D,
+    PMID_PCTRS_CACHE_L2 = ::PMID_PCTRS_CACHE_L2,
+    PMID_PCTRS_CACHE_L3 = ::PMID_PCTRS_CACHE_L3,
+    PMID_PCTRS_IPC = ::PMID_PCTRS_IPC,
+    PMID_PCTRS_TLB = ::PMID_PCTRS_TLB,
+    PMID_PCTRS_BP = ::PMID_PCTRS_BP,
+    PMID_OP_TIMELINE_GPU = ::PMID_OP_TIMELINE_GPU,
+    PMID_OP_SUBGRAPH_INFO = ::PMID_OP_SUBGRAPH_INFO,
+    PMID_OP_FINISH_EVENT = ::PMID_OP_FINISH_EVENT,
+    PMID_OP_COPY_INFO = ::PMID_OP_COPY_INFO,
+    PMID_REALM_LAST = ::PMID_REALM_LAST
   };
 
   namespace ProfilingMeasurements {
@@ -190,9 +188,9 @@ namespace Realm {
       // for each request create this
       enum RequestType
       {
-        FILL,
-        REDUCE,
-        COPY,
+        FILL = REALM_COPY_INFO_REQUEST_TYPE_FILL,
+        REDUCE = REALM_COPY_INFO_REQUEST_TYPE_REDUCE,
+        COPY = REALM_COPY_INFO_REQUEST_TYPE_COPY,
       };
 
       struct InstInfo {
@@ -341,6 +339,8 @@ namespace Realm {
     ProfilingRequest &add_measurement(ProfilingMeasurementID measurement_id);
     ProfilingRequest &
     add_measurements(const std::set<ProfilingMeasurementID> &measurement_ids);
+    ProfilingRequest &add_measurements(const ProfilingMeasurementID *measurement_ids,
+                                       size_t num_measurements);
 
     template <typename S>
     static ProfilingRequest *deserialize_new(S &s);
@@ -410,6 +410,8 @@ namespace Realm {
 
   protected:
     void send_response(const ProfilingRequest &pr) const;
+
+    void dump_to_buffer(const ProfilingRequest &pr, std::vector<char> &buffer) const;
 
     // in order to efficiently send responses as soon as we have all the requested
     // measurements, we

@@ -243,6 +243,52 @@ check_region_instance_validity(realm_region_instance_t instance)
   return REALM_SUCCESS;
 }
 
+[[nodiscard]] static realm_status_t
+check_profiling_response_validity(const realm_profiling_response_t *response)
+{
+  if(response == nullptr) {
+    return REALM_PROFILING_ERROR_INVALID_RESPONSE;
+  }
+  if(response->data == nullptr || response->data_size == 0) {
+    return REALM_PROFILING_ERROR_INVALID_RESPONSE;
+  }
+  // the buffer contains at least the measurement count and the user data offset
+  if(response->data_size < 2 * sizeof(int)) {
+    return REALM_PROFILING_ERROR_INVALID_RESPONSE;
+  }
+  return REALM_SUCCESS;
+}
+
+[[nodiscard]] static realm_status_t convert_realm_profiling_request_set_c_to_cxx(
+    const realm_profiling_request_t *profiling_requests, size_t num_profiling_requests,
+    Realm::ProfilingRequestSet &prs_cxx)
+{
+  if(profiling_requests == nullptr && num_profiling_requests != 0) {
+    return REALM_PROFILING_ERROR_INVALID_REQUEST_SET;
+  }
+  for(size_t i = 0; i < num_profiling_requests; i++) {
+    const realm_profiling_request_t &request_c = profiling_requests[i];
+    if(check_processor_validity(request_c.response_proc) != REALM_SUCCESS) {
+      return REALM_PROCESSOR_ERROR_INVALID_PROCESSOR;
+    }
+    if(request_c.measurement_ids == nullptr || request_c.num_measurements == 0) {
+      return REALM_PROFILING_ERROR_INVALID_MEASUREMENT;
+    }
+  }
+
+  for(size_t i = 0; i < num_profiling_requests; i++) {
+    const realm_profiling_request_t &request_c = profiling_requests[i];
+    bool report_if_empty = request_c.report_if_empty != 0;
+    Realm::ProfilingRequest &request_cxx = prs_cxx.add_request(
+        Realm::Processor(request_c.response_proc), request_c.response_task_id,
+        request_c.payload, request_c.payload_size, request_c.priority, report_if_empty);
+    request_cxx.add_measurements(reinterpret_cast<const Realm::ProfilingMeasurementID *>(
+                                     request_c.measurement_ids),
+                                 request_c.num_measurements);
+  }
+  return REALM_SUCCESS;
+}
+
 // Public C API starts here
 
 realm_status_t realm_get_library_version(const char **version)
@@ -501,9 +547,10 @@ realm_status_t realm_processor_register_task_by_kind(
 realm_status_t realm_processor_spawn(realm_runtime_t runtime,
                                      realm_processor_t target_proc,
                                      realm_task_func_id_t task_id, const void *args,
-                                     size_t arglen, realm_profiling_request_set_t prs,
-                                     realm_event_t wait_on, int priority,
-                                     realm_event_t *event)
+                                     size_t arglen,
+                                     const realm_profiling_request_t *profiling_requests,
+                                     size_t num_profiling_requests, realm_event_t wait_on,
+                                     int priority, realm_event_t *event)
 {
   Realm::RuntimeImpl *runtime_impl = nullptr;
   realm_status_t status = check_runtime_validity_and_assign(runtime, runtime_impl);
@@ -518,17 +565,24 @@ realm_status_t realm_processor_spawn(realm_runtime_t runtime,
   if(status != REALM_SUCCESS) {
     return status;
   }
+
+  Realm::ProfilingRequestSet prs_cxx;
+  if(profiling_requests != nullptr) {
+    status = convert_realm_profiling_request_set_c_to_cxx(
+        profiling_requests, num_profiling_requests, prs_cxx);
+    if(status != REALM_SUCCESS) {
+      return status;
+    }
+  }
+
   // TODO: check the validation of the task id for local processor
   Realm::ProcessorImpl *proc_impl =
       runtime_impl->get_processor_impl(Realm::Processor(target_proc));
 
   Realm::GenEventImpl *finish_event = Realm::GenEventImpl::create_genevent(runtime_impl);
   Realm::Event cxx_event = finish_event->current_event();
-  const Realm::ProfilingRequestSet *prs_cxx = &Realm::empty_prs_cxx;
-  if(prs != nullptr) {
-    prs_cxx = reinterpret_cast<const Realm::ProfilingRequestSet *>(prs);
-  }
-  proc_impl->spawn_task(task_id, args, arglen, *prs_cxx, Realm::Event(wait_on),
+
+  proc_impl->spawn_task(task_id, args, arglen, prs_cxx, Realm::Event(wait_on),
                         finish_event, Realm::ID(cxx_event).event_generation(), priority);
   *event = cxx_event;
   return REALM_SUCCESS;
@@ -1176,8 +1230,8 @@ public:
 realm_status_t realm_region_instance_create(
     realm_runtime_t runtime,
     const realm_region_instance_create_params_t *instance_creation_params,
-    realm_profiling_request_set_t prs, realm_event_t wait_on,
-    realm_region_instance_t *instance, realm_event_t *event)
+    const realm_profiling_request_t *profiling_requests, size_t num_profiling_requests,
+    realm_event_t wait_on, realm_region_instance_t *instance, realm_event_t *event)
 {
   Realm::RuntimeImpl *runtime_impl = nullptr;
   realm_status_t status = check_runtime_validity_and_assign(runtime, runtime_impl);
@@ -1199,9 +1253,13 @@ realm_status_t realm_region_instance_create(
     return REALM_REGION_INSTANCE_ERROR_INVALID_EVENT;
   }
 
-  const Realm::ProfilingRequestSet *prs_cxx = &Realm::empty_prs_cxx;
-  if(prs != nullptr) {
-    prs_cxx = reinterpret_cast<const Realm::ProfilingRequestSet *>(prs);
+  Realm::ProfilingRequestSet prs_cxx;
+  if(profiling_requests != nullptr) {
+    status = convert_realm_profiling_request_set_c_to_cxx(
+        profiling_requests, num_profiling_requests, prs_cxx);
+    if(status != REALM_SUCCESS) {
+      return status;
+    }
   }
 
   Realm::RegionInstance inst = Realm::RegionInstance::NO_INST;
@@ -1220,7 +1278,7 @@ realm_status_t realm_region_instance_create(
         upper_bound_long_long, instance_creation_params->field_ids,
         instance_creation_params->field_sizes, instance_creation_params->num_fields,
         instance_creation_params->block_size, instance_creation_params->external_resource,
-        *prs_cxx, Realm::Event(wait_on), inst, out_event);
+        prs_cxx, Realm::Event(wait_on), inst, out_event);
     break;
   }
   case REALM_COORD_TYPE_INT:
@@ -1234,8 +1292,8 @@ realm_status_t realm_region_instance_create(
         Realm::Memory(instance_creation_params->memory), lower_bound_int, upper_bound_int,
         instance_creation_params->field_ids, instance_creation_params->field_sizes,
         instance_creation_params->num_fields, instance_creation_params->block_size,
-        instance_creation_params->external_resource, *prs_cxx, Realm::Event(wait_on),
-        inst, out_event);
+        instance_creation_params->external_resource, prs_cxx, Realm::Event(wait_on), inst,
+        out_event);
     break;
   }
   default:
@@ -1274,8 +1332,8 @@ public:
 realm_status_t realm_region_instance_copy(
     realm_runtime_t runtime,
     const realm_region_instance_copy_params_t *instance_copy_params,
-    realm_profiling_request_set_t prs, realm_event_t wait_on, int priority,
-    realm_event_t *event)
+    const realm_profiling_request_t *profiling_requests, size_t num_profiling_requests,
+    realm_event_t wait_on, int priority, realm_event_t *event)
 {
   Realm::RuntimeImpl *runtime_impl = nullptr;
   realm_status_t status = check_runtime_validity_and_assign(runtime, runtime_impl);
@@ -1307,9 +1365,13 @@ realm_status_t realm_region_instance_copy(
                           instance_copy_params->dsts[i].size);
   }
 
-  const Realm::ProfilingRequestSet *prs_cxx = &Realm::empty_prs_cxx;
-  if(prs != nullptr) {
-    prs_cxx = reinterpret_cast<const Realm::ProfilingRequestSet *>(prs);
+  Realm::ProfilingRequestSet prs_cxx;
+  if(profiling_requests != nullptr) {
+    status = convert_realm_profiling_request_set_c_to_cxx(
+        profiling_requests, num_profiling_requests, prs_cxx);
+    if(status != REALM_SUCCESS) {
+      return status;
+    }
   }
 
   Realm::Event out_event = Realm::Event::NO_EVENT;
@@ -1325,7 +1387,7 @@ realm_status_t realm_region_instance_copy(
         instance_copy_params->num_dims, RealmRegionInstanceCopy(), runtime_impl,
         std::move(srcs_vec), std::move(dsts_vec), instance_copy_params->num_fields,
         lower_bound_long_long, upper_bound_long_long, instance_copy_params->num_dims,
-        instance_copy_params->sparsity_map, *prs_cxx, Realm::Event(wait_on), priority,
+        instance_copy_params->sparsity_map, prs_cxx, Realm::Event(wait_on), priority,
         out_event);
     break;
   }
@@ -1339,7 +1401,7 @@ realm_status_t realm_region_instance_copy(
         instance_copy_params->num_dims, RealmRegionInstanceCopy(), runtime_impl,
         std::move(srcs_vec), std::move(dsts_vec), instance_copy_params->num_fields,
         lower_bound_int, upper_bound_int, instance_copy_params->num_dims,
-        instance_copy_params->sparsity_map, *prs_cxx, Realm::Event(wait_on), priority,
+        instance_copy_params->sparsity_map, prs_cxx, Realm::Event(wait_on), priority,
         out_event);
     break;
   }
@@ -1551,4 +1613,356 @@ realm_status_t realm_external_resource_suggested_memory(
   }
   *memory = Realm::Memory(external_resource_cxx->suggested_memory());
   return REALM_SUCCESS;
+}
+
+// Profiling API
+
+realm_status_t
+realm_profiling_response_get_measurement(const realm_profiling_response_t *response,
+                                         realm_profiling_measurement_id_t measurement_id,
+                                         void *result, size_t *result_count)
+{
+  realm_status_t status = check_profiling_response_validity(response);
+  if(status != REALM_SUCCESS) {
+    return status;
+  }
+  if(measurement_id < 0 || measurement_id > PMID_REALM_LAST) {
+    return REALM_PROFILING_ERROR_INVALID_MEASUREMENT;
+  }
+
+  Realm::ProfilingResponse response_cxx(static_cast<const char *>(response->data),
+                                        response->data_size);
+
+  if(measurement_id == PMID_OP_BACKTRACE_PCS) {
+    if(result_count == nullptr) {
+      bool has_measurement =
+          response_cxx
+              .has_measurement<Realm::ProfilingMeasurements::OperationBacktrace>();
+      status =
+          has_measurement ? REALM_SUCCESS : REALM_PROFILING_ERROR_INVALID_MEASUREMENT;
+    } else {
+      Realm::ProfilingMeasurements::OperationBacktrace *op_backtrace_cxx =
+          response_cxx
+              .get_measurement<Realm::ProfilingMeasurements::OperationBacktrace>();
+      *result_count = op_backtrace_cxx->pcs.size();
+      if(result != nullptr) {
+        memcpy(result, op_backtrace_cxx->pcs.data(),
+               op_backtrace_cxx->pcs.size() * sizeof(uintptr_t));
+      }
+      delete op_backtrace_cxx;
+    }
+  } else if(measurement_id == PMID_OP_BACKTRACE_SYMBOLS) {
+    if(result_count == nullptr) {
+      bool has_measurement =
+          response_cxx
+              .has_measurement<Realm::ProfilingMeasurements::OperationBacktrace>();
+      status =
+          has_measurement ? REALM_SUCCESS : REALM_PROFILING_ERROR_INVALID_MEASUREMENT;
+    } else {
+      Realm::ProfilingMeasurements::OperationBacktrace *op_backtrace_cxx =
+          response_cxx
+              .get_measurement<Realm::ProfilingMeasurements::OperationBacktrace>();
+      *result_count = op_backtrace_cxx->symbols.size();
+      if(result != nullptr) {
+        realm_profiling_measurement_operation_backtrace_symbol_t *symbol_result =
+            reinterpret_cast<realm_profiling_measurement_operation_backtrace_symbol_t *>(
+                result);
+        for(size_t i = 0; i < op_backtrace_cxx->symbols.size(); i++) {
+          if(op_backtrace_cxx->symbols[i].size() > PMID_OP_BACKTRACE_SYMBOLS_MAX_LENGTH) {
+            log_realm_c.error("Symbol length is too long, please increase "
+                              "PMID_OP_BACKTRACE_SYMBOLS_MAX_LENGTH");
+            return REALM_PROFILING_ERROR_INVALID_MEASUREMENT;
+          }
+          memcpy(symbol_result[i].symbol, op_backtrace_cxx->symbols[i].c_str(),
+                 op_backtrace_cxx->symbols[i].size());
+          symbol_result[i].symbol[op_backtrace_cxx->symbols[i].size()] = '\0';
+        }
+      }
+      delete op_backtrace_cxx;
+    }
+  } else if(measurement_id == PMID_OP_TIMELINE) {
+    if(result_count == nullptr) {
+      bool has_measurement =
+          response_cxx.has_measurement<Realm::ProfilingMeasurements::OperationTimeline>();
+      status =
+          has_measurement ? REALM_SUCCESS : REALM_PROFILING_ERROR_INVALID_MEASUREMENT;
+    } else {
+      Realm::ProfilingMeasurements::OperationTimeline *op_timeline_cxx =
+          response_cxx.get_measurement<Realm::ProfilingMeasurements::OperationTimeline>();
+      realm_profiling_measurement_operation_timeline_t *op_timeline_result =
+          reinterpret_cast<realm_profiling_measurement_operation_timeline_t *>(result);
+      op_timeline_result->create_time = op_timeline_cxx->create_time;
+      op_timeline_result->ready_time = op_timeline_cxx->ready_time;
+      op_timeline_result->start_time = op_timeline_cxx->start_time;
+      op_timeline_result->end_time = op_timeline_cxx->end_time;
+      op_timeline_result->complete_time = op_timeline_cxx->complete_time;
+      delete op_timeline_cxx;
+    }
+  }
+
+  else if(measurement_id == PMID_OP_EVENT_WAITS) {
+    if(result_count == nullptr) {
+      bool has_measurement =
+          response_cxx
+              .has_measurement<Realm::ProfilingMeasurements::OperationEventWaits>();
+      status =
+          has_measurement ? REALM_SUCCESS : REALM_PROFILING_ERROR_INVALID_MEASUREMENT;
+    } else {
+      Realm::ProfilingMeasurements::OperationEventWaits *op_waits_cxx =
+          response_cxx
+              .get_measurement<Realm::ProfilingMeasurements::OperationEventWaits>();
+      *result_count = op_waits_cxx->intervals.size();
+      if(result != nullptr) {
+        realm_profiling_measurement_operation_event_wait_interval_t
+            *wait_interval_result = reinterpret_cast<
+                realm_profiling_measurement_operation_event_wait_interval_t *>(result);
+        for(size_t i = 0; i < op_waits_cxx->intervals.size(); i++) {
+          Realm::ProfilingMeasurements::OperationEventWaits::WaitInterval &wait_interval =
+              op_waits_cxx->intervals[i];
+          wait_interval_result[i].wait_start = wait_interval.wait_start;
+          wait_interval_result[i].wait_ready = wait_interval.wait_ready;
+          wait_interval_result[i].wait_end = wait_interval.wait_end;
+          wait_interval_result[i].wait_event = wait_interval.wait_event;
+        }
+      }
+      delete op_waits_cxx;
+    }
+  }
+
+  else if(measurement_id == PMID_OP_PROC_USAGE) {
+    if(result_count == nullptr) {
+      bool has_measurement =
+          response_cxx
+              .has_measurement<Realm::ProfilingMeasurements::OperationProcessorUsage>();
+      status =
+          has_measurement ? REALM_SUCCESS : REALM_PROFILING_ERROR_INVALID_MEASUREMENT;
+    } else {
+      Realm::ProfilingMeasurements::OperationProcessorUsage *op_proc_usage_cxx =
+          response_cxx
+              .get_measurement<Realm::ProfilingMeasurements::OperationProcessorUsage>();
+      realm_profiling_measurement_operation_processor_usage_t *op_proc_usage_result =
+          reinterpret_cast<realm_profiling_measurement_operation_processor_usage_t *>(
+              result);
+      op_proc_usage_result->proc = op_proc_usage_cxx->proc.id;
+      delete op_proc_usage_cxx;
+    }
+  }
+
+  else if(measurement_id == PMID_OP_MEM_USAGE) {
+    if(result_count == nullptr) {
+      bool has_measurement =
+          response_cxx
+              .has_measurement<Realm::ProfilingMeasurements::OperationMemoryUsage>();
+      status =
+          has_measurement ? REALM_SUCCESS : REALM_PROFILING_ERROR_INVALID_MEASUREMENT;
+    } else {
+      Realm::ProfilingMeasurements::OperationMemoryUsage *op_mem_usage_cxx =
+          response_cxx
+              .get_measurement<Realm::ProfilingMeasurements::OperationMemoryUsage>();
+      realm_profiling_measurement_operation_memory_usage_t *op_mem_usage_result =
+          reinterpret_cast<realm_profiling_measurement_operation_memory_usage_t *>(
+              result);
+      op_mem_usage_result->source = op_mem_usage_cxx->source.id;
+      op_mem_usage_result->target = op_mem_usage_cxx->target.id;
+      op_mem_usage_result->size = op_mem_usage_cxx->size;
+      delete op_mem_usage_cxx;
+    }
+  }
+
+  else if(measurement_id == PMID_INST_TIMELINE) {
+    if(result_count == nullptr) {
+      bool has_measurement =
+          response_cxx.has_measurement<Realm::ProfilingMeasurements::InstanceTimeline>();
+      status =
+          has_measurement ? REALM_SUCCESS : REALM_PROFILING_ERROR_INVALID_MEASUREMENT;
+    } else {
+      Realm::ProfilingMeasurements::InstanceTimeline *inst_timeline_cxx =
+          response_cxx.get_measurement<Realm::ProfilingMeasurements::InstanceTimeline>();
+      realm_profiling_measurement_instance_timeline_t *inst_timeline_result =
+          reinterpret_cast<realm_profiling_measurement_instance_timeline_t *>(result);
+      inst_timeline_result->instance = inst_timeline_cxx->instance.id;
+      inst_timeline_result->create_time = inst_timeline_cxx->create_time;
+      inst_timeline_result->ready_time = inst_timeline_cxx->ready_time;
+      inst_timeline_result->delete_time = inst_timeline_cxx->delete_time;
+      delete inst_timeline_cxx;
+    }
+  }
+
+  else if(measurement_id == PMID_INST_MEM_USAGE) {
+    if(result_count == nullptr) {
+      bool has_measurement =
+          response_cxx
+              .has_measurement<Realm::ProfilingMeasurements::InstanceMemoryUsage>();
+      status =
+          has_measurement ? REALM_SUCCESS : REALM_PROFILING_ERROR_INVALID_MEASUREMENT;
+    } else {
+      Realm::ProfilingMeasurements::InstanceMemoryUsage *inst_mem_usage_cxx =
+          response_cxx
+              .get_measurement<Realm::ProfilingMeasurements::InstanceMemoryUsage>();
+      realm_profiling_measurement_instance_memory_usage_t *inst_mem_usage_result =
+          reinterpret_cast<realm_profiling_measurement_instance_memory_usage_t *>(result);
+      inst_mem_usage_result->instance = inst_mem_usage_cxx->instance.id;
+      inst_mem_usage_result->memory = inst_mem_usage_cxx->memory.id;
+      inst_mem_usage_result->bytes = inst_mem_usage_cxx->bytes;
+      delete inst_mem_usage_cxx;
+    }
+  }
+
+  else if(measurement_id == PMID_OP_TIMELINE_GPU) {
+    if(result_count == nullptr) {
+      bool has_measurement =
+          response_cxx
+              .has_measurement<Realm::ProfilingMeasurements::OperationTimelineGPU>();
+      status =
+          has_measurement ? REALM_SUCCESS : REALM_PROFILING_ERROR_INVALID_MEASUREMENT;
+    } else {
+      Realm::ProfilingMeasurements::OperationTimelineGPU *op_timeline_gpu_cxx =
+          response_cxx
+              .get_measurement<Realm::ProfilingMeasurements::OperationTimelineGPU>();
+      realm_profiling_measurement_operation_timeline_gpu_t *op_timeline_gpu_result =
+          reinterpret_cast<realm_profiling_measurement_operation_timeline_gpu_t *>(
+              result);
+      op_timeline_gpu_result->start_time = op_timeline_gpu_cxx->start_time;
+      op_timeline_gpu_result->end_time = op_timeline_gpu_cxx->end_time;
+      delete op_timeline_gpu_cxx;
+    }
+  }
+
+  else if(measurement_id == PMID_OP_COPY_INFO) {
+    if(result_count == nullptr) {
+      bool has_measurement =
+          response_cxx.has_measurement<Realm::ProfilingMeasurements::OperationCopyInfo>();
+      status =
+          has_measurement ? REALM_SUCCESS : REALM_PROFILING_ERROR_INVALID_MEASUREMENT;
+    } else {
+      Realm::ProfilingMeasurements::OperationCopyInfo *copy_info_cxx =
+          response_cxx.get_measurement<Realm::ProfilingMeasurements::OperationCopyInfo>();
+      *result_count = copy_info_cxx->inst_info.size();
+      if(result != nullptr) {
+        realm_profiling_measurement_operation_copy_info_inst_info_t *inst_info_result =
+            reinterpret_cast<
+                realm_profiling_measurement_operation_copy_info_inst_info_t *>(result);
+        for(size_t i = 0; i < copy_info_cxx->inst_info.size(); i++) {
+          inst_info_result[i].src_indirection_inst =
+              copy_info_cxx->inst_info[i].src_indirection_inst.id;
+          inst_info_result[i].dst_indirection_inst =
+              copy_info_cxx->inst_info[i].dst_indirection_inst.id;
+          inst_info_result[i].src_indirection_field =
+              copy_info_cxx->inst_info[i].src_indirection_field;
+          inst_info_result[i].dst_indirection_field =
+              copy_info_cxx->inst_info[i].dst_indirection_field;
+          inst_info_result[i].request_type =
+              static_cast<realm_profiling_measurement_operation_copy_info_request_type_t>(
+                  copy_info_cxx->inst_info[i].request_type);
+          inst_info_result[i].num_hops = copy_info_cxx->inst_info[i].num_hops;
+        }
+      }
+      delete copy_info_cxx;
+    }
+  }
+
+  else if(measurement_id >= PMID_OP_COPY_INFO_SRC_INST &&
+          measurement_id < PMID_OP_COPY_INFO_DST_INST) {
+    if(result_count == nullptr) {
+      bool has_measurement =
+          response_cxx.has_measurement<Realm::ProfilingMeasurements::OperationCopyInfo>();
+      status =
+          has_measurement ? REALM_SUCCESS : REALM_PROFILING_ERROR_INVALID_MEASUREMENT;
+    } else {
+      Realm::ProfilingMeasurements::OperationCopyInfo *copy_info_cxx =
+          response_cxx.get_measurement<Realm::ProfilingMeasurements::OperationCopyInfo>();
+      int index = measurement_id - PMID_OP_COPY_INFO_SRC_INST;
+      if(index < 0 || static_cast<size_t>(index) >= copy_info_cxx->inst_info.size()) {
+        return REALM_PROFILING_ERROR_INVALID_MEASUREMENT;
+      }
+      *result_count = copy_info_cxx->inst_info[index].src_insts.size();
+      if(result != nullptr) {
+        Realm::ProfilingMeasurements::OperationCopyInfo::InstInfo *inst_info_cxx =
+            copy_info_cxx->inst_info.data();
+        memcpy(result, inst_info_cxx[index].src_insts.data(),
+               inst_info_cxx[index].src_insts.size() * sizeof(Realm::RegionInstance));
+      }
+      delete copy_info_cxx;
+    }
+  }
+
+  else if(measurement_id >= PMID_OP_COPY_INFO_DST_INST &&
+          measurement_id < PMID_OP_COPY_INFO_SRC_FIELD) {
+    if(result_count == nullptr) {
+      bool has_measurement =
+          response_cxx.has_measurement<Realm::ProfilingMeasurements::OperationCopyInfo>();
+      status =
+          has_measurement ? REALM_SUCCESS : REALM_PROFILING_ERROR_INVALID_MEASUREMENT;
+    } else {
+      Realm::ProfilingMeasurements::OperationCopyInfo *copy_info_cxx =
+          response_cxx.get_measurement<Realm::ProfilingMeasurements::OperationCopyInfo>();
+      int index = measurement_id - PMID_OP_COPY_INFO_DST_INST;
+      if(index < 0 || static_cast<size_t>(index) >= copy_info_cxx->inst_info.size()) {
+        return REALM_PROFILING_ERROR_INVALID_MEASUREMENT;
+      }
+      *result_count = copy_info_cxx->inst_info[index].dst_insts.size();
+      if(result != nullptr) {
+        Realm::ProfilingMeasurements::OperationCopyInfo::InstInfo *inst_info_cxx =
+            copy_info_cxx->inst_info.data();
+        memcpy(result, inst_info_cxx[index].dst_insts.data(),
+               inst_info_cxx[index].dst_insts.size() * sizeof(Realm::RegionInstance));
+      }
+      delete copy_info_cxx;
+    }
+  }
+
+  else if(measurement_id >= PMID_OP_COPY_INFO_SRC_FIELD &&
+          measurement_id < PMID_OP_COPY_INFO_DST_FIELD) {
+    if(result_count == nullptr) {
+      bool has_measurement =
+          response_cxx.has_measurement<Realm::ProfilingMeasurements::OperationCopyInfo>();
+      status =
+          has_measurement ? REALM_SUCCESS : REALM_PROFILING_ERROR_INVALID_MEASUREMENT;
+    } else {
+      Realm::ProfilingMeasurements::OperationCopyInfo *copy_info_cxx =
+          response_cxx.get_measurement<Realm::ProfilingMeasurements::OperationCopyInfo>();
+      int index = measurement_id - PMID_OP_COPY_INFO_SRC_FIELD;
+      if(index < 0 || static_cast<size_t>(index) >= copy_info_cxx->inst_info.size()) {
+        return REALM_PROFILING_ERROR_INVALID_MEASUREMENT;
+      }
+      *result_count = copy_info_cxx->inst_info[index].src_fields.size();
+      if(result != nullptr) {
+        Realm::ProfilingMeasurements::OperationCopyInfo::InstInfo *inst_info_cxx =
+            copy_info_cxx->inst_info.data();
+        memcpy(result, inst_info_cxx[index].src_fields.data(),
+               inst_info_cxx[index].src_fields.size() * sizeof(Realm::FieldID));
+      }
+      delete copy_info_cxx;
+    }
+  }
+
+  else if(measurement_id >= PMID_OP_COPY_INFO_DST_FIELD &&
+          measurement_id < PMID_REALM_LAST) {
+    if(result_count == nullptr) {
+      bool has_measurement =
+          response_cxx.has_measurement<Realm::ProfilingMeasurements::OperationCopyInfo>();
+      status =
+          has_measurement ? REALM_SUCCESS : REALM_PROFILING_ERROR_INVALID_MEASUREMENT;
+    } else {
+      Realm::ProfilingMeasurements::OperationCopyInfo *copy_info_cxx =
+          response_cxx.get_measurement<Realm::ProfilingMeasurements::OperationCopyInfo>();
+      int index = measurement_id - PMID_OP_COPY_INFO_DST_FIELD;
+      if(index < 0 || static_cast<size_t>(index) >= copy_info_cxx->inst_info.size()) {
+        return REALM_PROFILING_ERROR_INVALID_MEASUREMENT;
+      }
+      *result_count = copy_info_cxx->inst_info[index].dst_fields.size();
+      if(result != nullptr) {
+        Realm::ProfilingMeasurements::OperationCopyInfo::InstInfo *inst_info_cxx =
+            copy_info_cxx->inst_info.data();
+        memcpy(result, inst_info_cxx[index].dst_fields.data(),
+               inst_info_cxx[index].dst_fields.size() * sizeof(Realm::FieldID));
+      }
+      delete copy_info_cxx;
+    }
+  }
+
+  else {
+    status = REALM_PROFILING_ERROR_INVALID_MEASUREMENT;
+  }
+  return status;
 }

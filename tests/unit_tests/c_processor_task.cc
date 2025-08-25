@@ -117,7 +117,7 @@ TEST_F(CProcessorTaskTest, SpawnNullRuntime)
 {
   realm_event_t event;
   realm_status_t status = realm_processor_spawn(nullptr, proc_impl->me, 0, nullptr, 0,
-                                                nullptr, REALM_NO_EVENT, 0, &event);
+                                                nullptr, 0, REALM_NO_EVENT, 0, &event);
   EXPECT_EQ(status, REALM_RUNTIME_ERROR_NOT_INITIALIZED);
 }
 
@@ -126,7 +126,7 @@ TEST_F(CProcessorTaskTest, SpawnInvalidProcessor)
   realm_event_t event;
   realm_runtime_t runtime = *runtime_impl;
   realm_status_t status = realm_processor_spawn(runtime, REALM_NO_PROC, 0, nullptr, 0,
-                                                nullptr, REALM_NO_EVENT, 0, &event);
+                                                nullptr, 0, REALM_NO_EVENT, 0, &event);
   EXPECT_EQ(status, REALM_PROCESSOR_ERROR_INVALID_PROCESSOR);
 }
 
@@ -136,7 +136,7 @@ TEST_F(CProcessorTaskTest, SpawnSuccess)
   realm_event_t event;
   realm_runtime_t runtime = *runtime_impl;
   realm_status_t status = realm_processor_spawn(runtime, proc_impl->me, 0, nullptr, 0,
-                                                nullptr, REALM_NO_EVENT, 0, &event);
+                                                nullptr, 0, REALM_NO_EVENT, 0, &event);
   EXPECT_EQ(status, REALM_SUCCESS);
   EXPECT_EQ(proc_impl->spawned_func_ids.size(), 1);
   EXPECT_EQ(proc_impl->spawned_func_ids[0], 0);
