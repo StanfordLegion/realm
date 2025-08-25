@@ -187,8 +187,8 @@ namespace Realm {
 
         bool status = single_network->check_for_quiescence(messages_received);
         if(control_plane_network) {
-          status &=
-              control_plane_network->check_for_quiescence(control_messages_received);
+          // status &=
+          // control_plane_network->check_for_quiescence(control_messages_received);
         }
         return status;
       }

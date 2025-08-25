@@ -9,13 +9,23 @@ using namespace Realm;
 
 enum
 {
-  TOP_TASK_ID = Processor::TASK_ID_FIRST_AVAILABLE
+  TOP_TASK_ID = Processor::TASK_ID_FIRST_AVAILABLE,
+  NODE_TASK,
 };
+
+struct TaskArgs {};
 
 namespace TestConfig {
   int expected_peers{4};
   int shutdown_node_id{1};
+  int failed_node_id{2};
 }; // namespace TestConfig
+
+void node_task(const void *args, size_t arglen, const void *userdata, size_t userlen,
+               Processor p)
+{
+  TaskArgs &task_args = *(TaskArgs *)args;
+}
 
 void top_task(const void *args, size_t arglen, const void *userdata, size_t userlen,
               Processor p)
@@ -45,16 +55,45 @@ void top_task(const void *args, size_t arglen, const void *userdata, size_t user
 
   std::map<NodeID, int> cpu_count, sysmem_visible, pma_count;
 
-  // Count CPUs and detect whether each CPU can reach at least one SYSTEM_MEM
+  if(Network::my_node_id != TestConfig::failed_node_id) {
+
+    std::map<NodeID, Memory> memories;
+    for(Machine::MemoryQuery::iterator it = Machine::MemoryQuery(machine).begin(); it;
+        ++it) {
+      Memory m = *it;
+      if(m.kind() == Memory::SYSTEM_MEM) {
+        NodeID node = NodeID(ID(m).memory_owner_node());
+        if(node == TestConfig::failed_node_id) {
+          memories[node] = m;
+        }
+      }
+    }
+
+    assert(!memories.empty());
+
+    Processor proc = *Machine::ProcessorQuery(machine)
+                          .only_kind(Processor::LOC_PROC)
+                          .same_address_space_as(memories[TestConfig::failed_node_id])
+                          .begin();
+
+    {
+      TaskArgs args;
+      // args.wait_on = done;
+      Event e = proc.spawn(NODE_TASK, &args, sizeof(args), Event::NO_EVENT, 0);
+      bool poisoned = false;
+      e.wait_faultaware(poisoned);
+      assert(poisoned);
+    }
+  }
+
   Machine::ProcessorQuery pq =
       Machine::ProcessorQuery(machine).only_kind(Processor::LOC_PROC);
   for(Processor pr : pq) {
     NodeID as = pr.address_space();
     cpu_count[as]++;
 
-    // Check visible memories for this processor (local_only = false)
     std::set<Memory> vis;
-    machine.get_visible_memories(pr, vis, /*local_only=*/false);
+    machine.get_visible_memories(pr, vis, false);
     for(Memory mem : vis) {
       if(mem.kind() == Memory::SYSTEM_MEM) {
         sysmem_visible[as]++;
@@ -70,18 +109,21 @@ void top_task(const void *args, size_t arglen, const void *userdata, size_t user
   }
 
   for(NodeID n = 0; n < TestConfig::expected_peers; n++) {
-    // Each rank must have at least one CPU
-    assert(cpu_count[n] > 0);
-    // and every CPU must reach a SYSTEM_MEM
-    assert(sysmem_visible[n] > 0);
-    // plus at least one processor–memory affinity record
-    assert(pma_count[n] > 0);
+    if(n != TestConfig::failed_node_id) {
+      // Each rank must have at least one CPU
+      assert(cpu_count[n] > 0);
+      // and every CPU must reach a SYSTEM_MEM
+      assert(sysmem_visible[n] > 0);
+      // plus at least one processor–memory affinity record
+      assert(pma_count[n] > 0);
+    }
   }
 
   sleep(8);
 
-  // Runtime::get_runtime().shutdown();
-  // return;
+  if(Network::my_node_id == TestConfig::failed_node_id) {
+    return;
+  }
 
   if(Network::my_node_id == TestConfig::shutdown_node_id) {
     Runtime::get_runtime().shutdown();
@@ -101,6 +143,7 @@ void top_task(const void *args, size_t arglen, const void *userdata, size_t user
                 << " on node:" << Network::my_node_id << " epoch:" << machine.get_epoch()
                 << std::endl;
     }
+
     Runtime::get_runtime().shutdown();
   }
 
@@ -117,6 +160,10 @@ int main(int argc, char **argv)
   }
 
   rt.register_task(TOP_TASK_ID, top_task);
+
+  Processor::register_task_by_kind(Processor::LOC_PROC, false /*!global*/, NODE_TASK,
+                                   CodeDescriptor(node_task), ProfilingRequestSet(), 0, 0)
+      .wait();
 
   Processor p = Machine::ProcessorQuery(Machine::get_machine())
                     .local_address_space()

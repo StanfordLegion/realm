@@ -1,4 +1,5 @@
 #include "membership.h"
+#include "realm/realm_c.h"
 #include "realm_defines.h"
 #include <stdlib.h>
 #include <cassert>
@@ -72,7 +73,7 @@ realm_status_t membership_init(membership_handle_t *out, membership_hooks_t hook
 #else
   assert(0);
   (void)out;
-  return REALM_ERR_INTERNAL;
+  return realm_status_t::REALM_ERROR;
 #endif
 }
 
@@ -82,7 +83,6 @@ realm_status_t membership_destroy(membership_handle_t h)
   return membership_mesh_destroy(h);
 #else
   assert(0);
-  (void)out;
-  return REALM_ERR_INTERNAL;
+  return realm_status_t::REALM_ERROR;
 #endif
 }

@@ -161,13 +161,13 @@ namespace Realm {
 
     void request_cancellation(Event finish_event, const void *reason_data,
                               size_t reason_size);
+    void cancel_pending_ops(NodeID peer);
 
     void set_priority(Event finish_event, int new_priority);
 
     void print_operations(std::ostream &os);
 
     static void register_handlers(void);
-
     // checks that all operations have finished before shutdown
     void shutdown_check(void);
 

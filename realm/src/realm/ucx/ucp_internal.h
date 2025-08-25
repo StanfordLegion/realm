@@ -195,6 +195,7 @@ namespace Realm {
 
       void bump_peer(NodeID peer, std::function<void(PeerCounters &)> fn)
       {
+        assert(Network::my_node_id != peer);
         AutoLock<> al(peer_counters_mutex);
         auto &sp = peer_counters[peer];
         if(!sp) {

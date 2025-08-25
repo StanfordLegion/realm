@@ -21,6 +21,7 @@
 #include <cstdint>
 #include <functional>
 #include "realm/udp/frag_list.h"
+#include "realm/mutex.h"
 
 namespace Realm {
 
@@ -80,6 +81,8 @@ namespace Realm {
     static bool in_window(uint16_t seq, uint16_t last_rx);
 
     void send_now(TxEntry &e);
+
+    mutable Mutex mtx;
 
     TxCallback tx_cb;
     uint16_t next_tx_seq{0};

@@ -33,7 +33,7 @@ namespace Realm {
 
     /* --- configuration (can be env-overridden) --- */
     uint64_t probe_interval_ns_{500ull * 1000 * 1000};     // e.g. 500ms
-    uint64_t dead_timeout_ns_{15ull * 1000 * 1000 * 1000}; // e.g.   5s
+    uint64_t dead_timeout_ns_{10ull * 1000 * 1000 * 1000}; // e.g.   5s
     size_t fanout_k_{10};                                  // 0 → log₂N
 
     /* --- state --- */

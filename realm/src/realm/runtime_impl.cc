@@ -474,12 +474,14 @@ namespace Realm {
         rt->shutdown_in_progress.store(true);
 
         NodeSet members = rt->node_directory->get_members();
+
         for(NodeID node : members) {
-          bool ok = rt->cancel_work(node);
+          bool ok = rt->cancel_work(node, /*self=*/true);
           assert(ok);
         }
 
         wait_for_quiescence();
+
       } else {
         if(!rt->shutdown_in_progress.load()) {
           bool ok = rt->cancel_work(self->node_id);
@@ -1952,10 +1954,10 @@ namespace Realm {
 
     GenEventImpl::GenEventImplAllocator event_allocator(&event_triggerer);
 
-    constexpr int MAX_NODES = 4096;
+    constexpr int MAX_NODES = 256;
     nodes = new Node[MAX_NODES];
     num_nodes = MAX_NODES;
-    for(int i = 0; i < Network::max_node_id + 1; i++) {
+    for(int i = 0; i < num_nodes; i++) {
       nodes[i].remote_events.set_constructor(event_allocator);
     }
 
@@ -2440,21 +2442,44 @@ namespace Realm {
     return true;
   }
 
-  bool RuntimeImpl::cancel_work(NodeID id)
+  bool RuntimeImpl::cancel_work(NodeID id, bool self)
   {
-    Node &n = nodes[id];
+    if(!self) {
+      optable.cancel_pending_ops(id);
+    } else {
 
-    // TODO: TEST ME
-
-    for(size_t i = 0; i < n.remote_events.max_entries(); ++i) {
-      if(n.remote_events.has_entry(i)) {
+      Node &n = nodes[id];
+      for(size_t i = 0; i < n.remote_events.max_entries(); ++i) {
         GenEventImpl *e = n.remote_events.lookup_entry(i, id);
-        GenEventImpl::trigger(e->current_event(), /*poisoned=*/true);
+        bool poisoned = false;
+        if(e && !e->current_event().has_triggered_faultaware(poisoned)) {
+          if(e) {
+            GenEventImpl::trigger(e->current_event(), /*poisoned=*/true);
+          }
+        }
       }
-    }
 
-    for(size_t i = 0; i < n.barriers.max_entries(); ++i) {
-      if(n.barriers.has_entry(i)) {
+      return true;
+
+      for(size_t i = 0; i < n.barriers.max_entries(); ++i) {
+        if(n.barriers.has_entry(i)) {
+          BarrierImpl *b = n.barriers.lookup_entry(i, id);
+          if(b) {
+            // Barrier e = b->current_barrier();
+            // GenEventImpl::trigger(e, /*poisoned=*/true);
+          }
+        }
+      }
+
+      for(size_t i = 0; i < n.reservations.max_entries(); ++i) {
+        if(n.reservations.has_entry(i)) {
+          ReservationImpl *r = n.reservations.lookup_entry(i, id);
+          if(r) {
+            for(auto &kv : r->retries) {
+              // GenEventImpl::trigger(kv.second.event, /*poisoned=*/true);
+            }
+          }
+        }
       }
     }
 
@@ -2919,7 +2944,7 @@ namespace Realm {
     if(Thread::self()) {
       Operation *op = Thread::self()->get_operation();
       if(op != 0) {
-        log_runtime.debug() << "shutdown merging finish event=" << op->get_finish_event();
+        log_runtime.error() << "shutdown merging finish event=" << op->get_finish_event();
         wait_on = Event::merge_events(wait_on, op->get_finish_event());
       }
     }
@@ -2973,13 +2998,14 @@ namespace Realm {
       Event e = spawn_on_all(local_procs, flush_task_id, 0, 0, Event::NO_EVENT,
                              INT_MIN); // runs with lowest priority
       e.external_wait();
-      log_runtime.info() << "local processor shutdown tasks complete";
+      log_runtime.error() << "local processor shutdown tasks complete";
     }
 
     {
       size_t n = num_untriggered_events.load();
       if(n != 0) {
-        log_runtime.fatal() << n << " pending operations during shutdown!";
+        log_runtime.fatal() << n << " pending operations during shutdown! me:"
+                            << Network::my_node_id;
         abort();
       }
     }
@@ -3157,8 +3183,8 @@ namespace Realm {
     finalize_nvtx();
 #endif
 
-    std::cout << "&&&&&&&&&& SHUTDOWN me:" << Network::my_node_id
-              << " epoch:" << Network::node_directory.cluster_epoch() << std::endl;
+    log_runtime.error() << "SHUTDOWN me:" << Network::my_node_id
+                        << " epoch:" << Network::node_directory.cluster_epoch();
     return shutdown_result_code;
   }
 
