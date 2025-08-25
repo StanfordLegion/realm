@@ -42,7 +42,7 @@ typedef struct {
 
 realm_status_t membership_create(const membership_ops_t *ops, void *state,
                                  membership_handle_t *out);
-realm_status_t membership_destroy(membership_handle_t h);
+realm_status_t membership_delete(membership_handle_t h);
 
 #ifdef __cplusplus
 extern "C" {
@@ -51,6 +51,7 @@ extern "C" {
 realm_status_t membership_join(membership_handle_t h, const node_meta_t *self);
 realm_status_t membership_leave(membership_handle_t h, const node_meta_t *self);
 realm_status_t membership_init(membership_handle_t *out, membership_hooks_t hooks);
+realm_status_t membership_destroy(membership_handle_t h);
 
 #ifdef __cplusplus
 }
