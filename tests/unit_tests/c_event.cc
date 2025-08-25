@@ -141,7 +141,7 @@ TEST_F(CEventTest, DISABLED_MergeEventsWithPoisonedIgnoreFaults)
   for(int i = 0; i < num_events; i++) {
     ASSERT_REALM(realm_user_event_create(runtime, &wait_for_events[i]));
   }
-  UserEvent(wait_for_events[0]).cancel();
+  ASSERT_REALM(realm_event_cancel_operation(runtime, wait_for_events[0], nullptr, 0));
 
   realm_user_event_t event = REALM_NO_EVENT;
   realm_status_t status =
@@ -158,7 +158,7 @@ TEST_F(CEventTest, DISABLED_MergeEventsWithPoisonedNoIgnoreFaults)
   for(int i = 0; i < num_events; i++) {
     ASSERT_REALM(realm_user_event_create(runtime, &wait_for_events[i]));
   }
-  UserEvent(wait_for_events[0]).cancel();
+  ASSERT_REALM(realm_event_cancel_operation(runtime, wait_for_events[0], nullptr, 0));
 
   realm_user_event_t event = REALM_NO_EVENT;
   // we will get back wait_for_events[0] because it is poisoned
@@ -218,7 +218,7 @@ TEST_F(CEventTest, DISABLED_EventWaitPoisoned)
   realm_user_event_t event = REALM_NO_EVENT;
   realm_runtime_t runtime = *runtime_impl;
   ASSERT_REALM(realm_user_event_create(runtime, &event));
-  UserEvent(event).cancel();
+  ASSERT_REALM(realm_event_cancel_operation(runtime, event, nullptr, 0));
 
   int poisoned = 0;
   realm_status_t status = realm_event_wait(runtime, event, &poisoned);
@@ -264,7 +264,7 @@ TEST_F(CEventTest, DISABLED_UserEventTriggerWithWaitPoisoned)
 
   realm_status_t status = realm_user_event_trigger(runtime, user_event, wait_on_event, 0);
   EXPECT_EQ(status, REALM_SUCCESS);
-  UserEvent(wait_on_event).cancel();
+  ASSERT_REALM(realm_event_cancel_operation(runtime, wait_on_event, nullptr, 0));
   bool poisoned = false;
   Event(user_event).has_triggered_faultaware(poisoned);
   EXPECT_TRUE(poisoned);
@@ -330,7 +330,7 @@ TEST_F(CEventTest, DISABLED_EventHasTriggeredPoisoned)
   realm_user_event_t event = REALM_NO_EVENT;
   realm_runtime_t runtime = *runtime_impl;
   ASSERT_REALM(realm_user_event_create(runtime, &event));
-  UserEvent(event).cancel(); // FIXME: this need runtime singleton
+  ASSERT_REALM(realm_event_cancel_operation(runtime, event, nullptr, 0));
 
   int has_triggered = 0;
   int poisoned = 0;

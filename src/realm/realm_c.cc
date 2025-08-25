@@ -898,6 +898,33 @@ realm_status_t realm_event_has_triggered(realm_runtime_t runtime, realm_event_t 
   return REALM_SUCCESS;
 }
 
+realm_status_t realm_event_cancel_operation(realm_runtime_t runtime, realm_event_t event,
+                                            const void *reason_data, size_t reason_size)
+{
+  Realm::RuntimeImpl *runtime_impl = nullptr;
+  realm_status_t status = check_runtime_validity_and_assign(runtime, runtime_impl);
+  if(status != REALM_SUCCESS) {
+    return status;
+  }
+  status = check_event_validity(event);
+  if(status != REALM_SUCCESS) {
+    return status;
+  }
+  // NO_EVENT is a no-op for cancellation
+  if(event == REALM_NO_EVENT) {
+    return REALM_SUCCESS;
+  }
+
+  Realm::Event cxx_event = Realm::Event(event);
+  // If already triggered, this call is pointless
+  bool poisoned = false;
+  if(cxx_event.has_triggered_faultaware(poisoned)) {
+    return REALM_SUCCESS;
+  }
+  cxx_event.cancel_operation(reason_data, reason_size);
+  return REALM_SUCCESS;
+}
+
 /* UserEvent API */
 
 realm_status_t realm_user_event_create(realm_runtime_t runtime, realm_user_event_t *event)
