@@ -173,6 +173,8 @@ typedef struct realm_region_instance_copy_params_t {
 #define REALM_TASK_ID_PROCESSOR_SHUTDOWN ((realm_task_func_id_t)2U)
 #define REALM_TASK_ID_FIRST_AVAILABLE ((realm_task_func_id_t)4U)
 
+#define REALM_WAIT_INFINITE ((int64_t)INT64_MIN)
+
 typedef enum realm_register_task_flags
 {
   REALM_REGISTER_TASK_DEFAULT = 0x0ULL,
@@ -758,14 +760,16 @@ realm_status_t REALM_EXPORT realm_memory_query_iter(realm_memory_query_t query,
  * @brief Waits for a specific event to complete.
  *
  * @param runtime The runtime instance to use.
- * @param[out] event The event to wait for.
+ * @param event The event to wait for.
+ * @param max_ns The maximum number of nanoseconds to wait.
+ *               REALM_WAIT_INFINITE is a special value that means wait forever.
  * @param[out] poisoned Whether the event is poisoned.
  * @return Realm status indicating success or failure.
  *
  * @ingroup Event
  */
 realm_status_t REALM_EXPORT realm_event_wait(realm_runtime_t runtime, realm_event_t event,
-                                             int *poisoned);
+                                             int64_t max_ns, int *poisoned);
 
 /**
  * @brief Merges multiple events into a single event.

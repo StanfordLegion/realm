@@ -72,7 +72,7 @@ void REALM_FNPTR top_level_task(const void *args, size_t arglen, const void *use
                                       0, 0, NULL, 0, 0, &events[i]));
   }
   CHECK_REALM(realm_event_merge(runtime, events.data(), events.size(), &event, 0));
-  CHECK_REALM(realm_event_wait(runtime, event, nullptr));
+  CHECK_REALM(realm_event_wait(runtime, event, REALM_WAIT_INFINITE, nullptr));
 
 #ifdef REALM_USE_CUDA
   CHECK_REALM(realm_processor_query_create(runtime, &proc_query));
@@ -85,7 +85,7 @@ void REALM_FNPTR top_level_task(const void *args, size_t arglen, const void *use
 
   CHECK_REALM(
       realm_processor_spawn(runtime, gpu_proc, HELLO_TASK, 0, 0, NULL, 0, 0, &event));
-  CHECK_REALM(realm_event_wait(runtime, event, nullptr));
+  CHECK_REALM(realm_event_wait(runtime, event, REALM_WAIT_INFINITE, nullptr));
 #endif
 }
 
@@ -105,17 +105,20 @@ int main(int argc, char **argv)
   CHECK_REALM(realm_processor_register_task_by_kind(
       runtime, LOC_PROC, REALM_REGISTER_TASK_DEFAULT, TOP_LEVEL_TASK, top_level_task, 0,
       0, &register_task_event));
-  CHECK_REALM(realm_event_wait(runtime, register_task_event, nullptr));
+  CHECK_REALM(
+      realm_event_wait(runtime, register_task_event, REALM_WAIT_INFINITE, nullptr));
 
   CHECK_REALM(realm_processor_register_task_by_kind(
       runtime, LOC_PROC, REALM_REGISTER_TASK_DEFAULT, HELLO_TASK, hello_task, 0, 0,
       &register_task_event));
-  CHECK_REALM(realm_event_wait(runtime, register_task_event, nullptr));
+  CHECK_REALM(
+      realm_event_wait(runtime, register_task_event, REALM_WAIT_INFINITE, nullptr));
 
   CHECK_REALM(realm_processor_register_task_by_kind(
       runtime, TOC_PROC, REALM_REGISTER_TASK_DEFAULT, HELLO_TASK, hello_task, 0, 0,
       &register_task_event));
-  CHECK_REALM(realm_event_wait(runtime, register_task_event, nullptr));
+  CHECK_REALM(
+      realm_event_wait(runtime, register_task_event, REALM_WAIT_INFINITE, nullptr));
 
   realm_processor_query_t proc_query;
   CHECK_REALM(realm_processor_query_create(runtime, &proc_query));
