@@ -1,6 +1,6 @@
 var searchData=
 [
-  ['gather_5fcontrol_5fport_0',['GATHER_CONTROL_PORT',['../structRealm_1_1XferDesPortInfo.html#a0780bdd795b1147215a99d2a3c869eafa8d0f709d946298d91922a2a55bc7d78f',1,'Realm::XferDesPortInfo']]],
+  ['gather_5fcontrol_5fport_0',['GATHER_CONTROL_PORT',['../structRealm_1_1XferDesPortInfo.html#ae1a32d0604b997aa1f8dc192798dd1b4a8d0f709d946298d91922a2a55bc7d78f',1,'Realm::XferDesPortInfo']]],
   ['global_5fkind_1',['GLOBAL_KIND',['../structRealm_1_1Channel_1_1SupportedPath.html#a4ec629af60519e1e194683a4fc75fdc1acef1e75babf340df594f56297f637e7a',1,'Realm::Channel::SupportedPath']]],
   ['gpu_5fmemcpy_5fdevice_5fto_5fdevice_2',['gpu_memcpy_device_to_device',['../namespaceRealm_1_1Cuda.html#a6938136ba824ee88993d3962a440359aaacef4caa69ebcfefea5d58d5161c8872',1,'Realm::Cuda::GPU_MEMCPY_DEVICE_TO_DEVICE'],['../namespaceRealm_1_1Hip.html#a5a2cc7b74a71b72cbff0ee7358974282abaed9f8409e994f06d7373c4a171457b',1,'Realm::Hip::GPU_MEMCPY_DEVICE_TO_DEVICE']]],
   ['gpu_5fmemcpy_5fdevice_5fto_5fhost_3',['gpu_memcpy_device_to_host',['../namespaceRealm_1_1Cuda.html#a6938136ba824ee88993d3962a440359aaa0100411617686f8f8e5751c9e10e28c',1,'Realm::Cuda::GPU_MEMCPY_DEVICE_TO_HOST'],['../namespaceRealm_1_1Hip.html#a5a2cc7b74a71b72cbff0ee7358974282ab3bdc14f30e769ed62560a40164f4946',1,'Realm::Hip::GPU_MEMCPY_DEVICE_TO_HOST']]],

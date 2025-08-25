@@ -1,10 +1,10 @@
 var classRealm_1_1Machine =
 [
-    [ "AffinityDetails", "structRealm_1_1Machine_1_1AffinityDetails.html", "structRealm_1_1Machine_1_1AffinityDetails" ],
     [ "MachineUpdateSubscriber", "classRealm_1_1Machine_1_1MachineUpdateSubscriber.html", "classRealm_1_1Machine_1_1MachineUpdateSubscriber" ],
     [ "MemoryMemoryAffinity", "structRealm_1_1Machine_1_1MemoryMemoryAffinity.html", "structRealm_1_1Machine_1_1MemoryMemoryAffinity" ],
     [ "ProcessInfo", "structRealm_1_1Machine_1_1ProcessInfo.html", "structRealm_1_1Machine_1_1ProcessInfo" ],
     [ "ProcessorMemoryAffinity", "structRealm_1_1Machine_1_1ProcessorMemoryAffinity.html", "structRealm_1_1Machine_1_1ProcessorMemoryAffinity" ],
+    [ "AffinityDetails", "classRealm_1_1Machine.html#acf863e762be28abb44553cba44b707f7", null ],
     [ "iterator", "classRealm_1_1Machine.html#a5e310274ed9556247fcf1698506fe8d5", null ],
     [ "iterator", "classRealm_1_1Machine.html#a824626a9f9c86ec053a8af16090b648c", null ],
     [ "Machine", "classRealm_1_1Machine.html#a7ea5d62bf5bd13b9b9f7b0dba075f900", null ],

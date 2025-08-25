@@ -51,7 +51,6 @@ var hierarchy =
     [ "Realm::Cuda::AffineSubRect< N, Offset_t >", "structRealm_1_1Cuda_1_1AffineSubRect.html", null ],
     [ "Realm::Cuda::AffineSubRect< N, size_t >", "structRealm_1_1Cuda_1_1AffineSubRect.html", null ],
     [ "Realm::AffineTransform< M, N, T >", "classRealm_1_1AffineTransform.html", null ],
-    [ "Realm::Machine::AffinityDetails", "structRealm_1_1Machine_1_1AffinityDetails.html", null ],
     [ "Realm::AsyncFileIOContext::AIOOperation", "classRealm_1_1AsyncFileIOContext_1_1AIOOperation.html", null ],
     [ "Realm::MPI::AM_msg", "structRealm_1_1MPI_1_1AM__msg.html", null ],
     [ "Realm::ApproxImageResponseMessage< T >", "structRealm_1_1ApproxImageResponseMessage.html", null ],
@@ -148,7 +147,9 @@ var hierarchy =
     ] ],
     [ "BaseMedium", "structBaseMedium.html", null ],
     [ "BaseReply", "structBaseReply.html", null ],
-    [ "Realm::BasicRangeAllocator< RT, TT >", "classRealm_1_1BasicRangeAllocator.html", null ],
+    [ "Realm::BasicRangeAllocator< RT, TT >", "classRealm_1_1BasicRangeAllocator.html", [
+      [ "Realm::SizedRangeAllocator< RT, TT, SORTED >", "classRealm_1_1SizedRangeAllocator.html", null ]
+    ] ],
     [ "Realm::BasicRangeAllocator< size_t, RegionInstance >", "classRealm_1_1BasicRangeAllocator.html", null ],
     [ "Realm::bitfield< _BITS, _SHIFT >", "structRealm_1_1bitfield.html", null ],
     [ "Realm::bitpack< T >", "classRealm_1_1bitpack.html", null ],
@@ -676,6 +677,7 @@ var hierarchy =
       ] ]
     ] ],
     [ "Realm::MemoryQueryImpl", "classRealm_1_1MemoryQueryImpl.html", null ],
+    [ "Realm::BasicRangeAllocator< RT, TT >::MemoryStats", "structRealm_1_1BasicRangeAllocator_1_1MemoryStats.html", null ],
     [ "Realm::MemPathInfo", "structRealm_1_1MemPathInfo.html", null ],
     [ "Realm::MemSpecificInfo", "classRealm_1_1MemSpecificInfo.html", [
       [ "Realm::Cuda::MemSpecificCudaArray", "classRealm_1_1Cuda_1_1MemSpecificCudaArray.html", null ],
@@ -942,10 +944,13 @@ var hierarchy =
     [ "QuiescenceChecker", "classQuiescenceChecker.html", null ],
     [ "Realm::BasicRangeAllocator< RT, TT >::Range", "structRealm_1_1BasicRangeAllocator_1_1Range.html", null ],
     [ "Realm::RWLock::Reader", "structRealm_1_1RWLock_1_1Reader.html", null ],
+    [ "realm_affinity_details_t", "structrealm__affinity__details__t.html", null ],
     [ "realm_copy_src_dst_field_t", "structrealm__copy__src__dst__field__t.html", null ],
-    [ "realm_external_cuda_memory_resource_create_params_t", "structrealm__external__cuda__memory__resource__create__params__t.html", null ],
-    [ "realm_external_instance_resource_create_params_t", "structrealm__external__instance__resource__create__params__t.html", null ],
-    [ "realm_external_system_memory_resource_create_params_t", "structrealm__external__system__memory__resource__create__params__t.html", null ],
+    [ "realm_external_cuda_memory_resource_st", "structrealm__external__cuda__memory__resource__st.html", null ],
+    [ "realm_external_resource_st", "structrealm__external__resource__st.html", null ],
+    [ "realm_external_system_memory_resource_st", "structrealm__external__system__memory__resource__st.html", null ],
+    [ "realm_index_space_t", "structrealm__index__space__t.html", null ],
+    [ "realm_region_instance_attr_value_t", "structrealm__region__instance__attr__value__t.html", null ],
     [ "realm_region_instance_copy_params_t", "structrealm__region__instance__copy__params__t.html", null ],
     [ "realm_region_instance_create_params_t", "structrealm__region__instance__create__params__t.html", null ],
     [ "Realm::RealmEntryExitRAII", "classRealm_1_1RealmEntryExitRAII.html", null ],

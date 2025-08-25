@@ -6,7 +6,6 @@ var classRealm_1_1RuntimeImpl =
     [ "add_code_translator", "classRealm_1_1RuntimeImpl.html#a3a126aa8ce966b0e44a8df165a7d8416", null ],
     [ "add_dma_channel", "classRealm_1_1RuntimeImpl.html#a86ab1b4119ac6061a7ee19eb2413709a", null ],
     [ "add_ib_memory", "classRealm_1_1RuntimeImpl.html#a7ca3590e11228ca48e2d9849cd507f72", null ],
-    [ "add_mem_mem_affinity", "classRealm_1_1RuntimeImpl.html#ac705a2ec5fa6ed70094a12b4e01dc309", null ],
     [ "add_memory", "classRealm_1_1RuntimeImpl.html#a9186215ba3728ffc85d038b34e9c788e", null ],
     [ "add_proc_mem_affinity", "classRealm_1_1RuntimeImpl.html#a179c8c928ea1e1c534c64931895e6b9b", null ],
     [ "add_processor", "classRealm_1_1RuntimeImpl.html#a678a4cb125548d0566de295be020a58f", null ],

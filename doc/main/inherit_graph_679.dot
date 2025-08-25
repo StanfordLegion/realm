@@ -1,9 +1,0 @@
-digraph "Graphical Class Hierarchy"
-{
- // LATEX_PDF_SIZE
-  bgcolor="transparent";
-  edge [fontname=Helvetica,fontsize=10,labelfontname=Helvetica,labelfontsize=10];
-  node [fontname=Helvetica,fontsize=10,shape=box,height=0.2,width=0.4];
-  rankdir="LR";
-  Node0 [id="Node000000",label="realm_external_cuda\l_memory_resource_create\l_params_t",height=0.2,width=0.4,color="grey40", fillcolor="white", style="filled",URL="$structrealm__external__cuda__memory__resource__create__params__t.html",tooltip=" "];
-}

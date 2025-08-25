@@ -9,7 +9,7 @@ var searchData=
   ['uop_5flist_6',['uop_list',['../classRealm_1_1PartitioningOpQueue.html#a62b6b764cfada9f9a592f90008fa8160',1,'Realm::PartitioningOpQueue']]],
   ['update_5fread_5flock_7',['update_read_lock',['../classRealm_1_1XferDes.html#a84700cfe2c58f41c3bc53eef0179e147',1,'Realm::XferDes']]],
   ['update_5fwrite_5flock_8',['update_write_lock',['../classRealm_1_1XferDes.html#a06f2212b482269a4f2183bb9d7bf62fe',1,'Realm::XferDes']]],
-  ['upper_5fbound_9',['upper_bound',['../structrealm__region__instance__create__params__t.html#a2f05065f04479b65aa83572382aeb0c4',1,'realm_region_instance_create_params_t::upper_bound'],['../structrealm__region__instance__copy__params__t.html#af51458301aae5cac8c933a8e5031c6d3',1,'realm_region_instance_copy_params_t::upper_bound']]],
+  ['upper_5fbound_9',['upper_bound',['../structrealm__index__space__t.html#ac3b819b22e455c024e10234dfc1b0be1',1,'realm_index_space_t::upper_bound'],['../structrealm__region__instance__create__params__t.html#a2f05065f04479b65aa83572382aeb0c4',1,'realm_region_instance_create_params_t::upper_bound'],['../structrealm__region__instance__copy__params__t.html#af51458301aae5cac8c933a8e5031c6d3',1,'realm_region_instance_copy_params_t::upper_bound']]],
   ['usage_10',['usage',['../classRealm_1_1LocalManagedMemory.html#a10cda096bb3a3d51c34283c146838272',1,'Realm::LocalManagedMemory']]],
   ['use_5fcount_11',['use_count',['../structRealm_1_1IncomingMessageManager_1_1MessageBlock.html#a6e7500f97716ede1c3b0562cadd79b44',1,'Realm::IncomingMessageManager::MessageBlock']]],
   ['use_5fext_5fsysmem_12',['use_ext_sysmem',['../classRealm_1_1CoreModuleConfig.html#a2b013450cd0b65bfb15d07b08816b74a',1,'Realm::CoreModuleConfig']]],

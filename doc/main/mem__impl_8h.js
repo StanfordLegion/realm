@@ -6,6 +6,8 @@ var mem__impl_8h =
     [ "Realm::PendingIBRequests", "classRealm_1_1PendingIBRequests.html", "classRealm_1_1PendingIBRequests" ],
     [ "Realm::BasicRangeAllocator< RT, TT >", "classRealm_1_1BasicRangeAllocator.html", "classRealm_1_1BasicRangeAllocator" ],
     [ "Realm::BasicRangeAllocator< RT, TT >::Range", "structRealm_1_1BasicRangeAllocator_1_1Range.html", "structRealm_1_1BasicRangeAllocator_1_1Range" ],
+    [ "Realm::BasicRangeAllocator< RT, TT >::MemoryStats", "structRealm_1_1BasicRangeAllocator_1_1MemoryStats.html", "structRealm_1_1BasicRangeAllocator_1_1MemoryStats" ],
+    [ "Realm::SizedRangeAllocator< RT, TT, SORTED >", "classRealm_1_1SizedRangeAllocator.html", "classRealm_1_1SizedRangeAllocator" ],
     [ "Realm::LocalManagedMemory", "classRealm_1_1LocalManagedMemory.html", "classRealm_1_1LocalManagedMemory" ],
     [ "Realm::LocalManagedMemory::PendingAlloc", "structRealm_1_1LocalManagedMemory_1_1PendingAlloc.html", "structRealm_1_1LocalManagedMemory_1_1PendingAlloc" ],
     [ "Realm::LocalManagedMemory::PendingRelease", "structRealm_1_1LocalManagedMemory_1_1PendingRelease.html", "structRealm_1_1LocalManagedMemory_1_1PendingRelease" ],

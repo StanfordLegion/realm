@@ -2,7 +2,7 @@ var classRealm_1_1LocalManagedMemory =
 [
     [ "PendingAlloc", "structRealm_1_1LocalManagedMemory_1_1PendingAlloc.html", "structRealm_1_1LocalManagedMemory_1_1PendingAlloc" ],
     [ "PendingRelease", "structRealm_1_1LocalManagedMemory_1_1PendingRelease.html", "structRealm_1_1LocalManagedMemory_1_1PendingRelease" ],
-    [ "RangeAllocator", "classRealm_1_1LocalManagedMemory.html#a716562fc1b4edf0f148dffb3cd277a95", null ],
+    [ "RangeAllocator", "classRealm_1_1LocalManagedMemory.html#a4a31595291231bc4195b8338eec4504a", null ],
     [ "LocalManagedMemory", "classRealm_1_1LocalManagedMemory.html#ab118a6031ee0785577ee4b54ae5feabe", null ],
     [ "~LocalManagedMemory", "classRealm_1_1LocalManagedMemory.html#ad289148d308ec29f36deb6c9dfaab72d", null ],
     [ "allocate_storage_deferrable", "classRealm_1_1LocalManagedMemory.html#a0a2237989ebd48d8d6a36f034aa2357b", null ],

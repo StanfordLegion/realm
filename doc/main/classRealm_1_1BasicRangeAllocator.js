@@ -1,5 +1,6 @@
 var classRealm_1_1BasicRangeAllocator =
 [
+    [ "MemoryStats", "structRealm_1_1BasicRangeAllocator_1_1MemoryStats.html", "structRealm_1_1BasicRangeAllocator_1_1MemoryStats" ],
     [ "Range", "structRealm_1_1BasicRangeAllocator_1_1Range.html", "structRealm_1_1BasicRangeAllocator_1_1Range" ],
     [ "BasicRangeAllocator", "classRealm_1_1BasicRangeAllocator.html#ad68e17f48364938effa2dbeb2505939f", null ],
     [ "~BasicRangeAllocator", "classRealm_1_1BasicRangeAllocator.html#ac1a55aa7d7e9ed6d28758187e718e706", null ],
@@ -11,9 +12,9 @@ var classRealm_1_1BasicRangeAllocator =
     [ "can_allocate", "classRealm_1_1BasicRangeAllocator.html#a31ee0d1320d3b59f80faa926ce4622d1", null ],
     [ "deallocate", "classRealm_1_1BasicRangeAllocator.html#a2b1a42b126c7d63574d62b9c43768c46", null ],
     [ "deallocate", "classRealm_1_1BasicRangeAllocator.html#a027bad090713e2f07127d874377525a1", null ],
-    [ "dump_allocator_status", "classRealm_1_1BasicRangeAllocator.html#ae9fa11e1ded7ed6e5ca87a42fa447879", null ],
     [ "free_list_has_cycle", "classRealm_1_1BasicRangeAllocator.html#a49f1557deb3c672987886e36d6e6b1cd", null ],
     [ "free_range", "classRealm_1_1BasicRangeAllocator.html#a828ec9d340561d85a97079b2966c596a", null ],
+    [ "get_allocator_stats", "classRealm_1_1BasicRangeAllocator.html#ab43b980a11d46c20218073539a8fa74d", null ],
     [ "has_invalid_ranges", "classRealm_1_1BasicRangeAllocator.html#a7e8d509c64114b0622f8c8157c69ca1e", null ],
     [ "lookup", "classRealm_1_1BasicRangeAllocator.html#ac4898ee90b2e795783fb18302f180de3", null ],
     [ "operator=", "classRealm_1_1BasicRangeAllocator.html#a5af8b1a71ed63fdce009fd594695d0aa", null ],

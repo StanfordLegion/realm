@@ -4,6 +4,7 @@ var searchData=
   ['addressspace_1',['AddressSpace',['../namespaceRealm.html#a0adf312ad376ec4937e60ef93bd2f011',1,'Realm']]],
   ['affinelayoutpiece_2',['AffineLayoutPiece',['../namespacePRealm.html#a69c3677eb8badd4449b97663ccf23ec1',1,'PRealm']]],
   ['affinetransform_3',['AffineTransform',['../namespacePRealm.html#a8a627c1c0530730214fddaae5c2b5400',1,'PRealm']]],
-  ['autoreaderlock_4',['AutoReaderLock',['../classRealm_1_1RWLock.html#a5768a705f9ede63744bcd9729607ae5d',1,'Realm::RWLock']]],
-  ['autowriterlock_5',['AutoWriterLock',['../classRealm_1_1RWLock.html#a77340f2397f7cb174d6942ae74ba631a',1,'Realm::RWLock']]]
+  ['affinitydetails_4',['AffinityDetails',['../classRealm_1_1Machine.html#acf863e762be28abb44553cba44b707f7',1,'Realm::Machine']]],
+  ['autoreaderlock_5',['AutoReaderLock',['../classRealm_1_1RWLock.html#a5768a705f9ede63744bcd9729607ae5d',1,'Realm::RWLock']]],
+  ['autowriterlock_6',['AutoWriterLock',['../classRealm_1_1RWLock.html#a77340f2397f7cb174d6942ae74ba631a',1,'Realm::RWLock']]]
 ];

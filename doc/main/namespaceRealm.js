@@ -452,6 +452,7 @@ var namespaceRealm =
     [ "SimpleXferDesCreateMessage", "structRealm_1_1SimpleXferDesCreateMessage.html", null ],
     [ "SimpleXferDesFactory", "classRealm_1_1SimpleXferDesFactory.html", "classRealm_1_1SimpleXferDesFactory" ],
     [ "SingleXDQChannel", "classRealm_1_1SingleXDQChannel.html", "classRealm_1_1SingleXDQChannel" ],
+    [ "SizedRangeAllocator", "classRealm_1_1SizedRangeAllocator.html", "classRealm_1_1SizedRangeAllocator" ],
     [ "span", "classRealm_1_1span.html", null ],
     [ "span< T, dynamic_extent >", "classRealm_1_1span_3_01T_00_01dynamic__extent_01_4.html", "classRealm_1_1span_3_01T_00_01dynamic__extent_01_4" ],
     [ "SparsityMap", "classRealm_1_1SparsityMap.html", "classRealm_1_1SparsityMap" ],

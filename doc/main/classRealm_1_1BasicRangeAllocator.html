@@ -44,7 +44,7 @@
    <!-- BEGIN version select -->
     <br />
     <div class="dropdown">
-     <button class="dropbtn">Version 25.6.1-rc.1+c60979f5</button>
+     <button class="dropbtn">Version 025.6.1-rc.2+a9d38eb1</button>
      <div class="dropdown-content"></div>
     </div>
     <script type="text/javascript" src="../selectversion.js"></script>
@@ -144,9 +144,16 @@ $(document).ready(function(){initNavTree('classRealm_1_1BasicRangeAllocator.html
 <div class="contents">
 
 <p><code>#include &lt;<a class="el" href="mem__impl_8h_source.html">mem_impl.h</a>&gt;</code></p>
+<div class="dynheader">
+Inheritance diagram for Realm::BasicRangeAllocator&lt; RT, TT &gt;:</div>
+<div class="dyncontent">
+<div class="center"><iframe scrolling="no" frameborder="0" src="classRealm_1_1BasicRangeAllocator__inherit__graph.svg" width="218" height="139"><p><b>This browser is not able to show SVG: try Firefox, Chrome, Safari, or Opera instead.</b></p></iframe></div>
+<center><span class="legend">[<a target="top" href="graph_legend.html">legend</a>]</span></center></div>
 <table class="memberdecls">
 <tr class="heading"><td colspan="2"><h2 class="groupheader"><a id="nested-classes" name="nested-classes"></a>
 Classes</h2></td></tr>
+<tr class="memitem:"><td class="memItemLeft" align="right" valign="top">struct &#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="structRealm_1_1BasicRangeAllocator_1_1MemoryStats.html">MemoryStats</a></td></tr>
+<tr class="separator:"><td class="memSeparator" colspan="2">&#160;</td></tr>
 <tr class="memitem:"><td class="memItemLeft" align="right" valign="top">struct &#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="structRealm_1_1BasicRangeAllocator_1_1Range.html">Range</a></td></tr>
 <tr class="separator:"><td class="memSeparator" colspan="2">&#160;</td></tr>
 </table><table class="memberdecls">
@@ -178,8 +185,8 @@ Public Member Functions</h2></td></tr>
 <tr class="separator:ac4898ee90b2e795783fb18302f180de3"><td class="memSeparator" colspan="2">&#160;</td></tr>
 <tr class="memitem:addb4163ab55a9854c78ff2c1e647e792" id="r_addb4163ab55a9854c78ff2c1e647e792"><td class="memItemLeft" align="right" valign="top">size_t&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="classRealm_1_1BasicRangeAllocator.html#addb4163ab55a9854c78ff2c1e647e792">split_range</a> (TT old_tag, const std::vector&lt; TT &gt; &amp;new_tags, const std::vector&lt; RT &gt; &amp;sizes, const std::vector&lt; RT &gt; &amp;alignment, std::vector&lt; RT &gt; &amp;allocs_first, bool missing_ok=false)</td></tr>
 <tr class="separator:addb4163ab55a9854c78ff2c1e647e792"><td class="memSeparator" colspan="2">&#160;</td></tr>
-<tr class="memitem:ae9fa11e1ded7ed6e5ca87a42fa447879" id="r_ae9fa11e1ded7ed6e5ca87a42fa447879"><td class="memItemLeft" align="right" valign="top">void&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="classRealm_1_1BasicRangeAllocator.html#ae9fa11e1ded7ed6e5ca87a42fa447879">dump_allocator_status</a> ()</td></tr>
-<tr class="separator:ae9fa11e1ded7ed6e5ca87a42fa447879"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:ab43b980a11d46c20218073539a8fa74d" id="r_ab43b980a11d46c20218073539a8fa74d"><td class="memItemLeft" align="right" valign="top"><a class="el" href="structRealm_1_1BasicRangeAllocator_1_1MemoryStats.html">MemoryStats</a>&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="classRealm_1_1BasicRangeAllocator.html#ab43b980a11d46c20218073539a8fa74d">get_allocator_stats</a> ()</td></tr>
+<tr class="separator:ab43b980a11d46c20218073539a8fa74d"><td class="memSeparator" colspan="2">&#160;</td></tr>
 <tr class="memitem:a49f1557deb3c672987886e36d6e6b1cd" id="r_a49f1557deb3c672987886e36d6e6b1cd"><td class="memItemLeft" align="right" valign="top">bool&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="classRealm_1_1BasicRangeAllocator.html#a49f1557deb3c672987886e36d6e6b1cd">free_list_has_cycle</a> ()</td></tr>
 <tr class="separator:a49f1557deb3c672987886e36d6e6b1cd"><td class="memSeparator" colspan="2">&#160;</td></tr>
 <tr class="memitem:a7e8d509c64114b0622f8c8157c69ca1e" id="r_a7e8d509c64114b0622f8c8157c69ca1e"><td class="memItemLeft" align="right" valign="top">bool&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="classRealm_1_1BasicRangeAllocator.html#a7e8d509c64114b0622f8c8157c69ca1e">has_invalid_ranges</a> ()</td></tr>
@@ -513,25 +520,6 @@ template&lt;typename RT , typename TT &gt; </div>
 
 </div>
 </div>
-<a id="ae9fa11e1ded7ed6e5ca87a42fa447879" name="ae9fa11e1ded7ed6e5ca87a42fa447879"></a>
-<h2 class="memtitle"><span class="permalink"><a href="#ae9fa11e1ded7ed6e5ca87a42fa447879">&#9670;&#160;</a></span>dump_allocator_status()</h2>
-
-<div class="memitem">
-<div class="memproto">
-<div class="memtemplate">
-template&lt;typename RT , typename TT &gt; </div>
-      <table class="memname">
-        <tr>
-          <td class="memname">void <a class="el" href="classRealm_1_1BasicRangeAllocator.html">Realm::BasicRangeAllocator</a>&lt; RT, TT &gt;::dump_allocator_status </td>
-          <td>(</td>
-          <td class="paramname"></td><td>)</td>
-          <td></td>
-        </tr>
-      </table>
-</div><div class="memdoc">
-
-</div>
-</div>
 <a id="a49f1557deb3c672987886e36d6e6b1cd" name="a49f1557deb3c672987886e36d6e6b1cd"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#a49f1557deb3c672987886e36d6e6b1cd">&#9670;&#160;</a></span>free_list_has_cycle()</h2>
 
@@ -575,6 +563,25 @@ template&lt;typename RT , typename TT &gt; </div>
 <span class="mlabels"><span class="mlabel">protected</span></span>  </td>
   </tr>
 </table>
+</div><div class="memdoc">
+
+</div>
+</div>
+<a id="ab43b980a11d46c20218073539a8fa74d" name="ab43b980a11d46c20218073539a8fa74d"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#ab43b980a11d46c20218073539a8fa74d">&#9670;&#160;</a></span>get_allocator_stats()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<div class="memtemplate">
+template&lt;typename RT , typename TT &gt; </div>
+      <table class="memname">
+        <tr>
+          <td class="memname"><a class="el" href="structRealm_1_1BasicRangeAllocator_1_1MemoryStats.html">MemoryStats</a> <a class="el" href="classRealm_1_1BasicRangeAllocator.html">Realm::BasicRangeAllocator</a>&lt; RT, TT &gt;::get_allocator_stats </td>
+          <td>(</td>
+          <td class="paramname"></td><td>)</td>
+          <td></td>
+        </tr>
+      </table>
 </div><div class="memdoc">
 
 </div>
