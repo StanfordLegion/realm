@@ -124,7 +124,7 @@ jobs:
               cc: "gcc", cxx: "g++",
               ccache: ccache,
               shared_lib: 'OFF',
-              cuda: '12.9.0',
+              cuda: '13.0.0',
               openmp: 'ON',
               ucx: 'OFF',
               gasnet: 'OFF',
@@ -221,7 +221,7 @@ jobs:
         if: ${{ startsWith(matrix.config.os, 'ubuntu') }}
         run: $(which sudo) apt install -yy libopenmpi-dev
 
-      - uses: Jimver/cuda-toolkit@v0.2.25
+      - uses: Jimver/cuda-toolkit@v0.2.27
         name: Get CUDA
         if: ${{ matrix.config.cuda != '' }}
         with:
