@@ -1625,22 +1625,18 @@ template <typename T, typename Result>
 struct has_to_c_with_data<
     T, Result,
     std::void_t<decltype(std::declval<T>().to_c(
-        std::declval<Result*>(),
-        std::declval<size_t*>(),
-        (const void*)nullptr))>> : std::true_type {};
-
+        std::declval<Result *>(), std::declval<size_t *>(), (const void *)nullptr))>>
+  : std::true_type {};
 
 // Trait: check if a type T has a to_c(result, result_count) method
 template <typename T, typename Result, typename = void>
 struct has_to_c_with_count : std::false_type {};
 
 template <typename T, typename Result>
-struct has_to_c_with_count<
-    T, Result,
-    std::void_t<decltype(std::declval<T>().to_c(
-        std::declval<Result*>(),
-        std::declval<size_t*>()))>> : std::true_type {};
-
+struct has_to_c_with_count<T, Result,
+                           std::void_t<decltype(std::declval<T>().to_c(
+                               std::declval<Result *>(), std::declval<size_t *>()))>>
+  : std::true_type {};
 
 // Trait: check if a type T has a to_c(result) method
 template <typename T, typename Result, typename = void>
@@ -1648,9 +1644,8 @@ struct has_to_c_simple : std::false_type {};
 
 template <typename T, typename Result>
 struct has_to_c_simple<
-    T, Result,
-    std::void_t<decltype(std::declval<T>().to_c(
-        std::declval<Result*>()))>> : std::true_type {};
+    T, Result, std::void_t<decltype(std::declval<T>().to_c(std::declval<Result *>()))>>
+  : std::true_type {};
 
 template <typename CXX_Measurement_Type, typename C_Measurement_Type>
 static inline realm_status_t
@@ -1666,9 +1661,10 @@ handle_measurement(const Realm::ProfilingResponse &response_cxx,
     bool ok = response_cxx.get_measurement<CXX_Measurement_Type>(m);
     if(ok) {
       // Dispatch to the correct to_c() overload at compile time
-      if constexpr (has_to_c_with_data<CXX_Measurement_Type, C_Measurement_Type>::value) {
+      if constexpr(has_to_c_with_data<CXX_Measurement_Type, C_Measurement_Type>::value) {
         return m.to_c(result, result_count, data);
-      } else if constexpr (has_to_c_with_count<CXX_Measurement_Type, C_Measurement_Type>::value) {
+      } else if constexpr(has_to_c_with_count<CXX_Measurement_Type,
+                                              C_Measurement_Type>::value) {
         return m.to_c(result, result_count);
       } else {
         return m.to_c(result);
@@ -1703,72 +1699,76 @@ realm_profiling_response_get_measurement(const realm_profiling_response_t *respo
     break;
   case PMID_OP_BACKTRACE_SYMBOLS:
     status = handle_measurement<Realm::ProfilingMeasurements::OperationBacktrace,
-                                realm_profiling_measurement_operation_backtrace_symbol_t>(
+                                realm_profiling_operation_backtrace_symbol_t>(
         response_cxx,
-        static_cast<realm_profiling_measurement_operation_backtrace_symbol_t *>(result),
+        static_cast<realm_profiling_operation_backtrace_symbol_t *>(result),
         result_count);
     break;
   case PMID_OP_TIMELINE:
     status = handle_measurement<Realm::ProfilingMeasurements::OperationTimeline,
-                                realm_profiling_measurement_operation_timeline_t>(
+                                realm_profiling_operation_timeline_t>(
         response_cxx,
-        static_cast<realm_profiling_measurement_operation_timeline_t *>(result),
+        static_cast<realm_profiling_operation_timeline_t *>(result),
         result_count);
     break;
   case PMID_OP_EVENT_WAITS:
     status =
         handle_measurement<Realm::ProfilingMeasurements::OperationEventWaits,
-                           realm_profiling_measurement_operation_event_wait_interval_t>(
+                           realm_profiling_operation_event_wait_interval_t>(
             response_cxx,
-            static_cast<realm_profiling_measurement_operation_event_wait_interval_t *>(
+            static_cast<realm_profiling_operation_event_wait_interval_t *>(
                 result),
             result_count);
     break;
   case PMID_OP_PROC_USAGE:
     status = handle_measurement<Realm::ProfilingMeasurements::OperationProcessorUsage,
-                                realm_profiling_measurement_operation_processor_usage_t>(
+                                realm_profiling_operation_processor_usage_t>(
         response_cxx,
-        static_cast<realm_profiling_measurement_operation_processor_usage_t *>(result),
+        static_cast<realm_profiling_operation_processor_usage_t *>(result),
         result_count);
     break;
   case PMID_OP_MEM_USAGE:
     status = handle_measurement<Realm::ProfilingMeasurements::OperationMemoryUsage,
-                                realm_profiling_measurement_operation_memory_usage_t>(
+                                realm_profiling_operation_memory_usage_t>(
         response_cxx,
-        static_cast<realm_profiling_measurement_operation_memory_usage_t *>(result),
+        static_cast<realm_profiling_operation_memory_usage_t *>(result),
         result_count);
     break;
   case PMID_INST_TIMELINE:
     status = handle_measurement<Realm::ProfilingMeasurements::InstanceTimeline,
-                                realm_profiling_measurement_instance_timeline_t>(
+                                realm_profiling_instance_timeline_t>(
         response_cxx,
-        static_cast<realm_profiling_measurement_instance_timeline_t *>(result),
+        static_cast<realm_profiling_instance_timeline_t *>(result),
         result_count);
     break;
   case PMID_INST_MEM_USAGE:
     status = handle_measurement<Realm::ProfilingMeasurements::InstanceMemoryUsage,
-                                realm_profiling_measurement_instance_memory_usage_t>(
+                                realm_profiling_instance_memory_usage_t>(
         response_cxx,
-        static_cast<realm_profiling_measurement_instance_memory_usage_t *>(result),
+        static_cast<realm_profiling_instance_memory_usage_t *>(result),
         result_count);
     break;
   case PMID_OP_TIMELINE_GPU:
     status = handle_measurement<Realm::ProfilingMeasurements::OperationTimelineGPU,
-                                realm_profiling_measurement_operation_timeline_gpu_t>(
+                                realm_profiling_operation_timeline_gpu_t>(
         response_cxx,
-        static_cast<realm_profiling_measurement_operation_timeline_gpu_t *>(result),
+        static_cast<realm_profiling_operation_timeline_gpu_t *>(result),
         result_count);
     break;
   case PMID_OP_COPY_INFO:
     status =
         handle_measurement<Realm::ProfilingMeasurements::OperationCopyInfo,
-                           realm_profiling_measurement_operation_copy_info_inst_info_t>(
+                           realm_profiling_operation_copy_info_t>(
             response_cxx,
-            static_cast<realm_profiling_measurement_operation_copy_info_inst_info_t *>(
-                result),
+            static_cast<realm_profiling_operation_copy_info_t *>(result),
             result_count);
     break;
   default:
+    status = REALM_PROFILING_ERROR_INVALID_MEASUREMENT;
+    break;
+  }
+
+  if(status == REALM_PROFILING_ERROR_INVALID_MEASUREMENT) {
     if(measurement_id >= PMID_OP_COPY_INFO_SRC_INST &&
        measurement_id < PMID_OP_COPY_INFO_SRC_FIELD) {
       status = handle_measurement<Realm::ProfilingMeasurements::OperationCopyInfo,
@@ -1781,10 +1781,7 @@ realm_profiling_response_get_measurement(const realm_profiling_response_t *respo
                                   realm_field_id_t>(
           response_cxx, static_cast<realm_field_id_t *>(result), result_count,
           &measurement_id);
-    } else {
-      status = REALM_PROFILING_ERROR_INVALID_MEASUREMENT;
     }
-    break;
   }
   return status;
 }

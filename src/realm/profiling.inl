@@ -101,12 +101,12 @@ namespace Realm {
       return status;
     }
 
-    inline realm_status_t OperationBacktrace::to_c(realm_profiling_measurement_operation_backtrace_symbol_t *result, size_t *result_count) const
+    inline realm_status_t OperationBacktrace::to_c(realm_profiling_operation_backtrace_symbol_t *result, size_t *result_count) const
     {
       *result_count = symbols.size();
       if(result != nullptr) {
-        realm_profiling_measurement_operation_backtrace_symbol_t *symbol_result =
-            reinterpret_cast<realm_profiling_measurement_operation_backtrace_symbol_t *>(
+        realm_profiling_operation_backtrace_symbol_t *symbol_result =
+            reinterpret_cast<realm_profiling_operation_backtrace_symbol_t *>(
                 result);
         for(size_t i = 0; i < symbols.size(); i++) {
           if(symbols[i].size() > PMID_OP_BACKTRACE_SYMBOLS_MAX_LENGTH) {
@@ -127,7 +127,7 @@ namespace Realm {
       return ((start_time != INVALID_TIMESTAMP) && (end_time != INVALID_TIMESTAMP));
     }
 
-    inline realm_status_t OperationTimelineGPU::to_c(realm_profiling_measurement_operation_timeline_gpu_t *result) const
+    inline realm_status_t OperationTimelineGPU::to_c(realm_profiling_operation_timeline_gpu_t *result) const
     {
       if(result) {
         result->start_time = start_time;
@@ -174,7 +174,7 @@ namespace Realm {
               (complete_time != INVALID_TIMESTAMP));
     }
 
-    inline realm_status_t OperationTimeline::to_c(realm_profiling_measurement_operation_timeline_t *result) const
+    inline realm_status_t OperationTimeline::to_c(realm_profiling_operation_timeline_t *result) const
     {
       if(result) {
         result->create_time = create_time;
@@ -218,7 +218,7 @@ namespace Realm {
       wait_end = Clock::current_time_in_nanoseconds();
     }
 
-    inline realm_status_t OperationEventWaits::to_c(realm_profiling_measurement_operation_event_wait_interval_t *result, size_t *result_count) const
+    inline realm_status_t OperationEventWaits::to_c(realm_profiling_operation_event_wait_interval_t *result, size_t *result_count) const
     {
       realm_status_t status = REALM_SUCCESS;
       if(result != nullptr) {
@@ -244,7 +244,7 @@ namespace Realm {
     // struct OperationProcessorUsage
     //
 
-    inline realm_status_t OperationProcessorUsage::to_c(realm_profiling_measurement_operation_processor_usage_t *result) const
+    inline realm_status_t OperationProcessorUsage::to_c(realm_profiling_operation_processor_usage_t *result) const
     {
       if(result) {
         result->proc = proc.id;
@@ -258,7 +258,7 @@ namespace Realm {
     // struct OperationMemoryUsage
     //
 
-    inline realm_status_t OperationMemoryUsage::to_c(realm_profiling_measurement_operation_memory_usage_t *result) const
+    inline realm_status_t OperationMemoryUsage::to_c(realm_profiling_operation_memory_usage_t *result) const
     {
       if(result) {
         result->source = source.id;
@@ -289,7 +289,7 @@ namespace Realm {
       delete_time = Clock::current_time_in_nanoseconds();
     }
 
-    inline realm_status_t InstanceTimeline::to_c(realm_profiling_measurement_instance_timeline_t *result) const
+    inline realm_status_t InstanceTimeline::to_c(realm_profiling_instance_timeline_t *result) const
     {
       if(result) {
         result->instance = instance.id;
@@ -306,7 +306,7 @@ namespace Realm {
     // struct InstanceMemoryUsage
     //
 
-    inline realm_status_t InstanceMemoryUsage::to_c(realm_profiling_measurement_instance_memory_usage_t *result) const
+    inline realm_status_t InstanceMemoryUsage::to_c(realm_profiling_instance_memory_usage_t *result) const
     {
       if(result) {
         result->instance = instance.id;
@@ -364,7 +364,7 @@ namespace Realm {
       return success;
     }
 
-    inline realm_status_t OperationCopyInfo::to_c(realm_profiling_measurement_operation_copy_info_inst_info_t *result, size_t *result_count) const
+    inline realm_status_t OperationCopyInfo::to_c(realm_profiling_operation_copy_info_t *result, size_t *result_count) const
     {
       realm_status_t status = REALM_SUCCESS;
       if(result != nullptr) {
@@ -377,7 +377,7 @@ namespace Realm {
             result[i].src_indirection_field = inst_info[i].src_indirection_field;
             result[i].dst_indirection_field = inst_info[i].dst_indirection_field;
             result[i].request_type =
-                static_cast<realm_profiling_measurement_operation_copy_info_request_type_t>(
+                static_cast<realm_profiling_operation_copy_info_request_type_t>(
                     inst_info[i].request_type);
             result[i].num_hops = inst_info[i].num_hops;
           }

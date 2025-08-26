@@ -71,7 +71,7 @@ void REALM_FNPTR op_profiling_response_task(const void *args, size_t arglen,
 
   if(realm_profiling_response_get_measurement(&response, PMID_OP_TIMELINE, nullptr,
                                               nullptr) == REALM_SUCCESS) {
-    realm_profiling_measurement_operation_timeline_t op_timeline;
+    realm_profiling_operation_timeline_t op_timeline;
     status = realm_profiling_response_get_measurement(&response, PMID_OP_TIMELINE,
                                                       &op_timeline, nullptr);
     assert(status == REALM_SUCCESS);
@@ -92,14 +92,14 @@ void REALM_FNPTR op_profiling_response_task(const void *args, size_t arglen,
 
   if(realm_profiling_response_get_measurement(&response, PMID_OP_EVENT_WAITS, nullptr,
                                               nullptr) == REALM_SUCCESS) {
-    realm_profiling_measurement_operation_event_wait_interval_t *op_waits = nullptr;
+    realm_profiling_operation_event_wait_interval_t *op_waits = nullptr;
     size_t count = 0;
     status = realm_profiling_response_get_measurement(&response, PMID_OP_EVENT_WAITS,
                                                       op_waits, &count);
     assert(status == REALM_SUCCESS);
     printf("op waits = %zd", count);
     if(count > 0) {
-      op_waits = new realm_profiling_measurement_operation_event_wait_interval_t[count];
+      op_waits = new realm_profiling_operation_event_wait_interval_t[count];
       status = realm_profiling_response_get_measurement(&response, PMID_OP_EVENT_WAITS,
                                                         op_waits, &count);
       printf(" [");
@@ -232,7 +232,7 @@ void REALM_FNPTR main_task(const void *args, size_t arglen, const void *userdata
     status = realm_processor_spawn(runtime, proc, CHILD_TASK, &cargs, sizeof(cargs),
                                    request, 1, REALM_NO_EVENT, 0, &event);
     assert(status == REALM_SUCCESS);
-    status = realm_event_wait(runtime, event, nullptr);
+    status = realm_event_wait(runtime, event, REALM_WAIT_INFINITE, nullptr);
     assert(status == REALM_SUCCESS);
   }
 
@@ -325,21 +325,21 @@ int main(int argc, char **argv)
                                                  REALM_REGISTER_TASK_DEFAULT, MAIN_TASK,
                                                  main_task, 0, 0, &register_task_event);
   assert(status == REALM_SUCCESS);
-  status = realm_event_wait(runtime, register_task_event, nullptr);
+  status = realm_event_wait(runtime, register_task_event, REALM_WAIT_INFINITE, nullptr);
   assert(status == REALM_SUCCESS);
 
   status = realm_processor_register_task_by_kind(runtime, LOC_PROC,
                                                  REALM_REGISTER_TASK_DEFAULT, CHILD_TASK,
                                                  child_task, 0, 0, &register_task_event);
   assert(status == REALM_SUCCESS);
-  status = realm_event_wait(runtime, register_task_event, nullptr);
+  status = realm_event_wait(runtime, register_task_event, REALM_WAIT_INFINITE, nullptr);
   assert(status == REALM_SUCCESS);
 
   status = realm_processor_register_task_by_kind(
       runtime, LOC_PROC, REALM_REGISTER_TASK_DEFAULT, OP_PROFILING_RESPONSE_TASK,
       op_profiling_response_task, 0, 0, &register_task_event);
   assert(status == REALM_SUCCESS);
-  status = realm_event_wait(runtime, register_task_event, nullptr);
+  status = realm_event_wait(runtime, register_task_event, REALM_WAIT_INFINITE, nullptr);
   assert(status == REALM_SUCCESS);
 
   realm_processor_query_t proc_query;
