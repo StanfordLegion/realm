@@ -1617,6 +1617,41 @@ realm_status_t realm_external_resource_suggested_memory(
 
 // Profiling API
 
+// Trait: check if a type T has a to_c(result, result_count, data) method
+template <typename T, typename Result, typename = void>
+struct has_to_c_with_data : std::false_type {};
+
+template <typename T, typename Result>
+struct has_to_c_with_data<
+    T, Result,
+    std::void_t<decltype(std::declval<T>().to_c(
+        std::declval<Result*>(),
+        std::declval<size_t*>(),
+        (const void*)nullptr))>> : std::true_type {};
+
+
+// Trait: check if a type T has a to_c(result, result_count) method
+template <typename T, typename Result, typename = void>
+struct has_to_c_with_count : std::false_type {};
+
+template <typename T, typename Result>
+struct has_to_c_with_count<
+    T, Result,
+    std::void_t<decltype(std::declval<T>().to_c(
+        std::declval<Result*>(),
+        std::declval<size_t*>()))>> : std::true_type {};
+
+
+// Trait: check if a type T has a to_c(result) method
+template <typename T, typename Result, typename = void>
+struct has_to_c_simple : std::false_type {};
+
+template <typename T, typename Result>
+struct has_to_c_simple<
+    T, Result,
+    std::void_t<decltype(std::declval<T>().to_c(
+        std::declval<Result*>()))>> : std::true_type {};
+
 template <typename CXX_Measurement_Type, typename C_Measurement_Type>
 static inline realm_status_t
 handle_measurement(const Realm::ProfilingResponse &response_cxx,
@@ -1630,8 +1665,14 @@ handle_measurement(const Realm::ProfilingResponse &response_cxx,
     CXX_Measurement_Type m;
     bool ok = response_cxx.get_measurement<CXX_Measurement_Type>(m);
     if(ok) {
-      realm_status_t status = m.to_c(result, result_count, data);
-      return status;
+      // Dispatch to the correct to_c() overload at compile time
+      if constexpr (has_to_c_with_data<CXX_Measurement_Type, C_Measurement_Type>::value) {
+        return m.to_c(result, result_count, data);
+      } else if constexpr (has_to_c_with_count<CXX_Measurement_Type, C_Measurement_Type>::value) {
+        return m.to_c(result, result_count);
+      } else {
+        return m.to_c(result);
+      }
     } else {
       return REALM_PROFILING_ERROR_INVALID_MEASUREMENT;
     }
