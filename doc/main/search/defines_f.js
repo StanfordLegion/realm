@@ -71,12 +71,13 @@ var searchData=
   ['realm_5fversion_5fmeta_68',['REALM_VERSION_META',['../realm__defines_8h.html#a0a56666a71a24d7645c4799e7ebabf56',1,'realm_defines.h']]],
   ['realm_5fversion_5fminor_69',['REALM_VERSION_MINOR',['../realm__defines_8h.html#a1f3c1e63db0ac1926692a22b95ac1a4d',1,'realm_defines.h']]],
   ['realm_5fversion_5fpatch_70',['REALM_VERSION_PATCH',['../realm__defines_8h.html#a319e011f33a288664d280b6451f23ca4',1,'realm_defines.h']]],
-  ['realm_5fxferdes_5fkinds_71',['REALM_XFERDES_KINDS',['../channel_8h.html#abf7500830a6534d679519296a93f7f28',1,'channel.h']]],
-  ['register_5frealm_5fmodule_5fconfig_5fdynamic_72',['REGISTER_REALM_MODULE_CONFIG_DYNAMIC',['../module_8h.html#a79819cb2ce962f0c2981163700ab52c6',1,'module.h']]],
-  ['register_5frealm_5fmodule_5fdynamic_73',['REGISTER_REALM_MODULE_DYNAMIC',['../module_8h.html#a509d4cbced34a5340ae9a1240279752b',1,'module.h']]],
-  ['register_5frealm_5fnetwork_5fmodule_5fdynamic_74',['REGISTER_REALM_NETWORK_MODULE_DYNAMIC',['../module_8h.html#a4c6e8284d2f4051891066eb76eb989eb',1,'module.h']]],
-  ['report_5fcu_5ferror_75',['REPORT_CU_ERROR',['../cuda__internal_8h.html#a6e674bbed65074f83ed076231397afd0',1,'cuda_internal.h']]],
-  ['report_5fcupti_5ferror_76',['REPORT_CUPTI_ERROR',['../cuda__internal_8h.html#a335626e129f6ebabcb7eb8b0f7094170',1,'cuda_internal.h']]],
-  ['report_5fhip_5ferror_77',['REPORT_HIP_ERROR',['../hip__internal_8h.html#a6e45146997a4be05508065bef1338d8c',1,'hip_internal.h']]],
-  ['report_5fnvml_5ferror_78',['REPORT_NVML_ERROR',['../cuda__internal_8h.html#a8632372a7716956c1143a6a18e311c89',1,'cuda_internal.h']]]
+  ['realm_5fwait_5finfinite_71',['REALM_WAIT_INFINITE',['../realm__c_8h.html#a7150767667959dfeb490c638d4cd14b8',1,'realm_c.h']]],
+  ['realm_5fxferdes_5fkinds_72',['REALM_XFERDES_KINDS',['../channel_8h.html#abf7500830a6534d679519296a93f7f28',1,'channel.h']]],
+  ['register_5frealm_5fmodule_5fconfig_5fdynamic_73',['REGISTER_REALM_MODULE_CONFIG_DYNAMIC',['../module_8h.html#a79819cb2ce962f0c2981163700ab52c6',1,'module.h']]],
+  ['register_5frealm_5fmodule_5fdynamic_74',['REGISTER_REALM_MODULE_DYNAMIC',['../module_8h.html#a509d4cbced34a5340ae9a1240279752b',1,'module.h']]],
+  ['register_5frealm_5fnetwork_5fmodule_5fdynamic_75',['REGISTER_REALM_NETWORK_MODULE_DYNAMIC',['../module_8h.html#a4c6e8284d2f4051891066eb76eb989eb',1,'module.h']]],
+  ['report_5fcu_5ferror_76',['REPORT_CU_ERROR',['../cuda__internal_8h.html#a6e674bbed65074f83ed076231397afd0',1,'cuda_internal.h']]],
+  ['report_5fcupti_5ferror_77',['REPORT_CUPTI_ERROR',['../cuda__internal_8h.html#a335626e129f6ebabcb7eb8b0f7094170',1,'cuda_internal.h']]],
+  ['report_5fhip_5ferror_78',['REPORT_HIP_ERROR',['../hip__internal_8h.html#a6e45146997a4be05508065bef1338d8c',1,'hip_internal.h']]],
+  ['report_5fnvml_5ferror_79',['REPORT_NVML_ERROR',['../cuda__internal_8h.html#a8632372a7716956c1143a6a18e311c89',1,'cuda_internal.h']]]
 ];

@@ -44,7 +44,7 @@
    <!-- BEGIN version select -->
     <br />
     <div class="dropdown">
-     <button class="dropbtn">Version 025.6.1-rc.2+9507ac17</button>
+     <button class="dropbtn">Version 025.6.1-rc.2+77790b24</button>
      <div class="dropdown-content"></div>
     </div>
     <script type="text/javascript" src="../selectversion.js"></script>
@@ -201,6 +201,8 @@ Macros</h2></td></tr>
 <tr class="separator:a9fcf9bf3eec797da0eec630f3db35b02"><td class="memSeparator" colspan="2">&#160;</td></tr>
 <tr class="memitem:a04a279da1bdab7c2dfea109d8477060f" id="r_a04a279da1bdab7c2dfea109d8477060f"><td class="memItemLeft" align="right" valign="top">#define&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="realm__c_8h.html#a04a279da1bdab7c2dfea109d8477060f">REALM_TASK_ID_FIRST_AVAILABLE</a>&#160;&#160;&#160;((<a class="el" href="realm__c_8h.html#ad4124ee029c7e40a8be8f3ace05e1944">realm_task_func_id_t</a>)4U)</td></tr>
 <tr class="separator:a04a279da1bdab7c2dfea109d8477060f"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:a7150767667959dfeb490c638d4cd14b8" id="r_a7150767667959dfeb490c638d4cd14b8"><td class="memItemLeft" align="right" valign="top">#define&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="realm__c_8h.html#a7150767667959dfeb490c638d4cd14b8">REALM_WAIT_INFINITE</a>&#160;&#160;&#160;((int64_t)INT64_MIN)</td></tr>
+<tr class="separator:a7150767667959dfeb490c638d4cd14b8"><td class="memSeparator" colspan="2">&#160;</td></tr>
 <tr class="memitem:a468d7622e77a096596dc59e273c00000" id="r_a468d7622e77a096596dc59e273c00000"><td class="memItemLeft" align="right" valign="top">#define&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="realm__c_8h.html#a468d7622e77a096596dc59e273c00000">REALM_PROCESSOR_KINDS</a>(__op__)</td></tr>
 <tr class="separator:a468d7622e77a096596dc59e273c00000"><td class="memSeparator" colspan="2">&#160;</td></tr>
 <tr class="memitem:afaed0bf55f33b3f2a41cd7f8880c04ee" id="r_afaed0bf55f33b3f2a41cd7f8880c04ee"><td class="memItemLeft" align="right" valign="top">#define&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="realm__c_8h.html#afaed0bf55f33b3f2a41cd7f8880c04ee">C_ENUMS</a>(name,  desc)&#160;&#160;&#160;name,</td></tr>
@@ -510,9 +512,9 @@ Functions</h2></td></tr>
 <tr class="memitem:ac261672dab06998a352eba3bc721c996" id="r_ac261672dab06998a352eba3bc721c996"><td class="memItemLeft" align="right" valign="top"><a class="el" href="realm__c_8h.html#a2b6b74b69d9ab09086e991192d6a3b01">realm_status_t</a> <a class="el" href="realm__c_8h.html#a8318db725ba0c1c4a16d4a3e9c5e221c">REALM_EXPORT</a>&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="realm__c_8h.html#ac261672dab06998a352eba3bc721c996">realm_memory_query_iter</a> (<a class="el" href="realm__c_8h.html#a44c7f27d39bede79065e70b4216bb692">realm_memory_query_t</a> query, <a class="el" href="realm__c_8h.html#a31366ed2ccd9e0fd9b71f6b13b016bdd">realm_memory_query_cb_t</a> cb, void *user_data, size_t max_queries)</td></tr>
 <tr class="memdesc:ac261672dab06998a352eba3bc721c996"><td class="mdescLeft">&#160;</td><td class="mdescRight">Iterates over the memories in the query.  <br /></td></tr>
 <tr class="separator:ac261672dab06998a352eba3bc721c996"><td class="memSeparator" colspan="2">&#160;</td></tr>
-<tr class="memitem:a0d5065553dbefbc37b03f068426a3b1b" id="r_a0d5065553dbefbc37b03f068426a3b1b"><td class="memItemLeft" align="right" valign="top"><a class="el" href="realm__c_8h.html#a2b6b74b69d9ab09086e991192d6a3b01">realm_status_t</a> <a class="el" href="realm__c_8h.html#a8318db725ba0c1c4a16d4a3e9c5e221c">REALM_EXPORT</a>&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="realm__c_8h.html#a0d5065553dbefbc37b03f068426a3b1b">realm_event_wait</a> (<a class="el" href="realm__c_8h.html#a12244d6f588701745cab3b05915d8bc7">realm_runtime_t</a> runtime, <a class="el" href="realm__c_8h.html#a6fd9ee4981b8ef6f230377d9c3f0bedd">realm_event_t</a> event, int *poisoned)</td></tr>
-<tr class="memdesc:a0d5065553dbefbc37b03f068426a3b1b"><td class="mdescLeft">&#160;</td><td class="mdescRight">Waits for a specific event to complete.  <br /></td></tr>
-<tr class="separator:a0d5065553dbefbc37b03f068426a3b1b"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:a841d2b360a6feeec1df95db86e11d95b" id="r_a841d2b360a6feeec1df95db86e11d95b"><td class="memItemLeft" align="right" valign="top"><a class="el" href="realm__c_8h.html#a2b6b74b69d9ab09086e991192d6a3b01">realm_status_t</a> <a class="el" href="realm__c_8h.html#a8318db725ba0c1c4a16d4a3e9c5e221c">REALM_EXPORT</a>&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="realm__c_8h.html#a841d2b360a6feeec1df95db86e11d95b">realm_event_wait</a> (<a class="el" href="realm__c_8h.html#a12244d6f588701745cab3b05915d8bc7">realm_runtime_t</a> runtime, <a class="el" href="realm__c_8h.html#a6fd9ee4981b8ef6f230377d9c3f0bedd">realm_event_t</a> event, int64_t max_ns, int *poisoned)</td></tr>
+<tr class="memdesc:a841d2b360a6feeec1df95db86e11d95b"><td class="mdescLeft">&#160;</td><td class="mdescRight">Waits for a specific event to complete.  <br /></td></tr>
+<tr class="separator:a841d2b360a6feeec1df95db86e11d95b"><td class="memSeparator" colspan="2">&#160;</td></tr>
 <tr class="memitem:aefd62511c371d140d37eb14e3d63a171" id="r_aefd62511c371d140d37eb14e3d63a171"><td class="memItemLeft" align="right" valign="top"><a class="el" href="realm__c_8h.html#a2b6b74b69d9ab09086e991192d6a3b01">realm_status_t</a> <a class="el" href="realm__c_8h.html#a8318db725ba0c1c4a16d4a3e9c5e221c">REALM_EXPORT</a>&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="realm__c_8h.html#aefd62511c371d140d37eb14e3d63a171">realm_event_merge</a> (<a class="el" href="realm__c_8h.html#a12244d6f588701745cab3b05915d8bc7">realm_runtime_t</a> runtime, const <a class="el" href="realm__c_8h.html#a6fd9ee4981b8ef6f230377d9c3f0bedd">realm_event_t</a> *wait_for, size_t num_events, <a class="el" href="realm__c_8h.html#a6fd9ee4981b8ef6f230377d9c3f0bedd">realm_event_t</a> *event, int ignore_faults)</td></tr>
 <tr class="memdesc:aefd62511c371d140d37eb14e3d63a171"><td class="mdescLeft">&#160;</td><td class="mdescRight">Merges multiple events into a single event.  <br /></td></tr>
 <tr class="separator:aefd62511c371d140d37eb14e3d63a171"><td class="memSeparator" colspan="2">&#160;</td></tr>
@@ -826,6 +828,20 @@ Functions</h2></td></tr>
       <table class="memname">
         <tr>
           <td class="memname">#define REALM_TASK_ID_PROCESSOR_SHUTDOWN&#160;&#160;&#160;((<a class="el" href="realm__c_8h.html#ad4124ee029c7e40a8be8f3ace05e1944">realm_task_func_id_t</a>)2U)</td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+
+</div>
+</div>
+<a id="a7150767667959dfeb490c638d4cd14b8" name="a7150767667959dfeb490c638d4cd14b8"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a7150767667959dfeb490c638d4cd14b8">&#9670;&#160;</a></span>REALM_WAIT_INFINITE</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname">#define REALM_WAIT_INFINITE&#160;&#160;&#160;((int64_t)INT64_MIN)</td>
         </tr>
       </table>
 </div><div class="memdoc">
@@ -1806,8 +1822,8 @@ Functions</h2></td></tr>
 
 </div>
 </div>
-<a id="a0d5065553dbefbc37b03f068426a3b1b" name="a0d5065553dbefbc37b03f068426a3b1b"></a>
-<h2 class="memtitle"><span class="permalink"><a href="#a0d5065553dbefbc37b03f068426a3b1b">&#9670;&#160;</a></span>realm_event_wait()</h2>
+<a id="a841d2b360a6feeec1df95db86e11d95b" name="a841d2b360a6feeec1df95db86e11d95b"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a841d2b360a6feeec1df95db86e11d95b">&#9670;&#160;</a></span>realm_event_wait()</h2>
 
 <div class="memitem">
 <div class="memproto">
@@ -1827,6 +1843,12 @@ Functions</h2></td></tr>
         <tr>
           <td class="paramkey"></td>
           <td></td>
+          <td class="paramtype">int64_t&#160;</td>
+          <td class="paramname"><em>max_ns</em>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
           <td class="paramtype">int *&#160;</td>
           <td class="paramname"><em>poisoned</em>&#160;</td>
         </tr>
@@ -1842,7 +1864,8 @@ Functions</h2></td></tr>
 <dl class="params"><dt>Parameters</dt><dd>
   <table class="params">
     <tr><td class="paramdir"></td><td class="paramname">runtime</td><td>The runtime instance to use. </td></tr>
-    <tr><td class="paramdir">[out]</td><td class="paramname">event</td><td>The event to wait for. </td></tr>
+    <tr><td class="paramdir"></td><td class="paramname">event</td><td>The event to wait for. </td></tr>
+    <tr><td class="paramdir"></td><td class="paramname">max_ns</td><td>The maximum number of nanoseconds to wait. REALM_WAIT_INFINITE is a special value that means wait forever. </td></tr>
     <tr><td class="paramdir">[out]</td><td class="paramname">poisoned</td><td>Whether the event is poisoned. </td></tr>
   </table>
   </dd>
