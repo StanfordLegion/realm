@@ -29,7 +29,7 @@ concurrency:
 
 jobs:
   build:
-    name: ${{ matrix.config.os }}-${{ matrix.config.shared == 'ON' && 'shared' || 'static' }}-${{ matrix.config.cc }}-${{ matrix.config.build }}${{ matrix.config.cuda && format('-cuda{0}', matrix.config.cuda) || '' }}${{ matrix.config.ucx == 'ON' && '-ucx' || '' }}${{ matrix.config.gasnet == 'ON' && '-gasnet' || '' }}${{ matrix.config.openmp == 'ON' && '-openmp' || '' }}${{ matrix.config.python == 'ON' && '-python' || '' }}${{ matrix.config.sanitizer != 'NONE' && format('-{0}', matrix.config.sanitizer) || '' }}
+    name: ${{ matrix.config.os }}-${{ matrix.config.shared == 'ON' && 'shared' || 'static' }}-${{ matrix.config.cc }}-${{ matrix.config.build }}${{ matrix.config.cuda && format('-cuda{0}', matrix.config.cuda) || '' }}${{ matrix.config.ucx == 'ON' && '-ucx' || '' }}${{ matrix.config.gasnet == 'ON' && '-gasnet' || '' }}${{ matrix.config.kokkos == 'ON' && '-kokkos' || '' }}${{ matrix.config.openmp == 'ON' && '-openmp' || '' }}${{ matrix.config.python == 'ON' && '-python' || '' }}${{ matrix.config.sanitizer != 'NONE' && format('-{0}', matrix.config.sanitizer) || '' }}
     runs-on: ${{ matrix.config.os }}
     env:
       CPM_SOURCE_CACHE: "${{ github.workspace }}/.cache/cpm"
@@ -51,6 +51,7 @@ jobs:
               ucx: 'OFF',
               gasnet: 'OFF',
               python: 'OFF',
+              kokkos: 'OFF',
               sanitizer: 'NONE'
             }
           - {
@@ -64,6 +65,7 @@ jobs:
               ucx: 'OFF',
               gasnet: 'OFF',
               python: 'OFF',
+              kokkos: 'OFF',
               sanitizer: 'NONE'
             }
           - {
@@ -77,6 +79,7 @@ jobs:
               ucx: 'OFF',
               gasnet: 'OFF',
               python: 'ON',
+              kokkos: 'OFF',
               sanitizer: 'NONE'
             }
           - {
@@ -90,6 +93,7 @@ jobs:
               ucx: 'OFF',
               gasnet: 'OFF',
               python: 'ON',
+              kokkos: 'OFF',
               sanitizer: 'NONE'
             }
           - {
@@ -103,6 +107,7 @@ jobs:
               ucx: 'OFF',
               gasnet: 'ON',
               python: 'ON',
+              kokkos: 'ON',
               sanitizer: 'NONE'
             }
           - {
@@ -116,6 +121,7 @@ jobs:
               ucx: 'ON',
               gasnet: 'OFF',
               python: 'ON',
+              kokkos: 'ON',
               sanitizer: 'NONE'
             }
           - {
@@ -129,6 +135,7 @@ jobs:
               ucx: 'OFF',
               gasnet: 'OFF',
               python: 'ON',
+              kokkos: 'ON',
               sanitizer: 'NONE'
             }
           - {
@@ -142,6 +149,7 @@ jobs:
               ucx: 'OFF',
               gasnet: 'OFF',
               python: 'ON',
+              kokkos: 'OFF',
               sanitizer: 'NONE'
             }
           - {
@@ -155,6 +163,7 @@ jobs:
               ucx: 'OFF',
               gasnet: 'OFF',
               python: 'ON',
+              kokkos: 'OFF',
               sanitizer: 'NONE'
             }
           - {
@@ -168,6 +177,7 @@ jobs:
               ucx: 'OFF',
               gasnet: 'OFF',
               python: 'OFF',
+              kokkos: 'OFF',
               sanitizer: 'ASAN'
             }
           - {
@@ -181,6 +191,7 @@ jobs:
               ucx: 'OFF',
               gasnet: 'OFF',
               python: 'OFF',
+              kokkos: 'OFF',
               sanitizer: 'UBSAN'
             }
           - {
@@ -194,6 +205,7 @@ jobs:
               ucx: 'OFF',
               gasnet: 'OFF',
               python: 'OFF',
+              kokkos: 'OFF',
               sanitizer: 'TSAN'
             }
     steps:
@@ -287,6 +299,7 @@ jobs:
                 -DREALM_ENABLE_UCX=${{ matrix.config.ucx }}
                 -DREALM_ENABLE_PYTHON=${{ matrix.config.python }}
                 -DREALM_ENABLE_CUDA=${{ matrix.config.cuda != '' && 'ON' || 'OFF' }}
+                -DREALM_ENABLE_KOKKOS=${{ matrix.config.kokkos }}
                 -DGASNET_CONDUIT=mpi
                 -DREALM_ENABLE_GASNETEX=${{ matrix.config.gasnet }}
                 -DREALM_SANITIZER=${{ matrix.config.sanitizer }}
