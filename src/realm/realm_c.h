@@ -348,72 +348,71 @@ typedef struct realm_profiling_response_st {
 // bytes
 #define PMID_OP_BACKTRACE_SYMBOLS_MAX_LENGTH (2048)
 
-typedef struct realm_profiling_measurement_operation_backtrace_symbol_st {
+typedef struct realm_profiling_operation_backtrace_symbol_st {
   char symbol[PMID_OP_BACKTRACE_SYMBOLS_MAX_LENGTH];
-} realm_profiling_measurement_operation_backtrace_symbol_t;
+} realm_profiling_operation_backtrace_symbol_t;
 
-typedef struct realm_profiling_measurement_operation_timeline_st {
+typedef struct realm_profiling_operation_timeline_st {
   long long create_time;   // when was operation created?
   long long ready_time;    // when was operation ready to proceed?
   long long start_time;    // when did operation start?
   long long end_time;      // when did operation end (on processor)?
   long long complete_time; // when was all work for operation complete?
-} realm_profiling_measurement_operation_timeline_t;
+} realm_profiling_operation_timeline_t;
 
-typedef struct realm_profiling_measurement_operation_timeline_gpu_st {
+typedef struct realm_profiling_operation_timeline_gpu_st {
   long long start_time; // when was the GPU started?
   long long end_time;   // when was the GPU completed?
-} realm_profiling_measurement_operation_timeline_gpu_t;
+} realm_profiling_operation_timeline_gpu_t;
 
-typedef struct realm_profiling_measurement_operation_event_wait_interval_st {
+typedef struct realm_profiling_operation_event_wait_interval_st {
   long long wait_start;     // when did the interval begin?
   long long wait_ready;     // when did the event trigger?
   long long wait_end;       // when did the interval actually end
   realm_event_t wait_event; // which event was waited on
-} realm_profiling_measurement_operation_event_wait_interval_t;
+} realm_profiling_operation_event_wait_interval_t;
 
-typedef struct realm_profiling_measurement_operation_processor_usage_st {
+typedef struct realm_profiling_operation_processor_usage_st {
   realm_processor_t proc;
-} realm_profiling_measurement_operation_processor_usage_t;
+} realm_profiling_operation_processor_usage_t;
 
-typedef struct realm_profiling_measurement_operation_memory_usage_st {
+typedef struct realm_profiling_operation_memory_usage_st {
   realm_memory_t source;
   realm_memory_t target;
   size_t size;
-} realm_profiling_measurement_operation_memory_usage_t;
+} realm_profiling_operation_memory_usage_t;
 
-typedef struct realm_profiling_measurement_instance_timeline_st {
+typedef struct realm_profiling_instance_timeline_st {
   realm_region_instance_t instance;
   long long create_time; // when was instance created?
   long long ready_time;  // when was instance ready for use?
   long long delete_time; // when was the instance deleted?
-} realm_profiling_measurement_instance_timeline_t;
+} realm_profiling_instance_timeline_t;
 
-typedef struct realm_profiling_measurement_instance_memory_usage_st {
+typedef struct realm_profiling_instance_memory_usage_st {
   realm_region_instance_t instance;
   realm_memory_t memory;
   size_t bytes;
-} realm_profiling_measurement_instance_memory_usage_t;
+} realm_profiling_instance_memory_usage_t;
 
-typedef enum realm_profiling_measurement_operation_copy_info_request_type_enum
+typedef enum realm_profiling_operation_copy_info_request_type_enum
 {
   REALM_COPY_INFO_REQUEST_TYPE_FILL = 0,
   REALM_COPY_INFO_REQUEST_TYPE_REDUCE = 1,
   REALM_COPY_INFO_REQUEST_TYPE_COPY = 2,
-} realm_profiling_measurement_operation_copy_info_request_type_t;
+} realm_profiling_operation_copy_info_request_type_t;
 
 // The src and dst instances and fields are not included in the inst_info, because they
 // are retrieved from the PMID_OP_COPY_INFO_SRC_INST, PMID_OP_COPY_INFO_DST_INST,
 // PMID_OP_COPY_INFO_SRC_FIELD, PMID_OP_COPY_INFO_DST_FIELD.
-typedef struct realm_profiling_measurement_operation_copy_info_inst_info_st {
+typedef struct realm_profiling_operation_copy_info_st {
   realm_region_instance_t src_indirection_inst; // src indirection instance (gather)
   realm_region_instance_t dst_indirection_inst; // dst indirection instance (scatter)
   realm_field_id_t src_indirection_field;       // field of indirection points
   realm_field_id_t dst_indirection_field;       // field of indirection points
-  realm_profiling_measurement_operation_copy_info_request_type_t
-      request_type;      // fill, reduce, copy
+  realm_profiling_operation_copy_info_request_type_t request_type; // fill, reduce, copy
   unsigned int num_hops; // num_hops for each request
-} realm_profiling_measurement_operation_copy_info_inst_info_t;
+} realm_profiling_operation_copy_info_t;
 
 typedef struct realm_affinity_details_t {
   unsigned bandwidth; // in MB/s

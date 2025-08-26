@@ -353,7 +353,7 @@ TEST_F(CProfilingTest_OperationBacktrace,
        ProfilingResponseGetMeasurementOperationBacktraceSymbols)
 {
   size_t result_count = backtrace.symbols.size();
-  realm_profiling_measurement_operation_backtrace_symbol_t symbols[result_count];
+  realm_profiling_operation_backtrace_symbol_t symbols[result_count];
   realm_status_t status = realm_profiling_response_get_measurement(
       &response, realm_profiling_measurement_id_t::PMID_OP_BACKTRACE_SYMBOLS, symbols,
       &result_count);
@@ -402,7 +402,7 @@ TEST_F(CProfilingTest_OperationTimeline, ProfilingResponseHasMeasurementSuccess)
 
 TEST_F(CProfilingTest_OperationTimeline, ProfilingResponseGetMeasurementOperationTimeline)
 {
-  realm_profiling_measurement_operation_timeline_t op_timeline_result;
+  realm_profiling_operation_timeline_t op_timeline_result;
   size_t result_count = 0;
   realm_status_t status = realm_profiling_response_get_measurement(
       &response, realm_profiling_measurement_id_t::PMID_OP_TIMELINE, &op_timeline_result,
@@ -441,7 +441,7 @@ TEST_F(CProfilingTest_OperationTimelineGPU, ProfilingResponseHasMeasurementSucce
 TEST_F(CProfilingTest_OperationTimelineGPU,
        ProfilingResponseGetMeasurementOperationTimelineGPU)
 {
-  realm_profiling_measurement_operation_timeline_gpu_t op_timeline_gpu_result;
+  realm_profiling_operation_timeline_gpu_t op_timeline_gpu_result;
   size_t result_count = 0;
   realm_status_t status = realm_profiling_response_get_measurement(
       &response, realm_profiling_measurement_id_t::PMID_OP_TIMELINE_GPU,
@@ -481,7 +481,7 @@ TEST_F(CProfilingTest_OperationEventWaits,
        ProfilingResponseGetMeasurementOperationEventWaits)
 {
   size_t result_count = event_waits.intervals.size();
-  realm_profiling_measurement_operation_event_wait_interval_t op_event_waits_result[result_count];
+  realm_profiling_operation_event_wait_interval_t op_event_waits_result[result_count];
   realm_status_t status = realm_profiling_response_get_measurement(
       &response, realm_profiling_measurement_id_t::PMID_OP_EVENT_WAITS,
       op_event_waits_result, &result_count);
@@ -499,7 +499,7 @@ TEST_F(CProfilingTest_OperationEventWaits,
        ProfilingResponseGetMeasurementOperationEventWaitsSmallBuffer)
 {
   size_t result_count = event_waits.intervals.size() - 1;
-  realm_profiling_measurement_operation_event_wait_interval_t op_event_waits_result[result_count];
+  realm_profiling_operation_event_wait_interval_t op_event_waits_result[result_count];
   realm_status_t status = realm_profiling_response_get_measurement(
   &response, realm_profiling_measurement_id_t::PMID_OP_EVENT_WAITS,
   op_event_waits_result, &result_count);
@@ -544,7 +544,7 @@ TEST_F(CProfilingTest_OperationProcessorUsage, ProfilingResponseHasMeasurementSu
 TEST_F(CProfilingTest_OperationProcessorUsage,
        ProfilingResponseGetMeasurementOperationProcessorUsage)
 {
-  realm_profiling_measurement_operation_processor_usage_t op_processor_usage_result;
+  realm_profiling_operation_processor_usage_t op_processor_usage_result;
   size_t result_count = 0;
   realm_status_t status = realm_profiling_response_get_measurement(
       &response, realm_profiling_measurement_id_t::PMID_OP_PROC_USAGE,
@@ -579,7 +579,7 @@ TEST_F(CProfilingTest_OperationMemoryUsage, ProfilingResponseHasMeasurementSucce
 TEST_F(CProfilingTest_OperationMemoryUsage,
        ProfilingResponseGetMeasurementOperationMemoryUsage)
 {
-  realm_profiling_measurement_operation_memory_usage_t op_memory_usage_result;
+  realm_profiling_operation_memory_usage_t op_memory_usage_result;
   size_t result_count = 0;
   realm_status_t status = realm_profiling_response_get_measurement(
       &response, realm_profiling_measurement_id_t::PMID_OP_MEM_USAGE,
@@ -617,7 +617,7 @@ TEST_F(CProfilingTest_InstanceTimeline, ProfilingResponseHasMeasurementSuccess)
 
 TEST_F(CProfilingTest_InstanceTimeline, ProfilingResponseGetMeasurementInstanceTimeline)
 {
-  realm_profiling_measurement_instance_timeline_t inst_timeline_result;
+  realm_profiling_instance_timeline_t inst_timeline_result;
   size_t result_count = 0;
   realm_status_t status = realm_profiling_response_get_measurement(
       &response, realm_profiling_measurement_id_t::PMID_INST_TIMELINE,
@@ -656,7 +656,7 @@ TEST_F(CProfilingTest_InstanceMemoryUsage, ProfilingResponseHasMeasurementSucces
 TEST_F(CProfilingTest_InstanceMemoryUsage,
        ProfilingResponseGetMeasurementInstanceMemoryUsage)
 {
-  realm_profiling_measurement_instance_memory_usage_t inst_mem_usage_result;
+  realm_profiling_instance_memory_usage_t inst_mem_usage_result;
   size_t result_count = 0;
   realm_status_t status = realm_profiling_response_get_measurement(
       &response, realm_profiling_measurement_id_t::PMID_INST_MEM_USAGE,
@@ -768,7 +768,7 @@ TEST_F(CProfilingTest_CopyInfo, GetCopyInfoDstFields)
 TEST_F(CProfilingTest_CopyInfo, GetCopyInfoOther)
 {
   size_t result_count = copy_info.inst_info.size();
-  realm_profiling_measurement_operation_copy_info_inst_info_t inst_info_result;
+  realm_profiling_operation_copy_info_t inst_info_result;
   realm_status_t status = realm_profiling_response_get_measurement(
       &response, realm_profiling_measurement_id_t::PMID_OP_COPY_INFO, &inst_info_result,
       &result_count);
@@ -789,7 +789,7 @@ TEST_F(CProfilingTest_CopyInfo, GetCopyInfoOther)
 TEST_F(CProfilingTest_CopyInfo, GetCopyInfoOtherSmallBuffer)
 {
   size_t result_count = copy_info.inst_info.size() - 1;
-  realm_profiling_measurement_operation_copy_info_inst_info_t inst_info_result;
+  realm_profiling_operation_copy_info_t inst_info_result;
   realm_status_t status = realm_profiling_response_get_measurement(
       &response, realm_profiling_measurement_id_t::PMID_OP_COPY_INFO, &inst_info_result,
       &result_count);
