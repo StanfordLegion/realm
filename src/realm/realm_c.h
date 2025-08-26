@@ -803,6 +803,22 @@ realm_status_t REALM_EXPORT realm_event_has_triggered(realm_runtime_t runtime,
                                                       realm_event_t event,
                                                       int *has_triggered, int *poisoned);
 
+/**
+ * @brief Cancels the operation associated with an event and marks it as poisoned.
+ *
+ * @param runtime The runtime instance to use.
+ * @param event The event to cancel the operation of.
+ * @param reason_data The reason for the cancellation.
+ * @param reason_size The size of the reason data.
+ * @return Realm status indicating success or failure.
+ *
+ * @ingroup Event
+ */
+realm_status_t REALM_EXPORT realm_event_cancel_operation(realm_runtime_t runtime,
+                                                         realm_event_t event,
+                                                         const void *reason_data,
+                                                         size_t reason_size);
+
 /*
  * @defgroup UserEvent UserEvent API
  * @ingroup Realm

@@ -41,7 +41,7 @@ void test_merge(realm_runtime_t runtime, int ignore_faults, int *poisoned)
   for(int i = 0; i < 10; i++) {
     status = realm_user_event_create(runtime, &event_poisoned[i]);
     assert(status == REALM_SUCCESS);
-    Realm::UserEvent(event_poisoned[i]).cancel();
+    CHECK_REALM(realm_event_cancel_operation(runtime, event_poisoned[i], nullptr, 0));
   }
   realm_event_t merged_event;
   CHECK_REALM(
@@ -54,7 +54,7 @@ void test_trigger(realm_runtime_t runtime, int ignore_faults, bool use_wait,
 {
   realm_user_event_t wait_on_event;
   CHECK_REALM(realm_user_event_create(runtime, &wait_on_event));
-  Realm::UserEvent(wait_on_event).cancel();
+  CHECK_REALM(realm_event_cancel_operation(runtime, wait_on_event, nullptr, 0));
   realm_user_event_t user_event;
   CHECK_REALM(realm_user_event_create(runtime, &user_event));
   CHECK_REALM(

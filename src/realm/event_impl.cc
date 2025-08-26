@@ -334,6 +334,7 @@ namespace Realm {
     EventImpl::gen_t gen = ID(id).event_generation();
     Operation *op = nullptr;
     bool poisoned = false;
+    bool did_cancel = true;
 
     if(!ID(id).is_event()) {
       // Only event types can be cancelled
@@ -355,12 +356,18 @@ namespace Realm {
                                           reason_len);
       } else {
         // Fast path, triggering operation is local!
-        op->attempt_cancellation(Realm::Faults::ERROR_CANCELLED, reason_data, reason_len);
-        op->remove_reference();
+        did_cancel = op->attempt_cancellation(Realm::Faults::ERROR_CANCELLED, reason_data,
+                                              reason_len);
       }
     } else {
-      // Slow path, triggering operation is remote
-      get_runtime()->optable.request_cancellation(*this, reason_data, reason_len);
+      // Slow path, triggering operation is possibly remote
+      did_cancel =
+          get_runtime()->optable.request_cancellation(*this, reason_data, reason_len);
+    }
+    if(!did_cancel) {
+      // if this failed, just trigger with poison
+      GenEventImpl::trigger(*this, true /*poisoned*/);
+      return;
     }
   }
 

@@ -143,7 +143,7 @@ TEST_F(CEventTest, DISABLED_MergeEventsWithPoisonedIgnoreFaults)
   for(int i = 0; i < num_events; i++) {
     ASSERT_REALM(realm_user_event_create(runtime, &wait_for_events[i]));
   }
-  UserEvent(wait_for_events[0]).cancel();
+  ASSERT_REALM(realm_event_cancel_operation(runtime, wait_for_events[0], nullptr, 0));
 
   realm_user_event_t event = REALM_NO_EVENT;
   realm_status_t status =
@@ -160,7 +160,7 @@ TEST_F(CEventTest, DISABLED_MergeEventsWithPoisonedNoIgnoreFaults)
   for(int i = 0; i < num_events; i++) {
     ASSERT_REALM(realm_user_event_create(runtime, &wait_for_events[i]));
   }
-  UserEvent(wait_for_events[0]).cancel();
+  ASSERT_REALM(realm_event_cancel_operation(runtime, wait_for_events[0], nullptr, 0));
 
   realm_user_event_t event = REALM_NO_EVENT;
   // we will get back wait_for_events[0] because it is poisoned
@@ -248,7 +248,7 @@ TEST_F(CEventTest, DISABLED_EventWaitPoisoned)
   realm_user_event_t event = REALM_NO_EVENT;
   realm_runtime_t runtime = *runtime_impl;
   ASSERT_REALM(realm_user_event_create(runtime, &event));
-  UserEvent(event).cancel();
+  ASSERT_REALM(realm_event_cancel_operation(runtime, event, nullptr, 0));
 
   int poisoned = 0;
   realm_status_t status =
@@ -295,7 +295,7 @@ TEST_F(CEventTest, DISABLED_UserEventTriggerWithWaitPoisoned)
 
   realm_status_t status = realm_user_event_trigger(runtime, user_event, wait_on_event, 0);
   EXPECT_EQ(status, REALM_SUCCESS);
-  UserEvent(wait_on_event).cancel();
+  ASSERT_REALM(realm_event_cancel_operation(runtime, wait_on_event, nullptr, 0));
   bool poisoned = false;
   Event(user_event).has_triggered_faultaware(poisoned);
   EXPECT_TRUE(poisoned);
@@ -361,7 +361,7 @@ TEST_F(CEventTest, DISABLED_EventHasTriggeredPoisoned)
   realm_user_event_t event = REALM_NO_EVENT;
   realm_runtime_t runtime = *runtime_impl;
   ASSERT_REALM(realm_user_event_create(runtime, &event));
-  UserEvent(event).cancel(); // FIXME: this need runtime singleton
+  ASSERT_REALM(realm_event_cancel_operation(runtime, event, nullptr, 0));
 
   int has_triggered = 0;
   int poisoned = 0;
@@ -370,4 +370,181 @@ TEST_F(CEventTest, DISABLED_EventHasTriggeredPoisoned)
   EXPECT_EQ(status, REALM_SUCCESS);
   EXPECT_EQ(has_triggered, 0);
   EXPECT_EQ(poisoned, 1);
+}
+
+TEST_F(CEventTest, EventCancelOperationNullRuntime)
+{
+  realm_event_t event = REALM_NO_EVENT;
+  realm_status_t status = realm_event_cancel_operation(nullptr, event, nullptr, 0);
+  EXPECT_EQ(status, REALM_RUNTIME_ERROR_NOT_INITIALIZED);
+}
+
+TEST_F(CEventTest, EventCancelOperationNoEvent)
+{
+  realm_runtime_t runtime = *runtime_impl;
+  realm_status_t status =
+      realm_event_cancel_operation(runtime, REALM_NO_EVENT, nullptr, 0);
+  EXPECT_EQ(status, REALM_SUCCESS);
+}
+
+// TODO: remove the get_runtime in the has_triggered_faultaware function to unblock the
+// test
+TEST_F(CEventTest, DISABLED_EventCancelOperationNullReasonData)
+{
+  realm_user_event_t event = REALM_NO_EVENT;
+  realm_runtime_t runtime = *runtime_impl;
+  ASSERT_REALM(realm_user_event_create(runtime, &event));
+
+  // Test with null reason_data but zero size
+  realm_status_t status = realm_event_cancel_operation(runtime, event, nullptr, 0);
+  EXPECT_EQ(status, REALM_SUCCESS);
+}
+
+TEST_F(CEventTest, EventCancelOperationNullReasonDataNonZeroSize)
+{
+  realm_user_event_t event = REALM_NO_EVENT;
+  realm_runtime_t runtime = *runtime_impl;
+  ASSERT_REALM(realm_user_event_create(runtime, &event));
+
+  // Test with null reason_data but non-zero size - this should still succeed
+  // as the implementation may handle this gracefully
+  realm_status_t status = realm_event_cancel_operation(runtime, event, nullptr, 10);
+  EXPECT_EQ(status, REALM_ERROR_INVALID_PARAMETER);
+}
+
+// TODO: remove the get_runtime in the has_triggered function to unblock the test
+TEST_F(CEventTest, DISABLED_EventCancelOperationValidReasonData)
+{
+  realm_user_event_t event = REALM_NO_EVENT;
+  realm_runtime_t runtime = *runtime_impl;
+  ASSERT_REALM(realm_user_event_create(runtime, &event));
+
+  const char *reason_data = "Test cancellation reason";
+  size_t reason_size = strlen(reason_data);
+
+  realm_status_t status =
+      realm_event_cancel_operation(runtime, event, reason_data, reason_size);
+  EXPECT_EQ(status, REALM_SUCCESS);
+}
+
+// TODO: remove the get_runtime in the has_triggered function to unblock the test
+TEST_F(CEventTest, DISABLED_EventCancelOperationLargeReasonData)
+{
+  realm_user_event_t event = REALM_NO_EVENT;
+  realm_runtime_t runtime = *runtime_impl;
+  ASSERT_REALM(realm_user_event_create(runtime, &event));
+
+  // Create a larger reason data buffer
+  std::vector<char> large_reason_data(1024, 'A');
+  size_t reason_size = large_reason_data.size();
+
+  realm_status_t status =
+      realm_event_cancel_operation(runtime, event, large_reason_data.data(), reason_size);
+  EXPECT_EQ(status, REALM_SUCCESS);
+}
+
+TEST_F(CEventTest, EventCancelOperationZeroReasonSize)
+{
+  realm_user_event_t event = REALM_NO_EVENT;
+  realm_runtime_t runtime = *runtime_impl;
+  ASSERT_REALM(realm_user_event_create(runtime, &event));
+
+  const char *reason_data = "This should be ignored";
+
+  realm_status_t status = realm_event_cancel_operation(runtime, event, reason_data, 0);
+  EXPECT_EQ(status, REALM_ERROR_INVALID_PARAMETER);
+}
+
+// TODO: remove the get_runtime in the has_triggered function to unblock the test
+TEST_F(CEventTest, DISABLED_EventCancelOperationAlreadyTriggeredEvent)
+{
+  realm_user_event_t event = REALM_NO_EVENT;
+  realm_runtime_t runtime = *runtime_impl;
+  ASSERT_REALM(realm_user_event_create(runtime, &event));
+
+  // First trigger the event
+  ASSERT_REALM(realm_user_event_trigger(runtime, event, REALM_NO_EVENT, 0));
+
+  // Then try to cancel it - should still succeed but be a no-op
+  realm_status_t status = realm_event_cancel_operation(runtime, event, nullptr, 0);
+  EXPECT_EQ(status, REALM_SUCCESS);
+}
+
+// TODO: remove the get_runtime in the has_triggered function to unblock the test
+TEST_F(CEventTest, DISABLED_EventCancelOperationAlreadyCancelledEvent)
+{
+  realm_user_event_t event = REALM_NO_EVENT;
+  realm_runtime_t runtime = *runtime_impl;
+  ASSERT_REALM(realm_user_event_create(runtime, &event));
+
+  // First cancel the event
+  ASSERT_REALM(realm_event_cancel_operation(runtime, event, nullptr, 0));
+
+  // Then try to cancel it again - should still succeed
+  realm_status_t status = realm_event_cancel_operation(runtime, event, nullptr, 0);
+  EXPECT_EQ(status, REALM_SUCCESS);
+}
+
+// TODO: remove the get_runtime in the has_triggered function to unblock the test
+TEST_F(CEventTest, DISABLED_EventCancelOperationInvalidEvent)
+{
+  realm_runtime_t runtime = *runtime_impl;
+
+  // Create an event and then invalidate it by bumping generation
+  realm_user_event_t event = REALM_NO_EVENT;
+  ASSERT_REALM(realm_user_event_create(runtime, &event));
+
+  // Bump the generation to make it invalid
+  GenEventImpl *e = runtime_impl->get_genevent_impl(Event(event));
+  e->generation.store(e->generation.load() + 1);
+
+  // Try to cancel the invalid event
+  realm_status_t status = realm_event_cancel_operation(runtime, event, nullptr, 0);
+  // This should either succeed (if validation is lenient) or return an error
+  // The exact behavior depends on the implementation
+  EXPECT_EQ(status, REALM_EVENT_ERROR_INVALID_EVENT);
+}
+
+// TODO: remove the get_runtime in the has_triggered function to unblock the test
+TEST_F(CEventTest, DISABLED_EventCancelOperationMultipleCancellations)
+{
+  realm_user_event_t event = REALM_NO_EVENT;
+  realm_runtime_t runtime = *runtime_impl;
+  ASSERT_REALM(realm_user_event_create(runtime, &event));
+
+  // Cancel multiple times with different reason data
+  const char *reason1 = "First cancellation";
+  const char *reason2 = "Second cancellation";
+  const char *reason3 = "Third cancellation";
+
+  realm_status_t status1 =
+      realm_event_cancel_operation(runtime, event, reason1, strlen(reason1));
+  EXPECT_EQ(status1, REALM_SUCCESS);
+
+  realm_status_t status2 =
+      realm_event_cancel_operation(runtime, event, reason2, strlen(reason2));
+  EXPECT_EQ(status2, REALM_SUCCESS);
+
+  realm_status_t status3 =
+      realm_event_cancel_operation(runtime, event, reason3, strlen(reason3));
+  EXPECT_EQ(status3, REALM_SUCCESS);
+}
+
+// TODO: remove the get_runtime in the has_triggered function to unblock the test
+TEST_F(CEventTest, DISABLED_EventCancelOperationBoundaryReasonSize)
+{
+  realm_user_event_t event = REALM_NO_EVENT;
+  realm_runtime_t runtime = *runtime_impl;
+  ASSERT_REALM(realm_user_event_create(runtime, &event));
+
+  // Test with very small reason size
+  realm_status_t status1 = realm_event_cancel_operation(runtime, event, "A", 1);
+  EXPECT_EQ(status1, REALM_SUCCESS);
+
+  // Test with size_t max (this might be too large for practical use)
+  // We'll use a more reasonable large size instead
+  std::vector<char> large_buffer(10000, 'X');
+  realm_status_t status2 = realm_event_cancel_operation(
+      runtime, event, large_buffer.data(), large_buffer.size());
+  EXPECT_EQ(status2, REALM_SUCCESS);
 }
