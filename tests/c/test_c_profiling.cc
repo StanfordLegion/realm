@@ -53,8 +53,8 @@ void REALM_FNPTR op_profiling_response_task(const void *args, size_t arglen,
 
   realm_status_t status = REALM_SUCCESS;
 
-  if(realm_profiling_response_has_measurement(&response, PMID_OP_TIMELINE) ==
-     REALM_SUCCESS) {
+  if(realm_profiling_response_get_measurement(&response, PMID_OP_TIMELINE, nullptr,
+                                              nullptr) == REALM_SUCCESS) {
     realm_profiling_measurement_operation_timeline_t op_timeline;
     status = realm_profiling_response_get_measurement(&response, PMID_OP_TIMELINE,
                                                       &op_timeline, nullptr);
@@ -74,8 +74,8 @@ void REALM_FNPTR op_profiling_response_task(const void *args, size_t arglen,
     printf("no timeline\n");
   }
 
-  if(realm_profiling_response_has_measurement(&response, PMID_OP_EVENT_WAITS) ==
-     REALM_SUCCESS) {
+  if(realm_profiling_response_get_measurement(&response, PMID_OP_EVENT_WAITS, nullptr,
+                                              nullptr) == REALM_SUCCESS) {
     realm_profiling_measurement_operation_event_wait_interval_t *op_waits = nullptr;
     size_t count = 0;
     status = realm_profiling_response_get_measurement(&response, PMID_OP_EVENT_WAITS,
@@ -98,8 +98,8 @@ void REALM_FNPTR op_profiling_response_task(const void *args, size_t arglen,
     printf("no event wait data\n");
   }
 
-  if(realm_profiling_response_has_measurement(&response, PMID_OP_COPY_INFO) ==
-     REALM_SUCCESS) {
+  if(realm_profiling_response_get_measurement(&response, PMID_OP_COPY_INFO, nullptr,
+                                              nullptr) == REALM_SUCCESS) {
     size_t count = 0;
     status = realm_profiling_response_get_measurement(&response, PMID_OP_COPY_INFO,
                                                       nullptr, &count);
