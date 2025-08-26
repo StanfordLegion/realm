@@ -87,6 +87,37 @@ namespace Realm {
       return ((serdez & b.pcs) && (serdez & b.symbols));
     }
 
+    inline realm_status_t OperationBacktrace::to_c(uintptr_t *result, size_t *result_count, const void *data) const
+    {
+      realm_status_t status = REALM_SUCCESS;
+      if(result != nullptr) {
+        if (pcs.size() > *result_count) {
+          status = REALM_PROFILING_ERROR_INVALID_BUFFER;
+        } else {
+          memcpy(result, pcs.data(), pcs.size() * sizeof(uintptr_t));
+        }
+      }
+      *result_count = pcs.size();
+      return status;
+    }
+
+    inline realm_status_t OperationBacktrace::to_c(realm_profiling_measurement_operation_backtrace_symbol_t *result, size_t *result_count, const void *data) const
+    {
+      *result_count = symbols.size();
+      if(result != nullptr) {
+        realm_profiling_measurement_operation_backtrace_symbol_t *symbol_result =
+            reinterpret_cast<realm_profiling_measurement_operation_backtrace_symbol_t *>(
+                result);
+        for(size_t i = 0; i < symbols.size(); i++) {
+          if(symbols[i].size() > PMID_OP_BACKTRACE_SYMBOLS_MAX_LENGTH) {
+            return REALM_PROFILING_ERROR_INVALID_BUFFER;
+          }
+          memcpy(symbol_result[i].symbol, symbols[i].c_str(), symbols[i].size());
+          symbol_result[i].symbol[symbols[i].size()] = '\0';
+        }
+      }
+      return REALM_SUCCESS;
+    }
     ////////////////////////////////////////////////////////////////////////
     //
     // struct OperationTimeLineGPU
@@ -94,6 +125,16 @@ namespace Realm {
     inline bool OperationTimelineGPU::is_valid(void) const
     {
       return ((start_time != INVALID_TIMESTAMP) && (end_time != INVALID_TIMESTAMP));
+    }
+
+    inline realm_status_t OperationTimelineGPU::to_c(realm_profiling_measurement_operation_timeline_gpu_t *result, size_t *result_count, const void *data) const
+    {
+      if(result) {
+        result->start_time = start_time;
+        result->end_time = end_time;
+        return REALM_SUCCESS;
+      }
+      return REALM_PROFILING_ERROR_INVALID_MEASUREMENT;
     }
 
     ////////////////////////////////////////////////////////////////////////
@@ -133,6 +174,19 @@ namespace Realm {
               (complete_time != INVALID_TIMESTAMP));
     }
 
+    inline realm_status_t OperationTimeline::to_c(realm_profiling_measurement_operation_timeline_t *result, size_t *result_count, const void *data) const
+    {
+      if(result) {
+        result->create_time = create_time;
+        result->ready_time = ready_time;
+        result->start_time = start_time;
+        result->end_time = end_time;
+        result->complete_time = complete_time;
+        return REALM_SUCCESS;
+      }
+      return REALM_PROFILING_ERROR_INVALID_MEASUREMENT;
+    }
+
     ////////////////////////////////////////////////////////////////////////
     //
     // struct OperationEventWaits
@@ -164,6 +218,57 @@ namespace Realm {
       wait_end = Clock::current_time_in_nanoseconds();
     }
 
+    inline realm_status_t OperationEventWaits::to_c(realm_profiling_measurement_operation_event_wait_interval_t *result, size_t *result_count, const void *data) const
+    {
+      realm_status_t status = REALM_SUCCESS;
+      if(result != nullptr) {
+        if (intervals.size() > *result_count) {
+          status = REALM_PROFILING_ERROR_INVALID_BUFFER;
+        } else {
+          for(size_t i = 0; i < intervals.size(); i++) {
+            const Realm::ProfilingMeasurements::OperationEventWaits::WaitInterval
+                &wait_interval = intervals[i];
+            result[i].wait_start = wait_interval.wait_start;
+            result[i].wait_ready = wait_interval.wait_ready;
+            result[i].wait_end = wait_interval.wait_end;
+            result[i].wait_event = wait_interval.wait_event;
+          }
+        }
+      }
+      *result_count = intervals.size();
+      return status;
+    }
+
+    ////////////////////////////////////////////////////////////////////////
+    //
+    // struct OperationProcessorUsage
+    //
+
+    inline realm_status_t OperationProcessorUsage::to_c(realm_profiling_measurement_operation_processor_usage_t *result, size_t *result_count, const void *data) const
+    {
+      if(result) {
+        result->proc = proc.id;
+        return REALM_SUCCESS;
+      }
+      return REALM_PROFILING_ERROR_INVALID_MEASUREMENT;
+    }
+
+    ////////////////////////////////////////////////////////////////////////
+    //
+    // struct OperationMemoryUsage
+    //
+
+    inline realm_status_t OperationMemoryUsage::to_c(realm_profiling_measurement_operation_memory_usage_t *result, size_t *result_count, const void *data) const
+    {
+      if(result) {
+        result->source = source.id;
+        result->target = target.id;
+        result->size = size;
+        return REALM_SUCCESS;
+      }
+      return REALM_PROFILING_ERROR_INVALID_MEASUREMENT;
+    }
+
     ////////////////////////////////////////////////////////////////////////
     //
     // struct InstanceTimeLine
@@ -182,6 +287,34 @@ namespace Realm {
     inline void InstanceTimeline::record_delete_time(void)
     {
       delete_time = Clock::current_time_in_nanoseconds();
+    }
+
+    inline realm_status_t InstanceTimeline::to_c(realm_profiling_measurement_instance_timeline_t *result, size_t *result_count, const void *data) const
+    {
+      if(result) {
+        result->instance = instance.id;
+        result->create_time = create_time;
+        result->ready_time = ready_time;
+        result->delete_time = delete_time;
+        return REALM_SUCCESS;
+      }
+      return REALM_PROFILING_ERROR_INVALID_MEASUREMENT;
+    }
+
+    ////////////////////////////////////////////////////////////////////////
+    //
+    // struct InstanceMemoryUsage
+    //
+
+    inline realm_status_t InstanceMemoryUsage::to_c(realm_profiling_measurement_instance_memory_usage_t *result, size_t *result_count, const void *data) const
+    {
+      if(result) {
+        result->instance = instance.id;
+        result->memory = memory.id;
+        result->bytes = bytes;
+        return REALM_SUCCESS;
+      }
+      return REALM_PROFILING_ERROR_INVALID_MEASUREMENT;
     }
 
     ////////////////////////////////////////////////////////////////////////
@@ -229,6 +362,85 @@ namespace Realm {
                   (dez & c.inst_info[i].request_type) && (dez & c.inst_info[i].num_hops);
       }
       return success;
+    }
+
+    inline realm_status_t OperationCopyInfo::to_c(realm_profiling_measurement_operation_copy_info_inst_info_t *result, size_t *result_count, const void *data) const
+    {
+      realm_status_t status = REALM_SUCCESS;
+      if(result != nullptr) {
+        if (inst_info.size() > *result_count) {
+          status = REALM_PROFILING_ERROR_INVALID_BUFFER;
+        } else {
+          for(size_t i = 0; i < inst_info.size(); i++) {
+            result[i].src_indirection_inst = inst_info[i].src_indirection_inst.id;
+            result[i].dst_indirection_inst = inst_info[i].dst_indirection_inst.id;
+            result[i].src_indirection_field = inst_info[i].src_indirection_field;
+            result[i].dst_indirection_field = inst_info[i].dst_indirection_field;
+            result[i].request_type =
+                static_cast<realm_profiling_measurement_operation_copy_info_request_type_t>(
+                    inst_info[i].request_type);
+            result[i].num_hops = inst_info[i].num_hops;
+          }
+        }
+      }
+      *result_count = inst_info.size();
+      return status;
+    }
+
+    inline realm_status_t OperationCopyInfo::to_c(realm_region_instance_t *result, size_t *result_count, const void *data) const
+    {
+      realm_profiling_measurement_id_t measurement_id =
+          *(static_cast<const realm_profiling_measurement_id_t *>(data));
+      bool is_dst = measurement_id >= PMID_OP_COPY_INFO_DST_INST;
+      int index = measurement_id - (is_dst ? PMID_OP_COPY_INFO_DST_INST
+                                          : PMID_OP_COPY_INFO_SRC_INST);
+      if((index < 0) || (static_cast<size_t>(index) >= inst_info.size())) {
+        return REALM_PROFILING_ERROR_INVALID_MEASUREMENT;
+      }
+      const Realm::ProfilingMeasurements::OperationCopyInfo::InstInfo &inst_info_item =
+          inst_info[index];
+      const std::vector<Realm::RegionInstance> &inst_vec =
+          (is_dst ? inst_info_item.dst_insts : inst_info_item.src_insts);
+
+      realm_status_t status = REALM_SUCCESS;
+      if(result != nullptr) {
+        if (inst_vec.size() > *result_count) {
+          status = REALM_PROFILING_ERROR_INVALID_BUFFER;
+        } else {
+          memcpy(result, inst_vec.data(), inst_vec.size() * sizeof(inst_vec[0]));
+        }
+      }
+      *result_count = inst_vec.size();
+      return status;
+    }
+
+    inline realm_status_t OperationCopyInfo::to_c(realm_field_id_t *result, size_t *result_count, const void *data) const
+    {
+      realm_profiling_measurement_id_t measurement_id =
+          *(static_cast<const realm_profiling_measurement_id_t *>(data));
+      bool is_dst = measurement_id >= PMID_OP_COPY_INFO_DST_FIELD;
+      int index = measurement_id - (is_dst ? PMID_OP_COPY_INFO_DST_FIELD
+                                          : PMID_OP_COPY_INFO_SRC_FIELD);
+
+      if((index < 0) || (static_cast<size_t>(index) >= inst_info.size())) {
+        return REALM_PROFILING_ERROR_INVALID_MEASUREMENT;
+      }
+
+      const Realm::ProfilingMeasurements::OperationCopyInfo::InstInfo &inst_info_item =
+          inst_info[index];
+      const std::vector<Realm::FieldID> &field_vec =
+          (is_dst ? inst_info_item.dst_fields : inst_info_item.src_fields);
+
+      realm_status_t status = REALM_SUCCESS;
+      if(result != nullptr) {
+        if (field_vec.size() > *result_count) {
+          status = REALM_PROFILING_ERROR_INVALID_BUFFER;
+        } else {
+          memcpy(result, field_vec.data(), field_vec.size() * sizeof(field_vec[0]));
+        }
+      }
+      *result_count = field_vec.size();
+      return status;
     }
 
   }; // namespace ProfilingMeasurements
