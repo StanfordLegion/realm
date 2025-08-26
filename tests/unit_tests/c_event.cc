@@ -27,6 +27,8 @@
 #include <set>
 #include <gtest/gtest.h>
 
+#define TEN_MS_IN_NS 10000000
+
 using namespace Realm;
 
 namespace Realm {
@@ -173,7 +175,7 @@ TEST_F(CEventTest, DISABLED_MergeEventsWithPoisonedNoIgnoreFaults)
 TEST_F(CEventTest, EventWaitNullRuntime)
 {
   realm_event_t event = REALM_NO_EVENT;
-  realm_status_t status = realm_event_wait(nullptr, event, nullptr);
+  realm_status_t status = realm_event_wait(nullptr, event, REALM_WAIT_INFINITE, nullptr);
   EXPECT_EQ(status, REALM_RUNTIME_ERROR_NOT_INITIALIZED);
 }
 
@@ -185,7 +187,7 @@ TEST_F(CEventTest, DISABLED_EventWaitTriggeredEvent)
   ASSERT_REALM(realm_user_event_create(runtime, &event));
   ASSERT_REALM(realm_user_event_trigger(runtime, event, REALM_NO_EVENT, 0));
 
-  realm_status_t status = realm_event_wait(runtime, event, nullptr);
+  realm_status_t status = realm_event_wait(runtime, event, REALM_WAIT_INFINITE, nullptr);
   EXPECT_EQ(status, REALM_SUCCESS);
 }
 
@@ -195,8 +197,36 @@ TEST_F(CEventTest, DISABLED_EventWaitNotTriggeredEvent)
   realm_runtime_t runtime = *runtime_impl;
   ASSERT_REALM(realm_user_event_create(runtime, &event));
 
-  realm_status_t status = realm_event_wait(runtime, event, nullptr);
+  realm_status_t status = realm_event_wait(runtime, event, REALM_WAIT_INFINITE, nullptr);
   EXPECT_EQ(status, REALM_SUCCESS);
+}
+
+TEST_F(CEventTest, DISABLED_EventWaitTimeoutEvent)
+{
+  realm_user_event_t event = REALM_NO_EVENT;
+  realm_runtime_t runtime = *runtime_impl;
+  ASSERT_REALM(realm_user_event_create(runtime, &event));
+
+  // Record start time before the wait
+  auto start_time = std::chrono::high_resolution_clock::now();
+
+  realm_status_t status = realm_event_wait(runtime, event, TEN_MS_IN_NS, nullptr);
+  EXPECT_EQ(status, REALM_SUCCESS);
+
+  // Record end time after the wait and calculate elapsed time
+  auto end_time = std::chrono::high_resolution_clock::now();
+  auto elapsed_time =
+      std::chrono::duration_cast<std::chrono::nanoseconds>(end_time - start_time);
+
+  // Verify that the wait lasted at least as long as requested (10ms)
+  EXPECT_GE(elapsed_time.count(), TEN_MS_IN_NS)
+      << "Event wait should have lasted at least 10ms, but only lasted "
+      << elapsed_time.count() << " nanoseconds";
+
+  int has_triggered = 0;
+  status = realm_event_has_triggered(runtime, event, &has_triggered, nullptr);
+  EXPECT_EQ(status, REALM_SUCCESS);
+  EXPECT_EQ(has_triggered, 0);
 }
 
 // // an event id with maybe a higher generation than is triggered should return an error
@@ -209,7 +239,7 @@ TEST_F(CEventTest, DISABLED_EventWaitInvalidEvent)
   GenEventImpl *e = runtime_impl->get_genevent_impl(Event(event));
   e->generation.store(e->generation.load() + 1);
 
-  realm_status_t status = realm_event_wait(runtime, event, nullptr);
+  realm_status_t status = realm_event_wait(runtime, event, REALM_WAIT_INFINITE, nullptr);
   EXPECT_EQ(status, REALM_SUCCESS);
 }
 
@@ -221,7 +251,8 @@ TEST_F(CEventTest, DISABLED_EventWaitPoisoned)
   UserEvent(event).cancel();
 
   int poisoned = 0;
-  realm_status_t status = realm_event_wait(runtime, event, &poisoned);
+  realm_status_t status =
+      realm_event_wait(runtime, event, REALM_WAIT_INFINITE, &poisoned);
   EXPECT_EQ(status, REALM_SUCCESS);
   EXPECT_EQ(poisoned, 1);
 }
