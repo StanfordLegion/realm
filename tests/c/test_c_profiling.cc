@@ -22,7 +22,6 @@
 #include "realm/utils.h"
 
 #include <stdio.h>
-#include <unistd.h>
 #include <assert.h>
 
 Realm::Logger log_app("app");
@@ -310,7 +309,6 @@ void REALM_FNPTR main_task(const void *args, size_t arglen, const void *userdata
     dst_inst_2.destroy();
   }
 
-  usleep(100000);
 }
 
 int main(int argc, char **argv)
