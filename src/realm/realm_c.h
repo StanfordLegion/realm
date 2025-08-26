@@ -346,7 +346,7 @@ typedef struct realm_profiling_response_st {
 
 // When profiling the backtrace, the maximum length of a symbol supported by Realm is 2048
 // bytes
-#define PMID_OP_BACKTRACE_SYMBOLS_MAX_LENGTH 2048
+#define PMID_OP_BACKTRACE_SYMBOLS_MAX_LENGTH (2048)
 
 typedef struct realm_profiling_measurement_operation_backtrace_symbol_st {
   char symbol[PMID_OP_BACKTRACE_SYMBOLS_MAX_LENGTH];
@@ -395,9 +395,6 @@ typedef struct realm_profiling_measurement_instance_memory_usage_st {
   size_t bytes;
 } realm_profiling_measurement_instance_memory_usage_t;
 
-// We can not use FILL, REDUCE, COPY directly, because they are already defined in Legion.
-// legion_config.h:1469:26: error: redefinition of enumerator 'REDUCE'
-//  LEGION_DEPRECATED_ENUM(REDUCE)
 typedef enum realm_profiling_measurement_operation_copy_info_request_type_enum
 {
   REALM_COPY_INFO_REQUEST_TYPE_FILL = 0,
@@ -488,6 +485,7 @@ typedef enum realm_status_enum
   REALM_PROFILING_ERROR_INVALID_PARAM = -15002,
   REALM_PROFILING_ERROR_INVALID_MEASUREMENT = -15003,
   REALM_PROFILING_ERROR_INVALID_RESPONSE = -15004,
+  REALM_PROFILING_ERROR_INVALID_BUFFER = -15005,
   REALM_MODULE_CONFIG_ERROR_INVALID_NAME = -16001,
   REALM_MODULE_CONFIG_ERROR_NO_RESOURCE = -16002,
 } realm_status_t;
