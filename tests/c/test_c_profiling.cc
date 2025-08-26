@@ -50,7 +50,7 @@ struct ChildTaskArgs {
 void REALM_FNPTR child_task(const void *args, size_t arglen, const void *userdata,
                             size_t userlen, realm_processor_t proc)
 {
-  log_app.print("child_task on proc " IDFMT, proc);
+  log_app.info("child_task on proc " IDFMT, proc);
   assert(arglen == sizeof(ChildTaskArgs));
   const ChildTaskArgs &cargs = *(const ChildTaskArgs *)args;
   if(cargs.wait_on.exists()) {
@@ -62,7 +62,7 @@ void REALM_FNPTR op_profiling_response_task(const void *args, size_t arglen,
                                             const void *userdata, size_t userlen,
                                             realm_processor_t proc)
 {
-  log_app.print("op_profiling_response_task on proc " IDFMT, proc);
+  log_app.info("op_profiling_response_task on proc " IDFMT, proc);
   realm_profiling_response_t response;
   response.data = args;
   response.data_size = arglen;
@@ -75,7 +75,7 @@ void REALM_FNPTR op_profiling_response_task(const void *args, size_t arglen,
     status = realm_profiling_response_get_measurement(&response, PMID_OP_TIMELINE,
                                                       &op_timeline, nullptr);
     assert(status == REALM_SUCCESS);
-    printf("op timeline = %lld %lld %lld %lld (%lld %lld %lld)\n", op_timeline.ready_time,
+    log_app.info("op timeline = %lld %lld %lld %lld (%lld %lld %lld)", op_timeline.ready_time,
            op_timeline.start_time, op_timeline.end_time, op_timeline.complete_time,
            (((op_timeline.start_time >= 0) && (op_timeline.ready_time >= 0))
                 ? (op_timeline.start_time - op_timeline.ready_time)
@@ -87,7 +87,7 @@ void REALM_FNPTR op_profiling_response_task(const void *args, size_t arglen,
                 ? (op_timeline.complete_time - op_timeline.end_time)
                 : -1));
   } else {
-    printf("no timeline\n");
+    log_app.info("no timeline");
   }
 
   if(realm_profiling_response_get_measurement(&response, PMID_OP_EVENT_WAITS, nullptr,
@@ -97,21 +97,19 @@ void REALM_FNPTR op_profiling_response_task(const void *args, size_t arglen,
     status = realm_profiling_response_get_measurement(&response, PMID_OP_EVENT_WAITS,
                                                       op_waits, &count);
     assert(status == REALM_SUCCESS);
-    printf("op waits = %zd", count);
+    log_app.info("op waits = %zd", count);
     if(count > 0) {
       op_waits = new realm_profiling_operation_event_wait_interval_t[count];
       status = realm_profiling_response_get_measurement(&response, PMID_OP_EVENT_WAITS,
                                                         op_waits, &count);
-      printf(" [");
       for(size_t i = 0; i < count; i++) {
-        printf(" (%lld %lld %lld %llx)", op_waits[i].wait_start, op_waits[i].wait_ready,
+        log_app.info(" (%lld %lld %lld %llx)", op_waits[i].wait_start, op_waits[i].wait_ready,
                op_waits[i].wait_end, op_waits[i].wait_event);
       }
-      printf(" ]\n");
       delete[] op_waits;
     }
   } else {
-    printf("no event wait data\n");
+    log_app.info("no event wait data");
   }
 
   if(realm_profiling_response_get_measurement(&response, PMID_OP_COPY_INFO, nullptr,
@@ -122,7 +120,7 @@ void REALM_FNPTR op_profiling_response_task(const void *args, size_t arglen,
     assert(status == REALM_SUCCESS);
     Realm::ProfilingResponse pr(args, arglen);
     OperationCopyInfo *cxx_copy_info = pr.get_measurement<OperationCopyInfo>();
-    printf("copy info = %zd\n", count);
+    log_app.info("copy info = %zd", count);
     for(size_t i = 0; i < count; i++) {
       size_t inst_count = 0;
       Realm::RegionInstance *insts = nullptr;
@@ -134,7 +132,7 @@ void REALM_FNPTR op_profiling_response_task(const void *args, size_t arglen,
       status = realm_profiling_response_get_measurement(
           &response, MAKE_OP_COPY_INFO_SRC_INST_ID(i), insts, &inst_count);
       assert(status == REALM_SUCCESS);
-      log_app.print() << "src_insts idx " << i << " = "
+      log_app.info() << "src_insts idx " << i << " = "
                       << Realm::PrettyVector<Realm::RegionInstance>(
                              std::vector<Realm::RegionInstance>(insts,
                                                                 insts + inst_count));
@@ -148,7 +146,7 @@ void REALM_FNPTR op_profiling_response_task(const void *args, size_t arglen,
       status = realm_profiling_response_get_measurement(
           &response, MAKE_OP_COPY_INFO_DST_INST_ID(i), insts, &inst_count);
       assert(status == REALM_SUCCESS);
-      log_app.print() << "dst_insts idx " << i << " = "
+      log_app.info() << "dst_insts idx " << i << " = "
                       << Realm::PrettyVector<Realm::RegionInstance>(
                              std::vector<Realm::RegionInstance>(insts,
                                                                 insts + inst_count));
@@ -164,7 +162,7 @@ void REALM_FNPTR op_profiling_response_task(const void *args, size_t arglen,
       status = realm_profiling_response_get_measurement(
           &response, MAKE_OP_COPY_INFO_SRC_FIELD_ID(i), field_ids, &field_count);
       assert(status == REALM_SUCCESS);
-      log_app.print() << "src_fields idx " << i << " = "
+      log_app.info() << "src_fields idx " << i << " = "
                       << Realm::PrettyVector<Realm::FieldID>(std::vector<Realm::FieldID>(
                              field_ids, field_ids + field_count));
       delete[] field_ids;
@@ -177,14 +175,14 @@ void REALM_FNPTR op_profiling_response_task(const void *args, size_t arglen,
       status = realm_profiling_response_get_measurement(
           &response, MAKE_OP_COPY_INFO_DST_FIELD_ID(i), field_ids, &field_count);
       assert(status == REALM_SUCCESS);
-      log_app.print() << "dst_fields idx " << i << " = "
+      log_app.info() << "dst_fields idx " << i << " = "
                       << Realm::PrettyVector<Realm::FieldID>(std::vector<Realm::FieldID>(
                              field_ids, field_ids + field_count));
       delete[] field_ids;
     }
     for(Realm::ProfilingMeasurements::OperationCopyInfo::InstInfo &inst_info :
         cxx_copy_info->inst_info) {
-      log_app.print() << "copy type " << inst_info.request_type << ", src_insts ("
+      log_app.info() << "copy type " << inst_info.request_type << ", src_insts ("
                       << Realm::PrettyVector<Realm::RegionInstance>(inst_info.src_insts)
                       << ")"
                       << ", dst_insts ("
@@ -197,7 +195,7 @@ void REALM_FNPTR op_profiling_response_task(const void *args, size_t arglen,
     }
     delete cxx_copy_info;
   } else {
-    printf("no copy info\n");
+    log_app.info("no copy info");
   }
   assert(status == REALM_SUCCESS);
 }

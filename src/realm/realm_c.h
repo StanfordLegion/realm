@@ -279,43 +279,145 @@ typedef enum realm_file_mode_t
   LEGION_FILE_CREATE = REALM_FILE_CREATE,
 } realm_file_mode_t;
 
-// Profiling measurement IDs
+/**
+ * Enum of profiling measurement IDs for Realm operations and instances.
+ * Each ID corresponds to a specific kind of measurement or performance counter.
+ */
 typedef enum realm_profiling_measurement_id_enum
 {
-  PMID_OP_STATUS = 0,                 // completion status of operation
-  PMID_OP_STATUS_ABNORMAL,            // completion status only if abnormal
-  PMID_OP_BACKTRACE,                  // backtrace of a failed operation
-  PMID_OP_BACKTRACE_PCS,              // program counter of a failed operation
-  PMID_OP_BACKTRACE_SYMBOLS,          // symbol of a failed operation
-  PMID_OP_TIMELINE,                   // when task was ready, started, completed
-  PMID_OP_EVENT_WAITS,                // intervals when operation is waiting on events
-  PMID_OP_PROC_USAGE,                 // processor used by task
-  PMID_OP_MEM_USAGE,                  // memories used by a copy
-  PMID_INST_STATUS,                   // "completion" status of an instance
-  PMID_INST_STATUS_ABNORMAL,          // completion status only if abnormal
-  PMID_INST_ALLOCRESULT,              // success/failure of instance allocation
-  PMID_INST_TIMELINE,                 // timeline for a physical instance
-  PMID_INST_MEM_USAGE,                // memory and size used by an instance
-  PMID_PCTRS_CACHE_L1I,               // L1 I$ performance counters
-  PMID_PCTRS_CACHE_L1D,               // L1 D$ performance counters
-  PMID_PCTRS_CACHE_L2,                // L2 D$ performance counters
-  PMID_PCTRS_CACHE_L3,                // L3 D$ performance counters
-  PMID_PCTRS_IPC,                     // instructions/clocks performance counters
-  PMID_PCTRS_TLB,                     // TLB miss counters
-  PMID_PCTRS_BP,                      // branch predictor performance counters
-  PMID_OP_TIMELINE_GPU,               // when a task was started and completed on the GPU
-  PMID_OP_SUBGRAPH_INFO,              // identifying info for containing subgraph(s)
-  PMID_OP_FINISH_EVENT,               // finish event for an operation
-  PMID_OP_COPY_INFO,                  // copy transfer details
-  PMID_OP_COPY_INFO_SRC_INST = 10000, // copy transfer details for each source instance
-  PMID_OP_COPY_INFO_DST_INST =
-      20000, // copy transfer details for each destination instance
-  PMID_OP_COPY_INFO_SRC_FIELD = 30000, // copy transfer details for each source field
-  PMID_OP_COPY_INFO_DST_FIELD = 40000, // copy transfer details for each destination field
-  // as the name suggests, this should always be last, allowing apps/runtimes
-  // sitting on top of Realm to use some of the ID space
-  PMID_REALM_LAST =
-      0x7FFFFFFF, // 32 bit INT_MAX, to compatible with Legion, which uses int.
+  /** Completion status of operation */
+  PMID_OP_STATUS = 0,
+
+  /** Completion status only if abnormal */
+  PMID_OP_STATUS_ABNORMAL,
+
+  /** Backtrace of a failed operation */
+  PMID_OP_BACKTRACE,
+
+  /** Program counter of a failed operation, they are save in uintptr_t */
+  PMID_OP_BACKTRACE_PCS,
+
+  /**
+   * Symbol of a failed operation.
+   * \see realm_profiling_operation_backtrace_symbol_t
+   */
+  PMID_OP_BACKTRACE_SYMBOLS,
+
+  /**
+   * When task was ready, started, completed
+   * \see realm_profiling_operation_timeline_t
+   */
+  PMID_OP_TIMELINE,
+
+  /**
+   * Intervals when operation is waiting on events
+   * \see realm_profiling_operation_event_wait_interval_t
+   */
+  PMID_OP_EVENT_WAITS,
+
+  /**
+   * Processor used by task
+   * \see realm_profiling_operation_processor_usage_t
+   */
+  PMID_OP_PROC_USAGE,
+
+  /**
+   * Memories used by a copy
+   * \see realm_profiling_operation_memory_usage_t
+   */
+  PMID_OP_MEM_USAGE,
+
+  /** "Completion" status of an instance */
+  PMID_INST_STATUS,
+
+  /**
+   * Completion status only if abnormal
+   */
+  PMID_INST_STATUS_ABNORMAL,
+
+  /**
+   * Success/failure of instance allocation
+   */
+  PMID_INST_ALLOCRESULT,
+
+  /**
+   * Timeline for a physical instance
+   * \see realm_profiling_instance_timeline_t
+   */
+  PMID_INST_TIMELINE,
+
+  /**
+   * Memory and size used by an instance
+   * \see realm_profiling_instance_memory_usage_t
+   */
+  PMID_INST_MEM_USAGE,
+
+  /** L1 I$ performance counters */
+  PMID_PCTRS_CACHE_L1I,
+
+  /** L1 D$ performance counters */
+  PMID_PCTRS_CACHE_L1D,
+
+  /** L2 D$ performance counters */
+  PMID_PCTRS_CACHE_L2,
+
+  /** L3 D$ performance counters */
+  PMID_PCTRS_CACHE_L3,
+
+  /** Instructions/clocks performance counters */
+  PMID_PCTRS_IPC,
+
+  /** TLB miss counters */
+  PMID_PCTRS_TLB,
+
+  /** Branch predictor performance counters */
+  PMID_PCTRS_BP,
+
+  /**
+   * When a task was started and completed on the GPU
+   * \see realm_profiling_operation_timeline_gpu_t
+   */
+  PMID_OP_TIMELINE_GPU,
+
+  /** Identifying info for containing subgraph(s) */
+  PMID_OP_SUBGRAPH_INFO,
+
+  /** Finish event for an operation */
+  PMID_OP_FINISH_EVENT,
+
+  /** Copy transfer details for an operation
+   * \see realm_profiling_operation_copy_info_t
+   */
+  PMID_OP_COPY_INFO,
+
+  /**
+   * Copy transfer details for each source instance, please use
+   * MAKE_OP_COPY_INFO_SRC_INST_ID to specify the index of the source instance
+   */
+  PMID_OP_COPY_INFO_SRC_INST = 10000,
+
+  /**
+   * Copy transfer details for each destination instance, please use
+   * MAKE_OP_COPY_INFO_DST_INST_ID to specify the index of the destination instance
+   */
+  PMID_OP_COPY_INFO_DST_INST = 20000,
+
+  /**
+   * Copy transfer details for each source field, please use
+   * MAKE_OP_COPY_INFO_SRC_FIELD_ID to specify the index of the source field
+   */
+  PMID_OP_COPY_INFO_SRC_FIELD = 30000,
+
+  /**
+   * Copy transfer details for each destination field, please use
+   * MAKE_OP_COPY_INFO_DST_FIELD_ID to specify the index of the destination field
+   */
+  PMID_OP_COPY_INFO_DST_FIELD = 40000,
+
+  /**
+   * Always last. Allows apps/runtimes sitting on top of Realm to use some of the ID space
+   */
+  PMID_REALM_LAST = 0x7FFFFFFF, // 32 bit INT_MAX
 } realm_profiling_measurement_id_t;
 
 #define MAKE_OP_COPY_INFO_SRC_INST_ID(index)                                             \
