@@ -243,8 +243,8 @@ void top_level_task(const void *args, size_t arglen, const void *userdata, size_
     ASSERT_REALM(gpu_config->get_property("d2d_streams", d2d_streams));
     assert(d2d_streams == TestConfig::d2d_streams);
     // test wrong property
-    ASSERT_REALM(gpu_config->get_property("get_error_cuda", wrong_config));
-    assert(wrong_config == REALM_MODULE_CONFIG_ERROR_INVALID_NAME);
+    ret_value = gpu_config->get_property("get_error_cuda", wrong_config);
+    assert(ret_value == REALM_MODULE_CONFIG_ERROR_INVALID_NAME);
     log_app.print(
         "cuda gpus %d, fbmem %zu, zcmem %zu, fb_ib %zu, zc_ib %zu, uvm %zu, "
         "use_dynamic_fb %d, dynfb_max_size %zu, task_streams %u, d2d_streams %u",
