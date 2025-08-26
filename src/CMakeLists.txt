@@ -129,6 +129,11 @@ endif()
 
 if(TARGET Kokkos::kokkoscore)
   list(APPEND REALM_SOURCES kokkos_interop.cc)
+  set_source_files_properties(kokkos_interop.cc PROPERTIES
+      LANGUAGE ${Kokkos_COMPILE_LANGUAGE}
+      ${Kokkos_COMPILE_LANGUAGE}_ARCHITECTURES ${Kokkos_{Kokkos_COMPILE_LANGUAGE}_ARCHITECTURES}
+      ${Kokkos_COMPILE_LANGUAGE}_STANDARD ${Kokkos_{Kokkos_COMPILE_LANGUAGE}_STANDARD}
+  )
 endif()
 
 # Replace me later
