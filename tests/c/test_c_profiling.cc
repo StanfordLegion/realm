@@ -308,7 +308,6 @@ void REALM_FNPTR main_task(const void *args, size_t arglen, const void *userdata
     dst_inst_1.destroy();
     dst_inst_2.destroy();
   }
-
 }
 
 int main(int argc, char **argv)
