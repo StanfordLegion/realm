@@ -1865,23 +1865,27 @@ realm_profiling_response_get_measurement(const realm_profiling_response_t *respo
   Realm::ProfilingResponse response_cxx(static_cast<const char *>(response->data),
                                         response->data_size);
 
-  if(measurement_id == PMID_OP_BACKTRACE_PCS) {
+  switch(measurement_id) {
+  case PMID_OP_BACKTRACE_PCS:
     status =
         handle_measurement<Realm::ProfilingMeasurements::OperationBacktrace, uintptr_t>(
             response_cxx, static_cast<uintptr_t *>(result), result_count);
-  } else if(measurement_id == PMID_OP_BACKTRACE_SYMBOLS) {
+    break;
+  case PMID_OP_BACKTRACE_SYMBOLS:
     status = handle_measurement<Realm::ProfilingMeasurements::OperationBacktrace,
                                 realm_profiling_measurement_operation_backtrace_symbol_t>(
         response_cxx,
         static_cast<realm_profiling_measurement_operation_backtrace_symbol_t *>(result),
         result_count);
-  } else if(measurement_id == PMID_OP_TIMELINE) {
+    break;
+  case PMID_OP_TIMELINE:
     status = handle_measurement<Realm::ProfilingMeasurements::OperationTimeline,
                                 realm_profiling_measurement_operation_timeline_t>(
         response_cxx,
         static_cast<realm_profiling_measurement_operation_timeline_t *>(result),
         result_count);
-  } else if(measurement_id == PMID_OP_EVENT_WAITS) {
+    break;
+  case PMID_OP_EVENT_WAITS:
     status =
         handle_measurement<Realm::ProfilingMeasurements::OperationEventWaits,
                            realm_profiling_measurement_operation_event_wait_interval_t>(
@@ -1889,37 +1893,43 @@ realm_profiling_response_get_measurement(const realm_profiling_response_t *respo
             static_cast<realm_profiling_measurement_operation_event_wait_interval_t *>(
                 result),
             result_count);
-  } else if(measurement_id == PMID_OP_PROC_USAGE) {
+    break;
+  case PMID_OP_PROC_USAGE:
     status = handle_measurement<Realm::ProfilingMeasurements::OperationProcessorUsage,
                                 realm_profiling_measurement_operation_processor_usage_t>(
         response_cxx,
         static_cast<realm_profiling_measurement_operation_processor_usage_t *>(result),
         result_count);
-  } else if(measurement_id == PMID_OP_MEM_USAGE) {
+    break;
+  case PMID_OP_MEM_USAGE:
     status = handle_measurement<Realm::ProfilingMeasurements::OperationMemoryUsage,
                                 realm_profiling_measurement_operation_memory_usage_t>(
         response_cxx,
         static_cast<realm_profiling_measurement_operation_memory_usage_t *>(result),
         result_count);
-  } else if(measurement_id == PMID_INST_TIMELINE) {
+    break;
+  case PMID_INST_TIMELINE:
     status = handle_measurement<Realm::ProfilingMeasurements::InstanceTimeline,
                                 realm_profiling_measurement_instance_timeline_t>(
         response_cxx,
         static_cast<realm_profiling_measurement_instance_timeline_t *>(result),
         result_count);
-  } else if(measurement_id == PMID_INST_MEM_USAGE) {
+    break;
+  case PMID_INST_MEM_USAGE:
     status = handle_measurement<Realm::ProfilingMeasurements::InstanceMemoryUsage,
                                 realm_profiling_measurement_instance_memory_usage_t>(
         response_cxx,
         static_cast<realm_profiling_measurement_instance_memory_usage_t *>(result),
         result_count);
-  } else if(measurement_id == PMID_OP_TIMELINE_GPU) {
+    break;
+  case PMID_OP_TIMELINE_GPU:
     status = handle_measurement<Realm::ProfilingMeasurements::OperationTimelineGPU,
                                 realm_profiling_measurement_operation_timeline_gpu_t>(
         response_cxx,
         static_cast<realm_profiling_measurement_operation_timeline_gpu_t *>(result),
         result_count);
-  } else if(measurement_id == PMID_OP_COPY_INFO) {
+    break;
+  case PMID_OP_COPY_INFO:
     status =
         handle_measurement<Realm::ProfilingMeasurements::OperationCopyInfo,
                            realm_profiling_measurement_operation_copy_info_inst_info_t>(
@@ -1927,20 +1937,24 @@ realm_profiling_response_get_measurement(const realm_profiling_response_t *respo
             static_cast<realm_profiling_measurement_operation_copy_info_inst_info_t *>(
                 result),
             result_count);
-  } else if(measurement_id >= PMID_OP_COPY_INFO_SRC_INST &&
-            measurement_id < PMID_OP_COPY_INFO_SRC_FIELD) {
-    status = handle_measurement<Realm::ProfilingMeasurements::OperationCopyInfo,
-                                realm_region_instance_t>(
-        response_cxx, static_cast<realm_region_instance_t *>(result), result_count,
-        &measurement_id);
-  } else if(measurement_id >= PMID_OP_COPY_INFO_SRC_FIELD &&
-            measurement_id < PMID_REALM_LAST) {
-    status = handle_measurement<Realm::ProfilingMeasurements::OperationCopyInfo,
-                                realm_field_id_t>(response_cxx,
-                                                  static_cast<realm_field_id_t *>(result),
-                                                  result_count, &measurement_id);
-  } else {
-    status = REALM_PROFILING_ERROR_INVALID_MEASUREMENT;
+    break;
+  default:
+    if(measurement_id >= PMID_OP_COPY_INFO_SRC_INST &&
+       measurement_id < PMID_OP_COPY_INFO_SRC_FIELD) {
+      status = handle_measurement<Realm::ProfilingMeasurements::OperationCopyInfo,
+                                  realm_region_instance_t>(
+          response_cxx, static_cast<realm_region_instance_t *>(result), result_count,
+          &measurement_id);
+    } else if(measurement_id >= PMID_OP_COPY_INFO_SRC_FIELD &&
+              measurement_id < PMID_REALM_LAST) {
+      status = handle_measurement<Realm::ProfilingMeasurements::OperationCopyInfo,
+                                  realm_field_id_t>(
+          response_cxx, static_cast<realm_field_id_t *>(result), result_count,
+          &measurement_id);
+    } else {
+      status = REALM_PROFILING_ERROR_INVALID_MEASUREMENT;
+    }
+    break;
   }
   return status;
 }
