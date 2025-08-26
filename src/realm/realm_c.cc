@@ -1621,11 +1621,16 @@ static inline realm_status_t
 copy_measurement(const Realm::ProfilingMeasurements::OperationBacktrace &m,
                  uintptr_t *result, size_t *result_count, const void *data)
 {
-  *result_count = m.pcs.size();
+  realm_status_t status = REALM_SUCCESS;
   if(result != nullptr) {
-    memcpy(result, m.pcs.data(), m.pcs.size() * sizeof(uintptr_t));
+    if (m.pcs.size() > *result_count) {
+      status = REALM_PROFILING_ERROR_INVALID_BUFFER;
+    } else {
+      memcpy(result, m.pcs.data(), m.pcs.size() * sizeof(uintptr_t));
+    }
   }
-  return REALM_SUCCESS;
+  *result_count = m.pcs.size();
+  return status;
 }
 
 static inline realm_status_t
@@ -1642,7 +1647,7 @@ copy_measurement(const Realm::ProfilingMeasurements::OperationBacktrace &m,
       if(m.symbols[i].size() > PMID_OP_BACKTRACE_SYMBOLS_MAX_LENGTH) {
         log_realm_c.error("Symbol length is too long, please increase "
                           "PMID_OP_BACKTRACE_SYMBOLS_MAX_LENGTH");
-        return REALM_PROFILING_ERROR_INVALID_MEASUREMENT;
+        return REALM_PROFILING_ERROR_INVALID_BUFFER;
       }
       memcpy(symbol_result[i].symbol, m.symbols[i].c_str(), m.symbols[i].size());
       symbol_result[i].symbol[m.symbols[i].size()] = '\0';
@@ -1672,18 +1677,23 @@ copy_measurement(const Realm::ProfilingMeasurements::OperationEventWaits &m,
                  realm_profiling_measurement_operation_event_wait_interval_t *result,
                  size_t *result_count, const void *data)
 {
-  *result_count = m.intervals.size();
+  realm_status_t status = REALM_SUCCESS;
   if(result != nullptr) {
-    for(size_t i = 0; i < m.intervals.size(); i++) {
-      const Realm::ProfilingMeasurements::OperationEventWaits::WaitInterval
-          &wait_interval = m.intervals[i];
-      result[i].wait_start = wait_interval.wait_start;
-      result[i].wait_ready = wait_interval.wait_ready;
-      result[i].wait_end = wait_interval.wait_end;
-      result[i].wait_event = wait_interval.wait_event;
+    if (m.intervals.size() > *result_count) {
+      status = REALM_PROFILING_ERROR_INVALID_BUFFER;
+    } else {
+      for(size_t i = 0; i < m.intervals.size(); i++) {
+        const Realm::ProfilingMeasurements::OperationEventWaits::WaitInterval
+            &wait_interval = m.intervals[i];
+        result[i].wait_start = wait_interval.wait_start;
+        result[i].wait_ready = wait_interval.wait_ready;
+        result[i].wait_end = wait_interval.wait_end;
+        result[i].wait_event = wait_interval.wait_event;
+      }
     }
   }
-  return REALM_SUCCESS;
+  *result_count = m.intervals.size();
+  return status;
 }
 
 static inline realm_status_t
@@ -1759,20 +1769,25 @@ copy_measurement(const Realm::ProfilingMeasurements::OperationCopyInfo &m,
                  realm_profiling_measurement_operation_copy_info_inst_info_t *result,
                  size_t *result_count, const void *data)
 {
-  *result_count = m.inst_info.size();
+  realm_status_t status = REALM_SUCCESS;
   if(result != nullptr) {
-    for(size_t i = 0; i < m.inst_info.size(); i++) {
-      result[i].src_indirection_inst = m.inst_info[i].src_indirection_inst.id;
-      result[i].dst_indirection_inst = m.inst_info[i].dst_indirection_inst.id;
-      result[i].src_indirection_field = m.inst_info[i].src_indirection_field;
-      result[i].dst_indirection_field = m.inst_info[i].dst_indirection_field;
-      result[i].request_type =
-          static_cast<realm_profiling_measurement_operation_copy_info_request_type_t>(
-              m.inst_info[i].request_type);
-      result[i].num_hops = m.inst_info[i].num_hops;
+    if (m.inst_info.size() > *result_count) {
+      status = REALM_PROFILING_ERROR_INVALID_BUFFER;
+    } else {
+      for(size_t i = 0; i < m.inst_info.size(); i++) {
+        result[i].src_indirection_inst = m.inst_info[i].src_indirection_inst.id;
+        result[i].dst_indirection_inst = m.inst_info[i].dst_indirection_inst.id;
+        result[i].src_indirection_field = m.inst_info[i].src_indirection_field;
+        result[i].dst_indirection_field = m.inst_info[i].dst_indirection_field;
+        result[i].request_type =
+            static_cast<realm_profiling_measurement_operation_copy_info_request_type_t>(
+                m.inst_info[i].request_type);
+        result[i].num_hops = m.inst_info[i].num_hops;
+      }
     }
   }
-  return REALM_SUCCESS;
+  *result_count = m.inst_info.size();
+  return status;
 }
 
 static inline realm_status_t
@@ -1781,51 +1796,58 @@ copy_measurement(const Realm::ProfilingMeasurements::OperationCopyInfo &m,
 {
   realm_profiling_measurement_id_t measurement_id =
       *(static_cast<const realm_profiling_measurement_id_t *>(data));
-  int index = measurement_id - (measurement_id >= PMID_OP_COPY_INFO_DST_INST
-                                    ? PMID_OP_COPY_INFO_DST_INST
-                                    : PMID_OP_COPY_INFO_SRC_INST);
-  if(index < 0 || static_cast<size_t>(index) >= m.inst_info.size()) {
+  bool is_dst = measurement_id >= PMID_OP_COPY_INFO_DST_INST;
+  int index = measurement_id - (is_dst ? PMID_OP_COPY_INFO_DST_INST
+                                       : PMID_OP_COPY_INFO_SRC_INST);
+  if((index < 0) || (static_cast<size_t>(index) >= m.inst_info.size())) {
     return REALM_PROFILING_ERROR_INVALID_MEASUREMENT;
   }
   const Realm::ProfilingMeasurements::OperationCopyInfo::InstInfo &inst_info =
       m.inst_info[index];
   const std::vector<Realm::RegionInstance> &inst_vec =
-      (measurement_id >= PMID_OP_COPY_INFO_DST_INST ? inst_info.dst_insts
-                                                    : inst_info.src_insts);
+      (is_dst ? inst_info.dst_insts : inst_info.src_insts);
 
-  *result_count = inst_vec.size();
+  realm_status_t status = REALM_SUCCESS;
   if(result != nullptr) {
-    memcpy(result, inst_vec.data(), inst_vec.size() * sizeof(Realm::RegionInstance));
+    if (inst_vec.size() > *result_count) {
+      status = REALM_PROFILING_ERROR_INVALID_BUFFER;
+    } else {
+      memcpy(result, inst_vec.data(), inst_vec.size() * sizeof(inst_vec[0]));
+    }
   }
-  return REALM_SUCCESS;
+  *result_count = inst_vec.size();
+  return status;
 }
 
 static inline realm_status_t copy_measurement(
-
     const Realm::ProfilingMeasurements::OperationCopyInfo &m, realm_field_id_t *result,
     size_t *result_count, const void *data)
 {
   realm_profiling_measurement_id_t measurement_id =
       *(static_cast<const realm_profiling_measurement_id_t *>(data));
-  int index = measurement_id - (measurement_id >= PMID_OP_COPY_INFO_DST_FIELD
-                                    ? PMID_OP_COPY_INFO_DST_FIELD
-                                    : PMID_OP_COPY_INFO_SRC_FIELD);
+  bool is_dst = measurement_id >= PMID_OP_COPY_INFO_DST_FIELD;
+  int index = measurement_id - (is_dst ? PMID_OP_COPY_INFO_DST_FIELD
+                                       : PMID_OP_COPY_INFO_SRC_FIELD);
 
-  if(index < 0 || static_cast<size_t>(index) >= m.inst_info.size()) {
+  if((index < 0) || (static_cast<size_t>(index) >= m.inst_info.size())) {
     return REALM_PROFILING_ERROR_INVALID_MEASUREMENT;
   }
 
   const Realm::ProfilingMeasurements::OperationCopyInfo::InstInfo &inst_info =
       m.inst_info[index];
   const std::vector<Realm::FieldID> &field_vec =
-      (measurement_id >= PMID_OP_COPY_INFO_DST_FIELD ? inst_info.dst_fields
-                                                     : inst_info.src_fields);
+      (is_dst ? inst_info.dst_fields : inst_info.src_fields);
 
-  *result_count = field_vec.size();
+  realm_status_t status = REALM_SUCCESS;
   if(result != nullptr) {
-    memcpy(result, field_vec.data(), field_vec.size() * sizeof(Realm::FieldID));
+    if (field_vec.size() > *result_count) {
+      status = REALM_PROFILING_ERROR_INVALID_BUFFER;
+    } else {
+      memcpy(result, field_vec.data(), field_vec.size() * sizeof(field_vec[0]));
+    }
   }
-  return REALM_SUCCESS;
+  *result_count = field_vec.size();
+  return status;
 }
 
 template <typename CXX_Measurement_Type, typename C_Measurement_Type>
@@ -1838,10 +1860,10 @@ handle_measurement(const Realm::ProfilingResponse &response_cxx,
     bool has = response_cxx.has_measurement<CXX_Measurement_Type>();
     return has ? REALM_SUCCESS : REALM_PROFILING_ERROR_INVALID_MEASUREMENT;
   } else {
-    CXX_Measurement_Type *m = response_cxx.get_measurement<CXX_Measurement_Type>();
-    if(m) {
-      realm_status_t status = copy_measurement(*m, result, result_count, data);
-      delete m;
+    CXX_Measurement_Type m;
+    bool ok = response_cxx.get_measurement<CXX_Measurement_Type>(m);
+    if(ok) {
+      realm_status_t status = copy_measurement(m, result, result_count, data);
       return status;
     } else {
       return REALM_PROFILING_ERROR_INVALID_MEASUREMENT;
