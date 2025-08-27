@@ -24,8 +24,8 @@ __global__ void intersect_input_rects(
   size_t idx_y = idx / numParentRects;
   assert(idx_x < numParentRects);
   assert(idx_y < numInstRects);
-  const auto &source_entry = d_parent_entries[idx_x];
-  const auto &inst_entry = d_inst_entries[idx_y];
+  const SparsityMapEntry<N, T> source_entry = d_parent_entries[idx_x];
+  const SparsityMapEntry<N, T> inst_entry = d_inst_entries[idx_y];
   Rect<N,T> rect_output = inst_entry.bounds.intersection(source_entry.bounds);
   if (rect_output.empty()) {
     return;

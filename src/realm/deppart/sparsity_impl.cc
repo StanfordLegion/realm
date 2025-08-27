@@ -416,8 +416,8 @@ namespace Realm {
     // full cross-product test for now - for larger rectangle lists, consider
     //  an acceleration structure?
     if(approx) {
-      auto rects1 = get_approx_rects();
-      auto rects2 = other->get_approx_rects();
+      span<Rect<N, T>> rects1 = get_approx_rects();
+      span<Rect<N, T>> rects2 = other->get_approx_rects();
       for(size_t i = 0; i < rects1.size(); i++) {
         Rect<N, T> isect = rects1[i].intersection(bounds);
         if(isect.empty())
@@ -428,8 +428,8 @@ namespace Realm {
         }
       }
     } else {
-      auto entries1 = get_entries();
-      auto entries2 = other->get_entries();
+      span<SparsityMapEntry<N, T>> entries1 = get_entries();
+      span<SparsityMapEntry<N, T>> entries2 = other->get_entries();
       for(size_t i = 0; i < entries1.size(); i++) {
         Rect<N, T> isect = entries1[i].bounds.intersection(bounds);
         if(isect.empty())
@@ -1189,8 +1189,7 @@ namespace Realm {
           old_data.swap(this->entries);
           size_t i = 0;
           size_t n = 0;
-         auto old_it =
-              old_data.begin();
+          typename std::vector<SparsityMapEntry<N, T>>::iterator old_it = old_data.begin();
           while((i < count) && (old_it != old_data.end())) {
             if(rects[i].hi[0] < (old_it->bounds.lo[0] - 1)) {
               this->entries.resize(n + 1);
@@ -1492,7 +1491,7 @@ namespace Realm {
       // scan the entry list, sending bitmaps first and making a list of rects
       std::vector<Rect<N, T>> rects;
       for(size_t i = 0; i < this->get_entries().size(); i++) {
-        auto entry = this->get_entries()[i];
+        SparsityMapEntry<N, T> entry = this->get_entries()[i];
         if(entry.bitmap) {
           // TODO: send bitmap
           assert(0);
@@ -1689,6 +1688,9 @@ namespace Realm {
   template <int N, typename T>
   void SparsityMapImpl<N, T>::finalize(void)
   {
+
+    this->from_gpu = false;
+
     // in order to organize the data a little better and handle common coalescing
     //  cases, we do N sort/merging passes, with each dimension appearing last
     //  in the sort order at least once (so that we can merge in that dimension)
@@ -1741,14 +1743,11 @@ namespace Realm {
         merge_dim--;
     }
 
-    this->span_entries = span<SparsityMapEntry<N,T>>(this->entries.data(), this->entries.size());
-
     // now that we've got our entries nice and tidy, build a bounded approximation of them
     if(true /*ID(me).sparsity_creator_node() == Network::my_node_id*/) {
       assert(!this->approx_valid.load());
-      compute_approximation(this->span_entries, this->approx_rects,
+      compute_approximation(span<SparsityMapEntry<N,T>>(this->entries.data(), this->entries.size()), this->approx_rects,
                             DeppartConfig::cfg_max_rects_in_approximation);
-      this->span_approx_rects = span<Rect<N,T>>(this->approx_rects.data(), this->approx_rects.size());
       this->approx_valid.store_release(true);
     }
 
@@ -1831,13 +1830,17 @@ namespace Realm {
       GenEventImpl::trigger(trigger_precise, false /*!poisoned*/);
 
   }
+
+
+  //Here, we copy everything the CPU finalize does except manipulating the entries further
+  //and we indicate that the sparsity map was constructed from the cpu
 
   template <int N, typename T>
   void SparsityMapImpl<N, T>::gpu_finalize(void)
   {
 
+    this->from_gpu = true;
 
-    // now that we've got our entries nice and tidy, build a bounded approximation of them
     if(true /*ID(me).sparsity_creator_node() == Network::my_node_id*/) {
       assert(!this->approx_valid.load());
       this->approx_valid.store_release(true);
@@ -1922,22 +1925,21 @@ namespace Realm {
       GenEventImpl::trigger(trigger_precise, false /*!poisoned*/);
   }
 
+
+  //Allows a GPU deppart client to set the entries directly with a host region instance
   template<int N, typename T>
     void SparsityMapImpl<N, T>::set_instance(RegionInstance _entries_instance, size_t size)
   {
     this->entries_instance = _entries_instance;
-    this->span_entries = span<SparsityMapEntry<N,T>>(
-        reinterpret_cast<SparsityMapEntry<N,T>*>(AffineAccessor<char,1>(this->entries_instance, 0).base),
-        size);
+    this->num_entries = size;
   }
 
+  //Allows a GPU deppart client to set the approx enrects directly with a host region instance
   template<int N, typename T>
   void SparsityMapImpl<N, T>::set_approx_instance(RegionInstance _approx_instance, size_t size)
   {
     this->approx_instance = _approx_instance;
-    this->span_approx_rects = span<Rect<N,T>>(
-        reinterpret_cast<Rect<N,T>*>(AffineAccessor<char,1>(this->approx_instance, 0).base),
-        size);
+    this->num_approx = size;
   }
 
   template <int N, typename T>

@@ -90,7 +90,7 @@ namespace Realm {
       // we need precise data for non-dense index spaces (the original
       //  'bounds' on the IndexSpace is often VERY conservative)
       SparsityMapPublicImpl<N, T> *impl = is.sparsity.impl();
-      auto entries = impl->get_entries();
+      span<SparsityMapEntry<N, T>> entries = impl->get_entries();
       if(!entries.empty()) {
         // TODO: set some sort of threshold for merging entries
         size_t i = 0;

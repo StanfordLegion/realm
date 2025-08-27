@@ -205,7 +205,7 @@ namespace Realm {
      * @return the entries of this sparsity map
      */
     REALM_PUBLIC_API
-    const span<SparsityMapEntry<N, T>> &get_entries(void);
+    const span<SparsityMapEntry<N, T>> get_entries(void);
 
     /**
      * Get the approximate rectangles of this sparsity map.
@@ -215,7 +215,7 @@ namespace Realm {
      * @return the approximate rectangles of this sparsity map
      */
     REALM_PUBLIC_API
-    const span<Rect<N, T>> &get_approx_rects(void);
+    const span<Rect<N, T>> get_approx_rects(void);
 
     /**
      * Check if this sparsity map overlaps another sparsity map.
@@ -246,12 +246,23 @@ namespace Realm {
 
   protected:
     atomic<bool> entries_valid{false}, approx_valid{false};
+
+    //BOTH RegionInstance and vector are returned as a span
+    //only on can be valid (i.e. only finalize or gpu_finalize can be called, not both)
+
+    //Stores rectangles for CPU deppart (easy manipulation for sort/merge entries)
     std::vector<SparsityMapEntry<N,T> > entries;
-    span<SparsityMapEntry<N,T> > span_entries;
     std::vector<Rect<N,T> > approx_rects;
-    span<Rect<N,T> > span_approx_rects;
+
+    //Stores rectangles for GPU deppart (allows fast copy after merged on GPU)
     RegionInstance entries_instance;
+    size_t num_entries;
+
     RegionInstance approx_instance;
+    size_t num_approx;
+
+    //Tracks whether to use instance or vector
+    bool from_gpu;
   };
 
 }; // namespace Realm
