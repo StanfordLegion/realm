@@ -136,6 +136,10 @@ namespace Realm {
     void remote_data_request(NodeID requestor, bool send_precise, bool send_approx);
     void remote_data_reply(NodeID requestor, bool send_precise, bool send_approx);
 
+    void set_instance(RegionInstance _entries_instance, size_t size);
+    void set_approx_instance(RegionInstance _approx_instance, size_t size);
+    void gpu_finalize(void);
+
     SparsityMap<N, T> me;
 
     struct RemoteSparsityRequest {
