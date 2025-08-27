@@ -1,13 +1,18 @@
 #pragma once
 #include "deppart_config.h"
 #include "partitions.h"
-#include "../nvtx.h"
-#include "../cuda/cuda_internal.h"
+#ifdef REALM_USE_NVTX
+#include "realm/nvtx.h"
+#endif
+#include "realm/cuda/cuda_internal.h"
 #include "realm/deppart/partitions_gpu_kernels.hpp"
 #include <cub/cub.cuh>
 
 namespace Realm {
 
+
+
+  //Used by cub::DeviceReduce to compute bad GPU approximation
   template<int N, typename T>
   struct UnionRectOp {
     __host__ __device__
@@ -22,6 +27,16 @@ namespace Realm {
     }
   };
 
+
+  /*
+   *  Input: An array of points (potentially with duplicates) with associated
+   *  src indices, where all the points with a given src idx together represent an exact covering
+   *  of the partitioning output for that index.
+   *  Output: A disjoint, coalesced array of rectangles sorted by src idx that it then sends off
+   *  to the send output function, which constructs the final sparsity map.
+   *  Approach: Sort the points by (x0,x1,...,xN-1,src) (right is MSB). Convert them to singleton rects.
+   *  Run-length encode along each dimension (N-1...0).
+   */
   template<int N, typename T>
   template<typename Container, typename IndexFn, typename MapFn>
   void GPUMicroOp<N,T>::complete_pipeline(PointDesc<N, T>* d_points, size_t total_pts, Memory my_mem, const Container& ctr, IndexFn getIndex, MapFn getMap)
@@ -38,7 +53,11 @@ namespace Realm {
     size_t max_aux_bytes = std::max({bytes_T, bytes_S, bytes_R});
     size_t max_pg_bytes = std::max({bytes_p, bytes_S});
 
+
+    // Instance shared by coordinate keys, source keys, and rectangle outputs
     RegionInstance aux_instance = this->realm_malloc(2 * max_aux_bytes, my_mem);
+
+    //Instance shared by group ids (RLE) and intermediate points in sorting
     RegionInstance pg_instance = this->realm_malloc(max_pg_bytes, my_mem);
 
     uintptr_t aux_in = AffineAccessor<char,1>(aux_instance, 0).base;
@@ -66,11 +85,13 @@ namespace Realm {
     cub::DeviceRadixSort::SortPairs(nullptr, t2, d_src_keys_in, d_src_keys_out, d_points_in, d_points_out, total_pts, 0, 8*sizeof(size_t), stream);
     cub::DeviceScan::InclusiveSum(nullptr, t3, break_points, group_ids, total_pts, stream);
 
+    //Temporary storage instance shared by CUB operations.
     size_t temp_bytes = std::max({t1, t2, t3});
     RegionInstance temp_storage_instance = this->realm_malloc(temp_bytes, my_mem);
     void *temp_storage = reinterpret_cast<void*>(AffineAccessor<char,1>(temp_storage_instance, 0).base);
 
 
+    //Sort along each dimension from LSB to MSB (0 to N-1)
     int threads_per_block = 256;
     size_t grid_size = (total_pts + threads_per_block - 1) / threads_per_block;
     size_t use_bytes = temp_bytes;
@@ -80,9 +101,9 @@ namespace Realm {
       cub::DeviceRadixSort::SortPairs(temp_storage, use_bytes, d_keys_in, d_keys_out, d_points_in, d_points_out, total_pts, 0, 8*sizeof(T), stream);
       std::swap(d_keys_in, d_keys_out);
       std::swap(d_points_in, d_points_out);
-
     }
 
+    //Sort by source index now to keep individual partitions separate
     build_src_key<<<grid_size, threads_per_block, 0, stream>>>(d_src_keys_in, d_points_in, total_pts);
     KERNEL_CHECK(stream);
     use_bytes = temp_bytes;
@@ -100,17 +121,24 @@ namespace Realm {
 
 
     for (int dim = N-1; dim >= 0; --dim) {
-      int threads_per_block = 256;
-      size_t grid_size = (num_intermediate + threads_per_block - 1) / threads_per_block;
+
+      // Step 1: Mark rectangle starts
+      // e.g. [1, 2, 4, 5, 6, 8] -> [1, 0, 1, 0, 0, 1]
+      grid_size = (num_intermediate + threads_per_block - 1) / threads_per_block;
       mark_breaks_dim<<<grid_size, threads_per_block, 0, stream>>>(d_rects_in, break_points, num_intermediate, dim);
       KERNEL_CHECK(stream);
+
+      // Step 2: Inclusive scan of break points to get group ids
+      // e.g. [1, 0, 1, 0, 0, 1] -> [1, 1, 2, 2, 2, 3]
       use_bytes = temp_bytes;
       cub::DeviceScan::InclusiveSum(temp_storage, use_bytes, break_points, group_ids, num_intermediate, stream);
 
+      //Determine new number of intermediate rectangles
       size_t last_grp;
       CUDA_CHECK(cudaMemcpyAsync(&last_grp, &group_ids[num_intermediate-1], sizeof(size_t), cudaMemcpyDeviceToHost, stream), stream);
       CUDA_CHECK(cudaStreamSynchronize(stream), stream);
 
+      //Step 3: Write output rectangles, where rect starts write lo and rect ends write hi
       init_rects_dim<<<grid_size, threads_per_block, 0, stream>>>(d_rects_in, break_points, group_ids, d_rects_out, num_intermediate, dim);
       KERNEL_CHECK(stream);
 
@@ -132,6 +160,13 @@ namespace Realm {
     aux_instance.destroy();
     nvtx_range_pop();
   }
+
+  /*
+   *  Input: An array of disjoint rectangles sorted by src idx.
+   *  Output: Fills the sparsity output for each src with a host region instance
+   *  containing the entries/approx entries and calls gpu_finalize on the SparsityMapImpl.
+   *  Approach: Segments the rectangles by their src idx and copies them back to the host,
+   */
 
   template<int N, typename T>
   template<typename Container, typename IndexFn, typename MapFn>
@@ -157,11 +192,15 @@ namespace Realm {
     CUDA_CHECK(cudaMemsetAsync(d_starts, 0, ctr.size()*sizeof(size_t),stream), stream);
     CUDA_CHECK(cudaMemsetAsync(d_ends, 0, ctr.size()*sizeof(size_t),stream), stream);
 
+
+    //Convert RectDesc to SparsityMapEntry and determine where eeach src's rectangles start and end.
     int threads_per_block = 256;
     size_t grid_size = (total_rects + threads_per_block - 1) / threads_per_block;
     build_final_output<<<grid_size, threads_per_block, 0, stream>>>(d_rects, final_entries, final_rects, d_starts, d_ends, total_rects);
     KERNEL_CHECK(stream);
 
+
+    //Copy starts and ends back to host and handle empty partitions
     std::vector<size_t> d_starts_host(ctr.size()), d_ends_host(ctr.size());
     CUDA_CHECK(cudaMemcpyAsync(d_starts_host.data(), d_starts, ctr.size() * sizeof(size_t), cudaMemcpyDeviceToHost, stream), stream);
     CUDA_CHECK(cudaMemcpyAsync(d_ends_host.data(), d_ends, ctr.size() * sizeof(size_t), cudaMemcpyDeviceToHost, stream), stream);
@@ -173,6 +212,7 @@ namespace Realm {
       }
     }
 
+    //Find system memory
     Memory sysmem;
     bool found_sysmem = false;
     Machine machine = Machine::get_machine();
@@ -187,6 +227,8 @@ namespace Realm {
     }
     assert(found_sysmem);
 
+
+    //Use provided lambdas to iterate over sparsity output container (map or vector)
     for (auto const& elem : ctr) {
       size_t idx = getIndex(elem);
       auto mapOpj = getMap(elem);
@@ -205,6 +247,8 @@ namespace Realm {
           approx_rects = final_rects + start;
           num_approx = end - start;
         } else {
+          //TODO: Maybe add a better GPU approx here when given more rectangles
+          //Use CUB to compute a bad approx on the GPU (union of all rectangles)
           approx_rects_instance = realm_malloc(sizeof(Rect<N,T>), my_mem);
           approx_rects = reinterpret_cast<Rect<N,T>*>(AffineAccessor<char,1>(approx_rects_instance, 0).base);
           num_approx = 1;
@@ -217,11 +261,11 @@ namespace Realm {
           }
           cub::DeviceReduce::Reduce(
             d_temp, temp_sz,
-            final_rects + start,            // input iterator
-            approx_rects,              // writes one Rect<N,T>
+            final_rects + start,
+            approx_rects,
             (end - start),
-            UnionRectOp<N,T>(), // our component‐wise min/max
-            identity_rect, // init = (+∞, -∞)
+            UnionRectOp<N,T>(),
+            identity_rect,
             stream
           );
           RegionInstance temp_rects_instance = realm_malloc(temp_sz * sizeof(Rect<N,T>), my_mem);

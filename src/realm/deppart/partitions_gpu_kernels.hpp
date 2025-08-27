@@ -34,6 +34,7 @@ __global__ void build_src_key(size_t*        d_keys,
 }
 
 // 1) mark breaks on RectDesc array at pass d
+//NOTE: ONLY WORKS IF WE STARTED WITH SINGLETONS
 template<int N, typename T>
 __global__
 void mark_breaks_dim(const RectDesc<N,T>* in,
@@ -59,14 +60,15 @@ void mark_breaks_dim(const RectDesc<N,T>* in,
     if((p.lo[k] != q.lo[k]) || (p.hi[k] != q.hi[k]))
       split = true;
 
-  // current dim d must advance by +1 in lo
+  // current dim d must equal or advance by +1 in lo
   if(!split && (p.lo[d] != (q.hi[d] + 1)) && (p.lo[d] != q.lo[d]))
     split = true;
 
   brk[i] = split ? 1 : 0;
 }
 
-// 2) init one RectDesc per group at its start
+// Write output rectangles for RLE
+//Starts write lo, ends write hi, everyone else no-ops
 template<int N, typename T>
 __global__
 void init_rects_dim(const RectDesc<N,T>* in,
@@ -82,11 +84,10 @@ void init_rects_dim(const RectDesc<N,T>* in,
   bool is_end = (i == M-1) || (gid[i+1] != gid[i]);
   if (!brk[i] && !is_end) return;
 
-  size_t g = gid[i] - 1;  // zero-based
-  const auto &r = in[i].rect;
+  size_t g = gid[i] - 1;  // zero-based rectangle index
+  const Rect<N, T> &r = in[i].rect;
   out[g].src_idx = in[i].src_idx;
 
-  // copy dims ≠ d
   #pragma unroll
   for(int k = 0; k < N; ++k) {
     if (brk[i]) {
@@ -98,6 +99,7 @@ void init_rects_dim(const RectDesc<N,T>* in,
   }
 }
 
+//Convert RectDesc to sparsity output and determine [d_start[i], d_end[i]) for each src i
 template<int N, typename T>
 __global__
 void build_final_output(const RectDesc<N,T>* d_rects,
@@ -112,9 +114,13 @@ void build_final_output(const RectDesc<N,T>* d_rects,
   d_entries_out[idx].bounds = d_rects[idx].rect;
   d_entries_out[idx].sparsity.id = 0;
   d_entries_out[idx].bitmap = 0;
+
+  //Checks if we're the first value for a given src
   if (idx == 0 || d_rects[idx].src_idx != d_rects[idx-1].src_idx) {
     d_starts[d_rects[idx].src_idx] = idx;
   }
+
+  //Checks if we're the last value for a given src
   if (idx == numRects-1 || d_rects[idx].src_idx != d_rects[idx+1].src_idx) {
     d_ends[d_rects[idx].src_idx] = idx+1;
   }
