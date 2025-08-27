@@ -8,9 +8,30 @@
 #include "realm/deppart/partitions_gpu_kernels.hpp"
 #include <cub/cub.cuh>
 
+//CUDA ERROR CHECKING MACROS
+
+#define CUDA_CHECK(call, stream)                                                \
+  do {                                                                          \
+    cudaError_t err = (call);                                                   \
+    if (err != cudaSuccess) {                                                   \
+      std::cerr << "CUDA error at " << __FILE__ << ":" << __LINE__             \
+                << " '" #call "' failed with "                                 \
+                << cudaGetErrorString(err) << " (" << err << ")\n";            \
+      assert(false);                                                  \
+    }                                                                           \
+  } while (0)
+
+#define KERNEL_CHECK(stream)                                                    \
+  do {                                                                          \
+    cudaError_t err = cudaGetLastError();                                       \
+    if (err != cudaSuccess) {                                                   \
+      std::cerr << "Kernel launch failed at " << __FILE__ << ":" << __LINE__   \
+                << ": " << cudaGetErrorString(err) << "\n";                    \
+      assert(false);                                                \
+    }                                                                        \
+  } while (0)
+
 namespace Realm {
-
-
 
   //Used by cub::DeviceReduce to compute bad GPU approximation
   template<int N, typename T>

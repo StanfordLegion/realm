@@ -18,6 +18,7 @@
 // sparsity maps for Realm
 
 // nop, but helps IDEs
+#include "realm/inst_layout.h"
 #include "realm/sparsity.h"
 
 #include "realm/serialize.h"
@@ -83,19 +84,27 @@ namespace Realm {
   }
 
   template <int N, typename T>
-  inline const span<SparsityMapEntry<N,T> >& SparsityMapPublicImpl<N,T>::get_entries(void)
+  inline const span<SparsityMapEntry<N,T> > SparsityMapPublicImpl<N,T>::get_entries(void)
   {
     if(!entries_valid.load_acquire())
       REALM_ASSERT(0, "get_entries called on sparsity map without valid data");
-    return span_entries;
+    if (from_gpu) {
+      return  span<SparsityMapEntry<N,T> >(reinterpret_cast<SparsityMapEntry<N,T>*>(entries_instance.pointer_untyped(0, num_entries*sizeof(SparsityMapEntry<N, T>))), num_entries);
+    } else {
+      return span<SparsityMapEntry<N,T>>(entries.data(), entries.size());
+    }
   }
 
   template <int N, typename T>
-  inline const span<Rect<N,T> >& SparsityMapPublicImpl<N,T>::get_approx_rects(void)
+  inline const span<Rect<N,T> > SparsityMapPublicImpl<N,T>::get_approx_rects(void)
   {
     if(!approx_valid.load_acquire())
       REALM_ASSERT(0, "get_approx_rects called on sparsity map without valid data");
-    return span_approx_rects;
+    if (from_gpu) {
+      return span<Rect<N,T> >(reinterpret_cast<Rect<N, T>*>(approx_instance.pointer_untyped(0, num_approx*sizeof(Rect<N, T>))), num_approx);
+    } else {
+      return  span<Rect<N,T>>(approx_rects.data(), approx_rects.size());
+    }
   }
 
 }; // namespace Realm

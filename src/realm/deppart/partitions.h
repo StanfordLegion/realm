@@ -35,30 +35,6 @@
 #include "realm/deppart/inst_helper.h"
 #include "realm/bgwork.h"
 
-// Wrap any CUDA API call, then sync & check the given stream.
-#define CUDA_CHECK(call, stream)                                                \
-  do {                                                                          \
-    cudaError_t err = (call);                                                   \
-    if (err != cudaSuccess) {                                                   \
-      std::cerr << "CUDA error at " << __FILE__ << ":" << __LINE__             \
-                << " '" #call "' failed with "                                 \
-                << cudaGetErrorString(err) << " (" << err << ")\n";            \
-      assert(false);                                                  \
-    }                                                                           \
-  } while (0)
-
-
-// Trap kernel-launch errors (immediate and async) on the given stream.
-#define KERNEL_CHECK(stream)                                                    \
-  do {                                                                          \
-    cudaError_t err = cudaGetLastError();                                       \
-    if (err != cudaSuccess) {                                                   \
-      std::cerr << "Kernel launch failed at " << __FILE__ << ":" << __LINE__   \
-                << ": " << cudaGetErrorString(err) << "\n";                    \
-      assert(false);                                                \
-    }                                                                        \
-  } while (0)
-
 namespace Realm {
 
   class PartitioningMicroOp;
