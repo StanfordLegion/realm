@@ -301,16 +301,13 @@ jobs:
 
       - name: Build Kokkos
         if: matrix.config.kokkos == 'ON'
-        env:
-          CUDA_ROOT: ${{ env.CUDA_PATH }}
-          NVCC_WRAPPER_DEFAULT_COMPILER: ${{ matrix.config.cxx }}
         run: |
           cmake -S kokkos -B kokkos/build \
-            ${{ matrix.config.cuda != '' && '-DKokkos_ARCH_AMPERE80=ON -DKokkos_ENABLE_CUDA=ON -DKokkos_ENABLE_CUDA_LAMBDA=ON -DKokkos_ENABLE_CUDA_UVM=OFF -DCMAKE_CXX_FLAGS=-DKOKKOS_IMPL_TURN_OFF_CUDA_HOST_INIT_CHECK -DCMAKE_CXX_COMPILER=$PWD/kokkos/bin/nvcc_wrapper' || ''}} \
+            ${{ matrix.config.cuda != '' && '-DKokkos_ARCH_AMPERE80=ON -DKokkos_ENABLE_CUDA=ON -DKokkos_ENABLE_CUDA_LAMBDA=ON -DKokkos_ENABLE_CUDA_UVM=OFF -DCMAKE_CXX_FLAGS=-DKOKKOS_IMPL_TURN_OFF_CUDA_HOST_INIT_CHECK' || ''}} \
+            -DKokkos_ENABLE_COMPILE_AS_CMAKE_LANGUAGE=ON \
             -DCMAKE_BUILD_TYPE=Release \
             -DBUILD_SHARED_LIBS=ON \
             -DCMAKE_POSITION_INDEPENDENT_CODE=ON \
-            -DKokkos_ENABLE_OPENMP=${{ matrix.config.openmp }} \
             -DKokkos_ENABLE_SERIAL=ON \
             -DCMAKE_INSTALL_PREFIX=${{ github.workspace }}/kokkos/install
           cmake --build kokkos/build --parallel 4 --config Release
@@ -325,14 +322,12 @@ jobs:
           echo no_gpu=$? >> $GITHUB_OUTPUT
 
       - name: Configure
-        env:
-          CUDA_ROOT: ${{ env.CUDA_PATH }}
-          NVCC_WRAPPER_DEFAULT_COMPILER: ${{ matrix.config.cxx }}
         run:
           cmake -S . -B build
                 -DCMAKE_C_COMPILER=${{ matrix.config.cc }}
                 -DCMAKE_CXX_COMPILER=${{ matrix.config.cxx }}
                 -DCMAKE_C_COMPILER_LAUNCHER=${{ matrix.config.ccache }}
+                -DCMAKE_CXX_COMPILER_LAUNCHER=${{ matrix.config.ccache }}
                 -DCMAKE_BUILD_TYPE=${{ matrix.config.build }}
                 -DBUILD_SHARED_LIBS=${{ matrix.config.shared_lib }}
                 -DREALM_BUILD_TESTS=ON -DREALM_BUILD_BENCHMARKS=ON -DREALM_BUILD_TUTORIALS=ON -DREALM_BUILD_EXAMPLES=ON
@@ -347,9 +342,6 @@ jobs:
                 -DREALM_SANITIZER=${{ matrix.config.sanitizer }}
 
       - name: Build
-        env:
-          CUDA_ROOT: ${{ env.CUDA_PATH }}
-          NVCC_WRAPPER_DEFAULT_COMPILER: ${{ matrix.config.cxx }}
         run:
           cmake --build build --parallel 4 --config ${{ matrix.config.build }} --verbose | tee build-new.log
 

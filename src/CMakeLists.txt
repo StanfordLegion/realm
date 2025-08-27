@@ -129,15 +129,11 @@ endif()
 
 if(TARGET Kokkos::kokkos)
   list(APPEND REALM_SOURCES kokkos_interop.cc)
-  set_source_files_properties(kokkos_interop.cc PROPERTIES
+  set_source_files_properties("${REALM_SOURCE_DIR}/kokkos_interop.cc" 
+      DIRECTORY ${PROJECT_SOURCE_DIR}
+      PROPERTIES
       LANGUAGE ${Kokkos_COMPILE_LANGUAGE}
-      ${Kokkos_COMPILE_LANGUAGE}_STANDARD ${Kokkos_${Kokkos_COMPILE_LANGUAGE}_STANDARD}
   )
-  if (Kokkos_${Kokkos_COMPILE_LANGUAGE}_ARCHITECTURES)
-      set_source_files_properties(kokkos_interop.cc PROPERTIES
-        ${Kokkos_COMPILE_LANGUAGE}_ARCHITECTURES ${Kokkos_${Kokkos_COMPILE_LANGUAGE}_ARCHITECTURES}
-      )
-  endif()
 endif()
 
 # Replace me later
