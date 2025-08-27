@@ -95,7 +95,8 @@ namespace Realm {
       std::vector<std::string> symbols;
 
       inline realm_status_t to_c(uintptr_t *result, size_t *result_count) const;
-      inline realm_status_t to_c(realm_profiling_operation_backtrace_symbol_t *result, size_t *result_count) const;
+      inline realm_status_t to_c(realm_profiling_operation_backtrace_symbol_t *result,
+                                 size_t *result_count) const;
     };
 
     struct OperationTimeline {
@@ -174,7 +175,8 @@ namespace Realm {
 
       std::vector<WaitInterval> intervals;
 
-      inline realm_status_t to_c(realm_profiling_operation_event_wait_interval_t *result, size_t *result_count) const;
+      inline realm_status_t to_c(realm_profiling_operation_event_wait_interval_t *result,
+                                 size_t *result_count) const;
     };
 
     // Track processor used for tasks
@@ -182,7 +184,8 @@ namespace Realm {
       static const ProfilingMeasurementID ID = PMID_OP_PROC_USAGE;
       Processor proc;
 
-      inline realm_status_t to_c(realm_profiling_operation_processor_usage_t *result) const;
+      inline realm_status_t
+      to_c(realm_profiling_operation_processor_usage_t *result) const;
     };
 
     // Track memories used for copies
@@ -220,9 +223,12 @@ namespace Realm {
       };
       std::vector<InstInfo> inst_info;
 
-      inline realm_status_t to_c(realm_profiling_operation_copy_info_t *result, size_t *result_count) const;
-      inline realm_status_t to_c(realm_region_instance_t *result, size_t *result_count, const void *data = nullptr) const;
-      inline realm_status_t to_c(realm_field_id_t *result, size_t *result_count, const void *data = nullptr) const;
+      inline realm_status_t to_c(realm_profiling_operation_copy_info_t *result,
+                                 size_t *result_count) const;
+      inline realm_status_t to_c(realm_region_instance_t *result, size_t *result_count,
+                                 const void *data = nullptr) const;
+      inline realm_status_t to_c(realm_field_id_t *result, size_t *result_count,
+                                 const void *data = nullptr) const;
     };
 
     struct OperationFinishEvent {

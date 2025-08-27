@@ -131,7 +131,7 @@ bool create_instance_and_copy_and_verify(
 
   CHECK_REALM(realm_region_instance_copy(runtime, &copy_params, nullptr, 0,
                                          REALM_NO_EVENT, 0, &event));
-  CHECK_REALM(realm_event_wait(runtime, event, nullptr));
+  CHECK_REALM(realm_event_wait(runtime, event, REALM_WAIT_INFINITE, nullptr));
 
   Realm::RegionInstance dst_inst_cxx = Realm::RegionInstance(dst_inst);
   dst_inst_cxx.fetch_metadata(Realm::Processor(proc)).wait();
