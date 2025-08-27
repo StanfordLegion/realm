@@ -355,8 +355,8 @@ TEST_F(CProfilingTest_OperationBacktrace,
   size_t result_count = backtrace.symbols.size();
   std::vector<realm_profiling_operation_backtrace_symbol_t> symbols(result_count);
   realm_status_t status = realm_profiling_response_get_measurement(
-      &response, realm_profiling_measurement_id_t::PMID_OP_BACKTRACE_SYMBOLS, symbols.data(),
-      &result_count);
+      &response, realm_profiling_measurement_id_t::PMID_OP_BACKTRACE_SYMBOLS,
+      symbols.data(), &result_count);
   EXPECT_EQ(status, REALM_SUCCESS);
   EXPECT_EQ(result_count, backtrace.symbols.size());
   for(size_t i = 0; i < result_count; i++) {
@@ -481,7 +481,8 @@ TEST_F(CProfilingTest_OperationEventWaits,
        ProfilingResponseGetMeasurementOperationEventWaits)
 {
   size_t result_count = event_waits.intervals.size();
-  std::vector<realm_profiling_operation_event_wait_interval_t> op_event_waits_result(result_count);
+  std::vector<realm_profiling_operation_event_wait_interval_t> op_event_waits_result(
+      result_count);
   realm_status_t status = realm_profiling_response_get_measurement(
       &response, realm_profiling_measurement_id_t::PMID_OP_EVENT_WAITS,
       op_event_waits_result.data(), &result_count);
@@ -491,7 +492,8 @@ TEST_F(CProfilingTest_OperationEventWaits,
     EXPECT_EQ(op_event_waits_result[i].wait_start, event_waits.intervals[i].wait_start);
     EXPECT_EQ(op_event_waits_result[i].wait_ready, event_waits.intervals[i].wait_ready);
     EXPECT_EQ(op_event_waits_result[i].wait_end, event_waits.intervals[i].wait_end);
-    EXPECT_EQ(op_event_waits_result[i].wait_event, event_waits.intervals[i].wait_event.id);
+    EXPECT_EQ(op_event_waits_result[i].wait_event,
+              event_waits.intervals[i].wait_event.id);
   }
 }
 
@@ -499,7 +501,8 @@ TEST_F(CProfilingTest_OperationEventWaits,
        ProfilingResponseGetMeasurementOperationEventWaitsSmallBuffer)
 {
   size_t result_count = event_waits.intervals.size() - 1;
-  std::vector<realm_profiling_operation_event_wait_interval_t> op_event_waits_result(result_count);
+  std::vector<realm_profiling_operation_event_wait_interval_t> op_event_waits_result(
+      result_count);
   realm_status_t status = realm_profiling_response_get_measurement(
       &response, realm_profiling_measurement_id_t::PMID_OP_EVENT_WAITS,
       op_event_waits_result.data(), &result_count);
