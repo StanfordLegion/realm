@@ -478,7 +478,7 @@ if(REALM_ENABLE_KOKKOS)
   # when you use it that way and the build environment to get kokkos working
   # with cuda, hip, etc needs to be very finely tuned.  So we give up and ask
   # the user to install it themselves.
-  find_package(Kokkos COMPONENTS launch_compiler)
+  find_package(Kokkos COMPONENTS separable_compilation)
   if (Kokkos_FOUND)
     enable_language(${Kokkos_COMPILE_LANGUAGE})
     list(APPEND REALM_STATIC_DEPENDS Kokkos)
