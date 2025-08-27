@@ -35,10 +35,46 @@
 #include "realm/deppart/inst_helper.h"
 #include "realm/bgwork.h"
 
+// Wrap any CUDA API call, then sync & check the given stream.
+#define CUDA_CHECK(call, stream)                                                \
+  do {                                                                          \
+    cudaError_t err = (call);                                                   \
+    if (err != cudaSuccess) {                                                   \
+      std::cerr << "CUDA error at " << __FILE__ << ":" << __LINE__             \
+                << " '" #call "' failed with "                                 \
+                << cudaGetErrorString(err) << " (" << err << ")\n";            \
+      assert(false);                                                  \
+    }                                                                           \
+  } while (0)
+
+
+// Trap kernel-launch errors (immediate and async) on the given stream.
+#define KERNEL_CHECK(stream)                                                    \
+  do {                                                                          \
+    cudaError_t err = cudaGetLastError();                                       \
+    if (err != cudaSuccess) {                                                   \
+      std::cerr << "Kernel launch failed at " << __FILE__ << ":" << __LINE__   \
+                << ": " << cudaGetErrorString(err) << "\n";                    \
+      assert(false);                                                \
+    }                                                                        \
+  } while (0)
+
 namespace Realm {
 
   class PartitioningMicroOp;
   class PartitioningOperation;
+
+  template<int N, typename T>
+  struct RectDesc {
+    Rect<N,T> rect;
+    size_t src_idx;
+  };
+
+  template<int N, typename T>
+  struct PointDesc {
+    Point<N,T> point;
+    size_t src_idx;
+  };
 
 
   template <int N, typename T>
@@ -108,6 +144,8 @@ namespace Realm {
     template <int N, typename T>
     void sparsity_map_ready(SparsityMapImpl<N,T> *sparsity, bool precise);
 
+    RegionInstance realm_malloc(size_t size, Memory location = Memory::NO_MEMORY);
+
     IntrusiveListLink<PartitioningMicroOp> uop_link;
     REALM_PMTA_DEFN(PartitioningMicroOp,IntrusiveListLink<PartitioningMicroOp>,uop_link);
     typedef IntrusiveList<PartitioningMicroOp, REALM_PMTA_USE(PartitioningMicroOp,uop_link), DummyLock> MicroOpList;
@@ -145,6 +183,22 @@ namespace Realm {
     PartitioningOperation *op;
     std::vector<IndexSpace<N,T> > input_spaces;
     std::vector<SparsityMapImpl<N,T> *> extra_deps;
+  };
+
+  template<int N, typename T>
+  class GPUMicroOp : public PartitioningMicroOp {
+  public:
+    GPUMicroOp(void) = default;
+    virtual ~GPUMicroOp(void) = default;
+
+    virtual void execute(void) = 0;
+
+    template<typename Container, typename IndexFn, typename MapFn>
+    void complete_pipeline(PointDesc<N, T>* d_points, size_t total_pts, Memory my_mem, const Container& ctr, IndexFn getIndex, MapFn getMap);
+
+    template<typename Container, typename IndexFn, typename MapFn>
+    void send_output(RectDesc<N, T>* d_rects, size_t total_rects, Memory my_mem, const Container& ctr, IndexFn getIndex, MapFn getMap);
+
   };
 
   ////////////////////////////////////////

@@ -277,8 +277,59 @@ namespace Realm {
     (void)ok;
   }
 
-  template <int N, typename T, typename FT>
-  ActiveMessageHandlerReg<RemoteMicroOpMessage<ByFieldMicroOp<N,T,FT> > > ByFieldMicroOp<N,T,FT>::areg;
+  template<int N, typename T, typename FT>
+  ActiveMessageHandlerReg<RemoteMicroOpMessage<ByFieldMicroOp<N, T, FT> > > ByFieldMicroOp<N, T, FT>::areg;
+
+
+  ////////////////////////////////////////////////////////////////////////
+  //
+  // class StructuredImageMicroOp<N, T, N2, T2>
+
+  template<int N, typename T, typename FT>
+  GPUByFieldMicroOp<N, T, FT>::GPUByFieldMicroOp(
+    const IndexSpace<N, T> &_parent,
+    const std::vector<FieldDataDescriptor<IndexSpace<N, T>, FT> > &_field_data)
+    : parent_space(_parent), field_data(_field_data) {
+  }
+
+  template<int N, typename T, typename FT>
+  GPUByFieldMicroOp<N, T, FT>::~GPUByFieldMicroOp() {
+  }
+
+  template<int N, typename T, typename FT>
+  void GPUByFieldMicroOp<N, T, FT>::dispatch(
+    PartitioningOperation *op, bool inline_ok) {
+    for (size_t i = 0; i < field_data.size(); i++) {
+      IndexSpace<N, T> inst_space = field_data[i].index_space;
+      if (!inst_space.dense()) {
+        // it's safe to add the count after the registration only because we initialized
+        //  the count to 2 instead of 1
+        bool registered = SparsityMapImpl<N, T>::lookup(inst_space.sparsity)->add_waiter(this, true /*precise*/);
+        if (registered)
+          this->wait_count.fetch_add(1);
+      }
+    }
+
+    if (!parent_space.dense()) {
+      bool registered = SparsityMapImpl<N, T>::lookup(parent_space.sparsity)->add_waiter(this, true /*precise*/);
+      if (registered) this->wait_count.fetch_add(1);
+    }
+    this->finish_dispatch(op, inline_ok);
+  }
+
+  template<int N, typename T, typename FT>
+  void GPUByFieldMicroOp<N, T, FT>::add_sparsity_output(
+    FT _val, SparsityMap<N, T> _sparsity) {
+    colors.push_back(_val);
+    // TODO(apryakhin): Handle and test this sparsity ref-count path.
+    sparsity_outputs[_val] = _sparsity;
+  }
+
+  template<int N, typename T, typename FT>
+  void GPUByFieldMicroOp<N, T, FT>::execute(void) {
+    TimeStamp ts("StructuredImageMicroOp::execute", true, &log_uop_timing);
+    gpu_populate_bitmasks();
+  }
 
 
   ////////////////////////////////////////////////////////////////////////
@@ -322,21 +373,29 @@ namespace Realm {
     return subspace;
   }
 
-  template <int N, typename T, typename FT>
-  void ByFieldOperation<N,T,FT>::execute(void)
-  {
-    for(size_t i = 0; i < subspaces.size(); i++)
-      SparsityMapImpl<N,T>::lookup(subspaces[i])->set_contributor_count(field_data.size());
+  template<int N, typename T, typename FT>
+  void ByFieldOperation<N, T, FT>::execute(void) {
 
-    for(size_t i = 0; i < field_data.size(); i++) {
-      ByFieldMicroOp<N,T,FT> *uop = new ByFieldMicroOp<N,T,FT>(parent,
-							       field_data[i].index_space,
-							       field_data[i].inst,
-							       field_data[i].field_offset);
-      for(size_t j = 0; j < colors.size(); j++)
-	uop->add_sparsity_output(colors[j], subspaces[j]);
-      //uop.set_value_set(colors);
-      uop->dispatch(this, true /* ok to run in this thread */);
+    if (field_data.size() > 0 && field_data[0].inst.get_location().kind()==Memory::GPU_FB_MEM) {
+      GPUByFieldMicroOp<N, T, FT> *uop = new GPUByFieldMicroOp<N, T, FT>(parent, field_data);
+      for (size_t i = 0; i < colors.size(); i++) {
+        uop->add_sparsity_output(colors[i], subspaces[i]);
+      }
+      uop->dispatch(this, true);
+
+    } else {
+      for (size_t i = 0; i < subspaces.size(); i++)
+        SparsityMapImpl<N, T>::lookup(subspaces[i])->set_contributor_count(field_data.size());
+      for (size_t i = 0; i < field_data.size(); i++) {
+        ByFieldMicroOp<N, T, FT> *uop = new ByFieldMicroOp<N, T, FT>(parent,
+                                                                     field_data[i].index_space,
+                                                                     field_data[i].inst,
+                                                                     field_data[i].field_offset);
+        for (size_t j = 0; j < colors.size(); j++)
+          uop->add_sparsity_output(colors[j], subspaces[j]);
+        //uop.set_value_set(colors);
+        uop->dispatch(this, true /* ok to run in this thread */);
+      }
     }
   }
 
@@ -345,20 +404,4 @@ namespace Realm {
   {
     os << "ByFieldOperation(" << parent << ")";
   }
-
-#define DOIT(N,T,F) \
-  template class ByFieldMicroOp<N,T,F>; \
-  template class ByFieldOperation<N,T,F>; \
-  template ByFieldMicroOp<N,T,F>::ByFieldMicroOp(NodeID, AsyncMicroOp *, Serialization::FixedBufferDeserializer&); \
-  template Event IndexSpace<N,T>::create_subspaces_by_field(const std::vector<FieldDataDescriptor<IndexSpace<N,T>,F> >&, \
-							     const std::vector<F>&, \
-							     std::vector<IndexSpace<N,T> >&, \
-							     const ProfilingRequestSet &, \
-							     Event) const;
-#ifndef REALM_TEMPLATES_ONLY
-  FOREACH_NTF(DOIT)
-#endif
-
-  // instantiations of point/rect-field templates handled in byfield_tmpl.cc
-
 };

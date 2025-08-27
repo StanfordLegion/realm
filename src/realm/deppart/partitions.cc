@@ -71,7 +71,7 @@ namespace Realm {
 				      size_t start, size_t count, size_t volume,
 				      IndexSpace<N,T> *results,
 				      size_t first_result, size_t last_result,
-				      const std::vector<SparsityMapEntry<N,T> >& entries)
+				      const span<SparsityMapEntry<N,T> >& entries)
   {
     // should never be here with empty bounds
     assert(!bounds.empty());
@@ -111,13 +111,11 @@ namespace Realm {
     size_t lo_volume[N];
     for(int i = 0; i < N; i++)
       lo_volume[i] = 0;
-    for(typename std::vector<SparsityMapEntry<N,T> >::const_iterator it = entries.begin();
-	it != entries.end();
-	it++) {
+    for(size_t j = 0; j < entries.size(); j++) {
       for(int i = 0; i < N; i++)
-	lo_volume[i] += it->bounds.intersection(lo_half[i]).volume();
+	lo_volume[i] += entries[j].bounds.intersection(lo_half[i]).volume();
     }
-    // now compute how many subspaces would fall in each half and the 
+    // now compute how many subspaces would fall in each half and the
     //  inefficiency of the split
     size_t lo_count[N], inefficiency[N];
     for(int i = 0; i < N; i++) {
@@ -233,7 +231,7 @@ namespace Realm {
     // TODO: sparse case where we have to wait
     SparsityMapPublicImpl<N,T> *impl = sparsity.impl();
     assert(impl->is_valid());
-    const std::vector<SparsityMapEntry<N,T> >& entries = impl->get_entries();
+    const span<SparsityMapEntry<N,T> >& entries = impl->get_entries();
     // initially every subspace will be a copy of this one, and then
     //  we'll decompose the bounds
     subspace = *this;
@@ -307,7 +305,7 @@ namespace Realm {
     // TODO: sparse case where we have to wait
     SparsityMapPublicImpl<N,T> *impl = sparsity.impl();
     assert(impl->is_valid());
-    const std::vector<SparsityMapEntry<N,T> >& entries = impl->get_entries();
+    auto entries = impl->get_entries();
     // initially every subspace will be a copy of this one, and then
     //  we'll decompose the bounds
     subspaces.resize(count, *this);
@@ -498,7 +496,7 @@ namespace Realm {
   template <typename T>
   class RectListAdapter {
   public:
-    RectListAdapter(const std::vector<Rect<1,T> >& _rects)
+    RectListAdapter(const span<Rect<1,T> >& _rects)
       : rects(_rects.empty() ? 0 : &_rects[0]), count(_rects.size()) {}
     RectListAdapter(const Rect<1,T> *_rects, size_t _count)
       : rects(_rects), count(_count) {}
@@ -583,7 +581,6 @@ namespace Realm {
     os << "AsyncMicroOp(" << (void *)uop << ")";
   }
 
-
   ////////////////////////////////////////////////////////////////////////
   //
   // class PartitioningMicroOp
@@ -664,6 +661,16 @@ namespace Realm {
       } else
 	deppart_op_queue->enqueue_partitioning_microop(this);
     }
+  }
+
+  RegionInstance PartitioningMicroOp::realm_malloc(size_t size, Memory location) {
+      assert(location != Memory::NO_MEMORY);
+      assert(size > 0);
+      std::vector<size_t> byte_fields = {sizeof(char)};
+      IndexSpace<1> instance_index_space(Rect<1>(0, size-1));
+      RegionInstance inst_entries_instance;
+      RegionInstance::create_instance(inst_entries_instance, location, instance_index_space, byte_fields, 0, Realm::ProfilingRequestSet()).wait();
+      return inst_entries_instance;
   }
 
   ////////////////////////////////////////////////////////////////////////

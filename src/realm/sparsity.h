@@ -205,7 +205,7 @@ namespace Realm {
      * @return the entries of this sparsity map
      */
     REALM_PUBLIC_API
-    const std::vector<SparsityMapEntry<N, T>> &get_entries(void);
+    const span<SparsityMapEntry<N, T>> &get_entries(void);
 
     /**
      * Get the approximate rectangles of this sparsity map.
@@ -215,7 +215,7 @@ namespace Realm {
      * @return the approximate rectangles of this sparsity map
      */
     REALM_PUBLIC_API
-    const std::vector<Rect<N, T>> &get_approx_rects(void);
+    const span<Rect<N, T>> &get_approx_rects(void);
 
     /**
      * Check if this sparsity map overlaps another sparsity map.
@@ -246,8 +246,12 @@ namespace Realm {
 
   protected:
     atomic<bool> entries_valid{false}, approx_valid{false};
-    std::vector<SparsityMapEntry<N, T>> entries;
-    std::vector<Rect<N, T>> approx_rects;
+    std::vector<SparsityMapEntry<N,T> > entries;
+    span<SparsityMapEntry<N,T> > span_entries;
+    std::vector<Rect<N,T> > approx_rects;
+    span<Rect<N,T> > span_approx_rects;
+    RegionInstance entries_instance;
+    RegionInstance approx_instance;
   };
 
 }; // namespace Realm

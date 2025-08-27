@@ -416,36 +416,30 @@ namespace Realm {
     // full cross-product test for now - for larger rectangle lists, consider
     //  an acceleration structure?
     if(approx) {
-      const std::vector<Rect<N, T>> &rects1 = get_approx_rects();
-      const std::vector<Rect<N, T>> &rects2 = other->get_approx_rects();
-      for(typename std::vector<Rect<N, T>>::const_iterator it1 = rects1.begin();
-          it1 != rects1.end(); it1++) {
-        Rect<N, T> isect = it1->intersection(bounds);
+      auto rects1 = get_approx_rects();
+      auto rects2 = other->get_approx_rects();
+      for(size_t i = 0; i < rects1.size(); i++) {
+        Rect<N, T> isect = rects1[i].intersection(bounds);
         if(isect.empty())
           continue;
-        for(typename std::vector<Rect<N, T>>::const_iterator it2 = rects2.begin();
-            it2 != rects2.end(); it2++) {
-          if(it2->overlaps(isect))
+        for(size_t j = 0; j < rects2.size(); j++) {
+          if(rects2[j].overlaps(isect))
             return true;
         }
       }
     } else {
-      const std::vector<SparsityMapEntry<N, T>> &entries1 = get_entries();
-      const std::vector<SparsityMapEntry<N, T>> &entries2 = other->get_entries();
-      for(typename std::vector<SparsityMapEntry<N, T>>::const_iterator it1 =
-              entries1.begin();
-          it1 != entries1.end(); it1++) {
-        Rect<N, T> isect = it1->bounds.intersection(bounds);
+      auto entries1 = get_entries();
+      auto entries2 = other->get_entries();
+      for(size_t i = 0; i < entries1.size(); i++) {
+        Rect<N, T> isect = entries1[i].bounds.intersection(bounds);
         if(isect.empty())
           continue;
-        for(typename std::vector<SparsityMapEntry<N, T>>::const_iterator it2 =
-                entries2.begin();
-            it2 != entries2.end(); it2++) {
-          if(!it2->bounds.overlaps(isect))
+        for(size_t j = 0; j < entries2.size(); j++) {
+          if(!entries2[j].bounds.overlaps(isect))
             continue;
           // TODO: handle further sparsity in either side
-          assert(!it1->sparsity.exists() && (it1->bitmap == 0) &&
-                 !it2->sparsity.exists() && (it2->bitmap == 0));
+          assert(!entries1[i].sparsity.exists() && (entries1[i].bitmap == 0) &&
+                 !entries2[j].sparsity.exists() && (entries2[j].bitmap == 0));
           return true;
         }
       }
@@ -457,6 +451,9 @@ namespace Realm {
   template <int N, typename T>
   class SparsityMapToRectAdapter {
   public:
+    SparsityMapToRectAdapter(const span<SparsityMapEntry<N, T>> &_entries)
+      : entries(_entries)
+    {}
     SparsityMapToRectAdapter(const std::vector<SparsityMapEntry<N, T>> &_entries)
       : entries(_entries)
     {}
@@ -1192,7 +1189,7 @@ namespace Realm {
           old_data.swap(this->entries);
           size_t i = 0;
           size_t n = 0;
-          typename std::vector<SparsityMapEntry<N, T>>::const_iterator old_it =
+         auto old_it =
               old_data.begin();
           while((i < count) && (old_it != old_data.end())) {
             if(rects[i].hi[0] < (old_it->bounds.lo[0] - 1)) {
@@ -1494,17 +1491,16 @@ namespace Realm {
         assert(false);
       // scan the entry list, sending bitmaps first and making a list of rects
       std::vector<Rect<N, T>> rects;
-      for(typename std::vector<SparsityMapEntry<N, T>>::const_iterator it =
-              this->entries.begin();
-          it != this->entries.end(); it++) {
-        if(it->bitmap) {
+      for(size_t i = 0; i < this->get_entries().size(); i++) {
+        auto entry = this->get_entries()[i];
+        if(entry.bitmap) {
           // TODO: send bitmap
           assert(0);
-        } else if(it->sparsity.exists()) {
+        } else if(entry.sparsity.exists()) {
           // TODO: ?
           assert(0);
         } else {
-          rects.push_back(it->bounds);
+          rects.push_back(entry.bounds);
         }
       }
 
@@ -1557,7 +1553,7 @@ namespace Realm {
   };
 
   template <int N, typename T>
-  static void compute_approximation(const std::vector<SparsityMapEntry<N, T>> &entries,
+  static void compute_approximation(const span<SparsityMapEntry<N, T>> &entries,
                                     std::vector<Rect<N, T>> &approx_rects, int max_rects)
   {
     size_t n = entries.size();
@@ -1579,7 +1575,7 @@ namespace Realm {
   }
 
   template <typename T>
-  static void compute_approximation(const std::vector<SparsityMapEntry<1, T>> &entries,
+  static void compute_approximation(const span<SparsityMapEntry<1, T>> &entries,
                                     std::vector<Rect<1, T>> &approx_rects, int max_rects)
   {
     int n = entries.size();
@@ -1745,11 +1741,14 @@ namespace Realm {
         merge_dim--;
     }
 
+    this->span_entries = span<SparsityMapEntry<N,T>>(this->entries.data(), this->entries.size());
+
     // now that we've got our entries nice and tidy, build a bounded approximation of them
     if(true /*ID(me).sparsity_creator_node() == Network::my_node_id*/) {
       assert(!this->approx_valid.load());
-      compute_approximation(this->entries, this->approx_rects,
+      compute_approximation(this->span_entries, this->approx_rects,
                             DeppartConfig::cfg_max_rects_in_approximation);
+      this->span_approx_rects = span<Rect<N,T>>(this->approx_rects.data(), this->approx_rects.size());
       this->approx_valid.store_release(true);
     }
 
@@ -1830,6 +1829,115 @@ namespace Realm {
 
     if(trigger_precise.exists())
       GenEventImpl::trigger(trigger_precise, false /*!poisoned*/);
+
+  }
+
+  template <int N, typename T>
+  void SparsityMapImpl<N, T>::gpu_finalize(void)
+  {
+
+
+    // now that we've got our entries nice and tidy, build a bounded approximation of them
+    if(true /*ID(me).sparsity_creator_node() == Network::my_node_id*/) {
+      assert(!this->approx_valid.load());
+      this->approx_valid.store_release(true);
+    }
+
+    {
+      LoggerMessage msg = log_part.info();
+      if(msg.is_active()) {
+        msg << "finalizing " << me << "(" << this << "), " << this->entries.size()
+            << " entries";
+        for(size_t i = 0; i < this->entries.size(); i++)
+          msg << "\n  [" << i << "]: bounds=" << this->entries[i].bounds
+              << " sparsity=" << this->entries[i].sparsity
+              << " bitmap=" << this->entries[i].bitmap;
+      }
+    }
+
+#ifdef DEBUG_PARTITIONING
+    std::cout << "finalizing " << this << ", " << this->entries.size() << " entries"
+              << std::endl;
+    for(size_t i = 0; i < this->entries.size(); i++)
+      std::cout << "  [" << i << "]: bounds=" << this->entries[i].bounds
+                << " sparsity=" << this->entries[i].sparsity
+                << " bitmap=" << this->entries[i].bitmap << std::endl;
+#endif
+    NodeSet sendto_precise, sendto_approx;
+    Event trigger_precise = Event::NO_EVENT;
+    Event trigger_approx = Event::NO_EVENT;
+    std::vector<PartitioningMicroOp *> precise_waiters_copy, approx_waiters_copy;
+    {
+      AutoLock<> al(mutex);
+
+      assert(!this->entries_valid.load());
+      this->entries_valid.store_release(true);
+
+      precise_requested = false;
+      if(precise_ready_event.exists()) {
+        trigger_precise = precise_ready_event;
+        precise_ready_event = Event::NO_EVENT;
+      }
+
+      precise_waiters_copy.swap(precise_waiters);
+      approx_waiters_copy.swap(approx_waiters);
+
+      remote_precise_waiters.swap(sendto_precise);
+      remote_approx_waiters.swap(sendto_approx);
+    }
+
+    for(std::vector<PartitioningMicroOp *>::const_iterator it =
+            precise_waiters_copy.begin();
+        it != precise_waiters_copy.end(); it++)
+      (*it)->sparsity_map_ready(this, true);
+
+    for(std::vector<PartitioningMicroOp *>::const_iterator it =
+            approx_waiters_copy.begin();
+        it != approx_waiters_copy.end(); it++)
+      (*it)->sparsity_map_ready(this, false);
+
+    if(!sendto_approx.empty()) {
+      for(NodeID i = 0; (i <= Network::max_node_id) && !sendto_approx.empty(); i++)
+        if(sendto_approx.contains(i)) {
+          bool also_precise = sendto_precise.contains(i);
+          if(also_precise)
+            sendto_precise.remove(i);
+          remote_data_reply(i, also_precise, true);
+          sendto_approx.remove(i);
+        }
+    }
+
+    if(!sendto_precise.empty()) {
+      for(NodeID i = 0; (i <= Network::max_node_id) && !sendto_precise.empty(); i++)
+        if(sendto_precise.contains(i)) {
+          remote_data_reply(i, true, false);
+          sendto_precise.remove(i);
+        }
+    }
+
+    if(trigger_approx.exists())
+      GenEventImpl::trigger(trigger_approx, false /*!poisoned*/);
+
+    if(trigger_precise.exists())
+      GenEventImpl::trigger(trigger_precise, false /*!poisoned*/);
+  }
+
+  template<int N, typename T>
+    void SparsityMapImpl<N, T>::set_instance(RegionInstance _entries_instance, size_t size)
+  {
+    this->entries_instance = _entries_instance;
+    this->span_entries = span<SparsityMapEntry<N,T>>(
+        reinterpret_cast<SparsityMapEntry<N,T>*>(AffineAccessor<char,1>(this->entries_instance, 0).base),
+        size);
+  }
+
+  template<int N, typename T>
+  void SparsityMapImpl<N, T>::set_approx_instance(RegionInstance _approx_instance, size_t size)
+  {
+    this->approx_instance = _approx_instance;
+    this->span_approx_rects = span<Rect<N,T>>(
+        reinterpret_cast<Rect<N,T>*>(AffineAccessor<char,1>(this->approx_instance, 0).base),
+        size);
   }
 
   template <int N, typename T>
