@@ -315,9 +315,9 @@ TEST_F(CProfilingTest_OperationBacktrace,
        ProfilingResponseGetMeasurementOperationBacktracePCsSmallBuffer)
 {
   size_t result_count = backtrace.pcs.size() - 1;
-  uintptr_t pcs[result_count];
+  std::vector<uintptr_t> pcs(result_count);
   realm_status_t status = realm_profiling_response_get_measurement(
-      &response, realm_profiling_measurement_id_t::PMID_OP_BACKTRACE_PCS, pcs,
+      &response, realm_profiling_measurement_id_t::PMID_OP_BACKTRACE_PCS, pcs.data(),
       &result_count);
   EXPECT_EQ(status, REALM_PROFILING_ERROR_INVALID_BUFFER);
   EXPECT_EQ(result_count, backtrace.pcs.size());
@@ -327,9 +327,9 @@ TEST_F(CProfilingTest_OperationBacktrace,
        ProfilingResponseGetMeasurementOperationBacktracePCs)
 {
   size_t result_count = backtrace.pcs.size();
-  uintptr_t pcs[result_count];
+  std::vector<uintptr_t> pcs(result_count);
   realm_status_t status = realm_profiling_response_get_measurement(
-      &response, realm_profiling_measurement_id_t::PMID_OP_BACKTRACE_PCS, pcs,
+      &response, realm_profiling_measurement_id_t::PMID_OP_BACKTRACE_PCS, pcs.data(),
       &result_count);
   EXPECT_EQ(status, REALM_SUCCESS);
   EXPECT_EQ(result_count, backtrace.pcs.size());
@@ -353,9 +353,9 @@ TEST_F(CProfilingTest_OperationBacktrace,
        ProfilingResponseGetMeasurementOperationBacktraceSymbols)
 {
   size_t result_count = backtrace.symbols.size();
-  realm_profiling_operation_backtrace_symbol_t symbols[result_count];
+  std::vector<realm_profiling_operation_backtrace_symbol_t> symbols(result_count);
   realm_status_t status = realm_profiling_response_get_measurement(
-      &response, realm_profiling_measurement_id_t::PMID_OP_BACKTRACE_SYMBOLS, symbols,
+      &response, realm_profiling_measurement_id_t::PMID_OP_BACKTRACE_SYMBOLS, symbols.data(),
       &result_count);
   EXPECT_EQ(status, REALM_SUCCESS);
   EXPECT_EQ(result_count, backtrace.symbols.size());
@@ -481,17 +481,17 @@ TEST_F(CProfilingTest_OperationEventWaits,
        ProfilingResponseGetMeasurementOperationEventWaits)
 {
   size_t result_count = event_waits.intervals.size();
-  realm_profiling_operation_event_wait_interval_t op_event_waits_result[result_count];
+  std::vector<realm_profiling_operation_event_wait_interval_t> op_event_waits_result(result_count);
   realm_status_t status = realm_profiling_response_get_measurement(
       &response, realm_profiling_measurement_id_t::PMID_OP_EVENT_WAITS,
-      op_event_waits_result, &result_count);
+      op_event_waits_result.data(), &result_count);
   EXPECT_EQ(status, REALM_SUCCESS);
   EXPECT_EQ(result_count, event_waits.intervals.size());
   for(size_t i = 0; i < result_count; i++) {
     EXPECT_EQ(op_event_waits_result[i].wait_start, event_waits.intervals[i].wait_start);
     EXPECT_EQ(op_event_waits_result[i].wait_ready, event_waits.intervals[i].wait_ready);
     EXPECT_EQ(op_event_waits_result[i].wait_end, event_waits.intervals[i].wait_end);
-    EXPECT_EQ(op_event_waits_result[i].wait_event, event_waits.intervals[i].wait_event);
+    EXPECT_EQ(op_event_waits_result[i].wait_event, event_waits.intervals[i].wait_event.id);
   }
 }
 
@@ -499,10 +499,10 @@ TEST_F(CProfilingTest_OperationEventWaits,
        ProfilingResponseGetMeasurementOperationEventWaitsSmallBuffer)
 {
   size_t result_count = event_waits.intervals.size() - 1;
-  realm_profiling_operation_event_wait_interval_t op_event_waits_result[result_count];
+  std::vector<realm_profiling_operation_event_wait_interval_t> op_event_waits_result(result_count);
   realm_status_t status = realm_profiling_response_get_measurement(
       &response, realm_profiling_measurement_id_t::PMID_OP_EVENT_WAITS,
-      op_event_waits_result, &result_count);
+      op_event_waits_result.data(), &result_count);
   EXPECT_EQ(status, REALM_PROFILING_ERROR_INVALID_BUFFER);
   EXPECT_EQ(result_count, event_waits.intervals.size());
 }
@@ -706,9 +706,9 @@ TEST_F(CProfilingTest_CopyInfo, GetCopyInfoMeasurementCount)
 TEST_F(CProfilingTest_CopyInfo, GetCopyInfoSmallBuffer)
 {
   size_t result_count = copy_info.inst_info[0].src_insts.size() - 1;
-  realm_region_instance_t insts[result_count];
+  std::vector<realm_region_instance_t> insts(result_count);
   realm_status_t status = realm_profiling_response_get_measurement(
-      &response, MAKE_OP_COPY_INFO_SRC_INST_ID(0), insts, &result_count);
+      &response, MAKE_OP_COPY_INFO_SRC_INST_ID(0), insts.data(), &result_count);
   EXPECT_EQ(status, REALM_PROFILING_ERROR_INVALID_BUFFER);
   EXPECT_EQ(result_count, copy_info.inst_info[0].src_insts.size());
 }
@@ -716,9 +716,9 @@ TEST_F(CProfilingTest_CopyInfo, GetCopyInfoSmallBuffer)
 TEST_F(CProfilingTest_CopyInfo, GetCopyInfoSrcInsts)
 {
   size_t result_count = copy_info.inst_info[0].src_insts.size();
-  realm_region_instance_t insts[result_count];
+  std::vector<realm_region_instance_t> insts(result_count);
   realm_status_t status = realm_profiling_response_get_measurement(
-      &response, MAKE_OP_COPY_INFO_SRC_INST_ID(0), insts, &result_count);
+      &response, MAKE_OP_COPY_INFO_SRC_INST_ID(0), insts.data(), &result_count);
   EXPECT_EQ(status, REALM_SUCCESS);
   EXPECT_EQ(result_count, copy_info.inst_info[0].src_insts.size());
   for(size_t i = 0; i < result_count; i++) {
@@ -729,9 +729,9 @@ TEST_F(CProfilingTest_CopyInfo, GetCopyInfoSrcInsts)
 TEST_F(CProfilingTest_CopyInfo, GetCopyInfoDstInsts)
 {
   size_t result_count = copy_info.inst_info[0].dst_insts.size();
-  realm_region_instance_t insts[result_count];
+  std::vector<realm_region_instance_t> insts(result_count);
   realm_status_t status = realm_profiling_response_get_measurement(
-      &response, MAKE_OP_COPY_INFO_DST_INST_ID(0), insts, &result_count);
+      &response, MAKE_OP_COPY_INFO_DST_INST_ID(0), insts.data(), &result_count);
   EXPECT_EQ(status, REALM_SUCCESS);
   EXPECT_EQ(result_count, copy_info.inst_info[0].dst_insts.size());
   for(size_t i = 0; i < result_count; i++) {
@@ -742,9 +742,9 @@ TEST_F(CProfilingTest_CopyInfo, GetCopyInfoDstInsts)
 TEST_F(CProfilingTest_CopyInfo, GetCopyInfoSrcFields)
 {
   size_t result_count = copy_info.inst_info[0].src_fields.size();
-  realm_field_id_t field_ids[result_count];
+  std::vector<realm_field_id_t> field_ids(result_count);
   realm_status_t status = realm_profiling_response_get_measurement(
-      &response, MAKE_OP_COPY_INFO_SRC_FIELD_ID(0), field_ids, &result_count);
+      &response, MAKE_OP_COPY_INFO_SRC_FIELD_ID(0), field_ids.data(), &result_count);
   EXPECT_EQ(status, REALM_SUCCESS);
   EXPECT_EQ(result_count, copy_info.inst_info[0].src_fields.size());
   for(size_t i = 0; i < result_count; i++) {
@@ -755,9 +755,9 @@ TEST_F(CProfilingTest_CopyInfo, GetCopyInfoSrcFields)
 TEST_F(CProfilingTest_CopyInfo, GetCopyInfoDstFields)
 {
   size_t result_count = copy_info.inst_info[0].dst_fields.size();
-  realm_field_id_t field_ids[result_count];
+  std::vector<realm_field_id_t> field_ids(result_count);
   realm_status_t status = realm_profiling_response_get_measurement(
-      &response, MAKE_OP_COPY_INFO_DST_FIELD_ID(0), field_ids, &result_count);
+      &response, MAKE_OP_COPY_INFO_DST_FIELD_ID(0), field_ids.data(), &result_count);
   EXPECT_EQ(status, REALM_SUCCESS);
   EXPECT_EQ(result_count, copy_info.inst_info[0].dst_fields.size());
   for(size_t i = 0; i < result_count; i++) {
