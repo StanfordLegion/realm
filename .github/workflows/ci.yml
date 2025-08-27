@@ -277,6 +277,31 @@ jobs:
 
       - uses: lukka/get-cmake@latest
 
+      - name: Checkout kokkos
+        if: matrix.config.kokkos == 'ON'
+        uses: actions/checkout@v4.2.2
+        with:
+          repository: kokkos/kokkos
+          ref: 4.0.01
+          path: kokkos
+
+      - name: Build Kokkos
+        if: matrix.config.kokkos == 'ON'
+        env:
+          CUDA_ROOT: ${{ env.CUDA_PATH }}
+          NVCC_WRAPPER_DEFAULT_COMPILER: ${{ matrix.config.cxx }}
+        run: |
+          cmake -S kokkos -B kokkos/build \
+            ${{ matrix.config.cuda != '' && '-DKokkos_ENABLE_CUDA=ON -DKokkos_ENABLE_CUDA_LAMBDA=ON -DKokkos_ENABLE_CUDA_UVM=OFF -DCMAKE_CXX_COMPILER=$PWD/kokkos/bin/nvcc_wrapper' || ''}} \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DBUILD_SHARED_LIBS=ON \
+            -DCMAKE_POSITION_INDEPENDENT_CODE=ON \
+            -DKokkos_ENABLE_OPENMP=${{ matrix.config.openmp }} \
+            -DKokkos_ENABLE_SERIAL=ON \
+            -DCMAKE_INSTALL_PREFIX=${{ github.workspace }}/kokkos/install
+          cmake --build kokkos/build --parallel 4 --config Release
+          cmake --install kokkos/build --parallel 4 --prefix kokkos/install --config Release
+
       - name: Check for GPU
         if: ${{ matrix.config.cuda != '' }}
         id: check_gpu
@@ -286,6 +311,9 @@ jobs:
           echo no_gpu=$? >> $GITHUB_OUTPUT
 
       - name: Configure
+        env:
+          CUDA_ROOT: ${{ env.CUDA_PATH }}
+          NVCC_WRAPPER_DEFAULT_COMPILER: ${{ matrix.config.cxx }}
         run:
           cmake -S . -B build
                 -DCMAKE_C_COMPILER=${{ matrix.config.cc }}
@@ -300,11 +328,15 @@ jobs:
                 -DREALM_ENABLE_PYTHON=${{ matrix.config.python }}
                 -DREALM_ENABLE_CUDA=${{ matrix.config.cuda != '' && 'ON' || 'OFF' }}
                 -DREALM_ENABLE_KOKKOS=${{ matrix.config.kokkos }}
+                -DKokkos_ROOT=kokkos/install
                 -DGASNET_CONDUIT=mpi
                 -DREALM_ENABLE_GASNETEX=${{ matrix.config.gasnet }}
                 -DREALM_SANITIZER=${{ matrix.config.sanitizer }}
 
       - name: Build
+        env:
+          CUDA_ROOT: ${{ env.CUDA_PATH }}
+          NVCC_WRAPPER_DEFAULT_COMPILER: ${{ matrix.config.cxx }}
         run:
           cmake --build build --parallel 4 --config ${{ matrix.config.build }} --verbose | tee build-new.log
 
