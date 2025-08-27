@@ -21,6 +21,7 @@
 #define REALM_DEPPART_BYFIELD_H
 
 #include "realm/deppart/partitions.h"
+#include "realm/deppart/rectlist.h"
 
 namespace Realm {
 
@@ -64,6 +65,30 @@ namespace Realm {
     bool value_range_valid, value_set_valid;
     FT range_lo, range_hi;
     std::set<FT> value_set;
+    std::map<FT, SparsityMap<N,T> > sparsity_outputs;
+  };
+
+  template<int N, typename T, typename FT>
+    class GPUByFieldMicroOp : public GPUMicroOp<N, T> {
+  public:
+    GPUByFieldMicroOp(
+        const IndexSpace<N, T> &_parent,
+        const std::vector<FieldDataDescriptor<IndexSpace<N,T>,FT> >& _field_data);
+
+    virtual ~GPUByFieldMicroOp(void);
+
+    virtual void execute(void);
+
+    virtual void gpu_populate_bitmasks();
+
+    void dispatch(PartitioningOperation *op, bool inline_ok);
+
+    void add_sparsity_output(FT _val, SparsityMap<N, T> _sparsity);
+
+  protected:
+    const IndexSpace<N, T> parent_space;
+    const std::vector<FieldDataDescriptor<IndexSpace<N,T>,FT> >& field_data;
+    std::vector<FT> colors;
     std::map<FT, SparsityMap<N,T> > sparsity_outputs;
   };
 
