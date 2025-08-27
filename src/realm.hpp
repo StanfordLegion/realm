@@ -2408,10 +2408,10 @@ namespace REALM_NAMESPACE {
     mutable std::vector<realm_memory_t> mset;
   };
 
-  /*static*/ const Processor Processor::NO_PROC{REALM_NO_PROC};
-  /*static*/ const Event Event::NO_EVENT{REALM_NO_EVENT};
-  /*static*/ const UserEvent UserEvent::NO_USER_EVENT{REALM_NO_USER_EVENT};
-  /*static*/ const Memory Memory::NO_MEMORY{REALM_NO_MEM};
+  inline const Processor Processor::NO_PROC{REALM_NO_PROC};
+  inline const Event Event::NO_EVENT{REALM_NO_EVENT};
+  inline const UserEvent UserEvent::NO_USER_EVENT{REALM_NO_USER_EVENT};
+  inline const Memory Memory::NO_MEMORY{REALM_NO_MEM};
 
 #undef REALM_TYPE_KINDS
 } // namespace REALM_NAMESPACE
