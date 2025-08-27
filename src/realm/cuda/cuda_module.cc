@@ -1678,8 +1678,7 @@ namespace Realm {
         return;
       // free any remaining allocations
       AutoGPUContext agc(gpu);
-      for(std::map<RegionInstance, Allocation>::const_iterator it =
-              allocations.begin();
+      for(std::map<RegionInstance, Allocation>::const_iterator it = allocations.begin();
           it != allocations.end(); ++it)
         if(!it->second.origin.exists() && it->second.ptr)
           CHECK_CU(CUDA_DRIVER_FNPTR(cuMemFree)(it->second.ptr));
@@ -1746,8 +1745,8 @@ namespace Realm {
       // insert entry into our allocation map
       {
         AutoLock<> al(mutex);
-        allocations.emplace(std::make_pair(inst->me, 
-              Allocation{base, bytes, RegionInstance::NO_INST, 1}));
+        allocations.emplace(std::make_pair(
+            inst->me, Allocation{base, bytes, RegionInstance::NO_INST, 1}));
       }
 
       inst->notify_allocation(ALLOC_INSTANT_SUCCESS, base, work_until);
@@ -1772,8 +1771,7 @@ namespace Realm {
       CUdeviceptr base = 0;
       {
         AutoLock<> al(mutex);
-        std::map<RegionInstance, Allocation>::iterator it =
-            allocations.find(inst->me);
+        std::map<RegionInstance, Allocation>::iterator it = allocations.find(inst->me);
         if(it == allocations.end()) {
           log_gpu.fatal() << "attempt to release unknown instance: inst=" << inst->me;
           abort();
@@ -1784,12 +1782,13 @@ namespace Realm {
           allocations.erase(it);
           it = allocations.find(origin);
           if(it != allocations.end()) {
-            log_gpu.fatal() << "attempt to release unknown redistricted instance: inst=" << origin;
+            log_gpu.fatal() << "attempt to release unknown redistricted instance: inst="
+                            << origin;
             abort();
           }
         }
         assert(it->second.references > 0);
-        if (--it->second.references == 0) {
+        if(--it->second.references == 0) {
           base = it->second.ptr;
           assert(cur_size >= it->second.size);
           cur_size -= it->second.size;
@@ -1805,13 +1804,13 @@ namespace Realm {
       inst->notify_deallocation();
     }
 
-    MemoryImpl::AllocationResult
-    GPUDynamicFBMemory::reuse_storage_immediate(RegionInstanceImpl *old_inst,
-                                        std::vector<RegionInstanceImpl *> &new_insts,
-                                        bool poisoned, TimeLimit work_until)
+    MemoryImpl::AllocationResult GPUDynamicFBMemory::reuse_storage_immediate(
+        RegionInstanceImpl *old_inst, std::vector<RegionInstanceImpl *> &new_insts,
+        bool poisoned, TimeLimit work_until)
     {
       if(poisoned || (old_inst->metadata.ext_resource != 0))
-        return MemoryImpl::reuse_storage_immediate(old_inst, new_insts, poisoned, work_until);
+        return MemoryImpl::reuse_storage_immediate(old_inst, new_insts, poisoned,
+                                                   work_until);
       uintptr_t offset;
       size_t max_size;
       RegionInstance origin;
@@ -1820,7 +1819,8 @@ namespace Realm {
         std::map<RegionInstance, Allocation>::iterator it =
             allocations.find(old_inst->me);
         if(it == allocations.end()) {
-          log_gpu.fatal() << "attempt to redistrict unknown instance: inst=" << old_inst->me;
+          log_gpu.fatal() << "attempt to redistrict unknown instance: inst="
+                          << old_inst->me;
           abort();
         }
         offset = it->second.ptr;
@@ -1831,7 +1831,8 @@ namespace Realm {
           allocations.erase(it);
           it = allocations.find(origin);
           if(it == allocations.end()) {
-            log_gpu.fatal() << "attempt to find unknown redistricted instance: inst=" << origin;
+            log_gpu.fatal() << "attempt to find unknown redistricted instance: inst="
+                            << origin;
             abort();
           }
         } else {
@@ -1866,9 +1867,8 @@ namespace Realm {
         if(max_size < (bytes_used + bytes_needed)) {
           // Won't be able to allocate anymore instances at this point
           while(idx < local_insts.size()) {
-            local_insts[idx++]->notify_allocation(ALLOC_INSTANT_FAILURE,
-                                                  RegionInstanceImpl::INSTOFFSET_FAILED,
-                                                  work_until);
+            local_insts[idx++]->notify_allocation(
+                ALLOC_INSTANT_FAILURE, RegionInstanceImpl::INSTOFFSET_FAILED, work_until);
           }
           break;
         }
@@ -1878,15 +1878,15 @@ namespace Realm {
         allocated_instances++;
         AutoLock<> al(mutex);
         // Record this instance as being allocated
-        allocations.emplace(std::make_pair(local_insts[idx]->me,
-              Allocation{offset, bytes_needed, origin, 1/*references*/}));
+        allocations.emplace(
+            std::make_pair(local_insts[idx]->me,
+                           Allocation{offset, bytes_needed, origin, 1 /*references*/}));
         offset += bytes_needed;
       }
       CUdeviceptr base = 0;
       if(allocated_instances < local_insts.size()) {
         // Remove extra references we added to the origin
-        std::map<RegionInstance, Allocation>::iterator it =
-            allocations.find(origin);
+        std::map<RegionInstance, Allocation>::iterator it = allocations.find(origin);
         assert(it != allocations.end());
         assert(it->second.references >= ((local_insts.size() - allocated_instances)));
         it->second.references -= (local_insts.size() - allocated_instances);
@@ -1894,8 +1894,7 @@ namespace Realm {
           base = it->second.ptr;
           allocations.erase(it);
         }
-      }
-      else
+      } else
         return ALLOC_INSTANT_SUCCESS;
       if(base != 0) {
         AutoGPUContext agc(gpu);
