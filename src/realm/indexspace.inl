@@ -493,7 +493,7 @@ namespace Realm {
       // always use precise info if it's available
       if(impl->is_valid(true /*precise*/)) {
         IndexSpace<N, T> result;
-        auto entries = impl->get_entries();
+        span<SparsityMapEntry<N, T>> entries = impl->get_entries();
         // three cases:
         // 1) empty index space
         if(entries.empty()) {
@@ -533,7 +533,7 @@ namespace Realm {
         log_dpops.info() << "tighten: " << *this << " = " << result;
         return result;
       } else {
-        auto approx_rects = impl->get_approx_rects();
+        span<Rect<N, T>> approx_rects = impl->get_approx_rects();
 
         // two cases:
         // 1) empty index space
@@ -592,7 +592,7 @@ namespace Realm {
       return true;
 
     SparsityMapPublicImpl<N,T> *impl = sparsity.impl();
-    auto entries = impl->get_entries();
+    span<SparsityMapEntry<N, T>> entries = impl->get_entries();
     if(N == 1) {
       // binary search to find the element we want
       size_t idx = bsearch_map_entries<N,T>(entries, p);
@@ -614,7 +614,7 @@ namespace Realm {
       return true;
     } else {
       for(size_t i = 0; i < entries.size(); i++) {
-        auto entry = entries[i];
+        SparsityMapEntry<N, T> entry = entries[i];
 	if(!entry.bounds.contains(p)) continue;
 	if(entry.sparsity.exists()) {
 	  assert(0);
@@ -641,9 +641,9 @@ namespace Realm {
       // test against sparsity map too
       size_t total_volume = 0;
       SparsityMapPublicImpl<N,T> *impl = sparsity.impl();
-      auto entries = impl->get_entries();
+      span<SparsityMapEntry<N, T>> entries = impl->get_entries();
       for(size_t i = 0; i < entries.size(); i++) {
-        auto entry = entries[i];
+        SparsityMapEntry<N, T> entry = entries[i];
 	if(!entry.bounds.overlaps(r)) continue;
 	if(entry.sparsity.exists()) {
 	  assert(0);
@@ -673,9 +673,9 @@ namespace Realm {
     if(!dense()) {
       // test against sparsity map too
       SparsityMapPublicImpl<N,T> *impl = sparsity.impl();
-      auto entries = impl->get_entries();
+      span<SparsityMapEntry<N, T>> entries = impl->get_entries();
       for(size_t i = 0; i < entries.size(); i++) {
-        auto entry = entries[i];
+        SparsityMapEntry<N, T> entry = entries[i];
 	if(!entry.bounds.overlaps(r)) continue;
 	if(entry.sparsity.exists()) {
 	  assert(0);
@@ -724,9 +724,9 @@ namespace Realm {
 
     size_t total = 0;
     SparsityMapPublicImpl<N, T> *impl = sparsity.impl();
-   auto entries = impl->get_entries();
+   span<SparsityMapEntry<N, T>> entries = impl->get_entries();
     for(size_t i = 0; i < entries.size(); i++) {
-      auto entry = entries[i];
+      SparsityMapEntry<N, T> entry = entries[i];
       Rect<N, T> isect = bounds.intersection(entry.bounds);
       if(isect.empty())
         continue;
@@ -757,9 +757,9 @@ namespace Realm {
       return true;
 
     SparsityMapPublicImpl<N,T> *impl = sparsity.impl();
-    auto approx_rects = impl->get_approx_rects();
+    span<SparsityMapEntry<N, T>> approx_rects = impl->get_approx_rects();
     for(size_t i = 0; i < approx_rects.size(); i++) {
-      auto entry = approx_rects[i];
+      SparsityMapEntry<N, T> entry = approx_rects[i];
       if(entry.contains(p))
 	return true;
     }
@@ -780,9 +780,9 @@ namespace Realm {
       return true;
 
     SparsityMapPublicImpl<N,T> *impl = sparsity.impl();
-    auto approx_rects = impl->get_approx_rects();
+    span<Rect<N, T>> approx_rects = impl->get_approx_rects();
     for(size_t i = 0; i < approx_rects.size(); i++) {
-      auto entry = approx_rects[i];
+      Rect<N, T> entry = approx_rects[i];
       if(entry.contains(r))
 	return true;
       if(entry.overlaps(r))
@@ -805,9 +805,9 @@ namespace Realm {
       return true;
 
     SparsityMapPublicImpl<N,T> *impl = sparsity.impl();
-    auto approx_rects = impl->get_approx_rects();
+    span<Rect<N, T>> approx_rects = impl->get_approx_rects();
     for(size_t i = 0; i < approx_rects.size(); i++) {
-      auto entry = approx_rects[i];
+      Rect<N, T> entry = approx_rects[i];
       if(entry.overlaps(r))
 	return true;
     }
@@ -849,7 +849,7 @@ namespace Realm {
 
     size_t total = 0;
     SparsityMapPublicImpl<N,T> *impl = sparsity.impl();
-    auto approx_rects = impl->get_approx_rects();
+    span<Rect<N, T>> approx_rects = impl->get_approx_rects();
     for(size_t i = 0; i < approx_rects.size(); i++)
       total += approx_rects[i].volume();
 
@@ -1311,7 +1311,7 @@ namespace Realm {
 
     rect = Rect<N, T>::make_empty();
 
-    auto entries = s_impl->get_entries();
+    span<SparsityMapEntry<N, T>> entries = s_impl->get_entries();
     // find the first entry that overlaps our restriction - speed this up with a
     //  binary search on the low end of the restriction if we're 1-D
 
@@ -1347,7 +1347,7 @@ namespace Realm {
     // TODO: handle iteration within a sparsity entry
 
     // move onto the next sparsity entry (that overlaps our restriction)
-    auto entries = s_impl->get_entries();
+    const span<SparsityMapEntry<N, T>> entries = s_impl->get_entries();
     for(cur_entry++; cur_entry < entries.size(); cur_entry++) {
       const SparsityMapEntry<N, T> &e = entries[cur_entry];
       rect = restriction.intersection(e.bounds);

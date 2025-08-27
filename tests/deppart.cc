@@ -88,9 +88,9 @@ void dump_sparse_index_space(const char *pfx, IndexSpace<N, T> is)
   if(!is.sparsity.exists())
     return;
   SparsityMapPublicImpl<N, T> *impl = is.sparsity.impl();
-  auto& entries = impl->get_entries();
+  span<SparsityMapEntry<N, T>> entries = impl->get_entries();
   for(size_t i = 0; i < entries.size(); i++) {
-    auto entry = entries[i];
+    SparsityMapEntry<N, T> entry = entries[i];
     std::cout << "  " << entry.bounds;
     if(entry.bitmap)
       std::cout << " bitmap(" << entry.bitmap << ")";
@@ -332,7 +332,7 @@ public:
     Machine machine = Machine::get_machine();
     std::set<Memory> all_memories;
     machine.get_all_memories(all_memories);
-    for(auto& memory : all_memories) {
+    for(Memory memory : all_memories) {
       if(memory.kind() == Memory::GPU_FB_MEM) {
         gpu_memory = memory;
         found_gpu_memory = true;

@@ -305,7 +305,7 @@ namespace Realm {
     // TODO: sparse case where we have to wait
     SparsityMapPublicImpl<N,T> *impl = sparsity.impl();
     assert(impl->is_valid());
-    auto entries = impl->get_entries();
+    span<SparsityMapEntry<N, T>> entries = impl->get_entries();
     // initially every subspace will be a copy of this one, and then
     //  we'll decompose the bounds
     subspaces.resize(count, *this);
