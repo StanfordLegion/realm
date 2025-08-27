@@ -147,7 +147,7 @@ configure_file(
   @ONLY
 )
 
-# generate per-dimension object files for deppart stuff
+# Generate per-dimension object files for CPU deppart.
 foreach(INST_N1 RANGE 1 ${REALM_MAX_DIM})
   foreach(INST_N2 RANGE 1 ${REALM_MAX_DIM})
     foreach(SRCFILE realm/deppart/image realm/deppart/preimage realm/deppart/byfield)
@@ -159,7 +159,7 @@ foreach(INST_N1 RANGE 1 ${REALM_MAX_DIM})
   endforeach()
 endforeach()
 
-# generate per-dimension object files for deppart stuff
+# Generate per-dimension object files for GPU deppart.
 foreach(INST_N1 RANGE 1 ${REALM_MAX_DIM})
     foreach(INST_N2 RANGE 1 ${REALM_MAX_DIM})
         foreach(SRCFILE realm/deppart/byfield)

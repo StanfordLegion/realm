@@ -13,11 +13,10 @@
  * limitations under the License.
  */
 
-// per‐dimension instantiator for the GPU version of
-// ImageMicroOp<…>::gpu_populate_bitmasks_ptrs
+// per‐dimension instantiator for the GPU By Field Operation
+// Mirrors CPU Approach (byfield_tmpl.cc)
 
 #define REALM_TEMPLATES_ONLY
-#include "realm/deppart/byfield_gpu_kernels.hpp"
 #include "realm/deppart/byfield_gpu_impl.hpp"
 #include "realm/deppart/inst_helper.h"
 
