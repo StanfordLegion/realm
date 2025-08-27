@@ -75,17 +75,18 @@ void REALM_FNPTR op_profiling_response_task(const void *args, size_t arglen,
     status = realm_profiling_response_get_measurement(&response, PMID_OP_TIMELINE,
                                                       &op_timeline, nullptr);
     assert(status == REALM_SUCCESS);
-    log_app.info("op timeline = %lld %lld %lld %lld (%lld %lld %lld)", op_timeline.ready_time,
-           op_timeline.start_time, op_timeline.end_time, op_timeline.complete_time,
-           (((op_timeline.start_time >= 0) && (op_timeline.ready_time >= 0))
-                ? (op_timeline.start_time - op_timeline.ready_time)
-                : -1),
-           (((op_timeline.end_time >= 0) && (op_timeline.start_time >= 0))
-                ? (op_timeline.end_time - op_timeline.start_time)
-                : -1),
-           (((op_timeline.complete_time >= 0) && (op_timeline.end_time >= 0))
-                ? (op_timeline.complete_time - op_timeline.end_time)
-                : -1));
+    log_app.info("op timeline = %lld %lld %lld %lld (%lld %lld %lld)",
+                 op_timeline.ready_time, op_timeline.start_time, op_timeline.end_time,
+                 op_timeline.complete_time,
+                 (((op_timeline.start_time >= 0) && (op_timeline.ready_time >= 0))
+                      ? (op_timeline.start_time - op_timeline.ready_time)
+                      : -1),
+                 (((op_timeline.end_time >= 0) && (op_timeline.start_time >= 0))
+                      ? (op_timeline.end_time - op_timeline.start_time)
+                      : -1),
+                 (((op_timeline.complete_time >= 0) && (op_timeline.end_time >= 0))
+                      ? (op_timeline.complete_time - op_timeline.end_time)
+                      : -1));
   } else {
     log_app.info("no timeline");
   }
@@ -103,8 +104,9 @@ void REALM_FNPTR op_profiling_response_task(const void *args, size_t arglen,
       status = realm_profiling_response_get_measurement(&response, PMID_OP_EVENT_WAITS,
                                                         op_waits, &count);
       for(size_t i = 0; i < count; i++) {
-        log_app.info(" (%lld %lld %lld %llx)", op_waits[i].wait_start, op_waits[i].wait_ready,
-               op_waits[i].wait_end, op_waits[i].wait_event);
+        log_app.info(" (%lld %lld %lld %llx)", op_waits[i].wait_start,
+                     op_waits[i].wait_ready, op_waits[i].wait_end,
+                     op_waits[i].wait_event);
       }
       delete[] op_waits;
     }
@@ -133,9 +135,9 @@ void REALM_FNPTR op_profiling_response_task(const void *args, size_t arglen,
           &response, MAKE_OP_COPY_INFO_SRC_INST_ID(i), insts, &inst_count);
       assert(status == REALM_SUCCESS);
       log_app.info() << "src_insts idx " << i << " = "
-                      << Realm::PrettyVector<Realm::RegionInstance>(
-                             std::vector<Realm::RegionInstance>(insts,
-                                                                insts + inst_count));
+                     << Realm::PrettyVector<Realm::RegionInstance>(
+                            std::vector<Realm::RegionInstance>(insts,
+                                                               insts + inst_count));
       delete[] insts;
 
       // dst insts
@@ -147,9 +149,9 @@ void REALM_FNPTR op_profiling_response_task(const void *args, size_t arglen,
           &response, MAKE_OP_COPY_INFO_DST_INST_ID(i), insts, &inst_count);
       assert(status == REALM_SUCCESS);
       log_app.info() << "dst_insts idx " << i << " = "
-                      << Realm::PrettyVector<Realm::RegionInstance>(
-                             std::vector<Realm::RegionInstance>(insts,
-                                                                insts + inst_count));
+                     << Realm::PrettyVector<Realm::RegionInstance>(
+                            std::vector<Realm::RegionInstance>(insts,
+                                                               insts + inst_count));
       delete[] insts;
 
       // src fields
@@ -163,8 +165,8 @@ void REALM_FNPTR op_profiling_response_task(const void *args, size_t arglen,
           &response, MAKE_OP_COPY_INFO_SRC_FIELD_ID(i), field_ids, &field_count);
       assert(status == REALM_SUCCESS);
       log_app.info() << "src_fields idx " << i << " = "
-                      << Realm::PrettyVector<Realm::FieldID>(std::vector<Realm::FieldID>(
-                             field_ids, field_ids + field_count));
+                     << Realm::PrettyVector<Realm::FieldID>(std::vector<Realm::FieldID>(
+                            field_ids, field_ids + field_count));
       delete[] field_ids;
 
       // dst fields
@@ -176,22 +178,22 @@ void REALM_FNPTR op_profiling_response_task(const void *args, size_t arglen,
           &response, MAKE_OP_COPY_INFO_DST_FIELD_ID(i), field_ids, &field_count);
       assert(status == REALM_SUCCESS);
       log_app.info() << "dst_fields idx " << i << " = "
-                      << Realm::PrettyVector<Realm::FieldID>(std::vector<Realm::FieldID>(
-                             field_ids, field_ids + field_count));
+                     << Realm::PrettyVector<Realm::FieldID>(std::vector<Realm::FieldID>(
+                            field_ids, field_ids + field_count));
       delete[] field_ids;
     }
     for(Realm::ProfilingMeasurements::OperationCopyInfo::InstInfo &inst_info :
         cxx_copy_info->inst_info) {
       log_app.info() << "copy type " << inst_info.request_type << ", src_insts ("
-                      << Realm::PrettyVector<Realm::RegionInstance>(inst_info.src_insts)
-                      << ")"
-                      << ", dst_insts ("
-                      << Realm::PrettyVector<Realm::RegionInstance>(inst_info.dst_insts)
-                      << ")"
-                      << ", src_fid "
-                      << Realm::PrettyVector<Realm::FieldID>(inst_info.src_fields)
-                      << ", dst_fid "
-                      << Realm::PrettyVector<Realm::FieldID>(inst_info.dst_fields);
+                     << Realm::PrettyVector<Realm::RegionInstance>(inst_info.src_insts)
+                     << ")"
+                     << ", dst_insts ("
+                     << Realm::PrettyVector<Realm::RegionInstance>(inst_info.dst_insts)
+                     << ")"
+                     << ", src_fid "
+                     << Realm::PrettyVector<Realm::FieldID>(inst_info.src_fields)
+                     << ", dst_fid "
+                     << Realm::PrettyVector<Realm::FieldID>(inst_info.dst_fields);
     }
     delete cxx_copy_info;
   } else {

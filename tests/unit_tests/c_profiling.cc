@@ -501,8 +501,8 @@ TEST_F(CProfilingTest_OperationEventWaits,
   size_t result_count = event_waits.intervals.size() - 1;
   realm_profiling_operation_event_wait_interval_t op_event_waits_result[result_count];
   realm_status_t status = realm_profiling_response_get_measurement(
-  &response, realm_profiling_measurement_id_t::PMID_OP_EVENT_WAITS,
-  op_event_waits_result, &result_count);
+      &response, realm_profiling_measurement_id_t::PMID_OP_EVENT_WAITS,
+      op_event_waits_result, &result_count);
   EXPECT_EQ(status, REALM_PROFILING_ERROR_INVALID_BUFFER);
   EXPECT_EQ(result_count, event_waits.intervals.size());
 }

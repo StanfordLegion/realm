@@ -1700,68 +1700,57 @@ realm_profiling_response_get_measurement(const realm_profiling_response_t *respo
   case PMID_OP_BACKTRACE_SYMBOLS:
     status = handle_measurement<Realm::ProfilingMeasurements::OperationBacktrace,
                                 realm_profiling_operation_backtrace_symbol_t>(
-        response_cxx,
-        static_cast<realm_profiling_operation_backtrace_symbol_t *>(result),
+        response_cxx, static_cast<realm_profiling_operation_backtrace_symbol_t *>(result),
         result_count);
     break;
   case PMID_OP_TIMELINE:
     status = handle_measurement<Realm::ProfilingMeasurements::OperationTimeline,
                                 realm_profiling_operation_timeline_t>(
-        response_cxx,
-        static_cast<realm_profiling_operation_timeline_t *>(result),
+        response_cxx, static_cast<realm_profiling_operation_timeline_t *>(result),
         result_count);
     break;
   case PMID_OP_EVENT_WAITS:
-    status =
-        handle_measurement<Realm::ProfilingMeasurements::OperationEventWaits,
-                           realm_profiling_operation_event_wait_interval_t>(
-            response_cxx,
-            static_cast<realm_profiling_operation_event_wait_interval_t *>(
-                result),
-            result_count);
+    status = handle_measurement<Realm::ProfilingMeasurements::OperationEventWaits,
+                                realm_profiling_operation_event_wait_interval_t>(
+        response_cxx,
+        static_cast<realm_profiling_operation_event_wait_interval_t *>(result),
+        result_count);
     break;
   case PMID_OP_PROC_USAGE:
     status = handle_measurement<Realm::ProfilingMeasurements::OperationProcessorUsage,
                                 realm_profiling_operation_processor_usage_t>(
-        response_cxx,
-        static_cast<realm_profiling_operation_processor_usage_t *>(result),
+        response_cxx, static_cast<realm_profiling_operation_processor_usage_t *>(result),
         result_count);
     break;
   case PMID_OP_MEM_USAGE:
     status = handle_measurement<Realm::ProfilingMeasurements::OperationMemoryUsage,
                                 realm_profiling_operation_memory_usage_t>(
-        response_cxx,
-        static_cast<realm_profiling_operation_memory_usage_t *>(result),
+        response_cxx, static_cast<realm_profiling_operation_memory_usage_t *>(result),
         result_count);
     break;
   case PMID_INST_TIMELINE:
     status = handle_measurement<Realm::ProfilingMeasurements::InstanceTimeline,
                                 realm_profiling_instance_timeline_t>(
-        response_cxx,
-        static_cast<realm_profiling_instance_timeline_t *>(result),
+        response_cxx, static_cast<realm_profiling_instance_timeline_t *>(result),
         result_count);
     break;
   case PMID_INST_MEM_USAGE:
     status = handle_measurement<Realm::ProfilingMeasurements::InstanceMemoryUsage,
                                 realm_profiling_instance_memory_usage_t>(
-        response_cxx,
-        static_cast<realm_profiling_instance_memory_usage_t *>(result),
+        response_cxx, static_cast<realm_profiling_instance_memory_usage_t *>(result),
         result_count);
     break;
   case PMID_OP_TIMELINE_GPU:
     status = handle_measurement<Realm::ProfilingMeasurements::OperationTimelineGPU,
                                 realm_profiling_operation_timeline_gpu_t>(
-        response_cxx,
-        static_cast<realm_profiling_operation_timeline_gpu_t *>(result),
+        response_cxx, static_cast<realm_profiling_operation_timeline_gpu_t *>(result),
         result_count);
     break;
   case PMID_OP_COPY_INFO:
-    status =
-        handle_measurement<Realm::ProfilingMeasurements::OperationCopyInfo,
-                           realm_profiling_operation_copy_info_t>(
-            response_cxx,
-            static_cast<realm_profiling_operation_copy_info_t *>(result),
-            result_count);
+    status = handle_measurement<Realm::ProfilingMeasurements::OperationCopyInfo,
+                                realm_profiling_operation_copy_info_t>(
+        response_cxx, static_cast<realm_profiling_operation_copy_info_t *>(result),
+        result_count);
     break;
   default:
     status = REALM_PROFILING_ERROR_INVALID_MEASUREMENT;
