@@ -627,6 +627,11 @@ namespace Realm {
       virtual void release_storage_immediate(RegionInstanceImpl *inst, bool poisoned,
                                              TimeLimit work_until);
 
+      virtual AllocationResult
+      reuse_storage_immediate(RegionInstanceImpl *old_inst,
+                              std::vector<RegionInstanceImpl *> &new_insts, bool poisoned,
+                              TimeLimit work_until);
+
       // these work, but they are SLOW
       virtual void get_bytes(off_t offset, void *dst, size_t size);
       virtual void put_bytes(off_t offset, const void *src, size_t size);
@@ -649,7 +654,14 @@ namespace Realm {
       GPU *gpu;
       Mutex mutex;
       size_t cur_size;
-      std::map<RegionInstance, std::pair<CUdeviceptr, size_t>> alloc_bases;
+      struct Allocation {
+        CUdeviceptr ptr;
+        size_t size;
+        // For cases of redistricting
+        RegionInstance origin;
+        size_t references;
+      };
+      std::map<RegionInstance, Allocation> allocations;
       NetworkSegment local_segment;
     };
 
