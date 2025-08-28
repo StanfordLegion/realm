@@ -91,14 +91,22 @@ namespace Realm {
     size_t max_pg_bytes = std::max({bytes_p, bytes_S});
 
 
+    std::set<Event> allocation_events;
     // Instance shared by coordinate keys, source keys, and rectangle outputs
-    RegionInstance aux_instance = this->realm_malloc(2 * max_aux_bytes, my_mem);
+    RegionInstance aux_instance;
+    allocation_events.insert(this->realm_malloc(aux_instance, 2 * max_aux_bytes, my_mem));
 
     //Instance shared by group ids (RLE) and intermediate points in sorting
-    RegionInstance pg_instance = this->realm_malloc(max_pg_bytes, my_mem);
+    RegionInstance pg_instance;
+    allocation_events.insert(this->realm_malloc(pg_instance, max_pg_bytes, my_mem));
 
-    uintptr_t aux_in = AffineAccessor<char,1>(aux_instance, 0).base;
-    uintptr_t aux_out = aux_in + max_aux_bytes;
+    RegionInstance break_points_instance;
+    allocation_events.insert(this->realm_malloc(break_points_instance, total_pts * sizeof(uint8_t), my_mem));
+
+    Event::merge_events(allocation_events).wait();
+
+    const uintptr_t aux_in = AffineAccessor<char,1>(aux_instance, 0).base;
+    const uintptr_t aux_out = aux_in + max_aux_bytes;
 
     T* d_keys_in = reinterpret_cast<T*>(aux_in);
     T* d_keys_out = reinterpret_cast<T*>(aux_out);
@@ -106,7 +114,6 @@ namespace Realm {
     PointDesc<N,T>* d_points_in = d_points;
     PointDesc<N,T>* d_points_out = reinterpret_cast<PointDesc<N,T>*>(AffineAccessor<char,1>(pg_instance, 0).base);
 
-    RegionInstance break_points_instance = this->realm_malloc(total_pts * sizeof(uint8_t), my_mem);
     uint8_t* break_points = reinterpret_cast<uint8_t*>(AffineAccessor<char,1>(break_points_instance, 0).base);
 
     size_t* group_ids = reinterpret_cast<size_t*>(AffineAccessor<char,1>(pg_instance, 0).base);
@@ -124,7 +131,8 @@ namespace Realm {
 
     //Temporary storage instance shared by CUB operations.
     size_t temp_bytes = std::max({t1, t2, t3});
-    RegionInstance temp_storage_instance = this->realm_malloc(temp_bytes, my_mem);
+    RegionInstance temp_storage_instance;
+    this->realm_malloc(temp_storage_instance, temp_bytes, my_mem).wait();
     void *temp_storage = reinterpret_cast<void*>(AffineAccessor<char,1>(temp_storage_instance, 0).base);
 
 
@@ -213,17 +221,24 @@ namespace Realm {
     cudaStream_t stream;
     CUDA_CHECK(cudaStreamCreate(&stream), stream);
 
-    RegionInstance final_entries_instance = this->realm_malloc(total_rects * sizeof(SparsityMapEntry<N,T>), my_mem);
-    SparsityMapEntry<N,T>* final_entries = reinterpret_cast<SparsityMapEntry<N,T>*>(AffineAccessor<char,1>(final_entries_instance, 0).base);
+    std::set<Event> output_allocs;
 
-    RegionInstance final_rects_instance = this->realm_malloc(total_rects * sizeof(Rect<N,T>), my_mem);
+    RegionInstance final_entries_instance;
+    output_allocs.insert(this->realm_malloc(final_entries_instance, total_rects * sizeof(SparsityMapEntry<N,T>), my_mem));
+
+    RegionInstance final_rects_instance;
+    output_allocs.insert(this->realm_malloc(final_rects_instance, total_rects * sizeof(Rect<N,T>), my_mem));
+
+    RegionInstance boundaries_instance;
+    output_allocs.insert(this->realm_malloc(boundaries_instance, 2 * ctr.size() * sizeof(size_t), my_mem));
+
+    Event::merge_events(output_allocs).wait();
+
+    SparsityMapEntry<N,T>* final_entries = reinterpret_cast<SparsityMapEntry<N,T>*>(AffineAccessor<char,1>(final_entries_instance, 0).base);
     Rect<N,T>* final_rects = reinterpret_cast<Rect<N,T>*>(AffineAccessor<char,1>(final_rects_instance, 0).base);
 
-    RegionInstance starts_instance = this->realm_malloc(ctr.size() * sizeof(size_t), my_mem);
-    size_t* d_starts = reinterpret_cast<size_t*>(AffineAccessor<char,1>(starts_instance, 0).base);
-
-    RegionInstance ends_instance = this->realm_malloc(ctr.size() * sizeof(size_t), my_mem);
-    size_t* d_ends = reinterpret_cast<size_t*>(AffineAccessor<char,1>(ends_instance, 0).base);
+    size_t* d_starts = reinterpret_cast<size_t*>(AffineAccessor<char,1>(boundaries_instance, 0).base);
+    size_t* d_ends = d_starts + ctr.size();
 
     CUDA_CHECK(cudaMemsetAsync(d_starts, 0, ctr.size()*sizeof(size_t),stream), stream);
     CUDA_CHECK(cudaMemsetAsync(d_ends, 0, ctr.size()*sizeof(size_t),stream), stream);
@@ -272,7 +287,8 @@ namespace Realm {
       if (d_ends_host[idx] > d_starts_host[idx]) {
         size_t end = d_ends_host[idx];
         size_t start = d_starts_host[idx];
-        RegionInstance entries = this->realm_malloc((end - start) * sizeof(SparsityMapEntry<N,T>), sysmem);
+        RegionInstance entries;
+        this->realm_malloc(entries, (end - start) * sizeof(SparsityMapEntry<N,T>), sysmem).wait();
         SparsityMapEntry<N, T> *h_entries = reinterpret_cast<SparsityMapEntry<N, T> *>(AffineAccessor<char, 1>(entries, 0).base);
         CUDA_CHECK(cudaMemcpyAsync(h_entries, final_entries + start, (end - start) * sizeof(SparsityMapEntry<N,T>), cudaMemcpyDeviceToHost, stream), stream);
 
@@ -285,7 +301,7 @@ namespace Realm {
         } else {
           //TODO: Maybe add a better GPU approx here when given more rectangles
           //Use CUB to compute a bad approx on the GPU (union of all rectangles)
-          approx_rects_instance = realm_malloc(sizeof(Rect<N,T>), my_mem);
+          this->realm_malloc(approx_rects_instance, sizeof(Rect<N,T>), my_mem).wait();
           approx_rects = reinterpret_cast<Rect<N,T>*>(AffineAccessor<char,1>(approx_rects_instance, 0).base);
           num_approx = 1;
           void*  d_temp   = nullptr;
@@ -304,7 +320,8 @@ namespace Realm {
             identity_rect,
             stream
           );
-          RegionInstance temp_rects_instance = realm_malloc(temp_sz * sizeof(Rect<N,T>), my_mem);
+          RegionInstance temp_rects_instance;
+          this->realm_malloc(temp_rects_instance, temp_sz * sizeof(Rect<N,T>), my_mem).wait();
           d_temp = reinterpret_cast<void*>(AffineAccessor<char,1>(temp_rects_instance, 0).base);
           cub::DeviceReduce::Reduce(
             d_temp, temp_sz,
@@ -318,7 +335,8 @@ namespace Realm {
           CUDA_CHECK(cudaStreamSynchronize(stream), stream);
           temp_rects_instance.destroy();
         }
-        RegionInstance approx_entries = this->realm_malloc(num_approx * sizeof(Rect<N,T>), sysmem);
+        RegionInstance approx_entries;
+        this->realm_malloc(approx_entries, num_approx * sizeof(Rect<N,T>), sysmem).wait();
         SparsityMapEntry<N, T> *h_approx_entries = reinterpret_cast<SparsityMapEntry<N, T> *>(AffineAccessor<char, 1>(approx_entries, 0).base);
         CUDA_CHECK(cudaMemcpyAsync(h_approx_entries, approx_rects, num_approx * sizeof(Rect<N,T>), cudaMemcpyDeviceToHost, stream), stream);
         CUDA_CHECK(cudaStreamSynchronize(stream), stream);
@@ -337,8 +355,7 @@ namespace Realm {
     cudaStreamDestroy(stream);
     final_entries_instance.destroy();
     final_rects_instance.destroy();
-    starts_instance.destroy();
-    ends_instance.destroy();
+    boundaries_instance.destroy();
   }
 
 
