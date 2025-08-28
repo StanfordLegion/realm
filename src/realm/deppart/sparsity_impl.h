@@ -109,6 +109,8 @@ namespace Realm {
     SparsityMapImpl(SparsityMap<N, T> _me, NodeSet &subscribers,
                     SparsityMapCommunicator<N, T> *_sparsity_comm);
 
+    ~SparsityMapImpl();
+
     // actual implementation - SparsityMapPublicImpl's version just calls this one
     Event make_valid(bool precise = true);
 

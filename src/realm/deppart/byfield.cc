@@ -299,11 +299,12 @@ namespace Realm {
   template<int N, typename T, typename FT>
   void GPUByFieldMicroOp<N, T, FT>::dispatch(
     PartitioningOperation *op, bool inline_ok) {
+
+    //We have to register ourselves as a waiter on sparse inputs before dispatching
+
     for (size_t i = 0; i < field_data.size(); i++) {
       IndexSpace<N, T> inst_space = field_data[i].index_space;
       if (!inst_space.dense()) {
-        // it's safe to add the count after the registration only because we initialized
-        //  the count to 2 instead of 1
         bool registered = SparsityMapImpl<N, T>::lookup(inst_space.sparsity)->add_waiter(this, true /*precise*/);
         if (registered)
           this->wait_count.fetch_add(1);
@@ -321,13 +322,12 @@ namespace Realm {
   void GPUByFieldMicroOp<N, T, FT>::add_sparsity_output(
     FT _val, SparsityMap<N, T> _sparsity) {
     colors.push_back(_val);
-    // TODO(apryakhin): Handle and test this sparsity ref-count path.
     sparsity_outputs[_val] = _sparsity;
   }
 
   template<int N, typename T, typename FT>
   void GPUByFieldMicroOp<N, T, FT>::execute(void) {
-    TimeStamp ts("StructuredImageMicroOp::execute", true, &log_uop_timing);
+    TimeStamp ts("GPUByFieldMicroOp::execute", true, &log_uop_timing);
     gpu_populate_bitmasks();
   }
 
@@ -376,6 +376,11 @@ namespace Realm {
   template<int N, typename T, typename FT>
   void ByFieldOperation<N, T, FT>::execute(void) {
 
+
+    //If the field data is on the GPU, we need to launch a GPUByFieldMicroOp
+    //Rather than one micro-op per field, we can do them all in one micro-op
+    //Launching multiple GPU micro-ops just adds overhead, and
+    //there isn't enough work to need multiple GPUs
     if (field_data.size() > 0 && field_data[0].inst.get_location().kind()==Memory::GPU_FB_MEM) {
       GPUByFieldMicroOp<N, T, FT> *uop = new GPUByFieldMicroOp<N, T, FT>(parent, field_data);
       for (size_t i = 0; i < colors.size(); i++) {

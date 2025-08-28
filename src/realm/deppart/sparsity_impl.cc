@@ -353,6 +353,7 @@ namespace Realm {
 
     if(map_impl.compare_exchange(impl, new_impl)) {
       map_deleter = [](void *map_impl) {
+
         delete static_cast<SparsityMapImpl<N, T> *>(map_impl);
       };
       return new_impl;
@@ -451,9 +452,6 @@ namespace Realm {
   template <int N, typename T>
   class SparsityMapToRectAdapter {
   public:
-    SparsityMapToRectAdapter(const span<SparsityMapEntry<N, T>> &_entries)
-      : entries(_entries)
-    {}
     SparsityMapToRectAdapter(const std::vector<SparsityMapEntry<N, T>> &_entries)
       : entries(_entries)
     {}
@@ -903,6 +901,18 @@ namespace Realm {
     , remote_subscribers(subscribers)
     , sparsity_comm(_sparsity_comm)
   {}
+
+template<int N, typename T>
+SparsityMapImpl<N, T>::~SparsityMapImpl(void)
+{
+     //We are responsible for our instances
+     if (false) {
+       if (this->entries_instance.exists() && this->num_entries)
+         this->entries_instance.destroy();
+       if (this->approx_instance.exists() && this->num_approx)
+         this->approx_instance.destroy();
+     }
+}
 
   template <int N, typename T>
   inline /*static*/ SparsityMapImpl<N, T> *
@@ -1838,7 +1848,6 @@ namespace Realm {
   template <int N, typename T>
   void SparsityMapImpl<N, T>::gpu_finalize(void)
   {
-
     this->from_gpu = true;
 
     if(true /*ID(me).sparsity_creator_node() == Network::my_node_id*/) {
