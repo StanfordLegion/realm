@@ -1323,9 +1323,9 @@ namespace Realm {
   RegionInstanceImpl::get_lookup_program(FieldID field_id, unsigned allowed_mask,
                                          uintptr_t &field_offset)
   {
-    if (!metadata.lookup_program.is_compiled.load_acquire()) {
+    if(!metadata.lookup_program.is_compiled.load_acquire()) {
       AutoLock<> al(mutex);
-      if (!metadata.lookup_program.is_compiled.load_acquire()) {
+      if(!metadata.lookup_program.is_compiled.load_acquire()) {
         metadata.layout->compile_lookup_program(metadata.lookup_program);
       }
     }
@@ -1356,9 +1356,9 @@ namespace Realm {
   RegionInstanceImpl::get_lookup_program(FieldID field_id, const Rect<N, T> &subrect,
                                          unsigned allowed_mask, size_t &field_offset)
   {
-    if (!metadata.lookup_program.is_compiled.load_acquire()) {
+    if(!metadata.lookup_program.is_compiled.load_acquire()) {
       AutoLock<> al(mutex);
-      if (!metadata.lookup_program.is_compiled.load_acquire()) {
+      if(!metadata.lookup_program.is_compiled.load_acquire()) {
         metadata.layout->compile_lookup_program(metadata.lookup_program);
       }
     }
