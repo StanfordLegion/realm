@@ -27,14 +27,12 @@ template <int N, typename T, typename FT>
 void GPUByFieldMicroOp<N,T,FT>::gpu_populate_bitmasks()
 {
 
-    nvtx_range_push("cuda", "byfield_gpu_populate_bitmasks");
+    NVTX_DEPPART(byfield_gpu);
 
     cudaStream_t stream;
     CUDA_CHECK(cudaStreamCreate(&stream), stream);
 
     Memory my_mem = field_data[0].inst.get_location();
-
-    nvtx_range_push("cuda", "build parent and instance entries");
 
 
     // We need inst_offsets to preserve which instance each rectangle came from
@@ -43,6 +41,8 @@ void GPUByFieldMicroOp<N,T,FT>::gpu_populate_bitmasks()
 
     //Determine size of allocation for combined inst_rects and offset entries
     size_t inst_size = 0;
+
+
     for (size_t i = 0; i < field_data.size(); ++i) {
       inst_offsets[i] = inst_size;
       if (field_data[i].index_space.dense()) {
@@ -87,10 +87,6 @@ void GPUByFieldMicroOp<N,T,FT>::gpu_populate_bitmasks()
     RegionInstance parent_entries_instance = this->realm_malloc(parent_entries.size() * sizeof(SparsityMapEntry<N,T>), my_mem);
     SparsityMapEntry<N, T>* d_parent_entries = reinterpret_cast<SparsityMapEntry<N,T>*>(AffineAccessor<char,1>(parent_entries_instance, 0).base);
     CUDA_CHECK(cudaMemcpyAsync(d_parent_entries, parent_entries.data(), parent_entries.size() * sizeof(SparsityMapEntry<N,T>), cudaMemcpyHostToDevice, stream), stream);
-    nvtx_range_pop();
-
-    nvtx_range_push("cuda", "Build and intersect input rectangles");
-
 
     //This is used for count + emit: first pass counts how many rectangles survive intersection, second pass uses the counter
     // to figure out where to write each rectangle
@@ -132,8 +128,6 @@ void GPUByFieldMicroOp<N,T,FT>::gpu_populate_bitmasks()
       inst_counters_instance.destroy();
       inst_entries_instance.destroy();
       parent_entries_instance.destroy();
-      nvtx_range_pop();
-      nvtx_range_pop();
       cudaStreamDestroy(stream);
       return;
     }
@@ -155,10 +149,6 @@ void GPUByFieldMicroOp<N,T,FT>::gpu_populate_bitmasks()
     grid_size = (parent_entries.size() * inst_size + flattened_threads - 1) / flattened_threads;
     intersect_input_rects<N,T><<<grid_size, flattened_threads, 0, stream>>>(d_inst_entries, d_parent_entries, d_inst_offsets, d_inst_prefix, inst_size, parent_entries.size(), field_data.size(), d_inst_counters, d_valid_rects);
     KERNEL_CHECK(stream);
-
-    nvtx_range_pop();
-
-    nvtx_range_push("cuda", "build volume offsets");
 
 
     // Prefix sum the valid rectangles by volume
@@ -199,16 +189,11 @@ void GPUByFieldMicroOp<N,T,FT>::gpu_populate_bitmasks()
     CUDA_CHECK(cudaMemcpyAsync(&total_pts, &d_prefix_rects[num_valid_rects], sizeof(size_t), cudaMemcpyDeviceToHost, stream), stream);
 
     CUDA_CHECK(cudaStreamSynchronize(stream), stream);
-
-    nvtx_range_pop();
-
     inst_entries_instance.destroy();
     parent_entries_instance.destroy();
     inst_offsets_instance.destroy();
     temp_instance.destroy();
     inst_counters_instance.destroy();
-
-    nvtx_range_push("cuda", "build points");
 
     RegionInstance points_instance = this->realm_malloc(total_pts * sizeof(PointDesc<N,T>), my_mem);
     PointDesc<N,T>* d_points = reinterpret_cast<PointDesc<N,T>*>(AffineAccessor<char,1>(points_instance, 0).base);
@@ -243,17 +228,12 @@ void GPUByFieldMicroOp<N,T,FT>::gpu_populate_bitmasks()
     AffineAccessor<FT,N,T>* d_accessors = reinterpret_cast<AffineAccessor<FT,N,T>*>(AffineAccessor<char,1>(accessors_instance, 0).base);
     CUDA_CHECK(cudaMemcpyAsync(d_accessors, h_accessors, field_data.size() * sizeof(AffineAccessor<FT,N,T>), cudaMemcpyHostToDevice, stream), stream);
 
-    nvtx_range_pop();
-
-    nvtx_range_push("cuda", "populate bitmasks");
 
     //This is where the work is actually done - each thread figures out which points to read, reads it, marks a PointDesc with its color, and writes it out
 
     int num_blocks = (total_pts + flattened_threads - 1) / flattened_threads;
     byfield_gpuPopulateBitmasksKernel<N,T,FT><<<num_blocks, flattened_threads, 0, stream>>>(d_accessors, d_valid_rects, d_prefix_rects, d_inst_prefix, d_colors, total_pts, colors.size(), num_valid_rects, field_data.size(), d_points);
     KERNEL_CHECK(stream);
-
-    nvtx_range_pop();
 
   // Map colors to their output index to match send output iterator
   std::map<FT, size_t> color_indices;
@@ -282,11 +262,6 @@ void GPUByFieldMicroOp<N,T,FT>::gpu_populate_bitmasks()
                           return kv.second;
                        });
 
-    nvtx_range_push("cuda", "free");
-
     points_instance.destroy();
-
-    nvtx_range_pop();
-    nvtx_range_pop();
 }
 }

@@ -31,6 +31,21 @@
     }                                                                        \
   } while (0)
 
+
+//NVTX macros to only add ranges if defined
+#ifdef REALM_USE_NVTX
+
+  #define NVTX_CAT(a,b)  a##b
+
+  #define NVTX_DEPPART(message) \
+  nvtxScopedRange NVTX_CAT(nvtx_, message)("cuda", #message, 0)
+
+#else
+
+  #define NVTX_DEPPART(message) do { } while (0)
+
+#endif
+
 namespace Realm {
 
   //Used by cub::DeviceReduce to compute bad GPU approximation
@@ -63,7 +78,8 @@ namespace Realm {
   void GPUMicroOp<N,T>::complete_pipeline(PointDesc<N, T>* d_points, size_t total_pts, Memory my_mem, const Container& ctr, IndexFn getIndex, MapFn getMap)
   {
 
-    nvtx_range_push("cuda", "sort valid points");
+    NVTX_DEPPART(complete_pipeline);
+
     cudaStream_t stream;
     CUDA_CHECK(cudaStreamCreate(&stream), stream);
 
@@ -116,23 +132,23 @@ namespace Realm {
     int threads_per_block = 256;
     size_t grid_size = (total_pts + threads_per_block - 1) / threads_per_block;
     size_t use_bytes = temp_bytes;
-    for (int dim = 0; dim < N; ++dim) {
-      build_coord_key<<<grid_size, threads_per_block, 0, stream>>>(d_keys_in, d_points_in, total_pts, dim);
+
+    {
+      NVTX_DEPPART(sort_valid_points);
+      for (int dim = 0; dim < N; ++dim) {
+        build_coord_key<<<grid_size, threads_per_block, 0, stream>>>(d_keys_in, d_points_in, total_pts, dim);
+        KERNEL_CHECK(stream);
+        cub::DeviceRadixSort::SortPairs(temp_storage, use_bytes, d_keys_in, d_keys_out, d_points_in, d_points_out, total_pts, 0, 8*sizeof(T), stream);
+        std::swap(d_keys_in, d_keys_out);
+        std::swap(d_points_in, d_points_out);
+      }
+
+      //Sort by source index now to keep individual partitions separate
+      build_src_key<<<grid_size, threads_per_block, 0, stream>>>(d_src_keys_in, d_points_in, total_pts);
       KERNEL_CHECK(stream);
-      cub::DeviceRadixSort::SortPairs(temp_storage, use_bytes, d_keys_in, d_keys_out, d_points_in, d_points_out, total_pts, 0, 8*sizeof(T), stream);
-      std::swap(d_keys_in, d_keys_out);
-      std::swap(d_points_in, d_points_out);
+      use_bytes = temp_bytes;
+      cub::DeviceRadixSort::SortPairs(temp_storage, use_bytes, d_src_keys_in, d_src_keys_out, d_points_in, d_points_out, total_pts, 0, 8*sizeof(size_t), stream);
     }
-
-    //Sort by source index now to keep individual partitions separate
-    build_src_key<<<grid_size, threads_per_block, 0, stream>>>(d_src_keys_in, d_points_in, total_pts);
-    KERNEL_CHECK(stream);
-    use_bytes = temp_bytes;
-    cub::DeviceRadixSort::SortPairs(temp_storage, use_bytes, d_src_keys_in, d_src_keys_out, d_points_in, d_points_out, total_pts, 0, 8*sizeof(size_t), stream);
-
-    nvtx_range_pop();
-
-    nvtx_range_push("cuda", "Run length encode");
 
 
     points_to_rects<<<grid_size, threads_per_block, 0, stream>>>(d_points_out, d_rects_in, total_pts);
@@ -140,46 +156,45 @@ namespace Realm {
 
     size_t num_intermediate = total_pts;
 
+    {
+      NVTX_DEPPART(run_length_encode);
 
-    for (int dim = N-1; dim >= 0; --dim) {
+      for (int dim = N-1; dim >= 0; --dim) {
 
-      // Step 1: Mark rectangle starts
-      // e.g. [1, 2, 4, 5, 6, 8] -> [1, 0, 1, 0, 0, 1]
-      grid_size = (num_intermediate + threads_per_block - 1) / threads_per_block;
-      mark_breaks_dim<<<grid_size, threads_per_block, 0, stream>>>(d_rects_in, break_points, num_intermediate, dim);
-      KERNEL_CHECK(stream);
+        // Step 1: Mark rectangle starts
+        // e.g. [1, 2, 4, 5, 6, 8] -> [1, 0, 1, 0, 0, 1]
+        grid_size = (num_intermediate + threads_per_block - 1) / threads_per_block;
+        mark_breaks_dim<<<grid_size, threads_per_block, 0, stream>>>(d_rects_in, break_points, num_intermediate, dim);
+        KERNEL_CHECK(stream);
 
-      // Step 2: Inclusive scan of break points to get group ids
-      // e.g. [1, 0, 1, 0, 0, 1] -> [1, 1, 2, 2, 2, 3]
-      use_bytes = temp_bytes;
-      cub::DeviceScan::InclusiveSum(temp_storage, use_bytes, break_points, group_ids, num_intermediate, stream);
+        // Step 2: Inclusive scan of break points to get group ids
+        // e.g. [1, 0, 1, 0, 0, 1] -> [1, 1, 2, 2, 2, 3]
+        use_bytes = temp_bytes;
+        cub::DeviceScan::InclusiveSum(temp_storage, use_bytes, break_points, group_ids, num_intermediate, stream);
 
-      //Determine new number of intermediate rectangles
-      size_t last_grp;
-      CUDA_CHECK(cudaMemcpyAsync(&last_grp, &group_ids[num_intermediate-1], sizeof(size_t), cudaMemcpyDeviceToHost, stream), stream);
+        //Determine new number of intermediate rectangles
+        size_t last_grp;
+        CUDA_CHECK(cudaMemcpyAsync(&last_grp, &group_ids[num_intermediate-1], sizeof(size_t), cudaMemcpyDeviceToHost, stream), stream);
+        CUDA_CHECK(cudaStreamSynchronize(stream), stream);
+
+        //Step 3: Write output rectangles, where rect starts write lo and rect ends write hi
+        init_rects_dim<<<grid_size, threads_per_block, 0, stream>>>(d_rects_in, break_points, group_ids, d_rects_out, num_intermediate, dim);
+        KERNEL_CHECK(stream);
+
+        num_intermediate = last_grp;
+        std::swap(d_rects_in, d_rects_out);
+      }
+
       CUDA_CHECK(cudaStreamSynchronize(stream), stream);
-
-      //Step 3: Write output rectangles, where rect starts write lo and rect ends write hi
-      init_rects_dim<<<grid_size, threads_per_block, 0, stream>>>(d_rects_in, break_points, group_ids, d_rects_out, num_intermediate, dim);
-      KERNEL_CHECK(stream);
-
-      num_intermediate = last_grp;
-      std::swap(d_rects_in, d_rects_out);
+      pg_instance.destroy();
+      temp_storage_instance.destroy();
+      break_points_instance.destroy();
     }
-
-    CUDA_CHECK(cudaStreamSynchronize(stream), stream);
-    pg_instance.destroy();
-    temp_storage_instance.destroy();
-    break_points_instance.destroy();
-
-    nvtx_range_pop();
 
     this->send_output(d_rects_in, num_intermediate, my_mem, ctr, getIndex, getMap);
 
-    nvtx_range_push("cuda", "free");
     cudaStreamDestroy(stream);
     aux_instance.destroy();
-    nvtx_range_pop();
   }
 
   /*
@@ -193,7 +208,7 @@ namespace Realm {
   template<typename Container, typename IndexFn, typename MapFn>
   void GPUMicroOp<N,T>::send_output(RectDesc<N, T>* d_rects, size_t total_rects, Memory my_mem, const Container& ctr, IndexFn getIndex, MapFn getMap)
   {
-    nvtx_range_push("cuda", "build final output");
+    NVTX_DEPPART(send_output);
 
     cudaStream_t stream;
     CUDA_CHECK(cudaStreamCreate(&stream), stream);
@@ -319,15 +334,11 @@ namespace Realm {
       SparsityMapImpl<N, T> *impl = SparsityMapImpl<N, T>::lookup(getMap(elem));
       impl->gpu_finalize();
     }
-
-    nvtx_range_pop();
-    nvtx_range_push("cuda", "free");
     cudaStreamDestroy(stream);
     final_entries_instance.destroy();
     final_rects_instance.destroy();
     starts_instance.destroy();
     ends_instance.destroy();
-    nvtx_range_pop();
   }
 
 
