@@ -113,6 +113,7 @@ namespace Realm {
       };
 
       std::map<FieldID, PerField> fields;
+      atomic<bool> is_compiled{false};
     };
 
     // this is a namespace instead of an enum so that it can be extended elsewhere

@@ -146,6 +146,7 @@ namespace Realm {
     program_base = nullptr;
     program_size = 0;
     fields.clear();
+    is_compiled.store(false);
   }
 
   ////////////////////////////////////////////////////////////////////////
@@ -350,6 +351,7 @@ namespace Realm {
   template <int N, typename T>
   void InstanceLayout<N, T>::compile_lookup_program(PieceLookup::CompiledProgram &p) const
   {
+    assert(!p.is_compiled.load());
     // first, count up how many bytes we're going to need
 
     size_t total_bytes = 0;
@@ -425,6 +427,8 @@ namespace Realm {
     }
 
     p.commit_updates();
+
+    p.is_compiled.store(true);
   }
 
   ////////////////////////////////////////////////////////////////////////
@@ -717,7 +721,6 @@ namespace Realm {
       impl->metadata.ext_resource = res->clone();
     else
       impl->metadata.ext_resource = 0;
-    ilg->compile_lookup_program(impl->metadata.lookup_program);
 
     bool need_alloc_result = false;
     if(!prs.empty()) {
@@ -871,8 +874,6 @@ namespace Realm {
         insts[i]->metadata.need_alloc_result = false;
       }
       insts[i]->metadata.need_notify_dealloc = false;
-      insts[i]->metadata.layout->compile_lookup_program(
-          insts[i]->metadata.lookup_program);
     }
     // request reuse of storage - note that due to the asynchronous
     //  nature of any profiling responses, it is not safe to refer to the
@@ -1322,6 +1323,13 @@ namespace Realm {
   RegionInstanceImpl::get_lookup_program(FieldID field_id, unsigned allowed_mask,
                                          uintptr_t &field_offset)
   {
+    if (!metadata.lookup_program.is_compiled.load_acquire()) {
+      AutoLock<> al(mutex);
+      if (!metadata.lookup_program.is_compiled.load_acquire()) {
+        metadata.layout->compile_lookup_program(metadata.lookup_program);
+      }
+    }
+
     // metadata must already be available
     assert(metadata.is_valid() &&
            "instance metadata must be valid before accesses are performed");
@@ -1348,6 +1356,13 @@ namespace Realm {
   RegionInstanceImpl::get_lookup_program(FieldID field_id, const Rect<N, T> &subrect,
                                          unsigned allowed_mask, size_t &field_offset)
   {
+    if (!metadata.lookup_program.is_compiled.load_acquire()) {
+      AutoLock<> al(mutex);
+      if (!metadata.lookup_program.is_compiled.load_acquire()) {
+        metadata.layout->compile_lookup_program(metadata.lookup_program);
+      }
+    }
+
     // metadata must already be available
     assert(metadata.is_valid() &&
            "instance metadata must be valid before accesses are performed");
@@ -1595,7 +1610,6 @@ namespace Realm {
     bool ok = (fbd >> inst_offset);
     if(ok) {
       layout = InstanceLayoutGeneric::deserialize_new(fbd);
-      layout->compile_lookup_program(lookup_program);
     }
     assert(ok && (layout != 0) && (fbd.bytes_left() == 0));
   }
