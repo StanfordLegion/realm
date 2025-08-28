@@ -29,8 +29,7 @@ void GPUByFieldMicroOp<N,T,FT>::gpu_populate_bitmasks()
 
     NVTX_DEPPART(byfield_gpu);
 
-    cudaStream_t stream;
-    CUDA_CHECK(cudaStreamCreate(&stream), stream);
+    cudaStream_t stream = Cuda::get_task_cuda_stream();
 
     Memory my_mem = field_data[0].inst.get_location();
 
@@ -139,7 +138,6 @@ void GPUByFieldMicroOp<N,T,FT>::gpu_populate_bitmasks()
       inst_counters_instance.destroy();
       inst_entries_instance.destroy();
       parent_entries_instance.destroy();
-      cudaStreamDestroy(stream);
       return;
     }
 
@@ -262,7 +260,6 @@ void GPUByFieldMicroOp<N,T,FT>::gpu_populate_bitmasks()
   }
 
   CUDA_CHECK(cudaStreamSynchronize(stream), stream);
-  cudaStreamDestroy(stream);
   valid_rects_instance.destroy();
   prefix_rects_instance.destroy();
   colors_instance.destroy();

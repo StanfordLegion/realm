@@ -80,8 +80,7 @@ namespace Realm {
 
     NVTX_DEPPART(complete_pipeline);
 
-    cudaStream_t stream;
-    CUDA_CHECK(cudaStreamCreate(&stream), stream);
+    cudaStream_t stream = Cuda::get_task_cuda_stream();
 
     size_t bytes_T   = total_pts * sizeof(T);
     size_t bytes_S   = total_pts * sizeof(size_t);
@@ -201,7 +200,6 @@ namespace Realm {
 
     this->send_output(d_rects_in, num_intermediate, my_mem, ctr, getIndex, getMap);
 
-    cudaStreamDestroy(stream);
     aux_instance.destroy();
   }
 
@@ -218,8 +216,7 @@ namespace Realm {
   {
     NVTX_DEPPART(send_output);
 
-    cudaStream_t stream;
-    CUDA_CHECK(cudaStreamCreate(&stream), stream);
+    cudaStream_t stream = Cuda::get_task_cuda_stream();
 
     std::set<Event> output_allocs;
 
@@ -352,7 +349,6 @@ namespace Realm {
       SparsityMapImpl<N, T> *impl = SparsityMapImpl<N, T>::lookup(getMap(elem));
       impl->gpu_finalize();
     }
-    cudaStreamDestroy(stream);
     final_entries_instance.destroy();
     final_rects_instance.destroy();
     boundaries_instance.destroy();
