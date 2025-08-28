@@ -61,12 +61,16 @@ typedef struct realm_memory_query_st *realm_memory_query_t;
 struct realm_sparsity_handle_st;
 typedef struct realm_sparsity_handle_st *realm_sparsity_handle_t;
 
+struct realm_fast_reservation_st;
+typedef struct realm_fast_reservation_st *realm_fast_reservation_t;
+
 typedef unsigned long long realm_id_t;
 typedef realm_id_t realm_event_t;
 typedef realm_id_t realm_user_event_t;
 typedef realm_id_t realm_processor_t;
 typedef realm_id_t realm_memory_t;
 typedef realm_id_t realm_region_instance_t;
+typedef realm_id_t realm_reservation_t;
 #define IDFMT "%llx" // TODO: name it to REALM_IDFMT
 
 typedef unsigned int realm_address_space_t;
@@ -167,6 +171,7 @@ typedef struct realm_region_instance_copy_params_t {
 #define REALM_NO_EVENT ((realm_event_t)0ULL)
 #define REALM_NO_USER_EVENT ((realm_user_event_t)0ULL)
 #define REALM_NO_INST ((realm_region_instance_t)0ULL)
+#define REALM_NO_RESERVATION ((realm_reservation_t)0ULL)
 
 #define REALM_TASK_ID_PROCESSOR_NOP ((realm_task_func_id_t)0U)
 #define REALM_TASK_ID_PROCESSOR_INIT ((realm_task_func_id_t)1U)
@@ -350,6 +355,7 @@ typedef enum realm_status_enum
   REALM_CUDA_ERROR_NOT_ENABLED = -14001,
   REALM_MODULE_CONFIG_ERROR_INVALID_NAME = -16001,
   REALM_MODULE_CONFIG_ERROR_NO_RESOURCE = -16002,
+  REALM_RESERVATION_ERROR_INVALID_RESERVATION = -17001,
 } realm_status_t;
 
 typedef realm_status_t RealmStatus;
@@ -957,6 +963,70 @@ realm_status_t REALM_EXPORT realm_region_instance_generate_external_resource_inf
 realm_status_t REALM_EXPORT realm_external_resource_suggested_memory(
     realm_runtime_t runtime, const realm_external_resource_t *external_resource,
     realm_memory_t *memory);
+
+/*
+ * @defgroup Reservation Reservation API
+ * @ingroup Realm
+ */
+
+/**
+ * @brief Creates a new fast reservation.
+ *
+ * @param runtime The runtime instance to use.
+ * @param reservation The reservation to be used for the fast reservation, it can be
+ * REALM_NO_RESERVATION if reservation is not needed.
+ * @param[out] fast_reservation The fast reservation to be created.
+ * @return Realm status indicating success or failure.
+ *
+ * @ingroup Reservation
+ */
+realm_status_t REALM_EXPORT
+realm_fast_reservation_create(realm_runtime_t runtime, realm_reservation_t reservation,
+                              realm_fast_reservation_t *fast_reservation);
+
+/**
+ * @brief Destroys a fast reservation.
+ *
+ * @param fast_reservation The fast reservation to be destroyed.
+ * @return Realm status indicating success or failure.
+ *
+ * @ingroup Reservation
+ */
+realm_status_t REALM_EXPORT
+realm_fast_reservation_destroy(realm_fast_reservation_t fast_reservation);
+
+/**
+ * @brief Acquires a write lock on a fast reservation.
+ *
+ * @param fast_reservation The fast reservation to acquire the write lock on.
+ * @return Realm status indicating success or failure.
+ *
+ * @ingroup Reservation
+ */
+realm_status_t REALM_EXPORT realm_fast_reservation_wrlock(
+    realm_fast_reservation_t fast_reservation, realm_event_t *event);
+
+/**
+ * @brief Acquires a read lock on a fast reservation.
+ *
+ * @param fast_reservation The fast reservation to acquire the read lock on.
+ * @return Realm status indicating success or failure.
+ *
+ * @ingroup Reservation
+ */
+realm_status_t REALM_EXPORT realm_fast_reservation_rdlock(
+    realm_fast_reservation_t fast_reservation, realm_event_t *event);
+
+/**
+ * @brief Releases a lock on a fast reservation.
+ *
+ * @param fast_reservation The fast reservation to release the lock on.
+ * @return Realm status indicating success or failure.
+ *
+ * @ingroup Reservation
+ */
+realm_status_t REALM_EXPORT
+realm_fast_reservation_unlock(realm_fast_reservation_t fast_reservation);
 #ifdef __cplusplus
 }
 #endif

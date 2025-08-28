@@ -1552,3 +1552,71 @@ realm_status_t realm_external_resource_suggested_memory(
   *memory = Realm::Memory(external_resource_cxx->suggested_memory());
   return REALM_SUCCESS;
 }
+
+/* Reservation API */
+
+realm_status_t realm_fast_reservation_create(realm_runtime_t runtime,
+                                             realm_reservation_t reservation,
+                                             realm_fast_reservation_t *fast_reservation)
+{
+  Realm::RuntimeImpl *runtime_impl = nullptr;
+  realm_status_t status = check_runtime_validity_and_assign(runtime, runtime_impl);
+  if(status != REALM_SUCCESS) {
+    return status;
+  }
+  if(fast_reservation == nullptr) {
+    return REALM_RESERVATION_ERROR_INVALID_RESERVATION;
+  }
+  Realm::Reservation cxx_reservation = Realm::Reservation(reservation);
+  // TODO: we need to find a way to pass the runtime_impl to the FastReservation
+  // constructors, so that we can remove the global runtime_singleton
+  *fast_reservation = reinterpret_cast<realm_fast_reservation_t>(
+      new Realm::FastReservation(cxx_reservation));
+  return REALM_SUCCESS;
+}
+
+realm_status_t realm_fast_reservation_destroy(realm_fast_reservation_t fast_reservation)
+{
+  if(fast_reservation == nullptr) {
+    return REALM_RESERVATION_ERROR_INVALID_RESERVATION;
+  }
+  Realm::FastReservation *fast_reservation_impl =
+      reinterpret_cast<Realm::FastReservation *>(fast_reservation);
+  delete fast_reservation_impl;
+  return REALM_SUCCESS;
+}
+
+realm_status_t realm_fast_reservation_wrlock(realm_fast_reservation_t fast_reservation,
+                                             realm_event_t *event)
+{
+  if(fast_reservation == nullptr) {
+    return REALM_RESERVATION_ERROR_INVALID_RESERVATION;
+  }
+  Realm::FastReservation *fast_reservation_impl =
+      reinterpret_cast<Realm::FastReservation *>(fast_reservation);
+  *event = fast_reservation_impl->wrlock();
+  return REALM_SUCCESS;
+}
+
+realm_status_t realm_fast_reservation_rdlock(realm_fast_reservation_t fast_reservation,
+                                             realm_event_t *event)
+{
+  if(fast_reservation == nullptr) {
+    return REALM_RESERVATION_ERROR_INVALID_RESERVATION;
+  }
+  Realm::FastReservation *fast_reservation_impl =
+      reinterpret_cast<Realm::FastReservation *>(fast_reservation);
+  *event = fast_reservation_impl->rdlock();
+  return REALM_SUCCESS;
+}
+
+realm_status_t realm_fast_reservation_unlock(realm_fast_reservation_t fast_reservation)
+{
+  if(fast_reservation == nullptr) {
+    return REALM_RESERVATION_ERROR_INVALID_RESERVATION;
+  }
+  Realm::FastReservation *fast_reservation_impl =
+      reinterpret_cast<Realm::FastReservation *>(fast_reservation);
+  fast_reservation_impl->unlock();
+  return REALM_SUCCESS;
+}

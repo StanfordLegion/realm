@@ -31,6 +31,12 @@ namespace Realm {
   public:
     typedef ::realm_id_t id_t;
     id_t id;
+
+    Reservation() = default;
+    constexpr explicit Reservation(id_t id_)
+      : id(id_)
+    {}
+
     bool operator<(const Reservation &rhs) const { return id < rhs.id; }
     bool operator==(const Reservation &rhs) const { return id == rhs.id; }
     bool operator!=(const Reservation &rhs) const { return id != rhs.id; }

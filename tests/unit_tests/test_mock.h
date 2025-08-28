@@ -86,6 +86,28 @@ public:
   }
 };
 
+class MockRuntimeImplWithReservationFreeList : public MockRuntimeImpl {
+public:
+  MockRuntimeImplWithReservationFreeList(void)
+    : MockRuntimeImpl()
+  {}
+
+  void init(int num_nodes = 1)
+  {
+    MockRuntimeImpl::init(num_nodes);
+    Node &n = nodes[0];
+    local_reservation_free_list =
+        new ReservationTableAllocator::FreeList(n.reservations, 0);
+  }
+
+  void finalize(void)
+  {
+    delete local_reservation_free_list;
+    local_reservation_free_list = nullptr;
+    MockRuntimeImpl::finalize();
+  }
+};
+
 class MockProcessorImpl : public ProcessorImpl {
 public:
   MockProcessorImpl(RuntimeImpl *runtime_impl, Processor _me, Processor::Kind _kind)

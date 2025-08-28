@@ -144,6 +144,7 @@ list(
   c_runtime_version.cc
   c_runtime_attr.cc
   c_affinity.cc
+  c_fast_reservation.cc
 )
 list(TRANSFORM REALM_C_UNIT_TESTS PREPEND "${REALM_TEST_DIR}/unit_tests/")
 add_executable(realm_c_unit_tests ${REALM_C_UNIT_TESTS})
