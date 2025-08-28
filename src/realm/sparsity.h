@@ -256,10 +256,10 @@ namespace Realm {
 
     //Stores rectangles for GPU deppart (allows fast copy after merged on GPU)
     RegionInstance entries_instance;
-    size_t num_entries;
+    size_t num_entries = 0;
 
     RegionInstance approx_instance;
-    size_t num_approx;
+    size_t num_approx = 0;
 
     //Tracks whether to use instance or vector
     bool from_gpu;

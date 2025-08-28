@@ -757,9 +757,9 @@ namespace Realm {
       return true;
 
     SparsityMapPublicImpl<N,T> *impl = sparsity.impl();
-    span<SparsityMapEntry<N, T>> approx_rects = impl->get_approx_rects();
+    span<Rect<N, T>> approx_rects = impl->get_approx_rects();
     for(size_t i = 0; i < approx_rects.size(); i++) {
-      SparsityMapEntry<N, T> entry = approx_rects[i];
+      Rect<N, T> entry = approx_rects[i];
       if(entry.contains(p))
 	return true;
     }

@@ -40,6 +40,11 @@ namespace Realm {
   class PartitioningMicroOp;
   class PartitioningOperation;
 
+  // Data representations for GPU micro-ops
+  // src idx tracks which subspace each rect/point
+  // belongs to and allows multiple subspaces to be
+  // computed together in a micro-op
+
   template<int N, typename T>
   struct RectDesc {
     Rect<N,T> rect;
@@ -160,6 +165,8 @@ namespace Realm {
     std::vector<IndexSpace<N,T> > input_spaces;
     std::vector<SparsityMapImpl<N,T> *> extra_deps;
   };
+
+  //The parent class for all GPU partitioning micro-ops. Provides output utility functions
 
   template<int N, typename T>
   class GPUMicroOp : public PartitioningMicroOp {
