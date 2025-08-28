@@ -325,12 +325,6 @@ namespace Realm {
     sparsity_outputs[_val] = _sparsity;
   }
 
-  template<int N, typename T, typename FT>
-  void GPUByFieldMicroOp<N, T, FT>::execute(void) {
-    TimeStamp ts("GPUByFieldMicroOp::execute", true, &log_uop_timing);
-    gpu_populate_bitmasks();
-  }
-
 
   ////////////////////////////////////////////////////////////////////////
   //

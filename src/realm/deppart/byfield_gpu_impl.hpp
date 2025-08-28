@@ -24,7 +24,7 @@ struct RectFieldVolumeOp {
  *  prefix sum + binary search to iterate over these in parallel and mark each point with its color.
  */
 template <int N, typename T, typename FT>
-void GPUByFieldMicroOp<N,T,FT>::gpu_populate_bitmasks()
+void GPUByFieldMicroOp<N,T,FT>::execute()
 {
 
     NVTX_DEPPART(byfield_gpu);
