@@ -1,5 +1,7 @@
 var NAVTREEINDEX56 =
 {
+"namespaceRealm.html#a5e200e79f3ad2e43b2d41fbed27678e9a7558d7c7c588dcef6358f7089212f9fc":[0,0,3,484,10],
+"namespaceRealm.html#a5e200e79f3ad2e43b2d41fbed27678e9a83b346ec98818a3030de6102cf4c124d":[0,0,3,484,6],
 "namespaceRealm.html#a5e200e79f3ad2e43b2d41fbed27678e9a89b5a9cda7cead3ffcc2596a1f1f834f":[0,0,3,484,11],
 "namespaceRealm.html#a5e200e79f3ad2e43b2d41fbed27678e9a992dbf45c11c767545327a1d240737b0":[0,0,3,484,13],
 "namespaceRealm.html#a5e200e79f3ad2e43b2d41fbed27678e9aabe093c9cf0627d583d8a85d2857cc7d":[0,0,3,484,3],
@@ -247,7 +249,5 @@ var NAVTREEINDEX56 =
 "namespaceRealm_1_1ProfilingMeasurements.html#abcafc5c96ab2cc13b45a80362f113a0a":[0,0,3,20,23],
 "namespaceRealm_1_1Python.html":[0,0,3,21],
 "namespaceRealm_1_1ReductionKernels.html":[0,0,3,22],
-"namespaceRealm_1_1ReductionKernels.html#a2037b25ea6f2f8f1fc3ca2581ba74e46":[0,0,3,22,0],
-"namespaceRealm_1_1ReductionKernels.html#ae1b6b2b7b729c65395477be21d6098cb":[0,0,3,22,1],
-"namespaceRealm_1_1SampleFile.html":[0,0,3,23]
+"namespaceRealm_1_1ReductionKernels.html#a2037b25ea6f2f8f1fc3ca2581ba74e46":[0,0,3,22,0]
 };

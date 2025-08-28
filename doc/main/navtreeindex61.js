@@ -1,5 +1,7 @@
 var NAVTREEINDEX61 =
 {
+"structRealm_1_1Cuda_1_1AffineCopyPair.html":[1,0,3,1,2],
+"structRealm_1_1Cuda_1_1AffineCopyPair.html":[0,0,3,2,2],
 "structRealm_1_1Cuda_1_1AffineCopyPair.html#a2efb859c8367076981b1a006035128ba":[0,0,3,2,2,3],
 "structRealm_1_1Cuda_1_1AffineCopyPair.html#a2efb859c8367076981b1a006035128ba":[1,0,3,1,2,3],
 "structRealm_1_1Cuda_1_1AffineCopyPair.html#a31aa0152d567d915a00c6141507e1c7b":[1,0,3,1,2,1],
@@ -247,7 +249,5 @@ var NAVTREEINDEX61 =
 "structRealm_1_1Cuda_1_1RegisteredVariable.html#ac7898ea3d180833730dc3fa525cd5a5a":[1,0,3,1,53,2],
 "structRealm_1_1Cuda_1_1RegisteredVariable.html#ac7898ea3d180833730dc3fa525cd5a5a":[0,0,3,2,53,2],
 "structRealm_1_1Cuda_1_1RegisteredVariable.html#aec6295fc9e165b9b4cac156d8a045444":[0,0,3,2,53,8],
-"structRealm_1_1Cuda_1_1RegisteredVariable.html#aec6295fc9e165b9b4cac156d8a045444":[1,0,3,1,53,8],
-"structRealm_1_1DefaultElementConstructor.html":[1,0,3,98],
-"structRealm_1_1DefaultElementConstructor.html":[0,0,3,109]
+"structRealm_1_1Cuda_1_1RegisteredVariable.html#aec6295fc9e165b9b4cac156d8a045444":[1,0,3,1,53,8]
 };

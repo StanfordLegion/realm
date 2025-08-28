@@ -1,5 +1,7 @@
 var NAVTREEINDEX60 =
 {
+"structRealm_1_1BarrierImpl_1_1Generation_1_1PerNodeUpdates.html#a1948f5b94855dfc321d9ece22c057e2c":[1,0,3,51,0,0,0],
+"structRealm_1_1BarrierImpl_1_1Generation_1_1PerNodeUpdates.html#a1948f5b94855dfc321d9ece22c057e2c":[0,0,3,62,0,0,0],
 "structRealm_1_1BarrierImpl_1_1Generation_1_1PerNodeUpdates.html#ae13b11ab624b6091bb8f3647117c948d":[0,0,3,62,0,0,1],
 "structRealm_1_1BarrierImpl_1_1Generation_1_1PerNodeUpdates.html#ae13b11ab624b6091bb8f3647117c948d":[1,0,3,51,0,0,1],
 "structRealm_1_1BarrierTriggerMessage.html":[0,0,3,63],
@@ -247,7 +249,5 @@ var NAVTREEINDEX60 =
 "structRealm_1_1Cuda_1_1AffineCopyInfo.html#a03f5bd0f0920427a4144876d16048fb8":[0,0,3,2,1,0],
 "structRealm_1_1Cuda_1_1AffineCopyInfo.html#a03f5bd0f0920427a4144876d16048fb8":[1,0,3,1,1,0],
 "structRealm_1_1Cuda_1_1AffineCopyInfo.html#af7e60ecbacfd78526175417653ce5327":[0,0,3,2,1,1],
-"structRealm_1_1Cuda_1_1AffineCopyInfo.html#af7e60ecbacfd78526175417653ce5327":[1,0,3,1,1,1],
-"structRealm_1_1Cuda_1_1AffineCopyPair.html":[1,0,3,1,2],
-"structRealm_1_1Cuda_1_1AffineCopyPair.html":[0,0,3,2,2]
+"structRealm_1_1Cuda_1_1AffineCopyInfo.html#af7e60ecbacfd78526175417653ce5327":[1,0,3,1,1,1]
 };

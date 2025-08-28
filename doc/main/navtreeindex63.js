@@ -1,5 +1,7 @@
 var NAVTREEINDEX63 =
 {
+"structRealm_1_1Hip_1_1GPUInfo.html#a151c2bf0363ac9615627bed3c20e64c8":[1,0,3,4,14,6],
+"structRealm_1_1Hip_1_1GPUInfo.html#a151c2bf0363ac9615627bed3c20e64c8":[0,0,3,8,14,6],
 "structRealm_1_1Hip_1_1GPUInfo.html#a282ad6dfacaeb6581ab24cf27149329d":[1,0,3,4,14,2],
 "structRealm_1_1Hip_1_1GPUInfo.html#a282ad6dfacaeb6581ab24cf27149329d":[0,0,3,8,14,2],
 "structRealm_1_1Hip_1_1GPUInfo.html#a2e6c6f4f6fcb03f98c4797c1a31be225":[0,0,3,8,14,1],
@@ -247,7 +249,5 @@ var NAVTREEINDEX63 =
 "structRealm_1_1IndexSpace.html#a0f1f8217bb23c3b1928070911b20edca":[1,0,3,177,25],
 "structRealm_1_1IndexSpace.html#a0f1f8217bb23c3b1928070911b20edca":[0,0,3,188,25],
 "structRealm_1_1IndexSpace.html#a166e90983e09c83035eb61e570bdffd0":[1,0,3,177,32],
-"structRealm_1_1IndexSpace.html#a166e90983e09c83035eb61e570bdffd0":[0,0,3,188,32],
-"structRealm_1_1IndexSpace.html#a1ebff138dd91e39e6d053c93a24cdeef":[0,0,3,188,30],
-"structRealm_1_1IndexSpace.html#a1ebff138dd91e39e6d053c93a24cdeef":[1,0,3,177,30]
+"structRealm_1_1IndexSpace.html#a166e90983e09c83035eb61e570bdffd0":[0,0,3,188,32]
 };

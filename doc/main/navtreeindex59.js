@@ -1,5 +1,7 @@
 var NAVTREEINDEX59 =
 {
+"realm__defines_8h.html#a27dd364bc931d438a269c3d216b55d92":[2,0,2,10],
+"realm__defines_8h.html#a319e011f33a288664d280b6451f23ca4":[2,0,2,15],
 "realm__defines_8h.html#a551ec9fa2e268a9fdc60cf21c977bce1":[2,0,2,11],
 "realm__defines_8h.html#a63caae09de4c60272b58e3734aa4866c":[2,0,2,7],
 "realm__defines_8h.html#a7324a1960d9fb5e8bbd8c947b40ca701":[2,0,2,9],
@@ -247,7 +249,5 @@ var NAVTREEINDEX59 =
 "structRealm_1_1BackgroundWorkManager_1_1Config.html#adb7b972376f05f8b459594f6e1a0ee9a":[0,0,3,58,0,2],
 "structRealm_1_1BackgroundWorkManager_1_1Config.html#adb7b972376f05f8b459594f6e1a0ee9a":[1,0,3,47,0,2],
 "structRealm_1_1BarrierImpl_1_1Generation_1_1PerNodeUpdates.html":[0,0,3,62,0,0],
-"structRealm_1_1BarrierImpl_1_1Generation_1_1PerNodeUpdates.html":[1,0,3,51,0,0],
-"structRealm_1_1BarrierImpl_1_1Generation_1_1PerNodeUpdates.html#a1948f5b94855dfc321d9ece22c057e2c":[1,0,3,51,0,0,0],
-"structRealm_1_1BarrierImpl_1_1Generation_1_1PerNodeUpdates.html#a1948f5b94855dfc321d9ece22c057e2c":[0,0,3,62,0,0,0]
+"structRealm_1_1BarrierImpl_1_1Generation_1_1PerNodeUpdates.html":[1,0,3,51,0,0]
 };

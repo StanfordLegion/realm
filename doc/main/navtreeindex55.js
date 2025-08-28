@@ -1,5 +1,7 @@
 var NAVTREEINDEX55 =
 {
+"hip__module_8h.html#a4578c6a9d2e0d47d532366be84df81c6":[2,0,1,1,5,3,2],
+"hip__module_8h.html#a57076396f9f1d8514981fa057af10481":[2,0,1,1,5,3,3],
 "hip__module_8h.html#af70c5fb5ef5a251468522d4d5a9ce782":[2,0,1,1,5,3,4],
 "hip__module_8h_source.html":[2,0,1,1,5,3],
 "hip__redop_8h.html":[2,0,1,1,5,4],
@@ -247,7 +249,5 @@ var NAVTREEINDEX55 =
 "namespaceRealm.html#a5e200e79f3ad2e43b2d41fbed27678e9a1f54ca0238ffb68f27d7d19860b19ba3":[0,0,3,484,8],
 "namespaceRealm.html#a5e200e79f3ad2e43b2d41fbed27678e9a283c8e6593b58d6daa26dc7a183eaf04":[0,0,3,484,5],
 "namespaceRealm.html#a5e200e79f3ad2e43b2d41fbed27678e9a3204ad00f7bb04d0364062e0594f42d9":[0,0,3,484,2],
-"namespaceRealm.html#a5e200e79f3ad2e43b2d41fbed27678e9a5f9a38d42beabc43c499a1394623edf2":[0,0,3,484,0],
-"namespaceRealm.html#a5e200e79f3ad2e43b2d41fbed27678e9a7558d7c7c588dcef6358f7089212f9fc":[0,0,3,484,10],
-"namespaceRealm.html#a5e200e79f3ad2e43b2d41fbed27678e9a83b346ec98818a3030de6102cf4c124d":[0,0,3,484,6]
+"namespaceRealm.html#a5e200e79f3ad2e43b2d41fbed27678e9a5f9a38d42beabc43c499a1394623edf2":[0,0,3,484,0]
 };
