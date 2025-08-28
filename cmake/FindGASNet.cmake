@@ -44,7 +44,7 @@ endif()
 set(_GASNet_search_modules)
 if(NOT GASNET_CONDUIT)
   # This list is in order of search priority.  Manually specify via GASNET_CONDUIT
-  foreach(_gasnet_conduit ibv ucx aries ofi mpi smp)
+  foreach(_gasnet_conduit ibv ucx aries ofi gemini psm smp mpi udp)
     foreach(_gasnet_multithread par parsync seq)
       list(APPEND _GASNet_search_modules gasnet-${_gasnet_conduit}-${_gasnet_multithread})
     endforeach()
@@ -55,12 +55,12 @@ endif()
 
 pkg_search_module(GASNet ${_GASNet_search_modules} IMPORTED_TARGET GASNet)
 
-# GASNet wants you to use mpicc to build and link your application, so doesn't
-# include the mpi dependencies itself.  Since the MPI dependency is completely
-# contained within MPI, we really just need the MPI library, so add it as a
-# transitive dependency here.  In theory, there may be more of these cases with
-# different conduits, but we'll deal with those on a case-by-case basis
 if(GASNet_FOUND)
+  # GASNet wants you to use mpicc to build and link your application, so doesn't
+  # include the mpi dependencies itself.  Since the MPI dependency is completely
+  # contained within MPI, we really just need the MPI library, so add it as a
+  # transitive dependency here.  In theory, there may be more of these cases with
+  # different conduits, but we'll deal with those on a case-by-case basis
   pkg_get_variable(_needs_mpi ${GASNet_MODULE_NAME} GASNET_LD_REQUIRES_MPI)
 
   if(_needs_mpi STREQUAL "1")
@@ -75,6 +75,16 @@ if(GASNet_FOUND)
     endif()
     list(APPEND _GASNet_LINK_LIBRARIES MPI::MPI_CXX)
   endif()
+
+  # Provide a way to indicate to the caller what conduit was found
+  if (NOT GASNET_CONDUIT)
+    string(REGEX MATCH "gasnet-([a-z]+)-.*" _ "${GASNet_MODULE_NAME}")
+    set(GASNET_CONDUIT ${CMAKE_MATCH_1})
+  endif()
+
+  string(TOUPPER "${GASNET_CONDUIT}" GASNET_CONDUIT_UPPER)
+  set(GASNET_CONDUIT_${GASNET_CONDUIT_UPPER} TRUE)
+
 endif()
 
 include(FindPackageMessage)
@@ -89,7 +99,7 @@ endif()
 find_package_handle_standard_args(
   GASNet
   VERSION_VAR GASNet_VERSION
-  REQUIRED_VARS GASNet_FOUND GASNet_LIBRARIES GASNet_INCLUDE_DIRS
+  REQUIRED_VARS GASNet_FOUND GASNet_LIBRARIES GASNet_INCLUDE_DIRS GASNET_CONDUIT GASNET_CONDUIT_${GASNET_CONDUIT_UPPER}
   FOUND_VAR GASNet_FOUND
 )
 
@@ -106,4 +116,8 @@ if(GASNet_FOUND)
   )
 endif()
 
-mark_as_advanced(GASNet_INCLUDE_DIRS GASNet_LIBRARIES)
+mark_as_advanced(GASNet_INCLUDE_DIRS
+                 GASNet_LIBRARIES
+                 GASNET_CONDUIT
+                 GASNET_CONDUIT_${GASNET_CONDUIT}
+)
