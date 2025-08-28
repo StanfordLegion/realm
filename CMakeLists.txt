@@ -473,52 +473,17 @@ if(REALM_ENABLE_PYTHON)
 endif()
 
 if(REALM_ENABLE_KOKKOS)
-  if(TARGET CUDA::cuda_driver)
-    list(APPEND KOKKOS_CONFIG_ARGS "Kokkos_ENABLE_CUDA ON" "Kokkos_ENABLE_CUDA_LAMBDA ON"
-         "Kokkos_ENABLE_CUDA_UVM OFF"
-    )
+  # Unfortunately, Kokkos really doesn't like to be used with CPM or anything
+  # when cuda is enabled.  Only certain configuration options are available
+  # when you use it that way and the build environment to get kokkos working
+  # with cuda, hip, etc needs to be very finely tuned.  So we give up and ask
+  # the user to install it themselves.
+  find_package(Kokkos COMPONENTS separable_compilation)
+  if (Kokkos_FOUND)
+    enable_language(${Kokkos_COMPILE_LANGUAGE})
+    list(APPEND REALM_STATIC_DEPENDS Kokkos)
+    list(APPEND REALM_LIBRARIES Kokkos::kokkoscore)
   endif()
-  if(hip_FOUND)
-    list(APPEND KOKKOS_CONFIG_ARGS "Kokkos_ENABLE_HIP ON")
-  endif()
-  if(OpenMP_FOUND)
-    list(APPEND KOKKOS_CONFIG_ARGS "Kokkos_ENABLE_OPENMP ON")
-  endif()
-  list(
-    APPEND
-    KOKKOS_CONFIG_ARGS
-    "Kokkos_INSTALL_TESTING OFF"
-    "CMAKE_SKIP_INSTALL_RULES ON"
-    "BUILD_SHARED_LIBS OFF"
-    "CMAKE_POSITION_INDEPENDENT_CODE ON"
-    "CMAKE_CXX_FLAGS -DKOKKOS_IMPL_TURN_OFF_CUDA_HOST_INIT_CHECK"
-  )
-  cpmfindpackage(
-    NAME
-    Kokkos
-    GIT_REPOSITORY
-    https://github.com/kokkos/kokkos.git
-    GIT_TAG
-    4.0.01
-    EXCLUDE_FROM_ALL
-    YES
-    SYSTEM
-    YES
-    OPTIONS
-    ${KOKKOS_CONFIG_ARGS}
-    FIND_PACKAGE_ARGUMENTS
-    COMPONENTS
-    launch_compiler
-    separable_compilation
-  )
-  if(Kokkos_ADDED)
-    set_property(GLOBAL APPEND PROPERTY PACKAGES_FOUND Kokkos)
-    get_property(_NOT_FOUND GLOBAL PROPERTY PACKAGES_NOT_FOUND)
-    list(REMOVE_ITEM _NOT_FOUND Kokkos)
-    set_property(GLOBAL PROPERTY PACKAGES_NOT_FOUND "${_NOT_FOUND}")
-  endif()
-  list(APPEND REALM_STATIC_DEPENDS Kokkos)
-  list(APPEND REALM_LIBRARIES Kokkos::kokkos)
 endif()
 
 if(REALM_ENABLE_LLVM)
@@ -736,9 +701,7 @@ if(REALM_ENABLE_GASNETEX)
       URL_HASH SHA256=f945e80f71d340664766b66290496d230e021df5e5cd88f404d101258446daa9
       SOURCE_DIR "${GASNet_SOURCE_DIR}" INSTALL_DIR "${GASNet_ROOT}"
     )
-    if(NOT GASNet_populated)
-      FetchContent_Populate(GASNet)
-    endif()
+    FetchContent_MakeAvailable(GASNet)
 
     if(NOT GASNet_CONFIG_ARGS STREQUAL GASNet_CONFIG_ARGS_INTERNAL)
       file(REMOVE ${GASNet_SOURCE_DIR}/config.cache)

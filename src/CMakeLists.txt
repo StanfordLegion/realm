@@ -127,8 +127,13 @@ if(TARGET MPI::MPI_CXX)
   list(APPEND REALM_SOURCES mpi/mpi_module.cc mpi/am_mpi.cc)
 endif()
 
-if(TARGET Kokkos::kokkoscore)
+if(TARGET Kokkos::kokkos)
   list(APPEND REALM_SOURCES kokkos_interop.cc)
+  set_source_files_properties("${REALM_SOURCE_DIR}/kokkos_interop.cc" 
+      DIRECTORY ${PROJECT_SOURCE_DIR}
+      PROPERTIES
+      LANGUAGE ${Kokkos_COMPILE_LANGUAGE}
+  )
 endif()
 
 # Replace me later
