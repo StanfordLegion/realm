@@ -79,8 +79,6 @@ namespace Realm {
 
     virtual void execute(void);
 
-    virtual void gpu_populate_bitmasks();
-
     void dispatch(PartitioningOperation *op, bool inline_ok);
 
     void add_sparsity_output(FT _val, SparsityMap<N, T> _sparsity);
