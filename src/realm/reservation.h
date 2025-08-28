@@ -37,6 +37,8 @@ namespace Realm {
       : id(id_)
     {}
 
+    constexpr operator id_t() const { return id; }
+
     bool operator<(const Reservation &rhs) const { return id < rhs.id; }
     bool operator==(const Reservation &rhs) const { return id == rhs.id; }
     bool operator!=(const Reservation &rhs) const { return id != rhs.id; }
