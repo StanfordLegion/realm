@@ -20,12 +20,17 @@
 #ifndef REALM_HPP
 #define REALM_HPP
 
+#include <algorithm>
+#include <cassert>
+#include <cstddef>
+#include <cstdint>
+#include <iostream>
+#include <memory>
+#include <set>
+#include <stdexcept>
 #include <string>
 #include <vector>
-#include <set>
-#include <iostream>
-#include <cstddef>
-#include <stdexcept>
+
 #if __cplusplus >= 202002L
 #include <span>
 #endif
@@ -37,11 +42,15 @@
   do {                                                                                   \
     realm_status_t _status = (call);                                                     \
     if(_status != REALM_SUCCESS) {                                                       \
-      throw std::runtime_error("Realm C API call failed: " #call);                       \
+      throw std::runtime_error("Realm C API call failed with status " +                  \
+                               std::to_string(_status) + ": " #call);                    \
     }                                                                                    \
   } while(0)
 
-namespace Realm {
+#ifndef REALM_NAMESPACE
+#define REALM_NAMESPACE Realm
+#endif
+namespace REALM_NAMESPACE {
   // Forward declarations
   class ProfilingRequestSet;
   class CodeDescriptor;
@@ -215,16 +224,15 @@ namespace Realm {
    * do not need to be explicitly garbage collected.
    */
   class Event {
-  private:
+  public:
     realm_event_t id{REALM_NO_EVENT};
 
-  public:
     Event() = default;
-    constexpr explicit Event(realm_id_t id)
+    constexpr explicit Event(realm_event_t id)
       : id(id)
     {}
 
-    constexpr operator realm_id_t() const { return id; }
+    constexpr operator realm_event_t() const { return id; }
 
     bool operator<(const Event &rhs) const { return id < rhs.id; }
     bool operator==(const Event &rhs) const { return id == rhs.id; }
@@ -246,7 +254,14 @@ namespace Realm {
      * Test whether an event has triggered without waiting.
      * \return true if the event has triggered, false otherwise
      */
-    bool has_triggered(void) const { throw std::logic_error("Not implemented"); }
+    bool has_triggered(void) const
+    {
+      realm_runtime_t runtime;
+      int has_triggered;
+      REALM_CHECK(realm_runtime_get_runtime(&runtime));
+      REALM_CHECK(realm_event_has_triggered(runtime, id, &has_triggered, nullptr));
+      return has_triggered != 0;
+    }
 
     /**
      * Wait for an event to trigger.
@@ -256,7 +271,7 @@ namespace Realm {
       realm_runtime_t runtime;
       int poisoned;
       REALM_CHECK(realm_runtime_get_runtime(&runtime));
-      REALM_CHECK(realm_event_wait(runtime, id, &poisoned));
+      REALM_CHECK(realm_event_wait(runtime, id, REALM_WAIT_INFINITE, &poisoned));
     }
 
     /**
@@ -267,12 +282,18 @@ namespace Realm {
     /**
      * External wait with a timeout - returns true if event triggers, false
      * if the maximum delay occurs first
-     * \param max_ns the maximum number of nanoseconds to wait
+     * \param max_ns the maximum number of nanoseconds to wait. REALM_WAIT_INFINITE is a
+     *              special value that means wait forever.
      * \return true if the event has triggered, false if the timeout occurred
      */
-    bool external_timedwait(long long max_ns) const
+    bool external_timedwait(int64_t max_ns) const
     {
-      throw std::logic_error("Not implemented");
+      realm_runtime_t runtime;
+      int has_triggered;
+      REALM_CHECK(realm_runtime_get_runtime(&runtime));
+      REALM_CHECK(realm_event_wait(runtime, id, max_ns, nullptr));
+      REALM_CHECK(realm_event_has_triggered(runtime, id, &has_triggered, nullptr));
+      return has_triggered != 0;
     }
 
     /**
@@ -283,28 +304,34 @@ namespace Realm {
      */
     bool has_triggered_faultaware(bool &poisoned) const
     {
-      throw std::logic_error("Not implemented");
+      realm_runtime_t runtime;
+      int tmp_has_triggered;
+      int tmp_poisoned;
+      REALM_CHECK(realm_runtime_get_runtime(&runtime));
+      REALM_CHECK(
+          realm_event_has_triggered(runtime, id, &tmp_has_triggered, &tmp_poisoned));
+      poisoned = (tmp_poisoned != 0);
+      return tmp_has_triggered != 0;
     }
 
     /**
      * Fault-aware versions of the wait function.
      * \param poisoned set to true if the event is poisoned
-     * \return true if the event has triggered, false otherwise
      */
     void wait_faultaware(bool &poisoned) const
     {
-      throw std::logic_error("Not implemented");
+      realm_runtime_t runtime;
+      int tmp_poisoned;
+      REALM_CHECK(realm_runtime_get_runtime(&runtime));
+      REALM_CHECK(realm_event_wait(runtime, id, REALM_WAIT_INFINITE, &tmp_poisoned));
+      poisoned = (tmp_poisoned != 0);
     }
 
     /**
      * Fault-aware versions of the external wait function.
      * \param poisoned set to true if the event is poisoned
-     * \return true if the event has triggered, false otherwise
      */
-    void external_wait_faultaware(bool &poisoned) const
-    {
-      throw std::logic_error("Not implemented");
-    }
+    void external_wait_faultaware(bool &poisoned) const { wait_faultaware(poisoned); }
 
     /**
      * Fault-aware versions of the external timed wait function.
@@ -312,9 +339,16 @@ namespace Realm {
      * \param max_ns the maximum number of nanoseconds to wait
      * \return true if the event has triggered, false if the timeout occurred
      */
-    bool external_timedwait_faultaware(bool &poisoned, long long max_ns) const
+    bool external_timedwait_faultaware(bool &poisoned, int64_t max_ns) const
     {
-      throw std::logic_error("Not implemented");
+      realm_runtime_t runtime;
+      int has_triggered;
+      int tmp_poisoned;
+      REALM_CHECK(realm_runtime_get_runtime(&runtime));
+      REALM_CHECK(realm_event_wait(runtime, id, max_ns, &tmp_poisoned));
+      REALM_CHECK(realm_event_has_triggered(runtime, id, &has_triggered, nullptr));
+      poisoned = (tmp_poisoned != 0);
+      return has_triggered != 0;
     }
 
     /**
@@ -356,8 +390,15 @@ namespace Realm {
     {
       realm_runtime_t runtime;
       REALM_CHECK(realm_runtime_get_runtime(&runtime));
+
+      std::vector<realm_event_t> event_ids(num_events);
+      std::transform(wait_for, wait_for + num_events, event_ids.begin(),
+                     [](const Event &e) { return e.id; });
+
       realm_event_t merged_event_id;
-      REALM_CHECK(realm_event_merge(runtime, reinterpret_cast<const realm_event_t*>(wait_for), num_events, &merged_event_id, 0));
+      REALM_CHECK(
+          realm_event_merge(runtime, event_ids.data(), num_events, &merged_event_id, 0));
+
       return Event(merged_event_id);
     }
 
@@ -391,8 +432,15 @@ namespace Realm {
     {
       realm_runtime_t runtime;
       REALM_CHECK(realm_runtime_get_runtime(&runtime));
+
+      std::vector<realm_event_t> event_ids(num_events);
+      std::transform(wait_for, wait_for + num_events, event_ids.begin(),
+                     [](const Event &e) { return e.id; });
+
       realm_event_t merged_event_id;
-      REALM_CHECK(realm_event_merge(runtime, reinterpret_cast<const realm_event_t*>(wait_for), num_events, &merged_event_id, 1));
+      REALM_CHECK(
+          realm_event_merge(runtime, event_ids.data(), num_events, &merged_event_id, 1));
+
       return Event(merged_event_id);
     }
     static Event merge_events_ignorefaults(const span<const Event> &wait_for)
@@ -473,7 +521,8 @@ namespace Realm {
     {
       realm_runtime_t runtime;
       REALM_CHECK(realm_runtime_get_runtime(&runtime));
-      REALM_CHECK(realm_user_event_trigger(runtime, *this, wait_on, ignore_faults ? 1 : 0));
+      REALM_CHECK(
+          realm_user_event_trigger(runtime, *this, wait_on, ignore_faults ? 1 : 0));
     }
 
     /*
@@ -492,22 +541,18 @@ namespace Realm {
    * and manage task execution on that processor.
    */
   class Processor {
-  private:
-    realm_id_t id{REALM_NO_PROC};
-
   public:
+    realm_processor_t id{REALM_NO_PROC};
     Processor() = default;
-    constexpr explicit Processor(realm_id_t id)
+    constexpr explicit Processor(realm_processor_t id)
       : id(id)
     {}
 
-    constexpr operator realm_id_t() const { return id; }
-
     /**
-     * \brief Get the internal ID for derived classes.
-     * \return The event ID
+     * \brief Implicit conversion operator to realm_processor_t.
+     * \return The underlying realm_processor_t instance
      */
-    realm_id_t get_id() const { return id; }
+    constexpr operator realm_processor_t() const { return id; }
 
     bool operator<(const Processor &rhs) const { return id < rhs.id; }
     bool operator==(const Processor &rhs) const { return id == rhs.id; }
@@ -519,7 +564,7 @@ namespace Realm {
      * \brief Check whether this processor has a valid ID.
      * \return true if the processor has a valid ID, false otherwise
      */
-    bool exists(void) const { return id != 0; }
+    bool exists(void) const { return id != REALM_NO_PROC; }
 
     typedef ::realm_task_func_id_t TaskFuncID;
     typedef void (*TaskFuncPtr)(const void *args, size_t arglen, const void *user_data,
@@ -849,6 +894,12 @@ namespace Realm {
     }
 
     /**
+     * \brief Implicit conversion operator to realm_runtime_t.
+     * \return The underlying realm_runtime_t instance
+     */
+    constexpr operator realm_runtime_t() const { return impl; }
+
+    /**
      * \brief Destructor that cleans up the runtime instance.
      */
     ~Runtime(void) { realm_runtime_destroy((impl)); }
@@ -1075,9 +1126,8 @@ namespace Realm {
                            const Event &wait_on = Event::NO_EVENT, int priority = 0)
     {
       realm_event_t eventIdOut;
-      REALM_CHECK(realm_runtime_collective_spawn(impl, target_proc.get_id(), task_id,
-                                                 args, arglen, wait_on, priority,
-                                                 &eventIdOut));
+      REALM_CHECK(realm_runtime_collective_spawn(impl, target_proc.id, task_id, args,
+                                                 arglen, wait_on, priority, &eventIdOut));
       return Event(eventIdOut);
     }
 
@@ -1188,22 +1238,14 @@ namespace Realm {
    * latency, and accessibility from different processors.
    */
   class Memory {
-  private:
-    realm_id_t id{REALM_NO_MEM};
-
   public:
+    realm_memory_t id{REALM_NO_MEM};
     Memory() = default;
-    constexpr explicit Memory(realm_id_t id)
+    constexpr explicit Memory(realm_memory_t id)
       : id(id)
     {}
 
-    constexpr operator realm_id_t() const { return id; }
-
-    /**
-     * \brief Get the internal ID for derived classes.
-     * \return The event ID
-     */
-    realm_id_t get_id() const { return id; }
+    constexpr operator realm_memory_t() const { return id; }
 
     bool operator<(const Memory &rhs) const { return id < rhs.id; }
     bool operator==(const Memory &rhs) const { return id == rhs.id; }
@@ -1215,7 +1257,7 @@ namespace Realm {
      * \brief Check whether this memory has a valid ID.
      * \return true if the memory has a valid ID, false otherwise
      */
-    bool exists(void) const { return id != 0; }
+    bool exists(void) const { return id != REALM_NO_MEM; }
 
     /**
      * \brief Get the address space this memory belongs to.
@@ -1283,7 +1325,7 @@ namespace Realm {
 
   inline std::ostream &operator<<(std::ostream &os, Memory m)
   {
-    return os << std::hex << m.get_id() << std::dec;
+    return os << std::hex << m.id << std::dec;
   }
 
   inline std::ostream &operator<<(std::ostream &os, Memory::Kind kind)
@@ -1310,15 +1352,23 @@ namespace Realm {
   class Machine {
   private:
     // Templated callback for collecting handles (Processor/Memory) into a std::set
-    template <typename HandleType, typename CHandleType>
-    static realm_status_t collect_handle_cb(CHandleType handle, void *user_data)
+    template <typename CHandleType>
+    static realm_status_t collect_handle_into_set_cb(CHandleType handle, void *user_data)
     {
-      std::set<HandleType> &set = *static_cast<std::set<HandleType> *>(user_data);
-      set.insert(HandleType(handle));
+      std::set<CHandleType> &set = *static_cast<std::set<CHandleType> *>(user_data);
+      set.insert(handle);
       return REALM_SUCCESS;
     }
 
-  private:
+    template <typename CHandleType>
+    static realm_status_t collect_handle_into_vector_cb(CHandleType handle,
+                                                        void *user_data)
+    {
+      std::vector<CHandleType> &vec = *static_cast<std::vector<CHandleType> *>(user_data);
+      vec.push_back(handle);
+      return REALM_SUCCESS;
+    }
+
     realm_runtime_t impl;
 
   protected:
@@ -1338,7 +1388,12 @@ namespace Realm {
     }
     ~Machine(void) {}
 
-    static Machine get_machine(void) { throw std::logic_error("Not implemented"); }
+    static Machine get_machine(void)
+    {
+      realm_runtime_t runtime;
+      REALM_CHECK(realm_runtime_get_runtime(&runtime));
+      return Machine(runtime);
+    }
 
     class ProcessorQuery;
     class MemoryQuery;
@@ -1386,7 +1441,7 @@ namespace Realm {
       REALM_CHECK(realm_memory_query_create(runtime, &query));
 
       REALM_CHECK(realm_memory_query_iter(
-          query, &Machine::collect_handle_cb<Memory, realm_memory_t>, &mset, SIZE_MAX));
+          query, &Machine::collect_handle_into_set_cb<realm_memory_t>, &mset, SIZE_MAX));
       REALM_CHECK(realm_memory_query_destroy(query));
     }
 
@@ -1402,7 +1457,7 @@ namespace Realm {
       REALM_CHECK(realm_processor_query_create(runtime, &query));
 
       REALM_CHECK(realm_processor_query_iter(
-          query, &Machine::collect_handle_cb<Processor, realm_processor_t>, &pset,
+          query, &Machine::collect_handle_into_set_cb<realm_processor_t>, &pset,
           SIZE_MAX));
       REALM_CHECK(realm_processor_query_destroy(query));
     }
@@ -1429,7 +1484,7 @@ namespace Realm {
       REALM_CHECK(realm_processor_query_restrict_to_address_space(query, runtime_space));
 
       REALM_CHECK(realm_processor_query_iter(
-          query, &Machine::collect_handle_cb<Processor, realm_processor_t>, &pset,
+          query, &Machine::collect_handle_into_set_cb<realm_processor_t>, &pset,
           SIZE_MAX));
       REALM_CHECK(realm_processor_query_destroy(query));
     }
@@ -1460,7 +1515,7 @@ namespace Realm {
       REALM_CHECK(realm_processor_query_restrict_to_address_space(query, runtime_space));
 
       REALM_CHECK(realm_processor_query_iter(
-          query, &Machine::collect_handle_cb<Processor, realm_processor_t>, &pset,
+          query, &Machine::collect_handle_into_set_cb<realm_processor_t>, &pset,
           SIZE_MAX));
       REALM_CHECK(realm_processor_query_destroy(query));
     }
@@ -1494,7 +1549,7 @@ namespace Realm {
       // For now, just get all memories
 
       REALM_CHECK(realm_memory_query_iter(
-          query, &Machine::collect_handle_cb<Memory, realm_memory_t>, &mset, SIZE_MAX));
+          query, &Machine::collect_handle_into_set_cb<realm_memory_t>, &mset, SIZE_MAX));
       REALM_CHECK(realm_memory_query_destroy(query));
 #endif
     }
@@ -1528,7 +1583,7 @@ namespace Realm {
       // For now, just get all memories
 
       REALM_CHECK(realm_memory_query_iter(
-          query, &Machine::collect_handle_cb<Memory, realm_memory_t>, &mset, SIZE_MAX));
+          query, &Machine::collect_handle_into_set_cb<realm_memory_t>, &mset, SIZE_MAX));
       REALM_CHECK(realm_memory_query_destroy(query));
 #endif
     }
@@ -1563,7 +1618,7 @@ namespace Realm {
       // For now, just get all processors
 
       REALM_CHECK(realm_processor_query_iter(
-          query, &Machine::collect_handle_cb<Processor, realm_processor_t>, &pset,
+          query, &Machine::collect_handle_into_set_cb<realm_processor_t>, &pset,
           SIZE_MAX));
       REALM_CHECK(realm_processor_query_destroy(query));
 #endif
@@ -1585,7 +1640,7 @@ namespace Realm {
       REALM_CHECK(realm_memory_query_restrict_by_capacity(query, min_capacity));
 
       REALM_CHECK(realm_memory_query_iter(
-          query, &Machine::collect_handle_cb<Memory, realm_memory_t>, &mset, SIZE_MAX));
+          query, &Machine::collect_handle_into_set_cb<realm_memory_t>, &mset, SIZE_MAX));
       REALM_CHECK(realm_memory_query_destroy(query));
     }
 
@@ -1709,33 +1764,30 @@ namespace Realm {
   template <typename QT, typename RT>
   class MachineQueryIterator {
   public:
-    // explicitly set iterator traits
     typedef std::input_iterator_tag iterator_category;
     typedef RT value_type;
     typedef std::ptrdiff_t difference_type;
     typedef RT *pointer;
     typedef RT &reference;
 
-    // would like this constructor to be protected and have QT be a friend.
-    //  The CUDA compiler also seems to be a little dense here as well
-#if (!defined(__CUDACC__) && !defined(__HIPCC__))
+#if(!defined(__CUDACC__) && !defined(__HIPCC__))
   protected:
     friend QT;
 #else
   public:
 #endif
-    MachineQueryIterator(const QT &_query, RT _result)
-      : query(_query)
+    MachineQueryIterator(const QT &query_ptr, RT _result)
+      : query_ptr(query_ptr)
       , result(_result)
     {}
 
   private:
-    QT query;
+    QT query_ptr;
     RT result;
 
   public:
     MachineQueryIterator(const MachineQueryIterator<QT, RT> &copy_from)
-      : query(copy_from.query)
+      : query_ptr(copy_from.query_ptr)
       , result(copy_from.result)
     {}
 
@@ -1743,14 +1795,14 @@ namespace Realm {
 
     MachineQueryIterator<QT, RT> &operator=(const MachineQueryIterator<QT, RT> &copy_from)
     {
-      query = copy_from.query;
+      query_ptr = copy_from.query_ptr;
       result = copy_from.result;
       return *this;
     }
 
     bool operator==(const MachineQueryIterator<QT, RT> &compare_to) const
     {
-      return (query == compare_to.query) && (result == compare_to.result);
+      return (query_ptr == compare_to.query_ptr) && (result == compare_to.result);
     }
 
     bool operator!=(const MachineQueryIterator<QT, RT> &compare_to) const
@@ -1764,17 +1816,18 @@ namespace Realm {
 
     MachineQueryIterator<QT, RT> &operator++(/*prefix*/)
     {
-      throw std::logic_error("Not implemented");
+      result = query_ptr.next(result);
+      return *this;
     }
 
     MachineQueryIterator<QT, RT> operator++(int /*postfix*/)
     {
-      throw std::logic_error("Not implemented");
+      MachineQueryIterator<QT, RT> tmp(*this);
+      ++(*this);
+      return tmp;
     }
 
-    // in addition to testing an iterator against .end(), you can also cast to bool,
-    // allowing for(iterator it = q.begin(); q; ++q) ...
-    operator bool(void) const { throw std::logic_error("Not implemented"); }
+    operator bool(void) const { return result != RT(); }
   };
 
   /**
@@ -1786,17 +1839,22 @@ namespace Realm {
    * all matching criteria is returned.
    */
   class Machine::ProcessorQuery {
+  private:
+    std::shared_ptr<realm_processor_query_st> impl = {nullptr};
+
   public:
     /**
      * \brief Construct a processor query for the given machine.
      * \param m The machine to query processors from
      */
     explicit ProcessorQuery(const Machine &m)
-      : impl(nullptr)
     {
       realm_runtime_t runtime;
       REALM_CHECK(realm_runtime_get_runtime(&runtime));
-      REALM_CHECK(realm_processor_query_create(runtime, &impl));
+      realm_processor_query_t query_handle;
+      REALM_CHECK(realm_processor_query_create(runtime, &query_handle));
+      impl = std::shared_ptr<realm_processor_query_st>(query_handle,
+                                                       realm_processor_query_destroy);
     }
 
     /**
@@ -1808,23 +1866,29 @@ namespace Realm {
     {}
 
     /**
+     * \brief Copy constructor from a raw query handle.
+     * \param q The raw query handle to copy from
+     */
+    ProcessorQuery(realm_processor_query_t q)
+      : impl(std::shared_ptr<realm_processor_query_st>(q, realm_processor_query_destroy))
+    {}
+
+    /**
      * \brief Destructor that cleans up the query resources.
      */
     ~ProcessorQuery(void)
     {
-      if(impl) {
-        realm_processor_query_destroy(impl);
-      }
+      // shared_ptr automatically handles cleanup when reference count reaches 0
     }
 
     ProcessorQuery &operator=(const ProcessorQuery &q)
     {
-      throw std::logic_error("Not implemented");
+      impl = q.impl;
+      return *this;
     }
 
     bool operator==(const ProcessorQuery &compare_to) const
     {
-      // Stub implementation
       return impl == compare_to.impl;
     }
 
@@ -1832,6 +1896,9 @@ namespace Realm {
     {
       return !(*this == compare_to);
     }
+
+    // implicit conversion to raw query handle
+    operator realm_processor_query_t(void) const { return impl.get(); }
 
     // filter predicates (returns self-reference for chaining)
     // if multiple predicates are used, they must all match (i.e. the intersection is
@@ -1844,9 +1911,9 @@ namespace Realm {
      */
     ProcessorQuery &only_kind(Processor::Kind kind)
     {
-      if(impl) {
+      if(impl != nullptr) {
         REALM_CHECK(realm_processor_query_restrict_to_kind(
-            impl, static_cast<realm_processor_kind_t>(kind)));
+            impl.get(), static_cast<realm_processor_kind_t>(kind)));
       }
       return *this;
     }
@@ -1863,13 +1930,14 @@ namespace Realm {
       realm_runtime_attr_t runtime_attr = REALM_RUNTIME_ATTR_LOCAL_ADDRESS_SPACE;
       uint64_t values;
 
-      if(impl) {
+      if(impl != nullptr) {
         REALM_CHECK(realm_runtime_get_runtime(&runtime));
         REALM_CHECK(realm_runtime_get_attributes(runtime, &runtime_attr, &values, 1));
         REALM_CHECK(realm_processor_query_create(runtime, &query));
 
         runtime_space = static_cast<realm_address_space_t>(values);
-        REALM_CHECK(realm_processor_query_restrict_to_address_space(impl, runtime_space));
+        REALM_CHECK(
+            realm_processor_query_restrict_to_address_space(impl.get(), runtime_space));
       }
       return *this;
     }
@@ -1930,26 +1998,53 @@ namespace Realm {
      * \brief Get the number of processors matching the query criteria.
      * \return Number of matching processors
      */
-    size_t count(void) const { throw std::logic_error("Not implemented"); }
+    size_t count(void) const
+    {
+      ensure_result_set();
+      return pset.size();
+    }
 
     /**
      * \brief Get the first processor matching the query criteria.
      * \return First matching processor, or NO_PROC if none match
      */
-    Processor first(void) const { throw std::logic_error("Not implemented"); }
+    Processor first(void) const
+    {
+      ensure_result_set();
+      return pset.empty() ? Processor(REALM_NO_PROC) : Processor(pset[0]);
+    }
 
     /**
      * \brief Get the next processor after the specified one that matches the criteria.
      * \param after The processor to search after
      * \return Next matching processor, or NO_PROC if none found
      */
-    Processor next(Processor after) const { throw std::logic_error("Not implemented"); }
+    Processor next(Processor after) const
+    {
+      ensure_result_set();
+      auto it =
+          std::find(pset.begin(), pset.end(), static_cast<realm_processor_t>(after));
+      if(it != pset.end()) {
+        ++it;
+        if(it != pset.end()) {
+          return Processor(*it);
+        }
+      }
+      return Processor(REALM_NO_PROC);
+    }
 
     /**
      * \brief Get a random processor matching the query criteria.
      * \return Random matching processor, or NO_PROC if none match
      */
-    Processor random(void) const { throw std::logic_error("Not implemented"); }
+    Processor random(void) const
+    {
+      ensure_result_set();
+      if(pset.empty()) {
+        return Processor(REALM_NO_PROC);
+      }
+      return Processor(pset[std::rand() % pset.size()]);
+    }
 
     typedef MachineQueryIterator<ProcessorQuery, Processor> iterator;
 
@@ -1957,16 +2052,34 @@ namespace Realm {
      * \brief Get an iterator to enumerate all matching processors.
      * \return Iterator pointing to the first matching processor
      */
-    iterator begin(void) const { return iterator(*this, first()); }
-
+    iterator begin() const
+    {
+      ensure_result_set();
+      return iterator(*this, first());
+    }
     /**
      * \brief Get an iterator representing the end of the query results.
      * \return End iterator
      */
-    iterator end(void) const { return iterator(*this, Processor(REALM_NO_PROC)); }
+    iterator end() const
+    {
+      ensure_result_set();
+      return iterator(*this, Processor(REALM_NO_PROC));
+    }
 
   private:
-    realm_processor_query_t impl;
+    void ensure_result_set() const
+    {
+      if(pset.empty() && impl != nullptr) {
+        REALM_CHECK(realm_processor_query_iter(
+            impl.get(), &Machine::collect_handle_into_vector_cb<realm_processor_t>, &pset,
+            SIZE_MAX));
+      }
+    }
+
+    // 'pset' is marked mutable because it is modified by ensure_result_set(), which is
+    // called from const member functions to allow lazy evaluation/caching.
+    mutable std::vector<realm_processor_t> pset;
   };
 
   /**
@@ -1976,17 +2089,22 @@ namespace Realm {
    * capacity, and affinity relationships with processors.
    */
   class Machine::MemoryQuery {
+  private:
+    std::shared_ptr<realm_memory_query_st> impl = {nullptr};
+
   public:
     /**
      * \brief Construct a query for all memories in the machine.
      * \param m The machine to query
      */
     explicit MemoryQuery(const Machine &m)
-      : impl(nullptr)
     {
       realm_runtime_t runtime;
       REALM_CHECK(realm_runtime_get_runtime(&runtime));
-      REALM_CHECK(realm_memory_query_create(runtime, &impl));
+      realm_memory_query_t query_handle;
+      REALM_CHECK(realm_memory_query_create(runtime, &query_handle));
+      impl = std::shared_ptr<realm_memory_query_st>(query_handle,
+                                                    realm_memory_query_destroy);
     }
 
     /**
@@ -1998,13 +2116,19 @@ namespace Realm {
     {}
 
     /**
+     * \brief Copy constructor from a raw query handle.
+     * \param q The raw query handle to copy from
+     */
+    MemoryQuery(realm_memory_query_t q)
+      : impl(std::shared_ptr<realm_memory_query_st>(q, realm_memory_query_destroy))
+    {}
+
+    /**
      * \brief Destructor.
      */
     ~MemoryQuery(void)
     {
-      if(impl) {
-        realm_memory_query_destroy(impl);
-      }
+      // shared_ptr automatically handles cleanup when reference count reaches 0
     }
 
     /**
@@ -2014,7 +2138,8 @@ namespace Realm {
      */
     MemoryQuery &operator=(const MemoryQuery &q)
     {
-      throw std::logic_error("Not implemented");
+      impl = q.impl;
+      return *this;
     }
 
     /**
@@ -2024,7 +2149,6 @@ namespace Realm {
      */
     bool operator==(const MemoryQuery &compare_to) const
     {
-      // Stub implementation
       return impl == compare_to.impl;
     }
 
@@ -2038,6 +2162,9 @@ namespace Realm {
       return !(*this == compare_to);
     }
 
+    // implicit conversion to raw query handle
+    operator realm_memory_query_t(void) const { return impl.get(); }
+
     // filter predicates (returns self-reference for chaining)
     // if multiple predicates are used, they must all match (i.e. the intersection is
     // returned)
@@ -2049,9 +2176,9 @@ namespace Realm {
      */
     MemoryQuery &only_kind(Memory::Kind kind)
     {
-      if(impl) {
+      if(impl != nullptr) {
         REALM_CHECK(realm_memory_query_restrict_to_kind(
-            impl, static_cast<realm_memory_kind_t>(kind)));
+            impl.get(), static_cast<realm_memory_kind_t>(kind)));
       }
       return *this;
     }
@@ -2068,13 +2195,14 @@ namespace Realm {
       realm_runtime_attr_t runtime_attr = REALM_RUNTIME_ATTR_LOCAL_ADDRESS_SPACE;
       uint64_t values;
 
-      if(impl) {
+      if(impl != nullptr) {
         REALM_CHECK(realm_runtime_get_runtime(&runtime));
         REALM_CHECK(realm_runtime_get_attributes(runtime, &runtime_attr, &values, 1));
         REALM_CHECK(realm_memory_query_create(runtime, &query));
 
         runtime_space = static_cast<realm_address_space_t>(values);
-        REALM_CHECK(realm_memory_query_restrict_to_address_space(impl, runtime_space));
+        REALM_CHECK(
+            realm_memory_query_restrict_to_address_space(impl.get(), runtime_space));
       }
       return *this;
     }
@@ -2161,40 +2289,61 @@ namespace Realm {
      */
     MemoryQuery &has_capacity(size_t min_bytes)
     {
-      if(impl) {
-        REALM_CHECK(realm_memory_query_restrict_by_capacity(impl, min_bytes));
+      if(impl != nullptr) {
+        REALM_CHECK(realm_memory_query_restrict_by_capacity(impl.get(), min_bytes));
       }
       return *this;
     }
 
     // results - a query may be executed multiple times - when the machine model is
     //  dynamic, there is no guarantee that the results of any two executions will be
-    //  consistent
 
-    /**
-     * \brief Get the number of memories matching the query criteria.
-     * \return Number of matching memories
-     */
-    size_t count(void) const { throw std::logic_error("Not implemented"); }
+    size_t count(void) const
+    {
+      ensure_result_set();
+      return mset.size();
+    }
 
     /**
      * \brief Get the first memory matching the query criteria.
      * \return First matching memory, or NO_MEMORY if none match
      */
-    Memory first(void) const { throw std::logic_error("Not implemented"); }
+    Memory first(void) const
+    {
+      ensure_result_set();
+      return mset.empty() ? Memory(REALM_NO_MEM) : Memory(mset[0]);
+    }
 
     /**
      * \brief Get the next memory after the specified one that matches the criteria.
      * \param after The memory to search after
      * \return Next matching memory, or NO_MEMORY if none found
      */
-    Memory next(Memory after) const { throw std::logic_error("Not implemented"); }
+    Memory next(Memory after) const
+    {
+      ensure_result_set();
+      auto it = std::find(mset.begin(), mset.end(), static_cast<realm_memory_t>(after));
+      if(it != mset.end()) {
+        ++it;
+        if(it != mset.end()) {
+          return Memory(*it);
+        }
+      }
+      return Memory(REALM_NO_MEM);
+    }
 
     /**
      * \brief Get a random memory matching the query criteria.
      * \return Random matching memory, or NO_MEMORY if none match
      */
-    Memory random(void) const { throw std::logic_error("Not implemented"); }
+    Memory random(void) const
+    {
+      ensure_result_set();
+      if(mset.empty()) {
+        return Memory(REALM_NO_MEM);
+      }
+      return Memory(mset[std::rand() % mset.size()]);
+    }
 
     typedef MachineQueryIterator<MemoryQuery, Memory> iterator;
 
@@ -2202,18 +2351,44 @@ namespace Realm {
      * \brief Get an iterator to enumerate all matching memories.
      * \return Iterator pointing to the first matching memory
      */
-    iterator begin(void) const { return iterator(*this, first()); }
+
+    iterator begin() const
+    {
+      ensure_result_set();
+      return iterator(*this, first());
+    }
 
     /**
      * \brief Get an iterator representing the end of the query results.
      * \return End iterator
      */
-    iterator end(void) const { return iterator(*this, Memory(REALM_NO_MEM)); }
+    iterator end() const
+    {
+      ensure_result_set();
+      return iterator(*this, Memory(REALM_NO_MEM));
+    }
 
   private:
-    realm_memory_query_t impl;
+    void ensure_result_set() const
+    {
+      if(mset.empty() && impl != nullptr) {
+        REALM_CHECK(realm_memory_query_iter(
+            impl.get(), &Machine::collect_handle_into_vector_cb<realm_memory_t>, &mset,
+            SIZE_MAX));
+      }
+    }
+
+    // 'mset' is marked mutable because it is modified by ensure_result_set(), which is
+    // called from const member functions to allow lazy evaluation/caching.
+    mutable std::vector<realm_memory_t> mset;
   };
+
+  /*static*/ const Processor Processor::NO_PROC{REALM_NO_PROC};
+  /*static*/ const Event Event::NO_EVENT{REALM_NO_EVENT};
+  /*static*/ const UserEvent UserEvent::NO_USER_EVENT{REALM_NO_USER_EVENT};
+  /*static*/ const Memory Memory::NO_MEMORY{REALM_NO_MEM};
+
 #undef REALM_TYPE_KINDS
-} // namespace Realm
+} // namespace REALM_NAMESPACE
 
 #endif // REALM_HPP
