@@ -77,6 +77,10 @@ typedef unsigned realm_event_gen_t;
 typedef int realm_field_id_t;
 typedef unsigned long long realm_barrier_timestamp_t;
 
+// in the first version, it is just a C++ InstanceLayout class, 
+// we will have a c struct version later
+typedef void realm_instance_layout_t;
+
 // type of external resource
 typedef enum realm_external_resource_type_enum
 {
@@ -341,6 +345,7 @@ typedef enum realm_status_enum
   REALM_REGION_INSTANCE_ERROR_INVALID_PARAMS = -12005,
   REALM_REGION_INSTANCE_ERROR_INVALID_COORD_TYPE = -12006,
   REALM_REGION_INSTANCE_ERROR_INVALID_ATTRIBUTE = -12007,
+  REALM_REGION_INSTANCE_ERROR_INVALID_INSTANCE_LAYOUT = -12008,
   REALM_EXTERNAL_RESOURCE_ERROR_INVALID_RESOURCE = -13001,
   REALM_EXTERNAL_RESOURCE_ERROR_INVALID_BASE = -13002,
   REALM_EXTERNAL_RESOURCE_ERROR_INVALID_SIZE = -13003,
@@ -857,6 +862,28 @@ realm_status_t REALM_EXPORT realm_region_instance_create(
     const realm_region_instance_create_params_t *instance_creation_params,
     realm_profiling_request_set_t prs, realm_event_t wait_on,
     realm_region_instance_t *instance, realm_event_t *event);
+
+/**
+ * @brief Creates a new region instance from an instance layout.
+ *
+ * @param runtime The runtime instance to use.
+ * @param instance_layout The instance layout to create the region instance from.
+ * @param memory The memory to create the region instance on.
+ * @param external_resource The external resource to create the region instance on.
+ * @param prs The profiling request set.
+ * @param wait_on The event to wait on before creating the region instance.
+ * @param[out] instance The region instance to be created.
+ * @param[out] event The event to signal upon region instance creation.
+ * @return Realm status indicating success or failure.
+ *
+ * @ingroup RegionInstance
+ */
+realm_status_t REALM_EXPORT realm_region_instance_create_from_instance_layout(
+  realm_runtime_t runtime, const realm_instance_layout_t *instance_layout,
+  realm_memory_t memory, const realm_external_resource_t *external_resource,
+  realm_profiling_request_set_t prs, realm_event_t wait_on,
+  realm_region_instance_t *instance, realm_event_t *event);
+
 
 /**
  * @brief Copies data between region instances.
