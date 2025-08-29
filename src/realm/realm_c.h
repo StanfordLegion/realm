@@ -125,18 +125,15 @@ typedef enum realm_coord_type_enum
 typedef struct realm_index_space_t {
   realm_coord_t lower_bound;
   realm_coord_t upper_bound;
-  size_t num_dims;
+  int num_dims;
   realm_coord_type_t coord_type;
+  realm_sparsity_handle_t sparsity_map;
 } realm_index_space_t;
 
 // data type of region instance create params
 typedef struct realm_region_instance_create_params_t {
   realm_memory_t memory;                // the memory where the region instance is created
-  realm_coord_t lower_bound;            // the lower bound of the region instance
-  realm_coord_t upper_bound;            // the upper bound of the region instance
-  size_t num_dims;                      // the number of dimensions of the region instance
-  realm_coord_type_t coord_type;        // the data type of the coordinate
-  realm_sparsity_handle_t sparsity_map; // the sparsity map of the region instance
+  realm_index_space_t space;            // the index space of the region instance
   realm_field_id_t *field_ids;          // the field ids of the region instance
   size_t *field_sizes;                  // the field sizes of the region instance
   size_t num_fields;                    // the number of fields of the region instance
@@ -155,11 +152,7 @@ typedef struct realm_region_instance_copy_params_t {
   realm_copy_src_dst_field_t *srcs;     // the source fields to be copied
   realm_copy_src_dst_field_t *dsts;     // the destination fields to be copied
   size_t num_fields;                    // the number of fields to be copied
-  realm_coord_t lower_bound;            // the lower bound of the region instance
-  realm_coord_t upper_bound;            // the upper bound of the region instance
-  size_t num_dims;                      // the number of dimensions of the region instance
-  realm_coord_type_t coord_type;        // the data type of the coordinate
-  realm_sparsity_handle_t sparsity_map; // the sparsity map of the region instance
+  realm_index_space_t space;            // the index space of the region instance
 } realm_region_instance_copy_params_t;
 
 #define REALM_NO_PROC ((realm_processor_t)0ULL)

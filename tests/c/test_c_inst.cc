@@ -76,13 +76,17 @@ static void test_copy(realm_runtime_t runtime, realm_memory_t src_mem,
   realm_field_id_t field_ids[1] = {FID_BASE};
   size_t field_sizes[1] = {sizeof(int)};
 
+  realm_index_space_t space = {
+    .lower_bound = lower_bound,
+    .upper_bound = upper_bound,
+    .num_dims = N,
+    .coord_type = coord_type,
+    .sparsity_map = nullptr,
+  };
+
   realm_region_instance_create_params_t src_instance_params = {
       .memory = src_mem,
-      .lower_bound = lower_bound,
-      .upper_bound = upper_bound,
-      .num_dims = N,
-      .coord_type = coord_type,
-      .sparsity_map = nullptr,
+      .space = space,
       .field_ids = field_ids,
       .field_sizes = field_sizes,
       .num_fields = 1,
@@ -92,21 +96,6 @@ static void test_copy(realm_runtime_t runtime, realm_memory_t src_mem,
   CHECK_REALM(realm_region_instance_create(runtime, &src_instance_params, nullptr,
                                            REALM_NO_EVENT, &src_inst, &event));
   CHECK_REALM(realm_event_wait(runtime, event, REALM_WAIT_INFINITE, nullptr));
-  // realm_region_instance_create_params_t dst_instance_params = {
-  //     .memory = dst_mem,
-  //     .lower_bound = lower_bound,
-  //     .upper_bound = upper_bound,
-  //     .num_dims = N,
-  //     .coord_type = coord_type,
-  //     .sparsity_map = nullptr,
-  //     .field_ids = field_ids,
-  //     .field_sizes = field_sizes,
-  //     .num_fields = 1,
-  //     .block_size = 0,
-  //     .external_resource = nullptr,
-  // };
-  // CHECK_REALM(realm_region_instance_create(runtime, &dst_instance_params, nullptr,
-  //                                          REALM_NO_EVENT, &dst_inst, &event));
 
   realm_field_layout_t field_layout;
   field_layout.field_id = FID_BASE;
@@ -116,13 +105,10 @@ static void test_copy(realm_runtime_t runtime, realm_memory_t src_mem,
   instance_layout.field_layouts = &field_layout;
   instance_layout.num_piece_lists = 0; // SOA
   instance_layout.alignment_reqd = 32;
-  instance_layout.space.num_dims = N;
-  instance_layout.space.coord_type = coord_type;
-  instance_layout.space.lower_bound = lower_bound;
-  instance_layout.space.upper_bound = upper_bound;
+  instance_layout.space = space;
 
   int dim_order[N];
-  for(size_t dim = 0; dim < N; dim++) {
+  for(int dim = 0; dim < N; dim++) {
     dim_order[dim] = dim;
   }
   instance_layout.dim_order = dim_order;
@@ -152,11 +138,7 @@ static void test_copy(realm_runtime_t runtime, realm_memory_t src_mem,
       .srcs = srcs,
       .dsts = dsts,
       .num_fields = 1,
-      .lower_bound = lower_bound,
-      .upper_bound = upper_bound,
-      .num_dims = N,
-      .coord_type = coord_type,
-      .sparsity_map = nullptr,
+      .space = space
   };
 
   CHECK_REALM(realm_region_instance_copy(runtime, &copy_params, nullptr, REALM_NO_EVENT,
