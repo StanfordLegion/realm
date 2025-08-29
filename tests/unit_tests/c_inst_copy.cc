@@ -211,9 +211,9 @@ TEST_F(CInstCopyTest, CopyInvalidLowerBound)
   params.srcs = &srcs;
   params.dsts = &dsts;
   params.num_fields = 1;
-  params.lower_bound = nullptr;
+  params.space.lower_bound = nullptr;
   int upper_bound[1] = {10};
-  params.upper_bound = upper_bound;
+  params.space.upper_bound = upper_bound;
   realm_event_t event;
 
   realm_status_t status =
@@ -234,8 +234,8 @@ TEST_F(CInstCopyTest, CopyInvalidUpperBound)
   params.dsts = &dsts;
   params.num_fields = 1;
   int lower_bound[1] = {10};
-  params.lower_bound = lower_bound;
-  params.upper_bound = nullptr;
+  params.space.lower_bound = lower_bound;
+  params.space.upper_bound = nullptr;
   realm_event_t event;
 
   realm_status_t status =
@@ -256,9 +256,9 @@ TEST_F(CInstCopyTest, CopyZeroDim)
   params.dsts = &dsts;
   params.num_fields = 1;
   int bound[1] = {10};
-  params.lower_bound = bound;
-  params.upper_bound = bound;
-  params.num_dims = 0;
+  params.space.lower_bound = bound;
+  params.space.upper_bound = bound;
+  params.space.num_dims = 0;
   realm_event_t event;
 
   realm_status_t status =
@@ -279,9 +279,9 @@ TEST_F(CInstCopyTest, CopyOverMaxDim)
   params.dsts = &dsts;
   params.num_fields = 1;
   int bound[1] = {10};
-  params.lower_bound = bound;
-  params.upper_bound = bound;
-  params.num_dims = REALM_MAX_DIM + 1;
+  params.space.lower_bound = bound;
+  params.space.upper_bound = bound;
+  params.space.num_dims = REALM_MAX_DIM + 1;
   realm_event_t event;
 
   realm_status_t status =
@@ -305,10 +305,10 @@ TEST_F(CInstCopyTest, CopyInvalidCoordType)
   params.dsts = &dsts;
   params.num_fields = 1;
   int bound[1] = {10};
-  params.lower_bound = bound;
-  params.upper_bound = bound;
-  params.num_dims = 1;
-  params.coord_type = static_cast<realm_coord_type_t>(REALM_COORD_TYPE_NUM + 1);
+  params.space.lower_bound = bound;
+  params.space.upper_bound = bound;
+  params.space.num_dims = 1;
+  params.space.coord_type = static_cast<realm_coord_type_t>(REALM_COORD_TYPE_NUM + 1);
   realm_event_t event;
 
   realm_status_t status =
@@ -382,10 +382,10 @@ TYPED_TEST(CInstCopyTestN, CopySuccess)
     upper_bound[i] = 10;
   }
 
-  params.lower_bound = lower_bound;
-  params.upper_bound = upper_bound;
-  params.num_dims = N;
-  params.coord_type = REALM_COORD_TYPE_INT;
+  params.space.lower_bound = lower_bound;
+  params.space.upper_bound = upper_bound;
+  params.space.num_dims = N;
+  params.space.coord_type = REALM_COORD_TYPE_INT;
 
   realm_event_t event;
   int priority = 0;
