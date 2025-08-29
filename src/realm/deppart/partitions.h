@@ -40,6 +40,23 @@ namespace Realm {
   class PartitioningMicroOp;
   class PartitioningOperation;
 
+  // Data representations for GPU micro-ops
+  // src idx tracks which subspace each rect/point
+  // belongs to and allows multiple subspaces to be
+  // computed together in a micro-op
+
+  template<int N, typename T>
+  struct RectDesc {
+    Rect<N,T> rect;
+    size_t src_idx;
+  };
+
+  template<int N, typename T>
+  struct PointDesc {
+    Point<N,T> point;
+    size_t src_idx;
+  };
+
 
   template <int N, typename T>
   class OverlapTester {
@@ -108,6 +125,8 @@ namespace Realm {
     template <int N, typename T>
     void sparsity_map_ready(SparsityMapImpl<N,T> *sparsity, bool precise);
 
+    Event realm_malloc(RegionInstance &result, size_t size, Memory location = Memory::NO_MEMORY);
+
     IntrusiveListLink<PartitioningMicroOp> uop_link;
     REALM_PMTA_DEFN(PartitioningMicroOp,IntrusiveListLink<PartitioningMicroOp>,uop_link);
     typedef IntrusiveList<PartitioningMicroOp, REALM_PMTA_USE(PartitioningMicroOp,uop_link), DummyLock> MicroOpList;
@@ -145,6 +164,24 @@ namespace Realm {
     PartitioningOperation *op;
     std::vector<IndexSpace<N,T> > input_spaces;
     std::vector<SparsityMapImpl<N,T> *> extra_deps;
+  };
+
+  //The parent class for all GPU partitioning micro-ops. Provides output utility functions
+
+  template<int N, typename T>
+  class GPUMicroOp : public PartitioningMicroOp {
+  public:
+    GPUMicroOp(void) = default;
+    virtual ~GPUMicroOp(void) = default;
+
+    virtual void execute(void) = 0;
+
+    template<typename Container, typename IndexFn, typename MapFn>
+    void complete_pipeline(PointDesc<N, T>* d_points, size_t total_pts, Memory my_mem, const Container& ctr, IndexFn getIndex, MapFn getMap);
+
+    template<typename Container, typename IndexFn, typename MapFn>
+    void send_output(RectDesc<N, T>* d_rects, size_t total_rects, Memory my_mem, const Container& ctr, IndexFn getIndex, MapFn getMap);
+
   };
 
   ////////////////////////////////////////

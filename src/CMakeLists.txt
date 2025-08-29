@@ -147,7 +147,7 @@ configure_file(
   @ONLY
 )
 
-# generate per-dimension object files for deppart stuff
+# Generate per-dimension object files for CPU deppart.
 foreach(INST_N1 RANGE 1 ${REALM_MAX_DIM})
   foreach(INST_N2 RANGE 1 ${REALM_MAX_DIM})
     foreach(SRCFILE realm/deppart/image realm/deppart/preimage realm/deppart/byfield)
@@ -157,6 +157,18 @@ foreach(INST_N1 RANGE 1 ${REALM_MAX_DIM})
       list(APPEND REALM_SOURCES "${_result_file}")
     endforeach()
   endforeach()
+endforeach()
+
+# Generate per-dimension object files for GPU deppart.
+foreach(INST_N1 RANGE 1 ${REALM_MAX_DIM})
+    foreach(INST_N2 RANGE 1 ${REALM_MAX_DIM})
+        foreach(SRCFILE realm/deppart/byfield)
+            set(_result_file "${CMAKE_CURRENT_BINARY_DIR}/${SRCFILE}_gpu_${INST_N1}_${INST_N2}.cu")
+            # use cmake's configure_file for a portable way of creating wrapper source files
+            configure_file("${PROJECT_SOURCE_DIR}/cmake/deppart_tmpl.cu.in" "${_result_file}")
+            list(APPEND REALM_SOURCES "${_result_file}")
+        endforeach()
+    endforeach()
 endforeach()
 
 set(REALM_SOURCES
