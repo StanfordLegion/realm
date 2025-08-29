@@ -76,10 +76,17 @@ public:
   {
     MockRuntimeImpl::init(num_nodes);
     local_event_free_list = new LocalEventTableAllocator::FreeList(local_events, 0);
+
+    // Set the global runtime singleton so that realm_runtime_get_runtime() can find it
+    // This is needed for the HPP Event class methods to work properly
+    runtime_singleton = this;
   }
 
   void finalize(void)
   {
+    // Clear the global runtime singleton
+    runtime_singleton = nullptr;
+
     delete local_event_free_list;
     local_event_free_list = nullptr;
     MockRuntimeImpl::finalize();

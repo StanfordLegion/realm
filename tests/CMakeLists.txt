@@ -154,6 +154,21 @@ target_link_libraries(
   realm_c_unit_tests PRIVATE realm_obj GTest::gmock_main ${REALM_LIBRARIES} ${REALM_EXTRA_OBJS}
 )
 
+list(
+  APPEND
+  REALM_HPP_UNIT_TESTS
+  hpp_runtime_test.cc
+  hpp_event_test.cc
+)
+list(TRANSFORM REALM_HPP_UNIT_TESTS PREPEND "${REALM_TEST_DIR}/unit_tests/")
+add_executable(realm_hpp_unit_tests ${REALM_HPP_UNIT_TESTS})
+# Needed for designated initializers
+# TODO(apriakhin): to be removed
+target_compile_features(realm_hpp_unit_tests PUBLIC cxx_std_20)
+target_link_libraries(
+  realm_hpp_unit_tests PRIVATE realm_obj GTest::gmock_main ${REALM_LIBRARIES} ${REALM_EXTRA_OBJS}
+)
+
 include(GoogleTest)
 if((NOT REALM_SANITIZER OR REALM_SANITIZER STREQUAL "NONE")
    AND NOT WIN32
@@ -161,10 +176,12 @@ if((NOT REALM_SANITIZER OR REALM_SANITIZER STREQUAL "NONE")
 )
   gtest_discover_tests(realm_unit_tests NO_PRETTY_TYPES NO_PRETTY_VALUES PROPERTIES LABELS "unit")
   gtest_discover_tests(realm_c_unit_tests NO_PRETTY_TYPES NO_PRETTY_VALUES PROPERTIES LABELS "unit")
+  gtest_discover_tests(realm_hpp_unit_tests NO_PRETTY_TYPES NO_PRETTY_VALUES PROPERTIES LABELS "unit")
 else()
   add_test(NAME realm_unit_tests COMMAND $<TARGET_FILE:realm_unit_tests>)
   add_test(NAME realm_c_unit_tests COMMAND $<TARGET_FILE:realm_c_unit_tests>)
-  set_tests_properties(realm_unit_tests realm_c_unit_tests PROPERTIES LABELS "unit")
+  add_test(NAME realm_hpp_unit_tests COMMAND $<TARGET_FILE:realm_hpp_unit_tests>)
+  set_tests_properties(realm_unit_tests realm_c_unit_tests realm_hpp_unit_tests PROPERTIES LABELS "unit")
 endif()
 
 if(REALM_SANITIZER STREQUAL "ASAN")
@@ -186,7 +203,7 @@ if(REALM_ENABLE_COVERAGE)
         Coverage -L unit
       BYPRODUCTS coverage.xml
       WORKING_DIRECTORY ${PROJECT_BINARY_DIR}
-      DEPENDS realm_unit_tests realm_c_unit_tests VERBATIUM
+      DEPENDS realm_unit_tests realm_c_unit_tests realm_hpp_unit_tests VERBATIUM
       COMMENT "Running opencppcoverage to produce Cobertura coverage report"
     )
     # Show info where to find the report
@@ -216,6 +233,7 @@ if(REALM_ENABLE_COVERAGE)
       DEPENDENCIES
       realm_unit_tests
       realm_c_unit_tests
+      realm_hpp_unit_tests
       BASE_DIRECTORY
       "${REALM_TEST_DIR}/../.."
       EXCLUDE
@@ -427,6 +445,9 @@ if(TEST_USE_GPU)
   target_link_libraries(task_stream ${TEST_GPU_LIBS})
 endif()
 
+#### HPP API tests
+add_integration_test(hpp_runtime "${REALM_TEST_DIR}/hpp/test_runtime.cc")
+
 #### C API tests
 add_integration_test(c_runtime "${REALM_TEST_DIR}/c/test_runtime.cc")
 add_integration_test(c_processor_query "${REALM_TEST_DIR}/c/test_processor_query.cc")
@@ -496,6 +517,6 @@ endif()
 
 add_custom_target(
   check
-  DEPENDS ${_integ_list} realm_unit_tests realm_c_unit_tests
+  DEPENDS ${_integ_list} realm_unit_tests realm_c_unit_tests realm_hpp_unit_tests
   COMMAND ${CMAKE_CTEST_COMMAND} -j --output-on-failure
 )
