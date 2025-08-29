@@ -108,15 +108,26 @@ static void test_copy(realm_runtime_t runtime, realm_memory_t src_mem,
   // CHECK_REALM(realm_region_instance_create(runtime, &dst_instance_params, nullptr,
   //                                          REALM_NO_EVENT, &dst_inst, &event));
 
+  realm_field_layout_t field_layout;
+  field_layout.field_id = FID_BASE;
+  field_layout.size_in_bytes = sizeof(int);
+  realm_instance_layout_t instance_layout;
+  instance_layout.num_fields = 1;
+  instance_layout.field_layouts = &field_layout;
+  instance_layout.num_piece_lists = 0; // SOA
+  instance_layout.alignment_reqd = 32;
+  instance_layout.space.num_dims = N;
+  instance_layout.space.coord_type = coord_type;
+  instance_layout.space.lower_bound = lower_bound;
+  instance_layout.space.upper_bound = upper_bound;
+
   int dim_order[N];
-  for(int dim = 0; dim < N; dim++) {
+  for(size_t dim = 0; dim < N; dim++) {
     dim_order[dim] = dim;
   }
-  Realm::InstanceLayoutConstraints ilc(field_ids, field_sizes, 1, 0);
-  Realm::InstanceLayoutGeneric *instance_layout = Realm::InstanceLayoutGeneric::choose_instance_layout<N, T>(
-    Realm::IndexSpace<N, T>(rect), ilc, dim_order);
+  instance_layout.dim_order = dim_order;
 
-  realm_region_instance_create_from_instance_layout(runtime, instance_layout, dst_mem, nullptr, nullptr, REALM_NO_EVENT, &dst_inst, &event);
+  realm_region_instance_create_from_instance_layout(runtime, &instance_layout, dst_mem, nullptr, nullptr, REALM_NO_EVENT, &dst_inst, &event);
   CHECK_REALM(realm_event_wait(runtime, event, REALM_WAIT_INFINITE, nullptr));
   Realm::RegionInstance src_inst_cxx = Realm::RegionInstance(src_inst);
   Realm::RegionInstance dst_inst_cxx = Realm::RegionInstance(dst_inst);
@@ -238,7 +249,7 @@ void REALM_FNPTR main_task(const void *args, size_t arglen, const void *userdata
                             cpu_mem_query_args.mems[dst_mem_idx], rect3d_ll,
                             REALM_COORD_TYPE_LONG_LONG, proc);
 
-    log_app.print("test_copy 3D int");
+    log_app.info("test_copy 3D int");
     Realm::Rect<3, int> rect3d_int(
         Realm::Point<3, int>(0, 0, 0),
         Realm::Point<3, int>(upper_size - 1, upper_size - 1, upper_size - 1));

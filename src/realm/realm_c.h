@@ -77,10 +77,6 @@ typedef unsigned realm_event_gen_t;
 typedef int realm_field_id_t;
 typedef unsigned long long realm_barrier_timestamp_t;
 
-// in the first version, it is just a C++ InstanceLayout class, 
-// we will have a c struct version later
-typedef void realm_instance_layout_t;
-
 // type of external resource
 typedef enum realm_external_resource_type_enum
 {
@@ -225,6 +221,22 @@ typedef struct realm_region_instance_attr_value_t {
     realm_memory_t memory;
   } value;
 } realm_region_instance_attr_value_t;
+
+// in the first version, we use the necessary variables
+// for creating affine layout
+typedef struct realm_field_layout_st {
+  realm_field_id_t field_id;
+  size_t size_in_bytes;
+} realm_field_layout_t;
+
+typedef struct realm_instance_layout_st {
+  size_t alignment_reqd;
+  realm_field_layout_t *field_layouts;
+  size_t num_fields;
+  realm_index_space_t space;
+  size_t num_piece_lists;
+  int *dim_order;
+} realm_instance_layout_t;
 
 // Different Processor types
 // clang-format off
