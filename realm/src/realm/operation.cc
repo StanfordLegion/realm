@@ -505,6 +505,42 @@ namespace Realm {
 #endif
   }
 
+  void OperationTable::cancel_pending_ops(NodeID peer)
+  {
+    std::vector<Operation *> ops;
+    std::vector<Event> events;
+    for(int table_idx = 0; table_idx < NUM_TABLES; table_idx++) {
+      AutoLock<> al(mutexes[table_idx]);
+      for(const auto [event, entry] : tables[table_idx]) {
+        if(entry.remote_node == peer) {
+          events.emplace_back(entry.finish_event);
+          if(entry.local_op) {
+            ops.emplace_back(entry.local_op);
+          }
+        }
+      }
+    }
+
+    for(size_t i = 0; i < ops.size(); i++) {
+      void *reason_data = 0;
+      size_t reason_size = 0;
+      bool ok = ops[i]->attempt_cancellation(Realm::Faults::ERROR_CANCELLED, reason_data,
+                                             reason_size);
+      assert(ok);
+      if(reason_data) {
+        free(reason_data);
+      }
+      ops[i]->remove_reference();
+    }
+
+    for(size_t i = 0; i < events.size(); i++) {
+      bool poisoned = false;
+      if(!events[i].has_triggered_faultaware(poisoned)) {
+        GenEventImpl::trigger(events[i], true);
+      }
+    }
+  }
+
   void OperationTable::add_remote_operation(Event finish_event, int remote_node)
   {
 #ifdef REALM_USE_OPERATION_TABLE

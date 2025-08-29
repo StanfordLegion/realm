@@ -134,7 +134,7 @@ option(REALM_ENABLE_HDF5 "Compile with HDF5 support" ON)
 option(REALM_ENABLE_MPI "Compile with MPI support" OFF)
 option(REALM_ENABLE_OPENMP "Compile with OpenMP support" ON)
 option(REALM_ENABLE_KOKKOS "Compile with kokkos support" OFF)
-cmake_dependent_option(REALM_ENABLE_UCX "Compile with UCX support" OFF "NOT WIN32" OFF)
+cmake_dependent_option(REALM_ENABLE_UCX "Compile with UCX support" ON "NOT WIN32" OFF)
 option(REALM_ENABLE_UDP, "Compile UDP support" ON)
 cmake_dependent_option(
   REALM_INSTALL_UCX_BOOTSTRAPS "Install UCX bootstraps" ON "REALM_ENABLE_INSTALL; REALM_ENABLE_UCX"
@@ -142,7 +142,7 @@ cmake_dependent_option(
 )
 option(REALM_ENABLE_HWLOC "Compile with hwloc hardware discovery support" OFF)
 option(REALM_ENABLE_PAPI "Compile with PAPI thread profiling support" ON)
-option(REALM_ENABLE_CPPTRACE "Compile with cpptrace backtrace support" OFF)
+option(REALM_ENABLE_CPPTRACE "Compile with cpptrace backtrace support" ON)
 option(REALM_ENABLE_PREALM "Compile with realm profiler" OFF)
 cmake_dependent_option(
   REALM_ENABLE_LIBDL "Compile with dynamic runtime linking support" ON "NOT WIN32" OFF

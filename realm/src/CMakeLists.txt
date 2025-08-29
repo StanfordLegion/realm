@@ -126,6 +126,8 @@ if(REALM_USE_UDP)
     udp/udp_shim.cc
     udp/udp_module.h
     membership/membership_mesh.cc
+    membership/gossip.cc
+    membership/heartbeat.cc
   )
 endif()
 

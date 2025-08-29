@@ -15,6 +15,7 @@
  */
 
 #include "realm/logging.h"
+#include "realm/ucx/ucp_internal.h"
 
 #ifdef REALM_USE_CUDA
 #include "realm/cuda/cuda_module.h"
@@ -416,11 +417,40 @@ namespace Realm {
       }
     }
 
-    bool UCPWorker::ep_add(int target, ucp_address_t *addr, int remote_dev_index)
+    namespace {
+      struct UCPUserData {
+        Realm::NetworkModule *module;
+        NodeID target;
+      };
+
+      void ucp_error_cb(void *arg, ucp_ep_h /*ep*/, ucs_status_t /*status*/)
+      {
+        auto *user_data = static_cast<UCPUserData *>(arg);
+        if(user_data) {
+          user_data->module->notify_peer_failure(user_data->target,
+                                                 PeerFailureKind::TransportError);
+        }
+      }
+    } // namespace
+
+    bool UCPWorker::ep_add(int target, ucp_address_t *addr, int remote_dev_index,
+                           Realm::NetworkModule *module, bool enable_timeout)
     {
       ucp_ep_h ep;
       ucp_ep_params_t ep_params;
       ep_params.field_mask = UCP_EP_PARAM_FIELD_REMOTE_ADDRESS;
+
+      if(enable_timeout) {
+        ep_params.field_mask |= UCP_EP_PARAM_FIELD_ERR_HANDLING_MODE;
+        ep_params.err_mode = UCP_ERR_HANDLING_MODE_PEER;
+        ep_params.field_mask |=
+            UCP_EP_PARAM_FIELD_ERR_HANDLER | UCP_EP_PARAM_FIELD_USER_DATA;
+        static ucp_err_handler_t errh = {&ucp_error_cb};
+        ep_params.err_handler = errh;
+        auto *ud = new UCPUserData{module, target};
+        ep_params.user_data = ud;
+      }
+
       ep_params.address = addr;
 
 #ifdef REALM_USE_CUDA

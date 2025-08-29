@@ -15,6 +15,7 @@
 
 #include "realm/proc_impl.h"
 
+#include "realm/network.h"
 #include "realm/timers.h"
 #include "realm/runtime_impl.h"
 #include "realm/logging.h"
@@ -90,6 +91,7 @@ namespace Realm {
 
     p->spawn_task(func_id, args, arglen, ProfilingRequestSet(), wait_on, finish_event,
                   ID(e).event_generation(), priority);
+
     return e;
   }
 
@@ -764,6 +766,7 @@ namespace Realm {
   {
     // check for spawn to remote processor group
     NodeID target = ID(me).pgroup_owner_node();
+
     if(target != Network::my_node_id) {
       Event e = finish_event->make_event(finish_gen);
       log_task.debug() << "sending remote spawn request:"
@@ -786,6 +789,7 @@ namespace Realm {
                          target, false /*without congestion*/));
 
         ActiveMessage<SpawnTaskMessage> amsg(target, to_send);
+
         amsg->proc = me;
         amsg->finish_event = e;
         amsg->func_id = func_id;
@@ -933,8 +937,6 @@ namespace Realm {
                                    EventImpl::gen_t finish_gen, int priority)
   {
     Event e = finish_event->make_event(finish_gen);
-    log_task.debug() << "sending remote spawn request:"
-                     << " func=" << func_id << " proc=" << me << " finish=" << e;
 
     ID id(me);
     NodeID target = 0;
@@ -945,6 +947,10 @@ namespace Realm {
     else {
       assert(0);
     }
+
+    log_task.error() << "sending remote spawn request:"
+                     << " func=" << func_id << " proc=" << me << " finish=" << e
+                     << " target:" << target << " me:" << Network::my_node_id;
 
     get_runtime()->optable.add_remote_operation(e, target);
 

@@ -57,7 +57,11 @@ namespace Realm {
     while(!module->shutting_down_.load()) {
       AutoLock<> al(module->peer_map_mutex);
       for(auto &kv : module->peer_map_) {
-        kv.second->retransmit.poll(Clock::current_time_in_microseconds());
+        bool ok = kv.second->retransmit.poll(Clock::current_time_in_microseconds());
+        if(!ok) {
+          // module->notify_peer_failure(kv.first, PeerFailureKind::TransportError);
+          // return false;
+        }
       }
       break;
     }
@@ -123,6 +127,11 @@ namespace Realm {
       const bool is_ack = (uh->msgid == 0) && (uh->payload_size == 0);
       module->register_peer(uh->src, src.sin_addr.s_addr, ntohs(src.sin_port));
       UDPPeerShim *peer = module->ensure_peer(uh->src);
+
+      if(!peer) {
+        did_work = false;
+        break;
+      }
 
       peer->retransmit.handle_tx(uh->seq, uh->ack_bits);
       if(!is_ack) {
@@ -335,8 +344,8 @@ namespace Realm {
   void UDPModule::collect_quiescence_counters(NodeID node, QuiescenceCounters &out)
   { // TODO: THIS NEEDS MORE WORK
     AutoLock<> al(peer_map_mutex);
-    for(auto &kv : peer_map_) {
-      out.outstanding += kv.second->retransmit.num_outstanding();
+    if(peer_map_.find(node) != peer_map_.end()) {
+      out.outstanding += peer_map_[node]->retransmit.num_outstanding();
     }
   }
 
@@ -476,13 +485,13 @@ namespace Realm {
     }
 
     const NodeMeta *nm = runtime_->node_directory->lookup(id);
+
     if(nm != nullptr) {
       register_peer(id, nm->ip, nm->udp_port);
-    } else {
-      assert(0);
-      peer_map_[id] = new UDPPeerShim(this);
+      return peer_map_[id];
     }
-    return peer_map_[id];
+
+    return nullptr;
   }
 
   /* ------------------------------------------------------------------ */
@@ -579,6 +588,9 @@ namespace Realm {
     if(multicast_) {
       for(NodeSetIterator it(targets_); it != targets_.end(); ++it) {
         auto peer = mod_->ensure_peer(*it);
+        if(!peer) {
+          return; // TODO: EVALUATE WHAT TO DO
+        }
         peer->retransmit.enqueue(pkt, [](void *h, uint16_t seq, uint16_t ack) {
           auto *uh = reinterpret_cast<UDPModule::UDPHeader *>(h);
           uh->seq = seq;
@@ -587,6 +599,9 @@ namespace Realm {
       }
     } else {
       auto peer = mod_->ensure_peer(target_);
+      if(!peer) {
+        return;
+      }
       peer->retransmit.enqueue(pkt, [](void *h, uint16_t seq, uint16_t ack) {
         auto *uh = reinterpret_cast<UDPModule::UDPHeader *>(h);
         uh->seq = seq;
