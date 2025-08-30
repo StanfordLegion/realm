@@ -70,7 +70,8 @@ protected:
 
 // test realm_region_instance_create and realm_region_instance_destroy
 
-class CInstCreateFromInstanceLayoutTest : public CInstLayoutBaseTest, public ::testing::Test {
+class CInstCreateFromInstanceLayoutTest : public CInstLayoutBaseTest,
+                                          public ::testing::Test {
 protected:
   void SetUp() override { CInstLayoutBaseTest::initialize(1); }
 
@@ -100,8 +101,9 @@ TEST_F(CInstCreateFromInstanceLayoutTest, CreateNullRuntime)
   instance_layout.dim_order = dim_order;
   realm_event_t event;
 
-  realm_status_t status = realm_region_instance_create_from_instance_layout(nullptr, &instance_layout, REALM_NO_MEM, nullptr, nullptr,
-                                                       REALM_NO_EVENT, &inst, &event);
+  realm_status_t status = realm_region_instance_create_from_instance_layout(
+      nullptr, &instance_layout, REALM_NO_MEM, nullptr, nullptr, REALM_NO_EVENT, &inst,
+      &event);
 
   EXPECT_EQ(status, REALM_RUNTIME_ERROR_NOT_INITIALIZED);
 }
@@ -130,8 +132,9 @@ TEST_F(CInstCreateFromInstanceLayoutTest, CreateInvalidMemory)
   instance_layout.dim_order = dim_order;
   realm_event_t event;
 
-  realm_status_t status = realm_region_instance_create_from_instance_layout(runtime, &instance_layout, REALM_NO_MEM, nullptr, nullptr,
-                                                                            REALM_NO_EVENT, &inst, &event);
+  realm_status_t status = realm_region_instance_create_from_instance_layout(
+      runtime, &instance_layout, REALM_NO_MEM, nullptr, nullptr, REALM_NO_EVENT, &inst,
+      &event);
 
   EXPECT_EQ(status, REALM_MEMORY_ERROR_INVALID_MEMORY);
 }
@@ -159,8 +162,9 @@ TEST_F(CInstCreateFromInstanceLayoutTest, CreateInvalidLowerBound)
   instance_layout.dim_order = dim_order;
   realm_event_t event;
 
-  realm_status_t status = realm_region_instance_create_from_instance_layout(runtime, &instance_layout, REALM_NO_MEM, nullptr, nullptr,
-                                                                            REALM_NO_EVENT, &inst, &event);
+  realm_status_t status = realm_region_instance_create_from_instance_layout(
+      runtime, &instance_layout, REALM_NO_MEM, nullptr, nullptr, REALM_NO_EVENT, &inst,
+      &event);
 
   EXPECT_EQ(status, REALM_REGION_INSTANCE_ERROR_INVALID_DIMS);
 }
@@ -188,8 +192,9 @@ TEST_F(CInstCreateFromInstanceLayoutTest, CreateInvalidUpperBound)
   instance_layout.dim_order = dim_order;
   realm_event_t event;
 
-  realm_status_t status = realm_region_instance_create_from_instance_layout(runtime, &instance_layout, REALM_NO_MEM, nullptr, nullptr,
-                                                                            REALM_NO_EVENT, &inst, &event);
+  realm_status_t status = realm_region_instance_create_from_instance_layout(
+      runtime, &instance_layout, REALM_NO_MEM, nullptr, nullptr, REALM_NO_EVENT, &inst,
+      &event);
 
   EXPECT_EQ(status, REALM_REGION_INSTANCE_ERROR_INVALID_DIMS);
 }
@@ -218,8 +223,9 @@ TEST_F(CInstCreateFromInstanceLayoutTest, CreateZeroDim)
   instance_layout.dim_order = dim_order;
   realm_event_t event;
 
-  realm_status_t status = realm_region_instance_create_from_instance_layout(runtime, &instance_layout, REALM_NO_MEM, nullptr, nullptr,
-                                                                            REALM_NO_EVENT, &inst, &event);
+  realm_status_t status = realm_region_instance_create_from_instance_layout(
+      runtime, &instance_layout, REALM_NO_MEM, nullptr, nullptr, REALM_NO_EVENT, &inst,
+      &event);
 
   EXPECT_EQ(status, REALM_REGION_INSTANCE_ERROR_INVALID_DIMS);
 }
@@ -247,8 +253,9 @@ TEST_F(CInstCreateFromInstanceLayoutTest, CreateOverMaxDim)
   instance_layout.dim_order = dim_order;
   realm_event_t event;
 
-  realm_status_t status = realm_region_instance_create_from_instance_layout(runtime, &instance_layout, REALM_NO_MEM, nullptr, nullptr,
-                                                                            REALM_NO_EVENT, &inst, &event);
+  realm_status_t status = realm_region_instance_create_from_instance_layout(
+      runtime, &instance_layout, REALM_NO_MEM, nullptr, nullptr, REALM_NO_EVENT, &inst,
+      &event);
 
   EXPECT_EQ(status, REALM_REGION_INSTANCE_ERROR_INVALID_DIMS);
 }
@@ -273,8 +280,9 @@ TEST_F(CInstCreateFromInstanceLayoutTest, CreateInvalidFieldLayouts)
   instance_layout.dim_order = dim_order;
   realm_event_t event;
 
-  realm_status_t status = realm_region_instance_create_from_instance_layout(runtime, &instance_layout, REALM_NO_MEM, nullptr, nullptr,
-                                                                            REALM_NO_EVENT, &inst, &event);
+  realm_status_t status = realm_region_instance_create_from_instance_layout(
+      runtime, &instance_layout, REALM_NO_MEM, nullptr, nullptr, REALM_NO_EVENT, &inst,
+      &event);
 
   EXPECT_EQ(status, REALM_INSTANCE_LAYOUT_ERROR_INVALID_FIELDS);
 }
@@ -289,7 +297,7 @@ TEST_F(CInstCreateFromInstanceLayoutTest, CreateNullEvent)
   realm_index_space_t space;
   space.lower_bound = lower_bound;
   space.upper_bound = upper_bound;
-  space.num_dims =  1;
+  space.num_dims = 1;
   space.coord_type = REALM_COORD_TYPE_INT;
   realm_field_layout_t field_layout;
   field_layout.field_id = 0;
@@ -302,8 +310,9 @@ TEST_F(CInstCreateFromInstanceLayoutTest, CreateNullEvent)
   int dim_order[1] = {0};
   instance_layout.dim_order = dim_order;
 
-  realm_status_t status = realm_region_instance_create_from_instance_layout(runtime, &instance_layout, REALM_NO_MEM, nullptr, nullptr,
-                                                                            REALM_NO_EVENT, &inst, nullptr);
+  realm_status_t status = realm_region_instance_create_from_instance_layout(
+      runtime, &instance_layout, REALM_NO_MEM, nullptr, nullptr, REALM_NO_EVENT, &inst,
+      nullptr);
 }
 
 struct InstanceLayoutConfig {
@@ -315,12 +324,12 @@ struct InstanceLayoutConfig {
   std::vector<int> dim_order;
 };
 
-
 template <typename T>
 class CInstCreateFromInstanceLayoutTestT : public CInstCreateFromInstanceLayoutTest {
 protected:
   template <int Dim>
-  realm_instance_layout_t make_instance_layout(const InstanceLayoutConfig &cfg) {
+  realm_instance_layout_t make_instance_layout(const InstanceLayoutConfig &cfg)
+  {
     assert(cfg.num_dims == Dim); // sanity check
 
     realm_instance_layout_t layout;
@@ -343,38 +352,32 @@ struct LayoutCase1D {
   static const InstanceLayoutConfig value;
 };
 const InstanceLayoutConfig LayoutCase1D::value = {
-    1, {0}, {9}, 32,
-    {
-      {0, sizeof(int), 0},
-      {1, sizeof(int), sizeof(int) * 10}
-    },
-    {0}
-};
+    1, {0}, {9}, 32, {{0, sizeof(int), 0}, {1, sizeof(int), sizeof(int) * 10}}, {0}};
 
 struct LayoutCase2D {
   static constexpr int DIM = 2;
   static const InstanceLayoutConfig value;
 };
 const InstanceLayoutConfig LayoutCase2D::value = {
-    2, {0,0}, {4,4}, 32,
-    {
-      {0, sizeof(float), 0},
-      {1, sizeof(float), sizeof(float) * 25}
-    },
-    {0,1}
-};
+    2,
+    {0, 0},
+    {4, 4},
+    32,
+    {{0, sizeof(float), 0}, {1, sizeof(float), sizeof(float) * 25}},
+    {0, 1}};
 
 using LayoutConfigs = ::testing::Types<LayoutCase1D, LayoutCase2D>;
 TYPED_TEST_SUITE(CInstCreateFromInstanceLayoutTestT, LayoutConfigs);
 
-TYPED_TEST(CInstCreateFromInstanceLayoutTestT, CreateSuccess) {
+TYPED_TEST(CInstCreateFromInstanceLayoutTestT, CreateSuccess)
+{
   const InstanceLayoutConfig &cfg = TypeParam::value;
   constexpr int DIM = TypeParam::DIM;
 
   this->runtime_impl->setup_mock_proc_mems(
       MockRuntimeImplMachineModel::ProcessorMemoriesToBeAdded{
           {{0, Processor::Kind::LOC_PROC, 0}},
-          {{0, Memory::Kind::SYSTEM_MEM, 1024*1024, 0}},
+          {{0, Memory::Kind::SYSTEM_MEM, 1024 * 1024, 0}},
           {{0, 0, 1000, 1}}});
 
   realm_runtime_t runtime = *this->runtime_impl;
@@ -384,8 +387,8 @@ TYPED_TEST(CInstCreateFromInstanceLayoutTestT, CreateSuccess) {
   auto instance_layout = this->template make_instance_layout<DIM>(cfg);
 
   realm_status_t status = realm_region_instance_create_from_instance_layout(
-      runtime, &instance_layout, ID::make_memory(0, 0).convert<Memory>(),
-      nullptr, nullptr, REALM_NO_EVENT, &inst, &event);
+      runtime, &instance_layout, ID::make_memory(0, 0).convert<Memory>(), nullptr,
+      nullptr, REALM_NO_EVENT, &inst, &event);
 
   EXPECT_EQ(status, REALM_SUCCESS);
   EXPECT_EQ(RegionInstance(inst).exists(), true);
@@ -397,13 +400,13 @@ TYPED_TEST(CInstCreateFromInstanceLayoutTestT, CreateSuccess) {
   EXPECT_EQ(instance_layout_cxx->alignment_reqd, instance_layout.alignment_reqd);
 
   Rect<DIM, int> bounds = instance_layout_cxx->space.bounds;
-  for (int d = 0; d < DIM; d++) {
+  for(int d = 0; d < DIM; d++) {
     EXPECT_EQ(bounds.lo[d], cfg.lower_bound[d]);
     EXPECT_EQ(bounds.hi[d], cfg.upper_bound[d]);
   }
 
   EXPECT_EQ(instance_layout_cxx->fields.size(), cfg.fields.size());
-  for (auto &field : instance_layout_cxx->fields) {
+  for(auto &field : instance_layout_cxx->fields) {
     EXPECT_EQ(field.first, cfg.fields[field.first].field_id);
     EXPECT_EQ(field.second.size_in_bytes, cfg.fields[field.first].size_in_bytes);
   }

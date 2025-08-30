@@ -87,11 +87,11 @@ bool create_instance_and_copy_and_verify(
   realm_memory_t src_mem;
 
   realm_index_space_t space = {
-    .lower_bound = lower_bound,
-    .upper_bound = upper_bound,
-    .num_dims = N,
-    .coord_type = coord_type,
-    .sparsity_map = nullptr,
+      .lower_bound = lower_bound,
+      .upper_bound = upper_bound,
+      .num_dims = N,
+      .coord_type = coord_type,
+      .sparsity_map = nullptr,
   };
   CHECK_REALM(
       realm_external_resource_suggested_memory(runtime, external_mem_res, &src_mem));
@@ -172,11 +172,11 @@ static void test_copy(realm_runtime_t runtime, realm_memory_t dst_mem,
   size_t field_sizes[1] = {sizeof(int)};
 
   realm_index_space_t space = {
-    .lower_bound = lower_bound,
-    .upper_bound = upper_bound,
-    .num_dims = N,
-    .coord_type = coord_type,
-    .sparsity_map = nullptr,
+      .lower_bound = lower_bound,
+      .upper_bound = upper_bound,
+      .num_dims = N,
+      .coord_type = coord_type,
+      .sparsity_map = nullptr,
   };
 
   // create dst instance from cpu memory

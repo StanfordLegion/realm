@@ -235,8 +235,8 @@ check_region_instance_validity(realm_region_instance_t instance)
   return REALM_SUCCESS;
 }
 
-[[nodiscard]] static inline realm_status_t check_instance_layout_validity(
-    const realm_instance_layout_t *instance_layout)
+[[nodiscard]] static inline realm_status_t
+check_instance_layout_validity(const realm_instance_layout_t *instance_layout)
 {
   if(instance_layout == nullptr) {
     return REALM_INSTANCE_LAYOUT_ERROR_INVALID_LAYOUT;
@@ -1165,10 +1165,10 @@ static realm_status_t realm_region_instance_create_common(
 class RealmInstanceLayoutCreate {
 public:
   template <int N, typename T>
-  [[nodiscard]] realm_status_t
-  operator()(const T *lower_bound, const T *upper_bound, Realm::InstanceLayoutConstraints &ilc,
-             const int *dim_order,
-             Realm::InstanceLayoutGeneric *&instance_layout)
+  [[nodiscard]] realm_status_t operator()(const T *lower_bound, const T *upper_bound,
+                                          Realm::InstanceLayoutConstraints &ilc,
+                                          const int *dim_order,
+                                          Realm::InstanceLayoutGeneric *&instance_layout)
   {
     // We use fortran order here
     Realm::Rect<N, T> rect;
@@ -1227,32 +1227,28 @@ realm_status_t realm_region_instance_create(
     dim_order[dim] = dim;
   }
   Realm::InstanceLayoutConstraints ilc(instance_creation_params->field_ids,
-                                        instance_creation_params->field_sizes,
-                                        instance_creation_params->num_fields, block_size);
+                                       instance_creation_params->field_sizes,
+                                       instance_creation_params->num_fields, block_size);
 
   // create instancelayout
   Realm::InstanceLayoutGeneric *instance_layout = nullptr;
   switch(space.coord_type) {
   case REALM_COORD_TYPE_LONG_LONG:
   {
-    const long long *lower_bound =
-        reinterpret_cast<const long long *>(space.lower_bound);
-    const long long *upper_bound =
-        reinterpret_cast<const long long *>(space.upper_bound);
-    status = realm_dim_dispatch<long long>(
-        space.num_dims, RealmInstanceLayoutCreate(), lower_bound,
-        upper_bound, ilc, dim_order.data(), instance_layout);
+    const long long *lower_bound = reinterpret_cast<const long long *>(space.lower_bound);
+    const long long *upper_bound = reinterpret_cast<const long long *>(space.upper_bound);
+    status = realm_dim_dispatch<long long>(space.num_dims, RealmInstanceLayoutCreate(),
+                                           lower_bound, upper_bound, ilc,
+                                           dim_order.data(), instance_layout);
     break;
   }
   case REALM_COORD_TYPE_INT:
   {
-    const int *lower_bound =
-        reinterpret_cast<const int *>(space.lower_bound);
-    const int *upper_bound =
-        reinterpret_cast<const int *>(space.upper_bound);
-    status = realm_dim_dispatch<int>(
-        space.num_dims, RealmInstanceLayoutCreate(), lower_bound,
-        upper_bound, ilc, dim_order.data(), instance_layout);
+    const int *lower_bound = reinterpret_cast<const int *>(space.lower_bound);
+    const int *upper_bound = reinterpret_cast<const int *>(space.upper_bound);
+    status =
+        realm_dim_dispatch<int>(space.num_dims, RealmInstanceLayoutCreate(), lower_bound,
+                                upper_bound, ilc, dim_order.data(), instance_layout);
     break;
   }
   default:
@@ -1283,7 +1279,7 @@ realm_status_t
 realm_instance_layout_c_to_cxx(const realm_instance_layout_t *instance_layout,
                                Realm::InstanceLayoutGeneric *&instance_layout_cxx)
 {
-  // TODO: do not use the helper function. 
+  // TODO: do not use the helper function.
   std::vector<Realm::FieldID> field_ids(instance_layout->num_fields);
   std::vector<size_t> field_sizes(instance_layout->num_fields);
   for(size_t i = 0; i < instance_layout->num_fields; i++) {
@@ -1292,8 +1288,9 @@ realm_instance_layout_c_to_cxx(const realm_instance_layout_t *instance_layout,
   }
   // default to SOA
   int block_size = 0;
-  if (instance_layout->num_fields > 1) {
-    if (instance_layout->field_layouts[1].rel_offset == instance_layout->field_layouts[0].size_in_bytes) {
+  if(instance_layout->num_fields > 1) {
+    if(instance_layout->field_layouts[1].rel_offset ==
+       instance_layout->field_layouts[0].size_in_bytes) {
       block_size = 1;
     }
   }
@@ -1306,24 +1303,20 @@ realm_instance_layout_c_to_cxx(const realm_instance_layout_t *instance_layout,
   switch(space.coord_type) {
   case REALM_COORD_TYPE_LONG_LONG:
   {
-    const long long *lower_bound =
-        reinterpret_cast<const long long *>(space.lower_bound);
-    const long long *upper_bound =
-        reinterpret_cast<const long long *>(space.upper_bound);
+    const long long *lower_bound = reinterpret_cast<const long long *>(space.lower_bound);
+    const long long *upper_bound = reinterpret_cast<const long long *>(space.upper_bound);
     status = realm_dim_dispatch<long long>(
-        space.num_dims, RealmInstanceLayoutCreate(), lower_bound,
-        upper_bound, ilc, instance_layout->dim_order, instance_layout_cxx);
+        space.num_dims, RealmInstanceLayoutCreate(), lower_bound, upper_bound, ilc,
+        instance_layout->dim_order, instance_layout_cxx);
     break;
   }
   case REALM_COORD_TYPE_INT:
   {
-    const int *lower_bound =
-        reinterpret_cast<const int *>(space.lower_bound);
-    const int *upper_bound =
-        reinterpret_cast<const int *>(space.upper_bound);
-    status = realm_dim_dispatch<int>(
-        space.num_dims, RealmInstanceLayoutCreate(), lower_bound,
-        upper_bound, ilc, instance_layout->dim_order, instance_layout_cxx);
+    const int *lower_bound = reinterpret_cast<const int *>(space.lower_bound);
+    const int *upper_bound = reinterpret_cast<const int *>(space.upper_bound);
+    status = realm_dim_dispatch<int>(space.num_dims, RealmInstanceLayoutCreate(),
+                                     lower_bound, upper_bound, ilc,
+                                     instance_layout->dim_order, instance_layout_cxx);
     break;
   }
   default:
@@ -1471,25 +1464,21 @@ realm_status_t realm_region_instance_copy(
     const long long *upper_bound_long_long =
         reinterpret_cast<const long long *>(space.upper_bound);
     status = realm_dim_dispatch<long long>(
-        space.num_dims, RealmRegionInstanceCopy(), runtime_impl,
-        std::move(srcs_vec), std::move(dsts_vec), instance_copy_params->num_fields,
-        lower_bound_long_long, upper_bound_long_long, space.num_dims,
-        space.sparsity_map, *prs_cxx, Realm::Event(wait_on), priority,
-        out_event);
+        space.num_dims, RealmRegionInstanceCopy(), runtime_impl, std::move(srcs_vec),
+        std::move(dsts_vec), instance_copy_params->num_fields, lower_bound_long_long,
+        upper_bound_long_long, space.num_dims, space.sparsity_map, *prs_cxx,
+        Realm::Event(wait_on), priority, out_event);
     break;
   }
   case REALM_COORD_TYPE_INT:
   {
-    const int *lower_bound_int =
-        reinterpret_cast<const int *>(space.lower_bound);
-    const int *upper_bound_int =
-        reinterpret_cast<const int *>(space.upper_bound);
+    const int *lower_bound_int = reinterpret_cast<const int *>(space.lower_bound);
+    const int *upper_bound_int = reinterpret_cast<const int *>(space.upper_bound);
     status = realm_dim_dispatch<int>(
-        space.num_dims, RealmRegionInstanceCopy(), runtime_impl,
-        std::move(srcs_vec), std::move(dsts_vec), instance_copy_params->num_fields,
-        lower_bound_int, upper_bound_int, space.num_dims,
-        space.sparsity_map, *prs_cxx, Realm::Event(wait_on), priority,
-        out_event);
+        space.num_dims, RealmRegionInstanceCopy(), runtime_impl, std::move(srcs_vec),
+        std::move(dsts_vec), instance_copy_params->num_fields, lower_bound_int,
+        upper_bound_int, space.num_dims, space.sparsity_map, *prs_cxx,
+        Realm::Event(wait_on), priority, out_event);
     break;
   }
   default:
