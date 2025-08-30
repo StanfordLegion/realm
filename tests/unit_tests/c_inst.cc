@@ -80,13 +80,12 @@ protected:
 TEST_F(CInstCreateDestroyTest, CreateNullRuntime)
 {
   realm_region_instance_t inst;
-  realm_region_instance_create_params_t params{
-      .memory = REALM_NO_MEM,
-      .lower_bound = nullptr,
-      .upper_bound = nullptr,
-      .num_dims = 0,
-      .field_ids = nullptr,
-  };
+  realm_region_instance_create_params_t params;
+  params.memory = REALM_NO_MEM;
+  params.space.lower_bound = nullptr;
+  params.space.upper_bound = nullptr;
+  params.space.num_dims = 0;
+  params.field_ids = nullptr;
   realm_event_t event;
 
   realm_status_t status = realm_region_instance_create(nullptr, &params, nullptr,
@@ -128,8 +127,8 @@ TEST_F(CInstCreateDestroyTest, CreateInvalidLowerBound)
   realm_region_instance_create_params_t params;
   int upper_bound[1] = {10};
   params.memory = ID::make_memory(0, 0).convert<Memory>();
-  params.lower_bound = nullptr;
-  params.upper_bound = upper_bound;
+  params.space.lower_bound = nullptr;
+  params.space.upper_bound = upper_bound;
   realm_event_t event;
 
   realm_status_t status = realm_region_instance_create(runtime, &params, nullptr,
@@ -145,8 +144,8 @@ TEST_F(CInstCreateDestroyTest, CreateInvalidUpperBound)
   realm_region_instance_create_params_t params;
   int lower_bound[1] = {10};
   params.memory = ID::make_memory(0, 0).convert<Memory>();
-  params.lower_bound = lower_bound;
-  params.upper_bound = nullptr;
+  params.space.lower_bound = lower_bound;
+  params.space.upper_bound = nullptr;
   realm_event_t event;
 
   realm_status_t status = realm_region_instance_create(runtime, &params, nullptr,
@@ -162,9 +161,9 @@ TEST_F(CInstCreateDestroyTest, CreateZeroDim)
   realm_region_instance_create_params_t params;
   int bound[1] = {10};
   params.memory = ID::make_memory(0, 0).convert<Memory>();
-  params.lower_bound = bound;
-  params.upper_bound = bound;
-  params.num_dims = 0;
+  params.space.lower_bound = bound;
+  params.space.upper_bound = bound;
+  params.space.num_dims = 0;
   realm_event_t event;
 
   realm_status_t status = realm_region_instance_create(runtime, &params, nullptr,
@@ -180,9 +179,9 @@ TEST_F(CInstCreateDestroyTest, CreateOverMaxDim)
   realm_region_instance_create_params_t params;
   int bound[1] = {10};
   params.memory = ID::make_memory(0, 0).convert<Memory>();
-  params.lower_bound = bound;
-  params.upper_bound = bound;
-  params.num_dims = REALM_MAX_DIM + 1;
+  params.space.lower_bound = bound;
+  params.space.upper_bound = bound;
+  params.space.num_dims = REALM_MAX_DIM + 1;
   realm_event_t event;
 
   realm_status_t status = realm_region_instance_create(runtime, &params, nullptr,
@@ -199,9 +198,9 @@ TEST_F(CInstCreateDestroyTest, CreateNullFieldIds)
   int bound[1] = {10};
   size_t field_sizes[1] = {sizeof(int)};
   params.memory = ID::make_memory(0, 0).convert<Memory>();
-  params.lower_bound = bound;
-  params.upper_bound = bound;
-  params.num_dims = 1;
+  params.space.lower_bound = bound;
+  params.space.upper_bound = bound;
+  params.space.num_dims = 1;
   params.field_ids = nullptr;
   params.field_sizes = field_sizes;
   params.num_fields = 1;
@@ -221,9 +220,9 @@ TEST_F(CInstCreateDestroyTest, CreateNullFieldSizes)
   int bound[1] = {10};
   int field_ids[1] = {0};
   params.memory = ID::make_memory(0, 0).convert<Memory>();
-  params.lower_bound = bound;
-  params.upper_bound = bound;
-  params.num_dims = 1;
+  params.space.lower_bound = bound;
+  params.space.upper_bound = bound;
+  params.space.num_dims = 1;
   params.field_ids = field_ids;
   params.field_sizes = nullptr;
   params.num_fields = 1;
@@ -242,9 +241,9 @@ TEST_F(CInstCreateDestroyTest, CreateZeroField)
   realm_region_instance_create_params_t params;
   int bound[1] = {10};
   params.memory = ID::make_memory(0, 0).convert<Memory>();
-  params.lower_bound = bound;
-  params.upper_bound = bound;
-  params.num_dims = 1;
+  params.space.lower_bound = bound;
+  params.space.upper_bound = bound;
+  params.space.num_dims = 1;
   params.num_fields = 0;
   realm_event_t event;
 
@@ -266,13 +265,13 @@ TEST_F(CInstCreateDestroyTest, CreateInvalidCoordType)
   int field_ids[1] = {0};
   size_t field_sizes[1] = {sizeof(int)};
   params.memory = ID::make_memory(0, 0).convert<Memory>();
-  params.lower_bound = bound;
-  params.upper_bound = bound;
-  params.num_dims = 1;
+  params.space.lower_bound = bound;
+  params.space.upper_bound = bound;
+  params.space.num_dims = 1;
   params.num_fields = 1;
   params.field_ids = field_ids;
   params.field_sizes = field_sizes;
-  params.coord_type = static_cast<realm_coord_type_t>(REALM_COORD_TYPE_NUM + 1);
+  params.space.coord_type = static_cast<realm_coord_type_t>(REALM_COORD_TYPE_NUM + 1);
   realm_event_t event;
 
   realm_status_t status = realm_region_instance_create(runtime, &params, nullptr,
@@ -291,13 +290,13 @@ TEST_F(CInstCreateDestroyTest, CreateNullEvent)
   int field_ids[1] = {0};
   size_t field_sizes[1] = {sizeof(int)};
   params.memory = ID::make_memory(0, 0).convert<Memory>();
-  params.lower_bound = bound;
-  params.upper_bound = bound;
-  params.num_dims = 1;
+  params.space.lower_bound = bound;
+  params.space.upper_bound = bound;
+  params.space.num_dims = 1;
   params.num_fields = 1;
   params.field_ids = field_ids;
   params.field_sizes = field_sizes;
-  params.coord_type = REALM_COORD_TYPE_INT;
+  params.space.coord_type = REALM_COORD_TYPE_INT;
 
   realm_status_t status = realm_region_instance_create(runtime, &params, nullptr,
                                                        REALM_NO_EVENT, &inst, nullptr);
@@ -322,10 +321,10 @@ TEST_F(CInstCreateDestroyTest, CreateSuccess)
   int field_ids[1] = {0};
   size_t field_sizes[1] = {sizeof(int)};
   params.memory = ID::make_memory(0, 0).convert<Memory>();
-  params.lower_bound = lower_bound;
-  params.upper_bound = upper_bound;
-  params.coord_type = REALM_COORD_TYPE_INT;
-  params.num_dims = 1;
+  params.space.lower_bound = lower_bound;
+  params.space.upper_bound = upper_bound;
+  params.space.coord_type = REALM_COORD_TYPE_INT;
+  params.space.num_dims = 1;
   params.num_fields = 1;
   params.field_ids = field_ids;
   params.field_sizes = field_sizes;
@@ -358,10 +357,10 @@ TEST_F(CInstCreateDestroyTest, DestroySuccess)
   int field_ids[1] = {0};
   size_t field_sizes[1] = {sizeof(int)};
   params.memory = ID::make_memory(0, 0).convert<Memory>();
-  params.lower_bound = lower_bound;
-  params.upper_bound = upper_bound;
-  params.coord_type = REALM_COORD_TYPE_INT;
-  params.num_dims = 1;
+  params.space.lower_bound = lower_bound;
+  params.space.upper_bound = upper_bound;
+  params.space.coord_type = REALM_COORD_TYPE_INT;
+  params.space.num_dims = 1;
   params.num_fields = 1;
   params.field_ids = field_ids;
   params.field_sizes = field_sizes;
@@ -393,10 +392,10 @@ TEST_F(CInstCreateDestroyTest, DISABLED_CreateFailedTooLarge)
   int field_ids[1] = {0};
   size_t field_sizes[1] = {sizeof(int)};
   params.memory = ID::make_memory(0, 0).convert<Memory>();
-  params.lower_bound = lower_bound;
-  params.upper_bound = upper_bound;
-  params.coord_type = REALM_COORD_TYPE_INT;
-  params.num_dims = 1;
+  params.space.lower_bound = lower_bound;
+  params.space.upper_bound = upper_bound;
+  params.space.coord_type = REALM_COORD_TYPE_INT;
+  params.space.num_dims = 1;
   params.num_fields = 1;
   params.field_ids = field_ids;
   params.field_sizes = field_sizes;
@@ -432,10 +431,10 @@ protected:
     int field_ids[1] = {0};
     size_t field_sizes[1] = {sizeof(int)};
     params.memory = mem;
-    params.lower_bound = lower_bound;
-    params.upper_bound = upper_bound;
-    params.coord_type = REALM_COORD_TYPE_INT;
-    params.num_dims = 1;
+    params.space.lower_bound = lower_bound;
+    params.space.upper_bound = upper_bound;
+    params.space.coord_type = REALM_COORD_TYPE_INT;
+    params.space.num_dims = 1;
     params.num_fields = 1;
     params.field_ids = field_ids;
     params.field_sizes = field_sizes;
