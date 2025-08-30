@@ -235,6 +235,25 @@ check_region_instance_validity(realm_region_instance_t instance)
   return REALM_SUCCESS;
 }
 
+[[nodiscard]] static inline realm_status_t check_instance_layout_validity(
+    const realm_instance_layout_t *instance_layout)
+{
+  if(instance_layout == nullptr) {
+    return REALM_INSTANCE_LAYOUT_ERROR_INVALID_LAYOUT;
+  }
+  if(instance_layout->field_layouts == nullptr) {
+    return REALM_INSTANCE_LAYOUT_ERROR_INVALID_FIELDS;
+  }
+  if(instance_layout->num_fields == 0) {
+    return REALM_INSTANCE_LAYOUT_ERROR_INVALID_FIELDS;
+  }
+  realm_status_t status = check_index_space_validity(&instance_layout->space);
+  if(status != REALM_SUCCESS) {
+    return status;
+  }
+  return status;
+}
+
 // Public C API starts here
 
 realm_status_t realm_get_library_version(const char **version)
@@ -1271,10 +1290,14 @@ realm_instance_layout_c_to_cxx(const realm_instance_layout_t *instance_layout,
     field_ids[i] = instance_layout->field_layouts[i].field_id;
     field_sizes[i] = instance_layout->field_layouts[i].size_in_bytes;
   }
-  int block_size = instance_layout->num_piece_lists;
-  if (block_size > 1) {
-    block_size = 0;
+  // default to SOA
+  int block_size = 0;
+  if (instance_layout->num_fields > 1) {
+    if (instance_layout->field_layouts[1].rel_offset == instance_layout->field_layouts[0].size_in_bytes) {
+      block_size = 1;
+    }
   }
+
   // create the instance layout constraints
   Realm::InstanceLayoutConstraints ilc(field_ids, field_sizes, block_size);
 
@@ -1306,6 +1329,7 @@ realm_instance_layout_c_to_cxx(const realm_instance_layout_t *instance_layout,
   default:
     return REALM_REGION_INSTANCE_ERROR_INVALID_COORD_TYPE;
   }
+  instance_layout_cxx->alignment_reqd = instance_layout->alignment_reqd;
   return status;
 }
 
@@ -1322,8 +1346,9 @@ realm_status_t realm_region_instance_create_from_instance_layout(
     return status;
   }
 
-  if(instance_layout == nullptr) {
-    return REALM_REGION_INSTANCE_ERROR_INVALID_INSTANCE_LAYOUT;
+  status = check_instance_layout_validity(instance_layout);
+  if(status != REALM_SUCCESS) {
+    return status;
   }
 
   status = check_memory_validity(memory);

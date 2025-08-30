@@ -132,12 +132,12 @@ typedef struct realm_index_space_t {
 
 // data type of region instance create params
 typedef struct realm_region_instance_create_params_t {
-  realm_memory_t memory;                // the memory where the region instance is created
-  realm_index_space_t space;            // the index space of the region instance
-  realm_field_id_t *field_ids;          // the field ids of the region instance
-  size_t *field_sizes;                  // the field sizes of the region instance
-  size_t num_fields;                    // the number of fields of the region instance
-  size_t block_size;                    // the block size of the region instance
+  realm_memory_t memory;       // the memory where the region instance is created
+  realm_index_space_t space;   // the index space of the region instance
+  realm_field_id_t *field_ids; // the field ids of the region instance
+  size_t *field_sizes;         // the field sizes of the region instance
+  size_t num_fields;           // the number of fields of the region instance
+  size_t block_size;           // the block size of the region instance
   const realm_external_resource_t *external_resource; // the external resource of the
                                                       // region instance
 } realm_region_instance_create_params_t;
@@ -149,10 +149,10 @@ typedef struct realm_copy_src_dst_field_t {
 } realm_copy_src_dst_field_t;
 
 typedef struct realm_region_instance_copy_params_t {
-  realm_copy_src_dst_field_t *srcs;     // the source fields to be copied
-  realm_copy_src_dst_field_t *dsts;     // the destination fields to be copied
-  size_t num_fields;                    // the number of fields to be copied
-  realm_index_space_t space;            // the index space of the region instance
+  realm_copy_src_dst_field_t *srcs; // the source fields to be copied
+  realm_copy_src_dst_field_t *dsts; // the destination fields to be copied
+  size_t num_fields;                // the number of fields to be copied
+  realm_index_space_t space;        // the index space of the region instance
 } realm_region_instance_copy_params_t;
 
 #define REALM_NO_PROC ((realm_processor_t)0ULL)
@@ -218,8 +218,12 @@ typedef struct realm_region_instance_attr_value_t {
 // in the first version, we use the necessary variables
 // for creating affine layout
 typedef struct realm_field_layout_st {
-  realm_field_id_t field_id;
-  size_t size_in_bytes;
+  realm_field_id_t field_id; // the field id
+  int rel_offset; // the relative offset of the field in bytes, in AOS layout, the offset
+                  // is the value of previous fields' size in bytes, in SOA layout, the
+                  // offset is the value of previous fields' size in bytes multiple by the
+                  // size of index space (lower_bound to upper_bound)
+  int size_in_bytes; // the size of the field in bytes
 } realm_field_layout_t;
 
 typedef struct realm_instance_layout_st {
@@ -227,7 +231,6 @@ typedef struct realm_instance_layout_st {
   realm_field_layout_t *field_layouts;
   size_t num_fields;
   realm_index_space_t space;
-  size_t num_piece_lists;
   int *dim_order;
 } realm_instance_layout_t;
 
@@ -360,6 +363,8 @@ typedef enum realm_status_enum
   REALM_CUDA_ERROR_NOT_ENABLED = -14001,
   REALM_MODULE_CONFIG_ERROR_INVALID_NAME = -16001,
   REALM_MODULE_CONFIG_ERROR_NO_RESOURCE = -16002,
+  REALM_INSTANCE_LAYOUT_ERROR_INVALID_LAYOUT = -17001,
+  REALM_INSTANCE_LAYOUT_ERROR_INVALID_FIELDS = -17002,
 } realm_status_t;
 
 typedef realm_status_t RealmStatus;
@@ -884,11 +889,10 @@ realm_status_t REALM_EXPORT realm_region_instance_create(
  * @ingroup RegionInstance
  */
 realm_status_t REALM_EXPORT realm_region_instance_create_from_instance_layout(
-  realm_runtime_t runtime, const realm_instance_layout_t *instance_layout,
-  realm_memory_t memory, const realm_external_resource_t *external_resource,
-  realm_profiling_request_set_t prs, realm_event_t wait_on,
-  realm_region_instance_t *instance, realm_event_t *event);
-
+    realm_runtime_t runtime, const realm_instance_layout_t *instance_layout,
+    realm_memory_t memory, const realm_external_resource_t *external_resource,
+    realm_profiling_request_set_t prs, realm_event_t wait_on,
+    realm_region_instance_t *instance, realm_event_t *event);
 
 /**
  * @brief Copies data between region instances.

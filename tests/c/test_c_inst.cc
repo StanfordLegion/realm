@@ -100,10 +100,10 @@ static void test_copy(realm_runtime_t runtime, realm_memory_t src_mem,
   realm_field_layout_t field_layout;
   field_layout.field_id = FID_BASE;
   field_layout.size_in_bytes = sizeof(int);
+  field_layout.rel_offset = 0;
   realm_instance_layout_t instance_layout;
   instance_layout.num_fields = 1;
   instance_layout.field_layouts = &field_layout;
-  instance_layout.num_piece_lists = 0; // SOA
   instance_layout.alignment_reqd = 32;
   instance_layout.space = space;
 

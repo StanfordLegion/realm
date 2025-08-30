@@ -139,6 +139,7 @@ list(
   c_processor_task.cc
   c_event.cc
   c_inst.cc
+  c_inst_layout.cc
   c_external_inst.cc
   c_inst_copy.cc
   c_runtime_version.cc
