@@ -41,7 +41,10 @@
     }                                                                                    \
   } while(0)
 
-namespace Realm {
+#ifndef REALM_NAMESPACE
+#define REALM_NAMESPACE Realm
+#endif
+namespace REALM_NAMESPACE {
   // Forward declarations
   class ProfilingRequestSet;
   class CodeDescriptor;
@@ -256,7 +259,7 @@ namespace Realm {
       realm_runtime_t runtime;
       int poisoned;
       REALM_CHECK(realm_runtime_get_runtime(&runtime));
-      REALM_CHECK(realm_event_wait(runtime, id, &poisoned));
+      REALM_CHECK(realm_event_wait(runtime, id, REALM_WAIT_INFINITE, &poisoned));
     }
 
     /**
@@ -357,7 +360,9 @@ namespace Realm {
       realm_runtime_t runtime;
       REALM_CHECK(realm_runtime_get_runtime(&runtime));
       realm_event_t merged_event_id;
-      REALM_CHECK(realm_event_merge(runtime, reinterpret_cast<const realm_event_t*>(wait_for), num_events, &merged_event_id, 0));
+      REALM_CHECK(realm_event_merge(runtime,
+                                    reinterpret_cast<const realm_event_t *>(wait_for),
+                                    num_events, &merged_event_id, 0));
       return Event(merged_event_id);
     }
 
@@ -392,7 +397,9 @@ namespace Realm {
       realm_runtime_t runtime;
       REALM_CHECK(realm_runtime_get_runtime(&runtime));
       realm_event_t merged_event_id;
-      REALM_CHECK(realm_event_merge(runtime, reinterpret_cast<const realm_event_t*>(wait_for), num_events, &merged_event_id, 1));
+      REALM_CHECK(realm_event_merge(runtime,
+                                    reinterpret_cast<const realm_event_t *>(wait_for),
+                                    num_events, &merged_event_id, 1));
       return Event(merged_event_id);
     }
     static Event merge_events_ignorefaults(const span<const Event> &wait_for)
@@ -473,7 +480,8 @@ namespace Realm {
     {
       realm_runtime_t runtime;
       REALM_CHECK(realm_runtime_get_runtime(&runtime));
-      REALM_CHECK(realm_user_event_trigger(runtime, *this, wait_on, ignore_faults ? 1 : 0));
+      REALM_CHECK(
+          realm_user_event_trigger(runtime, *this, wait_on, ignore_faults ? 1 : 0));
     }
 
     /*
@@ -1718,7 +1726,7 @@ namespace Realm {
 
     // would like this constructor to be protected and have QT be a friend.
     //  The CUDA compiler also seems to be a little dense here as well
-#if (!defined(__CUDACC__) && !defined(__HIPCC__))
+#if(!defined(__CUDACC__) && !defined(__HIPCC__))
   protected:
     friend QT;
 #else
@@ -2214,6 +2222,6 @@ namespace Realm {
     realm_memory_query_t impl;
   };
 #undef REALM_TYPE_KINDS
-} // namespace Realm
+} // namespace REALM_NAMESPACE
 
 #endif // REALM_HPP
