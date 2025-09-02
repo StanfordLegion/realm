@@ -55,7 +55,7 @@ namespace Realm {
 
   typedef unsigned long long XferDesID;
 
-// clang-format off
+  // clang-format off
 #define REALM_XFERDES_KINDS(__op__) \
   __op__(XFER_NONE) \
   __op__(XFER_DISK_READ) \
@@ -641,6 +641,16 @@ namespace Realm {
                                  int priority, XferDesRedopInfo redop_info,
                                  const void *fill_data, size_t fill_size,
                                  size_t fill_total) = 0;
+
+    virtual TransferIterator *create_iterator(RegionInstance inst,
+                                              const std::vector<int> &dim_order,
+                                              const std::vector<FieldID> &fields,
+                                              const std::vector<size_t> &fld_offsets,
+                                              const std::vector<size_t> &fld_sizes)
+    {
+      assert(0);
+      return nullptr;
+    }
   };
 
   struct XferDesCreateMessageBase {
@@ -715,14 +725,30 @@ namespace Realm {
       : node(Network::my_node_id)
       , kind(_kind)
     {}
-    virtual ~Channel(){};
+    virtual ~Channel() {};
 
     // TODO: make pure virtual
     virtual void shutdown() {}
 
-    // most channels can hand out a factory that makes arbitrary xds on
-    //  that channel
+    virtual TransferIterator *get_iterator(RegionInstance inst,
+                                           const std::vector<FieldID> &_fields,
+                                           const std::vector<size_t> &_fld_offsets,
+                                           const std::vector<size_t> &_fld_sizes)
+    {
+      return nullptr;
+    }
+
     virtual XferDesFactory *get_factory() = 0;
+
+    struct ChannelFactoryInfo {
+      IndexSpaceGeneric domain;
+      std::vector<IndexSpaceGeneric> spaces;
+    };
+
+    virtual XferDesFactory *get_factory_for(const ChannelFactoryInfo &info)
+    {
+      return get_factory();
+    }
 
   public:
     // which node manages this channel
@@ -881,7 +907,7 @@ namespace Realm {
   // polymorphic container for info necessary to create a remote channel
   class REALM_INTERNAL_API_EXTERNAL_LINKAGE RemoteChannelInfo {
   public:
-    virtual ~RemoteChannelInfo(){};
+    virtual ~RemoteChannelInfo() {};
 
     virtual RemoteChannel *create_remote_channel() = 0;
 

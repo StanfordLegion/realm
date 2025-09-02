@@ -817,7 +817,11 @@ namespace Realm {
       //  default (can be re-enabled with -cuda:mtdma 1)
       static const bool is_ordered = true;
 
-      virtual bool needs_wrapping_iterator() const;
+      virtual TransferIterator *get_iterator(RegionInstance inst,
+                                             const std::vector<FieldID> &_fields,
+                                             const std::vector<size_t> &_fld_offsets,
+                                             const std::vector<size_t> &_fld_sizes);
+
       virtual Memory suggest_ib_memories() const;
 
       virtual RemoteChannelInfo *construct_remote_info() const;
@@ -830,6 +834,8 @@ namespace Realm {
                     unsigned *bw_ret = 0, unsigned *lat_ret = 0);
 
       virtual bool supports_indirection_memory(Memory mem) const;
+
+      virtual XferDesFactory *get_factory_for(const ChannelFactoryInfo &info);
 
       virtual XferDes *create_xfer_des(uintptr_t dma_op, NodeID launch_node,
                                        XferDesID guid,
@@ -845,6 +851,7 @@ namespace Realm {
     protected:
       friend class GPUIndirectXferDes;
       GPU *src_gpu;
+      XferDesFactory *factory;
     };
 
     class GPUIndirectRemoteChannelInfo : public SimpleRemoteChannelInfo {
@@ -875,7 +882,12 @@ namespace Realm {
       GPUIndirectRemoteChannel(uintptr_t _remote_ptr,
                                const std::vector<Memory> &_indirect_memories);
       virtual Memory suggest_ib_memories() const;
-      virtual bool needs_wrapping_iterator() const;
+
+      virtual TransferIterator *get_iterator(RegionInstance inst,
+                                             const std::vector<FieldID> &_fields,
+                                             const std::vector<size_t> &_fld_offsets,
+                                             const std::vector<size_t> &_fld_sizes);
+
       virtual uint64_t
       supports_path(ChannelCopyInfo channel_copy_info, CustomSerdezID src_serdez_id,
                     CustomSerdezID dst_serdez_id, ReductionOpID redop_id,

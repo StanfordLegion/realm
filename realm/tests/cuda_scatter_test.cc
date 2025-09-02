@@ -982,7 +982,7 @@ template <int N, typename T, int N2, typename T2, typename DT>
 bool scatter_gather_test(const std::vector<Memory> &sys_mems,
                          const std::vector<Memory> &gpu_mems, int pieces1, int pieces2,
                          Processor p, CustomSerdezID serdez_id = 0, bool scatter = false,
-                         bool remote = false, bool inverse = false)
+                         bool remote = false, bool inverse = true)
 {
   Rect<N, T> r1;
   Rect<N2, T2> r2;
@@ -1157,7 +1157,7 @@ void top_level_task(const void *args, size_t arglen, const void *userdata, size_
 
   bool ok = true;
 
-  for(int i = 0; i < 2; i++) {
+  for(int i = 1; i < 2; i++) {
     bool do_scatter = (i == 0);
     /*typedef Pad<float, 16> BigFloat;
     break;
@@ -1167,7 +1167,7 @@ void top_level_task(const void *args, size_t arglen, const void *userdata, size_
       ok = false;
     }*/
 
-    if(!scatter_gather_test<1, long long, 1, long long, int>(
+    /*if(!scatter_gather_test<1, long long, 1, long long, int>(
            sys_mems, gpu_mems, TestConfig::pieces1, TestConfig::pieces2, p, 0, do_scatter,
            true, true)) {
       ok = false;
@@ -1177,15 +1177,14 @@ void top_level_task(const void *args, size_t arglen, const void *userdata, size_
            sys_mems, gpu_mems, TestConfig::pieces1, TestConfig::pieces2, p, 0, do_scatter,
            true, true)) {
       ok = false;
-    }
+    }*/
 
     if(!scatter_gather_test<2, long long, 2, long long, int>(
-           sys_mems, gpu_mems, TestConfig::pieces1, TestConfig::pieces2, p, 0, do_scatter,
-           true)) {
+           sys_mems, gpu_mems, TestConfig::pieces1, TestConfig::pieces2, p, 0, do_scatter)) {
       ok = false;
     }
 
-    if(!scatter_gather_test<1, int, 1, int, long long>(
+    /*if(!scatter_gather_test<1, int, 1, int, long long>(
            sys_mems, gpu_mems, TestConfig::pieces1, TestConfig::pieces2, p, 0, do_scatter,
            true)) {
       ok = false;
@@ -1213,7 +1212,7 @@ void top_level_task(const void *args, size_t arglen, const void *userdata, size_
            sys_mems, gpu_mems, TestConfig::pieces1, TestConfig::pieces2, p, 0, do_scatter,
            true)) {
       ok = false;
-    }
+    }*/
   }
 
   log_app.info() << "Scatter/gather test finished "

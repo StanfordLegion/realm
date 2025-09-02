@@ -20,6 +20,16 @@
 #include "realm/cuda/cuda_access.h"
 #include "realm/cuda/cuda_memcpy.h"
 
+#include "realm/idx_impl.h"
+#include "realm/indexspace.h"
+#include "realm/sparsity.h"
+#include "realm/runtime_impl.h"
+
+#include <cstdint>
+#include <cstring>
+#include <sys/types.h>
+#include <typeindex>
+
 namespace Realm {
 
   extern Logger log_xd;
@@ -923,8 +933,9 @@ namespace Realm {
       src_gpus.resize(inputs_info.size(), 0);
       for(size_t i = 0; i < input_ports.size(); i++) {
         src_gpus[i] = mem_to_gpu(input_ports[i].mem);
-        if(input_ports[i].mem->kind == MemoryImpl::MKIND_GPUFB)
+        if(input_ports[i].mem->kind == MemoryImpl::MKIND_GPUFB) {
           assert(src_gpus[i]);
+        }
       }
 
       dst_gpus.resize(outputs_info.size(), 0);
@@ -949,6 +960,167 @@ namespace Realm {
     }
 
     bool GPUIndirectXferDes::progress_xd(GPUIndirectChannel *channel,
+                                         TimeLimit work_until)
+    {
+      bool did_work = false;
+      ReadSequenceCache rseqcache(this, 2 << 20);
+
+      const size_t MIN_XFER_SIZE = 4 << 20; // 4 MiB threshold
+
+      while(true) {
+        //--------------------------------------------------------------//
+        // 1.  Ask iterator to populate address-lists
+        //--------------------------------------------------------------//
+        const InstanceLayoutPieceBase *in_nonaffine = nullptr;
+        const InstanceLayoutPieceBase *out_nonaffine = nullptr;
+
+        size_t max_bytes =
+            get_addresses(MIN_XFER_SIZE, &rseqcache, in_nonaffine, out_nonaffine);
+        if(max_bytes == 0) {
+          break;
+        }
+
+        size_t in_span_start = 0, out_span_start = 0;
+
+        //--------------------------------------------------------------//
+        // 2.  Resolve ports, GPUs, base pointers
+        //--------------------------------------------------------------//
+        XferPort *in_port = &input_ports[input_control.current_io_port];
+        XferPort *out_port = &output_ports[output_control.current_io_port];
+
+        in_span_start = in_port->local_bytes_total;
+        out_span_start = out_port->local_bytes_total;
+
+        GPU *in_gpu = src_gpus[input_control.current_io_port];
+        GPU *out_gpu = dst_gpus[output_control.current_io_port];
+        bool out_ipc = dst_is_ipc[output_control.current_io_port];
+
+        uintptr_t in_base =
+            reinterpret_cast<uintptr_t>(in_port->mem->get_direct_ptr(0, 0));
+        uintptr_t out_base = 0;
+        const GPU::CudaIpcMapping *out_map = nullptr;
+        if(out_ipc) {
+          out_map = in_gpu->find_ipc_mapping(out_port->mem->me);
+          assert(out_map);
+          out_base = out_map->local_base;
+        } else {
+          out_base = reinterpret_cast<uintptr_t>(out_port->mem->get_direct_ptr(0, 0));
+        }
+
+        //--------------------------------------------------------------//
+        // 3.  Decode geometry from AddressListCursor
+        //--------------------------------------------------------------//
+
+        AddressListCursor &in_cur = in_port->addrcursor;
+        AddressListCursor &out_cur = out_port->addrcursor;
+
+        const bool is_gather =
+            (in_port->indirect_port_idx >= 0) && (out_port->indirect_port_idx < 0);
+        const bool is_scatter =
+            (out_port->indirect_port_idx >= 0) && (in_port->indirect_port_idx < 0);
+        assert(!(is_gather && is_scatter));
+
+        AddressListCursor &geo_cur = is_gather ? in_cur : out_cur;
+
+        size_t total_bytes = geo_cur.remaining(0);
+        if(total_bytes == 0) {
+          break;
+        }
+
+        const int act_dim = geo_cur.get_dim();
+        assert(act_dim >= 3);
+
+        size_t base_offset = geo_cur.get_offset();
+        // size_t base_offset_in = in_cur.get_offset();
+        // size_t base_offset_out = out_cur.get_offset();
+
+        size_t field_size = geo_cur.get_stride(1);
+        size_t line_stride = (act_dim > 3) ? geo_cur.get_stride(3) : 0;
+        size_t plane_stride = (act_dim > 4) ? geo_cur.get_stride(4) : 0;
+
+        // number of index-space dimensions for the indirection kernel
+        int ind_num_dims = act_dim - 2;
+
+        // compute addr sizes for indirection buffer
+        size_t addr_size = in_port->iter->get_address_size(); // sizeof(Point<N,T>)
+        size_t addr_type_size = addr_size / ((ind_num_dims > 0) ? ind_num_dims : 1);
+
+        std::cout << "act_dim:" << act_dim << " field_size:" << field_size
+                  << " line_stride:" << line_stride << " plane_stride:" << plane_stride
+                  << " add_size:" << addr_size << " add_tp_size:" << addr_type_size
+                  << std::endl;
+
+        //--------------------------------------------------------------//
+        // 4.  Resolve indirection buffer bases
+        //--------------------------------------------------------------//
+        uintptr_t src_ind_base = 0, dst_ind_base = 0;
+        size_t read_ind_bytes = 0, write_ind_bytes = 0;
+
+        if(is_gather) { // gather
+          src_ind_base = reinterpret_cast<uintptr_t>(
+              input_ports[in_port->indirect_port_idx].mem->get_direct_ptr(
+                  geo_cur.get_stride(2), 0));
+          read_ind_bytes = (total_bytes / field_size) * addr_size;
+
+          in_base += base_offset;
+          //src_ind_base += (base_offset / field_size) * addr_size;
+
+        } else {
+          in_base += in_cur.get_offset();
+        }
+
+        if(is_scatter) { // scatter
+          dst_ind_base = reinterpret_cast<uintptr_t>(
+              input_ports[out_port->indirect_port_idx].mem->get_direct_ptr(
+                  geo_cur.get_stride(2), 0));
+          write_ind_bytes = (total_bytes / field_size) * addr_size;
+
+          out_base += base_offset;
+        } else {
+          out_base += out_cur.get_offset();
+        }
+
+        //--------------------------------------------------------------//
+        // 5.  Launch CUDA indirect-copy kernel
+        //--------------------------------------------------------------//
+        std::vector<size_t> strides = {field_size, line_stride, plane_stride};
+
+        auto stream = select_stream(out_gpu, in_gpu, channel->get_gpu(), out_map,
+                                    in_port->mem, out_port->mem);
+        AutoGPUContext agc(stream->get_gpu());
+        assert(!in_nonaffine && !out_nonaffine);
+
+        launch_indirect_kernel(in_gpu, stream, ind_num_dims, addr_type_size, field_size,
+                               total_bytes, strides, in_base, out_base, src_ind_base,
+                               dst_ind_base);
+
+        //--------------------------------------------------------------//
+        // 6.  Advance cursors and byte counters
+        //--------------------------------------------------------------//
+        in_cur.advance(0, total_bytes);
+        out_cur.advance(0, total_bytes);
+
+        in_port->local_bytes_total += total_bytes;
+        out_port->local_bytes_total += total_bytes;
+
+        add_reference();
+        stream->add_notification(new GPUIndirectTransferCompletion(
+            this, input_control.current_io_port, in_span_start, total_bytes,
+            output_control.current_io_port, out_span_start, total_bytes,
+            in_port->indirect_port_idx, 0, read_ind_bytes, out_port->indirect_port_idx, 0,
+            write_ind_bytes));
+
+        did_work = true;
+        if(total_bytes >= MIN_XFER_SIZE || work_until.is_expired()) {
+          break;
+        }
+      }
+
+      rseqcache.flush();
+      return did_work;
+    }
+
+    /*bool GPUIndirectXferDes::progress_xd(GPUIndirectChannel *channel,
                                          TimeLimit work_until)
     {
       bool did_work = false;
@@ -1135,7 +1307,7 @@ namespace Realm {
 
       rseqcache.flush();
       return did_work;
-    }
+    }*/
 
     ////////////////////////////////////////////////////////////////////////
     //
@@ -1286,7 +1458,13 @@ namespace Realm {
       return Memory::NO_MEMORY;
     }
 
-    bool GPUIndirectChannel::needs_wrapping_iterator() const { return true; }
+    TransferIterator *GPUIndirectChannel::get_iterator(
+        RegionInstance inst, const std::vector<FieldID> &fields,
+        const std::vector<size_t> &fld_offsets, const std::vector<size_t> &fld_sizes)
+    {
+      std::vector<int> dim_order;
+      return factory->create_iterator(inst, dim_order, fields, fld_offsets, fld_sizes);
+    }
 
     uint64_t GPUIndirectChannel::supports_path(
         ChannelCopyInfo channel_copy_info, CustomSerdezID src_serdez_id,
@@ -1308,6 +1486,500 @@ namespace Realm {
       // TODO: support all memories accessible by the source gpu
       return (memory.kind() == Memory::GPU_FB_MEM) &&
              (NodeID(ID(memory).memory_owner_node()) == node);
+    }
+
+    template <int N, typename T>
+    class GPUIndirectTransferIterator : public TransferIterator {
+    public:
+      // ------------------------------------------------------------------
+      // construction / (de-)serialization
+      // ------------------------------------------------------------------
+      GPUIndirectTransferIterator(RegionInstanceImpl *_inst_impl,
+                                  const std::vector<int> &dim_order,
+                                  const std::vector<FieldID> &_fields,
+                                  const std::vector<size_t> &_fld_offsets,
+                                  const std::vector<size_t> &_fld_sizes,
+                                  size_t _total_elems)
+        : inst_impl(_inst_impl)
+        , total_elems(_total_elems)
+        , fields(_fields)
+        , fld_offsets(_fld_offsets)
+        , fld_sizes(_fld_sizes)
+      {
+        for(int i = 0; i < N; i++) {
+          this->dim_order[i] = (i < (int)dim_order.size()) ? dim_order[i] : i;
+        }
+        reset();
+      }
+
+      template <typename S>
+      static TransferIterator *deserialize_new(S &deserializer)
+      {
+        RegionInstance inst;
+        std::vector<int> dim_order;
+        std::vector<FieldID> fields;
+        std::vector<size_t> fld_offsets, fld_sizes;
+        size_t total_elems;
+
+        if(!((deserializer >> inst) || (deserializer >> dim_order) ||
+             (deserializer >> fields) || (deserializer >> fld_offsets) ||
+             (deserializer >> fld_sizes) || (deserializer >> total_elems))) {
+          return nullptr;
+        }
+
+        return new GPUIndirectTransferIterator<N, T>(
+            get_runtime()->get_instance_impl(inst), dim_order, fields, fld_offsets,
+            fld_sizes, total_elems);
+      }
+
+      template <typename S>
+      bool serialize(S &serializer) const
+      {
+        return ((serializer << inst_impl->me) &&
+                (serializer << std::vector<int>(dim_order, dim_order + N)) &&
+                (serializer << fields) && (serializer << fld_offsets) &&
+                (serializer << fld_sizes) && (serializer << total_elems));
+      }
+
+      // ------------------------------------------------------------------
+      // mandatory virtuals
+      // ------------------------------------------------------------------
+      virtual Event request_metadata(void) { return Event::NO_EVENT; }
+
+      virtual void set_indirect_input_port(XferDes *xd, int port_idx,
+                                           TransferIterator *inner_iter)
+      {
+        indirect_xd = xd;
+        indirect_port_idx = port_idx;
+        addrs_in = inner_iter;
+      }
+
+      virtual void reset(void)
+      {
+        piece_idx = 0;
+        field_idx = 0;
+        cur_bytes = 0;
+        have_piece = false;
+      }
+
+      virtual bool done(void) { return (field_idx >= fields.size()); }
+
+      // amount of memory one element occupies for current field
+      virtual size_t get_field_size(void) const { return fld_sizes[field_idx]; }
+
+      virtual size_t get_address_size(void) const { return sizeof(T); }
+
+      virtual FieldID get_field_id(void) const { return fields[field_idx]; }
+
+      // ------------------------------------------------------------------
+      // iteration – AddressList / AddressInfo interface
+      // ------------------------------------------------------------------
+      virtual size_t step(size_t max_bytes, AddressInfo &info, unsigned /*flags*/,
+                          bool /*tentative*/ = false)
+      {
+        // no work left?
+        if(done()) {
+          return 0;
+        }
+
+        // ensure cur_piece is valid
+        if(!have_piece && !advance_to_next_piece()) {
+          return 0; // iterator finished
+        }
+
+        const AffineLayoutPiece<N, T> *ap = cur_piece.piece;
+        const size_t fsz = cur_piece.field_size;
+
+        // ----------------------------------------------------------------
+        // fill AddressInfo for the whole affine piece
+        // ----------------------------------------------------------------
+        info.base_offset = cur_piece.cur_offset; // byte address of (lo)
+        info.bytes_per_chunk = ap->strides[0];   // distance between X neighbours
+
+        if constexpr(N >= 2) {
+          info.num_lines = ap->bounds.hi[1] - ap->bounds.lo[1] + 1;
+          info.line_stride = ap->strides[1];
+        } else {
+          info.num_lines = 1;
+          info.line_stride = info.bytes_per_chunk;
+        }
+
+        if constexpr(N == 3) {
+          info.num_planes = ap->bounds.hi[2] - ap->bounds.lo[2] + 1;
+          info.plane_stride = ap->strides[2];
+        } else {
+          info.num_planes = 1;
+          info.plane_stride = info.line_stride;
+        }
+
+        // total bytes in this piece
+        const size_t bytes_this_step = ap->bounds.volume() * fsz;
+
+        // mark piece consumed – next call will advance to next piece/field
+        have_piece = false;
+
+        return bytes_this_step;
+      }
+
+      virtual size_t step_custom(size_t, AddressInfoCustom &, bool = false)
+      {
+        return 0;
+      } // not used for this iterator
+
+      virtual void confirm_step(void) { /* nothing to do */ }
+
+      virtual void cancel_step(void)
+      {
+        // cancellation never happens in current XferDes usage
+        assert(false);
+      }
+
+      virtual bool get_addresses(AddressList &addrlist,
+                                 const InstanceLayoutPieceBase *&nonaffine)
+      {
+        nonaffine = nullptr;
+        static const size_t MAX_POINTS = 4194304; // identical to wrapper
+        XferDes::XferPort &iip = indirect_xd->input_ports[indirect_port_idx];
+
+        //------------------------------------------------------------------
+        // 1.  Make sure we have at least one point in the local buffer
+        //------------------------------------------------------------------
+        while(point_pos >= num_points) {
+          // exhausted current batch – need more
+          if(addrs_in->done()) { // upstream finished?
+            return true;
+          }
+
+          size_t addr_max_bytes = sizeof(Point<N, T>) * MAX_POINTS;
+
+          // flow-control: how many bytes are visible locally?
+          if(iip.peer_guid != XferDes::XFERDES_NO_GUID) {
+            addr_max_bytes =
+                iip.seq_remote.span_exists(iip.local_bytes_total, addr_max_bytes);
+            // round down to whole points
+            addr_max_bytes -= addr_max_bytes % sizeof(Point<N, T>);
+            if(addr_max_bytes == 0) {
+              assert(0);
+              // if(iip.remote_bytes_total.load() == iip.local_bytes_total)
+              // this->is_done = true; // nothing more coming
+              return true; // wait for credit
+            }
+          }
+
+          //----------------------------------------------------------------
+          // pull data from upstream iterator
+          //----------------------------------------------------------------
+          TransferIterator::AddressInfo ai{};
+          size_t got = addrs_in->step(addr_max_bytes, ai, 0, /*tentative=*/false);
+          if(got == 0) {
+            return false; // stalled
+          }
+
+          addrs_in_offset = ai.base_offset;
+          num_points = got / sizeof(Point<N, T>);
+          point_pos = 0;
+
+          // update flow-control counters on indirect_xd
+          indirect_xd->update_bytes_read(indirect_port_idx, iip.local_bytes_total, got);
+          iip.local_bytes_total += got;
+        }
+
+        //------------------------------------------------------------------
+        // 2.  Produce geometry for the DATA instance (one affine piece)
+        //------------------------------------------------------------------
+        TransferIterator::AddressInfo aff{};
+        size_t piece_bytes = step(SIZE_MAX, aff, 0, /*tentative=*/false);
+        if(piece_bytes == 0) {
+          return false; // no data piece yet
+        }
+
+        //------------------------------------------------------------------
+        // 3.  Emit one ND-entry into AddressList
+        //------------------------------------------------------------------
+        const size_t pts_in_entry = num_points - point_pos;
+        const size_t field_size = aff.bytes_per_chunk;
+        const size_t total_bytes = pts_in_entry * field_size;
+
+        int act_dim = 2;
+        if(aff.num_lines > 0)
+          act_dim++;
+        if(aff.num_planes > 0)
+          act_dim++;
+
+        size_t *ad = addrlist.begin_nd_entry(act_dim);
+        if(!ad) {
+          return false; // list full – caller retry
+        }
+
+        ad[0] = (total_bytes << 4) | act_dim;
+        ad[1] = aff.base_offset;
+
+        ad[2] = 1;
+        ad[3] = field_size;
+
+        ad[4] = 1;
+        ad[5] = addrs_in_offset;
+
+        int idx = 6;
+
+        if(aff.num_lines > 0) {
+          ad[idx++] = 1;
+          ad[idx++] = aff.line_stride;
+        }
+
+        if(aff.num_planes > 0) {
+          ad[idx++] = 1;
+          ad[idx++] = aff.plane_stride;
+        }
+
+        addrlist.commit_nd_entry(act_dim, total_bytes);
+        //------------------------------------------------------------------
+        // 4.  Advance point cursor – we consumed whole batch
+        //------------------------------------------------------------------
+        point_pos = num_points;
+        return true;
+      }
+
+      static Serialization::PolymorphicSerdezSubclass<TransferIterator,
+                                                      GPUIndirectTransferIterator<N, T>>
+          serdez_subclass;
+
+    private:
+      // ------------------------------------------------------------------
+      // helpers
+      // ------------------------------------------------------------------
+      struct LayoutPieceInfo {
+        const AffineLayoutPiece<N, T> *piece = nullptr;
+        size_t off_in_piece = 0;
+        size_t field_size = 0;
+        // byte offset of the first element of this piece within the instance
+        uintptr_t cur_offset = 0;
+
+        size_t cur_offset_in_inst(const RegionInstanceImpl *inst,
+                                  size_t field_rel_off) const
+        {
+          return inst->metadata.inst_offset + piece->offset +
+                 piece->strides.dot(piece->bounds.lo) +
+                 field_rel_off + // field offset within struct
+                 off_in_piece;
+        }
+
+        size_t bytes_remaining() const
+        {
+          return (piece->bounds.volume() * field_size) - off_in_piece;
+        }
+
+        void advance(size_t bytes)
+        {
+          off_in_piece += bytes;
+          cur_offset += bytes;
+        }
+      };
+
+      bool advance_to_next_piece()
+      {
+        const InstanceLayout<N, T> *layout =
+            checked_cast<const InstanceLayout<N, T> *>(inst_impl->metadata.layout);
+        assert(layout);
+
+        while(field_idx < fields.size()) {
+          // map field id -> piece list
+          FieldID fid = fields[field_idx];
+          size_t field_size = fld_sizes[field_idx];
+          size_t field_rel_offset = fld_offsets[field_idx];
+
+          auto it = layout->fields.find(fid);
+          assert(it != layout->fields.end());
+
+          const auto &plist = layout->piece_lists[it->second.list_idx].pieces;
+
+          if(piece_idx < plist.size()) {
+            const InstanceLayoutPiece<N, T> *base = plist[piece_idx++];
+            if(base->layout_type != PieceLayoutTypes::AffineLayoutType) {
+              // Non-affine pieces are not expected for FB memories
+              continue;
+            }
+            cur_piece.piece = static_cast<const AffineLayoutPiece<N, T> *>(base);
+            cur_piece.off_in_piece = 0;
+            cur_piece.field_size = field_size;
+            // cur_piece.field_rel_off = field_rel_offset;
+            cur_piece.cur_offset =
+                cur_piece.cur_offset_in_inst(inst_impl, field_rel_offset);
+            have_piece = true;
+            return true;
+          }
+
+          // exhausted current field, move to next
+          field_idx++;
+          piece_idx = 0;
+        }
+        return false; // no more data
+      }
+
+      // ------------------------------------------------------------------
+      // data members
+      // ------------------------------------------------------------------
+      RegionInstanceImpl *inst_impl = nullptr;
+      size_t total_elems = 0;
+
+      std::vector<FieldID> fields;
+      std::vector<size_t> fld_offsets;
+      std::vector<size_t> fld_sizes;
+
+      int dim_order[N];
+
+      // per-field iteration state
+      size_t piece_idx = 0; // index in piece list
+      size_t field_idx = 0; // which field we are on
+      size_t cur_bytes = 0; // bytes produced so far
+
+      LayoutPieceInfo cur_piece;
+      bool have_piece = false;
+
+      int indirect_port_idx;
+      TransferIterator *addrs_in;
+      XferDes *indirect_xd;
+
+      size_t addrs_in_offset = 0;
+      size_t point_pos = 0;
+      size_t num_points = 0;
+
+      static constexpr size_t MAX_POINTS = 4194304;
+    };
+
+    // explicit registration with polymorphic serdez system
+    template <int N, typename T>
+    Serialization::PolymorphicSerdezSubclass<TransferIterator,
+                                             GPUIndirectTransferIterator<N, T>>
+        GPUIndirectTransferIterator<N, T>::serdez_subclass;
+
+    template <int N, typename T>
+    class CudaIndirectXferDesFactory : public XferDesFactory {
+    public:
+      CudaIndirectXferDesFactory(size_t _bytes_per_element,
+                                 const IndexSpace<N, T> &_domain, Channel *_channel)
+        : bytes_per_element(_bytes_per_element)
+        , domain(_domain)
+        , channel(_channel)
+      {}
+
+    protected:
+      virtual ~CudaIndirectXferDesFactory() {}
+
+    public:
+      // void release() override {}
+      bool needs_release() override { return false; }
+
+      void create_xfer_des(uintptr_t dma_op, NodeID launch_node, NodeID target_node,
+                           XferDesID guid,
+                           const std::vector<XferDesPortInfo> &inputs_info,
+                           const std::vector<XferDesPortInfo> &outputs_info, int priority,
+                           XferDesRedopInfo redop_info, const void *fill_data,
+                           size_t fill_size, size_t fill_total) override
+      {
+        if(target_node == Network::my_node_id) {
+          // local creation
+          // assert(!inst.exists());
+          // XferDes *xd = local_channel->create_xfer_des(
+          // dma_op, launch_node, guid, inputs_info, outputs_info, priority, redop_info,
+          // fill_data, fill_size, fill_total);
+
+          // XferDes *xd = new GPUIndirectXfer(
+          // domain, domain_base, dma_op, channel, launch_node, guid, inputs_info,
+          // outputs_info, priority, redop_info);
+
+          XferDes *xd =
+              new GPUIndirectXferDes(dma_op, channel, launch_node, guid, inputs_info,
+                                     outputs_info, priority, redop_info);
+
+          channel->enqueue_ready_xd(xd);
+        } else {
+          // TODO: IMPLEMENT REMOTE CREATION
+          assert(0);
+        }
+      }
+
+      virtual TransferIterator *create_iterator(RegionInstance inst,
+                                                const std::vector<int> &dim_order,
+                                                const std::vector<FieldID> &fields,
+                                                const std::vector<size_t> &fld_offsets,
+                                                const std::vector<size_t> &fld_sizes)
+      {
+        return new GPUIndirectTransferIterator<N, T>(
+            get_runtime()->get_instance_impl(inst), dim_order, fields, fld_offsets,
+            fld_sizes, domain.volume());
+      }
+
+    protected:
+      size_t bytes_per_element{0};
+      IndexSpace<N, T> domain;
+      Channel *channel{nullptr};
+    };
+
+    template <typename T>
+    struct type_identity {
+      using type = T;
+    };
+
+    template <typename Func, size_t... Ns>
+    static void dispatch_for_dimension(int dim, Func &&func, std::index_sequence<Ns...>)
+    {
+      (
+          [&] {
+            if(dim == static_cast<int>(Ns + 1)) {
+              func(std::integral_constant<int, Ns + 1>{});
+            }
+          }(),
+          ...);
+    }
+
+    template <typename Func, typename... Ts>
+    static void dispatch_for_type(std::type_index type, Func &&func, std::tuple<Ts...>)
+    {
+      (
+          [&] {
+            if(type == typeid(Ts)) {
+              func(type_identity<Ts>{});
+            }
+          }(),
+          ...);
+    }
+
+    template <typename Func, size_t... Ns, typename... Ts>
+    static void dispatch_for_index_space(const IndexSpaceGeneric &index_space,
+                                         Func &&func, std::index_sequence<Ns...>,
+                                         std::tuple<Ts...>)
+    {
+      auto [dim, type] = index_space.impl->get_index_space_type();
+
+      dispatch_for_dimension(
+          dim,
+          [&](auto N_const) {
+            constexpr int N = decltype(N_const)::value;
+            dispatch_for_type(
+                type,
+                [&](auto T_const) {
+                  using T = typename decltype(T_const)::type;
+
+                  const IndexSpace<N, T> &typed_space =
+                      index_space.as_index_space<N, T>();
+                  func(typed_space);
+                },
+                std::tuple<Ts...>{});
+          },
+          std::index_sequence<Ns...>{});
+    }
+
+    XferDesFactory *
+    GPUIndirectChannel::get_factory_for(const Channel::ChannelFactoryInfo &info)
+    {
+      dispatch_for_index_space(
+          info.domain,
+          [&](const auto &typed_space) {
+            factory = new CudaIndirectXferDesFactory(0, typed_space, this);
+          },
+          std::make_index_sequence<REALM_MAX_DIM>(), std::tuple<int, long long>{});
+      return factory;
     }
 
     XferDes *GPUIndirectChannel::create_xfer_des(
@@ -1412,6 +2084,14 @@ namespace Realm {
       : RemoteChannel(_remote_ptr, indirect_memories)
     {}
 
+    TransferIterator *GPUIndirectRemoteChannel::get_iterator(
+        RegionInstance inst, const std::vector<FieldID> &_fields,
+        const std::vector<size_t> &fld_offsets, const std::vector<size_t> &fld_sizes)
+    {
+      assert(0);
+      return nullptr;
+    }
+
     Memory GPUIndirectRemoteChannel::suggest_ib_memories() const
     {
       Node &n = get_runtime()->nodes[node];
@@ -1439,8 +2119,6 @@ namespace Realm {
                                           redop_id, total_bytes, src_frags, dst_frags,
                                           kind_ret, bw_ret, lat_ret);
     }
-
-    bool GPUIndirectRemoteChannel::needs_wrapping_iterator() const { return true; }
 
     ////////////////////////////////////////////////////////////////////////
     //
@@ -2764,5 +3442,4 @@ namespace Realm {
     }
 
   }; // namespace Cuda
-
 }; // namespace Realm

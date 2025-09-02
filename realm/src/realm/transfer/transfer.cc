@@ -2806,7 +2806,9 @@ namespace Realm {
         xdn.target_node = path_infos[0].xd_channels[i]->node;
         xdn.channel = path_infos[0].xd_channels[i];
 
-        xdn.factory = path_infos[0].xd_channels[i]->get_factory();
+        // xdn.factory = path_infos[0].xd_channels[i]->get_factory();
+
+        xdn.factory = create_factory(path_infos[0].xd_channels[i]);
         xdn.gather_control_input = -1;
         xdn.scatter_control_input = -1;
         if(i == 0) {
@@ -3420,6 +3422,17 @@ namespace Realm {
   }
 
   template <int N, typename T, int N2, typename T2>
+  XferDesFactory *
+  IndirectionInfoTyped<N, T, N2, T2>::create_factory(Channel *channel) const
+  {
+    std::vector<IndexSpaceGeneric> generic_spaces(spaces.size());
+    for(size_t i = 0; i < spaces.size(); i++) {
+      generic_spaces[i] = spaces[i];
+    }
+    return channel->get_factory_for(Channel::ChannelFactoryInfo{domain, generic_spaces});
+  }
+
+  template <int N, typename T, int N2, typename T2>
   RegionInstance IndirectionInfoTyped<N, T, N2, T2>::get_pointer_instance(void) const
   {
     return inst;
@@ -3456,19 +3469,24 @@ namespace Realm {
       const std::vector<size_t> &fld_offsets, const std::vector<size_t> &fld_sizes,
       Channel *channel) const
   {
-    if(channel && channel->needs_wrapping_iterator()) {
-      return new WrappingTransferIteratorIndirect<N2, T2>(inst, fields, fld_offsets,
-                                                          fld_sizes);
-    } else {
+    TransferIterator *it = nullptr;
+
+    if(channel) {
+      it = channel->get_iterator(inst, fields, fld_offsets, fld_sizes);
+    }
+
+    if(it == nullptr) {
       if(is_ranges) {
-        return new TransferIteratorIndirectRange<N2, T2>(addrs_mem, inst, fields,
-                                                         fld_offsets, fld_sizes);
+        it = new TransferIteratorIndirectRange<N2, T2>(addrs_mem, inst, fields,
+                                                       fld_offsets, fld_sizes);
       } else {
-        return new TransferIteratorIndirect<N2, T2>(
-            addrs_mem, get_runtime()->get_instance_impl(inst), fields, fld_offsets,
-            fld_sizes);
+        it = new TransferIteratorIndirect<N2, T2>(addrs_mem,
+                                                  get_runtime()->get_instance_impl(inst),
+                                                  fields, fld_offsets, fld_sizes);
       }
     }
+
+    return it;
   }
 
   template <int N, typename T, int N2, typename T2>

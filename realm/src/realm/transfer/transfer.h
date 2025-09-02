@@ -535,6 +535,7 @@ namespace Realm {
     virtual size_t address_size() const = 0;
 
     virtual XferDesFactory *create_addrsplit_factory(size_t bytes_per_element) const = 0;
+    virtual XferDesFactory *create_factory(Channel *channel) const = 0;
 
     bool structured;
     FieldID field_id;
@@ -584,6 +585,7 @@ namespace Realm {
     virtual size_t address_size() const;
 
     virtual XferDesFactory *create_addrsplit_factory(size_t bytes_per_element) const;
+    virtual XferDesFactory *create_factory(Channel *channel) const;
 
     IndexSpace<N, T> domain;
     std::vector<IndexSpace<N2, T2>> spaces;

@@ -21,6 +21,7 @@
 #define REALM_IDX_IMPL_H
 
 #include "realm/indexspace.h"
+#include <typeindex>
 
 namespace Realm {
 
@@ -33,6 +34,7 @@ namespace Realm {
     virtual IndexSpaceGenericImpl *clone_at(void *dst) const = 0;
 
     virtual void destroy(Event wait_on) = 0;
+    virtual std::pair<int, std::type_index> get_index_space_type() const = 0;
 
     virtual Event copy(const std::vector<CopySrcDstField> &srcs,
                        const std::vector<CopySrcDstField> &dsts,
@@ -61,6 +63,9 @@ namespace Realm {
     virtual IndexSpaceGenericImpl *clone_at(void *dst) const;
 
     virtual void destroy(Event wait_on);
+    std::pair<int, std::type_index> get_index_space_type() const override {
+        return {N, typeid(T)};
+    }
 
     virtual Event copy(const std::vector<CopySrcDstField> &srcs,
                        const std::vector<CopySrcDstField> &dsts,
