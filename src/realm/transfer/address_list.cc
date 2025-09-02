@@ -26,75 +26,137 @@
 
 namespace Realm {
 
+  // helpers
+  // -----------------------------------------------------------------------------------------
+  namespace detail {
+    inline size_t contig_bytes(const size_t *e)
+    {
+      return ((e[AddressList::SLOT_HEADER] >> AddressList::CONTIG_SHIFT));
+    }
+
+    inline int actdim(const size_t *e)
+    {
+      return int(e[AddressList::SLOT_HEADER] & AddressList::DIM_MASK);
+    }
+
+    inline size_t count_index(int dim) { return AddressList::DIM_SLOTS * dim; }
+
+    inline size_t stride_index(int dim) { return count_index(dim) + 1; }
+  } // namespace detail
+
   ////////////////////////////////////////////////////////////////////////
   //
   // class AddressList
   //
 
-  AddressList::AddressList()
-    : total_bytes(0)
-    , write_pointer(0)
-    , read_pointer(0)
+  AddressList::AddressList(size_t _max_entries)
+    : max_entries(_max_entries)
   {
-    memset(data, 0, MAX_ENTRIES * sizeof(size_t));
+    data.reserve(max_entries);
   }
 
-  size_t *AddressList::begin_nd_entry(int max_dim)
+  bool AddressList::append_entry(
+      int dims, size_t contig_bytes, size_t total_bytes, size_t base_offset,
+      const std::unordered_map<int, std::pair<size_t, size_t>> &count_strides,
+      bool wrap_around)
   {
-    size_t entries_needed = max_dim * 2;
+    size_t *entry = begin_entry(dims, wrap_around);
 
-    size_t new_wp = write_pointer + entries_needed;
-    if(new_wp > MAX_ENTRIES) {
-      // have to wrap around
-      if((read_pointer <= entries_needed) || (write_pointer < read_pointer))
-        return 0;
+    if(entry == nullptr) {
+      return false;
+    }
 
-      // fill remaining entries with 0's so reader skips over them
-      while(write_pointer < MAX_ENTRIES)
-        data[write_pointer++] = 0;
+    entry[AddressList::SLOT_BASE] = base_offset;
 
-      write_pointer = 0;
+    for(auto &[dim, count_stride] : count_strides) {
+      entry[detail::count_index(dim)] = count_stride.first;
+      entry[detail::stride_index(dim)] = count_stride.second;
+    }
+
+    entry[AddressList::SLOT_HEADER] = pack_entry_header(contig_bytes, dims);
+    commit_entry(dims, total_bytes);
+    return true;
+  }
+
+  size_t *AddressList::begin_entry(int max_dim, bool wrap_mode)
+  {
+    size_t entries_needed = detail::count_index(max_dim);
+
+    if(wrap_mode) {
+      size_t new_wp = write_pointer + entries_needed;
+      if(new_wp > max_entries) {
+        if((read_pointer <= entries_needed) || (write_pointer < read_pointer))
+          return nullptr;
+
+        // fill remaining entries with 0's so reader skips
+        while(write_pointer < max_entries)
+          data[write_pointer++] = 0;
+
+        write_pointer = 0;
+        new_wp = entries_needed;
+      } else {
+        if((write_pointer < read_pointer) && (new_wp >= read_pointer))
+          return nullptr;
+        if((new_wp == max_entries) && (read_pointer == 0))
+          return nullptr;
+      }
+
+      // ensure capacity upfront for max_entries once
+      if(data.size() < max_entries)
+        data.resize(max_entries);
+
+      return data.data() + write_pointer;
     } else {
-      // if the write pointer would cross over the read pointer, we have to wait
-      if((write_pointer < read_pointer) && (new_wp >= read_pointer))
-        return 0;
-
-      // special case: if the write pointer would wrap and read is at 0, that'd
-      //  be a collision too
-      if((new_wp == MAX_ENTRIES) && (read_pointer == 0))
-        return 0;
+      if(data.size() < write_pointer + entries_needed)
+        data.resize(write_pointer + entries_needed);
+      return data.data() + write_pointer;
     }
-
-    // all good - return a pointer to the first available entry
-    return (data + write_pointer);
   }
 
-  void AddressList::commit_nd_entry(int act_dim, size_t bytes)
+  void AddressList::commit_entry(int act_dim, size_t bytes)
   {
-    size_t entries_used = act_dim * 2;
-
+    size_t entries_used = detail::count_index(act_dim);
     write_pointer += entries_used;
-    if(write_pointer >= MAX_ENTRIES) {
-      assert(write_pointer == MAX_ENTRIES);
-      write_pointer = 0;
-    }
+    total_bytes += bytes * (field_block ? field_block->count : 1);
+  }
 
-    total_bytes += bytes;
+  void AddressList::attach_field_block(const FieldBlock *_field_block)
+  {
+    field_block = _field_block;
   }
 
   size_t AddressList::bytes_pending() const { return total_bytes; }
 
+  size_t AddressList::full_field_bytes()
+  {
+    const size_t *entry = read_entry();
+    // decode header
+    const size_t contig = detail::contig_bytes(entry);
+    const int dims = detail::actdim(entry);
+    size_t bytes = contig;
+    for(int d = 1; d < dims; d++) {
+      bytes *= entry[detail::count_index(d)];
+    }
+    return bytes;
+  }
+
+  size_t AddressList::pack_entry_header(size_t contig_bytes, int dims)
+  {
+    return (contig_bytes << CONTIG_SHIFT) | (dims & DIM_MASK);
+  }
+
   const size_t *AddressList::read_entry()
   {
-    assert(total_bytes > 0);
-    if(read_pointer >= MAX_ENTRIES) {
-      assert(read_pointer == MAX_ENTRIES);
+    // assert(total_bytes > 0);
+    if(read_pointer >= max_entries) {
+      assert(read_pointer == max_entries);
       read_pointer = 0;
     }
+
     // skip trailing 0's
     if(data[read_pointer] == 0)
       read_pointer = 0;
-    return (data + read_pointer);
+    return (data.data() + read_pointer);
   }
 
   ////////////////////////////////////////////////////////////////////////
@@ -102,14 +164,7 @@ namespace Realm {
   // class AddressListCursor
   //
 
-  AddressListCursor::AddressListCursor()
-    : addrlist(0)
-    , partial(false)
-    , partial_dim(0)
-  {
-    for(int i = 0; i < MAX_DIM; i++)
-      pos[i] = 0;
-  }
+  AddressListCursor::AddressListCursor() { pos.fill(0); }
 
   void AddressListCursor::set_addrlist(AddressList *_addrlist) { addrlist = _addrlist; }
 
@@ -120,17 +175,15 @@ namespace Realm {
     if(partial) {
       return (partial_dim + 1);
     } else {
-      const size_t *entry = addrlist->read_entry();
-      int act_dim = (entry[0] & 15);
-      return act_dim;
+      return detail::actdim(addrlist->read_entry());
     }
   }
 
   uintptr_t AddressListCursor::get_offset() const
   {
     const size_t *entry = addrlist->read_entry();
-    int act_dim = (entry[0] & 15);
-    uintptr_t ofs = entry[1];
+    int act_dim = detail::actdim(entry);
+    uintptr_t ofs = entry[AddressList::SLOT_BASE];
     if(partial) {
       for(int i = partial_dim; i < act_dim; i++)
         if(i == 0) {
@@ -138,7 +191,7 @@ namespace Realm {
           ofs += pos[0];
         } else {
           // rest use the strides from the address list
-          ofs += pos[i] * entry[1 + (2 * i)];
+          ofs += pos[i] * entry[detail::stride_index(i)];
         }
     }
     return ofs;
@@ -147,19 +200,22 @@ namespace Realm {
   uintptr_t AddressListCursor::get_stride(int dim) const
   {
     const size_t *entry = addrlist->read_entry();
-    int act_dim = (entry[0] & 15);
+    int act_dim = detail::actdim(entry);
     assert((dim > 0) && (dim < act_dim));
-    return entry[2 * dim + 1];
+    return entry[detail::stride_index(dim)];
   }
 
   size_t AddressListCursor::remaining(int dim) const
   {
     const size_t *entry = addrlist->read_entry();
-    int act_dim = (entry[0] & 15);
+    int act_dim = detail::actdim(entry);
     assert(dim < act_dim);
-    size_t r = entry[2 * dim];
-    if(dim == 0)
-      r >>= 4;
+    size_t r = entry[detail::count_index(dim)];
+
+    if(dim == 0) {
+      r >>= AddressList::CONTIG_SHIFT;
+    }
+
     if(partial) {
       if(dim > partial_dim)
         r = 1;
@@ -171,58 +227,89 @@ namespace Realm {
     return r;
   }
 
-  void AddressListCursor::advance(int dim, size_t amount)
+  void AddressListCursor::advance(int dim, size_t amount, int f)
   {
     const size_t *entry = addrlist->read_entry();
-    int act_dim = (entry[0] & 15);
+    int act_dim = detail::actdim(entry);
     assert(dim < act_dim);
-    size_t r = entry[2 * dim];
-    if(dim == 0)
-      r >>= 4;
 
+    // size of this "slice" in dim
+    size_t r = entry[detail::count_index(dim)];
+    if(dim == 0) {
+      r >>= AddressList::CONTIG_SHIFT;
+    }
+
+    // compute how many bytes we're really removing
     size_t bytes = amount;
     if(dim > 0) {
 #ifdef DEBUG_REALM
       for(int i = 0; i < dim; i++)
         assert(pos[i] == 0);
 #endif
-      bytes *= (entry[0] >> 4);
+      bytes *= detail::contig_bytes(entry);
       for(int i = 1; i < dim; i++)
-        bytes *= entry[2 * i];
+        bytes *= entry[detail::count_index(i)];
     }
-#ifdef DEBUG_REALM
-    assert(addrlist->total_bytes >= bytes);
-#endif
-    addrlist->total_bytes -= bytes;
 
-    if(!partial) {
-      if((dim == (act_dim - 1)) && (amount == r)) {
-        // simple case - we consumed the whole thing
-        addrlist->read_pointer += 2 * act_dim;
-        return;
+#ifdef DEBUG_REALM
+    assert(addrlist->total_bytes >= bytes * f);
+#endif
+    addrlist->total_bytes -= bytes * f;
+
+    const FieldBlock *fields = field_block();
+
+    // ——— NEW: if this call exactly finishes *one* rect (the last dim)
+    if(dim == (act_dim - 1) && amount == r) {
+      if(fields && f > 0) {
+        // bump fields only on a full-rect consume
+        partial_fields += f;
+        if(partial_fields >= fields->count) {
+          partial_fields = 0;
+          addrlist->read_pointer += detail::count_index(act_dim);
+        }
       } else {
-        // record partial consumption
-        partial = true;
-        partial_dim = dim;
-        pos[partial_dim] = amount;
+        // no fields at all: consume entry immediately
+        addrlist->read_pointer += detail::count_index(act_dim);
       }
+      // reset any in-flight partial state
+      partial = false;
+      partial_dim = 0;
+      pos.fill(0);
+      return;
+    }
+
+    // ——— otherwise fall back to the existing "partial" logic
+    if(!partial) {
+      partial = true;
+      partial_dim = dim;
+      pos[dim] = amount;
     } else {
-      // update a partial consumption in progress
       assert(dim <= partial_dim);
       partial_dim = dim;
-      pos[partial_dim] += amount;
+      pos[dim] += amount;
     }
 
     while(pos[partial_dim] == r) {
       pos[partial_dim++] = 0;
+
       if(partial_dim == act_dim) {
-        // all done
+        // we have finished the rect described by this entry
         partial = false;
-        addrlist->read_pointer += 2 * act_dim;
+
+        if(fields && (f > 0)) {
+          partial_fields += f;
+          if(partial_fields >= fields->count) {
+            partial_fields = 0;
+            addrlist->read_pointer += detail::count_index(act_dim);
+          }
+        } else {
+          addrlist->read_pointer += detail::count_index(act_dim);
+        }
         break;
       } else {
-        pos[partial_dim]++;         // carry into next dimension
-        r = entry[2 * partial_dim]; // no shift because partial_dim > 0
+        // carry into the next higher dimension
+        pos[partial_dim]++; // increment that dimension
+        r = entry[detail::count_index(partial_dim)];
       }
     }
   }
@@ -260,6 +347,24 @@ namespace Realm {
         }
       }
     }
+  }
+
+  const FieldBlock *AddressListCursor::field_block() const
+  {
+    return addrlist->field_block;
+  }
+
+  const FieldID *AddressListCursor::fields_data() const
+  {
+    return addrlist->field_block->fields + partial_fields;
+  }
+
+  size_t AddressListCursor::remaining_fields() const
+  {
+    if(addrlist->field_block) {
+      return addrlist->field_block->count - partial_fields;
+    }
+    return 1;
   }
 
   std::ostream &operator<<(std::ostream &os, const AddressListCursor &alc)
