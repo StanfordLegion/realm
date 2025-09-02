@@ -126,7 +126,7 @@ namespace REALM_NAMESPACE {
      * \param v The vector to create a span over
      */
     span(const std::vector<typename std::remove_const<T>::type> &v)
-      : base(v.data())
+      : base(const_cast<T *>(v.data()))
       , length(v.size())
     {}
 
@@ -173,6 +173,18 @@ namespace REALM_NAMESPACE {
      * \return true if the span contains no elements, false otherwise
      */
     bool empty() const { return (length == 0); }
+
+    // Iterator support
+  public:
+    typedef T *iterator;
+    typedef const T *const_iterator;
+
+    iterator begin() { return base; }
+    iterator end() { return base + length; }
+    const_iterator begin() const { return base; }
+    const_iterator end() const { return base + length; }
+    const_iterator cbegin() const { return base; }
+    const_iterator cend() const { return base + length; }
 
   private:
     T *base;

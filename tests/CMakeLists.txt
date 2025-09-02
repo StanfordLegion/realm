@@ -120,9 +120,12 @@ list(
 )
 list(TRANSFORM REALM_UNIT_TESTS PREPEND "${REALM_TEST_DIR}/unit_tests/")
 add_executable(realm_unit_tests ${REALM_UNIT_TESTS})
-# Needed for designated initializers
+# Needed for designated initializers on Windows. gcc and clang support designated initializers
+# as an extension in C++17 mode
 # TODO(apriakhin): to be removed
-target_compile_features(realm_unit_tests PUBLIC cxx_std_20)
+if(WIN32)
+  target_compile_features(realm_unit_tests PUBLIC cxx_std_20)
+endif()
 target_link_libraries(
   realm_unit_tests PRIVATE realm_obj GTest::gmock_main ${REALM_LIBRARIES} ${REALM_EXTRA_OBJS}
 )
@@ -147,9 +150,12 @@ list(
 )
 list(TRANSFORM REALM_C_UNIT_TESTS PREPEND "${REALM_TEST_DIR}/unit_tests/")
 add_executable(realm_c_unit_tests ${REALM_C_UNIT_TESTS})
-# Needed for designated initializers
+# Needed for designated initializers on Windows. gcc and clang support designated initializers
+# as an extension in C++17 mode
 # TODO(apriakhin): to be removed
-target_compile_features(realm_c_unit_tests PUBLIC cxx_std_20)
+if(WIN32)
+  target_compile_features(realm_c_unit_tests PUBLIC cxx_std_20)
+endif()
 target_link_libraries(
   realm_c_unit_tests PRIVATE realm_obj GTest::gmock_main ${REALM_LIBRARIES} ${REALM_EXTRA_OBJS}
 )
@@ -162,9 +168,12 @@ list(
 )
 list(TRANSFORM REALM_HPP_UNIT_TESTS PREPEND "${REALM_TEST_DIR}/unit_tests/")
 add_executable(realm_hpp_unit_tests ${REALM_HPP_UNIT_TESTS})
-# Needed for designated initializers
+# Needed for designated initializers on Windows. gcc and clang support designated initializers
+# as an extension in C++17 mode
 # TODO(apriakhin): to be removed
-target_compile_features(realm_hpp_unit_tests PUBLIC cxx_std_20)
+if(WIN32)
+  target_compile_features(realm_hpp_unit_tests PUBLIC cxx_std_20)
+endif()
 target_link_libraries(
   realm_hpp_unit_tests PRIVATE realm_obj GTest::gmock_main ${REALM_LIBRARIES} ${REALM_EXTRA_OBJS}
 )
@@ -454,16 +463,24 @@ add_integration_test(c_processor_query "${REALM_TEST_DIR}/c/test_processor_query
 add_integration_test(c_memory_query "${REALM_TEST_DIR}/c/test_memory_query.cc")
 add_integration_test(c_event "${REALM_TEST_DIR}/c/test_event.cc")
 add_integration_test(c_inst "${REALM_TEST_DIR}/c/test_c_inst.cc")
-# TODO(weiwu): designated initializers require c++20, should be removed
-target_compile_features(c_inst PUBLIC cxx_std_20)
+# Needed for designated initializers on Windows. gcc and clang support designated initializers
+# as an extension in C++17 mode
+# TODO(weiwu): remove designated initializers
+if(WIN32)
+  target_compile_features(c_inst PUBLIC cxx_std_20)
+endif()
 
 add_integration_test(c_external_inst "${REALM_TEST_DIR}/c/test_c_external_inst.cc")
 # TODO(weiwu): test crashes on windows
 if(WIN32)
   set_property(TEST c_external_inst PROPERTY DISABLED TRUE)
 endif()
-# TODO(weiwu): designated initializers require c++20, should be removed
-target_compile_features(c_external_inst PUBLIC cxx_std_20)
+# Needed for designated initializers on Windows. gcc and clang support designated initializers
+# as an extension in C++17 mode
+# TODO(weiwu): remove designated initializers
+if(WIN32)
+  target_compile_features(c_external_inst PUBLIC cxx_std_20)
+endif()
 target_link_libraries(c_external_inst ${TEST_GPU_LIBS})
 
 add_integration_test(c_event_poisoned "${REALM_TEST_DIR}/c/test_event_poisoned.cc")
