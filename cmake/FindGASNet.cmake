@@ -105,9 +105,12 @@ find_package_handle_standard_args(
 
 if(GASNet_FOUND)
   add_library(GASNet::GASNet ALIAS PkgConfig::GASNet)
-  string(REPLACE ";" " " _GASNet_CFLAGS_str "${GASNet_CFLAGS}")
+  string(REPLACE ";" " " _GASNet_CFLAGS_str "${GASNet_CFLAGS_OTHER}")
+  string(REPLACE ";" " " _GASNet_LDFLAGS_str "${GASNet_LDFLAGS_OTHER}")
   set_target_properties(
-    PkgConfig::GASNet PROPERTIES INTERFACE_COMPILE_OPTIONS "${_GASNet_CFLAGS_str}"
+    PkgConfig::GASNet PROPERTIES
+    INTERFACE_COMPILE_OPTIONS "SHELL:${_GASNet_CFLAGS_str}"
+    INTERFACE_LINK_OPTIONS "SHELL:${_GASNet_LDFLAGS_str}"
   )
   set_property(
     TARGET PkgConfig::GASNet
