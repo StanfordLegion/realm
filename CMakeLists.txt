@@ -225,6 +225,14 @@ set_package_properties(
   PURPOSE "To display backtraces"
 )
 
+if (REALM_USE_CUDART_HIJACK)
+  message(FATAL_ERROR "CUDART HIJACK is no longer supported")
+endif()
+
+if (REALM_USE_HIP_HIJACK)
+  message(FATAL_ERROR "HIP HIJACK is no longer supported")
+endif()
+
 # TODO(cperry): rename with REALM_ prefix
 set(COMPILE_TIME_MIN_LEVEL "LEVEL_${REALM_LOG_LEVEL}")
 if(CMAKE_BUILD_TYPE STREQUAL Debug)
