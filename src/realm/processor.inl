@@ -16,6 +16,7 @@
  */
 
 // processors for Realm
+#include <functional>
 
 // nop, but helps IDEs
 #include "realm/processor.h"
@@ -63,3 +64,10 @@ namespace Realm {
 #endif
 
 }; // namespace Realm
+
+template<>
+struct std::hash<Realm::Processor> {
+  std::size_t operator()(const Realm::Processor& p) const noexcept {
+    return std::hash<realm_id_t>()(p.id);
+  }
+};

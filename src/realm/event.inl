@@ -19,6 +19,7 @@
 
 // nop, but helps IDEs
 #include "realm/event.h"
+#include <functional>
 
 #include "realm/serialize.h"
 TYPE_IS_SERIALIZABLE(Realm::Event);
@@ -103,3 +104,24 @@ namespace Realm {
   }
 
 }; // namespace Realm
+
+template<>
+struct std::hash<Realm::Event> {
+  std::size_t operator()(const Realm::Event& e) const noexcept {
+    return std::hash<realm_id_t>()(e.id);
+  }
+};
+
+template<>
+struct std::hash<Realm::UserEvent> {
+  std::size_t operator()(const Realm::UserEvent& e) const noexcept {
+    return std::hash<realm_id_t>()(e.id);
+  }
+};
+
+template<>
+struct std::hash<Realm::Barrier> {
+  std::size_t operator()(const Realm::Barrier& e) const noexcept {
+    return std::hash<realm_id_t>()(e.id);
+  }
+};

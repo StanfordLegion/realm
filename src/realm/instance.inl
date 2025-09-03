@@ -20,6 +20,8 @@
 #ifndef REALM_INSTANCE_INL
 #define REALM_INSTANCE_INL
 
+#include <functional>
+
 // nop, but helps IDEs
 #include "realm/instance.h"
 
@@ -300,5 +302,12 @@ namespace Realm {
   }
 
 }; // namespace Realm
+
+template<>
+struct std::hash<Realm::RegionInstance> {
+  std::size_t operator()(const Realm::RegionInstance& r) const noexcept {
+    return std::hash<realm_id_t>()(r.id);
+  }
+};
 
 #endif // ifndef REALM_INSTANCE_INL

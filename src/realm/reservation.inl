@@ -16,6 +16,7 @@
  */
 
 // reservations for Realm
+#include <functional>
 
 // NOP but useful for IDEs
 #include "realm/reservation.h"
@@ -252,3 +253,10 @@ namespace Realm {
   }
 
 }; // namespace Realm
+
+template<>
+struct std::hash<Realm::Reservation> {
+  std::size_t operator()(const Realm::Reservation& m) const noexcept {
+    return std::hash<realm_id_t>()(m.id);
+  }
+};

@@ -24,6 +24,7 @@
 
 #include <stddef.h>
 #include <iostream>
+#include <functional>
 
 namespace Realm {
 
@@ -89,6 +90,13 @@ namespace Realm {
   }
 
 }; // namespace Realm
+
+template<>
+struct std::hash<Realm::Memory> {
+  std::size_t operator()(const Realm::Memory& m) const noexcept {
+    return std::hash<realm_id_t>()(m.id);
+  }
+};
 
   // include "memory.inl"
 
