@@ -464,6 +464,7 @@ var hierarchy =
     [ "Realm::Hip::GPUProcessor::GPUTaskTableEntry", "structRealm_1_1Hip_1_1GPUProcessor_1_1GPUTaskTableEntry.html", null ],
     [ "Realm::ActiveMessageHandlerTable::HandlerEntry", "structRealm_1_1ActiveMessageHandlerTable_1_1HandlerEntry.html", null ],
     [ "Realm::HardwareTopology", "classRealm_1_1HardwareTopology.html", null ],
+    [ "std::hash< Realm::Memory >", "structstd_1_1hash_3_01Realm_1_1Memory_01_4.html", null ],
     [ "Realm::HDF5::HDF5Dataset", "classRealm_1_1HDF5_1_1HDF5Dataset.html", null ],
     [ "Realm::HDF5PieceInfo", "structRealm_1_1HDF5PieceInfo.html", [
       [ "Realm::HDF5LayoutPiece< N, T >", "classRealm_1_1HDF5LayoutPiece.html", null ]

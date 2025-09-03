@@ -79,12 +79,14 @@ digraph "/home/runner/work/realm/realm/realm-src/src/realm/network.h"
   Node29 -> Node8 [id="edge44_Node000029_Node000008",color="steelblue1",style="solid",tooltip=" "];
   Node29 -> Node30 [id="edge45_Node000029_Node000030",color="steelblue1",style="solid",tooltip=" "];
   Node30 [id="Node000030",label="iostream",height=0.2,width=0.4,color="grey60", fillcolor="#E0E0E0", style="filled",tooltip=" "];
-  Node1 -> Node31 [id="edge46_Node000001_Node000031",color="steelblue1",style="solid",tooltip=" "];
-  Node31 [id="Node000031",label="realm/bytearray.h",height=0.2,width=0.4,color="grey40", fillcolor="white", style="filled",URL="$bytearray_8h.html",tooltip=" "];
-  Node31 -> Node8 [id="edge47_Node000031_Node000008",color="steelblue1",style="solid",tooltip=" "];
-  Node31 -> Node32 [id="edge48_Node000031_Node000032",color="steelblue1",style="solid",tooltip=" "];
-  Node32 [id="Node000032",label="realm/bytearray.inl",height=0.2,width=0.4,color="grey60", fillcolor="#E0E0E0", style="filled",tooltip=" "];
-  Node1 -> Node14 [id="edge49_Node000001_Node000014",color="steelblue1",style="solid",tooltip=" "];
-  Node1 -> Node33 [id="edge50_Node000001_Node000033",color="steelblue1",style="solid",tooltip=" "];
-  Node33 [id="Node000033",label="realm/network.inl",height=0.2,width=0.4,color="grey60", fillcolor="#E0E0E0", style="filled",tooltip=" "];
+  Node29 -> Node31 [id="edge46_Node000029_Node000031",color="steelblue1",style="solid",tooltip=" "];
+  Node31 [id="Node000031",label="functional",height=0.2,width=0.4,color="grey60", fillcolor="#E0E0E0", style="filled",tooltip=" "];
+  Node1 -> Node32 [id="edge47_Node000001_Node000032",color="steelblue1",style="solid",tooltip=" "];
+  Node32 [id="Node000032",label="realm/bytearray.h",height=0.2,width=0.4,color="grey40", fillcolor="white", style="filled",URL="$bytearray_8h.html",tooltip=" "];
+  Node32 -> Node8 [id="edge48_Node000032_Node000008",color="steelblue1",style="solid",tooltip=" "];
+  Node32 -> Node33 [id="edge49_Node000032_Node000033",color="steelblue1",style="solid",tooltip=" "];
+  Node33 [id="Node000033",label="realm/bytearray.inl",height=0.2,width=0.4,color="grey60", fillcolor="#E0E0E0", style="filled",tooltip=" "];
+  Node1 -> Node14 [id="edge50_Node000001_Node000014",color="steelblue1",style="solid",tooltip=" "];
+  Node1 -> Node34 [id="edge51_Node000001_Node000034",color="steelblue1",style="solid",tooltip=" "];
+  Node34 [id="Node000034",label="realm/network.inl",height=0.2,width=0.4,color="grey60", fillcolor="#E0E0E0", style="filled",tooltip=" "];
 }

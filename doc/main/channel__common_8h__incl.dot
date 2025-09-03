@@ -28,4 +28,6 @@ digraph "/home/runner/work/realm/realm/realm-src/src/realm/transfer/channel_comm
   Node5 -> Node10 [id="edge11_Node000005_Node000010",color="steelblue1",style="solid",tooltip=" "];
   Node5 -> Node12 [id="edge12_Node000005_Node000012",color="steelblue1",style="solid",tooltip=" "];
   Node12 [id="Node000012",label="iostream",height=0.2,width=0.4,color="grey60", fillcolor="#E0E0E0", style="filled",tooltip=" "];
+  Node5 -> Node13 [id="edge13_Node000005_Node000013",color="steelblue1",style="solid",tooltip=" "];
+  Node13 [id="Node000013",label="functional",height=0.2,width=0.4,color="grey60", fillcolor="#E0E0E0", style="filled",tooltip=" "];
 }

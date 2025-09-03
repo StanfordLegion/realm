@@ -8,6 +8,7 @@ var point_8h =
     [ "std::less< Realm::Rect< N, T > >", "structstd_1_1less_3_01Realm_1_1Rect_3_01N_00_01T_01_4_01_4.html", "structstd_1_1less_3_01Realm_1_1Rect_3_01N_00_01T_01_4_01_4" ],
     [ "ONLY_IF_INTEGRAL", "point_8h.html#a7185255dbed5a8d58b30b96c7bfe83af", null ],
     [ "make_point", "point_8h.html#a6dbd0f03659edfeb0d7094e5f7801a3a", null ],
+    [ "operator!=", "point_8h.html#acb691002fce2c5fc333229e8619cbe2f", null ],
     [ "operator!=", "point_8h.html#a45c5a2dfe2c0a5933512bfc15b58a8ad", null ],
     [ "operator!=", "point_8h.html#addd773f1d808a80e000f0c20616bdb60", null ],
     [ "operator%", "point_8h.html#a006004c69f8a707a5eda6919bf681790", null ],
@@ -29,6 +30,7 @@ var point_8h =
     [ "operator<<", "point_8h.html#ae9e62a2eb03b5620a327e84ec133d4cb", null ],
     [ "operator<<", "point_8h.html#af21e4c1c0a2b94287167ff06aec18591", null ],
     [ "operator<<", "point_8h.html#a593d72ecd795371c239d421bcb0f27ff", null ],
+    [ "operator==", "point_8h.html#a98a00dd2c1182797f4821e53d9449363", null ],
     [ "operator==", "point_8h.html#aaed49d210e4a9f7a8b1c7de79955573c", null ],
     [ "operator==", "point_8h.html#ae2aec6aa05121d72dc39cc4df7c7856c", null ]
 ];

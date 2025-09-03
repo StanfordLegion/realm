@@ -12,6 +12,7 @@ var structRealm_1_1Rect =
     [ "empty", "structRealm_1_1Rect.html#a79b962e70a0784d086157463b12f64ef", null ],
     [ "fill", "structRealm_1_1Rect.html#a2e13b6e4028e7d85cba587fc71657cd5", null ],
     [ "intersection", "structRealm_1_1Rect.html#a37b6a6cded102a1262e8288025c2305a", null ],
+    [ "ONLY_IF_INTEGRAL", "structRealm_1_1Rect.html#a4c1ac5284b43f0dab28910e354391666", null ],
     [ "operator=", "structRealm_1_1Rect.html#a6ab9267d612a80ac67f9b1921fd4d450", null ],
     [ "overlaps", "structRealm_1_1Rect.html#ab3c42c552100e79b64ec26e5bcae5c71", null ],
     [ "union_bbox", "structRealm_1_1Rect.html#ad2d63f3022afe9779d5ce8405edd45d2", null ],

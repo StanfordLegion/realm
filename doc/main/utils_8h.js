@@ -24,6 +24,7 @@ var utils_8h =
     [ "delete_container_contents", "utils_8h.html#a6f17c15e86f9107a51be2a9df4bbc334", null ],
     [ "delete_container_contents", "utils_8h.html#a8f95dc6ddb106588ce1d7a9285049372", null ],
     [ "delete_container_contents_free", "utils_8h.html#a0472391756da9c0e27dfdd5c848366ee", null ],
+    [ "hash_combine", "utils_8h.html#a0b5ef45a7d65d3d72fdfa4c459167a60", null ],
     [ "hash_fnv1a", "utils_8h.html#a519480d9cc7e6da1a76368cf25e0e3b2", null ],
     [ "ipc_mailbox_create", "utils_8h.html#a5842be0e46d452fd06c8d10efa9f6d6a", null ],
     [ "ipc_mailbox_recv", "utils_8h.html#a9ba1dad696d3db51478501ad5a2a6cd7", null ],

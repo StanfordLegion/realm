@@ -42,10 +42,12 @@ digraph "/home/runner/work/realm/realm/realm-src/src/realm/event.h"
   Node17 -> Node6 [id="edge19_Node000017_Node000006",color="steelblue1",style="solid",tooltip=" "];
   Node17 -> Node18 [id="edge20_Node000017_Node000018",color="steelblue1",style="solid",tooltip=" "];
   Node18 [id="Node000018",label="iostream",height=0.2,width=0.4,color="grey60", fillcolor="#E0E0E0", style="filled",tooltip=" "];
-  Node1 -> Node11 [id="edge21_Node000001_Node000011",color="steelblue1",style="solid",tooltip=" "];
-  Node1 -> Node19 [id="edge22_Node000001_Node000019",color="steelblue1",style="solid",tooltip=" "];
-  Node19 [id="Node000019",label="set",height=0.2,width=0.4,color="grey60", fillcolor="#E0E0E0", style="filled",tooltip=" "];
-  Node1 -> Node18 [id="edge23_Node000001_Node000018",color="steelblue1",style="solid",tooltip=" "];
-  Node1 -> Node20 [id="edge24_Node000001_Node000020",color="steelblue1",style="solid",tooltip=" "];
-  Node20 [id="Node000020",label="realm/event.inl",height=0.2,width=0.4,color="grey60", fillcolor="#E0E0E0", style="filled",tooltip=" "];
+  Node17 -> Node19 [id="edge21_Node000017_Node000019",color="steelblue1",style="solid",tooltip=" "];
+  Node19 [id="Node000019",label="functional",height=0.2,width=0.4,color="grey60", fillcolor="#E0E0E0", style="filled",tooltip=" "];
+  Node1 -> Node11 [id="edge22_Node000001_Node000011",color="steelblue1",style="solid",tooltip=" "];
+  Node1 -> Node20 [id="edge23_Node000001_Node000020",color="steelblue1",style="solid",tooltip=" "];
+  Node20 [id="Node000020",label="set",height=0.2,width=0.4,color="grey60", fillcolor="#E0E0E0", style="filled",tooltip=" "];
+  Node1 -> Node18 [id="edge24_Node000001_Node000018",color="steelblue1",style="solid",tooltip=" "];
+  Node1 -> Node21 [id="edge25_Node000001_Node000021",color="steelblue1",style="solid",tooltip=" "];
+  Node21 [id="Node000021",label="realm/event.inl",height=0.2,width=0.4,color="grey60", fillcolor="#E0E0E0", style="filled",tooltip=" "];
 }

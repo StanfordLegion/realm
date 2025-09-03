@@ -2,6 +2,7 @@ var structRealm_1_1Matrix =
 [
     [ "Matrix", "structRealm_1_1Matrix.html#a116edaf7ccb76c00b2811eeec5cbe873", null ],
     [ "Matrix", "structRealm_1_1Matrix.html#a60c2eb576bb1674387ae65ee6396f901", null ],
+    [ "ONLY_IF_INTEGRAL", "structRealm_1_1Matrix.html#ad4115bddc91aa73462a875ed2ce87731", null ],
     [ "operator=", "structRealm_1_1Matrix.html#a8e3e3a22e6ef92959d9d47f4aeadc397", null ],
     [ "operator[]", "structRealm_1_1Matrix.html#aca33bec584bedc3915f523b8e7fe673e", null ],
     [ "operator[]", "structRealm_1_1Matrix.html#aef5124313118cf6122255a978bbd257a", null ],
