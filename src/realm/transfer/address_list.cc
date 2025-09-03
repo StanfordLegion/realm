@@ -120,6 +120,13 @@ namespace Realm {
     total_bytes += bytes * (field_block ? field_block->count : 1);
   }
 
+  void AddressList::attach_field_block(const FieldBlock *_field_block)
+  {
+    field_block = _field_block;
+  }
+
+  size_t AddressList::bytes_pending() const { return total_bytes; }
+
   size_t AddressList::full_field_bytes()
   {
     const size_t *entry = read_entry();
@@ -137,13 +144,6 @@ namespace Realm {
   {
     return (contig_bytes << CONTIG_SHIFT) | (dims & DIM_MASK);
   }
-
-  void AddressList::attach_field_block(const FieldBlock *_field_block)
-  {
-    field_block = _field_block;
-  }
-
-  size_t AddressList::bytes_pending() const { return total_bytes; }
 
   const size_t *AddressList::read_entry()
   {
