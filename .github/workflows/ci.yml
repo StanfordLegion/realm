@@ -312,6 +312,7 @@ jobs:
             -DCMAKE_INSTALL_PREFIX=${{ github.workspace }}/kokkos/install
           cmake --build kokkos/build --parallel 4 --config Release
           cmake --install kokkos/build --parallel 4 --prefix kokkos/install --config Release
+          echo REALM_MIN_CUDA_ARCH=60 >> "${GITHUB_ENV}"
 
       - name: Check for GPU
         if: ${{ matrix.config.cuda != '' }}
@@ -335,6 +336,7 @@ jobs:
                 -DREALM_ENABLE_UCX=${{ matrix.config.ucx }}
                 -DREALM_ENABLE_PYTHON=${{ matrix.config.python }}
                 -DREALM_ENABLE_CUDA=${{ matrix.config.cuda != '' && 'ON' || 'OFF' }}
+                -DREALM_MIN_CUDA_ARCH=$REALM_MIN_CUDA_ARCH
                 -DREALM_ENABLE_KOKKOS=${{ matrix.config.kokkos }}
                 -DKokkos_ROOT=kokkos/install
                 -DGASNET_CONDUIT=mpi
