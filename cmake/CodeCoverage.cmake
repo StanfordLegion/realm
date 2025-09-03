@@ -1,3 +1,4 @@
+# Copyright 2025 NVIDIA Corp
 # Copyright (c) 2012 - 2017, Lars Bilke
 # All rights reserved.
 #
@@ -27,6 +28,8 @@
 # SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #
 # CHANGES:
+# 2025-09-03, Cory Perry
+# - Replace uses of "COMMAND ;" with cmake -E echo
 #
 # 2012-01-31, Lars Bilke
 # - Enable Code Coverage
@@ -390,15 +393,13 @@ function(setup_target_for_coverage_lcov)
 
     # Show where to find the lcov info report
     add_custom_command(TARGET ${Coverage_NAME} POST_BUILD
-        COMMAND ;
-        COMMENT "Lcov code coverage info report saved in ${Coverage_NAME}.info."
+        COMMAND ${CMAKE_COMMAND} -E echo "Lcov code coverage info report saved in ${Coverage_NAME}.info.\n"
         ${GCOVR_XML_CMD_COMMENT}
     )
 
     # Show info where to find the report
     add_custom_command(TARGET ${Coverage_NAME} POST_BUILD
-        COMMAND ;
-        COMMENT "Open ./${Coverage_NAME}/index.html in your browser to view the coverage report."
+        COMMAND ${CMAKE_COMMAND} -E echo "Open ./${Coverage_NAME}/index.html in your browser to view the coverage report."
     )
 
 endfunction() # setup_target_for_coverage_lcov
@@ -490,8 +491,7 @@ function(setup_target_for_coverage_gcovr_xml)
 
     # Show info where to find the report
     add_custom_command(TARGET ${Coverage_NAME} POST_BUILD
-        COMMAND ;
-        COMMENT "Cobertura code coverage report saved in ${Coverage_NAME}.xml."
+        COMMAND ${CMAKE_COMMAND} -E echo "Cobertura code coverage report saved in ${Coverage_NAME}.xml."
     )
 endfunction() # setup_target_for_coverage_gcovr_xml
 
@@ -591,8 +591,7 @@ function(setup_target_for_coverage_gcovr_html)
 
     # Show info where to find the report
     add_custom_command(TARGET ${Coverage_NAME} POST_BUILD
-        COMMAND ;
-        COMMENT "Open ./${Coverage_NAME}/index.html in your browser to view the coverage report."
+        COMMAND ${CMAKE_COMMAND} -E echo "Open ./${Coverage_NAME}/index.html in your browser to view the coverage report."
     )
 
 endfunction() # setup_target_for_coverage_gcovr_html

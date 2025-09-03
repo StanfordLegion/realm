@@ -194,8 +194,7 @@ if(REALM_ENABLE_COVERAGE)
     add_custom_command(
       TARGET coverage
       POST_BUILD
-      COMMAND ;
-      COMMENT "Cobertura coverage report saved in ${PROJECT_BINARY_DIR}/coverage.xml"
+      COMMAND ${CMAKE_COMMAND} -E echo "Cobertura coverage report saved in ${PROJECT_BINARY_DIR}/coverage.xml"
     )
   else()
     set(CODE_COVERAGE_VERBOSE TRUE)
