@@ -64,7 +64,7 @@ HeartbeatBackend::HeartbeatBackend(GossipMonitor &owner)
 , rng_(std::random_device{}())*/
 {}
 
-void HeartbeatBackend::start(const node_meta_t &self)
+void HeartbeatBackend::start(const NodeInfo &self)
 {
   self_id_ = self.node_id;
   running_.store(true, std::memory_order_release);
@@ -77,13 +77,13 @@ void HeartbeatBackend::stop()
   singleton_ = nullptr;
 }
 
-void HeartbeatBackend::notify_join(const node_meta_t &peer)
+void HeartbeatBackend::notify_join(const NodeInfo &peer)
 {
   AutoLock<> al(mtx_);
   peers_[peer.node_id] = {Clock::current_time_in_nanoseconds(), true};
 }
 
-void HeartbeatBackend::notify_leave(const node_meta_t &peer)
+void HeartbeatBackend::notify_leave(const NodeInfo &peer)
 {
   // best-effort bye
   ActiveMessage<Bye> bye(peer.node_id);
@@ -163,7 +163,7 @@ void HeartbeatBackend::process_timeouts(uint64_t now_ns)
   }
 
   for(NodeID d : dead) {
-    node_meta_t meta{static_cast<int32_t>(d), 0, false};
+    NodeInfo meta{static_cast<int32_t>(d), 0, false};
     monitor_.on_state_change(meta, /*alive=*/false);
   }
 }
@@ -182,7 +182,7 @@ void HeartbeatBackend::on_beat(NodeID sender, uint64_t ts_ns)
   }
 
   if(revived) {
-    node_meta_t meta{static_cast<int32_t>(sender), 0, false};
+    NodeInfo meta{static_cast<int32_t>(sender), 0, false};
     monitor_.on_state_change(meta, /*alive=*/true);
   }
 }
@@ -193,6 +193,6 @@ void HeartbeatBackend::on_bye(NodeID sender)
     AutoLock<> al(mtx_);
     peers_.erase(sender);
   }
-  node_meta_t meta{static_cast<int32_t>(sender), 0, false};
+  NodeInfo meta{static_cast<int32_t>(sender), 0, false};
   monitor_.on_state_change(meta, /*alive=*/false);
 }

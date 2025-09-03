@@ -412,36 +412,6 @@ namespace Realm {
 
   namespace {
 
-    void membership_pre_join_cb(const node_meta_t *self, const void *, size_t,
-                                bool joined, void *)
-    {
-      assert(joined == false);
-
-      RuntimeImpl *rt = get_runtime();
-
-      if(Network::my_node_id == self->node_id) {
-      } else {
-        assert(rt->shutdown_in_progress.load() == false);
-      }
-    }
-
-    void membership_post_join_cb(const node_meta_t *, const void *, size_t, bool joined,
-                                 void *)
-    {
-      RuntimeImpl *rt = get_runtime();
-      rt->node_directory->remove_slot(NodeDirectory::UNKNOWN_NODE_ID);
-
-      if(joined) {
-        AutoLock<> al(rt->join_mutex);
-        rt->join_complete = joined;
-        rt->join_condvar.broadcast();
-      }
-
-#ifdef REALM_ENABLE_NETWORK_PING_TEST
-      assert(Network::ping_all_peers());
-#endif
-    }
-
     void wait_for_quiescence()
     {
       constexpr int MAX_RETRIES = 100;
@@ -465,12 +435,39 @@ namespace Realm {
       }
     }
 
-    void membership_pre_leave_cb(const node_meta_t *self, const void *, size_t,
-                                 bool /*left*/, void *)
+    void pre_join_cb(const NodeInfo &self, bool joined)
+    {
+      assert(joined == false);
+
+      RuntimeImpl *rt = get_runtime();
+
+      if(Network::my_node_id == self.node_id) {
+      } else {
+        assert(rt->shutdown_in_progress.load() == false);
+      }
+    }
+
+    void post_join_cb(const NodeInfo &self, bool joined)
+    {
+      RuntimeImpl *rt = get_runtime();
+      rt->node_directory->remove_slot(NodeDirectory::UNKNOWN_NODE_ID);
+
+      if(joined) {
+        AutoLock<> al(rt->join_mutex);
+        rt->join_complete = joined;
+        rt->join_condvar.broadcast();
+      }
+
+#ifdef REALM_ENABLE_NETWORK_PING_TEST
+      assert(Network::ping_all_peers());
+#endif
+    }
+
+    void pre_leave_cb(const NodeInfo &self, bool joined)
     {
       RuntimeImpl *rt = get_runtime();
 
-      if(Network::my_node_id == self->node_id) {
+      if(Network::my_node_id == self.node_id) {
         rt->shutdown_in_progress.store(true);
 
         NodeSet members = rt->node_directory->get_members();
@@ -484,7 +481,7 @@ namespace Realm {
 
       } else {
         if(!rt->shutdown_in_progress.load()) {
-          bool ok = rt->cancel_work(self->node_id);
+          bool ok = rt->cancel_work(self.node_id);
           assert(ok);
           // TODO: we probably don't need to wait here
           // wait_for_quiescence();
@@ -492,11 +489,10 @@ namespace Realm {
       }
     }
 
-    void membership_post_leave_cb(const node_meta_t *self, const void *, size_t,
-                                  bool /*left*/, void *)
+    void post_leave_cb(const NodeInfo &self, bool joined)
     {
       RuntimeImpl *rt = get_runtime();
-      if(Network::my_node_id == self->node_id) {
+      if(Network::my_node_id == self.node_id) {
 
         {
           AutoLock<> al(rt->shutdown_mutex);
@@ -508,12 +504,12 @@ namespace Realm {
         // rt->initiate_shutdown(/*signal_only=*/true);
       } else {
         if(!rt->shutdown_in_progress.load()) {
-          assert(rt->remove_peer(self->node_id));
+          assert(rt->remove_peer(self.node_id));
         }
       }
     }
 
-    bool membership_filter_cb(const node_meta_t *, void *) { return true; }
+    bool filter_cb(const NodeInfo) { return true; }
   } // namespace
 
   ////////////////////////////////////////////////////////////////////////
@@ -749,7 +745,7 @@ namespace Realm {
     event = Event::NO_EVENT;
     bool conflict = reduce_op_table.put(redop_id, cloned);
     if(conflict) {
-      log_runtime.error() << "duplicate registration of reduction op " << redop_id;
+      log_runtime.info() << "duplicate registration of reduction op " << redop_id;
       free(cloned);
       return false;
     }
@@ -767,7 +763,7 @@ namespace Realm {
     CustomSerdezUntyped *cloned = serdez->clone();
     bool conflict = ((RuntimeImpl *)impl)->custom_serdez_table.put(serdez_id, cloned);
     if(conflict) {
-      log_runtime.error() << "duplicate registration of custom serdez " << serdez_id;
+      log_runtime.info() << "duplicate registration of custom serdez " << serdez_id;
       delete cloned;
       return false;
     }
@@ -2517,10 +2513,10 @@ namespace Realm {
 
   void RuntimeImpl::elastic_start(void)
   {
-    hooks = membership_hooks_t{membership_pre_join_cb,  membership_post_join_cb,
-                               membership_pre_leave_cb, membership_post_leave_cb,
-                               membership_filter_cb,    nullptr};
-    membership_init(&membership, hooks);
+    IMembership::Hooks hooks{pre_join_cb, post_join_cb, pre_leave_cb, post_leave_cb,
+                             filter_cb};
+    membership_impl = create_membership("am_mesh", hooks);
+    membership_impl->start();
 
     Serialization::DynamicBufferSerializer dbs(4096);
     bool ok = serialize_announcement(dbs, &get_runtime()->nodes[Network::my_node_id],
@@ -2534,15 +2530,13 @@ namespace Realm {
     const uint8_t *buffer = static_cast<const uint8_t *>(dbs.get_buffer());
     nm->machine_model.assign(buffer, buffer + dbs.bytes_used());
 
-    node_meta_t self_meta{};
+    NodeInfo self_meta{};
     self_meta.node_id = Network::my_node_id;
     self_meta.seed_id = Network::my_node_id == 0 ? NodeDirectory::INVALID_NODE_ID
                                                  : NodeDirectory::UNKNOWN_NODE_ID;
     self_meta.announce_mm = true;
-
-    realm_status_t status = membership_join(membership, &self_meta);
-
-    assert(status == realm_status_t::REALM_SUCCESS);
+    bool joined = membership_impl->join(self_meta);
+    assert(joined);
 
     {
       AutoLock<> al(join_mutex);
@@ -2907,10 +2901,12 @@ namespace Realm {
       CoreModuleConfig *config =
           checked_cast<CoreModuleConfig *>(get_module_config("core"));
       if(config->enable_elasticity) {
-        node_meta_t self_meta{};
+
+        NodeInfo self_meta{};
         self_meta.node_id = Network::my_node_id;
-        realm_status_t status = membership_leave(membership, &self_meta);
-        assert(status == realm_status_t::REALM_SUCCESS);
+        bool ok = membership_impl->leave(self_meta);
+        assert(ok);
+
       } else {
 
         NodeID shutdown_master_node = 0;
@@ -2979,7 +2975,7 @@ namespace Realm {
       while(!shutdown_initiated)
         shutdown_condvar.wait();
     }
-    log_runtime.info("shutdown request received - terminating");
+    log_runtime.error("shutdown request received - terminating");
 
     // we need a task to run on each processor to ensure anything that was
     //  running when the shutdown was initiated (e.g. the task that initiated
@@ -3066,7 +3062,8 @@ namespace Realm {
 
     repl_heap.cleanup();
 
-    membership_destroy(membership);
+    membership_impl->stop();
+    // membership_destroy(membership);
 
     // let network-dependent cleanup happen before we detach
     for(std::vector<Module *>::iterator it = modules.begin(); it != modules.end(); it++) {

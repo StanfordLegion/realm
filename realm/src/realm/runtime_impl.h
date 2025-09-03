@@ -401,9 +401,7 @@ namespace Realm {
 
     bool shared_peers_use_network_module = true;
 
-    membership_handle_t membership;
-    membership_hooks_t hooks;
-
+    std::unique_ptr<IMembership> membership_impl{nullptr};
     NodeDirectory* node_directory{nullptr};
 
     class DeferredShutdown : public EventWaiter {

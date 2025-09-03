@@ -40,11 +40,11 @@ static bool wait_until(std::function<bool()> pred, int timeout_sec)
 {
   auto start = std::chrono::steady_clock::now();
   while(true) {
-    if(pred())
+    if(pred()) {
       return true;
-    if(std::chrono::duration_cast<std::chrono::seconds>(std::chrono::steady_clock::now() -
-                                                        start)
-           .count() > timeout_sec) {
+    } else if(std::chrono::duration_cast<std::chrono::seconds>(
+                  std::chrono::steady_clock::now() - start)
+                  .count() > timeout_sec) {
       return false;
     }
     sleep(1);
@@ -129,6 +129,7 @@ void top_task(const void *args, size_t arglen, const void *userdata, size_t user
         size_t(TestConfig::expected_peers) - size_t(TestConfig::failed_node_ids.size());
     const size_t expected_epoch_min =
         size_t(TestConfig::expected_peers) + size_t(TestConfig::failed_node_ids.size());
+
     bool f_ok = wait_until(
         [&]() {
           size_t peers = Network::node_directory.size();
@@ -139,6 +140,7 @@ void top_task(const void *args, size_t arglen, const void *userdata, size_t user
     assert(f_ok && "timeout waiting for post-failure peers/epoch");
   }
 
+  std::cout << "Call Shutdown Me:" << Network::my_node_id << std::endl;
   Runtime::get_runtime().shutdown();
 }
 

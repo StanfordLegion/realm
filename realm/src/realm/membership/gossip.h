@@ -14,20 +14,20 @@ namespace Realm {
   class GossipBackend {
   public:
     virtual ~GossipBackend() = default;
-    virtual void start(const node_meta_t &self) = 0;
+    virtual void start(const NodeInfo &self) = 0;
     virtual void stop() = 0;
     virtual void poll(uint64_t now_ns = 0) = 0;
-    virtual void notify_join(const node_meta_t &peer) = 0;
-    virtual void notify_leave(const node_meta_t &peer) = 0;
+    virtual void notify_join(const NodeInfo &peer) = 0;
+    virtual void notify_leave(const NodeInfo &peer) = 0;
   };
 
   // Callback type: alive=false means the peer is considered dead/timed-out
-  using GossipStateChangeCB = std::function<void(const node_meta_t &peer, bool alive)>;
+  using GossipStateChangeCB = std::function<void(const NodeInfo &peer, bool alive)>;
 
   class GossipMonitor {
   public:
     GossipMonitor() = default;
-    ~GossipMonitor() { stop(); }
+    ~GossipMonitor() { }
 
     GossipMonitor(const GossipMonitor &) = delete;
     GossipMonitor &operator=(const GossipMonitor &) = delete;
@@ -41,7 +41,7 @@ namespace Realm {
 
     void set_state_callback(GossipStateChangeCB cb) { state_cb_ = std::move(cb); }
 
-    void start(const node_meta_t &self)
+    void start(const NodeInfo &self)
     {
       if(backend_) {
         backend_->start(self);
@@ -62,21 +62,21 @@ namespace Realm {
       }
     }
 
-    void notify_join(const node_meta_t &peer)
+    void notify_join(const NodeInfo &peer)
     {
       if(backend_) {
         backend_->notify_join(peer);
       }
     }
 
-    void notify_leave(const node_meta_t &peer)
+    void notify_leave(const NodeInfo &peer)
     {
       if(backend_) {
         backend_->notify_leave(peer);
       }
     }
 
-    void on_state_change(const node_meta_t &peer, bool alive)
+    void on_state_change(const NodeInfo &peer, bool alive)
     {
       if(state_cb_) {
         state_cb_(peer, alive);

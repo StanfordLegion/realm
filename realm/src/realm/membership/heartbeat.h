@@ -12,11 +12,11 @@ namespace Realm {
   public:
     explicit HeartbeatBackend(GossipMonitor &owner);
 
-    void start(const node_meta_t &self_meta) override;
+    void start(const NodeInfo &self_meta) override;
     void stop() override;
     void poll(uint64_t now_ns = 0) override;
-    void notify_join(const node_meta_t &peer) override;
-    void notify_leave(const node_meta_t &peer) override;
+    void notify_join(const NodeInfo &peer) override;
+    void notify_leave(const NodeInfo &peer) override;
 
     void on_beat(NodeID sender, uint64_t ts_ns);
     void on_bye(NodeID sender);
