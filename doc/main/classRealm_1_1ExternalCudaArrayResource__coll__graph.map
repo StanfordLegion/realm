@@ -1,9 +1,0 @@
-<map id="Realm::ExternalCudaArrayResource" name="Realm::ExternalCudaArrayResource">
-<area shape="rect" id="Node000001" title=" " alt="" coords="709,34,904,74"/>
-<area shape="rect" id="Node000002" href="$classRealm_1_1ExternalInstanceResource.html" title=" " alt="" coords="293,5,535,31"/>
-<area shape="poly" id="edge1_Node000001_Node000002" title=" " alt="" coords="549,28,709,42,709,48,548,33"/>
-<area shape="rect" id="Node000003" href="$classRealm_1_1Serialization_1_1PolymorphicSerdezSubclass.html" title=" " alt="" coords="277,55,551,125"/>
-<area shape="poly" id="edge2_Node000001_Node000003" title=" " alt="" coords="565,74,709,60,709,66,565,79"/>
-<area shape="rect" id="Node000004" href="$classRealm_1_1Serialization_1_1PolymorphicSerdezIntfc.html" title=" " alt="" coords="5,70,228,110"/>
-<area shape="poly" id="edge3_Node000003_Node000004" title=" " alt="" coords="242,87,277,87,277,93,242,93"/>
-</map>
