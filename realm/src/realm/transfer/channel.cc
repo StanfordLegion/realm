@@ -3161,6 +3161,7 @@ namespace Realm {
     if(!supports_redop(redop_id)) {
       return 0;
     }
+
     // If we don't support the indirection memory, then no need to check the paths.
     if((channel_copy_info.ind_mem != Memory::NO_MEMORY) &&
        !supports_indirection_memory(channel_copy_info.ind_mem)) {

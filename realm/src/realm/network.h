@@ -64,6 +64,14 @@ namespace Realm {
 #define REALM_ENABLE_NETWORK_PING_TEST
 
   typedef uint64_t Epoch_t;
+  enum class PeerFailureKind
+  {
+    LivenessTimeout,
+    ProgressStall,
+    TransportError
+  };
+
+  using PeerFailureCB = void (*)(NodeID peer, PeerFailureKind kind, void *user);
 
   namespace Network {
     extern NodeDirectory node_directory;
@@ -114,6 +122,8 @@ namespace Realm {
     //  since the previous quiescence check)
     bool check_for_quiescence(IncomingMessageManager *message_manager,
                               bool elastic = false);
+
+    void register_peer_failure_callback(PeerFailureCB cb, void *user);
 
     // collective communication across all nodes (TODO: subcommunicators?)
     template <typename T>
@@ -220,6 +230,20 @@ namespace Realm {
 
     virtual size_t sample_messages_received_count(void) = 0;
 
+    virtual void set_peer_failure_callback(PeerFailureCB cb, void *user)
+    {
+      peer_fail_cb_ = cb;
+      peer_fail_ud_ = user;
+    }
+
+    inline void notify_peer_failure(NodeID peer, PeerFailureKind kind) const
+    {
+      auto cb = peer_fail_cb_;
+      if(cb) {
+        cb(peer, kind, peer_fail_ud_);
+      }
+    }
+
     virtual void collect_quiescence_counters(NodeID node, QuiescenceCounters &out)
     {
       assert(0);
@@ -279,6 +303,10 @@ namespace Realm {
                                            size_t line_stride,
                                            const RemoteAddress &dest_payload_addr,
                                            bool with_congestion, size_t header_size) = 0;
+
+  private:
+    PeerFailureCB peer_fail_cb_{nullptr};
+    void *peer_fail_ud_{nullptr};
   };
 
   namespace NetworkSegmentInfo {

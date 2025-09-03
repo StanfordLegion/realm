@@ -21,6 +21,7 @@
 #include <cstdint>
 #include <functional>
 #include "realm/udp/frag_list.h"
+#include "realm/mutex.h"
 
 namespace Realm {
 
@@ -60,8 +61,7 @@ namespace Realm {
     uint16_t get_rx_bitmap() const { return rx_bitmap; }
     size_t num_outstanding() const { return in_flight_entries.size(); }
 
-    // Retransmit any packet whose ACK is overdue; must be polled periodically.
-    void poll(uint64_t now_us);
+    bool poll(uint64_t now_us);
 
   private:
     struct TxEntry {
@@ -81,6 +81,8 @@ namespace Realm {
     static bool in_window(uint16_t seq, uint16_t last_rx);
 
     void send_now(TxEntry &e);
+
+    mutable Mutex mtx;
 
     TxCallback tx_cb;
     uint16_t next_tx_seq{0};

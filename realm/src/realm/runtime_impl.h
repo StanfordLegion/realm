@@ -306,7 +306,7 @@ namespace Realm {
     // shutdown the runtime
     void shutdown(Event wait_on = Event::NO_EVENT, int result_code = 0);
 
-    bool cancel_work(NodeID id);
+    bool cancel_work(NodeID id, bool self = false);
     bool remove_peer(NodeID id);
 
     // returns value of result_code passed to shutdown()
@@ -401,9 +401,7 @@ namespace Realm {
 
     bool shared_peers_use_network_module = true;
 
-    membership_handle_t membership;
-    membership_hooks_t hooks;
-
+    std::unique_ptr<IMembership> membership_impl{nullptr};
     NodeDirectory* node_directory{nullptr};
 
     class DeferredShutdown : public EventWaiter {

@@ -53,6 +53,7 @@ namespace Realm {
 
   void UDPShim::enqueue(const std::vector<char> &packet, const PatchFn &patch)
   {
+    AutoLock<> lock(mtx);
     TxEntry entry{packet, next_tx_seq++, 0, 0, patch};
     send_now(entry);
     in_flight_entries.push_back(std::move(entry));
@@ -63,6 +64,7 @@ namespace Realm {
 
   void UDPShim::handle_tx(uint16_t seq, uint16_t ack_bits)
   {
+    AutoLock<> lock(mtx);
     while(!in_flight_entries.empty()) {
       uint16_t diff = seq_diff(in_flight_entries.front().seq, seq);
       if(diff == 0 || (diff < WINDOW_BITS && (ack_bits & (1U << (diff - 1))))) {
@@ -75,6 +77,7 @@ namespace Realm {
 
   bool UDPShim::handle_rx(uint16_t seq, const std::vector<char> &packet)
   {
+    AutoLock<> lock(mtx);
     last_rx_seq = seq;
 
     uint16_t diff = seq_diff(seq, last_rx_seq);
@@ -98,6 +101,7 @@ namespace Realm {
 
   std::vector<char> UDPShim::pull()
   {
+    AutoLock<> lock(mtx);
     std::vector<char> *vec = frag_list.pull();
     if(vec) {
       std::vector<char> ret = std::move(*vec);
@@ -107,17 +111,20 @@ namespace Realm {
     return {};
   }
 
-  void UDPShim::poll(uint64_t now_us)
+  bool UDPShim::poll(uint64_t now_us)
   {
+    AutoLock<> lock(mtx);
     for(auto &entry : in_flight_entries) {
       if(entry.retries >= int(MAX_RETRIES)) {
-        assert(0);
-        continue;
+        return false;
       }
       if(now_us - entry.ts_last_send >= RETRY_USEC) {
-        assert(entry.patch);
+        if(!entry.patch) {
+          return false; // TODO: FIX AND TEST ME
+        }
         send_now(entry);
       }
     }
+    return true;
   }
 } // namespace Realm

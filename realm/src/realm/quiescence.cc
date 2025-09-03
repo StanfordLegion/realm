@@ -18,6 +18,7 @@
 #include "realm/quiescence.h"
 #include "realm/mutex.h"
 #include "realm/node_directory.h"
+#include <unordered_map>
 #include <vector>
 
 namespace Realm {
@@ -60,6 +61,9 @@ namespace Realm {
     NodeSet peers;
     uint64_t epoch;
     std::vector<char> responded;
+
+    std::unordered_map<NodeID, QuiescenceCounters> local_counters;
+
     uint64_t round_id{0};
     uint64_t sum_msg_sent{0};
     uint64_t sum_msg_recv{0};
@@ -74,6 +78,7 @@ namespace Realm {
       peers = _peers;
       responded.assign(peers.size(), 0);
       sum_msg_sent = sum_msg_recv = sum_rcomp_sent = sum_rcomp_recv = sum_outstanding = 0;
+      local_counters.clear();
     }
 
     bool mark(NodeID node, const QuiesceRepAM &rep)
@@ -190,16 +195,20 @@ namespace Realm {
       AutoLock<> al(quiesce_state.mtx);
       if(quiesce_state.round_id == 0) {
 
-        QuiescenceCounters local_counters;
-        for(NodeID peer : members) {
-          collect_all_counters(peer, local_counters);
-        }
+        auto &local_counters = quiesce_state.local_counters;
 
         const uint64_t new_round =
             g_next_round.fetch_add(1, std::memory_order_relaxed) + 1;
         quiesce_state.reset(epoch, new_round, members);
 
-        quiesce_state.sum_outstanding = local_counters.outstanding;
+        for(NodeID peer : members) {
+          collect_all_counters(peer, local_counters[peer]);
+          quiesce_state.sum_msg_sent += local_counters[peer].msg_sent;
+          quiesce_state.sum_msg_recv += local_counters[peer].msg_recv;
+          quiesce_state.sum_rcomp_sent += local_counters[peer].rcomp_sent;
+          quiesce_state.sum_rcomp_recv += local_counters[peer].rcomp_recv;
+          quiesce_state.sum_outstanding += local_counters[peer].outstanding;
+        }
 
         ActiveMessage<QuiesceReqAM> am(members);
         am->leaving = leaving;
@@ -218,13 +227,13 @@ namespace Realm {
         return false;
       }
 
-      const bool done = (quiesce_state.sum_outstanding == 0);
+      const bool msgs_ok = ((quiesce_state.sum_msg_sent + quiesce_state.sum_rcomp_sent) ==
+                            (quiesce_state.sum_msg_recv + quiesce_state.sum_rcomp_recv));
 
-      // const bool msgs_ok = (quiesce_state.sum_msg_sent == quiesce_state.sum_msg_recv);
-      // const bool rcmp_ok = (quiesce_state.sum_rcomp_sent ==
-      // quiesce_state.sum_rcomp_recv); const bool outs_ok =
-      // (quiesce_state.sum_outstanding == 0); const bool done = msgs_ok && rcmp_ok &&
-      // outs_ok;
+      const bool rcmp_ok =
+          true; //(quiesce_state.sum_rcomp_sent == quiesce_state.sum_rcomp_recv);
+      const bool outs_ok = (quiesce_state.sum_outstanding == 0);
+      const bool done = msgs_ok && rcmp_ok && outs_ok;
 
       if(done) {
         ActiveMessage<QuiesceDoneAM> am(members);
@@ -239,5 +248,43 @@ namespace Realm {
       return done;
     }
     return false;
+  }
+
+  void quiescence_on_peer_failed(NodeID peer)
+  {
+    AutoLock<> al(quiesce_state.mtx);
+    if(quiesce_state.round_id != 0) {
+      if(quiesce_state.peers.contains(peer)) {
+        quiesce_state.peers.remove(peer);
+        if(static_cast<size_t>(peer) < quiesce_state.responded.size()) {
+          quiesce_state.responded[peer] = 1;
+        }
+      }
+
+      // TODO: TEST ME
+
+      if(static_cast<size_t>(peer) < quiesce_state.local_counters.size()) {
+        // subtract stale contribution from round totals
+        quiesce_state.sum_msg_sent -= quiesce_state.local_counters[peer].msg_sent;
+        quiesce_state.sum_msg_recv -= quiesce_state.local_counters[peer].msg_recv;
+        quiesce_state.sum_rcomp_sent -= quiesce_state.local_counters[peer].rcomp_sent;
+        quiesce_state.sum_rcomp_recv -= quiesce_state.local_counters[peer].rcomp_recv;
+        quiesce_state.sum_outstanding -= quiesce_state.local_counters[peer].outstanding;
+
+        // refresh per-peer counters – treat every sent msg/rcmp as received
+        quiesce_state.local_counters[peer].msg_recv =
+            quiesce_state.local_counters[peer].msg_sent;
+        quiesce_state.local_counters[peer].rcomp_recv =
+            quiesce_state.local_counters[peer].rcomp_sent;
+        quiesce_state.local_counters[peer].outstanding = 0;
+
+        // add balanced contribution back into round totals
+        quiesce_state.sum_msg_sent += quiesce_state.local_counters[peer].msg_sent;
+        quiesce_state.sum_msg_recv += quiesce_state.local_counters[peer].msg_recv;
+        quiesce_state.sum_rcomp_sent += quiesce_state.local_counters[peer].rcomp_sent;
+        quiesce_state.sum_rcomp_recv += quiesce_state.local_counters[peer].rcomp_recv;
+        // outstanding is zero now – nothing to add
+      }
+    }
   }
 } // namespace Realm

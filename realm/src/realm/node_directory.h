@@ -38,7 +38,6 @@ namespace Realm {
     uint8_t flags{0};
     std::vector<uint8_t> worker_address;
     uint32_t dev_index{0};
-
     std::vector<uint8_t> machine_model;
   };
 

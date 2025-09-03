@@ -89,7 +89,8 @@ namespace Realm {
       ~UCPWorker();
       bool init();
       void finalize();
-      bool ep_add(int target, ucp_address_t *addr, int remote_dev_index);
+      bool ep_add(int target, ucp_address_t *addr, int remote_dev_index,
+                  Realm::NetworkModule *module = nullptr, bool enable_timeout = false);
       bool ep_get(int target, int remote_dev_index, ucp_ep_h *ep);
       bool ep_close(ucp_ep_h ep);
       void *request_get();

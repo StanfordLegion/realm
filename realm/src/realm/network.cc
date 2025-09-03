@@ -153,6 +153,14 @@ namespace Realm {
 
 #endif // REALM_ENABLE_NETWORK_PING_TEST
 
+    void register_peer_failure_callback(PeerFailureCB cb, void *user)
+    {
+      single_network->set_peer_failure_callback(cb, user);
+      if(control_plane_network) {
+        control_plane_network->set_peer_failure_callback(cb, user);
+      }
+    }
+
     bool check_for_quiescence(IncomingMessageManager *message_manager, bool elastic)
     {
 #ifdef REALM_USE_MULTIPLE_NETWORKS
@@ -179,8 +187,8 @@ namespace Realm {
 
         bool status = single_network->check_for_quiescence(messages_received);
         if(control_plane_network) {
-          status &=
-              control_plane_network->check_for_quiescence(control_messages_received);
+          // status &=
+          // control_plane_network->check_for_quiescence(control_messages_received);
         }
         return status;
       }
