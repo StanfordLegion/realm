@@ -141,6 +141,7 @@ namespace Realm {
 
   template <int N, typename T>
   struct REALM_PUBLIC_API Rect {
+    typedef ONLY_IF_INTEGRAL(T) value_type;
     Point<N, T> lo, hi;
 
     REALM_CUDA_HD
@@ -227,6 +228,7 @@ namespace Realm {
 
   template <int M, int N, typename T>
   struct REALM_PUBLIC_API Matrix {
+    typedef ONLY_IF_INTEGRAL(T) value_type;
     Point<N, T> rows[M];
 
     REALM_CUDA_HD
@@ -248,6 +250,10 @@ namespace Realm {
   template <int M, int P, int N, typename T, typename T2>
   REALM_CUDA_HD Matrix<M, N, T> operator*(const Matrix<M, P, T> &m,
                                           const Matrix<P, N, T2> &n);
+  template <int M, int N, typename T, typename T2>
+  REALM_CUDA_HD bool operator==(const Matrix<M, N, T> &lhs, const Matrix<M, N, T> &rhs);
+  template <int M, int N, typename T, typename T2>
+  REALM_CUDA_HD bool operator!=(const Matrix<M, N, T> &lhs, const Matrix<M, N, T> &rhs);
 
   template <int N, typename T>
   class PointInRectIterator {

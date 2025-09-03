@@ -66,6 +66,13 @@ namespace Realm {
                   : hash_fnv1a(s + 1, n - 1, ((value ^ uint64_t(*s)) * 0x100000001b3ULL));
   }
 
+  // Based on boost::hash_combine
+  constexpr size_t hash_combine(size_t lhs, size_t rhs) noexcept
+  {
+    const size_t seed = 0x517cc1b727220a95ULL;
+    return lhs ^ (rhs + seed + (lhs << 6) + (lhs >> 2));
+  }
+
   // TODO: actually use C++20 version if available
   const size_t dynamic_extent = size_t(-1);
 

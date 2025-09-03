@@ -91,9 +91,10 @@ namespace Realm {
 
 }; // namespace Realm
 
-template<>
+template <>
 struct std::hash<Realm::Memory> {
-  std::size_t operator()(const Realm::Memory& m) const noexcept {
+  std::size_t operator()(const Realm::Memory &m) const noexcept
+  {
     return std::hash<realm_id_t>()(m.id);
   }
 };

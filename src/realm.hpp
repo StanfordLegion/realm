@@ -2223,22 +2223,21 @@ namespace REALM_NAMESPACE {
     realm_memory_query_t impl;
   };
 
-} // namespace Realm
+} // namespace REALM_NAMESPACE
 
 #define REALM_HASH_DEFINE(C)                                                             \
   template <>                                                                            \
   struct std::hash<C> {                                                                  \
     std::size_t operator()(const C &c) const noexcept                                    \
     {                                                                                    \
-      return std::hash<realm_id_t>()(c.id);                                              \
+      return std::hash<realm_id_t>()(c);                                                 \
     }                                                                                    \
   }
 
-REALM_HASH_DEFINE(Realm::Memory);
-REALM_HASH_DEFINE(Realm::Processor);
-REALM_HASH_DEFINE(Realm::Event);
-REALM_HASH_DEFINE(Realm::UserEvent);
-REALM_HASH_DEFINE(Realm::Barrier);
+REALM_HASH_DEFINE(REALM_NAMESPACE::Memory);
+REALM_HASH_DEFINE(REALM_NAMESPACE::Processor);
+REALM_HASH_DEFINE(REALM_NAMESPACE::Event);
+REALM_HASH_DEFINE(REALM_NAMESPACE::UserEvent);
 
 #undef REALM_HASH_DEFINE
 
