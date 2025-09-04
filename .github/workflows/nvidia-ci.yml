@@ -1,0 +1,176 @@
+# Copyright 2025 Stanford University, NVIDIA Corporation
+# SPDX-License-Identifier: Apache-2.0
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+name: nv-ci
+
+on:
+  push:
+    branches:
+      - "pull-request/[0-9]+"
+      - "main"
+
+jobs:
+  build:
+    name: Build-Linux-amd64-${{ matrix.build }}${{ matrix.cuda }}
+    if: github.repository == 'nv-legate/nv-realm'
+    runs-on: linux-amd64-cpu8
+    container:
+      image: rapidsai/ci-wheel:cuda${{ matrix.cuda }}-rockylinux8-py3.13
+    env:
+      CPM_SOURCE_CACHE: "${{ github.workspace }}/.cache/cpm"
+      SCCACHE_DIR: "${{ github.workspace }}/.cache/sccache"
+    strategy:
+      fail-fast: false
+      matrix:
+        cuda:
+          - 12.9.1
+        build:
+          - Release
+        openmp:
+          - ON
+        python:
+          - ON
+        ucx:
+          - OFF
+        gasnet:
+          - OFF
+        sanitizer:
+          - NONE
+    steps:
+
+      - uses: actions/checkout@v4.2.2
+        with:
+          fetch-tags: true
+          fetch-depth: 100
+
+      - uses: actions/cache@v4
+        name: Restore cpm source cache
+        with:
+          key: cpm-${{ github.ref_name }}
+          restore-keys: |
+            cpm-${{ github.ref_name }}
+            cpm-main
+          path: ${{ env.CPM_SOURCE_CACHE }}
+
+      - uses: actions/cache@v4
+        name: Restore sccache cache
+        with:
+          # TODO: Add compiler and features to this key
+          key: sccache-${{ github.ref_name }}
+          restore-keys: |
+            sccache-${{ github.ref_name }}
+            sccache-main
+          path: ${{ env.SCCACHE_DIR }}
+
+      - name: Configure
+        run: |
+          source /opt/rh/gcc-toolset-14/enable
+          cmake -S . -B build \
+               -DDCMAKE_C_COMPILER_LAUNCHER=sccache -DCMAKE_CXX_COMPILER_LAUNCHER=sccache \
+               -DBUILD_SHARED_LIBS=ON \
+               -DCMAKE_BUILD_TYPE=${{ matrix.build }} \
+               -DREALM_BUILD_TESTS=ON -DREALM_BUILD_BENCHMARKS=ON -DREALM_BUILD_EXAMPLES=ON \
+               -DREALM_ENABLE_CUDA=ON \
+               -DREALM_ENABLE_OPENMP=${{ matrix.openmp }} \
+               -DREALM_ENABLE_PYTHON=${{ matrix.python }} \
+               -DREALM_ENABLE_UCX=${{ matrix.ucx }} \
+               -DGASNET_CONDUIT=mpi \
+               -DREALM_ENABLE_GASNETEX=${{ matrix.gasnet }}
+
+      - name: Build
+        run: |
+          source /opt/rh/gcc-toolset-14/enable
+          cmake --build build --config ${{ matrix.build }} --verbose --parallel 8
+
+      - name: Show sccache stats
+        run: sccache --show-stats
+
+      - name: Package the workspace
+        run: tar -pvczf /tmp/workspace.tar.gz --exclude='*.o' --exclude='_deps' --exclude='CMakeFiles' build
+      
+      - name: Upload Workspace
+        uses: actions/upload-artifact@v4
+        with:
+          name: workspace-Linux-x86_64-${{ matrix.build }}${{ matrix.cuda }}
+          retention-days: 1
+          path: /tmp/workspace.tar.gz
+
+  test:
+    name: Test-Linux-amd64-${{ matrix.build }}${{ matrix.cuda }}
+    if: github.repository == 'nv-legate/nv-realm'
+    runs-on: ${{ matrix.runner }}
+    container:
+      image: rapidsai/citestwheel:cuda${{ matrix.cuda }}-ubuntu24.04-py3.13
+      env:
+        NVIDIA_VISIBLE_DEVICES: ${{ env.NVIDIA_VISIBLE_DEVICES }}
+    needs: build
+    strategy:
+      fail-fast: false
+      # This matrix needs to at least contain all the
+      # key-values of the build job in order to ensure
+      # we test all the generated artifacts.
+      matrix:
+        runner:
+          - linux-amd64-gpu-l4-latest-1
+          - linux-amd64-gpu-t4-latest-2-llr
+        cuda:
+          - 12.9.1
+        build:
+          - Release
+        openmp:
+          - ON
+        python:
+          - ON
+        ucx:
+          - OFF
+        gasnet:
+          - OFF
+        sanitizer:
+          - NONE
+    steps:
+      - name: Download Workspace
+        uses: actions/download-artifact@v4
+        with:
+          name: workspace-Linux-x86_64-${{ matrix.build }}${{ matrix.cuda }}
+          path: /tmp
+
+      - name: Extract Workspace
+        run: |
+          tar -pxzf /tmp/workspace.tar.gz
+
+      - name: Get cmake (for ctest)
+        uses: jwlawson/actions-setup-cmake@v2
+
+      - name: Run nvidia-smi
+        run: nvidia-smi
+
+      - name: Set environment for number of gpus
+        run: echo REALM_DEFAULT_ARGS="-ll:gpu $(nvidia-smi -L | wc -l)" >> "$GITHUB_ENV"
+
+      - name: Run Tests
+        id: run-tests
+        run: |
+          ctest --output-junit /tmp/test-results.xml \
+                --test-dir build \
+                --build-config ${{ matrix.build }} \
+                --output-on-failure \
+                --timeout 240 \
+                --parallel 4
+
+      - uses: test-summary/action@v2
+        name: Upload Test Results
+        if: always() && steps.run-tests.outcome != 'skipped'
+        with:
+          paths: "/tmp/test-results.xml"
