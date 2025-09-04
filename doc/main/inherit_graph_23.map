@@ -1,9 +1,0 @@
-<map id="Graphical Class Hierarchy" name="Graphical Class Hierarchy">
-<area shape="rect" id="Node000000" title=" " alt="" coords="5,99,184,124"/>
-<area shape="rect" id="Node000001" href="$classRealm_1_1ThreadedTaskScheduler_1_1WorkCounterUpdater.html" title=" " alt="" coords="254,5,481,60"/>
-<area shape="poly" id="edge7_Node000000_Node000001" title=" " alt="" coords="151,92,231,69,270,58,272,63,233,74,153,97"/>
-<area shape="rect" id="Node000002" href="$classRealm_1_1ThreadedTaskScheduler_1_1WorkCounterUpdater.html" title=" " alt="" coords="232,84,503,139"/>
-<area shape="poly" id="edge8_Node000000_Node000002" title=" " alt="" coords="197,109,232,109,232,114,197,114"/>
-<area shape="rect" id="Node000003" href="$classRealm_1_1ThreadedTaskScheduler_1_1WorkCounterUpdater.html" title=" " alt="" coords="254,163,481,203"/>
-<area shape="poly" id="edge9_Node000000_Node000003" title=" " alt="" coords="153,125,233,147,284,161,283,166,231,153,152,130"/>
-</map>

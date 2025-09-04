@@ -6,7 +6,7 @@
 <meta http-equiv="X-UA-Compatible" content="IE=9"/>
 <meta name="generator" content="Doxygen 1.9.8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1"/>
-<title>Realm: Main Page</title>
+<title>Realm: Realm</title>
 <link href="tabs.css" rel="stylesheet" type="text/css"/>
 <script type="text/javascript" src="jquery.js"></script>
 <script type="text/javascript" src="dynsections.js"></script>
@@ -44,7 +44,7 @@
    <!-- BEGIN version select -->
     <br />
     <div class="dropdown">
-     <button class="dropbtn">Version 25.6.1-rc.2+6a1f9b73</button>
+     <button class="dropbtn">Version 25.6.1-rc.2+289bbd98</button>
      <div class="dropdown-content"></div>
     </div>
     <script type="text/javascript" src="../selectversion.js"></script>
@@ -122,10 +122,152 @@ $(document).ready(function(){initNavTree('index.html',''); initResizable(); });
 </div>
 </div>
 
-<div class="header">
-  <div class="headertitle"><div class="title">Realm Documentation</div></div>
+<div><div class="header">
+  <div class="headertitle"><div class="title"><a class="el" href="namespaceRealm.html">Realm</a> </div></div>
 </div><!--header-->
 <div class="contents">
+<div class="textblock"><p><a class="anchor" id="md__2home_2runner_2work_2realm_2realm_2realm-src_2README"></a></p>
+<p><a href="https://github.com/StanfordLegion/realm/actions/workflows/ci.yml"><img src="https://github.com/stanfordlegion/realm/actions/workflows/ci.yml/badge.svg" alt="ci" style="pointer-events: none;" class="inline"/></a> <a href="https://github.com/StanfordLegion/realm/releases/latest"><img src="https://img.shields.io/github/release/stanfordlegion/realm.svg?include_preleases" alt="Release" style="pointer-events: none;" class="inline"/></a> <a href="https://legion.stanford.edu/realm/doc"><img src="https://img.shields.io/badge/docs-grey.svg?logo=doxygen&amp;logoColor=white&amp;labelColor=blue" alt="Documentation" style="pointer-events: none;" class="inline"/></a> <a href="https://github.com/StanfordLegion/realm/blob/main/LICENSE.txt"><img src="https://img.shields.io/github/license/stanfordlegion/realm.svg" alt="License" style="pointer-events: none;" class="inline"/></a> <a href="https://api.reuse.software/info/github.com/StanfordLegion/realm"><img src="https://img.shields.io/reuse/compliance/github.com%2FStanfordLegion%2Frealm" alt="REUSE Compliance" class="inline"/></a> <a href="https://codecov.io/github/stanfordlegion/realm"><img src="https://codecov.io/github/stanfordlegion/realm/graph/badge.svg?token=XMFNJ4B756" alt="codecov" style="pointer-events: none;" class="inline"/></a> <a href="https://github.com/StanfordLegion/realm/issues"><img src="https://img.shields.io/github/issues/stanfordlegion/realm.svg" alt="Issues" style="pointer-events: none;" class="inline"/></a> <a href="https://legion.zulipchat.com"><img src="https://img.shields.io/badge/zulip-join_chat-brightgreen.svg" alt="Chat" style="pointer-events: none;" class="inline"/></a></p>
+<p>"" "![CUDA](https://img.shields.io/badge/CUDA-76B900?logo=nvidia&amp;logoColor=fff)" "" "![Linux](https://img.shields.io/badge/Linux-FCC624?logo=linux&amp;logoColor=black)" "" "![macOS](https://img.shields.io/badge/macOS-000000?logo=apple&amp;logoColor=F0F0F0)" "" "![Windows](https://custom-icon-badges.demolab.com/badge/Windows-0078D6?logo=windows11&amp;logoColor=white)" "" "![ARM](https://img.shields.io/badge/ARM-white?logo=arm&amp;logoColor=white&amp;color=blue)"</p>
+<h1><a class="anchor" id="autotoc_md0"></a>
+Realm</h1>
+<p><a class="el" href="namespaceRealm.html">Realm</a> is a distributed, <b>event–based tasking runtime</b> for building high-performance applications that span clusters of CPUs, GPUs, and other accelerators. <br  />
+ It began life as the low-level substrate underneath the <a href="https://github.com/StanfordLegion/legion">Legion</a> programming system but is now maintained as a standalone project for developers who want direct, fine-grained control of parallel and heterogeneous machines.</p>
+<hr  />
+<h2><a class="anchor" id="autotoc_md2"></a>
+Why Realm?</h2>
+<ul>
+<li><b>Asynchronous tasks &amp; events</b> – Compose applications out of many light-weight tasks connected by events instead of blocking synchronization.</li>
+<li><b>Heterogeneous execution</b> – Target CPUs, NVIDIA CUDA/HIP GPUs, OpenMP threads, and specialized fabrics with a single API.</li>
+<li><b>Scalable networking</b> – Integrate GASNet-EX, UCX, MPI or shared memory transports for efficient inter-node communication.</li>
+<li><b>Extensible modules</b> – Enable/disable features (CUDA, HIP, LLVM JIT, NVTX, PAPI …) at build time with simple CMake flags.</li>
+<li><b>Portable performance</b> – <a class="el" href="namespaceRealm.html">Realm</a> applications routinely scale from laptops to the world's largest supercomputers.</li>
+</ul>
+<p>The runtime follows a <em>data-flow</em> execution model: tasks are launched asynchronously and start when their pre-condition events trigger. This design hides network and device latency, maximizes overlap, and gives programmers explicit control over when work becomes runnable.</p>
+<p>For a deeper dive see the <a class="el" href="namespaceRealm.html">Realm</a> white-paper published at PACT 2014: <br  />
+ <a href="https://cs.stanford.edu/~sjt/pubs/pact14.pdf">https://cs.stanford.edu/~sjt/pubs/pact14.pdf</a></p>
+<hr  />
+<h2><a class="anchor" id="autotoc_md4"></a>
+Quick start</h2>
+<h3><a class="anchor" id="autotoc_md5"></a>
+1. Clone</h3>
+<div class="fragment"><div class="line">git clone https://github.com/StanfordLegion/realm.git</div>
+<div class="line">cd realm</div>
+</div><!-- fragment --><h3><a class="anchor" id="autotoc_md6"></a>
+2. Build with CMake (recommended)</h3>
+<div class="fragment"><div class="line"># Create an out-of-tree build directory</div>
+<div class="line">mkdir build &amp;&amp; cd build</div>
+<div class="line"># Configure – pick the options that match your system</div>
+<div class="line">cmake .. \</div>
+<div class="line">      -DCMAKE_BUILD_TYPE=Release \</div>
+<div class="line">      -DREALM_ENABLE_OPENMP=ON \   # OpenMP support</div>
+<div class="line">      -DREALM_ENABLE_CUDA=OFF       # flip ON to target NVIDIA GPUs</div>
+<div class="line"> </div>
+<div class="line"># Compile everything</div>
+<div class="line">make -j$(nproc)</div>
+<div class="line"> </div>
+<div class="line"># (optional) run the unit tests</div>
+<div class="line">ctest --output-on-failure</div>
+</div><!-- fragment --><p> The full list of CMake toggles is documented inside <a href="CMakeLists.txt"><code>CMakeLists.txt</code></a>. Common switches include:</p>
+<table class="markdownTable">
+<tr class="markdownTableHead">
+<th class="markdownTableHeadNone">Option   </th><th class="markdownTableHeadNone">Default   </th><th class="markdownTableHeadNone">Purpose    </th></tr>
+<tr class="markdownTableRowOdd">
+<td class="markdownTableBodyNone"><code>REALM_ENABLE_CUDA</code>   </td><td class="markdownTableBodyNone"><code>ON</code>   </td><td class="markdownTableBodyNone">Build CUDA backend    </td></tr>
+<tr class="markdownTableRowEven">
+<td class="markdownTableBodyNone"><code>REALM_ENABLE_HIP</code>   </td><td class="markdownTableBodyNone"><code>ON</code>   </td><td class="markdownTableBodyNone">Build HIP/ROCm backend    </td></tr>
+<tr class="markdownTableRowOdd">
+<td class="markdownTableBodyNone"><code>REALM_ENABLE_GASNETEX</code>   </td><td class="markdownTableBodyNone"><code>ON on Linux</code>   </td><td class="markdownTableBodyNone">GASNet-EX network    </td></tr>
+<tr class="markdownTableRowEven">
+<td class="markdownTableBodyNone"><code>REALM_ENABLE_UCX</code>   </td><td class="markdownTableBodyNone"><code>ON on Linux</code>   </td><td class="markdownTableBodyNone">UCX network    </td></tr>
+<tr class="markdownTableRowOdd">
+<td class="markdownTableBodyNone"><code>REALM_ENABLE_MPI</code>   </td><td class="markdownTableBodyNone"><code>OFF</code>   </td><td class="markdownTableBodyNone">MPI network    </td></tr>
+<tr class="markdownTableRowEven">
+<td class="markdownTableBodyNone"><code>REALM_LOG_LEVEL</code>   </td><td class="markdownTableBodyNone"><code>WARNING</code>   </td><td class="markdownTableBodyNone">Compile-time log level   </td></tr>
+</table>
+<blockquote class="doxtable">
+<p>&zwj;<b>TIP:</b> combine <code>cmake -LAH</code> or <code>ccmake</code> to explore every option. </p>
+</blockquote>
+<h3><a class="anchor" id="autotoc_md7"></a>
+3. Install (optional)</h3>
+<div class="fragment"><div class="line">make install   # honour DESTDIR / CMAKE_INSTALL_PREFIX as usual</div>
+</div><!-- fragment --><p> Libraries, headers and CMake packages will be placed under <code>include/realm</code>, <code>lib/</code>, and <code>share/realm/</code> so that external projects can consume <a class="el" href="namespaceRealm.html">Realm</a> via </p><div class="fragment"><div class="line">find_package(Realm REQUIRED)</div>
+</div><!-- fragment --><h3><a class="anchor" id="autotoc_md8"></a>
+4. Try the tutorials</h3>
+<p>The easiest way to get started is to build the tutorials as part of your normal CMake build tree:</p>
+<div class="fragment"><div class="line"># Configure (enable tutorials) if you did not already</div>
+<div class="line">cmake -B build -DREALM_BUILD_TUTORIALS=ON</div>
+<div class="line">cmake --build build --target realm_hello_world</div>
+<div class="line"> </div>
+<div class="line"># Run it (path will be inside the build directory)</div>
+<div class="line">./build/tutorials/hello_world/realm_hello_world -ll:cpu 4</div>
+</div><!-- fragment --><p>If you have <b>installed</b> <a class="el" href="namespaceRealm.html">Realm</a> (e.g. via <code>make install</code>) you can also build an individual tutorial stand-alone:</p>
+<div class="fragment"><div class="line">cd tutorials/hello_world         # Inside this repo or the copy installed under share/realm/tutorials</div>
+<div class="line">cmake -B build -DCMAKE_PREFIX_PATH=/path/to/realm/install</div>
+<div class="line">cmake --build build</div>
+<div class="line">./build/realm_hello_world -ll:cpu 4</div>
+</div><!-- fragment --><blockquote class="doxtable">
+<p>&zwj;Note • The tutorial directories only provide CMake build files. Traditional Makefiles are no longer shipped. </p>
+</blockquote>
+<p><b>Tutorials currently available</b></p>
+<ul>
+<li>Hello World – minimal <a class="el" href="namespaceRealm.html">Realm</a> program</li>
+<li>Events &amp; Barriers – synchronization primitive</li>
+<li>Reservations - locks</li>
+<li>Reductions</li>
+<li>CUDA/HIP interoperability – calling GPU kernels from <a class="el" href="namespaceRealm.html">Realm</a> tasks</li>
+<li>Profiling &amp; Tracing – using <code>-lg:prof</code> and Legion Prof</li>
+<li>Machine Model Exploration – querying the machine model</li>
+<li>Index Space Operations – set algebra helpers for index spaces</li>
+<li>Region Instances – creating and using regional instances</li>
+<li>Copy ⁄ Fill – DMA-style data movement between instances</li>
+<li>Subgraph Launches – launching groups of tasks together</li>
+<li>Deferred Allocation – lazy allocation of physical memory</li>
+<li>Completion Queues – querying event completion programmatically</li>
+</ul>
+<h2><a class="anchor" id="autotoc_md9"></a>
+Runtime command-line flags</h2>
+<p><a class="el" href="namespaceRealm.html">Realm</a> and its modules share a common set of <code>-ll:&lt;flag&gt;</code> options to tune processor/memory counts at runtime:</p>
+<div class="fragment"><div class="line">-ll:cpu &lt;N&gt;      # number of CPU cores per rank</div>
+<div class="line">-ll:gpu &lt;N&gt;      # number of GPUs per rank</div>
+<div class="line">-ll:util &lt;N&gt;     # number of util processors (communication helpers)</div>
+<div class="line">-ll:csize &lt;MB&gt;   # DRAM memory per rank</div>
+<div class="line">-ll:fsize &lt;MB&gt;   # framebuffer memory per GPU</div>
+<div class="line">-ll:zsize &lt;MB&gt;   # zero-copy (pinned) memory per GPU</div>
+<div class="line">-logfile &lt;path&gt;  # redirect logging (supports % for rank)</div>
+<div class="line">-level &lt;cat&gt;=&lt;n&gt; # change logging level per category</div>
+</div><!-- fragment --><p> Run any <a class="el" href="namespaceRealm.html">Realm</a> executable with <code>-hl:help</code> (high-level) or <code>-ll:help</code> (low-level) to see everything that is available.</p>
+<hr  />
+<h2><a class="anchor" id="autotoc_md11"></a>
+Documentation</h2>
+<ul>
+<li>Current public documentation can be found <a href="https://legion.stanford.edu/realm/doc/main">here</a></li>
+<li><b>API reference (Doxygen):</b> generate with <code>make docs</code> or <code>cmake --build . --target docs</code>.</li>
+<li><b>Tutorials:</b> see the [<code>tutorials/</code>](tutorials) directory listed above.</li>
+<li><b>Examples &amp; Benchmarks:</b> under [<code>examples/</code>](examples) and [<code>benchmarks/</code>](benchmarks).</li>
+</ul>
+<p>Please file an issue or pull request if something is missing or outdated.</p>
+<hr  />
+<h2><a class="anchor" id="autotoc_md13"></a>
+Contributing</h2>
+<p>We welcome contributions of all kinds – bug reports, documentation fixes, new features, and performance improvements.</p>
+<ol type="1">
+<li>Fork the repository and create a feature branch.</li>
+<li>Follow the existing code style (clang-format is enforced in CI).</li>
+<li>Make sure <code>ctest</code> passes on your machine <em>and</em> with <code>REALM_ENABLE_SANITIZER</code> if possible.</li>
+<li>Open a pull request against <code>master</code> (or the feature branch you were asked to use).</li>
+</ol>
+<p>See `CONTRIBUTING.md` for the full guidelines.</p>
+<hr  />
+<h2><a class="anchor" id="autotoc_md15"></a>
+License</h2>
+<p><a class="el" href="namespaceRealm.html">Realm</a> is licensed under the <b>Apache License 2.0</b> – see <a href="LICENSE.txt"><code>LICENSE.txt</code></a> for details.</p>
+<p>Commercial and academic use is free; attribution in papers and derivative works is appreciated.</p>
+<hr  />
+<h2><a class="anchor" id="autotoc_md17"></a>
+Acknowledgements</h2>
+<p><a class="el" href="namespaceRealm.html">Realm</a> is developed and maintained by the <a href="https://legion.stanford.edu">Stanford Legion</a> team with significant contributions from NVIDIA, Los Alamos, Livermore, Sandia, and many members of the broader HPC community. </p>
+</div></div><!-- PageDoc -->
 </div><!-- contents -->
 </div><!-- doc-content -->
 <!-- HTML footer for doxygen 1.9.1-->

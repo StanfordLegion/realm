@@ -25,6 +25,20 @@
 var NAVTREE =
 [
   [ "Realm", "index.html", [
+    [ "Realm", "index.html#autotoc_md0", [
+      [ "Why Realm?", "index.html#autotoc_md2", null ],
+      [ "Quick start", "index.html#autotoc_md4", [
+        [ "1. Clone", "index.html#autotoc_md5", null ],
+        [ "2. Build with CMake (recommended)", "index.html#autotoc_md6", null ],
+        [ "3. Install (optional)", "index.html#autotoc_md7", null ],
+        [ "4. Try the tutorials", "index.html#autotoc_md8", null ]
+      ] ],
+      [ "Runtime command-line flags", "index.html#autotoc_md9", null ],
+      [ "Documentation", "index.html#autotoc_md11", null ],
+      [ "Contributing", "index.html#autotoc_md13", null ],
+      [ "License", "index.html#autotoc_md15", null ],
+      [ "Acknowledgements", "index.html#autotoc_md17", null ]
+    ] ],
     [ "Namespaces", "namespaces.html", [
       [ "Namespace List", "namespaces.html", "namespaces_dup" ],
       [ "Namespace Members", "namespacemembers.html", [
@@ -123,24 +137,24 @@ var NAVTREEINDEX =
 "cuda__module_8h_source.html",
 "gasnetmsg_8h.html#a3d12f6efd8b849a471e9aa1eb2e4b738",
 "hip__module_8h.html#a4578c6a9d2e0d47d532366be84df81c6",
-"namespaceRealm.html#a5e200e79f3ad2e43b2d41fbed27678e9a5f9a38d42beabc43c499a1394623edf2",
-"namespaceRealm_1_1Python.html",
-"profiling_8h.html#a85045a8c1b4e33b846311f5c10230dbb",
-"realm__defines_8h.html#a0734de92aef351d235bacd69ca16f258",
-"structRealm_1_1BackgroundWorkManager_1_1Config.html#aba335d082e3df54b79ccc7930717802d",
-"structRealm_1_1Cuda_1_1AffineCopyInfo.html",
-"structRealm_1_1Cuda_1_1RegisteredVariable.html#ac68f96f7646a501bee9287a22e75809b",
-"structRealm_1_1Hip_1_1FatBin.html#ac099cc84155437c6d23cac166cc11522",
-"structRealm_1_1IndexSpace.html#a09050c7b5d0347484d8c34a22cdff79c",
-"structRealm_1_1LocalManagedMemory_1_1PendingRelease.html#af7b776795af26adb6dee6af11bb35795",
-"structRealm_1_1NTF__TemplateHelper.html#acb7ae09d7cf628e8c43bd09fdfef3f76",
-"structRealm_1_1PieceLookup_1_1SplitPlane.html#a27154d18b6c445544d232da94903281a",
-"structRealm_1_1ProfilingMeasurements_1_1InstanceTimeline.html#ab0de35ff72587b58e0923ad300757b0d",
-"structRealm_1_1ReductionOpUntyped.html#a4815b90c31587781ce2959042f8336a0",
-"structRealm_1_1SparsityMapRefCounter_1_1SparsityMapAddReferenceMessage.html#aee15375f5e9846aedb860599fd74865a",
-"structRealm_1_1ThreadPool_1_1WorkItem.html#a5746322da0b4889e64a8bb796b38620e",
-"structRealm_1_1UCP_1_1UCPMsgHdr.html#a8fd7740502310d7f52aee112905ce904",
-"structgex__wrapper__handle__s.html#a081f77b27cbc0a2deafacdd5a94dcc38"
+"namespaceRealm.html#a55144d226eed6e1ea47f0173f86b03f2",
+"namespaceRealm_1_1PieceLayoutTypes.html",
+"proc__impl_8h.html",
+"realm__c_8h_source.html",
+"structRealm_1_1BackgroundWorkManager_1_1Config.html",
+"structRealm_1_1CopySrcDstField.html#abbefb8f29dab59be69af2bfd9086edcf",
+"structRealm_1_1Cuda_1_1RegisteredVariable.html#a2eda5a55587dffd58e8c5273ea5d358e",
+"structRealm_1_1HardwareTopology_1_1Proc.html#a87b3942060fba2041efad149a6d05b71",
+"structRealm_1_1IncomingMessageManager_1_1MessageBlock.html#ae7d4d317b0d0a76268c7153c88986b5c",
+"structRealm_1_1LocalManagedMemory_1_1PendingRelease.html#a9a771a78114b3beef99e20658e1ff23b",
+"structRealm_1_1MetadataRequestMessage.html#a940f02cce8775114d3d4697d6d8b90ae",
+"structRealm_1_1PieceLookup_1_1Instruction.html#a84d3a5a8ae2f9d010e1bab1677d4d635",
+"structRealm_1_1ProfilingMeasurements_1_1InstanceTimeline.html",
+"structRealm_1_1ReductionOp.html#a61958cc4a1149531e53c9b17d97c103b",
+"structRealm_1_1SparsityMapImpl_1_1SetContribCountMessage.html",
+"structRealm_1_1SubgraphScheduleEntry.html#af48bb20b1c8a1cca66278f27cb5d8a14",
+"structRealm_1_1UCP_1_1UCPInternal_1_1Config.html#af2631ddbf3a80795649a591ce2d8a394",
+"structbootstrap__handle.html#af70d98b7ae5004b981c2d132c9702fcc"
 ];
 
 var SYNCONMSG = 'click to disable panel synchronisation';
