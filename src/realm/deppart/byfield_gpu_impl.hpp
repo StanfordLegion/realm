@@ -53,8 +53,7 @@ void GPUByFieldMicroOp<N,T,FT>::execute()
     inst_offsets[field_data.size()] = inst_size;
 
 
-    RegionInstance inst_entries_instance;
-    this->realm_malloc(inst_entries_instance, inst_size * sizeof(SparsityMapEntry<N,T>), my_mem).wait();
+    RegionInstance inst_entries_instance = this->realm_malloc(inst_size * sizeof(SparsityMapEntry<N,T>), my_mem);
     SparsityMapEntry<N,T>* d_inst_entries = reinterpret_cast<SparsityMapEntry<N,T>*>(AffineAccessor<char,1>(inst_entries_instance, 0).base);
 
     //Now we fill the device array with all instance rectangles
@@ -85,28 +84,22 @@ void GPUByFieldMicroOp<N,T,FT>::execute()
       parent_entries = parent_space.sparsity.impl()->get_entries();
     }
 
-    RegionInstance parent_entries_instance;
-    Event parent_alloc_event = this->realm_malloc(parent_entries_instance, parent_entries.size() * sizeof(SparsityMapEntry<N,T>), my_mem);
+    RegionInstance parent_entries_instance = this->realm_malloc(parent_entries.size() * sizeof(SparsityMapEntry<N,T>), my_mem);
 
-    RegionInstance inst_counters_instance;
-    Event counters_alloc_event = this->realm_malloc(inst_counters_instance, (field_data.size()) * sizeof(uint32_t), my_mem);
+    RegionInstance inst_counters_instance = this->realm_malloc((field_data.size()) * sizeof(uint32_t), my_mem);
 
-    RegionInstance inst_offsets_instance;
-    Event inst_offsets_alloc_event = this->realm_malloc(inst_offsets_instance, (field_data.size() + 1) * sizeof(size_t), my_mem);
+    RegionInstance inst_offsets_instance = this->realm_malloc((field_data.size() + 1) * sizeof(size_t), my_mem);
 
-    parent_alloc_event.wait();
     SparsityMapEntry<N, T>* d_parent_entries = reinterpret_cast<SparsityMapEntry<N,T>*>(AffineAccessor<char,1>(parent_entries_instance, 0).base);
     CUDA_CHECK(cudaMemcpyAsync(d_parent_entries, parent_entries.data(), parent_entries.size() * sizeof(SparsityMapEntry<N,T>), cudaMemcpyHostToDevice, stream), stream);
 
     //This is used for count + emit: first pass counts how many rectangles survive intersection, second pass uses the counter
     // to figure out where to write each rectangle
-    counters_alloc_event.wait();
     uint32_t* d_inst_counters = reinterpret_cast<uint32_t*>(AffineAccessor<char,1>(inst_counters_instance, 0).base);
     CUDA_CHECK(cudaMemsetAsync(d_inst_counters, 0, (field_data.size()) * sizeof(uint32_t), stream), stream);
 
 
     //This is used to track which instance each rectangle came from
-    inst_offsets_alloc_event.wait();
     size_t* d_inst_offsets = reinterpret_cast<size_t*>(AffineAccessor<char,1>(inst_offsets_instance, 0).base);
     CUDA_CHECK(cudaMemcpyAsync(d_inst_offsets, inst_offsets.data(), (field_data.size() + 1) * sizeof(size_t), cudaMemcpyHostToDevice, stream), stream);
 
@@ -142,20 +135,15 @@ void GPUByFieldMicroOp<N,T,FT>::execute()
     }
 
 
-    RegionInstance inst_prefix_instance;
-    Event inst_prefix_alloc_event = this->realm_malloc(inst_prefix_instance, (field_data.size() + 1) * sizeof(uint32_t), my_mem);
-    RegionInstance valid_rects_instance;
-    Event valid_rects_alloc_event = this->realm_malloc(valid_rects_instance, num_valid_rects * sizeof(Rect<N,T>), my_mem);
-    RegionInstance prefix_rects_instance;;
-    Event vol_prefix_alloc_event = this->realm_malloc(prefix_rects_instance, (num_valid_rects + 1) * sizeof(size_t), my_mem);
+    RegionInstance inst_prefix_instance = this->realm_malloc((field_data.size() + 1) * sizeof(uint32_t), my_mem);
+    RegionInstance valid_rects_instance = this->realm_malloc(num_valid_rects * sizeof(Rect<N,T>), my_mem);
+    RegionInstance prefix_rects_instance = this->realm_malloc((num_valid_rects + 1) * sizeof(size_t), my_mem);
 
     //Where each instance should start writing its rectangles
-    inst_prefix_alloc_event.wait();
     uint32_t* d_inst_prefix = reinterpret_cast<uint32_t*>(AffineAccessor<char,1>(inst_prefix_instance, 0).base);
     CUDA_CHECK(cudaMemcpyAsync(d_inst_prefix, h_inst_counters.data(), (field_data.size() + 1) * sizeof(size_t), cudaMemcpyHostToDevice, stream), stream);
 
     //Non-empty rectangles from the intersection
-    valid_rects_alloc_event.wait();
     Rect<N,T>* d_valid_rects = reinterpret_cast<Rect<N,T>*>(AffineAccessor<char,1>(valid_rects_instance, 0).base);
 
     //Reset counters
@@ -168,7 +156,6 @@ void GPUByFieldMicroOp<N,T,FT>::execute()
 
 
     // Prefix sum the valid rectangles by volume
-    vol_prefix_alloc_event.wait();
     size_t* d_prefix_rects = reinterpret_cast<size_t*>(AffineAccessor<char,1>(prefix_rects_instance, 0).base);
     CUDA_CHECK(cudaMemsetAsync(d_prefix_rects, 0, sizeof(size_t), stream), stream);
 
@@ -189,8 +176,7 @@ void GPUByFieldMicroOp<N,T,FT>::execute()
         /* d_out */           d_prefix_rects + 1,   // shift by one so prefix[1]..prefix[n]
         /* num_items */       num_valid_rects, stream);
 
-    RegionInstance temp_instance;
-    this->realm_malloc(temp_instance, rect_temp_bytes, my_mem).wait();
+    RegionInstance temp_instance = this->realm_malloc(rect_temp_bytes, my_mem);
     d_temp = reinterpret_cast<void*>(AffineAccessor<char,1>(temp_instance, 0).base);
     cub::DeviceScan::InclusiveSum(
         /* d_temp_storage */  d_temp,
@@ -211,8 +197,7 @@ void GPUByFieldMicroOp<N,T,FT>::execute()
     temp_instance.destroy();
     inst_counters_instance.destroy();
 
-    RegionInstance points_instance;
-    this->realm_malloc(points_instance, total_pts * sizeof(PointDesc<N,T>), my_mem).wait();
+    RegionInstance points_instance = this->realm_malloc(total_pts * sizeof(PointDesc<N,T>), my_mem);
     PointDesc<N,T>* d_points = reinterpret_cast<PointDesc<N,T>*>(AffineAccessor<char,1>(points_instance, 0).base);
 
     FT* d_colors;
@@ -224,12 +209,12 @@ void GPUByFieldMicroOp<N,T,FT>::execute()
       for (size_t i = 0; i < colors.size(); i++) {
         flat_colors[i] = colors[i] ? 1 : 0;
       }
-      this->realm_malloc(colors_instance, total_pts * sizeof(PointDesc<N,T>), my_mem).wait();
+      colors_instance = this->realm_malloc(total_pts * sizeof(PointDesc<N,T>), my_mem);
       uint8_t* d_flat_colors = reinterpret_cast<uint8_t*>(AffineAccessor<char,1>(colors_instance, 0).base);
       CUDA_CHECK(cudaMemcpyAsync(d_flat_colors, flat_colors.data(), colors.size() * sizeof(uint8_t), cudaMemcpyHostToDevice, stream), stream);
       d_colors = reinterpret_cast<FT*>(d_flat_colors);
     } else {
-      this->realm_malloc(colors_instance, colors.size() * sizeof(FT), my_mem).wait();
+      colors_instance = this->realm_malloc(colors.size() * sizeof(FT), my_mem);
       d_colors = reinterpret_cast<FT*>(AffineAccessor<char,1>(colors_instance, 0).base);
       CUDA_CHECK(cudaMemcpyAsync(d_colors, colors.data(), colors.size() * sizeof(FT), cudaMemcpyHostToDevice, stream), stream);
     }
@@ -242,8 +227,7 @@ void GPUByFieldMicroOp<N,T,FT>::execute()
       h_accessors[i] = AffineAccessor<FT,N,T>(field_data[i].inst, field_data[i].field_offset);
     }
 
-    RegionInstance accessors_instance;
-    this->realm_malloc(accessors_instance, field_data.size() * sizeof(AffineAccessor<FT,N,T>), my_mem).wait();
+    RegionInstance accessors_instance = this->realm_malloc(field_data.size() * sizeof(AffineAccessor<FT,N,T>), my_mem);
     AffineAccessor<FT,N,T>* d_accessors = reinterpret_cast<AffineAccessor<FT,N,T>*>(AffineAccessor<char,1>(accessors_instance, 0).base);
     CUDA_CHECK(cudaMemcpyAsync(d_accessors, h_accessors.data(), field_data.size() * sizeof(AffineAccessor<FT,N,T>), cudaMemcpyHostToDevice, stream), stream);
 

@@ -125,7 +125,7 @@ namespace Realm {
     template <int N, typename T>
     void sparsity_map_ready(SparsityMapImpl<N,T> *sparsity, bool precise);
 
-    Event realm_malloc(RegionInstance &result, size_t size, Memory location = Memory::NO_MEMORY);
+    RegionInstance realm_malloc(size_t size, Memory location = Memory::NO_MEMORY);
 
     IntrusiveListLink<PartitioningMicroOp> uop_link;
     REALM_PMTA_DEFN(PartitioningMicroOp,IntrusiveListLink<PartitioningMicroOp>,uop_link);
