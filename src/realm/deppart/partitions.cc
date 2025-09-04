@@ -663,12 +663,14 @@ namespace Realm {
     }
   }
 
-  Event PartitioningMicroOp::realm_malloc(RegionInstance &result, size_t size, Memory location) {
+  RegionInstance PartitioningMicroOp::realm_malloc(size_t size, Memory location) {
       assert(location != Memory::NO_MEMORY);
       assert(size > 0);
       std::vector<size_t> byte_fields = {sizeof(char)};
       IndexSpace<1> instance_index_space(Rect<1>(0, size-1));
-      return RegionInstance::create_instance(result, location, instance_index_space, byte_fields, 0, Realm::ProfilingRequestSet());
+      RegionInstance result;
+      RegionInstance::create_instance(result, location, instance_index_space, byte_fields, 0, Realm::ProfilingRequestSet()).wait();
+      return result;
   }
 
   ////////////////////////////////////////////////////////////////////////
