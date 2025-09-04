@@ -36,8 +36,8 @@ namespace Realm {
     void cleanup();
 
     // objects may be allocated and freed
-    void *alloc_obj(size_t bytes, size_t alignment);
-    void free_obj(void *ptr);
+    virtual void *alloc_obj(size_t bytes, size_t alignment);
+    virtual void free_obj(void *ptr);
 
     // writes to an object must be via the address at which is was allocated,
     //  and be followed by a call to commit_writes for the appropriate address

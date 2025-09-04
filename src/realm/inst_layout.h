@@ -122,7 +122,7 @@ namespace Realm {
 
       static const Opcode OP_INVALID = 0;
       static const Opcode OP_SPLIT1 = 1; // this is a SplitPlane<N,T>
-    }                                    // namespace Opcodes
+    } // namespace Opcodes
 
     // some processors are limited in which instruction types they can
     //  support, so we build masks to describe usage/capabilities
@@ -225,7 +225,9 @@ namespace Realm {
       int size_in_bytes;
     };
 
-    std::map<FieldID, FieldLayout> fields;
+    using FieldMap = std::map<FieldID, FieldLayout>;
+    FieldMap fields;
+    bool idindexed_fields{false};
   };
 
   REALM_PUBLIC_API
@@ -419,6 +421,9 @@ namespace Realm {
 
     IndexSpace<N, T> space;
     std::vector<InstancePieceList<N, T>> piece_lists;
+
+    // Pre-computed dimension ordering for idindexed_fields
+    std::vector<int> preferred_dim_order;
 
     static Serialization::PolymorphicSerdezSubclass<InstanceLayoutGeneric,
                                                     InstanceLayout<N, T>>
@@ -714,7 +719,7 @@ namespace Realm {
     // protected:
     // friend
     //  std::ostream& operator<<(std::ostream& os, const AffineAccessor<FT,N,T>& a);
-//#define REALM_ACCESSOR_DEBUG
+// #define REALM_ACCESSOR_DEBUG
 #if defined(REALM_ACCESSOR_DEBUG) || defined(REALM_USE_KOKKOS)
     Rect<N, T> bounds;
 #endif

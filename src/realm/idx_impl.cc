@@ -212,8 +212,7 @@ namespace Realm {
     if(!layout)
       return false; // dimension mismatch
 
-    std::map<FieldID, InstanceLayoutGeneric::FieldLayout>::const_iterator it =
-        layout->fields.find(fid);
+    InstanceLayoutGeneric::FieldMap::const_iterator it = layout->fields.find(fid);
     if(it == layout->fields.end())
       return false; // invalid field ID
 
@@ -292,7 +291,7 @@ namespace Realm {
   template IndexSpaceGeneric::IndexSpaceGeneric(const Rect<N, T> &copy_from);            \
   template IndexSpaceGeneric &IndexSpaceGeneric::operator=                               \
       <N, T>(const IndexSpace<N, T> &);                                                  \
-  template IndexSpaceGeneric &IndexSpaceGeneric::operator=<N, T>(const Rect<N, T> &);    \
+  template IndexSpaceGeneric &IndexSpaceGeneric::operator= <N, T>(const Rect<N, T> &);   \
   template const IndexSpace<N, T> &IndexSpaceGeneric::as_index_space<N, T>() const;      \
   template Event IndexSpaceGeneric::copy<N, T>(                                          \
       const std::vector<CopySrcDstField> &, const std::vector<CopySrcDstField> &,        \

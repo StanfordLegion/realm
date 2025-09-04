@@ -414,7 +414,8 @@ namespace Realm {
       void launch_batch_affine_fill_kernel(void *fill_info, size_t dim, size_t elemSize,
                                            size_t volume, GPUStream *stream);
       void launch_batch_affine_kernel(void *copy_info, size_t dim, size_t elemSize,
-                                      size_t volume, GPUStream *stream);
+                                      size_t volume, bool multified_optimized,
+                                      GPUStream *stream);
       void launch_transpose_kernel(MemcpyTransposeInfo<size_t> &copy_info,
                                    size_t elemSize, GPUStream *stream);
 
@@ -464,6 +465,8 @@ namespace Realm {
       GPUFuncInfo indirect_copy_kernels[REALM_MAX_DIM][CUDA_MEMCPY_KERNEL_MAX2_LOG2_BYTES]
                                        [CUDA_MEMCPY_KERNEL_MAX2_LOG2_BYTES];
       GPUFuncInfo batch_affine_kernels[REALM_MAX_DIM][CUDA_MEMCPY_KERNEL_MAX2_LOG2_BYTES];
+      GPUFuncInfo multi_batch_affine_kernels[REALM_MAX_DIM]
+                                            [CUDA_MEMCPY_KERNEL_MAX2_LOG2_BYTES];
       GPUFuncInfo batch_fill_affine_kernels[REALM_MAX_DIM]
                                            [CUDA_MEMCPY_KERNEL_MAX2_LOG2_BYTES];
       GPUFuncInfo fill_affine_large_kernels[REALM_MAX_DIM]
@@ -785,9 +788,28 @@ namespace Realm {
 
       bool progress_xd(GPUChannel *channel, TimeLimit work_until);
 
+      static size_t read_address_entry(AffineCopyInfo<3> &copy_infos, size_t &min_align,
+                                       MemcpyTransposeInfo<size_t> &transpose_info,
+                                       AddressListCursor &in_alc, uintptr_t in_base,
+                                       AddressListCursor &out_alc, uintptr_t out_base,
+                                       size_t bytes_left, size_t max_xfer_fields,
+                                       size_t &fields_total);
+
     private:
       std::vector<GPU *> src_gpus, dst_gpus;
       std::vector<bool> dst_is_ipc;
+
+      // Mininum amount to transfer in a single quantum before returning in order to
+      // ensure forward progress
+      // TODO: make controllable
+      static constexpr size_t min_xfer_size = 4 << 20;
+      // Maximum amount to transfer in a single quantum in order to ensure other requests
+      // have a chance to make forward progress.  This should be large enough that the
+      // overhead of splitting the copy shouldn't be noticable in terms of latency (4GiB
+      // should be good here for most purposes)
+      // TODO: make controllable
+      static constexpr size_t max_xfer_size = 4ULL * 1024ULL * 1024ULL * 1024ULL;
+      static constexpr size_t max_xfer_fields = 2000;
     };
 
     class GPUIndirectChannel;
@@ -904,9 +926,46 @@ namespace Realm {
       long submit(Request **requests, long nr);
       GPU *get_gpu() const { return src_gpu; }
 
+      virtual RemoteChannelInfo *construct_remote_info() const;
+
+      virtual bool support_idindexed_fields(Memory src_mem, Memory dst_mem) const
+      {
+        return true;
+      }
+
     private:
       GPU *src_gpu;
-      // std::deque<Request*> pending_copies;
+    };
+
+    class GPURemoteChannelInfo : public SimpleRemoteChannelInfo {
+    public:
+      GPURemoteChannelInfo(NodeID _owner, XferDesKind _kind, uintptr_t _remote_ptr,
+                           const std::vector<Channel::SupportedPath> &_paths);
+
+      virtual RemoteChannel *create_remote_channel();
+
+      template <typename S>
+      bool serialize(S &serializer) const;
+
+      template <typename S>
+      static RemoteChannelInfo *deserialize_new(S &deserializer);
+
+    protected:
+      static Serialization::PolymorphicSerdezSubclass<RemoteChannelInfo,
+                                                      GPURemoteChannelInfo>
+          serdez_subclass;
+    };
+
+    class GPURemoteChannel : public RemoteChannel {
+      friend class GPURemoteChannelInfo;
+
+      GPURemoteChannel(uintptr_t _remote_ptr);
+
+    public:
+      virtual bool support_idindexed_fields(Memory src_mem, Memory dst_mem) const
+      {
+        return true;
+      }
     };
 
     class GPUfillChannel;

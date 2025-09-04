@@ -177,7 +177,7 @@ namespace Realm {
   {
     size_t field_rel_offset;
     {
-      std::map<FieldID, InstanceLayoutGeneric::FieldLayout>::const_iterator it =
+      InstanceLayoutGeneric::FieldMap::const_iterator it =
           inst_layout->fields.find(field_id);
       assert(it != inst_layout->fields.end());
       assert((field_offset + field_size) <= size_t(it->second.size_in_bytes));
@@ -218,7 +218,7 @@ namespace Realm {
         checked_cast<const InstanceLayout<N, T> *>(inst_impl->metadata.layout);
 
     {
-      std::map<FieldID, InstanceLayoutGeneric::FieldLayout>::const_iterator it =
+      InstanceLayoutGeneric::FieldMap::const_iterator it =
           inst_layout->fields.find(cur_field_id);
       assert(it != inst_layout->fields.end());
       assert((cur_field_offset + cur_field_size) <= size_t(it->second.size_in_bytes));
@@ -369,7 +369,7 @@ namespace Realm {
     const InstanceLayoutPiece<N, T> *layout_piece;
     // int field_rel_offset;
     {
-      std::map<FieldID, InstanceLayoutGeneric::FieldLayout>::const_iterator it =
+      InstanceLayoutGeneric::FieldMap::const_iterator it =
           inst_layout->fields.find(cur_field_id);
       assert(it != inst_layout->fields.end());
       assert((cur_field_offset == 0) &&
@@ -523,7 +523,7 @@ namespace Realm {
 
       // we may be able to compact dimensions, but ask for space to write a
       //  an address record of the maximum possible dimension (i.e. N)
-      size_t *addr_data = addrlist.begin_nd_entry(N);
+      size_t *addr_data = addrlist.begin_entry(N);
       if(!addr_data) {
         return true; // out of space for now
       }
@@ -532,7 +532,7 @@ namespace Realm {
       const InstanceLayoutPiece<N, T> *layout_piece;
       size_t field_rel_offset;
       {
-        std::map<FieldID, InstanceLayoutGeneric::FieldLayout>::const_iterator it =
+        InstanceLayoutGeneric::FieldMap::const_iterator it =
             inst_layout->fields.find(cur_field_id);
         assert(it != inst_layout->fields.end());
         assert((cur_field_offset + cur_field_size) <= size_t(it->second.size_in_bytes));
@@ -572,6 +572,7 @@ namespace Realm {
 #endif
 
       // TODO: remove now-redundant condition here
+      // TODO: use compact_affine_dims
       if(layout_piece->layout_type == PieceLayoutTypes::AffineLayoutType) {
         const AffineLayoutPiece<N, T> *affine =
             static_cast<const AffineLayoutPiece<N, T> *>(layout_piece);
@@ -626,6 +627,7 @@ namespace Realm {
 
           addr_data[cur_dim * 2] = total_count;
           addr_data[cur_dim * 2 + 1] = stride;
+
           log_dma.debug() << "Add addr data dim=" << cur_dim
                           << " total_count=" << total_count << " stride=" << stride;
           total_bytes *= total_count;
@@ -635,7 +637,7 @@ namespace Realm {
         // now that we know the compacted dimension, we can finish the address
         //  record
         addr_data[0] = (bytes << 4) + cur_dim;
-        addrlist.commit_nd_entry(cur_dim, total_bytes);
+        addrlist.commit_entry(cur_dim, total_bytes);
         log_dma.debug() << "Finalize addr data dim=" << cur_dim << " total_bytes"
                         << total_bytes;
       } else {
@@ -817,6 +819,276 @@ namespace Realm {
 
   ////////////////////////////////////////////////////////////////////////
   //
+  // class IDIndexedFieldsIterator<N,T>
+  //
+
+  template <int N, typename T>
+  IDIndexedFieldsIterator<N, T>::IDIndexedFieldsIterator(
+      const int _dim_order[N], const std::vector<FieldID> &_fields, size_t _field_size,
+      RegionInstanceImpl *_inst_impl, const IndexSpace<N, T> &_is,
+      ReplicatedHeap *_repl_heap)
+    : TransferIteratorBase<N, T>(_inst_impl, _dim_order)
+    , is(_is)
+    , repl_heap(_repl_heap)
+    , field_block(FieldBlock::create(*_repl_heap, _fields.data(), _fields.size()))
+  {
+    if(is.is_valid()) {
+      reset_internal();
+    } else {
+      iter_init_deferred = true;
+    }
+
+    if(iter_init_deferred || iter.valid) {
+      fields = _fields;
+      field_size = _field_size;
+      inst_layout =
+          checked_cast<const InstanceLayout<N, T> *>(this->inst_impl->metadata.layout);
+    }
+  }
+
+  /*template <int N, typename T>
+  IDIndexedFieldsIterator<N, T>::IDIndexedFieldsIterator(
+      const int _dim_order[N], const std::vector<FieldID> &_fields,
+      const std::vector<size_t> &_fld_offsets, const std::vector<size_t> &_fld_sizes,
+      RegionInstanceImpl *_inst_impl, const Rect<N, T> &_bounds,
+      SparsityMapImpl<N, T> *_sparsity_impl)
+    : TransferIteratorBase<N, T>(_inst_impl, _dim_order)
+    , is(_bounds, _sparsity_impl->me)
+    , sparsity_impl(_sparsity_impl)
+  {
+    assert(sparsity_impl);
+    reset_internal();
+    if(iter.valid) {
+      fields = _fields;
+      fld_offsets = _fld_offsets;
+      fld_sizes = _fld_sizes;
+    }
+  }*/
+
+  template <int N, typename T>
+  IDIndexedFieldsIterator<N, T>::IDIndexedFieldsIterator(void)
+  {}
+
+  template <int N, typename T>
+  template <typename S>
+  /*static*/ TransferIterator *
+  IDIndexedFieldsIterator<N, T>::deserialize_new(S &deserializer)
+  {
+    IndexSpace<N, T> is;
+    RegionInstance inst;
+    std::vector<FieldID> fields;
+    size_t field_size;
+    int dim_order[N];
+
+    if(!((deserializer >> is) && (deserializer >> inst) && (deserializer >> fields) &&
+         (deserializer >> field_size))) {
+      return 0;
+    }
+
+    for(int i = 0; i < N; i++) {
+      if(!(deserializer >> dim_order[i])) {
+        return 0;
+      }
+    }
+
+    IDIndexedFieldsIterator<N, T> *tiis = new IDIndexedFieldsIterator<N, T>(
+        dim_order, fields, field_size, get_runtime()->get_instance_impl(inst), is,
+        &get_runtime()->repl_heap);
+
+    return tiis;
+  }
+
+  template <int N, typename T>
+  IDIndexedFieldsIterator<N, T>::~IDIndexedFieldsIterator(void)
+  {
+    if(field_block) {
+      repl_heap->free_obj(field_block);
+    }
+  }
+
+  template <int N, typename T>
+  Event IDIndexedFieldsIterator<N, T>::request_metadata(void)
+  {
+    Event e = TransferIteratorBase<N, T>::request_metadata();
+
+    if(iter_init_deferred) {
+      e = Event::merge_events(e, is.make_valid());
+    }
+
+    return e;
+  }
+
+  template <int N, typename T>
+  void IDIndexedFieldsIterator<N, T>::reset(void)
+  {
+    TransferIteratorBase<N, T>::reset();
+    rect_idx = 0;
+    reset_internal();
+  }
+
+  template <int N, typename T>
+  void IDIndexedFieldsIterator<N, T>::reset_internal(void)
+  {
+    // assert(!iter_init_deferred);
+    if(!sparsity_impl) {
+      assert(is.is_valid());
+      iter.reset(is);
+    } else {
+      iter.reset(is.bounds, is.bounds,
+                 reinterpret_cast<SparsityMapPublicImpl<N, T> *>(sparsity_impl));
+    }
+    iter_init_deferred = false;
+    this->is_done = !iter.valid;
+  }
+
+  template <int N, typename T>
+  bool
+  IDIndexedFieldsIterator<N, T>::get_addresses(AddressList &addrlist,
+                                               const InstanceLayoutPieceBase *&nonaffine)
+  {
+    nonaffine = 0;
+
+    if(rect_idx == 0) {
+      addrlist.attach_field_block(field_block);
+    }
+
+    while(!this->done()) {
+      if(!this->have_rect) {
+        return false;
+      }
+
+      const InstancePieceList<N, T> &piece_list =
+          inst_layout->piece_lists[inst_layout->fields.begin()->second.list_idx];
+      const InstanceLayoutPiece<N, T> *layout_piece =
+          piece_list.find_piece(this->cur_point);
+
+      assert(layout_piece->layout_type == PieceLayoutTypes::AffineLayoutType);
+
+      Rect<N, T> target_subrect;
+      this->have_rect =
+          compute_target_subrect(layout_piece->bounds, this->cur_rect, this->cur_point,
+                                 target_subrect, &this->dim_order[0]);
+
+      size_t contig_bytes = 0;
+      size_t total_bytes = 0;
+
+      const AffineLayoutPiece<N, T> *affine =
+          static_cast<const AffineLayoutPiece<N, T> *>(layout_piece);
+
+      // assert(this->inst_impl->metadata.is_valid());
+      size_t base_offset = this->inst_impl->metadata.inst_offset + affine->offset +
+                           affine->strides.dot(target_subrect.lo); //+ field_rel_offset;
+
+#ifdef DEBUG_REALM
+      assert(layout_piece->bounds.contains(target_subrect));
+#endif
+
+      assert(layout_piece->layout_type == PieceLayoutTypes::AffineLayoutType);
+
+      // TODO(apryakhin@): If that's the same rec consider caching it
+      std::unordered_map<int, std::pair<size_t, size_t>> count_strides;
+      int ndims = compact_affine_dims<N, T>(
+          static_cast<const AffineLayoutPiece<N, T> *>(layout_piece), target_subrect,
+          this->dim_order, field_size, total_bytes, contig_bytes, count_strides);
+      assert(ndims > 0);
+      assert(total_bytes > 0);
+      assert(contig_bytes > 0);
+
+      bool commited = addrlist.append_entry(ndims, contig_bytes, total_bytes, base_offset,
+                                            count_strides);
+      assert(commited);
+    }
+
+    return true;
+  }
+
+  template <int N, typename T>
+  size_t IDIndexedFieldsIterator<N, T>::step(size_t max_bytes,
+                                             TransferIterator::AddressInfo &info,
+                                             unsigned flags, bool tentative /*= false*/)
+  {
+    // NOT SUPPORTED
+    assert(0);
+    return 0;
+  }
+
+  template <int N, typename T>
+  size_t
+  IDIndexedFieldsIterator<N, T>::step_custom(size_t max_bytes,
+                                             TransferIterator::AddressInfoCustom &info,
+                                             bool tentative /*= false*/)
+  {
+    // NOT SUPPORTED
+    assert(0);
+    return 0;
+  }
+
+  template <int N, typename T>
+  void IDIndexedFieldsIterator<N, T>::confirm_step(void)
+  {
+    // NOT SUPPORTED
+    assert(0);
+  }
+
+  template <int N, typename T>
+  void IDIndexedFieldsIterator<N, T>::cancel_step(void)
+  {
+    // NOT SUPPORTED
+    assert(0);
+  }
+
+  template <int N, typename T>
+  bool IDIndexedFieldsIterator<N, T>::get_next_rect(Rect<N, T> &r, FieldID &fid,
+                                                    size_t &offset, size_t &fsize)
+  {
+    if(iter_init_deferred) {
+      reset_internal();
+      if(!iter.valid) {
+        this->is_done = true;
+        return false;
+      }
+    }
+
+    if(this->is_done) {
+      return false;
+    }
+
+    r = iter.rect;
+    rect_idx++;
+
+    iter.step();
+    if(!iter.valid) {
+      reset_internal();
+      this->is_done = true;
+    }
+    return true;
+  }
+
+  template <int N, typename T>
+  /*static*/ Serialization::PolymorphicSerdezSubclass<TransferIterator,
+                                                      IDIndexedFieldsIterator<N, T>>
+      IDIndexedFieldsIterator<N, T>::serdez_subclass;
+
+  template <int N, typename T>
+  template <typename S>
+  bool IDIndexedFieldsIterator<N, T>::serialize(S &serializer) const
+  {
+    if(!((serializer << iter.space) && (serializer << this->inst_impl->me) &&
+         (serializer << fields) && (serializer << field_size))) {
+      return false;
+    }
+
+    for(int i = 0; i < N; i++) {
+      if(!(serializer << this->dim_order[i])) {
+        return false;
+      }
+    }
+
+    return true;
+  }
+
+  ////////////////////////////////////////////////////////////////////////
+  //
   // class WrappingTransferIteratorIndirect<N,T>
   //
 
@@ -973,7 +1245,7 @@ namespace Realm {
         checked_cast<const InstanceLayout<N, T> *>(this->inst_impl->metadata.layout);
 
     assert(inst_layout);
-    std::map<FieldID, InstanceLayoutGeneric::FieldLayout>::const_iterator it =
+    InstanceLayoutGeneric::FieldMap::const_iterator it =
         inst_layout->fields.find(cur_field_id);
     assert(it != inst_layout->fields.end());
     size_t pieces = inst_layout->piece_lists[it->second.list_idx].pieces.size();
@@ -1020,7 +1292,7 @@ namespace Realm {
         return false;
       }
 
-      size_t *addr_data = addrlist.begin_nd_entry(1);
+      size_t *addr_data = addrlist.begin_entry(1);
       if(!addr_data) {
         return true;
       }
@@ -1029,7 +1301,7 @@ namespace Realm {
       size_t total_bytes = this->cur_rect.volume() * this->cur_field_size;
       this->have_rect = false;
       addr_data[0] = ((total_bytes) << 4) + cur_dim;
-      addrlist.commit_nd_entry(cur_dim, total_bytes);
+      addrlist.commit_entry(cur_dim, total_bytes);
       log_dma.debug() << "Finalize gather/scatter addr data dim=" << cur_dim
                       << " total_bytes=" << total_bytes;
       break;
@@ -1620,6 +1892,7 @@ namespace Realm {
   class TransferDomainIndexSpace : public TransferDomain {
   public:
     TransferDomainIndexSpace(IndexSpace<N, T> _is);
+    ~TransferDomainIndexSpace();
 
     template <typename S>
     static TransferDomain *deserialize_new(S &deserializer);
@@ -1646,12 +1919,13 @@ namespace Realm {
                                               const std::vector<int> &dim_order,
                                               const std::vector<FieldID> &fields,
                                               const std::vector<size_t> &fld_offsets,
-                                              const std::vector<size_t> &fld_sizes) const;
+                                              const std::vector<size_t> &fld_sizes,
+                                              bool idindexed_fields = false);
 
     virtual TransferIterator *create_iterator(RegionInstance inst, RegionInstance peer,
                                               const std::vector<FieldID> &fields,
                                               const std::vector<size_t> &fld_offsets,
-                                              const std::vector<size_t> &fld_sizes) const;
+                                              const std::vector<size_t> &fld_sizes);
 
     virtual void print(std::ostream &os) const;
 
@@ -1662,6 +1936,8 @@ namespace Realm {
     template <typename S>
     bool serialize(S &serializer) const;
 
+    static constexpr size_t MIN_IDINDEXED_FIELDS = 2;
+
     // protected:
     IndexSpace<N, T> is;
   };
@@ -1669,6 +1945,10 @@ namespace Realm {
   template <int N, typename T>
   TransferDomainIndexSpace<N, T>::TransferDomainIndexSpace(IndexSpace<N, T> _is)
     : is(_is)
+  {}
+
+  template <int N, typename T>
+  TransferDomainIndexSpace<N, T>::~TransferDomainIndexSpace()
   {}
 
   template <int N, typename T>
@@ -1770,8 +2050,7 @@ namespace Realm {
     assert(impl->metadata.is_valid());
     const InstanceLayout<N, T> *layout =
         checked_cast<const InstanceLayout<N, T> *>(impl->metadata.layout);
-    std::map<FieldID, InstanceLayoutGeneric::FieldLayout>::const_iterator it =
-        layout->fields.find(field_id);
+    InstanceLayoutGeneric::FieldMap::const_iterator it = layout->fields.find(field_id);
     assert(it != layout->fields.end());
     const InstancePieceList<N, T> &ipl = layout->piece_lists[it->second.list_idx];
     std::vector<int> preferred;
@@ -1823,6 +2102,27 @@ namespace Realm {
     std::vector<int> preferred;
     preferred.reserve(N);
 
+    RegionInstanceImpl *impl = get_runtime()->get_instance_impl(dsts[0].inst);
+    const InstanceLayout<N, T> *inst_layout =
+        checked_cast<const InstanceLayout<N, T> *>(impl->metadata.layout);
+
+    // Fast path for idindexed_fields with pre-computed ordering
+    if(inst_layout->idindexed_fields && !inst_layout->preferred_dim_order.empty()) {
+      // Filter out trivial dimensions from pre-computed ordering for this specific copy
+      for(int d : inst_layout->preferred_dim_order) {
+        if(!trivial[d]) {
+          dim_order.push_back(d);
+        }
+      }
+      
+      // Add back trivial dimensions
+      for(int i = 0; i < N; i++) {
+        if(trivial[i]) {
+          dim_order.push_back(i);
+        }
+      }
+      return;
+    }
     // consider destinations first
     for(size_t i = 0; i < dsts.size(); i++) {
       if((dsts[i].field_id != FieldID(-1)) && dsts[i].inst.exists()) {
@@ -1830,7 +2130,6 @@ namespace Realm {
                             max_stride);
         reconcile_dim_orders(dim_order, preferred);
         preferred.clear();
-        continue;
       }
 
       // TODO: ask opinion of indirections?
@@ -1843,7 +2142,6 @@ namespace Realm {
                             max_stride);
         reconcile_dim_orders(dim_order, preferred);
         preferred.clear();
-        continue;
       }
 
       // TODO: ask opinion of indirections?
@@ -1924,13 +2222,33 @@ namespace Realm {
 
     fragments.assign(N + 2, 0);
 
-    for(size_t i = 0; i < fields.size(); i++) {
-      FieldID fid = fields[i];
-      size_t field_size = fld_sizes[i];
+    // Determine processing strategy: bulk (for idindexed_fields) or individual
+    bool use_bulk_processing = false;
+    size_t fields_to_process = fields.size(); // Process one field per iteration;
+    if(inst_layout->idindexed_fields && fields.size() >= 2) {
+      use_bulk_processing = true;
+      fields_to_process = 1; // Process all fields at once
+    }
 
+    for(size_t field_batch = 0; field_batch < fields_to_process; field_batch++) {
+      // Determine field info for this batch
+      FieldID fid;
+      size_t field_size, effective_field_count;
+      
+      if(use_bulk_processing) {
+        fid = fields[0];
+        field_size = fld_sizes[0];
+        effective_field_count = fields.size();
+      } else {
+        fid = fields[field_batch];
+        field_size = fld_sizes[field_batch];
+        effective_field_count = 1;
+      }
+
+      // Get layout pieces for representative field
       const InstancePieceList<N, T> *ipl;
       {
-        std::map<FieldID, InstanceLayoutGeneric::FieldLayout>::const_iterator it =
+        InstanceLayoutGeneric::FieldMap::const_iterator it =
             inst_layout->fields.find(fid);
         assert(it != inst_layout->fields.end());
         ipl = &inst_layout->piece_lists[it->second.list_idx];
@@ -1943,18 +2261,18 @@ namespace Realm {
       assert(layout_piece != 0);
 
       if(layout_piece->bounds.contains(is)) {
-        // easy case: one piece covers our entire domain and the iteration order
+        // Easy case: one piece covers our entire domain and the iteration order
         //  doesn't impact the fragment count
         if(layout_piece->layout_type == PieceLayoutTypes::AffineLayoutType) {
           const AffineLayoutPiece<N, T> *affine =
               static_cast<const AffineLayoutPiece<N, T> *>(layout_piece);
           do {
-            add_fragments_for_rect(isi.rect, field_size, 1 /*field count*/,
+            add_fragments_for_rect(isi.rect, field_size, effective_field_count,
                                    affine->strides, dim_order, fragments);
             isi.step();
           } while(isi.valid);
         } else {
-          // not affine - add one fragment for each rectangle
+          // Not affine - add one fragment for each rectangle
           size_t num_rects;
           if(is.dense()) {
             num_rects = 1;
@@ -1972,7 +2290,7 @@ namespace Realm {
         do {
           Point<N, T> next_start = isi.rect.lo;
           while(true) {
-            // look up new piece if needed
+            // Look up new piece if needed
             if(!layout_piece->bounds.contains(next_start)) {
               layout_piece = ipl->find_piece(next_start);
               assert(layout_piece != 0);
@@ -1984,7 +2302,7 @@ namespace Realm {
             if(layout_piece->layout_type == PieceLayoutTypes::AffineLayoutType) {
               const AffineLayoutPiece<N, T> *affine =
                   static_cast<const AffineLayoutPiece<N, T> *>(layout_piece);
-              add_fragments_for_rect(isi.rect, field_size, 1 /*field count*/,
+              add_fragments_for_rect(isi.rect, field_size, effective_field_count,
                                      affine->strides, dim_order, fragments);
             } else {
               non_affine_rects++;
@@ -2011,18 +2329,30 @@ namespace Realm {
   TransferIterator *TransferDomainIndexSpace<N, T>::create_iterator(
       RegionInstance inst, const std::vector<int> &dim_order,
       const std::vector<FieldID> &fields, const std::vector<size_t> &fld_offsets,
-      const std::vector<size_t> &fld_sizes) const
+      const std::vector<size_t> &fld_sizes, bool idindexed_fields)
   {
     assert(dim_order.size() == N);
     RegionInstanceImpl *impl = get_runtime()->get_instance_impl(inst);
-    return new TransferIteratorIndexSpace<N, T>(dim_order.data(), fields, fld_offsets,
-                                                fld_sizes, impl, is);
+    const InstanceLayout<N, T> *inst_layout =
+        checked_cast<const InstanceLayout<N, T> *>(impl->metadata.layout);
+    if(idindexed_fields && inst_layout->idindexed_fields && is.dense() &&
+       fields.size() >= MIN_IDINDEXED_FIELDS) {
+      // TODO(apryakhin@): There is an untested path where either src or dst
+      // might not have idindexed_fields layout. There aren't any checks that prevents
+      // this from running either.
+      return new IDIndexedFieldsIterator<N, T>(dim_order.data(), fields,
+                                               fld_sizes.front(), impl, is,
+                                               &get_runtime()->repl_heap);
+    } else {
+      return new TransferIteratorIndexSpace<N, T>(dim_order.data(), fields, fld_offsets,
+                                                  fld_sizes, impl, is);
+    }
   }
 
   template <int N, typename T>
   TransferIterator *TransferDomainIndexSpace<N, T>::create_iterator(
       RegionInstance inst, RegionInstance peer, const std::vector<FieldID> &fields,
-      const std::vector<size_t> &fld_offsets, const std::vector<size_t> &fld_sizes) const
+      const std::vector<size_t> &fld_offsets, const std::vector<size_t> &fld_sizes)
   {
     std::vector<int> dim_order(N, -1);
     bool have_ordering = false;
@@ -2547,8 +2877,7 @@ namespace Realm {
           log_xpath.info() << "inter: src_idx:" << src_idx << " "
                            << partials[src_idx].ib_mem << "(n:" << src_node
                            << ")-> dst_idx:" << dst_idx << " " << partials[dst_idx].ib_mem
-                           << "(n:" << dst_node << ")"
-                           << " channel=" << channel->kind
+                           << "(n:" << dst_node << ")" << " channel=" << channel->kind
                            << " cost=" << partials[src_idx].cost << "+" << cost << " = "
                            << total_cost << " <? " << partials[dst_idx].cost;
           // also prune any path that already exceeds the cost of the direct path
@@ -3537,20 +3866,20 @@ namespace Realm {
   {
     log_xplan.info() << "created: plan=" << (void *)this << " domain=" << *domain
                      << " srcs=" << srcs.size() << " dsts=" << dsts.size();
-    if(log_xplan.want_debug()) {
-      for(size_t i = 0; i < srcs.size(); i++) {
-        log_xplan.debug() << "created: plan=" << (void *)this << " srcs[" << i
-                          << "]=" << srcs[i];
-      }
-      for(size_t i = 0; i < dsts.size(); i++) {
-        log_xplan.debug() << "created: plan=" << (void *)this << " dsts[" << i
-                          << "]=" << dsts[i];
-      }
-      for(size_t i = 0; i < indirects.size(); i++) {
-        log_xplan.debug() << "created: plan=" << (void *)this << " indirects[" << i
-                          << "]=" << *indirects[i];
-      }
+    // if(log_xplan.want_debug()) {
+    for(size_t i = 0; i < srcs.size(); i++) {
+      log_xplan.info() << "created: plan=" << (void *)this << " srcs[" << i
+                       << "]=" << srcs[i];
     }
+    for(size_t i = 0; i < dsts.size(); i++) {
+      log_xplan.info() << "created: plan=" << (void *)this << " dsts[" << i
+                       << "]=" << dsts[i];
+    }
+    for(size_t i = 0; i < indirects.size(); i++) {
+      log_xplan.info() << "created: plan=" << (void *)this << " indirects[" << i
+                       << "]=" << *indirects[i];
+    }
+    //}
 
     std::vector<Event> preconditions;
 
@@ -3628,8 +3957,13 @@ namespace Realm {
       min_granularity = combined_field_size;
     }
 
+    size_t max_ib_size = 0;
+    bool success =
+        get_runtime()->get_module_config("core")->get_property("ib_regmem", max_ib_size);
+    assert(success);
+
     size_t ib_size = domain_size * element_size + serdez_pad;
-    const size_t IB_MAX_SIZE = 16 << 20; // 16MB
+    const size_t IB_MAX_SIZE = max_ib_size; // 16 << 20; // 16MB
     if(ib_size > IB_MAX_SIZE) {
       // take up to IB_MAX_SIZE, respecting the min granularity
       if(min_granularity > 1) {
@@ -4031,6 +4365,16 @@ namespace Realm {
               xdn.gather_control_input = -1;
               xdn.scatter_control_input = -1;
               xdn.target_node = path_info.xd_channels[j]->node;
+
+              bool enable_multi_field = false;
+              bool success = get_runtime()->get_module_config("core")->get_property(
+                  "dma_multi_field", enable_multi_field);
+              assert(success);
+
+              xdn.idindexed_fields =
+                  enable_multi_field &&
+                  path_info.xd_channels[j]->support_idindexed_fields(src_mem, dst_mem);
+
               xdn.channel = path_info.xd_channels[j];
               xdn.inputs.resize(1);
               xdn.inputs[0] = ((j == 0) ? TransferGraph::XDTemplate::mk_inst(
@@ -4197,50 +4541,50 @@ namespace Realm {
                 IBAllocOrderSorter(graph.ib_edges));
     }
 
-    if(log_xplan.want_debug()) {
-      log_xplan.debug() << "analysis: plan=" << (void *)this
-                        << " dim_order=" << PrettyVector<int>(dim_order)
-                        << " xds=" << graph.xd_nodes.size()
-                        << " ibs=" << graph.ib_edges.size();
+    // if(log_xplan.want_debug()) {
+    log_xplan.info() << "analysis: plan=" << (void *)this
+                     << " dim_order=" << PrettyVector<int>(dim_order)
+                     << " xds=" << graph.xd_nodes.size()
+                     << " ibs=" << graph.ib_edges.size();
 
-      for(size_t i = 0; i < graph.xd_nodes.size(); i++) {
-        if(graph.xd_nodes[i].redop.id != 0) {
-          log_xplan.debug()
-              << "analysis: plan=" << (void *)this << " xds[" << i
-              << "]: target=" << graph.xd_nodes[i].target_node << " inputs="
-              << PrettyVector<TransferGraph::XDTemplate::IO>(graph.xd_nodes[i].inputs)
-              << " outputs="
-              << PrettyVector<TransferGraph::XDTemplate::IO>(graph.xd_nodes[i].outputs)
-              << " channel="
-              << ((graph.xd_nodes[i].channel) ? graph.xd_nodes[i].channel->kind : -1)
-              << " redop=(" << graph.xd_nodes[i].redop.id << ","
-              << graph.xd_nodes[i].redop.is_fold << ","
-              << graph.xd_nodes[i].redop.in_place << ")";
-        } else {
-          log_xplan.debug()
-              << "analysis: plan=" << (void *)this << " xds[" << i
-              << "]: target=" << graph.xd_nodes[i].target_node << " inputs="
-              << PrettyVector<TransferGraph::XDTemplate::IO>(graph.xd_nodes[i].inputs)
-              << " outputs="
-              << PrettyVector<TransferGraph::XDTemplate::IO>(graph.xd_nodes[i].outputs)
-              << " channel="
-              << ((graph.xd_nodes[i].channel) ? graph.xd_nodes[i].channel->kind : -1);
-        }
+    for(size_t i = 0; i < graph.xd_nodes.size(); i++) {
+      if(graph.xd_nodes[i].redop.id != 0) {
+        log_xplan.info()
+            << "analysis: plan=" << (void *)this << " xds[" << i
+            << "]: target=" << graph.xd_nodes[i].target_node << " inputs="
+            << PrettyVector<TransferGraph::XDTemplate::IO>(graph.xd_nodes[i].inputs)
+            << " outputs="
+            << PrettyVector<TransferGraph::XDTemplate::IO>(graph.xd_nodes[i].outputs)
+            << " channel="
+            << ((graph.xd_nodes[i].channel) ? graph.xd_nodes[i].channel->kind : -1)
+            << " redop=(" << graph.xd_nodes[i].redop.id << ","
+            << graph.xd_nodes[i].redop.is_fold << "," << graph.xd_nodes[i].redop.in_place
+            << ")";
+      } else {
+        log_xplan.info()
+            << "analysis: plan=" << (void *)this << " xds[" << i
+            << "]: target=" << graph.xd_nodes[i].target_node << " inputs="
+            << PrettyVector<TransferGraph::XDTemplate::IO>(graph.xd_nodes[i].inputs)
+            << " outputs="
+            << PrettyVector<TransferGraph::XDTemplate::IO>(graph.xd_nodes[i].outputs)
+            << " channel="
+            << ((graph.xd_nodes[i].channel) ? graph.xd_nodes[i].channel->kind : -1);
       }
+      // }
 
       for(size_t i = 0; i < graph.ib_edges.size(); i++) {
-        log_xplan.debug() << "analysis: plan=" << (void *)this << " ibs[" << i
-                          << "]: memory=" << graph.ib_edges[i].memory << ":"
-                          << graph.ib_edges[i].memory.kind()
-                          << " size=" << graph.ib_edges[i].size;
+        log_xplan.info() << "analysis: plan=" << (void *)this << " ibs[" << i
+                         << "]: memory=" << graph.ib_edges[i].memory << ":"
+                         << graph.ib_edges[i].memory.kind()
+                         << " size=" << graph.ib_edges[i].size;
       }
 
       if(!graph.ib_edges.empty()) {
-        log_xplan.debug() << "analysis: plan=" << (void *)this
-                          << " ib_alloc=" << PrettyVector<unsigned>(graph.ib_alloc_order);
+        log_xplan.info() << "analysis: plan=" << (void *)this
+                         << " ib_alloc=" << PrettyVector<unsigned>(graph.ib_alloc_order);
       }
     }
-
+    
     // mark that the analysis is complete and see if there are any pending
     //  ops that can start allocating ibs
     std::vector<TransferOperation *> to_alloc;
@@ -4671,7 +5015,8 @@ namespace Realm {
             src_sizes[k] = desc.src_fields[xdn.inputs[j].inst.fld_start + k].size;
           }
           ii.iter = desc.domain->create_iterator(xdn.inputs[j].inst.inst, desc.dim_order,
-                                                 src_fields, src_offsets, src_sizes);
+                                                 src_fields, src_offsets, src_sizes,
+                                                 xdn.idindexed_fields);
           // use first field's serdez - they all have to be the same
           ii.serdez_id = desc.src_fields[xdn.inputs[j].inst.fld_start].serdez_id;
           ii.ib_offset = 0;
@@ -4801,7 +5146,8 @@ namespace Realm {
             dst_sizes[k] = desc.dst_fields[xdn.outputs[j].inst.fld_start + k].size;
           }
           oi.iter = desc.domain->create_iterator(xdn.outputs[j].inst.inst, desc.dim_order,
-                                                 dst_fields, dst_offsets, dst_sizes);
+                                                 dst_fields, dst_offsets, dst_sizes,
+                                                 xdn.idindexed_fields);
           // use first field's serdez - they all have to be the same
           oi.serdez_id = desc.dst_fields[xdn.outputs[j].inst.fld_start].serdez_id;
           oi.ib_offset = 0;
@@ -5054,6 +5400,7 @@ namespace Realm {
       const ProfilingRequestSet &, Event, int) const;                                    \
   template class TransferIteratorIndexSpace<N, T>;                                       \
   template class TransferIteratorIndirect<N, T>;                                         \
+  template class IDIndexedFieldsIterator<N, T>;                                          \
   template class WrappingTransferIteratorIndirect<N, T>;                                 \
   template class TransferIteratorIndirectRange<N, T>;                                    \
   template class AddressSplitXferDesFactory<N, T>;                                       \
