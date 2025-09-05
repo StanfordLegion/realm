@@ -68,7 +68,7 @@ set(REALM_SOURCES
     procset/procset_module.cc
 )
 
-if(TARGET CUDA::cuda_driver AND REALM_USE_CUDA)
+if(REALM_USE_CUDA)
   list(APPEND REALM_SOURCES cuda/cuda_module.cc cuda/cuda_internal.cc cuda/cuda_access.cc)
   if(REALM_USE_NVTX)
     list(APPEND REALM_SOURCES nvtx.cc)
@@ -76,15 +76,15 @@ if(TARGET CUDA::cuda_driver AND REALM_USE_CUDA)
   list(APPEND REALM_CUDA_SOURCES cuda/cuda_memcpy.cu)
 endif()
 
-if(TARGET hip::host)
+if(REALM_USE_HIP)
   list(APPEND REALM_SOURCES hip/hip_module.cc hip/hip_internal.cc hip/hip_access.cc)
 endif()
 
-if(TARGET LLVM::LLVM)
+if(REALM_USE_LLVM)
   list(APPEND REALM_SOURCES llvmjit/llvmjit_internal.cc llvmjit/llvmjit_module.cc)
 endif()
 
-if(TARGET hdf5::hdf5)
+if(REALM_USE_HDF5)
   list(APPEND REALM_SOURCES hdf5/hdf5_module.cc hdf5/hdf5_internal.cc hdf5/hdf5_access.cc)
 endif()
 
@@ -99,11 +99,11 @@ if(REALM_USE_PREALM)
   list(APPEND REALM_SOURCES prealm/prealm.cc)
 endif()
 
-if(TARGET Python3::Python)
+if(REALM_USE_PYTHON)
   list(APPEND REALM_SOURCES python/python_module.cc python/python_source.cc)
 endif()
 
-if(TARGET ucx::ucp)
+if(REALM_USE_UCX)
   list(
     APPEND
     REALM_SOURCES
@@ -118,16 +118,16 @@ if(TARGET ucx::ucp)
   )
 endif()
 
-if(TARGET GASNet::GASNet)
+if(REALM_USE_GASNETEX)
   list(APPEND REALM_SOURCES gasnet1/gasnet1_module.cc gasnet1/gasnetmsg.cc)
   list(APPEND REALM_SOURCES gasnetex/gasnetex_module.cc gasnetex/gasnetex_internal.cc)
 endif()
 
-if(TARGET MPI::MPI_CXX)
+if(REALM_USE_MPI)
   list(APPEND REALM_SOURCES mpi/mpi_module.cc mpi/am_mpi.cc)
 endif()
 
-if(TARGET Kokkos::kokkos)
+if(REALM_USE_KOKKOS)
   list(APPEND REALM_SOURCES kokkos_interop.cc)
   set_source_files_properties("${REALM_SOURCE_DIR}/kokkos_interop.cc" 
       DIRECTORY ${PROJECT_SOURCE_DIR}
