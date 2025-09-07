@@ -1944,7 +1944,7 @@ SparsityMapImpl<N, T>::~SparsityMapImpl(void)
     this->num_entries = size;
   }
 
-  //Allows a GPU deppart client to set the approx enrects directly with a host region instance
+  //Allows a GPU deppart client to set the approx rects directly with a host region instance
   template<int N, typename T>
   void SparsityMapImpl<N, T>::set_approx_instance(RegionInstance _approx_instance, size_t size)
   {
