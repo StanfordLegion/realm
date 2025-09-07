@@ -906,11 +906,12 @@ template<int N, typename T>
 SparsityMapImpl<N, T>::~SparsityMapImpl(void)
 {
      //We are responsible for our instances
-     if (false) {
-       if (this->entries_instance.exists() && this->num_entries)
+     if (this->from_gpu) {
+       if (get_runtime()->get_memory_impl(this->entries_instance))
          this->entries_instance.destroy();
-       if (this->approx_instance.exists() && this->num_approx)
+       if (get_runtime()->get_memory_impl(this->approx_instance))
          this->approx_instance.destroy();
+       this->from_gpu = false;
      }
 }
 

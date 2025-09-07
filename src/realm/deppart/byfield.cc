@@ -380,7 +380,7 @@ namespace Realm {
       for (size_t i = 0; i < colors.size(); i++) {
         uop->add_sparsity_output(colors[i], subspaces[i]);
       }
-      uop->dispatch(this, true);
+      uop->dispatch(this, false);
 
     } else {
       for (size_t i = 0; i < subspaces.size(); i++)
