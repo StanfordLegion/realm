@@ -400,7 +400,7 @@ if(REALM_ENABLE_CUDA OR (REALM_ENABLE_HIP AND CMAKE_HIP_PLATFORM STREQUAL "nvidi
     # the CUDA::nvtx3 and CUDA::nvToolsExt targets are mutually exclusive, they don't
     # appear to be so in earlier versions. So if we have nvtx3, prefer that, otherwise
     # fall back to nvToolsExt.
-    set(REALM_USE_NVTX ${REALM_ENABLE_CUDA})
+    set(REALM_USE_NVTX ${REALM_ENABLE_NVTX})
     if(TARGET CUDA::nvtx3)
       list(APPEND REALM_LIBRARIES CUDA::nvtx3)
     elseif(TARGET CUDA::nvToolsExt)
@@ -716,8 +716,8 @@ if(REALM_ENABLE_GASNETEX)
 
     FetchContent_Declare(
       GASNet
-      URL https://gasnet.lbl.gov/EX/GASNet-2024.5.0.tar.gz
-      URL_HASH SHA256=f945e80f71d340664766b66290496d230e021df5e5cd88f404d101258446daa9
+      URL https://gasnet.lbl.gov/EX/GASNet-2025.8.0.tar.gz
+      URL_HASH SHA256=bd5919099477d1d2f59c247d006e9d1ac017c9190c974f5e069667418e5bf48d
       SOURCE_DIR "${GASNet_SOURCE_DIR}" INSTALL_DIR "${GASNet_ROOT}"
     )
     FetchContent_MakeAvailable(GASNet)

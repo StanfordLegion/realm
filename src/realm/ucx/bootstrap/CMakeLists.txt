@@ -30,7 +30,7 @@ if(NOT Realm_VERSION_MAJOR)
 endif()
 
 option(UCX_BOOTSTRAP_ENABLE_MPI "Compile with MPI support" OFF)
-option(REALM_INSTALL "Enable installation support" OFF)
+option(UCX_BOOTSTRAP_INSTALL "Enable installation support" OFF)
 
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 set(CMAKE_C_VISIBILITY_PRESET hidden)
@@ -75,7 +75,7 @@ endif()
 add_backend_plugin(NAME realm_bootstrap_p2p SOURCES ${UCX_BOOTSTRAP_ROOT_DIR}/bootstrap_p2p.cc)
 #endregion
 
-if(REALM_INSTALL)
+if(UCX_BOOTSTRAP_INSTALL)
   install(TARGETS ${UCX_BACKENDS})
 endif()
 
