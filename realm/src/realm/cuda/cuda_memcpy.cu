@@ -66,23 +66,27 @@ static __device__ inline size_t coords_to_index(Offset_t *coords, const Offset_t
 }
 
 template <typename T, typename Offset_t = size_t>
-static __device__ inline void memcpy_kernel_transpose(
-    Realm::Cuda::MemcpyTransposeInfo<Offset_t> info, T* tile) {
+static __device__ inline void
+memcpy_kernel_transpose(Realm::Cuda::MemcpyTransposeInfo<Offset_t> info, T *tile)
+{
   __restrict__ T *out_base = reinterpret_cast<T *>(info.dst);
   __restrict__ T *in_base = reinterpret_cast<T *>(info.src);
   const Offset_t tile_size = info.tile_size;
+
   const Offset_t tidx = threadIdx.x % tile_size;
   const Offset_t tidy = (threadIdx.x / tile_size) % tile_size;
+
   const Offset_t grid_dimx = ((info.extents[2] + tile_size - 1) / tile_size);
   const Offset_t grid_dimy = ((info.extents[1] + tile_size - 1) / tile_size);
   const Offset_t contig_bytes = info.extents[0];
   const Offset_t chunks = contig_bytes / sizeof(T);
 
-  const Offset_t src_stride_x = info.src_strides[1] / contig_bytes;
-  const Offset_t src_stride_y = info.src_strides[0] / contig_bytes;
+  // Convert byte strides into element strides (units of T)
+  const Offset_t src_stride_x_T = info.src_strides[1] / sizeof(T);
+  const Offset_t src_stride_y_T = info.src_strides[0] / sizeof(T);
 
-  const Offset_t dst_stride_y = info.dst_strides[1] / contig_bytes;
-  const Offset_t dst_stride_x = info.dst_strides[0] / contig_bytes;
+  const Offset_t dst_stride_x_T = info.dst_strides[0] / sizeof(T);
+  const Offset_t dst_stride_y_T = info.dst_strides[1] / sizeof(T);
 
   for(Offset_t block = blockIdx.x; block < grid_dimx * grid_dimy; block += gridDim.x) {
     Offset_t block_idx = block % grid_dimx;
@@ -98,13 +102,14 @@ static __device__ inline void memcpy_kernel_transpose(
       if(x_base + block_offset < info.extents[2] * chunks && y_base < info.extents[1]) {
         Offset_t in_tile_idx = tidx + (tile_size + 1) * tidy * chunks;
 
-        // The purpose of this calculation is to handle XYZ -> ZYX case
-        // where contig_bytes > sizeof(T)
-        Offset_t x_base_idx =
-            ((x_base / chunks) * (src_stride_x * chunks) + x_base % chunks);
-        tile[in_tile_idx + block_offset] =
-            in_base[x_base_idx + y_base * src_stride_y * chunks +
-                    block_offset * src_stride_x];
+        // Fold block_offset into the contiguous coordinate before computing
+        // (plane, k) and do not add it again after stride scaling.
+        Offset_t x_e = x_base + block_offset;
+        Offset_t x_plane = x_e / chunks;
+        Offset_t k_elem = x_e % chunks;
+
+        Offset_t src_idx_T = x_plane * src_stride_x_T + y_base * src_stride_y_T + k_elem;
+        tile[in_tile_idx + block_offset] = in_base[src_idx_T];
       }
     }
 
@@ -120,11 +125,16 @@ static __device__ inline void memcpy_kernel_transpose(
             (tidy + (tile_size + 1) * ((tidx + block_offset) / chunks)) * chunks +
             (tidx + block_offset) % chunks;
 
-        Offset_t x_base_idx =
-            ((x_base / chunks) * (dst_stride_x * chunks) + x_base % chunks);
+        // Fold block_offset into the contiguous coordinate before computing
+        // (plane, k) and do not add it again after stride scaling.
+        Offset_t x_e = x_base + block_offset;
+        Offset_t x_plane = x_e / chunks;
+        Offset_t k_elem = x_e % chunks;
+        Offset_t x_base_idx = x_plane * (dst_stride_x_T * chunks) + k_elem;
 
-        out_base[x_base_idx + dst_stride_y * y_base * chunks +
-                 block_offset * dst_stride_x] = tile[out_tile_idx];
+        Offset_t dst_idx_T = x_plane * dst_stride_x_T + y_base * dst_stride_y_T + k_elem;
+
+        out_base[dst_idx_T] = tile[out_tile_idx];
       }
     }
   }
