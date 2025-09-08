@@ -33,44 +33,16 @@ void GPUByFieldMicroOp<N,T,FT>::execute()
 
     Memory my_mem = field_data[0].inst.get_location();
 
+    collapsed_space<N, T> inst_space;
 
-    // We need inst_offsets to preserve which instance each rectangle came from
-    // so that we know where to read from after intersecting.
-    std::vector<size_t> inst_offsets(field_data.size() + 1);
+    //This is used to track which instance each rectangle came from
+    RegionInstance inst_offsets_instance = this->realm_malloc((field_data.size() + 1) * sizeof(size_t), my_mem);
+    inst_space.offsets = reinterpret_cast<size_t*>(AffineAccessor<char,1>(inst_offsets_instance, 0).base);
+    inst_space.num_children = field_data.size();
 
-    //Determine size of allocation for combined inst_rects and offset entries
-    size_t inst_size = 0;
+    RegionInstance inst_entries_instance;
 
-
-    for (size_t i = 0; i < field_data.size(); ++i) {
-      inst_offsets[i] = inst_size;
-      if (field_data[i].index_space.dense()) {
-        inst_size += 1;
-      } else {
-        inst_size += field_data[i].index_space.sparsity.impl()->get_entries().size();
-      }
-    }
-    inst_offsets[field_data.size()] = inst_size;
-
-
-    RegionInstance inst_entries_instance = this->realm_malloc(inst_size * sizeof(SparsityMapEntry<N,T>), my_mem);
-    SparsityMapEntry<N,T>* d_inst_entries = reinterpret_cast<SparsityMapEntry<N,T>*>(AffineAccessor<char,1>(inst_entries_instance, 0).base);
-
-    //Now we fill the device array with all instance rectangles
-    size_t inst_pos = 0;
-    for (size_t i = 0; i < field_data.size(); ++i) {
-      const IndexSpace<N,T> &inst_space = field_data[i].index_space;
-      if (inst_space.dense()) {
-        SparsityMapEntry<N,T> entry;
-        entry.bounds = inst_space.bounds;
-        CUDA_CHECK(cudaMemcpyAsync(d_inst_entries + inst_pos, &entry, sizeof(SparsityMapEntry<N,T>), cudaMemcpyHostToDevice, stream), stream);
-        ++inst_pos;
-      } else {
-        auto tmp = inst_space.sparsity.impl()->get_entries();
-        CUDA_CHECK(cudaMemcpyAsync(d_inst_entries + inst_pos, tmp.data(), tmp.size() * sizeof(SparsityMapEntry<N,T>), cudaMemcpyHostToDevice, stream), stream);
-        inst_pos += tmp.size();
-      }
-    }
+    GPUMicroOp<N, T>::collapse_inst_space(field_data, inst_entries_instance, inst_space, my_mem, stream);
 
     //Copy the parent entries to the device as well
     span<SparsityMapEntry<N,T>> parent_entries;
@@ -88,8 +60,6 @@ void GPUByFieldMicroOp<N,T,FT>::execute()
 
     RegionInstance inst_counters_instance = this->realm_malloc((field_data.size()) * sizeof(uint32_t), my_mem);
 
-    RegionInstance inst_offsets_instance = this->realm_malloc((field_data.size() + 1) * sizeof(size_t), my_mem);
-
     SparsityMapEntry<N, T>* d_parent_entries = reinterpret_cast<SparsityMapEntry<N,T>*>(AffineAccessor<char,1>(parent_entries_instance, 0).base);
     CUDA_CHECK(cudaMemcpyAsync(d_parent_entries, parent_entries.data(), parent_entries.size() * sizeof(SparsityMapEntry<N,T>), cudaMemcpyHostToDevice, stream), stream);
 
@@ -99,15 +69,10 @@ void GPUByFieldMicroOp<N,T,FT>::execute()
     CUDA_CHECK(cudaMemsetAsync(d_inst_counters, 0, (field_data.size()) * sizeof(uint32_t), stream), stream);
 
 
-    //This is used to track which instance each rectangle came from
-    size_t* d_inst_offsets = reinterpret_cast<size_t*>(AffineAccessor<char,1>(inst_offsets_instance, 0).base);
-    CUDA_CHECK(cudaMemcpyAsync(d_inst_offsets, inst_offsets.data(), (field_data.size() + 1) * sizeof(size_t), cudaMemcpyHostToDevice, stream), stream);
-
-
     //First pass: figure out how many rectangles survive intersection
     int flattened_threads = 256;
-    int grid_size = (parent_entries.size() * inst_size + flattened_threads - 1) / flattened_threads;
-    intersect_input_rects<N,T><<<grid_size, flattened_threads, 0, stream>>>(d_inst_entries, d_parent_entries, d_inst_offsets, nullptr, inst_size, parent_entries.size(), field_data.size(), d_inst_counters, nullptr);
+    int grid_size = (parent_entries.size() * inst_space.num_entries + flattened_threads - 1) / flattened_threads;
+    intersect_input_rects<N,T><<<grid_size, flattened_threads, 0, stream>>>(inst_space.entries_buffer, d_parent_entries, inst_space.offsets, nullptr, inst_space.num_entries, parent_entries.size(), field_data.size(), d_inst_counters, nullptr);
     KERNEL_CHECK(stream);
 
 
@@ -150,8 +115,8 @@ void GPUByFieldMicroOp<N,T,FT>::execute()
     CUDA_CHECK(cudaMemsetAsync(d_inst_counters, 0, (field_data.size()) * sizeof(uint32_t), stream), stream);
 
     //Second pass: recompute intersection, but this time write to output
-    grid_size = (parent_entries.size() * inst_size + flattened_threads - 1) / flattened_threads;
-    intersect_input_rects<N,T><<<grid_size, flattened_threads, 0, stream>>>(d_inst_entries, d_parent_entries, d_inst_offsets, d_inst_prefix, inst_size, parent_entries.size(), field_data.size(), d_inst_counters, d_valid_rects);
+    grid_size = (parent_entries.size() * inst_space.num_entries + flattened_threads - 1) / flattened_threads;
+    intersect_input_rects<N,T><<<grid_size, flattened_threads, 0, stream>>>(inst_space.entries_buffer, d_parent_entries, inst_space.offsets, d_inst_prefix, inst_space.num_entries, parent_entries.size(), field_data.size(), d_inst_counters, d_valid_rects);
     KERNEL_CHECK(stream);
 
 

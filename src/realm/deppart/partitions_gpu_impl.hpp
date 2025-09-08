@@ -63,6 +63,88 @@ namespace Realm {
     }
   };
 
+  template<int N, typename T>
+  struct BVH {
+    Rect<N,T>* boxes;
+    int root;
+    size_t num_leaves;
+    uint64_t* indices;
+    uint64_t* labels;
+    int* childLeft;
+    int* childRight;
+  };
+
+  inline bool find_sysmem(Memory &sysmem)
+  {
+    bool found_sysmem = false;
+    Machine machine = Machine::get_machine();
+    std::set<Memory> all_memories;
+    machine.get_all_memories(all_memories);
+    for(auto& memory : all_memories) {
+      if(memory.kind() == Memory::SYSTEM_MEM) {
+        sysmem = memory;
+        found_sysmem = true;
+        break;
+      }
+    }
+    return found_sysmem;
+  }
+
+  template<int N, typename T>
+  template<typename FT>
+  void GPUMicroOp<N,T>::collapse_inst_space(const std::vector<FieldDataDescriptor<IndexSpace<N, T>, FT> >& field_data, RegionInstance& out_instance, collapsed_space<N, T> &out_space, Memory my_mem, cudaStream_t stream)
+  {
+    // We need inst_offsets to preserve which instance each rectangle came from
+    // so that we know where to read from after intersecting.
+    std::vector<size_t> inst_offsets(field_data.size() + 1);
+
+    //Determine size of allocation for combined inst_rects and offset entries
+    out_space.num_entries = 0;
+
+
+    for (size_t i = 0; i < field_data.size(); ++i) {
+      inst_offsets[i] = out_space.num_entries;
+      if (field_data[i].index_space.dense()) {
+        out_space.num_entries += 1;
+      } else {
+        out_space.num_entries += field_data[i].index_space.sparsity.impl()->get_entries().size();
+      }
+    }
+    inst_offsets[field_data.size()] = out_space.num_entries;
+
+    out_instance = realm_malloc(out_space.num_entries * sizeof(SparsityMapEntry<N,T>), my_mem);
+    out_space.entries_buffer = reinterpret_cast<SparsityMapEntry<N,T>*>(AffineAccessor<char,1>(out_instance, 0).base);
+
+    //Now we fill the device array with all instance rectangles
+    size_t inst_pos = 0;
+    for (size_t i = 0; i < field_data.size(); ++i) {
+      const IndexSpace<N,T> &inst_space = field_data[i].index_space;
+      if (inst_space.dense()) {
+        SparsityMapEntry<N,T> entry;
+        entry.bounds = inst_space.bounds;
+        CUDA_CHECK(cudaMemcpyAsync(out_space.entries_buffer + inst_pos, &entry, sizeof(SparsityMapEntry<N,T>), cudaMemcpyHostToDevice, stream), stream);
+        ++inst_pos;
+      } else {
+        auto tmp = inst_space.sparsity.impl()->get_entries();
+        CUDA_CHECK(cudaMemcpyAsync(out_space.entries_buffer + inst_pos, tmp.data(), tmp.size() * sizeof(SparsityMapEntry<N,T>), cudaMemcpyHostToDevice, stream), stream);
+        inst_pos += tmp.size();
+      }
+    }
+    CUDA_CHECK(cudaMemcpyAsync(out_space.offsets, inst_offsets.data(), (field_data.size() + 1) * sizeof(size_t), cudaMemcpyHostToDevice, stream), stream);
+  }
+
+  template<int N, typename T>
+  void GPUMicroOp<N,T>::collapse_parent_space(const IndexSpace<N, T>& parent_space, RegionInstance& out_instance, collapsed_space<N, T> &out_space, Memory my_mem, cudaStream_t stream)
+  {
+
+  }
+
+  //template<int N, typename T>
+  //template<typename out_t>
+  //void GPUMicroOp<N,T>::construct_input_rectlist(const collapsed_space<N, T> &lhs, const collapsed_space<N, T> &rhs, RegionInstance &out_instance,  size_t& out_size, uint32_t* out_offsets, Memory my_mem)
+  //{
+//
+  //}
 
   /*
    *  Input: An array of points (potentially with duplicates) with associated
@@ -248,21 +330,8 @@ namespace Realm {
       }
     }
 
-    //Find system memory
     Memory sysmem;
-    bool found_sysmem = false;
-    Machine machine = Machine::get_machine();
-    std::set<Memory> all_memories;
-    machine.get_all_memories(all_memories);
-    for(auto& memory : all_memories) {
-      if(memory.kind() == Memory::SYSTEM_MEM) {
-        sysmem = memory;
-        found_sysmem = true;
-        break;
-      }
-    }
-    assert(found_sysmem);
-
+    assert(find_sysmem(sysmem));
 
     //Use provided lambdas to iterate over sparsity output container (map or vector)
     for (auto const& elem : ctr) {
