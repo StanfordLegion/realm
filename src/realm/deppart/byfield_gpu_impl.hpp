@@ -49,31 +49,17 @@ void GPUByFieldMicroOp<N,T,FT>::execute()
 
     GPUMicroOp<N, T>::collapse_parent_space(parent_space, parent_entries_instance, collapsed_parent, my_mem, stream);
 
-    RegionInstance inst_counters_instance = this->realm_malloc((field_data.size()) * sizeof(uint32_t), my_mem);
+    RegionInstance inst_counters_instance = this->realm_malloc((2*field_data.size() + 1) * sizeof(uint32_t), my_mem);
 
     //This is used for count + emit: first pass counts how many rectangles survive intersection, second pass uses the counter
     // to figure out where to write each rectangle
     uint32_t* d_inst_counters = reinterpret_cast<uint32_t*>(AffineAccessor<char,1>(inst_counters_instance, 0).base);
-    CUDA_CHECK(cudaMemsetAsync(d_inst_counters, 0, (field_data.size()) * sizeof(uint32_t), stream), stream);
+    uint32_t* d_inst_prefix = d_inst_counters + field_data.size();
+    RegionInstance out_instance;
+    size_t num_valid_rects;
 
-
-    //First pass: figure out how many rectangles survive intersection
-    int flattened_threads = 256;
-    int grid_size = (collapsed_parent.num_entries * inst_space.num_entries + flattened_threads - 1) / flattened_threads;
-    intersect_input_rects<N,T><<<grid_size, flattened_threads, 0, stream>>>(inst_space.entries_buffer, collapsed_parent.entries_buffer, inst_space.offsets, nullptr, inst_space.num_entries, collapsed_parent.num_entries, field_data.size(), d_inst_counters, nullptr);
-    KERNEL_CHECK(stream);
-
-
-    //Prefix sum over instances (small enough to keep on host)
-    std::vector<uint32_t> h_inst_counters(field_data.size()+1);
-    h_inst_counters[0] = 0; // prefix sum starts at 0
-    CUDA_CHECK(cudaMemcpyAsync(h_inst_counters.data()+1, d_inst_counters, field_data.size() * sizeof(uint32_t), cudaMemcpyDeviceToHost, stream), stream);
-    CUDA_CHECK(cudaStreamSynchronize(stream), stream);
-    for (size_t i = 0; i < field_data.size(); ++i) {
-      h_inst_counters[i+1] += h_inst_counters[i];
-    }
-
-    size_t num_valid_rects = h_inst_counters[field_data.size()];
+    GPUMicroOp<N, T>::template construct_input_rectlist<Rect<N, T>>(inst_space, collapsed_parent, out_instance, num_valid_rects, d_inst_counters, d_inst_prefix, my_mem, stream);
+    Rect<N, T>* d_valid_rects = reinterpret_cast<Rect<N,T>*>(AffineAccessor<char,1>(out_instance, 0).base);
 
     if (num_valid_rects == 0) {
       for (std::pair<const FT, SparsityMap<N, T>> it : sparsity_outputs) {
@@ -87,26 +73,7 @@ void GPUByFieldMicroOp<N,T,FT>::execute()
       return;
     }
 
-
-    RegionInstance inst_prefix_instance = this->realm_malloc((field_data.size() + 1) * sizeof(uint32_t), my_mem);
-    RegionInstance valid_rects_instance = this->realm_malloc(num_valid_rects * sizeof(Rect<N,T>), my_mem);
     RegionInstance prefix_rects_instance = this->realm_malloc((num_valid_rects + 1) * sizeof(size_t), my_mem);
-
-    //Where each instance should start writing its rectangles
-    uint32_t* d_inst_prefix = reinterpret_cast<uint32_t*>(AffineAccessor<char,1>(inst_prefix_instance, 0).base);
-    CUDA_CHECK(cudaMemcpyAsync(d_inst_prefix, h_inst_counters.data(), (field_data.size() + 1) * sizeof(size_t), cudaMemcpyHostToDevice, stream), stream);
-
-    //Non-empty rectangles from the intersection
-    Rect<N,T>* d_valid_rects = reinterpret_cast<Rect<N,T>*>(AffineAccessor<char,1>(valid_rects_instance, 0).base);
-
-    //Reset counters
-    CUDA_CHECK(cudaMemsetAsync(d_inst_counters, 0, (field_data.size()) * sizeof(uint32_t), stream), stream);
-
-    //Second pass: recompute intersection, but this time write to output
-    grid_size = (collapsed_parent.num_entries * inst_space.num_entries + flattened_threads - 1) / flattened_threads;
-    intersect_input_rects<N,T><<<grid_size, flattened_threads, 0, stream>>>(inst_space.entries_buffer, collapsed_parent.entries_buffer, inst_space.offsets, d_inst_prefix, inst_space.num_entries, collapsed_parent.num_entries, field_data.size(), d_inst_counters, d_valid_rects);
-    KERNEL_CHECK(stream);
-
 
     // Prefix sum the valid rectangles by volume
     size_t* d_prefix_rects = reinterpret_cast<size_t*>(AffineAccessor<char,1>(prefix_rects_instance, 0).base);
@@ -148,7 +115,6 @@ void GPUByFieldMicroOp<N,T,FT>::execute()
     parent_entries_instance.destroy();
     inst_offsets_instance.destroy();
     temp_instance.destroy();
-    inst_counters_instance.destroy();
 
     RegionInstance points_instance = this->realm_malloc(total_pts * sizeof(PointDesc<N,T>), my_mem);
     PointDesc<N,T>* d_points = reinterpret_cast<PointDesc<N,T>*>(AffineAccessor<char,1>(points_instance, 0).base);
@@ -186,8 +152,9 @@ void GPUByFieldMicroOp<N,T,FT>::execute()
 
 
     //This is where the work is actually done - each thread figures out which points to read, reads it, marks a PointDesc with its color, and writes it out
-    int num_blocks = (total_pts + flattened_threads - 1) / flattened_threads;
-    byfield_gpuPopulateBitmasksKernel<N,T,FT><<<num_blocks, flattened_threads, 0, stream>>>(d_accessors, d_valid_rects, d_prefix_rects, d_inst_prefix, d_colors, total_pts, colors.size(), num_valid_rects, field_data.size(), d_points);
+    int threads_per_block = 256;
+    int num_blocks = (total_pts + threads_per_block - 1) / threads_per_block;
+    byfield_gpuPopulateBitmasksKernel<N,T,FT><<<num_blocks, threads_per_block, 0, stream>>>(d_accessors, d_valid_rects, d_prefix_rects, d_inst_prefix, d_colors, total_pts, colors.size(), num_valid_rects, field_data.size(), d_points);
     KERNEL_CHECK(stream);
 
   // Map colors to their output index to match send output iterator
@@ -197,11 +164,11 @@ void GPUByFieldMicroOp<N,T,FT>::execute()
   }
 
   CUDA_CHECK(cudaStreamSynchronize(stream), stream);
-  valid_rects_instance.destroy();
   prefix_rects_instance.destroy();
   colors_instance.destroy();
   accessors_instance.destroy();
-  inst_prefix_instance.destroy();
+  out_instance.destroy();
+  inst_counters_instance.destroy();
 
   // Ship off the points for final processing
 

@@ -192,8 +192,8 @@ namespace Realm {
 
     static void collapse_parent_space(const IndexSpace<N, T>& parent_space, RegionInstance& out_instance, collapsed_space<N, T> &out_space, Memory my_mem, cudaStream_t stream);
 
-    //template <typename out_t>
-    //static void construct_input_rectlist(const collapsed_space<N, T> &lhs, const collapsed_space<N, T> &rhs, RegionInstance &out_instance,  size_t& out_size, uint32_t* out_offsets, Memory my_mem);
+    template <typename out_t>
+    static void construct_input_rectlist(const collapsed_space<N, T> &lhs, const collapsed_space<N, T> &rhs, RegionInstance &out_instance,  size_t& out_size, uint32_t* counters, uint32_t* out_offsets, Memory my_mem, cudaStream_t stream);
 
     template<typename Container, typename IndexFn, typename MapFn>
     void complete_pipeline(PointDesc<N, T>* d_points, size_t total_pts, Memory my_mem, const Container& ctr, IndexFn getIndex, MapFn getMap);

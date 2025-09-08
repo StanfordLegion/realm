@@ -3,6 +3,48 @@
 
 namespace Realm {
 
+  // Intersect all instance rectangles with all parent rectangles in parallel.
+// Used for both count and emit depending on whether the output array is null.
+
+template <int N, typename T>
+__global__ void intersect_input_rects(
+  const SparsityMapEntry<N,T>* d_inst_entries,
+  const SparsityMapEntry<N,T>* d_parent_entries,
+  const size_t *d_inst_offsets,
+  const uint32_t *d_inst_prefix,
+  size_t numInstRects,
+  size_t numParentRects,
+  size_t numInsts,
+  uint32_t *d_inst_counters,
+  Rect<N,T>* d_rects
+) {
+  size_t idx = blockIdx.x * blockDim.x + threadIdx.x;
+  if (idx >= numInstRects * numParentRects) return;
+  size_t idx_x = idx % numParentRects;
+  size_t idx_y = idx / numParentRects;
+  assert(idx_x < numParentRects);
+  assert(idx_y < numInstRects);
+  const SparsityMapEntry<N, T> source_entry = d_parent_entries[idx_x];
+  const SparsityMapEntry<N, T> inst_entry = d_inst_entries[idx_y];
+  Rect<N,T> rect_output = inst_entry.bounds.intersection(source_entry.bounds);
+  if (rect_output.empty()) {
+    return;
+  }
+  size_t low = 0, high = numInsts;
+  while (low < high) {
+      size_t mid = (low + high) >> 1;
+      if (d_inst_offsets[mid+1] <= idx_y) low = mid + 1;
+      else                                 high = mid;
+  }
+  size_t inst_idx = low;
+  uint32_t local = atomicAdd(&d_inst_counters[inst_idx], 1);
+  if (d_rects != nullptr) {
+    // If d_rects is not null, we write the output rect
+    uint32_t out_idx = d_inst_prefix[inst_idx] + local;
+    d_rects[out_idx] = rect_output;
+  }
+}
+
 template<int N, typename T>
 __global__ void build_coord_key(T*        d_keys,
                                 const PointDesc<N,T>* d_pts,

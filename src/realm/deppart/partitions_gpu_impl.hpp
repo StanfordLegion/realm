@@ -162,12 +162,52 @@ namespace Realm {
     out_space.num_children = 1;
   }
 
-  //template<int N, typename T>
-  //template<typename out_t>
-  //void GPUMicroOp<N,T>::construct_input_rectlist(const collapsed_space<N, T> &lhs, const collapsed_space<N, T> &rhs, RegionInstance &out_instance,  size_t& out_size, uint32_t* out_offsets, Memory my_mem)
-  //{
-//
-  //}
+  template<int N, typename T>
+  template<typename out_t>
+  void GPUMicroOp<N,T>::construct_input_rectlist(const collapsed_space<N, T> &lhs, const collapsed_space<N, T> &rhs, RegionInstance &out_instance,  size_t& out_size, uint32_t* counters, uint32_t* out_offsets, Memory my_mem, cudaStream_t stream)
+  {
+
+    CUDA_CHECK(cudaMemsetAsync(counters, 0, (lhs.num_children) * sizeof(uint32_t), stream), stream);
+
+    //First pass: figure out how many rectangles survive intersection
+    int flattened_threads = 256;
+    int grid_size = (lhs.num_entries * rhs.num_entries + flattened_threads - 1) / flattened_threads;
+    intersect_input_rects<N,T><<<grid_size, flattened_threads, 0, stream>>>(lhs.entries_buffer, rhs.entries_buffer, lhs.offsets, nullptr, lhs.num_entries, rhs.num_entries, lhs.num_children, counters, nullptr);
+    KERNEL_CHECK(stream);
+
+
+    //Prefix sum over instances (small enough to keep on host)
+    std::vector<uint32_t> h_inst_counters(lhs.num_children+1);
+    h_inst_counters[0] = 0; // prefix sum starts at 0
+    CUDA_CHECK(cudaMemcpyAsync(h_inst_counters.data()+1, counters, lhs.num_children * sizeof(uint32_t), cudaMemcpyDeviceToHost, stream), stream);
+    CUDA_CHECK(cudaStreamSynchronize(stream), stream);
+    for (size_t i = 0; i < lhs.num_children; ++i) {
+      h_inst_counters[i+1] += h_inst_counters[i];
+    }
+
+    out_size = h_inst_counters[lhs.num_children];
+
+    if (out_size==0) {
+      return;
+    }
+
+    out_instance = realm_malloc(out_size * sizeof(out_t), my_mem);
+
+    //Where each instance should start writing its rectangles
+    CUDA_CHECK(cudaMemcpyAsync(out_offsets, h_inst_counters.data(), (lhs.num_children + 1) * sizeof(uint32_t), cudaMemcpyHostToDevice, stream), stream);
+
+    //Non-empty rectangles from the intersection
+    out_t* d_valid_rects = reinterpret_cast<out_t*>(AffineAccessor<char,1>(out_instance, 0).base);
+
+    //Reset counters
+    CUDA_CHECK(cudaMemsetAsync(counters, 0, lhs.num_children * sizeof(uint32_t), stream), stream);
+
+    //Second pass: recompute intersection, but this time write to output
+    grid_size = (lhs.num_entries * rhs.num_entries + flattened_threads - 1) / flattened_threads;
+    intersect_input_rects<N,T><<<grid_size, flattened_threads, 0, stream>>>(lhs.entries_buffer, rhs.entries_buffer, lhs.offsets, out_offsets, lhs.num_entries, rhs.num_entries, lhs.num_children, counters, d_valid_rects);
+    KERNEL_CHECK(stream);
+    CUDA_CHECK(cudaStreamSynchronize(stream), stream);
+  }
 
   /*
    *  Input: An array of points (potentially with duplicates) with associated
