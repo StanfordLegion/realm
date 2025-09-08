@@ -101,7 +101,6 @@ namespace Realm {
     //Determine size of allocation for combined inst_rects and offset entries
     out_space.num_entries = 0;
 
-
     for (size_t i = 0; i < field_data.size(); ++i) {
       inst_offsets[i] = out_space.num_entries;
       if (field_data[i].index_space.dense()) {
@@ -111,6 +110,12 @@ namespace Realm {
       }
     }
     inst_offsets[field_data.size()] = out_space.num_entries;
+
+    Memory sysmem;
+    assert(find_sysmem(sysmem));
+
+    RegionInstance h_instance = realm_malloc(out_space.num_entries * sizeof(SparsityMapEntry<N,T>), sysmem);
+    SparsityMapEntry<N, T>* h_entries = reinterpret_cast<SparsityMapEntry<N,T>*>(AffineAccessor<char,1>(h_instance, 0).base);
 
     out_instance = realm_malloc(out_space.num_entries * sizeof(SparsityMapEntry<N,T>), my_mem);
     out_space.entries_buffer = reinterpret_cast<SparsityMapEntry<N,T>*>(AffineAccessor<char,1>(out_instance, 0).base);
@@ -122,21 +127,39 @@ namespace Realm {
       if (inst_space.dense()) {
         SparsityMapEntry<N,T> entry;
         entry.bounds = inst_space.bounds;
-        CUDA_CHECK(cudaMemcpyAsync(out_space.entries_buffer + inst_pos, &entry, sizeof(SparsityMapEntry<N,T>), cudaMemcpyHostToDevice, stream), stream);
+        memcpy(h_entries + inst_pos, &entry, sizeof(SparsityMapEntry<N,T>));
         ++inst_pos;
       } else {
-        auto tmp = inst_space.sparsity.impl()->get_entries();
-        CUDA_CHECK(cudaMemcpyAsync(out_space.entries_buffer + inst_pos, tmp.data(), tmp.size() * sizeof(SparsityMapEntry<N,T>), cudaMemcpyHostToDevice, stream), stream);
+        span<SparsityMapEntry<N, T>> tmp = inst_space.sparsity.impl()->get_entries();
+        memcpy(h_entries + inst_pos, tmp.data(), tmp.size() * sizeof(SparsityMapEntry<N,T>));
         inst_pos += tmp.size();
       }
     }
+    CUDA_CHECK(cudaMemcpyAsync(out_space.entries_buffer, h_entries, out_space.num_entries * sizeof(SparsityMapEntry<N,T>), cudaMemcpyHostToDevice, stream), stream);
     CUDA_CHECK(cudaMemcpyAsync(out_space.offsets, inst_offsets.data(), (field_data.size() + 1) * sizeof(size_t), cudaMemcpyHostToDevice, stream), stream);
+    CUDA_CHECK(cudaStreamSynchronize(stream), stream);
+    h_instance.destroy();
   }
 
   template<int N, typename T>
   void GPUMicroOp<N,T>::collapse_parent_space(const IndexSpace<N, T>& parent_space, RegionInstance& out_instance, collapsed_space<N, T> &out_space, Memory my_mem, cudaStream_t stream)
   {
-
+    if (parent_space.dense()) {
+      SparsityMapEntry<N,T> entry;
+      entry.bounds = parent_space.bounds;
+      out_instance = realm_malloc(sizeof(SparsityMapEntry<N,T>), my_mem);
+      out_space.entries_buffer = reinterpret_cast<SparsityMapEntry<N,T>*>(AffineAccessor<char,1>(out_instance, 0).base);
+      out_space.num_entries = 1;
+      CUDA_CHECK(cudaMemcpyAsync(out_space.entries_buffer, &entry, sizeof(SparsityMapEntry<N,T>), cudaMemcpyHostToDevice, stream), stream);
+    } else {
+      span<SparsityMapEntry<N, T>> tmp =  parent_space.sparsity.impl()->get_entries();
+      out_space.num_entries = tmp.size();
+      out_instance = realm_malloc(tmp.size() * sizeof(SparsityMapEntry<N,T>), my_mem);
+      out_space.entries_buffer = reinterpret_cast<SparsityMapEntry<N,T>*>(AffineAccessor<char,1>(out_instance, 0).base);
+      CUDA_CHECK(cudaMemcpyAsync(out_space.entries_buffer, tmp.data(), tmp.size() * sizeof(SparsityMapEntry<N,T>), cudaMemcpyHostToDevice, stream), stream);
+    }
+    out_space.offsets = nullptr;
+    out_space.num_children = 1;
   }
 
   //template<int N, typename T>
