@@ -2102,27 +2102,47 @@ namespace Realm {
     std::vector<int> preferred;
     preferred.reserve(N);
 
-    RegionInstanceImpl *impl = get_runtime()->get_instance_impl(dsts[0].inst);
-    const InstanceLayout<N, T> *inst_layout =
-        checked_cast<const InstanceLayout<N, T> *>(impl->metadata.layout);
-
-    // Fast path for idindexed_fields with pre-computed ordering
-    if(inst_layout->idindexed_fields && !inst_layout->preferred_dim_order.empty()) {
-      // Filter out trivial dimensions from pre-computed ordering for this specific copy
-      for(int d : inst_layout->preferred_dim_order) {
+    // Fast path for dst and src with idindexed_fields and pre-computed ordering
+    RegionInstanceImpl *dst_impl = nullptr;
+    const InstanceLayout<N, T> *dst_layout = nullptr;
+    RegionInstanceImpl *src_impl = nullptr;
+    const InstanceLayout<N, T> *src_layout = nullptr;
+    
+    // Check destination
+    if((dsts[0].field_id != FieldID(-1)) && dsts[0].inst.exists() && 
+       dsts[0].indirect_index == -1) {
+      dst_impl = get_runtime()->get_instance_impl(dsts[0].inst);
+      dst_layout = checked_cast<const InstanceLayout<N, T> *>(dst_impl->metadata.layout);
+    }
+    
+    // Check source
+    if((srcs[0].field_id != FieldID(-1)) && srcs[0].inst.exists() && 
+       srcs[0].indirect_index == -1) {
+      src_impl = get_runtime()->get_instance_impl(srcs[0].inst);
+      src_layout = checked_cast<const InstanceLayout<N, T> *>(src_impl->metadata.layout);
+    }
+    
+      if(dst_layout && dst_layout->idindexed_fields && !dst_layout->preferred_dim_order.empty() &&
+       src_layout && src_layout->idindexed_fields && !src_layout->preferred_dim_order.empty()) {
+      
+      for(int d : dst_layout->preferred_dim_order) {
         if(!trivial[d]) {
           dim_order.push_back(d);
         }
       }
       
-      // Add back trivial dimensions
-      for(int i = 0; i < N; i++) {
-        if(trivial[i]) {
-          dim_order.push_back(i);
+      preferred.clear();
+      for(int d : src_layout->preferred_dim_order) {
+        if(!trivial[d]) {
+          preferred.push_back(d);
         }
       }
+
+      reconcile_dim_orders(dim_order, preferred);
+      
       return;
     }
+    
     // consider destinations first
     for(size_t i = 0; i < dsts.size(); i++) {
       if((dsts[i].field_id != FieldID(-1)) && dsts[i].inst.exists()) {
@@ -3958,9 +3978,9 @@ namespace Realm {
     }
 
     size_t max_ib_size = 0;
-    bool success =
+    RealmStatus status =
         get_runtime()->get_module_config("core")->get_property("ib_regmem", max_ib_size);
-    assert(success);
+    assert(status == REALM_SUCCESS);
 
     size_t ib_size = domain_size * element_size + serdez_pad;
     const size_t IB_MAX_SIZE = max_ib_size; // 16 << 20; // 16MB
@@ -4367,9 +4387,9 @@ namespace Realm {
               xdn.target_node = path_info.xd_channels[j]->node;
 
               bool enable_multi_field = false;
-              bool success = get_runtime()->get_module_config("core")->get_property(
+              RealmStatus success = get_runtime()->get_module_config("core")->get_property(
                   "dma_multi_field", enable_multi_field);
-              assert(success);
+              assert(success == REALM_SUCCESS);
 
               xdn.idindexed_fields =
                   enable_multi_field &&
