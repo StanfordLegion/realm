@@ -181,11 +181,11 @@ void dump_and_verify(RegionInstance inst, FieldID fid, const IndexSpace<N, T> &i
         DT v = acc[it2.p];
         if(verify) {
           if(v != test_data[i]) {
-            // std::cout << "Mismatch at " << it2.p << ": " << v << " != " << test_data[i]
-            //<< '\n';
-            // assert(0);
+            std::cout << "Mismatch at " << it2.p << ": " << v << " != " << test_data[i]
+                      << '\n';
+            assert(0);
           }
-          // assert(v == test_data[i]);
+          assert(v == test_data[i]);
         }
         if(verbose) {
           if((i) % row_size == 0) {
@@ -426,8 +426,8 @@ void do_single_dim(Memory src_mem, Memory dst_mem, int log2_size, size_t narrow_
       wait_for =
           is.fill(dsts, ProfilingRequestSet(), &fill_value, sizeof(fill_value), wait_for);
       wait_for.wait();
-      // dump_and_verify_fill<N, T, FT>(dst_inst, fill_value, /*field_id*/ 0, is,
-      // TestConfig::verbose, TestConfig::verify);
+      dump_and_verify_fill<N, T, FT>(dst_inst, fill_value, /*field_id*/ 0, is,
+                                     TestConfig::verbose, TestConfig::verify);
 
       wait_for = is.copy(srcs, dsts, prs, wait_for);
       wait_for.wait();
