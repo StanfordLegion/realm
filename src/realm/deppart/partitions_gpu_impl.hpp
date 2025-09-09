@@ -63,20 +63,33 @@ namespace Realm {
     }
   };
 
-  inline bool find_sysmem(Memory &sysmem)
+  //Used to compute prefix sum by volume for an array of rects
+  template <int N, typename T, typename out_t>
+  struct RectVolumeOp {
+    __device__ __forceinline__
+    size_t operator()(const out_t& r) const {
+      if constexpr (std::is_same_v<Rect<N, T>, out_t>) {
+        return r.volume();
+      } else {
+        return r.rect.volume();
+      }
+    }
+  };
+
+  inline bool find_memory(Memory &output, Memory::Kind kind)
   {
-    bool found_sysmem = false;
+    bool found = false;
     Machine machine = Machine::get_machine();
     std::set<Memory> all_memories;
     machine.get_all_memories(all_memories);
     for(auto& memory : all_memories) {
-      if(memory.kind() == Memory::SYSTEM_MEM) {
-        sysmem = memory;
-        found_sysmem = true;
+      if(memory.kind() == kind) {
+        output = memory;
+        found = true;
         break;
       }
     }
-    return found_sysmem;
+    return found;
   }
 
   template<int N, typename T>
@@ -101,7 +114,7 @@ namespace Realm {
     inst_offsets[field_data.size()] = out_space.num_entries;
 
     Memory sysmem;
-    assert(find_sysmem(sysmem));
+    assert(find_memory(sysmem, Memory::SYSTEM_MEM));
 
     RegionInstance h_instance = realm_malloc(out_space.num_entries * sizeof(SparsityMapEntry<N,T>), sysmem);
     SparsityMapEntry<N, T>* h_entries = reinterpret_cast<SparsityMapEntry<N,T>*>(AffineAccessor<char,1>(h_instance, 0).base);
@@ -316,6 +329,50 @@ namespace Realm {
     }
   }
 
+  template<int N, typename T>
+  template<typename out_t>
+  void GPUMicroOp<N, T>::volume_prefix_sum(const out_t* d_rects, size_t total_rects, RegionInstance &out_instance, size_t& num_pts, Memory my_mem, cudaStream_t stream)
+  {
+    out_instance = realm_malloc((total_rects + 1) * sizeof(size_t), my_mem);
+
+    // Prefix sum the valid rectangles by volume
+    size_t* d_prefix_rects = reinterpret_cast<size_t*>(AffineAccessor<char,1>(out_instance, 0).base);
+    CUDA_CHECK(cudaMemsetAsync(d_prefix_rects, 0, sizeof(size_t), stream), stream);
+
+    // Build the CUB transform‐iterator
+    using VolIter = cub::TransformInputIterator<
+                      size_t,              // output type
+                      RectVolumeOp<N,T,out_t>,            // functor
+                      const out_t*     // underlying input iterator
+                    >;
+    VolIter d_volumes(d_rects, RectVolumeOp<N,T,out_t>());
+
+    void*   d_temp = nullptr;
+    size_t rect_temp_bytes = 0;
+    cub::DeviceScan::InclusiveSum(
+        /* d_temp_storage */  nullptr,
+        /* temp_bytes */      rect_temp_bytes,
+        /* d_in */            d_volumes,
+        /* d_out */           d_prefix_rects + 1,   // shift by one so prefix[1]..prefix[n]
+        /* num_items */       total_rects, stream);
+
+    RegionInstance temp_instance = realm_malloc(rect_temp_bytes, my_mem);
+    d_temp = reinterpret_cast<void*>(AffineAccessor<char,1>(temp_instance, 0).base);
+    cub::DeviceScan::InclusiveSum(
+        /* d_temp_storage */  d_temp,
+        /* temp_bytes */      rect_temp_bytes,
+        /* d_in */            d_volumes,
+        /* d_out */           d_prefix_rects + 1,
+        /* num_items */       total_rects, stream);
+
+
+    //Number of points across all rectangles (also our total output count)
+    CUDA_CHECK(cudaMemcpyAsync(&num_pts, &d_prefix_rects[total_rects], sizeof(size_t), cudaMemcpyDeviceToHost, stream), stream);
+
+    CUDA_CHECK(cudaStreamSynchronize(stream), stream);
+    temp_instance.destroy();
+  }
+
   /*
    *  Input: An array of points (potentially with duplicates) with associated
    *  src indices, where all the points with a given src idx together represent an exact covering
@@ -501,7 +558,7 @@ namespace Realm {
     }
 
     Memory sysmem;
-    assert(find_sysmem(sysmem));
+    assert(find_memory(sysmem, Memory::SYSTEM_MEM));
 
     //Use provided lambdas to iterate over sparsity output container (map or vector)
     for (auto const& elem : ctr) {
