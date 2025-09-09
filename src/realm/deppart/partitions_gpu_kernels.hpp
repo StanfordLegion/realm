@@ -6,42 +6,55 @@ namespace Realm {
   // Intersect all instance rectangles with all parent rectangles in parallel.
 // Used for both count and emit depending on whether the output array is null.
 
-template <int N, typename T>
+template <int N, typename T, typename out_t>
 __global__ void intersect_input_rects(
-  const SparsityMapEntry<N,T>* d_inst_entries,
-  const SparsityMapEntry<N,T>* d_parent_entries,
-  const size_t *d_inst_offsets,
-  const uint32_t *d_inst_prefix,
-  size_t numInstRects,
-  size_t numParentRects,
-  size_t numInsts,
-  uint32_t *d_inst_counters,
-  Rect<N,T>* d_rects
+  const SparsityMapEntry<N,T>* d_lhs_entries,
+  const SparsityMapEntry<N,T>* d_rhs_entries,
+  const size_t *d_lhs_offsets,
+  const uint32_t *d_lhs_prefix,
+  const size_t* d_rhs_offsets,
+  size_t numLHSRects,
+  size_t numRHSRects,
+  size_t numLHSChildren,
+  size_t numRHSChildren,
+  uint32_t *d_lhs_counters,
+  out_t* d_rects
 ) {
   size_t idx = blockIdx.x * blockDim.x + threadIdx.x;
-  if (idx >= numInstRects * numParentRects) return;
-  size_t idx_x = idx % numParentRects;
-  size_t idx_y = idx / numParentRects;
-  assert(idx_x < numParentRects);
-  assert(idx_y < numInstRects);
-  const SparsityMapEntry<N, T> source_entry = d_parent_entries[idx_x];
-  const SparsityMapEntry<N, T> inst_entry = d_inst_entries[idx_y];
-  Rect<N,T> rect_output = inst_entry.bounds.intersection(source_entry.bounds);
+  if (idx >= numLHSRects * numRHSRects) return;
+  size_t idx_x = idx % numRHSRects;
+  size_t idx_y = idx / numRHSRects;
+  assert(idx_x < numRHSRects);
+  assert(idx_y < numLHSRects);
+  const SparsityMapEntry<N, T> rhs_entry = d_rhs_entries[idx_x];
+  const SparsityMapEntry<N, T> lhs_entry = d_lhs_entries[idx_y];
+  Rect<N,T> rect_output = lhs_entry.bounds.intersection(rhs_entry.bounds);
   if (rect_output.empty()) {
     return;
   }
-  size_t low = 0, high = numInsts;
+  size_t low = 0, high = numLHSChildren;
   while (low < high) {
       size_t mid = (low + high) >> 1;
-      if (d_inst_offsets[mid+1] <= idx_y) low = mid + 1;
-      else                                 high = mid;
+      if (d_lhs_offsets[mid+1] <= idx_y) low = mid + 1;
+      else high = mid;
   }
-  size_t inst_idx = low;
-  uint32_t local = atomicAdd(&d_inst_counters[inst_idx], 1);
+  size_t lhs_idx = low;
+  uint32_t local = atomicAdd(&d_lhs_counters[lhs_idx], 1);
   if (d_rects != nullptr) {
     // If d_rects is not null, we write the output rect
-    uint32_t out_idx = d_inst_prefix[inst_idx] + local;
-    d_rects[out_idx] = rect_output;
+    uint32_t out_idx = d_lhs_prefix[lhs_idx] + local;
+    if constexpr (std::is_same_v<out_t, RectDesc<N, T>>) {
+      low = 0, high = numRHSChildren;
+      while (low < high) {
+          size_t mid = (low + high) >> 1;
+          if (d_rhs_offsets[mid+1] <= idx_x) low = mid + 1;
+          else high = mid;
+      }
+      d_rects[out_idx].src_idx = low;
+      d_rects[out_idx].rect = rect_output;
+    } else {
+      d_rects[out_idx] = rect_output;
+    }
   }
 }
 

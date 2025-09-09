@@ -172,7 +172,7 @@ namespace Realm {
     //First pass: figure out how many rectangles survive intersection
     int flattened_threads = 256;
     int grid_size = (lhs.num_entries * rhs.num_entries + flattened_threads - 1) / flattened_threads;
-    intersect_input_rects<N,T><<<grid_size, flattened_threads, 0, stream>>>(lhs.entries_buffer, rhs.entries_buffer, lhs.offsets, nullptr, lhs.num_entries, rhs.num_entries, lhs.num_children, counters, nullptr);
+    intersect_input_rects<N, T, out_t><<<grid_size, flattened_threads, 0, stream>>>(lhs.entries_buffer, rhs.entries_buffer, lhs.offsets, nullptr, rhs.offsets, lhs.num_entries, rhs.num_entries, lhs.num_children, rhs.num_children, counters, nullptr);
     KERNEL_CHECK(stream);
 
 
@@ -204,7 +204,7 @@ namespace Realm {
 
     //Second pass: recompute intersection, but this time write to output
     grid_size = (lhs.num_entries * rhs.num_entries + flattened_threads - 1) / flattened_threads;
-    intersect_input_rects<N,T><<<grid_size, flattened_threads, 0, stream>>>(lhs.entries_buffer, rhs.entries_buffer, lhs.offsets, out_offsets, lhs.num_entries, rhs.num_entries, lhs.num_children, counters, d_valid_rects);
+    intersect_input_rects<N, T, out_t><<<grid_size, flattened_threads, 0, stream>>>(lhs.entries_buffer, rhs.entries_buffer, lhs.offsets, out_offsets, rhs.offsets, lhs.num_entries, rhs.num_entries, lhs.num_children, rhs.num_children, counters, d_valid_rects);
     KERNEL_CHECK(stream);
     CUDA_CHECK(cudaStreamSynchronize(stream), stream);
   }
