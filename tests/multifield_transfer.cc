@@ -360,8 +360,8 @@ public:
     Realm::Point<MAX_DIM> start_pnt(0, 0);
     Realm::Point<MAX_DIM> end_pnt(1, TestConfig::size);
 
-    //Realm::Point<MAX_DIM> start_pnt(0);
-    //Realm::Point<MAX_DIM> end_pnt(TestConfig::size);
+    // Realm::Point<MAX_DIM> start_pnt(0);
+    // Realm::Point<MAX_DIM> end_pnt(TestConfig::size);
     CopyIndexSpace is(Rect<MAX_DIM>{start_pnt, end_pnt});
 
     std::map<FieldID, size_t> src_fields;

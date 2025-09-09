@@ -4902,4 +4902,4 @@ namespace Realm {
 #endif
 
   }; // namespace Cuda
-}; // namespace Realm
+};   // namespace Realm

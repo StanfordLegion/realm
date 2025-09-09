@@ -34,10 +34,7 @@ namespace {
       return ptr;
     }
 
-    void free_obj(void *ptr)
-    {
-      free(ptr);
-    }
+    void free_obj(void *ptr) { free(ptr); }
   };
 
   static void make_1d_entry(AddressList &alist, size_t bytes, int payload = 0)

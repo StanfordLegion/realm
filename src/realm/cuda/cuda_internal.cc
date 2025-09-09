@@ -943,8 +943,8 @@ namespace Realm {
           cuda_copy.dstDevice = copy_info.dst.addr;
           cuda_copy.srcDevice = copy_info.src.addr;
 
-          log_gpudma.info() << "\tLaunching 3D CE " << "xd=" << std::hex << guid
-                            << std::dec << " bytes="
+          log_gpudma.info() << "\tLaunching 3D CE "
+                            << "xd=" << std::hex << guid << std::dec << " bytes="
                             << copy_info.extents[0] * copy_info.extents[1] *
                                    copy_info.extents[2]
                             << " srcPitch=" << cuda_copy.srcPitch
@@ -1081,8 +1081,9 @@ namespace Realm {
 
         size_t max_bytes =
             get_addresses(min_xfer_size, &rseqcache, in_nonaffine, out_nonaffine);
-        log_gpudma.info() << "cuda gather/scatter copy" << " xd=" << std::hex << guid
-                          << std::dec << " min_xfer_size=" << min_xfer_size
+        log_gpudma.info() << "cuda gather/scatter copy"
+                          << " xd=" << std::hex << guid << std::dec
+                          << " min_xfer_size=" << min_xfer_size
                           << " max_bytes=" << max_bytes << " xd=" << std::hex
                           << out_port->peer_guid << std::dec;
 
@@ -1185,9 +1186,10 @@ namespace Realm {
         assert(!(out_port->indirect_port_idx >= 0 && in_port->indirect_port_idx >= 0));
         assert(!in_nonaffine && !out_nonaffine);
 
-        log_gpudma.info() << "\t launching cuda gather/scatter " << "xd:" << std::hex
-                          << guid << std::dec << " bytes:" << max_bytes
-                          << " addr_size:" << addr_size << " num_dims:" << num_dims
+        log_gpudma.info() << "\t launching cuda gather/scatter "
+                          << "xd:" << std::hex << guid << std::dec
+                          << " bytes:" << max_bytes << " addr_size:" << addr_size
+                          << " num_dims:" << num_dims
                           << " addr_type_size:" << addr_type_size;
 
         launch_indirect_kernel(in_gpu, stream, num_dims, addr_type_size, field_size,

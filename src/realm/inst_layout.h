@@ -122,7 +122,7 @@ namespace Realm {
 
       static const Opcode OP_INVALID = 0;
       static const Opcode OP_SPLIT1 = 1; // this is a SplitPlane<N,T>
-    } // namespace Opcodes
+    }                                    // namespace Opcodes
 
     // some processors are limited in which instruction types they can
     //  support, so we build masks to describe usage/capabilities

@@ -846,25 +846,6 @@ namespace Realm {
     }
   }
 
-  /*template <int N, typename T>
-  IDIndexedFieldsIterator<N, T>::IDIndexedFieldsIterator(
-      const int _dim_order[N], const std::vector<FieldID> &_fields,
-      const std::vector<size_t> &_fld_offsets, const std::vector<size_t> &_fld_sizes,
-      RegionInstanceImpl *_inst_impl, const Rect<N, T> &_bounds,
-      SparsityMapImpl<N, T> *_sparsity_impl)
-    : TransferIteratorBase<N, T>(_inst_impl, _dim_order)
-    , is(_bounds, _sparsity_impl->me)
-    , sparsity_impl(_sparsity_impl)
-  {
-    assert(sparsity_impl);
-    reset_internal();
-    if(iter.valid) {
-      fields = _fields;
-      fld_offsets = _fld_offsets;
-      fld_sizes = _fld_sizes;
-    }
-  }*/
-
   template <int N, typename T>
   IDIndexedFieldsIterator<N, T>::IDIndexedFieldsIterator(void)
   {}
@@ -2107,30 +2088,31 @@ namespace Realm {
     const InstanceLayout<N, T> *dst_layout = nullptr;
     RegionInstanceImpl *src_impl = nullptr;
     const InstanceLayout<N, T> *src_layout = nullptr;
-    
+
     // Check destination
-    if((dsts[0].field_id != FieldID(-1)) && dsts[0].inst.exists() && 
+    if((dsts[0].field_id != FieldID(-1)) && dsts[0].inst.exists() &&
        dsts[0].indirect_index == -1) {
       dst_impl = get_runtime()->get_instance_impl(dsts[0].inst);
       dst_layout = checked_cast<const InstanceLayout<N, T> *>(dst_impl->metadata.layout);
     }
-    
+
     // Check source
-    if((srcs[0].field_id != FieldID(-1)) && srcs[0].inst.exists() && 
+    if((srcs[0].field_id != FieldID(-1)) && srcs[0].inst.exists() &&
        srcs[0].indirect_index == -1) {
       src_impl = get_runtime()->get_instance_impl(srcs[0].inst);
       src_layout = checked_cast<const InstanceLayout<N, T> *>(src_impl->metadata.layout);
     }
-    
-      if(dst_layout && dst_layout->idindexed_fields && !dst_layout->preferred_dim_order.empty() &&
-       src_layout && src_layout->idindexed_fields && !src_layout->preferred_dim_order.empty()) {
-      
+
+    if(dst_layout && dst_layout->idindexed_fields &&
+       !dst_layout->preferred_dim_order.empty() && src_layout &&
+       src_layout->idindexed_fields && !src_layout->preferred_dim_order.empty()) {
+
       for(int d : dst_layout->preferred_dim_order) {
         if(!trivial[d]) {
           dim_order.push_back(d);
         }
       }
-      
+
       preferred.clear();
       for(int d : src_layout->preferred_dim_order) {
         if(!trivial[d]) {
@@ -2139,10 +2121,10 @@ namespace Realm {
       }
 
       reconcile_dim_orders(dim_order, preferred);
-      
+
       return;
     }
-    
+
     // consider destinations first
     for(size_t i = 0; i < dsts.size(); i++) {
       if((dsts[i].field_id != FieldID(-1)) && dsts[i].inst.exists()) {
@@ -2254,7 +2236,7 @@ namespace Realm {
       // Determine field info for this batch
       FieldID fid;
       size_t field_size, effective_field_count;
-      
+
       if(use_bulk_processing) {
         fid = fields[0];
         field_size = fld_sizes[0];
@@ -2897,7 +2879,8 @@ namespace Realm {
           log_xpath.info() << "inter: src_idx:" << src_idx << " "
                            << partials[src_idx].ib_mem << "(n:" << src_node
                            << ")-> dst_idx:" << dst_idx << " " << partials[dst_idx].ib_mem
-                           << "(n:" << dst_node << ")" << " channel=" << channel->kind
+                           << "(n:" << dst_node << ")"
+                           << " channel=" << channel->kind
                            << " cost=" << partials[src_idx].cost << "+" << cost << " = "
                            << total_cost << " <? " << partials[dst_idx].cost;
           // also prune any path that already exceeds the cost of the direct path
@@ -4387,8 +4370,9 @@ namespace Realm {
               xdn.target_node = path_info.xd_channels[j]->node;
 
               bool enable_multi_field = false;
-              RealmStatus success = get_runtime()->get_module_config("core")->get_property(
-                  "dma_multi_field", enable_multi_field);
+              RealmStatus success =
+                  get_runtime()->get_module_config("core")->get_property(
+                      "dma_multi_field", enable_multi_field);
               assert(success == REALM_SUCCESS);
 
               xdn.idindexed_fields =
@@ -4604,7 +4588,7 @@ namespace Realm {
                          << " ib_alloc=" << PrettyVector<unsigned>(graph.ib_alloc_order);
       }
     }
-    
+
     // mark that the analysis is complete and see if there are any pending
     //  ops that can start allocating ibs
     std::vector<TransferOperation *> to_alloc;
