@@ -33,6 +33,11 @@ namespace {
       assert(ret == 0);
       return ptr;
     }
+
+    void free_obj(void *ptr)
+    {
+      free(ptr);
+    }
   };
 
   static void make_1d_entry(AddressList &alist, size_t bytes, int payload = 0)
@@ -84,7 +89,7 @@ namespace {
     // Fields should be reset once we finished the rect entry
     ASSERT_EQ(cursor.remaining_fields(), fields.size());
 
-    delete fb;
+    heap.free_obj(fb);
   }
 
   TEST(AdvanceTests, WithFields_PartialDoesNotIncrementField)
@@ -105,7 +110,7 @@ namespace {
     EXPECT_EQ(al.bytes_pending(), kBytes * ids.size() - 128);
     ASSERT_EQ(cur.remaining_fields(), ids.size());
 
-    delete fb;
+    heap.free_obj(fb);
   }
 
   TEST(AdvanceTests, WithFields_FullRectSingleField)
@@ -127,7 +132,7 @@ namespace {
     EXPECT_EQ(al.bytes_pending(), kBytes * ids.size() - kBytes);
     ASSERT_EQ(cur.remaining_fields(), ids.size() - 1);
 
-    delete fb;
+    heap.free_obj(fb);
   }
 
   TEST(AdvanceTests, WithFields_FullRectMultipleFieldsAtOnce)
@@ -148,7 +153,7 @@ namespace {
     EXPECT_EQ(al.bytes_pending(), kBytes * ids.size() - 2 * kBytes);
     ASSERT_EQ(cur.remaining_fields(), ids.size() - 2);
 
-    delete fb;
+    heap.free_obj(fb);
   }
 
   TEST(AdvanceTests, WithFields_ConsumeAllFieldsAtOnce)
@@ -169,7 +174,7 @@ namespace {
     EXPECT_EQ(cur.fields_data(), fb->fields);
     ASSERT_EQ(cur.remaining_fields(), ids.size());
 
-    delete fb;
+    heap.free_obj(fb);
   }
 
   TEST(AdvanceTests, WithFields_SequentialFullRect)
@@ -191,7 +196,7 @@ namespace {
     }
     EXPECT_EQ(al.bytes_pending(), 0);
 
-    delete fb;
+    heap.free_obj(fb);
   }
 
   TEST(AdvanceTests, MultiDim_WithFields)
@@ -225,7 +230,7 @@ namespace {
     cur.advance(2, 2);
     EXPECT_EQ(al.bytes_pending(), volume * (ids.size() - 3));
 
-    delete fb;
+    heap.free_obj(fb);
   }
 
   TEST(AdvanceTests, MultiDim_WithFieldsSingleAdvance)
@@ -253,7 +258,7 @@ namespace {
     cur.advance(2, 2, ids.size());
     EXPECT_EQ(al.bytes_pending(), 0);
 
-    delete fb;
+    heap.free_obj(fb);
   }
 
   TEST(AddressListTests, Basic1DEntryNoPayload)
@@ -441,7 +446,7 @@ namespace {
     EXPECT_EQ(c.fields_data(), fb->fields);
     EXPECT_EQ(al.bytes_pending(), BYTES * LINES * f.size() - BYTES / 2);
 
-    delete fb;
+    h.free_obj(fb);
   }
 
   TEST(AddressListTests, WithFields_PartialThenFullRect)
@@ -472,7 +477,7 @@ namespace {
     EXPECT_EQ(cur.fields_data(), fb->fields);
     EXPECT_EQ(al.bytes_pending(), 0u);
 
-    delete fb;
+    h.free_obj(fb);
   }
 
   TEST(AddressListTests, WithFields_3D_PlaneWisePartial)
@@ -508,7 +513,7 @@ namespace {
     EXPECT_EQ(al.bytes_pending(), 0u);
     EXPECT_EQ(c.fields_data(), fb->fields);
 
-    delete fb;
+    h.free_obj(fb);
   }
 
 } // namespace
