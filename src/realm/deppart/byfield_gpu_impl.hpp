@@ -104,17 +104,15 @@ void GPUByFieldMicroOp<N,T,FT>::execute()
       CUDA_CHECK(cudaMemcpyAsync(d_colors, colors.data(), colors.size() * sizeof(FT), cudaMemcpyHostToDevice, stream), stream);
     }
 
-
+    Memory zcpy_mem;
+    assert(find_memory(zcpy_mem, Memory::Z_COPY_MEM));
 
     // We need to pass the accessors to the GPU so it can read field values
-    std::vector<AffineAccessor<FT,N,T>> h_accessors(field_data.size());
-    for (size_t i = 0; i < field_data.size(); ++i) {
-      h_accessors[i] = AffineAccessor<FT,N,T>(field_data[i].inst, field_data[i].field_offset);
-    }
-
-    RegionInstance accessors_instance = this->realm_malloc(field_data.size() * sizeof(AffineAccessor<FT,N,T>), my_mem);
+    RegionInstance accessors_instance = this->realm_malloc(field_data.size() * sizeof(AffineAccessor<FT,N,T>), zcpy_mem);
     AffineAccessor<FT,N,T>* d_accessors = reinterpret_cast<AffineAccessor<FT,N,T>*>(AffineAccessor<char,1>(accessors_instance, 0).base);
-    CUDA_CHECK(cudaMemcpyAsync(d_accessors, h_accessors.data(), field_data.size() * sizeof(AffineAccessor<FT,N,T>), cudaMemcpyHostToDevice, stream), stream);
+    for (size_t i = 0; i < field_data.size(); ++i) {
+      d_accessors[i] = AffineAccessor<FT,N,T>(field_data[i].inst, field_data[i].field_offset);
+    }
 
 
     //This is where the work is actually done - each thread figures out which points to read, reads it, marks a PointDesc with its color, and writes it out
