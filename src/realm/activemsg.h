@@ -235,7 +235,7 @@ namespace Realm {
   };
 
   // singleton class that can convert message type->ID and ID->handler
-  class ActiveMessageHandlerTable {
+  class REALM_INTERNAL_API_EXTERNAL_LINKAGE ActiveMessageHandlerTable {
   public:
     ActiveMessageHandlerTable(void);
     ~ActiveMessageHandlerTable(void);
@@ -300,7 +300,7 @@ namespace Realm {
   };
 
   template <typename T, typename T2 = T>
-  class ActiveMessageHandlerReg : public ActiveMessageHandlerRegBase {
+  class REALM_INTERNAL_API_EXTERNAL_LINKAGE ActiveMessageHandlerReg : public ActiveMessageHandlerRegBase {
   public:
     ActiveMessageHandlerReg(void);
     ~ActiveMessageHandlerReg(void);

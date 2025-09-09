@@ -1,6 +1,5 @@
-/*
- * Copyright 2025 Stanford University, NVIDIA Corporation
- * SPDX-License-Identifier: Apache-2.0
+/* Copyright 2024 Stanford University
+ * Copyright 2024 NVIDIA Corp
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -24,6 +23,8 @@
 
 using namespace Realm;
 
+#include "../realm_ubench_common.h"
+
 Logger log_app("app");
 
 enum
@@ -35,13 +36,16 @@ enum
 };
 
 struct BenchTimingTaskArgs {
+  int output_configs = 1;
   size_t num_launcher_tasks = 1;
   size_t num_dummy_tasks = 100;
   size_t num_samples = 1;
+  size_t num_warmup_samples = 1;
   size_t arg_size = 0;
   bool chain = false;
   bool test_gpu = false;
   bool use_proc_group = false;
+  int remote_mode = 2; // 0: local, 1: remote, 2: local and remote
 };
 
 struct DummyTaskLauncherArgs {
@@ -52,66 +56,20 @@ struct DummyTaskLauncherArgs {
   bool chain;
 };
 
-class Stat {
-public:
-  Stat()
-    : count(0)
-    , mean(0.0)
-    , sum(0.0)
-    , square_sum(0.0)
-    , smallest(std::numeric_limits<double>::max())
-    , largest(-std::numeric_limits<double>::max())
-  {}
-  void reset() { *this = Stat(); }
-  void sample(double s)
-  {
-    count++;
-    if(s < smallest)
-      smallest = s;
-    if(s > largest)
-      largest = s;
-    sum += s;
-    double delta0 = s - mean;
-    mean += delta0 / count;
-    double delta1 = s - mean;
-    square_sum += delta0 * delta1;
-  }
-  unsigned get_count() const { return count; }
-  double get_average() const { return mean; }
-  double get_sum() const { return sum; }
-  double get_stddev() const
-  {
-    return get_variance() > 0.0 ? std::sqrt(get_variance()) : 0.0;
-  }
-  double get_variance() const { return square_sum / (count > 2 ? 1 : count - 1); }
-  double get_smallest() const { return smallest; }
-  double get_largest() const { return largest; }
-
-  friend std::ostream &operator<<(std::ostream &os, const Stat &s);
-
-private:
-  unsigned count;
-  double mean;
-  double sum;
-  double square_sum;
-  double smallest;
-  double largest;
-};
-
-std::ostream &operator<<(std::ostream &os, const Stat &s)
-{
-  return os << std::scientific << std::setprecision(2)
-            << s.get_average() /*<< "(+/-" << s.get_stddev() << ')'*/
-            << ", MIN=" << s.get_smallest() << ", MAX=" << s.get_largest()
-            << ", N=" << s.get_count();
-}
-
 #if defined(REALM_USE_CUDA) || defined(REALM_USE_HIP)
-void dummy_gpu_task(const void *args, size_t arglen, const void *userdata, size_t userlen,
-                    Processor p);
+void dummy_gpu_task(const void *args, size_t arglen, 
+		                const void *userdata, size_t userlen, Processor p);
 #endif
 
-static void display_processor_info(Processor p) {}
+static void output_configuration(const BenchTimingTaskArgs &args)
+{
+  printf("BENCHMARK_CONFIGURATION {num_launcher_tasks:%zu, num_dummy_tasks:%zu, "
+         "num_samples:%zu, arg_size:%zu, chain:%d, test_gpu:%d, "
+         "use_proc_group:%d, remote_mode:%d}\n",
+         args.num_launcher_tasks, args.num_dummy_tasks, args.num_samples,
+         args.arg_size, args.chain, args.test_gpu, args.use_proc_group,
+         args.remote_mode);
+}
 
 static void dummy_task(const void *args, size_t arglen, const void *userdata,
                        size_t userlen, Processor p)
@@ -142,11 +100,17 @@ static void dummy_task_launcher(const void *args, size_t arglen, const void *use
 }
 
 static void bench_timing_task(const void *args, size_t arglen, const void *userdata,
-                              size_t userlen, Processor p)
+                              size_t userlen, Processor proc)
 {
   const BenchTimingTaskArgs &self_args =
       *reinterpret_cast<const BenchTimingTaskArgs *>(args);
   assert(arglen == sizeof(BenchTimingTaskArgs));
+
+  // output configuration
+  if (self_args.output_configs) {
+    output_machine_config();
+    output_configuration(self_args);
+  }
 
   Stat spawn_time, completion_time;
 
@@ -156,7 +120,7 @@ static void bench_timing_task(const void *args, size_t arglen, const void *userd
   launcher_args.chain = self_args.chain;
 
   Processor::Kind proc_kind = Processor::Kind::NO_KIND;
-  if(self_args.test_gpu) {
+  if (self_args.test_gpu) {
     proc_kind = Processor::TOC_PROC;
   } else {
     proc_kind = Processor::LOC_PROC;
@@ -164,15 +128,31 @@ static void bench_timing_task(const void *args, size_t arglen, const void *userd
 
   std::vector<Processor> processors;
   size_t proc_num = 0;
+  Machine::ProcessorQuery processors_to_test =
+      Machine::ProcessorQuery(Machine::get_machine()).only_kind(proc_kind);
+
+  if(self_args.remote_mode == 0) {
+    processors_to_test = processors_to_test.local_address_space();
+    processors.assign(processors_to_test.begin(), processors_to_test.end());
+  } else if(self_args.remote_mode == 1) {
+    std::unordered_map<AddressSpace, std::vector<Processor>> proc_map;
+    for(Processor proc : processors_to_test) {
+      proc_map[proc.address_space()].push_back(proc);
+    }
+    std::unordered_map<AddressSpace, std::vector<Processor>>::iterator it;
+    for(it = proc_map.begin(); it != proc_map.end(); it++) {
+      if(it->first != proc.address_space()) {
+        processors.insert(processors.end(), it->second.begin(), it->second.end());
+      }
+    }
+  } else {
+    processors.assign(processors_to_test.begin(), processors_to_test.end());
+  }
 
   {
-    Machine::ProcessorQuery processors_to_test =
-        Machine::ProcessorQuery(Machine::get_machine()).only_kind(proc_kind);
-
-    processors.assign(processors_to_test.begin(), processors_to_test.end());
     proc_num = processors.size();
 
-    if(self_args.use_proc_group) {
+    if (self_args.use_proc_group) {
       ProcessorGroup proc_group = ProcessorGroup::create_group(processors);
       processors.clear();
       processors.push_back(proc_group);
@@ -184,12 +164,14 @@ static void bench_timing_task(const void *args, size_t arglen, const void *userd
   std::vector<Event> child_task_events(self_args.num_launcher_tasks * proc_num,
                                        Event::NO_EVENT);
 
-  for(size_t s = 0; s < self_args.num_samples + 1; s++) {
+  for(size_t s = 0; s < self_args.num_samples + self_args.num_warmup_samples; s++) {
     UserEvent trigger_event = UserEvent::create_user_event();
     launcher_args.dummy_task_trigger_event = UserEvent::create_user_event();
 
     for(size_t p = 0; p < proc_num; p++) {
       Processor target_processor = processors[p % processors.size()];
+      log_app.info("Proc:%llx launches tasks onto target proc:%llx", proc.id,
+                   target_processor.id);
       for(size_t t = 0; t < self_args.num_launcher_tasks; t++) {
         launcher_args.dummy_task_wait_event = UserEvent::create_user_event();
         task_events[p * self_args.num_launcher_tasks + t] = target_processor.spawn(
@@ -207,10 +189,12 @@ static void bench_timing_task(const void *args, size_t arglen, const void *userd
       trigger_event.trigger();
       wait_event.wait();
       size_t end_time = Clock::current_time_in_microseconds();
-      spawn_time.sample(double(proc_num * self_args.num_launcher_tasks *
-                               self_args.num_dummy_tasks * 1e6) /
-                        double(end_time - start_time));
-      log_app.info() << "Spawn sample (us): " << end_time - start_time;
+      if(s >= self_args.num_warmup_samples) {
+        spawn_time.sample(double(proc_num * self_args.num_launcher_tasks *
+                                self_args.num_dummy_tasks * 1e6) /
+                          double(end_time - start_time));
+        log_app.info() << "Spawn sample (us): " << end_time - start_time;
+      }
     }
 
     wait_event = Event::merge_events(child_task_events);
@@ -220,20 +204,23 @@ static void bench_timing_task(const void *args, size_t arglen, const void *userd
       launcher_args.dummy_task_trigger_event.trigger();
       wait_event.wait();
       size_t end_time = Clock::current_time_in_microseconds();
-      completion_time.sample(double(proc_num * self_args.num_launcher_tasks *
-                                    self_args.num_dummy_tasks * 1e6) /
-                             double(end_time - start_time));
-      log_app.info() << "Completion sample (us): " << end_time - start_time;
-    }
-    // Warm-up
-    if(s == 0) {
-      spawn_time.reset();
-      completion_time.reset();
+      if(s >= self_args.num_warmup_samples) {
+        completion_time.sample(double(proc_num * self_args.num_launcher_tasks *
+                                      self_args.num_dummy_tasks * 1e6) /
+                              double(end_time - start_time));
+        log_app.info() << "Completion sample (us): " << end_time - start_time;
+      }
     }
   }
 
-  log_app.print() << "Spawn rate (tasks/s): " << spawn_time;
-  log_app.print() << "Completion rate (tasks/s): " << completion_time;
+#ifdef BENCHMARK_USE_JSON_FORMAT
+  std::cout << "RESULT {name:spawn_rate, " << spawn_time << ", unit:+tasks/s}" << std::endl;
+  std::cout << "RESULT {name:completion_rate, " << completion_time
+                  << ", unit:+tasks/s}" << std::endl;
+#else
+  std::cout << "RESULT spawn_rate=/" << spawn_time << " +tasks/s" << std::endl;
+  std::cout << "RESULT completion_rate=/" << completion_time << " +tasks/s" << std::endl;
+#endif
   Runtime::get_runtime().shutdown();
 }
 
@@ -246,41 +233,47 @@ int main(int argc, char **argv)
   assert(ok);
 
   r.register_task(BENCH_TIMING_TASK, bench_timing_task);
-  Processor::register_task_by_kind(
-      Processor::LOC_PROC, false /*!global*/, DUMMY_TASK_LAUNCHER,
-      CodeDescriptor(dummy_task_launcher), ProfilingRequestSet())
-      .wait();
-  Processor::register_task_by_kind(Processor::LOC_PROC, false /*!global*/, DUMMY_TASK,
-                                   CodeDescriptor(dummy_task), ProfilingRequestSet())
-      .wait();
+  Processor::register_task_by_kind(Processor::LOC_PROC,
+				   false /*!global*/,
+				   DUMMY_TASK_LAUNCHER,
+				   CodeDescriptor(dummy_task_launcher),
+				   ProfilingRequestSet()).wait();
+  Processor::register_task_by_kind(Processor::LOC_PROC,
+				   false /*!global*/,
+				   DUMMY_TASK,
+				   CodeDescriptor(dummy_task),
+				   ProfilingRequestSet()).wait();
 #if defined(REALM_USE_CUDA) || defined(REALM_USE_HIP)
-  Processor::register_task_by_kind(
-      Processor::TOC_PROC, false /*!global*/, DUMMY_TASK_LAUNCHER,
-      CodeDescriptor(dummy_task_launcher), ProfilingRequestSet())
-      .wait();
-  Processor::register_task_by_kind(Processor::TOC_PROC, false /*!global*/, DUMMY_TASK,
-                                   CodeDescriptor(dummy_gpu_task), ProfilingRequestSet())
-      .wait();
+  Processor::register_task_by_kind(Processor::TOC_PROC,
+				   false /*!global*/,
+				   DUMMY_TASK_LAUNCHER,
+				   CodeDescriptor(dummy_task_launcher),
+				   ProfilingRequestSet()).wait();
+  Processor::register_task_by_kind(Processor::TOC_PROC,
+				   false /*!global*/,
+				   DUMMY_TASK,
+				   CodeDescriptor(dummy_gpu_task),
+				   ProfilingRequestSet()).wait();
 #endif
 
   BenchTimingTaskArgs args;
 
+  cp.add_option_int("-config", args.output_configs);
   cp.add_option_int("-a", args.arg_size);
   cp.add_option_int("-s", args.num_samples);
+  cp.add_option_int("-warmup", args.num_warmup_samples);
   cp.add_option_int("-tpp", args.num_launcher_tasks);
   cp.add_option_int("-n", args.num_dummy_tasks);
   cp.add_option_bool("-c", args.chain);
   cp.add_option_bool("-gpu", args.test_gpu);
   cp.add_option_bool("-g", args.use_proc_group);
+  cp.add_option_int("-remote", args.remote_mode);
 
   ok = cp.parse_command_line(argc, (const char **)argv);
   assert(ok);
 
   Machine::ProcessorQuery processors_to_test =
       Machine::ProcessorQuery(Machine::get_machine()).only_kind(Processor::LOC_PROC);
-  for(Processor p : processors_to_test) {
-    display_processor_info(p);
-  }
 
   Processor p = Machine::ProcessorQuery(Machine::get_machine())
                     .only_kind(Processor::LOC_PROC)

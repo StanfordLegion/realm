@@ -205,7 +205,7 @@ namespace Realm {
 
   /*static*/ ActiveMessageHandlerRegBase *ActiveMessageHandlerTable::pending_handlers = 0;
 
-  /*extern*/ ActiveMessageHandlerTable activemsg_handler_table;
+  /*extern*/ REALM_INTERNAL_API_EXTERNAL_LINKAGE ActiveMessageHandlerTable activemsg_handler_table;
 
   ////////////////////////////////////////////////////////////////////////
   //

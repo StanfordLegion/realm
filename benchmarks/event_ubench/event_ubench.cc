@@ -1,6 +1,5 @@
-/*
- * Copyright 2025 Stanford University, NVIDIA Corporation
- * SPDX-License-Identifier: Apache-2.0
+/* Copyright 2024 Stanford University
+ * Copyright 2024 NVIDIA Corp
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -19,8 +18,10 @@
 #include <iostream>
 #include <realm.h>
 #include <realm/cmdline.h>
-
+#include <realm/network.h>
 using namespace Realm;
+
+#include "../realm_ubench_common.h"
 
 Logger log_app("app");
 
@@ -34,14 +35,15 @@ enum
 
 enum TestFlags
 {
-  EVENT_TEST = 1 << 0,
   FAN_TEST = 1 << 1,
   CHAIN_TEST = 1 << 2
 };
 
 struct BenchLauncherTaskArgs {
+  int output_configs = 1;
   uint64_t enabled_tests = 0;
   bool measure_latency = false;
+  bool skip_same_proc = false;
   size_t min_usecs = 1000000;
   size_t num_samples = 0;
   size_t min_test_size = 1024;
@@ -73,7 +75,21 @@ struct BenchTimingTaskArgs {
   Processor dst_proc;
 };
 
+Stat inter_node_fan_events_rate;
+Stat intra_node_fan_events_rate;
+Stat inter_node_chain_events_rate;
+Stat intra_node_chain_events_rate;
+
 static void display_processor_info(Processor p) {}
+
+static void output_configuration(const BenchLauncherTaskArgs &args)
+{
+  std::cout << "BENCHMARK_CONFIGURATION {enabled_tests:" << std::hex << args.enabled_tests
+            << std::dec << ", measure_latency:" << args.measure_latency
+            << ", min_usecs:" << args.min_usecs << ", num_samples:" << args.num_samples
+            << ", min_test_size:" << args.min_test_size
+            << ", max_test_size:" << args.max_test_size << "}" << std::endl;
+}
 
 // We want the fanned out events to be allocated on the remote processor for every sample,
 // so setup the measurement DAGs and the start and end event for each sample DAG, but then
@@ -148,17 +164,31 @@ static void setup_chain_test(const BenchTimingTaskArgs &src_args, size_t num_sam
       .wait();
 }
 
-static void report_timing(float usecs, bool measure_latency, size_t num_samples,
-                          size_t num_events_per_sample)
+static float report_timing(std::string name, Processor from_proc, Processor to_proc,
+                           float usecs, bool measure_latency, size_t num_samples,
+                           size_t num_events_per_sample)
 {
-  if(measure_latency)
-    log_app.print() << '\t' << (usecs) / num_samples << " us (" << num_samples
-                    << " samples)";
-  else
-    log_app.print() << '\t' << std::scientific << std::setprecision(2)
-                    << (num_samples * num_events_per_sample * 1e6) / usecs
-                    << " events/s (" << num_samples << " samples, total=" << usecs
-                    << " us)";
+  double result = 0.0f;
+  if(measure_latency) {
+    result = (usecs) / num_samples;
+    log_app.print() << "RESULT " << name << " " << from_proc << "->" << to_proc << "=/"
+                    << result << " -us";
+    log_app.info() << "(" << num_samples << " samples)>";
+  } else {
+    result = (num_samples * num_events_per_sample * 1e6) / usecs;
+#ifdef BENCHMARK_USE_JSON_FORMAT
+    std::cout << "RESULT {name:" << name << "_from_proc_" << from_proc << "_to_proc_"
+              << to_proc << "_events_" << num_events_per_sample
+              << ", avarage:" << std::scientific << std::setprecision(2) << result
+              << ", unit:+events/s}" << std::endl;
+#else
+    std::cout << "RESULT " << name << " " << from_proc << "->" << to_proc << "=/"
+              << std::scientific << std::setprecision(2) << result << " +events/s"
+              << std::endl;
+#endif
+    log_app.info() << "(" << num_samples << " samples, total=" << usecs << " us)";
+  }
+  return result;
 }
 
 static double time_dag(UserEvent &trigger_event, Event &wait_event)
@@ -203,11 +233,13 @@ static void bench_timing_task(const void *args, size_t arglen, const void *userd
 {
   assert(arglen == sizeof(BenchTimingTaskArgs));
   const BenchTimingTaskArgs &src_args = *static_cast<const BenchTimingTaskArgs *>(args);
-  UserEvent trigger_event;
-  Event wait_event;
-  size_t num_samples = src_args.num_samples;
 
+  // run the fan test
   if(src_args.enabled_tests & FAN_TEST) {
+    UserEvent trigger_event;
+    Event wait_event;
+    size_t num_samples = src_args.num_samples;
+
     for(size_t i = src_args.min_num_events; i <= src_args.max_num_events; i <<= 1) {
       double usecs = 0.0;
       if(src_args.num_samples == 0) {
@@ -223,15 +255,32 @@ static void bench_timing_task(const void *args, size_t arglen, const void *userd
       }
       setup_fan_test(src_args, num_samples, p, i, trigger_event, wait_event);
       usecs = time_dag(trigger_event, wait_event);
-      log_app.print() << "Fan test " << p << "->" << src_args.dst_proc;
-      report_timing(usecs, src_args.measure_latency, num_samples, i + 2);
+      double result = report_timing("fan_event_rate", p, src_args.dst_proc, usecs,
+                                    src_args.measure_latency, num_samples, i + 2);
+      if(p.address_space() == src_args.dst_proc.address_space()) {
+        intra_node_fan_events_rate.sample(result);
+      } else {
+        inter_node_fan_events_rate.sample(result);
+      }
     }
-  } else if(src_args.enabled_tests & CHAIN_TEST) {
+  }
+
+  // run the chain test
+  if(src_args.enabled_tests & CHAIN_TEST) {
+    UserEvent trigger_event;
+    Event wait_event;
+    size_t num_samples = src_args.num_samples;
+
     for(size_t i = src_args.min_num_events; i <= src_args.max_num_events; i <<= 1) {
       setup_chain_test(src_args, num_samples, p, i, trigger_event, wait_event);
       double usecs = time_dag(trigger_event, wait_event);
-      log_app.print() << "Chain test " << p << "->" << src_args.dst_proc;
-      report_timing(usecs, src_args.measure_latency, num_samples, 2 * i + 2);
+      double result = report_timing("chain_event_rate", p, src_args.dst_proc, usecs,
+                                    src_args.measure_latency, num_samples, 2 * i + 2);
+      if(p.address_space() == src_args.dst_proc.address_space()) {
+        intra_node_chain_events_rate.sample(result);
+      } else {
+        inter_node_chain_events_rate.sample(result);
+      }
     }
   }
 }
@@ -284,6 +333,12 @@ static void bench_launcher(const void *args, size_t arglen, const void *userdata
 
   assert(arglen == sizeof(BenchLauncherTaskArgs));
 
+  // output configuration
+  if(src_args.output_configs) {
+    output_machine_config();
+    output_configuration(src_args);
+  }
+
   Machine::ProcessorQuery q1 =
       Machine::ProcessorQuery(Machine::get_machine()).only_kind(Processor::LOC_PROC);
   for(Processor p : q1) {
@@ -302,12 +357,15 @@ static void bench_launcher(const void *args, size_t arglen, const void *userdata
       Machine::ProcessorQuery(Machine::get_machine()).only_kind(Processor::LOC_PROC);
   for(Processor p1 : q1) {
     for(Processor p2 : q2) {
+      if(src_args.skip_same_proc && p1 == p2) {
+        continue;
+      }
       task_args.dst_proc = p2;
       e = p1.spawn(BENCH_TIMING_TASK, &task_args, sizeof(task_args), e);
     }
   }
 
-  Runtime::get_runtime().shutdown(e);
+  e.wait();
 }
 
 int main(int argc, char **argv)
@@ -325,13 +383,14 @@ int main(int argc, char **argv)
 
   BenchLauncherTaskArgs args;
   std::vector<std::string> enabled_tests;
-  std::string only_kind;
 
+  cp.add_option_int("-config", args.output_configs);
   cp.add_option_int("-s", args.num_samples);
-  cp.add_option_stringlist("-t", enabled_tests);
   cp.add_option_int("-m", args.min_test_size);
   cp.add_option_int("-n", args.max_test_size);
   cp.add_option_bool("-L", args.measure_latency);
+  cp.add_option_bool("-skip", args.skip_same_proc);
+  cp.add_option_stringlist("-t", enabled_tests);
   ok = cp.parse_command_line(argc, (const char **)argv);
 
   if(args.min_test_size > args.max_test_size) {
@@ -346,8 +405,6 @@ int main(int argc, char **argv)
         args.enabled_tests |= (uint64_t)FAN_TEST;
       else if(enabled_tests[i] == "CHAIN")
         args.enabled_tests |= (uint64_t)CHAIN_TEST;
-      else if(enabled_tests[i] == "EVENT")
-        args.enabled_tests |= (uint64_t)EVENT_TEST;
       else
         abort();
     }
@@ -357,7 +414,94 @@ int main(int argc, char **argv)
                     .only_kind(Processor::LOC_PROC)
                     .first();
 
-  r.collective_spawn(p, BENCH_LAUNCHER_TASK, &args, sizeof(args));
+  Event e = r.collective_spawn(p, BENCH_LAUNCHER_TASK, &args, sizeof(args));
+  e.wait();
+  if(Network::my_node_id == 0) {
+    std::vector<Stat> inter_node_fan_events_rate_all;
+    std::vector<Stat> intra_node_fan_events_rate_all;
+    std::vector<Stat> inter_node_chain_events_rate_all;
+    std::vector<Stat> intra_node_chain_events_rate_all;
+    Network::gather<Stat>(0, inter_node_fan_events_rate, inter_node_fan_events_rate_all);
+    Network::gather<Stat>(0, intra_node_fan_events_rate, intra_node_fan_events_rate_all);
+    Network::gather<Stat>(0, inter_node_chain_events_rate,
+                          inter_node_chain_events_rate_all);
+    Network::gather<Stat>(0, intra_node_chain_events_rate,
+                          intra_node_chain_events_rate_all);
+    {
+      Stat global_stat;
+      for(const Stat &stat : inter_node_fan_events_rate_all) {
+        if (stat.get_count() > 0) {
+          global_stat.accumulate(stat);
+        }
+      }
+      if (global_stat.get_count() > 0) {
+#ifdef BENCHMARK_USE_JSON_FORMAT
+      std::cout << "RESULT {name:inter_node_fan_events_rate, "
+                << global_stat << ", unit:+events/s}" << std::endl;
+#else
+      std::cout << "RESULT inter_node_fan_events_rate=" << global_stat
+                << ", +events/s" << std::endl;
+#endif
+      }
+    }
+    {
+      Stat global_stat;
+      for(const Stat &stat : intra_node_fan_events_rate_all) {
+        if (stat.get_count() > 0) {
+          global_stat.accumulate(stat);
+        }
+      }
+      if (global_stat.get_count() > 0) {
+#ifdef BENCHMARK_USE_JSON_FORMAT
+      std::cout << "RESULT {name:intra_node_fan_events_rate, "
+                << global_stat << ", unit:+events/s}" << std::endl;
+#else
+      std::cout << "RESULT intra_node_fan_events_rate=" << global_stat
+                << ", +events/s" << std::endl;
+#endif
+      }
+    }
+    {
+      Stat global_stat;
+      for(const Stat &stat : inter_node_chain_events_rate_all) {
+        if (stat.get_count() > 0) {
+          global_stat.accumulate(stat);
+        }
+      }
+      if (global_stat.get_count() > 0) {
+#ifdef BENCHMARK_USE_JSON_FORMAT
+      std::cout << "RESULT {name:inter_node_chain_events_rate, "
+                << global_stat << ", unit:+events/s}" << std::endl;
+#else
+      std::cout << "RESULT inter_node_chain_events_rate=" << global_stat
+                << ", +events/s" << std::endl;
+#endif
+      }
+    }
+    {
+      Stat global_stat;
+      for(const Stat &stat : intra_node_chain_events_rate_all) {
+        if (stat.get_count() > 0) {
+          global_stat.accumulate(stat);
+        }
+      }
+      if (global_stat.get_count() > 0) {
+#ifdef BENCHMARK_USE_JSON_FORMAT
+      std::cout << "RESULT {name:intra_node_chain_events_rate, "
+                << global_stat << ", unit:+events/s}" << std::endl;
+#else
+      std::cout << "RESULT intra_node_chain_events_rate=" << global_stat
+                << ", +events/s" << std::endl;
+#endif
+      }
+    }
+  } else {
+    Network::gather<Stat>(0, inter_node_fan_events_rate);
+    Network::gather<Stat>(0, intra_node_fan_events_rate);
+    Network::gather<Stat>(0, inter_node_chain_events_rate);
+    Network::gather<Stat>(0, intra_node_chain_events_rate);
+  }
 
+  r.shutdown();
   return r.wait_for_shutdown();
 }
