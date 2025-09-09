@@ -66,8 +66,19 @@ namespace Realm {
     size_t num_entries;
     size_t* offsets;
     size_t num_children;
+    Rect<N, T> bounds;
   };
 
+  template<int N, typename T>
+  struct BVH {
+    int root;
+    size_t num_leaves;
+    Rect<N,T>* boxes;
+    uint64_t* indices;
+    size_t* labels;
+    int* childLeft;
+    int* childRight;
+  };
 
   template <int N, typename T>
   class OverlapTester {
@@ -191,6 +202,8 @@ namespace Realm {
     static void collapse_inst_space(const std::vector<FieldDataDescriptor<IndexSpace<N, T>, FT> >& field_data, RegionInstance& out_instance, collapsed_space<N, T> &out_space, Memory my_mem, cudaStream_t stream);
 
     static void collapse_parent_space(const IndexSpace<N, T>& parent_space, RegionInstance& out_instance, collapsed_space<N, T> &out_space, Memory my_mem, cudaStream_t stream);
+
+    static void build_bvh(const collapsed_space<N, T> &space, RegionInstance& bvh_instance, BVH<N, T> &bvh, Memory my_mem, cudaStream_t stream);
 
     template <typename out_t>
     static void construct_input_rectlist(const collapsed_space<N, T> &lhs, const collapsed_space<N, T> &rhs, RegionInstance &out_instance,  size_t& out_size, uint32_t* counters, uint32_t* out_offsets, Memory my_mem, cudaStream_t stream);
