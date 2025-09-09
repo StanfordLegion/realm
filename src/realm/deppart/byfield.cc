@@ -283,7 +283,7 @@ namespace Realm {
 
   ////////////////////////////////////////////////////////////////////////
   //
-  // class StructuredImageMicroOp<N, T, N2, T2>
+  // class GPUByFieldMicroOp<N, T, FT>
 
   template<int N, typename T, typename FT>
   GPUByFieldMicroOp<N, T, FT>::GPUByFieldMicroOp(
@@ -300,7 +300,7 @@ namespace Realm {
   void GPUByFieldMicroOp<N, T, FT>::dispatch(
     PartitioningOperation *op, bool inline_ok) {
 
-    //We have to register ourselves as a waiter on sparse inputs before dispatching
+    // We have to register ourselves as a waiter on sparse inputs before dispatching.
 
     for (size_t i = 0; i < field_data.size(); i++) {
       IndexSpace<N, T> inst_space = field_data[i].index_space;
@@ -371,10 +371,10 @@ namespace Realm {
   void ByFieldOperation<N, T, FT>::execute(void) {
 
 
-    //If the field data is on the GPU, we need to launch a GPUByFieldMicroOp
-    //Rather than one micro-op per field, we can do them all in one micro-op
-    //Launching multiple GPU micro-ops just adds overhead, and
-    //there isn't enough work to need multiple GPUs
+    // If the field data is on the GPU, we need to launch a GPUByFieldMicroOp.
+    // Rather than one micro-op per field, we can do them all in one micro-op.
+    // Launching multiple GPU micro-ops just adds overhead, and
+    // there isn't enough work to need multiple GPUs.
     if (field_data.size() > 0 && field_data[0].inst.get_location().kind()==Memory::GPU_FB_MEM) {
       GPUByFieldMicroOp<N, T, FT> *uop = new GPUByFieldMicroOp<N, T, FT>(parent, field_data);
       for (size_t i = 0; i < colors.size(); i++) {
@@ -392,7 +392,7 @@ namespace Realm {
                                                                      field_data[i].field_offset);
         for (size_t j = 0; j < colors.size(); j++)
           uop->add_sparsity_output(colors[j], subspaces[j]);
-        //uop.set_value_set(colors);
+
         uop->dispatch(this, true /* ok to run in this thread */);
       }
     }

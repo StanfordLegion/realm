@@ -1,5 +1,6 @@
 #pragma once
 #include "realm/deppart/byfield.h"
+#include "realm/deppart/partitions_gpu_kernels.hpp"
 
 namespace Realm {
 
@@ -23,25 +24,13 @@ void byfield_gpuPopulateBitmasksKernel(
   size_t idx = blockIdx.x * blockDim.x + threadIdx.x;
   if (idx >= numPoints) return;
 
-  // Binary search to find which rectangle this point belongs to
-  size_t low = 0, high = numRects;
-  while (low < high) {
-    size_t mid = (low + high) >> 1;
-    if (prefix[mid+1] <= idx) low = mid + 1;
-    else                      high = mid;
-  }
-  size_t r = low;
+  // Binary search to find which rectangle this point belongs to.
+  uint32_t r = bsearch(prefix, numRects, idx);
 
-  // Binary search to find which instance this rectangle belongs to
-  low = 0, high = num_insts;
-  while (low < high) {
-      size_t mid = (low + high) >> 1;
-      if (inst_prefix[mid+1] <= r) low = mid + 1;
-      else                         high = mid;
-  }
-  size_t inst_idx = low;
+  // Binary search to find which instance this rectangle belongs to.
+  size_t inst_idx = bsearch(inst_prefix, num_insts, r);
 
-  // Now we know which rectangle we're in, figure out the point coordinates
+  // Now we know which rectangle we're in, figure out the point coordinates.
   size_t offset = idx - prefix[r];
   Point<N, T> p;
   for (int k = N-1; k >= 0; --k) {
@@ -50,10 +39,10 @@ void byfield_gpuPopulateBitmasksKernel(
     offset /= dim;
   }
 
-  // Read the field value at that point
+  // Read the field value at that point.
   FT ptr = accessors[inst_idx].read(p);
 
-  // Find our color's idx and write output
+  // Find our color's idx and write output.
   PointDesc<N,T> point_desc;
   point_desc.point = p;
   for (size_t i = 0; i < numColors; ++i) {

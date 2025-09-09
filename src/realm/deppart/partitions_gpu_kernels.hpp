@@ -3,7 +3,20 @@
 
 namespace Realm {
 
-  // Intersect all instance rectangles with all parent rectangles in parallel.
+template <typename T>
+__device__ __forceinline__ size_t bsearch(const T* arr, size_t len, T val) {
+  size_t low = 0, high = len;
+  while (low < high) {
+    size_t mid = low + ((high - low) >> 1);
+    if (arr[mid + 1] <= val)
+      low = mid + 1;
+    else
+      high = mid;
+  }
+  return low;
+}
+
+// Intersect all instance rectangles with all parent rectangles in parallel.
 // Used for both count and emit depending on whether the output array is null.
 
 template <int N, typename T, typename out_t>
@@ -32,25 +45,13 @@ __global__ void intersect_input_rects(
   if (rect_output.empty()) {
     return;
   }
-  size_t low = 0, high = numLHSChildren;
-  while (low < high) {
-      size_t mid = (low + high) >> 1;
-      if (d_lhs_offsets[mid+1] <= idx_y) low = mid + 1;
-      else high = mid;
-  }
-  size_t lhs_idx = low;
+  size_t lhs_idx = bsearch(d_lhs_offsets, numLHSRects, idx_y);
   uint32_t local = atomicAdd(&d_lhs_counters[lhs_idx], 1);
   if (d_rects != nullptr) {
     // If d_rects is not null, we write the output rect
     uint32_t out_idx = d_lhs_prefix[lhs_idx] + local;
     if constexpr (std::is_same_v<out_t, RectDesc<N, T>>) {
-      low = 0, high = numRHSChildren;
-      while (low < high) {
-          size_t mid = (low + high) >> 1;
-          if (d_rhs_offsets[mid+1] <= idx_x) low = mid + 1;
-          else high = mid;
-      }
-      d_rects[out_idx].src_idx = low;
+      d_rects[out_idx].src_idx = bsearch(d_rhs_offsets, numRHSChildren, idx_x);
       d_rects[out_idx].rect = rect_output;
     } else {
       d_rects[out_idx] = rect_output;
@@ -109,13 +110,7 @@ __global__ void bvh_build_morton_codes(
   d_morton_codes[idx] = bvh_morton_code(entry.bounds, *d_global_bounds);
   d_indices[idx] = idx;
   if (d_offsets_rects != nullptr) {
-    size_t low = 0, high = num_targets;
-    while (low < high) {
-      size_t mid = (low + high) >> 1;
-      if (d_offsets_rects[mid+1] <= idx) low = mid + 1;
-      else                                 high = mid;
-    }
-    d_targets_indices[idx] = low;
+    d_targets_indices[idx] = bsearch(d_offsets_rects, num_targets, idx);
   }
 }
 
@@ -203,13 +198,7 @@ void query_input_bvh(
   size_t idx = blockIdx.x * blockDim.x + threadIdx.x;
   if (idx >= numQueries) return;
   Rect<N, T> in_rect = queries[idx].bounds;
-  size_t low = 0, high = numLHSChildren;
-  while (low < high) {
-    size_t mid = (low + high) >> 1;
-    if (d_query_offsets[mid+1] <= idx) low = mid + 1;
-    else                          high = mid;
-  }
-  size_t lhs_idx = low;
+  size_t lhs_idx = bsearch(d_query_offsets, numLHSChildren, idx);
 
   constexpr int MAX_STACK = 64; // max stack size for BVH traversal
   int stack[MAX_STACK];

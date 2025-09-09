@@ -615,7 +615,9 @@ namespace Realm {
     } else {
       for(size_t i = 0; i < entries.size(); i++) {
         SparsityMapEntry<N, T> entry = entries[i];
-	if(!entry.bounds.contains(p)) continue;
+	if(!entry.bounds.contains(p)) {
+	  continue;
+	}
 	if(entry.sparsity.exists()) {
 	  assert(0);
 	} else if(entry.bitmap != 0) {

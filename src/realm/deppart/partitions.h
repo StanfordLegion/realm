@@ -60,6 +60,8 @@ namespace Realm {
     size_t src_idx;
   };
 
+  // Combines one or multiple index spaces into a single struct
+  // If multiple, offsets tracks transitions between spaces
   template<int N, typename T>
   struct collapsed_space {
     SparsityMapEntry<N, T>* entries_buffer;
@@ -69,6 +71,8 @@ namespace Realm {
     Rect<N, T> bounds;
   };
 
+  // Stores everything necessary to query a BVH
+  // Used with GPUMicroOp<N, T>::build_bvh
   template<int N, typename T>
   struct BVH {
     int root;

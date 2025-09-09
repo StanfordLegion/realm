@@ -911,7 +911,6 @@ SparsityMapImpl<N, T>::~SparsityMapImpl(void)
          this->entries_instance.destroy();
        if (get_runtime()->get_memory_impl(this->approx_instance))
          this->approx_instance.destroy();
-       this->from_gpu = false;
      }
 }
 
@@ -1502,7 +1501,7 @@ SparsityMapImpl<N, T>::~SparsityMapImpl(void)
       // scan the entry list, sending bitmaps first and making a list of rects
       std::vector<Rect<N, T>> rects;
       for(size_t i = 0; i < this->get_entries().size(); i++) {
-        SparsityMapEntry<N, T> entry = this->get_entries()[i];
+        const SparsityMapEntry<N, T> &entry = this->get_entries()[i];
         if(entry.bitmap) {
           // TODO: send bitmap
           assert(0);

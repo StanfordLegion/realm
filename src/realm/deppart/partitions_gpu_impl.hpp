@@ -31,8 +31,13 @@
     }                                                                        \
   } while (0)
 
+#define THREADS_PER_BLOCK 256
 
-//NVTX macros to only add ranges if defined
+#define COMPUTE_GRID(num_items) \
+  (((num_items) + THREADS_PER_BLOCK - 1) / THREADS_PER_BLOCK)
+
+
+//NVTX macros to only add ranges if defined.
 #ifdef REALM_USE_NVTX
 
   #define NVTX_CAT(a,b)  a##b
@@ -48,7 +53,7 @@
 
 namespace Realm {
 
-  //Used by cub::DeviceReduce to compute bad GPU approximation
+  // Used by cub::DeviceReduce to compute bad GPU approximation.
   template<int N, typename T>
   struct UnionRectOp {
     __host__ __device__
@@ -63,7 +68,7 @@ namespace Realm {
     }
   };
 
-  //Used to compute prefix sum by volume for an array of rects
+  // Used to compute prefix sum by volume for an array of Rects or RectDescs.
   template <int N, typename T, typename out_t>
   struct RectVolumeOp {
     __device__ __forceinline__
@@ -76,6 +81,7 @@ namespace Realm {
     }
   };
 
+  // Finds a memory of the specified kind. Returns true on success, false otherwise.
   inline bool find_memory(Memory &output, Memory::Kind kind)
   {
     bool found = false;
@@ -92,6 +98,7 @@ namespace Realm {
     return found;
   }
 
+  //Given a list of instances, compacts them all into one collapsed_space
   template<int N, typename T>
   template<typename FT>
   void GPUMicroOp<N,T>::collapse_inst_space(const std::vector<FieldDataDescriptor<IndexSpace<N, T>, FT> >& field_data, RegionInstance& out_instance, collapsed_space<N, T> &out_space, Memory my_mem, cudaStream_t stream)
@@ -100,7 +107,7 @@ namespace Realm {
     // so that we know where to read from after intersecting.
     std::vector<size_t> inst_offsets(field_data.size() + 1);
 
-    //Determine size of allocation for combined inst_rects and offset entries
+    // Determine size of allocation for combined inst_rects.
     out_space.num_entries = 0;
 
     for (size_t i = 0; i < field_data.size(); ++i) {
@@ -113,6 +120,7 @@ namespace Realm {
     }
     inst_offsets[field_data.size()] = out_space.num_entries;
 
+    //We copy into one contiguous host buffer, then copy to device
     Memory sysmem;
     assert(find_memory(sysmem, Memory::SYSTEM_MEM));
 
@@ -122,7 +130,7 @@ namespace Realm {
     out_instance = realm_malloc(out_space.num_entries * sizeof(SparsityMapEntry<N,T>), my_mem);
     out_space.entries_buffer = reinterpret_cast<SparsityMapEntry<N,T>*>(AffineAccessor<char,1>(out_instance, 0).base);
 
-    //Now we fill the device array with all instance rectangles
+    //Now we fill the host array with all instance rectangles
     size_t inst_pos = 0;
     for (size_t i = 0; i < field_data.size(); ++i) {
       const IndexSpace<N,T> &inst_space = field_data[i].index_space;
@@ -137,12 +145,15 @@ namespace Realm {
         inst_pos += tmp.size();
       }
     }
+
+    //Now we copy our entries and offsets to the device
     CUDA_CHECK(cudaMemcpyAsync(out_space.entries_buffer, h_entries, out_space.num_entries * sizeof(SparsityMapEntry<N,T>), cudaMemcpyHostToDevice, stream), stream);
     CUDA_CHECK(cudaMemcpyAsync(out_space.offsets, inst_offsets.data(), (field_data.size() + 1) * sizeof(size_t), cudaMemcpyHostToDevice, stream), stream);
     CUDA_CHECK(cudaStreamSynchronize(stream), stream);
     h_instance.destroy();
   }
 
+  // Only real work here is getting dense/sparse into a single collapsed_space.
   template<int N, typename T>
   void GPUMicroOp<N,T>::collapse_parent_space(const IndexSpace<N, T>& parent_space, RegionInstance& out_instance, collapsed_space<N, T> &out_space, Memory my_mem, cudaStream_t stream)
   {
@@ -165,15 +176,19 @@ namespace Realm {
     out_space.num_children = 1;
   }
 
+  // Given a collapsed space, builds a (potentially marked) bvh over that space.
+  // Based on Tero Karras' Maximizing Parallelism in the Construction of BVHs, Octrees, and k-d Trees
   template<int N, typename T>
   void GPUMicroOp<N, T>::build_bvh(const collapsed_space<N, T> &space, RegionInstance &bvh_instance, BVH<N, T> &result, Memory my_mem, cudaStream_t stream)
   {
 
+      // Bounds used for morton code computation.
       RegionInstance global_bounds_instance = realm_malloc(sizeof(Rect<N,T>), my_mem);
       Rect<N,T>* d_global_bounds = reinterpret_cast<Rect<N,T>*>(AffineAccessor<char,1>(global_bounds_instance, 0).base);
       CUDA_CHECK(cudaMemcpyAsync(d_global_bounds, &space.bounds, sizeof(Rect<N,T>), cudaMemcpyHostToDevice, stream),
              stream);
 
+      //We want to keep the entire BVH that we return in one instance for convenience.
       size_t indices_instance_size = space.num_entries * sizeof(uint64_t);
       size_t labels_instance_size = space.offsets == nullptr ? 0 : space.num_entries * sizeof(size_t);
       size_t boxes_instance_size =  (2*space.num_entries - 1) * sizeof(Rect<N, T>);
@@ -193,16 +208,15 @@ namespace Realm {
       curr_idx += child_instance_size;
       result.childRight = reinterpret_cast<int*>(AffineAccessor<char,1>(bvh_instance, 0).base + curr_idx);
 
+      // These are intermediate instances we'll destroy before returning.
       RegionInstance morton_visit_instance = realm_malloc(2 * space.num_entries * max(sizeof(uint64_t), sizeof(int)), my_mem);
       uint64_t* d_morton_codes = reinterpret_cast<uint64_t*>(AffineAccessor<char,1>(morton_visit_instance, 0).base);
 
       RegionInstance indices_tmp_instance = realm_malloc(space.num_entries * sizeof(uint64_t), my_mem);
       uint64_t* d_indices_in = reinterpret_cast<uint64_t*>(AffineAccessor<char,1>(indices_tmp_instance, 0).base);
 
-      int threads_per_block = 256;
-      int grid_size = (space.num_entries + threads_per_block - 1) / threads_per_block;
-
-      bvh_build_morton_codes<N, T><<<grid_size, threads_per_block, 0, stream>>>(space.entries_buffer, space.offsets, d_global_bounds, space.num_entries, space.num_children, d_morton_codes, d_indices_in, result.labels);
+      // We compute morton codes for each leaf and sort, labeling if necessary.
+      bvh_build_morton_codes<N, T><<<COMPUTE_GRID(space.num_entries), THREADS_PER_BLOCK, 0, stream>>>(space.entries_buffer, space.offsets, d_global_bounds, space.num_entries, space.num_children, d_morton_codes, d_indices_in, result.labels);
       KERNEL_CHECK(stream);
 
       uint64_t* d_morton_codes_out = d_morton_codes + space.num_entries;
@@ -219,40 +233,40 @@ namespace Realm {
 
       std::swap(d_morton_codes, d_morton_codes_out);
 
+
+      // Another temporary instance.
       RegionInstance parent_instance = realm_malloc((2*space.num_entries - 1) * sizeof(int), my_mem);
       int* d_parent = reinterpret_cast<int*>(AffineAccessor<char,1>(parent_instance, 0).base);
-
       CUDA_CHECK(cudaMemsetAsync(d_parent, -1, (2*space.num_entries - 1) * sizeof(int), stream), stream);
 
-      grid_size = ((space.num_entries - 1) + threads_per_block - 1) / threads_per_block;
-
+      // Here's where we actually build the BVH
       int n = (int) space.num_entries;
-      bvh_build_radix_tree_kernel<<< grid_size, threads_per_block, 0, stream>>>(d_morton_codes, result.indices, n, result.childLeft, result.childRight, d_parent);
+      bvh_build_radix_tree_kernel<<< COMPUTE_GRID(space.num_entries - 1), THREADS_PER_BLOCK, 0, stream>>>(d_morton_codes, result.indices, n, result.childLeft, result.childRight, d_parent);
       KERNEL_CHECK(stream);
 
+      // Figure out which node didn't get its parent set.
       RegionInstance root_instance = realm_malloc(sizeof(int), my_mem);
       int* d_root = reinterpret_cast<int*>(AffineAccessor<char,1>(root_instance, 0).base);
 
       CUDA_CHECK(cudaMemsetAsync(d_root, -1, sizeof(int), stream), stream);
 
-      grid_size = (2 * space.num_entries - 1 + threads_per_block - 1) / threads_per_block;
-      bvh_build_root_kernel<<< grid_size, threads_per_block, 0, stream>>>(d_root, d_parent, space.num_entries);
+      bvh_build_root_kernel<<< COMPUTE_GRID(2 * space.num_entries - 1), THREADS_PER_BLOCK, 0, stream>>>(d_root, d_parent, space.num_entries);
       KERNEL_CHECK(stream);
 
       CUDA_CHECK(cudaMemcpyAsync(&result.root, d_root, sizeof(int), cudaMemcpyDeviceToHost, stream), stream);
       CUDA_CHECK(cudaStreamSynchronize(stream), stream);
 
-
-      grid_size = ((space.num_entries) + threads_per_block - 1) / threads_per_block;
-      bvh_init_leaf_boxes_kernel<N, T><<<grid_size, threads_per_block, 0, stream>>>(space.entries_buffer, result.indices, space.num_entries, result.boxes);
+      // Now we materialize the tree into something the client can query.
+      bvh_init_leaf_boxes_kernel<N, T><<<COMPUTE_GRID(space.num_entries), THREADS_PER_BLOCK, 0, stream>>>(space.entries_buffer, result.indices, space.num_entries, result.boxes);
       KERNEL_CHECK(stream);
 
       int* d_visitCount = reinterpret_cast<int*>(AffineAccessor<char,1>(morton_visit_instance, 0).base);
       CUDA_CHECK(cudaMemsetAsync(d_visitCount, 0, (2*space.num_entries - 1) * sizeof(int), stream), stream);
 
-      grid_size = (space.num_entries + threads_per_block - 1) / threads_per_block;
-      bvh_merge_internal_boxes_kernel < N, T ><<< grid_size, threads_per_block, 0, stream>>>(space.num_entries, result.childLeft, result.childRight, d_parent, result.boxes, d_visitCount);
+      bvh_merge_internal_boxes_kernel < N, T ><<< COMPUTE_GRID(space.num_entries), THREADS_PER_BLOCK, 0, stream>>>(space.num_entries, result.childLeft, result.childRight, d_parent, result.boxes, d_visitCount);
       KERNEL_CHECK(stream);
+
+      // Cleanup.
       CUDA_CHECK(cudaStreamSynchronize(stream), stream);
       root_instance.destroy();
       parent_instance.destroy();
@@ -263,6 +277,9 @@ namespace Realm {
 
   }
 
+  // Intersects two collapsed spaces, where lhs is always instances and rhs is either parent or soruces/targets.
+  // If rhs is sources/targets, we mark the intersected rectangles by where they came from.
+  // If the intersection is costly, we accelerate with a BVH.
   template<int N, typename T>
   template<typename out_t>
   void GPUMicroOp<N,T>::construct_input_rectlist(const collapsed_space<N, T> &lhs, const collapsed_space<N, T> &rhs, RegionInstance &out_instance,  size_t& out_size, uint32_t* counters, uint32_t* out_offsets, Memory my_mem, cudaStream_t stream)
@@ -277,20 +294,16 @@ namespace Realm {
       build_bvh(rhs, bvh_instance, my_bvh, my_mem, stream);
     }
 
-    //First pass: figure out how many rectangles survive intersection
-    int flattened_threads = 256;
-    int grid_size;
+    // First pass: figure out how many rectangles survive intersection.
     if (!bvh_valid) {
-      grid_size = (lhs.num_entries * rhs.num_entries + flattened_threads - 1) / flattened_threads;
-      intersect_input_rects<N, T, out_t><<<grid_size, flattened_threads, 0, stream>>>(lhs.entries_buffer, rhs.entries_buffer, lhs.offsets, nullptr, rhs.offsets, lhs.num_entries, rhs.num_entries, lhs.num_children, rhs.num_children, counters, nullptr);
+      intersect_input_rects<N, T, out_t><<<COMPUTE_GRID(lhs.num_entries * rhs.num_entries), THREADS_PER_BLOCK, 0, stream>>>(lhs.entries_buffer, rhs.entries_buffer, lhs.offsets, nullptr, rhs.offsets, lhs.num_entries, rhs.num_entries, lhs.num_children, rhs.num_children, counters, nullptr);
     } else {
-      grid_size = (lhs.num_entries + flattened_threads - 1) / flattened_threads;
-      query_input_bvh<N, T, out_t><<<grid_size, flattened_threads, 0, stream>>>(lhs.entries_buffer, lhs.offsets, my_bvh.root, my_bvh.childLeft, my_bvh.childRight, my_bvh.indices, my_bvh.labels, my_bvh.boxes, lhs.num_entries, my_bvh.num_leaves, lhs.num_children, nullptr, counters, nullptr);
+      query_input_bvh<N, T, out_t><<<COMPUTE_GRID(lhs.num_entries), THREADS_PER_BLOCK, 0, stream>>>(lhs.entries_buffer, lhs.offsets, my_bvh.root, my_bvh.childLeft, my_bvh.childRight, my_bvh.indices, my_bvh.labels, my_bvh.boxes, lhs.num_entries, my_bvh.num_leaves, lhs.num_children, nullptr, counters, nullptr);
     }
     KERNEL_CHECK(stream);
 
 
-    //Prefix sum over instances (small enough to keep on host)
+    // Prefix sum over instances (small enough to keep on host).
     std::vector<uint32_t> h_inst_counters(lhs.num_children+1);
     h_inst_counters[0] = 0; // prefix sum starts at 0
     CUDA_CHECK(cudaMemcpyAsync(h_inst_counters.data()+1, counters, lhs.num_children * sizeof(uint32_t), cudaMemcpyDeviceToHost, stream), stream);
@@ -307,20 +320,20 @@ namespace Realm {
 
     out_instance = realm_malloc(out_size * sizeof(out_t), my_mem);
 
-    //Where each instance should start writing its rectangles
+    // Where each instance should start writing its rectangles.
     CUDA_CHECK(cudaMemcpyAsync(out_offsets, h_inst_counters.data(), (lhs.num_children + 1) * sizeof(uint32_t), cudaMemcpyHostToDevice, stream), stream);
 
-    //Non-empty rectangles from the intersection
+    // Non-empty rectangles from the intersection.
     out_t* d_valid_rects = reinterpret_cast<out_t*>(AffineAccessor<char,1>(out_instance, 0).base);
 
-    //Reset counters
+    // Reset counters.
     CUDA_CHECK(cudaMemsetAsync(counters, 0, lhs.num_children * sizeof(uint32_t), stream), stream);
 
-    //Second pass: recompute intersection, but this time write to output
+    // Second pass: recompute intersection, but this time write to output.
     if (!bvh_valid) {
-      intersect_input_rects<N, T, out_t><<<grid_size, flattened_threads, 0, stream>>>(lhs.entries_buffer, rhs.entries_buffer, lhs.offsets, out_offsets, rhs.offsets, lhs.num_entries, rhs.num_entries, lhs.num_children, rhs.num_children, counters, d_valid_rects);
+      intersect_input_rects<N, T, out_t><<<COMPUTE_GRID(lhs.num_entries * rhs.num_entries), THREADS_PER_BLOCK, 0, stream>>>(lhs.entries_buffer, rhs.entries_buffer, lhs.offsets, out_offsets, rhs.offsets, lhs.num_entries, rhs.num_entries, lhs.num_children, rhs.num_children, counters, d_valid_rects);
     } else {
-      query_input_bvh<N, T, out_t><<<grid_size, flattened_threads, 0, stream>>>(lhs.entries_buffer, lhs.offsets, my_bvh.root, my_bvh.childLeft, my_bvh.childRight, my_bvh.indices, my_bvh.labels, my_bvh.boxes, lhs.num_entries, my_bvh.num_leaves, lhs.num_children, out_offsets, counters, d_valid_rects);
+      query_input_bvh<N, T, out_t><<<COMPUTE_GRID(lhs.num_entries), THREADS_PER_BLOCK, 0, stream>>>(lhs.entries_buffer, lhs.offsets, my_bvh.root, my_bvh.childLeft, my_bvh.childRight, my_bvh.indices, my_bvh.labels, my_bvh.boxes, lhs.num_entries, my_bvh.num_leaves, lhs.num_children, out_offsets, counters, d_valid_rects);
     }
     KERNEL_CHECK(stream);
     CUDA_CHECK(cudaStreamSynchronize(stream), stream);
@@ -329,17 +342,16 @@ namespace Realm {
     }
   }
 
+  // Prefix sum an array of Rects or RectDescs by volume.
   template<int N, typename T>
   template<typename out_t>
   void GPUMicroOp<N, T>::volume_prefix_sum(const out_t* d_rects, size_t total_rects, RegionInstance &out_instance, size_t& num_pts, Memory my_mem, cudaStream_t stream)
   {
     out_instance = realm_malloc((total_rects + 1) * sizeof(size_t), my_mem);
-
-    // Prefix sum the valid rectangles by volume
     size_t* d_prefix_rects = reinterpret_cast<size_t*>(AffineAccessor<char,1>(out_instance, 0).base);
     CUDA_CHECK(cudaMemsetAsync(d_prefix_rects, 0, sizeof(size_t), stream), stream);
 
-    // Build the CUB transform‐iterator
+    // Build the CUB transform‐iterator.
     using VolIter = cub::TransformInputIterator<
                       size_t,              // output type
                       RectVolumeOp<N,T,out_t>,            // functor
@@ -366,7 +378,7 @@ namespace Realm {
         /* num_items */       total_rects, stream);
 
 
-    //Number of points across all rectangles (also our total output count)
+    //Number of points across all rectangles (also our total output count).
     CUDA_CHECK(cudaMemcpyAsync(&num_pts, &d_prefix_rects[total_rects], sizeof(size_t), cudaMemcpyDeviceToHost, stream), stream);
 
     CUDA_CHECK(cudaStreamSynchronize(stream), stream);
@@ -438,14 +450,12 @@ namespace Realm {
 
 
     //Sort along each dimension from LSB to MSB (0 to N-1)
-    int threads_per_block = 256;
-    size_t grid_size = (total_pts + threads_per_block - 1) / threads_per_block;
     size_t use_bytes = temp_bytes;
 
     {
       NVTX_DEPPART(sort_valid_points);
       for (int dim = 0; dim < N; ++dim) {
-        build_coord_key<<<grid_size, threads_per_block, 0, stream>>>(d_keys_in, d_points_in, total_pts, dim);
+        build_coord_key<<<COMPUTE_GRID(total_pts), THREADS_PER_BLOCK, 0, stream>>>(d_keys_in, d_points_in, total_pts, dim);
         KERNEL_CHECK(stream);
         cub::DeviceRadixSort::SortPairs(temp_storage, use_bytes, d_keys_in, d_keys_out, d_points_in, d_points_out, total_pts, 0, 8*sizeof(T), stream);
         std::swap(d_keys_in, d_keys_out);
@@ -453,14 +463,14 @@ namespace Realm {
       }
 
       //Sort by source index now to keep individual partitions separate
-      build_src_key<<<grid_size, threads_per_block, 0, stream>>>(d_src_keys_in, d_points_in, total_pts);
+      build_src_key<<<COMPUTE_GRID(total_pts), THREADS_PER_BLOCK, 0, stream>>>(d_src_keys_in, d_points_in, total_pts);
       KERNEL_CHECK(stream);
       use_bytes = temp_bytes;
       cub::DeviceRadixSort::SortPairs(temp_storage, use_bytes, d_src_keys_in, d_src_keys_out, d_points_in, d_points_out, total_pts, 0, 8*sizeof(size_t), stream);
     }
 
 
-    points_to_rects<<<grid_size, threads_per_block, 0, stream>>>(d_points_out, d_rects_in, total_pts);
+    points_to_rects<<<COMPUTE_GRID(total_pts), THREADS_PER_BLOCK, 0, stream>>>(d_points_out, d_rects_in, total_pts);
     KERNEL_CHECK(stream);
 
     size_t num_intermediate = total_pts;
@@ -472,8 +482,7 @@ namespace Realm {
 
         // Step 1: Mark rectangle starts
         // e.g. [1, 2, 4, 5, 6, 8] -> [1, 0, 1, 0, 0, 1]
-        grid_size = (num_intermediate + threads_per_block - 1) / threads_per_block;
-        mark_breaks_dim<<<grid_size, threads_per_block, 0, stream>>>(d_rects_in, break_points, num_intermediate, dim);
+        mark_breaks_dim<<<COMPUTE_GRID(num_intermediate), THREADS_PER_BLOCK, 0, stream>>>(d_rects_in, break_points, num_intermediate, dim);
         KERNEL_CHECK(stream);
 
         // Step 2: Inclusive scan of break points to get group ids
@@ -487,7 +496,7 @@ namespace Realm {
         CUDA_CHECK(cudaStreamSynchronize(stream), stream);
 
         //Step 3: Write output rectangles, where rect starts write lo and rect ends write hi
-        init_rects_dim<<<grid_size, threads_per_block, 0, stream>>>(d_rects_in, break_points, group_ids, d_rects_out, num_intermediate, dim);
+        init_rects_dim<<<COMPUTE_GRID(num_intermediate), THREADS_PER_BLOCK, 0, stream>>>(d_rects_in, break_points, group_ids, d_rects_out, num_intermediate, dim);
         KERNEL_CHECK(stream);
 
         num_intermediate = last_grp;
@@ -538,10 +547,8 @@ namespace Realm {
     CUDA_CHECK(cudaMemsetAsync(d_ends, 0, ctr.size()*sizeof(size_t),stream), stream);
 
 
-    //Convert RectDesc to SparsityMapEntry and determine where eeach src's rectangles start and end.
-    int threads_per_block = 256;
-    size_t grid_size = (total_rects + threads_per_block - 1) / threads_per_block;
-    build_final_output<<<grid_size, threads_per_block, 0, stream>>>(d_rects, final_entries, final_rects, d_starts, d_ends, total_rects);
+    //Convert RectDesc to SparsityMapEntry and determine where each src's rectangles start and end.
+    build_final_output<<<COMPUTE_GRID(total_rects), THREADS_PER_BLOCK, 0, stream>>>(d_rects, final_entries, final_rects, d_starts, d_ends, total_rects);
     KERNEL_CHECK(stream);
 
 
