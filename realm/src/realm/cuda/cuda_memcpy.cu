@@ -79,8 +79,7 @@ memcpy_kernel_transpose(Realm::Cuda::MemcpyTransposeInfo<Offset_t> info, T *tile
   const Offset_t grid_dimx = ((info.extents[2] + tile_size - 1) / tile_size);
   const Offset_t grid_dimy = ((info.extents[1] + tile_size - 1) / tile_size);
 
-  const Offset_t contig_bytes = info.extents[0];
-  const Offset_t chunks = contig_bytes / sizeof(T);
+  const Offset_t chunks = info.extents[0] / sizeof(T);
 
   const Offset_t src_size_dim0 = info.src_strides[0] / sizeof(T);
   const Offset_t src_size_dim1 = info.src_strides[1] / sizeof(T);
