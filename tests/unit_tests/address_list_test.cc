@@ -17,6 +17,7 @@
 
 #include "realm/transfer/address_list.h"
 #include <gtest/gtest.h>
+#include <cstdlib>
 
 using namespace Realm;
 
@@ -29,12 +30,25 @@ namespace {
     void *alloc_obj(std::size_t bytes, std::size_t align = 16)
     {
       void *ptr = nullptr;
+#ifdef REALM_ON_WINDOWS
+      ptr = _aligned_malloc(bytes, align);
+#else
       int ret = posix_memalign(&ptr, align, bytes);
-      assert(ret == 0);
+      if(ret != 0)
+        ptr = nullptr;
+#endif
+      assert(ptr != nullptr);
       return ptr;
     }
 
-    void free_obj(void *ptr) { free(ptr); }
+    void free_obj(void *ptr)
+    {
+#ifdef REALM_ON_WINDOWS
+      _aligned_free(ptr);
+#else
+      free(ptr);
+#endif
+    }
   };
 
   static void make_1d_entry(AddressList &alist, size_t bytes, int payload = 0)
@@ -422,7 +436,8 @@ namespace {
 
   TEST(AddressListTests, WithFields_2D_PartialLine_NoFieldAdvance)
   {
-    constexpr size_t BYTES = 64, LINES = 3;
+    constexpr size_t NUM_BYTES = 64;
+    constexpr size_t NUM_LINES = 3;
     AddressList al;
     std::vector<int> f = {1, 2, 3};
     MockHeap h;
@@ -430,47 +445,47 @@ namespace {
     al.attach_field_block(fb);
 
     size_t *e = al.begin_entry(2);
-    e[AddressList::SLOT_HEADER] = AddressList::pack_entry_header(BYTES, 2);
-    e[AddressList::DIM_SLOTS * 1] = LINES;
-    e[AddressList::DIM_SLOTS * 1 + 1] = BYTES;
-    al.commit_entry(2, BYTES * LINES);
+    e[AddressList::SLOT_HEADER] = AddressList::pack_entry_header(NUM_BYTES, 2);
+    e[AddressList::DIM_SLOTS * 1] = NUM_LINES;
+    e[AddressList::DIM_SLOTS * 1 + 1] = NUM_BYTES;
+    al.commit_entry(2, NUM_BYTES * NUM_LINES);
 
     AddressListCursor c;
     c.set_addrlist(&al);
 
     // Consume half a line – must NOT change field index
-    c.advance(0, BYTES / 2, 1);
+    c.advance(0, NUM_BYTES / 2, 1);
     EXPECT_EQ(c.fields_data(), fb->fields);
-    EXPECT_EQ(al.bytes_pending(), BYTES * LINES * f.size() - BYTES / 2);
+    EXPECT_EQ(al.bytes_pending(), NUM_BYTES * NUM_LINES * f.size() - NUM_BYTES / 2);
 
     h.free_obj(fb);
   }
 
   TEST(AddressListTests, WithFields_PartialThenFullRect)
   {
-    constexpr size_t BYTES = 32;
+    constexpr size_t NUM_BYTES = 32;
     AddressList al;
     std::vector<int> f = {0, 1, 2};
     MockHeap h;
     FieldBlock *fb = FieldBlock::create(h, f.data(), f.size());
     al.attach_field_block(fb);
-    make_1d_entry(al, BYTES);
+    make_1d_entry(al, NUM_BYTES);
 
     AddressListCursor cur;
     cur.set_addrlist(&al);
 
     // (1) move full rect for two fields at once
-    cur.advance(0, BYTES, 2);
+    cur.advance(0, NUM_BYTES, 2);
     EXPECT_EQ(cur.fields_data(), fb->fields + 2);
-    EXPECT_EQ(al.bytes_pending(), BYTES * (f.size() - 2));
+    EXPECT_EQ(al.bytes_pending(), NUM_BYTES * (f.size() - 2));
 
     // (2) move half-rect – must stay on field #2
-    cur.advance(0, BYTES / 2, 1);
+    cur.advance(0, NUM_BYTES / 2, 1);
     EXPECT_EQ(cur.fields_data(), fb->fields + 2);
-    EXPECT_EQ(al.bytes_pending(), BYTES * (f.size() - 2) - BYTES / 2);
+    EXPECT_EQ(al.bytes_pending(), NUM_BYTES * (f.size() - 2) - NUM_BYTES / 2);
 
     // (3) finish the rect – now field pointer wraps to beginning
-    cur.advance(0, BYTES / 2, 1);
+    cur.advance(0, NUM_BYTES / 2, 1);
     EXPECT_EQ(cur.fields_data(), fb->fields);
     EXPECT_EQ(al.bytes_pending(), 0u);
 
@@ -479,7 +494,9 @@ namespace {
 
   TEST(AddressListTests, WithFields_3D_PlaneWisePartial)
   {
-    constexpr size_t BYTES = 16, LINES = 2, PLANES = 3;
+    constexpr size_t NUM_BYTES = 16;
+    constexpr size_t NUM_LINES = 2;
+    constexpr size_t NUM_PLANES = 3;
     AddressList al;
     std::vector<int> f = {9, 9};
     MockHeap h;
@@ -487,26 +504,26 @@ namespace {
     al.attach_field_block(fb);
 
     size_t *e = al.begin_entry(3);
-    e[AddressList::SLOT_HEADER] = AddressList::pack_entry_header(BYTES, 3);
-    e[AddressList::DIM_SLOTS * 1] = LINES;
-    e[AddressList::DIM_SLOTS * 1 + 1] = BYTES;
-    e[AddressList::DIM_SLOTS * 2] = PLANES;
-    e[AddressList::DIM_SLOTS * 2 + 1] = BYTES * LINES;
-    al.commit_entry(3, BYTES * LINES * PLANES);
+    e[AddressList::SLOT_HEADER] = AddressList::pack_entry_header(NUM_BYTES, 3);
+    e[AddressList::DIM_SLOTS * 1] = NUM_LINES;
+    e[AddressList::DIM_SLOTS * 1 + 1] = NUM_BYTES;
+    e[AddressList::DIM_SLOTS * 2] = NUM_PLANES;
+    e[AddressList::DIM_SLOTS * 2 + 1] = NUM_BYTES * NUM_LINES;
+    al.commit_entry(3, NUM_BYTES * NUM_LINES * NUM_PLANES);
 
     AddressListCursor c;
     c.set_addrlist(&al);
 
     // consume one plane at a time – still field 0
-    for(size_t p = 0; p < PLANES; ++p) {
+    for(size_t p = 0; p < NUM_PLANES; ++p) {
       c.advance(2, 1);
     }
 
-    EXPECT_EQ(al.bytes_pending(), BYTES * LINES * PLANES * (f.size() - 1));
+    EXPECT_EQ(al.bytes_pending(), NUM_BYTES * NUM_LINES * NUM_PLANES * (f.size() - 1));
     EXPECT_EQ(c.fields_data(), fb->fields + 1);
 
     // now full rect for one field
-    c.advance(2, PLANES, 1);
+    c.advance(2, NUM_PLANES, 1);
     EXPECT_EQ(al.bytes_pending(), 0u);
     EXPECT_EQ(c.fields_data(), fb->fields);
 

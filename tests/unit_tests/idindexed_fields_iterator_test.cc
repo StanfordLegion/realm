@@ -19,6 +19,7 @@
 #include "realm/inst_layout.h"
 #include "test_common.h"
 #include <gtest/gtest.h>
+#include <cstdlib>
 
 using namespace Realm;
 
@@ -62,12 +63,25 @@ struct MockHeap : public ReplicatedHeap {
   void *alloc_obj(std::size_t bytes, std::size_t align = 16) override
   {
     void *ptr = nullptr;
+#ifdef REALM_ON_WINDOWS
+    ptr = _aligned_malloc(bytes, align);
+#else
     int ret = posix_memalign(&ptr, align, bytes);
-    assert(ret == 0);
+    if(ret != 0)
+      ptr = nullptr;
+#endif
+    assert(ptr != nullptr);
     return ptr;
   }
 
-  void free_obj(void *ptr) override { free(ptr); }
+  void free_obj(void *ptr) override
+  {
+#ifdef REALM_ON_WINDOWS
+    _aligned_free(ptr);
+#else
+    free(ptr);
+#endif
+  }
 };
 
 template <int N>

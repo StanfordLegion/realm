@@ -39,9 +39,24 @@ namespace {
     void *alloc_obj(std::size_t bytes, std::size_t align = 16)
     {
       void *ptr = nullptr;
+#ifdef REALM_ON_WINDOWS
+      ptr = _aligned_malloc(bytes, align);
+#else
       int ret = posix_memalign(&ptr, align, bytes);
-      assert(ret == 0);
+      if(ret != 0)
+        ptr = nullptr;
+#endif
+      assert(ptr != nullptr);
       return ptr;
+    }
+
+    void free_obj(void *ptr)
+    {
+#ifdef REALM_ON_WINDOWS
+      _aligned_free(ptr);
+#else
+      free(ptr);
+#endif
     }
   };
 
@@ -237,8 +252,8 @@ TEST(ReadAddressEntryTests, FieldBlock_LimitedTransfer)
   EXPECT_EQ(in_al.bytes_pending(), CONTIG * (kTotalFields - kMaxFieldsPerXfer));
   EXPECT_EQ(out_al.bytes_pending(), CONTIG * (kTotalFields - kMaxFieldsPerXfer));
 
-  delete fb_in;
-  delete fb_out;
+  heap.free_obj(fb_in);
+  heap.free_obj(fb_out);
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -292,8 +307,8 @@ TEST(ReadAddressEntry, Loop_PartialFieldConsumption)
   EXPECT_EQ(in_al.bytes_pending(), 0u);
   EXPECT_EQ(out_al.bytes_pending(), 0u);
 
-  delete fb_in;
-  delete fb_out;
+  h.free_obj(fb_in);
+  h.free_obj(fb_out);
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -515,7 +530,7 @@ TEST(ReadAddressEntryTests, SrcWithFields_DstNoFields_Partial)
     EXPECT_EQ(oc.remaining(0), kContig * kMoveFields + kLeft);
   }
 
-  delete fb_src;
+  heap.free_obj(fb_src);
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -565,8 +580,8 @@ TEST(ReadAddressEntry, FieldBlock_2D_MoveTwoFields)
   EXPECT_EQ(in_al.bytes_pending(), BYTES_PER_FIELD * (FIELDS - 2));
   EXPECT_EQ(out_al.bytes_pending(), BYTES_PER_FIELD * (FIELDS - 2));
 
-  delete fb_in;
-  delete fb_out;
+  h.free_obj(fb_in);
+  h.free_obj(fb_out);
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -618,7 +633,7 @@ TEST(ReadAddressEntry, DstFieldBlock_3D_MoveThreeFields)
   EXPECT_EQ(in_al.bytes_pending(), 0u);
   EXPECT_EQ(out_al.bytes_pending(), VOL * (DST_FIELDS - 3));
 
-  delete fb_dst;
+  h.free_obj(fb_dst);
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
