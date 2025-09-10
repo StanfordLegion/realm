@@ -85,15 +85,19 @@ bool create_instance_and_copy_and_verify(
   // create external instance from external memory resource
   realm_region_instance_t src_inst;
   realm_memory_t src_mem;
-  CHECK_REALM(
-      realm_external_resource_suggested_memory(runtime, external_mem_res, &src_mem));
-  realm_region_instance_create_params_t src_instance_params = {
-      .memory = src_mem,
+
+  realm_index_space_t space = {
       .lower_bound = lower_bound,
       .upper_bound = upper_bound,
       .num_dims = N,
       .coord_type = coord_type,
       .sparsity_map = nullptr,
+  };
+  CHECK_REALM(
+      realm_external_resource_suggested_memory(runtime, external_mem_res, &src_mem));
+  realm_region_instance_create_params_t src_instance_params = {
+      .memory = src_mem,
+      .space = space,
       .field_ids = field_ids,
       .field_sizes = field_sizes,
       .num_fields = 1,
@@ -122,11 +126,7 @@ bool create_instance_and_copy_and_verify(
       .srcs = srcs,
       .dsts = dsts,
       .num_fields = 1,
-      .lower_bound = lower_bound,
-      .upper_bound = upper_bound,
-      .num_dims = N,
-      .coord_type = coord_type,
-      .sparsity_map = nullptr,
+      .space = space,
   };
 
   CHECK_REALM(realm_region_instance_copy(runtime, &copy_params, nullptr, REALM_NO_EVENT,
@@ -147,15 +147,9 @@ bool create_instance_and_copy_and_verify(
   }
 
   // test generate external resource info
-  realm_index_space_t ispace = {
-      .lower_bound = lower_bound,
-      .upper_bound = upper_bound,
-      .num_dims = N,
-      .coord_type = coord_type,
-  };
   realm_external_resource_t external_resource;
   CHECK_REALM(realm_region_instance_generate_external_resource_info(
-      runtime, src_inst, &ispace, field_ids, 1, 0, &external_resource));
+      runtime, src_inst, &space, field_ids, 1, 0, &external_resource));
   assert(external_resource.type == external_mem_res->type);
 
   CHECK_REALM(realm_region_instance_destroy(runtime, src_inst, REALM_NO_EVENT));
@@ -177,14 +171,18 @@ static void test_copy(realm_runtime_t runtime, realm_memory_t dst_mem,
   realm_field_id_t field_ids[1] = {FID_BASE};
   size_t field_sizes[1] = {sizeof(int)};
 
-  // create dst instance from cpu memory
-  realm_region_instance_create_params_t dst_instance_params = {
-      .memory = dst_mem,
+  realm_index_space_t space = {
       .lower_bound = lower_bound,
       .upper_bound = upper_bound,
       .num_dims = N,
       .coord_type = coord_type,
       .sparsity_map = nullptr,
+  };
+
+  // create dst instance from cpu memory
+  realm_region_instance_create_params_t dst_instance_params = {
+      .memory = dst_mem,
+      .space = space,
       .field_ids = field_ids,
       .field_sizes = field_sizes,
       .num_fields = 1,

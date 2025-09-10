@@ -76,13 +76,17 @@ static void test_copy(realm_runtime_t runtime, realm_memory_t src_mem,
   realm_field_id_t field_ids[1] = {FID_BASE};
   size_t field_sizes[1] = {sizeof(int)};
 
-  realm_region_instance_create_params_t src_instance_params = {
-      .memory = src_mem,
+  realm_index_space_t space = {
       .lower_bound = lower_bound,
       .upper_bound = upper_bound,
       .num_dims = N,
       .coord_type = coord_type,
       .sparsity_map = nullptr,
+  };
+
+  realm_region_instance_create_params_t src_instance_params = {
+      .memory = src_mem,
+      .space = space,
       .field_ids = field_ids,
       .field_sizes = field_sizes,
       .num_fields = 1,
@@ -92,21 +96,26 @@ static void test_copy(realm_runtime_t runtime, realm_memory_t src_mem,
   CHECK_REALM(realm_region_instance_create(runtime, &src_instance_params, nullptr,
                                            REALM_NO_EVENT, &src_inst, &event));
   CHECK_REALM(realm_event_wait(runtime, event, REALM_WAIT_INFINITE, nullptr));
-  realm_region_instance_create_params_t dst_instance_params = {
-      .memory = dst_mem,
-      .lower_bound = lower_bound,
-      .upper_bound = upper_bound,
-      .num_dims = N,
-      .coord_type = coord_type,
-      .sparsity_map = nullptr,
-      .field_ids = field_ids,
-      .field_sizes = field_sizes,
-      .num_fields = 1,
-      .block_size = 0,
-      .external_resource = nullptr,
-  };
-  CHECK_REALM(realm_region_instance_create(runtime, &dst_instance_params, nullptr,
-                                           REALM_NO_EVENT, &dst_inst, &event));
+
+  realm_field_layout_t field_layout;
+  field_layout.field_id = FID_BASE;
+  field_layout.size_in_bytes = sizeof(int);
+  field_layout.rel_offset = 0;
+  realm_instance_layout_t instance_layout;
+  instance_layout.num_fields = 1;
+  instance_layout.field_layouts = &field_layout;
+  instance_layout.alignment_reqd = 32;
+  instance_layout.space = space;
+
+  int dim_order[N];
+  for(int dim = 0; dim < N; dim++) {
+    dim_order[dim] = dim;
+  }
+  instance_layout.dim_order = dim_order;
+
+  realm_region_instance_create_from_instance_layout(runtime, &instance_layout, dst_mem,
+                                                    nullptr, nullptr, REALM_NO_EVENT,
+                                                    &dst_inst, &event);
   CHECK_REALM(realm_event_wait(runtime, event, REALM_WAIT_INFINITE, nullptr));
   Realm::RegionInstance src_inst_cxx = Realm::RegionInstance(src_inst);
   Realm::RegionInstance dst_inst_cxx = Realm::RegionInstance(dst_inst);
@@ -128,15 +137,7 @@ static void test_copy(realm_runtime_t runtime, realm_memory_t src_mem,
   realm_copy_src_dst_field_t srcs[1] = {{src_inst, FID_BASE, sizeof(int)}};
   realm_copy_src_dst_field_t dsts[1] = {{dst_inst, FID_BASE, sizeof(int)}};
   realm_region_instance_copy_params_t copy_params = {
-      .srcs = srcs,
-      .dsts = dsts,
-      .num_fields = 1,
-      .lower_bound = lower_bound,
-      .upper_bound = upper_bound,
-      .num_dims = N,
-      .coord_type = coord_type,
-      .sparsity_map = nullptr,
-  };
+      .srcs = srcs, .dsts = dsts, .num_fields = 1, .space = space};
 
   CHECK_REALM(realm_region_instance_copy(runtime, &copy_params, nullptr, REALM_NO_EVENT,
                                          0, &event));
@@ -228,7 +229,7 @@ void REALM_FNPTR main_task(const void *args, size_t arglen, const void *userdata
                             cpu_mem_query_args.mems[dst_mem_idx], rect3d_ll,
                             REALM_COORD_TYPE_LONG_LONG, proc);
 
-    log_app.print("test_copy 3D int");
+    log_app.info("test_copy 3D int");
     Realm::Rect<3, int> rect3d_int(
         Realm::Point<3, int>(0, 0, 0),
         Realm::Point<3, int>(upper_size - 1, upper_size - 1, upper_size - 1));

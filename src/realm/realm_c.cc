@@ -194,13 +194,9 @@ check_region_instance_validity(realm_region_instance_t instance)
   if(status != REALM_SUCCESS) {
     return status;
   }
-  if(instance_creation_params->lower_bound == nullptr ||
-     instance_creation_params->upper_bound == nullptr) {
-    return REALM_REGION_INSTANCE_ERROR_INVALID_DIMS;
-  }
-  if(instance_creation_params->num_dims == 0 ||
-     instance_creation_params->num_dims > REALM_MAX_DIM) {
-    return REALM_REGION_INSTANCE_ERROR_INVALID_DIMS;
+  status = check_index_space_validity(&instance_creation_params->space);
+  if(status != REALM_SUCCESS) {
+    return status;
   }
   if(instance_creation_params->field_ids == nullptr ||
      instance_creation_params->field_sizes == nullptr ||
@@ -232,15 +228,30 @@ check_region_instance_validity(realm_region_instance_t instance)
   if(instance_copy_params->srcs->size == 0 || instance_copy_params->dsts->size == 0) {
     return REALM_REGION_INSTANCE_ERROR_INVALID_FIELDS;
   }
-  if(instance_copy_params->lower_bound == nullptr ||
-     instance_copy_params->upper_bound == nullptr) {
-    return REALM_REGION_INSTANCE_ERROR_INVALID_DIMS;
-  }
-  if(instance_copy_params->num_dims == 0 ||
-     instance_copy_params->num_dims > REALM_MAX_DIM) {
-    return REALM_REGION_INSTANCE_ERROR_INVALID_DIMS;
+  status = check_index_space_validity(&instance_copy_params->space);
+  if(status != REALM_SUCCESS) {
+    return status;
   }
   return REALM_SUCCESS;
+}
+
+[[nodiscard]] static inline realm_status_t
+check_instance_layout_validity(const realm_instance_layout_t *instance_layout)
+{
+  if(instance_layout == nullptr) {
+    return REALM_INSTANCE_LAYOUT_ERROR_INVALID_LAYOUT;
+  }
+  if(instance_layout->field_layouts == nullptr) {
+    return REALM_INSTANCE_LAYOUT_ERROR_INVALID_FIELDS;
+  }
+  if(instance_layout->num_fields == 0) {
+    return REALM_INSTANCE_LAYOUT_ERROR_INVALID_FIELDS;
+  }
+  realm_status_t status = check_index_space_validity(&instance_layout->space);
+  if(status != REALM_SUCCESS) {
+    return status;
+  }
+  return status;
 }
 
 // Public C API starts here
@@ -1124,51 +1135,49 @@ static realm_status_t convert_external_instance_resource_cxx_to_c(
   return REALM_SUCCESS;
 }
 
-class RealmRegionInstanceCreate {
+static realm_status_t realm_region_instance_create_common(
+    Realm::RuntimeImpl *runtime_impl, Realm::InstanceLayoutGeneric *layout,
+    realm_memory_t memory, const realm_external_resource_t *external_resource,
+    const Realm::ProfilingRequestSet *prs_cxx, realm_event_t wait_on,
+    Realm::RegionInstance &inst, Realm::Event &out_event)
+{
+  std::unique_ptr<Realm::ExternalInstanceResource> external_resource_cxx{nullptr};
+  if(external_resource != nullptr) {
+    // external instance
+
+    // convert the C API external instance resource to the C++ API external instance
+    // resource Do not delete the resource_cxx, it will be maintained by the
+    // RegionInstanceImpl
+    realm_status_t status = convert_external_instance_resource_c_to_cxx(
+        external_resource, external_resource_cxx);
+    if(status != REALM_SUCCESS) {
+      return status;
+    }
+  }
+
+  out_event = Realm::RegionInstanceImpl::create_instance(
+      runtime_impl, inst, Realm::Memory(memory), layout, external_resource_cxx.get(),
+      *prs_cxx, Realm::Event(wait_on));
+
+  return REALM_SUCCESS;
+}
+
+class RealmInstanceLayoutCreate {
 public:
   template <int N, typename T>
-  [[nodiscard]] realm_status_t
-  operator()(Realm::RuntimeImpl *runtime_impl, Realm::Memory memory, const T *lower_bound,
-             const T *upper_bound, const Realm::FieldID *field_ids,
-             const size_t *field_sizes, size_t num_fields, size_t block_size,
-             const realm_external_resource_t *external_resource,
-             const Realm::ProfilingRequestSet &prs, Realm::Event wait_on,
-             Realm::RegionInstance &inst, Realm::Event &out_event)
+  [[nodiscard]] realm_status_t operator()(const T *lower_bound, const T *upper_bound,
+                                          Realm::InstanceLayoutConstraints &ilc,
+                                          const int *dim_order,
+                                          Realm::InstanceLayoutGeneric *&instance_layout)
   {
-    std::unique_ptr<Realm::ExternalInstanceResource> external_resource_cxx{nullptr};
-    if(external_resource != nullptr) {
-      // external instance
-
-      // convert the C API external instance resource to the C++ API external instance
-      // resource Do not delete the resource_cxx, it will be maintained by the
-      // RegionInstanceImpl
-      realm_status_t status = convert_external_instance_resource_c_to_cxx(
-          external_resource, external_resource_cxx);
-      if(status != REALM_SUCCESS) {
-        return status;
-      }
-    }
-    // create instance layout
-    // smoosh hybrid block sizes back to SOA for now
-    if(block_size > 1) {
-      block_size = 0;
-    }
-    Realm::InstanceLayoutConstraints ilc(field_ids, field_sizes, num_fields, block_size);
     // We use fortran order here
     Realm::Rect<N, T> rect;
-    int dim_order[N];
     for(int dim = 0; dim < N; dim++) {
-      dim_order[dim] = dim;
       rect.lo[dim] = lower_bound[dim];
       rect.hi[dim] = upper_bound[dim];
     }
-    Realm::InstanceLayoutGeneric *layout =
-        Realm::InstanceLayoutGeneric::choose_instance_layout<N, T>(
-            Realm::IndexSpace<N, T>(rect), ilc, dim_order);
-
-    out_event = Realm::RegionInstanceImpl::create_instance(
-        runtime_impl, inst, Realm::Memory(memory), layout, external_resource_cxx.get(),
-        prs, wait_on);
+    instance_layout = Realm::InstanceLayoutGeneric::choose_instance_layout<N, T>(
+        Realm::IndexSpace<N, T>(rect), ilc, dim_order);
     return REALM_SUCCESS;
   }
 };
@@ -1204,45 +1213,176 @@ realm_status_t realm_region_instance_create(
     prs_cxx = reinterpret_cast<const Realm::ProfilingRequestSet *>(prs);
   }
 
-  Realm::RegionInstance inst = Realm::RegionInstance::NO_INST;
-  Realm::Event out_event = Realm::Event::NO_EVENT;
+  // create instance layout constraints
+  // smoosh hybrid block sizes back to SOA for now
+  int block_size = instance_creation_params->block_size;
+  if(instance_creation_params->block_size > 1) {
+    block_size = 0;
+  }
 
-  switch(instance_creation_params->coord_type) {
+  // default with fortran order
+  const realm_index_space_t &space = instance_creation_params->space;
+  std::vector<int> dim_order(space.num_dims);
+  for(int dim = 0; dim < space.num_dims; dim++) {
+    dim_order[dim] = dim;
+  }
+  Realm::InstanceLayoutConstraints ilc(instance_creation_params->field_ids,
+                                       instance_creation_params->field_sizes,
+                                       instance_creation_params->num_fields, block_size);
+
+  // create instancelayout
+  Realm::InstanceLayoutGeneric *instance_layout = nullptr;
+  switch(space.coord_type) {
   case REALM_COORD_TYPE_LONG_LONG:
   {
-    const long long *lower_bound_long_long =
-        reinterpret_cast<const long long *>(instance_creation_params->lower_bound);
-    const long long *upper_bound_long_long =
-        reinterpret_cast<const long long *>(instance_creation_params->upper_bound);
-    status = realm_dim_dispatch<long long>(
-        instance_creation_params->num_dims, RealmRegionInstanceCreate(), runtime_impl,
-        Realm::Memory(instance_creation_params->memory), lower_bound_long_long,
-        upper_bound_long_long, instance_creation_params->field_ids,
-        instance_creation_params->field_sizes, instance_creation_params->num_fields,
-        instance_creation_params->block_size, instance_creation_params->external_resource,
-        *prs_cxx, Realm::Event(wait_on), inst, out_event);
+    const long long *lower_bound = reinterpret_cast<const long long *>(space.lower_bound);
+    const long long *upper_bound = reinterpret_cast<const long long *>(space.upper_bound);
+    status = realm_dim_dispatch<long long>(space.num_dims, RealmInstanceLayoutCreate(),
+                                           lower_bound, upper_bound, ilc,
+                                           dim_order.data(), instance_layout);
     break;
   }
   case REALM_COORD_TYPE_INT:
   {
-    const int *lower_bound_int =
-        reinterpret_cast<const int *>(instance_creation_params->lower_bound);
-    const int *upper_bound_int =
-        reinterpret_cast<const int *>(instance_creation_params->upper_bound);
-    status = realm_dim_dispatch<int>(
-        instance_creation_params->num_dims, RealmRegionInstanceCreate(), runtime_impl,
-        Realm::Memory(instance_creation_params->memory), lower_bound_int, upper_bound_int,
-        instance_creation_params->field_ids, instance_creation_params->field_sizes,
-        instance_creation_params->num_fields, instance_creation_params->block_size,
-        instance_creation_params->external_resource, *prs_cxx, Realm::Event(wait_on),
-        inst, out_event);
+    const int *lower_bound = reinterpret_cast<const int *>(space.lower_bound);
+    const int *upper_bound = reinterpret_cast<const int *>(space.upper_bound);
+    status =
+        realm_dim_dispatch<int>(space.num_dims, RealmInstanceLayoutCreate(), lower_bound,
+                                upper_bound, ilc, dim_order.data(), instance_layout);
     break;
   }
   default:
-  {
     return REALM_REGION_INSTANCE_ERROR_INVALID_COORD_TYPE;
   }
+
+  if(status != REALM_SUCCESS) {
+    return status;
   }
+
+  Realm::RegionInstance inst = Realm::RegionInstance::NO_INST;
+  Realm::Event out_event = Realm::Event::NO_EVENT;
+  status = realm_region_instance_create_common(
+      runtime_impl, instance_layout, instance_creation_params->memory,
+      instance_creation_params->external_resource, prs_cxx, wait_on, inst, out_event);
+
+  if(status != REALM_SUCCESS) {
+    delete instance_layout;
+    return status;
+  }
+
+  *instance = inst;
+  *event = out_event;
+  return status;
+}
+
+realm_status_t
+realm_instance_layout_c_to_cxx(const realm_instance_layout_t *instance_layout,
+                               Realm::InstanceLayoutGeneric *&instance_layout_cxx)
+{
+  // TODO: do not use the helper function.
+  std::vector<Realm::FieldID> field_ids(instance_layout->num_fields);
+  std::vector<size_t> field_sizes(instance_layout->num_fields);
+  for(size_t i = 0; i < instance_layout->num_fields; i++) {
+    field_ids[i] = instance_layout->field_layouts[i].field_id;
+    field_sizes[i] = instance_layout->field_layouts[i].size_in_bytes;
+  }
+  // default to SOA
+  int block_size = 0;
+  if(instance_layout->num_fields > 1) {
+    if(instance_layout->field_layouts[1].rel_offset ==
+       instance_layout->field_layouts[0].size_in_bytes) {
+      block_size = 1;
+    }
+  }
+
+  // create the instance layout constraints
+  Realm::InstanceLayoutConstraints ilc(field_ids, field_sizes, block_size);
+
+  realm_status_t status = REALM_SUCCESS;
+  const realm_index_space_t &space = instance_layout->space;
+  switch(space.coord_type) {
+  case REALM_COORD_TYPE_LONG_LONG:
+  {
+    const long long *lower_bound = reinterpret_cast<const long long *>(space.lower_bound);
+    const long long *upper_bound = reinterpret_cast<const long long *>(space.upper_bound);
+    status = realm_dim_dispatch<long long>(
+        space.num_dims, RealmInstanceLayoutCreate(), lower_bound, upper_bound, ilc,
+        instance_layout->dim_order, instance_layout_cxx);
+    break;
+  }
+  case REALM_COORD_TYPE_INT:
+  {
+    const int *lower_bound = reinterpret_cast<const int *>(space.lower_bound);
+    const int *upper_bound = reinterpret_cast<const int *>(space.upper_bound);
+    status = realm_dim_dispatch<int>(space.num_dims, RealmInstanceLayoutCreate(),
+                                     lower_bound, upper_bound, ilc,
+                                     instance_layout->dim_order, instance_layout_cxx);
+    break;
+  }
+  default:
+    return REALM_REGION_INSTANCE_ERROR_INVALID_COORD_TYPE;
+  }
+  instance_layout_cxx->alignment_reqd = instance_layout->alignment_reqd;
+  return status;
+}
+
+realm_status_t realm_region_instance_create_from_instance_layout(
+    realm_runtime_t runtime, const realm_instance_layout_t *instance_layout,
+    realm_memory_t memory, const realm_external_resource_t *external_resource,
+    realm_profiling_request_set_t prs, realm_event_t wait_on,
+    realm_region_instance_t *instance, realm_event_t *event)
+{
+  // parameter check
+  Realm::RuntimeImpl *runtime_impl = nullptr;
+  realm_status_t status = check_runtime_validity_and_assign(runtime, runtime_impl);
+  if(status != REALM_SUCCESS) {
+    return status;
+  }
+
+  status = check_instance_layout_validity(instance_layout);
+  if(status != REALM_SUCCESS) {
+    return status;
+  }
+
+  status = check_memory_validity(memory);
+  if(status != REALM_SUCCESS) {
+    return status;
+  }
+
+  status = check_event_validity(wait_on);
+  if(status != REALM_SUCCESS) {
+    return status;
+  }
+
+  if(instance == nullptr) {
+    return REALM_REGION_INSTANCE_ERROR_INVALID_INSTANCE;
+  }
+  if(event == nullptr) {
+    return REALM_REGION_INSTANCE_ERROR_INVALID_EVENT;
+  }
+
+  const Realm::ProfilingRequestSet *prs_cxx = &Realm::empty_prs_cxx;
+  if(prs != nullptr) {
+    prs_cxx = reinterpret_cast<const Realm::ProfilingRequestSet *>(prs);
+  }
+
+  Realm::RegionInstance inst = Realm::RegionInstance::NO_INST;
+  Realm::Event out_event = Realm::Event::NO_EVENT;
+
+  Realm::InstanceLayoutGeneric *instance_layout_cxx = nullptr;
+  status = realm_instance_layout_c_to_cxx(instance_layout, instance_layout_cxx);
+  if(status != REALM_SUCCESS) {
+    return status;
+  }
+  status = realm_region_instance_create_common(runtime_impl, instance_layout_cxx, memory,
+                                               external_resource, prs_cxx, wait_on, inst,
+                                               out_event);
+
+  if(status != REALM_SUCCESS) {
+    delete instance_layout_cxx;
+    return status;
+  }
+
   *instance = inst;
   *event = out_event;
   return status;
@@ -1314,33 +1454,31 @@ realm_status_t realm_region_instance_copy(
 
   Realm::Event out_event = Realm::Event::NO_EVENT;
 
-  switch(instance_copy_params->coord_type) {
+  const realm_index_space_t &space = instance_copy_params->space;
+
+  switch(space.coord_type) {
   case REALM_COORD_TYPE_LONG_LONG:
   {
     const long long *lower_bound_long_long =
-        reinterpret_cast<const long long *>(instance_copy_params->lower_bound);
+        reinterpret_cast<const long long *>(space.lower_bound);
     const long long *upper_bound_long_long =
-        reinterpret_cast<const long long *>(instance_copy_params->upper_bound);
+        reinterpret_cast<const long long *>(space.upper_bound);
     status = realm_dim_dispatch<long long>(
-        instance_copy_params->num_dims, RealmRegionInstanceCopy(), runtime_impl,
-        std::move(srcs_vec), std::move(dsts_vec), instance_copy_params->num_fields,
-        lower_bound_long_long, upper_bound_long_long, instance_copy_params->num_dims,
-        instance_copy_params->sparsity_map, *prs_cxx, Realm::Event(wait_on), priority,
-        out_event);
+        space.num_dims, RealmRegionInstanceCopy(), runtime_impl, std::move(srcs_vec),
+        std::move(dsts_vec), instance_copy_params->num_fields, lower_bound_long_long,
+        upper_bound_long_long, space.num_dims, space.sparsity_map, *prs_cxx,
+        Realm::Event(wait_on), priority, out_event);
     break;
   }
   case REALM_COORD_TYPE_INT:
   {
-    const int *lower_bound_int =
-        reinterpret_cast<const int *>(instance_copy_params->lower_bound);
-    const int *upper_bound_int =
-        reinterpret_cast<const int *>(instance_copy_params->upper_bound);
+    const int *lower_bound_int = reinterpret_cast<const int *>(space.lower_bound);
+    const int *upper_bound_int = reinterpret_cast<const int *>(space.upper_bound);
     status = realm_dim_dispatch<int>(
-        instance_copy_params->num_dims, RealmRegionInstanceCopy(), runtime_impl,
-        std::move(srcs_vec), std::move(dsts_vec), instance_copy_params->num_fields,
-        lower_bound_int, upper_bound_int, instance_copy_params->num_dims,
-        instance_copy_params->sparsity_map, *prs_cxx, Realm::Event(wait_on), priority,
-        out_event);
+        space.num_dims, RealmRegionInstanceCopy(), runtime_impl, std::move(srcs_vec),
+        std::move(dsts_vec), instance_copy_params->num_fields, lower_bound_int,
+        upper_bound_int, space.num_dims, space.sparsity_map, *prs_cxx,
+        Realm::Event(wait_on), priority, out_event);
     break;
   }
   default:
