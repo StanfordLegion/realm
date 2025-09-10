@@ -159,6 +159,9 @@ install(
 )
 
 export(PACKAGE Realm)
+export(EXPORT Realm_targets
+       FILE "${CMAKE_CURRENT_BINARY_DIR}/Realm-${lib_type}-targets.cmake"
+       NAMESPACE Realm::)
 #endregion
 
 #region Documentation
