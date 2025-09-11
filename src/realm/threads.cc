@@ -887,7 +887,7 @@ namespace Realm {
         assert(ret == 0);
       } else {
         // The current stack is not ours, because someone did not clean up after
-        // themselves. We should not touch it in any way in case they intent to retrieve
+        // themselves. We should not touch it in any way in case they intend to retrieve
         // it.
         //
         // There's not much we can do in this case.
