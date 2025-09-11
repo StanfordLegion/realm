@@ -843,13 +843,15 @@ namespace Realm {
     KernelThread *thread = (KernelThread *)data;
 
 #ifdef REALM_USE_ALTSTACK
+    stack_t old_stack{};
+
     // install our alt stack (if it exists) for signal handling
     if(thread->altstack_base != 0) {
       stack_t altstack;
       altstack.ss_sp = thread->altstack_base;
       altstack.ss_flags = 0;
       altstack.ss_size = thread->altstack_size;
-      int ret = sigaltstack(&altstack, 0);
+      int ret = sigaltstack(&altstack, &old_stack);
       assert(ret == 0);
     }
 #endif
@@ -873,29 +875,24 @@ namespace Realm {
 #ifdef REALM_USE_ALTSTACK
     // uninstall and free our alt stack (if it exists)
     if(thread->altstack_base != 0) {
-      // The manual for sigaltstack states:
-      //
-      // > SS_DISABLE: The stack is to be disabled and ss_sp and ss_size
-      //               are ignored.
-      //
-      // This holds everywhere except macOS, which seemingly does not ignore
-      // ss_sp and ss_size if ss_flags is SS_DISABLE. Instead, it fails with
-      // ENOMEM (perhaps it tries to allocate some temporaries on the stack
-      // before disabling it). So pass in the original values for the disabled
-      // stack to pacify it.
-      stack_t disabled;
-      disabled.ss_sp = thread->altstack_base;
-      disabled.ss_flags = SS_DISABLE;
-      disabled.ss_size = thread->altstack_size;
-      stack_t oldstack;
-      int ret = sigaltstack(&disabled, &oldstack);
+      stack_t current_stack{};
+      int ret{};
+
+      ret = sigaltstack(nullptr, &current_stack);
       assert(ret == 0);
-      // in a perfect world, we'd double-check that it's our stack we
-      //  unloaded, but some libraries (e.g. libpython 3.4) do not clean
-      //  up properly, so our stack may not have been active anyway
-      // either way though, it's not active after the call above, so it's
-      //  safe to free the memory now
-      // assert(oldstack.ss_sp == thread->altstack_base);
+      if(current_stack.ss_sp == thread->altstack_base) {
+        // The current stack is the one we installed previously. It is safe to restore the
+        // old one.
+        ret = sigaltstack(&old_stack, nullptr);
+        assert(ret == 0);
+      } else {
+        // The current stack is not ours, because someone did not clean up after
+        // themselves. We should not touch it in any way in case they intent to retrieve
+        // it.
+        //
+        // There's not much we can do in this case.
+      }
+      static_cast<void>(ret);
       free(thread->altstack_base);
     }
 #endif
