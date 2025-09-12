@@ -138,6 +138,9 @@ namespace Realm {
     //  track that
     std::map<std::pair<size_t, size_t>, size_t> pl_indexes, pl_starts, pl_sizes;
 
+    size_t field_stride = 0;
+    layout->idindexed_fields = true;
+
     // reserve space so that we don't have to copy piece lists as we grow
     layout->piece_lists.reserve(ilc.field_groups.size());
     for(size_t i = 0; i < ilc.field_groups.size(); i++) {
@@ -147,6 +150,7 @@ namespace Realm {
       //  pieces
       size_t gsize = 0;
       size_t galign = 1;
+
       // we can't set field offsets in a single pass because we don't know
       //  the whole group's alignment until we look at every field
       std::map<FieldID, size_t> field_offsets;
@@ -166,6 +170,7 @@ namespace Realm {
         }
         // increase size and alignment if needed
         gsize = max(gsize, offset + it2->size);
+
         if((it2->alignment > 1) && ((galign % it2->alignment) != 0))
           galign = lcm(galign, size_t(it2->alignment));
         field_offsets[it2->field_id] = offset;
@@ -182,13 +187,14 @@ namespace Realm {
       std::pair<size_t, size_t> pl_key(gsize, galign);
       std::map<std::pair<size_t, size_t>, size_t>::const_iterator it =
           pl_indexes.find(pl_key);
+
       size_t li;
       size_t reuse_offset;
+
       if(it != pl_indexes.end()) {
         li = it->second;
         size_t piece_start = round_up(layout->bytes_used, galign);
         reuse_offset = piece_start - pl_starts[pl_key];
-
         // we're not going to create piece lists, but we still have to update
         //  the overall size
         layout->bytes_used = piece_start + pl_sizes[pl_key];
@@ -229,6 +235,9 @@ namespace Realm {
           // final value of stride is total bytes used by piece - use that
           //  to set new instance footprint
           layout->bytes_used = piece_start + stride;
+          if(field_stride == 0) {
+            field_stride = stride;
+          }
 
           pl.pieces.push_back(piece);
         }
@@ -242,10 +251,69 @@ namespace Realm {
           it2 != field_offsets.end(); ++it2) {
         // should not have seen this field before
         assert(layout->fields.count(it2->first) == 0);
+
+        layout->idindexed_fields &=
+            (static_cast<size_t>(it2->first * field_stride) == reuse_offset);
+
         InstanceLayoutGeneric::FieldLayout &fl = layout->fields[it2->first];
         fl.list_idx = li;
         fl.rel_offset = /*group_offset +*/ it2->second + reuse_offset;
         fl.size_in_bytes = field_sizes[it2->first];
+      }
+    }
+
+    // Compute preferred dimension ordering for idindexed_fields
+    if(layout->idindexed_fields) {
+      layout->preferred_dim_order.clear();
+      std::vector<int> preferred;
+      preferred.reserve(N);
+
+      // Consider all fields
+      for(InstanceLayoutGeneric::FieldMap::const_iterator it = layout->fields.begin();
+          it != layout->fields.end(); ++it) {
+        const InstancePieceList<N, T> &ipl = layout->piece_lists[it->second.list_idx];
+
+        for(typename std::vector<InstanceLayoutPiece<N, T> *>::const_iterator it2 =
+                ipl.pieces.begin();
+            it2 != ipl.pieces.end(); ++it2) {
+
+          const AffineLayoutPiece<N, T> *affine =
+              static_cast<const AffineLayoutPiece<N, T> *>(*it2);
+
+          preferred.clear();
+          for(int d = 0; d < N; d++) {
+            preferred.push_back(d);
+          }
+
+          // Sort dimensions by stride
+          std::sort(preferred.begin(), preferred.end(), [&](int a, int b) {
+            return affine->strides[a] < affine->strides[b];
+          });
+
+          // Reconcile dimensions orders
+          if(preferred.size() > layout->preferred_dim_order.size()) {
+            if(std::equal(layout->preferred_dim_order.begin(),
+                          layout->preferred_dim_order.end(), preferred.begin())) {
+              layout->preferred_dim_order = preferred;
+            }
+          }
+
+          preferred.clear();
+        }
+      }
+
+      // If we didn't end up choosing all the dimensions, add the rest back in
+      //  in arbitrary (ascending, currently) order (matches transfer.cc logic)
+      if(layout->preferred_dim_order.size() != N) {
+        std::vector<bool> present(N, false);
+        for(size_t i = 0; i < layout->preferred_dim_order.size(); i++) {
+          present[layout->preferred_dim_order[i]] = true;
+        }
+        for(int i = 0; i < N; i++) {
+          if(!present[i]) {
+            layout->preferred_dim_order.push_back(i);
+          }
+        }
       }
     }
 
@@ -511,7 +579,8 @@ namespace Realm {
   {
     InstanceLayout<N, T> *il = new InstanceLayout<N, T>;
     if((s >> il->bytes_used) && (s >> il->alignment_reqd) && (s >> il->fields) &&
-       (s >> il->space) && (s >> il->piece_lists)) {
+       (s >> il->idindexed_fields) && (s >> il->space) && (s >> il->piece_lists) &&
+       (s >> il->preferred_dim_order)) {
       return il;
     } else {
       delete il;
@@ -530,7 +599,9 @@ namespace Realm {
     copy->bytes_used = bytes_used;
     copy->alignment_reqd = alignment_reqd;
     copy->fields = fields;
+    copy->idindexed_fields = idindexed_fields;
     copy->space = space;
+    copy->preferred_dim_order = preferred_dim_order;
     copy->piece_lists.resize(piece_lists.size());
     for(size_t i = 0; i < piece_lists.size(); i++) {
       copy->piece_lists[i].pieces.resize(piece_lists[i].pieces.size());
@@ -554,8 +625,7 @@ namespace Realm {
   {
     os << "Layout(bytes=" << bytes_used << ", align=" << alignment_reqd << ", fields={";
     bool first = true;
-    for(std::map<FieldID, FieldLayout>::const_iterator it = fields.begin();
-        it != fields.end(); ++it) {
+    for(FieldMap::const_iterator it = fields.begin(); it != fields.end(); ++it) {
       if(!first)
         os << ", ";
       first = false;
@@ -582,8 +652,7 @@ namespace Realm {
   inline size_t InstanceLayout<N, T>::calculate_offset(Point<N, T> p, FieldID fid) const
   {
     // first look up the field to see which piece list it uses (and get offset)
-    std::map<FieldID, InstanceLayoutGeneric::FieldLayout>::const_iterator it =
-        fields.find(fid);
+    FieldMap::const_iterator it = fields.find(fid);
     assert(it != fields.end());
 
     const InstanceLayoutPiece<N, T> *ilp = piece_lists[it->second.list_idx].find_piece(p);
@@ -598,8 +667,9 @@ namespace Realm {
   template <typename S>
   inline bool InstanceLayout<N, T>::serialize(S &s) const
   {
-    return ((s << bytes_used) && (s << alignment_reqd) && (s << fields) && (s << space) &&
-            (s << piece_lists));
+    return ((s << bytes_used) && (s << alignment_reqd) && (s << fields) &&
+            (s << idindexed_fields) && (s << space) && (s << piece_lists) &&
+            (s << preferred_dim_order));
   }
 
   ////////////////////////////////////////////////////////////////////////
@@ -769,8 +839,7 @@ namespace Realm {
     // find the right piece list for our field
     const InstanceLayout<N, T> *layout =
         checked_cast<const InstanceLayout<N, T> *>(inst.get_layout());
-    std::map<FieldID, InstanceLayoutGeneric::FieldLayout>::const_iterator it =
-        layout->fields.find(field_id);
+    InstanceLayoutGeneric::FieldMap::const_iterator it = layout->fields.find(field_id);
     assert(it != layout->fields.end());
 
     this->piece_list = &layout->piece_lists[it->second.list_idx];
@@ -789,8 +858,7 @@ namespace Realm {
     // find the right piece list for our field
     const InstanceLayout<N, T> *layout =
         checked_cast<const InstanceLayout<N, T> *>(inst.get_layout());
-    std::map<FieldID, InstanceLayoutGeneric::FieldLayout>::const_iterator it =
-        layout->fields.find(field_id);
+    InstanceLayoutGeneric::FieldMap::const_iterator it = layout->fields.find(field_id);
     assert(it != layout->fields.end());
 
     this->piece_list = &layout->piece_lists[it->second.list_idx];
@@ -913,8 +981,7 @@ namespace Realm {
   {
     const InstanceLayout<N, T> *layout =
         checked_cast<const InstanceLayout<N, T> *>(inst.get_layout());
-    std::map<FieldID, InstanceLayoutGeneric::FieldLayout>::const_iterator it =
-        layout->fields.find(field_id);
+    InstanceLayoutGeneric::FieldMap::const_iterator it = layout->fields.find(field_id);
     assert(it != layout->fields.end());
     const InstancePieceList<N, T> &ipl = layout->piece_lists[it->second.list_idx];
 
@@ -963,8 +1030,7 @@ namespace Realm {
   {
     const InstanceLayout<N, T> *layout =
         checked_cast<const InstanceLayout<N, T> *>(inst.get_layout());
-    std::map<FieldID, InstanceLayoutGeneric::FieldLayout>::const_iterator it =
-        layout->fields.find(field_id);
+    InstanceLayoutGeneric::FieldMap::const_iterator it = layout->fields.find(field_id);
     assert(it != layout->fields.end());
     const InstancePieceList<N, T> &ipl = layout->piece_lists[it->second.list_idx];
 
@@ -1020,8 +1086,7 @@ namespace Realm {
     // instance's dimensionality should be <N2,T2>
     const InstanceLayout<N2, T2> *layout =
         checked_cast<const InstanceLayout<N2, T2> *>(inst.get_layout());
-    std::map<FieldID, InstanceLayoutGeneric::FieldLayout>::const_iterator it =
-        layout->fields.find(field_id);
+    InstanceLayoutGeneric::FieldMap::const_iterator it = layout->fields.find(field_id);
     assert(it != layout->fields.end());
     const InstancePieceList<N2, T2> &ipl = layout->piece_lists[it->second.list_idx];
 
@@ -1088,8 +1153,7 @@ namespace Realm {
     // instance's dimensionality should be <N2,T2>
     const InstanceLayout<N2, T2> *layout =
         checked_cast<const InstanceLayout<N2, T2> *>(inst.get_layout());
-    std::map<FieldID, InstanceLayoutGeneric::FieldLayout>::const_iterator it =
-        layout->fields.find(field_id);
+    InstanceLayoutGeneric::FieldMap::const_iterator it = layout->fields.find(field_id);
     assert(it != layout->fields.end());
     const InstancePieceList<N2, T2> &ipl = layout->piece_lists[it->second.list_idx];
 
@@ -1146,8 +1210,7 @@ namespace Realm {
   {
     const InstanceLayout<N, T> *layout =
         checked_cast<const InstanceLayout<N, T> *>(inst.get_layout());
-    std::map<FieldID, InstanceLayoutGeneric::FieldLayout>::const_iterator it =
-        layout->fields.find(field_id);
+    InstanceLayoutGeneric::FieldMap::const_iterator it = layout->fields.find(field_id);
     if(it == layout->fields.end())
       return false;
     const InstancePieceList<N, T> &ipl = layout->piece_lists[it->second.list_idx];
@@ -1173,8 +1236,7 @@ namespace Realm {
   {
     const InstanceLayout<N, T> *layout =
         checked_cast<const InstanceLayout<N, T> *>(inst.get_layout());
-    std::map<FieldID, InstanceLayoutGeneric::FieldLayout>::const_iterator it =
-        layout->fields.find(field_id);
+    InstanceLayoutGeneric::FieldMap::const_iterator it = layout->fields.find(field_id);
     if(it == layout->fields.end())
       return false;
     const InstancePieceList<N, T> &ipl = layout->piece_lists[it->second.list_idx];
@@ -1209,8 +1271,7 @@ namespace Realm {
     // instance's dimensionality should be <N2,T2>
     const InstanceLayout<N2, T2> *layout =
         checked_cast<const InstanceLayout<N2, T2> *>(inst.get_layout());
-    std::map<FieldID, InstanceLayoutGeneric::FieldLayout>::const_iterator it =
-        layout->fields.find(field_id);
+    InstanceLayoutGeneric::FieldMap::const_iterator it = layout->fields.find(field_id);
     if(it == layout->fields.end())
       return false;
     const InstancePieceList<N2, T2> &ipl = layout->piece_lists[it->second.list_idx];
@@ -1238,8 +1299,7 @@ namespace Realm {
     // instance's dimensionality should be <N2,T2>
     const InstanceLayout<N2, T2> *layout =
         checked_cast<const InstanceLayout<N2, T2> *>(inst.get_layout());
-    std::map<FieldID, InstanceLayoutGeneric::FieldLayout>::const_iterator it =
-        layout->fields.find(field_id);
+    InstanceLayoutGeneric::FieldMap::const_iterator it = layout->fields.find(field_id);
     if(it == layout->fields.end())
       return false;
     const InstancePieceList<N2, T2> &ipl = layout->piece_lists[it->second.list_idx];
