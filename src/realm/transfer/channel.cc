@@ -3894,13 +3894,18 @@ namespace Realm {
 
   void RemoteChannel::register_redop(ReductionOpID redop_id)
   {
-    RWLock::AutoWriterLock al(mutex);
+    AutoLock<Mutex> al(mutex);
+    redop_is_registering.store(true);
     (void)supported_redops.insert(redop_id);
+    redop_is_registering.store_release(false);
   }
 
   bool RemoteChannel::supports_redop(ReductionOpID redop_id) const
   {
-    RWLock::AutoReaderLock al(mutex);
+    while (redop_is_registering.load_acquire() == true) {
+      // we may just busy loop here
+      Thread::yield();
+    }
     return supported_redops.count(redop_id) != 0;
   }
 

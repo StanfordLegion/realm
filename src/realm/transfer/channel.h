@@ -976,11 +976,12 @@ namespace Realm {
     void wakeup_xd(XferDes *xd) override { assert(0); }
 
   protected:
-    mutable RWLock mutex;
+    Mutex mutex;
     uintptr_t remote_ptr;
     std::set<ReductionOpID> supported_redops;
     SimpleXferDesFactory factory_singleton;
     const std::set<Memory> indirect_memories;
+    atomic<bool> redop_is_registering{false};
   };
 
   template <typename CHANNEL, typename XD>
