@@ -996,7 +996,7 @@ bool scatter_gather_test(const std::vector<Memory> &sys_mems,
     r2.hi[i] = TestConfig::sizes2[i] - 1;
   }
 
-  log_app.info() << "Run testcase for N=" << N << " N2=" << N2 << " src_bounds=" << r1
+  log_app.error() << "Run testcase for N=" << N << " N2=" << N2 << " src_bounds=" << r1
                  << " dst_bounds=" << r2;
 
   IndexSpace<N, T> is1(r1);

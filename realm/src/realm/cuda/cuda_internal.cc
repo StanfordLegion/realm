@@ -894,31 +894,32 @@ namespace Realm {
     ////////////////////////////////////////////////////////////////////////
     //
     // class GPUIndirectXferDes
-
-    static void launch_indirect_kernel(GPU *gpu, GPUStream *stream, size_t num_dims,
-                                       size_t addr_type_size, size_t field_size,
-                                       size_t bytes, const std::vector<size_t> &strides,
-                                       uintptr_t in_base, uintptr_t out_base,
-                                       uintptr_t src_ind_base, uintptr_t dst_ind_base)
-    {
-      MemcpyIndirectInfo<3, size_t> memcpy_info;
-      memset(&memcpy_info, 0, sizeof(MemcpyIndirectInfo<3, size_t>));
-      memcpy_info.src_ind_addr = src_ind_base;
-      memcpy_info.dst_ind_addr = dst_ind_base;
-      memcpy_info.src_addr = in_base;
-      memcpy_info.dst_addr = out_base;
-      memcpy_info.field_size = field_size;
-      assert(memcpy_info.field_size > 0);
-      memcpy_info.volume = bytes / field_size;
-      assert(memcpy_info.volume > 0);
-      for(size_t i = 0; i < num_dims; i++) {
-        memcpy_info.src_strides[i] = strides[i] / field_size;
-        memcpy_info.dst_strides[i] = strides[i] / field_size;
+    namespace {
+      void launch_indirect_kernel(GPU *gpu, GPUStream *stream, size_t num_dims,
+                                  size_t addr_type_size, size_t field_size, size_t bytes,
+                                  const std::vector<size_t> &strides, uintptr_t in_base,
+                                  uintptr_t out_base, uintptr_t src_ind_base,
+                                  uintptr_t dst_ind_base)
+      {
+        MemcpyIndirectInfo<3, size_t> memcpy_info;
+        memset(&memcpy_info, 0, sizeof(MemcpyIndirectInfo<3, size_t>));
+        memcpy_info.src_ind_addr = src_ind_base;
+        memcpy_info.dst_ind_addr = dst_ind_base;
+        memcpy_info.src_addr = in_base;
+        memcpy_info.dst_addr = out_base;
+        memcpy_info.field_size = field_size;
+        assert(memcpy_info.field_size > 0);
+        memcpy_info.volume = bytes / field_size;
+        assert(memcpy_info.volume > 0);
+        for(size_t i = 0; i < num_dims; i++) {
+          memcpy_info.src_strides[i] = strides[i] / field_size;
+          memcpy_info.dst_strides[i] = strides[i] / field_size;
+        }
+        gpu->launch_indirect_copy_kernel(&memcpy_info, num_dims, addr_type_size,
+                                         memcpy_info.field_size, memcpy_info.volume,
+                                         stream);
       }
-      gpu->launch_indirect_copy_kernel(&memcpy_info, num_dims, addr_type_size,
-                                       memcpy_info.field_size, memcpy_info.volume,
-                                       stream);
-    }
+    } // namespace
 
     GPUIndirectXferDes::GPUIndirectXferDes(
         uintptr_t _dma_op, Channel *_channel, NodeID _launch_node, XferDesID _guid,
@@ -1042,13 +1043,11 @@ namespace Realm {
         int ind_num_dims = act_dim - 2;
 
         // compute addr sizes for indirection buffer
-        size_t addr_size = in_port->iter->get_address_size(); // sizeof(Point<N,T>)
-        size_t addr_type_size = addr_size / ((ind_num_dims > 0) ? ind_num_dims : 1);
+        size_t addr_size = in_port->iter->get_address_size();
 
         std::cout << "act_dim:" << act_dim << " field_size:" << field_size
                   << " line_stride:" << line_stride << " plane_stride:" << plane_stride
-                  << " add_size:" << addr_size << " add_tp_size:" << addr_type_size
-                  << std::endl;
+                  << " add_size:" << addr_size << std::endl;
 
         //--------------------------------------------------------------//
         // 4.  Resolve indirection buffer bases
@@ -1063,7 +1062,7 @@ namespace Realm {
           read_ind_bytes = (total_bytes / field_size) * addr_size;
 
           in_base += base_offset;
-          //src_ind_base += (base_offset / field_size) * addr_size;
+          // src_ind_base += (base_offset / field_size) * addr_size;
 
         } else {
           in_base += in_cur.get_offset();
@@ -1090,7 +1089,7 @@ namespace Realm {
         AutoGPUContext agc(stream->get_gpu());
         assert(!in_nonaffine && !out_nonaffine);
 
-        launch_indirect_kernel(in_gpu, stream, ind_num_dims, addr_type_size, field_size,
+        launch_indirect_kernel(in_gpu, stream, ind_num_dims, addr_size, field_size,
                                total_bytes, strides, in_base, out_base, src_ind_base,
                                dst_ind_base);
 
@@ -1119,195 +1118,6 @@ namespace Realm {
       rseqcache.flush();
       return did_work;
     }
-
-    /*bool GPUIndirectXferDes::progress_xd(GPUIndirectChannel *channel,
-                                         TimeLimit work_until)
-    {
-      bool did_work = false;
-      // TODO: add span
-      ReadSequenceCache rseqcache(this, 2 << 20);
-
-      while(true) {
-        size_t min_xfer_size = 4 << 20;
-        const InstanceLayoutPieceBase *in_nonaffine, *out_nonaffine;
-
-        size_t in_span_start = 0, out_span_start = 0;
-        XferPort *in_port = 0, *out_port = 0;
-        GPU *in_gpu = 0, *out_gpu = 0;
-        bool out_is_ipc = false;
-
-        if(input_control.current_io_port >= 0) {
-          in_port = &input_ports[input_control.current_io_port];
-          in_gpu = this->src_gpus[input_control.current_io_port];
-          in_span_start = in_port->local_bytes_total;
-        }
-
-        if(output_control.current_io_port >= 0) {
-          out_port = &output_ports[output_control.current_io_port];
-          out_gpu = this->dst_gpus[output_control.current_io_port];
-          out_is_ipc = this->dst_is_ipc[output_control.current_io_port];
-          out_span_start = out_port->local_bytes_total;
-        }
-
-        assert(in_port != nullptr);
-        assert(out_port != nullptr);
-
-        size_t max_bytes =
-            get_addresses(min_xfer_size, &rseqcache, in_nonaffine, out_nonaffine);
-        log_gpudma.info() << "cuda gather/scatter copy"
-                          << " xd=" << std::hex << guid << std::dec
-                          << " min_xfer_size=" << min_xfer_size
-                          << " max_bytes=" << max_bytes << " xd=" << std::hex
-                          << out_port->peer_guid << std::dec;
-
-        if(max_bytes == 0) {
-          break;
-        }
-
-        size_t total_bytes = 0;
-
-        uintptr_t in_base = 0;
-        if(!in_nonaffine) {
-          in_base = reinterpret_cast<uintptr_t>(in_port->mem->get_direct_ptr(0, 0));
-        }
-
-        uintptr_t out_base = 0;
-        const GPU::CudaIpcMapping *out_mapping = 0;
-        if(!out_nonaffine) {
-          if(out_is_ipc) {
-            out_mapping = in_gpu->find_ipc_mapping(out_port->mem->me);
-            assert(out_mapping);
-            out_base = out_mapping->local_base;
-          } else {
-            out_base = reinterpret_cast<uintptr_t>(out_port->mem->get_direct_ptr(0, 0));
-          }
-        }
-
-        TransferIterator::AddressInfo addr_info;
-        memset(&addr_info, 0, sizeof(TransferIterator::AddressInfo));
-
-        size_t addr_size = 0;
-
-        AddressListCursor &in_alc = in_port->addrcursor;
-        AddressListCursor &out_alc = out_port->addrcursor;
-
-        size_t write_ind_bytes = 0;
-        uintptr_t dst_ind_base = 0;
-        if(out_port->indirect_port_idx >= 0) {
-          // scatter
-          out_port->iter->step(max_bytes, addr_info, 0, 0);
-          addr_size = out_port->iter->get_address_size();
-
-          dst_ind_base = reinterpret_cast<uintptr_t>(
-              input_ports[out_port->indirect_port_idx].mem->get_direct_ptr(
-                  out_port->iter->get_base_offset(), 0));
-
-          out_base += addr_info.base_offset;
-          dst_ind_base += (out_alc.get_offset() / addr_info.bytes_per_chunk) * addr_size;
-        } else {
-          out_base += out_alc.get_offset();
-        }
-
-        size_t read_ind_bytes = 0;
-        uintptr_t src_ind_base = 0;
-        if(in_port->indirect_port_idx >= 0) {
-          // gather
-          in_port->iter->step(max_bytes, addr_info, 0, 0);
-          addr_size = in_port->iter->get_address_size();
-
-          src_ind_base = reinterpret_cast<uintptr_t>(
-              input_ports[in_port->indirect_port_idx].mem->get_direct_ptr(
-                  in_port->iter->get_base_offset(), 0));
-
-          in_base += addr_info.base_offset;
-          src_ind_base += (in_alc.get_offset() / addr_info.bytes_per_chunk) * addr_size;
-        } else {
-          in_base += in_alc.get_offset();
-        }
-
-        log_gpudma.info() << "cuda gathe/scatter bytes_per_chunk="
-                          << addr_info.bytes_per_chunk
-                          << " num_lines=" << addr_info.num_lines
-                          << " line_stride=" << addr_info.line_stride
-                          << " num_planes=" << addr_info.num_planes
-                          << " plane_stride=" << addr_info.plane_stride
-                          << " base_offset=" << in_port->iter->get_base_offset();
-
-        std::vector<size_t> strides{addr_info.bytes_per_chunk, addr_info.line_stride,
-                                    addr_info.plane_stride};
-        size_t field_size = strides[0];
-        size_t num_dims =
-            addr_info.num_planes > 0 ? 3 : (addr_info.num_lines > 0 ? 2 : 1);
-        for(size_t i = 1; i < num_dims; i++) {
-          if(strides[i] > 0 && field_size >= strides[i]) {
-            field_size = strides[i];
-          }
-        }
-
-        size_t addr_type_size = addr_size / num_dims;
-
-        if(in_port->indirect_port_idx >= 0)
-          read_ind_bytes = (max_bytes / field_size) * addr_size;
-        else
-          write_ind_bytes = (max_bytes / field_size) * addr_size;
-
-        auto stream = select_stream(out_gpu, in_gpu, channel->get_gpu(), out_mapping,
-                                    in_port->mem, out_port->mem);
-        AutoGPUContext agc(stream->get_gpu());
-
-        // We can't do gather-scatter yet.
-        assert(!(out_port->indirect_port_idx >= 0 && in_port->indirect_port_idx >= 0));
-        assert(!in_nonaffine && !out_nonaffine);
-
-        log_gpudma.info() << "\t launching cuda gather/scatter "
-                          << "xd:" << std::hex << guid << std::dec
-                          << " bytes:" << max_bytes << " addr_size:" << addr_size
-                          << " num_dims:" << num_dims
-                          << " addr_type_size:" << addr_type_size;
-
-        launch_indirect_kernel(in_gpu, stream, num_dims, addr_type_size, field_size,
-                               max_bytes, strides, in_base, out_base, src_ind_base,
-                               dst_ind_base);
-
-        in_alc.advance(0, max_bytes);
-        out_alc.advance(0, max_bytes);
-
-        // TODO(apryakhin@): Add control flow
-        total_bytes += max_bytes;
-        size_t bytes_to_fence = total_bytes;
-        if((total_bytes >= min_xfer_size) && work_until.is_expired()) {
-          break;
-        }
-
-        if(bytes_to_fence > 0) {
-          add_reference();
-          log_gpudma.info() << "cuda gather/scatter fence: stream=" << stream << " "
-                            << " xd=" << std::hex << guid << std::dec
-                            << " bytes:" << bytes_to_fence
-                            << " in_spart_start:" << in_span_start
-                            << " out_span_start:" << out_span_start
-                            << " read_ind_bytes:" << read_ind_bytes
-                            << " write_ind_bytes:" << write_ind_bytes;
-
-          stream->add_notification(new GPUIndirectTransferCompletion(
-              this, input_control.current_io_port, in_span_start, total_bytes,
-              output_control.current_io_port, out_span_start, bytes_to_fence,
-              in_port->indirect_port_idx, 0, read_ind_bytes, out_port->indirect_port_idx,
-              0, write_ind_bytes));
-        }
-
-        if(total_bytes > 0) {
-          did_work = true;
-          bool done = record_address_consumption(total_bytes, total_bytes);
-          if(done || work_until.is_expired()) {
-            break;
-          }
-        }
-      }
-
-      rseqcache.flush();
-      return did_work;
-    }*/
 
     ////////////////////////////////////////////////////////////////////////
     //
@@ -1544,17 +1354,17 @@ namespace Realm {
       // ------------------------------------------------------------------
       // mandatory virtuals
       // ------------------------------------------------------------------
-      virtual Event request_metadata(void) { return Event::NO_EVENT; }
+      Event request_metadata(void) override { return Event::NO_EVENT; }
 
-      virtual void set_indirect_input_port(XferDes *xd, int port_idx,
-                                           TransferIterator *inner_iter)
+      void set_indirect_input_port(XferDes *xd, int port_idx,
+                                   TransferIterator *inner_iter) override
       {
         indirect_xd = xd;
         indirect_port_idx = port_idx;
         addrs_in = inner_iter;
       }
 
-      virtual void reset(void)
+      void reset(void) override
       {
         piece_idx = 0;
         field_idx = 0;
@@ -1562,20 +1372,17 @@ namespace Realm {
         have_piece = false;
       }
 
-      virtual bool done(void) { return (field_idx >= fields.size()); }
+      bool done(void) override { return (field_idx >= fields.size()); }
+      size_t get_address_size(void) const override { return sizeof(T); }
 
-      // amount of memory one element occupies for current field
-      virtual size_t get_field_size(void) const { return fld_sizes[field_idx]; }
-
-      virtual size_t get_address_size(void) const { return sizeof(T); }
-
-      virtual FieldID get_field_id(void) const { return fields[field_idx]; }
+      // size_t get_field_size(void) const { return fld_sizes[field_idx]; }
+      // FieldID get_field_id(void) const { return fields[field_idx]; }
 
       // ------------------------------------------------------------------
       // iteration – AddressList / AddressInfo interface
       // ------------------------------------------------------------------
-      virtual size_t step(size_t max_bytes, AddressInfo &info, unsigned /*flags*/,
-                          bool /*tentative*/ = false)
+      size_t step(size_t max_bytes, AddressInfo &info, unsigned /*flags*/,
+                  bool /*tentative*/ = false) override
       {
         // no work left?
         if(done()) {
@@ -1621,21 +1428,21 @@ namespace Realm {
         return bytes_this_step;
       }
 
-      virtual size_t step_custom(size_t, AddressInfoCustom &, bool = false)
+      size_t step_custom(size_t, AddressInfoCustom &, bool = false) override
       {
         return 0;
       } // not used for this iterator
 
-      virtual void confirm_step(void) { /* nothing to do */ }
+      void confirm_step(void) override { /* nothing to do */ }
 
-      virtual void cancel_step(void)
+      void cancel_step(void) override
       {
         // cancellation never happens in current XferDes usage
         assert(false);
       }
 
-      virtual bool get_addresses(AddressList &addrlist,
-                                 const InstanceLayoutPieceBase *&nonaffine)
+      bool get_addresses(AddressList &addrlist,
+                         const InstanceLayoutPieceBase *&nonaffine) override
       {
         nonaffine = nullptr;
         static const size_t MAX_POINTS = 4194304; // identical to wrapper
@@ -1701,26 +1508,28 @@ namespace Realm {
         const size_t total_bytes = pts_in_entry * field_size;
 
         int act_dim = 2;
-        if(aff.num_lines > 0)
+        if(aff.num_lines > 0) {
           act_dim++;
-        if(aff.num_planes > 0)
+        }
+        if(aff.num_planes > 0) {
           act_dim++;
+        }
 
         size_t *ad = addrlist.begin_nd_entry(act_dim);
         if(!ad) {
           return false; // list full – caller retry
         }
 
-        ad[0] = (total_bytes << 4) | act_dim;
-        ad[1] = aff.base_offset;
+        int idx = 0;
 
-        ad[2] = 1;
-        ad[3] = field_size;
+        ad[idx++] = (total_bytes << 4) | act_dim;
+        ad[idx++] = aff.base_offset;
 
-        ad[4] = 1;
-        ad[5] = addrs_in_offset;
+        ad[idx++] = 1;
+        ad[idx++] = field_size;
 
-        int idx = 6;
+        ad[idx++] = 1;
+        ad[idx++] = addrs_in_offset;
 
         if(aff.num_lines > 0) {
           ad[idx++] = 1;
