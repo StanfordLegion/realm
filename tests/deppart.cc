@@ -323,7 +323,7 @@ public:
   //  p_nodes - nodes partitioned by subgraph id (from GPU)
   //  p_nodes_cpu - nodes partitioned by subgraph id (from CPU)
 
-  std::vector<IndexSpace<1>> p_nodes, p_nodes_cpu;
+  std::vector<IndexSpace<1>> p_nodes, p_nodes_cpu, p_nodes_mixed;
 
   virtual Event perform_partitioning(void)
   {
@@ -412,6 +412,32 @@ public:
               << "\n";
     log_app.info() << "GPU Partitioning complete " << Clock::current_time_in_microseconds()
               << "\n";
+
+    // Mixed CPU+GPU: instances 1,3,5 CPU and 2,4 GPU (1-based indexing)
+    std::vector<FieldDataDescriptor<IndexSpace<1>, int>> piece_field_data_mixed;
+    piece_field_data_mixed.resize(num_pieces);
+    for (int i = 0; i < num_pieces; i++) {
+      if ((i % 2) == 0) {
+        piece_field_data_mixed[i].inst = piece_id_field_data[i].inst;
+      } else {
+        piece_field_data_mixed[i].inst = piece_field_data_gpu[i].inst;
+      }
+      piece_field_data_mixed[i].index_space = piece_id_field_data[i].index_space;
+      piece_field_data_mixed[i].field_offset = 0;
+    }
+    log_app.info() << "Starting MIXED Partitioning " << Clock::current_time_in_microseconds()
+              << "\n";
+    log_app.info() << "Starting MIXED By Field " << Clock::current_time_in_microseconds()
+              << "\n";
+    Event e3 = is_nodes.create_subspaces_by_field(
+        piece_field_data_mixed, colors, p_nodes_mixed, Realm::ProfilingRequestSet());
+    if (wait_on_events)
+      e3.wait();
+    log_app.info() << "MIXED By Field complete " << Clock::current_time_in_microseconds()
+              << "\n";
+    log_app.info() << "MIXED Partitioning complete " << Clock::current_time_in_microseconds()
+              << "\n";
+
     log_app.info() << "Starting CPU Partitioning " << Clock::current_time_in_microseconds()
               << "\n";
     log_app.info() << "Starting CPU By Field " << Clock::current_time_in_microseconds()
@@ -464,9 +490,53 @@ public:
         }
       }
     }
+
+    // Mixed vs GPU and CPU: mixed results are stored at p_nodes_cpu[i + num_pieces]
+    for (int i = 0; i < num_pieces; i++) {
+      // GPU vs MIXED
+      for (IndexSpaceIterator<1> it(p_nodes[i]); it.valid; it.step()) {
+        for (PointInRectIterator<1> point(it.rect); point.valid; point.step()) {
+          if (!p_nodes_mixed[i].contains(point.p)) {
+            log_app.error() << "Mismatch! GPU has extra point " << point.p
+                            << " on MIXED piece " << i << "\n";
+            errors++;
+          }
+        }
+      }
+      for (IndexSpaceIterator<1> it(p_nodes_mixed[i]); it.valid; it.step()) {
+        for (PointInRectIterator<1> point(it.rect); point.valid; point.step()) {
+          if (!p_nodes[i].contains(point.p)) {
+            log_app.error() << "Mismatch! MIXED is missing point " << point.p
+                            << " on piece " << i << " compared to GPU\n";
+            errors++;
+          }
+        }
+      }
+      // CPU vs MIXED
+      for (IndexSpaceIterator<1> it(p_nodes_cpu[i]); it.valid; it.step()) {
+        for (PointInRectIterator<1> point(it.rect); point.valid; point.step()) {
+          if (!p_nodes_mixed[i].contains(point.p)) {
+            log_app.error() << "Mismatch! CPU has extra point " << point.p
+                            << " on MIXED piece " << i << "\n";
+            errors++;
+          }
+        }
+      }
+      for (IndexSpaceIterator<1> it(p_nodes_mixed[i]); it.valid; it.step()) {
+        for (PointInRectIterator<1> point(it.rect); point.valid; point.step()) {
+          if (!p_nodes_cpu[i].contains(point.p)) {
+            log_app.error() << "Mismatch! MIXED is missing point " << point.p
+                            << " on piece " << i << " compared to CPU\n";
+            errors++;
+          }
+        }
+      }
+    }
+
     return errors;
   }
 };
+
 
 class MiniAeroTest : public TestInterface {
 public:

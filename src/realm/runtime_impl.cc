@@ -3395,16 +3395,16 @@ namespace Realm {
 
   Node::~Node(void)
   {
+    for(atomic<DynamicTable<SparsityMapTableAllocator> *> &atomic_sparsity :
+        sparsity_maps) {
+      delete atomic_sparsity.load();
+    }
+
     // delete processors, memories, nodes, etc.
     delete_container_contents(memories);
     delete_container_contents(processors);
     delete_container_contents(ib_memories);
     delete_container_contents(dma_channels);
-
-    for(atomic<DynamicTable<SparsityMapTableAllocator> *> &atomic_sparsity :
-        sparsity_maps) {
-      delete atomic_sparsity.load();
-    }
 
     for(atomic<DynamicTable<SubgraphTableAllocator> *> &atomic_subgraph : subgraphs) {
       delete atomic_subgraph.load();

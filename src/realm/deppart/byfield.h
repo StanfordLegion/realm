@@ -73,7 +73,8 @@ namespace Realm {
   public:
     GPUByFieldMicroOp(
         const IndexSpace<N, T> &_parent,
-        const std::vector<FieldDataDescriptor<IndexSpace<N,T>,FT> >& _field_data);
+        std::vector<FieldDataDescriptor<IndexSpace<N,T>,FT> > _field_data,
+        bool _exclusive);
 
     virtual ~GPUByFieldMicroOp(void);
 
@@ -85,7 +86,7 @@ namespace Realm {
 
   protected:
     const IndexSpace<N, T> parent_space;
-    const std::vector<FieldDataDescriptor<IndexSpace<N,T>,FT> >& field_data;
+    std::vector<FieldDataDescriptor<IndexSpace<N,T>,FT> > field_data;
     std::vector<FT> colors;
     std::map<FT, SparsityMap<N,T> > sparsity_outputs;
   };

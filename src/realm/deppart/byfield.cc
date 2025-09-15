@@ -288,8 +288,10 @@ namespace Realm {
   template<int N, typename T, typename FT>
   GPUByFieldMicroOp<N, T, FT>::GPUByFieldMicroOp(
     const IndexSpace<N, T> &_parent,
-    const std::vector<FieldDataDescriptor<IndexSpace<N, T>, FT> > &_field_data)
+    std::vector<FieldDataDescriptor<IndexSpace<N, T>, FT> > _field_data,
+    bool _exclusive)
     : parent_space(_parent), field_data(_field_data) {
+    this->exclusive = _exclusive;
   }
 
   template<int N, typename T, typename FT>
@@ -375,26 +377,36 @@ namespace Realm {
     // Rather than one micro-op per field, we can do them all in one micro-op.
     // Launching multiple GPU micro-ops just adds overhead, and
     // there isn't enough work to need multiple GPUs.
-    if (field_data.size() > 0 && field_data[0].inst.get_location().kind()==Memory::GPU_FB_MEM) {
-      GPUByFieldMicroOp<N, T, FT> *uop = new GPUByFieldMicroOp<N, T, FT>(parent, field_data);
-      for (size_t i = 0; i < colors.size(); i++) {
-        uop->add_sparsity_output(colors[i], subspaces[i]);
+    std::vector<FieldDataDescriptor<IndexSpace<N,T>,FT> > gpu_field_data;
+    std::vector<FieldDataDescriptor<IndexSpace<N,T>,FT> > cpu_field_data;
+    for (size_t i = 0; i < field_data.size(); i++) {
+      if (field_data[i].inst.get_location().kind() == Memory::GPU_FB_MEM) {
+        gpu_field_data.push_back(field_data[i]);
+      } else {
+        cpu_field_data.push_back(field_data[i]);
       }
-      uop->dispatch(this, false);
-
-    } else {
+    }
+    if (!cpu_field_data.empty()) {
       for (size_t i = 0; i < subspaces.size(); i++)
-        SparsityMapImpl<N, T>::lookup(subspaces[i])->set_contributor_count(field_data.size());
-      for (size_t i = 0; i < field_data.size(); i++) {
+        SparsityMapImpl<N, T>::lookup(subspaces[i])->set_contributor_count(cpu_field_data.size() + (gpu_field_data.empty() ? 0 : 1));
+      for (size_t i = 0; i < cpu_field_data.size(); i++) {
         ByFieldMicroOp<N, T, FT> *uop = new ByFieldMicroOp<N, T, FT>(parent,
-                                                                     field_data[i].index_space,
-                                                                     field_data[i].inst,
-                                                                     field_data[i].field_offset);
+                                                                     cpu_field_data[i].index_space,
+                                                                     cpu_field_data[i].inst,
+                                                                     cpu_field_data[i].field_offset);
         for (size_t j = 0; j < colors.size(); j++)
           uop->add_sparsity_output(colors[j], subspaces[j]);
 
         uop->dispatch(this, true /* ok to run in this thread */);
       }
+    }
+    if (!gpu_field_data.empty()) {
+      GPUByFieldMicroOp<N, T, FT> *uop = new GPUByFieldMicroOp<N, T, FT>(parent, gpu_field_data, cpu_field_data.empty());
+      for (size_t i = 0; i < colors.size(); i++) {
+        uop->add_sparsity_output(colors[i], subspaces[i]);
+      }
+      uop->dispatch(this, false);
+
     }
   }
 

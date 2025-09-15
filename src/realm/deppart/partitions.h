@@ -221,6 +221,8 @@ namespace Realm {
     template<typename Container, typename IndexFn, typename MapFn>
     void send_output(RectDesc<N, T>* d_rects, size_t total_rects, Memory my_mem, const Container& ctr, IndexFn getIndex, MapFn getMap);
 
+    bool exclusive = false;
+
   };
 
   ////////////////////////////////////////

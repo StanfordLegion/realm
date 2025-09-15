@@ -64,7 +64,11 @@ void GPUByFieldMicroOp<N,T,FT>::execute()
   if (num_valid_rects == 0) {
     for (std::pair<const FT, SparsityMap<N, T>> it : sparsity_outputs) {
       SparsityMapImpl<N, T> *impl = SparsityMapImpl<N, T>::lookup(it.second);
-      impl->gpu_finalize();
+      if (this->exclusive) {
+        impl->gpu_finalize();
+      } else {
+        impl->contribute_nothing();
+      }
     }
     out_instance.destroy();
     inst_counters_instance.destroy();

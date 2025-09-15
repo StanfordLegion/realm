@@ -564,78 +564,96 @@ namespace Realm {
       }
     }
 
-    Memory sysmem;
-    assert(find_memory(sysmem, Memory::SYSTEM_MEM));
-
-    //Use provided lambdas to iterate over sparsity output container (map or vector)
-    for (auto const& elem : ctr) {
-      size_t idx = getIndex(elem);
-      auto mapOpj = getMap(elem);
-      SparsityMapImpl<N, T> *impl = SparsityMapImpl<N, T>::lookup(mapOpj);
-      if (d_ends_host[idx] > d_starts_host[idx]) {
-        size_t end = d_ends_host[idx];
-        size_t start = d_starts_host[idx];
-        RegionInstance entries = this->realm_malloc((end - start) * sizeof(SparsityMapEntry<N,T>), sysmem);
-        SparsityMapEntry<N, T> *h_entries = reinterpret_cast<SparsityMapEntry<N, T> *>(AffineAccessor<char, 1>(entries, 0).base);
-        CUDA_CHECK(cudaMemcpyAsync(h_entries, final_entries + start, (end - start) * sizeof(SparsityMapEntry<N,T>), cudaMemcpyDeviceToHost, stream), stream);
-
-        Rect<N,T> *approx_rects;
-        RegionInstance approx_rects_instance;
-        size_t num_approx;
-        if (end - start <= ((size_t) DeppartConfig::cfg_max_rects_in_approximation)) {
-          approx_rects = final_rects + start;
-          num_approx = end - start;
-        } else {
-          //TODO: Maybe add a better GPU approx here when given more rectangles
-          //Use CUB to compute a bad approx on the GPU (union of all rectangles)
-          approx_rects_instance = this->realm_malloc(sizeof(Rect<N,T>), my_mem);
-          approx_rects = reinterpret_cast<Rect<N,T>*>(AffineAccessor<char,1>(approx_rects_instance, 0).base);
-          num_approx = 1;
-          void*  d_temp   = nullptr;
-          size_t temp_sz  = 0;
-          Rect<N, T> identity_rect;
-          for(int d=0; d<N; d++){
-            identity_rect.lo[d] =  std::numeric_limits<T>::max();
-            identity_rect.hi[d] =  std::numeric_limits<T>::min();
-          }
-          cub::DeviceReduce::Reduce(
-            d_temp, temp_sz,
-            final_rects + start,
-            approx_rects,
-            (end - start),
-            UnionRectOp<N,T>(),
-            identity_rect,
-            stream
-          );
-          RegionInstance temp_rects_instance = this->realm_malloc(temp_sz * sizeof(Rect<N,T>), my_mem);
-          d_temp = reinterpret_cast<void*>(AffineAccessor<char,1>(temp_rects_instance, 0).base);
-          cub::DeviceReduce::Reduce(
-            d_temp, temp_sz,
-            final_rects + start,
-            approx_rects,
-            end - start,
-            UnionRectOp<N,T>(),
-            identity_rect,
-            stream
-          );
+    if (!this->exclusive) {
+      for (auto const& elem : ctr) {
+        size_t idx = getIndex(elem);
+        auto mapOpj = getMap(elem);
+        SparsityMapImpl<N, T> *impl = SparsityMapImpl<N, T>::lookup(mapOpj);
+        if (d_ends_host[idx] > d_starts_host[idx]) {
+          size_t end = d_ends_host[idx];
+          size_t start = d_starts_host[idx];
+          std::vector<Rect<N, T>> h_rects(end - start);
+          CUDA_CHECK(cudaMemcpyAsync(h_rects.data(), final_rects + start, (end - start) * sizeof(Rect<N,T>), cudaMemcpyDeviceToHost, stream), stream);
           CUDA_CHECK(cudaStreamSynchronize(stream), stream);
-          temp_rects_instance.destroy();
-        }
-        RegionInstance approx_entries = this->realm_malloc(num_approx * sizeof(Rect<N,T>), sysmem);
-        SparsityMapEntry<N, T> *h_approx_entries = reinterpret_cast<SparsityMapEntry<N, T> *>(AffineAccessor<char, 1>(approx_entries, 0).base);
-        CUDA_CHECK(cudaMemcpyAsync(h_approx_entries, approx_rects, num_approx * sizeof(Rect<N,T>), cudaMemcpyDeviceToHost, stream), stream);
-        CUDA_CHECK(cudaStreamSynchronize(stream), stream);
-        impl->set_instance(entries, end - start);
-        impl->set_approx_instance(approx_entries, num_approx);
-        if (end - start > ((size_t) DeppartConfig::cfg_max_rects_in_approximation)) {
-          approx_rects_instance.destroy();
+          impl->contribute_dense_rect_list(h_rects, true);
+        } else {
+          impl->contribute_nothing();
         }
       }
-    }
-    CUDA_CHECK(cudaStreamSynchronize(stream), stream);
-    for (auto const& elem : ctr) {
-      SparsityMapImpl<N, T> *impl = SparsityMapImpl<N, T>::lookup(getMap(elem));
-      impl->gpu_finalize();
+    } else {
+      Memory sysmem;
+      assert(find_memory(sysmem, Memory::SYSTEM_MEM));
+
+      //Use provided lambdas to iterate over sparsity output container (map or vector)
+      for (auto const& elem : ctr) {
+        size_t idx = getIndex(elem);
+        auto mapOpj = getMap(elem);
+        SparsityMapImpl<N, T> *impl = SparsityMapImpl<N, T>::lookup(mapOpj);
+        if (d_ends_host[idx] > d_starts_host[idx]) {
+          size_t end = d_ends_host[idx];
+          size_t start = d_starts_host[idx];
+          RegionInstance entries = this->realm_malloc((end - start) * sizeof(SparsityMapEntry<N,T>), sysmem);
+          SparsityMapEntry<N, T> *h_entries = reinterpret_cast<SparsityMapEntry<N, T> *>(AffineAccessor<char, 1>(entries, 0).base);
+          CUDA_CHECK(cudaMemcpyAsync(h_entries, final_entries + start, (end - start) * sizeof(SparsityMapEntry<N,T>), cudaMemcpyDeviceToHost, stream), stream);
+
+          Rect<N,T> *approx_rects;
+          RegionInstance approx_rects_instance;
+          size_t num_approx;
+          if (end - start <= ((size_t) DeppartConfig::cfg_max_rects_in_approximation)) {
+            approx_rects = final_rects + start;
+            num_approx = end - start;
+          } else {
+            //TODO: Maybe add a better GPU approx here when given more rectangles
+            //Use CUB to compute a bad approx on the GPU (union of all rectangles)
+            approx_rects_instance = this->realm_malloc(sizeof(Rect<N,T>), my_mem);
+            approx_rects = reinterpret_cast<Rect<N,T>*>(AffineAccessor<char,1>(approx_rects_instance, 0).base);
+            num_approx = 1;
+            void*  d_temp   = nullptr;
+            size_t temp_sz  = 0;
+            Rect<N, T> identity_rect;
+            for(int d=0; d<N; d++){
+              identity_rect.lo[d] =  std::numeric_limits<T>::max();
+              identity_rect.hi[d] =  std::numeric_limits<T>::min();
+            }
+            cub::DeviceReduce::Reduce(
+              d_temp, temp_sz,
+              final_rects + start,
+              approx_rects,
+              (end - start),
+              UnionRectOp<N,T>(),
+              identity_rect,
+              stream
+            );
+            RegionInstance temp_rects_instance = this->realm_malloc(temp_sz * sizeof(Rect<N,T>), my_mem);
+            d_temp = reinterpret_cast<void*>(AffineAccessor<char,1>(temp_rects_instance, 0).base);
+            cub::DeviceReduce::Reduce(
+              d_temp, temp_sz,
+              final_rects + start,
+              approx_rects,
+              end - start,
+              UnionRectOp<N,T>(),
+              identity_rect,
+              stream
+            );
+            CUDA_CHECK(cudaStreamSynchronize(stream), stream);
+            temp_rects_instance.destroy();
+          }
+          RegionInstance approx_entries = this->realm_malloc(num_approx * sizeof(Rect<N,T>), sysmem);
+          SparsityMapEntry<N, T> *h_approx_entries = reinterpret_cast<SparsityMapEntry<N, T> *>(AffineAccessor<char, 1>(approx_entries, 0).base);
+          CUDA_CHECK(cudaMemcpyAsync(h_approx_entries, approx_rects, num_approx * sizeof(Rect<N,T>), cudaMemcpyDeviceToHost, stream), stream);
+          CUDA_CHECK(cudaStreamSynchronize(stream), stream);
+          impl->set_instance(entries, end - start);
+          impl->set_approx_instance(approx_entries, num_approx);
+          if (end - start > ((size_t) DeppartConfig::cfg_max_rects_in_approximation)) {
+            approx_rects_instance.destroy();
+          }
+        }
+      }
+      CUDA_CHECK(cudaStreamSynchronize(stream), stream);
+      for (auto const& elem : ctr) {
+        SparsityMapImpl<N, T> *impl = SparsityMapImpl<N, T>::lookup(getMap(elem));
+        impl->gpu_finalize();
+      }
     }
     final_entries_instance.destroy();
     final_rects_instance.destroy();

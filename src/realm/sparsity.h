@@ -255,14 +255,14 @@ namespace Realm {
     std::vector<Rect<N,T> > approx_rects;
 
     //Stores rectangles for GPU deppart (allows fast copy after merged on GPU)
-    RegionInstance entries_instance;
+    RegionInstance entries_instance = RegionInstance::NO_INST;
     size_t num_entries = 0;
 
-    RegionInstance approx_instance;
+    RegionInstance approx_instance = RegionInstance::NO_INST;
     size_t num_approx = 0;
 
     //Tracks whether to use instance or vector
-    bool from_gpu;
+    bool from_gpu = false;
   };
 
 }; // namespace Realm
