@@ -500,7 +500,7 @@ namespace Realm {
                                                prs, wait_on);
   }
 
-  void RegionInstance::destroy(Event wait_on /*= Event::NO_EVENT*/) const
+  Event RegionInstance::destroy(Event wait_on /*= Event::NO_EVENT*/) const
   {
     // we can immediately turn this into a (possibly-preconditioned) request to
     //  deallocate the instance's storage - the eventual callback from that
@@ -510,17 +510,30 @@ namespace Realm {
     MemoryImpl *mem_impl = get_runtime()->get_memory_impl(*this);
     assert(mem_impl != nullptr && "invalid memory handle");
     RegionInstanceImpl *inst_impl = mem_impl->get_instance(*this);
+    assert(inst_impl != nullptr && "invalid instance handle");
+    Event destroy_event = Event::NO_EVENT;
+
+    // Only create a destroy event to trigger if the destruction is possibly deferred
+    if(wait_on != Event::NO_EVENT) {
+      GenEventImpl *ev = GenEventImpl::create_genevent();
+      assert(ev != nullptr && "Failed to retrieve event");
+      destroy_event = ev->current_event();
+    }
+
+    destroy_event = inst_impl->metadata.destroy_event;
     mem_impl->release_storage_deferrable(inst_impl, wait_on);
+
+    return destroy_event;
   }
 
-  void RegionInstance::destroy(const std::vector<DestroyedField> &destroyed_fields,
-                               Event wait_on /*= Event::NO_EVENT*/) const
+  Event RegionInstance::destroy(const std::vector<DestroyedField> &destroyed_fields,
+                                Event wait_on /*= Event::NO_EVENT*/) const
   {
     // TODO: actually call destructor
     if(!destroyed_fields.empty()) {
       log_inst.warning() << "WARNING: field destructors ignored - inst=" << *this;
     }
-    destroy(wait_on);
+    return destroy(wait_on);
   }
 
   // it is sometimes useful to re-register an existing instance (in whole or
@@ -675,6 +688,7 @@ namespace Realm {
 
     metadata.inst_offset = INSTOFFSET_UNALLOCATED;
     metadata.ready_event = Event::NO_EVENT;
+    metadata.destroy_event = Event::NO_EVENT;
     metadata.layout = 0;
     metadata.ext_resource = 0;
     metadata.mem_specific = 0;
@@ -1266,10 +1280,16 @@ namespace Realm {
       prefetch_events.clear();
     }
 
+    if(metadata.destroy_event.exists()) {
+      GenEventImpl::trigger(metadata.destroy_event,
+                            metadata.inst_offset == INSTOFFSET_FAILED);
+    }
+
     // send any required invalidation messages for metadata
     bool recycle_now = metadata.initiate_cleanup(me.id);
-    if(recycle_now)
+    if(recycle_now) {
       recycle_instance();
+    }
   }
 
   void RegionInstanceImpl::recycle_instance(void)
@@ -1586,6 +1606,7 @@ namespace Realm {
   RegionInstanceImpl::Metadata::Metadata(ReplicatedHeap *repl_heap)
     : inst_offset(INSTOFFSET_UNALLOCATED)
     , ready_event(Event::NO_EVENT)
+    , destroy_event(Event::NO_EVENT)
     , layout(0)
     , ext_resource(0)
     , mem_specific(0)
