@@ -17,7 +17,7 @@
 
 // per-dimension instantiator for byfield.cc
 
-#define REALM_TEMPLATES_ONLY
+#undef REALM_TEMPLATES_ONLY
 #include "./byfield.cc"
 
 #ifndef INST_N1
@@ -42,6 +42,19 @@ namespace Realm {
 
 #define N1 INST_N1
 #define N2 INST_N2
+
+#define DOIT(N,T,F) \
+  template class ByFieldMicroOp<N,T,F>; \
+  template class GPUByFieldMicroOp<N,T,F>; \
+  template class ByFieldOperation<N,T,F>; \
+  template ByFieldMicroOp<N,T,F>::ByFieldMicroOp(NodeID, AsyncMicroOp *, Serialization::FixedBufferDeserializer&); \
+  template Event IndexSpace<N,T>::create_subspaces_by_field(const std::vector<FieldDataDescriptor<IndexSpace<N,T>,F> >&, \
+							     const std::vector<F>&, \
+							     std::vector<IndexSpace<N,T> >&, \
+							     const ProfilingRequestSet &, \
+							     Event) const;
+  
+FOREACH_NTF(DOIT)
 
 #define ZP(N,T) Point<N,T>
 #define ZR(N,T) Rect<N,T>

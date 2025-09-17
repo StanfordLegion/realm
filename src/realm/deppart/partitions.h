@@ -35,11 +35,54 @@
 #include "realm/deppart/inst_helper.h"
 #include "realm/bgwork.h"
 
+struct CUstream_st;
+typedef CUstream_st* cudaStream_t;
+
 namespace Realm {
 
   class PartitioningMicroOp;
   class PartitioningOperation;
 
+  // Data representations for GPU micro-ops
+  // src idx tracks which subspace each rect/point
+  // belongs to and allows multiple subspaces to be
+  // computed together in a micro-op
+
+  template<int N, typename T>
+  struct RectDesc {
+    Rect<N,T> rect;
+    size_t src_idx;
+  };
+
+  template<int N, typename T>
+  struct PointDesc {
+    Point<N,T> point;
+    size_t src_idx;
+  };
+
+  // Combines one or multiple index spaces into a single struct
+  // If multiple, offsets tracks transitions between spaces
+  template<int N, typename T>
+  struct collapsed_space {
+    SparsityMapEntry<N, T>* entries_buffer;
+    size_t num_entries;
+    size_t* offsets;
+    size_t num_children;
+    Rect<N, T> bounds;
+  };
+
+  // Stores everything necessary to query a BVH
+  // Used with GPUMicroOp<N, T>::build_bvh
+  template<int N, typename T>
+  struct BVH {
+    int root;
+    size_t num_leaves;
+    Rect<N,T>* boxes;
+    uint64_t* indices;
+    size_t* labels;
+    int* childLeft;
+    int* childRight;
+  };
 
   template <int N, typename T>
   class OverlapTester {
@@ -108,6 +151,8 @@ namespace Realm {
     template <int N, typename T>
     void sparsity_map_ready(SparsityMapImpl<N,T> *sparsity, bool precise);
 
+    static RegionInstance realm_malloc(size_t size, Memory location = Memory::NO_MEMORY);
+
     IntrusiveListLink<PartitioningMicroOp> uop_link;
     REALM_PMTA_DEFN(PartitioningMicroOp,IntrusiveListLink<PartitioningMicroOp>,uop_link);
     typedef IntrusiveList<PartitioningMicroOp, REALM_PMTA_USE(PartitioningMicroOp,uop_link), DummyLock> MicroOpList;
@@ -145,6 +190,39 @@ namespace Realm {
     PartitioningOperation *op;
     std::vector<IndexSpace<N,T> > input_spaces;
     std::vector<SparsityMapImpl<N,T> *> extra_deps;
+  };
+
+  //The parent class for all GPU partitioning micro-ops. Provides output utility functions
+
+  template<int N, typename T>
+  class GPUMicroOp : public PartitioningMicroOp {
+  public:
+    GPUMicroOp(void) = default;
+    virtual ~GPUMicroOp(void) = default;
+
+    virtual void execute(void) = 0;
+
+    template <typename FT>
+    static void collapse_inst_space(const std::vector<FieldDataDescriptor<IndexSpace<N, T>, FT> >& field_data, RegionInstance& out_instance, collapsed_space<N, T> &out_space, Memory my_mem, cudaStream_t stream);
+
+    static void collapse_parent_space(const IndexSpace<N, T>& parent_space, RegionInstance& out_instance, collapsed_space<N, T> &out_space, Memory my_mem, cudaStream_t stream);
+
+    static void build_bvh(const collapsed_space<N, T> &space, RegionInstance& bvh_instance, BVH<N, T> &bvh, Memory my_mem, cudaStream_t stream);
+
+    template <typename out_t>
+    static void construct_input_rectlist(const collapsed_space<N, T> &lhs, const collapsed_space<N, T> &rhs, RegionInstance &out_instance,  size_t& out_size, uint32_t* counters, uint32_t* out_offsets, Memory my_mem, cudaStream_t stream);
+
+    template <typename out_t>
+    static void volume_prefix_sum(const out_t* d_rects, size_t total_rects, RegionInstance &out_instance, size_t& num_pts, Memory my_mem, cudaStream_t stream);
+
+    template<typename Container, typename IndexFn, typename MapFn>
+    void complete_pipeline(PointDesc<N, T>* d_points, size_t total_pts, Memory my_mem, const Container& ctr, IndexFn getIndex, MapFn getMap);
+
+    template<typename Container, typename IndexFn, typename MapFn>
+    void send_output(RectDesc<N, T>* d_rects, size_t total_rects, Memory my_mem, const Container& ctr, IndexFn getIndex, MapFn getMap);
+
+    bool exclusive = false;
+
   };
 
   ////////////////////////////////////////

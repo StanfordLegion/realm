@@ -277,8 +277,55 @@ namespace Realm {
     (void)ok;
   }
 
-  template <int N, typename T, typename FT>
-  ActiveMessageHandlerReg<RemoteMicroOpMessage<ByFieldMicroOp<N,T,FT> > > ByFieldMicroOp<N,T,FT>::areg;
+  template<int N, typename T, typename FT>
+  ActiveMessageHandlerReg<RemoteMicroOpMessage<ByFieldMicroOp<N, T, FT> > > ByFieldMicroOp<N, T, FT>::areg;
+
+
+  ////////////////////////////////////////////////////////////////////////
+  //
+  // class GPUByFieldMicroOp<N, T, FT>
+
+  template<int N, typename T, typename FT>
+  GPUByFieldMicroOp<N, T, FT>::GPUByFieldMicroOp(
+    const IndexSpace<N, T> &_parent,
+    std::vector<FieldDataDescriptor<IndexSpace<N, T>, FT> > _field_data,
+    bool _exclusive)
+    : parent_space(_parent), field_data(_field_data) {
+    this->exclusive = _exclusive;
+  }
+
+  template<int N, typename T, typename FT>
+  GPUByFieldMicroOp<N, T, FT>::~GPUByFieldMicroOp() {
+  }
+
+  template<int N, typename T, typename FT>
+  void GPUByFieldMicroOp<N, T, FT>::dispatch(
+    PartitioningOperation *op, bool inline_ok) {
+
+    // We have to register ourselves as a waiter on sparse inputs before dispatching.
+
+    for (size_t i = 0; i < field_data.size(); i++) {
+      IndexSpace<N, T> inst_space = field_data[i].index_space;
+      if (!inst_space.dense()) {
+        bool registered = SparsityMapImpl<N, T>::lookup(inst_space.sparsity)->add_waiter(this, true /*precise*/);
+        if (registered)
+          this->wait_count.fetch_add(1);
+      }
+    }
+
+    if (!parent_space.dense()) {
+      bool registered = SparsityMapImpl<N, T>::lookup(parent_space.sparsity)->add_waiter(this, true /*precise*/);
+      if (registered) this->wait_count.fetch_add(1);
+    }
+    this->finish_dispatch(op, inline_ok);
+  }
+
+  template<int N, typename T, typename FT>
+  void GPUByFieldMicroOp<N, T, FT>::add_sparsity_output(
+    FT _val, SparsityMap<N, T> _sparsity) {
+    colors.push_back(_val);
+    sparsity_outputs[_val] = _sparsity;
+  }
 
 
   ////////////////////////////////////////////////////////////////////////
@@ -322,21 +369,44 @@ namespace Realm {
     return subspace;
   }
 
-  template <int N, typename T, typename FT>
-  void ByFieldOperation<N,T,FT>::execute(void)
-  {
-    for(size_t i = 0; i < subspaces.size(); i++)
-      SparsityMapImpl<N,T>::lookup(subspaces[i])->set_contributor_count(field_data.size());
+  template<int N, typename T, typename FT>
+  void ByFieldOperation<N, T, FT>::execute(void) {
 
-    for(size_t i = 0; i < field_data.size(); i++) {
-      ByFieldMicroOp<N,T,FT> *uop = new ByFieldMicroOp<N,T,FT>(parent,
-							       field_data[i].index_space,
-							       field_data[i].inst,
-							       field_data[i].field_offset);
-      for(size_t j = 0; j < colors.size(); j++)
-	uop->add_sparsity_output(colors[j], subspaces[j]);
-      //uop.set_value_set(colors);
-      uop->dispatch(this, true /* ok to run in this thread */);
+
+    // If the field data is on the GPU, we need to launch a GPUByFieldMicroOp.
+    // Rather than one micro-op per field, we can do them all in one micro-op.
+    // Launching multiple GPU micro-ops just adds overhead, and
+    // there isn't enough work to need multiple GPUs.
+    std::vector<FieldDataDescriptor<IndexSpace<N,T>,FT> > gpu_field_data;
+    std::vector<FieldDataDescriptor<IndexSpace<N,T>,FT> > cpu_field_data;
+    for (size_t i = 0; i < field_data.size(); i++) {
+      if (field_data[i].inst.get_location().kind() == Memory::GPU_FB_MEM) {
+        gpu_field_data.push_back(field_data[i]);
+      } else {
+        cpu_field_data.push_back(field_data[i]);
+      }
+    }
+    if (!cpu_field_data.empty()) {
+      for (size_t i = 0; i < subspaces.size(); i++)
+        SparsityMapImpl<N, T>::lookup(subspaces[i])->set_contributor_count(cpu_field_data.size() + (gpu_field_data.empty() ? 0 : 1));
+      for (size_t i = 0; i < cpu_field_data.size(); i++) {
+        ByFieldMicroOp<N, T, FT> *uop = new ByFieldMicroOp<N, T, FT>(parent,
+                                                                     cpu_field_data[i].index_space,
+                                                                     cpu_field_data[i].inst,
+                                                                     cpu_field_data[i].field_offset);
+        for (size_t j = 0; j < colors.size(); j++)
+          uop->add_sparsity_output(colors[j], subspaces[j]);
+
+        uop->dispatch(this, true /* ok to run in this thread */);
+      }
+    }
+    if (!gpu_field_data.empty()) {
+      GPUByFieldMicroOp<N, T, FT> *uop = new GPUByFieldMicroOp<N, T, FT>(parent, gpu_field_data, cpu_field_data.empty());
+      for (size_t i = 0; i < colors.size(); i++) {
+        uop->add_sparsity_output(colors[i], subspaces[i]);
+      }
+      uop->dispatch(this, false);
+
     }
   }
 
@@ -345,20 +415,4 @@ namespace Realm {
   {
     os << "ByFieldOperation(" << parent << ")";
   }
-
-#define DOIT(N,T,F) \
-  template class ByFieldMicroOp<N,T,F>; \
-  template class ByFieldOperation<N,T,F>; \
-  template ByFieldMicroOp<N,T,F>::ByFieldMicroOp(NodeID, AsyncMicroOp *, Serialization::FixedBufferDeserializer&); \
-  template Event IndexSpace<N,T>::create_subspaces_by_field(const std::vector<FieldDataDescriptor<IndexSpace<N,T>,F> >&, \
-							     const std::vector<F>&, \
-							     std::vector<IndexSpace<N,T> >&, \
-							     const ProfilingRequestSet &, \
-							     Event) const;
-#ifndef REALM_TEMPLATES_ONLY
-  FOREACH_NTF(DOIT)
-#endif
-
-  // instantiations of point/rect-field templates handled in byfield_tmpl.cc
-
 };

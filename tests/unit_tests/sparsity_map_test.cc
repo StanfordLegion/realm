@@ -284,7 +284,7 @@ void run_contribute_dense_case(const ContributeDenseRectTestData<N> &test_case)
   impl->set_contributor_count(1);
   impl->contribute_dense_rect_list(test_case.rects, test_case.disjoint);
 
-  std::vector<SparsityMapEntry<N, T>> entries = public_impl->get_entries();
+  span<SparsityMapEntry<N, T>> entries = public_impl->get_entries();
   ASSERT_TRUE(public_impl->is_valid());
   ASSERT_EQ(entries.size(), test_case.expected.size());
   for(size_t i = 0; i < entries.size(); i++) {

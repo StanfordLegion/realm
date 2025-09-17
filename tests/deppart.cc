@@ -41,6 +41,8 @@ enum
 {
   TOP_LEVEL_TASK = Processor::TASK_ID_FIRST_AVAILABLE + 0,
   INIT_CIRCUIT_DATA_TASK,
+  INIT_BASIC_DATA_TASK,
+  INIT_2D_DATA_TASK,
   INIT_PENNANT_DATA_TASK,
   INIT_MINIAERO_DATA_TASK,
 };
@@ -87,14 +89,14 @@ void dump_sparse_index_space(const char *pfx, IndexSpace<N, T> is)
   if(!is.sparsity.exists())
     return;
   SparsityMapPublicImpl<N, T> *impl = is.sparsity.impl();
-  const std::vector<SparsityMapEntry<N, T>> &entries = impl->get_entries();
-  for(typename std::vector<SparsityMapEntry<N, T>>::const_iterator it = entries.begin();
-      it != entries.end(); it++) {
-    std::cout << "  " << it->bounds;
-    if(it->bitmap)
-      std::cout << " bitmap(" << it->bitmap << ")";
-    if(it->sparsity.exists())
-      std::cout << " sparsity(" << it->sparsity << ")";
+  span<SparsityMapEntry<N, T>> entries = impl->get_entries();
+  for(size_t i = 0; i < entries.size(); i++) {
+    SparsityMapEntry<N, T> entry = entries[i];
+    std::cout << "  " << entry.bounds;
+    if(entry.bitmap)
+      std::cout << " bitmap(" << entry.bitmap << ")";
+    if(entry.sparsity.exists())
+      std::cout << " sparsity(" << entry.sparsity << ")";
     std::cout << "\n";
   }
 }
@@ -160,6 +162,381 @@ int find_split(const std::vector<T> &cuts, T v)
   assert(false);
   return 0;
 }
+
+/*
+ * Basic test - create a graph, partition it by
+ * node subgraph id and then check that the partitioning
+ * is correct
+ */
+class BasicTest : public TestInterface {
+public:
+  // graph config parameters
+  int num_nodes = 1000;
+  int num_pieces = 4;
+  std::string filename;
+
+  BasicTest(int argc, const char *argv[])
+  {
+    for(int i = 1; i < argc; i++) {
+
+      if(!strcmp(argv[i], "-p")) {
+        num_pieces = atoi(argv[++i]);
+        continue;
+      }
+      if(!strcmp(argv[i], "-n")) {
+        num_nodes = atoi(argv[++i]);
+        continue;
+      }
+    }
+
+    if(num_nodes <= 0) {
+      log_app.error() << "Invalid nodes=" << num_nodes << "\n";
+      exit(1);
+    }
+  }
+
+  struct InitDataArgs {
+    int index;
+    RegionInstance ri_nodes;
+  };
+
+  enum PRNGStreams
+  {
+    NODE_SUBGRAPH_STREAM,
+  };
+
+  // assign subgraph ids to nodes
+  void random_node_data(int idx, int &subgraph)
+  {
+    if(random_colors)
+      subgraph =
+          Philox_2x32<>::rand_int(random_seed, idx, NODE_SUBGRAPH_STREAM, num_pieces);
+    else
+      subgraph = idx * num_pieces / num_nodes;
+  }
+
+  static void init_data_task_wrapper(const void *args, size_t arglen,
+                                     const void *userdata, size_t userlen, Processor p)
+  {
+    BasicTest *me = (BasicTest *)testcfg;
+    me->init_data_task(args, arglen, p);
+  }
+
+  //Each piece has a task to initialize its data
+  void init_data_task(const void *args, size_t arglen, Processor p)
+  {
+    const InitDataArgs &i_args = *(const InitDataArgs *)args;
+
+    log_app.info() << "init task #" << i_args.index << " (ri_nodes=" << i_args.ri_nodes
+                   << ")";
+
+    i_args.ri_nodes.fetch_metadata(p).wait();
+
+    IndexSpace<1> is_nodes = i_args.ri_nodes.get_indexspace<1>();
+
+    log_app.debug() << "N: " << is_nodes;
+
+    //For each node in the graph, mark it with a random (or deterministic) subgraph id
+    {
+      AffineAccessor<int, 1> a_piece_id(i_args.ri_nodes, 0 /* offset */);
+
+      for(int i = is_nodes.bounds.lo; i <= is_nodes.bounds.hi; i++) {
+        int subgraph;
+        random_node_data(i, subgraph);
+        a_piece_id.write(i, subgraph);
+      }
+    }
+
+    //Optionally print out the assigned subgraph ids
+    if(show_graph) {
+      AffineAccessor<int, 1> a_piece_id(i_args.ri_nodes, 0 /* offset */);
+
+      for(int i = is_nodes.bounds.lo; i <= is_nodes.bounds.hi; i++)
+        log_app.info() << "piece_id[" << i << "] = " << a_piece_id.read(i) << "\n";
+    }
+  }
+
+  IndexSpace<1> is_nodes;
+  std::vector<RegionInstance> ri_nodes;
+  std::vector<FieldDataDescriptor<IndexSpace<1>, int>> piece_id_field_data;
+
+  virtual void print_info(void)
+  {
+    printf("Realm dependent partitioning test - basic: %d nodes, %d pieces\n",
+           (int)num_nodes, (int)num_pieces);
+  }
+
+  virtual Event initialize_data(const std::vector<Memory> &memories,
+                                const std::vector<Processor> &procs)
+  {
+    // now create index space for nodes
+    is_nodes = Rect<1>(0, num_nodes - 1);
+
+    // equal partition is used to do initial population of edges and nodes
+    std::vector<IndexSpace<1>> ss_nodes_eq;
+
+    log_app.info() << "Creating equal subspaces\n";
+
+    is_nodes
+        .create_equal_subspaces(num_pieces, 1, ss_nodes_eq, Realm::ProfilingRequestSet())
+        .wait();
+
+    log_app.debug() << "Initial partitions:";
+    for(size_t i = 0; i < ss_nodes_eq.size(); i++)
+      log_app.debug() << " Nodes #" << i << ": " << ss_nodes_eq[i];
+
+    // Create instances for each of these subspaces
+    std::vector<size_t> node_fields;
+    node_fields.push_back(sizeof(int));
+
+    ri_nodes.resize(num_pieces);
+    piece_id_field_data.resize(num_pieces);
+
+    for(size_t i = 0; i < ss_nodes_eq.size(); i++) {
+      RegionInstance ri;
+      RegionInstance::create_instance(ri, memories[i % memories.size()], ss_nodes_eq[i],
+                                      node_fields, 0 /*SOA*/,
+                                      Realm::ProfilingRequestSet())
+          .wait();
+      ri_nodes[i] = ri;
+
+      piece_id_field_data[i].index_space = ss_nodes_eq[i];
+      piece_id_field_data[i].inst = ri_nodes[i];
+      piece_id_field_data[i].field_offset = 0;
+    }
+
+    // Fire off tasks to initialize data
+    std::set<Event> events;
+    for(int i = 0; i < num_pieces; i++) {
+      Processor p = procs[i % procs.size()];
+      InitDataArgs args;
+      args.index = i;
+      args.ri_nodes = ri_nodes[i];
+      Event e = p.spawn(INIT_BASIC_DATA_TASK, &args, sizeof(args));
+      events.insert(e);
+    }
+
+    return Event::merge_events(events);
+  }
+
+  // the outputs of our partitioning will be:
+  //  p_nodes - nodes partitioned by subgraph id (from GPU)
+  //  p_nodes_cpu - nodes partitioned by subgraph id (from CPU)
+
+  std::vector<IndexSpace<1>> p_nodes, p_nodes_cpu, p_nodes_mixed;
+
+  virtual Event perform_partitioning(void)
+  {
+    // Partition nodes by subgraph id - do this twice, once on CPU and once on GPU
+    // Ensure that the results are identical
+
+    std::vector<int> colors(num_pieces);
+    for(int i = 0; i < num_pieces; i++)
+      colors[i] = i;
+
+    // We need a GPU memory for GPU partitioning
+    Memory gpu_memory;
+    bool found_gpu_memory = false;
+    Machine machine = Machine::get_machine();
+    std::set<Memory> all_memories;
+    machine.get_all_memories(all_memories);
+    for(Memory memory : all_memories) {
+      if(memory.kind() == Memory::GPU_FB_MEM) {
+        gpu_memory = memory;
+        found_gpu_memory = true;
+        break;
+      }
+    }
+    if (!found_gpu_memory) {
+      log_app.error() << "No GPU memory found for partitioning test\n";
+      return Event::NO_EVENT;
+    }
+
+    //We have to copy each piece id data to GPU memory
+
+    std::vector<size_t> node_fields;
+    node_fields.push_back(sizeof(int));
+
+    std::vector<FieldDataDescriptor<IndexSpace<1>, int>> piece_field_data_gpu;
+    piece_field_data_gpu.resize(num_pieces);
+    std::set<Event> copy_events;
+    for(int i = 0; i < num_pieces; i++) {
+      RegionInstance piece_gpu_instance;
+      RegionInstance::create_instance(piece_gpu_instance, gpu_memory,
+                                      piece_id_field_data[i].index_space, node_fields,
+                                      0 /*SOA*/, Realm::ProfilingRequestSet())
+          .wait();
+      CopySrcDstField piece_gpu_field, piece_cpu_field;
+      piece_gpu_field.inst = piece_gpu_instance;
+      piece_gpu_field.size = sizeof(int);
+      piece_gpu_field.field_id = 0;
+      piece_cpu_field.inst = piece_id_field_data[i].inst;
+      piece_cpu_field.size = sizeof(int);
+      piece_cpu_field.field_id = 0;
+      std::vector<CopySrcDstField> piece_cpu_data, piece_gpu_data;
+      piece_gpu_data.push_back(piece_gpu_field);
+      piece_cpu_data.push_back(piece_cpu_field);
+
+      copy_events.insert(piece_id_field_data[i]
+          .index_space.copy(piece_cpu_data, piece_gpu_data, Realm::ProfilingRequestSet()));
+
+
+      piece_field_data_gpu[i].inst = piece_gpu_instance;
+      piece_field_data_gpu[i].index_space = piece_id_field_data[i].index_space;
+      piece_field_data_gpu[i].field_offset = 0;
+    }
+    Event::merge_events(copy_events).wait();
+
+    //We wait for accurate timimg
+    wait_on_events = true;
+
+    //Allow GPU kernels to reflect accurate performance
+    log_app.info() << "warming up" << Clock::current_time_in_microseconds() << "\n";
+    std::vector<IndexSpace<1>> p_garbage_nodes;
+    Event e01 = is_nodes.create_subspaces_by_field(
+        piece_field_data_gpu, colors, p_garbage_nodes, Realm::ProfilingRequestSet());
+    if(wait_on_events)
+      e01.wait();
+    log_app.info() << "warming up complete " << Clock::current_time_in_microseconds()
+              << "\n";
+
+    log_app.info() << "Starting GPU Partitioning " << Clock::current_time_in_microseconds()
+              << "\n";
+    log_app.info() << "Starting GPU By Field " << Clock::current_time_in_microseconds()
+              << "\n";
+    Event e1 = is_nodes.create_subspaces_by_field(piece_field_data_gpu, colors, p_nodes,
+                                                  Realm::ProfilingRequestSet());
+    if(wait_on_events)
+      e1.wait();
+    log_app.info() << "GPU By Field complete " << Clock::current_time_in_microseconds()
+              << "\n";
+    log_app.info() << "GPU Partitioning complete " << Clock::current_time_in_microseconds()
+              << "\n";
+
+    // Mixed CPU+GPU: instances 1,3,5 CPU and 2,4 GPU (1-based indexing)
+    std::vector<FieldDataDescriptor<IndexSpace<1>, int>> piece_field_data_mixed;
+    piece_field_data_mixed.resize(num_pieces);
+    for (int i = 0; i < num_pieces; i++) {
+      if ((i % 2) == 0) {
+        piece_field_data_mixed[i].inst = piece_id_field_data[i].inst;
+      } else {
+        piece_field_data_mixed[i].inst = piece_field_data_gpu[i].inst;
+      }
+      piece_field_data_mixed[i].index_space = piece_id_field_data[i].index_space;
+      piece_field_data_mixed[i].field_offset = 0;
+    }
+    log_app.info() << "Starting MIXED Partitioning " << Clock::current_time_in_microseconds()
+              << "\n";
+    log_app.info() << "Starting MIXED By Field " << Clock::current_time_in_microseconds()
+              << "\n";
+    Event e3 = is_nodes.create_subspaces_by_field(
+        piece_field_data_mixed, colors, p_nodes_mixed, Realm::ProfilingRequestSet());
+    if (wait_on_events)
+      e3.wait();
+    log_app.info() << "MIXED By Field complete " << Clock::current_time_in_microseconds()
+              << "\n";
+    log_app.info() << "MIXED Partitioning complete " << Clock::current_time_in_microseconds()
+              << "\n";
+
+    log_app.info() << "Starting CPU Partitioning " << Clock::current_time_in_microseconds()
+              << "\n";
+    log_app.info() << "Starting CPU By Field " << Clock::current_time_in_microseconds()
+              << "\n";
+    Event e5 = is_nodes.create_subspaces_by_field(
+        piece_id_field_data, colors, p_nodes_cpu, Realm::ProfilingRequestSet());
+    if(wait_on_events)
+      e5.wait();
+    log_app.info() << "CPU By Field complete " << Clock::current_time_in_microseconds()
+              << "\n";
+    log_app.info() << "CPU Partitioning complete " << Clock::current_time_in_microseconds()
+              << "\n";
+
+    return e5;
+  }
+
+  virtual int perform_dynamic_checks(void)
+  {
+    // Nothing to do here
+    return 0;
+  }
+
+  virtual int check_partitioning(void)
+  {
+    int errors = 0;
+
+    if (!p_nodes.size()) {
+      return 0;
+    }
+
+    log_app.info() << "Checking correctness of partitioning " << "\n";
+
+    for(int i = 0; i < num_pieces; i++) {
+      for(IndexSpaceIterator<1> it(p_nodes[i]); it.valid; it.step()) {
+        for(PointInRectIterator<1> point(it.rect); point.valid; point.step()) {
+          if (!p_nodes_cpu[i].contains(point.p)) {
+            log_app.error() << "Mismatch! GPU has extra point " << point.p
+                            << " on piece " << i << "\n";
+            errors++;
+          }
+        }
+      }
+      for(IndexSpaceIterator<1> it(p_nodes_cpu[i]); it.valid; it.step()) {
+        for(PointInRectIterator<1> point(it.rect); point.valid; point.step()) {
+          if (!p_nodes[i].contains(point.p)) {
+            log_app.error() << "Mismatch! GPU is missing point " << point.p
+                          << " on piece " << i << "\n";
+            errors++;
+          }
+        }
+      }
+    }
+
+    // Mixed vs GPU and CPU: mixed results are stored at p_nodes_cpu[i + num_pieces]
+    for (int i = 0; i < num_pieces; i++) {
+      // GPU vs MIXED
+      for (IndexSpaceIterator<1> it(p_nodes[i]); it.valid; it.step()) {
+        for (PointInRectIterator<1> point(it.rect); point.valid; point.step()) {
+          if (!p_nodes_mixed[i].contains(point.p)) {
+            log_app.error() << "Mismatch! GPU has extra point " << point.p
+                            << " on MIXED piece " << i << "\n";
+            errors++;
+          }
+        }
+      }
+      for (IndexSpaceIterator<1> it(p_nodes_mixed[i]); it.valid; it.step()) {
+        for (PointInRectIterator<1> point(it.rect); point.valid; point.step()) {
+          if (!p_nodes[i].contains(point.p)) {
+            log_app.error() << "Mismatch! MIXED is missing point " << point.p
+                            << " on piece " << i << " compared to GPU\n";
+            errors++;
+          }
+        }
+      }
+      // CPU vs MIXED
+      for (IndexSpaceIterator<1> it(p_nodes_cpu[i]); it.valid; it.step()) {
+        for (PointInRectIterator<1> point(it.rect); point.valid; point.step()) {
+          if (!p_nodes_mixed[i].contains(point.p)) {
+            log_app.error() << "Mismatch! CPU has extra point " << point.p
+                            << " on MIXED piece " << i << "\n";
+            errors++;
+          }
+        }
+      }
+      for (IndexSpaceIterator<1> it(p_nodes_mixed[i]); it.valid; it.step()) {
+        for (PointInRectIterator<1> point(it.rect); point.valid; point.step()) {
+          if (!p_nodes_cpu[i].contains(point.p)) {
+            log_app.error() << "Mismatch! MIXED is missing point " << point.p
+                            << " on piece " << i << " compared to CPU\n";
+            errors++;
+          }
+        }
+      }
+    }
+
+    return errors;
+  }
+};
+
 
 class MiniAeroTest : public TestInterface {
 public:
@@ -2831,6 +3208,11 @@ int main(int argc, char **argv)
       break;
     }
 
+    if(!strcmp(argv[i], "basic")) {
+      testcfg = new BasicTest(argc - i, const_cast<const char **>(argv + i));
+      break;
+    }
+
     if(!strcmp(argv[i], "pennant")) {
       testcfg = new PennantTest(argc - i, const_cast<const char **>(argv + i));
       break;
@@ -2867,6 +3249,7 @@ int main(int argc, char **argv)
   rt.register_task(TOP_LEVEL_TASK, top_level_task);
   rt.register_task(INIT_CIRCUIT_DATA_TASK, CircuitTest::init_data_task_wrapper);
   rt.register_task(INIT_PENNANT_DATA_TASK, PennantTest::init_data_task_wrapper);
+  rt.register_task(INIT_BASIC_DATA_TASK, BasicTest::init_data_task_wrapper);
   rt.register_task(INIT_MINIAERO_DATA_TASK, MiniAeroTest::init_data_task_wrapper);
 
   signal(SIGALRM, sigalrm_handler);
