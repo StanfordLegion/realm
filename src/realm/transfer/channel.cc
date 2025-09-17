@@ -3667,13 +3667,16 @@ namespace Realm {
       return true;
     }
 
+    return has_redop_paths;
+  }
+
+  void Channel::update_channel_state() {
+    has_redop_paths = false;
     for(const SupportedPath &path : paths) {
       if(path.redops_allowed) {
-        return true;
+        has_redop_paths = true;
       }
     }
-
-    return false;
   }
 
   long Channel::progress_xd(XferDes *xd, long max_nr)
@@ -3900,8 +3903,11 @@ namespace Realm {
 
   bool RemoteChannel::supports_redop(ReductionOpID redop_id) const
   {
-    RWLock::AutoReaderLock al(mutex);
-    return supported_redops.count(redop_id) != 0;
+    if (has_redop_paths) {
+      RWLock::AutoReaderLock al(mutex);
+      return supported_redops.count(redop_id) != 0;
+    }
+    return redop_id == 0;
   }
 
   long RemoteChannel::submit(Request **requests, long nr)

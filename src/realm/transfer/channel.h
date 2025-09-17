@@ -32,6 +32,7 @@
 #include <vector>
 #include <deque>
 #include <queue>
+#include <unordered_set>
 #include <assert.h>
 #include <string.h>
 
@@ -732,6 +733,8 @@ namespace Realm {
 
     virtual bool supports_redop(ReductionOpID redop_id) const;
 
+    virtual void update_channel_state();
+
     // attempt to make progress on the specified xferdes
     virtual long progress_xd(XferDes *xd, long max_nr);
 
@@ -857,6 +860,7 @@ namespace Realm {
                             unsigned frag_overhead, XferDesKind xd_kind);
 
     std::vector<SupportedPath> paths;
+    bool has_redop_paths = false;
   };
 
   std::ostream &operator<<(std::ostream &os, const Channel::SupportedPath &p);
@@ -978,7 +982,7 @@ namespace Realm {
   protected:
     mutable RWLock mutex;
     uintptr_t remote_ptr;
-    std::set<ReductionOpID> supported_redops;
+    std::unordered_set<ReductionOpID> supported_redops;
     SimpleXferDesFactory factory_singleton;
     const std::set<Memory> indirect_memories;
   };
