@@ -1669,7 +1669,7 @@ namespace Realm {
         // self-path
         unsigned bw = src_gpu->info->logical_peer_bandwidth[_src_gpu->info->index];
         unsigned latency = src_gpu->info->logical_peer_latency[_src_gpu->info->index];
-        unsigned frag_overhead = 2000; // HACK - estimate at 2 us
+        unsigned frag_overhead = 200; // HACK - estimate at 2 us
 
         add_path(local_gpu_mems, local_gpu_mems, bw, latency, frag_overhead,
                  XFER_GPU_IN_FB)
@@ -1694,7 +1694,7 @@ namespace Realm {
                 src_gpu->info->logical_peer_bandwidth[peer_gpu->info->index]);
             unsigned latency = static_cast<unsigned>(
                 src_gpu->info->logical_peer_latency[peer_gpu->info->index]);
-            unsigned frag_overhead = 2000; // HACK - estimate at 2 us
+            unsigned frag_overhead = 200; // HACK - estimate at 2 us
             if(peer_gpu->fbmem != nullptr) {
               add_path(local_gpu_mems, peer_gpu->fbmem->me, bw, latency, frag_overhead,
                        XFER_GPU_PEER_FB)
@@ -1725,8 +1725,8 @@ namespace Realm {
         for(const GPU::CudaIpcMapping &mapping : src_gpu->cudaipc_mappings) {
           size_t bw =
               std::max(src_gpu->info->pci_bandwidth, src_gpu->info->nvswitch_bandwidth);
-          size_t latency = 1000;         // HACK - estimate at 1 us
-          unsigned frag_overhead = 2000; // HACK - estimate at 2 us
+          size_t latency = 1000;        // HACK - estimate at 1 us
+          unsigned frag_overhead = 200; // HACK - estimate at 2 us
           if(mapping.src_gpu != nullptr) {
             bw = src_gpu->info->logical_peer_bandwidth[mapping.src_gpu->info->index];
             latency = src_gpu->info->logical_peer_latency[mapping.src_gpu->info->index];
@@ -1770,6 +1770,69 @@ namespace Realm {
       assert(0);
       return 0;
     }
+
+    RemoteChannelInfo *GPUChannel::construct_remote_info() const
+    {
+      return new GPURemoteChannelInfo(node, kind, reinterpret_cast<uintptr_t>(this),
+                                      paths);
+    }
+
+    ////////////////////////////////////////////////////////////////////////
+    //
+    // class GPURemoteChannelInfo
+    //
+
+    GPURemoteChannelInfo::GPURemoteChannelInfo(
+        NodeID _owner, XferDesKind _kind, uintptr_t _remote_ptr,
+        const std::vector<Channel::SupportedPath> &_paths)
+      : SimpleRemoteChannelInfo(_owner, _kind, _remote_ptr, _paths)
+    {}
+
+    RemoteChannel *GPURemoteChannelInfo::create_remote_channel()
+    {
+      GPURemoteChannel *rc = new GPURemoteChannel(remote_ptr);
+      rc->node = owner;
+      rc->kind = kind;
+      rc->paths.swap(paths);
+      return rc;
+    }
+
+    // these templates can go here because they're only used by the helper below
+    template <typename S>
+    bool GPURemoteChannelInfo::serialize(S &serializer) const
+    {
+      return ((serializer << owner) && (serializer << kind) &&
+              (serializer << remote_ptr) && (serializer << paths));
+    }
+
+    template <typename S>
+    /*static*/ RemoteChannelInfo *GPURemoteChannelInfo::deserialize_new(S &deserializer)
+    {
+      NodeID owner;
+      XferDesKind kind;
+      uintptr_t remote_ptr;
+      std::vector<Channel::SupportedPath> paths;
+
+      if((deserializer >> owner) && (deserializer >> kind) &&
+         (deserializer >> remote_ptr) && (deserializer >> paths)) {
+        return new GPURemoteChannelInfo(owner, kind, remote_ptr, paths);
+      } else {
+        return 0;
+      }
+    }
+
+    /*static*/ Serialization::PolymorphicSerdezSubclass<RemoteChannelInfo,
+                                                        GPURemoteChannelInfo>
+        GPURemoteChannelInfo::serdez_subclass;
+
+    ////////////////////////////////////////////////////////////////////////
+    //
+    // class GPURemoteChannel
+    //
+
+    GPURemoteChannel::GPURemoteChannel(uintptr_t _remote_ptr)
+      : RemoteChannel(_remote_ptr)
+    {}
 
     ////////////////////////////////////////////////////////////////////////
     //
