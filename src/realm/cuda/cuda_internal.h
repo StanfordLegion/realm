@@ -926,8 +926,46 @@ namespace Realm {
       long submit(Request **requests, long nr);
       GPU *get_gpu() const { return src_gpu; }
 
+      virtual RemoteChannelInfo *construct_remote_info() const;
+
+      virtual bool support_idindexed_fields(Memory src_mem, Memory dst_mem) const
+      {
+        return true;
+      }
+
     private:
       GPU *src_gpu;
+    };
+
+    class GPURemoteChannelInfo : public SimpleRemoteChannelInfo {
+    public:
+      GPURemoteChannelInfo(NodeID _owner, XferDesKind _kind, uintptr_t _remote_ptr,
+                           const std::vector<Channel::SupportedPath> &_paths);
+
+      virtual RemoteChannel *create_remote_channel();
+
+      template <typename S>
+      bool serialize(S &serializer) const;
+
+      template <typename S>
+      static RemoteChannelInfo *deserialize_new(S &deserializer);
+
+    protected:
+      static Serialization::PolymorphicSerdezSubclass<RemoteChannelInfo,
+                                                      GPURemoteChannelInfo>
+          serdez_subclass;
+    };
+
+    class GPURemoteChannel : public RemoteChannel {
+      friend class GPURemoteChannelInfo;
+
+      GPURemoteChannel(uintptr_t _remote_ptr);
+
+    public:
+      virtual bool support_idindexed_fields(Memory src_mem, Memory dst_mem) const
+      {
+        return true;
+      }
     };
 
     class GPUfillChannel;

@@ -4195,7 +4195,7 @@ namespace Realm {
   {
     unsigned bw = 5000;            // HACK - estimate at 5 GB/s
     unsigned latency = 2000;       // HACK - estimate at 2 us
-    unsigned frag_overhead = 1000; // HACK - estimate at 1 us
+    unsigned frag_overhead = 2000; // HACK - estimate at 1 us
     // any combination of SYSTEM/REGDMA/Z_COPY/SOCKET_MEM
     // for(size_t i = 0; i < num_cpu_mem_kinds; i++)
     //   add_path(cpu_mem_kinds[i], false,
