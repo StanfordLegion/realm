@@ -487,7 +487,7 @@ bool test_copies(Memory m, IndexSpace<N, T> is,
 
   // destroy instances
   for(int i = 0; i < num_layouts; i++)
-    inst[i].destroy();
+    inst[i].destroy().wait();
 
   return true;
 }
@@ -809,9 +809,6 @@ void top_level_task(const void *args, size_t arglen, const void *userdata, size_
     log_app.info() << "coverings test finished successfully";
   else
     log_app.error() << "coverings test finished with errors!";
-
-  // HACK: there's a shutdown race condition related to instance destruction
-  usleep(100000);
 
   Runtime::get_runtime().shutdown(Processor::get_current_finish_event(), ok ? 0 : 1);
 }
