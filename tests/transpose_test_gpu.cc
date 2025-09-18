@@ -154,22 +154,25 @@ void dump_and_verify_fill(RegionInstance inst, DT fill_value, FieldID fid,
           assert(v == fill_value);
         }
         if(verbose) {
-          if((i) % row_size == 0)
+          if((i) % row_size == 0) {
             std::cout << '\n';
+          }
           std::cout << it2.p << ": " << v << " ";
         }
       }
-      if(verbose)
+      if(verbose) {
         std::cout << '\n';
+      }
     }
   }
 }
 
 template <int N, typename T, typename DT>
 void dump_and_verify(RegionInstance inst, FieldID fid, const IndexSpace<N, T> &is,
-                     std::vector<DT> test_data, bool verbose = false, bool verify = true)
+                     const std::vector<DT> &test_data, bool verbose = false,
+                     bool verify = true)
 {
-  const size_t row_size = is.bounds.hi[N - 1] - is.bounds.lo[N - 1];
+  const size_t row_size = is.bounds.hi[0] - is.bounds.lo[0] + 1;
   if(verify || verbose) {
     GenericAccessor<DT, N, T> acc(inst, fid);
     size_t i = 0;
@@ -185,14 +188,16 @@ void dump_and_verify(RegionInstance inst, FieldID fid, const IndexSpace<N, T> &i
           assert(v == test_data[i]);
         }
         if(verbose) {
-          if((i) % row_size == 0)
+          if((i) % row_size == 0) {
             std::cout << '\n';
+          }
           std::cout << it2.p << ": " << v << " ";
         }
         i++;
       }
-      if(verbose)
+      if(verbose) {
         std::cout << '\n';
+      }
     }
   }
 }
@@ -316,7 +321,7 @@ void do_single_dim(Memory src_mem, Memory dst_mem, int log2_size, size_t narrow_
         domain.back().hi[i] = (1 << (log2_size / N)) - 1;
     }
   }
-  IndexSpace<N> is(domain);
+  IndexSpace<N, T> is(domain);
 
   if(src_bounds.empty()) {
     src_bounds.resize(1);
@@ -330,7 +335,7 @@ void do_single_dim(Memory src_mem, Memory dst_mem, int log2_size, size_t narrow_
     }
   }
 
-  IndexSpace<N> src_is(src_bounds);
+  IndexSpace<N, T> src_is(src_bounds);
 
   if(dst_bounds.empty()) {
     dst_bounds.resize(1);
@@ -344,7 +349,7 @@ void do_single_dim(Memory src_mem, Memory dst_mem, int log2_size, size_t narrow_
     }
   }
 
-  IndexSpace<N> dst_is(dst_bounds);
+  IndexSpace<N, T> dst_is(dst_bounds);
 
   std::map<FieldID, size_t> field_sizes;
   field_sizes[0] = sizeof(FT);
@@ -380,6 +385,7 @@ void do_single_dim(Memory src_mem, Memory dst_mem, int log2_size, size_t narrow_
       if(!dst_perms.empty() && dst_perms.find(perms[j].name) == dst_perms.end()) {
         continue;
       }
+
       RegionInstance dst_inst;
       {
         InstanceLayoutGeneric *ilg = InstanceLayoutGeneric::choose_instance_layout<N, T>(
@@ -422,6 +428,7 @@ void do_single_dim(Memory src_mem, Memory dst_mem, int log2_size, size_t narrow_
       wait_for.wait();
       dump_and_verify_fill<N, T, FT>(dst_inst, fill_value, /*field_id*/ 0, is,
                                      TestConfig::verbose, TestConfig::verify);
+
       wait_for = is.copy(srcs, dsts, prs, wait_for);
       wait_for.wait();
 
@@ -553,31 +560,54 @@ void top_level_task(const void *args, size_t arglen, const void *userdata, size_
                                          TestConfig::narrow_dim, p, {"XY"}, {"YX"});
       } else if(TestConfig::dim_mask == 3) {
         if(!TestConfig::do_unit_test) {
-          // TODO(apryakhin@): This is an HTR hard-coded use case.
-          // Consider finding a more generica alternative.
-          std::vector<Rect<3>> domain;
-          domain.push_back(Rect<3>(Point<3>(0, 9, 9), Point<3>(0, 16, 16)));
-          domain.push_back(Rect<3>(Point<3>(8, 9, 9), Point<3>(8, 16, 16)));
 
-          std::vector<Rect<3>> src_bounds = {
-              Rect<3>(Point<3>(0, 9, 9), Point<3>(8, 17, 17))};
+          {
+            // TODO(apryakhin@): This is an HTR hard-coded use case.
+            // Consider finding a more generica alternative.
+            std::vector<Rect<3>> domain;
+            domain.push_back(Rect<3>(Point<3>(0, 9, 9), Point<3>(0, 16, 16)));
+            domain.push_back(Rect<3>(Point<3>(8, 9, 9), Point<3>(8, 16, 16)));
 
-          std::vector<Rect<3>> dst_bounds;
-          dst_bounds.push_back(Rect<3>(Point<3>(0, 9, 6), Point<3>(8, 17, 8)));
-          dst_bounds.push_back(Rect<3>(Point<3>(0, 6, 9), Point<3>(8, 8, 17)));
-          dst_bounds.push_back(Rect<3>(Point<3>(0, 9, 9), Point<3>(0, 16, 16)));
-          dst_bounds.push_back(Rect<3>(Point<3>(8, 9, 9), Point<3>(8, 16, 16)));
-          dst_bounds.push_back(Rect<3>(Point<3>(9, 9, 9), Point<3>(11, 17, 17)));
-          dst_bounds.push_back(Rect<3>(Point<3>(0, 17, 9), Point<3>(8, 17, 16)));
-          dst_bounds.push_back(Rect<3>(Point<3>(0, 9, 17), Point<3>(8, 17, 17)));
+            std::vector<Rect<3>> src_bounds = {
+                Rect<3>(Point<3>(0, 9, 9), Point<3>(8, 17, 17))};
 
-          do_single_dim_field_size<3, int>(
-              *src_it, *dst_it, log2_buffer_size, TestConfig::narrow_dim, p, {}, {},
-              domain, src_bounds, dst_bounds, TestConfig::field_size);
+            std::vector<Rect<3>> dst_bounds;
+            dst_bounds.push_back(Rect<3>(Point<3>(0, 9, 6), Point<3>(8, 17, 8)));
+            dst_bounds.push_back(Rect<3>(Point<3>(0, 6, 9), Point<3>(8, 8, 17)));
+            dst_bounds.push_back(Rect<3>(Point<3>(0, 9, 9), Point<3>(0, 16, 16)));
+            dst_bounds.push_back(Rect<3>(Point<3>(8, 9, 9), Point<3>(8, 16, 16)));
+            dst_bounds.push_back(Rect<3>(Point<3>(9, 9, 9), Point<3>(11, 17, 17)));
+            dst_bounds.push_back(Rect<3>(Point<3>(0, 17, 9), Point<3>(8, 17, 16)));
+            dst_bounds.push_back(Rect<3>(Point<3>(0, 9, 17), Point<3>(8, 17, 17)));
+
+            do_single_dim_field_size<3, int>(
+                *src_it, *dst_it, log2_buffer_size, TestConfig::narrow_dim, p, {}, {},
+                domain, src_bounds, dst_bounds, TestConfig::field_size);
+          }
+
+          {
+            using coord_t = long long;
+
+            std::set<std::string> dst_perms = {"ZYX"};
+            std::set<std::string> src_perms = {"ZXY"};
+
+            std::vector<Rect<3, coord_t>> domain = {
+                Rect<3, coord_t>(Point<3, coord_t>(0, 0, 0), Point<3, coord_t>(2, 2, 2))};
+            std::vector<Rect<3, coord_t>> src_bounds = domain, dst_bounds = domain;
+
+            domain = {
+                Rect<3, coord_t>(Point<3, coord_t>(0, 0, 1), Point<3, coord_t>(2, 2, 2))};
+            do_single_dim_field_size<3, coord_t>(*src_it, *dst_it,
+                                                 /*log2_size=*/0, /*narrow_size=*/0, p,
+                                                 src_perms, dst_perms, domain, src_bounds,
+                                                 dst_bounds,
+                                                 /*field_size=*/8, /*pad=*/0);
+          }
 
         } else {
           const size_t block_cols = TestConfig::block_cols;
           const size_t block_rows = TestConfig::block_rows;
+
           for(int pad_x = -1; pad_x <= 1; pad_x++) {
             for(int pad_y = -1; pad_y <= 1; pad_y++) {
               for(size_t field_size = 8; field_size <= 64; field_size += 8) {
