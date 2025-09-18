@@ -348,7 +348,7 @@ void main_task(const void *args, size_t arglen, const void *userdata, size_t use
   sg.destroy();
 
   for(int i = 0; i < 5; i++) {
-    insts[i].destroy();
+    insts[i].destroy().wait();
   }
 }
 

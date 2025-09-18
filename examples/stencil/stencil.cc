@@ -681,15 +681,19 @@ void shard_task(const void *args, size_t arglen, const void *userdata, size_t us
   // Make sure all operations are done before returning
   Event::merge_events(xp_copy_done, xm_copy_done, yp_copy_done, ym_copy_done).wait();
 
-  private_inst.destroy();
-  if(xp_inst_out_local.exists())
-    xp_inst_out_local.destroy();
-  if(xm_inst_out_local.exists())
-    xm_inst_out_local.destroy();
-  if(yp_inst_out_local.exists())
-    yp_inst_out_local.destroy();
-  if(ym_inst_out_local.exists())
-    ym_inst_out_local.destroy();
+  private_inst.destroy().wait();
+  if(xp_inst_out_local.exists()) {
+    xp_inst_out_local.destroy().wait();
+  }
+  if(xm_inst_out_local.exists()) {
+    xm_inst_out_local.destroy().wait();
+  }
+  if(yp_inst_out_local.exists()) {
+    yp_inst_out_local.destroy().wait();
+  }
+  if(ym_inst_out_local.exists()) {
+    ym_inst_out_local.destroy().wait();
+  }
 
   free(weights);
 }
@@ -1074,21 +1078,29 @@ void top_level_task(const void *args, size_t arglen, const void *userdata, size_
   printf("Stop skew: %e seconds\n", (last_stop - first_stop) / 1e6);
 
   for(DefaultMap<Point2, RegionInstance>::const_iterator it = xp_insts.begin();
-      it != xp_insts.end(); it++)
-    if(it->second.exists())
-      it->second.destroy();
+      it != xp_insts.end(); it++) {
+    if(it->second.exists()) {
+      it->second.destroy().wait();
+    }
+  }
   for(DefaultMap<Point2, RegionInstance>::const_iterator it = xm_insts.begin();
-      it != xm_insts.end(); it++)
-    if(it->second.exists())
-      it->second.destroy();
+      it != xm_insts.end(); it++) {
+    if(it->second.exists()) {
+      it->second.destroy().wait();
+    }
+  }
   for(DefaultMap<Point2, RegionInstance>::const_iterator it = yp_insts.begin();
-      it != yp_insts.end(); it++)
-    if(it->second.exists())
-      it->second.destroy();
+      it != yp_insts.end(); it++) {
+    if(it->second.exists()) {
+      it->second.destroy().wait();
+    }
+  }
   for(DefaultMap<Point2, RegionInstance>::const_iterator it = ym_insts.begin();
-      it != ym_insts.end(); it++)
-    if(it->second.exists())
-      it->second.destroy();
+      it != ym_insts.end(); it++) {
+    if(it->second.exists()) {
+      it->second.destroy().wait();
+    }
+  }
 }
 
 int main(int argc, char **argv)
