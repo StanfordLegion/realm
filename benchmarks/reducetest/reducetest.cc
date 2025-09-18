@@ -415,9 +415,7 @@ void hist_batch_localize_task(const void *args, size_t arglen, const void *userd
   // now copy the local instance back to the original one
   Event done = hbargs->region.copy(dst, src, ProfilingRequestSet());
 
-  lclinst.destroy(done);
-
-  done.wait();
+  lclinst.destroy(done).wait();
 }
 
 template <class REDOP>
@@ -467,9 +465,7 @@ void hist_batch_redfold_task(const void *args, size_t arglen, const void *userda
   dst[0].set_redop(REDOP_BUCKET_ADD, false /*!fold*/);
   Event done = hbargs->region.copy(src, dst, ProfilingRequestSet(), Event::NO_EVENT);
 
-  redinst.destroy(done);
-
-  done.wait();
+  redinst.destroy(done).wait();
 }
 
 template <class REDOP>

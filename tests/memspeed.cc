@@ -364,7 +364,7 @@ void top_level_task(const void *args, size_t arglen, const void *userdata, size_
         e.wait();
       }
 
-      inst.destroy();
+      inst.destroy().wait();
     }
   }
 
@@ -559,15 +559,12 @@ void top_level_task(const void *args, size_t arglen, const void *userdata, size_
                          << ", num_hops_short_copy:" << num_hops_short;
         }
 
-        inst2.destroy();
+        inst2.destroy().wait();
       }
 
-      inst1.destroy();
+      inst1.destroy().wait();
     }
   }
-
-  // HACK: there's a shutdown race condition related to instance destruction
-  usleep(100000);
 }
 
 int main(int argc, char **argv)
