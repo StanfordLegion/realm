@@ -784,9 +784,11 @@ namespace Realm {
     config_map.insert({"pin_util_procs", &pin_util_procs});
     config_map.insert({"use_ext_sysmem", &use_ext_sysmem});
     config_map.insert({"regmem", &reg_mem_size});
+    config_map.insert({"ib_regmem", &reg_ib_mem_size});
     config_map.insert({"report_sparsity_leaks", &report_sparsity_leaks});
     config_map.insert({"barrier_broadcast_radix", &barrier_broadcast_radix});
     config_map.insert({"diskmem", &disk_mem_size});
+    config_map.insert({"dma_multi_field", &dma_multi_field});
 
     resource_map.insert({"cpu", &res_num_cpus});
     resource_map.insert({"sysmem", &res_sysmem_size});
@@ -841,6 +843,7 @@ namespace Realm {
         .add_option_int_units("-ll:ib_rsize", reg_ib_mem_size, 'm')
         .add_option_int_units("-ll:dsize", disk_mem_size, 'm')
         .add_option_int("-ll:dma", dma_worker_threads)
+        .add_option_int("-ll:dma_multi_field", dma_multi_field)
         .add_option_bool("-ll:pin_dma", pin_dma_threads)
         .add_option_int("-ll:dummy_rsrv_ok", dummy_reservation_ok)
         .add_option_bool("-ll:show_rsrv", show_reservations)
