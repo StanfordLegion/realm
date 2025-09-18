@@ -111,6 +111,7 @@ list(
   repl_heap_test.cc
   nodeset_test.cc
   transfer_iterator_test.cc
+  idindexed_fields_iterator_test.cc
   lowlevel_dma_test.cc
   circ_queue_test.cc
   gather_scatter_test.cc
@@ -417,6 +418,10 @@ if(TEST_USE_GPU)
     target_link_libraries(cuda_memcpy_test CUDA::cudart)
     target_link_libraries(cuda_scatter_test CUDA::cudart)
     target_link_libraries(test_cuhook CUDA::cudart)
+    set(multifield_transfer_ARGS -ll:gpu 1)
+    set(multifield_transfer_RESOURCE_LOCK gpu)
+    add_integration_test(multifield_transfer "${REALM_TEST_DIR}/multifield_transfer.cc")
+    target_link_libraries(multifield_transfer CUDA::cudart)
   endif()
   set(transpose_test_gpu_ARGS -ll:gpu 1)
   set(transpose_test_gpu_RESOURCE_LOCK gpu)
