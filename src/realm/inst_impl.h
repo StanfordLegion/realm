@@ -183,7 +183,7 @@ namespace Realm {
 
     public:
       size_t inst_offset;
-      Event ready_event;
+      Event ready_event, destroy_event;
       bool need_alloc_result, need_notify_dealloc;
       InstanceLayoutGeneric *layout;
       ExternalInstanceResource *ext_resource;

@@ -177,10 +177,10 @@ bool test_reduction(IndexSpace<N, T> domain, IndexSpace<N, T> bloat, Memory dst_
       }
   }
 
-  chk_inst.destroy();
-  dst_inst.destroy();
+  chk_inst.destroy().wait();
+  dst_inst.destroy().wait();
   for(size_t i = 0; i < src_insts.size(); i++) {
-    src_insts[i].destroy();
+    src_insts[i].destroy().wait();
   }
 
   return (errors == 0);

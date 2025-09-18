@@ -19,6 +19,7 @@
 #include <cstdlib>
 #include <cassert>
 #include <cstring>
+#include <thread>
 #include <chrono>
 
 #include <time.h>
@@ -112,7 +113,7 @@ void child_task(const void *args, size_t arglen, const void *userdata, size_t us
     // create a user event and wait on it - hangs unless somebody cancels us
     UserEvent::create_user_event().wait();
   } else {
-    usleep(cargs.sleep_useconds);
+    std::this_thread::sleep_for(std::chrono::microseconds(cargs.sleep_useconds));
   }
 
 #ifdef REALM_USE_CUDA
@@ -494,7 +495,7 @@ void top_level_task(const void *args, size_t arglen, const void *userdata, size_
     ChildTaskArgs cargs;
     cargs.sleep_useconds = 5000000;
     Event e4 = task_proc.spawn(CHILD_TASK, &cargs, sizeof(cargs), prs);
-    sleep(2);
+    std::this_thread::sleep_for(std::chrono::seconds(2));
     int info = 111;
     e4.cancel_operation(&info, sizeof(info));
     bool poisoned = false;
@@ -507,7 +508,7 @@ void top_level_task(const void *args, size_t arglen, const void *userdata, size_
     ChildTaskArgs cargs;
     cargs.hang = true;
     Event e5 = task_proc.spawn(CHILD_TASK, &cargs, sizeof(cargs), prs);
-    sleep(2);
+    std::this_thread::sleep_for(std::chrono::seconds(2));
     int info = 112;
     e5.cancel_operation(&info, sizeof(info));
     bool poisoned = false;
@@ -565,7 +566,7 @@ void top_level_task(const void *args, size_t arglen, const void *userdata, size_
       assert(poisoned);
     }
 
-    inst.destroy();
+    inst.destroy().wait();
   }
 
   // instance profiling #2 - allocation failure
@@ -590,7 +591,7 @@ void top_level_task(const void *args, size_t arglen, const void *userdata, size_
     // a normal inst.destroy(e) would not work here, as 'e' is poisoned...
     // instead, we need to "launder" the poison in order to actually clean
     //  up the metadata for the failed allocation
-    inst.destroy(Event::ignorefaults(e));
+    inst.destroy(Event::ignorefaults(e)).wait();
   }
 
   printf("waiting for profiling responses...\n");

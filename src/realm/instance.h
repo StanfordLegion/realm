@@ -306,7 +306,13 @@ namespace Realm {
                                                        const ProfilingRequestSet &prs,
                                                        Event wait_on = Event::NO_EVENT));
 
-    void destroy(Event wait_on = Event::NO_EVENT) const;
+    /// @brief Destroy the RegionInstance, releasing any storage associated with it, after
+    /// the given \p wait_on event has been triggered.
+    /// @note The actual release of the storage can happen at any time after the given
+    /// \p wait_on event has triggered but happens before the returned event is triggered
+    /// @param wait_on Event to wait on before storage can safely be released
+    /// @return Event triggered when destruction completes (storage is safely released)
+    Event destroy(Event wait_on = Event::NO_EVENT) const;
 
     AddressSpace address_space(void) const;
 
@@ -381,9 +387,15 @@ namespace Realm {
       CustomSerdezID serdez_id;
     };
 
-    // if any fields in the instance need custom destruction, use this version
-    void destroy(const std::vector<DestroyedField> &destroyed_fields,
-                 Event wait_on = Event::NO_EVENT) const;
+    /// @brief Destroy the RegionInstance, releasing any storage associated with it, after
+    /// the given \p wait_on event has been triggered.
+    /// If any fields in the instance need custom destruction, use this version.
+    /// @note The actual release of the storage can happen at any time after the given
+    /// \p wait_on event has triggered but happens before the returned event is triggered
+    /// @param wait_on Event to wait on before storage can safely be released
+    /// @return Event triggered when destruction completes (storage is safely released)
+    Event destroy(const std::vector<DestroyedField> &destroyed_fields,
+                  Event wait_on = Event::NO_EVENT) const;
 
     bool can_get_strided_access_parameters(size_t start, size_t count,
                                            ptrdiff_t field_offset, size_t field_size);
