@@ -20,118 +20,126 @@
 
 #include <cstdint>
 #include <cstring>
-#if defined(REALM_ON_WINDOWS)
-#define WIN32_LEAN_AND_MEAN 1
-#include <windows.h>
-#endif
 
 class ReductionOpMixedAdd {
 public:
-  typedef uint64_t LHS;
-  typedef uint32_t RHS;
+  typedef double LHS;
+  typedef int RHS;
 
-  // You can specify user data here that can be applied to all elements as data members
-  // here.
-  RHS offset = 1;
-  // The identity for fold operations
-  static const RHS identity = 0;
-
-  // The reduction operation definitions all processors will use
   template <bool EXCL>
-  REALM_CUDA_HD void apply(LHS &lhs, const RHS &rhs) const
+  static void apply(LHS &lhs, RHS rhs)
   {
     if(EXCL) {
-      lhs += rhs * offset;
+      lhs += rhs;
     } else {
-      atomic_add(lhs, rhs * offset);
+      // no FP64 atomics on cpu, so use compare_and_swap
+      volatile uint64_t *tgtptr = reinterpret_cast<uint64_t *>(&lhs);
+      while(true) {
+        uint64_t origval = *tgtptr;
+        LHS v;
+        memcpy(&v, &origval, sizeof(LHS));
+        v += rhs;
+        uint64_t newval;
+        memcpy(&newval, &v, sizeof(LHS));
+        if(__sync_bool_compare_and_swap(tgtptr, origval, newval))
+          break;
+      }
     }
   }
 
+  // both of these are optional
+  static const RHS identity;
+
   template <bool EXCL>
-  REALM_CUDA_HD void fold(RHS &rhs1, const RHS &rhs2) const
+  static void fold(RHS &rhs1, RHS rhs2)
   {
     if(EXCL) {
-      rhs1 += rhs2 * offset;
+      rhs1 += rhs2;
     } else {
-      atomic_add(rhs1, rhs2 * offset);
+      // non-exclusive fold is easier because we do have atomic integer add
+      __sync_fetch_and_add(&rhs1, rhs2);
     }
-  }
-
-  // Provide a platform agnostic version of atomically incrementing an element by some
-  // given amount
-  static REALM_CUDA_HD void atomic_add(LHS &lhs, const RHS &rhs)
-  {
-#if defined(__CUDA_ARCH__) || defined(__HIP_DEVICE_COMPILE__)
-    atomicAdd((unsigned long long int *)&lhs, (unsigned long long)rhs);
-#elif defined(_MSC_VER)
-    InterlockedAdd64((volatile int64_t *)&lhs, (int64_t)rhs);
-#else
-// Would be nice to use atomic_ref here...
-#ifdef __clang__
-#pragma clang diagnostic push
-#pragma clang diagnostic ignored "-Watomic-alignment"
-#endif
-    __atomic_add_fetch(&lhs, (LHS)rhs, __ATOMIC_SEQ_CST);
-#ifdef __clang__
-#pragma clang diagnostic pop
-#endif
-#endif
-  }
-
-  static REALM_CUDA_HD void atomic_add(RHS &rhs1, const RHS &rhs2)
-  {
-#if defined(__CUDA_ARCH__) || defined(__HIP_DEVICE_COMPILE__)
-    atomicAdd(&rhs1, rhs2);
-#elif defined(_MSC_VER)
-    InterlockedAdd((volatile LONG *)&rhs1, (LONG)rhs2);
-#else
-// Would be nice to use atomic_ref here...
-#ifdef __clang__
-#pragma clang diagnostic push
-#pragma clang diagnostic ignored "-Watomic-alignment"
-#endif
-    __atomic_add_fetch(&rhs1, rhs2, __ATOMIC_SEQ_CST);
-#ifdef __clang__
-#pragma clang diagnostic pop
-#endif
-#endif
   }
 
 #if defined(REALM_USE_CUDA) && defined(__CUDACC__)
-  // We don't actually want to register this the normal way for cuda in order to test the
-  // auxilary way for registration but if CUDART hijack is enabled, we need to use it
-  // since we can't call runtime functions outside of a task... :sigh:
-#if defined(REALM_USE_CUDART_HIJACK)
   static const bool has_cuda_reductions = true;
+
+  // device methods for CUDA
+  template <bool EXCL>
+  static __device__ void apply_cuda(LHS &lhs, RHS rhs)
+  {
+    if(EXCL) {
+      lhs += rhs;
+    } else {
+#if __CUDA_ARCH__ >= 600
+      // sm_60 and up has native atomics on doubles
+      atomicAdd(&lhs, (LHS)rhs);
 #else
-  static const bool has_cuda_reductions = false;
+      // before sm_60, this requires a CAS - don't actually do an initial read,
+      //  but guess that the value is 0 and the first CAS will serve as the
+      //  read in the (common) case where we guessed wrong
+      unsigned long long oldval = 0;
+      while(true) {
+        unsigned long long newval, chkval;
+        newval = __double_as_longlong(__longlong_as_double(oldval) + rhs);
+        chkval = atomicCAS(reinterpret_cast<unsigned long long *>(&lhs), oldval, newval);
+        if(chkval == oldval)
+          break;
+        oldval = chkval;
+      }
 #endif
-  template <bool EXCL>
-  __device__ void apply_cuda(LHS &lhs, const RHS &rhs) const
-  {
-    apply<EXCL>(lhs, rhs);
+    }
   }
+
   template <bool EXCL>
-  __device__ void fold_cuda(RHS &rhs1, const RHS &rhs2) const
+  static __device__ void fold_cuda(RHS &rhs1, RHS rhs2)
   {
-    fold<EXCL>(rhs1, rhs2);
+    if(EXCL) {
+      rhs1 += rhs2;
+    } else {
+      atomicAdd(&rhs1, rhs2);
+    }
   }
 #endif
 
-#if defined(REALM_USE_HIP) && defined(__HIPCC__)
-  // HIP implementations that redirect to the __host__ __device__ implementations defined
-  // earlier
+#if defined(REALM_USE_HIP) && (defined(__CUDACC__) || defined(__HIPCC__))
   static const bool has_hip_reductions = true;
 
+  // device methods for HIP
   template <bool EXCL>
-  __device__ void apply_hip(LHS &lhs, const RHS &rhs) const
+  static __device__ void apply_hip(LHS &lhs, RHS rhs)
   {
-    apply<EXCL>(lhs, rhs);
+    if(EXCL) {
+      lhs += rhs;
+    } else {
+#if(__CUDA_ARCH__ >= 600) || defined(__HIP_DEVICE_COMPILE__)
+      // sm_60 and up has native atomics on doubles
+      atomicAdd(&lhs, (LHS)rhs);
+#else
+      // before sm_60, this requires a CAS - don't actually do an initial read,
+      //  but guess that the value is 0 and the first CAS will serve as the
+      //  read in the (common) case where we guessed wrong
+      unsigned long long oldval = 0;
+      while(true) {
+        unsigned long long newval, chkval;
+        newval = __double_as_longlong(__longlong_as_double(oldval) + rhs);
+        chkval = atomicCAS(reinterpret_cast<unsigned long long *>(&lhs), oldval, newval);
+        if(chkval == oldval)
+          break;
+        oldval = chkval;
+      }
+#endif
+    }
   }
+
   template <bool EXCL>
-  __device__ void fold_hip(RHS &rhs1, const RHS &rhs2) const
+  static __device__ void fold_hip(RHS &rhs1, RHS rhs2)
   {
-    fold<EXCL>(rhs1, rhs2);
+    if(EXCL) {
+      rhs1 += rhs2;
+    } else {
+      atomicAdd(&rhs1, rhs2);
+    }
   }
 #endif
 };

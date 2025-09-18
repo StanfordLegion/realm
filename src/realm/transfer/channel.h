@@ -730,8 +730,6 @@ namespace Realm {
     // the kind of XferDes this channel can accept
     XferDesKind kind;
 
-    virtual bool supports_redop(ReductionOpID redop_id) const;
-
     // attempt to make progress on the specified xferdes
     virtual long progress_xd(XferDes *xd, long max_nr);
 
@@ -929,56 +927,46 @@ namespace Realm {
     RemoteChannel(uintptr_t _remote_ptr, const std::vector<Memory> &indirect_memories);
     RemoteChannel(uintptr_t _remote_ptr);
 
-    void shutdown() override;
+    virtual void shutdown();
 
-    XferDesFactory *get_factory() override;
+    virtual XferDesFactory *get_factory();
 
   public:
-    uintptr_t get_remote_ptr() const;
-
-    void register_redop(ReductionOpID redop_id);
-
-    bool supports_redop(ReductionOpID redop_id) const override;
-
     /*
      * Submit nr asynchronous requests into the channel instance.
      * This is supposed to be a non-blocking function call, and
      * should immediately return the number of requests that are
      * successfully submitted.
      */
-    long submit(Request **requests, long nr) override;
+    virtual long submit(Request **requests, long nr);
 
     /*
      *
      */
-    void pull() override;
+    virtual void pull();
 
     /*
      * Return the number of slots that are available for
      * submitting requests
      */
-    long available() override;
+    virtual long available();
 
-    uint64_t supports_path(ChannelCopyInfo channel_copy_info,
-                           CustomSerdezID src_serdez_id, CustomSerdezID dst_serdez_id,
-                           ReductionOpID redop_id, size_t total_bytes,
-                           const std::vector<size_t> *src_frags,
-                           const std::vector<size_t> *dst_frags,
-                           XferDesKind *kind_ret = 0, unsigned *bw_ret = 0,
-                           unsigned *lat_ret = 0) override;
+    virtual uint64_t
+    supports_path(ChannelCopyInfo channel_copy_info, CustomSerdezID src_serdez_id,
+                  CustomSerdezID dst_serdez_id, ReductionOpID redop_id,
+                  size_t total_bytes, const std::vector<size_t> *src_frags,
+                  const std::vector<size_t> *dst_frags, XferDesKind *kind_ret = 0,
+                  unsigned *bw_ret = 0, unsigned *lat_ret = 0);
 
     /// @brief Queries if a given \p mem can be used as an indirection buffer
     /// @param mem Memory to be used as an indirection buffer
     /// @return True if the given \p mem can be used as an indirection buffer for a copy
-    bool supports_indirection_memory(Memory mem) const override;
+    virtual bool supports_indirection_memory(Memory mem) const;
 
-    void enqueue_ready_xd(XferDes *xd) override { assert(0); }
-    void wakeup_xd(XferDes *xd) override { assert(0); }
+    virtual void enqueue_ready_xd(XferDes *xd) { assert(0); }
+    virtual void wakeup_xd(XferDes *xd) { assert(0); }
 
   protected:
-    mutable RWLock mutex;
-    uintptr_t remote_ptr;
-    std::set<ReductionOpID> supported_redops;
     SimpleXferDesFactory factory_singleton;
     const std::set<Memory> indirect_memories;
   };
@@ -1057,7 +1045,13 @@ namespace Realm {
     // multiple concurrent memreduces ok
     static const bool is_ordered = false;
 
-    virtual bool supports_redop(ReductionOpID redop_id) const;
+    // override because we don't want to claim non-reduction copies
+    virtual uint64_t
+    supports_path(ChannelCopyInfo channel_copy_info, CustomSerdezID src_serdez_id,
+                  CustomSerdezID dst_serdez_id, ReductionOpID redop_id,
+                  size_t total_bytes, const std::vector<size_t> *src_frags,
+                  const std::vector<size_t> *dst_frags, XferDesKind *kind_ret = 0,
+                  unsigned *bw_ret = 0, unsigned *lat_ret = 0);
 
     virtual XferDes *create_xfer_des(uintptr_t dma_op, NodeID launch_node, XferDesID guid,
                                      const std::vector<XferDesPortInfo> &inputs_info,

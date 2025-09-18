@@ -276,9 +276,7 @@ namespace Realm {
     void start(void);
 
     bool register_task(Processor::TaskFuncID taskid, Processor::TaskFuncPtr taskptr);
-    Event notify_register_reduction(ReductionOpID redop_id);
-    bool register_reduction(Event &event, ReductionOpID redop_id,
-                            const ReductionOpUntyped *redop);
+    bool register_reduction(ReductionOpID redop_id, const ReductionOpUntyped *redop);
     bool register_custom_serdez(CustomSerdezID serdez_id,
                                 const CustomSerdezUntyped *serdez);
 
