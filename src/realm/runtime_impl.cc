@@ -1126,6 +1126,7 @@ namespace Realm {
 
   void RuntimeImpl::add_dma_channel(Channel *c)
   {
+    c->update_channel_state();
     nodes[c->node].dma_channels.push_back(c);
   }
 
