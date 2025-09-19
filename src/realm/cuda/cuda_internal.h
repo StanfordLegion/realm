@@ -648,8 +648,10 @@ namespace Realm {
     public:
       GPU *gpu;
       Mutex mutex;
-      size_t cur_size;
-      std::map<RegionInstance, std::pair<CUdeviceptr, size_t>> alloc_bases;
+      CUmemoryPool pool = nullptr;
+      typedef std::unordered_map<RegionInstanceImpl *, CUdeviceptr> InstToPtrMap;
+      InstToPtrMap inst_to_ptr;
+      std::atomic<size_t> allocated_bytes = 0;
       NetworkSegment local_segment;
     };
 
@@ -1408,6 +1410,11 @@ namespace Realm {
   __op__(cuModuleGetGlobal, CUDA_VERSION_MIN);                                           \
   __op__(cuLaunchHostFunc, CUDA_VERSION_MIN);                                            \
   __op__(cuCtxRecordEvent, 12050);                                                       \
+  __op__(cuMemAllocFromPoolAsync, CUDA_VERSION_MIN);                                     \
+  __op__(cuMemPoolGetAttribute, CUDA_VERSION_MIN);                                       \
+  __op__(cuMemPoolSetAttribute, CUDA_VERSION_MIN);                                       \
+  __op__(cuDeviceGetMemPool, CUDA_VERSION_MIN);                                          \
+  __op__(cuMemPoolTrimTo, CUDA_VERSION_MIN);                                             \
   __op__(cuArrayGetMemoryRequirements, CUDA_VERSION_MIN);
 
 // Make sure to only use decltype, to ensure it matches the cuda.h definition
