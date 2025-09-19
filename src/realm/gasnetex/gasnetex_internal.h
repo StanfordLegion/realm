@@ -61,7 +61,6 @@ namespace Realm {
 
     void dec_usecount();
 
-    uintptr_t databuf_reserve(size_t bytes);
     void databuf_close();
 
     enum PktType
@@ -139,7 +138,8 @@ namespace Realm {
 
     void init(size_t _outbuf_count, size_t _outbuf_size, uintptr_t _baseptr);
 
-    OutbufMetadata *alloc_outbuf(OutbufMetadata::State state, bool overflow_ok);
+    OutbufMetadata *alloc_outbuf(OutbufMetadata::State state, bool overflow_ok,
+                                 const gex_rank_t *new_endpoint);
     void free_outbuf(OutbufMetadata *md);
 
     virtual bool do_work(TimeLimit work_until);
@@ -152,10 +152,18 @@ namespace Realm {
     // we manage the copying over overflow bufs back to real outbufs - track
     //  both pending overflow bufs and reserved outbufs and request bgwork
     //  time when we've got at least one of each
-    size_t num_overflow, num_reserved;
+    size_t num_overflow, num_reserved, num_buffers;
     OutbufMetadata *overflow_head;
     OutbufMetadata **overflow_tail;
     OutbufMetadata *reserved_head;
+    // In order to detect the case of misconfigured objcounts given the
+    // number of endpoints we count how many different endpoints we
+    // need to allocate buffers for, if it is more than the total number
+    // of buffers then we fail immediately since we'll never succeed
+    // TODO: Remove this once we insert a slow insertion pathway
+    // from dynamically allocated output buffers that are not
+    // registered with GASNet
+    std::vector<gex_rank_t> target_endpoints;
   };
 
   class PendingCompletionManager;
@@ -754,7 +762,6 @@ namespace Realm {
     ChunkedRecycler<PreparedMessage, 32> prep_alloc;
     ChunkedRecycler<PendingPutHeader, 32> put_alloc;
 
-    uintptr_t databuf_reserve(size_t bytes_needed, OutbufMetadata **mdptr);
   };
 
 }; // namespace Realm

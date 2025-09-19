@@ -264,22 +264,6 @@ namespace Realm {
       manager->free_outbuf(this);
   }
 
-  uintptr_t OutbufMetadata::databuf_reserve(size_t bytes)
-  {
-    assert(state == STATE_DATABUF);
-    size_t eff_bytes = roundup_pow2(bytes, 128);
-    size_t old_rsrv = databuf_rsrv_offset;
-    size_t new_rsrv = old_rsrv + eff_bytes;
-    if(new_rsrv <= size) {
-      databuf_use_count += 1;
-      databuf_rsrv_offset = new_rsrv;
-      log_gex.debug() << "dbuf reserve: this=" << this << " base=" << std::hex
-                      << (baseptr + old_rsrv) << std::dec;
-      return baseptr + old_rsrv;
-    } else
-      return 0;
-  }
-
   void OutbufMetadata::databuf_close()
   {
     assert(state == STATE_DATABUF);
@@ -434,6 +418,7 @@ namespace Realm {
   void OutbufManager::init(size_t _outbuf_count, size_t _outbuf_size, uintptr_t _baseptr)
   {
     assert(_outbuf_count > 0);
+    num_buffers = _outbuf_count;
     outbuf_size = _outbuf_size;
     metadatas = new OutbufMetadata[_outbuf_count];
     for(size_t i = 0; i < _outbuf_count; i++) {
@@ -447,7 +432,8 @@ namespace Realm {
   }
 
   OutbufMetadata *OutbufManager::alloc_outbuf(OutbufMetadata::State state,
-                                              bool overflow_ok)
+                                              bool overflow_ok,
+                                              const gex_rank_t *new_endpoint)
   {
     OutbufMetadata *md;
     {
@@ -455,6 +441,22 @@ namespace Realm {
       md = first_available;
       if(md)
         first_available = md->nextbuf;
+      if((new_endpoint != nullptr) &&
+         !std::binary_search(target_endpoints.begin(), target_endpoints.end(),
+                             *new_endpoint)) {
+        target_endpoints.push_back(*new_endpoint);
+        if(num_buffers < target_endpoints.size()) {
+          log_gex_obmgr.fatal()
+              << "Detected inevitable hang because there are "
+              << "not enough object buffers for GASNet to service all endpoints "
+              << "on node " << Network::my_node_id << ". This node was configured "
+              << "with -gex:obcount=" << num_buffers << " but at least "
+              << target_endpoints.size() << " object buffers are required.";
+          std::abort();
+        } else {
+          std::sort(target_endpoints.begin(), target_endpoints.end());
+        }
+      }
     }
 
     if(REALM_LIKELY(md != nullptr)) {
@@ -1188,7 +1190,8 @@ namespace Realm {
         // get a new pbuf
         OutbufMetadata *new_pbuf;
         new_pbuf =
-            internal->obmgr.alloc_outbuf(OutbufMetadata::STATE_PKTBUF, overflow_ok);
+            internal->obmgr.alloc_outbuf(OutbufMetadata::STATE_PKTBUF, overflow_ok,
+                                         (cur_pbuf == nullptr) ? &tgt_rank : nullptr);
         if(!new_pbuf)
           return false; // out of space
 
@@ -5286,33 +5289,6 @@ namespace Realm {
     }
 
     ThreadLocal::in_am_handler = false;
-  }
-
-  uintptr_t GASNetEXInternal::databuf_reserve(size_t bytes_needed, OutbufMetadata **mdptr)
-  {
-    assert(bytes_needed <= module->cfg_outbuf_size);
-
-    AutoLock<> al(databuf_mutex);
-    if(databuf_md) {
-      uintptr_t base = databuf_md->databuf_reserve(bytes_needed);
-      if(base != 0) {
-        if(mdptr)
-          *mdptr = databuf_md;
-        return base;
-      }
-      // failed - close this one out and get a new one
-      databuf_md->databuf_close();
-    }
-    databuf_md =
-        obmgr.alloc_outbuf(OutbufMetadata::STATE_DATABUF, false /*!overflow_ok*/);
-    if(!databuf_md)
-      return 0;
-    // fresh outbuf - this must succeed
-    uintptr_t base = databuf_md->databuf_reserve(bytes_needed);
-    assert(base != 0);
-    if(mdptr)
-      *mdptr = databuf_md;
-    return base;
   }
 
 }; // namespace Realm
