@@ -138,15 +138,9 @@ static void test_copy(realm_runtime_t runtime, realm_memory_t src_mem,
       .sparsity_map = nullptr,
   };
 
-<<<<<<< HEAD
-  CHECK_REALM(realm_region_instance_copy(runtime, &copy_params, nullptr, REALM_NO_EVENT,
-                                         0, &event));
-  CHECK_REALM(realm_event_wait(runtime, event, REALM_WAIT_INFINITE, nullptr));
-=======
   CHECK_REALM(realm_region_instance_copy(runtime, &copy_params, nullptr, 0,
                                          REALM_NO_EVENT, 0, &event));
   CHECK_REALM(realm_event_wait(runtime, event, nullptr));
->>>>>>> 36d4d3088e (add C API for profiling)
 
   bool success = true;
   Realm::GenericAccessor<int, N, T> acc(Realm::RegionInstance(dst_inst), FID_BASE);
