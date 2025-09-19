@@ -82,6 +82,8 @@ TEST_P(SupportsPathTest, CheckSupportsPath)
   std::unique_ptr<Channel> channel(
       new MemcpyChannel(bgwork, &node, remote_shared_memory_mappings));
 
+  channel->update_channel_state();
+
   uint64_t cost = channel->supports_path(
       ChannelCopyInfo(src_mem->me, dst_mem->me), test_case.src_serdez_id,
       test_case.dst_serdez_id, test_case.redop_id, bytes,

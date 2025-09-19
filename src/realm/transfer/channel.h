@@ -32,6 +32,7 @@
 #include <vector>
 #include <deque>
 #include <queue>
+#include <unordered_set>
 #include <assert.h>
 #include <string.h>
 
@@ -730,6 +731,12 @@ namespace Realm {
     // the kind of XferDes this channel can accept
     XferDesKind kind;
 
+    // whether the channel has a redop path
+    bool has_redop_path{false};
+
+    // whether the channel has a non-redop path
+    bool has_non_redop_path{false};
+
     virtual bool supports_redop(ReductionOpID redop_id) const;
 
     // attempt to make progress on the specified xferdes
@@ -809,6 +816,8 @@ namespace Realm {
     };
 
     const std::vector<SupportedPath> &get_paths(void) const;
+
+    void update_channel_state(void);
 
     // returns 0 if the path is not supported, or a strictly-positive
     //  estimate of the time required (in nanoseconds) to transfer data
@@ -978,7 +987,7 @@ namespace Realm {
   protected:
     mutable RWLock mutex;
     uintptr_t remote_ptr;
-    std::set<ReductionOpID> supported_redops;
+    std::unordered_set<ReductionOpID> supported_redops;
     SimpleXferDesFactory factory_singleton;
     const std::set<Memory> indirect_memories;
   };
