@@ -761,7 +761,6 @@ namespace Realm {
     ChunkedRecycler<GASNetEXEvent, 64> event_alloc;
     ChunkedRecycler<PreparedMessage, 32> prep_alloc;
     ChunkedRecycler<PendingPutHeader, 32> put_alloc;
-
   };
 
 }; // namespace Realm
