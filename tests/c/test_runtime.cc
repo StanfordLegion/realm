@@ -85,7 +85,7 @@ void REALM_FNPTR top_level_task(const void *args, size_t arglen, const void *use
 
   CHECK_REALM(realm_processor_spawn(runtime, gpu_proc, HELLO_TASK, 0, 0, nullptr, 0,
                                     REALM_NO_EVENT, 0, &event));
-  CHECK_REALM(realm_event_wait(runtime, event, nullptr));
+  CHECK_REALM(realm_event_wait(runtime, event, REALM_WAIT_INFINITE, nullptr));
 #endif
 }
 
