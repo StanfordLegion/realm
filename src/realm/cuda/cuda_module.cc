@@ -51,7 +51,6 @@
 #include <sstream>
 #include <iomanip>
 #include <algorithm>
-#include <utility>
 
 // The embedded fat binary that holds all the internal
 // realm cuda kernels (see generated file realm_fatbin.c)
@@ -1166,15 +1165,6 @@ namespace Realm {
       }
 
       return nullptr;
-    }
-    bool GPU::register_reduction(ReductionOpID redop_id, CUfunction apply_excl,
-                                 CUfunction apply_nonexcl, CUfunction fold_excl,
-                                 CUfunction fold_nonexcl)
-    {
-      AutoLock<> al(alloc_mutex);
-      return gpu_reduction_table
-          .insert({redop_id, {apply_excl, apply_nonexcl, fold_excl, fold_nonexcl}})
-          .second;
     }
 
     bool GPUProcessor::register_task(Processor::TaskFuncID func_id,
@@ -4111,62 +4101,6 @@ namespace Realm {
       }
       // can not find the Processor p, so return false
       return false;
-    }
-
-    bool CudaModule::get_cuda_context(Processor p, CUctx_st **context) const
-    {
-      for(const GPU *gpu : gpus) {
-        if((gpu->proc->me) == p) {
-          *context = const_cast<CUcontext>(gpu->context);
-          return true;
-        }
-      }
-      // can not find the Processor p, so return false
-      return false;
-    }
-
-    bool CudaModule::register_reduction(Event &event, const CudaRedOpDesc *descs,
-                                        size_t num)
-    {
-      std::vector<GPU *> redop_gpus(num, nullptr);
-      std::vector<Event> events(num, Event::NO_EVENT);
-
-      // Double check that all specified processors are GPU processors
-      for(size_t didx = 0; didx < num; didx++) {
-        // Ensure there's a reduction operator available
-        ReductionOpUntyped *redop_untyped =
-            get_runtime()->reduce_op_table.get(descs[didx].redop_id, nullptr);
-        if(redop_untyped == nullptr) {
-          log_gpu.debug("Failed to find pre-registered reduction operator");
-          return false;
-        }
-        for(GPU *g : gpus) {
-          if((g->proc->me) == descs[didx].proc) {
-            redop_gpus[didx] = g;
-            break;
-          }
-        }
-        if(redop_gpus[didx] == nullptr) {
-          return false;
-        }
-      }
-
-      bool failed_reg = false;
-      for(size_t didx = 0; didx < num; didx++) {
-        if(!redop_gpus[didx]->register_reduction(
-               descs[didx].redop_id, descs[didx].apply_excl, descs[didx].apply_nonexcl,
-               descs[didx].fold_excl, descs[didx].fold_nonexcl)) {
-          failed_reg = true;
-          break;
-        }
-        // Update everyone's view of the reduction api
-        // TODO: batch this notification to reduce the number of separate messages sent
-        events[didx] = get_runtime()->notify_register_reduction(descs[didx].redop_id);
-      }
-
-      event = Event::merge_events(events);
-
-      return !failed_reg;
     }
 
     ////////////////////////////////////////////////////////////////////////
