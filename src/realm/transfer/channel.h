@@ -55,7 +55,7 @@ namespace Realm {
 
   typedef unsigned long long XferDesID;
 
-// clang-format off
+  // clang-format off
 #define REALM_XFERDES_KINDS(__op__) \
   __op__(XFER_NONE) \
   __op__(XFER_DISK_READ) \
@@ -731,6 +731,11 @@ namespace Realm {
     XferDesKind kind;
 
     virtual bool supports_redop(ReductionOpID redop_id) const;
+
+    virtual bool support_idindexed_fields(Memory src_mem, Memory dst_mem) const
+    {
+      return false;
+    };
 
     // attempt to make progress on the specified xferdes
     virtual long progress_xd(XferDes *xd, long max_nr);
