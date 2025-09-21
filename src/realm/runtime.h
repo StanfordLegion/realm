@@ -82,25 +82,9 @@ namespace Realm {
     //  that
     bool register_task(Processor::TaskFuncID taskid, Processor::TaskFuncPtr taskptr);
 
-    bool register_reduction(Event &event, ReductionOpID redop_id,
-                            const ReductionOpUntyped *redop);
-    bool register_reduction(ReductionOpID redop_id, const ReductionOpUntyped *redop)
-    {
-      Event event = Event::NO_EVENT;
-      if(register_reduction(event, redop_id, redop)) {
-        event.wait();
-        return true;
-      }
-      return false;
-    }
+    bool register_reduction(ReductionOpID redop_id, const ReductionOpUntyped *redop);
     template <typename REDOP>
     bool register_reduction(ReductionOpID redop_id)
-    {
-      const ReductionOp<REDOP> redop;
-      return register_reduction(redop_id, &redop);
-    }
-    template <typename REDOP>
-    bool register_reduction(Event &event, ReductionOpID redop_id)
     {
       const ReductionOp<REDOP> redop;
       return register_reduction(redop_id, &redop);

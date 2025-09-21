@@ -1442,16 +1442,38 @@ namespace Realm {
       xdq.add_to_manager(bgwork);
     }
 
-    bool GPUreduceChannel::supports_redop(ReductionOpID redop_id) const
+    /*static*/ bool GPUreduceChannel::is_gpu_redop(ReductionOpID redop_id)
     {
-      if(redop_id == 0) {
+      if(redop_id == 0)
         return false;
-      }
 
       ReductionOpUntyped *redop = get_runtime()->reduce_op_table.get(redop_id, 0);
+      assert(redop);
+
       // there's four different kernels, but they should be all or nothing, so
       //  just check one
-      return (redop != nullptr) && (redop->hip_apply_excl_fn != nullptr);
+      if(!redop->hip_apply_excl_fn)
+        return false;
+
+      return true;
+    }
+
+    uint64_t GPUreduceChannel::supports_path(
+        ChannelCopyInfo channel_copy_info, CustomSerdezID src_serdez_id,
+        CustomSerdezID dst_serdez_id, ReductionOpID redop_id, size_t total_bytes,
+        const std::vector<size_t> *src_frags, const std::vector<size_t> *dst_frags,
+        XferDesKind *kind_ret /*= 0*/, unsigned *bw_ret /*= 0*/,
+        unsigned *lat_ret /*= 0*/)
+    {
+      // first check that we have a reduction op (if not, we want the cudamemcpy
+      //   path to pick this up instead) and that it has cuda kernels available
+      if(!is_gpu_redop(redop_id))
+        return 0;
+
+      // then delegate to the normal supports_path logic
+      return Channel::supports_path(channel_copy_info, src_serdez_id, dst_serdez_id,
+                                    redop_id, total_bytes, src_frags, dst_frags, kind_ret,
+                                    bw_ret, lat_ret);
     }
 
     RemoteChannelInfo *GPUreduceChannel::construct_remote_info() const
@@ -1536,6 +1558,24 @@ namespace Realm {
     GPUreduceRemoteChannel::GPUreduceRemoteChannel(uintptr_t _remote_ptr)
       : RemoteChannel(_remote_ptr)
     {}
+
+    uint64_t GPUreduceRemoteChannel::supports_path(
+        ChannelCopyInfo channel_copy_info, CustomSerdezID src_serdez_id,
+        CustomSerdezID dst_serdez_id, ReductionOpID redop_id, size_t total_bytes,
+        const std::vector<size_t> *src_frags, const std::vector<size_t> *dst_frags,
+        XferDesKind *kind_ret /*= 0*/, unsigned *bw_ret /*= 0*/,
+        unsigned *lat_ret /*= 0*/)
+    {
+      // check first that we have a reduction op (if not, we want the cudamemcpy
+      //   path to pick this up instead) and that it has cuda kernels available
+      if(!GPUreduceChannel::is_gpu_redop(redop_id))
+        return 0;
+
+      // then delegate to the normal supports_path logic
+      return Channel::supports_path(channel_copy_info, src_serdez_id, dst_serdez_id,
+                                    redop_id, total_bytes, src_frags, dst_frags, kind_ret,
+                                    bw_ret, lat_ret);
+    }
 
     ////////////////////////////////////////////////////////////////////////
     //

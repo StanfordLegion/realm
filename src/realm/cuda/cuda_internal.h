@@ -21,7 +21,6 @@
 #include "realm/cuda/cuda_module.h"
 
 #include <memory>
-#include <unordered_map>
 #if !defined(CUDA_ENABLE_DEPRECATED)
 // Ignore deprecation warnings from cuda headers
 #define CUDA_ENABLE_DEPRECATED 1
@@ -424,10 +423,6 @@ namespace Realm {
       bool is_accessible_host_mem(const MemoryImpl *mem) const;
       bool is_accessible_gpu_mem(const MemoryImpl *mem) const;
 
-      bool register_reduction(ReductionOpID redop_id, CUfunction apply_excl,
-                              CUfunction apply_nonexcl, CUfunction fold_excl,
-                              CUfunction fold_nonexcl);
-
     protected:
       CUmodule load_cuda_module(const void *data);
 
@@ -511,15 +506,6 @@ namespace Realm {
       std::map<NodeID, GPUStream *> cudaipc_streams;
       Mutex alloc_mutex;
       const CudaIpcMapping *find_ipc_mapping(Memory mem) const;
-
-      struct GPUReductionOpEntry {
-        CUfunction apply_nonexcl = nullptr;
-        CUfunction apply_excl = nullptr;
-        CUfunction fold_nonexcl = nullptr;
-        CUfunction fold_excl = nullptr;
-      };
-
-      std::unordered_map<ReductionOpID, GPUReductionOpEntry> gpu_reduction_table;
     };
 
     // helper to push/pop a GPU's context by scope
@@ -980,18 +966,28 @@ namespace Realm {
       static const bool is_ordered = false;
 
       // helper method here so that GPUreduceRemoteChannel can use it too
-      bool supports_redop(ReductionOpID redop_id) const override;
+      static bool is_gpu_redop(ReductionOpID redop_id);
 
-      RemoteChannelInfo *construct_remote_info() const override;
+      // override this because we have to be picky about which reduction ops
+      //  we support
+      virtual uint64_t
+      supports_path(ChannelCopyInfo channel_copy_info, CustomSerdezID src_serdez_id,
+                    CustomSerdezID dst_serdez_id, ReductionOpID redop_id,
+                    size_t total_bytes, const std::vector<size_t> *src_frags,
+                    const std::vector<size_t> *dst_frags, XferDesKind *kind_ret = 0,
+                    unsigned *bw_ret = 0, unsigned *lat_ret = 0);
 
-      XferDes *create_xfer_des(uintptr_t dma_op, NodeID launch_node, XferDesID guid,
-                               const std::vector<XferDesPortInfo> &inputs_info,
-                               const std::vector<XferDesPortInfo> &outputs_info,
-                               int priority, XferDesRedopInfo redop_info,
-                               const void *fill_data, size_t fill_size,
-                               size_t fill_total) override;
+      virtual RemoteChannelInfo *construct_remote_info() const;
 
-      long submit(Request **requests, long nr) override;
+      virtual XferDes *create_xfer_des(uintptr_t dma_op, NodeID launch_node,
+                                       XferDesID guid,
+                                       const std::vector<XferDesPortInfo> &inputs_info,
+                                       const std::vector<XferDesPortInfo> &outputs_info,
+                                       int priority, XferDesRedopInfo redop_info,
+                                       const void *fill_data, size_t fill_size,
+                                       size_t fill_total);
+
+      long submit(Request **requests, long nr);
 
     protected:
       friend class GPUreduceXferDes;
@@ -1022,6 +1018,13 @@ namespace Realm {
       friend class GPUreduceRemoteChannelInfo;
 
       GPUreduceRemoteChannel(uintptr_t _remote_ptr);
+
+      virtual uint64_t
+      supports_path(ChannelCopyInfo channel_copy_info, CustomSerdezID src_serdez_id,
+                    CustomSerdezID dst_serdez_id, ReductionOpID redop_id,
+                    size_t total_bytes, const std::vector<size_t> *src_frags,
+                    const std::vector<size_t> *dst_frags, XferDesKind *kind_ret = 0,
+                    unsigned *bw_ret = 0, unsigned *lat_ret = 0);
     };
 
     // active message for establishing cuda ipc mappings
