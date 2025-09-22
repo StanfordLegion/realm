@@ -23,7 +23,6 @@
 #include "realm/mutex.h"
 
 #include <time.h>
-#include <unistd.h>
 #include <unordered_map>
 #include <sys/syscall.h>
 

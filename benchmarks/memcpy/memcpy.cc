@@ -19,7 +19,6 @@
 #include <realm.h>
 #include <realm/cmdline.h>
 
-#include <unistd.h>
 #include <limits>
 
 using namespace Realm;

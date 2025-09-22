@@ -15,8 +15,6 @@
  * limitations under the License.
  */
 
-#include <unistd.h>
-
 #include "realm.h"
 #include "realm/cmdline.h"
 

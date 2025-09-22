@@ -20,7 +20,6 @@
 #include "realm/id.h"
 
 #include <time.h>
-#include <unistd.h>
 
 using namespace Realm;
 
