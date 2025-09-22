@@ -887,7 +887,19 @@ namespace Realm {
         // from underneath us and hasn't cleaned it up properly yet.
         //
         // There is nothing we can (or should) do in this scenario.
-        ret = sigaltstack(&old_stack, nullptr);
+        if(old_stack.ss_flags & SS_DISABLE) {
+          // The previous stack was the default stack. In this case we cannot just pass
+          // this back, since it will contain `ss_sp = nullptr` and `ss_size = 0` which is
+          // invalid (some implementations, like macOS will fail with ENOMEM, even if
+          // `ss_flags` is `SS_DISABLE`).
+          //
+          // Instead, to reset to the original stack, we just need to disable our own
+          // stack.
+          cur_stack.ss_flags = SS_DISABLE;
+          ret = sigaltstack(&cur_stack, nullptr);
+        } else {
+          ret = sigaltstack(&old_stack, nullptr);
+        }
         assert(ret == 0);
       }
       free(thread->altstack_base);
