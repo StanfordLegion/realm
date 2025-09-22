@@ -3677,7 +3677,7 @@ namespace Realm {
       // the channel has both redop and non-redop path
       // early return
       if (has_redop_path && has_non_redop_path) {
-        return;
+        break;
       }
     }
   }
@@ -3919,12 +3919,12 @@ namespace Realm {
       return has_non_redop_path;
     }
 
-    if (!has_redop_path) {
-      return false;
+    if (has_redop_path) {
+      RWLock::AutoReaderLock al(mutex);
+      return supported_redops.count(redop_id) != 0;
     }
     
-    RWLock::AutoReaderLock al(mutex);
-    return supported_redops.count(redop_id) != 0;
+    return false;
   }
 
   long RemoteChannel::submit(Request **requests, long nr)
