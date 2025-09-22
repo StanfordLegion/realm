@@ -19,5 +19,5 @@ var classRealm_1_1RemoteChannel =
     [ "indirect_memories", "classRealm_1_1RemoteChannel.html#a3fdbfdcbd521c3eb243b22b208a7f382", null ],
     [ "mutex", "classRealm_1_1RemoteChannel.html#aa403ea8bf44d5b3bda558f44ba523f0f", null ],
     [ "remote_ptr", "classRealm_1_1RemoteChannel.html#ac7021e3fc7e0e09e6c4e9146976dc19f", null ],
-    [ "supported_redops", "classRealm_1_1RemoteChannel.html#ab9baf6bd35e31265cf00135d472f037e", null ]
+    [ "supported_redops", "classRealm_1_1RemoteChannel.html#a88e4363b3e93449ae3397c696610fd41", null ]
 ];

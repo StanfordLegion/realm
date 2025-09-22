@@ -1,5 +1,11 @@
 var NAVTREEINDEX59 =
 {
+"realm__c_8h.html#aee6eb56aed7e682066382883e6cd0f1f":[3,0,1,1,61,43],
+"realm__c_8h.html#aefd62511c371d140d37eb14e3d63a171":[3,0,1,1,61,81],
+"realm__c_8h.html#af6fdc8f2f9e549367fe3498c7e0d1bdb":[3,0,1,1,61,40],
+"realm__c_8h.html#afaed0bf55f33b3f2a41cd7f8880c04ee":[3,0,1,1,61,9],
+"realm__c_8h.html#afaed0bf55f33b3f2a41cd7f8880c04ee":[3,0,1,1,61,10],
+"realm__c_8h.html#afcee12e3abd26ba856a70294262e302d":[3,0,1,1,61,85],
 "realm__c_8h_source.html":[3,0,1,1,61],
 "realm__config_8h.html":[3,0,1,1,62],
 "realm__config_8h.html#a0734de92aef351d235bacd69ca16f258":[3,0,1,1,62,2],
@@ -243,11 +249,5 @@ var NAVTREEINDEX59 =
 "structRealm_1_1ApproxImageResponseMessage.html":[2,0,3,40],
 "structRealm_1_1ApproxImageResponseMessage.html#a344d69958c4ffd2431023e687cd63c79":[1,0,3,51,0],
 "structRealm_1_1ApproxImageResponseMessage.html#a344d69958c4ffd2431023e687cd63c79":[2,0,3,40,0],
-"structRealm_1_1ApproxImageResponseMessage.html#ae50d5999f18a71da8245139e3c359509":[1,0,3,51,1],
-"structRealm_1_1ApproxImageResponseMessage.html#ae50d5999f18a71da8245139e3c359509":[2,0,3,40,1],
-"structRealm_1_1AutoMessageRegistrar.html":[1,0,3,56],
-"structRealm_1_1AutoMessageRegistrar.html":[2,0,3,45],
-"structRealm_1_1AutoMessageRegistrar.html#af6cfea7391d672f48659978d0cff71b2":[1,0,3,56,0],
-"structRealm_1_1AutoMessageRegistrar.html#af6cfea7391d672f48659978d0cff71b2":[2,0,3,45,0],
-"structRealm_1_1BackgroundWorkManager_1_1Config.html":[1,0,3,58,0]
+"structRealm_1_1ApproxImageResponseMessage.html#ae50d5999f18a71da8245139e3c359509":[1,0,3,51,1]
 };

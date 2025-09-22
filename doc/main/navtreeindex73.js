@@ -1,5 +1,11 @@
 var NAVTREEINDEX73 =
 {
+"structbootstrap__handle.html#a81416b4e2f5d7442a934ea157d51150d":[2,0,9,4],
+"structbootstrap__handle.html#aa6688040772fff65d1a3a8e20bfd4234":[2,0,9,10],
+"structbootstrap__handle.html#aaacfaa49617d9f033d26c398e7cf38d5":[2,0,9,9],
+"structbootstrap__handle.html#ab3d50e21e33ebfe2c4b3f5f6577003ee":[2,0,9,5],
+"structbootstrap__handle.html#ad076de79d3142204c7641c0226a9ca94":[2,0,9,1],
+"structbootstrap__handle.html#af5862787e841ff53d2075231a8b2f305":[2,0,9,2],
 "structbootstrap__handle.html#af70d98b7ae5004b981c2d132c9702fcc":[2,0,9,8],
 "structbootstrap__handle.html#afb93c229d6c5ec993a05316e90211a3c":[2,0,9,7],
 "structgex__callback__handle__s.html":[2,0,11],

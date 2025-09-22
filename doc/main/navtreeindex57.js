@@ -1,5 +1,11 @@
 var NAVTREEINDEX57 =
 {
+"namespaceRealm_1_1NetworkSegmentInfo.html":[1,0,3,13],
+"namespaceRealm_1_1NetworkSegmentInfo.html#a3f344941ce4ec946242d8c49e3361d61":[1,0,3,13,2],
+"namespaceRealm_1_1NetworkSegmentInfo.html#a64e7245ffba2278055c7b9b8d0220060":[1,0,3,13,3],
+"namespaceRealm_1_1NetworkSegmentInfo.html#a8a2197df3970b61331dbc954f1cca5c8":[1,0,3,13,1],
+"namespaceRealm_1_1Numa.html":[1,0,3,14],
+"namespaceRealm_1_1OpenMP.html":[1,0,3,15],
 "namespaceRealm_1_1PieceLayoutTypes.html":[1,0,3,16],
 "namespaceRealm_1_1PieceLayoutTypes.html#ab87fe83f3c42381f6667a21b10f804e8":[1,0,3,16,0],
 "namespaceRealm_1_1PieceLookup.html":[1,0,3,17],
@@ -243,11 +249,5 @@ var NAVTREEINDEX57 =
 "prealm_8h.html#ac3f27231588cdba9ce92562515dd9e0e":[3,0,1,1,10,0,20],
 "prealm_8h.html#ac6408fc6c72ba6a2241281092ef9c495":[3,0,1,1,10,0,35],
 "prealm_8h.html#ac74b2cbd9ae6c67eac2cd6e0eac7bb22":[3,0,1,1,10,0,21],
-"prealm_8h.html#ad569fee097bcfa0b780bf4f17279b4cb":[3,0,1,1,10,0,37],
-"prealm_8h_source.html":[3,0,1,1,10,0],
-"preimage_8h.html":[3,0,1,1,1,5],
-"preimage_8h_source.html":[3,0,1,1,1,5],
-"pri__queue_8h.html":[3,0,1,1,57],
-"pri__queue_8h.html#a1f105aa52c2819056cf2ff6eb85860e7":[3,0,1,1,57,2],
-"pri__queue_8h_source.html":[3,0,1,1,57]
+"prealm_8h.html#ad569fee097bcfa0b780bf4f17279b4cb":[3,0,1,1,10,0,37]
 };

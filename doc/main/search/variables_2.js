@@ -37,7 +37,7 @@ var searchData=
   ['bitmask_5farray_5fsize_34',['BITMASK_ARRAY_SIZE',['../classRealm_1_1BackgroundWorkManager.html#ac91d20205c558df6285d54e748e50c66',1,'Realm::BackgroundWorkManager']]],
   ['bitmask_5fbits_35',['BITMASK_BITS',['../classRealm_1_1BackgroundWorkManager.html#a1fafdfc15d1ce51c6d2f614f7a46f895',1,'Realm::BackgroundWorkManager']]],
   ['bitmask_5fsize_36',['BITMASK_SIZE',['../structRealm_1_1Channel_1_1SupportedPath_1_1MemBitmask.html#a1be9123c859a653d007ec48b685bdacf',1,'Realm::Channel::SupportedPath::MemBitmask']]],
-  ['bits_37',['bits',['../classRealm_1_1NodeSetBitmask.html#ae26933a276db1a3a07a9be239393dd65',1,'Realm::NodeSetBitmask::bits'],['../structRealm_1_1bitfield.html#a3b070847137c35f4d621995ae0376aee',1,'Realm::bitfield::BITS']]],
+  ['bits_37',['bits',['../structRealm_1_1bitfield.html#a3b070847137c35f4d621995ae0376aee',1,'Realm::bitfield::BITS'],['../classRealm_1_1NodeSetBitmask.html#ae26933a276db1a3a07a9be239393dd65',1,'Realm::NodeSetBitmask::bits']]],
   ['bits_5fper_5felem_38',['BITS_PER_ELEM',['../classRealm_1_1NodeSetBitmask.html#afa8779dba320d03ff528c32266a58d69',1,'Realm::NodeSetBitmask']]],
   ['bitset_5fchunk_5fsize_39',['bitset_chunk_size',['../classRealm_1_1CoreModuleConfig.html#a8d13e7c09d32a6afe02326660896409a',1,'Realm::CoreModuleConfig']]],
   ['bitset_5felements_40',['bitset_elements',['../classRealm_1_1NodeSetBitmask.html#a4fa080bb8f3cf5b5afe6d36ef706a91c',1,'Realm::NodeSetBitmask']]],

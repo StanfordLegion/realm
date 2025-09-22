@@ -1,0 +1,15 @@
+digraph "Graphical Class Hierarchy"
+{
+ // LATEX_PDF_SIZE
+  bgcolor="transparent";
+  edge [fontname=Helvetica,fontsize=10,labelfontname=Helvetica,labelfontsize=10];
+  node [fontname=Helvetica,fontsize=10,shape=box,height=0.2,width=0.4];
+  rankdir="LR";
+  Node0 [id="Node000000",label="PQ::NotificationCallback",height=0.2,width=0.4,color="grey60", fillcolor="#E0E0E0", style="filled",tooltip=" "];
+  Node0 -> Node1 [id="edge7_Node000000_Node000001",dir="back",color="steelblue1",style="solid",tooltip=" "];
+  Node1 [id="Node000001",label="Realm::ThreadedTaskScheduler\l::WorkCounterUpdater\< Realm\l::TaskQueue \>",height=0.2,width=0.4,color="grey40", fillcolor="white", style="filled",URL="$classRealm_1_1ThreadedTaskScheduler_1_1WorkCounterUpdater.html",tooltip=" "];
+  Node0 -> Node2 [id="edge8_Node000000_Node000002",dir="back",color="steelblue1",style="solid",tooltip=" "];
+  Node2 [id="Node000002",label="Realm::ThreadedTaskScheduler\l::WorkCounterUpdater\< PriorityQueue\l\< Thread *, DummyLock \> \>",height=0.2,width=0.4,color="grey40", fillcolor="white", style="filled",URL="$classRealm_1_1ThreadedTaskScheduler_1_1WorkCounterUpdater.html",tooltip=" "];
+  Node0 -> Node3 [id="edge9_Node000000_Node000003",dir="back",color="steelblue1",style="solid",tooltip=" "];
+  Node3 [id="Node000003",label="Realm::ThreadedTaskScheduler\l::WorkCounterUpdater\< PQ \>",height=0.2,width=0.4,color="grey40", fillcolor="white", style="filled",URL="$classRealm_1_1ThreadedTaskScheduler_1_1WorkCounterUpdater.html",tooltip=" "];
+}

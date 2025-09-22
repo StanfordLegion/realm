@@ -192,7 +192,7 @@ var searchData=
   ['successful_189',['successful',['../structRealm_1_1RegisterTaskCompleteMessage.html#a9a77deff8db46707be0f7f79471e842e',1,'Realm::RegisterTaskCompleteMessage']]],
   ['sum_190',['sum',['../structRealm_1_1ActiveMessageHandlerStats.html#ad6253f3431dab756010b70fb9164ff9d',1,'Realm::ActiveMessageHandlerStats']]],
   ['sum2_191',['sum2',['../structRealm_1_1ActiveMessageHandlerStats.html#aed018984ffc1e06650e88fb535672672',1,'Realm::ActiveMessageHandlerStats']]],
-  ['supported_5fredops_192',['supported_redops',['../classRealm_1_1RemoteChannel.html#ab9baf6bd35e31265cf00135d472f037e',1,'Realm::RemoteChannel']]],
+  ['supported_5fredops_192',['supported_redops',['../classRealm_1_1RemoteChannel.html#a88e4363b3e93449ae3397c696610fd41',1,'Realm::RemoteChannel']]],
   ['symbols_193',['symbols',['../structRealm_1_1ProfilingMeasurements_1_1OperationBacktrace.html#a41415f98a54b0ebfd343cd30e9414c5f',1,'Realm::ProfilingMeasurements::OperationBacktrace']]],
   ['syncing_5fthreads_194',['syncing_threads',['../classRealm_1_1Cuda_1_1ContextSynchronizer.html#a8bdda1513a7ba45ceac994940d4c73d8',1,'Realm::Cuda::ContextSynchronizer::syncing_threads'],['../classRealm_1_1Hip_1_1ContextSynchronizer.html#ac0d7eab289d445b0ad7106d7f51fae9e',1,'Realm::Hip::ContextSynchronizer::syncing_threads']]],
   ['sysmem_5fipc_5flimit_195',['sysmem_ipc_limit',['../classRealm_1_1CoreModuleConfig.html#a105aff928f1ae3c155a579d5561ecbb4',1,'Realm::CoreModuleConfig']]],

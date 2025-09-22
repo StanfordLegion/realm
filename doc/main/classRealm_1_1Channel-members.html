@@ -44,7 +44,7 @@
    <!-- BEGIN version select -->
     <br />
     <div class="dropdown">
-     <button class="dropbtn">Version 25.6.1-rc.4+b1e8815e</button>
+     <button class="dropbtn">Version 25.6.1-rc.4+fedd6a35</button>
      <div class="dropdown-content"></div>
     </div>
     <script type="text/javascript" src="../selectversion.js"></script>
@@ -148,6 +148,8 @@ $(document).ready(function(){initNavTree('classRealm_1_1Channel.html',''); initR
   <tr class="even"><td class="entry"><a class="el" href="classRealm_1_1Channel.html#a6acbc1cf456729249439e86f28fc07e2">enqueue_ready_xd</a>(XferDes *xd)=0</td><td class="entry"><a class="el" href="classRealm_1_1Channel.html">Realm::Channel</a></td><td class="entry"><span class="mlabel">pure virtual</span></td></tr>
   <tr class="odd"><td class="entry"><a class="el" href="classRealm_1_1Channel.html#ab57aa620e5e00083154b11d094d8a75a">get_factory</a>()=0</td><td class="entry"><a class="el" href="classRealm_1_1Channel.html">Realm::Channel</a></td><td class="entry"><span class="mlabel">pure virtual</span></td></tr>
   <tr class="even"><td class="entry"><a class="el" href="classRealm_1_1Channel.html#a7d1129c58ec547dcf461de4a97cfff60">get_paths</a>(void) const</td><td class="entry"><a class="el" href="classRealm_1_1Channel.html">Realm::Channel</a></td><td class="entry"></td></tr>
+  <tr class="odd"><td class="entry"><a class="el" href="classRealm_1_1Channel.html#a69ead90e0c1fd41100593e5636b04f73">has_non_redop_path</a></td><td class="entry"><a class="el" href="classRealm_1_1Channel.html">Realm::Channel</a></td><td class="entry"></td></tr>
+  <tr class="even"><td class="entry"><a class="el" href="classRealm_1_1Channel.html#adf99bb4b97750e7f96a709dc48f91f41">has_redop_path</a></td><td class="entry"><a class="el" href="classRealm_1_1Channel.html">Realm::Channel</a></td><td class="entry"></td></tr>
   <tr class="odd"><td class="entry"><a class="el" href="classRealm_1_1Channel.html#ab52dc4f487189a705224b81b3980642b">kind</a></td><td class="entry"><a class="el" href="classRealm_1_1Channel.html">Realm::Channel</a></td><td class="entry"></td></tr>
   <tr class="even"><td class="entry"><a class="el" href="classRealm_1_1Channel.html#a6881a58ee8449cda172164385509af5e">needs_wrapping_iterator</a>() const</td><td class="entry"><a class="el" href="classRealm_1_1Channel.html">Realm::Channel</a></td><td class="entry"><span class="mlabel">inline</span><span class="mlabel">virtual</span></td></tr>
   <tr class="odd"><td class="entry"><a class="el" href="classRealm_1_1Channel.html#a4236ded530807d17f7f722a16a4d4af6">node</a></td><td class="entry"><a class="el" href="classRealm_1_1Channel.html">Realm::Channel</a></td><td class="entry"></td></tr>
@@ -162,8 +164,9 @@ $(document).ready(function(){initNavTree('classRealm_1_1Channel.html',''); initR
   <tr class="even"><td class="entry"><a class="el" href="classRealm_1_1Channel.html#a784d0b355cb7553f3168e8a8b3e6e760">supports_indirection_memory</a>(Memory mem) const</td><td class="entry"><a class="el" href="classRealm_1_1Channel.html">Realm::Channel</a></td><td class="entry"><span class="mlabel">virtual</span></td></tr>
   <tr class="odd"><td class="entry"><a class="el" href="classRealm_1_1Channel.html#a9b7a5ffbbdfe463bdb3709f4acd3326e">supports_path</a>(ChannelCopyInfo channel_copy_info, CustomSerdezID src_serdez_id, CustomSerdezID dst_serdez_id, ReductionOpID redop_id, size_t total_bytes, const std::vector&lt; size_t &gt; *src_frags, const std::vector&lt; size_t &gt; *dst_frags, XferDesKind *kind_ret=0, unsigned *bw_ret=0, unsigned *lat_ret=0)</td><td class="entry"><a class="el" href="classRealm_1_1Channel.html">Realm::Channel</a></td><td class="entry"><span class="mlabel">virtual</span></td></tr>
   <tr class="even"><td class="entry"><a class="el" href="classRealm_1_1Channel.html#ae6a167afc2ae35e911e2d7299a429a2a">supports_redop</a>(ReductionOpID redop_id) const</td><td class="entry"><a class="el" href="classRealm_1_1Channel.html">Realm::Channel</a></td><td class="entry"><span class="mlabel">virtual</span></td></tr>
-  <tr class="odd"><td class="entry"><a class="el" href="classRealm_1_1Channel.html#ae1d52771972bb0ab2c0e66f469d1dbec">wakeup_xd</a>(XferDes *xd)=0</td><td class="entry"><a class="el" href="classRealm_1_1Channel.html">Realm::Channel</a></td><td class="entry"><span class="mlabel">pure virtual</span></td></tr>
-  <tr class="even"><td class="entry"><a class="el" href="classRealm_1_1Channel.html#a9d3f60675e8168dc973cfdbc3a27be4d">~Channel</a>()</td><td class="entry"><a class="el" href="classRealm_1_1Channel.html">Realm::Channel</a></td><td class="entry"><span class="mlabel">inline</span><span class="mlabel">virtual</span></td></tr>
+  <tr class="odd"><td class="entry"><a class="el" href="classRealm_1_1Channel.html#afb1f194c62e6c48d46bb0f4ed19e6b72">update_channel_state</a>(void)</td><td class="entry"><a class="el" href="classRealm_1_1Channel.html">Realm::Channel</a></td><td class="entry"></td></tr>
+  <tr class="even"><td class="entry"><a class="el" href="classRealm_1_1Channel.html#ae1d52771972bb0ab2c0e66f469d1dbec">wakeup_xd</a>(XferDes *xd)=0</td><td class="entry"><a class="el" href="classRealm_1_1Channel.html">Realm::Channel</a></td><td class="entry"><span class="mlabel">pure virtual</span></td></tr>
+  <tr class="odd"><td class="entry"><a class="el" href="classRealm_1_1Channel.html#a9d3f60675e8168dc973cfdbc3a27be4d">~Channel</a>()</td><td class="entry"><a class="el" href="classRealm_1_1Channel.html">Realm::Channel</a></td><td class="entry"><span class="mlabel">inline</span><span class="mlabel">virtual</span></td></tr>
 </table></div><!-- contents -->
 </div><!-- doc-content -->
 <!-- HTML footer for doxygen 1.9.1-->

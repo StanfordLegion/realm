@@ -24,7 +24,10 @@ var classRealm_1_1Channel =
     [ "supports_indirection_memory", "classRealm_1_1Channel.html#a784d0b355cb7553f3168e8a8b3e6e760", null ],
     [ "supports_path", "classRealm_1_1Channel.html#a9b7a5ffbbdfe463bdb3709f4acd3326e", null ],
     [ "supports_redop", "classRealm_1_1Channel.html#ae6a167afc2ae35e911e2d7299a429a2a", null ],
+    [ "update_channel_state", "classRealm_1_1Channel.html#afb1f194c62e6c48d46bb0f4ed19e6b72", null ],
     [ "wakeup_xd", "classRealm_1_1Channel.html#ae1d52771972bb0ab2c0e66f469d1dbec", null ],
+    [ "has_non_redop_path", "classRealm_1_1Channel.html#a69ead90e0c1fd41100593e5636b04f73", null ],
+    [ "has_redop_path", "classRealm_1_1Channel.html#adf99bb4b97750e7f96a709dc48f91f41", null ],
     [ "kind", "classRealm_1_1Channel.html#ab52dc4f487189a705224b81b3980642b", null ],
     [ "node", "classRealm_1_1Channel.html#a4236ded530807d17f7f722a16a4d4af6", null ],
     [ "paths", "classRealm_1_1Channel.html#a92221d10a9f76816ff9b5388923edf71", null ]
