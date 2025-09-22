@@ -2230,9 +2230,9 @@ namespace Realm {
         if(gpu_red_it != gpu->gpu_reduction_table.end()) {
           kernel = (redop_info.is_fold
                         ? (redop_info.is_exclusive ? gpu_red_it->second.fold_excl
-                                                  : gpu_red_it->second.fold_nonexcl)
+                                                   : gpu_red_it->second.fold_nonexcl)
                         : (redop_info.is_exclusive ? gpu_red_it->second.apply_excl
-                                                  : gpu_red_it->second.apply_nonexcl));
+                                                   : gpu_red_it->second.apply_nonexcl));
         }
       }
 
@@ -2625,7 +2625,8 @@ namespace Realm {
 
       // Is this redop in our gpu's reduction table? (i.e. registered with a CUfunc)
       {
-        // TODO: if we see a performance issue, this is the place where we could investigate
+        // TODO: if we see a performance issue, this is the place where we could
+        // investigate
         AutoLock<Mutex> al(gpu->alloc_mutex);
         if(gpu->gpu_reduction_table.find(redop_id) != gpu->gpu_reduction_table.end()) {
           return true;

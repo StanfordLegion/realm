@@ -3676,7 +3676,7 @@ namespace Realm {
 
       // the channel has both redop and non-redop path
       // early return
-      if (has_redop_path && has_non_redop_path) {
+      if(has_redop_path && has_non_redop_path) {
         break;
       }
     }
@@ -3915,15 +3915,15 @@ namespace Realm {
 
   bool RemoteChannel::supports_redop(ReductionOpID redop_id) const
   {
-    if (redop_id == 0) {
+    if(redop_id == 0) {
       return has_non_redop_path;
     }
 
-    if (has_redop_path) {
+    if(has_redop_path) {
       RWLock::AutoReaderLock al(mutex);
       return supported_redops.count(redop_id) != 0;
     }
-    
+
     return false;
   }
 
