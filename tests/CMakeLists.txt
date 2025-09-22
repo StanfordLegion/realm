@@ -447,6 +447,7 @@ target_compile_features(c_external_inst PUBLIC cxx_std_20)
 target_link_libraries(c_external_inst ${TEST_GPU_LIBS})
 
 add_integration_test(c_event_poisoned "${REALM_TEST_DIR}/c/test_event_poisoned.cc")
+add_integration_test(sigterm_test "${REALM_TEST_DIR}/sigterm_test.cc")
 
 target_link_libraries(
   machine_config_test ${TEST_GPU_LIBS} $<TARGET_NAME_IF_EXISTS:CUDA::cuda_driver>

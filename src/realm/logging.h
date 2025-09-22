@@ -49,6 +49,9 @@ namespace Realm {
   class LoggerOutputStream;
   struct DelayedMessage;
 
+
+  void flush_all_streams(void);
+
   class REALM_PUBLIC_API Logger {
   public:
     Logger(const std::string &_name);
