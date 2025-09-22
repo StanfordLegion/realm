@@ -843,13 +843,15 @@ namespace Realm {
     KernelThread *thread = (KernelThread *)data;
 
 #ifdef REALM_USE_ALTSTACK
+    stack_t old_stack{};
+
     // install our alt stack (if it exists) for signal handling
     if(thread->altstack_base != 0) {
       stack_t altstack;
       altstack.ss_sp = thread->altstack_base;
       altstack.ss_flags = 0;
       altstack.ss_size = thread->altstack_size;
-      int ret = sigaltstack(&altstack, 0);
+      int ret = sigaltstack(&altstack, &old_stack);
       assert(ret == 0);
     }
 #endif
@@ -873,29 +875,33 @@ namespace Realm {
 #ifdef REALM_USE_ALTSTACK
     // uninstall and free our alt stack (if it exists)
     if(thread->altstack_base != 0) {
-      // The manual for sigaltstack states:
-      //
-      // > SS_DISABLE: The stack is to be disabled and ss_sp and ss_size
-      //               are ignored.
-      //
-      // This holds everywhere except macOS, which seemingly does not ignore
-      // ss_sp and ss_size if ss_flags is SS_DISABLE. Instead, it fails with
-      // ENOMEM (perhaps it tries to allocate some temporaries on the stack
-      // before disabling it). So pass in the original values for the disabled
-      // stack to pacify it.
-      stack_t disabled;
-      disabled.ss_sp = thread->altstack_base;
-      disabled.ss_flags = SS_DISABLE;
-      disabled.ss_size = thread->altstack_size;
-      stack_t oldstack;
-      int ret = sigaltstack(&disabled, &oldstack);
+      stack_t cur_stack{};
+      int ret = 0;
+
+      ret = sigaltstack(nullptr, &cur_stack);
       assert(ret == 0);
-      // in a perfect world, we'd double-check that it's our stack we
-      //  unloaded, but some libraries (e.g. libpython 3.4) do not clean
-      //  up properly, so our stack may not have been active anyway
-      // either way though, it's not active after the call above, so it's
-      //  safe to free the memory now
-      // assert(oldstack.ss_sp == thread->altstack_base);
+      if(cur_stack.ss_sp == thread->altstack_base) {
+        // The current stack is the same one that we installed previously. In this case,
+        // it is safe to reinstall the old one we found on entry. If the stack is not the
+        // same one we installed, then someone else has installed a new signal stack out
+        // from underneath us and hasn't cleaned it up properly yet.
+        //
+        // There is nothing we can (or should) do in this scenario.
+        if(old_stack.ss_flags & SS_DISABLE) {
+          // The previous stack was the default stack. In this case we cannot just pass
+          // this back, since it will contain `ss_sp = nullptr` and `ss_size = 0` which is
+          // invalid (some implementations, like macOS will fail with ENOMEM, even if
+          // `ss_flags` is `SS_DISABLE`).
+          //
+          // Instead, to reset to the original stack, we just need to disable our own
+          // stack.
+          cur_stack.ss_flags = SS_DISABLE;
+          ret = sigaltstack(&cur_stack, nullptr);
+        } else {
+          ret = sigaltstack(&old_stack, nullptr);
+        }
+        assert(ret == 0);
+      }
       free(thread->altstack_base);
     }
 #endif
