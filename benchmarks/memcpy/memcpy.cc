@@ -20,6 +20,8 @@
 #include <realm/cmdline.h>
 
 #include <limits>
+#include <thread>
+#include <chrono>
 
 using namespace Realm;
 
@@ -555,7 +557,8 @@ static void bench_timing_task(const void *args, size_t arglen,
 
   delete test_factory;
 
-  usleep(100000);
+  using namespace std::chrono_literals;
+  std::this_thread::sleep_for(100000us);
 }
 
 int main(int argc, char **argv) {
