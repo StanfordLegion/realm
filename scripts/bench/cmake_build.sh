@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# Copyright 2023 NVIDIA Corporation
+# Copyright 2025 NVIDIA Corporation
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -43,19 +43,18 @@ if [[ -e "$SCRIPT_DIR/$PLATFORM.sh" ]]; then
 fi
 
 # setup cmake options
-cmake_options="-DLegion_BUILD_TUTORIAL=ON -DLegion_BUILD_TESTS=ON"
 if [[ "$USE_CUDA" == 1 ]]; then
-    cmake_options="${cmake_options} -DLegion_USE_CUDA=ON -DLegion_CUDA_ARCH=${CUDA_ARCH}"
+    cmake_options="${cmake_options} -DREALM_ENABLE_CUDA=ON -DLegion_CUDA_ARCH=${CUDA_ARCH}"
 fi
 if [[ "$USE_OPENMP" == 1 ]]; then
-    cmake_options="${cmake_options} -DLegion_USE_OpenMP=ON"
+    cmake_options="${cmake_options} -DREALM_ENABLE_OPENMP=ON"
 fi
 if [[ "$NETWORK" == gasnetex ]]; then
     if [ -z ${CONDUIT+x} ]; then 
         echo "CONDUIT is unset"
         exit 1
     fi
-    cmake_options="${cmake_options} -DREALM_ENABLE_GASNETEX=ON -DGASNet_CONDUIT=${CONDUIT}"
+    cmake_options="${cmake_options} -DREALM_ENABLE_GASNETEX=ON -DGASNET_CONDUIT=${CONDUIT}"
 elif [[ "$NETWORK" == ucx ]]; then
     cmake_options="${cmake_options} -DREALM_ENABLE_UCX=ON"
 fi

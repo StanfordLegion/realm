@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# Copyright 2023 NVIDIA Corporation
+# Copyright 2025 NVIDIA Corporation
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
