@@ -374,6 +374,12 @@ namespace Realm {
     os.flush();
   }
 
+#if defined(REALM_ON_LINUX) || defined(REALM_ON_MACOS) || defined(REALM_ON_FREEBSD)
+  // Store the original SIGTERM handler so we can call it after flushing
+  // Initialize to default so if no previous handler exists, we restore to default
+  static struct sigaction original_sigterm_handler = { SIG_DFL, {}, 0, nullptr };
+#endif
+
   static void realm_sigterm_handler(int signal)
   {
     // We are trying to prevent further signals while we are flushing
@@ -396,8 +402,8 @@ namespace Realm {
     fprintf(stderr, "Realm logs flushed. Re-raising SIGTERM.\n");
     fflush(stderr);
 
-    // Reset to default and re-raise
-    sigaction(SIGTERM, &sa_dfl, NULL);
+    // Restore original handler and re-raise
+    sigaction(SIGTERM, &original_sigterm_handler, NULL);
     raise(SIGTERM);
   }
 
@@ -2033,7 +2039,7 @@ namespace Realm {
     action.sa_handler = realm_sigterm_handler;
     sigemptyset(&action.sa_mask);
     action.sa_flags = 0;  // Not using SA_ONSTACK for this handler
-    CHECK_LIBC( sigaction(SIGTERM, &action, 0) );
+    CHECK_LIBC( sigaction(SIGTERM, &action, &original_sigterm_handler) );
 #endif
 
     // debugging tool to dump realm event graphs after a fixed delay
