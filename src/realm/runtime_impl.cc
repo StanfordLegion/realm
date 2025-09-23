@@ -2007,8 +2007,12 @@ namespace Realm {
 #ifdef DEADLOCK_TRACE
     next_thread = 0;
     signaled_threads = 0;
-    signal(SIGTERM, deadlock_catch);
-    signal(SIGINT, deadlock_catch);
+    struct sigaction deadlock_action;
+    deadlock_action.sa_handler = deadlock_catch;
+    sigemptyset(&deadlock_action.sa_mask);
+    deadlock_action.sa_flags = 0;
+    CHECK_LIBC(sigaction(SIGTERM, &deadlock_action, 0));
+    CHECK_LIBC(sigaction(SIGINT, &deadlock_action, 0));
 #endif
     const char *realm_freeze_env = getenv("REALM_FREEZE_ON_ERROR");
     const char *legion_freeze_env = getenv("LEGION_FREEZE_ON_ERROR");
@@ -2044,7 +2048,11 @@ namespace Realm {
         if(*pos == '+')
           delay += Network::my_node_id * atoi(pos + 1);
         log_runtime.info() << "setting show_event alarm for " << delay << " seconds";
-        signal(SIGALRM, realm_show_events);
+        struct sigaction action;
+        action.sa_handler = realm_show_events;
+        sigemptyset(&action.sa_mask);
+        action.sa_flags = 0;
+        CHECK_LIBC(sigaction(SIGALRM, &action, 0));
         alarm(delay);
       }
     }
@@ -3317,8 +3325,8 @@ namespace Realm {
                 << " raised inside realm signal handler, previous caught signal "
                 << ThreadLocal::error_signal_value << std::endl;
       unregister_error_signal_handler();
-      // We could just call exit or abort, but reraising the signal sets the return
-      // status from the process correctly.
+      // We could just call exit or abort, but reraising the signal sets the return status
+      // from the process correctly.
       std::raise(signal);
     }
 #if defined(REALM_ON_LINUX) || defined(REALM_ON_MACOS) || defined(REALM_ON_FREEBSD)
