@@ -24,7 +24,6 @@
 
 #include <time.h>
 #include <unordered_map>
-#include <sys/syscall.h>
 
 /*
   In this benchmark, we will benchmark the performance of realm active message.
