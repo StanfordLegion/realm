@@ -408,6 +408,8 @@ namespace Realm {
     , first_available(0)
     , num_overflow(0)
     , num_reserved(0)
+    , num_buffers(0)
+    , num_endpoints(0)
     , overflow_head(nullptr)
     , overflow_tail(&overflow_head)
     , reserved_head(nullptr)
@@ -432,8 +434,7 @@ namespace Realm {
   }
 
   OutbufMetadata *OutbufManager::alloc_outbuf(OutbufMetadata::State state,
-                                              bool overflow_ok,
-                                              const gex_rank_t *new_endpoint)
+                                              bool overflow_ok, bool new_endpoint)
   {
     OutbufMetadata *md;
     {
@@ -441,21 +442,16 @@ namespace Realm {
       md = first_available;
       if(md)
         first_available = md->nextbuf;
-      if((new_endpoint != nullptr) &&
-         !std::binary_search(target_endpoints.begin(), target_endpoints.end(),
-                             *new_endpoint)) {
-        target_endpoints.push_back(*new_endpoint);
-        if(num_buffers < target_endpoints.size()) {
-          log_gex_obmgr.fatal()
-              << "Detected inevitable hang because there are "
-              << "not enough object buffers for GASNet to service all endpoints "
-              << "on node " << Network::my_node_id << ". This node was configured "
-              << "with -gex:obcount=" << num_buffers << " but at least "
-              << target_endpoints.size() << " object buffers are required.";
-          std::abort();
-        } else {
-          std::sort(target_endpoints.begin(), target_endpoints.end());
-        }
+      else if(!overflow_ok)
+        return nullptr;
+      if(new_endpoint && (num_buffers == num_endpoints++)) {
+        log_gex_obmgr.fatal()
+            << "Detected inevitable hang because there are "
+            << "not enough object buffers for GASNet to service all endpoints "
+            << "on node " << Network::my_node_id << ". This node was configured "
+            << "with -gex:obcount=" << num_buffers << " but at least " << num_endpoints
+            << " object buffers are required.";
+        std::abort();
       }
     }
 
@@ -466,68 +462,63 @@ namespace Realm {
                            << " baseptr=" << std::hex << md->baseptr << std::dec;
       return md;
     } else {
-      if(overflow_ok) {
-        // dynamically allocate a buffer and a metadata and enqueue it into
-        //  into the overflow list
-        md = new OutbufMetadata();
-        md->state = OutbufMetadata::STATE_IDLE;
-        md->manager = this;
-        md->nextbuf = nullptr;
-        md->size = outbuf_size;
-        md->is_overflow = true;
-        md->set_state(state);
+      assert(overflow_ok);
+      // dynamically allocate a buffer and a metadata and enqueue it into
+      //  into the overflow list
+      md = new OutbufMetadata();
+      md->state = OutbufMetadata::STATE_IDLE;
+      md->manager = this;
+      md->nextbuf = nullptr;
+      md->size = outbuf_size;
+      md->is_overflow = true;
+      md->set_state(state);
 
 #ifdef REALM_ON_WINDOWS
-        void *buffer = _aligned_malloc(outbuf_size, 16);
-        assert(buffer);
+      void *buffer = _aligned_malloc(outbuf_size, 16);
+      assert(buffer);
 #else
-        void *buffer;
-        int ret = posix_memalign(&buffer, 16, outbuf_size);
-        assert(ret == 0);
+      void *buffer;
+      int ret = posix_memalign(&buffer, 16, outbuf_size);
+      assert(ret == 0);
 #endif
-        md->baseptr = reinterpret_cast<uintptr_t>(buffer);
+      md->baseptr = reinterpret_cast<uintptr_t>(buffer);
 
-        OutbufMetadata *realbuf = nullptr;
-        {
-          AutoLock<> al(mutex);
-          // see if a real buffer showed up while we were doing this
-          if(first_available) {
-            realbuf = first_available;
-            first_available = realbuf->nextbuf;
-          } else {
-            num_overflow += 1;
-            *overflow_tail = md;
-            overflow_tail = &md->next_overflow;
-          }
-        }
-
-        if(realbuf) {
-          // we look a bit silly destroying things we just created, but it's
-          //  better than forcing copies and stuff down the road
-#ifdef REALM_ON_WINDOWS
-          _aligned_free(buffer);
-#else
-          free(buffer);
-#endif
-          delete md;
-
-          // set up the realbuf as above
-          realbuf->nextbuf = nullptr;
-          realbuf->set_state(state);
-          log_gex_obmgr.info() << "alloc outbuf(2): outbuf=" << realbuf
-                               << " state=" << state << " baseptr=" << std::hex
-                               << realbuf->baseptr << std::dec;
-          return realbuf;
+      OutbufMetadata *realbuf = nullptr;
+      {
+        AutoLock<> al(mutex);
+        // see if a real buffer showed up while we were doing this
+        if(first_available) {
+          realbuf = first_available;
+          first_available = realbuf->nextbuf;
         } else {
-          log_gex_obmgr.info() << "alloc overflow: ovbuf=" << md << " state=" << state
-                               << " baseptr=" << std::hex << md->baseptr << std::dec;
-
-          return md;
+          num_overflow += 1;
+          *overflow_tail = md;
+          overflow_tail = &md->next_overflow;
         }
+      }
 
+      if(realbuf) {
+        // we look a bit silly destroying things we just created, but it's
+        //  better than forcing copies and stuff down the road
+#ifdef REALM_ON_WINDOWS
+        _aligned_free(buffer);
+#else
+        free(buffer);
+#endif
+        delete md;
+
+        // set up the realbuf as above
+        realbuf->nextbuf = nullptr;
+        realbuf->set_state(state);
+        log_gex_obmgr.info() << "alloc outbuf(2): outbuf=" << realbuf
+                             << " state=" << state << " baseptr=" << std::hex
+                             << realbuf->baseptr << std::dec;
+        return realbuf;
       } else {
-        // no buffer to give
-        return nullptr;
+        log_gex_obmgr.info() << "alloc overflow: ovbuf=" << md << " state=" << state
+                             << " baseptr=" << std::hex << md->baseptr << std::dec;
+
+        return md;
       }
     }
   }
@@ -1189,9 +1180,8 @@ namespace Realm {
       } else {
         // get a new pbuf
         OutbufMetadata *new_pbuf;
-        new_pbuf =
-            internal->obmgr.alloc_outbuf(OutbufMetadata::STATE_PKTBUF, overflow_ok,
-                                         (cur_pbuf == nullptr) ? &tgt_rank : nullptr);
+        new_pbuf = internal->obmgr.alloc_outbuf(OutbufMetadata::STATE_PKTBUF, overflow_ok,
+                                                (cur_pbuf == nullptr));
         if(!new_pbuf)
           return false; // out of space
 
