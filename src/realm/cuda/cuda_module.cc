@@ -1169,11 +1169,21 @@ namespace Realm {
     }
     bool GPU::register_reduction(ReductionOpID redop_id, CUfunction apply_excl,
                                  CUfunction apply_nonexcl, CUfunction fold_excl,
-                                 CUfunction fold_nonexcl)
+                                 CUfunction fold_nonexcl, CUfunction apply_excl_adv,
+                                 CUfunction apply_nonexcl_adv, CUfunction fold_excl_adv,
+                                 CUfunction fold_nonexcl_adv,
+                                 CUfunction apply_excl_tran_adv,
+                                 CUfunction apply_nonexcl_tran_adv,
+                                 CUfunction fold_excl_tran_adv,
+                                 CUfunction fold_nonexcl_tran_adv)
     {
       AutoLock<> al(alloc_mutex);
       return gpu_reduction_table
-          .insert({redop_id, {apply_excl, apply_nonexcl, fold_excl, fold_nonexcl}})
+          .insert(
+              {redop_id,
+               {apply_excl, apply_nonexcl, fold_excl, fold_nonexcl, apply_excl_adv,
+                apply_nonexcl_adv, fold_excl_adv, fold_nonexcl_adv, apply_excl_tran_adv,
+                apply_nonexcl_tran_adv, fold_excl_tran_adv, fold_nonexcl_tran_adv}})
           .second;
     }
 
@@ -4155,7 +4165,11 @@ namespace Realm {
       for(size_t didx = 0; didx < num; didx++) {
         if(!redop_gpus[didx]->register_reduction(
                descs[didx].redop_id, descs[didx].apply_excl, descs[didx].apply_nonexcl,
-               descs[didx].fold_excl, descs[didx].fold_nonexcl)) {
+               descs[didx].fold_excl, descs[didx].fold_nonexcl,
+               descs[didx].apply_excl_adv, descs[didx].apply_nonexcl_adv,
+               descs[didx].fold_excl_adv, descs[didx].fold_nonexcl_adv,
+               descs[didx].apply_excl_tran_adv, descs[didx].apply_nonexcl_tran_adv,
+               descs[didx].fold_excl_tran_adv, descs[didx].fold_nonexcl_tran_adv)) {
           failed_reg = true;
           break;
         }

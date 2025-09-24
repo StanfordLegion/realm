@@ -159,6 +159,14 @@ namespace Realm {
       CUfunc_st *apply_nonexcl = nullptr;
       CUfunc_st *fold_excl = nullptr;
       CUfunc_st *fold_nonexcl = nullptr;
+      CUfunc_st *apply_excl_adv = nullptr;
+      CUfunc_st *apply_nonexcl_adv = nullptr;
+      CUfunc_st *fold_excl_adv = nullptr;
+      CUfunc_st *fold_nonexcl_adv = nullptr;
+      CUfunc_st *apply_excl_tran_adv = nullptr;
+      CUfunc_st *apply_nonexcl_tran_adv = nullptr;
+      CUfunc_st *fold_excl_tran_adv = nullptr;
+      CUfunc_st *fold_nonexcl_tran_adv = nullptr;
     };
 
     // our interface to the rest of the runtime

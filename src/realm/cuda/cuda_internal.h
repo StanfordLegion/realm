@@ -426,7 +426,12 @@ namespace Realm {
 
       bool register_reduction(ReductionOpID redop_id, CUfunction apply_excl,
                               CUfunction apply_nonexcl, CUfunction fold_excl,
-                              CUfunction fold_nonexcl);
+                              CUfunction fold_nonexcl, CUfunction apply_excl_adv,
+                              CUfunction apply_nonexcl_adv, CUfunction fold_excl_adv,
+                              CUfunction fold_nonexcl_adv, CUfunction apply_excl_tran_adv,
+                              CUfunction apply_nonexcl_tran_adv,
+                              CUfunction fold_excl_tran_adv,
+                              CUfunction fold_nonexcl_tran_adv);
 
     protected:
       CUmodule load_cuda_module(const void *data);
@@ -517,6 +522,14 @@ namespace Realm {
         CUfunction apply_excl = nullptr;
         CUfunction fold_nonexcl = nullptr;
         CUfunction fold_excl = nullptr;
+        CUfunction apply_nonexcl_adv = nullptr;
+        CUfunction apply_excl_adv = nullptr;
+        CUfunction fold_nonexcl_adv = nullptr;
+        CUfunction fold_excl_adv = nullptr;
+        CUfunction apply_nonexcl_tran_adv = nullptr;
+        CUfunction apply_excl_tran_adv = nullptr;
+        CUfunction fold_nonexcl_tran_adv = nullptr;
+        CUfunction fold_excl_tran_adv = nullptr;
       };
 
       std::unordered_map<ReductionOpID, GPUReductionOpEntry> gpu_reduction_table;
@@ -961,12 +974,20 @@ namespace Realm {
       long get_requests(Request **requests, long nr);
 
       bool progress_xd(GPUreduceChannel *channel, TimeLimit work_until);
+      bool progress_basic_xd(GPUreduceChannel *channel, TimeLimit work_until);
+      bool progress_custom_xd_data(GPUreduceChannel *channel, TimeLimit work_until);
+      void setup_redop_kernel(GPUreduceChannel *channel, void *params, void *src_base,
+                              const size_t in_span_start, const size_t out_span_start,
+                              const size_t in_elem_size, const size_t out_elem_size,
+                              const size_t elems, const bool has_transpose);
 
     protected:
       XferDesRedopInfo redop_info;
       const ReductionOpUntyped *redop;
       CUfunction kernel;
       const void *kernel_host_proxy;
+      const void *kernel_host_proxy_adv;
+      const void *kernel_host_proxy_tran_adv;
       GPUStream *stream;
       std::vector<GPU *> src_gpus;
       std::vector<bool> src_is_ipc;
