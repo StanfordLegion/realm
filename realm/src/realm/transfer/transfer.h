@@ -54,8 +54,6 @@ namespace Realm {
 
     virtual void reset(void) = 0;
     virtual bool done(void) = 0;
-    virtual size_t get_base_offset(void) const;
-    virtual size_t get_address_size(void) const;
 
     // flag bits to control iterators
     enum
@@ -139,8 +137,6 @@ namespace Realm {
 
     virtual void confirm_step(void);
     virtual void cancel_step(void);
-
-    virtual size_t get_base_offset(void) const;
 
     virtual bool get_addresses(AddressList &addrlist,
                                const InstanceLayoutPieceBase *&nonaffine);

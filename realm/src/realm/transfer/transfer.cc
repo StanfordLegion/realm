@@ -81,20 +81,6 @@ namespace Realm {
     assert(0);
   }
 
-  size_t TransferIterator::get_base_offset(void) const
-  {
-    // should not be called
-    assert(0);
-    return 0;
-  }
-
-  size_t TransferIterator::get_address_size(void) const
-  {
-    // should not be called
-    assert(0);
-    return 0;
-  }
-
   template <int N, typename T>
   TransferIteratorBase<N, T>::TransferIteratorBase(RegionInstanceImpl *_inst_impl,
                                                    const int _dim_order[N])
@@ -498,12 +484,6 @@ namespace Realm {
   }
 
   template <int N, typename T>
-  uintptr_t TransferIteratorBase<N, T>::get_base_offset(void) const
-  {
-    return inst_impl->metadata.inst_offset;
-  }
-
-  template <int N, typename T>
   bool
   TransferIteratorBase<N, T>::get_addresses(AddressList &addrlist,
                                             const InstanceLayoutPieceBase *&nonaffine)
@@ -579,6 +559,9 @@ namespace Realm {
         // offset of initial entry is easy to compute
         addr_data[1] = (inst_impl->metadata.inst_offset + affine->offset +
                         affine->strides.dot(target_subrect.lo) + field_rel_offset);
+
+        std::cout << "OFF:" << addr_data[1] << " target_subrect:" << target_subrect
+                  << " bounds:" << affine->bounds << std::endl;
 
         size_t bytes = cur_field_size;
         int cur_dim = 1;
@@ -844,11 +827,8 @@ namespace Realm {
     virtual bool get_addresses(AddressList &addrlist,
                                const InstanceLayoutPieceBase *&nonaffine);
 
-    virtual size_t get_base_offset(void) const;
-
     virtual void reset(void);
 
-    virtual size_t get_address_size(void) const;
     virtual size_t step(size_t max_bytes, TransferIterator::AddressInfo &info,
                         unsigned flags, bool tentative = false);
 
@@ -945,18 +925,6 @@ namespace Realm {
   {
     TransferIteratorBase<N, T>::reset();
     piece_idx = 0;
-  }
-
-  template <int N, typename T>
-  size_t WrappingTransferIteratorIndirect<N, T>::get_address_size(void) const
-  {
-    return sizeof(Point<N, T>);
-  }
-
-  template <int N, typename T>
-  uintptr_t WrappingTransferIteratorIndirect<N, T>::get_base_offset(void) const
-  {
-    return addrs_in_offset;
   }
 
   template <int N, typename T>

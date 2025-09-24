@@ -115,16 +115,39 @@ namespace Realm {
       uintptr_t src;
     };
 
-    template <size_t N, typename Offset_t = size_t>
-    struct MemcpyIndirectInfo {
+    template <int N, typename Offset_t = size_t>
+    struct MemcpyIndirectBatchPiece {
       Offset_t volume;
+      Offset_t strides[N];
       Offset_t field_size;
-      Offset_t src_strides[N];
-      Offset_t dst_strides[N];
+      uintptr_t src_base;
+      uintptr_t dst_base;
       uintptr_t src_ind_addr;
       uintptr_t dst_ind_addr;
-      uintptr_t src_addr;
-      uintptr_t dst_addr;
+      unsigned short dim;
+    };
+
+    template <int N, typename Offset_t = size_t,
+              size_t MAX_RECTS = (MAX_CUDA_PARAM_CONSTBANK_SIZE - 256) /
+                                 sizeof(MemcpyIndirectBatchPiece<N, Offset_t>)>
+    struct MemcpyIndirectInfo {
+      enum
+      {
+        MAX_NUM_RECTS = MAX_RECTS,
+        DIM = N
+      };
+
+      // Offset_t volume;
+      //Offset_t field_size;
+      // Offset_t src_strides[N];
+      // Offset_t dst_strides[N];
+      uintptr_t src_ind_addr;
+      uintptr_t dst_ind_addr;
+      // uintptr_t src_addr;
+      // uintptr_t dst_addr;
+
+      unsigned short num_rects;
+      MemcpyIndirectBatchPiece<N, Offset_t> rects[MAX_RECTS];
     };
 
     static const size_t CUDA_MAX_DIM = REALM_MAX_DIM < 3 ? REALM_MAX_DIM : 3;

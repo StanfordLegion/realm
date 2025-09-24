@@ -865,7 +865,7 @@ namespace Realm {
       if((ThreadLocal::context_sync_required > 0) ||
          ((ThreadLocal::context_sync_required < 0) &&
           gpu->module->config->cfg_task_context_sync)) {
-#if(CUDA_VERSION >= 12050)
+#if (CUDA_VERSION >= 12050)
         // If this driver supports retrieving an event for the context's current work,
         // retrieve and wait for it.  This will still over-synchronize with work from the
         // DMA engine, but at least this is completely asynchronous and doesn't require a
@@ -3258,14 +3258,14 @@ namespace Realm {
           for(GPUInfo *info : infos) {
             nvmlFieldValue_t values[] = {
 #if CUDA_VERSION >= 12000
-              {NVML_FI_DEV_NVLINK_GET_SPEED, 0},
+                {NVML_FI_DEV_NVLINK_GET_SPEED, 0},
 #else
-              {NVML_FI_DEV_NVLINK_SPEED_MBPS_L0, 0}
+                {NVML_FI_DEV_NVLINK_SPEED_MBPS_L0, 0}
 #endif
 #if CUDA_VERSION >= 12030
-              {NVML_FI_DEV_C2C_LINK_GET_STATUS, 0},
-              {NVML_FI_DEV_C2C_LINK_COUNT, 0},
-              {NVML_FI_DEV_C2C_LINK_GET_MAX_BW, 0},
+                {NVML_FI_DEV_C2C_LINK_GET_STATUS, 0},
+                {NVML_FI_DEV_C2C_LINK_COUNT, 0},
+                {NVML_FI_DEV_C2C_LINK_GET_MAX_BW, 0},
 #endif
             };
 
@@ -4871,4 +4871,4 @@ namespace Realm {
 #endif
 
   }; // namespace Cuda
-};   // namespace Realm
+}; // namespace Realm

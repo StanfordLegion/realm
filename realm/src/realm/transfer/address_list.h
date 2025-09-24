@@ -27,8 +27,8 @@ namespace Realm {
   public:
     AddressList();
 
-    size_t *begin_nd_entry(int max_dim);
-    void commit_nd_entry(int act_dim, size_t bytes);
+    size_t *begin_nd_entry(int max_dim, unsigned payload_count = 0);
+    void commit_nd_entry(int act_dim, size_t bytes, unsigned payload_count = 0);
 
     size_t bytes_pending() const;
 
@@ -37,6 +37,7 @@ namespace Realm {
 
     const size_t *read_entry();
 
+    bool has_payload{false};
     size_t total_bytes;
     unsigned write_pointer;
     unsigned read_pointer;
@@ -58,6 +59,10 @@ namespace Realm {
 
     void skip_bytes(size_t bytes);
 
+    size_t extra_words() const;
+    size_t read_extra();
+    static size_t payload_offset(int dim);
+
   protected:
     AddressList *addrlist;
     bool partial;
@@ -67,6 +72,9 @@ namespace Realm {
     static const int MAX_DIM = REALM_MAX_DIM + 1;
     int partial_dim;
     size_t pos[MAX_DIM];
+
+  private:
+    unsigned extra_pos = 1;
   };
 
   std::ostream &operator<<(std::ostream &os, const AddressListCursor &alc);

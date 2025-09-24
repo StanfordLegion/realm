@@ -202,13 +202,57 @@ template <int N, typename T, typename DT, typename Offset_t = size_t>
 static __device__ inline void
 memcpy_indirect_points(Realm::Cuda::MemcpyIndirectInfo<3, Offset_t> info)
 {
-  Offset_t offset = blockIdx.x * blockDim.x + threadIdx.x;
-  __restrict__ T *dst_ind_base = reinterpret_cast<T *>(info.dst_ind_addr);
-  __restrict__ T *src_ind_base = reinterpret_cast<T *>(info.src_ind_addr);
+  Offset_t thread_index = blockIdx.x * blockDim.x + threadIdx.x;
+  const unsigned grid_stride = gridDim.x * blockDim.x;
 
-  Offset_t chunks = info.field_size / sizeof(DT);
+  Offset_t start_offset = 0;
 
-  for(; offset < info.volume; offset += blockDim.x * gridDim.x) {
+  for(unsigned r = 0; r < info.num_rects; r++) {
+    const auto &rect = info.rects[r];
+    const Offset_t vol = rect.volume;
+
+    const Offset_t chunks = rect.field_size / sizeof(DT);
+
+    const bool src_is_ind = (rect.src_ind_addr != 0);
+    const bool dst_is_ind = (rect.dst_ind_addr != 0);
+    __restrict__ T *dst_ind_base = reinterpret_cast<T *>(rect.dst_ind_addr);
+    __restrict__ T *src_ind_base = reinterpret_cast<T *>(rect.src_ind_addr);
+
+    for(Offset_t i = thread_index; i < vol; i += grid_stride) {
+      Offset_t p[N];
+      if(src_ind_base) {
+
+        for(int d = 0; d < rect.dim; d++) {
+          p[d] = src_ind_base[(i)*rect.dim + d]; //- rect.bounds_lo[d];
+        }
+      }
+
+      Offset_t src_linear_idx = 0, dst_linear_idx = 0;
+
+      if(src_ind_base) {
+#pragma unroll
+        for(int d = 0; d < N; d++) {
+          src_linear_idx += p[d] * rect.strides[d];
+        }
+        dst_linear_idx = i + start_offset;
+      }
+
+      __restrict__ DT *dst =
+          reinterpret_cast<DT *>(rect.dst_base + dst_linear_idx * rect.field_size);
+      __restrict__ DT *src =
+          reinterpret_cast<DT *>(rect.src_base + src_linear_idx * rect.field_size);
+
+      for(Offset_t chunk_idx = 0; chunk_idx < chunks; chunk_idx++) {
+        dst[chunk_idx] = src[chunk_idx];
+      }
+    }
+
+    start_offset += vol;
+    thread_index -= vol;
+  }
+
+  /*for(; offset < info.volume; offset += grid_stride) {
+
     Offset_t src_index = offset;
     if(info.src_ind_addr != 0) {
       Offset_t index = 0;
@@ -237,7 +281,7 @@ memcpy_indirect_points(Realm::Cuda::MemcpyIndirectInfo<3, Offset_t> info)
     for(Offset_t chunk_idx = 0; chunk_idx < chunks; chunk_idx++) {
       dst[chunk_idx] = src[chunk_idx];
     }
-  }
+  }*/
 }
 
 template <int N, typename T, typename Offset_t = size_t>

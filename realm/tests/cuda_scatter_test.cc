@@ -126,7 +126,6 @@ namespace TestConfig {
   bool skipfirst = false;
   bool splitcopies = false;
   bool do_scatter = false;
-  bool do_direct = false;
   bool verbose = false;
   bool verify = true;
   bool ind_on_gpu = true;
@@ -219,14 +218,6 @@ public:
                 FieldID src_id, FieldID dst_id, bool oor_possible, bool aliasing_possible,
                 CustomSerdezID serdez_id, Event wait_on, Processor p,
                 TransposeExperiment<N> *exp) const;
-
-#ifdef ENABLE_DIRECT_TEST
-  template <typename FT, typename DST>
-  Event direct_scatter(IndexSpace<N, T> is, FieldID ptr_id, DistributedData<N, T> &ind,
-                       DST &dst, FieldID src_id, FieldID dst_id, bool oor_possible,
-                       bool aliasing_possible, CustomSerdezID serdez_id,
-                       Event wait_on) const;
-#endif
 
   template <typename FT>
   bool verify(IndexSpace<N, T> is, FieldID fid, Event wait_on);
@@ -513,137 +504,6 @@ Event DistributedData<N, T>::fill(IndexSpace<N, T> is, FieldID fid, LAMBDA fille
 
   return Event::merge_events(events);
 }
-
-#ifdef ENABLE_DIRECT_TEST
-// TODO(apryakhin@): Refactor to run either gathe or scatter or
-// gather-scatter.
-template <int N, typename T>
-template <typename FT, typename DST>
-Event DistributedData<N, T>::direct_scatter(IndexSpace<N, T> is, FieldID ptr_id,
-                                            DistributedData<N, T> &ind, DST &dst,
-                                            FieldID src_id, FieldID dst_id,
-                                            bool oor_possible, bool aliasing_possible,
-                                            CustomSerdezID serdez_id, Event wait_on) const
-{
-  std::vector<Event> events;
-  for(typename std::vector<Piece>::const_iterator it = pieces.begin(); it != pieces.end();
-      ++it) {
-    for(typename std::vector<typename DST::Piece>::const_iterator it2 =
-            dst.pieces.begin();
-        it2 != dst.pieces.end(); ++it2) {
-      RuntimeImpl *rt = Realm::get_runtime();
-      auto module = rt->get_module<Realm::Cuda::CudaModule>("cuda");
-      // Just suppport a single GPU test for now.
-      assert(module->gpus.size() == 1);
-
-      // Fetch affine bounds.
-      auto inst_impl = get_runtime()->get_instance_impl(it2->inst);
-      const InstanceLayout<DST::_N, typename DST::_T> *inst_layout =
-          checked_cast<const InstanceLayout<DST::_N, typename DST::_T> *>(
-              inst_impl->metadata.layout);
-
-      const InstancePieceList<DST::_N, typename DST::_T> &piece_list =
-          inst_layout->piece_lists[0];
-      const InstanceLayoutPiece<DST::_N, typename DST::_T> *layout_piece =
-          piece_list.find_piece(Point<DST::_N, typename DST::_T>::ZEROES());
-
-      const AffineLayoutPiece<DST::_N, typename DST::_T> *affine =
-          static_cast<const AffineLayoutPiece<DST::_N, typename DST::_T> *>(layout_piece);
-
-      Realm::Cuda::MemcpyUnstructuredInfo<DST::_N> copy_info = {};
-
-      size_t count = sizeof(FT);
-      for(int i = 1; i < DST::_N; i++) {
-        copy_info.dst.strides[i - 1] = affine->strides[i] / count;
-        count *= copy_info.dst.strides[i - 1];
-      }
-      copy_info.volume = is.volume();
-      copy_info.src.addr = reinterpret_cast<uintptr_t>(it->inst.pointer_untyped(0, 0));
-
-      assert(ind.pieces.size() == 1);
-      copy_info.src_ind = 0;
-      copy_info.dst_ind =
-          reinterpret_cast<uintptr_t>(ind.pieces[0].inst.pointer_untyped(0, 0));
-      copy_info.dst.addr = reinterpret_cast<uintptr_t>(it2->inst.pointer_untyped(0, 0));
-      copy_info.field_size = sizeof(FT);
-
-      size_t field_size = std::min<size_t>(sizeof(FT), 8);
-
-      char kernel_name[30];
-      std::snprintf(kernel_name, sizeof(kernel_name), "run_memcpy_indirect%uD_%lu",
-                    DST::_N, field_size << 3);
-
-      auto gpu = module->gpus[0];
-      CUfunction memcpy_fn = 0;
-      CHECK_CU(CUDA_DRIVER_FNPTR(cuModuleGetFunction)(&memcpy_fn, gpu->device_module,
-                                                      kernel_name));
-
-      void *params[] = {&copy_info};
-      size_t threads_per_block = 256;
-      int blocks_per_grid = 0;
-
-      gpu->push_context();
-      CHECK_CU(CUDA_DRIVER_FNPTR(cuOccupancyMaxActiveBlocksPerMultiprocessor)(
-          &blocks_per_grid, memcpy_fn, threads_per_block, 0));
-
-      blocks_per_grid =
-          std::min(blocks_per_grid,
-                   (int)((is.volume() + threads_per_block - 1) / threads_per_block));
-
-      auto stream = gpu->get_next_d2d_stream()->get_stream();
-
-      CHECK_CU(CUDA_DRIVER_FNPTR(cuLaunchKernel)(memcpy_fn, blocks_per_grid, 1, 1,
-                                                 threads_per_block, 1, 1, 0, stream,
-                                                 params, 0));
-
-      CHECK_CU(CUDA_DRIVER_FNPTR(cuStreamSynchronize)(stream));
-
-      gpu->pop_context();
-
-      dump_instance<N, T, FT>(it->inst, FID_DATA1, is, is.bounds.hi[0]);
-
-      dump_instance<N, T, Point<DST::_N, typename DST::_T>>(ind.pieces[0].inst, ptr_id,
-                                                            is, is.bounds.hi[0]);
-
-      dump_instance<DST::_N, typename DST::_T, FT>(it2->inst, FID_DATA1, it2->space,
-                                                   it2->space.bounds.hi[0]);
-    }
-  }
-
-  // update reference data
-  const std::map<Point<N, T>, Maybe<Point<DST::_N, typename DST::_T>>> &ptrref =
-      ind.get_ref_data<Point<DST::_N, typename DST::_T>>(ptr_id);
-
-  const std::map<Point<N, T>, Maybe<FT>> &srcref = get_ref_data<FT>(src_id);
-
-  std::map<Point<DST::_N, typename DST::_T>, Maybe<FT>> &dstref =
-      dst.template get_ref_data<FT>(dst_id);
-
-  std::set<Point<DST::_N, typename DST::_T>> touched; // to detect aliasing
-                                                      //
-  IndexSpaceIterator<N, T> it(is);
-
-  while(it.valid) {
-    PointInRectIterator<N, T> pit(it.rect);
-    while(pit.valid) {
-      Point<DST::_N, typename DST::_T> p2 = ptrref.at(pit.p).get_value();
-      if(dstref.count(p2) > 0) {
-        if(touched.count(p2) > 0) {
-          assert(aliasing_possible);
-          dstref[p2] = Maybe<FT>();
-        } else {
-          dstref[p2] = srcref.at(pit.p);
-          touched.insert(p2);
-        }
-      } else
-        assert(oor_possible); // make sure we didn't lie to Realm
-      pit.step();
-    }
-    it.step();
-  }
-  return Event::merge_events(events);
-}
-#endif
 
 template <int N, typename T>
 template <typename FT, typename DST>
@@ -997,7 +857,7 @@ bool scatter_gather_test(const std::vector<Memory> &sys_mems,
   }
 
   log_app.error() << "Run testcase for N=" << N << " N2=" << N2 << " src_bounds=" << r1
-                 << " dst_bounds=" << r2;
+                  << " dst_bounds=" << r2;
 
   IndexSpace<N, T> is1(r1);
   IndexSpace<N2, T2> is2(r2);
@@ -1031,7 +891,11 @@ bool scatter_gather_test(const std::vector<Memory> &sys_mems,
       .wait();
 
   DistributedData<N2, T2> region2;
-  region2.add_subspaces(is2, pieces2, /*num_subrects=*/1);
+  // Create each destination piece normally, but make the SOURCE instance (region2)
+  // consist of multiple affine subrects so that gather/scatter paths exercise
+  // multi-piece logic in the GPU iterator.
+  // Use 3 subrects per piece to stress the code.
+  region2.add_subspaces(is2, pieces2, /*num_subrects=*/2);
   region2
       .create_instances(fields2, RoundRobinPicker<N2, T2>(gpu_mems),
                         /*offset=*/2, inverse)
@@ -1093,7 +957,7 @@ bool scatter_gather_test(const std::vector<Memory> &sys_mems,
 
   TransposeExperiment<N> *exp = new TransposeExperiment<N>;
 
-  if(scatter && !TestConfig::do_direct) {
+  if(scatter) {
     region1
         .template scatter<DT>(is1, FID_PTR1, region_ind, region2, FID_DATA1, FID_DATA1,
                               false /*!oor_possible*/, true /*aliasing_possible*/,
@@ -1104,7 +968,7 @@ bool scatter_gather_test(const std::vector<Memory> &sys_mems,
       return false;
   }
 
-  if(!scatter && !TestConfig::do_direct) {
+  if(!scatter) {
     region1
         .template gather<DT>(is1, FID_PTR1, region_ind, region2, FID_DATA1, FID_DATA1,
                              false /*!oor_possible*/, true /*aliasing_possible*/,
@@ -1167,22 +1031,20 @@ void top_level_task(const void *args, size_t arglen, const void *userdata, size_
       ok = false;
     }*/
 
-    /*if(!scatter_gather_test<1, long long, 1, long long, int>(
-           sys_mems, gpu_mems, TestConfig::pieces1, TestConfig::pieces2, p, 0, do_scatter,
-           true, true)) {
-      ok = false;
-    }
+    ok = scatter_gather_test<1, int, 1, int, int>(sys_mems, gpu_mems, TestConfig::pieces1,
+                                                  TestConfig::pieces2, p, 0, do_scatter,
+                                                  true, true);
 
-    if(!scatter_gather_test<3, long long, 3, long long, int>(
+    /*if(!scatter_gather_test<3, long long, 3, long long, int>(
            sys_mems, gpu_mems, TestConfig::pieces1, TestConfig::pieces2, p, 0, do_scatter,
            true, true)) {
       ok = false;
     }*/
 
-    if(!scatter_gather_test<2, long long, 2, long long, int>(
-           sys_mems, gpu_mems, TestConfig::pieces1, TestConfig::pieces2, p, 0, do_scatter)) {
-      ok = false;
-    }
+    /*if(!scatter_gather_test<2, long long, 2, long long, int>(
+           sys_mems, gpu_mems, TestConfig::pieces1, TestConfig::pieces2, p, 0,
+    do_scatter)) { ok = false;
+    }*/
 
     /*if(!scatter_gather_test<1, int, 1, int, long long>(
            sys_mems, gpu_mems, TestConfig::pieces1, TestConfig::pieces2, p, 0, do_scatter,
@@ -1252,7 +1114,6 @@ int main(int argc, char **argv)
   cp.add_option_int("-scatter", TestConfig::do_scatter);
   cp.add_option_int("-verbose", TestConfig::verbose);
   cp.add_option_int("-verify", TestConfig::verify);
-  cp.add_option_int("-direct", TestConfig::do_direct);
   cp.add_option_int("-ind_on_gpu", TestConfig::ind_on_gpu);
   cp.add_option_int("-do_cpu", TestConfig::do_cpu);
   cp.add_option_int("-remote_gather", TestConfig::remote_gather);

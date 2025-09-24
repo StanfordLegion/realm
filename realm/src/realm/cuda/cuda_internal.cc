@@ -24,6 +24,7 @@
 #include "realm/indexspace.h"
 #include "realm/sparsity.h"
 #include "realm/runtime_impl.h"
+#include "realm/transfer/address_list.h"
 
 #include <cstdint>
 #include <cstring>
@@ -332,6 +333,7 @@ namespace Realm {
       AffineCopyPair<3> &copy_info = copy_infos.subrects[copy_infos.num_rects++];
       uintptr_t in_offset = in_alc.get_offset();
       uintptr_t out_offset = out_alc.get_offset();
+
       // the reported dim is reduced for partially consumed address
       // ranges - whatever we get can be assumed to be regular
       int in_dim = in_alc.get_dim();
@@ -901,7 +903,7 @@ namespace Realm {
                                   uintptr_t out_base, uintptr_t src_ind_base,
                                   uintptr_t dst_ind_base)
       {
-        MemcpyIndirectInfo<3, size_t> memcpy_info;
+        /*MemcpyIndirectInfo<3, size_t> memcpy_info;
         memset(&memcpy_info, 0, sizeof(MemcpyIndirectInfo<3, size_t>));
         memcpy_info.src_ind_addr = src_ind_base;
         memcpy_info.dst_ind_addr = dst_ind_base;
@@ -910,6 +912,7 @@ namespace Realm {
         memcpy_info.field_size = field_size;
         assert(memcpy_info.field_size > 0);
         memcpy_info.volume = bytes / field_size;
+
         assert(memcpy_info.volume > 0);
         for(size_t i = 0; i < num_dims; i++) {
           memcpy_info.src_strides[i] = strides[i] / field_size;
@@ -917,7 +920,7 @@ namespace Realm {
         }
         gpu->launch_indirect_copy_kernel(&memcpy_info, num_dims, addr_type_size,
                                          memcpy_info.field_size, memcpy_info.volume,
-                                         stream);
+                                         stream);*/
       }
     } // namespace
 
@@ -947,13 +950,14 @@ namespace Realm {
           assert(dst_gpus[i]);
         } else {
           if(NodeID(ID(output_ports[i].mem->me).memory_owner_node()) !=
-             Network::my_node_id)
+             Network::my_node_id) {
             dst_is_ipc[i] = true;
+          }
         }
       }
     }
 
-    long GPUIndirectXferDes::get_requests(Request **requests, long nr)
+    long GPUIndirectXferDes::get_requests(Request **, long)
     {
       // unused
       assert(0);
@@ -963,10 +967,11 @@ namespace Realm {
     bool GPUIndirectXferDes::progress_xd(GPUIndirectChannel *channel,
                                          TimeLimit work_until)
     {
+      constexpr size_t MIN_XFER_SIZE = 4 << 20;
       bool did_work = false;
-      ReadSequenceCache rseqcache(this, 2 << 20);
 
-      const size_t MIN_XFER_SIZE = 4 << 20; // 4 MiB threshold
+      ReadSequenceCache rseqcache(this, MIN_XFER_SIZE);
+      // WriteSequenceCache wseqcache(this, 2 << 20);
 
       while(true) {
         //--------------------------------------------------------------//
@@ -981,6 +986,7 @@ namespace Realm {
           break;
         }
 
+        assert(!in_nonaffine && !out_nonaffine);
         size_t in_span_start = 0, out_span_start = 0;
 
         //--------------------------------------------------------------//
@@ -992,12 +998,14 @@ namespace Realm {
         in_span_start = in_port->local_bytes_total;
         out_span_start = out_port->local_bytes_total;
 
+        rseqcache.add_span(input_control.current_io_port, in_span_start, max_bytes);
+
         GPU *in_gpu = src_gpus[input_control.current_io_port];
         GPU *out_gpu = dst_gpus[output_control.current_io_port];
         bool out_ipc = dst_is_ipc[output_control.current_io_port];
 
-        uintptr_t in_base =
-            reinterpret_cast<uintptr_t>(in_port->mem->get_direct_ptr(0, 0));
+        // uintptr_t in_base =
+        // reinterpret_cast<uintptr_t>(in_port->mem->get_direct_ptr(0, 0));
         uintptr_t out_base = 0;
         const GPU::CudaIpcMapping *out_map = nullptr;
         if(out_ipc) {
@@ -1011,106 +1019,140 @@ namespace Realm {
         //--------------------------------------------------------------//
         // 3.  Decode geometry from AddressListCursor
         //--------------------------------------------------------------//
-
-        AddressListCursor &in_cur = in_port->addrcursor;
-        AddressListCursor &out_cur = out_port->addrcursor;
+        AddressListCursor &src_addr_cursor = in_port->addrcursor;
+        AddressListCursor &dst_addr_cursor = out_port->addrcursor;
 
         const bool is_gather =
             (in_port->indirect_port_idx >= 0) && (out_port->indirect_port_idx < 0);
         const bool is_scatter =
             (out_port->indirect_port_idx >= 0) && (in_port->indirect_port_idx < 0);
+
         assert(!(is_gather && is_scatter));
 
-        AddressListCursor &geo_cur = is_gather ? in_cur : out_cur;
+        AddressListCursor &ctrl_addr_cursor =
+            is_gather ? src_addr_cursor : dst_addr_cursor;
 
-        size_t total_bytes = geo_cur.remaining(0);
-        if(total_bytes == 0) {
-          break;
-        }
+        MemcpyIndirectInfo<3, size_t> memcpy_info;
+        memset(&memcpy_info, 0, sizeof(MemcpyIndirectInfo<3, size_t>));
 
-        const int act_dim = geo_cur.get_dim();
-        assert(act_dim >= 3);
+        int dimensions = 3;
 
-        size_t base_offset = geo_cur.get_offset();
-        // size_t base_offset_in = in_cur.get_offset();
-        // size_t base_offset_out = out_cur.get_offset();
+        size_t volume = 0;
+        size_t addr_size = 0;
+        size_t src_base_off = 0;
+        size_t min_field_bytes = 0;
 
-        size_t field_size = geo_cur.get_stride(1);
-        size_t line_stride = (act_dim > 3) ? geo_cur.get_stride(3) : 0;
-        size_t plane_stride = (act_dim > 4) ? geo_cur.get_stride(4) : 0;
+        size_t remaining_bytes = max_bytes;
+        while(remaining_bytes > 0 &&
+              memcpy_info.num_rects < MemcpyIndirectInfo<3, size_t>::MAX_NUM_RECTS) {
+          MemcpyIndirectBatchPiece<3> &batch_piece =
+              memcpy_info.rects[memcpy_info.num_rects++];
 
-        // number of index-space dimensions for the indirection kernel
-        int ind_num_dims = act_dim - 2;
+          size_t total_bytes = ctrl_addr_cursor.remaining(0);
+          if(total_bytes == 0) {
+            break;
+          }
 
-        // compute addr sizes for indirection buffer
-        size_t addr_size = in_port->iter->get_address_size();
+          remaining_bytes -= total_bytes;
 
-        std::cout << "act_dim:" << act_dim << " field_size:" << field_size
-                  << " line_stride:" << line_stride << " plane_stride:" << plane_stride
-                  << " add_size:" << addr_size << std::endl;
+          int act_dim = ctrl_addr_cursor.get_dim();
+          unsigned payload_count = ctrl_addr_cursor.extra_words();
+          assert(payload_count == 3);
 
-        //--------------------------------------------------------------//
-        // 4.  Resolve indirection buffer bases
-        //--------------------------------------------------------------//
-        uintptr_t src_ind_base = 0, dst_ind_base = 0;
-        size_t read_ind_bytes = 0, write_ind_bytes = 0;
+          size_t field_bytes = ctrl_addr_cursor.read_extra();
+          size_t coord_bytes = ctrl_addr_cursor.read_extra();
+          const size_t offset = ctrl_addr_cursor.read_extra();
+          const size_t base_offset = ctrl_addr_cursor.get_offset();
 
-        if(is_gather) { // gather
-          src_ind_base = reinterpret_cast<uintptr_t>(
-              input_ports[in_port->indirect_port_idx].mem->get_direct_ptr(
-                  geo_cur.get_stride(2), 0));
-          read_ind_bytes = (total_bytes / field_size) * addr_size;
+          if(min_field_bytes == 0 || min_field_bytes > field_bytes) {
+            min_field_bytes = field_bytes;
+          }
 
-          in_base += base_offset;
-          // src_ind_base += (base_offset / field_size) * addr_size;
+          size_t line_stride = (act_dim > 1) ? ctrl_addr_cursor.get_stride(1) : 0;
+          size_t plane_stride = (act_dim > 2) ? ctrl_addr_cursor.get_stride(2) : 0;
 
-        } else {
-          in_base += in_cur.get_offset();
-        }
+          assert(dimensions >= (act_dim));
 
-        if(is_scatter) { // scatter
-          dst_ind_base = reinterpret_cast<uintptr_t>(
-              input_ports[out_port->indirect_port_idx].mem->get_direct_ptr(
-                  geo_cur.get_stride(2), 0));
-          write_ind_bytes = (total_bytes / field_size) * addr_size;
+          if(addr_size != 0) {
+            assert(addr_size == coord_bytes);
+          } else {
+            addr_size = coord_bytes;
+          }
 
-          out_base += base_offset;
-        } else {
-          out_base += out_cur.get_offset();
+          //--------------------------------------------------------------//
+          // 4.  Resolve indirection buffer bases
+          //--------------------------------------------------------------//
+          uintptr_t src_ind_base = 0, dst_ind_base = 0;
+
+          if(is_gather) { // gather
+            src_ind_base = reinterpret_cast<uintptr_t>(
+                input_ports[in_port->indirect_port_idx].mem->get_direct_ptr(offset, 0));
+            src_base_off = base_offset;
+          } else {
+            if(memcpy_info.num_rects == 1) {
+              src_base_off += src_addr_cursor.get_offset();
+            }
+          }
+
+          if(is_scatter) { // scatter
+            assert(0);
+            dst_ind_base = reinterpret_cast<uintptr_t>(
+                input_ports[out_port->indirect_port_idx].mem->get_direct_ptr(offset, 0));
+            out_base = base_offset;
+          } else {
+            if(memcpy_info.num_rects == 1) {
+              out_base += dst_addr_cursor.get_offset();
+            }
+          }
+
+          batch_piece.dim = act_dim;
+          batch_piece.src_base =
+              reinterpret_cast<uintptr_t>(in_port->mem->get_direct_ptr(src_base_off, 0));
+          batch_piece.dst_base = out_base;
+
+          batch_piece.src_ind_addr = src_ind_base;
+          batch_piece.dst_ind_addr = dst_ind_base;
+
+          batch_piece.field_size = field_bytes;
+
+          // TODO: name this extents
+          batch_piece.strides[0] = field_bytes;
+          batch_piece.strides[1] = line_stride;
+          batch_piece.strides[2] = plane_stride;
+
+          for(int i = 0; i < act_dim; i++) {
+            batch_piece.strides[i] /= field_bytes;
+          }
+          batch_piece.volume = total_bytes / field_bytes;
+
+          volume += batch_piece.volume;
+          src_addr_cursor.advance(0, total_bytes);
+          dst_addr_cursor.advance(0, total_bytes);
         }
 
         //--------------------------------------------------------------//
         // 5.  Launch CUDA indirect-copy kernel
         //--------------------------------------------------------------//
-        std::vector<size_t> strides = {field_size, line_stride, plane_stride};
-
         auto stream = select_stream(out_gpu, in_gpu, channel->get_gpu(), out_map,
                                     in_port->mem, out_port->mem);
         AutoGPUContext agc(stream->get_gpu());
-        assert(!in_nonaffine && !out_nonaffine);
-
-        launch_indirect_kernel(in_gpu, stream, ind_num_dims, addr_size, field_size,
-                               total_bytes, strides, in_base, out_base, src_ind_base,
-                               dst_ind_base);
-
-        //--------------------------------------------------------------//
-        // 6.  Advance cursors and byte counters
-        //--------------------------------------------------------------//
-        in_cur.advance(0, total_bytes);
-        out_cur.advance(0, total_bytes);
-
-        in_port->local_bytes_total += total_bytes;
-        out_port->local_bytes_total += total_bytes;
+        in_gpu->launch_indirect_copy_kernel(&memcpy_info, dimensions, addr_size,
+                                            min_field_bytes, volume, stream);
 
         add_reference();
+
+        size_t ind_bytes = volume * addr_size;
+
         stream->add_notification(new GPUIndirectTransferCompletion(
-            this, input_control.current_io_port, in_span_start, total_bytes,
-            output_control.current_io_port, out_span_start, total_bytes,
-            in_port->indirect_port_idx, 0, read_ind_bytes, out_port->indirect_port_idx, 0,
-            write_ind_bytes));
+            this, input_control.current_io_port, in_span_start, max_bytes,
+            output_control.current_io_port, out_span_start, max_bytes,
+            in_port->indirect_port_idx, 0, ind_bytes, out_port->indirect_port_idx, 0,
+            /*write_ind_bytes=*/0));
+
+        bool done = record_address_consumption(max_bytes, max_bytes);
 
         did_work = true;
-        if(total_bytes >= MIN_XFER_SIZE || work_until.is_expired()) {
+        if(done || max_bytes >= MIN_XFER_SIZE || work_until.is_expired()) {
           break;
         }
       }
@@ -1373,16 +1415,12 @@ namespace Realm {
       }
 
       bool done(void) override { return (field_idx >= fields.size()); }
-      size_t get_address_size(void) const override { return sizeof(T); }
-
-      // size_t get_field_size(void) const { return fld_sizes[field_idx]; }
-      // FieldID get_field_id(void) const { return fields[field_idx]; }
 
       // ------------------------------------------------------------------
       // iteration – AddressList / AddressInfo interface
       // ------------------------------------------------------------------
-      size_t step(size_t max_bytes, AddressInfo &info, unsigned /*flags*/,
-                  bool /*tentative*/ = false) override
+      size_t step(size_t, AddressInfo &info, unsigned /*flags*/,
+                  bool /*tentative*/) override
       {
         // no work left?
         if(done()) {
@@ -1422,6 +1460,7 @@ namespace Realm {
         // total bytes in this piece
         const size_t bytes_this_step = ap->bounds.volume() * fsz;
 
+        // cur_piece.advance(bytes_this_step);
         // mark piece consumed – next call will advance to next piece/field
         have_piece = false;
 
@@ -1445,13 +1484,16 @@ namespace Realm {
                          const InstanceLayoutPieceBase *&nonaffine) override
       {
         nonaffine = nullptr;
-        static const size_t MAX_POINTS = 4194304; // identical to wrapper
+        static constexpr size_t MAX_POINTS = 4194304;
         XferDes::XferPort &iip = indirect_xd->input_ports[indirect_port_idx];
 
         //------------------------------------------------------------------
         // 1.  Make sure we have at least one point in the local buffer
         //------------------------------------------------------------------
         while(point_pos >= num_points) {
+          size_t piece_bytes = 0;
+          TransferIterator::AddressInfo aff{};
+
           // exhausted current batch – need more
           if(addrs_in->done()) { // upstream finished?
             return true;
@@ -1473,6 +1515,18 @@ namespace Realm {
             }
           }
 
+          //------------------------------------------------------------------
+          // 2.  Produce geometry for the DATA instance (one affine piece)
+          //------------------------------------------------------------------
+          piece_bytes += step(SIZE_MAX, aff, 0, /*tentative=*/false);
+          if(piece_bytes == 0) {
+            return false; // no data piece yet
+          }
+
+          size_t max_layout_points =
+              (piece_bytes / aff.bytes_per_chunk) * sizeof(Point<N, T>);
+          addr_max_bytes = std::min(addr_max_bytes, max_layout_points);
+
           //----------------------------------------------------------------
           // pull data from upstream iterator
           //----------------------------------------------------------------
@@ -1489,63 +1543,60 @@ namespace Realm {
           // update flow-control counters on indirect_xd
           indirect_xd->update_bytes_read(indirect_port_idx, iip.local_bytes_total, got);
           iip.local_bytes_total += got;
+          //}
+
+          //------------------------------------------------------------------
+          // 3.  Emit one ND-entry into AddressList
+          //------------------------------------------------------------------
+          const size_t pts_in_entry = num_points - point_pos;
+          const size_t field_size = aff.bytes_per_chunk;
+          const size_t total_bytes = pts_in_entry * field_size;
+
+          int act_dim = 1;
+
+          if(aff.num_lines > 1) {
+            act_dim++;
+          }
+          if(aff.num_planes > 1) {
+            act_dim++;
+          }
+
+          unsigned payload_count = 3;
+          size_t *ad = addrlist.begin_nd_entry(act_dim, payload_count);
+          if(!ad) {
+            return false;
+          }
+
+          int idx = 0;
+
+          ad[idx++] = (total_bytes << 4) | act_dim;
+          ad[idx++] = aff.base_offset;
+
+          if(aff.num_lines > 1) {
+            ad[idx++] = 1;
+            ad[idx++] = aff.line_stride;
+          }
+
+          if(aff.num_planes > 1) {
+            ad[idx++] = 1;
+            ad[idx++] = aff.plane_stride;
+          }
+
+          if(payload_count) {
+            size_t start_offset = AddressListCursor::payload_offset(act_dim);
+            ad[start_offset++] = field_size;
+            ad[start_offset++] = sizeof(T);
+            ad[start_offset++] = addrs_in_offset;
+          }
+
+          assert(total_bytes <= piece_bytes);
+          addrlist.commit_nd_entry(act_dim, total_bytes, payload_count);
+
+          //------------------------------------------------------------------
+          // 4.  Advance point cursor – we consumed whole batch
+          //------------------------------------------------------------------
+          point_pos = num_points;
         }
-
-        //------------------------------------------------------------------
-        // 2.  Produce geometry for the DATA instance (one affine piece)
-        //------------------------------------------------------------------
-        TransferIterator::AddressInfo aff{};
-        size_t piece_bytes = step(SIZE_MAX, aff, 0, /*tentative=*/false);
-        if(piece_bytes == 0) {
-          return false; // no data piece yet
-        }
-
-        //------------------------------------------------------------------
-        // 3.  Emit one ND-entry into AddressList
-        //------------------------------------------------------------------
-        const size_t pts_in_entry = num_points - point_pos;
-        const size_t field_size = aff.bytes_per_chunk;
-        const size_t total_bytes = pts_in_entry * field_size;
-
-        int act_dim = 2;
-        if(aff.num_lines > 0) {
-          act_dim++;
-        }
-        if(aff.num_planes > 0) {
-          act_dim++;
-        }
-
-        size_t *ad = addrlist.begin_nd_entry(act_dim);
-        if(!ad) {
-          return false; // list full – caller retry
-        }
-
-        int idx = 0;
-
-        ad[idx++] = (total_bytes << 4) | act_dim;
-        ad[idx++] = aff.base_offset;
-
-        ad[idx++] = 1;
-        ad[idx++] = field_size;
-
-        ad[idx++] = 1;
-        ad[idx++] = addrs_in_offset;
-
-        if(aff.num_lines > 0) {
-          ad[idx++] = 1;
-          ad[idx++] = aff.line_stride;
-        }
-
-        if(aff.num_planes > 0) {
-          ad[idx++] = 1;
-          ad[idx++] = aff.plane_stride;
-        }
-
-        addrlist.commit_nd_entry(act_dim, total_bytes);
-        //------------------------------------------------------------------
-        // 4.  Advance point cursor – we consumed whole batch
-        //------------------------------------------------------------------
-        point_pos = num_points;
         return true;
       }
 
@@ -1557,7 +1608,7 @@ namespace Realm {
       // ------------------------------------------------------------------
       // helpers
       // ------------------------------------------------------------------
-      struct LayoutPieceInfo {
+      struct LayoutPieceIterator {
         const AffineLayoutPiece<N, T> *piece = nullptr;
         size_t off_in_piece = 0;
         size_t field_size = 0;
@@ -1567,10 +1618,10 @@ namespace Realm {
         size_t cur_offset_in_inst(const RegionInstanceImpl *inst,
                                   size_t field_rel_off) const
         {
-          return inst->metadata.inst_offset + piece->offset +
-                 piece->strides.dot(piece->bounds.lo) +
-                 field_rel_off + // field offset within struct
-                 off_in_piece;
+          return inst->metadata.inst_offset; //+ piece->offset +
+                                             // piece->strides.dot(piece->bounds.lo) +
+                                             // field_rel_off +
+                                             // off_in_piece;
         }
 
         size_t bytes_remaining() const
@@ -1608,12 +1659,14 @@ namespace Realm {
               // Non-affine pieces are not expected for FB memories
               continue;
             }
+
             cur_piece.piece = static_cast<const AffineLayoutPiece<N, T> *>(base);
             cur_piece.off_in_piece = 0;
             cur_piece.field_size = field_size;
-            // cur_piece.field_rel_off = field_rel_offset;
+
             cur_piece.cur_offset =
                 cur_piece.cur_offset_in_inst(inst_impl, field_rel_offset);
+
             have_piece = true;
             return true;
           }
@@ -1642,7 +1695,7 @@ namespace Realm {
       size_t field_idx = 0; // which field we are on
       size_t cur_bytes = 0; // bytes produced so far
 
-      LayoutPieceInfo cur_piece;
+      LayoutPieceIterator cur_piece;
       bool have_piece = false;
 
       int indirect_port_idx;
@@ -1708,11 +1761,11 @@ namespace Realm {
         }
       }
 
-      virtual TransferIterator *create_iterator(RegionInstance inst,
-                                                const std::vector<int> &dim_order,
-                                                const std::vector<FieldID> &fields,
-                                                const std::vector<size_t> &fld_offsets,
-                                                const std::vector<size_t> &fld_sizes)
+      TransferIterator *create_iterator(RegionInstance inst,
+                                        const std::vector<int> &dim_order,
+                                        const std::vector<FieldID> &fields,
+                                        const std::vector<size_t> &fld_offsets,
+                                        const std::vector<size_t> &fld_sizes) override
       {
         return new GPUIndirectTransferIterator<N, T>(
             get_runtime()->get_instance_impl(inst), dim_order, fields, fld_offsets,
@@ -2196,21 +2249,21 @@ namespace Realm {
     void GPUIndirectTransferCompletion::request_completed(void)
     {
 
-      log_gpudma.info() << "gpu gather complete: xd=" << std::hex << xd->guid << std::dec
-                        << " read=" << read_port_idx << "/" << read_offset
-                        << " write=" << write_port_idx << "/" << write_offset
-                        << " bytes=" << write_size;
+      log_gpudma.error() << "gpu gather complete: xd=" << std::hex << xd->guid << std::dec
+                         << " read=" << read_port_idx << "/" << read_offset
+                         << " write=" << write_port_idx << "/" << write_offset
+                         << " bytes=" << write_size;
 
       if(read_ind_port_idx >= 0) {
         XferDes::XferPort &iip = xd->input_ports[read_ind_port_idx];
         xd->update_bytes_read(read_ind_port_idx, iip.local_bytes_total, read_ind_size);
-        iip.local_bytes_total += read_ind_size;
+        // iip.local_bytes_total += read_ind_size;
       }
 
       if(write_ind_port_idx >= 0) {
         XferDes::XferPort &iip = xd->input_ports[write_ind_port_idx];
         xd->update_bytes_read(write_ind_port_idx, iip.local_bytes_total, write_ind_size);
-        iip.local_bytes_total += write_ind_size;
+        // iip.local_bytes_total += write_ind_size;
       }
 
       if(read_port_idx >= 0) {
@@ -2978,7 +3031,6 @@ namespace Realm {
 
         bool done = record_address_consumption(total_elems * in_elem_size,
                                                total_elems * out_elem_size);
-
         did_work = true;
 
         if(done || work_until.is_expired())

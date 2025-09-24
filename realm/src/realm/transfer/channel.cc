@@ -1836,8 +1836,11 @@ namespace Realm {
     //  finished - if that's all of them, we can mark full transfer completion
     int64_t prev = bytes_write_pending.fetch_add(total_bytes_written);
     int64_t pending = prev + total_bytes_written;
-    log_xd.info() << "completion: xd=" << std::hex << guid << std::dec
-                  << " total_bytes=" << total_bytes_written << " pending=" << pending;
+
+    log_xd.error() << "completion: xd=" << std::hex << guid << std::dec
+                   << " total_bytes=" << total_bytes_written << " pending=" << pending
+                   << " prev:" << prev;
+
     assert(pending >= 0);
     if(pending == 0)
       transfer_completed.store_release(true);

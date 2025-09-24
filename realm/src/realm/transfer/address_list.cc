@@ -28,6 +28,54 @@ namespace Realm {
 
   ////////////////////////////////////////////////////////////////////////
   //
+  //  Layout of one ND-entry (legacy + optional payload)
+  //
+  //    word0 : (bytes << 4) | dim | (has_extra ? 0x10 : 0)
+  //    word1 : base_offset
+  //    word2..(2*dim+1)           :   [extent,stride] pairs
+  //    if(has_extra) {
+  //        word2*dim+2   : extra_cnt         (#payload words)
+  //        word2*dim+3.. : payload words
+  //    }
+  //
+  //  When extra_cnt == 0   → flag bit 0x10 is clear and entry is 100 %
+  //                          backward-compatible.
+  //
+  ////////////////////////////////////////////////////////////////////////
+
+  namespace {
+    static constexpr unsigned DIM_MASK = 0x0F; // low 4 bits
+    static constexpr unsigned PLD_FLAG = 0x10; // bit-4
+
+    inline unsigned payload_start(unsigned dim) { return 2 * dim; }
+
+    inline unsigned header_dim(const size_t *entry)
+    {
+      return static_cast<unsigned>(*entry & DIM_MASK);
+    }
+
+    inline size_t header_bytes(size_t entry) { return (entry >> 4) & ~size_t(1); }
+
+    inline size_t payload_count(const size_t *entry)
+    {
+      return entry[payload_start(header_dim(entry))];
+    }
+
+    inline size_t entry_words(int dim, size_t cnt)
+    {
+      return (payload_start(dim) + (cnt ? (1 + cnt) : 0));
+    }
+
+    inline size_t entry_words_total(const size_t *entry)
+    {
+      const unsigned dim = header_dim(entry);
+      const unsigned cnt = payload_count(entry);
+      return entry_words(dim, cnt);
+    }
+  } // namespace
+
+  ////////////////////////////////////////////////////////////////////////
+  //
   // class AddressList
   //
 
@@ -39,9 +87,9 @@ namespace Realm {
     memset(data, 0, MAX_ENTRIES * sizeof(size_t));
   }
 
-  size_t *AddressList::begin_nd_entry(int max_dim)
+  size_t *AddressList::begin_nd_entry(int max_dim, unsigned payload_count)
   {
-    size_t entries_needed = max_dim * 2;
+    size_t entries_needed = entry_words(max_dim, payload_count);
 
     size_t new_wp = write_pointer + entries_needed;
     if(new_wp > MAX_ENTRIES) {
@@ -65,13 +113,21 @@ namespace Realm {
         return 0;
     }
 
+    if(payload_count) {
+      data[write_pointer + payload_start(max_dim)] = payload_count;
+    }
+
     // all good - return a pointer to the first available entry
     return (data + write_pointer);
   }
 
-  void AddressList::commit_nd_entry(int act_dim, size_t bytes)
+  void AddressList::commit_nd_entry(int act_dim, size_t bytes, unsigned payload_count)
   {
-    size_t entries_used = act_dim * 2;
+    size_t entries_used = entry_words(act_dim, payload_count);
+
+    if(payload_count) {
+      data[write_pointer] |= PLD_FLAG;
+    }
 
     write_pointer += entries_used;
     if(write_pointer >= MAX_ENTRIES) {
@@ -106,9 +162,11 @@ namespace Realm {
     : addrlist(0)
     , partial(false)
     , partial_dim(0)
+    , extra_pos(1)
   {
-    for(int i = 0; i < MAX_DIM; i++)
+    for(int i = 0; i < MAX_DIM; i++) {
       pos[i] = 0;
+    }
   }
 
   void AddressListCursor::set_addrlist(AddressList *_addrlist) { addrlist = _addrlist; }
@@ -121,7 +179,7 @@ namespace Realm {
       return (partial_dim + 1);
     } else {
       const size_t *entry = addrlist->read_entry();
-      int act_dim = (entry[0] & 15);
+      int act_dim = header_dim(entry);
       return act_dim;
     }
   }
@@ -129,7 +187,7 @@ namespace Realm {
   uintptr_t AddressListCursor::get_offset() const
   {
     const size_t *entry = addrlist->read_entry();
-    int act_dim = (entry[0] & 15);
+    int act_dim = header_dim(entry);
     uintptr_t ofs = entry[1];
     if(partial) {
       for(int i = partial_dim; i < act_dim; i++)
@@ -147,7 +205,7 @@ namespace Realm {
   uintptr_t AddressListCursor::get_stride(int dim) const
   {
     const size_t *entry = addrlist->read_entry();
-    int act_dim = (entry[0] & 15);
+    int act_dim = header_dim(entry);
     assert((dim > 0) && (dim < act_dim));
     return entry[2 * dim + 1];
   }
@@ -155,11 +213,11 @@ namespace Realm {
   size_t AddressListCursor::remaining(int dim) const
   {
     const size_t *entry = addrlist->read_entry();
-    int act_dim = (entry[0] & 15);
+    int act_dim = header_dim(entry);
     assert(dim < act_dim);
     size_t r = entry[2 * dim];
     if(dim == 0)
-      r >>= 4;
+      r = header_bytes(entry[0]); // 4;
     if(partial) {
       if(dim > partial_dim)
         r = 1;
@@ -174,21 +232,26 @@ namespace Realm {
   void AddressListCursor::advance(int dim, size_t amount)
   {
     const size_t *entry = addrlist->read_entry();
-    int act_dim = (entry[0] & 15);
+
+    int act_dim = header_dim(entry);
     assert(dim < act_dim);
+
     size_t r = entry[2 * dim];
-    if(dim == 0)
-      r >>= 4;
+    if(dim == 0) {
+      r = header_bytes(entry[0]); // 4;
+    }
 
     size_t bytes = amount;
     if(dim > 0) {
 #ifdef DEBUG_REALM
-      for(int i = 0; i < dim; i++)
+      for(int i = 0; i < dim; i++) {
         assert(pos[i] == 0);
+      }
 #endif
-      bytes *= (entry[0] >> 4);
-      for(int i = 1; i < dim; i++)
+      bytes *= header_bytes(entry[0]); //(entry[0] >> 4);
+      for(int i = 1; i < dim; i++) {
         bytes *= entry[2 * i];
+      }
     }
 #ifdef DEBUG_REALM
     assert(addrlist->total_bytes >= bytes);
@@ -198,7 +261,10 @@ namespace Realm {
     if(!partial) {
       if((dim == (act_dim - 1)) && (amount == r)) {
         // simple case - we consumed the whole thing
-        addrlist->read_pointer += 2 * act_dim;
+        addrlist->read_pointer +=
+            !(entry[0] & PLD_FLAG) ? 2 * act_dim : entry_words_total(entry);
+
+        extra_pos = 1;
         return;
       } else {
         // record partial consumption
@@ -218,7 +284,9 @@ namespace Realm {
       if(partial_dim == act_dim) {
         // all done
         partial = false;
-        addrlist->read_pointer += 2 * act_dim;
+        addrlist->read_pointer +=
+            !(entry[0] & PLD_FLAG) ? 2 * act_dim : entry_words_total(entry);
+        extra_pos = 1;
         break;
       } else {
         pos[partial_dim]++;         // carry into next dimension
@@ -262,14 +330,29 @@ namespace Realm {
     }
   }
 
+  size_t AddressListCursor::extra_words() const
+  {
+    return payload_count(addrlist->read_entry());
+  }
+
+  size_t AddressListCursor::read_extra()
+  {
+    const size_t *e = addrlist->read_entry();
+    return e[payload_start(header_dim(e)) + extra_pos++];
+  }
+
+  size_t AddressListCursor::payload_offset(int dim) { return payload_start(dim) + 1; }
+
   std::ostream &operator<<(std::ostream &os, const AddressListCursor &alc)
   {
     os << alc.remaining(0);
-    for(int i = 1; i < alc.get_dim(); i++)
+    for(int i = 1; i < alc.get_dim(); i++) {
       os << 'x' << alc.remaining(i);
+    }
     os << ',' << alc.get_offset();
-    for(int i = 1; i < alc.get_dim(); i++)
+    for(int i = 1; i < alc.get_dim(); i++) {
       os << '+' << alc.get_stride(i);
+    }
     return os;
   }
 } // namespace Realm
