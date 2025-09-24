@@ -450,7 +450,9 @@ namespace Realm {
             << "not enough object buffers for GASNet to service all endpoints "
             << "on node " << Network::my_node_id << ". This node was configured "
             << "with -gex:obcount=" << num_buffers << " but at least " << num_endpoints
-            << " object buffers are required.";
+            << " object buffers are required. Please see the following github issue "
+            << "for more information or to make a comment on this failure: "
+            << "https://github.com/StanfordLegion/realm/issues/239";
         std::abort();
       }
     }
