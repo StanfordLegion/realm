@@ -139,7 +139,7 @@ namespace Realm {
     void init(size_t _outbuf_count, size_t _outbuf_size, uintptr_t _baseptr);
 
     OutbufMetadata *alloc_outbuf(OutbufMetadata::State state, bool overflow_ok,
-                                 const gex_rank_t *new_endpoint);
+                                 bool new_endpoint);
     void free_outbuf(OutbufMetadata *md);
 
     virtual bool do_work(TimeLimit work_until);
@@ -152,10 +152,7 @@ namespace Realm {
     // we manage the copying over overflow bufs back to real outbufs - track
     //  both pending overflow bufs and reserved outbufs and request bgwork
     //  time when we've got at least one of each
-    size_t num_overflow, num_reserved, num_buffers;
-    OutbufMetadata *overflow_head;
-    OutbufMetadata **overflow_tail;
-    OutbufMetadata *reserved_head;
+    size_t num_overflow, num_reserved;
     // In order to detect the case of misconfigured objcounts given the
     // number of endpoints we count how many different endpoints we
     // need to allocate buffers for, if it is more than the total number
@@ -163,7 +160,10 @@ namespace Realm {
     // TODO: Remove this once we insert a slow insertion pathway
     // from dynamically allocated output buffers that are not
     // registered with GASNet
-    std::vector<gex_rank_t> target_endpoints;
+    size_t num_buffers, num_endpoints;
+    OutbufMetadata *overflow_head;
+    OutbufMetadata **overflow_tail;
+    OutbufMetadata *reserved_head;
   };
 
   class PendingCompletionManager;
