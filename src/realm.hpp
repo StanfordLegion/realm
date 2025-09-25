@@ -241,16 +241,15 @@ namespace REALM_NAMESPACE {
    * do not need to be explicitly garbage collected.
    */
   class Event {
-  private:
+  public:
     realm_event_t id{REALM_NO_EVENT};
 
-  public:
     Event() = default;
-    constexpr explicit Event(realm_id_t id)
+    constexpr explicit Event(realm_event_t id)
       : id(id)
     {}
 
-    constexpr operator realm_id_t() const { return id; }
+    constexpr operator realm_event_t() const { return id; }
 
     bool operator<(const Event &rhs) const { return id < rhs.id; }
     bool operator==(const Event &rhs) const { return id == rhs.id; }
@@ -475,7 +474,7 @@ namespace REALM_NAMESPACE {
   class UserEvent : public Event {
   public:
     UserEvent() = default;
-    constexpr UserEvent(realm_id_t id)
+    constexpr UserEvent(realm_event_t id)
       : Event(id)
     {}
 
@@ -523,22 +522,19 @@ namespace REALM_NAMESPACE {
    * and manage task execution on that processor.
    */
   class Processor {
-  private:
-    realm_id_t id{REALM_NO_PROC};
-
   public:
+    realm_processor_t id{REALM_NO_PROC};
+
     Processor() = default;
-    constexpr explicit Processor(realm_id_t id)
+    constexpr explicit Processor(realm_processor_t id)
       : id(id)
     {}
 
-    constexpr operator realm_id_t() const { return id; }
-
     /**
-     * \brief Get the internal ID for derived classes.
-     * \return The event ID
+     * \brief Implicit conversion operator to realm_processor_t.
+     * \return The underlying realm_processor_t instance
      */
-    realm_id_t get_id() const { return id; }
+    constexpr operator realm_processor_t() const { return id; }
 
     bool operator<(const Processor &rhs) const { return id < rhs.id; }
     bool operator==(const Processor &rhs) const { return id == rhs.id; }
@@ -550,7 +546,7 @@ namespace REALM_NAMESPACE {
      * \brief Check whether this processor has a valid ID.
      * \return true if the processor has a valid ID, false otherwise
      */
-    bool exists(void) const { return id != 0; }
+    bool exists(void) const { return id != REALM_NO_PROC; }
 
     typedef ::realm_task_func_id_t TaskFuncID;
     typedef void (*TaskFuncPtr)(const void *args, size_t arglen, const void *user_data,
@@ -880,6 +876,12 @@ namespace REALM_NAMESPACE {
     }
 
     /**
+     * \brief Implicit conversion operator to realm_runtime_t.
+     * \return The underlying realm_runtime_t instance
+     */
+    constexpr operator realm_runtime_t() const { return impl; }
+
+    /**
      * \brief Destructor that cleans up the runtime instance.
      */
     ~Runtime(void) { realm_runtime_destroy((impl)); }
@@ -1106,9 +1108,8 @@ namespace REALM_NAMESPACE {
                            const Event &wait_on = Event::NO_EVENT, int priority = 0)
     {
       realm_event_t eventIdOut;
-      REALM_CHECK(realm_runtime_collective_spawn(impl, target_proc.get_id(), task_id,
-                                                 args, arglen, wait_on, priority,
-                                                 &eventIdOut));
+      REALM_CHECK(realm_runtime_collective_spawn(impl, target_proc.id, task_id, args,
+                                                 arglen, wait_on, priority, &eventIdOut));
       return Event(eventIdOut);
     }
 
@@ -1219,22 +1220,15 @@ namespace REALM_NAMESPACE {
    * latency, and accessibility from different processors.
    */
   class Memory {
-  private:
-    realm_id_t id{REALM_NO_MEM};
-
   public:
+    realm_memory_t id{REALM_NO_MEM};
+
     Memory() = default;
-    constexpr explicit Memory(realm_id_t id)
+    constexpr explicit Memory(realm_memory_t id)
       : id(id)
     {}
 
-    constexpr operator realm_id_t() const { return id; }
-
-    /**
-     * \brief Get the internal ID for derived classes.
-     * \return The event ID
-     */
-    realm_id_t get_id() const { return id; }
+    constexpr operator realm_memory_t() const { return id; }
 
     bool operator<(const Memory &rhs) const { return id < rhs.id; }
     bool operator==(const Memory &rhs) const { return id == rhs.id; }
@@ -1246,7 +1240,7 @@ namespace REALM_NAMESPACE {
      * \brief Check whether this memory has a valid ID.
      * \return true if the memory has a valid ID, false otherwise
      */
-    bool exists(void) const { return id != 0; }
+    bool exists(void) const { return id != REALM_NO_MEM; }
 
     /**
      * \brief Get the address space this memory belongs to.
@@ -1314,7 +1308,7 @@ namespace REALM_NAMESPACE {
 
   inline std::ostream &operator<<(std::ostream &os, Memory m)
   {
-    return os << std::hex << m.get_id() << std::dec;
+    return os << std::hex << m.id << std::dec;
   }
 
   inline std::ostream &operator<<(std::ostream &os, Memory::Kind kind)
@@ -1864,6 +1858,9 @@ namespace REALM_NAMESPACE {
       return !(*this == compare_to);
     }
 
+    // implicit conversion to raw query handle
+    operator realm_processor_query_t(void) const { return impl; }
+
     // filter predicates (returns self-reference for chaining)
     // if multiple predicates are used, they must all match (i.e. the intersection is
     // returned)
@@ -1875,7 +1872,7 @@ namespace REALM_NAMESPACE {
      */
     ProcessorQuery &only_kind(Processor::Kind kind)
     {
-      if(impl) {
+      if(impl != nullptr) {
         REALM_CHECK(realm_processor_query_restrict_to_kind(
             impl, static_cast<realm_processor_kind_t>(kind)));
       }
@@ -1894,7 +1891,7 @@ namespace REALM_NAMESPACE {
       realm_runtime_attr_t runtime_attr = REALM_RUNTIME_ATTR_LOCAL_ADDRESS_SPACE;
       uint64_t values;
 
-      if(impl) {
+      if(impl != nullptr) {
         REALM_CHECK(realm_runtime_get_runtime(&runtime));
         REALM_CHECK(realm_runtime_get_attributes(runtime, &runtime_attr, &values, 1));
         REALM_CHECK(realm_processor_query_create(runtime, &query));
@@ -2033,7 +2030,7 @@ namespace REALM_NAMESPACE {
      */
     ~MemoryQuery(void)
     {
-      if(impl) {
+      if(impl != nullptr) {
         realm_memory_query_destroy(impl);
       }
     }
@@ -2069,6 +2066,9 @@ namespace REALM_NAMESPACE {
       return !(*this == compare_to);
     }
 
+    // implicit conversion to raw query handle
+    operator realm_memory_query_t(void) const { return impl; }
+
     // filter predicates (returns self-reference for chaining)
     // if multiple predicates are used, they must all match (i.e. the intersection is
     // returned)
@@ -2080,7 +2080,7 @@ namespace REALM_NAMESPACE {
      */
     MemoryQuery &only_kind(Memory::Kind kind)
     {
-      if(impl) {
+      if(impl != nullptr) {
         REALM_CHECK(realm_memory_query_restrict_to_kind(
             impl, static_cast<realm_memory_kind_t>(kind)));
       }
@@ -2099,7 +2099,7 @@ namespace REALM_NAMESPACE {
       realm_runtime_attr_t runtime_attr = REALM_RUNTIME_ATTR_LOCAL_ADDRESS_SPACE;
       uint64_t values;
 
-      if(impl) {
+      if(impl != nullptr) {
         REALM_CHECK(realm_runtime_get_runtime(&runtime));
         REALM_CHECK(realm_runtime_get_attributes(runtime, &runtime_attr, &values, 1));
         REALM_CHECK(realm_memory_query_create(runtime, &query));
@@ -2245,6 +2245,10 @@ namespace REALM_NAMESPACE {
     realm_memory_query_t impl;
   };
 
+  inline const Processor Processor::NO_PROC{REALM_NO_PROC};
+  inline const Event Event::NO_EVENT{REALM_NO_EVENT};
+  inline const UserEvent UserEvent::NO_USER_EVENT{REALM_NO_USER_EVENT};
+  inline const Memory Memory::NO_MEMORY{REALM_NO_MEM};
 } // namespace REALM_NAMESPACE
 
 #define REALM_HASH_DEFINE(C)                                                             \
