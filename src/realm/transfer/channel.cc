@@ -3915,7 +3915,7 @@ namespace Realm {
 
   bool RemoteChannel::supports_redop(ReductionOpID redop_id) const
   {
-  #if 1
+  #if 0
     RWLock::AutoReaderLock al(mutex);
     return supported_redops.count(redop_id) != 0;
   #else
