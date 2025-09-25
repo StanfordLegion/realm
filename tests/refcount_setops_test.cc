@@ -485,7 +485,6 @@ void main_task(const void *args, size_t arglen, const void *userdata, size_t use
     }
   }
 
-  usleep(100000);
   Runtime::get_runtime().shutdown(Processor::get_current_finish_event(), 0);
 }
 

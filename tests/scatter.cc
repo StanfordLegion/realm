@@ -155,7 +155,7 @@ public:
   template <typename LAMBDA>
   Event create_instances(const FieldMap &fields, LAMBDA mem_picker);
 
-  void destroy_instances(Event wait_on);
+  Event destroy_instances(Event wait_on);
 
   template <typename FT, typename LAMBDA>
   Event fill(IndexSpace<N, T> is, FieldID fid, LAMBDA filler, Event wait_on);
@@ -286,18 +286,20 @@ Event DistributedData<N, T>::create_instances(const FieldMap &fields, LAMBDA mem
 }
 
 template <int N, typename T>
-void DistributedData<N, T>::destroy_instances(Event wait_on)
+Event DistributedData<N, T>::destroy_instances(Event wait_on)
 {
+  std::vector<Event> events;
   for(typename std::vector<Piece>::iterator it = pieces.begin(); it != pieces.end();
       ++it) {
-    it->inst.destroy(wait_on);
+    events.push_back(it->inst.destroy(wait_on));
     it->inst = RegionInstance::NO_INST;
     if(it->cpu_inst.exists()) {
-      it->cpu_inst.destroy(wait_on);
+      events.push_back(it->cpu_inst.destroy(wait_on));
       it->cpu_inst = RegionInstance::NO_INST;
     }
     it->proc = Processor::NO_PROC;
   }
+  return Event::merge_events(events);
 }
 
 template <typename T>
@@ -960,7 +962,7 @@ bool DistributedData<N, T>::verify(IndexSpace<N, T> is, FieldID fid, Event wait_
     }
 
     if(tmp_inst.exists())
-      tmp_inst.destroy();
+      tmp_inst.destroy().wait();
   }
 
   return (errors == 0);
@@ -1095,8 +1097,8 @@ bool scatter_gather_test(const std::vector<Memory> &mems, T size1, T2 size2, int
       return false;
   }
 
-  region1.destroy_instances(Event::NO_EVENT);
-  region2.destroy_instances(Event::NO_EVENT);
+  region1.destroy_instances(Event::NO_EVENT).wait();
+  region2.destroy_instances(Event::NO_EVENT).wait();
 
   return true;
 #if 0
@@ -1232,9 +1234,9 @@ bool scatter_gather_test(const std::vector<Memory> &mems, T size1, T2 size2, int
     dump_field<N, T, DT >(inst1, FID_DATA2, is1);
   }
 
-  inst1.destroy();
-  inst2a.destroy();
-  inst2b.destroy();
+  inst1.destroy().wait();
+  inst2a.destroy().wait();
+  inst2b.destroy().wait();
   return true;
 #endif
 }
@@ -1468,9 +1470,6 @@ void top_level_task(const void *args, size_t arglen, const void *userdata, size_
     log_app.info() << "scatter/gather test finished successfully";
   else
     log_app.error() << "scatter/gather test finished with errors!";
-
-  // HACK: there's a shutdown race condition related to instance destruction
-  usleep(100000);
 
   Runtime::get_runtime().shutdown(Processor::get_current_finish_event(), ok ? 0 : 1);
 }

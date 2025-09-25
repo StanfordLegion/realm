@@ -291,7 +291,7 @@ void main_task(const void *args, size_t arglen, const void *userdata, size_t use
   log_app.print("Success");
 
   // clean up
-  inst.destroy();
+  inst.destroy().wait();
   reservation.destroy_reservation();
 }
 

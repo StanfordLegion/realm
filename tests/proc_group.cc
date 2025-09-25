@@ -20,8 +20,9 @@
 #include <cstdlib>
 #include <cassert>
 #include <cstring>
-
-#include <time.h>
+#include <ctime>
+#include <thread>
+#include <chrono>
 
 #include "realm.h"
 
@@ -68,7 +69,7 @@ void delay_task(const void *args, size_t arglen, const void *userdata, size_t us
   task_start_times[d_args.id] = Clock::current_time();
 
   // printf("starting task %d on processor " IDFMT "\n", d_args.id, p.id);
-  accurate_sleep(d_args.sleep_useconds);
+  std::this_thread::sleep_for(std::chrono::microseconds(d_args.sleep_useconds));
   // printf("ending task %d on processor " IDFMT "\n", d_args.id, p.id);
 
   task_end_times[d_args.id] = Clock::current_time();
@@ -233,7 +234,7 @@ void top_level_task(const void *args, size_t arglen, const void *userdata, size_
         pgrp_events.insert(e);
     }
     // small delay after each batch to make sure the tasks are all enqueued
-    accurate_sleep(400000);
+    std::this_thread::sleep_for(std::chrono::microseconds(400000));
   }
   log_app.info() << count << " tasks launched";
 
@@ -303,6 +304,9 @@ void top_level_task(const void *args, size_t arglen, const void *userdata, size_
     log_app.error() << "Exiting with errors.";
     exit(1);
   }
+
+  local_inst.destroy().wait();
+  tgt_inst.destroy().wait();
 
   // simple check for now to make sure IDs are reused - create a new group
   //  and verify it gets the same ID as the one we used above
