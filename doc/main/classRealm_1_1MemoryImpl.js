@@ -38,6 +38,7 @@ var classRealm_1_1MemoryImpl =
     [ "get_network_segment", "classRealm_1_1MemoryImpl.html#abeb65f288f18807061236030467f033e", null ],
     [ "get_rdma_info", "classRealm_1_1MemoryImpl.html#a8931ddbb46423797259132d609250f16", null ],
     [ "get_remote_addr", "classRealm_1_1MemoryImpl.html#adffd3726bfae9556ff257d2d1f39991a", null ],
+    [ "get_runtime_impl", "classRealm_1_1MemoryImpl.html#a732ea643648f55f751194fbe74144967", null ],
     [ "new_instance", "classRealm_1_1MemoryImpl.html#ae842ef2ff831c06e563e311793517b0d", null ],
     [ "put_bytes", "classRealm_1_1MemoryImpl.html#ac6f45876439f88c4bb48319147ce0998", null ],
     [ "release_instance", "classRealm_1_1MemoryImpl.html#a96289be34100801a66a89733ab7774b7", null ],
