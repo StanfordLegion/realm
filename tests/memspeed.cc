@@ -386,17 +386,9 @@ void top_level_task(const void *args, size_t arglen, const void *userdata, size_
       d_sparse = IndexSpace<1>(rects);
     }
 
-    int num_concurrent_copies = 10;
-
     for(std::vector<Memory>::const_iterator it = memories.begin(); it != memories.end();
         ++it) {
-      for(std::vector<Memory>::const_iterator it2 = memories.begin();
-          it2 != memories.end(); ++it2) {
       Memory m1 = *it;
-      Memory m2 = *it2;
-      if (m1.address_space() == m2.address_space() || m1.kind() != Memory::GPU_FB_MEM || m2.kind() != Memory::GPU_FB_MEM) {
-        continue;
-      }
 
       RegionInstance inst1;
       RegionInstance::create_instance(inst1, m1, d, field_sizes,
@@ -417,6 +409,10 @@ void top_level_task(const void *args, size_t arglen, const void *userdata, size_
 
         d.copy(srcs, dsts, ProfilingRequestSet()).wait();
       }
+
+      for(std::vector<Memory>::const_iterator it2 = memories.begin();
+          it2 != memories.end(); ++it2) {
+        Memory m2 = *it2;
 
         RegionInstance inst2;
         RegionInstance::create_instance(inst2, m2, d, field_sizes,
@@ -450,10 +446,6 @@ void top_level_task(const void *args, size_t arglen, const void *userdata, size_
         for(int i = 0; i < TestConfig::copy_fields; i++)
           dsts[i].set_field(inst2, FID_BASE + i, sizeof(void *));
 
-        long long start_time = Clock::current_time_in_nanoseconds();
-
-        std::vector<Event> copy_events(num_concurrent_copies);
-
         for(int rep = 0; rep <= TestConfig::copy_reps; rep++) {
           // now perform two instance-to-instance copies
 
@@ -466,16 +458,15 @@ void top_level_task(const void *args, size_t arglen, const void *userdata, size_
             result.num_hops = &num_hops_full;
             result.done = full_copy_done;
             ProfilingRequestSet prs;
-            // if(rep == 0) {
-            //   prs.add_request(p, COPYPROF_TASK, &result, sizeof(CopyProfResult))
-            //       .add_measurement<ProfilingMeasurements::OperationTimeline>()
-            //       .add_measurement<ProfilingMeasurements::OperationCopyInfo>();
-            // } else {
-            //   prs.add_request(p, COPYPROF_TASK, &result, sizeof(CopyProfResult))
-            //       .add_measurement<ProfilingMeasurements::OperationTimeline>();
-            // }
-            Event e = d.copy(srcs, dsts, prs);
-            copy_events.push_back(e);
+            if(rep == 0) {
+              prs.add_request(p, COPYPROF_TASK, &result, sizeof(CopyProfResult))
+                  .add_measurement<ProfilingMeasurements::OperationTimeline>()
+                  .add_measurement<ProfilingMeasurements::OperationCopyInfo>();
+            } else {
+              prs.add_request(p, COPYPROF_TASK, &result, sizeof(CopyProfResult))
+                  .add_measurement<ProfilingMeasurements::OperationTimeline>();
+            }
+            d.copy(srcs, dsts, prs).wait();
           }
 
           // copy #2 - single-element copy
@@ -487,36 +478,91 @@ void top_level_task(const void *args, size_t arglen, const void *userdata, size_
             result.num_hops = &num_hops_short;
             result.done = short_copy_done;
             ProfilingRequestSet prs;
-            // if(rep == 0) {
-            //   prs.add_request(p, COPYPROF_TASK, &result, sizeof(CopyProfResult))
-            //       .add_measurement<ProfilingMeasurements::OperationTimeline>()
-            //       .add_measurement<ProfilingMeasurements::OperationCopyInfo>();
-            // } else {
-            //   prs.add_request(p, COPYPROF_TASK, &result, sizeof(CopyProfResult))
-            //       .add_measurement<ProfilingMeasurements::OperationTimeline>();
-            // }
-            Event e = d.copy(srcs, dsts, prs);
-            copy_events.push_back(e);
+            if(rep == 0) {
+              prs.add_request(p, COPYPROF_TASK, &result, sizeof(CopyProfResult))
+                  .add_measurement<ProfilingMeasurements::OperationTimeline>()
+                  .add_measurement<ProfilingMeasurements::OperationCopyInfo>();
+            } else {
+              prs.add_request(p, COPYPROF_TASK, &result, sizeof(CopyProfResult))
+                  .add_measurement<ProfilingMeasurements::OperationTimeline>();
+            }
+            Rect<1>(0, 0).copy(srcs, dsts, prs).wait();
           }
 
           // wait for both results
-          // full_copy_done.wait();
-          // short_copy_done.wait();
-          if (copy_events.size() == num_concurrent_copies) {
-            Event e = Event::merge_events(copy_events);
-            e.wait();
-            copy_events.clear();
+          full_copy_done.wait();
+          short_copy_done.wait();
+
+          if((rep > 0) || (TestConfig::copy_reps == 0)) {
+            total_full_copy_time += full_copy_time;
+            total_short_copy_time += short_copy_time;
+          }
+
+          // optional copy #3 - sparse copy
+          if(TestConfig::sparse_chunk > 0) {
+            long long sparse_copy_time = -1;
+            UserEvent sparse_copy_done = UserEvent::create_user_event();
+            {
+              CopyProfResult result;
+              result.nanoseconds = &sparse_copy_time;
+              result.done = sparse_copy_done;
+              ProfilingRequestSet prs;
+              prs.add_request(p, COPYPROF_TASK, &result, sizeof(CopyProfResult))
+                  .add_measurement<ProfilingMeasurements::OperationTimeline>();
+              d_sparse.copy(srcs, dsts, prs).wait();
+            }
+
+            sparse_copy_done.wait();
+
+            if((rep > 0) || (TestConfig::copy_reps == 0))
+              total_sparse_copy_time += sparse_copy_time;
           }
         }
 
-        long long end_time = Clock::current_time_in_nanoseconds();
-        long long copy_time = end_time - start_time;
-        log_app.print() << "copy " << m1 << " -> " << m2 << ": time:" << double(copy_time)/1e6 << "ms";
+        if(TestConfig::copy_reps > 1) {
+          total_full_copy_time /= TestConfig::copy_reps;
+          total_short_copy_time /= TestConfig::copy_reps;
+          total_sparse_copy_time /= TestConfig::copy_reps;
+        }
 
+        // latency is estimated as time to perfom single copy
+        double latency = total_short_copy_time;
+
+        // bandwidth is estimated based on extra time taken by full copy
+        double bw = (1.0 * elements * TestConfig::copy_fields * sizeof(void *) /
+                     (total_full_copy_time - total_short_copy_time));
+
+        // verify the copy only need one hop if src and dst are on the same node.
+        if(inst1.address_space() == inst2.address_space()) {
+          if(num_hops_full != 1) {
+            log_app.error() << "Error: the full copy from " << inst1 << " to " << inst2
+                            << " takes more than one hop, num_hops=" << num_hops_full;
+          }
+          if(num_hops_short != 1) {
+            log_app.error() << "Error: the short copy from " << inst1 << " to " << inst2
+                            << " takes more than one hop, num_hops=" << num_hops_full;
+          }
+        }
+
+        if(TestConfig::sparse_chunk == 0) {
+          log_app.info() << "copy " << m1 << " -> " << m2 << ": bw:" << bw
+                         << " lat:" << latency << ", num_hops_full_copy:" << num_hops_full
+                         << ", num_hops_short_copy:" << num_hops_short;
+        } else {
+          double sparse_bw =
+              (1.0 * sparse_elements * TestConfig::copy_fields * sizeof(void *) /
+               (total_sparse_copy_time - total_short_copy_time));
+
+          log_app.info() << "copy " << m1 << " -> " << m2 << ": bw:" << bw
+                         << " lat:" << latency << " sparse_bw:" << sparse_bw
+                         << ", num_hops_full_copy:" << num_hops_full
+                         << ", num_hops_short_copy:" << num_hops_short;
+        }
 
         inst2.destroy();
-        inst1.destroy();
       }
+
+      inst1.destroy();
     }
   }
 
@@ -531,7 +577,7 @@ int main(int argc, char **argv)
   rt.init(&argc, &argv);
 
   CommandLineParser cp;
-  cp.add_option_int_units("-b", TestConfig::buffer_size, 'K')
+  cp.add_option_int_units("-b", TestConfig::buffer_size, 'M')
       .add_option_int("-tasks", TestConfig::do_tasks)
       .add_option_int("-copies", TestConfig::do_copies)
       .add_option_int("-reps", TestConfig::copy_reps)
