@@ -20,13 +20,17 @@
 #ifndef REALM_HPP
 #define REALM_HPP
 
-#include <string>
-#include <vector>
-#include <set>
-#include <iostream>
+#include <algorithm>
+#include <cassert>
 #include <cstddef>
+#include <cstdint>
+#include <iostream>
+#include <memory>
+#include <set>
 #include <stdexcept>
 #include <functional>
+#include <string>
+#include <vector>
 #if __cplusplus >= 202002L
 #include <span>
 #endif
@@ -271,17 +275,19 @@ namespace REALM_NAMESPACE {
      * Test whether an event has triggered without waiting.
      * \return true if the event has triggered, false otherwise
      */
-    bool has_triggered(void) const { throw std::logic_error("Not implemented"); }
+    bool has_triggered(void) const
+    {
+      bool poisoned = false;
+      return has_triggered_faultaware(poisoned);
+    }
 
     /**
      * Wait for an event to trigger.
      */
-    void wait(void) const
+    void wait() const
     {
-      realm_runtime_t runtime;
-      int poisoned;
-      REALM_CHECK(realm_runtime_get_runtime(&runtime));
-      REALM_CHECK(realm_event_wait(runtime, id, REALM_WAIT_INFINITE, &poisoned));
+      bool poisoned = false;
+      wait_common(poisoned, REALM_WAIT_INFINITE);
     }
 
     /**
@@ -295,9 +301,10 @@ namespace REALM_NAMESPACE {
      * \param max_ns the maximum number of nanoseconds to wait
      * \return true if the event has triggered, false if the timeout occurred
      */
-    bool external_timedwait(long long max_ns) const
+    bool external_timedwait(int64_t max_ns) const
     {
-      throw std::logic_error("Not implemented");
+      bool poisoned = false;
+      return wait_common(poisoned, max_ns);
     }
 
     /**
@@ -308,7 +315,14 @@ namespace REALM_NAMESPACE {
      */
     bool has_triggered_faultaware(bool &poisoned) const
     {
-      throw std::logic_error("Not implemented");
+      realm_runtime_t runtime;
+      int tmp_has_triggered;
+      int tmp_poisoned;
+      REALM_CHECK(realm_runtime_get_runtime(&runtime));
+      REALM_CHECK(
+          realm_event_has_triggered(runtime, id, &tmp_has_triggered, &tmp_poisoned));
+      poisoned = (tmp_poisoned != 0);
+      return tmp_has_triggered != 0;
     }
 
     /**
@@ -318,7 +332,7 @@ namespace REALM_NAMESPACE {
      */
     void wait_faultaware(bool &poisoned) const
     {
-      throw std::logic_error("Not implemented");
+      wait_common(poisoned, REALM_WAIT_INFINITE);
     }
 
     /**
@@ -328,7 +342,7 @@ namespace REALM_NAMESPACE {
      */
     void external_wait_faultaware(bool &poisoned) const
     {
-      throw std::logic_error("Not implemented");
+      wait_common(poisoned, REALM_WAIT_INFINITE);
     }
 
     /**
@@ -337,11 +351,25 @@ namespace REALM_NAMESPACE {
      * \param max_ns the maximum number of nanoseconds to wait
      * \return true if the event has triggered, false if the timeout occurred
      */
-    bool external_timedwait_faultaware(bool &poisoned, long long max_ns) const
+    bool external_timedwait_faultaware(bool &poisoned, int64_t max_ns) const
     {
-      throw std::logic_error("Not implemented");
+      return wait_common(poisoned, max_ns);
     }
 
+  private:
+    bool wait_common(bool &poisoned, int64_t max_ns) const
+    {
+      realm_runtime_t runtime;
+      int has_triggered;
+      int tmp_poisoned;
+      realm_runtime_get_runtime(&runtime);
+      realm_event_wait(runtime, id, max_ns, nullptr);
+      realm_event_has_triggered(runtime, id, &has_triggered, &tmp_poisoned);
+      poisoned = tmp_poisoned != 0;
+      return has_triggered != 0;
+    }
+
+  public:
     /**
      * Subscribe to an event, ensuring that the triggeredness of the
      * event will be available as soon as possible (and without having to call
@@ -379,34 +407,29 @@ namespace REALM_NAMESPACE {
      */
     static Event merge_events(const Event *wait_for, size_t num_events)
     {
-      realm_runtime_t runtime;
-      REALM_CHECK(realm_runtime_get_runtime(&runtime));
-      realm_event_t merged_event_id;
-      REALM_CHECK(realm_event_merge(runtime,
-                                    reinterpret_cast<const realm_event_t *>(wait_for),
-                                    num_events, &merged_event_id, 0));
-      return Event(merged_event_id);
+      return merge_events_common(wait_for, num_events, false);
     }
 
     template <typename... Args>
     static Event merge_events(Event ev1, Event ev2, Args... args)
     {
       Event events[] = {ev1, ev2, Event(args)...};
-      return merge_events(events, sizeof(events) / sizeof(events[0]));
+      return merge_events_common(events, sizeof(events) / sizeof(events[0]), false);
     }
 
     static Event merge_events(const std::set<Event> &wait_for)
     {
       std::vector<Event> events(wait_for.begin(), wait_for.end());
-      return merge_events(events.data(), events.size());
+      return merge_events_common(events.data(), events.size(), false);
     }
 
     static Event merge_events(const span<const Event> &wait_for)
     {
-      return merge_events(wait_for.data(), wait_for.size());
+      return merge_events_common(wait_for.data(), wait_for.size(), false);
     }
     ///@}
 
+    ///@{
     /**
      * Create an event that won't trigger until all input events
      * have, ignoring any poison on the input events.
@@ -416,28 +439,46 @@ namespace REALM_NAMESPACE {
      */
     static Event merge_events_ignorefaults(const Event *wait_for, size_t num_events)
     {
-      realm_runtime_t runtime;
-      REALM_CHECK(realm_runtime_get_runtime(&runtime));
-      realm_event_t merged_event_id;
-      REALM_CHECK(realm_event_merge(runtime,
-                                    reinterpret_cast<const realm_event_t *>(wait_for),
-                                    num_events, &merged_event_id, 1));
-      return Event(merged_event_id);
+      return merge_events_common(wait_for, num_events, true);
     }
-    static Event merge_events_ignorefaults(const span<const Event> &wait_for)
+
+    template <typename... Args>
+    static Event merge_events_ignorefaults(Event ev1, Event ev2, Args... args)
     {
-      return merge_events_ignorefaults(wait_for.data(), wait_for.size());
+      Event events[] = {ev1, ev2, Event(args)...};
+      return merge_events_common(events, sizeof(events) / sizeof(events[0]), true);
     }
+
     static Event merge_events_ignorefaults(const std::set<Event> &wait_for)
     {
       std::vector<Event> events(wait_for.begin(), wait_for.end());
-      return merge_events_ignorefaults(events.data(), events.size());
-    }
-    static Event ignorefaults(Event wait_for)
-    {
-      return merge_events_ignorefaults(&wait_for, 1);
+      return merge_events_common(events.data(), events.size(), true);
     }
 
+    static Event merge_events_ignorefaults(const span<const Event> &wait_for)
+    {
+      return merge_events_common(wait_for.data(), wait_for.size(), true);
+    }
+    ///@}
+
+  private:
+    static Event merge_events_common(const Event *wait_for, size_t num_events,
+                                     bool ignore_faults)
+    {
+      realm_runtime_t runtime;
+      REALM_CHECK(realm_runtime_get_runtime(&runtime));
+
+      std::vector<realm_event_t> event_ids(num_events);
+      std::transform(wait_for, wait_for + num_events, event_ids.begin(),
+                     [](const Event &e) { return e.id; });
+
+      realm_event_t merged_event_id;
+      REALM_CHECK(realm_event_merge(runtime, event_ids.data(), num_events,
+                                    &merged_event_id, ignore_faults ? 1 : 0));
+      return Event(merged_event_id);
+    }
+
+  public:
     /**
      * The following call is used to give Realm a bound on when the UserEvent
      * will be triggered.  In addition to being useful for diagnostic purposes
