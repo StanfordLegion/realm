@@ -98,7 +98,7 @@ class RemoteChannelFixture : public benchmark::Fixture
     int num_channels{100};
 };
 
-BENCHMARK_F(RemoteChannelFixture, BenchSupportsRedop)(benchmark::State& state) {
+BENCHMARK_F(RemoteChannelFixture, BenchSupportsChannel)(benchmark::State& state) {
   Realm::Memory src_mem = Realm::ID::make_memory(0, 0).convert<Realm::Memory>();
   Realm::Memory dst_mem = Realm::ID::make_memory(1, 0).convert<Realm::Memory>();
   Realm::ChannelCopyInfo channel_copy_info{src_mem, dst_mem};
