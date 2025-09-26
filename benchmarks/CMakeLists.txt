@@ -86,7 +86,6 @@ macro(add_benchmark target)
 endmacro()
 
 add_benchmark(memcpy "${REALM_BENCH_DIR}/memcpy/memcpy.cc")
-add_benchmark(memcpy_latency "${REALM_BENCH_DIR}/memcpy_latency/memcpy_latency.cc")
 add_benchmark(event_latency "${REALM_BENCH_DIR}/event_latency/event_latency.cc")
 add_benchmark(event_throughput "${REALM_BENCH_DIR}/event_throughput/event_throughput.cc")
 set(event_ubench_ARGS -s 100)

@@ -3915,10 +3915,6 @@ namespace Realm {
 
   bool RemoteChannel::supports_redop(ReductionOpID redop_id) const
   {
-  #if 0
-    RWLock::AutoReaderLock al(mutex);
-    return supported_redops.count(redop_id) != 0;
-  #else
     if(redop_id == 0) {
       return has_non_redop_path;
     }
@@ -3929,7 +3925,6 @@ namespace Realm {
     }
 
     return false;
-  #endif
   }
 
   long RemoteChannel::submit(Request **requests, long nr)
