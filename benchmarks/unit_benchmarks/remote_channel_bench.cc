@@ -22,18 +22,18 @@
 
 class MockChannel : public Realm::Channel {
   public:
-    MockChannel(Realm::XferDesKind kind) : Realm::Channel(kind)
+    MockChannel(Realm::XferDesKind kind, Realm::NodeID src_node, Realm::NodeID dst_node) : Realm::Channel(kind)
     {
       // create some memories
       std::vector<Realm::Memory> src_memories;
       std::vector<Realm::Memory> dst_memories;
       int num_memories = 10;
       for (int i = 0; i < num_memories; i++) {
-        Realm::Memory mem = Realm::ID::make_memory(0, i).convert<Realm::Memory>();
+        Realm::Memory mem = Realm::ID::make_memory(src_node, i).convert<Realm::Memory>();
         src_memories.push_back(mem);
       }
       for (int i = 0; i < num_memories; i++) {
-        Realm::Memory mem = Realm::ID::make_memory(1, i).convert<Realm::Memory>();
+        Realm::Memory mem = Realm::ID::make_memory(dst_node, i).convert<Realm::Memory>();
         dst_memories.push_back(mem);
       }
 
@@ -78,11 +78,11 @@ class RemoteChannelFixture : public benchmark::Fixture
 
       channels.reserve(num_channels);
       for (int i = 0; i < num_channels; i++) {
-        MockChannel channel(Realm::XferDesKind::XFER_MEM_CPY);
+        MockChannel channel(Realm::XferDesKind::XFER_MEM_CPY, 0, i+1);
         std::vector<Realm::Channel::SupportedPath> paths = channel.get_paths();
 
         std::unique_ptr<Realm::SimpleRemoteChannelInfo> rci = std::make_unique<Realm::SimpleRemoteChannelInfo>(
-                                                                1, Realm::XferDesKind::XFER_MEM_CPY, 0, paths);
+                                                                i+1, Realm::XferDesKind::XFER_MEM_CPY, 0, paths);
         Realm::RemoteChannel* rc = rci->create_remote_channel();
         rc->register_redop(0);
         rc->has_non_redop_path = true;
@@ -100,16 +100,21 @@ class RemoteChannelFixture : public benchmark::Fixture
 
 BENCHMARK_F(RemoteChannelFixture, BenchSupportsChannel)(benchmark::State& state) {
   Realm::Memory src_mem = Realm::ID::make_memory(0, 0).convert<Realm::Memory>();
-  Realm::Memory dst_mem = Realm::ID::make_memory(1, 0).convert<Realm::Memory>();
-  Realm::ChannelCopyInfo channel_copy_info{src_mem, dst_mem};
+  // can not use vector here because ChannelCopyInfo has no default constructor
+  Realm::ChannelCopyInfo *channel_copy_infos = reinterpret_cast<Realm::ChannelCopyInfo *>(malloc(num_channels * sizeof(Realm::ChannelCopyInfo)));
+  for (int i = 0; i < num_channels; i++) {
+    Realm::Memory dst_mem = Realm::ID::make_memory(i+1, 0).convert<Realm::Memory>();
+    channel_copy_infos[i] = Realm::ChannelCopyInfo{src_mem, dst_mem};
+  }
   for (auto _ : state) {
     uint64_t best_time = 0;
     Realm::XferDesKind best_kind = Realm::XferDesKind::XFER_NONE;
-    for (auto& channel : channels) {
-      best_time = channel->supports_path(channel_copy_info, 0, 0, 0, 10000, nullptr, nullptr, &best_kind, nullptr, nullptr);
+    for (int i = 0; i < num_channels; i++) {
+      best_time = channels[i]->supports_path(channel_copy_infos[i], 0, 0, 0, 10000, nullptr, nullptr, &best_kind, nullptr, nullptr);
       assert(best_time > 0);
     }
   }
+  free(channel_copy_infos);
 }
 
 BENCHMARK_MAIN();
