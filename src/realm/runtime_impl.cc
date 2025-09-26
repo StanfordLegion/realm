@@ -32,6 +32,7 @@
 #include "realm/codedesc.h"
 
 #include "realm/utils.h"
+#include "realm/logging.h"
 
 // remote copy active messages from from lowlevel_dma.h for now
 #include "realm/transfer/lowlevel_dma.h"
@@ -371,6 +372,39 @@ namespace Realm {
 
     os << "DONE\n";
     os.flush();
+  }
+
+#if defined(REALM_ON_LINUX) || defined(REALM_ON_MACOS) || defined(REALM_ON_FREEBSD)
+  // Store the original SIGTERM handler so we can call it after flushing
+  // Initialize to default so if no previous handler exists, we restore to default
+  static struct sigaction original_sigterm_handler = { SIG_DFL, {}, 0, nullptr };
+#endif
+
+  static void realm_sigterm_handler(int signal)
+  {
+    // We are trying to prevent further signals while we are flushing
+    // This is not guaranteed to be async-signal-safe but it's better than nothing.
+    struct sigaction sa_dfl, sa_ign;
+    sa_dfl.sa_handler = SIG_DFL;
+    sigemptyset(&sa_dfl.sa_mask);
+    sa_dfl.sa_flags = 0;
+
+    sa_ign.sa_handler = SIG_IGN;
+    sigemptyset(&sa_ign.sa_mask);
+    sa_ign.sa_flags = 0;
+
+    // Attempt to ignore further SIGTERMs while handling this one.
+    sigaction(SIGTERM, &sa_ign, NULL);
+
+    fprintf(stderr, "Realm caught SIGTERM, flushing logs...\n");
+    fflush(stderr);
+    Realm::flush_all_streams();
+    fprintf(stderr, "Realm logs flushed. Re-raising SIGTERM.\n");
+    fflush(stderr);
+
+    // Restore original handler and re-raise
+    sigaction(SIGTERM, &original_sigterm_handler, NULL);
+    raise(SIGTERM);
   }
 
   static void realm_show_events(int signal)
@@ -1979,8 +2013,12 @@ namespace Realm {
 #ifdef DEADLOCK_TRACE
     next_thread = 0;
     signaled_threads = 0;
-    signal(SIGTERM, deadlock_catch);
-    signal(SIGINT, deadlock_catch);
+    struct sigaction deadlock_action;
+    deadlock_action.sa_handler = deadlock_catch;
+    sigemptyset(&deadlock_action.sa_mask);
+    deadlock_action.sa_flags = 0;
+    CHECK_LIBC(sigaction(SIGTERM, &deadlock_action, 0));
+    CHECK_LIBC(sigaction(SIGINT, &deadlock_action, 0));
 #endif
     const char *realm_freeze_env = getenv("REALM_FREEZE_ON_ERROR");
     const char *legion_freeze_env = getenv("LEGION_FREEZE_ON_ERROR");
@@ -1995,6 +2033,15 @@ namespace Realm {
         register_error_signal_handler(realm_backtrace);
     }
 
+#if defined(REALM_ON_LINUX) || defined(REALM_ON_MACOS) || defined(REALM_ON_FREEBSD)
+    // register SIGTERM handler
+    struct sigaction action;
+    action.sa_handler = realm_sigterm_handler;
+    sigemptyset(&action.sa_mask);
+    action.sa_flags = 0;  // Not using SA_ONSTACK for this handler
+    CHECK_LIBC( sigaction(SIGTERM, &action, &original_sigterm_handler) );
+#endif
+
     // debugging tool to dump realm event graphs after a fixed delay
     //  (easier than actually detecting a hang)
 #if defined(REALM_ON_LINUX) || defined(REALM_ON_MACOS) || defined(REALM_ON_FREEBSD)
@@ -2007,7 +2054,11 @@ namespace Realm {
         if(*pos == '+')
           delay += Network::my_node_id * atoi(pos + 1);
         log_runtime.info() << "setting show_event alarm for " << delay << " seconds";
-        signal(SIGALRM, realm_show_events);
+        struct sigaction action;
+        action.sa_handler = realm_show_events;
+        sigemptyset(&action.sa_mask);
+        action.sa_flags = 0;
+        CHECK_LIBC(sigaction(SIGALRM, &action, 0));
         alarm(delay);
       }
     }
@@ -3280,8 +3331,8 @@ namespace Realm {
                 << " raised inside realm signal handler, previous caught signal "
                 << ThreadLocal::error_signal_value << std::endl;
       unregister_error_signal_handler();
-      // We could just call exit or abort, but reraising the signal sets the return
-      // status from the process correctly.
+      // We could just call exit or abort, but reraising the signal sets the return status
+      // from the process correctly.
       std::raise(signal);
     }
 #if defined(REALM_ON_LINUX) || defined(REALM_ON_MACOS) || defined(REALM_ON_FREEBSD)

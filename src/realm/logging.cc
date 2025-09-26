@@ -199,6 +199,11 @@ namespace Realm {
       cfg->stream->flush();
   }
 
+  void flush_all_streams(void)
+  {
+    LoggerConfig::flush_all_streams();
+  }
+
   template <>
   int convert_integer_cmdline_argument<Logger::LoggingLevel>(const std::string &s,
                                                              Logger::LoggingLevel &target)
