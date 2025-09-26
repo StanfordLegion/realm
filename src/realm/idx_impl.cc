@@ -212,8 +212,7 @@ namespace Realm {
     if(!layout)
       return false; // dimension mismatch
 
-    std::map<FieldID, InstanceLayoutGeneric::FieldLayout>::const_iterator it =
-        layout->fields.find(fid);
+    InstanceLayoutGeneric::FieldMap::const_iterator it = layout->fields.find(fid);
     if(it == layout->fields.end())
       return false; // invalid field ID
 
