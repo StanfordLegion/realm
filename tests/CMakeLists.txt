@@ -182,32 +182,32 @@ if(REALM_ENABLE_COVERAGE)
     cmake_path(CONVERT ${PROJECT_SOURCE_DIR} TO_NATIVE_PATH_LIST NATIVE_SRC_DIR)
     cmake_path(CONVERT ${PROJECT_BINARY_DIR} TO_NATIVE_PATH_LIST NATIVE_BIN_DIR)
     add_custom_target(
-      coverage
+      coverage_unit
       COMMAND
-        "${OPENCPPCOV_PATH}" "--export_type=cobertura:${NATIVE_BIN_DIR}\\coverage.xml"
+        "${OPENCPPCOV_PATH}" "--export_type=cobertura:${NATIVE_BIN_DIR}\\coverage_unit.xml"
         --cover_children --sources "${NATIVE_SRC_DIR}" --modules "${NATIVE_BIN_DIR}"
         --excluded_sources "${NATIVE_BIN_DIR}\\_deps" -- "${CMAKE_CTEST_COMMAND}" -T Test -T
         Coverage -L unit
-      BYPRODUCTS coverage.xml
+      BYPRODUCTS coverage_unit.xml
       WORKING_DIRECTORY ${PROJECT_BINARY_DIR}
       DEPENDS realm_unit_tests realm_c_unit_tests VERBATIUM
       COMMENT "Running opencppcoverage to produce Cobertura coverage report"
     )
     # Show info where to find the report
     add_custom_command(
-      TARGET coverage
+      TARGET coverage_unit
       POST_BUILD
-      COMMAND ${CMAKE_COMMAND} -E echo "Cobertura coverage report saved in ${PROJECT_BINARY_DIR}/coverage.xml"
+      COMMAND ${CMAKE_COMMAND} -E echo "Cobertura coverage report saved in ${PROJECT_BINARY_DIR}/coverage_unit.xml"
     )
   else()
     set(CODE_COVERAGE_VERBOSE TRUE)
-    set(GCOVR_ADDITIONAL_ARGS "-j")
+    set(GCOVR_ADDITIONAL_ARGS --keep -j)
     append_coverage_compiler_flags_to_target(realm_unit_tests)
     append_coverage_compiler_flags_to_target(realm_c_unit_tests)
     # TODO(cperry): fix base directory when sources are moved over
     setup_target_for_coverage_gcovr_xml(
       NAME
-      coverage
+      coverage_unit
       EXECUTABLE
       "${CMAKE_CTEST_COMMAND}"
       -T
@@ -243,7 +243,7 @@ macro(add_integration_test target)
     list(TRANSFORM SRC_LIST REPLACE ".*:(.*\.cu)>" "\\1")
     set_source_files_properties(${SRC_LIST} PROPERTIES LANGUAGE HIP)
   endif()
-  target_link_libraries(${target} Realm::Realm)
+  target_link_libraries(${target} PRIVATE Realm::Realm)
   add_test(NAME ${target} COMMAND $<TARGET_FILE:${target}> ${${target}_ARGS})
   set_property(
     TEST ${target} PROPERTY RESOURCE_LOCK $<REMOVE_DUPLICATES:${TEST_RESOURCE_LOCK}
@@ -372,7 +372,7 @@ add_integration_test(
   memspeed "${REALM_TEST_DIR}/memspeed.cc"
   "$<$<BOOL:TEST_USE_GPU>:${REALM_TEST_DIR}/memspeed_gpu.cu>"
 )
-target_link_libraries(memspeed ${TEST_GPU_LIBS})
+target_link_libraries(memspeed PRIVATE ${TEST_GPU_LIBS})
 set(simple_reduce_ARGS -all)
 if(NOT BUILD_SHARED_LIBS OR NOT REALM_ENABLE_HIP)
   # simple_reduce registers a kernel with the runtime, but uses a different instance of the runtime
@@ -387,7 +387,7 @@ add_integration_test(
   multiaffine "${REALM_TEST_DIR}/multiaffine.cc"
   "$<$<BOOL:TEST_USE_GPU>:${REALM_TEST_DIR}/multiaffine_gpu.cu>"
 )
-target_link_libraries(multiaffine ${TEST_GPU_LIBS})
+target_link_libraries(multiaffine PRIVATE ${TEST_GPU_LIBS})
 if(TEST_USE_GPU)
   if(REALM_USE_CUDA)
     set(cuda_memcpy_test_ARGS
@@ -414,20 +414,20 @@ if(TEST_USE_GPU)
     add_integration_test(
       test_cuhook "${REALM_TEST_DIR}/test_cuhook.cc" "${REALM_TEST_DIR}/test_cuhook_gpu.cu"
     )
-    target_link_libraries(cuda_memcpy_test CUDA::cudart)
-    target_link_libraries(cuda_scatter_test CUDA::cudart)
-    target_link_libraries(test_cuhook CUDA::cudart)
+    target_link_libraries(cuda_memcpy_test PRIVATE CUDA::cudart)
+    target_link_libraries(cuda_scatter_test PRIVATE CUDA::cudart)
+    target_link_libraries(test_cuhook PRIVATE CUDA::cudart)
   endif()
   set(transpose_test_gpu_ARGS -ll:gpu 1)
   set(transpose_test_gpu_RESOURCE_LOCK gpu)
   add_integration_test(transpose_test_gpu "${REALM_TEST_DIR}/transpose_test_gpu.cc")
-  target_link_libraries(transpose_test_gpu ${TEST_GPU_LIBS})
+  target_link_libraries(transpose_test_gpu PRIVATE ${TEST_GPU_LIBS})
   set(task_stream_ARGS -ll:gpu 1)
   set(task_stream_RESOURCE_LOCK gpu)
   add_integration_test(
     task_stream "${REALM_TEST_DIR}/task_stream.cc" "${REALM_TEST_DIR}/task_stream_gpu.cu"
   )
-  target_link_libraries(task_stream ${TEST_GPU_LIBS})
+  target_link_libraries(task_stream PRIVATE ${TEST_GPU_LIBS})
 endif()
 
 #### C API tests
@@ -446,16 +446,16 @@ if(WIN32)
 endif()
 # TODO(weiwu): designated initializers require c++20, should be removed
 target_compile_features(c_external_inst PUBLIC cxx_std_20)
-target_link_libraries(c_external_inst ${TEST_GPU_LIBS})
+target_link_libraries(c_external_inst PRIVATE ${TEST_GPU_LIBS})
 
 add_integration_test(c_event_poisoned "${REALM_TEST_DIR}/c/test_event_poisoned.cc")
 
 target_link_libraries(
-  machine_config_test ${TEST_GPU_LIBS} $<TARGET_NAME_IF_EXISTS:CUDA::cuda_driver>
+  machine_config_test PRIVATE ${TEST_GPU_LIBS} $<TARGET_NAME_IF_EXISTS:CUDA::cuda_driver>
 )
-target_link_libraries(test_profiling ${TEST_GPU_LIBS})
+target_link_libraries(test_profiling PRIVATE ${TEST_GPU_LIBS})
 if(REALM_USE_LIBDL)
-  target_link_libraries(taskreg ${CMAKE_DL_LIBS})
+  target_link_libraries(taskreg PRIVATE ${CMAKE_DL_LIBS})
 endif()
 
 # These executables use global registration and require -rdynamic to be set in order to retrieve the symbol name and offset
@@ -495,6 +495,57 @@ else()
   )
 endif()
 
+if(REALM_ENABLE_COVERAGE)
+  if(OPENCPPCOV_PATH)
+    cmake_path(CONVERT ${PROJECT_SOURCE_DIR} TO_NATIVE_PATH_LIST NATIVE_SRC_DIR)
+    cmake_path(CONVERT ${PROJECT_BINARY_DIR} TO_NATIVE_PATH_LIST NATIVE_BIN_DIR)
+    add_custom_target(
+      coverage_integ
+      COMMAND
+        "${OPENCPPCOV_PATH}" "--export_type=cobertura:${NATIVE_BIN_DIR}\\coverage_integ.xml"
+        --cover_children --sources "${NATIVE_SRC_DIR}" --modules "${NATIVE_BIN_DIR}"
+        --excluded_sources "${NATIVE_BIN_DIR}\\_deps" -- "${CMAKE_CTEST_COMMAND}" -T Test -T
+        Coverage -L integration
+      BYPRODUCTS coverage_integ.xml
+      WORKING_DIRECTORY ${PROJECT_BINARY_DIR}
+      DEPENDS ${_integ_list} VERBATIUM
+      COMMENT "Running opencppcoverage to produce Cobertura coverage report"
+    )
+    # Show info where to find the report
+    add_custom_command(
+      TARGET coverage_integ
+      POST_BUILD
+      COMMAND ${CMAKE_COMMAND} -E echo "Cobertura coverage report saved in ${PROJECT_BINARY_DIR}/coverage_integ.xml"
+    )
+  else()
+    set(CODE_COVERAGE_VERBOSE TRUE)
+    set(GCOVR_ADDITIONAL_ARGS --gcov-ignore-parse-errors --keep -j)
+    foreach(t ${_integ_list})
+      append_coverage_compiler_flags_to_target(${t})  
+    endforeach()
+    # TODO(cperry): fix base directory when sources are moved over
+    setup_target_for_coverage_gcovr_xml(
+      NAME
+      coverage_integ
+      EXECUTABLE
+      "${CMAKE_CTEST_COMMAND}"
+      -T
+      Test
+      -T
+      Coverage
+      -L
+      integration
+      DEPENDENCIES
+      ${_integ_list}
+      BASE_DIRECTORY
+      "${REALM_TEST_DIR}/../.."
+      EXCLUDE
+      "${PROJECT_BINARY_DIR}/*"
+      "${REALM_TEST_DIR}/*"
+    )
+  endif()
+endif()
+
 #endregion
 
 add_custom_target(
@@ -502,3 +553,10 @@ add_custom_target(
   DEPENDS ${_integ_list} realm_unit_tests realm_c_unit_tests
   COMMAND ${CMAKE_CTEST_COMMAND} -j --output-on-failure
 )
+
+if (REALM_ENABLE_COVERAGE)
+  add_custom_target(
+    coverage
+    DEPENDS coverage_unit coverage_integ
+  )
+endif()
