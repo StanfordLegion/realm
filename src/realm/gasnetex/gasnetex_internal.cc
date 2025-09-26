@@ -449,10 +449,22 @@ namespace Realm {
             << "Detected inevitable hang because there are "
             << "not enough object buffers for GASNet to service all endpoints "
             << "on node " << Network::my_node_id << ". This node was configured "
-            << "with -gex:obcount=" << num_buffers << " but at least " << num_endpoints
-            << " object buffers are required. Please see the following github issue "
-            << "for more information or to make a comment on this failure: "
-            << "https://github.com/StanfordLegion/realm/issues/239";
+            << "with the option -gex:obcount to have " << num_buffers
+            << " but at least one more object buffer is necessary to satisfy"
+            << " all the dynamic endpoints needed for this run to avoid hanging."
+            << " This check cannot determine the precise number of object buffers"
+            << " requried for your application. You should consult"
+            << " https://github.com/StanfordLegion/realm/issues/239 for more"
+            << " information and to obtain the most recent formula for"
+            << " computing a conservative upper bound on the number of"
+            << " object buffers that are required given your machine"
+            << " configuration. Note that this upper bound might not be tight"
+            << " and you may be able to get away with fewer object buffers"
+            << " depending on the dynamic communication pattern of your"
+            << " application. This check will give you sound and precise"
+            << " feedback as to whether you will hang or not so we recommend"
+            << " binary searching to find a tight upper bound on the number"
+            << " of object buffers required.";
         std::abort();
       }
     }
