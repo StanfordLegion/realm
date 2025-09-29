@@ -100,7 +100,7 @@ int main(int argc, char **argv)
       runtime, LOC_PROC, REALM_REGISTER_TASK_DEFAULT, TOP_LEVEL_TASK, top_level_task, 0,
       0, &register_task_event));
   CHECK_REALM(
-      realm_event_wait(runtime, register_task_event, REALM_WAIT_INFINITE, nullptr));
+      realm_event_wait(runtime, register_task_event, REALM_WAIT_INFINITE));
 
   realm_processor_query_t proc_query;
   CHECK_REALM(realm_processor_query_create(runtime, &proc_query));
