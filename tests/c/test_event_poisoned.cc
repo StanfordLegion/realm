@@ -46,7 +46,7 @@ void test_merge(realm_runtime_t runtime, int ignore_faults, int *poisoned)
   realm_event_t merged_event;
   CHECK_REALM(
       realm_event_merge(runtime, event_poisoned, 10, &merged_event, ignore_faults));
-  CHECK_REALM(realm_event_wait(runtime, merged_event, REALM_WAIT_INFINITE, poisoned));
+  CHECK_REALM(realm_event_wait(runtime, merged_event, REALM_WAIT_INFINITE));
 }
 
 void test_trigger(realm_runtime_t runtime, int ignore_faults, bool use_wait,
@@ -60,7 +60,7 @@ void test_trigger(realm_runtime_t runtime, int ignore_faults, bool use_wait,
   CHECK_REALM(
       realm_user_event_trigger(runtime, user_event, wait_on_event, ignore_faults));
   if(use_wait) {
-    CHECK_REALM(realm_event_wait(runtime, user_event, REALM_WAIT_INFINITE, poisoned));
+    CHECK_REALM(realm_event_wait(runtime, user_event, REALM_WAIT_INFINITE));
   } else {
     int has_triggered = 0;
     CHECK_REALM(realm_event_has_triggered(runtime, user_event, &has_triggered, poisoned));
@@ -109,7 +109,7 @@ int main(int argc, char **argv)
       runtime, LOC_PROC, REALM_REGISTER_TASK_DEFAULT, MAIN_TASK, main_task, 0, 0,
       &register_task_event));
   CHECK_REALM(
-      realm_event_wait(runtime, register_task_event, REALM_WAIT_INFINITE, nullptr));
+      realm_event_wait(runtime, register_task_event, REALM_WAIT_INFINITE));
 
   realm_processor_query_t proc_query;
   CHECK_REALM(realm_processor_query_create(runtime, &proc_query));
