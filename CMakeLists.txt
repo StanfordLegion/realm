@@ -160,6 +160,10 @@ cmake_dependent_option(
   "NOT WIN32; REALM_ENABLE_LIBDL" OFF
 )
 cmake_dependent_option(
+  REALM_INSTALL_GASNETEX_WRAPPER "Compile and install the dynamic GASNetEx ABI stability wrapper" OFF
+  "REALM_ENABLE_GASNETEX_WRAPPER" OFF
+)
+cmake_dependent_option(
   REALM_ENABLE_PYTHON "Compile with Python support" ON "REALM_ENABLE_LIBDL" OFF
 )
 
@@ -750,15 +754,18 @@ if(REALM_ENABLE_GASNETEX)
     message(FATAL_ERROR "Failed to find GASNet")
   else()
     set(GEX_WRAPPER_BUILD_SHARED ${REALM_ENABLE_GASNETEX_WRAPPER})
-    if(GEX_WRAPPER_BUILD_SHARED OR NOT BUILD_SHARED_LIBS)
+    if (REALM_INSTALL_GASNETEX_WRAPPER)
       set(GEX_NO_INSTALL FALSE)
+      add_subdirectory(
+        ${REALM_SOURCE_DIR}/gasnetex/gasnetex_wrapper ${CMAKE_CURRENT_BINARY_DIR}/gasnetex_wrapper
+      )
     else()
       set(GEX_NO_INSTALL TRUE)
+      add_subdirectory(
+        ${REALM_SOURCE_DIR}/gasnetex/gasnetex_wrapper ${CMAKE_CURRENT_BINARY_DIR}/gasnetex_wrapper
+        EXCLUDE_FROM_ALL
+      )
     endif()
-    add_subdirectory(
-      ${REALM_SOURCE_DIR}/gasnetex/gasnetex_wrapper ${CMAKE_CURRENT_BINARY_DIR}/gasnetex_wrapper
-      EXCLUDE_FROM_ALL
-    )
     if(NOT REALM_ENABLE_GASNETEX_WRAPPER)
       list(APPEND REALM_LIBRARIES GASNet::GASNet)
       list(APPEND REALM_STATIC_DEPENDS GASNet)
@@ -818,6 +825,7 @@ if(TARGET Kokkos::kokkoscore AND REALM_ENABLE_KOKKOS)
 endif()
 if(TARGET GASNet::GASNet AND REALM_ENABLE_GASNETEX)
   set(REALM_USE_GASNETEX TRUE)
+  set(REALM_USE_GASNETEX_WRAPPER ${REALM_ENABLE_GASNETEX_WRAPPER})
 endif()
 if(TARGET ucx::ucp AND REALM_ENABLE_UCX)
   set(REALM_USE_UCX TRUE)
