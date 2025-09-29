@@ -279,9 +279,8 @@ namespace REALM_NAMESPACE {
     void wait(void) const
     {
       realm_runtime_t runtime;
-      int poisoned;
       REALM_CHECK(realm_runtime_get_runtime(&runtime));
-      REALM_CHECK(realm_event_wait(runtime, id, REALM_WAIT_INFINITE, &poisoned));
+      REALM_CHECK(realm_event_wait(runtime, id, REALM_WAIT_INFINITE));
     }
 
     /**
