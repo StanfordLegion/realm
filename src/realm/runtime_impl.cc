@@ -1126,6 +1126,7 @@ namespace Realm {
 
   void RuntimeImpl::add_dma_channel(Channel *c)
   {
+    c->update_channel_state();
     nodes[c->node].dma_channels.push_back(c);
   }
 
@@ -1375,7 +1376,9 @@ namespace Realm {
     RemoteChannelInfo *rci = ch->construct_remote_info();
     bool ok = ((serializer << NODE_ANNOUNCE_DMA_CHANNEL) && (serializer << *rci));
     // TODO: iterate the redop table, check for support and add it here.
-    if(ch->supports_redop(0)) {
+    // ch->has_non_redop_path is used for channels without any paths such as address split
+    // channel
+    if(ch->supports_redop(0) && ch->has_non_redop_path) {
       ok = ((serializer << size_t(1)) && (serializer << ReductionOpID(0)));
     } else {
       ok = (serializer << size_t(0));

@@ -31,7 +31,7 @@ install(
 )
 
 # Install the realm_gex_wrapper as well if we have to link directly to it
-if(REALM_USE_GASNETEX AND REALM_USE_GASNETEX_WRAPPER)
+if(REALM_INSTALL_GASNETEX_WRAPPER)
   install(
     TARGETS realm_gex_wrapper
     EXPORT Realm_targets

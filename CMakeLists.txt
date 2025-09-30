@@ -160,6 +160,10 @@ cmake_dependent_option(
   "NOT WIN32; REALM_ENABLE_LIBDL" OFF
 )
 cmake_dependent_option(
+  REALM_INSTALL_GASNETEX_WRAPPER "Compile and install the dynamic GASNetEx ABI stability wrapper" OFF
+  "REALM_ENABLE_GASNETEX_WRAPPER" OFF
+)
+cmake_dependent_option(
   REALM_ENABLE_PYTHON "Compile with Python support" ON "REALM_ENABLE_LIBDL" OFF
 )
 
@@ -237,6 +241,12 @@ endif()
 set(COMPILE_TIME_MIN_LEVEL "LEVEL_${REALM_LOG_LEVEL}")
 if(CMAKE_BUILD_TYPE STREQUAL Debug)
   set(DEBUG_REALM 1)
+endif()
+
+if (NOT MAKE_EXECUTABLE MATCHES ".*make.*")
+  find_program(MAKE_EXECUTABLE NAMES make gnumake smake gmake)
+else()
+  set(MAKE_EXECUTABLE ${CMAKE_MAKE_PROGRAM})
 endif()
 
 set(CMAKE_THREAD_PREFER_PTHREAD TRUE)
@@ -561,8 +571,6 @@ if(REALM_ENABLE_UCX)
       INSTALL_DIR "${ucx_ROOT_DIR}"
       CONFIGURE_COMMAND ${CMAKE_COMMAND} -E env CC=${CMAKE_C_COMPILER} CXX=${CMAKE_CXX_COMPILER}
       contrib/configure-release-mt "--prefix=<INSTALL_DIR>" ${UCX_CONFIG_ARGS}
-      BUILD_COMMAND $(MAKE)
-      INSTALL_COMMAND $(MAKE) install
       BUILD_IN_SOURCE TRUE
       BUILD_JOB_SERVER_AWARE TRUE
       BUILD_BYPRODUCTS <INSTALL_DIR>/lib/${CMAKE_SHARED_LIBRARY_PREFIX}ucp${CMAKE_SHARED_LIBRARY_SUFFIX}
@@ -610,8 +618,6 @@ if(REALM_ENABLE_UCX)
         INSTALL_DIR "${CMAKE_CURRENT_BINARY_DIR}/_deps/ucc-install"
         CONFIGURE_COMMAND ${CMAKE_COMMAND} -E env CC=${CMAKE_C_COMPILER} CXX=${CMAKE_CXX_COMPILER} ./autogen.sh
         COMMAND ${CMAKE_COMMAND} -E env CC=${CMAKE_C_COMPILER} CXX=${CMAKE_CXX_COMPILER} ./configure "--prefix=<INSTALL_DIR>" ${UCC_CONFIG_ARGS}
-        BUILD_COMMAND $(MAKE)
-        INSTALL_COMMAND $(MAKE) install
         BUILD_IN_SOURCE TRUE
         BUILD_JOB_SERVER_AWARE TRUE
         BUILD_BYPRODUCTS <INSTALL_DIR>/lib/${CMAKE_SHARED_LIBRARY_PREFIX}ucc${CMAKE_SHARED_LIBRARY_SUFFIX}
@@ -719,6 +725,7 @@ if(REALM_ENABLE_GASNETEX)
       URL https://gasnet.lbl.gov/EX/GASNet-2025.8.0.tar.gz
       URL_HASH SHA256=bd5919099477d1d2f59c247d006e9d1ac017c9190c974f5e069667418e5bf48d
       SOURCE_DIR "${GASNet_SOURCE_DIR}" INSTALL_DIR "${GASNet_ROOT}"
+      DOWNLOAD_EXTRACT_TIMESTAMP TRUE
     )
     FetchContent_MakeAvailable(GASNet)
 
@@ -732,7 +739,7 @@ if(REALM_ENABLE_GASNETEX)
         WORKING_DIRECTORY ${GASNet_SOURCE_DIR}
       )
       execute_process(
-        COMMAND "${CMAKE_MAKE_PROGRAM}" -j install COMMAND_ECHO STDOUT COMMAND_ERROR_IS_FATAL ANY
+        COMMAND "${MAKE_EXECUTABLE}" -j install COMMAND_ECHO STDOUT COMMAND_ERROR_IS_FATAL ANY
         WORKING_DIRECTORY ${GASNet_SOURCE_DIR}
       )
       set(GASNet_CONFIG_ARGS_INTERNAL
@@ -747,15 +754,18 @@ if(REALM_ENABLE_GASNETEX)
     message(FATAL_ERROR "Failed to find GASNet")
   else()
     set(GEX_WRAPPER_BUILD_SHARED ${REALM_ENABLE_GASNETEX_WRAPPER})
-    if(GEX_WRAPPER_BUILD_SHARED OR NOT BUILD_SHARED_LIBS)
+    if (REALM_INSTALL_GASNETEX_WRAPPER)
       set(GEX_NO_INSTALL FALSE)
+      add_subdirectory(
+        ${REALM_SOURCE_DIR}/gasnetex/gasnetex_wrapper ${CMAKE_CURRENT_BINARY_DIR}/gasnetex_wrapper
+      )
     else()
       set(GEX_NO_INSTALL TRUE)
+      add_subdirectory(
+        ${REALM_SOURCE_DIR}/gasnetex/gasnetex_wrapper ${CMAKE_CURRENT_BINARY_DIR}/gasnetex_wrapper
+        EXCLUDE_FROM_ALL
+      )
     endif()
-    add_subdirectory(
-      ${REALM_SOURCE_DIR}/gasnetex/gasnetex_wrapper ${CMAKE_CURRENT_BINARY_DIR}/gasnetex_wrapper
-      EXCLUDE_FROM_ALL
-    )
     if(NOT REALM_ENABLE_GASNETEX_WRAPPER)
       list(APPEND REALM_LIBRARIES GASNet::GASNet)
       list(APPEND REALM_STATIC_DEPENDS GASNet)
@@ -815,6 +825,7 @@ if(TARGET Kokkos::kokkoscore AND REALM_ENABLE_KOKKOS)
 endif()
 if(TARGET GASNet::GASNet AND REALM_ENABLE_GASNETEX)
   set(REALM_USE_GASNETEX TRUE)
+  set(REALM_USE_GASNETEX_WRAPPER ${REALM_ENABLE_GASNETEX_WRAPPER})
 endif()
 if(TARGET ucx::ucp AND REALM_ENABLE_UCX)
   set(REALM_USE_UCX TRUE)

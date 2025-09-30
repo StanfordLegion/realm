@@ -3157,11 +3157,12 @@ namespace Realm {
       const std::vector<size_t> *src_frags, const std::vector<size_t> *dst_frags,
       XferDesKind *kind_ret /*= 0*/, unsigned *bw_ret /*= 0*/, unsigned *lat_ret /*= 0*/)
   {
-    Memory src_mem = channel_copy_info.src_mem;
-    Memory dst_mem = channel_copy_info.dst_mem;
     if(!supports_redop(redop_id)) {
       return 0;
     }
+
+    Memory src_mem = channel_copy_info.src_mem;
+    Memory dst_mem = channel_copy_info.dst_mem;
     // If we don't support the indirection memory, then no need to check the paths.
     if((channel_copy_info.ind_mem != Memory::NO_MEMORY) &&
        !supports_indirection_memory(channel_copy_info.ind_mem)) {
@@ -3661,19 +3662,33 @@ namespace Realm {
     return p;
   }
 
+  void Channel::update_channel_state(void)
+  {
+    assert(has_redop_path == false);
+    assert(has_non_redop_path == false);
+
+    for(const SupportedPath &path : paths) {
+      if(path.redops_allowed) {
+        has_redop_path = true;
+      } else {
+        has_non_redop_path = true;
+      }
+
+      // the channel has both redop and non-redop path
+      // early return
+      if(has_redop_path && has_non_redop_path) {
+        break;
+      }
+    }
+  }
+
   bool Channel::supports_redop(ReductionOpID redop_id) const
   {
     if(redop_id == 0) {
       return true;
     }
 
-    for(const SupportedPath &path : paths) {
-      if(path.redops_allowed) {
-        return true;
-      }
-    }
-
-    return false;
+    return has_redop_path;
   }
 
   long Channel::progress_xd(XferDes *xd, long max_nr)
@@ -3900,8 +3915,16 @@ namespace Realm {
 
   bool RemoteChannel::supports_redop(ReductionOpID redop_id) const
   {
-    RWLock::AutoReaderLock al(mutex);
-    return supported_redops.count(redop_id) != 0;
+    if(redop_id == 0) {
+      return has_non_redop_path;
+    }
+
+    if(has_redop_path) {
+      RWLock::AutoReaderLock al(mutex);
+      return supported_redops.count(redop_id) != 0;
+    }
+
+    return false;
   }
 
   long RemoteChannel::submit(Request **requests, long nr)
@@ -3927,10 +3950,6 @@ namespace Realm {
     // simultaneous serialization/deserialization not
     //  allowed anywhere right now
     if((src_serdez_id != 0) && (dst_serdez_id != 0)) {
-      return 0;
-    }
-
-    if(!supports_redop(redop_id)) {
       return 0;
     }
 

@@ -119,7 +119,9 @@ if(REALM_USE_UCX)
 endif()
 
 if(REALM_USE_GASNETEX)
-  list(APPEND REALM_SOURCES gasnet1/gasnet1_module.cc gasnet1/gasnetmsg.cc)
+  if (NOT REALM_ENABLE_GASNETEX_WRAPPER)
+    list(APPEND REALM_SOURCES gasnet1/gasnet1_module.cc gasnet1/gasnetmsg.cc)
+  endif()
   list(APPEND REALM_SOURCES gasnetex/gasnetex_module.cc gasnetex/gasnetex_internal.cc)
 endif()
 

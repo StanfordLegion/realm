@@ -15,27 +15,18 @@
  * limitations under the License.
  */
 
-#ifndef TEST_COMMON_H
-#define TEST_COMMON_H
+#define REALM_NAMESPACE RealmHPP
 
-#include "realm/inst_impl.h"
-#include "realm/inst_layout.h"
-#include <utility>
+#include "realm.hpp"
+#include <gtest/gtest.h>
 
-#include "../test_utils.h"
+#include "realm_defines.h"
 
-namespace Realm {
+using namespace REALM_NAMESPACE;
 
-  template <int N, typename T>
-  RegionInstanceImpl *create_inst(MemoryImpl *mem_impl, Rect<N, T> bounds,
-                                  const std::vector<FieldID> &field_ids,
-                                  const std::vector<size_t> &field_sizes);
-
-  template <typename Func, size_t... Is>
-  void dispatch_for_dimension(int dim, Func &&func, std::index_sequence<Is...>);
-
-} // namespace Realm
-
-#include "test_common.inl"
-
-#endif // TEST_COMMON_H
+TEST(RuntimeVersionTest, GetLibraryVersionSuccess)
+{
+  const char *version = Runtime::get_library_version();
+  EXPECT_NE(version, nullptr);
+  EXPECT_EQ(strcmp(version, REALM_VERSION), 0);
+}
