@@ -118,8 +118,12 @@ set(REALM_CXX_STANDARD
     17
     CACHE STRING "C++ standard used"
 )
+set(REALM_DEFAULT_LOG_LEVEL "WARNING")
+if (CMAKE_BUILD_TYPE STREQUAL "Debug")
+  set(REALM_DEFAULT_LOG_LEVEL "DEBUG")
+endif()
 set(REALM_LOG_LEVEL
-    "WARNING"
+    ${REALM_DEFAULT_LOG_LEVEL}
     CACHE STRING "Compile-time logging level"
 )
 set_property(
@@ -195,6 +199,10 @@ cmake_dependent_option(
 cmake_dependent_option(
   REALM_ENABLE_SHM "Enable shared memory support for inter-process communication" ON
   "UNIX; NOT APPLE" OFF
+)
+cmake_dependent_option(
+  REALM_UCX_DYNAMIC_LOAD "Dynamically load UCX rather than link against it" ON
+  "REALM_ENABLE_UCX; REALM_ENABLE_LIBDL" OFF
 )
 cmake_dependent_option(
   REALM_ENABLE_UCC "Enable UCC for UCX networking module collectives" ON "REALM_ENABLE_UCX" OFF
@@ -592,8 +600,12 @@ if(REALM_ENABLE_UCX)
     list(REMOVE_ITEM _NOT_FOUND ucx)
     set_property(GLOBAL PROPERTY PACKAGES_NOT_FOUND "${_NOT_FOUND}")
   endif()
-  list(APPEND REALM_STATIC_DEPENDS ucx)
-  list(APPEND REALM_LIBRARIES ucx::ucp)
+  if (NOT REALM_UCX_DYNAMIC_LOAD)
+    list(APPEND REALM_STATIC_DEPENDS ucx)
+    list(APPEND REALM_LIBRARIES ucx::ucp)
+  endif()
+
+  get_target_property(UCX_INCLUDE_DIR ucx::ucp INTERFACE_INCLUDE_DIRECTORIES)
 
   if(REALM_ENABLE_UCC AND TARGET ucx::ucp)
     find_package(ucc QUIET CONFIG)
@@ -640,8 +652,11 @@ if(REALM_ENABLE_UCX)
       list(REMOVE_ITEM _NOT_FOUND ucc)
       set_property(GLOBAL PROPERTY PACKAGES_NOT_FOUND "${_NOT_FOUND}")
     endif()
-    list(APPEND REALM_STATIC_DEPENDS ucc)
-    list(APPEND REALM_LIBRARIES ucc::ucc)
+    if(NOT REALM_UCX_DYNAMIC_LOAD)
+      list(APPEND REALM_STATIC_DEPENDS ucc)
+      list(APPEND REALM_LIBRARIES ucc::ucc)
+    endif()
+    get_target_property(UCC_INCLUDE_DIR ucc::ucc INTERFACE_INCLUDE_DIRECTORIES)
   endif()
 
   # TODO(cperry): when we support more bootstraps, we should be able to select and pick one for testing
@@ -957,6 +972,8 @@ target_include_directories(
           $<$<TARGET_EXISTS:CUDA::cuda_driver>:${CUDAToolkit_INCLUDE_DIR}>
           $<$<TARGET_EXISTS:Python3::Python>:${Python_INCLUDE_DIRS}>
           $<$<TARGET_EXISTS:hip::host>:${HIP_INCLUDE_DIR}>
+          $<$<TARGET_EXISTS:ucx::ucp>:${UCX_INCLUDE_DIR}>
+          $<$<TARGET_EXISTS:ucc::ucc>:${UCC_INCLUDE_DIR}>
 )
 target_include_directories(
   Realm
@@ -966,6 +983,8 @@ target_include_directories(
           $<$<TARGET_EXISTS:CUDA::cuda_driver>:${CUDAToolkit_INCLUDE_DIR}>
           $<$<TARGET_EXISTS:Python3::Python>:${Python_INCLUDE_DIRS}>
           $<$<TARGET_EXISTS:hip::host>:${HIP_INCLUDE_DIR}>
+          $<$<TARGET_EXISTS:ucx::ucp>:${UCX_INCLUDE_DIR}>
+          $<$<TARGET_EXISTS:ucc::ucc>:${UCC_INCLUDE_DIR}>
 )
 if(REALM_ENABLE_GASNETEX)
   # Force the creation of the export header for the wrapper we need, but nothing else
@@ -1021,6 +1040,17 @@ target_compile_options(
 if(REALM_ENABLE_COVERAGE AND NOT OPENCPPCOV_PATH)
   append_coverage_compiler_flags_to_target(realm_obj)
   append_coverage_compiler_flags_to_target(Realm)
+endif()
+
+# Add direct dependencies on these libraries in order to force automatically
+# building them if necessacary, even if we have loaders for them
+if (REALM_ENABLE_UCX AND TARGET ucx::ucp)
+  add_dependencies(realm_obj ucx::ucp)
+  add_dependencies(Realm ucx::ucp)
+endif()
+if (REALM_ENABLE_UCC AND TARGET ucc::ucc)
+  add_dependencies(realm_obj ucc::ucc)
+  add_dependencies(Realm ucc::ucc)
 endif()
 #endregion
 
