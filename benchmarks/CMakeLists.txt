@@ -161,13 +161,13 @@ cpmfindpackage(
   OPTIONS
   "INSTALL_GTEST OFF"
   "BUILD_SHARED_LIBS OFF"
+  "BENCHMARK_ENABLE_TESTING OFF"
 )
 if(googlebenchmark_ADDED)
   set_property(GLOBAL APPEND PROPERTY PACKAGES_FOUND googlebenchmark)
   get_property(_NOT_FOUND GLOBAL PROPERTY PACKAGES_NOT_FOUND)
   list(REMOVE_ITEM _NOT_FOUND googlebenchmark)
   set_property(GLOBAL PROPERTY PACKAGES_NOT_FOUND "${_NOT_FOUND}")
-  set(BENCHMARK_ENABLE_TESTING OFF CACHE BOOL "" FORCE)
 endif()
 
 add_executable(realm_unit_remote_channel_bench "${REALM_BENCH_DIR}/unit_benchmarks/remote_channel_bench.cc")
