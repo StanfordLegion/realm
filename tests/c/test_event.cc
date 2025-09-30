@@ -67,10 +67,10 @@ void REALM_FNPTR top_level_task(const void *args, size_t arglen, const void *use
 
   realm_event_t merged_event;
   CHECK_REALM(realm_event_merge(runtime, task_events, 10, &merged_event, 0));
-  CHECK_REALM(realm_event_wait(runtime, merged_event, REALM_WAIT_INFINITE, nullptr));
+  CHECK_REALM(realm_event_wait(runtime, merged_event, REALM_WAIT_INFINITE));
 
   // set a timer on the wait_on event before triggering it
-  CHECK_REALM(realm_event_wait(runtime, merged_event, 10000, nullptr));
+  CHECK_REALM(realm_event_wait(runtime, merged_event, 10000));
 
   CHECK_REALM(realm_event_has_triggered(runtime, wait_on, &has_triggered, nullptr));
   assert(has_triggered == 0);
@@ -79,7 +79,7 @@ void REALM_FNPTR top_level_task(const void *args, size_t arglen, const void *use
   CHECK_REALM(realm_user_event_trigger(runtime, wait_on, REALM_NO_EVENT, 0));
 
   CHECK_REALM(realm_event_merge(runtime, user_events, 10, &merged_event, 0));
-  CHECK_REALM(realm_event_wait(runtime, merged_event, REALM_WAIT_INFINITE, nullptr));
+  CHECK_REALM(realm_event_wait(runtime, merged_event, REALM_WAIT_INFINITE));
 
   // test has_triggered
   for(int i = 0; i < 10; i++) {
@@ -101,14 +101,12 @@ int main(int argc, char **argv)
   CHECK_REALM(realm_processor_register_task_by_kind(
       runtime, LOC_PROC, REALM_REGISTER_TASK_DEFAULT, TOP_LEVEL_TASK, top_level_task, 0,
       0, &register_task_event));
-  CHECK_REALM(
-      realm_event_wait(runtime, register_task_event, REALM_WAIT_INFINITE, nullptr));
+  CHECK_REALM(realm_event_wait(runtime, register_task_event, REALM_WAIT_INFINITE));
 
   CHECK_REALM(realm_processor_register_task_by_kind(
       runtime, LOC_PROC, REALM_REGISTER_TASK_DEFAULT, EVENT_TASK, event_task, 0, 0,
       &register_task_event));
-  CHECK_REALM(
-      realm_event_wait(runtime, register_task_event, REALM_WAIT_INFINITE, nullptr));
+  CHECK_REALM(realm_event_wait(runtime, register_task_event, REALM_WAIT_INFINITE));
 
   realm_processor_query_t proc_query;
   CHECK_REALM(realm_processor_query_create(runtime, &proc_query));

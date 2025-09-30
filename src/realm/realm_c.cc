@@ -824,7 +824,7 @@ realm_status_t realm_memory_query_iter(realm_memory_query_t query,
 /* Event API */
 
 realm_status_t realm_event_wait(realm_runtime_t runtime, realm_event_t event,
-                                int64_t max_ns, int *poisoned)
+                                int64_t max_ns)
 {
   Realm::RuntimeImpl *runtime_impl = nullptr;
   realm_status_t status = check_runtime_validity_and_assign(runtime, runtime_impl);
@@ -839,23 +839,18 @@ realm_status_t realm_event_wait(realm_runtime_t runtime, realm_event_t event,
 
   // special case: NO_EVENT is always triggered
   if(event == REALM_NO_EVENT) {
-    if(poisoned != nullptr) {
-      *poisoned = 0;
-    }
     return REALM_SUCCESS;
   }
 
   Realm::Event cxx_event = Realm::Event(event);
   bool poisoned_cxx = false;
 
+  // We need to call the fault-aware version of the wait function,
+  // because the regular version will crash if the event is poisoned.
   if(max_ns == REALM_WAIT_INFINITE) {
     cxx_event.wait_faultaware(poisoned_cxx);
   } else {
     cxx_event.external_timedwait_faultaware(poisoned_cxx, max_ns);
-  }
-
-  if(poisoned != nullptr) {
-    *poisoned = poisoned_cxx ? 1 : 0;
   }
 
   return REALM_SUCCESS;

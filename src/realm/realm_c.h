@@ -763,13 +763,12 @@ realm_status_t REALM_EXPORT realm_memory_query_iter(realm_memory_query_t query,
  * @param event The event to wait for.
  * @param max_ns The maximum number of nanoseconds to wait.
  *               REALM_WAIT_INFINITE is a special value that means wait forever.
- * @param[out] poisoned Whether the event is poisoned.
  * @return Realm status indicating success or failure.
  *
  * @ingroup Event
  */
 realm_status_t REALM_EXPORT realm_event_wait(realm_runtime_t runtime, realm_event_t event,
-                                             int64_t max_ns, int *poisoned);
+                                             int64_t max_ns);
 
 /**
  * @brief Merges multiple events into a single event.

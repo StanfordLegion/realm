@@ -175,7 +175,7 @@ TEST_F(CEventTest, DISABLED_MergeEventsWithPoisonedNoIgnoreFaults)
 TEST_F(CEventTest, EventWaitNullRuntime)
 {
   realm_event_t event = REALM_NO_EVENT;
-  realm_status_t status = realm_event_wait(nullptr, event, REALM_WAIT_INFINITE, nullptr);
+  realm_status_t status = realm_event_wait(nullptr, event, REALM_WAIT_INFINITE);
   EXPECT_EQ(status, REALM_RUNTIME_ERROR_NOT_INITIALIZED);
 }
 
@@ -187,7 +187,7 @@ TEST_F(CEventTest, DISABLED_EventWaitTriggeredEvent)
   ASSERT_REALM(realm_user_event_create(runtime, &event));
   ASSERT_REALM(realm_user_event_trigger(runtime, event, REALM_NO_EVENT, 0));
 
-  realm_status_t status = realm_event_wait(runtime, event, REALM_WAIT_INFINITE, nullptr);
+  realm_status_t status = realm_event_wait(runtime, event, REALM_WAIT_INFINITE);
   EXPECT_EQ(status, REALM_SUCCESS);
 }
 
@@ -197,7 +197,7 @@ TEST_F(CEventTest, DISABLED_EventWaitNotTriggeredEvent)
   realm_runtime_t runtime = *runtime_impl;
   ASSERT_REALM(realm_user_event_create(runtime, &event));
 
-  realm_status_t status = realm_event_wait(runtime, event, REALM_WAIT_INFINITE, nullptr);
+  realm_status_t status = realm_event_wait(runtime, event, REALM_WAIT_INFINITE);
   EXPECT_EQ(status, REALM_SUCCESS);
 }
 
@@ -210,7 +210,7 @@ TEST_F(CEventTest, DISABLED_EventWaitTimeoutEvent)
   // Record start time before the wait
   auto start_time = std::chrono::high_resolution_clock::now();
 
-  realm_status_t status = realm_event_wait(runtime, event, TEN_MS_IN_NS, nullptr);
+  realm_status_t status = realm_event_wait(runtime, event, TEN_MS_IN_NS);
   EXPECT_EQ(status, REALM_SUCCESS);
 
   // Record end time after the wait and calculate elapsed time
@@ -239,22 +239,8 @@ TEST_F(CEventTest, DISABLED_EventWaitInvalidEvent)
   GenEventImpl *e = runtime_impl->get_genevent_impl(Event(event));
   e->generation.store(e->generation.load() + 1);
 
-  realm_status_t status = realm_event_wait(runtime, event, REALM_WAIT_INFINITE, nullptr);
+  realm_status_t status = realm_event_wait(runtime, event, REALM_WAIT_INFINITE);
   EXPECT_EQ(status, REALM_SUCCESS);
-}
-
-TEST_F(CEventTest, DISABLED_EventWaitPoisoned)
-{
-  realm_user_event_t event = REALM_NO_EVENT;
-  realm_runtime_t runtime = *runtime_impl;
-  ASSERT_REALM(realm_user_event_create(runtime, &event));
-  UserEvent(event).cancel();
-
-  int poisoned = 0;
-  realm_status_t status =
-      realm_event_wait(runtime, event, REALM_WAIT_INFINITE, &poisoned);
-  EXPECT_EQ(status, REALM_SUCCESS);
-  EXPECT_EQ(poisoned, 1);
 }
 
 // TODO: remove the get_runtime in the trigger function
