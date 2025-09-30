@@ -843,11 +843,14 @@ realm_status_t realm_event_wait(realm_runtime_t runtime, realm_event_t event,
   }
 
   Realm::Event cxx_event = Realm::Event(event);
+  bool poisoned_cxx = false;
 
+  // We need to call the fault-aware version of the wait function,
+  // because the regular version will crash if the event is poisoned.
   if(max_ns == REALM_WAIT_INFINITE) {
-    cxx_event.wait();
+    cxx_event.wait_faultaware(poisoned_cxx);
   } else {
-    cxx_event.external_timedwait(max_ns);
+    cxx_event.external_timedwait_faultaware(poisoned_cxx, max_ns);
   }
 
   return REALM_SUCCESS;

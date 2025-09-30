@@ -47,6 +47,9 @@ void test_merge(realm_runtime_t runtime, int ignore_faults, int *poisoned)
   CHECK_REALM(
       realm_event_merge(runtime, event_poisoned, 10, &merged_event, ignore_faults));
   CHECK_REALM(realm_event_wait(runtime, merged_event, REALM_WAIT_INFINITE));
+  int has_triggered = 0;
+  CHECK_REALM(realm_event_has_triggered(runtime, merged_event, &has_triggered, poisoned));
+  assert(has_triggered == 1);
 }
 
 void test_trigger(realm_runtime_t runtime, int ignore_faults, bool use_wait,
@@ -59,13 +62,9 @@ void test_trigger(realm_runtime_t runtime, int ignore_faults, bool use_wait,
   CHECK_REALM(realm_user_event_create(runtime, &user_event));
   CHECK_REALM(
       realm_user_event_trigger(runtime, user_event, wait_on_event, ignore_faults));
-  if(use_wait) {
-    CHECK_REALM(realm_event_wait(runtime, user_event, REALM_WAIT_INFINITE));
-  } else {
-    int has_triggered = 0;
-    CHECK_REALM(realm_event_has_triggered(runtime, user_event, &has_triggered, poisoned));
-    assert(has_triggered == 1);
-  }
+  int has_triggered = 0;
+  CHECK_REALM(realm_event_has_triggered(runtime, user_event, &has_triggered, poisoned));
+  assert(has_triggered == 1);
 }
 
 void REALM_FNPTR main_task(const void *args, size_t arglen, const void *userdata,
@@ -82,12 +81,6 @@ void REALM_FNPTR main_task(const void *args, size_t arglen, const void *userdata
   test_merge(runtime, 0, &poisoned);
   assert(poisoned == 1);
   test_merge(runtime, 1, &poisoned);
-  assert(poisoned == 0);
-
-  // test trigger poisoned event
-  test_trigger(runtime, 0, true, &poisoned);
-  assert(poisoned == 1);
-  test_trigger(runtime, 1, true, &poisoned);
   assert(poisoned == 0);
 
   // test trigger poisoned event with has_triggered
