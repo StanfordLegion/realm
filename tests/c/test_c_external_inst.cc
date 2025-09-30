@@ -351,8 +351,7 @@ int main(int argc, char **argv)
   CHECK_REALM(realm_processor_register_task_by_kind(
       runtime, target_proc_kind, REALM_REGISTER_TASK_DEFAULT, MAIN_TASK, main_task, 0, 0,
       &register_task_event));
-  CHECK_REALM(
-      realm_event_wait(runtime, register_task_event, REALM_WAIT_INFINITE));
+  CHECK_REALM(realm_event_wait(runtime, register_task_event, REALM_WAIT_INFINITE));
 
   realm_processor_query_t proc_query;
   CHECK_REALM(realm_processor_query_create(runtime, &proc_query));
