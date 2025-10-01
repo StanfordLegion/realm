@@ -98,6 +98,9 @@ namespace Realm {
     Logger log_cudart("cudart");
     Logger log_cudaipc("cudaipc");
     Logger log_cupti("cupti");
+    CudaLoader cuda_loader;
+    NVMLLoader nvml_loader;
+    CUPTILoader cupti_loader;
 
     Logger log_stream("gpustream");
     bool nvml_api_fnptrs_loaded = false;
@@ -105,14 +108,6 @@ namespace Realm {
     bool cupti_api_fnptrs_loaded = false;
     bool cupti_api_initialized = false;
     CUresult cuda_init_code = CUDA_ERROR_UNKNOWN;
-
-    bool cuda_api_fnptrs_loaded = false;
-
-// Make sure to only use decltype here, to ensure it matches the cuda.h definition
-#define DEFINE_FNPTR(name, ver) decltype(&name) name##_fnptr = 0;
-
-    CUDA_DRIVER_APIS(DEFINE_FNPTR);
-#undef DEFINE_FNPTR
 
     static unsigned ctz(uint64_t v)
     {
@@ -135,12 +130,6 @@ namespace Realm {
       return __builtin_ctzll(v);
 #endif
     }
-
-#define DEFINE_FNPTR(name) decltype(&name) name##_fnptr = 0;
-
-    NVML_APIS(DEFINE_FNPTR);
-    CUPTI_APIS(DEFINE_FNPTR);
-#undef DEFINE_FNPTR
 
     // function pointers for cuda hook
     typedef void (*PFN_cuhook_register_callback)(void);
@@ -869,7 +858,7 @@ namespace Realm {
       if((ThreadLocal::context_sync_required > 0) ||
          ((ThreadLocal::context_sync_required < 0) &&
           gpu->module->config->cfg_task_context_sync)) {
-#if(CUDA_VERSION >= 12050)
+#if (CUDA_VERSION >= 12050)
         // If this driver supports retrieving an event for the context's current work,
         // retrieve and wait for it.  This will still over-synchronize with work from the
         // DMA engine, but at least this is completely asynchronous and doesn't require a
@@ -2694,128 +2683,80 @@ namespace Realm {
       }
     }
 
+    bool CudaLoader::load_symbols()
+    {
+      decltype(&cuGetProcAddress) cuGetProcAddress_fnptr = nullptr;
+      get_symbol(STRINGIFY(cuGetProcAddress), cuGetProcAddress_fnptr);
+      if(cuGetProcAddress_fnptr != nullptr) {
+#define GET_SYMBOL(name, ver)                                                            \
+  cuGetProcAddress_stable(cuGetProcAddress_fnptr, name##_fnptr, #name, ver,              \
+                          "Could not retrieve symbol " #name);
+        CUDA_DRIVER_APIS(GET_SYMBOL);
+#undef GET_SYMBOL
+      } else {
+#define GET_SYMBOL(name, ver)                                                            \
+  if(!get_symbol(STRINGIFY(name), name##_fnptr)) {                                       \
+    log_gpu.info("Could not retrieve symbol %s", STRINGIFY(name));                       \
+  }
+        CUDA_DRIVER_APIS(GET_SYMBOL);
+#undef GET_SYMBOL
+      }
+      return true;
+    }
+
+    bool NVMLLoader::load_symbols()
+    {
+#define GET_SYMBOL(name)                                                                 \
+  if(!get_symbol(STRINGIFY(name), name##_fnptr)) {                                       \
+    log_gpu.info("Could not retrieve symbol %s", STRINGIFY(name));                       \
+  }
+      NVML_APIS(GET_SYMBOL);
+      return true;
+    }
+
+    bool CUPTILoader::load_symbols()
+    {
+#define GET_SYMBOL(name)                                                                 \
+  if(!get_symbol(STRINGIFY(name), name##_fnptr)) {                                       \
+    log_gpu.info("Could not retrieve symbol %s", STRINGIFY(name));                       \
+  }
+      CUPTI_APIS(GET_SYMBOL);
+      return true;
+    }
+
     static bool resolve_cuda_api_fnptrs(void)
     {
-      if(cuda_api_fnptrs_loaded) {
+#if !defined(REALM_CUDA_DYNAMIC_LOAD)
+      return true;
+#else
+      if(cuda_loader) {
         return true;
       }
 
-      decltype(&cuGetProcAddress) cuGetProcAddress_fnptr = nullptr;
-
-#if defined(REALM_USE_LIBDL)
-      log_gpu.info() << "dynamically loading libcuda.so";
-      void *libcuda = dlopen("libcuda.so.1", RTLD_NOW);
-      if(!libcuda) {
-        log_gpu.info() << "could not open libcuda.so: " << strerror(errno);
-        return false;
-      }
-      // Use the symbol we get from the dynamically loaded library
-      cuGetProcAddress_fnptr = reinterpret_cast<decltype(cuGetProcAddress_fnptr)>(
-          dlsym(libcuda, STRINGIFY(cuGetProcAddress)));
-#elif CUDA_VERSION >= 11030
-      // Use the statically available symbol
-      cuGetProcAddress_fnptr = &cuGetProcAddress;
-#endif
-
-      if(cuGetProcAddress_fnptr != nullptr) {
-#define DRIVER_GET_FNPTR(name, ver)                                                      \
-  cuGetProcAddress_stable(cuGetProcAddress_fnptr, name##_fnptr, #name, ver,              \
-                          "Could not retrieve symbol " #name);
-
-        CUDA_DRIVER_APIS(DRIVER_GET_FNPTR);
-#undef DRIVER_GET_FNPTR
-      } else {
-#if defined(REALM_USE_LIBDL)
-#define DRIVER_GET_FNPTR(name, ver)                                                      \
-  if(CUDA_SUCCESS != (nullptr != (name##_fnptr = reinterpret_cast<decltype(&name)>(      \
-                                      dlsym(libcuda, STRINGIFY(name)))))) {              \
-    log_gpu.info() << "Could not retrieve symbol " #name;                                \
-  }
-        CUDA_DRIVER_APIS(DRIVER_GET_FNPTR)
-#undef DRIVER_GET_FNPTR
+      return cuda_loader.load({
+#if defined(REALM_ON_WINDOWS)
+          "nvcuda.dll",
 #else
-#define DRIVER_GET_FNPTR(name, ver) name##_fnptr = &name;
-        // Only enumerate the driver apis for the base toolkit version, extra features
-        // cannot be enumerated
-        CUDA_DRIVER_APIS_BASE(DRIVER_GET_FNPTR);
-#undef DRIVER_GET_FNPTR
-#endif /* REALM_USE_LIBDL */
-      }
-
-      cuda_api_fnptrs_loaded = true;
-
-      return true;
+          "libcuda.so.1",
+#endif
+          nullptr});
+#endif
     }
 
     static bool resolve_nvml_api_fnptrs()
     {
-#ifdef REALM_USE_LIBDL
-      void *libnvml = NULL;
-      if(nvml_api_fnptrs_loaded)
+      if (nvml_loader) {
         return true;
-      log_gpu.info() << "dynamically loading libnvidia-ml.so";
-      libnvml = dlopen("libnvidia-ml.so.1", RTLD_NOW);
-      if(libnvml == NULL) {
-        log_gpu.info() << "could not open libnvidia-ml.so" << strerror(errno);
-        return false;
       }
-
-#define DRIVER_GET_FNPTR(name)                                                           \
-  do {                                                                                   \
-    void *sym = dlsym(libnvml, STRINGIFY(name));                                         \
-    if(!sym) {                                                                           \
-      log_gpu.info() << "symbol '" STRINGIFY(name) " missing from libnvidia-ml.so!";     \
-    }                                                                                    \
-    name##_fnptr = reinterpret_cast<decltype(&name)>(sym);                               \
-  } while(0)
-
-      NVML_APIS(DRIVER_GET_FNPTR);
-#undef DRIVER_GET_FNPTR
-
-      nvml_api_fnptrs_loaded = true;
-      return true;
-#else
-      return false;
-#endif
+      return nvml_loader.load({"libnvidia-ml.so", nullptr});
     }
 
     static bool resolve_cupti_api_fnptrs()
     {
-#if defined(REALM_USE_LIBDL)
-      void *libcupti = NULL;
-      if(cupti_api_fnptrs_loaded) {
+      if (cupti_loader) {
         return true;
       }
-      log_gpu.info("dynamically loading libcupti.so");
-      libcupti = dlopen("libcupti.so", RTLD_NOW);
-      if(libcupti == NULL) {
-        log_gpu.info("Failed to retrieve libcupti.so from LD_LIBRARY_PATH, trying "
-                     "/usr/local/cuda/extras/CUPTI/lib64!");
-        libcupti = dlopen("/usr/local/cuda/extras/CUPTI/lib64/libcupti.so", RTLD_NOW);
-        if(libcupti == NULL) {
-          log_gpu.info() << "Could not open libcupti.so" << strerror(errno);
-          return false;
-        }
-      }
-
-#define DRIVER_GET_FNPTR(name)                                                           \
-  do {                                                                                   \
-    void *sym = dlsym(libcupti, STRINGIFY(name));                                        \
-    if(!sym) {                                                                           \
-      log_gpu.info() << "symbol '" STRINGIFY(name) " missing from libcupti.so!";         \
-    }                                                                                    \
-    name##_fnptr = reinterpret_cast<decltype(&name)>(sym);                               \
-  } while(0)
-
-      CUPTI_APIS(DRIVER_GET_FNPTR);
-#undef DRIVER_GET_FNPTR
-
-      log_gpu.info() << "Loaded cupti!";
-      cupti_api_fnptrs_loaded = true;
-      return true;
-#else
-      return false;
-#endif
+      return cupti_loader.load({"libcupti.so", "/usr/local/cuda/extras/CUPTI/libcupti.so", nullptr});
     }
 
     /*static*/ ModuleConfig *CudaModule::create_module_config(RuntimeImpl *runtime)
@@ -4889,4 +4830,4 @@ namespace Realm {
 #endif
 
   }; // namespace Cuda
-};   // namespace Realm
+}; // namespace Realm

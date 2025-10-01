@@ -18,6 +18,7 @@ set(REALM_SOURCES
     network.cc
     codedesc.cc
     logging.cc
+    loader.cc
     mutex.cc
     profiling.cc
     timers.cc
