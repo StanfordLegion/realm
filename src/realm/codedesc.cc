@@ -228,9 +228,9 @@ namespace Realm {
 
       if(inf.dli_saddr != ptr) {
         if (!quiet && inf.dli_saddr == nullptr) {
-          log_codetrans.warning() << "pointer " << ptr << " matched to shared object "
-                                  << inf.dli_fname 
-                                  << " but not to a symbol name in the object";
+          log_codetrans.warning() 
+              << "pointer " << ptr << " matched to shared object " << inf.dli_fname 
+              << " but not to a symbol name in the object";
         } else if(!quiet) {
           log_codetrans.warning() << "pointer " << ptr << " in middle of symbol '"
                                   << inf.dli_sname << " (" << inf.dli_saddr << ")?";
