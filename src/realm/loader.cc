@@ -35,6 +35,8 @@ namespace Realm {
     int dlopen_flags = 0;
     if(flags & LOADLIB_NOW) {
       dlopen_flags |= RTLD_NOW;
+    } else {
+      dlopen_flags |= RTLD_LAZY;
     }
     return dlopen(name, dlopen_flags);
 #else

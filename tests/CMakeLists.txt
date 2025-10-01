@@ -90,6 +90,12 @@ if(googletest_ADDED)
   set_property(GLOBAL PROPERTY PACKAGES_NOT_FOUND "${_NOT_FOUND}")
 endif()
 
+add_library(dummy MODULE EXCLUDE_FROM_ALL ${REALM_TEST_DIR}/unit_tests/dummy_library.cc)
+generate_export_header(
+  dummy EXPORT_FILE_NAME "${CMAKE_CURRENT_BINARY_DIR}/dummy_library_exports.h"
+)
+target_include_directories(dummy PRIVATE "${CMAKE_CURRENT_BINARY_DIR}")
+
 list(
   APPEND
   REALM_UNIT_TESTS
@@ -121,15 +127,19 @@ list(
   hpp_span_test.cc
   hpp_runtime_test.cc
   hpp_event_test.cc
+  loader_test.cc
 )
 list(TRANSFORM REALM_UNIT_TESTS PREPEND "${REALM_TEST_DIR}/unit_tests/")
 add_executable(realm_unit_tests ${REALM_UNIT_TESTS})
+# Add the dummy library as a dependency for building
+add_dependencies(realm_unit_tests dummy)
 # Needed for designated initializers
 # TODO(apriakhin): to be removed
 target_compile_features(realm_unit_tests PUBLIC cxx_std_20)
 target_link_libraries(
   realm_unit_tests PRIVATE realm_obj GTest::gmock_main ${REALM_LIBRARIES} ${REALM_EXTRA_OBJS}
 )
+target_include_directories(realm_unit_tests PRIVATE "${CMAKE_CURRENT_BINARY_DIR}")
 
 # TODO(wei): To be merged into realm_unit_tests once runtime singleton is
 # removed from all unit tests
@@ -166,7 +176,8 @@ if((NOT REALM_SANITIZER OR REALM_SANITIZER STREQUAL "NONE")
   gtest_discover_tests(realm_unit_tests NO_PRETTY_TYPES NO_PRETTY_VALUES PROPERTIES LABELS "unit")
   gtest_discover_tests(realm_c_unit_tests NO_PRETTY_TYPES NO_PRETTY_VALUES PROPERTIES LABELS "unit")
 else()
-  add_test(NAME realm_unit_tests COMMAND $<TARGET_FILE:realm_unit_tests>)
+  add_test(NAME realm_unit_tests COMMAND $<TARGET_FILE:realm_unit_tests>
+           WORKING_DIRECTORY $<TARGET_FILE_DIR:realm_unit_tests>)
   add_test(NAME realm_c_unit_tests COMMAND $<TARGET_FILE:realm_c_unit_tests>)
   set_tests_properties(realm_unit_tests realm_c_unit_tests PROPERTIES LABELS "unit")
 endif()
