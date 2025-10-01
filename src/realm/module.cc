@@ -228,7 +228,7 @@ namespace Realm {
   // accepts a colon-separated list of so files to try to load
   static void load_module_list(const char *sonames, RuntimeImpl *runtime,
                                std::vector<std::string> &cmdline,
-                               std::vector<void *> &handles)
+                               std::vector<lib_handle_t> &handles)
   {
     // null/empty strings are nops
     if(!sonames || !*sonames)
@@ -257,7 +257,7 @@ namespace Realm {
       assert(dlerror() == 0);
 
       // open so file, resolving all symbols but not polluting global namespace
-      void *handle = dlopen(filename, RTLD_NOW | RTLD_LOCAL);
+      lib_handle_t handle = Realm::load_library(filename, LOADLIB_NOW);
       if(handle == 0) {
         log_module.error() << "could not load " << filename << ": " << dlerror();
         continue;
@@ -265,10 +265,10 @@ namespace Realm {
 
       {
         // this file should have a "realm_module_version" symbol
-        void *sym = dlsym(handle, "realm_module_version");
+        void *sym = Realm::get_symbol(handle, "realm_module_version");
         if(!sym) {
           log_module.error() << "symbol 'realm_module_version' not found in " << filename;
-          dlclose(handle);
+          Realm::close_library(handle);
           continue;
         }
         const char *module_version = static_cast<const char *>(sym);
@@ -285,7 +285,7 @@ namespace Realm {
                 << "module version mismatch in '" << filename << "': realm='"
                 << REALM_VERSION << "' module='" << module_version
                 << "' - set REALM_PERMIT_MODULE_VERSION_MISMATCH to load anyway";
-            dlclose(handle);
+            Realm::close_library(handle);
             continue;
           }
         }
@@ -331,9 +331,9 @@ namespace Realm {
         abort();
       }
 
-      for(std::vector<std::string>::const_iterator it = sonames_list.begin();
-          it != sonames_list.end(); it++)
-        load_module_list(it->c_str(), runtime, cmdline, module_sofile_handles);
+      for(std::string &name : sonames_list) {
+        load_module_list(name.c_str(), runtime, cmdline, module_sofile_handles);
+      }
       sofile_loaded = true;
 #else
       log_module.fatal()

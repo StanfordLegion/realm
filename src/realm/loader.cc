@@ -18,7 +18,12 @@
 #include <realm/loader.h>
 #include <realm/realm_config.h>
 
+#if defined(REALM_ON_WINDOWS)
+#define WIN32_LEAN_AND_MEAN 1
+#include <windows.h>
+#else
 #include <dlfcn.h>
+#endif
 
 namespace Realm {
 
@@ -30,9 +35,6 @@ namespace Realm {
     int dlopen_flags = 0;
     if(flags & LOADLIB_NOW) {
       dlopen_flags |= RTLD_NOW;
-    }
-    if(flags & LOADLIB_DEEP) {
-      dlopen_flags |= RTLD_DEEPBIND | RTLD_GLOBAL;
     }
     return dlopen(name, dlopen_flags);
 #else

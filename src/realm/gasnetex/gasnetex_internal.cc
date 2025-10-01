@@ -22,6 +22,7 @@
 #include "realm/runtime_impl.h"
 #include "realm/mem_impl.h"
 #include "realm/logging.h"
+#include "realm/loader.h"
 
 #ifdef REALM_USE_CUDA
 #include "realm/cuda/cuda_module.h"
@@ -32,8 +33,6 @@
 #include "realm/hip/hip_module.h"
 #include "realm/hip/hip_internal.h"
 #endif
-
-#include <dlfcn.h>
 
 namespace Realm {
 
@@ -3178,25 +3177,24 @@ namespace Realm {
     static const char default_gex_wrapper_name[] = "librealm_gex_wrapper.so";
     const char *gex_wrapper_name = getenv("REALM_GASNETEX_WRAPPER");
     gex_wrapper_init_pfn realm_gex_wrapper_init_fnptr = nullptr;
-    void *librealm_gex_wrapper_handle = nullptr;
+    lib_handle_t librealm_gex_wrapper_handle = nullptr;
 
     if(gex_wrapper_name == nullptr) {
       gex_wrapper_name = default_gex_wrapper_name;
     }
 
     log_gex.debug("Loading gex wrapper: %s", gex_wrapper_name);
-    librealm_gex_wrapper_handle = dlopen(gex_wrapper_name, RTLD_NOW);
+    librealm_gex_wrapper_handle = Realm::load_library(gex_wrapper_name, LOADLIB_NOW);
     if(librealm_gex_wrapper_handle == nullptr) {
       log_gex.error("Failed to load gex wrapper at %s", gex_wrapper_name);
       goto Error;
     }
 
     realm_gex_wrapper_init_fnptr = reinterpret_cast<gex_wrapper_init_pfn>(
-        dlsym(librealm_gex_wrapper_handle, "realm_gex_wrapper_init"));
+        Realm::get_symbol(librealm_gex_wrapper_handle, "realm_gex_wrapper_init"));
     if(realm_gex_wrapper_init_fnptr == nullptr) {
-      const char *dlsym_error = dlerror();
-      log_gex.error("Cannot load wrapper entry symbol: %s\n", dlsym_error);
-      dlclose(librealm_gex_wrapper_handle);
+      log_gex.error("Cannot load wrapper entry symbol\n");
+      Realm::close_library(librealm_gex_wrapper_handle);
       goto Error;
     }
     if(0 != realm_gex_wrapper_init_fnptr(&gex_wrapper_handle)) {
