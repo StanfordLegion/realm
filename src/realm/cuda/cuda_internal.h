@@ -1296,7 +1296,8 @@ namespace Realm {
 // cuda driver and/or runtime entry points
 #if defined(REALM_CUDA_DYNAMIC_LOAD)
 #define CUDA_DRIVER_HAS_FNPTR(name) ((cuda_loader.name##_fnptr) != nullptr)
-#define CUDA_DRIVER_FNPTR(name) (assert(cuda_loader.name##_fnptr != nullptr), cuda_loader.name##_fnptr)
+#define CUDA_DRIVER_FNPTR(name)                                                          \
+  (assert(cuda_loader.name##_fnptr != nullptr), cuda_loader.name##_fnptr)
 #else
 #define CUDA_DRIVER_HAS_FNPTR(name) ((name) != nullptr)
 #define CUDA_DRIVER_FNPTR(name) (assert(name != nullptr), name)
@@ -1416,15 +1417,15 @@ namespace Realm {
   __op__(cuCtxRecordEvent, 12050);                                                       \
   __op__(cuArrayGetMemoryRequirements, CUDA_VERSION_MIN);
 
-struct CudaLoader : public Loader<CudaLoader> {
+    struct CudaLoader : public Loader<CudaLoader> {
 // Make sure to only use decltype, to ensure it matches the cuda.h definition
 #define DECL_FNPTR(name, ver) decltype(&name) name##_fnptr = nullptr;
-  CUDA_DRIVER_APIS(DECL_FNPTR);
+      CUDA_DRIVER_APIS(DECL_FNPTR);
 #undef DECL_FNPTR
-  bool load_symbols();
-};
+      bool load_symbols();
+    };
 
-extern CudaLoader cuda_loader;
+    extern CudaLoader cuda_loader;
 
 #define NVML_FNPTR(name) (nvml_loader.name##_fnptr)
 
@@ -1475,15 +1476,15 @@ extern CudaLoader cuda_loader;
   NVML_11_APIS(__op__);                                                                  \
   NVML_12_APIS(__op__);
 
-struct NVMLLoader : public Loader<NVMLLoader> {
+    struct NVMLLoader : public Loader<NVMLLoader> {
 // Make sure to only use decltype, to ensure it matches the cuda.h definition
 #define DECL_FNPTR(name) decltype(&name) name##_fnptr = nullptr;
-  NVML_APIS(DECL_FNPTR);
+      NVML_APIS(DECL_FNPTR);
 #undef DECL_FNPTR
-  bool load_symbols();
-};
+      bool load_symbols();
+    };
 
-extern NVMLLoader nvml_loader;
+    extern NVMLLoader nvml_loader;
 
 #define DECL_FNPTR_EXTERN(name) extern decltype(&name) name##_fnptr;
     NVML_APIS(DECL_FNPTR_EXTERN)
@@ -1506,17 +1507,18 @@ extern NVMLLoader nvml_loader;
 #undef DECL_FNPTR_EXTERN
 
 #define CUPTI_HAS_FNPTR(name) (cupti_loader.name##_fnptr != nullptr)
-#define CUPTI_FNPTR(name) (assert(cupti_loader.name##_fnptr != nullptr), cupti_loader.name##_fnptr)
+#define CUPTI_FNPTR(name)                                                                \
+  (assert(cupti_loader.name##_fnptr != nullptr), cupti_loader.name##_fnptr)
 
-struct CUPTILoader : public Loader<CUPTILoader> {
+    struct CUPTILoader : public Loader<CUPTILoader> {
 // Make sure to only use decltype, to ensure it matches the cuda.h definition
 #define DECL_FNPTR(name) decltype(&name) name##_fnptr = nullptr;
-  CUPTI_APIS(DECL_FNPTR);
+      CUPTI_APIS(DECL_FNPTR);
 #undef DECL_FNPTR
-  bool load_symbols();
-};
+      bool load_symbols();
+    };
 
-extern CUPTILoader cupti_loader;
+    extern CUPTILoader cupti_loader;
 
   }; // namespace Cuda
 

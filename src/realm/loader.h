@@ -15,10 +15,12 @@
  * limitations under the License.
  */
 
+#ifndef __LOADER_H__
+#define __LOADER_H__
+
 #include <type_traits>
 #include <initializer_list>
 #include <utility>
-
 namespace Realm {
 
   typedef void *lib_handle_t;
@@ -27,7 +29,6 @@ namespace Realm {
   {
     LOADLIB_DEFAULT = 0,
     LOADLIB_NOW = 1,
-    LOADLIB_DEEP = 2
   };
 
   /// @brief Helper to load a library from the given name
@@ -54,7 +55,9 @@ namespace Realm {
 
   public:
     Loader() = default;
-    Loader(lib_handle_t &hdl) : handle(std::move(hdl)) {}
+    Loader(lib_handle_t &hdl)
+      : handle(std::move(hdl))
+    {}
     Loader(const Loader &) = delete;
     Loader(Loader &&) = default;
     ~Loader()
@@ -66,12 +69,13 @@ namespace Realm {
     operator bool() const { return handle != nullptr; }
 
     /// @brief Initializes the loader from the given name
-    bool load(const char* name, int flags = 0) {
+    bool load(const char *name, int flags = 0)
+    {
       handle = Realm::load_library(name, flags);
-      if (handle == nullptr) {
+      if(handle == nullptr) {
         return false;
       }
-      if (!static_cast<D*>(this)->load_symbols()) {
+      if(!static_cast<D *>(this)->load_symbols()) {
         Realm::close_library(handle);
         handle = nullptr;
       }
@@ -81,8 +85,8 @@ namespace Realm {
     /// @brief Initializes the loader from the given names
     bool load(std::initializer_list<const char *> names, int flags = LOADLIB_NOW)
     {
-      for (const char *name : names) {
-        if (load(name, flags)) {
+      for(const char *name : names) {
+        if(load(name, flags)) {
           return true;
         }
       }
@@ -94,7 +98,7 @@ namespace Realm {
     /// @param name Name of the symbol this references
     /// @return Address of the object referenced in this loader with the given name
     template <typename T, typename = std::enable_if_t<std::is_pointer<T>::value>>
-    bool get_symbol(const char *name, T& ptr)
+    bool get_symbol(const char *name, T &ptr)
     {
       ptr = reinterpret_cast<T>(Realm::get_symbol(handle, name));
       return ptr != nullptr;
@@ -102,3 +106,4 @@ namespace Realm {
   };
 
 } // namespace Realm
+#endif // __LOADER_H__

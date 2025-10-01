@@ -858,7 +858,7 @@ namespace Realm {
       if((ThreadLocal::context_sync_required > 0) ||
          ((ThreadLocal::context_sync_required < 0) &&
           gpu->module->config->cfg_task_context_sync)) {
-#if (CUDA_VERSION >= 12050)
+#if(CUDA_VERSION >= 12050)
         // If this driver supports retrieving an event for the context's current work,
         // retrieve and wait for it.  This will still over-synchronize with work from the
         // DMA engine, but at least this is completely asynchronous and doesn't require a
@@ -2735,28 +2735,37 @@ namespace Realm {
 
       return cuda_loader.load({
 #if defined(REALM_ON_WINDOWS)
-          "nvcuda.dll",
+        "nvcuda.dll",
 #else
-          "libcuda.so.1",
+        "libcuda.so.1",
 #endif
-          nullptr});
+            nullptr
+      });
 #endif
     }
 
     static bool resolve_nvml_api_fnptrs()
     {
-      if (nvml_loader) {
+      if(nvml_loader) {
         return true;
       }
-      return nvml_loader.load({"libnvidia-ml.so", nullptr});
+      return nvml_loader.load({
+#if defined(REALM_ON_WINDOWS)
+        "nvml.dll",
+#else
+        "libnvidia-ml.so",
+#endif
+            nullptr
+      });
     }
 
     static bool resolve_cupti_api_fnptrs()
     {
-      if (cupti_loader) {
+      if(cupti_loader) {
         return true;
       }
-      return cupti_loader.load({"libcupti.so", "/usr/local/cuda/extras/CUPTI/libcupti.so", nullptr});
+      return cupti_loader.load(
+          {"libcupti.so", "/usr/local/cuda/extras/CUPTI/libcupti.so", nullptr});
     }
 
     /*static*/ ModuleConfig *CudaModule::create_module_config(RuntimeImpl *runtime)
@@ -4830,4 +4839,4 @@ namespace Realm {
 #endif
 
   }; // namespace Cuda
-}; // namespace Realm
+};   // namespace Realm
