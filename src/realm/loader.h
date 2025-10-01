@@ -27,14 +27,15 @@ namespace Realm {
 
   enum LoadLibraryFlags
   {
-    LOADLIB_DEFAULT = 0,
     LOADLIB_NOW = 1,
+    LOADLIB_DEFAULT = LOADLIB_NOW,
   };
 
   /// @brief Helper to load a library from the given name
   /// @param name Name of the library to load
+  /// @param flags Extra flags for how the library should be loaded
   /// @return handle for the given library
-  lib_handle_t load_library(const char *name, int flags);
+  lib_handle_t load_library(const char *name, int flags = LOADLIB_DEFAULT);
 
   /// @brief Helper to close / free a library handle from \sa load_library
   /// @param hdl Handle to release
@@ -57,9 +58,14 @@ namespace Realm {
     Loader() = default;
     Loader(lib_handle_t &hdl)
       : handle(std::move(hdl))
-    {}
+    {
+      hdl = nullptr;
+    }
     Loader(const Loader &) = delete;
-    Loader(Loader &&) = default;
+    Loader(Loader &&) = delete;
+    Loader& operator=(Loader&&) = delete;
+    Loader& operator=(Loader&) = delete;
+
     ~Loader()
     {
       if(handle != nullptr) {
@@ -69,7 +75,7 @@ namespace Realm {
     operator bool() const { return handle != nullptr; }
 
     /// @brief Initializes the loader from the given name
-    bool load(const char *name, int flags = 0)
+    bool load(const char *name, int flags = LOADLIB_DEFAULT)
     {
       handle = Realm::load_library(name, flags);
       if(handle == nullptr) {
@@ -83,7 +89,7 @@ namespace Realm {
     }
 
     /// @brief Initializes the loader from the given names
-    bool load(std::initializer_list<const char *> names, int flags = LOADLIB_NOW)
+    bool load(std::initializer_list<const char *> names, int flags = LOADLIB_DEFAULT)
     {
       for(const char *name : names) {
         if(load(name, flags)) {

@@ -2739,7 +2739,6 @@ namespace Realm {
 #else
         "libcuda.so.1",
 #endif
-            nullptr
       });
 #endif
     }
@@ -2755,7 +2754,6 @@ namespace Realm {
 #else
         "libnvidia-ml.so",
 #endif
-            nullptr
       });
     }
 
@@ -2765,7 +2763,7 @@ namespace Realm {
         return true;
       }
       return cupti_loader.load(
-          {"libcupti.so", "/usr/local/cuda/extras/CUPTI/libcupti.so", nullptr});
+          {"libcupti.so", "/usr/local/cuda/extras/CUPTI/libcupti.so"});
     }
 
     /*static*/ ModuleConfig *CudaModule::create_module_config(RuntimeImpl *runtime)
