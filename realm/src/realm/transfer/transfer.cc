@@ -560,9 +560,6 @@ namespace Realm {
         addr_data[1] = (inst_impl->metadata.inst_offset + affine->offset +
                         affine->strides.dot(target_subrect.lo) + field_rel_offset);
 
-        std::cout << "OFF:" << addr_data[1] << " target_subrect:" << target_subrect
-                  << " bounds:" << affine->bounds << std::endl;
-
         size_t bytes = cur_field_size;
         int cur_dim = 1;
         int di = 0;
@@ -796,278 +793,6 @@ namespace Realm {
     }
 
     return true;
-  }
-
-  ////////////////////////////////////////////////////////////////////////
-  //
-  // class WrappingTransferIteratorIndirect<N,T>
-  //
-
-  template <int N, typename T>
-  class WrappingTransferIteratorIndirect : public TransferIteratorBase<N, T> {
-  protected:
-    WrappingTransferIteratorIndirect(void); // used by deserializer
-  public:
-    WrappingTransferIteratorIndirect(RegionInstance inst,
-                                     const std::vector<FieldID> &_fields,
-                                     const std::vector<size_t> &_fld_offsets,
-                                     const std::vector<size_t> &_fld_sizes);
-
-    template <typename S>
-    static TransferIterator *deserialize_new(S &deserializer);
-
-    virtual ~WrappingTransferIteratorIndirect(void);
-
-    virtual Event request_metadata(void);
-
-    // specify the xd port used for indirect address flow control, if any
-    virtual void set_indirect_input_port(XferDes *xd, int port_idx,
-                                         TransferIterator *inner_iter);
-
-    virtual bool get_addresses(AddressList &addrlist,
-                               const InstanceLayoutPieceBase *&nonaffine);
-
-    virtual void reset(void);
-
-    virtual size_t step(size_t max_bytes, TransferIterator::AddressInfo &info,
-                        unsigned flags, bool tentative = false);
-
-    static Serialization::PolymorphicSerdezSubclass<
-        TransferIterator, WrappingTransferIteratorIndirect<N, T>>
-        serdez_subclass;
-
-    template <typename S>
-    bool serialize(S &serializer) const;
-
-  protected:
-    virtual bool get_next_rect(Rect<N, T> &r, FieldID &fid, size_t &offset,
-                               size_t &fsize);
-
-    std::vector<FieldID> fields;
-    std::vector<size_t> fld_offsets, fld_sizes;
-    XferDes *indirect_xd;
-    size_t piece_idx;
-    int indirect_port_idx;
-    TransferIterator *addrs_in;
-    size_t addrs_in_offset = 0;
-    size_t point_pos = 0;
-    size_t num_points = 0;
-    static const size_t MAX_POINTS = 4194304;
-  };
-
-  template <int N, typename T>
-  WrappingTransferIteratorIndirect<N, T>::WrappingTransferIteratorIndirect(void)
-  {}
-
-  template <int N, typename T>
-  WrappingTransferIteratorIndirect<N, T>::WrappingTransferIteratorIndirect(
-      RegionInstance inst, const std::vector<FieldID> &_fields,
-      const std::vector<size_t> &_fld_offsets, const std::vector<size_t> &_fld_sizes)
-    : TransferIteratorBase<N, T>(get_runtime()->get_instance_impl(inst), 0)
-    , fields(_fields)
-    , fld_offsets(_fld_offsets)
-    , fld_sizes(_fld_sizes)
-    , piece_idx(0)
-  {}
-
-  template <int N, typename T>
-  /*static*/ Serialization::PolymorphicSerdezSubclass<
-      TransferIterator, WrappingTransferIteratorIndirect<N, T>>
-      WrappingTransferIteratorIndirect<N, T>::serdez_subclass;
-
-  template <int N, typename T>
-  template <typename S>
-  bool WrappingTransferIteratorIndirect<N, T>::serialize(S &serializer) const
-  {
-    return ((serializer << this->inst_impl->me) && (serializer << fields) &&
-            (serializer << fld_offsets) && (serializer << fld_sizes));
-  }
-
-  template <int N, typename T>
-  template <typename S>
-  /*static*/ TransferIterator *
-  WrappingTransferIteratorIndirect<N, T>::deserialize_new(S &deserializer)
-  {
-    RegionInstance inst;
-    std::vector<FieldID> fields;
-    std::vector<size_t> fld_offsets, fld_sizes;
-
-    if(!((deserializer >> inst) && (deserializer >> fields) &&
-         (deserializer >> fld_offsets) && (deserializer >> fld_sizes))) {
-      return 0;
-    }
-
-    return new WrappingTransferIteratorIndirect<N, T>(inst, fields, fld_offsets,
-                                                      fld_sizes);
-  }
-
-  template <int N, typename T>
-  WrappingTransferIteratorIndirect<N, T>::~WrappingTransferIteratorIndirect(void)
-  {}
-
-  template <int N, typename T>
-  Event WrappingTransferIteratorIndirect<N, T>::request_metadata(void)
-  {
-    return TransferIteratorBase<N, T>::request_metadata();
-  }
-
-  template <int N, typename T>
-  void WrappingTransferIteratorIndirect<N, T>::set_indirect_input_port(
-      XferDes *xd, int port_idx, TransferIterator *inner_iter)
-  {
-    indirect_xd = xd;
-    indirect_port_idx = port_idx;
-    addrs_in = inner_iter;
-  }
-
-  template <int N, typename T>
-  void WrappingTransferIteratorIndirect<N, T>::reset(void)
-  {
-    TransferIteratorBase<N, T>::reset();
-    piece_idx = 0;
-  }
-
-  template <int N, typename T>
-  size_t WrappingTransferIteratorIndirect<N, T>::step(size_t max_bytes,
-                                                      TransferIterator::AddressInfo &info,
-                                                      unsigned flags,
-                                                      bool tentative /*= false*/)
-  {
-    FieldID cur_field_id = fields[0];
-    size_t cur_field_offset = fld_offsets[0];
-    size_t cur_field_size = fld_sizes[0];
-
-    const InstanceLayout<N, T> *inst_layout =
-        checked_cast<const InstanceLayout<N, T> *>(this->inst_impl->metadata.layout);
-
-    assert(inst_layout);
-    std::map<FieldID, InstanceLayoutGeneric::FieldLayout>::const_iterator it =
-        inst_layout->fields.find(cur_field_id);
-    assert(it != inst_layout->fields.end());
-    size_t pieces = inst_layout->piece_lists[it->second.list_idx].pieces.size();
-
-    if(piece_idx < pieces) {
-      const InstanceLayoutPiece<N, T> *layout_piece;
-      size_t field_rel_offset =
-          get_layout_piece(inst_layout, layout_piece, cur_field_id, cur_field_size,
-                           cur_field_offset, piece_idx);
-
-      if(layout_piece->layout_type == PieceLayoutTypes::AffineLayoutType) {
-        const AffineLayoutPiece<N, T> *affine =
-            static_cast<const AffineLayoutPiece<N, T> *>(layout_piece);
-
-        info.base_offset = (this->inst_impl->metadata.inst_offset + affine->offset +
-                            affine->strides.dot(affine->bounds.lo) + field_rel_offset);
-
-        size_t cur_dim = 0;
-        info.bytes_per_chunk = affine->strides[cur_dim++];
-        if(N > cur_dim) {
-          info.num_lines = affine->bounds.hi[cur_dim] - affine->bounds.lo[cur_dim] + 1;
-          info.line_stride = affine->strides[cur_dim];
-        }
-        cur_dim++;
-        if(N > cur_dim) {
-          info.num_planes = affine->bounds.hi[cur_dim] - affine->bounds.lo[cur_dim] + 1;
-          info.plane_stride = affine->strides[cur_dim];
-        }
-        piece_idx++;
-      }
-    }
-    piece_idx %= pieces;
-    return 0;
-  }
-
-  template <int N, typename T>
-  bool WrappingTransferIteratorIndirect<N, T>::get_addresses(
-      AddressList &addrlist, const InstanceLayoutPieceBase *&nonaffine)
-  {
-    nonaffine = 0;
-
-    while(!this->done()) {
-      if(!this->have_rect) {
-        return false;
-      }
-
-      size_t *addr_data = addrlist.begin_nd_entry(1);
-      if(!addr_data) {
-        return true;
-      }
-
-      int cur_dim = 1;
-      size_t total_bytes = this->cur_rect.volume() * this->cur_field_size;
-      this->have_rect = false;
-      addr_data[0] = ((total_bytes) << 4) + cur_dim;
-      addrlist.commit_nd_entry(cur_dim, total_bytes);
-      log_dma.debug() << "Finalize gather/scatter addr data dim=" << cur_dim
-                      << " total_bytes=" << total_bytes;
-      break;
-    }
-    return true;
-  }
-
-  template <int N, typename T>
-  bool WrappingTransferIteratorIndirect<N, T>::get_next_rect(Rect<N, T> &r, FieldID &fid,
-                                                             size_t &offset,
-                                                             size_t &fsize)
-  {
-    assert(fields.size() == 1);
-    fid = fields[0];
-    offset = fld_offsets[0];
-    fsize = fld_sizes[0];
-
-    r.lo = Point<N, T>::ZEROES();
-    r.hi = Point<N, T>::ZEROES();
-
-    addrs_in->done();
-
-    XferDes::XferPort &iip = indirect_xd->input_ports[indirect_port_idx];
-
-    bool nonempty = false;
-    while(true) {
-
-      if(point_pos * sizeof(Point<N, T>) > iip.local_bytes_total) {
-        return nonempty;
-      }
-
-      if(point_pos >= num_points) {
-        if(addrs_in->done()) {
-          this->is_done = true;
-          return nonempty;
-        }
-
-        TransferIterator::AddressInfo a_info;
-        size_t addr_max_bytes = sizeof(Point<N, T>) * MAX_POINTS;
-        if(indirect_xd != 0) {
-          if(iip.peer_guid != XferDes::XFERDES_NO_GUID) {
-            addr_max_bytes =
-                iip.seq_remote.span_exists(iip.local_bytes_total, addr_max_bytes);
-            size_t rem = addr_max_bytes % sizeof(Point<N, T>);
-            if(rem > 0) {
-              addr_max_bytes -= rem;
-            }
-            if(addr_max_bytes == 0) {
-              if(iip.remote_bytes_total.load() == iip.local_bytes_total) {
-                this->is_done = true;
-              }
-              return nonempty;
-            }
-          }
-        }
-
-        size_t amt = addrs_in->step(addr_max_bytes, a_info, 0, false);
-        if(amt == 0) {
-          return nonempty;
-        }
-
-        // TODO: handle partial point reads
-        addrs_in_offset = a_info.base_offset;
-        num_points = amt / sizeof(Point<N, T>);
-      }
-      r.lo[0] = point_pos;
-      r.hi[0] = point_pos + num_points - 1;
-      point_pos += num_points;
-      nonempty = true;
-    }
   }
 
   ////////////////////////////////////////////////////////////////////////
@@ -1621,6 +1346,12 @@ namespace Realm {
                                               const std::vector<size_t> &fld_offsets,
                                               const std::vector<size_t> &fld_sizes) const;
 
+    virtual AffinePieceIteratorBase *
+    create_piece_iterator(RegionInstance inst, const std::vector<int> &dim_order,
+                          const std::vector<FieldID> &fields,
+                          const std::vector<size_t> &fld_offsets,
+                          const std::vector<size_t> &fld_sizes) const;
+
     virtual void print(std::ostream &os) const;
 
     static Serialization::PolymorphicSerdezSubclass<TransferDomain,
@@ -1973,6 +1704,17 @@ namespace Realm {
         }
       }
     }
+  }
+
+  template <int N, typename T>
+  AffinePieceIteratorBase *TransferDomainIndexSpace<N, T>::create_piece_iterator(
+      RegionInstance inst, const std::vector<int> &dim_order,
+      const std::vector<FieldID> &fields, const std::vector<size_t> &fld_offsets,
+      const std::vector<size_t> &fld_sizes) const
+  {
+    assert(dim_order.size() == N);
+    RegionInstanceImpl *impl = get_runtime()->get_instance_impl(inst);
+    return new AffinePieceIteratorT<N, T>(impl, fields, fld_offsets, fld_sizes);
   }
 
   template <int N, typename T>
@@ -3328,6 +3070,10 @@ namespace Realm {
                           ind.insts, _addr_split_channel)
     , domain(is)
     , spaces(ind.spaces)
+    , entries(!domain.dense()
+                  ? (domain.sparsity.impl()->get_entries())
+                  : std::vector<SparsityMapEntry<N, T>>{SparsityMapEntry<N, T>{
+                        domain.bounds, SparsityMap<N, T>(), /*bitmap=*/nullptr}})
   {}
 
   template <int N, typename T, int N2, typename T2>
@@ -3397,7 +3143,15 @@ namespace Realm {
     for(size_t i = 0; i < spaces.size(); i++) {
       generic_spaces[i] = spaces[i];
     }
-    return channel->get_factory_for(Channel::ChannelFactoryInfo{domain, generic_spaces});
+
+    Channel::ChannelFactoryInfo info{domain,
+                                     generic_spaces,
+                                     static_cast<const void *>(entries.data()),
+                                     entries.size(),
+                                     sizeof(SparsityMapEntry<N, T>),
+                                     domain.volume()};
+
+    return channel->get_factory_for(info);
   }
 
   template <int N, typename T, int N2, typename T2>
@@ -4658,6 +4412,10 @@ namespace Realm {
           }
           ii.iter = desc.domain->create_iterator(xdn.inputs[j].inst.inst, desc.dim_order,
                                                  src_fields, src_offsets, src_sizes);
+          ii.piece_iter =
+              desc.domain->create_piece_iterator(xdn.inputs[j].inst.inst, desc.dim_order,
+                                                 src_fields, src_offsets, src_sizes);
+
           // use first field's serdez - they all have to be the same
           ii.serdez_id = desc.src_fields[xdn.inputs[j].inst.fld_start].serdez_id;
           ii.ib_offset = 0;
@@ -4683,6 +4441,11 @@ namespace Realm {
           ii.iter = gather_info->create_indirect_iterator(
               ii.mem, xdn.inputs[j].indirect.inst, src_fields, src_offsets, src_sizes,
               xdn.channel);
+
+          ii.piece_iter = desc.domain->create_piece_iterator(xdn.inputs[j].indirect.inst,
+                                                             desc.dim_order, src_fields,
+                                                             src_offsets, src_sizes);
+
           // use first field's serdez - they all have to be the same
           ii.serdez_id = desc.src_fields[xdn.inputs[j].indirect.fld_start].serdez_id;
           ii.ib_offset = 0;
@@ -4787,6 +4550,10 @@ namespace Realm {
             dst_sizes[k] = desc.dst_fields[xdn.outputs[j].inst.fld_start + k].size;
           }
           oi.iter = desc.domain->create_iterator(xdn.outputs[j].inst.inst, desc.dim_order,
+                                                 dst_fields, dst_offsets, dst_sizes);
+
+          oi.piece_iter =
+              desc.domain->create_piece_iterator(xdn.outputs[j].inst.inst, desc.dim_order,
                                                  dst_fields, dst_offsets, dst_sizes);
           // use first field's serdez - they all have to be the same
           oi.serdez_id = desc.dst_fields[xdn.outputs[j].inst.fld_start].serdez_id;
@@ -5040,7 +4807,6 @@ namespace Realm {
       const ProfilingRequestSet &, Event, int) const;                                    \
   template class TransferIteratorIndexSpace<N, T>;                                       \
   template class TransferIteratorIndirect<N, T>;                                         \
-  template class WrappingTransferIteratorIndirect<N, T>;                                 \
   template class TransferIteratorIndirectRange<N, T>;                                    \
   template class AddressSplitXferDesFactory<N, T>;                                       \
   template class AddressSplitCommunicator<N, T>;                                         \

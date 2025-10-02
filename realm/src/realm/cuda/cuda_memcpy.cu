@@ -22,6 +22,7 @@
 
 #include "realm/cuda/cuda_memcpy.h"
 #include "realm/point.h"
+#include "realm/sparsity.h"
 
 // The general formula for a linearized index is the following:
 // I = \sum_{i=0}^{N} v_i (\prod_{j=0}^{i-1} D_j)
@@ -183,105 +184,173 @@ memcpy_affine_batch(Realm::Cuda::AffineCopyPair<N, Offset_t> *info, size_t nrect
   }
 }
 
-/*
- * Scatter/gather points using indirection from/to dense buffer.
- * General assumptions:
- * 1. The src_ind/dst_ind buffer is dense and always has the same size
- * as the src/dst buffer (depending whether we are doing scatter or gather).
- * 2. src_ind_/dst_ind are accessed in a linear fashion with the base
- * type Point<N, Offset_t> per indirection element.
- * 3. src_ind/dst_ind do not have to be sorted but it should be
- * considered for coalesced access.
- *
- * TODO(apryakhin@): Consider handling ranges where src_ind/dst_ind
- * contain Rect<N, Offset_t> instead of Point<N Offset_t>.
- *
- * */
+template <int N, typename COORD_T, typename DATA_T, typename Offset_t = size_t>
+__device__ inline void
+memcpy_indirect_points_alt(Realm::Cuda::MemcpyIndirectInfo<3, Offset_t> info)
+{
+  //--------------------------------------------------------------------
+  // 0. flat thread id and stride
+  //--------------------------------------------------------------------
+  const Offset_t tid = blockIdx.x * blockDim.x + threadIdx.x;
+  const Offset_t grid_step = gridDim.x * blockDim.x;
 
-template <int N, typename T, typename DT, typename Offset_t = size_t>
+  //--------------------------------------------------------------------
+  // 1. handy aliases (all in registers)
+  //--------------------------------------------------------------------
+  const auto &rect = info.rects[0];
+  const Offset_t vec = rect.field_size / sizeof(DATA_T);
+
+  const COORD_T *__restrict__ ind_base =
+      reinterpret_cast<const COORD_T *>(rect.src_ind_addr);
+
+  const Realm::SparsityMapEntry<N, COORD_T> *__restrict__ drects =
+      reinterpret_cast<const Realm::SparsityMapEntry<N, COORD_T> *>(info.domain_base);
+
+  //--------------------------------------------------------------------
+  // 2. thread-local linear index in the *whole* domain
+  //--------------------------------------------------------------------
+  Offset_t lin = rect.point_pos + tid; // first point for this thread
+
+  //--------------------------------------------------------------------
+  // 3. locate the rectangle that owns ‘lin’
+  //--------------------------------------------------------------------
+  unsigned r = 0;
+  while((r < info.domain_rects) && (lin >= drects[r].bounds.volume()))
+    lin -= drects[r++].bounds.volume();
+
+  //--------------------------------------------------------------------
+  // 4. main copy loop – jump by grid_step each iteration
+  //--------------------------------------------------------------------
+  while((r < info.domain_rects) && (tid < rect.volume)) {
+
+    const Realm::Rect<N, COORD_T> &rb = drects[r].bounds;
+
+    //---------------- destination point inside rectangle -------------
+    Realm::Point<N, COORD_T> dst_pt;
+    Offset_t tmp = lin;
+#pragma unroll
+    for(int d = 0; d < N; d++) {
+      const COORD_T len = rb.hi[d] - rb.lo[d] + 1;
+      dst_pt[d] = rb.lo[d] + (tmp % len);
+      tmp /= len;
+    }
+
+    //---------------- source point via indirection -------------------
+#pragma unroll
+    Realm::Point<N, COORD_T> src_pt;
+    const Offset_t ind_base_idx = [&]() {
+      Offset_t ofs = 0;
+#pragma unroll
+      for(int d = 0; d < rect.dim; d++)
+        ofs += rb.lo[d] * rect.ind_strides[d];
+      return ofs;
+    }();
+
+#pragma unroll
+    for(int d = 0; d < rect.dim; d++)
+      src_pt[d] = ind_base[(ind_base_idx + lin) * rect.dim + d];
+
+    //---------------- byte address calculations ----------------------
+    Offset_t src_lin = 0, dst_lin = 0;
+#pragma unroll
+    for(int d = 0; d < N; d++) {
+      src_lin += src_pt[d] * rect.src_strides[d];
+      dst_lin += (dst_pt[d] - rb.lo[d]) * rect.dst_strides[d];
+    }
+
+    DATA_T *__restrict__ src =
+        reinterpret_cast<DATA_T *>(rect.src_base + src_lin * rect.field_size);
+    DATA_T *__restrict__ dst =
+        reinterpret_cast<DATA_T *>(rect.dst_base + dst_lin * rect.field_size);
+
+#pragma unroll
+    for(Offset_t v = 0; v < vec; v++)
+      dst[v] = src[v];
+
+    //---------------- advance linear index ---------------------------
+    lin += grid_step;
+
+    // fast-forward to correct rectangle, if linear index overflowed it
+    while((r < info.domain_rects) && (lin >= drects[r].bounds.volume()))
+      lin -= drects[r++].bounds.volume();
+  }
+}
+
+template <int N, typename COORD_T, typename DATA_T, typename Offset_t = size_t>
 static __device__ inline void
 memcpy_indirect_points(Realm::Cuda::MemcpyIndirectInfo<3, Offset_t> info)
 {
-  Offset_t thread_index = blockIdx.x * blockDim.x + threadIdx.x;
-  const unsigned grid_stride = gridDim.x * blockDim.x;
+  //--------------------------------------------------------------------
+  // 0. flat thread id and stride
+  //--------------------------------------------------------------------
+  const Offset_t tid = blockIdx.x * blockDim.x + threadIdx.x;
+  const Offset_t grid_step = gridDim.x * blockDim.x;
 
-  Offset_t start_offset = 0;
+  //--------------------------------------------------------------------
+  // 1. handy aliases (all in registers)
+  //--------------------------------------------------------------------
+  const auto &rect = info.rects[0];
+  const Offset_t vec = rect.field_size / sizeof(DATA_T);
 
-  for(unsigned r = 0; r < info.num_rects; r++) {
-    const auto &rect = info.rects[r];
-    const Offset_t vol = rect.volume;
+  const COORD_T *__restrict__ ind_base =
+      reinterpret_cast<const COORD_T *>(rect.ind_base);
+  const Realm::SparsityMapEntry<N, COORD_T> *__restrict__ drects =
+      reinterpret_cast<const Realm::SparsityMapEntry<N, COORD_T> *>(info.domain_base);
 
-    const Offset_t chunks = rect.field_size / sizeof(DT);
+  //--------------------------------------------------------------------
+  // 2. thread-local linear index in the *whole* domain
+  //--------------------------------------------------------------------
+  Offset_t lin = rect.point_pos + tid; // first point for this thread
 
-    const bool src_is_ind = (rect.src_ind_addr != 0);
-    const bool dst_is_ind = (rect.dst_ind_addr != 0);
-    __restrict__ T *dst_ind_base = reinterpret_cast<T *>(rect.dst_ind_addr);
-    __restrict__ T *src_ind_base = reinterpret_cast<T *>(rect.src_ind_addr);
+  //--------------------------------------------------------------------
+  // 3. locate the rectangle that owns ‘lin’
+  //--------------------------------------------------------------------
+  unsigned r = 0;
+  while((r < info.domain_rects) && (lin >= drects[r].bounds.volume()))
+    lin -= drects[r++].bounds.volume();
 
-    for(Offset_t i = thread_index; i < vol; i += grid_stride) {
-      Offset_t p[N];
-      if(src_ind_base) {
+  while((r < info.domain_rects) && (tid < rect.volume)) {
+    const Realm::Rect<N, COORD_T> &rb = drects[r].bounds;
 
-        for(int d = 0; d < rect.dim; d++) {
-          p[d] = src_ind_base[(i)*rect.dim + d]; //- rect.bounds_lo[d];
-        }
-      }
-
-      Offset_t src_linear_idx = 0, dst_linear_idx = 0;
-
-      if(src_ind_base) {
+    Offset_t ind_linear_idx = 0;
 #pragma unroll
-        for(int d = 0; d < N; d++) {
-          src_linear_idx += p[d] * rect.strides[d];
-        }
-        dst_linear_idx = i + start_offset;
-      }
-
-      __restrict__ DT *dst =
-          reinterpret_cast<DT *>(rect.dst_base + dst_linear_idx * rect.field_size);
-      __restrict__ DT *src =
-          reinterpret_cast<DT *>(rect.src_base + src_linear_idx * rect.field_size);
-
-      for(Offset_t chunk_idx = 0; chunk_idx < chunks; chunk_idx++) {
-        dst[chunk_idx] = src[chunk_idx];
-      }
+    for(int d = 0; d < N; d++) {
+      ind_linear_idx += rb.lo[d] * rect.ind_strides[d];
     }
 
-    start_offset += vol;
-    thread_index -= vol;
+    Realm::Point<N, COORD_T> p;
+#pragma unroll
+    for(int d = 0; d < N; d++) {
+      p[d] = ind_base[(ind_linear_idx + lin) * N + d];
+    }
+
+    Offset_t dst_linear_idx = 0;
+#pragma unroll
+    for(int d = 0; d < N; d++) {
+      dst_linear_idx += rb.lo[d] * rect.dst_strides[d];
+    }
+    dst_linear_idx += lin;
+
+    Offset_t src_linear_idx = 0;
+#pragma unroll
+    for(int d = 0; d < N; d++) {
+      src_linear_idx += p[d] * rect.src_strides[d];
+    }
+
+    __restrict__ DATA_T *src =
+        reinterpret_cast<DATA_T *>(rect.src_base + src_linear_idx * rect.field_size);
+
+    __restrict__ DATA_T *dst =
+        reinterpret_cast<DATA_T *>(rect.dst_base + (dst_linear_idx)*rect.field_size);
+
+    for(Offset_t v = 0; v < vec; v++) {
+      dst[v] = src[v];
+    }
+
+    lin += grid_step;
+    while((r < info.domain_rects) && (lin >= drects[r].bounds.volume()))
+      lin -= drects[r++].bounds.volume();
   }
-
-  /*for(; offset < info.volume; offset += grid_stride) {
-
-    Offset_t src_index = offset;
-    if(info.src_ind_addr != 0) {
-      Offset_t index = 0;
-#pragma unroll
-      for(int i = 0; i < N; i++) {
-        index += src_ind_base[offset * N + i] * info.src_strides[i];
-      }
-      src_index = index;
-    }
-
-    Offset_t dst_index = offset;
-    if(info.dst_ind_addr != 0) {
-      Offset_t index = 0;
-#pragma unroll
-      for(int i = 0; i < N; i++) {
-        index += dst_ind_base[offset * N + i] * info.dst_strides[i];
-      }
-
-      dst_index = index;
-    }
-
-    __restrict__ DT *dst =
-        reinterpret_cast<DT *>(info.dst_addr + dst_index * info.field_size);
-    __restrict__ DT *src =
-        reinterpret_cast<DT *>(info.src_addr + src_index * info.field_size);
-    for(Offset_t chunk_idx = 0; chunk_idx < chunks; chunk_idx++) {
-      dst[chunk_idx] = src[chunk_idx];
-    }
-  }*/
 }
 
 template <int N, typename T, typename Offset_t = size_t>

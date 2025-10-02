@@ -713,29 +713,6 @@ namespace Realm {
       GPUCompletionEvent event;
     };
 
-    class GPUIndirectTransferCompletion : public GPUCompletionNotification {
-    public:
-      GPUIndirectTransferCompletion(
-          XferDes *_xd, int _read_port_idx, size_t _read_offset, size_t _read_size,
-          int _write_port_idx, size_t _write_offset, size_t _write_size,
-          int _read_ind_port_idx = -1, size_t _read_ind_offset = 0,
-          size_t _read_ind_size = 0, int _write_ind_port_idx = -1,
-          size_t _write_ind_offset = 0, size_t _write_ind_size = 0);
-
-      virtual void request_completed(void);
-
-    protected:
-      XferDes *xd;
-      int read_port_idx;
-      size_t read_offset, read_size;
-      int read_ind_port_idx;
-      size_t read_ind_offset, read_ind_size;
-      int write_port_idx;
-      size_t write_offset, write_size;
-      int write_ind_port_idx;
-      size_t write_ind_offset, write_ind_size;
-    };
-
     class GPUTransferCompletion : public GPUCompletionNotification {
     public:
       GPUTransferCompletion(XferDes *_xd, int _read_port_idx, size_t _read_offset,
@@ -797,14 +774,35 @@ namespace Realm {
       GPUIndirectXferDes(uintptr_t _dma_op, Channel *_channel, NodeID _launch_node,
                          XferDesID _guid, const std::vector<XferDesPortInfo> &inputs_info,
                          const std::vector<XferDesPortInfo> &outputs_info, int _priority,
-                         XferDesRedopInfo _redop_info);
+                         XferDesRedopInfo _redop_info, const void *_domain_rects_base,
+                         size_t _num_domain_rects, size_t _rect_bytes, size_t _volume);
 
-      long get_requests(Request **requests, long nr);
+      long get_requests(Request **requests, long nr) override;
       bool progress_xd(GPUIndirectChannel *channel, TimeLimit work_until);
+      void fetch_indirection_meta(XferPort *ind_port);
+
+      Event request_metadata() override;
 
     protected:
       std::vector<GPU *> src_gpus, dst_gpus;
       std::vector<bool> dst_is_ipc;
+
+    private:
+      size_t volume{0};
+      const void *domain_rects_base{nullptr};
+      size_t num_domain_rects{0};
+      size_t rect_bytes{0};
+      RegionInstance domain_inst;
+      uintptr_t rect_ptr{0};
+
+      size_t points_done{0};
+      size_t total_points{0};
+      size_t addr_bytes{0};
+      uintptr_t ind_addr{0};
+
+      std::vector<AffinePieceInfo> ind_pieces;
+      std::vector<AffinePieceInfo> src_pieces;
+      std::vector<AffinePieceInfo> dst_pieces;
     };
 
     class GPUIndirectChannel

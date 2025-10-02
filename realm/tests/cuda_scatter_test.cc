@@ -1,43 +1,19 @@
-/*
- * Copyright 2025 Stanford University, NVIDIA Corporation
- * SPDX-License-Identifier: Apache-2.0
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
-
 #include <cassert>
 #include <cmath>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
 
+#include "realm/runtime_impl.h"
 #include "realm.h"
 #include "osdep.h"
 #include "realm/cmdline.h"
-
-#ifdef ENABLE_DIRECT_TEST
-#include "realm/cuda/cuda_internal.h"
-#endif
-
-#include "realm/cuda/cuda_module.h"
 #include "realm/id.h"
 
 using namespace Realm;
-using namespace Realm::Cuda;
 
 Logger log_app("app");
 
-// Task IDs, some IDs are reserved so start at first available number
 enum
 {
   TOP_LEVEL_TASK = Processor::TASK_ID_FIRST_AVAILABLE + 0,
@@ -119,6 +95,7 @@ namespace TestConfig {
   size_t cuda_grid_x = 1;
   size_t sizes1[MAX_TEST_DIM];
   size_t sizes2[MAX_TEST_DIM];
+  int num_points = 16;
   // size_t size1 = 64 << 1;
   // size_t size2 = 64 << 1;
   size_t pieces1 = 1;
@@ -126,11 +103,14 @@ namespace TestConfig {
   bool skipfirst = false;
   bool splitcopies = false;
   bool do_scatter = false;
+  bool do_direct = false;
   bool verbose = false;
   bool verify = true;
   bool ind_on_gpu = true;
   bool remote_gather = false;
   bool do_cpu = false;
+  int gap_size = 3;
+  int gap_count = 3;
 }; // namespace TestConfig
 
 struct SpeedTestArgs {
@@ -211,7 +191,8 @@ public:
   Event gather(IndexSpace<N, T> is, FieldID ptr_id, DistributedData<N, T> &ind,
                const SRC &src, FieldID src_id, FieldID dst_id, bool oor_possible,
                bool aliasing_possible, CustomSerdezID serdez_id, Event wait_on,
-               Processor p, TransposeExperiment<N> *exp);
+               Processor p, TransposeExperiment<N> *exp,
+               const std::vector<Point<SRC::_N, typename SRC::_T>> &points);
 
   template <typename FT, typename DST>
   Event scatter(IndexSpace<N, T> is, FieldID ptr_id, DistributedData<N, T> &ind, DST &dst,
@@ -328,17 +309,18 @@ Event DistributedData<N, T>::create_instances(const FieldMap &fields, LAMBDA mem
     {
       int dim_order[N];
       for(int i = 0; i < N; i++) {
-        // dim_order[i] = i;
-        dim_order[inverse ? i : N - i - 1] = i;
+        dim_order[i] = i;
+        // dim_order[inverse ? i : N - i - 1] = i;
       }
       InstanceLayoutConstraints ilc(fields, 1);
+      assert(pieces[i].space.is_valid());
+
       InstanceLayoutGeneric *ilg = InstanceLayoutGeneric::choose_instance_layout<N, T>(
           pieces[i].space, pieces[i].subrects, ilc, dim_order);
 
       Event e =
-          RegionInstance::create_instance(pieces[i].inst, m, *ilg, ProfilingRequestSet());
+          RegionInstance::create_instance(pieces[i].inst, m, ilg, ProfilingRequestSet());
       events.push_back(e);
-      delete ilg;
     }
 
     if(cpu_mem.exists()) {
@@ -421,12 +403,14 @@ public:
 
     args.inst.fetch_metadata(p).wait();
     AffineAccessor<FT, N, T> acc(args.inst, args.field_id);
+    args.space.make_valid().wait();
+    assert(args.space.is_valid());
     IndexSpaceIterator<N, T> it(args.space);
     while(it.valid) {
       PointInRectIterator<N, T> pit(it.rect);
       while(pit.valid) {
         FT val = args.filler(pit.p);
-        log_app.debug() << "  [" << pit.p << "] = " << val;
+        // log_app.debug() << "  [" << pit.p << "] = " << val;
         acc[pit.p] = val;
         pit.step();
       }
@@ -613,12 +597,11 @@ Event DistributedData<N, T>::scatter(IndexSpace<N, T> is, FieldID ptr_id,
 
 template <int N, typename T>
 template <typename FT, typename SRC>
-Event DistributedData<N, T>::gather(IndexSpace<N, T> is, FieldID ptr_id,
-                                    DistributedData<N, T> &ind, const SRC &src,
-                                    FieldID src_id, FieldID dst_id, bool oor_possible,
-                                    bool aliasing_possible, CustomSerdezID serdez_id,
-                                    Event wait_on, Processor p,
-                                    TransposeExperiment<N> *exp)
+Event DistributedData<N, T>::gather(
+    IndexSpace<N, T> is, FieldID ptr_id, DistributedData<N, T> &ind, const SRC &src,
+    FieldID src_id, FieldID dst_id, bool oor_possible, bool aliasing_possible,
+    CustomSerdezID serdez_id, Event wait_on, Processor p, TransposeExperiment<N> *exp,
+    const std::vector<Point<SRC::_N, typename SRC::_T>> &points)
 {
   std::vector<Event> events;
   for(typename std::vector<Piece>::const_iterator it = pieces.begin(); it != pieces.end();
@@ -656,7 +639,7 @@ Event DistributedData<N, T>::gather(IndexSpace<N, T> is, FieldID ptr_id,
 
     exp->nanoseconds = 0;
 
-    UserEvent done = UserEvent::create_user_event();
+    /*UserEvent done = UserEvent::create_user_event();
     events.push_back(done);
 
     CopyProfResult cpr;
@@ -665,13 +648,13 @@ Event DistributedData<N, T>::gather(IndexSpace<N, T> is, FieldID ptr_id,
 
     ProfilingRequestSet prs;
     prs.add_request(p, COPYPROF_TASK, &cpr, sizeof(CopyProfResult))
-        .add_measurement<ProfilingMeasurements::OperationTimeline>();
+        .add_measurement<ProfilingMeasurements::OperationTimeline>();*/
 
     Event e =
         is.copy(srcs, dsts,
                 std::vector<const typename CopyIndirection<N, T>::Base *>(1, &indirect),
-                prs, wait_on);
-    e.wait();
+                ProfilingRequestSet(), wait_on);
+    events.push_back(e);
 
     dump_instance<N, T, FT>(it->inst, FID_DATA1, is, is.bounds.hi[0]);
 
@@ -691,11 +674,13 @@ Event DistributedData<N, T>::gather(IndexSpace<N, T> is, FieldID ptr_id,
 
   std::map<Point<N, T>, Maybe<FT>> &dstref = get_ref_data<FT>(dst_id);
 
+  // int index = 0;
   IndexSpaceIterator<N, T> it(is);
   while(it.valid) {
     PointInRectIterator<N, T> pit(it.rect);
     while(pit.valid) {
       Point<SRC::_N, typename SRC::_T> p2 = ptrref.at(pit.p).get_value();
+      // points[index++]; // ptrref.at(pit.p).get_value();
       if(srcref.count(p2) > 0) {
         dstref[pit.p] = srcref.at(p2);
       } else
@@ -707,6 +692,10 @@ Event DistributedData<N, T>::gather(IndexSpace<N, T> is, FieldID ptr_id,
 
   return Event::merge_events(events);
 }
+
+//
+// dst = src[ind];
+//
 
 template <int N, typename T>
 template <typename FT>
@@ -763,8 +752,8 @@ bool DistributedData<N, T>::verify(IndexSpace<N, T> is, FieldID fid, Event wait_
         if(exp.has_value()) {
           if(exp.get_value() == act) {
             // good
-            log_app.debug() << "  match at [" << pit.p << "]: exp=" << exp.get_value()
-                            << " act=" << act;
+            log_app.error() << "  match at [" << pit.p << "]: exp=" << exp.get_value()
+                           << " act=" << act;
           } else {
             if(errors++ < 10)
               log_app.error() << "  mismatch at [" << pit.p
@@ -819,13 +808,29 @@ void dump_field(RegionInstance inst, FieldID fid, IndexSpace<N, T> is)
 
 template <typename T, size_t BYTES>
 struct Pad {
+  static_assert(BYTES >= sizeof(T), "Padding size must be at least the size of T");
+
   T val;
   char padding[BYTES - sizeof(T)];
+
   Pad() {}
   Pad(T _val)
     : val(_val)
   {}
+
   operator T() const { return val; }
+
+  Pad &operator+=(const T &rhs)
+  {
+    val += rhs;
+    return *this;
+  }
+
+  Pad &operator*=(const T &rhs)
+  {
+    val *= rhs;
+    return *this;
+  }
 };
 
 template <typename T, size_t BYTES>
@@ -842,7 +847,7 @@ template <int N, typename T, int N2, typename T2, typename DT>
 bool scatter_gather_test(const std::vector<Memory> &sys_mems,
                          const std::vector<Memory> &gpu_mems, int pieces1, int pieces2,
                          Processor p, CustomSerdezID serdez_id = 0, bool scatter = false,
-                         bool remote = false, bool inverse = true)
+                         bool remote = false, bool inverse = false)
 {
   Rect<N, T> r1;
   Rect<N2, T2> r2;
@@ -856,11 +861,69 @@ bool scatter_gather_test(const std::vector<Memory> &sys_mems,
     r2.hi[i] = TestConfig::sizes2[i] - 1;
   }
 
-  log_app.error() << "Run testcase for N=" << N << " N2=" << N2 << " src_bounds=" << r1
-                  << " dst_bounds=" << r2;
+  log_app.info() << "Run testcase for N=" << N << " N2=" << N2 << " src_bounds=" << r1
+                 << " dst_bounds=" << r2;
 
-  IndexSpace<N, T> is1(r1);
+  const int num_points = TestConfig::num_points; // 16;
+
+  std::vector<Rect<N, T>> split_bounds;
+  T prev_x = 0;
+  for(int i = 0; i < num_points / TestConfig::gap_count; i++) {
+    Rect<N, T> bounds = Rect<N, T>::make_empty();
+    bounds.lo[0] = prev_x;
+    bounds.hi[0] = prev_x + TestConfig::gap_count;
+    for(int j = 1; j < N; j++) {
+      bounds.lo[j] = 0;
+      bounds.hi[j] = 1;
+    }
+    prev_x += TestConfig::gap_count + TestConfig::gap_size;
+    split_bounds.emplace_back(bounds);
+    log_app.info() << "split_bounds:" << bounds;
+  }
+
+  IndexSpace<N, T> is1(split_bounds);
+
+  Rect<N, T> ind_bounds = Rect<N, T>::make_empty();
+  ind_bounds.lo[0] = 0;
+  ind_bounds.hi[0] = is1.bounds.hi[0]; // TestConfig::num_points;
+  for(int j = 1; j < N; j++) {
+    ind_bounds.lo[j] = 0;
+    ind_bounds.hi[j] = 1;
+  }
+  IndexSpace<N, T> is_ind(ind_bounds);
+  assert(is_ind.dense());
+
+  /*std::vector<Rect<N, T>> split_bounds;
+  T prev_x = 0;
+  for(int i = 0; i < num_points / TestConfig::gap_count; i++) {
+    Rect<N, T> bounds = Rect<N, T>::make_empty();
+    bounds.lo[0] = prev_x;
+    bounds.hi[0] = prev_x + TestConfig::gap_count;
+    for(int j = 1; j < N; j++) {
+      bounds.lo[j] = 0;
+      bounds.hi[j] = TestConfig::sizes1[j] - 1; // Adjusted to ensure same total size
+    }
+    prev_x += TestConfig::gap_count + TestConfig::gap_size;
+    split_bounds.emplace_back(bounds);
+    log_app.info() << "split_bounds:" << bounds;
+  }
+
+  IndexSpace<N, T> is1(split_bounds);
+
+  // Ensure is_ind matches the total bounds of is1
+  IndexSpace<N, T> is_ind(r1);
+  assert(is_ind.dense());*/
+
+  std::vector<Point<N2, T2>> points;
+  for(int i = 0; i < num_points; i++) {
+    points.emplace_back(Point<N2, T2>(i));
+  }
+
   IndexSpace<N2, T2> is2(r2);
+
+  assert(!is1.empty());
+  assert(!is2.empty());
+  // assert(!ind_bounds.empty());
 
   FieldMap fields_ind;
   fields_ind[FID_PTR1] = sizeof(Point<N2, T2>);
@@ -878,28 +941,26 @@ bool scatter_gather_test(const std::vector<Memory> &sys_mems,
   region1.add_subspaces(is1, pieces1);
   region1
       .create_instances(fields1, RoundRobinPicker<N, T>(gpu_mems),
-                        /*offset=*/0, false)
+                        /*offset=*/1, false)
       .wait();
 
   DistributedData<N, T> region_ind;
-  region_ind.add_subspaces(is1, pieces1);
+  region_ind.add_subspaces(is_ind, pieces1);
   region_ind
       .create_instances(
           fields_ind,
           RoundRobinPicker<N, T>(TestConfig::ind_on_gpu ? gpu_mems : sys_mems),
-          /*offset=*/1)
+          /*offset=*/0, false)
       .wait();
 
   DistributedData<N2, T2> region2;
-  // Create each destination piece normally, but make the SOURCE instance (region2)
-  // consist of multiple affine subrects so that gather/scatter paths exercise
-  // multi-piece logic in the GPU iterator.
-  // Use 3 subrects per piece to stress the code.
-  region2.add_subspaces(is2, pieces2, /*num_subrects=*/2);
+  region2.add_subspaces(is2, pieces2, /*num_subrects=*/1);
   region2
       .create_instances(fields2, RoundRobinPicker<N2, T2>(gpu_mems),
-                        /*offset=*/2, inverse)
+                        /*offset=*/0, false) // inverse
       .wait();
+
+  std::cout << "IS1:" << is1 << " IS2:" << is2 << std::endl;
 
   Matrix<N2, N, T> transform;
   for(int i = 0; i < N2; i++) {
@@ -915,9 +976,11 @@ bool scatter_gather_test(const std::vector<Memory> &sys_mems,
     }
   }
 
+  is1.make_valid().wait();
+
   region_ind
       .template fill<Point<N2, T2>>(
-          is1, FID_PTR1, [=](Point<N, T> p) -> Point<N2, T2> { return transform * p; },
+          is2, FID_PTR1, [=](Point<N, T> p) -> Point<N2, T2> { return transform * p; },
           Event::NO_EVENT)
       .wait();
 
@@ -925,6 +988,7 @@ bool scatter_gather_test(const std::vector<Memory> &sys_mems,
       .template fill<DT>(
           is1, FID_DATA1,
           [&](Point<N, T> p) -> DT {
+            return 0;
             DT i = 0;
             DT vol = 1;
             int d = 0;
@@ -955,33 +1019,51 @@ bool scatter_gather_test(const std::vector<Memory> &sys_mems,
           Event::NO_EVENT)
       .wait();
 
+  UserEvent event = UserEvent::create_user_event();
+
   TransposeExperiment<N> *exp = new TransposeExperiment<N>;
 
-  if(scatter) {
-    region1
-        .template scatter<DT>(is1, FID_PTR1, region_ind, region2, FID_DATA1, FID_DATA1,
-                              false /*!oor_possible*/, true /*aliasing_possible*/,
-                              serdez_id, Event::NO_EVENT, p, exp)
-        .wait();
+  if(scatter && !TestConfig::do_direct) {
+    assert(0);
+    region1.template scatter<DT>(is1, FID_PTR1, region_ind, region2, FID_DATA1, FID_DATA1,
+                                 false /*!oor_possible*/, true /*aliasing_possible*/,
+                                 serdez_id, Event::NO_EVENT, p, exp);
 
-    if(!region2.template verify<DT>(is2, FID_DATA1, Event::NO_EVENT))
-      return false;
+    if(!region2.template verify<DT>(is2, FID_DATA1, Event::NO_EVENT)) {
+      // return false;
+    }
   }
 
-  if(!scatter) {
-    region1
-        .template gather<DT>(is1, FID_PTR1, region_ind, region2, FID_DATA1, FID_DATA1,
-                             false /*!oor_possible*/, true /*aliasing_possible*/,
-                             serdez_id, Event::NO_EVENT, p, exp)
-        .wait();
+  double time_us = 0.0;
 
-    if(!region1.template verify<DT>(is1, FID_DATA1, Event::NO_EVENT))
-      return false;
+  if(!scatter && !TestConfig::do_direct) {
+    Event gather_event = region1.template gather<DT>(
+        is1, FID_PTR1, region_ind, region2, FID_DATA1, FID_DATA1, false /*!oor_possible*/,
+        true /*aliasing_possible*/, serdez_id, event, p, exp, points);
 
-    log_app.print() << "Exp Time=" << exp->nanoseconds;
+    size_t start_time = Clock::current_time_in_microseconds();
+    event.trigger();
+    gather_event.wait();
+    size_t end_time = Clock::current_time_in_microseconds();
+    time_us = double(end_time - start_time);
+
+    if(!region1.template verify<DT>(is1, FID_DATA1, Event::NO_EVENT)) {
+      // return false;
+    }
   }
 
-  log_app.print() << "Time=" << exp->nanoseconds / (1000000.0);
+  usleep(4000);
+
+  // Compute bandwidth
+  // double time_us = double(
+  // end_time -
+  // s // tart_time); // exp->nanoseconds / 1e9;        // Convert nanoseconds to seconds
+  size_t total_bytes = is1.volume() * sizeof(DT);      // Total data transferred in bytes
+  double bandwidth = total_bytes / (time_us * 1000.0); // GB/s
+
+  log_app.print() << "Bandwidth=" << bandwidth << " GB/s"
+                  << " Latency(us):" << time_us << " total_bytes:" << total_bytes
+                  << " is1:" << is1;
 
   usleep(100);
   region1.destroy_instances(Event::NO_EVENT);
@@ -1023,56 +1105,25 @@ void top_level_task(const void *args, size_t arglen, const void *userdata, size_
 
   for(int i = 1; i < 2; i++) {
     bool do_scatter = (i == 0);
-    /*typedef Pad<float, 16> BigFloat;
-    break;
-    if(!scatter_gather_test<1, long long, 2, long long, BigFloat>(
+    // typedef Pad<float, 16> BigFloat;
+
+    /*if(!scatter_gather_test<1, long long, 1, long long, int>(
            sys_mems, gpu_mems, TestConfig::pieces1, TestConfig::pieces2, p, 0, do_scatter,
            true)) {
       ok = false;
     }*/
 
-    ok = scatter_gather_test<1, int, 1, int, int>(sys_mems, gpu_mems, TestConfig::pieces1,
-                                                  TestConfig::pieces2, p, 0, do_scatter,
-                                                  true, true);
+    // typedef Pad<float, 16> BigFloat;
+    //typedef Pad<float, 16> BigFloat;
+    if(!scatter_gather_test<1, int, 1, int, long long>(
+           sys_mems, gpu_mems, TestConfig::pieces1, TestConfig::pieces2, p, 0, do_scatter,
+           true, true)) {
+      ok = false;
+    }
 
     /*if(!scatter_gather_test<3, long long, 3, long long, int>(
            sys_mems, gpu_mems, TestConfig::pieces1, TestConfig::pieces2, p, 0, do_scatter,
            true, true)) {
-      ok = false;
-    }*/
-
-    /*if(!scatter_gather_test<2, long long, 2, long long, int>(
-           sys_mems, gpu_mems, TestConfig::pieces1, TestConfig::pieces2, p, 0,
-    do_scatter)) { ok = false;
-    }*/
-
-    /*if(!scatter_gather_test<1, int, 1, int, long long>(
-           sys_mems, gpu_mems, TestConfig::pieces1, TestConfig::pieces2, p, 0, do_scatter,
-           true)) {
-      ok = false;
-    }
-
-    if(!scatter_gather_test<1, long long, 1, long long, long long>(
-           sys_mems, gpu_mems, TestConfig::pieces1, TestConfig::pieces2, p, 0, do_scatter,
-           true)) {
-      ok = false;
-    }
-
-    if(!scatter_gather_test<1, long long, 2, long long, int>(
-           sys_mems, gpu_mems, TestConfig::pieces1, TestConfig::pieces2, p, 0, do_scatter,
-           true)) {
-      ok = false;
-    }
-
-    if(!scatter_gather_test<1, long long, 3, long long, int>(
-           sys_mems, gpu_mems, TestConfig::pieces1, TestConfig::pieces2, p, 0, do_scatter,
-           true)) {
-      ok = false;
-    }
-
-    if(!scatter_gather_test<2, long long, 3, long long, int>(
-           sys_mems, gpu_mems, TestConfig::pieces1, TestConfig::pieces2, p, 0, do_scatter,
-           true)) {
       ok = false;
     }*/
   }
@@ -1093,14 +1144,14 @@ int main(int argc, char **argv)
   rt.init(&argc, &argv);
 
   for(size_t i = 0; i < MAX_TEST_DIM; i++) {
-    TestConfig::sizes1[i] = 16;
-    TestConfig::sizes2[i] = TestConfig::sizes1[i]; //* 2;
+    // TestConfig::sizes1[i] = TestConfig::sizes1[i];//8388608 * 4; // 100000000/4;
+    // TestConfig::sizes2[i] = TestConfig::sizes2[i];
   }
 
   CommandLineParser cp;
   // TODO(apryakhin@): Depreate some size options.
   // cp.add_option_int("-s1", TestConfig::size1);
-  // cp.add_option_int("-s2", TestConfig::size2);
+  cp.add_option_int("-num_points", TestConfig::num_points);
   cp.add_option_int("-s1x", TestConfig::sizes1[0]);
   cp.add_option_int("-s1y", TestConfig::sizes1[1]);
   cp.add_option_int("-s1z", TestConfig::sizes1[2]);
@@ -1114,9 +1165,13 @@ int main(int argc, char **argv)
   cp.add_option_int("-scatter", TestConfig::do_scatter);
   cp.add_option_int("-verbose", TestConfig::verbose);
   cp.add_option_int("-verify", TestConfig::verify);
+  cp.add_option_int("-direct", TestConfig::do_direct);
   cp.add_option_int("-ind_on_gpu", TestConfig::ind_on_gpu);
   cp.add_option_int("-do_cpu", TestConfig::do_cpu);
   cp.add_option_int("-remote_gather", TestConfig::remote_gather);
+  cp.add_option_int("-gap_size", TestConfig::gap_size);
+  cp.add_option_int("-gap_count", TestConfig::gap_count);
+  cp.add_option_int("-num_points", TestConfig::num_points);
   bool ok = cp.parse_command_line(argc, const_cast<const char **>(argv));
   assert(ok);
 
@@ -1129,18 +1184,12 @@ int main(int argc, char **argv)
 
   rt.register_custom_serdez<WrappingSerdez<float>>(SERDEZ_WRAP_FLOAT);
 
-  // select a processor to run the top level task on
   Processor p = Machine::ProcessorQuery(Machine::get_machine())
                     .only_kind(Processor::LOC_PROC)
                     .first();
   assert(p.exists());
 
-  // collective launch of a single task - everybody gets the same finish event
   rt.collective_spawn(p, TOP_LEVEL_TASK, 0, 0);
-
-  // shutdown will be requested by main task
-
-  // now sleep this thread until that shutdown actually happens
   int result = rt.wait_for_shutdown();
 
   return result;

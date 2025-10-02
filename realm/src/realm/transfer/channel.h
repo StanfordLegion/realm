@@ -50,6 +50,7 @@ namespace Realm {
   class Channel;
   class DmaRequest;
   class TransferIterator;
+  class AffinePieceIteratorBase;
 
   extern Logger log_new_dma;
 
@@ -203,6 +204,7 @@ namespace Realm {
     RegionInstance inst;
     size_t ib_offset, ib_size;
     TransferIterator *iter;
+    AffinePieceIteratorBase *piece_iter;
     CustomSerdezID serdez_id;
   };
 
@@ -299,6 +301,7 @@ namespace Realm {
     struct XferPort {
       MemoryImpl *mem;
       TransferIterator *iter;
+      AffinePieceIteratorBase *piece_iter;
       const CustomSerdezUntyped *serdez_op;
       XferDesID peer_guid;
       int peer_port_idx;
@@ -743,6 +746,10 @@ namespace Realm {
     struct ChannelFactoryInfo {
       IndexSpaceGeneric domain;
       std::vector<IndexSpaceGeneric> spaces;
+      const void* domain_rects_base;
+      size_t num_domain_rects;
+      size_t rect_bytes;
+      size_t volume;
     };
 
     virtual XferDesFactory *get_factory_for(const ChannelFactoryInfo &info)

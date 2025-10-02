@@ -471,6 +471,7 @@ namespace Realm {
       p.mem = get_runtime()->get_memory_impl(ii.mem);
       assert(p.mem != nullptr && "invalid memory handle");
       p.iter = ii.iter;
+      p.piece_iter = ii.piece_iter;
       if(ii.serdez_id != 0) {
         const CustomSerdezUntyped *op =
             get_runtime()->custom_serdez_table.get(ii.serdez_id, 0);
@@ -490,6 +491,7 @@ namespace Realm {
       p.ib_offset = ii.ib_offset;
       p.ib_size = ii.ib_size;
       p.addrcursor.set_addrlist(&p.addrlist);
+
       switch(ii.port_type) {
       case XferDesPortInfo::GATHER_CONTROL_PORT:
         gather_control_port = i;
@@ -510,6 +512,7 @@ namespace Realm {
         input_ports[p.indirect_port_idx].is_indirect_port = true;
       }
     }
+
     if(gather_control_port >= 0) {
       input_control.control_port_idx = gather_control_port;
       input_control.current_io_port = 0;
@@ -530,6 +533,7 @@ namespace Realm {
       p.mem = get_runtime()->get_memory_impl(oi.mem);
       assert(p.mem != nullptr && "invalid memory handle");
       p.iter = oi.iter;
+      p.piece_iter = oi.piece_iter;
       if(oi.serdez_id != 0) {
         const CustomSerdezUntyped *op =
             get_runtime()->custom_serdez_table.get(oi.serdez_id, 0);
@@ -675,6 +679,7 @@ namespace Realm {
         XferPort &icp = input_ports[input_control.control_port_idx];
         size_t avail =
             icp.seq_remote.span_exists(icp.local_bytes_total, 4 * sizeof(unsigned));
+
         size_t old_lbt = icp.local_bytes_total;
 
         // may take a few chunks of data to get a control packet
@@ -707,7 +712,7 @@ namespace Realm {
           update_bytes_read(input_control.control_port_idx, old_lbt,
                             icp.local_bytes_total - old_lbt);
 
-        log_xd.info() << "input control: xd=" << std::hex << guid << std::dec
+        log_xd.error() << "input control: xd=" << std::hex << guid << std::dec
                       << " port=" << input_control.current_io_port
                       << " count=" << input_control.remaining_count
                       << " done=" << input_control.eos_received;
@@ -1842,8 +1847,11 @@ namespace Realm {
                    << " prev:" << prev;
 
     assert(pending >= 0);
-    if(pending == 0)
+
+    if(pending == 0) {
+      assert(total_bytes_written > 0);
       transfer_completed.store_release(true);
+    }
   }
 
   void XferDes::update_bytes_read(int port_idx, size_t offset, size_t size)
@@ -1868,7 +1876,7 @@ namespace Realm {
   {
     XferPort *out_port = &output_ports[port_idx];
     size_t inc_amt = out_port->seq_local.add_span(offset, size);
-    log_xd.info() << "bytes_write: " << std::hex << guid << std::dec << "(" << port_idx
+    log_xd.error() << "bytes_write: " << std::hex << guid << std::dec << "(" << port_idx
                   << ") " << offset << "+" << size << " -> " << inc_amt;
 
     if(out_port->peer_guid != XFERDES_NO_GUID) {
@@ -1898,7 +1906,7 @@ namespace Realm {
     if(inc_amt > 0) {
       int64_t prev = bytes_write_pending.fetch_sub(inc_amt);
       if(prev > 0)
-        log_xd.info() << "completion: xd=" << std::hex << guid << std::dec
+        log_xd.error() << "completion: xd=" << std::hex << guid << std::dec
                       << " remaining=" << (prev - inc_amt);
       if(inc_amt == static_cast<size_t>(prev)) {
         add_reference();

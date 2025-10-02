@@ -117,14 +117,15 @@ namespace Realm {
 
     template <int N, typename Offset_t = size_t>
     struct MemcpyIndirectBatchPiece {
+      Offset_t point_pos;
       Offset_t volume;
-      Offset_t strides[N];
+      Offset_t src_strides[N];
+      Offset_t dst_strides[N];
+      Offset_t ind_strides[N];
       Offset_t field_size;
       uintptr_t src_base;
       uintptr_t dst_base;
-      uintptr_t src_ind_addr;
-      uintptr_t dst_ind_addr;
-      unsigned short dim;
+      uintptr_t ind_base;
     };
 
     template <int N, typename Offset_t = size_t,
@@ -137,14 +138,11 @@ namespace Realm {
         DIM = N
       };
 
-      // Offset_t volume;
-      //Offset_t field_size;
-      // Offset_t src_strides[N];
-      // Offset_t dst_strides[N];
       uintptr_t src_ind_addr;
       uintptr_t dst_ind_addr;
-      // uintptr_t src_addr;
-      // uintptr_t dst_addr;
+
+      uintptr_t domain_base;
+      Offset_t domain_rects;
 
       unsigned short num_rects;
       MemcpyIndirectBatchPiece<N, Offset_t> rects[MAX_RECTS];
