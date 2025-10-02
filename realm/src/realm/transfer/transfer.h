@@ -160,20 +160,20 @@ namespace Realm {
   };
 
   struct AffinePieceInfo {
-    uintptr_t base_offset; // byte offset of first element in instance
-    size_t field_size;     // bytes per element
-    int dim;               // 1..3
-    size_t extents[3];     // x_elems , y_lines , z_planes   (unused dims = 1)
-    size_t strides[3];     // byte strides for x,y,z         (unused dims = 0)
+    uintptr_t base_offset;
+    size_t field_size;
+    int dim;
+
+    size_t extents[REALM_MAX_DIM];
+    size_t strides[REALM_MAX_DIM];
+
+    int lo[REALM_MAX_DIM];
+    int hi[REALM_MAX_DIM];
   };
 
-  // type-erased iterator
   class AffinePieceIteratorBase {
   public:
     virtual ~AffinePieceIteratorBase() = default;
-
-    // Fills 'out' with the next affine piece and returns true,
-    // or returns false when no pieces remain.
     virtual bool next(AffinePieceInfo &out) = 0;
   };
 
@@ -238,6 +238,7 @@ namespace Realm {
         valid = true;
         return true;
       }
+
       // next field
       field_idx++;
       piece_idx = 0;
@@ -256,8 +257,16 @@ namespace Realm {
     out.base_offset = cur_base_off;
     out.field_size = cur_field_size;
     out.dim = N;
+
     const Rect<N, T> &b = cur_piece->bounds;
+
+    for(int d = 0; d < N; d++) {
+      out.lo[d] = b.lo[d];
+      out.hi[d] = b.hi[d];
+    }
+
     const size_t w_bytes = cur_field_size * (static_cast<size_t>(b.hi[0] - b.lo[0] + 1));
+
     out.extents[0] = (b.hi[0] - b.lo[0] + 1);
     out.strides[0] = w_bytes;
 
@@ -277,7 +286,6 @@ namespace Realm {
       out.strides[2] = 0;
     }
 
-    /* advance to next piece for subsequent call */
     advance();
     return true;
   }

@@ -797,8 +797,6 @@ namespace Realm {
 
       size_t points_done{0};
       size_t total_points{0};
-      size_t addr_bytes{0};
-      uintptr_t ind_addr{0};
 
       std::vector<AffinePieceInfo> ind_pieces;
       std::vector<AffinePieceInfo> src_pieces;

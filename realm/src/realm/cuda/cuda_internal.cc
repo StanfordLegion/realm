@@ -1065,7 +1065,6 @@ namespace Realm {
 
       AffinePieceInfo p;
       size_t points = 0;
-      size_t fbytes = 0;
       while(ind_port->piece_iter->next(p)) {
         size_t elems = p.extents[0];
         if(p.dim >= 2) {
@@ -1075,16 +1074,10 @@ namespace Realm {
           elems *= p.extents[2];
         }
         points += elems;
-        if(fbytes == 0) {
-          fbytes = p.field_size;
-        }
         ind_pieces.emplace_back(p);
       }
-
+      assert(ind_pieces.size() == 1);
       total_points = std::min(volume, points);
-      addr_bytes = fbytes;
-      ind_addr =
-          reinterpret_cast<uintptr_t>(ind_port->mem->get_direct_ptr(p.base_offset, 0));
     }
 
     bool GPUIndirectXferDes::progress_xd(GPUIndirectChannel *channel,
@@ -1113,6 +1106,7 @@ namespace Realm {
 
         fetch_indirection_meta(ind_port);
 
+        size_t coord_bytes = ind_pieces[0].field_size;
         size_t max_bytes = std::min(control_count, MAX_CHUNK);
         max_bytes = clamp_span(max_bytes, inp_port);
         max_bytes = clamp_span(max_bytes, out_port);
@@ -1129,6 +1123,8 @@ namespace Realm {
           }
         }
 
+        assert(src_pieces.size() == 1);
+
         if(dst_pieces.empty()) {
           AffinePieceInfo pinfo;
           while(out_port->piece_iter->next(pinfo)) {
@@ -1136,14 +1132,16 @@ namespace Realm {
           }
         }
 
+        assert(dst_pieces.size() == 1);
+
         size_t field_bytes =
             std::min(min_field_bytes(src_pieces), min_field_bytes(dst_pieces));
         int dim = std::min(min_dim(src_pieces), min_dim(dst_pieces));
 
-        size_t ind_budget = clamp_span(total_points * addr_bytes, ind_port);
+        size_t ind_budget = clamp_span(total_points * coord_bytes, ind_port);
         size_t points =
             std::min(total_points - points_done,
-                     std::min(ind_budget / addr_bytes, max_bytes / field_bytes));
+                     std::min(ind_budget / coord_bytes, max_bytes / field_bytes));
         if(points == 0) {
           assert(0);
           // begin_completion();
@@ -1167,39 +1165,49 @@ namespace Realm {
 
         MemcpyIndirectInfo<3, size_t> memcpy_info;
         memset(&memcpy_info, 0, sizeof(MemcpyIndirectInfo<3, size_t>));
-        MemcpyIndirectBatchPiece<3> &batch_piece =
-            memcpy_info.rects[memcpy_info.num_rects++];
 
-        batch_piece.src_base = reinterpret_cast<uintptr_t>(
-            inp_port->mem->get_direct_ptr(src_pieces[0].base_offset, 0));
-        batch_piece.dst_base = out_base;
-        batch_piece.ind_base = ind_addr;
-
-        batch_piece.field_size = field_bytes;
-
-        batch_piece.src_strides[0] = src_pieces[0].field_size;
-        batch_piece.src_strides[1] = src_pieces[0].strides[0];
-        batch_piece.src_strides[2] = src_pieces[0].strides[1];
-        for(int i = 0; i < dim; i++) {
-          batch_piece.src_strides[i] /= field_bytes;
+        memcpy_info.num_src_pieces = src_pieces.size();
+        for(size_t i = 0; i < src_pieces.size(); i++) {
+          memcpy_info.src_pieces[i].dim = src_pieces[i].dim;
+          memcpy_info.src_pieces[i].base = reinterpret_cast<uintptr_t>(
+              inp_port->mem->get_direct_ptr(src_pieces[i].base_offset, 0));
+          memcpy_info.src_pieces[i].strides[0] = src_pieces[i].field_size;
+          memcpy_info.src_pieces[i].strides[1] = src_pieces[i].strides[0];
+          memcpy_info.src_pieces[i].strides[2] = src_pieces[i].strides[1];
+          for(int d = 0; d < src_pieces[i].dim; d++) {
+            memcpy_info.src_pieces[i].lo[d] = src_pieces[i].lo[d];
+            memcpy_info.src_pieces[i].hi[d] = src_pieces[i].hi[d];
+            memcpy_info.src_pieces[i].strides[0] /= field_bytes;
+          }
         }
 
-        batch_piece.ind_strides[0] = ind_pieces[0].field_size;
-        batch_piece.ind_strides[1] = ind_pieces[0].strides[0];
-        batch_piece.ind_strides[2] = ind_pieces[0].strides[1];
-        for(int i = 0; i < dim; i++) {
-          batch_piece.ind_strides[i] /= addr_bytes;
+        memcpy_info.num_dst_pieces = dst_pieces.size();
+        for(size_t i = 0; i < dst_pieces.size(); i++) {
+          memcpy_info.dst_pieces[i].dim = dst_pieces[i].dim;
+          memcpy_info.dst_pieces[i].base = out_base;
+          memcpy_info.dst_pieces[i].strides[0] = dst_pieces[i].field_size;
+          memcpy_info.dst_pieces[i].strides[1] = dst_pieces[i].strides[0];
+          memcpy_info.dst_pieces[i].strides[2] = dst_pieces[i].strides[1];
+          for(int d = 0; d < dst_pieces[i].dim; d++) {
+            memcpy_info.dst_pieces[i].lo[d] = dst_pieces[i].lo[d];
+            memcpy_info.dst_pieces[i].hi[d] = dst_pieces[i].hi[d];
+            memcpy_info.dst_pieces[i].strides[0] /= field_bytes;
+          }
         }
 
-        batch_piece.dst_strides[0] = dst_pieces[0].field_size;
-        batch_piece.dst_strides[1] = dst_pieces[0].strides[0];
-        batch_piece.dst_strides[2] = dst_pieces[0].strides[1];
+        memcpy_info.ind_base = reinterpret_cast<uintptr_t>(
+            ind_port->mem->get_direct_ptr(ind_pieces[0].base_offset, 0));
+        memcpy_info.field_size = field_bytes;
+
+        memcpy_info.ind_strides[0] = ind_pieces[0].field_size;
+        memcpy_info.ind_strides[1] = ind_pieces[0].strides[0];
+        memcpy_info.ind_strides[2] = ind_pieces[0].strides[1];
         for(int i = 0; i < dim; i++) {
-          batch_piece.dst_strides[i] /= field_bytes;
+          memcpy_info.ind_strides[i] /= coord_bytes;
         }
 
-        batch_piece.point_pos = points_done;
-        batch_piece.volume = points;
+        memcpy_info.point_pos = points_done;
+        memcpy_info.volume = points;
 
         memcpy_info.domain_base = rect_ptr;
         memcpy_info.domain_rects = num_domain_rects;
@@ -1213,12 +1221,11 @@ namespace Realm {
                                     inp_port->mem, out_port->mem);
         AutoGPUContext agc(stream->get_gpu());
 
-        stream->get_gpu()->launch_indirect_copy_kernel(&memcpy_info, dim, addr_bytes,
+        stream->get_gpu()->launch_indirect_copy_kernel(&memcpy_info, dim, coord_bytes,
                                                        field_bytes, points, stream);
         add_reference();
 
         const size_t bytes_to_fence = points * field_bytes;
-        // const size_t ind_bytes = (ind_port ? points * addr_bytes : 0);
 
         stream->add_notification(new GPUTransferCompletion(
             this, input_control.current_io_port, inp_span_start, bytes_to_fence,
@@ -1882,7 +1889,6 @@ namespace Realm {
       req->xd->notify_request_read_done(req);
       req->xd->notify_request_write_done(req);
     }
-
 
     ////////////////////////////////////////////////////////////////////////
     //
