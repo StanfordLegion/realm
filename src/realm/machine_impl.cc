@@ -176,7 +176,7 @@ namespace Realm {
       return mmas_in.add_affinity(mma.m1, mma, is_local);
 
     // shouldn't have been called!
-    assert(0);
+    abort();
     return false;
   }
 
@@ -203,7 +203,7 @@ namespace Realm {
 
   bool MachineNodeInfo::add_processor(Processor p)
   {
-    assert(node == NodeID(ID(p).proc_owner_node()));
+    REALM_ASSERT_WITH_ABORT(node == NodeID(ID(p).proc_owner_node()), log_machine);
     MachineProcInfo *&ptr = procs[p];
     // TODO: see if anything changed?
     if(ptr != 0)
@@ -216,7 +216,7 @@ namespace Realm {
 
   bool MachineNodeInfo::add_memory(Memory m)
   {
-    assert(node == NodeID(ID(m).memory_owner_node()));
+    REALM_ASSERT_WITH_ABORT(node == NodeID(ID(m).memory_owner_node()), log_machine);
     MachineMemInfo *&ptr = mems[m];
     // TODO: see if anything changed?
     if(ptr != 0)
@@ -404,19 +404,19 @@ namespace Realm {
   // class MachineImpl
   //
 
-  MachineImpl *machine_singleton = 0;
+  MachineImpl *machine_singleton = nullptr;
 
   MachineImpl::MachineImpl(RuntimeImpl *_runtime_impl)
     : runtime_impl(_runtime_impl)
   {
-    assert(machine_singleton == 0);
+    REALM_ASSERT_WITH_ABORT(machine_singleton == nullptr, log_machine);
     machine_singleton = this;
   }
 
   MachineImpl::~MachineImpl(void)
   {
-    assert(machine_singleton == this);
-    machine_singleton = 0;
+    REALM_ASSERT_WITH_ABORT(machine_singleton == this, log_machine);
+    machine_singleton = nullptr;
     delete_map_contents(nodeinfos);
   }
 
@@ -471,7 +471,7 @@ namespace Realm {
   {
     AutoLock<> al(mutex);
 
-    assert(node_id <= Network::max_node_id);
+    REALM_ASSERT_WITH_ABORT(node_id <= Network::max_node_id, log_annc);
     Node &n = runtime_impl->nodes[node_id];
 
     Serialization::FixedBufferDeserializer fbd(args, arglen);
@@ -480,7 +480,7 @@ namespace Realm {
       NodeAnnounceTag tag;
       if(!(fbd >> tag)) {
         log_annc.fatal() << "unexpected end of input";
-        assert(0);
+        abort();
       }
 
       switch(tag) {
@@ -491,7 +491,7 @@ namespace Realm {
         int num_cores;
         ok = (ok && (fbd >> p) && (fbd >> kind) && (fbd >> num_cores));
         if(ok) {
-          assert(NodeID(ID(p).proc_owner_node()) == node_id);
+          REALM_ASSERT_WITH_ABORT(NodeID(ID(p).proc_owner_node()) == node_id, log_annc);
           log_annc.debug() << "adding proc " << p << " (kind = " << kind
                            << " num_cores = " << num_cores << ")";
           if(remote) {
@@ -516,7 +516,7 @@ namespace Realm {
         if(has_rdma_info)
           ok = ok && (fbd >> rdma_info);
         if(ok) {
-          assert(NodeID(ID(m).memory_owner_node()) == node_id);
+          REALM_ASSERT_WITH_ABORT(NodeID(ID(m).memory_owner_node()) == node_id, log_annc);
           log_annc.debug() << "adding memory " << m << " (kind = " << kind
                            << ", size = " << size << ", has_rdma = " << has_rdma_info
                            << ")";
@@ -560,7 +560,7 @@ namespace Realm {
         if(has_rdma_info)
           ok = ok && (fbd >> rdma_info);
         if(ok) {
-          assert(NodeID(ID(m).memory_owner_node()) == node_id);
+          REALM_ASSERT_WITH_ABORT(NodeID(ID(m).memory_owner_node()) == node_id, log_annc);
           log_annc.debug() << "adding ib memory " << m << " (kind = " << kind
                            << ", size = " << size << ", has_rdma = " << has_rdma_info
                            << ")";
@@ -613,7 +613,7 @@ namespace Realm {
           }
 
           log_annc.debug() << "adding channel: " << *rc;
-          assert(rc->node == node_id);
+          REALM_ASSERT_WITH_ABORT(rc->node == node_id, log_annc);
           if(remote)
             runtime_impl->add_dma_channel(rc);
           else
@@ -634,11 +634,11 @@ namespace Realm {
 
       default:
         log_annc.fatal() << "unknown tag: " << tag;
-        assert(0);
+        abort();
       }
     }
 
-    assert(ok && (fbd.bytes_left() == 0));
+    REALM_ASSERT_WITH_ABORT(ok && (fbd.bytes_left() == 0), log_annc);
   }
 
   void MachineImpl::get_all_memories(std::set<Memory> &mset) const
@@ -861,7 +861,10 @@ namespace Realm {
     if(!node_info) {
       return false;
     }
-    assert(node_info->process_info != nullptr);
+    if (!node_info->process_info) {
+      log_machine.warning("Process info is not set");
+      return false;
+    }
     *info = *(node_info->process_info);
     return true;
   }
@@ -1217,7 +1220,10 @@ namespace Realm {
     if(!ptr) {
       ptr = new MachineNodeInfo(node_id, runtime_impl);
     }
-    assert(ptr->add_process_info(process_info));
+    if(!ptr->add_process_info(process_info)) {
+      log_machine.fatal("Failed to add process info because it already exists");
+      abort();
+    }
     if(!lock_held) {
       mutex.unlock();
     }
@@ -1638,7 +1644,7 @@ namespace Realm {
 
   ProcessorQueryImpl::~ProcessorQueryImpl(void)
   {
-    assert(references.load() == 0);
+    REALM_ASSERT_WITH_ABORT(references.load() == 0, log_machine);
     for(std::vector<ProcQueryPredicate *>::iterator it = predicates.begin();
         it != predicates.end(); it++)
       delete *it;
@@ -1723,7 +1729,7 @@ namespace Realm {
 
     if(cur_cached_list == NULL) {
       log_query.fatal() << "cur_cached_list is null";
-      assert(0);
+      abort();
     }
     if(!cur_cached_list)
       return nextp;
@@ -1735,7 +1741,7 @@ namespace Realm {
       if(((*cur_cached_list)[cur_index] != after) &&
          (cur_index < cur_cached_list->size())) {
         log_query.fatal() << "cur_cached_list: inconsistent state";
-        assert(0);
+        abort();
       }
       ++cur_index;
     }
@@ -1853,7 +1859,8 @@ namespace Realm {
             pval = (*clist)[lrand48() % clist->size()];
             break;
           default:
-            assert(false); // invalid query
+            // invalid query
+            abort();
             break;
           }
         }
@@ -2729,7 +2736,8 @@ namespace Realm {
             mval = (*clist)[lrand48() % clist->size()];
             break;
           default:
-            assert(false); // invalid query
+            // invalid query
+            abort();
             break;
           }
         }
