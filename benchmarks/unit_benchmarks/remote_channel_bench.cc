@@ -22,17 +22,16 @@
 
 class MockChannel : public Realm::Channel {
   public:
-    MockChannel(Realm::XferDesKind kind, Realm::NodeID src_node, Realm::NodeID dst_node) : Realm::Channel(kind)
+    MockChannel(Realm::XferDesKind kind) : Realm::Channel(kind)
     {
       // create some memories
       std::vector<Realm::Memory> src_memories;
       std::vector<Realm::Memory> dst_memories;
-      int num_memories = 10;
-      for (int i = 0; i < num_memories; i++) {
+      for (int i = 0; i < num_memories_per_node; i++) {
         Realm::Memory mem = Realm::ID::make_memory(src_node, i).convert<Realm::Memory>();
         src_memories.push_back(mem);
       }
-      for (int i = 0; i < num_memories; i++) {
+      for (int i = 0; i < num_memories_per_node; i++) {
         Realm::Memory mem = Realm::ID::make_memory(dst_node, i).convert<Realm::Memory>();
         dst_memories.push_back(mem);
       }
@@ -64,6 +63,12 @@ class MockChannel : public Realm::Channel {
     virtual void wakeup_xd(Realm::XferDes *xd) override {
       return;
     }
+
+    void add_a_path(std::vector<Realm::Memory> src_mems, std::vector<Realm::Memory> dst_mems, unsigned bandwidth, unsigned latency,
+                    unsigned frag_overhead, Realm::XferDesKind xd_kind, int max_dim)
+    {
+      add_path(src_mems, dst_mems, bandwidth, latency, frag_overhead, xd_kind).set_max_dim(max_dim);
+    }
 };
 
 class RemoteChannelFixture : public benchmark::Fixture 
@@ -76,13 +81,34 @@ class RemoteChannelFixture : public benchmark::Fixture
         num_channels = std::atoi(channels_env);
       }
 
+      std::vector<Realm::Memory> src_memories;
+      std::vector<Realm::Memory> dst_memories;
+      src_memories.reserve(num_memories);
+      dst_memories.reserve(num_memories);
+      for (int i = 0; i < num_memories; i++) {
+        Realm::Memory mem = Realm::ID::make_memory(0, i).convert<Realm::Memory>();
+        src_memories.push_back(mem);
+      }
+
       channels.reserve(num_channels);
+      // heer are the configuration values used for the channel
+      constexpr int bandwidth = 10000;
+      constexpr int latency = 100;
+      constexpr int frag_overhead = 200;
+      constexpr int max_dim = 3;
       for (int i = 0; i < num_channels; i++) {
-        MockChannel channel(Realm::XferDesKind::XFER_MEM_CPY, 0, i+1);
+        int dst_node = i + 1;
+        MockChannel channel(Realm::XferDesKind::XFER_MEM_CPY);
+        for (int j = 0; j < num_memories; j++) {
+          Realm::Memory mem = Realm::ID::make_memory(dst_node, j).convert<Realm::Memory>();
+          dst_memories.push_back(mem);
+        }
+        channel.add_a_path(src_memories, dst_memories, bandwidth, latency, frag_overhead, Realm::XferDesKind::XFER_MEM_CPY, max_dim);
+        dst_memories.clear();
         std::vector<Realm::Channel::SupportedPath> paths = channel.get_paths();
 
         std::unique_ptr<Realm::SimpleRemoteChannelInfo> rci = std::make_unique<Realm::SimpleRemoteChannelInfo>(
-                                                                i+1, Realm::XferDesKind::XFER_MEM_CPY, 0, paths);
+                                                                dst_node, Realm::XferDesKind::XFER_MEM_CPY, 0, paths);
         Realm::RemoteChannel* rc = rci->create_remote_channel();
         rc->register_redop(0);
         rc->has_non_redop_path = true;
@@ -96,6 +122,7 @@ class RemoteChannelFixture : public benchmark::Fixture
   
     std::vector<std::unique_ptr<Realm::RemoteChannel>> channels;
     int num_channels{100};
+    int num_memories{10};
 };
 
 BENCHMARK_F(RemoteChannelFixture, BenchSupportsChannel)(benchmark::State& state) {
@@ -106,11 +133,13 @@ BENCHMARK_F(RemoteChannelFixture, BenchSupportsChannel)(benchmark::State& state)
     Realm::Memory dst_mem = Realm::ID::make_memory(i+1, 0).convert<Realm::Memory>();
     channel_copy_infos[i] = Realm::ChannelCopyInfo{src_mem, dst_mem};
   }
+  size_t bytes = 10000; // we benchmark the case with 10KB transfer. this number does not matter in this benchmark
+  int redop_id = 0; // we benchmark the case with no reduction
   for (auto _ : state) {
     uint64_t best_time = 0;
     Realm::XferDesKind best_kind = Realm::XferDesKind::XFER_NONE;
     for (int i = 0; i < num_channels; i++) {
-      best_time = channels[i]->supports_path(channel_copy_infos[i], 0, 0, 0, 10000, nullptr, nullptr, &best_kind, nullptr, nullptr);
+      best_time = channels[i]->supports_path(channel_copy_infos[i], 0, 0, redop_id, bytes, nullptr, nullptr, &best_kind, nullptr, nullptr);
       assert(best_time > 0);
     }
   }
