@@ -54,8 +54,6 @@ namespace Realm {
 
     virtual void reset(void) = 0;
     virtual bool done(void) = 0;
-    virtual size_t get_base_offset(void) const;
-    virtual size_t get_address_size(void) const;
 
     // flag bits to control iterators
     enum
@@ -140,8 +138,6 @@ namespace Realm {
     virtual void confirm_step(void);
     virtual void cancel_step(void);
 
-    virtual size_t get_base_offset(void) const;
-
     virtual bool get_addresses(AddressList &addrlist,
                                const InstanceLayoutPieceBase *&nonaffine);
 
@@ -162,6 +158,136 @@ namespace Realm {
     bool tentative_valid;
     int dim_order[N];
   };
+
+  struct AffinePieceInfo {
+    uintptr_t base_offset;
+    size_t field_size;
+    int dim;
+
+    size_t extents[REALM_MAX_DIM];
+    size_t strides[REALM_MAX_DIM];
+
+    int lo[REALM_MAX_DIM];
+    int hi[REALM_MAX_DIM];
+  };
+
+  class AffinePieceIteratorBase {
+  public:
+    virtual ~AffinePieceIteratorBase() = default;
+    virtual bool next(AffinePieceInfo &out) = 0;
+  };
+
+  template <int N, typename T>
+  class AffinePieceIteratorT : public AffinePieceIteratorBase {
+  public:
+    AffinePieceIteratorT(RegionInstanceImpl *inst, const std::vector<int> &fids,
+                         const std::vector<size_t> &offs, const std::vector<size_t> &szs);
+
+    bool next(AffinePieceInfo &out) override;
+
+  private:
+    bool advance(void);
+
+    RegionInstanceImpl *inst_impl;
+    const InstanceLayout<N, T> *layout;
+    std::vector<FieldID> fields;
+    std::vector<size_t> fld_offs, fld_sizes;
+    size_t piece_idx = 0, field_idx = 0;
+    const AffineLayoutPiece<N, T> *cur_piece = nullptr;
+    size_t cur_field_size = 0;
+    size_t cur_base_off = 0;
+    bool valid = false;
+  };
+
+  template <int N, typename T>
+  AffinePieceIteratorT<N, T>::AffinePieceIteratorT(RegionInstanceImpl *inst,
+                                                   const std::vector<int> &fids,
+                                                   const std::vector<size_t> &offs,
+                                                   const std::vector<size_t> &szs)
+    : inst_impl(inst)
+    , layout(checked_cast<const InstanceLayout<N, T> *>(inst->metadata.layout))
+    , fields(fids.begin(), fids.end())
+    , fld_offs(offs)
+    , fld_sizes(szs)
+  {
+    advance();
+  }
+
+  template <int N, typename T>
+  bool AffinePieceIteratorT<N, T>::advance()
+  {
+    while(field_idx < fields.size()) {
+      FieldID fid = fields[field_idx];
+      size_t fld_off = fld_offs[field_idx];
+      size_t fld_size = fld_sizes[field_idx];
+      auto it = layout->fields.find(fid);
+      const auto &plist = layout->piece_lists[it->second.list_idx].pieces;
+
+      while(piece_idx < plist.size()) {
+        auto *base = plist[piece_idx++];
+        if(base->layout_type != PieceLayoutTypes::AffineLayoutType) {
+          continue;
+        }
+
+        cur_piece = static_cast<const AffineLayoutPiece<N, T> *>(base);
+        cur_field_size = fld_size;
+        cur_base_off = inst_impl->metadata.inst_offset + cur_piece->offset + fld_off +
+                       cur_piece->strides.dot(cur_piece->bounds.lo);
+
+        valid = true;
+        return true;
+      }
+
+      // next field
+      field_idx++;
+      piece_idx = 0;
+    }
+    valid = false;
+    return false;
+  }
+
+  template <int N, typename T>
+  bool AffinePieceIteratorT<N, T>::next(AffinePieceInfo &out)
+  {
+    if(!valid) {
+      return false;
+    }
+
+    out.base_offset = cur_base_off;
+    out.field_size = cur_field_size;
+    out.dim = N;
+
+    const Rect<N, T> &b = cur_piece->bounds;
+
+    for(int d = 0; d < N; d++) {
+      out.lo[d] = b.lo[d];
+      out.hi[d] = b.hi[d];
+    }
+
+    const size_t w_bytes = cur_field_size * (static_cast<size_t>(b.hi[0] - b.lo[0] + 1));
+
+    out.extents[0] = (b.hi[0] - b.lo[0] + 1);
+    out.strides[0] = w_bytes;
+
+    if(N >= 2) {
+      out.extents[1] = (b.hi[1] - b.lo[1] + 1);
+      out.strides[1] = cur_piece->strides[1];
+    } else {
+      out.extents[1] = 1;
+      out.strides[1] = 0;
+    }
+
+    if(N >= 3) {
+      out.extents[2] = (b.hi[2] - b.lo[2] + 1);
+      out.strides[2] = cur_piece->strides[2];
+    } else {
+      out.extents[2] = 1;
+      out.strides[2] = 0;
+    }
+
+    advance();
+    return true;
+  }
 
   ////////////////////////////////////////////////////////////////////////
   //
@@ -305,6 +431,12 @@ namespace Realm {
                     const std::vector<FieldID> &fields,
                     const std::vector<size_t> &fld_offsets,
                     const std::vector<size_t> &fld_sizes) const = 0;
+
+    virtual AffinePieceIteratorBase *
+    create_piece_iterator(RegionInstance inst, const std::vector<int> &dim_order,
+                          const std::vector<FieldID> &fields,
+                          const std::vector<size_t> &fld_offsets,
+                          const std::vector<size_t> &fld_sizes) const = 0;
 
     virtual void print(std::ostream &os) const = 0;
   };
@@ -535,6 +667,7 @@ namespace Realm {
     virtual size_t address_size() const = 0;
 
     virtual XferDesFactory *create_addrsplit_factory(size_t bytes_per_element) const = 0;
+    virtual XferDesFactory *create_factory(Channel *channel) const = 0;
 
     bool structured;
     FieldID field_id;
@@ -584,9 +717,11 @@ namespace Realm {
     virtual size_t address_size() const;
 
     virtual XferDesFactory *create_addrsplit_factory(size_t bytes_per_element) const;
+    virtual XferDesFactory *create_factory(Channel *channel) const;
 
     IndexSpace<N, T> domain;
     std::vector<IndexSpace<N2, T2>> spaces;
+    std::vector<SparsityMapEntry<N, T>> entries;
     Channel *addr_split_channel;
   };
 

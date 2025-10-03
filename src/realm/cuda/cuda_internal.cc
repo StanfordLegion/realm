@@ -20,6 +20,15 @@
 #include "realm/cuda/cuda_access.h"
 #include "realm/cuda/cuda_memcpy.h"
 
+#include "realm/indexspace.h"
+#include "realm/sparsity.h"
+#include "realm/runtime_impl.h"
+#include "realm/transfer/address_list.h"
+
+#include "realm/inst_layout.h"
+#include "realm/inst_impl.h"
+#include <cstdint>
+
 namespace Realm {
 
   extern Logger log_xd;
@@ -322,6 +331,7 @@ namespace Realm {
       AffineCopyPair<3> &copy_info = copy_infos.subrects[copy_infos.num_rects++];
       uintptr_t in_offset = in_alc.get_offset();
       uintptr_t out_offset = out_alc.get_offset();
+
       // the reported dim is reduced for partially consumed address
       // ranges - whatever we get can be assumed to be regular
       int in_dim = in_alc.get_dim();
@@ -885,46 +895,27 @@ namespace Realm {
     //
     // class GPUIndirectXferDes
 
-    static void launch_indirect_kernel(GPU *gpu, GPUStream *stream, size_t num_dims,
-                                       size_t addr_type_size, size_t field_size,
-                                       size_t bytes, const std::vector<size_t> &strides,
-                                       uintptr_t in_base, uintptr_t out_base,
-                                       uintptr_t src_ind_base, uintptr_t dst_ind_base)
-    {
-      MemcpyIndirectInfo<3, size_t> memcpy_info;
-      memset(&memcpy_info, 0, sizeof(MemcpyIndirectInfo<3, size_t>));
-      memcpy_info.src_ind_addr = src_ind_base;
-      memcpy_info.dst_ind_addr = dst_ind_base;
-      memcpy_info.src_addr = in_base;
-      memcpy_info.dst_addr = out_base;
-      memcpy_info.field_size = field_size;
-      assert(memcpy_info.field_size > 0);
-      memcpy_info.volume = bytes / field_size;
-      assert(memcpy_info.volume > 0);
-      for(size_t i = 0; i < num_dims; i++) {
-        memcpy_info.src_strides[i] = strides[i] / field_size;
-        memcpy_info.dst_strides[i] = strides[i] / field_size;
-      }
-      gpu->launch_indirect_copy_kernel(&memcpy_info, num_dims, addr_type_size,
-                                       memcpy_info.field_size, memcpy_info.volume,
-                                       stream);
-    }
-
     GPUIndirectXferDes::GPUIndirectXferDes(
         uintptr_t _dma_op, Channel *_channel, NodeID _launch_node, XferDesID _guid,
         const std::vector<XferDesPortInfo> &inputs_info,
-        const std::vector<XferDesPortInfo> &outputs_info, int _priority,
-        XferDesRedopInfo _redop_info)
+        const std::vector<XferDesPortInfo> &outputs_info, int _priority, XferDesRedopInfo,
+        const void *_domain_rects_base, size_t _num_domain_rects, size_t _rect_bytes,
+        size_t _volume)
       : XferDes(_dma_op, _channel, _launch_node, _guid, inputs_info, outputs_info,
-                _priority, 0, 0)
+                _priority, nullptr, 0)
+      , domain_rects_base(_domain_rects_base)
+      , num_domain_rects(_num_domain_rects)
+      , rect_bytes(_rect_bytes)
+      , volume(_volume)
     {
       kind = XFER_GPU_IN_FB;
 
       src_gpus.resize(inputs_info.size(), 0);
       for(size_t i = 0; i < input_ports.size(); i++) {
         src_gpus[i] = mem_to_gpu(input_ports[i].mem);
-        if(input_ports[i].mem->kind == MemoryImpl::MKIND_GPUFB)
+        if(input_ports[i].mem->kind == MemoryImpl::MKIND_GPUFB) {
           assert(src_gpus[i]);
+        }
       }
 
       dst_gpus.resize(outputs_info.size(), 0);
@@ -935,201 +926,328 @@ namespace Realm {
           assert(dst_gpus[i]);
         } else {
           if(NodeID(ID(output_ports[i].mem->me).memory_owner_node()) !=
-             Network::my_node_id)
+             Network::my_node_id) {
             dst_is_ipc[i] = true;
+          }
         }
       }
     }
 
-    long GPUIndirectXferDes::get_requests(Request **requests, long nr)
+    GPUIndirectXferDes::~GPUIndirectXferDes() { domain_inst.destroy(); }
+
+    // TODO: TEST ME!
+    class DeferredHtoDUpload : public EventWaiter {
+    public:
+      DeferredHtoDUpload(Cuda::GPU *gpu, RegionInstance inst, const void *src,
+                         size_t bytes)
+        : gpu(gpu)
+        , inst(inst)
+        , src(src)
+        , bytes(bytes)
+      {
+        finish_event = GenEventImpl::create_genevent()->current_event();
+      }
+
+      void defer(Event wait_on) { EventImpl::add_waiter(wait_on, this); }
+
+      void event_triggered(bool poisoned, TimeLimit work_until) override
+      {
+        if(!poisoned) {
+          RegionInstanceImpl *impl = get_runtime()->get_instance_impl(inst);
+          CUdeviceptr dptr = static_cast<CUdeviceptr>(impl->metadata.inst_offset);
+          Cuda::AutoGPUContext agc(gpu);
+          CHECK_CU(CUDA_DRIVER_FNPTR(cuMemcpyHtoD)(dptr, src, bytes));
+        }
+        GenEventImpl::trigger(finish_event, poisoned, work_until);
+        delete this;
+      }
+
+      void print(std::ostream &os) const override {}
+
+      Event get_finish_event(void) const override { return finish_event; }
+
+    private:
+      Cuda::GPU *gpu;
+      RegionInstance inst;
+      const void *src;
+      size_t bytes;
+      Event finish_event;
+    };
+
+    Event GPUIndirectXferDes::request_metadata()
+    {
+      Event event = XferDes::request_metadata();
+
+      GPUIndirectChannel *gchannel = static_cast<GPUIndirectChannel *>(channel);
+      GPU *gpu = gchannel->get_gpu();
+
+      Memory dyn_mem = (gpu && gpu->fb_dmem) ? gpu->fb_dmem->me : Memory::NO_MEMORY;
+      assert(dyn_mem.exists());
+
+      Rect<1, int> bounds(Point<1, int>(0), Point<1, int>(num_domain_rects - 1));
+      std::vector<size_t> field_sizes(1, rect_bytes);
+      Event alloc_event = RegionInstance::create_instance(
+          domain_inst, dyn_mem, bounds, field_sizes, 0, ProfilingRequestSet());
+
+      const size_t bytes = num_domain_rects * rect_bytes;
+
+      Event finish;
+      if(!alloc_event.has_triggered()) {
+        auto *upload = new DeferredHtoDUpload(gpu, domain_inst, domain_rects_base, bytes);
+        upload->defer(alloc_event);
+        finish = Event::merge_events(event, upload->get_finish_event());
+      } else {
+        RegionInstanceImpl *impl = get_runtime()->get_instance_impl(domain_inst);
+        MemoryImpl *mem = impl->mem_impl;
+        assert(mem != nullptr);
+        CUdeviceptr dptr = reinterpret_cast<CUdeviceptr>(
+            mem->get_direct_ptr(impl->metadata.inst_offset, 0));
+        Cuda::AutoGPUContext agc(gpu);
+        CHECK_CU(CUDA_DRIVER_FNPTR(cuMemcpyHtoD)(dptr, domain_rects_base, bytes));
+        finish = event;
+      }
+
+      return finish;
+    }
+
+    long GPUIndirectXferDes::get_requests(Request **, long)
     {
       // unused
       assert(0);
       return 0;
     }
 
+    namespace {
+
+      template <typename Vec>
+      inline size_t min_field_bytes(const Vec &v)
+      {
+        size_t b = SIZE_MAX;
+        for(auto &p : v) {
+          b = std::min(b, p.field_size);
+        }
+        return b;
+      }
+
+      template <typename Vec>
+      inline int min_dim(const Vec &v)
+      {
+        int d = REALM_MAX_DIM;
+        for(auto &p : v) {
+          d = std::min(d, p.dim);
+        }
+        return d;
+      }
+
+      inline size_t clamp_span(size_t want, XferDes::XferPort *p)
+      {
+        if(p->peer_guid == XferDes::XFERDES_NO_GUID) {
+          return want;
+        }
+        size_t span = p->seq_remote.span_exists(p->local_bytes_total, want);
+        if(span > (p->ib_size >> 1)) {
+          span = std::max<size_t>(1, p->ib_size >> 1);
+        }
+        return std::min(want, span);
+      }
+
+    } // namespace
+
+    void GPUIndirectXferDes::fetch_indirection_meta(XferPort *ind_port)
+    {
+      if(total_points != 0 || !ind_pieces.empty()) {
+        return;
+      }
+
+      AffinePieceInfo p;
+      size_t points = 0;
+      while(ind_port->piece_iter->next(p)) {
+        size_t elems = p.extents[0];
+        if(p.dim >= 2) {
+          elems *= p.extents[1];
+        }
+        if(p.dim >= 3) {
+          elems *= p.extents[2];
+        }
+        points += elems;
+        ind_pieces.emplace_back(p);
+      }
+      assert(ind_pieces.size() == 1);
+      total_points = std::min(volume, points);
+    }
+
     bool GPUIndirectXferDes::progress_xd(GPUIndirectChannel *channel,
                                          TimeLimit work_until)
     {
+      constexpr size_t MAX_CHUNK = 4 << 20;
+      constexpr size_t MIN_CHUNK = 64 << 10;
+
       bool did_work = false;
-      // TODO: add span
-      ReadSequenceCache rseqcache(this, 2 << 20);
 
-      while(true) {
-        size_t min_xfer_size = 4 << 20;
-        const InstanceLayoutPieceBase *in_nonaffine, *out_nonaffine;
+      ReadSequenceCache rseqcache(this, MIN_CHUNK);
 
-        size_t in_span_start = 0, out_span_start = 0;
-        XferPort *in_port = 0, *out_port = 0;
-        GPU *in_gpu = 0, *out_gpu = 0;
-        bool out_is_ipc = false;
-
-        if(input_control.current_io_port >= 0) {
-          in_port = &input_ports[input_control.current_io_port];
-          in_gpu = this->src_gpus[input_control.current_io_port];
-          in_span_start = in_port->local_bytes_total;
-        }
-
-        if(output_control.current_io_port >= 0) {
-          out_port = &output_ports[output_control.current_io_port];
-          out_gpu = this->dst_gpus[output_control.current_io_port];
-          out_is_ipc = this->dst_is_ipc[output_control.current_io_port];
-          out_span_start = out_port->local_bytes_total;
-        }
-
-        assert(in_port != nullptr);
-        assert(out_port != nullptr);
-
-        size_t max_bytes =
-            get_addresses(min_xfer_size, &rseqcache, in_nonaffine, out_nonaffine);
-        log_gpudma.info() << "cuda gather/scatter copy"
-                          << " xd=" << std::hex << guid << std::dec
-                          << " min_xfer_size=" << min_xfer_size
-                          << " max_bytes=" << max_bytes << " xd=" << std::hex
-                          << out_port->peer_guid << std::dec;
-
-        if(max_bytes == 0) {
+      while(!work_until.is_expired()) {
+        size_t control_count = update_control_info(&rseqcache);
+        if(control_count == 0) {
+          // begin_completion();
           break;
         }
 
-        size_t total_bytes = 0;
+        XferPort *inp_port = &input_ports[input_control.current_io_port];
+        XferPort *out_port = &output_ports[output_control.current_io_port];
 
-        uintptr_t in_base = 0;
-        if(!in_nonaffine) {
-          in_base = reinterpret_cast<uintptr_t>(in_port->mem->get_direct_ptr(0, 0));
+        int ind_idx = inp_port->indirect_port_idx;
+        assert(ind_idx >= 0);
+
+        XferPort *ind_port = &input_ports[ind_idx];
+        fetch_indirection_meta(ind_port);
+
+        size_t coord_bytes = ind_pieces[0].field_size;
+        size_t max_bytes = std::min(control_count, MAX_CHUNK);
+        max_bytes = clamp_span(max_bytes, inp_port);
+        max_bytes = clamp_span(max_bytes, out_port);
+
+        if(max_bytes < MIN_CHUNK) {
+          assert(0);
+          return did_work;
         }
+
+        if(src_pieces.empty()) {
+          AffinePieceInfo pinfo;
+          while(inp_port->piece_iter->next(pinfo)) {
+            src_pieces.emplace_back(pinfo);
+          }
+        }
+
+        if(dst_pieces.empty()) {
+          AffinePieceInfo pinfo;
+          while(out_port->piece_iter->next(pinfo)) {
+            dst_pieces.emplace_back(pinfo);
+          }
+        }
+
+        size_t field_bytes =
+            std::min(min_field_bytes(src_pieces), min_field_bytes(dst_pieces));
+        int dim = std::min(min_dim(src_pieces), min_dim(dst_pieces));
+
+        size_t ind_budget = clamp_span(total_points * coord_bytes, ind_port);
+        size_t points =
+            std::min(total_points - points_done,
+                     std::min(ind_budget / coord_bytes, max_bytes / field_bytes));
+        if(points == 0) {
+          assert(0);
+          // begin_completion();
+          break;
+        }
+
+        GPU *inp_gpu = src_gpus[input_control.current_io_port];
+        GPU *out_gpu = dst_gpus[output_control.current_io_port];
+        bool out_ipc = dst_is_ipc[output_control.current_io_port];
 
         uintptr_t out_base = 0;
-        const GPU::CudaIpcMapping *out_mapping = 0;
-        if(!out_nonaffine) {
-          if(out_is_ipc) {
-            out_mapping = in_gpu->find_ipc_mapping(out_port->mem->me);
-            assert(out_mapping);
-            out_base = out_mapping->local_base;
-          } else {
-            out_base = reinterpret_cast<uintptr_t>(out_port->mem->get_direct_ptr(0, 0));
+        const GPU::CudaIpcMapping *out_map = nullptr;
+        if(out_ipc) {
+          out_map = inp_gpu->find_ipc_mapping(out_port->mem->me);
+          assert(out_map);
+          out_base = out_map->local_base;
+        } else {
+          out_base = reinterpret_cast<uintptr_t>(out_port->mem->get_direct_ptr(0, 0));
+        }
+
+        MemcpyIndirectInfo<3, size_t> memcpy_info;
+        memset(&memcpy_info, 0, sizeof(MemcpyIndirectInfo<3, size_t>));
+
+        memcpy_info.num_src_pieces = src_pieces.size();
+        for(size_t i = 0; i < src_pieces.size(); i++) {
+          memcpy_info.src_pieces[i].dim = src_pieces[i].dim;
+          memcpy_info.src_pieces[i].base = reinterpret_cast<uintptr_t>(
+              inp_port->mem->get_direct_ptr(src_pieces[i].base_offset, 0));
+          memcpy_info.src_pieces[i].strides[0] = src_pieces[i].field_size;
+          memcpy_info.src_pieces[i].strides[1] = src_pieces[i].strides[0];
+          memcpy_info.src_pieces[i].strides[2] = src_pieces[i].strides[1];
+          for(int d = 0; d < src_pieces[i].dim; d++) {
+            memcpy_info.src_pieces[i].lo[d] = src_pieces[i].lo[d];
+            memcpy_info.src_pieces[i].hi[d] = src_pieces[i].hi[d];
+            memcpy_info.src_pieces[i].strides[0] /= field_bytes;
           }
         }
 
-        TransferIterator::AddressInfo addr_info;
-        memset(&addr_info, 0, sizeof(TransferIterator::AddressInfo));
-
-        size_t addr_size = 0;
-
-        AddressListCursor &in_alc = in_port->addrcursor;
-        AddressListCursor &out_alc = out_port->addrcursor;
-
-        size_t write_ind_bytes = 0;
-        uintptr_t dst_ind_base = 0;
-        if(out_port->indirect_port_idx >= 0) {
-          // scatter
-          out_port->iter->step(max_bytes, addr_info, 0, 0);
-          addr_size = out_port->iter->get_address_size();
-
-          dst_ind_base = reinterpret_cast<uintptr_t>(
-              input_ports[out_port->indirect_port_idx].mem->get_direct_ptr(
-                  out_port->iter->get_base_offset(), 0));
-
-          out_base += addr_info.base_offset;
-          dst_ind_base += (out_alc.get_offset() / addr_info.bytes_per_chunk) * addr_size;
-        } else {
-          out_base += out_alc.get_offset();
-        }
-
-        size_t read_ind_bytes = 0;
-        uintptr_t src_ind_base = 0;
-        if(in_port->indirect_port_idx >= 0) {
-          // gather
-          in_port->iter->step(max_bytes, addr_info, 0, 0);
-          addr_size = in_port->iter->get_address_size();
-
-          src_ind_base = reinterpret_cast<uintptr_t>(
-              input_ports[in_port->indirect_port_idx].mem->get_direct_ptr(
-                  in_port->iter->get_base_offset(), 0));
-
-          in_base += addr_info.base_offset;
-          src_ind_base += (in_alc.get_offset() / addr_info.bytes_per_chunk) * addr_size;
-        } else {
-          in_base += in_alc.get_offset();
-        }
-
-        log_gpudma.info() << "cuda gathe/scatter bytes_per_chunk="
-                          << addr_info.bytes_per_chunk
-                          << " num_lines=" << addr_info.num_lines
-                          << " line_stride=" << addr_info.line_stride
-                          << " num_planes=" << addr_info.num_planes
-                          << " plane_stride=" << addr_info.plane_stride
-                          << " base_offset=" << in_port->iter->get_base_offset();
-
-        std::vector<size_t> strides{addr_info.bytes_per_chunk, addr_info.line_stride,
-                                    addr_info.plane_stride};
-        size_t field_size = strides[0];
-        size_t num_dims =
-            addr_info.num_planes > 0 ? 3 : (addr_info.num_lines > 0 ? 2 : 1);
-        for(size_t i = 1; i < num_dims; i++) {
-          if(strides[i] > 0 && field_size >= strides[i]) {
-            field_size = strides[i];
+        memcpy_info.num_dst_pieces = dst_pieces.size();
+        for(size_t i = 0; i < dst_pieces.size(); i++) {
+          memcpy_info.dst_pieces[i].dim = dst_pieces[i].dim;
+          memcpy_info.dst_pieces[i].base = out_base + dst_pieces[i].base_offset;
+          memcpy_info.dst_pieces[i].strides[0] = dst_pieces[i].field_size;
+          memcpy_info.dst_pieces[i].strides[1] = dst_pieces[i].strides[0];
+          memcpy_info.dst_pieces[i].strides[2] = dst_pieces[i].strides[1];
+          for(int d = 0; d < dst_pieces[i].dim; d++) {
+            memcpy_info.dst_pieces[i].lo[d] = dst_pieces[i].lo[d];
+            memcpy_info.dst_pieces[i].hi[d] = dst_pieces[i].hi[d];
+            memcpy_info.dst_pieces[i].strides[0] /= field_bytes;
           }
         }
 
-        size_t addr_type_size = addr_size / num_dims;
+        memcpy_info.ind_base = reinterpret_cast<uintptr_t>(
+            ind_port->mem->get_direct_ptr(ind_pieces[0].base_offset, 0));
+        memcpy_info.field_size = field_bytes;
 
-        if(in_port->indirect_port_idx >= 0)
-          read_ind_bytes = (max_bytes / field_size) * addr_size;
-        else
-          write_ind_bytes = (max_bytes / field_size) * addr_size;
+        memcpy_info.ind_strides[0] = ind_pieces[0].field_size;
+        memcpy_info.ind_strides[1] = ind_pieces[0].strides[0];
+        memcpy_info.ind_strides[2] = ind_pieces[0].strides[1];
+        for(int i = 0; i < dim; i++) {
+          memcpy_info.ind_strides[i] /= coord_bytes;
+        }
 
-        auto stream = select_stream(out_gpu, in_gpu, channel->get_gpu(), out_mapping,
-                                    in_port->mem, out_port->mem);
+        memcpy_info.point_pos = points_done;
+        memcpy_info.volume = points;
+
+        {
+
+          RegionInstanceImpl *impl = get_runtime()->get_instance_impl(domain_inst);
+          memcpy_info.domain_base = reinterpret_cast<uintptr_t>(
+              impl->mem_impl->get_direct_ptr(impl->metadata.inst_offset, 0));
+          memcpy_info.domain_rects = num_domain_rects;
+        }
+
+        const size_t inp_span_start = inp_port->local_bytes_total;
+        const size_t out_span_start = out_port->local_bytes_total;
+        rseqcache.add_span(input_control.current_io_port, inp_span_start, max_bytes);
+
+        auto stream = select_stream(out_gpu, inp_gpu, channel->get_gpu(), out_map,
+                                    inp_port->mem, out_port->mem);
+
         AutoGPUContext agc(stream->get_gpu());
+        stream->get_gpu()->launch_indirect_copy_kernel(&memcpy_info, dim, coord_bytes,
+                                                       field_bytes, points, stream);
+        add_reference();
 
-        // We can't do gather-scatter yet.
-        assert(!(out_port->indirect_port_idx >= 0 && in_port->indirect_port_idx >= 0));
-        assert(!in_nonaffine && !out_nonaffine);
+        const size_t bytes_to_fence = points * field_bytes;
+        stream->add_notification(new GPUTransferCompletion(
+            this, input_control.current_io_port, inp_span_start, bytes_to_fence,
+            output_control.current_io_port, out_span_start, bytes_to_fence));
 
-        log_gpudma.info() << "\t launching cuda gather/scatter "
-                          << "xd:" << std::hex << guid << std::dec
-                          << " bytes:" << max_bytes << " addr_size:" << addr_size
-                          << " num_dims:" << num_dims
-                          << " addr_type_size:" << addr_type_size;
+        inp_port->local_bytes_total += bytes_to_fence;
+        inp_port->local_bytes_cons.fetch_add(bytes_to_fence);
+        out_port->local_bytes_total += bytes_to_fence;
+        out_port->local_bytes_cons.fetch_add(bytes_to_fence);
+        input_control.remaining_count -= bytes_to_fence;
+        output_control.remaining_count -= bytes_to_fence;
+        points_done += points;
 
-        launch_indirect_kernel(in_gpu, stream, num_dims, addr_type_size, field_size,
-                               max_bytes, strides, in_base, out_base, src_ind_base,
-                               dst_ind_base);
+        did_work = true;
 
-        in_alc.advance(0, max_bytes);
-        out_alc.advance(0, max_bytes);
+        bool finished =
+            ((input_control.control_port_idx >= 0) &&
+             (input_control.remaining_count == 0) && input_control.eos_received) ||
+            ((output_control.control_port_idx >= 0) &&
+             (output_control.remaining_count == 0) && output_control.eos_received) ||
+            (points_done >= total_points);
 
-        // TODO(apryakhin@): Add control flow
-        total_bytes += max_bytes;
-        size_t bytes_to_fence = total_bytes;
-        if((total_bytes >= min_xfer_size) && work_until.is_expired()) {
+        if(finished) {
+          begin_completion();
+        }
+
+        if(finished || work_until.is_expired()) {
           break;
-        }
-
-        if(bytes_to_fence > 0) {
-          add_reference();
-          log_gpudma.info() << "cuda gather/scatter fence: stream=" << stream << " "
-                            << " xd=" << std::hex << guid << std::dec
-                            << " bytes:" << bytes_to_fence
-                            << " in_spart_start:" << in_span_start
-                            << " out_span_start:" << out_span_start
-                            << " read_ind_bytes:" << read_ind_bytes
-                            << " write_ind_bytes:" << write_ind_bytes;
-
-          stream->add_notification(new GPUIndirectTransferCompletion(
-              this, input_control.current_io_port, in_span_start, total_bytes,
-              output_control.current_io_port, out_span_start, bytes_to_fence,
-              in_port->indirect_port_idx, 0, read_ind_bytes, out_port->indirect_port_idx,
-              0, write_ind_bytes));
-        }
-
-        if(total_bytes > 0) {
-          did_work = true;
-          bool done = record_address_consumption(total_bytes, total_bytes);
-          if(done || work_until.is_expired()) {
-            break;
-          }
         }
       }
 
@@ -1286,7 +1404,12 @@ namespace Realm {
       return Memory::NO_MEMORY;
     }
 
-    bool GPUIndirectChannel::needs_wrapping_iterator() const { return true; }
+    TransferIterator *GPUIndirectChannel::get_iterator(
+        RegionInstance inst, const std::vector<FieldID> &fields,
+        const std::vector<size_t> &fld_offsets, const std::vector<size_t> &fld_sizes)
+    {
+      return nullptr;
+    }
 
     uint64_t GPUIndirectChannel::supports_path(
         ChannelCopyInfo channel_copy_info, CustomSerdezID src_serdez_id,
@@ -1310,6 +1433,60 @@ namespace Realm {
              (NodeID(ID(memory).memory_owner_node()) == node);
     }
 
+    class CudaIndirectChannelFactory : public XferDesFactory {
+    public:
+      CudaIndirectChannelFactory(Channel *_channel, const void *_domain_rects_base,
+                                 size_t _num_domain_rects, size_t _rect_bytes,
+                                 size_t volume)
+        : channel(_channel)
+        , domain_rects_base(_domain_rects_base)
+        , num_domain_rects(_num_domain_rects)
+        , rect_bytes(_rect_bytes)
+        , volume(volume)
+      {}
+
+      ~CudaIndirectChannelFactory() override {}
+
+    public:
+      // void release() override {}
+      bool needs_release() override { return false; }
+
+      void create_xfer_des(uintptr_t dma_op, NodeID launch_node, NodeID target_node,
+                           XferDesID guid,
+                           const std::vector<XferDesPortInfo> &inputs_info,
+                           const std::vector<XferDesPortInfo> &outputs_info, int priority,
+                           XferDesRedopInfo redop_info, const void *, size_t,
+                           size_t) override
+      {
+        if(target_node == Network::my_node_id) {
+          XferDes *xd = new GPUIndirectXferDes(
+              dma_op, channel, launch_node, guid, inputs_info, outputs_info, priority,
+              redop_info, domain_rects_base, num_domain_rects, rect_bytes, volume);
+          channel->enqueue_ready_xd(xd);
+        } else {
+          // TODO: IMPLEMENT REMOTE CREATION
+          assert(0);
+        }
+      }
+
+    private:
+      Channel *channel{nullptr};
+      const void *domain_rects_base{nullptr};
+      size_t num_domain_rects{0};
+      size_t rect_bytes{0};
+      size_t volume{0};
+    };
+
+    XferDesFactory *
+    GPUIndirectChannel::get_factory(const Channel::ChannelFactoryInfo *info)
+    {
+      assert(info);
+      factory = new CudaIndirectChannelFactory(this, info->domain_rects_base,
+                                               info->num_domain_rects, info->rect_bytes,
+                                               info->volume);
+      return factory;
+    }
+
     XferDes *GPUIndirectChannel::create_xfer_des(
         uintptr_t dma_op, NodeID launch_node, XferDesID guid,
         const std::vector<XferDesPortInfo> &inputs_info,
@@ -1317,10 +1494,9 @@ namespace Realm {
         XferDesRedopInfo redop_info, const void *fill_data, size_t fill_size,
         size_t fill_total)
     {
-      // assert(redop_info.id == 0);
+      assert(0);
       assert(fill_size == 0);
-      return new GPUIndirectXferDes(dma_op, this, launch_node, guid, inputs_info,
-                                    outputs_info, priority, redop_info);
+      return nullptr;
     }
 
     long GPUIndirectChannel::submit(Request **requests, long nr)
@@ -1412,6 +1588,14 @@ namespace Realm {
       : RemoteChannel(_remote_ptr, indirect_memories)
     {}
 
+    TransferIterator *GPUIndirectRemoteChannel::get_iterator(
+        RegionInstance inst, const std::vector<FieldID> &_fields,
+        const std::vector<size_t> &fld_offsets, const std::vector<size_t> &fld_sizes)
+    {
+      assert(0);
+      return nullptr;
+    }
+
     Memory GPUIndirectRemoteChannel::suggest_ib_memories() const
     {
       Node &n = get_runtime()->nodes[node];
@@ -1439,8 +1623,6 @@ namespace Realm {
                                           redop_id, total_bytes, src_frags, dst_frags,
                                           kind_ret, bw_ret, lat_ret);
     }
-
-    bool GPUIndirectRemoteChannel::needs_wrapping_iterator() const { return true; }
 
     ////////////////////////////////////////////////////////////////////////
     //
@@ -1680,63 +1862,6 @@ namespace Realm {
     {
       req->xd->notify_request_read_done(req);
       req->xd->notify_request_write_done(req);
-    }
-
-    ////////////////////////////////////////////////////////////////////////
-    //
-    // class GPUIndirectTransferCompletion
-
-    GPUIndirectTransferCompletion::GPUIndirectTransferCompletion(
-        XferDes *_xd, int _read_port_idx, size_t _read_offset, size_t _read_size,
-        int _write_port_idx, size_t _write_offset, size_t _write_size,
-        int _read_ind_port_idx, size_t _read_ind_offset, size_t _read_ind_size,
-        int _write_ind_port_idx, size_t _write_ind_offset, size_t _write_ind_size)
-      : xd(_xd)
-      , read_port_idx(_read_port_idx)
-      , read_offset(_read_offset)
-      , read_size(_read_size)
-      , read_ind_port_idx(_read_ind_port_idx)
-      , read_ind_offset(_read_ind_offset)
-      , read_ind_size(_read_ind_size)
-      , write_port_idx(_write_port_idx)
-      , write_offset(_write_offset)
-      , write_size(_write_size)
-      , write_ind_port_idx(_write_ind_port_idx)
-      , write_ind_offset(_write_ind_offset)
-      , write_ind_size(_write_ind_size)
-    {}
-
-    void GPUIndirectTransferCompletion::request_completed(void)
-    {
-
-      log_gpudma.info() << "gpu gather complete: xd=" << std::hex << xd->guid << std::dec
-                        << " read=" << read_port_idx << "/" << read_offset
-                        << " write=" << write_port_idx << "/" << write_offset
-                        << " bytes=" << write_size;
-
-      if(read_ind_port_idx >= 0) {
-        XferDes::XferPort &iip = xd->input_ports[read_ind_port_idx];
-        xd->update_bytes_read(read_ind_port_idx, iip.local_bytes_total, read_ind_size);
-        iip.local_bytes_total += read_ind_size;
-      }
-
-      if(write_ind_port_idx >= 0) {
-        XferDes::XferPort &iip = xd->input_ports[write_ind_port_idx];
-        xd->update_bytes_read(write_ind_port_idx, iip.local_bytes_total, write_ind_size);
-        iip.local_bytes_total += write_ind_size;
-      }
-
-      if(read_port_idx >= 0) {
-        xd->update_bytes_read(read_port_idx, read_offset, read_size);
-      }
-      if(write_port_idx >= 0) {
-        xd->update_bytes_write(write_port_idx, write_offset, write_size);
-      }
-
-      xd->update_progress();
-      xd->remove_reference();
-      // TODO(apryakhin@): Do we need to update this?
-      delete this;
     }
 
     ////////////////////////////////////////////////////////////////////////
@@ -2494,7 +2619,6 @@ namespace Realm {
 
         bool done = record_address_consumption(total_elems * in_elem_size,
                                                total_elems * out_elem_size);
-
         did_work = true;
 
         if(done || work_until.is_expired())
@@ -2772,5 +2896,4 @@ namespace Realm {
     }
 
   }; // namespace Cuda
-
 }; // namespace Realm

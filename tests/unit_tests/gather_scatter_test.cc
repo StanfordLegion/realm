@@ -70,7 +70,7 @@ public:
     return make_mem(node, kIBMemIdx);
   }
 
-  XferDesFactory *get_factory() { return nullptr; }
+  XferDesFactory *get_factory(const ChannelFactoryInfo *) { return nullptr; }
 
   MOCK_METHOD(long, available, (), ());
   MOCK_METHOD(long, submit, (Request * *requests, long nr), ());
