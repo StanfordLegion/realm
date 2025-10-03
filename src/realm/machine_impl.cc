@@ -142,8 +142,6 @@ namespace Realm {
     log_machine.info() << "ProcInfo: adding proc-mem affinity " << pma.p << " -> "
                        << pma.m << " with bandwidth " << pma.bandwidth << " and latency "
                        << pma.latency;
-    assert(pma.bandwidth > 0);
-    assert(pma.latency > 0);
     bool is_local = is_local_affinity(pma);
     return pmas.add_affinity(pma.m, pma, is_local);
   }
@@ -233,14 +231,14 @@ namespace Realm {
 
     if(NodeID(ID(pma.p).proc_owner_node()) == node) {
       MachineProcInfo *mpi = procs[pma.p];
-      assert(mpi != 0);
+      REALM_ASSERT_WITH_ABORT(mpi != 0, log_machine);
       if(mpi->add_proc_mem_affinity(pma))
         changed = true;
     }
 
     if(NodeID(ID(pma.m).memory_owner_node()) == node) {
       MachineMemInfo *mmi = mems[pma.m];
-      assert(mmi != 0);
+      REALM_ASSERT_WITH_ABORT(mmi != 0, log_machine);
       if(mmi->add_proc_mem_affinity(pma))
         changed = true;
     }
@@ -254,14 +252,14 @@ namespace Realm {
 
     if(NodeID(ID(mma.m1).memory_owner_node()) == node) {
       MachineMemInfo *mmi = mems[mma.m1];
-      assert(mmi != 0);
+      REALM_ASSERT_WITH_ABORT(mmi != 0, log_machine);
       if(mmi->add_mem_mem_affinity(mma))
         changed = true;
     }
 
     if(NodeID(ID(mma.m2).memory_owner_node()) == node) {
       MachineMemInfo *mmi = mems[mma.m2];
-      assert(mmi != 0);
+      REALM_ASSERT_WITH_ABORT(mmi != 0, log_machine);
       if(mmi->add_mem_mem_affinity(mma))
         changed = true;
     }
@@ -321,13 +319,15 @@ namespace Realm {
 
   void Machine::get_local_processors(std::set<Processor> &pset) const
   {
-    return (static_cast<MachineImpl *>(impl))->get_local_processors(pset);
+    RealmStatus status = (static_cast<MachineImpl *>(impl))->get_local_processors(pset);
+    REALM_ASSERT_WITH_ABORT(status == REALM_SUCCESS, log_machine);
   }
 
   void Machine::get_local_processors_by_kind(std::set<Processor> &pset,
                                              Processor::Kind kind) const
   {
-    return (static_cast<MachineImpl *>(impl))->get_local_processors_by_kind(pset, kind);
+    RealmStatus status = (static_cast<MachineImpl *>(impl))->get_local_processors_by_kind(pset, kind);
+    REALM_ASSERT_WITH_ABORT(status == REALM_SUCCESS, log_machine);
   }
 
   // Return the set of memories visible from a processor
@@ -687,7 +687,7 @@ namespace Realm {
     if(it != nodeinfos.end())
       return it->second;
     else
-      return 0;
+      return nullptr;
   }
 
   inline MachineNodeInfo *MachineImpl::get_nodeinfo(Processor p) const
@@ -700,7 +700,7 @@ namespace Realm {
     return get_nodeinfo(ID(m).memory_owner_node());
   }
 
-  void MachineImpl::get_local_processors(std::set<Processor> &pset) const
+  RealmStatus MachineImpl::get_local_processors(std::set<Processor> &pset) const
   {
     // TODO: consider using a reader/writer lock here instead
     AutoLock<> al(mutex);
@@ -714,14 +714,17 @@ namespace Realm {
     }
 #else
     const MachineNodeInfo *mynode = get_nodeinfo(Network::my_node_id);
-    assert(mynode != 0);
+    if (mynode == nullptr) {
+      return REALM_MACHINE_ERROR_INVALID_NODE;
+    }
     for(std::map<Processor, MachineProcInfo *>::const_iterator it = mynode->procs.begin();
         it != mynode->procs.end(); ++it)
       pset.insert(it->first);
 #endif
+    return REALM_SUCCESS;
   }
 
-  void MachineImpl::get_local_processors_by_kind(std::set<Processor> &pset,
+  RealmStatus MachineImpl::get_local_processors_by_kind(std::set<Processor> &pset,
                                                  Processor::Kind kind) const
   {
     // TODO: consider using a reader/writer lock here instead
@@ -738,7 +741,9 @@ namespace Realm {
     }
 #else
     const MachineNodeInfo *mynode = get_nodeinfo(Network::my_node_id);
-    assert(mynode != 0);
+    if (mynode == nullptr) {
+      return REALM_MACHINE_ERROR_INVALID_NODE;
+    }
     std::map<Processor::Kind, std::map<Processor, MachineProcInfo *>>::const_iterator it =
         mynode->proc_by_kind.find(kind);
     if(it != mynode->proc_by_kind.end())
@@ -746,6 +751,7 @@ namespace Realm {
           it2 != it->second.end(); ++it2)
         pset.insert(it2->first);
 #endif
+    return REALM_SUCCESS;
   }
 
   // Return the set of memories visible from a processor
@@ -1100,6 +1106,8 @@ namespace Realm {
   void MachineImpl::add_proc_mem_affinity(const Machine::ProcessorMemoryAffinity &pma,
                                           bool lock_held /*= false*/)
   {
+    REALM_ASSERT_WITH_ABORT(pma.bandwidth > 0, log_machine);
+    REALM_ASSERT_WITH_ABORT(pma.latency > 0, log_machine);
     if(!lock_held)
       mutex.lock();
 
@@ -1527,7 +1535,7 @@ namespace Realm {
       return false;
     return true;
 #else
-    assert(info != 0);
+    REALM_ASSERT_WITH_ABORT(info != 0, log_machine);
     std::map<Memory, Machine::ProcessorMemoryAffinity *>::const_iterator it =
         info->pmas.all.find(memory);
     if(it == info->pmas.all.end())
@@ -1563,7 +1571,7 @@ namespace Realm {
   {
 #ifndef USE_OLD_AFFINITIES
     if((bandwidth_weight == 1) && (latency_weight == 0)) {
-      assert(info != 0);
+      REALM_ASSERT_WITH_ABORT(info != 0, log_machine);
       std::map<Memory, Machine::ProcessorMemoryAffinity *>::const_iterator it =
           info->pmas.best.find(memory);
       return (it != info->pmas.best.end());
@@ -2374,7 +2382,7 @@ namespace Realm {
       return false;
     return true;
 #else
-    assert(info != 0);
+    REALM_ASSERT_WITH_ABORT(info != 0, log_machine);
     std::map<Processor, Machine::ProcessorMemoryAffinity *>::const_iterator it =
         info->pmas.all.find(proc);
     if(it == info->pmas.all.end())
@@ -2419,7 +2427,7 @@ namespace Realm {
       return false;
     return true;
 #else
-    assert(info != 0);
+    REALM_ASSERT_WITH_ABORT(info != 0, log_machine);
     std::map<Memory, Machine::MemoryMemoryAffinity *>::const_iterator it =
         info->mmas_out.all.find(memory);
     if(it == info->mmas_out.all.end())
@@ -2455,7 +2463,7 @@ namespace Realm {
   {
 #ifndef USE_OLD_AFFINITIES
     if((bandwidth_weight == 1) && (latency_weight == 0)) {
-      assert(info != 0);
+      REALM_ASSERT_WITH_ABORT(info != 0, log_machine);
       std::map<Processor, Machine::ProcessorMemoryAffinity *>::const_iterator it =
           info->pmas.best.find(proc);
       return (it != info->pmas.best.end());
@@ -2503,7 +2511,7 @@ namespace Realm {
   {
 #ifndef USE_OLD_AFFINITIES
     if((bandwidth_weight == 1) && (latency_weight == 0)) {
-      assert(info != 0);
+      REALM_ASSERT_WITH_ABORT(info != 0, log_machine);
       std::map<Memory, Machine::MemoryMemoryAffinity *>::const_iterator it =
           info->mmas_out.best.find(memory);
       return (it != info->mmas_out.best.end());
@@ -2580,7 +2588,7 @@ namespace Realm {
 
   MemoryQueryImpl::~MemoryQueryImpl(void)
   {
-    assert(references.load() == 0);
+    REALM_ASSERT_WITH_ABORT(references.load() == 0, log_machine);
     for(std::vector<MemoryQueryPredicate *>::iterator it = predicates.begin();
         it != predicates.end(); it++)
       delete *it;
