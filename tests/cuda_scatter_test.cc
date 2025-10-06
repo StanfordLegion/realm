@@ -854,11 +854,11 @@ bool scatter_gather_test(const std::vector<Memory> &sys_mems,
   for(int i = 0; i < N; i++)
     r1.lo[i] = 0;
   for(int i = 0; i < N; i++)
-    r1.hi[i] = TestConfig::sizes1[i] - 1;
+    r1.hi[i] = TestConfig::sizes1[i];
   for(int i = 0; i < N2; i++)
     r2.lo[i] = 0;
   for(int i = 0; i < N2; i++) {
-    r2.hi[i] = TestConfig::sizes2[i] - 1;
+    r2.hi[i] = TestConfig::sizes2[i];
   }
 
   log_app.info() << "Run testcase for N=" << N << " N2=" << N2 << " src_bounds=" << r1
@@ -892,27 +892,6 @@ bool scatter_gather_test(const std::vector<Memory> &sys_mems,
   }
   IndexSpace<N, T> is_ind(ind_bounds);
   assert(is_ind.dense());
-
-  /*std::vector<Rect<N, T>> split_bounds;
-  T prev_x = 0;
-  for(int i = 0; i < num_points / TestConfig::gap_count; i++) {
-    Rect<N, T> bounds = Rect<N, T>::make_empty();
-    bounds.lo[0] = prev_x;
-    bounds.hi[0] = prev_x + TestConfig::gap_count;
-    for(int j = 1; j < N; j++) {
-      bounds.lo[j] = 0;
-      bounds.hi[j] = TestConfig::sizes1[j] - 1; // Adjusted to ensure same total size
-    }
-    prev_x += TestConfig::gap_count + TestConfig::gap_size;
-    split_bounds.emplace_back(bounds);
-    log_app.info() << "split_bounds:" << bounds;
-  }
-
-  IndexSpace<N, T> is1(split_bounds);
-
-  // Ensure is_ind matches the total bounds of is1
-  IndexSpace<N, T> is_ind(r1);
-  assert(is_ind.dense());*/
 
   std::vector<Point<N2, T2>> points;
   for(int i = 0; i < num_points; i++) {
@@ -1121,9 +1100,9 @@ void top_level_task(const void *args, size_t arglen, const void *userdata, size_
       ok = false;
     }
 
-    if(!scatter_gather_test<1, int, 1, int, int>(
-           sys_mems, gpu_mems, TestConfig::pieces1, TestConfig::pieces2, p, 0, do_scatter,
-           true, true)) {
+    if(!scatter_gather_test<1, int, 1, int, int>(sys_mems, gpu_mems, TestConfig::pieces1,
+                                                 TestConfig::pieces2, p, 0, do_scatter,
+                                                 true, true)) {
       ok = false;
     }
 
