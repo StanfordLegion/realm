@@ -30,12 +30,12 @@ using namespace Realm;
 
 struct DummyLoader : public Loader<DummyLoader> {
   decltype(&dummy) dummy_fnptr = nullptr;
-  bool load_symbols() { return get_symbol("dummy", dummy_fnptr); }
+  bool load_symbols() { return this->get_symbol("dummy", dummy_fnptr); }
 };
 
 struct DummyBadLoader : public Loader<DummyBadLoader> {
   decltype(&dummy) dummy_fnptr = nullptr;
-  bool load_symbols() { return get_symbol("dummy.does.not.exist", dummy_fnptr); }
+  bool load_symbols() { return this->get_symbol("dummy.does.not.exist", dummy_fnptr); }
 };
 
 TEST(Loader, CanLoadDummy)
@@ -108,6 +108,6 @@ TEST(Loader, LoaderClassSymbolFails)
 {
   const int TEST_VALUE = 0xCAFEBABE;
   DummyBadLoader loader;
-  EXPECT_TRUE(loader.load(DUMMY_LIB_NAME));
+  EXPECT_FALSE(loader.load(DUMMY_LIB_NAME));
   EXPECT_FALSE(!!loader);
 }
