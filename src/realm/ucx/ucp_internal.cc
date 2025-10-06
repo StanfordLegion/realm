@@ -888,7 +888,7 @@ namespace Realm {
     {
       log_ucp.info() << "dynamically loading libucp.so.0";
 
-      libucp = dlopen("libucp.so.0", RTLD_NOW);
+      libucp = Realm::load_library("libucp.so.0");
       if(!libucp) {
         log_ucp.warning() << "could not open libucp.so.0: " << strerror(errno);
         return false;
@@ -897,7 +897,7 @@ namespace Realm {
 #define STRINGIFY(s) #s
 #define UCP_GET_FNPTR(name)                                                              \
   do {                                                                                   \
-    void *sym = dlsym(libucp, STRINGIFY(name));                                          \
+    void *sym = Realm::get_symbol(libucp, STRINGIFY(name));                              \
     if(!sym) {                                                                           \
       log_ucp.warning() << "symbol '" STRINGIFY(name) "' missing from libucp.so!";       \
       return false;                                                                      \
@@ -943,7 +943,7 @@ namespace Realm {
 
     err_version:
 #ifdef REALM_UCX_DYNAMIC_LOAD
-      dlclose(libucp);
+      Realm::close_library(libucp);
     err:
 #endif
       return false;

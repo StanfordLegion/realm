@@ -38,7 +38,11 @@ namespace Realm {
     } else {
       dlopen_flags |= RTLD_LAZY;
     }
-    return dlopen(name, dlopen_flags);
+    lib_handle_t handle = dlopen(name, dlopen_flags);
+    if(handle == nullptr) {
+      dlerror(); // Clear error
+    }
+    return handle;
 #else
     return nullptr;
 #endif
@@ -56,9 +60,16 @@ namespace Realm {
   void *get_symbol(lib_handle_t hdl, const char *name)
   {
 #if defined(REALM_ON_WINDOWS)
+    if(hdl == THIS_LIB) {
+      hdl = reinterpret_cast<lib_handle_t>(GetModuleHandle(nullptr));
+    }
     return GetProcAddress(static_cast<HMODULE>(hdl), name);
 #elif defined(REALM_USE_DLFCN)
-    return dlsym(hdl, name);
+    void *sym = dlsym(hdl, name);
+    if(sym == nullptr) {
+      dlerror();
+    }
+    return sym;
 #else
     return nullptr;
 #endif

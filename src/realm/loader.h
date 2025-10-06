@@ -25,6 +25,8 @@ namespace Realm {
 
   typedef void *lib_handle_t;
 
+  static constexpr lib_handle_t THIS_LIB = nullptr;
+
   enum LoadLibraryFlags
   {
     LOADLIB_NOW = 1,
@@ -63,8 +65,8 @@ namespace Realm {
     }
     Loader(const Loader &) = delete;
     Loader(Loader &&) = delete;
-    Loader& operator=(Loader&&) = delete;
-    Loader& operator=(Loader&) = delete;
+    Loader &operator=(Loader &&) = delete;
+    Loader &operator=(Loader &) = delete;
 
     ~Loader()
     {
@@ -102,7 +104,7 @@ namespace Realm {
     /// @brief Gets the address of the symbol for the given symbol name
     /// @tparam T type of the object this symbol references (must be a pointer type)
     /// @param name Name of the symbol this references
-    /// @return Address of the object referenced in this loader with the given name
+    /// @return True if successful, false otherwise.
     template <typename T, typename = std::enable_if_t<std::is_pointer<T>::value>>
     bool get_symbol(const char *name, T &ptr)
     {
