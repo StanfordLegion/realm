@@ -1102,7 +1102,8 @@ namespace Realm {
         XferPort *ind_port = &input_ports[ind_idx];
         fetch_indirection_meta(ind_port);
 
-        size_t coord_bytes = ind_pieces[0].field_size;
+        size_t coord_bytes = ind_pieces[0].field_size / ind_pieces[0].dim;
+        assert(coord_bytes > 0);
         size_t max_bytes = std::min(control_count, MAX_CHUNK);
         max_bytes = clamp_span(max_bytes, inp_port);
         max_bytes = clamp_span(max_bytes, out_port);
@@ -1168,7 +1169,7 @@ namespace Realm {
           for(int d = 0; d < src_pieces[i].dim; d++) {
             memcpy_info.src_pieces[i].lo[d] = src_pieces[i].lo[d];
             memcpy_info.src_pieces[i].hi[d] = src_pieces[i].hi[d];
-            memcpy_info.src_pieces[i].strides[0] /= field_bytes;
+            memcpy_info.src_pieces[i].strides[d] /= field_bytes;
           }
         }
 
@@ -1182,7 +1183,7 @@ namespace Realm {
           for(int d = 0; d < dst_pieces[i].dim; d++) {
             memcpy_info.dst_pieces[i].lo[d] = dst_pieces[i].lo[d];
             memcpy_info.dst_pieces[i].hi[d] = dst_pieces[i].hi[d];
-            memcpy_info.dst_pieces[i].strides[0] /= field_bytes;
+            memcpy_info.dst_pieces[i].strides[d] /= field_bytes;
           }
         }
 
@@ -1194,7 +1195,7 @@ namespace Realm {
         memcpy_info.ind_strides[1] = ind_pieces[0].strides[0];
         memcpy_info.ind_strides[2] = ind_pieces[0].strides[1];
         for(int i = 0; i < dim; i++) {
-          memcpy_info.ind_strides[i] /= coord_bytes;
+          memcpy_info.ind_strides[i] /= ind_pieces[0].field_size;
         }
 
         memcpy_info.point_pos = points_done;

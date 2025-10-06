@@ -753,7 +753,7 @@ bool DistributedData<N, T>::verify(IndexSpace<N, T> is, FieldID fid, Event wait_
           if(exp.get_value() == act) {
             // good
             log_app.error() << "  match at [" << pit.p << "]: exp=" << exp.get_value()
-                           << " act=" << act;
+                            << " act=" << act;
           } else {
             if(errors++ < 10)
               log_app.error() << "  mismatch at [" << pit.p
@@ -938,7 +938,7 @@ bool scatter_gather_test(const std::vector<Memory> &sys_mems,
   // fields2[FID_DATA2] = sizeof(DT);
 
   DistributedData<N, T> region1;
-  region1.add_subspaces(is1, pieces1, 2);
+  region1.add_subspaces(is1, pieces1, 1);
   region1
       .create_instances(fields1, RoundRobinPicker<N, T>(gpu_mems),
                         /*offset=*/1, false)
@@ -960,7 +960,7 @@ bool scatter_gather_test(const std::vector<Memory> &sys_mems,
                         /*offset=*/0, false) // inverse
       .wait();
 
-  std::cout << "IS1:" << is1 << " IS2:" << is2 << std::endl;
+  std::cout << "IS1:" << is1 << " IS2:" << is2 << "IS_IND:" << is_ind << std::endl;
 
   Matrix<N2, N, T> transform;
   for(int i = 0; i < N2; i++) {
@@ -1114,8 +1114,8 @@ void top_level_task(const void *args, size_t arglen, const void *userdata, size_
     }*/
 
     // typedef Pad<float, 16> BigFloat;
-    //typedef Pad<float, 16> BigFloat;
-    if(!scatter_gather_test<1, int, 1, int, long long>(
+    // typedef Pad<float, 16> BigFloat;
+    if(!scatter_gather_test<2, int, 2, int, long long>(
            sys_mems, gpu_mems, TestConfig::pieces1, TestConfig::pieces2, p, 0, do_scatter,
            true, true)) {
       ok = false;

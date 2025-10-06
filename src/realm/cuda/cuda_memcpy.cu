@@ -140,8 +140,8 @@ memcpy_kernel_transpose(Realm::Cuda::MemcpyTransposeInfo<Offset_t> info, T *tile
 
 template <typename T, size_t N, typename Offset_t = size_t>
 static __device__ inline void
-memcpy_affine_batch(Realm::Cuda::AffineCopyPair<N, Offset_t> *info,
-                    size_t nrects, size_t start_offset = 0)
+memcpy_affine_batch(Realm::Cuda::AffineCopyPair<N, Offset_t> *info, size_t nrects,
+                    size_t start_offset = 0)
 {
   Offset_t offset = blockIdx.x * blockDim.x + threadIdx.x - start_offset;
   const unsigned grid_stride = gridDim.x * blockDim.x;
@@ -171,8 +171,7 @@ memcpy_affine_batch(Realm::Cuda::AffineCopyPair<N, Offset_t> *info,
       for(unsigned j = 0; j < i; j++) {
         Offset_t dst_coords[N];
 
-        index_to_coords<N, Offset_t>(dst_coords,
-                                     (offset + j * grid_stride),
+        index_to_coords<N, Offset_t>(dst_coords, (offset + j * grid_stride),
                                      current_info.extents);
 
         const size_t dst_idx =
@@ -232,7 +231,7 @@ memcpy_indirect_points(Realm::Cuda::MemcpyIndirectInfo<3, Offset_t> info)
       ind_linear_idx += rb.lo[d] * info.ind_strides[d];
     }
 
-    /*Offset_t tmp = lin;
+    Offset_t tmp = lin;
     Offset_t ind_lin_ofs = 0;
 #pragma unroll
     for(int d = 0; d < N; d++) {
@@ -240,17 +239,17 @@ memcpy_indirect_points(Realm::Cuda::MemcpyIndirectInfo<3, Offset_t> info)
       COORD_T coord_in_rect = tmp % len;
       tmp /= len;
       ind_lin_ofs += Offset_t(coord_in_rect) * info.ind_strides[d];
-    }*/
+    }
 
     Realm::Point<N, COORD_T> src_pt;
 #pragma unroll
     for(int d = 0; d < N; d++) {
-      // src_pt[d] = ind_base[(ind_linear_idx + ind_lin_ofs) * N + d];
-      src_pt[d] = ind_base[(ind_linear_idx + lin) * N + d];
+      src_pt[d] = ind_base[(ind_linear_idx + ind_lin_ofs) * N + d];
+      // src_pt[d] = ind_base[(ind_linear_idx + lin) * N + d];
     }
 
     Realm::Point<N, COORD_T> dst_pt;
-    Offset_t tmp = lin;
+    tmp = lin;
 #pragma unroll
     for(int d = 0; d < N; d++) {
       const COORD_T len = rb.hi[d] - rb.lo[d] + 1;
@@ -308,7 +307,7 @@ memcpy_indirect_points(Realm::Cuda::MemcpyIndirectInfo<3, Offset_t> info)
 
 template <int N, typename T, typename Offset_t = size_t>
 static __device__ inline void
-memfill_affine_batch(const Realm::Cuda::AffineFillInfo<N, Offset_t>& info)
+memfill_affine_batch(const Realm::Cuda::AffineFillInfo<N, Offset_t> &info)
 {
   Offset_t offset = blockIdx.x * blockDim.x + threadIdx.x;
   const unsigned grid_stride = gridDim.x * blockDim.x;
@@ -338,15 +337,17 @@ memfill_affine_batch(const Realm::Cuda::AffineFillInfo<N, Offset_t>& info)
   }
 }
 
-#define MEMCPY_TEMPLATE_INST(type, dim, offt, name)                            \
-  extern "C" __global__ __launch_bounds__(256, 4) void                         \
-      memcpy_affine_batch##name(Realm::Cuda::AffineCopyInfo<dim, offt> info) { \
-    memcpy_affine_batch<type, dim, offt>(info.subrects, info.num_rects);       \
+#define MEMCPY_TEMPLATE_INST(type, dim, offt, name)                                      \
+  extern "C" __global__ __launch_bounds__(256, 4) void memcpy_affine_batch##name(        \
+      Realm::Cuda::AffineCopyInfo<dim, offt> info)                                       \
+  {                                                                                      \
+    memcpy_affine_batch<type, dim, offt>(info.subrects, info.num_rects);                 \
   }
 
 #define FILL_TEMPLATE_INST(type, dim, offt, name)                                        \
   extern "C" __global__ void fill_affine_batch##name(                                    \
-      Realm::Cuda::AffineFillInfo<dim, offt> info) {                                     \
+      Realm::Cuda::AffineFillInfo<dim, offt> info)                                       \
+  {                                                                                      \
     memfill_affine_batch<dim, type, offt>(info);                                         \
   }
 
@@ -377,11 +378,11 @@ memfill_affine_batch(const Realm::Cuda::AffineFillInfo<N, Offset_t>& info)
   MEMCPY_INDIRECT_TEMPLATE_INST(int, type, dim, off, dim##D_##sz##32)                    \
   MEMCPY_INDIRECT_TEMPLATE_INST(long long, type, dim, off, dim##D_##sz##64)
 
-#define INST_TEMPLATES_FOR_TYPES(dim, off)                                     \
-  INST_TEMPLATES(unsigned char, 8, dim, off)                                   \
-  INST_TEMPLATES(unsigned short, 16, dim, off)                                 \
-  INST_TEMPLATES(unsigned int, 32, dim, off)                                   \
-  INST_TEMPLATES(unsigned long long, 64, dim, off)                             \
+#define INST_TEMPLATES_FOR_TYPES(dim, off)                                               \
+  INST_TEMPLATES(unsigned char, 8, dim, off)                                             \
+  INST_TEMPLATES(unsigned short, 16, dim, off)                                           \
+  INST_TEMPLATES(unsigned int, 32, dim, off)                                             \
+  INST_TEMPLATES(unsigned long long, 64, dim, off)                                       \
   INST_TEMPLATES(uint4, 128, dim, off)
 
 #define INST_TEMPLATES_FOR_DIMS()                                                        \
