@@ -1155,17 +1155,17 @@ namespace Realm {
           out_base = reinterpret_cast<uintptr_t>(out_port->mem->get_direct_ptr(0, 0));
         }
 
-        MemcpyIndirectInfo<3, size_t> memcpy_info;
-        memset(&memcpy_info, 0, sizeof(MemcpyIndirectInfo<3, size_t>));
+        MemcpyIndirectInfoSized<3> memcpy_info;
+        memset(&memcpy_info, 0, sizeof(MemcpyIndirectInfo<3>));
 
+        assert(MemcpyIndirectInfoSized<3>::MAX_NUM_PIECES >= src_pieces.size());
         memcpy_info.num_src_pieces = src_pieces.size();
         for(size_t i = 0; i < src_pieces.size(); i++) {
-          memcpy_info.src_pieces[i].dim = src_pieces[i].dim;
           memcpy_info.src_pieces[i].base = reinterpret_cast<uintptr_t>(
               inp_port->mem->get_direct_ptr(src_pieces[i].base_offset, 0));
-          memcpy_info.src_pieces[i].strides[0] = src_pieces[i].field_size;
-          memcpy_info.src_pieces[i].strides[1] = src_pieces[i].strides[0];
-          memcpy_info.src_pieces[i].strides[2] = src_pieces[i].strides[1];
+          memcpy_info.src_pieces[i].strides[0] = src_pieces[i].strides[0];
+          memcpy_info.src_pieces[i].strides[1] = src_pieces[i].strides[1];
+          memcpy_info.src_pieces[i].strides[2] = src_pieces[i].strides[2];
           for(int d = 0; d < src_pieces[i].dim; d++) {
             memcpy_info.src_pieces[i].lo[d] = src_pieces[i].lo[d];
             memcpy_info.src_pieces[i].hi[d] = src_pieces[i].hi[d];
@@ -1173,13 +1173,13 @@ namespace Realm {
           }
         }
 
+        assert(MemcpyIndirectInfoSized<3>::MAX_NUM_PIECES >= dst_pieces.size());
         memcpy_info.num_dst_pieces = dst_pieces.size();
         for(size_t i = 0; i < dst_pieces.size(); i++) {
-          memcpy_info.dst_pieces[i].dim = dst_pieces[i].dim;
           memcpy_info.dst_pieces[i].base = out_base + dst_pieces[i].base_offset;
-          memcpy_info.dst_pieces[i].strides[0] = dst_pieces[i].field_size;
-          memcpy_info.dst_pieces[i].strides[1] = dst_pieces[i].strides[0];
-          memcpy_info.dst_pieces[i].strides[2] = dst_pieces[i].strides[1];
+          memcpy_info.dst_pieces[i].strides[0] = dst_pieces[i].strides[0];
+          memcpy_info.dst_pieces[i].strides[1] = dst_pieces[i].strides[1];
+          memcpy_info.dst_pieces[i].strides[2] = dst_pieces[i].strides[2];
           for(int d = 0; d < dst_pieces[i].dim; d++) {
             memcpy_info.dst_pieces[i].lo[d] = dst_pieces[i].lo[d];
             memcpy_info.dst_pieces[i].hi[d] = dst_pieces[i].hi[d];
@@ -1191,9 +1191,9 @@ namespace Realm {
             ind_port->mem->get_direct_ptr(ind_pieces[0].base_offset, 0));
         memcpy_info.field_size = field_bytes;
 
-        memcpy_info.ind_strides[0] = ind_pieces[0].field_size;
-        memcpy_info.ind_strides[1] = ind_pieces[0].strides[0];
-        memcpy_info.ind_strides[2] = ind_pieces[0].strides[1];
+        memcpy_info.ind_strides[0] = ind_pieces[0].strides[0];
+        memcpy_info.ind_strides[1] = ind_pieces[0].strides[1];
+        memcpy_info.ind_strides[2] = ind_pieces[0].strides[2];
         for(int i = 0; i < dim; i++) {
           memcpy_info.ind_strides[i] /= ind_pieces[0].field_size;
         }

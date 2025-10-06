@@ -899,7 +899,7 @@ bool scatter_gather_test(const std::vector<Memory> &sys_mems,
   }
 
   IndexSpace<N2, T2> is2(r2);
-
+  std::cout << "IS1:" << is1 << " IS2:" << is2 << "IS_IND:" << is_ind << std::endl;
   assert(!is1.empty());
   assert(!is2.empty());
   // assert(!ind_bounds.empty());
@@ -933,13 +933,11 @@ bool scatter_gather_test(const std::vector<Memory> &sys_mems,
       .wait();
 
   DistributedData<N2, T2> region2;
-  region2.add_subspaces(is2, pieces2, /*num_subrects=*/2);
+  region2.add_subspaces(is2, pieces2, /*num_subrects=*/1);
   region2
       .create_instances(fields2, RoundRobinPicker<N2, T2>(gpu_mems),
                         /*offset=*/0, false) // inverse
       .wait();
-
-  std::cout << "IS1:" << is1 << " IS2:" << is2 << "IS_IND:" << is_ind << std::endl;
 
   Matrix<N2, N, T> transform;
   for(int i = 0; i < N2; i++) {
@@ -1094,6 +1092,12 @@ void top_level_task(const void *args, size_t arglen, const void *userdata, size_
 
     // typedef Pad<float, 16> BigFloat;
     // typedef Pad<float, 16> BigFloat;
+    if(!scatter_gather_test<3, int, 3, int, long long>(
+           sys_mems, gpu_mems, TestConfig::pieces1, TestConfig::pieces2, p, 0, do_scatter,
+           true, true)) {
+      ok = false;
+    }
+
     if(!scatter_gather_test<2, int, 2, int, long long>(
            sys_mems, gpu_mems, TestConfig::pieces1, TestConfig::pieces2, p, 0, do_scatter,
            true, true)) {

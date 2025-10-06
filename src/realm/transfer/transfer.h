@@ -255,7 +255,7 @@ namespace Realm {
 
     out.base_offset = cur_base_off;
     out.field_size = cur_field_size;
-    out.dim = N;
+    out.dim = 1;
 
     const Rect<N, T> &b = cur_piece->bounds;
 
@@ -264,14 +264,16 @@ namespace Realm {
       out.hi[d] = b.hi[d];
     }
 
-    const size_t w_bytes = cur_field_size * (static_cast<size_t>(b.hi[0] - b.lo[0] + 1));
+    // const size_t w_bytes = cur_field_size * (static_cast<size_t>(b.hi[0] - b.lo[0] +
+    // 1));
 
     out.extents[0] = (b.hi[0] - b.lo[0] + 1);
-    out.strides[0] = w_bytes;
+    out.strides[0] = cur_piece->strides[0];
 
     if(N >= 2) {
       out.extents[1] = (b.hi[1] - b.lo[1] + 1);
       out.strides[1] = cur_piece->strides[1];
+      out.dim++;
     } else {
       out.extents[1] = 1;
       out.strides[1] = 0;
@@ -280,6 +282,7 @@ namespace Realm {
     if(N >= 3) {
       out.extents[2] = (b.hi[2] - b.lo[2] + 1);
       out.strides[2] = cur_piece->strides[2];
+      out.dim++;
     } else {
       out.extents[2] = 1;
       out.strides[2] = 0;

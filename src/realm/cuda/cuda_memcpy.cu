@@ -190,7 +190,7 @@ memcpy_affine_batch(Realm::Cuda::AffineCopyPair<N, Offset_t> *info, size_t nrect
 
 template <int N, typename COORD_T, typename DATA_T, typename Offset_t = size_t>
 static __device__ inline void
-memcpy_indirect_points(Realm::Cuda::MemcpyIndirectInfo<3, Offset_t> info)
+memcpy_indirect_points(Realm::Cuda::MemcpyIndirectInfoSized<3, Offset_t> info)
 {
   //--------------------------------------------------------------------
   // 0. flat thread id and stride
@@ -214,15 +214,17 @@ memcpy_indirect_points(Realm::Cuda::MemcpyIndirectInfo<3, Offset_t> info)
   // 2. thread-local linear index in the *whole* domain
   //--------------------------------------------------------------------
   Offset_t lin = info.point_pos + tid;
+  Offset_t gidx = info.point_pos + tid;
 
   //--------------------------------------------------------------------
   // 3. locate the rectangle that owns ‘lin’
   //--------------------------------------------------------------------
   unsigned r = 0;
-  while((r < info.domain_rects) && (lin >= drects[r].bounds.volume()))
+  while((r < info.domain_rects) && (lin >= drects[r].bounds.volume())) {
     lin -= drects[r++].bounds.volume();
+  }
 
-  while((r < info.domain_rects) && (tid < info.volume)) {
+  while((r < info.domain_rects) && (gidx < info.volume)) {
     const Realm::Rect<N, COORD_T> &rb = drects[r].bounds;
 
     Offset_t ind_linear_idx = 0;
@@ -259,22 +261,28 @@ memcpy_indirect_points(Realm::Cuda::MemcpyIndirectInfo<3, Offset_t> info)
 
     auto inside = [&](const auto &pc, const Realm::Point<N, COORD_T> &q) {
 #pragma unroll
-      for(int d = 0; d < N; d++)
-        if((q[d] < pc.lo[d]) || (q[d] > pc.hi[d]))
+      for(int d = 0; d < N; d++) {
+        if((q[d] < pc.lo[d]) || (q[d] > pc.hi[d])) {
           return false;
-      return true;
+        }
+        return true;
+      }
     };
 
     int32_t src_pidx = -1;
     int32_t dst_pidx = -1;
 
-    for(int32_t i = 0; i < info.num_src_pieces && src_pidx == -1; i++)
-      if(inside(src_pcs[i], src_pt))
+    for(int32_t i = 0; i < info.num_src_pieces && src_pidx == -1; i++) {
+      if(inside(src_pcs[i], src_pt)) {
         src_pidx = i;
+      }
+    }
 
-    for(int32_t j = 0; j < info.num_dst_pieces && dst_pidx == -1; j++)
-      if(inside(dst_pcs[j], dst_pt))
+    for(int32_t j = 0; j < info.num_dst_pieces && dst_pidx == -1; j++) {
+      if(inside(dst_pcs[j], dst_pt)) {
         dst_pidx = j;
+      }
+    }
 
     //---------------- byte address calculations ----------------------
     Offset_t src_lin = 0, dst_lin = 0;
@@ -286,8 +294,9 @@ memcpy_indirect_points(Realm::Cuda::MemcpyIndirectInfo<3, Offset_t> info)
           Offset_t(dst_pt[d] - dst_pcs[dst_pidx].lo[d]) * dst_pcs[dst_pidx].strides[d];
     }
 
-    if(src_pidx == -1 || dst_pidx == -1)
+    if(src_pidx == -1 || dst_pidx == -1) {
       return;
+    }
 
     __restrict__ DATA_T *src =
         reinterpret_cast<DATA_T *>(src_pcs[src_pidx].base + src_lin * info.field_size);
@@ -299,9 +308,11 @@ memcpy_indirect_points(Realm::Cuda::MemcpyIndirectInfo<3, Offset_t> info)
       dst[v] = src[v];
     }
 
+    gidx += grid_step;
     lin += grid_step;
-    while((r < info.domain_rects) && (lin >= drects[r].bounds.volume()))
+    while((r < info.domain_rects) && (lin >= drects[r].bounds.volume())) {
       lin -= drects[r++].bounds.volume();
+    }
   }
 }
 
@@ -366,7 +377,7 @@ memfill_affine_batch(const Realm::Cuda::AffineFillInfo<N, Offset_t> &info)
 
 #define MEMCPY_INDIRECT_TEMPLATE_INST(addr_type, data_type, dim, offt, name)             \
   extern "C" __global__ __launch_bounds__(256, 4) void memcpy_indirect##name(            \
-      Realm::Cuda::MemcpyIndirectInfo<3, offt> info)                                     \
+      Realm::Cuda::MemcpyIndirectInfoSized<3, offt> info)                                \
   {                                                                                      \
     memcpy_indirect_points<dim, addr_type, data_type, offt>(info);                       \
   }
