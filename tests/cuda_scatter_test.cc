@@ -752,8 +752,8 @@ bool DistributedData<N, T>::verify(IndexSpace<N, T> is, FieldID fid, Event wait_
         if(exp.has_value()) {
           if(exp.get_value() == act) {
             // good
-            log_app.error() << "  match at [" << pit.p << "]: exp=" << exp.get_value()
-                            << " act=" << act;
+            log_app.info() << "  match at [" << pit.p << "]: exp=" << exp.get_value()
+                           << " act=" << act;
           } else {
             if(errors++ < 10)
               log_app.error() << "  mismatch at [" << pit.p
@@ -1038,7 +1038,7 @@ bool scatter_gather_test(const std::vector<Memory> &sys_mems,
   size_t total_bytes = is1.volume() * sizeof(DT);      // Total data transferred in bytes
   double bandwidth = total_bytes / (time_us * 1000.0); // GB/s
 
-  log_app.print() << "Bandwidth=" << bandwidth << " GB/s"
+  log_app.error() << "Bandwidth=" << bandwidth << " GB/s"
                   << " Latency(us):" << time_us << " total_bytes:" << total_bytes
                   << " is1:" << is1;
 
@@ -1091,8 +1091,8 @@ void top_level_task(const void *args, size_t arglen, const void *userdata, size_
     }*/
 
     // typedef Pad<float, 16> BigFloat;
-    // typedef Pad<float, 16> BigFloat;
-    if(!scatter_gather_test<3, int, 3, int, long long>(
+    typedef Pad<float, 16> BigFloat;
+    if(!scatter_gather_test<3, int, 3, int, BigFloat>(
            sys_mems, gpu_mems, TestConfig::pieces1, TestConfig::pieces2, p, 0, do_scatter,
            true, true)) {
       ok = false;

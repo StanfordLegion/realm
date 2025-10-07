@@ -1079,7 +1079,7 @@ namespace Realm {
     bool GPUIndirectXferDes::progress_xd(GPUIndirectChannel *channel,
                                          TimeLimit work_until)
     {
-      constexpr size_t MAX_CHUNK = 4 << 20;
+      constexpr size_t MAX_CHUNK = 16 << 20;
       constexpr size_t MIN_CHUNK = 64 << 10;
 
       bool did_work = false;

@@ -215,13 +215,19 @@ memcpy_indirect_points(Realm::Cuda::MemcpyIndirectInfoSized<3, Offset_t> info)
   //--------------------------------------------------------------------
   Offset_t lin = info.point_pos + tid;
   Offset_t gidx = info.point_pos + tid;
+  Offset_t curr_rect_vol = drects[0].bounds.volume();
 
+  // TODO: PREFIX SUM
   //--------------------------------------------------------------------
   // 3. locate the rectangle that owns ‘lin’
   //--------------------------------------------------------------------
   unsigned r = 0;
-  while((r < info.domain_rects) && (lin >= drects[r].bounds.volume())) {
-    lin -= drects[r++].bounds.volume();
+  while((r < info.domain_rects) && (lin >= curr_rect_vol)) {
+    lin -= curr_rect_vol;
+    r++;
+    if(r < info.domain_rects) {
+      curr_rect_vol = drects[r].bounds.volume();
+    }
   }
 
   while((r < info.domain_rects) && (gidx < info.volume)) {
@@ -284,6 +290,10 @@ memcpy_indirect_points(Realm::Cuda::MemcpyIndirectInfoSized<3, Offset_t> info)
       }
     }
 
+    if(src_pidx == -1 || dst_pidx == -1) {
+      return;
+    }
+
     //---------------- byte address calculations ----------------------
     Offset_t src_lin = 0, dst_lin = 0;
 #pragma unroll
@@ -292,10 +302,6 @@ memcpy_indirect_points(Realm::Cuda::MemcpyIndirectInfoSized<3, Offset_t> info)
           Offset_t(src_pt[d] - src_pcs[src_pidx].lo[d]) * src_pcs[src_pidx].strides[d];
       dst_lin +=
           Offset_t(dst_pt[d] - dst_pcs[dst_pidx].lo[d]) * dst_pcs[dst_pidx].strides[d];
-    }
-
-    if(src_pidx == -1 || dst_pidx == -1) {
-      return;
     }
 
     __restrict__ DATA_T *src =
@@ -310,8 +316,12 @@ memcpy_indirect_points(Realm::Cuda::MemcpyIndirectInfoSized<3, Offset_t> info)
 
     gidx += grid_step;
     lin += grid_step;
-    while((r < info.domain_rects) && (lin >= drects[r].bounds.volume())) {
-      lin -= drects[r++].bounds.volume();
+    while((r < info.domain_rects) && (lin >= curr_rect_vol)) {
+      lin -= curr_rect_vol;
+      r++;
+      if(r < info.domain_rects) {
+        curr_rect_vol = drects[r].bounds.volume();
+      }
     }
   }
 }
