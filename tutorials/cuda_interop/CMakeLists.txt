@@ -18,7 +18,7 @@ project(RealmTutorial_cuda_interop)
 
 # Only search if were building stand-alone and not as part of Realm
 if(NOT TARGET Realm::Realm)
-  find_package(Realm REQUIRED)
+  find_package(Realm REQUIRED OPTIONAL_COMPONENTS cuda)
 endif()
 
 set(CUDA_INTEROP_SRCS cuda_interop.cc)

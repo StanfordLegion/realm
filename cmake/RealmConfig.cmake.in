@@ -20,7 +20,8 @@ set(REALM_VERSION @Realm_VERSION@)
 # Allow the application developer to choose between static and shared libraries
 # if available by specifying 'static' or 'shared' component in find_package
 
-set(Realm_known_comps static shared)
+set(Realm_known_comps static shared cuda nvtx hip kokkos aio shm llvm hdf5 omp
+                      prealm hwloc python papi cpptrace rdtsc gasnet ucx mpi)
 set(Realm_static_comp NO)
 set(Realm_shared_comp NO)
 foreach(_comp IN LISTS ${CMAKE_FIND_PACKAGE_NAME}_COMPONENTS)
@@ -43,14 +44,51 @@ if(Realm_static_comp AND Realm_shared_comp)
   return()
 endif()
 
+# Compile-time feature components
+# We expose these features as the original CMakeLists.txt variable in
+# order to maintain compatibility if the app decides to use add_subdirectory
+# or find_package, no other cmake changes are needed.
+set(REALM_USE_CUDA @REALM_USE_CUDA@)
+set(REALM_USE_NVTX @REALM_USE_NVTX@)
+set(REALM_USE_HIP @REALM_USE_HIP@)
+set(REALM_USE_KOKKOS @REALM_USE_KOKKOS@)
+set(REALM_USE_KERNEL_AIO @REALM_USE_KERNEL_AIO@)
+set(REALM_USE_SHM @REALM_USE_SHM@)
+set(REALM_USE_LLVM @REALM_USE_LLVM@)
+set(REALM_USE_HDF5 @REALM_USE_HDF5@)
+set(REALM_USE_OPENMP @REALM_USE_OPENMP@)
+set(REALM_USE_PREALM @REALM_USE_PREALM@)
+set(REALM_USE_HWLOC @REALM_USE_HWLOC@)
+set(REALM_USE_PYTHON @REALM_USE_PYTHON@)
+set(REALM_USE_PAPI @REALM_USE_PAPI@)
+set(REALM_USE_CPPTRACE @REALM_USE_CPPTRACE@)
+set(REALM_TIMERS_USE_RDTSC @REALM_TIMERS_USE_RDTSC@)
+set(REALM_USE_GASNET @REALM_USE_GASNET@)
+set(REALM_USE_UCX @REALM_USE_UCX@)
+set(REALM_USE_MPI @REALM_USE_MPI@)
+
+# And now expose them as proper cmake components that can be requested via
+# find_package(Realm COMPONENTS xxx)
+foreach(feature cuda nvtx hip kokkos kernel_aio shm llvm hdf5 openmp
+        prealm hwloc python papi cpptrace gasnet ucx mpi)
+  string(TOUPPER "${feature}" upper_feature)
+  if(REALM_USE_${upper_feature})
+    set(Realm_${feature}_FOUND ON)
+  endif()
+endforeach()
+# rdtsc is special
+if(REALM_TIMERS_USE_RDTSC)
+  set(Realm_rdtsc_FOUND ON)
+endif()
+
 include(CMakeFindDependencyMacro)
+# Use our installed find_package modules as a last resort
 list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_LIST_DIR}")
 
 # If Kokkos was used, it needs to be found regardless of shared or static since
 # it's (unfortunately) part of the interface
 # TODO(cperry): move this to be header only / optional, maybe after the c++ api
 #               is implemented on top of the c api
-set(REALM_USE_KOKKOS @REALM_USE_KOKKOS@)
 if(REALM_USE_KOKKOS)
   find_dependency(Kokkos)
 endif()
