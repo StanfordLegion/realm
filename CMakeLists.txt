@@ -876,6 +876,35 @@ if(TARGET CUDA::cuda_driver AND REALM_ENABLE_CUDA)
 endif()
 #endregion
 
+if(REALM_USE_HIP)
+  add_library(realm_hip_fatbin OBJECT ${REALM_HIP_SOURCES})
+  target_compile_options(
+    realm_hip_fatbin
+    PRIVATE $<$<COMPILE_LANG_AND_ID:HIP,clang>:
+            --fatbin>
+  )
+  target_compile_definitions(realm_hip_fatbin PRIVATE "HIP_FATBIN_COMPILATION")
+
+  target_include_directories(
+    realm_hip_fatbin PRIVATE "${REALM_SOURCE_DIR}/.." "${CMAKE_CURRENT_BINARY_DIR}/include"
+  )
+  set_target_properties(realm_hip_fatbin PROPERTIES HIP_STANDARD ${REALM_CXX_STANDARD})
+
+  set(realm_fatbin_cc "${CMAKE_CURRENT_BINARY_DIR}/realm_hipcc_memcpy.cc")
+  add_custom_command(
+    OUTPUT "${realm_fatbin_cc}"
+    COMMAND
+      ${CMAKE_COMMAND} "-DVAR_NAME=realm_fatbin" "-DDEFINES_HEADER=realm/realm_config.h"
+      "-DIN_FILE=$<TARGET_OBJECTS:realm_hip_fatbin>" "-DOUT_FILE=${realm_fatbin_cc}" -P
+      ${PROJECT_SOURCE_DIR}/cmake/bin2c.cmake
+    VERBATIM
+    WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+    DEPENDS realm_hip_fatbin
+    COMMENT "Embedding binary objects realm_hip_fatbin -> ${realm_fatbin_cc}"
+  )
+  add_custom_target(realm_fatbin_tgt DEPENDS "${realm_fatbin_cc}")
+  list(APPEND REALM_SOURCES "${realm_fatbin_cc}")
+endif()
 #region Library compilation
 
 # Specifically for adding extra object libraries' target objects to prevent

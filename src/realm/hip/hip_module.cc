@@ -43,8 +43,15 @@
 #include <stdio.h>
 #include <string.h>
 #include <dlfcn.h>
+#include <math.h>
+#include <sstream>
+#include <iomanip>
+#include <algorithm>
+#include <utility>
 
 #define IS_DEFAULT_STREAM(stream) ((stream) == 0)
+
+extern unsigned char realm_hipcc_memcpy_co[];
 
 namespace Realm {
 
@@ -275,7 +282,7 @@ namespace Realm {
       r->add_dma_channel(new GPUChannel(this, XFER_GPU_IN_FB, &r->bgwork));
       r->add_dma_channel(new GPUfillChannel(this, &r->bgwork));
       r->add_dma_channel(new GPUreduceChannel(this, &r->bgwork));
-
+      r->add_dma_channel(new GPUIndirectChannel(this, XFER_GPU_SC_IN_FB, &r->bgwork));
       // treat managed mem like pinned sysmem on the assumption that most data
       //  is usually in system memory
       if(!pinned_sysmems.empty() || !managed_mems.empty()) {
@@ -288,6 +295,7 @@ namespace Realm {
       // only create a p2p channel if we have peers (and an fb)
       if(!peer_fbs.empty() || !hipipc_mappings.empty()) {
         r->add_dma_channel(new GPUChannel(this, XFER_GPU_PEER_FB, &r->bgwork));
+        r->add_dma_channel(new GPUIndirectChannel(this, XFER_GPU_SC_PEER_FB, &r->bgwork));
       }
     }
 
@@ -406,8 +414,7 @@ namespace Realm {
       // shouldn't be any events running around still
       assert((current_size + external_count) == total_size);
       if(external_count)
-        log_stream.warning() << "Application leaking " << external_count
-                             << " cuda events";
+        log_stream.warning() << "Application leaking " << external_count << " hip events";
 
       for(int i = 0; i < current_size; i++)
         CHECK_HIP(hipEventDestroy(available_events[i]));
@@ -1960,6 +1967,111 @@ namespace Realm {
     */
     }
 #endif
+    static void launch_kernel(const Realm::Hip::GPU::GPUFuncInfo &func_info, void *params,
+                              size_t num_elems, size_t arg_size, GPUStream *stream)
+    {
+      unsigned int num_blocks = 0, num_threads = 0;
+      num_threads = 32;
+      num_blocks = std::min(
+          static_cast<unsigned int>((num_elems + num_threads - 1) / num_threads),
+          static_cast<unsigned int>(
+              func_info.occ_num_blocks)); // Cap the grid based on the given volume
+      void *config[] = {HIP_LAUNCH_PARAM_BUFFER_POINTER, params,
+                        HIP_LAUNCH_PARAM_BUFFER_SIZE, &arg_size, HIP_LAUNCH_PARAM_END};
+      CHECK_HIP(hipModuleLaunchKernel(func_info.func, num_blocks, 1, 1, num_threads, 1, 1,
+                                      /* shared_mem_bytes */ 0, stream->get_stream(),
+                                      nullptr, config));
+    }
+
+    void GPU::launch_transpose_kernel(MemcpyTransposeInfo<size_t> &copy_info,
+                                      size_t elem_size, GPUStream *stream)
+    {
+      size_t log_elem_size = std::min(static_cast<size_t>(ctz(elem_size)),
+                                      HIP_MEMCPY_KERNEL_MAX2_LOG2_BYTES - 1);
+      size_t num_elems = copy_info.extents[1] * copy_info.extents[2];
+      assert((1ULL << log_elem_size) <= elem_size);
+
+      GPUFuncInfo &func_info = transpose_kernels[log_elem_size];
+      unsigned int num_blocks = 0, num_threads = 0;
+      // SM_TODO : Use results from Occupancy (currently not properly supported)
+      func_info.occ_num_threads = 128;
+      func_info.occ_num_blocks = 32;
+      size_t chunks = copy_info.extents[0] / elem_size;
+      copy_info.tile_size = static_cast<size_t>(
+          static_cast<size_t>(sqrt(func_info.occ_num_threads) / chunks) * chunks);
+      size_t shared_mem_bytes =
+          (copy_info.tile_size * (copy_info.tile_size + 1)) * copy_info.extents[0];
+
+      num_threads = copy_info.tile_size * copy_info.tile_size;
+
+      num_blocks =
+          std::min(static_cast<unsigned int>((num_elems + num_threads - 1) / num_threads),
+                   static_cast<unsigned int>(func_info.occ_num_blocks));
+      size_t offset = sizeof(copy_info);
+#if DEBUG_SM
+      unsigned int j = 0;
+      char *in = (char *)(&copy_info);
+      for(unsigned int i = 0; i < offset; i = i + 8) {
+        unsigned char c = ((unsigned char *)(in))[j];
+        j = j + 1;
+        int x = c & 0xff;
+        log_gpu.print() << "copy_info[" << j << "]:" << x;
+      }
+#endif
+      void *config[] = {HIP_LAUNCH_PARAM_BUFFER_POINTER, &copy_info,
+                        HIP_LAUNCH_PARAM_BUFFER_SIZE, &offset, HIP_LAUNCH_PARAM_END};
+      CHECK_HIP(hipModuleLaunchKernel(func_info.func, num_blocks, 1, 1, num_threads, 1, 1,
+                                      shared_mem_bytes, stream->get_stream(), nullptr,
+                                      config));
+    }
+
+    void GPU::launch_batch_affine_kernel(void *copy_info, size_t dim, size_t elem_size,
+                                         size_t volume, GPUStream *stream,
+                                         size_t arg_size)
+    {
+      size_t log_elem_size = std::min(static_cast<size_t>(ctz(elem_size)),
+                                      HIP_MEMCPY_KERNEL_MAX2_LOG2_BYTES - 1);
+
+      assert((1ULL << log_elem_size) == elem_size);
+      assert(dim <= REALM_MAX_DIM);
+      assert(dim >= 1);
+      log_gpudma.info() << "launching batch affine kernel ";
+      GPUFuncInfo &func_info = batch_affine_kernels[dim - 1][log_elem_size];
+      launch_kernel(func_info, copy_info, volume, arg_size, stream);
+    }
+
+    void GPU::launch_indirect_copy_kernel(void *copy_info, size_t dim, size_t addr_size,
+                                          size_t field_size, size_t volume,
+                                          size_t arg_size, GPUStream *stream)
+    {
+      size_t log_addr_size = std::min(static_cast<size_t>(ctz(addr_size)),
+                                      HIP_MEMCPY_KERNEL_MAX2_LOG2_BYTES - 1);
+      size_t log_field_size = std::min(static_cast<size_t>(ctz(field_size)),
+                                       HIP_MEMCPY_KERNEL_MAX2_LOG2_BYTES - 1);
+
+      assert((1ULL << log_field_size) <= field_size);
+      assert(dim <= REALM_MAX_DIM);
+      assert(dim >= 1);
+      log_gpudma.info() << "launching indirect copy kernel ";
+      GPUFuncInfo &func_info =
+          indirect_copy_kernels[dim - 1][log_addr_size][log_field_size];
+      launch_kernel(func_info, copy_info, volume, arg_size, stream);
+    }
+
+    void GPU::launch_batch_affine_fill_kernel(void *fill_info, size_t dim,
+                                              size_t elem_size, size_t volume,
+                                              size_t arg_size, GPUStream *stream)
+    {
+      size_t log_elem_size = std::min(static_cast<size_t>(ctz(elem_size)),
+                                      HIP_MEMCPY_KERNEL_MAX2_LOG2_BYTES - 1);
+
+      assert((1ULL << log_elem_size) == elem_size);
+      assert(dim <= REALM_MAX_DIM);
+      assert(dim >= 1);
+      log_gpudma.info() << "launching batch affine fill kernel ";
+      GPUFuncInfo &func_info = batch_affine_fill_kernels[dim - 1][log_elem_size];
+      launch_kernel(func_info, fill_info, volume, arg_size, stream);
+    }
 
     void GPUProcessor::gpu_memcpy(void *dst, const void *src, size_t size,
                                   hipMemcpyKind kind)
@@ -2057,13 +2169,91 @@ namespace Realm {
       host_to_device_stream = new GPUStream(this, worker);
       device_to_host_stream = new GPUStream(this, worker);
 
+      hipDevice_t dev;
+      int numSMs;
+
+      CHECK_HIP(hipGetDevice(&dev));
+      CHECK_HIP(
+          hipDeviceGetAttribute(&numSMs, hipDeviceAttributeMultiprocessorCount, dev));
+
+      CHECK_HIP(hipModuleLoadData(&device_module, (void *)realm_hipcc_memcpy_co));
+      for(unsigned int log_bit_sz = 0; log_bit_sz < HIP_MEMCPY_KERNEL_MAX2_LOG2_BYTES;
+          log_bit_sz++) {
+        const unsigned int bit_sz = 8U << log_bit_sz;
+        GPUFuncInfo func_info;
+        char name[30];
+        std::snprintf(name, sizeof(name), "memcpy_transpose%u", bit_sz);
+        CHECK_HIP(hipModuleGetFunction(&func_info.func, device_module, name));
+
+#ifdef SM_TODO
+        auto blocksize_to_shared = [](int block_size) -> size_t {
+          int tile_size = sqrt(block_size);
+          return static_cast<size_t>(tile_size * (tile_size + 1) * HIP_MAX_FIELD_BYTES);
+        };
+#endif
+        size_t block_size = 64;
+        size_t blocksize_to_sharedmem =
+            sqrt(block_size) * (sqrt(block_size) + 1) * HIP_MAX_FIELD_BYTES;
+        log_gpu.debug() << "block size occupancy for function " << name << " , func"
+                        << func_info.func;
+        CHECK_HIP(hipModuleOccupancyMaxPotentialBlockSize(
+            &func_info.occ_num_blocks, &func_info.occ_num_threads, func_info.func,
+            blocksize_to_sharedmem, 0));
+
+        transpose_kernels[log_bit_sz] = func_info;
+
+        for(unsigned int d = 1; d <= HIP_MAX_DIM; d++) {
+          std::snprintf(name, sizeof(name), "memcpy_affine_batch%uD_%u", d, bit_sz);
+          CHECK_HIP(hipModuleGetFunction(&func_info.func, device_module, name));
+          // Here, we don't have a constraint on the block size, so allow
+          // the driver to decide the best combination we can launch
+          CHECK_HIP(hipModuleOccupancyMaxPotentialBlockSize(
+              &func_info.occ_num_blocks, &func_info.occ_num_threads, func_info.func,
+              blocksize_to_sharedmem, 0));
+
+          batch_affine_kernels[d - 1][log_bit_sz] = func_info;
+
+          std::snprintf(name, sizeof(name), "fill_affine_large%uD_%u", d, bit_sz);
+          CHECK_HIP(hipModuleGetFunction(&func_info.func, device_module, name));
+          // Here, we don't have a constraint on the block size, so allow
+          // the driver to decide the best combination we can launch
+          CHECK_HIP(hipModuleOccupancyMaxPotentialBlockSize(
+              &func_info.occ_num_blocks, &func_info.occ_num_threads, func_info.func,
+              blocksize_to_sharedmem, 0));
+
+          fill_affine_large_kernels[d - 1][log_bit_sz] = func_info;
+
+          std::snprintf(name, sizeof(name), "fill_affine_batch%uD_%u", d, bit_sz);
+          CHECK_HIP(hipModuleGetFunction(&func_info.func, device_module, name));
+          // Here, we don't have a constraint on the block size, so allow
+          // the driver to decide the best combination we can launch
+          CHECK_HIP(hipModuleOccupancyMaxPotentialBlockSize(
+              &func_info.occ_num_blocks, &func_info.occ_num_threads, func_info.func,
+              blocksize_to_sharedmem, 0));
+          batch_affine_fill_kernels[d - 1][log_bit_sz] = func_info;
+
+          for(unsigned int log_addr_bit_sz = 2; log_addr_bit_sz < 4; log_addr_bit_sz++) {
+            const unsigned int addr_bit_sz = 8U << log_addr_bit_sz;
+            std::snprintf(name, sizeof(name), "memcpy_indirect%uD_%u%u", d, bit_sz,
+                          addr_bit_sz);
+
+            CHECK_HIP(hipModuleGetFunction(&func_info.func, device_module, name));
+
+            CHECK_HIP(hipModuleOccupancyMaxPotentialBlockSize(&func_info.occ_num_blocks,
+                                                              &func_info.occ_num_threads,
+                                                              func_info.func, 0, 0));
+            indirect_copy_kernels[d - 1][log_addr_bit_sz][log_bit_sz] = func_info;
+          }
+        }
+      }
+
       device_to_device_streams.resize(module->config->cfg_d2d_streams, 0);
       for(unsigned i = 0; i < module->config->cfg_d2d_streams; i++)
         device_to_device_streams[i] =
             new GPUStream(this, worker, module->config->cfg_d2d_stream_priority);
 
       // only create p2p streams for devices we can talk to
-      peer_to_peer_streams.resize(module->gpu_info.size(), 0);
+      peer_to_peer_streams.resize(module->gpu_info.size(), nullptr);
       for(std::vector<GPUInfo *>::const_iterator it = module->gpu_info.begin();
           it != module->gpu_info.end(); ++it)
         if(info->peers.count((*it)->device) != 0)
@@ -2130,6 +2320,12 @@ namespace Realm {
       // hipCtx_t popped;
       // CHECK_HIP( hipCtxPopCurrent(&popped) );
       // assert(popped == context);
+    }
+
+    bool GPU::can_access_peer(const GPU *peer) const
+    {
+      return (peer != NULL) &&
+             (info->peers.find(peer->info->device) != info->peers.end());
     }
 
     void GPU::create_processor(RuntimeImpl *runtime, size_t stack_size)
