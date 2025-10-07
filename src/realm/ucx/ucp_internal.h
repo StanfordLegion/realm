@@ -36,6 +36,7 @@
 #include "realm/ucx/spinlock.h"
 #include "realm/ucx/bootstrap/bootstrap_internal.h"
 #include "realm/ucx/ucc_comm.h"
+#include "realm/loader.h"
 #include <ucp/api/ucp.h>
 
 #include <memory>
@@ -250,7 +251,7 @@ namespace Realm {
       using AttachMap = std::unordered_map<const UCPContext *, std::vector<ucp_mem_h>>;
 
 #ifdef REALM_UCX_DYNAMIC_LOAD
-      void *libucp{nullptr};
+      libhandle_t libucp{nullptr};
 #endif
       bool initialized_boot{false};
       bool initialized_ucp{false};
