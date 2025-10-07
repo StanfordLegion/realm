@@ -326,7 +326,8 @@ namespace Realm {
   void Machine::get_local_processors_by_kind(std::set<Processor> &pset,
                                              Processor::Kind kind) const
   {
-    RealmStatus status = (static_cast<MachineImpl *>(impl))->get_local_processors_by_kind(pset, kind);
+    RealmStatus status =
+        (static_cast<MachineImpl *>(impl))->get_local_processors_by_kind(pset, kind);
     REALM_ASSERT_WITH_ABORT(status == REALM_SUCCESS, log_machine);
   }
 
@@ -714,7 +715,7 @@ namespace Realm {
     }
 #else
     const MachineNodeInfo *mynode = get_nodeinfo(Network::my_node_id);
-    if (mynode == nullptr) {
+    if(mynode == nullptr) {
       return REALM_MACHINE_ERROR_INVALID_NODE;
     }
     for(std::map<Processor, MachineProcInfo *>::const_iterator it = mynode->procs.begin();
@@ -725,7 +726,7 @@ namespace Realm {
   }
 
   RealmStatus MachineImpl::get_local_processors_by_kind(std::set<Processor> &pset,
-                                                 Processor::Kind kind) const
+                                                        Processor::Kind kind) const
   {
     // TODO: consider using a reader/writer lock here instead
     AutoLock<> al(mutex);
@@ -741,7 +742,7 @@ namespace Realm {
     }
 #else
     const MachineNodeInfo *mynode = get_nodeinfo(Network::my_node_id);
-    if (mynode == nullptr) {
+    if(mynode == nullptr) {
       return REALM_MACHINE_ERROR_INVALID_NODE;
     }
     std::map<Processor::Kind, std::map<Processor, MachineProcInfo *>>::const_iterator it =
@@ -867,7 +868,7 @@ namespace Realm {
     if(!node_info) {
       return false;
     }
-    if (!node_info->process_info) {
+    if(!node_info->process_info) {
       log_machine.warning("Process info is not set");
       return false;
     }

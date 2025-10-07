@@ -103,14 +103,13 @@
 #endif
 
 // TODO: remove the logger if used in gpu kernels
-#define REALM_ASSERT_WITH_ABORT(expr, logger)                    \
-  do {                                                           \
-    if (!(expr)) {                                               \
-      logger.fatal("Assertion failed: (%s), at %s:%d",   \
-              #expr, __FILE__, __LINE__);                        \
-      abort();                                                 \
-    }                                                              \
-  } while (0)
+#define REALM_ASSERT_WITH_ABORT(expr, logger)                                            \
+  do {                                                                                   \
+    if(!(expr)) {                                                                        \
+      logger.fatal("Assertion failed: (%s), at %s:%d", #expr, __FILE__, __LINE__);       \
+      abort();                                                                           \
+    }                                                                                    \
+  } while(0)
 
 // REALM_LIKELY(expr) - suggest that `expr` is usually true
 // REALM_UNLILELY(expr) - suggest that `expr` is usually false
