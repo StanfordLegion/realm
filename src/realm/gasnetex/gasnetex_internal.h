@@ -160,6 +160,7 @@ namespace Realm {
     // TODO: Remove this once we insert a slow insertion pathway
     // from dynamically allocated output buffers that are not
     // registered with GASNet
+    // https://github.com/StanfordLegion/realm/issues/239
     size_t num_buffers, num_endpoints;
     OutbufMetadata *overflow_head;
     OutbufMetadata **overflow_tail;

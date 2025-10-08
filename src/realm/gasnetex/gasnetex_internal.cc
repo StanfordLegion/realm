@@ -440,10 +440,11 @@ namespace Realm {
     {
       AutoLock<> al(mutex);
       md = first_available;
-      if(md)
+      if(md) {
         first_available = md->nextbuf;
-      else if(!overflow_ok)
+      } else if(!overflow_ok) {
         return nullptr;
+      }
       if(new_endpoint && (num_buffers == num_endpoints++)) {
         log_gex_obmgr.fatal()
             << "Detected inevitable hang because there are "
