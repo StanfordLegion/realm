@@ -310,12 +310,14 @@ memcpy_indirect_points(Realm::Cuda::MemcpyIndirectInfoSized<3, Offset_t> info)
     int32_t src_pidx = -1;
     int32_t dst_pidx = -1;
 
+    // TODO: ACCELERATE ME
     for(int32_t i = 0; i < info.num_src_pieces && src_pidx == -1; i++) {
       if(inside(src_pcs[i], src_pt)) {
         src_pidx = i;
       }
     }
 
+    // TODO: ACCELERATE ME
     for(int32_t j = 0; j < info.num_dst_pieces && dst_pidx == -1; j++) {
       if(inside(dst_pcs[j], dst_pt)) {
         dst_pidx = j;

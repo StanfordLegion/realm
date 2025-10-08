@@ -794,8 +794,7 @@ namespace Realm {
       size_t rect_bytes{0};
       size_t volume{0};
 
-      RegionInstance domain_inst;
-
+      void *domain_rects_dev{nullptr};
 
       size_t points_done{0};
       size_t total_points{0};

@@ -933,7 +933,12 @@ namespace Realm {
       }
     }
 
-    GPUIndirectXferDes::~GPUIndirectXferDes() { domain_inst.destroy(); }
+    GPUIndirectXferDes::~GPUIndirectXferDes()
+    {
+      if(domain_rects_dev) {
+        runtime_singleton->repl_heap.free_obj(domain_rects_dev);
+      }
+    }
 
     // TODO: TEST ME!
     class DeferredHtoDUpload : public EventWaiter {
@@ -977,37 +982,11 @@ namespace Realm {
     Event GPUIndirectXferDes::request_metadata()
     {
       Event event = XferDes::request_metadata();
-
-      GPUIndirectChannel *gchannel = static_cast<GPUIndirectChannel *>(channel);
-      GPU *gpu = gchannel->get_gpu();
-
-      Memory dyn_mem = (gpu && gpu->fb_dmem) ? gpu->fb_dmem->me : Memory::NO_MEMORY;
-      assert(dyn_mem.exists());
-
-      Rect<1, int> bounds(Point<1, int>(0), Point<1, int>(num_domain_rects - 1));
-      std::vector<size_t> field_sizes(1, rect_bytes);
-      Event alloc_event = RegionInstance::create_instance(
-          domain_inst, dyn_mem, bounds, field_sizes, 0, ProfilingRequestSet());
-
       const size_t bytes = num_domain_rects * rect_bytes;
-
-      Event finish;
-      if(!alloc_event.has_triggered()) {
-        auto *upload = new DeferredHtoDUpload(gpu, domain_inst, domain_rects_base, bytes);
-        upload->defer(alloc_event);
-        finish = Event::merge_events(event, upload->get_finish_event());
-      } else {
-        RegionInstanceImpl *impl = get_runtime()->get_instance_impl(domain_inst);
-        MemoryImpl *mem = impl->mem_impl;
-        assert(mem != nullptr);
-        CUdeviceptr dptr = reinterpret_cast<CUdeviceptr>(
-            mem->get_direct_ptr(impl->metadata.inst_offset, 0));
-        Cuda::AutoGPUContext agc(gpu);
-        CHECK_CU(CUDA_DRIVER_FNPTR(cuMemcpyHtoD)(dptr, domain_rects_base, bytes));
-        finish = event;
-      }
-
-      return finish;
+      constexpr size_t ALIGN = 16;
+      domain_rects_dev = runtime_singleton->repl_heap.alloc_obj(bytes, ALIGN);
+      std::memcpy(domain_rects_dev, domain_rects_base, bytes);
+      return event;
     }
 
     long GPUIndirectXferDes::get_requests(Request **, long)
@@ -1202,10 +1181,7 @@ namespace Realm {
         memcpy_info.volume = points;
 
         {
-
-          RegionInstanceImpl *impl = get_runtime()->get_instance_impl(domain_inst);
-          memcpy_info.domain_base = reinterpret_cast<uintptr_t>(
-              impl->mem_impl->get_direct_ptr(impl->metadata.inst_offset, 0));
+          memcpy_info.domain_base = reinterpret_cast<uintptr_t>(domain_rects_dev);
           memcpy_info.domain_rects = num_domain_rects;
         }
 
