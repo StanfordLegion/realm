@@ -34,6 +34,7 @@ struct CUstream_st; // cudaStream_t == CUstream == CUstream_st *
 struct CUevent_st;
 struct CUctx_st;
 struct CUfunc_st;
+struct CUmemPoolHandle_st;
 
 namespace Realm {
 
@@ -226,7 +227,6 @@ namespace Realm {
       bool get_cuda_context(Processor p, CUctx_st **context) const;
 
       bool register_reduction(Event &event, const CudaRedOpDesc *descs, size_t num);
-
     public:
       CudaModuleConfig *config;
       RuntimeImpl *runtime;

@@ -624,6 +624,7 @@ namespace Realm {
                                                           bool poisoned,
                                                           TimeLimit work_until);
 
+      virtual void release_storage_deferrable(RegionInstanceImpl *inst, Event precondition);
       virtual void release_storage_immediate(RegionInstanceImpl *inst, bool poisoned,
                                              TimeLimit work_until);
 
@@ -649,9 +650,16 @@ namespace Realm {
       GPU *gpu;
       Mutex mutex;
       CUmemoryPool pool = nullptr;
-      typedef std::unordered_map<RegionInstanceImpl *, CUdeviceptr> InstToPtrMap;
-      InstToPtrMap inst_to_ptr;
-      std::atomic<size_t> allocated_bytes = 0;
+      struct InstInfo {
+        CUdeviceptr ptr = 0;
+        bool need_alloc_result = false;
+        bool deferred_release = false;
+      };
+      typedef std::unordered_map<RegionInstanceImpl *, InstInfo> InstToInfoMap;
+      InstToInfoMap inst_to_info;
+      std::queue<RegionInstanceImpl *> pending_allocs;
+      size_t free_bytes = 0;
+      size_t pending_free_bytes = 0;
       NetworkSegment local_segment;
     };
 
