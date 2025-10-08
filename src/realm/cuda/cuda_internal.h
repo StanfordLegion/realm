@@ -611,6 +611,7 @@ namespace Realm {
     };
 
     class GPUDynamicFBMemory : public MemoryImpl {
+      MemoryImpl::AllocationResult allocate_storage_immediate_internal(RegionInstanceImpl *inst, bool need_alloc_result, bool poisoned, bool push_deferred, TimeLimit work_until);
     public:
       GPUDynamicFBMemory(RuntimeImpl *_runtime_impl, Memory _me, GPU *_gpu,
                          size_t _max_size);
