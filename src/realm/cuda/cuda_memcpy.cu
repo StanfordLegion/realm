@@ -188,6 +188,33 @@ memcpy_affine_batch(Realm::Cuda::AffineCopyPair<N, Offset_t> *info, size_t nrect
   }
 }
 
+template <int N, typename COORD_T, typename Offset_t>
+static __device__ inline unsigned
+locate_rectangle(const Realm::SparsityMapEntry<N, COORD_T> *__restrict__ drects,
+                 Offset_t num_rects, Offset_t global_lin, Offset_t &local_lin)
+{
+  Offset_t lo = 0;
+  Offset_t hi = num_rects;
+
+  while(lo < hi) {
+    Offset_t mid = (lo + hi) >> 1;
+    Offset_t start = drects[mid].prefix_sum;
+    Offset_t end = start + drects[mid].bounds.volume();
+
+    if(global_lin < start) {
+      hi = mid;
+    } else if(global_lin >= end) {
+      lo = mid + 1;
+    } else {
+      local_lin = global_lin - start;
+      return mid;
+    }
+  }
+
+  local_lin = 0;
+  return num_rects;
+}
+
 template <int N, typename COORD_T, typename DATA_T, typename Offset_t = size_t>
 static __device__ inline void
 memcpy_indirect_points(Realm::Cuda::MemcpyIndirectInfoSized<3, Offset_t> info)
@@ -221,14 +248,19 @@ memcpy_indirect_points(Realm::Cuda::MemcpyIndirectInfoSized<3, Offset_t> info)
   //--------------------------------------------------------------------
   // 3. locate the rectangle that owns ‘lin’
   //--------------------------------------------------------------------
-  unsigned r = 0;
-  while((r < info.domain_rects) && (lin >= curr_rect_vol)) {
+  // unsigned r = 0;
+  /*while((r < info.domain_rects) && (lin >= curr_rect_vol)) {
     lin -= curr_rect_vol;
     r++;
     if(r < info.domain_rects) {
       curr_rect_vol = drects[r].bounds.volume();
     }
-  }
+  }*/
+
+  Offset_t local_lin = 0;
+  unsigned r =
+      locate_rectangle<N, COORD_T, Offset_t>(drects, info.domain_rects, gidx, local_lin);
+  lin = local_lin;
 
   while((r < info.domain_rects) && (gidx < info.volume)) {
     const Realm::Rect<N, COORD_T> &rb = drects[r].bounds;
@@ -316,13 +348,18 @@ memcpy_indirect_points(Realm::Cuda::MemcpyIndirectInfoSized<3, Offset_t> info)
 
     gidx += grid_step;
     lin += grid_step;
-    while((r < info.domain_rects) && (lin >= curr_rect_vol)) {
+
+    r = locate_rectangle<N, COORD_T, Offset_t>(drects, info.domain_rects, gidx,
+                                               local_lin);
+    lin = local_lin;
+
+    /*while((r < info.domain_rects) && (lin >= curr_rect_vol)) {
       lin -= curr_rect_vol;
       r++;
       if(r < info.domain_rects) {
         curr_rect_vol = drects[r].bounds.volume();
       }
-    }
+    }*/
   }
 }
 
