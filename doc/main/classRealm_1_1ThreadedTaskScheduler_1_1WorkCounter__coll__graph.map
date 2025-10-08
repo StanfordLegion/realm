@@ -1,0 +1,14 @@
+<map id="Realm::ThreadedTaskScheduler::WorkCounter" name="Realm::ThreadedTaskScheduler::WorkCounter">
+<area shape="rect" id="Node000001" title=" " alt="" coords="680,67,907,107"/>
+<area shape="rect" id="Node000002" href="$classRealm_1_1atomic.html" title=" " alt="" coords="7,5,207,31"/>
+<area shape="poly" id="edge1_Node000001_Node000002" title=" " alt="" coords="221,14,425,20,541,31,657,49,724,65,723,70,655,54,541,36,424,26,221,19"/>
+<area shape="rect" id="Node000004" href="$classRealm_1_1DelegatingMutex.html" title=" " alt="" coords="356,49,540,75"/>
+<area shape="poly" id="edge4_Node000004_Node000002" title=" " alt="" coords="219,30,356,48,355,53,219,35"/>
+<area shape="rect" id="Node000003" href="$classRealm_1_1atomic.html" title=" " alt="" coords="361,99,535,124"/>
+<area shape="poly" id="edge2_Node000001_Node000003" title=" " alt="" coords="549,109,656,105,679,102,680,108,656,110,549,115"/>
+<area shape="poly" id="edge3_Node000001_Node000004" title=" " alt="" coords="554,67,680,76,680,82,553,72"/>
+<area shape="rect" id="Node000005" href="$classRealm_1_1DoorbellList.html" title=" " alt="" coords="373,148,523,173"/>
+<area shape="poly" id="edge5_Node000001_Node000005" title=" " alt="" coords="536,150,655,130,738,105,740,110,657,135,537,155"/>
+<area shape="rect" id="Node000006" href="$classRealm_1_1atomic.html" title=" " alt="" coords="5,148,208,173"/>
+<area shape="poly" id="edge6_Node000005_Node000006" title=" " alt="" coords="222,158,373,158,373,163,222,163"/>
+</map>
