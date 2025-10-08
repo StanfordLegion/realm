@@ -1697,6 +1697,15 @@ namespace Realm {
                                                    bool need_alloc_result, bool poisoned,
                                                    TimeLimit work_until)
     {
+      return allocate_storage_immediate_internal(inst, need_alloc_result, poisoned, true,
+                                                 work_until);
+    }
+
+    MemoryImpl::AllocationResult
+    GPUDynamicFBMemory::allocate_storage_immediate_internal(RegionInstanceImpl *inst,
+                                                   bool need_alloc_result, bool poisoned, bool push_deferred,
+                                                   TimeLimit work_until)
+    {
       MemoryImpl::AllocationResult result = ALLOC_INSTANT_FAILURE;
       size_t offset = RegionInstanceImpl::INSTOFFSET_FAILED;
       size_t cur_alloc = 0;
@@ -1726,9 +1735,9 @@ namespace Realm {
           result = ALLOC_INSTANT_FAILURE;
           goto Done;
         }
-        // Acquire all the free bytes we need, prioritizing free bytes
-        // This assumes that all free bytes are allocatable (they may not be if the pool
-        // is fragmented)
+        // Acquire all the free bytes we need, prioritizing currently free bytes
+        // This assumes that all memory is allocatable (they may not be if the pool
+        // is fragmented, but we can't know this directly)
         size_t bytes_left = bytes;
         if (bytes > free_bytes) {
           bytes_left = free_bytes;
@@ -1751,10 +1760,10 @@ namespace Realm {
         AutoLock<> al(mutex);
         if(needs_deferred_alloc || (res == CUDA_ERROR_OUT_OF_MEMORY)) {
           log_gpu.warning() << "out of memory in cuMemAllocFromPoolAsync: bytes=" << bytes;
-          // TODO: need to factor this out to indicate when allocation is happening via a
-          // release, so we don't push duplicate entries here.
           if (needs_deferred_alloc || pending_free_bytes > 0) {
-            pending_allocs.push(inst);
+            if (push_deferred) {
+              pending_allocs.push(inst);
+            }
             inst_to_info[inst].ptr = offset = RegionInstanceImpl::INSTOFFSET_DELAYEDALLOC;
             result = ALLOC_DEFERRED;
           }
@@ -1839,6 +1848,8 @@ namespace Realm {
 
       if(base != 0) {
         AutoGPUContext agc(gpu);
+        // Do not hold the lock while we're releasing the memory to cuda in order to allow
+        // other threads to make progress here.
         CHECK_CU(CUDA_DRIVER_FNPTR(cuMemFree)(base));
 
         AutoLock<> al(mutex);
@@ -1848,12 +1859,12 @@ namespace Realm {
           RegionInstanceImpl *alloc_inst = pending_allocs.front();
           InstInfo &inst_info = inst_to_info[alloc_inst];
           AllocationResult alloc_res =
-              allocate_storage_immediate(alloc_inst, inst_info.need_alloc_result,
-                                         /*poisoned*/ false, TimeLimit::responsive());
-          if(alloc_res == ALLOC_INSTANT_SUCCESS || alloc_res == ALLOC_DEFERRED) {
-            pending_allocs.pop(); // TODO: fix ALLOC_DEFERRED case to not reinsert if called from a release to maintain queue order
+              allocate_storage_immediate_internal(alloc_inst, inst_info.need_alloc_result,
+                                         /*poisoned*/ false, /*push_deferred*/ false, work_until);
+          if(alloc_res == ALLOC_INSTANT_SUCCESS) {
+            pending_allocs.pop();
           } else {
-            break;
+            break;  // Couldn't allocate the next in queue, so stop
           }
         }
       }
