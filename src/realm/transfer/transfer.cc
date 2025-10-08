@@ -626,6 +626,100 @@ namespace Realm {
     return true; // we have no more addresses to produce
   }
 
+  ////////////////////////////////////////////////////////////////////////
+  //
+  // class TransferIteratorIndirectRange<N,T>
+  //
+  template <int N, typename T>
+  AffinePieceIteratorT<N, T>::AffinePieceIteratorT(RegionInstanceImpl *inst,
+                                                   const std::vector<int> &fids,
+                                                   const std::vector<size_t> &offs,
+                                                   const std::vector<size_t> &szs)
+    : inst_impl(inst)
+    , layout(checked_cast<const InstanceLayout<N, T> *>(inst->metadata.layout))
+    , fields(fids.begin(), fids.end())
+    , fld_offs(offs)
+    , fld_sizes(szs)
+  {
+    advance();
+  }
+
+  template <int N, typename T>
+  bool AffinePieceIteratorT<N, T>::advance()
+  {
+    while(field_idx < fields.size()) {
+      FieldID fid = fields[field_idx];
+      size_t fld_off = fld_offs[field_idx];
+      size_t fld_size = fld_sizes[field_idx];
+      auto it = layout->fields.find(fid);
+      const auto &plist = layout->piece_lists[it->second.list_idx].pieces;
+
+      while(piece_idx < plist.size()) {
+        auto *base = plist[piece_idx++];
+        if(base->layout_type != PieceLayoutTypes::AffineLayoutType) {
+          continue;
+        }
+
+        cur_piece = static_cast<const AffineLayoutPiece<N, T> *>(base);
+        cur_field_size = fld_size;
+        cur_base_off = inst_impl->metadata.inst_offset + cur_piece->offset + fld_off +
+                       cur_piece->strides.dot(cur_piece->bounds.lo);
+
+        valid = true;
+        return true;
+      }
+
+      // next field
+      field_idx++;
+      piece_idx = 0;
+    }
+    valid = false;
+    return false;
+  }
+
+  template <int N, typename T>
+  bool AffinePieceIteratorT<N, T>::next(AffinePieceInfo &out)
+  {
+    if(!valid) {
+      return false;
+    }
+
+    out.base_offset = cur_base_off;
+    out.field_size = cur_field_size;
+    out.dim = 1;
+
+    const Rect<N, T> &b = cur_piece->bounds;
+
+    for(int d = 0; d < N; d++) {
+      out.lo[d] = b.lo[d];
+      out.hi[d] = b.hi[d];
+    }
+
+    out.extents[0] = (b.hi[0] - b.lo[0] + 1);
+    out.strides[0] = cur_piece->strides[0];
+
+    if(N >= 2) {
+      out.extents[1] = (b.hi[1] - b.lo[1] + 1);
+      out.strides[1] = cur_piece->strides[1];
+      out.dim++;
+    } else {
+      out.extents[1] = 1;
+      out.strides[1] = 0;
+    }
+
+    if(N >= 3) {
+      out.extents[2] = (b.hi[2] - b.lo[2] + 1);
+      out.strides[2] = cur_piece->strides[2];
+      out.dim++;
+    } else {
+      out.extents[2] = 1;
+      out.strides[2] = 0;
+    }
+
+    advance();
+    return true;
+  }
+
   template <int N, typename T>
   TransferIteratorIndexSpace<N, T>::TransferIteratorIndexSpace(
       const int _dim_order[N], const std::vector<FieldID> &_fields,
@@ -4796,6 +4890,7 @@ namespace Realm {
       std::vector<CopySrcDstField> &&, std::vector<CopySrcDstField> &&,                  \
       const std::vector<const CopyIndirection<N, T>::Base *> &,                          \
       const ProfilingRequestSet &, Event, int) const;                                    \
+  template class AffinePieceIteratorT<N, T>;                                             \
   template class TransferIteratorIndexSpace<N, T>;                                       \
   template class TransferIteratorIndirect<N, T>;                                         \
   template class TransferIteratorIndirectRange<N, T>;                                    \
