@@ -611,7 +611,9 @@ namespace Realm {
     };
 
     class GPUDynamicFBMemory : public MemoryImpl {
-      MemoryImpl::AllocationResult allocate_storage_immediate_internal(RegionInstanceImpl *inst, bool need_alloc_result, bool poisoned, bool push_deferred, TimeLimit work_until);
+      AllocationResult queue_allocation(RegionInstanceImpl *inst, size_t size_needed);
+      CUresult alloc(CUmemoryPool pool, CUdeviceptr &offset, size_t size);
+
     public:
       GPUDynamicFBMemory(RuntimeImpl *_runtime_impl, Memory _me, GPU *_gpu,
                          size_t _max_size);
@@ -625,7 +627,8 @@ namespace Realm {
                                                           bool poisoned,
                                                           TimeLimit work_until);
 
-      virtual void release_storage_deferrable(RegionInstanceImpl *inst, Event precondition);
+      virtual void release_storage_deferrable(RegionInstanceImpl *inst,
+                                              Event precondition);
       virtual void release_storage_immediate(RegionInstanceImpl *inst, bool poisoned,
                                              TimeLimit work_until);
 
@@ -653,12 +656,12 @@ namespace Realm {
       CUmemoryPool pool = nullptr;
       struct InstInfo {
         CUdeviceptr ptr = 0;
-        bool need_alloc_result = false;
+        size_t alloc_bytes_needed = 0;
         bool deferred_release = false;
       };
       typedef std::unordered_map<RegionInstanceImpl *, InstInfo> InstToInfoMap;
       InstToInfoMap inst_to_info;
-      std::queue<RegionInstanceImpl *> pending_allocs;
+      std::deque<RegionInstanceImpl *> pending_allocs;
       size_t free_bytes = 0;
       size_t pending_free_bytes = 0;
       NetworkSegment local_segment;

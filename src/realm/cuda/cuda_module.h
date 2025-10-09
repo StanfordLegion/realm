@@ -227,6 +227,7 @@ namespace Realm {
       bool get_cuda_context(Processor p, CUctx_st **context) const;
 
       bool register_reduction(Event &event, const CudaRedOpDesc *descs, size_t num);
+
     public:
       CudaModuleConfig *config;
       RuntimeImpl *runtime;
