@@ -16,6 +16,7 @@
  */
 
 #include "realm/cuda/cuda_internal.h"
+#include "cuda_memcpy.h"
 #include "realm/cuda/cuda_module.h"
 #include "realm/cuda/cuda_access.h"
 #include "realm/cuda/cuda_memcpy.h"
@@ -1030,6 +1031,32 @@ namespace Realm {
         return std::min(want, span);
       }
 
+      void *upload_layout(XferDes::XferPort *port,
+                          std::vector<PackedPieceDev<3>> &pieces_dev, int &dim,
+                          size_t &field_size)
+      {
+        AffinePieceInfo pinfo;
+        PackedPieceDev<3> devpiece;
+        while(port->piece_iter->next(pinfo)) {
+          devpiece.base = reinterpret_cast<uintptr_t>(
+              port->mem->get_direct_ptr(pinfo.base_offset, 0));
+          for(int d = 0; d < pinfo.dim; d++) {
+            devpiece.lo[d] = pinfo.lo[d];
+            devpiece.hi[d] = pinfo.hi[d];
+            devpiece.strides[d] = pinfo.strides[d] / pinfo.field_size;
+          }
+          dim = std::min(dim, pinfo.dim);
+          field_size = std::min(field_size, pinfo.field_size);
+          pieces_dev.emplace_back(devpiece);
+        }
+
+        const size_t piece_bytes = pieces_dev.size() * sizeof(PackedPieceDev<3>);
+        constexpr size_t ALIGN = 16;
+        void *ptr = runtime_singleton->repl_heap.alloc_obj(piece_bytes, ALIGN);
+        std::memcpy(ptr, pieces_dev.data(), piece_bytes);
+        return ptr;
+      }
+
     } // namespace
 
     void GPUIndirectXferDes::fetch_indirection_meta(XferPort *ind_port)
@@ -1092,23 +1119,75 @@ namespace Realm {
           return did_work;
         }
 
-        if(src_pieces.empty()) {
+        bool out_ipc = dst_is_ipc[output_control.current_io_port];
+
+        MemcpyIndirectInfo<3> memcpy_info;
+        memset(&memcpy_info, 0, sizeof(MemcpyIndirectInfo<3>));
+
+        int dim = REALM_MAX_DIM;
+        size_t field_bytes = MAX_CHUNK;
+
+        if(!src_pieces_ptr) {
           AffinePieceInfo pinfo;
+          PackedPieceDev<3> devpiece;
+          std::vector<PackedPieceDev<3>> src_pieces_dev;
           while(inp_port->piece_iter->next(pinfo)) {
-            src_pieces.emplace_back(pinfo);
+            devpiece.base = reinterpret_cast<uintptr_t>(
+                inp_port->mem->get_direct_ptr(pinfo.base_offset, 0));
+            for(int d = 0; d < pinfo.dim; d++) {
+              devpiece.lo[d] = pinfo.lo[d];
+              devpiece.hi[d] = pinfo.hi[d];
+              devpiece.strides[d] = pinfo.strides[d] / pinfo.field_size;
+            }
+            dim = std::min(dim, pinfo.dim);
+            field_bytes = std::min(field_bytes, pinfo.field_size);
+            // memcpy_info.src_instruction = pinfo.prog;
+            src_pieces_dev.emplace_back(devpiece);
           }
+
+          const size_t src_piece_bytes =
+              src_pieces_dev.size() * sizeof(PackedPieceDev<3>);
+          constexpr size_t ALIGN = 16;
+          src_pieces_ptr = (PackedPieceDev<3> *)runtime_singleton->repl_heap.alloc_obj(
+              src_piece_bytes, ALIGN);
+          src_piece_count = src_pieces_dev.size();
+          std::memcpy(src_pieces_ptr, src_pieces_dev.data(), src_piece_bytes);
         }
 
-        if(dst_pieces.empty()) {
+        memcpy_info.num_src_pieces = src_piece_count;
+        memcpy_info.src_pieces_ptr = src_pieces_ptr;
+
+        assert(out_ipc == false);
+
+        if(!dst_pieces_ptr) {
           AffinePieceInfo pinfo;
+          PackedPieceDev<3> devpiece;
+          std::vector<PackedPieceDev<3>> dst_pieces_dev;
           while(out_port->piece_iter->next(pinfo)) {
-            dst_pieces.emplace_back(pinfo);
+            devpiece.base = reinterpret_cast<uintptr_t>(
+                out_port->mem->get_direct_ptr(pinfo.base_offset, 0));
+            for(int d = 0; d < pinfo.dim; d++) {
+              devpiece.lo[d] = pinfo.lo[d];
+              devpiece.hi[d] = pinfo.hi[d];
+              devpiece.strides[d] = pinfo.strides[d] / pinfo.field_size;
+            }
+            dim = std::min(dim, pinfo.dim);
+            field_bytes = std::min(field_bytes, pinfo.field_size);
+            // memcpy_info.dst_instruction = pinfo.prog;
+            dst_pieces_dev.emplace_back(devpiece);
           }
+
+          const size_t dst_piece_bytes =
+              dst_pieces_dev.size() * sizeof(PackedPieceDev<3>);
+          constexpr size_t ALIGN = 16;
+          dst_pieces_ptr = (PackedPieceDev<3> *)runtime_singleton->repl_heap.alloc_obj(
+              dst_piece_bytes, ALIGN);
+          dst_piece_count = dst_pieces_dev.size();
+          std::memcpy(dst_pieces_ptr, dst_pieces_dev.data(), dst_piece_bytes);
         }
 
-        size_t field_bytes =
-            std::min(min_field_bytes(src_pieces), min_field_bytes(dst_pieces));
-        int dim = std::min(min_dim(src_pieces), min_dim(dst_pieces));
+        memcpy_info.num_dst_pieces = dst_piece_count;
+        memcpy_info.dst_pieces_ptr = dst_pieces_ptr;
 
         size_t ind_budget = clamp_span(total_points * coord_bytes, ind_port);
         size_t points =
@@ -1122,7 +1201,6 @@ namespace Realm {
 
         GPU *inp_gpu = src_gpus[input_control.current_io_port];
         GPU *out_gpu = dst_gpus[output_control.current_io_port];
-        bool out_ipc = dst_is_ipc[output_control.current_io_port];
 
         uintptr_t out_base = 0;
         const GPU::CudaIpcMapping *out_map = nullptr;
@@ -1132,38 +1210,6 @@ namespace Realm {
           out_base = out_map->local_base;
         } else {
           out_base = reinterpret_cast<uintptr_t>(out_port->mem->get_direct_ptr(0, 0));
-        }
-
-        MemcpyIndirectInfoSized<3> memcpy_info;
-        memset(&memcpy_info, 0, sizeof(MemcpyIndirectInfo<3>));
-
-        assert(MemcpyIndirectInfoSized<3>::MAX_NUM_PIECES >= src_pieces.size());
-        memcpy_info.num_src_pieces = src_pieces.size();
-        for(size_t i = 0; i < src_pieces.size(); i++) {
-          memcpy_info.src_pieces[i].base = reinterpret_cast<uintptr_t>(
-              inp_port->mem->get_direct_ptr(src_pieces[i].base_offset, 0));
-          memcpy_info.src_pieces[i].strides[0] = src_pieces[i].strides[0];
-          memcpy_info.src_pieces[i].strides[1] = src_pieces[i].strides[1];
-          memcpy_info.src_pieces[i].strides[2] = src_pieces[i].strides[2];
-          for(int d = 0; d < src_pieces[i].dim; d++) {
-            memcpy_info.src_pieces[i].lo[d] = src_pieces[i].lo[d];
-            memcpy_info.src_pieces[i].hi[d] = src_pieces[i].hi[d];
-            memcpy_info.src_pieces[i].strides[d] /= field_bytes;
-          }
-        }
-
-        assert(MemcpyIndirectInfoSized<3>::MAX_NUM_PIECES >= dst_pieces.size());
-        memcpy_info.num_dst_pieces = dst_pieces.size();
-        for(size_t i = 0; i < dst_pieces.size(); i++) {
-          memcpy_info.dst_pieces[i].base = out_base + dst_pieces[i].base_offset;
-          memcpy_info.dst_pieces[i].strides[0] = dst_pieces[i].strides[0];
-          memcpy_info.dst_pieces[i].strides[1] = dst_pieces[i].strides[1];
-          memcpy_info.dst_pieces[i].strides[2] = dst_pieces[i].strides[2];
-          for(int d = 0; d < dst_pieces[i].dim; d++) {
-            memcpy_info.dst_pieces[i].lo[d] = dst_pieces[i].lo[d];
-            memcpy_info.dst_pieces[i].hi[d] = dst_pieces[i].hi[d];
-            memcpy_info.dst_pieces[i].strides[d] /= field_bytes;
-          }
         }
 
         memcpy_info.ind_base = reinterpret_cast<uintptr_t>(
@@ -1191,7 +1237,6 @@ namespace Realm {
 
         auto stream = select_stream(out_gpu, inp_gpu, channel->get_gpu(), out_map,
                                     inp_port->mem, out_port->mem);
-
         AutoGPUContext agc(stream->get_gpu());
         stream->get_gpu()->launch_indirect_copy_kernel(&memcpy_info, dim, coord_bytes,
                                                        field_bytes, points, stream);
@@ -1646,8 +1691,8 @@ namespace Realm {
 
         if(src_gpu->info->pageable_access_supported &&
            (src_gpu->module->config->cfg_pageable_access != 0)) {
-          // GPU can access all host memories, so add a path for each memory kind that is
-          // accessible to the host as the source
+          // GPU can access all host memories, so add a path for each memory kind that
+          // is accessible to the host as the source
           // TODO(cperry): Add a query for the memory kind that it is CPU accessible.
           size_t num_kinds = 0;
 #define COUNTER(kind, desc) num_kinds++;
@@ -1695,8 +1740,8 @@ namespace Realm {
 
         if(src_gpu->info->pageable_access_supported &&
            (src_gpu->module->config->cfg_pageable_access != 0)) {
-          // GPU can access all host memories, so add a path for each memory kind that is
-          // accessible to the host as the source
+          // GPU can access all host memories, so add a path for each memory kind that
+          // is accessible to the host as the source
           // TODO(cperry): Add a query for the memory kind that it is CPU accessible.
           size_t num_kinds = 0;
 #define COUNTER(kind, desc) num_kinds++;
@@ -1709,8 +1754,8 @@ namespace Realm {
             case GPU_FB_MEM:
               continue;
             default:
-              add_path(local_gpu_mems, static_cast<Memory::Kind>(i), /*src_global=*/false,
-                       bw, latency, frag_overhead, XFER_GPU_FROM_FB)
+              add_path(local_gpu_mems, static_cast<Memory::Kind>(i),
+                       /*src_global=*/false, bw, latency, frag_overhead, XFER_GPU_FROM_FB)
                   .set_max_dim(2);
               break;
             }
@@ -1979,7 +2024,8 @@ namespace Realm {
                 lines = std::max<size_t>(1, max_bytes / bytes);
               }
 
-              // Fill repeated patterns of the reduced fill size so we can expand it later
+              // Fill repeated patterns of the reduced fill size so we can expand it
+              // later
               fill_info.subrects[fill_info.num_rects].addr = out_base + out_offset;
               fill_info.subrects[fill_info.num_rects].volume =
                   (bytes * lines) / reduced_fill_size;
@@ -2237,8 +2283,8 @@ namespace Realm {
           .set_max_dim(2);
       bw = std::max(gpu->info->c2c_bandwidth, gpu->info->pci_bandwidth);
 
-      // TODO(cperry): Even though this is a HOST fill, mark it as a GPU_TO_FB xfer kind.
-      // Is it really necesscary to annotate the kind of transfer?
+      // TODO(cperry): Even though this is a HOST fill, mark it as a GPU_TO_FB xfer
+      // kind. Is it really necesscary to annotate the kind of transfer?
       if(gpu->info->pageable_access_supported &&
          (gpu->module->config->cfg_pageable_access != 0)) {
         // GPU can access all host memories, so add a path for each memory kind that is

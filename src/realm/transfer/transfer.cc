@@ -665,6 +665,11 @@ namespace Realm {
         cur_base_off = inst_impl->metadata.inst_offset + cur_piece->offset + fld_off +
                        cur_piece->strides.dot(cur_piece->bounds.lo);
 
+        /*unsigned allowed_mask =
+            (PieceLookup::ALLOW_AFFINE_PIECE | PieceLookup::ALLOW_SPLIT1);
+        prog = inst_impl->get_lookup_program<N, T>(fid, allowed_mask, fld_off);
+        assert(prog != nullptr);*/
+
         valid = true;
         return true;
       }
@@ -687,6 +692,7 @@ namespace Realm {
     out.base_offset = cur_base_off;
     out.field_size = cur_field_size;
     out.dim = 1;
+    //out.prog = prog;
 
     const Rect<N, T> &b = cur_piece->bounds;
 

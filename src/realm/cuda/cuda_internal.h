@@ -799,9 +799,12 @@ namespace Realm {
       size_t points_done{0};
       size_t total_points{0};
 
+      size_t src_piece_count{0};
+      size_t dst_piece_count{0};
+      PackedPieceDev<3> *src_pieces_ptr{nullptr};
+      PackedPieceDev<3> *dst_pieces_ptr{nullptr};
+
       std::vector<AffinePieceInfo> ind_pieces;
-      std::vector<AffinePieceInfo> src_pieces;
-      std::vector<AffinePieceInfo> dst_pieces;
     };
 
     class GPUIndirectChannel

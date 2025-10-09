@@ -24,6 +24,43 @@
 #include "realm/point.h"
 #include "realm/sparsity.h"
 
+/*using namespace Realm;
+using namespace Realm::PieceLookup;
+
+template <int N, typename COORD_T>
+static __device__ inline uintptr_t execute_lookup(const Instruction *ip,
+                                                  Realm::Point<N, COORD_T> point,
+                                                  uintptr_t field_base, size_t field_size)
+{
+  while(true) {
+    switch(ip->opcode()) {
+
+    case Opcodes::OP_SPLIT1:
+    {
+      const auto *sp = static_cast<const SplitPlane<N, COORD_T> *>(ip);
+      ip = sp->next(point);
+      break;
+    }
+
+    case Opcodes::OP_AFFINE_PIECE:
+    {
+      const auto *ap = static_cast<const AffinePiece<N, COORD_T> *>(ip);
+
+      size_t lin = 0;
+#pragma unroll
+      for(int d = 0; d < N; d++)
+        lin += static_cast<size_t>(point[d] - ap->bounds.lo[d]) *
+               static_cast<size_t>(ap->strides[d] / field_size);
+
+      return field_base + ap->base + lin * field_size;
+    }
+
+    default:
+      return 0; // unsupported opcode => error
+    }
+  }
+}*/
+
 // The general formula for a linearized index is the following:
 // I = \sum_{i=0}^{N} v_i (\prod_{j=0}^{i-1} D_j)
 // This implies that the general form for a coordinate is:
@@ -217,7 +254,7 @@ locate_rectangle(const Realm::SparsityMapEntry<N, COORD_T> *__restrict__ drects,
 
 template <int N, typename COORD_T, typename DATA_T, typename Offset_t = size_t>
 static __device__ inline void
-memcpy_indirect_points(Realm::Cuda::MemcpyIndirectInfoSized<3, Offset_t> info)
+memcpy_indirect_points(Realm::Cuda::MemcpyIndirectInfo<3, Offset_t> info)
 {
   //--------------------------------------------------------------------
   // 0. flat thread id and stride
@@ -234,8 +271,8 @@ memcpy_indirect_points(Realm::Cuda::MemcpyIndirectInfoSized<3, Offset_t> info)
   const Realm::SparsityMapEntry<N, COORD_T> *__restrict__ drects =
       reinterpret_cast<const Realm::SparsityMapEntry<N, COORD_T> *>(info.domain_base);
 
-  const auto &src_pcs = (info.src_pieces);
-  const auto &dst_pcs = (info.dst_pieces);
+  const auto src_pcs = (info.src_pieces_ptr);
+  const auto dst_pcs = (info.dst_pieces_ptr);
 
   //--------------------------------------------------------------------
   // 2. thread-local linear index in the *whole* domain
@@ -338,9 +375,16 @@ memcpy_indirect_points(Realm::Cuda::MemcpyIndirectInfoSized<3, Offset_t> info)
           Offset_t(dst_pt[d] - dst_pcs[dst_pidx].lo[d]) * dst_pcs[dst_pidx].strides[d];
     }
 
+    /*uintptr_t src_byte = execute_lookup<N>(info.src_instruction, src_pt,
+                                           src_pcs[src_pidx].base, info.field_size);
+    uintptr_t dst_byte = execute_lookup<N>(info.dst_instruction, dst_pt,
+                                           dst_pcs[src_pidx].base, info.field_size);
+
+    __restrict__ DATA_T *src = reinterpret_cast<DATA_T *>(src_byte);
+    __restrict__ DATA_T *dst = reinterpret_cast<DATA_T *>(dst_byte);*/
+
     __restrict__ DATA_T *src =
         reinterpret_cast<DATA_T *>(src_pcs[src_pidx].base + src_lin * info.field_size);
-
     __restrict__ DATA_T *dst =
         reinterpret_cast<DATA_T *>(dst_pcs[dst_pidx].base + dst_lin * info.field_size);
 
@@ -426,7 +470,7 @@ memfill_affine_batch(const Realm::Cuda::AffineFillInfo<N, Offset_t> &info)
 
 #define MEMCPY_INDIRECT_TEMPLATE_INST(addr_type, data_type, dim, offt, name)             \
   extern "C" __global__ __launch_bounds__(256, 4) void memcpy_indirect##name(            \
-      Realm::Cuda::MemcpyIndirectInfoSized<3, offt> info)                                \
+      Realm::Cuda::MemcpyIndirectInfo<3, offt> info)                                     \
   {                                                                                      \
     memcpy_indirect_points<dim, addr_type, data_type, offt>(info);                       \
   }

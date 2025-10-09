@@ -22,6 +22,7 @@
 #include <cstdint>
 #include <vector>
 #include "realm/point.h"
+// #include "realm/inst_layout.h"
 
 #define CUDA_MAX_FIELD_BYTES 64
 #define CUDA_MAX_BLOCKS_PER_GRID 2048
@@ -117,17 +118,17 @@ namespace Realm {
 
     template <int N, typename COORD_T = int32_t>
     struct PackedPieceDev {
+
       uintptr_t base;
       COORD_T lo[N], hi[N];
       size_t strides[N];
       // uint8_t dim;
     };
 
-    template <int N, typename Offset_t = size_t, size_t MAX_PIECES = 1>
+    template <int N, typename Offset_t = size_t>
     struct MemcpyIndirectInfo {
       enum
       {
-        MAX_NUM_PIECES = MAX_PIECES,
         DIM = N
       };
 
@@ -143,41 +144,13 @@ namespace Realm {
 
       unsigned short num_src_pieces;
       unsigned short num_dst_pieces;
-      PackedPieceDev<N> src_pieces[MAX_PIECES];
-      PackedPieceDev<N> dst_pieces[MAX_PIECES];
+
+      // const Realm::PieceLookup::Instruction *src_instruction;
+      // const Realm::PieceLookup::Instruction *dst_instruction;
+
+      PackedPieceDev<N> *src_pieces_ptr;
+      PackedPieceDev<N> *dst_pieces_ptr;
     };
-
-    namespace impl {
-      static constexpr std::size_t CUDA_PARAM_LIMIT = MAX_CUDA_PARAM_CONSTBANK_SIZE;
-
-      template <int N>
-      constexpr std::size_t header_bytes()
-      {
-        return offsetof(MemcpyIndirectInfo<N>, src_pieces);
-      }
-
-      template <int N>
-      constexpr std::size_t slot_bytes()
-      {
-        return ((sizeof(PackedPieceDev<N>) + 7) & ~std::size_t(7)); // 8-byte align
-      }
-
-      template <int N>
-      constexpr std::size_t max_pieces_per_table()
-      {
-        return (CUDA_PARAM_LIMIT - header_bytes<N>()) /
-               (2 * slot_bytes<N>()); // divide between src/dst tables
-      }
-    } // namespace impl
-
-    // ---------- redeclare alias with the real limit ------------------------
-    template <int N, typename Offset_t = std::size_t,
-              std::size_t MAX_PIECES = impl::max_pieces_per_table<N>()>
-    using MemcpyIndirectInfoSized = MemcpyIndirectInfo<N, Offset_t, MAX_PIECES>;
-
-    // safety check – will fail to compile if the calculation overruns 4 KiB
-    static_assert(sizeof(MemcpyIndirectInfoSized<3>) <= impl::CUDA_PARAM_LIMIT,
-                  "MemcpyIndirectInfo too large for CUDA launch parameters");
 
     static const size_t CUDA_MAX_DIM = REALM_MAX_DIM < 3 ? REALM_MAX_DIM : 3;
   } // namespace Cuda

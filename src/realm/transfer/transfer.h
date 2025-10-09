@@ -169,6 +169,9 @@ namespace Realm {
 
     int lo[REALM_MAX_DIM];
     int hi[REALM_MAX_DIM];
+
+    //const Realm::PieceLookup::Instruction *prog;
+    //uintptr_t field_base;
   };
 
   class AffinePieceIteratorBase {
@@ -188,15 +191,19 @@ namespace Realm {
   private:
     bool advance(void);
 
-    RegionInstanceImpl *inst_impl;
-    const InstanceLayout<N, T> *layout;
+    RegionInstanceImpl *inst_impl{nullptr};
+    const InstanceLayout<N, T> *layout{nullptr};
     std::vector<FieldID> fields;
     std::vector<size_t> fld_offs, fld_sizes;
-    size_t piece_idx = 0, field_idx = 0;
-    const AffineLayoutPiece<N, T> *cur_piece = nullptr;
-    size_t cur_field_size = 0;
-    size_t cur_base_off = 0;
-    bool valid = false;
+    size_t piece_idx{0};
+    size_t field_idx{0};
+    const AffineLayoutPiece<N, T> *cur_piece{nullptr};
+    size_t cur_field_size{0};
+    size_t cur_base_off{0};
+    bool valid{false};
+
+    const Realm::PieceLookup::Instruction *prog;
+    uintptr_t field_base;
   };
 
   ////////////////////////////////////////////////////////////////////////
