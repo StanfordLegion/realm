@@ -105,6 +105,7 @@ namespace Realm {
     struct GPUInfo;
     class GPUZCMemory;
     class GPUReplHeapListener;
+    class CudaHook;
 
     class CudaModuleConfig : public ModuleConfig {
       friend class CudaModule;
@@ -144,6 +145,7 @@ namespace Realm {
       bool cfg_use_cuda_ipc = true;
       int cfg_pageable_access = 0;
       bool cfg_enable_cupti = false;
+      bool cfg_enable_cuhook = false;
 
       // resources
       bool resource_discovered = false;
@@ -247,6 +249,8 @@ namespace Realm {
       Mutex::CondVar cudaipc_condvar;
       atomic<size_t> cudaipc_responses_received{0};
       int cuda_api_version = 0;
+
+      CudaHook *cuda_hook{nullptr};
     };
 
   }; // namespace Cuda
