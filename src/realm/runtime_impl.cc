@@ -50,6 +50,8 @@
 #include "realm/nvtx.h"
 #endif
 
+#include "realm/ucx/bootstrap/bootstrap_internal.h"
+
 #include <string.h>
 #include <thread>
 #include <sstream>
@@ -1196,6 +1198,8 @@ namespace Realm {
       }
   }
 
+  static bootstrap_handle_t bootstrap_handle;
+
   bool RuntimeImpl::network_init(int *argc, char ***argv)
   {
     // if we're given empty or non-existent argc/argv, start from a
@@ -1302,6 +1306,11 @@ namespace Realm {
       *argc = local_argc;
     if(argv)
       *argv = const_cast<char **>(local_argv);
+
+    Realm::UCP::BootstrapConfig boot_config;
+    boot_config.mode = Realm::UCP::BOOTSTRAP_MPI;
+    boot_config.plugin_name = getenv("REALM_UCP_BOOTSTRAP_PLUGIN");
+    Realm::UCP::bootstrap_init(&boot_config, &bootstrap_handle);
 
     return true;
   }
@@ -2808,6 +2817,8 @@ namespace Realm {
     for(std::vector<NetworkModule *>::const_iterator it = network_modules.begin();
         it != network_modules.end(); it++)
       (*it)->detach(this, network_segments);
+
+    Realm::UCP::bootstrap_finalize(&bootstrap_handle);
 
 #ifdef DEBUG_REALM
     event_triggerer.shutdown_work_item();

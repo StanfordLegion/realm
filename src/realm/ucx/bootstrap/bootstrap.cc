@@ -20,6 +20,9 @@
 #include "realm/logging.h"
 #include "realm/ucx/bootstrap/bootstrap_internal.h"
 #include "realm/ucx/bootstrap/bootstrap_loader.h"
+#include </home/weiwu/anaconda3/envs/legate-ompi5/include/mpi.h>
+
+#define OH_MPI_CRASH
 
 namespace Realm {
 
@@ -32,6 +35,7 @@ namespace Realm {
     {
       int status = 0;
 
+#ifdef OH_MPI_CRASH
       switch(config->mode) {
       case BOOTSTRAP_MPI:
         if(config->plugin_name != NULL) {
@@ -63,16 +67,29 @@ namespace Realm {
         status = BOOTSTRAP_ERROR_INTERNAL;
         log_ucp.error() << ("invalid bootstrap mode");
       }
+#else 
+int provided_level;
+//   // Legate collInit requires MPI_THREAD_MULTIPLE
+  MPI_Init_thread(NULL, NULL, MPI_THREAD_MULTIPLE, &provided_level);
+
+#endif
 
       return status;
     }
 
     int bootstrap_finalize(bootstrap_handle_t *handle)
     {
-      int status = bootstrap_loader_finalize(handle);
+      int status = 0;
+#ifdef OH_MPI_CRASH
+      status = bootstrap_loader_finalize(handle);
       if(status != 0) {
         log_ucp.error() << "bootstrap_finalize failed";
       }
+#else 
+
+      MPI_Finalize();
+
+#endif
       return status;
     }
 

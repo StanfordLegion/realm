@@ -576,64 +576,9 @@ int main(int argc, char **argv)
 
   rt.init(&argc, &argv);
 
-  CommandLineParser cp;
-  cp.add_option_int_units("-b", TestConfig::buffer_size, 'M')
-      .add_option_int("-tasks", TestConfig::do_tasks)
-      .add_option_int("-copies", TestConfig::do_copies)
-      .add_option_int("-reps", TestConfig::copy_reps)
-      .add_option_int("-fields", TestConfig::copy_fields)
-      .add_option_int("-sparse", TestConfig::sparse_chunk)
-      .add_option_int("-gap", TestConfig::sparse_gap)
-      .add_option_int("-aos", TestConfig::copy_aos)
-      .add_option_int("-slowmem", TestConfig::slow_mems)
-      .add_option_bool("-showmem", TestConfig::show_mems);
-  bool ok = cp.parse_command_line(argc, const_cast<const char **>(argv));
-  assert(ok);
-
-  rt.register_task(TOP_LEVEL_TASK, top_level_task);
-
-  Processor::register_task_by_kind(Processor::LOC_PROC, false /*!global*/, MEMSPEED_TASK,
-                                   CodeDescriptor(memspeed_cpu_task),
-                                   ProfilingRequestSet(), 0, 0)
-      .wait();
-  supported_proc_kinds.insert(Processor::LOC_PROC);
-
-  Processor::register_task_by_kind(Processor::UTIL_PROC, false /*!global*/, MEMSPEED_TASK,
-                                   CodeDescriptor(memspeed_cpu_task),
-                                   ProfilingRequestSet(), 0, 0)
-      .wait();
-  supported_proc_kinds.insert(Processor::UTIL_PROC);
-
-  Processor::register_task_by_kind(Processor::IO_PROC, false /*!global*/, MEMSPEED_TASK,
-                                   CodeDescriptor(memspeed_cpu_task),
-                                   ProfilingRequestSet(), 0, 0)
-      .wait();
-  supported_proc_kinds.insert(Processor::IO_PROC);
-
-#if defined(REALM_USE_CUDA) || defined(REALM_USE_HIP)
-  Processor::register_task_by_kind(Processor::TOC_PROC, false /*!global*/, MEMSPEED_TASK,
-                                   CodeDescriptor(memspeed_gpu_task),
-                                   ProfilingRequestSet(), 0, 0)
-      .wait();
-  supported_proc_kinds.insert(Processor::TOC_PROC);
-#endif
-
-  Processor::register_task_by_kind(Processor::LOC_PROC, false /*!global*/, COPYPROF_TASK,
-                                   CodeDescriptor(copy_profiling_task),
-                                   ProfilingRequestSet(), 0, 0)
-      .wait();
-
-  // select a processor to run the top level task on
-  Processor p = Machine::ProcessorQuery(Machine::get_machine())
-                    .only_kind(Processor::LOC_PROC)
-                    .first();
-  assert(p.exists());
-
-  // collective launch of a single task - everybody gets the same finish event
-  Event e = rt.collective_spawn(p, TOP_LEVEL_TASK, 0, 0);
 
   // request shutdown once that task is complete
-  rt.shutdown(e);
+  rt.shutdown(Event::NO_EVENT);
 
   // now sleep this thread until that shutdown actually happens
   rt.wait_for_shutdown();
