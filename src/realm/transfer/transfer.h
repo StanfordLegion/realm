@@ -170,8 +170,8 @@ namespace Realm {
     int lo[REALM_MAX_DIM];
     int hi[REALM_MAX_DIM];
 
-    //const Realm::PieceLookup::Instruction *prog;
-    //uintptr_t field_base;
+    // const Realm::PieceLookup::Instruction *prog;
+    // uintptr_t field_base;
   };
 
   class AffinePieceIteratorBase {
@@ -538,6 +538,12 @@ namespace Realm {
 
     virtual TransferIterator *create_address_iterator(RegionInstance peer) const = 0;
 
+    virtual AffinePieceIteratorBase *
+    create_piece_iterator(RegionInstance inst, const std::vector<int> &dim_order,
+                          const std::vector<FieldID> &fields,
+                          const std::vector<size_t> &fld_offsets,
+                          const std::vector<size_t> &fld_sizes) const = 0;
+
     virtual TransferIterator *create_indirect_iterator(
         Memory addrs_mem, RegionInstance inst, const std::vector<FieldID> &fields,
         const std::vector<size_t> &fld_offsets, const std::vector<size_t> &fld_sizes,
@@ -619,6 +625,12 @@ namespace Realm {
     virtual FieldID get_field(void) const;
 
     virtual TransferIterator *create_address_iterator(RegionInstance peer) const;
+
+    virtual AffinePieceIteratorBase *
+    create_piece_iterator(RegionInstance inst, const std::vector<int> &dim_order,
+                          const std::vector<FieldID> &fields,
+                          const std::vector<size_t> &fld_offsets,
+                          const std::vector<size_t> &fld_sizes) const;
 
     virtual TransferIterator *create_indirect_iterator(
         Memory addrs_mem, RegionInstance inst, const std::vector<FieldID> &fields,

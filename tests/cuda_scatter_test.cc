@@ -1098,7 +1098,7 @@ void top_level_task(const void *args, size_t arglen, const void *userdata, size_
       ok = false;
     }
 
-    /*if(!scatter_gather_test<2, int, 2, int, long long>(
+    if(!scatter_gather_test<2, int, 2, int, long long>(
            sys_mems, gpu_mems, TestConfig::pieces1, TestConfig::pieces2, p, 0, do_scatter,
            true, true)) {
       ok = false;
@@ -1108,7 +1108,7 @@ void top_level_task(const void *args, size_t arglen, const void *userdata, size_
                                                  TestConfig::pieces2, p, 0, do_scatter,
                                                  true, true)) {
       ok = false;
-    }*/
+    }
 
     /*if(!scatter_gather_test<3, long long, 3, long long, int>(
            sys_mems, gpu_mems, TestConfig::pieces1, TestConfig::pieces2, p, 0, do_scatter,

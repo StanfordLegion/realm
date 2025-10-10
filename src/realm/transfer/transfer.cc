@@ -640,9 +640,7 @@ namespace Realm {
     , fields(fids.begin(), fids.end())
     , fld_offs(offs)
     , fld_sizes(szs)
-  {
-    advance();
-  }
+  {}
 
   template <int N, typename T>
   bool AffinePieceIteratorT<N, T>::advance()
@@ -651,7 +649,11 @@ namespace Realm {
       FieldID fid = fields[field_idx];
       size_t fld_off = fld_offs[field_idx];
       size_t fld_size = fld_sizes[field_idx];
+
+      assert(layout != nullptr);
       auto it = layout->fields.find(fid);
+      assert(it != layout->fields.end());
+
       const auto &plist = layout->piece_lists[it->second.list_idx].pieces;
 
       while(piece_idx < plist.size()) {
@@ -678,6 +680,7 @@ namespace Realm {
       field_idx++;
       piece_idx = 0;
     }
+
     valid = false;
     return false;
   }
@@ -685,6 +688,8 @@ namespace Realm {
   template <int N, typename T>
   bool AffinePieceIteratorT<N, T>::next(AffinePieceInfo &out)
   {
+    advance();
+
     if(!valid) {
       return false;
     }
@@ -692,7 +697,7 @@ namespace Realm {
     out.base_offset = cur_base_off;
     out.field_size = cur_field_size;
     out.dim = 1;
-    //out.prog = prog;
+    // out.prog = prog;
 
     const Rect<N, T> &b = cur_piece->bounds;
 
@@ -722,7 +727,6 @@ namespace Realm {
       out.strides[2] = 0;
     }
 
-    advance();
     return true;
   }
 
@@ -3277,6 +3281,16 @@ namespace Realm {
   }
 
   template <int N, typename T, int N2, typename T2>
+  AffinePieceIteratorBase *IndirectionInfoTyped<N, T, N2, T2>::create_piece_iterator(
+      RegionInstance inst, const std::vector<int> &dim_order,
+      const std::vector<FieldID> &fields, const std::vector<size_t> &fld_offsets,
+      const std::vector<size_t> &fld_sizes) const
+  {
+    RegionInstanceImpl *impl = get_runtime()->get_instance_impl(inst);
+    return new AffinePieceIteratorT<N2, T2>(impl, fields, fld_offsets, fld_sizes);
+  }
+
+  template <int N, typename T, int N2, typename T2>
   TransferIterator *IndirectionInfoTyped<N, T, N2, T2>::create_indirect_iterator(
       Memory addrs_mem, RegionInstance inst, const std::vector<FieldID> &fields,
       const std::vector<size_t> &fld_offsets, const std::vector<size_t> &fld_sizes,
@@ -4533,7 +4547,7 @@ namespace Realm {
               ii.mem, xdn.inputs[j].indirect.inst, src_fields, src_offsets, src_sizes,
               xdn.channel);
 
-          ii.piece_iter = desc.domain->create_piece_iterator(xdn.inputs[j].indirect.inst,
+          ii.piece_iter = gather_info->create_piece_iterator(xdn.inputs[j].indirect.inst,
                                                              desc.dim_order, src_fields,
                                                              src_offsets, src_sizes);
 

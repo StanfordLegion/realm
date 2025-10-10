@@ -252,6 +252,18 @@ locate_rectangle(const Realm::SparsityMapEntry<N, COORD_T> *__restrict__ drects,
   return num_rects;
 }
 
+template <typename COORD_T, typename Piece>
+static __device__ inline bool point_inside(int dim, const Piece &pc,
+                                           const COORD_T *coords)
+{
+  for(int d = 0; d < dim; d++) {
+    if((coords[d] < pc.lo[d]) || (coords[d] > pc.hi[d])) {
+      return false;
+    }
+  }
+  return true;
+}
+
 template <int N, typename COORD_T, typename DATA_T, typename Offset_t = size_t>
 static __device__ inline void
 memcpy_indirect_points(Realm::Cuda::MemcpyIndirectInfo<3, Offset_t> info)
@@ -318,11 +330,9 @@ memcpy_indirect_points(Realm::Cuda::MemcpyIndirectInfo<3, Offset_t> info)
       ind_lin_ofs += Offset_t(coord_in_rect) * info.ind_strides[d];
     }
 
-    Realm::Point<N, COORD_T> src_pt;
-#pragma unroll
-    for(int d = 0; d < N; d++) {
-      src_pt[d] = ind_base[(ind_linear_idx + ind_lin_ofs) * N + d];
-      // src_pt[d] = ind_base[(ind_linear_idx + lin) * N + d];
+    Realm::Point<3, COORD_T> src_pt;
+    for(int d = 0; d < info.src_dim; d++) {
+      src_pt[d] = ind_base[(ind_linear_idx + ind_lin_ofs) * info.src_dim + d];
     }
 
     Realm::Point<N, COORD_T> dst_pt;
@@ -334,29 +344,19 @@ memcpy_indirect_points(Realm::Cuda::MemcpyIndirectInfo<3, Offset_t> info)
       tmp /= len;
     }
 
-    auto inside = [&](const auto &pc, const Realm::Point<N, COORD_T> &q) {
-#pragma unroll
-      for(int d = 0; d < N; d++) {
-        if((q[d] < pc.lo[d]) || (q[d] > pc.hi[d])) {
-          return false;
-        }
-        return true;
-      }
-    };
-
     int32_t src_pidx = -1;
     int32_t dst_pidx = -1;
 
     // TODO: ACCELERATE ME
     for(int32_t i = 0; i < info.num_src_pieces && src_pidx == -1; i++) {
-      if(inside(src_pcs[i], src_pt)) {
+      if(point_inside<COORD_T>(info.src_dim, src_pcs[i], &src_pt[0])) {
         src_pidx = i;
       }
     }
 
     // TODO: ACCELERATE ME
     for(int32_t j = 0; j < info.num_dst_pieces && dst_pidx == -1; j++) {
-      if(inside(dst_pcs[j], dst_pt)) {
+      if(point_inside<COORD_T>(info.dst_dim, dst_pcs[j], &dst_pt[0])) {
         dst_pidx = j;
       }
     }
@@ -366,11 +366,14 @@ memcpy_indirect_points(Realm::Cuda::MemcpyIndirectInfo<3, Offset_t> info)
     }
 
     //---------------- byte address calculations ----------------------
-    Offset_t src_lin = 0, dst_lin = 0;
-#pragma unroll
-    for(int d = 0; d < N; d++) {
+    Offset_t src_lin = 0;
+    for(int d = 0; d < info.src_dim; d++) {
       src_lin +=
           Offset_t(src_pt[d] - src_pcs[src_pidx].lo[d]) * src_pcs[src_pidx].strides[d];
+    }
+
+    Offset_t dst_lin = 0;
+    for(int d = 0; d < info.dst_dim; d++) {
       dst_lin +=
           Offset_t(dst_pt[d] - dst_pcs[dst_pidx].lo[d]) * dst_pcs[dst_pidx].strides[d];
     }

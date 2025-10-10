@@ -122,7 +122,7 @@ namespace Realm {
       uintptr_t base;
       COORD_T lo[N], hi[N];
       size_t strides[N];
-      // uint8_t dim;
+      //uint8_t dim;
     };
 
     template <int N, typename Offset_t = size_t>
@@ -139,8 +139,12 @@ namespace Realm {
       Offset_t volume;
 
       Offset_t field_size;
+
       Offset_t ind_strides[N];
       uintptr_t ind_base;
+
+      int src_dim;
+      int dst_dim;
 
       unsigned short num_src_pieces;
       unsigned short num_dst_pieces;

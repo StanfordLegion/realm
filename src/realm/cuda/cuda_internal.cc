@@ -1108,8 +1108,6 @@ namespace Realm {
         XferPort *ind_port = &input_ports[ind_idx];
         fetch_indirection_meta(ind_port);
 
-        size_t coord_bytes = ind_pieces[0].field_size / ind_pieces[0].dim;
-        assert(coord_bytes > 0);
         size_t max_bytes = std::min(control_count, MAX_CHUNK);
         max_bytes = clamp_span(max_bytes, inp_port);
         max_bytes = clamp_span(max_bytes, out_port);
@@ -1131,6 +1129,8 @@ namespace Realm {
           AffinePieceInfo pinfo;
           PackedPieceDev<3> devpiece;
           std::vector<PackedPieceDev<3>> src_pieces_dev;
+
+          memcpy_info.src_dim = REALM_MAX_DIM;
           while(inp_port->piece_iter->next(pinfo)) {
             devpiece.base = reinterpret_cast<uintptr_t>(
                 inp_port->mem->get_direct_ptr(pinfo.base_offset, 0));
@@ -1139,6 +1139,7 @@ namespace Realm {
               devpiece.hi[d] = pinfo.hi[d];
               devpiece.strides[d] = pinfo.strides[d] / pinfo.field_size;
             }
+            memcpy_info.src_dim = std::min(memcpy_info.src_dim, pinfo.dim);
             dim = std::min(dim, pinfo.dim);
             field_bytes = std::min(field_bytes, pinfo.field_size);
             // memcpy_info.src_instruction = pinfo.prog;
@@ -1154,15 +1155,14 @@ namespace Realm {
           std::memcpy(src_pieces_ptr, src_pieces_dev.data(), src_piece_bytes);
         }
 
-        memcpy_info.num_src_pieces = src_piece_count;
-        memcpy_info.src_pieces_ptr = src_pieces_ptr;
-
         assert(out_ipc == false);
 
         if(!dst_pieces_ptr) {
           AffinePieceInfo pinfo;
           PackedPieceDev<3> devpiece;
           std::vector<PackedPieceDev<3>> dst_pieces_dev;
+
+          memcpy_info.dst_dim = REALM_MAX_DIM;
           while(out_port->piece_iter->next(pinfo)) {
             devpiece.base = reinterpret_cast<uintptr_t>(
                 out_port->mem->get_direct_ptr(pinfo.base_offset, 0));
@@ -1171,6 +1171,7 @@ namespace Realm {
               devpiece.hi[d] = pinfo.hi[d];
               devpiece.strides[d] = pinfo.strides[d] / pinfo.field_size;
             }
+            memcpy_info.dst_dim = std::min(memcpy_info.dst_dim, pinfo.dim);
             dim = std::min(dim, pinfo.dim);
             field_bytes = std::min(field_bytes, pinfo.field_size);
             // memcpy_info.dst_instruction = pinfo.prog;
@@ -1186,9 +1187,8 @@ namespace Realm {
           std::memcpy(dst_pieces_ptr, dst_pieces_dev.data(), dst_piece_bytes);
         }
 
-        memcpy_info.num_dst_pieces = dst_piece_count;
-        memcpy_info.dst_pieces_ptr = dst_pieces_ptr;
-
+        size_t coord_bytes = ind_pieces[0].field_size / memcpy_info.src_dim;
+        assert(coord_bytes > 0);
         size_t ind_budget = clamp_span(total_points * coord_bytes, ind_port);
         size_t points =
             std::min(total_points - points_done,
@@ -1212,10 +1212,16 @@ namespace Realm {
           out_base = reinterpret_cast<uintptr_t>(out_port->mem->get_direct_ptr(0, 0));
         }
 
+        memcpy_info.num_src_pieces = src_piece_count;
+        memcpy_info.src_pieces_ptr = src_pieces_ptr;
+        memcpy_info.num_dst_pieces = dst_piece_count;
+        memcpy_info.dst_pieces_ptr = dst_pieces_ptr;
+
+        memcpy_info.domain_base = reinterpret_cast<uintptr_t>(domain_rects_dev);
+        memcpy_info.domain_rects = num_domain_rects;
+
         memcpy_info.ind_base = reinterpret_cast<uintptr_t>(
             ind_port->mem->get_direct_ptr(ind_pieces[0].base_offset, 0));
-        memcpy_info.field_size = field_bytes;
-
         memcpy_info.ind_strides[0] = ind_pieces[0].strides[0];
         memcpy_info.ind_strides[1] = ind_pieces[0].strides[1];
         memcpy_info.ind_strides[2] = ind_pieces[0].strides[2];
@@ -1223,13 +1229,11 @@ namespace Realm {
           memcpy_info.ind_strides[i] /= ind_pieces[0].field_size;
         }
 
+        assert(ind_pieces[0].dim == memcpy_info.dst_dim);
+
+        memcpy_info.field_size = field_bytes;
         memcpy_info.point_pos = points_done;
         memcpy_info.volume = points;
-
-        {
-          memcpy_info.domain_base = reinterpret_cast<uintptr_t>(domain_rects_dev);
-          memcpy_info.domain_rects = num_domain_rects;
-        }
 
         const size_t inp_span_start = inp_port->local_bytes_total;
         const size_t out_span_start = out_port->local_bytes_total;
@@ -1289,7 +1293,8 @@ namespace Realm {
       // won't be correct if ib smaller that overall size of
       // gather/scatter
       if(channel_copy_info.addr_size > sizeof(size_t) || channel_copy_info.is_ranges ||
-         channel_copy_info.num_spaces > 1 || channel_copy_info.oor_possible) {
+         channel_copy_info.num_spaces > 1 || channel_copy_info.oor_possible ||
+         channel_copy_info.is_scatter) {
         return false;
       }
 
