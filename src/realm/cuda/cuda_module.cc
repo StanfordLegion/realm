@@ -1694,8 +1694,9 @@ namespace Realm {
     }
 
     MemoryImpl::AllocationResult
-    GPUDynamicFBMemory::queue_allocation(RegionInstanceImpl *inst, size_t size_needed)
+    GPUDynamicFBMemory::queue_allocation(RegionInstanceImpl *inst, size_t size_needed /* = 0 */)
     {
+      log_gpu.debug("Queueing allocation request: %p", inst);
       inst_to_info[inst].alloc_bytes_needed = size_needed;
       pending_allocs.push_back(inst);
       return ALLOC_DEFERRED;
@@ -1732,6 +1733,7 @@ namespace Realm {
 
       // Skip poisoned
       if(poisoned) {
+        result = ALLOC_CANCELLED;
         goto Done;
       }
 
@@ -1766,6 +1768,7 @@ namespace Realm {
       // during this time.
       res = alloc(pool, base, bytes);
       offset = base;
+
       {
         AutoLock<> al(mutex);
         if(res == CUDA_SUCCESS) {
@@ -1774,8 +1777,9 @@ namespace Realm {
         } else if((res == CUDA_ERROR_OUT_OF_MEMORY) && (pending_free_bytes > 0)) {
           // The mempool is fragmented or was not able to grow to the needed size for the
           // request, but we have some pending bytes, so lets try again later when those
-          // free bytes are available
-          result = queue_allocation(inst, bytes);
+          // free bytes are available.  We pass zero for bytes here because we've already
+          // taken all we need from free_bytes
+          result = queue_allocation(inst);
         } else {
           REPORT_CU_ERROR(Logger::LEVEL_INFO, "cuMemAllocFromPoolAsync", res);
           result = ALLOC_INSTANT_FAILURE;
@@ -1808,9 +1812,9 @@ namespace Realm {
         // to update the pending_bytes as well as free_bytes
         {
           AutoLock<> al(mutex);
-          pending_free_bytes += inst->metadata.layout->bytes_used;
           InstToInfoMap::iterator it = inst_to_info.find(inst);
           if(it != inst_to_info.end()) {
+            pending_free_bytes += inst->metadata.layout->bytes_used;
             it->second.deferred_release = true;
           }
         }
@@ -1865,13 +1869,22 @@ namespace Realm {
         CHECK_CU(CUDA_DRIVER_FNPTR(cuMemFree)(base));
       }
 
+      inst->notify_deallocation();
+
       {
         AutoLock<> al(mutex);
         // Handle each pending allocation in turn.
         while(!pending_allocs.empty()) {
           RegionInstanceImpl *alloc_inst = pending_allocs.front();
           InstInfo &inst_info = inst_to_info[alloc_inst];
+          // We already removed all the free bytes we could at allocation request, so we
+          // just need to check if we have enough free bytes for the rest of what we need
+          // for this request
           if(free_bytes < inst_info.alloc_bytes_needed) {
+            // Not enough.  We could keep checking other instances, but that could starve
+            // large allocations and potentially lead to a deadlock that the application
+            // cannot reason about.  While we could still deadlock regardless, the
+            // application can at least reason about how to work around it.
             break;
           }
           pending_allocs.pop_front();
@@ -1891,8 +1904,7 @@ namespace Realm {
             // the pool by cuda.  Either way, to prevent deadlocks, we need to fail this
             // allocation, but we'll free up the bytes taken from this instance and notify
             // waiters of the failure.
-            free_bytes +=
-                alloc_inst->metadata.layout->bytes_used - inst_info.alloc_bytes_needed;
+            free_bytes += alloc_inst->metadata.layout->bytes_used;
             alloc_inst->notify_allocation(ALLOC_INSTANT_FAILURE, base, work_until);
           }
         }
