@@ -53,14 +53,20 @@ namespace Realm {
       return 0;
     }
 
-    int bootstrap_loader_init(const char *plugin, void *arg, bootstrap_handle_t *handle)
+    int bootstrap_loader_init(const char *plugin, void *arg, bootstrap_handle_t *handle, enum BootstrapMode mode)
     {
       int (*bootstrap_plugin_init)(void *arg, bootstrap_handle_t *handle);
       int status = 0;
 
       dlerror(); /* Clear any existing error */
       plugin_name = strdup(plugin);
-      plugin_hdl = dlopen(plugin, RTLD_NODELETE | RTLD_NOW);
+      int flags = RTLD_NOW;
+      // if the mode is MPI, we need to load the plugin with RTLD_NODELETE
+      // for details, please refer to https://github.com/StanfordLegion/realm/issues/331
+      if (mode == BOOTSTRAP_MPI) {
+        flags |= RTLD_NODELETE;
+      }
+      plugin_hdl = dlopen(plugin, flags);
       BOOTSTRAP_NULL_ERROR_JMP(plugin_hdl, status, -1, error,
                                "Bootstrap unable to load '%s'\n\t%s\n", plugin,
                                dlerror());
