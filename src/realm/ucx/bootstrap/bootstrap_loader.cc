@@ -60,7 +60,7 @@ namespace Realm {
 
       dlerror(); /* Clear any existing error */
       plugin_name = strdup(plugin);
-      plugin_hdl = dlopen(plugin, RTLD_NOW);
+      plugin_hdl = dlopen(plugin, RTLD_NODELETE | RTLD_NOW);
       BOOTSTRAP_NULL_ERROR_JMP(plugin_hdl, status, -1, error,
                                "Bootstrap unable to load '%s'\n\t%s\n", plugin,
                                dlerror());
