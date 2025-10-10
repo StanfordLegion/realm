@@ -1,4 +1,4 @@
-/*
+/*channel.c
  * Copyright 2025 Los Alamos National Laboratory, Stanford University, NVIDIA Corporation
  * SPDX-License-Identifier: Apache-2.0
  *
@@ -471,6 +471,7 @@ namespace Realm {
       p.mem = get_runtime()->get_memory_impl(ii.mem);
       assert(p.mem != nullptr && "invalid memory handle");
       p.iter = ii.iter;
+      p.piece_iter = ii.piece_iter;
       if(ii.serdez_id != 0) {
         const CustomSerdezUntyped *op =
             get_runtime()->custom_serdez_table.get(ii.serdez_id, 0);
@@ -490,6 +491,7 @@ namespace Realm {
       p.ib_offset = ii.ib_offset;
       p.ib_size = ii.ib_size;
       p.addrcursor.set_addrlist(&p.addrlist);
+
       switch(ii.port_type) {
       case XferDesPortInfo::GATHER_CONTROL_PORT:
         gather_control_port = i;
@@ -510,6 +512,7 @@ namespace Realm {
         input_ports[p.indirect_port_idx].is_indirect_port = true;
       }
     }
+
     if(gather_control_port >= 0) {
       input_control.control_port_idx = gather_control_port;
       input_control.current_io_port = 0;
@@ -530,6 +533,7 @@ namespace Realm {
       p.mem = get_runtime()->get_memory_impl(oi.mem);
       assert(p.mem != nullptr && "invalid memory handle");
       p.iter = oi.iter;
+      p.piece_iter = oi.piece_iter;
       if(oi.serdez_id != 0) {
         const CustomSerdezUntyped *op =
             get_runtime()->custom_serdez_table.get(oi.serdez_id, 0);
@@ -675,6 +679,7 @@ namespace Realm {
         XferPort &icp = input_ports[input_control.control_port_idx];
         size_t avail =
             icp.seq_remote.span_exists(icp.local_bytes_total, 4 * sizeof(unsigned));
+
         size_t old_lbt = icp.local_bytes_total;
 
         // may take a few chunks of data to get a control packet
@@ -708,9 +713,9 @@ namespace Realm {
                             icp.local_bytes_total - old_lbt);
 
         log_xd.info() << "input control: xd=" << std::hex << guid << std::dec
-                      << " port=" << input_control.current_io_port
-                      << " count=" << input_control.remaining_count
-                      << " done=" << input_control.eos_received;
+                       << " port=" << input_control.current_io_port
+                       << " count=" << input_control.remaining_count
+                       << " done=" << input_control.eos_received;
       }
       // if count is still zero, we're done
       if(input_control.remaining_count == 0) {
@@ -1836,11 +1841,17 @@ namespace Realm {
     //  finished - if that's all of them, we can mark full transfer completion
     int64_t prev = bytes_write_pending.fetch_add(total_bytes_written);
     int64_t pending = prev + total_bytes_written;
+
     log_xd.info() << "completion: xd=" << std::hex << guid << std::dec
-                  << " total_bytes=" << total_bytes_written << " pending=" << pending;
+                   << " total_bytes=" << total_bytes_written << " pending=" << pending
+                   << " prev:" << prev;
+
     assert(pending >= 0);
-    if(pending == 0)
+
+    if(pending == 0) {
+      assert(total_bytes_written > 0);
       transfer_completed.store_release(true);
+    }
   }
 
   void XferDes::update_bytes_read(int port_idx, size_t offset, size_t size)
@@ -1866,7 +1877,7 @@ namespace Realm {
     XferPort *out_port = &output_ports[port_idx];
     size_t inc_amt = out_port->seq_local.add_span(offset, size);
     log_xd.info() << "bytes_write: " << std::hex << guid << std::dec << "(" << port_idx
-                  << ") " << offset << "+" << size << " -> " << inc_amt;
+                   << ") " << offset << "+" << size << " -> " << inc_amt;
 
     if(out_port->peer_guid != XFERDES_NO_GUID) {
       // update bytes total if needed (and available)
@@ -1896,7 +1907,7 @@ namespace Realm {
       int64_t prev = bytes_write_pending.fetch_sub(inc_amt);
       if(prev > 0)
         log_xd.info() << "completion: xd=" << std::hex << guid << std::dec
-                      << " remaining=" << (prev - inc_amt);
+                       << " remaining=" << (prev - inc_amt);
       if(inc_amt == static_cast<size_t>(prev)) {
         add_reference();
         transfer_completed.store_release(true);
@@ -3157,12 +3168,11 @@ namespace Realm {
       const std::vector<size_t> *src_frags, const std::vector<size_t> *dst_frags,
       XferDesKind *kind_ret /*= 0*/, unsigned *bw_ret /*= 0*/, unsigned *lat_ret /*= 0*/)
   {
+    Memory src_mem = channel_copy_info.src_mem;
+    Memory dst_mem = channel_copy_info.dst_mem;
     if(!supports_redop(redop_id)) {
       return 0;
     }
-
-    Memory src_mem = channel_copy_info.src_mem;
-    Memory dst_mem = channel_copy_info.dst_mem;
     // If we don't support the indirection memory, then no need to check the paths.
     if((channel_copy_info.ind_mem != Memory::NO_MEMORY) &&
        !supports_indirection_memory(channel_copy_info.ind_mem)) {
@@ -3841,7 +3851,7 @@ namespace Realm {
     , factory_singleton(reinterpret_cast<uintptr_t>(this))
   {}
 
-  XferDesFactory *LocalChannel::get_factory() { return &factory_singleton; }
+  XferDesFactory *LocalChannel::get_factory(const ChannelFactoryInfo *) { return &factory_singleton; }
 
   ////////////////////////////////////////////////////////////////////////
   //
@@ -3905,7 +3915,7 @@ namespace Realm {
 
   uintptr_t RemoteChannel::get_remote_ptr() const { return remote_ptr; }
 
-  XferDesFactory *RemoteChannel::get_factory() { return &factory_singleton; }
+  XferDesFactory *RemoteChannel::get_factory(const ChannelFactoryInfo *) { return &factory_singleton; }
 
   void RemoteChannel::register_redop(ReductionOpID redop_id)
   {

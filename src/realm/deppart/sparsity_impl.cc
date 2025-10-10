@@ -1825,6 +1825,12 @@ namespace Realm {
         }
     }
 
+    size_t running = 0;
+    for (size_t i = 0; i < this->entries.size(); i++) {
+      this->entries[i].prefix_sum = running;
+      running += this->entries[i].bounds.volume();
+    }
+
     if(trigger_approx.exists())
       GenEventImpl::trigger(trigger_approx, false /*!poisoned*/);
 

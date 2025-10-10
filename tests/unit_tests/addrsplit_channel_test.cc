@@ -128,8 +128,6 @@ public:
   void confirm_step(void) override {}
   void cancel_step(void) override {}
 
-  size_t get_base_offset(void) const override { return 0; }
-
   bool get_addresses(AddressList &addrlist,
                      const InstanceLayoutPieceBase *&nonaffine) override
   {

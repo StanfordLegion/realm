@@ -151,6 +151,7 @@ namespace Realm {
     Rect<N, T> bounds;
     SparsityMap<N, T> sparsity;
     HierarchicalBitMap<N, T> *bitmap;
+    size_t prefix_sum{0};
   };
 
   template <int N, typename T>
