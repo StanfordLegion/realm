@@ -1177,6 +1177,14 @@ namespace Realm {
           .second;
     }
 
+    void GPU::trim_mempools(CUmemoryPool skip) {
+      for (CUmemoryPool pool : registered_mempools) {
+        if (pool != skip) {
+          CHECK_CU(CUDA_DRIVER_FNPTR(cuMemPoolTrimTo)(pool, 0));
+        }
+      }
+    }
+
     bool GPUProcessor::register_task(Processor::TaskFuncID func_id,
                                      CodeDescriptor &codedesc,
                                      const ByteArrayRef &user_data)
@@ -1654,17 +1662,15 @@ namespace Realm {
     // class GPUDynamicMemory
 
     GPUDynamicFBMemory::GPUDynamicFBMemory(RuntimeImpl *_runtime_impl, Memory _me,
-                                           GPU *_gpu, size_t _max_size)
+                                           GPU *_gpu, CUmemoryPool _pool, size_t _max_size)
       : MemoryImpl(_runtime_impl, _me, _max_size, MKIND_GPUFB, Memory::GPU_DYNAMIC_MEM, 0)
       , gpu(_gpu)
+      , pool(_pool)
     {
       cuuint64_t bytes = size;
       free_bytes = size;
       // mark what context we belong to
       add_module_specific(new CudaDeviceMemoryInfo(gpu->context));
-      // TODO(cperry): Should we create our own mempool here?  If so, we need to manage
-      // the peer mappings and everything ourselves...
-      CHECK_CU(CUDA_DRIVER_FNPTR(cuDeviceGetMemPool)(&pool, gpu->info->device));
       // Cache allocations below the given size in the pool.  Everything allocated after
       // that is opportunistic and will likely hit a perf-cliff
       CHECK_CU(CUDA_DRIVER_FNPTR(cuMemPoolSetAttribute)(
@@ -1716,7 +1722,13 @@ namespace Realm {
       // destroy streams.  Should be cheap enough
       CHECK_CU(CUDA_DRIVER_FNPTR(cuStreamCreate)(&tmp_stream, CU_STREAM_NON_BLOCKING));
       res = CUDA_DRIVER_FNPTR(cuMemAllocFromPoolAsync)(&offset, size, pool, tmp_stream);
+      if (res != CUDA_SUCCESS) {
+        // Trim all known mempools for this gpu and try one more time.
+        gpu->trim_mempools(pool);
+        res = CUDA_DRIVER_FNPTR(cuMemAllocFromPoolAsync)(&offset, size, pool, tmp_stream);
+      }
       CHECK_CU(CUDA_DRIVER_FNPTR(cuStreamDestroy)(tmp_stream));
+
       return res;
     }
 
@@ -1877,6 +1889,7 @@ namespace Realm {
         while(!pending_allocs.empty()) {
           RegionInstanceImpl *alloc_inst = pending_allocs.front();
           InstInfo &inst_info = inst_to_info[alloc_inst];
+          base = 0;
           // We already removed all the free bytes we could at allocation request, so we
           // just need to check if we have enough free bytes for the rest of what we need
           // for this request
@@ -1941,30 +1954,21 @@ namespace Realm {
     bool GPUDynamicFBMemory::attempt_register_external_resource(RegionInstanceImpl *inst,
                                                                 size_t &inst_offset)
     {
-      {
-        ExternalCudaMemoryResource *res =
-            dynamic_cast<ExternalCudaMemoryResource *>(inst->metadata.ext_resource);
-        if(res) {
-          // automatic success
-          inst_offset = res->base; // "offsets" are absolute in dynamic fbmem
-          return true;
-        }
+      switch(inst->metadata.ext_resource->get_type_id()) {
+      case REALM_HASH_TOKEN(Realm::ExternalCudaMemoryResource):
+        inst_offset =
+            static_cast<ExternalCudaMemoryResource *>(inst->metadata.ext_resource)->base;
+        break;
+      case REALM_HASH_TOKEN(Realm::ExternalCudaArrayResource):
+        inst_offset = 0;
+        inst->metadata.add_mem_specific(new MemSpecificCudaArray(
+            static_cast<ExternalCudaArrayResource *>(inst->metadata.ext_resource)
+                ->array));
+        break;
+      default:
+        return false;
       }
-
-      {
-        ExternalCudaArrayResource *res =
-            dynamic_cast<ExternalCudaArrayResource *>(inst->metadata.ext_resource);
-        if(res) {
-          // automatic success
-          inst_offset = 0;
-          CUarray array = reinterpret_cast<CUarray>(res->array);
-          inst->metadata.add_mem_specific(new MemSpecificCudaArray(array));
-          return true;
-        }
-      }
-
-      // not a kind we recognize
-      return false;
+      return true;
     }
 
     void GPUDynamicFBMemory::unregister_external_resource(RegionInstanceImpl *inst)
@@ -2548,8 +2552,13 @@ namespace Realm {
       }
 
       Memory m = runtime->next_local_memory_id();
-      // TODO(apryakhin@): Determine if we need to keep the pointer.
-      fb_dmem = new GPUDynamicFBMemory(runtime, m, this, max_size);
+      CUmemoryPool pool = 0;
+      // TODO(cperry): Should we create our own mempool here?  If so, we need to manage
+      // the peer mappings and everything ourselves...
+      CHECK_CU(CUDA_DRIVER_FNPTR(cuDeviceGetMemPool)(&pool, info->device));
+      registered_mempools.insert(pool);
+
+      fb_dmem = new GPUDynamicFBMemory(runtime, m, this, pool, max_size);
       runtime->add_memory(fb_dmem);
     }
 
