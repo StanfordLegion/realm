@@ -427,6 +427,7 @@ namespace Realm {
       bool register_reduction(ReductionOpID redop_id, CUfunction apply_excl,
                               CUfunction apply_nonexcl, CUfunction fold_excl,
                               CUfunction fold_nonexcl);
+      void trim_mempools(CUmemoryPool skip = 0);
 
     protected:
       CUmodule load_cuda_module(const void *data);
@@ -520,6 +521,7 @@ namespace Realm {
       };
 
       std::unordered_map<ReductionOpID, GPUReductionOpEntry> gpu_reduction_table;
+      std::unordered_set<CUmemoryPool> registered_mempools;
     };
 
     // helper to push/pop a GPU's context by scope
@@ -616,7 +618,7 @@ namespace Realm {
 
     public:
       GPUDynamicFBMemory(RuntimeImpl *_runtime_impl, Memory _me, GPU *_gpu,
-                         size_t _max_size);
+                         CUmemoryPool pool, size_t _max_size);
 
       virtual ~GPUDynamicFBMemory(void);
       void cleanup(void);
