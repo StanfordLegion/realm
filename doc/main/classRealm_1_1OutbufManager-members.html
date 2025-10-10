@@ -44,7 +44,7 @@
    <!-- BEGIN version select -->
     <br />
     <div class="dropdown">
-     <button class="dropbtn">Version 25.6.1-rc.4+b89cca5e</button>
+     <button class="dropbtn">Version 25.6.1-rc.4+ade81565</button>
      <div class="dropdown-content"></div>
     </div>
     <script type="text/javascript" src="../selectversion.js"></script>
@@ -138,7 +138,7 @@ $(document).ready(function(){initNavTree('classRealm_1_1OutbufManager.html','');
 <p>This is the complete list of members for <a class="el" href="classRealm_1_1OutbufManager.html">Realm::OutbufManager</a>, including all inherited members.</p>
 <table class="directory">
   <tr class="even"><td class="entry"><a class="el" href="classRealm_1_1BackgroundWorkItem.html#ad4bea2be52d8119d3c24c9c903bd91ef">add_to_manager</a>(BackgroundWorkManager *_manager, int _numa_domain=-1, long long _min_timeslice_needed=-1)</td><td class="entry"><a class="el" href="classRealm_1_1BackgroundWorkItem.html">Realm::BackgroundWorkItem</a></td><td class="entry"></td></tr>
-  <tr class="odd"><td class="entry"><a class="el" href="classRealm_1_1OutbufManager.html#a3e9c61e665d479358799333975557fb4">alloc_outbuf</a>(OutbufMetadata::State state, bool overflow_ok)</td><td class="entry"><a class="el" href="classRealm_1_1OutbufManager.html">Realm::OutbufManager</a></td><td class="entry"></td></tr>
+  <tr class="odd"><td class="entry"><a class="el" href="classRealm_1_1OutbufManager.html#a82b44f86994bf9ec35c9590037b2628d">alloc_outbuf</a>(OutbufMetadata::State state, bool overflow_ok, bool new_endpoint)</td><td class="entry"><a class="el" href="classRealm_1_1OutbufManager.html">Realm::OutbufManager</a></td><td class="entry"></td></tr>
   <tr class="even"><td class="entry"><a class="el" href="classRealm_1_1BackgroundWorkItem.html#ad36aca35b48afd05d40df2771b7a0a26">BackgroundWorkItem</a>(const std::string &amp;_name)</td><td class="entry"><a class="el" href="classRealm_1_1BackgroundWorkItem.html">Realm::BackgroundWorkItem</a></td><td class="entry"></td></tr>
   <tr class="odd"><td class="entry"><a class="el" href="classRealm_1_1OutbufManager.html#ac3970816bc16353a9212b2104bbed2a9">do_work</a>(TimeLimit work_until)</td><td class="entry"><a class="el" href="classRealm_1_1OutbufManager.html">Realm::OutbufManager</a></td><td class="entry"><span class="mlabel">virtual</span></td></tr>
   <tr class="even"><td class="entry"><a class="el" href="classRealm_1_1OutbufManager.html#a67514617bb375d8c1adf3e39ea7121a3">first_available</a></td><td class="entry"><a class="el" href="classRealm_1_1OutbufManager.html">Realm::OutbufManager</a></td><td class="entry"><span class="mlabel">protected</span></td></tr>
@@ -151,6 +151,8 @@ $(document).ready(function(){initNavTree('classRealm_1_1OutbufManager.html','');
   <tr class="odd"><td class="entry"><a class="el" href="classRealm_1_1BackgroundWorkItem.html#a466a94679756496fd3b4dd9ed49b7f22">min_timeslice_needed</a></td><td class="entry"><a class="el" href="classRealm_1_1BackgroundWorkItem.html">Realm::BackgroundWorkItem</a></td><td class="entry"><span class="mlabel">protected</span></td></tr>
   <tr class="even"><td class="entry"><a class="el" href="classRealm_1_1OutbufManager.html#af7be67ae57fa2b2e0c015641c797ca3e">mutex</a></td><td class="entry"><a class="el" href="classRealm_1_1OutbufManager.html">Realm::OutbufManager</a></td><td class="entry"><span class="mlabel">protected</span></td></tr>
   <tr class="odd"><td class="entry"><a class="el" href="classRealm_1_1BackgroundWorkItem.html#a24aa31dd1ed942257c0c4075f04dd5d8">name</a></td><td class="entry"><a class="el" href="classRealm_1_1BackgroundWorkItem.html">Realm::BackgroundWorkItem</a></td><td class="entry"><span class="mlabel">protected</span></td></tr>
+  <tr class="even"><td class="entry"><a class="el" href="classRealm_1_1OutbufManager.html#ad68df2bcfb3d4ef28d5a100b246f1391">num_buffers</a></td><td class="entry"><a class="el" href="classRealm_1_1OutbufManager.html">Realm::OutbufManager</a></td><td class="entry"><span class="mlabel">protected</span></td></tr>
+  <tr class="odd"><td class="entry"><a class="el" href="classRealm_1_1OutbufManager.html#a4197354d53767271c2d2d0a730ceaa4f">num_endpoints</a></td><td class="entry"><a class="el" href="classRealm_1_1OutbufManager.html">Realm::OutbufManager</a></td><td class="entry"><span class="mlabel">protected</span></td></tr>
   <tr class="even"><td class="entry"><a class="el" href="classRealm_1_1OutbufManager.html#a771037cb640c81e77716628b20eee0e9">num_overflow</a></td><td class="entry"><a class="el" href="classRealm_1_1OutbufManager.html">Realm::OutbufManager</a></td><td class="entry"><span class="mlabel">protected</span></td></tr>
   <tr class="odd"><td class="entry"><a class="el" href="classRealm_1_1OutbufManager.html#afd907c5f005768b8ed115b45d4e2904b">num_reserved</a></td><td class="entry"><a class="el" href="classRealm_1_1OutbufManager.html">Realm::OutbufManager</a></td><td class="entry"><span class="mlabel">protected</span></td></tr>
   <tr class="even"><td class="entry"><a class="el" href="classRealm_1_1BackgroundWorkItem.html#aebfe09f95cd326148215a2c7e321c5b1">numa_domain</a></td><td class="entry"><a class="el" href="classRealm_1_1BackgroundWorkItem.html">Realm::BackgroundWorkItem</a></td><td class="entry"><span class="mlabel">protected</span></td></tr>

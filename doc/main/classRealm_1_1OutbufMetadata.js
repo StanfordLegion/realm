@@ -17,7 +17,6 @@ var classRealm_1_1OutbufMetadata =
     ] ],
     [ "OutbufMetadata", "classRealm_1_1OutbufMetadata.html#a76994d8d10e1e57400a13981908301f3", null ],
     [ "databuf_close", "classRealm_1_1OutbufMetadata.html#aee1cb4efa153dbd44478e715ba16e177", null ],
-    [ "databuf_reserve", "classRealm_1_1OutbufMetadata.html#a7d179d1270fe3ef5a098b168f55ddcfd", null ],
     [ "dec_usecount", "classRealm_1_1OutbufMetadata.html#a187d39d2d653298deb675c17c7e4874e", null ],
     [ "pktbuf_close", "classRealm_1_1OutbufMetadata.html#a2ac4d1115ee9db55dc4bafb07a4d3728", null ],
     [ "pktbuf_commit", "classRealm_1_1OutbufMetadata.html#a9e544b575385d60049711c8b3afaf2db", null ],

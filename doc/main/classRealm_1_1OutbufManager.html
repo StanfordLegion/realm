@@ -44,7 +44,7 @@
    <!-- BEGIN version select -->
     <br />
     <div class="dropdown">
-     <button class="dropbtn">Version 25.6.1-rc.4+b89cca5e</button>
+     <button class="dropbtn">Version 25.6.1-rc.4+ade81565</button>
      <div class="dropdown-content"></div>
     </div>
     <script type="text/javascript" src="../selectversion.js"></script>
@@ -159,8 +159,8 @@ Public Member Functions</h2></td></tr>
 <tr class="separator:a2051a7da924eb5778bfabd6fba70caaf"><td class="memSeparator" colspan="2">&#160;</td></tr>
 <tr class="memitem:a30f60262070b6571f0ab313196067654" id="r_a30f60262070b6571f0ab313196067654"><td class="memItemLeft" align="right" valign="top">void&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="classRealm_1_1OutbufManager.html#a30f60262070b6571f0ab313196067654">init</a> (size_t _outbuf_count, size_t _outbuf_size, uintptr_t _baseptr)</td></tr>
 <tr class="separator:a30f60262070b6571f0ab313196067654"><td class="memSeparator" colspan="2">&#160;</td></tr>
-<tr class="memitem:a3e9c61e665d479358799333975557fb4" id="r_a3e9c61e665d479358799333975557fb4"><td class="memItemLeft" align="right" valign="top"><a class="el" href="classRealm_1_1OutbufMetadata.html">OutbufMetadata</a> *&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="classRealm_1_1OutbufManager.html#a3e9c61e665d479358799333975557fb4">alloc_outbuf</a> (<a class="el" href="classRealm_1_1OutbufMetadata.html#ae4557239ff8015e12721cb950a5320e3">OutbufMetadata::State</a> state, bool overflow_ok)</td></tr>
-<tr class="separator:a3e9c61e665d479358799333975557fb4"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:a82b44f86994bf9ec35c9590037b2628d" id="r_a82b44f86994bf9ec35c9590037b2628d"><td class="memItemLeft" align="right" valign="top"><a class="el" href="classRealm_1_1OutbufMetadata.html">OutbufMetadata</a> *&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="classRealm_1_1OutbufManager.html#a82b44f86994bf9ec35c9590037b2628d">alloc_outbuf</a> (<a class="el" href="classRealm_1_1OutbufMetadata.html#ae4557239ff8015e12721cb950a5320e3">OutbufMetadata::State</a> state, bool overflow_ok, bool new_endpoint)</td></tr>
+<tr class="separator:a82b44f86994bf9ec35c9590037b2628d"><td class="memSeparator" colspan="2">&#160;</td></tr>
 <tr class="memitem:ab4049596002aabc6d23de83d5b91d38c" id="r_ab4049596002aabc6d23de83d5b91d38c"><td class="memItemLeft" align="right" valign="top">void&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="classRealm_1_1OutbufManager.html#ab4049596002aabc6d23de83d5b91d38c">free_outbuf</a> (<a class="el" href="classRealm_1_1OutbufMetadata.html">OutbufMetadata</a> *md)</td></tr>
 <tr class="separator:ab4049596002aabc6d23de83d5b91d38c"><td class="memSeparator" colspan="2">&#160;</td></tr>
 <tr class="memitem:ac3970816bc16353a9212b2104bbed2a9" id="r_ac3970816bc16353a9212b2104bbed2a9"><td class="memItemLeft" align="right" valign="top">virtual bool&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="classRealm_1_1OutbufManager.html#ac3970816bc16353a9212b2104bbed2a9">do_work</a> (<a class="el" href="classRealm_1_1TimeLimit.html">TimeLimit</a> work_until)</td></tr>
@@ -187,6 +187,10 @@ Protected Attributes</h2></td></tr>
 <tr class="separator:a771037cb640c81e77716628b20eee0e9"><td class="memSeparator" colspan="2">&#160;</td></tr>
 <tr class="memitem:afd907c5f005768b8ed115b45d4e2904b" id="r_afd907c5f005768b8ed115b45d4e2904b"><td class="memItemLeft" align="right" valign="top">size_t&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="classRealm_1_1OutbufManager.html#afd907c5f005768b8ed115b45d4e2904b">num_reserved</a></td></tr>
 <tr class="separator:afd907c5f005768b8ed115b45d4e2904b"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:ad68df2bcfb3d4ef28d5a100b246f1391" id="r_ad68df2bcfb3d4ef28d5a100b246f1391"><td class="memItemLeft" align="right" valign="top">size_t&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="classRealm_1_1OutbufManager.html#ad68df2bcfb3d4ef28d5a100b246f1391">num_buffers</a></td></tr>
+<tr class="separator:ad68df2bcfb3d4ef28d5a100b246f1391"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:a4197354d53767271c2d2d0a730ceaa4f" id="r_a4197354d53767271c2d2d0a730ceaa4f"><td class="memItemLeft" align="right" valign="top">size_t&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="classRealm_1_1OutbufManager.html#a4197354d53767271c2d2d0a730ceaa4f">num_endpoints</a></td></tr>
+<tr class="separator:a4197354d53767271c2d2d0a730ceaa4f"><td class="memSeparator" colspan="2">&#160;</td></tr>
 <tr class="memitem:a5b151cb5e6ab3c35c555323521168fac" id="r_a5b151cb5e6ab3c35c555323521168fac"><td class="memItemLeft" align="right" valign="top"><a class="el" href="classRealm_1_1OutbufMetadata.html">OutbufMetadata</a> *&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="classRealm_1_1OutbufManager.html#a5b151cb5e6ab3c35c555323521168fac">overflow_head</a></td></tr>
 <tr class="separator:a5b151cb5e6ab3c35c555323521168fac"><td class="memSeparator" colspan="2">&#160;</td></tr>
 <tr class="memitem:a7b82aacfc345e2d384d41369a83e742b" id="r_a7b82aacfc345e2d384d41369a83e742b"><td class="memItemLeft" align="right" valign="top"><a class="el" href="classRealm_1_1OutbufMetadata.html">OutbufMetadata</a> **&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="classRealm_1_1OutbufManager.html#a7b82aacfc345e2d384d41369a83e742b">overflow_tail</a></td></tr>
@@ -247,8 +251,8 @@ Additional Inherited Members</h2></td></tr>
 </div>
 </div>
 <h2 class="groupheader">Member Function Documentation</h2>
-<a id="a3e9c61e665d479358799333975557fb4" name="a3e9c61e665d479358799333975557fb4"></a>
-<h2 class="memtitle"><span class="permalink"><a href="#a3e9c61e665d479358799333975557fb4">&#9670;&#160;</a></span>alloc_outbuf()</h2>
+<a id="a82b44f86994bf9ec35c9590037b2628d" name="a82b44f86994bf9ec35c9590037b2628d"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a82b44f86994bf9ec35c9590037b2628d">&#9670;&#160;</a></span>alloc_outbuf()</h2>
 
 <div class="memitem">
 <div class="memproto">
@@ -263,7 +267,13 @@ Additional Inherited Members</h2></td></tr>
           <td class="paramkey"></td>
           <td></td>
           <td class="paramtype">bool&#160;</td>
-          <td class="paramname"><em>overflow_ok</em>&#160;</td>
+          <td class="paramname"><em>overflow_ok</em>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype">bool&#160;</td>
+          <td class="paramname"><em>new_endpoint</em>&#160;</td>
         </tr>
         <tr>
           <td></td>
@@ -411,6 +421,50 @@ Additional Inherited Members</h2></td></tr>
       <table class="memname">
         <tr>
           <td class="memname"><a class="el" href="namespaceRealm.html#a4713e57139284efc3da66bd4bbc20ebe">Mutex</a> Realm::OutbufManager::mutex</td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel">protected</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+</div>
+</div>
+<a id="ad68df2bcfb3d4ef28d5a100b246f1391" name="ad68df2bcfb3d4ef28d5a100b246f1391"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#ad68df2bcfb3d4ef28d5a100b246f1391">&#9670;&#160;</a></span>num_buffers</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">size_t Realm::OutbufManager::num_buffers</td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel">protected</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+</div>
+</div>
+<a id="a4197354d53767271c2d2d0a730ceaa4f" name="a4197354d53767271c2d2d0a730ceaa4f"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a4197354d53767271c2d2d0a730ceaa4f">&#9670;&#160;</a></span>num_endpoints</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">size_t Realm::OutbufManager::num_endpoints</td>
         </tr>
       </table>
   </td>

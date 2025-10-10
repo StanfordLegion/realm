@@ -11,7 +11,6 @@ var classRealm_1_1GASNetEXInternal =
     [ "cancel_message", "classRealm_1_1GASNetEXInternal.html#a3329d396d488af3e10c8bbc6186878c6", null ],
     [ "check_for_quiescence", "classRealm_1_1GASNetEXInternal.html#a89e267db7bc4371af59048e51d761c2d", null ],
     [ "commit_message", "classRealm_1_1GASNetEXInternal.html#aae518f00cc475318ce0fd554b6e1f2b6", null ],
-    [ "databuf_reserve", "classRealm_1_1GASNetEXInternal.html#aaf1aec034bf52f7045eb00ffc94e0db4", null ],
     [ "detach", "classRealm_1_1GASNetEXInternal.html#a4a547f0cb70fafc949904c2ce851762f", null ],
     [ "early_local_completion", "classRealm_1_1GASNetEXInternal.html#a630801a7c8a0d162cbc1cf6fe5d9150d", null ],
     [ "extract_arg0_local_comp", "classRealm_1_1GASNetEXInternal.html#af7d5225e47a272c4dd3c86a2768dac5e", null ],
