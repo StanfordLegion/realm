@@ -611,7 +611,7 @@ namespace Realm {
     };
 
     class GPUDynamicFBMemory : public MemoryImpl {
-      AllocationResult queue_allocation(RegionInstanceImpl *inst, size_t size_needed);
+      AllocationResult queue_allocation(RegionInstanceImpl *inst, size_t size_needed = 0);
       CUresult alloc(CUmemoryPool pool, CUdeviceptr &offset, size_t size);
 
     public:
