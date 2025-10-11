@@ -34,6 +34,7 @@ struct CUstream_st; // cudaStream_t == CUstream == CUstream_st *
 struct CUevent_st;
 struct CUctx_st;
 struct CUfunc_st;
+struct CUmemPoolHandle_st;
 
 namespace Realm {
 

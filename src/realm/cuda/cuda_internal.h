@@ -427,6 +427,7 @@ namespace Realm {
       bool register_reduction(ReductionOpID redop_id, CUfunction apply_excl,
                               CUfunction apply_nonexcl, CUfunction fold_excl,
                               CUfunction fold_nonexcl);
+      void trim_mempools(CUmemoryPool skip = 0);
 
     protected:
       CUmodule load_cuda_module(const void *data);
@@ -520,6 +521,7 @@ namespace Realm {
       };
 
       std::unordered_map<ReductionOpID, GPUReductionOpEntry> gpu_reduction_table;
+      std::unordered_set<CUmemoryPool> registered_mempools;
     };
 
     // helper to push/pop a GPU's context by scope
@@ -611,9 +613,12 @@ namespace Realm {
     };
 
     class GPUDynamicFBMemory : public MemoryImpl {
+      AllocationResult queue_allocation(RegionInstanceImpl *inst, size_t size_needed = 0);
+      CUresult alloc(CUmemoryPool pool, CUdeviceptr &offset, size_t size);
+
     public:
       GPUDynamicFBMemory(RuntimeImpl *_runtime_impl, Memory _me, GPU *_gpu,
-                         size_t _max_size);
+                         CUmemoryPool pool, size_t _max_size);
 
       virtual ~GPUDynamicFBMemory(void);
       void cleanup(void);
@@ -624,6 +629,8 @@ namespace Realm {
                                                           bool poisoned,
                                                           TimeLimit work_until);
 
+      virtual void release_storage_deferrable(RegionInstanceImpl *inst,
+                                              Event precondition);
       virtual void release_storage_immediate(RegionInstanceImpl *inst, bool poisoned,
                                              TimeLimit work_until);
 
@@ -648,8 +655,17 @@ namespace Realm {
     public:
       GPU *gpu;
       Mutex mutex;
-      size_t cur_size;
-      std::map<RegionInstance, std::pair<CUdeviceptr, size_t>> alloc_bases;
+      CUmemoryPool pool = nullptr;
+      struct InstInfo {
+        CUdeviceptr ptr = 0;
+        size_t alloc_bytes_needed = 0;
+        bool deferred_release = false;
+      };
+      typedef std::unordered_map<RegionInstanceImpl *, InstInfo> InstToInfoMap;
+      InstToInfoMap inst_to_info;
+      std::deque<RegionInstanceImpl *> pending_allocs;
+      size_t free_bytes = 0;
+      size_t pending_free_bytes = 0;
       NetworkSegment local_segment;
     };
 
@@ -1408,6 +1424,11 @@ namespace Realm {
   __op__(cuModuleGetGlobal, CUDA_VERSION_MIN);                                           \
   __op__(cuLaunchHostFunc, CUDA_VERSION_MIN);                                            \
   __op__(cuCtxRecordEvent, 12050);                                                       \
+  __op__(cuMemAllocFromPoolAsync, CUDA_VERSION_MIN);                                     \
+  __op__(cuMemPoolGetAttribute, CUDA_VERSION_MIN);                                       \
+  __op__(cuMemPoolSetAttribute, CUDA_VERSION_MIN);                                       \
+  __op__(cuDeviceGetMemPool, CUDA_VERSION_MIN);                                          \
+  __op__(cuMemPoolTrimTo, CUDA_VERSION_MIN);                                             \
   __op__(cuArrayGetMemoryRequirements, CUDA_VERSION_MIN);
 
 // Make sure to only use decltype, to ensure it matches the cuda.h definition
