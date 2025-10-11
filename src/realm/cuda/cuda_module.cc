@@ -1901,7 +1901,7 @@ namespace Realm {
             break;
           }
           pending_allocs.pop_front();
-
+          free_bytes -= inst_info.alloc_bytes_needed;
           al.release();
           CUresult res = alloc(pool, base, alloc_inst->metadata.layout->bytes_used);
           al.reacquire();
