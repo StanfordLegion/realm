@@ -53,7 +53,7 @@ public:
   MOCK_METHOD(void, pull, (), ());
   MOCK_METHOD(void, wakeup_xd, (XferDes * xd), ());
   MOCK_METHOD(void, enqueue_ready_xd, (XferDes * xd), ());
-  MOCK_METHOD(XferDesFactory *, get_factory, (), ());
+  MOCK_METHOD(XferDesFactory *, get_factory, (const ChannelFactoryInfo *info), ());
 };
 
 // TODO(apryakhin@): Add operator<<

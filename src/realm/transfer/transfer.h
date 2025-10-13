@@ -54,8 +54,6 @@ namespace Realm {
 
     virtual void reset(void) = 0;
     virtual bool done(void) = 0;
-    virtual size_t get_base_offset(void) const;
-    virtual size_t get_address_size(void) const;
 
     // flag bits to control iterators
     enum
@@ -140,8 +138,6 @@ namespace Realm {
     virtual void confirm_step(void);
     virtual void cancel_step(void);
 
-    virtual size_t get_base_offset(void) const;
-
     virtual bool get_addresses(AddressList &addrlist,
                                const InstanceLayoutPieceBase *&nonaffine);
 
@@ -161,6 +157,53 @@ namespace Realm {
     size_t inst_offset;
     bool tentative_valid;
     int dim_order[N];
+  };
+
+  struct AffinePieceInfo {
+    uintptr_t base_offset;
+    size_t field_size;
+    int dim;
+
+    size_t extents[REALM_MAX_DIM];
+    size_t strides[REALM_MAX_DIM];
+
+    int lo[REALM_MAX_DIM];
+    int hi[REALM_MAX_DIM];
+
+    // const Realm::PieceLookup::Instruction *prog;
+    // uintptr_t field_base;
+  };
+
+  class AffinePieceIteratorBase {
+  public:
+    virtual ~AffinePieceIteratorBase() = default;
+    virtual bool next(AffinePieceInfo &out) = 0;
+  };
+
+  template <int N, typename T>
+  class AffinePieceIteratorT : public AffinePieceIteratorBase {
+  public:
+    AffinePieceIteratorT(RegionInstanceImpl *inst, const std::vector<int> &fids,
+                         const std::vector<size_t> &offs, const std::vector<size_t> &szs);
+
+    bool next(AffinePieceInfo &out) override;
+
+  private:
+    bool advance(void);
+
+    RegionInstanceImpl *inst_impl{nullptr};
+    const InstanceLayout<N, T> *layout{nullptr};
+    std::vector<FieldID> fields;
+    std::vector<size_t> fld_offs, fld_sizes;
+    size_t piece_idx{0};
+    size_t field_idx{0};
+    const AffineLayoutPiece<N, T> *cur_piece{nullptr};
+    size_t cur_field_size{0};
+    size_t cur_base_off{0};
+    bool valid{false};
+
+    const Realm::PieceLookup::Instruction *prog;
+    uintptr_t field_base;
   };
 
   ////////////////////////////////////////////////////////////////////////
@@ -305,6 +348,12 @@ namespace Realm {
                     const std::vector<FieldID> &fields,
                     const std::vector<size_t> &fld_offsets,
                     const std::vector<size_t> &fld_sizes) const = 0;
+
+    virtual AffinePieceIteratorBase *
+    create_piece_iterator(RegionInstance inst, const std::vector<int> &dim_order,
+                          const std::vector<FieldID> &fields,
+                          const std::vector<size_t> &fld_offsets,
+                          const std::vector<size_t> &fld_sizes) const = 0;
 
     virtual void print(std::ostream &os) const = 0;
   };
@@ -489,6 +538,12 @@ namespace Realm {
 
     virtual TransferIterator *create_address_iterator(RegionInstance peer) const = 0;
 
+    virtual AffinePieceIteratorBase *
+    create_piece_iterator(RegionInstance inst, const std::vector<int> &dim_order,
+                          const std::vector<FieldID> &fields,
+                          const std::vector<size_t> &fld_offsets,
+                          const std::vector<size_t> &fld_sizes) const = 0;
+
     virtual TransferIterator *create_indirect_iterator(
         Memory addrs_mem, RegionInstance inst, const std::vector<FieldID> &fields,
         const std::vector<size_t> &fld_offsets, const std::vector<size_t> &fld_sizes,
@@ -535,6 +590,7 @@ namespace Realm {
     virtual size_t address_size() const = 0;
 
     virtual XferDesFactory *create_addrsplit_factory(size_t bytes_per_element) const = 0;
+    virtual XferDesFactory *create_factory(Channel *channel) const = 0;
 
     bool structured;
     FieldID field_id;
@@ -570,6 +626,12 @@ namespace Realm {
 
     virtual TransferIterator *create_address_iterator(RegionInstance peer) const;
 
+    virtual AffinePieceIteratorBase *
+    create_piece_iterator(RegionInstance inst, const std::vector<int> &dim_order,
+                          const std::vector<FieldID> &fields,
+                          const std::vector<size_t> &fld_offsets,
+                          const std::vector<size_t> &fld_sizes) const;
+
     virtual TransferIterator *create_indirect_iterator(
         Memory addrs_mem, RegionInstance inst, const std::vector<FieldID> &fields,
         const std::vector<size_t> &fld_offsets, const std::vector<size_t> &fld_sizes,
@@ -584,9 +646,11 @@ namespace Realm {
     virtual size_t address_size() const;
 
     virtual XferDesFactory *create_addrsplit_factory(size_t bytes_per_element) const;
+    virtual XferDesFactory *create_factory(Channel *channel) const;
 
     IndexSpace<N, T> domain;
     std::vector<IndexSpace<N2, T2>> spaces;
+    std::vector<SparsityMapEntry<N, T>> entries;
     Channel *addr_split_channel;
   };
 

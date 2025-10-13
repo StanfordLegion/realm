@@ -22,6 +22,7 @@
 #include <cstdint>
 #include <vector>
 #include "realm/point.h"
+// #include "realm/inst_layout.h"
 
 #define CUDA_MAX_FIELD_BYTES 64
 #define CUDA_MAX_BLOCKS_PER_GRID 2048
@@ -115,16 +116,44 @@ namespace Realm {
       uintptr_t src;
     };
 
-    template <size_t N, typename Offset_t = size_t>
+    template <int N, typename COORD_T = int32_t>
+    struct PackedPieceDev {
+
+      uintptr_t base;
+      COORD_T lo[N], hi[N];
+      size_t strides[N];
+      // uint8_t dim;
+    };
+
+    template <int N, typename Offset_t = size_t>
     struct MemcpyIndirectInfo {
+      enum
+      {
+        DIM = N
+      };
+
+      uintptr_t domain_base;
+      Offset_t domain_rects;
+
+      Offset_t point_pos;
       Offset_t volume;
+
       Offset_t field_size;
-      Offset_t src_strides[N];
-      Offset_t dst_strides[N];
-      uintptr_t src_ind_addr;
-      uintptr_t dst_ind_addr;
-      uintptr_t src_addr;
-      uintptr_t dst_addr;
+
+      Offset_t ind_strides[N];
+      uintptr_t ind_base;
+
+      int src_dim;
+      int dst_dim;
+
+      unsigned short num_src_pieces;
+      unsigned short num_dst_pieces;
+
+      // const Realm::PieceLookup::Instruction *src_instruction;
+      // const Realm::PieceLookup::Instruction *dst_instruction;
+
+      PackedPieceDev<N> *src_pieces_ptr;
+      PackedPieceDev<N> *dst_pieces_ptr;
     };
 
     static const size_t CUDA_MAX_DIM = REALM_MAX_DIM < 3 ? REALM_MAX_DIM : 3;

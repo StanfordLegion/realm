@@ -32,7 +32,6 @@
 #include <vector>
 #include <deque>
 #include <queue>
-#include <unordered_set>
 #include <assert.h>
 #include <string.h>
 
@@ -51,12 +50,13 @@ namespace Realm {
   class Channel;
   class DmaRequest;
   class TransferIterator;
+  class AffinePieceIteratorBase;
 
   extern Logger log_new_dma;
 
   typedef unsigned long long XferDesID;
 
-// clang-format off
+  // clang-format off
 #define REALM_XFERDES_KINDS(__op__) \
   __op__(XFER_NONE) \
   __op__(XFER_DISK_READ) \
@@ -204,6 +204,7 @@ namespace Realm {
     RegionInstance inst;
     size_t ib_offset, ib_size;
     TransferIterator *iter;
+    AffinePieceIteratorBase *piece_iter;
     CustomSerdezID serdez_id;
   };
 
@@ -300,6 +301,7 @@ namespace Realm {
     struct XferPort {
       MemoryImpl *mem;
       TransferIterator *iter;
+      AffinePieceIteratorBase *piece_iter;
       const CustomSerdezUntyped *serdez_op;
       XferDesID peer_guid;
       int peer_port_idx;
@@ -721,9 +723,22 @@ namespace Realm {
     // TODO: make pure virtual
     virtual void shutdown() {}
 
-    // most channels can hand out a factory that makes arbitrary xds on
-    //  that channel
-    virtual XferDesFactory *get_factory() = 0;
+    virtual TransferIterator *get_iterator(RegionInstance inst,
+                                           const std::vector<FieldID> &_fields,
+                                           const std::vector<size_t> &_fld_offsets,
+                                           const std::vector<size_t> &_fld_sizes)
+    {
+      return nullptr;
+    }
+
+    struct ChannelFactoryInfo {
+      const void *domain_rects_base;
+      size_t num_domain_rects;
+      size_t rect_bytes;
+      size_t volume;
+    };
+
+    virtual XferDesFactory *get_factory(const ChannelFactoryInfo *info = nullptr) = 0;
 
   public:
     // which node manages this channel
@@ -832,6 +847,7 @@ namespace Realm {
     /// @param mem Memory to be used as an indirection buffer
     /// @return True if the given \p mem can be used as an indirection buffer for a copy
     virtual bool supports_indirection_memory(Memory mem) const;
+    virtual bool supports_address_splitting(int num_spaces) const;
 
     virtual Memory suggest_ib_memories() const;
     virtual Memory suggest_ib_memories_for_node(NodeID node) const;
@@ -881,7 +897,7 @@ namespace Realm {
                                      const void *fill_data, size_t fill_size,
                                      size_t fill_total) = 0;
 
-    virtual XferDesFactory *get_factory();
+    virtual XferDesFactory *get_factory(const ChannelFactoryInfo *info);
 
   protected:
     SimpleXferDesFactory factory_singleton;
@@ -940,7 +956,7 @@ namespace Realm {
 
     void shutdown() override;
 
-    XferDesFactory *get_factory() override;
+    XferDesFactory *get_factory(const ChannelFactoryInfo *info) override;
 
   public:
     uintptr_t get_remote_ptr() const;

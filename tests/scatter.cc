@@ -1436,9 +1436,10 @@ void top_level_task(const void *args, size_t arglen, const void *userdata, size_
   bool ok = true;
 
   // normal-sized data
-  if(!scatter_gather_test<1, int, 2, int, float>(
-         mems, TestConfig::size1, TestConfig::size2, TestConfig::pieces1,
-         TestConfig::pieces2, p, /*serdez_id=*/0, /*oor_possible=*/true))
+  if(!scatter_gather_test<1, int, 2, int, float>(mems, TestConfig::size1,
+                                                 TestConfig::size2, TestConfig::pieces1,
+                                                 TestConfig::pieces2, p, /*serdez_id=*/0,
+                                                 /*oor_possible=*/true))
     ok = false;
 
   // normal-sized data

@@ -713,29 +713,6 @@ namespace Realm {
       GPUCompletionEvent event;
     };
 
-    class GPUIndirectTransferCompletion : public GPUCompletionNotification {
-    public:
-      GPUIndirectTransferCompletion(
-          XferDes *_xd, int _read_port_idx, size_t _read_offset, size_t _read_size,
-          int _write_port_idx, size_t _write_offset, size_t _write_size,
-          int _read_ind_port_idx = -1, size_t _read_ind_offset = 0,
-          size_t _read_ind_size = 0, int _write_ind_port_idx = -1,
-          size_t _write_ind_offset = 0, size_t _write_ind_size = 0);
-
-      virtual void request_completed(void);
-
-    protected:
-      XferDes *xd;
-      int read_port_idx;
-      size_t read_offset, read_size;
-      int read_ind_port_idx;
-      size_t read_ind_offset, read_ind_size;
-      int write_port_idx;
-      size_t write_offset, write_size;
-      int write_ind_port_idx;
-      size_t write_ind_offset, write_ind_size;
-    };
-
     class GPUTransferCompletion : public GPUCompletionNotification {
     public:
       GPUTransferCompletion(XferDes *_xd, int _read_port_idx, size_t _read_offset,
@@ -797,14 +774,37 @@ namespace Realm {
       GPUIndirectXferDes(uintptr_t _dma_op, Channel *_channel, NodeID _launch_node,
                          XferDesID _guid, const std::vector<XferDesPortInfo> &inputs_info,
                          const std::vector<XferDesPortInfo> &outputs_info, int _priority,
-                         XferDesRedopInfo _redop_info);
+                         XferDesRedopInfo _redop_info, const void *_domain_rects_base,
+                         size_t _num_domain_rects, size_t _rect_bytes, size_t _volume);
+      ~GPUIndirectXferDes() override;
 
-      long get_requests(Request **requests, long nr);
+      long get_requests(Request **requests, long nr) override;
       bool progress_xd(GPUIndirectChannel *channel, TimeLimit work_until);
+      void fetch_indirection_meta(XferPort *ind_port);
+
+      Event request_metadata() override;
 
     protected:
       std::vector<GPU *> src_gpus, dst_gpus;
       std::vector<bool> dst_is_ipc;
+
+    private:
+      const void *domain_rects_base{nullptr};
+      size_t num_domain_rects{0};
+      size_t rect_bytes{0};
+      size_t volume{0};
+
+      void *domain_rects_dev{nullptr};
+
+      size_t points_done{0};
+      size_t total_points{0};
+
+      size_t src_piece_count{0};
+      size_t dst_piece_count{0};
+      PackedPieceDev<3> *src_pieces_ptr{nullptr};
+      PackedPieceDev<3> *dst_pieces_ptr{nullptr};
+
+      std::vector<AffinePieceInfo> ind_pieces;
     };
 
     class GPUIndirectChannel
@@ -817,7 +817,11 @@ namespace Realm {
       //  default (can be re-enabled with -cuda:mtdma 1)
       static const bool is_ordered = true;
 
-      virtual bool needs_wrapping_iterator() const;
+      virtual TransferIterator *get_iterator(RegionInstance inst,
+                                             const std::vector<FieldID> &_fields,
+                                             const std::vector<size_t> &_fld_offsets,
+                                             const std::vector<size_t> &_fld_sizes);
+
       virtual Memory suggest_ib_memories() const;
 
       virtual RemoteChannelInfo *construct_remote_info() const;
@@ -830,6 +834,9 @@ namespace Realm {
                     unsigned *bw_ret = 0, unsigned *lat_ret = 0);
 
       virtual bool supports_indirection_memory(Memory mem) const;
+      virtual bool supports_address_splitting(int num_spaces) const;
+
+      virtual XferDesFactory *get_factory(const ChannelFactoryInfo *info);
 
       virtual XferDes *create_xfer_des(uintptr_t dma_op, NodeID launch_node,
                                        XferDesID guid,
@@ -845,6 +852,7 @@ namespace Realm {
     protected:
       friend class GPUIndirectXferDes;
       GPU *src_gpu;
+      XferDesFactory *factory;
     };
 
     class GPUIndirectRemoteChannelInfo : public SimpleRemoteChannelInfo {
@@ -875,7 +883,12 @@ namespace Realm {
       GPUIndirectRemoteChannel(uintptr_t _remote_ptr,
                                const std::vector<Memory> &_indirect_memories);
       virtual Memory suggest_ib_memories() const;
-      virtual bool needs_wrapping_iterator() const;
+
+      virtual TransferIterator *get_iterator(RegionInstance inst,
+                                             const std::vector<FieldID> &_fields,
+                                             const std::vector<size_t> &_fld_offsets,
+                                             const std::vector<size_t> &_fld_sizes);
+
       virtual uint64_t
       supports_path(ChannelCopyInfo channel_copy_info, CustomSerdezID src_serdez_id,
                     CustomSerdezID dst_serdez_id, ReductionOpID redop_id,
