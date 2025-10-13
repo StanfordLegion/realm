@@ -949,45 +949,6 @@ namespace Realm {
       }
     }
 
-    // TODO: TEST ME!
-    class DeferredHtoDUpload : public EventWaiter {
-    public:
-      DeferredHtoDUpload(Cuda::GPU *gpu, RegionInstance inst, const void *src,
-                         size_t bytes)
-        : gpu(gpu)
-        , inst(inst)
-        , src(src)
-        , bytes(bytes)
-      {
-        finish_event = GenEventImpl::create_genevent()->current_event();
-      }
-
-      void defer(Event wait_on) { EventImpl::add_waiter(wait_on, this); }
-
-      void event_triggered(bool poisoned, TimeLimit work_until) override
-      {
-        if(!poisoned) {
-          RegionInstanceImpl *impl = get_runtime()->get_instance_impl(inst);
-          CUdeviceptr dptr = static_cast<CUdeviceptr>(impl->metadata.inst_offset);
-          Cuda::AutoGPUContext agc(gpu);
-          CHECK_CU(CUDA_DRIVER_FNPTR(cuMemcpyHtoD)(dptr, src, bytes));
-        }
-        GenEventImpl::trigger(finish_event, poisoned, work_until);
-        delete this;
-      }
-
-      void print(std::ostream &os) const override {}
-
-      Event get_finish_event(void) const override { return finish_event; }
-
-    private:
-      Cuda::GPU *gpu;
-      RegionInstance inst;
-      const void *src;
-      size_t bytes;
-      Event finish_event;
-    };
-
     Event GPUIndirectXferDes::request_metadata()
     {
       Event event = XferDes::request_metadata();
