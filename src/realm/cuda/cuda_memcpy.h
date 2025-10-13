@@ -122,7 +122,7 @@ namespace Realm {
       uintptr_t base;
       COORD_T lo[N], hi[N];
       size_t strides[N];
-      //uint8_t dim;
+      // uint8_t dim;
     };
 
     template <int N, typename Offset_t = size_t>
