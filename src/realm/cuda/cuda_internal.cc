@@ -939,6 +939,14 @@ namespace Realm {
       if(domain_rects_dev) {
         runtime_singleton->repl_heap.free_obj(domain_rects_dev);
       }
+
+      if(src_pieces_ptr) {
+        runtime_singleton->repl_heap.free_obj(src_pieces_ptr);
+      }
+
+      if(dst_pieces_ptr) {
+        runtime_singleton->repl_heap.free_obj(dst_pieces_ptr);
+      }
     }
 
     // TODO: TEST ME!
@@ -1031,13 +1039,15 @@ namespace Realm {
         return std::min(want, span);
       }
 
-      void *upload_layout(XferDes::XferPort *port,
-                          std::vector<PackedPieceDev<3>> &pieces_dev, int &dim,
-                          size_t &field_size)
+      template <int N>
+      PackedPieceDev<N> *upload_layout(XferDes::XferPort *port, size_t &piece_count,
+                                       int &dim, size_t &field_size)
       {
         AffinePieceInfo pinfo;
-        PackedPieceDev<3> devpiece;
+        std::vector<PackedPieceDev<N>> pieces_dev;
         while(port->piece_iter->next(pinfo)) {
+          pieces_dev.emplace_back(PackedPieceDev<N>{});
+          PackedPieceDev<N> &devpiece = pieces_dev.back();
           devpiece.base = reinterpret_cast<uintptr_t>(
               port->mem->get_direct_ptr(pinfo.base_offset, 0));
           for(int d = 0; d < pinfo.dim; d++) {
@@ -1047,14 +1057,17 @@ namespace Realm {
           }
           dim = std::min(dim, pinfo.dim);
           field_size = std::min(field_size, pinfo.field_size);
-          pieces_dev.emplace_back(devpiece);
+          // pieces_dev.emplace_back(devpiece);
         }
 
-        const size_t piece_bytes = pieces_dev.size() * sizeof(PackedPieceDev<3>);
+        const size_t piece_bytes = pieces_dev.size() * sizeof(PackedPieceDev<N>);
         constexpr size_t ALIGN = 16;
-        void *ptr = runtime_singleton->repl_heap.alloc_obj(piece_bytes, ALIGN);
-        std::memcpy(ptr, pieces_dev.data(), piece_bytes);
-        return ptr;
+        PackedPieceDev<N> *devpiece_ptr =
+            (PackedPieceDev<N> *)runtime_singleton->repl_heap.alloc_obj(piece_bytes,
+                                                                        ALIGN);
+        piece_count = pieces_dev.size();
+        std::memcpy(devpiece_ptr, pieces_dev.data(), piece_bytes);
+        return devpiece_ptr;
       }
 
     } // namespace
@@ -1126,65 +1139,19 @@ namespace Realm {
         size_t field_bytes = MAX_CHUNK;
 
         if(!src_pieces_ptr) {
-          AffinePieceInfo pinfo;
-          PackedPieceDev<3> devpiece;
-          std::vector<PackedPieceDev<3>> src_pieces_dev;
-
           memcpy_info.src_dim = REALM_MAX_DIM;
-          while(inp_port->piece_iter->next(pinfo)) {
-            devpiece.base = reinterpret_cast<uintptr_t>(
-                inp_port->mem->get_direct_ptr(pinfo.base_offset, 0));
-            for(int d = 0; d < pinfo.dim; d++) {
-              devpiece.lo[d] = pinfo.lo[d];
-              devpiece.hi[d] = pinfo.hi[d];
-              devpiece.strides[d] = pinfo.strides[d] / pinfo.field_size;
-            }
-            memcpy_info.src_dim = std::min(memcpy_info.src_dim, pinfo.dim);
-            dim = std::min(dim, pinfo.dim);
-            field_bytes = std::min(field_bytes, pinfo.field_size);
-            // memcpy_info.src_instruction = pinfo.prog;
-            src_pieces_dev.emplace_back(devpiece);
-          }
-
-          const size_t src_piece_bytes =
-              src_pieces_dev.size() * sizeof(PackedPieceDev<3>);
-          constexpr size_t ALIGN = 16;
-          src_pieces_ptr = (PackedPieceDev<3> *)runtime_singleton->repl_heap.alloc_obj(
-              src_piece_bytes, ALIGN);
-          src_piece_count = src_pieces_dev.size();
-          std::memcpy(src_pieces_ptr, src_pieces_dev.data(), src_piece_bytes);
+          src_pieces_ptr = upload_layout<3>(inp_port, src_piece_count,
+                                            memcpy_info.src_dim, field_bytes);
+          dim = std::min(dim, memcpy_info.src_dim);
         }
 
         assert(out_ipc == false);
 
         if(!dst_pieces_ptr) {
-          AffinePieceInfo pinfo;
-          PackedPieceDev<3> devpiece;
-          std::vector<PackedPieceDev<3>> dst_pieces_dev;
-
           memcpy_info.dst_dim = REALM_MAX_DIM;
-          while(out_port->piece_iter->next(pinfo)) {
-            devpiece.base = reinterpret_cast<uintptr_t>(
-                out_port->mem->get_direct_ptr(pinfo.base_offset, 0));
-            for(int d = 0; d < pinfo.dim; d++) {
-              devpiece.lo[d] = pinfo.lo[d];
-              devpiece.hi[d] = pinfo.hi[d];
-              devpiece.strides[d] = pinfo.strides[d] / pinfo.field_size;
-            }
-            memcpy_info.dst_dim = std::min(memcpy_info.dst_dim, pinfo.dim);
-            dim = std::min(dim, pinfo.dim);
-            field_bytes = std::min(field_bytes, pinfo.field_size);
-            // memcpy_info.dst_instruction = pinfo.prog;
-            dst_pieces_dev.emplace_back(devpiece);
-          }
-
-          const size_t dst_piece_bytes =
-              dst_pieces_dev.size() * sizeof(PackedPieceDev<3>);
-          constexpr size_t ALIGN = 16;
-          dst_pieces_ptr = (PackedPieceDev<3> *)runtime_singleton->repl_heap.alloc_obj(
-              dst_piece_bytes, ALIGN);
-          dst_piece_count = dst_pieces_dev.size();
-          std::memcpy(dst_pieces_ptr, dst_pieces_dev.data(), dst_piece_bytes);
+          dst_pieces_ptr = upload_layout<3>(out_port, dst_piece_count,
+                                            memcpy_info.dst_dim, field_bytes);
+          dim = std::min(dim, memcpy_info.dst_dim);
         }
 
         size_t coord_bytes = ind_pieces[0].field_size / memcpy_info.src_dim;
