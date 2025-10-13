@@ -1849,7 +1849,6 @@ namespace Realm {
     assert(pending >= 0);
 
     if(pending == 0) {
-      assert(total_bytes_written > 0);
       transfer_completed.store_release(true);
     }
   }
