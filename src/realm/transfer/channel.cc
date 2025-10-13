@@ -713,9 +713,9 @@ namespace Realm {
                             icp.local_bytes_total - old_lbt);
 
         log_xd.info() << "input control: xd=" << std::hex << guid << std::dec
-                       << " port=" << input_control.current_io_port
-                       << " count=" << input_control.remaining_count
-                       << " done=" << input_control.eos_received;
+                      << " port=" << input_control.current_io_port
+                      << " count=" << input_control.remaining_count
+                      << " done=" << input_control.eos_received;
       }
       // if count is still zero, we're done
       if(input_control.remaining_count == 0) {
@@ -1843,8 +1843,8 @@ namespace Realm {
     int64_t pending = prev + total_bytes_written;
 
     log_xd.info() << "completion: xd=" << std::hex << guid << std::dec
-                   << " total_bytes=" << total_bytes_written << " pending=" << pending
-                   << " prev:" << prev;
+                  << " total_bytes=" << total_bytes_written << " pending=" << pending
+                  << " prev:" << prev;
 
     assert(pending >= 0);
 
@@ -1876,7 +1876,7 @@ namespace Realm {
     XferPort *out_port = &output_ports[port_idx];
     size_t inc_amt = out_port->seq_local.add_span(offset, size);
     log_xd.info() << "bytes_write: " << std::hex << guid << std::dec << "(" << port_idx
-                   << ") " << offset << "+" << size << " -> " << inc_amt;
+                  << ") " << offset << "+" << size << " -> " << inc_amt;
 
     if(out_port->peer_guid != XFERDES_NO_GUID) {
       // update bytes total if needed (and available)
@@ -1906,7 +1906,7 @@ namespace Realm {
       int64_t prev = bytes_write_pending.fetch_sub(inc_amt);
       if(prev > 0)
         log_xd.info() << "completion: xd=" << std::hex << guid << std::dec
-                       << " remaining=" << (prev - inc_amt);
+                      << " remaining=" << (prev - inc_amt);
       if(inc_amt == static_cast<size_t>(prev)) {
         add_reference();
         transfer_completed.store_release(true);
@@ -3850,7 +3850,10 @@ namespace Realm {
     , factory_singleton(reinterpret_cast<uintptr_t>(this))
   {}
 
-  XferDesFactory *LocalChannel::get_factory(const ChannelFactoryInfo *) { return &factory_singleton; }
+  XferDesFactory *LocalChannel::get_factory(const ChannelFactoryInfo *)
+  {
+    return &factory_singleton;
+  }
 
   ////////////////////////////////////////////////////////////////////////
   //
@@ -3914,7 +3917,10 @@ namespace Realm {
 
   uintptr_t RemoteChannel::get_remote_ptr() const { return remote_ptr; }
 
-  XferDesFactory *RemoteChannel::get_factory(const ChannelFactoryInfo *) { return &factory_singleton; }
+  XferDesFactory *RemoteChannel::get_factory(const ChannelFactoryInfo *)
+  {
+    return &factory_singleton;
+  }
 
   void RemoteChannel::register_redop(ReductionOpID redop_id)
   {

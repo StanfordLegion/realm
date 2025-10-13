@@ -718,7 +718,7 @@ namespace Realm {
       : node(Network::my_node_id)
       , kind(_kind)
     {}
-    virtual ~Channel() {};
+    virtual ~Channel(){};
 
     // TODO: make pure virtual
     virtual void shutdown() {}
@@ -905,7 +905,7 @@ namespace Realm {
   // polymorphic container for info necessary to create a remote channel
   class REALM_INTERNAL_API_EXTERNAL_LINKAGE RemoteChannelInfo {
   public:
-    virtual ~RemoteChannelInfo() {};
+    virtual ~RemoteChannelInfo(){};
 
     virtual RemoteChannel *create_remote_channel() = 0;
 
