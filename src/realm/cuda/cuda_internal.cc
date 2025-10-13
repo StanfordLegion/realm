@@ -1189,14 +1189,12 @@ namespace Realm {
 
         memcpy_info.ind_base = reinterpret_cast<uintptr_t>(
             ind_port->mem->get_direct_ptr(ind_pieces[0].base_offset, 0));
-        memcpy_info.ind_strides[0] = ind_pieces[0].strides[0];
-        memcpy_info.ind_strides[1] = ind_pieces[0].strides[1];
-        memcpy_info.ind_strides[2] = ind_pieces[0].strides[2];
-        for(int i = 0; i < dim; i++) {
-          memcpy_info.ind_strides[i] /= ind_pieces[0].field_size;
-        }
 
         assert(ind_pieces[0].dim == memcpy_info.dst_dim);
+        for(int d = 0; d < ind_pieces[0].dim; d++) {
+          memcpy_info.ind_strides[d] =
+              (ind_pieces[0].strides[d]) / ind_pieces[0].field_size;
+        }
 
         memcpy_info.field_size = field_bytes;
         memcpy_info.point_pos = points_done;
