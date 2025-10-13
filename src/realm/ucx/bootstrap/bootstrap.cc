@@ -35,9 +35,9 @@ namespace Realm {
       switch(config->mode) {
       case BOOTSTRAP_MPI:
         if(config->plugin_name != NULL) {
-          status = bootstrap_loader_init(config->plugin_name, NULL, handle, BootstrapMode::BOOTSTRAP_MPI);
+          status = bootstrap_loader_init(config->plugin_name, NULL, handle);
         } else {
-          status = bootstrap_loader_init(BOOTSTRAP_MPI_PLUGIN, NULL, handle, BootstrapMode::BOOTSTRAP_MPI);
+          status = bootstrap_loader_init(BOOTSTRAP_MPI_PLUGIN, NULL, handle);
         }
         if(status != 0) {
           log_ucp.error() << "bootstrap_loader_init failed";
@@ -45,17 +45,16 @@ namespace Realm {
         break;
       case BOOTSTRAP_P2P:
         if(config->plugin_name != NULL) {
-          status = bootstrap_loader_init(config->plugin_name, NULL, handle, BootstrapMode::BOOTSTRAP_P2P);
+          status = bootstrap_loader_init(config->plugin_name, NULL, handle);
         } else {
-          status = bootstrap_loader_init(BOOTSTRAP_P2P_PLUGIN, NULL, handle, BootstrapMode::BOOTSTRAP_P2P);
+          status = bootstrap_loader_init(BOOTSTRAP_P2P_PLUGIN, NULL, handle);
         }
         if(status != 0) {
           log_ucp.error() << "bootstrap_loader_init failed";
         }
         break;
       case BOOTSTRAP_PLUGIN:
-        // for safety, use MPI as the bootstrap mode to not unload the plugin
-        status = bootstrap_loader_init(config->plugin_name, NULL, handle, BootstrapMode::BOOTSTRAP_MPI);
+        status = bootstrap_loader_init(config->plugin_name, NULL, handle);
         if(status != 0) {
           log_ucp.error() << "bootstrap_loader_init failed";
         }
