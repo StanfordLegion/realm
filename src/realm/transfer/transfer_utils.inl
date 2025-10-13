@@ -143,4 +143,53 @@ namespace Realm {
 
     return have_rect;
   }
+
+  template <int N, typename T>
+  inline int
+  compact_affine_dims(const AffineLayoutPiece<N, T> *affine, const Rect<N, T> &subrect,
+                      const int dim_order[N], size_t field_size, size_t &total_bytes,
+                      size_t &contig_bytes,
+                      std::unordered_map<int, std::pair<size_t, size_t>> &count_strides)
+  {
+    size_t bytes = field_size;
+    int cur_dim = 1;
+    int di = 0;
+
+    for(; di < N; di++) {
+      int d = dim_order[di];
+      if(subrect.lo[d] == subrect.hi[d])
+        continue;
+      if(affine->strides[d] != bytes)
+        break;
+      bytes *= (subrect.hi[d] - subrect.lo[d] + 1);
+    }
+
+    contig_bytes = bytes;
+    total_bytes = bytes;
+
+    for(; di < N;) {
+      int d = dim_order[di];
+      size_t stride = affine->strides[d];
+      size_t total_count = 1;
+
+      for(; di < N; di++) {
+        d = dim_order[di];
+        if(subrect.lo[d] == subrect.hi[d])
+          continue;
+
+        size_t count = (subrect.hi[d] - subrect.lo[d] + 1);
+        if(affine->strides[d] != (stride * total_count))
+          break;
+
+        total_count *= count;
+      }
+
+      count_strides[cur_dim] = {total_count, stride};
+
+      total_bytes *= total_count;
+      cur_dim++;
+    }
+    return cur_dim;
+    // ndims_out = cur_dim;
+  }
 } // namespace Realm
