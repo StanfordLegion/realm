@@ -608,10 +608,12 @@ namespace Realm {
     for(std::vector<XferPort>::const_iterator it = input_ports.begin();
         it != input_ports.end(); ++it) {
       delete it->iter;
+      delete it->piece_iter;
     }
     for(std::vector<XferPort>::const_iterator it = output_ports.begin();
         it != output_ports.end(); ++it) {
       delete it->iter;
+      delete it->piece_iter;
     }
 
     if(fill_data != &inline_fill_storage) {
