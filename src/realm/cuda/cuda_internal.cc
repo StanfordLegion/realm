@@ -1223,8 +1223,7 @@ namespace Realm {
       // won't be correct if ib smaller that overall size of
       // gather/scatter
       if(channel_copy_info.addr_size > sizeof(size_t) || channel_copy_info.is_ranges ||
-         channel_copy_info.num_spaces > 1 || channel_copy_info.oor_possible ||
-         channel_copy_info.is_scatter) {
+         channel_copy_info.num_spaces > 1 || channel_copy_info.is_scatter) {
         return false;
       }
 
@@ -1388,6 +1387,11 @@ namespace Realm {
       // TODO: support all memories accessible by the source gpu
       return (memory.kind() == Memory::GPU_FB_MEM) &&
              (NodeID(ID(memory).memory_owner_node()) == node);
+    }
+
+    bool GPUIndirectChannel::supports_address_splitting(int num_spaces) const
+    {
+      return num_spaces == 1;
     }
 
     class CudaIndirectChannelFactory : public XferDesFactory {

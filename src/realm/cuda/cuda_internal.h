@@ -834,6 +834,7 @@ namespace Realm {
                     unsigned *bw_ret = 0, unsigned *lat_ret = 0);
 
       virtual bool supports_indirection_memory(Memory mem) const;
+      virtual bool supports_address_splitting(int num_spaces) const;
 
       virtual XferDesFactory *get_factory(const ChannelFactoryInfo *info);
 

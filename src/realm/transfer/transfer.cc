@@ -2553,11 +2553,15 @@ namespace Realm {
         // new path to compute
         path_infos.resize(idx + 1);
         std::vector<size_t> src_frags{domain_size()}, dst_frags{1};
-        log_xpath.info() << "Find fastest path for gather op spaces:" << spaces_size;
         ChannelCopyInfo copy_info{insts[i].get_location(), dst_mem, inst.get_location(),
                                   spaces_size,
                                   /*is_scatter=*/false};
         populate_copy_info(copy_info);
+
+        log_xpath.info() << "Find fastest path for gather op spaces:" << spaces_size
+                         << " oor:" << copy_info.oor_possible
+                         << " addr_size:" << copy_info.addr_size
+                         << " is_ranges:" << copy_info.is_ranges;
         bool ok = find_fastest_path(nodes_info, path_cache, copy_info, serdez_id, 0,
                                     domain_size() * bytes_per_element, &src_frags,
                                     &dst_frags, path_infos[idx]);
@@ -2580,11 +2584,13 @@ namespace Realm {
     TransferGraph::XDTemplate::IO addr_edge =
         TransferGraph::XDTemplate::mk_inst(inst, addr_field_start, 1);
 
+    Channel *channel = path_infos[0].xd_channels[0];
+
     // special case - a gather from a single source with no out of range
     //  accesses
-    if((spaces_size == 1) && !oor_possible) {
+    if((!oor_possible && num_spaces() == 1) ||
+       channel->supports_address_splitting(num_spaces())) {
       size_t pathlen = path_infos[0].xd_channels.size();
-      auto channel = path_infos[0].xd_channels[0];
       log_xpath.info() << "Gather channel kind=" << channel->kind
                        << " node=" << channel->node << " path len=" << pathlen;
 
@@ -2903,11 +2909,13 @@ namespace Realm {
     TransferGraph::XDTemplate::IO addr_edge =
         TransferGraph::XDTemplate::mk_inst(inst, addr_field_start, 1);
 
+    size_t pathlen = path_infos[0].xd_channels.size();
+    Channel *channel = path_infos[0].xd_channels[pathlen - 1];
+
     // special case - a scatter to a single destination with no out of
     //  range accesses
-    if((spaces_size == 1) && !oor_possible) {
-      size_t pathlen = path_infos[0].xd_channels.size();
-      auto channel = path_infos[0].xd_channels[pathlen - 1];
+    if((!oor_possible && num_spaces() == 1) ||
+       channel->supports_address_splitting(num_spaces())) {
       log_xpath.info() << "Scatter channel kind=" << channel->kind
                        << " node=" << channel->node << " path len=" << pathlen;
       Memory ind_ib_mem = channel->suggest_ib_memories();
@@ -2968,7 +2976,6 @@ namespace Realm {
         }
       }
     } else {
-
       // First complication: if all the data paths don't use the same first
       //  step, we need to force them to go through an intermediate
       Memory src_ib_mem = find_sysmem_ib_memory(ID(src_mem).memory_owner_node());

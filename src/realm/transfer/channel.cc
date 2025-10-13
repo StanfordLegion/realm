@@ -3388,6 +3388,8 @@ namespace Realm {
     return false;
   }
 
+  bool Channel::supports_address_splitting(int num_spaces) const { return false; }
+
   static Memory find_sysmem_ib_memory(NodeID node)
   {
     Node &n = get_runtime()->nodes[node];

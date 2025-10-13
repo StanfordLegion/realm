@@ -847,6 +847,7 @@ namespace Realm {
     /// @param mem Memory to be used as an indirection buffer
     /// @return True if the given \p mem can be used as an indirection buffer for a copy
     virtual bool supports_indirection_memory(Memory mem) const;
+    virtual bool supports_address_splitting(int num_spaces) const;
 
     virtual Memory suggest_ib_memories() const;
     virtual Memory suggest_ib_memories_for_node(NodeID node) const;

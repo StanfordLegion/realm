@@ -362,7 +362,9 @@ memcpy_indirect_points(Realm::Cuda::MemcpyIndirectInfo<3, Offset_t> info)
     }
 
     if(src_pidx == -1 || dst_pidx == -1) {
-      return;
+      gidx += grid_step;
+      lin += grid_step;
+      continue; // skip this point, keep going
     }
 
     //---------------- byte address calculations ----------------------
