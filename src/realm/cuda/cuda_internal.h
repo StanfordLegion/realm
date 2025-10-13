@@ -614,6 +614,7 @@ namespace Realm {
 
     class GPUDynamicFBMemory : public MemoryImpl {
       AllocationResult queue_allocation(RegionInstanceImpl *inst, size_t size_needed = 0);
+      void handle_pending_allocs(TimeLimit work_until);
       CUresult alloc(CUmemoryPool pool, CUdeviceptr &offset, size_t size);
 
     public:
@@ -628,6 +629,10 @@ namespace Realm {
                                                           bool need_alloc_result,
                                                           bool poisoned,
                                                           TimeLimit work_until);
+      virtual AllocationResult
+      reuse_storage_immediate(RegionInstanceImpl *old_inst,
+                              std::vector<RegionInstanceImpl *> &new_insts, bool poisoned,
+                              TimeLimit work_until);
 
       virtual void release_storage_deferrable(RegionInstanceImpl *inst,
                                               Event precondition);
@@ -657,11 +662,15 @@ namespace Realm {
       Mutex mutex;
       CUmemoryPool pool = nullptr;
       struct InstInfo {
+        GPU *gpu = nullptr;
         CUdeviceptr ptr = 0;
+        size_t size = 0;
         size_t alloc_bytes_needed = 0;
         bool deferred_release = false;
+        ~InstInfo();
       };
-      typedef std::unordered_map<RegionInstanceImpl *, InstInfo> InstToInfoMap;
+      typedef std::unordered_map<RegionInstanceImpl *, std::shared_ptr<InstInfo>>
+          InstToInfoMap;
       InstToInfoMap inst_to_info;
       std::deque<RegionInstanceImpl *> pending_allocs;
       size_t free_bytes = 0;
