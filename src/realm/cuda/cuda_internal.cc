@@ -1165,14 +1165,18 @@ namespace Realm {
         const size_t out_span_start = out_port->local_bytes_total;
         rseqcache.add_span(input_control.current_io_port, inp_span_start, max_bytes);
 
+        const size_t bytes_to_fence = points * field_bytes;
         auto stream = select_stream(out_gpu, inp_gpu, channel->get_gpu(), out_map,
                                     inp_port->mem, out_port->mem);
         AutoGPUContext agc(stream->get_gpu());
+        log_gpudma.info() << " Launch indirect gather dim:" << dim
+                          << " coord_bytes:" << coord_bytes << " points:" << points
+                          << " bytes:" << bytes_to_fence
+                          << " field_bytes:" << field_bytes;
         stream->get_gpu()->launch_indirect_copy_kernel(&memcpy_info, dim, coord_bytes,
                                                        field_bytes, points, stream);
         add_reference();
 
-        const size_t bytes_to_fence = points * field_bytes;
         stream->add_notification(new GPUTransferCompletion(
             this, input_control.current_io_port, inp_span_start, bytes_to_fence,
             output_control.current_io_port, out_span_start, bytes_to_fence));
