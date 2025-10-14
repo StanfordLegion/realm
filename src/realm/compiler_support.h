@@ -95,11 +95,27 @@
 #define REALM_CUDA_HD
 #endif
 
-// REALM_ASSERT(cond, message) - abort program if 'cond' is not true
+// REALM_ASSERT(cond) - abort program if 'cond' is not true
+#ifdef NDEBUG
 #if defined(__CUDACC__) || defined(__HIPCC__)
-#define REALM_ASSERT(cond, message) assert(cond)
+#define REALM_ASSERT(cond)                                                             \
+  do {                                                                                 \
+    if(!(cond)) {                                                                      \
+      abort();                                                                         \
+    }                                                                                  \
+  } while(0)
 #else
-#define REALM_ASSERT(cond, message) assert((cond) && (message))
+#define REALM_ASSERT(cond)                                                             \
+  do {                                                                                 \
+    if(!(cond)) {                                                                      \
+      fprintf(stderr, "Assertion failed: (%s), at %s:%d", #cond, __FILE__, __LINE__);  \
+      fflush(stderr);                                                                  \
+      abort();                                                                         \
+    }                                                                                  \
+  } while(0)
+#endif
+#else
+#define REALM_ASSERT(cond) assert(cond)
 #endif
 
 // REALM_LIKELY(expr) - suggest that `expr` is usually true
