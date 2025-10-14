@@ -1823,6 +1823,12 @@ namespace Realm {
         return MemoryImpl::reuse_storage_immediate(old_inst, new_insts, poisoned,
                                                    work_until);
       }
+      if (poisoned) {
+        for (RegionInstanceImpl *new_inst : new_insts) {
+          new_inst->notify_allocation(ALLOC_CANCELLED, 0, work_until);
+        }
+        return ALLOC_CANCELLED;
+      }
 
       // Old instance should be ready at this point
       assert(old_inst->metadata.ready_event.has_triggered());
@@ -1830,6 +1836,7 @@ namespace Realm {
       // Lookup the control block for the old_inst
       AutoLock<> al(mutex);
       std::shared_ptr<InstInfo> info;
+      std::vector<RegionInstanceImpl *> local_new_insts;
       {
         InstToInfoMap::iterator it = inst_to_info.find(old_inst);
         if(it == inst_to_info.end()) {
@@ -1837,19 +1844,28 @@ namespace Realm {
           return ALLOC_INSTANT_FAILURE;
         }
         info = it->second;
+        inst_to_info.erase(it);
       }
 
+      size_t old_inst_sz = old_inst->metadata.layout->bytes_used;
       size_t bytes_free = old_inst->metadata.layout->bytes_used;
-      AllocationResult result = ALLOC_INSTANT_FAILURE;
+      local_new_insts.swap(new_insts);
+
+      al.release();
+      old_inst->notify_deallocation();
+      al.reacquire();
+
       // TODO(cperry): rework the locking logic here to reduce reaquires
-      for(RegionInstanceImpl *new_inst : new_insts) {
+      for(RegionInstanceImpl *new_inst : local_new_insts) {
+        AllocationResult result = ALLOC_EVENTUAL_FAILURE;
         size_t offset = 0;
         if(new_inst->metadata.layout->bytes_used <= bytes_free) {
           // Suballocate from the old instance
-          offset = info->ptr + (old_inst->metadata.layout->bytes_used - bytes_free);
+          offset = info->ptr + (old_inst_sz - bytes_free);
           bytes_free -= new_inst->metadata.layout->bytes_used;
-          result = ALLOC_INSTANT_SUCCESS;
+          result = ALLOC_EVENTUAL_SUCCESS;
           // Reference the control block in this new instance
+          info->refcount++;
           inst_to_info[new_inst] = info;
         }
         al.release();
@@ -1857,7 +1873,7 @@ namespace Realm {
         al.reacquire();
       }
 
-      return result;
+      return ALLOC_INSTANT_SUCCESS;
     }
 
     void GPUDynamicFBMemory::release_storage_deferrable(RegionInstanceImpl *inst,
@@ -1875,7 +1891,7 @@ namespace Realm {
       } else {
         AutoLock<> al(mutex);
         InstToInfoMap::iterator it = inst_to_info.find(inst);
-        if(it != inst_to_info.end() && (it->second.use_count() == 1)) {
+        if((it != inst_to_info.end()) && (it->second->refcount == 1)) {
           // last reference to this control block. Update the pending_free_bytes for
           // future allocations and set this instance as a deferred_release so the later
           // called release_storage_immediate knows it needs to update the pending_bytes
@@ -1912,6 +1928,7 @@ namespace Realm {
         al.release();
         CUresult res = alloc(pool, base, alloc_inst->metadata.layout->bytes_used);
         al.reacquire();
+
         if(res == CUDA_SUCCESS) {
           inst_info->ptr = base;
           inst_info->size = alloc_inst->metadata.layout->bytes_used;
@@ -1958,7 +1975,7 @@ namespace Realm {
         assert(it != inst_to_info.end());
         std::shared_ptr<InstInfo> &info = it->second;
         base = info->ptr;
-        if(base != 0 && (info.use_count() == 1)) {
+        if(base != 0 && ((--info->refcount) == 0)) {
           // Last reference to this control block, so update the pool's bytes and delete
           // the control block
           if(info->deferred_release) {
