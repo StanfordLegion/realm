@@ -80,6 +80,8 @@ void musage_profiling_task(const void *args, size_t arglen, const void *userdata
   assert(memory_usage.instance != RegionInstance::NO_INST);
   *(result->bytes) = memory_usage.bytes;
 
+  log_app.error("musage prof task");
+
   result->done.trigger();
 }
 
@@ -97,6 +99,8 @@ void inst_profiling_task(const void *args, size_t arglen, const void *userdata,
   assert(inst_time.ready_time != 0);
   *(result->called) = 1;
 
+  log_app.error("inst prof task");
+
   result->done.trigger();
 }
 
@@ -109,6 +113,9 @@ void inst_status_profiling_task(const void *args, size_t arglen, const void *use
   ProfilingMeasurements::InstanceStatus inst_status;
   assert((resp.get_measurement(inst_status)));
   *(result->success) = inst_status.error_code;
+
+  log_app.error("inst status task");
+
   result->done.trigger();
 }
 
@@ -122,6 +129,9 @@ void alloc_profiling_task(const void *args, size_t arglen, const void *userdata,
   assert((resp.get_measurement(inst_alloc)));
   *(result->success) = inst_alloc.success;
   *(result->invocations) = *(result->invocations) + 1;
+
+  log_app.error("alloc profiling task");
+
   result->done.trigger();
 }
 
@@ -144,7 +154,7 @@ void top_level_task(const void *args, size_t arglen, const void *userdata, size_
 {
   std::map<NodeID, Memory> memories;
   Machine::MemoryQuery mq(Machine::get_machine());
-  mq.only_kind(Memory::SYSTEM_MEM);
+  mq.only_kind(Memory::GPU_DYNAMIC_MEM);
   for(Machine::MemoryQuery::iterator it = mq.begin(); it != mq.end(); ++it) {
     Memory memory = *it;
     NodeID owner = ID(*it).memory_owner_node();
@@ -266,7 +276,7 @@ void top_level_task(const void *args, size_t arglen, const void *userdata, size_
       PointInRectIterator<1, int> pit(it.rect);
       while(pit.valid) {
         data.push_back(index);
-        acc[pit.p] = index++;
+        inst2.write((acc.ptr(pit.p) - acc.ptr(0)) * sizeof(int), index++);
         pit.step();
       }
       it.step();
@@ -281,14 +291,16 @@ void top_level_task(const void *args, size_t arglen, const void *userdata, size_
                                   ProfilingRequestSet(), e1);
   e2.wait();
 
+  log_app.error("Waiting for user events");
   Event::merge_events(user_events).wait();
+  log_app.error("Finished waiting for user events");
   assert(alloc_result == true);
   assert(timel_result == true);
   assert(static_cast<size_t>(musage_result) == bounds.volume() * sizeof(int));
   assert(inst_status_result == 0);
 
   destroy_event.trigger();
-  usleep(100000);
+  //usleep(100000);
 }
 
 void worker_task(const void *args, size_t arglen, const void *userdata, size_t userlen,
@@ -373,7 +385,9 @@ void worker_task(const void *args, size_t arglen, const void *userdata, size_t u
     Event e = inst.redistrict(insts.data(), layouts.data(), num_split_inst, prs.data());
 
     bool poisoned = false;
+    log_app.error("Waiting for redistrict");
     e.wait_faultaware(poisoned);
+    log_app.error("Done waiting for redistrict");
     if(needs_oom) {
       assert(poisoned);
       return;
@@ -401,7 +415,7 @@ void worker_task(const void *args, size_t arglen, const void *userdata, size_t u
       while(it.valid) {
         PointInRectIterator<1, int> pit(it.rect);
         while(pit.valid) {
-          int val = acc[pit.p];
+          int val = insts[i].read<int>((acc.ptr(pit.p) - acc.ptr(0)) * sizeof(int));
           assert(val == wargs->data[offset++]);
           pit.step();
         }
