@@ -270,9 +270,7 @@ namespace Realm {
 
     // do local processors first
     std::set<Processor> local_procs;
-    RealmStatus status =
-        get_runtime()->machine->get_local_processors_by_kind(local_procs, target_kind);
-    REALM_ASSERT_WITH_ABORT(status == REALM_SUCCESS, log_taskreg);
+    get_runtime()->machine->get_local_processors_by_kind(local_procs, target_kind);
     if(!local_procs.empty()) {
       for(std::set<Processor>::const_iterator it = local_procs.begin();
           it != local_procs.end(); it++) {

@@ -201,7 +201,7 @@ namespace Realm {
 
   bool MachineNodeInfo::add_processor(Processor p)
   {
-    REALM_ASSERT_WITH_ABORT(node == NodeID(ID(p).proc_owner_node()), log_machine);
+    REALM_ASSERT(node == NodeID(ID(p).proc_owner_node()));
     MachineProcInfo *&ptr = procs[p];
     // TODO: see if anything changed?
     if(ptr != 0)
@@ -214,7 +214,7 @@ namespace Realm {
 
   bool MachineNodeInfo::add_memory(Memory m)
   {
-    REALM_ASSERT_WITH_ABORT(node == NodeID(ID(m).memory_owner_node()), log_machine);
+    REALM_ASSERT(node == NodeID(ID(m).memory_owner_node()));
     MachineMemInfo *&ptr = mems[m];
     // TODO: see if anything changed?
     if(ptr != 0)
@@ -231,14 +231,14 @@ namespace Realm {
 
     if(NodeID(ID(pma.p).proc_owner_node()) == node) {
       MachineProcInfo *mpi = procs[pma.p];
-      REALM_ASSERT_WITH_ABORT(mpi != 0, log_machine);
+      REALM_ASSERT(mpi != 0);
       if(mpi->add_proc_mem_affinity(pma))
         changed = true;
     }
 
     if(NodeID(ID(pma.m).memory_owner_node()) == node) {
       MachineMemInfo *mmi = mems[pma.m];
-      REALM_ASSERT_WITH_ABORT(mmi != 0, log_machine);
+      REALM_ASSERT(mmi != 0);
       if(mmi->add_proc_mem_affinity(pma))
         changed = true;
     }
@@ -252,14 +252,14 @@ namespace Realm {
 
     if(NodeID(ID(mma.m1).memory_owner_node()) == node) {
       MachineMemInfo *mmi = mems[mma.m1];
-      REALM_ASSERT_WITH_ABORT(mmi != 0, log_machine);
+      REALM_ASSERT(mmi != 0);
       if(mmi->add_mem_mem_affinity(mma))
         changed = true;
     }
 
     if(NodeID(ID(mma.m2).memory_owner_node()) == node) {
       MachineMemInfo *mmi = mems[mma.m2];
-      REALM_ASSERT_WITH_ABORT(mmi != 0, log_machine);
+      REALM_ASSERT(mmi != 0);
       if(mmi->add_mem_mem_affinity(mma))
         changed = true;
     }
@@ -319,16 +319,13 @@ namespace Realm {
 
   void Machine::get_local_processors(std::set<Processor> &pset) const
   {
-    RealmStatus status = (static_cast<MachineImpl *>(impl))->get_local_processors(pset);
-    REALM_ASSERT_WITH_ABORT(status == REALM_SUCCESS, log_machine);
+    return (static_cast<MachineImpl *>(impl))->get_local_processors(pset);
   }
 
   void Machine::get_local_processors_by_kind(std::set<Processor> &pset,
                                              Processor::Kind kind) const
   {
-    RealmStatus status =
-        (static_cast<MachineImpl *>(impl))->get_local_processors_by_kind(pset, kind);
-    REALM_ASSERT_WITH_ABORT(status == REALM_SUCCESS, log_machine);
+    return (static_cast<MachineImpl *>(impl))->get_local_processors_by_kind(pset, kind);
   }
 
   // Return the set of memories visible from a processor
@@ -410,13 +407,13 @@ namespace Realm {
   MachineImpl::MachineImpl(RuntimeImpl *_runtime_impl)
     : runtime_impl(_runtime_impl)
   {
-    REALM_ASSERT_WITH_ABORT(machine_singleton == nullptr, log_machine);
+    REALM_ASSERT(machine_singleton == nullptr);
     machine_singleton = this;
   }
 
   MachineImpl::~MachineImpl(void)
   {
-    REALM_ASSERT_WITH_ABORT(machine_singleton == this, log_machine);
+    REALM_ASSERT(machine_singleton == this);
     machine_singleton = nullptr;
     delete_map_contents(nodeinfos);
   }
@@ -472,7 +469,7 @@ namespace Realm {
   {
     AutoLock<> al(mutex);
 
-    REALM_ASSERT_WITH_ABORT(node_id <= Network::max_node_id, log_annc);
+    REALM_ASSERT(node_id <= Network::max_node_id);
     Node &n = runtime_impl->nodes[node_id];
 
     Serialization::FixedBufferDeserializer fbd(args, arglen);
@@ -492,7 +489,7 @@ namespace Realm {
         int num_cores;
         ok = (ok && (fbd >> p) && (fbd >> kind) && (fbd >> num_cores));
         if(ok) {
-          REALM_ASSERT_WITH_ABORT(NodeID(ID(p).proc_owner_node()) == node_id, log_annc);
+          REALM_ASSERT(NodeID(ID(p).proc_owner_node()) == node_id);
           log_annc.debug() << "adding proc " << p << " (kind = " << kind
                            << " num_cores = " << num_cores << ")";
           if(remote) {
@@ -517,7 +514,7 @@ namespace Realm {
         if(has_rdma_info)
           ok = ok && (fbd >> rdma_info);
         if(ok) {
-          REALM_ASSERT_WITH_ABORT(NodeID(ID(m).memory_owner_node()) == node_id, log_annc);
+          REALM_ASSERT(NodeID(ID(m).memory_owner_node()) == node_id);
           log_annc.debug() << "adding memory " << m << " (kind = " << kind
                            << ", size = " << size << ", has_rdma = " << has_rdma_info
                            << ")";
@@ -561,7 +558,7 @@ namespace Realm {
         if(has_rdma_info)
           ok = ok && (fbd >> rdma_info);
         if(ok) {
-          REALM_ASSERT_WITH_ABORT(NodeID(ID(m).memory_owner_node()) == node_id, log_annc);
+          REALM_ASSERT(NodeID(ID(m).memory_owner_node()) == node_id);
           log_annc.debug() << "adding ib memory " << m << " (kind = " << kind
                            << ", size = " << size << ", has_rdma = " << has_rdma_info
                            << ")";
@@ -614,7 +611,7 @@ namespace Realm {
           }
 
           log_annc.debug() << "adding channel: " << *rc;
-          REALM_ASSERT_WITH_ABORT(rc->node == node_id, log_annc);
+          REALM_ASSERT(rc->node == node_id);
           if(remote)
             runtime_impl->add_dma_channel(rc);
           else
@@ -639,7 +636,7 @@ namespace Realm {
       }
     }
 
-    REALM_ASSERT_WITH_ABORT(ok && (fbd.bytes_left() == 0), log_annc);
+    REALM_ASSERT(ok && (fbd.bytes_left() == 0));
   }
 
   void MachineImpl::get_all_memories(std::set<Memory> &mset) const
@@ -701,7 +698,7 @@ namespace Realm {
     return get_nodeinfo(ID(m).memory_owner_node());
   }
 
-  RealmStatus MachineImpl::get_local_processors(std::set<Processor> &pset) const
+  void MachineImpl::get_local_processors(std::set<Processor> &pset) const
   {
     // TODO: consider using a reader/writer lock here instead
     AutoLock<> al(mutex);
@@ -715,17 +712,14 @@ namespace Realm {
     }
 #else
     const MachineNodeInfo *mynode = get_nodeinfo(Network::my_node_id);
-    if(mynode == nullptr) {
-      return REALM_MACHINE_ERROR_INVALID_NODE;
-    }
+    REALM_ASSERT(mynode != nullptr);
     for(std::map<Processor, MachineProcInfo *>::const_iterator it = mynode->procs.begin();
         it != mynode->procs.end(); ++it)
       pset.insert(it->first);
 #endif
-    return REALM_SUCCESS;
   }
 
-  RealmStatus MachineImpl::get_local_processors_by_kind(std::set<Processor> &pset,
+  void MachineImpl::get_local_processors_by_kind(std::set<Processor> &pset,
                                                         Processor::Kind kind) const
   {
     // TODO: consider using a reader/writer lock here instead
@@ -742,9 +736,7 @@ namespace Realm {
     }
 #else
     const MachineNodeInfo *mynode = get_nodeinfo(Network::my_node_id);
-    if(mynode == nullptr) {
-      return REALM_MACHINE_ERROR_INVALID_NODE;
-    }
+    REALM_ASSERT(mynode != nullptr);
     std::map<Processor::Kind, std::map<Processor, MachineProcInfo *>>::const_iterator it =
         mynode->proc_by_kind.find(kind);
     if(it != mynode->proc_by_kind.end())
@@ -752,7 +744,6 @@ namespace Realm {
           it2 != it->second.end(); ++it2)
         pset.insert(it2->first);
 #endif
-    return REALM_SUCCESS;
   }
 
   // Return the set of memories visible from a processor
@@ -1107,8 +1098,8 @@ namespace Realm {
   void MachineImpl::add_proc_mem_affinity(const Machine::ProcessorMemoryAffinity &pma,
                                           bool lock_held /*= false*/)
   {
-    REALM_ASSERT_WITH_ABORT(pma.bandwidth > 0, log_machine);
-    REALM_ASSERT_WITH_ABORT(pma.latency > 0, log_machine);
+    REALM_ASSERT(pma.bandwidth > 0);
+    REALM_ASSERT(pma.latency > 0);
     if(!lock_held)
       mutex.lock();
 
@@ -1536,7 +1527,7 @@ namespace Realm {
       return false;
     return true;
 #else
-    REALM_ASSERT_WITH_ABORT(info != 0, log_machine);
+    REALM_ASSERT(info != 0);
     std::map<Memory, Machine::ProcessorMemoryAffinity *>::const_iterator it =
         info->pmas.all.find(memory);
     if(it == info->pmas.all.end())
@@ -1572,7 +1563,7 @@ namespace Realm {
   {
 #ifndef USE_OLD_AFFINITIES
     if((bandwidth_weight == 1) && (latency_weight == 0)) {
-      REALM_ASSERT_WITH_ABORT(info != 0, log_machine);
+      REALM_ASSERT(info != 0);
       std::map<Memory, Machine::ProcessorMemoryAffinity *>::const_iterator it =
           info->pmas.best.find(memory);
       return (it != info->pmas.best.end());
@@ -1653,7 +1644,7 @@ namespace Realm {
 
   ProcessorQueryImpl::~ProcessorQueryImpl(void)
   {
-    REALM_ASSERT_WITH_ABORT(references.load() == 0, log_machine);
+    REALM_ASSERT(references.load() == 0);
     for(std::vector<ProcQueryPredicate *>::iterator it = predicates.begin();
         it != predicates.end(); it++)
       delete *it;
@@ -2383,7 +2374,7 @@ namespace Realm {
       return false;
     return true;
 #else
-    REALM_ASSERT_WITH_ABORT(info != 0, log_machine);
+    REALM_ASSERT(info != 0);
     std::map<Processor, Machine::ProcessorMemoryAffinity *>::const_iterator it =
         info->pmas.all.find(proc);
     if(it == info->pmas.all.end())
@@ -2428,7 +2419,7 @@ namespace Realm {
       return false;
     return true;
 #else
-    REALM_ASSERT_WITH_ABORT(info != 0, log_machine);
+    REALM_ASSERT(info != 0);
     std::map<Memory, Machine::MemoryMemoryAffinity *>::const_iterator it =
         info->mmas_out.all.find(memory);
     if(it == info->mmas_out.all.end())
@@ -2464,7 +2455,7 @@ namespace Realm {
   {
 #ifndef USE_OLD_AFFINITIES
     if((bandwidth_weight == 1) && (latency_weight == 0)) {
-      REALM_ASSERT_WITH_ABORT(info != 0, log_machine);
+      REALM_ASSERT(info != 0);
       std::map<Processor, Machine::ProcessorMemoryAffinity *>::const_iterator it =
           info->pmas.best.find(proc);
       return (it != info->pmas.best.end());
@@ -2512,7 +2503,7 @@ namespace Realm {
   {
 #ifndef USE_OLD_AFFINITIES
     if((bandwidth_weight == 1) && (latency_weight == 0)) {
-      REALM_ASSERT_WITH_ABORT(info != 0, log_machine);
+      REALM_ASSERT(info != 0);
       std::map<Memory, Machine::MemoryMemoryAffinity *>::const_iterator it =
           info->mmas_out.best.find(memory);
       return (it != info->mmas_out.best.end());
@@ -2589,7 +2580,7 @@ namespace Realm {
 
   MemoryQueryImpl::~MemoryQueryImpl(void)
   {
-    REALM_ASSERT_WITH_ABORT(references.load() == 0, log_machine);
+    REALM_ASSERT(references.load() == 0);
     for(std::vector<MemoryQueryPredicate *>::iterator it = predicates.begin();
         it != predicates.end(); it++)
       delete *it;

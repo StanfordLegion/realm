@@ -95,21 +95,28 @@
 #define REALM_CUDA_HD
 #endif
 
-// REALM_ASSERT(cond, message) - abort program if 'cond' is not true
+// REALM_ASSERT(cond) - abort program if 'cond' is not true
+#ifdef NDEBUG
 #if defined(__CUDACC__) || defined(__HIPCC__)
-#define REALM_ASSERT(cond, message) assert(cond)
-#else
-#define REALM_ASSERT(cond, message) assert((cond) && (message))
-#endif
-
-// TODO: remove the logger if used in gpu kernels
-#define REALM_ASSERT_WITH_ABORT(expr, logger)                                            \
-  do {                                                                                   \
-    if(!(expr)) {                                                                        \
-      logger.fatal("Assertion failed: (%s), at %s:%d", #expr, __FILE__, __LINE__);       \
-      abort();                                                                           \
-    }                                                                                    \
+#define REALM_ASSERT(cond)                                                             \
+  do {                                                                                 \
+    if(!(cond)) {                                                                      \
+      abort();                                                                         \
+    }                                                                                  \
   } while(0)
+#else
+#define REALM_ASSERT(cond)                                                             \
+  do {                                                                                 \
+    if(!(cond)) {                                                                      \
+      fprintf(stderr, "Assertion failed: (%s), at %s:%d", #cond, __FILE__, __LINE__);  \
+      fflush(stderr);                                                                  \
+      abort();                                                                         \
+    }                                                                                  \
+  } while(0)
+#endif
+#else
+#define REALM_ASSERT(cond) assert(cond)
+#endif
 
 // REALM_LIKELY(expr) - suggest that `expr` is usually true
 // REALM_UNLILELY(expr) - suggest that `expr` is usually false

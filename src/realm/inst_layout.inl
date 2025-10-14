@@ -1425,10 +1425,7 @@ namespace Realm {
     for(int i = 0; i < N; i++) {
       // a Kokkos::View uses relative indexing, so subtract out the base
       //  of the subrectangle with which we must have been constructed
-      REALM_ASSERT(bounds_specified,
-                   "FATAL: construction of a (relative-indexed) Kokkos::View"
-                   " is only possible if the AffineAccessor was constructed"
-                   " with explicitly-specified bounds!");
+      REALM_ASSERT(bounds_specified);
 
       base_shifted += (bounds.lo[i] * strides[i]);
       kls.dimension[i] =
