@@ -222,25 +222,6 @@ out:
   return status;
 }
 
-int protect_self_from_unload(void *symbol)
-{
-  Dl_info info;
-  if(dladdr(symbol, &info) == 0 || info.dli_fname == NULL) {
-    fprintf(stderr, "protect_self_from_unload: dladdr failed\n");
-    return -1;
-  }
-
-  void *handle = dlopen(info.dli_fname, RTLD_NOW | RTLD_NODELETE);
-  if(handle == NULL) {
-    fprintf(stderr, "protect_self_from_unload: dlopen(%s) failed: %s\n", info.dli_fname,
-            dlerror());
-    return -1;
-  }
-
-  dlclose(handle);
-  return 0;
-}
-
 int realm_ucp_bootstrap_plugin_init(void *mpi_comm, bootstrap_handle_t *handle)
 {
   // protect self from unload
