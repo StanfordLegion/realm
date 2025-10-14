@@ -667,6 +667,7 @@ namespace Realm {
         size_t size = 0;
         size_t alloc_bytes_needed = 0;
         bool deferred_release = false;
+        size_t refcount = 0;
         ~InstInfo();
       };
       typedef std::unordered_map<RegionInstanceImpl *, std::shared_ptr<InstInfo>>

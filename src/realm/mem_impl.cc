@@ -204,8 +204,6 @@ namespace Realm {
     NodeID target = ID(me).memory_owner_node();
     assert(target == Network::my_node_id);
 
-    // This better be an external instance
-    assert(old_inst->metadata.ext_resource);
     bool poisoned = false;
     if(precondition.has_triggered_faultaware(poisoned)) {
       // fall through to immediate storage release
