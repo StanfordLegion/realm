@@ -61,7 +61,6 @@ namespace Realm {
 
     void dec_usecount();
 
-    uintptr_t databuf_reserve(size_t bytes);
     void databuf_close();
 
     enum PktType
@@ -139,7 +138,8 @@ namespace Realm {
 
     void init(size_t _outbuf_count, size_t _outbuf_size, uintptr_t _baseptr);
 
-    OutbufMetadata *alloc_outbuf(OutbufMetadata::State state, bool overflow_ok);
+    OutbufMetadata *alloc_outbuf(OutbufMetadata::State state, bool overflow_ok,
+                                 bool new_endpoint);
     void free_outbuf(OutbufMetadata *md);
 
     virtual bool do_work(TimeLimit work_until);
@@ -153,6 +153,15 @@ namespace Realm {
     //  both pending overflow bufs and reserved outbufs and request bgwork
     //  time when we've got at least one of each
     size_t num_overflow, num_reserved;
+    // In order to detect the case of misconfigured objcounts given the
+    // number of endpoints we count how many different endpoints we
+    // need to allocate buffers for, if it is more than the total number
+    // of buffers then we fail immediately since we'll never succeed
+    // TODO: Remove this once we insert a slow insertion pathway
+    // from dynamically allocated output buffers that are not
+    // registered with GASNet
+    // https://github.com/StanfordLegion/realm/issues/239
+    size_t num_buffers, num_endpoints;
     OutbufMetadata *overflow_head;
     OutbufMetadata **overflow_tail;
     OutbufMetadata *reserved_head;
@@ -753,8 +762,6 @@ namespace Realm {
     ChunkedRecycler<GASNetEXEvent, 64> event_alloc;
     ChunkedRecycler<PreparedMessage, 32> prep_alloc;
     ChunkedRecycler<PendingPutHeader, 32> put_alloc;
-
-    uintptr_t databuf_reserve(size_t bytes_needed, OutbufMetadata **mdptr);
   };
 
 }; // namespace Realm
