@@ -110,6 +110,8 @@ namespace Realm {
 
     bool cuda_api_fnptrs_loaded = false;
 
+    static std::unique_ptr<CudaHook> cuda_hook{nullptr};
+
 // Make sure to only use decltype here, to ensure it matches the cuda.h definition
 #define DEFINE_FNPTR(name, ver) decltype(&name) name##_fnptr = 0;
 
@@ -779,8 +781,8 @@ namespace Realm {
       ThreadLocal::current_gpu_stream = s;
       assert(!ThreadLocal::created_gpu_streams);
 
-      if(gpu->module->cuda_hook) {
-        gpu->module->cuda_hook->start_task(s);
+      if(cuda_hook) {
+        cuda_hook->start_task(s);
       }
 
       // a task can force context sync on task completion either on or off during
@@ -901,8 +903,8 @@ namespace Realm {
       // cuda stream sanity check and clear cuda hook calls
       // we only check against the current_gpu_stream because it is impossible to launch
       // tasks onto other realm gpu streams
-      if(gpu->module->cuda_hook) {
-        gpu->module->cuda_hook->end_task(s, task->func_id);
+      if(cuda_hook) {
+        cuda_hook->end_task(s, task->func_id);
       }
 
       ThreadLocal::current_gpu_stream = nullptr;
@@ -2624,9 +2626,6 @@ namespace Realm {
       assert(cuda_module_singleton == this);
       cuda_module_singleton = 0;
       delete rh_listener;
-      if (cuda_hook) {
-        delete cuda_hook;
-      }
     }
 
     static std::string convert_uuid(CUuuid &cu_uuid)
@@ -3950,7 +3949,7 @@ namespace Realm {
           cupti_api_initialized = true;
         }
         if (config->cfg_enable_cuhook && CUPTI_HAS_FNPTR(cuptiSubscribe)) {
-          cuda_hook = new CudaHook();
+          cuda_hook = std::make_unique<CudaHook>();
         }
       }
     }
