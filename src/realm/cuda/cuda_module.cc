@@ -19,6 +19,7 @@
 #include "realm/cuda/cuda_access.h"
 #include "realm/cuda/cuda_internal.h"
 #include "realm/cuda/cuda_memcpy.h"
+#include "realm/cuda/cuda_hook.h"
 
 #include "realm/tasks.h"
 #include "realm/logging.h"
@@ -93,6 +94,7 @@ namespace Realm {
       } data;
     };
 
+    extern Logger log_cuhook;
     Logger log_gpu("gpu");
     Logger log_gpudma("gpudma");
     Logger log_cudart("cudart");
@@ -107,6 +109,8 @@ namespace Realm {
     CUresult cuda_init_code = CUDA_ERROR_UNKNOWN;
 
     bool cuda_api_fnptrs_loaded = false;
+
+    static std::unique_ptr<CudaHook> cuda_hook{nullptr};
 
 // Make sure to only use decltype here, to ensure it matches the cuda.h definition
 #define DEFINE_FNPTR(name, ver) decltype(&name) name##_fnptr = 0;
@@ -142,19 +146,9 @@ namespace Realm {
     CUPTI_APIS(DEFINE_FNPTR);
 #undef DEFINE_FNPTR
 
-    // function pointers for cuda hook
-    typedef void (*PFN_cuhook_register_callback)(void);
-    typedef void (*PFN_cuhook_start_task)(CUstream current_task_stream);
-    typedef void (*PFN_cuhook_end_task)(CUstream current_task_stream);
-
-    static PFN_cuhook_register_callback cuhook_register_callback_fnptr = nullptr;
-    static PFN_cuhook_start_task cuhook_start_task_fnptr = nullptr;
-    static PFN_cuhook_end_task cuhook_end_task_fnptr = nullptr;
-    static bool cuhook_enabled = false;
-
     namespace ThreadLocal {
-      thread_local GPUStream *current_gpu_stream = 0;
-      thread_local std::set<GPUStream *> *created_gpu_streams = 0;
+      thread_local GPUStream *current_gpu_stream = nullptr;
+      thread_local std::set<GPUStream *> *created_gpu_streams = nullptr;
       static thread_local int context_sync_required = 0;
       thread_local bool block_on_synchronize = false;
     }; // namespace ThreadLocal
@@ -787,8 +781,8 @@ namespace Realm {
       ThreadLocal::current_gpu_stream = s;
       assert(!ThreadLocal::created_gpu_streams);
 
-      if(cuhook_enabled) {
-        cuhook_start_task_fnptr(s->get_stream());
+      if(cuda_hook) {
+        cuda_hook->start_task(s);
       }
 
       // a task can force context sync on task completion either on or off during
@@ -909,8 +903,8 @@ namespace Realm {
       // cuda stream sanity check and clear cuda hook calls
       // we only check against the current_gpu_stream because it is impossible to launch
       // tasks onto other realm gpu streams
-      if(cuhook_enabled) {
-        cuhook_end_task_fnptr(s->get_stream());
+      if(cuda_hook) {
+        cuda_hook->end_task(s, task->func_id);
       }
 
       ThreadLocal::current_gpu_stream = nullptr;
@@ -2584,7 +2578,8 @@ namespace Realm {
           .add_option_int_units("-cuda:hostreg", cfg_hostreg_limit, 'm')
           .add_option_int("-cuda:pageable_access", cfg_pageable_access)
           .add_option_int("-cuda:cupti", cfg_enable_cupti)
-          .add_option_int("-cuda:ipc", cfg_use_cuda_ipc);
+          .add_option_int("-cuda:ipc", cfg_use_cuda_ipc)
+          .add_option_bool("-cuda:cuhook", cfg_enable_cuhook);
 #ifdef REALM_USE_CUDART_HIJACK
       cp.add_option_int("-cuda:nongpusync", Cuda::cudart_hijack_nongpu_sync);
 #endif
@@ -2630,10 +2625,6 @@ namespace Realm {
       delete_container_contents(gpu_info);
       assert(cuda_module_singleton == this);
       cuda_module_singleton = 0;
-      cuhook_register_callback_fnptr = nullptr;
-      cuhook_start_task_fnptr = nullptr;
-      cuhook_end_task_fnptr = nullptr;
-      cuhook_enabled = false;
       delete rh_listener;
     }
 
@@ -3133,6 +3124,10 @@ namespace Realm {
         log_cupti.info() << "Unable to load cupti, gpu timelines may be inaccurate";
       }
 
+      if(m->config->cfg_enable_cuhook && !resolve_cupti_api_fnptrs()) {
+        log_cuhook.info() << "Unable to load cuhook because of missing CUPTI";
+      }
+
       // create GPUInfo
       std::vector<GPUInfo *> infos;
       {
@@ -3602,17 +3597,6 @@ namespace Realm {
       // make sure we hear about any changes to the size of the replicated
       //  heap
       runtime->repl_heap.add_listener(rh_listener);
-#ifdef REALM_USE_LIBDL
-      cuhook_register_callback_fnptr =
-          (PFN_cuhook_register_callback)dlsym(NULL, "cuhook_register_callback");
-      cuhook_start_task_fnptr = (PFN_cuhook_start_task)dlsym(NULL, "cuhook_start_task");
-      cuhook_end_task_fnptr = (PFN_cuhook_end_task)dlsym(NULL, "cuhook_end_task");
-      if(cuhook_register_callback_fnptr && cuhook_start_task_fnptr &&
-         cuhook_end_task_fnptr) {
-        cuhook_register_callback_fnptr();
-        cuhook_enabled = true;
-      }
-#endif
     }
 
     // create any memories provided by this module (default == do nothing)
@@ -3951,18 +3935,22 @@ namespace Realm {
 
       Module::create_dma_channels(runtime);
 
-      if(cupti_api_fnptrs_loaded &&
-         CUPTI_HAS_FNPTR(cuptiActivityPushExternalCorrelationId)) {
-        // Wait until the clock is fully calibrated before we register the timestamp
-        // callback, otherwise cupti will normalize to the wrong timestamp and the GPU
-        // timings will be incorrectly translated
-        CHECK_CUPTI(
-            CUPTI_FNPTR(cuptiActivityRegisterTimestampCallback)(cupti_timestamp_cb));
-        CHECK_CUPTI(CUPTI_FNPTR(cuptiActivityRegisterCallbacks)(
-            cupti_request_buffer_cb, cupti_buffer_complete_cb));
-        CHECK_CUPTI(
-            CUPTI_FNPTR(cuptiActivityEnable)(CUPTI_ACTIVITY_KIND_EXTERNAL_CORRELATION));
-        cupti_api_initialized = true;
+      if(cupti_api_fnptrs_loaded) {
+         if (config->cfg_enable_cupti && CUPTI_HAS_FNPTR(cuptiActivityPushExternalCorrelationId)) {
+          // Wait until the clock is fully calibrated before we register the timestamp
+          // callback, otherwise cupti will normalize to the wrong timestamp and the GPU
+          // timings will be incorrectly translated
+          CHECK_CUPTI(
+              CUPTI_FNPTR(cuptiActivityRegisterTimestampCallback)(cupti_timestamp_cb));
+          CHECK_CUPTI(CUPTI_FNPTR(cuptiActivityRegisterCallbacks)(
+              cupti_request_buffer_cb, cupti_buffer_complete_cb));
+          CHECK_CUPTI(
+              CUPTI_FNPTR(cuptiActivityEnable)(CUPTI_ACTIVITY_KIND_EXTERNAL_CORRELATION));
+          cupti_api_initialized = true;
+        }
+        if (config->cfg_enable_cuhook && CUPTI_HAS_FNPTR(cuptiSubscribe)) {
+          cuda_hook = std::make_unique<CudaHook>();
+        }
       }
     }
 
