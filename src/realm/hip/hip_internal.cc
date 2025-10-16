@@ -803,7 +803,7 @@ namespace Realm {
                             transpose_copy.extents[2];
         }
 
-        if((copy_infos.num_rects > 1) || needs_kernel_copy) {
+        if((copy_infos.num_rects >= 1) || needs_kernel_copy) {
           // Adjust all the rectangles' sizes to account for the element size based on the
           // calculated alignment
           for(size_t i = 0; (min_align > 1) && (i < copy_infos.num_rects); i++) {
@@ -822,41 +822,7 @@ namespace Realm {
           stream->get_gpu()->launch_batch_affine_kernel(
               &copy_infos, 3, min_align, copy_info_total / min_align, stream, arg_size);
           bytes_to_fence += copy_info_total;
-        } else if(copy_infos.num_rects == 1) {
-          // Then the affine copies to/from the device
-          // We default to hipMemcpy3D here since that's the most efficient for this copy
-          AffineCopyPair<3> &copy_info = copy_infos.subrects[0];
-          assert(copy_infos.num_rects == 1);
-          hip_copy.dstMemoryType = hipMemoryTypeUnified;
-          hip_copy.srcMemoryType = hipMemoryTypeUnified;
-          hip_copy.WidthInBytes = copy_info.extents[0];
-          hip_copy.Height = copy_info.extents[1];
-          hip_copy.Depth = copy_info.extents[2];
-
-          hip_copy.srcPitch = copy_info.src.strides[0];
-          hip_copy.srcHeight = copy_info.src.strides[1];
-          hip_copy.dstPitch = copy_info.dst.strides[0];
-          hip_copy.dstHeight = copy_info.dst.strides[1];
-
-          hip_copy.dstDevice = (hipDeviceptr_t)(copy_info.dst.addr);
-          hip_copy.srcDevice = (hipDeviceptr_t)(copy_info.src.addr);
-
-          log_gpudma.info() << "\tLaunching 3D CE "
-                            << "xd=" << std::hex << guid << std::dec << " bytes="
-                            << copy_info.extents[0] * copy_info.extents[1] *
-                                   copy_info.extents[2]
-                            << " srcPitch=" << hip_copy.srcPitch
-                            << " srcHeight=" << hip_copy.srcHeight
-                            << " srcDevice=" << std::hex << hip_copy.srcDevice << std::dec
-                            << " dstPitch=" << hip_copy.dstPitch
-                            << " dstHeight=" << hip_copy.dstHeight
-                            << " dstDevice=" << std::hex << hip_copy.dstDevice;
-
-          CHECK_HIP(hipDrvMemcpy3DAsync(&hip_copy, stream->get_stream()));
-          bytes_to_fence +=
-              copy_info.extents[0] * copy_info.extents[1] * copy_info.extents[2];
         }
-
         if(bytes_to_fence > 0) {
           assert(bytes_to_fence <= max_bytes);
           add_reference(); // released by transfer completion)
