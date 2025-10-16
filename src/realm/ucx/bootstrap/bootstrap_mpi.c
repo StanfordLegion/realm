@@ -235,11 +235,12 @@ int realm_ucp_bootstrap_plugin_init(void *mpi_comm, bootstrap_handle_t *handle)
     fprintf(stderr, "dladdr returned NULL dli_fname\n");
     return -1;
   }
-  if(dlopen(info.dli_fname, RTLD_NOW | RTLD_NODELETE) == NULL) {
+  void *self_handle = dlopen(info.dli_fname, RTLD_NOW | RTLD_NODELETE);
+  if(self_handle == NULL) {
     fprintf(stderr, "dlopen failed for %s: %s\n", info.dli_fname, dlerror());
     return -1;
   }
-  dlclose(handle);
+  dlclose(self_handle);
 
   int status = MPI_SUCCESS, initialized = 0, finalized = 0;
   MPI_Comm src_comm;
