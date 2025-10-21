@@ -219,12 +219,10 @@ namespace Realm {
       const std::vector<UCPWorker *> &get_rx_workers(const UCPContext *context) const;
       UCPWorker *get_rx_worker(const UCPContext *context, uint8_t priority) const;
       bool is_congested();
-      bool add_rdma_info(NetworkSegment *segment, const UCPContext *context,
-                         ucp_mem_h mem_h);
-      void add_rdma_info_odr(NetworkSegment *segment, const UCPContext *context);
       bool am_msg_recv_data_ready(UCPInternal *internal, UCPWorker *worker,
                                   const UCPMsgHdr *ucp_msg_hdr, size_t header_size,
                                   void *payload, size_t payload_size, int payload_mode);
+      // handler for AM_ID_REPLY
       static ucs_status_t am_remote_comp_handler(void *arg, const void *header,
                                                  size_t header_size, void *data,
                                                  size_t data_size,
@@ -236,14 +234,11 @@ namespace Realm {
                                         IncomingMessageManager::CallbackData cb_data2);
       static void am_rndv_recv_data_handler(void *request, ucs_status_t status,
                                             size_t length, void *user_data);
+      // handler for AM_ID
       static ucs_status_t am_msg_recv_handler(void *arg, const void *header,
                                               size_t header_size, void *payload,
                                               size_t payload_size,
                                               const ucp_am_recv_param_t *param);
-      static ucs_status_t am_rdma_msg_recv_handler(void *arg, const void *header,
-                                                   size_t header_size, void *payload,
-                                                   size_t payload_size,
-                                                   const ucp_am_recv_param_t *param);
 
       bool compute_shared_ranks();
       using WorkersMap = std::unordered_map<const UCPContext *, Workers>;
@@ -301,7 +296,6 @@ namespace Realm {
 
     private:
       bool set_inline_payload_base();
-      bool commit_with_rma(ucp_ep_h ep);
       bool commit_unicast(size_t act_payload_size);
       bool commit_multicast(size_t act_payload_size);
       bool send_fast_path(ucp_ep_h ep, size_t act_payload_size);
@@ -312,64 +306,24 @@ namespace Realm {
       static void am_local_failure_handler(Request *req, UCPInternal *internal);
       static void am_local_comp_handler(void *request, ucs_status_t status,
                                         void *user_data);
-      static void am_put_comp_handler(void *request, ucs_status_t status,
-                                      void *user_data);
-      static void am_put_flush_comp_handler(void *request, ucs_status_t status,
-                                            void *user_data);
 
       UCPInternal *internal;
       UCPWorker *worker;
       NodeID target;
       NodeSet targets;
-      const void *src_payload_addr;
-      size_t src_payload_lines;
-      size_t src_payload_line_stride;
+      const void *src_payload_addr; // TODO: remove this, it is nullptr
+      size_t src_payload_lines; // TODO: remove this, it is 0
+      size_t src_payload_line_stride; // TODO: remove this, it is 0
       size_t header_size;
       PayloadBaseType payload_base_type;
-      UCPRDMAInfo *dest_payload_rdma_info{nullptr};
+      UCPRDMAInfo *dest_payload_rdma_info{nullptr}; // TODO: remove this, we don't use it
       CompList *local_comp{nullptr};
       RemoteComp *remote_comp{nullptr};
       bool is_multicast{false};
-      ucs_memory_type_t memtype;
+      ucs_memory_type_t memtype; // TODO: remove this, set it to UCS_MEMORY_TYPE_HOST
 
       UCPMsgHdr ucp_msg_hdr;
       // nothing should be added after 'ucp_msg_hdr'
-    };
-
-    class UCPRemoteMemoryCommon {
-    public:
-      UCPRemoteMemoryCommon(const ByteArray &rdma_info_ba);
-
-      virtual ~UCPRemoteMemoryCommon();
-
-      virtual bool get_remote_addr(off_t offset, RemoteAddress &remote_addr);
-
-    private:
-      UCPRDMAInfo *rdma_info;
-      size_t rdma_info_size;
-    };
-
-    /* A block of memory on a remote process
-     * Parent class RemoteMemory has node id in me.memory_owner_node()
-     */
-    class UCPRemoteMemory : public UCPRemoteMemoryCommon, public RemoteMemory {
-    public:
-      UCPRemoteMemory(RuntimeImpl *_runtime_impl, Memory me, size_t size,
-                      Memory::Kind kind, const ByteArray &rdma_info_ba,
-                      UCPInternal *internal);
-
-      virtual void get_bytes(off_t offset, void *dst, size_t size);
-      virtual void put_bytes(off_t offset, const void *src, size_t size);
-      virtual bool get_remote_addr(off_t offset, RemoteAddress &remote_addr);
-    };
-
-    // Intermediate buffer memory
-    class UCPIBMemory : public UCPRemoteMemoryCommon, public IBMemory {
-    public:
-      UCPIBMemory(RuntimeImpl *_runtime_impl, Memory me, size_t size, Memory::Kind kind,
-                  const ByteArray &rdma_info_ba, UCPInternal *internal);
-
-      virtual bool get_remote_addr(off_t offset, RemoteAddress &remote_addr);
     };
 
   }; // namespace UCP

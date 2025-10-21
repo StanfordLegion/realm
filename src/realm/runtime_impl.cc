@@ -829,7 +829,8 @@ namespace Realm {
     // config for RuntimeImpl
     // low-level runtime parameters
     if(Network::max_node_id > 0)
-      reg_ib_mem_size = 256 << 20; // for inter-node copies
+      //reg_ib_mem_size = 256 << 20; // for inter-node copies
+      reg_ib_mem_size = 0;
     else
       reg_ib_mem_size = 64 << 20; // for local transposes/serdez
 

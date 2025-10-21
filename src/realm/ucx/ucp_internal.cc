@@ -112,6 +112,7 @@ namespace Realm {
       ~RemoteComp() { delete comp_list; }
     };
 
+    // TODO: remove this
     struct UCPRDMAInfo {
       uint64_t reg_base;
       int dev_index;
@@ -619,7 +620,6 @@ namespace Realm {
 
       static std::vector<AmHandler> am_handlers = {
           {AM_ID, &am_msg_recv_handler, "am"},
-          {AM_ID_RDMA, &am_rdma_msg_recv_handler, "rdma"},
           {AM_ID_REPLY, &am_remote_comp_handler, "am reply"}};
 
       // the handlers should be installed on the rx workers only
@@ -1290,6 +1290,7 @@ namespace Realm {
       return (payload_mode == PAYLOAD_KEEP) ? UCS_INPROGRESS : UCS_OK;
     }
 
+#ifdef FULL_REALM
     ucs_status_t UCPInternal::am_rdma_msg_recv_handler(void *arg, const void *header,
                                                        size_t header_size, void *payload,
                                                        size_t payload_size,
@@ -1377,8 +1378,11 @@ namespace Realm {
       segment->add_rdma_info(module, &rdma_info, sizeof(rdma_info));
     }
 
+#endif
+
     void UCPInternal::attach(std::vector<NetworkSegment *> &segments)
     {
+#ifdef FULL_REALM
       size_t total_alloc_size = 0;
       const UCPContext *context;
       ucp_mem_map_params_t mem_map_params;
@@ -1387,6 +1391,7 @@ namespace Realm {
       ucs_status_t status;
       uintptr_t alloc_base, offset;
       ByteArray alloc_rdma_info;
+#endif
 
 #if defined(REALM_USE_CUDA)
       // Find the GPUs
@@ -1414,6 +1419,7 @@ namespace Realm {
         abort();
       }
 
+#ifdef FULL_REALM
       // Try to register allocation requests first
       // The bind_hostmem option does not apply to allocation requests
       for(const NetworkSegment *segment : segments) {
@@ -1541,6 +1547,7 @@ namespace Realm {
 
     err:
       return;
+#endif
     }
 
     void UCPInternal::detach(std::vector<NetworkSegment *> &segments)
@@ -1962,6 +1969,11 @@ namespace Realm {
       , src_payload_lines(_src_payload_lines)
       , src_payload_line_stride(_src_payload_line_stride)
     {
+
+      assert(src_payload_addr == nullptr);
+      assert(src_payload_lines == 0);
+      assert(src_payload_line_stride == 0);
+    
       const UCPContext *context = internal->get_context(_src_segment);
       uint8_t priority =
           (_header_size + _max_payload_size <= internal->config.priority_size_max)
@@ -1999,6 +2011,8 @@ namespace Realm {
         payload_base = nullptr; // no payload
       }
 
+      assert(_dest_payload_addr == nullptr);
+#ifdef FULL_REALM
       // Set remote address info if available
       if(_dest_payload_addr) {
         dest_payload_rdma_info =
@@ -2014,6 +2028,7 @@ namespace Realm {
         dest_payload_rdma_info = nullptr;
         ucp_msg_hdr.rdma_payload_addr = nullptr;
       }
+#endif
     }
 
     UCPMessageImpl::UCPMessageImpl(UCPInternal *_internal, const NodeSet &_targets,
@@ -2262,6 +2277,7 @@ namespace Realm {
       delete req->am_send.mc_desc;
     }
 
+#ifdef FULL_REALM
     void UCPMessageImpl::am_put_comp_handler(void *request, ucs_status_t status,
                                              void *user_data)
     {
@@ -2355,12 +2371,12 @@ namespace Realm {
       free(dest_payload_rdma_info);
       return false;
     }
+#endif
 
     bool UCPMessageImpl::commit_multicast(size_t act_payload_size)
     {
       size_t to_submit = targets.size();
-      int remote_dev_index =
-          dest_payload_rdma_info ? dest_payload_rdma_info->dev_index : -1;
+      int remote_dev_index = -1;
       Request *req_prim, *req;
 
       req_prim = make_request(act_payload_size);
@@ -2405,8 +2421,7 @@ namespace Realm {
 
     bool UCPMessageImpl::commit_unicast(size_t act_payload_size)
     {
-      int remote_dev_index =
-          dest_payload_rdma_info ? dest_payload_rdma_info->dev_index : -1;
+      int remote_dev_index = -1;
       bool ret;
       ucp_ep_h ep;
 
@@ -2429,12 +2444,13 @@ namespace Realm {
         //       Because, ucp put does not support multi-rail,
         //       but multi-rail benefits are seen when sending
         //       from host buffer.
+        assert(false);
         log_ucp_am.debug() << "sending am with remote address using forced rndv";
         ret = send_slow_path(ep, act_payload_size, UCP_AM_SEND_FLAG_RNDV);
       } else {
         // send with ucp rma
+        assert(false);
         log_ucp_am.debug() << "sending am with remote address using rma";
-        ret = commit_with_rma(ep);
       }
 
       return ret;
@@ -2451,6 +2467,10 @@ namespace Realm {
 #ifdef REALM_USE_CUDA
       Cuda::AutoGPUContext agc(context->gpu);
 #endif
+
+      assert(src_payload_addr == nullptr);
+      assert(src_payload_lines == 0);
+      assert(src_payload_line_stride == 0);
 
       // For now, copy non-contiguous data. TODO: Use UCP IOV
       if((src_payload_addr != nullptr) && (src_payload_lines > 1)) {
@@ -2477,8 +2497,10 @@ namespace Realm {
       }
 
       if(is_multicast) {
+        log_ucp_am.print() << "committing multicast";
         status = commit_multicast(act_payload_size);
       } else {
+        log_ucp_am.print() << "committing unicast";
         status = commit_unicast(act_payload_size);
       }
 
@@ -2514,6 +2536,7 @@ namespace Realm {
       }
     }
 
+#ifdef FULL_REALM
     ////////////////////////////////////////////////////////////////////////
     //
     // class UCPRemoteMemoryCommon
@@ -2591,6 +2614,7 @@ namespace Realm {
     {
       return UCPRemoteMemoryCommon::get_remote_addr(offset, remote_addr);
     }
+#endif
 
   }; // namespace UCP
 

@@ -217,15 +217,23 @@ namespace Realm {
                                               size_t size, Memory::Kind kind,
                                               const ByteArray &rdma_info_ba)
   {
+#ifdef FULL_REALM
     return new Realm::UCP::UCPRemoteMemory(runtime, me, size, kind, rdma_info_ba,
                                            internal);
+#else
+    return NULL;
+#endif
   }
 
   IBMemory *UCPModule::create_remote_ib_memory(RuntimeImpl *runtime, Memory me,
                                                size_t size, Memory::Kind kind,
                                                const ByteArray &rdma_info_ba)
   {
+#ifdef FULL_REALM
     return new Realm::UCP::UCPIBMemory(runtime, me, size, kind, rdma_info_ba, internal);
+#else
+    return NULL;
+#endif
   }
 
   ActiveMessageImpl *UCPModule::create_active_message_impl(
