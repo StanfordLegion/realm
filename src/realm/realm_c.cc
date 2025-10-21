@@ -1167,8 +1167,8 @@ public:
             Realm::IndexSpace<N, T>(rect), ilc, dim_order);
 
     out_event = Realm::RegionInstanceImpl::create_instance(
-        runtime_impl, inst, Realm::Memory(memory), layout, external_resource_cxx.get(),
-        prs, wait_on);
+        inst, runtime_impl->get_memory_impl(memory.id), layout,
+        external_resource_cxx.get(), prs, wait_on);
     return REALM_SUCCESS;
   }
 };

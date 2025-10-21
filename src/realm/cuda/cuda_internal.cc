@@ -2223,14 +2223,17 @@ namespace Realm {
       GPU *gpu = checked_cast<GPUreduceChannel *>(channel)->gpu;
       stream = gpu->get_next_d2d_stream();
 
-      std::unordered_map<ReductionOpID, GPU::GPUReductionOpEntry>::const_iterator
-          gpu_red_it = gpu->gpu_reduction_table.find(redop_info.id);
-      if(gpu_red_it != gpu->gpu_reduction_table.end()) {
-        kernel = (redop_info.is_fold
-                      ? (redop_info.is_exclusive ? gpu_red_it->second.fold_excl
-                                                 : gpu_red_it->second.fold_nonexcl)
-                      : (redop_info.is_exclusive ? gpu_red_it->second.apply_excl
-                                                 : gpu_red_it->second.apply_nonexcl));
+      {
+        AutoLock<Mutex> al(gpu->alloc_mutex);
+        std::unordered_map<ReductionOpID, GPU::GPUReductionOpEntry>::const_iterator
+            gpu_red_it = gpu->gpu_reduction_table.find(redop_info.id);
+        if(gpu_red_it != gpu->gpu_reduction_table.end()) {
+          kernel = (redop_info.is_fold
+                        ? (redop_info.is_exclusive ? gpu_red_it->second.fold_excl
+                                                   : gpu_red_it->second.fold_nonexcl)
+                        : (redop_info.is_exclusive ? gpu_red_it->second.apply_excl
+                                                   : gpu_red_it->second.apply_nonexcl));
+        }
       }
 
       if(kernel == nullptr) {
@@ -2621,8 +2624,13 @@ namespace Realm {
       }
 
       // Is this redop in our gpu's reduction table? (i.e. registered with a CUfunc)
-      if(gpu->gpu_reduction_table.find(redop_id) != gpu->gpu_reduction_table.end()) {
-        return true;
+      {
+        // TODO: if we see a performance issue, this is the place where we could
+        // investigate
+        AutoLock<Mutex> al(gpu->alloc_mutex);
+        if(gpu->gpu_reduction_table.find(redop_id) != gpu->gpu_reduction_table.end()) {
+          return true;
+        }
       }
 
       // Now check if it was registered along with the host pointer with a valid cuda

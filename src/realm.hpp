@@ -20,13 +20,17 @@
 #ifndef REALM_HPP
 #define REALM_HPP
 
-#include <string>
-#include <vector>
-#include <set>
-#include <iostream>
+#include <algorithm>
+#include <cassert>
 #include <cstddef>
+#include <cstdint>
+#include <iostream>
+#include <memory>
+#include <set>
 #include <stdexcept>
 #include <functional>
+#include <string>
+#include <vector>
 #if __cplusplus >= 202002L
 #include <span>
 #endif
@@ -241,16 +245,15 @@ namespace REALM_NAMESPACE {
    * do not need to be explicitly garbage collected.
    */
   class Event {
-  private:
+  public:
     realm_event_t id{REALM_NO_EVENT};
 
-  public:
     Event() = default;
-    constexpr explicit Event(realm_id_t id)
+    constexpr explicit Event(realm_event_t id)
       : id(id)
     {}
 
-    constexpr operator realm_id_t() const { return id; }
+    constexpr operator realm_event_t() const { return id; }
 
     bool operator<(const Event &rhs) const { return id < rhs.id; }
     bool operator==(const Event &rhs) const { return id == rhs.id; }
@@ -272,17 +275,19 @@ namespace REALM_NAMESPACE {
      * Test whether an event has triggered without waiting.
      * \return true if the event has triggered, false otherwise
      */
-    bool has_triggered(void) const { throw std::logic_error("Not implemented"); }
+    bool has_triggered(void) const
+    {
+      bool poisoned = false;
+      return has_triggered_faultaware(poisoned);
+    }
 
     /**
      * Wait for an event to trigger.
      */
-    void wait(void) const
+    void wait() const
     {
-      realm_runtime_t runtime;
-      int poisoned;
-      REALM_CHECK(realm_runtime_get_runtime(&runtime));
-      REALM_CHECK(realm_event_wait(runtime, id, REALM_WAIT_INFINITE, &poisoned));
+      bool poisoned = false;
+      wait_common(poisoned, REALM_WAIT_INFINITE);
     }
 
     /**
@@ -296,9 +301,10 @@ namespace REALM_NAMESPACE {
      * \param max_ns the maximum number of nanoseconds to wait
      * \return true if the event has triggered, false if the timeout occurred
      */
-    bool external_timedwait(long long max_ns) const
+    bool external_timedwait(int64_t max_ns) const
     {
-      throw std::logic_error("Not implemented");
+      bool poisoned = false;
+      return wait_common(poisoned, max_ns);
     }
 
     /**
@@ -309,7 +315,14 @@ namespace REALM_NAMESPACE {
      */
     bool has_triggered_faultaware(bool &poisoned) const
     {
-      throw std::logic_error("Not implemented");
+      realm_runtime_t runtime;
+      int tmp_has_triggered;
+      int tmp_poisoned;
+      REALM_CHECK(realm_runtime_get_runtime(&runtime));
+      REALM_CHECK(
+          realm_event_has_triggered(runtime, id, &tmp_has_triggered, &tmp_poisoned));
+      poisoned = (tmp_poisoned != 0);
+      return tmp_has_triggered != 0;
     }
 
     /**
@@ -319,7 +332,7 @@ namespace REALM_NAMESPACE {
      */
     void wait_faultaware(bool &poisoned) const
     {
-      throw std::logic_error("Not implemented");
+      wait_common(poisoned, REALM_WAIT_INFINITE);
     }
 
     /**
@@ -329,7 +342,7 @@ namespace REALM_NAMESPACE {
      */
     void external_wait_faultaware(bool &poisoned) const
     {
-      throw std::logic_error("Not implemented");
+      wait_common(poisoned, REALM_WAIT_INFINITE);
     }
 
     /**
@@ -338,11 +351,25 @@ namespace REALM_NAMESPACE {
      * \param max_ns the maximum number of nanoseconds to wait
      * \return true if the event has triggered, false if the timeout occurred
      */
-    bool external_timedwait_faultaware(bool &poisoned, long long max_ns) const
+    bool external_timedwait_faultaware(bool &poisoned, int64_t max_ns) const
     {
-      throw std::logic_error("Not implemented");
+      return wait_common(poisoned, max_ns);
     }
 
+  private:
+    bool wait_common(bool &poisoned, int64_t max_ns) const
+    {
+      realm_runtime_t runtime;
+      int has_triggered;
+      int tmp_poisoned;
+      realm_runtime_get_runtime(&runtime);
+      realm_event_wait(runtime, id, max_ns, nullptr);
+      realm_event_has_triggered(runtime, id, &has_triggered, &tmp_poisoned);
+      poisoned = tmp_poisoned != 0;
+      return has_triggered != 0;
+    }
+
+  public:
     /**
      * Subscribe to an event, ensuring that the triggeredness of the
      * event will be available as soon as possible (and without having to call
@@ -380,34 +407,29 @@ namespace REALM_NAMESPACE {
      */
     static Event merge_events(const Event *wait_for, size_t num_events)
     {
-      realm_runtime_t runtime;
-      REALM_CHECK(realm_runtime_get_runtime(&runtime));
-      realm_event_t merged_event_id;
-      REALM_CHECK(realm_event_merge(runtime,
-                                    reinterpret_cast<const realm_event_t *>(wait_for),
-                                    num_events, &merged_event_id, 0));
-      return Event(merged_event_id);
+      return merge_events_common(wait_for, num_events, false);
     }
 
     template <typename... Args>
     static Event merge_events(Event ev1, Event ev2, Args... args)
     {
       Event events[] = {ev1, ev2, Event(args)...};
-      return merge_events(events, sizeof(events) / sizeof(events[0]));
+      return merge_events_common(events, sizeof(events) / sizeof(events[0]), false);
     }
 
     static Event merge_events(const std::set<Event> &wait_for)
     {
       std::vector<Event> events(wait_for.begin(), wait_for.end());
-      return merge_events(events.data(), events.size());
+      return merge_events_common(events.data(), events.size(), false);
     }
 
     static Event merge_events(const span<const Event> &wait_for)
     {
-      return merge_events(wait_for.data(), wait_for.size());
+      return merge_events_common(wait_for.data(), wait_for.size(), false);
     }
     ///@}
 
+    ///@{
     /**
      * Create an event that won't trigger until all input events
      * have, ignoring any poison on the input events.
@@ -417,28 +439,46 @@ namespace REALM_NAMESPACE {
      */
     static Event merge_events_ignorefaults(const Event *wait_for, size_t num_events)
     {
-      realm_runtime_t runtime;
-      REALM_CHECK(realm_runtime_get_runtime(&runtime));
-      realm_event_t merged_event_id;
-      REALM_CHECK(realm_event_merge(runtime,
-                                    reinterpret_cast<const realm_event_t *>(wait_for),
-                                    num_events, &merged_event_id, 1));
-      return Event(merged_event_id);
+      return merge_events_common(wait_for, num_events, true);
     }
-    static Event merge_events_ignorefaults(const span<const Event> &wait_for)
+
+    template <typename... Args>
+    static Event merge_events_ignorefaults(Event ev1, Event ev2, Args... args)
     {
-      return merge_events_ignorefaults(wait_for.data(), wait_for.size());
+      Event events[] = {ev1, ev2, Event(args)...};
+      return merge_events_common(events, sizeof(events) / sizeof(events[0]), true);
     }
+
     static Event merge_events_ignorefaults(const std::set<Event> &wait_for)
     {
       std::vector<Event> events(wait_for.begin(), wait_for.end());
-      return merge_events_ignorefaults(events.data(), events.size());
-    }
-    static Event ignorefaults(Event wait_for)
-    {
-      return merge_events_ignorefaults(&wait_for, 1);
+      return merge_events_common(events.data(), events.size(), true);
     }
 
+    static Event merge_events_ignorefaults(const span<const Event> &wait_for)
+    {
+      return merge_events_common(wait_for.data(), wait_for.size(), true);
+    }
+    ///@}
+
+  private:
+    static Event merge_events_common(const Event *wait_for, size_t num_events,
+                                     bool ignore_faults)
+    {
+      realm_runtime_t runtime;
+      REALM_CHECK(realm_runtime_get_runtime(&runtime));
+
+      std::vector<realm_event_t> event_ids(num_events);
+      std::transform(wait_for, wait_for + num_events, event_ids.begin(),
+                     [](const Event &e) { return e.id; });
+
+      realm_event_t merged_event_id;
+      REALM_CHECK(realm_event_merge(runtime, event_ids.data(), num_events,
+                                    &merged_event_id, ignore_faults ? 1 : 0));
+      return Event(merged_event_id);
+    }
+
+  public:
     /**
      * The following call is used to give Realm a bound on when the UserEvent
      * will be triggered.  In addition to being useful for diagnostic purposes
@@ -475,7 +515,7 @@ namespace REALM_NAMESPACE {
   class UserEvent : public Event {
   public:
     UserEvent() = default;
-    constexpr UserEvent(realm_id_t id)
+    constexpr UserEvent(realm_event_t id)
       : Event(id)
     {}
 
@@ -523,22 +563,19 @@ namespace REALM_NAMESPACE {
    * and manage task execution on that processor.
    */
   class Processor {
-  private:
-    realm_id_t id{REALM_NO_PROC};
-
   public:
+    realm_processor_t id{REALM_NO_PROC};
+
     Processor() = default;
-    constexpr explicit Processor(realm_id_t id)
+    constexpr explicit Processor(realm_processor_t id)
       : id(id)
     {}
 
-    constexpr operator realm_id_t() const { return id; }
-
     /**
-     * \brief Get the internal ID for derived classes.
-     * \return The event ID
+     * \brief Implicit conversion operator to realm_processor_t.
+     * \return The underlying realm_processor_t instance
      */
-    realm_id_t get_id() const { return id; }
+    constexpr operator realm_processor_t() const { return id; }
 
     bool operator<(const Processor &rhs) const { return id < rhs.id; }
     bool operator==(const Processor &rhs) const { return id == rhs.id; }
@@ -550,7 +587,7 @@ namespace REALM_NAMESPACE {
      * \brief Check whether this processor has a valid ID.
      * \return true if the processor has a valid ID, false otherwise
      */
-    bool exists(void) const { return id != 0; }
+    bool exists(void) const { return id != REALM_NO_PROC; }
 
     typedef ::realm_task_func_id_t TaskFuncID;
     typedef void (*TaskFuncPtr)(const void *args, size_t arglen, const void *user_data,
@@ -880,6 +917,12 @@ namespace REALM_NAMESPACE {
     }
 
     /**
+     * \brief Implicit conversion operator to realm_runtime_t.
+     * \return The underlying realm_runtime_t instance
+     */
+    constexpr operator realm_runtime_t() const { return impl; }
+
+    /**
      * \brief Destructor that cleans up the runtime instance.
      */
     ~Runtime(void) { realm_runtime_destroy((impl)); }
@@ -1106,9 +1149,8 @@ namespace REALM_NAMESPACE {
                            const Event &wait_on = Event::NO_EVENT, int priority = 0)
     {
       realm_event_t eventIdOut;
-      REALM_CHECK(realm_runtime_collective_spawn(impl, target_proc.get_id(), task_id,
-                                                 args, arglen, wait_on, priority,
-                                                 &eventIdOut));
+      REALM_CHECK(realm_runtime_collective_spawn(impl, target_proc.id, task_id, args,
+                                                 arglen, wait_on, priority, &eventIdOut));
       return Event(eventIdOut);
     }
 
@@ -1219,22 +1261,15 @@ namespace REALM_NAMESPACE {
    * latency, and accessibility from different processors.
    */
   class Memory {
-  private:
-    realm_id_t id{REALM_NO_MEM};
-
   public:
+    realm_memory_t id{REALM_NO_MEM};
+
     Memory() = default;
-    constexpr explicit Memory(realm_id_t id)
+    constexpr explicit Memory(realm_memory_t id)
       : id(id)
     {}
 
-    constexpr operator realm_id_t() const { return id; }
-
-    /**
-     * \brief Get the internal ID for derived classes.
-     * \return The event ID
-     */
-    realm_id_t get_id() const { return id; }
+    constexpr operator realm_memory_t() const { return id; }
 
     bool operator<(const Memory &rhs) const { return id < rhs.id; }
     bool operator==(const Memory &rhs) const { return id == rhs.id; }
@@ -1246,7 +1281,7 @@ namespace REALM_NAMESPACE {
      * \brief Check whether this memory has a valid ID.
      * \return true if the memory has a valid ID, false otherwise
      */
-    bool exists(void) const { return id != 0; }
+    bool exists(void) const { return id != REALM_NO_MEM; }
 
     /**
      * \brief Get the address space this memory belongs to.
@@ -1314,7 +1349,7 @@ namespace REALM_NAMESPACE {
 
   inline std::ostream &operator<<(std::ostream &os, Memory m)
   {
-    return os << std::hex << m.get_id() << std::dec;
+    return os << std::hex << m.id << std::dec;
   }
 
   inline std::ostream &operator<<(std::ostream &os, Memory::Kind kind)
@@ -1864,6 +1899,9 @@ namespace REALM_NAMESPACE {
       return !(*this == compare_to);
     }
 
+    // implicit conversion to raw query handle
+    operator realm_processor_query_t(void) const { return impl; }
+
     // filter predicates (returns self-reference for chaining)
     // if multiple predicates are used, they must all match (i.e. the intersection is
     // returned)
@@ -1875,7 +1913,7 @@ namespace REALM_NAMESPACE {
      */
     ProcessorQuery &only_kind(Processor::Kind kind)
     {
-      if(impl) {
+      if(impl != nullptr) {
         REALM_CHECK(realm_processor_query_restrict_to_kind(
             impl, static_cast<realm_processor_kind_t>(kind)));
       }
@@ -1894,7 +1932,7 @@ namespace REALM_NAMESPACE {
       realm_runtime_attr_t runtime_attr = REALM_RUNTIME_ATTR_LOCAL_ADDRESS_SPACE;
       uint64_t values;
 
-      if(impl) {
+      if(impl != nullptr) {
         REALM_CHECK(realm_runtime_get_runtime(&runtime));
         REALM_CHECK(realm_runtime_get_attributes(runtime, &runtime_attr, &values, 1));
         REALM_CHECK(realm_processor_query_create(runtime, &query));
@@ -2033,7 +2071,7 @@ namespace REALM_NAMESPACE {
      */
     ~MemoryQuery(void)
     {
-      if(impl) {
+      if(impl != nullptr) {
         realm_memory_query_destroy(impl);
       }
     }
@@ -2069,6 +2107,9 @@ namespace REALM_NAMESPACE {
       return !(*this == compare_to);
     }
 
+    // implicit conversion to raw query handle
+    operator realm_memory_query_t(void) const { return impl; }
+
     // filter predicates (returns self-reference for chaining)
     // if multiple predicates are used, they must all match (i.e. the intersection is
     // returned)
@@ -2080,7 +2121,7 @@ namespace REALM_NAMESPACE {
      */
     MemoryQuery &only_kind(Memory::Kind kind)
     {
-      if(impl) {
+      if(impl != nullptr) {
         REALM_CHECK(realm_memory_query_restrict_to_kind(
             impl, static_cast<realm_memory_kind_t>(kind)));
       }
@@ -2099,7 +2140,7 @@ namespace REALM_NAMESPACE {
       realm_runtime_attr_t runtime_attr = REALM_RUNTIME_ATTR_LOCAL_ADDRESS_SPACE;
       uint64_t values;
 
-      if(impl) {
+      if(impl != nullptr) {
         REALM_CHECK(realm_runtime_get_runtime(&runtime));
         REALM_CHECK(realm_runtime_get_attributes(runtime, &runtime_attr, &values, 1));
         REALM_CHECK(realm_memory_query_create(runtime, &query));
@@ -2245,6 +2286,10 @@ namespace REALM_NAMESPACE {
     realm_memory_query_t impl;
   };
 
+  inline const Processor Processor::NO_PROC{REALM_NO_PROC};
+  inline const Event Event::NO_EVENT{REALM_NO_EVENT};
+  inline const UserEvent UserEvent::NO_USER_EVENT{REALM_NO_USER_EVENT};
+  inline const Memory Memory::NO_MEMORY{REALM_NO_MEM};
 } // namespace REALM_NAMESPACE
 
 #define REALM_HASH_DEFINE(C)                                                             \

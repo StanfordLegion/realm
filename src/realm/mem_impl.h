@@ -182,6 +182,8 @@ namespace Realm {
 
     void add_module_specific(ModuleSpecificInfo *info);
 
+    RuntimeImpl *get_runtime_impl() const { return runtime_impl; }
+
     struct InstanceList {
       std::vector<RegionInstanceImpl *> instances;
       std::vector<size_t> free_list;
