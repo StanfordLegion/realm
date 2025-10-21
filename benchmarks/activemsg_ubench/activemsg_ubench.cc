@@ -446,6 +446,8 @@ int main(int argc, char **argv)
   // now sleep this thread until that shutdown actually happens
   rt.wait_for_shutdown();
 
+  std::cout << "shutdown complete" << std::endl;
+
 #ifdef MEASURE_EACH_AM
   for(std::vector<Processor>::iterator it = local_cpu_procs.begin();
       it != local_cpu_procs.end(); it++) {
@@ -461,6 +463,8 @@ int main(int argc, char **argv)
     delete am_condvar[it->id];
     delete am_mutex[it->id];
   }
+
+  std::cout << "cleanup complete" << std::endl;
 
   return 0;
 }
