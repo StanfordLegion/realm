@@ -308,15 +308,11 @@ namespace Realm {
       UCPWorker *worker;
       NodeID target;
       NodeSet targets;
-      // const void *src_payload_addr; // TODO: remove this, it is nullptr
-      // size_t src_payload_lines; // TODO: remove this, it is 0
-      // size_t src_payload_line_stride; // TODO: remove this, it is 0
       size_t header_size;
       PayloadBaseType payload_base_type;
       CompList *local_comp{nullptr};
       RemoteComp *remote_comp{nullptr};
       bool is_multicast{false};
-      ucs_memory_type_t memtype; // TODO: remove this, set it to UCS_MEMORY_TYPE_HOST
 
       UCPMsgHdr ucp_msg_hdr;
       // nothing should be added after 'ucp_msg_hdr'

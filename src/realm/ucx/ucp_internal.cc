@@ -279,22 +279,6 @@ namespace Realm {
       }
     }
 
-    static ucs_memory_type_t
-    realm2ucs_memtype(const NetworkSegmentInfo::MemoryType &memtype)
-    {
-      switch(memtype) {
-      case NetworkSegmentInfo::HostMem:
-        return UCS_MEMORY_TYPE_HOST;
-#ifdef REALM_USE_CUDA
-      case NetworkSegmentInfo::CudaDeviceMem:
-        return UCS_MEMORY_TYPE_CUDA;
-#endif
-      default:
-        log_ucp.fatal() << "unsupported realm memtype " << memtype;
-        return UCS_MEMORY_TYPE_UNKNOWN;
-      }
-    }
-
     ////////////////////////////////////////////////////////////////////////
     //
     // class UCPPoller
@@ -1742,7 +1726,6 @@ namespace Realm {
               : 0;
 
       worker = internal->get_tx_worker(context, priority);
-      memtype = UCS_MEMORY_TYPE_HOST;
 
       size_t max_header_size = _storage_size - sizeof(*this);
       max_header_size = std::min(max_header_size, worker->get_max_am_header());
@@ -1906,7 +1889,7 @@ namespace Realm {
     {
       bool ok = worker->am_send_fast_path(ep, AM_ID, &ucp_msg_hdr,
                                           sizeof(ucp_msg_hdr) + header_size, payload_base,
-                                          act_payload_size, memtype);
+                                          act_payload_size, UCS_MEMORY_TYPE_HOST);
 
       if(ok) {
         internal->notify_msg_sent(1);
@@ -1979,7 +1962,7 @@ namespace Realm {
       req->am_send.local_comp = local_comp;
       req->ucp.payload = payload_base;
       req->ucp.payload_size = act_payload_size;
-      req->ucp.memtype = memtype;
+      req->ucp.memtype = UCS_MEMORY_TYPE_HOST;
       req->ucp.flags = 0;
 
       if(is_multicast) {
