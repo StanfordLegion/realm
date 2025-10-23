@@ -64,7 +64,7 @@ else
     cmake_options="${cmake_options} -DCMAKE_BUILD_TYPE=Debug"
 fi
 
-cmake_options="${cmake_options} -DREALM_BUILD_BENCHMARKS=ON -DREALM_BUILD_TESTS=ON"
+cmake_options="${cmake_options} -DREALM_ENABLE_HDF5=OFF -DREALM_BUILD_BENCHMARKS=ON -DREALM_BUILD_TESTS=ON"
 
 # build legion
 mkdir -p "$REALM_DIR/$BUILD_DIR"
