@@ -210,8 +210,6 @@ namespace Realm {
                         << " payload_size=" << payload_size << " src=" << ucp_msg_hdr->src
                         << " msgid=" << ucp_msg_hdr->msgid
                         << " rcomp=" << ucp_msg_hdr->remote_comp
-                        << " rdma_payload_addr=" << ucp_msg_hdr->rdma_payload_addr
-                        << " rdma_payload_size=" << ucp_msg_hdr->rdma_payload_size
                         << " exp=" << std::hex << exp_crc << " act=" << act_crc
                         << std::dec;
         abort();
@@ -1212,15 +1210,9 @@ namespace Realm {
         param.memory_type = UCS_MEMORY_TYPE_HOST;
 #endif
 
-        if(ucp_msg_hdr->rdma_payload_addr != nullptr) {
-          // am with remote address
-          req->am_rndv_recv.payload = ucp_msg_hdr->rdma_payload_addr;
-          req->am_rndv_recv.payload_mode = PAYLOAD_KEEPREG;
-        } else {
-          // Allocate buffer to receive the payload
-          req->am_rndv_recv.payload = internal->pbuf_get(worker, payload_size);
-          req->am_rndv_recv.payload_mode = PAYLOAD_FREE;
-        }
+        // Allocate buffer to receive the payload
+        req->am_rndv_recv.payload = internal->pbuf_get(worker, payload_size);
+        req->am_rndv_recv.payload_mode = PAYLOAD_FREE;
 
         req->am_rndv_recv.header = internal->hbuf_get(worker, header_size);
         req->am_rndv_recv.header_size = header_size;
@@ -2077,7 +2069,6 @@ namespace Realm {
       assert(payload_base_type != PAYLOAD_BASE_LAST || payload_size == 0);
 
       ucp_msg_hdr.remote_comp = remote_comp;
-      ucp_msg_hdr.rdma_payload_size = act_payload_size;
 
       if(internal->config.crc_check) {
         insert_packet_crc(&ucp_msg_hdr, header_size, act_payload_size);

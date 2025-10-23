@@ -71,11 +71,6 @@ namespace Realm {
       NodeID src;
       unsigned short msgid;
       RemoteComp *remote_comp;
-      void *rdma_payload_addr;
-      size_t rdma_payload_size;
-#ifdef REALM_USE_CUDA
-      int src_dev_index;
-#endif
       char realm_hdr[0];
     } __attribute__((packed)); // gcc-specific
 
