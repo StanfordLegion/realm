@@ -311,12 +311,11 @@ namespace Realm {
       UCPWorker *worker;
       NodeID target;
       NodeSet targets;
-      const void *src_payload_addr; // TODO: remove this, it is nullptr
-      size_t src_payload_lines; // TODO: remove this, it is 0
-      size_t src_payload_line_stride; // TODO: remove this, it is 0
+      // const void *src_payload_addr; // TODO: remove this, it is nullptr
+      // size_t src_payload_lines; // TODO: remove this, it is 0
+      // size_t src_payload_line_stride; // TODO: remove this, it is 0
       size_t header_size;
       PayloadBaseType payload_base_type;
-      UCPRDMAInfo *dest_payload_rdma_info{nullptr}; // TODO: remove this, we don't use it
       CompList *local_comp{nullptr};
       RemoteComp *remote_comp{nullptr};
       bool is_multicast{false};

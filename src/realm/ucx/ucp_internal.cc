@@ -1290,108 +1290,9 @@ namespace Realm {
       return (payload_mode == PAYLOAD_KEEP) ? UCS_INPROGRESS : UCS_OK;
     }
 
-#ifdef FULL_REALM
-    ucs_status_t UCPInternal::am_rdma_msg_recv_handler(void *arg, const void *header,
-                                                       size_t header_size, void *payload,
-                                                       size_t payload_size,
-                                                       const ucp_am_recv_param_t *param)
-    {
-      const UCPMsgHdr *ucp_msg_hdr = reinterpret_cast<const UCPMsgHdr *>(header);
-      AmHandlersArgs *am_args = reinterpret_cast<AmHandlersArgs *>(arg);
-      UCPWorker *worker = am_args->worker;
-      UCPInternal *internal = am_args->internal;
-
-      assert((header != nullptr) && (header_size >= sizeof(UCPMsgHdr)));
-      assert(payload_size == 0);
-
-      log_ucp_am.debug() << "am rdma received";
-
-      payload = ucp_msg_hdr->rdma_payload_addr;
-      payload_size = ucp_msg_hdr->rdma_payload_size;
-
-      internal->am_msg_recv_data_ready(internal, worker, ucp_msg_hdr, header_size,
-                                       payload, payload_size, PAYLOAD_KEEPREG);
-
-      return UCS_OK;
-    }
-
-    static void set_rdma_info_common(const NetworkSegment *segment,
-                                     UCPRDMAInfo *rdma_info)
-    {
-      rdma_info->reg_base = reinterpret_cast<uint64_t>(segment->base);
-      rdma_info->dev_index = -1;
-
-#if defined(REALM_USE_CUDA)
-      if(segment->memtype == NetworkSegmentInfo::CudaDeviceMem) {
-        Cuda::GPU *gpu = reinterpret_cast<Cuda::GPU *>(segment->memextra);
-        rdma_info->dev_index = gpu->info->index;
-      }
-#endif
-    }
-
-    bool UCPInternal::add_rdma_info(NetworkSegment *segment, const UCPContext *context,
-                                    ucp_mem_h mem_h)
-    {
-      UCPRDMAInfo *rdma_info;
-      void *rkey_buf;
-      size_t rkey_buf_size;
-      ucs_status_t status;
-
-      assert(segment->base != nullptr);
-
-#ifdef REALM_USE_CUDA
-      Cuda::AutoGPUContext agc(context->gpu);
-#endif
-
-      status = UCP_FNPTR(ucp_rkey_pack)(context->get_ucp_context(), mem_h, &rkey_buf,
-                                        &rkey_buf_size);
-      CHKERR_JUMP(status != UCS_OK, "ucp_rkey_pack failed", log_ucp, err);
-
-      rdma_info =
-          reinterpret_cast<UCPRDMAInfo *>(malloc(sizeof(*rdma_info) + rkey_buf_size));
-      CHKERR_JUMP(rdma_info == nullptr, "failed to malloc rdma info", log_ucp,
-                  err_rkey_rel);
-
-      memcpy(rdma_info->rkey, rkey_buf, rkey_buf_size);
-
-      set_rdma_info_common(segment, rdma_info);
-      rdma_info->has_rkey = true;
-
-      segment->add_rdma_info(module, rdma_info, sizeof(*rdma_info) + rkey_buf_size);
-      free(rdma_info);
-      UCP_FNPTR(ucp_rkey_buffer_release)(rkey_buf);
-
-      return true;
-
-    err_rkey_rel:
-      UCP_FNPTR(ucp_rkey_buffer_release)(rkey_buf);
-    err:
-      return false;
-    }
-
-    void UCPInternal::add_rdma_info_odr(NetworkSegment *segment,
-                                        const UCPContext *context)
-    {
-      UCPRDMAInfo rdma_info;
-      set_rdma_info_common(segment, &rdma_info);
-      rdma_info.has_rkey = false;
-      segment->add_rdma_info(module, &rdma_info, sizeof(rdma_info));
-    }
-
-#endif
 
     void UCPInternal::attach(std::vector<NetworkSegment *> &segments)
     {
-#ifdef FULL_REALM
-      size_t total_alloc_size = 0;
-      const UCPContext *context;
-      ucp_mem_map_params_t mem_map_params;
-      ucp_mem_attr_t mem_attr;
-      ucp_mem_h alloc_mem_h, mem_h;
-      ucs_status_t status;
-      uintptr_t alloc_base, offset;
-      ByteArray alloc_rdma_info;
-#endif
 
 #if defined(REALM_USE_CUDA)
       // Find the GPUs
@@ -1418,136 +1319,6 @@ namespace Realm {
         log_ucp.fatal() << "failed to initialized ucp contexts";
         abort();
       }
-
-#ifdef FULL_REALM
-      // Try to register allocation requests first
-      // The bind_hostmem option does not apply to allocation requests
-      for(const NetworkSegment *segment : segments) {
-        if(segment->bytes == 0 || segment->base)
-          continue;
-        // Skip ODR segments
-        if(segment->flags & NetworkSegmentInfo::OptionFlags::OnDemandRegistration)
-          continue;
-        // Must be host memory
-        // TODO: Have two separate allocations: one for host and one for device
-        if(segment->memtype != NetworkSegmentInfo::HostMem) {
-          log_ucp.info() << "non-host memory allocation not supported in attach"
-                         << " segment " << segment;
-          continue;
-        }
-        total_alloc_size += segment->bytes;
-      }
-
-      context = get_context_host();
-      assert(context);
-
-      mem_map_params.field_mask =
-          UCP_MEM_MAP_PARAM_FIELD_LENGTH | UCP_MEM_MAP_PARAM_FIELD_FLAGS;
-      mem_map_params.flags = UCP_MEM_MAP_ALLOCATE;
-      mem_map_params.length = total_alloc_size;
-
-      CHKERR_JUMP(!context->mem_map(&mem_map_params, &alloc_mem_h),
-                  "ucp_mem_map failed for allocation segments", log_ucp, err);
-      attach_mem_hs[context].push_back(alloc_mem_h);
-
-      // Now try to register non-allocation requests (includes ODR)
-      for(NetworkSegment *segment : segments) {
-        const bool is_odr =
-            (segment->flags & NetworkSegmentInfo::OptionFlags::OnDemandRegistration);
-        // Skip allocation segments
-        if(!segment->base && !is_odr)
-          continue;
-#if defined(REALM_USE_CUDA)
-        if(segment->memtype == NetworkSegmentInfo::CudaManagedMem) {
-          log_ucp_seg.debug() << "cuda managed memory attach not supported"
-                              << " segment " << segment;
-          continue;
-        } else if(segment->memtype == NetworkSegmentInfo::CudaDeviceMem) {
-          if(!config.bind_cudamem)
-            continue;
-          Cuda::GPU *gpu = reinterpret_cast<Cuda::GPU *>(segment->memextra);
-          context = get_context_device(gpu->info->index);
-          if(!(context->supported_memtypes() & UCS_MEMORY_TYPE_CUDA))
-            continue;
-          log_ucp_seg.info() << "attaching" << (segment->base ? " pre-allocated" : "")
-                             << (is_odr ? " ODR" : "") << " gpu segment " << segment
-                             << " base " << segment->base << " length " << segment->bytes
-                             << " device index " << gpu->info->index << " gpu context "
-                             << context;
-        } else
-#endif
-        {
-          assert(segment->memtype == NetworkSegmentInfo::HostMem);
-          if(!config.bind_hostmem)
-            continue;
-          context = get_context_host();
-          log_ucp_seg.info() << "attaching" << (segment->base ? " pre-allocated" : "")
-                             << (is_odr ? " ODR" : "") << " segment " << segment
-                             << " base " << segment->base << " length " << segment->bytes
-                             << " host context " << context;
-        }
-        assert(context);
-
-        if(is_odr) {
-          add_rdma_info_odr(segment, context);
-        } else {
-          mem_map_params.field_mask =
-              UCP_MEM_MAP_PARAM_FIELD_LENGTH | UCP_MEM_MAP_PARAM_FIELD_ADDRESS;
-          mem_map_params.address = segment->base;
-          mem_map_params.length = segment->bytes;
-          if(!context->mem_map(&mem_map_params, &mem_h)) {
-            log_ucp.info() << "ucp_mem_map failed for pre-allocated segment " << segment;
-            continue;
-          }
-          attach_mem_hs[context].push_back(mem_h);
-
-          if(!add_rdma_info(segment, context, mem_h)) {
-            log_ucp.info() << "failed to add rdma info for pre-allocated segment "
-                           << segment;
-          }
-        }
-      }
-
-      // Set address and add RDMA info for allocated segments
-      context = get_context_host();
-      mem_attr.field_mask = UCP_MEM_ATTR_FIELD_ADDRESS;
-      status = UCP_FNPTR(ucp_mem_query)(alloc_mem_h, &mem_attr);
-      assert(status == UCS_OK);
-      alloc_base = reinterpret_cast<uintptr_t>(mem_attr.address);
-      offset = 0;
-      for(NetworkSegment *segment : segments) {
-        if(segment->bytes == 0 || segment->base)
-          continue;
-        // Skip ODR segments
-        if(segment->flags & NetworkSegmentInfo::OptionFlags::OnDemandRegistration)
-          continue;
-        // Must be host memory
-        if(segment->memtype != NetworkSegmentInfo::HostMem)
-          continue;
-
-        segment->base = reinterpret_cast<void *>(alloc_base + offset);
-        if(offset == 0) {
-          if(!add_rdma_info(segment, context, alloc_mem_h)) {
-            log_ucp.info() << "failed to add rdma info for allocation segment "
-                           << segment;
-          }
-          alloc_rdma_info = *(segment->get_rdma_info(module));
-        } else {
-          // already have the rkey in alloc_rdma_info,
-          // but should update the base pointer
-          UCPRDMAInfo *rdma_info =
-              reinterpret_cast<UCPRDMAInfo *>(alloc_rdma_info.base());
-          rdma_info->reg_base = reinterpret_cast<uint64_t>(segment->base);
-          segment->add_rdma_info(module, alloc_rdma_info.base(), alloc_rdma_info.size());
-        }
-        offset += segment->bytes;
-      }
-
-      log_ucp.info() << "attached segments";
-
-    err:
-      return;
-#endif
     }
 
     void UCPInternal::detach(std::vector<NetworkSegment *> &segments)
@@ -1965,14 +1736,7 @@ namespace Realm {
         size_t _storage_size)
       : internal(_internal)
       , target(_target)
-      , src_payload_addr(_src_payload_addr)
-      , src_payload_lines(_src_payload_lines)
-      , src_payload_line_stride(_src_payload_line_stride)
     {
-
-      assert(src_payload_addr == nullptr);
-      assert(src_payload_lines == 0);
-      assert(src_payload_line_stride == 0);
     
       const UCPContext *context = internal->get_context(_src_segment);
       uint8_t priority =
@@ -1998,37 +1762,18 @@ namespace Realm {
 
       payload_base_type = PAYLOAD_BASE_LAST;
       if(payload_size > 0) {
-        if((src_payload_addr != nullptr) && (src_payload_lines <= 1)) {
-          // contiguous source data can be used directly
-          payload_base = const_cast<void *>(src_payload_addr);
-          payload_base_type = PAYLOAD_BASE_EXTERNAL;
-        } else if(!set_inline_payload_base()) {
+        if(!set_inline_payload_base()) {
           payload_base = internal->pbuf_get(worker, payload_size);
           assert(payload_base != nullptr);
           payload_base_type = PAYLOAD_BASE_INTERNAL;
+        } else {
+          assert(false);
         }
       } else {
         payload_base = nullptr; // no payload
       }
 
       assert(_dest_payload_addr == nullptr);
-#ifdef FULL_REALM
-      // Set remote address info if available
-      if(_dest_payload_addr) {
-        dest_payload_rdma_info =
-            reinterpret_cast<UCPRDMAInfo *>(malloc(sizeof(*_dest_payload_addr)));
-        assert(dest_payload_rdma_info);
-
-        memcpy(dest_payload_rdma_info, _dest_payload_addr->raw_bytes,
-               sizeof(*_dest_payload_addr));
-
-        ucp_msg_hdr.rdma_payload_addr =
-            reinterpret_cast<void *>(dest_payload_rdma_info->reg_base);
-      } else {
-        dest_payload_rdma_info = nullptr;
-        ucp_msg_hdr.rdma_payload_addr = nullptr;
-      }
-#endif
     }
 
     UCPMessageImpl::UCPMessageImpl(UCPInternal *_internal, const NodeSet &_targets,
@@ -2277,102 +2022,6 @@ namespace Realm {
       delete req->am_send.mc_desc;
     }
 
-#ifdef FULL_REALM
-    void UCPMessageImpl::am_put_comp_handler(void *request, ucs_status_t status,
-                                             void *user_data)
-    {
-      Request *req = reinterpret_cast<Request *>(user_data);
-      UCPInternal *internal = req->internal;
-
-      log_ucp_am.debug() << "am_put_comp_handler invoked for request " << req;
-
-      if(status != UCS_OK) {
-        log_ucp.error() << "failed to complete put for am";
-      }
-
-      UCP_FNPTR(ucp_rkey_destroy)(req->ucp.rma.rkey);
-      free(req->rma.rdma_info_buf);
-      internal->request_release(req);
-    }
-
-    void UCPMessageImpl::am_put_flush_comp_handler(void *request, ucs_status_t status,
-                                                   void *user_data)
-    {
-      Request *req = reinterpret_cast<Request *>(user_data);
-      UCPInternal *internal = req->internal;
-
-      log_ucp_am.debug() << "am_put_flush_comp_handler invoked for request " << req;
-
-      CHKERR_JUMP(status != UCS_OK, "failed to complete flush for am", log_ucp, err);
-
-      req->ucp.flags |= UCP_AM_SEND_FLAG_EAGER;
-      // am payload has already been put on the target.
-      req->ucp.payload_size = 0;
-      // we're sending header only; memtype will be host
-      req->ucp.memtype = UCS_MEMORY_TYPE_HOST;
-      CHKERR_JUMP(!UCPMessageImpl::send_request(req, AM_ID_RDMA),
-                  "failed to send am request in put flush callback", log_ucp, err);
-
-      return;
-
-    err:
-      UCPMessageImpl::am_local_failure_handler(req, internal);
-      // TODO: should invoke some higher-level error handler
-    }
-
-    bool UCPMessageImpl::commit_with_rma(ucp_ep_h ep)
-    {
-      Request *req, *req_put;
-      ucp_rkey_h rkey;
-      ucs_status_t status;
-
-      req = make_request(ucp_msg_hdr.rdma_payload_size);
-      CHKERR_JUMP(req == nullptr, "failed to make am request", log_ucp, err);
-
-      req_put = internal->request_get(worker);
-      CHKERR_JUMP(req_put == nullptr, "failed to get request", log_ucp, err_rel_req);
-
-      status = UCP_FNPTR(ucp_ep_rkey_unpack)(ep, dest_payload_rdma_info->rkey, &rkey);
-      CHKERR_JUMP(status != UCS_OK, "ucp_ep_rkey_unpack failed", log_ucp,
-                  err_rel_req_put);
-
-      req_put->ucp.op_type = UCPWorker::OpType::PUT;
-      req_put->ucp.ep = ep;
-      req_put->ucp.payload = req->ucp.payload;
-      req_put->ucp.payload_size = req->ucp.payload_size;
-      req_put->ucp.memtype = req->ucp.memtype;
-      req_put->ucp.flags = 0;
-      req_put->ucp.args = req_put;
-      req_put->ucp.cb = &UCPMessageImpl::am_put_comp_handler;
-      req_put->ucp.rma.rkey = rkey;
-      req_put->ucp.rma.remote_addr = dest_payload_rdma_info->reg_base;
-
-      CHKERR_JUMP(!worker->submit_req(&req_put->ucp), "failed to commit with rma",
-                  log_ucp, err_dest_rkey);
-
-      // we reuse the same req for both flush and am send after it
-      req->ucp.op_type = UCPWorker::OpType::EP_FLUSH;
-      req->ucp.ep = ep;
-      req->ucp.args = req;
-      req->ucp.cb = &UCPMessageImpl::am_put_flush_comp_handler;
-
-      CHKERR_JUMP(!worker->submit_req(&req->ucp), "failed to commit with rma", log_ucp,
-                  err_dest_rkey);
-
-      return true;
-
-    err_dest_rkey:
-      UCP_FNPTR(ucp_rkey_destroy)(rkey);
-    err_rel_req_put:
-      internal->request_release(req_put);
-    err_rel_req:
-      UCPMessageImpl::am_local_failure_handler(req, internal);
-    err:
-      free(dest_payload_rdma_info);
-      return false;
-    }
-#endif
-
     bool UCPMessageImpl::commit_multicast(size_t act_payload_size)
     {
       size_t to_submit = targets.size();
@@ -2428,29 +2077,11 @@ namespace Realm {
       CHKERR_JUMP(!worker->ep_get(target, remote_dev_index, &ep), "failed to get ep",
                   log_ucp, err);
 
-      if(dest_payload_rdma_info == nullptr) {
-        if(header_size + act_payload_size <= internal->config.fp_max) {
-          ret = send_fast_path(ep, act_payload_size) ||
-                send_slow_path(ep, act_payload_size, 0);
-        } else {
-          ret = send_slow_path(ep, act_payload_size, 0);
-        }
-      } else if((internal->config.am_wra_mode == AM_WITH_REMOTE_ADDR_MODE_AUTO ||
-                 internal->config.am_wra_mode == AM_WITH_REMOTE_ADDR_MODE_AM)) {
-        // have remote buffer info and am mode is not rma
-        // send with am rndv
-        // TODO: use rma if source buffer is GPU, and
-        //       use am rndv if source buffer is host.
-        //       Because, ucp put does not support multi-rail,
-        //       but multi-rail benefits are seen when sending
-        //       from host buffer.
-        assert(false);
-        log_ucp_am.debug() << "sending am with remote address using forced rndv";
-        ret = send_slow_path(ep, act_payload_size, UCP_AM_SEND_FLAG_RNDV);
+      if(header_size + act_payload_size <= internal->config.fp_max) {
+        ret = send_fast_path(ep, act_payload_size) ||
+              send_slow_path(ep, act_payload_size, 0);
       } else {
-        // send with ucp rma
-        assert(false);
-        log_ucp_am.debug() << "sending am with remote address using rma";
+        ret = send_slow_path(ep, act_payload_size, 0);
       }
 
       return ret;
@@ -2467,23 +2098,6 @@ namespace Realm {
 #ifdef REALM_USE_CUDA
       Cuda::AutoGPUContext agc(context->gpu);
 #endif
-
-      assert(src_payload_addr == nullptr);
-      assert(src_payload_lines == 0);
-      assert(src_payload_line_stride == 0);
-
-      // For now, copy non-contiguous data. TODO: Use UCP IOV
-      if((src_payload_addr != nullptr) && (src_payload_lines > 1)) {
-        assert(payload_base != nullptr);
-        log_ucp_am.info() << "committing non-contiguous payload";
-        size_t bytes_per_line = act_payload_size / src_payload_lines;
-        for(size_t i = 0; i < src_payload_lines; i++) {
-          memcpy(reinterpret_cast<char *>(payload_base) + (i * bytes_per_line),
-                 reinterpret_cast<const char *>(src_payload_addr) +
-                     (i * src_payload_line_stride),
-                 bytes_per_line);
-        }
-      }
 
       // payload_base must point to payload data unless payload size is 0
       assert((payload_base != nullptr) || (act_payload_size == 0));
@@ -2512,25 +2126,13 @@ namespace Realm {
           << "msg commit " << (is_multicast ? "multicast" : "unicast") << "context "
           << context << "worker " << worker << " target " << (is_multicast ? -1 : target)
           << " hsize " << header_size << " psize " << act_payload_size << " ptype "
-          << payload_base_type
-#ifdef REALM_USE_CUDA
-          << " src_mem_type " << (context->gpu ? "cuda" : "host") << " dst_mem_type "
-          << (dest_payload_rdma_info
-                  ? (dest_payload_rdma_info->dev_index == -1 ? "host" : "cuda")
-                  : "host")
-          << " src_dev_index " << (context->gpu ? context->gpu->info->index : -1)
-          << " dst_dev_index "
-          << (dest_payload_rdma_info ? dest_payload_rdma_info->dev_index : -1)
-#endif
-          << " remote_addr "
-          << (dest_payload_rdma_info ? dest_payload_rdma_info->reg_base : 0);
+          << payload_base_type;
     }
 
     void UCPMessageImpl::cancel()
     {
       delete local_comp;
       delete remote_comp;
-      free(dest_payload_rdma_info);
       if(payload_base_type == PAYLOAD_BASE_INTERNAL) {
         internal->pbuf_release(worker, payload_base);
       }
