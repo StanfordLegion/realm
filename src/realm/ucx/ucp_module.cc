@@ -241,10 +241,10 @@ namespace Realm {
       const void *src_payload_addr, size_t src_payload_lines,
       size_t src_payload_line_stride, void *storage_base, size_t storage_size)
   {
+    assert(src_payload_addr == nullptr);
     assert(storage_size >= sizeof(Realm::UCP::UCPMessageImpl));
     return new(storage_base) Realm::UCP::UCPMessageImpl(
-        internal, target, msgid, header_size, max_payload_size, src_payload_addr,
-        src_payload_lines, src_payload_line_stride, nullptr, nullptr, storage_size);
+        internal, target, msgid, header_size, max_payload_size, storage_size);
   }
 
   ActiveMessageImpl *UCPModule::create_active_message_impl(
@@ -253,22 +253,20 @@ namespace Realm {
       size_t src_payload_line_stride, const RemoteAddress &dest_payload_addr,
       void *storage_base, size_t storage_size)
   {
+    assert(src_payload_addr.segment == nullptr);
     assert(storage_size >= sizeof(Realm::UCP::UCPMessageImpl));
     return new(storage_base) Realm::UCP::UCPMessageImpl(
-        internal, target, msgid, header_size, max_payload_size,
-        static_cast<char *>(src_payload_addr.segment->base) + src_payload_addr.offset,
-        src_payload_lines, src_payload_line_stride, src_payload_addr.segment,
-        &dest_payload_addr, storage_size);
+        internal, target, msgid, header_size, max_payload_size, storage_size);
   }
 
   ActiveMessageImpl *UCPModule::create_active_message_impl(
       NodeID target, unsigned short msgid, size_t header_size, size_t max_payload_size,
       const RemoteAddress &dest_payload_addr, void *storage_base, size_t storage_size)
   {
+    assert(dest_payload_addr.ptr == 0);
     assert(storage_size >= sizeof(Realm::UCP::UCPMessageImpl));
     return new(storage_base) Realm::UCP::UCPMessageImpl(
-        internal, target, msgid, header_size, max_payload_size, nullptr, 0, 0, nullptr,
-        &dest_payload_addr, storage_size);
+        internal, target, msgid, header_size, max_payload_size, storage_size);
   }
 
   ActiveMessageImpl *UCPModule::create_active_message_impl(
@@ -276,10 +274,10 @@ namespace Realm {
       size_t max_payload_size, const void *src_payload_addr, size_t src_payload_lines,
       size_t src_payload_line_stride, void *storage_base, size_t storage_size)
   {
+    assert(src_payload_addr == nullptr);
     assert(storage_size >= sizeof(Realm::UCP::UCPMessageImpl));
     return new(storage_base) Realm::UCP::UCPMessageImpl(
-        internal, targets, msgid, header_size, max_payload_size, src_payload_addr,
-        src_payload_lines, src_payload_line_stride, storage_size);
+        internal, targets, msgid, header_size, max_payload_size, storage_size);
   }
 
   size_t UCPModule::recommended_max_payload(NodeID target, bool with_congestion,

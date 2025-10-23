@@ -1730,23 +1730,19 @@ namespace Realm {
 
     UCPMessageImpl::UCPMessageImpl(
         UCPInternal *_internal, NodeID _target, unsigned short _msgid,
-        size_t _header_size, size_t _max_payload_size, const void *_src_payload_addr,
-        size_t _src_payload_lines, size_t _src_payload_line_stride,
-        const NetworkSegment *_src_segment, const RemoteAddress *_dest_payload_addr,
-        size_t _storage_size)
+        size_t _header_size, size_t _max_payload_size, size_t _storage_size)
       : internal(_internal)
       , target(_target)
     {
     
-      const UCPContext *context = internal->get_context(_src_segment);
+      const UCPContext *context = internal->get_context(nullptr);
       uint8_t priority =
           (_header_size + _max_payload_size <= internal->config.priority_size_max)
               ? internal->config.num_priorities - 1
               : 0;
 
       worker = internal->get_tx_worker(context, priority);
-      memtype =
-          _src_segment ? realm2ucs_memtype(_src_segment->memtype) : UCS_MEMORY_TYPE_HOST;
+      memtype = UCS_MEMORY_TYPE_HOST;
 
       size_t max_header_size = _storage_size - sizeof(*this);
       max_header_size = std::min(max_header_size, worker->get_max_am_header());
@@ -1772,19 +1768,13 @@ namespace Realm {
       } else {
         payload_base = nullptr; // no payload
       }
-
-      assert(_dest_payload_addr == nullptr);
     }
 
     UCPMessageImpl::UCPMessageImpl(UCPInternal *_internal, const NodeSet &_targets,
                                    unsigned short _msgid, size_t _header_size,
-                                   size_t _max_payload_size,
-                                   const void *_src_payload_addr,
-                                   size_t _src_payload_lines,
-                                   size_t _src_payload_line_stride, size_t _storage_size)
+                                   size_t _max_payload_size, size_t _storage_size)
       : UCPMessageImpl(_internal, *_targets.begin(), _msgid, _header_size,
-                       _max_payload_size, _src_payload_addr, _src_payload_lines,
-                       _src_payload_line_stride, nullptr, nullptr, _storage_size)
+                       _max_payload_size, _storage_size)
     {
       // treat as multicast if only number of targets is greater than 1
       if(_targets.size() > 1) {

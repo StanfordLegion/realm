@@ -277,14 +277,11 @@ namespace Realm {
     public:
       UCPMessageImpl(UCPInternal *internal, NodeID target, unsigned short msgid,
                      size_t header_size, size_t max_payload_size,
-                     const void *src_payload_addr, size_t src_payload_lines,
-                     size_t src_payload_line_stride, const NetworkSegment *_src_segment,
-                     const RemoteAddress *_dest_payload_addr, size_t storage_size);
+                     size_t storage_size);
 
       UCPMessageImpl(UCPInternal *internal, const NodeSet &targets, unsigned short msgid,
                      size_t header_size, size_t max_payload_size,
-                     const void *src_payload_addr, size_t src_payload_lines,
-                     size_t src_payload_line_stride, size_t storage_size);
+                     size_t storage_size);
 
       virtual ~UCPMessageImpl();
 
