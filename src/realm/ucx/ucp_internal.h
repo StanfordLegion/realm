@@ -46,13 +46,6 @@
 namespace Realm {
   namespace UCP {
 
-    enum AmWithRemoteAddrMode
-    {
-      AM_WITH_REMOTE_ADDR_MODE_AUTO,
-      AM_WITH_REMOTE_ADDR_MODE_PUT,
-      AM_WITH_REMOTE_ADDR_MODE_AM
-    };
-
     enum PayloadBaseType
     {
       PAYLOAD_BASE_INLINE,
@@ -63,7 +56,6 @@ namespace Realm {
 
     struct CompList;
     struct RemoteComp;
-    struct UCPRDMAInfo;
     struct Request;
 
     struct UCPMsgHdr {
@@ -100,8 +92,6 @@ namespace Realm {
     public:
       friend class UCPMessageImpl;
       struct Config {
-        AmWithRemoteAddrMode am_wra_mode{AM_WITH_REMOTE_ADDR_MODE_AUTO};
-        bool bind_hostmem{true};
         int pollers_max{2};
         int num_priorities{2};
         int prog_boff_max{4}; // progress thread maximum backoff
@@ -125,12 +115,6 @@ namespace Realm {
         std::string host_nics;
         std::string zcopy_thresh_host;
         std::string tls_host;
-#ifdef REALM_USE_CUDA
-        bool bind_cudamem{true};
-        std::string gpu_nics;
-        std::string zcopy_thresh_dev;
-        std::string tls_dev;
-#endif
       };
 
       UCPInternal(Realm::UCPModule *_module, Realm::RuntimeImpl *_runtime);
@@ -154,8 +138,6 @@ namespace Realm {
                                      const RemoteAddress *dest_payload_addr,
                                      bool with_congestion, size_t header_size);
 
-      bool get_ucp_ep(const UCPWorker *worker, NodeID target,
-                      const UCPRDMAInfo *rdma_info, ucp_ep_h *ep) const;
 
       Request *request_get(UCPWorker *worker);
       void request_release(Request *req);
@@ -166,7 +148,7 @@ namespace Realm {
       void *pbuf_get(UCPWorker *worker, size_t size);
       void pbuf_release(UCPWorker *worker, void *buf);
 
-      void notify_msg_sent(uint64_t count);
+      void notify_msg_sent(uint64_t count);  // TODO: can be removed if we do not need error checking
 
       const UCPContext *get_context(const NetworkSegment *segment) const;
       // the public interface exposes the tx worker only
@@ -193,11 +175,7 @@ namespace Realm {
       bool resolve_ucp_api_fnptrs();
 #endif
 
-#ifdef REALM_USE_CUDA
-      bool init_ucp_contexts(const std::unordered_set<Realm::Cuda::GPU *> &gpus);
-#else
       bool init_ucp_contexts();
-#endif
 
       bool create_workers();
       void destroy_workers();
@@ -207,9 +185,7 @@ namespace Realm {
       bool create_eps();
       bool create_pollers();
       const UCPContext *get_context_host() const;
-#if defined(REALM_USE_CUDA)
-      const UCPContext *get_context_device(int dev_index) const;
-#endif
+
       const std::vector<UCPWorker *> &get_tx_workers(const UCPContext *context) const;
       const std::vector<UCPWorker *> &get_rx_workers(const UCPContext *context) const;
       UCPWorker *get_rx_worker(const UCPContext *context, uint8_t priority) const;
@@ -237,7 +213,6 @@ namespace Realm {
 
       bool compute_shared_ranks();
       using WorkersMap = std::unordered_map<const UCPContext *, Workers>;
-      using AttachMap = std::unordered_map<const UCPContext *, std::vector<ucp_mem_h>>;
 
 #ifdef REALM_UCX_DYNAMIC_LOAD
       void *libucp{nullptr};
@@ -250,13 +225,9 @@ namespace Realm {
       int num_shared_ranks{0};
       std::vector<NodeID> shared_ranks;
       std::list<UCPContext> ucp_contexts;
-#ifdef REALM_USE_CUDA
-      std::unordered_map<int, UCPContext *> dev_ctx_map;
-#endif
       WorkersMap workers;
       std::list<UCPPoller> pollers;
       std::list<AmHandlersArgs> am_handlers_args;
-      AttachMap attach_mem_hs;
       atomic<uint64_t> total_msg_sent;
       atomic<uint64_t> total_msg_received;
       atomic<uint64_t> total_rcomp_sent;

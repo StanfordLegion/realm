@@ -78,12 +78,8 @@ namespace Realm {
     size_t deprecated_gsize = 0;
     cp.add_option_int_units("-ll:gsize", deprecated_gsize, 'm');
 
-    std::string am_mode;
-    cp.add_option_string("-ucx:am_mode", am_mode);
-
     cp.add_option_string("-ucx:host_nics", config.host_nics);
 
-    cp.add_option_int("-ucx:bindhost", config.bind_hostmem);
 
     // maximum number of background work items to use for UCP polling
     cp.add_option_int("-ucx:pollers_max", config.pollers_max);
@@ -147,21 +143,6 @@ namespace Realm {
     }
 
     //// set internal config ////
-
-    // am-with-remote-address config
-    if(!am_mode.empty()) {
-      if(am_mode == "auto") {
-        config.am_wra_mode = Realm::UCP::AM_WITH_REMOTE_ADDR_MODE_AUTO;
-      } else if(am_mode == "put") {
-        config.am_wra_mode = Realm::UCP::AM_WITH_REMOTE_ADDR_MODE_PUT;
-      } else if(am_mode == "am") {
-        config.am_wra_mode = Realm::UCP::AM_WITH_REMOTE_ADDR_MODE_AM;
-      } else {
-        log_ucp.fatal() << "invalid mode for am with remote address " << am_mode
-                        << ". Valid choices: auto, put, am";
-        abort();
-      }
-    }
 
     if(!internal->init(config)) {
       log_ucp.fatal() << "internal init failed";

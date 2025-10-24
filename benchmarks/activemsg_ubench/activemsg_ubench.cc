@@ -283,6 +283,10 @@ void benchmark_task(const void *args, size_t arglen, const void *userdata, size_
     output_machine_config();
     printf("BENCHMARK_CONFIGURATION {alltoall:%d, payload_size:%zu, num_samples:%d, num_pingpong_per_sample:%d, num_bgwork:%d, multicast:%d}\n",
            TestConfig::all_to_all, TestConfig::payload_size, TestConfig::num_samples, TestConfig::num_pingpongs_per_sample, TestConfig::num_bgwork, TestConfig::use_multicast);
+    for (NodeID node_id = 0; node_id < Network::max_node_id; node_id++) {
+      printf("recommanded max payload size for ping AM node %d: %zu\n", node_id, Network::recommended_max_payload(node_id, true, sizeof(PingRequest)));
+      printf("recommanded max payload size for pong AM node %d: %zu\n", node_id, Network::recommended_max_payload(node_id, true, sizeof(PongRequest)));
+    }
   }
 
   Machine machine = Machine::get_machine();

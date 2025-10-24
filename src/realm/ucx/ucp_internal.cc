@@ -1312,17 +1312,6 @@ namespace Realm {
 #endif
       }
       log_ucp.info() << "ended ucp pollers";
-
-      for(UCPContext &context : ucp_contexts) {
-        auto &mem_hs = attach_mem_hs[&context];
-        while(!mem_hs.empty()) {
-          if(!context.mem_unmap(mem_hs.back())) {
-            log_ucp.info() << "failed to unmap segment mem_h " << mem_hs.back();
-          }
-          mem_hs.pop_back();
-        }
-      }
-      log_ucp.info() << "unmapped attached segments";
     }
 
     void UCPInternal::get_shared_peers(Realm::NodeSet &shared_peers)
@@ -2101,86 +2090,6 @@ namespace Realm {
         internal->pbuf_release(worker, payload_base);
       }
     }
-
-#ifdef FULL_REALM
-    ////////////////////////////////////////////////////////////////////////
-    //
-    // class UCPRemoteMemoryCommon
-    //
-
-    UCPRemoteMemoryCommon::UCPRemoteMemoryCommon(const ByteArray &_rdma_info_ba)
-      : rdma_info_size(_rdma_info_ba.size())
-    {
-      rdma_info = reinterpret_cast<UCPRDMAInfo *>(malloc(_rdma_info_ba.size()));
-      assert(rdma_info != nullptr);
-
-      memcpy(rdma_info, _rdma_info_ba.base(), _rdma_info_ba.size());
-    }
-
-    UCPRemoteMemoryCommon::~UCPRemoteMemoryCommon() { free(rdma_info); }
-
-    bool UCPRemoteMemoryCommon::get_remote_addr(off_t offset, RemoteAddress &remote_addr)
-    {
-      assert(rdma_info_size <= sizeof(remote_addr.raw_bytes));
-
-      memcpy(remote_addr.raw_bytes, rdma_info, rdma_info_size);
-
-      uint64_t addr = rdma_info->reg_base + offset;
-      memcpy(remote_addr.raw_bytes, &addr, sizeof(addr));
-
-      return true;
-    }
-
-    ////////////////////////////////////////////////////////////////////////
-    //
-    // class UCPRemoteMemory
-    //
-
-    UCPRemoteMemory::UCPRemoteMemory(RuntimeImpl *_runtime_impl, Memory _me, size_t _size,
-                                     Memory::Kind _kind, const ByteArray &_rdma_info_ba,
-                                     UCPInternal *_internal)
-      : UCPRemoteMemoryCommon(_rdma_info_ba)
-      , RemoteMemory(_runtime_impl, _me, _size, _kind, MKIND_RDMA)
-    {}
-
-    void UCPRemoteMemory::get_bytes(off_t offset, void *dst, size_t size)
-    {
-      // rkey unpack requires an ep. With multiple ucp contexts, the ep
-      // is not known until we have both send and recv buffer info in
-      // addition to node id. So, unpacking here.
-      // ucs_status_t status = UCP_FNPTR(ucp_ep_rkey_unpack)(ep, rdma_info->rkey, &rkey);
-      // assert(status == UCS_OK);
-      // UCP_FNPTR(ucp_rkey_destroy)(rkey);
-      assert(0);
-    }
-
-    void UCPRemoteMemory::put_bytes(off_t offset, const void *src, size_t size)
-    {
-      assert(0);
-    }
-
-    bool UCPRemoteMemory::get_remote_addr(off_t offset, RemoteAddress &remote_addr)
-    {
-      return UCPRemoteMemoryCommon::get_remote_addr(offset, remote_addr);
-    }
-
-    ////////////////////////////////////////////////////////////////////////
-    //
-    // class UCPIBMemory
-    //
-
-    UCPIBMemory::UCPIBMemory(RuntimeImpl *_runtime_impl, Memory _me, size_t _size,
-                             Memory::Kind _kind, const ByteArray &_rdma_info_ba,
-                             UCPInternal *_internal)
-      : UCPRemoteMemoryCommon(_rdma_info_ba)
-      , IBMemory(_runtime_impl, _me, _size, MKIND_REMOTE, _kind, 0, 0)
-    {}
-
-    bool UCPIBMemory::get_remote_addr(off_t offset, RemoteAddress &remote_addr)
-    {
-      return UCPRemoteMemoryCommon::get_remote_addr(offset, remote_addr);
-    }
-#endif
 
   }; // namespace UCP
 
