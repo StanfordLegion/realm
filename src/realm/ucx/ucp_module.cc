@@ -66,7 +66,7 @@ namespace Realm {
 
   void UCPModule::get_shared_peers(NodeSet &shared_peers)
   {
-    internal->get_shared_peers(shared_peers);
+    shared_peers.clear();
   }
 
   void UCPModule::parse_command_line(RuntimeImpl *runtime,
@@ -152,12 +152,12 @@ namespace Realm {
 
   void UCPModule::attach(RuntimeImpl *runtime, std::vector<NetworkSegment *> &segments)
   {
-    internal->attach(segments);
+    internal->attach();
   }
 
   void UCPModule::detach(RuntimeImpl *runtime, std::vector<NetworkSegment *> &segments)
   {
-    internal->detach(segments);
+    internal->detach();
     // Call finalize here because it uses other realm
     // objects (e.g., gpu) which may be destroyed before
     // the network module's destructor is called.
@@ -265,7 +265,7 @@ namespace Realm {
                                             size_t header_size)
   {
     (void)target;
-    return internal->recommended_max_payload(nullptr, nullptr, nullptr, with_congestion,
+    return internal->recommended_max_payload(with_congestion,
                                              header_size);
   }
 
@@ -273,7 +273,7 @@ namespace Realm {
                                             size_t header_size)
   {
     (void)targets;
-    return internal->recommended_max_payload(nullptr, nullptr, nullptr, with_congestion,
+    return internal->recommended_max_payload(with_congestion,
                                              header_size);
   }
 
@@ -282,8 +282,8 @@ namespace Realm {
                                             bool with_congestion, size_t header_size)
   {
     (void)target;
-    return internal->recommended_max_payload(nullptr, nullptr, &dest_payload_addr,
-                                             with_congestion, header_size);
+    return internal->recommended_max_payload(with_congestion,
+                                             header_size);
   }
 
   size_t UCPModule::recommended_max_payload(NodeID target, const void *data,
@@ -292,7 +292,7 @@ namespace Realm {
                                             size_t header_size)
   {
     (void)target;
-    return internal->recommended_max_payload(data, nullptr, nullptr, with_congestion,
+    return internal->recommended_max_payload(with_congestion,
                                              header_size);
   }
 
@@ -302,7 +302,7 @@ namespace Realm {
                                             size_t header_size)
   {
     (void)targets;
-    return internal->recommended_max_payload(data, nullptr, nullptr, with_congestion,
+    return internal->recommended_max_payload(with_congestion,
                                              header_size);
   }
 
@@ -314,10 +314,9 @@ namespace Realm {
                                             bool with_congestion, size_t header_size)
   {
     (void)target;
-    char *data =
-        static_cast<char *>(src_payload_addr.segment->base) + src_payload_addr.offset;
-    return internal->recommended_max_payload(
-        data, src_payload_addr.segment, &dest_payload_addr, with_congestion, header_size);
+    // char *data =
+    //     static_cast<char *>(src_payload_addr.segment->base) + src_payload_addr.offset;
+    return internal->recommended_max_payload( with_congestion, header_size);
   }
 
 }; // namespace Realm

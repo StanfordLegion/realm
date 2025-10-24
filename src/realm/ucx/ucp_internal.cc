@@ -691,8 +691,6 @@ namespace Realm {
 
       CHKERR_JUMP(!string_to_val_units(config.ib_seg_size, &ib_seg_size),
                   "failed to read ib_seg_size value", log_ucp, err);
-      CHKERR_JUMP(!string_to_val_units(config.zcopy_thresh_host, &zcopy_thresh_host),
-                  "failed to read zcopy_thresh_host value", log_ucp, err);
 
       // create the host context
       ucp_contexts.emplace_back(ep_nums_est);
@@ -815,11 +813,11 @@ namespace Realm {
         goto err;
       }
 
-      // Compute shared ranks
-      if(!compute_shared_ranks()) {
-        log_ucp.error() << "Failed to compute shared ranks \n";
-        goto err;
-      }
+      // // Compute shared ranks
+      // if(!compute_shared_ranks()) {
+      //   log_ucp.error() << "Failed to compute shared ranks \n";
+      //   goto err;
+      // }
 
       Network::my_node_id = ucc_comm->get_rank();
       Network::max_node_id = ucc_comm->get_world_size() - 1;
@@ -835,35 +833,35 @@ namespace Realm {
       return false;
     }
 
-    bool UCPInternal::compute_shared_ranks()
-    {
-      std::vector<int> rank_host_ids(ucc_comm->get_world_size());
-      shared_ranks.resize(ucc_comm->get_world_size());
+    // bool UCPInternal::compute_shared_ranks()
+    // {
+    //   std::vector<int> rank_host_ids(ucc_comm->get_world_size());
+    //   shared_ranks.resize(ucc_comm->get_world_size());
 
-      int host_id = gethostid();
+    //   int host_id = gethostid();
 
-      // allgather ranks
-      ucc_status_t st{UCC_OK};
+    //   // allgather ranks
+    //   ucc_status_t st{UCC_OK};
 
-      st = ucc_comm->UCC_Allgather(&host_id, 1, UCC_DT_INT32, rank_host_ids.data(),
-                                   ucc_comm->get_world_size(), UCC_DT_UINT32);
+    //   st = ucc_comm->UCC_Allgather(&host_id, 1, UCC_DT_INT32, rank_host_ids.data(),
+    //                                ucc_comm->get_world_size(), UCC_DT_UINT32);
 
-      if(UCC_OK != st) {
-        log_ucp.error() << "Failed to get the hostids of the rank\n";
-        return false;
-      }
+    //   if(UCC_OK != st) {
+    //     log_ucp.error() << "Failed to get the hostids of the rank\n";
+    //     return false;
+    //   }
 
-      // Populate shared ranks and total count.
-      for(int r = 0; r < static_cast<int>(rank_host_ids.size()); r++) {
-        if(rank_host_ids[r] == host_id) {
-          this->shared_ranks.push_back(r);
-        }
-      }
+    //   // Populate shared ranks and total count.
+    //   for(int r = 0; r < static_cast<int>(rank_host_ids.size()); r++) {
+    //     if(rank_host_ids[r] == host_id) {
+    //       this->shared_ranks.push_back(r);
+    //     }
+    //   }
 
-      this->num_shared_ranks = rank_host_ids.size();
+    //   this->num_shared_ranks = rank_host_ids.size();
 
-      return true;
-    }
+    //   return true;
+    // }
 
 #ifdef REALM_UCX_DYNAMIC_LOAD
     bool UCPInternal::resolve_ucp_api_fnptrs()
@@ -1267,7 +1265,7 @@ namespace Realm {
     }
 
 
-    void UCPInternal::attach(std::vector<NetworkSegment *> &segments)
+    void UCPInternal::attach(void)
     {
 
 #if defined(REALM_USE_CUDA)
@@ -1297,7 +1295,7 @@ namespace Realm {
       }
     }
 
-    void UCPInternal::detach(std::vector<NetworkSegment *> &segments)
+    void UCPInternal::detach(void)
     {
       // This relies on the fact that Realm calls detach only once
       // during shutdown. Thus, we deregister all ucp memory handles
@@ -1312,15 +1310,6 @@ namespace Realm {
 #endif
       }
       log_ucp.info() << "ended ucp pollers";
-    }
-
-    void UCPInternal::get_shared_peers(Realm::NodeSet &shared_peers)
-    {
-      for(int i = 0; i < this->num_shared_ranks; i++) {
-        if(this->shared_ranks[i] != ucc_comm->get_rank()) {
-          shared_peers.add(shared_ranks[i]);
-        }
-      }
     }
 
     void UCPInternal::barrier()
@@ -1459,10 +1448,7 @@ namespace Realm {
       return (outstanding_reqs.load() > config.outstanding_reqs_limit);
     }
 
-    size_t UCPInternal::recommended_max_payload(const void *data,
-                                                const NetworkSegment *src_segment,
-                                                const RemoteAddress *dest_payload_addr,
-                                                bool with_congestion, size_t header_size)
+    size_t UCPInternal::recommended_max_payload(bool with_congestion, size_t header_size)
     {
       size_t ret = 0;
 
@@ -1477,40 +1463,12 @@ namespace Realm {
        * 3. if the network module must provide the source buffer, then
        *    the payload must be smaller than pre-registered mpool objects.
        */
-      size_t bcopy_max = zcopy_thresh_host ? zcopy_thresh_host - 1 : 0;
       size_t eager_max = (ib_seg_size > header_size) ? ib_seg_size - header_size : 0;
-      if(data) {
-        // source buffer is given
-        if(src_segment) {
-          assert(dest_payload_addr);
-          // remote address is given. So, rndv will be enforced.
-          // source buffer is pre-registered or ODR. So, zcopy is ok.
-          ret = GET_ZCOPY_MAX;
-        } else {
-          // source buffer is neither pre-registered nor ODR. So, avoid zcopy.
-          // can only be host memory.
-          if(dest_payload_addr) {
-            // rndv is enforced
-            ret = bcopy_max;
-          } else {
-            // eager may be used
-            ret = std::min(eager_max, bcopy_max);
-          }
-        }
-      } else {
-        // source buffer is not given
-        if(dest_payload_addr) {
-          // rndv is enforced
-          ret = config.pbuf_max_size;
-        } else {
-          // eager may be used
-          ret = std::min(eager_max, config.pbuf_max_size);
-        }
-      }
+      ret = std::min(eager_max, config.pbuf_max_size);
 
       if(!ret) {
         log_ucp.warning() << "recommended max payload 0 without congestion"
-                          << " zcopy_thresh_host " << zcopy_thresh_host << " ib_seg_size "
+                          << " ib_seg_size "
                           << ib_seg_size << " header_size " << header_size
                           << " GET_ZCOPY_MAX " << GET_ZCOPY_MAX << " pbuf_max_size "
                           << config.pbuf_max_size;

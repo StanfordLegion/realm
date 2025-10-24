@@ -122,9 +122,8 @@ namespace Realm {
       bool bootstrap();
       bool init(const Config &config);
       void finalize();
-      void attach(std::vector<NetworkSegment *> &segments);
-      void detach(std::vector<NetworkSegment *> &segments);
-      void get_shared_peers(Realm::NodeSet &shared_peers);
+      void attach(void);
+      void detach(void);
       void barrier();
       void broadcast(NodeID root, const void *val_in, void *val_out, size_t bytes);
       void gather(NodeID root, const void *val_in, void *vals_out, size_t bytes);
@@ -134,9 +133,7 @@ namespace Realm {
                       std::vector<size_t> &lengths);
       size_t sample_messages_received_count();
       bool check_for_quiescence(size_t sampled_receive_count);
-      size_t recommended_max_payload(const void *data, const NetworkSegment *src_segment,
-                                     const RemoteAddress *dest_payload_addr,
-                                     bool with_congestion, size_t header_size);
+      size_t recommended_max_payload(bool with_congestion, size_t header_size);
 
 
       Request *request_get(UCPWorker *worker);
@@ -211,7 +208,6 @@ namespace Realm {
                                               size_t payload_size,
                                               const ucp_am_recv_param_t *param);
 
-      bool compute_shared_ranks();
       using WorkersMap = std::unordered_map<const UCPContext *, Workers>;
 
 #ifdef REALM_UCX_DYNAMIC_LOAD
@@ -222,13 +218,11 @@ namespace Realm {
       Config config;
       bootstrap_handle_t boot_handle;
       std::unique_ptr<ucc::UCCComm> ucc_comm{nullptr};
-      int num_shared_ranks{0};
-      std::vector<NodeID> shared_ranks;
       std::list<UCPContext> ucp_contexts;
       WorkersMap workers;
       std::list<UCPPoller> pollers;
       std::list<AmHandlersArgs> am_handlers_args;
-      atomic<uint64_t> total_msg_sent;
+      atomic<uint64_t> total_msg_sent; // TODO: can be removed if we do not need error checking
       atomic<uint64_t> total_msg_received;
       atomic<uint64_t> total_rcomp_sent;
       atomic<uint64_t> total_rcomp_received;
@@ -236,7 +230,6 @@ namespace Realm {
       MPool *rcba_mp;
       SpinLock rcba_mp_spinlock;
       size_t ib_seg_size;
-      size_t zcopy_thresh_host;
     };
 
     class UCPMessageImpl : public ActiveMessageImpl {
