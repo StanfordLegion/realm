@@ -86,8 +86,9 @@ namespace Realm {
   inline const std::vector<SparsityMapEntry<N, T>> &
   SparsityMapPublicImpl<N, T>::get_entries(void)
   {
-    if(!entries_valid.load_acquire())
-      REALM_ASSERT(0, "get_entries called on sparsity map without valid data");
+    if(!entries_valid.load_acquire()) {
+      abort();
+    }
     return entries;
   }
 
@@ -95,8 +96,9 @@ namespace Realm {
   inline const std::vector<Rect<N, T>> &
   SparsityMapPublicImpl<N, T>::get_approx_rects(void)
   {
-    if(!approx_valid.load_acquire())
-      REALM_ASSERT(0, "get_approx_rects called on sparsity map without valid data");
+    if(!approx_valid.load_acquire()) {
+      abort();
+    }
     return approx_rects;
   }
 
