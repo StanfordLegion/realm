@@ -359,7 +359,7 @@ namespace Realm {
     // each piece list that's used will turn into a program
     std::map<int, size_t> piece_list_starts;
     std::map<int, PieceSplitNode<T> *> piece_list_plans;
-    for(std::map<FieldID, FieldLayout>::const_iterator it = fields.begin();
+    for(InstanceLayoutGeneric::FieldMap::const_iterator it = fields.begin();
         it != fields.end(); ++it) {
       // did we already do this piece list?
       if(piece_list_starts.count(it->second.list_idx) > 0)
@@ -417,7 +417,7 @@ namespace Realm {
     }
 
     // fill in per field info
-    for(std::map<FieldID, FieldLayout>::const_iterator it = fields.begin();
+    for(InstanceLayoutGeneric::FieldMap::const_iterator it = fields.begin();
         it != fields.end(); ++it) {
       PieceLookup::CompiledProgram::PerField &pf = p.fields[it->first];
       pf.start_inst = reinterpret_cast<const PieceLookup::Instruction *>(
@@ -1523,7 +1523,7 @@ namespace Realm {
     assert(inst_layout != 0);
 
     // look up the right field
-    std::map<FieldID, InstanceLayoutGeneric::FieldLayout>::const_iterator it =
+    InstanceLayoutGeneric::FieldMap::const_iterator it =
         inst_layout->fields.find(field_offset);
     assert(it != inst_layout->fields.end());
 
