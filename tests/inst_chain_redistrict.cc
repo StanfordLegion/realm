@@ -31,42 +31,35 @@ Logger log_app("app");
 // Task IDs, some IDs are reserved so start at first available number
 enum
 {
-  TOP_LEVEL_TASK = Processor::TASK_ID_FIRST_AVAILABLE + 0,
-  WORKER_TASK,
+  MAIN_TASK = Processor::TASK_ID_FIRST_AVAILABLE + 0,
+  VERIFY_TASK,
   ALLOC_PROF_TASK,
   ALLOC_INST_TASK,
   INST_STATUS_PROF_TASK,
   MUSAGE_PROF_TASK,
 };
 
-int num_iterations = 1;
-bool needs_oom = false;
-bool needs_ext = false;
-
-struct WorkerArgs {
-  RegionInstance inst;
+struct VerifyArgs {
+  RegionInstance inst = RegionInstance::NO_INST;
   Rect<1> bounds;
-  std::vector<int> data;
+  int expected = 0xDEADBEEF;
 };
 
 struct ProfMusageResult {
-  int *bytes;
   UserEvent done;
+  int expected_usage;
 };
 
 struct ProfTimelResult {
-  int *called;
   UserEvent done;
 };
 
 struct ProfAllocResult {
-  int *success;
-  int *invocations;
   UserEvent done;
 };
 
-void musage_profiling_task(const void *args, size_t arglen, const void *userdata,
-                           size_t userlen, Processor p)
+static void musage_profiling_task(const void *args, size_t arglen, const void *userdata,
+                                  size_t userlen, Processor p)
 {
   ProfilingResponse resp(args, arglen);
   assert(resp.user_data_size() == sizeof(ProfMusageResult));
@@ -78,15 +71,14 @@ void musage_profiling_task(const void *args, size_t arglen, const void *userdata
   // TODO(apryakhin@): Verify timestamps
   assert(memory_usage.bytes != 0);
   assert(memory_usage.instance != RegionInstance::NO_INST);
-  *(result->bytes) = memory_usage.bytes;
-
-  log_app.error("musage prof task");
+  log_app.error("musage - Expected: %d, Used: %zd", result->expected_usage, memory_usage.bytes);
+  assert(result->expected_usage == memory_usage.bytes);
 
   result->done.trigger();
 }
 
-void inst_profiling_task(const void *args, size_t arglen, const void *userdata,
-                         size_t userlen, Processor p)
+static void inst_profiling_task(const void *args, size_t arglen, const void *userdata,
+                                size_t userlen, Processor p)
 {
   ProfilingResponse resp(args, arglen);
   assert(resp.user_data_size() == sizeof(ProfTimelResult));
@@ -97,409 +89,225 @@ void inst_profiling_task(const void *args, size_t arglen, const void *userdata,
   // TODO(apryakhin@): Verify timestamps
   assert(inst_time.create_time != 0);
   assert(inst_time.ready_time != 0);
-  *(result->called) = 1;
+  assert(inst_time.instance != 0);  // TODO: add instance correlation
 
-  log_app.error("inst prof task");
+  log_app.error() << "timel " << inst_time.instance;
 
   result->done.trigger();
 }
 
-void inst_status_profiling_task(const void *args, size_t arglen, const void *userdata,
-                                size_t userlen, Processor p)
+static void inst_status_profiling_task(const void *args, size_t arglen,
+                                       const void *userdata, size_t userlen, Processor p)
 {
   ProfilingResponse resp(args, arglen);
   assert(resp.user_data_size() == sizeof(ProfAllocResult));
   const ProfAllocResult *result = static_cast<const ProfAllocResult *>(resp.user_data());
   ProfilingMeasurements::InstanceStatus inst_status;
   assert((resp.get_measurement(inst_status)));
-  *(result->success) = inst_status.error_code;
-
-  log_app.error("inst status task");
+  assert(inst_status.error_code == 0); // FAILURE CASE
+  assert(inst_status.inst != 0); // TODO(cperry): add instance correlation
 
   result->done.trigger();
 }
 
-void alloc_profiling_task(const void *args, size_t arglen, const void *userdata,
-                          size_t userlen, Processor p)
+static void alloc_profiling_task(const void *args, size_t arglen, const void *userdata,
+                                 size_t userlen, Processor p)
 {
   ProfilingResponse resp(args, arglen);
   assert(resp.user_data_size() == sizeof(ProfAllocResult));
   const ProfAllocResult *result = static_cast<const ProfAllocResult *>(resp.user_data());
   ProfilingMeasurements::InstanceAllocResult inst_alloc;
   assert((resp.get_measurement(inst_alloc)));
-  *(result->success) = inst_alloc.success;
-  *(result->invocations) = *(result->invocations) + 1;
-
-  log_app.error("alloc profiling task");
+  assert(inst_alloc.success); // FAILURE CASE
 
   result->done.trigger();
+}
+
+static void verify_task(const void *args, size_t arglen, const void *userdata,
+                        size_t userlen, Processor p)
+{
+  const VerifyArgs &vargs = *static_cast<const VerifyArgs *>(args);
+  std::vector<int> values(vargs.bounds.volume(), 0);
+  vargs.inst.read_untyped(0, values.data(), sizeof(int) * values.size());
+  for(size_t i = 0; i < values.size(); i++) {
+    assert(values[i] == vargs.expected && "Unexpected value");
+  }
+  log_app.error() << "Verified inst " << vargs.inst;
 }
 
 template <int N>
 InstanceLayoutGeneric *create_layout(Rect<N> bounds)
 {
-  std::map<FieldID, size_t> fields;
-  fields[0] = sizeof(int);
-  InstanceLayoutConstraints ilc(fields, 1);
-  int dim_order[N];
-  for(int i = 0; i < N; i++)
-    dim_order[i] = 0;
+  InstanceLayoutConstraints ilc({sizeof(int)}, 1);
+  int dim_order[N] = {0};
   InstanceLayoutGeneric *ilg =
       InstanceLayoutGeneric::choose_instance_layout<N, int>(bounds, ilc, dim_order);
   return ilg;
 }
 
-void top_level_task(const void *args, size_t arglen, const void *userdata, size_t userlen,
-                    Processor p)
+static Event setup_prs(ProfilingRequestSet &prs, Processor tgt, int expected_sz)
 {
-  std::map<NodeID, Memory> memories;
-  Machine::MemoryQuery mq(Machine::get_machine());
-  mq.only_kind(Memory::GPU_DYNAMIC_MEM);
-  for(Machine::MemoryQuery::iterator it = mq.begin(); it != mq.end(); ++it) {
-    Memory memory = *it;
-    NodeID owner = ID(*it).memory_owner_node();
-    if(!ID(memory).is_ib_memory() && memories.count(owner) == 0) {
-      memories[owner] = memory;
-    }
+  UserEvent musage_e = UserEvent::create_user_event();
+  UserEvent inst_prof_e = UserEvent::create_user_event();
+  UserEvent inst_status_prof_e = UserEvent::create_user_event();
+  UserEvent alloc_prof_e = UserEvent::create_user_event();
+  {
+    ProfMusageResult result;
+    result.done = musage_e;
+    result.expected_usage = expected_sz;
+    prs.add_request(tgt, MUSAGE_PROF_TASK, &result, sizeof(result))
+        .add_measurement<ProfilingMeasurements::InstanceMemoryUsage>();
   }
-
-  std::vector<Processor> reader_cpus, cpus;
-  Machine machine = Machine::get_machine();
-  for(size_t i = 0; i < memories.size(); i++) {
-    Machine::ProcessorQuery pq = Machine::ProcessorQuery(machine)
-                                     .only_kind(Processor::LOC_PROC)
-                                     .same_address_space_as(memories[i]);
-    for(Machine::ProcessorQuery::iterator it = pq.begin(); it; it++) {
-      reader_cpus.push_back(*it);
-      break;
-    }
+  {
+    ProfTimelResult result;
+    result.done = inst_prof_e;
+    prs.add_request(tgt, ALLOC_INST_TASK, &result, sizeof(result))
+        .add_measurement<ProfilingMeasurements::InstanceTimeline>();
   }
-
-  assert(!reader_cpus.empty());
-  assert(reader_cpus.size() == memories.size());
-
-  Rect<1> bounds;
-  bounds.lo[0] = 0;
-  bounds.hi[0] = 512 * 512 - 1;
-
-  std::vector<size_t> field_sizes(1, sizeof(int));
-
-  RegionInstance inst1;
-  RegionInstance::create_instance(inst1, memories[0], bounds, field_sizes, 0 /*SOA*/,
-                                  ProfilingRequestSet())
-      .wait();
-  assert(inst1.exists());
-
-  Event e1 = inst1.fetch_metadata(reader_cpus[0]);
-
-  UserEvent destroy_event = UserEvent::create_user_event();
-  inst1.destroy(destroy_event);
-
-  std::vector<Event> user_events;
-
-  ProfilingRequestSet prs;
-
-  UserEvent inst_status_event = UserEvent::create_user_event();
-  int inst_status_result = 0;
   {
     ProfAllocResult result;
-    result.done = inst_status_event;
-    result.success = &inst_status_result;
-    prs.add_request(p, INST_STATUS_PROF_TASK, &result, sizeof(ProfAllocResult))
+    result.done = inst_status_prof_e;
+    prs.add_request(tgt, INST_STATUS_PROF_TASK, &result, sizeof(result))
         .add_measurement<ProfilingMeasurements::InstanceStatus>();
   }
-
-  user_events.push_back(inst_status_event);
-
-  UserEvent alloc_event = UserEvent::create_user_event();
-  int alloc_result = 0;
-  int alloc_invocatios = 0;
   {
     ProfAllocResult result;
-    result.done = alloc_event;
-    result.success = &alloc_result;
-    result.invocations = &alloc_invocatios;
-    prs.add_request(p, ALLOC_PROF_TASK, &result, sizeof(ProfAllocResult))
+    result.done = alloc_prof_e;
+    prs.add_request(tgt, ALLOC_PROF_TASK, &result, sizeof(result))
         .add_measurement<ProfilingMeasurements::InstanceAllocResult>();
   }
 
-  user_events.push_back(alloc_event);
-
-  UserEvent timel_event = UserEvent::create_user_event();
-  int timel_result = 0;
-  {
-    ProfTimelResult result;
-    result.done = timel_event;
-    result.called = &timel_result;
-    prs.add_request(p, ALLOC_INST_TASK, &result, sizeof(ProfTimelResult))
-        .add_measurement<ProfilingMeasurements::InstanceTimeline>();
-  }
-
-  user_events.push_back(timel_event);
-
-  UserEvent musage_event = UserEvent::create_user_event();
-  int musage_result = 0;
-  {
-    ProfMusageResult result;
-    result.done = musage_event;
-    result.bytes = &musage_result;
-    prs.add_request(p, MUSAGE_PROF_TASK, &result, sizeof(ProfMusageResult))
-        .add_measurement<ProfilingMeasurements::InstanceMemoryUsage>();
-  }
-
-  user_events.push_back(musage_event);
-
-  RegionInstance inst2;
-  if(needs_ext) {
-    RegionInstance::create_instance(inst2, memories[0], bounds, field_sizes, 0,
-                                    ProfilingRequestSet())
-        .wait();
-    ExternalInstanceResource *extres =
-        inst2.generate_resource_info(bounds, 0, true /*read_only*/);
-    assert(extres);
-    RegionInstance inst_ext;
-    RegionInstance::create_external_instance(inst_ext, extres->suggested_memory(),
-                                             *inst2.get_layout(), *extres, prs)
-        .wait();
-    inst2 = inst_ext;
-  } else {
-    RegionInstance::create_instance(inst2, memories[0], bounds, field_sizes, 0, prs)
-        .wait();
-  }
-
-  std::vector<int> data;
-  {
-    int index = 0;
-    AffineAccessor<int, 1, int> acc(inst2, 0);
-    IndexSpaceIterator<1, int> it(bounds);
-    while(it.valid) {
-      PointInRectIterator<1, int> pit(it.rect);
-      while(pit.valid) {
-        data.push_back(index);
-        inst2.write((acc.ptr(pit.p) - acc.ptr(0)) * sizeof(int), index++);
-        pit.step();
-      }
-      it.step();
-    }
-  }
-
-  WorkerArgs worker_args;
-  worker_args.inst = inst2;
-  worker_args.bounds = bounds;
-  worker_args.data = data;
-  Event e2 = reader_cpus[0].spawn(WORKER_TASK, &worker_args, sizeof(WorkerArgs),
-                                  ProfilingRequestSet(), e1);
-  e2.wait();
-
-  log_app.error("Waiting for user events");
-  Event::merge_events(user_events).wait();
-  log_app.error("Finished waiting for user events");
-  assert(alloc_result == true);
-  assert(timel_result == true);
-  assert(static_cast<size_t>(musage_result) == bounds.volume() * sizeof(int));
-  assert(inst_status_result == 0);
-
-  destroy_event.trigger();
-  //usleep(100000);
+  return Event::merge_events(musage_e, inst_prof_e, inst_status_prof_e, alloc_prof_e);
 }
 
-void worker_task(const void *args, size_t arglen, const void *userdata, size_t userlen,
-                 Processor p)
+static void run_test(Processor proc, RegionInstance inst, Rect<1> bounds, int min_chunk_sz, int test_value, bool external_inst = false)
 {
-  const WorkerArgs *wargs = static_cast<const WorkerArgs *>(args);
-  Rect<1> bounds = wargs->bounds;
-  RegionInstance inst = wargs->inst;
+  UserEvent trigger = UserEvent::create_user_event();
+  Event wait_on = trigger;
+  Event prof_event = Event::NO_EVENT;
+  std::vector<RegionInstance> instances(1, inst);
+  std::vector<Event> prof_events;
 
-  Event timel_event;
-  Event alloc_event;
-  Event musage_event;
+  Processor verify_proc = Machine::ProcessorQuery(Machine::get_machine())
+                              .same_address_space_as(inst.get_location())
+                              .first();
 
-  const int num_split_inst = 2;
+  for(size_t chunk_sz = bounds.hi >> 1; chunk_sz > min_chunk_sz;
+      chunk_sz >>= 1) {
 
-  size_t profile_result_index = 0;
-  int alloc_invocations = 0;
-  std::vector<int> alloc_results(num_iterations * num_split_inst);
-  std::vector<int> timel_results(num_iterations * num_split_inst);
-  std::vector<int> musage_results(num_iterations * num_split_inst);
-  std::vector<int> exp_usage;
+    std::vector<RegionInstance> split_instances(instances.size() * 2, RegionInstance::NO_INST);
+    Event next_wait_on = wait_on;
+    for(size_t i = 0; i < instances.size(); i++) {
+      // Split each instance in half.
+      const int start = 2 * i * chunk_sz;
+      const int end = 2 * (i + 1) * chunk_sz;
+      const InstanceLayoutGeneric *layouts[] = {
+          create_layout(Rect<1>(start, start + chunk_sz - 1)),
+          create_layout(Rect<1>(start + chunk_sz, end - 1))};
 
-  for(int i = 0; i < num_iterations; i++) {
-    Rect<1> next_bounds;
-    next_bounds.lo[0] = 0;
-    next_bounds.hi[0] = needs_oom ? bounds.hi[0] : bounds.hi[0] / num_split_inst;
+      Realm::ProfilingRequestSet prs[2];
+      prof_events.push_back(setup_prs(prs[0], proc, chunk_sz * sizeof(int)));
+      prof_events.push_back(setup_prs(prs[1], proc, chunk_sz * sizeof(int)));
 
-    log_app.info() << "redistrict bounds:" << bounds << " next_bounds:" << next_bounds
-                   << " inst:" << inst;
+      // Wait to redistrict until the parent instance's operations are complete
+      Event redistrict_e = instances[i].redistrict(split_instances.data() + 2 * i, layouts, 2, prs,
+                                        wait_on);
+      // Clean up the layouts
+      delete layouts[0];
+      delete layouts[1];
 
-    std::vector<RegionInstance> insts(num_split_inst);
-    const InstanceLayoutGeneric *ilg_a = create_layout(next_bounds);
-    const InstanceLayoutGeneric *ilg_b = create_layout(next_bounds);
-    std::vector<const InstanceLayoutGeneric *> layouts{ilg_a, ilg_b};
-
-    std::vector<Event> timel_events;
-    std::vector<Event> alloc_events;
-    std::vector<Event> musage_events;
-
-    std::vector<ProfilingRequestSet> prs(num_split_inst);
-    for(int j = 0; j < num_split_inst; j++) {
-      // TODO: test profiling requests
-      if(!needs_ext) {
-        {
-          UserEvent event = UserEvent::create_user_event();
-          ProfTimelResult result;
-          result.done = event;
-          result.called = &timel_results[profile_result_index];
-          prs[j]
-              .add_request(p, ALLOC_INST_TASK, &result, sizeof(ProfTimelResult))
-              .add_measurement<ProfilingMeasurements::InstanceTimeline>();
-          timel_events.push_back(event);
-        }
-
-        {
-          UserEvent event = UserEvent::create_user_event();
-          alloc_events.push_back(event);
-          ProfAllocResult result;
-          result.done = event;
-          result.success = &alloc_results[profile_result_index];
-          result.invocations = &alloc_invocations;
-          prs[j]
-              .add_request(p, ALLOC_PROF_TASK, &result, sizeof(ProfAllocResult))
-              .add_measurement<ProfilingMeasurements::InstanceAllocResult>();
-        }
-
-        {
-          UserEvent event = UserEvent::create_user_event();
-          musage_events.push_back(event);
-          ProfMusageResult result;
-          result.done = event;
-          result.bytes = &musage_results[profile_result_index];
-          prs[j]
-              .add_request(p, MUSAGE_PROF_TASK, &result, sizeof(ProfMusageResult))
-              .add_measurement<ProfilingMeasurements::InstanceMemoryUsage>();
-          exp_usage.push_back(next_bounds.volume());
-        }
+      // Verify the data hasn't changed in the new instances
+      Event fin_verif[2];
+      for(size_t j = 0; j < 2; j++) {
+        VerifyArgs vargs{split_instances[2 * i + j],
+                         Rect<1>(chunk_sz * j, chunk_sz * (j + 1) - 1), test_value};
+        log_app.error() << "Testing inst " << split_instances[2 * i + j];
+        fin_verif[j] = verify_proc.spawn(VERIFY_TASK, &vargs, sizeof(vargs), redistrict_e);
       }
-      profile_result_index++;
+      // Accumulate all the verifications for these split instances to wait on next
+      next_wait_on = Event::merge_events(next_wait_on, fin_verif[0], fin_verif[1]);
     }
-
-    Event e = inst.redistrict(insts.data(), layouts.data(), num_split_inst, prs.data());
-
-    bool poisoned = false;
-    log_app.error("Waiting for redistrict");
-    e.wait_faultaware(poisoned);
-    log_app.error("Done waiting for redistrict");
-    if(needs_oom) {
-      assert(poisoned);
-      return;
-    }
-
-    assert(poisoned == false);
-
-    timel_event = Event::merge_events(timel_events);
-    alloc_event = Event::merge_events(alloc_events);
-    musage_event = Event::merge_events(musage_events);
-
-    delete ilg_a;
-    delete ilg_b;
-
-    /*std::vector<CopySrcDstField> srcs(1), dsts(1);
-    srcs[0].set_field(insts[0], 0, sizeof(int));
-    dsts[0].set_field(insts[1], 0, sizeof(int));
-    e = IndexSpace<1>(next_bounds).copy(srcs, dsts, ProfilingRequestSet(), e);
-    e.wait();*/
-
-    size_t offset = next_bounds.volume();
-    for(size_t i = 1; i < insts.size(); i++) {
-      AffineAccessor<int, 1, int> acc(insts[i], 0);
-      IndexSpaceIterator<1, int> it(next_bounds);
-      while(it.valid) {
-        PointInRectIterator<1, int> pit(it.rect);
-        while(pit.valid) {
-          int val = insts[i].read<int>((acc.ptr(pit.p) - acc.ptr(0)) * sizeof(int));
-          assert(val == wargs->data[offset++]);
-          pit.step();
-        }
-        it.step();
-      }
-    }
-
-    bounds = next_bounds;
-    inst = insts[0];
-    if(!needs_ext) {
-      insts[1].destroy();
-    }
+    wait_on = next_wait_on;
+    // Update the set of instances to split for the next iteration
+    instances.swap(split_instances);
+  }
+  for (RegionInstance inst : instances) {
+    inst.destroy(wait_on);
   }
 
-  if(!needs_ext) {
-    inst.destroy();
-    alloc_event.wait();
-    musage_event.wait();
-    timel_event.wait();
+  trigger.trigger();
 
-    for(size_t i = 0; i < alloc_results.size(); i++) {
-      assert(alloc_results[i]);
-    }
+  bool poisoned = false;
+  wait_on.wait_faultaware(poisoned);
+  assert(!poisoned);
+  Event::merge_events(prof_events).wait_faultaware(poisoned);
+  assert(!poisoned);
+}
 
-    for(size_t i = 0; i < timel_results.size(); i++) {
-      assert(timel_results[i]);
-    }
+static void main_task(const void *args, size_t arglen, const void *userdata,
+                      size_t userlen, Processor p)
+{
+  Machine::MemoryQuery mq(Machine::get_machine());
+  const size_t num = 1048576;
+  mq.has_capacity(num * sizeof(int));
+  for (Memory m : mq) {
+    RegionInstance inst;
+    Rect<1> bounds(0, num);
+    std::vector<int> test_value(bounds.volume(), 0xDEADBEEF + m.id);
+    std::vector<size_t> fields{sizeof(int)};
+    ProfilingRequestSet prs;
+    Event prof_e = setup_prs(prs, p, bounds.volume() * sizeof(int));
 
-    for(size_t i = 0; i < musage_results.size(); i++) {
-      assert(static_cast<size_t>(musage_results[i]) == exp_usage[i] * sizeof(int));
-    }
-    assert(static_cast<size_t>(alloc_invocations) == alloc_results.size());
+    RegionInstance::create_instance(inst, m, bounds, fields, 1, prs).wait();
+    inst.write_untyped(0, test_value.data(), sizeof(int) * test_value.size());
+    log_app.error() << "==== Testing memory: " << m << " ====";
+    run_test(p, inst, bounds, 1024, 0xDEADBEEF + m.id);
+    prof_e.wait();
+    log_app.error("============");
   }
 }
 
 int main(int argc, char **argv)
 {
   Runtime rt;
+  CommandLineParser cp;
 
   rt.init(&argc, &argv);
 
-  for(int i = 1; i < argc; i++) {
-    if(!strcmp(argv[i], "-i")) {
-      num_iterations = atoi(argv[++i]);
-      continue;
-    }
-  }
-
-  CommandLineParser cp;
-  cp.add_option_int("-i", num_iterations);
-  cp.add_option_int("-needs_oom", needs_oom);
-  cp.add_option_int("-needs_ext", needs_ext);
+  // cp.add_option_int("-i", num_iterations);
+  // cp.add_option_int("-needs_oom", needs_oom);
+  // cp.add_option_int("-needs_ext", needs_ext);
   bool ok = cp.parse_command_line(argc, const_cast<const char **>(argv));
   assert(ok);
 
-  rt.register_task(TOP_LEVEL_TASK, top_level_task);
-  rt.register_task(WORKER_TASK, worker_task);
+  rt.register_task(MAIN_TASK, main_task);
+  rt.register_task(VERIFY_TASK, verify_task);
 
   Processor::register_task_by_kind(Processor::LOC_PROC, false /*!global*/,
                                    ALLOC_PROF_TASK, CodeDescriptor(alloc_profiling_task),
-                                   ProfilingRequestSet(), 0, 0)
+                                   ProfilingRequestSet())
       .wait();
 
   Processor::register_task_by_kind(Processor::LOC_PROC, false /*!global*/,
                                    ALLOC_INST_TASK, CodeDescriptor(inst_profiling_task),
-                                   ProfilingRequestSet(), 0, 0)
+                                   ProfilingRequestSet())
       .wait();
 
   Processor::register_task_by_kind(
       Processor::LOC_PROC, false /*!global*/, MUSAGE_PROF_TASK,
-      CodeDescriptor(musage_profiling_task), ProfilingRequestSet(), 0, 0)
+      CodeDescriptor(musage_profiling_task), ProfilingRequestSet())
       .wait();
 
   Processor::register_task_by_kind(
       Processor::LOC_PROC, false /*!global*/, INST_STATUS_PROF_TASK,
-      CodeDescriptor(inst_status_profiling_task), ProfilingRequestSet(), 0, 0)
+      CodeDescriptor(inst_status_profiling_task), ProfilingRequestSet())
       .wait();
 
   Processor p = Machine::ProcessorQuery(Machine::get_machine())
                     .only_kind(Processor::LOC_PROC)
                     .first();
   assert(p.exists());
-  Event e = rt.collective_spawn(p, TOP_LEVEL_TASK, 0, 0);
+  Event e = rt.collective_spawn(p, MAIN_TASK, 0, 0);
   rt.shutdown(e);
-  rt.wait_for_shutdown();
-  return 0;
+  return rt.wait_for_shutdown();
 }

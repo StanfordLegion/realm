@@ -1665,9 +1665,16 @@ namespace Realm {
     GPUDynamicFBMemory::GPUDynamicFBMemory(RuntimeImpl *_runtime_impl, Memory _me,
                                            GPU *_gpu, CUmemoryPool _pool,
                                            size_t _max_size)
+      : GPUDynamicFBMemory(_runtime_impl, _me, _gpu, _pool, _max_size, cuda_module_singleton->config->cfg_enable_dynasync)
+    {}
+
+    GPUDynamicFBMemory::GPUDynamicFBMemory(RuntimeImpl *_runtime_impl, Memory _me,
+                                           GPU *_gpu, CUmemoryPool _pool,
+                                           size_t _max_size, bool _enable_async)
       : MemoryImpl(_runtime_impl, _me, _max_size, MKIND_GPUFB, Memory::GPU_DYNAMIC_MEM, 0)
       , gpu(_gpu)
       , pool(_pool)
+      , enable_async(_enable_async)
     {
       cuuint64_t bytes = size;
       free_bytes = size;
@@ -1705,7 +1712,11 @@ namespace Realm {
     GPUDynamicFBMemory::queue_allocation(RegionInstanceImpl *inst,
                                          size_t size_needed /* = 0 */)
     {
+      if (!enable_async) {
+        return ALLOC_INSTANT_FAILURE;
+      }
       log_gpu.debug("Queueing allocation request: %p", inst);
+      inst_to_info[inst] = std::make_shared<InstInfo>();
       inst_to_info[inst]->alloc_bytes_needed = size_needed;
       pending_allocs.push_back(inst);
       return ALLOC_DEFERRED;
@@ -1768,7 +1779,6 @@ namespace Realm {
           // Need more bytes than are currently available, take all the free bytes and
           // defer the allocation until enough pending bytes are available
           free_bytes = 0;
-          inst_to_info[inst] = std::make_shared<InstInfo>();
           result = queue_allocation(inst, bytes - free_bytes);
         } else {
           // We have enough space right now to allocate from
@@ -1798,7 +1808,6 @@ namespace Realm {
           // request, but we have some pending bytes, so lets try again later when those
           // free bytes are available.  We pass zero for bytes here because we've already
           // taken all we need from free_bytes
-          inst_to_info[inst] = std::make_shared<InstInfo>();
           result = queue_allocation(inst);
         } else {
           REPORT_CU_ERROR(Logger::LEVEL_INFO, "cuMemAllocFromPoolAsync", res);
@@ -2784,6 +2793,7 @@ namespace Realm {
           .add_option_int_units("-cuda:hostreg", cfg_hostreg_limit, 'm')
           .add_option_int("-cuda:pageable_access", cfg_pageable_access)
           .add_option_int("-cuda:cupti", cfg_enable_cupti)
+          .add_option_int("-cuda:dynasync", cfg_enable_dynasync)
           .add_option_int("-cuda:ipc", cfg_use_cuda_ipc);
 #ifdef REALM_USE_CUDART_HIJACK
       cp.add_option_int("-cuda:nongpusync", Cuda::cudart_hijack_nongpu_sync);

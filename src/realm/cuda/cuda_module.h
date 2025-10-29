@@ -145,6 +145,7 @@ namespace Realm {
       bool cfg_use_cuda_ipc = true;
       int cfg_pageable_access = 0;
       bool cfg_enable_cupti = false;
+      bool cfg_enable_dynasync = false;
 
       // resources
       bool resource_discovered = false;
