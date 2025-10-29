@@ -619,7 +619,9 @@ namespace Realm {
 
     public:
       GPUDynamicFBMemory(RuntimeImpl *_runtime_impl, Memory _me, GPU *_gpu,
-                         CUmemoryPool pool, size_t _max_size);
+                      CUmemoryPool pool, size_t _max_size);
+      GPUDynamicFBMemory(RuntimeImpl *_runtime_impl, Memory _me, GPU *_gpu,
+                         CUmemoryPool pool, size_t _max_size, bool enable_async);
 
       virtual ~GPUDynamicFBMemory(void);
       void cleanup(void);
@@ -677,6 +679,7 @@ namespace Realm {
       size_t free_bytes = 0;
       size_t pending_free_bytes = 0;
       NetworkSegment local_segment;
+      bool enable_async = false;
     };
 
     class GPUZCMemory : public LocalManagedMemory {
