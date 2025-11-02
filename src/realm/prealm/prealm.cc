@@ -30,7 +30,7 @@ static constexpr unsigned LEGION_PROF_VERSION =
 #if 0
 #include "legion/legion_profiling_version.h"
 #else
-    1008 // the current Legion Prof version we work with
+    1010 // the current Legion Prof version we work with
 #endif
     ;
 // pr_fopen expects filename to be a std::string
@@ -536,14 +536,18 @@ namespace PRealm {
   }
 
   void ThreadProfiler::record_event_wait(Event wait_on, Backtrace &bt, long long start,
-                                         long long stop)
+                                         long long stop, const std::string_view& prov)
   {
     Profiler &profiler = Profiler::get_profiler();
     if(!profiler.enabled)
       return;
     unsigned long long backtrace_id = profiler.find_backtrace_id(bt);
+    unsigned long long provenance_id = 0;
+    if (!prov.empty()) {
+      prov = profiler.find_provenance_id(prov);
+    }
     event_wait_infos.emplace_back(
-        EventWaitInfo{local_proc.id, get_fevent(), wait_on, backtrace_id});
+        EventWaitInfo{local_proc.id, get_fevent(), wait_on, backtrace_id, provenance_id});
     if(wait_on.is_barrier())
       record_barrier_use(wait_on);
     profiler.update_footprint(sizeof(EventWaitInfo), this);
@@ -1574,7 +1578,9 @@ namespace PRealm {
     typedef ::realm_id_t UniqueID;
     typedef long long timestamp_t;
     std::stringstream ss;
-    ss << "FileType: BinaryLegionProf v: 1.0" << std::endl;
+    ss << "FileType: BinaryLegionProf v: " LEGION_PROF_VERSION << std::endl;
+    // Hard code a Legion version that we work with for now
+    ss << "d06e529a4b7e945f80a8ec563588e1753d82d056" << std::endl;
 
     const std::string delim = ", ";
 
@@ -1591,7 +1597,7 @@ namespace PRealm {
     ss << "MachineDesc {"
        << "id:" << MACHINE_DESC_ID << delim << "node_id:unsigned:" << sizeof(unsigned)
        << delim << "num_nodes:unsigned:" << sizeof(unsigned) << delim
-       << "version:unsigned:" << sizeof(unsigned) << delim << "hostname:string:"
+       << "hostname:string:"
        << "-1" << delim << "host_id:unsigned long long:" << sizeof(unsigned long long)
        << delim << "process_id:unsigned:" << sizeof(unsigned) << "}" << std::endl;
 
@@ -1777,6 +1783,7 @@ namespace PRealm {
        << "id:" << EVENT_WAIT_INFO_ID << delim << "proc_id:ProcID:" << sizeof(ProcID)
        << delim << "fevent:unsigned long long:" << sizeof(Event) << delim
        << "wait_event:unsigned long long:" << sizeof(Event) << delim
+       << "provenance:unsigned long long:" << sizeof(unsigned long long) << delim
        << "backtrace_id:unsigned long long:" << sizeof(unsigned long long) << "}"
        << std::endl;
 
@@ -1894,8 +1901,6 @@ namespace PRealm {
     unsigned node_id = local.address_space();
     pr_fwrite(f, (char *)&(node_id), sizeof(node_id));
     pr_fwrite(f, (char *)&(total_address_spaces), sizeof(total_address_spaces));
-    unsigned version = LEGION_PROF_VERSION;
-    pr_fwrite(f, (char *)&(version), sizeof(version));
     Machine::ProcessInfo process_info;
     machine.get_process_info(local, &process_info);
     pr_fwrite(f, process_info.hostname, strlen(process_info.hostname) + 1);
@@ -2011,6 +2016,7 @@ namespace PRealm {
     pr_fwrite(f, (char *)&info.proc_id, sizeof(info.proc_id));
     pr_fwrite(f, (char *)&info.fevent.id, sizeof(info.fevent.id));
     pr_fwrite(f, (char *)&info.event.id, sizeof(info.event.id));
+    pr_fwrite(f, (char *)&info.provenance_id, sizeof(info.provenance_id));
     pr_fwrite(f, (char *)&info.backtrace_id, sizeof(info.backtrace_id));
   }
 
@@ -2482,7 +2488,7 @@ namespace PRealm {
       // Record the processor descriptor
       ThreadProfiler::ProcDesc proc_desc;
       proc_desc.proc_id = implicit_proc.id;
-      proc_desc.kind = Processor::IO_PROC;
+      proc_desc.kind = Processor::NO_KIND;
       serialize(proc_desc);
       recorded_processors.push_back(implicit_proc);
       std::sort(recorded_processors.begin(), recorded_processors.end());
