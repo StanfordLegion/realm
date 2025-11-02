@@ -536,14 +536,14 @@ namespace PRealm {
   }
 
   void ThreadProfiler::record_event_wait(Event wait_on, Backtrace &bt, long long start,
-                                         long long stop, const std::string_view& prov)
+                                         long long stop, const std::string_view &prov)
   {
     Profiler &profiler = Profiler::get_profiler();
     if(!profiler.enabled)
       return;
     unsigned long long backtrace_id = profiler.find_backtrace_id(bt);
     unsigned long long provenance_id = 0;
-    if (!prov.empty()) {
+    if(!prov.empty()) {
       prov = profiler.find_provenance_id(prov);
     }
     event_wait_infos.emplace_back(
