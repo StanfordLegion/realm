@@ -489,7 +489,7 @@ namespace Realm {
       p.remote_bytes_total.store(size_t(-1));
       p.ib_offset = ii.ib_offset;
       p.ib_size = ii.ib_size;
-      p.addrcursor.set_addrlist(&p.addrlist);
+      p.span_iter = SpanIterator(&p.span_list);
       switch(ii.port_type) {
       case XferDesPortInfo::GATHER_CONTROL_PORT:
         gather_control_port = i;
@@ -555,7 +555,7 @@ namespace Realm {
       p.remote_bytes_total.store(size_t(-1));
       p.ib_offset = oi.ib_offset;
       p.ib_size = oi.ib_size;
-      p.addrcursor.set_addrlist(&p.addrlist);
+      p.span_iter = SpanIterator(&p.span_list);
 
       // if we're writing into an IB, the first 'ib_size' byte
       //  locations can be freely written
@@ -803,10 +803,10 @@ namespace Realm {
       XferPort *in_port = &input_ports[input_control.current_io_port];
 
       // do we need more addresses?
-      size_t read_bytes_avail = in_port->addrlist.bytes_pending();
+      size_t read_bytes_avail = in_port->span_list.bytes_pending();
       if(read_bytes_avail < min_xfer_size) {
-        bool flush = in_port->iter->get_addresses(in_port->addrlist, in_nonaffine);
-        read_bytes_avail = in_port->addrlist.bytes_pending();
+        bool flush = in_port->iter->get_addresses(in_port->span_list, in_nonaffine);
+        read_bytes_avail = in_port->span_list.bytes_pending();
         if(flush) {
           if(read_bytes_avail > 0) {
             // ignore a nonaffine piece as we still have some affine bytes
@@ -855,10 +855,10 @@ namespace Realm {
       XferPort *out_port = &output_ports[output_control.current_io_port];
 
       // do we need more addresses?
-      size_t write_bytes_avail = out_port->addrlist.bytes_pending();
+      size_t write_bytes_avail = out_port->span_list.bytes_pending();
       if(write_bytes_avail < min_xfer_size) {
-        bool flush = out_port->iter->get_addresses(out_port->addrlist, out_nonaffine);
-        write_bytes_avail = out_port->addrlist.bytes_pending();
+        bool flush = out_port->iter->get_addresses(out_port->span_list, out_nonaffine);
+        write_bytes_avail = out_port->span_list.bytes_pending();
 
         // TODO(apryakhin@): We add this to handle scatter when both
         // indirection and source are coming from IB and this needs
@@ -927,7 +927,7 @@ namespace Realm {
       in_port->local_bytes_cons.fetch_add(total_read_bytes);
 
       if(in_port->peer_guid == XFERDES_NO_GUID)
-        in_done = ((in_port->addrlist.bytes_pending() == 0) && in_port->iter->done());
+        in_done = ((in_port->span_list.bytes_pending() == 0) && in_port->iter->done());
       else
         in_done =
             (in_port->local_bytes_total == in_port->remote_bytes_total.load_acquire());
@@ -941,7 +941,7 @@ namespace Realm {
       out_port->local_bytes_cons.fetch_add(total_write_bytes);
 
       if(out_port->peer_guid == XFERDES_NO_GUID)
-        out_done = ((out_port->addrlist.bytes_pending() == 0) && out_port->iter->done());
+        out_done = ((out_port->span_list.bytes_pending() == 0) && out_port->iter->done());
     }
 
     input_control.remaining_count -= total_read_bytes;
@@ -2062,13 +2062,13 @@ namespace Realm {
             reinterpret_cast<uintptr_t>(out_port->mem->get_direct_ptr(0, 0));
 
         while(total_bytes < max_bytes) {
-          AddressListCursor &out_alc = out_port->addrcursor;
+          SpanIterator &out_iter = out_port->span_iter;
 
-          uintptr_t out_offset = out_alc.get_offset();
+          uintptr_t out_offset = out_iter.offset();
 
           // the reported dim is reduced for partially consumed address
           //  ranges - whatever we get can be assumed to be regular
-          int out_dim = out_alc.get_dim();
+          int out_dim = out_iter.dim();
 
           size_t bytes = 0;
           size_t bytes_left = max_bytes - total_bytes;
@@ -2086,7 +2086,7 @@ namespace Realm {
           }
 
           if(out_dim > 0) {
-            size_t ocount = out_alc.remaining(0);
+            size_t ocount = out_iter.remaining(0);
 
             // contig bytes is always the first dimension
             size_t contig_bytes = std::min(ocount, bytes_left);
@@ -2096,18 +2096,18 @@ namespace Realm {
                ((contig_bytes == ocount) && (out_dim == 1))) {
               bytes = contig_bytes;
               memset_1d(out_base + out_offset, contig_bytes, fill_data, fill_size);
-              out_alc.advance(0, bytes);
+              out_iter.advance(0, bytes);
             } else {
               // grow to a 2D fill
-              ocount = out_alc.remaining(1);
-              uintptr_t out_lstride = out_alc.get_stride(1);
+              ocount = out_iter.remaining(1);
+              uintptr_t out_lstride = out_iter.stride(1);
 
               size_t lines = std::min(ocount, bytes_left / contig_bytes);
 
               bytes = contig_bytes * lines;
               memset_2d(out_base + out_offset, out_lstride, contig_bytes, lines,
                         fill_data, fill_size);
-              out_alc.advance(1, lines);
+              out_iter.advance(1, lines);
             }
           } else {
             // scatter adddress list
@@ -2212,7 +2212,7 @@ namespace Realm {
                              output_control.remaining_count / out_elem_size);
         if(in_port != 0) {
           max_elems =
-              std::min(max_elems, in_port->addrlist.bytes_pending() / in_elem_size);
+              std::min(max_elems, in_port->span_list.bytes_pending() / in_elem_size);
           if(in_port->peer_guid != XFERDES_NO_GUID) {
             size_t read_bytes_avail = in_port->seq_remote.span_exists(
                 in_port->local_bytes_total, (max_elems * in_elem_size));
@@ -2221,7 +2221,7 @@ namespace Realm {
         }
         if(out_port != 0) {
           max_elems =
-              std::min(max_elems, out_port->addrlist.bytes_pending() / out_elem_size);
+              std::min(max_elems, out_port->span_list.bytes_pending() / out_elem_size);
           // no support for reducing into an intermediate buffer
           assert(out_port->peer_guid == XFERDES_NO_GUID);
         }
@@ -2240,36 +2240,36 @@ namespace Realm {
               reinterpret_cast<uintptr_t>(out_port->mem->get_direct_ptr(0, 0));
 
           while(total_elems < max_elems) {
-            AddressListCursor &in_alc = in_port->addrcursor;
-            AddressListCursor &out_alc = out_port->addrcursor;
+            SpanIterator &in_iter = in_port->span_iter;
+            SpanIterator &out_iter = out_port->span_iter;
 
-            uintptr_t in_offset = in_alc.get_offset();
-            uintptr_t out_offset = out_alc.get_offset();
+            uintptr_t in_offset = in_iter.offset();
+            uintptr_t out_offset = out_iter.offset();
 
             // the reported dim is reduced for partially consumed address
             //  ranges - whatever we get can be assumed to be regular
-            int in_dim = in_alc.get_dim();
-            int out_dim = out_alc.get_dim();
+            int in_dim = in_iter.dim();
+            int out_dim = out_iter.dim();
 
             // the current reduction op interface can reduce multiple elements
             //  with a fixed address stride, which looks to us like either
             //  1D (stride = elem_size), or 2D with 1 elem/line
 
-            size_t icount = in_alc.remaining(0) / in_elem_size;
-            size_t ocount = out_alc.remaining(0) / out_elem_size;
+            size_t icount = in_iter.remaining(0) / in_elem_size;
+            size_t ocount = out_iter.remaining(0) / out_elem_size;
             size_t istride, ostride;
             if((in_dim > 1) && (icount == 1)) {
               in_dim = 2;
-              icount = in_alc.remaining(1);
-              istride = in_alc.get_stride(1);
+              icount = in_iter.remaining(1);
+              istride = in_iter.stride(1);
             } else {
               in_dim = 1;
               istride = in_elem_size;
             }
             if((out_dim > 1) && (ocount == 1)) {
               out_dim = 2;
-              ocount = out_alc.remaining(1);
-              ostride = out_alc.get_stride(1);
+              ocount = out_iter.remaining(1);
+              ostride = out_iter.stride(1);
             } else {
               out_dim = 1;
               ostride = out_elem_size;
@@ -2297,8 +2297,8 @@ namespace Realm {
                                               redop->userdata);
             }
 
-            in_alc.advance(in_dim - 1, elems * ((in_dim == 1) ? in_elem_size : 1));
-            out_alc.advance(out_dim - 1, elems * ((out_dim == 1) ? out_elem_size : 1));
+            in_iter.advance(in_dim - 1, elems * ((in_dim == 1) ? in_elem_size : 1));
+            out_iter.advance(out_dim - 1, elems * ((out_dim == 1) ? out_elem_size : 1));
 
 #ifdef DEBUG_REALM
             assert(elems <= elems_left);
@@ -2313,13 +2313,13 @@ namespace Realm {
         } else {
           // input but no output, so skip input bytes
           total_elems = max_elems;
-          in_port->addrcursor.skip_bytes(total_elems * in_elem_size);
+          in_port->span_iter.skip_bytes(total_elems * in_elem_size);
         }
       } else {
         if(out_port != 0) {
           // output but no input, so skip output bytes
           total_elems = max_elems;
-          out_port->addrcursor.skip_bytes(total_elems * out_elem_size);
+          out_port->span_iter.skip_bytes(total_elems * out_elem_size);
         } else {
           // skipping both input and output is possible for simultaneous
           //  gather+scatter
@@ -2543,12 +2543,12 @@ namespace Realm {
                         << " max=" << max_bytes;
 
           while(total_bytes < max_bytes) {
-            AddressListCursor &in_alc = in_port->addrcursor;
-            AddressListCursor &out_alc = out_port->addrcursor;
-            int in_dim = in_alc.get_dim();
-            int out_dim = out_alc.get_dim();
-            size_t icount = in_alc.remaining(0);
-            size_t ocount = out_alc.remaining(0);
+            SpanIterator &in_iter = in_port->span_iter;
+            SpanIterator &out_iter = out_port->span_iter;
+            int in_dim = in_iter.dim();
+            int out_dim = out_iter.dim();
+            size_t icount = in_iter.remaining(0);
+            size_t ocount = out_iter.remaining(0);
 
             size_t bytes = 0;
             size_t bytes_left = max_bytes - total_bytes;
@@ -2559,7 +2559,7 @@ namespace Realm {
             size_t dst_2d_maxbytes =
                 (((out_dim > 1) && (ocount <= (MAX_ASSEMBLY_SIZE / 2)))
                      ? (ocount *
-                        std::min(MAX_ASSEMBLY_SIZE / ocount, out_alc.remaining(1)))
+                        std::min(MAX_ASSEMBLY_SIZE / ocount, out_iter.remaining(1)))
                      : 0);
             // would have to scan forward through the dst address list to
             //  get the exact number of bytes that we can fit into
@@ -2577,12 +2577,12 @@ namespace Realm {
               // 1D target
               NodeID dst_node = ID(out_port->mem->me).memory_owner_node();
               RemoteAddress dst_buf;
-              bool ok = out_port->mem->get_remote_addr(out_alc.get_offset(), dst_buf);
+              bool ok = out_port->mem->get_remote_addr(out_iter.offset(), dst_buf);
               assert(ok);
 
               // now look at the input
               LocalAddress src_buf;
-              ok = in_port->mem->get_local_addr(in_alc.get_offset(), src_buf);
+              ok = in_port->mem->get_local_addr(in_iter.offset(), src_buf);
               assert(ok);
               size_t src_1d_maxbytes = 0;
               if(in_dim > 0) {
@@ -2595,9 +2595,9 @@ namespace Realm {
               // TODO: permit if source memory is cpu-accessible?
 #ifdef ALLOW_RDMA_SOURCE_2D
               if(in_dim > 1) {
-                size_t lines = in_alc.remaining(1);
+                size_t lines = in_iter.remaining(1);
                 size_t rec_bytes = ActiveMessage<Write1DMessage>::recommended_max_payload(
-                    dst_node, src_buf, icount, lines, in_alc.get_stride(1), dst_buf,
+                    dst_node, src_buf, icount, lines, in_iter.stride(1), dst_buf,
                     true /*w/ congestion*/);
                 // round the recommendation down to a multiple of the line size
                 rec_bytes -= (rec_bytes % icount);
@@ -2653,15 +2653,15 @@ namespace Realm {
                 out_span_start += bytes;
 
                 amsg.commit();
-                in_alc.advance(0, bytes);
-                out_alc.advance(0, bytes);
+                in_iter.advance(0, bytes);
+                out_iter.advance(0, bytes);
               } else if(src_2d_maxbytes >= src_ga_maxbytes) {
                 // 2D source
                 size_t bytes_per_line = icount;
                 size_t lines = src_2d_maxbytes / icount;
                 bytes = bytes_per_line * lines;
                 assert(bytes == src_2d_maxbytes);
-                size_t src_stride = in_alc.get_stride(1);
+                size_t src_stride = in_iter.stride(1);
                 // log_xd.info() << "remote write 2d: guid=" << guid
                 //              << " src=" << src_buf << " dst=" << dst_buf
                 //              << " bytes=" << bytes << " lines=" << lines
@@ -2688,8 +2688,8 @@ namespace Realm {
                 out_span_start += bytes;
 
                 amsg.commit();
-                in_alc.advance(1, lines);
-                out_alc.advance(0, bytes);
+                in_iter.advance(1, lines);
+                out_iter.advance(0, bytes);
               } else {
                 // gather: assemble data
                 bytes = src_ga_maxbytes;
@@ -2704,35 +2704,35 @@ namespace Realm {
                     if((icount >= todo / 2) || (in_dim == 1)) {
                       size_t chunk = std::min(todo, icount);
                       uintptr_t src = reinterpret_cast<uintptr_t>(
-                          in_port->mem->get_direct_ptr(in_alc.get_offset(), chunk));
+                          in_port->mem->get_direct_ptr(in_iter.offset(), chunk));
                       uintptr_t dst =
                           reinterpret_cast<uintptr_t>(amsg.payload_ptr(chunk));
                       memcpy_1d(dst, src, chunk);
-                      in_alc.advance(0, chunk);
+                      in_iter.advance(0, chunk);
                       todo -= chunk;
                     } else {
-                      size_t lines = std::min(todo / icount, in_alc.remaining(1));
+                      size_t lines = std::min(todo / icount, in_iter.remaining(1));
 
                       if(((icount * lines) >= todo / 2) || (in_dim == 2)) {
                         uintptr_t src = reinterpret_cast<uintptr_t>(
-                            in_port->mem->get_direct_ptr(in_alc.get_offset(), icount));
+                            in_port->mem->get_direct_ptr(in_iter.offset(), icount));
                         uintptr_t dst =
                             reinterpret_cast<uintptr_t>(amsg.payload_ptr(icount * lines));
-                        memcpy_2d(dst, icount /*lstride*/, src, in_alc.get_stride(1),
+                        memcpy_2d(dst, icount /*lstride*/, src, in_iter.stride(1),
                                   icount, lines);
-                        in_alc.advance(1, lines);
+                        in_iter.advance(1, lines);
                         todo -= icount * lines;
                       } else {
                         size_t planes =
-                            std::min(todo / (icount * lines), in_alc.remaining(2));
+                            std::min(todo / (icount * lines), in_iter.remaining(2));
                         uintptr_t src = reinterpret_cast<uintptr_t>(
-                            in_port->mem->get_direct_ptr(in_alc.get_offset(), icount));
+                            in_port->mem->get_direct_ptr(in_iter.offset(), icount));
                         uintptr_t dst = reinterpret_cast<uintptr_t>(
                             amsg.payload_ptr(icount * lines * planes));
                         memcpy_3d(dst, icount /*lstride*/, (icount * lines) /*pstride*/,
-                                  src, in_alc.get_stride(1), in_alc.get_stride(2), icount,
+                                  src, in_iter.stride(1), in_iter.stride(2), icount,
                                   lines, planes);
-                        in_alc.advance(2, planes);
+                        in_iter.advance(2, planes);
                         todo -= icount * lines * planes;
                       }
                     }
@@ -2744,8 +2744,8 @@ namespace Realm {
                     break;
 
                   // read next entry
-                  in_dim = in_alc.get_dim();
-                  icount = in_alc.remaining(0);
+                  in_dim = in_iter.dim();
+                  icount = in_iter.remaining(0);
                 }
 
                 // the write isn't complete until it's ack'd by the target
@@ -2760,7 +2760,7 @@ namespace Realm {
                 rseqcache.add_span(input_control.current_io_port, in_span_start, bytes);
                 in_span_start += bytes;
 
-                out_alc.advance(0, bytes);
+                out_iter.advance(0, bytes);
               }
             } else if(dst_2d_maxbytes >= dst_sc_maxbytes) {
               // 2D target
@@ -2783,7 +2783,7 @@ namespace Realm {
         } else {
           // input but no output, so skip input bytes
           total_bytes = max_bytes;
-          in_port->addrcursor.skip_bytes(total_bytes);
+          in_port->span_iter.skip_bytes(total_bytes);
           rseqcache.add_span(input_control.current_io_port, in_span_start, total_bytes);
           in_span_start += total_bytes;
         }
@@ -2791,7 +2791,7 @@ namespace Realm {
         if(out_port != 0) {
           // output but no input, so skip output bytes
           total_bytes = max_bytes;
-          out_port->addrcursor.skip_bytes(total_bytes);
+          out_port->span_iter.skip_bytes(total_bytes);
           wseqcache.add_span(output_control.current_io_port, out_span_start, total_bytes);
           out_span_start += total_bytes;
         } else {

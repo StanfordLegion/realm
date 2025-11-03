@@ -130,7 +130,7 @@ public:
 
   size_t get_base_offset(void) const override { return 0; }
 
-  bool get_addresses(AddressList &addrlist,
+  bool get_addresses(SpanList &span_list,
                      const InstanceLayoutPieceBase *&nonaffine) override
   {
     nonaffine = 0;

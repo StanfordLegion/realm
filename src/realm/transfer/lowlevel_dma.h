@@ -187,7 +187,7 @@ namespace Realm {
     virtual void confirm_step(void);
     virtual void cancel_step(void);
 
-    virtual bool get_addresses(AddressList &addrlist,
+    virtual bool get_addresses(SpanList &span_list,
                                const InstanceLayoutPieceBase *&nonaffine);
 
     static Serialization::PolymorphicSerdezSubclass<TransferIterator,

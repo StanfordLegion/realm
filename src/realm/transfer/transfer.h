@@ -36,7 +36,7 @@ namespace Realm {
   //  can hold an arbitrary IndexSpace and dispatch based on its type
 
   class XferDes;
-  class AddressList;
+  class SpanList;
 
   class TransferIterator {
   public:
@@ -112,7 +112,7 @@ namespace Realm {
     virtual void confirm_step(void) = 0;
     virtual void cancel_step(void) = 0;
 
-    virtual bool get_addresses(AddressList &addrlist,
+    virtual bool get_addresses(SpanList &span_list,
                                const InstanceLayoutPieceBase *&nonaffine) = 0;
   };
 
@@ -142,7 +142,7 @@ namespace Realm {
 
     virtual size_t get_base_offset(void) const;
 
-    virtual bool get_addresses(AddressList &addrlist,
+    virtual bool get_addresses(SpanList &span_list,
                                const InstanceLayoutPieceBase *&nonaffine);
 
   protected:

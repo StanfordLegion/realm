@@ -183,16 +183,16 @@ namespace Realm {
               reinterpret_cast<uintptr_t>(out_port->mem->get_direct_ptr(0, 0));
 
           while(total_bytes < max_bytes) {
-            AddressListCursor &in_alc = in_port->addrcursor;
-            AddressListCursor &out_alc = out_port->addrcursor;
+            SpanIterator &in_iter = in_port->span_iter;
+            SpanIterator &out_iter = out_port->span_iter;
 
-            uintptr_t in_offset = in_alc.get_offset();
-            uintptr_t out_offset = out_alc.get_offset();
+            uintptr_t in_offset = in_iter.offset();
+            uintptr_t out_offset = out_iter.offset();
 
             // the reported dim is reduced for partially consumed address
             //  ranges - whatever we get can be assumed to be regular
-            int in_dim = in_alc.get_dim();
-            int out_dim = out_alc.get_dim();
+            int in_dim = in_iter.dim();
+            int out_dim = out_iter.dim();
 
             size_t bytes = 0;
             size_t bytes_left = max_bytes - total_bytes;
@@ -203,8 +203,8 @@ namespace Realm {
 
             if(in_dim > 0) {
               if(out_dim > 0) {
-                size_t icount = in_alc.remaining(0);
-                size_t ocount = out_alc.remaining(0);
+                size_t icount = in_iter.remaining(0);
+                size_t ocount = out_iter.remaining(0);
 
                 // contig bytes is always the min of the first dimensions
                 size_t contig_bytes = std::min(std::min(icount, ocount), bytes_left);
@@ -215,8 +215,8 @@ namespace Realm {
                    ((contig_bytes == ocount) && (out_dim == 1))) {
                   bytes = contig_bytes;
                   memcpy_1d(out_base + out_offset, in_base + in_offset, bytes);
-                  in_alc.advance(0, bytes);
-                  out_alc.advance(0, bytes);
+                  in_iter.advance(0, bytes);
+                  out_iter.advance(0, bytes);
                 } else {
                   // grow to a 2D copy
                   int id;
@@ -235,8 +235,8 @@ namespace Realm {
                   } else {
                     assert(in_dim > 1);
                     id = 1;
-                    icount = in_alc.remaining(id);
-                    in_lstride = in_alc.get_stride(id);
+                    icount = in_iter.remaining(id);
+                    in_lstride = in_iter.stride(id);
                     iscale = 1;
                   }
 
@@ -256,8 +256,8 @@ namespace Realm {
                   } else {
                     assert(out_dim > 1);
                     od = 1;
-                    ocount = out_alc.remaining(od);
-                    out_lstride = out_alc.get_stride(od);
+                    ocount = out_iter.remaining(od);
+                    out_lstride = out_iter.stride(od);
                     oscale = 1;
                   }
 
@@ -271,8 +271,8 @@ namespace Realm {
                     bytes = contig_bytes * lines;
                     memcpy_2d(out_base + out_offset, out_lstride, in_base + in_offset,
                               in_lstride, contig_bytes, lines);
-                    in_alc.advance(id, lines * iscale);
-                    out_alc.advance(od, lines * oscale);
+                    in_iter.advance(id, lines * iscale);
+                    out_iter.advance(od, lines * oscale);
                   } else {
                     uintptr_t in_pstride;
                     if(lines < icount) {
@@ -285,8 +285,8 @@ namespace Realm {
                     } else {
                       id++;
                       assert(in_dim > id);
-                      icount = in_alc.remaining(id);
-                      in_pstride = in_alc.get_stride(id);
+                      icount = in_iter.remaining(id);
+                      in_pstride = in_iter.stride(id);
                       iscale = 1;
                     }
 
@@ -301,8 +301,8 @@ namespace Realm {
                     } else {
                       od++;
                       assert(out_dim > od);
-                      ocount = out_alc.remaining(od);
-                      out_pstride = out_alc.get_stride(od);
+                      ocount = out_iter.remaining(od);
+                      out_pstride = out_iter.stride(od);
                       oscale = 1;
                     }
 
@@ -312,8 +312,8 @@ namespace Realm {
                     memcpy_3d(out_base + out_offset, out_lstride, out_pstride,
                               in_base + in_offset, in_lstride, in_pstride, contig_bytes,
                               lines, planes);
-                    in_alc.advance(id, planes * iscale);
-                    out_alc.advance(od, planes * oscale);
+                    in_iter.advance(id, planes * iscale);
+                    out_iter.advance(od, planes * oscale);
                   }
                 }
               } else {
@@ -344,13 +344,13 @@ namespace Realm {
         } else {
           // input but no output, so skip input bytes
           total_bytes = max_bytes;
-          in_port->addrcursor.skip_bytes(total_bytes);
+          in_port->span_iter.skip_bytes(total_bytes);
         }
       } else {
         if(out_port != 0) {
           // output but no input, so skip output bytes
           total_bytes = max_bytes;
-          out_port->addrcursor.skip_bytes(total_bytes);
+          out_port->span_iter.skip_bytes(total_bytes);
         } else {
           // skipping both input and output is possible for simultaneous
           //  gather+scatter
