@@ -803,10 +803,10 @@ namespace Realm {
       XferPort *in_port = &input_ports[input_control.current_io_port];
 
       // do we need more addresses?
-      size_t read_bytes_avail = in_port->span_list.bytes_pending();
+      size_t read_bytes_avail = in_port->span_iter.bytes_pending();
       if(read_bytes_avail < min_xfer_size) {
         bool flush = in_port->iter->get_addresses(in_port->span_list, in_nonaffine);
-        read_bytes_avail = in_port->span_list.bytes_pending();
+        read_bytes_avail = in_port->span_iter.bytes_pending();
         if(flush) {
           if(read_bytes_avail > 0) {
             // ignore a nonaffine piece as we still have some affine bytes
@@ -855,10 +855,10 @@ namespace Realm {
       XferPort *out_port = &output_ports[output_control.current_io_port];
 
       // do we need more addresses?
-      size_t write_bytes_avail = out_port->span_list.bytes_pending();
+      size_t write_bytes_avail = out_port->span_iter.bytes_pending();
       if(write_bytes_avail < min_xfer_size) {
         bool flush = out_port->iter->get_addresses(out_port->span_list, out_nonaffine);
-        write_bytes_avail = out_port->span_list.bytes_pending();
+        write_bytes_avail = out_port->span_iter.bytes_pending();
 
         // TODO(apryakhin@): We add this to handle scatter when both
         // indirection and source are coming from IB and this needs
@@ -927,7 +927,7 @@ namespace Realm {
       in_port->local_bytes_cons.fetch_add(total_read_bytes);
 
       if(in_port->peer_guid == XFERDES_NO_GUID)
-        in_done = ((in_port->span_list.bytes_pending() == 0) && in_port->iter->done());
+        in_done = ((in_port->span_iter.bytes_pending() == 0) && in_port->iter->done());
       else
         in_done =
             (in_port->local_bytes_total == in_port->remote_bytes_total.load_acquire());
@@ -941,7 +941,7 @@ namespace Realm {
       out_port->local_bytes_cons.fetch_add(total_write_bytes);
 
       if(out_port->peer_guid == XFERDES_NO_GUID)
-        out_done = ((out_port->span_list.bytes_pending() == 0) && out_port->iter->done());
+        out_done = ((out_port->span_iter.bytes_pending() == 0) && out_port->iter->done());
     }
 
     input_control.remaining_count -= total_read_bytes;
@@ -2212,7 +2212,7 @@ namespace Realm {
                              output_control.remaining_count / out_elem_size);
         if(in_port != 0) {
           max_elems =
-              std::min(max_elems, in_port->span_list.bytes_pending() / in_elem_size);
+              std::min(max_elems, in_port->span_iter.bytes_pending() / in_elem_size);
           if(in_port->peer_guid != XFERDES_NO_GUID) {
             size_t read_bytes_avail = in_port->seq_remote.span_exists(
                 in_port->local_bytes_total, (max_elems * in_elem_size));
@@ -2221,7 +2221,7 @@ namespace Realm {
         }
         if(out_port != 0) {
           max_elems =
-              std::min(max_elems, out_port->span_list.bytes_pending() / out_elem_size);
+              std::min(max_elems, out_port->span_iter.bytes_pending() / out_elem_size);
           // no support for reducing into an intermediate buffer
           assert(out_port->peer_guid == XFERDES_NO_GUID);
         }
