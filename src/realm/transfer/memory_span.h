@@ -18,7 +18,6 @@
 #ifndef MEMORY_SPAN_H
 #define MEMORY_SPAN_H
 
-#include "realm/realm_config.h"
 #include "realm/indexspace.h"
 
 #include <cstdint>
@@ -35,8 +34,8 @@ namespace Realm {
     size_t base_offset;
     std::vector<FieldID> field_ids;
     uint8_t num_dims;
-    uint32_t extents[4];
-    size_t strides[4];
+    uint32_t extents[REALM_MAX_DIM + 1];
+    size_t strides[REALM_MAX_DIM + 1];
 
     // Computed properties
     size_t total_bytes() const;
@@ -47,18 +46,14 @@ namespace Realm {
   //                                           SpanList
   // =================================================================================================
 
-  class SpanIterator; // Forward declaration
-
   class SpanList {
     std::vector<Span> spans_;
 
   public:
     SpanList() = default;
 
-    // Append span (works for single or multiple fields)
     void append(const Span &span);
 
-    // Convenience builder
     void append(size_t base, const std::vector<FieldID> &fields, uint8_t dims,
                 const uint32_t *extents, const size_t *strides);
 
@@ -69,7 +64,6 @@ namespace Realm {
 
     // Compute total bytes pending across all spans
     size_t total_bytes() const;
-    size_t bytes_pending() const { return total_bytes(); } // Total bytes (no iterator)
   };
 
   // =================================================================================================
@@ -80,7 +74,7 @@ namespace Realm {
     const SpanList *list_ = nullptr;
     size_t span_idx_ = 0;
     size_t field_idx_ = 0; // Current field within span
-    uint32_t pos_[4] = {};
+    uint32_t pos_[REALM_MAX_DIM + 1] = {};
     size_t bytes_consumed_ = 0; // Total bytes consumed so far
 
   public:

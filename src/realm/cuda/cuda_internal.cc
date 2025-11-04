@@ -2314,7 +2314,7 @@ namespace Realm {
                                output_control.remaining_count / out_elem_size);
           if(in_port != 0) {
             max_elems =
-                std::min(max_elems, in_port->span_list.bytes_pending() / in_elem_size);
+                std::min(max_elems, in_port->span_iter.bytes_pending() / in_elem_size);
             if(in_port->peer_guid != XFERDES_NO_GUID) {
               size_t read_bytes_avail = in_port->seq_remote.span_exists(
                   in_port->local_bytes_total, (max_elems * in_elem_size));
@@ -2323,7 +2323,7 @@ namespace Realm {
           }
           if(out_port != 0) {
             max_elems =
-                std::min(max_elems, out_port->span_list.bytes_pending() / out_elem_size);
+                std::min(max_elems, out_port->span_iter.bytes_pending() / out_elem_size);
             // no support for reducing into an intermediate buffer
             assert(out_port->peer_guid == XFERDES_NO_GUID);
           }

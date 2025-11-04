@@ -197,16 +197,16 @@ namespace Realm {
             size_t bytes_to_fence = 0;
 
             while(total_bytes < max_bytes) {
-              AddressListCursor &in_alc = in_port->addrcursor;
-              AddressListCursor &out_alc = out_port->addrcursor;
+              SpanIterator &in_iter = in_port->span_iter;
+              SpanIterator &out_iter = out_port->span_iter;
 
-              uintptr_t in_offset = in_alc.get_offset();
-              uintptr_t out_offset = out_alc.get_offset();
+              uintptr_t in_offset = in_iter.offset();
+              uintptr_t out_offset = out_iter.offset();
 
               // the reported dim is reduced for partially consumed address
               //  ranges - whatever we get can be assumed to be regular
-              int in_dim = in_alc.get_dim();
-              int out_dim = out_alc.get_dim();
+              int in_dim = in_iter.dim();
+              int out_dim = out_iter.dim();
 
               size_t bytes = 0;
               size_t bytes_left = max_bytes - total_bytes;
@@ -219,8 +219,8 @@ namespace Realm {
               assert(in_dim > 0);
               assert(out_dim > 0);
 
-              size_t icount = in_alc.remaining(0);
-              size_t ocount = out_alc.remaining(0);
+              size_t icount = in_iter.remaining(0);
+              size_t ocount = out_iter.remaining(0);
 
               // contig bytes is always the min of the first dimensions
               size_t contig_bytes = std::min(std::min(icount, ocount), bytes_left);
@@ -257,8 +257,8 @@ namespace Realm {
                     << " src=" << (in_base + in_offset) << std::dec << " bytes=" << bytes
                     << " stream=" << stream << " kind=" << memcpy_kind;
 
-                in_alc.advance(0, bytes);
-                out_alc.advance(0, bytes);
+                in_iter.advance(0, bytes);
+                out_iter.advance(0, bytes);
 
                 bytes_to_fence += bytes;
                 // TODO: fence on a threshold
@@ -279,8 +279,8 @@ namespace Realm {
                 } else {
                   assert(in_dim > 1);
                   id = 1;
-                  icount = in_alc.remaining(id);
-                  in_lstride = in_alc.get_stride(id);
+                  icount = in_iter.remaining(id);
+                  in_lstride = in_iter.stride(id);
                   iscale = 1;
                 }
 
@@ -299,8 +299,8 @@ namespace Realm {
                 } else {
                   assert(out_dim > 1);
                   od = 1;
-                  ocount = out_alc.remaining(od);
-                  out_lstride = out_alc.get_stride(od);
+                  ocount = out_iter.remaining(od);
+                  out_lstride = out_iter.stride(od);
                   oscale = 1;
                 }
 
@@ -344,8 +344,8 @@ namespace Realm {
                                              contig_bytes, lines, copy_type,
                                              stream->get_stream()));
 
-                  in_alc.advance(id, lines * iscale);
-                  out_alc.advance(od, lines * oscale);
+                  in_iter.advance(id, lines * iscale);
+                  out_iter.advance(od, lines * oscale);
 
                   bytes_to_fence += bytes;
                   // TODO: fence on a threshold
@@ -361,8 +361,8 @@ namespace Realm {
                   } else {
                     id++;
                     assert(in_dim > id);
-                    icount = in_alc.remaining(id);
-                    in_pstride = in_alc.get_stride(id);
+                    icount = in_iter.remaining(id);
+                    in_pstride = in_iter.stride(id);
                     iscale = 1;
                   }
 
@@ -377,8 +377,8 @@ namespace Realm {
                   } else {
                     od++;
                     assert(out_dim > od);
-                    ocount = out_alc.remaining(od);
-                    out_pstride = out_alc.get_stride(od);
+                    ocount = out_iter.remaining(od);
+                    out_pstride = out_iter.stride(od);
                     oscale = 1;
                   }
 
@@ -434,8 +434,8 @@ namespace Realm {
                       << " stream=" << stream << " kind=" << memcpy_kind;
 
                   bytes = contig_bytes * lines * act_planes;
-                  in_alc.advance(id, act_planes * iscale);
-                  out_alc.advance(od, act_planes * oscale);
+                  in_iter.advance(id, act_planes * iscale);
+                  out_iter.advance(od, act_planes * oscale);
 
                   bytes_to_fence += bytes;
                   // TODO: fence on a threshold
@@ -468,7 +468,7 @@ namespace Realm {
           } else {
             // input but no output, so skip input bytes
             total_bytes = max_bytes;
-            in_port->addrcursor.skip_bytes(total_bytes);
+            in_port->span_iter.skip_bytes(total_bytes);
 
             rseqcache.add_span(input_control.current_io_port, in_span_start, total_bytes);
             in_span_start += total_bytes;
@@ -477,7 +477,7 @@ namespace Realm {
           if(out_port != 0) {
             // output but no input, so skip output bytes
             total_bytes = max_bytes;
-            out_port->addrcursor.skip_bytes(total_bytes);
+            out_port->span_iter.skip_bytes(total_bytes);
           } else {
             // skipping both input and output is possible for simultaneous
             //  gather+scatter
@@ -763,13 +763,13 @@ namespace Realm {
           GPUStream *stream = channel->gpu->get_next_d2d_stream();
 
           while(total_bytes < max_bytes) {
-            AddressListCursor &out_alc = out_port->addrcursor;
+            SpanIterator &out_iter = out_port->span_iter;
 
-            uintptr_t out_offset = out_alc.get_offset();
+            uintptr_t out_offset = out_iter.offset();
 
             // the reported dim is reduced for partially consumed address
             //  ranges - whatever we get can be assumed to be regular
-            int out_dim = out_alc.get_dim();
+            int out_dim = out_iter.dim();
 
 #ifdef DEBUG_REALM
             // since HIP does not support 12/32 bit 2D memset, we need to
@@ -785,19 +785,19 @@ namespace Realm {
               uint8_t fill_u8;
               memcpy(&fill_u8, fill_data, 1);
               if(out_dim == 1) {
-                size_t bytes = out_alc.remaining(0);
+                size_t bytes = out_iter.remaining(0);
                 CHECK_HIP(hipMemsetD8Async((hipDeviceptr_t)(out_base + out_offset),
                                            fill_u8, bytes, stream->get_stream()));
-                out_alc.advance(0, bytes);
+                out_iter.advance(0, bytes);
                 total_bytes += bytes;
               } else {
-                size_t bytes = out_alc.remaining(0);
-                size_t lines = out_alc.remaining(1);
+                size_t bytes = out_iter.remaining(0);
+                size_t lines = out_iter.remaining(1);
                 CHECK_HIP(hipMemset2DAsync((void *)(out_base + out_offset),
-                                           out_alc.get_stride(1),
+                                           out_iter.stride(1),
                                            *reinterpret_cast<const uint8_t *>(fill_data),
                                            bytes, lines, stream->get_stream()));
-                out_alc.advance(1, lines);
+                out_iter.advance(1, lines);
                 total_bytes += bytes * lines;
               }
               break;
@@ -809,13 +809,13 @@ namespace Realm {
               uint16_t fill_u16;
               memcpy(&fill_u16, fill_data, 2);
               if(out_dim == 1) {
-                size_t bytes = out_alc.remaining(0);
+                size_t bytes = out_iter.remaining(0);
 #ifdef DEBUG_REALM
                 assert((bytes & 1) == 0);
 #endif
                 CHECK_HIP(hipMemsetD16Async((hipDeviceptr_t)(out_base + out_offset),
                                             fill_u16, bytes >> 1, stream->get_stream()));
-                out_alc.advance(0, bytes);
+                out_iter.advance(0, bytes);
                 total_bytes += bytes;
               } else {
 #ifdef DEBUG_REALM
@@ -832,13 +832,13 @@ namespace Realm {
               uint32_t fill_u32;
               memcpy(&fill_u32, fill_data, 4);
               if(out_dim == 1) {
-                size_t bytes = out_alc.remaining(0);
+                size_t bytes = out_iter.remaining(0);
 #ifdef DEBUG_REALM
                 assert((bytes & 3) == 0);
 #endif
                 CHECK_HIP(hipMemsetD32Async((hipDeviceptr_t)(out_base + out_offset),
                                             fill_u32, bytes >> 2, stream->get_stream()));
-                out_alc.advance(0, bytes);
+                out_iter.advance(0, bytes);
                 total_bytes += bytes;
               } else {
 #ifdef DEBUG_REALM
@@ -862,13 +862,13 @@ namespace Realm {
               case 2:
               {
                 assert((bytes & 1) == 0);
-                assert((out_alc.get_stride(1) & 1) == 0);
+                assert((out_iter.stride(1) & 1) == 0);
                 break;
               }
               case 4:
               {
                 assert((bytes & 3) == 0);
-                assert((out_alc.get_stride(1) & 3) == 0);
+                assert((out_iter.stride(1) & 3) == 0);
                 break;
               }
               default:
@@ -923,11 +923,11 @@ namespace Realm {
 
               if(out_dim == 1) {
                 // all done
-                out_alc.advance(0, bytes);
+                out_iter.advance(0, bytes);
                 total_bytes += bytes;
               } else {
-                size_t lines = out_alc.remaining(1);
-                size_t lstride = out_alc.get_stride(1);
+                size_t lines = out_iter.remaining(1);
+                size_t lstride = out_iter.stride(1);
 
                 void *srcDevice = (void *)(out_base + out_offset);
 
@@ -943,11 +943,11 @@ namespace Realm {
                 }
 
                 if(out_dim == 2) {
-                  out_alc.advance(1, lines);
+                  out_iter.advance(1, lines);
                   total_bytes += bytes * lines;
                 } else {
-                  size_t planes = out_alc.remaining(2);
-                  size_t pstride = out_alc.get_stride(2);
+                  size_t planes = out_iter.remaining(2);
+                  size_t pstride = out_iter.stride(2);
 
                   // logarithmic version requires that pstride be a multiple of
                   //  lstride
@@ -976,7 +976,7 @@ namespace Realm {
                       planes_done += todo;
                     }
 
-                    out_alc.advance(2, planes);
+                    out_iter.advance(2, planes);
                     total_bytes += bytes * lines * planes;
                   } else {
                     // plane-at-a-time fallback - can reuse most of copy2d
@@ -988,7 +988,7 @@ namespace Realm {
                                                  bytes, lines, hipMemcpyDeviceToDevice,
                                                  stream->get_stream()));
                     }
-                    out_alc.advance(2, planes);
+                    out_iter.advance(2, planes);
                     total_bytes += bytes * lines * planes;
                   }
                 }
@@ -1168,7 +1168,7 @@ namespace Realm {
                                output_control.remaining_count / out_elem_size);
           if(in_port != 0) {
             max_elems =
-                std::min(max_elems, in_port->addrlist.bytes_pending() / in_elem_size);
+                std::min(max_elems, in_port->span_iter.bytes_pending() / in_elem_size);
             if(in_port->peer_guid != XFERDES_NO_GUID) {
               size_t read_bytes_avail = in_port->seq_remote.span_exists(
                   in_port->local_bytes_total, (max_elems * in_elem_size));
@@ -1177,7 +1177,7 @@ namespace Realm {
           }
           if(out_port != 0) {
             max_elems =
-                std::min(max_elems, out_port->addrlist.bytes_pending() / out_elem_size);
+                std::min(max_elems, out_port->span_iter.bytes_pending() / out_elem_size);
             // no support for reducing into an intermediate buffer
             assert(out_port->peer_guid == XFERDES_NO_GUID);
           }
@@ -1196,36 +1196,36 @@ namespace Realm {
                 reinterpret_cast<uintptr_t>(out_port->mem->get_direct_ptr(0, 0));
 
             while(total_elems < max_elems) {
-              AddressListCursor &in_alc = in_port->addrcursor;
-              AddressListCursor &out_alc = out_port->addrcursor;
+              SpanIterator &in_iter = in_port->span_iter;
+              SpanIterator &out_iter = out_port->span_iter;
 
-              uintptr_t in_offset = in_alc.get_offset();
-              uintptr_t out_offset = out_alc.get_offset();
+              uintptr_t in_offset = in_iter.offset();
+              uintptr_t out_offset = out_iter.offset();
 
               // the reported dim is reduced for partially consumed address
               //  ranges - whatever we get can be assumed to be regular
-              int in_dim = in_alc.get_dim();
-              int out_dim = out_alc.get_dim();
+              int in_dim = in_iter.dim();
+              int out_dim = out_iter.dim();
 
               // the current reduction op interface can reduce multiple elements
               //  with a fixed address stride, which looks to us like either
               //  1D (stride = elem_size), or 2D with 1 elem/line
 
-              size_t icount = in_alc.remaining(0) / in_elem_size;
-              size_t ocount = out_alc.remaining(0) / out_elem_size;
+              size_t icount = in_iter.remaining(0) / in_elem_size;
+              size_t ocount = out_iter.remaining(0) / out_elem_size;
               size_t istride, ostride;
               if((in_dim > 1) && (icount == 1)) {
                 in_dim = 2;
-                icount = in_alc.remaining(1);
-                istride = in_alc.get_stride(1);
+                icount = in_iter.remaining(1);
+                istride = in_iter.stride(1);
               } else {
                 in_dim = 1;
                 istride = in_elem_size;
               }
               if((out_dim > 1) && (ocount == 1)) {
                 out_dim = 2;
-                ocount = out_alc.remaining(1);
-                ostride = out_alc.get_stride(1);
+                ocount = out_iter.remaining(1);
+                ostride = out_iter.stride(1);
               } else {
                 out_dim = 1;
                 ostride = out_elem_size;
@@ -1302,8 +1302,8 @@ namespace Realm {
               in_span_start += elems * in_elem_size;
               out_span_start += elems * out_elem_size;
 
-              in_alc.advance(in_dim - 1, elems * ((in_dim == 1) ? in_elem_size : 1));
-              out_alc.advance(out_dim - 1, elems * ((out_dim == 1) ? out_elem_size : 1));
+              in_iter.advance(in_dim - 1, elems * ((in_dim == 1) ? in_elem_size : 1));
+              out_iter.advance(out_dim - 1, elems * ((out_dim == 1) ? out_elem_size : 1));
 
 #ifdef DEBUG_REALM
               assert(elems <= elems_left);
@@ -1319,7 +1319,7 @@ namespace Realm {
           } else {
             // input but no output, so skip input bytes
             total_elems = max_elems;
-            in_port->addrcursor.skip_bytes(total_elems * in_elem_size);
+            in_port->span_iter.skip_bytes(total_elems * in_elem_size);
 
             rseqcache.add_span(input_control.current_io_port, in_span_start,
                                total_elems * in_elem_size);
@@ -1329,7 +1329,7 @@ namespace Realm {
           if(out_port != 0) {
             // output but no input, so skip output bytes
             total_elems = max_elems;
-            out_port->addrcursor.skip_bytes(total_elems * out_elem_size);
+            out_port->span_iter.skip_bytes(total_elems * out_elem_size);
 
             wseqcache.add_span(output_control.current_io_port, out_span_start,
                                total_elems * out_elem_size);
