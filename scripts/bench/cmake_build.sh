@@ -22,7 +22,6 @@ export SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null 2>&1 && p
 export REALM_DIR="$(dirname "$(dirname "$SCRIPT_DIR")")"
 export PLATFORM="${PLATFORM:-}"
 export USE_CUDA="${USE_CUDA:-}"
-export CUDA_ARCH="${CUDA_ARCH:-}"
 export USE_OPENMP="${USE_OPENMP:-}"
 export NETWORK="${NETWORK:-}"
 export BUILD_DIR="${BUILD_DIR:-}"
@@ -44,7 +43,7 @@ fi
 
 # setup cmake options
 if [[ "$USE_CUDA" == 1 ]]; then
-    cmake_options="${cmake_options} -DREALM_ENABLE_CUDA=ON -DLegion_CUDA_ARCH=${CUDA_ARCH}"
+    cmake_options="${cmake_options} -DREALM_ENABLE_CUDA=ON"
 fi
 if [[ "$USE_OPENMP" == 1 ]]; then
     cmake_options="${cmake_options} -DREALM_ENABLE_OPENMP=ON"
@@ -64,7 +63,7 @@ else
     cmake_options="${cmake_options} -DCMAKE_BUILD_TYPE=Debug"
 fi
 
-cmake_options="${cmake_options} -DREALM_ENABLE_HDF5=OFF -DREALM_BUILD_BENCHMARKS=ON -DREALM_BUILD_TESTS=ON"
+cmake_options="${cmake_options} -DREALM_ENABLE_HDF5=OFF -DREALM_BUILD_BENCHMARKS=ON -DREALM_BUILD_TESTS=ON -DREALM_ENABLE_HDF5=OFF"
 
 # build legion
 mkdir -p "$REALM_DIR/$BUILD_DIR"
