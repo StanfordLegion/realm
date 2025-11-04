@@ -579,7 +579,7 @@ namespace Realm {
         size_t bytes = cur_field_size;
         int cur_dim = 0;
         int di = 0;
-        
+
         // compact any dimensions that are contiguous first
         for(; di < N; di++) {
           // follow the agreed-upon dimension ordering
@@ -628,7 +628,7 @@ namespace Realm {
 
           // Span now supports up to 4 dimensions
           assert(cur_dim < 4 && "Span dimension limit (4) exceeded");
-          
+
           span.extents[cur_dim] = total_count;
           span.strides[cur_dim] = stride;
 
@@ -640,9 +640,9 @@ namespace Realm {
 
         span.num_dims = cur_dim;
         span_list.append(span);
-        
-        log_dma.debug() << "Finalize addr data dim=" << cur_dim << " total_bytes="
-                        << total_bytes;
+
+        log_dma.debug() << "Finalize addr data dim=" << cur_dim
+                        << " total_bytes=" << total_bytes;
       } else {
         assert(0 && "no support for non-affine pieces yet");
       }
@@ -1028,15 +1028,15 @@ namespace Realm {
       int cur_dim = 1;
       size_t total_bytes = this->cur_rect.volume() * this->cur_field_size;
       this->have_rect = false;
-      
+
       // Create a 1D span for the indirect address
       Span span;
-      span.base_offset = 0;  // Will be filled in by indirect addressing
+      span.base_offset = 0;
       span.field_ids.push_back(this->cur_field_id);
       span.num_dims = 1;
       span.extents[0] = total_bytes;
       span.strides[0] = 1;
-      
+
       span_list.append(span);
       log_dma.debug() << "Finalize gather/scatter addr data dim=" << cur_dim
                       << " total_bytes=" << total_bytes;

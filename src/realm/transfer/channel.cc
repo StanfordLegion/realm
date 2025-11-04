@@ -2718,8 +2718,8 @@ namespace Realm {
                             in_port->mem->get_direct_ptr(in_iter.offset(), icount));
                         uintptr_t dst =
                             reinterpret_cast<uintptr_t>(amsg.payload_ptr(icount * lines));
-                        memcpy_2d(dst, icount /*lstride*/, src, in_iter.stride(1),
-                                  icount, lines);
+                        memcpy_2d(dst, icount /*lstride*/, src, in_iter.stride(1), icount,
+                                  lines);
                         in_iter.advance(1, lines);
                         todo -= icount * lines;
                       } else {

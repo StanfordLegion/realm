@@ -25,7 +25,8 @@ namespace {
   constexpr size_t kStride = 8;
   constexpr size_t kBytes = 1024;
 
-  TEST(MemorySpanTests, SingleFieldBasic) {
+  TEST(MemorySpanTests, SingleFieldBasic)
+  {
     // Single field, 1D span
     std::vector<FieldID> fields = {100};
     uint32_t extents[] = {kBytes};
@@ -47,7 +48,8 @@ namespace {
     EXPECT_EQ(it.dim(), 1);
   }
 
-  TEST(MemorySpanTests, SingleFieldAdvance) {
+  TEST(MemorySpanTests, SingleFieldAdvance)
+  {
     std::vector<FieldID> fields = {100};
     uint32_t extents[] = {kBytes};
     size_t strides[] = {1};
@@ -56,7 +58,7 @@ namespace {
     spans.append(0, fields, 1, extents, strides);
 
     SpanIterator it(&spans);
-    
+
     // Advance partway
     it.advance(0, 128);
     EXPECT_EQ(it.offset(), 128);
@@ -73,7 +75,8 @@ namespace {
     EXPECT_TRUE(it.done());
   }
 
-  TEST(MemorySpanTests, MultiFieldSingleSpan) {
+  TEST(MemorySpanTests, MultiFieldSingleSpan)
+  {
     // Multiple fields in one span (contiguous case)
     std::vector<FieldID> fields = {10, 11, 12, 13};
     uint32_t extents[] = {kBytes};
@@ -87,7 +90,7 @@ namespace {
     EXPECT_EQ(spans[0].total_bytes(), kBytes * 4);
 
     SpanIterator it(&spans);
-    
+
     // Start at first field
     EXPECT_EQ(it.current_field(), 10);
     EXPECT_EQ(it.remaining_fields(), 4);
@@ -111,7 +114,8 @@ namespace {
     EXPECT_EQ(it.remaining(0), kBytes);
   }
 
-  TEST(MemorySpanTests, MultiFieldAdvanceAll) {
+  TEST(MemorySpanTests, MultiFieldAdvanceAll)
+  {
     std::vector<FieldID> fields = {7, 8, 9};
     uint32_t extents[] = {kBytes};
     size_t strides[] = {1};
@@ -122,7 +126,7 @@ namespace {
     SpanIterator it(&spans);
 
     // Advance through all fields at once
-    for (size_t f = 0; f < 3; f++) {
+    for(size_t f = 0; f < 3; f++) {
       EXPECT_EQ(it.current_field(), FieldID(7 + f));
       it.advance(0, kBytes);
     }
@@ -130,9 +134,10 @@ namespace {
     EXPECT_TRUE(it.done());
   }
 
-  TEST(MemorySpanTests, TwoDimensionalSingle) {
+  TEST(MemorySpanTests, TwoDimensionalSingle)
+  {
     std::vector<FieldID> fields = {100};
-    uint32_t extents[] = {1024, 100};  // 1024 bytes × 100 lines
+    uint32_t extents[] = {1024, 100}; // 1024 bytes × 100 lines
     size_t strides[] = {1, 1024};
 
     SpanList spans;
@@ -154,7 +159,8 @@ namespace {
     EXPECT_TRUE(it.done());
   }
 
-  TEST(MemorySpanTests, TwoDimensionalMultiField) {
+  TEST(MemorySpanTests, TwoDimensionalMultiField)
+  {
     std::vector<FieldID> fields = {10, 11, 12};
     uint32_t extents[] = {1024, 100};
     size_t strides[] = {1, 1024};
@@ -163,21 +169,22 @@ namespace {
     spans.append(0, fields, 2, extents, strides);
 
     SpanIterator it(&spans);
-    
+
     size_t total_bytes = 1024 * 100 * 3;
     EXPECT_EQ(spans.total_bytes(), total_bytes);
 
     // Process first field
     EXPECT_EQ(it.current_field(), 10);
-    it.advance(1, 100);  // Advance all lines
-    
+    it.advance(1, 100); // Advance all lines
+
     // Should move to second field
     EXPECT_FALSE(it.done());
     EXPECT_EQ(it.current_field(), 11);
     EXPECT_EQ(it.remaining(1), 100);
   }
 
-  TEST(MemorySpanTests, MultipleSpansSeparateFields) {
+  TEST(MemorySpanTests, MultipleSpansSeparateFields)
+  {
     // Three spans, one field each (non-contiguous case)
     uint32_t extents[] = {kBytes};
     size_t strides[] = {1};
@@ -215,9 +222,10 @@ namespace {
     EXPECT_TRUE(it.done());
   }
 
-  TEST(MemorySpanTests, ThreeDimensional) {
+  TEST(MemorySpanTests, ThreeDimensional)
+  {
     std::vector<FieldID> fields = {100};
-    uint32_t extents[] = {64, 8, 2};  // 64 bytes × 8 × 2
+    uint32_t extents[] = {64, 8, 2}; // 64 bytes × 8 × 2
     size_t strides[] = {1, 64, 512};
 
     SpanList spans;
@@ -234,7 +242,8 @@ namespace {
     EXPECT_TRUE(it.done());
   }
 
-  TEST(MemorySpanTests, SkipBytes) {
+  TEST(MemorySpanTests, SkipBytes)
+  {
     std::vector<FieldID> fields = {100};
     uint32_t extents[] = {kBytes};
     size_t strides[] = {1};
@@ -243,7 +252,7 @@ namespace {
     spans.append(0, fields, 1, extents, strides);
 
     SpanIterator it(&spans);
-    
+
     // Skip some bytes
     it.skip_bytes(128);
     EXPECT_EQ(it.offset(), 128);
@@ -254,7 +263,8 @@ namespace {
     EXPECT_EQ(it.offset(), 256);
   }
 
-  TEST(MemorySpanTests, AdvanceFieldsExplicit) {
+  TEST(MemorySpanTests, AdvanceFieldsExplicit)
+  {
     std::vector<FieldID> fields = {10, 11, 12, 13};
     uint32_t extents[] = {kBytes};
     size_t strides[] = {1};
@@ -263,21 +273,22 @@ namespace {
     spans.append(0, fields, 1, extents, strides);
 
     SpanIterator it(&spans);
-    
+
     // At first field
     EXPECT_EQ(it.current_field(), 10);
     EXPECT_EQ(it.current_field_index(), 0);
 
     // Advance to skip geometry for 2 fields
-    it.advance(0, kBytes);  // Complete field 10
+    it.advance(0, kBytes); // Complete field 10
     EXPECT_EQ(it.current_field(), 11);
-    
-    it.advance(0, kBytes);  // Complete field 11
+
+    it.advance(0, kBytes); // Complete field 11
     EXPECT_EQ(it.current_field(), 12);
     EXPECT_EQ(it.remaining_fields(), 2);
   }
 
-  TEST(MemorySpanTests, IsContiguous) {
+  TEST(MemorySpanTests, IsContiguous)
+  {
     // Contiguous span
     std::vector<FieldID> fields = {100};
     uint32_t extents1[] = {64, 100};
@@ -302,12 +313,13 @@ namespace {
     span2.extents[0] = 64;
     span2.extents[1] = 100;
     span2.strides[0] = 1;
-    span2.strides[1] = 128;  // Stride doesn't match (has padding)
+    span2.strides[1] = 128; // Stride doesn't match (has padding)
 
     EXPECT_FALSE(span2.is_contiguous());
   }
 
-  TEST(MemorySpanTests, EmptySpanList) {
+  TEST(MemorySpanTests, EmptySpanList)
+  {
     SpanList spans;
     EXPECT_TRUE(spans.empty());
     EXPECT_EQ(spans.size(), 0);
@@ -317,9 +329,10 @@ namespace {
     EXPECT_TRUE(it.done());
   }
 
-  TEST(MemorySpanTests, PartialAdvanceTwoDim) {
+  TEST(MemorySpanTests, PartialAdvanceTwoDim)
+  {
     std::vector<FieldID> fields = {100};
-    uint32_t extents[] = {64, 10};  // 64 bytes × 10 lines
+    uint32_t extents[] = {64, 10}; // 64 bytes × 10 lines
     size_t strides[] = {1, 64};
 
     SpanList spans;
@@ -358,10 +371,10 @@ namespace {
     // Should overflow twice: 25 / 10 = 2 carries, 25 % 10 = 5 remainder
     // Expected: pos[0] = 5, pos[1] = 2
     it.advance(0, 25);
-    
-    EXPECT_EQ(it.remaining(0), 5);  // 10 - 5 = 5 remaining in dim 0
-    EXPECT_EQ(it.remaining(1), 3);  // 5 - 2 = 3 remaining in dim 1
-    EXPECT_EQ(it.offset(), 0x1000 + 2 * 10 + 5);  // base + 2 lines + 5 bytes
+
+    EXPECT_EQ(it.remaining(0), 5);               // 10 - 5 = 5 remaining in dim 0
+    EXPECT_EQ(it.remaining(1), 3);               // 5 - 2 = 3 remaining in dim 1
+    EXPECT_EQ(it.offset(), 0x1000 + 2 * 10 + 5); // base + 2 lines + 5 bytes
     EXPECT_FALSE(it.done());
 
     // Advance by another 25 bytes to complete the span
@@ -371,4 +384,3 @@ namespace {
   }
 
 } // namespace
-

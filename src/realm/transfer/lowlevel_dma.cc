@@ -860,14 +860,14 @@ namespace Realm {
 
     // Create span with single dummy field (wrapping FIFO doesn't use real fields)
     std::vector<FieldID> fields = {FieldID(0)};
-    
+
     if(dim == 1) {
       uint32_t extents[] = {static_cast<uint32_t>(size)};
       size_t strides[] = {1};
       span_list.append(base, fields, 1, extents, strides);
     } else {
       uint32_t extents[] = {static_cast<uint32_t>(size), static_cast<uint32_t>(lines)};
-      size_t strides[] = {1, 0};  // stride of 0 for wrapping
+      size_t strides[] = {1, 0}; // stride of 0 for wrapping
       span_list.append(base, fields, 2, extents, strides);
     }
 

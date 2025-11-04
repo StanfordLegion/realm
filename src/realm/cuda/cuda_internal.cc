@@ -252,8 +252,7 @@ namespace Realm {
           // if it's not contiguous, width must be exactly what
           // we need for either 1 or 2 leading dimensions
           if(iter.remaining(0) == ainfo.width_in_bytes) {
-            if((iter.dim() == 2) ||
-               (iter.remaining(1) >= (ainfo.height * ainfo.depth))) {
+            if((iter.dim() == 2) || (iter.remaining(1) >= (ainfo.height * ainfo.depth))) {
               // input dim 1 covers output 1 and 2
               pitch = iter.stride(1);
               height = ainfo.height;
@@ -733,8 +732,7 @@ namespace Realm {
               cuda_copy.dstY = ainfo.pos[1];
               cuda_copy.dstZ = ainfo.pos[2];
               cuda_copy.srcMemoryType = CU_MEMORYTYPE_UNIFIED;
-              cuda_copy.srcDevice =
-                  static_cast<CUdeviceptr>(in_base + in_iter.offset());
+              cuda_copy.srcDevice = static_cast<CUdeviceptr>(in_base + in_iter.offset());
               get_nonaffine_strides(cuda_copy.srcPitch, cuda_copy.srcHeight, ainfo,
                                     in_iter, bytes);
             }
