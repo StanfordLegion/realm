@@ -34,9 +34,9 @@ namespace Realm {
   struct Span {
     size_t base_offset;              // Base memory offset
     std::vector<FieldID> field_ids;  // Field ID(s) - one or more
-    uint8_t num_dims;                // 1-3
-    uint32_t extents[3];             // Elements per dimension
-    size_t strides[3];               // Byte stride per dimension
+    uint8_t num_dims;                // 1-4 (extended from 3 to 4 for complex layouts)
+    uint32_t extents[4];             // Elements per dimension
+    size_t strides[4];               // Byte stride per dimension
     
     // Computed properties
     size_t total_bytes() const;
@@ -80,7 +80,7 @@ namespace Realm {
     const SpanList* list_ = nullptr;
     size_t span_idx_ = 0;
     size_t field_idx_ = 0;          // Current field within span
-    uint32_t pos_[3] = {};
+    uint32_t pos_[4] = {};
     size_t bytes_consumed_ = 0;     // Total bytes consumed so far
     
   public:

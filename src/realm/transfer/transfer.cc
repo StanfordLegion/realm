@@ -626,6 +626,9 @@ namespace Realm {
             total_count *= count;
           }
 
+          // Span now supports up to 4 dimensions
+          assert(cur_dim < 4 && "Span dimension limit (4) exceeded");
+          
           span.extents[cur_dim] = total_count;
           span.strides[cur_dim] = stride;
 

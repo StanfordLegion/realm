@@ -71,12 +71,12 @@ namespace Realm {
     span.field_ids = fields;
     span.num_dims = dims;
     
-    for (int d = 0; d < dims && d < 3; d++) {
+    for (int d = 0; d < dims && d < 4; d++) {
       span.extents[d] = extents[d];
       span.strides[d] = strides[d];
     }
     // Zero out unused dimensions
-    for (int d = dims; d < 3; d++) {
+    for (int d = dims; d < 4; d++) {
       span.extents[d] = 0;
       span.strides[d] = 0;
     }
@@ -152,6 +152,35 @@ namespace Realm {
     }
     
     const Span& s = (*list_)[span_idx_];
+    
+    // Return effective dimensionality based on current position
+    // This matches AddressListCursor behavior: when we're partially through
+    // a multi-dimensional space, we report dimensions starting from the
+    // lowest dimension that has been partially consumed.
+    //
+    // Find the lowest dimension where we've made partial progress
+    for (int d = 0; d < s.num_dims; d++) {
+      if (pos_[d] > 0 && pos_[d] < s.extents[d]) {
+        // We're partway through dimension d
+        // Return d+1 (dimensionality includes this dimension)
+        int result = d + 1;
+        fprintf(stderr, "DEBUG SpanIterator::dim(): span_idx=%zu, pos=[%u,%u,%u,%u], extents=[%u,%u,%u,%u], partial at d=%d, returning %d\n",
+                span_idx_, pos_[0], pos_[1], pos_[2], pos_[3], s.extents[0], s.extents[1], s.extents[2], s.extents[3], d, result);
+        return result;
+      }
+      if (pos_[d] >= s.extents[d]) {
+        // This dimension is exhausted, should have carried to next
+        // (this shouldn't happen in well-formed iterator state)
+        continue;
+      }
+    }
+    
+    // No partial progress yet, return full dimensionality
+    fprintf(stderr, "DEBUG SpanIterator::dim(): span_idx=%zu, pos=[%u,%u,%u,%u], extents=[%u,%u,%u,%u], num_dims=%d, no partial, returning %d\n",
+            span_idx_, pos_[0], pos_[1], pos_[2], pos_[3], s.extents[0], s.extents[1], s.extents[2], s.extents[3], (int)s.num_dims, (int)s.num_dims);
+    if (s.num_dims > 4) {
+      fprintf(stderr, "ERROR: num_dims=%d is > 4, this is a bug!\n", (int)s.num_dims);
+    }
     return s.num_dims;
   }
   
