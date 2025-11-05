@@ -101,7 +101,7 @@
 #define REALM_ASSERT(cond)                                                             \
   do {                                                                                 \
     if(!(cond)) {                                                                      \
-      abort();                                                                         \
+      __trap();                                                                        \
     }                                                                                  \
   } while(0)
 #else
