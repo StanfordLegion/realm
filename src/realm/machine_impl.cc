@@ -142,6 +142,8 @@ namespace Realm {
     log_machine.info() << "ProcInfo: adding proc-mem affinity " << pma.p << " -> "
                        << pma.m << " with bandwidth " << pma.bandwidth << " and latency "
                        << pma.latency;
+    REALM_ASSERT(pma.bandwidth > 0);
+    REALM_ASSERT(pma.latency > 0);
     bool is_local = is_local_affinity(pma);
     return pmas.add_affinity(pma.m, pma, is_local);
   }
@@ -1098,8 +1100,6 @@ namespace Realm {
   void MachineImpl::add_proc_mem_affinity(const Machine::ProcessorMemoryAffinity &pma,
                                           bool lock_held /*= false*/)
   {
-    REALM_ASSERT(pma.bandwidth > 0);
-    REALM_ASSERT(pma.latency > 0);
     if(!lock_held)
       mutex.lock();
 
