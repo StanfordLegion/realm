@@ -813,6 +813,8 @@ namespace Realm {
         boot_config.mode = Realm::UCP::BOOTSTRAP_MPI;
       } else if(strcmp(bootstrap_mode_str, "p2p") == 0) {
         boot_config.mode = Realm::UCP::BOOTSTRAP_P2P;
+      } else if(strcmp(bootstrap_mode_str, "pmix") == 0) {
+        boot_config.mode = Realm::UCP::BOOTSTRAP_PMIX;
       } else if(strcmp(bootstrap_mode_str, "plugin") == 0) {
         boot_config.mode = Realm::UCP::BOOTSTRAP_PLUGIN;
       } else {

@@ -25,6 +25,8 @@
 
 #define BOOTSTRAP_MPI_PLUGIN "realm_ucp_bootstrap_mpi.so"
 #define BOOTSTRAP_P2P_PLUGIN "realm_ucp_bootstrap_p2p.so"
+#define BOOTSTRAP_PMIX_PLUGIN "realm_ucp_bootstrap_pmix.so"
+
 namespace Realm {
   namespace UCP {
 
@@ -32,6 +34,7 @@ namespace Realm {
     {
       BOOTSTRAP_MPI,
       BOOTSTRAP_P2P,
+      BOOTSTRAP_PMIX,
       BOOTSTRAP_PLUGIN
     };
 

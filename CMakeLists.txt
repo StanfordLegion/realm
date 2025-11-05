@@ -647,6 +647,7 @@ if(REALM_ENABLE_UCX)
   # TODO(cperry): when we support more bootstraps, we should be able to select and pick one for testing
   if(REALM_BUILD_TESTS OR REALM_BUILD_BENCHMARKS)
     set(UCX_BOOTSTRAP_ENABLE_MPI ON)
+    set(UCX_BOOTSTRAP_ENABLE_PMIX ON)
   endif()
   if(REALM_INSTALL_UCX_BOOTSTRAPS)
     add_subdirectory(src/realm/ucx/bootstrap)
