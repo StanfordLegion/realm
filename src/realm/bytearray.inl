@@ -20,9 +20,10 @@
 // this is a nop, but it's for the benefit of IDEs trying to parse this file
 #include "realm/bytearray.h"
 
+#include "realm/logging.h"
+
 #include <string.h>
 #include <stdlib.h>
-#include <assert.h>
 
 // for std::swap
 #include <algorithm>
