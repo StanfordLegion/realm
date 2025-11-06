@@ -42,6 +42,8 @@ namespace Realm {
 
     virtual void shutdown(void);
 
+    int get_num_threads(void) const noexcept;
+
   protected:
     class OpenMPContextManager : public TaskContextManager {
     public:
