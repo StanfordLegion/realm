@@ -554,8 +554,7 @@ namespace Realm {
   {
     os << "Layout(bytes=" << bytes_used << ", align=" << alignment_reqd << ", fields={";
     bool first = true;
-    for(std::map<FieldID, FieldLayout>::const_iterator it = fields.begin();
-        it != fields.end(); ++it) {
+    for(FieldMap::const_iterator it = fields.begin(); it != fields.end(); ++it) {
       if(!first)
         os << ", ";
       first = false;
@@ -582,8 +581,7 @@ namespace Realm {
   inline size_t InstanceLayout<N, T>::calculate_offset(Point<N, T> p, FieldID fid) const
   {
     // first look up the field to see which piece list it uses (and get offset)
-    std::map<FieldID, InstanceLayoutGeneric::FieldLayout>::const_iterator it =
-        fields.find(fid);
+    FieldMap::const_iterator it = fields.find(fid);
     assert(it != fields.end());
 
     const InstanceLayoutPiece<N, T> *ilp = piece_lists[it->second.list_idx].find_piece(p);
@@ -769,8 +767,7 @@ namespace Realm {
     // find the right piece list for our field
     const InstanceLayout<N, T> *layout =
         checked_cast<const InstanceLayout<N, T> *>(inst.get_layout());
-    std::map<FieldID, InstanceLayoutGeneric::FieldLayout>::const_iterator it =
-        layout->fields.find(field_id);
+    InstanceLayoutGeneric::FieldMap::const_iterator it = layout->fields.find(field_id);
     assert(it != layout->fields.end());
 
     this->piece_list = &layout->piece_lists[it->second.list_idx];
@@ -789,8 +786,7 @@ namespace Realm {
     // find the right piece list for our field
     const InstanceLayout<N, T> *layout =
         checked_cast<const InstanceLayout<N, T> *>(inst.get_layout());
-    std::map<FieldID, InstanceLayoutGeneric::FieldLayout>::const_iterator it =
-        layout->fields.find(field_id);
+    InstanceLayoutGeneric::FieldMap::const_iterator it = layout->fields.find(field_id);
     assert(it != layout->fields.end());
 
     this->piece_list = &layout->piece_lists[it->second.list_idx];
@@ -913,8 +909,7 @@ namespace Realm {
   {
     const InstanceLayout<N, T> *layout =
         checked_cast<const InstanceLayout<N, T> *>(inst.get_layout());
-    std::map<FieldID, InstanceLayoutGeneric::FieldLayout>::const_iterator it =
-        layout->fields.find(field_id);
+    InstanceLayoutGeneric::FieldMap::const_iterator it = layout->fields.find(field_id);
     assert(it != layout->fields.end());
     const InstancePieceList<N, T> &ipl = layout->piece_lists[it->second.list_idx];
 
@@ -963,8 +958,7 @@ namespace Realm {
   {
     const InstanceLayout<N, T> *layout =
         checked_cast<const InstanceLayout<N, T> *>(inst.get_layout());
-    std::map<FieldID, InstanceLayoutGeneric::FieldLayout>::const_iterator it =
-        layout->fields.find(field_id);
+    InstanceLayoutGeneric::FieldMap::const_iterator it = layout->fields.find(field_id);
     assert(it != layout->fields.end());
     const InstancePieceList<N, T> &ipl = layout->piece_lists[it->second.list_idx];
 
@@ -1020,8 +1014,7 @@ namespace Realm {
     // instance's dimensionality should be <N2,T2>
     const InstanceLayout<N2, T2> *layout =
         checked_cast<const InstanceLayout<N2, T2> *>(inst.get_layout());
-    std::map<FieldID, InstanceLayoutGeneric::FieldLayout>::const_iterator it =
-        layout->fields.find(field_id);
+    InstanceLayoutGeneric::FieldMap::const_iterator it = layout->fields.find(field_id);
     assert(it != layout->fields.end());
     const InstancePieceList<N2, T2> &ipl = layout->piece_lists[it->second.list_idx];
 
@@ -1088,8 +1081,7 @@ namespace Realm {
     // instance's dimensionality should be <N2,T2>
     const InstanceLayout<N2, T2> *layout =
         checked_cast<const InstanceLayout<N2, T2> *>(inst.get_layout());
-    std::map<FieldID, InstanceLayoutGeneric::FieldLayout>::const_iterator it =
-        layout->fields.find(field_id);
+    InstanceLayoutGeneric::FieldMap::const_iterator it = layout->fields.find(field_id);
     assert(it != layout->fields.end());
     const InstancePieceList<N2, T2> &ipl = layout->piece_lists[it->second.list_idx];
 
@@ -1146,8 +1138,7 @@ namespace Realm {
   {
     const InstanceLayout<N, T> *layout =
         checked_cast<const InstanceLayout<N, T> *>(inst.get_layout());
-    std::map<FieldID, InstanceLayoutGeneric::FieldLayout>::const_iterator it =
-        layout->fields.find(field_id);
+    InstanceLayoutGeneric::FieldMap::const_iterator it = layout->fields.find(field_id);
     if(it == layout->fields.end())
       return false;
     const InstancePieceList<N, T> &ipl = layout->piece_lists[it->second.list_idx];
@@ -1173,8 +1164,7 @@ namespace Realm {
   {
     const InstanceLayout<N, T> *layout =
         checked_cast<const InstanceLayout<N, T> *>(inst.get_layout());
-    std::map<FieldID, InstanceLayoutGeneric::FieldLayout>::const_iterator it =
-        layout->fields.find(field_id);
+    InstanceLayoutGeneric::FieldMap::const_iterator it = layout->fields.find(field_id);
     if(it == layout->fields.end())
       return false;
     const InstancePieceList<N, T> &ipl = layout->piece_lists[it->second.list_idx];
@@ -1209,8 +1199,7 @@ namespace Realm {
     // instance's dimensionality should be <N2,T2>
     const InstanceLayout<N2, T2> *layout =
         checked_cast<const InstanceLayout<N2, T2> *>(inst.get_layout());
-    std::map<FieldID, InstanceLayoutGeneric::FieldLayout>::const_iterator it =
-        layout->fields.find(field_id);
+    InstanceLayoutGeneric::FieldMap::const_iterator it = layout->fields.find(field_id);
     if(it == layout->fields.end())
       return false;
     const InstancePieceList<N2, T2> &ipl = layout->piece_lists[it->second.list_idx];
@@ -1238,8 +1227,7 @@ namespace Realm {
     // instance's dimensionality should be <N2,T2>
     const InstanceLayout<N2, T2> *layout =
         checked_cast<const InstanceLayout<N2, T2> *>(inst.get_layout());
-    std::map<FieldID, InstanceLayoutGeneric::FieldLayout>::const_iterator it =
-        layout->fields.find(field_id);
+    InstanceLayoutGeneric::FieldMap::const_iterator it = layout->fields.find(field_id);
     if(it == layout->fields.end())
       return false;
     const InstancePieceList<N2, T2> &ipl = layout->piece_lists[it->second.list_idx];
