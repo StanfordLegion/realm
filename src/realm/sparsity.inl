@@ -20,6 +20,7 @@
 // nop, but helps IDEs
 #include "realm/sparsity.h"
 
+#include "realm/logging.h"
 #include "realm/serialize.h"
 
 TEMPLATE_TYPE_IS_SERIALIZABLE2(int N, typename T, Realm::SparsityMap<N, T>);
