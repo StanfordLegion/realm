@@ -240,7 +240,7 @@ namespace Realm {
                                                                     int offset, int count,
                                                                     MARKER &marker) const
   {
-    assert(count > 0);
+    REALM_ASSERT(count > 0);
 
 #ifdef DEBUG_INTERVALS
     std::cout << "START " << count;
@@ -430,20 +430,20 @@ namespace Realm {
   template <typename IT, typename LT>
   inline void IntervalTree<IT, LT>::remove_interval(IT iv_start, IT iv_end, LT iv_label)
   {
-    assert(0);
+    abort();
   }
 
   template <typename IT, typename LT>
   template <typename IR>
   inline void IntervalTree<IT, LT>::remove_intervals(const IR &iv_ranges, LT iv_label)
   {
-    assert(0);
+    abort();
   }
 
   template <typename IT, typename LT>
   inline void IntervalTree<IT, LT>::remove_by_label(LT iv_label)
   {
-    assert(0);
+    abort();
   }
 
   template <typename IT, typename LT>
