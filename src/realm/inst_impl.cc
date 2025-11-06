@@ -1082,6 +1082,7 @@ namespace Realm {
                              ? InstanceStatus::FAILED_ALLOCATION
                              : InstanceStatus::CANCELLED_ALLOCATION);
           stat.error_code = 0;
+          stat.inst = me;
           measurements.add_measurement(stat);
         }
 
@@ -1091,6 +1092,7 @@ namespace Realm {
                              ? InstanceStatus::FAILED_ALLOCATION
                              : InstanceStatus::CANCELLED_ALLOCATION);
           stat.error_code = 0;
+          stat.inst = me;
           measurements.add_measurement(stat);
         }
 
@@ -1106,6 +1108,7 @@ namespace Realm {
 
           InstanceAllocResult result;
           result.success = false;
+          result.inst = me;
           measurements.add_measurement(result);
         }
 
@@ -1139,6 +1142,7 @@ namespace Realm {
 #endif
           ProfilingMeasurements::InstanceAllocResult result;
           result.success = true;
+          result.inst = me;
           measurements.add_measurement(result);
 
           metadata.need_alloc_result = false;
@@ -1185,6 +1189,7 @@ namespace Realm {
 
         ProfilingMeasurements::InstanceAllocResult result;
         result.success = true;
+        result.inst = me;
         measurements.add_measurement(result);
       }
 
@@ -1250,6 +1255,7 @@ namespace Realm {
         ProfilingMeasurements::InstanceStatus stat;
         stat.result = ProfilingMeasurements::InstanceStatus::DESTROYED_SUCCESSFULLY;
         stat.error_code = 0;
+        stat.inst = me;
         measurements.add_measurement(stat);
       }
 

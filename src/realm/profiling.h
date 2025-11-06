@@ -239,6 +239,7 @@ namespace Realm {
         INSTANCE_COUNT_EXCEEDED,
       };
 
+      RegionInstance inst;
       Result result;
       int error_code;
       ByteArray error_details;
@@ -254,6 +255,7 @@ namespace Realm {
       static const ProfilingMeasurementID ID = PMID_INST_ALLOCRESULT;
 
       bool success;
+      RegionInstance inst;
     };
 
     // Track the timeline of an instance
