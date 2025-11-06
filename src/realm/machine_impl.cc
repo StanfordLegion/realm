@@ -722,7 +722,7 @@ namespace Realm {
   }
 
   void MachineImpl::get_local_processors_by_kind(std::set<Processor> &pset,
-                                                        Processor::Kind kind) const
+                                                 Processor::Kind kind) const
   {
     // TODO: consider using a reader/writer lock here instead
     AutoLock<> al(mutex);

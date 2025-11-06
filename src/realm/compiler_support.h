@@ -98,24 +98,25 @@
 namespace Realm {
   class Logger;
   extern Logger log_runtime;
-}
+} // namespace Realm
 
 // REALM_ASSERT(cond) - abort program if 'cond' is not true
 #ifdef NDEBUG
 #if defined(__CUDACC__) || defined(__HIPCC__)
-#define REALM_ASSERT(cond)                                                             \
-  do {                                                                                 \
-    if(!(cond)) {                                                                      \
-      __trap();                                                                        \
-    }                                                                                  \
+#define REALM_ASSERT(cond)                                                               \
+  do {                                                                                   \
+    if(!(cond)) {                                                                        \
+      __trap();                                                                          \
+    }                                                                                    \
   } while(0)
 #else
-#define REALM_ASSERT(cond)                                                             \
-  do {                                                                                 \
-    if(!(cond)) {                                                                      \
-      Realm::log_runtime.fatal("Assertion failed: (%s), at %s:%d", #cond, __FILE__, __LINE__);  \
-      abort();                                                                         \
-    }                                                                                  \
+#define REALM_ASSERT(cond)                                                               \
+  do {                                                                                   \
+    if(!(cond)) {                                                                        \
+      Realm::log_runtime.fatal("Assertion failed: (%s), at %s:%d", #cond, __FILE__,      \
+                               __LINE__);                                                \
+      abort();                                                                           \
+    }                                                                                    \
   } while(0)
 #endif
 #else
