@@ -91,7 +91,8 @@ void run_uniform_test_case(const IDIndexedIteratorTestCaseData<N> &tc)
 
   // Create an instance with one entry per field, all uniformly sized
   std::vector<size_t> field_sizes(tc.fields.size(), tc.field_size);
-  RegionInstanceImpl *inst_impl = create_inst<N, T>(nullptr, tc.domain, tc.fields, field_sizes);
+  RegionInstanceImpl *inst_impl =
+      create_inst<N, T>(nullptr, tc.domain, tc.fields, field_sizes);
 
   MockHeap mock_heap;
 
