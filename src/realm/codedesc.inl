@@ -608,7 +608,7 @@ namespace Realm {
   inline CodeDescriptor::CodeDescriptor(T fnptr)
     : m_type(TypeConv::from_cpp_type<T>())
   {
-    assert(m_type.is<FunctionPointerType>());
+    REALM_ASSERT(m_type.is<FunctionPointerType>());
     FunctionPointerImplementation *fpi =
         new FunctionPointerImplementation(reinterpret_cast<void (*)()>(fnptr));
     m_impls.push_back(fpi);

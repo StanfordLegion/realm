@@ -121,7 +121,7 @@ namespace Realm {
     template <typename T1>
     inline /*static*/ void TypeListTerm::DemuxHelper<TARGET, N>::demux(int index, T1 arg1)
     {
-      assert(0);
+      abort();
     }
 
     template <typename TARGET, int N>
@@ -129,7 +129,7 @@ namespace Realm {
     inline /*static*/ void TypeListTerm::DemuxHelper<TARGET, N>::demux(int index, T1 arg1,
                                                                        T2 arg2)
     {
-      assert(0);
+      abort();
     }
 
     template <typename TARGET, int N>
@@ -137,7 +137,7 @@ namespace Realm {
     inline /*static*/ void TypeListTerm::DemuxHelper<TARGET, N>::demux(int index, T1 arg1,
                                                                        T2 arg2, T3 arg3)
     {
-      assert(0);
+      abort();
     }
 
     template <typename TARGET, int N>
@@ -146,7 +146,7 @@ namespace Realm {
                                                                        T2 arg2, T3 arg3,
                                                                        T4 arg4)
     {
-      assert(0);
+      abort();
     }
 
     ////////////////////////////////////////////////////////////////////////
@@ -157,7 +157,7 @@ namespace Realm {
     template <typename TARGET, typename T1>
     inline /*static*/ void IntList<MIN, MAX>::demux(int index, T1 arg1)
     {
-      assert((MIN <= index) && (index <= MAX));
+      REALM_ASSERT((MIN <= index) && (index <= MAX));
       IntDemuxHelper<TARGET, MIN, MAX - MIN>::template demux<T1>(index, arg1);
     }
 
@@ -165,7 +165,7 @@ namespace Realm {
     template <typename TARGET, typename T1, typename T2>
     inline /*static*/ void IntList<MIN, MAX>::demux(int index, T1 arg1, T2 arg2)
     {
-      assert((MIN <= index) && (index <= MAX));
+      REALM_ASSERT((MIN <= index) && (index <= MAX));
       IntDemuxHelper<TARGET, MIN, MAX - MIN>::template demux<T1, T2>(index, arg1, arg2);
     }
 
@@ -173,7 +173,7 @@ namespace Realm {
     template <typename TARGET, typename T1, typename T2, typename T3>
     inline /*static*/ void IntList<MIN, MAX>::demux(int index, T1 arg1, T2 arg2, T3 arg3)
     {
-      assert((MIN <= index) && (index <= MAX));
+      REALM_ASSERT((MIN <= index) && (index <= MAX));
       IntDemuxHelper<TARGET, MIN, MAX - MIN>::template demux<T1, T2, T3>(index, arg1,
                                                                          arg2, arg3);
     }
@@ -183,7 +183,7 @@ namespace Realm {
     inline /*static*/ void IntList<MIN, MAX>::demux(int index, T1 arg1, T2 arg2, T3 arg3,
                                                     T4 arg4)
     {
-      assert((MIN <= index) && (index <= MAX));
+      REALM_ASSERT((MIN <= index) && (index <= MAX));
       IntDemuxHelper<TARGET, MIN, MAX - MIN>::template demux<T1, T2, T3, T4>(
           index, arg1, arg2, arg3, arg4);
     }

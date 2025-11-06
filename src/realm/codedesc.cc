@@ -351,7 +351,7 @@ namespace Realm {
     if(target_impl_type == typeid(FunctionPointerImplementation)) {
       const DSOReferenceImplementation *dsoref =
           dynamic_cast<const DSOReferenceImplementation *>(source);
-      assert(dsoref != 0);
+      REALM_ASSERT(dsoref != 0);
 
       void *handle = 0;
       // check to see if we've already loaded the module?
@@ -385,7 +385,7 @@ namespace Realm {
     if(target_impl_type == typeid(DSOReferenceImplementation)) {
       const FunctionPointerImplementation *fpi =
           dynamic_cast<const FunctionPointerImplementation *>(source);
-      assert(fpi != 0);
+      REALM_ASSERT(fpi != 0);
 
       return dladdr_helper((void *)(fpi->fnptr), false /*!quiet*/);
     }

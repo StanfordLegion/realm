@@ -179,7 +179,7 @@ namespace Realm {
                                                                      int level)
   {
 #ifdef DEBUG_REALM
-    assert(((reinterpret_cast<intptr_t>(root) & 7) == 0) && (level >= 0) && (level <= 7));
+    REALM_ASSERT(((reinterpret_cast<intptr_t>(root) & 7) == 0) && (level >= 0) && (level <= 7));
 #endif
     return (reinterpret_cast<intptr_t>(root) | level);
   }
@@ -255,7 +255,7 @@ namespace Realm {
     if(rlval == 0)
       return false; // empty tree
 #ifdef DEBUG_REALM
-    assert(extract_root(rlval)->level == extract_level(rlval));
+    REALM_ASSERT(extract_root(rlval)->level == extract_level(rlval));
 #endif
     int n_level = extract_level(rlval);
     if(n_level < level_needed)
@@ -264,14 +264,14 @@ namespace Realm {
 
 #ifdef DEBUG_REALM
     // when we get here, root is high enough
-    assert((level_needed <= n->level) && (index >= n->first_index) &&
+    REALM_ASSERT((level_needed <= n->level) && (index >= n->first_index) &&
            (index <= n->last_index));
 #endif
 
     // now walk tree, populating the path we need
     while(n_level > 0) {
 #ifdef DEBUG_REALM
-      assert(n_level == n->level);
+      REALM_ASSERT(n_level == n->level);
 #endif
       // intermediate nodes
       typename ALLOCATOR::INNER_TYPE *inner =
@@ -280,7 +280,7 @@ namespace Realm {
       IT i = ((index >> (ALLOCATOR::LEAF_BITS + (n->level - 1) * ALLOCATOR::INNER_BITS)) &
               ((((IT)1) << ALLOCATOR::INNER_BITS) - 1));
 #ifdef DEBUG_REALM
-      assert(((size_t)i) < ALLOCATOR::INNER_TYPE::SIZE);
+      REALM_ASSERT(((size_t)i) < ALLOCATOR::INNER_TYPE::SIZE);
 #endif
 
       NodeBase *child = inner->elems[i].load_acquire();
@@ -288,7 +288,7 @@ namespace Realm {
         return false;
       }
 #ifdef DEBUG_REALM
-      assert((child != 0) && (child->level == (n_level - 1)) &&
+      REALM_ASSERT((child != 0) && (child->level == (n_level - 1)) &&
              (index >= child->first_index) && (index <= child->last_index));
 #endif
       n = child;
@@ -320,7 +320,7 @@ namespace Realm {
     NodeBase *n = extract_root(rlval);
     int n_level = extract_level(rlval);
 #ifdef DEBUG_REALM
-    assert(!n || (n_level == n->level));
+    REALM_ASSERT(!n || (n_level == n->level));
 #endif
     if(!n || (n_level < level_needed)) {
       // root doesn't appear to be high enough - take lock and fix it if it's really
@@ -362,14 +362,14 @@ namespace Realm {
     }
 #ifdef DEBUG_REALM
     // when we get here, root is high enough
-    assert((level_needed <= n->level) && (index >= n->first_index) &&
+    REALM_ASSERT((level_needed <= n->level) && (index >= n->first_index) &&
            (index <= n->last_index));
 #endif
 
     // now walk tree, populating the path we need
     while(n_level > 0) {
 #ifdef DEBUG_REALM
-      assert(n_level == n->level);
+      REALM_ASSERT(n_level == n->level);
 #endif
       // intermediate nodes
       typename ALLOCATOR::INNER_TYPE *inner =
@@ -378,7 +378,7 @@ namespace Realm {
       IT i = ((index >> (ALLOCATOR::LEAF_BITS + (n->level - 1) * ALLOCATOR::INNER_BITS)) &
               ((((IT)1) << ALLOCATOR::INNER_BITS) - 1));
 #ifdef DEBUG_REALM
-      assert(((size_t)i) < ALLOCATOR::INNER_TYPE::SIZE);
+      REALM_ASSERT(((size_t)i) < ALLOCATOR::INNER_TYPE::SIZE);
 #endif
 
       NodeBase *child = inner->elems[i].load_acquire();
@@ -406,7 +406,7 @@ namespace Realm {
         inner->lock.unlock();
       }
 #ifdef DEBUG_REALM
-      assert((child != 0) && (child->level == (n_level - 1)) &&
+      REALM_ASSERT((child != 0) && (child->level == (n_level - 1)) &&
              (index >= child->first_index) && (index <= child->last_index));
 #endif
       n = child;
@@ -440,7 +440,7 @@ namespace Realm {
     , first_free(0)
     , next_alloc(0)
   {
-    assert((parent_list == nullptr) || (parent_list->parent_list == nullptr));
+    REALM_ASSERT((parent_list == nullptr) || (parent_list->parent_list == nullptr));
     ALLOCATOR::register_freelist(this);
   }
 
@@ -448,7 +448,7 @@ namespace Realm {
   void
   DynamicTableFreeList<ALLOCATOR>::push_front(DynamicTableFreeList<ALLOCATOR>::ET *entry)
   {
-    assert(entry->next_free == nullptr);
+    REALM_ASSERT(entry->next_free == nullptr);
     // no need for lock - use compare and swap to push item onto front of
     //  free list (no ABA problem because the popper is mutex'd)
     DynamicTableFreeList<ALLOCATOR>::ET *old_free = first_free.load_acquire();
@@ -532,7 +532,7 @@ namespace Realm {
       // Can't use dummy here since it may have been already allocated and used elsewhere.
       // Only the items pushed in the free list as a symptom of the lookup are freely
       // available.
-      assert(dummy != 0);
+      REALM_ASSERT(dummy != 0);
       (void)dummy;
       // No one is using the returned list, so we can freely pop the head off and push the
       // rest onto this list for later

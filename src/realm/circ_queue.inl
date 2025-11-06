@@ -172,7 +172,7 @@ namespace Realm {
   {
     // check for full-ness
     if(current_size == max_size) {
-      assert(growth_factor != 0);
+      REALM_ASSERT(growth_factor != 0);
       if(growth_factor > 0)
         reserve(max_size + growth_factor);
       else if(max_size > 0)
@@ -195,7 +195,7 @@ namespace Realm {
   template <typename T, unsigned INTSIZE>
   inline void CircularQueue<T, INTSIZE>::pop_front(void)
   {
-    assert(current_size > 0);
+    REALM_ASSERT(current_size > 0);
 
     // destruct existing entry
     T *ptr = item_ptr(external_buffer ? external_buffer : internal_buffer, head);
@@ -226,7 +226,7 @@ namespace Realm {
   {
     // check for full-ness
     if(current_size == max_size) {
-      assert(growth_factor != 0);
+      REALM_ASSERT(growth_factor != 0);
       if(growth_factor > 0)
         reserve(max_size + growth_factor);
       else if(max_size > 0)
@@ -249,7 +249,7 @@ namespace Realm {
   template <typename T, unsigned INTSIZE>
   inline void CircularQueue<T, INTSIZE>::pop_back(void)
   {
-    assert(current_size > 0);
+    REALM_ASSERT(current_size > 0);
 
     // destruct existing entry
     T *ptr = item_ptr(external_buffer ? external_buffer : internal_buffer, tail);
@@ -270,7 +270,7 @@ namespace Realm {
     if((current_size > 0) && (external_buffer == 0)) {
       if((swap_with.current_size > 0) && (swap_with.external_buffer == 0)) {
         // both sides have valid data - yuck
-        assert(0);
+        abort();
       } else {
         // copy items from *this to swap_with
         size_t p = head;
@@ -321,7 +321,7 @@ namespace Realm {
   inline void CircularQueue<T, INTSIZE>::swap(CircularQueue<T, INTSIZE2> &swap_with)
   {
     // not yet implemented
-    assert(0);
+    abort();
   }
 
   template <typename T, unsigned INTSIZE>
@@ -422,7 +422,7 @@ namespace Realm {
   template <typename T, unsigned INTSIZE>
   inline T CircularQueueIterator<T, INTSIZE>::operator*(void)
   {
-    assert(cq && !at_end);
+    REALM_ASSERT(cq && !at_end);
     return *(cq->item_ptr(cq->external_buffer ? cq->external_buffer : cq->internal_buffer,
                           pos));
   }
@@ -430,7 +430,7 @@ namespace Realm {
   template <typename T, unsigned INTSIZE>
   inline const T *CircularQueueIterator<T, INTSIZE>::operator->(void)
   {
-    assert(cq && !at_end);
+    REALM_ASSERT(cq && !at_end);
     return (cq->item_ptr(cq->external_buffer ? cq->external_buffer : cq->internal_buffer,
                          pos));
   }
@@ -439,7 +439,7 @@ namespace Realm {
   CircularQueueIterator<T, INTSIZE> &
       CircularQueueIterator<T, INTSIZE>::operator++(/*prefix*/)
   {
-    assert(cq && !at_end);
+    REALM_ASSERT(cq && !at_end);
     if(pos == cq->tail) {
       at_end = true;
     } else {
@@ -456,7 +456,7 @@ namespace Realm {
   CircularQueueIterator<T, INTSIZE>::operator++(int /*postfix*/)
   {
     CircularQueueIterator<T, INTSIZE> orig(*this);
-    assert(cq && !at_end);
+    REALM_ASSERT(cq && !at_end);
     if(pos == cq->tail) {
       at_end = true;
     } else {

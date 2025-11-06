@@ -56,7 +56,7 @@ namespace Realm {
       start = static_cast<char *>(start) + step;
       ofs += step;
     }
-    assert(ofs == bytes);
+    REALM_ASSERT(ofs == bytes);
   }
 
   /*static*/ void CompletionCallbackBase::clone_all(void *dst, const void *src,
@@ -71,7 +71,7 @@ namespace Realm {
       dst = static_cast<char *>(dst) + step;
       ofs += step;
     }
-    assert(ofs == bytes);
+    REALM_ASSERT(ofs == bytes);
   }
 
   /*static*/ void CompletionCallbackBase::destroy_all(void *start, size_t bytes)
@@ -84,7 +84,7 @@ namespace Realm {
       start = static_cast<char *>(start) + step;
       ofs += step;
     }
-    assert(ofs == bytes);
+    REALM_ASSERT(ofs == bytes);
   }
 
   ////////////////////////////////////////////////////////////////////////
@@ -123,14 +123,14 @@ namespace Realm {
   ActiveMessageHandlerTable::HandlerEntry *
   ActiveMessageHandlerTable::lookup_message_handler(MessageID id)
   {
-    assert(id < handlers.size());
+    REALM_ASSERT(id < handlers.size());
     return &handlers[id];
   }
 
   const char *
   ActiveMessageHandlerTable::lookup_message_name(ActiveMessageHandlerTable::MessageID id)
   {
-    assert(id < handlers.size());
+    REALM_ASSERT(id < handlers.size());
     return handlers[id].name;
   }
 
@@ -138,7 +138,7 @@ namespace Realm {
                                                               long long t_start,
                                                               long long t_end)
   {
-    assert(id < handlers.size());
+    REALM_ASSERT(id < handlers.size());
     handlers[id].stats.record(t_start, t_end);
   }
 
@@ -188,7 +188,7 @@ namespace Realm {
       e.extract_frag_info = nextreg->extract_frag_info;
       e.handler_notimeout = nextreg->get_handler_notimeout();
       // at least one of the two above must be non-null
-      assert((e.handler != 0) || (e.handler_notimeout != 0));
+      REALM_ASSERT((e.handler != 0) || (e.handler_notimeout != 0));
       e.handler_inline = nextreg->get_handler_inline();
       handlers.push_back(e);
     }
@@ -216,7 +216,7 @@ namespace Realm {
   IncomingMessageManager::MessageBlock::new_block(size_t _total_size)
   {
     void *ptr = malloc(_total_size);
-    assert(ptr != 0);
+    REALM_ASSERT(ptr != 0);
     MessageBlock *block = new(ptr) MessageBlock;
     block->total_size = _total_size;
     block->next_free = 0;
@@ -281,7 +281,7 @@ namespace Realm {
       return msg;
     } else {
       // would it have ever fit?
-      assert((new_used - size_used) <= (total_size - sizeof(MessageBlock)));
+      REALM_ASSERT((new_used - size_used) <= (total_size - sizeof(MessageBlock)));
 
       // return failure - caller will find a new block
       return 0;
@@ -415,7 +415,7 @@ namespace Realm {
         }
 
         bool ok = it->second->add_chunk(frag_info.chunk_id, payload, payload_size);
-        assert(ok);
+        REALM_ASSERT(ok);
 
         if(!it->second->is_complete()) {
           total_messages_handled += 1;
@@ -489,7 +489,7 @@ namespace Realm {
           current_block->reset();
           log_amhandler.debug() << "reusing message block: " << current_block;
         } else {
-          assert(available_blocks != 0);
+          REALM_ASSERT(available_blocks != 0);
           current_block = available_blocks;
           available_blocks = available_blocks->next_free;
           current_block->next_free = 0;
@@ -499,7 +499,7 @@ namespace Realm {
 
         // either way, this must now succeed
         msg = current_block->append_message(hdr_bytes_needed, payload_bytes_needed);
-        assert(msg != 0);
+        REALM_ASSERT(msg != 0);
         break;
       }
 
@@ -543,7 +543,7 @@ namespace Realm {
 
     if(heads[sender]) {
       // tack this on to the existing list
-      assert(tails[sender]);
+      REALM_ASSERT(tails[sender]);
       *(tails[sender]) = msg;
       tails[sender] = &(msg->next_msg);
     } else {
@@ -559,7 +559,7 @@ namespace Realm {
         todo_newest++;
         if(todo_newest > nodes)
           todo_newest = 0;
-        assert(todo_newest != todo_oldest); // should never wrap around
+        REALM_ASSERT(todo_newest != todo_oldest); // should never wrap around
         if(sleeper_count > 0)
           condvar.broadcast(); // wake up any sleepers
 
@@ -699,7 +699,7 @@ namespace Realm {
       todo_newest++;
       if(todo_newest > nodes)
         todo_newest = 0;
-      assert(todo_newest != todo_oldest); // should never wrap around
+      REALM_ASSERT(todo_newest != todo_oldest); // should never wrap around
       if(sleeper_count > 0)
         condvar.broadcast(); // wake up any sleepers
 
@@ -734,7 +734,7 @@ namespace Realm {
     // we're here because there was work to do, so an empty list is bad unless
     //  there are also dedicated threads that might have grabbed it
     if(sender == -1) {
-      assert(dedicated_threads > 0);
+      REALM_ASSERT(dedicated_threads > 0);
       return false;
     }
 

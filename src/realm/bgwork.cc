@@ -173,7 +173,7 @@ namespace Realm {
 
   BackgroundWorkManager::~BackgroundWorkManager(void)
   {
-    assert(dedicated_workers.empty());
+    REALM_ASSERT(dedicated_workers.empty());
   }
 
   unsigned BackgroundWorkManager::assign_slot(BackgroundWorkItem *item)
@@ -181,10 +181,10 @@ namespace Realm {
     AutoLock<> al(mutex);
     // TODO: reuse slots
     unsigned slot = num_work_items.load();
-    assert(slot < MAX_WORK_ITEMS);
+    REALM_ASSERT(slot < MAX_WORK_ITEMS);
     work_items[slot] = item;
     int prev = work_item_usecounts[slot].fetch_add_acqrel(1);
-    assert(prev == 0);
+    REALM_ASSERT(prev == 0);
     (void)prev;
     num_work_items.store_release(slot + 1);
     return slot;
@@ -196,7 +196,7 @@ namespace Realm {
     unsigned elem = slot / BITMASK_BITS;
     unsigned ofs = slot % BITMASK_BITS;
     BitMask mask = BitMask(1) << ofs;
-    assert((active_work_item_mask[elem].load() & mask) == 0);
+    REALM_ASSERT((active_work_item_mask[elem].load() & mask) == 0);
 
     // use count has to change from 1 (i.e. we are only remaining user)
     //  to 0 _before_ we enter critical section
@@ -265,7 +265,7 @@ namespace Realm {
         .add_option_int("-ll:bgslice", cfg.work_item_timeslice);
 
     bool ok = cp.parse_command_line(cmdline);
-    assert(ok);
+    REALM_ASSERT(ok);
   }
 
   void BackgroundWorkManager::start_dedicated_workers(Realm::CoreReservationSet &crs)
@@ -513,7 +513,7 @@ namespace Realm {
           // slot pointer is valid and can't change until we decrement the
           //  use count again
           BackgroundWorkItem *item = manager->work_items[unknown_slot];
-          assert(item != 0);
+          REALM_ASSERT(item != 0);
 
           bool allowed = true;
 
@@ -573,7 +573,7 @@ namespace Realm {
           //  an invalid slot because we have claimed a work request and
           //  not ack'd it yet
           int prev_usecount = manager->work_item_usecounts[slot].fetch_add_acqrel(1);
-          assert(prev_usecount > 0);
+          REALM_ASSERT(prev_usecount > 0);
           (void)prev_usecount;
 
           BackgroundWorkItem *item = manager->work_items[slot];
