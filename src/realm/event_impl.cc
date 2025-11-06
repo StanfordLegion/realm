@@ -52,7 +52,7 @@ namespace Realm {
 #endif
         {
           log_poison.fatal() << "FATAL: no handler for test of poisoned event " << *this;
-          assert(0);
+          abort();
         }
       }
       return true;
@@ -204,7 +204,7 @@ namespace Realm {
 #endif
       {
         log_poison.fatal() << "FATAL: no handler for test of poisoned event " << *this;
-        assert(0);
+        abort();
       }
     }
   }
@@ -231,7 +231,7 @@ namespace Realm {
     }
 
     Thread *thread = Thread::self();
-    assert(thread); // all tasks had better have a thread...
+    REALM_ASSERT(thread); // all tasks had better have a thread...
 
     log_event.info() << "thread blocked: thread=" << thread << " event=" << *this;
     // see if we are being asked to profile these waits
@@ -262,7 +262,7 @@ namespace Realm {
 #endif
       {
         log_poison.fatal() << "FATAL: no handler for test of poisoned event " << *this;
-        assert(0);
+        abort();
       }
     }
   }
@@ -301,7 +301,7 @@ namespace Realm {
 #endif
       {
         log_poison.fatal() << "FATAL: no handler for test of poisoned event " << *this;
-        assert(0);
+        abort();
       }
     }
 
@@ -394,7 +394,7 @@ namespace Realm {
   /*static*/ UserEvent UserEvent::create_user_event(void)
   {
     Event e = GenEventImpl::create_genevent()->current_event();
-    assert(e.id != 0);
+    REALM_ASSERT(e.id != 0);
     UserEvent u;
     u.id = e.id;
     log_event.info() << "user event created: event=" << e;
@@ -426,7 +426,7 @@ namespace Realm {
                                          true /*print chain*/)) {
           log_event.fatal() << "deferred trigger creates event loop!  event=" << *this
                             << " wait_on=" << wait_on;
-          assert(0);
+          abort();
         }
       }
 
@@ -604,7 +604,7 @@ namespace Realm {
           gen_t gen = impl->generation.load();
           if(gen >= id.event_generation()) {
             // already triggered!?
-            assert(0);
+            abort();
           } else if((gen + 1) == id.event_generation()) {
             // current generation
             waiters_head = impl->current_local_waiters.head.next;
@@ -636,10 +636,10 @@ namespace Realm {
             next_barrier_gen = impl->make_event(it->first);
         }*/
       } else {
-        assert(0);
+        abort();
       }
 
-      assert(!next_barrier_gen.exists());
+      REALM_ASSERT(!next_barrier_gen.exists());
 
       // record all of these event waiters as seen before traversing, so that we find the
       //  shortest possible path
@@ -689,7 +689,7 @@ namespace Realm {
         todo.pop_back();
         if(w)
           break;
-        assert(!events.empty());
+        REALM_ASSERT(!events.empty());
         events.pop_back();
         waiters.pop_back();
       }
@@ -739,8 +739,8 @@ namespace Realm {
 
   EventMerger::~EventMerger(void)
   {
-    assert(!is_active());
-    assert(free_preconditions.empty());
+    REALM_ASSERT(!is_active());
+    REALM_ASSERT(free_preconditions.empty());
   }
 
   bool EventMerger::is_active(void) const { return (count_needed.load() != 0); }
@@ -748,9 +748,9 @@ namespace Realm {
   void EventMerger::prepare_merger(Event _finish_event, bool _ignore_faults,
                                    std::optional<size_t> expected_events)
   {
-    assert(!is_active());
+    REALM_ASSERT(!is_active());
     finish_gen = ID(_finish_event).event_generation();
-    assert(event_impl->make_event(finish_gen) == _finish_event);
+    REALM_ASSERT(event_impl->make_event(finish_gen) == _finish_event);
     if(expected_events) {
       recycle_preconditions = false;
       if(MAX_INLINE_PRECONDITIONS < *expected_events) {
@@ -770,7 +770,7 @@ namespace Realm {
 
   void EventMerger::add_precondition(Event wait_for)
   {
-    assert(is_active());
+    REALM_ASSERT(is_active());
 
     if(!wait_for.exists()) {
       return;
@@ -804,7 +804,7 @@ namespace Realm {
   //  list
   EventMerger::MergeEventPrecondition *EventMerger::get_next_precondition(void)
   {
-    assert(is_active());
+    REALM_ASSERT(is_active());
     count_needed.fetch_add_acqrel(1);
     if(precondition_offset < MAX_INLINE_PRECONDITIONS) {
       return &inline_preconditions[precondition_offset++];
@@ -827,7 +827,7 @@ namespace Realm {
       }
     }
     precondition_offset++;
-    assert(offset == overflow_preconditions.size());
+    REALM_ASSERT(offset == overflow_preconditions.size());
     overflow_preconditions.resize(offset + 1);
     MergeEventPrecondition &result = overflow_preconditions.back();
     result.merger = this;
@@ -836,7 +836,7 @@ namespace Realm {
 
   void EventMerger::arm_merger(void)
   {
-    assert(is_active());
+    REALM_ASSERT(is_active());
     precondition_triggered(false /*!poisoned*/, TimeLimit::responsive());
   }
 
@@ -1005,7 +1005,7 @@ namespace Realm {
       const EventImpl::gen_t *new_poisoned_gens =
           static_cast<const EventImpl::gen_t *>(data);
       int new_poisoned_count = datalen / sizeof(*new_poisoned_gens);
-      assert((new_poisoned_count * sizeof(*new_poisoned_gens)) ==
+      REALM_ASSERT((new_poisoned_count * sizeof(*new_poisoned_gens)) ==
              datalen); // no remainders or overflow please
 
       log_event.debug() << "event update: event=" << args.event << " poisoned="
@@ -1107,8 +1107,8 @@ namespace Realm {
 
   void GenEventImpl::init(ID _me, unsigned _init_owner)
   {
-    assert(event_triggerer != nullptr);
-    assert(event_comm != nullptr);
+    REALM_ASSERT(event_triggerer != nullptr);
+    REALM_ASSERT(event_comm != nullptr);
     me = _me;
     owner = _init_owner;
     generation.store(0);
@@ -1282,14 +1282,14 @@ namespace Realm {
     Processor current_proc = Processor::get_executing_processor();
     if(current_proc != Processor::NO_PROC) {
       ProcessorImpl *proc_impl = runtime_impl->get_processor_impl(current_proc);
-      assert(proc_impl != nullptr);
+      REALM_ASSERT(proc_impl != nullptr);
       impl = proc_impl->create_genevent();
     } else {
       impl = runtime_impl->local_event_free_list->alloc_entry();
     }
 
-    assert(impl != nullptr);
-    assert(ID(impl->me).is_event());
+    REALM_ASSERT(impl != nullptr);
+    REALM_ASSERT(ID(impl->me).is_event());
 
     log_event.spew() << "event created: event=" << impl->current_event();
 
@@ -1320,7 +1320,7 @@ namespace Realm {
         if(it != local_triggers.end()) {
           // 2) we're not the owner node, but we've locally triggered this and have
           // correct poison info
-          assert(owner != Network::my_node_id);
+          REALM_ASSERT(owner != Network::my_node_id);
           trigger_now = true;
           trigger_poisoned = it->second;
         } else {
@@ -1338,7 +1338,7 @@ namespace Realm {
           } else {
             // no, put it in an appropriate future waiter list - only allowed for
             // non-owners
-            assert(owner != Network::my_node_id);
+            REALM_ASSERT(owner != Network::my_node_id);
             future_local_waiters[needed_gen].push_back(waiter);
           }
 
@@ -1382,7 +1382,7 @@ namespace Realm {
     // case 3: it'd better be in a waiter list
     if(needed_gen == (generation.load() + 1)) {
       bool ok = current_local_waiters.erase(waiter) > 0;
-      assert(ok);
+      REALM_ASSERT(ok);
       return true;
     } else {
       bool ok = future_local_waiters[needed_gen].erase(waiter) > 0;
@@ -1432,7 +1432,7 @@ namespace Realm {
         subscription_recorded = true;
       } else {
         // should never get subscriptions newer than our current
-        assert(subscribe_gen <= cur_gen);
+        REALM_ASSERT(subscribe_gen <= cur_gen);
       }
     }
 
@@ -1462,7 +1462,7 @@ namespace Realm {
                                     int new_poisoned_count, TimeLimit work_until)
   {
     // this event had better not belong to us...
-    assert(owner != Network::my_node_id);
+    REALM_ASSERT(owner != Network::my_node_id);
 
     // the result of the update may trigger multiple generations worth of waiters - keep
     // their
@@ -1482,13 +1482,13 @@ namespace Realm {
       if(new_poisoned_count > 0) {
         // should be an incremental update
         int old_npg = num_poisoned_generations.load();
-        assert(old_npg <= new_poisoned_count);
+        REALM_ASSERT(old_npg <= new_poisoned_count);
         if(old_npg > 0)
-          assert(memcmp(poisoned_generations, new_poisoned_generations,
+          REALM_ASSERT(memcmp(poisoned_generations, new_poisoned_generations,
                         old_npg * sizeof(gen_t)) == 0);
       } else {
         // we shouldn't have any local ones either
-        assert(num_poisoned_generations.load() == 0);
+        REALM_ASSERT(num_poisoned_generations.load() == 0);
       }
 #endif
 
@@ -1497,7 +1497,7 @@ namespace Realm {
         if(!poisoned_generations)
           poisoned_generations = new gen_t[POISONED_GENERATION_LIMIT];
         if(num_poisoned_generations.load() < new_poisoned_count) {
-          assert(new_poisoned_count <= POISONED_GENERATION_LIMIT);
+          REALM_ASSERT(new_poisoned_count <= POISONED_GENERATION_LIMIT);
           memcpy(poisoned_generations, new_poisoned_generations,
                  new_poisoned_count * sizeof(gen_t));
           num_poisoned_generations.store_release(new_poisoned_count);
@@ -1529,7 +1529,7 @@ namespace Realm {
       if(has_local_triggers) {
         std::map<gen_t, bool>::iterator it = local_triggers.begin();
         while((it != local_triggers.end()) && (it->first <= current_gen)) {
-          assert(it->second == is_generation_poisoned(it->first));
+          REALM_ASSERT(it->second == is_generation_poisoned(it->first));
           local_triggers.erase(it);
           it = local_triggers.begin();
         }
@@ -1564,7 +1564,7 @@ namespace Realm {
     if(REALM_LIKELY(generation.load() + 1 == gen)) {
       AutoLock<> a(mutex);
       if(REALM_LIKELY(generation.load() + 1 == gen)) {
-        assert(ID(op->get_finish_event()).event_gen_event_idx() ==
+        REALM_ASSERT(ID(op->get_finish_event()).event_gen_event_idx() ==
                ID(this->me).event_gen_event_idx());
         // Make sure to drop the reference of a previous operation
         if(current_trigger_op != nullptr) {
@@ -1633,7 +1633,7 @@ namespace Realm {
   void GenEventImpl::subscribe(gen_t subscribe_gen)
   {
     // should never be called on a local event
-    assert(owner != Network::my_node_id);
+    REALM_ASSERT(owner != Network::my_node_id);
 
     // lock-free check on previous subscriptions or known triggers
     if((subscribe_gen <= gen_subscribed.load_acquire()) ||
@@ -1745,10 +1745,10 @@ namespace Realm {
         AutoLock<> a(mutex);
 
         // must always be the next generation
-        assert(gen_triggered == (generation.load() + 1));
+        REALM_ASSERT(gen_triggered == (generation.load() + 1));
 
         to_wake.swap(current_local_waiters);
-        assert(future_local_waiters.empty()); // no future waiters here
+        REALM_ASSERT(future_local_waiters.empty()); // no future waiters here
 
         to_update.swap(remote_waiters);
         update_gen = gen_triggered;
@@ -1759,7 +1759,7 @@ namespace Realm {
           if(!poisoned_generations)
             poisoned_generations = new gen_t[POISONED_GENERATION_LIMIT];
           int npg_cached = num_poisoned_generations.load();
-          assert(npg_cached < POISONED_GENERATION_LIMIT);
+          REALM_ASSERT(npg_cached < POISONED_GENERATION_LIMIT);
           poisoned_generations[npg_cached] = gen_triggered;
           num_poisoned_generations.store_release(npg_cached + 1);
           if((npg_cached + 1) == POISONED_GENERATION_LIMIT)
@@ -1811,13 +1811,13 @@ namespace Realm {
       }
     } else {
       // we're triggering somebody else's event, so the first thing to do is tell them
-      assert(trigger_node == (int)Network::my_node_id);
+      REALM_ASSERT(trigger_node == (int)Network::my_node_id);
       // once we send this message, it's possible we get an update from the owner before
       //  we take the lock a few lines below here (assuming somebody on this node had
       //  already subscribed), so check here that we're triggering a new generation
       // (the alternative is to not send the message until after we update local state,
       // but that adds latency for everybody else)
-      assert(gen_triggered > generation.load());
+      REALM_ASSERT(gen_triggered > generation.load());
       event_comm->trigger(make_event(gen_triggered), owner, poisoned);
       // we might need to subscribe to intermediate generations
       bool subscribe_needed = false;
@@ -1899,7 +1899,7 @@ namespace Realm {
 
     // finally, trigger any local waiters
     if(!to_wake.empty()) {
-      assert(event_triggerer != nullptr);
+      REALM_ASSERT(event_triggerer != nullptr);
       event_triggerer->trigger_event_waiters(to_wake, poisoned, work_until);
     }
 
