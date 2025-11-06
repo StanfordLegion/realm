@@ -731,6 +731,7 @@ var namespaceRealm =
     [ "gex_wrapper_handle", "namespaceRealm.html#a779a1d2e80a0804ac2bb320786ce51cb", null ],
     [ "log_new_dma", "namespaceRealm.html#a3dbb9226b0a26d1e15c655c8d1a8e3fe", null ],
     [ "log_poison", "namespaceRealm.html#a0bc1e32fd83e0c414739bacdc5b3857f", null ],
+    [ "log_runtime", "namespaceRealm.html#ad19604af1eea8f1d9aca08fcbbfbe613", null ],
     [ "machine_singleton", "namespaceRealm.html#acbabfb91d5923534056ce315d6a70129", null ],
     [ "runtime_singleton", "namespaceRealm.html#a3f709c2a8d05935161f0f9b2cdd2a6cc", null ]
 ];

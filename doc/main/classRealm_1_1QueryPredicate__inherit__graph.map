@@ -1,0 +1,15 @@
+<map id="Realm::QueryPredicate&lt; T, T2 &gt;" name="Realm::QueryPredicate&lt; T, T2 &gt;">
+<area shape="rect" id="Node000001" title=" " alt="" coords="5,165,177,205"/>
+<area shape="rect" id="Node000002" href="$classRealm_1_1MemoryBestMemAffinityPredicate.html" title=" " alt="" coords="225,5,513,45"/>
+<area shape="poly" id="edge1_Node000001_Node000002" title=" " alt="" coords="114,153,161,102,191,76,224,55,252,43,254,48,227,60,194,81,165,106,118,156"/>
+<area shape="rect" id="Node000003" href="$classRealm_1_1MemoryBestProcAffinityPredicate.html" title=" " alt="" coords="225,69,513,109"/>
+<area shape="poly" id="edge2_Node000001_Node000003" title=" " alt="" coords="140,156,224,119,265,107,266,112,226,124,142,161"/>
+<area shape="rect" id="Node000004" href="$classRealm_1_1MemoryHasMemAffinityPredicate.html" title=" " alt="" coords="225,133,513,173"/>
+<area shape="poly" id="edge3_Node000001_Node000004" title=" " alt="" coords="191,171,225,167,225,173,191,177"/>
+<area shape="rect" id="Node000005" href="$classRealm_1_1MemoryHasProcAffinityPredicate.html" title=" " alt="" coords="225,197,513,237"/>
+<area shape="poly" id="edge4_Node000001_Node000005" title=" " alt="" coords="191,194,225,198,225,203,191,199"/>
+<area shape="rect" id="Node000006" href="$classRealm_1_1ProcessorBestAffinityPredicate.html" title=" " alt="" coords="243,262,495,317"/>
+<area shape="poly" id="edge5_Node000001_Node000006" title=" " alt="" coords="143,209,226,247,263,259,261,264,224,252,140,214"/>
+<area shape="rect" id="Node000007" href="$classRealm_1_1ProcessorHasAffinityPredicate.html" title=" " alt="" coords="243,341,495,395"/>
+<area shape="poly" id="edge6_Node000001_Node000007" title=" " alt="" coords="116,215,163,272,193,301,227,326,251,338,249,343,224,330,190,305,159,276,112,218"/>
+</map>

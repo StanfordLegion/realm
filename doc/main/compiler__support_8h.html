@@ -44,7 +44,7 @@
    <!-- BEGIN version select -->
     <br />
     <div class="dropdown">
-     <button class="dropbtn">Version 25.6.1-rc.4+8ce6b721</button>
+     <button class="dropbtn">Version 25.6.1-rc.4+870f744e</button>
      <div class="dropdown-content"></div>
     </div>
     <script type="text/javascript" src="../selectversion.js"></script>
@@ -130,26 +130,33 @@ $(document).ready(function(){initNavTree('compiler__support_8h.html',''); initRe
 
 <div class="header">
   <div class="summary">
-<a href="#define-members">Macros</a>  </div>
+<a href="#namespaces">Namespaces</a> &#124;
+<a href="#define-members">Macros</a> &#124;
+<a href="#var-members">Variables</a>  </div>
   <div class="headertitle"><div class="title">compiler_support.h File Reference</div></div>
 </div><!--header-->
 <div class="contents">
 <div class="textblock"><div class="dynheader">
 This graph shows which files directly or indirectly include this file:</div>
 <div class="dyncontent">
-<div class="center"><!-- SVG 0 --></div>
+<div class="center"><iframe scrolling="no" frameborder="0" src="compiler__support_8h__dep__incl.svg" width="5204" height="990"><p><b>This browser is not able to show SVG: try Firefox, Chrome, Safari, or Opera instead.</b></p></iframe></div>
 </div>
 </div>
 <p><a href="compiler__support_8h_source.html">Go to the source code of this file.</a></p>
 <table class="memberdecls">
+<tr class="heading"><td colspan="2"><h2 class="groupheader"><a id="namespaces" name="namespaces"></a>
+Namespaces</h2></td></tr>
+<tr class="memitem:namespaceRealm" id="r_namespaceRealm"><td class="memItemLeft" align="right" valign="top">namespace &#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="namespaceRealm.html">Realm</a></td></tr>
+<tr class="separator:"><td class="memSeparator" colspan="2">&#160;</td></tr>
+</table><table class="memberdecls">
 <tr class="heading"><td colspan="2"><h2 class="groupheader"><a id="define-members" name="define-members"></a>
 Macros</h2></td></tr>
 <tr class="memitem:ae92a45b7ea6c5c4bbbde6ac048dfcb04" id="r_ae92a45b7ea6c5c4bbbde6ac048dfcb04"><td class="memItemLeft" align="right" valign="top">#define&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="compiler__support_8h.html#ae92a45b7ea6c5c4bbbde6ac048dfcb04">REALM_NOEXCEPT</a>&#160;&#160;&#160;noexcept</td></tr>
 <tr class="separator:ae92a45b7ea6c5c4bbbde6ac048dfcb04"><td class="memSeparator" colspan="2">&#160;</td></tr>
 <tr class="memitem:abdece69c5acdf72040a4beb49743368d" id="r_abdece69c5acdf72040a4beb49743368d"><td class="memItemLeft" align="right" valign="top">#define&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="compiler__support_8h.html#abdece69c5acdf72040a4beb49743368d">REALM_CUDA_HD</a></td></tr>
 <tr class="separator:abdece69c5acdf72040a4beb49743368d"><td class="memSeparator" colspan="2">&#160;</td></tr>
-<tr class="memitem:a1bdc77dc365ea01ba146dae6021fcbfa" id="r_a1bdc77dc365ea01ba146dae6021fcbfa"><td class="memItemLeft" align="right" valign="top">#define&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="compiler__support_8h.html#a1bdc77dc365ea01ba146dae6021fcbfa">REALM_ASSERT</a>(cond,  message)&#160;&#160;&#160;assert((cond) &amp;&amp; (message))</td></tr>
-<tr class="separator:a1bdc77dc365ea01ba146dae6021fcbfa"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:a187804f8589f8e7304fbe40167a60130" id="r_a187804f8589f8e7304fbe40167a60130"><td class="memItemLeft" align="right" valign="top">#define&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="compiler__support_8h.html#a187804f8589f8e7304fbe40167a60130">REALM_ASSERT</a>(cond)&#160;&#160;&#160;assert(cond)</td></tr>
+<tr class="separator:a187804f8589f8e7304fbe40167a60130"><td class="memSeparator" colspan="2">&#160;</td></tr>
 <tr class="memitem:aeb86ca07ef0e907b474f3303a114a1f0" id="r_aeb86ca07ef0e907b474f3303a114a1f0"><td class="memItemLeft" align="right" valign="top">#define&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="compiler__support_8h.html#aeb86ca07ef0e907b474f3303a114a1f0">REALM_LIKELY</a>(expr)&#160;&#160;&#160;__builtin_expect((expr), true)</td></tr>
 <tr class="separator:aeb86ca07ef0e907b474f3303a114a1f0"><td class="memSeparator" colspan="2">&#160;</td></tr>
 <tr class="memitem:a3ea20fe1581dd087c9f9a5173c95f69c" id="r_a3ea20fe1581dd087c9f9a5173c95f69c"><td class="memItemLeft" align="right" valign="top">#define&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="compiler__support_8h.html#a3ea20fe1581dd087c9f9a5173c95f69c">REALM_UNLIKELY</a>(expr)&#160;&#160;&#160;__builtin_expect((expr), false)</td></tr>
@@ -182,6 +189,11 @@ Macros</h2></td></tr>
 <tr class="separator:a0fcea358ba9f4a1ddd8bf87ae21772f7"><td class="memSeparator" colspan="2">&#160;</td></tr>
 <tr class="memitem:a7601fdf979a12f3b1b899a667e5b0f68" id="r_a7601fdf979a12f3b1b899a667e5b0f68"><td class="memItemLeft" align="right" valign="top">#define&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="compiler__support_8h.html#a7601fdf979a12f3b1b899a667e5b0f68">REALM_INTERNAL_API</a></td></tr>
 <tr class="separator:a7601fdf979a12f3b1b899a667e5b0f68"><td class="memSeparator" colspan="2">&#160;</td></tr>
+</table><table class="memberdecls">
+<tr class="heading"><td colspan="2"><h2 class="groupheader"><a id="var-members" name="var-members"></a>
+Variables</h2></td></tr>
+<tr class="memitem:ad19604af1eea8f1d9aca08fcbbfbe613" id="r_ad19604af1eea8f1d9aca08fcbbfbe613"><td class="memItemLeft" align="right" valign="top"><a class="el" href="classRealm_1_1Logger.html">Logger</a>&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="namespaceRealm.html#ad19604af1eea8f1d9aca08fcbbfbe613">Realm::log_runtime</a></td></tr>
+<tr class="separator:ad19604af1eea8f1d9aca08fcbbfbe613"><td class="memSeparator" colspan="2">&#160;</td></tr>
 </table>
 <h2 class="groupheader">Macro Definition Documentation</h2>
 <a id="a2ef118a54055bad7fedc2f64ae3c1bb9" name="a2ef118a54055bad7fedc2f64ae3c1bb9"></a>
@@ -270,8 +282,8 @@ Macros</h2></td></tr>
 
 </div>
 </div>
-<a id="a1bdc77dc365ea01ba146dae6021fcbfa" name="a1bdc77dc365ea01ba146dae6021fcbfa"></a>
-<h2 class="memtitle"><span class="permalink"><a href="#a1bdc77dc365ea01ba146dae6021fcbfa">&#9670;&#160;</a></span>REALM_ASSERT</h2>
+<a id="a187804f8589f8e7304fbe40167a60130" name="a187804f8589f8e7304fbe40167a60130"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a187804f8589f8e7304fbe40167a60130">&#9670;&#160;</a></span>REALM_ASSERT</h2>
 
 <div class="memitem">
 <div class="memproto">
@@ -280,18 +292,8 @@ Macros</h2></td></tr>
           <td class="memname">#define REALM_ASSERT</td>
           <td>(</td>
           <td class="paramtype">&#160;</td>
-          <td class="paramname">cond, </td>
-        </tr>
-        <tr>
-          <td class="paramkey"></td>
-          <td></td>
-          <td class="paramtype">&#160;</td>
-          <td class="paramname">message&#160;</td>
-        </tr>
-        <tr>
-          <td></td>
-          <td>)</td>
-          <td></td><td>&#160;&#160;&#160;assert((cond) &amp;&amp; (message))</td>
+          <td class="paramname">cond</td><td>)</td>
+          <td>&#160;&#160;&#160;assert(cond)</td>
         </tr>
       </table>
 </div><div class="memdoc">
