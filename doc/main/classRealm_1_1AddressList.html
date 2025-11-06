@@ -44,7 +44,7 @@
    <!-- BEGIN version select -->
     <br />
     <div class="dropdown">
-     <button class="dropbtn">Version 25.6.1-rc.4+870f744e</button>
+     <button class="dropbtn">Version 25.6.1-rc.4+d48b3e73</button>
      <div class="dropdown-content"></div>
     </div>
     <script type="text/javascript" src="../selectversion.js"></script>
@@ -133,9 +133,10 @@ $(document).ready(function(){initNavTree('classRealm_1_1AddressList.html',''); i
 <div class="header">
   <div class="summary">
 <a href="#pub-methods">Public Member Functions</a> &#124;
+<a href="#pub-static-methods">Static Public Member Functions</a> &#124;
+<a href="#pub-static-attribs">Static Public Attributes</a> &#124;
 <a href="#pro-methods">Protected Member Functions</a> &#124;
 <a href="#pro-attribs">Protected Attributes</a> &#124;
-<a href="#pro-static-attribs">Static Protected Attributes</a> &#124;
 <a href="#friends">Friends</a> &#124;
 <a href="classRealm_1_1AddressList-members.html">List of all members</a>  </div>
   <div class="headertitle"><div class="title">Realm::AddressList Class Reference</div></div>
@@ -143,17 +144,46 @@ $(document).ready(function(){initNavTree('classRealm_1_1AddressList.html',''); i
 <div class="contents">
 
 <p><code>#include &lt;<a class="el" href="address__list_8h_source.html">address_list.h</a>&gt;</code></p>
+<div class="dynheader">
+Collaboration diagram for Realm::AddressList:</div>
+<div class="dyncontent">
+<div class="center"><!-- SVG 0 --></div>
+<center><span class="legend">[<a target="top" href="graph_legend.html">legend</a>]</span></center></div>
 <table class="memberdecls">
 <tr class="heading"><td colspan="2"><h2 class="groupheader"><a id="pub-methods" name="pub-methods"></a>
 Public Member Functions</h2></td></tr>
-<tr class="memitem:a62149f4a3e5186c6922c736d59a49167" id="r_a62149f4a3e5186c6922c736d59a49167"><td class="memItemLeft" align="right" valign="top">&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="classRealm_1_1AddressList.html#a62149f4a3e5186c6922c736d59a49167">AddressList</a> ()</td></tr>
-<tr class="separator:a62149f4a3e5186c6922c736d59a49167"><td class="memSeparator" colspan="2">&#160;</td></tr>
-<tr class="memitem:a316d035c261fbf18fc2ce2439f754e3f" id="r_a316d035c261fbf18fc2ce2439f754e3f"><td class="memItemLeft" align="right" valign="top">size_t *&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="classRealm_1_1AddressList.html#a316d035c261fbf18fc2ce2439f754e3f">begin_nd_entry</a> (int max_dim)</td></tr>
-<tr class="separator:a316d035c261fbf18fc2ce2439f754e3f"><td class="memSeparator" colspan="2">&#160;</td></tr>
-<tr class="memitem:aeca001bad67d2ae15dee61c4b33ea867" id="r_aeca001bad67d2ae15dee61c4b33ea867"><td class="memItemLeft" align="right" valign="top">void&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="classRealm_1_1AddressList.html#aeca001bad67d2ae15dee61c4b33ea867">commit_nd_entry</a> (int act_dim, size_t bytes)</td></tr>
-<tr class="separator:aeca001bad67d2ae15dee61c4b33ea867"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:aac1644e512e048d1e5a78c1d91dbffb7" id="r_aac1644e512e048d1e5a78c1d91dbffb7"><td class="memItemLeft" align="right" valign="top">&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="classRealm_1_1AddressList.html#aac1644e512e048d1e5a78c1d91dbffb7">AddressList</a> (size_t _max_entries=1000)</td></tr>
+<tr class="separator:aac1644e512e048d1e5a78c1d91dbffb7"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:a1d2393232c64d4fb9dfab765f88a7da2" id="r_a1d2393232c64d4fb9dfab765f88a7da2"><td class="memItemLeft" align="right" valign="top">bool&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="classRealm_1_1AddressList.html#a1d2393232c64d4fb9dfab765f88a7da2">append_entry</a> (int dims, size_t contig_bytes, size_t <a class="el" href="classRealm_1_1AddressList.html#a2cedc3d4383a418f5b39bd899163591d">total_bytes</a>, size_t base_offset, const std::unordered_map&lt; int, std::pair&lt; size_t, size_t &gt; &gt; &amp;count_strides, bool wrap_around=false)</td></tr>
+<tr class="separator:a1d2393232c64d4fb9dfab765f88a7da2"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:a022c53ec1415fd52811867c5ff153c23" id="r_a022c53ec1415fd52811867c5ff153c23"><td class="memItemLeft" align="right" valign="top">size_t *&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="classRealm_1_1AddressList.html#a022c53ec1415fd52811867c5ff153c23">begin_entry</a> (int max_dim, bool wrap_around=true)</td></tr>
+<tr class="separator:a022c53ec1415fd52811867c5ff153c23"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:a641d8b39ac5139efe2c806c67755591d" id="r_a641d8b39ac5139efe2c806c67755591d"><td class="memItemLeft" align="right" valign="top">void&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="classRealm_1_1AddressList.html#a641d8b39ac5139efe2c806c67755591d">commit_entry</a> (int act_dim, size_t bytes)</td></tr>
+<tr class="separator:a641d8b39ac5139efe2c806c67755591d"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:a3a066ec7a0861dd03211518f55bda869" id="r_a3a066ec7a0861dd03211518f55bda869"><td class="memItemLeft" align="right" valign="top">void&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="classRealm_1_1AddressList.html#a3a066ec7a0861dd03211518f55bda869">attach_field_block</a> (const <a class="el" href="namespaceRealm.html#a17e405c7b3ab4da044c0e17b06afb23c">FieldBlock</a> *_field_block)</td></tr>
+<tr class="separator:a3a066ec7a0861dd03211518f55bda869"><td class="memSeparator" colspan="2">&#160;</td></tr>
 <tr class="memitem:af1ffc7aec2f553312976f3bafa6070c3" id="r_af1ffc7aec2f553312976f3bafa6070c3"><td class="memItemLeft" align="right" valign="top">size_t&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="classRealm_1_1AddressList.html#af1ffc7aec2f553312976f3bafa6070c3">bytes_pending</a> () const</td></tr>
 <tr class="separator:af1ffc7aec2f553312976f3bafa6070c3"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:a7904f47a8bd380da67ba1809346af22e" id="r_a7904f47a8bd380da67ba1809346af22e"><td class="memItemLeft" align="right" valign="top">size_t&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="classRealm_1_1AddressList.html#a7904f47a8bd380da67ba1809346af22e">full_field_bytes</a> ()</td></tr>
+<tr class="separator:a7904f47a8bd380da67ba1809346af22e"><td class="memSeparator" colspan="2">&#160;</td></tr>
+</table><table class="memberdecls">
+<tr class="heading"><td colspan="2"><h2 class="groupheader"><a id="pub-static-methods" name="pub-static-methods"></a>
+Static Public Member Functions</h2></td></tr>
+<tr class="memitem:a58f0048a71ea823e74af13f6e3d230c5" id="r_a58f0048a71ea823e74af13f6e3d230c5"><td class="memItemLeft" align="right" valign="top">static size_t&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="classRealm_1_1AddressList.html#a58f0048a71ea823e74af13f6e3d230c5">pack_entry_header</a> (size_t contig_bytes, int dims)</td></tr>
+<tr class="separator:a58f0048a71ea823e74af13f6e3d230c5"><td class="memSeparator" colspan="2">&#160;</td></tr>
+</table><table class="memberdecls">
+<tr class="heading"><td colspan="2"><h2 class="groupheader"><a id="pub-static-attribs" name="pub-static-attribs"></a>
+Static Public Attributes</h2></td></tr>
+<tr class="memitem:a8c23fd6114a64d828c44fc13f331ece4" id="r_a8c23fd6114a64d828c44fc13f331ece4"><td class="memItemLeft" align="right" valign="top">static constexpr size_t&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="classRealm_1_1AddressList.html#a8c23fd6114a64d828c44fc13f331ece4">SLOT_HEADER</a> = 0</td></tr>
+<tr class="separator:a8c23fd6114a64d828c44fc13f331ece4"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:a6c38d32b8ad17873c07fd073dc52d8df" id="r_a6c38d32b8ad17873c07fd073dc52d8df"><td class="memItemLeft" align="right" valign="top">static constexpr size_t&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="classRealm_1_1AddressList.html#a6c38d32b8ad17873c07fd073dc52d8df">SLOT_BASE</a> = 1</td></tr>
+<tr class="separator:a6c38d32b8ad17873c07fd073dc52d8df"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:a5cba4df25b95d3e65fa30e91aa9ceecf" id="r_a5cba4df25b95d3e65fa30e91aa9ceecf"><td class="memItemLeft" align="right" valign="top">static constexpr size_t&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="classRealm_1_1AddressList.html#a5cba4df25b95d3e65fa30e91aa9ceecf">DIM_SLOTS</a> = 2</td></tr>
+<tr class="separator:a5cba4df25b95d3e65fa30e91aa9ceecf"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:ae5aba62db592f371fbab876910676597" id="r_ae5aba62db592f371fbab876910676597"><td class="memItemLeft" align="right" valign="top">static constexpr size_t&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="classRealm_1_1AddressList.html#ae5aba62db592f371fbab876910676597">DIM_MASK</a> = 0xF</td></tr>
+<tr class="separator:ae5aba62db592f371fbab876910676597"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:ae0104bafa050796b2fddad4d27d43f65" id="r_ae0104bafa050796b2fddad4d27d43f65"><td class="memItemLeft" align="right" valign="top">static constexpr size_t&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="classRealm_1_1AddressList.html#ae0104bafa050796b2fddad4d27d43f65">CONTIG_SHIFT</a> = 4</td></tr>
+<tr class="separator:ae0104bafa050796b2fddad4d27d43f65"><td class="memSeparator" colspan="2">&#160;</td></tr>
 </table><table class="memberdecls">
 <tr class="heading"><td colspan="2"><h2 class="groupheader"><a id="pro-methods" name="pro-methods"></a>
 Protected Member Functions</h2></td></tr>
@@ -162,19 +192,18 @@ Protected Member Functions</h2></td></tr>
 </table><table class="memberdecls">
 <tr class="heading"><td colspan="2"><h2 class="groupheader"><a id="pro-attribs" name="pro-attribs"></a>
 Protected Attributes</h2></td></tr>
-<tr class="memitem:a2cedc3d4383a418f5b39bd899163591d" id="r_a2cedc3d4383a418f5b39bd899163591d"><td class="memItemLeft" align="right" valign="top">size_t&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="classRealm_1_1AddressList.html#a2cedc3d4383a418f5b39bd899163591d">total_bytes</a></td></tr>
+<tr class="memitem:a7e76cd58d051104e2ae92513e529e00f" id="r_a7e76cd58d051104e2ae92513e529e00f"><td class="memItemLeft" align="right" valign="top">const <a class="el" href="namespaceRealm.html#a17e405c7b3ab4da044c0e17b06afb23c">FieldBlock</a> *&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="classRealm_1_1AddressList.html#a7e76cd58d051104e2ae92513e529e00f">field_block</a> {nullptr}</td></tr>
+<tr class="separator:a7e76cd58d051104e2ae92513e529e00f"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:a2cedc3d4383a418f5b39bd899163591d" id="r_a2cedc3d4383a418f5b39bd899163591d"><td class="memItemLeft" align="right" valign="top">size_t&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="classRealm_1_1AddressList.html#a2cedc3d4383a418f5b39bd899163591d">total_bytes</a> {0}</td></tr>
 <tr class="separator:a2cedc3d4383a418f5b39bd899163591d"><td class="memSeparator" colspan="2">&#160;</td></tr>
-<tr class="memitem:aab855634126b53806e26fd5dbb6a1afb" id="r_aab855634126b53806e26fd5dbb6a1afb"><td class="memItemLeft" align="right" valign="top">unsigned&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="classRealm_1_1AddressList.html#aab855634126b53806e26fd5dbb6a1afb">write_pointer</a></td></tr>
-<tr class="separator:aab855634126b53806e26fd5dbb6a1afb"><td class="memSeparator" colspan="2">&#160;</td></tr>
-<tr class="memitem:a12c0e929aa5fa27c167a5076a64a86c5" id="r_a12c0e929aa5fa27c167a5076a64a86c5"><td class="memItemLeft" align="right" valign="top">unsigned&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="classRealm_1_1AddressList.html#a12c0e929aa5fa27c167a5076a64a86c5">read_pointer</a></td></tr>
-<tr class="separator:a12c0e929aa5fa27c167a5076a64a86c5"><td class="memSeparator" colspan="2">&#160;</td></tr>
-<tr class="memitem:a679c05f544d90201764a890748948b30" id="r_a679c05f544d90201764a890748948b30"><td class="memItemLeft" align="right" valign="top">size_t&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="classRealm_1_1AddressList.html#a679c05f544d90201764a890748948b30">data</a> [<a class="el" href="classRealm_1_1AddressList.html#acec7bb65b8966803c568a9521808b465">MAX_ENTRIES</a>]</td></tr>
-<tr class="separator:a679c05f544d90201764a890748948b30"><td class="memSeparator" colspan="2">&#160;</td></tr>
-</table><table class="memberdecls">
-<tr class="heading"><td colspan="2"><h2 class="groupheader"><a id="pro-static-attribs" name="pro-static-attribs"></a>
-Static Protected Attributes</h2></td></tr>
-<tr class="memitem:acec7bb65b8966803c568a9521808b465" id="r_acec7bb65b8966803c568a9521808b465"><td class="memItemLeft" align="right" valign="top">static const size_t&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="classRealm_1_1AddressList.html#acec7bb65b8966803c568a9521808b465">MAX_ENTRIES</a> = 1000</td></tr>
-<tr class="separator:acec7bb65b8966803c568a9521808b465"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:ab8ae4be1b95dec75b1d1be47290fec8d" id="r_ab8ae4be1b95dec75b1d1be47290fec8d"><td class="memItemLeft" align="right" valign="top">size_t&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="classRealm_1_1AddressList.html#ab8ae4be1b95dec75b1d1be47290fec8d">write_pointer</a> {0}</td></tr>
+<tr class="separator:ab8ae4be1b95dec75b1d1be47290fec8d"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:a924e58ab083c49444846fef33945681b" id="r_a924e58ab083c49444846fef33945681b"><td class="memItemLeft" align="right" valign="top">size_t&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="classRealm_1_1AddressList.html#a924e58ab083c49444846fef33945681b">read_pointer</a> {0}</td></tr>
+<tr class="separator:a924e58ab083c49444846fef33945681b"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:a11e3effc73a24e17fe2eae1f108351de" id="r_a11e3effc73a24e17fe2eae1f108351de"><td class="memItemLeft" align="right" valign="top">size_t&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="classRealm_1_1AddressList.html#a11e3effc73a24e17fe2eae1f108351de">max_entries</a> {0}</td></tr>
+<tr class="separator:a11e3effc73a24e17fe2eae1f108351de"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:a1ea0fc7bd1ed049483b178f458a36aa9" id="r_a1ea0fc7bd1ed049483b178f458a36aa9"><td class="memItemLeft" align="right" valign="top">std::vector&lt; size_t &gt;&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="classRealm_1_1AddressList.html#a1ea0fc7bd1ed049483b178f458a36aa9">data</a></td></tr>
+<tr class="separator:a1ea0fc7bd1ed049483b178f458a36aa9"><td class="memSeparator" colspan="2">&#160;</td></tr>
 </table><table class="memberdecls">
 <tr class="heading"><td colspan="2"><h2 class="groupheader"><a id="friends" name="friends"></a>
 Friends</h2></td></tr>
@@ -182,8 +211,8 @@ Friends</h2></td></tr>
 <tr class="separator:a71e25517750d8bf70381a32471c5426b"><td class="memSeparator" colspan="2">&#160;</td></tr>
 </table>
 <h2 class="groupheader">Constructor &amp; Destructor Documentation</h2>
-<a id="a62149f4a3e5186c6922c736d59a49167" name="a62149f4a3e5186c6922c736d59a49167"></a>
-<h2 class="memtitle"><span class="permalink"><a href="#a62149f4a3e5186c6922c736d59a49167">&#9670;&#160;</a></span>AddressList()</h2>
+<a id="aac1644e512e048d1e5a78c1d91dbffb7" name="aac1644e512e048d1e5a78c1d91dbffb7"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#aac1644e512e048d1e5a78c1d91dbffb7">&#9670;&#160;</a></span>AddressList()</h2>
 
 <div class="memitem">
 <div class="memproto">
@@ -191,7 +220,8 @@ Friends</h2></td></tr>
         <tr>
           <td class="memname">Realm::AddressList::AddressList </td>
           <td>(</td>
-          <td class="paramname"></td><td>)</td>
+          <td class="paramtype">size_t&#160;</td>
+          <td class="paramname"><em>_max_entries</em> = <code>1000</code></td><td>)</td>
           <td></td>
         </tr>
       </table>
@@ -200,18 +230,98 @@ Friends</h2></td></tr>
 </div>
 </div>
 <h2 class="groupheader">Member Function Documentation</h2>
-<a id="a316d035c261fbf18fc2ce2439f754e3f" name="a316d035c261fbf18fc2ce2439f754e3f"></a>
-<h2 class="memtitle"><span class="permalink"><a href="#a316d035c261fbf18fc2ce2439f754e3f">&#9670;&#160;</a></span>begin_nd_entry()</h2>
+<a id="a1d2393232c64d4fb9dfab765f88a7da2" name="a1d2393232c64d4fb9dfab765f88a7da2"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a1d2393232c64d4fb9dfab765f88a7da2">&#9670;&#160;</a></span>append_entry()</h2>
 
 <div class="memitem">
 <div class="memproto">
       <table class="memname">
         <tr>
-          <td class="memname">size_t * Realm::AddressList::begin_nd_entry </td>
+          <td class="memname">bool Realm::AddressList::append_entry </td>
           <td>(</td>
           <td class="paramtype">int&#160;</td>
-          <td class="paramname"><em>max_dim</em></td><td>)</td>
+          <td class="paramname"><em>dims</em>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
           <td></td>
+          <td class="paramtype">size_t&#160;</td>
+          <td class="paramname"><em>contig_bytes</em>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype">size_t&#160;</td>
+          <td class="paramname"><em>total_bytes</em>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype">size_t&#160;</td>
+          <td class="paramname"><em>base_offset</em>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype">const std::unordered_map&lt; int, std::pair&lt; size_t, size_t &gt; &gt; &amp;&#160;</td>
+          <td class="paramname"><em>count_strides</em>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype">bool&#160;</td>
+          <td class="paramname"><em>wrap_around</em> = <code>false</code>&#160;</td>
+        </tr>
+        <tr>
+          <td></td>
+          <td>)</td>
+          <td></td><td></td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+
+</div>
+</div>
+<a id="a3a066ec7a0861dd03211518f55bda869" name="a3a066ec7a0861dd03211518f55bda869"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a3a066ec7a0861dd03211518f55bda869">&#9670;&#160;</a></span>attach_field_block()</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname">void Realm::AddressList::attach_field_block </td>
+          <td>(</td>
+          <td class="paramtype">const <a class="el" href="namespaceRealm.html#a17e405c7b3ab4da044c0e17b06afb23c">FieldBlock</a> *&#160;</td>
+          <td class="paramname"><em>_field_block</em></td><td>)</td>
+          <td></td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+
+</div>
+</div>
+<a id="a022c53ec1415fd52811867c5ff153c23" name="a022c53ec1415fd52811867c5ff153c23"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a022c53ec1415fd52811867c5ff153c23">&#9670;&#160;</a></span>begin_entry()</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname">size_t * Realm::AddressList::begin_entry </td>
+          <td>(</td>
+          <td class="paramtype">int&#160;</td>
+          <td class="paramname"><em>max_dim</em>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype">bool&#160;</td>
+          <td class="paramname"><em>wrap_around</em> = <code>true</code>&#160;</td>
+        </tr>
+        <tr>
+          <td></td>
+          <td>)</td>
+          <td></td><td></td>
         </tr>
       </table>
 </div><div class="memdoc">
@@ -235,14 +345,14 @@ Friends</h2></td></tr>
 
 </div>
 </div>
-<a id="aeca001bad67d2ae15dee61c4b33ea867" name="aeca001bad67d2ae15dee61c4b33ea867"></a>
-<h2 class="memtitle"><span class="permalink"><a href="#aeca001bad67d2ae15dee61c4b33ea867">&#9670;&#160;</a></span>commit_nd_entry()</h2>
+<a id="a641d8b39ac5139efe2c806c67755591d" name="a641d8b39ac5139efe2c806c67755591d"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a641d8b39ac5139efe2c806c67755591d">&#9670;&#160;</a></span>commit_entry()</h2>
 
 <div class="memitem">
 <div class="memproto">
       <table class="memname">
         <tr>
-          <td class="memname">void Realm::AddressList::commit_nd_entry </td>
+          <td class="memname">void Realm::AddressList::commit_entry </td>
           <td>(</td>
           <td class="paramtype">int&#160;</td>
           <td class="paramname"><em>act_dim</em>, </td>
@@ -259,6 +369,59 @@ Friends</h2></td></tr>
           <td></td><td></td>
         </tr>
       </table>
+</div><div class="memdoc">
+
+</div>
+</div>
+<a id="a7904f47a8bd380da67ba1809346af22e" name="a7904f47a8bd380da67ba1809346af22e"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a7904f47a8bd380da67ba1809346af22e">&#9670;&#160;</a></span>full_field_bytes()</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname">size_t Realm::AddressList::full_field_bytes </td>
+          <td>(</td>
+          <td class="paramname"></td><td>)</td>
+          <td></td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+
+</div>
+</div>
+<a id="a58f0048a71ea823e74af13f6e3d230c5" name="a58f0048a71ea823e74af13f6e3d230c5"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a58f0048a71ea823e74af13f6e3d230c5">&#9670;&#160;</a></span>pack_entry_header()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">static size_t Realm::AddressList::pack_entry_header </td>
+          <td>(</td>
+          <td class="paramtype">size_t&#160;</td>
+          <td class="paramname"><em>contig_bytes</em>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype">int&#160;</td>
+          <td class="paramname"><em>dims</em>&#160;</td>
+        </tr>
+        <tr>
+          <td></td>
+          <td>)</td>
+          <td></td><td></td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel">static</span></span>  </td>
+  </tr>
+</table>
 </div><div class="memdoc">
 
 </div>
@@ -312,8 +475,8 @@ Friends</h2></td></tr>
 </div>
 </div>
 <h2 class="groupheader">Member Data Documentation</h2>
-<a id="a679c05f544d90201764a890748948b30" name="a679c05f544d90201764a890748948b30"></a>
-<h2 class="memtitle"><span class="permalink"><a href="#a679c05f544d90201764a890748948b30">&#9670;&#160;</a></span>data</h2>
+<a id="ae0104bafa050796b2fddad4d27d43f65" name="ae0104bafa050796b2fddad4d27d43f65"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#ae0104bafa050796b2fddad4d27d43f65">&#9670;&#160;</a></span>CONTIG_SHIFT</h2>
 
 <div class="memitem">
 <div class="memproto">
@@ -322,7 +485,29 @@ Friends</h2></td></tr>
   <td class="mlabels-left">
       <table class="memname">
         <tr>
-          <td class="memname">size_t Realm::AddressList::data[<a class="el" href="classRealm_1_1AddressList.html#acec7bb65b8966803c568a9521808b465">MAX_ENTRIES</a>]</td>
+          <td class="memname">constexpr size_t Realm::AddressList::CONTIG_SHIFT = 4</td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel">static</span><span class="mlabel">constexpr</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+</div>
+</div>
+<a id="a1ea0fc7bd1ed049483b178f458a36aa9" name="a1ea0fc7bd1ed049483b178f458a36aa9"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a1ea0fc7bd1ed049483b178f458a36aa9">&#9670;&#160;</a></span>data</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">std::vector&lt;size_t&gt; Realm::AddressList::data</td>
         </tr>
       </table>
   </td>
@@ -334,8 +519,8 @@ Friends</h2></td></tr>
 
 </div>
 </div>
-<a id="acec7bb65b8966803c568a9521808b465" name="acec7bb65b8966803c568a9521808b465"></a>
-<h2 class="memtitle"><span class="permalink"><a href="#acec7bb65b8966803c568a9521808b465">&#9670;&#160;</a></span>MAX_ENTRIES</h2>
+<a id="ae5aba62db592f371fbab876910676597" name="ae5aba62db592f371fbab876910676597"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#ae5aba62db592f371fbab876910676597">&#9670;&#160;</a></span>DIM_MASK</h2>
 
 <div class="memitem">
 <div class="memproto">
@@ -344,20 +529,20 @@ Friends</h2></td></tr>
   <td class="mlabels-left">
       <table class="memname">
         <tr>
-          <td class="memname">const size_t Realm::AddressList::MAX_ENTRIES = 1000</td>
+          <td class="memname">constexpr size_t Realm::AddressList::DIM_MASK = 0xF</td>
         </tr>
       </table>
   </td>
   <td class="mlabels-right">
-<span class="mlabels"><span class="mlabel">static</span><span class="mlabel">protected</span></span>  </td>
+<span class="mlabels"><span class="mlabel">static</span><span class="mlabel">constexpr</span></span>  </td>
   </tr>
 </table>
 </div><div class="memdoc">
 
 </div>
 </div>
-<a id="a12c0e929aa5fa27c167a5076a64a86c5" name="a12c0e929aa5fa27c167a5076a64a86c5"></a>
-<h2 class="memtitle"><span class="permalink"><a href="#a12c0e929aa5fa27c167a5076a64a86c5">&#9670;&#160;</a></span>read_pointer</h2>
+<a id="a5cba4df25b95d3e65fa30e91aa9ceecf" name="a5cba4df25b95d3e65fa30e91aa9ceecf"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a5cba4df25b95d3e65fa30e91aa9ceecf">&#9670;&#160;</a></span>DIM_SLOTS</h2>
 
 <div class="memitem">
 <div class="memproto">
@@ -366,12 +551,122 @@ Friends</h2></td></tr>
   <td class="mlabels-left">
       <table class="memname">
         <tr>
-          <td class="memname">unsigned Realm::AddressList::read_pointer</td>
+          <td class="memname">constexpr size_t Realm::AddressList::DIM_SLOTS = 2</td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel">static</span><span class="mlabel">constexpr</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+</div>
+</div>
+<a id="a7e76cd58d051104e2ae92513e529e00f" name="a7e76cd58d051104e2ae92513e529e00f"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a7e76cd58d051104e2ae92513e529e00f">&#9670;&#160;</a></span>field_block</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">const <a class="el" href="namespaceRealm.html#a17e405c7b3ab4da044c0e17b06afb23c">FieldBlock</a>* Realm::AddressList::field_block {nullptr}</td>
         </tr>
       </table>
   </td>
   <td class="mlabels-right">
 <span class="mlabels"><span class="mlabel">protected</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+</div>
+</div>
+<a id="a11e3effc73a24e17fe2eae1f108351de" name="a11e3effc73a24e17fe2eae1f108351de"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a11e3effc73a24e17fe2eae1f108351de">&#9670;&#160;</a></span>max_entries</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">size_t Realm::AddressList::max_entries {0}</td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel">protected</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+</div>
+</div>
+<a id="a924e58ab083c49444846fef33945681b" name="a924e58ab083c49444846fef33945681b"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a924e58ab083c49444846fef33945681b">&#9670;&#160;</a></span>read_pointer</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">size_t Realm::AddressList::read_pointer {0}</td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel">protected</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+</div>
+</div>
+<a id="a6c38d32b8ad17873c07fd073dc52d8df" name="a6c38d32b8ad17873c07fd073dc52d8df"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a6c38d32b8ad17873c07fd073dc52d8df">&#9670;&#160;</a></span>SLOT_BASE</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">constexpr size_t Realm::AddressList::SLOT_BASE = 1</td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel">static</span><span class="mlabel">constexpr</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+</div>
+</div>
+<a id="a8c23fd6114a64d828c44fc13f331ece4" name="a8c23fd6114a64d828c44fc13f331ece4"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a8c23fd6114a64d828c44fc13f331ece4">&#9670;&#160;</a></span>SLOT_HEADER</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">constexpr size_t Realm::AddressList::SLOT_HEADER = 0</td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel">static</span><span class="mlabel">constexpr</span></span>  </td>
   </tr>
 </table>
 </div><div class="memdoc">
@@ -388,7 +683,7 @@ Friends</h2></td></tr>
   <td class="mlabels-left">
       <table class="memname">
         <tr>
-          <td class="memname">size_t Realm::AddressList::total_bytes</td>
+          <td class="memname">size_t Realm::AddressList::total_bytes {0}</td>
         </tr>
       </table>
   </td>
@@ -400,8 +695,8 @@ Friends</h2></td></tr>
 
 </div>
 </div>
-<a id="aab855634126b53806e26fd5dbb6a1afb" name="aab855634126b53806e26fd5dbb6a1afb"></a>
-<h2 class="memtitle"><span class="permalink"><a href="#aab855634126b53806e26fd5dbb6a1afb">&#9670;&#160;</a></span>write_pointer</h2>
+<a id="ab8ae4be1b95dec75b1d1be47290fec8d" name="ab8ae4be1b95dec75b1d1be47290fec8d"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#ab8ae4be1b95dec75b1d1be47290fec8d">&#9670;&#160;</a></span>write_pointer</h2>
 
 <div class="memitem">
 <div class="memproto">
@@ -410,7 +705,7 @@ Friends</h2></td></tr>
   <td class="mlabels-left">
       <table class="memname">
         <tr>
-          <td class="memname">unsigned Realm::AddressList::write_pointer</td>
+          <td class="memname">size_t Realm::AddressList::write_pointer {0}</td>
         </tr>
       </table>
   </td>

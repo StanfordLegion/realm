@@ -44,7 +44,7 @@
    <!-- BEGIN version select -->
     <br />
     <div class="dropdown">
-     <button class="dropbtn">Version 25.6.1-rc.4+870f744e</button>
+     <button class="dropbtn">Version 25.6.1-rc.4+d48b3e73</button>
      <div class="dropdown-content"></div>
     </div>
     <script type="text/javascript" src="../selectversion.js"></script>
@@ -136,11 +136,13 @@ $(document).ready(function(){initNavTree('transfer__utils_8h.html',''); initResi
 </div><!--header-->
 <div class="contents">
 <div class="textblock"><code>#include &quot;<a class="el" href="point_8h_source.html">realm/point.h</a>&quot;</code><br />
+<code>#include &quot;<a class="el" href="inst__layout_8h_source.html">realm/inst_layout.h</a>&quot;</code><br />
+<code>#include &lt;unordered_map&gt;</code><br />
 <code>#include &quot;realm/transfer/transfer_utils.inl&quot;</code><br />
 </div><div class="textblock"><div class="dynheader">
 Include dependency graph for transfer_utils.h:</div>
 <div class="dyncontent">
-<div class="center"><iframe scrolling="no" frameborder="0" src="transfer__utils_8h__incl.svg" width="1530" height="520"><p><b>This browser is not able to show SVG: try Firefox, Chrome, Safari, or Opera instead.</b></p></iframe></div>
+<div class="center"><!-- SVG 0 --></div>
 </div>
 </div>
 <p><a href="transfer__utils_8h_source.html">Go to the source code of this file.</a></p>
@@ -158,6 +160,10 @@ Functions</h2></td></tr>
 <tr class="memitem:a07e1d9fa43445572de98ccefc7794582" id="r_a07e1d9fa43445572de98ccefc7794582"><td class="memTemplParams" colspan="2">template&lt;int N, typename T &gt; </td></tr>
 <tr class="memitem:a07e1d9fa43445572de98ccefc7794582"><td class="memTemplItemLeft" align="right" valign="top">bool&#160;</td><td class="memTemplItemRight" valign="bottom"><a class="el" href="namespaceRealm.html#a07e1d9fa43445572de98ccefc7794582">Realm::compute_target_subrect</a> (const <a class="el" href="structRealm_1_1Rect.html">Rect</a>&lt; N, T &gt; &amp;layout_bounds, const <a class="el" href="structRealm_1_1Rect.html">Rect</a>&lt; N, T &gt; &amp;cur_rect, <a class="el" href="structRealm_1_1Point.html">Point</a>&lt; N, T &gt; &amp;cur_point, <a class="el" href="structRealm_1_1Rect.html">Rect</a>&lt; N, T &gt; &amp;target_subrect, const int *dim_order)</td></tr>
 <tr class="separator:a07e1d9fa43445572de98ccefc7794582"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:a8d4ed2396248fafbba692fd88d728b03" id="r_a8d4ed2396248fafbba692fd88d728b03"><td class="memTemplParams" colspan="2">template&lt;int N, typename T &gt; </td></tr>
+<tr class="memitem:a8d4ed2396248fafbba692fd88d728b03"><td class="memTemplItemLeft" align="right" valign="top">int&#160;</td><td class="memTemplItemRight" valign="bottom"><a class="el" href="namespaceRealm.html#a8d4ed2396248fafbba692fd88d728b03">Realm::compact_affine_dims</a> (const <a class="el" href="classRealm_1_1AffineLayoutPiece.html">AffineLayoutPiece</a>&lt; N, T &gt; *affine, const <a class="el" href="structRealm_1_1Rect.html">Rect</a>&lt; N, T &gt; &amp;subrect, const int dim_order[N], size_t field_size, size_t &amp;total_bytes, size_t &amp;contig_bytes, std::unordered_map&lt; int, std::pair&lt; size_t, size_t &gt; &gt; &amp;count_strides)</td></tr>
+<tr class="memdesc:a8d4ed2396248fafbba692fd88d728b03"><td class="mdescLeft">&#160;</td><td class="mdescRight">Computes compact affine addressing information for a subrectangle.  <br /></td></tr>
+<tr class="separator:a8d4ed2396248fafbba692fd88d728b03"><td class="memSeparator" colspan="2">&#160;</td></tr>
 </table>
 </div><!-- contents -->
 </div><!-- doc-content -->

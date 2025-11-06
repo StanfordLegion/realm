@@ -44,7 +44,7 @@
    <!-- BEGIN version select -->
     <br />
     <div class="dropdown">
-     <button class="dropbtn">Version 25.6.1-rc.4+870f744e</button>
+     <button class="dropbtn">Version 25.6.1-rc.4+d48b3e73</button>
      <div class="dropdown-content"></div>
     </div>
     <script type="text/javascript" src="../selectversion.js"></script>
@@ -144,7 +144,7 @@ $(document).ready(function(){initNavTree('classRealm_1_1ReplicatedHeap.html','')
 <div class="dynheader">
 Collaboration diagram for Realm::ReplicatedHeap:</div>
 <div class="dyncontent">
-<div class="center"><iframe scrolling="no" frameborder="0" src="classRealm_1_1ReplicatedHeap__coll__graph.svg" width="591" height="300"><p><b>This browser is not able to show SVG: try Firefox, Chrome, Safari, or Opera instead.</b></p></iframe></div>
+<div class="center"><!-- SVG 0 --></div>
 <center><span class="legend">[<a target="top" href="graph_legend.html">legend</a>]</span></center></div>
 <table class="memberdecls">
 <tr class="heading"><td colspan="2"><h2 class="groupheader"><a id="nested-classes" name="nested-classes"></a>
@@ -164,10 +164,10 @@ Public Member Functions</h2></td></tr>
 <tr class="separator:abc6c94affe7b0419210dceffe8f75a27"><td class="memSeparator" colspan="2">&#160;</td></tr>
 <tr class="memitem:a97b6a1763a5221e95f6aa867a827d1bc" id="r_a97b6a1763a5221e95f6aa867a827d1bc"><td class="memItemLeft" align="right" valign="top">void&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="classRealm_1_1ReplicatedHeap.html#a97b6a1763a5221e95f6aa867a827d1bc">cleanup</a> ()</td></tr>
 <tr class="separator:a97b6a1763a5221e95f6aa867a827d1bc"><td class="memSeparator" colspan="2">&#160;</td></tr>
-<tr class="memitem:ac0f186ac3b0493d74ce7794f558a037a" id="r_ac0f186ac3b0493d74ce7794f558a037a"><td class="memItemLeft" align="right" valign="top">void *&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="classRealm_1_1ReplicatedHeap.html#ac0f186ac3b0493d74ce7794f558a037a">alloc_obj</a> (size_t bytes, size_t alignment)</td></tr>
-<tr class="separator:ac0f186ac3b0493d74ce7794f558a037a"><td class="memSeparator" colspan="2">&#160;</td></tr>
-<tr class="memitem:a5bc71cf76b311c90a8ef0ab2fb5472d3" id="r_a5bc71cf76b311c90a8ef0ab2fb5472d3"><td class="memItemLeft" align="right" valign="top">void&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="classRealm_1_1ReplicatedHeap.html#a5bc71cf76b311c90a8ef0ab2fb5472d3">free_obj</a> (void *ptr)</td></tr>
-<tr class="separator:a5bc71cf76b311c90a8ef0ab2fb5472d3"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:ad8e91c5a5cc51674dd15f9c2e91eaa8e" id="r_ad8e91c5a5cc51674dd15f9c2e91eaa8e"><td class="memItemLeft" align="right" valign="top">virtual void *&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="classRealm_1_1ReplicatedHeap.html#ad8e91c5a5cc51674dd15f9c2e91eaa8e">alloc_obj</a> (size_t bytes, size_t alignment)</td></tr>
+<tr class="separator:ad8e91c5a5cc51674dd15f9c2e91eaa8e"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:aea26f5b94b85a86ca8e98c8c4b8aaf64" id="r_aea26f5b94b85a86ca8e98c8c4b8aaf64"><td class="memItemLeft" align="right" valign="top">virtual void&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="classRealm_1_1ReplicatedHeap.html#aea26f5b94b85a86ca8e98c8c4b8aaf64">free_obj</a> (void *ptr)</td></tr>
+<tr class="separator:aea26f5b94b85a86ca8e98c8c4b8aaf64"><td class="memSeparator" colspan="2">&#160;</td></tr>
 <tr class="memitem:a86746864ee4903fb0fbb16437ba08576" id="r_a86746864ee4903fb0fbb16437ba08576"><td class="memItemLeft" align="right" valign="top">void&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="classRealm_1_1ReplicatedHeap.html#a86746864ee4903fb0fbb16437ba08576">commit_writes</a> (void *start, size_t bytes)</td></tr>
 <tr class="separator:a86746864ee4903fb0fbb16437ba08576"><td class="memSeparator" colspan="2">&#160;</td></tr>
 <tr class="memitem:a6ed376913645d4cbcfd72d90d29ed9dc" id="r_a6ed376913645d4cbcfd72d90d29ed9dc"><td class="memItemLeft" align="right" valign="top">void&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="classRealm_1_1ReplicatedHeap.html#a6ed376913645d4cbcfd72d90d29ed9dc">add_listener</a> (<a class="el" href="classRealm_1_1ReplicatedHeap_1_1Listener.html">Listener</a> *listener)</td></tr>
@@ -252,14 +252,17 @@ Protected Attributes</h2></td></tr>
 
 </div>
 </div>
-<a id="ac0f186ac3b0493d74ce7794f558a037a" name="ac0f186ac3b0493d74ce7794f558a037a"></a>
-<h2 class="memtitle"><span class="permalink"><a href="#ac0f186ac3b0493d74ce7794f558a037a">&#9670;&#160;</a></span>alloc_obj()</h2>
+<a id="ad8e91c5a5cc51674dd15f9c2e91eaa8e" name="ad8e91c5a5cc51674dd15f9c2e91eaa8e"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#ad8e91c5a5cc51674dd15f9c2e91eaa8e">&#9670;&#160;</a></span>alloc_obj()</h2>
 
 <div class="memitem">
 <div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
       <table class="memname">
         <tr>
-          <td class="memname">void * Realm::ReplicatedHeap::alloc_obj </td>
+          <td class="memname">virtual void * Realm::ReplicatedHeap::alloc_obj </td>
           <td>(</td>
           <td class="paramtype">size_t&#160;</td>
           <td class="paramname"><em>bytes</em>, </td>
@@ -276,6 +279,11 @@ Protected Attributes</h2></td></tr>
           <td></td><td></td>
         </tr>
       </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel">virtual</span></span>  </td>
+  </tr>
+</table>
 </div><div class="memdoc">
 
 </div>
@@ -325,20 +333,28 @@ Protected Attributes</h2></td></tr>
 
 </div>
 </div>
-<a id="a5bc71cf76b311c90a8ef0ab2fb5472d3" name="a5bc71cf76b311c90a8ef0ab2fb5472d3"></a>
-<h2 class="memtitle"><span class="permalink"><a href="#a5bc71cf76b311c90a8ef0ab2fb5472d3">&#9670;&#160;</a></span>free_obj()</h2>
+<a id="aea26f5b94b85a86ca8e98c8c4b8aaf64" name="aea26f5b94b85a86ca8e98c8c4b8aaf64"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#aea26f5b94b85a86ca8e98c8c4b8aaf64">&#9670;&#160;</a></span>free_obj()</h2>
 
 <div class="memitem">
 <div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
       <table class="memname">
         <tr>
-          <td class="memname">void Realm::ReplicatedHeap::free_obj </td>
+          <td class="memname">virtual void Realm::ReplicatedHeap::free_obj </td>
           <td>(</td>
           <td class="paramtype">void *&#160;</td>
           <td class="paramname"><em>ptr</em></td><td>)</td>
           <td></td>
         </tr>
       </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel">virtual</span></span>  </td>
+  </tr>
+</table>
 </div><div class="memdoc">
 
 </div>

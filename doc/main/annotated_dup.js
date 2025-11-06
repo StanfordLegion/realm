@@ -371,6 +371,7 @@ var annotated_dup =
       [ "ExternalInstanceResource", "classRealm_1_1ExternalInstanceResource.html", "classRealm_1_1ExternalInstanceResource" ],
       [ "ExternalMemoryResource", "classRealm_1_1ExternalMemoryResource.html", "classRealm_1_1ExternalMemoryResource" ],
       [ "FastReservation", "classRealm_1_1FastReservation.html", "classRealm_1_1FastReservation" ],
+      [ "FieldBlockBase", "structRealm_1_1FieldBlockBase.html", "structRealm_1_1FieldBlockBase" ],
       [ "FieldDataDescriptor", "structRealm_1_1FieldDataDescriptor.html", "structRealm_1_1FieldDataDescriptor" ],
       [ "FIFOCondVar", "classRealm_1_1FIFOCondVar.html", "classRealm_1_1FIFOCondVar" ],
       [ "FIFOMutex", "classRealm_1_1FIFOMutex.html", "classRealm_1_1FIFOMutex" ],

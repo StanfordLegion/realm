@@ -390,6 +390,7 @@ var hierarchy =
     ] ],
     [ "Realm::Cuda::FatBin", "structRealm_1_1Cuda_1_1FatBin.html", null ],
     [ "Realm::Hip::FatBin", "structRealm_1_1Hip_1_1FatBin.html", null ],
+    [ "Realm::FieldBlockBase< FieldID >", "structRealm_1_1FieldBlockBase.html", null ],
     [ "Realm::FieldDataDescriptor< IS, FT >", "structRealm_1_1FieldDataDescriptor.html", null ],
     [ "Realm::InstanceLayoutConstraints::FieldInfo", "structRealm_1_1InstanceLayoutConstraints_1_1FieldInfo.html", null ],
     [ "Realm::TransferDesc::FieldInfo", "structRealm_1_1TransferDesc_1_1FieldInfo.html", null ],

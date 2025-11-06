@@ -44,7 +44,7 @@
    <!-- BEGIN version select -->
     <br />
     <div class="dropdown">
-     <button class="dropbtn">Version 25.6.1-rc.4+870f744e</button>
+     <button class="dropbtn">Version 25.6.1-rc.4+d48b3e73</button>
      <div class="dropdown-content"></div>
     </div>
     <script type="text/javascript" src="../selectversion.js"></script>
@@ -442,6 +442,8 @@ Classes</h2></td></tr>
 <tr class="memitem:"><td class="memItemLeft" align="right" valign="top">class &#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="classRealm_1_1ExternalMemoryResource.html">ExternalMemoryResource</a></td></tr>
 <tr class="separator:"><td class="memSeparator" colspan="2">&#160;</td></tr>
 <tr class="memitem:"><td class="memItemLeft" align="right" valign="top">class &#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="classRealm_1_1FastReservation.html">FastReservation</a></td></tr>
+<tr class="separator:"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:"><td class="memItemLeft" align="right" valign="top">struct &#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="structRealm_1_1FieldBlockBase.html">FieldBlockBase</a></td></tr>
 <tr class="separator:"><td class="memSeparator" colspan="2">&#160;</td></tr>
 <tr class="memitem:"><td class="memItemLeft" align="right" valign="top">class &#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="structRealm_1_1FieldDataDescriptor.html">FieldDataDescriptor</a></td></tr>
 <tr class="separator:"><td class="memSeparator" colspan="2">&#160;</td></tr>
@@ -1109,6 +1111,8 @@ Typedefs</h2></td></tr>
 <tr class="separator:a21cec416ea9c6eb975e065d1ccaf8b9c"><td class="memSeparator" colspan="2">&#160;</td></tr>
 <tr class="memitem:a208682ade14bd2923d3dcb35d82f19cb" id="r_a208682ade14bd2923d3dcb35d82f19cb"><td class="memItemLeft" align="right" valign="top">typedef <a class="el" href="classRealm_1_1DynamicTableAllocator.html">DynamicTableAllocator</a>&lt; <a class="el" href="classRealm_1_1SubgraphImpl.html">SubgraphImpl</a>, 10, 4 &gt;&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="namespaceRealm.html#a208682ade14bd2923d3dcb35d82f19cb">SubgraphTableAllocator</a></td></tr>
 <tr class="separator:a208682ade14bd2923d3dcb35d82f19cb"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:a17e405c7b3ab4da044c0e17b06afb23c" id="r_a17e405c7b3ab4da044c0e17b06afb23c"><td class="memItemLeft" align="right" valign="top">using&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="namespaceRealm.html#a17e405c7b3ab4da044c0e17b06afb23c">FieldBlock</a> = <a class="el" href="structRealm_1_1FieldBlockBase.html">FieldBlockBase</a>&lt; int &gt;</td></tr>
+<tr class="separator:a17e405c7b3ab4da044c0e17b06afb23c"><td class="memSeparator" colspan="2">&#160;</td></tr>
 <tr class="memitem:abed5575be9e112dd2dc723c61bc2137b" id="r_abed5575be9e112dd2dc723c61bc2137b"><td class="memItemLeft" align="right" valign="top">typedef unsigned long long&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="namespaceRealm.html#abed5575be9e112dd2dc723c61bc2137b">XferDesID</a></td></tr>
 <tr class="separator:abed5575be9e112dd2dc723c61bc2137b"><td class="memSeparator" colspan="2">&#160;</td></tr>
 <tr class="memitem:a232fc7f8cd62543773830f625b3e9461" id="r_a232fc7f8cd62543773830f625b3e9461"><td class="memItemLeft" align="right" valign="top">typedef std::map&lt; std::pair&lt; <a class="el" href="realm__c_8h.html#a31948ee1e879c0b543581b44ee85f82b">realm_id_t</a>, <a class="el" href="realm__c_8h.html#a31948ee1e879c0b543581b44ee85f82b">realm_id_t</a> &gt;, <a class="el" href="classRealm_1_1PathLRU.html">PathLRU</a> * &gt;&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="namespaceRealm.html#a232fc7f8cd62543773830f625b3e9461">PathCache</a></td></tr>
@@ -1472,6 +1476,10 @@ Functions</h2></td></tr>
 <tr class="memitem:a07e1d9fa43445572de98ccefc7794582" id="r_a07e1d9fa43445572de98ccefc7794582"><td class="memTemplParams" colspan="2">template&lt;int N, typename T &gt; </td></tr>
 <tr class="memitem:a07e1d9fa43445572de98ccefc7794582"><td class="memTemplItemLeft" align="right" valign="top">bool&#160;</td><td class="memTemplItemRight" valign="bottom"><a class="el" href="namespaceRealm.html#a07e1d9fa43445572de98ccefc7794582">compute_target_subrect</a> (const <a class="el" href="structRealm_1_1Rect.html">Rect</a>&lt; N, T &gt; &amp;layout_bounds, const <a class="el" href="structRealm_1_1Rect.html">Rect</a>&lt; N, T &gt; &amp;cur_rect, <a class="el" href="structRealm_1_1Point.html">Point</a>&lt; N, T &gt; &amp;cur_point, <a class="el" href="structRealm_1_1Rect.html">Rect</a>&lt; N, T &gt; &amp;target_subrect, const int *dim_order)</td></tr>
 <tr class="separator:a07e1d9fa43445572de98ccefc7794582"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:a8d4ed2396248fafbba692fd88d728b03" id="r_a8d4ed2396248fafbba692fd88d728b03"><td class="memTemplParams" colspan="2">template&lt;int N, typename T &gt; </td></tr>
+<tr class="memitem:a8d4ed2396248fafbba692fd88d728b03"><td class="memTemplItemLeft" align="right" valign="top">int&#160;</td><td class="memTemplItemRight" valign="bottom"><a class="el" href="namespaceRealm.html#a8d4ed2396248fafbba692fd88d728b03">compact_affine_dims</a> (const <a class="el" href="classRealm_1_1AffineLayoutPiece.html">AffineLayoutPiece</a>&lt; N, T &gt; *affine, const <a class="el" href="structRealm_1_1Rect.html">Rect</a>&lt; N, T &gt; &amp;subrect, const int dim_order[N], size_t field_size, size_t &amp;total_bytes, size_t &amp;contig_bytes, std::unordered_map&lt; int, std::pair&lt; size_t, size_t &gt; &gt; &amp;count_strides)</td></tr>
+<tr class="memdesc:a8d4ed2396248fafbba692fd88d728b03"><td class="mdescLeft">&#160;</td><td class="mdescRight">Computes compact affine addressing information for a subrectangle.  <br /></td></tr>
+<tr class="separator:a8d4ed2396248fafbba692fd88d728b03"><td class="memSeparator" colspan="2">&#160;</td></tr>
 <tr class="memitem:a519480d9cc7e6da1a76368cf25e0e3b2" id="r_a519480d9cc7e6da1a76368cf25e0e3b2"><td class="memItemLeft" align="right" valign="top">constexpr uint64_t&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="namespaceRealm.html#a519480d9cc7e6da1a76368cf25e0e3b2">hash_fnv1a</a> (const char *s, size_t n, const uint64_t value=0xcbf29ce484222325ULL) noexcept</td></tr>
 <tr class="separator:a519480d9cc7e6da1a76368cf25e0e3b2"><td class="memSeparator" colspan="2">&#160;</td></tr>
 <tr class="memitem:a0b5ef45a7d65d3d72fdfa4c459167a60" id="r_a0b5ef45a7d65d3d72fdfa4c459167a60"><td class="memItemLeft" align="right" valign="top">constexpr size_t&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="namespaceRealm.html#a0b5ef45a7d65d3d72fdfa4c459167a60">hash_combine</a> (size_t lhs, size_t rhs) noexcept</td></tr>
@@ -1646,6 +1654,20 @@ template&lt;typename Hdr &gt; </div>
       <table class="memname">
         <tr>
           <td class="memname">typedef <a class="el" href="structRealm_1_1DynamicTemplates_1_1TypeList.html">DynamicTemplates::TypeList</a>&lt;int,unsignedint,longlong&gt;::TL <a class="el" href="namespaceRealm.html#a55144d226eed6e1ea47f0173f86b03f2">Realm::DIMTYPES</a></td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+
+</div>
+</div>
+<a id="a17e405c7b3ab4da044c0e17b06afb23c" name="a17e405c7b3ab4da044c0e17b06afb23c"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a17e405c7b3ab4da044c0e17b06afb23c">&#9670;&#160;</a></span>FieldBlock</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname">using <a class="el" href="namespaceRealm.html#a17e405c7b3ab4da044c0e17b06afb23c">Realm::FieldBlock</a> = typedef <a class="el" href="structRealm_1_1FieldBlockBase.html">FieldBlockBase</a>&lt;int&gt;</td>
         </tr>
       </table>
 </div><div class="memdoc">
@@ -2167,6 +2189,95 @@ template&lt;typename T , typename T2 &gt; </div>
 <dl class="params"><dt>Parameters</dt><dd>
   <table class="params">
     <tr><td class="paramname">handle</td><td></td></tr>
+  </table>
+  </dd>
+</dl>
+
+</div>
+</div>
+<a id="a8d4ed2396248fafbba692fd88d728b03" name="a8d4ed2396248fafbba692fd88d728b03"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a8d4ed2396248fafbba692fd88d728b03">&#9670;&#160;</a></span>compact_affine_dims()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<div class="memtemplate">
+template&lt;int N, typename T &gt; </div>
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">int Realm::compact_affine_dims </td>
+          <td>(</td>
+          <td class="paramtype">const <a class="el" href="classRealm_1_1AffineLayoutPiece.html">AffineLayoutPiece</a>&lt; N, T &gt; *&#160;</td>
+          <td class="paramname"><em>affine</em>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype">const <a class="el" href="structRealm_1_1Rect.html">Rect</a>&lt; N, T &gt; &amp;&#160;</td>
+          <td class="paramname"><em>subrect</em>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype">const int&#160;</td>
+          <td class="paramname"><em>dim_order</em>[N], </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype">size_t&#160;</td>
+          <td class="paramname"><em>field_size</em>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype">size_t &amp;&#160;</td>
+          <td class="paramname"><em>total_bytes</em>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype">size_t &amp;&#160;</td>
+          <td class="paramname"><em>contig_bytes</em>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype">std::unordered_map&lt; int, std::pair&lt; size_t, size_t &gt; &gt; &amp;&#160;</td>
+          <td class="paramname"><em>count_strides</em>&#160;</td>
+        </tr>
+        <tr>
+          <td></td>
+          <td>)</td>
+          <td></td><td></td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel">inline</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>Computes compact affine addressing information for a subrectangle. </p>
+<p>Given an affine layout piece and a target subrectangle, this function determines the base offset, total number of bytes, and dimension stride/count pairs for efficient memory access. It compactly represents contiguous dimensions and generates stride-based indexing information for the remaining ones.</p>
+<dl class="tparams"><dt>Template Parameters</dt><dd>
+  <table class="tparams">
+    <tr><td class="paramname">N</td><td>Number of dimensions in the layout. </td></tr>
+    <tr><td class="paramname">T</td><td>Coordinate type (e.g., int, long).</td></tr>
+  </table>
+  </dd>
+</dl>
+<dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramdir"></td><td class="paramname">affine</td><td>Pointer to the affine layout piece being queried. </td></tr>
+    <tr><td class="paramdir"></td><td class="paramname">subrect</td><td>Subrectangle to compute addressing for. </td></tr>
+    <tr><td class="paramdir"></td><td class="paramname">dim_order</td><td>Ordering of dimensions to compact/iterate over. </td></tr>
+    <tr><td class="paramdir">[out]</td><td class="paramname">total_bytes</td><td>Total bytes represented by the subrect. </td></tr>
+    <tr><td class="paramdir">[out]</td><td class="paramname">contig_bytes</td><td>Number of contiguous bytes in the compacted dimensions. </td></tr>
+    <tr><td class="paramdir">[out]</td><td class="paramname">count_strides</td><td>Output stride/count pairs indexed by dimension. count_strides[i][0] = count, count_strides[i][1] = stride. </td></tr>
   </table>
   </dd>
 </dl>

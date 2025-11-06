@@ -1,0 +1,52 @@
+digraph "Realm::RegionInstanceImpl::Metadata"
+{
+ // LATEX_PDF_SIZE
+  bgcolor="transparent";
+  edge [fontname=Helvetica,fontsize=10,labelfontname=Helvetica,labelfontsize=10];
+  node [fontname=Helvetica,fontsize=10,shape=box,height=0.2,width=0.4];
+  rankdir="LR";
+  Node1 [id="Node000001",label="Realm::RegionInstanceImpl\l::Metadata",height=0.2,width=0.4,color="gray40", fillcolor="grey60", style="filled", fontcolor="black",tooltip=" "];
+  Node2 -> Node1 [id="edge1_Node000001_Node000002",dir="back",color="steelblue1",style="solid",tooltip=" "];
+  Node2 [id="Node000002",label="Realm::MetadataBase",height=0.2,width=0.4,color="gray40", fillcolor="white", style="filled",URL="$classRealm_1_1MetadataBase.html",tooltip=" "];
+  Node3 -> Node2 [id="edge2_Node000002_Node000003",dir="back",color="darkorchid3",style="dashed",tooltip=" ",label=" mutex",fontcolor="grey" ];
+  Node3 [id="Node000003",label="Realm::UnfairMutex",height=0.2,width=0.4,color="gray40", fillcolor="white", style="filled",URL="$classRealm_1_1UnfairMutex.html",tooltip=" "];
+  Node4 -> Node3 [id="edge3_Node000003_Node000004",dir="back",color="steelblue1",style="solid",tooltip=" "];
+  Node4 [id="Node000004",label="Realm::noncopyable",height=0.2,width=0.4,color="gray40", fillcolor="white", style="filled",URL="$classRealm_1_1noncopyable.html",tooltip=" "];
+  Node5 -> Node3 [id="edge4_Node000003_Node000005",dir="back",color="darkorchid3",style="dashed",tooltip=" ",label=" state",fontcolor="grey" ];
+  Node5 [id="Node000005",label="Realm::atomic\< uint32_t \>",height=0.2,width=0.4,color="gray40", fillcolor="white", style="filled",URL="$classRealm_1_1atomic.html",tooltip=" "];
+  Node6 -> Node3 [id="edge5_Node000003_Node000006",dir="back",color="darkorchid3",style="dashed",tooltip=" ",label=" db_list",fontcolor="grey" ];
+  Node6 [id="Node000006",label="Realm::DoorbellList",height=0.2,width=0.4,color="gray40", fillcolor="white", style="filled",URL="$classRealm_1_1DoorbellList.html",tooltip=" "];
+  Node7 -> Node6 [id="edge6_Node000006_Node000007",dir="back",color="darkorchid3",style="dashed",tooltip=" ",label=" head_or_count",fontcolor="grey" ];
+  Node7 [id="Node000007",label="Realm::atomic\< uintptr_t \>",height=0.2,width=0.4,color="gray40", fillcolor="white", style="filled",URL="$classRealm_1_1atomic.html",tooltip=" "];
+  Node8 -> Node2 [id="edge7_Node000002_Node000008",dir="back",color="darkorchid3",style="dashed",tooltip=" ",label=" valid_event",fontcolor="grey" ];
+  Node8 [id="Node000008",label="Realm::Event",height=0.2,width=0.4,color="gray40", fillcolor="white", style="filled",URL="$classRealm_1_1Event.html",tooltip=" "];
+  Node8 -> Node8 [id="edge8_Node000008_Node000008",dir="back",color="darkorchid3",style="dashed",tooltip=" ",label=" NO_EVENT",fontcolor="grey" ];
+  Node9 -> Node2 [id="edge9_Node000002_Node000009",dir="back",color="darkorchid3",style="dashed",tooltip=" ",label=" remote_copies",fontcolor="grey" ];
+  Node9 [id="Node000009",label="Realm::NodeSet",height=0.2,width=0.4,color="gray40", fillcolor="white", style="filled",URL="$classRealm_1_1NodeSet.html",tooltip=" "];
+  Node10 -> Node9 [id="edge10_Node000009_Node000010",dir="back",color="darkorchid3",style="dashed",tooltip=" ",label=" data",fontcolor="grey" ];
+  Node10 [id="Node000010",label="Realm::NodeSet::Encoding\lUnion",height=0.2,width=0.4,color="gray40", fillcolor="white", style="filled",URL="$unionRealm_1_1NodeSet_1_1EncodingUnion.html",tooltip=" "];
+  Node11 -> Node10 [id="edge11_Node000010_Node000011",dir="back",color="darkorchid3",style="dashed",tooltip=" ",label=" bitmask",fontcolor="grey" ];
+  Node11 [id="Node000011",label="Realm::NodeSetBitmask",height=0.2,width=0.4,color="gray40", fillcolor="white", style="filled",URL="$classRealm_1_1NodeSetBitmask.html",tooltip=" "];
+  Node3 -> Node11 [id="edge12_Node000011_Node000003",dir="back",color="darkorchid3",style="dashed",tooltip=" ",label=" free_list_mutex",fontcolor="grey" ];
+  Node12 -> Node2 [id="edge13_Node000002_Node000012",dir="back",color="darkorchid3",style="dashed",tooltip=" ",label=" frag_buffer",fontcolor="grey" ];
+  Node12 [id="Node000012",label="Realm::atomic\< char * \>",height=0.2,width=0.4,color="gray40", fillcolor="white", style="filled",URL="$classRealm_1_1atomic.html",tooltip=" "];
+  Node13 -> Node2 [id="edge14_Node000002_Node000013",dir="back",color="darkorchid3",style="dashed",tooltip=" ",label=" frag_bytes_received",fontcolor="grey" ];
+  Node13 [id="Node000013",label="Realm::atomic\< size_t \>",height=0.2,width=0.4,color="gray40", fillcolor="white", style="filled",URL="$classRealm_1_1atomic.html",tooltip=" "];
+  Node8 -> Node1 [id="edge15_Node000001_Node000008",dir="back",color="darkorchid3",style="dashed",tooltip=" ",label=" ready_event",fontcolor="grey" ];
+  Node14 -> Node1 [id="edge16_Node000001_Node000014",dir="back",color="darkorchid3",style="dashed",tooltip=" ",label=" layout",fontcolor="grey" ];
+  Node14 [id="Node000014",label="Realm::InstanceLayoutGeneric",height=0.2,width=0.4,color="gray40", fillcolor="white", style="filled",URL="$classRealm_1_1InstanceLayoutGeneric.html",tooltip=" "];
+  Node15 -> Node1 [id="edge17_Node000001_Node000015",dir="back",color="darkorchid3",style="dashed",tooltip=" ",label=" ext_resource",fontcolor="grey" ];
+  Node15 [id="Node000015",label="Realm::ExternalInstanceResource",height=0.2,width=0.4,color="gray40", fillcolor="white", style="filled",URL="$classRealm_1_1ExternalInstanceResource.html",tooltip=" "];
+  Node16 -> Node1 [id="edge18_Node000001_Node000016",dir="back",color="darkorchid3",style="dashed",tooltip=" ",label=" mem_specific",fontcolor="grey" ];
+  Node16 [id="Node000016",label="Realm::MemSpecificInfo",height=0.2,width=0.4,color="gray40", fillcolor="white", style="filled",URL="$classRealm_1_1MemSpecificInfo.html",tooltip=" "];
+  Node16 -> Node16 [id="edge19_Node000016_Node000016",dir="back",color="darkorchid3",style="dashed",tooltip=" ",label=" next",fontcolor="grey" ];
+  Node17 -> Node1 [id="edge20_Node000001_Node000017",dir="back",color="darkorchid3",style="dashed",tooltip=" ",label=" lookup_program",fontcolor="grey" ];
+  Node17 [id="Node000017",label="Realm::CompiledInstanceLayout",height=0.2,width=0.4,color="gray40", fillcolor="white", style="filled",URL="$classRealm_1_1CompiledInstanceLayout.html",tooltip=" "];
+  Node18 -> Node17 [id="edge21_Node000017_Node000018",dir="back",color="steelblue1",style="solid",tooltip=" "];
+  Node18 [id="Node000018",label="Realm::PieceLookup\l::CompiledProgram",height=0.2,width=0.4,color="gray40", fillcolor="white", style="filled",URL="$classRealm_1_1PieceLookup_1_1CompiledProgram.html",tooltip=" "];
+  Node19 -> Node18 [id="edge22_Node000018_Node000019",dir="back",color="darkorchid3",style="dashed",tooltip=" ",label=" is_compiled",fontcolor="grey" ];
+  Node19 [id="Node000019",label="Realm::atomic\< bool \>",height=0.2,width=0.4,color="gray40", fillcolor="white", style="filled",URL="$classRealm_1_1atomic.html",tooltip=" "];
+  Node20 -> Node17 [id="edge23_Node000017_Node000020",dir="back",color="darkorchid3",style="dashed",tooltip=" ",label=" repl_heap",fontcolor="grey" ];
+  Node20 [id="Node000020",label="Realm::ReplicatedHeap",height=0.2,width=0.4,color="gray40", fillcolor="white", style="filled",URL="$classRealm_1_1ReplicatedHeap.html",tooltip=" "];
+  Node3 -> Node20 [id="edge24_Node000020_Node000003",dir="back",color="darkorchid3",style="dashed",tooltip=" ",label=" mutex",fontcolor="grey" ];
+}
