@@ -847,10 +847,6 @@ namespace Realm {
   }
 
   template <int N, typename T>
-  IDIndexedFieldsIterator<N, T>::IDIndexedFieldsIterator(void)
-  {}
-
-  template <int N, typename T>
   template <typename S>
   /*static*/ TransferIterator *
   IDIndexedFieldsIterator<N, T>::deserialize_new(S &deserializer)
