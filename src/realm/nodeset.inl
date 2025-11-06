@@ -105,7 +105,7 @@ namespace Realm {
   inline bool NodeSet::empty() const
   {
 #ifdef DEBUG_REALM_NODESET
-    assert((count == 0) == reference_set.empty());
+    REALM_ASSERT((count == 0) == reference_set.empty());
 #endif
     return (count == 0);
   }
@@ -113,7 +113,7 @@ namespace Realm {
   inline size_t NodeSet::size() const
   {
 #ifdef DEBUG_REALM_NODESET
-    assert(count == reference_set.size());
+    REALM_ASSERT(count == reference_set.size());
 #endif
     return count;
   }
@@ -307,7 +307,7 @@ namespace Realm {
   {
     if(count == 0) {
 #ifdef DEBUG_REALM_NODESET
-      assert(reference_set.count(id) == 0);
+      REALM_ASSERT(reference_set.count(id) == 0);
 #endif
       return false;
     }
@@ -318,7 +318,7 @@ namespace Realm {
       for(short i = 0; i < short(count); i++)
         if(data.values[i] == id) {
 #ifdef DEBUG_REALM_NODESET
-          assert(reference_set.count(id) > 0);
+          REALM_ASSERT(reference_set.count(id) > 0);
 #endif
           return true;
         }
@@ -330,7 +330,7 @@ namespace Realm {
       for(short i = 0; i < range_count; i++)
         if((data.ranges[i].lo <= id) && (id <= data.ranges[i].hi)) {
 #ifdef DEBUG_REALM_NODESET
-          assert(reference_set.count(id) > 0);
+          REALM_ASSERT(reference_set.count(id) > 0);
 #endif
           return true;
         }
@@ -341,7 +341,7 @@ namespace Realm {
     {
       if(data.bitmask->is_set(id)) {
 #ifdef DEBUG_REALM_NODESET
-        assert(reference_set.count(id) > 0);
+        REALM_ASSERT(reference_set.count(id) > 0);
 #endif
         return true;
       }
@@ -350,7 +350,7 @@ namespace Realm {
     }
 
 #ifdef DEBUG_REALM_NODESET
-    assert(reference_set.count(id) == 0);
+    REALM_ASSERT(reference_set.count(id) == 0);
 #endif
     return false;
   }
@@ -421,7 +421,7 @@ namespace Realm {
   inline NodeID NodeSetIterator::operator*() const
   {
 #ifdef DEBUG_REALM_NODESET
-    assert(nodeset->reference_set.count(cur_node) > 0);
+    REALM_ASSERT(nodeset->reference_set.count(cur_node) > 0);
 #endif
     return cur_node;
   }
@@ -429,7 +429,7 @@ namespace Realm {
   inline const NodeID *NodeSetIterator::operator->() const
   {
 #ifdef DEBUG_REALM_NODESET
-    assert(nodeset->reference_set.count(cur_node) > 0);
+    REALM_ASSERT(nodeset->reference_set.count(cur_node) > 0);
 #endif
     return &cur_node;
   }
