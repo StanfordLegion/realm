@@ -231,7 +231,7 @@ void run_test_case(const MemcpyXferTestCaseData<N> &test_case)
   input_port.mem = input_mem.get();
   input_port.peer_port_idx = 0;
   input_port.iter = src_it;
-  input_port.addrcursor.set_addrlist(&input_port.addrlist);
+  input_port.span_iter = SpanIterator(&input_port.span_list);
 
   TransferIteratorIndexSpace<N, T> *dst_it = new TransferIteratorIndexSpace<N, T>(
       test_case.dim_order.data(), test_case.field_ids, test_case.field_offsets,
@@ -251,7 +251,7 @@ void run_test_case(const MemcpyXferTestCaseData<N> &test_case)
   output_port.peer_port_idx = 0;
   output_port.iter = dst_it;
 
-  output_port.addrcursor.set_addrlist(&output_port.addrlist);
+  output_port.span_iter = SpanIterator(&output_port.span_list);
 
   while(xfer_desc->progress_xd(channel.get(), TimeLimit::relative(10000000))) {
   }

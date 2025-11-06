@@ -50,7 +50,7 @@ set(REALM_SOURCES
     realm_c.cc
     fragmented_message.cc
     transfer/lowlevel_disk.cc
-    transfer/address_list.cc
+    transfer/memory_span.cc
     transfer/channel_common.cc
     transfer/memcpy_channel.cc
     transfer/channel.cc

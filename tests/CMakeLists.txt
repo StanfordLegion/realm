@@ -101,7 +101,7 @@ list(
   event_test.cc
   path_cache_test.cc
   transfer_utils_test.cc
-  address_list_test.cc
+  memory_span_test.cc
   cmdline_parser_test.cc
   sequence_assembler_test.cc
   dynamic_table_test.cc
@@ -129,6 +129,13 @@ add_executable(realm_unit_tests ${REALM_UNIT_TESTS})
 target_compile_features(realm_unit_tests PUBLIC cxx_std_20)
 target_link_libraries(
   realm_unit_tests PRIVATE realm_obj GTest::gmock_main ${REALM_LIBRARIES} ${REALM_EXTRA_OBJS}
+)
+
+# Standalone memory_span_test for debugging
+add_executable(memory_span_test ${REALM_TEST_DIR}/unit_tests/memory_span_test.cc)
+target_compile_features(memory_span_test PUBLIC cxx_std_20)
+target_link_libraries(
+  memory_span_test PRIVATE realm_obj GTest::gmock_main ${REALM_LIBRARIES} ${REALM_EXTRA_OBJS}
 )
 
 # TODO(wei): To be merged into realm_unit_tests once runtime singleton is

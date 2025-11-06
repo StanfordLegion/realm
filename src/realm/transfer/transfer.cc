@@ -177,7 +177,7 @@ namespace Realm {
   {
     size_t field_rel_offset;
     {
-      std::map<FieldID, InstanceLayoutGeneric::FieldLayout>::const_iterator it =
+      InstanceLayoutGeneric::FieldMap::const_iterator it =
           inst_layout->fields.find(field_id);
       assert(it != inst_layout->fields.end());
       assert((field_offset + field_size) <= size_t(it->second.size_in_bytes));
@@ -218,7 +218,7 @@ namespace Realm {
         checked_cast<const InstanceLayout<N, T> *>(inst_impl->metadata.layout);
 
     {
-      std::map<FieldID, InstanceLayoutGeneric::FieldLayout>::const_iterator it =
+      InstanceLayoutGeneric::FieldMap::const_iterator it =
           inst_layout->fields.find(cur_field_id);
       assert(it != inst_layout->fields.end());
       assert((cur_field_offset + cur_field_size) <= size_t(it->second.size_in_bytes));
@@ -369,7 +369,7 @@ namespace Realm {
     const InstanceLayoutPiece<N, T> *layout_piece;
     // int field_rel_offset;
     {
-      std::map<FieldID, InstanceLayoutGeneric::FieldLayout>::const_iterator it =
+      InstanceLayoutGeneric::FieldMap::const_iterator it =
           inst_layout->fields.find(cur_field_id);
       assert(it != inst_layout->fields.end());
       assert((cur_field_offset == 0) &&
@@ -505,7 +505,7 @@ namespace Realm {
 
   template <int N, typename T>
   bool
-  TransferIteratorBase<N, T>::get_addresses(AddressList &addrlist,
+  TransferIteratorBase<N, T>::get_addresses(SpanList &span_list,
                                             const InstanceLayoutPieceBase *&nonaffine)
   {
 #ifdef DEBUG_REALM
@@ -521,18 +521,11 @@ namespace Realm {
         return false; // no more addresses at the moment, but expect more later
       }
 
-      // we may be able to compact dimensions, but ask for space to write a
-      //  an address record of the maximum possible dimension (i.e. N)
-      size_t *addr_data = addrlist.begin_nd_entry(N);
-      if(!addr_data) {
-        return true; // out of space for now
-      }
-
       // find the layout piece the current point is in
       const InstanceLayoutPiece<N, T> *layout_piece;
       size_t field_rel_offset;
       {
-        std::map<FieldID, InstanceLayoutGeneric::FieldLayout>::const_iterator it =
+        InstanceLayoutGeneric::FieldMap::const_iterator it =
             inst_layout->fields.find(cur_field_id);
         assert(it != inst_layout->fields.end());
         assert((cur_field_offset + cur_field_size) <= size_t(it->second.size_in_bytes));
@@ -572,17 +565,21 @@ namespace Realm {
 #endif
 
       // TODO: remove now-redundant condition here
+      // TODO: use compact_affine_dims
       if(layout_piece->layout_type == PieceLayoutTypes::AffineLayoutType) {
         const AffineLayoutPiece<N, T> *affine =
             static_cast<const AffineLayoutPiece<N, T> *>(layout_piece);
 
-        // offset of initial entry is easy to compute
-        addr_data[1] = (inst_impl->metadata.inst_offset + affine->offset +
-                        affine->strides.dot(target_subrect.lo) + field_rel_offset);
+        // Prepare span data
+        Span span;
+        span.base_offset = (inst_impl->metadata.inst_offset + affine->offset +
+                            affine->strides.dot(target_subrect.lo) + field_rel_offset);
+        span.field_ids.push_back(cur_field_id);
 
         size_t bytes = cur_field_size;
-        int cur_dim = 1;
+        int cur_dim = 0;
         int di = 0;
+
         // compact any dimensions that are contiguous first
         for(; di < N; di++) {
           // follow the agreed-upon dimension ordering
@@ -601,6 +598,11 @@ namespace Realm {
           // it's contiguous - multiply total bytes by extent and continue
           bytes *= (target_subrect.hi[d] - target_subrect.lo[d] + 1);
         }
+
+        // First dimension is the contiguous bytes
+        span.extents[cur_dim] = bytes;
+        span.strides[cur_dim] = 1;
+        cur_dim++;
 
         // if any dimensions are left, they need to become count/stride pairs
         size_t total_bytes = bytes;
@@ -624,20 +626,23 @@ namespace Realm {
             total_count *= count;
           }
 
-          addr_data[cur_dim * 2] = total_count;
-          addr_data[cur_dim * 2 + 1] = stride;
+          // Span now supports up to 4 dimensions
+          assert(cur_dim < 4 && "Span dimension limit (4) exceeded");
+
+          span.extents[cur_dim] = total_count;
+          span.strides[cur_dim] = stride;
+
           log_dma.debug() << "Add addr data dim=" << cur_dim
                           << " total_count=" << total_count << " stride=" << stride;
           total_bytes *= total_count;
           cur_dim++;
         }
 
-        // now that we know the compacted dimension, we can finish the address
-        //  record
-        addr_data[0] = (bytes << 4) + cur_dim;
-        addrlist.commit_nd_entry(cur_dim, total_bytes);
-        log_dma.debug() << "Finalize addr data dim=" << cur_dim << " total_bytes"
-                        << total_bytes;
+        span.num_dims = cur_dim;
+        span_list.append(span);
+
+        log_dma.debug() << "Finalize addr data dim=" << cur_dim
+                        << " total_bytes=" << total_bytes;
       } else {
         assert(0 && "no support for non-affine pieces yet");
       }
@@ -841,7 +846,7 @@ namespace Realm {
     virtual void set_indirect_input_port(XferDes *xd, int port_idx,
                                          TransferIterator *inner_iter);
 
-    virtual bool get_addresses(AddressList &addrlist,
+    virtual bool get_addresses(SpanList &span_list,
                                const InstanceLayoutPieceBase *&nonaffine);
 
     virtual size_t get_base_offset(void) const;
@@ -973,7 +978,7 @@ namespace Realm {
         checked_cast<const InstanceLayout<N, T> *>(this->inst_impl->metadata.layout);
 
     assert(inst_layout);
-    std::map<FieldID, InstanceLayoutGeneric::FieldLayout>::const_iterator it =
+    InstanceLayoutGeneric::FieldMap::const_iterator it =
         inst_layout->fields.find(cur_field_id);
     assert(it != inst_layout->fields.end());
     size_t pieces = inst_layout->piece_lists[it->second.list_idx].pieces.size();
@@ -1011,7 +1016,7 @@ namespace Realm {
 
   template <int N, typename T>
   bool WrappingTransferIteratorIndirect<N, T>::get_addresses(
-      AddressList &addrlist, const InstanceLayoutPieceBase *&nonaffine)
+      SpanList &span_list, const InstanceLayoutPieceBase *&nonaffine)
   {
     nonaffine = 0;
 
@@ -1020,16 +1025,19 @@ namespace Realm {
         return false;
       }
 
-      size_t *addr_data = addrlist.begin_nd_entry(1);
-      if(!addr_data) {
-        return true;
-      }
-
       int cur_dim = 1;
       size_t total_bytes = this->cur_rect.volume() * this->cur_field_size;
       this->have_rect = false;
-      addr_data[0] = ((total_bytes) << 4) + cur_dim;
-      addrlist.commit_nd_entry(cur_dim, total_bytes);
+
+      // Create a 1D span for the indirect address
+      Span span;
+      span.base_offset = 0;
+      span.field_ids.push_back(this->cur_field_id);
+      span.num_dims = 1;
+      span.extents[0] = total_bytes;
+      span.strides[0] = 1;
+
+      span_list.append(span);
       log_dma.debug() << "Finalize gather/scatter addr data dim=" << cur_dim
                       << " total_bytes=" << total_bytes;
       break;
@@ -1770,8 +1778,7 @@ namespace Realm {
     assert(impl->metadata.is_valid());
     const InstanceLayout<N, T> *layout =
         checked_cast<const InstanceLayout<N, T> *>(impl->metadata.layout);
-    std::map<FieldID, InstanceLayoutGeneric::FieldLayout>::const_iterator it =
-        layout->fields.find(field_id);
+    InstanceLayoutGeneric::FieldMap::const_iterator it = layout->fields.find(field_id);
     assert(it != layout->fields.end());
     const InstancePieceList<N, T> &ipl = layout->piece_lists[it->second.list_idx];
     std::vector<int> preferred;
@@ -1930,7 +1937,7 @@ namespace Realm {
 
       const InstancePieceList<N, T> *ipl;
       {
-        std::map<FieldID, InstanceLayoutGeneric::FieldLayout>::const_iterator it =
+        InstanceLayoutGeneric::FieldMap::const_iterator it =
             inst_layout->fields.find(fid);
         assert(it != inst_layout->fields.end());
         ipl = &inst_layout->piece_lists[it->second.list_idx];

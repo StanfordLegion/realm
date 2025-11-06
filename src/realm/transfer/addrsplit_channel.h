@@ -24,7 +24,7 @@
 namespace Realm {
 
   class XferDes;
-  class AddressList;
+  class SpanList;
 
   class AddressSplitChannel;
 

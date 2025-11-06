@@ -55,9 +55,8 @@ template <int N>
 void run_test_case(const TestCaseData<N> &test_case)
 {
   using T = int;
-  AddressList addrlist;
-  AddressListCursor cursor;
-  cursor.set_addrlist(&addrlist);
+  SpanList span_list;
+  SpanIterator span_iter(&span_list);
   constexpr size_t elem_size = sizeof(int);
   const InstanceLayoutPieceBase *nonaffine;
   const size_t bytes = sizeof(Point<N, T>) * test_case.indirection.size();
@@ -93,21 +92,21 @@ void run_test_case(const TestCaseData<N> &test_case)
   it->set_indirect_input_port(xd.get(), /*indirect_port_idx=*/0, addr_it.get());
 
   bool done_early = it->done();
-  bool ok = it->get_addresses(addrlist, nonaffine);
+  bool ok = it->get_addresses(span_list, nonaffine);
   bool done_later = it->done();
 
   ASSERT_FALSE(done_early);
   ASSERT_TRUE(ok);
   ASSERT_TRUE(done_later);
   ASSERT_EQ(nonaffine, nullptr);
-  ASSERT_EQ(addrlist.bytes_pending(), buffer.size() * elem_size);
+  ASSERT_EQ(span_iter.bytes_pending(), buffer.size() * elem_size);
 
   for(size_t offset : test_case.expected) {
-    EXPECT_EQ(offset, cursor.get_offset());
-    cursor.advance(0, cursor.remaining(0));
+    EXPECT_EQ(offset, span_iter.offset());
+    span_iter.advance(0, span_iter.remaining(0));
   }
 
-  EXPECT_EQ(addrlist.bytes_pending(), 0);
+  EXPECT_EQ(span_iter.bytes_pending(), 0);
 }
 
 TEST_P(IndirectGetAddressesTest, Base)

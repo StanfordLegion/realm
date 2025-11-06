@@ -42,7 +42,7 @@
 #include "realm/inst_impl.h"
 #include "realm/bgwork.h"
 #include "realm/utils.h"
-#include "realm/transfer/address_list.h"
+#include "realm/transfer/memory_span.h"
 
 namespace Realm {
 
@@ -314,8 +314,8 @@ namespace Realm {
       //  to complete)
       Memory ib_mem;
       size_t ib_offset, ib_size;
-      AddressList addrlist;
-      AddressListCursor addrcursor;
+      SpanList span_list;
+      SpanIterator span_iter;
     };
     std::vector<XferPort> input_ports, output_ports;
     struct ControlPortState {

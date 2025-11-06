@@ -847,7 +847,7 @@ namespace Realm {
     tentative_valid = false;
   }
 
-  bool WrappingFIFOIterator::get_addresses(AddressList &addrlist,
+  bool WrappingFIFOIterator::get_addresses(SpanList &span_list,
                                            const InstanceLayoutPieceBase *&nonaffine)
   {
     nonaffine = 0;
@@ -857,18 +857,19 @@ namespace Realm {
     //  the same location twice)
     size_t lines = std::max<size_t>((1 << 30) / size, 1);
     int dim = (lines > 1) ? 2 : 1;
-    size_t *data = addrlist.begin_nd_entry(dim);
-    if(!data)
-      return true; // can't add more until some is consumed
 
-    // 1-D span from [base,base+size)
-    data[0] = (size << 4) + 2 /*dim*/;
-    data[1] = base;
-    if(dim == 2) {
-      data[2] = lines;
-      data[3] = 0; // stride
+    // Create span with single dummy field (wrapping FIFO doesn't use real fields)
+    std::vector<FieldID> fields = {FieldID(0)};
+
+    if(dim == 1) {
+      uint32_t extents[] = {static_cast<uint32_t>(size)};
+      size_t strides[] = {1};
+      span_list.append(base, fields, 1, extents, strides);
+    } else {
+      uint32_t extents[] = {static_cast<uint32_t>(size), static_cast<uint32_t>(lines)};
+      size_t strides[] = {1, 0}; // stride of 0 for wrapping
+      span_list.append(base, fields, 2, extents, strides);
     }
-    addrlist.commit_nd_entry(dim, size * lines);
 
     return false; // we can add more if asked
   }

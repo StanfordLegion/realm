@@ -75,15 +75,15 @@ void run_test_case(const TrasferItTestCaseData<N> &test_case)
                             test_case.field_sizes),
           test_case.domain, impl.get());
   const InstanceLayoutPieceBase *nonaffine;
-  AddressList addrlist;
-  AddressListCursor cursor;
+  SpanList span_list;
+  SpanIterator span_iter;
 
-  bool ok = it->get_addresses(addrlist, nonaffine);
+  bool ok = it->get_addresses(span_list, nonaffine);
 
   ASSERT_TRUE(ok);
   ASSERT_TRUE(it->done());
 
-  cursor.set_addrlist(&addrlist);
+  span_iter = SpanIterator(&span_list);
   size_t total_volume = 0;
   for(const auto &rect : test_case.expected) {
     total_volume += rect.volume();
@@ -94,20 +94,20 @@ void run_test_case(const TrasferItTestCaseData<N> &test_case)
     bytes_pending += total_volume * size;
   }
 
-  ASSERT_EQ(addrlist.bytes_pending(), bytes_pending);
+  ASSERT_EQ(span_iter.bytes_pending(), bytes_pending);
 
-  if(bytes_pending > 0 && cursor.get_dim() == 1) {
-    // TODO(apryakhin:@): Find better way to analyze the adddress list
-    // ASSERT_EQ(cursor.get_dim(), 1);
+  if(bytes_pending > 0 && span_iter.dim() == 1) {
+    // TODO(apryakhin:@): Find better way to analyze the address list
+    // ASSERT_EQ(span_iter.dim(), 1);
     for(const size_t field_size : test_case.field_sizes) {
       for(const auto &rect : test_case.expected) {
-        int dim = cursor.get_dim();
-        ASSERT_EQ(cursor.remaining(dim - 1), rect.volume() * field_size);
-        cursor.advance(dim - 1, cursor.remaining(dim - 1));
+        int dim = span_iter.dim();
+        ASSERT_EQ(span_iter.remaining(dim - 1), rect.volume() * field_size);
+        span_iter.advance(dim - 1, span_iter.remaining(dim - 1));
       }
     }
 
-    ASSERT_EQ(addrlist.bytes_pending(), 0);
+    ASSERT_EQ(span_iter.bytes_pending(), 0);
   }
 }
 
