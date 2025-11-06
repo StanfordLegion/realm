@@ -50,7 +50,7 @@ namespace Realm {
   void ActiveMessage<T, INLINE_STORAGE>::init(NodeID _target,
                                               size_t _max_payload_size /*= 0*/)
   {
-    assert(impl == 0);
+    REALM_ASSERT(impl == 0);
     unsigned short msgid = activemsg_handler_table.lookup_message_id<T>();
     impl = Network::create_active_message_impl(_target, msgid, sizeof(T),
                                                _max_payload_size, 0, 0, 0,
@@ -72,7 +72,7 @@ namespace Realm {
   void ActiveMessage<T, INLINE_STORAGE>::init(NodeID _target, size_t _max_payload_size,
                                               const RemoteAddress &_dest_payload_addr)
   {
-    assert(impl == 0);
+    REALM_ASSERT(impl == 0);
     unsigned short msgid = activemsg_handler_table.lookup_message_id<T>();
     impl = Network::create_active_message_impl(_target, msgid, sizeof(T),
                                                _max_payload_size, _dest_payload_addr,
@@ -93,7 +93,7 @@ namespace Realm {
   void ActiveMessage<T, INLINE_STORAGE>::init(const Realm::NodeSet &_targets,
                                               size_t _max_payload_size /*= 0*/)
   {
-    assert(impl == 0);
+    REALM_ASSERT(impl == 0);
     unsigned short msgid = activemsg_handler_table.lookup_message_id<T>();
     impl = Network::create_active_message_impl(_targets, msgid, sizeof(T),
                                                _max_payload_size, 0, 0, 0,
@@ -114,7 +114,7 @@ namespace Realm {
   void ActiveMessage<T, INLINE_STORAGE>::init(NodeID _target, const void *_data,
                                               size_t _datalen)
   {
-    assert(impl == 0);
+    REALM_ASSERT(impl == 0);
     unsigned short msgid = activemsg_handler_table.lookup_message_id<T>();
     impl =
         Network::create_active_message_impl(_target, msgid, sizeof(T), _datalen, _data, 0,
@@ -138,7 +138,7 @@ namespace Realm {
                                               size_t _datalen,
                                               const RemoteAddress &_dest_payload_addr)
   {
-    assert(impl == 0);
+    REALM_ASSERT(impl == 0);
     unsigned short msgid = activemsg_handler_table.lookup_message_id<T>();
     impl = Network::create_active_message_impl(
         _target, msgid, sizeof(T), _datalen, _src_payload_addr, 0, 0, _dest_payload_addr,
@@ -158,7 +158,7 @@ namespace Realm {
   void ActiveMessage<T, INLINE_STORAGE>::init(const Realm::NodeSet &_targets,
                                               const void *_data, size_t _datalen)
   {
-    assert(impl == 0);
+    REALM_ASSERT(impl == 0);
     unsigned short msgid = activemsg_handler_table.lookup_message_id<T>();
     impl = Network::create_active_message_impl(_targets, msgid, sizeof(T), _datalen,
                                                _data, 0, 0, &inline_capacity,
@@ -180,7 +180,7 @@ namespace Realm {
                                               size_t _bytes_per_line, size_t _lines,
                                               size_t _line_stride)
   {
-    assert(impl == 0);
+    REALM_ASSERT(impl == 0);
     unsigned short msgid = activemsg_handler_table.lookup_message_id<T>();
     impl = Network::create_active_message_impl(
         _target, msgid, sizeof(T), _bytes_per_line * _lines, _data, _lines, _line_stride,
@@ -207,7 +207,7 @@ namespace Realm {
                                               size_t _line_stride,
                                               const RemoteAddress &_dest_payload_addr)
   {
-    assert(impl == 0);
+    REALM_ASSERT(impl == 0);
     unsigned short msgid = activemsg_handler_table.lookup_message_id<T>();
     impl = Network::create_active_message_impl(
         _target, msgid, sizeof(T), _bytes_per_line * _lines, _src_payload_addr, _lines,
@@ -230,7 +230,7 @@ namespace Realm {
                                               const void *_data, size_t _bytes_per_line,
                                               size_t _lines, size_t _line_stride)
   {
-    assert(impl == 0);
+    REALM_ASSERT(impl == 0);
     unsigned short msgid = activemsg_handler_table.lookup_message_id<T>();
     impl = Network::create_active_message_impl(
         _targets, msgid, sizeof(T), _bytes_per_line * _lines, _data, _lines, _line_stride,
@@ -241,7 +241,7 @@ namespace Realm {
   template <typename T, size_t INLINE_STORAGE>
   ActiveMessage<T, INLINE_STORAGE>::~ActiveMessage(void)
   {
-    assert(impl == 0);
+    REALM_ASSERT(impl == 0);
   }
 
   template <typename T, size_t INLINE_STORAGE>
@@ -325,7 +325,7 @@ namespace Realm {
                                                      int payload_mode /*= PAYLOAD_COPY*/)
   {
     bool ok = fbs.append_bytes(data, datalen);
-    assert(ok);
+    REALM_ASSERT(ok);
     if(payload_mode == PAYLOAD_FREE)
       free(const_cast<void *>(data));
   }
@@ -339,12 +339,12 @@ namespace Realm {
     // detect case where 2d collapses to 1d
     if(line_stride == bytes_per_line) {
       bool ok = fbs.append_bytes(data, bytes_per_line * lines);
-      assert(ok);
+      REALM_ASSERT(ok);
     } else {
       for(size_t i = 0; i < lines; i++) {
         bool ok = fbs.append_bytes((static_cast<const char *>(data) + (i * line_stride)),
                                    bytes_per_line);
-        assert(ok);
+        REALM_ASSERT(ok);
       }
     }
     if(payload_mode == PAYLOAD_FREE)
@@ -367,7 +367,7 @@ namespace Realm {
   template <typename CALLABLE>
   void ActiveMessage<T, INLINE_STORAGE>::add_local_completion(const CALLABLE &callable)
   {
-    assert(impl != 0);
+    REALM_ASSERT(impl != 0);
 
     size_t bytes = sizeof(CompletionCallback<CALLABLE>);
     // round up
@@ -381,7 +381,7 @@ namespace Realm {
   template <typename CALLABLE>
   void ActiveMessage<T, INLINE_STORAGE>::add_remote_completion(const CALLABLE &callable)
   {
-    assert(impl != 0);
+    REALM_ASSERT(impl != 0);
 
     size_t bytes = sizeof(CompletionCallback<CALLABLE>);
     // round up
@@ -395,7 +395,7 @@ namespace Realm {
   template <typename T, size_t INLINE_STORAGE>
   void ActiveMessage<T, INLINE_STORAGE>::commit(void)
   {
-    assert(impl != 0);
+    REALM_ASSERT(impl != 0);
 
     size_t act_payload_len;
     if(impl->payload_size)
@@ -414,7 +414,7 @@ namespace Realm {
   template <typename T, size_t INLINE_STORAGE>
   void ActiveMessage<T, INLINE_STORAGE>::cancel(void)
   {
-    assert(impl != 0);
+    REALM_ASSERT(impl != 0);
     impl->cancel();
 
     // now tear things down
@@ -444,7 +444,7 @@ namespace Realm {
   {
     // double-check that our alignment is satisfactory
 #ifdef DEBUG_REALM
-    assert(REALM_ALIGNOF(CompletionCallback<CALLABLE>) <= ALIGNMENT);
+    REALM_ASSERT(REALM_ALIGNOF(CompletionCallback<CALLABLE>) <= ALIGNMENT);
 #endif
     size_t bytes = sizeof(CompletionCallback<CALLABLE>);
     // round up to ALIGNMENT boundary
@@ -488,7 +488,7 @@ namespace Realm {
         return mid;
     }
 
-    assert(0);
+    abort();
     return 0;
   }
 
