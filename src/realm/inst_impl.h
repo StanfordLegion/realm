@@ -180,7 +180,7 @@ namespace Realm {
       void serialize_msg(T &s) const
       {
         bool ok = ((s << inst_offset) && (s << *layout));
-        assert(ok);
+        REALM_ASSERT(ok);
       }
 
       void deserialize(const void *in_data, size_t in_size);

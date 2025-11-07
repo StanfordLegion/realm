@@ -253,8 +253,9 @@ namespace Realm {
     CommandLineParser cp;
     cp.add_option_int_units("-ll:gsize", global_size, 'm');
     bool ok = cp.parse_command_line(cmdline);
-    assert(ok);
-    assert((global_size == 0) && "no global mem support in dummy network yet");
+    REALM_ASSERT(ok);
+    // no global mem support in dummy network yet
+    REALM_ASSERT(global_size == 0);
   }
 
   // "attaches" to the network, if that is meaningful - attempts to
@@ -269,7 +270,7 @@ namespace Realm {
       if(((*it)->bytes > 0) && ((*it)->base == 0)) {
         void *memptr =
             aligned_malloc((*it)->bytes, std::max((*it)->alignment, sizeof(void *)));
-        assert(memptr != 0);
+        REALM_ASSERT(memptr != 0);
         (*it)->base = memptr;
         (*it)->add_rdma_info(this, &memptr, sizeof(void *));
       }
@@ -447,7 +448,7 @@ namespace Realm {
     ba.set(data, len);
 #ifdef REALM_USE_MULTIPLE_NETWORKS
 #else
-    assert(single_network == 0);
+    REALM_ASSERT(single_network == 0);
     single_network = network;
     single_network_data = &ba;
 #endif
@@ -560,7 +561,7 @@ namespace Realm {
       p1 = p2 + (*p2 ? 1 : 0);
 
       // no leftover errors from anybody else please...
-      assert(dlerror() == 0);
+      REALM_ASSERT(dlerror() == 0);
 
       // open so file, resolving all symbols but not polluting global namespace
       void *handle = dlopen(filename, RTLD_NOW | RTLD_LOCAL);
@@ -728,9 +729,9 @@ namespace Realm {
     if(need_loopback) {
       NetworkModule *m =
           LoopbackNetworkModule::create_network_module(runtime, argc, argv);
-      assert(m != 0);
+      REALM_ASSERT(m != 0);
       modules.push_back(m);
-      assert(Network::single_network == 0);
+      REALM_ASSERT(Network::single_network == 0);
       Network::single_network = m;
     }
   }

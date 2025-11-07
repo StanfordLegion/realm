@@ -563,7 +563,7 @@ namespace Realm {
   static size_t bsearch_map_entries(const std::vector<SparsityMapEntry<N, T>> &entries,
                                     const Point<N, T> &p)
   {
-    assert(N == 1);
+    REALM_ASSERT(N == 1);
     // search range at any given time is [lo, hi)
     int lo = 0;
     int hi = entries.size();
@@ -607,10 +607,10 @@ namespace Realm {
         return false;
 
       if(e.sparsity.exists()) {
-        assert(0);
+        abort();
       }
       if(e.bitmap != 0) {
-        assert(0);
+        abort();
       }
       return true;
     } else {
@@ -620,9 +620,9 @@ namespace Realm {
         if(!it->bounds.contains(p))
           continue;
         if(it->sparsity.exists()) {
-          assert(0);
+          abort();
         } else if(it->bitmap != 0) {
-          assert(0);
+          abort();
         } else {
           return true;
         }
@@ -651,9 +651,9 @@ namespace Realm {
         if(!it->bounds.overlaps(r))
           continue;
         if(it->sparsity.exists()) {
-          assert(0);
+          abort();
         } else if(it->bitmap != 0) {
-          assert(0);
+          abort();
         } else {
           Rect<N, T> isect = it->bounds.intersection(r);
           total_volume += isect.volume();
@@ -685,9 +685,9 @@ namespace Realm {
         if(!it->bounds.overlaps(r))
           continue;
         if(it->sparsity.exists()) {
-          assert(0);
+          abort();
         } else if(it->bitmap != 0) {
-          assert(0);
+          abort();
         } else {
           return true;
         }
@@ -738,9 +738,9 @@ namespace Realm {
       if(isect.empty())
         continue;
       if(it->sparsity.exists()) {
-        assert(0);
+        abort();
       } else if(it->bitmap != 0) {
-        assert(0);
+        abort();
       } else {
         total += isect.volume();
       }
@@ -792,7 +792,7 @@ namespace Realm {
       if(it->contains(r))
         return true;
       if(it->overlaps(r))
-        assert(0);
+        abort();
     }
 
     // no entries matched, so the point is definitely not contained in this space
@@ -877,7 +877,7 @@ namespace Realm {
     srcs.resize(dsts.size());
     size_t offset = 0;
     for(size_t i = 0; i < dsts.size(); i++) {
-      assert((offset + dsts[i].size) <= fill_value_size);
+      REALM_ASSERT((offset + dsts[i].size) <= fill_value_size);
       srcs[i].set_fill(reinterpret_cast<const char *>(fill_value) + offset, dsts[i].size);
       // special case: if a field uses all of the fill value, the next
       //  field (if any) is allowed to use the same value
@@ -962,8 +962,8 @@ namespace Realm {
     // TODO(apryakhin): For now we just support building a general structured
     // transform from an affince transform. This will be extended later
     // to support more transform types.
-    assert(typeid(transform) == typeid(AffineTransform<N, N2, T2>) ||
-           typeid(transform) == typeid(TranslationTransform<N2, T2>));
+    REALM_ASSERT(typeid(transform) == typeid(AffineTransform<N, N2, T2>) ||
+                 typeid(transform) == typeid(TranslationTransform<N2, T2>));
     return create_subspaces_by_image(DomainTransform<N, T, N2, T2>(transform), sources,
                                      images, reqs, wait_on);
   }
@@ -1057,8 +1057,8 @@ namespace Realm {
     // TODO(apryakhin): For now we just support building a general structured
     // transform from an affince transform. This will be extended later
     // to support more transform types.
-    assert(typeid(transform) == typeid(AffineTransform<N, N2, T2>) ||
-           typeid(transform) == typeid(TranslationTransform<N2, T2>));
+    REALM_ASSERT(typeid(transform) == typeid(AffineTransform<N, N2, T2>) ||
+                 typeid(transform) == typeid(TranslationTransform<N2, T2>));
     return create_subspaces_by_preimage(DomainTransform<N2, T2, N, T>(transform), targets,
                                         preimages, reqs, wait_on);
   }
@@ -1314,7 +1314,7 @@ namespace Realm {
   template <int N, typename T>
   inline void IndexSpaceIterator<N, T>::reset_sparse(SparsityMapPublicImpl<N, T> *_s_impl)
   {
-    assert(_s_impl);
+    REALM_ASSERT(_s_impl);
     s_impl = _s_impl;
 
     rect = Rect<N, T>::make_empty();
@@ -1329,8 +1329,8 @@ namespace Realm {
       const SparsityMapEntry<N, T> &e = entries[cur_entry];
       rect = restriction.intersection(e.bounds);
       if(!rect.empty()) {
-        assert(!e.sparsity.exists());
-        assert(e.bitmap == 0);
+        REALM_ASSERT(!e.sparsity.exists());
+        REALM_ASSERT(e.bitmap == 0);
         valid = true;
         return;
       }
@@ -1344,7 +1344,7 @@ namespace Realm {
   template <int N, typename T>
   inline bool IndexSpaceIterator<N, T>::step(void)
   {
-    assert(valid); // can't step an interator that's already done
+    REALM_ASSERT(valid); // can't step an interator that's already done
 
     // a dense space is covered in the first step
     if(!s_impl) {
@@ -1369,8 +1369,8 @@ namespace Realm {
           continue;
       }
 
-      assert(!e.sparsity.exists());
-      assert(e.bitmap == 0);
+      REALM_ASSERT(!e.sparsity.exists());
+      REALM_ASSERT(e.bitmap == 0);
       return true;
     }
 
@@ -1400,14 +1400,14 @@ namespace Realm {
   template <int N, typename T>
   inline LinearizedIndexSpace<N, T> &LinearizedIndexSpaceIntfc::as_dim(void)
   {
-    assert((dim == N) && (idxtype == int(sizeof(T))));
+    REALM_ASSERT((dim == N) && (idxtype == int(sizeof(T))));
     return *static_cast<LinearizedIndexSpace<N, T> *>(this);
   }
 
   template <int N, typename T>
   inline const LinearizedIndexSpace<N, T> &LinearizedIndexSpaceIntfc::as_dim(void) const
   {
-    assert((dim == N) && (idxtype == int(sizeof(T))));
+    REALM_ASSERT((dim == N) && (idxtype == int(sizeof(T))));
     return *static_cast<const LinearizedIndexSpace<N, T> *>(this);
   }
 
@@ -1450,7 +1450,7 @@ namespace Realm {
           s *= bounds.hi[i] - bounds.lo[i] + 1;
         }
       }
-      assert(s == ptrdiff_t(volume));
+      REALM_ASSERT(s == ptrdiff_t(volume));
     } else {
       offset = 0;
       for(int i = 0; i < N; i++)
@@ -1476,7 +1476,7 @@ namespace Realm {
     size_t x = 0;
     for(int i = 0; i < N; i++)
       x += p[i] * strides[i];
-    assert(x >= offset);
+    REALM_ASSERT(x >= offset);
     return x - offset;
   }
 

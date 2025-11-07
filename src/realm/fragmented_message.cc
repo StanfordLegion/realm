@@ -17,9 +17,9 @@
 
 #include "realm/realm_config.h"
 #include "realm/fragmented_message.h"
+#include "realm/logging.h"
 
 #include <stdexcept>
-#include <assert.h>
 
 namespace Realm {
 
@@ -45,7 +45,7 @@ namespace Realm {
 
   bool FragmentedMessage::is_complete() const
   {
-    assert(received_count <= total_chunks);
+    REALM_ASSERT(received_count <= total_chunks);
     return received_count == total_chunks;
   }
 

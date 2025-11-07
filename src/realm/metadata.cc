@@ -64,7 +64,7 @@ namespace Realm {
     //   response if the data is already valid
     AutoLock<> a(mutex);
 
-    assert(!remote_copies.contains(requestor));
+    REALM_ASSERT(!remote_copies.contains(requestor));
     remote_copies.add(requestor);
 
     return is_valid();
@@ -88,7 +88,7 @@ namespace Realm {
       }
 
       default:
-        assert(0);
+        abort();
       }
     }
 
@@ -129,16 +129,18 @@ namespace Realm {
       case STATE_REQUESTED:
       {
         // request has already been issued, but return the event again
-        assert(valid_event.exists());
+        REALM_ASSERT(valid_event.exists());
         e = valid_event;
         break;
       }
 
       case STATE_INVALIDATE:
-        assert(0 && "requesting metadata we've been told is invalid!");
+        log_metadata.fatal() << "requesting metadata we've been told is invalid!";
+        abort();
 
       case STATE_CLEANUP:
-        assert(0 && "requesting metadata in CLEANUP state!");
+        log_metadata.fatal() << "requesting metadata in CLEANUP state!";
+        abort();
       }
     }
 
@@ -157,7 +159,7 @@ namespace Realm {
     {
       AutoLock<> a(mutex);
 
-      assert(state == STATE_VALID);
+      REALM_ASSERT(state == STATE_VALID);
 
       // eagerly invalidate local contents
       do_invalidate();
@@ -208,7 +210,7 @@ namespace Realm {
     }
 
     default:
-      assert(0);
+      abort();
     }
   }
 
@@ -218,7 +220,7 @@ namespace Realm {
     {
       AutoLock<> a(mutex);
 
-      assert(remote_copies.contains(sender));
+      REALM_ASSERT(remote_copies.contains(sender));
       remote_copies.remove(sender);
       last_copy = remote_copies.empty();
       if(last_copy)
@@ -252,7 +254,7 @@ namespace Realm {
         impl->metadata.serialize_msg(dbs);
       }
     } else {
-      assert(0);
+      abort();
     }
 
     if(send_response) {
@@ -310,10 +312,10 @@ namespace Realm {
             delete[] new_buffer;
           }
         }
-        assert((args.offset + datalen) <= args.total_bytes);
+        REALM_ASSERT((args.offset + datalen) <= args.total_bytes);
         memcpy(buffer + args.offset, data, datalen);
         size_t prev_bytes_done = impl->metadata.frag_bytes_received.fetch_add(datalen);
-        assert((prev_bytes_done + datalen) <= args.total_bytes);
+        REALM_ASSERT((prev_bytes_done + datalen) <= args.total_bytes);
         if((prev_bytes_done + datalen) == args.total_bytes) {
           // safe to deserialize now, but detach reassembly buffer first (to avoid
           //  races with reuse of the instance)
@@ -327,7 +329,7 @@ namespace Realm {
         }
       }
     } else {
-      assert(0);
+      abort();
     }
   }
 
@@ -350,7 +352,7 @@ namespace Realm {
       RegionInstanceImpl *impl = get_runtime()->get_instance_impl(args.id);
       impl->metadata.handle_invalidate();
     } else {
-      assert(0);
+      abort();
     }
 
     // ack the request
@@ -380,7 +382,7 @@ namespace Realm {
       if(last_ack)
         impl->recycle_instance();
     } else {
-      assert(0);
+      abort();
     }
 
     if(last_ack) {

@@ -164,8 +164,8 @@ namespace Realm {
         log_kokkos.info() << "doing cuda init on proc " << p;
 
         ProcessorImpl *impl = get_runtime()->get_processor_impl(p);
-        assert(impl != nullptr && "invalid processor handle");
-        assert(impl->kind == Processor::TOC_PROC);
+        REALM_ASSERT(impl != nullptr);
+        REALM_ASSERT(impl->kind == Processor::TOC_PROC);
         Cuda::GPUProcessor *gpu = checked_cast<Cuda::GPUProcessor *>(impl);
 
 #ifdef REALM_USE_KOKKOS_INITIALIZATION_SETTINGS
@@ -220,8 +220,8 @@ namespace Realm {
         log_kokkos.info() << "doing hip init on proc " << p;
 
         ProcessorImpl *impl = get_runtime()->get_processor_impl(p);
-        assert(impl != nullptr && "invalid processor handle");
-        assert(impl->kind == Processor::TOC_PROC);
+        REALM_ASSERT(impl != nullptr);
+        REALM_ASSERT(impl->kind == Processor::TOC_PROC);
         Hip::GPUProcessor *gpu = checked_cast<Hip::GPUProcessor *>(impl);
 
 #ifdef REALM_USE_KOKKOS_INITIALIZATION_SETTINGS
@@ -453,8 +453,8 @@ namespace Realm {
   {
 #ifdef REALM_USE_CUDA
     ProcessorImpl *impl = get_runtime()->get_processor_impl(p);
-    assert(impl != nullptr && "invalid processor handle");
-    assert(impl->kind == Processor::TOC_PROC);
+    REALM_ASSERT(impl != nullptr);
+    REALM_ASSERT(impl->kind == Processor::TOC_PROC);
     Cuda::GPUProcessor *gpu = checked_cast<Cuda::GPUProcessor *>(impl);
     cudaStream_t stream = gpu->gpu->get_null_task_stream()->get_stream();
     log_kokkos.info() << "handing back stream " << stream;
@@ -489,8 +489,8 @@ namespace Realm {
   {
 #ifdef REALM_USE_HIP
     ProcessorImpl *impl = get_runtime()->get_processor_impl(p);
-    assert(impl != nullptr && "invalid processor handle");
-    assert(impl->kind == Processor::TOC_PROC);
+    REALM_ASSERT(impl != nullptr);
+    REALM_ASSERT(impl->kind == Processor::TOC_PROC);
     Hip::GPUProcessor *gpu = checked_cast<Hip::GPUProcessor *>(impl);
     hipStream_t stream = gpu->gpu->get_null_task_stream()->get_stream();
     log_kokkos.info() << "handing back stream " << stream;

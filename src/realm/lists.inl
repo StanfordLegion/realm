@@ -42,8 +42,8 @@ namespace Realm {
   {
 #ifdef DEBUG_REALM_LISTS
     // should not be deleted while in a list
-    assert(next == 0);
-    assert(current_list == 0);
+    REALM_ASSERT(next == 0);
+    REALM_ASSERT(current_list == 0);
 #endif
   }
 
@@ -64,7 +64,7 @@ namespace Realm {
 #ifdef DEBUG_REALM_LISTS
     lock.lock();
     // lists should be empty when deleted
-    assert(head.next == 0);
+    REALM_ASSERT(head.next == 0);
 #endif
   }
 
@@ -74,7 +74,7 @@ namespace Realm {
   inline IntrusiveList<T, LINK, LT>::IntrusiveList(
       const IntrusiveList<T, LINK, LT> &copy_from)
   {
-    assert(copy_from.empty());
+    REALM_ASSERT(copy_from.empty());
     head.next = 0;
     lastlink = &head;
   }
@@ -83,8 +83,8 @@ namespace Realm {
   inline IntrusiveList<T, LINK, LT> &
   IntrusiveList<T, LINK, LT>::operator=(const IntrusiveList<T, LINK, LT> &copy_from)
   {
-    assert(empty());
-    assert(copy_from.empty());
+    REALM_ASSERT(empty());
+    REALM_ASSERT(copy_from.empty());
     return *this;
   }
 
@@ -105,11 +105,11 @@ namespace Realm {
 #ifdef DEBUG_REALM_LISTS
     // fix current_list references
     for(T *pos = head.next; pos; pos = REALM_PMTA_DEREF(pos, LINK).next) {
-      assert(REALM_PMTA_DEREF(pos, LINK).current_list == &swap_with);
+      REALM_ASSERT(REALM_PMTA_DEREF(pos, LINK).current_list == &swap_with);
       REALM_PMTA_DEREF(pos, LINK).current_list = this;
     }
     for(T *pos = swap_with.head.next; pos; pos = REALM_PMTA_DEREF(pos, LINK).next) {
-      assert(REALM_PMTA_DEREF(pos, LINK).current_list == this);
+      REALM_ASSERT(REALM_PMTA_DEREF(pos, LINK).current_list == this);
       REALM_PMTA_DEREF(pos, LINK).current_list = &swap_with;
     }
 #endif
@@ -127,7 +127,7 @@ namespace Realm {
     take_from.lock.lock();
 #ifdef DEBUG_REALM_LISTS
     for(T *pos = take_from.head.next; pos; pos = REALM_PMTA_DEREF(pos, LINK).next) {
-      assert(REALM_PMTA_DEREF(pos, LINK).current_list == &take_from);
+      REALM_ASSERT(REALM_PMTA_DEREF(pos, LINK).current_list == &take_from);
       REALM_PMTA_DEREF(pos, LINK).current_list = this;
     }
 #endif
@@ -161,9 +161,9 @@ namespace Realm {
   {
     lock.lock();
 #ifdef DEBUG_REALM_LISTS
-    assert(REALM_PMTA_DEREF(new_entry, LINK).current_list == 0);
+    REALM_ASSERT(REALM_PMTA_DEREF(new_entry, LINK).current_list == 0);
     REALM_PMTA_DEREF(new_entry, LINK).current_list = this;
-    assert(REALM_PMTA_DEREF(new_entry, LINK).next == 0);
+    REALM_ASSERT(REALM_PMTA_DEREF(new_entry, LINK).next == 0);
 #endif
     lastlink->next = new_entry;
     lastlink = &REALM_PMTA_DEREF(new_entry, LINK);
@@ -175,9 +175,9 @@ namespace Realm {
   {
     lock.lock();
 #ifdef DEBUG_REALM_LISTS
-    assert(REALM_PMTA_DEREF(new_entry, LINK).current_list == 0);
+    REALM_ASSERT(REALM_PMTA_DEREF(new_entry, LINK).current_list == 0);
     REALM_PMTA_DEREF(new_entry, LINK).current_list = this;
-    assert(REALM_PMTA_DEREF(new_entry, LINK).next == 0);
+    REALM_ASSERT(REALM_PMTA_DEREF(new_entry, LINK).next == 0);
 #endif
     REALM_PMTA_DEREF(new_entry, LINK).next = head.next;
     if(lastlink == &head) {
@@ -202,7 +202,7 @@ namespace Realm {
     if(head.next) {
       popped = head.next;
 #ifdef DEBUG_REALM_LISTS
-      assert(REALM_PMTA_DEREF(popped, LINK).current_list == this);
+      REALM_ASSERT(REALM_PMTA_DEREF(popped, LINK).current_list == this);
       REALM_PMTA_DEREF(popped, LINK).current_list = 0;
 #endif
       head.next = REALM_PMTA_DEREF(popped, LINK).next;
@@ -260,9 +260,9 @@ namespace Realm {
   {
 #ifdef DEBUG_REALM_LISTS
     // should not be deleted while in a list
-    assert(next_within_pri == 0);
-    assert(next_lower_pri == 0);
-    assert(current_list == 0);
+    REALM_ASSERT(next_within_pri == 0);
+    REALM_ASSERT(next_lower_pri == 0);
+    REALM_ASSERT(current_list == 0);
 #endif
   }
 
@@ -285,7 +285,7 @@ namespace Realm {
 #ifdef DEBUG_REALM_LISTS
     lock.lock();
     // list should be empty when deleted
-    assert(head == 0);
+    REALM_ASSERT(head == 0);
 #endif
   }
 
@@ -298,7 +298,7 @@ namespace Realm {
       const IntrusivePriorityList<T, PT, LINK, PRI, LT> &copy_from)
     : head(0)
   {
-    assert(copy_from.head == 0);
+    REALM_ASSERT(copy_from.head == 0);
   }
 
   template <typename T, typename PT,
@@ -308,8 +308,8 @@ namespace Realm {
   IntrusivePriorityList<T, PT, LINK, PRI, LT>::operator=(
       const IntrusivePriorityList<T, PT, LINK, PRI, LT> &copy_from)
   {
-    assert(head == 0);
-    assert(copy_from.head == 0);
+    REALM_ASSERT(head == 0);
+    REALM_ASSERT(copy_from.head == 0);
     return *this;
   }
 
@@ -322,7 +322,7 @@ namespace Realm {
       T *cur = nextp;
       nextp = REALM_PMTA_DEREF(nextp, LINK).next_lower_pri;
       while(cur != 0) {
-        assert(REALM_PMTA_DEREF(cur, LINK).current_list == from);
+        REALM_ASSERT(REALM_PMTA_DEREF(cur, LINK).current_list == from);
         REALM_PMTA_DEREF(cur, LINK).current_list = to;
         cur = REALM_PMTA_DEREF(cur, LINK).next_within_pri;
       }
@@ -405,7 +405,7 @@ namespace Realm {
     take_from.head = 0;
 #ifdef DEBUG_REALM_LISTS
     size_t act_size = size();
-    assert(exp_size == act_size);
+    REALM_ASSERT(exp_size == act_size);
 #endif
     take_from.lock.unlock();
     lock.unlock();
@@ -420,9 +420,9 @@ namespace Realm {
     lock.lock();
 #ifdef DEBUG_REALM_LISTS
     // entry being added should be unentangled
-    assert(REALM_PMTA_DEREF(new_entry, LINK).next_within_pri == 0);
-    assert(REALM_PMTA_DEREF(new_entry, LINK).lastlink_within_pri == 0);
-    assert(REALM_PMTA_DEREF(new_entry, LINK).next_lower_pri == 0);
+    REALM_ASSERT(REALM_PMTA_DEREF(new_entry, LINK).next_within_pri == 0);
+    REALM_ASSERT(REALM_PMTA_DEREF(new_entry, LINK).lastlink_within_pri == 0);
+    REALM_ASSERT(REALM_PMTA_DEREF(new_entry, LINK).next_lower_pri == 0);
     size_t exp_size = size() + 1;
 #endif
     // scan ahead to find right priority level to insert at
@@ -447,10 +447,10 @@ namespace Realm {
       *curdst = new_entry;
     }
 #ifdef DEBUG_REALM_LISTS
-    assert(REALM_PMTA_DEREF(new_entry, LINK).current_list == 0);
+    REALM_ASSERT(REALM_PMTA_DEREF(new_entry, LINK).current_list == 0);
     REALM_PMTA_DEREF(new_entry, LINK).current_list = this;
     size_t act_size = size();
-    assert(exp_size == act_size);
+    REALM_ASSERT(exp_size == act_size);
 #endif
     lock.unlock();
   }
@@ -463,9 +463,9 @@ namespace Realm {
     lock.lock();
 #ifdef DEBUG_REALM_LISTS
     // entry being added should be unentangled
-    assert(REALM_PMTA_DEREF(new_entry, LINK).next_within_pri == 0);
-    assert(REALM_PMTA_DEREF(new_entry, LINK).lastlink_within_pri == 0);
-    assert(REALM_PMTA_DEREF(new_entry, LINK).next_lower_pri == 0);
+    REALM_ASSERT(REALM_PMTA_DEREF(new_entry, LINK).next_within_pri == 0);
+    REALM_ASSERT(REALM_PMTA_DEREF(new_entry, LINK).lastlink_within_pri == 0);
+    REALM_ASSERT(REALM_PMTA_DEREF(new_entry, LINK).next_lower_pri == 0);
     size_t exp_size = size() + 1;
 #endif
     // scan ahead to find right priority level to insert at
@@ -495,10 +495,10 @@ namespace Realm {
       *curdst = new_entry;
     }
 #ifdef DEBUG_REALM_LISTS
-    assert(REALM_PMTA_DEREF(new_entry, LINK).current_list == 0);
+    REALM_ASSERT(REALM_PMTA_DEREF(new_entry, LINK).current_list == 0);
     REALM_PMTA_DEREF(new_entry, LINK).current_list = this;
     size_t act_size = size();
-    assert(exp_size == act_size);
+    REALM_ASSERT(exp_size == act_size);
 #endif
     lock.unlock();
   }
@@ -568,7 +568,7 @@ namespace Realm {
         head = REALM_PMTA_DEREF(popped, LINK).next_lower_pri;
       }
 #ifdef DEBUG_REALM_LISTS
-      assert(REALM_PMTA_DEREF(popped, LINK).current_list == this);
+      REALM_ASSERT(REALM_PMTA_DEREF(popped, LINK).current_list == this);
       REALM_PMTA_DEREF(popped, LINK).current_list = 0;
       // clean up now-unused pointers to make debugging easier
       REALM_PMTA_DEREF(popped, LINK).next_within_pri = 0;
@@ -578,7 +578,7 @@ namespace Realm {
     }
 #ifdef DEBUG_REALM_LISTS
     size_t act_size = size();
-    assert(exp_size == act_size);
+    REALM_ASSERT(exp_size == act_size);
 #endif
     lock.unlock();
     return popped;
@@ -610,7 +610,7 @@ namespace Realm {
         head = REALM_PMTA_DEREF(popped, LINK).next_lower_pri;
       }
 #ifdef DEBUG_REALM_LISTS
-      assert(REALM_PMTA_DEREF(popped, LINK).current_list == this);
+      REALM_ASSERT(REALM_PMTA_DEREF(popped, LINK).current_list == this);
       REALM_PMTA_DEREF(popped, LINK).current_list = 0;
       // clean up now-unused pointers to make debugging easier
       REALM_PMTA_DEREF(popped, LINK).next_within_pri = 0;
@@ -620,7 +620,7 @@ namespace Realm {
     }
 #ifdef DEBUG_REALM_LISTS
     size_t act_size = size();
-    assert(exp_size == act_size);
+    REALM_ASSERT(exp_size == act_size);
 #endif
     lock.unlock();
     return popped;
@@ -661,14 +661,14 @@ namespace Realm {
       while(REALM_PMTA_DEREF(cur2, LINK).next_within_pri != 0) {
         cur2 = REALM_PMTA_DEREF(cur2, LINK).next_within_pri;
 #ifdef DEBUG_REALM_LISTS
-        assert(REALM_PMTA_DEREF(cur2, PRI) == REALM_PMTA_DEREF(cur, PRI));
-        assert(REALM_PMTA_DEREF(cur2, LINK).lastlink_within_pri == 0);
-        assert(REALM_PMTA_DEREF(cur2, LINK).next_lower_pri == 0);
+        REALM_ASSERT(REALM_PMTA_DEREF(cur2, PRI) == REALM_PMTA_DEREF(cur, PRI));
+        REALM_ASSERT(REALM_PMTA_DEREF(cur2, LINK).lastlink_within_pri == 0);
+        REALM_ASSERT(REALM_PMTA_DEREF(cur2, LINK).next_lower_pri == 0);
 #endif
         count++;
       }
 #ifdef DEBUG_REALM_LISTS
-      assert(REALM_PMTA_DEREF(cur, LINK).lastlink_within_pri ==
+      REALM_ASSERT(REALM_PMTA_DEREF(cur, LINK).lastlink_within_pri ==
              &(REALM_PMTA_DEREF(cur2, LINK).next_within_pri));
 #endif
       cur = REALM_PMTA_DEREF(cur, LINK).next_lower_pri;

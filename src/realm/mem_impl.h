@@ -98,7 +98,7 @@ namespace Realm {
     virtual void reuse_allocated_range(RegionInstanceImpl *old_inst,
                                        std::vector<RegionInstanceImpl *> &new_insts)
     {
-      assert(0);
+      abort();
     }
 
     // default implementation falls through (directly or indirectly) to
