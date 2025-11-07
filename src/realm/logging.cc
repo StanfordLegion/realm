@@ -129,11 +129,8 @@ namespace Realm {
     virtual void write(const char *buffer, size_t len)
     {
       AutoLock<> al(mutex);
-#ifndef NDEBUG
-      size_t amt =
-#endif
-          fwrite(buffer, 1, len, f);
-      assert(amt == len);
+      size_t amt = fwrite(buffer, 1, len, f);
+      REALM_ASSERT(amt == len);
     }
 
     FILE *f;
@@ -402,14 +399,14 @@ namespace Realm {
   void LoggerConfig::set_default_output(LoggerOutputStream *s)
   {
     // must be called before command line is parsed
-    assert(!cmdline_read);
+    REALM_ASSERT(!cmdline_read);
     default_output = s;
   }
 
   void LoggerConfig::set_logger_output(const std::string &name, LoggerOutputStream *s)
   {
     // must be called before command line is read
-    assert(!cmdline_read);
+    REALM_ASSERT(!cmdline_read);
     logger_output[name] = s;
   }
 
@@ -566,7 +563,7 @@ namespace Realm {
     if(!configured) {
       size_t bytes = sizeof(DelayedMessage) + msglen;
       void *ptr = ::operator new(bytes);
-      assert(ptr != 0);
+      REALM_ASSERT(ptr != 0);
       DelayedMessage *d = new(ptr) DelayedMessage;
       d->next_msg = 0;
       d->level = level;
