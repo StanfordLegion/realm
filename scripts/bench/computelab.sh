@@ -19,7 +19,8 @@
 echo $REALM_DIR
 # only for ucx, but it doe not break other network modules if it is set
 if [[ -z "${REALM_UCP_BOOTSTRAP_PLUGIN}" ]]; then
-export REALM_UCP_BOOTSTRAP_PLUGIN=${REALM_UCP_BOOTSTRAP_PLUGIN:-$REALM_DIR/$BUILD_DIR/lib/realm_ucp_bootstrap_mpi.so}
+  export REALM_UCP_BOOTSTRAP_PLUGIN=$REALM_DIR/$BUILD_DIR/lib/realm_ucp_bootstrap_mpi.so}
+fi
 
 # CUDA Toolkit Path
 if [[ -z "${CUDA_PATH}" ]]; then
