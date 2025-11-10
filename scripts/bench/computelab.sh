@@ -18,15 +18,13 @@
 
 echo $REALM_DIR
 
-set +u
 # only for ucx, but it doe not break other network modules if it is set
 export REALM_UCP_BOOTSTRAP_PLUGIN=${REALM_UCP_BOOTSTRAP_PLUGIN:-$REALM_DIR/$BUILD_DIR/lib/realm_ucp_bootstrap_mpi.so}
 
 # CUDA Toolkit Path
-export CUDA_PATH="${CUDA_PATH:/home/scratch.svc_compute_arch/release/cuda_toolkit/public/12.6.1/x86_64/u22.04/}"
-export MPI_PATH="${MPI_PATH:/home/scratch.svc_compute_arch/release/mpi/openmpi/v4.1.4-ucx-1.13.1-cuda11.5}"
+export CUDA_PATH="${CUDA_PATH:-/home/scratch.svc_compute_arch/release/cuda_toolkit/public/12.6.1/x86_64/u22.04/}"
+export MPI_PATH="${MPI_PATH:-/home/scratch.svc_compute_arch/release/mpi/openmpi/v4.1.4-ucx-1.13.1-cuda11.5}"
 
-set -u
 # Update PATH
 export PATH="${MPI_PATH}/bin:${CUDA_PATH}/bin:${PATH:-}"
 
