@@ -111,86 +111,6 @@ out:
   return status;
 }
 
-static int bootstrap_pmix_barrier(bootstrap_handle_t *handle)
-{
-  (void)handle;
-  pmix_status_t status = PMIx_Fence(NULL, 0, NULL, 0);
-  BOOTSTRAP_NE_ERROR_JMP(status, PMIX_SUCCESS, BOOTSTRAP_ERROR_INTERNAL, out,
-                         "PMIx_Fence failed\n");
-
-out:
-  return status;
-}
-
-static int bootstrap_pmix_bcast(void *buf, int length, int root,
-                                struct bootstrap_handle *handle)
-{
-  static int key_index = 1;
-  pmix_status_t status;
-  char key[BOOTSTRAP_PMIX_KEYSIZE];
-
-  if(handle->pg_size == 1) {
-    return 0;
-  }
-
-  snprintf(key, BOOTSTRAP_PMIX_KEYSIZE, "BOOTSTRAP-BCAST-%04x", key_index);
-
-  if(handle->pg_rank == root) {
-    status = bootstrap_pmix_put(key, buf, length);
-    BOOTSTRAP_NE_ERROR_JMP(status, PMIX_SUCCESS, BOOTSTRAP_ERROR_INTERNAL, out,
-                           "bootstrap_pmix_put failed\n");
-  }
-
-  status = bootstrap_pmix_exchange();
-  BOOTSTRAP_NE_ERROR_JMP(status, PMIX_SUCCESS, BOOTSTRAP_ERROR_INTERNAL, out,
-                         "bootstrap_pmix_exchange failed\n");
-
-  if(handle->pg_rank != root) {
-    status = bootstrap_pmix_get(root, key, buf, length);
-    BOOTSTRAP_NE_ERROR_JMP(status, PMIX_SUCCESS, BOOTSTRAP_ERROR_INTERNAL, out,
-                           "bootstrap_pmix_get failed\n");
-  }
-
-out:
-  key_index++;
-  return status;
-}
-
-static int bootstrap_pmix_gather(const void *sendbuf, void *recvbuf, int length, int root,
-                                 struct bootstrap_handle *handle)
-{
-  static int key_index = 1;
-  pmix_status_t status;
-  char key[BOOTSTRAP_PMIX_KEYSIZE];
-
-  if(handle->pg_size == 1) {
-    return 0;
-  }
-
-  snprintf(key, BOOTSTRAP_PMIX_KEYSIZE, "BOOTSTRAP-GATHER-%04x", key_index);
-
-  status = bootstrap_pmix_put(key, sendbuf, length);
-  BOOTSTRAP_NE_ERROR_JMP(status, PMIX_SUCCESS, BOOTSTRAP_ERROR_INTERNAL, out,
-                         "bootstrap_pmix_put failed\n");
-
-  status = bootstrap_pmix_exchange();
-  BOOTSTRAP_NE_ERROR_JMP(status, PMIX_SUCCESS, BOOTSTRAP_ERROR_INTERNAL, out,
-                         "bootstrap_pmix_exchange failed\n");
-
-  if(handle->pg_rank == root) {
-    for(int i = 0; i < handle->pg_size; i++) {
-      // assumes that same length is passed by all the processes
-      status = bootstrap_pmix_get(i, key, (char *)recvbuf + length * i, length);
-      BOOTSTRAP_NE_ERROR_JMP(status, PMIX_SUCCESS, BOOTSTRAP_ERROR_INTERNAL, out,
-                             "bootstrap_pmix_get failed\n");
-    }
-  }
-
-out:
-  key_index++;
-  return status;
-}
-
 static int bootstrap_pmix_allgather(const void *sendbuf, void *recvbuf, int length,
                                     bootstrap_handle_t *handle)
 {
@@ -216,122 +136,6 @@ static int bootstrap_pmix_allgather(const void *sendbuf, void *recvbuf, int leng
   for(int i = 0; i < handle->pg_size; i++) {
     // assumes that same length is passed by all the processes
     status = bootstrap_pmix_get(i, key, (char *)recvbuf + length * i, length);
-    BOOTSTRAP_NE_ERROR_JMP(status, PMIX_SUCCESS, BOOTSTRAP_ERROR_INTERNAL, out,
-                           "bootstrap_pmix_get failed\n");
-  }
-
-out:
-  key_index++;
-  return status;
-}
-
-static int bootstrap_pmix_alltoall(const void *sendbuf, void *recvbuf, int length,
-                                   bootstrap_handle_t *handle)
-{
-  static int key_index = 1;
-  pmix_status_t status;
-  char key[BOOTSTRAP_PMIX_KEYSIZE];
-
-  if(handle->pg_size == 1) {
-    memcpy(recvbuf, sendbuf, length);
-    return 0;
-  }
-
-  for(int i = 0; i < handle->pg_size; i++) {
-    snprintf(key, BOOTSTRAP_PMIX_KEYSIZE, "BOOTSTRAP-ALLTOALL-%04x-%08x", key_index, i);
-    status = bootstrap_pmix_put(key, (const char *)sendbuf + i * length, length);
-    BOOTSTRAP_NE_ERROR_JMP(status, PMIX_SUCCESS, BOOTSTRAP_ERROR_INTERNAL, out,
-                           "bootstrap_pmix_put failed\n");
-  }
-
-  status = bootstrap_pmix_exchange();
-  BOOTSTRAP_NE_ERROR_JMP(status, PMIX_SUCCESS, BOOTSTRAP_ERROR_INTERNAL, out,
-                         "bootstrap_pmix_exchange failed\n");
-
-  for(int i = 0; i < handle->pg_size; i++) {
-    snprintf(key, BOOTSTRAP_PMIX_KEYSIZE, "BOOTSTRAP-ALLTOALL-%04x-%08x", key_index,
-             handle->pg_rank);
-    // assumes that same length is passed by all the processes
-    status = bootstrap_pmix_get(i, key, (char *)recvbuf + length * i, length);
-    BOOTSTRAP_NE_ERROR_JMP(status, PMIX_SUCCESS, BOOTSTRAP_ERROR_INTERNAL, out,
-                           "bootstrap_pmix_get failed\n");
-  }
-
-out:
-  key_index++;
-  return status;
-}
-
-static int bootstrap_pmix_allreduce_ull(const void *sendbuf, void *recvbuf, int count,
-                                        enum reduction_op op,
-                                        struct bootstrap_handle *handle)
-{
-  pmix_status_t status;
-  unsigned long long *gather_recvbuf;
-  unsigned long long *reduce_buf = recvbuf;
-  size_t length = count * sizeof(reduce_buf[0]);
-  const int root = 0;
-
-  // only sum is supported for now
-  assert(op == REDUCTION_SUM);
-
-  // gather on a root rank (0)
-  if(handle->pg_rank == root) {
-    gather_recvbuf = malloc(handle->pg_size * length);
-    BOOTSTRAP_NULL_ERROR_JMP(gather_recvbuf, status, BOOTSTRAP_ERROR_INTERNAL, out,
-                             "malloc failed\n");
-  }
-  status = bootstrap_pmix_gather(sendbuf, gather_recvbuf, length, root, handle);
-  BOOTSTRAP_NZ_ERROR_JMP(status, BOOTSTRAP_ERROR_INTERNAL, free_gather_recvbuf,
-                         "bootstrap_pmix_gather failed\n");
-
-  // reduce on root
-  if(handle->pg_rank == root) {
-    for(int i = 0; i < count; i++) {
-      for(int j = 0; j < handle->pg_size; j++) {
-        reduce_buf[i] += gather_recvbuf[i + j * count];
-      }
-    }
-  }
-
-  // broadcast the reduction resutl from root
-  status = bootstrap_pmix_bcast(recvbuf, length, root, handle);
-  BOOTSTRAP_NZ_ERROR_JMP(status, BOOTSTRAP_ERROR_INTERNAL, free_gather_recvbuf,
-                         "bootstrap_pmix_bcast failed\n");
-
-free_gather_recvbuf:
-  if(handle->pg_rank == root) {
-    free(gather_recvbuf);
-  }
-out:
-  return status;
-}
-
-static int bootstrap_pmix_allgatherv(const void *sendbuf, void *recvbuf, int *sizes,
-                                     int *offsets, struct bootstrap_handle *handle)
-{
-  static int key_index = 1;
-  pmix_status_t status;
-  char key[BOOTSTRAP_PMIX_KEYSIZE];
-
-  if(handle->pg_size == 1) {
-    memcpy(recvbuf, sendbuf, sizes[0]);
-    return 0;
-  }
-
-  snprintf(key, BOOTSTRAP_PMIX_KEYSIZE, "BOOTSTRAP-ALLGATHERV-%04x", key_index);
-
-  status = bootstrap_pmix_put(key, sendbuf, sizes[handle->pg_rank]);
-  BOOTSTRAP_NE_ERROR_JMP(status, PMIX_SUCCESS, BOOTSTRAP_ERROR_INTERNAL, out,
-                         "bootstrap_pmix_put failed\n");
-
-  status = bootstrap_pmix_exchange();
-  BOOTSTRAP_NE_ERROR_JMP(status, PMIX_SUCCESS, BOOTSTRAP_ERROR_INTERNAL, out,
-                         "bootstrap_pmix_exchange failed\n");
-
-  for(int i = 0; i < handle->pg_size; i++) {
-    // assumes that same sizes array is passed by all the processes
-    status = bootstrap_pmix_get(i, key, (char *)recvbuf + offsets[i], sizes[i]);
     BOOTSTRAP_NE_ERROR_JMP(status, PMIX_SUCCESS, BOOTSTRAP_ERROR_INTERNAL, out,
                            "bootstrap_pmix_get failed\n");
   }
@@ -456,14 +260,8 @@ int realm_ucp_bootstrap_plugin_init(void *attr, bootstrap_handle_t *handle)
 
   handle->pg_rank = myproc.rank;
   handle->pg_size = val->data.uint32;
-  handle->barrier = bootstrap_pmix_barrier;
-  handle->bcast = bootstrap_pmix_bcast;
-  handle->gather = bootstrap_pmix_gather;
-  handle->allgather = bootstrap_pmix_allgather;
-  handle->alltoall = bootstrap_pmix_alltoall;
-  handle->allreduce_ull = bootstrap_pmix_allreduce_ull;
-  handle->allgatherv = bootstrap_pmix_allgatherv;
   handle->finalize = bootstrap_pmix_finalize;
+  handle->allgather = bootstrap_pmix_allgather;
 
 rel_val:
   PMIX_VALUE_RELEASE(val);
