@@ -21,6 +21,8 @@
 #include "realm/ucx/bootstrap/bootstrap_internal.h"
 #include "realm/ucx/bootstrap/bootstrap_loader.h"
 
+#include <iostream>
+
 namespace Realm {
 
   // defined in ucp_module.cc
@@ -38,6 +40,16 @@ namespace Realm {
           status = bootstrap_loader_init(config->plugin_name, NULL, handle);
         } else {
           status = bootstrap_loader_init(BOOTSTRAP_MPI_PLUGIN, NULL, handle);
+        }
+        if(status != 0) {
+          log_ucp.error() << "bootstrap_loader_init failed";
+        }
+        break;
+      case BOOTSTRAP_PMIX:
+        if(config->plugin_name != NULL) {
+          status = bootstrap_loader_init(config->plugin_name, NULL, handle);
+        } else {
+          status = bootstrap_loader_init(BOOTSTRAP_PMIX_PLUGIN, NULL, handle);
         }
         if(status != 0) {
           log_ucp.error() << "bootstrap_loader_init failed";

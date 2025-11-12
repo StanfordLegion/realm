@@ -72,6 +72,17 @@ if(UCX_BOOTSTRAP_ENABLE_MPI)
     )
   endif()
 endif()
+
+if(UCX_BOOTSTRAP_ENABLE_PMIX)
+  find_package(PMIX)
+  if (PMIX_FOUND)
+    add_backend_plugin(
+      NAME realm_ucp_bootstrap_pmix SOURCES ${UCX_BOOTSTRAP_ROOT_DIR}/bootstrap_pmix.c LIBRARIES
+      PMIX
+    )
+  endif()
+endif()
+
 add_backend_plugin(NAME realm_bootstrap_p2p SOURCES ${UCX_BOOTSTRAP_ROOT_DIR}/bootstrap_p2p.cc)
 #endregion
 
