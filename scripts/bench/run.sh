@@ -20,14 +20,15 @@
 set -e
 
 export SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null 2>&1 && pwd )"
-export REALM_DIR="$(dirname "$(dirname "$SCRIPT_DIR")")"
+export REALM_DIR=${REALM_DIR:-"$(dirname "$(dirname "$SCRIPT_DIR")")"}
 source "$SCRIPT_DIR/common.sh"
 
 # Prepare output directory
 function mk_output() {
+    export REALM_HOST_DIR=${REALM_HOST_DIR:-$REALM_DIR}
     DATE="$(date +%Y/%m/%d)"
-    mkdir -p "$REALM_DIR/$DATE"
-    export HOST_OUT_DIR="$REALM_DIR/$DATE"
+    mkdir -p "$REALM_HOST_DIR/$DATE"
+    export HOST_OUT_DIR="$REALM_HOST_DIR/$DATE"
     echo "Redirecting stdout, stderr and logs to $HOST_OUT_DIR"
     export CMD_OUT_DIR="$HOST_OUT_DIR"
 }
@@ -47,6 +48,7 @@ if [[ $# -lt 2 || ! "$1" =~ ^(1/)?[0-9]+(:[0-9]+)?$ ]]; then
     echo "  TIMELIMIT : how much time to request for the job, in minutes (defaut: 60)"
     echo "  NUM_GPUS : number of gpus per node"
     echo "  ACCOUNT : account name"
+    echo "  IMAGE: path to container image in container based clusteres"
     exit
 fi
 
@@ -132,6 +134,42 @@ elif [[ "$PLATFORM" == "computelab" || "$PLATFORM" == "oberon" ]]; then
 
     sbatch_cmd+=("${slurm_cmd[@]}")
     submit "${sbatch_cmd[@]}"
+elif [[ "$PLATFORM" == "eos" ]]; then
+  mk_output
+  NODE_RATIO="$RATIO_OF_NODE_USED / $RANKS_PER_NODE"
+  NUMAS_PER_NODE=2
+  RAM_PER_NUMA=950000
+  # Calculate available resources per OpenMP group
+  NUM_OMPS=$((NUMAS_PER_NODE * $NODE_RATIO))
+  if [[ $NUM_OMPS -lt 1 ]]; then
+    NUM_OMPS=1
+    RAM_PER_OMP=$((RAM_PER_NUMA * NUMAS_PER_NODE * $NODE_RATIO))
+  else
+    RAM_PER_OMP="$RAM_PER_NUMA"
+  fi
+  WORK_RAM=$((NUM_OMPS * RAM_PER_OMP))
+
+  TIME="$(date +%H%M%S)"
+  NUM_GPUS_PER_RANK=$(($NUM_GPUS / $RANKS_PER_NODE))
+
+  export GASNET_AM_CREDITS_PP=16
+  export GASNET_IBV_PORTS=mlx5_0+mlx5_3+mlx5_4+mlx5_5+mlx5_6+mlx5_9+mlx5_10+mlx5_11
+
+  # this is set in the docker image
+  unset REALM_UCP_BOOTSTRAP_PLUGIN
+
+  slurm_cmd=("$SCRIPT_DIR/job.slurm" srun -N "$NUM_RANKS" --mpi=pmix -n "$NUM_RANKS" --ntasks-per-node "$RANKS_PER_NODE" --mem "$((WORK_RAM + 4000))"M --container-image "$IMAGE" "$@")
+
+  if [[ -z "${NODE_LIST}" ]]; then
+    sbatch_cmd=(sbatch -p "$QUEUE" -t "$TIMELIMIT" --exclusive -N "$NUM_NODES"
+      -o "$HOST_OUT_DIR/$JOB_NAME-$TIME.txt" -A "$ACCOUNT" -J "$JOB")
+  else
+    sbatch_cmd=(sbatch -p "$QUEUE" -t "$TIMELIMIT" --exclusive -w "$NODE_LIST" -N "$NUM_NODES"
+      -o "$HOST_OUT_DIR/$JOB_NAME-$TIME.txt" -A "$ACCOUNT" -J "$JOB")
+  fi
+
+  sbatch_cmd+=("${slurm_cmd[@]}")
+  submit "${sbatch_cmd[@]}"
 fi
 
 # Wait for batch job to start

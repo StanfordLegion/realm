@@ -70,6 +70,6 @@ mkdir -p "$REALM_DIR/$BUILD_DIR"
 pushd "$REALM_DIR/$BUILD_DIR"
 echo "CMake Options: ${cmake_options}"
 # make clean
-cmake ../ ${cmake_options}
+cmake ${REALM_DIR} ${cmake_options}
 make -j VERBOSE=1
 popd

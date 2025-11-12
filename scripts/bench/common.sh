@@ -23,6 +23,11 @@ function detect_platform {
         export PLATFORM=computelab
         export QUEUE=v100-sxm2-16gb@cr+mp/dgx-1v@cr+mp/8gpu-80cpu-512gb
         export GPU_ARCH=70
+    elif [[ "$(uname -n)" == *"login-eos"* ]]; then
+        export PLATFORM=eos
+        export QUEUE=batch
+        export GPU_ARCH=90
+        export JOB="nvr_legate-realm.bench"
     else
         export PLATFORM=other
     fi
