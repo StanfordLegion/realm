@@ -1142,7 +1142,8 @@ namespace Realm {
     }
 
     void GPU::launch_batch_affine_kernel(void *copy_info, size_t dim, size_t elem_size,
-                                         size_t volume, GPUStream *stream)
+                                         size_t volume, bool mutlfield_optimized,
+                                         GPUStream *stream)
     {
       size_t log_elem_size = std::min(static_cast<size_t>(ctz(elem_size)),
                                       CUDA_MEMCPY_KERNEL_MAX2_LOG2_BYTES - 1);
@@ -1151,10 +1152,13 @@ namespace Realm {
       assert(dim <= REALM_MAX_DIM);
       assert(dim >= 1);
 
-      // TODO: probably replace this
-      // with a better data-structure
-      GPUFuncInfo &func_info = batch_affine_kernels[dim - 1][log_elem_size];
-      launch_kernel(func_info, copy_info, volume, stream);
+      if(!mutlfield_optimized) {
+        GPUFuncInfo &func_info = batch_affine_kernels[dim - 1][log_elem_size];
+        launch_kernel(func_info, copy_info, volume, stream);
+      } else {
+        GPUFuncInfo &func_info = multi_batch_affine_kernels[dim - 1][log_elem_size];
+        launch_kernel(func_info, copy_info, volume, stream);
+      }
     }
 
     const GPU::CudaIpcMapping *GPU::find_ipc_mapping(Memory mem) const
@@ -2086,6 +2090,15 @@ namespace Realm {
               &func_info.occ_num_blocks, &func_info.occ_num_threads, func_info.func, 0, 0,
               0));
           batch_affine_kernels[d - 1][log_bit_sz] = func_info;
+
+          std::snprintf(name, sizeof(name), "multi_affine_batch%uD_%u", d, bit_sz);
+          CHECK_CU(CUDA_DRIVER_FNPTR(cuModuleGetFunction)(&func_info.func, device_module,
+                                                          name));
+
+          CHECK_CU(CUDA_DRIVER_FNPTR(cuOccupancyMaxPotentialBlockSize)(
+              &func_info.occ_num_blocks, &func_info.occ_num_threads, func_info.func, 0, 0,
+              0));
+          multi_batch_affine_kernels[d - 1][log_bit_sz] = func_info;
 
           std::snprintf(name, sizeof(name), "fill_affine_large%uD_%u", d, bit_sz);
           CHECK_CU(CUDA_DRIVER_FNPTR(cuModuleGetFunction)(&func_info.func, device_module,
