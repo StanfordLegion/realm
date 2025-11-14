@@ -1,0 +1,11 @@
+<map id="Realm::RemoteChannel" name="Realm::RemoteChannel">
+<area shape="rect" id="Node000001" title=" " alt="" coords="179,77,355,102"/>
+<area shape="rect" id="Node000003" href="$classRealm_1_1Cuda_1_1GPUIndirectRemoteChannel.html" title=" " alt="" coords="425,5,616,45"/>
+<area shape="poly" id="edge2_Node000001_Node000003" title=" " alt="" coords="331,71,440,43,441,48,332,76"/>
+<area shape="rect" id="Node000004" href="$classRealm_1_1Cuda_1_1GPUreduceRemoteChannel.html" title=" " alt="" coords="403,69,639,109"/>
+<area shape="poly" id="edge3_Node000001_Node000004" title=" " alt="" coords="368,87,402,87,402,92,368,92"/>
+<area shape="rect" id="Node000005" href="$classRealm_1_1Hip_1_1GPUreduceRemoteChannel.html" title=" " alt="" coords="408,133,633,173"/>
+<area shape="poly" id="edge4_Node000001_Node000005" title=" " alt="" coords="332,103,441,131,440,136,331,108"/>
+<area shape="rect" id="Node000002" href="$classRealm_1_1Channel.html" title=" " alt="" coords="5,77,131,102"/>
+<area shape="poly" id="edge1_Node000001_Node000002" title=" " alt="" coords="144,87,179,87,179,92,144,92"/>
+</map>
