@@ -593,7 +593,8 @@ if(REALM_ENABLE_UCX)
     set_property(GLOBAL PROPERTY PACKAGES_NOT_FOUND "${_NOT_FOUND}")
   endif()
   list(APPEND REALM_STATIC_DEPENDS ucx)
-  list(APPEND REALM_LIBRARIES ucx::ucp)
+  # Link all UCX libraries to resolve inter-library dependencies
+  list(APPEND REALM_LIBRARIES ucx::ucp ucx::ucs ucx::uct)
 
   if(REALM_ENABLE_UCC AND TARGET ucx::ucp)
     find_package(ucc QUIET CONFIG)
