@@ -112,6 +112,7 @@ namespace Realm {
   } while(0)
 #else
 #define REALM_ASSERT(cond)                                                               \
+  #error "REALM_ASSERT with NDEBUG"
   do {                                                                                   \
     if(!(cond)) {                                                                        \
       Realm::log_runtime.fatal("Assertion failed: (%s), at %s:%d", #cond, __FILE__,      \
