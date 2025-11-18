@@ -129,5 +129,16 @@ extern "C" int realm_ucp_bootstrap_plugin_init(void *arg, bootstrap_handle_t *ha
   handle->allreduce_ull = nullptr;
   handle->allgatherv = nullptr;
   handle->finalize = bootstrap_p2p_finalize;
+  
+  handle->init = nullptr;
+  handle->join = nullptr;
+  handle->stop = nullptr;
+  handle->put = nullptr;
+  handle->get = nullptr;
+  handle->remove = nullptr;
+  handle->watch = nullptr;
+  handle->get_rank = nullptr;
+  handle->get_size = nullptr;
+  
   return 0;
 }

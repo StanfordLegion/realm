@@ -301,6 +301,16 @@ int realm_ucp_bootstrap_plugin_init(void *mpi_comm, bootstrap_handle_t *handle)
   handle->allreduce_ull = bootstrap_mpi_allreduce_ull;
   handle->allgatherv = bootstrap_mpi_allgatherv;
   handle->finalize = bootstrap_mpi_finalize;
+  
+  handle->init = NULL;
+  handle->join = NULL;
+  handle->stop = NULL;
+  handle->put = NULL;
+  handle->get = NULL;
+  handle->remove = NULL;
+  handle->watch = NULL;
+  handle->get_rank = NULL;
+  handle->get_size = NULL;
 
   goto out;
 

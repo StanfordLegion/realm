@@ -29,11 +29,19 @@ enum reduction_op
   REDUCTION_MAX = 0xFFFFFFFF
 };
 
+typedef struct bootstrap_blob {
+  void *bytes;
+  int len;
+} bootstrap_blob_t;
+
+typedef void (*bootstrap_watch_cb_t)(const char *key, bootstrap_blob_t value, void *user);
+
 typedef struct bootstrap_handle {
   int pg_rank;
   int pg_size;
   int *shared_ranks;
   int num_shared_ranks;
+  
   int (*barrier)(struct bootstrap_handle *handle);
   int (*bcast)(void *buf, int bytes, int root, struct bootstrap_handle *handle);
   int (*gather)(const void *sendbuf, void *recvbuf, int bytes, int root,
@@ -47,6 +55,19 @@ typedef struct bootstrap_handle {
   int (*allgatherv)(const void *sendbuf, void *recvbuf, int *sizes, int *offsets,
                     struct bootstrap_handle *handle);
   int (*finalize)(struct bootstrap_handle *handle);
+  
+  int (*init)(struct bootstrap_handle *handle, const char *config);
+  int (*join)(struct bootstrap_handle *handle);
+  int (*stop)(struct bootstrap_handle *handle);
+  
+  int (*put)(struct bootstrap_handle *handle, const char *key, bootstrap_blob_t val);
+  int (*get)(struct bootstrap_handle *handle, int target_rank, const char *key,
+             int timeout_ms, bootstrap_blob_t *out_val);
+  int (*remove)(struct bootstrap_handle *handle, const char *key);
+  int (*watch)(struct bootstrap_handle *handle, const char *prefix,
+               bootstrap_watch_cb_t cb, void *user_data);
+  int (*get_rank)(struct bootstrap_handle *handle);
+  int (*get_size)(struct bootstrap_handle *handle);
 } bootstrap_handle_t;
 
 #ifdef __cplusplus
