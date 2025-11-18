@@ -102,7 +102,8 @@ namespace Realm {
 
 // REALM_ASSERT(cond) - abort program if 'cond' is not true
 #ifdef NDEBUG
-#if (defined(__CUDACC__) && defined(__CUDA_ARCH__)) || (defined(__HIPCC__) && defined(__HIP_DEVICE_COMPILE__))
+#if(defined(__CUDACC__) && defined(__CUDA_ARCH__)) ||                                    \
+    (defined(__HIPCC__) && defined(__HIP_DEVICE_COMPILE__))
 #define REALM_ASSERT(cond)                                                               \
   do {                                                                                   \
     if(!(cond)) {                                                                        \
