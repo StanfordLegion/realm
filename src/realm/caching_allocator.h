@@ -85,7 +85,7 @@ namespace Realm {
 
       ~Block()
       {
-        assert((num_alloced_chunks.load() == 0) && "Not all chunks have been freed!");
+        REALM_ASSERT((num_alloced_chunks.load() == 0) && "Not all chunks have been freed!");
         // If we're part of the global list, make sure to clean up the rest of the
         // list (only done on process exit)
         if(block_link.next != nullptr) {
@@ -102,12 +102,12 @@ namespace Realm {
           // All full up, the block is now flagged for reclaimation
           return nullptr;
         } else {
-          assert((expected_full_size >= 0) &&
+          REALM_ASSERT((expected_full_size >= 0) &&
                  "Tried to allocate from a block marked for reclaimation!");
         }
 
         old_head = free_chunk_head.load_acquire();
-        assert((old_head != nullptr) && "Non-empty block with no free chunks!");
+        REALM_ASSERT((old_head != nullptr) && "Non-empty block with no free chunks!");
 
         // Only the owning thread can pop off the free list, so no ABA issue here
         // and we know from num_alloced_chunks that there must at least be one
@@ -189,7 +189,7 @@ namespace Realm {
         }
         if(newblk != nullptr) {
           obj = newblk->alloc_obj();
-          assert((obj != nullptr) && "Newly acquired block can't allocate!");
+          REALM_ASSERT((obj != nullptr) && "Newly acquired block can't allocate!");
           current_block.release();
           current_block.reset(newblk);
         }

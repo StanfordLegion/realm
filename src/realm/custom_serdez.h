@@ -115,7 +115,7 @@ namespace Realm {
     {
       Serialization::ByteCountSerializer bcs;
       bool ok = (bcs << (*val));
-      assert(ok);
+      REALM_ASSERT(ok);
       return bcs.bytes_used();
     }
 
@@ -125,7 +125,7 @@ namespace Realm {
       size_t max_size = size_t(-1) - reinterpret_cast<size_t>(buffer);
       Serialization::FixedBufferSerializer fbs(buffer, max_size);
       bool ok = (fbs << *val);
-      assert(ok);
+      REALM_ASSERT(ok);
       return max_size -
              fbs.bytes_left(); // because we didn't really tell it how many bytes we had
     }
@@ -137,7 +137,7 @@ namespace Realm {
       size_t max_size = size_t(-1) - reinterpret_cast<size_t>(buffer);
       Serialization::FixedBufferDeserializer fbd(buffer, max_size);
       bool ok = (fbd >> (*val));
-      assert(ok);
+      REALM_ASSERT(ok);
       return max_size - fbd.bytes_left();
     }
 

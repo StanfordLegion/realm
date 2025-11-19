@@ -210,7 +210,7 @@ namespace Realm {
       Event *ev_copy = 0;
       if(events) {
         ev_copy = reinterpret_cast<Event *>(malloc(max_events * sizeof(Event)));
-        assert(ev_copy != 0);
+        REALM_ASSERT(ev_copy != 0);
       }
       CompQueueImpl::RemotePopRequest *req =
           new CompQueueImpl::RemotePopRequest(ev_copy, max_events);
@@ -266,7 +266,7 @@ namespace Realm {
       if(max_to_pop > 1024)
         max_to_pop = 1024;
       events = reinterpret_cast<Event *>(alloca(max_to_pop * sizeof(Event)));
-      assert(events != 0);
+      REALM_ASSERT(events != 0);
     }
 
     size_t count = cq->pop_events(events, max_to_pop);
@@ -290,15 +290,15 @@ namespace Realm {
 
     {
       AutoLock<> al(req->mutex);
-      assert(msg.count <= req->capacity);
+      REALM_ASSERT(msg.count <= req->capacity);
       if(req->events) {
         // data expected
-        assert(datalen == (msg.count * sizeof(Event)));
+        REALM_ASSERT(datalen == (msg.count * sizeof(Event)));
         if(msg.count > 0)
           memcpy(req->events, data, datalen);
       } else {
         // no data expected
-        assert(datalen == 0);
+        REALM_ASSERT(datalen == 0);
       }
       req->count = msg.count;
       req->completed = true;
@@ -360,7 +360,7 @@ namespace Realm {
   CompQueueImpl::~CompQueueImpl()
   {
     AutoLock<> al(mutex);
-    assert(pending_events.load() == 0);
+    REALM_ASSERT(pending_events.load() == 0);
     while(batches) {
       CompQueueWaiterBatch *next_batch = batches->next_batch;
       delete batches;
@@ -378,9 +378,9 @@ namespace Realm {
   {
     AutoLock<> al(mutex);
     if(resizable) {
-      assert(cur_events == 0);
+      REALM_ASSERT(cur_events == 0);
     } else {
-      assert(wr_ptr.load() == consume_ptr.load());
+      REALM_ASSERT(wr_ptr.load() == consume_ptr.load());
     }
     wr_ptr.store(0);
     rd_ptr.store(0);
@@ -407,7 +407,7 @@ namespace Realm {
   {
     AutoLock<> al(mutex);
     // ok to have completed events leftover, but no pending events
-    assert(pending_events.load() == 0);
+    REALM_ASSERT(pending_events.load() == 0);
     max_events = 0;
   }
 
@@ -490,7 +490,7 @@ namespace Realm {
       //  event information
       if(resizable) {
         if(cur_events > 0) {
-          assert(local_progress_event == 0);
+          REALM_ASSERT(local_progress_event == 0);
           return Event::NO_EVENT;
         }
       } else {
@@ -633,7 +633,7 @@ namespace Realm {
         REALM_SPIN_YIELD();
       }
       size_t check = consume_ptr.fetch_add_acqrel(count);
-      assert(check == old_rd_ptr);
+      REALM_ASSERT(check == old_rd_ptr);
 
       return count;
     }
@@ -652,7 +652,7 @@ namespace Realm {
       // check for overflow
       if(cur_events >= max_events) {
         // should detect it precisely
-        assert(cur_events == max_events);
+        REALM_ASSERT(cur_events == max_events);
         size_t new_size = max_events * 2;
         std::unique_ptr<Event[]> new_events = std::make_unique<Event[]>(new_size);
         size_t rd_ofs = rd_ptr.load() & (max_events - 1);
@@ -678,7 +678,7 @@ namespace Realm {
         waiter->next_free = first_free_waiter.load();
         // cannot fail since we hold lock
         bool ok = first_free_waiter.compare_exchange(waiter->next_free, waiter);
-        assert(ok);
+        REALM_ASSERT(ok);
       }
 
       size_t wr_ofs = wr_ptr.fetch_add(1) & (max_events - 1);
@@ -709,7 +709,7 @@ namespace Realm {
         REALM_SPIN_YIELD();
       }
       size_t check = commit_ptr.fetch_add_acqrel(1);
-      assert(check == old_wr_ptr);
+      REALM_ASSERT(check == old_wr_ptr);
 
       // lock-free insertion of waiter into free list
       if(waiter) {
@@ -765,7 +765,7 @@ namespace Realm {
   void CompQueueImpl::DeferredDestroy::event_triggered(bool poisoned,
                                                        TimeLimit work_until)
   {
-    assert(!poisoned);
+    REALM_ASSERT(!poisoned);
     cq->destroy();
     get_runtime()->local_compqueue_free_list->free_entry(cq);
   }
