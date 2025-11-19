@@ -40,6 +40,11 @@ static int app_get(bootstrap_handle_t *handle, int target_rank, const char *key,
 
 static int app_init(bootstrap_handle_t *handle, const char *config)
 {
+  // example keys app could set for Realm to read via handle->get()
+  setenv("REALM_COMM_MODE", "env", 1);
+  setenv("REALM_BOOTSTRAP_TYPE", "mpi", 1);
+  
+  // for now, still need this for Realm to actually work
   setenv("REALM_UCP_BOOTSTRAP_MODE", "mpi", 1);
   return 0;
 }

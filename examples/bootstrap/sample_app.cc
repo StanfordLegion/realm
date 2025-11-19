@@ -42,6 +42,8 @@ int main(int argc, char **argv)
   
   // OR : Keep the bootstrap_handle_t at global REALM namespace
   // REALM::external_bootstrap_handle = &app_bootstrap;
+
+  // OR : Modify the interface of Realm::Runtime.init() to accept a bootstrap_handle_t
   
   // Temporary workaround: manually call init() to set env vars
   if(app_bootstrap.init) {
