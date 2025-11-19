@@ -144,7 +144,7 @@ namespace Realm {
     size_t reg_mem_size = 0;
     size_t disk_mem_size = 0;
     unsigned dma_worker_threads = 0; // unused - warning on application use
-    bool dma_multi_field = 1;
+    bool dma_multi_field = true;
 #ifdef EVENT_TRACING
     size_t event_trace_block_size = 1 << 20;
     double event_trace_exp_arrv_rate = 1e3;
