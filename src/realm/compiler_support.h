@@ -95,11 +95,6 @@
 #define REALM_CUDA_HD
 #endif
 
-namespace Realm {
-  class Logger;
-  extern Logger log_runtime;
-} // namespace Realm
-
 // REALM_ASSERT(cond) - abort program if 'cond' is not true
 #ifdef NDEBUG
 #if(defined(__CUDACC__) && defined(__CUDA_ARCH__)) ||                                    \
@@ -112,10 +107,9 @@ namespace Realm {
   } while(0)
 #else
 #define REALM_ASSERT(cond)                                                               \
-  #error "REALM_ASSERT with NDEBUG"
   do {                                                                                   \
     if(!(cond)) {                                                                        \
-      Realm::log_runtime.fatal("Assertion failed: (%s), at %s:%d", #cond, __FILE__,      \
+      printf("Assertion failed: (%s), at %s:%d\n", #cond, __FILE__,      \
                                __LINE__);                                                \
       abort();                                                                           \
     }                                                                                    \
