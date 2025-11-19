@@ -17,7 +17,7 @@
 
 #include "realm.h"
 #include "realm/network.h"
-#include "app.h"
+#include "realm_bootstrap.h"
 #include <iostream>
 
 using namespace Realm;

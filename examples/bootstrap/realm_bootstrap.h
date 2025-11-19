@@ -15,8 +15,8 @@
  * limitations under the License.
  */
 
-#ifndef APP_BOOTSTRAP_H
-#define APP_BOOTSTRAP_H
+#ifndef REALM_BOOTSTRAP_H
+#define REALM_BOOTSTRAP_H
 
 #include "realm/ucx/bootstrap/bootstrap.h"
 
@@ -27,5 +27,5 @@ int bootstrap_finalize(bootstrap_handle_t *handle);
 
 } // namespace App
 
-#endif // APP_BOOTSTRAP_H
+#endif // REALM_BOOTSTRAP_H
 

@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-#include "app.h"
+#include "realm_bootstrap.h"
 #include <cstring>
 #include <cstdlib>
 

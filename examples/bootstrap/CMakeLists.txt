@@ -20,7 +20,7 @@ if(NOT TARGET Realm::Realm)
   find_package(Realm REQUIRED)
 endif()
 
-add_executable(sample_app sample_app.cc app.cc)
+add_executable(sample_app sample_app.cc realm_bootstrap.cc)
 target_link_libraries(sample_app Realm::Realm)
 target_include_directories(sample_app PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 

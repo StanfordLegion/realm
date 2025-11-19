@@ -2,7 +2,7 @@
 
 Shows how an application can configure Realm's bootstrap using a key-value interface.
 
-The `sample_app.cc` main function represents an application like Dynamo or Flashcache that links against Realm. The `app.h` and `app.cc` files implement Realm's `bootstrap_handle_t` contract, providing the required interface.
+The `sample_app.cc` main function represents an application like Dynamo or Flashcache that links against Realm. The `realm_bootstrap.h` and `realm_bootstrap.cc` files implement Realm's `bootstrap_handle_t` contract, providing the required interface.
 
 ## Building
 
