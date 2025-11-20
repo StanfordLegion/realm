@@ -2248,23 +2248,23 @@ namespace Realm {
                                             : redop->cuda_fold_nonexcl_fn)
                  : (redop_info.is_exclusive ? redop->cuda_apply_excl_fn
                                             : redop->cuda_apply_nonexcl_fn));
-        
+
         if(redop->cudaGetFuncBySymbol_fn != 0) {
           // We can ask the runtime to perform the mapping for us
           // CRITICAL: Must obtain the kernel within the correct GPU's CUDA context
           // to ensure the CUfunction pointer is valid for this specific GPU
           gpu->push_context();
-          
+
 #ifdef REALM_USE_CUDART_HIJACK
           ThreadLocal::current_gpu_stream = stream;
 #endif
-          
+
           int result = reinterpret_cast<PFN_cudaGetFuncBySymbol>(
               redop->cudaGetFuncBySymbol_fn)((void **)&kernel, host_proxy);
           CHECK_CUDART(result);
-          
+
           gpu->pop_context();
-          
+
           // Cache this kernel in the GPU's local reduction table for future reuse
           // This avoids repeated cudaGetFuncBySymbol calls and ensures each GPU
           // has its own context-specific kernel instance
@@ -2448,22 +2448,24 @@ namespace Realm {
               args->count = elems;
 
               size_t threads_per_block = 256;
-              size_t blocks_per_grid = std::min(1 + ((elems - 1) / threads_per_block),
-                                                static_cast<size_t>(CUDA_MAX_BLOCKS_PER_GRID));
+              size_t blocks_per_grid =
+                  std::min(1 + ((elems - 1) / threads_per_block),
+                           static_cast<size_t>(CUDA_MAX_BLOCKS_PER_GRID));
 
               {
                 AutoGPUContext agc(channel->gpu);
 
                 if(kernel != 0) {
-                  // Use params array to pass kernel arguments (pointers to each parameter)
-                  // instead of CU_LAUNCH_PARAM_BUFFER_POINTER (packed buffer).
-                  // The params array method is more robust for reduction operators with small
-                  // userdata structs (e.g., 1-byte REDOP structs), as it avoids alignment
-                  // issues that can cause CUDA_ERROR_LAUNCH_OUT_OF_RESOURCES (error 701).
-                  // The last parameter (args + 1) points to the REDOP struct stored after KernelArgs.
+                  // Use params array to pass kernel arguments (pointers to each
+                  // parameter) instead of CU_LAUNCH_PARAM_BUFFER_POINTER (packed buffer).
+                  // The params array method is more robust for reduction operators with
+                  // small userdata structs (e.g., 1-byte REDOP structs), as it avoids
+                  // alignment issues that can cause CUDA_ERROR_LAUNCH_OUT_OF_RESOURCES
+                  // (error 701). The last parameter (args + 1) points to the REDOP struct
+                  // stored after KernelArgs.
                   void *params[] = {&args->dst_base,   &args->dst_stride, &args->src_base,
                                     &args->src_stride, &args->count,      args + 1};
-                  
+
                   CHECK_CU(CUDA_DRIVER_FNPTR(cuLaunchKernel)(
                       kernel, blocks_per_grid, 1, 1, threads_per_block, 1, 1,
                       0 /*sharedmem*/, stream->get_stream(), params, 0 /*extra*/));
