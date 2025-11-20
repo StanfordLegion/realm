@@ -52,6 +52,10 @@ export USE_OPENMP="${USE_OPENMP:-}"
 if [[ "$USE_OPENMP" == 1 ]]; then
     ENV_CMD="${ENV_CMD}USE_OPENMP=1,"
 fi
+if [ ${MPI_PATH+x} ]; then
+    ENV_CMD="${ENV_CMD}LD_LIBRARY_PATH=${MPI_PATH}/lib:${LD_LIBRARY_PATH},"
+    ENV_CMD="${ENV_CMD}PATH=${MPI_PATH}/bin:${PATH},"
+fi
 if [ ${NETWORK+x} ]; then 
     ENV_CMD="${ENV_CMD}NETWORK=${NETWORK},"
     if [ ${CONDUIT+x} ]; then 
