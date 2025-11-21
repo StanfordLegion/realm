@@ -62,7 +62,13 @@ namespace Realm {
     // and Realm will invoke them as part of bootstrapping the network.
     // Some functions are required in order to successfully bootstrap
     // the network while others are optional and provide information
-    // whenever the state of the network changes.
+    // whenever the state of the network changes. All callbacks will
+    // either be performed in an external thread (one not made by Realm
+    // but has called into Realm) or by a designated Realm thread
+    // independent of Realm's background worker threads so that clients
+    // can use non-Realm synchronization primitives in the implementation
+    // of these functions and not need to worry about blocking or
+    // impacting forward progress.
     struct NetworkVtable {
       ////////////////////////
       // REQUIRED FUNCTIONS //
@@ -101,11 +107,17 @@ namespace Realm {
       // process joins the Realm. It will be told of the assigned Realm
       // AddressSpace given to the process along with the unique data for the
       // process if it was provided (might be null). Note that you will also
-      // get a callback for yourself upon joining as well.
+      // get a callback for yourself upon joining as well. This call back is 
+      // only done *AFTER* the joining process has successfully joined meaning
+      // that this callback marks when it is safe to start referring to the
+      // new address space and all of the handles associated with it.
       void (*join)(AddressSpace space, const void *data, size_t size) = nullptr;
       // This callback is performed any time a process leaves the Realm.
       // It will be told of the AddressSpace for the process as well as the
-      // unique data associated with the process that is leaving.
+      // unique data associated with the process that is leaving. This
+      // callback is done *BEFORE* the process leaves the Realm. After this
+      // callback returns it is no longer safe to refer to handles from the
+      // address space that is leaving in the process where the callback occurs.
       void (*leave)(AddressSpace space, const void *data, size_t size) = nullptr;
     };
     bool network_init(const NetworkVtable &vtable);
