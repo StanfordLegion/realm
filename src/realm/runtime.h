@@ -57,6 +57,58 @@ namespace Realm {
     //  *argc and *argv contain the application's real command line
     //  (instead of e.g. mpi spawner information)
     bool network_init(int *argc, char ***argv);
+    // Some networks prefer to bootstrap via callbacks using a vtable
+    // A client provides an implementation of the functions in the vtable
+    // and Realm will invoke them as part of bootstrapping the network.
+    // Some functions are required in order to successfully bootstrap
+    // the network while others are optional and provide information
+    // whenever the state of the network changes.
+    struct NetworkVtable {
+      ////////////////////////
+      // REQUIRED FUNCTIONS //
+      ////////////////////////
+      // The "put" function must store a global key value pair in a way that it
+      // can be retrieved from any other process using a corresponding get call.
+      // The function is passed a buffer containing a key and buffer containing
+      // a value. The implementation must copy these values before returning from
+      // the callback if it needs to persist them as they are not guaranteed to
+      // live longer than the function call. The function should return true if
+      // the put succeeds and false if it doesn't. If the call fails then it is
+      // likely that the network initialization might not succeed.
+      bool (*put)(const void *key, size_t key_size, const void *value,
+                  size_t value_size) = nullptr;
+      // The "get" function must retrieve the value associated with the given key
+      // if it can be found. Realm will call this function with the value buffer
+      // already allocated with the given value_size. If the key is found and the
+      // value is the correct size for the value buffer, then the callee should
+      // copy the value into the value buffer and return true indicating that
+      // the call succeeded. If the key cannot be found or if the value found by
+      // the callee is different from the value size, then function should
+      // return false indicating that the callbcak failed. If the callback fails
+      // then the network initialization might not succeed.
+      bool (*get)(const void *key, size_t key_size, void *value,
+                  size_t value_size) = nullptr;
+      ////////////////////////
+      // OPTIONAL FUNCTIONS //
+      ////////////////////////
+      // You can pass in an optional buffer of data to uniquely identify this
+      // process to other processes as part of the bootstrap. Realm will make
+      // a copy of this data if provided during the network_init call so it
+      // you do not need to keep it alive longer than that.
+      const void *unique_data = nullptr;
+      size_t unique_data_size = 0;
+      // This callback is an optional callback that will be invoked any time a
+      // process joins the Realm. It will be told of the assigned Realm
+      // AddressSpace given to the process along with the unique data for the
+      // process if it was provided (might be null). Note that you will also
+      // get a callback for yourself upon joining as well.
+      void (*join)(AddressSpace space, const void *data, size_t size) = nullptr;
+      // This callback is performed any time a process leaves the Realm.
+      // It will be told of the AddressSpace for the process as well as the
+      // unique data associated with the process that is leaving.
+      void (*leave)(AddressSpace space, const void *data, size_t size) = nullptr;
+    };
+    bool network_init(const NetworkVtable &vtable);
 
     void parse_command_line(int argc, char **argv);
     void parse_command_line(std::vector<std::string> &cmdline,
