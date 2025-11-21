@@ -107,7 +107,7 @@ namespace Realm {
       // process joins the Realm. It will be told of the assigned Realm
       // AddressSpace given to the process along with the unique data for the
       // process if it was provided (might be null). Note that you will also
-      // get a callback for yourself upon joining as well. This call back is 
+      // get a callback for yourself upon joining as well. This call back is
       // only done *AFTER* the joining process has successfully joined meaning
       // that this callback marks when it is safe to start referring to the
       // new address space and all of the handles associated with it.
