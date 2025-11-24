@@ -20,6 +20,7 @@
 // nop, but helps IDEs
 #include "realm/sparsity.h"
 
+#include "realm/logging.h"
 #include "realm/serialize.h"
 
 TEMPLATE_TYPE_IS_SERIALIZABLE2(int N, typename T, Realm::SparsityMap<N, T>);
@@ -86,8 +87,7 @@ namespace Realm {
   inline const std::vector<SparsityMapEntry<N, T>> &
   SparsityMapPublicImpl<N, T>::get_entries(void)
   {
-    if(!entries_valid.load_acquire())
-      REALM_ASSERT(0, "get_entries called on sparsity map without valid data");
+    REALM_ASSERT(entries_valid.load_acquire());
     return entries;
   }
 
@@ -95,8 +95,7 @@ namespace Realm {
   inline const std::vector<Rect<N, T>> &
   SparsityMapPublicImpl<N, T>::get_approx_rects(void)
   {
-    if(!approx_valid.load_acquire())
-      REALM_ASSERT(0, "get_approx_rects called on sparsity map without valid data");
+    REALM_ASSERT(approx_valid.load_acquire());
     return approx_rects;
   }
 
