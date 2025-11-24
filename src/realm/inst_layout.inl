@@ -278,6 +278,9 @@ namespace Realm {
                 ipl.pieces.begin();
             it2 != ipl.pieces.end(); ++it2) {
 
+          // if((*it2)->layout_type != PieceLayoutTypes::AffineLayoutType)
+          //   continue;
+
           const AffineLayoutPiece<N, T> *affine =
               static_cast<const AffineLayoutPiece<N, T> *>(*it2);
 
@@ -287,9 +290,12 @@ namespace Realm {
           }
 
           // Sort dimensions by stride
-          std::sort(preferred.begin(), preferred.end(), [&](int a, int b) {
-            return affine->strides[a] < affine->strides[b];
-          });
+          // Only sort if N > 1 to avoid unnecessary comparisons
+          if(N > 1) {
+            std::sort(preferred.begin(), preferred.end(), [&](int a, int b) {
+              return affine->strides[a] < affine->strides[b];
+            });
+          }
 
           // Reconcile dimensions orders
           if(preferred.size() > layout->preferred_dim_order.size()) {
@@ -308,7 +314,11 @@ namespace Realm {
       if(layout->preferred_dim_order.size() != N) {
         std::vector<bool> present(N, false);
         for(size_t i = 0; i < layout->preferred_dim_order.size(); i++) {
-          present[layout->preferred_dim_order[i]] = true;
+          int d = layout->preferred_dim_order[i];
+          // Bounds check: only mark valid dimensions
+          if(d < N) {
+            present[d] = true;
+          }
         }
         for(int i = 0; i < N; i++) {
           if(!present[i]) {

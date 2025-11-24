@@ -2056,11 +2056,29 @@ namespace Realm {
       const std::vector<IndirectionInfo *> &indirects, bool force_fortran_order,
       size_t max_stride) const
   {
+    printf("[DEBUG] choose_dim_order called: N=%d, force_fortran=%s, srcs.size()=%zu, dsts.size()=%zu\n",
+           N, force_fortran_order ? "true" : "false", srcs.size(), dsts.size());
+    printf("[DEBUG] IndexSpace bounds: lo=[");
+    for(int i = 0; i < N; i++) {
+      printf("%lld%s", (long long)is.bounds.lo[i], (i < N-1) ? "," : "");
+    }
+    printf("], hi=[");
+    for(int i = 0; i < N; i++) {
+      printf("%lld%s", (long long)is.bounds.hi[i], (i < N-1) ? "," : "");
+    }
+    printf("]\n");
+    fflush(stdout);
+
     if(force_fortran_order) {
+      printf("[DEBUG] Using forced Fortran order\n");
+      fflush(stdout);
       dim_order.resize(N);
       for(int i = 0; i < N; i++) {
         dim_order[i] = i;
       }
+      printf("[DEBUG] choose_dim_order returning (fortran) with dim_order.size()=%zu\n", 
+             dim_order.size());
+      fflush(stdout);
       return;
     }
 
@@ -2103,23 +2121,111 @@ namespace Realm {
        !dst_layout->preferred_dim_order.empty() && src_layout &&
        src_layout->idindexed_fields && !src_layout->preferred_dim_order.empty()) {
 
+      printf("[DEBUG] choose_dim_order: FAST PATH taken for idindexed_fields, N=%d\n", N);
+      fflush(stdout);
+
+      printf("[DEBUG] Before processing - dst_preferred_order: [");
+      for(size_t i = 0; i < dst_layout->preferred_dim_order.size(); i++) {
+        printf("%d%s", dst_layout->preferred_dim_order[i], 
+               (i < dst_layout->preferred_dim_order.size()-1) ? "," : "");
+      }
+      printf("], src_preferred_order: [");
+      for(size_t i = 0; i < src_layout->preferred_dim_order.size(); i++) {
+        printf("%d%s", src_layout->preferred_dim_order[i], 
+               (i < src_layout->preferred_dim_order.size()-1) ? "," : "");
+      }
+      printf("]\n");
+      fflush(stdout);
+
+      printf("[DEBUG] Trivial dimensions: [");
+      for(int i = 0; i < N; i++) {
+        printf("%d:%s%s", i, trivial[i] ? "T" : "F", (i < N-1) ? "," : "");
+      }
+      printf("]\n");
+      fflush(stdout);
+
       for(int d : dst_layout->preferred_dim_order) {
-        if(!trivial[d]) {
+        // Bounds check: only use dimensions that are valid for this IndexSpace
+        if(d < N && !trivial[d]) {
+          printf("[DEBUG] Adding dimension %d from dst_preferred_order\n", d);
+          fflush(stdout);
           dim_order.push_back(d);
+        } else {
+          printf("[DEBUG] Skipping dimension %d from dst (d<N:%s, !trivial:%s)\n", 
+                 d, (d<N)?"true":"false", (!trivial[d])?"true":"false");
+          fflush(stdout);
         }
       }
 
       preferred.clear();
       for(int d : src_layout->preferred_dim_order) {
-        if(!trivial[d]) {
+        // Bounds check: only use dimensions that are valid for this IndexSpace
+        if(d < N && !trivial[d]) {
+          printf("[DEBUG] Adding dimension %d to preferred from src_preferred_order\n", d);
+          fflush(stdout);
           preferred.push_back(d);
+        } else {
+          printf("[DEBUG] Skipping dimension %d from src (d<N:%s, !trivial:%s)\n", 
+                 d, (d<N)?"true":"false", (!trivial[d])?"true":"false");
+          fflush(stdout);
         }
       }
 
+      printf("[DEBUG] Before reconcile - dim_order.size()=%zu, preferred.size()=%zu\n", 
+             dim_order.size(), preferred.size());
+      fflush(stdout);
+
       reconcile_dim_orders(dim_order, preferred);
 
+      printf("[DEBUG] After reconcile - dim_order.size()=%zu, N=%d, dim_order=[", 
+             dim_order.size(), N);
+      for(size_t i = 0; i < dim_order.size(); i++) {
+        printf("%d%s", dim_order[i], (i < dim_order.size()-1) ? "," : "");
+      }
+      printf("]\n");
+      fflush(stdout);
+
+      // if we didn't end up choosing all the dimensions, add the rest back in
+      //  in arbitrary (ascending, currently) order
+      if(dim_order.size() != N) {
+        printf("[DEBUG] *** FIX TRIGGERED: dim_order incomplete (size=%zu < N=%d), filling in missing dimensions\n", 
+               dim_order.size(), N);
+        fflush(stdout);
+        
+        std::vector<bool> present(N, false);
+        for(size_t i = 0; i < dim_order.size(); i++) {
+          present[dim_order[i]] = true;
+        }
+        for(int i = 0; i < N; i++) {
+          if(!present[i]) {
+            printf("[DEBUG] Adding missing dimension %d\n", i);
+            fflush(stdout);
+            dim_order.push_back(i);
+          }
+        }
+#ifdef DEBUG_REALM
+        assert(dim_order.size() == N);
+#endif
+        printf("[DEBUG] After fill-in - dim_order.size()=%zu, dim_order=[", dim_order.size());
+        for(size_t i = 0; i < dim_order.size(); i++) {
+          printf("%d%s", dim_order[i], (i < dim_order.size()-1) ? "," : "");
+        }
+        printf("]\n");
+        fflush(stdout);
+      } else {
+        printf("[DEBUG] dim_order complete (size=%zu == N=%d), no fill-in needed\n", 
+               dim_order.size(), N);
+        fflush(stdout);
+      }
+
+      printf("[DEBUG] choose_dim_order FAST PATH returning with dim_order.size()=%zu\n", 
+             dim_order.size());
+      fflush(stdout);
       return;
     }
+
+    printf("[DEBUG] choose_dim_order: STANDARD PATH (no idindexed fast path)\n");
+    fflush(stdout);
 
     // consider destinations first
     for(size_t i = 0; i < dsts.size(); i++) {
@@ -2145,9 +2251,16 @@ namespace Realm {
       // TODO: ask opinion of indirections?
     }
 
+    printf("[DEBUG] After standard path processing - dim_order.size()=%zu, N=%d\n", 
+           dim_order.size(), N);
+    fflush(stdout);
+
     // if we didn't end up choosing all the dimensions, add the rest back in
     //  in arbitrary (ascending, currently) order
     if(dim_order.size() != N) {
+      printf("[DEBUG] Standard path: filling in missing dimensions (size=%zu < N=%d)\n", 
+             dim_order.size(), N);
+      fflush(stdout);
       std::vector<bool> present(N, false);
       for(size_t i = 0; i < dim_order.size(); i++) {
         present[dim_order[i]] = true;
@@ -2161,6 +2274,14 @@ namespace Realm {
       assert(dim_order.size() == N);
 #endif
     }
+
+    printf("[DEBUG] choose_dim_order STANDARD PATH returning with dim_order.size()=%zu, dim_order=[", 
+           dim_order.size());
+    for(size_t i = 0; i < dim_order.size(); i++) {
+      printf("%d%s", dim_order[i], (i < dim_order.size()-1) ? "," : "");
+    }
+    printf("]\n");
+    fflush(stdout);
   }
 
   template <int N, typename T>
@@ -2169,11 +2290,27 @@ namespace Realm {
                                      const std::vector<int> &dim_order,
                                      std::vector<size_t> &fragments)
   {
+    // Debug: verify dim_order is valid before using it
+    if(dim_order.size() != N) {
+      printf("[ERROR] add_fragments_for_rect: dim_order.size()=%zu but N=%d!\n", 
+             dim_order.size(), N);
+      printf("[ERROR] dim_order contents: [");
+      for(size_t i = 0; i < dim_order.size(); i++) {
+        printf("%d%s", dim_order[i], (i < dim_order.size()-1) ? "," : "");
+      }
+      printf("]\n");
+      fflush(stdout);
+      // This will likely crash, but at least we'll have debug output
+    }
+
     int collapsed[N + 1];
     int breaks = 0;
     collapsed[0] = 1;
     size_t exp_stride = field_size;
     for(int di = 0; di < N; di++) {
+      printf("[DEBUG] add_fragments_for_rect: accessing dim_order[%d] (dim_order.size()=%zu, N=%d)\n", 
+             di, dim_order.size(), N);
+      fflush(stdout);
       int d = dim_order[di];
       // skip trivial dimensions
       if(rect.lo[d] == rect.hi[d]) {
@@ -2211,6 +2348,20 @@ namespace Realm {
       const std::vector<FieldID> &fields, const std::vector<size_t> &fld_sizes,
       std::vector<size_t> &fragments) const
   {
+    printf("[DEBUG] count_fragments called: N=%d, dim_order.size()=%zu, dim_order=[", 
+           N, dim_order.size());
+    for(size_t i = 0; i < dim_order.size(); i++) {
+      printf("%d%s", dim_order[i], (i < dim_order.size()-1) ? "," : "");
+    }
+    printf("], fields.size()=%zu\n", fields.size());
+    fflush(stdout);
+
+    if(dim_order.size() != N) {
+      printf("[ERROR] count_fragments: dim_order.size()=%zu != N=%d - THIS WILL CRASH!\n", 
+             dim_order.size(), N);
+      fflush(stdout);
+    }
+
     RegionInstanceImpl *inst_impl = get_runtime()->get_instance_impl(inst);
 #ifdef DEBUG_REALM
     assert(inst_impl->metadata.is_valid());
@@ -4012,6 +4163,12 @@ namespace Realm {
 
   void TransferDesc::perform_analysis()
   {
+    printf("\n========================================\n");
+    printf("[DEBUG] perform_analysis called\n");
+    printf("[DEBUG] srcs.size()=%zu, dsts.size()=%zu\n", srcs.size(), dsts.size());
+    printf("========================================\n");
+    fflush(stdout);
+    
     // initialize profiling data
     prof_usage.source = Memory::NO_MEMORY;
     prof_usage.target = Memory::NO_MEMORY;
@@ -4056,8 +4213,19 @@ namespace Realm {
     // for now, pick a global dimension ordering
     // TODO: allow this to vary for independent subgraphs (or dependent ones
     //   with transposes in line)
+    printf("[DEBUG] perform_analysis: about to call choose_dim_order\n");
+    fflush(stdout);
+    
     domain->choose_dim_order(dim_order, srcs, dsts, indirects,
                              false /*!force_fortran_order*/, 65536 /*max_stride*/);
+
+    printf("[DEBUG] perform_analysis: choose_dim_order returned, dim_order.size()=%zu, dim_order=[",
+           dim_order.size());
+    for(size_t i = 0; i < dim_order.size(); i++) {
+      printf("%d%s", dim_order[i], (i < dim_order.size()-1) ? "," : "");
+    }
+    printf("]\n");
+    fflush(stdout);
 
     src_fields.resize(srcs.size());
     dst_fields.resize(dsts.size());
@@ -4110,6 +4278,9 @@ namespace Realm {
         Memory src_mem = srcs[i].inst.get_location();
         Memory dst_mem = dsts[i].inst.get_location();
 
+        printf("[DEBUG] perform_analysis: calling count_fragments for reduction (field %zu)\n", i);
+        fflush(stdout);
+
         std::vector<size_t> src_frags, dst_frags;
         domain->count_fragments(srcs[i].inst, dim_order,
                                 std::vector<FieldID>(1, srcs[i].field_id),
@@ -4117,6 +4288,9 @@ namespace Realm {
         domain->count_fragments(dsts[i].inst, dim_order,
                                 std::vector<FieldID>(1, dsts[i].field_id),
                                 std::vector<size_t>(1, dsts[i].size), dst_frags);
+        
+        printf("[DEBUG] count_fragments completed for field %zu\n", i);
+        fflush(stdout);
 
         MemPathInfo path_info;
         bool ok = find_fastest_path(get_runtime()->nodes, path_cache,
@@ -4325,11 +4499,18 @@ namespace Realm {
               field_done[j] = true;
             }
 
+            printf("[DEBUG] perform_analysis: calling count_fragments for copy (field batch %zu, num_fields=%d)\n", 
+                   i, num_fields);
+            fflush(stdout);
+
             std::vector<size_t> src_frags, dst_frags;
             domain->count_fragments(srcs[i].inst, dim_order, src_field_ids,
                                     src_field_sizes, src_frags);
             domain->count_fragments(dsts[i].inst, dim_order, dst_field_ids,
                                     dst_field_sizes, dst_frags);
+            
+            printf("[DEBUG] count_fragments completed for copy field batch %zu\n", i);
+            fflush(stdout);
             // log_new_dma.print() << "fragments: domain=" << *domain
             //                     << " src_inst=" << srcs[i].inst << " frags=" <<
             //                     PrettyVector<size_t>(src_frags)
