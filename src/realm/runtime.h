@@ -118,16 +118,16 @@ namespace Realm {
       // are joining and leaving the Realm as a group. It must perform
       // a barrier across all the processes in the (implicit) group that
       // this process is a part of along with flushing any puts done
-      // before it. It should return true if the barrier succeeds and 
-      // false if it fails. If the barrier fails then it can be expected 
+      // before it. It should return true if the barrier succeeds and
+      // false if it fails. If the barrier fails then it can be expected
       // the Realm bootstrap will also fail. If you provide a bar method,
       // then you must also provide support in the "get" method for two
-      // kinds of special keys. Specifically you must provide support 
-      // for the "realm_rank" key which will return a unique integer 
-      // identifier for this process in its group as well as a "realm_ranks" 
-      // key which will return the total number of processes in the group. 
-      // The integer identifiers for processes must start at zero, be 
-      // contiguous incrementally, and all be strictly less than the 
+      // kinds of special keys. Specifically you must provide support
+      // for the "realm_rank" key which will return a unique integer
+      // identifier for this process in its group as well as a "realm_ranks"
+      // key which will return the total number of processes in the group.
+      // The integer identifiers for processes must start at zero, be
+      // contiguous incrementally, and all be strictly less than the
       // value of "realm_ranks". Note that each group should have its
       // numbering start at zero and grow incrementally. Process numbers
       // can be the same across ranks. Realm will generate a unique
