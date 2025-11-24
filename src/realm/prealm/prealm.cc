@@ -544,7 +544,7 @@ namespace PRealm {
     unsigned long long backtrace_id = profiler.find_backtrace_id(bt);
     unsigned long long provenance_id = 0;
     if(!prov.empty()) {
-      prov = profiler.find_provenance_id(prov);
+      provenance_id = profiler.find_provenance_id(prov);
     }
     event_wait_infos.emplace_back(
         EventWaitInfo{local_proc.id, get_fevent(), wait_on, backtrace_id, provenance_id});
@@ -1578,7 +1578,7 @@ namespace PRealm {
     typedef ::realm_id_t UniqueID;
     typedef long long timestamp_t;
     std::stringstream ss;
-    ss << "FileType: BinaryLegionProf v: " LEGION_PROF_VERSION << std::endl;
+    ss << "FileType: BinaryLegionProf v: " << LEGION_PROF_VERSION << std::endl;
     // Hard code a Legion version that we work with for now
     ss << "d06e529a4b7e945f80a8ec563588e1753d82d056" << std::endl;
 
