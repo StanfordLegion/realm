@@ -102,22 +102,36 @@ namespace Realm {
                   size_t *value_size) = nullptr;
       //////////////////////////////
       // SYNCRONIZATION FUNCTIONS //
-      // (PROVIDE EXACTLY ONE)    //
+      // (PROVIDE ONE OR BOTH)    //
       //////////////////////////////
-      // The "bar" function should be provided in cases of non-elastic
-      // bootstrap when there is a fixed unverse of processes. The bar
-      // function must flush all puts and then perform a barrier across
-      // all the processes in the job. It should return true if the barrier
-      // succeeds and false if it fails. If the barrier fails then it
-      // can be expected the Realm bootstrap will also fail. If you
-      // provide a bar method, then you must also provide support
-      // in the "get" method for two kinds of special keys. Specifically
-      // you must provide support for the "realm_rank" key which will
-      // return a unique integer identifier for this process as well
-      // as a "realm_ranks" key which will return the total number of
-      // processes in the job. The integer identifiers for processes
-      // must start at zero, be contiguous incrementally, and all be
-      // strictly less than the value of "realm_ranks".
+      // For the synchronization callbacks you can provide one or both
+      // functions. All three combinations correspond to different use cases.
+      // * Providing only "bar": this is an inelastic job with a fixed
+      //   universe of processes that will never change.
+      // * Providing only "cas": this is an elastic job with processes
+      //   that will come and go one at a time.
+      // * Providing both: this is an elastic job with processes that
+      //   will come and go as groups. Groups of processes must both
+      //   join and leave together.
+
+      // The "bar" function should be provided in cases where processes
+      // are joining and leaving the Realm as a group. It must perform
+      // a barrier across all the processes in the (implicit) group that
+      // this process is a part of along with flushing any puts done
+      // before it. It should return true if the barrier succeeds and 
+      // false if it fails. If the barrier fails then it can be expected 
+      // the Realm bootstrap will also fail. If you provide a bar method,
+      // then you must also provide support in the "get" method for two
+      // kinds of special keys. Specifically you must provide support 
+      // for the "realm_rank" key which will return a unique integer 
+      // identifier for this process in its group as well as a "realm_ranks" 
+      // key which will return the total number of processes in the group. 
+      // The integer identifiers for processes must start at zero, be 
+      // contiguous incrementally, and all be strictly less than the 
+      // value of "realm_ranks". Note that each group should have its
+      // numbering start at zero and grow incrementally. Process numbers
+      // can be the same across ranks. Realm will generate a unique
+      // address space for this process as part of the bootstrap.
       bool (*bar)(void) = nullptr;
       // The "cas" function should be provided in cases of elastic
       // bootstrap when an arbitrary number of processes can join or
