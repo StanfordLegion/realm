@@ -85,40 +85,56 @@ namespace Realm {
                   size_t value_size) = nullptr;
       // The "get" function must retrieve the value associated with the given key
       // if it can be found. Realm will call this function with the value buffer
-      // already allocated with the given value_size. If the key is found and the
-      // value is the correct size for the value buffer, then the callee should
-      // copy the value into the value buffer and return true indicating that
-      // the call succeeded. If the key cannot be found or if the value found by
-      // the callee is different from the value size, then function should
-      // return false indicating that the callbcak failed. If the callback fails
-      // then the network initialization might not succeed.
+      // already allocated with the value_size populated with the maximum size
+      // of the value that can be returned. If the key is found and the value
+      // size is less than or equal to the value_size passed in by Realm, then
+      // the value buffer should be populated and the value_size updated with
+      // the actual size of the value found. If the value is not found or is
+      // too large for the specified buffer then value_size should be set to
+      // zero. If for any reason the call fails then return value should be
+      // false. Not finding a key should still be considered a success as in
+      // some cases the backend might be able to cope with not finding some
+      // keys. Returning false should only occur if the function call fails
+      // in some way that makes it impossible to know if the key exists or
+      // not. If the callback fails then the network initialization might
+      // not succeed.
       bool (*get)(const void *key, size_t key_size, void *value,
-                  size_t value_size) = nullptr;
-      ////////////////////////
-      // OPTIONAL FUNCTIONS //
-      ////////////////////////
-      // You can pass in an optional buffer of data to uniquely identify this
-      // process to other processes as part of the bootstrap. Realm will make
-      // a copy of this data if provided during the network_init call so it
-      // you do not need to keep it alive longer than that.
-      const void *unique_data = nullptr;
-      size_t unique_data_size = 0;
-      // This callback is an optional callback that will be invoked any time a
-      // process joins the Realm. It will be told of the assigned Realm
-      // AddressSpace given to the process along with the unique data for the
-      // process if it was provided (might be null). Note that you will also
-      // get a callback for yourself upon joining as well. This call back is
-      // only done *AFTER* the joining process has successfully joined meaning
-      // that this callback marks when it is safe to start referring to the
-      // new address space and all of the handles associated with it.
-      void (*join)(AddressSpace space, const void *data, size_t size) = nullptr;
-      // This callback is performed any time a process leaves the Realm.
-      // It will be told of the AddressSpace for the process as well as the
-      // unique data associated with the process that is leaving. This
-      // callback is done *BEFORE* the process leaves the Realm. After this
-      // callback returns it is no longer safe to refer to handles from the
-      // address space that is leaving in the process where the callback occurs.
-      void (*leave)(AddressSpace space, const void *data, size_t size) = nullptr;
+                  size_t *value_size) = nullptr;
+      //////////////////////////////
+      // SYNCRONIZATION FUNCTIONS //
+      // (PROVIDE EXACTLY ONE)    //
+      //////////////////////////////
+      // The "bar" function should be provided in cases of non-elastic
+      // bootstrap when there is a fixed unverse of processes. The bar
+      // function must flush all puts and then perform a barrier across
+      // all the processes in the job. It should return true if the barrier
+      // succeeds and false if it fails. If the barrier fails then it
+      // can be expected the Realm bootstrap will also fail. If you
+      // provide a bar method, then you must also provide support
+      // in the "get" method for two kinds of special keys. Specifically
+      // you must provide support for the "realm_rank" key which will
+      // return a unique integer identifier for this process as well
+      // as a "realm_ranks" key which will return the total number of
+      // processes in the job. The integer identifiers for processes
+      // must start at zero, be contiguous incrementally, and all be
+      // strictly less than the value of "realm_ranks".
+      bool (*bar)(void) = nullptr;
+      // The "cas" function should be provided in cases of elastic
+      // bootstrap when an arbitrary number of processes can join or
+      // leave the Realm during its execution. The cas function should
+      // perform an atomic compare-and-swap operation on a key by
+      // checking that the key matches a particular value and if it
+      // does then updating it with the desired value in a single atomic
+      // operation. If the value of the key does not match the expected
+      // result, the call should fail, but return the updated expected
+      // value and size as long as it is less than or equal to the
+      // original expected size. If the new value size is larger than
+      // the expected size, then only the expected_size should be updated.
+      // It is possible for this call to fail and for the bootstrap to
+      // continue, although a large number of repetitive failures will
+      // likely lead to a timeout.
+      bool (*cas)(const void *key, size_t key_size, void *expected, size_t *expected_size,
+                  const void *desired, size_t desired_size) = nullptr;
     };
     bool network_init(const NetworkVtable &vtable);
 
