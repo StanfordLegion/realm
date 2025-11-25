@@ -2117,11 +2117,29 @@ namespace Realm {
       src_layout = checked_cast<const InstanceLayout<N, T> *>(src_impl->metadata.layout);
     }
 
-    if(dst_layout && dst_layout->idindexed_fields &&
-       !dst_layout->preferred_dim_order.empty() && src_layout &&
-       src_layout->idindexed_fields && !src_layout->preferred_dim_order.empty()) {
+    // Check if both layouts support the fast path optimization
+    bool layouts_support_fastpath = (dst_layout && dst_layout->idindexed_fields &&
+                                      !dst_layout->preferred_dim_order.empty() && 
+                                      src_layout && src_layout->idindexed_fields && 
+                                      !src_layout->preferred_dim_order.empty());
+    
+    // Only use fast path for sufficiently large transfers
+    // Small transfers (especially single points) have too much overhead
+    const size_t MIN_VOLUME_FOR_FASTPATH = 1024; // Tunable threshold
+    size_t transfer_volume = is.volume();
+    bool volume_justifies_fastpath = (transfer_volume >= MIN_VOLUME_FOR_FASTPATH);
+    
+    if(layouts_support_fastpath) {
+      printf("[DEBUG] Fast path candidate: volume=%zu, threshold=%zu, use_fastpath=%s\n",
+             transfer_volume, MIN_VOLUME_FOR_FASTPATH, 
+             volume_justifies_fastpath ? "YES" : "NO");
+      fflush(stdout);
+    }
 
-      printf("[DEBUG] choose_dim_order: FAST PATH taken for idindexed_fields, N=%d\n", N);
+    if(layouts_support_fastpath && volume_justifies_fastpath) {
+
+      printf("[DEBUG] choose_dim_order: FAST PATH taken for idindexed_fields, N=%d, volume=%zu\n", 
+             N, transfer_volume);
       fflush(stdout);
 
       printf("[DEBUG] Before processing - dst_preferred_order: [");
@@ -2224,7 +2242,12 @@ namespace Realm {
       return;
     }
 
-    printf("[DEBUG] choose_dim_order: STANDARD PATH (no idindexed fast path)\n");
+    if(layouts_support_fastpath && !volume_justifies_fastpath) {
+      printf("[DEBUG] choose_dim_order: STANDARD PATH (fast path skipped due to small volume=%zu < threshold=%zu)\n",
+             transfer_volume, MIN_VOLUME_FOR_FASTPATH);
+    } else {
+      printf("[DEBUG] choose_dim_order: STANDARD PATH (no idindexed fast path)\n");
+    }
     fflush(stdout);
 
     // consider destinations first
