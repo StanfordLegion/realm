@@ -1150,7 +1150,7 @@ namespace PRealm {
   }
 
   inline void prealm_time_range(long long start_time_in_ns, const std::string_view &name,
-                                Event external)
+                                Realm::Event external)
   {
     ThreadProfiler::get_thread_profiler().record_time_range(start_time_in_ns, name,
                                                             external);
