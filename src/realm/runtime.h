@@ -122,7 +122,7 @@ namespace Realm {
       // false if it fails. If the barrier fails then it can be expected
       // the Realm bootstrap will also fail. If you provide a bar method,
       // then you must also provide support in the "get" method for two
-      // special keys. Specifically you must provide support for the 
+      // special keys. Specifically you must provide support for the
       // "realm_rank" key which will return a unique integer identifier
       // for this process in its group as well as a "realm_ranks"
       // key which will return the total number of processes in the group.
