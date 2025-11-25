@@ -122,16 +122,16 @@ namespace Realm {
       // false if it fails. If the barrier fails then it can be expected
       // the Realm bootstrap will also fail. If you provide a bar method,
       // then you must also provide support in the "get" method for two
-      // kinds of special keys. Specifically you must provide support
-      // for the "realm_rank" key which will return a unique integer
-      // identifier for this process in its group as well as a "realm_ranks"
+      // special keys. Specifically you must provide support for the 
+      // "realm_rank" key which will return a unique integer identifier
+      // for this process in its group as well as a "realm_ranks"
       // key which will return the total number of processes in the group.
       // The integer identifiers for processes must start at zero, be
       // contiguous incrementally, and all be strictly less than the
       // value of "realm_ranks". Note that each group should have its
       // numbering start at zero and grow incrementally. Process numbers
-      // can be the same across ranks. Realm will generate a unique
-      // address space for this process as part of the bootstrap.
+      // can be the same across groups. Realm will generate a unique
+      // address space for each process as part of the bootstrap.
       bool (*bar)(void) = nullptr;
       // The "cas" function should be provided in cases of elastic
       // bootstrap when an arbitrary number of processes can join or
