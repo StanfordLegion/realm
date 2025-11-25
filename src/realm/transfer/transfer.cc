@@ -2070,14 +2070,18 @@ namespace Realm {
     fflush(stdout);
 
     if(force_fortran_order) {
-      printf("[DEBUG] Using forced Fortran order\n");
+      printf("[DEBUG] choose_dim_order: Using FORCED FORTRAN order (skipping all optimizations)\n");
       fflush(stdout);
       dim_order.resize(N);
       for(int i = 0; i < N; i++) {
         dim_order[i] = i;
       }
-      printf("[DEBUG] choose_dim_order returning (fortran) with dim_order.size()=%zu\n", 
+      printf("[DEBUG] choose_dim_order: FORTRAN PATH returning with dim_order.size()=%zu, dim_order=[", 
              dim_order.size());
+      for(size_t i = 0; i < dim_order.size(); i++) {
+        printf("%d%s", dim_order[i], (i < dim_order.size()-1) ? "," : "");
+      }
+      printf("]\n");
       fflush(stdout);
       return;
     }
@@ -2122,24 +2126,15 @@ namespace Realm {
                                       !dst_layout->preferred_dim_order.empty() && 
                                       src_layout && src_layout->idindexed_fields && 
                                       !src_layout->preferred_dim_order.empty());
-    
-    // Only use fast path for sufficiently large transfers
-    // Small transfers (especially single points) have too much overhead
-    const size_t MIN_VOLUME_FOR_FASTPATH = 1024; // Tunable threshold
-    size_t transfer_volume = is.volume();
-    bool volume_justifies_fastpath = (transfer_volume >= MIN_VOLUME_FOR_FASTPATH);
-    
+
     if(layouts_support_fastpath) {
-      printf("[DEBUG] Fast path candidate: volume=%zu, threshold=%zu, use_fastpath=%s\n",
-             transfer_volume, MIN_VOLUME_FOR_FASTPATH, 
-             volume_justifies_fastpath ? "YES" : "NO");
+      printf("[DEBUG] choose_dim_order: idindexed_fields FAST PATH available\n");
       fflush(stdout);
     }
 
-    if(layouts_support_fastpath && volume_justifies_fastpath) {
+    if(layouts_support_fastpath) {
 
-      printf("[DEBUG] choose_dim_order: FAST PATH taken for idindexed_fields, N=%d, volume=%zu\n", 
-             N, transfer_volume);
+      printf("[DEBUG] choose_dim_order: FAST PATH taken for idindexed_fields, N=%d\n", N);
       fflush(stdout);
 
       printf("[DEBUG] Before processing - dst_preferred_order: [");
@@ -2242,12 +2237,7 @@ namespace Realm {
       return;
     }
 
-    if(layouts_support_fastpath && !volume_justifies_fastpath) {
-      printf("[DEBUG] choose_dim_order: STANDARD PATH (fast path skipped due to small volume=%zu < threshold=%zu)\n",
-             transfer_volume, MIN_VOLUME_FOR_FASTPATH);
-    } else {
-      printf("[DEBUG] choose_dim_order: STANDARD PATH (no idindexed fast path)\n");
-    }
+    printf("[DEBUG] choose_dim_order: STANDARD PATH (no idindexed fast path available)\n");
     fflush(stdout);
 
     // consider destinations first
@@ -4236,11 +4226,20 @@ namespace Realm {
     // for now, pick a global dimension ordering
     // TODO: allow this to vary for independent subgraphs (or dependent ones
     //   with transposes in line)
-    printf("[DEBUG] perform_analysis: about to call choose_dim_order\n");
+    
+    // For single-point transfers (volume == 1), skip the expensive dimension
+    // ordering computation and just use simple Fortran order - any ordering
+    // works for a single point, so no need to compute optimal layout
+    size_t transfer_volume = domain->volume();
+    bool force_fortran = (transfer_volume == 1);
+    
+    printf("[DEBUG] perform_analysis: transfer_volume=%zu, force_fortran=%s\n",
+           transfer_volume,
+           force_fortran ? "YES (single-point transfer)" : "NO (multi-point transfer)");
     fflush(stdout);
     
     domain->choose_dim_order(dim_order, srcs, dsts, indirects,
-                             false /*!force_fortran_order*/, 65536 /*max_stride*/);
+                             force_fortran, 65536 /*max_stride*/);
 
     printf("[DEBUG] perform_analysis: choose_dim_order returned, dim_order.size()=%zu, dim_order=[",
            dim_order.size());
