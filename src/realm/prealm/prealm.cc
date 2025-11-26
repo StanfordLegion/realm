@@ -1966,6 +1966,54 @@ namespace PRealm {
     unsigned variant_id = Processor::NO_KIND;
     pr_fwrite(f, (char *)&(variant_id), sizeof(variant_id));
     pr_fwrite(f, task_name, strlen(task_name) + 1);
+    // Finally record our internal task IDs
+    for(Processor::TaskFuncID task_id = CALLBACK_TASK_ID; task_id <= SHUTDOWN_TASK_ID;
+        task_id++) {
+      const char *task_name = nullptr;
+      switch(task_id) {
+      case CALLBACK_TASK_ID:
+      {
+        task_name = "PRealm Callback Task";
+        break;
+      }
+      case WRAPPER_TASK_ID:
+      {
+        task_name = "PRealm Wrapper Task";
+        break;
+      }
+      case TRIGGER_TASK_ID:
+      {
+        task_name = "PRealm Event Trigger Task";
+        break;
+      }
+      case EXTERNAL_TASK_ID:
+      {
+        task_name = "PRealm External Event Trigger Task";
+        break;
+      }
+      case SHUTDOWN_TASK_ID:
+      {
+        task_name = "PRealm Shutdown Task";
+        break;
+      }
+      default:
+        std::abort();
+      }
+      int ID = TASK_KIND_ID;
+      pr_fwrite(f, (char *)&ID, sizeof(ID));
+      pr_fwrite(f, (char *)&(task_id), sizeof(task_id));
+      pr_fwrite(f, task_name, strlen(task_name) + 1);
+      bool overwrite = false;
+      pr_fwrite(f, (char *)&(overwrite), sizeof(overwrite));
+      for(unsigned variant_id = Processor::NO_KIND + 1; variant_id <= Processor::PY_PROC;
+          variant_id++) {
+        ID = TASK_VARIANT_ID;
+        pr_fwrite(f, (char *)&ID, sizeof(ID));
+        pr_fwrite(f, (char *)&(task_id), sizeof(task_id));
+        pr_fwrite(f, (char *)&(variant_id), sizeof(variant_id));
+        pr_fwrite(f, task_name, strlen(task_name) + 1);
+      }
+    }
   }
 
   void Profiler::serialize(const ThreadProfiler::ProcDesc &proc_desc) const
