@@ -56,6 +56,35 @@
 
 #define REALM_HASH_TOKEN(x) Realm::hash_fnv1a(#x, sizeof(#x) - 1)
 
+// REALM_ASSERT(cond) - abort program if 'cond' is not true
+#ifdef NDEBUG
+#if(defined(__CUDACC__) && defined(__CUDA_ARCH__)) ||                                    \
+    (defined(__HIPCC__) && defined(__HIP_DEVICE_COMPILE__))
+#define REALM_ASSERT(cond)                                                               \
+  do {                                                                                   \
+    if(!(cond)) {                                                                        \
+      __trap();                                                                          \
+    }                                                                                    \
+  } while(0)
+#else
+namespace Realm {
+  class Logger;
+  extern Logger log_runtime;
+} // namespace Realm
+
+#define REALM_ASSERT(cond)                                                               \
+  do {                                                                                   \
+    if(!(cond)) {                                                                        \
+      Realm::log_runtime.fatal("Assertion failed: (%s), at %s:%d", #cond, __FILE__,      \
+                               __LINE__);                                                \
+      abort();                                                                           \
+    }                                                                                    \
+  } while(0)
+#endif
+#else
+#define REALM_ASSERT(cond) assert(cond)
+#endif
+
 namespace Realm {
 
   // While this is recurisve, this is a compile-time
