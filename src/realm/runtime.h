@@ -73,31 +73,35 @@ namespace Realm {
       ////////////////////////
       // REQUIRED FUNCTIONS //
       ////////////////////////
-      // The "put" function must store a global key value pair in a way that it
-      // can be retrieved from any other process using a corresponding get call.
-      // The function is passed a buffer containing a key and buffer containing
-      // a value. The implementation must copy these values before returning from
-      // the callback if it needs to persist them as they are not guaranteed to
-      // live longer than the function call. The function should return true if
-      // the put succeeds and false if it doesn't. If the call fails then it is
-      // likely that the network initialization might not succeed.
+      /**
+       * The "put" function must store a global key value pair in a way that it
+       * can be retrieved from any other process using a corresponding get call.
+       * The function is passed a buffer containing a key and buffer containing
+       * a value. The implementation must copy these values before returning from
+       * the callback if it needs to persist them as they are not guaranteed to
+       * live longer than the function call. The function should return true if
+       * the put succeeds and false if it doesn't. If the call fails then it is
+       * likely that the network initialization might not succeed.
+       */
       bool (*put)(const void *key, size_t key_size, const void *value,
                   size_t value_size) = nullptr;
-      // The "get" function must retrieve the value associated with the given key
-      // if it can be found. Realm will call this function with the value buffer
-      // already allocated with the value_size populated with the maximum size
-      // of the value that can be returned. If the key is found and the value
-      // size is less than or equal to the value_size passed in by Realm, then
-      // the value buffer should be populated and the value_size updated with
-      // the actual size of the value found. If the value is not found or is
-      // too large for the specified buffer then value_size should be set to
-      // zero. If for any reason the call fails then return value should be
-      // false. Not finding a key should still be considered a success as in
-      // some cases the backend might be able to cope with not finding some
-      // keys. Returning false should only occur if the function call fails
-      // in some way that makes it impossible to know if the key exists or
-      // not. If the callback fails then the network initialization might
-      // not succeed.
+      /**
+       * The "get" function must retrieve the value associated with the given key
+       * if it can be found. Realm will call this function with the value buffer
+       * already allocated with the value_size populated with the maximum size
+       * of the value that can be returned. If the key is found and the value
+       * size is less than or equal to the value_size passed in by Realm, then
+       * the value buffer should be populated and the value_size updated with
+       * the actual size of the value found. If the value is not found or is
+       * too large for the specified buffer then value_size should be set to
+       * zero. If for any reason the call fails then return value should be
+       * false. Not finding a key should still be considered a success as in
+       * some cases the backend might be able to cope with not finding some
+       * keys. Returning false should only occur if the function call fails
+       * in some way that makes it impossible to know if the key exists or
+       * not. If the callback fails then the network initialization might
+       * not succeed.
+       */
       bool (*get)(const void *key, size_t key_size, void *value,
                   size_t *value_size) = nullptr;
       //////////////////////////////
@@ -113,40 +117,43 @@ namespace Realm {
       // * Providing both: this is an elastic job with processes that
       //   will come and go as groups. Groups of processes must both
       //   join and leave together.
-
-      // The "bar" function should be provided in cases where processes
-      // are joining and leaving the Realm as a group. It must perform
-      // a barrier across all the processes in the (implicit) group that
-      // this process is a part of along with flushing any puts done
-      // before it. It should return true if the barrier succeeds and
-      // false if it fails. If the barrier fails then it can be expected
-      // the Realm bootstrap will also fail. If you provide a bar method,
-      // then you must also provide support in the "get" method for two
-      // special keys. Specifically you must provide support for the
-      // "realm_rank" key which will return a unique integer identifier
-      // for this process in its group as well as a "realm_ranks"
-      // key which will return the total number of processes in the group.
-      // The integer identifiers for processes must start at zero, be
-      // contiguous incrementally, and all be strictly less than the
-      // value of "realm_ranks". Note that each group should have its
-      // numbering start at zero and grow incrementally. Process numbers
-      // can be the same across groups. Realm will generate a unique
-      // address space for each process as part of the bootstrap.
+      /**
+       * The "bar" function should be provided in cases where processes
+       * are joining and leaving the Realm as a group. It must perform
+       * a barrier across all the processes in the (implicit) group that
+       * this process is a part of along with flushing any puts done
+       * before it. It should return true if the barrier succeeds and
+       * false if it fails. If the barrier fails then it can be expected
+       * the Realm bootstrap will also fail. If you provide a bar method,
+       * then you must also provide support in the "get" method for two
+       * special keys. Specifically you must provide support for the
+       * "realm_rank" key which will return a unique integer identifier
+       * for this process in its group as well as a "realm_ranks"
+       * key which will return the total number of processes in the group.
+       * The integer identifiers for processes must start at zero, be
+       * contiguous incrementally, and all be strictly less than the
+       * value of "realm_ranks". Note that each group should have its
+       * numbering start at zero and grow incrementally. Process numbers
+       * can be the same across groups. Realm will generate a unique
+       * address space for each process as part of the bootstrap.
+       */
       bool (*bar)(void) = nullptr;
-      // The "cas" function should be provided in cases of elastic
-      // bootstrap when an arbitrary number of processes can join or
-      // leave the Realm during its execution. The cas function should
-      // perform an atomic compare-and-swap operation on a key by
-      // checking that the key matches a particular value and if it
-      // does then updating it with the desired value in a single atomic
-      // operation. If the value of the key does not match the expected
-      // result, the call should fail, but return the updated expected
-      // value and size as long as it is less than or equal to the
-      // original expected size. If the new value size is larger than
-      // the expected size, then only the expected_size should be updated.
-      // It is possible for this call to fail and for the bootstrap to
-      // continue, although a large number of repetitive failures will
-      // likely lead to a timeout.
+      /**
+       * The "cas" function should be provided in cases of elastic
+       * bootstrap when an arbitrary number of processes can join or
+       * leave the Realm during its execution. The cas function should
+       * perform an atomic compare-and-swap operation on a key by
+       * checking that the key matches a particular value and if it
+       * does then updating it with the desired value in a single atomic
+       * operation. If the value of the key does not match the expected
+       * result, the call should fail, but return the updated expected
+       * value and size as long as it is less than or equal to the
+       * original expected size. If the new value size is larger than
+       * the expected size, then only the expected_size should be updated.
+       * It is possible for this call to fail and for the bootstrap to
+       * continue, although a large number of repetitive failures will
+       * likely lead to a timeout.
+       */
       bool (*cas)(const void *key, size_t key_size, void *expected, size_t *expected_size,
                   const void *desired, size_t desired_size) = nullptr;
     };
