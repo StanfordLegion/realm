@@ -19,6 +19,8 @@
 #define REALM_TRANSFER_UTILS_H
 
 #include "realm/point.h"
+#include "realm/inst_layout.h"
+#include <unordered_map>
 
 namespace Realm {
   // finds the largest subrectangle of 'domain' that starts with 'start',
@@ -47,6 +49,32 @@ namespace Realm {
   bool compute_target_subrect(const Rect<N, T> &layout_bounds, const Rect<N, T> &cur_rect,
                               Point<N, T> &cur_point, Rect<N, T> &target_subrect,
                               const int *dim_order);
+
+  /**
+   * @brief Computes compact affine addressing information for a subrectangle.
+   *
+   * Given an affine layout piece and a target subrectangle, this function determines
+   * the base offset, total number of bytes, and dimension stride/count pairs for
+   * efficient memory access. It compactly represents contiguous dimensions and
+   * generates stride-based indexing information for the remaining ones.
+   *
+   * @tparam N Number of dimensions in the layout.
+   * @tparam T Coordinate type (e.g., int, long).
+   *
+   * @param affine Pointer to the affine layout piece being queried.
+   * @param subrect Subrectangle to compute addressing for.
+   * @param dim_order Ordering of dimensions to compact/iterate over.
+   * @param[out] total_bytes Total bytes represented by the subrect.
+   * @param[out] contig_bytes Number of contiguous bytes in the compacted dimensions.
+   * @param[out] count_strides Output stride/count pairs indexed by dimension.
+   *                            count_strides[i][0] = count, count_strides[i][1] = stride.
+   */
+  template <int N, typename T>
+  inline int
+  compact_affine_dims(const AffineLayoutPiece<N, T> *affine, const Rect<N, T> &subrect,
+                      const int dim_order[N], size_t field_size, size_t &total_bytes,
+                      size_t &contig_bytes,
+                      std::unordered_map<int, std::pair<size_t, size_t>> &count_strides);
 
 } // namespace Realm
 

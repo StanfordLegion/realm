@@ -69,8 +69,8 @@ template <typename T, typename Offset_t = size_t>
 static __device__ inline void
 memcpy_kernel_transpose(Realm::Cuda::MemcpyTransposeInfo<Offset_t> info, T *tile)
 {
-  __restrict__ T *out_base = reinterpret_cast<T *>(info.dst);
-  __restrict__ T *in_base = reinterpret_cast<T *>(info.src);
+  T* __restrict__ out_base = reinterpret_cast<T *>(info.dst);
+  T* __restrict__ in_base = reinterpret_cast<T *>(info.src);
   const Offset_t tile_size = info.tile_size;
 
   const Offset_t tidx = threadIdx.x % tile_size;
@@ -148,8 +148,8 @@ memcpy_affine_batch(Realm::Cuda::AffineCopyPair<N, Offset_t> *info,
   for(size_t rect = 0; rect < nrects; rect++) {
     Realm::Cuda::AffineCopyPair<N, Offset_t> &current_info = info[rect];
     const Offset_t vol = current_info.volume;
-    __restrict__ T *dst = reinterpret_cast<T *>(current_info.dst.addr);
-    __restrict__ T *src = reinterpret_cast<T *>(current_info.src.addr);
+    T* __restrict__ dst = reinterpret_cast<T *>(current_info.dst.addr);
+    T* __restrict__ src = reinterpret_cast<T *>(current_info.src.addr);
 
     while(offset < vol) {
       T tmp[MAX_UNROLL];
@@ -208,8 +208,8 @@ static __device__ inline void
 memcpy_indirect_points(Realm::Cuda::MemcpyIndirectInfo<3, Offset_t> info)
 {
   Offset_t offset = blockIdx.x * blockDim.x + threadIdx.x;
-  __restrict__ T *dst_ind_base = reinterpret_cast<T *>(info.dst_ind_addr);
-  __restrict__ T *src_ind_base = reinterpret_cast<T *>(info.src_ind_addr);
+  T* __restrict__ dst_ind_base = reinterpret_cast<T *>(info.dst_ind_addr);
+  T* __restrict__ src_ind_base = reinterpret_cast<T *>(info.src_ind_addr);
 
   Offset_t chunks = info.field_size / sizeof(DT);
 
@@ -235,9 +235,9 @@ memcpy_indirect_points(Realm::Cuda::MemcpyIndirectInfo<3, Offset_t> info)
       dst_index = index;
     }
 
-    __restrict__ DT *dst =
+    DT* __restrict__ dst =
         reinterpret_cast<DT *>(info.dst_addr + dst_index * info.field_size);
-    __restrict__ DT *src =
+    DT* __restrict__ src =
         reinterpret_cast<DT *>(info.src_addr + src_index * info.field_size);
     for(Offset_t chunk_idx = 0; chunk_idx < chunks; chunk_idx++) {
       dst[chunk_idx] = src[chunk_idx];
@@ -255,7 +255,7 @@ memfill_affine_batch(const Realm::Cuda::AffineFillInfo<N, Offset_t>& info)
   for(size_t rect = 0; rect < info.num_rects; rect++) {
     const Realm::Cuda::AffineFillRect<N, Offset_t> &current_info = info.subrects[rect];
     const Offset_t vol = current_info.volume;
-    __restrict__ T *addr = reinterpret_cast<T *>(current_info.addr);
+    T* __restrict__ addr = reinterpret_cast<T *>(current_info.addr);
     while(offset < vol) {
       unsigned i = 0;
 #pragma unroll

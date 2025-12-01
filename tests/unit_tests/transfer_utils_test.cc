@@ -283,3 +283,113 @@ std::vector<ComputeTargetSubrectTestVariant> allTestCases()
 
 INSTANTIATE_TEST_SUITE_P(TestAllDimensions, ComputeTargetSubrectTest,
                          testing::ValuesIn(allTestCases()));
+
+// Helper to build an AffineLayoutPiece with given strides
+template <int N>
+static AffineLayoutPiece<N, int> make_affine(const Point<N, size_t> &strides)
+{
+  AffineLayoutPiece<N, int> piece;
+  piece.strides = strides;
+  piece.offset = 0;
+  // set trivial bounds just to satisfy invariants (not used by function)
+  piece.bounds = Rect<N, int>(Point<N, int>::ZEROES(), Point<N, int>::ONES());
+  return piece;
+}
+
+// Test 1: fully contiguous 2‑D row‑major layout
+TEST(FlattenAffineDimensionsTest, Contiguous2D)
+{
+  constexpr int N = 2;
+  const size_t field_size = 4; // 4 bytes per element
+  const int dim_order[N] = {0, 1};
+
+  /*  layout: strides = {4, 16}  (row major for 4 columns)
+   *  subrect: 4 x 5 -> total 80 bytes are completely contiguous
+   */
+  AffineLayoutPiece<N, int> affine =
+      make_affine<N>(Point<2, size_t>(field_size, field_size * 4));
+
+  Rect<N, int> subrect(Point<2, int>(0, 0), Point<2, int>(3, 4)); // 4x5 rectangle
+
+  size_t total_bytes = 0;
+  size_t contig_bytes = 0;
+  std::unordered_map<int, std::pair<size_t, size_t>> count_strides;
+
+  int ndims = compact_affine_dims<N>(&affine, subrect, dim_order, field_size, total_bytes,
+                                     contig_bytes, count_strides);
+
+  EXPECT_EQ(ndims, 1);                // flattened to one contiguous dim
+  EXPECT_EQ(contig_bytes, 4 * 4 * 5); // 80
+  EXPECT_EQ(total_bytes, contig_bytes);
+  EXPECT_TRUE(count_strides.empty());
+}
+
+// Test 2: 2‑D layout with padding between rows (non‑contiguous second dim)
+TEST(FlattenAffineDimensionsTest, Padded2D)
+{
+  constexpr int N = 2;
+  const size_t field_size = 4;
+  const int dim_order[N] = {0, 1};
+
+  /*  layout: stride0 = 4         (element)
+   *          stride1 = 64        (padded row)
+   *  subrect counts: 4 cols x 5 rows
+   *  Expect: contiguous along dim0 only (16 bytes)
+   *          then 5 rows via stride 64  => total 80 bytes
+   */
+  AffineLayoutPiece<N, int> affine = make_affine<N>(Point<2, size_t>(field_size, 64));
+
+  Rect<N, int> subrect(Point<2, int>(0, 0), Point<2, int>(3, 4));
+
+  size_t total_bytes = 0;
+  size_t contig_bytes = 0;
+  std::unordered_map<int, std::pair<size_t, size_t>> count_strides;
+
+  int ndims = compact_affine_dims<N>(&affine, subrect, dim_order, field_size, total_bytes,
+                                     contig_bytes, count_strides);
+
+  EXPECT_EQ(ndims, 2);
+  EXPECT_EQ(contig_bytes, field_size * 4);  // 16
+  EXPECT_EQ(total_bytes, contig_bytes * 5); // 80
+  ASSERT_EQ(count_strides.size(), 1u);
+  auto it = count_strides.find(1);
+  ASSERT_NE(it, count_strides.end());
+  EXPECT_EQ(it->second.first, 5u);   // count
+  EXPECT_EQ(it->second.second, 64u); // stride
+}
+
+#if REALM_MAX_DIM > 2
+// Test 3: 3‑D layout where rows padded but planes contiguous with row padding
+TEST(FlattenAffineDimensionsTest, Grouped3D)
+{
+  constexpr int N = 3;
+  const size_t field_size = 4;
+  const int dim_order[N] = {0, 1, 2};
+
+  /*  counts  : dim0=4, dim1=5, dim2=6
+   *  strides : 4 (elem), 64 (row), 64*5=320 (plane)
+   *  Expect   : contig dim0 only (16 bytes)
+   *             dims1+2 grouped: count=5*6=30, stride=64
+   */
+  Point<3, size_t> strides(field_size, 64, 64 * 5);
+  AffineLayoutPiece<N, int> affine = make_affine<3>(strides);
+
+  Rect<3, int> subrect(Point<3, int>(0, 0, 0), Point<3, int>(3, 4, 5));
+
+  size_t total_bytes = 0;
+  size_t contig_bytes = 0;
+  std::unordered_map<int, std::pair<size_t, size_t>> count_strides;
+
+  int ndims = compact_affine_dims<N>(&affine, subrect, dim_order, field_size, total_bytes,
+                                     contig_bytes, count_strides);
+
+  EXPECT_EQ(ndims, 2);
+  EXPECT_EQ(contig_bytes, field_size * 4);   // 16
+  EXPECT_EQ(total_bytes, contig_bytes * 30); // 480
+  ASSERT_EQ(count_strides.size(), 1u);
+  auto it = count_strides.find(1);
+  ASSERT_NE(it, count_strides.end());
+  EXPECT_EQ(it->second.first, 30u);  // count = 5*6
+  EXPECT_EQ(it->second.second, 64u); // stride
+}
+#endif
