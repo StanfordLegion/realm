@@ -2099,9 +2099,13 @@ namespace Realm {
       src_layout = checked_cast<const InstanceLayout<N, T> *>(src_impl->metadata.layout);
     }
 
-    if(dst_layout && dst_layout->idindexed_fields &&
-       !dst_layout->preferred_dim_order.empty() && src_layout &&
-       src_layout->idindexed_fields && !src_layout->preferred_dim_order.empty()) {
+    // Check if both layouts support the fast path optimization
+    bool layouts_support_fastpath =
+        (dst_layout && dst_layout->idindexed_fields &&
+         !dst_layout->preferred_dim_order.empty() && src_layout &&
+         src_layout->idindexed_fields && !src_layout->preferred_dim_order.empty());
+
+    if(layouts_support_fastpath) {
 
       for(int d : dst_layout->preferred_dim_order) {
         if(!trivial[d]) {
@@ -2117,6 +2121,23 @@ namespace Realm {
       }
 
       reconcile_dim_orders(dim_order, preferred);
+
+      // if we didn't end up choosing all the dimensions, add the rest back in
+      //  in ascending order
+      if(dim_order.size() != N) {
+        std::vector<bool> present(N, false);
+        for(size_t i = 0; i < dim_order.size(); i++) {
+          present[dim_order[i]] = true;
+        }
+        for(int i = 0; i < N; i++) {
+          if(!present[i]) {
+            dim_order.push_back(i);
+          }
+        }
+#ifdef DEBUG_REALM
+        assert(dim_order.size() == N);
+#endif
+      }
 
       return;
     }
@@ -4056,8 +4077,14 @@ namespace Realm {
     // for now, pick a global dimension ordering
     // TODO: allow this to vary for independent subgraphs (or dependent ones
     //   with transposes in line)
-    domain->choose_dim_order(dim_order, srcs, dsts, indirects,
-                             false /*!force_fortran_order*/, 65536 /*max_stride*/);
+
+    // For single-point transfers (volume == 1), skip dimension
+    // ordering computation and just use Fortran order
+    size_t transfer_volume = domain->volume();
+    bool force_fortran = (transfer_volume == 1);
+
+    domain->choose_dim_order(dim_order, srcs, dsts, indirects, force_fortran,
+                             65536 /*max_stride*/);
 
     src_fields.resize(srcs.size());
     dst_fields.resize(dsts.size());

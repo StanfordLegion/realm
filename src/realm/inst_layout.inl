@@ -304,7 +304,7 @@ namespace Realm {
       }
 
       // If we didn't end up choosing all the dimensions, add the rest back in
-      //  in arbitrary (ascending, currently) order (matches transfer.cc logic)
+      //  in ascending order
       if(layout->preferred_dim_order.size() != N) {
         std::vector<bool> present(N, false);
         for(size_t i = 0; i < layout->preferred_dim_order.size(); i++) {
