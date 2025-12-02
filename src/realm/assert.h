@@ -19,7 +19,7 @@
 #define REALM_ASSERT_H
 
 // TODO: fix me after testing
-#if 1
+#ifdef NDEBUG
 // =============================================
 // Device-side (CUDA or HIP)
 // =============================================
