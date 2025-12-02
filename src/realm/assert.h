@@ -15,36 +15,59 @@
  * limitations under the License.
  */
 
-// atomics for Realm - this is a simple wrapper around C++11's std::atomic
-//  if available and uses gcc's __sync_* primitives otherwise
-
 #ifndef REALM_ASSERT_H
 #define REALM_ASSERT_H
 
+// TODO: fix me after testing
 #if 1
-#if(defined(__CUDACC__) && defined(__CUDA_ARCH__)) ||                                    \
-    (defined(__HIPCC__) && defined(__HIP_DEVICE_COMPILE__))
-#define REALM_ASSERT(cond)                                                               \
-  do {                                                                                   \
-    if(!(cond)) {                                                                        \
-      __trap();                                                                          \
-    }                                                                                    \
-  } while(0)
+// =============================================
+// Device-side (CUDA or HIP)
+// =============================================
+#if defined(__CUDA_ARCH__) || defined(__HIP_DEVICE_COMPILE__)
+
+// Clang CUDA or HIP: __assert_fail is available
+#if defined(__clang__)
+#include <assert.h>
+#define REALM_ASSERT(cond)                                                          \
+  do {                                                                              \
+    if (!(cond)) {                                                                  \
+      __assert_fail(#cond, __FILE__, __LINE__, __func__);                           \
+    }                                                                               \
+  } while (0)
+
+// NVCC CUDA: use trap
+#elif defined(__CUDACC__)
+#define REALM_ASSERT(cond)                                                          \
+  do {                                                                              \
+    if (!(cond)) {                                                                  \
+      __trap();                                                                     \
+    }                                                                               \
+  } while (0)
+
 #else
+#error "Unknown device compilation environment"
+#endif
+
+// =============================================
+// Host-side
+// =============================================
+#else
+#define REALM_NDEBUG_ASSERT
 #include "realm/logging.h"
 
 namespace Realm {
-  extern Logger log_runtime;
-} // namespace Realm
+  extern Logger log_assert;
+}
 
-#define REALM_ASSERT(cond)                                                               \
-  do {                                                                                   \
-    if(!(cond)) {                                                                        \
-      Realm::log_runtime.fatal("Assertion failed: (%s), at %s:%d", #cond, __FILE__,      \
-                               __LINE__);                                                \
-      abort();                                                                           \
-    }                                                                                    \
-  } while(0)
+#define REALM_ASSERT(cond)                                                          \
+  do {                                                                              \
+    if (!(cond)) {                                                                  \
+      Realm::log_assert.fatal("Assertion failed: (%s), at %s:%d",                   \
+                               #cond, __FILE__, __LINE__);                          \
+      abort();                                                                      \
+    }                                                                               \
+  } while (0)
+
 #endif
 #else
 #include <assert.h>
