@@ -17,11 +17,8 @@
 
  #include "realm/assert.h"
 
-#ifdef REALM_NDEBUG_ASSERT
  namespace Realm {
 
     REALM_INTERNAL_API_EXTERNAL_LINKAGE Logger log_assert("assert");
 
  } // namespace Realm
- #endif // REALM_NDEBUG_ASSERT
- 

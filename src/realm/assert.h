@@ -52,7 +52,6 @@
 // Host-side
 // =============================================
 #else
-#define REALM_NDEBUG_ASSERT
 #include "realm/logging.h"
 
 namespace Realm {
