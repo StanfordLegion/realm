@@ -16,7 +16,7 @@
  */
 
  #include "realm/compiler_support.h"
- #include "realm/assert.h"
+ #include "realm/logging.h"
 
  namespace Realm {
 
