@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+ #include "realm/compiler_support.h"
  #include "realm/assert.h"
 
  namespace Realm {
