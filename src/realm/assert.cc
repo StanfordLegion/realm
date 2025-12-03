@@ -15,11 +15,11 @@
  * limitations under the License.
  */
 
- #include "realm_config.h"
- #include "realm/logging.h"
+#include "realm_config.h"
+#include "realm/logging.h"
 
- namespace Realm {
+namespace Realm {
 
-    REALM_INTERNAL_API_EXTERNAL_LINKAGE Logger log_assert("assert");
+  REALM_INTERNAL_API_EXTERNAL_LINKAGE Logger log_assert("assert");
 
- } // namespace Realm
+} // namespace Realm

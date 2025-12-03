@@ -28,21 +28,21 @@
 // Clang CUDA or HIP: __assert_fail is available
 #if defined(__clang__)
 #include <assert.h>
-#define REALM_ASSERT(cond)                                                          \
-  do {                                                                              \
-    if (!(cond)) {                                                                  \
-      __assert_fail(#cond, __FILE__, __LINE__, __func__);                           \
-    }                                                                               \
-  } while (0)
+#define REALM_ASSERT(cond)                                                               \
+  do {                                                                                   \
+    if(!(cond)) {                                                                        \
+      __assert_fail(#cond, __FILE__, __LINE__, __func__);                                \
+    }                                                                                    \
+  } while(0)
 
 // NVCC CUDA: use trap
 #elif defined(__CUDACC__)
-#define REALM_ASSERT(cond)                                                          \
-  do {                                                                              \
-    if (!(cond)) {                                                                  \
-      __trap();                                                                     \
-    }                                                                               \
-  } while (0)
+#define REALM_ASSERT(cond)                                                               \
+  do {                                                                                   \
+    if(!(cond)) {                                                                        \
+      __trap();                                                                          \
+    }                                                                                    \
+  } while(0)
 
 #else
 #error "Unknown device compilation environment"
@@ -58,14 +58,14 @@ namespace Realm {
   extern Logger log_assert;
 }
 
-#define REALM_ASSERT(cond)                                                          \
-  do {                                                                              \
-    if (!(cond)) {                                                                  \
-      Realm::log_assert.fatal("Assertion failed: (%s), at %s:%d",                   \
-                               #cond, __FILE__, __LINE__);                          \
-      abort();                                                                      \
-    }                                                                               \
-  } while (0)
+#define REALM_ASSERT(cond)                                                               \
+  do {                                                                                   \
+    if(!(cond)) {                                                                        \
+      Realm::log_assert.fatal("Assertion failed: (%s), at %s:%d", #cond, __FILE__,       \
+                              __LINE__);                                                 \
+      abort();                                                                           \
+    }                                                                                    \
+  } while(0)
 
 #endif
 #else
