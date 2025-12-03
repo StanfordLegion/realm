@@ -15,6 +15,7 @@
 
 set(REALM_SOURCES
     activemsg.cc
+    assert.cc
     network.cc
     codedesc.cc
     logging.cc
