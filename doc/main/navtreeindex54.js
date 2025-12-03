@@ -1,5 +1,6 @@
 var NAVTREEINDEX54 =
 {
+"gasnetex__wrapper__internal_8h.html#a04b10514a93fc92b62c8045ad4eb9c6d":[3,0,1,1,3,0,1,0],
 "gasnetex__wrapper__internal_8h.html#a0e6c16e0e99f7a08c8dbcd99c89996c8":[3,0,1,1,3,0,1,6],
 "gasnetex__wrapper__internal_8h.html#a56ff2caa1e102b631f4c9530a5929462":[3,0,1,1,3,0,1,8],
 "gasnetex__wrapper__internal_8h.html#a714dc8d038867871b4224de6035a143d":[3,0,1,1,3,0,1,2],
@@ -173,8 +174,8 @@ var NAVTREEINDEX54 =
 "globals_b.html":[3,1,0,2],
 "globals_c.html":[3,1,0,3],
 "globals_d.html":[3,1,0,4],
-"globals_defs.html":[3,1,6,0],
 "globals_defs.html":[3,1,6],
+"globals_defs.html":[3,1,6,0],
 "globals_defs_a.html":[3,1,6,1],
 "globals_defs_b.html":[3,1,6,2],
 "globals_defs_c.html":[3,1,6,3],
@@ -216,8 +217,8 @@ var NAVTREEINDEX54 =
 "globals_v.html":[3,1,0,21],
 "globals_vars.html":[3,1,2],
 "globals_x.html":[3,1,0,22],
-"hardware__topology_8h.html":[3,0,1,1,33],
-"hardware__topology_8h_source.html":[3,0,1,1,33],
+"hardware__topology_8h.html":[3,0,1,1,34],
+"hardware__topology_8h_source.html":[3,0,1,1,34],
 "hdf5__access_8h.html":[3,0,1,1,4,0],
 "hdf5__access_8h.html#af7d7d15464b0e8c78f17b99e9e652413":[3,0,1,1,4,0,4],
 "hdf5__access_8h_source.html":[3,0,1,1,4,0],
@@ -248,6 +249,5 @@ var NAVTREEINDEX54 =
 "hip__cuda_8h.html#a535823a44047329e1610f371fa7d660d":[3,0,1,0,0,5],
 "hip__cuda_8h.html#a5c0b794314f24198f9827f7a816d725c":[3,0,1,0,0,17],
 "hip__cuda_8h.html#a5d89c821a3f4b019cf34b77c9c69300f":[3,0,1,0,0,29],
-"hip__cuda_8h.html#a66d1015175ec4b34c2be0930fe4849ec":[3,0,1,0,0,28],
-"hip__cuda_8h.html#a7ca2035860dfebe6384dac115cde55ca":[3,0,1,0,0,4]
+"hip__cuda_8h.html#a66d1015175ec4b34c2be0930fe4849ec":[3,0,1,0,0,28]
 };

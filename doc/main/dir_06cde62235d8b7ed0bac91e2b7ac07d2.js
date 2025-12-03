@@ -16,6 +16,7 @@ var dir_06cde62235d8b7ed0bac91e2b7ac07d2 =
     [ "transfer", "dir_1bb23b82c02807b960e9bec9b270f04c.html", "dir_1bb23b82c02807b960e9bec9b270f04c" ],
     [ "ucx", "dir_6ad6fbbbc095c2f37926061395ffdf7f.html", "dir_6ad6fbbbc095c2f37926061395ffdf7f" ],
     [ "activemsg.h", "activemsg_8h.html", "activemsg_8h" ],
+    [ "assert.h", "assert_8h.html", "assert_8h" ],
     [ "atomics.h", "atomics_8h.html", "atomics_8h" ],
     [ "barrier_impl.h", "barrier__impl_8h.html", "barrier__impl_8h" ],
     [ "bgwork.h", "bgwork_8h.html", "bgwork_8h" ],

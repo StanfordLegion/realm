@@ -3,7 +3,6 @@ var compiler__support_8h =
     [ "REALM_ALIGNED_TYPE_CONST", "compiler__support_8h.html#a2ef118a54055bad7fedc2f64ae3c1bb9", null ],
     [ "REALM_ALIGNED_TYPE_SAMEAS", "compiler__support_8h.html#ab3dd2637294373f432fc6c3805879b57", null ],
     [ "REALM_ALIGNOF", "compiler__support_8h.html#a297f51c2b0062d2e4711aa3346a16135", null ],
-    [ "REALM_ASSERT", "compiler__support_8h.html#a187804f8589f8e7304fbe40167a60130", null ],
     [ "REALM_ATTR_DEPRECATED", "compiler__support_8h.html#a920bf9a4430b09ed5c9bf55b2128f79b", null ],
     [ "REALM_ATTR_DEPRECATED2", "compiler__support_8h.html#abf9f7ea44d1cb1bdfd534995e4c84bdf", null ],
     [ "REALM_ATTR_NORETURN", "compiler__support_8h.html#a127f2afe94736c06b1d7d9740217bb96", null ],
@@ -18,6 +17,5 @@ var compiler__support_8h =
     [ "REALM_LIKELY", "compiler__support_8h.html#aeb86ca07ef0e907b474f3303a114a1f0", null ],
     [ "REALM_NOEXCEPT", "compiler__support_8h.html#ae92a45b7ea6c5c4bbbde6ac048dfcb04", null ],
     [ "REALM_PUBLIC_API", "compiler__support_8h.html#ae64e2333a603c784e4c6d0eb99529c63", null ],
-    [ "REALM_UNLIKELY", "compiler__support_8h.html#a3ea20fe1581dd087c9f9a5173c95f69c", null ],
-    [ "log_runtime", "compiler__support_8h.html#ad19604af1eea8f1d9aca08fcbbfbe613", null ]
+    [ "REALM_UNLIKELY", "compiler__support_8h.html#a3ea20fe1581dd087c9f9a5173c95f69c", null ]
 ];
