@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
- #include "realm/compiler_support.h"
+ #include "realm_config.h"
  #include "realm/logging.h"
 
  namespace Realm {
