@@ -27,6 +27,12 @@
 // get macros that spell things the right way for each compiler
 #include "realm/compiler_support.h"
 
+// TODO: this is a temporary fix to allow the assert.h header to be included in lots of places
+//       without having to change the include paths for all of them.
+//       It is a temporary fix for https://github.com/StanfordLegion/realm/issues/370
+//       We will remove it once we replace assert with REALM_ASSERT in all of the code.
+#include <assert.h>
+
 #define REALM_EVENT_GENERATION_BITS 20
 
 // Control the maximum number of dimensions for Realm
