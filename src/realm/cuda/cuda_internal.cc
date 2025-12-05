@@ -368,7 +368,7 @@ namespace Realm {
                                ? oc
                                : oc * max(size_t(1), oc * copy_info.dst.num_fields));
         } else {
-          left = min(left, ocount);
+          left = min(left, oc);
         }
 
         size_t max_by_bytes = (rect_volume == 0) ? 0 : (left / rect_volume);
@@ -1650,7 +1650,7 @@ namespace Realm {
               continue;
             default:
               add_path(local_gpu_mems, static_cast<Memory::Kind>(i),
-                       /*src_global=*/false, bw, latency, frag_overhead, XFER_GPU_TO_FB)
+                       /*src_global=*/false, bw, latency, frag_overhead, XFER_GPU_FROM_FB)
                   .set_max_dim(2);
               break;
             }

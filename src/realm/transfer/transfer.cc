@@ -4078,7 +4078,7 @@ namespace Realm {
     // TODO: allow this to vary for independent subgraphs (or dependent ones
     //   with transposes in line)
 
-    domain->choose_dim_order(dim_order, srcs, dsts, indirects, domain->volume() == 1,
+    domain->choose_dim_order(dim_order, srcs, dsts, indirects, (domain->volume() == 1),
                              65536 /*max_stride*/);
 
     src_fields.resize(srcs.size());
@@ -4592,20 +4592,20 @@ namespace Realm {
             << " channel="
             << ((graph.xd_nodes[i].channel) ? graph.xd_nodes[i].channel->kind : -1);
       }
-      // }
-
-      for(size_t i = 0; i < graph.ib_edges.size(); i++) {
-        log_xplan.info() << "analysis: plan=" << (void *)this << " ibs[" << i
-                         << "]: memory=" << graph.ib_edges[i].memory << ":"
-                         << graph.ib_edges[i].memory.kind()
-                         << " size=" << graph.ib_edges[i].size;
-      }
-
-      if(!graph.ib_edges.empty()) {
-        log_xplan.info() << "analysis: plan=" << (void *)this
-                         << " ib_alloc=" << PrettyVector<unsigned>(graph.ib_alloc_order);
-      }
     }
+
+    for(size_t i = 0; i < graph.ib_edges.size(); i++) {
+      log_xplan.info() << "analysis: plan=" << (void *)this << " ibs[" << i
+                       << "]: memory=" << graph.ib_edges[i].memory << ":"
+                       << graph.ib_edges[i].memory.kind()
+                       << " size=" << graph.ib_edges[i].size;
+    }
+
+    if(!graph.ib_edges.empty()) {
+      log_xplan.info() << "analysis: plan=" << (void *)this
+                       << " ib_alloc=" << PrettyVector<unsigned>(graph.ib_alloc_order);
+    }
+    //}
 
     // mark that the analysis is complete and see if there are any pending
     //  ops that can start allocating ibs
