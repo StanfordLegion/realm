@@ -442,46 +442,20 @@ namespace Realm {
 
   /*static*/ const char *Runtime::get_library_version() { return realm_library_version; }
 
-#if defined(REALM_USE_UCX) || defined(REALM_USE_MPI) || defined(REALM_USE_GASNET1) ||    \
-    defined(REALM_USE_GASNETEX) || defined(REALM_USE_KOKKOS)
-  // global flag that tells us if a realm runtime has already been
-  //  initialized in this process - some underlying libraries (e.g. mpi,
-  //  gasnet, kokkos) do not permit reinitialization
-  static bool runtime_initialized = false;
-#endif
-
   // performs any network initialization and, critically, makes sure
   //  *argc and *argv contain the application's real command line
   //  (instead of e.g. mpi spawner information)
   bool Runtime::network_init(int *argc, char ***argv)
   {
-#if defined(REALM_USE_UCX) || defined(REALM_USE_MPI) || defined(REALM_USE_GASNET1) ||    \
-    defined(REALM_USE_GASNETEX) || defined(REALM_USE_KOKKOS)
-    if(runtime_initialized) {
-      fprintf(stderr, "ERROR: reinitialization not supported by these Realm components:"
-#ifdef REALM_USE_UCX
-                      " ucx"
-#endif
-#ifdef REALM_USE_MPI
-                      " mpi"
-#endif
-#ifdef REALM_USE_GASNET1
-                      " gasnet1"
-#endif
-#ifdef REALM_USE_GASNETEX
-                      " gasnetex"
-#endif
-#ifdef REALM_USE_KOKKOS
-                      " kokkos"
-#endif
-                      "\n");
-      return false;
-    }
-    runtime_initialized = true;
-#endif
-
     assert(runtime_singleton != 0);
-    return static_cast<RuntimeImpl *>(impl)->network_init(argc, argv);
+    NetworkVtable vtable;
+    return static_cast<RuntimeImpl *>(impl)->network_init(argc, argv, vtable);
+  }
+
+  bool Runtime::network_init(const NetworkVtable &vtable)
+  {
+    assert(runtime_singleton != 0);
+    return static_cast<RuntimeImpl *>(impl)->network_init(nullptr, nullptr, vtable);
   }
 
   void Runtime::parse_command_line(int argc, char **argv)
@@ -1196,8 +1170,63 @@ namespace Realm {
       }
   }
 
-  bool RuntimeImpl::network_init(int *argc, char ***argv)
+  bool RuntimeImpl::network_init(int *argc, char ***argv,
+                                 const Runtime::NetworkVtable &vtable)
   {
+#if defined(REALM_USE_UCX) || defined(REALM_USE_MPI) || defined(REALM_USE_GASNET1) ||    \
+    defined(REALM_USE_GASNETEX) || defined(REALM_USE_KOKKOS)
+    // global flag that tells us if a realm runtime has already been
+    //  initialized in this process - some underlying libraries (e.g. mpi,
+    //  gasnet, kokkos) do not permit reinitialization
+    static std::atomic<bool> runtime_initialized = false;
+    if(runtime_initialized.exchange(true)) {
+      fprintf(stderr, "ERROR: reinitialization not supported by these Realm components:"
+#ifdef REALM_USE_UCX
+                      " ucx"
+#endif
+#ifdef REALM_USE_MPI
+                      " mpi"
+#endif
+#ifdef REALM_USE_GASNET1
+                      " gasnet1"
+#endif
+#ifdef REALM_USE_GASNETEX
+                      " gasnetex"
+#endif
+#ifdef REALM_USE_KOKKOS
+                      " kokkos"
+#endif
+                      "\n");
+      return false;
+    }
+#endif
+    // Check the sanity of the network vtable
+    if((vtable.get != nullptr) || (vtable.put != nullptr) || (vtable.bar != nullptr) ||
+       (vtable.cas != nullptr)) {
+      if(vtable.get == nullptr) {
+        fprintf(stderr,
+                "Detected non-trivial network vtable with missing 'get' callback.\n");
+        return false;
+      }
+      if(vtable.put == nullptr) {
+        fprintf(stderr,
+                "Detected non-trivial network vtable with missing 'put' callback.\n");
+        return false;
+      }
+      if((vtable.bar == nullptr) && (vtable.cas == nullptr)) {
+        fprintf(stderr, "Detected non-trivial network vtable with missing 'bar' or 'cas' "
+                        "callback. At least one must be specified.\n");
+        return false;
+      }
+      // Safe to save the network vtable
+      network_vtable = vtable;
+      if(vtable.vtable_data_size > 0) {
+        network_vtable_data.resize(vtable.vtable_data_size);
+        uint8_t *data = &network_vtable_data.front();
+        std::memcpy(data, vtable.vtable_data, vtable.vtable_data_size);
+        network_vtable.vtable_data = data;
+      }
+    }
     // if we're given empty or non-existent argc/argv, start from a
     //  dummy command line with a single string (which is supposed to be
     //  the name of the binary) so that the network module and/or the
@@ -1304,6 +1333,105 @@ namespace Realm {
       *argv = const_cast<char **>(local_argv);
 
     return true;
+  }
+
+  bool RuntimeImpl::has_network_vtable(void) const
+  {
+    return (network_vtable.put != nullptr);
+  }
+
+  bool RuntimeImpl::network_vtable_elastic(void) const
+  {
+    return (network_vtable.cas != nullptr);
+  }
+
+  bool RuntimeImpl::network_vtable_group(void) const
+  {
+    return (network_vtable.bar != nullptr);
+  }
+
+  std::optional<uint64_t> RuntimeImpl::network_vtable_local_rank(void) const
+  {
+    return network_vtable_get_int("realm_rank");
+  }
+
+  std::optional<uint64_t> RuntimeImpl::network_vtable_local_ranks(void) const
+  {
+    return network_vtable_get_int("realm_ranks");
+  }
+
+  std::optional<uint64_t>
+  RuntimeImpl::network_vtable_get_int(const std::string_view &key) const
+  {
+    constexpr size_t max_int_size = sizeof(uint64_t);
+    uint8_t buffer[max_int_size];
+    size_t actual_size = max_int_size;
+    if(!network_vtable_get(key.data(), key.size(), buffer, &actual_size) ||
+       (actual_size == 0)) {
+      log_runtime.error() << "Unable to find expected key " << key
+                          << " in key-value store for vtable 'get'. This key "
+                          << "must be provided by the vtable implementation in "
+                          << "order for Realm to be able to bootstrap network "
+                          << "communication successfully.";
+      return std::nullopt;
+    }
+    if(actual_size == sizeof(uint8_t)) {
+      return std::optional<uint64_t>(buffer[0]);
+    } else if(actual_size == sizeof(uint16_t)) {
+      uint16_t value;
+      std::memcpy(&value, buffer, actual_size);
+      return std::optional<uint64_t>(value);
+    } else if(actual_size == sizeof(uint32_t)) {
+      uint32_t value;
+      std::memcpy(&value, buffer, actual_size);
+      return std::optional<uint64_t>(value);
+    } else if(actual_size == sizeof(uint64_t)) {
+      uint64_t value;
+      std::memcpy(&value, buffer, actual_size);
+      return std::optional<uint64_t>(value);
+    } else {
+      log_runtime.error() << "Expected key " << key << " has an "
+                          << "invalid size for vtable 'get'. This key must be an "
+                          << "integer but the found size was " << actual_size
+                          << ". The size must be 1, 2, 4, or 8 bytes to be "
+                          << "interpreted as an integer.";
+      return std::nullopt;
+    }
+  }
+
+  bool RuntimeImpl::network_vtable_put(const void *key, size_t key_size,
+                                       const void *value, size_t value_size) const
+  {
+    assert(network_vtable.put != nullptr);
+    return (*network_vtable.put)(key, key_size, value, value_size,
+                                 network_vtable.vtable_data,
+                                 network_vtable.vtable_data_size);
+  }
+
+  bool RuntimeImpl::network_vtable_get(const void *key, size_t key_size, void *value,
+                                       size_t *value_size) const
+  {
+    assert(network_vtable.get != nullptr);
+    return (*network_vtable.get)(key, key_size, value, value_size,
+                                 network_vtable.vtable_data,
+                                 network_vtable.vtable_data_size);
+  }
+
+  bool RuntimeImpl::network_vtable_bar(void) const
+  {
+    assert(network_vtable.bar != nullptr);
+    return (*network_vtable.bar)(network_vtable.vtable_data,
+                                 network_vtable.vtable_data_size);
+  }
+
+  bool RuntimeImpl::network_vtable_cas(const void *key, size_t key_size, void *expected,
+                                       size_t *expected_size, const void *desired,
+                                       size_t desired_size) const
+  {
+    assert(network_vtable.cas != nullptr);
+    return (*network_vtable.cas)(key, key_size, expected, expected_size, desired,
+                                 desired_size, network_vtable.vtable_data,
+                                 network_vtable.vtable_data_size);
   }
 
   template <typename T>

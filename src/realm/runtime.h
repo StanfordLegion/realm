@@ -59,17 +59,25 @@ namespace Realm {
     bool network_init(int *argc, char ***argv);
     // Some networks prefer to bootstrap via callbacks using a vtable
     // A client provides an implementation of the functions in the vtable
-    // and Realm will invoke them as part of bootstrapping the network.
-    // Some functions are required in order to successfully bootstrap
-    // the network while others are optional and provide information
-    // whenever the state of the network changes. All callbacks will
-    // either be performed in an external thread (one not made by Realm
-    // but has called into Realm) or by a designated Realm thread
-    // independent of Realm's background worker threads so that clients
-    // can use non-Realm synchronization primitives in the implementation
-    // of these functions and not need to worry about blocking or
-    // impacting forward progress.
+    // and Realm will invoke them as part of bootstrapping the network and
+    // providing support for elasticity (when networks support it).
+    // Some functions are required while others are either/or options.
+    // All callbacks will either be performed in an external thread
+    // (one not made by Realm but has called into Realm) or by a designated
+    // Realm thread independent of Realm's background worker threads so that
+    // clients can use non-Realm synchronization primitives in the
+    // implementation of these functions and not need to worry about
+    // blocking or impacting forward progress.
     struct NetworkVtable {
+      /**
+       * Optional blob of data passed to all the network vtable functions
+       * when they are invoked by Realm. Realm will not attempt to
+       * interpret this data at all but will simply pass it through
+       * to each call. You do not have to pass any data through to
+       * implement the callbacks, it is purely for your convenience.
+       */
+      const void *vtable_data;
+      size_t vtable_data_size;
       ////////////////////////
       // REQUIRED FUNCTIONS //
       ////////////////////////
@@ -83,8 +91,8 @@ namespace Realm {
        * the put succeeds and false if it doesn't. If the call fails then it is
        * likely that the network initialization might not succeed.
        */
-      bool (*put)(const void *key, size_t key_size, const void *value,
-                  size_t value_size) = nullptr;
+      bool (*put)(const void *key, size_t key_size, const void *value, size_t value_sizem,
+                  const void *vtable_data, size_t vtable_data_size) = nullptr;
       /**
        * The "get" function must retrieve the value associated with the given key
        * if it can be found. Realm will call this function with the value buffer
@@ -92,18 +100,20 @@ namespace Realm {
        * of the value that can be returned. If the key is found and the value
        * size is less than or equal to the value_size passed in by Realm, then
        * the value buffer should be populated and the value_size updated with
-       * the actual size of the value found. If the value is not found or is
-       * too large for the specified buffer then value_size should be set to
-       * zero. If for any reason the call fails then return value should be
-       * false. Not finding a key should still be considered a success as in
-       * some cases the backend might be able to cope with not finding some
-       * keys. Returning false should only occur if the function call fails
-       * in some way that makes it impossible to know if the key exists or
-       * not. If the callback fails then the network initialization might
-       * not succeed.
+       * the actual size of the value found. If the key is found but the
+       * resulting value is larger than the buffer size, then the function
+       * should update value_size with the actual size of the buffer but
+       * does not need to populate the value buffer (sinze it obviously will
+       * not fit). If the key cannot be found then the value size should be
+       * set to zero. The function should always return true as long as the
+       * get call works correctly (even if a key is not found or the buffer
+       * is not larger enough). Returning false should only occur if the
+       * function call fails in some way that makes it impossible to know
+       * if the key exists or not. If the callback fails then the network
+       * initialization might not succeed.
        */
-      bool (*get)(const void *key, size_t key_size, void *value,
-                  size_t *value_size) = nullptr;
+      bool (*get)(const void *key, size_t key_size, void *value, size_t *value_size,
+                  const void *vtable_data, size_t vtable_data_size) = nullptr;
       //////////////////////////////
       // SYNCRONIZATION FUNCTIONS //
       // (PROVIDE ONE OR BOTH)    //
@@ -125,19 +135,26 @@ namespace Realm {
        * before it. It should return true if the barrier succeeds and
        * false if it fails. If the barrier fails then it can be expected
        * the Realm bootstrap will also fail. If you provide a bar method,
-       * then you must also provide support in the "get" method for two
-       * special keys. Specifically you must provide support for the
-       * "realm_rank" key which will return a unique integer identifier
-       * for this process in its group as well as a "realm_ranks"
-       * key which will return the total number of processes in the group.
-       * The integer identifiers for processes must start at zero, be
-       * contiguous incrementally, and all be strictly less than the
-       * value of "realm_ranks". Note that each group should have its
-       * numbering start at zero and grow incrementally. Process numbers
-       * can be the same across groups. Realm will generate a unique
-       * address space for each process as part of the bootstrap.
+       * then you must also provide support in the "get" method for three
+       * special keys:
+       * - "realm_group": the value associated with this key must be
+       *   interpretable as an integer that is the same for all processes
+       *   that cooperate in this barrier. It must be distinct from
+       *   any other group identifier for other processes that are
+       *   joining the same Realm.
+       * - "realm_ranks": the value associated with this key must be
+       *   interpretable as an integer that indicates how many processes
+       *   are participating in this barrier operation together.
+       * - "realm_rank": the value associated with this key must be
+       *   interpretable as an integer that uniquely identifies this
+       *   process in its local group. It must be in the range
+       *   [0, realm_ranks).
+       * Note that each group should have its rank numbering start at zero
+       * and grow incrementally. Rank numbers are therefore the same
+       * across groups. Realm will generate a unique address space for
+       * each process as part of the bootstrap.
        */
-      bool (*bar)(void) = nullptr;
+      bool (*bar)(const void *vtable_data, size_t vtable_data_size) = nullptr;
       /**
        * The "cas" function should be provided in cases of elastic
        * bootstrap when an arbitrary number of processes can join or
@@ -155,7 +172,8 @@ namespace Realm {
        * likely lead to a timeout.
        */
       bool (*cas)(const void *key, size_t key_size, void *expected, size_t *expected_size,
-                  const void *desired, size_t desired_size) = nullptr;
+                  const void *desired, size_t desired_size, const void *vtable_data,
+                  size_t vtable_data_size) = nullptr;
     };
     bool network_init(const NetworkVtable &vtable);
 

@@ -307,8 +307,9 @@ realm_status_t realm_runtime_init(realm_runtime_t runtime, int *argc, char ***ar
     argv = &my_argv;
   }
 
+  Realm::Runtime::NetworkVtable vtable;
   // TODO: we need to let each of these functions to return a specific error code
-  if(!runtime_impl->network_init(argc, argv)) {
+  if(!runtime_impl->network_init(argc, argv, vtable)) {
     return REALM_ERROR;
   }
   if(!runtime_impl->create_configs(*argc, *argv)) {
