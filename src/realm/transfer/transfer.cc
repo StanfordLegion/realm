@@ -4078,12 +4078,7 @@ namespace Realm {
     // TODO: allow this to vary for independent subgraphs (or dependent ones
     //   with transposes in line)
 
-    // For single-point transfers (volume == 1), skip dimension
-    // ordering computation and just use Fortran order
-    size_t transfer_volume = domain->volume();
-    bool force_fortran = (transfer_volume == 1);
-
-    domain->choose_dim_order(dim_order, srcs, dsts, indirects, force_fortran,
+    domain->choose_dim_order(dim_order, srcs, dsts, indirects, domain->volume() == 1,
                              65536 /*max_stride*/);
 
     src_fields.resize(srcs.size());
