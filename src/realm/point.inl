@@ -20,7 +20,7 @@
 // nop, but helps IDEs
 #include "realm/point.h"
 
-#include "realm/assert.h"
+#include "realm/realm_assert.h"
 #include "realm/serialize.h"
 
 #if defined(__CUDACC__) || defined(__HIPCC__)

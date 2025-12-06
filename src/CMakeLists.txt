@@ -15,7 +15,6 @@
 
 set(REALM_SOURCES
     activemsg.cc
-    assert.cc
     network.cc
     codedesc.cc
     logging.cc
@@ -39,6 +38,7 @@ set(REALM_SOURCES
     nodeset.cc
     operation.cc
     proc_impl.cc
+    realm_assert.cc
     repl_heap.cc
     rsrv_impl.cc
     runtime_impl.cc

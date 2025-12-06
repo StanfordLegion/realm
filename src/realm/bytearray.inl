@@ -20,7 +20,7 @@
 // this is a nop, but it's for the benefit of IDEs trying to parse this file
 #include "realm/bytearray.h"
 
-#include "realm/assert.h"
+#include "realm/realm_assert.h"
 #include <string.h>
 #include <stdlib.h>
 

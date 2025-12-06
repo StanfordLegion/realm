@@ -22,7 +22,7 @@
 // nop, but helps IDEs
 #include "realm/utils.h"
 
-#include "realm/assert.h"
+#include "realm/realm_assert.h"
 #include <stdlib.h>
 #include <string.h>
 
