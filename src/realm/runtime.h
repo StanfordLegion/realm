@@ -162,8 +162,10 @@ namespace Realm {
        * perform an atomic compare-and-swap operation on a key by
        * checking that the key matches a particular value and if it
        * does then updating it with the desired value in a single atomic
-       * operation. If the value of the key does not match the expected
-       * result, the call should fail, but return the updated expected
+       * operation. If the key does not yet exist then the transaction
+       * should create the key with the desirecd value. If the value
+       * associated with the key does not match the expected result,
+       * the call should fail, but return the updated expected
        * value and size as long as it is less than or equal to the
        * original expected size. If the new value size is larger than
        * the expected size, then only the expected_size should be updated.

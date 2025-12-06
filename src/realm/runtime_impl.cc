@@ -1350,6 +1350,11 @@ namespace Realm {
     return (network_vtable.bar != nullptr);
   }
 
+  std::optional<uint64_t> RuntimeImpl::network_vtable_local_group(void) const
+  {
+    return network_vtable_get_int("realm_group");
+  }
+
   std::optional<uint64_t> RuntimeImpl::network_vtable_local_rank(void) const
   {
     return network_vtable_get_int("realm_rank");

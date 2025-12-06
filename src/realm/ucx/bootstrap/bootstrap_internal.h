@@ -32,7 +32,8 @@ namespace Realm {
     {
       BOOTSTRAP_MPI,
       BOOTSTRAP_P2P,
-      BOOTSTRAP_PLUGIN
+      BOOTSTRAP_PLUGIN,
+      BOOTSTRAP_VTABLE,
     };
 
     struct BootstrapConfig {

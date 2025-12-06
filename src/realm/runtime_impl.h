@@ -272,6 +272,8 @@ namespace Realm {
     bool network_vtable_elastic(void) const;
     // Are we a single process joining by ourself or part of a group
     bool network_vtable_group(void) const;
+    // Our local group
+    std::optional<uint64_t> network_vtable_local_group(void) const;
     // Our local rank in the group
     std::optional<uint64_t> network_vtable_local_rank(void) const;
     // The total number of ranks in our group
