@@ -15,11 +15,18 @@
  * limitations under the License.
  */
 
-#include "realm_config.h"
+#include "realm/realm_assert.h"
 #include "realm/logging.h"
 
 namespace Realm {
 
-  REALM_INTERNAL_API_EXTERNAL_LINKAGE Logger log_assert("assert");
+  Logger log_assert("assert");
+
+  void realm_assert_fail(const char* cond_text, const char* file, int line)
+  {
+    log_assert.fatal("Assertion failed: (%s) at %s:%d",
+                     cond_text, file, line);
+    abort();
+  }
 
 } // namespace Realm

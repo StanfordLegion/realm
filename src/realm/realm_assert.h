@@ -51,17 +51,15 @@
 // Host-side
 // =============================================
 #else
-#include "realm/logging.h"
-
+#include "realm_config.h"
 namespace Realm {
-  extern Logger log_assert;
+  REALM_INTERNAL_API_EXTERNAL_LINKAGE void realm_assert_fail(const char* cond_text, const char* file, int line);
 }
 
 #define REALM_ASSERT(cond)                                                               \
   do {                                                                                   \
     if(!(cond)) {                                                                        \
-      Realm::log_assert.fatal("Assertion failed: (%s), at %s:%d", #cond, __FILE__,       \
-                              __LINE__);                                                 \
+      Realm::realm_assert_fail(#cond, __FILE__, __LINE__);                               \
       abort();                                                                           \
     }                                                                                    \
   } while(0)
