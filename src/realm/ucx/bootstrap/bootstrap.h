@@ -30,25 +30,25 @@ enum reduction_op
 };
 
 typedef struct bootstrap_handle {
-  int pg_rank = 0;
-  int pg_size = 0;
-  int *shared_ranks = nullptr;
-  int num_shared_ranks = 0;
+  int pg_rank;
+  int pg_size;
+  int *shared_ranks;
+  int num_shared_ranks;
   // TODO: Do we really need all these?!? As far as I can tell this interface
   // only requires the allgather function and nothing else
-  int (*barrier)(struct bootstrap_handle *handle) = nullptr;
-  int (*bcast)(void *buf, int bytes, int root, struct bootstrap_handle *handle) = nullptr;
+  int (*barrier)(struct bootstrap_handle *handle);
+  int (*bcast)(void *buf, int bytes, int root, struct bootstrap_handle *handle);
   int (*gather)(const void *sendbuf, void *recvbuf, int bytes, int root,
-                struct bootstrap_handle *handle) = nullptr;
+                struct bootstrap_handle *handle);
   int (*allgather)(const void *sendbuf, void *recvbuf, int bytes,
-                   struct bootstrap_handle *handle) = nullptr;
+                   struct bootstrap_handle *handle);
   int (*alltoall)(const void *sendbuf, void *recvbuf, int bytes,
-                  struct bootstrap_handle *handle) = nullptr;
+                  struct bootstrap_handle *handle);
   int (*allreduce_ull)(const void *sendbuf, void *recvbuf, int count,
-                       enum reduction_op op, struct bootstrap_handle *handle) = nullptr;
+                       enum reduction_op op, struct bootstrap_handle *handle);
   int (*allgatherv)(const void *sendbuf, void *recvbuf, int *sizes, int *offsets,
-                    struct bootstrap_handle *handle) = nullptr;
-  int (*finalize)(struct bootstrap_handle *handle) = nullptr;
+                    struct bootstrap_handle *handle);
+  int (*finalize)(struct bootstrap_handle *handle);
 } bootstrap_handle_t;
 
 #ifdef __cplusplus

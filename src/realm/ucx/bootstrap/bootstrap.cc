@@ -133,7 +133,16 @@ namespace Realm {
         }
         handle->pg_rank = *rank;
         handle->pg_size = *ranks;
+        handle->shared_ranks = nullptr;
+        handle->num_shared_ranks = 0;
+        handle->barrier = nullptr;
+        handle->bcast = nullptr;
+        handle->gather = nullptr;
         handle->allgather = bootstrap_vtable_allgather;
+        handle->alltoall = nullptr;
+        handle->allreduce_ull = nullptr;
+        handle->allgatherv = nullptr;
+        handle->finalize = nullptr;
         break;
       }
       default:
