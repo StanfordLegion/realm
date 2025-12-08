@@ -18,6 +18,8 @@
 #ifndef REALM_ASSERT_H
 #define REALM_ASSERT_H
 
+#include "realm_config.h"
+
 #ifdef NDEBUG
 // =============================================
 // Device-side (CUDA or HIP)
@@ -51,7 +53,6 @@
 // Host-side
 // =============================================
 #else
-#include "realm_config.h"
 namespace Realm {
   REALM_INTERNAL_API_EXTERNAL_LINKAGE void realm_assert_fail(const char* cond_text, const char* file, int line);
 }
