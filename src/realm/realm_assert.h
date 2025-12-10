@@ -18,7 +18,8 @@
 #ifndef REALM_ASSERT_H
 #define REALM_ASSERT_H
 
-// TODO: fix me after testing
+#include "realm_config.h"
+
 #ifdef NDEBUG
 // =============================================
 // Device-side (CUDA or HIP)
@@ -52,17 +53,15 @@
 // Host-side
 // =============================================
 #else
-#include "realm/logging.h"
-
 namespace Realm {
-  extern Logger log_assert;
+  REALM_INTERNAL_API_EXTERNAL_LINKAGE void realm_assert_fail(const char *cond_text,
+                                                             const char *file, int line);
 }
 
 #define REALM_ASSERT(cond)                                                               \
   do {                                                                                   \
     if(!(cond)) {                                                                        \
-      Realm::log_assert.fatal("Assertion failed: (%s), at %s:%d", #cond, __FILE__,       \
-                              __LINE__);                                                 \
+      Realm::realm_assert_fail(#cond, __FILE__, __LINE__);                               \
       abort();                                                                           \
     }                                                                                    \
   } while(0)

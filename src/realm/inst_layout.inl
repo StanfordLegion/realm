@@ -1393,7 +1393,7 @@ namespace Realm {
   }
 
 #ifdef REALM_PROVIDE_ACCESSOR_TO_KOKKOS_VIEW_CONVERSION
-#include "realm/assert.h"
+#include "realm/realm_assert.h"
   // some compilers like to try to reason about concrete types in template
   //  before it's instantiated, so here's a little wrapper that forces a
   //  dependence on a second type T2 (e.g. a parameter to the calling
