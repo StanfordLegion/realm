@@ -23,15 +23,13 @@
 #include "realm/realm_config.h"
 #include "realm/ucx/bootstrap/bootstrap_util.h"
 #include "realm/ucx/bootstrap/bootstrap_internal.h"
+#include "realm/loader.h"
 
 #define GET_SYMBOL(lib_handle, name, var, status)                                        \
   do {                                                                                   \
-    void **var_ptr = (void **)&(var);                                                    \
-    void *tmp = (void *)dlsym(lib_handle, name);                                         \
-    BOOTSTRAP_NULL_ERROR_JMP(tmp, status, BOOTSTRAP_ERROR_INTERNAL, out,                 \
-                             "Bootstrap failed to get symbol '%s'\n\t%s\n", name,        \
-                             dlerror());                                                 \
-    *var_ptr = tmp;                                                                      \
+    var = reinterpret_cast<decltype(var)>(Realm::get_symbol(lib_handle, name));          \
+    BOOTSTRAP_NULL_ERROR_JMP(var, status, BOOTSTRAP_ERROR_INTERNAL, out,                 \
+                             "Bootstrap failed to get symbol '%s'\n\t%s\n", name);       \
   } while(0)
 
 static void *plugin_hdl;
@@ -58,14 +56,11 @@ namespace Realm {
       int (*bootstrap_plugin_init)(void *arg, bootstrap_handle_t *handle);
       int status = 0;
 
-      dlerror(); /* Clear any existing error */
       plugin_name = strdup(plugin);
       plugin_hdl = dlopen(plugin, RTLD_NOW);
       BOOTSTRAP_NULL_ERROR_JMP(plugin_hdl, status, -1, error,
-                               "Bootstrap unable to load '%s'\n\t%s\n", plugin,
-                               dlerror());
+                               "Bootstrap unable to load '%s'\n", plugin);
 
-      dlerror(); /* Clear any existing error */
       GET_SYMBOL(plugin_hdl, "realm_ucp_bootstrap_plugin_init", bootstrap_plugin_init,
                  status);
 
