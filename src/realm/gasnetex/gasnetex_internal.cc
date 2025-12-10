@@ -3375,13 +3375,16 @@ namespace Realm {
       }
     }
 
+    if(gex_wrapper_handle.gex_ep_bind_segment(ep, segment, 0 /*flags*/) != 0) {
+      // TODO: destroy the segment and ep we created?
+      return false;
+    }
+
     assert(ep_index == eps.size());
     eps.push_back(ep);
 
     assert(ep_index == xmitsrcs.size());
     xmitsrcs.push_back(new XmitSrc(this, ep_index));
-
-    gex_wrapper_handle.gex_ep_bind_segment(ep, segment, 0 /*flags*/);
 
     uintptr_t base_as_uint = reinterpret_cast<uintptr_t>(base);
     segments_by_addr.push_back(
