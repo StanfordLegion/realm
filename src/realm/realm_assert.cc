@@ -22,10 +22,10 @@ namespace Realm {
 
   Logger log_assert("assert");
 
-  REALM_INTERNAL_API_EXTERNAL_LINKAGE void realm_assert_fail(const char* cond_text, const char* file, int line)
+  REALM_INTERNAL_API_EXTERNAL_LINKAGE void realm_assert_fail(const char *cond_text,
+                                                             const char *file, int line)
   {
-    log_assert.fatal("Assertion failed: (%s) at %s:%d",
-                     cond_text, file, line);
+    log_assert.fatal("Assertion failed: (%s) at %s:%d", cond_text, file, line);
     abort();
   }
 
