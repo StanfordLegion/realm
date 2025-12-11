@@ -203,7 +203,7 @@ namespace Realm {
                   if(memory_size_kB > 0) {
                     memories.emplace_back(HardwareTopology::MemoryInfo{
                         memory_size_kB << 10, static_cast<int>(numa_node)});
-                    assert(static_cast<int>(numa_node) == mem_node_id);
+                    REALM_ASSERT(static_cast<int>(numa_node) == mem_node_id);
                   }
                 }
                 break;
@@ -320,9 +320,9 @@ namespace Realm {
       return REALM_TOPOLOGY_ERROR_WIN32_NO_PROC_INFO;
     }
     proc_info = (PSYSTEM_LOGICAL_PROCESSOR_INFORMATION)malloc(proc_info_size);
-    assert(proc_info != 0);
+    REALM_ASSERT(proc_info != 0);
     rc = GetLogicalProcessorInformation(proc_info, &proc_info_size);
-    assert(rc == TRUE);
+    REALM_ASSERT(rc == TRUE);
 
     // populate _all_procs map
     for(int i = 0; (i < sizeof(DWORD_PTR) * 8) && ((DWORD_PTR(1) << i) <= process_mask);
@@ -539,13 +539,13 @@ namespace Realm {
 
     //  system memory
     hwloc_obj_t root_obj = hwloc_get_root_obj(topo);
-    assert(root_obj != nullptr);
+    REALM_ASSERT(root_obj != nullptr);
     // cross check with numa memory
     size_t system_mem = 0;
     for(const HardwareTopology::MemoryInfo &memory : memories) {
       system_mem += memory.bytes;
     }
-    assert(system_mem == root_obj->total_memory);
+    REALM_ASSERT(system_mem == root_obj->total_memory);
     host_memory = root_obj->total_memory;
 
     return REALM_SUCCESS;
@@ -758,8 +758,8 @@ namespace Realm {
                                      const std::vector<MemoryInfo> &memories,
                                      const size_t host_memory)
   {
-    assert(logical_cores.size() > 0);
-    assert(memories.size() > 0);
+    REALM_ASSERT(logical_cores.size() > 0);
+    REALM_ASSERT(memories.size() > 0);
     // ------ Step 1: construct numa memory
     for(const MemoryInfo &memory : memories) {
       by_domain[memory.domain].memory_size = memory.bytes;
@@ -898,7 +898,7 @@ namespace Realm {
         rr.push_back(x);
       }
     }
-    assert(pm.size() == all_procs.size());
+    REALM_ASSERT(pm.size() == all_procs.size());
     return pm;
   }
 

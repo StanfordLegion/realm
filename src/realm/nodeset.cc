@@ -18,9 +18,9 @@
 // dynamic node set implementation for Realm
 
 #include "realm/nodeset.h"
+#include "realm/logging.h"
 
 #include <cstring>
-#include <cassert>
 
 #ifdef REALM_ON_WINDOWS
 #include <intrin.h>
@@ -178,7 +178,7 @@ namespace Realm {
               // have to switch to a bitmask
               convert_to_bitmask();
               count -= data.bitmask->clear_range(lo, hi);
-              assert(count > 0); // shouldn't clear everything
+              REALM_ASSERT(count > 0); // shouldn't clear everything
               return;
             }
           } else {
@@ -218,7 +218,7 @@ namespace Realm {
 
   void NodeSet::convert_to_bitmask()
   {
-    assert(count > 0);
+    REALM_ASSERT(count > 0);
     NodeSetBitmask *newmask = NodeSetBitmask::acquire_bitmask();
 
     switch(enc_format) {
@@ -235,7 +235,7 @@ namespace Realm {
       break;
     }
     default:
-      assert(0);
+      abort();
     }
     data.bitmask = newmask;
     enc_format = ENC_BITMASK;
@@ -249,7 +249,7 @@ namespace Realm {
   {
 #ifdef DEBUG_REALM_NODESET
     for(size_t i = 0; i < (bitset_elements + bitset_twolevel); i++)
-      assert(bits[i] == 0);
+      REALM_ASSERT(bits[i] == 0);
 #endif
   }
 
@@ -270,7 +270,7 @@ namespace Realm {
       void *raw_base = calloc(1 + (bitset_elements + bitset_twolevel) * bitsets_per_chunk,
                               sizeof(bitmask_elem_t));
       // printf("CALLOC = %p\n", raw_base);
-      assert(raw_base != 0);
+      REALM_ASSERT(raw_base != 0);
       bitmask_elem_t *chunk_base = reinterpret_cast<bitmask_elem_t *>(raw_base);
       // first bitset is one we'll use
       base = reinterpret_cast<uintptr_t>(&chunk_base[1]);
@@ -311,7 +311,7 @@ namespace Realm {
     if(already_empty) {
 #ifdef DEBUG_REALM_NODESET
       for(size_t i = 0; i < (bitset_elements + bitset_twolevel); i++)
-        assert(bitmask->bits[i] == 0);
+        REALM_ASSERT(bitmask->bits[i] == 0);
 #endif
     } else {
       // clear things out so the next reuse starts fresh
@@ -328,7 +328,7 @@ namespace Realm {
   size_t NodeSetBitmask::set_bit(NodeID id)
   {
 #ifdef DEBUG_REALM
-    assert((id >= 0) && (id <= max_node_id));
+    REALM_ASSERT((id >= 0) && (id <= max_node_id));
 #endif
     size_t elmt_idx = id / BITS_PER_ELEM;
     size_t elmt_ofs = id % BITS_PER_ELEM;
@@ -345,7 +345,7 @@ namespace Realm {
   size_t NodeSetBitmask::clear_bit(NodeID id)
   {
 #ifdef DEBUG_REALM
-    assert((id >= 0) && (id <= max_node_id));
+    REALM_ASSERT((id >= 0) && (id <= max_node_id));
 #endif
     size_t elmt_idx = id / BITS_PER_ELEM;
     size_t elmt_ofs = id % BITS_PER_ELEM;
@@ -362,7 +362,7 @@ namespace Realm {
   size_t NodeSetBitmask::set_range(NodeID lo, NodeID hi)
   {
 #ifdef DEBUG_REALM
-    assert((lo >= 0) && (hi <= max_node_id));
+    REALM_ASSERT((lo >= 0) && (hi <= max_node_id));
 #endif
     if(lo > hi)
       return 0; // empty range
@@ -422,7 +422,7 @@ namespace Realm {
   size_t NodeSetBitmask::clear_range(NodeID lo, NodeID hi)
   {
 #ifdef DEBUG_REALM
-    assert((lo >= 0) && (hi <= max_node_id));
+    REALM_ASSERT((lo >= 0) && (hi <= max_node_id));
 #endif
     if(lo > hi)
       return 0; // empty range
@@ -482,7 +482,7 @@ namespace Realm {
   bool NodeSetBitmask::is_set(NodeID id) const
   {
 #ifdef DEBUG_REALM
-    assert((id >= 0) && (id <= max_node_id));
+    REALM_ASSERT((id >= 0) && (id <= max_node_id));
 #endif
     size_t elmt_idx = id / BITS_PER_ELEM;
     size_t elmt_ofs = id % BITS_PER_ELEM;
@@ -496,14 +496,14 @@ namespace Realm {
     if(bitset_twolevel) {
       int found = l2_find(0);
 #ifdef DEBUG_REALM
-      assert(found >= 0);
+      REALM_ASSERT(found >= 0);
 #endif
       elmt_idx = found;
     } else {
       while(bits[elmt_idx] == 0) {
         elmt_idx++;
 #ifdef DEBUG_REALM
-        assert(elmt_idx < bitset_elements);
+        REALM_ASSERT(elmt_idx < bitset_elements);
 #endif
       }
     }
@@ -514,7 +514,7 @@ namespace Realm {
   NodeID NodeSetBitmask::next_set(NodeID after) const
   {
 #ifdef DEBUG_REALM
-    assert((after >= 0) && (after <= max_node_id));
+    REALM_ASSERT((after >= 0) && (after <= max_node_id));
 #endif
     if(after == max_node_id)
       return -1;
@@ -531,7 +531,7 @@ namespace Realm {
           return -1;
         elmt_idx = found;
 #ifdef DEBUG_REALM
-        assert(bits[elmt_idx] != 0);
+        REALM_ASSERT(bits[elmt_idx] != 0);
 #endif
         elmt_ofs = ctz(bits[elmt_idx]);
         return (elmt_idx * BITS_PER_ELEM + elmt_ofs);
@@ -602,7 +602,7 @@ namespace Realm {
   {
     // can't reconfigure with a different node count
     if(max_node_id != -1) {
-      assert(max_node_id == _max_node_id);
+      REALM_ASSERT(max_node_id == _max_node_id);
       return;
     }
 

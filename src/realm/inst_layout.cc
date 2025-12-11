@@ -68,7 +68,7 @@ namespace Realm {
     default:
     {
       // hybrid - blech
-      assert(0);
+      abort();
     }
     }
   }
@@ -119,7 +119,7 @@ namespace Realm {
     default:
     {
       // hybrid - blech
-      assert(0);
+      abort();
     }
     }
   }
@@ -166,7 +166,7 @@ namespace Realm {
     default:
     {
       // hybrid - blech
-      assert(0);
+      abort();
     }
     }
   }

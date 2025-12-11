@@ -80,14 +80,14 @@ namespace Realm {
   template <int N, typename T>
   IndexSpaceGeneric::IndexSpaceGeneric(const IndexSpace<N, T> &copy_from)
   {
-    assert(STORAGE_BYTES >= sizeof(IndexSpaceGenericImplTyped<N, T>));
+    static_assert(STORAGE_BYTES >= sizeof(IndexSpaceGenericImplTyped<N, T>));
     impl = new(raw_storage) IndexSpaceGenericImplTyped<N, T>(copy_from);
   }
 
   template <int N, typename T>
   IndexSpaceGeneric::IndexSpaceGeneric(const Rect<N, T> &copy_from)
   {
-    assert(STORAGE_BYTES >= sizeof(IndexSpaceGenericImplTyped<N, T>));
+    static_assert(STORAGE_BYTES >= sizeof(IndexSpaceGenericImplTyped<N, T>));
     impl = new(raw_storage) IndexSpaceGenericImplTyped<N, T>(copy_from);
   }
 
@@ -113,7 +113,7 @@ namespace Realm {
   template <int N, typename T>
   IndexSpaceGeneric &IndexSpaceGeneric::operator=(const IndexSpace<N, T> &copy_from)
   {
-    assert(STORAGE_BYTES >= sizeof(IndexSpaceGenericImplTyped<N, T>));
+    static_assert(STORAGE_BYTES >= sizeof(IndexSpaceGenericImplTyped<N, T>));
     if(impl)
       impl->~IndexSpaceGenericImpl();
     impl = new(raw_storage) IndexSpaceGenericImplTyped<N, T>(copy_from);
@@ -123,7 +123,7 @@ namespace Realm {
   template <int N, typename T>
   IndexSpaceGeneric &IndexSpaceGeneric::operator=(const Rect<N, T> &copy_from)
   {
-    assert(STORAGE_BYTES >= sizeof(IndexSpaceGenericImplTyped<N, T>));
+    static_assert(STORAGE_BYTES >= sizeof(IndexSpaceGenericImplTyped<N, T>));
     if(impl)
       impl->~IndexSpaceGenericImpl();
     impl = new(raw_storage) IndexSpaceGenericImplTyped<N, T>(copy_from);
@@ -137,7 +137,7 @@ namespace Realm {
   {
     IndexSpaceGenericImplTyped<N, T> *typed =
         dynamic_cast<IndexSpaceGenericImplTyped<N, T> *>(impl);
-    assert(typed != 0);
+    REALM_ASSERT(typed != 0);
     return typed->space;
   }
 
@@ -199,7 +199,7 @@ namespace Realm {
                                                Event wait_on, int priority) const
   {
     // TODO: move to transfer.cc for indirection goodness
-    assert(indirect_len == 0);
+    REALM_ASSERT(indirect_len == 0);
     return space.copy(srcs, dsts, requests, wait_on, priority);
   }
 

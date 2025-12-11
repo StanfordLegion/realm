@@ -138,7 +138,7 @@ namespace Realm {
     {
       event = CreateEvent(NULL /*default security*/, FALSE /*!manual reset*/,
                           FALSE /*initial state*/, NULL /*unnamed*/);
-      assert(event);
+      REALM_ASSERT(event);
     }
 
     ~DoorbellImpl() { CloseHandle(event); }
@@ -183,7 +183,7 @@ namespace Realm {
   Doorbell::~Doorbell()
   {
 #ifdef DEBUG_REALM
-    assert(state.load() == STATE_IDLE);
+    REALM_ASSERT(state.load() == STATE_IDLE);
 #endif
   }
 
@@ -285,7 +285,7 @@ namespace Realm {
       //  exactly one wake, no matter which order they happen in
       if(dbi->state.compare_exchange(val, STATE_PENDING_ASLEEP)) {
         DWORD result = WaitForSingleObject(dbi->event, INFINITE);
-        assert(result == WAIT_OBJECT_0);
+        REALM_ASSERT(result == WAIT_OBJECT_0);
       }
 #else
       // attempt to sleep, but the AWAKE->ASLEEP transition has to happen with
@@ -303,7 +303,7 @@ namespace Realm {
     // uncontested transition back to IDLE
 #ifdef DEBUG_REALM
     uint32_t prev = state.exchange(STATE_IDLE);
-    assert(prev == val);
+    REALM_ASSERT(prev == val);
     (void)prev;
 #else
     state.store(STATE_IDLE);
@@ -318,16 +318,16 @@ namespace Realm {
 #if defined(REALM_ON_LINUX) && !defined(REALM_NO_USE_FUTEX)
     // tell kernel to wake up sleeper (or not, if we get there first)
     int ret = syscall(SYS_futex, &dbi->state, FUTEX_WAKE, 1, nullptr, nullptr, 0);
-    assert(ret >= 0);
+    REALM_ASSERT(ret >= 0);
 #elif defined(REALM_ON_WINDOWS)
     // set the sleeper's event
     DWORD result = SetEvent(dbi->event);
-    assert(result);
+    REALM_ASSERT(result);
 #else
     // we know there was a sleeper, but condvar rules say we need to take mutex
     //  first
     dbi->mutex.lock();
-    assert(dbi->asleep);
+    REALM_ASSERT(dbi->asleep);
     dbi->asleep = false;
     dbi->condvar.signal();
     dbi->mutex.unlock();
@@ -377,7 +377,7 @@ namespace Realm {
   DoorbellList::~DoorbellList()
   {
 #ifdef DEBUG_REALM
-    assert(head_or_count.load() == 0);
+    REALM_ASSERT(head_or_count.load() == 0);
 #endif
   }
 
@@ -467,7 +467,7 @@ namespace Realm {
         //  appears in a next pointer and disconnect it
         Doorbell *cur = reinterpret_cast<Doorbell *>(expected);
         while(cur->next_doorbell != head) {
-          assert(cur->next_doorbell);
+          REALM_ASSERT(cur->next_doorbell);
           cur = cur->next_doorbell;
         }
         cur->next_doorbell = head->next_doorbell;
@@ -475,7 +475,7 @@ namespace Realm {
     } else {
       // we're modifying something inside the list we own, so no need to mess
       //  with the atomic head pointer
-      assert(chosen_prev->next_doorbell == chosen);
+      REALM_ASSERT(chosen_prev->next_doorbell == chosen);
       chosen_prev->next_doorbell = chosen->next_doorbell;
     }
 
@@ -545,7 +545,7 @@ namespace Realm {
       //  appears in a next pointer and disconnect it
       Doorbell *cur = reinterpret_cast<Doorbell *>(expected);
       while(cur->next_doorbell != head) {
-        assert(cur->next_doorbell);
+        REALM_ASSERT(cur->next_doorbell);
         cur = cur->next_doorbell;
       }
       cur->next_doorbell = head->next_doorbell;
@@ -645,7 +645,7 @@ namespace Realm {
     // nope, new work has been delegated to us - return the difference between
     //  what we knew of before and the new total
 #ifdef DEBUG_REALM
-    assert(expected > tstate);
+    REALM_ASSERT(expected > tstate);
 #endif
     uint64_t new_work = (expected - tstate) >> 1;
     tstate = expected;
@@ -680,7 +680,7 @@ namespace Realm {
 #ifdef DEBUG_REALM
               // lock better be held!
               val = state.load();
-              assert((val & 1) != 0);
+              REALM_ASSERT((val & 1) != 0);
 #endif
               return;
             } else {
@@ -729,7 +729,7 @@ namespace Realm {
       // since we're releasing the lock to an unknown thread, this needs to
       //  have release semantics
       uint32_t prev = state.fetch_sub_acqrel(3);
-      assert(((prev & 1) != 0) && (prev >= 3));
+      REALM_ASSERT(((prev & 1) != 0) && (prev >= 3));
       (void)prev;
 
       db->notify(0 /*!lock_transfer*/);
@@ -737,7 +737,7 @@ namespace Realm {
       // if we got a spinning waiter or none at all (i.e. extra token case),
       //  we'll transfer the lock to them, so just decrement the waiter count
       uint32_t prev = state.fetch_sub(2);
-      assert(((prev & 1) != 0) && (prev >= 3));
+      REALM_ASSERT(((prev & 1) != 0) && (prev >= 3));
       (void)prev;
 
       // reattempt extract if we didn't get one before
@@ -775,7 +775,7 @@ namespace Realm {
           return;
         }
       } else {
-        assert(val == 0);
+        REALM_ASSERT(val == 0);
         if(state.compare_exchange(val, 1)) {
           // managed to grab the lock without waiting
           return;
@@ -789,7 +789,7 @@ namespace Realm {
     // decrement the waiter count and then pass the lock on to whoever we
     //  get from the doorbell list
     uint32_t prev = state.fetch_sub(2);
-    assert(((prev & 1) != 0) && (prev >= 3));
+    REALM_ASSERT(((prev & 1) != 0) && (prev >= 3));
     (void)prev;
 
     Doorbell *db =
@@ -806,7 +806,7 @@ namespace Realm {
   KernelMutex::KernelMutex(void)
   {
     NativeMutex *mutex = reinterpret_cast<NativeMutex *>(&placeholder);
-    assert(sizeof(NativeMutex) <= sizeof(placeholder));
+    static_assert(sizeof(NativeMutex) <= sizeof(placeholder));
 #ifdef REALM_ON_WINDOWS
     InitializeCriticalSection(mutex);
 #else
@@ -875,14 +875,14 @@ namespace Realm {
           db_list.extract_newest(true /*prefer_spinning*/, false /*!allow_extra*/);
       // a waiter had to add themselves before letting go of the lock, so
       //  this should never fail
-      assert(db);
+      REALM_ASSERT(db);
       // now that we have the signal-ee, don't actually ring the doorbell -
       //  just re-insert this doorbell on the mutex's waiter list
       uint32_t mutex_prev = mutex.state.fetch_add(2);
-      assert((mutex_prev & 1) != 0); // i.e. we hold the lock
+      REALM_ASSERT((mutex_prev & 1) != 0); // i.e. we hold the lock
       // similarly, this should never see a wake-before-wait case
       bool ok = mutex.db_list.add_doorbell(db);
-      assert(ok);
+      REALM_ASSERT(ok);
       (void)ok;
     } else {
       // no waiters, so signal() is a nop
@@ -901,14 +901,14 @@ namespace Realm {
           db_list.extract_oldest(false /*!prefer_spinning*/, false /*!allow_extra*/);
       // a waiter had to add themselves before letting go of the lock, so
       //  this should never fail
-      assert(db);
+      REALM_ASSERT(db);
       // now that we have the signal-ee, don't actually ring the doorbell -
       //  just re-insert this doorbell on the mutex's waiter list
       uint32_t mutex_prev = mutex.state.fetch_add(2);
-      assert((mutex_prev & 1) != 0); // i.e. we hold the lock
+      REALM_ASSERT((mutex_prev & 1) != 0); // i.e. we hold the lock
       // similarly, this should never see a wake-before-wait case
       bool ok = mutex.db_list.add_doorbell(db);
-      assert(ok);
+      REALM_ASSERT(ok);
       (void)ok;
     }
   }
@@ -922,7 +922,7 @@ namespace Realm {
     num_waiters++;
     bool ok = db_list.add_doorbell(db);
     // condvar doorbell list should never go negative
-    assert(ok);
+    REALM_ASSERT(ok);
     (void)ok;
 
     // now release the mutex and wait on our doorbell - we will not be
@@ -955,14 +955,14 @@ namespace Realm {
           db_list.extract_oldest(false /*!prefer_spinning*/, false /*!allow_extra*/);
       // a waiter had to add themselves before letting go of the lock, so
       //  this should never fail
-      assert(db);
+      REALM_ASSERT(db);
       // now that we have the signal-ee, don't actually ring the doorbell -
       //  just re-insert this doorbell on the mutex's waiter list
       uint32_t mutex_prev = mutex.state.fetch_add(2);
-      assert((mutex_prev & 1) != 0); // i.e. we hold the lock
+      REALM_ASSERT((mutex_prev & 1) != 0); // i.e. we hold the lock
       // similarly, this should never see a wake-before-wait case
       bool ok = mutex.db_list.add_doorbell(db);
-      assert(ok);
+      REALM_ASSERT(ok);
       (void)ok;
     } else {
       // no waiters, so signal() is a nop
@@ -979,14 +979,14 @@ namespace Realm {
           db_list.extract_oldest(false /*!prefer_spinning*/, false /*!allow_extra*/);
       // a waiter had to add themselves before letting go of the lock, so
       //  this should never fail
-      assert(db);
+      REALM_ASSERT(db);
       // now that we have the signal-ee, don't actually ring the doorbell -
       //  just re-insert this doorbell on the mutex's waiter list
       uint32_t mutex_prev = mutex.state.fetch_add(2);
-      assert((mutex_prev & 1) != 0); // i.e. we hold the lock
+      REALM_ASSERT((mutex_prev & 1) != 0); // i.e. we hold the lock
       // similarly, this should never see a wake-before-wait case
       bool ok = mutex.db_list.add_doorbell(db);
-      assert(ok);
+      REALM_ASSERT(ok);
       (void)ok;
     }
   }
@@ -1000,7 +1000,7 @@ namespace Realm {
     num_waiters++;
     bool ok = db_list.add_doorbell(db);
     // condvar doorbell list should never go negative
-    assert(ok);
+    REALM_ASSERT(ok);
     (void)ok;
 
     // now release the mutex and wait on our doorbell - we will not be
@@ -1020,7 +1020,7 @@ namespace Realm {
   {
     NativeConditionVariable *condvar =
         reinterpret_cast<NativeConditionVariable *>(&placeholder);
-    assert(sizeof(NativeConditionVariable) <= sizeof(placeholder));
+    static_assert(sizeof(NativeConditionVariable) <= sizeof(placeholder));
 #ifdef REALM_ON_WINDOWS
     InitializeConditionVariable(condvar);
 #else
@@ -1108,7 +1108,7 @@ namespace Realm {
     , reader(*this)
   {
     NativeRWLock *rwlock = reinterpret_cast<NativeRWLock *>(&placeholder);
-    assert(sizeof(NativeRWLock) <= sizeof(placeholder));
+    static_assert(sizeof(NativeRWLock) <= sizeof(placeholder));
 #ifdef REALM_ON_WINDOWS
     InitializeSRWLock(&rwlock->rwlock);
 #else

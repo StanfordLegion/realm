@@ -128,7 +128,7 @@ namespace Realm {
   {
     program_size = bytes;
     program_base = repl_heap->alloc_obj(bytes, 16);
-    assert(program_base != 0);
+    REALM_ASSERT(program_base != 0);
     return program_base;
   }
 
@@ -245,12 +245,12 @@ namespace Realm {
               opens++;
               cur_vol += pieces[(-1 - ss[i].second)]->bounds.volume();
             } else {
-              assert(opens > 0);
+              REALM_ASSERT(opens > 0);
               opens--;
             }
           }
-          assert(cur_vol == total_vol);
-          assert(opens == 0);
+          REALM_ASSERT(cur_vol == total_vol);
+          REALM_ASSERT(opens == 0);
         }
 
         if(best_dim >= 0) {
@@ -337,8 +337,8 @@ namespace Realm {
         // generate low half of tree then record delta for high tree
         next_inst = low_child->generate_instructions(pieces, next_inst, usage_mask);
         size_t delta_bytes = next_inst - cur_inst;
-        assert((delta_bytes & 15) == 0);
-        assert(delta_bytes < (1 << 20));
+        REALM_ASSERT((delta_bytes & 15) == 0);
+        REALM_ASSERT(delta_bytes < (1 << 20));
         sp->set_delta(delta_bytes >> 4);
 
         next_inst = high_child->generate_instructions(pieces, next_inst, usage_mask);
@@ -351,7 +351,7 @@ namespace Realm {
   template <int N, typename T>
   void InstanceLayout<N, T>::compile_lookup_program(PieceLookup::CompiledProgram &p) const
   {
-    assert(!p.is_compiled.load());
+    REALM_ASSERT(!p.is_compiled.load());
     // first, count up how many bytes we're going to need
 
     size_t total_bytes = 0;
@@ -508,7 +508,7 @@ namespace Realm {
     log_inst.info() << "instance destroyed: inst=" << *this << " wait_on=" << wait_on;
 
     RegionInstanceImpl *inst_impl = get_runtime()->get_instance_impl(id);
-    assert(inst_impl != nullptr && "invalid instance handle");
+    REALM_ASSERT(inst_impl != nullptr);
 
     return inst_impl->release(wait_on);
   }
@@ -533,7 +533,7 @@ namespace Realm {
   {
     ID inst_id = ID(id);
     MemoryImpl *mem_impl = get_runtime()->get_memory_impl(inst_id);
-    assert(mem_impl != nullptr && "invalid memory handle");
+    REALM_ASSERT(mem_impl != nullptr);
     RegionInstanceImpl *inst_impl = mem_impl->get_instance(inst_id);
     return mem_impl->generate_resource_info(inst_impl, 0, span<const FieldID>(),
                                             read_only);
@@ -545,7 +545,7 @@ namespace Realm {
   {
     ID inst_id = ID(id);
     MemoryImpl *mem_impl = get_runtime()->get_memory_impl(inst_id);
-    assert(mem_impl != nullptr && "invalid memory handle");
+    REALM_ASSERT(mem_impl != nullptr);
     RegionInstanceImpl *inst_impl = mem_impl->get_instance(inst_id);
     return mem_impl->generate_resource_info(inst_impl, &space, fields, read_only);
   }
@@ -569,9 +569,8 @@ namespace Realm {
   {
     RegionInstanceImpl *r_impl = get_runtime()->get_instance_impl(*this);
     // metadata must already be available
-    assert(r_impl->metadata.is_valid() &&
-           "instance metadata must be valid before accesses are performed");
-    assert(r_impl->metadata.layout);
+    REALM_ASSERT(r_impl->metadata.is_valid());
+    REALM_ASSERT(r_impl->metadata.layout);
     return r_impl->metadata.layout;
   }
 
@@ -644,7 +643,7 @@ namespace Realm {
     void *orig_base = 0;
     size_t orig_stride = 0;
     bool ok = r_impl->get_strided_parameters(orig_base, orig_stride, field_offset);
-    assert(ok);
+    REALM_ASSERT(ok);
     base = reinterpret_cast<intptr_t>(orig_base);
     stride = orig_stride;
   }
@@ -652,7 +651,7 @@ namespace Realm {
   void RegionInstance::report_instance_fault(int reason, const void *reason_data,
                                              size_t reason_size) const
   {
-    assert(0);
+    abort();
   }
 
   ////////////////////////////////////////////////////////////////////////
@@ -694,7 +693,7 @@ namespace Realm {
       RegionInstance &inst, MemoryImpl *mem_impl, InstanceLayoutGeneric *ilg,
       const ExternalInstanceResource *res, const ProfilingRequestSet &prs, Event wait_on)
   {
-    assert(mem_impl != nullptr && "Invalid mem impl");
+    REALM_ASSERT(mem_impl != nullptr);
     RegionInstanceImpl *impl = mem_impl->new_instance(prs);
     // we can fail to get a valid pointer if we are out of instance slots
     // we can also fail if there is not enough space for the instance
@@ -743,7 +742,7 @@ namespace Realm {
     case MemoryImpl::ALLOC_INSTANT_SUCCESS:
     {
       // successful allocation
-      assert(impl->metadata.inst_offset <= RegionInstanceImpl::INSTOFFSET_MAXVALID);
+      REALM_ASSERT(impl->metadata.inst_offset <= RegionInstanceImpl::INSTOFFSET_MAXVALID);
       ready_event = Event::NO_EVENT;
       break;
     }
@@ -812,7 +811,7 @@ namespace Realm {
     case MemoryImpl::ALLOC_EVENTUAL_SUCCESS:
     case MemoryImpl::ALLOC_EVENTUAL_FAILURE:
       // should not occur
-      assert(0);
+      abort();
     }
 
     if(res)
@@ -842,7 +841,7 @@ namespace Realm {
     std::vector<RegionInstanceImpl *> insts(num_layouts);
 
     // TODO(apryakhin): Handle redistricting from non-owner node
-    assert(NodeID(ID(me).instance_owner_node()) == Network::my_node_id);
+    REALM_ASSERT(NodeID(ID(me).instance_owner_node()) == Network::my_node_id);
 
     for(size_t i = 0; i < num_layouts; i++) {
       insts[i] = mem_impl->new_instance(prs[i]);
@@ -956,7 +955,7 @@ namespace Realm {
     case MemoryImpl::ALLOC_EVENTUAL_SUCCESS:
     case MemoryImpl::ALLOC_EVENTUAL_FAILURE:
       // should not occur
-      assert(0);
+      abort();
     }
     return ready_event;
   }
@@ -1019,7 +1018,7 @@ namespace Realm {
       }
 
       default:
-        assert(0);
+        abort();
       }
 
       ActiveMessage<MemStorageAllocResponse> amsg(creator_node);
@@ -1055,7 +1054,7 @@ namespace Realm {
         // exception: allocations that were cancelled would have had some
         //  error response reported further up the chain, so let this
         //  one slide
-        assert(result == MemoryImpl::ALLOC_CANCELLED);
+        REALM_ASSERT(result == MemoryImpl::ALLOC_CANCELLED);
       }
 
       log_inst.info() << "allocation failed: inst=" << me;
@@ -1096,8 +1095,8 @@ namespace Realm {
 
         if(metadata.need_alloc_result) {
 #ifdef DEBUG_REALM
-          assert(measurements.wants_measurement<InstanceAllocResult>());
-          assert(!metadata.need_notify_dealloc);
+          REALM_ASSERT(measurements.wants_measurement<InstanceAllocResult>());
+          REALM_ASSERT(!metadata.need_notify_dealloc);
 #endif
 
           // this is either the only result we will get or has raced ahead of
@@ -1134,7 +1133,7 @@ namespace Realm {
 
         if(metadata.need_alloc_result) {
 #ifdef DEBUG_REALM
-          assert(measurements
+          REALM_ASSERT(measurements
                      .wants_measurement<ProfilingMeasurements::InstanceAllocResult>());
 #endif
           ProfilingMeasurements::InstanceAllocResult result;
@@ -1175,8 +1174,8 @@ namespace Realm {
       //  message, so do it with lock held
       if(metadata.need_alloc_result) {
 #ifdef DEBUG_REALM
-        assert(measurements.wants_measurement<InstanceAllocResult>());
-        assert(!metadata.need_notify_dealloc);
+        REALM_ASSERT(measurements.wants_measurement<InstanceAllocResult>());
+        REALM_ASSERT(!metadata.need_notify_dealloc);
 #endif
 
         // this is either the only result we will get or has raced ahead of
@@ -1240,9 +1239,9 @@ namespace Realm {
     log_inst.debug() << "deallocation completed: inst=" << me;
 
     // our instance better not be in the unallocated state...
-    assert(metadata.inst_offset != INSTOFFSET_UNALLOCATED);
-    assert(metadata.inst_offset != INSTOFFSET_DELAYEDALLOC);
-    assert(metadata.inst_offset != INSTOFFSET_DELAYEDDESTROY);
+    REALM_ASSERT(metadata.inst_offset != INSTOFFSET_UNALLOCATED);
+    REALM_ASSERT(metadata.inst_offset != INSTOFFSET_DELAYEDALLOC);
+    REALM_ASSERT(metadata.inst_offset != INSTOFFSET_DELAYEDDESTROY);
 
     // was this a successfully allocatated instance?
     if(metadata.inst_offset != INSTOFFSET_FAILED) {
@@ -1295,7 +1294,7 @@ namespace Realm {
 
   Event RegionInstanceImpl::prefetch_metadata(NodeID target_node)
   {
-    assert(target_node != Network::my_node_id);
+    REALM_ASSERT(target_node != Network::my_node_id);
 
     Event e = Event::NO_EVENT;
     {
@@ -1331,11 +1330,10 @@ namespace Realm {
     }
 
     // metadata must already be available
-    assert(metadata.is_valid() &&
-           "instance metadata must be valid before accesses are performed");
+    REALM_ASSERT(metadata.is_valid());
     std::map<FieldID, PieceLookup::CompiledProgram::PerField>::const_iterator it;
     it = metadata.lookup_program.fields.find(field_id);
-    assert(it != metadata.lookup_program.fields.end());
+    REALM_ASSERT(it != metadata.lookup_program.fields.end());
 
     // bail out if the program requires unsupported instructions
     if((it->second.inst_usage_mask & ~allowed_mask) != 0)
@@ -1344,7 +1342,7 @@ namespace Realm {
     // the "field offset" picks up both the actual per-field offset but also
     //  the base of the instance itself
     void *ptr = mem_impl->get_inst_ptr(this, 0, metadata.layout->bytes_used);
-    assert(ptr != 0);
+    REALM_ASSERT(ptr != 0);
     field_offset = (reinterpret_cast<uintptr_t>(ptr) + it->second.field_offset);
 
     return it->second.start_inst;
@@ -1363,11 +1361,10 @@ namespace Realm {
     }
 
     // metadata must already be available
-    assert(metadata.is_valid() &&
-           "instance metadata must be valid before accesses are performed");
+    REALM_ASSERT(metadata.is_valid());
     std::map<FieldID, PieceLookup::CompiledProgram::PerField>::const_iterator it;
     it = metadata.lookup_program.fields.find(field_id);
-    assert(it != metadata.lookup_program.fields.end());
+    REALM_ASSERT(it != metadata.lookup_program.fields.end());
 
     // bail out if the program requires unsupported instructions
     if((it->second.inst_usage_mask & ~allowed_mask) != 0)
@@ -1376,7 +1373,7 @@ namespace Realm {
     // the "field offset" picks up both the actual per-field offset but also
     //  the base of the instance itself
     void *ptr = mem_impl->get_inst_ptr(this, 0, metadata.layout->bytes_used);
-    assert(ptr != 0);
+      REALM_ASSERT(ptr != 0);
     field_offset = (reinterpret_cast<uintptr_t>(ptr) + it->second.field_offset);
 
     // try to pre-execute part of the program based on the subrect given
@@ -1402,18 +1399,16 @@ namespace Realm {
   void RegionInstanceImpl::read_untyped(size_t offset, void *data, size_t datalen) const
   {
     // metadata must already be available
-    assert(metadata.is_valid() &&
-           "instance metadata must be valid before accesses are performed");
-    assert(metadata.layout);
+    REALM_ASSERT(metadata.is_valid());
+    REALM_ASSERT(metadata.layout);
     mem_impl->get_bytes(metadata.inst_offset + offset, data, datalen);
   }
 
   void RegionInstanceImpl::write_untyped(size_t offset, const void *data, size_t datalen)
   {
     // metadata must already be available
-    assert(metadata.is_valid() &&
-           "instance metadata must be valid before accesses are performed");
-    assert(metadata.layout);
+    REALM_ASSERT(metadata.is_valid());
+    REALM_ASSERT(metadata.layout);
     mem_impl->put_bytes(metadata.inst_offset + offset, data, datalen);
   }
 
@@ -1422,16 +1417,15 @@ namespace Realm {
                                                 bool exclusive /*= false*/)
   {
     // metadata must already be available
-    assert(metadata.is_valid() &&
-           "instance metadata must be valid before accesses are performed");
-    assert(metadata.layout);
+    REALM_ASSERT(metadata.is_valid());
+    REALM_ASSERT(metadata.layout);
     const ReductionOpUntyped *redop = runtime_impl->reduce_op_table.get(redop_id, 0);
     if(redop == 0) {
       log_inst.fatal() << "no reduction op registered for ID " << redop_id;
       abort();
     }
     // data should match RHS size
-    assert(datalen == redop->sizeof_rhs);
+    REALM_ASSERT(datalen == redop->sizeof_rhs);
     // can we run the reduction op directly on the memory location?
     void *ptr = mem_impl->get_inst_ptr(this, offset, redop->sizeof_lhs);
     if(ptr) {
@@ -1442,7 +1436,7 @@ namespace Realm {
     } else {
       // we have to do separate get/put, which means we cannot supply
       //  atomicity in the !exclusive case
-      assert(exclusive);
+      REALM_ASSERT(exclusive);
       void *lhs_copy = alloca(redop->sizeof_lhs);
       mem_impl->get_bytes(metadata.inst_offset + offset, lhs_copy, redop->sizeof_lhs);
       (redop->cpu_apply_excl_fn)(lhs_copy, 0, data, 0, 1, redop->userdata);
@@ -1455,16 +1449,15 @@ namespace Realm {
                                                bool exclusive /*= false*/)
   {
     // metadata must already be available
-    assert(metadata.is_valid() &&
-           "instance metadata must be valid before accesses are performed");
-    assert(metadata.layout);
+    REALM_ASSERT(metadata.is_valid());
+    REALM_ASSERT(metadata.layout);
     const ReductionOpUntyped *redop = runtime_impl->reduce_op_table.get(redop_id, 0);
     if(redop == 0) {
       log_inst.fatal() << "no reduction op registered for ID " << redop_id;
       abort();
     }
     // data should match RHS size
-    assert(datalen == redop->sizeof_rhs);
+    REALM_ASSERT(datalen == redop->sizeof_rhs);
     // can we run the reduction op directly on the memory location?
     void *ptr = mem_impl->get_inst_ptr(this, offset, redop->sizeof_rhs);
     if(ptr) {
@@ -1475,7 +1468,7 @@ namespace Realm {
     } else {
       // we have to do separate get/put, which means we cannot supply
       //  atomicity in the !exclusive case
-      assert(exclusive);
+      REALM_ASSERT(exclusive);
       void *rhs1_copy = alloca(redop->sizeof_rhs);
       mem_impl->get_bytes(metadata.inst_offset + offset, rhs1_copy, redop->sizeof_rhs);
       (redop->cpu_fold_excl_fn)(rhs1_copy, 0, data, 0, 1, redop->userdata);
@@ -1485,9 +1478,8 @@ namespace Realm {
   void *RegionInstanceImpl::pointer_untyped(size_t offset, size_t datalen)
   {
     // metadata must already be available
-    assert(metadata.is_valid() &&
-           "instance metadata must be valid before accesses are performed");
-    assert(metadata.layout);
+    REALM_ASSERT(metadata.is_valid());
+    REALM_ASSERT(metadata.layout);
     return mem_impl->get_inst_ptr(this, offset, datalen);
   }
 
@@ -1520,12 +1512,12 @@ namespace Realm {
     // this exists for compatibility and assumes N=1, T=long long
     const InstanceLayout<1, long long> *inst_layout =
         dynamic_cast<const InstanceLayout<1, long long> *>(metadata.layout);
-    assert(inst_layout != 0);
+    REALM_ASSERT(inst_layout != 0);
 
     // look up the right field
     InstanceLayoutGeneric::FieldMap::const_iterator it =
         inst_layout->fields.find(field_offset);
-    assert(it != inst_layout->fields.end());
+    REALM_ASSERT(it != inst_layout->fields.end());
 
     // hand out a null pointer for empty instances (stride can be whatever
     //  the caller wants)
@@ -1535,10 +1527,10 @@ namespace Realm {
     }
 
     // also only works for a single piece
-    assert(inst_layout->piece_lists[it->second.list_idx].pieces.size() == 1);
+    REALM_ASSERT(inst_layout->piece_lists[it->second.list_idx].pieces.size() == 1);
     const InstanceLayoutPiece<1, long long> *piece =
         inst_layout->piece_lists[it->second.list_idx].pieces[0];
-    assert((piece->layout_type == PieceLayoutTypes::AffineLayoutType));
+    REALM_ASSERT((piece->layout_type == PieceLayoutTypes::AffineLayoutType));
     const AffineLayoutPiece<1, long long> *affine =
         static_cast<const AffineLayoutPiece<1, long long> *>(piece);
 
@@ -1587,7 +1579,7 @@ namespace Realm {
     Serialization::DynamicBufferSerializer dbs(128);
 
     bool ok = ((dbs << inst_offset) && (dbs << *layout));
-    assert(ok);
+    REALM_ASSERT(ok);
 
     out_size = dbs.bytes_used();
     return dbs.detach_buffer(0 /*trim*/);
@@ -1601,7 +1593,7 @@ namespace Realm {
     if(ok) {
       layout = InstanceLayoutGeneric::deserialize_new(fbd);
     }
-    assert(ok && (layout != 0) && (fbd.bytes_left() == 0));
+    REALM_ASSERT(ok && (layout != 0) && (fbd.bytes_left() == 0));
   }
 
   void RegionInstanceImpl::Metadata::do_invalidate(void)
@@ -1678,7 +1670,7 @@ namespace Realm {
   {
     // TODO: some way to ask for external memory resources on other ranks?
     CoreModule *mod = get_runtime()->get_module<CoreModule>("core");
-    assert(mod);
+    REALM_ASSERT(mod);
     return mod->ext_sysmem->me;
   }
 

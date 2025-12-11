@@ -400,7 +400,7 @@ namespace Realm {
   inline std::ostream &LoggerMessage::get_stream(void)
   {
 #ifdef DEBUG_REALM
-    assert(active);
+    REALM_ASSERT(active);
 #endif
     return *stream;
   }
