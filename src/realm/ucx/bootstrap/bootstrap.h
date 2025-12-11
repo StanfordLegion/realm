@@ -34,6 +34,8 @@ typedef struct bootstrap_handle {
   int pg_size;
   int *shared_ranks;
   int num_shared_ranks;
+  // TODO: Do we really need all these?!? As far as I can tell this interface
+  // only requires the allgather function and nothing else
   int (*barrier)(struct bootstrap_handle *handle);
   int (*bcast)(void *buf, int bytes, int root, struct bootstrap_handle *handle);
   int (*gather)(const void *sendbuf, void *recvbuf, int bytes, int root,
