@@ -6,7 +6,7 @@
 namespace App {
 
 Realm::Runtime::NetworkVtable create_network_vtable();
-void finalize_network_vtable();
+void finalize_network_vtable(const Realm::Runtime::NetworkVtable &vtable);
 
 }
 

@@ -20,7 +20,7 @@ int main(int argc, char **argv)
   
   rt.shutdown();
   int rc = rt.wait_for_shutdown();
-  App::finalize_network_vtable();
+  App::finalize_network_vtable(vtable);
   return rc;
 }
 

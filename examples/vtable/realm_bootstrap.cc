@@ -13,19 +13,25 @@ static constexpr const char *REALM_KEY_RANK = "realm_rank";
 static constexpr const char *REALM_KEY_RANKS = "realm_ranks";
 static constexpr const char *REALM_KEY_GROUP = "realm_group";
 
-static std::map<std::string, std::vector<uint8_t>> local_kv_store;
-static std::map<std::string, std::vector<uint8_t>> global_kv_store;
-static bool pending_sync = false;
+struct VtableContext {
+  std::map<std::string, std::vector<uint8_t>> local_kv_store;
+  std::map<std::string, std::vector<uint8_t>> global_kv_store;
+  bool pending_sync = false;
+  int mpi_rank = 0;
+  int mpi_size = 0;
+};
 
 static bool app_put(const void *key, size_t key_size, const void *value, size_t value_size,
                     const void *vtable_data, size_t vtable_data_size)
 {
-  if(!key || !value || key_size == 0) return false;
+  if(!key || !value || key_size == 0 || !vtable_data) return false;
+  VtableContext *state = *(VtableContext**)vtable_data;
+  
   std::string k(static_cast<const char*>(key), key_size);
   std::vector<uint8_t> v(static_cast<const uint8_t*>(value), 
                          static_cast<const uint8_t*>(value) + value_size);
-  local_kv_store[k] = v;
-  pending_sync = true;
+  state->local_kv_store[k] = v;
+  state->pending_sync = true;
   // std::cout << "app_put: key='" << k << "' value_size=" << value_size << std::endl;
   return true;
 }
@@ -33,24 +39,22 @@ static bool app_put(const void *key, size_t key_size, const void *value, size_t 
 static bool app_get(const void *key, size_t key_size, void *value, size_t *value_size,
                     const void *vtable_data, size_t vtable_data_size)
 {
-  if(!key || !value || !value_size || key_size == 0) return false;
+  if(!key || !value || !value_size || key_size == 0 || !vtable_data) return false;
+  VtableContext *state = *(VtableContext**)vtable_data;
+  
   std::string k(static_cast<const char*>(key), key_size);
   // std::cout << "app_get: key='" << k << "'" << std::endl;
   
   if(k == REALM_KEY_RANK) {
-    int rank;
-    MPI_Comm_rank(MPI_COMM_WORLD, &rank);
     if(*value_size < sizeof(uint32_t)) { *value_size = 0; return false; }
-    uint32_t v = static_cast<uint32_t>(rank);
+    uint32_t v = static_cast<uint32_t>(state->mpi_rank);
     memcpy(value, &v, sizeof(v));
     *value_size = sizeof(v);
     return true;
   }
   if(k == REALM_KEY_RANKS) {
-    int size;
-    MPI_Comm_size(MPI_COMM_WORLD, &size);
     if(*value_size < sizeof(uint32_t)) { *value_size = 0; return false; }
-    uint32_t v = static_cast<uint32_t>(size);
+    uint32_t v = static_cast<uint32_t>(state->mpi_size);
     memcpy(value, &v, sizeof(v));
     *value_size = sizeof(v);
     return true;
@@ -63,8 +67,8 @@ static bool app_get(const void *key, size_t key_size, void *value, size_t *value
     return true;
   }
   
-  auto it = global_kv_store.find(k);
-  if(it != global_kv_store.end()) {
+  auto it = state->global_kv_store.find(k);
+  if(it != state->global_kv_store.end()) {
     if(it->second.size() > *value_size) {
       *value_size = it->second.size();
       return false;
@@ -74,8 +78,8 @@ static bool app_get(const void *key, size_t key_size, void *value, size_t *value
     return true;
   }
   
-  it = local_kv_store.find(k);
-  if(it != local_kv_store.end()) {
+  it = state->local_kv_store.find(k);
+  if(it != state->local_kv_store.end()) {
     if(it->second.size() > *value_size) {
       *value_size = it->second.size();
       return false;
@@ -91,20 +95,16 @@ static bool app_get(const void *key, size_t key_size, void *value, size_t *value
 
 static bool app_bar(const void *vtable_data, size_t vtable_data_size)
 {
-  // std::cout << "app_bar called" << std::endl;
+  if(!vtable_data) return false;
+  VtableContext *state = *(VtableContext**)vtable_data;
   
-  if(MPI_Barrier(MPI_COMM_WORLD) != MPI_SUCCESS)
-    return false;
+  // std::cout << "app_bar called" << std::endl;
   
   // Exchange local KV data. Two stores needed because bootstrap reuses keys across
   // rounds with different sizes - only sync new data to avoid clobbering.
-  if(pending_sync && !local_kv_store.empty()) {
-    int rank, nranks;
-    MPI_Comm_rank(MPI_COMM_WORLD, &rank);
-    MPI_Comm_size(MPI_COMM_WORLD, &nranks);
-    
+  if(state->pending_sync && !state->local_kv_store.empty()) {
     std::vector<uint8_t> sendbuf;
-    for(const auto &kv : local_kv_store) {
+    for(const auto &kv : state->local_kv_store) {
       uint32_t klen = kv.first.size();
       uint32_t vlen = kv.second.size();
       sendbuf.insert(sendbuf.end(), reinterpret_cast<uint8_t*>(&klen),
@@ -116,12 +116,12 @@ static bool app_bar(const void *vtable_data, size_t vtable_data_size)
     }
     
     int sendsize = sendbuf.size();
-    std::vector<int> recvsizes(nranks);
+    std::vector<int> recvsizes(state->mpi_size);
     MPI_Allgather(&sendsize, 1, MPI_INT, recvsizes.data(), 1, MPI_INT, MPI_COMM_WORLD);
     
-    std::vector<int> displs(nranks);
+    std::vector<int> displs(state->mpi_size);
     int total = 0;
-    for(int i = 0; i < nranks; i++) {
+    for(int i = 0; i < state->mpi_size; i++) {
       displs[i] = total;
       total += recvsizes[i];
     }
@@ -138,11 +138,11 @@ static bool app_bar(const void *vtable_data, size_t vtable_data_size)
       std::string k(reinterpret_cast<char*>(&recvbuf[off]), klen); off += klen;
       memcpy(&vlen, &recvbuf[off], sizeof(vlen)); off += sizeof(vlen);
       std::vector<uint8_t> v(&recvbuf[off], &recvbuf[off] + vlen); off += vlen;
-      global_kv_store[k] = v;
+      state->global_kv_store[k] = v;
     }
     
-    pending_sync = false;
-    local_kv_store.clear();
+    state->pending_sync = false;
+    state->local_kv_store.clear();
   }
   
   return true;
@@ -152,9 +152,13 @@ Realm::Runtime::NetworkVtable create_network_vtable()
 {
   MPI_Init(NULL, NULL);
   
+  VtableContext *state = new VtableContext();
+  MPI_Comm_rank(MPI_COMM_WORLD, &state->mpi_rank);
+  MPI_Comm_size(MPI_COMM_WORLD, &state->mpi_size);
+  
   Realm::Runtime::NetworkVtable vtable;
-  vtable.vtable_data = nullptr;
-  vtable.vtable_data_size = 0;
+  vtable.vtable_data = new VtableContext*(state);
+  vtable.vtable_data_size = sizeof(VtableContext*);
   vtable.put = app_put;
   vtable.get = app_get;
   vtable.bar = app_bar;
@@ -162,8 +166,13 @@ Realm::Runtime::NetworkVtable create_network_vtable()
   return vtable;
 }
 
-void finalize_network_vtable()
+void finalize_network_vtable(const Realm::Runtime::NetworkVtable &vtable)
 {
+  if(vtable.vtable_data) {
+    VtableContext *state = *(VtableContext**)vtable.vtable_data;
+    delete state;
+    delete (VtableContext**)vtable.vtable_data;
+  }
   MPI_Finalize();
 }
 
