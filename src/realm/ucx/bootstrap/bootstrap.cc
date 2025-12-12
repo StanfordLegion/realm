@@ -64,7 +64,7 @@ namespace Realm {
         uint8_t *ptr = (uint8_t *)recvbuf;
         for(int rank = 0; rank < handle->pg_size; rank++) {
           key_size =
-              snprintf(key, max_key_size, "realm_boostrap_key_%ld_%d", *group, rank);
+              snprintf(key, max_key_size, "realm_bootstrap_key_%ld_%d", *group, rank);
           if(max_key_size < key_size) {
             log_ucp.error() << "Internal bootstrap error, key too large";
             // Explode since this is our fault
