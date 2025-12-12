@@ -823,7 +823,7 @@ namespace Realm {
       }
 
       boot_config.plugin_name = getenv("REALM_UCP_BOOTSTRAP_PLUGIN");
-      if(!bootstrap_init(&boot_config, &boot_handle)) {
+      if(bootstrap_init(&boot_config, &boot_handle) != 0) {
         log_ucp.error() << "failed to bootstrap ucp";
         return false;
       }
