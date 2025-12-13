@@ -232,13 +232,6 @@ namespace Realm {
                             size_t _field_size, RegionInstanceImpl *_inst_impl,
                             const IndexSpace<N, T> &_is, ReplicatedHeap *_repl_heap);
 
-    /*IDIndexedFieldsIterator(const int _dim_order[N],
-                               const std::vector<FieldID> &_fields,
-                               const std::vector<size_t> &_fld_offsets,
-                               const std::vector<size_t> &_fld_sizes,
-                               RegionInstanceImpl *_inst_impl, const Rect<N, T> &_bounds,
-                               SparsityMapImpl<N, T> *_sparsity_impl);*/
-
     template <typename S>
     static TransferIterator *deserialize_new(S &deserializer);
 
