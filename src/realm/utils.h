@@ -67,9 +67,19 @@ namespace Realm {
   }
 
   // Based on boost::hash_combine
+  constexpr size_t hash_seed() noexcept
+  {
+    if constexpr (sizeof(size_t) == 8) {
+      return size_t{0x517cc1b727220a95ULL};
+    } else {
+      return size_t{0x9e3779b9UL};
+    }
+  }
+  
   constexpr size_t hash_combine(size_t lhs, size_t rhs) noexcept
   {
-    const size_t seed = 0x517cc1b727220a95ULL;
+    
+    constexpr size_t seed = hash_seed();
     return lhs ^ (rhs + seed + (lhs << 6) + (lhs >> 2));
   }
 
