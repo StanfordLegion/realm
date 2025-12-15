@@ -72,8 +72,8 @@ namespace Realm {
 #if SIZE_MAX == UINT64_MAX
     constexpr size_t seed = size_t{0x517cc1b727220a95ULL};
 #else
-    constexpr size_t seed =  size_t{0x9e3779b9UL};
-#endif    
+    constexpr size_t seed = size_t{0x9e3779b9UL};
+#endif
     return lhs ^ (rhs + seed + (lhs << 6) + (lhs >> 2));
   }
 
