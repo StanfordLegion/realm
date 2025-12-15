@@ -116,7 +116,7 @@ namespace mesh {
     auto key = self.ipaddress + ":" + std::to_string(self.port);
     key.resize(BUFSIZE); // always send BUFSIZE bytes!
     for(const auto &peer : send_sockets) {
-      size_t sz = send(peer.second, static_cast<void *>(key.data()), key.size(), 0);
+      size_t sz = send(peer.second, static_cast<const void *>(key.data()), key.size(), 0);
       if(sz != key.size()) {
         *p2p_log << "Failed to send the identity of the host" << std::endl;
         return -1;
