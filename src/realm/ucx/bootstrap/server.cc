@@ -119,7 +119,7 @@ namespace mesh {
           return -1;
         }
         exp_bytes -= sz;
-        sz = recv(s, const_cast<void*>(static_cast<const void*>(id.data())) + BUFSIZE - exp_bytes, exp_bytes, 0);
+        sz = recv(s, const_cast<char*>(id.data()) + (BUFSIZE - exp_bytes), exp_bytes, 0);
       }
 
       // TODO : Remove trailing null characters
