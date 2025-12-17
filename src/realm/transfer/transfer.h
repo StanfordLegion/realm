@@ -217,6 +217,68 @@ namespace Realm {
     size_t field_idx{0};
   };
 
+  ////////////////////////////////////////////////////////////////////////
+  //
+  // class IDIndexedFieldsIterator<N,T>
+  //
+
+  template <int N, typename T>
+  class IDIndexedFieldsIterator : public TransferIteratorBase<N, T> {
+  protected:
+    IDIndexedFieldsIterator(void);
+
+  public:
+    IDIndexedFieldsIterator(const int _dim_order[N], const std::vector<FieldID> &_fields,
+                            size_t _field_size, RegionInstanceImpl *_inst_impl,
+                            const IndexSpace<N, T> &_is, ReplicatedHeap *_repl_heap);
+
+    template <typename S>
+    static TransferIterator *deserialize_new(S &deserializer);
+
+    virtual ~IDIndexedFieldsIterator(void);
+
+    Event request_metadata(void) override;
+    void reset(void) override;
+
+    static Serialization::PolymorphicSerdezSubclass<TransferIterator,
+                                                    IDIndexedFieldsIterator<N, T>>
+        serdez_subclass;
+
+    template <typename S>
+    bool serialize(S &serializer) const;
+
+    bool get_addresses(AddressList &addrlist,
+                       const InstanceLayoutPieceBase *&nonaffine) override;
+
+    size_t step(size_t max_bytes, TransferIterator::AddressInfo &info, unsigned flags,
+                bool tentative = false) override;
+    size_t step_custom(size_t max_bytes, TransferIterator::AddressInfoCustom &info,
+                       bool tentative = false) override;
+    void confirm_step(void) override;
+    void cancel_step(void) override;
+
+  protected:
+    void reset_internal(void);
+
+    bool get_next_rect(Rect<N, T> &r, FieldID &fid, size_t &offset,
+                       size_t &fsize) override;
+
+    IndexSpace<N, T> is;
+    SparsityMapImpl<N, T> *sparsity_impl{nullptr};
+    IndexSpaceIterator<N, T> iter;
+    bool iter_init_deferred{false};
+    std::vector<FieldID> fields;
+
+    // const InstanceLayoutPiece<N, T> *layout_piece{nullptr};
+    const InstanceLayout<N, T> *inst_layout{nullptr};
+
+    size_t field_size{0};
+    size_t rect_idx{0};
+
+    ReplicatedHeap *repl_heap{nullptr};
+    FieldBlock *field_block{nullptr};
+  };
+
   template <int N, typename T>
   class TransferIteratorIndirect : public TransferIteratorBase<N, T> {
   protected:
@@ -294,17 +356,17 @@ namespace Realm {
                                  const std::vector<size_t> &fld_sizes,
                                  std::vector<size_t> &fragments) const = 0;
 
-    virtual TransferIterator *
-    create_iterator(RegionInstance inst, const std::vector<int> &dim_order,
-                    const std::vector<FieldID> &fields,
-                    const std::vector<size_t> &fld_offsets,
-                    const std::vector<size_t> &fld_sizes) const = 0;
+    virtual TransferIterator *create_iterator(RegionInstance inst,
+                                              const std::vector<int> &dim_order,
+                                              const std::vector<FieldID> &fields,
+                                              const std::vector<size_t> &fld_offsets,
+                                              const std::vector<size_t> &fld_sizes,
+                                              bool idindexed_fields = false) = 0;
 
-    virtual TransferIterator *
-    create_iterator(RegionInstance inst, RegionInstance peer,
-                    const std::vector<FieldID> &fields,
-                    const std::vector<size_t> &fld_offsets,
-                    const std::vector<size_t> &fld_sizes) const = 0;
+    virtual TransferIterator *create_iterator(RegionInstance inst, RegionInstance peer,
+                                              const std::vector<FieldID> &fields,
+                                              const std::vector<size_t> &fld_offsets,
+                                              const std::vector<size_t> &fld_sizes) = 0;
 
     virtual void print(std::ostream &os) const = 0;
   };
@@ -324,6 +386,7 @@ namespace Realm {
       int scatter_control_input;
       XferDesRedopInfo redop;
       Channel *channel = nullptr;
+      bool idindexed_fields = false;
 
       enum IOType
       {
