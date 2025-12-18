@@ -84,7 +84,6 @@ if(GASNet_FOUND)
 
   string(TOUPPER "${GASNET_CONDUIT}" GASNET_CONDUIT_UPPER)
   set(GASNET_CONDUIT_${GASNET_CONDUIT_UPPER} TRUE)
-
 endif()
 
 include(FindPackageMessage)
@@ -105,12 +104,13 @@ find_package_handle_standard_args(
 
 if(GASNet_FOUND)
   add_library(GASNet::GASNet ALIAS PkgConfig::GASNet)
-  string(REPLACE ";" " " _GASNet_CFLAGS_str "${GASNet_CFLAGS_OTHER}")
-  string(REPLACE ";" " " _GASNet_LDFLAGS_str "${GASNet_LDFLAGS_OTHER}")
+  # Issues #380
+  # GASNet pkgconfig adds optimization and build flags that are not necessacary
+  # for linkage but override and mess with compilation.  Until GASNet provides
+  # a way to remove these, we'll need to just ignore them for now
   set_target_properties(
     PkgConfig::GASNet PROPERTIES
-    INTERFACE_COMPILE_OPTIONS "SHELL:${_GASNet_CFLAGS_str}"
-    INTERFACE_LINK_OPTIONS "SHELL:${_GASNet_LDFLAGS_str}"
+    INTERFACE_COMPILE_OPTIONS ""
   )
   set_property(
     TARGET PkgConfig::GASNet
