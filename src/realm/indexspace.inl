@@ -26,6 +26,7 @@
 
 #include "realm/serialize.h"
 #include "realm/logging.h"
+#include "realm/realm_assert.h"
 
 TEMPLATE_TYPE_IS_SERIALIZABLE2(int N, typename T, Realm::IndexSpace<N, T>);
 
