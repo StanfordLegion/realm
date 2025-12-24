@@ -99,6 +99,7 @@ namespace PRealm {
       Event fevent;
       Event event;
       unsigned long long backtrace_id;
+      unsigned long long provenance_id;
     };
     struct EventMergerInfo {
     public:
@@ -270,7 +271,8 @@ namespace PRealm {
     Processor get_callback_processor(void) const;
     void process_proc_desc(const Processor &p);
     void process_mem_desc(const Memory &m);
-    void record_event_wait(Event wait_on, Backtrace &bt, long long start, long long stop);
+    void record_event_wait(Event wait_on, Backtrace &bt, long long start, long long stop,
+        const std::string_view& prov = std::string_view());
     void record_event_trigger(Event result, Event precondition);
     void record_event_poison(Event result);
     void record_barrier_use(Event barrier);
@@ -1148,7 +1150,7 @@ namespace PRealm {
   }
 
   inline void prealm_time_range(long long start_time_in_ns, const std::string_view &name,
-                                Event external)
+                                Realm::Event external)
   {
     ThreadProfiler::get_thread_profiler().record_time_range(start_time_in_ns, name,
                                                             external);
