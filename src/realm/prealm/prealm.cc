@@ -2949,7 +2949,6 @@ namespace PRealm {
   void Runtime::start(void)
   {
     Profiler::get_profiler().initialize();
-    Realm::Runtime::start();
     // Register our profiling callback function with all the local processors
     Machine machine = Machine::get_machine();
     Realm::Machine::ProcessorQuery local_procs(machine);
@@ -2982,6 +2981,8 @@ namespace PRealm {
     }
     if(!registered.empty())
       Realm::Event::merge_events(registered).wait();
+    // Finally we can do the start
+    Realm::Runtime::start();
   }
 
   bool Runtime::init(int *argc, char ***argv)
