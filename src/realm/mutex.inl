@@ -36,7 +36,7 @@ namespace Realm {
     // uncontested transition from IDLE to PENDING_AWAKE
 #ifdef DEBUG_REALM
     uint32_t prev = state.exchange(STATE_PENDING_AWAKE);
-    assert(prev == STATE_IDLE);
+    REALM_ASSERT(prev == STATE_IDLE);
     (void)prev;
 #else
     state.store(STATE_PENDING_AWAKE);
@@ -48,7 +48,7 @@ namespace Realm {
     // uncontested transition from PENDING_AWAKE to IDLE
 #ifdef DEBUG_REALM
     uint32_t prev = state.exchange(STATE_IDLE);
-    assert(prev == STATE_PENDING_AWAKE);
+    REALM_ASSERT(prev == STATE_PENDING_AWAKE);
     (void)prev;
 #else
     state.store(STATE_IDLE);
@@ -60,7 +60,7 @@ namespace Realm {
     uint32_t val = state.load_acquire();
 #ifdef DEBUG_REALM
     // should not be asking about an idle doorbell
-    assert(val != STATE_IDLE);
+    REALM_ASSERT(val != STATE_IDLE);
 #endif
     return ((val & STATE_SATISFIED_BIT) != 0);
   }
@@ -73,7 +73,7 @@ namespace Realm {
       // uncontested transition back to IDLE
 #ifdef DEBUG_REALM
       uint32_t prev = state.exchange(STATE_IDLE);
-      assert(prev == val);
+      REALM_ASSERT(prev == val);
       (void)prev;
 #else
       state.store(STATE_IDLE);
@@ -88,7 +88,7 @@ namespace Realm {
     uint32_t val = state.load();
 #ifdef DEBUG_REALM
     // should not be asking about an idle or satisfied doorbell
-    assert((val != STATE_IDLE) && ((val & STATE_SATISFIED_BIT) == 0));
+    REALM_ASSERT((val != STATE_IDLE) && ((val & STATE_SATISFIED_BIT) == 0));
 #endif
     return (val != STATE_PENDING_AWAKE);
   }
@@ -110,7 +110,7 @@ namespace Realm {
     //  wake thread
     uint32_t oldval = state.exchange(STATE_PENDING_PREWAKE);
 #ifdef DEBUG_REALM
-    assert((oldval == STATE_PENDING_AWAKE) || (oldval == STATE_PENDING_ASLEEP));
+    REALM_ASSERT((oldval == STATE_PENDING_AWAKE) || (oldval == STATE_PENDING_ASLEEP));
 #endif
     if(REALM_UNLIKELY(oldval == STATE_PENDING_ASLEEP))
       prewake_slow();
@@ -121,7 +121,7 @@ namespace Realm {
     // uncontested transition from PREWAKE back to AWAKE
 #ifdef DEBUG_REALM
     uint32_t prev = state.exchange(STATE_PENDING_AWAKE);
-    assert(prev == STATE_PENDING_PREWAKE);
+    REALM_ASSERT(prev == STATE_PENDING_PREWAKE);
     (void)prev;
 #else
     state.store(STATE_PENDING_AWAKE);
@@ -334,7 +334,7 @@ namespace Realm {
   inline void AutoLock<LT>::release(void)
   {
 #ifdef DEBUG_REALM
-    assert(held);
+    REALM_ASSERT(held);
 #endif
     mutex.unlock();
     held = false;
@@ -344,7 +344,7 @@ namespace Realm {
   inline void AutoLock<LT>::reacquire(void)
   {
 #ifdef DEBUG_REALM
-    assert(!held);
+    REALM_ASSERT(!held);
 #endif
     mutex.lock();
     held = true;

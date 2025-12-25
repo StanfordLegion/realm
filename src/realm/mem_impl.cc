@@ -72,7 +72,7 @@ namespace Realm {
   void Memory::report_memory_fault(int reason, const void *reason_data,
                                    size_t reason_size) const
   {
-    assert(0);
+    abort();
   }
 
   ////////////////////////////////////////////////////////////////////////
@@ -132,7 +132,7 @@ namespace Realm {
     // all allocation requests are handled by the memory's owning node for
     //  now - local caching might be possible though
     NodeID target = ID(me).memory_owner_node();
-    assert(target == Network::my_node_id);
+    REALM_ASSERT(target == Network::my_node_id);
 
     // check precondition on allocation
     bool alloc_poisoned = false;
@@ -182,7 +182,7 @@ namespace Realm {
     // all allocation requests are handled by the memory's owning node for
     //  now - local caching might be possible though
     NodeID target = ID(me).memory_owner_node();
-    assert(target == Network::my_node_id);
+    REALM_ASSERT(target == Network::my_node_id);
 
     bool poisoned = false;
     if(precondition.has_triggered_faultaware(poisoned)) {
@@ -202,17 +202,17 @@ namespace Realm {
     // all reuse requests are handled by the memory's owning node for
     //  now - local caching might be possible though
     NodeID target = ID(me).memory_owner_node();
-    assert(target == Network::my_node_id);
+    REALM_ASSERT(target == Network::my_node_id);
 
     // This better be an external instance
-    assert(old_inst->metadata.ext_resource);
+    REALM_ASSERT(old_inst->metadata.ext_resource);
     bool poisoned = false;
     if(precondition.has_triggered_faultaware(poisoned)) {
       // fall through to immediate storage release
       return reuse_storage_immediate(old_inst, new_insts, poisoned,
                                      TimeLimit::responsive());
     } else {
-      assert(old_inst->deferred_redistrict.empty());
+      REALM_ASSERT(old_inst->deferred_redistrict.empty());
       old_inst->deferred_redistrict.swap(new_insts);
       // ask the instance to tell us when the precondition is satisified
       old_inst->deferred_destroy.defer(old_inst, this, precondition);
@@ -226,7 +226,7 @@ namespace Realm {
                                       bool poisoned, TimeLimit work_until)
   {
     // Should only be here for external instances
-    assert(old_inst->metadata.ext_resource);
+    REALM_ASSERT(old_inst->metadata.ext_resource);
     // Swap the new instances into a local container because once we start notifying
     // the instances of their results, the DeferredDeletion object that invoked this
     // method could be reused right away
@@ -246,7 +246,7 @@ namespace Realm {
         // automatic success - make the "offset" be the difference between the
         //  base address we were given and our own allocation's base
         const uintptr_t mem_base = reinterpret_cast<uintptr_t>(get_direct_ptr(0, 0));
-        assert(mem_base != 0);
+        REALM_ASSERT(mem_base != 0);
         // Figure out how many of the new instances we can allocate
         size_t bytes_used = 0;
         uintptr_t offset = res->base;
@@ -273,7 +273,7 @@ namespace Realm {
             return ALLOC_INSTANT_FAILURE;
           }
           // Make sure all these instances are treated as external too
-          assert(!local_insts[idx]->metadata.ext_resource);
+          REALM_ASSERT(!local_insts[idx]->metadata.ext_resource);
           local_insts[idx]->metadata.ext_resource = res->clone();
           // notify the successful allocation, adjust for mem_base
           // underflow is ok here - it'll work itself out when we add the mem_base
@@ -322,13 +322,13 @@ namespace Realm {
 #if 0
     off_t MemoryImpl::alloc_bytes_local(size_t size)
     {
-      assert(0);
+      abort();
       return 0;
     }
 
     void MemoryImpl::free_bytes_local(off_t offset, size_t size)
     {
-      assert(0);
+      abort();
     }
 
     // make bad offsets really obvious (+1 PB)
@@ -400,7 +400,7 @@ namespace Realm {
 
       // frees of zero bytes should have the special offset
       if(size == 0) {
-	assert((size_t)offset == this->size + ZERO_SIZE_INSTANCE_OFFSET);
+	REALM_ASSERT((size_t)offset == this->size + ZERO_SIZE_INSTANCE_OFFSET);
 	return;
       }
 
@@ -423,7 +423,7 @@ namespace Realm {
 	  // found one - is it the first one?
 	  if(after == free_blocks.begin()) {
 	    // yes, so no "before"
-	    assert((offset + (off_t)size) <= after->first); // no overlap!
+	    REALM_ASSERT((offset + (off_t)size) <= after->first); // no overlap!
 	    if((offset + (off_t)size) == after->first) {
 	      // merge the ranges by eating the "after"
 	      size += after->second;
@@ -435,7 +435,7 @@ namespace Realm {
 	    std::map<off_t, off_t>::iterator before = after; before--;
 
 	    // if we're adjacent to the after, merge with it
-	    assert((offset + (off_t)size) <= after->first); // no overlap!
+	    REALM_ASSERT((offset + (off_t)size) <= after->first); // no overlap!
 	    if((offset + (off_t)size) == after->first) {
 	      // merge the ranges by eating the "after"
 	      size += after->second;
@@ -444,7 +444,7 @@ namespace Realm {
 
 	    // if we're adjacent with the before, grow it instead of adding
 	    //  a new range
-	    assert((before->first + before->second) <= offset);
+	    REALM_ASSERT((before->first + before->second) <= offset);
 	    if((before->first + before->second) == offset) {
 	      before->second += size;
 	    } else {
@@ -459,7 +459,7 @@ namespace Realm {
 
 	  // if we're adjacent with the before, grow it instead of adding
 	  //  a new range
-	  assert((before->first + before->second) <= offset);
+	  REALM_ASSERT((before->first + before->second) <= offset);
 	  if((before->first + before->second) == offset) {
 	    before->second += size;
 	  } else {
@@ -477,7 +477,7 @@ namespace Realm {
 
   RegionInstanceImpl *MemoryImpl::get_instance(ID id)
   {
-    assert(id.is_instance());
+    REALM_ASSERT(id.is_instance());
 
     NodeID cnode = id.instance_creator_node();
     unsigned idx = id.instance_inst_idx();
@@ -485,8 +485,8 @@ namespace Realm {
       // if it was locally created, we can directly access the local_instances list
       //  and it's a fatal error if it doesn't exist
       RWLock::AutoReaderLock al(local_instances.mutex);
-      assert(idx < local_instances.instances.size());
-      assert(local_instances.instances[idx] != 0);
+      REALM_ASSERT(idx < local_instances.instances.size());
+      REALM_ASSERT(local_instances.instances[idx] != 0);
       return local_instances.instances[idx];
     } else {
       // figure out which instance list to look in - non-local creators require a
@@ -568,7 +568,7 @@ namespace Realm {
             if(!reported) {
               // fatal error
               log_inst.fatal() << "FATAL: instance count exceeded for memory " << me;
-              assert(0);
+              abort();
             }
             return 0;
           }
@@ -696,7 +696,7 @@ namespace Realm {
     // all allocation requests are handled by the memory's owning node for
     //  now - local caching might be possible though
     NodeID target = ID(me).memory_owner_node();
-    assert(target == Network::my_node_id);
+    REALM_ASSERT(target == Network::my_node_id);
 
     // check precondition on allocation
     bool alloc_poisoned = false;
@@ -769,7 +769,7 @@ namespace Realm {
           for(std::deque<PendingRelease>::iterator it = pending_releases.begin();
               it != pending_releases.end(); ++it) {
             // shouldn't have any ready ones here
-            assert(!it->is_ready);
+            REALM_ASSERT(!it->is_ready);
             // due to network delays, it's possible for multiple
             //  deallocations of the same instance to be in our list,
             //  so ignore failures to deallocate from the future state
@@ -813,7 +813,7 @@ namespace Realm {
     // all allocation requests are handled by the memory's owning node for
     //  now - local caching might be possible though
     NodeID target = ID(me).memory_owner_node();
-    assert(target == Network::my_node_id);
+    REALM_ASSERT(target == Network::my_node_id);
 
     bool poisoned = false;
     bool triggered = precondition.has_triggered_faultaware(poisoned);
@@ -841,7 +841,7 @@ namespace Realm {
         //  "future release of it" - wait until the creation precondition is
         //  satisfied
         if(inst->metadata.inst_offset == RegionInstanceImpl::INSTOFFSET_DELAYEDALLOC) {
-          assert(!triggered);
+          REALM_ASSERT(!triggered);
           inst->metadata.inst_offset = RegionInstanceImpl::INSTOFFSET_DELAYEDDESTROY;
           break;
         }
@@ -917,7 +917,7 @@ namespace Realm {
     // all allocation requests are handled by the memory's owning node for
     //  now - local caching might be possible though
     NodeID target = ID(me).memory_owner_node();
-    assert(target == Network::my_node_id);
+    REALM_ASSERT(target == Network::my_node_id);
 
     if(old_inst->metadata.ext_resource) {
       return MemoryImpl::reuse_storage_deferrable(old_inst, new_insts, precondition);
@@ -958,7 +958,7 @@ namespace Realm {
       //  "future release of it" - wait until the creation precondition is
       //  satisfied
       if(old_inst->metadata.inst_offset == RegionInstanceImpl::INSTOFFSET_DELAYEDALLOC) {
-        assert(!triggered);
+        REALM_ASSERT(!triggered);
         old_inst->metadata.inst_offset = RegionInstanceImpl::INSTOFFSET_DELAYEDREDISTRICT;
         break;
       }
@@ -979,9 +979,9 @@ namespace Realm {
 #endif
       // Should never be a delayed destroy or a redistrict as that indicates
       // that we had a double deletion/redistrict
-      assert(old_inst->metadata.inst_offset !=
+      REALM_ASSERT(old_inst->metadata.inst_offset !=
              RegionInstanceImpl::INSTOFFSET_DELAYEDDESTROY);
-      assert(old_inst->metadata.inst_offset !=
+      REALM_ASSERT(old_inst->metadata.inst_offset !=
              RegionInstanceImpl::INSTOFFSET_DELAYEDREDISTRICT);
 
       if(pending_allocs.empty()) {
@@ -1053,7 +1053,7 @@ namespace Realm {
       }
       return ALLOC_INSTANT_SUCCESS;
     } else {
-      assert(old_inst->deferred_redistrict.empty());
+      REALM_ASSERT(old_inst->deferred_redistrict.empty());
       old_inst->deferred_redistrict.swap(new_insts);
       old_inst->deferred_destroy.defer(old_inst, this, precondition);
       return ALLOC_DEFERRED;
@@ -1074,7 +1074,7 @@ namespace Realm {
       // with the lock held, check the state of the instance to see if a
       //  deferred destruction has also been received - if so, we'll have to
       //  add that to the allocator history too
-      assert(
+      REALM_ASSERT(
           (inst->metadata.inst_offset == RegionInstanceImpl::INSTOFFSET_DELAYEDALLOC) ||
           (inst->metadata.inst_offset == RegionInstanceImpl::INSTOFFSET_DELAYEDDESTROY) ||
           (inst->metadata.inst_offset ==
@@ -1098,7 +1098,7 @@ namespace Realm {
             // automatic success - make the "offset" be the difference between the
             //  base address we were given and our own allocation's base
             void *mem_base = get_direct_ptr(0, 0); // only our subclasses know this
-            assert(mem_base != 0);
+            REALM_ASSERT(mem_base != 0);
             // underflow is ok here - it'll work itself out when we add the mem_base
             //  back in on accesses
             inst_offset = res->base - reinterpret_cast<uintptr_t>(mem_base);
@@ -1129,7 +1129,7 @@ namespace Realm {
           }
         }
         if(deferred_redistrict_exists) {
-          assert(!inst->deferred_redistrict.empty());
+          REALM_ASSERT(!inst->deferred_redistrict.empty());
           PendingRelease &back = pending_releases.emplace_back(
               PendingRelease(inst, false /*!ready*/, ++cur_release_seqid));
           back.record_redistrict(inst->deferred_redistrict);
@@ -1205,7 +1205,7 @@ namespace Realm {
         break;
     }
     // should have gotten at least one
-    assert(a_now != pending_allocs.begin());
+    REALM_ASSERT(a_now != pending_allocs.begin());
 
     // did we get them all?
     if(a_now == pending_allocs.end()) {
@@ -1327,7 +1327,7 @@ namespace Realm {
         //  no future state to fix up
         remove_pending_release(old_inst, failed_allocs);
       } else { // not poisoned
-        assert(!pending_releases.empty());
+        REALM_ASSERT(!pending_releases.empty());
         std::deque<PendingRelease>::iterator it = pending_releases.begin();
         // special case: if we're the oldest pending item (and we're not
         //  poisoned), we unclog things in the order we planned
@@ -1355,7 +1355,7 @@ namespace Realm {
 
 #ifdef DEBUG_REALM
               // but it should never be older than the current release
-              assert(it2->last_release_seqid >= it->seqid);
+              REALM_ASSERT(it2->last_release_seqid >= it->seqid);
 #endif
 
               // all older release are done, so this alloc had better work
@@ -1363,24 +1363,24 @@ namespace Realm {
               size_t offset = 0;
               bool ok = current_allocator.allocate(it2->inst->me, it2->bytes,
                                                    it2->alignment, offset);
-              assert(ok);
+              REALM_ASSERT(ok);
 #ifdef DEBUG_REALM
               // it should also be where we thought it was in the future
               //  allocator state (unless it's already been future-deleted)
               size_t f_first, f_size;
               if(future_allocator.lookup(it2->inst->me, f_first, f_size)) {
-                assert((f_first == offset) && (f_size == it2->bytes));
+                REALM_ASSERT((f_first == offset) && (f_size == it2->bytes));
               } else {
                 // find in future deletion list
                 std::deque<PendingRelease>::const_iterator it3 = pending_releases.begin();
                 while(true) {
                   // should not run off end of list
-                  assert(it3 != pending_releases.end());
+                  REALM_ASSERT(it3 != pending_releases.end());
                   if(it3->inst != it2->inst) {
                     ++it3;
                   } else {
                     // found it - make sure it's not already deleted
-                    assert(!it3->is_ready);
+                    REALM_ASSERT(!it3->is_ready);
                     break;
                   }
                 }
@@ -1415,7 +1415,7 @@ namespace Realm {
           // find this destruction in the list and mark it ready
           do {
             ++it;
-            assert(it != pending_releases.end()); // can't fall off end
+            REALM_ASSERT(it != pending_releases.end()); // can't fall off end
           } while(it->inst != old_inst);
           it->is_ready = true;
 
@@ -1474,14 +1474,14 @@ namespace Realm {
     local_insts.swap(new_insts);
     if(poisoned) {
       for(unsigned idx = 0; idx < local_insts.size(); idx++) {
-        assert(offsets[idx] == RegionInstanceImpl::INSTOFFSET_FAILED);
+        REALM_ASSERT(offsets[idx] == RegionInstanceImpl::INSTOFFSET_FAILED);
         local_insts[idx]->notify_allocation(ALLOC_CANCELLED, offsets[idx], work_until);
       }
       return ALLOC_CANCELLED;
     } else {
       old_inst->notify_deallocation();
       for(unsigned idx = 0; idx < local_insts.size(); idx++) {
-        assert((offsets[idx] != RegionInstanceImpl::INSTOFFSET_FAILED) ==
+        REALM_ASSERT((offsets[idx] != RegionInstanceImpl::INSTOFFSET_FAILED) ==
                (idx < allocated));
         local_insts[idx]->notify_allocation((idx < allocated) ? ALLOC_EVENTUAL_SUCCESS
                                                               : ALLOC_EVENTUAL_FAILURE,
@@ -1495,7 +1495,7 @@ namespace Realm {
       RegionInstanceImpl *inst, std::vector<RegionInstanceImpl *> &failed_allocs)
   {
     // this destruction should be somewhere in the pending ops list
-    assert(!pending_releases.empty());
+    REALM_ASSERT(!pending_releases.empty());
     std::deque<PendingRelease>::iterator it = pending_releases.begin();
     // special case: if there are no pending allocation requests, we
     //  just forget this destruction request ever happened - there is
@@ -1503,7 +1503,7 @@ namespace Realm {
     if(pending_allocs.empty()) {
       while(it->inst != inst) {
         ++it;
-        assert(it != pending_releases.end()); // can't fall off end
+        REALM_ASSERT(it != pending_releases.end()); // can't fall off end
       }
 
       it = pending_releases.erase(it);
@@ -1540,7 +1540,7 @@ namespace Realm {
             ++it2;
           } else {
             // this should only happen if we've seen the poisoned release
-            assert(found);
+            REALM_ASSERT(found);
 
             // this alloc is no longer possible - remove from the list
             //  and notify of the failure
@@ -1581,7 +1581,7 @@ namespace Realm {
 #endif
       if(!poisoned) {
         // this destruction should be somewhere in the pending ops list
-        assert(!pending_releases.empty());
+        REALM_ASSERT(!pending_releases.empty());
         std::deque<PendingRelease>::iterator it = pending_releases.begin();
         // special case: if we're the oldest pending item (and we're not
         //  poisoned), we unclog things in the order we planned
@@ -1609,7 +1609,7 @@ namespace Realm {
 
 #ifdef DEBUG_REALM
               // but it should never be older than the current release
-              assert(it2->last_release_seqid >= it->seqid);
+              REALM_ASSERT(it2->last_release_seqid >= it->seqid);
 #endif
 
               // all older release are done, so this alloc had better work
@@ -1617,24 +1617,24 @@ namespace Realm {
               size_t offset = 0;
               bool ok = current_allocator.allocate(it2->inst->me, it2->bytes,
                                                    it2->alignment, offset);
-              assert(ok);
+              REALM_ASSERT(ok);
 #ifdef DEBUG_REALM
               // it should also be where we thought it was in the future
               //  allocator state (unless it's already been future-deleted)
               size_t f_first, f_size;
               if(future_allocator.lookup(it2->inst->me, f_first, f_size)) {
-                assert((f_first == offset) && (f_size == it2->bytes));
+                REALM_ASSERT((f_first == offset) && (f_size == it2->bytes));
               } else {
                 // find in future deletion list
                 std::deque<PendingRelease>::const_iterator it3 = pending_releases.begin();
                 while(true) {
                   // should not run off end of list
-                  assert(it3 != pending_releases.end());
+                  REALM_ASSERT(it3 != pending_releases.end());
                   if(it3->inst != it2->inst) {
                     ++it3;
                   } else {
                     // found it - make sure it's not already deleted
-                    assert(!it3->is_ready);
+                    REALM_ASSERT(!it3->is_ready);
                     break;
                   }
                 }
@@ -1669,7 +1669,7 @@ namespace Realm {
           // find this destruction in the list and mark it ready
           do {
             ++it;
-            assert(it != pending_releases.end()); // can't fall off end
+            REALM_ASSERT(it != pending_releases.end()); // can't fall off end
           } while(it->inst != inst);
           it->is_ready = true;
 
@@ -1757,7 +1757,7 @@ namespace Realm {
   void LocalManagedMemory::PendingRelease::record_redistrict(
       const std::vector<RegionInstanceImpl *> &insts)
   {
-    assert(redistrict_tags.empty());
+    REALM_ASSERT(redistrict_tags.empty());
     // Need to pull these local because the insts might already have been
     // created and destroyed before we get around to doing the pending release
     const size_t num_insts = insts.size();
@@ -1787,8 +1787,8 @@ namespace Realm {
                                                      std::vector<size_t> &offsets,
                                                      bool missing_ok)
   {
-    assert(!redistrict_tags.empty());
-    assert(offsets.size() == redistrict_tags.size());
+    REALM_ASSERT(!redistrict_tags.empty());
+    REALM_ASSERT(offsets.size() == redistrict_tags.size());
     return allocator.split_range(inst->me, redistrict_tags, redistrict_sizes,
                                  redistrict_alignments, offsets, missing_ok);
   }
@@ -1850,7 +1850,7 @@ namespace Realm {
       }
       prealloced = false;
       // we should not have been given a NetworkSegment by our caller
-      assert(!segment);
+      REALM_ASSERT(!segment);
       // advertise our allocation in case the network can register it
       local_segment.assign(NetworkSegmentInfo::HostMem, base, _size);
       segment = &local_segment;
@@ -1902,9 +1902,9 @@ namespace Realm {
                                          span<const FieldID> fields, bool read_only)
   {
     // compute the bounds of the instance relative to our base
-    assert(inst->metadata.is_valid() &&
+    REALM_ASSERT(inst->metadata.is_valid() &&
            "instance metadata must be valid before accesses are performed");
-    assert(inst->metadata.layout);
+    REALM_ASSERT(inst->metadata.layout);
     InstanceLayoutGeneric *ilg = inst->metadata.layout;
     uintptr_t rel_base, extent;
     if(subspace == 0) {
@@ -1912,7 +1912,7 @@ namespace Realm {
       rel_base = 0;
       extent = ilg->bytes_used;
     } else {
-      assert(!fields.empty());
+      REALM_ASSERT(!fields.empty());
       // TODO: right now if the subspace is not dense in the underlying instance we
       // just return an ExternalMemoryResource that describes the upper bound of how
       // much size this external resource should be allowed to use. If we really wanted
@@ -1986,7 +1986,7 @@ namespace Realm {
                                             bool need_alloc_result, Event precondition)
   {
     NodeID target = ID(me).memory_owner_node();
-    assert(target != Network::my_node_id);
+    REALM_ASSERT(target != Network::my_node_id);
 
     // we need to send the layout information to the memory's owner node - see
     //  how big that'll be
@@ -1994,7 +1994,7 @@ namespace Realm {
     bool ok = bcs << *inst->metadata.layout;
     if(ok && (inst->metadata.ext_resource != 0))
       ok = bcs << *inst->metadata.ext_resource;
-    assert(ok);
+    REALM_ASSERT(ok);
     size_t layout_bytes = bcs.bytes_used();
 
     ActiveMessage<MemStorageAllocRequest> amsg(target, layout_bytes);
@@ -2014,7 +2014,7 @@ namespace Realm {
                                                 Event precondition)
   {
     NodeID target = ID(me).memory_owner_node();
-    assert(target != Network::my_node_id);
+    REALM_ASSERT(target != Network::my_node_id);
 
     ActiveMessage<MemStorageReleaseRequest> amsg(target);
     amsg->memory = me;
@@ -2029,7 +2029,7 @@ namespace Realm {
                                          Event precondition)
   {
     // TODO: implement this
-    assert(false);
+    abort();
     return ALLOC_INSTANT_FAILURE;
   }
 
@@ -2060,23 +2060,23 @@ namespace Realm {
 
   off_t RemoteMemory::alloc_bytes_local(size_t size)
   {
-    assert(0);
+    abort();
     return 0;
   }
 
-  void RemoteMemory::free_bytes_local(off_t offset, size_t size) { assert(0); }
+  void RemoteMemory::free_bytes_local(off_t offset, size_t size) { abort(); }
 
   void RemoteMemory::put_bytes(off_t offset, const void *src, size_t size)
   {
     void *ptr = get_direct_ptr(offset, size);
-    assert(ptr != nullptr);
+    REALM_ASSERT(ptr != nullptr);
     memcpy(ptr, src, size);
   }
 
   void RemoteMemory::get_bytes(off_t offset, void *dst, size_t size)
   {
     void *ptr = get_direct_ptr(offset, size);
-    assert(ptr != nullptr);
+    REALM_ASSERT(ptr != nullptr);
     memcpy(dst, ptr, size);
   }
 
@@ -2097,17 +2097,18 @@ namespace Realm {
       NodeID sender, const MemStorageAllocRequest &args, const void *data, size_t datalen)
   {
     MemoryImpl *impl = get_runtime()->get_memory_impl(args.memory);
-    assert(impl != nullptr && "invalid memory handle");
+    // invalid memory handle
+    REALM_ASSERT(impl != nullptr);
     RegionInstanceImpl *inst = impl->get_instance(args.inst);
-
+    REALM_ASSERT(inst != nullptr);
     // deserialize the layout
     Serialization::FixedBufferDeserializer fbd(data, datalen);
     InstanceLayoutGeneric *ilg = InstanceLayoutGeneric::deserialize_new(fbd);
-    assert(ilg != 0);
+    REALM_ASSERT(ilg != nullptr);
     ExternalInstanceResource *res = 0;
     if(fbd.bytes_left() > 0) {
       res = ExternalInstanceResource::deserialize_new(fbd);
-      assert((res != 0) && (fbd.bytes_left() == 0));
+      REALM_ASSERT((res != 0) && (fbd.bytes_left() == 0));
     }
     inst->metadata.layout = ilg; // TODO: mark metadata valid?
     inst->metadata.ext_resource = res;
@@ -2140,7 +2141,7 @@ namespace Realm {
                                            const void *data, size_t datalen)
   {
     MemoryImpl *impl = get_runtime()->get_memory_impl(args.memory);
-    assert(impl != nullptr && "invalid memory handle");
+    REALM_ASSERT(impl != nullptr);
     RegionInstanceImpl *inst = impl->get_instance(args.inst);
 
     impl->release_storage_deferrable(inst, args.precondition);

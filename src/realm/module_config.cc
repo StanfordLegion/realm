@@ -34,7 +34,7 @@ namespace Realm {
 
   void ModuleConfig::finish_configure(void)
   {
-    assert(finish_configured == false);
+    REALM_ASSERT(finish_configured == false);
     finish_configured = true;
   }
 

@@ -220,7 +220,7 @@ namespace Realm {
           size_t stride = gsize;
           for(int i = 0; i < N; i++) {
             const int dim = dim_order[i];
-            assert((0 <= dim) && (dim < N));
+            REALM_ASSERT((0 <= dim) && (dim < N));
             piece->strides[dim] = stride;
             piece->offset -= bloated.lo[dim] * stride;
             stride *= (bloated.hi[dim] - bloated.lo[dim] + 1);
@@ -241,7 +241,7 @@ namespace Realm {
       for(std::map<FieldID, size_t>::const_iterator it2 = field_offsets.begin();
           it2 != field_offsets.end(); ++it2) {
         // should not have seen this field before
-        assert(layout->fields.count(it2->first) == 0);
+        REALM_ASSERT(layout->fields.count(it2->first) == 0);
         InstanceLayoutGeneric::FieldLayout &fl = layout->fields[it2->first];
         fl.list_idx = li;
         fl.rel_offset = /*group_offset +*/ it2->second + reuse_offset;
@@ -582,10 +582,10 @@ namespace Realm {
   {
     // first look up the field to see which piece list it uses (and get offset)
     FieldMap::const_iterator it = fields.find(fid);
-    assert(it != fields.end());
+    REALM_ASSERT(it != fields.end());
 
     const InstanceLayoutPiece<N, T> *ilp = piece_lists[it->second.list_idx].find_piece(p);
-    assert(ilp != 0);
+    REALM_ASSERT(ilp != 0);
     size_t offset = ilp->calculate_offset(p);
     // add in field's offset
     offset += it->second.rel_offset;
@@ -768,7 +768,7 @@ namespace Realm {
     const InstanceLayout<N, T> *layout =
         checked_cast<const InstanceLayout<N, T> *>(inst.get_layout());
     InstanceLayoutGeneric::FieldMap::const_iterator it = layout->fields.find(field_id);
-    assert(it != layout->fields.end());
+    REALM_ASSERT(it != layout->fields.end());
 
     this->piece_list = &layout->piece_lists[it->second.list_idx];
     this->rel_offset = it->second.rel_offset + subfield_offset;
@@ -787,7 +787,7 @@ namespace Realm {
     const InstanceLayout<N, T> *layout =
         checked_cast<const InstanceLayout<N, T> *>(inst.get_layout());
     InstanceLayoutGeneric::FieldMap::const_iterator it = layout->fields.find(field_id);
-    assert(it != layout->fields.end());
+    REALM_ASSERT(it != layout->fields.end());
 
     this->piece_list = &layout->piece_lists[it->second.list_idx];
     this->rel_offset = it->second.rel_offset + subfield_offset;
@@ -862,7 +862,7 @@ namespace Realm {
     const InstanceLayoutPiece<N, T> *mypiece = prev_piece;
     if(!mypiece || !mypiece->bounds.contains(p)) {
       mypiece = piece_list->find_piece(p);
-      assert(mypiece);
+      REALM_ASSERT(mypiece);
       prev_piece = mypiece;
     }
     size_t offset = mypiece->calculate_offset(p);
@@ -910,7 +910,7 @@ namespace Realm {
     const InstanceLayout<N, T> *layout =
         checked_cast<const InstanceLayout<N, T> *>(inst.get_layout());
     InstanceLayoutGeneric::FieldMap::const_iterator it = layout->fields.find(field_id);
-    assert(it != layout->fields.end());
+    REALM_ASSERT(it != layout->fields.end());
     const InstancePieceList<N, T> &ipl = layout->piece_lists[it->second.list_idx];
 
     // Special case for empty instances
@@ -922,13 +922,13 @@ namespace Realm {
     }
 
     // this constructor only works if there's exactly one piece and it's affine
-    assert(ipl.pieces.size() == 1);
+    REALM_ASSERT(ipl.pieces.size() == 1);
     const InstanceLayoutPiece<N, T> *ilp = ipl.pieces[0];
-    assert((ilp->layout_type == PieceLayoutTypes::AffineLayoutType));
+    REALM_ASSERT((ilp->layout_type == PieceLayoutTypes::AffineLayoutType));
     const AffineLayoutPiece<N, T> *alp =
         static_cast<const AffineLayoutPiece<N, T> *>(ilp);
     base = reinterpret_cast<uintptr_t>(inst.pointer_untyped(0, layout->bytes_used));
-    assert(base != 0);
+    REALM_ASSERT(base != 0);
     base += alp->offset + it->second.rel_offset + subfield_offset;
     strides = alp->strides;
 #if defined(REALM_ACCESSOR_DEBUG) || defined(REALM_USE_KOKKOS)
@@ -959,7 +959,7 @@ namespace Realm {
     const InstanceLayout<N, T> *layout =
         checked_cast<const InstanceLayout<N, T> *>(inst.get_layout());
     InstanceLayoutGeneric::FieldMap::const_iterator it = layout->fields.find(field_id);
-    assert(it != layout->fields.end());
+    REALM_ASSERT(it != layout->fields.end());
     const InstancePieceList<N, T> &ipl = layout->piece_lists[it->second.list_idx];
 
     // special case for empty regions
@@ -971,12 +971,12 @@ namespace Realm {
       // find the piece that holds the lo corner of the subrect and insist it
       //  exists, covers the whole subrect, and is affine
       const InstanceLayoutPiece<N, T> *ilp = ipl.find_piece(subrect.lo);
-      assert(ilp && ilp->bounds.contains(subrect));
-      assert((ilp->layout_type == PieceLayoutTypes::AffineLayoutType));
+      REALM_ASSERT(ilp && ilp->bounds.contains(subrect));
+      REALM_ASSERT((ilp->layout_type == PieceLayoutTypes::AffineLayoutType));
       const AffineLayoutPiece<N, T> *alp =
           static_cast<const AffineLayoutPiece<N, T> *>(ilp);
       base = reinterpret_cast<uintptr_t>(inst.pointer_untyped(0, layout->bytes_used));
-      assert(base != 0);
+      REALM_ASSERT(base != 0);
       base += alp->offset + it->second.rel_offset + subfield_offset;
       strides = alp->strides;
     }
@@ -1015,7 +1015,7 @@ namespace Realm {
     const InstanceLayout<N2, T2> *layout =
         checked_cast<const InstanceLayout<N2, T2> *>(inst.get_layout());
     InstanceLayoutGeneric::FieldMap::const_iterator it = layout->fields.find(field_id);
-    assert(it != layout->fields.end());
+    REALM_ASSERT(it != layout->fields.end());
     const InstancePieceList<N2, T2> &ipl = layout->piece_lists[it->second.list_idx];
 
     // Special case for empty instances
@@ -1027,13 +1027,13 @@ namespace Realm {
     }
 
     // this constructor only works if there's exactly one piece and it's affine
-    assert(ipl.pieces.size() == 1);
+    REALM_ASSERT(ipl.pieces.size() == 1);
     const InstanceLayoutPiece<N2, T2> *ilp = ipl.pieces[0];
-    assert((ilp->layout_type == PieceLayoutTypes::AffineLayoutType));
+    REALM_ASSERT((ilp->layout_type == PieceLayoutTypes::AffineLayoutType));
     const AffineLayoutPiece<N2, T2> *alp =
         static_cast<const AffineLayoutPiece<N2, T2> *>(ilp);
     base = reinterpret_cast<uintptr_t>(inst.pointer_untyped(0, layout->bytes_used));
-    assert(base != 0);
+    REALM_ASSERT(base != 0);
     base += alp->offset + it->second.rel_offset + subfield_offset;
     // to get the effect of transforming every accessed x to Ax+b, we
     //  add strides.b to the offset and left-multiply s'*A to get strides
@@ -1082,7 +1082,7 @@ namespace Realm {
     const InstanceLayout<N2, T2> *layout =
         checked_cast<const InstanceLayout<N2, T2> *>(inst.get_layout());
     InstanceLayoutGeneric::FieldMap::const_iterator it = layout->fields.find(field_id);
-    assert(it != layout->fields.end());
+    REALM_ASSERT(it != layout->fields.end());
     const InstancePieceList<N2, T2> &ipl = layout->piece_lists[it->second.list_idx];
 
     // special case for empty regions
@@ -1099,12 +1099,12 @@ namespace Realm {
       // find the piece that holds the lo corner of the subrect and insist it
       //  exists, covers the whole subrect, and is affine
       const InstanceLayoutPiece<N2, T2> *ilp = ipl.find_piece(subrect_image.lo);
-      assert(ilp && ilp->bounds.contains(subrect_image));
-      assert((ilp->layout_type == PieceLayoutTypes::AffineLayoutType));
+      REALM_ASSERT(ilp && ilp->bounds.contains(subrect_image));
+      REALM_ASSERT((ilp->layout_type == PieceLayoutTypes::AffineLayoutType));
       const AffineLayoutPiece<N2, T2> *alp =
           static_cast<const AffineLayoutPiece<N2, T2> *>(ilp);
       base = reinterpret_cast<uintptr_t>(inst.pointer_untyped(0, layout->bytes_used));
-      assert(base != 0);
+      REALM_ASSERT(base != 0);
       base += alp->offset + it->second.rel_offset + subfield_offset;
       // to get the effect of transforming every accessed x to Ax+b, we
       //  add strides.b to the offset and left-multiply s'*A to get strides
@@ -1420,7 +1420,7 @@ namespace Realm {
       kls.dimension[i] =
           ((bounds.hi[i] >= bounds.lo[i]) ? (bounds.hi[i] - bounds.lo[i] + 1) : 0);
       kls.stride[i] = strides[i] / sizeof(FT);
-      assert((size_t(kls.stride[i]) * sizeof(FT)) == size_t(strides[i]));
+      REALM_ASSERT((size_t(kls.stride[i]) * sizeof(FT)) == size_t(strides[i]));
     }
 
     typedef Kokkos::View<typename Kokkos::View<Args...>::data_type, Kokkos::LayoutStride,
@@ -1475,7 +1475,7 @@ namespace Realm {
       kls.dimension[i] =
           ((bounds.hi[i] >= bounds.lo[i]) ? (bounds.hi[i] - bounds.lo[i] + 1) : 0);
       kls.stride[i] = strides[i] / sizeof(FT);
-      assert((size_t(kls.stride[i]) * sizeof(FT)) == size_t(strides[i]));
+      REALM_ASSERT((size_t(kls.stride[i]) * sizeof(FT)) == size_t(strides[i]));
     }
 
     typedef Kokkos::View<typename Kokkos::View<Args...>::data_type, Kokkos::LayoutStride,
@@ -1602,7 +1602,7 @@ namespace Realm {
   {
     unsigned allowed_mask = (PieceLookup::ALLOW_AFFINE_PIECE | PieceLookup::ALLOW_SPLIT1);
     start_inst = inst.get_lookup_program<N, T>(field_id, allowed_mask, field_offset);
-    assert(start_inst != 0);
+    REALM_ASSERT(start_inst != 0);
 
     // special case: if the first instruction is an AffinePiece and there's
     //  no next instruction, we cache the answer and forget the program
@@ -1633,7 +1633,7 @@ namespace Realm {
     unsigned allowed_mask = (PieceLookup::ALLOW_AFFINE_PIECE | PieceLookup::ALLOW_SPLIT1);
     start_inst =
         inst.get_lookup_program<N, T>(field_id, subrect, allowed_mask, field_offset);
-    assert(start_inst != 0);
+    REALM_ASSERT(start_inst != 0);
 
     // special case: if the first instruction is an AffinePiece and there's
     //  either no next instruction or the piece we've got covers the entire
@@ -1671,7 +1671,7 @@ namespace Realm {
       const PieceLookup::Instruction *i = start_inst;
       while(true) {
 #ifdef DEBUG_REALM
-        assert(i != 0);
+        REALM_ASSERT(i != 0);
 #endif
         if(i->opcode() == PieceLookup::Opcodes::OP_AFFINE_PIECE) {
           const PieceLookup::AffinePiece<N, T> *ap =
@@ -1685,7 +1685,7 @@ namespace Realm {
           } else
             i = ap->next();
         } else {
-          assert(i->opcode() == PieceLookup::Opcodes::OP_SPLIT1);
+          REALM_ASSERT(i->opcode() == PieceLookup::Opcodes::OP_SPLIT1);
           i = static_cast<const PieceLookup::SplitPlane<N, T> *>(i)->next(p);
         }
       }
@@ -1709,7 +1709,7 @@ namespace Realm {
       const PieceLookup::Instruction *i = start_inst;
       while(true) {
 #ifdef DEBUG_REALM
-        assert(i != 0);
+        REALM_ASSERT(i != 0);
 #endif
         if(i->opcode() == PieceLookup::Opcodes::OP_AFFINE_PIECE) {
           const PieceLookup::AffinePiece<N, T> *ap =
@@ -1725,7 +1725,7 @@ namespace Realm {
           } else
             i = ap->next();
         } else {
-          assert(i->opcode() == PieceLookup::Opcodes::OP_SPLIT1);
+          REALM_ASSERT(i->opcode() == PieceLookup::Opcodes::OP_SPLIT1);
           const PieceLookup::SplitPlane<N, T> *sp =
               static_cast<const PieceLookup::SplitPlane<N, T> *>(i);
           if(sp->splits_rect(r))
@@ -1764,7 +1764,7 @@ namespace Realm {
       while(true) {
 #ifdef DEBUG_REALM
 #ifndef __HIP_DEVICE_COMPILE__
-        assert(i != 0);
+        REALM_ASSERT(i != 0);
 #endif
 #endif
         if(i->opcode() == PieceLookup::Opcodes::OP_AFFINE_PIECE) {
@@ -1781,7 +1781,7 @@ namespace Realm {
             i = ap->next();
         } else {
 #ifndef __HIP_DEVICE_COMPILE__
-          assert(i->opcode() == PieceLookup::Opcodes::OP_SPLIT1);
+          REALM_ASSERT(i->opcode() == PieceLookup::Opcodes::OP_SPLIT1);
 #endif
           i = static_cast<const PieceLookup::SplitPlane<N, T> *>(i)->next(p);
         }
@@ -1803,7 +1803,7 @@ namespace Realm {
       const PieceLookup::Instruction *i = start_inst;
       while(true) {
 #ifdef DEBUG_REALM
-        assert(i != 0);
+        REALM_ASSERT(i != 0);
 #endif
         if(i->opcode() == PieceLookup::Opcodes::OP_AFFINE_PIECE) {
           const PieceLookup::AffinePiece<N, T> *ap =
@@ -1818,7 +1818,7 @@ namespace Realm {
           } else
             i = ap->next();
         } else {
-          assert(i->opcode() == PieceLookup::Opcodes::OP_SPLIT1);
+          REALM_ASSERT(i->opcode() == PieceLookup::Opcodes::OP_SPLIT1);
           const PieceLookup::SplitPlane<N, T> *sp =
               static_cast<const PieceLookup::SplitPlane<N, T> *>(i);
           if(sp->splits_rect(r))

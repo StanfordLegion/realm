@@ -254,7 +254,7 @@ namespace Realm {
       p1 = p2 + (*p2 ? 1 : 0);
 
       // no leftover errors from anybody else please...
-      assert(dlerror() == 0);
+      REALM_ASSERT(dlerror() == 0);
 
       // open so file, resolving all symbols but not polluting global namespace
       void *handle = dlopen(filename, RTLD_NOW | RTLD_LOCAL);
@@ -317,7 +317,7 @@ namespace Realm {
 
         // eat this argument and move the next one to sonames_list
         it = cmdline.erase(it);
-        assert(it != cmdline.end());
+        REALM_ASSERT(it != cmdline.end());
         sonames_list.push_back(*it);
         it = cmdline.erase(it);
       }
@@ -355,7 +355,7 @@ namespace Realm {
     //  out all the name we want to load
 #ifdef REALM_USE_DLFCN
     if(module_sofile_handles.size() > 0) {
-      assert(sofile_loaded);
+      REALM_ASSERT(sofile_loaded);
     }
     for(std::vector<void *>::iterator it = module_sofile_handles.begin();
         it != module_sofile_handles.end(); it++) {
@@ -401,11 +401,8 @@ namespace Realm {
       void *handle = sofile_handles.back();
       sofile_handles.pop_back();
 
-#ifndef NDEBUG
-      int ret =
-#endif
-          dlclose(handle);
-      assert(ret == 0);
+      int ret = dlclose(handle);
+      REALM_ASSERT(ret == 0);
     }
 #endif
   }

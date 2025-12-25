@@ -147,7 +147,8 @@ namespace Realm {
 #else
     // allocate space for the result of backtrace(), including the stuff on
     //  the front we're going to skip
-    assert(sizeof(void *) == sizeof(intptr_t));
+    static_assert(sizeof(void *) == sizeof(intptr_t),
+                  "void* and intptr_t must be the same size");
     pcs.clear();
     pcs.resize(max_depth + skip, 0);
 #ifdef REALM_ON_WINDOWS
@@ -155,7 +156,7 @@ namespace Realm {
 #else
     int count = backtrace((void **)pcs.data(), max_depth + skip);
 #endif
-    assert(count >= 0);
+    REALM_ASSERT(count >= 0);
 
     if(count > skip) {
       pcs.erase(pcs.begin() + count, pcs.end());

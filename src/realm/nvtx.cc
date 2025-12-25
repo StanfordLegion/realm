@@ -16,8 +16,8 @@
  */
 
 #include "realm/nvtx.h"
+#include "realm/logging.h"
 
-#include <assert.h>
 #include <iostream>
 #ifdef REALM_ON_WINDOWS
 #include <processthreadsapi.h>
@@ -168,7 +168,7 @@ namespace Realm {
   {
     std::map<std::string, NvtxCategory *>::iterator it;
     for(it = nvtx_categories->begin(); it != nvtx_categories->end(); it++) {
-      assert(it->second != nullptr);
+      REALM_ASSERT(it->second != nullptr);
       delete it->second;
     }
     delete nvtx_categories;

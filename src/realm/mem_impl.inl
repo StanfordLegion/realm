@@ -124,7 +124,7 @@ namespace Realm {
       return;
     }
 
-    assert(0);
+    abort();
   }
 
   template <typename RT, typename TT>
@@ -171,13 +171,13 @@ namespace Realm {
   {
     typename std::map<TT, unsigned>::iterator it = allocated.find(old_tag);
     if(it == allocated.end()) {
-      assert(missing_ok);
+      REALM_ASSERT(missing_ok);
       return 0;
     }
 
     const size_t n = new_tags.size();
-    assert(n == sizes.size() && n == alignments.size());
-    assert(allocs_first.size() == n);
+    REALM_ASSERT(n == sizes.size() && n == alignments.size());
+    REALM_ASSERT(allocs_first.size() == n);
 
     const unsigned range_idx = it->second;
     if(range_idx == SENTINEL) {
@@ -199,7 +199,7 @@ namespace Realm {
 
     Range *r = &ranges[range_idx];
     for(size_t i = 0; i < n; i++) {
-      assert(allocated.find(new_tags[i]) == allocated.end());
+      REALM_ASSERT(allocated.find(new_tags[i]) == allocated.end());
       if(sizes[i]) {
         RT offset = calculate_offset(r->first, alignments[i]);
         // do we have enough space?
@@ -214,7 +214,7 @@ namespace Realm {
           unsigned pf_idx = r->prev;
           while((pf_idx != SENTINEL) && (ranges[pf_idx].prev_free == pf_idx)) {
             pf_idx = ranges[pf_idx].prev;
-            assert(pf_idx != range_idx); // wrapping around would be bad
+            REALM_ASSERT(pf_idx != range_idx); // wrapping around would be bad
           }
           if((pf_idx == r->prev) && (pf_idx != SENTINEL)) {
             // Previous range is free so we can expand it to include offset
@@ -266,8 +266,8 @@ namespace Realm {
     bool has_cycle = free_list_has_cycle();
     bool invalid = has_invalid_ranges();
     if(has_cycle || invalid) {
-      assert(has_cycle == false);
-      assert(invalid == false);
+      REALM_ASSERT(has_cycle == false);
+      REALM_ASSERT(invalid == false);
     }
 #endif
     return n;
@@ -370,7 +370,7 @@ namespace Realm {
     stats.total_free_size = total_free_size;
     stats.largest_free_blocksize = largest_free_blocksize;
 
-    assert(total_size == total_used_size + total_free_size);
+    REALM_ASSERT(total_size == total_used_size + total_free_size);
     return stats;
   }
 
@@ -414,11 +414,6 @@ namespace Realm {
       allocated[tag] = SENTINEL;
       return true;
     }
-
-#ifdef DEBUG_REALM
-    // assert(free_list_has_cycle() == false);
-    // assert(has_invalid_ranges() == false);
-#endif
 
     // walk free ranges and just take the first that fits
     unsigned idx = ranges[SENTINEL].next_free;
@@ -499,11 +494,6 @@ namespace Realm {
 
         allocated[tag] = idx;
 
-#ifdef DEBUG_REALM
-        // assert(free_list_has_cycle() == false);
-        // assert(has_invalid_ranges() == false);
-#endif
-
         return true;
       }
 
@@ -528,12 +518,12 @@ namespace Realm {
     unsigned pf_idx = r.prev;
     while((pf_idx != SENTINEL) && (ranges[pf_idx].prev_free == pf_idx)) {
       pf_idx = ranges[pf_idx].prev;
-      assert(pf_idx != del_idx); // wrapping around would be bad
+      REALM_ASSERT(pf_idx != del_idx); // wrapping around would be bad
     }
     unsigned nf_idx = r.next;
     while((nf_idx != SENTINEL) && (ranges[nf_idx].next_free == nf_idx)) {
       nf_idx = ranges[nf_idx].next;
-      assert(nf_idx != del_idx);
+      REALM_ASSERT(nf_idx != del_idx);
     }
 
     // do we need to merge?
@@ -611,7 +601,7 @@ namespace Realm {
   {
     typename std::map<TT, unsigned>::iterator it = allocated.find(tag);
     if(it == allocated.end()) {
-      assert(missing_ok);
+      REALM_ASSERT(missing_ok);
       return;
     }
     unsigned del_idx = it->second;
@@ -713,7 +703,7 @@ namespace Realm {
     stats.total_free_size = total_free_size;
     stats.largest_free_blocksize = stats.largest_free_blocksize;
 
-    assert(total_size == total_used_size + total_free_size);
+    REALM_ASSERT(total_size == total_used_size + total_free_size);
     return stats;
   }
 
@@ -747,7 +737,7 @@ namespace Realm {
       return;
     }
 
-    assert(0);
+    abort();
   }
 
   template <typename RT, typename TT, bool SORTED>
@@ -853,7 +843,7 @@ namespace Realm {
   {
     typename std::map<TT, unsigned>::iterator it = this->allocated.find(tag);
     if(it == this->allocated.end()) {
-      assert(missing_ok);
+      REALM_ASSERT(missing_ok);
       return;
     }
     unsigned del_idx = it->second;
@@ -933,12 +923,12 @@ namespace Realm {
   {
     typename std::map<TT, unsigned>::iterator it = this->allocated.find(old_tag);
     if(it == this->allocated.end()) {
-      assert(missing_ok);
+      REALM_ASSERT(missing_ok);
       return 0;
     }
 
     size_t n = new_tags.size();
-    assert(n == sizes.size() && n == alignments.size());
+    REALM_ASSERT(n == sizes.size() && n == alignments.size());
 
     unsigned index = it->second;
     if (index == SENTINEL) {
@@ -1086,8 +1076,8 @@ namespace Realm {
       // We're the first item in the list
       RT size = range.last - range.first;
       unsigned log2_size = floor_log2(size);
-      assert(log2_size < size_based_free_lists.size());
-      assert(size_based_free_lists[log2_size] == index);
+      REALM_ASSERT(log2_size < size_based_free_lists.size());
+      REALM_ASSERT(size_based_free_lists[log2_size] == index);
       if (range.next_free != SENTINEL)
         this->ranges[range.next_free].prev_free = SENTINEL;
       size_based_free_lists[log2_size] = range.next_free;
@@ -1145,7 +1135,7 @@ namespace Realm {
   /*static*/ unsigned SizedRangeAllocator<RT,TT,SORTED>::floor_log2(uint64_t size)
   {
     // size should be non-zero
-    assert(size);
+    REALM_ASSERT(size);
     // Round down to the nearest power of two to figure out which range
     // to put it in using DeBruijin algorithm to compute integer log2
     // Taken from Hacker's Delight
