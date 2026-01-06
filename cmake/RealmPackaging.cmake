@@ -1,4 +1,4 @@
-# Copyright 2025 Stanford University, NVIDIA Corporation
+# Copyright 2025 Stanford University, NVIDIA Corporation, Los Alamos National Laboratory
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -29,6 +29,20 @@ install(
   INCLUDES
   DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}/realm"
 )
+
+# Install the realm_kokkos as well when needed
+if(REALM_USE_KOKKOS)
+  install(
+    TARGETS realm_kokkos
+    EXPORT Realm_targets
+    RUNTIME COMPONENT Realm_runtime
+    LIBRARY COMPONENT Realm_runtime
+    ARCHIVE COMPONENT Realm_devel
+    PUBLIC_HEADER COMPONENT Realm_devel DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}/realm"
+    INCLUDES
+    DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}/realm"
+  )
+endif()
 
 # Install the realm_gex_wrapper as well if we have to link directly to it
 if(REALM_INSTALL_GASNETEX_WRAPPER)

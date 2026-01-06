@@ -1,4 +1,4 @@
-# Copyright 2025 Stanford University, NVIDIA Corporation
+# Copyright 2025 Stanford University, NVIDIA Corporation, Los Alamos National Laboratory
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -512,8 +512,7 @@ if(REALM_ENABLE_KOKKOS)
   find_package(Kokkos COMPONENTS separable_compilation)
   if (Kokkos_FOUND)
     enable_language(${Kokkos_COMPILE_LANGUAGE})
-    list(APPEND REALM_STATIC_DEPENDS Kokkos)
-    list(APPEND REALM_LIBRARIES Kokkos::kokkoscore)
+    list(APPEND REALM_LIBRARIES realm_kokkos)
   endif()
 endif()
 
