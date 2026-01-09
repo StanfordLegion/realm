@@ -1,5 +1,5 @@
 /*
- * Copyright 2025 Stanford University, NVIDIA Corporation
+ * Copyright 2025 Stanford University, NVIDIA Corporation, Los Alamos National Laboratory
  * SPDX-License-Identifier: Apache-2.0
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -43,7 +43,7 @@
 #include "realm/transfer/channel_disk.h"
 
 #ifdef REALM_USE_KOKKOS
-#include "realm/kokkos_interop.h"
+#include "realm/kokkos/kokkos_interop.h"
 #endif
 
 #ifdef REALM_USE_NVTX
