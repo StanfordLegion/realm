@@ -38,7 +38,6 @@ set(REALM_SOURCES
     nodeset.cc
     operation.cc
     proc_impl.cc
-    realm_assert.cc
     repl_heap.cc
     rsrv_impl.cc
     runtime_impl.cc
@@ -64,12 +63,13 @@ set(REALM_SOURCES
     deppart/partitions.cc
     deppart/setops.cc
     deppart/sparsity_impl.cc
+    deppart/untemplated_gpu_kernels.cu
     numa/numa_module.cc
     numa/numasysif.cc
     procset/procset_module.cc
 )
 
-if(REALM_USE_CUDA)
+if(TARGET CUDA::cuda_driver AND REALM_USE_CUDA)
   list(APPEND REALM_SOURCES cuda/cuda_module.cc cuda/cuda_internal.cc cuda/cuda_access.cc)
   if(REALM_USE_NVTX)
     list(APPEND REALM_SOURCES nvtx.cc)
@@ -77,15 +77,15 @@ if(REALM_USE_CUDA)
   list(APPEND REALM_CUDA_SOURCES cuda/cuda_memcpy.cu)
 endif()
 
-if(REALM_USE_HIP)
+if(TARGET hip::host)
   list(APPEND REALM_SOURCES hip/hip_module.cc hip/hip_internal.cc hip/hip_access.cc)
 endif()
 
-if(REALM_USE_LLVM)
+if(TARGET LLVM::LLVM)
   list(APPEND REALM_SOURCES llvmjit/llvmjit_internal.cc llvmjit/llvmjit_module.cc)
 endif()
 
-if(REALM_USE_HDF5)
+if(TARGET hdf5::hdf5)
   list(APPEND REALM_SOURCES hdf5/hdf5_module.cc hdf5/hdf5_internal.cc hdf5/hdf5_access.cc)
 endif()
 
@@ -100,11 +100,11 @@ if(REALM_USE_PREALM)
   list(APPEND REALM_SOURCES prealm/prealm.cc)
 endif()
 
-if(REALM_USE_PYTHON)
+if(TARGET Python3::Python)
   list(APPEND REALM_SOURCES python/python_module.cc python/python_source.cc)
 endif()
 
-if(REALM_USE_UCX)
+if(TARGET ucx::ucp)
   list(
     APPEND
     REALM_SOURCES
@@ -119,18 +119,16 @@ if(REALM_USE_UCX)
   )
 endif()
 
-if(REALM_USE_GASNETEX)
-  if (NOT REALM_ENABLE_GASNETEX_WRAPPER)
-    list(APPEND REALM_SOURCES gasnet1/gasnet1_module.cc gasnet1/gasnetmsg.cc)
-  endif()
+if(TARGET GASNet::GASNet)
+  list(APPEND REALM_SOURCES gasnet1/gasnet1_module.cc gasnet1/gasnetmsg.cc)
   list(APPEND REALM_SOURCES gasnetex/gasnetex_module.cc gasnetex/gasnetex_internal.cc)
 endif()
 
-if(REALM_USE_MPI)
+if(TARGET MPI::MPI_CXX)
   list(APPEND REALM_SOURCES mpi/mpi_module.cc mpi/am_mpi.cc)
 endif()
 
-if(REALM_USE_KOKKOS)
+if(TARGET Kokkos::kokkos)
   list(APPEND REALM_SOURCES kokkos_interop.cc)
   set_source_files_properties("${REALM_SOURCE_DIR}/kokkos_interop.cc" 
       DIRECTORY ${PROJECT_SOURCE_DIR}
@@ -150,7 +148,7 @@ configure_file(
   @ONLY
 )
 
-# generate per-dimension object files for deppart stuff
+# Generate per-dimension object files for CPU deppart.
 foreach(INST_N1 RANGE 1 ${REALM_MAX_DIM})
   foreach(INST_N2 RANGE 1 ${REALM_MAX_DIM})
     foreach(SRCFILE realm/deppart/image realm/deppart/preimage realm/deppart/byfield)
@@ -160,6 +158,18 @@ foreach(INST_N1 RANGE 1 ${REALM_MAX_DIM})
       list(APPEND REALM_SOURCES "${_result_file}")
     endforeach()
   endforeach()
+endforeach()
+
+# Generate per-dimension object files for GPU deppart.
+foreach(INST_N1 RANGE 1 ${REALM_MAX_DIM})
+    foreach(INST_N2 RANGE 1 ${REALM_MAX_DIM})
+        foreach(SRCFILE realm/deppart/byfield realm/deppart/image)
+            set(_result_file "${CMAKE_CURRENT_BINARY_DIR}/${SRCFILE}_gpu_${INST_N1}_${INST_N2}.cu")
+            # use cmake's configure_file for a portable way of creating wrapper source files
+            configure_file("${PROJECT_SOURCE_DIR}/cmake/deppart_tmpl.cu.in" "${_result_file}")
+            list(APPEND REALM_SOURCES "${_result_file}")
+        endforeach()
+    endforeach()
 endforeach()
 
 set(REALM_SOURCES
