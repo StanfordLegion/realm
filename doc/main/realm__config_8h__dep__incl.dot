@@ -121,7 +121,7 @@ digraph "/home/runner/work/realm/realm/realm-src/src/realm/realm_config.h"
   Node85 [id="Node000085",label="/home/runner/work/realm\l/realm/realm-src/src/realm\l/instance.h",height=0.2,width=0.4,color="red", fillcolor="#FFF0F0", style="filled",URL="$instance_8h.html",tooltip=" "];
   Node85 -> Node65 [id="edge82_Node000085_Node000065",dir="back",color="steelblue1",style="solid",tooltip=" "];
   Node1 -> Node8 [id="edge83_Node000001_Node000008",dir="back",color="steelblue1",style="solid",tooltip=" "];
-  Node8 [id="Node000008",label="/home/runner/work/realm\l/realm/realm-src/src/realm\l/kokkos_interop.h",height=0.2,width=0.4,color="grey40", fillcolor="white", style="filled",URL="$kokkos__interop_8h.html",tooltip=" "];
+  Node8 [id="Node000008",label="/home/runner/work/realm\l/realm/realm-src/src/realm\l/kokkos/kokkos_interop.h",height=0.2,width=0.4,color="grey40", fillcolor="white", style="filled",URL="$kokkos__interop_8h.html",tooltip=" "];
   Node1 -> Node79 [id="edge84_Node000001_Node000079",dir="back",color="steelblue1",style="solid",tooltip=" "];
   Node1 -> Node87 [id="edge85_Node000001_Node000087",dir="back",color="steelblue1",style="solid",tooltip=" "];
   Node87 [id="Node000087",label="/home/runner/work/realm\l/realm/realm-src/src/realm\l/llvmjit/llvmjit_internal.h",height=0.2,width=0.4,color="grey40", fillcolor="white", style="filled",URL="$llvmjit__internal_8h.html",tooltip=" "];

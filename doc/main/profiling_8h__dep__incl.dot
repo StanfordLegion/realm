@@ -62,7 +62,7 @@ digraph "/home/runner/work/realm/realm/realm-src/src/realm/profiling.h"
   Node22 -> Node4 [id="edge34_Node000022_Node000004",dir="back",color="steelblue1",style="solid",tooltip=" "];
   Node22 -> Node6 [id="edge35_Node000022_Node000006",dir="back",color="steelblue1",style="solid",tooltip=" "];
   Node22 -> Node23 [id="edge36_Node000022_Node000023",dir="back",color="steelblue1",style="solid",tooltip=" "];
-  Node23 [id="Node000023",label="/home/runner/work/realm\l/realm/realm-src/src/realm\l/kokkos_interop.h",height=0.2,width=0.4,color="grey40", fillcolor="white", style="filled",URL="$kokkos__interop_8h.html",tooltip=" "];
+  Node23 [id="Node000023",label="/home/runner/work/realm\l/realm/realm-src/src/realm\l/kokkos/kokkos_interop.h",height=0.2,width=0.4,color="grey40", fillcolor="white", style="filled",URL="$kokkos__interop_8h.html",tooltip=" "];
   Node22 -> Node24 [id="edge37_Node000022_Node000024",dir="back",color="steelblue1",style="solid",tooltip=" "];
   Node24 [id="Node000024",label="/home/runner/work/realm\l/realm/realm-src/src/realm\l/openmp/openmp_internal.h",height=0.2,width=0.4,color="grey40", fillcolor="white", style="filled",URL="$openmp__internal_8h.html",tooltip=" "];
   Node22 -> Node25 [id="edge38_Node000022_Node000025",dir="back",color="steelblue1",style="solid",tooltip=" "];

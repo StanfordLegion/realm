@@ -10,5 +10,5 @@ digraph "/home/runner/work/realm/realm/realm-src/src/realm/hip"
   dir_1bb23b82c02807b960e9bec9b270f04c [label="transfer", fillcolor="#4ea9ff", color="grey25", style="filled", URL="dir_1bb23b82c02807b960e9bec9b270f04c.html",tooltip=""];
   dir_846932ae65fb6c13f149ccef41aee5b7 [label="hip", fillcolor="#daedff", color="grey25", style="filled,bold", URL="dir_846932ae65fb6c13f149ccef41aee5b7.html",tooltip=""];
   }
-  dir_846932ae65fb6c13f149ccef41aee5b7->dir_1bb23b82c02807b960e9bec9b270f04c [headlabel="2", labeldistance=1.5 headhref="dir_000007_000019.html" href="dir_000007_000019.html" color="steelblue1" fontcolor="steelblue1"];
+  dir_846932ae65fb6c13f149ccef41aee5b7->dir_1bb23b82c02807b960e9bec9b270f04c [headlabel="2", labeldistance=1.5 headhref="dir_000007_000020.html" href="dir_000007_000020.html" color="steelblue1" fontcolor="steelblue1"];
 }

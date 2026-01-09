@@ -29,7 +29,7 @@ digraph "/home/runner/work/realm/realm/realm-src/src/realm/custom_serdez.h"
   Node11 -> Node12 [id="edge12_Node000011_Node000012",dir="back",color="steelblue1",style="solid",tooltip=" "];
   Node12 [id="Node000012",label="/home/runner/work/realm\l/realm/realm-src/src/realm\l/hip/hip_internal.h",height=0.2,width=0.4,color="grey40", fillcolor="white", style="filled",URL="$hip__internal_8h.html",tooltip=" "];
   Node11 -> Node13 [id="edge13_Node000011_Node000013",dir="back",color="steelblue1",style="solid",tooltip=" "];
-  Node13 [id="Node000013",label="/home/runner/work/realm\l/realm/realm-src/src/realm\l/kokkos_interop.h",height=0.2,width=0.4,color="grey40", fillcolor="white", style="filled",URL="$kokkos__interop_8h.html",tooltip=" "];
+  Node13 [id="Node000013",label="/home/runner/work/realm\l/realm/realm-src/src/realm\l/kokkos/kokkos_interop.h",height=0.2,width=0.4,color="grey40", fillcolor="white", style="filled",URL="$kokkos__interop_8h.html",tooltip=" "];
   Node11 -> Node14 [id="edge14_Node000011_Node000014",dir="back",color="steelblue1",style="solid",tooltip=" "];
   Node14 [id="Node000014",label="/home/runner/work/realm\l/realm/realm-src/src/realm\l/openmp/openmp_internal.h",height=0.2,width=0.4,color="grey40", fillcolor="white", style="filled",URL="$openmp__internal_8h.html",tooltip=" "];
   Node11 -> Node15 [id="edge15_Node000011_Node000015",dir="back",color="steelblue1",style="solid",tooltip=" "];

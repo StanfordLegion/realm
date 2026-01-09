@@ -47,7 +47,7 @@ digraph "/home/runner/work/realm/realm/realm-src/src/realm/rsrv_impl.h"
   Node15 -> Node4 [id="edge26_Node000015_Node000004",dir="back",color="steelblue1",style="solid",tooltip=" "];
   Node15 -> Node6 [id="edge27_Node000015_Node000006",dir="back",color="steelblue1",style="solid",tooltip=" "];
   Node15 -> Node16 [id="edge28_Node000015_Node000016",dir="back",color="steelblue1",style="solid",tooltip=" "];
-  Node16 [id="Node000016",label="/home/runner/work/realm\l/realm/realm-src/src/realm\l/kokkos_interop.h",height=0.2,width=0.4,color="grey40", fillcolor="white", style="filled",URL="$kokkos__interop_8h.html",tooltip=" "];
+  Node16 [id="Node000016",label="/home/runner/work/realm\l/realm/realm-src/src/realm\l/kokkos/kokkos_interop.h",height=0.2,width=0.4,color="grey40", fillcolor="white", style="filled",URL="$kokkos__interop_8h.html",tooltip=" "];
   Node15 -> Node17 [id="edge29_Node000015_Node000017",dir="back",color="steelblue1",style="solid",tooltip=" "];
   Node17 [id="Node000017",label="/home/runner/work/realm\l/realm/realm-src/src/realm\l/openmp/openmp_internal.h",height=0.2,width=0.4,color="grey40", fillcolor="white", style="filled",URL="$openmp__internal_8h.html",tooltip=" "];
   Node15 -> Node18 [id="edge30_Node000015_Node000018",dir="back",color="steelblue1",style="solid",tooltip=" "];

@@ -10,5 +10,5 @@ digraph "/home/runner/work/realm/realm/realm-src/src/realm/cuda"
   dir_1bb23b82c02807b960e9bec9b270f04c [label="transfer", fillcolor="#4ea9ff", color="grey25", style="filled", URL="dir_1bb23b82c02807b960e9bec9b270f04c.html",tooltip=""];
   dir_a4d6ae311adfc804423539110c391532 [label="cuda", fillcolor="#daedff", color="grey25", style="filled,bold", URL="dir_a4d6ae311adfc804423539110c391532.html",tooltip=""];
   }
-  dir_a4d6ae311adfc804423539110c391532->dir_1bb23b82c02807b960e9bec9b270f04c [headlabel="2", labeldistance=1.5 headhref="dir_000001_000019.html" href="dir_000001_000019.html" color="steelblue1" fontcolor="steelblue1"];
+  dir_a4d6ae311adfc804423539110c391532->dir_1bb23b82c02807b960e9bec9b270f04c [headlabel="2", labeldistance=1.5 headhref="dir_000001_000020.html" href="dir_000001_000020.html" color="steelblue1" fontcolor="steelblue1"];
 }
