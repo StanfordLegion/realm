@@ -1177,6 +1177,15 @@ namespace Realm {
           .second;
     }
 
+    void GPU::trim_mempools(CUmemoryPool skip)
+    {
+      for(CUmemoryPool pool : registered_mempools) {
+        if(pool != skip) {
+          CHECK_CU(CUDA_DRIVER_FNPTR(cuMemPoolTrimTo)(pool, 0));
+        }
+      }
+    }
+
     bool GPUProcessor::register_task(Processor::TaskFuncID func_id,
                                      CodeDescriptor &codedesc,
                                      const ByteArrayRef &user_data)
@@ -1654,13 +1663,27 @@ namespace Realm {
     // class GPUDynamicMemory
 
     GPUDynamicFBMemory::GPUDynamicFBMemory(RuntimeImpl *_runtime_impl, Memory _me,
-                                           GPU *_gpu, size_t _max_size)
+                                           GPU *_gpu, CUmemoryPool _pool,
+                                           size_t _max_size)
+      : GPUDynamicFBMemory(_runtime_impl, _me, _gpu, _pool, _max_size, cuda_module_singleton->config->cfg_enable_dynasync)
+    {}
+
+    GPUDynamicFBMemory::GPUDynamicFBMemory(RuntimeImpl *_runtime_impl, Memory _me,
+                                           GPU *_gpu, CUmemoryPool _pool,
+                                           size_t _max_size, bool _enable_async)
       : MemoryImpl(_runtime_impl, _me, _max_size, MKIND_GPUFB, Memory::GPU_DYNAMIC_MEM, 0)
       , gpu(_gpu)
-      , cur_size(0)
+      , pool(_pool)
+      , enable_async(_enable_async)
     {
+      cuuint64_t bytes = size;
+      free_bytes = size;
       // mark what context we belong to
       add_module_specific(new CudaDeviceMemoryInfo(gpu->context));
+      // Cache allocations below the given size in the pool.  Everything allocated after
+      // that is opportunistic and will likely hit a perf-cliff
+      CHECK_CU(CUDA_DRIVER_FNPTR(cuMemPoolSetAttribute)(
+          pool, CU_MEMPOOL_ATTR_RELEASE_THRESHOLD, &bytes));
 
       // advertise for potential (on-demand) gpudirect support
       local_segment.assign(NetworkSegmentInfo::CudaDeviceMem, 0 /*base*/, 0 /*size*/,
@@ -1671,19 +1694,56 @@ namespace Realm {
 
     GPUDynamicFBMemory::~GPUDynamicFBMemory(void) { cleanup(); }
 
+    GPUDynamicFBMemory::InstInfo::~InstInfo()
+    {
+      if(ptr != 0) {
+        AutoGPUContext agc(gpu);
+        CHECK_CU(CUDA_DRIVER_FNPTR(cuMemFree)(ptr));
+      }
+    }
+
     void GPUDynamicFBMemory::cleanup(void)
     {
       AutoLock<> al(mutex);
-      if(alloc_bases.empty())
-        return;
-      // free any remaining allocations
+      inst_to_info.clear();
+    }
+
+    MemoryImpl::AllocationResult
+    GPUDynamicFBMemory::queue_allocation(RegionInstanceImpl *inst,
+                                         size_t size_needed /* = 0 */)
+    {
+      if (!enable_async) {
+        return ALLOC_INSTANT_FAILURE;
+      }
+      log_gpu.debug("Queueing allocation request: %p", inst);
+      inst_to_info[inst] = std::make_shared<InstInfo>();
+      inst_to_info[inst]->alloc_bytes_needed = size_needed;
+      pending_allocs.push_back(inst);
+      return ALLOC_DEFERRED;
+    }
+
+    CUresult GPUDynamicFBMemory::alloc(CUmemoryPool pool, CUdeviceptr &offset,
+                                       size_t size)
+    {
+      CUresult res = CUDA_SUCCESS;
+      CUstream tmp_stream;
       AutoGPUContext agc(gpu);
-      for(std::map<RegionInstance, std::pair<CUdeviceptr, size_t>>::const_iterator it =
-              alloc_bases.begin();
-          it != alloc_bases.end(); ++it)
-        if(it->second.first)
-          CHECK_CU(CUDA_DRIVER_FNPTR(cuMemFree)(it->second.first));
-      alloc_bases.clear();
+      // Create a temporary stream here to ensure the stream used is always idle (there
+      // isn't a "default" or "none" stream that is always idle that we can use) and the
+      // allocation is actually immediate.  This allows us to use mempools to manage
+      // fragmentation and cache physical allocations.
+      // TODO: maybe have a dedicated pool of streams to prevent needing to create /
+      // destroy streams.  Should be cheap enough
+      CHECK_CU(CUDA_DRIVER_FNPTR(cuStreamCreate)(&tmp_stream, CU_STREAM_NON_BLOCKING));
+      res = CUDA_DRIVER_FNPTR(cuMemAllocFromPoolAsync)(&offset, size, pool, tmp_stream);
+      if(res != CUDA_SUCCESS) {
+        // Trim all known mempools for this gpu and try one more time.
+        gpu->trim_mempools(pool);
+        res = CUDA_DRIVER_FNPTR(cuMemAllocFromPoolAsync)(&offset, size, pool, tmp_stream);
+      }
+      CHECK_CU(CUDA_DRIVER_FNPTR(cuStreamDestroy)(tmp_stream));
+
+      return res;
     }
 
     MemoryImpl::AllocationResult
@@ -1691,75 +1751,225 @@ namespace Realm {
                                                    bool need_alloc_result, bool poisoned,
                                                    TimeLimit work_until)
     {
-      // poisoned allocations are cancellled
+      AllocationResult result = ALLOC_INSTANT_FAILURE;
+      CUdeviceptr base = 0;
+      CUresult res = CUDA_SUCCESS;
+      size_t offset = RegionInstanceImpl::INSTOFFSET_FAILED;
+      size_t bytes = inst->metadata.layout->bytes_used;
+
+      // Skip poisoned
       if(poisoned) {
-        inst->notify_allocation(ALLOC_CANCELLED, RegionInstanceImpl::INSTOFFSET_FAILED,
-                                work_until);
+        result = ALLOC_CANCELLED;
+        goto Done;
+      }
+
+      // Skip zero byte sizes
+      if(bytes == 0) {
+        offset = 0;
+        result = ALLOC_INSTANT_SUCCESS;
+        goto Done;
+      }
+
+      {
+        AutoLock<> al(mutex);
+        if(bytes > (free_bytes + pending_free_bytes)) {
+          // No free space now or in the known future.
+          result = ALLOC_INSTANT_FAILURE;
+        } else if(bytes > free_bytes) {
+          // Need more bytes than are currently available, take all the free bytes and
+          // defer the allocation until enough pending bytes are available
+          free_bytes = 0;
+          result = queue_allocation(inst, bytes - free_bytes);
+        } else {
+          // We have enough space right now to allocate from
+          result = ALLOC_INSTANT_SUCCESS;
+          free_bytes -= bytes;
+        }
+      }
+      if(result != ALLOC_INSTANT_SUCCESS) {
+        goto Done;
+      }
+
+      // Try the allocation from the pool.  This may take a while, so we don't hold a lock
+      // during this time.
+      res = alloc(pool, base, bytes);
+      offset = base;
+
+      {
+        AutoLock<> al(mutex);
+        if(res == CUDA_SUCCESS) {
+          std::shared_ptr<InstInfo> info(new InstInfo);
+          info->ptr = base;
+          info->size = bytes;
+          inst_to_info[inst] = info;
+          result = ALLOC_INSTANT_SUCCESS;
+        } else if((res == CUDA_ERROR_OUT_OF_MEMORY) && (pending_free_bytes > 0)) {
+          // The mempool is fragmented or was not able to grow to the needed size for the
+          // request, but we have some pending bytes, so lets try again later when those
+          // free bytes are available.  We pass zero for bytes here because we've already
+          // taken all we need from free_bytes
+          result = queue_allocation(inst);
+        } else {
+          REPORT_CU_ERROR(Logger::LEVEL_INFO, "cuMemAllocFromPoolAsync", res);
+          result = ALLOC_INSTANT_FAILURE;
+          free_bytes += bytes;
+        }
+      }
+
+    Done:
+      if((result != ALLOC_DEFERRED) || need_alloc_result) {
+        inst->notify_allocation(result, offset, work_until);
+      }
+      return result;
+    }
+
+    MemoryImpl::AllocationResult GPUDynamicFBMemory::reuse_storage_immediate(
+        RegionInstanceImpl *old_inst, std::vector<RegionInstanceImpl *> &new_insts,
+        bool poisoned, TimeLimit work_until)
+    {
+      // Handle the external instance case
+      if(old_inst->metadata.ext_resource) {
+        return MemoryImpl::reuse_storage_immediate(old_inst, new_insts, poisoned,
+                                                   work_until);
+      }
+      if (poisoned) {
+        for (RegionInstanceImpl *new_inst : new_insts) {
+          new_inst->notify_allocation(ALLOC_CANCELLED, 0, work_until);
+        }
         return ALLOC_CANCELLED;
       }
 
-      // attempt cuMemAlloc, except for bytes=0 allocations
-      size_t bytes = inst->metadata.layout->bytes_used;
-      CUdeviceptr base = 0;
-      if(bytes > 0) {
-        // before we attempt an allocation with cuda, make sure we're not
-        //  going over our usage limit
-        bool limit_ok;
-        size_t cur_snapshot;
-        {
-          AutoLock<> al(mutex);
-          cur_snapshot = cur_size;
-          if((cur_size + bytes) <= size) {
-            cur_size += bytes;
-            limit_ok = true;
-          } else
-            limit_ok = false;
-        }
+      // Old instance should be ready at this point
+      assert(old_inst->metadata.ready_event.has_triggered());
 
-        if(!limit_ok) {
-          log_gpu.warning() << "dynamic allocation limit reached: mem=" << me
-                            << " cur_size=" << cur_snapshot << " bytes=" << bytes
-                            << " limit=" << size;
-          inst->notify_allocation(ALLOC_INSTANT_FAILURE,
-                                  RegionInstanceImpl::INSTOFFSET_FAILED, work_until);
-          return ALLOC_INSTANT_FAILURE;
-        }
-
-        CUresult ret = CUDA_SUCCESS;
-        {
-          AutoGPUContext agc(gpu);
-          // TODO: handle large alignments?
-          ret = CUDA_DRIVER_FNPTR(cuMemAlloc)(&base, bytes);
-          if((ret != CUDA_SUCCESS) && (ret != CUDA_ERROR_OUT_OF_MEMORY)) {
-            REPORT_CU_ERROR(Logger::LEVEL_ERROR, "cuMemAlloc", ret);
-            abort();
-          }
-        }
-        if(ret == CUDA_ERROR_OUT_OF_MEMORY) {
-          log_gpu.warning() << "out of memory in cuMemAlloc: bytes=" << bytes;
-          inst->notify_allocation(ALLOC_INSTANT_FAILURE,
-                                  RegionInstanceImpl::INSTOFFSET_FAILED, work_until);
-          return ALLOC_INSTANT_FAILURE;
-        }
-      }
-
-      // insert entry into our alloc_bases map
+      // Lookup the control block for the old_inst
+      AutoLock<> al(mutex);
+      std::shared_ptr<InstInfo> info;
+      std::vector<RegionInstanceImpl *> local_new_insts;
       {
-        AutoLock<> al(mutex);
-        alloc_bases[inst->me] = std::make_pair(base, bytes);
+        InstToInfoMap::iterator it = inst_to_info.find(old_inst);
+        if(it == inst_to_info.end()) {
+          // fail all instances
+          return ALLOC_INSTANT_FAILURE;
+        }
+        info = it->second;
+        inst_to_info.erase(it);
       }
 
-      inst->notify_allocation(ALLOC_INSTANT_SUCCESS, base, work_until);
+      size_t old_inst_sz = old_inst->metadata.layout->bytes_used;
+      size_t bytes_free = old_inst->metadata.layout->bytes_used;
+      local_new_insts.swap(new_insts);
+
+      al.release();
+      old_inst->notify_deallocation();
+      al.reacquire();
+
+      // TODO(cperry): rework the locking logic here to reduce reaquires
+      for(RegionInstanceImpl *new_inst : local_new_insts) {
+        AllocationResult result = ALLOC_EVENTUAL_FAILURE;
+        size_t offset = 0;
+        if(new_inst->metadata.layout->bytes_used <= bytes_free) {
+          // Suballocate from the old instance
+          offset = info->ptr + (old_inst_sz - bytes_free);
+          bytes_free -= new_inst->metadata.layout->bytes_used;
+          result = ALLOC_EVENTUAL_SUCCESS;
+          // Reference the control block in this new instance
+          info->refcount++;
+          inst_to_info[new_inst] = info;
+        }
+        al.release();
+        new_inst->notify_allocation(result, offset, work_until);
+        al.reacquire();
+      }
+
       return ALLOC_INSTANT_SUCCESS;
+    }
+
+    void GPUDynamicFBMemory::release_storage_deferrable(RegionInstanceImpl *inst,
+                                                        Event precondition)
+    {
+      // all allocation requests are handled by the memory's owning node for
+      //  now - local caching might be possible though
+      NodeID target = ID(me).memory_owner_node();
+      assert(target == Network::my_node_id);
+
+      bool poisoned = false;
+      if(precondition.has_triggered_faultaware(poisoned)) {
+        // fall through to immediate storage release
+        release_storage_immediate(inst, poisoned, TimeLimit::responsive());
+      } else {
+        AutoLock<> al(mutex);
+        InstToInfoMap::iterator it = inst_to_info.find(inst);
+        if((it != inst_to_info.end()) && (it->second->refcount == 1)) {
+          // last reference to this control block. Update the pending_free_bytes for
+          // future allocations and set this instance as a deferred_release so the later
+          // called release_storage_immediate knows it needs to update the pending_bytes
+          // as well as free_bytes
+          pending_free_bytes += it->second->size;
+          it->second->deferred_release = true;
+        }
+        // ask the instance to tell us when the precondition is satisified
+        inst->deferred_destroy.defer(inst, this, precondition);
+      }
+    }
+
+    void GPUDynamicFBMemory::handle_pending_allocs(TimeLimit work_until)
+    {
+      AutoLock<> al(mutex);
+      while(!pending_allocs.empty()) {
+        RegionInstanceImpl *alloc_inst = pending_allocs.front();
+        std::shared_ptr<InstInfo> inst_info = inst_to_info[alloc_inst];
+        AllocationResult alloc_result = ALLOC_INSTANT_SUCCESS;
+        CUdeviceptr base = 0;
+        // We already removed all the free bytes we could at allocation request, so we
+        // just need to check if we have enough free bytes for the rest of what we need
+        // for this request
+        if(free_bytes < inst_info->alloc_bytes_needed) {
+          // Not enough.  We could keep checking other instances, but that could starve
+          // large allocations and potentially lead to a deadlock that the application
+          // cannot reason about.  While we could still deadlock regardless, the
+          // application can at least reason about how to work around it.
+          break;
+        }
+        pending_allocs.pop_front();
+        free_bytes -= inst_info->alloc_bytes_needed;
+
+        al.release();
+        CUresult res = alloc(pool, base, alloc_inst->metadata.layout->bytes_used);
+        al.reacquire();
+
+        if(res == CUDA_SUCCESS) {
+          inst_info->ptr = base;
+          inst_info->size = alloc_inst->metadata.layout->bytes_used;
+          alloc_result = ALLOC_INSTANT_SUCCESS;
+        } else {
+          REPORT_CU_ERROR(Logger::LEVEL_INFO, "cuMemAllocFromPoolAsync", res);
+          // Couldn't allocate the next in queue even though we should have enough room.
+          // This could be due to fragmentation of the pool, or garbage collection of
+          // the pool by cuda.  Either way, to prevent deadlocks, we need to fail this
+          // allocation, but we'll free up the bytes taken from this instance and notify
+          // waiters of the failure.
+          alloc_result = ALLOC_INSTANT_FAILURE;
+          free_bytes += alloc_inst->metadata.layout->bytes_used;
+          inst_to_info.erase(alloc_inst);
+        }
+
+        al.release();
+        alloc_inst->notify_allocation(alloc_result, base, work_until);
+        al.reacquire();
+      }
     }
 
     void GPUDynamicFBMemory::release_storage_immediate(RegionInstanceImpl *inst,
                                                        bool poisoned,
                                                        TimeLimit work_until)
     {
+      CUdeviceptr base = 0;
+
       // ignore poisoned releases
-      if(poisoned)
+      if(poisoned) {
         return;
+      }
 
       // for external instances, all we have to do is ack the destruction
       if(inst->metadata.ext_resource != 0) {
@@ -1768,27 +1978,30 @@ namespace Realm {
         return;
       }
 
-      CUdeviceptr base;
       {
         AutoLock<> al(mutex);
-        std::map<RegionInstance, std::pair<CUdeviceptr, size_t>>::iterator it =
-            alloc_bases.find(inst->me);
-        if(it == alloc_bases.end()) {
-          log_gpu.fatal() << "attempt to release unknown instance: inst=" << inst->me;
-          abort();
+        InstToInfoMap::iterator it = inst_to_info.find(inst);
+        assert(it != inst_to_info.end());
+        std::shared_ptr<InstInfo> &info = it->second;
+        base = info->ptr;
+        if(base != 0 && ((--info->refcount) == 0)) {
+          // Last reference to this control block, so update the pool's bytes and delete
+          // the control block
+          if(info->deferred_release) {
+            pending_free_bytes -= info->size;
+          }
+          free_bytes += info->size;
         }
-        base = it->second.first;
-        assert(cur_size >= it->second.second);
-        cur_size -= it->second.second;
-        alloc_bases.erase(it);
-      }
-
-      if(base != 0) {
-        AutoGPUContext agc(gpu);
-        CHECK_CU(CUDA_DRIVER_FNPTR(cuMemFree)(base));
+        inst_to_info.erase(it);
       }
 
       inst->notify_deallocation();
+
+      if(base == 0) {
+        return;
+      }
+
+      handle_pending_allocs(work_until);
     }
 
     // these work, but they are SLOW
@@ -1821,30 +2034,21 @@ namespace Realm {
     bool GPUDynamicFBMemory::attempt_register_external_resource(RegionInstanceImpl *inst,
                                                                 size_t &inst_offset)
     {
-      {
-        ExternalCudaMemoryResource *res =
-            dynamic_cast<ExternalCudaMemoryResource *>(inst->metadata.ext_resource);
-        if(res) {
-          // automatic success
-          inst_offset = res->base; // "offsets" are absolute in dynamic fbmem
-          return true;
-        }
+      switch(inst->metadata.ext_resource->get_type_id()) {
+      case REALM_HASH_TOKEN(Realm::ExternalCudaMemoryResource):
+        inst_offset =
+            static_cast<ExternalCudaMemoryResource *>(inst->metadata.ext_resource)->base;
+        break;
+      case REALM_HASH_TOKEN(Realm::ExternalCudaArrayResource):
+        inst_offset = 0;
+        inst->metadata.add_mem_specific(new MemSpecificCudaArray(
+            static_cast<ExternalCudaArrayResource *>(inst->metadata.ext_resource)
+                ->array));
+        break;
+      default:
+        return false;
       }
-
-      {
-        ExternalCudaArrayResource *res =
-            dynamic_cast<ExternalCudaArrayResource *>(inst->metadata.ext_resource);
-        if(res) {
-          // automatic success
-          inst_offset = 0;
-          CUarray array = reinterpret_cast<CUarray>(res->array);
-          inst->metadata.add_mem_specific(new MemSpecificCudaArray(array));
-          return true;
-        }
-      }
-
-      // not a kind we recognize
-      return false;
+      return true;
     }
 
     void GPUDynamicFBMemory::unregister_external_resource(RegionInstanceImpl *inst)
@@ -2428,8 +2632,13 @@ namespace Realm {
       }
 
       Memory m = runtime->next_local_memory_id();
-      // TODO(apryakhin@): Determine if we need to keep the pointer.
-      fb_dmem = new GPUDynamicFBMemory(runtime, m, this, max_size);
+      CUmemoryPool pool = 0;
+      // TODO(cperry): Should we create our own mempool here?  If so, we need to manage
+      // the peer mappings and everything ourselves...
+      CHECK_CU(CUDA_DRIVER_FNPTR(cuDeviceGetMemPool)(&pool, info->device));
+      registered_mempools.insert(pool);
+
+      fb_dmem = new GPUDynamicFBMemory(runtime, m, this, pool, max_size);
       runtime->add_memory(fb_dmem);
     }
 
@@ -2584,6 +2793,7 @@ namespace Realm {
           .add_option_int_units("-cuda:hostreg", cfg_hostreg_limit, 'm')
           .add_option_int("-cuda:pageable_access", cfg_pageable_access)
           .add_option_int("-cuda:cupti", cfg_enable_cupti)
+          .add_option_int("-cuda:dynasync", cfg_enable_dynasync)
           .add_option_int("-cuda:ipc", cfg_use_cuda_ipc);
 #ifdef REALM_USE_CUDART_HIJACK
       cp.add_option_int("-cuda:nongpusync", Cuda::cudart_hijack_nongpu_sync);
