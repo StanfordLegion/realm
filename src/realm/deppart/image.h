@@ -24,117 +24,188 @@
 #include "realm/deppart/rectlist.h"
 
 namespace Realm {
+    template<int N, typename T, int N2, typename T2>
+    class ImageMicroOp : public PartitioningMicroOp {
+    public:
+        static const int DIM = N;
+        typedef T IDXTYPE;
+        static const int DIM2 = N2;
+        typedef T2 IDXTYPE2;
 
-  template <int N, typename T, int N2, typename T2>
-  class ImageMicroOp : public PartitioningMicroOp {
-  public:
-    static const int DIM = N;
-    typedef T IDXTYPE;
-    static const int DIM2 = N2;
-    typedef T2 IDXTYPE2;
+        ImageMicroOp(IndexSpace<N, T> _parent_space, IndexSpace<N2, T2> _inst_space,
+                     RegionInstance _inst, size_t _field_offset, bool _is_ranged);
 
-    ImageMicroOp(IndexSpace<N,T> _parent_space, IndexSpace<N2,T2> _inst_space,
-		 RegionInstance _inst, size_t _field_offset, bool _is_ranged);
+        virtual ~ImageMicroOp(void);
 
-    virtual ~ImageMicroOp(void);
+        void add_sparsity_output(IndexSpace<N2, T2> _source, SparsityMap<N, T> _sparsity);
 
-    void add_sparsity_output(IndexSpace<N2,T2> _source, SparsityMap<N,T> _sparsity);
-    void add_sparsity_output_with_difference(IndexSpace<N2,T2> _source,
-                                             IndexSpace<N,T> _diff_rhs,
-                                             SparsityMap<N,T> _sparsity);
-    void add_approx_output(int index, PartitioningOperation *op);
+        void add_sparsity_output_with_difference(IndexSpace<N2, T2> _source,
+                                                 IndexSpace<N, T> _diff_rhs,
+                                                 SparsityMap<N, T> _sparsity);
 
-    virtual void execute(void);
+        void add_sparsity_output_with_intersection(IndexSpace<N2, T2> _source,
+                                                   IndexSpace<N, T> _diff_rhs,
+                                                   SparsityMap<N, T> _sparsity);
 
-    void dispatch(PartitioningOperation *op, bool inline_ok);
+        void add_approx_output(int index, PartitioningOperation *op);
 
-  protected:
-    friend struct RemoteMicroOpMessage<ImageMicroOp<N,T,N2,T2> >;
-    static ActiveMessageHandlerReg<RemoteMicroOpMessage<ImageMicroOp<N,T,N2,T2> > > areg;
+        virtual void execute(void);
 
-    friend class PartitioningMicroOp;
-    template <typename S>
-    REALM_ATTR_WARN_UNUSED(bool serialize_params(S& s) const);
+        void dispatch(PartitioningOperation *op, bool inline_ok);
 
-    // construct from received packet
-    template <typename S>
-    ImageMicroOp(NodeID _requestor, AsyncMicroOp *_async_microop, S& s);
+    protected:
+        friend struct RemoteMicroOpMessage<ImageMicroOp<N, T, N2, T2> >;
+        static ActiveMessageHandlerReg<RemoteMicroOpMessage<ImageMicroOp<N, T, N2, T2> > > areg;
 
-    template <typename BM>
-    void populate_bitmasks_ptrs(std::map<int, BM *>& bitmasks);
+        friend class PartitioningMicroOp;
 
-    template <typename BM>
-    void populate_bitmasks_ranges(std::map<int, BM *>& bitmasks);
+        template<typename S>
+        REALM_ATTR_WARN_UNUSED(bool serialize_params(S& s) const);
 
-    template <typename BM>
-    void populate_approx_bitmask_ptrs(BM& bitmask);
+        // construct from received packet
+        template<typename S>
+        ImageMicroOp(NodeID _requestor, AsyncMicroOp *_async_microop, S &s);
 
-    template <typename BM>
-    void populate_approx_bitmask_ranges(BM& bitmask);
+        template<typename BM>
+        void populate_bitmasks_ptrs(std::map<int, BM *> &bitmasks);
 
-    IndexSpace<N,T> parent_space;
-    IndexSpace<N2,T2> inst_space;
-    RegionInstance inst;
-    size_t field_offset;
-    bool is_ranged;
-    std::vector<IndexSpace<N2,T2> > sources;
-    std::vector<IndexSpace<N,T> > diff_rhss;
-    std::vector<SparsityMap<N,T> > sparsity_outputs;
-    int approx_output_index;
-    intptr_t approx_output_op;
-  };
+        template<typename BM>
+        void populate_bitmasks_ranges(std::map<int, BM *> &bitmasks);
 
-  template <int N, typename T, int N2, typename T2>
-  class ImageOperation : public PartitioningOperation {
-  public:
-   ImageOperation(const IndexSpace<N, T>& _parent,
-                  const DomainTransform<N, T, N2, T2>& _domain_transform,
-                  const ProfilingRequestSet& reqs, GenEventImpl* _finish_event,
-                  EventImpl::gen_t _finish_gen);
+        template<typename BM>
+        void populate_approx_bitmask_ptrs(BM &bitmask);
 
-   virtual ~ImageOperation(void);
+        template<typename BM>
+        void populate_approx_bitmask_ranges(BM &bitmask);
 
-   IndexSpace<N, T> add_source(const IndexSpace<N2, T2>& source);
-   IndexSpace<N, T> add_source_with_difference(
-       const IndexSpace<N2, T2>& source, const IndexSpace<N, T>& diff_rhs);
+        IndexSpace<N, T> parent_space;
+        IndexSpace<N2, T2> inst_space;
+        RegionInstance inst;
+        size_t field_offset;
+        bool is_ranged;
+        bool is_intersection;
+        std::vector<IndexSpace<N2, T2> > sources;
+        std::vector<IndexSpace<N, T> > diff_rhss;
+        std::vector<SparsityMap<N, T> > sparsity_outputs;
+        int approx_output_index;
+        intptr_t approx_output_op;
+    };
 
-   virtual void execute(void);
+    template<int N, typename T, int N2, typename T2>
+    class ImageOperation : public PartitioningOperation {
+    public:
+        ImageOperation(const IndexSpace<N, T> &_parent,
+                       const DomainTransform<N, T, N2, T2> &_domain_transform,
+                       const ProfilingRequestSet &reqs, GenEventImpl *_finish_event,
+                       EventImpl::gen_t _finish_gen);
 
-   virtual void print(std::ostream& os) const;
+        virtual ~ImageOperation(void);
 
-   virtual void set_overlap_tester(void* tester);
+        IndexSpace<N, T> add_source(const IndexSpace<N2, T2> &source);
 
-  protected:
-   IndexSpace<N, T> parent;
-   DomainTransform<N, T, N2, T2> domain_transform;
-   std::vector<IndexSpace<N2, T2>> sources;
-   std::vector<IndexSpace<N, T>> diff_rhss;
-   std::vector<SparsityMap<N, T>> images;
-  };
+        IndexSpace<N, T> add_source_with_difference(
+            const IndexSpace<N2, T2> &source, const IndexSpace<N, T> &diff_rhs);
 
-  template <int N, typename T, int N2, typename T2>
-  class StructuredImageMicroOp : public PartitioningMicroOp {
-   public:
-    StructuredImageMicroOp(
-        const IndexSpace<N, T>& _parent,
-        const StructuredTransform<N, T, N2, T2>& _transform);
+        IndexSpace<N, T> add_source_with_intersection(
+            const IndexSpace<N2, T2> &source, const IndexSpace<N, T> &diff_rhs);
 
-    virtual ~StructuredImageMicroOp(void);
-    virtual void execute(void);
+        virtual void execute(void);
 
-    virtual void populate(std::map<int, HybridRectangleList<N, T>*>& bitmasks);
+        virtual void print(std::ostream &os) const;
 
-    void dispatch(PartitioningOperation* op, bool inline_ok);
-    void add_sparsity_output(IndexSpace<N2, T2> _source,
-                             SparsityMap<N, T> _sparsity);
+        virtual void set_overlap_tester(void *tester);
 
-   protected:
-    IndexSpace<N, T> parent_space;
-    StructuredTransform<N, T, N2, T2> transform;
-    std::vector<IndexSpace<N2, T2>> sources;
-    std::vector<SparsityMap<N, T>> sparsity_outputs;
-  };
+    protected:
+        IndexSpace<N, T> parent;
+        DomainTransform<N, T, N2, T2> domain_transform;
+        std::vector<IndexSpace<N2, T2> > sources;
+        std::vector<IndexSpace<N, T> > diff_rhss;
+        std::vector<SparsityMap<N, T> > images;
+        bool is_intersection;
+    };
 
-  };  // namespace Realm
+    template<int N, typename T, int N2, typename T2>
+    class StructuredImageMicroOp : public PartitioningMicroOp {
+    public:
+        StructuredImageMicroOp(
+            const IndexSpace<N, T> &_parent,
+            const StructuredTransform<N, T, N2, T2> &_transform);
+
+        virtual ~StructuredImageMicroOp(void);
+
+        virtual void execute(void);
+
+        virtual void populate(std::map<int, HybridRectangleList<N, T> *> &bitmasks);
+
+        void dispatch(PartitioningOperation *op, bool inline_ok);
+
+        void add_sparsity_output(IndexSpace<N2, T2> _source,
+                                 SparsityMap<N, T> _sparsity);
+
+    protected:
+        IndexSpace<N, T> parent_space;
+        StructuredTransform<N, T, N2, T2> transform;
+        std::vector<IndexSpace<N2, T2> > sources;
+        std::vector<SparsityMap<N, T> > sparsity_outputs;
+    };
+
+    template<int N, typename T, int N2, typename T2>
+      class GPUImageOperation : public PartitioningOperation {
+    public:
+      GPUImageOperation(const IndexSpace<N, T> &_parent,
+                     const DomainTransform<N, T, N2, T2> &_domain_transform,
+                     const ProfilingRequestSet &reqs,
+                     size_t _buffer_size,
+                     RegionInstance _buffer,
+                     GenEventImpl *_finish_event,
+                     EventImpl::gen_t _finish_gen);
+
+      virtual ~GPUImageOperation(void);
+
+      IndexSpace<N, T> add_source(const IndexSpace<N2, T2> &source);
+
+      virtual void execute(void);
+
+      virtual void print(std::ostream &os) const;
+
+    protected:
+      IndexSpace<N, T> parent;
+      DomainTransform<N, T, N2, T2> domain_transform;
+      std::vector<IndexSpace<N2, T2> > sources;
+      std::vector<SparsityMap<N, T> > images;
+      size_t buffer_size;
+      RegionInstance buffer;
+    };
+
+    template<int N, typename T, int N2, typename T2>
+    class GPUImageMicroOp : public GPUMicroOp<N, T> {
+    public:
+        GPUImageMicroOp(
+            const IndexSpace<N, T> &_parent,
+            const DomainTransform<N, T, N2, T2> &_domain_transform,
+            bool _exclusive, size_t fixed_buffer_size = 0, RegionInstance buffer = RegionInstance::NO_INST);
+
+        virtual ~GPUImageMicroOp(void);
+
+        virtual void execute(void);
+
+        virtual void gpu_populate_ptrs();
+
+        virtual void gpu_populate_rngs();
+
+        void dispatch(PartitioningOperation *op, bool inline_ok);
+
+        void add_sparsity_output(IndexSpace<N2, T2> _source,
+                                 SparsityMap<N, T> _sparsity);
+
+    protected:
+        IndexSpace<N, T> parent_space;
+        DomainTransform<N, T, N2, T2> domain_transform;
+        std::vector<IndexSpace<N2, T2> > sources;
+        std::vector<SparsityMap<N, T> > sparsity_outputs;
+        size_t fixed_buffer_size;
+        RegionInstance buffer;
+    };
+}; // namespace Realm
 
 #endif // REALM_DEPPART_IMAGE_H

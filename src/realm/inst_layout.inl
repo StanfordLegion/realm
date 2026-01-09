@@ -90,13 +90,13 @@ namespace Realm {
       // we need precise data for non-dense index spaces (the original
       //  'bounds' on the IndexSpace is often VERY conservative)
       SparsityMapPublicImpl<N, T> *impl = is.sparsity.impl();
-      const std::vector<SparsityMapEntry<N, T>> &entries = impl->get_entries();
+      span<SparsityMapEntry<N, T>> entries = impl->get_entries();
       if(!entries.empty()) {
         // TODO: set some sort of threshold for merging entries
-        typename std::vector<SparsityMapEntry<N, T>>::const_iterator it = entries.begin();
-        Rect<N, T> bbox = is.bounds.intersection(it->bounds);
-        while(++it != entries.end())
-          bbox = bbox.union_bbox(is.bounds.intersection(it->bounds));
+        size_t i = 0;
+        Rect<N, T> bbox = is.bounds.intersection(entries[i].bounds);
+        while(++i < entries.size())
+          bbox = bbox.union_bbox(is.bounds.intersection(entries[i].bounds));
         if(!bbox.empty())
           piece_bounds.push_back(bbox);
       }

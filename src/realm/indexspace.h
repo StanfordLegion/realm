@@ -29,6 +29,7 @@
 
 #include "realm/realm_c.h"
 #include "realm/realm_config.h"
+#include "realm/realm_assert.h"
 #include "realm/sparsity.h"
 #include "realm/dynamic_templates.h"
 
@@ -783,6 +784,17 @@ namespace Realm {
     ///@}
 
     ///@{
+    ///
+
+    template <int N2, typename T2>
+    REALM_PUBLIC_API Event gpu_subspaces_by_image(
+        const DomainTransform<N, T, N2, T2> &domain_transform,
+        const std::vector<IndexSpace<N2, T2>> &sources,
+        std::vector<IndexSpace<N, T>> &images, const ProfilingRequestSet &reqs,
+        std::pair<size_t, size_t> &sizes, RegionInstance buffer = RegionInstance::NO_INST, Event wait_on = Event::NO_EVENT) const;
+    ///@}
+
+    ///@{
     /**
      * Computes subspaces of this index space by determining what subsets are
      * reachable from subsets of some other index space - the field data points
@@ -812,6 +824,14 @@ namespace Realm {
         const std::vector<IndexSpace<N2, T2>> &sources,
         std::vector<IndexSpace<N, T>> &images, const ProfilingRequestSet &reqs,
         Event wait_on = Event::NO_EVENT) const;
+
+    template <int N2, typename T2>
+    REALM_PUBLIC_API Event gpu_subspaces_by_image(
+        const std::vector<FieldDataDescriptor<IndexSpace<N2, T2>, Point<N, T>>>
+            &field_data,
+        const std::vector<IndexSpace<N2, T2>> &sources,
+        std::vector<IndexSpace<N, T>> &images, const ProfilingRequestSet &reqs,
+        std::pair<size_t, size_t> &sizes, RegionInstance buffer = RegionInstance::NO_INST, Event wait_on = Event::NO_EVENT) const;
 
     // range versions
     template <int N2, typename T2>
