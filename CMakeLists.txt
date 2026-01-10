@@ -857,26 +857,51 @@ add_feature_info(
 add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/src)
 
 if(TARGET CUDA::cuda_driver AND REALM_ENABLE_CUDA)
-  add_library(realm_cuda_fatbin OBJECT ${REALM_CUDA_SOURCES})
-  target_compile_options(
-    realm_cuda_fatbin
-    PRIVATE $<$<COMPILE_LANG_AND_ID:CUDA,NVIDIA>:
-            -Xcudafe=--diag_suppress=boolean_controlling_expr_is_constant --fatbin>
-  )
-  target_compile_definitions(realm_cuda_fatbin PRIVATE "CUDA_FATBIN_COMPILATION")
+  if(CMAKE_CUDA_COMPILER_ID STREQUAL "NVIDIA")
+    add_library(realm_cuda_fatbin OBJECT ${REALM_CUDA_SOURCES})
+    target_compile_options(
+      realm_cuda_fatbin
+      PRIVATE $<$<COMPILE_LANG_AND_ID:CUDA,NVIDIA>:
+              -Xcudafe=--diag_suppress=boolean_controlling_expr_is_constant --fatbin>
+    )
+    target_compile_definitions(realm_cuda_fatbin PRIVATE "CUDA_FATBIN_COMPILATION")
 
-  target_include_directories(
-    realm_cuda_fatbin PRIVATE "${REALM_SOURCE_DIR}/.." "${CMAKE_CURRENT_BINARY_DIR}/include"
-  )
+    target_include_directories(
+      realm_cuda_fatbin PRIVATE "${REALM_SOURCE_DIR}/.." "${CMAKE_CURRENT_BINARY_DIR}/include"
+    )
 
-  set_target_properties(realm_cuda_fatbin PROPERTIES CUDA_STANDARD ${REALM_CXX_STANDARD})
+    set_target_properties(realm_cuda_fatbin PROPERTIES CUDA_STANDARD ${REALM_CXX_STANDARD})
+    set(fatbin_file "$<TARGET_OBJECTS:realm_cuda_fatbin>")
+  elseif(CMAKE_CUDA_COMPILER_ID STREQUAL "Clang")
+    add_library(realm_ptx_kernels OBJECT ${REALM_CUDA_SOURCES})
+    set_property(TARGET realm_ptx_kernels PROPERTY CUDA_PTX_COMPILATION ON)
+    target_include_directories(
+      realm_ptx_kernels PRIVATE "${REALM_SOURCE_DIR}/.." "${CMAKE_CURRENT_BINARY_DIR}/include"
+    )
+    target_compile_definitions(realm_ptx_kernels PRIVATE "CUDA_FATBIN_COMPILATION")
+    set_target_properties(realm_ptx_kernels PROPERTIES CUDA_STANDARD ${REALM_CXX_STANDARD})
+
+    find_program(FATBINARY_EXECUTABLE NAMES fatbinary
+      HINTS ${CUDAToolkit_ROOT} ENV CUDA_PATH
+      PATH_SUFFIXES bin
+      REQUIRED
+    )
+
+    add_custom_target(realm_cuda_fatbin ALL
+      ${FATBINARY_EXECUTABLE} --create="${CMAKE_CURRENT_BINARY_DIR}/realm_fatbin.fatbin"
+      --image3=kind=ptx,file=$<TARGET_OBJECTS:realm_ptx_kernels>,sm=${CMAKE_CUDA_ARCHITECTURES}
+      DEPENDS realm_ptx_kernels)
+    set(fatbin_file "${CMAKE_CURRENT_BINARY_DIR}/realm_fatbin.fatbin")
+  else()
+    message(FATAL_ERROR "Unsupported compiler combination!")
+  endif()
 
   set(realm_fatbin_cc "${CMAKE_CURRENT_BINARY_DIR}/realm_fatbin.cc")
   add_custom_command(
     OUTPUT "${realm_fatbin_cc}"
     COMMAND
       ${CMAKE_COMMAND} "-DVAR_NAME=realm_fatbin" "-DDEFINES_HEADER=realm/realm_config.h"
-      "-DIN_FILE=$<TARGET_OBJECTS:realm_cuda_fatbin>" "-DOUT_FILE=${realm_fatbin_cc}" -P
+      "-DIN_FILE=${fatbin_file}" "-DOUT_FILE=${realm_fatbin_cc}" -P
       ${PROJECT_SOURCE_DIR}/cmake/bin2c.cmake
     VERBATIM
     WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
