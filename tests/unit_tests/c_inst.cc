@@ -89,7 +89,7 @@ TEST_F(CInstCreateDestroyTest, CreateNullRuntime)
   };
   realm_event_t event;
 
-  realm_status_t status = realm_region_instance_create(nullptr, &params, nullptr,
+  realm_status_t status = realm_region_instance_create(nullptr, &params, nullptr, 0,
                                                        REALM_NO_EVENT, &inst, &event);
 
   EXPECT_EQ(status, REALM_RUNTIME_ERROR_NOT_INITIALIZED);
@@ -101,7 +101,7 @@ TEST_F(CInstCreateDestroyTest, CreateNullParams)
   realm_region_instance_t inst;
   realm_event_t event;
 
-  realm_status_t status = realm_region_instance_create(runtime, nullptr, nullptr,
+  realm_status_t status = realm_region_instance_create(runtime, nullptr, nullptr, 0,
                                                        REALM_NO_EVENT, &inst, &event);
 
   EXPECT_EQ(status, REALM_REGION_INSTANCE_ERROR_INVALID_PARAMS);
@@ -115,7 +115,7 @@ TEST_F(CInstCreateDestroyTest, CreateInvalidMemory)
   params.memory = REALM_NO_MEM;
   realm_event_t event;
 
-  realm_status_t status = realm_region_instance_create(runtime, &params, nullptr,
+  realm_status_t status = realm_region_instance_create(runtime, &params, nullptr, 0,
                                                        REALM_NO_EVENT, &inst, &event);
 
   EXPECT_EQ(status, REALM_MEMORY_ERROR_INVALID_MEMORY);
@@ -132,7 +132,7 @@ TEST_F(CInstCreateDestroyTest, CreateInvalidLowerBound)
   params.upper_bound = upper_bound;
   realm_event_t event;
 
-  realm_status_t status = realm_region_instance_create(runtime, &params, nullptr,
+  realm_status_t status = realm_region_instance_create(runtime, &params, nullptr, 0,
                                                        REALM_NO_EVENT, &inst, &event);
 
   EXPECT_EQ(status, REALM_REGION_INSTANCE_ERROR_INVALID_DIMS);
@@ -149,7 +149,7 @@ TEST_F(CInstCreateDestroyTest, CreateInvalidUpperBound)
   params.upper_bound = nullptr;
   realm_event_t event;
 
-  realm_status_t status = realm_region_instance_create(runtime, &params, nullptr,
+  realm_status_t status = realm_region_instance_create(runtime, &params, nullptr, 0,
                                                        REALM_NO_EVENT, &inst, &event);
 
   EXPECT_EQ(status, REALM_REGION_INSTANCE_ERROR_INVALID_DIMS);
@@ -167,7 +167,7 @@ TEST_F(CInstCreateDestroyTest, CreateZeroDim)
   params.num_dims = 0;
   realm_event_t event;
 
-  realm_status_t status = realm_region_instance_create(runtime, &params, nullptr,
+  realm_status_t status = realm_region_instance_create(runtime, &params, nullptr, 0,
                                                        REALM_NO_EVENT, &inst, &event);
 
   EXPECT_EQ(status, REALM_REGION_INSTANCE_ERROR_INVALID_DIMS);
@@ -185,7 +185,7 @@ TEST_F(CInstCreateDestroyTest, CreateOverMaxDim)
   params.num_dims = REALM_MAX_DIM + 1;
   realm_event_t event;
 
-  realm_status_t status = realm_region_instance_create(runtime, &params, nullptr,
+  realm_status_t status = realm_region_instance_create(runtime, &params, nullptr, 0,
                                                        REALM_NO_EVENT, &inst, &event);
 
   EXPECT_EQ(status, REALM_REGION_INSTANCE_ERROR_INVALID_DIMS);
@@ -207,7 +207,7 @@ TEST_F(CInstCreateDestroyTest, CreateNullFieldIds)
   params.num_fields = 1;
   realm_event_t event;
 
-  realm_status_t status = realm_region_instance_create(runtime, &params, nullptr,
+  realm_status_t status = realm_region_instance_create(runtime, &params, nullptr, 0,
                                                        REALM_NO_EVENT, &inst, &event);
 
   EXPECT_EQ(status, REALM_REGION_INSTANCE_ERROR_INVALID_FIELDS);
@@ -229,7 +229,7 @@ TEST_F(CInstCreateDestroyTest, CreateNullFieldSizes)
   params.num_fields = 1;
   realm_event_t event;
 
-  realm_status_t status = realm_region_instance_create(runtime, &params, nullptr,
+  realm_status_t status = realm_region_instance_create(runtime, &params, nullptr, 0,
                                                        REALM_NO_EVENT, &inst, &event);
 
   EXPECT_EQ(status, REALM_REGION_INSTANCE_ERROR_INVALID_FIELDS);
@@ -248,7 +248,7 @@ TEST_F(CInstCreateDestroyTest, CreateZeroField)
   params.num_fields = 0;
   realm_event_t event;
 
-  realm_status_t status = realm_region_instance_create(runtime, &params, nullptr,
+  realm_status_t status = realm_region_instance_create(runtime, &params, nullptr, 0,
                                                        REALM_NO_EVENT, &inst, &event);
 
   EXPECT_EQ(status, REALM_REGION_INSTANCE_ERROR_INVALID_FIELDS);
@@ -275,7 +275,7 @@ TEST_F(CInstCreateDestroyTest, CreateInvalidCoordType)
   params.coord_type = static_cast<realm_coord_type_t>(REALM_COORD_TYPE_NUM + 1);
   realm_event_t event;
 
-  realm_status_t status = realm_region_instance_create(runtime, &params, nullptr,
+  realm_status_t status = realm_region_instance_create(runtime, &params, nullptr, 0,
                                                        REALM_NO_EVENT, &inst, &event);
 
   EXPECT_EQ(status, REALM_REGION_INSTANCE_ERROR_INVALID_COORD_TYPE);
@@ -299,7 +299,7 @@ TEST_F(CInstCreateDestroyTest, CreateNullEvent)
   params.field_sizes = field_sizes;
   params.coord_type = REALM_COORD_TYPE_INT;
 
-  realm_status_t status = realm_region_instance_create(runtime, &params, nullptr,
+  realm_status_t status = realm_region_instance_create(runtime, &params, nullptr, 0,
                                                        REALM_NO_EVENT, &inst, nullptr);
 
   EXPECT_EQ(status, REALM_REGION_INSTANCE_ERROR_INVALID_EVENT);
@@ -332,7 +332,7 @@ TEST_F(CInstCreateDestroyTest, CreateSuccess)
   params.external_resource = nullptr;
   realm_event_t event;
 
-  realm_status_t status = realm_region_instance_create(runtime, &params, nullptr,
+  realm_status_t status = realm_region_instance_create(runtime, &params, nullptr, 0,
                                                        REALM_NO_EVENT, &inst, &event);
 
   EXPECT_EQ(status, REALM_SUCCESS);
@@ -367,7 +367,7 @@ TEST_F(CInstCreateDestroyTest, DestroySuccess)
   params.field_sizes = field_sizes;
   params.external_resource = nullptr;
   realm_event_t event;
-  ASSERT_REALM(realm_region_instance_create(runtime, &params, nullptr, REALM_NO_EVENT,
+  ASSERT_REALM(realm_region_instance_create(runtime, &params, nullptr, 0, REALM_NO_EVENT,
                                             &inst, &event));
 
   realm_status_t status = realm_region_instance_destroy(runtime, inst, event);
@@ -403,7 +403,7 @@ TEST_F(CInstCreateDestroyTest, DISABLED_CreateFailedTooLarge)
   params.external_resource = nullptr;
   realm_event_t event;
 
-  realm_status_t status = realm_region_instance_create(runtime, &params, nullptr,
+  realm_status_t status = realm_region_instance_create(runtime, &params, nullptr, 0,
                                                        REALM_NO_EVENT, &inst, &event);
 
   EXPECT_EQ(status, REALM_SUCCESS);
@@ -441,8 +441,8 @@ protected:
     params.field_sizes = field_sizes;
     params.external_resource = nullptr;
     realm_event_t event;
-    ASSERT_REALM(realm_region_instance_create(runtime, &params, nullptr, REALM_NO_EVENT,
-                                              &inst, &event));
+    ASSERT_REALM(realm_region_instance_create(runtime, &params, nullptr, 0,
+                                              REALM_NO_EVENT, &inst, &event));
   }
 
   void TearDown() override

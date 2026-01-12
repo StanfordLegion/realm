@@ -49,9 +49,6 @@ extern "C" {
 struct realm_runtime_st;
 typedef struct realm_runtime_st *realm_runtime_t;
 
-struct realm_profiling_request_set_st;
-typedef struct realm_profiling_request_set_st *realm_profiling_request_set_t;
-
 struct realm_processor_query_st;
 typedef struct realm_processor_query_st *realm_processor_query_t;
 
@@ -122,7 +119,7 @@ typedef enum realm_coord_type_enum
 } realm_coord_type_t;
 
 // Currently, we only support dense index space
-typedef struct realm_index_space_t {
+typedef struct realm_index_space_st {
   realm_coord_t lower_bound;
   realm_coord_t upper_bound;
   size_t num_dims;
@@ -130,7 +127,7 @@ typedef struct realm_index_space_t {
 } realm_index_space_t;
 
 // data type of region instance create params
-typedef struct realm_region_instance_create_params_t {
+typedef struct realm_region_instance_create_params_st {
   realm_memory_t memory;                // the memory where the region instance is created
   realm_coord_t lower_bound;            // the lower bound of the region instance
   realm_coord_t upper_bound;            // the upper bound of the region instance
@@ -145,13 +142,13 @@ typedef struct realm_region_instance_create_params_t {
                                                       // region instance
 } realm_region_instance_create_params_t;
 
-typedef struct realm_copy_src_dst_field_t {
+typedef struct realm_copy_src_dst_field_st {
   realm_region_instance_t inst; // the region instance to be copied
   realm_field_id_t field_id;    // the field id of the field to be copied
   size_t size;                  // the size of the field to be copied
 } realm_copy_src_dst_field_t;
 
-typedef struct realm_region_instance_copy_params_t {
+typedef struct realm_region_instance_copy_params_st {
   realm_copy_src_dst_field_t *srcs;     // the source fields to be copied
   realm_copy_src_dst_field_t *dsts;     // the destination fields to be copied
   size_t num_fields;                    // the number of fields to be copied
@@ -282,6 +279,243 @@ typedef enum realm_file_mode_t
   LEGION_FILE_CREATE = REALM_FILE_CREATE,
 } realm_file_mode_t;
 
+/**
+ * Enum of profiling measurement IDs for Realm operations and instances.
+ * Each ID corresponds to a specific kind of measurement or performance counter.
+ */
+typedef enum realm_profiling_measurement_id_enum
+{
+  /** Completion status of operation */
+  PMID_OP_STATUS = 0,
+
+  /** Completion status only if abnormal */
+  PMID_OP_STATUS_ABNORMAL,
+
+  /** Backtrace of a failed operation */
+  PMID_OP_BACKTRACE,
+
+  /** Program counter of a failed operation, they are save in uintptr_t */
+  PMID_OP_BACKTRACE_PCS,
+
+  /**
+   * Symbol of a failed operation.
+   * \see realm_profiling_operation_backtrace_symbol_t
+   */
+  PMID_OP_BACKTRACE_SYMBOLS,
+
+  /**
+   * When task was ready, started, completed
+   * \see realm_profiling_operation_timeline_t
+   */
+  PMID_OP_TIMELINE,
+
+  /**
+   * Intervals when operation is waiting on events
+   * \see realm_profiling_operation_event_wait_interval_t
+   */
+  PMID_OP_EVENT_WAITS,
+
+  /**
+   * Processor used by task
+   * \see realm_profiling_operation_processor_usage_t
+   */
+  PMID_OP_PROC_USAGE,
+
+  /**
+   * Memories used by a copy
+   * \see realm_profiling_operation_memory_usage_t
+   */
+  PMID_OP_MEM_USAGE,
+
+  /** "Completion" status of an instance */
+  PMID_INST_STATUS,
+
+  /**
+   * Completion status only if abnormal
+   */
+  PMID_INST_STATUS_ABNORMAL,
+
+  /**
+   * Success/failure of instance allocation
+   */
+  PMID_INST_ALLOCRESULT,
+
+  /**
+   * Timeline for a physical instance
+   * \see realm_profiling_instance_timeline_t
+   */
+  PMID_INST_TIMELINE,
+
+  /**
+   * Memory and size used by an instance
+   * \see realm_profiling_instance_memory_usage_t
+   */
+  PMID_INST_MEM_USAGE,
+
+  /** L1 I$ performance counters */
+  PMID_PCTRS_CACHE_L1I,
+
+  /** L1 D$ performance counters */
+  PMID_PCTRS_CACHE_L1D,
+
+  /** L2 D$ performance counters */
+  PMID_PCTRS_CACHE_L2,
+
+  /** L3 D$ performance counters */
+  PMID_PCTRS_CACHE_L3,
+
+  /** Instructions/clocks performance counters */
+  PMID_PCTRS_IPC,
+
+  /** TLB miss counters */
+  PMID_PCTRS_TLB,
+
+  /** Branch predictor performance counters */
+  PMID_PCTRS_BP,
+
+  /**
+   * When a task was started and completed on the GPU
+   * \see realm_profiling_operation_timeline_gpu_t
+   */
+  PMID_OP_TIMELINE_GPU,
+
+  /** Identifying info for containing subgraph(s) */
+  PMID_OP_SUBGRAPH_INFO,
+
+  /** Finish event for an operation */
+  PMID_OP_FINISH_EVENT,
+
+  /** Copy transfer details for an operation
+   * \see realm_profiling_operation_copy_info_t
+   */
+  PMID_OP_COPY_INFO,
+
+  /**
+   * Copy transfer details for each source instance, please use
+   * MAKE_OP_COPY_INFO_SRC_INST_ID to specify the index of the source instance
+   */
+  PMID_OP_COPY_INFO_SRC_INST = 10000,
+
+  /**
+   * Copy transfer details for each destination instance, please use
+   * MAKE_OP_COPY_INFO_DST_INST_ID to specify the index of the destination instance
+   */
+  PMID_OP_COPY_INFO_DST_INST = 20000,
+
+  /**
+   * Copy transfer details for each source field, please use
+   * MAKE_OP_COPY_INFO_SRC_FIELD_ID to specify the index of the source field
+   */
+  PMID_OP_COPY_INFO_SRC_FIELD = 30000,
+
+  /**
+   * Copy transfer details for each destination field, please use
+   * MAKE_OP_COPY_INFO_DST_FIELD_ID to specify the index of the destination field
+   */
+  PMID_OP_COPY_INFO_DST_FIELD = 40000,
+
+  /**
+   * Always last. Allows apps/runtimes sitting on top of Realm to use some of the ID space
+   */
+  PMID_REALM_LAST = 0x7FFFFFFF, // 32 bit INT_MAX
+} realm_profiling_measurement_id_t;
+
+#define MAKE_OP_COPY_INFO_SRC_INST_ID(index)                                             \
+  ((realm_profiling_measurement_id_t)(PMID_OP_COPY_INFO_SRC_INST + (index)))
+#define MAKE_OP_COPY_INFO_DST_INST_ID(index)                                             \
+  ((realm_profiling_measurement_id_t)(PMID_OP_COPY_INFO_DST_INST + (index)))
+#define MAKE_OP_COPY_INFO_SRC_FIELD_ID(index)                                            \
+  ((realm_profiling_measurement_id_t)(PMID_OP_COPY_INFO_SRC_FIELD + (index)))
+#define MAKE_OP_COPY_INFO_DST_FIELD_ID(index)                                            \
+  ((realm_profiling_measurement_id_t)(PMID_OP_COPY_INFO_DST_FIELD + (index)))
+
+// the struct of profiling request
+typedef struct realm_profiling_request_st {
+  realm_processor_t response_proc;
+  realm_task_func_id_t response_task_id;
+  int priority;
+  int report_if_empty;
+  realm_profiling_measurement_id_t *measurement_ids;
+  size_t num_measurements;
+  const void *payload;
+  size_t payload_size;
+} realm_profiling_request_t;
+
+typedef struct realm_profiling_response_st {
+  const void *data;
+  size_t data_size;
+} realm_profiling_response_t;
+
+// When profiling the backtrace, the maximum length of a symbol supported by Realm is 2048
+// bytes
+#define PMID_OP_BACKTRACE_SYMBOLS_MAX_LENGTH (2048)
+
+typedef struct realm_profiling_operation_backtrace_symbol_st {
+  char symbol[PMID_OP_BACKTRACE_SYMBOLS_MAX_LENGTH];
+} realm_profiling_operation_backtrace_symbol_t;
+
+typedef struct realm_profiling_operation_timeline_st {
+  long long create_time;   // when was operation created?
+  long long ready_time;    // when was operation ready to proceed?
+  long long start_time;    // when did operation start?
+  long long end_time;      // when did operation end (on processor)?
+  long long complete_time; // when was all work for operation complete?
+} realm_profiling_operation_timeline_t;
+
+typedef struct realm_profiling_operation_timeline_gpu_st {
+  long long start_time; // when was the GPU started?
+  long long end_time;   // when was the GPU completed?
+} realm_profiling_operation_timeline_gpu_t;
+
+typedef struct realm_profiling_operation_event_wait_interval_st {
+  long long wait_start;     // when did the interval begin?
+  long long wait_ready;     // when did the event trigger?
+  long long wait_end;       // when did the interval actually end
+  realm_event_t wait_event; // which event was waited on
+} realm_profiling_operation_event_wait_interval_t;
+
+typedef struct realm_profiling_operation_processor_usage_st {
+  realm_processor_t proc;
+} realm_profiling_operation_processor_usage_t;
+
+typedef struct realm_profiling_operation_memory_usage_st {
+  realm_memory_t source;
+  realm_memory_t target;
+  size_t size;
+} realm_profiling_operation_memory_usage_t;
+
+typedef struct realm_profiling_instance_timeline_st {
+  realm_region_instance_t instance;
+  long long create_time; // when was instance created?
+  long long ready_time;  // when was instance ready for use?
+  long long delete_time; // when was the instance deleted?
+} realm_profiling_instance_timeline_t;
+
+typedef struct realm_profiling_instance_memory_usage_st {
+  realm_region_instance_t instance;
+  realm_memory_t memory;
+  size_t bytes;
+} realm_profiling_instance_memory_usage_t;
+
+typedef enum realm_profiling_operation_copy_info_request_type_enum
+{
+  REALM_COPY_INFO_REQUEST_TYPE_FILL = 0,
+  REALM_COPY_INFO_REQUEST_TYPE_REDUCE = 1,
+  REALM_COPY_INFO_REQUEST_TYPE_COPY = 2,
+} realm_profiling_operation_copy_info_request_type_t;
+
+// The src and dst instances and fields are not included in the inst_info, because they
+// are retrieved from the PMID_OP_COPY_INFO_SRC_INST, PMID_OP_COPY_INFO_DST_INST,
+// PMID_OP_COPY_INFO_SRC_FIELD, PMID_OP_COPY_INFO_DST_FIELD.
+typedef struct realm_profiling_operation_copy_info_st {
+  realm_region_instance_t src_indirection_inst; // src indirection instance (gather)
+  realm_region_instance_t dst_indirection_inst; // dst indirection instance (scatter)
+  realm_field_id_t src_indirection_field;       // field of indirection points
+  realm_field_id_t dst_indirection_field;       // field of indirection points
+  realm_profiling_operation_copy_info_request_type_t request_type; // fill, reduce, copy
+  unsigned int num_hops; // num_hops for each request
+} realm_profiling_operation_copy_info_t;
+
 typedef struct realm_affinity_details_t {
   unsigned bandwidth; // in MB/s
   unsigned latency;   // in nanoseconds
@@ -348,6 +582,11 @@ typedef enum realm_status_enum
   REALM_EXTERNAL_RESOURCE_ERROR_INVALID_TYPE = -13005,
   REALM_EXTERNAL_RESOURCE_ERROR_INVALID_PARAMS = -13006,
   REALM_CUDA_ERROR_NOT_ENABLED = -14001,
+  REALM_PROFILING_ERROR_INVALID_REQUEST_SET = -15001,
+  REALM_PROFILING_ERROR_INVALID_PARAM = -15002,
+  REALM_PROFILING_ERROR_INVALID_MEASUREMENT = -15003,
+  REALM_PROFILING_ERROR_INVALID_RESPONSE = -15004,
+  REALM_PROFILING_ERROR_INVALID_BUFFER = -15005,
   REALM_MODULE_CONFIG_ERROR_INVALID_NAME = -16001,
   REALM_MODULE_CONFIG_ERROR_NO_RESOURCE = -16002,
 } realm_status_t;
@@ -564,8 +803,9 @@ realm_status_t REALM_EXPORT realm_processor_register_task_by_kind(
  */
 realm_status_t REALM_EXPORT realm_processor_spawn(
     realm_runtime_t runtime, realm_processor_t target_proc, realm_task_func_id_t task_id,
-    const void *args, size_t arglen, realm_profiling_request_set_t prs,
-    realm_event_t wait_on, int priority, realm_event_t *event);
+    const void *args, size_t arglen, const realm_profiling_request_t *profiling_requests,
+    size_t num_profiling_requests, realm_event_t wait_on, int priority,
+    realm_event_t *event);
 
 /**
  * @brief Returns the attributes of a processor.
@@ -855,8 +1095,8 @@ realm_status_t REALM_EXPORT realm_user_event_trigger(realm_runtime_t runtime,
 realm_status_t REALM_EXPORT realm_region_instance_create(
     realm_runtime_t runtime,
     const realm_region_instance_create_params_t *instance_creation_params,
-    realm_profiling_request_set_t prs, realm_event_t wait_on,
-    realm_region_instance_t *instance, realm_event_t *event);
+    const realm_profiling_request_t *profiling_requests, size_t num_profiling_requests,
+    realm_event_t wait_on, realm_region_instance_t *instance, realm_event_t *event);
 
 /**
  * @brief Copies data between region instances.
@@ -874,8 +1114,8 @@ realm_status_t REALM_EXPORT realm_region_instance_create(
 realm_status_t REALM_EXPORT realm_region_instance_copy(
     realm_runtime_t runtime,
     const realm_region_instance_copy_params_t *instance_copy_params,
-    realm_profiling_request_set_t prs, realm_event_t wait_on, int priority,
-    realm_event_t *event);
+    const realm_profiling_request_t *profiling_requests, size_t num_profiling_requests,
+    realm_event_t wait_on, int priority, realm_event_t *event);
 
 /**
  * @brief Destroys a region instance.
@@ -957,6 +1197,26 @@ realm_status_t REALM_EXPORT realm_region_instance_generate_external_resource_inf
 realm_status_t REALM_EXPORT realm_external_resource_suggested_memory(
     realm_runtime_t runtime, const realm_external_resource_t *external_resource,
     realm_memory_t *memory);
+
+/*
+ * @defgroup Profiling Profiling API
+ * @ingroup Realm
+ */
+
+/**
+ * @brief Gets a measurement from a profiling response.
+ *
+ * @param response The profiling response to get the measurement from.
+ * @param type The type of measurement to get.
+ * @param[in/out] result The result of the measurement.
+ * @param[in/out] result_count The number of results.
+ * @return Realm status indicating success or failure.
+ *
+ * @ingroup Profiling
+ */
+realm_status_t REALM_EXPORT realm_profiling_response_get_measurement(
+    const realm_profiling_response_t *response, realm_profiling_measurement_id_t type,
+    void *result, size_t *result_count);
 #ifdef __cplusplus
 }
 #endif
