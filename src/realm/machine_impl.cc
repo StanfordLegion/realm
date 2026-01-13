@@ -17,7 +17,7 @@
 
 #include "realm/machine_impl.h"
 
-#include "realm/assert.h"
+#include "realm/realm_assert.h"
 #include "realm/logging.h"
 #include "realm/proc_impl.h"
 #include "realm/mem_impl.h"

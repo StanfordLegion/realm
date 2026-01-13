@@ -20,9 +20,9 @@
 // this is a nop, but it's for the benefit of IDEs trying to parse this file
 #include "realm/bytearray.h"
 
+#include "realm/realm_assert.h"
 #include <string.h>
 #include <stdlib.h>
-#include <assert.h>
 
 // for std::swap
 #include <algorithm>
@@ -67,7 +67,7 @@ namespace Realm {
   const T &ByteArrayRef::at(size_t offset) const
   {
     // always range check?
-    assert((offset + sizeof(T)) <= array_size);
+    REALM_ASSERT((offset + sizeof(T)) <= array_size);
     return *static_cast<const T *>(static_cast<char *>(array_base) + offset);
   }
 
@@ -147,7 +147,7 @@ namespace Realm {
   T &ByteArray::at(size_t offset)
   {
     // always range check?
-    assert((offset + sizeof(T)) <= array_size);
+    REALM_ASSERT((offset + sizeof(T)) <= array_size);
     return *static_cast<T *>(static_cast<char *>(array_base) + offset);
   }
 
@@ -155,7 +155,7 @@ namespace Realm {
   const T &ByteArray::at(size_t offset) const
   {
     // always range check?
-    assert((offset + sizeof(T)) <= array_size);
+    REALM_ASSERT((offset + sizeof(T)) <= array_size);
     return *static_cast<const T *>(static_cast<char *>(array_base) + offset);
   }
 
@@ -165,7 +165,7 @@ namespace Realm {
     clear(); // throw away any data we had before
     if(new_size) {
       array_base = new_base;
-      assert(array_base != 0);
+      REALM_ASSERT(array_base != 0);
       array_size = new_size;
     } else {
       // if we were given ownership of a 0-length allocation, free it rather than leaking
@@ -180,7 +180,7 @@ namespace Realm {
   {
     if(copy_size) {
       array_base = malloc(copy_size);
-      assert(array_base != 0);
+      REALM_ASSERT(array_base != 0);
       memcpy(array_base, copy_base, copy_size);
       array_size = copy_size;
     } else {
@@ -234,7 +234,7 @@ namespace Realm {
     void *new_base = 0;
     if(new_size) {
       new_base = malloc(new_size);
-      assert(new_base != 0);
+      REALM_ASSERT(new_base != 0);
       if(!serdez.extract_bytes(new_base, new_size)) {
         free(new_base); // no leaks plz
         return false;

@@ -1,4 +1,4 @@
-# Copyright 2025 Stanford University, NVIDIA Corporation
+# Copyright 2025 Stanford University, NVIDIA Corporation, Los Alamos National Laboratory
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -29,6 +29,20 @@ install(
   INCLUDES
   DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}/realm"
 )
+
+# Install the realm_kokkos as well when needed
+if(REALM_USE_KOKKOS)
+  install(
+    TARGETS realm_kokkos
+    EXPORT Realm_targets
+    RUNTIME COMPONENT Realm_runtime
+    LIBRARY COMPONENT Realm_runtime
+    ARCHIVE COMPONENT Realm_devel
+    PUBLIC_HEADER COMPONENT Realm_devel DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}/realm"
+    INCLUDES
+    DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}/realm"
+  )
+endif()
 
 # Install the realm_gex_wrapper as well if we have to link directly to it
 if(REALM_INSTALL_GASNETEX_WRAPPER)
@@ -116,10 +130,32 @@ if(NOT BUILD_SHARED_LIBS)
 endif()
 
 # Setup pkgconfig module
+function(get_pkgconfig_path path out)
+  if(IS_ABSOLUTE "${path}")
+    # Normalize first because CMake normalizes the install prefix.
+    cmake_path(SET path NORMALIZE "${path}")
+    # Check if path is contained in the install prefix.
+    string(FIND "${path}" "${CMAKE_INSTALL_PREFIX}" path_in_prefix)
+    if(${path_in_prefix} EQUAL 0)
+      # Absolute path inside prefix, compute a relative path for relocation.
+      file(RELATIVE_PATH relative_path "${CMAKE_INSTALL_PREFIX}" "${path}")
+      set(${out} "\${prefix}/${relative_path}" PARENT_SCOPE)
+    else()
+      # Path is absolute but outside prefix, cannot relocate it.
+      set(${out} "${path}" PARENT_SCOPE)
+    endif()
+  else()
+    set(${out} "\${prefix}/${path}" PARENT_SCOPE)
+  endif()
+endfunction()
+
+get_pkgconfig_path(${CMAKE_INSTALL_LIBDIR} PKGCONFIG_CMAKE_INSTALL_LIBDIR)
+get_pkgconfig_path(${CMAKE_INSTALL_INCLUDEDIR} PKGCONFIG_CMAKE_INSTALL_INCLUDEDIR)
+get_pkgconfig_path(${CMAKE_INSTALL_DATAROOTDIR} PKGCONFIG_CMAKE_INSTALL_DATAROOTDIR)
+
 configure_package_config_file(
   ${CMAKE_CURRENT_SOURCE_DIR}/cmake/realm.pc.in realm.pc
   INSTALL_DESTINATION "${CMAKE_INSTALL_ROOTDATADIR}/pkgconfig"
-  PATH_VARS CMAKE_INSTALL_PREFIX CMAKE_INSTALL_LIBDIR CMAKE_INSTALL_INCLUDEDIR
 )
 
 # Set up RealmConfig file.

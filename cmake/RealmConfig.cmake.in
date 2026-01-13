@@ -1,4 +1,4 @@
-# Copyright 2025 Stanford University, NVIDIA Corporation
+# Copyright 2025 Stanford University, NVIDIA Corporation, Los Alamos National Laboratory
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -90,7 +90,7 @@ list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_LIST_DIR}")
 # TODO(cperry): move this to be header only / optional, maybe after the c++ api
 #               is implemented on top of the c api
 if(REALM_USE_KOKKOS)
-  find_dependency(Kokkos)
+  find_dependency(Kokkos COMPONENTS separable_compilation)
 endif()
 
 macro(Realm_load_targets type)

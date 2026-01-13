@@ -1,5 +1,5 @@
 /*
- * Copyright 2025 Stanford University, NVIDIA Corporation
+ * Copyright 2025 Stanford University, NVIDIA Corporation, Los Alamos National Laboratory
  * SPDX-License-Identifier: Apache-2.0
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -17,7 +17,7 @@
 
 // Realm+Kokkos interop support
 
-#include "realm/kokkos_interop.h"
+#include "realm/kokkos/kokkos_interop.h"
 
 #include "realm/mutex.h"
 #include "realm/processor.h"
