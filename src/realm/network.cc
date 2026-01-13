@@ -21,10 +21,7 @@
 #include "realm/cmdline.h"
 #include "realm/logging.h"
 #include "realm/activemsg.h"
-
-#ifdef REALM_USE_DLFCN
-#include <dlfcn.h>
-#endif
+#include "realm/loader.h"
 
 static void *aligned_malloc(size_t bytes, size_t alignment)
 {
@@ -532,7 +529,7 @@ namespace Realm {
   // accepts a colon-separated list of so files to try to load
   static int load_network_module_list(const char *sonames, RuntimeImpl *runtime,
                                       int *argc, const char ***argv,
-                                      std::vector<void *> &handles,
+                                      std::vector<lib_handle_t> &handles,
                                       std::vector<NetworkModule *> &modules)
   {
     // null/empty strings are nops
@@ -559,23 +556,20 @@ namespace Realm {
       // skip the color after the filename (if it exists)
       p1 = p2 + (*p2 ? 1 : 0);
 
-      // no leftover errors from anybody else please...
-      assert(dlerror() == 0);
-
       // open so file, resolving all symbols but not polluting global namespace
-      void *handle = dlopen(filename, RTLD_NOW | RTLD_LOCAL);
-      if(handle == 0) {
-        std::cerr << "ERROR: could not load " << filename << ": " << dlerror() << "\n";
+      lib_handle_t handle = Realm::load_library(filename, LOADLIB_NOW);
+      if(handle == nullptr) {
+        std::cerr << "ERROR: could not load " << filename << "\n";
         continue;
       }
 
       {
         // this file should have a "realm_module_version" symbol
-        void *sym = dlsym(handle, "realm_module_version");
+        void *sym = Realm::get_symbol(handle, "realm_module_version");
         if(!sym) {
           std::cerr << "ERROR: symbol 'realm_module_version' not found in '" << filename
                     << "'\n";
-          dlclose(handle);
+          Realm::close_library(handle);
           continue;
         }
         const char *module_version = static_cast<const char *>(sym);
@@ -591,18 +585,18 @@ namespace Realm {
             std::cerr << "ERROR: module version mismatch in '" << filename << "': realm='"
                       << REALM_VERSION << "' module='" << module_version
                       << "' - set REALM_PERMIT_MODULE_VERSION_MISMATCH to load anyway\n";
-            dlclose(handle);
+            Realm::close_library(handle);
             continue;
           }
         }
       }
 
       // this file should also have a "create_realm_network_module" symbol
-      void *sym = dlsym(handle, "create_realm_network_module");
+      void *sym = Realm::get_symbol(handle, "create_realm_network_module");
       if(!sym) {
         std::cerr << "ERROR: symbol 'create_realm_network_module' not found in '"
                   << filename << "'\n";
-        dlclose(handle);
+        Realm::close_library(handle);
         continue;
       }
 

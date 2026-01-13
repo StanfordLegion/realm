@@ -19,6 +19,7 @@
 #define REALM_CUDA_INTERNAL_H
 
 #include "realm/cuda/cuda_module.h"
+#include "realm/loader.h"
 
 #include <memory>
 #include <unordered_map>
@@ -67,8 +68,8 @@
 #define REPORT_CU_ERROR(level, cmd, ret)                                                 \
   do {                                                                                   \
     const char *name, *str;                                                              \
-    CUDA_DRIVER_FNPTR(Realm::Cuda::cuGetErrorName)(ret, &name);                          \
-    CUDA_DRIVER_FNPTR(Realm::Cuda::cuGetErrorString)(ret, &str);                         \
+    CUDA_DRIVER_FNPTR(cuGetErrorName)(ret, &name);                                       \
+    CUDA_DRIVER_FNPTR(cuGetErrorString)(ret, &str);                                      \
     log_gpu.newmsg(level) << __FILE__ << '(' << __LINE__ << "):" << cmd << " = " << ret  \
                           << '(' << name << "): " << str;                                \
   } while(0)
@@ -1292,9 +1293,15 @@ namespace Realm {
 #endif
 #endif
 
-    // cuda driver and/or runtime entry points
-#define CUDA_DRIVER_HAS_FNPTR(name) ((name##_fnptr) != nullptr)
-#define CUDA_DRIVER_FNPTR(name) (assert(name##_fnptr != nullptr), name##_fnptr)
+// cuda driver and/or runtime entry points
+#if defined(REALM_CUDA_DYNAMIC_LOAD)
+#define CUDA_DRIVER_HAS_FNPTR(name) ((cuda_loader.name##_fnptr) != nullptr)
+#define CUDA_DRIVER_FNPTR(name)                                                          \
+  (assert(cuda_loader.name##_fnptr != nullptr), cuda_loader.name##_fnptr)
+#else
+#define CUDA_DRIVER_HAS_FNPTR(name) ((name) != nullptr)
+#define CUDA_DRIVER_FNPTR(name) (assert(name != nullptr), name)
+#endif
 
 // Only APIs that are available in the minimum base driver version that Realm supports
 // should be listed here
@@ -1410,12 +1417,17 @@ namespace Realm {
   __op__(cuCtxRecordEvent, 12050);                                                       \
   __op__(cuArrayGetMemoryRequirements, CUDA_VERSION_MIN);
 
+    struct CudaLoader : public Loader<CudaLoader> {
 // Make sure to only use decltype, to ensure it matches the cuda.h definition
-#define DECL_FNPTR_EXTERN(name, ver) extern decltype(&name) name##_fnptr;
-    CUDA_DRIVER_APIS(DECL_FNPTR_EXTERN);
-#undef DECL_FNPTR_EXTERN
+#define DECL_FNPTR(name, ver) decltype(&name) name##_fnptr = nullptr;
+      CUDA_DRIVER_APIS(DECL_FNPTR);
+#undef DECL_FNPTR
+      bool load_symbols();
+    };
 
-#define NVML_FNPTR(name) (name##_fnptr)
+    extern CudaLoader cuda_loader;
+
+#define NVML_FNPTR(name) (nvml_loader.name##_fnptr)
 
 #if NVML_API_VERSION >= 11
 #define NVML_11_APIS(__op__) __op__(nvmlDeviceGetMemoryAffinity);
@@ -1464,6 +1476,16 @@ namespace Realm {
   NVML_11_APIS(__op__);                                                                  \
   NVML_12_APIS(__op__);
 
+    struct NVMLLoader : public Loader<NVMLLoader> {
+// Make sure to only use decltype, to ensure it matches the cuda.h definition
+#define DECL_FNPTR(name) decltype(&name) name##_fnptr = nullptr;
+      NVML_APIS(DECL_FNPTR);
+#undef DECL_FNPTR
+      bool load_symbols();
+    };
+
+    extern NVMLLoader nvml_loader;
+
 #define DECL_FNPTR_EXTERN(name) extern decltype(&name) name##_fnptr;
     NVML_APIS(DECL_FNPTR_EXTERN)
 #undef DECL_FNPTR_EXTERN
@@ -1484,8 +1506,19 @@ namespace Realm {
     CUPTI_APIS(DECL_FNPTR_EXTERN)
 #undef DECL_FNPTR_EXTERN
 
-#define CUPTI_HAS_FNPTR(name) (name##_fnptr != nullptr)
-#define CUPTI_FNPTR(name) (assert(name##_fnptr != nullptr), name##_fnptr)
+#define CUPTI_HAS_FNPTR(name) (cupti_loader.name##_fnptr != nullptr)
+#define CUPTI_FNPTR(name)                                                                \
+  (assert(cupti_loader.name##_fnptr != nullptr), cupti_loader.name##_fnptr)
+
+    struct CUPTILoader : public Loader<CUPTILoader> {
+// Make sure to only use decltype, to ensure it matches the cuda.h definition
+#define DECL_FNPTR(name) decltype(&name) name##_fnptr = nullptr;
+      CUPTI_APIS(DECL_FNPTR);
+#undef DECL_FNPTR
+      bool load_symbols();
+    };
+
+    extern CUPTILoader cupti_loader;
 
   }; // namespace Cuda
 

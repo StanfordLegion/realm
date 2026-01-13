@@ -22,6 +22,7 @@
 
 #include "realm/realm_config.h"
 #include "realm/module_config.h"
+#include "realm/loader.h"
 
 // to provide Realm functionality via the module interface, you need to:
 //
@@ -201,8 +202,8 @@ namespace Realm {
   protected:
     RuntimeImpl *runtime;
     bool sofile_loaded;
-    std::vector<void *> module_sofile_handles;
-    std::vector<void *> network_sofile_handles;
+    std::vector<lib_handle_t> module_sofile_handles;
+    std::vector<lib_handle_t> network_sofile_handles;
   };
 
   // macros used within a module when being built as a dynamic shared object

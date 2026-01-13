@@ -18,18 +18,13 @@
 // Realm modules
 
 #include "realm/realm_config.h"
-
 #include "realm/module.h"
-
 #include "realm/logging.h"
+#include "realm/loader.h"
 
 #include <assert.h>
 #include <string.h>
 #include <stdlib.h>
-
-#ifdef REALM_USE_DLFCN
-#include <dlfcn.h>
-#endif
 
 // TODO: replace this with Makefile (or maybe cmake) magic that adapts automatically
 //  to the build-system-controlled list of statically-linked Realm modules
@@ -215,8 +210,7 @@ namespace Realm {
   /*static*/ bool ModuleRegistrar::check_symbol_visibility(void)
   {
 #ifdef REALM_USE_DLFCN
-    void *sym = dlsym(RTLD_DEFAULT, "realm_internal_api_symbols_visible");
-    (void)dlerror(); // clear any lookup error
+    void *sym = Realm::get_symbol(Realm::THIS_LIB, "realm_internal_api_symbols_visible");
     return (sym == &realm_internal_api_symbols_visible);
 #else
     // definitely won't work without dlfcn
@@ -228,7 +222,7 @@ namespace Realm {
   // accepts a colon-separated list of so files to try to load
   static void load_module_list(const char *sonames, RuntimeImpl *runtime,
                                std::vector<std::string> &cmdline,
-                               std::vector<void *> &handles)
+                               std::vector<lib_handle_t> &handles)
   {
     // null/empty strings are nops
     if(!sonames || !*sonames)
@@ -253,22 +247,19 @@ namespace Realm {
       // skip the color after the filename (if it exists)
       p1 = p2 + (*p2 ? 1 : 0);
 
-      // no leftover errors from anybody else please...
-      assert(dlerror() == 0);
-
       // open so file, resolving all symbols but not polluting global namespace
-      void *handle = dlopen(filename, RTLD_NOW | RTLD_LOCAL);
+      lib_handle_t handle = Realm::load_library(filename, LOADLIB_NOW);
       if(handle == 0) {
-        log_module.error() << "could not load " << filename << ": " << dlerror();
+        log_module.error() << "could not load " << filename;
         continue;
       }
 
       {
         // this file should have a "realm_module_version" symbol
-        void *sym = dlsym(handle, "realm_module_version");
+        void *sym = Realm::get_symbol(handle, "realm_module_version");
         if(!sym) {
           log_module.error() << "symbol 'realm_module_version' not found in " << filename;
-          dlclose(handle);
+          Realm::close_library(handle);
           continue;
         }
         const char *module_version = static_cast<const char *>(sym);
@@ -285,7 +276,7 @@ namespace Realm {
                 << "module version mismatch in '" << filename << "': realm='"
                 << REALM_VERSION << "' module='" << module_version
                 << "' - set REALM_PERMIT_MODULE_VERSION_MISMATCH to load anyway";
-            dlclose(handle);
+            Realm::close_library(handle);
             continue;
           }
         }
@@ -331,9 +322,9 @@ namespace Realm {
         abort();
       }
 
-      for(std::vector<std::string>::const_iterator it = sonames_list.begin();
-          it != sonames_list.end(); it++)
-        load_module_list(it->c_str(), runtime, cmdline, module_sofile_handles);
+      for(std::string &name : sonames_list) {
+        load_module_list(name.c_str(), runtime, cmdline, module_sofile_handles);
+      }
       sofile_loaded = true;
 #else
       log_module.fatal()
@@ -357,10 +348,8 @@ namespace Realm {
     if(module_sofile_handles.size() > 0) {
       assert(sofile_loaded);
     }
-    for(std::vector<void *>::iterator it = module_sofile_handles.begin();
-        it != module_sofile_handles.end(); it++) {
-      void *handle = *it;
-      void *sym = dlsym(handle, "create_realm_module");
+    for(lib_handle_t handle : module_sofile_handles) {
+      void *sym = Realm::get_symbol(handle, "create_realm_module");
       if(!sym) {
         log_module.error() << "symbol 'create_realm_module' not found";
         continue;
@@ -379,11 +368,9 @@ namespace Realm {
   {
     load_module_sofiles(cmdline);
 #ifdef REALM_USE_DLFCN
-    for(std::vector<void *>::iterator it = module_sofile_handles.begin();
-        it != module_sofile_handles.end(); it++) {
-      void *handle = *it;
-      void *sym = dlsym(handle, "create_realm_module_config");
-      if(!sym) {
+    for(lib_handle_t handle : module_sofile_handles) {
+      void *sym = Realm::get_symbol(handle, "create_realm_module_config");
+      if(sym == nullptr) {
         log_module.error() << "symbol 'create_realm_module_config' not found";
         continue;
       }
@@ -398,14 +385,9 @@ namespace Realm {
   {
 #ifdef REALM_USE_DLFCN
     while(!sofile_handles.empty()) {
-      void *handle = sofile_handles.back();
+      lib_handle_t handle = sofile_handles.back();
       sofile_handles.pop_back();
-
-#ifndef NDEBUG
-      int ret =
-#endif
-          dlclose(handle);
-      assert(ret == 0);
+      Realm::close_library(handle);
     }
 #endif
   }
