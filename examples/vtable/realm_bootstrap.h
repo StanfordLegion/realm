@@ -24,7 +24,6 @@ namespace App {
 
   Realm::Runtime::KeyValueStoreVtable create_key_value_store_vtable();
   void finalize_key_value_store_vtable(const Realm::Runtime::KeyValueStoreVtable &vtable);
-}
+} // namespace App
 
 #endif
-
