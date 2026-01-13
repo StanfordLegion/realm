@@ -78,14 +78,9 @@ endmacro()
 add_example_test(saxpy)
 set(stencil_ARGS -ll:cpu 4)
 add_example_test(stencil)
-
-add_subdirectory(vtable)
-add_test(NAME example_vtable COMMAND $<TARGET_FILE:vtable>)
-set_property(TEST example_vtable PROPERTY RESOURCE_LOCK ${TEST_RESOURCE_LOCK})
-if(REALM_USE_UCX AND TARGET realm_ucp_bootstrap_mpi)
-  add_dependencies(vtable realm_ucp_bootstrap_mpi)
+if(REALM_USE_UCX)
+add_example_test(vtable)
 endif()
-list(APPEND _example_list example_vtable)
 
 set_tests_properties(
   ${_example_list}
