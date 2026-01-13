@@ -1,5 +1,5 @@
 /*
- * Copyright 2025 Stanford University, NVIDIA Corporation
+ * Copyright 2026 Stanford University, NVIDIA Corporation
  * SPDX-License-Identifier: Apache-2.0
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -22,9 +22,8 @@
 
 namespace App {
 
-Realm::Runtime::NetworkVtable create_network_vtable();
-void finalize_network_vtable(const Realm::Runtime::NetworkVtable &vtable);
-
+  Realm::Runtime::KeyValueStoreVtable create_key_value_store_vtable();
+  void finalize_key_value_store_vtable(const Realm::Runtime::KeyValueStoreVtable &vtable);
 }
 
 #endif

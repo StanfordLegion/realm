@@ -1,5 +1,5 @@
 /*
- * Copyright 2025 Stanford University, NVIDIA Corporation
+ * Copyright 2026 Stanford University, NVIDIA Corporation
  * SPDX-License-Identifier: Apache-2.0
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -448,11 +448,11 @@ namespace Realm {
   bool Runtime::network_init(int *argc, char ***argv)
   {
     assert(runtime_singleton != 0);
-    NetworkVtable vtable;
+    KeyValueStoreVtable vtable;
     return static_cast<RuntimeImpl *>(impl)->network_init(argc, argv, vtable);
   }
 
-  bool Runtime::network_init(const NetworkVtable &vtable)
+  bool Runtime::network_init(const KeyValueStoreVtable &vtable)
   {
     assert(runtime_singleton != 0);
     return static_cast<RuntimeImpl *>(impl)->network_init(nullptr, nullptr, vtable);
@@ -1171,7 +1171,7 @@ namespace Realm {
   }
 
   bool RuntimeImpl::network_init(int *argc, char ***argv,
-                                 const Runtime::NetworkVtable &vtable)
+                                 const Runtime::KeyValueStoreVtable &vtable)
   {
 #if defined(REALM_USE_UCX) || defined(REALM_USE_MPI) || defined(REALM_USE_GASNET1) ||    \
     defined(REALM_USE_GASNETEX) || defined(REALM_USE_KOKKOS)
@@ -1219,12 +1219,12 @@ namespace Realm {
         return false;
       }
       // Safe to save the network vtable
-      network_vtable = vtable;
+      key_value_store_vtable = vtable;
       if(vtable.vtable_data_size > 0) {
-        network_vtable_data.resize(vtable.vtable_data_size);
-        uint8_t *data = &network_vtable_data.front();
+        key_value_store_vtable_data.resize(vtable.vtable_data_size);
+        uint8_t *data = &key_value_store_vtable_data.front();
         std::memcpy(data, vtable.vtable_data, vtable.vtable_data_size);
-        network_vtable.vtable_data = data;
+        key_value_store_vtable.vtable_data = data;
       }
     }
     // if we're given empty or non-existent argc/argv, start from a
@@ -1335,43 +1335,43 @@ namespace Realm {
     return true;
   }
 
-  bool RuntimeImpl::has_network_vtable(void) const
+  bool RuntimeImpl::has_key_value_store(void) const
   {
-    return (network_vtable.put != nullptr);
+    return (key_value_store_vtable.put != nullptr);
   }
 
-  bool RuntimeImpl::network_vtable_elastic(void) const
+  bool RuntimeImpl::key_value_store_elastic(void) const
   {
-    return (network_vtable.cas != nullptr);
+    return (key_value_store_vtable.cas != nullptr);
   }
 
-  bool RuntimeImpl::network_vtable_group(void) const
+  bool RuntimeImpl::key_value_store_group(void) const
   {
-    return (network_vtable.bar != nullptr);
+    return (key_value_store_vtable.bar != nullptr);
   }
 
-  std::optional<uint64_t> RuntimeImpl::network_vtable_local_group(void) const
+  std::optional<uint64_t> RuntimeImpl::key_value_store_local_group(void) const
   {
-    return network_vtable_get_int("realm_group");
+    return key_value_store_get_int("realm_group");
   }
 
-  std::optional<uint64_t> RuntimeImpl::network_vtable_local_rank(void) const
+  std::optional<uint64_t> RuntimeImpl::key_value_store_local_rank(void) const
   {
-    return network_vtable_get_int("realm_rank");
+    return key_value_store_get_int("realm_rank");
   }
 
-  std::optional<uint64_t> RuntimeImpl::network_vtable_local_ranks(void) const
+  std::optional<uint64_t> RuntimeImpl::key_value_store_local_ranks(void) const
   {
-    return network_vtable_get_int("realm_ranks");
+    return key_value_store_get_int("realm_ranks");
   }
 
   std::optional<uint64_t>
-  RuntimeImpl::network_vtable_get_int(const std::string_view &key) const
+  RuntimeImpl::key_value_store_get_int(const std::string_view &key) const
   {
     constexpr size_t max_int_size = sizeof(uint64_t);
     uint8_t buffer[max_int_size];
     size_t actual_size = max_int_size;
-    if(!network_vtable_get(key.data(), key.size(), buffer, &actual_size) ||
+    if(!key_value_store_get(key.data(), key.size(), buffer, &actual_size) ||
        (actual_size == 0)) {
       log_runtime.error() << "Unable to find expected key " << key
                           << " in key-value store for vtable 'get'. This key "
@@ -1404,39 +1404,39 @@ namespace Realm {
     }
   }
 
-  bool RuntimeImpl::network_vtable_put(const void *key, size_t key_size,
-                                       const void *value, size_t value_size) const
+  bool RuntimeImpl::key_value_store_put(const void *key, size_t key_size,
+                                        const void *value, size_t value_size) const
   {
-    assert(network_vtable.put != nullptr);
-    return (*network_vtable.put)(key, key_size, value, value_size,
-                                 network_vtable.vtable_data,
-                                 network_vtable.vtable_data_size);
+    assert(key_value_store_vtable.put != nullptr);
+    return (*key_value_store_vtable.put)(key, key_size, value, value_size,
+                                         key_value_store_vtable.vtable_data,
+                                         key_value_store_vtable.vtable_data_size);
   }
 
-  bool RuntimeImpl::network_vtable_get(const void *key, size_t key_size, void *value,
-                                       size_t *value_size) const
+  bool RuntimeImpl::key_value_store_get(const void *key, size_t key_size, void *value,
+                                        size_t *value_size) const
   {
-    assert(network_vtable.get != nullptr);
-    return (*network_vtable.get)(key, key_size, value, value_size,
-                                 network_vtable.vtable_data,
-                                 network_vtable.vtable_data_size);
+    assert(key_value_store_vtable.get != nullptr);
+    return (*key_value_store_vtable.get)(key, key_size, value, value_size,
+                                         key_value_store_vtable.vtable_data,
+                                         key_value_store_vtable.vtable_data_size);
   }
 
-  bool RuntimeImpl::network_vtable_bar(void) const
+  bool RuntimeImpl::key_value_store_bar(void) const
   {
-    assert(network_vtable.bar != nullptr);
-    return (*network_vtable.bar)(network_vtable.vtable_data,
-                                 network_vtable.vtable_data_size);
+    assert(key_value_store_vtable.bar != nullptr);
+    return (*key_value_store_vtable.bar)(key_value_store_vtable.vtable_data,
+                                         key_value_store_vtable.vtable_data_size);
   }
 
-  bool RuntimeImpl::network_vtable_cas(const void *key, size_t key_size, void *expected,
-                                       size_t *expected_size, const void *desired,
-                                       size_t desired_size) const
+  bool RuntimeImpl::key_value_store_cas(const void *key, size_t key_size, void *expected,
+                                        size_t *expected_size, const void *desired,
+                                        size_t desired_size) const
   {
-    assert(network_vtable.cas != nullptr);
-    return (*network_vtable.cas)(key, key_size, expected, expected_size, desired,
-                                 desired_size, network_vtable.vtable_data,
-                                 network_vtable.vtable_data_size);
+    assert(key_value_store_vtable.cas != nullptr);
+    return (*key_value_store_vtable.cas)(key, key_size, expected, expected_size, desired,
+                                         desired_size, key_value_store_vtable.vtable_data,
+                                         key_value_store_vtable.vtable_data_size);
   }
 
   template <typename T>

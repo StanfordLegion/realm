@@ -1,5 +1,5 @@
 /*
- * Copyright 2025 Stanford University, NVIDIA Corporation
+ * Copyright 2026 Stanford University, NVIDIA Corporation
  * SPDX-License-Identifier: Apache-2.0
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -68,7 +68,7 @@ namespace Realm {
     // clients can use non-Realm synchronization primitives in the
     // implementation of these functions and not need to worry about
     // blocking or impacting forward progress.
-    struct NetworkVtable {
+    struct KeyValueStoreVtable {
       /**
        * Optional blob of data passed to all the network vtable functions
        * when they are invoked by Realm. Realm will not attempt to
@@ -177,7 +177,7 @@ namespace Realm {
                   const void *desired, size_t desired_size, const void *vtable_data,
                   size_t vtable_data_size) = nullptr;
     };
-    bool network_init(const NetworkVtable &vtable);
+    bool network_init(const KeyValueStoreVtable &vtable);
 
     void parse_command_line(int argc, char **argv);
     void parse_command_line(std::vector<std::string> &cmdline,

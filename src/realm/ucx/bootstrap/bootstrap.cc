@@ -1,5 +1,5 @@
 /*
- * Copyright 2025 NVIDIA Corporation
+ * Copyright 2026 NVIDIA Corporation
  * SPDX-License-Identifier: Apache-2.0
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -33,11 +33,11 @@ namespace Realm {
                                           struct bootstrap_handle *handle)
     {
       RuntimeImpl *runtime = get_runtime();
-      assert(runtime->has_network_vtable());
-      if(runtime->network_vtable_group()) {
+      assert(runtime->has_key_value_store());
+      if(runtime->key_value_store_group()) {
         // Need our group ID too to avoid interfering with other groups
         // that might be trying to join at the same time
-        const std::optional<uint64_t> group = runtime->network_vtable_local_group();
+        const std::optional<uint64_t> group = runtime->key_value_store_local_group();
         if(!group)
           return 1;
         // Synthesize our local key
@@ -52,13 +52,13 @@ namespace Realm {
           std::abort();
         }
         // Put our local value in the key-value store
-        if(!runtime->network_vtable_put(key, key_size, sendbuf, bytes)) {
+        if(!runtime->key_value_store_put(key, key_size, sendbuf, bytes)) {
           log_ucp.error() << "Failed bootstrap 'put' operation, "
                           << "the UCX bootstrap will not succeed.";
           return 1;
         }
         // Synchronize to make sure everyone is done
-        if(!runtime->network_vtable_bar())
+        if(!runtime->key_value_store_bar())
           return 1;
         // Get all the values from everyone else
         uint8_t *ptr = (uint8_t *)recvbuf;
@@ -71,7 +71,7 @@ namespace Realm {
             std::abort();
           }
           size_t actual_size = bytes;
-          if(!runtime->network_vtable_get(key, key_size, ptr, &actual_size) ||
+          if(!runtime->key_value_store_get(key, key_size, ptr, &actual_size) ||
              (actual_size != ((size_t)bytes))) {
             log_ucp.error() << "Failed bootstrap 'get' operation, "
                             << "the UCX boostrap will not succeed";
@@ -120,14 +120,14 @@ namespace Realm {
       case BOOTSTRAP_VTABLE:
       {
         RuntimeImpl *runtime = get_runtime();
-        assert(runtime->has_network_vtable());
+        assert(runtime->has_key_value_store());
         // We need to get our local process group information here and fill
         // in our all-gather implementation
-        std::optional<uint64_t> rank = runtime->network_vtable_local_rank();
+        std::optional<uint64_t> rank = runtime->key_value_store_local_rank();
         if(!rank) {
           return 1;
         }
-        std::optional<uint64_t> ranks = runtime->network_vtable_local_ranks();
+        std::optional<uint64_t> ranks = runtime->key_value_store_local_ranks();
         if(!ranks) {
           return 1;
         }

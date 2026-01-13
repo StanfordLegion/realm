@@ -1,5 +1,5 @@
 /*
- * Copyright 2025 Stanford University, NVIDIA Corporation
+ * Copyright 2026 Stanford University, NVIDIA Corporation
  * SPDX-License-Identifier: Apache-2.0
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -25,18 +25,18 @@
 
 namespace App {
 
-// Realm NetworkVtable required keys
-static constexpr const char *REALM_KEY_RANK = "realm_rank";
-static constexpr const char *REALM_KEY_RANKS = "realm_ranks";
-static constexpr const char *REALM_KEY_GROUP = "realm_group";
+  // Realm KeyValueStoreVtable required keys
+  static constexpr const char *REALM_KEY_RANK = "realm_rank";
+  static constexpr const char *REALM_KEY_RANKS = "realm_ranks";
+  static constexpr const char *REALM_KEY_GROUP = "realm_group";
 
-struct VtableContext {
-  std::map<std::string, std::vector<uint8_t>> local_kv_store;
-  std::map<std::string, std::vector<uint8_t>> global_kv_store;
-  bool pending_sync = false;
-  int mpi_rank = 0;
-  int mpi_size = 0;
-};
+  struct VtableContext {
+    std::map<std::string, std::vector<uint8_t>> local_kv_store;
+    std::map<std::string, std::vector<uint8_t>> global_kv_store;
+    bool pending_sync = false;
+    int mpi_rank = 0;
+    int mpi_size = 0;
+  };
 
 static bool app_put(const void *key, size_t key_size, const void *value, size_t value_size,
                     const void *vtable_data, size_t vtable_data_size)
@@ -165,15 +165,15 @@ static bool app_bar(const void *vtable_data, size_t vtable_data_size)
   return true;
 }
 
-Realm::Runtime::NetworkVtable create_network_vtable()
+Realm::Runtime::KeyValueStoreVtable create_key_value_store_vtable()
 {
   MPI_Init(NULL, NULL);
   
   VtableContext *state = new VtableContext();
   MPI_Comm_rank(MPI_COMM_WORLD, &state->mpi_rank);
   MPI_Comm_size(MPI_COMM_WORLD, &state->mpi_size);
-  
-  Realm::Runtime::NetworkVtable vtable;
+
+  Realm::Runtime::KeyValueStoreVtable vtable;
   vtable.vtable_data = new VtableContext*(state);
   vtable.vtable_data_size = sizeof(VtableContext*);
   vtable.put = app_put;
@@ -183,7 +183,7 @@ Realm::Runtime::NetworkVtable create_network_vtable()
   return vtable;
 }
 
-void finalize_network_vtable(const Realm::Runtime::NetworkVtable &vtable)
+void finalize_key_value_store_vtable(const Realm::Runtime::KeyValueStoreVtable &vtable)
 {
   if(vtable.vtable_data) {
     VtableContext *state = *(VtableContext**)vtable.vtable_data;

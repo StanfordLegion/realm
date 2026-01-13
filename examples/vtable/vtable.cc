@@ -1,5 +1,5 @@
 /*
- * Copyright 2025 Stanford University, NVIDIA Corporation
+ * Copyright 2026 Stanford University, NVIDIA Corporation
  * SPDX-License-Identifier: Apache-2.0
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -24,7 +24,7 @@ using namespace Realm;
 
 int main(int argc, char **argv)
 {
-  Runtime::NetworkVtable vtable = App::create_network_vtable();
+  Runtime::KeyValueStoreVtable vtable = App::create_key_value_store_vtable();
   Runtime rt;
   
   if(!rt.network_init(vtable)) return 1;
@@ -37,7 +37,7 @@ int main(int argc, char **argv)
   
   rt.shutdown();
   int rc = rt.wait_for_shutdown();
-  App::finalize_network_vtable(vtable);
+  App::finalize_key_value_store_vtable(vtable);
   return rc;
 }
 

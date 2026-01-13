@@ -1,5 +1,5 @@
 /*
- * Copyright 2025 Stanford University, NVIDIA Corporation
+ * Copyright 2026 Stanford University, NVIDIA Corporation
  * SPDX-License-Identifier: Apache-2.0
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -307,7 +307,7 @@ realm_status_t realm_runtime_init(realm_runtime_t runtime, int *argc, char ***ar
     argv = &my_argv;
   }
 
-  Realm::Runtime::NetworkVtable vtable;
+  Realm::Runtime::KeyValueStoreVtable vtable;
   // TODO: we need to let each of these functions to return a specific error code
   if(!runtime_impl->network_init(argc, argv, vtable)) {
     return REALM_ERROR;

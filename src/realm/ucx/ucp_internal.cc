@@ -1,5 +1,5 @@
 /*
- * Copyright 2025 NVIDIA Corporation
+ * Copyright 2026 NVIDIA Corporation
  * SPDX-License-Identifier: Apache-2.0
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -806,7 +806,7 @@ namespace Realm {
       BootstrapConfig boot_config;
       const char *bootstrap_mode_str = getenv("REALM_UCP_BOOTSTRAP_MODE");
       // If we have a direct vtable from the client alaways prefer that
-      if(runtime->has_network_vtable()) {
+      if(runtime->has_key_value_store()) {
         boot_config.mode = Realm::UCP::BOOTSTRAP_VTABLE;
       } else if(bootstrap_mode_str == NULL) {
         // use MPI as the default bootstrap
@@ -845,7 +845,7 @@ namespace Realm {
 
       Network::my_node_id = ucc_comm->get_rank();
       Network::max_node_id = ucc_comm->get_world_size() - 1;
-      if(runtime->network_vtable_elastic()) {
+      if(runtime->key_value_store_elastic()) {
         // If we're part of an elastic job then we need to do more work here
         uint64_t offset = 0;
         if(Network::my_node_id == 0) {
@@ -857,8 +857,8 @@ namespace Realm {
           // Try this up to 100 times, if we don't succeed then
           // we'll time out and fail to join
           for(unsigned idx = 0; idx < 100; idx++) {
-            if(runtime->network_vtable_cas(key.data(), key.size(), &offset, &offset_size,
-                                           &desired, sizeof(desired))) {
+            if(runtime->key_value_store_cas(key.data(), key.size(), &offset, &offset_size,
+                                            &desired, sizeof(desired))) {
               success = true;
               break;
             }
