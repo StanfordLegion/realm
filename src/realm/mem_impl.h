@@ -600,6 +600,7 @@ namespace Realm {
     Memory memory;
     RegionInstance inst;
     Event precondition;
+    Event destroy_event;
 
     static void handle_message(NodeID sender, const MemStorageReleaseRequest &msg,
                                const void *data, size_t datalen);
@@ -607,6 +608,7 @@ namespace Realm {
 
   struct MemStorageReleaseResponse {
     RegionInstance inst;
+    Event destroy_event;
 
     static void handle_message(NodeID sender, const MemStorageReleaseResponse &msg,
                                const void *data, size_t datalen);

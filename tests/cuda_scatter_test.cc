@@ -203,7 +203,7 @@ public:
   Event create_instances(const FieldMap &fields, LAMBDA mem_picker, int offset = 0,
                          bool inverse = false);
 
-  void destroy_instances(Event wait_on);
+  Event destroy_instances(Event wait_on);
 
   template <typename FT, typename LAMBDA>
   Event fill(IndexSpace<N, T> is, FieldID fid, LAMBDA filler, Event wait_on);
@@ -362,18 +362,20 @@ Event DistributedData<N, T>::create_instances(const FieldMap &fields, LAMBDA mem
 }
 
 template <int N, typename T>
-void DistributedData<N, T>::destroy_instances(Event wait_on)
+Event DistributedData<N, T>::destroy_instances(Event wait_on)
 {
+  std::vector<Event> destroy_events;
   for(typename std::vector<Piece>::iterator it = pieces.begin(); it != pieces.end();
       ++it) {
-    it->inst.destroy(wait_on);
+    destroy_events.push_back(it->inst.destroy(wait_on));
     it->inst = RegionInstance::NO_INST;
     if(it->cpu_inst.exists()) {
-      it->cpu_inst.destroy(wait_on);
+      destroy_events.push_back(it->cpu_inst.destroy(wait_on));
       it->cpu_inst = RegionInstance::NO_INST;
     }
     it->proc = Processor::NO_PROC;
   }
+  return Event::merge_events(destroy_events);
 }
 
 template <typename T>
@@ -918,8 +920,9 @@ bool DistributedData<N, T>::verify(IndexSpace<N, T> is, FieldID fid, Event wait_
       iit.step();
     }
 
-    if(tmp_inst.exists())
-      tmp_inst.destroy();
+    if(tmp_inst.exists()) {
+      tmp_inst.destroy().wait();
+    }
   }
 
   return (errors == 0);
@@ -1119,10 +1122,9 @@ bool scatter_gather_test(const std::vector<Memory> &sys_mems,
 
   log_app.print() << "Time=" << exp->nanoseconds / (1000000.0);
 
-  usleep(100);
-  region1.destroy_instances(Event::NO_EVENT);
-  region_ind.destroy_instances(Event::NO_EVENT);
-  region2.destroy_instances(Event::NO_EVENT);
+  region1.destroy_instances(Event::NO_EVENT).wait();
+  region_ind.destroy_instances(Event::NO_EVENT).wait();
+  region2.destroy_instances(Event::NO_EVENT).wait();
 
   return true;
 }
@@ -1218,8 +1220,6 @@ void top_level_task(const void *args, size_t arglen, const void *userdata, size_
 
   log_app.info() << "Scatter/gather test finished "
                  << (ok ? "successfully" : "with errors!");
-
-  usleep(100000);
   assert(ok);
 
   Runtime::get_runtime().shutdown(Processor::get_current_finish_event(), ok ? 0 : 1);

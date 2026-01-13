@@ -276,7 +276,7 @@ void run_test(Processor p)
         }
       }
 
-      inst_dst.destroy();
+      inst_dst.destroy().wait();
 
       double sparse_bw = static_cast<double>(sparse_elements) * sizeof(T) /
                          (static_cast<double>(sparse_total_time) * TestConfig::copy_reps);
@@ -291,11 +291,11 @@ void run_test(Processor p)
                       << " sparse_time_gpu: " << sparse_time_gpu
                       << " sparse_bw: " << sparse_bw;
     }
-    inst_src.destroy();
+    inst_src.destroy().wait();
   }
 
-  inst_src_cpu.destroy();
-  inst_dst_cpu.destroy();
+  inst_src_cpu.destroy().wait();
+  inst_dst_cpu.destroy().wait();
 }
 
 void copy_profiling_task(const void *args, size_t arglen, const void *userdata,
@@ -324,8 +324,6 @@ void top_level_task(const void *args, size_t arglen, const void *userdata, size_
   run_test<uint32_t>(p);
   run_test<uint64_t>(p);
   run_test<Integer128>(p);
-
-  usleep(100000);
 }
 
 int main(int argc, char **argv)
