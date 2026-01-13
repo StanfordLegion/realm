@@ -31,6 +31,7 @@
 #include <functional>
 #include <string>
 #include <vector>
+
 #if __cplusplus >= 202002L
 #include <span>
 #endif
@@ -42,7 +43,8 @@
   do {                                                                                   \
     realm_status_t _status = (call);                                                     \
     if(_status != REALM_SUCCESS) {                                                       \
-      throw std::runtime_error("Realm C API call failed: " #call);                       \
+      throw std::runtime_error("Realm C API call failed with status " +                  \
+                               std::to_string(_status) + ": " + #call);                  \
     }                                                                                    \
   } while(0)
 
@@ -1376,15 +1378,25 @@ namespace REALM_NAMESPACE {
   class Machine {
   private:
     // Templated callback for collecting handles (Processor/Memory) into a std::set
+    // CHandleType is the C handle type (e.g., realm_processor_t)
+    // HandleType is the C++ wrapper type (e.g., Processor)
     template <typename HandleType, typename CHandleType>
-    static realm_status_t collect_handle_cb(CHandleType handle, void *user_data)
+    static realm_status_t collect_handle_into_set_cb(CHandleType handle, void *user_data)
     {
       std::set<HandleType> &set = *static_cast<std::set<HandleType> *>(user_data);
       set.insert(HandleType(handle));
       return REALM_SUCCESS;
     }
 
-  private:
+    template <typename HandleType, typename CHandleType>
+    static realm_status_t collect_handle_into_vector_cb(CHandleType handle,
+                                                        void *user_data)
+    {
+      std::vector<HandleType> &vec = *static_cast<std::vector<HandleType> *>(user_data);
+      vec.push_back(HandleType(handle));
+      return REALM_SUCCESS;
+    }
+
     realm_runtime_t impl;
 
   protected:
@@ -1404,7 +1416,12 @@ namespace REALM_NAMESPACE {
     }
     ~Machine(void) {}
 
-    static Machine get_machine(void) { throw std::logic_error("Not implemented"); }
+    static Machine get_machine(void)
+    {
+      realm_runtime_t runtime;
+      REALM_CHECK(realm_runtime_get_runtime(&runtime));
+      return Machine(runtime);
+    }
 
     class ProcessorQuery;
     class MemoryQuery;
@@ -1452,7 +1469,8 @@ namespace REALM_NAMESPACE {
       REALM_CHECK(realm_memory_query_create(runtime, &query));
 
       REALM_CHECK(realm_memory_query_iter(
-          query, &Machine::collect_handle_cb<Memory, realm_memory_t>, &mset, SIZE_MAX));
+          query, &Machine::collect_handle_into_set_cb<Memory, realm_memory_t>, &mset,
+          SIZE_MAX));
       REALM_CHECK(realm_memory_query_destroy(query));
     }
 
@@ -1468,8 +1486,8 @@ namespace REALM_NAMESPACE {
       REALM_CHECK(realm_processor_query_create(runtime, &query));
 
       REALM_CHECK(realm_processor_query_iter(
-          query, &Machine::collect_handle_cb<Processor, realm_processor_t>, &pset,
-          SIZE_MAX));
+          query, &Machine::collect_handle_into_set_cb<Processor, realm_processor_t>,
+          &pset, SIZE_MAX));
       REALM_CHECK(realm_processor_query_destroy(query));
     }
 
@@ -1495,8 +1513,8 @@ namespace REALM_NAMESPACE {
       REALM_CHECK(realm_processor_query_restrict_to_address_space(query, runtime_space));
 
       REALM_CHECK(realm_processor_query_iter(
-          query, &Machine::collect_handle_cb<Processor, realm_processor_t>, &pset,
-          SIZE_MAX));
+          query, &Machine::collect_handle_into_set_cb<Processor, realm_processor_t>,
+          &pset, SIZE_MAX));
       REALM_CHECK(realm_processor_query_destroy(query));
     }
 
@@ -1526,8 +1544,8 @@ namespace REALM_NAMESPACE {
       REALM_CHECK(realm_processor_query_restrict_to_address_space(query, runtime_space));
 
       REALM_CHECK(realm_processor_query_iter(
-          query, &Machine::collect_handle_cb<Processor, realm_processor_t>, &pset,
-          SIZE_MAX));
+          query, &Machine::collect_handle_into_set_cb<Processor, realm_processor_t>,
+          &pset, SIZE_MAX));
       REALM_CHECK(realm_processor_query_destroy(query));
     }
 
@@ -1560,7 +1578,8 @@ namespace REALM_NAMESPACE {
       // For now, just get all memories
 
       REALM_CHECK(realm_memory_query_iter(
-          query, &Machine::collect_handle_cb<Memory, realm_memory_t>, &mset, SIZE_MAX));
+          query, &Machine::collect_handle_into_set_cb<Memory, realm_memory_t>, &mset,
+          SIZE_MAX));
       REALM_CHECK(realm_memory_query_destroy(query));
 #endif
     }
@@ -1594,7 +1613,8 @@ namespace REALM_NAMESPACE {
       // For now, just get all memories
 
       REALM_CHECK(realm_memory_query_iter(
-          query, &Machine::collect_handle_cb<Memory, realm_memory_t>, &mset, SIZE_MAX));
+          query, &Machine::collect_handle_into_set_cb<Memory, realm_memory_t>, &mset,
+          SIZE_MAX));
       REALM_CHECK(realm_memory_query_destroy(query));
 #endif
     }
@@ -1629,7 +1649,7 @@ namespace REALM_NAMESPACE {
       // For now, just get all processors
 
       REALM_CHECK(realm_processor_query_iter(
-          query, &Machine::collect_handle_cb<Processor, realm_processor_t>, &pset,
+          query, &Machine::collect_handle_into_set_cb<Processor, realm_processor_t>, &pset,
           SIZE_MAX));
       REALM_CHECK(realm_processor_query_destroy(query));
 #endif
@@ -1651,7 +1671,8 @@ namespace REALM_NAMESPACE {
       REALM_CHECK(realm_memory_query_restrict_by_capacity(query, min_capacity));
 
       REALM_CHECK(realm_memory_query_iter(
-          query, &Machine::collect_handle_cb<Memory, realm_memory_t>, &mset, SIZE_MAX));
+          query, &Machine::collect_handle_into_set_cb<Memory, realm_memory_t>, &mset,
+          SIZE_MAX));
       REALM_CHECK(realm_memory_query_destroy(query));
     }
 
@@ -1688,7 +1709,6 @@ namespace REALM_NAMESPACE {
       throw std::logic_error("Not implemented");
     }
 
-  public:
     /**
      * \brief Processor-Memory affinity information.
      */
