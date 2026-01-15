@@ -1478,7 +1478,10 @@ namespace Realm {
   __op__(cuptiActivityGetNextRecord);                                                    \
   __op__(cuptiActivityRegisterTimestampCallback);                                        \
   __op__(cuptiActivityPushExternalCorrelationId);                                        \
-  __op__(cuptiActivityPopExternalCorrelationId);
+  __op__(cuptiActivityPopExternalCorrelationId);                                         \
+  __op__(cuptiSubscribe);                                                                \
+  __op__(cuptiEnableCallback);                                                           \
+  __op__(cuptiUnsubscribe);
 
 #define DECL_FNPTR_EXTERN(name) extern decltype(&name) name##_fnptr;
     CUPTI_APIS(DECL_FNPTR_EXTERN)
