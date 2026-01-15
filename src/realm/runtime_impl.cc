@@ -1340,12 +1340,12 @@ namespace Realm {
     return (key_value_store_vtable.put != nullptr);
   }
 
-  bool RuntimeImpl::key_value_store_elastic(void) const
+  bool RuntimeImpl::is_key_value_store_elastic(void) const
   {
     return (key_value_store_vtable.cas != nullptr);
   }
 
-  bool RuntimeImpl::key_value_store_group(void) const
+  bool RuntimeImpl::has_key_value_store_group(void) const
   {
     return (key_value_store_vtable.bar != nullptr);
   }

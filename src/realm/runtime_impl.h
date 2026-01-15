@@ -270,9 +270,9 @@ namespace Realm {
                       const Runtime::KeyValueStoreVtable &vtable);
     bool has_key_value_store(void) const;
     // Is this an elastic Realm
-    bool key_value_store_elastic(void) const;
+    bool is_key_value_store_elastic(void) const;
     // Are we a single process joining by ourself or part of a group
-    bool key_value_store_group(void) const;
+    bool has_key_value_store_group(void) const;
     // Our local group
     std::optional<uint64_t> key_value_store_local_group(void) const;
     // Our local rank in the group

@@ -34,7 +34,7 @@ namespace Realm {
     {
       RuntimeImpl *runtime = get_runtime();
       assert(runtime->has_key_value_store());
-      if(runtime->key_value_store_group()) {
+      if(runtime->has_key_value_store_group()) {
         // Need our group ID too to avoid interfering with other groups
         // that might be trying to join at the same time
         const std::optional<uint64_t> group = runtime->key_value_store_local_group();

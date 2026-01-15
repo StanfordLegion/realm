@@ -251,30 +251,30 @@ TEST_F(KeyValueStoreTestBase, HasKeyValueStore_WithoutPut)
   EXPECT_FALSE(runtime_impl->has_key_value_store());
 }
 
-// Test key_value_store_elastic
+// Test is_key_value_store_elastic
 TEST_F(KeyValueStoreTestBase, Elastic_WithCas)
 {
   InitVtable(true, true, false, true);
-  EXPECT_TRUE(runtime_impl->key_value_store_elastic());
+  EXPECT_TRUE(runtime_impl->is_key_value_store_elastic());
 }
 
 TEST_F(KeyValueStoreTestBase, Elastic_WithoutCas)
 {
   InitVtable(true, true, false, false);
-  EXPECT_FALSE(runtime_impl->key_value_store_elastic());
+  EXPECT_FALSE(runtime_impl->is_key_value_store_elastic());
 }
 
-// Test key_value_store_group
+// Test has_key_value_store_group
 TEST_F(KeyValueStoreTestBase, Group_WithBar)
 {
   InitVtable(true, true, true, false);
-  EXPECT_TRUE(runtime_impl->key_value_store_group());
+  EXPECT_TRUE(runtime_impl->has_key_value_store_group());
 }
 
 TEST_F(KeyValueStoreTestBase, Group_WithoutBar)
 {
   InitVtable(true, true, false, false);
-  EXPECT_FALSE(runtime_impl->key_value_store_group());
+  EXPECT_FALSE(runtime_impl->has_key_value_store_group());
 }
 
 // Test key_value_store_local_group
@@ -635,7 +635,7 @@ TEST_F(KeyValueStoreTestBase, Integration_GroupWithBarrier)
   ctx->group = 1;
   InitVtable(true, true, true, false);
 
-  EXPECT_TRUE(runtime_impl->key_value_store_group());
+  EXPECT_TRUE(runtime_impl->has_key_value_store_group());
 
   auto rank = runtime_impl->key_value_store_local_rank();
   auto ranks = runtime_impl->key_value_store_local_ranks();
@@ -656,7 +656,7 @@ TEST_F(KeyValueStoreTestBase, Integration_ElasticWithCAS)
 {
   InitVtable(true, true, false, true);
 
-  EXPECT_TRUE(runtime_impl->key_value_store_elastic());
+  EXPECT_TRUE(runtime_impl->is_key_value_store_elastic());
 
   // Simulate elastic node joining
   const char *counter_key = "node_counter";

@@ -845,7 +845,7 @@ namespace Realm {
 
       Network::my_node_id = ucc_comm->get_rank();
       Network::max_node_id = ucc_comm->get_world_size() - 1;
-      if(runtime->key_value_store_elastic()) {
+      if(runtime->is_key_value_store_elastic()) {
         // If we're part of an elastic job then we need to do more work here
         uint64_t offset = 0;
         if(Network::my_node_id == 0) {
