@@ -26,6 +26,7 @@
 
 #include "realm/serialize.h"
 #include "realm/logging.h"
+#include "realm/realm_assert.h"
 
 TEMPLATE_TYPE_IS_SERIALIZABLE2(int N, typename T, Realm::IndexSpace<N, T>);
 
@@ -487,8 +488,8 @@ namespace Realm {
       SparsityMapPublicImpl<N, T> *impl = sparsity.impl();
 
       // if we don't have the data, it's too late - somebody should have waited
-      REALM_ASSERT(impl->is_valid(precise),
-                   "IndexSpace<N,T>::tighten called without waiting for valid metadata");
+      // we should have the metadata valid
+      REALM_ASSERT(impl->is_valid(precise));
 
       // always use precise info if it's available
       if(impl->is_valid(true /*precise*/)) {
