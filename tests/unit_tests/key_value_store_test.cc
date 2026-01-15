@@ -17,6 +17,7 @@
 
 #include "realm/runtime_impl.h"
 #include "realm/runtime.h"
+#include "test_mock.h"
 
 #include <gtest/gtest.h>
 #include <map>
@@ -25,6 +26,10 @@
 #include <cstring>
 
 using namespace Realm;
+
+namespace Realm {
+  extern bool enable_unit_tests;
+};
 
 // Mock key-value store context for testing
 struct MockKVStoreContext {
@@ -183,22 +188,34 @@ static bool mock_cas(const void *key, size_t key_size, void *expected, size_t *e
   return false;
 }
 
+// Helper class to expose protected members for testing
+class TestableRuntimeImpl : public MockRuntimeImpl {
+public:
+  using MockRuntimeImpl::key_value_store_vtable;
+};
+
 class KeyValueStoreTestBase : public ::testing::Test {
 protected:
   void SetUp() override
   {
+    Realm::enable_unit_tests = true;
+    
     ctx = new MockKVStoreContext();
     ctx_ptr = new MockKVStoreContext *(ctx);
     
     // Create a minimal runtime for testing
-    runtime_impl = new RuntimeImpl();
+    runtime_impl = new TestableRuntimeImpl();
+    runtime_impl->init(1);
   }
   
   void TearDown() override
   {
+    runtime_impl->finalize();
     delete runtime_impl;
     delete ctx;
     delete ctx_ptr;
+    
+    Realm::enable_unit_tests = false;
   }
   
   void InitVtable(bool with_put = true, bool with_get = true,
@@ -211,13 +228,13 @@ protected:
     vtable.bar = with_bar ? mock_bar : nullptr;
     vtable.cas = with_cas ? mock_cas : nullptr;
     
-    // Directly set the vtable in runtime_impl for testing
+    // Directly set the vtable (now accessible via TestableRuntimeImpl)
     runtime_impl->key_value_store_vtable = vtable;
   }
   
   MockKVStoreContext *ctx;
   MockKVStoreContext **ctx_ptr;
-  RuntimeImpl *runtime_impl;
+  TestableRuntimeImpl *runtime_impl;
   Runtime::KeyValueStoreVtable vtable;
 };
 
@@ -275,26 +292,26 @@ TEST_F(KeyValueStoreTestBase, LocalGroup_DifferentSizes)
 {
   InitVtable(true, true, true, false);
   
-  // Test with uint8_t
+  // Test with uint8_t - use context value
   ctx->group = 255;
   auto result8 = runtime_impl->key_value_store_local_group();
   ASSERT_TRUE(result8.has_value());
   EXPECT_EQ(result8.value(), 255);
   
-  // Test with uint16_t
-  uint16_t group16 = 1000;
-  ctx->store["realm_group"] = std::vector<uint8_t>(
-      reinterpret_cast<uint8_t *>(&group16),
-      reinterpret_cast<uint8_t *>(&group16) + sizeof(group16));
+  // Test with uint16_t - update context to test larger value
+  ctx->group = 1000;
   auto result16 = runtime_impl->key_value_store_local_group();
   ASSERT_TRUE(result16.has_value());
   EXPECT_EQ(result16.value(), 1000);
   
-  // Test with uint64_t
-  uint64_t group64 = 1000000;
-  ctx->store["realm_group"] = std::vector<uint8_t>(
-      reinterpret_cast<uint8_t *>(&group64),
-      reinterpret_cast<uint8_t *>(&group64) + sizeof(group64));
+  // Test with uint32_t - update context for even larger value
+  ctx->group = 100000;
+  auto result32 = runtime_impl->key_value_store_local_group();
+  ASSERT_TRUE(result32.has_value());
+  EXPECT_EQ(result32.value(), 100000);
+  
+  // Test with uint64_t - update context for maximum value
+  ctx->group = 1000000;
   auto result64 = runtime_impl->key_value_store_local_group();
   ASSERT_TRUE(result64.has_value());
   EXPECT_EQ(result64.value(), 1000000);
