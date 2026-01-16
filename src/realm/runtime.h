@@ -70,7 +70,7 @@ namespace Realm {
      * clients can use non-Realm synchronization primitives in the
      * implementation of these functions and not need to worry about
      * blocking or impacting forward progress.
-     */ 
+     */
     struct KeyValueStoreVtable {
       /**
        * Optional blob of data passed to all the network vtable functions

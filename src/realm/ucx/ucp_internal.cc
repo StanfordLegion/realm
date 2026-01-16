@@ -24,6 +24,7 @@
 #include "realm/logging.h"
 #include "unistd.h"
 #include <cstdint>
+#include <chrono>
 
 #ifdef REALM_USE_CUDA
 #include "realm/cuda/cuda_module.h"
@@ -854,9 +855,14 @@ namespace Realm {
           size_t offset_size = sizeof(offset);
           uint64_t desired = ucc_comm->get_world_size();
           bool success = false;
-          // Try this up to 100 times, if we don't succeed then
-          // we'll time out and fail to join
-          for(unsigned idx = 0; idx < 100; idx++) {
+          using clock = std::chrono::steady_clock;
+          using seconds = std::chrono::duration<double>;
+          // Give this up to 10 seconds to succeed
+          constexpr seconds timeout{10.0};
+          const auto start = clock::now();
+          const auto deadline = start + timeout;
+          // Iterate until the timeout
+          while(clock::now() < deadline) {
             if(runtime->key_value_store_cas(key.data(), key.size(), &offset, &offset_size,
                                             &desired, sizeof(desired))) {
               success = true;
@@ -869,7 +875,8 @@ namespace Realm {
             offset += ucc_comm->get_world_size();
           }
           if(!success) {
-            log_ucp.error() << "UCP timed out trying to join Realm";
+            log_ucp.error() << "UCP timed out after " << timeout
+                            << " seconds trying to join Realm";
             return false;
           }
         }
