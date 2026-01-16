@@ -875,7 +875,7 @@ namespace Realm {
             offset += ucc_comm->get_world_size();
           }
           if(!success) {
-            log_ucp.error() << "UCP timed out after " << timeout
+            log_ucp.error() << "UCP timed out after " << timeout.count()
                             << " seconds trying to join Realm";
             return false;
           }
