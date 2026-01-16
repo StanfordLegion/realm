@@ -57,17 +57,20 @@ namespace Realm {
     //  *argc and *argv contain the application's real command line
     //  (instead of e.g. mpi spawner information)
     bool network_init(int *argc, char ***argv);
-    // Some networks prefer to bootstrap via callbacks using a vtable
-    // A client provides an implementation of the functions in the vtable
-    // and Realm will invoke them as part of bootstrapping the network and
-    // providing support for elasticity (when networks support it).
-    // Some functions are required while others are either/or options.
-    // All callbacks will either be performed in an external thread
-    // (one not made by Realm but has called into Realm) or by a designated
-    // Realm thread independent of Realm's background worker threads so that
-    // clients can use non-Realm synchronization primitives in the
-    // implementation of these functions and not need to worry about
-    // blocking or impacting forward progress.
+    /**
+     * \struct KeyValueStoreVtable
+     * Some networks prefer to bootstrap via callbacks using a vtable
+     * A client provides an implementation of the functions in the vtable
+     * and Realm will invoke them as part of bootstrapping the network and
+     * providing support for elasticity (when networks support it).
+     * Some functions are required while others are either/or options.
+     * All callbacks will either be performed in an external thread
+     * (one not made by Realm but has called into Realm) or by a designated
+     * Realm thread independent of Realm's background worker threads so that
+     * clients can use non-Realm synchronization primitives in the
+     * implementation of these functions and not need to worry about
+     * blocking or impacting forward progress.
+     */ 
     struct KeyValueStoreVtable {
       /**
        * Optional blob of data passed to all the network vtable functions
