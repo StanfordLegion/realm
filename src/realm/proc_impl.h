@@ -177,6 +177,8 @@ namespace Realm {
   public:
     // TODO (rohany): ...
     ThreadedTaskScheduler *sched;
+    virtual void execute_task(Processor::TaskFuncID func_id,
+                              const ByteArrayRef &task_args);
 
   protected:
     void set_scheduler(ThreadedTaskScheduler *_sched);
@@ -193,8 +195,6 @@ namespace Realm {
     RWLock task_table_mutex;
     std::map<Processor::TaskFuncID, TaskTableEntry> task_table;
 
-    virtual void execute_task(Processor::TaskFuncID func_id,
-                              const ByteArrayRef &task_args);
   };
 
   // three simple subclasses for:
