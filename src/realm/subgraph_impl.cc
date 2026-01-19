@@ -1245,7 +1245,7 @@ namespace Realm {
   ) : state(_state), args(_args), preconds(_preconds), external_preconds(_external_preconds), EventWaiter() {}
 
   void SubgraphImpl::InstantiationCleanup::event_triggered(bool poisoned, Realm::TimeLimit work_until) {
-    delete state;
+    delete[] state;
     delete external_preconds;
     free(args);
     free(preconds);
@@ -1263,13 +1263,6 @@ namespace Realm {
     ExternalPreconditionMeta* _meta,
     atomic<int32_t>* _preconditions
   ) : subgraph(_subgraph), meta(_meta), preconditions(_preconditions), EventWaiter() {}
-
-  SubgraphImpl::ExternalPreconditionTriggerer::ExternalPreconditionTriggerer(
-      const Realm::SubgraphImpl::ExternalPreconditionTriggerer &o) {
-    subgraph = o.subgraph;
-    meta = o.meta;
-    preconditions = o.preconditions;
-  }
 
   void SubgraphImpl::ExternalPreconditionTriggerer::trigger() {
     // TODO (rohany): Is there a way to deduplicate this code

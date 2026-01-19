@@ -171,7 +171,6 @@ namespace Realm {
       public:
         ExternalPreconditionTriggerer() : EventWaiter() {}
         ExternalPreconditionTriggerer(SubgraphImpl* _subgraph, ExternalPreconditionMeta* meta, atomic<int32_t>* preconditions);
-        ExternalPreconditionTriggerer(const ExternalPreconditionTriggerer&);
         void trigger();
         virtual void event_triggered(bool poisoned, TimeLimit work_until);
         virtual void print(std::ostream& os) const;
