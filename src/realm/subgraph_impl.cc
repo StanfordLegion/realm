@@ -736,10 +736,11 @@ namespace Realm {
         }
       }
     }
-    // Actually create the list of waiters.
+    // Collapse the metadata for each external waiter.
     if (!external_preconditions.empty()) {
+      external_precondition_info.resize(max_ext_precond_id + 1);
       for (size_t i = 0; i < max_ext_precond_id + 1; i++) {
-        external_precond_waiters.emplace_back(this, external_preconditions[i]);
+        external_precondition_info[i].to_trigger = external_preconditions[i];
       }
     }
 
@@ -842,16 +843,6 @@ namespace Realm {
       }
     }
     precondition_offsets.push_back(precondition_count);
-    preconditions.resize(original_preconditions.size());
-    for (size_t i = 0; i < original_preconditions.size(); i++) {
-      preconditions[i].store(original_preconditions[i]);
-    }
-
-    // std::cout << "Preconditions: [";
-    // for (auto p : original_preconditions) {
-    //   std::cout << p << " ";
-    // }
-    // std::cout << "]" << std::endl;
 
     return true;
   }
@@ -870,6 +861,12 @@ namespace Realm {
         copied_args = malloc(arglen);
         memcpy(copied_args, args, arglen);
       }
+
+      // Create a fresh copy of the preconditions array.
+      static_assert(sizeof(int32_t) == sizeof(atomic<int32_t>));
+      size_t precondition_ctr_bytes = sizeof(atomic<int32_t>) * original_preconditions.size();
+      auto precondition_ctrs = (atomic<int32_t>*)malloc(precondition_ctr_bytes);
+      memcpy(precondition_ctrs, original_preconditions.data(), precondition_ctr_bytes);
 
       // TODO (rohany): We can also not use an event here and use another
       //  atomic counter with a single event. That is a micro-optimization though.
@@ -902,45 +899,28 @@ namespace Realm {
         state[i].proc_index = int32_t(i);
         state[i].args = copied_args;
         state[i].arglen = arglen;
+        state[i].preconditions = precondition_ctrs;
         event_impl->merger.add_precondition(state[i].finish_event);
       }
       event_impl->merger.arm_merger();
 
-      // Maintain a llvm::setvector<> of events to merge.
-      std::unordered_set<int32_t> trigger_procs;
-      std::vector<Event> trigger_preconditions;
-      // Start event waiters to trigger the external preconditions.
-      for (size_t i = 0; i < external_precond_waiters.size(); i++) {
+      // Since we have a fresh precondition vector, we can
+      // just queue up the external precondition waiters
+      // to start directly on the new data.
+      auto external_precondition_waiters = new ExternalPreconditionTriggerer[external_precondition_info.size()];
+      for (size_t i = 0; i < external_precondition_info.size(); i++) {
         // Note that the user may not provide all the preconditions
         // they said they would.
         Event precond = Event::NO_EVENT;
         if (i < preconditions.size())
           precond = preconditions[i];
-        auto waiter = &external_precond_waiters[i];
-        // Ensure that these waiters don't fire until the subgraph
-        // has been acquired by the processors each waiter will
-        // write to. The only way that we could avoid doing this write
-        // is if we know that the target processors are not currently
-        // working on this subgraph. The metadata to track that is
-        // kind of annoying so we'll add these extra preconditions.
-        // Note that this setup also gracefully handles nil
-        // preconditions, as the processor's start event is included
-        // in the merge.
-        assert(!start_events.empty());
-        // Collect the necessary processors to trigger.
-        trigger_procs.clear();
-        for (auto& info : waiter->to_trigger) {
-          trigger_procs.insert(info.proc);
+        auto meta = &external_precondition_info[i];
+        external_precondition_waiters[i] = ExternalPreconditionTriggerer(this, meta, precondition_ctrs);
+        if (!precond.exists() || precond.has_triggered()) {
+          external_precondition_waiters[i].trigger();
+        } else {
+          EventImpl::add_waiter(precond, &external_precondition_waiters[i]);
         }
-        trigger_preconditions.resize(trigger_procs.size() + 1);
-        size_t idx = 0;
-        for (auto proc : trigger_procs) {
-          trigger_preconditions[idx] = start_events[proc];
-          idx++;
-        }
-        trigger_preconditions[idx] = precond;
-        Event wait = Event::merge_events(trigger_preconditions);
-        EventImpl::add_waiter(wait, waiter);
       }
 
       // If there's nothing to defer, start the subgraph right away.
@@ -956,9 +936,8 @@ namespace Realm {
 
       // Issue a cleanup background work item. The item
       // will clean itself up.
-      auto cleanup = new InstantiationCleanup(state, copied_args);
+      auto cleanup = new InstantiationCleanup(state, copied_args, precondition_ctrs, external_precondition_waiters);
       EventImpl::add_waiter(finish_event, cleanup);
-
       return;
     }
 
@@ -1260,12 +1239,16 @@ namespace Realm {
 
   SubgraphImpl::InstantiationCleanup::InstantiationCleanup(
     ProcSubgraphReplayState* _state,
-    void* _args
-  ) : state(_state), args(_args), EventWaiter() {}
+    void* _args,
+    atomic<int32_t>* _preconds,
+    ExternalPreconditionTriggerer* _external_preconds
+  ) : state(_state), args(_args), preconds(_preconds), external_preconds(_external_preconds), EventWaiter() {}
 
   void SubgraphImpl::InstantiationCleanup::event_triggered(bool poisoned, Realm::TimeLimit work_until) {
     delete state;
+    delete external_preconds;
     free(args);
+    free(preconds);
     // Delete ourselves after freeing the resource. This pattern
     // is used by other event waiters, so it's reasonable to replicate it here.
     delete this;
@@ -1277,26 +1260,32 @@ namespace Realm {
 
   SubgraphImpl::ExternalPreconditionTriggerer::ExternalPreconditionTriggerer(
     SubgraphImpl* _subgraph,
-    const std::vector<CompletionInfo>& _to_trigger
-  ) : subgraph(_subgraph), to_trigger(_to_trigger), EventWaiter() {}
+    ExternalPreconditionMeta* _meta,
+    atomic<int32_t>* _preconditions
+  ) : subgraph(_subgraph), meta(_meta), preconditions(_preconditions), EventWaiter() {}
 
   SubgraphImpl::ExternalPreconditionTriggerer::ExternalPreconditionTriggerer(
       const Realm::SubgraphImpl::ExternalPreconditionTriggerer &o) {
     subgraph = o.subgraph;
-    to_trigger = o.to_trigger;
+    meta = o.meta;
+    preconditions = o.preconditions;
   }
 
-  void SubgraphImpl::ExternalPreconditionTriggerer::event_triggered(bool poisoned, Realm::TimeLimit work_until) {
+  void SubgraphImpl::ExternalPreconditionTriggerer::trigger() {
     // TODO (rohany): Is there a way to deduplicate this code
     //  from within the scheduler implementation?
-    for (auto& info : to_trigger) {
-      auto& trigger = subgraph->preconditions[subgraph->precondition_offsets[info.proc] + info.index];
+    for (auto& info : meta->to_trigger) {
+      auto& trigger = preconditions[subgraph->precondition_offsets[info.proc] + info.index];
       int32_t remaining = trigger.fetch_sub(1) - 1;
       if (remaining == 0) {
         auto lp = subgraph->all_proc_impls[info.proc];
         lp->sched->work_counter.increment_counter();
       }
     }
+  }
+
+  void SubgraphImpl::ExternalPreconditionTriggerer::event_triggered(bool poisoned, Realm::TimeLimit work_until) {
+    trigger();
   }
 
   void SubgraphImpl::ExternalPreconditionTriggerer::print(std::ostream &os) const {
