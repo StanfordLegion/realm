@@ -21,6 +21,9 @@
 
 #include "realm/runtime_impl.h"
 #include "realm/proc_impl.h"
+#include "realm/subgraph_impl.h"
+
+#include <stdatomic.h>
 
 #if defined(REALM_USE_CACHING_ALLOCATOR)
 #include "realm/caching_allocator.h"
@@ -751,7 +754,8 @@ namespace Realm {
   //
 
   ThreadedTaskScheduler::ThreadedTaskScheduler(void)
-    : shutdown_flag(false)
+    : replay_state(nullptr)
+    , shutdown_flag(false)
     , active_worker_count(0)
     , unassigned_worker_count(0)
     , wcu_task_queues(this)
@@ -1128,6 +1132,86 @@ namespace Realm {
           // and we're back to being unassigned
           update_worker_count(0, +1);
         }
+
+
+  // First, check if we have subgraph work to do.
+  {
+    ProcSubgraphReplayState* replay = this->replay_state.load();
+    if (replay) {
+      // Load the replay state.
+      int64_t next_task_index = replay->next_task_index;
+      int32_t proc_index = replay->proc_index;
+      SubgraphImpl* subgraph = replay->subgraph;
+
+      size_t precondition_index = subgraph->precondition_offsets[proc_index] + next_task_index;
+      atomic<int32_t>& precondition = subgraph->preconditions[precondition_index];
+      // Spin until the next task is ready.
+      // TODO (rohany): Have to experiment with this .. .
+      while (precondition.load() > 0) {}
+
+      auto task_index = subgraph->task_offsets[proc_index] + next_task_index;
+      auto& taskDesc = subgraph->tasks[task_index];
+
+      lock.unlock();
+
+      // TODO (rohany): Handle profiling responses etc later. This stuff
+      //  is handled in the Task::execute_on_processor function.
+      {
+        auto pimpl = get_runtime()->get_processor_impl(subgraph->all_procs[proc_index].id);
+        pimpl->execute_task(taskDesc.task_id, ByteArrayRef(taskDesc.args.base(), taskDesc.args.size()));
+      }
+
+      lock.lock();
+
+      // Reset the precondition pointer to the correct value for the next replay.
+      subgraph->preconditions[precondition_index].store(subgraph->original_preconditions[precondition_index]);
+
+      // Go and trigger whoever we have to trigger.
+      auto completion_proc_offset = subgraph->completion_info_proc_offsets[proc_index];
+      auto completion_task_offset_start = subgraph->completion_info_task_offsets[completion_proc_offset + next_task_index];
+      auto completion_task_offset_end = subgraph->completion_info_task_offsets[completion_proc_offset + next_task_index + 1];
+      for (size_t i = completion_task_offset_start; i < completion_task_offset_end; i++) {
+        SubgraphImpl::CompletionInfo& info = subgraph->completion_infos[i];
+        // std::cout << "Proc: " << proc_index << " triggering: " << (subgraph->precondition_offsets[info.proc] + info.index) << std::endl;
+        auto& trigger = subgraph->preconditions[subgraph->precondition_offsets[info.proc] + info.index];
+        // Decrement the counter. fetch_sub returns the value before
+        // the decrement, so if it was 1, then we've done the final trigger.
+        // In this case, we need to wake up the target processor (if it
+        // isn't us).
+        int32_t remaining = trigger.fetch_sub(1) - 1;
+        if (remaining == 0 && info.proc != proc_index) {
+          // TODO (rohany): We can hoist this to avoid the lookup
+          //  repeatedly if it's too expensive.
+          auto pimpl = get_runtime()->get_processor_impl(subgraph->all_procs[info.proc]);
+          // std::cout << "About to wake up proc: " << info.proc << std::endl;
+          // We should be a LocalTaskProcessor?
+          auto lp = dynamic_cast<LocalTaskProcessor*>(pimpl);
+          assert(lp);
+          lp->sched->work_counter.increment_counter();
+        }
+      }
+
+      // Increment the state (thread local?)
+      replay->next_task_index++;
+      uint64_t task_end = subgraph->task_offsets[proc_index+1];
+      if ((replay->next_task_index + subgraph->task_offsets[proc_index]) == task_end) {
+        // We're done! Free the replay state and exit.
+        this->replay_state.store(nullptr);
+        // We also need to let the finish event know that we're done.
+        // TODO (rohany): The locking ...
+        lock.unlock();
+        // std::cout << "Pre trigger ... " << std::endl;
+        replay->finish_event.trigger();
+        // std::cout << "Post trigger ... " << std::endl;
+        lock.lock();
+        // Finally, delete the replay object.
+        delete replay;
+      }
+
+      // No matter what, continue.
+      continue;
+    }
+  }
 
         // if we have both resumable and new ready tasks, we want the one that
         //  is the highest priority, with ties going to resumable tasks - we

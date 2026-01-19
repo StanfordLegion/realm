@@ -19,6 +19,7 @@
 
 #include "realm/subgraph_impl.h"
 #include "realm/runtime_impl.h"
+#include "realm/proc_impl.h"
 
 namespace Realm {
 
@@ -501,6 +502,17 @@ namespace Realm {
       }
     }
 
+    std::map<std::pair<SubgraphDefinition::OpKind, unsigned>, std::vector<std::pair<SubgraphDefinition::OpKind, unsigned>>> incoming_edges;
+    std::map<std::pair<SubgraphDefinition::OpKind, unsigned>, std::vector<std::pair<SubgraphDefinition::OpKind, unsigned>>> outgoing_edges;
+    // Perform a group-by on the dependencies list.
+    for (auto& it : defn->dependencies) {
+      // Add the incoming edge.
+      auto skey = std::make_pair(it.src_op_kind, it.src_op_index);
+      auto tkey = std::make_pair(it.tgt_op_kind, it.tgt_op_index);
+      incoming_edges[tkey].push_back(skey);
+      outgoing_edges[skey].push_back(tkey);
+    }
+
     // now sort the preconditions for each entry - allows us to group by port
     //  and also notice duplicates
     max_preconditions = 1; // have to count global precondition when needed
@@ -591,6 +603,194 @@ namespace Realm {
       }
     }
 
+    // Assert that we only have tasks.
+    assert(defn->copies.empty());
+    assert(defn->arrivals.empty());
+    assert(defn->instantiations.empty());
+    assert(defn->acquires.empty());
+    assert(defn->releases.empty());
+
+    // Start doing the static schedule packing analysis...
+    for (auto& it : incoming_edges) {
+      // For now, tasks should only depend on other tasks.
+      for (auto& edge : it.second) {
+        assert(edge.first == SubgraphDefinition::OPKIND_TASK);
+      }
+    }
+    // Each node's outgoing edge should also be a task (for now).
+    for (auto& it : outgoing_edges) {
+      for (auto& edge : it.second) {
+        assert(edge.first == SubgraphDefinition::OPKIND_TASK);
+      }
+    }
+
+    std::map<Processor, int32_t> proc_to_index;
+    std::map<Processor, std::vector<SubgraphDefinition::TaskDesc>> local_schedules;
+    std::map<Processor, std::vector<int32_t>> local_incoming;
+    std::map<Processor, std::vector<std::vector<CompletionInfo>>> local_outgoing;
+
+    // Set up the processor -> id mapping.
+    for (auto& it : schedule) {
+      // TODO 9(rohany): Handle multiple mailboxes here.
+      switch (it.op_kind) {
+        case SubgraphDefinition::OPKIND_TASK: {
+          auto& task = defn->tasks[it.op_index];
+          // During iteration, also initialize the mapping
+          // of processor IDs to local indices.
+          if (proc_to_index.find(task.proc) == proc_to_index.end()) {
+            proc_to_index[task.proc] = int32_t(proc_to_index.size());
+            all_procs.push_back(task.proc);
+          }
+          break;
+        }
+        default:
+          assert(false);
+      }
+    }
+
+    // Remember where we placed all of our tasks.
+    std::map<unsigned, unsigned> task_indices;
+
+    // TODO (rohany): Just iterating in schedule order should be enough?
+    for (auto& it : schedule) {
+      // TODO 9(rohany): Handle multiple mailboxes here.
+      switch (it.op_kind) {
+        case SubgraphDefinition::OPKIND_TASK: {
+          auto& task = defn->tasks[it.op_index];
+          // TODO (rohany): Do I even need this, or does an opindex into
+          //  the definition suffice?
+          task_indices[it.op_index] = local_schedules[task.proc].size();
+          local_schedules[task.proc].push_back(task);
+          local_incoming[task.proc].push_back(int32_t(incoming_edges[{it.op_kind, it.op_index}].size()));
+          break;
+        }
+        default:
+          assert(false);
+      }
+    }
+    // Now that all tasks have been added, fill out the outgoing information.
+    for (auto& it : schedule) {
+      // TODO 9(rohany): Handle multiple mailboxes here.
+      switch (it.op_kind) {
+        case SubgraphDefinition::OPKIND_TASK: {
+          auto& task = defn->tasks[it.op_index];
+          // TODO (rohany): Fill this out later ...
+          std::vector<CompletionInfo> outgoing;
+          for (auto& edge : outgoing_edges[{it.op_kind, it.op_index}]) {
+            CompletionInfo info;
+            assert(edge.first == SubgraphDefinition::OPKIND_TASK);
+            auto& dep = defn->tasks[edge.second];
+            info.proc = proc_to_index[dep.proc];
+            // TODO (rohany): This needs to be filled out later?
+            info.index = task_indices[edge.second];
+            outgoing.push_back(info);
+          }
+          local_outgoing[task.proc].push_back(outgoing);
+          break;
+        }
+        default:
+          assert(false);
+      }
+    }
+
+    // std::cout << "Incoming edges:" << std::endl;
+    // for (size_t i = 0; i < defn->tasks.size(); i++) {
+    //   std::cout << "Task index: " << i << std::endl;
+    //   for (auto it : incoming_edges[{SubgraphDefinition::OPKIND_TASK, i}]) {
+    //     std::cout << it.second << " ";
+    //   }
+    //   std::cout << std::endl;
+    // }
+    // std::cout << "Outgoing edges: " << std::endl;
+    // for (size_t i = 0; i < defn->tasks.size(); i++) {
+    //   std::cout << "Task index: " << i << std::endl;
+    //   for (auto it : outgoing_edges[{SubgraphDefinition::OPKIND_TASK, i}]) {
+    //     std::cout << it.second << " ";
+    //   }
+    //   std::cout << std::endl;
+    // }
+
+    // Now, flatten all the data structures into single vector's
+    // per processor. These data structures look like CSR.
+
+    // Tasks first.
+    uint64_t task_count = 0;
+    for (size_t i = 0; i < all_procs.size(); i++) {
+      auto proc = all_procs[i];
+      task_offsets.push_back(task_count);
+      for (auto& it : local_schedules[proc]) {
+        tasks.push_back(it);
+        task_count++;
+      }
+    }
+    task_offsets.push_back(task_count);
+    // std::cout << "Task offsets: [";
+    // for (auto o : task_offsets) {
+    //   std::cout << o << " ";
+    // }
+    // std::cout << "]" << std::endl;
+
+    // Completion information next.
+    uint64_t completion_proc_count = 0;
+    uint64_t completion_task_count = 0;
+    for (size_t i = 0; i < all_procs.size(); i++) {
+      auto proc = all_procs[i];
+      completion_info_proc_offsets.push_back(completion_proc_count);
+      for (auto& infos : local_outgoing[proc]) {
+        completion_info_task_offsets.push_back(completion_task_count);
+        completion_proc_count++;
+        for (auto& info : infos) {
+          completion_infos.push_back(info);
+          completion_task_count++;
+        }
+      }
+    }
+    completion_info_proc_offsets.push_back(completion_proc_count);
+    completion_info_task_offsets.push_back(completion_task_count);
+
+    // std::cout << "Completion info proc offset: [";
+    // for (auto o : completion_info_proc_offsets) {
+    //   std::cout << o << " ";
+    // }
+    // std::cout << "]" << std::endl;
+    // std::cout << "Completion info task offsets: [";
+    // for (auto o : completion_info_task_offsets) {
+    //   std::cout << o << " ";
+    // }
+    // std::cout << "]" << std::endl;
+
+    // std::cout << "Completions: [";
+    // for (auto& i : completion_infos) {
+    //   std::cout << "(" << i.proc << "," << i.index << ")" << " ";
+    // }
+    // std::cout << "]" << std::endl;
+
+    // Finally, the precondition array.
+    uint64_t precondition_count = 0;
+    // An annoying part about std::atomic is that we can't
+    // do any push backs when using it. We have to create them
+    // all at once.
+    for (size_t i = 0; i < all_procs.size(); i++) {
+      auto proc = all_procs[i];
+      precondition_offsets.push_back(precondition_count);
+      for (auto it : local_incoming[proc]) {
+        original_preconditions.push_back(it);
+        precondition_count++;
+      }
+    }
+    precondition_offsets.push_back(precondition_count);
+    preconditions.resize(original_preconditions.size());
+    for (size_t i = 0; i < original_preconditions.size(); i++) {
+      preconditions[i].store(original_preconditions[i]);
+    }
+
+    // std::cout << "Preconditions: [";
+    // for (auto p : original_preconditions) {
+    //   std::cout << p << " ";
+    // }
+    // std::cout << "]" << std::endl;
+
+
     return true;
   }
 
@@ -600,6 +800,35 @@ namespace Realm {
                                  span<const Event> postconditions, Event start_event,
                                  Event finish_event, int priority_adjust)
   {
+
+    // TODO (rohany): Make this controllable via a command line parameter.
+    if (true) {
+      // TODO (rohany): Handle preconditions.
+      // TODO (rohany): Handle interpolations.
+
+      // Arm the result merger with each of the completed events.
+      GenEventImpl *event_impl = get_genevent_impl(finish_event);
+      event_impl->merger.prepare_merger(finish_event, false /*!ignore_faults*/,
+                                        all_procs.size());
+
+      // Install the subgraph for each processor.
+      for (size_t i = 0; i < all_procs.size(); i++) {
+        Processor proc = all_procs[i];
+        ProcessorImpl* impl = get_runtime()->get_processor_impl(proc.id);
+        auto state = new ProcSubgraphReplayState();
+        state->next_task_index = 0;
+        state->subgraph = this;
+        state->finish_event = UserEvent::create_user_event();
+        state->proc_index = int32_t(i);
+        event_impl->merger.add_precondition(state->finish_event);
+        impl->install_subgraph_replay(state);
+      }
+
+      event_impl->merger.arm_merger();
+      return;
+    }
+
+
     // we precomputed the number of intermediate events we need, so put them
     //  on the stack
     Event *intermediate_events =

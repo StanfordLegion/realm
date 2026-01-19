@@ -76,6 +76,40 @@ namespace Realm {
     size_t num_intermediate_events, num_final_events, max_preconditions;
 
     DeferredDestroy deferred_destroy;
+
+  public:
+    // These objects consist of the "static schedule" information
+    // for subgraph replays.
+    // TODO (rohany): Instantiation-stable things go the SubgraphImpl.
+    // All of these data structures are flattened, so they look like
+    // CSR arrays.
+    std::vector<uint64_t> task_offsets;
+    std::vector<SubgraphDefinition::TaskDesc> tasks;
+    struct CompletionInfo {
+      int32_t proc;
+      uint64_t index;
+    };
+    std::vector<uint64_t> completion_info_proc_offsets;
+    std::vector<uint64_t> completion_info_task_offsets;
+    std::vector<CompletionInfo> completion_infos;
+    std::vector<uint64_t> precondition_offsets;
+    std::vector<atomic<int32_t>> preconditions;
+    // TODO 9(rohany): Comment ...
+    std::vector<int32_t> original_preconditions;
+    std::vector<Processor> all_procs;
+
+  };
+
+  struct ProcSubgraphReplayState {
+    // TODO (rohany): This has to be multiple indexes when we consider
+    //  multiple mailboxes.
+    int64_t next_task_index;
+    int32_t proc_index;
+    // TODO (rohany): INSTANTIATION-local interpolation scratch space can go here.
+    SubgraphImpl* subgraph;
+
+    // TODO (rohany): Comment ...
+    UserEvent finish_event;
   };
 
   // active messages

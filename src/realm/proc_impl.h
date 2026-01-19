@@ -40,6 +40,7 @@
 namespace Realm {
 
   class ProcessorGroupImpl;
+  struct ProcSubgraphReplayState;
 
   namespace ThreadLocal {
     // if nonzero, prevents application thread from yielding execution
@@ -86,14 +87,18 @@ namespace Realm {
     static Processor::Kind get_processor_kind(RuntimeImpl *runtime_impl,
                                               Processor processor);
 
+    virtual void install_subgraph_replay(ProcSubgraphReplayState* state) {
+      assert(false);
+    }
+
+    virtual void execute_task(Processor::TaskFuncID func_id,
+                              const ByteArrayRef &task_args);
+
   protected:
     friend class Task;
 
     // Event free list cache variables
     LocalEventTableAllocator::FreeList free_local_events;
-
-    virtual void execute_task(Processor::TaskFuncID func_id,
-                              const ByteArrayRef &task_args);
 
     struct DeferredSpawnCache {
       static const size_t MAX_ENTRIES = 4;
@@ -154,6 +159,8 @@ namespace Realm {
     virtual bool register_task(Processor::TaskFuncID func_id, CodeDescriptor &codedesc,
                                const ByteArrayRef &user_data);
 
+    virtual void install_subgraph_replay(ProcSubgraphReplayState* state);
+
     // starts worker threads and performs any per-processor initialization
     virtual void start_threads(void);
 
@@ -167,10 +174,13 @@ namespace Realm {
     // runs an internal Realm operation on this processor
     virtual void add_internal_task(InternalTask *task);
 
+  public:
+    // TODO (rohany): ...
+    ThreadedTaskScheduler *sched;
+
   protected:
     void set_scheduler(ThreadedTaskScheduler *_sched);
 
-    ThreadedTaskScheduler *sched;
     TaskQueue task_queue; // ready tasks
     ProfilingGauges::AbsoluteRangeGauge<int> ready_task_count;
     DeferredSpawnCache deferred_spawn_cache;
