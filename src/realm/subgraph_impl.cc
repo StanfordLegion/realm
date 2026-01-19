@@ -616,6 +616,7 @@ namespace Realm {
     std::vector<SubgraphDefinition::OpKind> allowed_kinds;
     allowed_kinds.push_back(SubgraphDefinition::OPKIND_TASK);
     allowed_kinds.push_back(SubgraphDefinition::OPKIND_ARRIVAL);
+    allowed_kinds.push_back(SubgraphDefinition::OPKIND_EXT_PRECOND);
 
     // Start doing the static schedule packing analysis...
     for (auto& it : incoming_edges) {
@@ -637,6 +638,9 @@ namespace Realm {
     std::map<Processor, std::vector<std::vector<CompletionInfo>>> local_outgoing;
     // Gather the interpolations into compacted lists for each processor.
     std::map<Processor, std::vector<std::vector<SubgraphDefinition::Interpolation>>> local_interpolations;
+    // Figure out which operations each external precondition
+    // is going to trigger.
+    std::map<unsigned, std::vector<CompletionInfo>> external_preconditions;
 
     // Set up the processor -> id mapping.
     for (auto& it : schedule) {
@@ -705,9 +709,7 @@ namespace Realm {
 
       std::vector<CompletionInfo> outgoing;
       for (auto& edge : outgoing_edges[key]) {
-        CompletionInfo info;
-        info.proc = operation_procs[edge];
-        info.index = operation_indices[edge];
+        CompletionInfo info(operation_procs[edge], operation_indices[edge]);
         outgoing.push_back(info);
       }
       local_outgoing[proc].push_back(outgoing);
@@ -718,6 +720,25 @@ namespace Realm {
         interps.push_back(defn->interpolations[i]);
       }
       local_interpolations[proc].push_back(interps);
+    }
+
+    // Perform external precondition analysis.
+    unsigned max_ext_precond_id = 0;
+    for (auto& it : schedule) {
+      auto key = std::make_pair(it.op_kind, it.op_index);
+      for (auto& edge : incoming_edges[key]) {
+        if (edge.first == SubgraphDefinition::OPKIND_EXT_PRECOND) {
+          CompletionInfo info(operation_procs[edge], operation_indices[edge]);
+          external_preconditions[edge.second].push_back(info);
+          max_ext_precond_id = std::max(max_ext_precond_id, edge.second);
+        }
+      }
+    }
+    // Actually create the list of waiters.
+    if (!external_preconditions.empty()) {
+      for (size_t i = 0; i < max_ext_precond_id + 1; i++) {
+        external_precond_waiters.emplace_back(this, external_preconditions[i]);
+      }
     }
 
     // std::cout << "Incoming edges:" << std::endl;
@@ -842,6 +863,7 @@ namespace Realm {
 
     // TODO (rohany): Make this controllable via a command line parameter.
     if (true) {
+      assert(!start_event.exists());
       // TODO (rohany): Handle preconditions.
 
       // We're going to return early before completing the interpolations,
@@ -871,6 +893,18 @@ namespace Realm {
         impl->install_subgraph_replay(state);
       }
       event_impl->merger.arm_merger();
+
+      // Start event waiters to trigger the external preconditions.
+      for (size_t i = 0; i < external_precond_waiters.size(); i++) {
+        // TODO (rohany): Not handling cases when the user said there
+        //  would be external preconditions and didn't provide them.
+        //  There's tricky business around sequencing these waiters
+        //  to write to the appropriate place without making instantiation
+        //  have to make copies of things like the precondition counter
+        //  arrays.
+        assert(i < preconditions.size() && preconditions[i].exists());
+        EventImpl::add_waiter(preconditions[i], &external_precond_waiters[i]);
+      }
 
       // If there were interpolations, delete the copy of the arguments we made.
       if (copied_args != nullptr) {
@@ -1188,6 +1222,38 @@ namespace Realm {
   }
 
   Event SubgraphImpl::DeferredInstantiationArgumentDeletion::get_finish_event() const {
+    return Event::NO_EVENT;
+  }
+
+  SubgraphImpl::ExternalPreconditionTriggerer::ExternalPreconditionTriggerer(
+    SubgraphImpl* _subgraph,
+    const std::vector<CompletionInfo>& _to_trigger
+  ) : subgraph(_subgraph), to_trigger(_to_trigger), EventWaiter() {}
+
+  SubgraphImpl::ExternalPreconditionTriggerer::ExternalPreconditionTriggerer(
+      const Realm::SubgraphImpl::ExternalPreconditionTriggerer &o) {
+    subgraph = o.subgraph;
+    to_trigger = o.to_trigger;
+  }
+
+  void SubgraphImpl::ExternalPreconditionTriggerer::event_triggered(bool poisoned, Realm::TimeLimit work_until) {
+    // TODO (rohany): Is there a way to deduplicate this code
+    //  from within the scheduler implementation?
+    for (auto& info : to_trigger) {
+      auto& trigger = subgraph->preconditions[subgraph->precondition_offsets[info.proc] + info.index];
+      int32_t remaining = trigger.fetch_sub(1) - 1;
+      if (remaining == 0) {
+        auto lp = subgraph->all_proc_impls[info.proc];
+        lp->sched->work_counter.increment_counter();
+      }
+    }
+  }
+
+  void SubgraphImpl::ExternalPreconditionTriggerer::print(std::ostream &os) const {
+    os << "External precondition triggerer";
+  }
+
+  Event SubgraphImpl::ExternalPreconditionTriggerer::get_finish_event() const {
     return Event::NO_EVENT;
   }
 

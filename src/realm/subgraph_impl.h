@@ -143,8 +143,9 @@ namespace Realm {
     std::vector<uint64_t> operation_offsets;
     std::vector<std::pair<SubgraphDefinition::OpKind, unsigned>> operations;
     struct CompletionInfo {
-      int32_t proc;
-      uint64_t index;
+      CompletionInfo(int32_t _proc, uint64_t _index) : proc(_proc), index(_index) {}
+      int32_t proc = -1;
+      uint64_t index = UINT64_MAX;
     };
     std::vector<uint64_t> completion_info_proc_offsets;
     std::vector<uint64_t> completion_info_task_offsets;
@@ -160,6 +161,19 @@ namespace Realm {
     std::vector<uint64_t> interpolation_proc_offsets;
     std::vector<uint64_t> interpolation_task_offsets;
     std::vector<SubgraphDefinition::Interpolation> interpolations;
+
+    class ExternalPreconditionTriggerer : public EventWaiter {
+      public:
+        ExternalPreconditionTriggerer(SubgraphImpl* _subgraph, const std::vector<CompletionInfo>& _to_trigger);
+        ExternalPreconditionTriggerer(const ExternalPreconditionTriggerer&);
+        virtual void event_triggered(bool poisoned, TimeLimit work_until);
+        virtual void print(std::ostream& os) const;
+        virtual Event get_finish_event(void) const;
+      private:
+        SubgraphImpl* subgraph;
+        std::vector<CompletionInfo> to_trigger;
+      };
+    std::vector<ExternalPreconditionTriggerer> external_precond_waiters;
   };
 
   struct ProcSubgraphReplayState {

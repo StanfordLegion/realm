@@ -344,7 +344,7 @@ void top_level_task(const void *args, size_t arglen,
 
     // Add the necessary dependencies.
     // sd.dependencies.resize(4);
-    sd.dependencies.resize(6);
+    sd.dependencies.resize(7);
     // TODO (rohany): Not considering external pre/postconditions etc.
     // Add the incoming and outgoing dependencies.
     sd.dependencies[0].src_op_kind = SubgraphDefinition::OPKIND_TASK;
@@ -384,6 +384,13 @@ void top_level_task(const void *args, size_t arglen,
     sd.dependencies[6].tgt_op_kind = SubgraphDefinition::OPKIND_TASK;
     sd.dependencies[6].tgt_op_index = 4;
 
+    // External precondition ...
+    sd.dependencies[7].src_op_kind = SubgraphDefinition::OPKIND_EXT_PRECOND;
+    // TODO (rohany): Try making this not the first etc ...
+    sd.dependencies[7].src_op_index = 0;
+    sd.dependencies[7].tgt_op_kind = SubgraphDefinition::OPKIND_TASK;
+    sd.dependencies[7].tgt_op_index = 0;
+
 //    // Copy dependencies.
 //    sd.dependencies[4].src_op_kind = SubgraphDefinition::OPKIND_TASK;
 //    sd.dependencies[4].src_op_index = 0;
@@ -400,6 +407,8 @@ void top_level_task(const void *args, size_t arglen,
 
     Subgraph::create_subgraph(diamond, sd, ProfilingRequestSet()).wait();
   }
+
+  auto next_bar = bar.advance_barrier();
   // TODO (rohany): Eventually chain these rather than have waits in the middle.
   Event e = Event::NO_EVENT;
   Serialization::DynamicBufferSerializer ser(256);
@@ -408,13 +417,21 @@ void top_level_task(const void *args, size_t arglen,
   ser << 2;
   ser << 3;
   ser << 4;
-  ser << bar;
-  e = diamond.instantiate(ser.get_buffer(), ser.bytes_used(), ProfilingRequestSet(), e);
+  ser << next_bar;
+  // e = diamond.instantiate(ser.get_buffer(), ser.bytes_used(), ProfilingRequestSet(), e);
+  std::vector<Event> ext_preconds;
+  ext_preconds.push_back(bar);
+  std::vector<Event> ext_postconds;
+  e = diamond.instantiate(ser.get_buffer(), ser.bytes_used(), ProfilingRequestSet(), ext_preconds, ext_postconds);
 //  std::cout << "Starting second instantiation." << std::endl;
   ser.reset();
+
+  std::cout << "Triggering barrier arrival." << std::endl;
+  bar.arrive();
+
   e.wait();
 
-  bar = bar.advance_barrier();
+  // bar = bar.advance_barrier();
 
   // See if the subgraph did the copy.
 //  {
@@ -441,15 +458,20 @@ void top_level_task(const void *args, size_t arglen,
 //  }
 //
 //  interp = 2;
+
+
+  auto next_next_bar = next_bar.advance_barrier();
   // Set interp to some new data, just to be sure it works on a second replay.
   ser << 5;
   ser << 6;
   ser << 7;
   ser << 8;
   ser << 9;
-  ser << bar;
+  ser << next_next_bar;
 
-  e = diamond.instantiate(ser.get_buffer(), ser.bytes_used(), ProfilingRequestSet(), e);
+  ext_preconds.clear();
+  ext_preconds.push_back(next_bar);
+  e = diamond.instantiate(ser.get_buffer(), ser.bytes_used(), ProfilingRequestSet(), ext_preconds, ext_postconds);
   std::cout << "Starting third instantiation." << std::endl;
 //  interp = 3;
 //  e = diamond.instantiate(&interp, sizeof(interp), ProfilingRequestSet(), e);
@@ -458,6 +480,8 @@ void top_level_task(const void *args, size_t arglen,
 //  e = diamond.instantiate(&interp, sizeof(interp), ProfilingRequestSet(), e);
   e.wait();
 
+  next_next_bar.wait();
+  std::cout << "Done!" << std::endl;
 
   // do everything on this processor - get a good memory to use
 //  Memory m = Machine::MemoryQuery(Machine::get_machine()).has_affinity_to(p).first();
