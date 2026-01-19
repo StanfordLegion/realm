@@ -177,6 +177,8 @@ namespace Realm {
   public:
     // TODO (rohany): ...
     ThreadedTaskScheduler *sched;
+    // Hacking ...
+    void extract_task_entry(Processor::TaskFuncID func_id, Processor::TaskFuncPtr& ptr, ByteArray& user_data);
     virtual void execute_task(Processor::TaskFuncID func_id,
                               const ByteArrayRef &task_args);
 

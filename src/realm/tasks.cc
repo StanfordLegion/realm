@@ -1176,8 +1176,12 @@ namespace Realm {
         }
 
         lock.unlock();
-        auto pimpl = subgraph->all_proc_impls[proc_index];
-        pimpl->execute_task(taskDesc.task_id, ByteArrayRef(taskDesc.args.base(), taskDesc.args.size()));
+        // TODO (rohany): Temporarily not using execute_task, as this
+        //  also takes some locks we dont want to take.
+        auto& entry = subgraph->preloaded_tasks[op_key.second];
+        (entry.fnptr)(taskDesc.args.base(), taskDesc.args.size(), entry.user_data.base(), entry.user_data.size(), taskDesc.proc);
+        // auto pimpl = subgraph->all_proc_impls[proc_index];
+        // pimpl->execute_task(taskDesc.task_id, ByteArrayRef(taskDesc.args.base(), taskDesc.args.size()));
         lock.lock();
 
         break;

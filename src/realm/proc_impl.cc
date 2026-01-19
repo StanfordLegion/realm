@@ -1128,6 +1128,13 @@ namespace Realm {
     return true;
   }
 
+  void LocalTaskProcessor::extract_task_entry(Processor::TaskFuncID func_id, Processor::TaskFuncPtr& ptr, ByteArray& user_data) {
+    RWLock::AutoReaderLock al(task_table_mutex);
+    auto& it = task_table.at(func_id);
+    ptr = it.fnptr;
+    user_data = it.user_data;
+  }
+
   void LocalTaskProcessor::execute_task(Processor::TaskFuncID func_id,
                                         const ByteArrayRef &task_args)
   {
