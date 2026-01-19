@@ -210,7 +210,7 @@ namespace Realm {
     {
       if(needed > N) {
         need_free = true;
-        base = static_cast<char *>(malloc(N));
+        base = static_cast<char *>(malloc(_needed));
         assert(base != 0);
       } else {
         need_free = false;
@@ -280,6 +280,39 @@ namespace Realm {
     }
 
     return ((scratch_buffer != 0) ? scratch_buffer : dstdata);
+  }
+
+  void
+  do_interpolation_inline(const std::vector<SubgraphDefinition::Interpolation> &interpolations,
+                          unsigned first_interp, unsigned num_interps,
+                          SubgraphDefinition::Interpolation::TargetKind target_kind,
+                          const void *srcdata, size_t srclen,
+                          void *dstdata, size_t dstlen)
+  {
+    for(unsigned i = 0; i < num_interps; i++) {
+      const SubgraphDefinition::Interpolation &it = interpolations[first_interp + i];
+      // if((it.target_kind != target_kind) || (it.target_index != target_index))
+      // TODO (rohany): I don't think we need the it.target_index check?
+      if (it.target_kind != target_kind)
+        continue;
+
+      assert((it.offset + it.bytes) <= srclen);
+      if(it.redop_id == 0) {
+        // overwrite
+        assert((it.target_offset + it.bytes) <= dstlen);
+        memcpy(reinterpret_cast<char *>(dstdata) + it.target_offset,
+               reinterpret_cast<const char *>(srcdata) + it.offset, it.bytes);
+      } else {
+        assert(false);
+        // const ReductionOpUntyped *redop =
+        //     get_runtime()->reduce_op_table.get(it.redop_id, 0);
+        // assert((it.target_offset + redop->sizeof_lhs) <= dstlen);
+        // (redop->cpu_apply_excl_fn)(reinterpret_cast<char *>(scratch_buffer) +
+        //                            it.target_offset,
+        //                            0, reinterpret_cast<const char *>(srcdata) + it.offset,
+        //                            0, 1 /*count*/, redop->userdata);
+      }
+    }
   }
 
   // a typed version for interpolating small values
@@ -536,6 +569,11 @@ namespace Realm {
         max_preconditions = num_unique + 1;
     }
 
+    // Maintain a separate collection of tasks to interpolation metadata.
+    // We'll use this when extracting the interpolation metadata for the
+    // statically scheduled graph component.
+    std::map<std::pair<SubgraphDefinition::OpKind, size_t>, std::pair<size_t, size_t>> op_to_interpolation_data;
+
     // sort the interpolations so that each operation has a compact range
     //  to iterate through
     std::sort(defn->interpolations.begin(), defn->interpolations.end(),
@@ -576,6 +614,7 @@ namespace Realm {
               hi++;
             it->first_interp = lo;
             it->num_interps = hi - lo;
+            op_to_interpolation_data[{it->op_kind, it->op_index}] = {lo, hi-lo};
             // log_subgraph.print() << "search (" << it->op_kind << "," << it->op_index <<
             // ") -> " << lo << " .. " << hi;
             break;
@@ -628,6 +667,8 @@ namespace Realm {
     std::map<Processor, std::vector<SubgraphDefinition::TaskDesc>> local_schedules;
     std::map<Processor, std::vector<int32_t>> local_incoming;
     std::map<Processor, std::vector<std::vector<CompletionInfo>>> local_outgoing;
+    // Gather the interpolations into compacted lists for each processor.
+    std::map<Processor, std::vector<std::vector<SubgraphDefinition::Interpolation>>> local_interpolations;
 
     // Set up the processor -> id mapping.
     for (auto& it : schedule) {
@@ -657,7 +698,7 @@ namespace Realm {
 
     // TODO (rohany): Just iterating in schedule order should be enough?
     for (auto& it : schedule) {
-      // TODO 9(rohany): Handle multiple mailboxes here.
+      // TODO (rohany): Handle multiple mailboxes here.
       switch (it.op_kind) {
         case SubgraphDefinition::OPKIND_TASK: {
           auto& task = defn->tasks[it.op_index];
@@ -672,9 +713,10 @@ namespace Realm {
           assert(false);
       }
     }
-    // Now that all tasks have been added, fill out the outgoing information.
+    // Now that all tasks have been added, fill out per-task information
+    // like outgoing neighbors and interpolations.
     for (auto& it : schedule) {
-      // TODO 9(rohany): Handle multiple mailboxes here.
+      // TODO (rohany): Handle multiple mailboxes here.
       switch (it.op_kind) {
         case SubgraphDefinition::OPKIND_TASK: {
           auto& task = defn->tasks[it.op_index];
@@ -690,6 +732,13 @@ namespace Realm {
             outgoing.push_back(info);
           }
           local_outgoing[task.proc].push_back(outgoing);
+
+          std::vector<SubgraphDefinition::Interpolation> interps;
+          auto& meta = op_to_interpolation_data[{SubgraphDefinition::OPKIND_TASK, it.op_index}];
+          for (size_t i = meta.first; i < meta.first + meta.second; i++) {
+            interps.push_back(defn->interpolations[i]);
+          }
+          local_interpolations[task.proc].push_back(interps);
           break;
         }
         default:
@@ -752,6 +801,24 @@ namespace Realm {
     completion_info_proc_offsets.push_back(completion_proc_count);
     completion_info_task_offsets.push_back(completion_task_count);
 
+    // Interpolation information.
+    uint64_t interpolation_proc_count = 0;
+    uint64_t interpolation_task_count = 0;
+    for (size_t i = 0; i < all_procs.size(); i++) {
+      auto proc = all_procs[i];
+      interpolation_proc_offsets.push_back(interpolation_proc_count);
+      for (auto& interps : local_interpolations[proc]) {
+        interpolation_task_offsets.push_back(interpolation_task_count);
+        interpolation_proc_count++;
+        for (auto& interp : interps) {
+          interpolations.push_back(interp);
+          interpolation_task_count++;
+        }
+      }
+    }
+    interpolation_proc_offsets.push_back(interpolation_proc_count);
+    interpolation_task_offsets.push_back(interpolation_task_count);
+
     // std::cout << "Completion info proc offset: [";
     // for (auto o : completion_info_proc_offsets) {
     //   std::cout << o << " ";
@@ -794,7 +861,6 @@ namespace Realm {
     // }
     // std::cout << "]" << std::endl;
 
-
     return true;
   }
 
@@ -808,7 +874,14 @@ namespace Realm {
     // TODO (rohany): Make this controllable via a command line parameter.
     if (true) {
       // TODO (rohany): Handle preconditions.
-      // TODO (rohany): Handle interpolations.
+
+      // We're going to return early before completing the interpolations,
+      // so we need to make a copy of the argument buffer to read from.
+      void* copied_args = nullptr;
+      if (args != nullptr && arglen > 0) {
+        copied_args = malloc(arglen);
+        memcpy(copied_args, args, arglen);
+      }
 
       // Arm the result merger with each of the completed events.
       GenEventImpl *event_impl = get_genevent_impl(finish_event);
@@ -820,15 +893,23 @@ namespace Realm {
         Processor proc = all_procs[i];
         ProcessorImpl* impl = all_proc_impls[i];
         auto state = new ProcSubgraphReplayState();
-        state->next_task_index = 0;
         state->subgraph = this;
         state->finish_event = UserEvent::create_user_event();
         state->proc_index = int32_t(i);
+        state->args = copied_args;
+        state->arglen = arglen;
         event_impl->merger.add_precondition(state->finish_event);
         impl->install_subgraph_replay(state);
       }
-
       event_impl->merger.arm_merger();
+
+      // If there were interpolations, delete the copy of the arguments we made.
+      if (copied_args != nullptr) {
+        // Fire and forget the waiter. It will delete
+        // itself once the event triggers.
+        auto waiter = new DeferredInstantiationArgumentDeletion(copied_args);
+        EventImpl::add_waiter(finish_event, waiter);
+      }
       return;
     }
 
@@ -1121,6 +1202,23 @@ namespace Realm {
 
   Event SubgraphImpl::DeferredDestroy::get_finish_event(void) const
   {
+    return Event::NO_EVENT;
+  }
+
+  void SubgraphImpl::DeferredInstantiationArgumentDeletion::print(std::ostream &os) const {
+    os << "deferred subgraph instantiation argument deletion: pointer=" << ptr;
+  }
+
+  SubgraphImpl::DeferredInstantiationArgumentDeletion::DeferredInstantiationArgumentDeletion(void *_ptr) : ptr(_ptr), EventWaiter() {}
+
+  void SubgraphImpl::DeferredInstantiationArgumentDeletion::event_triggered(bool poisoned, Realm::TimeLimit work_until) {
+    free(ptr);
+    // Delete ourselves after freeing the resource. This pattern
+    // is used by other event waiters, so it's reasonable to replicate it here.
+    delete this;
+  }
+
+  Event SubgraphImpl::DeferredInstantiationArgumentDeletion::get_finish_event() const {
     return Event::NO_EVENT;
   }
 

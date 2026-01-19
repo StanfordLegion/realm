@@ -1150,6 +1150,26 @@ namespace Realm {
       auto task_index = subgraph->task_offsets[proc_index] + next_task_index;
       auto& taskDesc = subgraph->tasks[task_index];
 
+      // Check if we have any interpolations.
+      {
+        auto interp_proc_offset = subgraph->interpolation_proc_offsets[proc_index];
+        auto first_interp = subgraph->interpolation_task_offsets[interp_proc_offset + next_task_index];
+        auto num_interps = subgraph->interpolation_task_offsets[interp_proc_offset + next_task_index + 1] - first_interp;
+        // TODO (rohany): Handle more than tasks here?
+        if (num_interps > 0) {
+          do_interpolation_inline(
+            subgraph->interpolations,
+            first_interp,
+            num_interps,
+            SubgraphDefinition::Interpolation::TARGET_TASK_ARGS,
+            replay->args,
+            replay->arglen,
+            taskDesc.args.base(),
+            taskDesc.args.size()
+          );
+        }
+      }
+
       lock.unlock();
 
       // TODO (rohany): Handle profiling responses etc later. This stuff

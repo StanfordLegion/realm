@@ -38,6 +38,13 @@ namespace Realm {
     bool is_final_event;
   };
 
+   void
+   do_interpolation_inline(const std::vector<SubgraphDefinition::Interpolation> &interpolations,
+                           unsigned first_interp, unsigned num_interps,
+                           SubgraphDefinition::Interpolation::TargetKind target_kind,
+                           const void *srcdata, size_t srclen,
+                           void *dstdata, size_t dstlen);
+
   class SubgraphImpl {
   public:
     SubgraphImpl();
@@ -71,6 +78,16 @@ namespace Realm {
       SubgraphImpl *subgraph;
     };
 
+    class DeferredInstantiationArgumentDeletion : public EventWaiter {
+      public:
+        DeferredInstantiationArgumentDeletion(void* _ptr);
+        virtual void event_triggered(bool poisoned, TimeLimit work_until);
+        virtual void print(std::ostream& os) const;
+        virtual Event get_finish_event(void) const;
+      private:
+        void* ptr;
+    };
+
   public:
     ID me;
     SubgraphImpl *next_free;
@@ -86,6 +103,8 @@ namespace Realm {
     // TODO (rohany): Instantiation-stable things go the SubgraphImpl.
     // All of these data structures are flattened, so they look like
     // CSR arrays.
+    // TODO (rohany): In the future, i'll probably turn these into
+    //  operations and make it a union of all the different types.
     std::vector<uint64_t> task_offsets;
     std::vector<SubgraphDefinition::TaskDesc> tasks;
     struct CompletionInfo {
@@ -97,22 +116,32 @@ namespace Realm {
     std::vector<CompletionInfo> completion_infos;
     std::vector<uint64_t> precondition_offsets;
     std::vector<atomic<int32_t>> preconditions;
-    // TODO 9(rohany): Comment ...
+    // TODO (rohany): Comment ...
     std::vector<int32_t> original_preconditions;
     std::vector<Processor> all_procs;
     std::vector<LocalTaskProcessor*> all_proc_impls;
+
+    // Collapsed interpolation metadata.
+    std::vector<uint64_t> interpolation_proc_offsets;
+    std::vector<uint64_t> interpolation_task_offsets;
+    std::vector<SubgraphDefinition::Interpolation> interpolations;
   };
 
   struct ProcSubgraphReplayState {
     // TODO (rohany): This has to be multiple indexes when we consider
     //  multiple mailboxes.
-    int64_t next_task_index;
-    int32_t proc_index;
-    // TODO (rohany): INSTANTIATION-local interpolation scratch space can go here.
-    SubgraphImpl* subgraph;
+    int64_t next_task_index = 0;
+    int32_t proc_index = -1;
+    SubgraphImpl* subgraph = nullptr;
 
-    // TODO (rohany): Comment ...
-    UserEvent finish_event;
+    // Interpolation argument sources.
+    void* args = nullptr;
+    size_t arglen = 0;
+
+    // Each processor is responsible for triggering a final
+    // event to let the runtime know that its contribution
+    // to the subgraph execution is done.
+    UserEvent finish_event = UserEvent::NO_USER_EVENT;
   };
 
   // active messages

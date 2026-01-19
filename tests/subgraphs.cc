@@ -107,7 +107,12 @@ struct TaskArgs {
 
 void dummy_task(const void *args, size_t arglen,
                 const void *userdata, size_t userlen, Processor p) {
-  std::cout << "In dummy task!" << std::endl;
+  if (arglen > 0) {
+    int32_t value = *(int32_t*)(args);
+    std::cout << "In dummy task -- " << value << "!" << std::endl;
+  } else {
+    std::cout << "In dummy task!" << std::endl;
+  }
 }
 
 void reader_task(const void *args, size_t arglen, const void *userdata, size_t userlen,
@@ -266,17 +271,44 @@ void top_level_task(const void *args, size_t arglen,
     sd.tasks[3].proc = cpus[3];
     sd.tasks[4].proc = cpus[2];
 
-//    TaskArgs args;
-//    args.value = 0;
-//    args.inst = gpu_inst;
-//    sd.tasks[0].args = ByteArray(&args, sizeof(TaskArgs));
+    TaskArgs args;
+    args.value = 0;
+    sd.tasks[0].args = ByteArray(&args, sizeof(TaskArgs));
+    sd.tasks[1].args = ByteArray(&args, sizeof(TaskArgs));
+    sd.tasks[2].args = ByteArray(&args, sizeof(TaskArgs));
+    sd.tasks[3].args = ByteArray(&args, sizeof(TaskArgs));
+    sd.tasks[4].args = ByteArray(&args, sizeof(TaskArgs));
 
-//    sd.interpolations.resize(1);
-//    sd.interpolations[0].offset = 0;
-//    sd.interpolations[0].bytes = sizeof(int32_t);
-//    sd.interpolations[0].target_kind = SubgraphDefinition::Interpolation::TARGET_TASK_ARGS;
-//    sd.interpolations[0].target_index = 0;
-//    sd.interpolations[0].target_offset = 0;
+    sd.interpolations.resize(5);
+    sd.interpolations[0].offset = 0;
+    sd.interpolations[0].bytes = sizeof(int32_t);
+    sd.interpolations[0].target_kind = SubgraphDefinition::Interpolation::TARGET_TASK_ARGS;
+    sd.interpolations[0].target_index = 0;
+    sd.interpolations[0].target_offset = 0;
+
+    sd.interpolations[1].offset = 4;
+    sd.interpolations[1].bytes = sizeof(int32_t);
+    sd.interpolations[1].target_kind = SubgraphDefinition::Interpolation::TARGET_TASK_ARGS;
+    sd.interpolations[1].target_index = 1;
+    sd.interpolations[1].target_offset = 0;
+
+    sd.interpolations[2].offset = 8;
+    sd.interpolations[2].bytes = sizeof(int32_t);
+    sd.interpolations[2].target_kind = SubgraphDefinition::Interpolation::TARGET_TASK_ARGS;
+    sd.interpolations[2].target_index = 2;
+    sd.interpolations[2].target_offset = 0;
+
+    sd.interpolations[3].offset = 12;
+    sd.interpolations[3].bytes = sizeof(int32_t);
+    sd.interpolations[3].target_kind = SubgraphDefinition::Interpolation::TARGET_TASK_ARGS;
+    sd.interpolations[3].target_index = 3;
+    sd.interpolations[3].target_offset = 0;
+
+    sd.interpolations[4].offset = 16;
+    sd.interpolations[4].bytes = sizeof(int32_t);
+    sd.interpolations[4].target_kind = SubgraphDefinition::Interpolation::TARGET_TASK_ARGS;
+    sd.interpolations[4].target_index = 4;
+    sd.interpolations[4].target_offset = 0;
 
 //    sd.copies.resize(2);
 //    {
@@ -360,8 +392,18 @@ void top_level_task(const void *args, size_t arglen,
   }
   // TODO (rohany): Eventually chain these rather than have waits in the middle.
   Event e = Event::NO_EVENT;
-  int32_t interp = 1;
-  e = diamond.instantiate(&interp, sizeof(interp), ProfilingRequestSet(), e);
+  std::vector<int32_t> interp;
+  // interp.push_back(15210);
+  // interp.push_back(15213);
+  // interp.push_back(15150);
+  // interp.push_back(15451);
+  // interp.push_back(15251);
+  interp.push_back(0);
+  interp.push_back(1);
+  interp.push_back(2);
+  interp.push_back(3);
+  interp.push_back(4);
+  e = diamond.instantiate(interp.data(), sizeof(int32_t) * interp.size(), ProfilingRequestSet(), e);
 //  std::cout << "Starting second instantiation." << std::endl;
   e.wait();
 
@@ -390,7 +432,12 @@ void top_level_task(const void *args, size_t arglen,
 //  }
 //
 //  interp = 2;
-  e = diamond.instantiate(&interp, sizeof(interp), ProfilingRequestSet(), e);
+  // Set interp to some new data, just to be sure it works on a second replay.
+  for (auto& it : interp) {
+    it += 5;
+  }
+
+  e = diamond.instantiate(interp.data(), sizeof(int32_t) * interp.size(), ProfilingRequestSet(), e);
   std::cout << "Starting third instantiation." << std::endl;
 //  interp = 3;
 //  e = diamond.instantiate(&interp, sizeof(interp), ProfilingRequestSet(), e);
