@@ -42,8 +42,45 @@ namespace Realm {
    do_interpolation_inline(const std::vector<SubgraphDefinition::Interpolation> &interpolations,
                            unsigned first_interp, unsigned num_interps,
                            SubgraphDefinition::Interpolation::TargetKind target_kind,
+                           unsigned target_index,
                            const void *srcdata, size_t srclen,
                            void *dstdata, size_t dstlen);
+
+  // a typed version for interpolating small values
+  template <typename T>
+  static T
+  do_interpolation(const std::vector<SubgraphDefinition::Interpolation> &interpolations,
+                   unsigned first_interp, unsigned num_interps,
+                   SubgraphDefinition::Interpolation::TargetKind target_kind,
+                   unsigned target_index, const void *srcdata, size_t srclen, T dstdata)
+  {
+    T val = dstdata;
+
+    for(unsigned i = 0; i < num_interps; i++) {
+      const SubgraphDefinition::Interpolation &it = interpolations[first_interp + i];
+      if((it.target_kind != target_kind) || (it.target_index != target_index))
+        continue;
+
+      assert((it.offset + it.bytes) <= srclen);
+      if(it.redop_id == 0) {
+        // overwrite
+        assert((it.target_offset + it.bytes) <= sizeof(T));
+        memcpy(reinterpret_cast<char *>(&val) + it.target_offset,
+               reinterpret_cast<const char *>(srcdata) + it.offset, it.bytes);
+      } else {
+        // TODO (rohany): Can't implement this here, including runtime_impl.h
+        //  leads to a circular dependence.
+        assert(false);
+        // const ReductionOpUntyped *redop =
+        //     get_runtime()->reduce_op_table.get(it.redop_id, 0);
+        // assert((it.target_offset + redop->sizeof_lhs) <= sizeof(T));
+        // (redop->cpu_apply_excl_fn)(reinterpret_cast<char *>(&val) + it.target_offset, 0,
+        //                            reinterpret_cast<const char *>(srcdata) + it.offset, 0,
+        //                            1 /*count*/, redop->userdata);
+      }
+    }
+    return val;
+  }
 
   class SubgraphImpl {
   public:
@@ -103,10 +140,8 @@ namespace Realm {
     // TODO (rohany): Instantiation-stable things go the SubgraphImpl.
     // All of these data structures are flattened, so they look like
     // CSR arrays.
-    // TODO (rohany): In the future, i'll probably turn these into
-    //  operations and make it a union of all the different types.
-    std::vector<uint64_t> task_offsets;
-    std::vector<SubgraphDefinition::TaskDesc> tasks;
+    std::vector<uint64_t> operation_offsets;
+    std::vector<std::pair<SubgraphDefinition::OpKind, unsigned>> operations;
     struct CompletionInfo {
       int32_t proc;
       uint64_t index;
@@ -130,7 +165,7 @@ namespace Realm {
   struct ProcSubgraphReplayState {
     // TODO (rohany): This has to be multiple indexes when we consider
     //  multiple mailboxes.
-    int64_t next_task_index = 0;
+    int64_t next_op_index = 0;
     int32_t proc_index = -1;
     SubgraphImpl* subgraph = nullptr;
 

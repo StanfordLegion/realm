@@ -16,6 +16,7 @@
  */
 
 #include "realm.h"
+#include "realm/serialize.h"
 
 #include <cstdio>
 #include <cstdlib>
@@ -251,6 +252,8 @@ void top_level_task(const void *args, size_t arglen,
 //    is2.fill(info, ProfilingRequestSet(), &value, sizeof(int32_t)).wait();
 //  }
 
+  auto bar = Barrier::create_barrier(1);
+
   std::cout << "Diamond subgraph." << std::endl;
   Subgraph diamond;
   {
@@ -279,7 +282,7 @@ void top_level_task(const void *args, size_t arglen,
     sd.tasks[3].args = ByteArray(&args, sizeof(TaskArgs));
     sd.tasks[4].args = ByteArray(&args, sizeof(TaskArgs));
 
-    sd.interpolations.resize(5);
+    sd.interpolations.resize(6);
     sd.interpolations[0].offset = 0;
     sd.interpolations[0].bytes = sizeof(int32_t);
     sd.interpolations[0].target_kind = SubgraphDefinition::Interpolation::TARGET_TASK_ARGS;
@@ -309,6 +312,13 @@ void top_level_task(const void *args, size_t arglen,
     sd.interpolations[4].target_kind = SubgraphDefinition::Interpolation::TARGET_TASK_ARGS;
     sd.interpolations[4].target_index = 4;
     sd.interpolations[4].target_offset = 0;
+
+    sd.arrivals.resize(1);
+    sd.arrivals[0].barrier = bar;
+    sd.interpolations[5].offset = 20;
+    sd.interpolations[5].bytes = sizeof(Barrier);
+    sd.interpolations[5].target_kind = SubgraphDefinition::Interpolation::TARGET_ARRIVAL_BARRIER;
+
 
 //    sd.copies.resize(2);
 //    {
@@ -392,20 +402,19 @@ void top_level_task(const void *args, size_t arglen,
   }
   // TODO (rohany): Eventually chain these rather than have waits in the middle.
   Event e = Event::NO_EVENT;
-  std::vector<int32_t> interp;
-  // interp.push_back(15210);
-  // interp.push_back(15213);
-  // interp.push_back(15150);
-  // interp.push_back(15451);
-  // interp.push_back(15251);
-  interp.push_back(0);
-  interp.push_back(1);
-  interp.push_back(2);
-  interp.push_back(3);
-  interp.push_back(4);
-  e = diamond.instantiate(interp.data(), sizeof(int32_t) * interp.size(), ProfilingRequestSet(), e);
+  Serialization::DynamicBufferSerializer ser(256);
+  ser << 0;
+  ser << 1;
+  ser << 2;
+  ser << 3;
+  ser << 4;
+  ser << bar;
+  e = diamond.instantiate(ser.get_buffer(), ser.bytes_used(), ProfilingRequestSet(), e);
 //  std::cout << "Starting second instantiation." << std::endl;
+  ser.reset();
   e.wait();
+
+  bar = bar.advance_barrier();
 
   // See if the subgraph did the copy.
 //  {
@@ -433,11 +442,14 @@ void top_level_task(const void *args, size_t arglen,
 //
 //  interp = 2;
   // Set interp to some new data, just to be sure it works on a second replay.
-  for (auto& it : interp) {
-    it += 5;
-  }
+  ser << 5;
+  ser << 6;
+  ser << 7;
+  ser << 8;
+  ser << 9;
+  ser << bar;
 
-  e = diamond.instantiate(interp.data(), sizeof(int32_t) * interp.size(), ProfilingRequestSet(), e);
+  e = diamond.instantiate(ser.get_buffer(), ser.bytes_used(), ProfilingRequestSet(), e);
   std::cout << "Starting third instantiation." << std::endl;
 //  interp = 3;
 //  e = diamond.instantiate(&interp, sizeof(interp), ProfilingRequestSet(), e);

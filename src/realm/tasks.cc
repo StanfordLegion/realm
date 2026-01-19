@@ -1137,57 +1137,81 @@ namespace Realm {
     ProcSubgraphReplayState* replay = this->replay_state.load();
     if (replay) {
       // Load the replay state.
-      int64_t next_task_index = replay->next_task_index;
+      int64_t next_op_index = replay->next_op_index;
       int32_t proc_index = replay->proc_index;
       SubgraphImpl* subgraph = replay->subgraph;
 
-      size_t precondition_index = subgraph->precondition_offsets[proc_index] + next_task_index;
+      size_t precondition_index = subgraph->precondition_offsets[proc_index] + next_op_index;
       atomic<int32_t>& precondition = subgraph->preconditions[precondition_index];
       // Spin until the next task is ready.
       // TODO (rohany): Have to experiment with this .. .
       while (precondition.load() > 0) {}
 
-      auto task_index = subgraph->task_offsets[proc_index] + next_task_index;
-      auto& taskDesc = subgraph->tasks[task_index];
+      auto op_index = subgraph->operation_offsets[proc_index] + next_op_index;
+      auto& op_key = subgraph->operations[op_index];
 
-      // Check if we have any interpolations.
+      auto interp_proc_offset = subgraph->interpolation_proc_offsets[proc_index];
+      auto first_interp = subgraph->interpolation_task_offsets[interp_proc_offset + next_op_index];
+      auto num_interps = subgraph->interpolation_task_offsets[interp_proc_offset + next_op_index + 1] - first_interp;
+
+      // Execute the operation.
+      switch (op_key.first) {
+      case SubgraphDefinition::OPKIND_TASK:
       {
-        auto interp_proc_offset = subgraph->interpolation_proc_offsets[proc_index];
-        auto first_interp = subgraph->interpolation_task_offsets[interp_proc_offset + next_task_index];
-        auto num_interps = subgraph->interpolation_task_offsets[interp_proc_offset + next_task_index + 1] - first_interp;
-        // TODO (rohany): Handle more than tasks here?
+        // Perform interpolations directly into the task descriptor, then run
+        // the task.
+        auto& taskDesc = subgraph->defn->tasks[op_key.second];
         if (num_interps > 0) {
           do_interpolation_inline(
-            subgraph->interpolations,
-            first_interp,
-            num_interps,
-            SubgraphDefinition::Interpolation::TARGET_TASK_ARGS,
-            replay->args,
-            replay->arglen,
-            taskDesc.args.base(),
-            taskDesc.args.size()
+              subgraph->interpolations,
+              first_interp,
+              num_interps,
+              SubgraphDefinition::Interpolation::TARGET_TASK_ARGS,
+              op_key.second,
+              replay->args,
+              replay->arglen,
+              taskDesc.args.base(),
+              taskDesc.args.size()
           );
         }
-      }
 
-      lock.unlock();
-
-      // TODO (rohany): Handle profiling responses etc later. This stuff
-      //  is handled in the Task::execute_on_processor function.
-      {
+        lock.unlock();
         auto pimpl = subgraph->all_proc_impls[proc_index];
         pimpl->execute_task(taskDesc.task_id, ByteArrayRef(taskDesc.args.base(), taskDesc.args.size()));
-      }
+        lock.lock();
 
-      lock.lock();
+        break;
+      }
+      case SubgraphDefinition::OPKIND_ARRIVAL:
+      {
+        auto& arrivalDesc = subgraph->defn->arrivals[op_key.second];
+
+        Barrier b =
+            do_interpolation(subgraph->interpolations, first_interp, num_interps,
+                             SubgraphDefinition::Interpolation::TARGET_ARRIVAL_BARRIER, op_key.second,
+                             replay->args, replay->arglen, arrivalDesc.barrier);
+        // Do the reduction value interpolation directly into the arrival desc.
+        do_interpolation_inline(
+            subgraph->interpolations, first_interp, num_interps,
+            SubgraphDefinition::Interpolation::TARGET_ARRIVAL_VALUE, op_key.second, replay->args, replay->arglen,
+            arrivalDesc.reduce_value.base(), arrivalDesc.reduce_value.size());
+        unsigned count = arrivalDesc.count;
+        lock.unlock();
+        b.arrive(count, Event::NO_EVENT, arrivalDesc.reduce_value.base(), arrivalDesc.reduce_value.size());
+        lock.lock();
+        break;
+      }
+      default:
+        assert(false);
+      }
 
       // Reset the precondition pointer to the correct value for the next replay.
       subgraph->preconditions[precondition_index].store(subgraph->original_preconditions[precondition_index]);
 
       // Go and trigger whoever we have to trigger.
       auto completion_proc_offset = subgraph->completion_info_proc_offsets[proc_index];
-      auto completion_task_offset_start = subgraph->completion_info_task_offsets[completion_proc_offset + next_task_index];
-      auto completion_task_offset_end = subgraph->completion_info_task_offsets[completion_proc_offset + next_task_index + 1];
+      auto completion_task_offset_start = subgraph->completion_info_task_offsets[completion_proc_offset + next_op_index];
+      auto completion_task_offset_end = subgraph->completion_info_task_offsets[completion_proc_offset + next_op_index + 1];
       for (size_t i = completion_task_offset_start; i < completion_task_offset_end; i++) {
         SubgraphImpl::CompletionInfo& info = subgraph->completion_infos[i];
         // std::cout << "Proc: " << proc_index << " triggering: " << (subgraph->precondition_offsets[info.proc] + info.index) << std::endl;
@@ -1205,9 +1229,9 @@ namespace Realm {
       }
 
       // Increment the state (thread local?)
-      replay->next_task_index++;
-      uint64_t task_end = subgraph->task_offsets[proc_index+1];
-      if ((replay->next_task_index + subgraph->task_offsets[proc_index]) == task_end) {
+      replay->next_op_index++;
+      uint64_t task_end = subgraph->operation_offsets[proc_index+1];
+      if ((replay->next_op_index + subgraph->operation_offsets[proc_index]) == task_end) {
         // We're done! Free the replay state and exit.
         this->replay_state.store(nullptr);
         // We also need to let the finish event know that we're done.

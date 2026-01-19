@@ -286,14 +286,13 @@ namespace Realm {
   do_interpolation_inline(const std::vector<SubgraphDefinition::Interpolation> &interpolations,
                           unsigned first_interp, unsigned num_interps,
                           SubgraphDefinition::Interpolation::TargetKind target_kind,
+                          unsigned target_index,
                           const void *srcdata, size_t srclen,
                           void *dstdata, size_t dstlen)
   {
     for(unsigned i = 0; i < num_interps; i++) {
       const SubgraphDefinition::Interpolation &it = interpolations[first_interp + i];
-      // if((it.target_kind != target_kind) || (it.target_index != target_index))
-      // TODO (rohany): I don't think we need the it.target_index check?
-      if (it.target_kind != target_kind)
+      if ((it.target_kind != target_kind) || (it.target_index != target_index))
         continue;
 
       assert((it.offset + it.bytes) <= srclen);
@@ -313,40 +312,6 @@ namespace Realm {
         //                            0, 1 /*count*/, redop->userdata);
       }
     }
-  }
-
-  // a typed version for interpolating small values
-  template <typename T>
-  static T
-  do_interpolation(const std::vector<SubgraphDefinition::Interpolation> &interpolations,
-                   unsigned first_interp, unsigned num_interps,
-                   SubgraphDefinition::Interpolation::TargetKind target_kind,
-                   unsigned target_index, const void *srcdata, size_t srclen, T dstdata)
-  {
-    T val = dstdata;
-
-    for(unsigned i = 0; i < num_interps; i++) {
-      const SubgraphDefinition::Interpolation &it = interpolations[first_interp + i];
-      if((it.target_kind != target_kind) || (it.target_index != target_index))
-        continue;
-
-      assert((it.offset + it.bytes) <= srclen);
-      if(it.redop_id == 0) {
-        // overwrite
-        assert((it.target_offset + it.bytes) <= sizeof(T));
-        memcpy(reinterpret_cast<char *>(&val) + it.target_offset,
-               reinterpret_cast<const char *>(srcdata) + it.offset, it.bytes);
-      } else {
-        const ReductionOpUntyped *redop =
-            get_runtime()->reduce_op_table.get(it.redop_id, 0);
-        assert((it.target_offset + redop->sizeof_lhs) <= sizeof(T));
-        (redop->cpu_apply_excl_fn)(reinterpret_cast<char *>(&val) + it.target_offset, 0,
-                                   reinterpret_cast<const char *>(srcdata) + it.offset, 0,
-                                   1 /*count*/, redop->userdata);
-      }
-    }
-
-    return val;
   }
 
   class SortInterpolationsByKindAndIndex {
@@ -644,27 +609,30 @@ namespace Realm {
 
     // Assert that we only have tasks.
     assert(defn->copies.empty());
-    assert(defn->arrivals.empty());
     assert(defn->instantiations.empty());
     assert(defn->acquires.empty());
     assert(defn->releases.empty());
 
+    std::vector<SubgraphDefinition::OpKind> allowed_kinds;
+    allowed_kinds.push_back(SubgraphDefinition::OPKIND_TASK);
+    allowed_kinds.push_back(SubgraphDefinition::OPKIND_ARRIVAL);
+
     // Start doing the static schedule packing analysis...
     for (auto& it : incoming_edges) {
-      // For now, tasks should only depend on other tasks.
+      // For now, tasks should only depend on allowed operations.
       for (auto& edge : it.second) {
-        assert(edge.first == SubgraphDefinition::OPKIND_TASK);
+        assert(std::find(allowed_kinds.begin(), allowed_kinds.end(), edge.first) != allowed_kinds.end());
       }
     }
-    // Each node's outgoing edge should also be a task (for now).
+    // Each node's outgoing edge should also to an allowed operation.
     for (auto& it : outgoing_edges) {
       for (auto& edge : it.second) {
-        assert(edge.first == SubgraphDefinition::OPKIND_TASK);
+        assert(std::find(allowed_kinds.begin(), allowed_kinds.end(), edge.first) != allowed_kinds.end());
       }
     }
 
     std::map<Processor, int32_t> proc_to_index;
-    std::map<Processor, std::vector<SubgraphDefinition::TaskDesc>> local_schedules;
+    std::map<Processor, std::vector<std::pair<SubgraphDefinition::OpKind, unsigned>>> local_schedules;
     std::map<Processor, std::vector<int32_t>> local_incoming;
     std::map<Processor, std::vector<std::vector<CompletionInfo>>> local_outgoing;
     // Gather the interpolations into compacted lists for each processor.
@@ -672,7 +640,6 @@ namespace Realm {
 
     // Set up the processor -> id mapping.
     for (auto& it : schedule) {
-      // TODO 9(rohany): Handle multiple mailboxes here.
       switch (it.op_kind) {
         case SubgraphDefinition::OPKIND_TASK: {
           auto& task = defn->tasks[it.op_index];
@@ -688,25 +655,41 @@ namespace Realm {
           }
           break;
         }
+        case SubgraphDefinition::OPKIND_ARRIVAL:
+          break;
         default:
           assert(false);
       }
     }
 
-    // Remember where we placed all of our tasks.
-    std::map<unsigned, unsigned> task_indices;
+    // Remember where we placed all of our operations.
+    std::map<std::pair<SubgraphDefinition::OpKind, unsigned>, size_t> operation_indices;
+    std::map<std::pair<SubgraphDefinition::OpKind, unsigned>, int32_t> operation_procs;
+
+    // For now, round-robin arrivals across the available
+    // processors. In the future, we should put an arrival on the
+    // likely last processor to trigger it.
+    size_t arrival_proc_idx = 0;
 
     // TODO (rohany): Just iterating in schedule order should be enough?
     for (auto& it : schedule) {
+      auto desc = std::make_pair(it.op_kind, it.op_index);
       // TODO (rohany): Handle multiple mailboxes here.
       switch (it.op_kind) {
         case SubgraphDefinition::OPKIND_TASK: {
           auto& task = defn->tasks[it.op_index];
-          // TODO (rohany): Do I even need this, or does an opindex into
-          //  the definition suffice?
-          task_indices[it.op_index] = local_schedules[task.proc].size();
-          local_schedules[task.proc].push_back(task);
-          local_incoming[task.proc].push_back(int32_t(incoming_edges[{it.op_kind, it.op_index}].size()));
+          operation_indices[desc] = local_schedules[task.proc].size();
+          operation_procs[desc] = proc_to_index[task.proc];
+          local_schedules[task.proc].push_back(desc);
+          local_incoming[task.proc].push_back(int32_t(incoming_edges[desc].size()));
+          break;
+        }
+        case SubgraphDefinition::OPKIND_ARRIVAL: {
+          auto proc = all_procs[arrival_proc_idx++ % all_procs.size()];
+          operation_indices[desc] = local_schedules[proc].size();
+          operation_procs[desc] = proc_to_index[proc];
+          local_schedules[proc].push_back(desc);
+          local_incoming[proc].push_back(int32_t(incoming_edges[desc].size()));
           break;
         }
         default:
@@ -717,33 +700,24 @@ namespace Realm {
     // like outgoing neighbors and interpolations.
     for (auto& it : schedule) {
       // TODO (rohany): Handle multiple mailboxes here.
-      switch (it.op_kind) {
-        case SubgraphDefinition::OPKIND_TASK: {
-          auto& task = defn->tasks[it.op_index];
-          // TODO (rohany): Fill this out later ...
-          std::vector<CompletionInfo> outgoing;
-          for (auto& edge : outgoing_edges[{it.op_kind, it.op_index}]) {
-            CompletionInfo info;
-            assert(edge.first == SubgraphDefinition::OPKIND_TASK);
-            auto& dep = defn->tasks[edge.second];
-            info.proc = proc_to_index[dep.proc];
-            // TODO (rohany): This needs to be filled out later?
-            info.index = task_indices[edge.second];
-            outgoing.push_back(info);
-          }
-          local_outgoing[task.proc].push_back(outgoing);
+      auto key = std::make_pair(it.op_kind, it.op_index);
+      auto proc = all_procs[operation_procs[key]];
 
-          std::vector<SubgraphDefinition::Interpolation> interps;
-          auto& meta = op_to_interpolation_data[{SubgraphDefinition::OPKIND_TASK, it.op_index}];
-          for (size_t i = meta.first; i < meta.first + meta.second; i++) {
-            interps.push_back(defn->interpolations[i]);
-          }
-          local_interpolations[task.proc].push_back(interps);
-          break;
-        }
-        default:
-          assert(false);
+      std::vector<CompletionInfo> outgoing;
+      for (auto& edge : outgoing_edges[key]) {
+        CompletionInfo info;
+        info.proc = operation_procs[edge];
+        info.index = operation_indices[edge];
+        outgoing.push_back(info);
       }
+      local_outgoing[proc].push_back(outgoing);
+
+      std::vector<SubgraphDefinition::Interpolation> interps;
+      auto& meta = op_to_interpolation_data[key];
+      for (size_t i = meta.first; i < meta.first + meta.second; i++) {
+        interps.push_back(defn->interpolations[i]);
+      }
+      local_interpolations[proc].push_back(interps);
     }
 
     // std::cout << "Incoming edges:" << std::endl;
@@ -766,22 +740,17 @@ namespace Realm {
     // Now, flatten all the data structures into single vector's
     // per processor. These data structures look like CSR.
 
-    // Tasks first.
-    uint64_t task_count = 0;
+    // Operations first.
+    uint64_t op_count = 0;
     for (size_t i = 0; i < all_procs.size(); i++) {
       auto proc = all_procs[i];
-      task_offsets.push_back(task_count);
+      operation_offsets.push_back(op_count);
       for (auto& it : local_schedules[proc]) {
-        tasks.push_back(it);
-        task_count++;
+        operations.push_back(it);
+        op_count++;
       }
     }
-    task_offsets.push_back(task_count);
-    // std::cout << "Task offsets: [";
-    // for (auto o : task_offsets) {
-    //   std::cout << o << " ";
-    // }
-    // std::cout << "]" << std::endl;
+    operation_offsets.push_back(op_count);
 
     // Completion information next.
     uint64_t completion_proc_count = 0;
