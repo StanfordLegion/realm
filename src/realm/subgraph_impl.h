@@ -115,14 +115,15 @@ namespace Realm {
       SubgraphImpl *subgraph;
     };
 
-    class DeferredInstantiationArgumentDeletion : public EventWaiter {
+    class InstantiationCleanup : public EventWaiter {
       public:
-        DeferredInstantiationArgumentDeletion(void* _ptr);
+        InstantiationCleanup(ProcSubgraphReplayState* state, void* args);
         virtual void event_triggered(bool poisoned, TimeLimit work_until);
         virtual void print(std::ostream& os) const;
         virtual Event get_finish_event(void) const;
       private:
-        void* ptr;
+        ProcSubgraphReplayState* state;
+        void* args;
     };
 
   public:
@@ -162,6 +163,18 @@ namespace Realm {
     std::vector<uint64_t> interpolation_task_offsets;
     std::vector<SubgraphDefinition::Interpolation> interpolations;
 
+    class SubgraphWorkLauncher : public EventWaiter {
+      public:
+        SubgraphWorkLauncher(ProcSubgraphReplayState* state, SubgraphImpl* subgraph);
+        void launch();
+        virtual void event_triggered(bool poisoned, TimeLimit work_until);
+        virtual void print(std::ostream& os) const;
+        virtual Event get_finish_event(void) const;
+      private:
+        ProcSubgraphReplayState* state;
+        SubgraphImpl* subgraph;
+    };
+
     class ExternalPreconditionTriggerer : public EventWaiter {
       public:
         ExternalPreconditionTriggerer(SubgraphImpl* _subgraph, const std::vector<CompletionInfo>& _to_trigger);
@@ -169,7 +182,6 @@ namespace Realm {
         virtual void event_triggered(bool poisoned, TimeLimit work_until);
         virtual void print(std::ostream& os) const;
         virtual Event get_finish_event(void) const;
-      private:
         SubgraphImpl* subgraph;
         std::vector<CompletionInfo> to_trigger;
       };
@@ -191,6 +203,13 @@ namespace Realm {
     // event to let the runtime know that its contribution
     // to the subgraph execution is done.
     UserEvent finish_event = UserEvent::NO_USER_EVENT;
+    // Signal pending work to start that may only
+    // begin running once this target processor has
+    // acquired the subgraph to replay.
+    UserEvent start_event = UserEvent::NO_USER_EVENT;
+
+    // Avoid false sharing of counters.
+    char _cache_line_padding[64];
   };
 
   // active messages

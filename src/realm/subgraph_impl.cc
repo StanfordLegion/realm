@@ -861,9 +861,6 @@ namespace Realm {
                                  Event finish_event, int priority_adjust)
   {
     if (std::getenv("STATIC_SUBGRAPH_OPT")) {
-      assert(!start_event.exists());
-      // TODO (rohany): Handle preconditions.
-
       // We're going to return early before completing the interpolations,
       // so we need to make a copy of the argument buffer to read from.
       void* copied_args = nullptr;
@@ -872,45 +869,86 @@ namespace Realm {
         memcpy(copied_args, args, arglen);
       }
 
+      // TODO (rohany): We can also not use an event here and use another
+      //  atomic counter with a single event. That is a micro-optimization though.
       // Arm the result merger with each of the completed events.
       GenEventImpl *event_impl = get_genevent_impl(finish_event);
       event_impl->merger.prepare_merger(finish_event, false /*!ignore_faults*/,
                                         all_procs.size());
 
-      // Install the subgraph for each processor.
+      // In order to properly sequence subgraph replays,
+      // certain operations may only start once processors
+      // acquire the replay state.
+      std::vector<UserEvent> start_events;
+      // Only initialize the start events if we need them.
+      bool need_start_events = !preconditions.empty();
+      if (need_start_events) {
+        start_events.resize(all_procs.size());
+        for (size_t i = 0; i < all_procs.size(); i++) {
+          start_events[i] = UserEvent::create_user_event();
+        }
+      }
+
+      // Separate the installation and state creation steps
+      // to enable deferring the launch of the subgraph.
+      auto state = new ProcSubgraphReplayState[all_procs.size()];
       for (size_t i = 0; i < all_procs.size(); i++) {
-        Processor proc = all_procs[i];
-        ProcessorImpl* impl = all_proc_impls[i];
-        auto state = new ProcSubgraphReplayState();
-        state->subgraph = this;
-        state->finish_event = UserEvent::create_user_event();
-        state->proc_index = int32_t(i);
-        state->args = copied_args;
-        state->arglen = arglen;
+        state[i].subgraph = this;
+        if (need_start_events)
+          state[i].start_event = start_events[i];
+        state[i].finish_event = UserEvent::create_user_event();
+        state[i].proc_index = int32_t(i);
+        state[i].args = copied_args;
+        state[i].arglen = arglen;
         event_impl->merger.add_precondition(state->finish_event);
-        impl->install_subgraph_replay(state);
       }
       event_impl->merger.arm_merger();
 
-      // Start event waiters to trigger the external preconditions.
-      for (size_t i = 0; i < external_precond_waiters.size(); i++) {
-        // TODO (rohany): Not handling cases when the user said there
-        //  would be external preconditions and didn't provide them.
-        //  There's tricky business around sequencing these waiters
-        //  to write to the appropriate place without making instantiation
-        //  have to make copies of things like the precondition counter
-        //  arrays.
-        assert(i < preconditions.size() && preconditions[i].exists());
-        EventImpl::add_waiter(preconditions[i], &external_precond_waiters[i]);
+      // If there's nothing to defer, start the subgraph right away.
+      if (!start_event.exists() || start_event.has_triggered()) {
+        SubgraphWorkLauncher(state, this).launch();
+      } else {
+        // Otherwise, allocate a launcher and queue
+        // it up to be launched. The launcher will
+        // clean itself up.
+        auto launcher = new SubgraphWorkLauncher(state, this);
+        EventImpl::add_waiter(start_event, launcher);
       }
 
-      // If there were interpolations, delete the copy of the arguments we made.
-      if (copied_args != nullptr) {
-        // Fire and forget the waiter. It will delete
-        // itself once the event triggers.
-        auto waiter = new DeferredInstantiationArgumentDeletion(copied_args);
-        EventImpl::add_waiter(finish_event, waiter);
+      std::set<Event> trigger_preconditions;
+      // Start event waiters to trigger the external preconditions.
+      for (size_t i = 0; i < external_precond_waiters.size(); i++) {
+        // Note that the user may not provide all the preconditions
+        // they said they would.
+        Event precond = Event::NO_EVENT;
+        if (i < preconditions.size())
+          precond = preconditions[i];
+        auto waiter = &external_precond_waiters[i];
+        // Ensure that these waiters don't fire until the subgraph
+        // has been acquired by the processors each waiter will
+        // write to. The only way that we could avoid doing this write
+        // is if we know that the target processors are not currently
+        // working on this subgraph. The metadata to track that is
+        // kind of annoying so we'll add these extra preconditions.
+        // Note that this setup also gracefully handles nil
+        // preconditions, as the processor's start event is included
+        // in the merge.
+        assert(!start_events.empty());
+        // Collect the necessary processors to trigger.
+        trigger_preconditions.clear();
+        trigger_preconditions.insert(precond);
+        for (auto& info : waiter->to_trigger) {
+          trigger_preconditions.insert(start_events[info.proc]);
+        }
+        Event wait = Event::merge_events(trigger_preconditions);
+        EventImpl::add_waiter(wait, waiter);
       }
+
+      // Issue a cleanup background work item. The item
+      // will clean itself up.
+      auto cleanup = new InstantiationCleanup(state, copied_args);
+      EventImpl::add_waiter(finish_event, cleanup);
+
       return;
     }
 
@@ -1206,20 +1244,24 @@ namespace Realm {
     return Event::NO_EVENT;
   }
 
-  void SubgraphImpl::DeferredInstantiationArgumentDeletion::print(std::ostream &os) const {
-    os << "deferred subgraph instantiation argument deletion: pointer=" << ptr;
+  void SubgraphImpl::InstantiationCleanup::print(std::ostream &os) const {
+    os << "deferred instantiation cleanup";
   }
 
-  SubgraphImpl::DeferredInstantiationArgumentDeletion::DeferredInstantiationArgumentDeletion(void *_ptr) : ptr(_ptr), EventWaiter() {}
+  SubgraphImpl::InstantiationCleanup::InstantiationCleanup(
+    ProcSubgraphReplayState* _state,
+    void* _args
+  ) : state(_state), args(_args), EventWaiter() {}
 
-  void SubgraphImpl::DeferredInstantiationArgumentDeletion::event_triggered(bool poisoned, Realm::TimeLimit work_until) {
-    free(ptr);
+  void SubgraphImpl::InstantiationCleanup::event_triggered(bool poisoned, Realm::TimeLimit work_until) {
+    delete state;
+    free(args);
     // Delete ourselves after freeing the resource. This pattern
     // is used by other event waiters, so it's reasonable to replicate it here.
     delete this;
   }
 
-  Event SubgraphImpl::DeferredInstantiationArgumentDeletion::get_finish_event() const {
+  Event SubgraphImpl::InstantiationCleanup::get_finish_event() const {
     return Event::NO_EVENT;
   }
 
@@ -1252,6 +1294,30 @@ namespace Realm {
   }
 
   Event SubgraphImpl::ExternalPreconditionTriggerer::get_finish_event() const {
+    return Event::NO_EVENT;
+  }
+
+  SubgraphImpl::SubgraphWorkLauncher::SubgraphWorkLauncher(Realm::ProcSubgraphReplayState *_state,
+                                                           Realm::SubgraphImpl *_subgraph)
+                                                           : state(_state), subgraph(_subgraph), EventWaiter() {}
+
+  void SubgraphImpl::SubgraphWorkLauncher::event_triggered(bool poisoned, Realm::TimeLimit work_until) {
+    launch();
+    delete this;
+  }
+
+  void SubgraphImpl::SubgraphWorkLauncher::launch() {
+    // Install each processor's replay state.
+    for (size_t i = 0; i < subgraph->all_proc_impls.size(); i++) {
+      subgraph->all_proc_impls[i]->install_subgraph_replay(&state[i]);
+    }
+  }
+
+  void SubgraphImpl::SubgraphWorkLauncher::print(std::ostream &os) const {
+    os << "Subgraph work launcher";
+  }
+
+  Event SubgraphImpl::SubgraphWorkLauncher::get_finish_event() const {
     return Event::NO_EVENT;
   }
 

@@ -429,7 +429,7 @@ void top_level_task(const void *args, size_t arglen,
   std::cout << "Triggering barrier arrival." << std::endl;
   bar.arrive();
 
-  e.wait();
+  // e.wait();
 
   // bar = bar.advance_barrier();
 
@@ -471,16 +471,18 @@ void top_level_task(const void *args, size_t arglen,
 
   ext_preconds.clear();
   ext_preconds.push_back(next_bar);
-  e = diamond.instantiate(ser.get_buffer(), ser.bytes_used(), ProfilingRequestSet(), ext_preconds, ext_postconds);
+  e = diamond.instantiate(ser.get_buffer(), ser.bytes_used(), ProfilingRequestSet(), ext_preconds, ext_postconds, e);
   std::cout << "Starting third instantiation." << std::endl;
 //  interp = 3;
 //  e = diamond.instantiate(&interp, sizeof(interp), ProfilingRequestSet(), e);
 //  std::cout << "Starting fourth instantiation." << std::endl;
 //  interp = 4;
 //  e = diamond.instantiate(&interp, sizeof(interp), ProfilingRequestSet(), e);
-  e.wait();
+  // e.wait();
 
   next_next_bar.wait();
+
+  e.wait();
   std::cout << "Done!" << std::endl;
 
   // do everything on this processor - get a good memory to use

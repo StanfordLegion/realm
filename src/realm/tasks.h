@@ -33,6 +33,8 @@
 #include "realm/mutex.h"
 #include "realm/bgwork.h"
 
+#include <queue>
+
 namespace Realm {
 
   class ProcessorImpl;
@@ -241,9 +243,10 @@ namespace Realm {
 
     void add_internal_task(InternalTask *itask);
 
-    // TODO (rohany): ...
-    // TODO (rohany): This should be a lock-free linked list.
-    atomic<ProcSubgraphReplayState*> replay_state;
+    // TODO (rohany): Multiple pending ...
+    RWLock pending_subgraphs_lock;
+    std::queue<ProcSubgraphReplayState*> pending_subgraphs;
+    ProcSubgraphReplayState* current_subgraph = nullptr;
 
   public:
     // the main scheduler loop - lock should be held before calling

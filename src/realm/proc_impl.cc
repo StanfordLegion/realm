@@ -1064,7 +1064,8 @@ namespace Realm {
   }
 
   void LocalTaskProcessor::install_subgraph_replay(Realm::ProcSubgraphReplayState *state) {
-    this->sched->replay_state.store(state);
+    RWLock::AutoWriterLock al(this->sched->pending_subgraphs_lock);
+    this->sched->pending_subgraphs.push(state);
     this->sched->work_counter.increment_counter();
   }
 

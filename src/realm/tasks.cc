@@ -752,8 +752,7 @@ namespace Realm {
   //
 
   ThreadedTaskScheduler::ThreadedTaskScheduler(void)
-    : replay_state(nullptr)
-    , shutdown_flag(false)
+    : shutdown_flag(false)
     , active_worker_count(0)
     , unassigned_worker_count(0)
     , wcu_task_queues(this)
@@ -1131,10 +1130,28 @@ namespace Realm {
           update_worker_count(0, +1);
         }
 
+  // If we're not working on a subgraph right now, see if there's
+  // anything to pop on the pending subgraph queue.
+  if (current_subgraph == nullptr) {
+    {
+      RWLock::AutoReaderLock al(pending_subgraphs_lock);
+      if (!pending_subgraphs.empty()) {
+        current_subgraph = pending_subgraphs.front();
+        pending_subgraphs.pop();
+      }
+    }
+    // If we acquired a subgraph to run, notify
+    // anyone who is waiting on the start event.
+    if (current_subgraph != nullptr && current_subgraph->start_event.exists()) {
+       lock.unlock();
+       current_subgraph->start_event.trigger();
+       lock.lock();
+    }
+  }
 
   // First, check if we have subgraph work to do.
   {
-    ProcSubgraphReplayState* replay = this->replay_state.load();
+    ProcSubgraphReplayState* replay = current_subgraph;
     if (replay) {
       // Load the replay state.
       int64_t next_op_index = replay->next_op_index;
@@ -1233,7 +1250,7 @@ namespace Realm {
       uint64_t task_end = subgraph->operation_offsets[proc_index+1];
       if ((replay->next_op_index + subgraph->operation_offsets[proc_index]) == task_end) {
         // We're done! Free the replay state and exit.
-        this->replay_state.store(nullptr);
+        this->current_subgraph = nullptr;
         // We also need to let the finish event know that we're done.
         // TODO (rohany): The locking ...
         lock.unlock();
@@ -1241,8 +1258,6 @@ namespace Realm {
         replay->finish_event.trigger();
         // std::cout << "Post trigger ... " << std::endl;
         lock.lock();
-        // Finally, delete the replay object.
-        delete replay;
       }
 
       // No matter what, continue.
