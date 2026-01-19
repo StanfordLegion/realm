@@ -147,13 +147,6 @@ namespace Realm {
       int32_t proc = -1;
       uint64_t index = UINT64_MAX;
     };
-    // TODO (rohany): ...
-    struct TableEntry {
-      Processor::TaskFuncPtr fnptr;
-      ByteArray user_data;
-    };
-    std::vector<TableEntry> preloaded_tasks;
-
     std::vector<uint64_t> completion_info_proc_offsets;
     std::vector<uint64_t> completion_info_task_offsets;
     std::vector<CompletionInfo> completion_infos;

@@ -851,15 +851,6 @@ namespace Realm {
     // }
     // std::cout << "]" << std::endl;
 
-    // Preload the tasks...
-    preloaded_tasks.resize(defn->tasks.size());
-    for (size_t i = 0; i < defn->tasks.size(); i++) {
-      auto& task = defn->tasks[i];
-      auto proc = dynamic_cast<LocalTaskProcessor*>(get_runtime()->get_processor_impl(task.proc));
-      assert(proc);
-      proc->extract_task_entry(task.task_id, preloaded_tasks[i].fnptr, preloaded_tasks[i].user_data);
-    }
-
     return true;
   }
 
