@@ -578,7 +578,7 @@ namespace Realm {
       stream->add_event(ev, nullptr, completion);
     }
 
-    void notify_subgraph_control_completion(ProcSubgraphReplayState* all_proc_states, unsigned index, GPUStream* depstream) {
+    void notify_subgraph_control_completion(ProcSubgraphReplayState* all_proc_states, unsigned subgraph_index, unsigned xd_index, GPUStream* depstream) {
       // Write the final event on subgraph_output
       // into the async work data structure.
       auto gpu = depstream->get_gpu();
@@ -589,6 +589,8 @@ namespace Realm {
       }
       ProcSubgraphReplayState* state = (ProcSubgraphReplayState*)(all_proc_states);
       // The event will be returned on subgraph completion.
+      auto subgraph = state[0].subgraph;
+      auto index = subgraph->bgwork_async_event_counts[subgraph_index] + xd_index;
       state[0].async_bgwork_events[index] = ev;
     }
 
@@ -949,7 +951,7 @@ namespace Realm {
 
     void GPUXferDes::on_subgraph_control_completion() {
       auto gpuchan = static_cast<GPUChannel*>(channel);
-      notify_subgraph_control_completion(subgraph_replay_state, subgraph_index, gpuchan->subgraph_stream);
+      notify_subgraph_control_completion(subgraph_replay_state, subgraph_index, xd_index, gpuchan->subgraph_stream);
     }
 
     LocalTaskProcessor* GPUXferDes::get_async_event_proc() {
@@ -1224,7 +1226,7 @@ namespace Realm {
 
     void GPUIndirectXferDes::on_subgraph_control_completion() {
       auto gpuchan = static_cast<GPUIndirectChannel*>(channel);
-      notify_subgraph_control_completion(subgraph_replay_state, subgraph_index, gpuchan->subgraph_stream);
+      notify_subgraph_control_completion(subgraph_replay_state, subgraph_index, xd_index, gpuchan->subgraph_stream);
     }
 
     LocalTaskProcessor* GPUIndirectXferDes::get_async_event_proc() {
@@ -2231,7 +2233,7 @@ namespace Realm {
 
     void GPUfillXferDes::on_subgraph_control_completion() {
       auto gpuchan = static_cast<GPUfillChannel*>(channel);
-      notify_subgraph_control_completion(subgraph_replay_state, subgraph_index, gpuchan->subgraph_stream);
+      notify_subgraph_control_completion(subgraph_replay_state, subgraph_index, xd_index, gpuchan->subgraph_stream);
     }
 
     LocalTaskProcessor* GPUfillXferDes::get_async_event_proc() {
@@ -2717,7 +2719,7 @@ namespace Realm {
 
     void GPUreduceXferDes::on_subgraph_control_completion() {
       auto gpuchan = static_cast<GPUreduceChannel*>(channel);
-      notify_subgraph_control_completion(subgraph_replay_state, subgraph_index, gpuchan->subgraph_stream);
+      notify_subgraph_control_completion(subgraph_replay_state, subgraph_index, xd_index, gpuchan->subgraph_stream);
     }
 
     LocalTaskProcessor* GPUreduceXferDes::get_async_event_proc() {

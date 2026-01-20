@@ -780,7 +780,7 @@ namespace Realm {
     // Must be called from within a CUDA context.
     void sync_subgraph_incoming_deps(ProcSubgraphReplayState* all_proc_states, unsigned index, GPUStream* stream);
     void add_transfer_completion_notification(ProcSubgraphReplayState* all_proc_states, GPUStream* stream, GPUStream* depstream, GPUCompletionNotification* completion);
-    void notify_subgraph_control_completion(ProcSubgraphReplayState* all_proc_states, unsigned index, GPUStream* depstream);
+    void notify_subgraph_control_completion(ProcSubgraphReplayState* all_proc_states, unsigned subgraph_index, unsigned xd_index, GPUStream* depstream);
 
     class GPUChannel;
 

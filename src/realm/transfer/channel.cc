@@ -679,16 +679,24 @@ namespace Realm {
   }
 
   void XferDes::trigger_subgraph_control_completion() {
+    assert(subgraph_replay_state != nullptr);
+    // Before asking the concrete XD anything, write a null pointer into
+    // the async token slot for this XD. If the concrete XD actually launched
+    // some async work, it is responsible for writing a non-null token.
+    auto subgraph = subgraph_replay_state[0].subgraph;
+    auto tokidx = subgraph->bgwork_async_event_counts[subgraph_index] + xd_index;
+    subgraph_replay_state[0].async_bgwork_events[tokidx] = nullptr;
+
     // First, do whatever the concrete XD wants to do.
     on_subgraph_control_completion();
 
     assert(subgraph_replay_state != nullptr);
-    auto& postconds = subgraph_replay_state[0].subgraph->bgwork_postconditions;
+    auto& postconds = subgraph->bgwork_postconditions;
     for (uint64_t i = postconds.offsets[subgraph_index]; i < postconds.offsets[subgraph_index + 1]; i++) {
       auto& info = postconds.data[i];
       trigger_subgraph_operation_completion(subgraph_replay_state, info, true /* incr_counter */, nullptr);
     }
-    if (subgraph_replay_state[0].subgraph->bgwork_items[subgraph_index].is_final_event) {
+    if (subgraph->bgwork_items[subgraph_index].is_final_event) {
       // TODO (rohany): Hackily including the contributions of bgwork
       //  operations in the proc 0 counters.
       int32_t remaining = subgraph_replay_state[0].pending_async_count.fetch_sub_acqrel(1) - 1;

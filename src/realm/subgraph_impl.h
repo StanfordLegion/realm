@@ -200,7 +200,7 @@ namespace Realm {
     };
 
     protected:
-      XferDes* analyze_copy(SubgraphDefinition::CopyDesc& copy);
+      void analyze_copy(SubgraphDefinition::CopyDesc& copy, std::vector<XferDes*>& result);
       // Methods for understanding the asynchronous affects tasks may have.
       // Since subgraphs have a static view of the source program, they can
       // take more advantage of this asynchrony than Realm can today.
@@ -210,6 +210,15 @@ namespace Realm {
       bool task_respects_async_effects(SubgraphDefinition::TaskDesc& src, SubgraphDefinition::TaskDesc& dst);
       bool operation_respects_async_effects(SubgraphDefinition::OpKind src_op_kind, unsigned src_op_idx,
                                             SubgraphDefinition::OpKind dst_op_kind, unsigned dst_op_idx);
+
+      // Returns the number of "operations" that each bgwork item will
+      // launch. Bgwork items (like copies) may launch multiple asynchronous
+      // pieces of work, and all operations must complete before the bgwork
+      // item is considered to be done. bgwork_async_operation_count is the
+      // same, but returns the number of work items that launch asynchronous
+      // work themselves.
+      int32_t bgwork_operation_count(SubgraphDefinition::OpKind op_kind, unsigned op_idx);
+      int32_t bgwork_async_operation_count(SubgraphDefinition::OpKind op_kind, unsigned op_idx);
 
   public:
     ID me;
@@ -306,6 +315,11 @@ namespace Realm {
     // to return async tokens (like CUDA events) back to the per-processor
     // pools they may have been allocated from.
     std::map<LocalTaskProcessor*, std::vector<unsigned>> bgwork_async_event_procs;
+
+    // The number of async events created per bgwork item. This is
+    // necessary because some bgwork items may launch multiple disjoint
+    // pieces of async work.
+    std::vector<int64_t> bgwork_async_event_counts;
     // TODO (rohany): Need to handle deferred launches of copies
     //  when the copies are sharing the same xd state.
     //  * To do this, have an event that all the processors will trigger
@@ -316,7 +330,7 @@ namespace Realm {
 
     // A vector of XD's for all copies that were planned during
     // subgraph compilation.
-    std::vector<XferDes*> planned_copy_xds;
+    FlattenedSparseMatrix<XferDes*> planned_copy_xds;
 
     class ExternalPreconditionTriggerer : public EventWaiter {
       public:
@@ -364,6 +378,7 @@ namespace Realm {
           ExternalPreconditionTriggerer* dynamic_preconds,
           void** async_operation_events,
           AsyncGPUWorkTriggerer* async_operation_event_triggerers,
+          void* bgwork_preconds,
           void** async_bgwork_events,
           atomic<int32_t>* dynamic_precond_counters,
           UserEvent* dynamic_events,
@@ -382,6 +397,7 @@ namespace Realm {
         ExternalPreconditionTriggerer* dynamic_preconds;
         void** async_operation_events;
         AsyncGPUWorkTriggerer* async_operation_event_triggerers;
+        void* bgwork_preconds;
         void** async_bgwork_events;
         atomic<int32_t>* dynamic_precond_counters;
         UserEvent* dynamic_events;

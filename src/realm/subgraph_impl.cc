@@ -190,9 +190,13 @@ namespace Realm {
     // We can't just look at the source and destination of the copy,
     // as the GPU's copy engines can even be used sometimes for H2H
     // copies. So just look at the XD and see if it has async effects.
-    auto xd = planned_copy_xds[op_idx];
-    assert(xd);
-    return xd->launches_async_work();
+    for (uint64_t i = planned_copy_xds.offsets[op_idx]; i < planned_copy_xds.offsets[op_idx + 1]; i++) {
+      // We're async if any of the xd's launches async work.
+      auto xd = planned_copy_xds.data[i];
+      if (!xd->launches_async_work())
+        return true;
+    }
+    return false;
   }
 
   bool SubgraphImpl::task_respects_async_effects(SubgraphDefinition::TaskDesc& src, SubgraphDefinition::TaskDesc& dst) {
@@ -256,6 +260,37 @@ namespace Realm {
         assert(false);
         return false;
       }
+    }
+  }
+
+  int32_t SubgraphImpl::bgwork_operation_count(SubgraphDefinition::OpKind op_kind, unsigned int op_idx) {
+    switch (op_kind) {
+      case SubgraphDefinition::OPKIND_COPY: {
+        // Just return the number of XD's planned for this copy.
+        return planned_copy_xds.offsets[op_idx + 1] - planned_copy_xds.offsets[op_idx];
+      }
+      default:
+        assert(false);
+        return 0;
+    }
+  }
+
+  int32_t SubgraphImpl::bgwork_async_operation_count(SubgraphDefinition::OpKind op_kind, unsigned int op_idx) {
+    if (!operation_has_async_effects(op_kind, op_idx))
+      return 0;
+    switch (op_kind) {
+      case SubgraphDefinition::OPKIND_COPY: {
+        int32_t count = 0;
+        for (uint64_t i = planned_copy_xds.offsets[op_idx]; i < planned_copy_xds.offsets[op_idx + 1]; i++) {
+          auto xd = planned_copy_xds.data[i];
+          if (xd->launches_async_work())
+            count++;
+          }
+        return count;
+      }
+      default:
+        assert(false);
+        return 0;
     }
   }
 
@@ -831,13 +866,14 @@ namespace Realm {
     }
 
     {
-      planned_copy_xds.resize(defn->copies.size(), nullptr);
+      std::vector<std::vector<XferDes*>> xds(defn->copies.size());
       for (auto& it : bgwork_items) {
         if (it.op_kind != SubgraphDefinition::OPKIND_COPY)
           continue;
         auto& copy = defn->copies[it.op_index];
-        planned_copy_xds[it.op_index] = analyze_copy(copy);
+        analyze_copy(copy, xds[it.op_index]);
       }
+      planned_copy_xds = xds;
     }
 
     std::map<Processor, int32_t> proc_to_index;
@@ -934,44 +970,87 @@ namespace Realm {
     std::vector<std::vector<CompletionInfo>> bgwork_postconditions_build(bgwork_items.size());
     std::vector<std::vector<CompletionInfo>> bgwork_async_preconditions_build(bgwork_items.size());
     std::vector<std::vector<CompletionInfo>> bgwork_async_postconditions_build(bgwork_items.size());
+
+    // First, initialize all the bgwork precondition counts, as iterating through
+    // the edges will modify the sizes.
     for (size_t i = 0; i < bgwork_items.size(); i++) {
       auto& it = bgwork_items[i];
       auto key = std::make_pair(it.op_kind, it.op_index);
       bgwork_preconditions[i] = int32_t(incoming_edges[key].size());
+    }
+
+    // Next, identify where each async bgwork item should write their
+    // async tokens into.
+    bgwork_async_event_counts = std::vector<int64_t>(bgwork_items.size() + 1, 0);
+    {
+      int64_t sum = 0;
+      for (size_t i = 0; i < bgwork_items.size(); i++) {
+        auto& it = bgwork_items[i];
+        bgwork_async_event_counts[i] = sum;
+
+        // Remember the range of indices of events that will need to
+        // be collected, and back into which processor.
+        switch (it.op_kind) {
+          case SubgraphDefinition::OPKIND_COPY: {
+            for (uint64_t j = planned_copy_xds.offsets[it.op_index]; j < planned_copy_xds.offsets[it.op_index + 1]; j++) {
+              auto xd = planned_copy_xds.data[j];
+              if (xd->launches_async_work()) {
+                auto proc = xd->get_async_event_proc();
+                auto bgwork_event_idx = sum + (j - planned_copy_xds.offsets[it.op_index]);
+                bgwork_async_event_procs[proc].push_back(bgwork_event_idx);
+              }
+            }
+            break;
+          }
+          default:
+            assert(false);
+        }
+
+        sum += bgwork_async_operation_count(it.op_kind, it.op_index);
+      }
+      bgwork_async_event_counts[bgwork_items.size()] = sum;
+    }
+
+    // Next, do edge analysis for bgwork items.
+    for (size_t i = 0; i < bgwork_items.size(); i++) {
+      auto& it = bgwork_items[i];
+      auto key = std::make_pair(it.op_kind, it.op_index);
 
       auto& outgoing = bgwork_postconditions_build[i];
+      // Handle each outgoing edge. Ensure that counters for bgwork
+      // items with multiple operations are correctly accounted for,
+      // as each operation will decrement the same counter. Since
+      // each bgwork item is already contributing 1 count through
+      // its presence in the edge list, subtract one from each call
+      // to bgwork_operation_count.
       for (auto& edge : outgoing_edges[key]) {
         if (bgwork_schedule.find(edge) != bgwork_schedule.end()) {
           auto idx = bgwork_schedule.at(edge);
           CompletionInfo info(-1, idx, CompletionInfo::EdgeKind::BGWORK_TO_BGWORK);
           outgoing.push_back(info);
+          bgwork_preconditions[idx] += (bgwork_operation_count(it.op_kind, it.op_index) - 1);
         } else if (toposort.find(edge) != toposort.end()) {
           auto idx = toposort.at(edge);
-          static_to_dynamic_counts[idx]++;
+          static_to_dynamic_counts[idx] += bgwork_operation_count(it.op_kind, it.op_index);
           CompletionInfo info(-1, idx, CompletionInfo::EdgeKind::BGWORK_TO_DYNAMIC);
           outgoing.push_back(info);
         } else {
           CompletionInfo info(operation_procs[edge], operation_indices[edge], CompletionInfo::EdgeKind::BGWORK_TO_STATIC);
           outgoing.push_back(info);
+          auto procidx = operation_procs[edge];
+          auto schedidx = operation_indices[edge];
+          local_incoming[all_procs[procidx]][schedidx] += (bgwork_operation_count(it.op_kind, it.op_index) - 1);
         }
       }
 
       // TODO (rohany): This is some unfortunate code duplication, where we
       //  basically have to do the same thing as below ...
       if (operation_has_async_effects(it.op_kind, it.op_index)) {
-
-        // Remember the processor that we need to return the
-        // async events to.
-        if (it.op_kind == SubgraphDefinition::OPKIND_COPY) {
-          auto proc = planned_copy_xds[it.op_index]->get_async_event_proc();
-          bgwork_async_event_procs[proc].push_back(i);
-        }
-
         for (auto& edge : outgoing_edges[key]) {
           // Similar to below, see if the edge is to the dynamic partition.
           if (toposort.find(edge) != toposort.end()) {
             auto idx = toposort.at(edge);
-            static_to_dynamic_counts[idx]++;
+            static_to_dynamic_counts[idx] += bgwork_async_operation_count(it.op_kind, it.op_index);
             bgwork_async_postconditions_build[i].emplace_back(-1, idx, CompletionInfo::EdgeKind::BGWORK_TO_DYNAMIC);
             continue;
           }
@@ -985,12 +1064,12 @@ namespace Realm {
 
           auto bgwork_it = bgwork_schedule.find(edge);
           if (bgwork_it != bgwork_schedule.end()) {
-            bgwork_preconditions[bgwork_it->second]++;
+            bgwork_preconditions[bgwork_it->second] += bgwork_async_operation_count(it.op_kind, it.op_index);
             bgwork_async_postconditions_build[i].emplace_back(-1, bgwork_it->second, CompletionInfo::EdgeKind::BGWORK_TO_BGWORK);
           } else {
             auto procidx = operation_procs[edge];
             auto schedidx = operation_indices[edge];
-            local_incoming[all_procs[procidx]][schedidx]++;
+            local_incoming[all_procs[procidx]][schedidx] += bgwork_async_operation_count(it.op_kind, it.op_index);
             // Remember the processors that this operation will have to trigger.
             bgwork_async_postconditions_build[i].emplace_back(procidx, schedidx, CompletionInfo::EdgeKind::BGWORK_TO_STATIC);
           }
@@ -1190,6 +1269,7 @@ namespace Realm {
 
     bgwork_finish_events = 0;
     for (size_t i = 0; i < bgwork_items.size(); i++) {
+      auto& it = bgwork_items[i];
       // Collect the bgwork items that should be triggered immediately
       // upon subgraph replay starting.
       if (bgwork_preconditions[i] == 0)
@@ -1197,9 +1277,9 @@ namespace Realm {
       // Also collect the number of bgwork items the subgraph
       // replay needs to finish before being considered done.
       if (bgwork_items[i].is_final_event) {
-        bgwork_finish_events++;
-        if (operation_has_async_effects(bgwork_items[i].op_kind, bgwork_items[i].op_index)) {
-          bgwork_finish_events++;
+        bgwork_finish_events += bgwork_operation_count(it.op_kind, it.op_index);
+        if (operation_has_async_effects(it.op_kind, it.op_index)) {
+          bgwork_finish_events += bgwork_async_operation_count(it.op_kind, it.op_index);
         }
       }
     }
@@ -1287,7 +1367,6 @@ namespace Realm {
           dynamic_events[i] = UserEvent::create_user_event();
       }
 
-      // TODO (rohany): Free this.
       size_t bgwork_precondition_ctr_bytes = sizeof(atomic<int32_t>) * bgwork_preconditions.size();
       auto bgwork_precondition_ctrs = (atomic<int32_t>*)malloc(bgwork_precondition_ctr_bytes);
       memcpy(bgwork_precondition_ctrs, bgwork_preconditions.data(), bgwork_precondition_ctr_bytes);
@@ -1302,7 +1381,7 @@ namespace Realm {
       //  tightly, rather than for each operation.
       auto async_operation_events = (void**)malloc(sizeof(void*) * operations.data.size());
       auto async_operation_effect_triggerers = (AsyncGPUWorkTriggerer*)malloc(sizeof(AsyncGPUWorkTriggerer) * operations.data.size());
-      auto async_bgwork_events = (void**)malloc(sizeof(void*) * bgwork_items.size());
+      auto async_bgwork_events = (void**)malloc(sizeof(void*) * bgwork_async_event_counts[bgwork_items.size()]);
 
       // Initialize a counter that all processors will decrement upon completion.
       auto finish_counter = (atomic<int32_t>*)malloc(sizeof(atomic<int32_t>));
@@ -1387,6 +1466,7 @@ namespace Realm {
         dynamic_precondition_waiters,
         async_operation_events,
         async_operation_effect_triggerers,
+        bgwork_precondition_ctrs,
         async_bgwork_events,
         dynamic_precondition_ctrs,
         dynamic_events,
@@ -1682,10 +1762,8 @@ namespace Realm {
     static_to_dynamic_counts.clear();
 
     bgwork_items.clear();
-    for (auto xd : planned_copy_xds) {
-      if (xd) {
-        xd->remove_reference();
-      }
+    for (auto xd : planned_copy_xds.data) {
+      xd->remove_reference();
     }
     planned_copy_xds.clear();
     bgwork_preconditions.clear();
@@ -1694,6 +1772,7 @@ namespace Realm {
     bgwork_async_postconditions.clear();
     bgwork_async_preconditions.clear();
     bgwork_async_event_procs.clear();
+    bgwork_async_event_counts.clear();
 
     // TODO: when we create subgraphs on remote nodes, send a message to the
     //  creator node so they can add it to their free list
@@ -1746,6 +1825,7 @@ namespace Realm {
     ExternalPreconditionTriggerer* _dynamic_preconds,
     void** _async_operation_events,
     AsyncGPUWorkTriggerer* _async_operation_event_triggerers,
+    void* _bgwork_preconds,
     void** _async_bgwork_events,
     atomic<int32_t>* _dynamic_precond_counters,
     UserEvent* _dynamic_events,
@@ -1753,7 +1833,7 @@ namespace Realm {
   ) : num_procs(_num_procs), state(_state), args(_args), preconds(_preconds), queue(_queue),
       external_preconds(_external_preconds), dynamic_preconds(_dynamic_preconds),
       async_operation_events(_async_operation_events), async_operation_event_triggerers(_async_operation_event_triggerers),
-      async_bgwork_events(_async_bgwork_events),
+      bgwork_preconds(_bgwork_preconds), async_bgwork_events(_async_bgwork_events),
       dynamic_precond_counters(_dynamic_precond_counters), dynamic_events(_dynamic_events), finish_counter(_finish_counter), EventWaiter() {}
 
   void SubgraphImpl::InstantiationCleanup::event_triggered(bool poisoned, Realm::TimeLimit work_until) {
@@ -1784,6 +1864,7 @@ namespace Realm {
     free(dynamic_preconds);
     free(async_operation_events);
     free(async_operation_event_triggerers);
+    free(bgwork_preconds);
     free(async_bgwork_events);
     free(dynamic_precond_counters);
     free(dynamic_events);
@@ -2003,18 +2084,22 @@ namespace Realm {
     auto subgraph = all_proc_states[0].subgraph;
     auto& item = subgraph->bgwork_items[index];
     assert(item.op_kind == SubgraphDefinition::OPKIND_COPY);
-    auto xd = subgraph->planned_copy_xds[item.op_index];
-    assert(xd);
-    xd->reset();
-    xd->subgraph_replay_state = all_proc_states;
-    xd->subgraph_index = index;
-    // Add a reference before enqueing the XD, as each pass through the pipeline
-    // removes a reference upon completion.
-    xd->add_reference();
-    xd->channel->enqueue_ready_xd(xd);
+    auto& offs = subgraph->planned_copy_xds.offsets;
+    for (uint64_t i = offs[item.op_index]; i < offs[item.op_index + 1]; i++) {
+      auto xd = subgraph->planned_copy_xds.data[i];
+      assert(xd);
+      xd->reset();
+      xd->subgraph_replay_state = all_proc_states;
+      xd->subgraph_index = index;
+      xd->xd_index = i - offs[item.op_index];
+      // Add a reference before enqueing the XD, as each pass through the pipeline
+      // removes a reference upon completion.
+      xd->add_reference();
+      xd->channel->enqueue_ready_xd(xd);
+    }
   }
 
-  XferDes* SubgraphImpl::analyze_copy(SubgraphDefinition::CopyDesc& copy) {
+  void SubgraphImpl::analyze_copy(SubgraphDefinition::CopyDesc& copy, std::vector<XferDes*>& result) {
     TransferDesc* td = copy.space.impl->make_transfer_desc(copy.srcs, copy.dsts);
     // Just constructing a TransferDescriptor should perform all the
     // copy analysis inline. It could be deferred, but if all the instances
@@ -2028,16 +2113,6 @@ namespace Realm {
     //  can consider extending the analysis to cache plans for
     //  multi-hop copies through the network.
     TransferGraph& graph = td->graph;
-    // TODO (rohany): I gave an initial attempt at supporting copies
-    //  with multiple XD's. Multi-hop copies are a separate problem, but
-    //  I wasn't sure of the right way to define a term that "copy_has_async_effects"
-    //  if some of the XD's within the copy do and others don't. A conservative
-    //  view would say that we have to do more synchronization (i.e. no async behavior)
-    //  for copies with multiple XD's, as they all must complete for the copy to
-    //  be registered as complete. For now, maybe we'll ask Legion to separate
-    //  copies into separate CopyDesc's whenever possible to expose more parallelism
-    //  and information to the subgraph.
-    assert(graph.xd_nodes.size() == 1);
     assert(graph.ib_edges.empty());
     // Now, spoof the XDFactory inside each node of the transfer
     // graph so that we can extract the XD's.
@@ -2060,18 +2135,23 @@ namespace Realm {
 
     // After TransferOperation::create_xds(), our mock factory should
     // have been invoked to handle the creation.
-    assert(factories[0].xd != nullptr);
+    for (auto& factory : factories) {
+      assert(factory.xd != nullptr);
+    }
     // We need to make the TransferOperation think that it is finished.
     // The SubgraphImpl will take over the reference to the XD.
-    assert(op->xd_trackers.size() == 1);
-    op->xd_trackers[0]->mark_finished(true /* successful */);
+    for (auto& tracker : op->xd_trackers) {
+      tracker->mark_finished(true /* successful */);
+    }
 
     // At this point, we don't need a reference to the transfer descriptor anymore.
     td->remove_reference();
 
-    auto xd = factories[0].xd;
-    // Detach the xd from its DMA op.
-    xd->dma_op = 0;
-    return xd;
+    for (auto& factory : factories) {
+      auto xd = factory.xd;
+      // Detach the xd from its DMA op.
+      xd->dma_op = 0;
+      result.push_back(xd);
+    }
   }
 }; // namespace Realm

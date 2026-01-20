@@ -1228,7 +1228,12 @@ namespace Realm {
                 break;
               }
               case SubgraphImpl::CompletionInfo::BGWORK_TO_STATIC: {
-                pimpl->sync_task_async_effect(replay->async_bgwork_events[info.index]);
+                // Wait on all events in the given range, if they aren't null.
+                for (uint64_t j = replay->subgraph->bgwork_async_event_counts[info.index]; j < replay->subgraph->bgwork_async_event_counts[info.index + 1]; j++) {
+                  auto bgtoken = replay->async_bgwork_events[j];
+                  if (bgtoken != nullptr)
+                    pimpl->sync_task_async_effect(bgtoken);
+                }
                 break;
               }
               default:

@@ -304,7 +304,12 @@ namespace Realm {
     // Maintain information within an XD about the surrounding
     // subgraph replay (if applicable).
     ProcSubgraphReplayState* subgraph_replay_state = nullptr;
+    // subgraph_index represents the op_index of the xd within
+    // the subgraph (i.e. which copy it corresponds to).
     unsigned subgraph_index = (unsigned)(-1);
+    // xd_index corresponds to which xd of the copy at op_index
+    // this xd is, as a copy may launch multiple xd's.
+    unsigned xd_index = (unsigned)(-1);
     // Stored to help reset XD state in subgraph replays.
     int gather_control_port = -1;
     int scatter_control_port = -1;

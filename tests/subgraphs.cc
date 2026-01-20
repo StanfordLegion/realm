@@ -219,7 +219,7 @@ std::vector<Memory> sysmems(sq.begin(), sq.end());
 std::map<FieldID, size_t> field_sizes;
 field_sizes[0] = sizeof(int32_t);
 IndexSpace<1> is2 = Rect<1>(0, 10);
-RegionInstance src_inst, dst_inst, dst_inst2, fill_inst;
+RegionInstance src_inst, dst_inst, dst_inst2, fill_inst, fill_inst2;
 RegionInstance::create_instance(src_inst, sysmems[0],
                                 is2, field_sizes,
                                 0 /*SOA*/, ProfilingRequestSet()).wait();
@@ -230,6 +230,9 @@ RegionInstance::create_instance(dst_inst2, sysmems[0],
                                 is2, field_sizes,
                                 0 /*SOA*/, ProfilingRequestSet()).wait();
 RegionInstance::create_instance(fill_inst, sysmems[0],
+                                is2, field_sizes,
+                                0 /*SOA*/, ProfilingRequestSet()).wait();
+RegionInstance::create_instance(fill_inst2, sysmems[0],
                                 is2, field_sizes,
                                 0 /*SOA*/, ProfilingRequestSet()).wait();
 
@@ -355,10 +358,12 @@ IndexSpace<1> pis2;
       sd.copies[0].dsts = dst;
     }
     {
-      std::vector<CopySrcDstField> src(1), dst(1);
+      std::vector<CopySrcDstField> src(2), dst(2);
       int32_t value = 13;
       src[0].set_fill(value);
       dst[0].set_field(fill_inst, 0, sizeof(int32_t));
+      src[1].set_fill(value);
+      dst[1].set_field(fill_inst2, 0, sizeof(int32_t));
       sd.copies[1].space = is2;
       sd.copies[1].srcs = src;
       sd.copies[1].dsts = dst;
@@ -383,7 +388,7 @@ IndexSpace<1> pis2;
     }
 
     // Add the necessary dependencies.
-    sd.dependencies.resize(15);
+    sd.dependencies.resize(16);
 
     sd.dependencies[0].src_op_kind = SubgraphDefinition::OPKIND_TASK;
     sd.dependencies[0].src_op_index = 0;
@@ -465,6 +470,11 @@ IndexSpace<1> pis2;
     sd.dependencies[14].tgt_op_kind = SubgraphDefinition::OPKIND_COPY;
     sd.dependencies[14].tgt_op_index = 3;
 
+    sd.dependencies[15].src_op_kind = SubgraphDefinition::OPKIND_COPY;
+    sd.dependencies[15].src_op_index = 1;
+    sd.dependencies[15].tgt_op_kind = SubgraphDefinition::OPKIND_TASK;
+    sd.dependencies[15].tgt_op_index = 2;
+
     Subgraph::create_subgraph(diamond, sd, ProfilingRequestSet()).wait();
   }
 
@@ -489,15 +499,17 @@ IndexSpace<1> pis2;
   bar.arrive();
 
   e = cpus[0].spawn(TEST_READ_TASK, &fill_inst, sizeof(fill_inst), e);
+  e = cpus[0].spawn(TEST_READ_TASK, &fill_inst2, sizeof(fill_inst2), e);
   e = cpus[0].spawn(TEST_READ_TASK, &dst_inst, sizeof(dst_inst), e);
   e = cpus[0].spawn(TEST_READ_TASK, &partial_inst, sizeof(partial_inst), e);
   e = cpus[0].spawn(TEST_READ_TASK, &partial_inst2, sizeof(partial_inst2), e);
   {
-    std::vector<CopySrcDstField> info(4);
+    std::vector<CopySrcDstField> info(5);
     info[0].set_field(src_inst, 0, sizeof(int32_t));
     info[1].set_field(fill_inst, 0, sizeof(int32_t));
-    info[2].set_field(partial_inst, 0, sizeof(int32_t));
-    info[3].set_field(partial_inst2, 0, sizeof(int32_t));
+    info[2].set_field(fill_inst2, 0, sizeof(int32_t));
+    info[3].set_field(partial_inst, 0, sizeof(int32_t));
+    info[4].set_field(partial_inst2, 0, sizeof(int32_t));
     int32_t value = 242;
     e = is2.fill(info, ProfilingRequestSet(), &value, sizeof(int32_t), e);
   }
@@ -520,6 +532,7 @@ IndexSpace<1> pis2;
   diamond.destroy(e);
 
   e = cpus[0].spawn(TEST_READ_TASK, &fill_inst, sizeof(fill_inst), e);
+  e = cpus[0].spawn(TEST_READ_TASK, &fill_inst2, sizeof(fill_inst2), e);
   e = cpus[0].spawn(TEST_READ_TASK, &dst_inst, sizeof(dst_inst), e);
   e = cpus[0].spawn(TEST_READ_TASK, &partial_inst, sizeof(partial_inst), e);
   e = cpus[0].spawn(TEST_READ_TASK, &partial_inst2, sizeof(partial_inst2), e);
