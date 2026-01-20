@@ -1457,6 +1457,15 @@ namespace Realm {
       finish_counter->store_release(all_procs.size());
       auto static_finish_event = UserEvent::create_user_event();
 
+      // Potential dynamic modifiers to the pending async counters
+      // of the subgraph.
+      int32_t* async_prof_counts = static_cast<int32_t*>(alloca(all_procs.size() * sizeof(int32_t)));
+      for (size_t i = 0; i < all_procs.size(); i++) {
+        async_prof_counts[i] = 0;
+      }
+      // Allocate the state for each processor in the replay.
+      state = new ProcSubgraphReplayState[all_procs.size()];
+
       // TODO (rohany): Experiment if this profiling stuff adds noticeable
       //  latency to subgraph execution. If it does, this initialize could
       //  get moved to when the operation starts.
@@ -1464,6 +1473,15 @@ namespace Realm {
       // if it is actually needed).
       SubgraphOperationProfilingInfo* inst_profiling_info = nullptr;
       if (has_static_profiling_requests || !sprs.empty()) {
+        // We have to do some bookkeeping for tasks in the static
+        // subgraph portion that launch async work. We'll increment
+        // the async finish counts of each processor for each async
+        // task the processor will launch.
+        std::unordered_map<realm_id_t, unsigned> proc_to_index;
+        for (size_t i = 0; i < all_procs.size(); i++) {
+          proc_to_index[all_procs[i].id] = i;
+        }
+
         // We'll stick profiling information for tasks and copies into the
         // same array, with copies coming after tasks.
         auto prof_size = defn->tasks.size() + defn->copies.size();
@@ -1471,6 +1489,7 @@ namespace Realm {
         // Set up some profiling information.
         for (size_t i = 0; i < prof_size; i++) {
           auto& info = inst_profiling_info[i];
+          info.all_proc_states = state;
           // There's an annoying resource usage dependency here, where we can't
           // add to the requests and measurements fields at the same time, as the
           // measurements field also takes ownership of some memory in the requests
@@ -1503,6 +1522,19 @@ namespace Realm {
           if (info.wants_timeline) {
             info.timeline.record_create_time();
           }
+
+          // If we're a task that launches asynchronous work, we need to make
+          // sure that the finish event isn't triggered before we record our
+          // profiling information.
+          if (i < defn->tasks.size() &&
+              dynamic_operations.find({SubgraphDefinition::OPKIND_TASK, i}) == dynamic_operations.end() &&
+              task_has_async_effects(defn->tasks[i]) &&
+              (info.wants_timeline || info.wants_gpu_timeline || info.wants_fevent)) {
+            auto proc_idx = proc_to_index[defn->tasks[i].proc.id];
+            async_prof_counts[proc_idx]++;
+            // Remember the counter we're supposed to go decrement.
+            info.final_ev_counter = &state[proc_idx].pending_async_count;
+          }
         }
       }
 
@@ -1514,7 +1546,6 @@ namespace Realm {
 
       // Separate the installation and state creation steps
       // to enable deferring the launch of the subgraph.
-      state = new ProcSubgraphReplayState[all_procs.size()];
       for (size_t i = 0; i < all_procs.size(); i++) {
         state[i].all_proc_states = state;
         state[i].subgraph = this;
@@ -1530,8 +1561,8 @@ namespace Realm {
         state[i].async_operation_events = async_operation_events;
         state[i].async_operation_effect_triggerers = async_operation_effect_triggerers;
         state[i].async_bgwork_events = async_bgwork_events;
-        state[i].has_pending_async_work = async_finish_events[i] > 0;
-        state[i].pending_async_count.store(async_finish_events[i]);
+        state[i].has_pending_async_work = (async_finish_events[i] + async_prof_counts[i]) > 0;
+        state[i].pending_async_count.store(async_finish_events[i] + async_prof_counts[i]);
         state[i].queue = queue;
         state[i].next_queue_slot.store(operations.proc_offsets[i] + initial_queue_entry_count[i]);
         state[i].inst_profiling_info = inst_profiling_info;
@@ -2125,6 +2156,29 @@ namespace Realm {
     }
   }
 
+  void GPUProfInfoTrigger::request_completed() {
+    if (start) {
+      info->timeline_gpu.record_start_time();
+    } else {
+      if (info->wants_gpu_timeline) {
+        info->timeline_gpu.record_end_time();
+      }
+      if (info->wants_timeline) {
+        info->timeline.record_complete_time();
+      }
+      if (info->wants_fevent) {
+        info->fevent_user.trigger();
+      }
+      // Go signal that we've recorded the necessary profiling information.
+      assert(info->final_ev_counter != nullptr);
+      int32_t remaining = info->final_ev_counter->fetch_sub_acqrel(1) - 1;
+      if (remaining == 0) {
+        maybe_trigger_subgraph_final_completion_event(info->all_proc_states[0]);
+      }
+    }
+    // Delete ourselves at the end to make this a "fire and forget" notification.
+    delete this;
+  }
 
   SubgraphImpl::SubgraphWorkLauncher::SubgraphWorkLauncher(Realm::ProcSubgraphReplayState *_state,
                                                            Realm::SubgraphImpl *_subgraph)

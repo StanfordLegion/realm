@@ -127,6 +127,12 @@ namespace Realm {
     //  unified "finish_event" infrastructure that Legion needs,
     //  we won't need this on the profiling information.
     atomic<int32_t> pending_work_items;
+
+    // Pending profiling requests for asynchronous work must
+    // make sure that the subgraph isn't completed before the
+    // profiling request for the asynchronous work completes reporting. 
+    atomic<int32_t>* final_ev_counter = nullptr;
+    ProcSubgraphReplayState* all_proc_states = nullptr;
   };
 
    // FlattenedProcMap and FlattenedProcTaskMap are essentially sparse matrix
@@ -556,23 +562,7 @@ namespace Realm {
   class GPUProfInfoTrigger : public Cuda::GPUCompletionNotification {
   public:
     GPUProfInfoTrigger(SubgraphOperationProfilingInfo* _info, bool _start) : info(_info), start(_start) {}
-    void request_completed() override {
-      if (start) {
-        info->timeline_gpu.record_start_time();
-      } else {
-        if (info->wants_gpu_timeline) {
-          info->timeline_gpu.record_end_time();
-        }
-        if (info->wants_timeline) {
-          info->timeline.record_complete_time();
-        }
-        if (info->wants_fevent) {
-          info->fevent_user.trigger();
-        }
-      }
-      // Delete ourselves at the end to make this a "fire and forget" notification.
-      delete this;
-    }
+    void request_completed() override;
   private:
     SubgraphOperationProfilingInfo* info;
     bool start;
