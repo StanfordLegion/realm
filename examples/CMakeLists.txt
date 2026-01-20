@@ -82,6 +82,11 @@ if(REALM_USE_UCX)
 add_example_test(vtable)
 endif()
 
+add_subdirectory(vtable_pmix)
+add_test(NAME example_vtable_pmix COMMAND $<TARGET_FILE:vtable_pmix>)
+set_property(TEST example_vtable_pmix PROPERTY RESOURCE_LOCK ${TEST_RESOURCE_LOCK})
+list(APPEND _example_list example_vtable_pmix)
+
 set_tests_properties(
   ${_example_list}
   PROPERTIES TEST_LAUNCHER

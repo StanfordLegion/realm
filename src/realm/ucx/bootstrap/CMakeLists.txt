@@ -30,6 +30,7 @@ if(NOT Realm_VERSION_MAJOR)
 endif()
 
 option(UCX_BOOTSTRAP_ENABLE_MPI "Compile with MPI support" OFF)
+option(UCX_BOOTSTRAP_ENABLE_PMIX "Compile with PMIx support" OFF)
 option(UCX_BOOTSTRAP_INSTALL "Enable installation support" OFF)
 
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
@@ -70,6 +71,17 @@ if(UCX_BOOTSTRAP_ENABLE_MPI)
       NAME realm_ucp_bootstrap_mpi SOURCES ${UCX_BOOTSTRAP_ROOT_DIR}/bootstrap_mpi.c LIBRARIES
       MPI::MPI_C
     )
+  endif()
+endif()
+if(UCX_BOOTSTRAP_ENABLE_PMIX)
+  find_package(PkgConfig REQUIRED)
+  pkg_check_modules(PMIX REQUIRED pmix)
+  if(PMIX_FOUND)
+    add_backend_plugin(
+      NAME realm_ucp_bootstrap_pmix SOURCES ${UCX_BOOTSTRAP_ROOT_DIR}/bootstrap_pmix.c LIBRARIES
+      ${PMIX_LIBRARIES}
+    )
+    target_include_directories(realm_ucp_bootstrap_pmix PRIVATE ${PMIX_INCLUDE_DIRS})
   endif()
 endif()
 add_backend_plugin(
