@@ -385,6 +385,7 @@ namespace Realm {
     BackgroundWorkManager bgwork;
     IncomingMessageManager *message_manager;
     EventTriggerNotifier event_triggerer;
+    SubgraphResourceReaper subgraph_reaper;
 
     OperationTable optable;
 

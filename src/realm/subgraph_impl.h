@@ -26,6 +26,8 @@
 #include "realm/cuda/cuda_module.h"
 #include "realm/mutex.h"
 
+#include <queue>
+
 namespace Realm {
 
   // Forward declarations.
@@ -454,6 +456,7 @@ namespace Realm {
         virtual void event_triggered(bool poisoned, TimeLimit work_until);
         virtual void print(std::ostream& os) const;
         virtual Event get_finish_event(void) const;
+        void cleanup();
       private:
         size_t num_procs;
         ProcSubgraphReplayState* state;
@@ -471,6 +474,23 @@ namespace Realm {
         atomic<int32_t>* finish_counter;
         SubgraphOperationProfilingInfo* inst_profiling_info;
     };
+  };
+
+  // SubgraphResourceReaper is a background work item in
+  // charge of cleaning up subgraph instantiation resources.
+  // It manages a queue of InstantiationCleanup items. This
+  // worker does the work instead of InstantiationCleanup
+  // itself to make sure that the deletion process doesn't
+  // expose too much latency and block other EventWaiters
+  // from triggering.
+  class SubgraphResourceReaper : public BackgroundWorkItem {
+  public:
+    SubgraphResourceReaper();
+    void add_work(SubgraphImpl::InstantiationCleanup* cleanup);
+    virtual bool do_work(TimeLimit work_until);
+  protected:
+    Mutex mutex;
+    std::queue<SubgraphImpl::InstantiationCleanup*> work;
   };
 
   struct ProcSubgraphReplayState {

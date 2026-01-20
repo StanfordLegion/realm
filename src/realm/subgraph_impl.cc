@@ -2029,7 +2029,7 @@ namespace Realm {
       dynamic_precond_counters(_dynamic_precond_counters), dynamic_events(_dynamic_events), finish_counter(_finish_counter),
       inst_profiling_info(_inst_profiling_info), EventWaiter() {}
 
-  void SubgraphImpl::InstantiationCleanup::event_triggered(bool poisoned, Realm::TimeLimit work_until) {
+  void SubgraphImpl::InstantiationCleanup::cleanup() {
     // Before we free async_operation_events, make sure that we return all
     // GPU events appropriately.
     assert(num_procs > 0);
@@ -2101,9 +2101,12 @@ namespace Realm {
     free(dynamic_events);
     free(finish_counter);
     delete[] inst_profiling_info;
-    // Delete ourselves after freeing the resource. This pattern
-    // is used by other event waiters, so it's reasonable to replicate it here.
-    delete this;
+  }
+
+  void SubgraphImpl::InstantiationCleanup::event_triggered(bool poisoned, Realm::TimeLimit work_until) {
+    // Defer cleanup work to a background worker to ensure that this
+    // event triggering doesn't hold up any future work.
+    get_runtime()->subgraph_reaper.add_work(this);
   }
 
   Event SubgraphImpl::InstantiationCleanup::get_finish_event() const {
@@ -2178,6 +2181,35 @@ namespace Realm {
     }
     // Delete ourselves at the end to make this a "fire and forget" notification.
     delete this;
+  }
+
+  SubgraphResourceReaper::SubgraphResourceReaper() : BackgroundWorkItem("subgraph cleanup") {}
+
+  void SubgraphResourceReaper::add_work(SubgraphImpl::InstantiationCleanup* cleanup) {
+    {
+      AutoLock<> al(mutex);
+      work.push(cleanup);
+    }
+    make_active();
+  }
+
+  bool SubgraphResourceReaper::do_work(TimeLimit work_until) {
+    size_t left = 0;
+    SubgraphImpl::InstantiationCleanup* item = nullptr;
+    {
+      AutoLock<> al(mutex);
+      if (!work.empty()) {
+        item = work.front();
+        work.pop();
+        left = work.size();
+      }
+    }
+    if (!item)
+      return false;
+
+    item->cleanup();
+    delete item;
+    return left > 0;
   }
 
   SubgraphImpl::SubgraphWorkLauncher::SubgraphWorkLauncher(Realm::ProcSubgraphReplayState *_state,
