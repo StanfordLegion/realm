@@ -1,4 +1,5 @@
 #include "realm.h"
+#include "stencil_subgraph.h"
 
 #include <iomanip>
 #include <iostream>
@@ -11,26 +12,9 @@ Logger log_app("app");
 // Task IDs, some IDs are reserved so start at first available number
 enum {
   TOP_LEVEL_TASK = Processor::TASK_ID_FIRST_AVAILABLE+0,
-  DUMMY_TASK,
   STENCIL_TASK,
   INCREMENT_TASK,
   VERIFY_TASK,
-};
-
-enum {
-  FID_INPUT = 100,
-  FID_OUTPUT = 101,
-};
-
-struct StencilArgs {
-  RegionInstance buffer = RegionInstance::NO_INST;
-  IndexSpace<2> local_space = IndexSpace<2>();
-  int64_t hx = -1, hy = -1;
-};
-
-struct IncrementArgs {
-  RegionInstance buffer = RegionInstance::NO_INST;
-  IndexSpace<2> local_space = IndexSpace<2>();
 };
 
 struct VerifyArgs {
@@ -46,12 +30,8 @@ struct TLTArgs {
   int64_t py = 2;
   int64_t steps = 50;
   bool use_subgraph = false;
+  bool verify = true;
 };
-
-
-void dummy_task(const void *args, size_t arglen,
-                const void *userdata, size_t userlen, Processor p) {
-}
 
 void stencil_task(const void *_args, size_t arglen,
                   const void *userdata, size_t userlen, Processor p) {
@@ -497,6 +477,8 @@ void top_level_task(const void *_args, size_t arglen,
   log_app.print() << "Realm subgraphs test";
   auto pq = Machine::ProcessorQuery(Machine::get_machine()).only_kind(Processor::LOC_PROC);
   std::vector<Processor> cpus(pq.begin(), pq.end());
+  auto gq = Machine::ProcessorQuery(Machine::get_machine()).only_kind(Processor::TOC_PROC);
+  std::vector<Processor> gpus(gq.begin(), gq.end());
   auto mq = Machine::MemoryQuery(Machine::get_machine()).only_kind(Memory::SYSTEM_MEM).has_capacity(1);
   std::vector<Memory> sysmems(mq.begin(), mq.end());
 
@@ -515,11 +497,21 @@ void top_level_task(const void *_args, size_t arglen,
   // Construct a processor and memory mapping.
   for (int64_t i = 0; i < px; i++) {
     for (int64_t j = 0; j < py; j++) {
-      procs[{i, j}] = cpus[(i * py + j) % cpus.size()];
-      mems[{i, j}] = sysmems[(i * py + j) % sysmems.size()];
+      if (gpus.empty()) {
+        assert(px * py <= cpus.size());
+        procs[{i, j}] = cpus[(i * py + j) % cpus.size()];
+        mems[{i, j}] = sysmems[(i * py + j) % sysmems.size()];
+      } else {
+        procs[{i, j}] = gpus[(i * py + j) % gpus.size()];
+        Machine::MemoryQuery query(Machine::get_machine());
+        query.only_kind(Memory::GPU_FB_MEM);
+        query.local_address_space();
+        query.best_affinity_to(procs[{i, j}]);
+        assert(query.count() == 1);
+        mems[{i, j}] = query.first();
+      }
     }
   }
-  assert(px * py <= cpus.size());
 
   assert(nx % px == 0);
   assert(ny % py == 0);
@@ -590,19 +582,22 @@ void top_level_task(const void *_args, size_t arglen,
   }
 
   uint64_t us_start, us_end;
-  // TODO (rohany): Make it a command line flag which one runs.
+  // For each benchmark, run twice and disregard the first to warm up the CUDA driver.
   if (args->use_subgraph) {
     log_app.print() << "Using subgraph!";
     // Now, define the stencil as a subgraph.
     int64_t subgraph_steps = 10;
     assert(steps % subgraph_steps == 0);
     Subgraph stencil_subgraph = compile_stencil(nx, ny, px, py, steps, subgraph_steps, procs, north_spaces, south_spaces, west_spaces, east_spaces, instances, local_spaces);
+    run_stencil_subgraph(steps, subgraph_steps, stencil_subgraph);
+
     // Instantiate the subgraph the correct number of times.
     us_start = Clock::current_time_in_microseconds();
     run_stencil_subgraph(steps, subgraph_steps, stencil_subgraph);
     us_end = Clock::current_time_in_microseconds();
   } else {
     log_app.print() << "Direct realm launch.";
+    run_stencil_direct(nx, ny, px, py, steps, procs, north_spaces, south_spaces, west_spaces, east_spaces, instances, local_spaces);
     us_start = Clock::current_time_in_microseconds();
     run_stencil_direct(nx, ny, px, py, steps, procs, north_spaces, south_spaces, west_spaces, east_spaces, instances, local_spaces);
     us_end = Clock::current_time_in_microseconds();
@@ -612,49 +607,56 @@ void top_level_task(const void *_args, size_t arglen,
 
 
   // Now, check that the computation was correct.
-  IndexSpace<2> full = Rect<2>({0, 0}, {nx - 1, ny - 1});
-  RegionInstance golden;
-  RegionInstance::create_instance(golden, sysmems[0], full, field_sizes, 0 /* SOA */, ProfilingRequestSet()).wait();
-  {
-    std::vector<CopySrcDstField> info(1);
-    info[0].set_field(golden, FID_INPUT, sizeof(float));
-    float value = 0;
-    full.fill(info, ProfilingRequestSet(), &value, sizeof(float)).wait();
-  }
-  {
-    AffineAccessor<float, 2> input(golden, FID_INPUT);
-    AffineAccessor<float, 2> output(golden, FID_OUTPUT);
-    for (int64_t step = 0; step < steps; step++) {
-      for (int64_t i = 0; i < nx; i++) {
-        for (int64_t j = 0; j < ny; j++) {
-          float center = input[{i, j}];
-          float north = i > 0 ? input[{i - 1, j}] : 0.0f;
-          float south = i < nx - 1 ? input[{i + 1, j}] : 0.0f;
-          float west = j > 0 ? input[{i, j - 1}] : 0.0f;
-          float east = j < ny - 1 ? input[{i, j + 1}] : 0.0f;
-          output[{i, j}] = (center + north + south + west + east) / 5.f;
+  if (args->verify) {
+    IndexSpace<2> full = Rect<2>({0, 0}, {nx - 1, ny - 1});
+    RegionInstance golden, computed;
+    RegionInstance::create_instance(golden, sysmems[0], full, field_sizes, 0 /* SOA */, ProfilingRequestSet()).wait();
+    RegionInstance::create_instance(computed, sysmems[0], full, field_sizes, 0 /* SOA */, ProfilingRequestSet()).wait();
+    {
+      std::vector<CopySrcDstField> info(1);
+      info[0].set_field(golden, FID_INPUT, sizeof(float));
+      float value = 0;
+      full.fill(info, ProfilingRequestSet(), &value, sizeof(float)).wait();
+    }
+    {
+      AffineAccessor<float, 2> input(golden, FID_INPUT);
+      AffineAccessor<float, 2> output(golden, FID_OUTPUT);
+      for (int64_t step = 0; step < steps * 2; step++) {
+        for (int64_t i = 0; i < nx; i++) {
+          for (int64_t j = 0; j < ny; j++) {
+            float center = input[{i, j}];
+            float north = i > 0 ? input[{i - 1, j}] : 0.0f;
+            float south = i < nx - 1 ? input[{i + 1, j}] : 0.0f;
+            float west = j > 0 ? input[{i, j - 1}] : 0.0f;
+            float east = j < ny - 1 ? input[{i, j + 1}] : 0.0f;
+            output[{i, j}] = (center + north + south + west + east) / 5.f;
+          }
         }
-      }
 
-      for (int64_t i = 0; i < nx; i++) {
-        for (int64_t j = 0; j < ny; j++) {
-          input[{i, j}] = output[{i, j}] + 1.0f;
+        for (int64_t i = 0; i < nx; i++) {
+          for (int64_t j = 0; j < ny; j++) {
+            input[{i, j}] = output[{i, j}] + 1.0f;
+          }
         }
       }
     }
-  }
 
-  // Verify the results.
-  for (int64_t i = 0; i < px; i++) {
-    for (int64_t j = 0; j < py; j++) {
-      VerifyArgs args;
-      args.local_buffer = instances[{i, j}];
-      args.golden = golden;
-      args.local_space = local_spaces[{i, j}];
-      procs[{i, j}].spawn(VERIFY_TASK, &args, sizeof(VerifyArgs)).wait();
+    // Copy each of the pieces into a CPU instance.
+    for (int64_t i = 0; i < px; i++) {
+      for (int64_t j = 0; j < py; j++) {
+        std::vector<CopySrcDstField> src(1), dst(1);
+        src[0].set_field(instances[{i, j}], FID_INPUT, sizeof(float));
+        dst[0].set_field(computed, FID_INPUT, sizeof(float));
+        local_spaces[{i, j}].copy(src, dst, ProfilingRequestSet()).wait();
+      }
     }
-  }
 
+    VerifyArgs vargs;
+    vargs.local_buffer = computed;
+    vargs.golden = golden;
+    vargs.local_space = full;
+    p.spawn(VERIFY_TASK, &vargs, sizeof(VerifyArgs)).wait();
+  }
 
   log_app.print() << "Success!";
 
@@ -694,13 +696,47 @@ int main(int argc, char **argv)
       args.use_subgraph = true;
       continue;
     }
+    if(!strcmp(argv[i], "-no-check")) {
+      args.verify = false;
+      continue;
+    }
   }
 
   rt.register_task(TOP_LEVEL_TASK, top_level_task);
-  rt.register_task(DUMMY_TASK, dummy_task);
-  rt.register_task(STENCIL_TASK, stencil_task);
-  rt.register_task(INCREMENT_TASK, increment_task);
   rt.register_task(VERIFY_TASK, verify_task);
+
+  Processor::register_task_by_kind(
+    Processor::LOC_PROC,
+    false /*!global*/,
+    STENCIL_TASK,
+    CodeDescriptor(stencil_task),
+    ProfilingRequestSet()
+  ).external_wait();
+  Processor::register_task_by_kind(
+    Processor::LOC_PROC,
+    false /*!global*/,
+    INCREMENT_TASK,
+    CodeDescriptor(increment_task),
+    ProfilingRequestSet()
+  ).external_wait();
+
+#ifdef REALM_USE_CUDA
+  Processor::register_task_by_kind(
+    Processor::TOC_PROC,
+    false /*!global*/,
+    STENCIL_TASK,
+    CodeDescriptor(stencil_task_gpu),
+    ProfilingRequestSet()
+  ).external_wait();
+  Processor::register_task_by_kind(
+    Processor::TOC_PROC,
+    false /*!global*/,
+    INCREMENT_TASK,
+    CodeDescriptor(increment_task_gpu),
+    ProfilingRequestSet()
+  ).external_wait();
+#endif
+
 
   // select a processor to run the top level task on
   Processor p = Machine::ProcessorQuery(Machine::get_machine())
