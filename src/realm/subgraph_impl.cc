@@ -1465,11 +1465,6 @@ namespace Realm {
       auto async_operation_effect_triggerers = (AsyncGPUWorkTriggerer*)malloc(sizeof(AsyncGPUWorkTriggerer) * operations.data.size());
       auto async_bgwork_events = (void**)malloc(sizeof(void*) * bgwork_async_event_counts[bgwork_items.size()]);
 
-      // Initialize a counter that all processors will decrement upon completion.
-      auto finish_counter = (atomic<int32_t>*)malloc(sizeof(atomic<int32_t>));
-      finish_counter->store_release(all_procs.size());
-      auto static_finish_event = UserEvent::create_user_event();
-
       // Potential dynamic modifiers to the pending async counters
       // of the subgraph.
       int32_t* async_prof_counts = static_cast<int32_t*>(alloca(all_procs.size() * sizeof(int32_t)));
@@ -1551,6 +1546,21 @@ namespace Realm {
         }
       }
 
+      // Initialize a counter that all processors will decrement upon completion.
+      auto finish_counter = (atomic<int32_t>*)malloc(sizeof(atomic<int32_t>));
+      {
+        // Each processor will decrement this counter upon exit. Make sure
+        // that the processors don't get the chance to exit early if there
+        // is pending asynchronous work though.
+        int32_t val = all_procs.size();
+        for (size_t i = 0; i < all_procs.size(); i++) {
+          if ((async_finish_events[i] + async_prof_counts[i]) > 0)
+            val++;
+        }
+        finish_counter->store_release(val);
+      }
+      auto static_finish_event = UserEvent::create_user_event();
+
       // Arm the result merger with the completion event, and
       // the final events from the dynamic portion.
       event_impl->merger.prepare_merger(finish_event, false /*!ignore_faults*/,
@@ -1574,7 +1584,6 @@ namespace Realm {
         state[i].async_operation_events = async_operation_events;
         state[i].async_operation_effect_triggerers = async_operation_effect_triggerers;
         state[i].async_bgwork_events = async_bgwork_events;
-        state[i].has_pending_async_work = (async_finish_events[i] + async_prof_counts[i]) > 0;
         state[i].pending_async_count.store(async_finish_events[i] + async_prof_counts[i]);
         state[i].queue = queue;
         state[i].next_queue_slot.store(operations.proc_offsets[i] + initial_queue_entry_count[i]);

@@ -1363,19 +1363,17 @@ namespace Realm {
         // We're done! Drop the replay state and exit.
         this->current_subgraph = nullptr;
 
-        // We also need to let the finish event know that we're done, as long
-        // as there isn't any pending asynchronous work. Otherwise, some other
-        // background worker will come trigger the final event.
-        if (!replay->has_pending_async_work) {
-          // Decrement the processor completion counter. Only one
-          // processor needs to contribute to the trigger.
-          int32_t remaining = replay->finish_counter->fetch_sub_acqrel(1) - 1;
-          if (remaining == 0) {
-            // The scheduler lock can't be held during the trigger.
-            lock.unlock();
-            replay->finish_event.trigger();
-            lock.lock();
-          }
+        // Decrement the processor completion counter. Only one
+        // processor needs to contribute to the trigger. Making sure
+        // the processor contributes to this counter here ensures that
+        // the subgraph can't be deleted by an async task that finishes
+        // quickly before the processor reaches this point.
+        int32_t remaining = replay->finish_counter->fetch_sub_acqrel(1) - 1;
+        if (remaining == 0) {
+          // The scheduler lock can't be held during the trigger.
+          lock.unlock();
+          replay->finish_event.trigger();
+          lock.lock();
         }
       }
 

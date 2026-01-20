@@ -544,7 +544,6 @@ namespace Realm {
     // A counter to manage the number of pending async items
     // that must complete before the finish event of this
     // processor can be triggered.
-    bool has_pending_async_work = false;
     atomic<int32_t> pending_async_count;
 
     // Profiling data.

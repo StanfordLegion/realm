@@ -658,6 +658,12 @@ namespace Realm {
         TransferOperation *op = reinterpret_cast<TransferOperation *>(dma_op);
         op->notify_xd_completion(guid);
       } else {
+        // Enqueueing the XD onto channels adds the guid of the
+        // xd into a set on the XferDesQueue. We need to remove the
+        // xd from there upon completion to avoid the XferDesQueue
+        // from thinking there's still a xd pending on shutdown.
+        destroy_xfer_des(guid);
+
         // Handle profiling. This has to be done _before_ calling
         // the completion functions, as once those functions get called
         // the XD is free to be reused by another thread, which could
@@ -688,11 +694,6 @@ namespace Realm {
         } else {
           trigger_subgraph_control_completion();
         }
-        // Enqueueing the XD onto channels adds the guid of the
-        // xd into a set on the XferDesQueue. We need to remove the
-        // xd from there upon completion to avoid the XferDesQueue
-        // from thinking there's still a xd pending on shutdown.
-        destroy_xfer_des(guid);
       }
     } else {
       assert(dma_op != 0);
