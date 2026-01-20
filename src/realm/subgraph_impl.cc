@@ -377,20 +377,18 @@ namespace Realm {
 
 
   // Active messages to create an XD on a remote node.
-  struct SubgraphXferDesCreateResponseMessage {
-    static void handle_message(NodeID sender,
-                               const SubgraphXferDesCreateResponseMessage &args,
-                               const void *data,
-                               size_t datalen) {
-      SubgraphImpl* subgraph = get_runtime()->get_subgraph_impl(args.subgraph_id);
+
+  struct SubgraphXferDesCreateAcknowledged {
+    SubgraphXferDesCreateAcknowledged(SubgraphImpl* _subgraph) : subgraph(_subgraph) {}
+    void operator()() const {
       subgraph->pending_remote_xd_creations.fetch_sub_acqrel(1);
     }
-    ID subgraph_id;
+    SubgraphImpl* subgraph;
   };
 
-  struct SubgraphXferDesCreateRequestMessage {
+  struct SubgraphXferDesCreateMessage {
     static void handle_message(NodeID sender,
-                               const SubgraphXferDesCreateRequestMessage &args,
+                               const SubgraphXferDesCreateMessage &args,
                                const void *data,
                                size_t datalen) {
       std::vector<XferDesPortInfo> inputs_info, outputs_info;
@@ -439,12 +437,6 @@ namespace Realm {
         auto& meta = rt->remote_subgraph_meta;
         meta[subgraph_id].xds[{op_index, xd_index}] = xd;
       }
-
-      // TODO (rohany): Replace this with a completion notification.
-      // Send a message back to the target node that we are done.
-      ActiveMessage<SubgraphXferDesCreateResponseMessage> amsg(sender);
-      amsg->subgraph_id = subgraph_id;
-      amsg.commit();
     }
     uintptr_t dma_op;
     XferDesID guid;
@@ -568,20 +560,18 @@ namespace Realm {
   }
 
   // Activate message to release remote resources from a subgraph.
-  struct SubgraphRemoteResourceDeletionResponseMessage {
-    static void handle_message(NodeID sender,
-                               const SubgraphRemoteResourceDeletionResponseMessage &args,
-                               const void *data,
-                               size_t datalen) {
-      SubgraphImpl* subgraph = get_runtime()->get_subgraph_impl(args.subgraph_id);
+
+  struct SubgraphRemoteDeletionAcknowledged {
+    SubgraphRemoteDeletionAcknowledged(SubgraphImpl* _subgraph) : subgraph(_subgraph) {}
+    void operator()() const {
       subgraph->pending_peer_deletions.fetch_sub_acqrel(1);
     }
-    ID subgraph_id;
+    SubgraphImpl* subgraph;
   };
 
-  struct SubgraphRemoteResourceDeletionRequestMessage {
+  struct SubgraphRemoteResourceDeletionMessage {
     static void handle_message(NodeID sender,
-                               const SubgraphRemoteResourceDeletionRequestMessage &args,
+                               const SubgraphRemoteResourceDeletionMessage &args,
                                const void *data,
                                size_t datalen) {
       RuntimeImpl* rt = get_runtime();
@@ -593,11 +583,6 @@ namespace Realm {
       }
       meta.xds.clear();
       rt->remote_subgraph_meta.erase(args.subgraph_id.id);
-      // TODO (rohany): Replace this with a completion notification.
-      // Send a message back that we're done.
-      ActiveMessage<SubgraphRemoteResourceDeletionResponseMessage> amsg(sender);
-      amsg->subgraph_id = args.subgraph_id;
-      amsg.commit();
     }
     ID subgraph_id;
   };
@@ -667,7 +652,7 @@ namespace Realm {
           assert(ok);
         }
         size_t req_size = bcs.bytes_used();
-        ActiveMessage<SubgraphXferDesCreateRequestMessage> amsg(target_node, req_size);
+        ActiveMessage<SubgraphXferDesCreateMessage> amsg(target_node, req_size);
         amsg->launch_node = launch_node;
         amsg->guid = guid;
         amsg->dma_op = dma_op;
@@ -685,6 +670,7 @@ namespace Realm {
             amsg.add_payload(fill_data, fill_size);
           assert(ok);
         }
+        amsg.add_remote_completion(SubgraphXferDesCreateAcknowledged(subgraph));
         amsg.commit();
 
         // TODO (rohany): Copied from the normal factory, probably have to do this too.
@@ -2319,8 +2305,9 @@ namespace Realm {
     // Tell all our peers that we're destroying this subgraph.
     pending_peer_deletions.store_release(peers.size());
     for (auto& it : peers) {
-      ActiveMessage<SubgraphRemoteResourceDeletionRequestMessage> amsg(it, 0 /* inline_storage */);
+      ActiveMessage<SubgraphRemoteResourceDeletionMessage> amsg(it, 0 /* inline_storage */);
       amsg->subgraph_id = me;
+      amsg.add_remote_completion(SubgraphRemoteDeletionAcknowledged(this));
       amsg.commit();
     }
 
@@ -3074,11 +3061,9 @@ namespace Realm {
   }
 
   // Active message handler registrations.
-  ActiveMessageHandlerReg<SubgraphXferDesCreateRequestMessage> subgraph_xfer_des_create_request_message_handler;
-  ActiveMessageHandlerReg<SubgraphXferDesCreateResponseMessage> subgraph_xfer_des_create_response_message_handler;
+  ActiveMessageHandlerReg<SubgraphXferDesCreateMessage> subgraph_xfer_des_create_request_message_handler;
   ActiveMessageHandlerReg<SubgraphXferDesEnqueueMessage> subgraph_xfer_des_enqueue_message_handler;
   ActiveMessageHandlerReg<SubgraphXferDesNotifyCompletionMessage> subgraph_notify_xfer_des_completion_message;
-  ActiveMessageHandlerReg<SubgraphRemoteResourceDeletionRequestMessage> subgraph_remote_resource_deletion_request_message_handler;
-  ActiveMessageHandlerReg<SubgraphRemoteResourceDeletionResponseMessage> subgraph_remote_resource_deletion_response_message_handler;
+  ActiveMessageHandlerReg<SubgraphRemoteResourceDeletionMessage> subgraph_remote_resource_deletion_request_message_handler;
 
 }; // namespace Realm

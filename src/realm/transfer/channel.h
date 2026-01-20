@@ -692,6 +692,10 @@ namespace Realm {
     //  takes care of it with lower latency
     virtual void update_bytes_write(int port_idx, size_t offset, size_t size);
 
+    // Note: not including the override to avoid warnings with
+    // the rest of the functions not marked override.
+    bool launches_async_work_locally() /* override */ { return false; }
+
     bool progress_xd(RemoteWriteChannel *channel, TimeLimit work_until);
 
     // writes directly to a contiguous chunk of destination
