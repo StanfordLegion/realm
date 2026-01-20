@@ -137,6 +137,9 @@ namespace Realm {
     SequenceAssembler(const SequenceAssembler &copy_from);
     ~SequenceAssembler(void);
 
+    // Not thread-safe.
+    void reset();
+
     // NOT thread-safe - caller must ensure neither *this nor other is being
     //  modified during this call
     void swap(SequenceAssembler &other);

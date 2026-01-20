@@ -59,6 +59,14 @@ namespace Realm {
     , spans(copy_from.spans)
   {}
 
+  void SequenceAssembler::reset() {
+    contig_amount_x2.store(0);
+    first_noncontig.store(0);
+    // TODO (rohany): Unclear if we need to cache
+    //  these spans or not.
+    spans.clear();
+  }
+
   SequenceAssembler::~SequenceAssembler(void)
   {
     if(mutex.load())
@@ -687,13 +695,10 @@ namespace Realm {
      info.local_bytes_total = 0;
      info.local_bytes_cons.store_release(0);
      info.remote_bytes_total.store_release(size_t(-1));
-     // TODO (rohany): How to best reset this stuff?
-     info.seq_local = {};
-     info.seq_remote = {};
-     // TODO (rohany): Do i need to do this for the addresslist too?
-     info.addrlist = {};
-     info.addrcursor = {};
-     info.addrcursor.set_addrlist(&info.addrlist);
+     info.seq_local.reset();
+     info.seq_remote.reset();
+     info.addrlist.reset();
+     info.addrcursor.reset();
    }
 
    if(gather_control_port >= 0) {
@@ -714,13 +719,10 @@ namespace Realm {
      info.local_bytes_total = 0;
      info.local_bytes_cons.store_release(0);
      info.remote_bytes_total.store_release(size_t(-1));
-     // TODO (rohany): How to best reset this stuff?
-     info.seq_local = {};
-     info.seq_remote = {};
-     // TODO (rohany): Do i need to do this for the addresslist too?
-     info.addrlist = {};
-     info.addrcursor = {};
-     info.addrcursor.set_addrlist(&info.addrlist);
+     info.seq_local.reset();
+     info.seq_remote.reset();
+     info.addrlist.reset();
+     info.addrcursor.reset();
    }
 
    if(scatter_control_port >= 0) {
