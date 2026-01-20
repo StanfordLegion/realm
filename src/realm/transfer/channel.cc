@@ -683,8 +683,10 @@ namespace Realm {
     on_subgraph_control_completion();
 
     assert(subgraph_replay_state != nullptr);
-    for (auto& it : subgraph_replay_state[0].subgraph->bgwork_postconditions[subgraph_index]) {
-      trigger_subgraph_operation_completion(subgraph_replay_state, it, true /* incr_counter */, nullptr);
+    auto& postconds = subgraph_replay_state[0].subgraph->bgwork_postconditions;
+    for (uint64_t i = postconds.offsets[subgraph_index]; i < postconds.offsets[subgraph_index + 1]; i++) {
+      auto& info = postconds.data[i];
+      trigger_subgraph_operation_completion(subgraph_replay_state, info, true /* incr_counter */, nullptr);
     }
     if (subgraph_replay_state[0].subgraph->bgwork_items[subgraph_index].is_final_event) {
       // TODO (rohany): Hackily including the contributions of bgwork
@@ -701,8 +703,10 @@ namespace Realm {
     on_subgraph_async_completion();
 
     assert(subgraph_replay_state != nullptr);
-    for (auto& it : subgraph_replay_state[0].subgraph->bgwork_async_postconditions[subgraph_index]) {
-      trigger_subgraph_operation_completion(subgraph_replay_state, it, true /* incr_counter */, nullptr);
+    auto& postconds = subgraph_replay_state[0].subgraph->bgwork_async_postconditions;
+    for (uint64_t i = postconds.offsets[subgraph_index]; i < postconds.offsets[subgraph_index + 1]; i++) {
+      auto& info = postconds.data[i];
+      trigger_subgraph_operation_completion(subgraph_replay_state, info, true /* incr_counter */, nullptr);
     }
     if (subgraph_replay_state[0].subgraph->bgwork_items[subgraph_index].is_final_event) {
       // TODO (rohany): Hackily including the contributions of bgwork

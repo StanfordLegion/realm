@@ -929,15 +929,17 @@ namespace Realm {
 
     // Also initialize preconditions of bgwork items.
     bgwork_preconditions = std::vector<int32_t>(bgwork_items.size(), 0);
-    bgwork_postconditions = std::vector<std::vector<CompletionInfo>>(bgwork_items.size());
-    bgwork_async_preconditions = std::vector<std::vector<CompletionInfo>>(bgwork_items.size());
-    bgwork_async_postconditions = std::vector<std::vector<CompletionInfo>>(bgwork_items.size());
+    // Create temporary versions of the bgwork pre/postconditions buffers. These
+    // will be compacted into flattened buffers during finalization of compilation.
+    std::vector<std::vector<CompletionInfo>> bgwork_postconditions_build(bgwork_items.size());
+    std::vector<std::vector<CompletionInfo>> bgwork_async_preconditions_build(bgwork_items.size());
+    std::vector<std::vector<CompletionInfo>> bgwork_async_postconditions_build(bgwork_items.size());
     for (size_t i = 0; i < bgwork_items.size(); i++) {
       auto& it = bgwork_items[i];
       auto key = std::make_pair(it.op_kind, it.op_index);
       bgwork_preconditions[i] = int32_t(incoming_edges[key].size());
 
-      auto& outgoing = bgwork_postconditions[i];
+      auto& outgoing = bgwork_postconditions_build[i];
       for (auto& edge : outgoing_edges[key]) {
         if (bgwork_schedule.find(edge) != bgwork_schedule.end()) {
           auto idx = bgwork_schedule.at(edge);
@@ -970,7 +972,7 @@ namespace Realm {
           if (toposort.find(edge) != toposort.end()) {
             auto idx = toposort.at(edge);
             static_to_dynamic_counts[idx]++;
-            bgwork_async_postconditions[i].emplace_back(-1, idx, CompletionInfo::EdgeKind::BGWORK_TO_DYNAMIC);
+            bgwork_async_postconditions_build[i].emplace_back(-1, idx, CompletionInfo::EdgeKind::BGWORK_TO_DYNAMIC);
             continue;
           }
 
@@ -984,13 +986,13 @@ namespace Realm {
           auto bgwork_it = bgwork_schedule.find(edge);
           if (bgwork_it != bgwork_schedule.end()) {
             bgwork_preconditions[bgwork_it->second]++;
-            bgwork_async_postconditions[i].emplace_back(-1, bgwork_it->second, CompletionInfo::EdgeKind::BGWORK_TO_BGWORK);
+            bgwork_async_postconditions_build[i].emplace_back(-1, bgwork_it->second, CompletionInfo::EdgeKind::BGWORK_TO_BGWORK);
           } else {
             auto procidx = operation_procs[edge];
             auto schedidx = operation_indices[edge];
             local_incoming[all_procs[procidx]][schedidx]++;
             // Remember the processors that this operation will have to trigger.
-            bgwork_async_postconditions[i].emplace_back(procidx, schedidx, CompletionInfo::EdgeKind::BGWORK_TO_STATIC);
+            bgwork_async_postconditions_build[i].emplace_back(procidx, schedidx, CompletionInfo::EdgeKind::BGWORK_TO_STATIC);
           }
         }
         for (auto& edge : incoming_edges[key]) {
@@ -1002,9 +1004,9 @@ namespace Realm {
           // Enqueue case.
           auto bgwork_it = bgwork_schedule.find(edge);
           if (bgwork_it != bgwork_schedule.end()) {
-            bgwork_async_preconditions[i].emplace_back(-1, bgwork_it->second, CompletionInfo::EdgeKind::BGWORK_TO_BGWORK);
+            bgwork_async_preconditions_build[i].emplace_back(-1, bgwork_it->second, CompletionInfo::EdgeKind::BGWORK_TO_BGWORK);
           } else {
-            bgwork_async_preconditions[i].emplace_back(operation_procs[edge], operation_indices[edge], CompletionInfo::EdgeKind::STATIC_TO_BGWORK);
+            bgwork_async_preconditions_build[i].emplace_back(operation_procs[edge], operation_indices[edge], CompletionInfo::EdgeKind::STATIC_TO_BGWORK);
           }
         }
       }
@@ -1231,18 +1233,15 @@ namespace Realm {
       }
     }
 
-    // Completion information next.
-    completion_infos = FlattenedProcTaskMap<CompletionInfo>(all_procs, local_outgoing);
-
-    // Interpolation information.
-    interpolations = FlattenedProcTaskMap<SubgraphDefinition::Interpolation>(all_procs, local_interpolations);
-
-    // Finally, the precondition array.
-    original_preconditions = FlattenedProcMap<int32_t>(all_procs, local_incoming);
-
-    // Aggregate asynchronous pre- and post-condition metadata.
-    async_outgoing_infos = FlattenedProcTaskMap<CompletionInfo>(all_procs, async_effect_triggers);
-    async_incoming_infos = FlattenedProcTaskMap<CompletionInfo>(all_procs, async_incoming_events);
+    // Flatten all nested metadata structures into flat buffers.
+    completion_infos = {all_procs, local_outgoing};
+    interpolations = {all_procs, local_interpolations};
+    original_preconditions = {all_procs, local_incoming};
+    async_outgoing_infos = {all_procs, async_effect_triggers};
+    async_incoming_infos = {all_procs, async_incoming_events};
+    bgwork_postconditions = bgwork_postconditions_build;
+    bgwork_async_postconditions = bgwork_async_postconditions_build;
+    bgwork_async_preconditions = bgwork_async_preconditions_build;
 
     return true;
   }
@@ -2029,6 +2028,15 @@ namespace Realm {
     //  can consider extending the analysis to cache plans for
     //  multi-hop copies through the network.
     TransferGraph& graph = td->graph;
+    // TODO (rohany): I gave an initial attempt at supporting copies
+    //  with multiple XD's. Multi-hop copies are a separate problem, but
+    //  I wasn't sure of the right way to define a term that "copy_has_async_effects"
+    //  if some of the XD's within the copy do and others don't. A conservative
+    //  view would say that we have to do more synchronization (i.e. no async behavior)
+    //  for copies with multiple XD's, as they all must complete for the copy to
+    //  be registered as complete. For now, maybe we'll ask Legion to separate
+    //  copies into separate CopyDesc's whenever possible to expose more parallelism
+    //  and information to the subgraph.
     assert(graph.xd_nodes.size() == 1);
     assert(graph.ib_edges.empty());
     // Now, spoof the XDFactory inside each node of the transfer

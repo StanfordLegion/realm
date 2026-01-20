@@ -541,7 +541,9 @@ namespace Realm {
     void sync_subgraph_incoming_deps(ProcSubgraphReplayState* all_proc_states, unsigned index, GPUStream* stream) {
       // We can arbitrarily use the first processor's state.
       auto& state = all_proc_states[0];
-      for (auto& info : state.subgraph->bgwork_async_preconditions[index]) {
+      auto& preconds = state.subgraph->bgwork_async_preconditions;
+      for (uint64_t i = preconds.offsets[index]; i < preconds.offsets[index + 1]; i++) {
+        auto& info = preconds.data[i];
         CUevent_st* ev = nullptr;
         switch (info.kind) {
           case SubgraphImpl::CompletionInfo::STATIC_TO_BGWORK: {

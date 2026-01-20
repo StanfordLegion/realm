@@ -144,6 +144,28 @@ namespace Realm {
      std::vector<T> data;
    };
 
+  template <typename T>
+  struct FlattenedSparseMatrix {
+    FlattenedSparseMatrix() {}
+    FlattenedSparseMatrix(const std::vector<std::vector<T>>& input) {
+      uint64_t count = 0;
+      for (size_t i = 0; i < input.size(); i++) {
+        offsets.push_back(count);
+        for (auto& it : input[i]) {
+          data.push_back(it);
+          count++;
+        }
+      }
+      offsets.push_back(count);
+    }
+    void clear() {
+      offsets.clear();
+      data.clear();
+    }
+    std::vector<uint64_t> offsets;
+    std::vector<T> data;
+  };
+
   class SubgraphImpl {
   public:
     SubgraphImpl();
@@ -276,10 +298,9 @@ namespace Realm {
     // work operations that are ready to run as soon as the
     // subgraph can start.
     std::vector<int64_t> bgwork_items_without_preconditions;
-    // TODO (rohany): Compact these nested vectors later.
-    std::vector<std::vector<CompletionInfo>> bgwork_postconditions;
-    std::vector<std::vector<CompletionInfo>> bgwork_async_postconditions;
-    std::vector<std::vector<CompletionInfo>> bgwork_async_preconditions;
+    FlattenedSparseMatrix<CompletionInfo> bgwork_postconditions;
+    FlattenedSparseMatrix<CompletionInfo> bgwork_async_postconditions;
+    FlattenedSparseMatrix<CompletionInfo> bgwork_async_preconditions;
     // Maintain a mapping of indices into the bgwork_items vector
     // of async tokens that belong to each processor. This is used
     // to return async tokens (like CUDA events) back to the per-processor
