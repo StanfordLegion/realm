@@ -1062,6 +1062,8 @@ namespace Realm {
      // Return the event to the caller. The caller is responsible
      // for cleaning up this
      *(CUevent_st**)(token) = e;
+     // Actually record the event.
+     CHECK_CU(CUDA_DRIVER_FNPTR(cuEventRecord)(e, s->get_stream()));
 
      // Enqueue a poller for the completion of the launched kernels.
      if (trigger) {
