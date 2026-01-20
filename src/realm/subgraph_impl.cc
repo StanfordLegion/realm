@@ -492,22 +492,6 @@ namespace Realm {
                                const SubgraphXferDesNotifyCompletionMessage &args,
                                const void *data,
                                size_t datalen) {
-      // TODO (rohany): Unclear how to handle xfer des destruction (i.e. the
-      //  call to destroy_xfer_des(guid) itself. The normal code path makes
-      //  it seem like calling this function is not safe to do until all
-      //  components of the copy complete. I think the simplest thing here
-      //  would be to remove xd's from the table only at subgraph shutdown,
-      //  and change the enqueue logic to not add XD's into the table.
-      //  In that way, the XD's are always there in the table and are tied
-      //  to the lifetime of the subgraph rather than the lifetime of
-      //  the instantiation? If we tie the GUID lifetimes to subgraph
-      //  instantiations themselves, then we have to wait to ensure that
-      //  all remote nodes have deleted their XD's from the table before
-      //  we can consider a subgraph done, which is annoying.
-      // TODO (rohany): Counterpoint: skimming the XD code makes it sound
-      //  like we can infact early-delete XD's if they think they are done...
-      //  I think that this is likely better?
-    
       ProcSubgraphReplayState* all_states = reinterpret_cast<ProcSubgraphReplayState*>(args.all_proc_states);
       ProcSubgraphReplayState& state = all_states[0];
       // Handle profiling.
@@ -618,10 +602,10 @@ namespace Realm {
                                  XferDesRedopInfo redop_info,
                                  const void *fill_data, size_t fill_size,
                                  size_t fill_total) override {
+      assert(launch_node == Network::my_node_id);
       auto sxdf = dynamic_cast<SimpleXferDesFactory*>(factory);
       assert(sxdf != nullptr);
       uintptr_t channel = sxdf->get_channel();
-      assert(launch_node == Network::my_node_id);
       if (target_node == Network::my_node_id) {
         LocalChannel *c = reinterpret_cast<LocalChannel *>(channel);
         xd = c->create_xfer_des(dma_op, launch_node, guid,
@@ -673,7 +657,7 @@ namespace Realm {
         amsg.add_remote_completion(SubgraphXferDesCreateAcknowledged(subgraph));
         amsg.commit();
 
-        // TODO (rohany): Copied from the normal factory, probably have to do this too.
+        // Delete the iterators as they have been sent to a remote node.
         for (auto& it : inputs_info)
           delete it.iter;
         for (auto& it : outputs_info)
