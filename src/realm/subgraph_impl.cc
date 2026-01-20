@@ -1350,6 +1350,15 @@ namespace Realm {
                                  span<const Event> postconditions, Event start_event,
                                  Event finish_event, int priority_adjust)
   {
+    // If we're an instantiation order subgraph, we need to lock the
+    // subgraph to make sure that no one is trying to do a concurrent
+    // launch. We need to do this to set state on the subgraph that will
+    // correctly sequence the subgraph against previous instantiations.
+    if (defn->concurrency_mode == SubgraphDefinition::INSTANTIATION_ORDER) {
+      instantiation_lock.lock();
+      start_event = Event::merge_events(start_event, previous_instantiation_completion);
+    }
+
     // If we're running with the static scheduling optimization, then
     // there's extra work to be done. We have to preemptively
     // declare some data set by the optimization path though.
@@ -1754,6 +1763,16 @@ namespace Realm {
       } else {
         GenEventImpl::trigger(finish_event, false /*!poisoned*/);
       }
+    }
+
+    // After everything in the graph is launched, record the finish
+    // event inside the subgraph and release this lock. Releasing the
+    // lock here should be safe, as there isn't a way that triggering
+    // any events from inside this function causes a recursive entrance
+    // into the instantiate method.
+    if (defn->concurrency_mode == SubgraphDefinition::INSTANTIATION_ORDER) {
+      previous_instantiation_completion = finish_event;
+      instantiation_lock.unlock();
     }
   }
 

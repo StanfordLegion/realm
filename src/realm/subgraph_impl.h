@@ -24,6 +24,7 @@
 #include "realm/id.h"
 #include "realm/event_impl.h"
 #include "realm/cuda/cuda_module.h"
+#include "realm/mutex.h"
 
 namespace Realm {
 
@@ -321,17 +322,16 @@ namespace Realm {
     // necessary because some bgwork items may launch multiple disjoint
     // pieces of async work.
     std::vector<int64_t> bgwork_async_event_counts;
-    // TODO (rohany): Need to handle deferred launches of copies
-    //  when the copies are sharing the same xd state.
-    //  * To do this, have an event that all the processors will trigger
-    //    once they actually start up. Add a waiter to that event that
-    //    will run through and make all initially true preconditions start.
-    //  ^ This doesn't actually work. I'm not sure of a good way to do (and
-    //    not force the user to chain the replays themselves).
 
     // A vector of XD's for all copies that were planned during
     // subgraph compilation.
     FlattenedSparseMatrix<XferDes*> planned_copy_xds;
+
+    // When concurrency_mode == INSTANTIATION_ORDER, the subgraph will
+    // implicitly order instantiations of the subgraph by tracking
+    // the completion event of the last instantiation.
+    mutable Mutex instantiation_lock;
+    mutable Event previous_instantiation_completion = Event::NO_EVENT;
 
     class ExternalPreconditionTriggerer : public EventWaiter {
       public:
