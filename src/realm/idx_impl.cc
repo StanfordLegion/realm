@@ -153,6 +153,16 @@ namespace Realm {
     return impl->copy(srcs, dsts, 0, 0, requests, wait_on, priority);
   }
 
+  Event IndexSpaceGeneric::copy(const std::vector<CopySrcDstField> &srcs,
+                                const std::vector<CopySrcDstField> &dsts,
+                                const std::vector<void*> &indirects,
+                                const ProfilingRequestSet &requests,
+                                Event wait_on /*= Event::NO_EVENT*/,
+                                int priority  /*= 0*/) const
+  {
+    return impl->copy(srcs, dsts, &indirects[0], indirects.size(), requests, wait_on, priority);
+  }
+
   template <int N, typename T>
   Event IndexSpaceGeneric::copy(
       const std::vector<CopySrcDstField> &srcs, const std::vector<CopySrcDstField> &dsts,
@@ -200,15 +210,24 @@ namespace Realm {
                                                const ProfilingRequestSet &requests,
                                                Event wait_on, int priority) const
   {
-    // TODO: move to transfer.cc for indirection goodness
-    assert(indirect_len == 0);
-    return space.copy(srcs, dsts, requests, wait_on, priority);
+    std::vector<const typename CopyIndirection<N,T>::Base *> indirects;
+    indirects.resize(indirect_len);
+    for (size_t i = 0; i < indirect_len; i++) {
+      auto data = const_cast<void*>(indirects_data);
+      indirects[i] = (reinterpret_cast<const typename CopyIndirection<N,T>::Base **>(data))[i];
+    }
+    return space.copy(srcs, dsts, indirects, requests, wait_on, priority);
   }
 
   template <int N, typename T>
   TransferDesc *IndexSpaceGenericImplTyped<N, T>::make_transfer_desc(const std::vector<CopySrcDstField> &srcs,
-                                                                     const std::vector<CopySrcDstField> &dsts) const {
+                                                                     const std::vector<CopySrcDstField> &dsts,
+                                                                     const std::vector<void*> &_indirects) const {
     std::vector<const typename CopyIndirection<N,T>::Base *> indirects;
+    indirects.resize(_indirects.size());
+    for (size_t i = 0; i < _indirects.size(); i++) {
+      indirects[i] = reinterpret_cast<const typename CopyIndirection<N,T>::Base *>(_indirects[i]);
+    }
     ProfilingRequestSet prs;
     TransferDesc *tdesc = new TransferDesc(this->space,
                                            srcs,

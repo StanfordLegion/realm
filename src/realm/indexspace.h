@@ -1142,6 +1142,16 @@ namespace Realm {
                const ProfilingRequestSet &requests, Event wait_on = Event::NO_EVENT,
                int priority = 0) const;
 
+    // Also allow "generic" (but unchecked) copy indirections to be executed.
+    Event copy(const std::vector<CopySrcDstField> &srcs,
+               const std::vector<CopySrcDstField> &dsts,
+               // The erased type:
+               // const std::vector<const typename CopyIndirection<N,T>::Base *>& indirects
+               const std::vector<void*> &indirects,
+               const ProfilingRequestSet &requests,
+               Event wait_on = Event::NO_EVENT,
+               int priority = 0) const;
+
     template <int N, typename T>
     Event copy(const std::vector<CopySrcDstField> &srcs,
                const std::vector<CopySrcDstField> &dsts,

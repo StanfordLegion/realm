@@ -114,6 +114,12 @@ namespace Realm {
       IndexSpaceGeneric space; // type-erase here to avoid template explosion
       std::vector<CopySrcDstField> srcs;
       std::vector<CopySrcDstField> dsts;
+      // TODO (rohany): We're not going to be able to support sending copies
+      //  with indirections over the network yet.
+      // The indirection code is very heavily templated. To use indirection
+      // copies in subgraphs, users must pass void pointers to the "correctly"
+      // templated argument types (CopyIndirection<N,T>::Base* objects).
+      std::vector<void*> indirects;
       ProfilingRequestSet prs;
       ReductionOpID redop_id /*= 0*/;
       bool red_fold /*= false*/;

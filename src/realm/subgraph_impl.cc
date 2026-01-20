@@ -1802,9 +1802,9 @@ namespace Realm {
           ProfilingRequestSet cprs;
           cprs.import_requests(cd.prs);
           cprs.import_requests(sprs.copy_prs[it->op_index]);
-          e = cd.space.copy(cd.srcs, cd.dsts, cprs, pre);
+          e = cd.space.copy(cd.srcs, cd.dsts, cd.indirects, cprs, pre);
         } else {
-          e = cd.space.copy(cd.srcs, cd.dsts, cd.prs, pre);
+          e = cd.space.copy(cd.srcs, cd.dsts, cd.indirects, cd.prs, pre);
         }
 
         intermediate_events[cur_intermediate_events++] = e;
@@ -2508,7 +2508,7 @@ namespace Realm {
     ProfilingMeasurements::OperationCopyInfo& copy_info,
     ProfilingMeasurements::OperationMemoryUsage& mem_info
   ) {
-    TransferDesc* td = copy.space.impl->make_transfer_desc(copy.srcs, copy.dsts);
+    TransferDesc* td = copy.space.impl->make_transfer_desc(copy.srcs, copy.dsts, copy.indirects);
     // Extract profiling information about the copy requested from
     // the transfer descriptor for later use.
     copy_info = td->prof_cpinfo;

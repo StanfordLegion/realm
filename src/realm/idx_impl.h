@@ -44,7 +44,8 @@ namespace Realm {
 
     // TODO (rohany): Only supporting direct copies for now.
     virtual TransferDesc* make_transfer_desc(const std::vector<CopySrcDstField> &srcs,
-                                             const std::vector<CopySrcDstField> &dsts) const = 0;
+                                             const std::vector<CopySrcDstField> &dsts,
+                                             const std::vector<void*> &indirects) const = 0;
 
     // given an instance layout, attempts to provide bounds (start relative to
     //  the base of the instance and relative limit - i.e. first nonaccessibly
@@ -75,7 +76,8 @@ namespace Realm {
                        int priority) const;
 
     virtual TransferDesc* make_transfer_desc(const std::vector<CopySrcDstField> &srcs,
-                                             const std::vector<CopySrcDstField> &dsts) const;
+                                             const std::vector<CopySrcDstField> &dsts,
+                                             const std::vector<void*> &indirects) const;
 
     virtual bool compute_affine_bounds(const InstanceLayoutGeneric *ilg, FieldID fid,
                                        uintptr_t &rel_base, uintptr_t &limit) const;
