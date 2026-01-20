@@ -186,7 +186,7 @@ namespace Realm {
     }
   }
 
-  bool SubgraphImpl::copy_has_async_effects(unsigned op_idx) {
+  bool SubgraphImpl::copy_has_any_async_effects(unsigned op_idx) {
     // We can't just look at the source and destination of the copy,
     // as the GPU's copy engines can even be used sometimes for H2H
     // copies. So just look at the XD and see if it has async effects.
@@ -197,6 +197,18 @@ namespace Realm {
         return true;
     }
     return false;
+  }
+
+  bool SubgraphImpl::copy_has_all_async_effects(unsigned op_idx) {
+    // We can't just look at the source and destination of the copy,
+    // as the GPU's copy engines can even be used sometimes for H2H
+    // copies. So just look at the XD and see if it has async effects.
+    for (uint64_t i = planned_copy_xds.offsets[op_idx]; i < planned_copy_xds.offsets[op_idx + 1]; i++) {
+      auto xd = planned_copy_xds.data[i];
+      if (!xd->launches_async_work())
+        return false;
+    }
+    return true;
   }
 
   bool SubgraphImpl::task_respects_async_effects(SubgraphDefinition::TaskDesc& src, SubgraphDefinition::TaskDesc& dst) {
@@ -219,7 +231,7 @@ namespace Realm {
             //  could look yet, so for now, a "copy being async" means
             //  that it pushes work onto a GPU. So the check here is
             //  just copy is async + task is on GPU.
-            return copy_has_async_effects(src_op_idx) && task_has_async_effects(defn->tasks[dst_op_idx]);
+            return copy_has_any_async_effects(src_op_idx) && task_has_async_effects(defn->tasks[dst_op_idx]);
           }
           default:
             return false;
@@ -227,13 +239,15 @@ namespace Realm {
       }
       case SubgraphDefinition::OPKIND_COPY: {
         // See the comment above in the COPY->TASK case. We'll pretend
-        // an async copy is really a copy serviced by the GPU.
+        // an async copy is really a copy serviced by the GPU. Copies
+        // only respect asynchronous effects if all of their XD's
+        // are asynchronous.
         switch (src_op_kind) {
           case SubgraphDefinition::OPKIND_TASK: {
-            return copy_has_async_effects(dst_op_idx) && task_has_async_effects(defn->tasks[src_op_idx]);
+            return task_has_async_effects(defn->tasks[src_op_idx]) && copy_has_all_async_effects(dst_op_idx);
           }
           case SubgraphDefinition::OPKIND_COPY: {
-            return copy_has_async_effects(src_op_idx) && copy_has_async_effects(dst_op_idx);
+            return copy_has_any_async_effects(src_op_idx) && copy_has_all_async_effects(dst_op_idx);
           }
           default:
             return false;
@@ -250,7 +264,7 @@ namespace Realm {
         return task_has_async_effects(defn->tasks[op_idx]);
       }
       case SubgraphDefinition::OPKIND_COPY: {
-        return copy_has_async_effects(op_idx);
+        return copy_has_any_async_effects(op_idx);
       }
       case SubgraphDefinition::OPKIND_EXT_PRECOND: [[fallthrough]];
       case SubgraphDefinition::OPKIND_ARRIVAL: {

@@ -205,7 +205,8 @@ namespace Realm {
       // Since subgraphs have a static view of the source program, they can
       // take more advantage of this asynchrony than Realm can today.
       bool task_has_async_effects(SubgraphDefinition::TaskDesc& task);
-      bool copy_has_async_effects(unsigned op_idx);
+      bool copy_has_any_async_effects(unsigned op_idx);
+      bool copy_has_all_async_effects(unsigned op_idx);
       bool operation_has_async_effects(SubgraphDefinition::OpKind op_kind, unsigned op_idx);
       bool task_respects_async_effects(SubgraphDefinition::TaskDesc& src, SubgraphDefinition::TaskDesc& dst);
       bool operation_respects_async_effects(SubgraphDefinition::OpKind src_op_kind, unsigned src_op_idx,
