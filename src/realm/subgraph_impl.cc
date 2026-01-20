@@ -396,14 +396,20 @@ namespace Realm {
       std::vector<XferDesPortInfo> inputs_info, outputs_info;
       int priority = 0;
       XferDesRedopInfo redop_info;
+      unsigned op_index;
+      unsigned xd_index;
+      ID::IDType subgraph_id;
       size_t fill_total = 0;
-    
+
       Realm::Serialization::FixedBufferDeserializer fbd(data, datalen);
-    
+
       bool ok = ((fbd >> inputs_info) &&
                  (fbd >> outputs_info) &&
                  (fbd >> priority) &&
                  (fbd >> redop_info) &&
+                 (fbd >> op_index) &&
+                 (fbd >> xd_index) &&
+                 (fbd >> subgraph_id) &&
                  (fbd >> fill_total));
       assert(ok);
       const void *fill_data;
@@ -425,36 +431,38 @@ namespace Realm {
                                        fill_data, fill_size, fill_total);
       // Detach the XD from its DMA op.
       xd->dma_op = 0;
-    
+
       // Now, register the XD for this subgraph.
       {
         RuntimeImpl* rt = get_runtime();
         RWLock::AutoWriterLock al(rt->remote_subgraph_meta_lock);
         auto& meta = rt->remote_subgraph_meta;
-        meta[args.subgraph_id.id].xds[{args.op_index, args.xd_index}] = xd;
+        meta[subgraph_id].xds[{op_index, xd_index}] = xd;
       }
-    
+
+      // TODO (rohany): Replace this with a completion notification.
       // Send a message back to the target node that we are done.
-      ActiveMessage<SubgraphXferDesCreateResponseMessage> amsg(sender, 0 /* inline_storage */);
-      amsg->subgraph_id = args.subgraph_id;
+      ActiveMessage<SubgraphXferDesCreateResponseMessage> amsg(sender);
+      amsg->subgraph_id = subgraph_id;
       amsg.commit();
     }
     uintptr_t dma_op;
     XferDesID guid;
     NodeID launch_node;
     uintptr_t channel;
-    unsigned op_index;
-    unsigned xd_index;
-    ID subgraph_id;
+    // Note: we can't include these fields in the header because
+    // the header can only fit 4 words.
+    // unsigned op_index;
+    // unsigned xd_index;
+    // ID subgraph_id;
   };
-    
+
   // Active message to request starting an XD on a remote node.
   struct SubgraphXferDesEnqueueMessage {
     static void handle_message(NodeID sender,
                                const SubgraphXferDesEnqueueMessage &args,
                                const void *data,
                                size_t datalen) {
-      assert(false);
       std::vector<unsigned> xd_indexes;
       std::vector<off_t> ib_offsets;
       Realm::Serialization::FixedBufferDeserializer fbd(data, datalen);
@@ -537,7 +545,7 @@ namespace Realm {
         auto& info = postconds.data[i];
         trigger_subgraph_operation_completion(all_states, info, true /* incr_counter */, nullptr);
       }
-    
+
       if (state.subgraph->bgwork_items[args.subgraph_index].is_final_event) {
         // TODO (rohany): Hackily including the contributions of bgwork
         //  operations in the proc 0 counters.
@@ -550,27 +558,26 @@ namespace Realm {
     uintptr_t all_proc_states; // ProcSubgraphReplayState*
     unsigned subgraph_index;
   };
-    
+
   void send_subgraph_remote_xd_completion(NodeID launch_node, ProcSubgraphReplayState* all_proc_states, unsigned subgraph_index) {
-    ActiveMessage<SubgraphXferDesNotifyCompletionMessage> amsg(launch_node, 0 /* inline_storage */);
+    ActiveMessage<SubgraphXferDesNotifyCompletionMessage> amsg(launch_node);
     amsg->all_proc_states = reinterpret_cast<uintptr_t>(all_proc_states);
     amsg->subgraph_index = subgraph_index;
     amsg.commit();
   }
-     
+
   // Activate message to release remote resources from a subgraph.
   struct SubgraphRemoteResourceDeletionResponseMessage {
     static void handle_message(NodeID sender,
                                const SubgraphRemoteResourceDeletionResponseMessage &args,
                                const void *data,
                                size_t datalen) {
-      assert(false);
       SubgraphImpl* subgraph = get_runtime()->get_subgraph_impl(args.subgraph_id);
       subgraph->pending_peer_deletions.fetch_sub_acqrel(1);
     }
     ID subgraph_id;
   };
-    
+
   struct SubgraphRemoteResourceDeletionRequestMessage {
     static void handle_message(NodeID sender,
                                const SubgraphRemoteResourceDeletionRequestMessage &args,
@@ -585,8 +592,9 @@ namespace Realm {
       }
       meta.xds.clear();
       rt->remote_subgraph_meta.erase(args.subgraph_id.id);
+      // TODO (rohany): Replace this with a completion notification.
       // Send a message back that we're done.
-      ActiveMessage<SubgraphRemoteResourceDeletionResponseMessage> amsg(sender, 0 /* inline_storage */);
+      ActiveMessage<SubgraphRemoteResourceDeletionResponseMessage> amsg(sender);
       amsg->subgraph_id = args.subgraph_id;
       amsg.commit();
     }
@@ -639,6 +647,8 @@ namespace Realm {
         subgraph->peers.insert(target_node);
         remote = true;
         xd_target_node = target_node;
+        // Increment the pending XD creations counter.
+        subgraph->pending_remote_xd_creations.fetch_add_acqrel(1);
 
         // Copied from the SimpleXferDesFactory.
         Serialization::ByteCountSerializer bcs;
@@ -647,6 +657,9 @@ namespace Realm {
                      (bcs << outputs_info) &&
                      (bcs << priority) &&
                      (bcs << redop_info) &&
+                     (bcs << op_index) &&
+                     (bcs << xd_index) &&
+                     (bcs << ID::IDType(subgraph->me.id)) &&
                      (bcs << fill_total));
           if(ok && (fill_size > 0))
             ok = bcs.append_bytes(fill_data, fill_size);
@@ -658,14 +671,14 @@ namespace Realm {
         amsg->guid = guid;
         amsg->dma_op = dma_op;
         amsg->channel = channel;
-        amsg->op_index = op_index;
-        amsg->xd_index = xd_index;
-        amsg->subgraph_id = subgraph->me;
         {
           bool ok = ((amsg << inputs_info) &&
                      (amsg << outputs_info) &&
                      (amsg << priority) &&
                      (amsg << redop_info) &&
+                     (amsg << op_index) &&
+                     (amsg << xd_index) &&
+                     (amsg << ID::IDType(subgraph->me.id)) &&
                      (amsg << fill_total));
           if(ok && (fill_size > 0))
             amsg.add_payload(fill_data, fill_size);
@@ -2837,6 +2850,7 @@ namespace Realm {
       xd->subgraph_replay_state = all_proc_states;
       xd->subgraph_index = subgraph_index;
       xd->xd_index = i - offs[op_idx];
+      xd->op_index = op_idx;
       // Add a reference before enqueing the XD, as each pass through the pipeline
       // removes a reference upon completion.
       xd->add_reference();
@@ -2847,6 +2861,14 @@ namespace Realm {
     auto& remote_xds = subgraph->remote_xd_groupings[op_idx];
     if (!remote_xds.empty()) {
       for (auto& it : remote_xds) {
+        // Set the async token for each of the remote XDs to null,
+        // as dependent operations check whether these tokens are null to
+        // include them or not, and remote copies are not treated as async.
+        for (auto xd_index : it.second) {
+          auto tokidx = subgraph->bgwork_async_event_counts[subgraph_index] + xd_index;
+          all_proc_states[0].async_bgwork_events[tokidx] = nullptr;
+        }
+
         Serialization::ByteCountSerializer bcs;
         {
           bool ok = ((bcs << it.second) && (bcs << ib_offsets));
@@ -2858,7 +2880,7 @@ namespace Realm {
         amsg->op_index = op_idx;
         amsg->subgraph_index = subgraph_index;
         {
-          bool ok = ((amsg << it.second) && (bcs << ib_offsets));
+          bool ok = ((amsg << it.second) && (amsg << ib_offsets));
           assert(ok);
         }
         amsg.commit();
