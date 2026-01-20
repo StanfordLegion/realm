@@ -1246,8 +1246,10 @@ namespace Realm {
           auto start = replay->subgraph->async_outgoing_infos.task_offsets[proc_offset + local_op_index];
           auto end = replay->subgraph->async_outgoing_infos.task_offsets[proc_offset + local_op_index + 1];
           auto sp = span<SubgraphImpl::CompletionInfo>(replay->subgraph->async_outgoing_infos.data.data() + start, end - start);
+          // Async final events need to decrement the pending async counter.
           atomic<int32_t>* final_ctr = nullptr;
-          if (subgraph->operation_meta.data[op_index].is_final_event) {
+          auto& opmeta = subgraph->operation_meta.data[op_index];
+          if (opmeta.is_final_event && opmeta.is_async) {
             final_ctr = &replay->pending_async_count;
           }
           // The notifier needs to be created if there are post-conditions,

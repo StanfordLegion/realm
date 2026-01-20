@@ -305,6 +305,7 @@ namespace Realm {
     // subgraph replay (if applicable).
     ProcSubgraphReplayState* subgraph_replay_state = nullptr;
     unsigned subgraph_index = (unsigned)(-1);
+    // Stored to help reset XD state in subgraph replays.
     int gather_control_port = -1;
     int scatter_control_port = -1;
     struct XferPort {
@@ -590,8 +591,12 @@ namespace Realm {
     // Note: not including the override to avoid warnings with
     // the rest of the functions not marked override.
     bool launches_async_work() /* override */ { return false; }
+    void reset();
 
     bool progress_xd(MemfillChannel *channel, TimeLimit work_until);
+  protected:
+    // Used to help reset the XD.
+    size_t fill_total;
   };
 
   class MemreduceChannel;
@@ -718,7 +723,8 @@ namespace Realm {
                                  const void *fill_data, size_t fill_size,
                                  size_t fill_total);
 
-    // TODO (rohany): Not sure there's an easier way outside
+    uintptr_t get_channel() { return channel; }
+  protected:
     //  making this public.
     uintptr_t channel;
   };

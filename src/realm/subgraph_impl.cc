@@ -293,7 +293,7 @@ namespace Realm {
       assert(launch_node == Network::my_node_id);
       auto sxdf = dynamic_cast<SimpleXferDesFactory*>(factory);
       assert(sxdf != nullptr);
-      LocalChannel *c = reinterpret_cast<LocalChannel *>(sxdf->channel);
+      LocalChannel *c = reinterpret_cast<LocalChannel *>(sxdf->get_channel());
       xd = c->create_xfer_des(dma_op, launch_node, guid,
                               inputs_info, outputs_info,
                               priority, redop_info,

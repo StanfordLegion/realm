@@ -2117,7 +2117,7 @@ namespace Realm {
                                  int _priority, const void *_fill_data, size_t _fill_size,
                                  size_t _fill_total)
     : XferDes(_dma_op, _channel, _launch_node, _guid, inputs_info, outputs_info,
-              _priority, _fill_data, _fill_size)
+              _priority, _fill_data, _fill_size), fill_total(_fill_total)
   {
     kind = XFER_MEM_FILL;
 
@@ -2126,6 +2126,14 @@ namespace Realm {
     assert(input_control.control_port_idx == -1);
     input_control.current_io_port = -1;
     input_control.remaining_count = _fill_total;
+    input_control.eos_received = true;
+  }
+
+  void MemfillXferDes::reset() {
+    XferDes::reset();
+    assert(input_control.control_port_idx == -1);
+    input_control.current_io_port = -1;
+    input_control.remaining_count = fill_total;
     input_control.eos_received = true;
   }
 

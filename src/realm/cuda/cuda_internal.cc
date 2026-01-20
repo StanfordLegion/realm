@@ -566,7 +566,10 @@ namespace Realm {
       auto gpu = depstream->get_gpu();
       auto ev = gpu->event_pool.get_event();
       CHECK_CU(CUDA_DRIVER_FNPTR(cuEventRecord)(ev, stream->get_stream()));
-      // Synchronize with this event on the outgoing stream.
+      // Synchronize with this event on the outgoing stream. This allows
+      // for depstream to capture a dependence on the work issued on stream,
+      // but does not serialize any of the work issued on stream with any
+      // other pending work or future work to be issued on stream.
       CHECK_CU(CUDA_DRIVER_FNPTR(cuStreamWaitEvent)(depstream->get_stream(), ev, 0));
       // Now throw the event back into the stream with
       // the completion attached.
@@ -612,23 +615,6 @@ namespace Realm {
       memset(&cuda_copy, 0, sizeof(cuda_copy));
       memset(&transpose_copy, 0, sizeof(transpose_copy));
       memset(&copy_infos, 0, sizeof(copy_infos));
-
-      // TODO (rohany): To handle asynchronous launching of work, we have to
-      //  do two things:
-      //   1) synchronize with previously submitted work by the subgraph, and
-      //   2) record a token for the subgraph to synchronize with us.
-      //  We'll accomplish this in the following way:
-      //   1) Each GPU*Channel will have two streams: a subgraph incoming
-      //      stream, and a subgraph outgoing stream.
-      //   2) Any work launched by the channel will synchronize against the
-      //      subgraph incoming stream (which will record an event on any
-      //      preconditions in the subgraph).
-      //   3) All work launched by the channel will record an event that is
-      //      then synchronized onto the subgraph outgoing stream. Once all
-      //      asynchronous work is launched by the stream, an event will be
-      //      recorded on the outgoing stream as the result token. This allows
-      //      all of the launched work to run in parallel, but still gives us
-      //      an event that requires all of the parallel work to complete.
 
       // The general algorithm here can be described in three loops:
       // 1) Outer loop - iterates over all the addresses for each request.  This typically

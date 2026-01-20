@@ -385,7 +385,7 @@ namespace Realm {
     atomic<int32_t>* dynamic_preconditions = nullptr;
     UserEvent* dynamic_events = nullptr;
 
-    // TODO (rohany): ...
+    // Precondition array for bgwork items.
     atomic<int32_t>* bgwork_preconditions = nullptr;
 
     // A queue of operation indexes to execute.
@@ -397,7 +397,7 @@ namespace Realm {
     void** async_operation_events = nullptr;
     SubgraphImpl::AsyncGPUWorkTriggerer* async_operation_effect_triggerers = nullptr;
 
-    // TODO (rohany): ...
+    // Array to manage background work items that launch asynchronous work.
     void** async_bgwork_events = nullptr;
 
     // A counter to manage the number of pending async items

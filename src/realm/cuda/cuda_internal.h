@@ -938,6 +938,8 @@ namespace Realm {
                      const std::vector<XferDesPortInfo> &outputs_info, int _priority,
                      const void *_fill_data, size_t _fill_size, size_t _fill_total);
 
+      void reset() override;
+
       long get_requests(Request **requests, long nr);
 
       bool progress_xd(GPUfillChannel *channel, TimeLimit work_until);
@@ -948,6 +950,7 @@ namespace Realm {
 
     protected:
       size_t reduced_fill_size;
+      size_t fill_total;
     };
 
     class GPUfillChannel : public SingleXDQChannel<GPUfillChannel, GPUfillXferDes> {

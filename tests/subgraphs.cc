@@ -111,9 +111,9 @@ void dummy_task(const void *args, size_t arglen,
                 const void *userdata, size_t userlen, Processor p) {
   if (arglen > 0) {
     int32_t value = *(int32_t*)(args);
-    std::cout << "In dummy task -- " << value << "!" << std::endl;
+    log_app.info() << "In dummy task -- " << value << "!";
   } else {
-    std::cout << "In dummy task!" << std::endl;
+    log_app.info() << "In dummy task!";
   }
 }
 
@@ -180,8 +180,8 @@ void test_read_task(const void *args, size_t arglen,
                     const void *userdata, size_t userlen, Processor p) {
   auto inst = (RegionInstance*)(args);
   AffineAccessor<int32_t, 1> acc = AffineAccessor<int32_t, 1>(*inst, 0);
-  std::cout << "FOUND VALUE IN INST: " << (*acc.ptr(0)) << std::endl;
-  std::cout << "FOUND VALUE IN INST: " << (*acc.ptr(inst->get_indexspace<1>().bounds.hi[0])) << std::endl;
+  log_app.info() << "FOUND VALUE IN INST: " << (*acc.ptr(0));
+  log_app.info() << "FOUND VALUE IN INST: " << (*acc.ptr(inst->get_indexspace<1>().bounds.hi[0]));
 }
 
 // clang doesn't permit use of offsetof when there are non-POD types involved
@@ -216,7 +216,7 @@ std::vector<Memory> sysmems(sq.begin(), sq.end());
 std::map<FieldID, size_t> field_sizes;
 field_sizes[0] = sizeof(int32_t);
 IndexSpace<1> is2 = Rect<1>(0, 10);
-RegionInstance src_inst, dst_inst, dst_inst2;
+RegionInstance src_inst, dst_inst, dst_inst2, fill_inst;
 RegionInstance::create_instance(src_inst, sysmems[0],
                                 is2, field_sizes,
                                 0 /*SOA*/, ProfilingRequestSet()).wait();
@@ -224,6 +224,9 @@ RegionInstance::create_instance(dst_inst, sysmems[0],
                                 is2, field_sizes,
                                 0 /*SOA*/, ProfilingRequestSet()).wait();
 RegionInstance::create_instance(dst_inst2, sysmems[0],
+                                is2, field_sizes,
+                                0 /*SOA*/, ProfilingRequestSet()).wait();
+RegionInstance::create_instance(fill_inst, sysmems[0],
                                 is2, field_sizes,
                                 0 /*SOA*/, ProfilingRequestSet()).wait();
 
@@ -276,7 +279,7 @@ RegionInstance::create_instance(dst_inst2, sysmems[0],
 
   auto bar = Barrier::create_barrier(1);
 
-  std::cout << "Diamond subgraph." << std::endl;
+  log_app.info() << "Diamond subgraph.";
   Subgraph diamond;
   {
     SubgraphDefinition sd;
@@ -341,27 +344,24 @@ RegionInstance::create_instance(dst_inst2, sysmems[0],
     sd.interpolations[5].bytes = sizeof(Barrier);
     sd.interpolations[5].target_kind = SubgraphDefinition::Interpolation::TARGET_ARRIVAL_BARRIER;
 
-    sd.copies.resize(1);
+    sd.copies.resize(2);
     {
       std::vector<CopySrcDstField> src(1), dst(1);
-      ProfilingRequestSet prs;
       src[0].set_field(src_inst, 0, sizeof(int32_t));
       dst[0].set_field(dst_inst, 0, sizeof(int32_t));
       sd.copies[0].space = is2;
       sd.copies[0].srcs = src;
       sd.copies[0].dsts = dst;
     }
-//    {
-//      std::vector<CopySrcDstField> src(1), dst(1);
-//      ProfilingRequestSet prs();
-//      int32_t value = 13;
-//      src[0].set_fill(value);
-//      dst[0].set_field(fill_inst, 0, sizeof(int32_t));
-//      sd.copies[1].space = is2;
-//      sd.copies[1].srcs = src;
-//      sd.copies[1].dsts = dst;
-//    }
-
+    {
+      std::vector<CopySrcDstField> src(1), dst(1);
+      int32_t value = 13;
+      src[0].set_fill(value);
+      dst[0].set_field(fill_inst, 0, sizeof(int32_t));
+      sd.copies[1].space = is2;
+      sd.copies[1].srcs = src;
+      sd.copies[1].dsts = dst;
+    }
 
     // Add the necessary dependencies.
     sd.dependencies.resize(13);
@@ -440,7 +440,7 @@ RegionInstance::create_instance(dst_inst2, sysmems[0],
   }
 
   auto next_bar = bar.advance_barrier();
-  // TODO (rohany): Eventually chain these rather than have waits in the middle.
+
   Event e = Event::NO_EVENT;
   Serialization::DynamicBufferSerializer ser(256);
   ser << 0;
@@ -449,41 +449,17 @@ RegionInstance::create_instance(dst_inst2, sysmems[0],
   ser << 3;
   ser << 4;
   ser << next_bar;
-  // e = diamond.instantiate(ser.get_buffer(), ser.bytes_used(), ProfilingRequestSet(), e);
   std::vector<Event> ext_preconds;
   ext_preconds.push_back(bar);
   std::vector<Event> ext_postconds(2);
   // First run will trigger the external post conds.
   e = diamond.instantiate(ser.get_buffer(), ser.bytes_used(), ProfilingRequestSet(), ext_preconds, ext_postconds);
-//  std::cout << "Starting second instantiation." << std::endl;
   ser.reset();
 
-  std::cout << "Triggering barrier arrival." << std::endl;
+  // Arrive to allow the instantiation to continue.
   bar.arrive();
 
-  // e.wait();
-
-  bar = bar.advance_barrier();
-
-
-  // Check out the fill instance.
-//  {
-//    std::vector<CopySrcDstField> src(1), dst(1);
-//    src[0].set_field(fill_inst, 0, sizeof(int32_t));
-//    dst[0].set_field(cpu_inst, 0, sizeof(int32_t));
-//    is2.copy(src, dst, ProfilingRequestSet()).wait();
-//    AffineAccessor<int32_t, 1> acc = AffineAccessor<int32_t, 1>(cpu_inst, 0);
-//    std::cout << "FOUND VALUE IN INST: " << (*acc.ptr(0)) << std::endl;
-//    std::cout << "FOUND VALUE IN INST: " << (*acc.ptr(is2.bounds.hi[0])) << std::endl;
-//  }
-//
-//  interp = 2;
-
-  // {
-  //   AffineAccessor<int32_t, 1> acc = AffineAccessor<int32_t, 1>(dst_inst, 0);
-  //   std::cout << "FOUND VALUE IN INST: " << (*acc.ptr(0)) << std::endl;
-  //   std::cout << "FOUND VALUE IN INST: " << (*acc.ptr(is2.bounds.hi[0])) << std::endl;
-  // }
+  e = cpus[0].spawn(TEST_READ_TASK, &fill_inst, sizeof(fill_inst), e);
   e = cpus[0].spawn(TEST_READ_TASK, &dst_inst, sizeof(dst_inst), e);
   {
     std::vector<CopySrcDstField> info(1);
@@ -491,7 +467,12 @@ RegionInstance::create_instance(dst_inst2, sysmems[0],
     int32_t value = 242;
     e = is2.fill(info, ProfilingRequestSet(), &value, sizeof(int32_t), e);
   }
-
+  {
+    std::vector<CopySrcDstField> info(1);
+    info[0].set_field(fill_inst, 0, sizeof(int32_t));
+    int32_t value = 242;
+    e = is2.fill(info, ProfilingRequestSet(), &value, sizeof(int32_t), e);
+  }
 
   auto next_next_bar = next_bar.advance_barrier();
   // Set interp to some new data, just to be sure it works on a second replay.
@@ -506,35 +487,22 @@ RegionInstance::create_instance(dst_inst2, sysmems[0],
   ext_preconds.push_back(next_bar);
   std::vector<Event> ext_postconds_2(2);
   e = diamond.instantiate(ser.get_buffer(), ser.bytes_used(), ProfilingRequestSet(), ext_preconds, ext_postconds_2, e);
-  std::cout << "Starting third instantiation." << std::endl;
-//  interp = 3;
-//  e = diamond.instantiate(&interp, sizeof(interp), ProfilingRequestSet(), e);
-//  std::cout << "Starting fourth instantiation." << std::endl;
-//  interp = 4;
-//  e = diamond.instantiate(&interp, sizeof(interp), ProfilingRequestSet(), e);
-  // e.wait();
 
-  // next_next_bar.wait();
+  // Ensure the destruction doesn't affect in flight replays.
+  diamond.destroy(e);
+
+  e = cpus[0].spawn(TEST_READ_TASK, &fill_inst, sizeof(fill_inst), e);
+  cpus[0].spawn(TEST_READ_TASK, &dst_inst, sizeof(dst_inst), e).wait();
 
   e.wait();
-  std::cout << "Done!" << std::endl;
+
   for (auto& e : ext_postconds)
     assert(e.exists() && e.has_triggered());
   for (auto& e : ext_postconds_2)
     assert(e.exists() && e.has_triggered());
+  assert(next_next_bar.has_triggered());
 
-  // See if the subgraph did the copy.
-  {
-    AffineAccessor<int32_t, 1> acc = AffineAccessor<int32_t, 1>(dst_inst, 0);
-    std::cout << "FOUND VALUE IN INST: " << (*acc.ptr(0)) << std::endl;
-    std::cout << "FOUND VALUE IN INST: " << (*acc.ptr(is2.bounds.hi[0])) << std::endl;
-  }
-
-  // TODO (rohany): For some reason, calling e.wait() works while
-  //  calling diamond.destroy(e) does not work, meaning that we have
-  //  some subgraph destruction races / final events triggering before it should.
-  diamond.destroy();
-
+  log_app.info() << "Done!";
 
   // do everything on this processor - get a good memory to use
 //  Memory m = Machine::MemoryQuery(Machine::get_machine()).has_affinity_to(p).first();
