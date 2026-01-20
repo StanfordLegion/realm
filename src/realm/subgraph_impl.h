@@ -23,8 +23,6 @@
 #include "realm/subgraph.h"
 #include "realm/id.h"
 #include "realm/event_impl.h"
-
-// TODO (rohany): Should be able to include this even in CPU-only builds...
 #include "realm/cuda/cuda_module.h"
 
 namespace Realm {
@@ -91,14 +89,15 @@ namespace Realm {
    bool task_has_async_effects(SubgraphDefinition::TaskDesc& task);
    bool operation_has_async_effects(SubgraphDefinition* defn, SubgraphDefinition::OpKind op_kind, unsigned op_idx);
 
-   // TODO (rohany): Not sure if these are the right interfaces yet. I suspect
-   //  that this needs to accept pairs, rather than individual tasks.
    bool task_respects_async_effects(SubgraphDefinition::TaskDesc& src, SubgraphDefinition::TaskDesc& dst);
    bool operation_respects_async_effects(SubgraphDefinition* defn,
                                          SubgraphDefinition::OpKind src_op_kind, unsigned src_op_idx,
                                          SubgraphDefinition::OpKind dst_op_kind, unsigned dst_op_idx);
 
-   // TODO (rohany): Comment ...
+   // FlattenedProcMap and FlattenedProcTaskMap are essentially sparse matrix
+   // and sparse tensor representations of mappings of
+   // * proc -> vec<T> (per task)
+   // * proc -> task -> vec<T>
    template<typename T>
    struct FlattenedProcMap {
      FlattenedProcMap() {}
@@ -193,9 +192,6 @@ namespace Realm {
     std::vector<LocalTaskProcessor*> all_proc_impls;
     std::vector<int32_t> async_finish_events;
 
-    // TODO (rohany): Instantiation-stable things go the SubgraphImpl.
-    // All of these data structures are flattened, so they look like
-    // CSR arrays.
     FlattenedProcMap<std::pair<SubgraphDefinition::OpKind, unsigned>> operations;
     struct OpMeta {
         bool is_final_event = false;
@@ -315,11 +311,12 @@ namespace Realm {
     atomic<int32_t>* preconditions = nullptr;
 
     // Data structures for management of asynchrony.
-    // TODO (rohany): void* ...
     void** async_operation_events = nullptr;
     SubgraphImpl::AsyncGPUWorkTriggerer* async_operation_effect_triggerers = nullptr;
 
-    // TODO (rohany): ...
+    // A counter to manage the number of pending async items
+    // that must complete before the finish event of this
+    // processor can be triggered.
     bool has_pending_async_work = false;
     atomic<int32_t> pending_async_count;
 

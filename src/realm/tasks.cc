@@ -1169,6 +1169,10 @@ namespace Realm {
       auto first_interp = subgraph->interpolations.task_offsets[interp_proc_offset + next_op_index];
       auto num_interps = subgraph->interpolations.task_offsets[interp_proc_offset + next_op_index + 1] - first_interp;
 
+      // Potentially record a token that captures the completion of asynchronous
+      // effects of this operation.
+      void* token = nullptr;
+
       // Execute the operation.
       switch (op_key.first) {
       case SubgraphDefinition::OPKIND_TASK:
@@ -1229,13 +1233,9 @@ namespace Realm {
           }
         }
 
-        void* token = nullptr;
         pimpl->pop_subgraph_task_replay_context(&token, trigger);
 
         lock.lock();
-
-        // Record the (potentially null) token.
-        replay->async_operation_events[op_index] = token;
 
         break;
       }
@@ -1257,16 +1257,14 @@ namespace Realm {
         b.arrive(count, Event::NO_EVENT, arrivalDesc.reduce_value.base(), arrivalDesc.reduce_value.size());
         lock.lock();
 
-        // TODO (rohany): Annoying to do this ...
-        // Non-async events need to explicitly record a null token to
-        // avoid the cleanup from trying to return invalid cuda events.
-        replay->async_operation_events[op_index] = nullptr;
-
         break;
       }
       default:
         assert(false);
       }
+
+      // Record the (potentially null) token.
+      replay->async_operation_events[op_index] = token;
 
       // Go and trigger whoever we have to trigger.
       auto completion_proc_offset = subgraph->completion_infos.proc_offsets[proc_index];
