@@ -683,16 +683,15 @@ namespace Realm {
     on_subgraph_control_completion();
 
     assert(subgraph_replay_state != nullptr);
-    ProcSubgraphReplayState* state = (ProcSubgraphReplayState*)(subgraph_replay_state);
-    for (auto& it : state[0].subgraph->bgwork_postconditions[subgraph_index]) {
-      trigger_subgraph_operation_completion(state, it, true /* incr_counter */, nullptr);
+    for (auto& it : subgraph_replay_state[0].subgraph->bgwork_postconditions[subgraph_index]) {
+      trigger_subgraph_operation_completion(subgraph_replay_state, it, true /* incr_counter */, nullptr);
     }
-    if (state[0].subgraph->bgwork_items[subgraph_index].is_final_event) {
+    if (subgraph_replay_state[0].subgraph->bgwork_items[subgraph_index].is_final_event) {
       // TODO (rohany): Hackily including the contributions of bgwork
       //  operations in the proc 0 counters.
-      int32_t remaining = state[0].pending_async_count.fetch_sub_acqrel(1) - 1;
+      int32_t remaining = subgraph_replay_state[0].pending_async_count.fetch_sub_acqrel(1) - 1;
       if (remaining == 0) {
-        maybe_trigger_subgraph_final_completion_event(state[0]);
+        maybe_trigger_subgraph_final_completion_event(subgraph_replay_state[0]);
       }
     }
   }
@@ -702,16 +701,15 @@ namespace Realm {
     on_subgraph_async_completion();
 
     assert(subgraph_replay_state != nullptr);
-    ProcSubgraphReplayState* state = (ProcSubgraphReplayState*)(subgraph_replay_state);
-    for (auto& it : state[0].subgraph->bgwork_async_postconditions[subgraph_index]) {
-      trigger_subgraph_operation_completion(state, it, true /* incr_counter */, nullptr);
+    for (auto& it : subgraph_replay_state[0].subgraph->bgwork_async_postconditions[subgraph_index]) {
+      trigger_subgraph_operation_completion(subgraph_replay_state, it, true /* incr_counter */, nullptr);
     }
-    if (state[0].subgraph->bgwork_items[subgraph_index].is_final_event) {
+    if (subgraph_replay_state[0].subgraph->bgwork_items[subgraph_index].is_final_event) {
       // TODO (rohany): Hackily including the contributions of bgwork
       //  operations in the proc 0 counters.
-      int32_t remaining = state[0].pending_async_count.fetch_sub_acqrel(1) - 1;
+      int32_t remaining = subgraph_replay_state[0].pending_async_count.fetch_sub_acqrel(1) - 1;
       if (remaining == 0) {
-        maybe_trigger_subgraph_final_completion_event(state[0]);
+        maybe_trigger_subgraph_final_completion_event(subgraph_replay_state[0]);
       }
     }
   }
