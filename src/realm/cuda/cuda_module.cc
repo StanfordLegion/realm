@@ -1050,7 +1050,8 @@ namespace Realm {
      //  execution, so use -1 as a "no preference" value
      ThreadLocal::context_sync_required = -1;
 
-     // Push profiling information, if necessary.
+     // Push profiling information, if necessary. This completion operation
+     // will set just the GPU start timeline.
      if (prof && prof->wants_gpu_timeline) {
        auto e = gpu->event_pool.get_event();
        CHECK_CU(CUDA_DRIVER_FNPTR(cuEventRecord)(e, s->get_stream()));
@@ -1069,8 +1070,9 @@ namespace Realm {
     // Again, handle post-task GPU timeline information. This must happen
     // before we enqueue the trigger, otherwise the profiling information
     // may not get recorded by the time the subgraph finishes and it is
-    // sent out during subgraph cleanup.
-    if (prof && prof->wants_gpu_timeline) {
+    // sent out during subgraph cleanup. It has to handle several different
+    // kinds of profiling requests on operation finish.
+    if (prof && (prof->wants_gpu_timeline || prof->wants_timeline || prof->wants_fevent)) {
       auto e = gpu->event_pool.get_event();
       CHECK_CU(CUDA_DRIVER_FNPTR(cuEventRecord)(e, s->get_stream()));
       auto completion = new GPUProfInfoTrigger(prof, false /* start */);

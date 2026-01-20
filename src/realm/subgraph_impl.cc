@@ -2108,22 +2108,10 @@ namespace Realm {
     ProcSubgraphReplayState* _all_proc_states,
     span<Realm::SubgraphImpl::CompletionInfo> _infos,
     atomic<int32_t> *_preconditions,
-    atomic<int32_t>* _final_ev_counter,
-    std::pair<SubgraphDefinition::OpKind, unsigned> _operation
-  ) : all_proc_states(_all_proc_states), infos(_infos), preconditions(_preconditions), final_ev_counter(_final_ev_counter), operation(_operation) {}
+    atomic<int32_t>* _final_ev_counter
+  ) : all_proc_states(_all_proc_states), infos(_infos), preconditions(_preconditions), final_ev_counter(_final_ev_counter) {}
 
   void SubgraphImpl::AsyncGPUWorkTriggerer::request_completed() {
-    // Record this event as completed.
-    auto prof = all_proc_states[0].get_profiling_info(operation.first, operation.second);
-    if (prof) {
-      if (prof->wants_timeline) {
-        prof->timeline.record_complete_time();
-      }
-      if (prof->wants_fevent) {
-        prof->fevent_user.trigger();
-      }
-    }
-
     for (size_t i = 0; i < infos.size(); i++) {
       auto& info = infos[i];
       trigger_subgraph_operation_completion(all_proc_states, info, true /* incr_counter */, nullptr /* ctx */);

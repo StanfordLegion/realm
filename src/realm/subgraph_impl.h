@@ -418,8 +418,7 @@ namespace Realm {
           ProcSubgraphReplayState* all_proc_states,
           span<CompletionInfo> _infos,
           atomic<int32_t>* _preconditions,
-          atomic<int32_t>* _final_ev_counter,
-          std::pair<SubgraphDefinition::OpKind, unsigned> _operation
+          atomic<int32_t>* _final_ev_counter
         );
         void request_completed() override;
       private:
@@ -427,7 +426,6 @@ namespace Realm {
         span<CompletionInfo> infos = {};
         atomic<int32_t>* preconditions = nullptr;
         atomic<int32_t>* final_ev_counter = nullptr;
-        std::pair<SubgraphDefinition::OpKind, unsigned> operation;
     };
 
     class InstantiationCleanup : public EventWaiter {
@@ -562,7 +560,15 @@ namespace Realm {
       if (start) {
         info->timeline_gpu.record_start_time();
       } else {
-        info->timeline_gpu.record_end_time();
+        if (info->wants_gpu_timeline) {
+          info->timeline_gpu.record_end_time();
+        }
+        if (info->wants_timeline) {
+          info->timeline.record_complete_time();
+        }
+        if (info->wants_fevent) {
+          info->fevent_user.trigger();
+        }
       }
       // Delete ourselves at the end to make this a "fire and forget" notification.
       delete this;

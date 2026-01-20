@@ -1292,12 +1292,10 @@ namespace Realm {
             }
           }
           // The notifier needs to be created if there are post-conditions,
-          // or this task is a final event. We also must launch the triggerer
-          // if profiling is on and this operation is async, to make sure that
-          // the operation is marked completed when the async work finishes.
-          if (!sp.empty() || final_ctr != nullptr || (prof != nullptr && prof->wants_timeline && opmeta.is_async)) {
+          // or this task is a final event.
+          if (!sp.empty() || final_ctr != nullptr) {
             trigger = new(&replay->async_operation_effect_triggerers[op_index]) SubgraphImpl::AsyncGPUWorkTriggerer(
-                replay->all_proc_states, sp, replay->preconditions, final_ctr, op_key);
+                replay->all_proc_states, sp, replay->preconditions, final_ctr);
           }
         }
 
