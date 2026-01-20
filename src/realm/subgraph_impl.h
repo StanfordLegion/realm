@@ -128,10 +128,9 @@ namespace Realm {
     // a finish event. This just avoids casting the fevent into
     // a user event.
     UserEvent fevent_user;
-    // TODO (rohany): Used by copies so that the finish event
-    //  is triggered only once? I think that if we get to a more
-    //  unified "finish_event" infrastructure that Legion needs,
-    //  we won't need this on the profiling information.
+    // pending_work_items is used by copies to ensure that only the
+    // last piece of async work actually records finish times and
+    // triggers the final event.
     atomic<int32_t> pending_work_items;
 
     // Pending profiling requests for asynchronous work must
@@ -221,6 +220,13 @@ namespace Realm {
     std::vector<T> data;
   };
 
+  // Object that represents the metadata a subgraph stores on
+  // other nodes to accelerate execution.
+  class RemoteSubgraphMeta {
+  public:
+    std::map<std::pair<unsigned, unsigned>, XferDes*> xds;
+  };
+
   // SubgraphIBAllocator is a helper class to get notifications that
   // requested IB allocations have completed.
   class SubgraphIBAllocator : public IBAllocationCompletion {
@@ -282,6 +288,7 @@ namespace Realm {
       void plan_copy(
         unsigned op_idx,
         std::vector<XferDes*>& result,
+        std::map<NodeID, std::vector<unsigned>>& remote_xds,
         ProfilingMeasurements::OperationCopyInfo& copy_info,
         ProfilingMeasurements::OperationMemoryUsage& mem_info
       );
@@ -412,12 +419,19 @@ namespace Realm {
 
     // A vector of XD's for all copies that were planned during
     // subgraph compilation.
+    // NOTE: Pointers in planned_copy_xds's may be NULL when the XD
+    //  was actually created on a remote node.
     FlattenedSparseMatrix<XferDes*> planned_copy_xds;
+    // remote_xd_groupings stores for each copy, the xd indexes that need
+    // to be enqueued on each remote node.
+    // TODO (rohany): See if there's an easy way to flatten this object.
+    std::vector<std::map<NodeID, std::vector<unsigned>>> remote_xd_groupings;
     std::vector<TransferDesc*> copy_transfer_descs;
     std::vector<SubgraphIBAllocator> copy_ib_allocators;
     // Always record copy plan information and cache it.
     std::vector<ProfilingMeasurements::OperationMemoryUsage> prof_copy_memory_usages;
     std::vector<ProfilingMeasurements::OperationCopyInfo> prof_copy_infos;
+    atomic<int32_t> pending_remote_xd_creations;
 
     // When concurrency_mode == INSTANTIATION_ORDER, the subgraph will
     // implicitly order instantiations of the subgraph by tracking
@@ -432,6 +446,10 @@ namespace Realm {
     // Remember which operations ended up as part of the dynamic
     // subgraph portion.
     std::set<std::pair<SubgraphDefinition::OpKind, unsigned>> dynamic_operations;
+
+    // Remember all the peers we cached remote metadata on.
+    std::set<NodeID> peers;
+    atomic<int32_t> pending_peer_deletions;
 
     class ExternalPreconditionTriggerer : public EventWaiter {
       public:
@@ -642,6 +660,7 @@ namespace Realm {
 
   void launch_async_bgwork_item(ProcSubgraphReplayState* all_proc_states, unsigned index);
   void maybe_trigger_subgraph_final_completion_event(ProcSubgraphReplayState& states);
+  void send_subgraph_remote_xd_completion(NodeID launch_node, ProcSubgraphReplayState* all_proc_states, unsigned subgraph_index);
 
 }; // namespace Realm
 

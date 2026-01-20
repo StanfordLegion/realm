@@ -306,6 +306,10 @@ namespace Realm {
     uint64_t current_in_port_remain, current_out_port_remain;
     // Maintain information within an XD about the surrounding
     // subgraph replay (if applicable).
+    // IMPORTANT NOTE: subgraph_replay_state is a pointer to
+    // the subgraph_replay_state ON THE NODE THAT LAUNCHED the copy.
+    // XD implementers must be careful to gaurd accesses to
+    // subgraph_replay_state with checks that the XD is running locally.
     ProcSubgraphReplayState* subgraph_replay_state = nullptr;
     // subgraph_index represents the op_index of the xd within
     // the subgraph (i.e. which copy it corresponds to).
@@ -313,6 +317,8 @@ namespace Realm {
     // xd_index corresponds to which xd of the copy at op_index
     // this xd is, as a copy may launch multiple xd's.
     unsigned xd_index = (unsigned)(-1);
+    // op_index is the operation index of the copy within the subgraph.
+    unsigned op_index = (unsigned)(-1);
     // Stored to help reset XD state in subgraph replays.
     int gather_control_port = -1;
     int scatter_control_port = -1;
@@ -444,12 +450,24 @@ namespace Realm {
     void update_pre_bytes_total(int port_idx, size_t pre_bytes_total);
     void update_next_bytes_read(int port_idx, size_t offset, size_t size);
 
+    bool running_locally() const {
+      return launch_node == Network::my_node_id;
+    }
+    // Separate "launches_async_work" into a wrapper method to make sure
+    // that XD's running remotely don't count as doing asynchronous things.
+    virtual bool launches_async_work() final {
+      if (!running_locally())
+        return false;
+      return launches_async_work_locally();
+    }
+  protected:
     // TODO (rohany): Used for subgraph replays.
     //  Implemented right now for progress, but in theory would
     //  be a pure virtual method to force child classes to declare.
     // TODO (rohany): Not sure the right interface for declaring
     //  "respects async work of certain processor kinds".
-    virtual bool launches_async_work() { assert(false); return false; }
+    virtual bool launches_async_work_locally() { assert(false); return false; }
+  public:
     // Triggers for different phases of XD completion. All copies
     // have to trigger completion when their work on the CPU finishes
     // (for some copies that might also be all the effects). Some
@@ -601,7 +619,7 @@ namespace Realm {
 
     // Note: not including the override to avoid warnings with
     // the rest of the functions not marked override.
-    bool launches_async_work() /* override */ { return false; }
+    bool launches_async_work_locally() /* override */ { return false; }
     void reset(const std::vector<off_t>& ib_offsets);
 
     bool progress_xd(MemfillChannel *channel, TimeLimit work_until);
@@ -625,7 +643,7 @@ namespace Realm {
 
     // Note: not including the override to avoid warnings with
     // the rest of the functions not marked override.
-    bool launches_async_work() /* override */ { return false; }
+    bool launches_async_work_locally() /* override */ { return false; }
 
   protected:
     XferDesRedopInfo redop_info;

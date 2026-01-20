@@ -730,8 +730,9 @@ namespace Realm {
           memset(&transpose_copy, 0, sizeof(transpose_copy));
         }
 
-        // Handle synchronizing against any pending subgraph work.
-        if (subgraph_replay_state != nullptr) {
+        // Handle synchronization against any pending subgraph work. Optimization
+        // only applies when this XD is running locally.
+        if (subgraph_replay_state != nullptr && running_locally()) {
           sync_subgraph_incoming_deps(subgraph_replay_state, subgraph_index, stream);
         }
 
@@ -937,7 +938,8 @@ namespace Realm {
                this, input_control.current_io_port, in_span_start, bytes_to_fence,
                output_control.current_io_port, out_span_start, bytes_to_fence);
 
-          if (subgraph_replay_state != nullptr) {
+          // Subgraph optimizations only apply when running locally.
+          if (subgraph_replay_state != nullptr && running_locally()) {
             add_transfer_completion_notification(subgraph_replay_state, stream, channel->subgraph_stream, completion);
           } else {
             stream->add_notification(completion);
@@ -1166,7 +1168,8 @@ namespace Realm {
                                     in_port->mem, out_port->mem);
         AutoGPUContext agc(stream->get_gpu());
 
-        if (subgraph_replay_state != nullptr) {
+        // Subgraph optimizations apply only when running locally.
+        if (subgraph_replay_state != nullptr && running_locally()) {
           sync_subgraph_incoming_deps(subgraph_replay_state, subgraph_index, stream);
         }
 
@@ -1209,7 +1212,8 @@ namespace Realm {
               output_control.current_io_port, out_span_start, bytes_to_fence,
               in_port->indirect_port_idx, 0, read_ind_bytes, out_port->indirect_port_idx,
               0, write_ind_bytes);
-          if (subgraph_replay_state != nullptr) {
+          // Subgraph optimizations only apply when running locally.
+          if (subgraph_replay_state != nullptr && running_locally()) {
             add_transfer_completion_notification(subgraph_replay_state, stream, channel->subgraph_stream, completion);
           } else {
             stream->add_notification(completion);
@@ -1978,7 +1982,8 @@ namespace Realm {
           AutoGPUContext agc(channel->gpu);
           GPUStream *stream = channel->gpu->get_next_d2d_stream();
 
-          if (subgraph_replay_state != nullptr) {
+          // Subgraph optimizations apply only when running locally.
+          if (subgraph_replay_state != nullptr && running_locally()) {
             sync_subgraph_incoming_deps(subgraph_replay_state, subgraph_index, stream);
           }
 
@@ -2215,7 +2220,8 @@ namespace Realm {
 
           auto completion = new GPUTransferCompletion(this, -1, 0, 0, output_control.current_io_port,
                                                       out_span_start, total_bytes);
-          if (subgraph_replay_state != nullptr) {
+          // Subgraph optimizations only apply when running locally.
+          if (subgraph_replay_state != nullptr && running_locally()) {
             add_transfer_completion_notification(subgraph_replay_state, stream, channel->subgraph_stream, completion);
           } else {
             stream->add_notification(completion);
@@ -2529,7 +2535,8 @@ namespace Realm {
           }
         }
 
-        if (subgraph_replay_state != nullptr) {
+        // Subgraph optimizations apply only when running locally.
+        if (subgraph_replay_state != nullptr && running_locally()) {
           sync_subgraph_incoming_deps(subgraph_replay_state, subgraph_index, stream);
         }
 
@@ -2666,7 +2673,8 @@ namespace Realm {
                                                             output_control.current_io_port,
                                                             out_span_start,
                                                             elems * out_elem_size);
-                if (subgraph_replay_state != nullptr) {
+                // Subgraph optimizations only apply when running locally.
+                if (subgraph_replay_state != nullptr && running_locally()) {
                   add_transfer_completion_notification(subgraph_replay_state, stream, channel->subgraph_stream, completion);
                 } else {
                     stream->add_notification(completion);

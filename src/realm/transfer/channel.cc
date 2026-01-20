@@ -655,18 +655,19 @@ namespace Realm {
       }
     }
 
-    // notify owning DmaRequest upon completion of this XferDes
-    // printf("complete XD = %lu\n", guid);
-    if(launch_node == Network::my_node_id) {
-      if (dma_op != 0) {
-        TransferOperation *op = reinterpret_cast<TransferOperation *>(dma_op);
-        op->notify_xd_completion(guid);
-      } else {
-        // Enqueueing the XD onto channels adds the guid of the
-        // xd into a set on the XferDesQueue. We need to remove the
-        // xd from there upon completion to avoid the XferDesQueue
-        // from thinking there's still a xd pending on shutdown.
-        destroy_xfer_des(guid);
+    // XD completion is different if the XD is part of a subgraph.
+    if (subgraph_replay_state != nullptr) {
+      // No matter what, the XferDes needs to be deleted from the
+      // xferdes guid table. Sanity check that this is safe.
+      // TODO (rohany): We may revisit this, if it proves to be racy.
+      NodeID execution_node = guid >> (XferDesQueue::NODE_BITS + XferDesQueue::INDEX_BITS);
+      assert(execution_node == Network::my_node_id);
+      // Enqueueing the XD onto channels adds the guid of the
+      // xd into a set on the XferDesQueue. We need to remove the
+      // xd from there upon completion to avoid the XferDesQueue
+      // from thinking there's still a xd pending on shutdown.
+      destroy_xfer_des(guid);
+      if (running_locally()) {
 
         // Handle profiling. This has to be done _before_ calling
         // the completion functions, as once those functions get called
@@ -676,17 +677,19 @@ namespace Realm {
         auto& item = sg->bgwork_items[subgraph_index];
         auto prof = subgraph_replay_state[0].get_profiling_info(SubgraphDefinition::OPKIND_COPY, item.op_index);
         if (prof) {
-          // TODO (rohany): Handle copies with async work more tightly later.
-          if (prof->wants_timeline) {
-            prof->timeline.record_end_time();
-            prof->timeline.record_complete_time();
-          }
-          if (prof->wants_fevent) {
-            // Triggering finish events for copies needs a little guard
-            // because multiple XD's can contribute to the same copy.
+          if (prof->wants_timeline || prof->wants_fevent) {
+            // Ensure that only the last XD to complete contributes
+            // to the profiling.
             auto remaining = prof->pending_work_items.fetch_sub_acqrel(1) - 1;
             if (remaining == 0) {
-              prof->fevent_user.trigger();
+              // TODO (rohany): Handle copies with async work more tightly later.
+              if (prof->wants_timeline) {
+                prof->timeline.record_end_time();
+                prof->timeline.record_complete_time();
+              }
+              if (prof->wants_fevent) {
+                prof->fevent_user.trigger();
+              }
             }
           }
         }
@@ -698,15 +701,26 @@ namespace Realm {
         } else {
           trigger_subgraph_control_completion();
         }
+      } else {
+        // If this XD is remotely executing, send completion metadata
+        // back to the owner node.
+        send_subgraph_remote_xd_completion(launch_node, subgraph_replay_state, subgraph_index);
       }
     } else {
-      assert(dma_op != 0);
-      TransferOperation *op = reinterpret_cast<TransferOperation *>(dma_op);
-      NotifyXferDesCompleteMessage::send_request(launch_node, op, guid);
+      if (running_locally()) {
+        TransferOperation *op = reinterpret_cast<TransferOperation *>(dma_op);
+        op->notify_xd_completion(guid);
+      } else {
+        assert(dma_op != 0);
+        TransferOperation *op = reinterpret_cast<TransferOperation *>(dma_op);
+        NotifyXferDesCompleteMessage::send_request(launch_node, op, guid);
+      }
     }
   }
 
   void XferDes::trigger_subgraph_control_completion() {
+    // This function should only be called when this XD is executing locally.
+    assert(running_locally());
     assert(subgraph_replay_state != nullptr);
     // Before asking the concrete XD anything, write a null pointer into
     // the async token slot for this XD. If the concrete XD actually launched
@@ -735,6 +749,9 @@ namespace Realm {
   }
 
   void XferDes::trigger_subgraph_async_completion() {
+    // This function should only be called when this XD is executing locally.
+    assert(running_locally());
+
     // First, do whatever the concrete XD wants to do.
     on_subgraph_async_completion();
 

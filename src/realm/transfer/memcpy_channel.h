@@ -45,7 +45,7 @@ namespace Realm {
 
     // Note: not including the override to avoid warnings with
     // the rest of the functions not marked override.
-    bool launches_async_work() /* override */ { return false; }
+    bool launches_async_work_locally() /* override */ { return false; }
 
     bool progress_xd(MemcpyChannel *channel, TimeLimit work_until);
 

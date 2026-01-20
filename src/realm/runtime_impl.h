@@ -465,6 +465,11 @@ namespace Realm {
     std::vector<NetworkSegment *> network_segments;
 
     std::map<std::string, ModuleConfig *> module_configs;
+    public:
+      // Cache data from other node's subgraphs to avoid communication
+      // at execution time.
+      RWLock remote_subgraph_meta_lock;
+      std::map<ID::IDType, RemoteSubgraphMeta> remote_subgraph_meta;
   };
 
   extern RuntimeImpl *runtime_singleton;

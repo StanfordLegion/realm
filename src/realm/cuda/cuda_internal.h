@@ -794,7 +794,7 @@ namespace Realm {
 
       bool progress_xd(GPUChannel *channel, TimeLimit work_until);
 
-      bool launches_async_work() override { return true; }
+      bool launches_async_work_locally() override { return true; }
       void on_subgraph_control_completion() override;
       LocalTaskProcessor* get_async_event_proc() override;
 
@@ -815,7 +815,7 @@ namespace Realm {
       long get_requests(Request **requests, long nr);
       bool progress_xd(GPUIndirectChannel *channel, TimeLimit work_until);
 
-      bool launches_async_work() override { return true; }
+      bool launches_async_work_locally() override { return true; }
       void on_subgraph_control_completion() override;
       LocalTaskProcessor* get_async_event_proc() override;
 
