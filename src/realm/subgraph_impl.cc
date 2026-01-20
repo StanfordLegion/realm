@@ -47,6 +47,18 @@ namespace Realm {
     subgraph = impl->me.convert<Subgraph>();
 
     impl->defn = new SubgraphDefinition(defn);
+    // The subgraph needs to hold onto CopyIndirection metadata with a longer
+    // lifetime than what was passed into the creation call. Clone all
+    // indirection objects, and we'll free them in the destructor. I decided
+    // to not put this in the SubgraphDefinition copy constructor to avoid
+    // accidentally copying these objects in other unsuspecting places and
+    // leaking memory.
+    for (size_t i = 0; i < impl->defn.copies.size(); i++) {
+      auto& copy = impl->defn.copies[i];
+      for (size_t j = 0; j < copy.indirects.size(); j++) {
+        copy.indirects[j] = reinterpret_cast<CopyIndirectionGeneric*>(copy.indirects[j])->clone();
+      }
+    }
 
     // no handling of preconditions or profiling yet
     assert(wait_on.has_triggered());
