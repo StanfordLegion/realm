@@ -301,10 +301,6 @@ namespace Realm {
     // event to let the runtime know that its contribution
     // to the subgraph execution is done.
     UserEvent finish_event = UserEvent::NO_USER_EVENT;
-    // Signal pending work to start that may only
-    // begin running once this target processor has
-    // acquired the subgraph to replay.
-    UserEvent start_event = UserEvent::NO_USER_EVENT;
 
     // Store the preconditions array local to this instantiation
     // of the subgraph.

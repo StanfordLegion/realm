@@ -932,26 +932,11 @@ namespace Realm {
       event_impl->merger.prepare_merger(finish_event, false /*!ignore_faults*/,
                                         all_procs.size());
 
-      // In order to properly sequence subgraph replays,
-      // certain operations may only start once processors
-      // acquire the replay state.
-      std::vector<UserEvent> start_events;
-      // Only initialize the start events if we need them.
-      bool need_start_events = !preconditions.empty();
-      if (need_start_events) {
-        start_events.resize(all_procs.size());
-        for (size_t i = 0; i < all_procs.size(); i++) {
-          start_events[i] = UserEvent::create_user_event();
-        }
-      }
-
       // Separate the installation and state creation steps
       // to enable deferring the launch of the subgraph.
       auto state = new ProcSubgraphReplayState[all_procs.size()];
       for (size_t i = 0; i < all_procs.size(); i++) {
         state[i].subgraph = this;
-        if (need_start_events)
-          state[i].start_event = start_events[i];
         state[i].finish_event = UserEvent::create_user_event();
         state[i].proc_index = int32_t(i);
         state[i].args = copied_args;
@@ -968,7 +953,7 @@ namespace Realm {
       // Since we have a fresh precondition vector, we can
       // just queue up the external precondition waiters
       // to start directly on the new data.
-      auto external_precondition_waiters = new ExternalPreconditionTriggerer[external_precondition_info.size()];
+      auto external_precondition_waiters = (ExternalPreconditionTriggerer*)malloc(sizeof(ExternalPreconditionTriggerer) * external_precondition_info.size());
       for (size_t i = 0; i < external_precondition_info.size(); i++) {
         // Note that the user may not provide all the preconditions
         // they said they would.
@@ -976,11 +961,11 @@ namespace Realm {
         if (i < preconditions.size())
           precond = preconditions[i];
         auto meta = &external_precondition_info[i];
-        external_precondition_waiters[i] = ExternalPreconditionTriggerer(this, meta, precondition_ctrs);
+        auto waiter = new (&external_precondition_waiters[i]) ExternalPreconditionTriggerer(this, meta, precondition_ctrs);
         if (!precond.exists() || precond.has_triggered()) {
-          external_precondition_waiters[i].trigger();
+          waiter->trigger();
         } else {
-          EventImpl::add_waiter(precond, &external_precondition_waiters[i]);
+          EventImpl::add_waiter(precond, waiter);
         }
       }
 
@@ -1335,9 +1320,9 @@ namespace Realm {
     }
 
     delete[] state;
-    delete external_preconds;
     free(args);
     free(preconds);
+    free(external_preconds);
     free(async_operation_events);
     free(async_operation_event_triggerers);
     // Delete ourselves after freeing the resource. This pattern
