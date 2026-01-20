@@ -766,12 +766,16 @@ namespace Realm {
     on_subgraph_async_completion();
 
     assert(subgraph_replay_state != nullptr);
-    auto& postconds = subgraph_replay_state[0].subgraph->bgwork_async_postconditions;
+    // Pull subgraph out of the subgraph_replay_state because the
+    // subgraph_replay_state might get deleted as soon as we trigger
+    // follow-up operations to start running.
+    auto subgraph = subgraph_replay_state[0].subgraph;
+    auto& postconds = subgraph->bgwork_async_postconditions;
     for (uint64_t i = postconds.offsets[subgraph_index]; i < postconds.offsets[subgraph_index + 1]; i++) {
       auto& info = postconds.data[i];
       trigger_subgraph_operation_completion(subgraph_replay_state, info, true /* incr_counter */, nullptr);
     }
-    if (subgraph_replay_state[0].subgraph->bgwork_items[subgraph_index].is_final_event) {
+    if (subgraph->bgwork_items[subgraph_index].is_final_event) {
       // TODO (rohany): Hackily including the contributions of bgwork
       //  operations in the proc 0 counters.
       int32_t remaining = subgraph_replay_state[0].pending_async_count.fetch_sub_acqrel(1) - 1;

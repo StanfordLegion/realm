@@ -534,7 +534,11 @@ namespace Realm {
         trigger_subgraph_operation_completion(all_states, info, true /* incr_counter */, nullptr);
       }
 
-      if (state.subgraph->bgwork_items[args.subgraph_index].is_final_event) {
+      // Make sure to use sg here instead of state.subgraph, as all_states
+      // could get deleted here as soon as we trigger the completion operation.
+      // However, we know it won't have gotten deleted if this operation is
+      // a final event.
+      if (sg->bgwork_items[args.subgraph_index].is_final_event) {
         // TODO (rohany): Hackily including the contributions of bgwork
         //  operations in the proc 0 counters.
         int32_t remaining = state.pending_async_count.fetch_sub_acqrel(1) - 1;

@@ -1358,6 +1358,11 @@ namespace Realm {
           // a bit of work to make sure that the call to trigger can actually
           // trigger an event (which means releasing the lock and taking it
           // back after the trigger is done).
+          // Note: While other places in the code hold onto ProcSubgraphReplayState
+          // objects on the stack for fear of them getting deleted after the call
+          // to trigger_subgraph_operation_completion, we are safe from that happening
+          // here. That is because every processor must execute the code below that
+          // checks the finish counter before the processor state can be collected.
           SchedulerReplayTriggerContext<decltype(lock)> ctx(lock);
           trigger_subgraph_operation_completion(replay->all_proc_states, info, info.proc != proc_index, &ctx);
         }
