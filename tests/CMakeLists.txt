@@ -277,7 +277,10 @@ add_integration_test(compqueue "${REALM_TEST_DIR}/compqueue.cc")
 add_integration_test(test_nodeset "${REALM_TEST_DIR}/test_nodeset.cc")
 # TODO (rohany): Not sure if this is right yet...
 add_integration_test(subgraphs "${REALM_TEST_DIR}/subgraphs.cc")
-add_integration_test(stencil_subgraph "${REALM_TEST_DIR}/stencil_subgraph.cc")
+add_integration_test(stencil_subgraph "${REALM_TEST_DIR}/stencil_subgraph.cc"
+  "$<$<BOOL:TEST_USE_GPU>:${REALM_TEST_DIR}/stencil_subgraph_gpu.cu>"
+)
+target_link_libraries(stencil_subgraph ${TEST_GPU_LIBS} )
 add_integration_test(large_tls "${REALM_TEST_DIR}/large_tls.cc")
 add_integration_test(memmodel "${REALM_TEST_DIR}/memmodel.cc")
 add_integration_test(coverings "${REALM_TEST_DIR}/coverings.cc")
