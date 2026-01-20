@@ -583,6 +583,7 @@ var hierarchy =
     [ "Realm::TransferGraph::XDTemplate::IO", "structRealm_1_1TransferGraph_1_1XDTemplate_1_1IO.html", null ],
     [ "Realm::ProfilingMeasurements::IPCPerfCounters", "structRealm_1_1ProfilingMeasurements_1_1IPCPerfCounters.html", null ],
     [ "is_copy_serializable", "structis__copy__serializable.html", null ],
+    [ "Realm::Runtime::KeyValueStoreVtable", "structRealm_1_1Runtime_1_1KeyValueStoreVtable.html", null ],
     [ "Realm::Hip::GPUProcessor::LaunchConfig", "structRealm_1_1Hip_1_1GPUProcessor_1_1LaunchConfig.html", [
       [ "Realm::Hip::GPUProcessor::CallConfig", "structRealm_1_1Hip_1_1GPUProcessor_1_1CallConfig.html", null ]
     ] ],

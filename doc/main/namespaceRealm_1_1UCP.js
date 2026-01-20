@@ -25,7 +25,8 @@ var namespaceRealm_1_1UCP =
     [ "BootstrapMode", "namespaceRealm_1_1UCP.html#afdb9c01afd72236fae0e2a1c4c8b2d4a", [
       [ "BOOTSTRAP_MPI", "namespaceRealm_1_1UCP.html#afdb9c01afd72236fae0e2a1c4c8b2d4aaafc712ad8aded00138cf2ef550b7e3fd", null ],
       [ "BOOTSTRAP_P2P", "namespaceRealm_1_1UCP.html#afdb9c01afd72236fae0e2a1c4c8b2d4aa885c2c43e295fe0ecd49f4e6ecc293f2", null ],
-      [ "BOOTSTRAP_PLUGIN", "namespaceRealm_1_1UCP.html#afdb9c01afd72236fae0e2a1c4c8b2d4aa7c8db244592a1810a0fdd56ac2148879", null ]
+      [ "BOOTSTRAP_PLUGIN", "namespaceRealm_1_1UCP.html#afdb9c01afd72236fae0e2a1c4c8b2d4aa7c8db244592a1810a0fdd56ac2148879", null ],
+      [ "BOOTSTRAP_VTABLE", "namespaceRealm_1_1UCP.html#afdb9c01afd72236fae0e2a1c4c8b2d4aa477896c16727a1bea9ee0a2cdf999553", null ]
     ] ],
     [ "PayloadBaseType", "namespaceRealm_1_1UCP.html#a42935f22bea6ca2175dcce0f09424ad9", [
       [ "PAYLOAD_BASE_INLINE", "namespaceRealm_1_1UCP.html#a42935f22bea6ca2175dcce0f09424ad9af177b98d80697c2e05c07e767fe65974", null ],

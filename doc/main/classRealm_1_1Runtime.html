@@ -44,7 +44,7 @@
    <!-- BEGIN version select -->
     <br />
     <div class="dropdown">
-     <button class="dropbtn">Version 25.6.1-rc.4+d798c0e3</button>
+     <button class="dropbtn">Version 25.6.1-rc.4+11f29ee3</button>
      <div class="dropdown-content"></div>
     </div>
     <script type="text/javascript" src="../selectversion.js"></script>
@@ -132,6 +132,7 @@ $(document).ready(function(){initNavTree('classRealm_1_1Runtime.html',''); initR
 
 <div class="header">
   <div class="summary">
+<a href="#nested-classes">Classes</a> &#124;
 <a href="#pub-types">Public Types</a> &#124;
 <a href="#pub-methods">Public Member Functions</a> &#124;
 <a href="#pub-static-methods">Static Public Member Functions</a> &#124;
@@ -146,9 +147,14 @@ $(document).ready(function(){initNavTree('classRealm_1_1Runtime.html',''); initR
 <div class="dynheader">
 Inheritance diagram for Realm::Runtime:</div>
 <div class="dyncontent">
-<div class="center"><iframe scrolling="no" frameborder="0" src="classRealm_1_1Runtime__inherit__graph.svg" width="146" height="110"><p><b>This browser is not able to show SVG: try Firefox, Chrome, Safari, or Opera instead.</b></p></iframe></div>
+<div class="center"><!-- SVG 0 --></div>
 <center><span class="legend">[<a target="top" href="graph_legend.html">legend</a>]</span></center></div>
 <table class="memberdecls">
+<tr class="heading"><td colspan="2"><h2 class="groupheader"><a id="nested-classes" name="nested-classes"></a>
+Classes</h2></td></tr>
+<tr class="memitem:"><td class="memItemLeft" align="right" valign="top">struct &#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="structRealm_1_1Runtime_1_1KeyValueStoreVtable.html">KeyValueStoreVtable</a></td></tr>
+<tr class="separator:"><td class="memSeparator" colspan="2">&#160;</td></tr>
+</table><table class="memberdecls">
 <tr class="heading"><td colspan="2"><h2 class="groupheader"><a id="pub-types" name="pub-types"></a>
 Public Types</h2></td></tr>
 <tr class="memitem:a04186dbcbe4fa060b2b2eb58d41fadf9" id="r_a04186dbcbe4fa060b2b2eb58d41fadf9"><td class="memItemLeft" align="right" valign="top">enum &#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="classRealm_1_1Runtime.html#a04186dbcbe4fa060b2b2eb58d41fadf9">RunStyle</a> { <a class="el" href="classRealm_1_1Runtime.html#a04186dbcbe4fa060b2b2eb58d41fadf9aafa7651fdd9cfc5a32256efac4b7a134">ONE_TASK_ONLY</a>
@@ -169,6 +175,8 @@ Public Member Functions</h2></td></tr>
 <tr class="separator:a3bcf7acbf505d23af1c892f373660958"><td class="memSeparator" colspan="2">&#160;</td></tr>
 <tr class="memitem:af153e4eb9caba4ed1a1c60705a443c71" id="r_af153e4eb9caba4ed1a1c60705a443c71"><td class="memItemLeft" align="right" valign="top">bool&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="classRealm_1_1Runtime.html#af153e4eb9caba4ed1a1c60705a443c71">network_init</a> (int *argc, char ***argv)</td></tr>
 <tr class="separator:af153e4eb9caba4ed1a1c60705a443c71"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:ab9ad89506ecbe75742903a6946f15014" id="r_ab9ad89506ecbe75742903a6946f15014"><td class="memItemLeft" align="right" valign="top">bool&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="classRealm_1_1Runtime.html#ab9ad89506ecbe75742903a6946f15014">network_init</a> (const <a class="el" href="structRealm_1_1Runtime_1_1KeyValueStoreVtable.html">KeyValueStoreVtable</a> &amp;vtable)</td></tr>
+<tr class="separator:ab9ad89506ecbe75742903a6946f15014"><td class="memSeparator" colspan="2">&#160;</td></tr>
 <tr class="memitem:a4fec07cc34cd2769b46673f3f666468d" id="r_a4fec07cc34cd2769b46673f3f666468d"><td class="memItemLeft" align="right" valign="top">void&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="classRealm_1_1Runtime.html#a4fec07cc34cd2769b46673f3f666468d">parse_command_line</a> (int argc, char **argv)</td></tr>
 <tr class="separator:a4fec07cc34cd2769b46673f3f666468d"><td class="memSeparator" colspan="2">&#160;</td></tr>
 <tr class="memitem:a14671d8e0b8146bfe85f63bcdc10d87a" id="r_a14671d8e0b8146bfe85f63bcdc10d87a"><td class="memItemLeft" align="right" valign="top">void&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="classRealm_1_1Runtime.html#a14671d8e0b8146bfe85f63bcdc10d87a">parse_command_line</a> (std::vector&lt; std::string &gt; &amp;cmdline, bool remove_realm_args=false)</td></tr>
@@ -690,8 +698,26 @@ template&lt;typename T &gt; </div>
 
 </div>
 </div>
+<a id="ab9ad89506ecbe75742903a6946f15014" name="ab9ad89506ecbe75742903a6946f15014"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#ab9ad89506ecbe75742903a6946f15014">&#9670;&#160;</a></span>network_init() <span class="overload">[1/2]</span></h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname">bool Realm::Runtime::network_init </td>
+          <td>(</td>
+          <td class="paramtype">const <a class="el" href="structRealm_1_1Runtime_1_1KeyValueStoreVtable.html">KeyValueStoreVtable</a> &amp;&#160;</td>
+          <td class="paramname"><em>vtable</em></td><td>)</td>
+          <td></td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+
+</div>
+</div>
 <a id="af153e4eb9caba4ed1a1c60705a443c71" name="af153e4eb9caba4ed1a1c60705a443c71"></a>
-<h2 class="memtitle"><span class="permalink"><a href="#af153e4eb9caba4ed1a1c60705a443c71">&#9670;&#160;</a></span>network_init()</h2>
+<h2 class="memtitle"><span class="permalink"><a href="#af153e4eb9caba4ed1a1c60705a443c71">&#9670;&#160;</a></span>network_init() <span class="overload">[2/2]</span></h2>
 
 <div class="memitem">
 <div class="memproto">

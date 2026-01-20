@@ -1,5 +1,6 @@
 var classRealm_1_1Runtime =
 [
+    [ "KeyValueStoreVtable", "structRealm_1_1Runtime_1_1KeyValueStoreVtable.html", "structRealm_1_1Runtime_1_1KeyValueStoreVtable" ],
     [ "RunStyle", "classRealm_1_1Runtime.html#a04186dbcbe4fa060b2b2eb58d41fadf9", [
       [ "ONE_TASK_ONLY", "classRealm_1_1Runtime.html#a04186dbcbe4fa060b2b2eb58d41fadf9aafa7651fdd9cfc5a32256efac4b7a134", null ],
       [ "ONE_TASK_PER_NODE", "classRealm_1_1Runtime.html#a04186dbcbe4fa060b2b2eb58d41fadf9a72b9d4c7e86b6408963e509d9c5d3979", null ],
@@ -18,6 +19,7 @@ var classRealm_1_1Runtime =
     [ "get_module_config", "classRealm_1_1Runtime.html#afb76ef114ff792916bd81d40faae2137", null ],
     [ "get_module_untyped", "classRealm_1_1Runtime.html#a3468137fac5906fab7466c7192e907d3", null ],
     [ "init", "classRealm_1_1Runtime.html#a21ac8f52e2c8680de6a7ddc7a4cc3458", null ],
+    [ "network_init", "classRealm_1_1Runtime.html#ab9ad89506ecbe75742903a6946f15014", null ],
     [ "network_init", "classRealm_1_1Runtime.html#af153e4eb9caba4ed1a1c60705a443c71", null ],
     [ "operator=", "classRealm_1_1Runtime.html#a9d65a7be3108c346c4852d6b20d993e7", null ],
     [ "parse_command_line", "classRealm_1_1Runtime.html#a4fec07cc34cd2769b46673f3f666468d", null ],

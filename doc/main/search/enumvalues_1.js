@@ -8,5 +8,6 @@ var searchData=
   ['blue_5',['blue',['../namespaceRealm.html#a5e200e79f3ad2e43b2d41fbed27678e9aabe093c9cf0627d583d8a85d2857cc7d',1,'Realm']]],
   ['bootstrap_5fmpi_6',['BOOTSTRAP_MPI',['../namespaceRealm_1_1UCP.html#afdb9c01afd72236fae0e2a1c4c8b2d4aaafc712ad8aded00138cf2ef550b7e3fd',1,'Realm::UCP']]],
   ['bootstrap_5fp2p_7',['BOOTSTRAP_P2P',['../namespaceRealm_1_1UCP.html#afdb9c01afd72236fae0e2a1c4c8b2d4aa885c2c43e295fe0ecd49f4e6ecc293f2',1,'Realm::UCP']]],
-  ['bootstrap_5fplugin_8',['BOOTSTRAP_PLUGIN',['../namespaceRealm_1_1UCP.html#afdb9c01afd72236fae0e2a1c4c8b2d4aa7c8db244592a1810a0fdd56ac2148879',1,'Realm::UCP']]]
+  ['bootstrap_5fplugin_8',['BOOTSTRAP_PLUGIN',['../namespaceRealm_1_1UCP.html#afdb9c01afd72236fae0e2a1c4c8b2d4aa7c8db244592a1810a0fdd56ac2148879',1,'Realm::UCP']]],
+  ['bootstrap_5fvtable_9',['BOOTSTRAP_VTABLE',['../namespaceRealm_1_1UCP.html#afdb9c01afd72236fae0e2a1c4c8b2d4aa477896c16727a1bea9ee0a2cdf999553',1,'Realm::UCP']]]
 ];
