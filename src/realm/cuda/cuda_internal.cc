@@ -630,7 +630,7 @@ namespace Realm {
       memset(&copy_infos, 0, sizeof(copy_infos));
 
 #ifdef REALM_USE_NVTX
-      nvtxScopedRange _nvtx_range("dma", __PRETTY_FUNCTION__);
+      nvtxScopedRange _nvtx_range("dma", __PRETTY_FUNCTION__, 0);
 #endif
 
       // The general algorithm here can be described in three loops:
@@ -1049,7 +1049,7 @@ namespace Realm {
       ReadSequenceCache rseqcache(this, 2 << 20);
 
 #ifdef REALM_USE_NVTX
-      nvtxScopedRange _nvtx_range("dma", __PRETTY_FUNCTION__);
+      nvtxScopedRange _nvtx_range("dma", __PRETTY_FUNCTION__, 0);
 #endif
 
       while(true) {
@@ -1968,7 +1968,7 @@ namespace Realm {
       WriteSequenceCache wseqcache(this, 2 << 20);
 
 #ifdef REALM_USE_NVTX
-      nvtxScopedRange _nvtx_range("dma", __PRETTY_FUNCTION__);
+      nvtxScopedRange _nvtx_range("dma", __PRETTY_FUNCTION__, 0);
 #endif
 
       while(true) {
@@ -2497,7 +2497,7 @@ namespace Realm {
       ReadSequenceCache wseqcache(this, 2 << 20);
 
 #ifdef REALM_USE_NVTX
-      nvtxScopedRange _nvtx_range("dma", __PRETTY_FUNCTION__);
+      nvtxScopedRange _nvtx_range("dma", __PRETTY_FUNCTION__, 0);
 #endif
 
       const size_t in_elem_size = redop->sizeof_rhs;

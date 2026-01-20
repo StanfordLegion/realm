@@ -2252,7 +2252,7 @@ namespace Realm {
     WriteSequenceCache wseqcache(this, 2 << 20);
 
 #ifdef REALM_USE_NVTX
-    nvtxScopedRange _nvtx_range("dma", __PRETTY_FUNCTION__);
+    nvtxScopedRange _nvtx_range("dma", __PRETTY_FUNCTION__, 0);
 #endif
 
     while(true) {
@@ -2401,7 +2401,7 @@ namespace Realm {
     assert(redop_info.in_place); // TODO: support for out-of-place reduces
 
 #ifdef REALM_USE_NVTX
-    nvtxScopedRange _nvtx_range("dma", __PRETTY_FUNCTION__);
+    nvtxScopedRange _nvtx_range("dma", __PRETTY_FUNCTION__, 0);
 #endif
 
     while(true) {
@@ -2737,7 +2737,7 @@ namespace Realm {
     WriteSequenceCache wseqcache(this);
 
 #ifdef REALM_USE_NVTX
-    nvtxScopedRange _nvtx_range("dma", __PRETTY_FUNCTION__);
+    nvtxScopedRange _nvtx_range("dma", __PRETTY_FUNCTION__, 0);
 #endif
 
     const size_t MAX_ASSEMBLY_SIZE = 4096;

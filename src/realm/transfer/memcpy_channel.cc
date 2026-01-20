@@ -148,7 +148,7 @@ namespace Realm {
     }
 
 #ifdef REALM_USE_NVTX
-    nvtxScopedRange _nvtx_range("dma", __PRETTY_FUNCTION__);
+    nvtxScopedRange _nvtx_range("dma", __PRETTY_FUNCTION__, 0);
 #endif
 
     // fast path - assumes no serdez
