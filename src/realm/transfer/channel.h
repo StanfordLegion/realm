@@ -431,6 +431,32 @@ namespace Realm {
     void update_pre_bytes_total(int port_idx, size_t pre_bytes_total);
     void update_next_bytes_read(int port_idx, size_t offset, size_t size);
 
+    // TODO (rohany): Used for subgraph replays.
+    //  Implemented right now for progress, but in theory would
+    //  be a pure virtual method to force child classes to declare.
+    // TODO (rohany): Not sure the right interface for declaring
+    //  "respects async work of certain processor kinds".
+    virtual bool launches_async_work() { assert(false); return false; }
+    // Triggers for different phases of XD completion. All copies
+    // have to trigger completion when their work on the CPU finishes
+    // (for some copies that might also be all the effects). Some
+    // copies must also have triggers for when all of their asynchronous
+    // work completes (like GPU copies).
+    virtual void trigger_subgraph_control_completion();
+    virtual void trigger_subgraph_async_completion();
+    // If this XD launches asynchronous work, then it is responsible
+    // for constructing an "event" (not a Realm event) that represents
+    // the completion of its work. That even may need to be "returned"
+    // to a processor. get_async_event_proc() tells the subgraph where
+    // one of these events should be returned to.
+    virtual LocalTaskProcessor* get_async_event_proc() { return nullptr; }
+  protected:
+    // on_subgraph_*_completion are methods that XD's can override
+    // to add extra logic to stage completions.
+    virtual void on_subgraph_control_completion() {}
+    virtual void on_subgraph_async_completion() {}
+  public:
+
     // called once iteration is complete, but we need to track in flight
     //  writes, flush byte counts, etc.
     void begin_completion();

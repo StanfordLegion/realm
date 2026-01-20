@@ -786,6 +786,10 @@ namespace Realm {
 
       bool progress_xd(GPUChannel *channel, TimeLimit work_until);
 
+      bool launches_async_work() override { return true; }
+      void on_subgraph_control_completion() override;
+      LocalTaskProcessor* get_async_event_proc() override;
+
     private:
       std::vector<GPU *> src_gpus, dst_gpus;
       std::vector<bool> dst_is_ipc;
@@ -906,8 +910,15 @@ namespace Realm {
       GPU *get_gpu() const { return src_gpu; }
 
     private:
+      friend class GPUXferDes;
       GPU *src_gpu;
       // std::deque<Request*> pending_copies;
+      // TODO (rohany): Can I extract this logic into a mixin for
+      //  all of the GPU channels?
+      // TODO (rohany): Comment ...
+      // TODO (rohany): Do these need to be pointers?
+      GPUStream* subgraph_input;
+      GPUStream* subgraph_output;
     };
 
     class GPUfillChannel;

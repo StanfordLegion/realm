@@ -41,6 +41,7 @@ enum
   READER_TASK,
   CLEANUP_TASK,
   DUMMY_TASK,
+  TEST_READ_TASK,
 };
 
 enum
@@ -173,6 +174,14 @@ void cleanup_task(const void *args, size_t arglen, const void *userdata, size_t 
   cta.subgraph.destroy(e);
   cta.subgraph_inner.destroy(e);
   cta.cleanup_done.trigger(e);
+}
+
+void test_read_task(const void *args, size_t arglen,
+                    const void *userdata, size_t userlen, Processor p) {
+  auto inst = (RegionInstance*)(args);
+  AffineAccessor<int32_t, 1> acc = AffineAccessor<int32_t, 1>(*inst, 0);
+  std::cout << "FOUND VALUE IN INST: " << (*acc.ptr(0)) << std::endl;
+  std::cout << "FOUND VALUE IN INST: " << (*acc.ptr(inst->get_indexspace<1>().bounds.hi[0])) << std::endl;
 }
 
 // clang doesn't permit use of offsetof when there are non-POD types involved
@@ -454,7 +463,7 @@ RegionInstance::create_instance(dst_inst2, sysmems[0],
 
   // e.wait();
 
-  // bar = bar.advance_barrier();
+  bar = bar.advance_barrier();
 
 
   // Check out the fill instance.
@@ -469,6 +478,19 @@ RegionInstance::create_instance(dst_inst2, sysmems[0],
 //  }
 //
 //  interp = 2;
+
+  // {
+  //   AffineAccessor<int32_t, 1> acc = AffineAccessor<int32_t, 1>(dst_inst, 0);
+  //   std::cout << "FOUND VALUE IN INST: " << (*acc.ptr(0)) << std::endl;
+  //   std::cout << "FOUND VALUE IN INST: " << (*acc.ptr(is2.bounds.hi[0])) << std::endl;
+  // }
+  e = cpus[0].spawn(TEST_READ_TASK, &dst_inst, sizeof(dst_inst), e);
+  {
+    std::vector<CopySrcDstField> info(1);
+    info[0].set_field(src_inst, 0, sizeof(int32_t));
+    int32_t value = 242;
+    e = is2.fill(info, ProfilingRequestSet(), &value, sizeof(int32_t), e);
+  }
 
 
   auto next_next_bar = next_bar.advance_barrier();
@@ -492,11 +514,10 @@ RegionInstance::create_instance(dst_inst2, sysmems[0],
 //  e = diamond.instantiate(&interp, sizeof(interp), ProfilingRequestSet(), e);
   // e.wait();
 
-  next_next_bar.wait();
+  // next_next_bar.wait();
 
   e.wait();
   std::cout << "Done!" << std::endl;
-
   for (auto& e : ext_postconds)
     assert(e.exists() && e.has_triggered());
   for (auto& e : ext_postconds_2)
@@ -508,6 +529,11 @@ RegionInstance::create_instance(dst_inst2, sysmems[0],
     std::cout << "FOUND VALUE IN INST: " << (*acc.ptr(0)) << std::endl;
     std::cout << "FOUND VALUE IN INST: " << (*acc.ptr(is2.bounds.hi[0])) << std::endl;
   }
+
+  // TODO (rohany): For some reason, calling e.wait() works while
+  //  calling diamond.destroy(e) does not work, meaning that we have
+  //  some subgraph destruction races / final events triggering before it should.
+  diamond.destroy();
 
 
   // do everything on this processor - get a good memory to use
@@ -770,6 +796,7 @@ int main(int argc, char **argv)
   rt.register_task(READER_TASK, reader_task);
   rt.register_task(CLEANUP_TASK, cleanup_task);
   rt.register_task(DUMMY_TASK, dummy_task);
+  rt.register_task(TEST_READ_TASK, test_read_task);
   // Processor::register_task_by_kind(Processor::TOC_PROC, false, DUMMY_TASK, CodeDescriptor(dummy_task), ProfilingRequestSet());
 
   rt.register_reduction<ReductionOpIntAdd>(REDOP_INT_ADD);

@@ -175,7 +175,7 @@ namespace Realm {
     return finish_event;
   }
 
-  bool task_has_async_effects(SubgraphDefinition::TaskDesc& task) {
+  bool SubgraphImpl::task_has_async_effects(SubgraphDefinition::TaskDesc& task) {
     switch (task.proc.kind()) {
       case Processor::TOC_PROC: {
         // TODO (rohany): Query an API in the future.
@@ -186,30 +186,50 @@ namespace Realm {
     }
   }
 
-  bool task_respects_async_effects(SubgraphDefinition::TaskDesc& task) {
-    switch (task.proc.kind()) {
-      case Processor::TOC_PROC: {
-        // TODO (rohany): Query an API in the future.
-        return true;
-      }
-      default:
-        return false;
-    }
+  bool SubgraphImpl::copy_has_async_effects(unsigned op_idx) {
+    // We can't just look at the source and destination of the copy,
+    // as the GPU's copy engines can even be used sometimes for H2H
+    // copies. So just look at the XD and see if it has async effects.
+    auto xd = planned_copy_xds[op_idx];
+    assert(xd);
+    return xd->launches_async_work();
   }
 
-  bool task_respects_async_effects(SubgraphDefinition::TaskDesc& src, SubgraphDefinition::TaskDesc& dst) {
+  bool SubgraphImpl::task_respects_async_effects(SubgraphDefinition::TaskDesc& src, SubgraphDefinition::TaskDesc& dst) {
     // TODO (rohany): Do more detailed analysis in the future.
     return src.proc.kind() == Processor::TOC_PROC && dst.proc.kind() == Processor::TOC_PROC;
   }
 
-  bool operation_respects_async_effects(SubgraphDefinition* defn,
-                                        SubgraphDefinition::OpKind src_op_kind, unsigned src_op_idx,
-                                        SubgraphDefinition::OpKind dst_op_kind, unsigned dst_op_idx) {
+  bool SubgraphImpl::operation_respects_async_effects(
+    SubgraphDefinition::OpKind src_op_kind, unsigned src_op_idx,
+    SubgraphDefinition::OpKind dst_op_kind, unsigned dst_op_idx
+  ) {
     switch (dst_op_kind) {
       case SubgraphDefinition::OPKIND_TASK: {
         switch (src_op_kind) {
           case SubgraphDefinition::OPKIND_TASK: {
             return task_respects_async_effects(defn->tasks[src_op_idx], defn->tasks[dst_op_idx]);
+          }
+          case SubgraphDefinition::OPKIND_COPY: {
+            // TODO (rohany): I don't know the right way that this API
+            //  could look yet, so for now, a "copy being async" means
+            //  that it pushes work onto a GPU. So the check here is
+            //  just copy is async + task is on GPU.
+            return copy_has_async_effects(src_op_idx) && task_has_async_effects(defn->tasks[dst_op_idx]);
+          }
+          default:
+            return false;
+        }
+      }
+      case SubgraphDefinition::OPKIND_COPY: {
+        // See the comment above in the COPY->TASK case. We'll pretend
+        // an async copy is really a copy serviced by the GPU.
+        switch (src_op_kind) {
+          case SubgraphDefinition::OPKIND_TASK: {
+            return copy_has_async_effects(dst_op_idx) && task_has_async_effects(defn->tasks[src_op_idx]);
+          }
+          case SubgraphDefinition::OPKIND_COPY: {
+            return copy_has_async_effects(src_op_idx) && copy_has_async_effects(dst_op_idx);
           }
           default:
             return false;
@@ -220,13 +240,14 @@ namespace Realm {
     }
   }
 
-  bool operation_has_async_effects(SubgraphDefinition* defn, SubgraphDefinition::OpKind op_kind, unsigned op_idx) {
+  bool SubgraphImpl::operation_has_async_effects(SubgraphDefinition::OpKind op_kind, unsigned op_idx) {
     switch (op_kind) {
       case SubgraphDefinition::OPKIND_TASK: {
         return task_has_async_effects(defn->tasks[op_idx]);
       }
-      // TODO (rohany): Handle async copies in the future...
-      case SubgraphDefinition::OPKIND_COPY: [[fallthrough]];
+      case SubgraphDefinition::OPKIND_COPY: {
+        return copy_has_async_effects(op_idx);
+      }
       case SubgraphDefinition::OPKIND_EXT_PRECOND: [[fallthrough]];
       case SubgraphDefinition::OPKIND_ARRIVAL: {
         return false;
@@ -680,7 +701,7 @@ namespace Realm {
         auto key = std::make_pair(it.op_kind, it.op_index);
         // Copies require special handling, as they don't go into the
         // per-processor local schedules.
-        if (it.op_kind == SubgraphDefinition::OPKIND_COPY && is_plannable_copy(defn->copies[it.op_index]) && !defn->copies[it.op_index].proc.exists()) {
+        if (it.op_kind == SubgraphDefinition::OPKIND_COPY && is_plannable_copy(defn->copies[it.op_index])) {
           bgwork_schedule[key] = bgwork_items.size();
           bgwork_items.push_back(it);
           if (it.is_final_event)
@@ -689,8 +710,7 @@ namespace Realm {
         }
 
         // Operations we know how to handle go into the static schedule.
-        if (std::find(allowed_kinds.begin(), allowed_kinds.end(), it.op_kind) != allowed_kinds.end() ||
-            (it.op_kind == SubgraphDefinition::OPKIND_COPY && is_plannable_copy(defn->copies[it.op_index]) && defn->copies[it.op_index].proc.exists())) {
+        if (std::find(allowed_kinds.begin(), allowed_kinds.end(), it.op_kind) != allowed_kinds.end()) {
             static_schedule.push_back(it);
           // If we're moving an operation into the static part of the schedule,
           // its contribution to the final event in the subgraph will be done
@@ -810,17 +830,9 @@ namespace Realm {
       }
     }
 
-    // TODO (rohany): This is complete garbage, but let's see if we can at least
-    //  get something to compile before worrying about where it's gotta go.
     {
       planned_copy_xds.resize(defn->copies.size(), nullptr);
       for (auto& it : bgwork_items) {
-        if (it.op_kind != SubgraphDefinition::OPKIND_COPY)
-          continue;
-        auto& copy = defn->copies[it.op_index];
-        planned_copy_xds[it.op_index] = analyze_copy(copy);
-      }
-      for (auto& it : static_schedule) {
         if (it.op_kind != SubgraphDefinition::OPKIND_COPY)
           continue;
         auto& copy = defn->copies[it.op_index];
@@ -907,19 +919,6 @@ namespace Realm {
           local_op_meta[proc].push_back(meta);
           break;
         }
-        case SubgraphDefinition::OPKIND_COPY: {
-          auto& copy = defn->copies[it.op_index];
-          assert(copy.proc.exists());
-          operation_indices[desc] = local_schedules[copy.proc].size();
-          operation_procs[desc] = proc_to_index[copy.proc];
-          local_schedules[copy.proc].push_back(desc);
-          local_incoming[copy.proc].push_back(int32_t(incoming_edges[desc].size()));
-          OpMeta meta;
-          meta.is_final_event = it.is_final_event;
-          meta.is_async = false;
-          local_op_meta[copy.proc].push_back(meta);
-          break;
-        }
         default:
           assert(false);
       }
@@ -931,6 +930,8 @@ namespace Realm {
     // Also initialize preconditions of bgwork items.
     bgwork_preconditions = std::vector<int32_t>(bgwork_items.size(), 0);
     bgwork_postconditions = std::vector<std::vector<CompletionInfo>>(bgwork_items.size());
+    bgwork_async_preconditions = std::vector<std::vector<CompletionInfo>>(bgwork_items.size());
+    bgwork_async_postconditions = std::vector<std::vector<CompletionInfo>>(bgwork_items.size());
     for (size_t i = 0; i < bgwork_items.size(); i++) {
       auto& it = bgwork_items[i];
       auto key = std::make_pair(it.op_kind, it.op_index);
@@ -953,9 +954,67 @@ namespace Realm {
         }
       }
 
-      // TODO (rohany): Handle asynchronous behavior of copies.
+      // TODO (rohany): This is some unfortunate code duplication, where we
+      //  basically have to do the same thing as below ...
+      if (operation_has_async_effects(it.op_kind, it.op_index)) {
+
+        // Remember the processor that we need to return the
+        // async events to.
+        if (it.op_kind == SubgraphDefinition::OPKIND_COPY) {
+          auto proc = planned_copy_xds[it.op_index]->get_async_event_proc();
+          bgwork_async_event_procs[proc].push_back(i);
+        }
+
+        for (auto& edge : outgoing_edges[key]) {
+          // Similar to below, see if the edge is to the dynamic partition.
+          if (toposort.find(edge) != toposort.end()) {
+            auto idx = toposort.at(edge);
+            static_to_dynamic_counts[idx]++;
+            bgwork_async_postconditions[i].emplace_back(-1, idx, CompletionInfo::EdgeKind::BGWORK_TO_DYNAMIC);
+            continue;
+          }
+
+          // Respects case.
+          if (operation_respects_async_effects(it.op_kind, it.op_index, edge.first, edge.second)) {
+            // If the child operation knows how to sequence itself
+            // after us without blocking, then we don't have to worry.
+            continue;
+          }
+
+          auto bgwork_it = bgwork_schedule.find(edge);
+          if (bgwork_it != bgwork_schedule.end()) {
+            bgwork_preconditions[bgwork_it->second]++;
+            bgwork_async_postconditions[i].emplace_back(-1, bgwork_it->second, CompletionInfo::EdgeKind::BGWORK_TO_BGWORK);
+          } else {
+            auto procidx = operation_procs[edge];
+            auto schedidx = operation_indices[edge];
+            local_incoming[all_procs[procidx]][schedidx]++;
+            // Remember the processors that this operation will have to trigger.
+            bgwork_async_postconditions[i].emplace_back(procidx, schedidx, CompletionInfo::EdgeKind::BGWORK_TO_STATIC);
+          }
+        }
+        for (auto& edge : incoming_edges[key]) {
+          // Respects case. See the comments below.
+          if (!operation_has_async_effects(edge.first, edge.second) ||
+              !operation_respects_async_effects(edge.first, edge.second, it.op_kind, it.op_index)) {
+            continue;
+          }
+          // Enqueue case.
+          auto bgwork_it = bgwork_schedule.find(edge);
+          if (bgwork_it != bgwork_schedule.end()) {
+            bgwork_async_preconditions[i].emplace_back(-1, bgwork_it->second, CompletionInfo::EdgeKind::BGWORK_TO_STATIC);
+          } else {
+            bgwork_async_preconditions[i].emplace_back(operation_procs[edge], operation_indices[edge], CompletionInfo::EdgeKind::STATIC_TO_STATIC);
+          }
+        }
+      }
     }
 
+    // TODO (rohany): Perform a big refactor of this code that unifies
+    //  the background work items with the normal schedule. Since we have
+    //  the dynamic queue etc, we don't need things to be assigned solely
+    //  to processors etc and have it as rigid as it is right now. We can
+    //  do it "badly" once, and then fix it the next time.
     // Now that all tasks have been added, fill out per-task information
     // like outgoing neighbors and interpolations.
     for (auto& it : static_schedule) {
@@ -984,9 +1043,7 @@ namespace Realm {
       local_outgoing[proc].push_back(outgoing);
 
       // Handle tasks with potentially asynchronous behavior.
-      if (operation_has_async_effects(defn, it.op_kind, it.op_index)) {
-        // TODO (rohany): Handle copy operations with asynchronous effects.
-
+      if (operation_has_async_effects(it.op_kind, it.op_index)) {
         // If an operation is asynchronous, then we might need extra
         // bookkeeping for dependent operations that can only start once
         // the asynchronous effects are complete.
@@ -1000,12 +1057,11 @@ namespace Realm {
           if (toposort.find(edge) != toposort.end()) {
             auto idx = toposort.at(edge);
             static_to_dynamic_counts[idx]++;
-            CompletionInfo info(-1, idx, CompletionInfo::EdgeKind::STATIC_TO_DYNAMIC);
-            to_trigger.push_back(info);
+            to_trigger.emplace_back(-1, idx, CompletionInfo::EdgeKind::STATIC_TO_DYNAMIC);
             continue;
           }
 
-          if (operation_respects_async_effects(defn, it.op_kind, it.op_index, edge.first, edge.second)) {
+          if (operation_respects_async_effects(it.op_kind, it.op_index, edge.first, edge.second)) {
             // If the child operation knows how to sequence itself
             // after us without blocking, then we don't have to worry.
             continue;
@@ -1014,19 +1070,25 @@ namespace Realm {
           // Otherwise, make the dependent operation have to wait on the
           // control code of this operation completing, _and_ its
           // asynchronous effect.
-          auto procidx = operation_procs[edge];
-          auto schedidx = operation_indices[edge];
-          local_incoming[all_procs[procidx]][schedidx]++;
-          // Remember the processors that this operation will have to trigger.
-          to_trigger.emplace_back(procidx, schedidx, CompletionInfo::EdgeKind::STATIC_TO_STATIC);
+          auto bgwork_it = bgwork_schedule.find(edge);
+          if (bgwork_it != bgwork_schedule.end()) {
+            bgwork_preconditions[bgwork_it->second]++;
+            to_trigger.emplace_back(-1, bgwork_it->second, CompletionInfo::EdgeKind::STATIC_TO_BGWORK);
+          } else {
+            auto procidx = operation_procs[edge];
+            auto schedidx = operation_indices[edge];
+            local_incoming[all_procs[procidx]][schedidx]++;
+            // Remember the processors that this operation will have to trigger.
+            to_trigger.emplace_back(procidx, schedidx, CompletionInfo::EdgeKind::STATIC_TO_STATIC);
+          }
         }
         async_effect_triggers[proc].push_back(to_trigger);
         // Additionally, we need to "wait" on the right "tokens" of
         // incoming asynchronous operations.
         std::vector<CompletionInfo> will_trigger;
         for (auto& edge : incoming_edges[key]) {
-          if (!operation_has_async_effects(defn, edge.first, edge.second) ||
-              !operation_respects_async_effects(defn, edge.first, edge.second, it.op_kind, it.op_index)) {
+          if (!operation_has_async_effects(edge.first, edge.second) ||
+              !operation_respects_async_effects(edge.first, edge.second, it.op_kind, it.op_index)) {
             // There are two cases in which we don't need to worry about
             // asynchronous predecessors.
             // 1) The predecessor is not asynchronous.
@@ -1037,7 +1099,12 @@ namespace Realm {
           }
           // If we do know how to handle the incoming async effect, then
           // remember the async predecessor tasks to wait on.
-          will_trigger.emplace_back(operation_procs[edge], operation_indices[edge], CompletionInfo::EdgeKind::STATIC_TO_STATIC);
+          auto bgwork_it = bgwork_schedule.find(edge);
+          if (bgwork_it != bgwork_schedule.end()) {
+            will_trigger.emplace_back(-1, bgwork_it->second, CompletionInfo::EdgeKind::BGWORK_TO_STATIC);
+          } else {
+            will_trigger.emplace_back(operation_procs[edge], operation_indices[edge], CompletionInfo::EdgeKind::STATIC_TO_STATIC);
+          }
         }
         async_incoming_events[proc].push_back(will_trigger);
       } else {
@@ -1127,15 +1194,19 @@ namespace Realm {
         bgwork_items_without_preconditions.push_back(i);
       // Also collect the number of bgwork items the subgraph
       // replay needs to finish before being considered done.
-      if (bgwork_items[i].is_final_event)
+      if (bgwork_items[i].is_final_event) {
         bgwork_finish_events++;
+        if (operation_has_async_effects(bgwork_items[i].op_kind, bgwork_items[i].op_index)) {
+          bgwork_finish_events++;
+        }
+      }
     }
 
     // Identify how many asynchronous operations will contribute to
     // the subgraph's completion event.
     async_finish_events = std::vector<int32_t>(all_procs.size(), 0);
     for (auto& it : static_schedule) {
-      if (it.is_final_event && operation_has_async_effects(defn, it.op_kind, it.op_index)) {
+      if (it.is_final_event && operation_has_async_effects(it.op_kind, it.op_index)) {
         auto proc = operation_procs.at({it.op_kind, it.op_index});
         async_finish_events[proc]++;
       }
@@ -1232,6 +1303,7 @@ namespace Realm {
       //  tightly, rather than for each operation.
       auto async_operation_events = (void**)malloc(sizeof(void*) * operations.data.size());
       auto async_operation_effect_triggerers = (AsyncGPUWorkTriggerer*)malloc(sizeof(AsyncGPUWorkTriggerer) * operations.data.size());
+      auto async_bgwork_events = (void**)malloc(sizeof(void*) * bgwork_items.size());
 
       // Initialize a counter that all processors will decrement upon completion.
       auto finish_counter = (atomic<int32_t>*)malloc(sizeof(atomic<int32_t>));
@@ -1261,6 +1333,7 @@ namespace Realm {
         state[i].bgwork_preconditions = bgwork_precondition_ctrs;
         state[i].async_operation_events = async_operation_events;
         state[i].async_operation_effect_triggerers = async_operation_effect_triggerers;
+        state[i].async_bgwork_events = async_bgwork_events;
         state[i].has_pending_async_work = async_finish_events[i] > 0;
         state[i].pending_async_count.store(async_finish_events[i]);
         state[i].queue = queue;
@@ -1315,6 +1388,7 @@ namespace Realm {
         dynamic_precondition_waiters,
         async_operation_events,
         async_operation_effect_triggerers,
+        async_bgwork_events,
         dynamic_precondition_ctrs,
         dynamic_events,
         finish_counter
@@ -1608,6 +1682,20 @@ namespace Realm {
     dynamic_to_static_triggers.clear();
     static_to_dynamic_counts.clear();
 
+    bgwork_items.clear();
+    for (auto xd : planned_copy_xds) {
+      if (xd) {
+        xd->remove_reference();
+      }
+    }
+    planned_copy_xds.clear();
+    bgwork_preconditions.clear();
+    bgwork_postconditions.clear();
+    bgwork_items_without_preconditions.clear();
+    bgwork_async_postconditions.clear();
+    bgwork_async_preconditions.clear();
+    bgwork_async_event_procs.clear();
+
     // TODO: when we create subgraphs on remote nodes, send a message to the
     //  creator node so they can add it to their free list
     NodeID creator_node = ID(me).subgraph_creator_node();
@@ -1659,12 +1747,14 @@ namespace Realm {
     ExternalPreconditionTriggerer* _dynamic_preconds,
     void** _async_operation_events,
     AsyncGPUWorkTriggerer* _async_operation_event_triggerers,
+    void** _async_bgwork_events,
     atomic<int32_t>* _dynamic_precond_counters,
     UserEvent* _dynamic_events,
     atomic<int32_t>* _finish_counter
   ) : num_procs(_num_procs), state(_state), args(_args), preconds(_preconds), queue(_queue),
       external_preconds(_external_preconds), dynamic_preconds(_dynamic_preconds),
       async_operation_events(_async_operation_events), async_operation_event_triggerers(_async_operation_event_triggerers),
+      async_bgwork_events(_async_bgwork_events),
       dynamic_precond_counters(_dynamic_precond_counters), dynamic_events(_dynamic_events), finish_counter(_finish_counter), EventWaiter() {}
 
   void SubgraphImpl::InstantiationCleanup::event_triggered(bool poisoned, Realm::TimeLimit work_until) {
@@ -1678,7 +1768,11 @@ namespace Realm {
       for (size_t j = sg->operations.proc_offsets[proc]; j < sg->operations.proc_offsets[proc + 1]; j++) {
         if (async_operation_events[j] != nullptr)
           tokens.push_back(async_operation_events[j]);
-        }
+      }
+      for (auto idx : sg->bgwork_async_event_procs[pimpl]) {
+        assert(async_bgwork_events[idx] != nullptr);
+        tokens.push_back(async_bgwork_events[idx]);
+      }
       pimpl->return_subgraph_async_tokens(tokens);
       tokens.clear();
     }
@@ -1691,6 +1785,7 @@ namespace Realm {
     free(dynamic_preconds);
     free(async_operation_events);
     free(async_operation_event_triggerers);
+    free(async_bgwork_events);
     free(dynamic_precond_counters);
     free(dynamic_events);
     free(finish_counter);
@@ -1909,8 +2004,8 @@ namespace Realm {
     xd->reset();
     xd->subgraph_replay_state = all_proc_states;
     xd->subgraph_index = index;
-    // TODO (rohany): I think we have to do this every time because going
-    //  all the way through removes a reference?
+    // Add a reference before enqueing the XD, as each pass through the pipeline
+    // removes a reference upon completion.
     xd->add_reference();
     xd->channel->enqueue_ready_xd(xd);
   }
@@ -1954,6 +2049,7 @@ namespace Realm {
     // have been invoked to handle the creation.
     assert(factories[0].xd != nullptr);
     // We need to make the TransferOperation think that it is finished.
+    // The SubgraphImpl will take over the reference to the XD.
     assert(op->xd_trackers.size() == 1);
     op->xd_trackers[0]->mark_finished(true /* successful */);
 
@@ -1961,8 +2057,6 @@ namespace Realm {
     td->remove_reference();
 
     auto xd = factories[0].xd;
-    // Explicitly add a reference to the xd from the subgraph.
-    xd->add_reference();
     // Detach the xd from its DMA op.
     xd->dma_op = 0;
     return xd;

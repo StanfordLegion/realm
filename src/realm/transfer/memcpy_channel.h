@@ -43,6 +43,10 @@ namespace Realm {
     virtual Request *dequeue_request();
     virtual void enqueue_request(Request *req);
 
+    // Note: not including the override to avoid warnings with
+    // the rest of the functions not marked override.
+    bool launches_async_work() /* override */ { return false; }
+
     bool progress_xd(MemcpyChannel *channel, TimeLimit work_until);
 
   private:

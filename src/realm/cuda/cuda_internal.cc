@@ -564,6 +564,23 @@ namespace Realm {
       memset(&transpose_copy, 0, sizeof(transpose_copy));
       memset(&copy_infos, 0, sizeof(copy_infos));
 
+      // TODO (rohany): To handle asynchronous launching of work, we have to
+      //  do two things:
+      //   1) synchronize with previously submitted work by the subgraph, and
+      //   2) record a token for the subgraph to synchronize with us.
+      //  We'll accomplish this in the following way:
+      //   1) Each GPU*Channel will have two streams: a subgraph incoming
+      //      stream, and a subgraph outgoing stream.
+      //   2) Any work launched by the channel will synchronize against the
+      //      subgraph incoming stream (which will record an event on any
+      //      preconditions in the subgraph).
+      //   3) All work launched by the channel will record an event that is
+      //      then synchronized onto the subgraph outgoing stream. Once all
+      //      asynchronous work is launched by the stream, an event will be
+      //      recorded on the outgoing stream as the result token. This allows
+      //      all of the launched work to run in parallel, but still gives us
+      //      an event that requires all of the parallel work to complete.
+
       // The general algorithm here can be described in three loops:
       // 1) Outer loop - iterates over all the addresses for each request.  This typically
       // corresponds to each rectangle in an index space transfer. 2) Batch loop - Map the
@@ -667,6 +684,37 @@ namespace Realm {
         }
         if(transpose_copy.src != 0) {
           memset(&transpose_copy, 0, sizeof(transpose_copy));
+        }
+
+        // TODO (rohany): Extract this out into a helper method that other
+        //  kinds of XD's can call.
+        // Handle synchronizing against any pending work.
+        if (subgraph_replay_state != nullptr) {
+          auto& state = ((ProcSubgraphReplayState*)(subgraph_replay_state))[0];
+          for (auto& info : state.subgraph->bgwork_async_preconditions[subgraph_index]) {
+            CUevent_st* ev = nullptr;
+            switch (info.kind) {
+              case SubgraphImpl::CompletionInfo::STATIC_TO_BGWORK: {
+                auto idx = state.subgraph->operations.proc_offsets[info.proc] + info.index;
+                ev = (CUevent_st*)(state.async_operation_events[idx]);
+                break;
+              }
+              case SubgraphImpl::CompletionInfo::BGWORK_TO_BGWORK: {
+                ev = (CUevent_st*)(state.async_bgwork_events[info.index]);
+                break;
+              }
+              default:
+                assert(false);
+            }
+            // Wait on the event on subgraph_input.
+            CHECK_CU(CUDA_DRIVER_FNPTR(cuStreamWaitEvent)(channel->subgraph_input->get_stream(), ev, 0));
+          }
+          // After waiting on all the predecessors, record an event on
+          // subgraph_input, and use that as a precondition for the stream.
+          auto ev = channel->get_gpu()->event_pool.get_event();
+          CHECK_CU(CUDA_DRIVER_FNPTR(cuEventRecord)(ev, channel->subgraph_input->get_stream()));
+          CHECK_CU(CUDA_DRIVER_FNPTR(cuStreamWaitEvent)(stream->get_stream(), ev, 0));
+          channel->get_gpu()->event_pool.return_event(ev);
         }
 
         // 2) Batch loop - Collect all the rectangles for this inport/outport pair by
@@ -867,9 +915,24 @@ namespace Realm {
           log_gpudma.info() << "gpu memcpy fence: stream=" << stream << " xd=" << std::hex
                             << guid << std::dec << " bytes=" << bytes_to_fence;
 
-          stream->add_notification(new GPUTransferCompletion(
-              this, input_control.current_io_port, in_span_start, bytes_to_fence,
-              output_control.current_io_port, out_span_start, bytes_to_fence));
+          auto completion = new GPUTransferCompletion(
+               this, input_control.current_io_port, in_span_start, bytes_to_fence,
+               output_control.current_io_port, out_span_start, bytes_to_fence);
+
+          if (subgraph_replay_state != nullptr) {
+            // Record an event of all the work submitted so far.
+            auto gpu = channel->get_gpu();
+            auto ev = gpu->event_pool.get_event();
+            CHECK_CU(CUDA_DRIVER_FNPTR(cuEventRecord)(ev, stream->get_stream()));
+            // Synchronize with this event on the outgoing stream.
+            CHECK_CU(CUDA_DRIVER_FNPTR(cuStreamWaitEvent)(channel->subgraph_output->get_stream(), ev, 0));
+            // Now throw the event back into the stream with
+            // the completion attached.
+            stream->add_event(ev, nullptr, completion);
+          } else {
+            stream->add_notification(completion);
+          }
+
           record_address_consumption(bytes_to_fence, bytes_to_fence);
           total_bytes += bytes_to_fence;
         }
@@ -879,6 +942,28 @@ namespace Realm {
       wseqcache.flush();
 
       return total_bytes > 0;
+    }
+
+    void GPUXferDes::on_subgraph_control_completion() {
+      // Write the final event on subgraph_output
+      // into the async work data structure.
+      auto gpuchan = static_cast<GPUChannel*>(channel);
+      auto stream = gpuchan->subgraph_output;
+      auto gpu = stream->get_gpu();
+      auto ev = gpu->event_pool.get_event();
+      {
+        AutoGPUContext agc(gpu);
+        CHECK_CU(CUDA_DRIVER_FNPTR(cuEventRecord)(ev, stream->get_stream()));
+      }
+      assert(subgraph_replay_state != nullptr);
+      ProcSubgraphReplayState* state = (ProcSubgraphReplayState*)(subgraph_replay_state);
+      // The event will be returned on subgraph completion.
+      state[0].async_bgwork_events[subgraph_index] = ev;
+    }
+
+    LocalTaskProcessor* GPUXferDes::get_async_event_proc() {
+      auto gpuchan = static_cast<GPUChannel*>(channel);
+      return gpuchan->get_gpu()->proc;
     }
 
     ////////////////////////////////////////////////////////////////////////
@@ -1647,9 +1732,22 @@ namespace Realm {
       default:
         assert(0);
       }
+
+      {
+        AutoGPUContext agc(src_gpu);
+        subgraph_input = new GPUStream(src_gpu, src_gpu->worker);
+        subgraph_output = new GPUStream(src_gpu, src_gpu->worker);
+      }
     }
 
-    GPUChannel::~GPUChannel() {}
+    GPUChannel::~GPUChannel()
+    {
+      {
+        AutoGPUContext agc(src_gpu);
+        delete subgraph_input;
+        delete subgraph_output;
+      }
+    }
 
     XferDes *GPUChannel::create_xfer_des(uintptr_t dma_op, NodeID launch_node,
                                          XferDesID guid,

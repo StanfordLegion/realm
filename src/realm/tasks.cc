@@ -1221,8 +1221,19 @@ namespace Realm {
           auto end = replay->subgraph->async_incoming_infos.task_offsets[proc_offset + local_op_index + 1];
           for (size_t i = start; i < end; i++) {
             auto& info = replay->subgraph->async_incoming_infos.data[i];
-            auto pred_op_idx = replay->subgraph->operations.proc_offsets[info.proc] + info.index;
-            pimpl->sync_task_async_effect(replay->async_operation_events[pred_op_idx]);
+            switch (info.kind) {
+              case SubgraphImpl::CompletionInfo::STATIC_TO_STATIC: {
+                auto pred_op_idx = replay->subgraph->operations.proc_offsets[info.proc] + info.index;
+                pimpl->sync_task_async_effect(replay->async_operation_events[pred_op_idx]);
+                break;
+              }
+              case SubgraphImpl::CompletionInfo::BGWORK_TO_STATIC: {
+                pimpl->sync_task_async_effect(replay->async_bgwork_events[info.index]);
+                break;
+              }
+              default:
+                assert(false);
+            }
           }
         }
 
@@ -1267,21 +1278,6 @@ namespace Realm {
         unsigned count = arrivalDesc.count;
         lock.unlock();
         b.arrive(count, Event::NO_EVENT, arrivalDesc.reduce_value.base(), arrivalDesc.reduce_value.size());
-        lock.lock();
-
-        break;
-      }
-      case SubgraphDefinition::OPKIND_COPY: {
-        auto xd = subgraph->planned_copy_xds[op_key.second];
-        assert(xd);
-        xd->reset();
-        // TODO (rohany): This is a hack ...
-        auto mxd = dynamic_cast<MemcpyXferDes*>(xd);
-        assert(mxd);
-        auto mchan = dynamic_cast<MemcpyChannel*>(xd->channel);
-        assert(mchan);
-        lock.unlock();
-        while (mxd->progress_xd(mchan, TimeLimit())) {}
         lock.lock();
 
         break;

@@ -658,28 +658,65 @@ namespace Realm {
         TransferOperation *op = reinterpret_cast<TransferOperation *>(dma_op);
         op->notify_xd_completion(guid);
       } else {
-        assert(subgraph_replay_state != nullptr);
-        ProcSubgraphReplayState* state = (ProcSubgraphReplayState*)(subgraph_replay_state);
-        for (auto& it : state[0].subgraph->bgwork_postconditions[subgraph_index]) {
-          trigger_subgraph_operation_completion(state, it, true /* incr_counter */, nullptr);
+        // Depending on whether we launch async work, the control
+        // completion function may have already been called.
+        if (launches_async_work()) {
+          trigger_subgraph_async_completion();
+        } else {
+          trigger_subgraph_control_completion();
         }
-        // TODO (rohany): Do we have to duplicate this logic in the async
-        //  gpu copy stream completion pieces?
-        if (state[0].subgraph->bgwork_items[subgraph_index].is_final_event) {
-          // TODO (rohany): Hackily including the contributions of bgwork
-          //  operations in the proc 0 counters.
-          int32_t remaining = state[0].pending_async_count.fetch_sub_acqrel(1) - 1;
-          if (remaining == 0) {
-            state[0].finish_event.trigger();
-          }
-        }
-        // TODO (rohany): ...
+        // Enqueueing the XD onto channels adds the guid of the
+        // xd into a set on the XferDesQueue. We need to remove the
+        // xd from there upon completion to avoid the XferDesQueue
+        // from thinking there's still a xd pending on shutdown.
         destroy_xfer_des(guid);
       }
     } else {
       assert(dma_op != 0);
       TransferOperation *op = reinterpret_cast<TransferOperation *>(dma_op);
       NotifyXferDesCompleteMessage::send_request(launch_node, op, guid);
+    }
+  }
+
+  void XferDes::trigger_subgraph_control_completion() {
+    // First, do whatever the concrete XD wants to do.
+    on_subgraph_control_completion();
+
+    assert(subgraph_replay_state != nullptr);
+    ProcSubgraphReplayState* state = (ProcSubgraphReplayState*)(subgraph_replay_state);
+    for (auto& it : state[0].subgraph->bgwork_postconditions[subgraph_index]) {
+      trigger_subgraph_operation_completion(state, it, true /* incr_counter */, nullptr);
+    }
+    // TODO (rohany): Do we have to duplicate this logic in the async
+    //  gpu copy stream completion pieces?
+    if (state[0].subgraph->bgwork_items[subgraph_index].is_final_event) {
+      // TODO (rohany): Hackily including the contributions of bgwork
+      //  operations in the proc 0 counters.
+      int32_t remaining = state[0].pending_async_count.fetch_sub_acqrel(1) - 1;
+      if (remaining == 0) {
+        state[0].finish_event.trigger();
+      }
+    }
+  }
+
+  void XferDes::trigger_subgraph_async_completion() {
+    // First, do whatever the concrete XD wants to do.
+    on_subgraph_async_completion();
+
+    assert(subgraph_replay_state != nullptr);
+    ProcSubgraphReplayState* state = (ProcSubgraphReplayState*)(subgraph_replay_state);
+    for (auto& it : state[0].subgraph->bgwork_async_postconditions[subgraph_index]) {
+      trigger_subgraph_operation_completion(state, it, true /* incr_counter */, nullptr);
+    }
+    // TODO (rohany): Do we have to duplicate this logic in the async
+    //  gpu copy stream completion pieces?
+    if (state[0].subgraph->bgwork_items[subgraph_index].is_final_event) {
+      // TODO (rohany): Hackily including the contributions of bgwork
+      //  operations in the proc 0 counters.
+      int32_t remaining = state[0].pending_async_count.fetch_sub_acqrel(1) - 1;
+      if (remaining == 0) {
+        state[0].finish_event.trigger();
+      }
     }
   }
 
@@ -1924,6 +1961,14 @@ namespace Realm {
     assert(pending >= 0);
     if(pending == 0)
       transfer_completed.store_release(true);
+
+    // If this xd launched some asynchronous work within a subgraph replay,
+    // then we can trigger the subgraph and tell it that the control side
+    // of this XD execution has completed, which will allow other components
+    // of the subgraph that depend on launched asynchronous work to continue.
+    if (subgraph_replay_state != nullptr && launches_async_work()) {
+      trigger_subgraph_control_completion();
+    }
   }
 
   void XferDes::update_bytes_read(int port_idx, size_t offset, size_t size)

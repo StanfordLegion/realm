@@ -86,17 +86,6 @@ namespace Realm {
     return val;
   }
 
-   // Methods for understanding the asynchronous affects tasks may have.
-   // Since subgraphs have a static view of the source program, they can
-   // take more advantage of this asynchrony than Realm can today.
-   bool task_has_async_effects(SubgraphDefinition::TaskDesc& task);
-   bool operation_has_async_effects(SubgraphDefinition* defn, SubgraphDefinition::OpKind op_kind, unsigned op_idx);
-
-   bool task_respects_async_effects(SubgraphDefinition::TaskDesc& src, SubgraphDefinition::TaskDesc& dst);
-   bool operation_respects_async_effects(SubgraphDefinition* defn,
-                                         SubgraphDefinition::OpKind src_op_kind, unsigned src_op_idx,
-                                         SubgraphDefinition::OpKind dst_op_kind, unsigned dst_op_idx);
-
    // FlattenedProcMap and FlattenedProcTaskMap are essentially sparse matrix
    // and sparse tensor representations of mappings of
    // * proc -> vec<T> (per task)
@@ -190,6 +179,15 @@ namespace Realm {
 
     protected:
       XferDes* analyze_copy(SubgraphDefinition::CopyDesc& copy);
+      // Methods for understanding the asynchronous affects tasks may have.
+      // Since subgraphs have a static view of the source program, they can
+      // take more advantage of this asynchrony than Realm can today.
+      bool task_has_async_effects(SubgraphDefinition::TaskDesc& task);
+      bool copy_has_async_effects(unsigned op_idx);
+      bool operation_has_async_effects(SubgraphDefinition::OpKind op_kind, unsigned op_idx);
+      bool task_respects_async_effects(SubgraphDefinition::TaskDesc& src, SubgraphDefinition::TaskDesc& dst);
+      bool operation_respects_async_effects(SubgraphDefinition::OpKind src_op_kind, unsigned src_op_idx,
+                                            SubgraphDefinition::OpKind dst_op_kind, unsigned dst_op_idx);
 
   public:
     ID me;
@@ -271,22 +269,23 @@ namespace Realm {
     std::vector<ExternalPreconditionMeta> dynamic_to_static_triggers;
     std::vector<int32_t> static_to_dynamic_counts;
 
-    // TODO (rohany): Clean these up later ...
+    int32_t bgwork_finish_events = 0;
     std::vector<SubgraphScheduleEntry> bgwork_items;
     std::vector<XferDes*> planned_copy_xds;
     std::vector<int32_t> bgwork_preconditions;
+    std::vector<int64_t> bgwork_items_without_preconditions;
     // TODO (rohany): Compact this later ...
     std::vector<std::vector<CompletionInfo>> bgwork_postconditions;
-    std::vector<int64_t> bgwork_items_without_preconditions;
-    int32_t bgwork_finish_events = 0;
-    // TODO (rohany): Need to handle completion triggers from the
-    //  copies into the static subgraph, and into the dynamic subgraph.
-    // TODO (rohany): Need to handle when copy is a finish event.
+    std::vector<std::vector<CompletionInfo>> bgwork_async_postconditions;
+    std::vector<std::vector<CompletionInfo>> bgwork_async_preconditions;
+    std::map<LocalTaskProcessor*, std::vector<unsigned>> bgwork_async_event_procs;
     // TODO (rohany): Need to handle deferred launches of copies
     //  when the copies are sharing the same xd state.
     //  * To do this, have an event that all the processors will trigger
     //    once they actually start up. Add a waiter to that event that
     //    will run through and make all initially true preconditions start.
+    //  ^ This doesn't actually work. I'm not sure of a good way to do (and
+    //    not force the user to chain the replays themselves).
 
     class ExternalPreconditionTriggerer : public EventWaiter {
       public:
@@ -334,6 +333,7 @@ namespace Realm {
           ExternalPreconditionTriggerer* dynamic_preconds,
           void** async_operation_events,
           AsyncGPUWorkTriggerer* async_operation_event_triggerers,
+          void** async_bgwork_events,
           atomic<int32_t>* dynamic_precond_counters,
           UserEvent* dynamic_events,
           atomic<int32_t>* finish_counter
@@ -351,6 +351,7 @@ namespace Realm {
         ExternalPreconditionTriggerer* dynamic_preconds;
         void** async_operation_events;
         AsyncGPUWorkTriggerer* async_operation_event_triggerers;
+        void** async_bgwork_events;
         atomic<int32_t>* dynamic_precond_counters;
         UserEvent* dynamic_events;
         atomic<int32_t>* finish_counter;
@@ -395,6 +396,9 @@ namespace Realm {
     // Data structures for management of asynchrony.
     void** async_operation_events = nullptr;
     SubgraphImpl::AsyncGPUWorkTriggerer* async_operation_effect_triggerers = nullptr;
+
+    // TODO (rohany): ...
+    void** async_bgwork_events = nullptr;
 
     // A counter to manage the number of pending async items
     // that must complete before the finish event of this
