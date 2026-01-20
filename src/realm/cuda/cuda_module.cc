@@ -1053,6 +1053,7 @@ namespace Realm {
      // Push profiling information, if necessary.
      if (prof && prof->wants_gpu_timeline) {
        auto e = gpu->event_pool.get_event();
+       CHECK_CU(CUDA_DRIVER_FNPTR(cuEventRecord)(e, s->get_stream()));
        auto completion = new GPUProfInfoTrigger(prof, true /* start */);
        s->add_event(e, nullptr, completion, nullptr, true /* return_event */);
      }
@@ -1064,6 +1065,17 @@ namespace Realm {
 
     assert(!gpu->module->config->cfg_task_legacy_sync);
     assert(ThreadLocal::context_sync_required == 0);
+
+    // Again, handle post-task GPU timeline information. This must happen
+    // before we enqueue the trigger, otherwise the profiling information
+    // may not get recorded by the time the subgraph finishes and it is
+    // sent out during subgraph cleanup.
+    if (prof && prof->wants_gpu_timeline) {
+      auto e = gpu->event_pool.get_event();
+      CHECK_CU(CUDA_DRIVER_FNPTR(cuEventRecord)(e, s->get_stream()));
+      auto completion = new GPUProfInfoTrigger(prof, false /* start */);
+      s->add_event(e, nullptr, completion, nullptr, true /* return_event */);
+    }
 
     // Record an event for the completion of kernels launched by the task.
     auto e = gpu->event_pool.get_event();
@@ -1079,13 +1091,6 @@ namespace Realm {
       // The subgraph cleanup will be responsible for cleaning up
       // and returning events to the pool.
       s->add_event(e, nullptr, completion, nullptr, false /* return_event */);
-    }
-
-    // Again, handle post-task GPU timeline information.
-    if (prof && prof->wants_gpu_timeline) {
-      auto e2 = gpu->event_pool.get_event();
-      auto completion = new GPUProfInfoTrigger(prof, false /* start */);
-      s->add_event(e2, nullptr, completion, nullptr, true /* return_event */);
     }
 
     ThreadLocal::current_gpu_stream = nullptr;
