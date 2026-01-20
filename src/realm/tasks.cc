@@ -1283,7 +1283,8 @@ namespace Realm {
       for (size_t i = completion_task_offset_start; i < completion_task_offset_end; i++) {
         SubgraphImpl::CompletionInfo& info = subgraph->completion_infos.data[i];
         assert(info.kind == SubgraphImpl::CompletionInfo::EdgeKind::STATIC_TO_STATIC ||
-               info.kind == SubgraphImpl::CompletionInfo::EdgeKind::STATIC_TO_DYNAMIC);
+               info.kind == SubgraphImpl::CompletionInfo::EdgeKind::STATIC_TO_DYNAMIC ||
+               info.kind == SubgraphImpl::CompletionInfo::EdgeKind::STATIC_TO_BGWORK);
         // Only wake up the target processor if it isn't us. We have to do
         // a bit of work to make sure that the call to trigger can actually
         // trigger an event (which means releasing the lock and taking it

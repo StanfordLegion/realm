@@ -28,6 +28,7 @@
 #include "realm/transfer/lowlevel_dma.h"
 #include "realm/transfer/ib_memory.h"
 #include "realm/utils.h"
+#include "realm/subgraph_impl.h"
 
 #include <algorithm>
 
@@ -462,8 +463,6 @@ namespace Realm {
     , nb_update_pre_bytes_total_calls_received(0)
   {
     input_ports.resize(inputs_info.size());
-    int gather_control_port = -1;
-    int scatter_control_port = -1;
     for(size_t i = 0; i < inputs_info.size(); i++) {
       XferPort &p = input_ports[i];
       const XferDesPortInfo &ii = inputs_info[i];
@@ -647,13 +646,95 @@ namespace Realm {
     // notify owning DmaRequest upon completion of this XferDes
     // printf("complete XD = %lu\n", guid);
     if(launch_node == Network::my_node_id) {
-      TransferOperation *op = reinterpret_cast<TransferOperation *>(dma_op);
-      op->notify_xd_completion(guid);
+      if (dma_op != 0) {
+        TransferOperation *op = reinterpret_cast<TransferOperation *>(dma_op);
+        op->notify_xd_completion(guid);
+      } else {
+        assert(subgraph_replay_state != nullptr);
+        ProcSubgraphReplayState* state = (ProcSubgraphReplayState*)(subgraph_replay_state);
+        for (auto& it : state[0].subgraph->bgwork_postconditions[subgraph_index]) {
+          trigger_subgraph_operation_completion(state, it, true /* incr_counter */, nullptr);
+        }
+        // TODO (rohany): Do we have to duplicate this logic in the async
+        //  gpu copy stream completion pieces?
+        if (state[0].subgraph->bgwork_items[subgraph_index].is_final_event) {
+          // TODO (rohany): Hackily including the contributions of bgwork
+          //  operations in the proc 0 counters.
+          int32_t remaining = state[0].pending_async_count.fetch_sub_acqrel(1) - 1;
+          if (remaining == 0) {
+            state[0].finish_event.trigger();
+          }
+        }
+        // TODO (rohany): ...
+        destroy_xfer_des(guid);
+      }
     } else {
+      assert(dma_op != 0);
       TransferOperation *op = reinterpret_cast<TransferOperation *>(dma_op);
       NotifyXferDesCompleteMessage::send_request(launch_node, op, guid);
     }
   }
+
+  void XferDes::reset() {
+   iteration_completed.store_release(false);
+   bytes_write_pending.store_release(0);
+   transfer_completed.store_release(false);
+   progress_counter.store_release(0);
+   nb_update_pre_bytes_total_calls_expected = 0;
+   nb_update_pre_bytes_total_calls_received.store_release(0);
+   for (auto& info : input_ports) {
+     info.iter->reset();
+     info.local_bytes_total = 0;
+     info.local_bytes_cons.store_release(0);
+     info.remote_bytes_total.store_release(size_t(-1));
+     // TODO (rohany): How to best reset this stuff?
+     info.seq_local = {};
+     info.seq_remote = {};
+     // TODO (rohany): Do i need to do this for the addresslist too?
+     info.addrlist = {};
+     info.addrcursor = {};
+     info.addrcursor.set_addrlist(&info.addrlist);
+   }
+
+   if(gather_control_port >= 0) {
+     input_control.control_port_idx = gather_control_port;
+     input_control.current_io_port = 0;
+     input_control.remaining_count = 0;
+     input_control.eos_received = false;
+   } else {
+     input_control.control_port_idx = -1;
+     input_control.current_io_port = 0;
+     input_control.remaining_count = size_t(-1);
+     input_control.eos_received = false;
+   }
+
+   for (auto& info : output_ports) {
+     info.iter->reset();
+     info.needs_pbt_update.store_release(info.peer_guid != XFERDES_NO_GUID);
+     info.local_bytes_total = 0;
+     info.local_bytes_cons.store_release(0);
+     info.remote_bytes_total.store_release(size_t(-1));
+     // TODO (rohany): How to best reset this stuff?
+     info.seq_local = {};
+     info.seq_remote = {};
+     // TODO (rohany): Do i need to do this for the addresslist too?
+     info.addrlist = {};
+     info.addrcursor = {};
+     info.addrcursor.set_addrlist(&info.addrlist);
+   }
+
+   if(scatter_control_port >= 0) {
+     output_control.control_port_idx = scatter_control_port;
+     output_control.current_io_port = 0;
+     output_control.remaining_count = 0;
+     output_control.eos_received = false;
+   } else {
+     output_control.control_port_idx = -1;
+     output_control.current_io_port = 0;
+     output_control.remaining_count = size_t(-1);
+     output_control.eos_received = false;
+   }
+ }
 
 #define MAX_GEN_REQS 3
 

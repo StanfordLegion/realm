@@ -20,6 +20,8 @@
 #include "realm/subgraph_impl.h"
 #include "realm/runtime_impl.h"
 #include "realm/proc_impl.h"
+#include "realm/idx_impl.h"
+#include "realm/transfer/transfer.h"
 
 #include <unordered_set>
 
@@ -233,6 +235,50 @@ namespace Realm {
       }
     }
   }
+
+  bool is_plannable_copy(SubgraphDefinition::CopyDesc& copy) {
+    auto node = Network::my_node_id;
+    bool allowed = true;
+    for(auto &src : copy.srcs) {
+      auto mem = src.inst.get_location();
+      if(mem.address_space() != node)
+        allowed = false;
+    }
+    for(auto &dst : copy.dsts) {
+      auto mem = dst.inst.get_location();
+      if(mem.address_space() != node)
+        allowed = false;
+    }
+    return allowed;
+  }
+
+  class MockXDFactory : public XferDesFactory {
+  public:
+    MockXDFactory() {}
+    virtual bool needs_release() override { return false; }
+    virtual void create_xfer_des(uintptr_t dma_op,
+                                 NodeID launch_node,
+                                 NodeID target_node,
+                                 XferDesID guid,
+                                 const std::vector<XferDesPortInfo>& inputs_info,
+                                 const std::vector<XferDesPortInfo>& outputs_info,
+                                 int priority,
+                                 XferDesRedopInfo redop_info,
+                                 const void *fill_data, size_t fill_size,
+                                 size_t fill_total) override {
+      assert(target_node == Network::my_node_id);
+      assert(launch_node == Network::my_node_id);
+      auto sxdf = dynamic_cast<SimpleXferDesFactory*>(factory);
+      assert(sxdf != nullptr);
+      LocalChannel *c = reinterpret_cast<LocalChannel *>(sxdf->channel);
+      xd = c->create_xfer_des(dma_op, launch_node, guid,
+                              inputs_info, outputs_info,
+                              priority, redop_info,
+                              fill_data, fill_size, fill_total);
+    }
+    XferDesFactory* factory = nullptr;
+    XferDes* xd = nullptr;
+  };
 
   ////////////////////////////////////////////////////////////////////////
   //
@@ -622,13 +668,24 @@ namespace Realm {
     allowed_kinds.push_back(SubgraphDefinition::OPKIND_TASK);
     allowed_kinds.push_back(SubgraphDefinition::OPKIND_ARRIVAL);
     allowed_kinds.push_back(SubgraphDefinition::OPKIND_EXT_PRECOND);
-    // TODO (rohany): Push more kinds of operations into the static portion
-    //  of the subgraph.
+    // TODO (rohany): Comment ...
+    std::map<std::pair<SubgraphDefinition::OpKind, unsigned>, unsigned> bgwork_schedule;
 
     if (opt) {
       // Reset the toposort for the new schedule.
       toposort.clear();
       for (auto& it : schedule) {
+        auto key = std::make_pair(it.op_kind, it.op_index);
+        // Copies require special handling, as they don't go into the
+        // per-processor local schedules.
+        if (it.op_kind == SubgraphDefinition::OPKIND_COPY && is_plannable_copy(defn->copies[it.op_index])) {
+          bgwork_schedule[key] = bgwork_items.size();
+          bgwork_items.push_back(it);
+          if (it.is_final_event)
+            num_final_events--;
+          continue;
+        }
+
         // Operations we know how to handle go into the static schedule.
         if (std::find(allowed_kinds.begin(), allowed_kinds.end(), it.op_kind) != allowed_kinds.end()) {
           static_schedule.push_back(it);
@@ -750,6 +807,67 @@ namespace Realm {
       }
     }
 
+    // TODO (rohany): This is complete garbage, but let's see if we can at least
+    //  get something to compile before worrying about where it's gotta go.
+    {
+      planned_copy_xds.resize(defn->copies.size(), nullptr);
+      for (auto& it : bgwork_items) {
+        if (it.op_kind != SubgraphDefinition::OPKIND_COPY)
+          continue;
+        auto& copy = defn->copies[it.op_index];
+        TransferDesc* td = copy.space.impl->make_transfer_desc(copy.srcs, copy.dsts);
+        // Just constructing a TransferDescriptor should perform all the
+        // copy analysis inline. It could be deferred, but if all the instances
+        // have been created already, then the analysis happens right away.
+        // Assert that this is true.
+        // TODO (rohany): Have to have some sort of filter for the copies that
+        //  we actually analyze in this manner.
+        assert(td->analysis_complete.load() && td->analysis_successful);
+        // For now, the copies we're analyzing should only ever
+        //  be one-hop copies inside this node. After this works, we
+        //  can consider extending the analysis to cache plans for
+        //  multi-hop copies through the network.
+        TransferGraph& graph = td->graph;
+        assert(graph.xd_nodes.size() == 1);
+        assert(graph.ib_edges.empty());
+        // Now, spoof the XDFactory inside each node of the transfer
+        // graph so that we can extract the XD's.
+        std::vector<MockXDFactory> factories(graph.xd_nodes.size());
+        for (size_t i = 0; i < graph.xd_nodes.size(); i++) {
+          factories[i].factory = graph.xd_nodes[i].factory;
+          graph.xd_nodes[i].factory = &factories[i];
+        }
+
+        // It looks like we will have to make a new GenEvent for each copy,
+        // but it's not the end of the world.
+        GenEventImpl *finish_event = GenEventImpl::create_genevent();
+        Event ev = finish_event->current_event();
+        TransferOperation *op = new TransferOperation(*td, Event::NO_EVENT, finish_event,
+                                                      ID(ev).event_generation(), 0 /* priority */);
+        // Actually create the XD's for the copy. We have to call
+        // TransferOperation::allocate_ibs(), which then falls through
+        // to call TransferOperation::create_xds().
+        op->allocate_ibs();
+
+        // After TransferOperation::create_xds(), our mock factory should
+        // have been invoked to handle the creation.
+        assert(factories[0].xd != nullptr);
+        // Explicitly add a reference to the xd from the subgraph.
+        factories[0].xd->add_reference();
+
+        // We need to make the TransferOperation think that it is finished.
+        assert(op->xd_trackers.size() == 1);
+        op->xd_trackers[0]->mark_finished(true /* successful */);
+
+        // At this point, we don't need a reference to the transfer descriptor anymore.
+        td->remove_reference();
+
+        planned_copy_xds[it.op_index] = factories[0].xd;
+        // Detach the xd from its DMA op.
+        planned_copy_xds[it.op_index]->dma_op = 0;
+      }
+    }
+
     std::map<Processor, int32_t> proc_to_index;
     std::map<Processor, std::vector<std::pair<SubgraphDefinition::OpKind, unsigned>>> local_schedules;
     std::map<Processor, std::vector<OpMeta>> local_op_meta;
@@ -836,6 +954,34 @@ namespace Realm {
     // Initialize the record of static->dynamic edges.
     static_to_dynamic_counts = std::vector<int32_t>(schedule.size(), 0);
 
+    // Also initialize preconditions of bgwork items.
+    bgwork_preconditions = std::vector<int32_t>(bgwork_items.size(), 0);
+    bgwork_postconditions = std::vector<std::vector<CompletionInfo>>(bgwork_items.size());
+    for (size_t i = 0; i < bgwork_items.size(); i++) {
+      auto& it = bgwork_items[i];
+      auto key = std::make_pair(it.op_kind, it.op_index);
+      bgwork_preconditions[i] = int32_t(incoming_edges[key].size());
+
+      auto& outgoing = bgwork_postconditions[i];
+      for (auto& edge : outgoing_edges[key]) {
+        if (bgwork_schedule.find(edge) != bgwork_schedule.end()) {
+          auto idx = bgwork_schedule.at(edge);
+          CompletionInfo info(-1, idx, CompletionInfo::EdgeKind::BGWORK_TO_BGWORK);
+          outgoing.push_back(info);
+        } else if (toposort.find(edge) != toposort.end()) {
+          auto idx = toposort.at(edge);
+          static_to_dynamic_counts[idx]++;
+          CompletionInfo info(-1, idx, CompletionInfo::EdgeKind::BGWORK_TO_DYNAMIC);
+          outgoing.push_back(info);
+        } else {
+          CompletionInfo info(operation_procs[edge], operation_indices[edge], CompletionInfo::EdgeKind::BGWORK_TO_STATIC);
+          outgoing.push_back(info);
+        }
+      }
+
+      // TODO (rohany): Handle asynchronous behavior of copies.
+    }
+
     // Now that all tasks have been added, fill out per-task information
     // like outgoing neighbors and interpolations.
     for (auto& it : static_schedule) {
@@ -844,7 +990,11 @@ namespace Realm {
 
       std::vector<CompletionInfo> outgoing;
       for (auto& edge : outgoing_edges[key]) {
-        if (toposort.find(edge) != toposort.end()) {
+        if (bgwork_schedule.find(edge) != bgwork_schedule.end()) {
+          auto idx = bgwork_schedule.at(edge);
+          CompletionInfo info(-1, idx, CompletionInfo::EdgeKind::STATIC_TO_BGWORK);
+          outgoing.push_back(info);
+        } else if (toposort.find(edge) != toposort.end()) {
           // NOTE: External postconditions are already included in the dynamic
           //  schedule, and wouldn't be mapped into the static schedule. So
           //  they are included implicitly in this case.
@@ -861,6 +1011,8 @@ namespace Realm {
 
       // Handle tasks with potentially asynchronous behavior.
       if (operation_has_async_effects(defn, it.op_kind, it.op_index)) {
+        // TODO (rohany): Handle copy operations with asynchronous effects.
+
         // If an operation is asynchronous, then we might need extra
         // bookkeeping for dependent operations that can only start once
         // the asynchronous effects are complete.
@@ -947,6 +1099,23 @@ namespace Realm {
         }
       }
     }
+    // Do the same analysis for bgwork items.
+    for (size_t i = 0; i < bgwork_items.size(); i++) {
+      auto& it = bgwork_items[i];
+      auto key = std::make_pair(it.op_kind, it.op_index);
+      CompletionInfo info(-1, i, CompletionInfo::EdgeKind::DYNAMIC_TO_BGWORK);
+      for (auto& edge : incoming_edges[key]) {
+        if (edge.first == SubgraphDefinition::OPKIND_EXT_PRECOND) {
+          external_preconditions[edge.second].push_back(info);
+          max_ext_precond_id = std::max(max_ext_precond_id, edge.second);
+        } else if (toposort.find(edge) != toposort.end()) {
+          // In this case, we have an incoming edge from
+          // the dynamic partition into the static partition.
+          dynamic_to_static_triggers[toposort.at(edge)].to_trigger.push_back(info);
+        }
+      }
+    }
+
     // Collapse the metadata for each external waiter.
     if (!external_preconditions.empty()) {
       external_precondition_info.resize(max_ext_precond_id + 1);
@@ -976,6 +1145,18 @@ namespace Realm {
       initial_queue_entry_count[i] = idx;
     }
 
+    bgwork_finish_events = 0;
+    for (size_t i = 0; i < bgwork_items.size(); i++) {
+      // Collect the bgwork items that should be triggered immediately
+      // upon subgraph replay starting.
+      if (bgwork_preconditions[i] == 0)
+        bgwork_items_without_preconditions.push_back(i);
+      // Also collect the number of bgwork items the subgraph
+      // replay needs to finish before being considered done.
+      if (bgwork_items[i].is_final_event)
+        bgwork_finish_events++;
+    }
+
     // Identify how many asynchronous operations will contribute to
     // the subgraph's completion event.
     async_finish_events = std::vector<int32_t>(all_procs.size(), 0);
@@ -984,6 +1165,16 @@ namespace Realm {
         auto proc = operation_procs.at({it.op_kind, it.op_index});
         async_finish_events[proc]++;
       }
+    }
+    // TODO (rohany): This feels like an big hack, but I should
+    //  probably unify the async items per proc with "anything async
+    //  happening not in the task launch side of the world".
+    // This is a hack also because it doesn't work if `-ll:static_subgraph_opt` is not
+    // provided and thus we don't have any async_finish_events. I'm doing something
+    // hacky here right now for the merge.
+    if (bgwork_finish_events != 0) {
+      assert(!async_finish_events.empty());
+      async_finish_events[0] += bgwork_finish_events;
     }
 
     // Flatten the operations.
@@ -1055,6 +1246,11 @@ namespace Realm {
           dynamic_events[i] = UserEvent::create_user_event();
       }
 
+      // TODO (rohany): Free this.
+      size_t bgwork_precondition_ctr_bytes = sizeof(atomic<int32_t>) * bgwork_preconditions.size();
+      auto bgwork_precondition_ctrs = (atomic<int32_t>*)malloc(bgwork_precondition_ctr_bytes);
+      memcpy(bgwork_precondition_ctrs, bgwork_preconditions.data(), bgwork_precondition_ctr_bytes);
+
       // Create a fresh queue vector for this instantiation of the graph.
       static_assert(sizeof(int64_t) == sizeof(atomic<int64_t>));
       size_t queue_bytes = sizeof(atomic<int64_t>) * initial_queue_state.size();
@@ -1091,6 +1287,7 @@ namespace Realm {
         state[i].preconditions = precondition_ctrs;
         state[i].dynamic_preconditions = dynamic_precondition_ctrs;
         state[i].dynamic_events = dynamic_events;
+        state[i].bgwork_preconditions = bgwork_precondition_ctrs;
         state[i].async_operation_events = async_operation_events;
         state[i].async_operation_effect_triggerers = async_operation_effect_triggerers;
         state[i].has_pending_async_work = async_finish_events[i] > 0;
@@ -1601,6 +1798,11 @@ namespace Realm {
     for (size_t i = 0; i < subgraph->all_proc_impls.size(); i++) {
       subgraph->all_proc_impls[i]->install_subgraph_replay(&state[i]);
     }
+    // Start up any background work items without any preconditions.
+    auto sg = state[0].subgraph;
+    for (auto idx : sg->bgwork_items_without_preconditions) {
+      launch_async_bgwork_item(state, idx);
+    }
   }
 
   void SubgraphImpl::SubgraphWorkLauncher::print(std::ostream &os) const {
@@ -1664,6 +1866,7 @@ namespace Realm {
       SubgraphTriggerContext* ctx
   ) {
     switch (info.kind) {
+      case SubgraphImpl::CompletionInfo::BGWORK_TO_STATIC: [[fallthrough]];
       case SubgraphImpl::CompletionInfo::EdgeKind::STATIC_TO_STATIC: [[fallthrough]];
       case SubgraphImpl::CompletionInfo::EdgeKind::DYNAMIC_TO_STATIC: {
         auto& state = all_proc_states[info.proc];
@@ -1688,6 +1891,7 @@ namespace Realm {
         }
         break;
       }
+      case SubgraphImpl::CompletionInfo::BGWORK_TO_DYNAMIC: [[fallthrough]];
       case SubgraphImpl::CompletionInfo::EdgeKind::STATIC_TO_DYNAMIC: {
         // If we're in the static-to-dynamic case, the CompletionInfo
         // edge doesn't have a processor associated with it, so pick
@@ -1704,9 +1908,39 @@ namespace Realm {
         }
         break;
       }
+      case SubgraphImpl::CompletionInfo::STATIC_TO_BGWORK: [[fallthrough]];
+      case SubgraphImpl::CompletionInfo::DYNAMIC_TO_BGWORK: [[fallthrough]];
+      case SubgraphImpl::CompletionInfo::BGWORK_TO_BGWORK: {
+        // The *-bgwork cases also don't have an associated processor.
+        auto& state = all_proc_states[0];
+        auto& trigger = state.bgwork_preconditions[info.index];
+        int32_t remaining = trigger.fetch_sub_acqrel(1) - 1;
+        if (remaining == 0) {
+          // To be safe, also use the context to ensure the
+          // appropriate locks are dropped.
+          if (ctx) { ctx->enter(); }
+          launch_async_bgwork_item(all_proc_states, info.index);
+          if (ctx) { ctx->exit(); }
+        }
+        break;
+      }
       default:
         assert(false);
     }
   }
 
+  void launch_async_bgwork_item(ProcSubgraphReplayState* all_proc_states, unsigned index) {
+    auto subgraph = all_proc_states[0].subgraph;
+    auto& item = subgraph->bgwork_items[index];
+    assert(item.op_kind == SubgraphDefinition::OPKIND_COPY);
+    auto xd = subgraph->planned_copy_xds[item.op_index];
+    assert(xd);
+    xd->reset();
+    xd->subgraph_replay_state = all_proc_states;
+    xd->subgraph_index = index;
+    // TODO (rohany): I think we have to do this every time because going
+    //  all the way through removes a reference?
+    xd->add_reference();
+    xd->channel->enqueue_ready_xd(xd);
+  }
 }; // namespace Realm

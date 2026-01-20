@@ -21,6 +21,8 @@
 
 #include "realm/deppart/inst_helper.h"
 #include "realm/instance.h"
+#include "realm/profiling.h"
+#include "realm/transfer/transfer.h"
 
 #include <iomanip>
 
@@ -201,6 +203,19 @@ namespace Realm {
     // TODO: move to transfer.cc for indirection goodness
     assert(indirect_len == 0);
     return space.copy(srcs, dsts, requests, wait_on, priority);
+  }
+
+  template <int N, typename T>
+  TransferDesc *IndexSpaceGenericImplTyped<N, T>::make_transfer_desc(const std::vector<CopySrcDstField> &srcs,
+                                                                     const std::vector<CopySrcDstField> &dsts) const {
+    std::vector<const typename CopyIndirection<N,T>::Base *> indirects;
+    ProfilingRequestSet prs;
+    TransferDesc *tdesc = new TransferDesc(this->space,
+                                           srcs,
+                                           dsts,
+                                           indirects,
+                                           prs);
+    return tdesc;
   }
 
   template <int N, typename T>

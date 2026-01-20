@@ -37,6 +37,7 @@ namespace Realm {
 
   class XferDes;
   class AddressList;
+  class SubgraphImpl;
 
   class TransferIterator {
   public:
@@ -441,6 +442,7 @@ namespace Realm {
     DeferredAnalysis deferred_analysis;
 
     friend class TransferOperation;
+    friend class SubgraphImpl;
 
     TransferDomain *domain;
     std::vector<CopySrcDstField> srcs, dsts;
@@ -625,6 +627,8 @@ namespace Realm {
     };
 
   protected:
+    friend class SubgraphImpl;
+
     virtual void mark_completed(void);
 
     class DeferredStart : public EventWaiter {

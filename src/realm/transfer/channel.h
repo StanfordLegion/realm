@@ -297,6 +297,12 @@ namespace Realm {
     // current input and output port mask
     uint64_t current_in_port_mask, current_out_port_mask;
     uint64_t current_in_port_remain, current_out_port_remain;
+    // TODO (rohany): ...
+    void* subgraph_replay_state = nullptr;
+    unsigned subgraph_index = (unsigned)(-1);
+    // TODO (rohany): ...
+    int gather_control_port = -1;
+    int scatter_control_port = -1;
     struct XferPort {
       MemoryImpl *mem;
       TransferIterator *iter;
@@ -396,6 +402,7 @@ namespace Realm {
     void remove_reference(void);
 
     void add_update_pre_bytes_total_received(void);
+    virtual void reset(void);
 
   protected:
     virtual ~XferDes();
@@ -673,7 +680,8 @@ namespace Realm {
                                  const void *fill_data, size_t fill_size,
                                  size_t fill_total);
 
-  protected:
+    // TODO (rohany): Not sure there's an easier way outside
+    //  making this public.
     uintptr_t channel;
   };
 

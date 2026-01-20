@@ -29,6 +29,7 @@ namespace Realm {
 
   // Forward declarations.
   class LocalTaskProcessor;
+  class XferDes;
 
   struct SubgraphScheduleEntry {
     SubgraphDefinition::OpKind op_kind;
@@ -212,10 +213,17 @@ namespace Realm {
     FlattenedProcMap<OpMeta> operation_meta;
 
     struct CompletionInfo {
+      // TODO (rohany): Contemplate if this really should be
+      //  two fields that represent the edge combinations.
       enum EdgeKind {
-        STATIC_TO_STATIC = 0,
-        STATIC_TO_DYNAMIC = 1,
-        DYNAMIC_TO_STATIC = 2,
+        STATIC_TO_STATIC,
+        STATIC_TO_DYNAMIC,
+        STATIC_TO_BGWORK, // TODO (rohany): Handle this ...
+        DYNAMIC_TO_STATIC,
+        DYNAMIC_TO_BGWORK, // TODO (rohany): Handle this ...
+        BGWORK_TO_STATIC, // TODO (rohany): Handle this ...
+        BGWORK_TO_DYNAMIC, // TODO (rohany): Handle this ...
+        BGWORK_TO_BGWORK, // TODO (rohany): Handle this ...
       };
       CompletionInfo(int32_t _proc, uint64_t _index, EdgeKind _kind) : proc(_proc), index(_index), kind(_kind) {}
       int32_t proc = -1;
@@ -254,10 +262,28 @@ namespace Realm {
     };
     std::vector<ExternalPreconditionMeta> external_precondition_info;
 
+    // TODO (rohany): Rename / re-comment this stuff for the bgwork component.
     // Metadata for the interaction of the dynamic and
     // static components of the subgraph.
     std::vector<ExternalPreconditionMeta> dynamic_to_static_triggers;
     std::vector<int32_t> static_to_dynamic_counts;
+
+    // TODO (rohany): Clean these up later ...
+    std::vector<SubgraphScheduleEntry> bgwork_items;
+    std::vector<XferDes*> planned_copy_xds;
+    std::vector<int32_t> bgwork_preconditions;
+    // TODO (rohany): Compact this later ...
+    std::vector<std::vector<CompletionInfo>> bgwork_postconditions;
+    std::vector<int64_t> bgwork_items_without_preconditions;
+    int32_t bgwork_finish_events = 0;
+    // TODO (rohany): Need to handle completion triggers from the
+    //  copies into the static subgraph, and into the dynamic subgraph.
+    // TODO (rohany): Need to handle when copy is a finish event.
+    // TODO (rohany): Need to handle deferred launches of copies
+    //  when the copies are sharing the same xd state.
+    //  * To do this, have an event that all the processors will trigger
+    //    once they actually start up. Add a waiter to that event that
+    //    will run through and make all initially true preconditions start.
 
     class ExternalPreconditionTriggerer : public EventWaiter {
       public:
@@ -355,6 +381,9 @@ namespace Realm {
     atomic<int32_t>* dynamic_preconditions = nullptr;
     UserEvent* dynamic_events = nullptr;
 
+    // TODO (rohany): ...
+    atomic<int32_t>* bgwork_preconditions = nullptr;
+
     // A queue of operation indexes to execute.
     atomic<int64_t>* queue = nullptr;
     // The queue slot that enqueuers should bump to write into.
@@ -405,12 +434,14 @@ namespace Realm {
   // of an operation during subgraph replay. The SubgraphTriggerContext
   // is a context that the caller can provide if certain state needs
   // to be set up before triggering an event.
-    void trigger_subgraph_operation_completion(
+  void trigger_subgraph_operation_completion(
     ProcSubgraphReplayState* all_proc_states,
     const SubgraphImpl::CompletionInfo& info,
     bool incr_counter,
     SubgraphTriggerContext* ctx
   );
+
+  void launch_async_bgwork_item(ProcSubgraphReplayState* all_proc_states, unsigned index);
 
 }; // namespace Realm
 
