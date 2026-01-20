@@ -707,7 +707,14 @@ namespace Realm {
       } else {
         // If this XD is remotely executing, send completion metadata
         // back to the owner node.
-        send_subgraph_remote_xd_completion(launch_node, subgraph_replay_state, subgraph_index);
+        send_subgraph_remote_xd_completion(
+          launch_node,
+          subgraph_replay_state,
+          subgraph_index
+#ifdef REALM_USE_NVTX
+          , xd_index
+#endif
+        );
       }
     } else {
       if (running_locally()) {
