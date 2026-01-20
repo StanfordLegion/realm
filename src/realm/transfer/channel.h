@@ -51,6 +51,7 @@ namespace Realm {
   class Channel;
   class DmaRequest;
   class TransferIterator;
+  struct ProcSubgraphReplayState;
 
   extern Logger log_new_dma;
 
@@ -300,10 +301,10 @@ namespace Realm {
     // current input and output port mask
     uint64_t current_in_port_mask, current_out_port_mask;
     uint64_t current_in_port_remain, current_out_port_remain;
-    // TODO (rohany): ...
-    void* subgraph_replay_state = nullptr;
+    // Maintain information within an XD about the surrounding
+    // subgraph replay (if applicable).
+    ProcSubgraphReplayState* subgraph_replay_state = nullptr;
     unsigned subgraph_index = (unsigned)(-1);
-    // TODO (rohany): ...
     int gather_control_port = -1;
     int scatter_control_port = -1;
     struct XferPort {
@@ -586,6 +587,10 @@ namespace Realm {
     virtual Request *dequeue_request();
     virtual void enqueue_request(Request *req);
 
+    // Note: not including the override to avoid warnings with
+    // the rest of the functions not marked override.
+    bool launches_async_work() /* override */ { return false; }
+
     bool progress_xd(MemfillChannel *channel, TimeLimit work_until);
   };
 
@@ -601,6 +606,10 @@ namespace Realm {
     long get_requests(Request **requests, long nr);
 
     bool progress_xd(MemreduceChannel *channel, TimeLimit work_until);
+
+    // Note: not including the override to avoid warnings with
+    // the rest of the functions not marked override.
+    bool launches_async_work() /* override */ { return false; }
 
   protected:
     XferDesRedopInfo redop_info;

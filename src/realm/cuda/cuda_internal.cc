@@ -538,6 +538,55 @@ namespace Realm {
       return false;
     }
 
+    void sync_subgraph_incoming_deps(ProcSubgraphReplayState* all_proc_states, unsigned index, GPUStream* stream) {
+      // We can arbitrarily use the first processor's state.
+      auto& state = all_proc_states[0];
+      for (auto& info : state.subgraph->bgwork_async_preconditions[index]) {
+        CUevent_st* ev = nullptr;
+        switch (info.kind) {
+          case SubgraphImpl::CompletionInfo::STATIC_TO_BGWORK: {
+            auto idx = state.subgraph->operations.proc_offsets[info.proc] + info.index;
+            ev = (CUevent_st*)(state.async_operation_events[idx]);
+            break;
+          }
+          case SubgraphImpl::CompletionInfo::BGWORK_TO_BGWORK: {
+            ev = (CUevent_st*)(state.async_bgwork_events[info.index]);
+            break;
+          }
+          default:
+            assert(false);
+        }
+        // Wait on the event on subgraph_input.
+        CHECK_CU(CUDA_DRIVER_FNPTR(cuStreamWaitEvent)(stream->get_stream(), ev, 0));
+      }
+    }
+
+    void add_transfer_completion_notification(ProcSubgraphReplayState* all_proc_states, GPUStream* stream, GPUStream* depstream, GPUCompletionNotification* completion) {
+      // Record an event of all the work submitted so far.
+      auto gpu = depstream->get_gpu();
+      auto ev = gpu->event_pool.get_event();
+      CHECK_CU(CUDA_DRIVER_FNPTR(cuEventRecord)(ev, stream->get_stream()));
+      // Synchronize with this event on the outgoing stream.
+      CHECK_CU(CUDA_DRIVER_FNPTR(cuStreamWaitEvent)(depstream->get_stream(), ev, 0));
+      // Now throw the event back into the stream with
+      // the completion attached.
+      stream->add_event(ev, nullptr, completion);
+    }
+
+    void notify_subgraph_control_completion(ProcSubgraphReplayState* all_proc_states, unsigned index, GPUStream* depstream) {
+      // Write the final event on subgraph_output
+      // into the async work data structure.
+      auto gpu = depstream->get_gpu();
+      auto ev = gpu->event_pool.get_event();
+      {
+        AutoGPUContext agc(gpu);
+        CHECK_CU(CUDA_DRIVER_FNPTR(cuEventRecord)(ev, depstream->get_stream()));
+      }
+      ProcSubgraphReplayState* state = (ProcSubgraphReplayState*)(all_proc_states);
+      // The event will be returned on subgraph completion.
+      state[0].async_bgwork_events[index] = ev;
+    }
+
     bool GPUXferDes::progress_xd(GPUChannel *channel, TimeLimit work_until)
     {
       // Mininum amount to transfer in a single quantum before returning in order to
@@ -686,35 +735,9 @@ namespace Realm {
           memset(&transpose_copy, 0, sizeof(transpose_copy));
         }
 
-        // TODO (rohany): Extract this out into a helper method that other
-        //  kinds of XD's can call.
-        // Handle synchronizing against any pending work.
+        // Handle synchronizing against any pending subgraph work.
         if (subgraph_replay_state != nullptr) {
-          auto& state = ((ProcSubgraphReplayState*)(subgraph_replay_state))[0];
-          for (auto& info : state.subgraph->bgwork_async_preconditions[subgraph_index]) {
-            CUevent_st* ev = nullptr;
-            switch (info.kind) {
-              case SubgraphImpl::CompletionInfo::STATIC_TO_BGWORK: {
-                auto idx = state.subgraph->operations.proc_offsets[info.proc] + info.index;
-                ev = (CUevent_st*)(state.async_operation_events[idx]);
-                break;
-              }
-              case SubgraphImpl::CompletionInfo::BGWORK_TO_BGWORK: {
-                ev = (CUevent_st*)(state.async_bgwork_events[info.index]);
-                break;
-              }
-              default:
-                assert(false);
-            }
-            // Wait on the event on subgraph_input.
-            CHECK_CU(CUDA_DRIVER_FNPTR(cuStreamWaitEvent)(channel->subgraph_input->get_stream(), ev, 0));
-          }
-          // After waiting on all the predecessors, record an event on
-          // subgraph_input, and use that as a precondition for the stream.
-          auto ev = channel->get_gpu()->event_pool.get_event();
-          CHECK_CU(CUDA_DRIVER_FNPTR(cuEventRecord)(ev, channel->subgraph_input->get_stream()));
-          CHECK_CU(CUDA_DRIVER_FNPTR(cuStreamWaitEvent)(stream->get_stream(), ev, 0));
-          channel->get_gpu()->event_pool.return_event(ev);
+          sync_subgraph_incoming_deps(subgraph_replay_state, subgraph_index, stream);
         }
 
         // 2) Batch loop - Collect all the rectangles for this inport/outport pair by
@@ -920,15 +943,7 @@ namespace Realm {
                output_control.current_io_port, out_span_start, bytes_to_fence);
 
           if (subgraph_replay_state != nullptr) {
-            // Record an event of all the work submitted so far.
-            auto gpu = channel->get_gpu();
-            auto ev = gpu->event_pool.get_event();
-            CHECK_CU(CUDA_DRIVER_FNPTR(cuEventRecord)(ev, stream->get_stream()));
-            // Synchronize with this event on the outgoing stream.
-            CHECK_CU(CUDA_DRIVER_FNPTR(cuStreamWaitEvent)(channel->subgraph_output->get_stream(), ev, 0));
-            // Now throw the event back into the stream with
-            // the completion attached.
-            stream->add_event(ev, nullptr, completion);
+            add_transfer_completion_notification(subgraph_replay_state, stream, channel->subgraph_stream, completion);
           } else {
             stream->add_notification(completion);
           }
@@ -945,20 +960,8 @@ namespace Realm {
     }
 
     void GPUXferDes::on_subgraph_control_completion() {
-      // Write the final event on subgraph_output
-      // into the async work data structure.
       auto gpuchan = static_cast<GPUChannel*>(channel);
-      auto stream = gpuchan->subgraph_output;
-      auto gpu = stream->get_gpu();
-      auto ev = gpu->event_pool.get_event();
-      {
-        AutoGPUContext agc(gpu);
-        CHECK_CU(CUDA_DRIVER_FNPTR(cuEventRecord)(ev, stream->get_stream()));
-      }
-      assert(subgraph_replay_state != nullptr);
-      ProcSubgraphReplayState* state = (ProcSubgraphReplayState*)(subgraph_replay_state);
-      // The event will be returned on subgraph completion.
-      state[0].async_bgwork_events[subgraph_index] = ev;
+      notify_subgraph_control_completion(subgraph_replay_state, subgraph_index, gpuchan->subgraph_stream);
     }
 
     LocalTaskProcessor* GPUXferDes::get_async_event_proc() {
@@ -1168,6 +1171,10 @@ namespace Realm {
                                     in_port->mem, out_port->mem);
         AutoGPUContext agc(stream->get_gpu());
 
+        if (subgraph_replay_state != nullptr) {
+          sync_subgraph_incoming_deps(subgraph_replay_state, subgraph_index, stream);
+        }
+
         // We can't do gather-scatter yet.
         assert(!(out_port->indirect_port_idx >= 0 && in_port->indirect_port_idx >= 0));
         assert(!in_nonaffine && !out_nonaffine);
@@ -1202,11 +1209,16 @@ namespace Realm {
                             << " read_ind_bytes:" << read_ind_bytes
                             << " write_ind_bytes:" << write_ind_bytes;
 
-          stream->add_notification(new GPUIndirectTransferCompletion(
+          auto completion = new GPUIndirectTransferCompletion(
               this, input_control.current_io_port, in_span_start, total_bytes,
               output_control.current_io_port, out_span_start, bytes_to_fence,
               in_port->indirect_port_idx, 0, read_ind_bytes, out_port->indirect_port_idx,
-              0, write_ind_bytes));
+              0, write_ind_bytes);
+          if (subgraph_replay_state != nullptr) {
+            add_transfer_completion_notification(subgraph_replay_state, stream, channel->subgraph_stream, completion);
+          } else {
+            stream->add_notification(completion);
+          }
         }
 
         if(total_bytes > 0) {
@@ -1220,6 +1232,16 @@ namespace Realm {
 
       rseqcache.flush();
       return did_work;
+    }
+
+    void GPUIndirectXferDes::on_subgraph_control_completion() {
+      auto gpuchan = static_cast<GPUIndirectChannel*>(channel);
+      notify_subgraph_control_completion(subgraph_replay_state, subgraph_index, gpuchan->subgraph_stream);
+    }
+
+    LocalTaskProcessor* GPUIndirectXferDes::get_async_event_proc() {
+      auto gpuchan = static_cast<GPUIndirectChannel*>(channel);
+      return gpuchan->get_gpu()->proc;
     }
 
     ////////////////////////////////////////////////////////////////////////
@@ -1355,9 +1377,19 @@ namespace Realm {
       default:
         assert(0);
       }
+
+      {
+        AutoGPUContext agc(src_gpu);
+        subgraph_stream = new GPUStream(src_gpu, src_gpu->worker);
+      }
     }
 
-    GPUIndirectChannel::~GPUIndirectChannel() {}
+    GPUIndirectChannel::~GPUIndirectChannel() {
+      {
+        AutoGPUContext agc(src_gpu);
+        delete subgraph_stream;
+      }
+    }
 
     Memory GPUIndirectChannel::suggest_ib_memories() const
     {
@@ -1950,6 +1982,11 @@ namespace Realm {
 
           AutoGPUContext agc(channel->gpu);
           GPUStream *stream = channel->gpu->get_next_d2d_stream();
+
+          if (subgraph_replay_state != nullptr) {
+            sync_subgraph_incoming_deps(subgraph_replay_state, subgraph_index, stream);
+          }
+
           Realm::Cuda::AffineFillInfo<2, size_t> fill_info{};
           size_t total_info_bytes = 0;
           for(size_t offset = 0;
@@ -2180,6 +2217,14 @@ namespace Realm {
           stream->add_notification(
               new GPUTransferCompletion(this, -1, 0, 0, output_control.current_io_port,
                                         out_span_start, total_bytes));
+
+          auto completion = new GPUTransferCompletion(this, -1, 0, 0, output_control.current_io_port,
+                                                      out_span_start, total_bytes);
+          if (subgraph_replay_state != nullptr) {
+            add_transfer_completion_notification(subgraph_replay_state, stream, channel->subgraph_stream, completion);
+          } else {
+            stream->add_notification(completion);
+          }
           out_span_start += total_bytes;
         }
 
@@ -2194,6 +2239,16 @@ namespace Realm {
       rseqcache.flush();
 
       return did_work;
+    }
+
+    void GPUfillXferDes::on_subgraph_control_completion() {
+      auto gpuchan = static_cast<GPUfillChannel*>(channel);
+      notify_subgraph_control_completion(subgraph_replay_state, subgraph_index, gpuchan->subgraph_stream);
+    }
+
+    LocalTaskProcessor* GPUfillXferDes::get_async_event_proc() {
+      auto gpuchan = static_cast<GPUfillChannel*>(channel);
+      return gpuchan->get_gpu()->proc;
     }
 
     ////////////////////////////////////////////////////////////////////////
@@ -2262,6 +2317,18 @@ namespace Realm {
       }
 
       xdq.add_to_manager(bgwork);
+
+      {
+        AutoGPUContext agc(gpu);
+        subgraph_stream = new GPUStream(gpu, gpu->worker);
+      }
+    }
+
+    GPUfillChannel::~GPUfillChannel() {
+      {
+        AutoGPUContext agc(gpu);
+        delete subgraph_stream;
+      }
     }
 
     XferDes *
@@ -2459,6 +2526,10 @@ namespace Realm {
           }
         }
 
+        if (subgraph_replay_state != nullptr) {
+          sync_subgraph_incoming_deps(subgraph_replay_state, subgraph_index, stream);
+        }
+
         size_t total_elems = 0;
         if(in_port != 0) {
           if(out_port != 0) {
@@ -2585,6 +2656,18 @@ namespace Realm {
                     this, input_control.current_io_port, in_span_start,
                     elems * in_elem_size, output_control.current_io_port, out_span_start,
                     elems * out_elem_size));
+                auto completion = new GPUTransferCompletion(this,
+                                                            input_control.current_io_port,
+                                                            in_span_start,
+                                                            elems * in_elem_size,
+                                                            output_control.current_io_port,
+                                                            out_span_start,
+                                                            elems * out_elem_size);
+                if (subgraph_replay_state != nullptr) {
+                  add_transfer_completion_notification(subgraph_replay_state, stream, channel->subgraph_stream, completion);
+                } else {
+                    stream->add_notification(completion);
+                }
               }
 
               in_span_start += elems * in_elem_size;
@@ -2642,6 +2725,16 @@ namespace Realm {
       wseqcache.flush();
 
       return did_work;
+    }
+
+    void GPUreduceXferDes::on_subgraph_control_completion() {
+      auto gpuchan = static_cast<GPUreduceChannel*>(channel);
+      notify_subgraph_control_completion(subgraph_replay_state, subgraph_index, gpuchan->subgraph_stream);
+    }
+
+    LocalTaskProcessor* GPUreduceXferDes::get_async_event_proc() {
+      auto gpuchan = static_cast<GPUreduceChannel*>(channel);
+      return gpuchan->gpu->proc;
     }
 
     ////////////////////////////////////////////////////////////////////////
@@ -2751,6 +2844,18 @@ namespace Realm {
       }
 
       xdq.add_to_manager(bgwork);
+
+      {
+        AutoGPUContext agc(gpu);
+        subgraph_stream = new GPUStream(gpu, gpu->worker);
+      }
+    }
+
+    GPUreduceChannel::~GPUreduceChannel() {
+      {
+        AutoGPUContext agc(gpu);
+        delete subgraph_stream;
+      }
     }
 
     bool GPUreduceChannel::supports_redop(ReductionOpID redop_id) const

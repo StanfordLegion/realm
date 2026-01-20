@@ -774,6 +774,14 @@ namespace Realm {
       size_t width_in_bytes, height, depth;
     };
 
+    // Utility methods for asynchronous XferDes objects to
+    // interact with subgraphs.
+
+    // Must be called from within a CUDA context.
+    void sync_subgraph_incoming_deps(ProcSubgraphReplayState* all_proc_states, unsigned index, GPUStream* stream);
+    void add_transfer_completion_notification(ProcSubgraphReplayState* all_proc_states, GPUStream* stream, GPUStream* depstream, GPUCompletionNotification* completion);
+    void notify_subgraph_control_completion(ProcSubgraphReplayState* all_proc_states, unsigned index, GPUStream* depstream);
+
     class GPUChannel;
 
     class GPUXferDes : public XferDes {
@@ -806,6 +814,10 @@ namespace Realm {
 
       long get_requests(Request **requests, long nr);
       bool progress_xd(GPUIndirectChannel *channel, TimeLimit work_until);
+
+      bool launches_async_work() override { return true; }
+      void on_subgraph_control_completion() override;
+      LocalTaskProcessor* get_async_event_proc() override;
 
     protected:
       std::vector<GPU *> src_gpus, dst_gpus;
@@ -850,6 +862,7 @@ namespace Realm {
     protected:
       friend class GPUIndirectXferDes;
       GPU *src_gpu;
+      GPUStream* subgraph_stream;
     };
 
     class GPUIndirectRemoteChannelInfo : public SimpleRemoteChannelInfo {
@@ -912,13 +925,8 @@ namespace Realm {
     private:
       friend class GPUXferDes;
       GPU *src_gpu;
-      // std::deque<Request*> pending_copies;
-      // TODO (rohany): Can I extract this logic into a mixin for
-      //  all of the GPU channels?
-      // TODO (rohany): Comment ...
-      // TODO (rohany): Do these need to be pointers?
-      GPUStream* subgraph_input;
-      GPUStream* subgraph_output;
+      // Stream to manage interaction with potential subgraph replays.
+      GPUStream* subgraph_stream;
     };
 
     class GPUfillChannel;
@@ -934,6 +942,10 @@ namespace Realm {
 
       bool progress_xd(GPUfillChannel *channel, TimeLimit work_until);
 
+      bool launches_async_work() override { return true; }
+      void on_subgraph_control_completion() override;
+      LocalTaskProcessor* get_async_event_proc() override;
+
     protected:
       size_t reduced_fill_size;
     };
@@ -941,6 +953,7 @@ namespace Realm {
     class GPUfillChannel : public SingleXDQChannel<GPUfillChannel, GPUfillXferDes> {
     public:
       GPUfillChannel(GPU *_gpu, BackgroundWorkManager *bgwork);
+      ~GPUfillChannel();
 
       // multiple concurrent cuda fills ok
       static const bool is_ordered = false;
@@ -959,6 +972,7 @@ namespace Realm {
       friend class GPUfillXferDes;
 
       GPU *gpu;
+      GPUStream* subgraph_stream;
     };
 
     class GPUreduceChannel;
@@ -974,6 +988,10 @@ namespace Realm {
 
       bool progress_xd(GPUreduceChannel *channel, TimeLimit work_until);
 
+      bool launches_async_work() override { return true; }
+      void on_subgraph_control_completion() override;
+      LocalTaskProcessor* get_async_event_proc() override;
+
     protected:
       XferDesRedopInfo redop_info;
       const ReductionOpUntyped *redop;
@@ -987,6 +1005,7 @@ namespace Realm {
     class GPUreduceChannel : public SingleXDQChannel<GPUreduceChannel, GPUreduceXferDes> {
     public:
       GPUreduceChannel(GPU *_gpu, BackgroundWorkManager *bgwork);
+      ~GPUreduceChannel();
 
       // multiple concurrent cuda reduces ok
       static const bool is_ordered = false;
@@ -1009,6 +1028,7 @@ namespace Realm {
       friend class GPUreduceXferDes;
 
       GPU *gpu;
+      GPUStream* subgraph_stream;
     };
 
     class GPUreduceRemoteChannelInfo : public SimpleRemoteChannelInfo {
