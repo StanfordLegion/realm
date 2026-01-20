@@ -2144,11 +2144,18 @@ namespace Realm {
         if (async_operation_events[j] != nullptr)
           tokens.push_back(async_operation_events[j]);
       }
-      for (auto idx : sg->bgwork_async_event_procs[pimpl]) {
-        assert(async_bgwork_events[idx] != nullptr);
-        tokens.push_back(async_bgwork_events[idx]);
-      }
       pimpl->return_subgraph_async_tokens(tokens);
+      tokens.clear();
+    }
+    // Separately handle the returning of bgwork tokens,
+    // in case there are processors used by the bgwork items
+    // that tasks are not running on (example CPU task + GPU copy).
+    tokens.clear();
+    for (auto& it : sg->bgwork_async_event_procs) {
+      for (auto& it2 : it.second) {
+        tokens.push_back(async_bgwork_events[it2]);
+      }
+      it.first->return_subgraph_async_tokens(tokens);
       tokens.clear();
     }
 
@@ -2548,7 +2555,7 @@ namespace Realm {
     }
     // Initialize the offsets vector -- this allocation will only happen on
     // the first replay of the subgraph.
-    ib_offsets.resize(graph.ib_edges.size(), -1);
+    ib_offsets.assign(graph.ib_edges.size(), -1);
     // Use the same trick from TransferOperation::allocate_ibs() to ensure
     // that the allocation request doesn't trigger completion before we
     // leave this function.

@@ -61,7 +61,7 @@ namespace Realm {
 
   void SequenceAssembler::reset() {
     contig_amount_x2.store(0);
-    first_noncontig.store(0);
+    first_noncontig.store((size_t)-1);
     // TODO (rohany): Unclear if we need to cache
     //  these spans or not.
     spans.clear();
@@ -759,13 +759,13 @@ namespace Realm {
    bytes_write_pending.store_release(0);
    transfer_completed.store_release(false);
    progress_counter.store_release(0);
-   nb_update_pre_bytes_total_calls_expected = 0;
    nb_update_pre_bytes_total_calls_received.store_release(0);
    for (auto& info : input_ports) {
      info.iter->reset();
      info.local_bytes_total = 0;
      info.local_bytes_cons.store_release(0);
      info.remote_bytes_total.store_release(size_t(-1));
+     info.needs_pbt_update.store(false);
      info.seq_local.reset();
      info.seq_remote.reset();
      info.addrlist.reset();
@@ -811,6 +811,9 @@ namespace Realm {
        auto wrapit = dynamic_cast<WrappingFIFOIterator*>(info.iter);
        assert(wrapit);
        wrapit->set_base(info.ib_offset);
+       // Also mark the remote sequence assembler as capable of
+       // writing into the ib memory.
+       info.seq_remote.add_span(0, info.ib_size);
      }
    }
 
