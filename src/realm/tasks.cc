@@ -1140,12 +1140,10 @@ namespace Realm {
         pending_subgraphs.pop();
       }
     }
-    // If we acquired a subgraph to run, notify
-    // anyone who is waiting on the start event.
-    if (current_subgraph != nullptr && current_subgraph->start_event.exists()) {
-       lock.unlock();
-       current_subgraph->start_event.trigger();
-       lock.lock();
+    // See if we acquired a subgraph.
+    if (current_subgraph != nullptr) {
+      auto proc_index = current_subgraph->proc_index;
+      current_subgraph->subgraph->all_proc_impls[proc_index]->push_subgraph_replay_context();
     }
   }
 
@@ -1158,18 +1156,18 @@ namespace Realm {
       int32_t proc_index = replay->proc_index;
       SubgraphImpl* subgraph = replay->subgraph;
 
-      size_t precondition_index = subgraph->precondition_offsets[proc_index] + next_op_index;
+      size_t precondition_index = subgraph->original_preconditions.proc_offsets[proc_index] + next_op_index;
       atomic<int32_t>& precondition = replay->preconditions[precondition_index];
       // Spin until the next task is ready.
       // TODO (rohany): Have to experiment with this .. .
       while (precondition.load() > 0) {}
 
-      auto op_index = subgraph->operation_offsets[proc_index] + next_op_index;
-      auto& op_key = subgraph->operations[op_index];
+      auto op_index = subgraph->operations.proc_offsets[proc_index] + next_op_index;
+      auto& op_key = subgraph->operations.data[op_index];
 
-      auto interp_proc_offset = subgraph->interpolation_proc_offsets[proc_index];
-      auto first_interp = subgraph->interpolation_task_offsets[interp_proc_offset + next_op_index];
-      auto num_interps = subgraph->interpolation_task_offsets[interp_proc_offset + next_op_index + 1] - first_interp;
+      auto interp_proc_offset = subgraph->interpolations.proc_offsets[proc_index];
+      auto first_interp = subgraph->interpolations.task_offsets[interp_proc_offset + next_op_index];
+      auto num_interps = subgraph->interpolations.task_offsets[interp_proc_offset + next_op_index + 1] - first_interp;
 
       // Execute the operation.
       switch (op_key.first) {
@@ -1180,7 +1178,7 @@ namespace Realm {
         auto& taskDesc = subgraph->defn->tasks[op_key.second];
         if (num_interps > 0) {
           do_interpolation_inline(
-              subgraph->interpolations,
+              subgraph->interpolations.data,
               first_interp,
               num_interps,
               SubgraphDefinition::Interpolation::TARGET_TASK_ARGS,
@@ -1193,9 +1191,51 @@ namespace Realm {
         }
 
         lock.unlock();
+
+        // TODO (rohany): Not using the existing context managers ...
         auto pimpl = subgraph->all_proc_impls[proc_index];
+        pimpl->push_subgraph_task_replay_context();
+
+        // Wait on any necessary asynchronous operations.
+        {
+          auto proc_offset = replay->subgraph->async_incoming_infos.proc_offsets[proc_index];
+          auto start = replay->subgraph->async_incoming_infos.task_offsets[proc_offset + next_op_index];
+          auto end = replay->subgraph->async_incoming_infos.task_offsets[proc_offset + next_op_index + 1];
+          for (size_t i = start; i < end; i++) {
+            auto& info = replay->subgraph->async_incoming_infos.data[i];
+            auto pred_op_idx = replay->subgraph->operations.proc_offsets[info.proc] + info.index;
+            pimpl->sync_task_async_effect(replay->async_operation_events[pred_op_idx]);
+          }
+        }
+
         pimpl->execute_task(taskDesc.task_id, ByteArrayRef(taskDesc.args.base(), taskDesc.args.size()));
+
+        // Potentially set up waiters on asynchronous effects the task may have.
+        void* trigger = nullptr;
+        {
+          auto proc_offset = replay->subgraph->async_outgoing_infos.proc_offsets[proc_index];
+          auto start = replay->subgraph->async_outgoing_infos.task_offsets[proc_offset + next_op_index];
+          auto end = replay->subgraph->async_outgoing_infos.task_offsets[proc_offset + next_op_index + 1];
+          if (end > start) {
+            auto sp = span<SubgraphImpl::CompletionInfo>(replay->subgraph->async_outgoing_infos.data.data(), end - start);
+            atomic<int32_t>* final_ctr = nullptr;
+            UserEvent final_event = UserEvent::NO_USER_EVENT;
+            if (subgraph->operation_meta.data[op_index].is_final_event) {
+              assert(subgraph->operation_meta.data[op_index].is_async);
+              final_ctr = &replay->pending_async_count;
+              final_event = replay->finish_event;
+            }
+            trigger = new(&replay->async_operation_effect_triggerers[op_index]) SubgraphImpl::AsyncGPUWorkTriggerer(replay->subgraph, sp, replay->preconditions, final_ctr, final_event);
+          }
+        }
+
+        void* token = nullptr;
+        pimpl->pop_subgraph_task_replay_context(&token, trigger);
+
         lock.lock();
+
+        // Record the (potentially null) token.
+        replay->async_operation_events[op_index] = token;
 
         break;
       }
@@ -1204,12 +1244,12 @@ namespace Realm {
         auto& arrivalDesc = subgraph->defn->arrivals[op_key.second];
 
         Barrier b =
-            do_interpolation(subgraph->interpolations, first_interp, num_interps,
+            do_interpolation(subgraph->interpolations.data, first_interp, num_interps,
                              SubgraphDefinition::Interpolation::TARGET_ARRIVAL_BARRIER, op_key.second,
                              replay->args, replay->arglen, arrivalDesc.barrier);
         // Do the reduction value interpolation directly into the arrival desc.
         do_interpolation_inline(
-            subgraph->interpolations, first_interp, num_interps,
+            subgraph->interpolations.data, first_interp, num_interps,
             SubgraphDefinition::Interpolation::TARGET_ARRIVAL_VALUE, op_key.second, replay->args, replay->arglen,
             arrivalDesc.reduce_value.base(), arrivalDesc.reduce_value.size());
         unsigned count = arrivalDesc.count;
@@ -1223,17 +1263,17 @@ namespace Realm {
       }
 
       // Go and trigger whoever we have to trigger.
-      auto completion_proc_offset = subgraph->completion_info_proc_offsets[proc_index];
-      auto completion_task_offset_start = subgraph->completion_info_task_offsets[completion_proc_offset + next_op_index];
-      auto completion_task_offset_end = subgraph->completion_info_task_offsets[completion_proc_offset + next_op_index + 1];
+      auto completion_proc_offset = subgraph->completion_infos.proc_offsets[proc_index];
+      auto completion_task_offset_start = subgraph->completion_infos.task_offsets[completion_proc_offset + next_op_index];
+      auto completion_task_offset_end = subgraph->completion_infos.task_offsets[completion_proc_offset + next_op_index + 1];
       for (size_t i = completion_task_offset_start; i < completion_task_offset_end; i++) {
-        SubgraphImpl::CompletionInfo& info = subgraph->completion_infos[i];
-        auto& trigger = replay->preconditions[subgraph->precondition_offsets[info.proc] + info.index];
+        SubgraphImpl::CompletionInfo& info = subgraph->completion_infos.data[i];
+        auto& trigger = replay->preconditions[subgraph->original_preconditions.proc_offsets[info.proc] + info.index];
         // Decrement the counter. fetch_sub returns the value before
         // the decrement, so if it was 1, then we've done the final trigger.
         // In this case, we need to wake up the target processor (if it
         // isn't us).
-        int32_t remaining = trigger.fetch_sub(1) - 1;
+        int32_t remaining = trigger.fetch_sub_acqrel(1) - 1;
         if (remaining == 0 && info.proc != proc_index) {
           // std::cout << "About to wake up proc: " << info.proc << std::endl;
           auto lp = subgraph->all_proc_impls[info.proc];
@@ -1243,17 +1283,23 @@ namespace Realm {
 
       // Increment the state (thread local?)
       replay->next_op_index++;
-      uint64_t task_end = subgraph->operation_offsets[proc_index+1];
-      if ((replay->next_op_index + subgraph->operation_offsets[proc_index]) == task_end) {
-        // We're done! Free the replay state and exit.
+      uint64_t task_end = subgraph->operations.proc_offsets[proc_index+1];
+      if ((replay->next_op_index + subgraph->operations.proc_offsets[proc_index]) == task_end) {
+        // Pop off any local replay state.
+        current_subgraph->subgraph->all_proc_impls[proc_index]->push_subgraph_replay_context();
+
+        // We're done! Drop the replay state and exit.
         this->current_subgraph = nullptr;
-        // We also need to let the finish event know that we're done.
-        // TODO (rohany): The locking ...
-        lock.unlock();
-        // std::cout << "Pre trigger ... " << std::endl;
-        replay->finish_event.trigger();
-        // std::cout << "Post trigger ... " << std::endl;
-        lock.lock();
+
+        // We also need to let the finish event know that we're done, as long
+        // as there isn't any pending asynchronous work. Otherwise, some other
+        // background worker will come trigger the final event.
+        if (!replay->has_pending_async_work) {
+          // The scheduler lock can't be held during the trigger.
+          lock.unlock();
+          replay->finish_event.trigger();
+          lock.lock();
+        }
       }
 
       // No matter what, continue.

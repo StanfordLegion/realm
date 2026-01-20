@@ -173,6 +173,66 @@ namespace Realm {
     return finish_event;
   }
 
+  bool task_has_async_effects(SubgraphDefinition::TaskDesc& task) {
+    switch (task.proc.kind()) {
+      case Processor::TOC_PROC: {
+        // TODO (rohany): Query an API in the future.
+        return true;
+      }
+      default:
+        return false;
+    }
+  }
+
+  bool task_respects_async_effects(SubgraphDefinition::TaskDesc& task) {
+    switch (task.proc.kind()) {
+      case Processor::TOC_PROC: {
+        // TODO (rohany): Query an API in the future.
+        return true;
+      }
+      default:
+        return false;
+    }
+  }
+
+  bool task_respects_async_effects(SubgraphDefinition::TaskDesc& src, SubgraphDefinition::TaskDesc& dst) {
+    // TODO (rohany): Do more detailed analysis in the future.
+    return src.proc.kind() == Processor::TOC_PROC && dst.proc.kind() == Processor::TOC_PROC;
+  }
+
+  bool operation_respects_async_effects(SubgraphDefinition* defn,
+                                        SubgraphDefinition::OpKind src_op_kind, unsigned src_op_idx,
+                                        SubgraphDefinition::OpKind dst_op_kind, unsigned dst_op_idx) {
+    switch (dst_op_kind) {
+      case SubgraphDefinition::OPKIND_TASK: {
+        switch (src_op_kind) {
+          case SubgraphDefinition::OPKIND_TASK: {
+            return task_respects_async_effects(defn->tasks[src_op_idx], defn->tasks[dst_op_idx]);
+          }
+          default:
+            return false;
+        }
+      }
+      default:
+        return false;
+    }
+  }
+
+  bool operation_has_async_effects(SubgraphDefinition* defn, SubgraphDefinition::OpKind op_kind, unsigned op_idx) {
+    switch (op_kind) {
+      case SubgraphDefinition::OPKIND_TASK: {
+        return task_has_async_effects(defn->tasks[op_idx]);
+      }
+      case SubgraphDefinition::OPKIND_ARRIVAL: {
+        return false;
+      }
+      default: {
+        assert(false);
+        return false;
+      }
+    }
+  }
+
   ////////////////////////////////////////////////////////////////////////
   //
   // class SubgraphImpl
@@ -636,8 +696,11 @@ namespace Realm {
 
     std::map<Processor, int32_t> proc_to_index;
     std::map<Processor, std::vector<std::pair<SubgraphDefinition::OpKind, unsigned>>> local_schedules;
+    std::map<Processor, std::vector<OpMeta>> local_op_meta;
     std::map<Processor, std::vector<int32_t>> local_incoming;
     std::map<Processor, std::vector<std::vector<CompletionInfo>>> local_outgoing;
+    std::map<Processor, std::vector<std::vector<CompletionInfo>>> async_effect_triggers;
+    std::map<Processor, std::vector<std::vector<CompletionInfo>>> async_incoming_events;
     // Gather the interpolations into compacted lists for each processor.
     std::map<Processor, std::vector<std::vector<SubgraphDefinition::Interpolation>>> local_interpolations;
     // Figure out which operations each external precondition
@@ -688,6 +751,10 @@ namespace Realm {
           operation_procs[desc] = proc_to_index[task.proc];
           local_schedules[task.proc].push_back(desc);
           local_incoming[task.proc].push_back(int32_t(incoming_edges[desc].size()));
+          OpMeta meta;
+          meta.is_final_event = it.is_final_event;
+          meta.is_async = task_has_async_effects(task);
+          local_op_meta[task.proc].push_back(meta);
           break;
         }
         case SubgraphDefinition::OPKIND_ARRIVAL: {
@@ -696,6 +763,10 @@ namespace Realm {
           operation_procs[desc] = proc_to_index[proc];
           local_schedules[proc].push_back(desc);
           local_incoming[proc].push_back(int32_t(incoming_edges[desc].size()));
+          OpMeta meta;
+          meta.is_final_event = it.is_final_event;
+          meta.is_async = false;
+          local_op_meta[proc].push_back(meta);
           break;
         }
         default:
@@ -715,6 +786,53 @@ namespace Realm {
         outgoing.push_back(info);
       }
       local_outgoing[proc].push_back(outgoing);
+
+      // Handle tasks with potentially asynchronous behavior.
+      if (operation_has_async_effects(defn, it.op_kind, it.op_index)) {
+        // If an operation is asynchronous, then we might need extra
+        // bookkeeping for dependent operations that can only start once
+        // the asynchronous effects are complete.
+        std::vector<CompletionInfo> to_trigger;
+        for (auto& edge : outgoing_edges[key]) {
+          if (operation_respects_async_effects(defn, it.op_kind, it.op_index, edge.first, edge.second)) {
+            // If the child operation knows how to sequence itself
+            // after us without blocking, then we don't have to worry.
+            continue;
+          }
+          // Otherwise, make the dependent operation have to wait on the
+          // control code of this operation completing, _and_ its
+          // asynchronous effect.
+          auto procidx = operation_procs[edge];
+          auto schedidx = operation_indices[edge];
+          local_incoming[all_procs[procidx]][schedidx]++;
+          // Remember the processors that this operation will have to trigger.
+          to_trigger.emplace_back(procidx, schedidx);
+        }
+        async_effect_triggers[proc].push_back(to_trigger);
+        // Additionally, we need to "wait" on the right "tokens" of
+        // incoming asynchronous operations.
+        std::vector<CompletionInfo> will_trigger;
+        for (auto& edge : incoming_edges[key]) {
+          if (!operation_has_async_effects(defn, edge.first, edge.second) ||
+              !operation_respects_async_effects(defn, edge.first, edge.second, it.op_kind, it.op_index)) {
+            // There are two cases in which we don't need to worry about
+            // asynchronous predecessors.
+            // 1) The predecessor is not asynchronous.
+            // 2) We don't know how to handle async effects. In this case,
+            //    we've already registered ourselves as dependent on the
+            //    asynchronous effects completing.
+            continue;
+          }
+          // If we do know how to handle the incoming async effect, then
+          // remember the async predecessor tasks to wait on.
+          will_trigger.emplace_back(operation_procs[edge], operation_indices[edge]);
+        }
+        async_incoming_events[proc].push_back(will_trigger);
+      } else {
+        // Otherwise, initialize the metadata structures with null data.
+        async_effect_triggers[proc].push_back({});
+        async_incoming_events[proc].push_back({});
+      }
 
       std::vector<SubgraphDefinition::Interpolation> interps;
       auto& meta = op_to_interpolation_data[key];
@@ -744,105 +862,38 @@ namespace Realm {
       }
     }
 
-    // std::cout << "Incoming edges:" << std::endl;
-    // for (size_t i = 0; i < defn->tasks.size(); i++) {
-    //   std::cout << "Task index: " << i << std::endl;
-    //   for (auto it : incoming_edges[{SubgraphDefinition::OPKIND_TASK, i}]) {
-    //     std::cout << it.second << " ";
-    //   }
-    //   std::cout << std::endl;
-    // }
-    // std::cout << "Outgoing edges: " << std::endl;
-    // for (size_t i = 0; i < defn->tasks.size(); i++) {
-    //   std::cout << "Task index: " << i << std::endl;
-    //   for (auto it : outgoing_edges[{SubgraphDefinition::OPKIND_TASK, i}]) {
-    //     std::cout << it.second << " ";
-    //   }
-    //   std::cout << std::endl;
-    // }
+
+    // Identify how many asynchronous operations will contribute to
+    // the subgraph's completion event.
+    async_finish_events = std::vector<int32_t>(all_procs.size(), 0);
+    for (auto& it : schedule) {
+      if (it.is_final_event && operation_has_async_effects(defn, it.op_kind, it.op_index)) {
+        auto proc = operation_procs.at({it.op_kind, it.op_index});
+        async_finish_events[proc]++;
+      }
+    }
 
     // Now, flatten all the data structures into single vector's
     // per processor. These data structures look like CSR.
-
-    // Operations first.
-    uint64_t op_count = 0;
-    for (size_t i = 0; i < all_procs.size(); i++) {
-      auto proc = all_procs[i];
-      operation_offsets.push_back(op_count);
-      for (auto& it : local_schedules[proc]) {
-        operations.push_back(it);
-        op_count++;
-      }
-    }
-    operation_offsets.push_back(op_count);
+    operations = FlattenedProcMap<std::pair<SubgraphDefinition::OpKind, unsigned>>(all_procs, local_schedules);
+    operation_meta = FlattenedProcMap<OpMeta>(all_procs, local_op_meta);
 
     // Completion information next.
-    uint64_t completion_proc_count = 0;
-    uint64_t completion_task_count = 0;
-    for (size_t i = 0; i < all_procs.size(); i++) {
-      auto proc = all_procs[i];
-      completion_info_proc_offsets.push_back(completion_proc_count);
-      for (auto& infos : local_outgoing[proc]) {
-        completion_info_task_offsets.push_back(completion_task_count);
-        completion_proc_count++;
-        for (auto& info : infos) {
-          completion_infos.push_back(info);
-          completion_task_count++;
-        }
-      }
-    }
-    completion_info_proc_offsets.push_back(completion_proc_count);
-    completion_info_task_offsets.push_back(completion_task_count);
+    completion_infos = FlattenedProcTaskMap<CompletionInfo>(all_procs, local_outgoing);
 
     // Interpolation information.
-    uint64_t interpolation_proc_count = 0;
-    uint64_t interpolation_task_count = 0;
-    for (size_t i = 0; i < all_procs.size(); i++) {
-      auto proc = all_procs[i];
-      interpolation_proc_offsets.push_back(interpolation_proc_count);
-      for (auto& interps : local_interpolations[proc]) {
-        interpolation_task_offsets.push_back(interpolation_task_count);
-        interpolation_proc_count++;
-        for (auto& interp : interps) {
-          interpolations.push_back(interp);
-          interpolation_task_count++;
-        }
-      }
-    }
-    interpolation_proc_offsets.push_back(interpolation_proc_count);
-    interpolation_task_offsets.push_back(interpolation_task_count);
-
-    // std::cout << "Completion info proc offset: [";
-    // for (auto o : completion_info_proc_offsets) {
-    //   std::cout << o << " ";
-    // }
-    // std::cout << "]" << std::endl;
-    // std::cout << "Completion info task offsets: [";
-    // for (auto o : completion_info_task_offsets) {
-    //   std::cout << o << " ";
-    // }
-    // std::cout << "]" << std::endl;
-
-    // std::cout << "Completions: [";
-    // for (auto& i : completion_infos) {
-    //   std::cout << "(" << i.proc << "," << i.index << ")" << " ";
-    // }
-    // std::cout << "]" << std::endl;
+    interpolations = FlattenedProcTaskMap<SubgraphDefinition::Interpolation>(all_procs, local_interpolations);
 
     // Finally, the precondition array.
-    uint64_t precondition_count = 0;
-    // An annoying part about std::atomic is that we can't
-    // do any push backs when using it. We have to create them
-    // all at once.
-    for (size_t i = 0; i < all_procs.size(); i++) {
-      auto proc = all_procs[i];
-      precondition_offsets.push_back(precondition_count);
-      for (auto it : local_incoming[proc]) {
-        original_preconditions.push_back(it);
-        precondition_count++;
-      }
-    }
-    precondition_offsets.push_back(precondition_count);
+    original_preconditions = FlattenedProcMap<int32_t>(all_procs, local_incoming);
+
+    // Aggregate asynchronous pre- and post-condition metadata.
+    async_outgoing_infos = FlattenedProcTaskMap<CompletionInfo>(all_procs, async_effect_triggers);
+    async_incoming_infos = FlattenedProcTaskMap<CompletionInfo>(all_procs, async_incoming_events);
+
+    // TODO (rohany): We'll need a buffer to store events, as well
+    //  as a buffer to stick a GPUCompletionNotification for each
+    //  completed async task / copy.
 
     return true;
   }
@@ -864,9 +915,14 @@ namespace Realm {
 
       // Create a fresh copy of the preconditions array.
       static_assert(sizeof(int32_t) == sizeof(atomic<int32_t>));
-      size_t precondition_ctr_bytes = sizeof(atomic<int32_t>) * original_preconditions.size();
+      size_t precondition_ctr_bytes = sizeof(atomic<int32_t>) * original_preconditions.data.size();
       auto precondition_ctrs = (atomic<int32_t>*)malloc(precondition_ctr_bytes);
-      memcpy(precondition_ctrs, original_preconditions.data(), precondition_ctr_bytes);
+      memcpy(precondition_ctrs, original_preconditions.data.data(), precondition_ctr_bytes);
+
+      // TODO (rohany): In the future, these allocations could be sized more
+      //  tightly, rather than for each operation.
+      auto async_operation_events = (void**)malloc(sizeof(void*) * operations.data.size());
+      auto async_operation_effect_triggerers = (AsyncGPUWorkTriggerer*)malloc(sizeof(AsyncGPUWorkTriggerer) * operations.data.size());
 
       // TODO (rohany): We can also not use an event here and use another
       //  atomic counter with a single event. That is a micro-optimization though.
@@ -900,6 +956,10 @@ namespace Realm {
         state[i].args = copied_args;
         state[i].arglen = arglen;
         state[i].preconditions = precondition_ctrs;
+        state[i].async_operation_events = async_operation_events;
+        state[i].async_operation_effect_triggerers = async_operation_effect_triggerers;
+        state[i].has_pending_async_work = async_finish_events[i] > 0;
+        state[i].pending_async_count.store(async_finish_events[i]);
         event_impl->merger.add_precondition(state[i].finish_event);
       }
       event_impl->merger.arm_merger();
@@ -936,7 +996,15 @@ namespace Realm {
 
       // Issue a cleanup background work item. The item
       // will clean itself up.
-      auto cleanup = new InstantiationCleanup(state, copied_args, precondition_ctrs, external_precondition_waiters);
+      auto cleanup = new InstantiationCleanup(
+        all_procs.size(),
+        state,
+        copied_args,
+        precondition_ctrs,
+        external_precondition_waiters,
+        async_operation_events,
+        async_operation_effect_triggerers
+      );
       EventImpl::add_waiter(finish_event, cleanup);
       return;
     }
@@ -1238,17 +1306,39 @@ namespace Realm {
   }
 
   SubgraphImpl::InstantiationCleanup::InstantiationCleanup(
+    size_t _num_procs,
     ProcSubgraphReplayState* _state,
     void* _args,
     atomic<int32_t>* _preconds,
-    ExternalPreconditionTriggerer* _external_preconds
-  ) : state(_state), args(_args), preconds(_preconds), external_preconds(_external_preconds), EventWaiter() {}
+    ExternalPreconditionTriggerer* _external_preconds,
+    void** _async_operation_events,
+    AsyncGPUWorkTriggerer* _async_operation_event_triggerers
+  ) : num_procs(_num_procs), state(_state), args(_args), preconds(_preconds),
+        external_preconds(_external_preconds), async_operation_events(_async_operation_events),
+        async_operation_event_triggerers(_async_operation_event_triggerers), EventWaiter() {}
 
   void SubgraphImpl::InstantiationCleanup::event_triggered(bool poisoned, Realm::TimeLimit work_until) {
+    // Before we free async_operation_events, make sure that we return all
+    // GPU events appropriately.
+    assert(num_procs > 0);
+    auto sg = state[0].subgraph;
+    std::vector<void*> tokens;
+    for (size_t proc = 0; proc < num_procs; proc++) {
+      auto pimpl = sg->all_proc_impls[proc];
+      for (size_t j = sg->operations.proc_offsets[proc]; j < sg->operations.proc_offsets[proc + 1]; j++) {
+        if (async_operation_events[j] != nullptr)
+          tokens.push_back(async_operation_events[j]);
+        }
+      pimpl->return_subgraph_async_tokens(tokens);
+      tokens.clear();
+    }
+
     delete[] state;
     delete external_preconds;
     free(args);
     free(preconds);
+    free(async_operation_events);
+    free(async_operation_event_triggerers);
     // Delete ourselves after freeing the resource. This pattern
     // is used by other event waiters, so it's reasonable to replicate it here.
     delete this;
@@ -1268,8 +1358,8 @@ namespace Realm {
     // TODO (rohany): Is there a way to deduplicate this code
     //  from within the scheduler implementation?
     for (auto& info : meta->to_trigger) {
-      auto& trigger = preconditions[subgraph->precondition_offsets[info.proc] + info.index];
-      int32_t remaining = trigger.fetch_sub(1) - 1;
+      auto& trigger = preconditions[subgraph->original_preconditions.proc_offsets[info.proc] + info.index];
+      int32_t remaining = trigger.fetch_sub_acqrel(1) - 1;
       if (remaining == 0) {
         auto lp = subgraph->all_proc_impls[info.proc];
         lp->sched->work_counter.increment_counter();
@@ -1288,6 +1378,36 @@ namespace Realm {
   Event SubgraphImpl::ExternalPreconditionTriggerer::get_finish_event() const {
     return Event::NO_EVENT;
   }
+
+  SubgraphImpl::AsyncGPUWorkTriggerer::AsyncGPUWorkTriggerer(
+    Realm::SubgraphImpl *_subgraph,
+    span<Realm::SubgraphImpl::CompletionInfo> _infos,
+    atomic<int32_t> *_preconditions,
+    atomic<int32_t>* _final_ev_counter,
+    UserEvent _final_event
+  ) : subgraph(_subgraph), infos(_infos), preconditions(_preconditions), final_ev_counter(_final_ev_counter), final_event(_final_event) {}
+
+  void SubgraphImpl::AsyncGPUWorkTriggerer::request_completed() {
+    // TODO (rohany): Is there a way to deduplicate this code
+    //  from within the scheduler implementation?
+    for (size_t i = 0; i < infos.size(); i++) {
+      auto& info = infos[i];
+      auto& trigger = preconditions[subgraph->original_preconditions.proc_offsets[info.proc] + info.index];
+      int32_t remaining = trigger.fetch_sub_acqrel(1) - 1;
+      if (remaining == 0) {
+          auto lp = subgraph->all_proc_impls[info.proc];
+          lp->sched->work_counter.increment_counter();
+      }
+    }
+    // Also see if we need to go trigger the completion event.
+    if (final_ev_counter) {
+      int32_t remaining = final_ev_counter->fetch_sub_acqrel(1) - 1;
+      if (remaining == 0) {
+        final_event.trigger();
+      }
+    }
+  }
+
 
   SubgraphImpl::SubgraphWorkLauncher::SubgraphWorkLauncher(Realm::ProcSubgraphReplayState *_state,
                                                            Realm::SubgraphImpl *_subgraph)

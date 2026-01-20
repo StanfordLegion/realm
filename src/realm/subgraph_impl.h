@@ -24,6 +24,9 @@
 #include "realm/id.h"
 #include "realm/event_impl.h"
 
+// TODO (rohany): Should be able to include this even in CPU-only builds...
+#include "realm/cuda/cuda_module.h"
+
 namespace Realm {
 
   // Forward declarations.
@@ -82,6 +85,65 @@ namespace Realm {
     return val;
   }
 
+   // Methods for understanding the asynchronous affects tasks may have.
+   // Since subgraphs have a static view of the source program, they can
+   // take more advantage of this asynchrony than Realm can today.
+   bool task_has_async_effects(SubgraphDefinition::TaskDesc& task);
+   bool operation_has_async_effects(SubgraphDefinition* defn, SubgraphDefinition::OpKind op_kind, unsigned op_idx);
+
+   // TODO (rohany): Not sure if these are the right interfaces yet. I suspect
+   //  that this needs to accept pairs, rather than individual tasks.
+   bool task_respects_async_effects(SubgraphDefinition::TaskDesc& src, SubgraphDefinition::TaskDesc& dst);
+   bool operation_respects_async_effects(SubgraphDefinition* defn,
+                                         SubgraphDefinition::OpKind src_op_kind, unsigned src_op_idx,
+                                         SubgraphDefinition::OpKind dst_op_kind, unsigned dst_op_idx);
+
+   // TODO (rohany): Comment ...
+   template<typename T>
+   struct FlattenedProcMap {
+     FlattenedProcMap() {}
+     FlattenedProcMap(const std::vector<Processor>& all_procs, const std::map<Processor, std::vector<T>>& input) {
+       uint64_t proc_count = 0;
+       for (size_t i = 0; i < all_procs.size(); i++) {
+         auto proc = all_procs[i];
+         proc_offsets.push_back(proc_count);
+         for (auto& it : input.at(proc)) {
+           data.push_back(it);
+           proc_count++;
+         }
+       }
+       proc_offsets.push_back(proc_count);
+     }
+     std::vector<uint64_t> proc_offsets;
+     std::vector<T> data;
+   };
+
+   template<typename T>
+   struct FlattenedProcTaskMap {
+     FlattenedProcTaskMap() {}
+     FlattenedProcTaskMap(const std::vector<Processor>& all_procs, const std::map<Processor, std::vector<std::vector<T>>>& input) {
+       uint64_t proc_count = 0;
+       uint64_t task_count = 0;
+       for (size_t i = 0; i < all_procs.size(); i++) {
+         auto proc = all_procs[i];
+         proc_offsets.push_back(proc_count);
+         for (auto& infos : input.at(proc)) {
+           task_offsets.push_back(task_count);
+           proc_count++;
+           for (auto& info : infos) {
+             data.push_back(info);
+             task_count++;
+           }
+         }
+       }
+       proc_offsets.push_back(proc_count);
+       task_offsets.push_back(task_count);
+     }
+     std::vector<uint64_t> proc_offsets;
+     std::vector<uint64_t> task_offsets;
+     std::vector<T> data;
+   };
+
   class SubgraphImpl {
   public:
     SubgraphImpl();
@@ -127,28 +189,34 @@ namespace Realm {
   public:
     // These objects consist of the "static schedule" information
     // for subgraph replays.
+    std::vector<Processor> all_procs;
+    std::vector<LocalTaskProcessor*> all_proc_impls;
+    std::vector<int32_t> async_finish_events;
+
     // TODO (rohany): Instantiation-stable things go the SubgraphImpl.
     // All of these data structures are flattened, so they look like
     // CSR arrays.
-    std::vector<uint64_t> operation_offsets;
-    std::vector<std::pair<SubgraphDefinition::OpKind, unsigned>> operations;
+    FlattenedProcMap<std::pair<SubgraphDefinition::OpKind, unsigned>> operations;
+    struct OpMeta {
+        bool is_final_event = false;
+        bool is_async = false;
+      };
+    FlattenedProcMap<OpMeta> operation_meta;
+
     struct CompletionInfo {
       CompletionInfo(int32_t _proc, uint64_t _index) : proc(_proc), index(_index) {}
       int32_t proc = -1;
       uint64_t index = UINT64_MAX;
     };
-    std::vector<uint64_t> completion_info_proc_offsets;
-    std::vector<uint64_t> completion_info_task_offsets;
-    std::vector<CompletionInfo> completion_infos;
-    std::vector<uint64_t> precondition_offsets;
-    std::vector<int32_t> original_preconditions;
-    std::vector<Processor> all_procs;
-    std::vector<LocalTaskProcessor*> all_proc_impls;
+
+    FlattenedProcTaskMap<CompletionInfo> completion_infos;
+    FlattenedProcMap<int32_t> original_preconditions;
+    // Metadata for operations with asynchronous side effects.
+    FlattenedProcTaskMap<CompletionInfo> async_outgoing_infos;
+    FlattenedProcTaskMap<CompletionInfo> async_incoming_infos;
 
     // Collapsed interpolation metadata.
-    std::vector<uint64_t> interpolation_proc_offsets;
-    std::vector<uint64_t> interpolation_task_offsets;
-    std::vector<SubgraphDefinition::Interpolation> interpolations;
+    FlattenedProcTaskMap<SubgraphDefinition::Interpolation> interpolations;
 
     class SubgraphWorkLauncher : public EventWaiter {
       public:
@@ -179,19 +247,46 @@ namespace Realm {
         SubgraphImpl* subgraph = nullptr;
         ExternalPreconditionMeta* meta = nullptr;
         atomic<int32_t>* preconditions = nullptr;
-      };
+    };
+
+    class AsyncGPUWorkTriggerer : public Cuda::GPUCompletionNotification {
+      public:
+        AsyncGPUWorkTriggerer(
+          SubgraphImpl* _subgraph,
+          span<CompletionInfo> _infos,
+          atomic<int32_t>* _preconditions,
+          atomic<int32_t>* _final_ev_counter,
+          UserEvent _final_event);
+        void request_completed() override;
+      private:
+        SubgraphImpl* subgraph = nullptr;
+        span<CompletionInfo> infos = {};
+        atomic<int32_t>* preconditions = nullptr;
+        atomic<int32_t>* final_ev_counter = nullptr;
+        UserEvent final_event = UserEvent::NO_USER_EVENT;
+    };
 
     class InstantiationCleanup : public EventWaiter {
       public:
-        InstantiationCleanup(ProcSubgraphReplayState* state, void* args, atomic<int32_t>* preconds, ExternalPreconditionTriggerer* external_preconds);
+        InstantiationCleanup(
+          size_t num_procs,
+          ProcSubgraphReplayState* state,
+          void* args, atomic<int32_t>* preconds,
+          ExternalPreconditionTriggerer* external_preconds,
+          void** async_operation_events,
+          AsyncGPUWorkTriggerer* async_operation_event_triggerers
+        );
         virtual void event_triggered(bool poisoned, TimeLimit work_until);
         virtual void print(std::ostream& os) const;
         virtual Event get_finish_event(void) const;
       private:
+        size_t num_procs;
         ProcSubgraphReplayState* state;
         void* args;
         atomic<int32_t>* preconds;
         ExternalPreconditionTriggerer* external_preconds;
+        void** async_operation_events;
+        AsyncGPUWorkTriggerer* async_operation_event_triggerers;
     };
   };
 
@@ -218,6 +313,15 @@ namespace Realm {
     // Store the preconditions array local to this instantiation
     // of the subgraph.
     atomic<int32_t>* preconditions = nullptr;
+
+    // Data structures for management of asynchrony.
+    // TODO (rohany): void* ...
+    void** async_operation_events = nullptr;
+    SubgraphImpl::AsyncGPUWorkTriggerer* async_operation_effect_triggerers = nullptr;
+
+    // TODO (rohany): ...
+    bool has_pending_async_work = false;
+    atomic<int32_t> pending_async_count;
 
     // Avoid false sharing of counters.
     char _cache_line_padding[64];

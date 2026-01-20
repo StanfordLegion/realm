@@ -159,7 +159,18 @@ namespace Realm {
     virtual bool register_task(Processor::TaskFuncID func_id, CodeDescriptor &codedesc,
                                const ByteArrayRef &user_data);
 
+    // Subgraph related APIs.
     virtual void install_subgraph_replay(ProcSubgraphReplayState* state);
+
+    // TODO (rohany): Scaffold implementation for first pass at GPU
+    //  subgraph execution implementation.
+    virtual void push_subgraph_replay_context() {};
+    virtual void pop_subgraph_replay_context() {};
+    virtual void push_subgraph_task_replay_context() {};
+    virtual void pop_subgraph_task_replay_context(void** token, void* trigger) {};
+    virtual void sync_task_async_effect(void* token) {};
+    virtual void defer_task_effect_trigger(void* token, void* trigger) {};
+    virtual void return_subgraph_async_tokens(const std::vector<void*>& tokens) {};
 
     // starts worker threads and performs any per-processor initialization
     virtual void start_threads(void);

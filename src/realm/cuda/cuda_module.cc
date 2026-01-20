@@ -585,6 +585,16 @@ namespace Realm {
       available_events[current_size++] = e;
     }
 
+    void GPUEventPool::return_events(CUevent* events, size_t num_events) {
+      AutoLock<> al(mutex);
+
+      assert(current_size < total_size);
+
+      for (size_t i = 0; i < num_events; i++) {
+        available_events[current_size++] = events[i];
+      }
+    }
+
     ////////////////////////////////////////////////////////////////////////
     //
     // class ContextSynchronizer
@@ -1012,6 +1022,62 @@ namespace Realm {
     }
 
     GPUProcessor::~GPUProcessor(void) { delete core_rsrv; }
+
+   void GPUProcessor::push_subgraph_replay_context() {
+     gpu->push_context();
+   }
+
+   void GPUProcessor::pop_subgraph_replay_context() {
+     gpu->pop_context();
+   }
+
+   void GPUProcessor::push_subgraph_task_replay_context() {
+     // TODO (rohany): A good chunk of this is ripped from the
+     //  GPUContextManager...
+     assert(ThreadLocal::current_gpu_stream == nullptr);
+     GPUStream *s = gpu->get_next_task_stream();
+     ThreadLocal::current_gpu_stream = s;
+     assert(!ThreadLocal::created_gpu_streams);
+
+     // a task can force context sync on task completion either on or off during
+     //  execution, so use -1 as a "no preference" value
+     ThreadLocal::context_sync_required = -1;
+
+     // TODO (rohany): CUPTI, start work fences etc.
+   }
+
+   void GPUProcessor::pop_subgraph_task_replay_context(void** token, void* trigger) {
+     GPUStream *s = ThreadLocal::current_gpu_stream;
+     assert(!ThreadLocal::created_gpu_streams);
+
+     assert(!gpu->module->config->cfg_task_legacy_sync);
+     assert(ThreadLocal::context_sync_required == 0);
+
+     // Record an event for the completion of kernels launched by the task.
+     auto e = gpu->event_pool.get_event();
+     // Return the event to the caller. The caller is responsible
+     // for cleaning up this
+     *(CUevent_st**)(token) = e;
+
+     // Enqueue a poller for the completion of the launched kernels.
+     if (trigger) {
+       auto completion = static_cast<GPUCompletionNotification*>(trigger);
+       s->add_event(e, nullptr, completion);
+     }
+
+     ThreadLocal::current_gpu_stream = nullptr;
+   }
+
+   void GPUProcessor::sync_task_async_effect(void *token) {
+     // The GPUProcessor will only ever return CUevent_st* to the scheduler.
+     CUevent_st* e = (CUevent_st*)(token);
+     GPUStream *s = ThreadLocal::current_gpu_stream;
+     CHECK_CU(CUDA_DRIVER_FNPTR(cuStreamWaitEvent)(s->get_stream(), e, 0));
+   }
+
+   void GPUProcessor::return_subgraph_async_tokens(const std::vector<void*>& tokens) {
+     gpu->event_pool.return_events(tokens.data(), tokens.size());
+   }
 
     GPUStream *GPU::find_stream(CUstream stream) const
     {

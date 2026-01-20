@@ -191,15 +191,6 @@ namespace Realm {
       GPUProcessor *proc = nullptr; // TODO(cperry): delete me
     };
 
-    // an interface for receiving completion notification for a GPU operation
-    //  (right now, just copies)
-    class GPUCompletionNotification {
-    public:
-      virtual ~GPUCompletionNotification(void) {}
-
-      virtual void request_completed(void) = 0;
-    };
-
     class GPUWorkFence : public Realm::Operation::AsyncWorkItem {
     public:
       GPUWorkFence(GPU *gpu, Realm::Operation *op);
@@ -345,6 +336,7 @@ namespace Realm {
 
       CUevent get_event(bool external = false);
       void return_event(CUevent e, bool external = false);
+      void return_events(CUevent* events, size_t num_events);
 
     protected:
       Mutex mutex;
@@ -544,6 +536,14 @@ namespace Realm {
                                  const ByteArrayRef &user_data);
 
       virtual void shutdown(void);
+
+      virtual void push_subgraph_replay_context() override;
+      virtual void pop_subgraph_replay_context() override;
+
+      virtual void push_subgraph_task_replay_context() override;
+      virtual void pop_subgraph_task_replay_context(void** token, void* trigger) override;
+      virtual void sync_task_async_effect(void* token) override;
+      virtual void return_subgraph_async_tokens(const std::vector<void*>& tokens) override;
 
     protected:
       virtual void execute_task(Processor::TaskFuncID func_id,
