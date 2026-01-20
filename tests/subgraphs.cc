@@ -273,11 +273,11 @@ IndexSpace<1> pis2;
 {
   IndexSpace<1> t1(Rect<1>(0, 0)), t2(Rect<1>(2, 2)), t3(Rect<1>(4, 4));
   Event e = Event::NO_EVENT;
-  e = IndexSpace<1>::compute_union(Rect<1>(0, 0), Rect<1>(2, 2), pis2, ProfilingRequestSet());
-  e = IndexSpace<1>::compute_union(pis2, Rect<1>(4, 4), pis2, ProfilingRequestSet());
-  e = IndexSpace<1>::compute_union(pis2, Rect<1>(6, 6), pis2, ProfilingRequestSet());
-  e = IndexSpace<1>::compute_union(pis2, Rect<1>(8, 8), pis2, ProfilingRequestSet());
-  e = IndexSpace<1>::compute_union(pis2, Rect<1>(10, 10), pis2, ProfilingRequestSet());
+  e = IndexSpace<1>::compute_union(Rect<1>(0, 0), Rect<1>(2, 2), pis2, ProfilingRequestSet(), e);
+  e = IndexSpace<1>::compute_union(pis2, Rect<1>(4, 4), pis2, ProfilingRequestSet(), e);
+  e = IndexSpace<1>::compute_union(pis2, Rect<1>(6, 6), pis2, ProfilingRequestSet(), e);
+  e = IndexSpace<1>::compute_union(pis2, Rect<1>(8, 8), pis2, ProfilingRequestSet(), e);
+  e = IndexSpace<1>::compute_union(pis2, Rect<1>(10, 10), pis2, ProfilingRequestSet(), e);
   e.wait();
 }
 
