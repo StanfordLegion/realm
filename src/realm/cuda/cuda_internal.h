@@ -249,7 +249,7 @@ namespace Realm {
       void add_notification(GPUCompletionNotification *notification);
       void add_event(CUevent event, GPUWorkFence *fence,
                      GPUCompletionNotification *notification = NULL,
-                     GPUWorkStart *start = NULL);
+                     GPUWorkStart *start = NULL, bool return_event = true);
       void wait_on_streams(const std::set<GPUStream *> &other_streams);
 
       // atomically checks rate limit counters and returns true if 'bytes'
@@ -271,6 +271,7 @@ namespace Realm {
       Mutex mutex;
       struct PendingEvent {
         CUevent event;
+        bool return_event = true;
         GPUWorkFence *fence;
         GPUWorkStart *start;
         GPUCompletionNotification *notification;

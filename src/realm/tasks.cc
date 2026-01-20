@@ -1217,7 +1217,7 @@ namespace Realm {
           auto start = replay->subgraph->async_outgoing_infos.task_offsets[proc_offset + next_op_index];
           auto end = replay->subgraph->async_outgoing_infos.task_offsets[proc_offset + next_op_index + 1];
           if (end > start) {
-            auto sp = span<SubgraphImpl::CompletionInfo>(replay->subgraph->async_outgoing_infos.data.data(), end - start);
+            auto sp = span<SubgraphImpl::CompletionInfo>(replay->subgraph->async_outgoing_infos.data.data() + start, end - start);
             atomic<int32_t>* final_ctr = nullptr;
             UserEvent final_event = UserEvent::NO_USER_EVENT;
             if (subgraph->operation_meta.data[op_index].is_final_event) {
@@ -1256,6 +1256,12 @@ namespace Realm {
         lock.unlock();
         b.arrive(count, Event::NO_EVENT, arrivalDesc.reduce_value.base(), arrivalDesc.reduce_value.size());
         lock.lock();
+
+        // TODO (rohany): Annoying to do this ...
+        // Non-async events need to explicitly record a null token to
+        // avoid the cleanup from trying to return invalid cuda events.
+        replay->async_operation_events[op_index] = nullptr;
+
         break;
       }
       default:
@@ -1286,7 +1292,7 @@ namespace Realm {
       uint64_t task_end = subgraph->operations.proc_offsets[proc_index+1];
       if ((replay->next_op_index + subgraph->operations.proc_offsets[proc_index]) == task_end) {
         // Pop off any local replay state.
-        current_subgraph->subgraph->all_proc_impls[proc_index]->push_subgraph_replay_context();
+        current_subgraph->subgraph->all_proc_impls[proc_index]->pop_subgraph_replay_context();
 
         // We're done! Drop the replay state and exit.
         this->current_subgraph = nullptr;

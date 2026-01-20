@@ -223,6 +223,7 @@ namespace Realm {
       case SubgraphDefinition::OPKIND_TASK: {
         return task_has_async_effects(defn->tasks[op_idx]);
       }
+      case SubgraphDefinition::OPKIND_EXT_PRECOND: [[fallthrough]];
       case SubgraphDefinition::OPKIND_ARRIVAL: {
         return false;
       }

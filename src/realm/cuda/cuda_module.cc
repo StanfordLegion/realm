@@ -230,7 +230,7 @@ namespace Realm {
 
     void GPUStream::add_event(CUevent event, GPUWorkFence *fence,
                               GPUCompletionNotification *notification,
-                              GPUWorkStart *start)
+                              GPUWorkStart *start, bool return_event)
     {
       bool add_to_worker = false;
       {
@@ -245,6 +245,7 @@ namespace Realm {
         e.fence = fence;
         e.start = start;
         e.notification = notification;
+        e.return_event = return_event;
 
         pending_events.push_back(e);
       }
@@ -320,14 +321,12 @@ namespace Realm {
         log_stream.debug() << "CUDA event " << event << " triggered on stream " << stream
                            << " (GPU " << gpu << ")";
 
-        // give event back to GPU for reuse
-        gpu->event_pool.return_event(event);
-
         // this event has triggered, so figure out the fence/notification to trigger
         //  and also peek at the next event
         GPUWorkFence *fence = 0;
         GPUWorkStart *start = 0;
         GPUCompletionNotification *notification = 0;
+        bool return_event = false;
 
         {
           AutoLock<> al(mutex);
@@ -337,6 +336,7 @@ namespace Realm {
           fence = e.fence;
           start = e.start;
           notification = e.notification;
+          return_event = e.return_event;
           pending_events.pop_front();
 
           if(pending_events.empty()) {
@@ -344,6 +344,10 @@ namespace Realm {
             work_left = has_work();
           } else
             event = pending_events.front().event;
+        }
+
+        if (return_event) {
+          gpu->event_pool.return_event(event);
         }
 
         if(start) {
@@ -1062,7 +1066,9 @@ namespace Realm {
      // Enqueue a poller for the completion of the launched kernels.
      if (trigger) {
        auto completion = static_cast<GPUCompletionNotification*>(trigger);
-       s->add_event(e, nullptr, completion);
+       // The subgraph cleanup will be responsible for cleaning up
+       // and returning events to the pool.
+       s->add_event(e, nullptr, completion, nullptr, false /* return_event */);
      }
 
      ThreadLocal::current_gpu_stream = nullptr;
@@ -1076,7 +1082,7 @@ namespace Realm {
    }
 
    void GPUProcessor::return_subgraph_async_tokens(const std::vector<void*>& tokens) {
-     gpu->event_pool.return_events(tokens.data(), tokens.size());
+     gpu->event_pool.return_events((CUevent_st**)tokens.data(), tokens.size());
    }
 
     GPUStream *GPU::find_stream(CUstream stream) const
