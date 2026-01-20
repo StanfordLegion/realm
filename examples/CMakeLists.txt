@@ -1,4 +1,4 @@
-# Copyright 2025 Stanford University, NVIDIA Corporation
+# Copyright 2026 Stanford University, NVIDIA Corporation
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -78,6 +78,9 @@ endmacro()
 add_example_test(saxpy)
 set(stencil_ARGS -ll:cpu 4)
 add_example_test(stencil)
+if(REALM_USE_UCX)
+add_example_test(vtable)
+endif()
 
 set_tests_properties(
   ${_example_list}

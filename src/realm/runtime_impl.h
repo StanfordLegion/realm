@@ -1,5 +1,5 @@
 /*
- * Copyright 2025 Stanford University, NVIDIA Corporation
+ * Copyright 2026 Stanford University, NVIDIA Corporation
  * SPDX-License-Identifier: Apache-2.0
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -55,6 +55,7 @@
 #include "realm/shm.h"
 #include "realm/hardware_topology.h"
 
+#include <optional>
 #include <unordered_map>
 #include <memory>
 
@@ -265,7 +266,29 @@ namespace Realm {
     RuntimeImpl(void);
     ~RuntimeImpl(void);
 
-    bool network_init(int *argc, char ***argv);
+    bool network_init(int *argc, char ***argv,
+                      const Runtime::KeyValueStoreVtable &vtable);
+    bool has_key_value_store(void) const;
+    // Is this an elastic Realm
+    bool is_key_value_store_elastic(void) const;
+    // Are we a single process joining by ourself or part of a group
+    bool has_key_value_store_group(void) const;
+    // Our local group
+    std::optional<uint64_t> key_value_store_local_group(void) const;
+    // Our local rank in the group
+    std::optional<uint64_t> key_value_store_local_rank(void) const;
+    // The total number of ranks in our group
+    std::optional<uint64_t> key_value_store_local_ranks(void) const;
+    // Helper for getting integers of unknown size
+    std::optional<uint64_t> key_value_store_get_int(const std::string_view &key) const;
+    bool key_value_store_put(const void *key, size_t key_size, const void *value,
+                             size_t value_size) const;
+    bool key_value_store_get(const void *key, size_t key_size, void *value,
+                             size_t *value_size) const;
+    bool key_value_store_bar(void) const;
+    bool key_value_store_cas(const void *key, size_t key_size, void *expected,
+                             size_t *expected_size, const void *desired,
+                             size_t desired_size) const;
 
     void parse_command_line(std::vector<std::string> &cmdline);
 
@@ -462,6 +485,9 @@ namespace Realm {
     std::vector<NetworkSegment *> network_segments;
 
     std::map<std::string, ModuleConfig *> module_configs;
+
+    Runtime::KeyValueStoreVtable key_value_store_vtable;
+    std::vector<uint8_t> key_value_store_vtable_data;
   };
 
   extern RuntimeImpl *runtime_singleton;
