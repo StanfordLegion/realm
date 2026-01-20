@@ -225,6 +225,8 @@ namespace Realm {
       case SubgraphDefinition::OPKIND_TASK: {
         return task_has_async_effects(defn->tasks[op_idx]);
       }
+      // TODO (rohany): Handle async copies in the future...
+      case SubgraphDefinition::OPKIND_COPY: [[fallthrough]];
       case SubgraphDefinition::OPKIND_EXT_PRECOND: [[fallthrough]];
       case SubgraphDefinition::OPKIND_ARRIVAL: {
         return false;
@@ -678,7 +680,7 @@ namespace Realm {
         auto key = std::make_pair(it.op_kind, it.op_index);
         // Copies require special handling, as they don't go into the
         // per-processor local schedules.
-        if (it.op_kind == SubgraphDefinition::OPKIND_COPY && is_plannable_copy(defn->copies[it.op_index])) {
+        if (it.op_kind == SubgraphDefinition::OPKIND_COPY && is_plannable_copy(defn->copies[it.op_index]) && !defn->copies[it.op_index].proc.exists()) {
           bgwork_schedule[key] = bgwork_items.size();
           bgwork_items.push_back(it);
           if (it.is_final_event)
@@ -687,8 +689,9 @@ namespace Realm {
         }
 
         // Operations we know how to handle go into the static schedule.
-        if (std::find(allowed_kinds.begin(), allowed_kinds.end(), it.op_kind) != allowed_kinds.end()) {
-          static_schedule.push_back(it);
+        if (std::find(allowed_kinds.begin(), allowed_kinds.end(), it.op_kind) != allowed_kinds.end() ||
+            (it.op_kind == SubgraphDefinition::OPKIND_COPY && is_plannable_copy(defn->copies[it.op_index]) && defn->copies[it.op_index].proc.exists())) {
+            static_schedule.push_back(it);
           // If we're moving an operation into the static part of the schedule,
           // its contribution to the final event in the subgraph will be done
           // separately, so remove it from the "dynamic" set of final events.
@@ -815,56 +818,13 @@ namespace Realm {
         if (it.op_kind != SubgraphDefinition::OPKIND_COPY)
           continue;
         auto& copy = defn->copies[it.op_index];
-        TransferDesc* td = copy.space.impl->make_transfer_desc(copy.srcs, copy.dsts);
-        // Just constructing a TransferDescriptor should perform all the
-        // copy analysis inline. It could be deferred, but if all the instances
-        // have been created already, then the analysis happens right away.
-        // Assert that this is true.
-        // TODO (rohany): Have to have some sort of filter for the copies that
-        //  we actually analyze in this manner.
-        assert(td->analysis_complete.load() && td->analysis_successful);
-        // For now, the copies we're analyzing should only ever
-        //  be one-hop copies inside this node. After this works, we
-        //  can consider extending the analysis to cache plans for
-        //  multi-hop copies through the network.
-        TransferGraph& graph = td->graph;
-        assert(graph.xd_nodes.size() == 1);
-        assert(graph.ib_edges.empty());
-        // Now, spoof the XDFactory inside each node of the transfer
-        // graph so that we can extract the XD's.
-        std::vector<MockXDFactory> factories(graph.xd_nodes.size());
-        for (size_t i = 0; i < graph.xd_nodes.size(); i++) {
-          factories[i].factory = graph.xd_nodes[i].factory;
-          graph.xd_nodes[i].factory = &factories[i];
-        }
-
-        // It looks like we will have to make a new GenEvent for each copy,
-        // but it's not the end of the world.
-        GenEventImpl *finish_event = GenEventImpl::create_genevent();
-        Event ev = finish_event->current_event();
-        TransferOperation *op = new TransferOperation(*td, Event::NO_EVENT, finish_event,
-                                                      ID(ev).event_generation(), 0 /* priority */);
-        // Actually create the XD's for the copy. We have to call
-        // TransferOperation::allocate_ibs(), which then falls through
-        // to call TransferOperation::create_xds().
-        op->allocate_ibs();
-
-        // After TransferOperation::create_xds(), our mock factory should
-        // have been invoked to handle the creation.
-        assert(factories[0].xd != nullptr);
-        // Explicitly add a reference to the xd from the subgraph.
-        factories[0].xd->add_reference();
-
-        // We need to make the TransferOperation think that it is finished.
-        assert(op->xd_trackers.size() == 1);
-        op->xd_trackers[0]->mark_finished(true /* successful */);
-
-        // At this point, we don't need a reference to the transfer descriptor anymore.
-        td->remove_reference();
-
-        planned_copy_xds[it.op_index] = factories[0].xd;
-        // Detach the xd from its DMA op.
-        planned_copy_xds[it.op_index]->dma_op = 0;
+        planned_copy_xds[it.op_index] = analyze_copy(copy);
+      }
+      for (auto& it : static_schedule) {
+        if (it.op_kind != SubgraphDefinition::OPKIND_COPY)
+          continue;
+        auto& copy = defn->copies[it.op_index];
+        planned_copy_xds[it.op_index] = analyze_copy(copy);
       }
     }
 
@@ -898,6 +858,7 @@ namespace Realm {
           }
           break;
         }
+        case SubgraphDefinition::OPKIND_COPY: [[fallthrough]];
         case SubgraphDefinition::OPKIND_ARRIVAL:
           break;
         default:
@@ -944,6 +905,19 @@ namespace Realm {
           meta.is_final_event = it.is_final_event;
           meta.is_async = false;
           local_op_meta[proc].push_back(meta);
+          break;
+        }
+        case SubgraphDefinition::OPKIND_COPY: {
+          auto& copy = defn->copies[it.op_index];
+          assert(copy.proc.exists());
+          operation_indices[desc] = local_schedules[copy.proc].size();
+          operation_procs[desc] = proc_to_index[copy.proc];
+          local_schedules[copy.proc].push_back(desc);
+          local_incoming[copy.proc].push_back(int32_t(incoming_edges[desc].size()));
+          OpMeta meta;
+          meta.is_final_event = it.is_final_event;
+          meta.is_async = false;
+          local_op_meta[copy.proc].push_back(meta);
           break;
         }
         default:
@@ -1169,11 +1143,8 @@ namespace Realm {
     // TODO (rohany): This feels like an big hack, but I should
     //  probably unify the async items per proc with "anything async
     //  happening not in the task launch side of the world".
-    // This is a hack also because it doesn't work if `-ll:static_subgraph_opt` is not
-    // provided and thus we don't have any async_finish_events. I'm doing something
-    // hacky here right now for the merge.
-    if (bgwork_finish_events != 0) {
-      assert(!async_finish_events.empty());
+    if (opt) {
+      assert(!all_procs.empty());
       async_finish_events[0] += bgwork_finish_events;
     }
 
@@ -1942,5 +1913,58 @@ namespace Realm {
     //  all the way through removes a reference?
     xd->add_reference();
     xd->channel->enqueue_ready_xd(xd);
+  }
+
+  XferDes* SubgraphImpl::analyze_copy(SubgraphDefinition::CopyDesc& copy) {
+    TransferDesc* td = copy.space.impl->make_transfer_desc(copy.srcs, copy.dsts);
+    // Just constructing a TransferDescriptor should perform all the
+    // copy analysis inline. It could be deferred, but if all the instances
+    // have been created already, then the analysis happens right away.
+    // Assert that this is true.
+    // TODO (rohany): Have to have some sort of filter for the copies that
+    //  we actually analyze in this manner.
+    assert(td->analysis_complete.load() && td->analysis_successful);
+    // For now, the copies we're analyzing should only ever
+    //  be one-hop copies inside this node. After this works, we
+    //  can consider extending the analysis to cache plans for
+    //  multi-hop copies through the network.
+    TransferGraph& graph = td->graph;
+    assert(graph.xd_nodes.size() == 1);
+    assert(graph.ib_edges.empty());
+    // Now, spoof the XDFactory inside each node of the transfer
+    // graph so that we can extract the XD's.
+    std::vector<MockXDFactory> factories(graph.xd_nodes.size());
+    for (size_t i = 0; i < graph.xd_nodes.size(); i++) {
+      factories[i].factory = graph.xd_nodes[i].factory;
+      graph.xd_nodes[i].factory = &factories[i];
+    }
+
+    // It looks like we will have to make a new GenEvent for each copy,
+    // but it's not the end of the world.
+    GenEventImpl *finish_event = GenEventImpl::create_genevent();
+    Event ev = finish_event->current_event();
+    TransferOperation *op = new TransferOperation(*td, Event::NO_EVENT, finish_event,
+                                                  ID(ev).event_generation(), 0 /* priority */);
+    // Actually create the XD's for the copy. We have to call
+    // TransferOperation::allocate_ibs(), which then falls through
+    // to call TransferOperation::create_xds().
+    op->allocate_ibs();
+
+    // After TransferOperation::create_xds(), our mock factory should
+    // have been invoked to handle the creation.
+    assert(factories[0].xd != nullptr);
+    // We need to make the TransferOperation think that it is finished.
+    assert(op->xd_trackers.size() == 1);
+    op->xd_trackers[0]->mark_finished(true /* successful */);
+
+    // At this point, we don't need a reference to the transfer descriptor anymore.
+    td->remove_reference();
+
+    auto xd = factories[0].xd;
+    // Explicitly add a reference to the xd from the subgraph.
+    xd->add_reference();
+    // Detach the xd from its DMA op.
+    xd->dma_op = 0;
+    return xd;
   }
 }; // namespace Realm

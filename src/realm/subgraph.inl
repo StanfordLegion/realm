@@ -70,6 +70,7 @@ namespace Realm {
     : redop_id(0)
     , red_fold(false)
     , priority(0)
+    , proc(Processor::NO_PROC)
   {}
 
   ////////////////////////////////////////////////////////////////////////

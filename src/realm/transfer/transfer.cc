@@ -5059,7 +5059,8 @@ namespace Realm {
   template class TransferIteratorIndirectRange<N, T>;                                    \
   template class AddressSplitXferDesFactory<N, T>;                                       \
   template class AddressSplitCommunicator<N, T>;                                         \
-  template class TransferDomainIndexSpace<N, T>;
+  template class TransferDomainIndexSpace<N, T>;                                         \
+  template TransferDomain* TransferDomain::construct<N,T>(const IndexSpace<N, T>& is);
   FOREACH_NT(DOIT)
 
 #define DOIT2(N, T, N2, T2)                                                              \

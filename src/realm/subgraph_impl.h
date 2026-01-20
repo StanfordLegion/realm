@@ -188,6 +188,9 @@ namespace Realm {
       SubgraphImpl *subgraph;
     };
 
+    protected:
+      XferDes* analyze_copy(SubgraphDefinition::CopyDesc& copy);
+
   public:
     ID me;
     SubgraphImpl *next_free;

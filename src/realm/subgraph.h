@@ -107,6 +107,9 @@ namespace Realm {
       ReductionOpID redop_id /*= 0*/;
       bool red_fold /*= false*/;
       int priority /*= 0*/;
+
+      // TODO (rohany): ...
+      Processor proc;
     };
 
     struct ArrivalDesc {

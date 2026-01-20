@@ -22,6 +22,8 @@
 #include "realm/runtime_impl.h"
 #include "realm/proc_impl.h"
 #include "realm/subgraph_impl.h"
+#include "realm/transfer/transfer.h"
+#include "realm/transfer/memcpy_channel.h"
 
 #if defined(REALM_USE_CACHING_ALLOCATOR)
 #include "realm/caching_allocator.h"
@@ -1265,6 +1267,21 @@ namespace Realm {
         unsigned count = arrivalDesc.count;
         lock.unlock();
         b.arrive(count, Event::NO_EVENT, arrivalDesc.reduce_value.base(), arrivalDesc.reduce_value.size());
+        lock.lock();
+
+        break;
+      }
+      case SubgraphDefinition::OPKIND_COPY: {
+        auto xd = subgraph->planned_copy_xds[op_key.second];
+        assert(xd);
+        xd->reset();
+        // TODO (rohany): This is a hack ...
+        auto mxd = dynamic_cast<MemcpyXferDes*>(xd);
+        assert(mxd);
+        auto mchan = dynamic_cast<MemcpyChannel*>(xd->channel);
+        assert(mchan);
+        lock.unlock();
+        while (mxd->progress_xd(mchan, TimeLimit())) {}
         lock.lock();
 
         break;
