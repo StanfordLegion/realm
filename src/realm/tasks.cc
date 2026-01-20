@@ -34,6 +34,11 @@ namespace Realm {
   Logger log_task("task");
   Logger log_sched("sched");
 
+  // Track when a thread is executing a task as part of a subgraph.
+  namespace ThreadLocal {
+    thread_local bool in_subgraph_exec = false;
+  };
+
   ////////////////////////////////////////////////////////////////////////
   //
   // class Task
@@ -1216,6 +1221,10 @@ namespace Realm {
           prof->proc.proc = pimpl->me;
         }
 
+        // Set thread local state before starting any task related work.
+        ThreadLocal::current_processor = pimpl->me;
+        ThreadLocal::in_subgraph_exec = true;
+
         lock.unlock();
 
         // TODO (rohany): This is kind of a hack for Legion profiling specifically,
@@ -1302,6 +1311,11 @@ namespace Realm {
         pimpl->pop_subgraph_task_replay_context(&token, trigger, prof);
 
         lock.lock();
+
+        // Unset thread local state. Note that we don't unset
+        // current processor, as this seems to confuse other parts
+        // of the runtime.
+        ThreadLocal::in_subgraph_exec = false;
 
         if (prof && prof->wants_fevent) {
           thread->unset_cur_event();

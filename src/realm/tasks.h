@@ -37,6 +37,10 @@
 
 namespace Realm {
 
+  namespace ThreadLocal {
+    extern thread_local bool in_subgraph_exec;
+  };
+
   class ProcessorImpl;
   struct ProcSubgraphReplayState;
 
