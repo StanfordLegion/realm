@@ -115,6 +115,10 @@ namespace Realm {
        }
        proc_offsets.push_back(proc_count);
      }
+     void clear() {
+       proc_offsets.clear();
+       data.clear();
+     }
      std::vector<uint64_t> proc_offsets;
      std::vector<T> data;
    };
@@ -139,6 +143,11 @@ namespace Realm {
        }
        proc_offsets.push_back(proc_count);
        task_offsets.push_back(task_count);
+     }
+     void clear() {
+       proc_offsets.clear();
+       task_offsets.clear();
+       data.clear();
      }
      std::vector<uint64_t> proc_offsets;
      std::vector<uint64_t> task_offsets;
@@ -276,15 +285,14 @@ namespace Realm {
           ProcSubgraphReplayState* all_proc_states,
           span<CompletionInfo> _infos,
           atomic<int32_t>* _preconditions,
-          atomic<int32_t>* _final_ev_counter,
-          UserEvent _final_event);
+          atomic<int32_t>* _final_ev_counter
+        );
         void request_completed() override;
       private:
         ProcSubgraphReplayState* all_proc_states = nullptr;
         span<CompletionInfo> infos = {};
         atomic<int32_t>* preconditions = nullptr;
         atomic<int32_t>* final_ev_counter = nullptr;
-        UserEvent final_event = UserEvent::NO_USER_EVENT;
     };
 
     class InstantiationCleanup : public EventWaiter {
@@ -298,7 +306,8 @@ namespace Realm {
           void** async_operation_events,
           AsyncGPUWorkTriggerer* async_operation_event_triggerers,
           atomic<int32_t>* dynamic_precond_counters,
-          UserEvent* dynamic_events
+          UserEvent* dynamic_events,
+          atomic<int32_t>* finish_counter
         );
         virtual void event_triggered(bool poisoned, TimeLimit work_until);
         virtual void print(std::ostream& os) const;
@@ -315,6 +324,7 @@ namespace Realm {
         AsyncGPUWorkTriggerer* async_operation_event_triggerers;
         atomic<int32_t>* dynamic_precond_counters;
         UserEvent* dynamic_events;
+        atomic<int32_t>* finish_counter;
     };
   };
 
@@ -332,9 +342,9 @@ namespace Realm {
     void* args = nullptr;
     size_t arglen = 0;
 
-    // Each processor is responsible for triggering a final
-    // event to let the runtime know that its contribution
-    // to the subgraph execution is done.
+    // Only the last processor to complete will trigger
+    // the finish event.
+    atomic<int32_t>* finish_counter = nullptr;
     UserEvent finish_event = UserEvent::NO_USER_EVENT;
 
     // Store the preconditions array local to this instantiation

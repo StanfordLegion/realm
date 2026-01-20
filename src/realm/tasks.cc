@@ -1235,13 +1235,11 @@ namespace Realm {
           if (end > start) {
             auto sp = span<SubgraphImpl::CompletionInfo>(replay->subgraph->async_outgoing_infos.data.data() + start, end - start);
             atomic<int32_t>* final_ctr = nullptr;
-            UserEvent final_event = UserEvent::NO_USER_EVENT;
             if (subgraph->operation_meta.data[op_index].is_final_event) {
               assert(subgraph->operation_meta.data[op_index].is_async);
               final_ctr = &replay->pending_async_count;
-              final_event = replay->finish_event;
             }
-            trigger = new(&replay->async_operation_effect_triggerers[op_index]) SubgraphImpl::AsyncGPUWorkTriggerer(replay->all_proc_states, sp, replay->preconditions, final_ctr, final_event);
+            trigger = new(&replay->async_operation_effect_triggerers[op_index]) SubgraphImpl::AsyncGPUWorkTriggerer(replay->all_proc_states, sp, replay->preconditions, final_ctr);
           }
         }
 
@@ -1308,10 +1306,15 @@ namespace Realm {
         // as there isn't any pending asynchronous work. Otherwise, some other
         // background worker will come trigger the final event.
         if (!replay->has_pending_async_work) {
-          // The scheduler lock can't be held during the trigger.
-          lock.unlock();
-          replay->finish_event.trigger();
-          lock.lock();
+          // Decrement the processor completion counter. Only one
+          // processor needs to contribute to the trigger.
+          int32_t remaining = replay->finish_counter->fetch_sub_acqrel(1) - 1;
+          if (remaining == 0) {
+            // The scheduler lock can't be held during the trigger.
+            lock.unlock();
+            replay->finish_event.trigger();
+            lock.lock();
+          }
         }
       }
 

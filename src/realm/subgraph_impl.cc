@@ -1066,10 +1066,16 @@ namespace Realm {
       auto async_operation_events = (void**)malloc(sizeof(void*) * operations.data.size());
       auto async_operation_effect_triggerers = (AsyncGPUWorkTriggerer*)malloc(sizeof(AsyncGPUWorkTriggerer) * operations.data.size());
 
-      // Arm the result merger with each of the completed events, and
+      // Initialize a counter that all processors will decrement upon completion.
+      auto finish_counter = (atomic<int32_t>*)malloc(sizeof(atomic<int32_t>));
+      finish_counter->store_release(all_procs.size());
+      auto static_finish_event = UserEvent::create_user_event();
+
+      // Arm the result merger with the completion event, and
       // the final events from the dynamic portion.
       event_impl->merger.prepare_merger(finish_event, false /*!ignore_faults*/,
-                                     all_procs.size() + num_final_events);
+                                     num_final_events + 1);
+      event_impl->merger.add_precondition(static_finish_event);
 
       // Separate the installation and state creation steps
       // to enable deferring the launch of the subgraph.
@@ -1077,7 +1083,8 @@ namespace Realm {
       for (size_t i = 0; i < all_procs.size(); i++) {
         state[i].all_proc_states = state;
         state[i].subgraph = this;
-        state[i].finish_event = UserEvent::create_user_event();
+        state[i].finish_counter = finish_counter;
+        state[i].finish_event = static_finish_event;
         state[i].proc_index = int32_t(i);
         state[i].args = copied_args;
         state[i].arglen = arglen;
@@ -1090,7 +1097,6 @@ namespace Realm {
         state[i].pending_async_count.store(async_finish_events[i]);
         state[i].queue = queue;
         state[i].next_queue_slot.store(operations.proc_offsets[i] + initial_queue_entry_count[i]);
-        event_impl->merger.add_precondition(state[i].finish_event);
       }
 
       // Since we have a fresh precondition vector, we can
@@ -1142,7 +1148,8 @@ namespace Realm {
         async_operation_events,
         async_operation_effect_triggerers,
         dynamic_precondition_ctrs,
-        dynamic_events
+        dynamic_events,
+        finish_counter
       );
       EventImpl::add_waiter(finish_event, cleanup);
     } else {
@@ -1416,6 +1423,23 @@ namespace Realm {
     delete defn;
     schedule.clear();
 
+    // Clean up all state used for the static portion of the subgraph.
+    all_procs.clear();
+    all_proc_impls.clear();
+    async_finish_events.clear();
+    operations.clear();
+    operation_meta.clear();
+    completion_infos.clear();
+    original_preconditions.clear();
+    async_outgoing_infos.clear();
+    async_incoming_infos.clear();
+    interpolations.clear();
+    initial_queue_state.clear();
+    initial_queue_entry_count.clear();
+    external_precondition_info.clear();
+    dynamic_to_static_triggers.clear();
+    static_to_dynamic_counts.clear();
+
     // TODO: when we create subgraphs on remote nodes, send a message to the
     //  creator node so they can add it to their free list
     NodeID creator_node = ID(me).subgraph_creator_node();
@@ -1468,11 +1492,12 @@ namespace Realm {
     void** _async_operation_events,
     AsyncGPUWorkTriggerer* _async_operation_event_triggerers,
     atomic<int32_t>* _dynamic_precond_counters,
-    UserEvent* _dynamic_events
+    UserEvent* _dynamic_events,
+    atomic<int32_t>* _finish_counter
   ) : num_procs(_num_procs), state(_state), args(_args), preconds(_preconds), queue(_queue),
       external_preconds(_external_preconds), dynamic_preconds(_dynamic_preconds),
       async_operation_events(_async_operation_events), async_operation_event_triggerers(_async_operation_event_triggerers),
-      dynamic_precond_counters(_dynamic_precond_counters), dynamic_events(_dynamic_events), EventWaiter() {}
+      dynamic_precond_counters(_dynamic_precond_counters), dynamic_events(_dynamic_events), finish_counter(_finish_counter), EventWaiter() {}
 
   void SubgraphImpl::InstantiationCleanup::event_triggered(bool poisoned, Realm::TimeLimit work_until) {
     // Before we free async_operation_events, make sure that we return all
@@ -1500,6 +1525,7 @@ namespace Realm {
     free(async_operation_event_triggerers);
     free(dynamic_precond_counters);
     free(dynamic_events);
+    free(finish_counter);
     // Delete ourselves after freeing the resource. This pattern
     // is used by other event waiters, so it's reasonable to replicate it here.
     delete this;
@@ -1538,9 +1564,8 @@ namespace Realm {
     ProcSubgraphReplayState* _all_proc_states,
     span<Realm::SubgraphImpl::CompletionInfo> _infos,
     atomic<int32_t> *_preconditions,
-    atomic<int32_t>* _final_ev_counter,
-    UserEvent _final_event
-  ) : all_proc_states(_all_proc_states), infos(_infos), preconditions(_preconditions), final_ev_counter(_final_ev_counter), final_event(_final_event) {}
+    atomic<int32_t>* _final_ev_counter
+  ) : all_proc_states(_all_proc_states), infos(_infos), preconditions(_preconditions), final_ev_counter(_final_ev_counter) {}
 
   void SubgraphImpl::AsyncGPUWorkTriggerer::request_completed() {
     for (size_t i = 0; i < infos.size(); i++) {
@@ -1551,7 +1576,12 @@ namespace Realm {
     if (final_ev_counter) {
       int32_t remaining = final_ev_counter->fetch_sub_acqrel(1) - 1;
       if (remaining == 0) {
-        final_event.trigger();
+        // Another trigger check for the final event. All processors
+        // share the same finish counter and finish event.
+        remaining = all_proc_states[0].finish_counter->fetch_sub_acqrel(1) - 1;
+        if (remaining == 0) {
+          all_proc_states[0].finish_event.trigger();
+        }
       }
     }
   }
