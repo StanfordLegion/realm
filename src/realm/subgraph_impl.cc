@@ -1317,6 +1317,9 @@ namespace Realm {
           // Record that the operation at index `j` of this
           // processor is ready to run.
           queue[idx++] = j;
+          // Record separately (for profiling) all the operations that
+          // run without any preconditions.
+          initial_queue_items.push_back(local_schedules[proc][j]);
         }
       }
       processor_queues[proc] = queue;
@@ -1468,23 +1471,29 @@ namespace Realm {
         // We'll stick profiling information for tasks and copies into the
         // same array, with copies coming after tasks.
         auto prof_size = defn->tasks.size() + defn->copies.size();
-        inst_profiling_info = new SubgraphOperationProfilingInfo[prof_size];
+        inst_profiling_info = new SubgraphOperationProfilingInfo[prof_size]{};
         // Set up some profiling information.
         for (size_t i = 0; i < prof_size; i++) {
           auto& info = inst_profiling_info[i];
-          auto& mts = info.measurements;
+          // There's an annoying resource usage dependency here, where we can't
+          // add to the requests and measurements fields at the same time, as the
+          // measurements field also takes ownership of some memory in the requests
+          // field. So we have to import all requests into `info.requests` before
+          // doing a final import of `info.requests` into `info.measurements`.
           if (i < defn->tasks.size()) {
-            info.import_requests(defn->tasks[i].prs);
+            info.requests.import_requests(defn->tasks[i].prs);
             if (i < sprs.task_prs.size()) {
-              info.import_requests(sprs.task_prs[i]);
+              info.requests.import_requests(sprs.task_prs[i]);
             }
           } else {
             auto idx = i - defn->tasks.size();
-            info.import_requests(defn->copies[idx].prs);
+            info.requests.import_requests(defn->copies[idx].prs);
             if (idx < sprs.copy_prs.size()) {
-              info.import_requests(sprs.copy_prs[idx]);
+              info.requests.import_requests(sprs.copy_prs[idx]);
             }
           }
+          auto& mts = info.measurements;
+          mts.import_requests(info.requests);
           // See which profiling requests we need.
           info.wants_timeline = mts.wants_measurement<ProfilingMeasurements::OperationTimeline>();
           info.wants_gpu_timeline = mts.wants_measurement<ProfilingMeasurements::OperationTimelineGPU>();
@@ -1530,6 +1539,16 @@ namespace Realm {
         state[i].queue = queue;
         state[i].next_queue_slot.store(operations.proc_offsets[i] + initial_queue_entry_count[i]);
         state[i].inst_profiling_info = inst_profiling_info;
+      }
+
+      // Mark ready for any operations that have no preconditions.
+      if (inst_profiling_info != nullptr) {
+        for (auto& it : initial_queue_items) {
+          auto prof = state[0].get_profiling_info(it.first, it.second);
+          if (prof && prof->wants_timeline) {
+            prof->timeline.record_ready_time();
+          }
+        }
       }
 
       // Since we have a fresh precondition vector, we can
@@ -1908,6 +1927,7 @@ namespace Realm {
     interpolations.clear();
     initial_queue_state.clear();
     initial_queue_entry_count.clear();
+    initial_queue_items.clear();
     external_precondition_info.clear();
     dynamic_to_static_triggers.clear();
     static_to_dynamic_counts.clear();

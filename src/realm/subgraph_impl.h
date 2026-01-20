@@ -127,11 +127,6 @@ namespace Realm {
     //  unified "finish_event" infrastructure that Legion needs,
     //  we won't need this on the profiling information.
     atomic<int32_t> pending_work_items;
-  
-    void import_requests(const ProfilingRequestSet& prs) {
-      requests.import_requests(prs);
-      measurements.import_requests(prs);
-    }
   };
 
    // FlattenedProcMap and FlattenedProcTaskMap are essentially sparse matrix
@@ -329,6 +324,9 @@ namespace Realm {
     // have any preconditions.
     std::vector<int64_t> initial_queue_state;
     std::vector<uint64_t> initial_queue_entry_count;
+    // For profiling, remember operations that are ready as soon as
+    // the subgraph starts replaying.
+    std::vector<std::pair<SubgraphDefinition::OpKind, unsigned>> initial_queue_items;
 
     class SubgraphWorkLauncher : public EventWaiter {
       public:
