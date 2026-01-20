@@ -2816,6 +2816,7 @@ namespace Realm {
 
 #ifdef DEBUG_REALM
     event_triggerer.shutdown_work_item();
+    subgraph_reaper.shutdown_work_item();
 #endif
     bgwork.stop_dedicated_workers();
 
