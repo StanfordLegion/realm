@@ -466,7 +466,7 @@ void run_stencil_subgraph(int64_t steps, int64_t subgraph_steps, Subgraph& subgr
   Event e = Event::NO_EVENT;
   for (int64_t step = 0; step < steps; step++) {
     if (step % subgraph_steps == 0) {
-      e = subgraph.instantiate(nullptr, 0, ProfilingRequestSet(), e);
+      e = subgraph.instantiate(nullptr, 0, ProfilingRequestSet(), SubgraphInstantiationProfilingRequestsDesc(), e);
     }
   }
   e.wait();

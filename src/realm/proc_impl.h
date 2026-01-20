@@ -41,6 +41,7 @@ namespace Realm {
 
   class ProcessorGroupImpl;
   struct ProcSubgraphReplayState;
+  struct SubgraphOperationProfilingInfo;
 
   namespace ThreadLocal {
     // if nonzero, prevents application thread from yielding execution
@@ -166,8 +167,8 @@ namespace Realm {
     //  subgraph execution implementation.
     virtual void push_subgraph_replay_context() {};
     virtual void pop_subgraph_replay_context() {};
-    virtual void push_subgraph_task_replay_context() {};
-    virtual void pop_subgraph_task_replay_context(void** token, void* trigger) {};
+    virtual void push_subgraph_task_replay_context(SubgraphOperationProfilingInfo* prof) {};
+    virtual void pop_subgraph_task_replay_context(void** token, void* trigger, SubgraphOperationProfilingInfo* prof) {};
     virtual void sync_task_async_effect(void* token) {};
     virtual void defer_task_effect_trigger(void* token, void* trigger) {};
     virtual void return_subgraph_async_tokens(const std::vector<void*>& tokens) {};

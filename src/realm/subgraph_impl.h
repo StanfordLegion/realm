@@ -31,6 +31,7 @@ namespace Realm {
   // Forward declarations.
   class LocalTaskProcessor;
   class XferDes;
+  struct SubgraphOperationProfilingInfo;
 
   struct SubgraphScheduleEntry {
     SubgraphDefinition::OpKind op_kind;
@@ -86,6 +87,52 @@ namespace Realm {
     }
     return val;
   }
+
+  // SubgraphOperationProfilingInfo contains metadata for each operation
+  // in the subgraph about the profiling requests for the operation. It
+  // mirrors structures found in other kinds of `Operation`s.
+  struct SubgraphOperationProfilingInfo {
+    ProfilingRequestSet requests;
+    ProfilingMeasurementCollection measurements;
+  
+    bool wants_timeline = false;
+    ProfilingMeasurements::OperationTimeline timeline;
+    bool wants_gpu_timeline = false;
+    ProfilingMeasurements::OperationTimelineGPU timeline_gpu; // gpu start/end times
+    bool wants_proc_usage = false;
+    ProfilingMeasurements::OperationProcessorUsage proc;
+    bool wants_event_waits = false;
+    // TODO (rohany): We're not going to do this right now.
+    ProfilingMeasurements::OperationEventWaits waits;
+    // MemoryUsage and CopyInfo profiling measurements are collected
+    // once at the time of copy planning during compilation. If that
+    // information is requested on send, then it can be collected
+    // from its cached location in the SubgraphImpl.
+    bool wants_mem_usage = false;
+    bool wants_copy_info = false;
+    // TODO (rohany): Not sure how to implement this.
+    bool wants_fevent = false;
+    ProfilingMeasurements::OperationFinishEvent fevent;
+  
+    // TODO (rohany): We can start with doing this just when profiling
+    //  is on, but we're going to need to figure out an efficient way
+    //  of triggering these events if we want to let Legion handle
+    //  futures correctly. Or something else ... not sure.
+    // Maintain a user event to trigger if the operation requested
+    // a finish event. This just avoids casting the fevent into
+    // a user event.
+    UserEvent fevent_user;
+    // TODO (rohany): Used by copies so that the finish event
+    //  is triggered only once? I think that if we get to a more
+    //  unified "finish_event" infrastructure that Legion needs,
+    //  we won't need this on the profiling information.
+    atomic<int32_t> pending_work_items;
+  
+    void import_requests(const ProfilingRequestSet& prs) {
+      requests.import_requests(prs);
+      measurements.import_requests(prs);
+    }
+  };
 
    // FlattenedProcMap and FlattenedProcTaskMap are essentially sparse matrix
    // and sparse tensor representations of mappings of
@@ -184,6 +231,7 @@ namespace Realm {
     bool compile(void);
 
     void instantiate(const void *args, size_t arglen, const ProfilingRequestSet &prs,
+                     const SubgraphInstantiationProfilingRequestsDesc &sprs,
                      span<const Event> preconditions, span<const Event> postconditions,
                      Event start_event, Event finish_event, int priority_adjust);
 
@@ -201,7 +249,12 @@ namespace Realm {
     };
 
     protected:
-      void analyze_copy(SubgraphDefinition::CopyDesc& copy, std::vector<XferDes*>& result);
+      void analyze_copy(
+        SubgraphDefinition::CopyDesc& copy,
+        std::vector<XferDes*>& result,
+        ProfilingMeasurements::OperationCopyInfo& copy_info,
+        ProfilingMeasurements::OperationMemoryUsage& mem_info
+      );
       // Methods for understanding the asynchronous affects tasks may have.
       // Since subgraphs have a static view of the source program, they can
       // take more advantage of this asynchrony than Realm can today.
@@ -326,12 +379,20 @@ namespace Realm {
     // A vector of XD's for all copies that were planned during
     // subgraph compilation.
     FlattenedSparseMatrix<XferDes*> planned_copy_xds;
+    // Always record copy plan information and cache it.
+    std::vector<ProfilingMeasurements::OperationMemoryUsage> prof_copy_memory_usages;
+    std::vector<ProfilingMeasurements::OperationCopyInfo> prof_copy_infos;
 
     // When concurrency_mode == INSTANTIATION_ORDER, the subgraph will
     // implicitly order instantiations of the subgraph by tracking
     // the completion event of the last instantiation.
     mutable Mutex instantiation_lock;
     mutable Event previous_instantiation_completion = Event::NO_EVENT;
+
+    bool has_static_profiling_requests = false;
+    // Remember which operations ended up as part of the dynamic
+    // subgraph portion.
+    std::set<std::pair<SubgraphDefinition::OpKind, unsigned>> dynamic_operations;
 
     class ExternalPreconditionTriggerer : public EventWaiter {
       public:
@@ -359,7 +420,8 @@ namespace Realm {
           ProcSubgraphReplayState* all_proc_states,
           span<CompletionInfo> _infos,
           atomic<int32_t>* _preconditions,
-          atomic<int32_t>* _final_ev_counter
+          atomic<int32_t>* _final_ev_counter,
+          std::pair<SubgraphDefinition::OpKind, unsigned> _operation
         );
         void request_completed() override;
       private:
@@ -367,6 +429,7 @@ namespace Realm {
         span<CompletionInfo> infos = {};
         atomic<int32_t>* preconditions = nullptr;
         atomic<int32_t>* final_ev_counter = nullptr;
+        std::pair<SubgraphDefinition::OpKind, unsigned> operation;
     };
 
     class InstantiationCleanup : public EventWaiter {
@@ -383,7 +446,8 @@ namespace Realm {
           void** async_bgwork_events,
           atomic<int32_t>* dynamic_precond_counters,
           UserEvent* dynamic_events,
-          atomic<int32_t>* finish_counter
+          atomic<int32_t>* finish_counter,
+          SubgraphOperationProfilingInfo* inst_profiling_info
         );
         virtual void event_triggered(bool poisoned, TimeLimit work_until);
         virtual void print(std::ostream& os) const;
@@ -403,6 +467,7 @@ namespace Realm {
         atomic<int32_t>* dynamic_precond_counters;
         UserEvent* dynamic_events;
         atomic<int32_t>* finish_counter;
+        SubgraphOperationProfilingInfo* inst_profiling_info;
     };
   };
 
@@ -454,8 +519,22 @@ namespace Realm {
     bool has_pending_async_work = false;
     atomic<int32_t> pending_async_count;
 
+    // Profiling data.
+    SubgraphOperationProfilingInfo* inst_profiling_info = nullptr;
+
     // Avoid false sharing of counters.
     char _cache_line_padding[64];
+
+    SubgraphOperationProfilingInfo* get_profiling_info(SubgraphDefinition::OpKind kind, unsigned index) {
+      if (!inst_profiling_info)
+        return nullptr;
+      if (kind != SubgraphDefinition::OPKIND_TASK && kind != SubgraphDefinition::OPKIND_COPY)
+        return nullptr;
+      // The inst_profiling_info array stores [tasks | copies].
+      if (kind == SubgraphDefinition::OPKIND_COPY)
+        index += subgraph->defn->tasks.size();
+      return &inst_profiling_info[index];
+    }
   };
 
   // active messages
@@ -476,6 +555,23 @@ namespace Realm {
 
     static void handle_message(NodeID sender, const SubgraphDestroyMessage &msg,
                                const void *data, size_t datalen);
+  };
+
+  class GPUProfInfoTrigger : public Cuda::GPUCompletionNotification {
+  public:
+    GPUProfInfoTrigger(SubgraphOperationProfilingInfo* _info, bool _start) : info(_info), start(_start) {}
+    void request_completed() override {
+      if (start) {
+        info->timeline_gpu.record_start_time();
+      } else {
+        info->timeline_gpu.record_end_time();
+      }
+      // Delete ourselves at the end to make this a "fire and forget" notification.
+      delete this;
+    }
+  private:
+    SubgraphOperationProfilingInfo* info;
+    bool start;
   };
 
   class SubgraphTriggerContext {

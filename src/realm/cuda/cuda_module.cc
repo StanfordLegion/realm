@@ -1038,7 +1038,7 @@ namespace Realm {
      gpu->pop_context();
    }
 
-   void GPUProcessor::push_subgraph_task_replay_context() {
+   void GPUProcessor::push_subgraph_task_replay_context(SubgraphOperationProfilingInfo* prof) {
      // TODO (rohany): A good chunk of this is ripped from the
      //  GPUContextManager...
      assert(ThreadLocal::current_gpu_stream == nullptr);
@@ -1050,34 +1050,46 @@ namespace Realm {
      //  execution, so use -1 as a "no preference" value
      ThreadLocal::context_sync_required = -1;
 
-     // TODO (rohany): CUPTI, start work fences etc.
-   }
-
-   void GPUProcessor::pop_subgraph_task_replay_context(void** token, void* trigger) {
-     GPUStream *s = ThreadLocal::current_gpu_stream;
-     assert(!ThreadLocal::created_gpu_streams);
-
-     assert(!gpu->module->config->cfg_task_legacy_sync);
-     assert(ThreadLocal::context_sync_required == 0);
-
-     // Record an event for the completion of kernels launched by the task.
-     auto e = gpu->event_pool.get_event();
-     // Return the event to the caller. The caller is responsible
-     // for cleaning up this
-     *(CUevent_st**)(token) = e;
-     // Actually record the event.
-     CHECK_CU(CUDA_DRIVER_FNPTR(cuEventRecord)(e, s->get_stream()));
-
-     // Enqueue a poller for the completion of the launched kernels.
-     if (trigger) {
-       auto completion = static_cast<GPUCompletionNotification*>(trigger);
-       // The subgraph cleanup will be responsible for cleaning up
-       // and returning events to the pool.
-       s->add_event(e, nullptr, completion, nullptr, false /* return_event */);
+     // Push profiling information, if necessary.
+     if (prof && prof->wants_gpu_timeline) {
+       auto e = gpu->event_pool.get_event();
+       auto completion = new GPUProfInfoTrigger(prof, true /* start */);
+       s->add_event(e, nullptr, completion, nullptr, true /* return_event */);
      }
+  }
 
-     ThreadLocal::current_gpu_stream = nullptr;
-   }
+   void GPUProcessor::pop_subgraph_task_replay_context(void** token, void* trigger, SubgraphOperationProfilingInfo* prof) {
+    GPUStream *s = ThreadLocal::current_gpu_stream;
+    assert(!ThreadLocal::created_gpu_streams);
+
+    assert(!gpu->module->config->cfg_task_legacy_sync);
+    assert(ThreadLocal::context_sync_required == 0);
+
+    // Record an event for the completion of kernels launched by the task.
+    auto e = gpu->event_pool.get_event();
+    // Return the event to the caller. The caller is responsible
+    // for cleaning up this
+    *(CUevent_st**)(token) = e;
+    // Actually record the event.
+    CHECK_CU(CUDA_DRIVER_FNPTR(cuEventRecord)(e, s->get_stream()));
+
+    // Enqueue a poller for the completion of the launched kernels.
+    if (trigger) {
+      auto completion = static_cast<GPUCompletionNotification*>(trigger);
+      // The subgraph cleanup will be responsible for cleaning up
+      // and returning events to the pool.
+      s->add_event(e, nullptr, completion, nullptr, false /* return_event */);
+    }
+
+    // Again, handle post-task GPU timeline information.
+    if (prof && prof->wants_gpu_timeline) {
+      auto e2 = gpu->event_pool.get_event();
+      auto completion = new GPUProfInfoTrigger(prof, false /* start */);
+      s->add_event(e2, nullptr, completion, nullptr, true /* return_event */);
+    }
+
+    ThreadLocal::current_gpu_stream = nullptr;
+  }
 
    void GPUProcessor::sync_task_async_effect(void *token) {
      // The GPUProcessor will only ever return CUevent_st* to the scheduler.

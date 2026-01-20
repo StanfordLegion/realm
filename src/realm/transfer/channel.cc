@@ -658,6 +658,29 @@ namespace Realm {
         TransferOperation *op = reinterpret_cast<TransferOperation *>(dma_op);
         op->notify_xd_completion(guid);
       } else {
+        // Handle profiling. This has to be done _before_ calling
+        // the completion functions, as once those functions get called
+        // the XD is free to be reused by another thread, which could
+        // invalidate pointers like subgraph_replay_state.
+        auto sg = subgraph_replay_state[0].subgraph;
+        auto& item = sg->bgwork_items[subgraph_index];
+        auto prof = subgraph_replay_state[0].get_profiling_info(SubgraphDefinition::OPKIND_COPY, item.op_index);
+        if (prof) {
+          // TODO (rohany): Handle copies with async work more tightly later.
+          if (prof->wants_timeline) {
+            prof->timeline.record_end_time();
+            prof->timeline.record_complete_time();
+          }
+          if (prof->wants_fevent) {
+            // Triggering finish events for copies needs a little guard
+            // because multiple XD's can contribute to the same copy.
+            auto remaining = prof->pending_work_items.fetch_sub_acqrel(1) - 1;
+            if (remaining == 0) {
+              prof->fevent_user.trigger();
+            }
+          }
+        }
+
         // Depending on whether we launch async work, the control
         // completion function may have already been called.
         if (launches_async_work()) {

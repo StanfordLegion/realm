@@ -94,7 +94,8 @@ namespace Realm {
   }
 
   Event Subgraph::instantiate(const void *args, size_t arglen,
-                              const ProfilingRequestSet &prs,
+                              const ProfilingRequestSet& prs,
+                              const SubgraphInstantiationProfilingRequestsDesc &sprs,
                               Event wait_on /*= Event::NO_EVENT*/,
                               int priority_adjust /*= 0*/) const
   {
@@ -107,10 +108,13 @@ namespace Realm {
 
     if(target_node == Network::my_node_id) {
       SubgraphImpl *impl = get_runtime()->get_subgraph_impl(*this);
-      impl->instantiate(args, arglen, prs, empty_span() /*preconditions*/,
+      impl->instantiate(args, arglen, prs, sprs, empty_span() /*preconditions*/,
                         empty_span() /*postconditions*/, wait_on, finish_event,
                         priority_adjust);
     } else {
+      // TODO (rohany): Support serialization of the new PRs for remote
+      //  subgraph executions later ...
+      assert(sprs.empty());
       Serialization::ByteCountSerializer bcs;
       {
         bool ok = (bcs.append_bytes(args, arglen) && (bcs << span<const Event>()) &&
@@ -136,7 +140,8 @@ namespace Realm {
   }
 
   Event Subgraph::instantiate(const void *args, size_t arglen,
-                              const ProfilingRequestSet &prs,
+                              const ProfilingRequestSet& prs,
+                              const SubgraphInstantiationProfilingRequestsDesc &sprs,
                               const std::vector<Event> &preconditions,
                               std::vector<Event> &postconditions,
                               Event wait_on /*= Event::NO_EVENT*/,
@@ -157,9 +162,12 @@ namespace Realm {
 
     if(target_node == Network::my_node_id) {
       SubgraphImpl *impl = get_runtime()->get_subgraph_impl(*this);
-      impl->instantiate(args, arglen, prs, preconditions, postconditions, wait_on,
+      impl->instantiate(args, arglen, prs, sprs, preconditions, postconditions, wait_on,
                         finish_event, priority_adjust);
     } else {
+      // TODO (rohany): Support serialization of the new PRs for remote
+      //  subgraph executions later ...
+      assert(sprs.empty());
       Serialization::ByteCountSerializer bcs;
       {
         bool ok = (bcs.append_bytes(args, arglen) && (bcs << preconditions) &&
@@ -545,6 +553,16 @@ namespace Realm {
       toposort[std::make_pair(SubgraphDefinition::OPKIND_RELEASE, i)] = nextval++;
     unsigned total_ops = nextval;
 
+    // See if there's any need to allocate profiling data structures.
+    for (auto& td : defn->tasks) {
+      if (!td.prs.empty())
+        has_static_profiling_requests = true;
+    }
+    for (auto& cd : defn->copies) {
+      if (!cd.prs.empty())
+        has_static_profiling_requests = true;
+    }
+
     // for subgraph instantiations, we need to do a pass over the dependencies
     //  to see which ports are used
     std::vector<unsigned> inst_pre_max_port(defn->instantiations.size(), 0);
@@ -784,6 +802,12 @@ namespace Realm {
       schedule = dynamic_schedule;
     }
 
+    // Also record a table of operations that are in the dynamic
+    // schedule portion.
+    for (auto& it : schedule) {
+      dynamic_operations.insert({it.op_kind, it.op_index});
+    }
+
     // count number of intermediate events - instantiations can produce more
     //  than one
     num_intermediate_events = 0;
@@ -889,11 +913,13 @@ namespace Realm {
 
     {
       std::vector<std::vector<XferDes*>> xds(defn->copies.size());
+      prof_copy_infos.resize(defn->copies.size());
+      prof_copy_memory_usages.resize(defn->copies.size());
       for (auto& it : bgwork_items) {
         if (it.op_kind != SubgraphDefinition::OPKIND_COPY)
           continue;
         auto& copy = defn->copies[it.op_index];
-        analyze_copy(copy, xds[it.op_index]);
+        analyze_copy(copy, xds[it.op_index], prof_copy_infos[it.op_index], prof_copy_memory_usages[it.op_index]);
       }
       planned_copy_xds = xds;
     }
@@ -1357,7 +1383,8 @@ namespace Realm {
   }
 
   void SubgraphImpl::instantiate(const void *args, size_t arglen,
-                                 const ProfilingRequestSet &prs,
+                                 const ProfilingRequestSet& prs,
+                                 const SubgraphInstantiationProfilingRequestsDesc &sprs,
                                  span<const Event> preconditions,
                                  span<const Event> postconditions, Event start_event,
                                  Event finish_event, int priority_adjust)
@@ -1427,6 +1454,53 @@ namespace Realm {
       finish_counter->store_release(all_procs.size());
       auto static_finish_event = UserEvent::create_user_event();
 
+      // TODO (rohany): I think we want some extra bits here (or during
+      //  compilation) that records which profiling requests are actually
+      //  part of the static subgraph (i.e. opkind, opindx) so that we can
+      //  batch send them all out and don't accidentally send multiple for
+      //  the dynamic component.
+      // TODO (rohany): Experiment if this profiling stuff adds noticeable
+      //  latency to subgraph execution.
+      // Handle profiling requests for the static subgraph component (only
+      // if it is actually needed).
+      SubgraphOperationProfilingInfo* inst_profiling_info = nullptr;
+      if (has_static_profiling_requests || !sprs.empty()) {
+        // We'll stick profiling information for tasks and copies into the
+        // same array, with copies coming after tasks.
+        auto prof_size = defn->tasks.size() + defn->copies.size();
+        inst_profiling_info = new SubgraphOperationProfilingInfo[prof_size];
+        // Set up some profiling information.
+        for (size_t i = 0; i < prof_size; i++) {
+          auto& info = inst_profiling_info[i];
+          auto& mts = info.measurements;
+          if (i < defn->tasks.size()) {
+            info.import_requests(defn->tasks[i].prs);
+            if (i < sprs.task_prs.size()) {
+              info.import_requests(sprs.task_prs[i]);
+            }
+          } else {
+            auto idx = i - defn->tasks.size();
+            info.import_requests(defn->copies[idx].prs);
+            if (idx < sprs.copy_prs.size()) {
+              info.import_requests(sprs.copy_prs[idx]);
+            }
+          }
+          // See which profiling requests we need.
+          info.wants_timeline = mts.wants_measurement<ProfilingMeasurements::OperationTimeline>();
+          info.wants_gpu_timeline = mts.wants_measurement<ProfilingMeasurements::OperationTimelineGPU>();
+          info.wants_event_waits = mts.wants_measurement<ProfilingMeasurements::OperationEventWaits>();
+          info.wants_proc_usage = mts.wants_measurement<ProfilingMeasurements::OperationProcessorUsage>();
+          info.wants_mem_usage = mts.wants_measurement<ProfilingMeasurements::OperationMemoryUsage>();
+          info.wants_copy_info = mts.wants_measurement<ProfilingMeasurements::OperationCopyInfo>();
+          info.wants_fevent = mts.wants_measurement<ProfilingMeasurements::OperationFinishEvent>();
+
+          // Mark all operations as created now.
+          if (info.wants_timeline) {
+            info.timeline.record_create_time();
+          }
+        }
+      }
+
       // Arm the result merger with the completion event, and
       // the final events from the dynamic portion.
       event_impl->merger.prepare_merger(finish_event, false /*!ignore_faults*/,
@@ -1455,6 +1529,7 @@ namespace Realm {
         state[i].pending_async_count.store(async_finish_events[i]);
         state[i].queue = queue;
         state[i].next_queue_slot.store(operations.proc_offsets[i] + initial_queue_entry_count[i]);
+        state[i].inst_profiling_info = inst_profiling_info;
       }
 
       // Since we have a fresh precondition vector, we can
@@ -1509,7 +1584,8 @@ namespace Realm {
         async_bgwork_events,
         dynamic_precondition_ctrs,
         dynamic_events,
-        finish_counter
+        finish_counter,
+        inst_profiling_info
       );
       EventImpl::add_waiter(finish_event, cleanup);
     } else {
@@ -1615,8 +1691,21 @@ namespace Realm {
             SubgraphDefinition::Interpolation::TARGET_TASK_ARGS, it->op_index, args,
             arglen, td.args.base(), td.args.size(), ish);
 
-        e = proc.spawn(task_id, task_args, td.args.size(), td.prs, pre,
-                       priority + priority_adjust);
+        // A bit of code duplication to avoid any copies. If we have any
+        // dynamic profiling requests, then construct a new request that
+        // has all the desired requests. Otherwise, use the existing
+        // request set attached to the task.
+        if (it->op_index < sprs.task_prs.size() && !sprs.task_prs[it->op_index].empty()) {
+          ProfilingRequestSet tprs;
+          tprs.import_requests(td.prs);
+          tprs.import_requests(sprs.task_prs[it->op_index]);
+          e = proc.spawn(task_id, task_args, td.args.size(), tprs, pre,
+                         priority + priority_adjust);
+        } else {
+          e = proc.spawn(task_id, task_args, td.args.size(), td.prs, pre,
+                         priority + priority_adjust);
+        }
+
         intermediate_events[cur_intermediate_events++] = e;
         break;
       }
@@ -1624,7 +1713,17 @@ namespace Realm {
       case SubgraphDefinition::OPKIND_COPY:
       {
         const SubgraphDefinition::CopyDesc &cd = defn->copies[it->op_index];
-        e = cd.space.copy(cd.srcs, cd.dsts, cd.prs, pre);
+
+        // Similarly to above, handle when some dynamic profiling is requested.
+        if (it->op_index < sprs.copy_prs.size() && !sprs.copy_prs[it->op_index].empty()) {
+          ProfilingRequestSet cprs;
+          cprs.import_requests(cd.prs);
+          cprs.import_requests(sprs.copy_prs[it->op_index]);
+          e = cd.space.copy(cd.srcs, cd.dsts, cprs, pre);
+        } else {
+          e = cd.space.copy(cd.srcs, cd.dsts, cd.prs, pre);
+        }
+
         intermediate_events[cur_intermediate_events++] = e;
         break;
       }
@@ -1731,7 +1830,10 @@ namespace Realm {
           inst_postconds.resize(it->intermediate_event_count - 1);
         }
 
-        e = sg_inner.instantiate(inst_args, id.args.size(), id.prs, inst_preconds,
+        // TODO (rohany): Not handling this case right now ...
+        assert(sprs.empty());
+
+        e = sg_inner.instantiate(inst_args, id.args.size(), id.prs, sprs, inst_preconds,
                                  inst_postconds, pre, priority_adjust);
 
         intermediate_events[cur_intermediate_events] = e;
@@ -1822,6 +1924,9 @@ namespace Realm {
     bgwork_async_preconditions.clear();
     bgwork_async_event_procs.clear();
     bgwork_async_event_counts.clear();
+    prof_copy_infos.clear();
+    prof_copy_memory_usages.clear();
+    dynamic_operations.clear();
 
     // TODO: when we create subgraphs on remote nodes, send a message to the
     //  creator node so they can add it to their free list
@@ -1878,12 +1983,14 @@ namespace Realm {
     void** _async_bgwork_events,
     atomic<int32_t>* _dynamic_precond_counters,
     UserEvent* _dynamic_events,
-    atomic<int32_t>* _finish_counter
+    atomic<int32_t>* _finish_counter,
+    SubgraphOperationProfilingInfo* _inst_profiling_info
   ) : num_procs(_num_procs), state(_state), args(_args), preconds(_preconds), queue(_queue),
       external_preconds(_external_preconds), dynamic_preconds(_dynamic_preconds),
       async_operation_events(_async_operation_events), async_operation_event_triggerers(_async_operation_event_triggerers),
       bgwork_preconds(_bgwork_preconds), async_bgwork_events(_async_bgwork_events),
-      dynamic_precond_counters(_dynamic_precond_counters), dynamic_events(_dynamic_events), finish_counter(_finish_counter), EventWaiter() {}
+      dynamic_precond_counters(_dynamic_precond_counters), dynamic_events(_dynamic_events), finish_counter(_finish_counter),
+      inst_profiling_info(_inst_profiling_info), EventWaiter() {}
 
   void SubgraphImpl::InstantiationCleanup::event_triggered(bool poisoned, Realm::TimeLimit work_until) {
     // Before we free async_operation_events, make sure that we return all
@@ -1905,6 +2012,44 @@ namespace Realm {
       tokens.clear();
     }
 
+    // Send profiling responses.
+    if (inst_profiling_info != nullptr) {
+      auto prof_size = sg->defn->tasks.size() + sg->defn->copies.size();
+      for (size_t i = 0; i < prof_size; i++) {
+        auto send_prof = [&](SubgraphOperationProfilingInfo* info, unsigned idx) {
+          if (info->wants_timeline)
+            info->measurements.add_measurement(info->timeline);
+          if (info->wants_gpu_timeline)
+            info->measurements.add_measurement(info->timeline_gpu);
+          if (info->wants_proc_usage)
+            info->measurements.add_measurement(info->proc);
+          if (info->wants_event_waits)
+            info->measurements.add_measurement(info->waits);
+          if (info->wants_mem_usage)
+            info->measurements.add_measurement(sg->prof_copy_memory_usages[idx]);
+          if (info->wants_copy_info)
+            info->measurements.add_measurement(sg->prof_copy_infos[idx]);
+          if (info->wants_fevent)
+            info->measurements.add_measurement(info->fevent);
+          info->measurements.send_responses(info->requests);
+        };
+        if (i < sg->defn->tasks.size()) {
+          // Ignore profiling requests for dynamic operations, as they
+          // are already handled in the standard code path.
+          if (sg->dynamic_operations.find({SubgraphDefinition::OPKIND_TASK, i}) != sg->dynamic_operations.end()) {
+            continue;
+          }
+          send_prof(&inst_profiling_info[i], i);
+        } else {
+          auto idx = i - sg->defn->tasks.size();
+          if (sg->dynamic_operations.find({SubgraphDefinition::OPKIND_COPY, idx}) != sg->dynamic_operations.end()) {
+            continue;
+          }
+          send_prof(&inst_profiling_info[i], idx);
+        }
+      }
+    }
+
     delete[] state;
     free(args);
     free(preconds);
@@ -1918,6 +2063,7 @@ namespace Realm {
     free(dynamic_precond_counters);
     free(dynamic_events);
     free(finish_counter);
+    delete[] inst_profiling_info;
     // Delete ourselves after freeing the resource. This pattern
     // is used by other event waiters, so it's reasonable to replicate it here.
     delete this;
@@ -1956,10 +2102,22 @@ namespace Realm {
     ProcSubgraphReplayState* _all_proc_states,
     span<Realm::SubgraphImpl::CompletionInfo> _infos,
     atomic<int32_t> *_preconditions,
-    atomic<int32_t>* _final_ev_counter
-  ) : all_proc_states(_all_proc_states), infos(_infos), preconditions(_preconditions), final_ev_counter(_final_ev_counter) {}
+    atomic<int32_t>* _final_ev_counter,
+    std::pair<SubgraphDefinition::OpKind, unsigned> _operation
+  ) : all_proc_states(_all_proc_states), infos(_infos), preconditions(_preconditions), final_ev_counter(_final_ev_counter), operation(_operation) {}
 
   void SubgraphImpl::AsyncGPUWorkTriggerer::request_completed() {
+    // Record this event as completed.
+    auto prof = all_proc_states[0].get_profiling_info(operation.first, operation.second);
+    if (prof) {
+      if (prof->wants_timeline) {
+        prof->timeline.record_complete_time();
+      }
+      if (prof->wants_fevent) {
+        prof->fevent_user.trigger();
+      }
+    }
+
     for (size_t i = 0; i < infos.size(); i++) {
       auto& info = infos[i];
       trigger_subgraph_operation_completion(all_proc_states, info, true /* incr_counter */, nullptr /* ctx */);
@@ -2024,7 +2182,7 @@ namespace Realm {
       ok = (fbd >> prs);
     assert(ok);
 
-    subgraph->instantiate(data, msg.arglen, prs, preconditions, postconditions,
+    subgraph->instantiate(data, msg.arglen, prs, SubgraphInstantiationProfilingRequestsDesc(), preconditions, postconditions,
                           msg.wait_on, msg.finish_event, msg.priority_adjust);
   }
 
@@ -2070,7 +2228,8 @@ namespace Realm {
       case SubgraphImpl::CompletionInfo::EdgeKind::DYNAMIC_TO_STATIC: {
         auto& state = all_proc_states[info.proc];
         auto subgraph = state.subgraph;
-        auto& trigger = state.preconditions[subgraph->original_preconditions.proc_offsets[info.proc] + info.index];
+        auto local_index = subgraph->original_preconditions.proc_offsets[info.proc] + info.index;
+        auto& trigger = state.preconditions[local_index];
         // Decrement the counter. fetch_sub returns the value before
         // the decrement, so if it was 1, then we've done the final trigger.
         // If we were the final trigger, we need to also add the triggered
@@ -2081,6 +2240,13 @@ namespace Realm {
           auto index = state.next_queue_slot.fetch_add(1);
           // Write out the value.
           state.queue[index].store_release(int64_t(info.index));
+
+          // Handle profiling.
+          auto& op = subgraph->operations.data[local_index];
+          auto prof = state.get_profiling_info(op.first, op.second);
+          if (prof && prof->wants_timeline) {
+            prof->timeline.record_ready_time();
+          }
 
           // If requested to increment the scheduler's counter, do so.
           if (incr_counter) {
@@ -2115,6 +2281,7 @@ namespace Realm {
         auto& trigger = state.bgwork_preconditions[info.index];
         int32_t remaining = trigger.fetch_sub_acqrel(1) - 1;
         if (remaining == 0) {
+          auto& item = state.subgraph->bgwork_items[info.index];
           // To be safe, also use the context to ensure the
           // appropriate locks are dropped.
           if (ctx) { ctx->enter(); }
@@ -2139,10 +2306,30 @@ namespace Realm {
   }
 
   void launch_async_bgwork_item(ProcSubgraphReplayState* all_proc_states, unsigned index) {
-    auto subgraph = all_proc_states[0].subgraph;
+    auto& state = all_proc_states[0];
+    auto subgraph = state.subgraph;
     auto& item = subgraph->bgwork_items[index];
     assert(item.op_kind == SubgraphDefinition::OPKIND_COPY);
     auto& offs = subgraph->planned_copy_xds.offsets;
+
+    auto prof = state.get_profiling_info(item.op_kind, item.op_index);
+    if (prof) {
+      if (prof->wants_timeline) {
+        prof->timeline.record_ready_time();
+        // TODO (rohany): I don't have a good hook into the
+        //  XD infrastructure that this would make more sense
+        //  to put (like once the XD gets pulled off the queue),
+        //  so we'll stick it in here for now.
+        prof->timeline.record_start_time();
+      }
+      if (prof->wants_fevent) {
+        prof->fevent_user = UserEvent::create_user_event();
+        prof->fevent.finish_event = prof->fevent_user;
+        // Record how many XD's will complete before this is counted as done.
+        prof->pending_work_items.store(int32_t(offs[item.op_index + 1] - offs[item.op_index]));
+      }
+    }
+
     for (uint64_t i = offs[item.op_index]; i < offs[item.op_index + 1]; i++) {
       auto xd = subgraph->planned_copy_xds.data[i];
       assert(xd);
@@ -2157,8 +2344,18 @@ namespace Realm {
     }
   }
 
-  void SubgraphImpl::analyze_copy(SubgraphDefinition::CopyDesc& copy, std::vector<XferDes*>& result) {
+  void SubgraphImpl::analyze_copy(
+    SubgraphDefinition::CopyDesc& copy,
+    std::vector<XferDes*>& result,
+    ProfilingMeasurements::OperationCopyInfo& copy_info,
+    ProfilingMeasurements::OperationMemoryUsage& mem_info
+  ) {
     TransferDesc* td = copy.space.impl->make_transfer_desc(copy.srcs, copy.dsts);
+    // Extract profiling information about the copy requested from
+    // the transfer descriptor for later use.
+    copy_info = td->prof_cpinfo;
+    mem_info = td->prof_usage;
+
     // Just constructing a TransferDescriptor should perform all the
     // copy analysis inline. It could be deferred, but if all the instances
     // have been created already, then the analysis happens right away.

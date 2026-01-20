@@ -1208,11 +1208,27 @@ namespace Realm {
           );
         }
 
+        auto pimpl = subgraph->all_proc_impls[proc_index];
+
+        // Extract profiling info for this task.
+        auto prof = replay->get_profiling_info(SubgraphDefinition::OPKIND_TASK, op_key.second);
+        if (prof && prof->wants_proc_usage) {
+          prof->proc.proc = pimpl->me;
+        }
+
         lock.unlock();
 
-        // TODO (rohany): Not using the existing context managers ...
-        auto pimpl = subgraph->all_proc_impls[proc_index];
-        pimpl->push_subgraph_task_replay_context();
+        // TODO (rohany): This is kind of a hack for Legion profiling specifically,
+        //  but if profiling is requested, then we might have a finish event for this
+        //  task. If we do, we can actually set this for the Thread.
+        Thread* thread = Thread::self();
+        if (prof && prof->wants_fevent) {
+          prof->fevent_user = UserEvent::create_user_event();
+          prof->fevent.finish_event = prof->fevent_user;
+          thread->set_cur_event(&prof->fevent_user);
+        }
+
+        pimpl->push_subgraph_task_replay_context(prof);
 
         // Wait on any necessary asynchronous operations.
         {
@@ -1242,7 +1258,16 @@ namespace Realm {
           }
         }
 
+        // Record start and stop times.
+        if (prof && prof->wants_timeline) {
+          prof->timeline.record_start_time();
+        }
+
         pimpl->execute_task(taskDesc.task_id, ByteArrayRef(taskDesc.args.base(), taskDesc.args.size()));
+
+        if (prof && prof->wants_timeline) {
+          prof->timeline.record_end_time();
+        }
 
         // Potentially set up waiters on asynchronous effects the task may have.
         void* trigger = nullptr;
@@ -1257,16 +1282,30 @@ namespace Realm {
           if (opmeta.is_final_event && opmeta.is_async) {
             final_ctr = &replay->pending_async_count;
           }
+          if (!opmeta.is_async && prof) {
+            // Non-async operations are done here.
+            if (prof->wants_timeline) {
+              prof->timeline.record_complete_time();
+            }
+            if (prof->wants_fevent) {
+              prof->fevent_user.trigger();
+            }
+          }
           // The notifier needs to be created if there are post-conditions,
           // or this task is a final event.
           if (!sp.empty() || final_ctr != nullptr) {
-            trigger = new(&replay->async_operation_effect_triggerers[op_index]) SubgraphImpl::AsyncGPUWorkTriggerer(replay->all_proc_states, sp, replay->preconditions, final_ctr);
+            trigger = new(&replay->async_operation_effect_triggerers[op_index]) SubgraphImpl::AsyncGPUWorkTriggerer(
+                replay->all_proc_states, sp, replay->preconditions, final_ctr, op_key);
           }
         }
 
-        pimpl->pop_subgraph_task_replay_context(&token, trigger);
+        pimpl->pop_subgraph_task_replay_context(&token, trigger, prof);
 
         lock.lock();
+
+        if (prof && prof->wants_fevent) {
+          thread->unset_cur_event();
+        }
 
         break;
       }

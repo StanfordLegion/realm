@@ -541,8 +541,8 @@ namespace Realm {
       virtual void push_subgraph_replay_context() override;
       virtual void pop_subgraph_replay_context() override;
 
-      virtual void push_subgraph_task_replay_context() override;
-      virtual void pop_subgraph_task_replay_context(void** token, void* trigger) override;
+      virtual void push_subgraph_task_replay_context(SubgraphOperationProfilingInfo* prof) override;
+      virtual void pop_subgraph_task_replay_context(void** token, void* trigger, SubgraphOperationProfilingInfo* prof) override;
       virtual void sync_task_async_effect(void* token) override;
       virtual void return_subgraph_async_tokens(const std::vector<void*>& tokens) override;
 

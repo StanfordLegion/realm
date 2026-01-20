@@ -42,6 +42,7 @@ enum
   CLEANUP_TASK,
   DUMMY_TASK,
   TEST_READ_TASK,
+  PROF_RESPONSE_TASK,
 };
 
 enum
@@ -117,6 +118,13 @@ void dummy_task(const void *args, size_t arglen,
   }
 }
 
+Realm::atomic<int32_t> recieved_profs;
+
+void prof_response_task(const void *args, size_t arglen,
+                const void *userdata, size_t userlen, Processor p) {
+  recieved_profs.fetch_sub_acqrel(1);
+}
+
 void reader_task(const void *args, size_t arglen, const void *userdata, size_t userlen,
                  Processor p)
 {
@@ -163,6 +171,7 @@ void cleanup_task(const void *args, size_t arglen, const void *userdata, size_t 
   std::vector<Event> preconditions;
   std::vector<Event> postconditions(1);
   Event e = cta.subgraph.instantiate(&sg_args, sizeof(sg_args), ProfilingRequestSet(),
+                                     SubgraphInstantiationProfilingRequestsDesc(),
                                      preconditions, postconditions, cta.precond);
 
   // technically e already dominates postconditions[0], but do this to make
@@ -283,16 +292,21 @@ IndexSpace<1> pis2;
 
   auto bar = Barrier::create_barrier(1);
 
+  ProfilingRequestSet prs;
+  auto& req = prs.add_request(cpus[1], PROF_RESPONSE_TASK);
+  req.add_measurement<ProfilingMeasurements::OperationFinishEvent>();
+
   log_app.info() << "Diamond subgraph.";
   Subgraph diamond;
+  SubgraphDefinition sd;
   {
-    SubgraphDefinition sd;
     sd.concurrency_mode = SubgraphDefinition::INSTANTIATION_ORDER;
     // Add four diamond tasks.
     sd.tasks.resize(5);
     for (int i = 0; i < 5; i++) {
       // sd.tasks[i].proc = gpus[(i % 2) % gpus.size()];
       sd.tasks[i].task_id = DUMMY_TASK;
+      sd.tasks[i].prs = prs;
       // sd.tasks[i].proc = p;
     }
 
@@ -386,6 +400,9 @@ IndexSpace<1> pis2;
       sd.copies[3].srcs = src;
       sd.copies[3].dsts = dst;
     }
+    for (auto& cpy : sd.copies) {
+      cpy.prs = prs;
+    }
 
     // Add the necessary dependencies.
     sd.dependencies.resize(16);
@@ -478,6 +495,9 @@ IndexSpace<1> pis2;
     Subgraph::create_subgraph(diamond, sd, ProfilingRequestSet()).wait();
   }
 
+  // We're going to run the subgraph twice.
+  recieved_profs.store_release(2 * (sd.tasks.size() + sd.copies.size()));
+
   auto next_bar = bar.advance_barrier();
 
   Event e = Event::NO_EVENT;
@@ -492,7 +512,7 @@ IndexSpace<1> pis2;
   ext_preconds.push_back(bar);
   std::vector<Event> ext_postconds(2);
   // First run will trigger the external post conds.
-  e = diamond.instantiate(ser.get_buffer(), ser.bytes_used(), ProfilingRequestSet(), ext_preconds, ext_postconds);
+  e = diamond.instantiate(ser.get_buffer(), ser.bytes_used(), ProfilingRequestSet(), SubgraphInstantiationProfilingRequestsDesc(), ext_preconds, ext_postconds);
   ser.reset();
 
   // Arrive to allow the instantiation to continue.
@@ -526,7 +546,7 @@ IndexSpace<1> pis2;
   ext_preconds.clear();
   ext_preconds.push_back(next_bar);
   std::vector<Event> ext_postconds_2(2);
-  e = diamond.instantiate(ser.get_buffer(), ser.bytes_used(), ProfilingRequestSet(), ext_preconds, ext_postconds_2, e);
+  e = diamond.instantiate(ser.get_buffer(), ser.bytes_used(), ProfilingRequestSet(), SubgraphInstantiationProfilingRequestsDesc(), ext_preconds, ext_postconds_2, e);
 
   // The subgraph itself should sequence deletions after pending replays
   // complete, so test that here.
@@ -547,6 +567,9 @@ IndexSpace<1> pis2;
   assert(next_next_bar.has_triggered());
 
   log_app.info() << "Done!";
+
+  // Before shut down, ensure we get all the profiling requests we expected.
+  while (recieved_profs.load_acquire() != 0) {}
 
   // do everything on this processor - get a good memory to use
 //  Memory m = Machine::MemoryQuery(Machine::get_machine()).has_affinity_to(p).first();
@@ -809,6 +832,7 @@ int main(int argc, char **argv)
   rt.register_task(CLEANUP_TASK, cleanup_task);
   rt.register_task(DUMMY_TASK, dummy_task);
   rt.register_task(TEST_READ_TASK, test_read_task);
+  rt.register_task(PROF_RESPONSE_TASK, prof_response_task);
 
   rt.register_reduction<ReductionOpIntAdd>(REDOP_INT_ADD);
 

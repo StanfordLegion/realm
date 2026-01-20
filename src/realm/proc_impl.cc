@@ -124,6 +124,11 @@ namespace Realm {
   /*static*/ Event Processor::get_current_finish_event(void)
   {
     Operation *op = Thread::self()->get_operation();
+    if (op == nullptr) {
+      Event* ev = Thread::self()->get_event();
+      assert(ev != nullptr);
+      return *ev;
+    }
     assert(op != 0);
     return op->get_finish_event();
   }
