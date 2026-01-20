@@ -863,6 +863,25 @@ namespace Realm {
       }
     }
 
+    // Construct the initial "queue" for each processor. This will contain
+    // all operations that do not have any preconditions, and then a default
+    // value for all other spaces in the queue.
+    std::map<Processor, std::vector<int64_t>> processor_queues;
+    initial_queue_entry_count = std::vector<uint64_t>(all_procs.size());
+    for (size_t i = 0; i < all_procs.size(); i++) {
+      auto proc = all_procs[i];
+      auto& preds = local_incoming[proc];
+      std::vector<int64_t> queue(preds.size(), SUBGRAPH_EMPTY_QUEUE_ENTRY);
+      size_t idx = 0;
+      for (size_t j = 0; j < preds.size(); j++) {
+        if (preds[j] == 0) {
+          // Record that the operation at index `j` of this
+          // processor is ready to run.
+          queue[idx++] = j;
+        }
+      }
+      initial_queue_entry_count[i] = idx;
+    }
 
     // Identify how many asynchronous operations will contribute to
     // the subgraph's completion event.
@@ -874,10 +893,17 @@ namespace Realm {
       }
     }
 
-    // Now, flatten all the data structures into single vector's
-    // per processor. These data structures look like CSR.
+    // Flatten the operations.
     operations = FlattenedProcMap<std::pair<SubgraphDefinition::OpKind, unsigned>>(all_procs, local_schedules);
     operation_meta = FlattenedProcMap<OpMeta>(all_procs, local_op_meta);
+
+    // Collapse the per-processor queues into a single flattened vector.
+    initial_queue_state.reserve(operations.data.size());
+    for (size_t i = 0; i < all_procs.size(); i++) {
+      for (auto& v : processor_queues[all_procs[i]]) {
+        initial_queue_state.push_back(v);
+      }
+    }
 
     // Completion information next.
     completion_infos = FlattenedProcTaskMap<CompletionInfo>(all_procs, local_outgoing);
@@ -891,10 +917,6 @@ namespace Realm {
     // Aggregate asynchronous pre- and post-condition metadata.
     async_outgoing_infos = FlattenedProcTaskMap<CompletionInfo>(all_procs, async_effect_triggers);
     async_incoming_infos = FlattenedProcTaskMap<CompletionInfo>(all_procs, async_incoming_events);
-
-    // TODO (rohany): We'll need a buffer to store events, as well
-    //  as a buffer to stick a GPUCompletionNotification for each
-    //  completed async task / copy.
 
     return true;
   }
@@ -920,6 +942,12 @@ namespace Realm {
       auto precondition_ctrs = (atomic<int32_t>*)malloc(precondition_ctr_bytes);
       memcpy(precondition_ctrs, original_preconditions.data.data(), precondition_ctr_bytes);
 
+      // Create a fresh queue vector for this instantiation of the graph.
+      static_assert(sizeof(int64_t) == sizeof(atomic<int64_t>));
+      size_t queue_bytes = sizeof(atomic<int64_t>) * initial_queue_state.size();
+      auto queue = (atomic<int64_t>*)malloc(queue_bytes);
+      memcpy(queue, initial_queue_state.data(), queue_bytes);
+
       // TODO (rohany): In the future, these allocations could be sized more
       //  tightly, rather than for each operation.
       auto async_operation_events = (void**)malloc(sizeof(void*) * operations.data.size());
@@ -936,6 +964,7 @@ namespace Realm {
       // to enable deferring the launch of the subgraph.
       auto state = new ProcSubgraphReplayState[all_procs.size()];
       for (size_t i = 0; i < all_procs.size(); i++) {
+        state[i].all_proc_states = state;
         state[i].subgraph = this;
         state[i].finish_event = UserEvent::create_user_event();
         state[i].proc_index = int32_t(i);
@@ -946,10 +975,14 @@ namespace Realm {
         state[i].async_operation_effect_triggerers = async_operation_effect_triggerers;
         state[i].has_pending_async_work = async_finish_events[i] > 0;
         state[i].pending_async_count.store(async_finish_events[i]);
+        state[i].queue = queue;
+        state[i].next_queue_slot.store(operations.proc_offsets[i] + initial_queue_entry_count[i]);
         event_impl->merger.add_precondition(state[i].finish_event);
       }
       event_impl->merger.arm_merger();
 
+      // TODO (rohany): Thread the processor state through here so that
+      //  external preconditions can perform the enqueue step.
       // Since we have a fresh precondition vector, we can
       // just queue up the external precondition waiters
       // to start directly on the new data.
@@ -961,7 +994,7 @@ namespace Realm {
         if (i < preconditions.size())
           precond = preconditions[i];
         auto meta = &external_precondition_info[i];
-        auto waiter = new (&external_precondition_waiters[i]) ExternalPreconditionTriggerer(this, meta, precondition_ctrs);
+        auto waiter = new (&external_precondition_waiters[i]) ExternalPreconditionTriggerer(this, meta, precondition_ctrs, state);
         if (!precond.exists() || precond.has_triggered()) {
           waiter->trigger();
         } else {
@@ -987,6 +1020,7 @@ namespace Realm {
         state,
         copied_args,
         precondition_ctrs,
+        queue,
         external_precondition_waiters,
         async_operation_events,
         async_operation_effect_triggerers
@@ -1296,10 +1330,11 @@ namespace Realm {
     ProcSubgraphReplayState* _state,
     void* _args,
     atomic<int32_t>* _preconds,
+    atomic<int64_t>* _queue,
     ExternalPreconditionTriggerer* _external_preconds,
     void** _async_operation_events,
     AsyncGPUWorkTriggerer* _async_operation_event_triggerers
-  ) : num_procs(_num_procs), state(_state), args(_args), preconds(_preconds),
+  ) : num_procs(_num_procs), state(_state), args(_args), preconds(_preconds), queue(_queue),
         external_preconds(_external_preconds), async_operation_events(_async_operation_events),
         async_operation_event_triggerers(_async_operation_event_triggerers), EventWaiter() {}
 
@@ -1322,6 +1357,7 @@ namespace Realm {
     delete[] state;
     free(args);
     free(preconds);
+    free(queue);
     free(external_preconds);
     free(async_operation_events);
     free(async_operation_event_triggerers);
@@ -1337,19 +1373,13 @@ namespace Realm {
   SubgraphImpl::ExternalPreconditionTriggerer::ExternalPreconditionTriggerer(
     SubgraphImpl* _subgraph,
     ExternalPreconditionMeta* _meta,
-    atomic<int32_t>* _preconditions
-  ) : subgraph(_subgraph), meta(_meta), preconditions(_preconditions), EventWaiter() {}
+    atomic<int32_t>* _preconditions,
+    ProcSubgraphReplayState* _all_proc_states
+  ) : subgraph(_subgraph), meta(_meta), preconditions(_preconditions), all_proc_states(_all_proc_states), EventWaiter() {}
 
   void SubgraphImpl::ExternalPreconditionTriggerer::trigger() {
-    // TODO (rohany): Is there a way to deduplicate this code
-    //  from within the scheduler implementation?
     for (auto& info : meta->to_trigger) {
-      auto& trigger = preconditions[subgraph->original_preconditions.proc_offsets[info.proc] + info.index];
-      int32_t remaining = trigger.fetch_sub_acqrel(1) - 1;
-      if (remaining == 0) {
-        auto lp = subgraph->all_proc_impls[info.proc];
-        lp->sched->work_counter.increment_counter();
-      }
+      trigger_subgraph_operation_completion(all_proc_states, info, true /* incr_counter */);
     }
   }
 
@@ -1366,24 +1396,19 @@ namespace Realm {
   }
 
   SubgraphImpl::AsyncGPUWorkTriggerer::AsyncGPUWorkTriggerer(
-    Realm::SubgraphImpl *_subgraph,
+    ProcSubgraphReplayState* _all_proc_states,
     span<Realm::SubgraphImpl::CompletionInfo> _infos,
     atomic<int32_t> *_preconditions,
     atomic<int32_t>* _final_ev_counter,
     UserEvent _final_event
-  ) : subgraph(_subgraph), infos(_infos), preconditions(_preconditions), final_ev_counter(_final_ev_counter), final_event(_final_event) {}
+  ) : all_proc_states(_all_proc_states), infos(_infos), preconditions(_preconditions), final_ev_counter(_final_ev_counter), final_event(_final_event) {}
 
   void SubgraphImpl::AsyncGPUWorkTriggerer::request_completed() {
     // TODO (rohany): Is there a way to deduplicate this code
     //  from within the scheduler implementation?
     for (size_t i = 0; i < infos.size(); i++) {
       auto& info = infos[i];
-      auto& trigger = preconditions[subgraph->original_preconditions.proc_offsets[info.proc] + info.index];
-      int32_t remaining = trigger.fetch_sub_acqrel(1) - 1;
-      if (remaining == 0) {
-          auto lp = subgraph->all_proc_impls[info.proc];
-          lp->sched->work_counter.increment_counter();
-      }
+      trigger_subgraph_operation_completion(all_proc_states, info, true /* incr_counter */);
     }
     // Also see if we need to go trigger the completion event.
     if (final_ev_counter) {
@@ -1464,5 +1489,32 @@ namespace Realm {
   }
 
   ActiveMessageHandlerReg<SubgraphDestroyMessage> subgraph_destroy_message_handler;
+
+  void trigger_subgraph_operation_completion(
+      ProcSubgraphReplayState* all_proc_states,
+      const SubgraphImpl::CompletionInfo& info,
+      bool incr_counter
+  ) {
+    auto& state = all_proc_states[info.proc];
+    auto subgraph = state.subgraph;
+    auto& trigger = state.preconditions[subgraph->original_preconditions.proc_offsets[info.proc] + info.index];
+    // Decrement the counter. fetch_sub returns the value before
+    // the decrement, so if it was 1, then we've done the final trigger.
+    // If we were the final trigger, we need to also add the triggered
+    // operation into the target processors queue.
+    int32_t remaining = trigger.fetch_sub_acqrel(1) - 1;
+    if (remaining == 0) {
+      // Get a slot to insert at.
+      auto index = state.next_queue_slot.fetch_add(1);
+      // Write out the value.
+      state.queue[index].store_release(int64_t(info.index));
+
+      // If requested to increment the scheduler's counter, do so.
+      if (incr_counter) {
+        auto lp = subgraph->all_proc_impls[info.proc];
+        lp->sched->work_counter.increment_counter();
+      }
+    }
+  }
 
 }; // namespace Realm

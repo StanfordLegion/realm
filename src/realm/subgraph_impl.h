@@ -39,6 +39,8 @@ namespace Realm {
     bool is_final_event;
   };
 
+  constexpr int64_t SUBGRAPH_EMPTY_QUEUE_ENTRY = -1;
+
    void
    do_interpolation_inline(const std::vector<SubgraphDefinition::Interpolation> &interpolations,
                            unsigned first_interp, unsigned num_interps,
@@ -214,6 +216,10 @@ namespace Realm {
     // Collapsed interpolation metadata.
     FlattenedProcTaskMap<SubgraphDefinition::Interpolation> interpolations;
 
+    // TODO (rohany): comment ...
+    std::vector<int64_t> initial_queue_state;
+    std::vector<uint64_t> initial_queue_entry_count;
+
     class SubgraphWorkLauncher : public EventWaiter {
       public:
         SubgraphWorkLauncher(ProcSubgraphReplayState* state, SubgraphImpl* subgraph);
@@ -234,7 +240,12 @@ namespace Realm {
     class ExternalPreconditionTriggerer : public EventWaiter {
       public:
         ExternalPreconditionTriggerer() : EventWaiter() {}
-        ExternalPreconditionTriggerer(SubgraphImpl* _subgraph, ExternalPreconditionMeta* meta, atomic<int32_t>* preconditions);
+        ExternalPreconditionTriggerer(
+          SubgraphImpl* _subgraph,
+          ExternalPreconditionMeta* meta,
+          atomic<int32_t>* preconditions,
+          ProcSubgraphReplayState* all_proc_states
+        );
         void trigger();
         virtual void event_triggered(bool poisoned, TimeLimit work_until);
         virtual void print(std::ostream& os) const;
@@ -243,19 +254,20 @@ namespace Realm {
         SubgraphImpl* subgraph = nullptr;
         ExternalPreconditionMeta* meta = nullptr;
         atomic<int32_t>* preconditions = nullptr;
+        ProcSubgraphReplayState* all_proc_states = nullptr;
     };
 
     class AsyncGPUWorkTriggerer : public Cuda::GPUCompletionNotification {
       public:
         AsyncGPUWorkTriggerer(
-          SubgraphImpl* _subgraph,
+          ProcSubgraphReplayState* all_proc_states,
           span<CompletionInfo> _infos,
           atomic<int32_t>* _preconditions,
           atomic<int32_t>* _final_ev_counter,
           UserEvent _final_event);
         void request_completed() override;
       private:
-        SubgraphImpl* subgraph = nullptr;
+        ProcSubgraphReplayState* all_proc_states = nullptr;
         span<CompletionInfo> infos = {};
         atomic<int32_t>* preconditions = nullptr;
         atomic<int32_t>* final_ev_counter = nullptr;
@@ -267,7 +279,7 @@ namespace Realm {
         InstantiationCleanup(
           size_t num_procs,
           ProcSubgraphReplayState* state,
-          void* args, atomic<int32_t>* preconds,
+          void* args, atomic<int32_t>* preconds, atomic<int64_t>* queue,
           ExternalPreconditionTriggerer* external_preconds,
           void** async_operation_events,
           AsyncGPUWorkTriggerer* async_operation_event_triggerers
@@ -280,6 +292,7 @@ namespace Realm {
         ProcSubgraphReplayState* state;
         void* args;
         atomic<int32_t>* preconds;
+        atomic<int64_t>* queue;
         ExternalPreconditionTriggerer* external_preconds;
         void** async_operation_events;
         AsyncGPUWorkTriggerer* async_operation_event_triggerers;
@@ -287,6 +300,9 @@ namespace Realm {
   };
 
   struct ProcSubgraphReplayState {
+    // Maintain a pointer to all the processor states.
+    ProcSubgraphReplayState* all_proc_states = nullptr;
+
     // TODO (rohany): This has to be multiple indexes when we consider
     //  multiple mailboxes.
     int64_t next_op_index = 0;
@@ -305,6 +321,11 @@ namespace Realm {
     // Store the preconditions array local to this instantiation
     // of the subgraph.
     atomic<int32_t>* preconditions = nullptr;
+
+    // A queue of operation indexes to execute.
+    atomic<int64_t>* queue = nullptr;
+    // The queue slot that enqueuers should bump to write into.
+    atomic<uint64_t> next_queue_slot;
 
     // Data structures for management of asynchrony.
     void** async_operation_events = nullptr;
@@ -339,6 +360,14 @@ namespace Realm {
     static void handle_message(NodeID sender, const SubgraphDestroyMessage &msg,
                                const void *data, size_t datalen);
   };
+
+  // Helper method to consolidate the logic of triggering the completion
+  // of an operation during subgraph replay.
+  void trigger_subgraph_operation_completion(
+    ProcSubgraphReplayState* all_proc_states,
+    const SubgraphImpl::CompletionInfo& info,
+    bool incr_counter
+  );
 
 }; // namespace Realm
 
