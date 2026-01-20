@@ -490,10 +490,11 @@ namespace Realm {
     uintptr_t all_proc_states;
     unsigned op_index;
     unsigned subgraph_index;
-    // IB offsets come in the immediate data.
-    // Also record a vector of op_indexes and xd_indexes to start.
+    // These fields come in the payload.
+    // std::vector<unsigned> xd_indexes;
+    // std::vector<off_t> ib_offsets;
   };
-    
+
   struct SubgraphXferDesNotifyCompletionMessage {
     static void handle_message(NodeID sender,
                                const SubgraphXferDesNotifyCompletionMessage &args,
@@ -3055,9 +3056,7 @@ namespace Realm {
         assert(factory.xd != nullptr);
       }
     }
-    for (auto& factory : factories) {
-      assert(factory.xd != nullptr || factory.remote);
-    }
+
     // We need to make the TransferOperation think that it is finished.
     // The SubgraphImpl will take over the reference to the XD.
     for (auto& tracker : op->xd_trackers) {

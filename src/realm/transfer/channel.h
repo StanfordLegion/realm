@@ -193,6 +193,8 @@ namespace Realm {
     // size_t nbytes;
   };
 
+  // NOTE: If this struct definition changes, make sure to update
+  //  the corresponding serialization functions in transfer.inl.
   struct XferDesPortInfo {
     enum /*PortType*/
     {
