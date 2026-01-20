@@ -64,7 +64,7 @@ namespace Realm {
     }
   }
 
-  void Subgraph::destroy(Event wait_on /*= Event::NO_EVENT*/) const
+  Event Subgraph::destroy(Event wait_on /*= Event::NO_EVENT*/) const
   {
     NodeID owner = ID(*this).subgraph_owner_node();
 
@@ -78,18 +78,30 @@ namespace Realm {
       // about tracking graph instantiations.
       if (subgraph->defn->concurrency_mode == SubgraphDefinition::INSTANTIATION_ORDER) {
         AutoLock<Mutex> al(subgraph->instantiation_lock);
-        wait_on = Event::merge_events(wait_on, subgraph->previous_instantiation_completion);
+        wait_on = Event::merge_events(
+          wait_on,
+          subgraph->previous_instantiation_completion,
+          subgraph->previous_cleanup_completion
+        );
       }
 
-      if(wait_on.has_triggered())
+      if(wait_on.has_triggered()) {
         subgraph->destroy();
-      else
-        subgraph->deferred_destroy.defer(subgraph, wait_on);
+        return Event::NO_EVENT;
+      }
+      else {
+        UserEvent trigger = UserEvent::create_user_event();
+        subgraph->deferred_destroy.defer(subgraph, wait_on, trigger);
+        return trigger;
+      }
     } else {
+      // TODO (rohany): Handle this case later.
+      assert(false);
       ActiveMessage<SubgraphDestroyMessage> amsg(owner);
       amsg->subgraph = *this;
       amsg->wait_on = wait_on;
       amsg.commit();
+      return Event::NO_EVENT;
     }
   }
 
@@ -1409,6 +1421,7 @@ namespace Realm {
     ExternalPreconditionTriggerer* dynamic_precondition_waiters = nullptr;
     atomic<int32_t>* precondition_ctrs = nullptr;
     ProcSubgraphReplayState* state = nullptr;
+    UserEvent instantiation_cleanup_completion = UserEvent::NO_USER_EVENT;
     if (opt) {
       // We're going to return early before completing the interpolations,
       // so we need to make a copy of the argument buffer to read from.
@@ -1606,7 +1619,9 @@ namespace Realm {
 
       // Issue a cleanup background work item. The item
       // will clean itself up.
+      instantiation_cleanup_completion = UserEvent::create_user_event();
       auto cleanup = new InstantiationCleanup(
+        instantiation_cleanup_completion,
         all_procs.size(),
         state,
         copied_args,
@@ -1922,6 +1937,7 @@ namespace Realm {
     // into the instantiate method.
     if (defn->concurrency_mode == SubgraphDefinition::INSTANTIATION_ORDER) {
       previous_instantiation_completion = finish_event;
+      previous_cleanup_completion = Event::merge_events(previous_cleanup_completion, instantiation_cleanup_completion);
       instantiation_lock.unlock();
     }
   }
@@ -1980,9 +1996,10 @@ namespace Realm {
   // class SubgraphImpl::DeferredDestroy
   //
 
-  void SubgraphImpl::DeferredDestroy::defer(SubgraphImpl *_subgraph, Event wait_on)
+  void SubgraphImpl::DeferredDestroy::defer(SubgraphImpl *_subgraph, Event wait_on, UserEvent _trigger)
   {
     subgraph = _subgraph;
+    trigger = _trigger;
     EventImpl::add_waiter(wait_on, this);
   }
 
@@ -1990,6 +2007,7 @@ namespace Realm {
   {
     assert(!poisoned);
     subgraph->destroy();
+    trigger.trigger();
   }
 
   void SubgraphImpl::DeferredDestroy::print(std::ostream &os) const
@@ -2007,6 +2025,7 @@ namespace Realm {
   }
 
   SubgraphImpl::InstantiationCleanup::InstantiationCleanup(
+    UserEvent _trigger,
     size_t _num_procs,
     ProcSubgraphReplayState* _state,
     void* _args,
@@ -2022,7 +2041,7 @@ namespace Realm {
     UserEvent* _dynamic_events,
     atomic<int32_t>* _finish_counter,
     SubgraphOperationProfilingInfo* _inst_profiling_info
-  ) : num_procs(_num_procs), state(_state), args(_args), preconds(_preconds), queue(_queue),
+  ) : trigger(_trigger), num_procs(_num_procs), state(_state), args(_args), preconds(_preconds), queue(_queue),
       external_preconds(_external_preconds), dynamic_preconds(_dynamic_preconds),
       async_operation_events(_async_operation_events), async_operation_event_triggerers(_async_operation_event_triggerers),
       bgwork_preconds(_bgwork_preconds), async_bgwork_events(_async_bgwork_events),
@@ -2101,6 +2120,9 @@ namespace Realm {
     free(dynamic_events);
     free(finish_counter);
     delete[] inst_profiling_info;
+    trigger.trigger();
+
+    log_subgraph.info() << "Finished subgraph cleanup.";
   }
 
   void SubgraphImpl::InstantiationCleanup::event_triggered(bool poisoned, Realm::TimeLimit work_until) {
@@ -2299,10 +2321,13 @@ namespace Realm {
       wait = Event::merge_events(msg.wait_on, subgraph->previous_instantiation_completion);
     }
 
+    // Not handling this case yet.
+    assert(false);
+
     if(wait.has_triggered())
       subgraph->destroy();
     else
-      subgraph->deferred_destroy.defer(subgraph, wait);
+      subgraph->deferred_destroy.defer(subgraph, wait, UserEvent::NO_USER_EVENT);
   }
 
   ActiveMessageHandlerReg<SubgraphDestroyMessage> subgraph_destroy_message_handler;

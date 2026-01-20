@@ -54,7 +54,7 @@ namespace Realm {
 
     // TODO: collective construction
 
-    void destroy(Event wait_on = Event::NO_EVENT) const;
+    Event destroy(Event wait_on = Event::NO_EVENT) const;
 
     Event instantiate(const void *args, size_t arglen, const ProfilingRequestSet &prs,
                       const SubgraphInstantiationProfilingRequestsDesc &sprs,

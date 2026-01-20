@@ -242,13 +242,14 @@ namespace Realm {
 
     class DeferredDestroy : public EventWaiter {
     public:
-      void defer(SubgraphImpl *_subgraph, Event wait_on);
+      void defer(SubgraphImpl *_subgraph, Event wait_on, UserEvent trigger);
       virtual void event_triggered(bool poisoned, TimeLimit work_until);
       virtual void print(std::ostream &os) const;
       virtual Event get_finish_event(void) const;
 
     protected:
-      SubgraphImpl *subgraph;
+      SubgraphImpl *subgraph = nullptr;
+      UserEvent trigger = UserEvent::NO_USER_EVENT;
     };
 
     protected:
@@ -394,6 +395,9 @@ namespace Realm {
     // the completion event of the last instantiation.
     mutable Mutex instantiation_lock;
     mutable Event previous_instantiation_completion = Event::NO_EVENT;
+    // previous_cleanup_completion tracks cleanup work launched
+    // by subgraph instantiations.
+    mutable Event previous_cleanup_completion = Event::NO_EVENT;
 
     bool has_static_profiling_requests = false;
     // Remember which operations ended up as part of the dynamic
@@ -439,6 +443,7 @@ namespace Realm {
     class InstantiationCleanup : public EventWaiter {
       public:
         InstantiationCleanup(
+          UserEvent trigger,
           size_t num_procs,
           ProcSubgraphReplayState* state,
           void* args, atomic<int32_t>* preconds, atomic<int64_t>* queue,
@@ -458,6 +463,7 @@ namespace Realm {
         virtual Event get_finish_event(void) const;
         void cleanup();
       private:
+        UserEvent trigger;
         size_t num_procs;
         ProcSubgraphReplayState* state;
         void* args;

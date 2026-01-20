@@ -550,7 +550,7 @@ IndexSpace<1> pis2;
 
   // The subgraph itself should sequence deletions after pending replays
   // complete, so test that here.
-  diamond.destroy();
+  Event destroy = diamond.destroy();
 
   e = cpus[0].spawn(TEST_READ_TASK, &fill_inst, sizeof(fill_inst), e);
   e = cpus[0].spawn(TEST_READ_TASK, &fill_inst2, sizeof(fill_inst2), e);
@@ -566,10 +566,14 @@ IndexSpace<1> pis2;
     assert(e.exists() && e.has_triggered());
   assert(next_next_bar.has_triggered());
 
-  log_app.info() << "Done!";
+  // The subgraph deletion event should trigger.
+  destroy.wait();
 
-  // Before shut down, ensure we get all the profiling requests we expected.
+  // Profiling responses are async tasks launched by cleanups, and the
+  // cleanup worker does not wait for those tasks to finish before returning.
   while (recieved_profs.load_acquire() != 0) {}
+
+  log_app.info() << "Done!";
 
   // do everything on this processor - get a good memory to use
 //  Memory m = Machine::MemoryQuery(Machine::get_machine()).has_affinity_to(p).first();
