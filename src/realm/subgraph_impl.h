@@ -214,17 +214,15 @@ namespace Realm {
     FlattenedProcMap<OpMeta> operation_meta;
 
     struct CompletionInfo {
-      // TODO (rohany): Contemplate if this really should be
-      //  two fields that represent the edge combinations.
       enum EdgeKind {
         STATIC_TO_STATIC,
         STATIC_TO_DYNAMIC,
-        STATIC_TO_BGWORK, // TODO (rohany): Handle this ...
+        STATIC_TO_BGWORK,
         DYNAMIC_TO_STATIC,
-        DYNAMIC_TO_BGWORK, // TODO (rohany): Handle this ...
-        BGWORK_TO_STATIC, // TODO (rohany): Handle this ...
-        BGWORK_TO_DYNAMIC, // TODO (rohany): Handle this ...
-        BGWORK_TO_BGWORK, // TODO (rohany): Handle this ...
+        DYNAMIC_TO_BGWORK,
+        BGWORK_TO_STATIC,
+        BGWORK_TO_DYNAMIC,
+        BGWORK_TO_BGWORK,
       };
       CompletionInfo(int32_t _proc, uint64_t _index, EdgeKind _kind) : proc(_proc), index(_index), kind(_kind) {}
       int32_t proc = -1;
@@ -263,21 +261,29 @@ namespace Realm {
     };
     std::vector<ExternalPreconditionMeta> external_precondition_info;
 
-    // TODO (rohany): Rename / re-comment this stuff for the bgwork component.
     // Metadata for the interaction of the dynamic and
     // static components of the subgraph.
     std::vector<ExternalPreconditionMeta> dynamic_to_static_triggers;
     std::vector<int32_t> static_to_dynamic_counts;
 
+    // The number of bgwork items that are final events of the subgrpah.
     int32_t bgwork_finish_events = 0;
+    // The schedule entries designated for background workers.
     std::vector<SubgraphScheduleEntry> bgwork_items;
-    std::vector<XferDes*> planned_copy_xds;
+    // Precondition counts for all bgwork items.
     std::vector<int32_t> bgwork_preconditions;
+    // A vector of indices into bgwork_items of all background
+    // work operations that are ready to run as soon as the
+    // subgraph can start.
     std::vector<int64_t> bgwork_items_without_preconditions;
-    // TODO (rohany): Compact this later ...
+    // TODO (rohany): Compact these nested vectors later.
     std::vector<std::vector<CompletionInfo>> bgwork_postconditions;
     std::vector<std::vector<CompletionInfo>> bgwork_async_postconditions;
     std::vector<std::vector<CompletionInfo>> bgwork_async_preconditions;
+    // Maintain a mapping of indices into the bgwork_items vector
+    // of async tokens that belong to each processor. This is used
+    // to return async tokens (like CUDA events) back to the per-processor
+    // pools they may have been allocated from.
     std::map<LocalTaskProcessor*, std::vector<unsigned>> bgwork_async_event_procs;
     // TODO (rohany): Need to handle deferred launches of copies
     //  when the copies are sharing the same xd state.
@@ -286,6 +292,10 @@ namespace Realm {
     //    will run through and make all initially true preconditions start.
     //  ^ This doesn't actually work. I'm not sure of a good way to do (and
     //    not force the user to chain the replays themselves).
+
+    // A vector of XD's for all copies that were planned during
+    // subgraph compilation.
+    std::vector<XferDes*> planned_copy_xds;
 
     class ExternalPreconditionTriggerer : public EventWaiter {
       public:
