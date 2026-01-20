@@ -1379,7 +1379,7 @@ namespace Realm {
       }
     }
 
-    GPUIndirectChannel::~GPUIndirectChannel() {
+    void GPUIndirectChannel::shutdown() {
       {
         AutoGPUContext agc(src_gpu);
         delete subgraph_stream;
@@ -1767,7 +1767,7 @@ namespace Realm {
       }
     }
 
-    GPUChannel::~GPUChannel()
+    void GPUChannel::shutdown()
     {
       {
         AutoGPUContext agc(src_gpu);
@@ -2319,7 +2319,7 @@ namespace Realm {
       }
     }
 
-    GPUfillChannel::~GPUfillChannel() {
+    void GPUfillChannel::shutdown() {
       {
         AutoGPUContext agc(gpu);
         delete subgraph_stream;
@@ -2846,7 +2846,7 @@ namespace Realm {
       }
     }
 
-    GPUreduceChannel::~GPUreduceChannel() {
+    void GPUreduceChannel::shutdown() {
       {
         AutoGPUContext agc(gpu);
         delete subgraph_stream;

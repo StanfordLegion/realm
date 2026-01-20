@@ -828,7 +828,6 @@ namespace Realm {
       : public SingleXDQChannel<GPUIndirectChannel, GPUIndirectXferDes> {
     public:
       GPUIndirectChannel(GPU *_src_gpu, XferDesKind _kind, BackgroundWorkManager *bgwork);
-      ~GPUIndirectChannel();
 
       // multi-threading of cuda copies for a given device is disabled by
       //  default (can be re-enabled with -cuda:mtdma 1)
@@ -858,6 +857,7 @@ namespace Realm {
 
       long submit(Request **requests, long nr);
       GPU *get_gpu() const { return src_gpu; }
+      void shutdown() override;
 
     protected:
       friend class GPUIndirectXferDes;
@@ -905,7 +905,6 @@ namespace Realm {
     class GPUChannel : public SingleXDQChannel<GPUChannel, GPUXferDes> {
     public:
       GPUChannel(GPU *_src_gpu, XferDesKind _kind, BackgroundWorkManager *bgwork);
-      ~GPUChannel();
 
       // multi-threading of cuda copies for a given device is disabled by
       //  default (can be re-enabled with -cuda:mtdma 1)
@@ -921,6 +920,7 @@ namespace Realm {
 
       long submit(Request **requests, long nr);
       GPU *get_gpu() const { return src_gpu; }
+      void shutdown() override;
 
     private:
       friend class GPUXferDes;
@@ -956,7 +956,6 @@ namespace Realm {
     class GPUfillChannel : public SingleXDQChannel<GPUfillChannel, GPUfillXferDes> {
     public:
       GPUfillChannel(GPU *_gpu, BackgroundWorkManager *bgwork);
-      ~GPUfillChannel();
 
       // multiple concurrent cuda fills ok
       static const bool is_ordered = false;
@@ -970,6 +969,7 @@ namespace Realm {
                                        size_t fill_total);
 
       long submit(Request **requests, long nr);
+      void shutdown() override;
 
     protected:
       friend class GPUfillXferDes;
@@ -1008,7 +1008,6 @@ namespace Realm {
     class GPUreduceChannel : public SingleXDQChannel<GPUreduceChannel, GPUreduceXferDes> {
     public:
       GPUreduceChannel(GPU *_gpu, BackgroundWorkManager *bgwork);
-      ~GPUreduceChannel();
 
       // multiple concurrent cuda reduces ok
       static const bool is_ordered = false;
@@ -1026,6 +1025,7 @@ namespace Realm {
                                size_t fill_total) override;
 
       long submit(Request **requests, long nr) override;
+      void shutdown() override;
 
     protected:
       friend class GPUreduceXferDes;
