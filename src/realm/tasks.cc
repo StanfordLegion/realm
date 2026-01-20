@@ -1338,26 +1338,6 @@ namespace Realm {
 
           break;
         }
-        case SubgraphDefinition::OPKIND_ARRIVAL:
-        {
-          auto& arrivalDesc = subgraph->defn->arrivals[op_key.second];
-
-          Barrier b =
-              do_interpolation(subgraph->interpolations.data, first_interp, num_interps,
-                               SubgraphDefinition::Interpolation::TARGET_ARRIVAL_BARRIER, op_key.second,
-                               replay->args, replay->arglen, arrivalDesc.barrier);
-          // Do the reduction value interpolation directly into the arrival desc.
-          do_interpolation_inline(
-              subgraph->interpolations.data, first_interp, num_interps,
-              SubgraphDefinition::Interpolation::TARGET_ARRIVAL_VALUE, op_key.second, replay->args, replay->arglen,
-              arrivalDesc.reduce_value.base(), arrivalDesc.reduce_value.size());
-          unsigned count = arrivalDesc.count;
-          lock.unlock();
-          b.arrive(count, Event::NO_EVENT, arrivalDesc.reduce_value.base(), arrivalDesc.reduce_value.size());
-          lock.lock();
-
-          break;
-        }
         default:
           assert(false);
         }

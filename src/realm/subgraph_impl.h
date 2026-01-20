@@ -366,6 +366,7 @@ namespace Realm {
 
     // Collapsed interpolation metadata.
     FlattenedProcTaskMap<SubgraphDefinition::Interpolation> interpolations;
+    std::vector<std::pair<size_t, size_t>> bgwork_interpolation_ranges;
 
     // Initial queue status, prefilled with operations that don't
     // have any preconditions.
@@ -667,7 +668,7 @@ namespace Realm {
     SubgraphTriggerContext* ctx
   );
 
-  void launch_async_bgwork_item(ProcSubgraphReplayState* all_proc_states, unsigned index);
+  void launch_async_bgwork_item(ProcSubgraphReplayState* all_proc_states, unsigned index, SubgraphTriggerContext* ctx);
   void maybe_trigger_subgraph_final_completion_event(ProcSubgraphReplayState& states);
   void send_subgraph_remote_xd_completion(
     NodeID launch_node,

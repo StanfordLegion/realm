@@ -327,6 +327,9 @@ namespace Realm {
         // Just return the number of XD's planned for this copy.
         return planned_copy_xds.offsets[op_idx + 1] - planned_copy_xds.offsets[op_idx];
       }
+      case SubgraphDefinition::OPKIND_ARRIVAL: {
+        return 1;
+      }
       default:
         assert(false);
         return 0;
@@ -348,6 +351,9 @@ namespace Realm {
             count++;
           }
         return count;
+      }
+      case SubgraphDefinition::OPKIND_ARRIVAL: {
+        return 0;
       }
       default:
         assert(false);
@@ -1087,7 +1093,6 @@ namespace Realm {
     // Similar to toposort, but for background work items.
     std::vector<SubgraphDefinition::OpKind> allowed_kinds;
     allowed_kinds.push_back(SubgraphDefinition::OPKIND_TASK);
-    allowed_kinds.push_back(SubgraphDefinition::OPKIND_ARRIVAL);
     allowed_kinds.push_back(SubgraphDefinition::OPKIND_EXT_PRECOND);
     // TODO (rohany): Comment ...
     std::map<std::pair<SubgraphDefinition::OpKind, unsigned>, unsigned> bgwork_schedule;
@@ -1098,8 +1103,11 @@ namespace Realm {
       for (auto& it : schedule) {
         auto key = std::make_pair(it.op_kind, it.op_index);
         // Copies require special handling, as they don't go into the
-        // per-processor local schedules.
-        if (it.op_kind == SubgraphDefinition::OPKIND_COPY && is_plannable_copy(it.op_index)) {
+        // per-processor local schedules. We'll also include arrivals
+        // in the bgwork slots, as we don't want them to get stuck
+        // behind other tasks in the processor queues.
+        if ((it.op_kind == SubgraphDefinition::OPKIND_COPY && is_plannable_copy(it.op_index)) ||
+             it.op_kind == SubgraphDefinition::OPKIND_ARRIVAL) {
           bgwork_schedule[key] = bgwork_items.size();
           bgwork_items.push_back(it);
           if (it.is_final_event)
@@ -1361,6 +1369,7 @@ namespace Realm {
     std::vector<std::vector<CompletionInfo>> bgwork_postconditions_build(bgwork_items.size());
     std::vector<std::vector<CompletionInfo>> bgwork_async_preconditions_build(bgwork_items.size());
     std::vector<std::vector<CompletionInfo>> bgwork_async_postconditions_build(bgwork_items.size());
+    bgwork_interpolation_ranges = std::vector<std::pair<size_t, size_t>>(bgwork_items.size(), {0, 0});
 
     // First, initialize all the bgwork precondition counts, as iterating through
     // the edges will modify the sizes.
@@ -1391,6 +1400,12 @@ namespace Realm {
       if (operation_has_async_effects(it.op_kind, it.op_index)) {
         it.is_final_event = true;
       }
+
+      // Record any interpolations used by this bgwork item.
+      auto interp_it = op_to_interpolation_data.find(key);
+      if (interp_it != op_to_interpolation_data.end()) {
+        bgwork_interpolation_ranges[i] = interp_it->second;
+      }
     }
 
     // Next, identify where each async bgwork item should write their
@@ -1419,6 +1434,8 @@ namespace Realm {
             }
             break;
           }
+          case SubgraphDefinition::OPKIND_ARRIVAL:
+            break;
           default:
             assert(false);
         }
@@ -1620,9 +1637,12 @@ namespace Realm {
       }
 
       std::vector<SubgraphDefinition::Interpolation> interps;
-      auto& meta = op_to_interpolation_data[key];
-      for (size_t i = meta.first; i < meta.first + meta.second; i++) {
-        interps.push_back(defn->interpolations[i]);
+      auto interp_it = op_to_interpolation_data.find(key);
+      if (interp_it != op_to_interpolation_data.end()) {
+        auto& meta = interp_it->second;
+        for (size_t i = meta.first; i < meta.first + meta.second; i++) {
+          interps.push_back(defn->interpolations[i]);
+        }
       }
       local_interpolations[proc].push_back(interps);
     }
@@ -2348,6 +2368,7 @@ namespace Realm {
     async_outgoing_infos.clear();
     async_incoming_infos.clear();
     interpolations.clear();
+    bgwork_interpolation_ranges.clear();
     initial_queue_state.clear();
     initial_queue_entry_count.clear();
     initial_queue_items.clear();
@@ -2681,7 +2702,7 @@ namespace Realm {
     // Start up any background work items without any preconditions.
     auto sg = state[0].subgraph;
     for (auto idx : sg->bgwork_items_without_preconditions) {
-      launch_async_bgwork_item(state, idx);
+      launch_async_bgwork_item(state, idx, nullptr /* ctx */);
     }
   }
 
@@ -2817,11 +2838,7 @@ namespace Realm {
         int32_t remaining = trigger.fetch_sub_acqrel(1) - 1;
         if (remaining == 0) {
           auto& item = state.subgraph->bgwork_items[info.index];
-          // To be safe, also use the context to ensure the
-          // appropriate locks are dropped.
-          if (ctx) { ctx->enter(); }
-          launch_async_bgwork_item(all_proc_states, info.index);
-          if (ctx) { ctx->exit(); }
+          launch_async_bgwork_item(all_proc_states, info.index, ctx);
         }
         break;
       }
@@ -2973,40 +2990,87 @@ namespace Realm {
     }
   }
 
-  void launch_async_bgwork_item(ProcSubgraphReplayState* all_proc_states, unsigned index) {
+  void launch_async_bgwork_item(ProcSubgraphReplayState* all_proc_states, unsigned index, SubgraphTriggerContext* ctx) {
     auto& state = all_proc_states[0];
     auto subgraph = state.subgraph;
     auto& item = subgraph->bgwork_items[index];
-    assert(item.op_kind == SubgraphDefinition::OPKIND_COPY);
-    auto& offs = subgraph->planned_copy_xds.offsets;
 
-    auto prof = state.get_profiling_info(item.op_kind, item.op_index);
-    if (prof) {
-      if (prof->wants_timeline || prof->wants_fevent) {
-        // Record how many XD's will complete before this is counted as done.
-        prof->pending_work_items.store(int32_t(offs[item.op_index + 1] - offs[item.op_index]));
-      }
-      if (prof->wants_timeline) {
-        prof->timeline.record_ready_time();
-        // TODO (rohany): I don't have a good hook into the
-        //  XD infrastructure that this would make more sense
-        //  to put (like once the XD gets pulled off the queue),
-        //  so we'll stick it in here for now.
-        prof->timeline.record_start_time();
-      }
-      if (prof->wants_fevent) {
-        prof->fevent_user = UserEvent::create_user_event();
-        prof->fevent.finish_event = prof->fevent_user;
-      }
-    }
+    switch (item.op_kind) {
+      case SubgraphDefinition::OPKIND_COPY: {
+        assert(item.op_kind == SubgraphDefinition::OPKIND_COPY);
+        auto& offs = subgraph->planned_copy_xds.offsets;
+
+        auto prof = state.get_profiling_info(item.op_kind, item.op_index);
+        if (prof) {
+          if (prof->wants_timeline || prof->wants_fevent) {
+            // Record how many XD's will complete before this is counted as done.
+            prof->pending_work_items.store(int32_t(offs[item.op_index + 1] - offs[item.op_index]));
+          }
+          if (prof->wants_timeline) {
+            prof->timeline.record_ready_time();
+            // TODO (rohany): I don't have a good hook into the
+            //  XD infrastructure that this would make more sense
+            //  to put (like once the XD gets pulled off the queue),
+            //  so we'll stick it in here for now.
+            prof->timeline.record_start_time();
+          }
+          if (prof->wants_fevent) {
+            prof->fevent_user = UserEvent::create_user_event();
+            prof->fevent.finish_event = prof->fevent_user;
+          }
+        }
 #ifdef REALM_USE_NVTX
-    subgraph->nvtx_bgwork_launches[index] = nvtx_range_start("subgraph", "copy initiation");
+        subgraph->nvtx_bgwork_launches[index] = nvtx_range_start("subgraph", "copy initiation");
 #endif
 
-    // Perform the necessary IB allocation. If no IBs are necessary,
-    // the allocation process short circuits.
-    SubgraphIBAllocator& allocator = subgraph->copy_ib_allocators[item.op_index];
-    allocator.allocate_and_launch_xds(all_proc_states, index, item.op_index);
+        // Perform the necessary IB allocation. If no IBs are necessary,
+        // the allocation process short circuits.
+        if (ctx) { ctx->enter(); }
+        SubgraphIBAllocator& allocator = subgraph->copy_ib_allocators[item.op_index];
+        allocator.allocate_and_launch_xds(all_proc_states, index, item.op_index);
+        if (ctx) { ctx->exit(); }
+        break;
+      }
+      case SubgraphDefinition::OPKIND_ARRIVAL: {
+        auto& arrivalDesc = subgraph->defn->arrivals[item.op_index];
+        auto& interpMeta = subgraph->bgwork_interpolation_ranges[index];
+        auto first_interp = interpMeta.first;
+        auto num_interps = interpMeta.second;
+        Barrier b =
+            do_interpolation(subgraph->defn->interpolations, first_interp, num_interps,
+                             SubgraphDefinition::Interpolation::TARGET_ARRIVAL_BARRIER, item.op_index,
+                             state.args, state.arglen, arrivalDesc.barrier);
+        // Do the reduction value interpolation directly into the arrival desc.
+        do_interpolation_inline(
+            subgraph->defn->interpolations, first_interp, num_interps,
+            SubgraphDefinition::Interpolation::TARGET_ARRIVAL_VALUE, item.op_index, state.args, state.arglen,
+            arrivalDesc.reduce_value.base(), arrivalDesc.reduce_value.size());
+        unsigned count = arrivalDesc.count;
+
+        if (ctx) { ctx->enter(); }
+        b.arrive(count, Event::NO_EVENT, arrivalDesc.reduce_value.base(), arrivalDesc.reduce_value.size());
+        if (ctx) { ctx->exit(); }
+
+        // Since we just triggered the barrier, we're free to also kick off
+        // anything that depends on the barrier being triggered.
+        auto& postconds = subgraph->bgwork_postconditions;
+        for (uint64_t i = postconds.offsets[index]; i < postconds.offsets[index + 1]; i++) {
+          auto& info = postconds.data[i];
+          trigger_subgraph_operation_completion(all_proc_states, info, true /* incr_counter */, ctx);
+        }
+        if (subgraph->bgwork_items[index].is_final_event) {
+          // TODO (rohany): Hackily including the contributions of bgwork
+          //  operations in the proc 0 counters.
+          int32_t remaining = all_proc_states[0].pending_async_count.fetch_sub_acqrel(1) - 1;
+          if (remaining == 0) {
+            maybe_trigger_subgraph_final_completion_event(all_proc_states[0]);
+          }
+        }
+        break;
+      }
+      default:
+        assert(false);
+    }
   }
 
   void SubgraphImpl::plan_copy(
