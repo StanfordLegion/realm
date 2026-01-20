@@ -2248,7 +2248,7 @@ namespace Realm {
 
     LocalTaskProcessor* GPUfillXferDes::get_async_event_proc() {
       auto gpuchan = static_cast<GPUfillChannel*>(channel);
-      return gpuchan->get_gpu()->proc;
+      return gpuchan->gpu->proc;
     }
 
     ////////////////////////////////////////////////////////////////////////
