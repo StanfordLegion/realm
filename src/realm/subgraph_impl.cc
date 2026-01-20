@@ -880,6 +880,7 @@ namespace Realm {
           queue[idx++] = j;
         }
       }
+      processor_queues[proc] = queue;
       initial_queue_entry_count[i] = idx;
     }
 
@@ -981,8 +982,6 @@ namespace Realm {
       }
       event_impl->merger.arm_merger();
 
-      // TODO (rohany): Thread the processor state through here so that
-      //  external preconditions can perform the enqueue step.
       // Since we have a fresh precondition vector, we can
       // just queue up the external precondition waiters
       // to start directly on the new data.
@@ -1404,8 +1403,6 @@ namespace Realm {
   ) : all_proc_states(_all_proc_states), infos(_infos), preconditions(_preconditions), final_ev_counter(_final_ev_counter), final_event(_final_event) {}
 
   void SubgraphImpl::AsyncGPUWorkTriggerer::request_completed() {
-    // TODO (rohany): Is there a way to deduplicate this code
-    //  from within the scheduler implementation?
     for (size_t i = 0; i < infos.size(); i++) {
       auto& info = infos[i];
       trigger_subgraph_operation_completion(all_proc_states, info, true /* incr_counter */);
