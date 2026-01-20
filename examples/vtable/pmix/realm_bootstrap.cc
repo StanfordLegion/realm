@@ -159,14 +159,10 @@ namespace App {
         return false;
       }
 
-      // Fetch data from all ranks for each key we put
+      // Fetch data from all ranks
       for(const auto &kv : ctx->local_kv_store) {
-        // Extract rank from key (format: realm_bootstrap_key_<group>_<rank>)
-        // We need to get data for all ranks, so iterate
         for(uint32_t rank = 0; rank < ctx->pmix_size; rank++) {
-          // Construct the key for this rank
           char key_buf[256];
-          // Parse our key to extract group_id, then construct key for each rank
           unsigned long group_id = 0;
           unsigned int our_rank = 0;
           if(sscanf(kv.first.c_str(), "realm_bootstrap_key_%lu_%u", &group_id, &our_rank) == 2) {
