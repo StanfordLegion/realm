@@ -1457,13 +1457,9 @@ namespace Realm {
       finish_counter->store_release(all_procs.size());
       auto static_finish_event = UserEvent::create_user_event();
 
-      // TODO (rohany): I think we want some extra bits here (or during
-      //  compilation) that records which profiling requests are actually
-      //  part of the static subgraph (i.e. opkind, opindx) so that we can
-      //  batch send them all out and don't accidentally send multiple for
-      //  the dynamic component.
       // TODO (rohany): Experiment if this profiling stuff adds noticeable
-      //  latency to subgraph execution.
+      //  latency to subgraph execution. If it does, this initialize could
+      //  get moved to when the operation starts.
       // Handle profiling requests for the static subgraph component (only
       // if it is actually needed).
       SubgraphOperationProfilingInfo* inst_profiling_info = nullptr;
@@ -1539,16 +1535,6 @@ namespace Realm {
         state[i].queue = queue;
         state[i].next_queue_slot.store(operations.proc_offsets[i] + initial_queue_entry_count[i]);
         state[i].inst_profiling_info = inst_profiling_info;
-      }
-
-      // Mark ready for any operations that have no preconditions.
-      if (inst_profiling_info != nullptr) {
-        for (auto& it : initial_queue_items) {
-          auto prof = state[0].get_profiling_info(it.first, it.second);
-          if (prof && prof->wants_timeline) {
-            prof->timeline.record_ready_time();
-          }
-        }
       }
 
       // Since we have a fresh precondition vector, we can
@@ -2162,6 +2148,17 @@ namespace Realm {
   }
 
   void SubgraphImpl::SubgraphWorkLauncher::launch() {
+    // If profiling, mark that all items without preconditions
+    // are ready.
+    if (state[0].inst_profiling_info != nullptr) {
+      for (auto& it : subgraph->initial_queue_items) {
+        auto prof = state[0].get_profiling_info(it.first, it.second);
+        if (prof && prof->wants_timeline) {
+          prof->timeline.record_ready_time();
+        }
+      }
+    }
+
     // Install each processor's replay state.
     for (size_t i = 0; i < subgraph->all_proc_impls.size(); i++) {
       subgraph->all_proc_impls[i]->install_subgraph_replay(&state[i]);
