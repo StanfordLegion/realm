@@ -183,6 +183,7 @@ namespace Realm {
     int barrier_broadcast_radix = 4;
 
     bool static_subgraph_opt = false;
+    bool subgraph_scheduler_spin = false;
 
     // topology of the host
     const HardwareTopology *host_topology = nullptr;

@@ -788,6 +788,7 @@ namespace Realm {
     config_map.insert({"barrier_broadcast_radix", &barrier_broadcast_radix});
     config_map.insert({"diskmem", &disk_mem_size});
     config_map.insert({"static_subgraph_opt", &static_subgraph_opt});
+    config_map.insert({"subgraph_scheduler_spin", &subgraph_scheduler_spin});
 
     resource_map.insert({"cpu", &res_num_cpus});
     resource_map.insert({"sysmem", &res_sysmem_size});
@@ -870,6 +871,9 @@ namespace Realm {
 
     // Whether or not to attempt optimization of subgraphs.
     cp.add_option_bool("-ll:static_subgraph_opt", static_subgraph_opt);
+    // Whether the subgraph version of the task scheduler should use
+    // a spin loop or yield back to the OS and be woken up.
+    cp.add_option_bool("-ll:subgraph_scheduler_spin", subgraph_scheduler_spin);
 
     bool cmdline_ok = cp.parse_command_line(cmdline);
 
