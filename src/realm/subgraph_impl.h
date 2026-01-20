@@ -222,7 +222,7 @@ namespace Realm {
   };
 
   // SubgraphIBAllocator is a helper class to get notifications that
-  // requested IB allocations
+  // requested IB allocations have completed.
   class SubgraphIBAllocator : public IBAllocationCompletion {
   public:
     virtual void notify_ib_allocation(unsigned ib_index, off_t ib_offset) override;
