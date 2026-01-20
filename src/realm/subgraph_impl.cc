@@ -735,7 +735,7 @@ namespace Realm {
     // included in the "statically-optimized" portion of the graph.
     std::vector<SubgraphScheduleEntry> dynamic_schedule;
     std::vector<SubgraphScheduleEntry> static_schedule;
-
+    // Similar to toposort, but for background work items.
     std::vector<SubgraphDefinition::OpKind> allowed_kinds;
     allowed_kinds.push_back(SubgraphDefinition::OPKIND_TASK);
     allowed_kinds.push_back(SubgraphDefinition::OPKIND_ARRIVAL);
@@ -1092,12 +1092,13 @@ namespace Realm {
           }
         }
         for (auto& edge : incoming_edges[key]) {
-          // Respects case. See the comments below.
+          // Similar to below, case when operation doesn't respect the asynchrony
+          // of the incoming edge.
           if (!operation_has_async_effects(edge.first, edge.second) ||
               !operation_respects_async_effects(edge.first, edge.second, it.op_kind, it.op_index)) {
             continue;
           }
-          // Enqueue case.
+          // When we do respect asynchrony, remember the events to synchronize against.
           auto bgwork_it = bgwork_schedule.find(edge);
           if (bgwork_it != bgwork_schedule.end()) {
             bgwork_async_preconditions_build[i].emplace_back(-1, bgwork_it->second, CompletionInfo::EdgeKind::BGWORK_TO_BGWORK);
