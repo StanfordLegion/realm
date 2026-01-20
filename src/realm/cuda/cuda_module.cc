@@ -1004,9 +1004,9 @@ namespace Realm {
         }
       }
       params.set_num_cores(1);
-      params.set_alu_usage(params.CORE_USAGE_SHARED);
-      params.set_fpu_usage(params.CORE_USAGE_SHARED);
-      params.set_ldst_usage(params.CORE_USAGE_SHARED);
+      params.set_alu_usage(params.CORE_USAGE_EXCLUSIVE);
+      params.set_fpu_usage(params.CORE_USAGE_EXCLUSIVE);
+      params.set_ldst_usage(params.CORE_USAGE_EXCLUSIVE);
       params.set_max_stack_size(_stack_size);
 
       std::string name = stringbuilder() << "GPU proc " << _me;
