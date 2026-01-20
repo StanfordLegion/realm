@@ -1976,6 +1976,14 @@ namespace Realm {
 
   void SubgraphImpl::destroy(void)
   {
+    // Before deleting the definition itself, free pointers to copy
+    // indirection objects that were created for this subgraph.
+    for (auto& it : defn->copies) {
+      for (auto& it2 : it.indirects) {
+        delete reinterpret_cast<CopyIndirectionGeneric*>(it2);
+      }
+    }
+
     delete defn;
     schedule.clear();
 

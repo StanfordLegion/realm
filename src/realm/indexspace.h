@@ -238,6 +238,14 @@ namespace Realm {
 
   class IndirectionInfo;
 
+  // Untyped base class for interacting with CopyIndirections.
+  class CopyIndirectionGeneric {
+  public:
+    virtual ~CopyIndirectionGeneric(void) {}
+    REALM_INTERNAL_API_EXTERNAL_LINKAGE
+    virtual CopyIndirectionGeneric* clone() const = 0;
+  };
+
   /**
    * \class CopyIndirection
    * A copy indirection is a container class that is used to describe
@@ -249,11 +257,13 @@ namespace Realm {
   template <int N, typename T = int>
   class REALM_PUBLIC_API CopyIndirection {
   public:
-    class Base {
+    class Base : public CopyIndirectionGeneric {
     public:
       virtual ~Base(void) {}
       REALM_INTERNAL_API_EXTERNAL_LINKAGE
       virtual IndirectionInfo *create_info(const IndexSpace<N, T> &is) const = 0;
+      REALM_INTERNAL_API_EXTERNAL_LINKAGE
+      virtual CopyIndirectionGeneric* clone() const = 0;
     };
 
     template <int N2, typename T2 = int>
@@ -273,6 +283,11 @@ namespace Realm {
 
       REALM_INTERNAL_API_EXTERNAL_LINKAGE
       virtual IndirectionInfo *create_info(const IndexSpace<N, T> &is) const;
+
+      REALM_INTERNAL_API_EXTERNAL_LINKAGE
+      virtual CopyIndirectionGeneric* clone() const {
+        return new Affine<N2, T2>(*this);
+      }
     };
 
     template <int N2, typename T2 = int>
@@ -308,6 +323,11 @@ namespace Realm {
 
       REALM_INTERNAL_API_EXTERNAL_LINKAGE
       virtual IndirectionInfo *create_info(const IndexSpace<N, T> &is) const;
+
+      REALM_INTERNAL_API_EXTERNAL_LINKAGE
+      virtual CopyIndirectionGeneric* clone() const {
+        return new Unstructured<N2, T2>(*this);
+      }
     };
   };
 

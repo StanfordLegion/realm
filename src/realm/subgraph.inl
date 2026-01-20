@@ -43,6 +43,34 @@ namespace Realm {
     : concurrency_mode(CONCURRENT)
   {}
 
+  inline SubgraphDefinition::SubgraphDefinition(const SubgraphDefinition& other)
+  : tasks(other.tasks),
+    // Copies need special care to be handled.
+    copies(),
+    arrivals(other.arrivals),
+    instantiations(other.instantiations),
+    acquires(other.acquires),
+    releases(other.releases),
+    dependencies(other.dependencies),
+    interpolations(other.interpolations),
+    concurrency_mode(other.concurrency_mode)
+  {
+    copies.resize(other.copies.size());
+    for (size_t i = 0; i < other.copies.size(); i++) {
+      auto& copy = other.copies[i];
+      copies[i].space = copy.space;
+      copies[i].srcs = copy.dsts;
+      copies[i].indirects.resize(copy.indirects.size());
+      for (size_t j = 0; j < copy.indirects.size(); j++) {
+        copies[i].indirects[j] = reinterpret_cast<CopyIndirectionGeneric*>(copy.indirects[j])->clone();
+      }
+      copies[i].prs = copy.prs;
+      copies[i].redop_id = copy.redop_id;
+      copies[i].red_fold = copy.red_fold;
+      copies[i].priority = copy.priority;
+    }
+  }
+
   template <typename S>
   bool serdez(S &serdez, const SubgraphDefinition &s)
   {

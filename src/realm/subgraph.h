@@ -71,6 +71,7 @@ namespace Realm {
 
   struct REALM_PUBLIC_API SubgraphDefinition {
     SubgraphDefinition();
+    SubgraphDefinition(const SubgraphDefinition& other);
 
     // Operations may provide ProfilingRequestSets as
     // part of the SubgraphDefinition that are always
