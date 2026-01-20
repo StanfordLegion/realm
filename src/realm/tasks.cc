@@ -1245,13 +1245,14 @@ namespace Realm {
           auto proc_offset = replay->subgraph->async_outgoing_infos.proc_offsets[proc_index];
           auto start = replay->subgraph->async_outgoing_infos.task_offsets[proc_offset + local_op_index];
           auto end = replay->subgraph->async_outgoing_infos.task_offsets[proc_offset + local_op_index + 1];
-          if (end > start) {
-            auto sp = span<SubgraphImpl::CompletionInfo>(replay->subgraph->async_outgoing_infos.data.data() + start, end - start);
-            atomic<int32_t>* final_ctr = nullptr;
-            if (subgraph->operation_meta.data[op_index].is_final_event) {
-              assert(subgraph->operation_meta.data[op_index].is_async);
-              final_ctr = &replay->pending_async_count;
-            }
+          auto sp = span<SubgraphImpl::CompletionInfo>(replay->subgraph->async_outgoing_infos.data.data() + start, end - start);
+          atomic<int32_t>* final_ctr = nullptr;
+          if (subgraph->operation_meta.data[op_index].is_final_event) {
+            final_ctr = &replay->pending_async_count;
+          }
+          // The notifier needs to be created if there are post-conditions,
+          // or this task is a final event.
+          if (!sp.empty() || final_ctr != nullptr) {
             trigger = new(&replay->async_operation_effect_triggerers[op_index]) SubgraphImpl::AsyncGPUWorkTriggerer(replay->all_proc_states, sp, replay->preconditions, final_ctr);
           }
         }

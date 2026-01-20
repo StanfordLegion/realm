@@ -1002,9 +1002,9 @@ namespace Realm {
           // Enqueue case.
           auto bgwork_it = bgwork_schedule.find(edge);
           if (bgwork_it != bgwork_schedule.end()) {
-            bgwork_async_preconditions[i].emplace_back(-1, bgwork_it->second, CompletionInfo::EdgeKind::BGWORK_TO_STATIC);
+            bgwork_async_preconditions[i].emplace_back(-1, bgwork_it->second, CompletionInfo::EdgeKind::BGWORK_TO_BGWORK);
           } else {
-            bgwork_async_preconditions[i].emplace_back(operation_procs[edge], operation_indices[edge], CompletionInfo::EdgeKind::STATIC_TO_STATIC);
+            bgwork_async_preconditions[i].emplace_back(operation_procs[edge], operation_indices[edge], CompletionInfo::EdgeKind::STATIC_TO_BGWORK);
           }
         }
       }
@@ -1839,12 +1839,7 @@ namespace Realm {
     if (final_ev_counter) {
       int32_t remaining = final_ev_counter->fetch_sub_acqrel(1) - 1;
       if (remaining == 0) {
-        // Another trigger check for the final event. All processors
-        // share the same finish counter and finish event.
-        remaining = all_proc_states[0].finish_counter->fetch_sub_acqrel(1) - 1;
-        if (remaining == 0) {
-          all_proc_states[0].finish_event.trigger();
-        }
+        maybe_trigger_subgraph_final_completion_event(all_proc_states[0]);
       }
     }
   }
@@ -1992,6 +1987,16 @@ namespace Realm {
       }
       default:
         assert(false);
+    }
+  }
+
+  void maybe_trigger_subgraph_final_completion_event(ProcSubgraphReplayState& state) {
+    // Trigger check for the final event. All processors
+    // share the same finish counter and finish event, so any
+    // entry of all_proc_states can be passed.
+    int32_t remaining = state.finish_counter->fetch_sub_acqrel(1) - 1;
+    if (remaining == 0) {
+      state.finish_event.trigger();
     }
   }
 

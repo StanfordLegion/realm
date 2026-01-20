@@ -687,14 +687,12 @@ namespace Realm {
     for (auto& it : state[0].subgraph->bgwork_postconditions[subgraph_index]) {
       trigger_subgraph_operation_completion(state, it, true /* incr_counter */, nullptr);
     }
-    // TODO (rohany): Do we have to duplicate this logic in the async
-    //  gpu copy stream completion pieces?
     if (state[0].subgraph->bgwork_items[subgraph_index].is_final_event) {
       // TODO (rohany): Hackily including the contributions of bgwork
       //  operations in the proc 0 counters.
       int32_t remaining = state[0].pending_async_count.fetch_sub_acqrel(1) - 1;
       if (remaining == 0) {
-        state[0].finish_event.trigger();
+        maybe_trigger_subgraph_final_completion_event(state[0]);
       }
     }
   }
@@ -708,14 +706,12 @@ namespace Realm {
     for (auto& it : state[0].subgraph->bgwork_async_postconditions[subgraph_index]) {
       trigger_subgraph_operation_completion(state, it, true /* incr_counter */, nullptr);
     }
-    // TODO (rohany): Do we have to duplicate this logic in the async
-    //  gpu copy stream completion pieces?
     if (state[0].subgraph->bgwork_items[subgraph_index].is_final_event) {
       // TODO (rohany): Hackily including the contributions of bgwork
       //  operations in the proc 0 counters.
       int32_t remaining = state[0].pending_async_count.fetch_sub_acqrel(1) - 1;
       if (remaining == 0) {
-        state[0].finish_event.trigger();
+        maybe_trigger_subgraph_final_completion_event(state[0]);
       }
     }
   }

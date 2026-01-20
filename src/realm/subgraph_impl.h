@@ -449,6 +449,7 @@ namespace Realm {
   );
 
   void launch_async_bgwork_item(ProcSubgraphReplayState* all_proc_states, unsigned index);
+  void maybe_trigger_subgraph_final_completion_event(ProcSubgraphReplayState& states);
 
 }; // namespace Realm
 
