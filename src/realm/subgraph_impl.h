@@ -25,6 +25,7 @@
 #include "realm/event_impl.h"
 #include "realm/cuda/cuda_module.h"
 #include "realm/mutex.h"
+#include "realm/mem_impl.h"
 
 #include <queue>
 
@@ -34,6 +35,9 @@ namespace Realm {
   class LocalTaskProcessor;
   class XferDes;
   struct SubgraphOperationProfilingInfo;
+  class TransferDesc;
+  struct TransferGraph;
+  class SubgraphImpl;
 
   struct SubgraphScheduleEntry {
     SubgraphDefinition::OpKind op_kind;
@@ -217,6 +221,23 @@ namespace Realm {
     std::vector<T> data;
   };
 
+  // SubgraphIBAllocator is a helper class to get notifications that
+  // requested IB allocations
+  class SubgraphIBAllocator : public IBAllocationCompletion {
+  public:
+    virtual void notify_ib_allocation(unsigned ib_index, off_t ib_offset) override;
+    virtual void notify_ib_allocations(unsigned count, unsigned first_index, const off_t *offsets) override;
+    void allocate_and_launch_xds(ProcSubgraphReplayState* all_proc_states, unsigned subgraph_index, unsigned op_idx);
+  private:
+    ProcSubgraphReplayState* all_proc_states;
+    SubgraphImpl* subgraph;
+    atomic<int32_t> pending_responses;
+    unsigned subgraph_index;
+    unsigned op_idx;
+    std::vector<off_t> ib_offsets;
+    void launch_copy_xds();
+  };
+
   class SubgraphImpl {
   public:
     SubgraphImpl();
@@ -252,14 +273,18 @@ namespace Realm {
       UserEvent trigger = UserEvent::NO_USER_EVENT;
     };
 
+    // Methods for interacting with copies and physical copy plans.
+    public:
+      TransferDesc* get_transfer_desc(unsigned op_idx);
+
     protected:
-      void analyze_copy(
-        SubgraphDefinition::CopyDesc& copy,
+      bool is_plannable_copy(unsigned op_idx);
+      void plan_copy(
+        unsigned op_idx,
         std::vector<XferDes*>& result,
         ProfilingMeasurements::OperationCopyInfo& copy_info,
         ProfilingMeasurements::OperationMemoryUsage& mem_info
       );
-      bool is_plannable_copy(SubgraphDefinition::CopyDesc& copy);
 
       // Methods for understanding the asynchronous affects tasks may have.
       // Since subgraphs have a static view of the source program, they can
@@ -388,6 +413,8 @@ namespace Realm {
     // A vector of XD's for all copies that were planned during
     // subgraph compilation.
     FlattenedSparseMatrix<XferDes*> planned_copy_xds;
+    std::vector<TransferDesc*> copy_transfer_descs;
+    std::vector<SubgraphIBAllocator> copy_ib_allocators;
     // Always record copy plan information and cache it.
     std::vector<ProfilingMeasurements::OperationMemoryUsage> prof_copy_memory_usages;
     std::vector<ProfilingMeasurements::OperationCopyInfo> prof_copy_infos;

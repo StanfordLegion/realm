@@ -496,6 +496,7 @@ namespace Realm {
       p.remote_bytes_total.store(size_t(-1));
       p.ib_offset = ii.ib_offset;
       p.ib_size = ii.ib_size;
+      p.ib_index = ii.ib_index;
       p.addrcursor.set_addrlist(&p.addrlist);
       switch(ii.port_type) {
       case XferDesPortInfo::GATHER_CONTROL_PORT:
@@ -562,6 +563,7 @@ namespace Realm {
       p.remote_bytes_total.store(size_t(-1));
       p.ib_offset = oi.ib_offset;
       p.ib_size = oi.ib_size;
+      p.ib_index = oi.ib_index;
       p.addrcursor.set_addrlist(&p.addrlist);
 
       // if we're writing into an IB, the first 'ib_size' byte
@@ -644,6 +646,8 @@ namespace Realm {
 
   void XferDes::mark_completed()
   {
+    // TODO (rohany): At some point, an XD might need to know that
+    //  it shouldn't actually free some of its IBs.
     for(std::vector<XferPort>::const_iterator it = input_ports.begin();
         it != input_ports.end(); ++it) {
       if(it->ib_size > 0) {
@@ -750,7 +754,7 @@ namespace Realm {
     }
   }
 
-  void XferDes::reset() {
+  void XferDes::reset(const std::vector<off_t>& ib_offsets) {
    iteration_completed.store_release(false);
    bytes_write_pending.store_release(0);
    transfer_completed.store_release(false);
@@ -766,6 +770,16 @@ namespace Realm {
      info.seq_remote.reset();
      info.addrlist.reset();
      info.addrcursor.reset();
+     // If this XD is using an IB, update its offset value
+     // to the latest one for this copy instantiation.
+     if (info.ib_size > 0) {
+       info.ib_offset = ib_offsets[info.ib_index];
+       // TODO (rohany): This is pretty hacky, but I don't know
+       //  a better way to do it...
+       auto wrapit = dynamic_cast<WrappingFIFOIterator*>(info.iter);
+       assert(wrapit);
+       wrapit->set_base(info.ib_offset);
+     }
    }
 
    if(gather_control_port >= 0) {
@@ -790,6 +804,14 @@ namespace Realm {
      info.seq_remote.reset();
      info.addrlist.reset();
      info.addrcursor.reset();
+     if (info.ib_size > 0) {
+       info.ib_offset = ib_offsets[info.ib_index];
+       // TODO (rohany): This is pretty hacky, but I don't know
+       //  a better way to do it...
+       auto wrapit = dynamic_cast<WrappingFIFOIterator*>(info.iter);
+       assert(wrapit);
+       wrapit->set_base(info.ib_offset);
+     }
    }
 
    if(scatter_control_port >= 0) {
@@ -2165,8 +2187,8 @@ namespace Realm {
     input_control.eos_received = true;
   }
 
-  void MemfillXferDes::reset() {
-    XferDes::reset();
+  void MemfillXferDes::reset(const std::vector<off_t>& ib_offsets) {
+    XferDes::reset(ib_offsets);
     assert(input_control.control_port_idx == -1);
     input_control.current_io_port = -1;
     input_control.remaining_count = fill_total;

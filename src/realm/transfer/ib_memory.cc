@@ -18,8 +18,7 @@
 // IB (Intermediate Buffer) Memory implementations for Realm
 
 #include "realm/transfer/ib_memory.h"
-
-#include "realm/transfer/transfer.h"
+#include "realm/runtime_impl.h"
 
 namespace Realm {
 
@@ -228,7 +227,7 @@ namespace Realm {
         // all done - return completed request(s) to original requestor
         if(reqs->sender == Network::my_node_id) {
           // oh, hey, that's us!
-          TransferOperation *op = reinterpret_cast<TransferOperation *>(reqs->req_op);
+          IBAllocationCompletion *op = reinterpret_cast<IBAllocationCompletion*>(reqs->req_op);
           op->notify_ib_allocations(reqs->count, reqs->first_req, reqs->offsets.data());
         } else {
           if(reqs->count == 1) {
@@ -599,7 +598,7 @@ namespace Realm {
           if(args.requestor == Network::my_node_id) {
             // local notification - do in two parts because the offsets are in
             //  two different arrays
-            TransferOperation *op = reinterpret_cast<TransferOperation *>(args.req_op);
+            IBAllocationCompletion *op = reinterpret_cast<IBAllocationCompletion *>(args.req_op);
             assert(args.curr_index > 0); // shouldn't be here if all ibs were local
             op->notify_ib_allocations(args.curr_index, args.first_index, offsets);
             op->notify_ib_allocations(immed_count, args.first_index + args.curr_index,
@@ -670,7 +669,7 @@ namespace Realm {
                                               const RemoteIBAllocResponseSingle &args,
                                               const void *data, size_t msglen)
   {
-    TransferOperation *op = reinterpret_cast<TransferOperation *>(args.req_op);
+    IBAllocationCompletion *op = reinterpret_cast<IBAllocationCompletion *>(args.req_op);
     op->notify_ib_allocation(args.req_index, args.offset);
   }
 
@@ -687,7 +686,7 @@ namespace Realm {
                                                 const RemoteIBAllocResponseMultiple &args,
                                                 const void *data, size_t msglen)
   {
-    TransferOperation *op = reinterpret_cast<TransferOperation *>(args.req_op);
+    IBAllocationCompletion *op = reinterpret_cast<IBAllocationCompletion *>(args.req_op);
     op->notify_ib_allocations(args.count, args.first_index,
                               ((msglen > 0) ? static_cast<const off_t *>(data) : 0));
   }

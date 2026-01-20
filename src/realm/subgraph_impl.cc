@@ -348,47 +348,42 @@ namespace Realm {
     }
   }
 
-  bool is_plannable_copy(SubgraphDefinition::CopyDesc& copy) {
-    auto node = Network::my_node_id;
-    bool allowed = true;
-    for(auto &src : copy.srcs) {
-      auto mem = src.inst.get_location();
-      if(mem.address_space() != node)
-        allowed = false;
-    }
-    for(auto &dst : copy.dsts) {
-      auto mem = dst.inst.get_location();
-      if(mem.address_space() != node)
-        allowed = false;
-    }
-    return allowed;
-  }
+  TransferDesc* SubgraphImpl::get_transfer_desc(unsigned op_idx) {
+    // We'll lazily initialize these.
+    if (copy_transfer_descs.empty())
+      copy_transfer_descs.resize(defn->copies.size(), nullptr);
+    if (copy_transfer_descs[op_idx] != nullptr)
+      return copy_transfer_descs[op_idx];
 
-  bool SubgraphImpl::is_plannable_copy(SubgraphDefinition::CopyDesc& copy) {
-    auto node = Network::my_node_id;
-    bool allowed = true;
-    for(auto &src : copy.srcs) {
-      auto mem = src.inst.get_location();
-      if(mem.address_space() != node)
-        allowed = false;
-    }
-    for(auto &dst : copy.dsts) {
-      auto mem = dst.inst.get_location();
-      if(mem.address_space() != node)
-        allowed = false;
-    }
-    if (!allowed)
-      return false;
-
-    // Copies that need to use intermediate buffers are not currently supported
-    // in the "fast" subgraph engine. We'll create a transfer desc here and when
-    // we analyze the copy, and can deduplicate that later if it becomes too expensive.
+    // In this case, we actually have to make the TransferDesc.
+    auto& copy = defn->copies[op_idx];
     TransferDesc* td = copy.space.impl->make_transfer_desc(copy.srcs, copy.dsts, copy.indirects);
     assert(td->analysis_complete.load() && td->analysis_successful);
-    bool has_ibs = !td->graph.ib_edges.empty();
-    td->remove_reference();
-    if (has_ibs)
-      return false;
+    copy_transfer_descs[op_idx] = td;
+    return td;
+  }
+
+  bool SubgraphImpl::is_plannable_copy(unsigned op_idx) {
+    auto& copy = defn->copies[op_idx];
+    // For now, copies that cross address space boundaries are
+    // not plannable.
+    {
+      auto node = Network::my_node_id;
+      bool allowed = true;
+      for(auto &src : copy.srcs) {
+        auto mem = src.inst.get_location();
+        if(mem.address_space() != node)
+          allowed = false;
+      }
+      for(auto &dst : copy.dsts) {
+        auto mem = dst.inst.get_location();
+        if(mem.address_space() != node)
+          allowed = false;
+      }
+      if (!allowed)
+        return false;
+    }
+
     return true;
   }
 
@@ -828,7 +823,7 @@ namespace Realm {
         auto key = std::make_pair(it.op_kind, it.op_index);
         // Copies require special handling, as they don't go into the
         // per-processor local schedules.
-        if (it.op_kind == SubgraphDefinition::OPKIND_COPY && is_plannable_copy(defn->copies[it.op_index])) {
+        if (it.op_kind == SubgraphDefinition::OPKIND_COPY && is_plannable_copy(it.op_index)) {
           bgwork_schedule[key] = bgwork_items.size();
           bgwork_items.push_back(it);
           if (it.is_final_event)
@@ -963,6 +958,7 @@ namespace Realm {
       }
     }
 
+    // Plan all copies in the static subgraph schedule.
     {
       std::vector<std::vector<XferDes*>> xds(defn->copies.size());
       prof_copy_infos.resize(defn->copies.size());
@@ -970,10 +966,12 @@ namespace Realm {
       for (auto& it : bgwork_items) {
         if (it.op_kind != SubgraphDefinition::OPKIND_COPY)
           continue;
-        auto& copy = defn->copies[it.op_index];
-        analyze_copy(copy, xds[it.op_index], prof_copy_infos[it.op_index], prof_copy_memory_usages[it.op_index]);
+        plan_copy(it.op_index, xds[it.op_index], prof_copy_infos[it.op_index], prof_copy_memory_usages[it.op_index]);
       }
       planned_copy_xds = xds;
+      // Initialize allocators for all copies (they will only be used for
+      // copies that need IB allocations).
+      copy_ib_allocators.resize(defn->copies.size());
     }
 
     std::map<Processor, int32_t> proc_to_index;
@@ -2046,6 +2044,12 @@ namespace Realm {
     static_to_dynamic_counts.clear();
 
     bgwork_items.clear();
+    for (auto td : copy_transfer_descs) {
+      if (td)
+        td->remove_reference();
+    }
+    copy_transfer_descs.clear();
+    copy_ib_allocators.clear();
     for (auto xd : planned_copy_xds.data) {
       xd->remove_reference();
     }
@@ -2511,6 +2515,97 @@ namespace Realm {
     }
   }
 
+  void SubgraphIBAllocator::launch_copy_xds() {
+    auto& offs = subgraph->planned_copy_xds.offsets;
+    for (uint64_t i = offs[op_idx]; i < offs[op_idx + 1]; i++) {
+      auto xd = subgraph->planned_copy_xds.data[i];
+      assert(xd);
+      xd->reset(ib_offsets);
+      xd->subgraph_replay_state = all_proc_states;
+      xd->subgraph_index = subgraph_index;
+      xd->xd_index = i - offs[op_idx];
+      // Add a reference before enqueing the XD, as each pass through the pipeline
+      // removes a reference upon completion.
+      xd->add_reference();
+      xd->channel->enqueue_ready_xd(xd);
+    }
+  }
+
+  void SubgraphIBAllocator::allocate_and_launch_xds(
+    ProcSubgraphReplayState* _all_proc_states,
+    unsigned _subgraph_index,
+    unsigned _op_idx
+  ) {
+    all_proc_states = _all_proc_states;
+    subgraph_index = _subgraph_index;
+    op_idx = _op_idx;
+    subgraph = all_proc_states[0].subgraph;
+    const TransferGraph& graph = subgraph->get_transfer_desc(op_idx)->get_transfer_graph();
+    // Allocation immediately succeeds for copies without ibs.
+    if (graph.ib_edges.empty()) {
+      launch_copy_xds();
+      return;
+    }
+    // Initialize the offsets vector -- this allocation will only happen on
+    // the first replay of the subgraph.
+    ib_offsets.resize(graph.ib_edges.size(), -1);
+    // Use the same trick from TransferOperation::allocate_ibs() to ensure
+    // that the allocation request doesn't trigger completion before we
+    // leave this function.
+    pending_responses.store(int32_t(graph.ib_edges.size() + 1));
+    allocate_ib_memories_from_graph(graph, this);
+    // Subtract another 1 from the pending responses to indicate that this
+    // function is now complete.
+    auto remaining = pending_responses.fetch_sub_acqrel(1) - 1;
+    // If there are no more pending responses, the inline allocation
+    // was successful.
+    if (remaining == 0) {
+      launch_copy_xds();
+    }
+  }
+
+  void SubgraphIBAllocator::notify_ib_allocation(unsigned int ib_index, off_t ib_offset) {
+    TransferDesc* desc = subgraph->get_transfer_desc(op_idx);
+
+    // Code stolen from TransferOperation::notify_ib_allocation.
+    ib_index = desc->get_transfer_graph().ib_alloc_order[ib_index];
+    assert(ib_index < ib_offsets.size());
+    // TODO: handle failed immediate allocation attempts
+    assert(ib_offset >= 0);
+#ifdef DEBUG_REALM
+    assert(ib_offsets[ib_index] == -1);
+#endif
+    ib_offsets[ib_index] = ib_offset;
+
+    auto remaining = pending_responses.fetch_sub_acqrel(1) - 1;
+    if (remaining == 0) {
+      launch_copy_xds();
+    }
+  }
+
+  void SubgraphIBAllocator::notify_ib_allocations(unsigned int count, unsigned int first_index, const off_t *offsets) {
+    TransferDesc* desc = subgraph->get_transfer_desc(op_idx);
+
+    // Code stolen from TransferOperation::notify_ib_allocations.
+    assert((first_index + count) <= ib_offsets.size());
+    // TODO: handle failed immediate allocation attempts
+    assert(offsets);
+
+    for(unsigned i = 0; i < count; i++) {
+      // translate alloc order back to original ib index
+      unsigned ib_index = desc->get_transfer_graph().ib_alloc_order[first_index + i];
+#ifdef DEBUG_REALM
+      assert(ib_offsets[ib_index] == -1);
+#endif
+      ib_offsets[ib_index] = offsets[i];
+    }
+
+    auto remaining = pending_responses.fetch_sub_acqrel(int32_t(count)) - count;
+    if (remaining == 0) {
+      launch_copy_xds();
+    }
+  }
+
   void launch_async_bgwork_item(ProcSubgraphReplayState* all_proc_states, unsigned index) {
     auto& state = all_proc_states[0];
     auto subgraph = state.subgraph;
@@ -2536,27 +2631,19 @@ namespace Realm {
       }
     }
 
-    for (uint64_t i = offs[item.op_index]; i < offs[item.op_index + 1]; i++) {
-      auto xd = subgraph->planned_copy_xds.data[i];
-      assert(xd);
-      xd->reset();
-      xd->subgraph_replay_state = all_proc_states;
-      xd->subgraph_index = index;
-      xd->xd_index = i - offs[item.op_index];
-      // Add a reference before enqueing the XD, as each pass through the pipeline
-      // removes a reference upon completion.
-      xd->add_reference();
-      xd->channel->enqueue_ready_xd(xd);
-    }
+    // Perform the necessary IB allocation. If no IBs are necessary,
+    // the allocation process short circuits.
+    SubgraphIBAllocator& allocator = subgraph->copy_ib_allocators[item.op_index];
+    allocator.allocate_and_launch_xds(all_proc_states, index, item.op_index);
   }
 
-  void SubgraphImpl::analyze_copy(
-    SubgraphDefinition::CopyDesc& copy,
+  void SubgraphImpl::plan_copy(
+    unsigned op_idx,
     std::vector<XferDes*>& result,
     ProfilingMeasurements::OperationCopyInfo& copy_info,
     ProfilingMeasurements::OperationMemoryUsage& mem_info
   ) {
-    TransferDesc* td = copy.space.impl->make_transfer_desc(copy.srcs, copy.dsts, copy.indirects);
+    TransferDesc* td = get_transfer_desc(op_idx);
     // Extract profiling information about the copy requested from
     // the transfer descriptor for later use.
     copy_info = td->prof_cpinfo;
@@ -2566,15 +2653,8 @@ namespace Realm {
     // copy analysis inline. It could be deferred, but if all the instances
     // have been created already, then the analysis happens right away.
     // Assert that this is true.
-    // TODO (rohany): Have to have some sort of filter for the copies that
-    //  we actually analyze in this manner.
     assert(td->analysis_complete.load() && td->analysis_successful);
-    // For now, the copies we're analyzing should only ever
-    //  be one-hop copies inside this node. After this works, we
-    //  can consider extending the analysis to cache plans for
-    //  multi-hop copies through the network.
     TransferGraph& graph = td->graph;
-    assert(graph.ib_edges.empty());
     // Now, spoof the XDFactory inside each node of the transfer
     // graph so that we can extract the XD's.
     std::vector<MockXDFactory> factories(graph.xd_nodes.size());
@@ -2589,10 +2669,20 @@ namespace Realm {
     Event ev = finish_event->current_event();
     TransferOperation *op = new TransferOperation(*td, Event::NO_EVENT, finish_event,
                                                   ID(ev).event_generation(), 0 /* priority */);
-    // Actually create the XD's for the copy. We have to call
-    // TransferOperation::allocate_ibs(), which then falls through
-    // to call TransferOperation::create_xds().
-    op->allocate_ibs();
+
+    // Skip IB allocation and create XD's immediately. Skipping
+    // TransferOperation::allocate_ibs() means that we first need to
+    // mark the operation as "ready". The XD creation assumes that
+    // the ib_offsets vector is of the right size though, so preallocate it.
+    // When actually replaying this copy, we'll perform the necessary
+    // ib allocations and hook them up into each XD.
+    if (!graph.ib_edges.empty()) {
+      op->ib_offsets.resize(graph.ib_edges.size(), -1);
+    }
+    bool ok = op->mark_ready();
+    assert(ok);
+    // Now we're ready to create the XDs.
+    op->create_xds();
 
     // After TransferOperation::create_xds(), our mock factory should
     // have been invoked to handle the creation.
@@ -2604,9 +2694,6 @@ namespace Realm {
     for (auto& tracker : op->xd_trackers) {
       tracker->mark_finished(true /* successful */);
     }
-
-    // At this point, we don't need a reference to the transfer descriptor anymore.
-    td->remove_reference();
 
     for (auto& factory : factories) {
       auto xd = factory.xd;

@@ -207,6 +207,9 @@ namespace Realm {
     Memory mem;
     RegionInstance inst;
     size_t ib_offset, ib_size;
+    // ib_index holds what index in the ib_offsets vector
+    // corresponds to the ib data for this port.
+    unsigned ib_index;
     TransferIterator *iter;
     CustomSerdezID serdez_id;
   };
@@ -330,6 +333,9 @@ namespace Realm {
       //  to complete)
       Memory ib_mem;
       size_t ib_offset, ib_size;
+      // Used when resetting an XD, records which ib_offset
+      // should be used.
+      unsigned ib_index;
       AddressList addrlist;
       AddressListCursor addrcursor;
     };
@@ -412,7 +418,7 @@ namespace Realm {
     void remove_reference(void);
 
     void add_update_pre_bytes_total_received(void);
-    virtual void reset(void);
+    virtual void reset(const std::vector<off_t>& ib_offsets);
 
   protected:
     virtual ~XferDes();
@@ -596,7 +602,7 @@ namespace Realm {
     // Note: not including the override to avoid warnings with
     // the rest of the functions not marked override.
     bool launches_async_work() /* override */ { return false; }
-    void reset();
+    void reset(const std::vector<off_t>& ib_offsets);
 
     bool progress_xd(MemfillChannel *channel, TimeLimit work_until);
   protected:

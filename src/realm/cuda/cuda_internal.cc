@@ -2453,6 +2453,14 @@ namespace Realm {
       }
     }
 
+    void GPUfillXferDes::reset(const std::vector<off_t>& ib_offsets) {
+      XferDes::reset(ib_offsets);
+      assert(input_control.control_port_idx == -1);
+      input_control.current_io_port = -1;
+      input_control.remaining_count = fill_total;
+      input_control.eos_received = true;
+    }
+
     long GPUreduceXferDes::get_requests(Request **requests, long nr)
     {
       // unused

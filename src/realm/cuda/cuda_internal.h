@@ -938,7 +938,7 @@ namespace Realm {
                      const std::vector<XferDesPortInfo> &outputs_info, int _priority,
                      const void *_fill_data, size_t _fill_size, size_t _fill_total);
 
-      void reset() override;
+      void reset(const std::vector<off_t>& ib_offsets) override;
 
       long get_requests(Request **requests, long nr);
 
