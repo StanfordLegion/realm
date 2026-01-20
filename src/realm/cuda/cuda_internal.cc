@@ -544,22 +544,27 @@ namespace Realm {
       auto& preconds = state.subgraph->bgwork_async_preconditions;
       for (uint64_t i = preconds.offsets[index]; i < preconds.offsets[index + 1]; i++) {
         auto& info = preconds.data[i];
-        CUevent_st* ev = nullptr;
         switch (info.kind) {
           case SubgraphImpl::CompletionInfo::STATIC_TO_BGWORK: {
             auto idx = state.subgraph->operations.proc_offsets[info.proc] + info.index;
-            ev = (CUevent_st*)(state.async_operation_events[idx]);
+            auto ev = (CUevent_st*)(state.async_operation_events[idx]);
+            CHECK_CU(CUDA_DRIVER_FNPTR(cuStreamWaitEvent)(stream->get_stream(), ev, 0));
             break;
           }
           case SubgraphImpl::CompletionInfo::BGWORK_TO_BGWORK: {
-            ev = (CUevent_st*)(state.async_bgwork_events[info.index]);
+            // Wait on all events in the given range, if they aren't null.
+            for (uint64_t j = state.subgraph->bgwork_async_event_counts[info.index]; j < state.subgraph->bgwork_async_event_counts[info.index + 1]; j++) {
+              auto token = state.async_bgwork_events[j];
+              if (token != nullptr) {
+                auto ev = (CUevent_st*)(token);
+                CHECK_CU(CUDA_DRIVER_FNPTR(cuStreamWaitEvent)(stream->get_stream(), ev, 0));
+              }
+            }
             break;
           }
           default:
             assert(false);
         }
-        // Wait on the event on subgraph_input.
-        CHECK_CU(CUDA_DRIVER_FNPTR(cuStreamWaitEvent)(stream->get_stream(), ev, 0));
       }
     }
 

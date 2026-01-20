@@ -193,7 +193,7 @@ namespace Realm {
     for (uint64_t i = planned_copy_xds.offsets[op_idx]; i < planned_copy_xds.offsets[op_idx + 1]; i++) {
       // We're async if any of the xd's launches async work.
       auto xd = planned_copy_xds.data[i];
-      if (!xd->launches_async_work())
+      if (xd->launches_async_work())
         return true;
     }
     return false;
@@ -1006,7 +1006,10 @@ namespace Realm {
             assert(false);
         }
 
-        sum += bgwork_async_operation_count(it.op_kind, it.op_index);
+        // Instead of async_operation_count, this is just operation_count. That's because
+        // if a bgwork item has some async and some sync items, the encoding scheme assumes
+        // that we can just access the i'th item's token, whether or not its async.
+        sum += bgwork_operation_count(it.op_kind, it.op_index);
       }
       bgwork_async_event_counts[bgwork_items.size()] = sum;
     }

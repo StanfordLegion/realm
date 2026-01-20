@@ -327,6 +327,9 @@ namespace Realm {
         GPUWorkStart *start = 0;
         GPUCompletionNotification *notification = 0;
         bool return_event = false;
+        // The logic below may change the value stored in
+        // `event`, so save it before manipulating the queue.
+        CUevent event_to_return = event;
 
         {
           AutoLock<> al(mutex);
@@ -347,7 +350,7 @@ namespace Realm {
         }
 
         if (return_event) {
-          gpu->event_pool.return_event(event);
+          gpu->event_pool.return_event(event_to_return);
         }
 
         if(start) {
