@@ -188,6 +188,7 @@ namespace Realm {
     DeferredDestroy deferred_destroy;
 
   public:
+    bool opt = false;
     // These objects consist of the "static schedule" information
     // for subgraph replays.
     std::vector<Processor> all_procs;
@@ -202,9 +203,15 @@ namespace Realm {
     FlattenedProcMap<OpMeta> operation_meta;
 
     struct CompletionInfo {
-      CompletionInfo(int32_t _proc, uint64_t _index) : proc(_proc), index(_index) {}
+      enum EdgeKind {
+        STATIC_TO_STATIC = 0,
+        STATIC_TO_DYNAMIC = 1,
+        DYNAMIC_TO_STATIC = 2,
+      };
+      CompletionInfo(int32_t _proc, uint64_t _index, EdgeKind _kind) : proc(_proc), index(_index), kind(_kind) {}
       int32_t proc = -1;
       uint64_t index = UINT64_MAX;
+      EdgeKind kind = STATIC_TO_STATIC;
     };
 
     FlattenedProcTaskMap<CompletionInfo> completion_infos;
@@ -216,7 +223,8 @@ namespace Realm {
     // Collapsed interpolation metadata.
     FlattenedProcTaskMap<SubgraphDefinition::Interpolation> interpolations;
 
-    // TODO (rohany): comment ...
+    // Initial queue status, prefilled with operations that don't
+    // have any preconditions.
     std::vector<int64_t> initial_queue_state;
     std::vector<uint64_t> initial_queue_entry_count;
 
@@ -236,6 +244,11 @@ namespace Realm {
       std::vector<CompletionInfo> to_trigger;
     };
     std::vector<ExternalPreconditionMeta> external_precondition_info;
+
+    // Metadata for the interaction of the dynamic and
+    // static components of the subgraph.
+    std::vector<ExternalPreconditionMeta> dynamic_to_static_triggers;
+    std::vector<int32_t> static_to_dynamic_counts;
 
     class ExternalPreconditionTriggerer : public EventWaiter {
       public:
@@ -281,8 +294,11 @@ namespace Realm {
           ProcSubgraphReplayState* state,
           void* args, atomic<int32_t>* preconds, atomic<int64_t>* queue,
           ExternalPreconditionTriggerer* external_preconds,
+          ExternalPreconditionTriggerer* dynamic_preconds,
           void** async_operation_events,
-          AsyncGPUWorkTriggerer* async_operation_event_triggerers
+          AsyncGPUWorkTriggerer* async_operation_event_triggerers,
+          atomic<int32_t>* dynamic_precond_counters,
+          UserEvent* dynamic_events
         );
         virtual void event_triggered(bool poisoned, TimeLimit work_until);
         virtual void print(std::ostream& os) const;
@@ -294,8 +310,11 @@ namespace Realm {
         atomic<int32_t>* preconds;
         atomic<int64_t>* queue;
         ExternalPreconditionTriggerer* external_preconds;
+        ExternalPreconditionTriggerer* dynamic_preconds;
         void** async_operation_events;
         AsyncGPUWorkTriggerer* async_operation_event_triggerers;
+        atomic<int32_t>* dynamic_precond_counters;
+        UserEvent* dynamic_events;
     };
   };
 
@@ -321,6 +340,10 @@ namespace Realm {
     // Store the preconditions array local to this instantiation
     // of the subgraph.
     atomic<int32_t>* preconditions = nullptr;
+    // Precondition information for operations in
+    // the dynamic portion of the subgraph.
+    atomic<int32_t>* dynamic_preconditions = nullptr;
+    UserEvent* dynamic_events = nullptr;
 
     // A queue of operation indexes to execute.
     atomic<int64_t>* queue = nullptr;
@@ -361,12 +384,22 @@ namespace Realm {
                                const void *data, size_t datalen);
   };
 
+  class SubgraphTriggerContext {
+  public:
+    virtual ~SubgraphTriggerContext() {};
+    virtual void enter() {};
+    virtual void exit() {};
+  };
+
   // Helper method to consolidate the logic of triggering the completion
-  // of an operation during subgraph replay.
-  void trigger_subgraph_operation_completion(
+  // of an operation during subgraph replay. The SubgraphTriggerContext
+  // is a context that the caller can provide if certain state needs
+  // to be set up before triggering an event.
+    void trigger_subgraph_operation_completion(
     ProcSubgraphReplayState* all_proc_states,
     const SubgraphImpl::CompletionInfo& info,
-    bool incr_counter
+    bool incr_counter,
+    SubgraphTriggerContext* ctx
   );
 
 }; // namespace Realm

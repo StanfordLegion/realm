@@ -787,6 +787,7 @@ namespace Realm {
     config_map.insert({"report_sparsity_leaks", &report_sparsity_leaks});
     config_map.insert({"barrier_broadcast_radix", &barrier_broadcast_radix});
     config_map.insert({"diskmem", &disk_mem_size});
+    config_map.insert({"static_subgraph_opt", &static_subgraph_opt});
 
     resource_map.insert({"cpu", &res_num_cpus});
     resource_map.insert({"sysmem", &res_sysmem_size});
@@ -866,6 +867,9 @@ namespace Realm {
     // The default of path_cache_size is 0, when it is set to non-zero, the caching is
     // enabled.
     cp.add_option_int("-ll:path_cache_size", Config::path_cache_lru_size);
+
+    // Whether or not to attempt optimization of subgraphs.
+    cp.add_option_bool("-ll:static_subgraph_opt", static_subgraph_opt);
 
     bool cmdline_ok = cp.parse_command_line(cmdline);
 

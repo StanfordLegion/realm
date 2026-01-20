@@ -1066,6 +1066,16 @@ namespace Realm {
     work_counter.increment_counter();
   }
 
+  template<typename LOCK>
+  class SchedulerReplayTriggerContext : public SubgraphTriggerContext {
+  public:
+    SchedulerReplayTriggerContext(LOCK& _lock) : lock(_lock) {}
+    virtual void enter() override { lock.unlock(); }
+    virtual void exit() override { lock.lock(); }
+  private:
+    LOCK& lock;
+  };
+
   // the main scheduler loop
   void ThreadedTaskScheduler::scheduler_loop(void)
   {
@@ -1156,12 +1166,11 @@ namespace Realm {
 
       size_t queue_index = subgraph->operations.proc_offsets[proc_index] + replay->next_op_index;
       atomic<int64_t>& queue_entry = replay->queue[queue_index];
-      // TODO (rohany): Have to experiment with yielding to the default
-      //  scheduler when work is not yet ready.
+      // TODO (rohany): Have to test the performance impacts of this...
       // Spin until an entry has been added into the queue.
       int64_t queue_entry_value = queue_entry.load_acquire();
-      while (queue_entry_value == SUBGRAPH_EMPTY_QUEUE_ENTRY) {
-        queue_entry_value = queue_entry.load_acquire();
+      if (queue_entry_value == SUBGRAPH_EMPTY_QUEUE_ENTRY) {
+        continue;
       }
 
       auto local_op_index = queue_entry_value;
@@ -1275,8 +1284,14 @@ namespace Realm {
       auto completion_task_offset_end = subgraph->completion_infos.task_offsets[completion_proc_offset + local_op_index + 1];
       for (size_t i = completion_task_offset_start; i < completion_task_offset_end; i++) {
         SubgraphImpl::CompletionInfo& info = subgraph->completion_infos.data[i];
-        // Only wake up the target processor if it isn't us.
-        trigger_subgraph_operation_completion(replay->all_proc_states, info, info.proc != proc_index);
+        assert(info.kind == SubgraphImpl::CompletionInfo::EdgeKind::STATIC_TO_STATIC ||
+               info.kind == SubgraphImpl::CompletionInfo::EdgeKind::STATIC_TO_DYNAMIC);
+        // Only wake up the target processor if it isn't us. We have to do
+        // a bit of work to make sure that the call to trigger can actually
+        // trigger an event (which means releasing the lock and taking it
+        // back after the trigger is done).
+        SchedulerReplayTriggerContext<decltype(lock)> ctx(lock);
+        trigger_subgraph_operation_completion(replay->all_proc_states, info, info.proc != proc_index, &ctx);
       }
 
       // Increment the state after consuming entry next_op_index in the queue.

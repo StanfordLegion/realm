@@ -393,6 +393,14 @@ namespace Realm {
 
   bool SubgraphImpl::compile(void)
   {
+
+    ModuleConfig *core = Runtime::get_runtime().get_module_config("core");
+    bool rt_opt = false;
+    assert(core->get_property("static_subgraph_opt", rt_opt) == REALM_SUCCESS);
+    opt = rt_opt && defn->concurrency_mode == SubgraphDefinition::INSTANTIATION_ORDER;
+    if (opt)
+      log_subgraph.info() << "Performing static subgraph optimizations.";
+
     typedef std::map<std::pair<SubgraphDefinition::OpKind, unsigned>, unsigned> TopoMap;
     TopoMap toposort;
 
@@ -499,104 +507,6 @@ namespace Realm {
       schedule[it->second].op_index = it->first.second;
     }
 
-    // count number of intermediate events - instantiations can produce more
-    //  than one
-    num_intermediate_events = 0;
-    num_final_events = 0;
-    for(std::vector<SubgraphScheduleEntry>::iterator it = schedule.begin();
-        it != schedule.end(); ++it) {
-      if(it->op_kind != SubgraphDefinition::OPKIND_EXT_POSTCOND) {
-        // we'll clear this later if we find our contribution to the final
-        //  event is done transitively
-        it->is_final_event = true;
-        num_final_events++;
-      } else
-        it->is_final_event = false;
-
-      it->intermediate_event_base = num_intermediate_events;
-
-      if(it->op_kind == SubgraphDefinition::OPKIND_INSTANTIATION)
-        it->intermediate_event_count = inst_post_max_port[it->op_index] + 1;
-      else if(it->op_kind != SubgraphDefinition::OPKIND_EXT_POSTCOND)
-        it->intermediate_event_count = 1;
-      else
-        it->intermediate_event_count = 0;
-
-      num_intermediate_events += it->intermediate_event_count;
-    }
-
-    for(std::vector<SubgraphDefinition::Dependency>::const_iterator it =
-            defn->dependencies.begin();
-        it != defn->dependencies.end(); ++it) {
-      TopoMap::const_iterator tgt =
-          toposort.find(std::make_pair(it->tgt_op_kind, it->tgt_op_index));
-      assert(tgt != toposort.end());
-
-      switch(it->src_op_kind) {
-      case SubgraphDefinition::OPKIND_EXT_PRECOND:
-      {
-        // external preconditions are encoded as negative indices
-        int idx = -1 - (int)(it->src_op_index);
-        schedule[tgt->second].preconditions.push_back(
-            std::make_pair(it->tgt_op_port, idx));
-        break;
-      }
-
-      default:
-      {
-        TopoMap::const_iterator src =
-            toposort.find(std::make_pair(it->src_op_kind, it->src_op_index));
-        assert(src != toposort.end());
-        unsigned ev_idx = schedule[src->second].intermediate_event_base + it->src_op_port;
-        schedule[tgt->second].preconditions.push_back(
-            std::make_pair(it->tgt_op_port, ev_idx));
-        // if we are depending on port 0 of another node and we're not an
-        //  external postcondition, then the preceeding node is not final
-        if((it->src_op_port == 0) &&
-           (it->tgt_op_kind != SubgraphDefinition::OPKIND_EXT_POSTCOND) &&
-           (schedule[src->second].is_final_event)) {
-          schedule[src->second].is_final_event = false;
-          num_final_events--;
-        }
-        break;
-      }
-      }
-    }
-
-    std::map<std::pair<SubgraphDefinition::OpKind, unsigned>, std::vector<std::pair<SubgraphDefinition::OpKind, unsigned>>> incoming_edges;
-    std::map<std::pair<SubgraphDefinition::OpKind, unsigned>, std::vector<std::pair<SubgraphDefinition::OpKind, unsigned>>> outgoing_edges;
-    // Perform a group-by on the dependencies list.
-    for (auto& it : defn->dependencies) {
-      // Add the incoming edge.
-      auto skey = std::make_pair(it.src_op_kind, it.src_op_index);
-      auto tkey = std::make_pair(it.tgt_op_kind, it.tgt_op_index);
-      incoming_edges[tkey].push_back(skey);
-      outgoing_edges[skey].push_back(tkey);
-    }
-
-    // now sort the preconditions for each entry - allows us to group by port
-    //  and also notice duplicates
-    max_preconditions = 1; // have to count global precondition when needed
-    for(std::vector<SubgraphScheduleEntry>::iterator it = schedule.begin();
-        it != schedule.end(); ++it) {
-      if(it->preconditions.empty())
-        continue;
-
-      std::sort(it->preconditions.begin(), it->preconditions.end());
-      // look for duplicates past the first event
-      size_t num_unique = 1;
-      for(size_t i = 1; i < it->preconditions.size(); i++)
-        if(it->preconditions[i] != it->preconditions[num_unique - 1]) {
-          if(num_unique < i)
-            it->preconditions[num_unique] = it->preconditions[i];
-          num_unique++;
-        }
-      if(num_unique < it->preconditions.size())
-        it->preconditions.resize(num_unique);
-      if(num_unique >= max_preconditions)
-        max_preconditions = num_unique + 1;
-    }
-
     // Maintain a separate collection of tasks to interpolation metadata.
     // We'll use this when extracting the interpolation metadata for the
     // statically scheduled graph component.
@@ -654,7 +564,7 @@ namespace Realm {
     // also sanity-check that any interpolation using a reduction op has it
     //  defined and sizes match up
     for(std::vector<SubgraphDefinition::Interpolation>::iterator it =
-            defn->interpolations.begin();
+        defn->interpolations.begin();
         it != defn->interpolations.end(); ++it) {
       if(it->redop_id != 0) {
         const ReductionOpUntyped *redop =
@@ -670,28 +580,174 @@ namespace Realm {
       }
     }
 
-    // Assert that we only have tasks.
-    assert(defn->copies.empty());
-    assert(defn->instantiations.empty());
-    assert(defn->acquires.empty());
-    assert(defn->releases.empty());
+    // Perform "final event" analysis before partitioning the schedule.
+    num_final_events = 0;
+    for(std::vector<SubgraphScheduleEntry>::iterator it = schedule.begin();
+        it != schedule.end(); ++it) {
+      if(it->op_kind != SubgraphDefinition::OPKIND_EXT_POSTCOND) {
+        // We'll clear this later if we find our contribution to the final
+        //  event is done transitively
+        it->is_final_event = true;
+        num_final_events++;
+      } else
+        it->is_final_event = false;
+      }
+
+    // Any operation that points into a final event is not a final event.
+    for(std::vector<SubgraphDefinition::Dependency>::const_iterator it =
+        defn->dependencies.begin();
+        it != defn->dependencies.end(); ++it) {
+      if (it->src_op_kind == SubgraphDefinition::OPKIND_EXT_PRECOND)
+        continue;
+      TopoMap::const_iterator src =
+          toposort.find(std::make_pair(it->src_op_kind, it->src_op_index));
+      // If we are depending on port 0 of another node and we're not an
+      //  external postcondition, then the preceeding node is not final.
+      if((it->src_op_port == 0) &&
+         (it->tgt_op_kind != SubgraphDefinition::OPKIND_EXT_POSTCOND) &&
+         (schedule[src->second].is_final_event)) {
+        schedule[src->second].is_final_event = false;
+        num_final_events--;
+      }
+    }
+
+    // Separate the schedules into "static" and "dynamic" portions of
+    // the original schedule.
+    // Construct a separate schedule for operations that are not
+    // included in the "statically-optimized" portion of the graph.
+    std::vector<SubgraphScheduleEntry> dynamic_schedule;
+    std::vector<SubgraphScheduleEntry> static_schedule;
 
     std::vector<SubgraphDefinition::OpKind> allowed_kinds;
     allowed_kinds.push_back(SubgraphDefinition::OPKIND_TASK);
     allowed_kinds.push_back(SubgraphDefinition::OPKIND_ARRIVAL);
     allowed_kinds.push_back(SubgraphDefinition::OPKIND_EXT_PRECOND);
+    // TODO (rohany): Push more kinds of operations into the static portion
+    //  of the subgraph.
 
-    // Start doing the static schedule packing analysis...
-    for (auto& it : incoming_edges) {
-      // For now, tasks should only depend on allowed operations.
-      for (auto& edge : it.second) {
-        assert(std::find(allowed_kinds.begin(), allowed_kinds.end(), edge.first) != allowed_kinds.end());
+    if (opt) {
+      // Reset the toposort for the new schedule.
+      toposort.clear();
+      for (auto& it : schedule) {
+        // Operations we know how to handle go into the static schedule.
+        if (std::find(allowed_kinds.begin(), allowed_kinds.end(), it.op_kind) != allowed_kinds.end()) {
+          static_schedule.push_back(it);
+          // If we're moving an operation into the static part of the schedule,
+          // its contribution to the final event in the subgraph will be done
+          // separately, so remove it from the "dynamic" set of final events.
+          if (it.is_final_event)
+            num_final_events--;
+        } else {
+          toposort[{it.op_kind, it.op_index}] = dynamic_schedule.size();
+          dynamic_schedule.push_back(it);
+        }
+      }
+
+      // The schedule is now only the dynamic portion.
+      schedule = dynamic_schedule;
+    }
+
+    // count number of intermediate events - instantiations can produce more
+    //  than one
+    num_intermediate_events = 0;
+    for(std::vector<SubgraphScheduleEntry>::iterator it = schedule.begin();
+        it != schedule.end(); ++it) {
+      it->intermediate_event_base = num_intermediate_events;
+      if(it->op_kind == SubgraphDefinition::OPKIND_INSTANTIATION)
+        it->intermediate_event_count = inst_post_max_port[it->op_index] + 1;
+      else if(it->op_kind != SubgraphDefinition::OPKIND_EXT_POSTCOND)
+        it->intermediate_event_count = 1;
+      else
+        it->intermediate_event_count = 0;
+      num_intermediate_events += it->intermediate_event_count;
+    }
+
+    for(std::vector<SubgraphDefinition::Dependency>::const_iterator it =
+            defn->dependencies.begin();
+        it != defn->dependencies.end(); ++it) {
+      TopoMap::const_iterator tgt =
+          toposort.find(std::make_pair(it->tgt_op_kind, it->tgt_op_index));
+      // If we can't find the target, that means the target is part
+      // of the static schedule, and will be handled by that logic.
+      if (tgt == toposort.end()) {
+        continue;
+      }
+      assert(tgt != toposort.end());
+
+      switch(it->src_op_kind) {
+      case SubgraphDefinition::OPKIND_EXT_PRECOND: {
+        // external preconditions are encoded as negative indices
+        int idx = -1 - (int)(it->src_op_index);
+        schedule[tgt->second].preconditions.push_back(
+            std::make_pair(it->tgt_op_port, idx));
+        break;
+      }
+
+      default: {
+        TopoMap::const_iterator src =
+            toposort.find(std::make_pair(it->src_op_kind, it->src_op_index));
+        // Same story for the source edge.
+        if (src == toposort.end())
+          continue;
+        unsigned ev_idx = schedule[src->second].intermediate_event_base + it->src_op_port;
+        schedule[tgt->second].preconditions.push_back(
+            std::make_pair(it->tgt_op_port, ev_idx));
+        break;
+      }
       }
     }
-    // Each node's outgoing edge should also to an allowed operation.
-    for (auto& it : outgoing_edges) {
-      for (auto& edge : it.second) {
-        assert(std::find(allowed_kinds.begin(), allowed_kinds.end(), edge.first) != allowed_kinds.end());
+
+    // now sort the preconditions for each entry - allows us to group by port
+    //  and also notice duplicates
+    max_preconditions = 1; // have to count global precondition when needed
+    for(std::vector<SubgraphScheduleEntry>::iterator it = schedule.begin();
+        it != schedule.end(); ++it) {
+      if(it->preconditions.empty())
+        continue;
+
+      std::sort(it->preconditions.begin(), it->preconditions.end());
+      // look for duplicates past the first event
+      size_t num_unique = 1;
+      for(size_t i = 1; i < it->preconditions.size(); i++)
+        if(it->preconditions[i] != it->preconditions[num_unique - 1]) {
+          if(num_unique < i)
+            it->preconditions[num_unique] = it->preconditions[i];
+          num_unique++;
+        }
+      if(num_unique < it->preconditions.size())
+        it->preconditions.resize(num_unique);
+      if(num_unique >= max_preconditions)
+        max_preconditions = num_unique + 1;
+    }
+
+    std::map<std::pair<SubgraphDefinition::OpKind, unsigned>, std::vector<std::pair<SubgraphDefinition::OpKind, unsigned>>> incoming_edges;
+    std::map<std::pair<SubgraphDefinition::OpKind, unsigned>, std::vector<std::pair<SubgraphDefinition::OpKind, unsigned>>> outgoing_edges;
+    // Perform a group-by on the dependencies list.
+    for (auto& it : defn->dependencies) {
+      // Add the incoming edge.
+      auto skey = std::make_pair(it.src_op_kind, it.src_op_index);
+      auto tkey = std::make_pair(it.tgt_op_kind, it.tgt_op_index);
+      incoming_edges[tkey].push_back(skey);
+      outgoing_edges[skey].push_back(tkey);
+    }
+
+    // If we're doing optimization, make sure that the graph only
+    // contains operations we know about.
+    if (opt) {
+      std::vector<SubgraphDefinition::OpKind> disallowed_edges;
+      disallowed_edges.push_back(SubgraphDefinition::OPKIND_INSTANTIATION);
+      disallowed_edges.push_back(SubgraphDefinition::OPKIND_EXT_POSTCOND);
+      for (auto& it : incoming_edges) {
+        // For now, tasks should only depend on allowed operations.
+        for (auto& edge : it.second) {
+          assert(std::find(disallowed_edges.begin(), disallowed_edges.end(), edge.first) == disallowed_edges.end());
+        }
+      }
+      // Each node's outgoing edge should also to an allowed operation.
+      for (auto& it : outgoing_edges) {
+        for (auto& edge : it.second) {
+          assert(std::find(disallowed_edges.begin(), disallowed_edges.end(), edge.first) == disallowed_edges.end());
+        }
       }
     }
 
@@ -709,7 +765,7 @@ namespace Realm {
     std::map<unsigned, std::vector<CompletionInfo>> external_preconditions;
 
     // Set up the processor -> id mapping.
-    for (auto& it : schedule) {
+    for (auto& it : static_schedule) {
       switch (it.op_kind) {
         case SubgraphDefinition::OPKIND_TASK: {
           auto& task = defn->tasks[it.op_index];
@@ -741,16 +797,19 @@ namespace Realm {
     // likely last processor to trigger it.
     size_t arrival_proc_idx = 0;
 
-    // TODO (rohany): Just iterating in schedule order should be enough?
-    for (auto& it : schedule) {
+    for (auto& it : static_schedule) {
       auto desc = std::make_pair(it.op_kind, it.op_index);
-      // TODO (rohany): Handle multiple mailboxes here.
       switch (it.op_kind) {
         case SubgraphDefinition::OPKIND_TASK: {
           auto& task = defn->tasks[it.op_index];
           operation_indices[desc] = local_schedules[task.proc].size();
           operation_procs[desc] = proc_to_index[task.proc];
           local_schedules[task.proc].push_back(desc);
+          // Comment for here and below. It's OK that incoming_edges
+          // can contain edges that point from the dynamic partition
+          // into the static partition. The total count of preconditions
+          // is still valid, as the precondition from the other partition
+          // still has to be respected.
           local_incoming[task.proc].push_back(int32_t(incoming_edges[desc].size()));
           OpMeta meta;
           meta.is_final_event = it.is_final_event;
@@ -774,17 +833,29 @@ namespace Realm {
           assert(false);
       }
     }
+
+    // Initialize the record of static->dynamic edges.
+    static_to_dynamic_counts = std::vector<int32_t>(schedule.size(), 0);
+
     // Now that all tasks have been added, fill out per-task information
     // like outgoing neighbors and interpolations.
-    for (auto& it : schedule) {
-      // TODO (rohany): Handle multiple mailboxes here.
+    for (auto& it : static_schedule) {
       auto key = std::make_pair(it.op_kind, it.op_index);
       auto proc = all_procs[operation_procs[key]];
 
       std::vector<CompletionInfo> outgoing;
       for (auto& edge : outgoing_edges[key]) {
-        CompletionInfo info(operation_procs[edge], operation_indices[edge]);
-        outgoing.push_back(info);
+        if (edge.first == SubgraphDefinition::OPKIND_EXT_POSTCOND) {
+          assert(false);
+        } else if (toposort.find(edge) != toposort.end()) {
+          auto idx = toposort.at(edge);
+          static_to_dynamic_counts[idx]++;
+          CompletionInfo info(-1, idx, CompletionInfo::EdgeKind::STATIC_TO_DYNAMIC);
+          outgoing.push_back(info);
+        } else {
+          CompletionInfo info(operation_procs[edge], operation_indices[edge], CompletionInfo::EdgeKind::STATIC_TO_STATIC);
+          outgoing.push_back(info);
+        }
       }
       local_outgoing[proc].push_back(outgoing);
 
@@ -795,11 +866,24 @@ namespace Realm {
         // the asynchronous effects are complete.
         std::vector<CompletionInfo> to_trigger;
         for (auto& edge : outgoing_edges[key]) {
+          // If the consumer of this operation is outside the static
+          // partition of the graph, then it is opaque to us and we have
+          // to wait for all effects of this task to complete before
+          // it can start.
+          if (toposort.find(edge) != toposort.end()) {
+            auto idx = toposort.at(edge);
+            static_to_dynamic_counts[idx]++;
+            CompletionInfo info(-1, idx, CompletionInfo::EdgeKind::STATIC_TO_DYNAMIC);
+            to_trigger.push_back(info);
+            continue;
+          }
+
           if (operation_respects_async_effects(defn, it.op_kind, it.op_index, edge.first, edge.second)) {
             // If the child operation knows how to sequence itself
             // after us without blocking, then we don't have to worry.
             continue;
           }
+
           // Otherwise, make the dependent operation have to wait on the
           // control code of this operation completing, _and_ its
           // asynchronous effect.
@@ -807,7 +891,7 @@ namespace Realm {
           auto schedidx = operation_indices[edge];
           local_incoming[all_procs[procidx]][schedidx]++;
           // Remember the processors that this operation will have to trigger.
-          to_trigger.emplace_back(procidx, schedidx);
+          to_trigger.emplace_back(procidx, schedidx, CompletionInfo::EdgeKind::STATIC_TO_STATIC);
         }
         async_effect_triggers[proc].push_back(to_trigger);
         // Additionally, we need to "wait" on the right "tokens" of
@@ -826,7 +910,7 @@ namespace Realm {
           }
           // If we do know how to handle the incoming async effect, then
           // remember the async predecessor tasks to wait on.
-          will_trigger.emplace_back(operation_procs[edge], operation_indices[edge]);
+          will_trigger.emplace_back(operation_procs[edge], operation_indices[edge], CompletionInfo::EdgeKind::STATIC_TO_STATIC);
         }
         async_incoming_events[proc].push_back(will_trigger);
       } else {
@@ -843,15 +927,22 @@ namespace Realm {
       local_interpolations[proc].push_back(interps);
     }
 
+    // Preallocate a set of vectors for external operations
+    // to trigger upon completion.
+    dynamic_to_static_triggers.resize(schedule.size());
     // Perform external precondition analysis.
     unsigned max_ext_precond_id = 0;
-    for (auto& it : schedule) {
+    for (auto& it : static_schedule) {
       auto key = std::make_pair(it.op_kind, it.op_index);
+      CompletionInfo info(operation_procs[key], operation_indices[key], CompletionInfo::EdgeKind::DYNAMIC_TO_STATIC);
       for (auto& edge : incoming_edges[key]) {
         if (edge.first == SubgraphDefinition::OPKIND_EXT_PRECOND) {
-          CompletionInfo info(operation_procs[key], operation_indices[key]);
           external_preconditions[edge.second].push_back(info);
           max_ext_precond_id = std::max(max_ext_precond_id, edge.second);
+        } else if (toposort.find(edge) != toposort.end()) {
+          // In this case, we have an incoming edge from
+          // the dynamic partition into the static partition.
+          dynamic_to_static_triggers[toposort.at(edge)].to_trigger.push_back(info);
         }
       }
     }
@@ -887,7 +978,7 @@ namespace Realm {
     // Identify how many asynchronous operations will contribute to
     // the subgraph's completion event.
     async_finish_events = std::vector<int32_t>(all_procs.size(), 0);
-    for (auto& it : schedule) {
+    for (auto& it : static_schedule) {
       if (it.is_final_event && operation_has_async_effects(defn, it.op_kind, it.op_index)) {
         auto proc = operation_procs.at({it.op_kind, it.op_index});
         async_finish_events[proc]++;
@@ -928,7 +1019,15 @@ namespace Realm {
                                  span<const Event> postconditions, Event start_event,
                                  Event finish_event, int priority_adjust)
   {
-    if (std::getenv("STATIC_SUBGRAPH_OPT")) {
+    // If we're running with the static scheduling optimization, then
+    // there's extra work to be done. We have to preemptively
+    // declare some data set by the optimization path though.
+    GenEventImpl *event_impl = get_genevent_impl(finish_event);
+    UserEvent* dynamic_events = nullptr;
+    ExternalPreconditionTriggerer* dynamic_precondition_waiters = nullptr;
+    atomic<int32_t>* precondition_ctrs = nullptr;
+    ProcSubgraphReplayState* state = nullptr;
+    if (opt) {
       // We're going to return early before completing the interpolations,
       // so we need to make a copy of the argument buffer to read from.
       void* copied_args = nullptr;
@@ -940,8 +1039,20 @@ namespace Realm {
       // Create a fresh copy of the preconditions array.
       static_assert(sizeof(int32_t) == sizeof(atomic<int32_t>));
       size_t precondition_ctr_bytes = sizeof(atomic<int32_t>) * original_preconditions.data.size();
-      auto precondition_ctrs = (atomic<int32_t>*)malloc(precondition_ctr_bytes);
+      precondition_ctrs = (atomic<int32_t>*)malloc(precondition_ctr_bytes);
       memcpy(precondition_ctrs, original_preconditions.data.data(), precondition_ctr_bytes);
+
+      // Allocate the data structures necessary to let control
+      // flow from the static partition to the dynamic one.
+      size_t dynamic_precondition_ctr_bytes = sizeof(atomic<int32_t>) * static_to_dynamic_counts.size();
+      auto dynamic_precondition_ctrs = (atomic<int32_t>*)malloc(dynamic_precondition_ctr_bytes);
+      memcpy(dynamic_precondition_ctrs, static_to_dynamic_counts.data(), dynamic_precondition_ctr_bytes);
+      size_t dynamic_event_bytes = sizeof(UserEvent) * static_to_dynamic_counts.size();
+      dynamic_events = (UserEvent*)malloc(dynamic_event_bytes);
+      for (size_t i = 0; i < static_to_dynamic_counts.size(); i++) {
+        if (static_to_dynamic_counts[i] > 0)
+          dynamic_events[i] = UserEvent::create_user_event();
+      }
 
       // Create a fresh queue vector for this instantiation of the graph.
       static_assert(sizeof(int64_t) == sizeof(atomic<int64_t>));
@@ -954,16 +1065,14 @@ namespace Realm {
       auto async_operation_events = (void**)malloc(sizeof(void*) * operations.data.size());
       auto async_operation_effect_triggerers = (AsyncGPUWorkTriggerer*)malloc(sizeof(AsyncGPUWorkTriggerer) * operations.data.size());
 
-      // TODO (rohany): We can also not use an event here and use another
-      //  atomic counter with a single event. That is a micro-optimization though.
-      // Arm the result merger with each of the completed events.
-      GenEventImpl *event_impl = get_genevent_impl(finish_event);
+      // Arm the result merger with each of the completed events, and
+      // the final events from the dynamic portion.
       event_impl->merger.prepare_merger(finish_event, false /*!ignore_faults*/,
-                                        all_procs.size());
+                                     all_procs.size() + num_final_events);
 
       // Separate the installation and state creation steps
       // to enable deferring the launch of the subgraph.
-      auto state = new ProcSubgraphReplayState[all_procs.size()];
+      state = new ProcSubgraphReplayState[all_procs.size()];
       for (size_t i = 0; i < all_procs.size(); i++) {
         state[i].all_proc_states = state;
         state[i].subgraph = this;
@@ -972,6 +1081,8 @@ namespace Realm {
         state[i].args = copied_args;
         state[i].arglen = arglen;
         state[i].preconditions = precondition_ctrs;
+        state[i].dynamic_preconditions = dynamic_precondition_ctrs;
+        state[i].dynamic_events = dynamic_events;
         state[i].async_operation_events = async_operation_events;
         state[i].async_operation_effect_triggerers = async_operation_effect_triggerers;
         state[i].has_pending_async_work = async_finish_events[i] > 0;
@@ -980,7 +1091,6 @@ namespace Realm {
         state[i].next_queue_slot.store(operations.proc_offsets[i] + initial_queue_entry_count[i]);
         event_impl->merger.add_precondition(state[i].finish_event);
       }
-      event_impl->merger.arm_merger();
 
       // Since we have a fresh precondition vector, we can
       // just queue up the external precondition waiters
@@ -1000,6 +1110,12 @@ namespace Realm {
           EventImpl::add_waiter(precond, waiter);
         }
       }
+
+      // Also allocate precondition waiters for external events to
+      // trigger from dynamic operations into static the static
+      // subgraph. We'll lazily initialize it as we issue operations
+      // from the dynamic portion of the subgraph.
+      dynamic_precondition_waiters = (ExternalPreconditionTriggerer*)(malloc(sizeof(ExternalPreconditionTriggerer) * dynamic_to_static_triggers.size()));
 
       // If there's nothing to defer, start the subgraph right away.
       if (!start_event.exists() || start_event.has_triggered()) {
@@ -1021,13 +1137,16 @@ namespace Realm {
         precondition_ctrs,
         queue,
         external_precondition_waiters,
+        dynamic_precondition_waiters,
         async_operation_events,
-        async_operation_effect_triggerers
+        async_operation_effect_triggerers,
+        dynamic_precondition_ctrs,
+        dynamic_events
       );
       EventImpl::add_waiter(finish_event, cleanup);
-      return;
+    } else {
+      event_impl->merger.prepare_merger(finish_event, false /*!ignore_faults*/, num_final_events);
     }
-
 
     // we precomputed the number of intermediate events we need, so put them
     //  on the stack
@@ -1035,19 +1154,13 @@ namespace Realm {
         static_cast<Event *>(alloca(num_intermediate_events * sizeof(Event)));
     size_t cur_intermediate_events = 0;
 
-    // we've also computed how many events will contribute to the finish
-    //  event, so we can arm the merger as we go
-    GenEventImpl *event_impl = 0;
-    if(num_final_events > 0) {
-      event_impl = get_genevent_impl(finish_event);
-      event_impl->merger.prepare_merger(finish_event, false /*!ignore_faults*/,
-                                        num_final_events);
-    }
-
-    Event *preconds = static_cast<Event *>(alloca(max_preconditions * sizeof(Event)));
+    // Allocate one extra precondition slot for triggers from the
+    // static subgraph into the dynamic subgraph.
+    Event *preconds = static_cast<Event *>(alloca((max_preconditions + 1) * sizeof(Event)));
 
     for(std::vector<SubgraphScheduleEntry>::const_iterator it = schedule.begin();
         it != schedule.end(); ++it) {
+      size_t sched_idx = it - schedule.begin();
       // assemble precondition
       size_t num_preconds = 0;
       bool need_global_precond = start_event.exists();
@@ -1076,8 +1189,10 @@ namespace Realm {
       }
       if(need_global_precond)
         preconds[num_preconds++] = start_event;
+      if (static_to_dynamic_counts[sched_idx] > 0 && dynamic_events)
+        preconds[num_preconds++] = dynamic_events[sched_idx];
 
-      assert(num_preconds <= max_preconditions);
+      assert(num_preconds <= max_preconditions + 1);
 
       // for external postconditions, merge the preconditions directly into the
       //  returned event
@@ -1266,15 +1381,32 @@ namespace Realm {
       // contribute to the final event if we need to
       if(it->is_final_event)
         event_impl->merger.add_precondition(e);
+
+      // The resulting event may need to contribute to
+      // triggering some work in the static component
+      // of the subgraph.
+      if (opt && !dynamic_to_static_triggers[sched_idx].to_trigger.empty()) {
+        auto meta = &dynamic_to_static_triggers[sched_idx];
+        auto waiter = new (&dynamic_precondition_waiters[sched_idx]) ExternalPreconditionTriggerer(this, meta, precondition_ctrs, state);
+        if (!e.exists() || e.has_triggered()) {
+          waiter->trigger();
+        } else {
+          EventImpl::add_waiter(e, waiter);
+        }
+      }
     }
 
     // sanity-check that we counted right
     assert(cur_intermediate_events == num_intermediate_events);
 
-    if(num_final_events > 0) {
+    if (opt) {
       event_impl->merger.arm_merger();
     } else {
-      GenEventImpl::trigger(finish_event, false /*!poisoned*/);
+      if(num_final_events > 0) {
+        event_impl->merger.arm_merger();
+      } else {
+        GenEventImpl::trigger(finish_event, false /*!poisoned*/);
+      }
     }
   }
 
@@ -1331,11 +1463,15 @@ namespace Realm {
     atomic<int32_t>* _preconds,
     atomic<int64_t>* _queue,
     ExternalPreconditionTriggerer* _external_preconds,
+    ExternalPreconditionTriggerer* _dynamic_preconds,
     void** _async_operation_events,
-    AsyncGPUWorkTriggerer* _async_operation_event_triggerers
+    AsyncGPUWorkTriggerer* _async_operation_event_triggerers,
+    atomic<int32_t>* _dynamic_precond_counters,
+    UserEvent* _dynamic_events
   ) : num_procs(_num_procs), state(_state), args(_args), preconds(_preconds), queue(_queue),
-        external_preconds(_external_preconds), async_operation_events(_async_operation_events),
-        async_operation_event_triggerers(_async_operation_event_triggerers), EventWaiter() {}
+      external_preconds(_external_preconds), dynamic_preconds(_dynamic_preconds),
+      async_operation_events(_async_operation_events), async_operation_event_triggerers(_async_operation_event_triggerers),
+      dynamic_precond_counters(_dynamic_precond_counters), dynamic_events(_dynamic_events), EventWaiter() {}
 
   void SubgraphImpl::InstantiationCleanup::event_triggered(bool poisoned, Realm::TimeLimit work_until) {
     // Before we free async_operation_events, make sure that we return all
@@ -1358,8 +1494,11 @@ namespace Realm {
     free(preconds);
     free(queue);
     free(external_preconds);
+    free(dynamic_preconds);
     free(async_operation_events);
     free(async_operation_event_triggerers);
+    free(dynamic_precond_counters);
+    free(dynamic_events);
     // Delete ourselves after freeing the resource. This pattern
     // is used by other event waiters, so it's reasonable to replicate it here.
     delete this;
@@ -1378,7 +1517,7 @@ namespace Realm {
 
   void SubgraphImpl::ExternalPreconditionTriggerer::trigger() {
     for (auto& info : meta->to_trigger) {
-      trigger_subgraph_operation_completion(all_proc_states, info, true /* incr_counter */);
+      trigger_subgraph_operation_completion(all_proc_states, info, true /* incr_counter */, nullptr /* ctx */);
     }
   }
 
@@ -1405,7 +1544,7 @@ namespace Realm {
   void SubgraphImpl::AsyncGPUWorkTriggerer::request_completed() {
     for (size_t i = 0; i < infos.size(); i++) {
       auto& info = infos[i];
-      trigger_subgraph_operation_completion(all_proc_states, info, true /* incr_counter */);
+      trigger_subgraph_operation_completion(all_proc_states, info, true /* incr_counter */, nullptr /* ctx */);
     }
     // Also see if we need to go trigger the completion event.
     if (final_ev_counter) {
@@ -1490,27 +1629,52 @@ namespace Realm {
   void trigger_subgraph_operation_completion(
       ProcSubgraphReplayState* all_proc_states,
       const SubgraphImpl::CompletionInfo& info,
-      bool incr_counter
+      bool incr_counter,
+      SubgraphTriggerContext* ctx
   ) {
-    auto& state = all_proc_states[info.proc];
-    auto subgraph = state.subgraph;
-    auto& trigger = state.preconditions[subgraph->original_preconditions.proc_offsets[info.proc] + info.index];
-    // Decrement the counter. fetch_sub returns the value before
-    // the decrement, so if it was 1, then we've done the final trigger.
-    // If we were the final trigger, we need to also add the triggered
-    // operation into the target processors queue.
-    int32_t remaining = trigger.fetch_sub_acqrel(1) - 1;
-    if (remaining == 0) {
-      // Get a slot to insert at.
-      auto index = state.next_queue_slot.fetch_add(1);
-      // Write out the value.
-      state.queue[index].store_release(int64_t(info.index));
+    switch (info.kind) {
+      case SubgraphImpl::CompletionInfo::EdgeKind::STATIC_TO_STATIC: [[fallthrough]];
+      case SubgraphImpl::CompletionInfo::EdgeKind::DYNAMIC_TO_STATIC: {
+        auto& state = all_proc_states[info.proc];
+        auto subgraph = state.subgraph;
+        auto& trigger = state.preconditions[subgraph->original_preconditions.proc_offsets[info.proc] + info.index];
+        // Decrement the counter. fetch_sub returns the value before
+        // the decrement, so if it was 1, then we've done the final trigger.
+        // If we were the final trigger, we need to also add the triggered
+        // operation into the target processors queue.
+        int32_t remaining = trigger.fetch_sub_acqrel(1) - 1;
+        if (remaining == 0) {
+          // Get a slot to insert at.
+          auto index = state.next_queue_slot.fetch_add(1);
+          // Write out the value.
+          state.queue[index].store_release(int64_t(info.index));
 
-      // If requested to increment the scheduler's counter, do so.
-      if (incr_counter) {
-        auto lp = subgraph->all_proc_impls[info.proc];
-        lp->sched->work_counter.increment_counter();
+          // If requested to increment the scheduler's counter, do so.
+          if (incr_counter) {
+            auto lp = subgraph->all_proc_impls[info.proc];
+            lp->sched->work_counter.increment_counter();
+          }
+        }
+        break;
       }
+      case SubgraphImpl::CompletionInfo::EdgeKind::STATIC_TO_DYNAMIC: {
+        // If we're in the static-to-dynamic case, the CompletionInfo
+        // edge doesn't have a processor associated with it, so pick
+        // the first one (arbitrarily).
+        auto& state = all_proc_states[0];
+        auto& trigger = state.dynamic_preconditions[info.index];
+        int32_t remaining = trigger.fetch_sub_acqrel(1) - 1;
+        if (remaining == 0) {
+          // Need some help from the caller about allowing the surrounding
+          // context to make an event trigger.
+          if (ctx) { ctx->enter(); }
+          state.dynamic_events[info.index].trigger();
+          if (ctx) { ctx->exit(); }
+        }
+        break;
+      }
+      default:
+        assert(false);
     }
   }
 

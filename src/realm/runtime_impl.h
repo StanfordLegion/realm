@@ -182,6 +182,8 @@ namespace Realm {
     // barriers
     int barrier_broadcast_radix = 4;
 
+    bool static_subgraph_opt = false;
+
     // topology of the host
     const HardwareTopology *host_topology = nullptr;
   };

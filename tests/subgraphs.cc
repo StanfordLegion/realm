@@ -201,20 +201,31 @@ void top_level_task(const void *args, size_t arglen,
 //  auto mq = Machine::MemoryQuery(Machine::get_machine()).only_kind(Memory::GPU_FB_MEM);
 //  std::vector<Memory> fbmems(mq.begin(), mq.end());
 
-//  auto sq = Machine::MemoryQuery(Machine::get_machine()).only_kind(Memory::SYSTEM_MEM);
-//  std::vector<Memory> sysmems(sq.begin(), sq.end());
+auto sq = Machine::MemoryQuery(Machine::get_machine()).only_kind(Memory::SYSTEM_MEM);
+std::vector<Memory> sysmems(sq.begin(), sq.end());
+
+std::map<FieldID, size_t> field_sizes;
+field_sizes[0] = sizeof(int32_t);
+IndexSpace<1> is2 = Rect<1>(0, 10);
+RegionInstance src_inst, dst_inst, dst_inst2;
+RegionInstance::create_instance(src_inst, sysmems[0],
+                                is2, field_sizes,
+                                0 /*SOA*/, ProfilingRequestSet()).wait();
+RegionInstance::create_instance(dst_inst, sysmems[0],
+                                is2, field_sizes,
+                                0 /*SOA*/, ProfilingRequestSet()).wait();
+RegionInstance::create_instance(dst_inst2, sysmems[0],
+                                is2, field_sizes,
+                                0 /*SOA*/, ProfilingRequestSet()).wait();
 
   // Create a buffer.
 //  IndexSpace<1> is = Rect<1>(0, 0);
-//  std::map<FieldID, size_t> field_sizes;
-//  field_sizes[0] = sizeof(int32_t);
 //  RegionInstance gpu_inst;
 //  RegionInstance::create_instance(gpu_inst, fbmems[0],
 //                                  is, field_sizes,
 //                                  0 /*SOA*/, ProfilingRequestSet()).wait();
 
   // IndexSpace<1> is2 = Rect<1>(0, 1250000000);
-//  IndexSpace<1> is2 = Rect<1>(0, 10);
 //  RegionInstance src_inst, dst_inst, cpu_inst, fill_inst;
 //  RegionInstance::create_instance(src_inst, fbmems[0],
 //                                  is2, field_sizes,
@@ -229,20 +240,22 @@ void top_level_task(const void *args, size_t arglen,
 //                                  is2, field_sizes,
 //                                  0 /*SOA*/, ProfilingRequestSet()).wait();
 
+  Event e1, e2;
   // Fill the source.
-//  {
-//    std::vector<CopySrcDstField> info(1);
-//    info[0].set_field(src_inst, 0, sizeof(int32_t));
-//    int32_t value = 42;
-//    is2.fill(info, ProfilingRequestSet(), &value, sizeof(int32_t)).wait();
-//  }
+  {
+    std::vector<CopySrcDstField> info(1);
+    info[0].set_field(src_inst, 0, sizeof(int32_t));
+    int32_t value = 42;
+    e1 = is2.fill(info, ProfilingRequestSet(), &value, sizeof(int32_t));
+  }
   // Also fill the destination to be sure the copy did something.
-//  {
-//    std::vector<CopySrcDstField> info(1);
-//    info[0].set_field(dst_inst, 0, sizeof(int32_t));
-//    int32_t value = 15210;
-//    is2.fill(info, ProfilingRequestSet(), &value, sizeof(int32_t)).wait();
-//  }
+  {
+    std::vector<CopySrcDstField> info(1);
+    info[0].set_field(dst_inst, 0, sizeof(int32_t));
+    int32_t value = 15210;
+    e2 = is2.fill(info, ProfilingRequestSet(), &value, sizeof(int32_t));
+  }
+  Event::merge_events(e1, e2).wait();
   // Fill another instance with a bogus value to be filled by the
   // subgraph.
 //  {
@@ -319,17 +332,16 @@ void top_level_task(const void *args, size_t arglen,
     sd.interpolations[5].bytes = sizeof(Barrier);
     sd.interpolations[5].target_kind = SubgraphDefinition::Interpolation::TARGET_ARRIVAL_BARRIER;
 
-
-//    sd.copies.resize(2);
-//    {
-//      std::vector<CopySrcDstField> src(1), dst(1);
-//      ProfilingRequestSet prs();
-//      src[0].set_field(src_inst, 0, sizeof(int32_t));
-//      dst[0].set_field(dst_inst, 0, sizeof(int32_t));
-//      sd.copies[0].space = is2;
-//      sd.copies[0].srcs = src;
-//      sd.copies[0].dsts = dst;
-//    }
+    sd.copies.resize(1);
+    {
+      std::vector<CopySrcDstField> src(1), dst(1);
+      ProfilingRequestSet prs;
+      src[0].set_field(src_inst, 0, sizeof(int32_t));
+      dst[0].set_field(dst_inst, 0, sizeof(int32_t));
+      sd.copies[0].space = is2;
+      sd.copies[0].srcs = src;
+      sd.copies[0].dsts = dst;
+    }
 //    {
 //      std::vector<CopySrcDstField> src(1), dst(1);
 //      ProfilingRequestSet prs();
@@ -344,7 +356,7 @@ void top_level_task(const void *args, size_t arglen,
 
     // Add the necessary dependencies.
     // sd.dependencies.resize(4);
-    sd.dependencies.resize(7);
+    sd.dependencies.resize(10);
     // TODO (rohany): Not considering external pre/postconditions etc.
     // Add the incoming and outgoing dependencies.
     sd.dependencies[0].src_op_kind = SubgraphDefinition::OPKIND_TASK;
@@ -391,16 +403,16 @@ void top_level_task(const void *args, size_t arglen,
     sd.dependencies[7].tgt_op_kind = SubgraphDefinition::OPKIND_TASK;
     sd.dependencies[7].tgt_op_index = 0;
 
-//    // Copy dependencies.
-//    sd.dependencies[4].src_op_kind = SubgraphDefinition::OPKIND_TASK;
-//    sd.dependencies[4].src_op_index = 0;
-//    sd.dependencies[4].tgt_op_kind = SubgraphDefinition::OPKIND_COPY;
-//    sd.dependencies[4].tgt_op_index = 0;
-//
-//    sd.dependencies[5].src_op_kind = SubgraphDefinition::OPKIND_TASK;
-//    sd.dependencies[5].src_op_index = 1;
-//    sd.dependencies[5].tgt_op_kind = SubgraphDefinition::OPKIND_COPY;
-//    sd.dependencies[5].tgt_op_index = 1;
+    // Copy dependencies.
+    sd.dependencies[8].src_op_kind = SubgraphDefinition::OPKIND_TASK;
+    sd.dependencies[8].src_op_index = 0;
+    sd.dependencies[8].tgt_op_kind = SubgraphDefinition::OPKIND_COPY;
+    sd.dependencies[8].tgt_op_index = 0;
+
+    sd.dependencies[9].src_op_kind = SubgraphDefinition::OPKIND_COPY;
+    sd.dependencies[9].src_op_index = 0;
+    sd.dependencies[9].tgt_op_kind = SubgraphDefinition::OPKIND_TASK;
+    sd.dependencies[9].tgt_op_index = 1;
 
 
     // TODO (rohany): Let's just first add a copy and see if nothing explodes.
@@ -432,18 +444,6 @@ void top_level_task(const void *args, size_t arglen,
   // e.wait();
 
   // bar = bar.advance_barrier();
-
-  // See if the subgraph did the copy.
-//  {
-//    std::vector<CopySrcDstField> src(1), dst(1);
-//    src[0].set_field(dst_inst, 0, sizeof(int32_t));
-//    dst[0].set_field(cpu_inst, 0, sizeof(int32_t));
-//    is2.copy(src, dst, ProfilingRequestSet()).wait();
-//
-//    AffineAccessor<int32_t, 1> acc = AffineAccessor<int32_t, 1>(cpu_inst, 0);
-//    std::cout << "FOUND VALUE IN INST: " << (*acc.ptr(0)) << std::endl;
-//    std::cout << "FOUND VALUE IN INST: " << (*acc.ptr(is2.bounds.hi[0])) << std::endl;
-//  }
 
 
   // Check out the fill instance.
@@ -484,6 +484,14 @@ void top_level_task(const void *args, size_t arglen,
 
   e.wait();
   std::cout << "Done!" << std::endl;
+
+  // See if the subgraph did the copy.
+  {
+    AffineAccessor<int32_t, 1> acc = AffineAccessor<int32_t, 1>(dst_inst, 0);
+    std::cout << "FOUND VALUE IN INST: " << (*acc.ptr(0)) << std::endl;
+    std::cout << "FOUND VALUE IN INST: " << (*acc.ptr(is2.bounds.hi[0])) << std::endl;
+  }
+
 
   // do everything on this processor - get a good memory to use
 //  Memory m = Machine::MemoryQuery(Machine::get_machine()).has_affinity_to(p).first();
