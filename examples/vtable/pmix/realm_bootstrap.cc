@@ -165,8 +165,10 @@ namespace App {
           char key_buf[256];
           unsigned long group_id = 0;
           unsigned int our_rank = 0;
-          if(sscanf(kv.first.c_str(), "realm_bootstrap_key_%lu_%u", &group_id, &our_rank) == 2) {
-            snprintf(key_buf, sizeof(key_buf), "realm_bootstrap_key_%lu_%u", group_id, rank);
+          if(sscanf(kv.first.c_str(), "realm_bootstrap_key_%lu_%u", &group_id,
+                    &our_rank) == 2) {
+            snprintf(key_buf, sizeof(key_buf), "realm_bootstrap_key_%lu_%u", group_id,
+                     rank);
           } else {
             continue;
           }
