@@ -27,6 +27,10 @@
 #include "realm/mutex.h"
 #include "realm/mem_impl.h"
 
+#ifdef REALM_USE_NVTX
+#include "realm/nvtx.h"
+#endif
+
 #include <queue>
 
 namespace Realm {
@@ -411,6 +415,11 @@ namespace Realm {
     // to return async tokens (like CUDA events) back to the per-processor
     // pools they may have been allocated from.
     std::map<LocalTaskProcessor*, std::vector<unsigned>> bgwork_async_event_procs;
+#ifdef REALM_USE_NVTX
+    // Profiling helpers.
+    std::vector<nvtxRangeId_t> nvtx_bgwork_launches;
+    std::vector<nvtxRangeId_t> nvtx_xd_ranges;
+#endif
 
     // The number of async events created per bgwork item. This is
     // necessary because some bgwork items may launch multiple disjoint
@@ -660,7 +669,15 @@ namespace Realm {
 
   void launch_async_bgwork_item(ProcSubgraphReplayState* all_proc_states, unsigned index);
   void maybe_trigger_subgraph_final_completion_event(ProcSubgraphReplayState& states);
-  void send_subgraph_remote_xd_completion(NodeID launch_node, ProcSubgraphReplayState* all_proc_states, unsigned subgraph_index);
+  void send_subgraph_remote_xd_completion(
+    NodeID launch_node,
+    ProcSubgraphReplayState* all_proc_states,
+    unsigned subgraph_index
+#ifdef REALM_USE_NVTX
+    ,unsigned xd_index
+#endif
+  );
+
 
 }; // namespace Realm
 

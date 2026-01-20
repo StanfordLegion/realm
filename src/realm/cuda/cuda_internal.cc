@@ -20,6 +20,10 @@
 #include "realm/cuda/cuda_access.h"
 #include "realm/cuda/cuda_memcpy.h"
 
+#ifdef REALM_USE_NVTX
+#include "realm/nvtx.h"
+#endif
+
 namespace Realm {
 
   extern Logger log_xd;
@@ -625,6 +629,10 @@ namespace Realm {
       memset(&transpose_copy, 0, sizeof(transpose_copy));
       memset(&copy_infos, 0, sizeof(copy_infos));
 
+#ifdef REALM_USE_NVTX
+      nvtxScopedRange _nvtx_range("dma", __PRETTY_FUNCTION__);
+#endif
+
       // The general algorithm here can be described in three loops:
       // 1) Outer loop - iterates over all the addresses for each request.  This typically
       // corresponds to each rectangle in an index space transfer. 2) Batch loop - Map the
@@ -1039,6 +1047,10 @@ namespace Realm {
       bool did_work = false;
       // TODO: add span
       ReadSequenceCache rseqcache(this, 2 << 20);
+
+#ifdef REALM_USE_NVTX
+      nvtxScopedRange _nvtx_range("dma", __PRETTY_FUNCTION__);
+#endif
 
       while(true) {
         size_t min_xfer_size = 4 << 20;
@@ -1955,6 +1967,10 @@ namespace Realm {
       ReadSequenceCache rseqcache(this, 2 << 20);
       WriteSequenceCache wseqcache(this, 2 << 20);
 
+#ifdef REALM_USE_NVTX
+      nvtxScopedRange _nvtx_range("dma", __PRETTY_FUNCTION__);
+#endif
+
       while(true) {
         size_t min_xfer_size = 4096; // TODO: make controllable
         size_t max_bytes = get_addresses(min_xfer_size, &rseqcache);
@@ -2479,6 +2495,10 @@ namespace Realm {
       bool did_work = false;
       ReadSequenceCache rseqcache(this, 2 << 20);
       ReadSequenceCache wseqcache(this, 2 << 20);
+
+#ifdef REALM_USE_NVTX
+      nvtxScopedRange _nvtx_range("dma", __PRETTY_FUNCTION__);
+#endif
 
       const size_t in_elem_size = redop->sizeof_rhs;
       const size_t out_elem_size =

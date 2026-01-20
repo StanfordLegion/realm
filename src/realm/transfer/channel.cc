@@ -693,7 +693,10 @@ namespace Realm {
             }
           }
         }
-
+#ifdef REALM_USE_NVTX
+        // Complete the nvtx range for this XD.
+        nvtx_range_end(sg->nvtx_xd_ranges[sg->planned_copy_xds.offsets[item.op_index] + xd_index]);
+#endif
         // Depending on whether we launch async work, the control
         // completion function may have already been called.
         if (launches_async_work()) {
@@ -2248,6 +2251,10 @@ namespace Realm {
     ReadSequenceCache rseqcache(this, 2 << 20);
     WriteSequenceCache wseqcache(this, 2 << 20);
 
+#ifdef REALM_USE_NVTX
+    nvtxScopedRange _nvtx_range("dma", __PRETTY_FUNCTION__);
+#endif
+
     while(true) {
       size_t min_xfer_size = 4096; // TODO: make controllable
       size_t max_bytes = get_addresses(min_xfer_size, &rseqcache);
@@ -2392,6 +2399,10 @@ namespace Realm {
     const size_t out_elem_size =
         (redop_info.is_fold ? redop->sizeof_rhs : redop->sizeof_lhs);
     assert(redop_info.in_place); // TODO: support for out-of-place reduces
+
+#ifdef REALM_USE_NVTX
+    nvtxScopedRange _nvtx_range("dma", __PRETTY_FUNCTION__);
+#endif
 
     while(true) {
       size_t min_xfer_size = 4096; // TODO: make controllable
@@ -2724,6 +2735,10 @@ namespace Realm {
     //  while immediate acks for writes happen only if we skip output
     ReadSequenceCache rseqcache(this);
     WriteSequenceCache wseqcache(this);
+
+#ifdef REALM_USE_NVTX
+    nvtxScopedRange _nvtx_range("dma", __PRETTY_FUNCTION__);
+#endif
 
     const size_t MAX_ASSEMBLY_SIZE = 4096;
     while(true) {

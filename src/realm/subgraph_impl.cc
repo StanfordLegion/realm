@@ -515,7 +515,12 @@ namespace Realm {
           }
         }
       }
-    
+
+#ifdef REALM_USE_NVTX
+      // Complete the nvtx range for this XD.
+      nvtx_range_end(sg->nvtx_xd_ranges[sg->planned_copy_xds.offsets[item.op_index] + args.xd_index]);
+#endif
+
       // Handle normal postconditions.
       auto& postconds = sg->bgwork_postconditions;
       for (uint64_t i = postconds.offsets[args.subgraph_index]; i < postconds.offsets[args.subgraph_index + 1]; i++) {
@@ -534,12 +539,25 @@ namespace Realm {
     }
     uintptr_t all_proc_states; // ProcSubgraphReplayState*
     unsigned subgraph_index;
+#ifdef REALM_USE_NVTX
+    unsigned xd_index;
+#endif
   };
 
-  void send_subgraph_remote_xd_completion(NodeID launch_node, ProcSubgraphReplayState* all_proc_states, unsigned subgraph_index) {
+  void send_subgraph_remote_xd_completion(
+    NodeID launch_node,
+    ProcSubgraphReplayState* all_proc_states,
+    unsigned subgraph_index
+#ifdef REALM_USE_NVTX
+    , unsigned xd_index
+#endif
+  ) {
     ActiveMessage<SubgraphXferDesNotifyCompletionMessage> amsg(launch_node);
     amsg->all_proc_states = reinterpret_cast<uintptr_t>(all_proc_states);
     amsg->subgraph_index = subgraph_index;
+#ifdef REALM_USE_NVTX
+    amsg->xd_index = xd_index;
+#endif
     amsg.commit();
   }
 
@@ -1241,6 +1259,12 @@ namespace Realm {
       copy_ib_allocators.resize(defn->copies.size());
       // Wait until all remote XD creations are done.
       while (pending_remote_xd_creations.load_acquire() != 0) {}
+
+#ifdef REALM_USE_NVTX
+      // Initialize some profiling data structures.
+      nvtx_bgwork_launches.resize(bgwork_items.size());
+      nvtx_xd_ranges.resize(planned_copy_xds.data.size());
+#endif
     }
 
     std::map<Processor, int32_t> proc_to_index;
@@ -2818,6 +2842,13 @@ namespace Realm {
 
   void SubgraphIBAllocator::launch_copy_xds() {
     auto& offs = subgraph->planned_copy_xds.offsets;
+#ifdef REALM_USE_NVTX
+    nvtx_range_end(subgraph->nvtx_bgwork_iballocs[subgraph_index]);
+    for (uint64_t i = offs[op_idx]; i < offs[op_idx + 1]; i++) {
+      subgraph->nvtx_xd_ranges[i] = nvtx_range_start("subgraph", "xd execution");
+    }
+#endif
+
     for (uint64_t i = offs[op_idx]; i < offs[op_idx + 1]; i++) {
       auto xd = subgraph->planned_copy_xds.data[i];
       // If the XD is null, then it is remote and will be handled
@@ -2968,6 +2999,9 @@ namespace Realm {
         prof->fevent.finish_event = prof->fevent_user;
       }
     }
+#ifdef REALM_USE_NVTX
+    subgraph->nvtx_bgwork_launches[index] = nvtx_range_start("subgraph", "copy initiation");
+#endif
 
     // Perform the necessary IB allocation. If no IBs are necessary,
     // the allocation process short circuits.

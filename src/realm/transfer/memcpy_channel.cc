@@ -147,6 +147,10 @@ namespace Realm {
       return did_work;
     }
 
+#ifdef REALM_USE_NVTX
+    nvtxScopedRange _nvtx_range("dma", __PRETTY_FUNCTION__);
+#endif
+
     // fast path - assumes no serdez
     bool did_work = false;
     ReadSequenceCache rseqcache(this, 2 << 20); // flush after 2MB
