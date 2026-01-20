@@ -364,6 +364,34 @@ namespace Realm {
     return allowed;
   }
 
+  bool SubgraphImpl::is_plannable_copy(SubgraphDefinition::CopyDesc& copy) {
+    auto node = Network::my_node_id;
+    bool allowed = true;
+    for(auto &src : copy.srcs) {
+      auto mem = src.inst.get_location();
+      if(mem.address_space() != node)
+        allowed = false;
+    }
+    for(auto &dst : copy.dsts) {
+      auto mem = dst.inst.get_location();
+      if(mem.address_space() != node)
+        allowed = false;
+    }
+    if (!allowed)
+      return false;
+
+    // Copies that need to use intermediate buffers are not currently supported
+    // in the "fast" subgraph engine. We'll create a transfer desc here and when
+    // we analyze the copy, and can deduplicate that later if it becomes too expensive.
+    TransferDesc* td = copy.space.impl->make_transfer_desc(copy.srcs, copy.dsts, copy.indirects);
+    assert(td->analysis_complete.load() && td->analysis_successful);
+    bool has_ibs = !td->graph.ib_edges.empty();
+    td->remove_reference();
+    if (has_ibs)
+      return false;
+    return true;
+  }
+
   class MockXDFactory : public XferDesFactory {
   public:
     MockXDFactory() {}

@@ -259,6 +259,8 @@ namespace Realm {
         ProfilingMeasurements::OperationCopyInfo& copy_info,
         ProfilingMeasurements::OperationMemoryUsage& mem_info
       );
+      bool is_plannable_copy(SubgraphDefinition::CopyDesc& copy);
+
       // Methods for understanding the asynchronous affects tasks may have.
       // Since subgraphs have a static view of the source program, they can
       // take more advantage of this asynchrony than Realm can today.
