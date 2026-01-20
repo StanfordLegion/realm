@@ -180,8 +180,11 @@ void test_read_task(const void *args, size_t arglen,
                     const void *userdata, size_t userlen, Processor p) {
   auto inst = (RegionInstance*)(args);
   AffineAccessor<int32_t, 1> acc = AffineAccessor<int32_t, 1>(*inst, 0);
-  log_app.info() << "FOUND VALUE IN INST: " << (*acc.ptr(0));
-  log_app.info() << "FOUND VALUE IN INST: " << (*acc.ptr(inst->get_indexspace<1>().bounds.hi[0]));
+  std::stringstream ss;
+  for(PointInRectIterator<1> it(inst->get_indexspace<1>().bounds); it.valid; it.step()) {
+    ss << acc[it.p] << " ";
+  }
+  log_app.info() << "INST DATA: " << ss.str();
 }
 
 // clang doesn't permit use of offsetof when there are non-POD types involved
@@ -230,52 +233,50 @@ RegionInstance::create_instance(fill_inst, sysmems[0],
                                 is2, field_sizes,
                                 0 /*SOA*/, ProfilingRequestSet()).wait();
 
-  // Create a buffer.
-//  IndexSpace<1> is = Rect<1>(0, 0);
-//  RegionInstance gpu_inst;
-//  RegionInstance::create_instance(gpu_inst, fbmems[0],
-//                                  is, field_sizes,
-//                                  0 /*SOA*/, ProfilingRequestSet()).wait();
+// Let's try out some partial copies.
+RegionInstance partial_inst, partial_inst2;
+RegionInstance::create_instance(partial_inst, sysmems[0],
+                                is2, field_sizes,
+                                0 /*SOA*/, ProfilingRequestSet()).wait();
+RegionInstance::create_instance(partial_inst2, sysmems[0],
+                                is2, field_sizes,
+                                0 /*SOA*/, ProfilingRequestSet()).wait();
+Event e1, e2, e3;
+// Fill the source.
+{
+  std::vector<CopySrcDstField> info(1);
+  info[0].set_field(src_inst, 0, sizeof(int32_t));
+  int32_t value = 42;
+  e1 = is2.fill(info, ProfilingRequestSet(), &value, sizeof(int32_t));
+}
+// Also fill the destination to be sure the copy did something.
+{
+  std::vector<CopySrcDstField> info(1);
+  info[0].set_field(dst_inst, 0, sizeof(int32_t));
+  int32_t value = 15210;
+  e2 = is2.fill(info, ProfilingRequestSet(), &value, sizeof(int32_t));
+}
+{
+  std::vector<CopySrcDstField> info(2);
+  info[0].set_field(partial_inst, 0, sizeof(int32_t));
+  info[1].set_field(partial_inst2, 0, sizeof(int32_t));
+  int32_t value = 15213;
+  e3 = is2.fill(info, ProfilingRequestSet(), &value, sizeof(int32_t));
+}
+Event::merge_events(e1, e2, e3).wait();
 
-  // IndexSpace<1> is2 = Rect<1>(0, 1250000000);
-//  RegionInstance src_inst, dst_inst, cpu_inst, fill_inst;
-//  RegionInstance::create_instance(src_inst, fbmems[0],
-//                                  is2, field_sizes,
-//                                  0 /*SOA*/, ProfilingRequestSet()).wait();
-//  RegionInstance::create_instance(dst_inst, fbmems[0],
-//                                  is2, field_sizes,
-//                                  0 /*SOA*/, ProfilingRequestSet()).wait();
-//  RegionInstance::create_instance(fill_inst, fbmems[0],
-//                                  is2, field_sizes,
-//                                  0 /*SOA*/, ProfilingRequestSet()).wait();
-//  RegionInstance::create_instance(cpu_inst, sysmems[0],
-//                                  is2, field_sizes,
-//                                  0 /*SOA*/, ProfilingRequestSet()).wait();
-
-  Event e1, e2;
-  // Fill the source.
-  {
-    std::vector<CopySrcDstField> info(1);
-    info[0].set_field(src_inst, 0, sizeof(int32_t));
-    int32_t value = 42;
-    e1 = is2.fill(info, ProfilingRequestSet(), &value, sizeof(int32_t));
-  }
-  // Also fill the destination to be sure the copy did something.
-  {
-    std::vector<CopySrcDstField> info(1);
-    info[0].set_field(dst_inst, 0, sizeof(int32_t));
-    int32_t value = 15210;
-    e2 = is2.fill(info, ProfilingRequestSet(), &value, sizeof(int32_t));
-  }
-  Event::merge_events(e1, e2).wait();
-  // Fill another instance with a bogus value to be filled by the
-  // subgraph.
-//  {
-//    std::vector<CopySrcDstField> info(1);
-//    info[0].set_field(fill_inst, 0, sizeof(int32_t));
-//    int32_t value = 15210;
-//    is2.fill(info, ProfilingRequestSet(), &value, sizeof(int32_t)).wait();
-//  }
+IndexSpace<1> pis1 = Rect<1>(0, 0);
+IndexSpace<1> pis2;
+{
+  IndexSpace<1> t1(Rect<1>(0, 0)), t2(Rect<1>(2, 2)), t3(Rect<1>(4, 4));
+  Event e = Event::NO_EVENT;
+  e = IndexSpace<1>::compute_union(Rect<1>(0, 0), Rect<1>(2, 2), pis2, ProfilingRequestSet());
+  e = IndexSpace<1>::compute_union(pis2, Rect<1>(4, 4), pis2, ProfilingRequestSet());
+  e = IndexSpace<1>::compute_union(pis2, Rect<1>(6, 6), pis2, ProfilingRequestSet());
+  e = IndexSpace<1>::compute_union(pis2, Rect<1>(8, 8), pis2, ProfilingRequestSet());
+  e = IndexSpace<1>::compute_union(pis2, Rect<1>(10, 10), pis2, ProfilingRequestSet());
+  e.wait();
+}
 
   auto bar = Barrier::create_barrier(1);
 
@@ -344,7 +345,7 @@ RegionInstance::create_instance(fill_inst, sysmems[0],
     sd.interpolations[5].bytes = sizeof(Barrier);
     sd.interpolations[5].target_kind = SubgraphDefinition::Interpolation::TARGET_ARRIVAL_BARRIER;
 
-    sd.copies.resize(2);
+    sd.copies.resize(4);
     {
       std::vector<CopySrcDstField> src(1), dst(1);
       src[0].set_field(src_inst, 0, sizeof(int32_t));
@@ -362,9 +363,27 @@ RegionInstance::create_instance(fill_inst, sysmems[0],
       sd.copies[1].srcs = src;
       sd.copies[1].dsts = dst;
     }
+    {
+      std::vector<CopySrcDstField> src(1), dst(1);
+      int32_t value = 15451;
+      src[0].set_fill(value);
+      dst[0].set_field(partial_inst, 0, sizeof(int32_t));
+      sd.copies[2].space = pis1;
+      sd.copies[2].srcs = src;
+      sd.copies[2].dsts = dst;
+    }
+    {
+      std::vector<CopySrcDstField> src(1), dst(1);
+      int32_t value = 15451;
+      src[0].set_fill(value);
+      dst[0].set_field(partial_inst2, 0, sizeof(int32_t));
+      sd.copies[3].space = pis2;
+      sd.copies[3].srcs = src;
+      sd.copies[3].dsts = dst;
+    }
 
     // Add the necessary dependencies.
-    sd.dependencies.resize(13);
+    sd.dependencies.resize(15);
 
     sd.dependencies[0].src_op_kind = SubgraphDefinition::OPKIND_TASK;
     sd.dependencies[0].src_op_index = 0;
@@ -436,6 +455,16 @@ RegionInstance::create_instance(fill_inst, sysmems[0],
     sd.dependencies[12].tgt_op_kind = SubgraphDefinition::OPKIND_EXT_POSTCOND;
     sd.dependencies[12].tgt_op_index = 1;
 
+    sd.dependencies[13].src_op_kind = SubgraphDefinition::OPKIND_COPY;
+    sd.dependencies[13].src_op_index = 1;
+    sd.dependencies[13].tgt_op_kind = SubgraphDefinition::OPKIND_COPY;
+    sd.dependencies[13].tgt_op_index = 2;
+
+    sd.dependencies[14].src_op_kind = SubgraphDefinition::OPKIND_TASK;
+    sd.dependencies[14].src_op_index = 3;
+    sd.dependencies[14].tgt_op_kind = SubgraphDefinition::OPKIND_COPY;
+    sd.dependencies[14].tgt_op_index = 3;
+
     Subgraph::create_subgraph(diamond, sd, ProfilingRequestSet()).wait();
   }
 
@@ -461,15 +490,14 @@ RegionInstance::create_instance(fill_inst, sysmems[0],
 
   e = cpus[0].spawn(TEST_READ_TASK, &fill_inst, sizeof(fill_inst), e);
   e = cpus[0].spawn(TEST_READ_TASK, &dst_inst, sizeof(dst_inst), e);
+  e = cpus[0].spawn(TEST_READ_TASK, &partial_inst, sizeof(partial_inst), e);
+  e = cpus[0].spawn(TEST_READ_TASK, &partial_inst2, sizeof(partial_inst2), e);
   {
-    std::vector<CopySrcDstField> info(1);
+    std::vector<CopySrcDstField> info(4);
     info[0].set_field(src_inst, 0, sizeof(int32_t));
-    int32_t value = 242;
-    e = is2.fill(info, ProfilingRequestSet(), &value, sizeof(int32_t), e);
-  }
-  {
-    std::vector<CopySrcDstField> info(1);
-    info[0].set_field(fill_inst, 0, sizeof(int32_t));
+    info[1].set_field(fill_inst, 0, sizeof(int32_t));
+    info[2].set_field(partial_inst, 0, sizeof(int32_t));
+    info[3].set_field(partial_inst2, 0, sizeof(int32_t));
     int32_t value = 242;
     e = is2.fill(info, ProfilingRequestSet(), &value, sizeof(int32_t), e);
   }
@@ -492,7 +520,9 @@ RegionInstance::create_instance(fill_inst, sysmems[0],
   diamond.destroy(e);
 
   e = cpus[0].spawn(TEST_READ_TASK, &fill_inst, sizeof(fill_inst), e);
-  cpus[0].spawn(TEST_READ_TASK, &dst_inst, sizeof(dst_inst), e).wait();
+  e = cpus[0].spawn(TEST_READ_TASK, &dst_inst, sizeof(dst_inst), e);
+  e = cpus[0].spawn(TEST_READ_TASK, &partial_inst, sizeof(partial_inst), e);
+  e = cpus[0].spawn(TEST_READ_TASK, &partial_inst2, sizeof(partial_inst2), e);
 
   e.wait();
 
@@ -765,7 +795,6 @@ int main(int argc, char **argv)
   rt.register_task(CLEANUP_TASK, cleanup_task);
   rt.register_task(DUMMY_TASK, dummy_task);
   rt.register_task(TEST_READ_TASK, test_read_task);
-  // Processor::register_task_by_kind(Processor::TOC_PROC, false, DUMMY_TASK, CodeDescriptor(dummy_task), ProfilingRequestSet());
 
   rt.register_reduction<ReductionOpIntAdd>(REDOP_INT_ADD);
 
