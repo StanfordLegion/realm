@@ -944,7 +944,7 @@ namespace Realm {
 
       bool progress_xd(GPUfillChannel *channel, TimeLimit work_until);
 
-      bool launches_async_work() override { return true; }
+      bool launches_async_work_locally() override { return true; }
       void on_subgraph_control_completion() override;
       LocalTaskProcessor* get_async_event_proc() override;
 
@@ -991,7 +991,7 @@ namespace Realm {
 
       bool progress_xd(GPUreduceChannel *channel, TimeLimit work_until);
 
-      bool launches_async_work() override { return true; }
+      bool launches_async_work_locally() override { return true; }
       void on_subgraph_control_completion() override;
       LocalTaskProcessor* get_async_event_proc() override;
 
