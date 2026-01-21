@@ -190,7 +190,6 @@ namespace Realm {
     unsigned max_latency;
   };
 
-
   namespace Config {
     extern bool use_machine_query_cache;
   };
@@ -323,8 +322,6 @@ namespace Realm {
     unsigned min_bandwidth;
     unsigned max_latency;
   };
-
-
 
   class MemoryQueryImpl {
   public:
