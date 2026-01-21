@@ -2022,8 +2022,7 @@ namespace Realm {
     cur_cached_list = new std::vector<Processor>();
     valid_cache = true;
 
-    int best_score = std::numeric_limits<int>::min();
-    bool found_any = false;
+    std::optional<int> best_score;
     std::vector<Processor> candidates_with_best_score;
 
     // Iterate through all candidates matching other predicates
@@ -2050,6 +2049,7 @@ namespace Realm {
 
       if(plist) {
         std::map<Processor, MachineProcInfo *>::const_iterator it2 = plist->begin();
+        std::vector<Machine::ProcessorMemoryAffinity> best_affinities;
         while(it2 != plist->end()) {
           bool ok = true;
           // Check all non-best-affinity predicates
@@ -2059,20 +2059,18 @@ namespace Realm {
 
           if(ok) {
             // Calculate affinity score for this candidate
-            std::vector<Machine::ProcessorMemoryAffinity> affinities;
-            machine->get_proc_mem_affinity(affinities, it2->first);
-            for(std::vector<Machine::ProcessorMemoryAffinity>::const_iterator aff_it =
-                    affinities.begin();
-                aff_it != affinities.end(); ++aff_it) {
-              if(aff_it->m == best_affinity_cost->memory) {
-                int score = (aff_it->bandwidth * best_affinity_cost->bandwidth_weight) +
-                            (aff_it->latency * best_affinity_cost->latency_weight);
-                if(!found_any || score > best_score) {
+            if(best_affinities.empty()) {
+              machine->get_proc_mem_affinity(best_affinities, Processor::NO_PROC, best_affinity_cost->memory);
+            }
+            for(const Machine::ProcessorMemoryAffinity& affinity : best_affinities) {
+              if(affinity.p == it2->first) {
+                int score = (affinity.bandwidth * best_affinity_cost->bandwidth_weight) +
+                            (affinity.latency * best_affinity_cost->latency_weight);
+                if(!best_score || score > *best_score) {
                   best_score = score;
                   candidates_with_best_score.clear();
                   candidates_with_best_score.push_back(it2->first);
-                  found_any = true;
-                } else if(score == best_score) {
+                } else if(score == *best_score) {
                   candidates_with_best_score.push_back(it2->first);
                 }
                 break;
@@ -2955,8 +2953,7 @@ namespace Realm {
     cur_cached_list = new std::vector<Memory>();
     valid_cache = true;
 
-    int best_score = std::numeric_limits<int>::min();
-    bool found_any = false;
+    std::optional<int> best_score;
     std::vector<Memory> candidates_with_best_score;
 
     // Iterate through all candidates matching other predicates
@@ -2983,6 +2980,8 @@ namespace Realm {
 
       if(plist) {
         std::map<Memory, MachineMemInfo *>::const_iterator it2 = plist->begin();
+        std::vector<Machine::ProcessorMemoryAffinity> best_proc_affinities;
+        std::vector<Machine::MemoryMemoryAffinity> best_mem_affinities;
         while(it2 != plist->end()) {
           size_t it2_capacity =
               MemoryImpl::get_memory_size(machine->get_runtime_impl(), it2->first);
@@ -2998,19 +2997,17 @@ namespace Realm {
             // Calculate affinity score for this candidate
             int score = 0;
             bool has_required_affinity = true;
-
             // Add processor affinity score if specified
             if(best_proc_affinity_cost.has_value()) {
-              std::vector<Machine::ProcessorMemoryAffinity> affinities;
-              machine->get_proc_mem_affinity(affinities, best_proc_affinity_cost->proc);
+              if(best_proc_affinities.empty()) {
+                machine->get_proc_mem_affinity(best_proc_affinities, best_proc_affinity_cost->proc);
+              }
               bool found_proc_affinity = false;
-              for(std::vector<Machine::ProcessorMemoryAffinity>::const_iterator aff_it =
-                      affinities.begin();
-                  aff_it != affinities.end(); ++aff_it) {
-                if(aff_it->m == it2->first) {
+              for(const Machine::ProcessorMemoryAffinity& affinity : best_proc_affinities) {
+                if(affinity.m == it2->first) {
                   score +=
-                      (aff_it->bandwidth * best_proc_affinity_cost->bandwidth_weight) +
-                      (aff_it->latency * best_proc_affinity_cost->latency_weight);
+                      (affinity.bandwidth * best_proc_affinity_cost->bandwidth_weight) +
+                      (affinity.latency * best_proc_affinity_cost->latency_weight);
                   found_proc_affinity = true;
                   break;
                 }
@@ -3023,16 +3020,15 @@ namespace Realm {
 
             // Add memory affinity score if specified
             if(has_required_affinity && best_mem_affinity_cost.has_value()) {
-              std::vector<Machine::MemoryMemoryAffinity> affinities;
-              machine->get_mem_mem_affinity(affinities, it2->first);
+              if(best_mem_affinities.empty()) {
+                machine->get_mem_mem_affinity(best_mem_affinities, best_mem_affinity_cost->memory);
+              }
               bool found_mem_affinity = false;
-              for(std::vector<Machine::MemoryMemoryAffinity>::const_iterator aff_it =
-                      affinities.begin();
-                  aff_it != affinities.end(); ++aff_it) {
-                if(aff_it->m2 == best_mem_affinity_cost->memory) {
+              for(const Machine::MemoryMemoryAffinity& affinity : best_mem_affinities) {
+                if(affinity.m2 == it2->first) {
                   score +=
-                      (aff_it->bandwidth * best_mem_affinity_cost->bandwidth_weight) +
-                      (aff_it->latency * best_mem_affinity_cost->latency_weight);
+                      (affinity.bandwidth * best_mem_affinity_cost->bandwidth_weight) +
+                      (affinity.latency * best_mem_affinity_cost->latency_weight);
                   found_mem_affinity = true;
                   break;
                 }
@@ -3045,12 +3041,11 @@ namespace Realm {
 
             // Only consider this candidate if it has all required affinities
             if(has_required_affinity) {
-              if(!found_any || score > best_score) {
+              if(!best_score || score > *best_score) {
                 best_score = score;
                 candidates_with_best_score.clear();
                 candidates_with_best_score.push_back(it2->first);
-                found_any = true;
-              } else if(score == best_score) {
+              } else if(score == *best_score) {
                 candidates_with_best_score.push_back(it2->first);
               }
             }
