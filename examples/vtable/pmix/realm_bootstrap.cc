@@ -30,7 +30,7 @@ namespace App {
 
   struct VtableContext {
     // pending_sync is an optimization to avoid redundant PMIx_Commit() calls
-    bool pending_sync = false; 
+    bool pending_sync = false;
     pmix_proc_t myproc;
     uint32_t pmix_rank = 0;
     uint32_t pmix_size = 0;
