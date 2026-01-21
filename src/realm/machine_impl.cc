@@ -1727,10 +1727,10 @@ namespace Realm {
       return nextp;
     if(!cur_cached_list->size())
       return nextp;
-    if((*cur_cached_list)[0] == after)
+    if(cur_cached_list->front() == after)
       cur_index = 1;
     else {
-      if(((*cur_cached_list)[cur_index] != after) &&
+      if((cur_cached_list->at(cur_index) != after) &&
          (cur_index < cur_cached_list->size())) {
         log_query.fatal() << "cur_cached_list: inconsistent state";
         abort();
@@ -1738,7 +1738,7 @@ namespace Realm {
       ++cur_index;
     }
     if(cur_index < cur_cached_list->size())
-      nextp = (*cur_cached_list)[cur_index];
+      nextp = cur_cached_list->at(cur_index);
     return nextp;
   }
 
@@ -2006,6 +2006,17 @@ namespace Realm {
       }
     }
 
+    // If we already have a valid cache, just return the first element
+    if(valid_cache && cur_cached_list) {
+      return cur_cached_list->empty() ? Processor::NO_PROC : cur_cached_list->front();
+    }
+
+    // Clean up any existing cache before allocating a new one
+    if(cur_cached_list && !shared_cached_list) {
+      delete cur_cached_list;
+      cur_cached_list = nullptr;
+    }
+
     // Allocate the instance-specific cache
     shared_cached_list = false;
     cur_cached_list = new std::vector<Processor>();
@@ -2214,8 +2225,8 @@ namespace Realm {
 
       // Find the next processor in the cache after the given one
       for(size_t i = 0; i < cur_cached_list->size(); ++i) {
-        if((*cur_cached_list)[i].id > after.id) {
-          return (*cur_cached_list)[i];
+        if(cur_cached_list->at(i).id > after.id) {
+          return cur_cached_list->at(i);
         }
       }
       return Processor::NO_PROC;
@@ -2412,7 +2423,7 @@ namespace Realm {
 
       if(!cur_cached_list->empty()) {
         size_t idx = lrand48() % cur_cached_list->size();
-        return (*cur_cached_list)[idx];
+        return cur_cached_list->at(idx);
       }
       return Processor::NO_PROC;
     }
@@ -2928,6 +2939,17 @@ namespace Realm {
       }
     }
 
+    // If we already have a valid cache, just return the first element
+    if(valid_cache && cur_cached_list) {
+      return cur_cached_list->empty() ? Memory::NO_MEMORY : cur_cached_list->front();
+    }
+
+    // Clean up any existing cache before allocating a new one
+    if(cur_cached_list && !shared_cached_list) {
+      delete cur_cached_list;
+      cur_cached_list = nullptr;
+    }
+
     // Allocate the instance-specific cache
     shared_cached_list = false;
     cur_cached_list = new std::vector<Memory>();
@@ -3183,8 +3205,8 @@ namespace Realm {
 
       // Find the next memory in the cache after the given one
       for(size_t i = 0; i < cur_cached_list->size(); ++i) {
-        if((*cur_cached_list)[i].id > after.id) {
-          return (*cur_cached_list)[i];
+        if(cur_cached_list->at(i).id > after.id) {
+          return cur_cached_list->at(i);
         }
       }
       return Memory::NO_MEMORY;
@@ -3246,12 +3268,12 @@ namespace Realm {
       return nextp;
     if(!cur_cached_list->size())
       return nextp;
-    if((*cur_cached_list)[0] == after)
+    if(cur_cached_list->front() == after)
       cur_index = 1;
     else
       ++cur_index;
     if(cur_index < cur_cached_list->size())
-      nextp = (*cur_cached_list)[cur_index];
+      nextp = cur_cached_list->at(cur_index);
     return nextp;
   }
 
@@ -3408,7 +3430,7 @@ namespace Realm {
 
       if(!cur_cached_list->empty()) {
         size_t idx = lrand48() % cur_cached_list->size();
-        return (*cur_cached_list)[idx];
+        return cur_cached_list->at(idx);
       }
       return Memory::NO_MEMORY;
     }
