@@ -288,8 +288,8 @@ TEST_F(BestAffinityTest, CacheBehavior)
 
   ASSERT_EQ(procs1.size(), procs2.size()) << "Iteration returned different counts";
   for(size_t i = 0; i < procs1.size(); i++) {
-    EXPECT_EQ(procs1[i], procs2[i]) << "Iteration returned different processors at index "
-                                     << i;
+    EXPECT_EQ(procs1[i], procs2[i])
+        << "Iteration returned different processors at index " << i;
   }
 }
 
