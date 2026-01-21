@@ -25,7 +25,7 @@ using namespace Realm;
 
 class BestAffinityTest : public ::testing::Test {
 protected:
-  void SetUp() override
+  static void SetUpTestSuite()
   {
     std::vector<const char *> cmdline_argv;
     const char dummy_args[] = "test";
@@ -46,7 +46,7 @@ protected:
     runtime_->init(&argc, &argv);
   }
 
-  void TearDown() override
+  static void TearDownTestSuite()
   {
     runtime_->shutdown();
     runtime_->wait_for_shutdown();
@@ -55,10 +55,12 @@ protected:
   }
 
   // Helper to get machine
-  Machine get_machine() { return Machine::get_machine(); }
+  static Machine get_machine() { return Machine::get_machine(); }
 
-  Runtime *runtime_;
+  static Runtime *runtime_;
 };
+
+Runtime *BestAffinityTest::runtime_ = nullptr;
 
 // Test basic processor best affinity with default weights
 TEST_F(BestAffinityTest, ProcessorBestAffinityDefault)

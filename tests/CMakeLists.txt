@@ -166,7 +166,14 @@ if((NOT REALM_SANITIZER OR REALM_SANITIZER STREQUAL "NONE")
    AND NOT CMAKE_CROSSCOMPILING
 )
   gtest_discover_tests(realm_unit_tests NO_PRETTY_TYPES NO_PRETTY_VALUES PROPERTIES LABELS "unit")
-  gtest_discover_tests(realm_c_unit_tests NO_PRETTY_TYPES NO_PRETTY_VALUES PROPERTIES LABELS "unit")
+  # Discover c_unit_tests but exclude BestAffinityTest (runtime init not safe for per-test isolation)
+  gtest_discover_tests(realm_c_unit_tests NO_PRETTY_TYPES NO_PRETTY_VALUES 
+                       TEST_FILTER "-BestAffinityTest.*"
+                       PROPERTIES LABELS "unit")
+  # Add BestAffinityTest as a single batch test
+  add_test(NAME BestAffinityTest 
+           COMMAND $<TARGET_FILE:realm_c_unit_tests> "--gtest_filter=BestAffinityTest.*")
+  set_tests_properties(BestAffinityTest PROPERTIES LABELS "unit")
 else()
   add_test(NAME realm_unit_tests COMMAND $<TARGET_FILE:realm_unit_tests>)
   add_test(NAME realm_c_unit_tests COMMAND $<TARGET_FILE:realm_c_unit_tests>)
