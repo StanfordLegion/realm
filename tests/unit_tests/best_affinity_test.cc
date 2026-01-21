@@ -28,7 +28,7 @@ using namespace Realm;
 namespace Realm {
   extern bool enable_unit_tests;
   extern RuntimeImpl *runtime_singleton;
-};
+}; // namespace Realm
 
 class BestAffinityTest : public ::testing::Test {
 protected:
@@ -36,11 +36,11 @@ protected:
   {
     Realm::enable_unit_tests = true;
     runtime_impl_ = std::make_unique<MockRuntimeImplMachineModel>();
-    
+
     // Set runtime singleton so Machine::get_machine() works
     Realm::runtime_singleton = runtime_impl_.get();
-    
-    runtime_impl_->init(1);  // Single node
+
+    runtime_impl_->init(1); // Single node
 
     // Set up mock machine model with processors and memories
     MockRuntimeImplMachineModel::ProcessorMemoriesToBeAdded procs_mems;
@@ -51,8 +51,10 @@ protected:
     }
 
     // Create 2 system memories with different sizes
-    procs_mems.mem_infos.push_back({0, Memory::SYSTEM_MEM, static_cast<size_t>(1024) * 1024 * 1024, 0});
-    procs_mems.mem_infos.push_back({1, Memory::SYSTEM_MEM, static_cast<size_t>(2048) * 1024 * 1024, 0});
+    procs_mems.mem_infos.push_back(
+        {0, Memory::SYSTEM_MEM, static_cast<size_t>(1024) * 1024 * 1024, 0});
+    procs_mems.mem_infos.push_back(
+        {1, Memory::SYSTEM_MEM, static_cast<size_t>(2048) * 1024 * 1024, 0});
 
     // Set up processor-memory affinities with varying bandwidth/latency
     // Proc 0 and 1 have high bandwidth to mem 0
@@ -80,7 +82,7 @@ protected:
     if(runtime_impl_) {
       runtime_impl_->finalize();
       runtime_impl_.reset();
-      
+
       // Clear runtime singleton
       Realm::runtime_singleton = nullptr;
     }
