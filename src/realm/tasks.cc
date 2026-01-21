@@ -1269,7 +1269,7 @@ namespace Realm {
                 }
                 case SubgraphImpl::CompletionInfo::BGWORK_TO_STATIC: {
                   // Wait on all events in the given range, if they aren't null.
-                  for (uint64_t j = replay->subgraph->bgwork_async_event_counts[info.index]; j < replay->subgraph->bgwork_async_event_counts[info.index + 1]; j++) {
+                  for (int64_t j = replay->subgraph->bgwork_async_event_counts[info.index]; j < replay->subgraph->bgwork_async_event_counts[info.index + 1]; j++) {
                     auto bgtoken = replay->async_bgwork_events[j];
                     if (bgtoken != nullptr)
                       pimpl->sync_task_async_effect(bgtoken);
@@ -1319,7 +1319,7 @@ namespace Realm {
             // or this task is a final event.
             if (!sp.empty() || final_ctr != nullptr) {
               trigger = new(&replay->async_operation_effect_triggerers[op_index]) SubgraphImpl::AsyncGPUWorkTriggerer(
-                  replay->all_proc_states, sp, replay->preconditions, final_ctr);
+                  replay->all_proc_states, sp, final_ctr);
             }
           }
 

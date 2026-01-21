@@ -18,6 +18,7 @@
 // Realm subgraph implementation
 
 #include "realm/subgraph_impl.h"
+#include "realm/event_impl.h"
 #include "realm/runtime_impl.h"
 #include "realm/proc_impl.h"
 #include "realm/idx_impl.h"
@@ -1989,7 +1990,7 @@ namespace Realm {
         // starts, meaning that a previous execution is already running.
         precond = Event::merge_events(precond, start_event);
         auto meta = &external_precondition_info[i];
-        auto waiter = new (&external_precondition_waiters[i]) ExternalPreconditionTriggerer(this, meta, precondition_ctrs, state);
+        auto waiter = new (&external_precondition_waiters[i]) ExternalPreconditionTriggerer(meta, state);
         if (!precond.exists() || precond.has_triggered()) {
           waiter->trigger();
         } else {
@@ -2305,7 +2306,7 @@ namespace Realm {
       // of the subgraph.
       if (opt && !dynamic_to_static_triggers[sched_idx].to_trigger.empty()) {
         auto meta = &dynamic_to_static_triggers[sched_idx];
-        auto waiter = new (&dynamic_precondition_waiters[sched_idx]) ExternalPreconditionTriggerer(this, meta, precondition_ctrs, state);
+        auto waiter = new (&dynamic_precondition_waiters[sched_idx]) ExternalPreconditionTriggerer(meta, state);
         if (!e.exists() || e.has_triggered()) {
           waiter->trigger();
         } else {
@@ -2468,12 +2469,12 @@ namespace Realm {
     UserEvent* _dynamic_events,
     atomic<int32_t>* _finish_counter,
     SubgraphOperationProfilingInfo* _inst_profiling_info
-  ) : trigger(_trigger), num_procs(_num_procs), state(_state), args(_args), preconds(_preconds), queue(_queue),
+  ) : EventWaiter(), trigger(_trigger), num_procs(_num_procs), state(_state), args(_args), preconds(_preconds), queue(_queue),
       external_preconds(_external_preconds), dynamic_preconds(_dynamic_preconds),
       async_operation_events(_async_operation_events), async_operation_event_triggerers(_async_operation_event_triggerers),
       bgwork_preconds(_bgwork_preconds), async_bgwork_events(_async_bgwork_events),
       dynamic_precond_counters(_dynamic_precond_counters), dynamic_events(_dynamic_events), finish_counter(_finish_counter),
-      inst_profiling_info(_inst_profiling_info), EventWaiter() {}
+      inst_profiling_info(_inst_profiling_info) {}
 
   void SubgraphImpl::InstantiationCleanup::cleanup() {
     // Before we free async_operation_events, make sure that we return all
@@ -2570,11 +2571,9 @@ namespace Realm {
   }
 
   SubgraphImpl::ExternalPreconditionTriggerer::ExternalPreconditionTriggerer(
-    SubgraphImpl* _subgraph,
     ExternalPreconditionMeta* _meta,
-    atomic<int32_t>* _preconditions,
     ProcSubgraphReplayState* _all_proc_states
-  ) : subgraph(_subgraph), meta(_meta), preconditions(_preconditions), all_proc_states(_all_proc_states), EventWaiter() {}
+  ) : EventWaiter(), meta(_meta), all_proc_states(_all_proc_states) {}
 
   void SubgraphImpl::ExternalPreconditionTriggerer::trigger() {
     for (auto& info : meta->to_trigger) {
@@ -2597,9 +2596,8 @@ namespace Realm {
   SubgraphImpl::AsyncGPUWorkTriggerer::AsyncGPUWorkTriggerer(
     ProcSubgraphReplayState* _all_proc_states,
     span<Realm::SubgraphImpl::CompletionInfo> _infos,
-    atomic<int32_t> *_preconditions,
     atomic<int32_t>* _final_ev_counter
-  ) : all_proc_states(_all_proc_states), infos(_infos), preconditions(_preconditions), final_ev_counter(_final_ev_counter) {}
+  ) : all_proc_states(_all_proc_states), infos(_infos), final_ev_counter(_final_ev_counter) {}
 
   void SubgraphImpl::AsyncGPUWorkTriggerer::request_completed() {
     for (size_t i = 0; i < infos.size(); i++) {
@@ -2680,7 +2678,7 @@ namespace Realm {
 
   SubgraphImpl::SubgraphWorkLauncher::SubgraphWorkLauncher(Realm::ProcSubgraphReplayState *_state,
                                                            Realm::SubgraphImpl *_subgraph)
-                                                           : state(_state), subgraph(_subgraph), EventWaiter() {}
+                                                           : EventWaiter(), state(_state), subgraph(_subgraph) {}
 
   void SubgraphImpl::SubgraphWorkLauncher::event_triggered(bool poisoned, Realm::TimeLimit work_until) {
     launch();
@@ -2841,7 +2839,6 @@ namespace Realm {
         auto& trigger = state.bgwork_preconditions[info.index];
         int32_t remaining = trigger.fetch_sub_acqrel(1) - 1;
         if (remaining == 0) {
-          auto& item = state.subgraph->bgwork_items[info.index];
           launch_async_bgwork_item(all_proc_states, info.index, ctx);
         }
         break;

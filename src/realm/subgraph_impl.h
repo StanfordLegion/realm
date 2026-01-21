@@ -235,6 +235,7 @@ namespace Realm {
   // requested IB allocations have completed.
   class SubgraphIBAllocator : public IBAllocationCompletion {
   public:
+    virtual ~SubgraphIBAllocator() {};
     virtual void notify_ib_allocation(unsigned ib_index, off_t ib_offset) override;
     virtual void notify_ib_allocations(unsigned count, unsigned first_index, const off_t *offsets) override;
     void allocate_and_launch_xds(ProcSubgraphReplayState* all_proc_states, unsigned subgraph_index, unsigned op_idx);
@@ -465,9 +466,7 @@ namespace Realm {
       public:
         ExternalPreconditionTriggerer() : EventWaiter() {}
         ExternalPreconditionTriggerer(
-          SubgraphImpl* _subgraph,
           ExternalPreconditionMeta* meta,
-          atomic<int32_t>* preconditions,
           ProcSubgraphReplayState* all_proc_states
         );
         void trigger();
@@ -475,9 +474,7 @@ namespace Realm {
         virtual void print(std::ostream& os) const;
         virtual Event get_finish_event(void) const;
       private:
-        SubgraphImpl* subgraph = nullptr;
         ExternalPreconditionMeta* meta = nullptr;
-        atomic<int32_t>* preconditions = nullptr;
         ProcSubgraphReplayState* all_proc_states = nullptr;
     };
 
@@ -486,14 +483,12 @@ namespace Realm {
         AsyncGPUWorkTriggerer(
           ProcSubgraphReplayState* all_proc_states,
           span<CompletionInfo> _infos,
-          atomic<int32_t>* _preconditions,
           atomic<int32_t>* _final_ev_counter
         );
         void request_completed() override;
       private:
         ProcSubgraphReplayState* all_proc_states = nullptr;
         span<CompletionInfo> infos = {};
-        atomic<int32_t>* preconditions = nullptr;
         atomic<int32_t>* final_ev_counter = nullptr;
     };
 

@@ -177,7 +177,7 @@ namespace Realm {
     // Not touching the addrlist.
     partial = false;
     partial_dim = 0;
-    for(int i = 0; i < pos.size(); i++)
+    for(size_t i = 0; i < pos.size(); i++)
       pos[i] = 0;
   }
 
