@@ -1339,10 +1339,20 @@ namespace Realm {
                                             int latency_weight /*= 0*/)
   {
     impl = ((ProcessorQueryImpl *)impl)->writeable_reference();
-    ((ProcessorQueryImpl *)impl)
-        ->add_predicate(
-            new ProcessorBestAffinityPredicate(m, bandwidth_weight, latency_weight));
-    ((ProcessorQueryImpl *)impl)->reset_cached_mem();
+    ProcessorQueryImpl *impl_ptr = ((ProcessorQueryImpl *)impl);
+
+    // Warn if overwriting a different target
+    if(impl_ptr->best_affinity_cost.has_value() &&
+       impl_ptr->best_affinity_cost->memory != m) {
+      log_query.warning() << "ProcessorQuery: best_affinity_to() called with different "
+                          << "memory targets - using most recent (Memory " << m.id << ")";
+    }
+
+    // Store the best affinity cost function
+    impl_ptr->best_affinity_cost =
+        ProcessorQueryImpl::BestAffinityCostFn{m, bandwidth_weight, latency_weight};
+
+    impl_ptr->reset_cached_mem();
     return *this;
   }
 
@@ -1439,9 +1449,20 @@ namespace Realm {
                                          int latency_weight /*= 0*/)
   {
     impl = ((MemoryQueryImpl *)impl)->writeable_reference();
-    ((MemoryQueryImpl *)impl)
-        ->add_predicate(
-            new MemoryBestMemAffinityPredicate(m, bandwidth_weight, latency_weight));
+    MemoryQueryImpl *impl_ptr = ((MemoryQueryImpl *)impl);
+
+    // Warn if overwriting a different target
+    if(impl_ptr->best_mem_affinity_cost.has_value() &&
+       impl_ptr->best_mem_affinity_cost->memory != m) {
+      log_query.warning()
+          << "MemoryQuery: best_affinity_to(Memory) called with different "
+          << "memory targets - using most recent (Memory " << m.id << ")";
+    }
+
+    // Store the best memory affinity cost function
+    impl_ptr->best_mem_affinity_cost =
+        MemoryQueryImpl::BestMemAffinityCostFn{m, bandwidth_weight, latency_weight};
+
     return *this;
   }
 
@@ -1461,9 +1482,20 @@ namespace Realm {
                                          int latency_weight /*= 0*/)
   {
     impl = ((MemoryQueryImpl *)impl)->writeable_reference();
-    ((MemoryQueryImpl *)impl)
-        ->add_predicate(
-            new MemoryBestProcAffinityPredicate(p, bandwidth_weight, latency_weight));
+    MemoryQueryImpl *impl_ptr = ((MemoryQueryImpl *)impl);
+
+    // Warn if overwriting a different target
+    if(impl_ptr->best_proc_affinity_cost.has_value() &&
+       impl_ptr->best_proc_affinity_cost->proc != p) {
+      log_query.warning()
+          << "MemoryQuery: best_affinity_to(Processor) called with different "
+          << "processor targets - using most recent (Processor " << p.id << ")";
+    }
+
+    // Store the best processor affinity cost function
+    impl_ptr->best_proc_affinity_cost =
+        MemoryQueryImpl::BestProcAffinityCostFn{p, bandwidth_weight, latency_weight};
+
     return *this;
   }
 
@@ -1546,48 +1578,6 @@ namespace Realm {
   // class ProcessorBestAffinityPredicate
   //
 
-  ProcessorBestAffinityPredicate::ProcessorBestAffinityPredicate(Memory _memory,
-                                                                 int _bandwidth_weight,
-                                                                 int _latency_weight)
-    : memory(_memory)
-    , bandwidth_weight(_bandwidth_weight)
-    , latency_weight(_latency_weight)
-  {}
-
-  ProcQueryPredicate *ProcessorBestAffinityPredicate::clone(void) const
-  {
-    return new ProcessorBestAffinityPredicate(memory, bandwidth_weight, latency_weight);
-  }
-
-  bool ProcessorBestAffinityPredicate::matches_predicate(
-      const MachineImpl *machine, Processor thing, const MachineProcInfo *info) const
-  {
-#ifndef USE_OLD_AFFINITIES
-    if((bandwidth_weight == 1) && (latency_weight == 0)) {
-      REALM_ASSERT(info != 0);
-      std::map<Memory, Machine::ProcessorMemoryAffinity *>::const_iterator it =
-          info->pmas.best.find(memory);
-      return (it != info->pmas.best.end());
-    }
-#endif
-
-    // old way
-    Memory best = Memory::NO_MEMORY;
-    int best_aff = INT_MIN;
-    std::vector<Machine::ProcessorMemoryAffinity> affinities;
-    machine->get_proc_mem_affinity(affinities, thing);
-    for(std::vector<Machine::ProcessorMemoryAffinity>::const_iterator it =
-            affinities.begin();
-        it != affinities.end(); it++) {
-      int aff = (it->bandwidth * bandwidth_weight) + (it->latency * latency_weight);
-      if(aff > best_aff) {
-        best_aff = aff;
-        best = it->m;
-      }
-    }
-    return (best == memory);
-  }
-
   ////////////////////////////////////////////////////////////////////////
   //
   // class ProcessorQueryImpl
@@ -1624,6 +1614,7 @@ namespace Realm {
     , restricted_node_id(copy_from.restricted_node_id)
     , is_restricted_kind(copy_from.is_restricted_kind)
     , restricted_kind(copy_from.restricted_kind)
+    , best_affinity_cost(copy_from.best_affinity_cost)
     , cached_mem(copy_from.cached_mem)
     , is_cached_mem(copy_from.is_cached_mem)
     , shared_cached_list(copy_from.shared_cached_list)
@@ -2002,6 +1993,93 @@ namespace Realm {
     return pval;
   }
 
+  Processor ProcessorQueryImpl::build_best_affinity_cache() const
+  {
+    // Check if the machine model has been invalidated since this query was created
+    if(invalid_count != cache_invalid_count) {
+      // Cache is invalid, update the invalid_count and clear any stale cache
+      invalid_count = cache_invalid_count;
+      valid_cache = false;
+      if(cur_cached_list && !shared_cached_list) {
+        delete cur_cached_list;
+        cur_cached_list = nullptr;
+      }
+    }
+
+    // Allocate the instance-specific cache
+    shared_cached_list = false;
+    cur_cached_list = new std::vector<Processor>();
+    valid_cache = true;
+
+    int best_score = std::numeric_limits<int>::min();
+    bool found_any = false;
+    std::vector<Processor> candidates_with_best_score;
+
+    // Iterate through all candidates matching other predicates
+    std::map<NodeID, MachineNodeInfo *>::const_iterator it;
+    if(is_restricted_node)
+      it = machine->nodeinfos.lower_bound(restricted_node_id);
+    else
+      it = machine->nodeinfos.begin();
+
+    while(it != machine->nodeinfos.end()) {
+      if(is_restricted_node && (it->first != restricted_node_id))
+        break;
+
+      const std::map<Processor, MachineProcInfo *> *plist = 0;
+      if(is_restricted_kind) {
+        std::map<Processor::Kind, std::map<Processor, MachineProcInfo *>>::const_iterator
+            it2 = it->second->proc_by_kind.find(restricted_kind);
+        if(it2 != it->second->proc_by_kind.end())
+          plist = &(it2->second);
+        else
+          plist = 0;
+      } else
+        plist = &(it->second->procs);
+
+      if(plist) {
+        std::map<Processor, MachineProcInfo *>::const_iterator it2 = plist->begin();
+        while(it2 != plist->end()) {
+          bool ok = true;
+          // Check all non-best-affinity predicates
+          for(std::vector<ProcQueryPredicate *>::const_iterator it3 = predicates.begin();
+              ok && (it3 != predicates.end()); it3++)
+            ok = (*it3)->matches_predicate(machine, it2->first, it2->second);
+
+          if(ok) {
+            // Calculate affinity score for this candidate
+            std::vector<Machine::ProcessorMemoryAffinity> affinities;
+            machine->get_proc_mem_affinity(affinities, it2->first);
+            for(std::vector<Machine::ProcessorMemoryAffinity>::const_iterator aff_it =
+                    affinities.begin();
+                aff_it != affinities.end(); ++aff_it) {
+              if(aff_it->m == best_affinity_cost->memory) {
+                int score = (aff_it->bandwidth * best_affinity_cost->bandwidth_weight) +
+                            (aff_it->latency * best_affinity_cost->latency_weight);
+                if(!found_any || score > best_score) {
+                  best_score = score;
+                  candidates_with_best_score.clear();
+                  candidates_with_best_score.push_back(it2->first);
+                  found_any = true;
+                } else if(score == best_score) {
+                  candidates_with_best_score.push_back(it2->first);
+                }
+                break;
+              }
+            }
+          }
+          ++it2;
+        }
+      }
+      ++it;
+    }
+
+    // Store only the best candidates in the cache
+    *cur_cached_list = std::move(candidates_with_best_score);
+
+    return cur_cached_list->empty() ? Processor::NO_PROC : cur_cached_list->front();
+  }
+
   Processor ProcessorQueryImpl::first_match(void) const
   {
 #ifdef USE_OLD_AFFINITIES
@@ -2032,6 +2110,12 @@ namespace Realm {
     }
     return lowest;
 #else
+
+    // If best affinity is specified, we need to collect all candidates
+    // and filter by best affinity cost
+    if(best_affinity_cost.has_value()) {
+      return build_best_affinity_cache();
+    }
 
     // optimize if restricted kind without predicates and restricted_node attached to the
     // query
@@ -2120,6 +2204,23 @@ namespace Realm {
     }
     return lowest;
 #else
+    // If best affinity is specified, the results should already be in the Level 2 cache
+    // from first_match(). Just iterate through the cached list.
+    if(best_affinity_cost.has_value()) {
+      // If cache not built yet, build it now
+      if(!valid_cache || !cur_cached_list) {
+        build_best_affinity_cache();
+      }
+
+      // Find the next processor in the cache after the given one
+      for(size_t i = 0; i < cur_cached_list->size(); ++i) {
+        if((*cur_cached_list)[i].id > after.id) {
+          return (*cur_cached_list)[i];
+        }
+      }
+      return Processor::NO_PROC;
+    }
+
     std::map<NodeID, MachineNodeInfo *>::const_iterator it;
     // start where we left off
     it = machine->nodeinfos.find(ID(after).proc_owner_node());
@@ -2208,6 +2309,15 @@ namespace Realm {
     }
     return pset.size();
 #else
+    // If best affinity is specified, use the Level 2 cache
+    if(best_affinity_cost.has_value()) {
+      // If cache not built yet, build it now
+      if(!valid_cache || !cur_cached_list) {
+        build_best_affinity_cache();
+      }
+      return cur_cached_list->size();
+    }
+
     size_t count = 0;
     if(cached_query(count))
       return count;
@@ -2292,6 +2402,21 @@ namespace Realm {
       }
     }
 #else
+    // If best affinity is specified, the results should be in the Level 2 cache
+    // Pick randomly from those
+    if(best_affinity_cost.has_value()) {
+      // If cache not built yet, build it now
+      if(!valid_cache || !cur_cached_list) {
+        build_best_affinity_cache();
+      }
+
+      if(!cur_cached_list->empty()) {
+        size_t idx = lrand48() % cur_cached_list->size();
+        return (*cur_cached_list)[idx];
+      }
+      return Processor::NO_PROC;
+    }
+
     // optimize if restricted kind without predicates and restricted_node attached to the
     // query
     Processor pval = Processor::NO_PROC;
@@ -2438,96 +2563,6 @@ namespace Realm {
   // class MemoryBestProcAffinityPredicate
   //
 
-  MemoryBestProcAffinityPredicate::MemoryBestProcAffinityPredicate(Processor _proc,
-                                                                   int _bandwidth_weight,
-                                                                   int _latency_weight)
-    : proc(_proc)
-    , bandwidth_weight(_bandwidth_weight)
-    , latency_weight(_latency_weight)
-  {}
-
-  MemoryQueryPredicate *MemoryBestProcAffinityPredicate::clone(void) const
-  {
-    return new MemoryBestProcAffinityPredicate(proc, bandwidth_weight, latency_weight);
-  }
-
-  bool MemoryBestProcAffinityPredicate::matches_predicate(
-      const MachineImpl *machine, Memory thing, const MachineMemInfo *info) const
-  {
-#ifndef USE_OLD_AFFINITIES
-    if((bandwidth_weight == 1) && (latency_weight == 0)) {
-      REALM_ASSERT(info != 0);
-      std::map<Processor, Machine::ProcessorMemoryAffinity *>::const_iterator it =
-          info->pmas.best.find(proc);
-      return (it != info->pmas.best.end());
-    }
-#endif
-
-    // old way
-    Processor best = Processor::NO_PROC;
-    int best_aff = INT_MIN;
-    std::vector<Machine::ProcessorMemoryAffinity> affinities;
-    machine->get_proc_mem_affinity(affinities, Processor::NO_PROC, thing);
-    for(std::vector<Machine::ProcessorMemoryAffinity>::const_iterator it =
-            affinities.begin();
-        it != affinities.end(); it++) {
-      int aff = (it->bandwidth * bandwidth_weight) + (it->latency * latency_weight);
-      if(aff > best_aff) {
-        best_aff = aff;
-        best = it->p;
-      }
-    }
-    return (best == proc);
-  }
-
-  ////////////////////////////////////////////////////////////////////////
-  //
-  // class MemoryBestMemAffinityPredicate
-  //
-
-  MemoryBestMemAffinityPredicate::MemoryBestMemAffinityPredicate(Memory _memory,
-                                                                 int _bandwidth_weight,
-                                                                 int _latency_weight)
-    : memory(_memory)
-    , bandwidth_weight(_bandwidth_weight)
-    , latency_weight(_latency_weight)
-  {}
-
-  MemoryQueryPredicate *MemoryBestMemAffinityPredicate::clone(void) const
-  {
-    return new MemoryBestMemAffinityPredicate(memory, bandwidth_weight, latency_weight);
-  }
-
-  bool MemoryBestMemAffinityPredicate::matches_predicate(const MachineImpl *machine,
-                                                         Memory thing,
-                                                         const MachineMemInfo *info) const
-  {
-#ifndef USE_OLD_AFFINITIES
-    if((bandwidth_weight == 1) && (latency_weight == 0)) {
-      REALM_ASSERT(info != 0);
-      std::map<Memory, Machine::MemoryMemoryAffinity *>::const_iterator it =
-          info->mmas_out.best.find(memory);
-      return (it != info->mmas_out.best.end());
-    }
-#endif
-
-    // old way
-    Memory best = Memory::NO_MEMORY;
-    int best_aff = INT_MIN;
-    std::vector<Machine::MemoryMemoryAffinity> affinities;
-    machine->get_mem_mem_affinity(affinities, thing);
-    for(std::vector<Machine::MemoryMemoryAffinity>::const_iterator it =
-            affinities.begin();
-        it != affinities.end(); it++) {
-      int aff = (it->bandwidth * bandwidth_weight) + (it->latency * latency_weight);
-      if(aff > best_aff) {
-        best_aff = aff;
-        best = it->m2;
-      }
-    }
-    return (best == memory);
-  }
-
   ////////////////////////////////////////////////////////////////////////
   //
   // class MemoryQueryImpl
@@ -2566,6 +2601,8 @@ namespace Realm {
     , valid_cache(copy_from.valid_cache)
     , cur_cached_list(copy_from.cur_cached_list)
     , invalid_count(cache_invalid_count)
+    , best_proc_affinity_cost(copy_from.best_proc_affinity_cost)
+    , best_mem_affinity_cost(copy_from.best_mem_affinity_cost)
   {
     predicates.reserve(copy_from.predicates.size());
     for(std::vector<MemoryQueryPredicate *>::const_iterator it =
@@ -2878,6 +2915,136 @@ namespace Realm {
     return mval;
   }
 
+  Memory MemoryQueryImpl::build_best_affinity_cache() const
+  {
+    // Check if the machine model has been invalidated since this query was created
+    if(invalid_count != cache_invalid_count) {
+      // Cache is invalid, update the invalid_count and clear any stale cache
+      invalid_count = cache_invalid_count;
+      valid_cache = false;
+      if(cur_cached_list && !shared_cached_list) {
+        delete cur_cached_list;
+        cur_cached_list = nullptr;
+      }
+    }
+
+    // Allocate the instance-specific cache
+    shared_cached_list = false;
+    cur_cached_list = new std::vector<Memory>();
+    valid_cache = true;
+
+    int best_score = std::numeric_limits<int>::min();
+    bool found_any = false;
+    std::vector<Memory> candidates_with_best_score;
+
+    // Iterate through all candidates matching other predicates
+    std::map<NodeID, MachineNodeInfo *>::const_iterator it;
+    if(is_restricted_node)
+      it = machine->nodeinfos.lower_bound(restricted_node_id);
+    else
+      it = machine->nodeinfos.begin();
+
+    while(it != machine->nodeinfos.end()) {
+      if(is_restricted_node && (it->first != restricted_node_id))
+        break;
+
+      const std::map<Memory, MachineMemInfo *> *plist;
+      if(is_restricted_kind) {
+        std::map<Memory::Kind, std::map<Memory, MachineMemInfo *>>::const_iterator it2 =
+            it->second->mem_by_kind.find(restricted_kind);
+        if(it2 != it->second->mem_by_kind.end())
+          plist = &(it2->second);
+        else
+          plist = 0;
+      } else
+        plist = &(it->second->mems);
+
+      if(plist) {
+        std::map<Memory, MachineMemInfo *>::const_iterator it2 = plist->begin();
+        while(it2 != plist->end()) {
+          size_t it2_capacity =
+              MemoryImpl::get_memory_size(machine->get_runtime_impl(), it2->first);
+          bool ok = ((restricted_min_capacity == 0) ||
+                     (it2_capacity >= restricted_min_capacity));
+          // Check all non-best-affinity predicates
+          for(std::vector<MemoryQueryPredicate *>::const_iterator it3 =
+                  predicates.begin();
+              ok && (it3 != predicates.end()); it3++)
+            ok = (*it3)->matches_predicate(machine, it2->first, it2->second);
+
+          if(ok) {
+            // Calculate affinity score for this candidate
+            int score = 0;
+            bool has_required_affinity = true;
+
+            // Add processor affinity score if specified
+            if(best_proc_affinity_cost.has_value()) {
+              std::vector<Machine::ProcessorMemoryAffinity> affinities;
+              machine->get_proc_mem_affinity(affinities, best_proc_affinity_cost->proc);
+              bool found_proc_affinity = false;
+              for(std::vector<Machine::ProcessorMemoryAffinity>::const_iterator aff_it =
+                      affinities.begin();
+                  aff_it != affinities.end(); ++aff_it) {
+                if(aff_it->m == it2->first) {
+                  score +=
+                      (aff_it->bandwidth * best_proc_affinity_cost->bandwidth_weight) +
+                      (aff_it->latency * best_proc_affinity_cost->latency_weight);
+                  found_proc_affinity = true;
+                  break;
+                }
+              }
+              // If we require proc affinity but didn't find it, skip this candidate
+              if(!found_proc_affinity) {
+                has_required_affinity = false;
+              }
+            }
+
+            // Add memory affinity score if specified
+            if(has_required_affinity && best_mem_affinity_cost.has_value()) {
+              std::vector<Machine::MemoryMemoryAffinity> affinities;
+              machine->get_mem_mem_affinity(affinities, it2->first);
+              bool found_mem_affinity = false;
+              for(std::vector<Machine::MemoryMemoryAffinity>::const_iterator aff_it =
+                      affinities.begin();
+                  aff_it != affinities.end(); ++aff_it) {
+                if(aff_it->m2 == best_mem_affinity_cost->memory) {
+                  score +=
+                      (aff_it->bandwidth * best_mem_affinity_cost->bandwidth_weight) +
+                      (aff_it->latency * best_mem_affinity_cost->latency_weight);
+                  found_mem_affinity = true;
+                  break;
+                }
+              }
+              // If we require mem affinity but didn't find it, skip this candidate
+              if(!found_mem_affinity) {
+                has_required_affinity = false;
+              }
+            }
+
+            // Only consider this candidate if it has all required affinities
+            if(has_required_affinity) {
+              if(!found_any || score > best_score) {
+                best_score = score;
+                candidates_with_best_score.clear();
+                candidates_with_best_score.push_back(it2->first);
+                found_any = true;
+              } else if(score == best_score) {
+                candidates_with_best_score.push_back(it2->first);
+              }
+            }
+          }
+          ++it2;
+        }
+      }
+      ++it;
+    }
+
+    // Store only the best candidates in the cache
+    *cur_cached_list = std::move(candidates_with_best_score);
+
+    return cur_cached_list->empty() ? Memory::NO_MEMORY : cur_cached_list->front();
+  }
+
   Memory MemoryQueryImpl::first_match(void) const
   {
 #if USE_OLD_AFFINITIES
@@ -2910,6 +3077,12 @@ namespace Realm {
     }
     return lowest;
 #else
+
+    // If best affinity is specified, we need to collect all candidates
+    // and filter by best affinity cost
+    if(best_proc_affinity_cost.has_value() || best_mem_affinity_cost.has_value()) {
+      return build_best_affinity_cache();
+    }
 
     Memory mval = Memory::NO_MEMORY;
     if(cached_query(mval, QUERY_FIRST))
@@ -3000,6 +3173,23 @@ namespace Realm {
     }
     return lowest;
 #else
+    // If best affinity is specified, the results should already be in the Level 2 cache
+    // from first_match(). Just iterate through the cached list.
+    if(best_proc_affinity_cost.has_value() || best_mem_affinity_cost.has_value()) {
+      // If cache not built yet, build it now
+      if(!valid_cache || !cur_cached_list) {
+        build_best_affinity_cache();
+      }
+
+      // Find the next memory in the cache after the given one
+      for(size_t i = 0; i < cur_cached_list->size(); ++i) {
+        if((*cur_cached_list)[i].id > after.id) {
+          return (*cur_cached_list)[i];
+        }
+      }
+      return Memory::NO_MEMORY;
+    }
+
     std::map<NodeID, MachineNodeInfo *>::const_iterator it;
     // start where we left off
     it = machine->nodeinfos.find(ID(after).memory_owner_node());
@@ -3108,6 +3298,15 @@ namespace Realm {
     }
     return pset.size();
 #else
+    // If best affinity is specified, use the Level 2 cache
+    if(best_proc_affinity_cost.has_value() || best_mem_affinity_cost.has_value()) {
+      // If cache not built yet, build it now
+      if(!valid_cache || !cur_cached_list) {
+        build_best_affinity_cache();
+      }
+      return cur_cached_list->size();
+    }
+
     size_t count = 0;
     if(cached_query(count))
       return count;
@@ -3199,6 +3398,20 @@ namespace Realm {
       }
     }
 #else
+    // If best affinity is specified, the results should be in the Level 2 cache
+    // Pick randomly from those
+    if(best_proc_affinity_cost.has_value() || best_mem_affinity_cost.has_value()) {
+      // If cache not built yet, build it now
+      if(!valid_cache || !cur_cached_list) {
+        build_best_affinity_cache();
+      }
+
+      if(!cur_cached_list->empty()) {
+        size_t idx = lrand48() % cur_cached_list->size();
+        return (*cur_cached_list)[idx];
+      }
+      return Memory::NO_MEMORY;
+    }
 
     Memory mval = Memory::NO_MEMORY;
     if(cached_query(mval, QUERY_RANDOM))
