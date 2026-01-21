@@ -32,15 +32,16 @@ namespace Realm {
 
   template <int N, typename T>
   template <int N2, typename T2>
-  Event IndexSpace<N, T>::gpu_subspaces_by_image(
+  Event IndexSpace<N, T>::create_subspaces_by_image(
       const DomainTransform<N, T, N2, T2> &domain_transform,
       const std::vector<IndexSpace<N2, T2>> &sources,
       std::vector<IndexSpace<N, T>> &images, const ProfilingRequestSet &reqs,
-      std::pair<size_t, size_t> &sizes, RegionInstance buffer, Event wait_on) const {
-    // output vector should start out empty
-    assert(images.empty());
+      Event wait_on,
+      RegionInstance buffer, std::pair<size_t, size_t>* buffer_bounds) const {
+   // output vector should start out empty
+   assert(images.empty());
 
-    if (buffer==RegionInstance::NO_INST) {
+   if (buffer_bounds != nullptr || buffer != RegionInstance::NO_INST) {
       size_t optimal_size = 0;
       for (size_t i = 0; i < sources.size(); i++) {
         optimal_size += 5 * sources[i].volume() * sizeof(RectDesc<N, T>);
@@ -73,49 +74,21 @@ namespace Realm {
           (2 * source_entries * sizeof(uint64_t)) +
           (source_entries * sizeof(uint64_t));
       }
-      sizes = std::make_pair(minimal_size, minimal_size + optimal_size);
-      return Event::NO_EVENT;
-    }
-
-    GenEventImpl *finish_event = GenEventImpl::create_genevent();
-    Event e = finish_event->current_event();
-
-    GPUImageOperation<N, T, N2, T2> *op = new GPUImageOperation<N, T, N2, T2>(
-        *this, domain_transform, reqs, sizes.first, buffer, finish_event, ID(e).event_generation());
-
-    size_t n = sources.size();
-    images.resize(n);
-    for (size_t i = 0; i < n; i++) {
-      images[i] = op->add_source(sources[i]);
-
-      if(!images[i].dense()) {
-        e = Event::merge_events(
-            {e, SparsityMapRefCounter(images[i].sparsity.id).add_references(1)});
+      if (buffer_bounds != nullptr && buffer == RegionInstance::NO_INST) {
+	*buffer_bounds = std::make_pair(minimal_size, minimal_size + optimal_size);
+      	return Event::NO_EVENT;
       }
-
-      log_dpops.info() << "image: " << *this << " src=" << sources[i] << " -> "
-                       << images[i] << " (" << e << ")";
+      assert(buffer != RegionInstance::NO_INST);
+      size_t buffer_size = buffer.get_layout()->bytes_used;
+      assert(buffer_size >= minimal_size);
     }
 
-    op->launch(wait_on);
-    return e;
-  }
-
-  template <int N, typename T>
-  template <int N2, typename T2>
-  Event IndexSpace<N, T>::create_subspaces_by_image(
-      const DomainTransform<N, T, N2, T2> &domain_transform,
-      const std::vector<IndexSpace<N2, T2>> &sources,
-      std::vector<IndexSpace<N, T>> &images, const ProfilingRequestSet &reqs,
-      Event wait_on) const {
-   // output vector should start out empty
-   assert(images.empty());
 
    GenEventImpl *finish_event = GenEventImpl::create_genevent();
    Event e = finish_event->current_event();
 
    ImageOperation<N, T, N2, T2> *op = new ImageOperation<N, T, N2, T2>(
-       *this, domain_transform, reqs, finish_event, ID(e).event_generation());
+       *this, domain_transform, reqs, finish_event, ID(e).event_generation(), buffer);
 
    size_t n = sources.size();
    images.resize(n);
@@ -507,10 +480,11 @@ namespace Realm {
       const IndexSpace<N, T> &_parent,
       const DomainTransform<N, T, N2, T2> &_domain_transform,
       const ProfilingRequestSet &reqs, GenEventImpl *_finish_event,
-      EventImpl::gen_t _finish_gen)
+      EventImpl::gen_t _finish_gen, RegionInstance _buffer)
       : PartitioningOperation(reqs, _finish_event, _finish_gen),
         parent(_parent),
-        domain_transform(_domain_transform) {}
+        domain_transform(_domain_transform),
+	buffer(_buffer) {}
 
   template <int N, typename T, int N2, typename T2>
   ImageOperation<N,T,N2,T2>::~ImageOperation(void)
@@ -715,24 +689,9 @@ namespace Realm {
     if (gpu_data) {
     	std::swap(domain_transform.ptr_data, gpu_ptr_data);
     	std::swap(domain_transform.range_data, gpu_rect_data);
-        const char* val = std::getenv("TILE_SIZE");  // or any env var
-        size_t tile_size = 100000000; //default
-        if (val) {
-          tile_size = atoi(val);
-        }
-        std::vector<size_t> byte_fields = {sizeof(char)};
-        IndexSpace<1> instance_index_space(Rect<1>(0, tile_size-1));
-        RegionInstance buffer;
-        Memory my_mem;
-        if (domain_transform.ptr_data.size() > 0) {
-          my_mem = domain_transform.ptr_data[0].inst.get_location();
-        } else {
-          my_mem = domain_transform.range_data[0].inst.get_location();
-        }
-        RegionInstance::create_instance(buffer, my_mem, instance_index_space, byte_fields, 0, Realm::ProfilingRequestSet()).wait();
     	GPUImageMicroOp<N, T, N2, T2> *micro_op =
 	       new GPUImageMicroOp<N, T, N2, T2>(
-		 parent, domain_transform, !cpu_data, tile_size, buffer);
+		 parent, domain_transform, !cpu_data, buffer);
     	for (size_t j = 0; j < sources.size(); j++) {
     		micro_op->add_sparsity_output(sources[j], images[j]);
     	}
@@ -814,74 +773,6 @@ namespace Realm {
 
   template <int N, typename T, int N2, typename T2>
   void ImageOperation<N,T,N2,T2>::print(std::ostream& os) const
-  {
-    os << "ImageOperation(" << parent << ")";
-  }
-
-  ////////////////////////////////////////////////////////////////////////
-  //
-  // class GPUImageOperation<N,T,N2,T2>
-
-  template <int N, typename T, int N2, typename T2>
-  GPUImageOperation<N, T, N2, T2>::GPUImageOperation(
-      const IndexSpace<N, T> &_parent,
-      const DomainTransform<N, T, N2, T2> &_domain_transform,
-      const ProfilingRequestSet &reqs, size_t _buffer_size, RegionInstance _buffer,
-      GenEventImpl *_finish_event, EventImpl::gen_t _finish_gen)
-      : PartitioningOperation(reqs, _finish_event, _finish_gen),
-        parent(_parent),
-        domain_transform(_domain_transform),
-        buffer_size(_buffer_size),
-        buffer(_buffer) {}
-
-  template <int N, typename T, int N2, typename T2>
-  GPUImageOperation<N,T,N2,T2>::~GPUImageOperation(void)
-  {}
-
-  template <int N, typename T, int N2, typename T2>
-  IndexSpace<N,T> GPUImageOperation<N,T,N2,T2>::add_source(const IndexSpace<N2,T2>& source)
-  {
-    // try to filter out obviously empty sources
-    if(parent.empty() || source.empty())
-      return IndexSpace<N,T>::make_empty();
-
-    // otherwise it'll be something smaller than the current parent
-    IndexSpace<N,T> image;
-    image.bounds = parent.bounds;
-
-    // if the source has a sparsity map, use the same node - otherwise
-    // get a sparsity ID by round-robin'ing across the nodes that have field data
-    int target_node = 0;
-    if(!source.dense())
-      target_node = ID(source.sparsity).sparsity_creator_node();
-    else
-      if(!domain_transform.ptr_data.empty())
-	target_node = ID(domain_transform.ptr_data[sources.size() % domain_transform.ptr_data.size()].inst).instance_owner_node();
-      else
-	target_node = ID(domain_transform.range_data[sources.size() % domain_transform.range_data.size()].inst).instance_owner_node();
-
-    SparsityMap<N,T> sparsity = get_runtime()->get_available_sparsity_impl(target_node)->me.convert<SparsityMap<N,T> >();
-    image.sparsity = sparsity;
-
-    sources.push_back(source);
-    images.push_back(sparsity);
-
-    return image;
-  }
-
-  template <int N, typename T, int N2, typename T2>
-  void GPUImageOperation<N, T, N2, T2>::execute(void) {
-    	GPUImageMicroOp<N, T, N2, T2> *micro_op =
-	       new GPUImageMicroOp<N, T, N2, T2>(
-		 parent, domain_transform, true, buffer_size, buffer);
-    	for (size_t j = 0; j < sources.size(); j++) {
-    		micro_op->add_sparsity_output(sources[j], images[j]);
-    	}
-    	micro_op->dispatch(this, true);
-  }
-
-  template <int N, typename T, int N2, typename T2>
-  void GPUImageOperation<N,T,N2,T2>::print(std::ostream& os) const
   {
     os << "ImageOperation(" << parent << ")";
   }
@@ -1015,8 +906,8 @@ namespace Realm {
   GPUImageMicroOp<N, T, N2, T2>::GPUImageMicroOp(
       const IndexSpace<N, T> &_parent,
       const DomainTransform<N, T, N2, T2> &_domain_transform,
-      bool _exclusive, size_t _fixed_buffer_size, RegionInstance _buffer)
-      : parent_space(_parent), domain_transform(_domain_transform), fixed_buffer_size(_fixed_buffer_size), buffer(_buffer)
+      bool _exclusive, RegionInstance _buffer)
+      : parent_space(_parent), domain_transform(_domain_transform), buffer(_buffer)
   {
 	  this->exclusive = _exclusive;
   }

@@ -514,13 +514,13 @@ public:
                                                      e01);
     if(wait_on_events) e02.wait();
     std::pair<size_t, size_t> estimate;
-    Event _e = is_nodes.gpu_subspaces_by_image(src_field_data_gpu,
+    Event _e = is_nodes.create_subspaces_by_image(src_field_data_gpu,
                                                   p_garbage_edges,
                                                   p_garbage_rd,
                                                   Realm::ProfilingRequestSet(),
-                                                  estimate,
+                                                  e02,
                                                   RegionInstance::NO_INST,
-                                                  e02);
+                                                  &estimate);
     std::cout << "Minimum size: " << estimate.first << " bytes, "
               << "Maximum size: " << estimate.second << " bytes\n";
 
@@ -535,14 +535,11 @@ public:
     IndexSpace<1> instance_index_space(Rect<1>(0, tile_size-1));
     RegionInstance buffer;
     RegionInstance::create_instance(buffer, gpu_memory, instance_index_space, byte_fields, 0, Realm::ProfilingRequestSet()).wait();
-    estimate.first = tile_size;
-    Event e03 = is_nodes.gpu_subspaces_by_image(src_field_data_gpu,
+    Event e03 = is_nodes.create_subspaces_by_image(src_field_data_gpu,
                                                   p_garbage_edges,
                                                   p_garbage_rd,
                                                   Realm::ProfilingRequestSet(),
-                                                  estimate,
-                                                  buffer,
-                                                  e02);
+                                                  e02, buffer);
     if(wait_on_events) e03.wait();
 
     Event e04 = is_edges.create_subspaces_by_preimage(dst_node_field_data,
@@ -573,13 +570,11 @@ public:
 
     // an image of p_edges through out_node gives us all the shared nodes, along
     //  with some private nodes
-    Event e3 = is_nodes.gpu_subspaces_by_image(src_field_data_gpu,
+    Event e3 = is_nodes.create_subspaces_by_image(src_field_data_gpu,
                                                   p_edges,
                                                   p_rd,
                                                   Realm::ProfilingRequestSet(),
-                                                  estimate,
-                                                  buffer,
-                                                  e2);
+                                                  e2, buffer);
     if(wait_on_events) e3.wait();
   	log_app.info() << "GPU Image complete " << Clock::current_time_in_microseconds() << "\n";
   	log_app.info() << "Starting second GPU preimage " << Clock::current_time_in_microseconds() << "\n";
