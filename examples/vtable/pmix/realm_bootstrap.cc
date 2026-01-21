@@ -19,8 +19,6 @@
 #include <cstring>
 #include <cstdlib>
 #include <string>
-#include <map>
-#include <vector>
 #include <pmix.h>
 
 namespace App {
@@ -31,9 +29,8 @@ namespace App {
   static constexpr const char *REALM_KEY_GROUP = "realm_group";
 
   struct VtableContext {
-    std::map<std::string, std::vector<uint8_t>> local_kv_store;
-    std::map<std::string, std::vector<uint8_t>> global_kv_store;
-    bool pending_sync = false;
+    // pending_sync is an optimization to avoid redundant PMIx_Commit() calls
+    bool pending_sync = false; 
     pmix_proc_t myproc;
     uint32_t pmix_rank = 0;
     uint32_t pmix_size = 0;
@@ -47,9 +44,16 @@ namespace App {
     VtableContext *ctx = *(VtableContext **)vtable_data;
 
     std::string k(static_cast<const char *>(key), key_size);
-    std::vector<uint8_t> v(static_cast<const uint8_t *>(value),
-                           static_cast<const uint8_t *>(value) + value_size);
-    ctx->local_kv_store[k] = v;
+
+    pmix_value_t val;
+    val.type = PMIX_BYTE_OBJECT;
+    val.data.bo.bytes = (char *)value;
+    val.data.bo.size = value_size;
+
+    pmix_status_t rc = PMIx_Put(PMIX_GLOBAL, k.c_str(), &val);
+    if(rc != PMIX_SUCCESS)
+      return false;
+
     ctx->pending_sync = true;
     return true;
   }
@@ -94,28 +98,25 @@ namespace App {
       return true;
     }
 
-    auto it = ctx->global_kv_store.find(k);
-    if(it != ctx->global_kv_store.end()) {
-      if(it->second.size() > *value_size) {
-        *value_size = it->second.size();
+    pmix_proc_t wildcard;
+    PMIX_PROC_LOAD(&wildcard, ctx->myproc.nspace, PMIX_RANK_WILDCARD);
+    pmix_value_t *val = NULL;
+
+    pmix_status_t rc = PMIx_Get(&wildcard, k.c_str(), NULL, 0, &val);
+    if(rc == PMIX_SUCCESS && val && val->type == PMIX_BYTE_OBJECT) {
+      if(val->data.bo.size > *value_size) {
+        *value_size = val->data.bo.size;
+        PMIX_VALUE_RELEASE(val);
         return false;
       }
-      memcpy(value, it->second.data(), it->second.size());
-      *value_size = it->second.size();
+      memcpy(value, val->data.bo.bytes, val->data.bo.size);
+      *value_size = val->data.bo.size;
+      PMIX_VALUE_RELEASE(val);
       return true;
     }
 
-    it = ctx->local_kv_store.find(k);
-    if(it != ctx->local_kv_store.end()) {
-      if(it->second.size() > *value_size) {
-        *value_size = it->second.size();
-        return false;
-      }
-      memcpy(value, it->second.data(), it->second.size());
-      *value_size = it->second.size();
-      return true;
-    }
-
+    if(val)
+      PMIX_VALUE_RELEASE(val);
     *value_size = 0;
     return true;
   }
@@ -126,70 +127,23 @@ namespace App {
       return false;
     VtableContext *ctx = *(VtableContext **)vtable_data;
 
-    // Exchange local KV data via PMIx
-    if(ctx->pending_sync && !ctx->local_kv_store.empty()) {
-      // Put all local keys to PMIx
-      for(const auto &kv : ctx->local_kv_store) {
-        pmix_value_t val;
-        val.type = PMIX_BYTE_OBJECT;
-        val.data.bo.bytes = (char *)kv.second.data();
-        val.data.bo.size = kv.second.size();
-
-        pmix_status_t rc = PMIx_Put(PMIX_GLOBAL, kv.first.c_str(), &val);
-        if(rc != PMIX_SUCCESS) {
-          return false;
-        }
-      }
-
+    if(ctx->pending_sync) {
       pmix_status_t rc = PMIx_Commit();
-      if(rc != PMIX_SUCCESS) {
+      if(rc != PMIX_SUCCESS)
         return false;
-      }
-
-      // Fence with data collection
-      pmix_proc_t wildcard;
-      PMIX_PROC_LOAD(&wildcard, ctx->myproc.nspace, PMIX_RANK_WILDCARD);
-
-      pmix_info_t fence_info[1];
-      bool collect_data = true;
-      PMIX_INFO_LOAD(&fence_info[0], PMIX_COLLECT_DATA, &collect_data, PMIX_BOOL);
-
-      rc = PMIx_Fence(&wildcard, 1, fence_info, 1);
-      if(rc != PMIX_SUCCESS) {
-        return false;
-      }
-
-      // Fetch data from all ranks
-      for(const auto &kv : ctx->local_kv_store) {
-        for(uint32_t rank = 0; rank < ctx->pmix_size; rank++) {
-          char key_buf[256];
-          unsigned long group_id = 0;
-          unsigned int our_rank = 0;
-          if(sscanf(kv.first.c_str(), "realm_bootstrap_key_%lu_%u", &group_id,
-                    &our_rank) == 2) {
-            snprintf(key_buf, sizeof(key_buf), "realm_bootstrap_key_%lu_%u", group_id,
-                     rank);
-          } else {
-            continue;
-          }
-
-          pmix_proc_t proc;
-          PMIX_PROC_LOAD(&proc, ctx->myproc.nspace, rank);
-          pmix_value_t *val = NULL;
-
-          rc = PMIx_Get(&proc, key_buf, NULL, 0, &val);
-          if(rc == PMIX_SUCCESS && val && val->type == PMIX_BYTE_OBJECT) {
-            std::vector<uint8_t> v((uint8_t *)val->data.bo.bytes,
-                                   (uint8_t *)val->data.bo.bytes + val->data.bo.size);
-            ctx->global_kv_store[key_buf] = v;
-            PMIX_VALUE_RELEASE(val);
-          }
-        }
-      }
-
       ctx->pending_sync = false;
-      ctx->local_kv_store.clear();
     }
+
+    pmix_proc_t wildcard;
+    PMIX_PROC_LOAD(&wildcard, ctx->myproc.nspace, PMIX_RANK_WILDCARD);
+
+    pmix_info_t fence_info[1];
+    bool collect_data = true;
+    PMIX_INFO_LOAD(&fence_info[0], PMIX_COLLECT_DATA, &collect_data, PMIX_BOOL);
+
+    pmix_status_t rc = PMIx_Fence(&wildcard, 1, fence_info, 1);
+    if(rc != PMIX_SUCCESS)
+      return false;
 
     return true;
   }
