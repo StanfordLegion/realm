@@ -231,7 +231,8 @@ void GPUImageMicroOp<N,T,N2,T2>::gpu_populate_ptrs()
 
     cudaStream_t stream = Cuda::get_task_cuda_stream();
 
-    size_t tile_size = fixed_buffer_size;
+    size_t tile_size = buffer.get_layout()->bytes_used;
+    std::cout << "Using tile size of " << tile_size << " bytes." << std::endl;
     RegionInstance fixed_buffer = buffer;
     Arena buffer_arena(reinterpret_cast<void *>(AffineAccessor<char, 1>(fixed_buffer, 0).base), tile_size);
 

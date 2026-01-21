@@ -97,7 +97,7 @@ namespace Realm {
         ImageOperation(const IndexSpace<N, T> &_parent,
                        const DomainTransform<N, T, N2, T2> &_domain_transform,
                        const ProfilingRequestSet &reqs, GenEventImpl *_finish_event,
-                       EventImpl::gen_t _finish_gen);
+                       EventImpl::gen_t _finish_gen, RegionInstance buffer = RegionInstance::NO_INST);
 
         virtual ~ImageOperation(void);
 
@@ -122,6 +122,7 @@ namespace Realm {
         std::vector<IndexSpace<N, T> > diff_rhss;
         std::vector<SparsityMap<N, T> > images;
         bool is_intersection;
+        RegionInstance buffer;
     };
 
     template<int N, typename T, int N2, typename T2>
@@ -150,40 +151,12 @@ namespace Realm {
     };
 
     template<int N, typename T, int N2, typename T2>
-      class GPUImageOperation : public PartitioningOperation {
-    public:
-      GPUImageOperation(const IndexSpace<N, T> &_parent,
-                     const DomainTransform<N, T, N2, T2> &_domain_transform,
-                     const ProfilingRequestSet &reqs,
-                     size_t _buffer_size,
-                     RegionInstance _buffer,
-                     GenEventImpl *_finish_event,
-                     EventImpl::gen_t _finish_gen);
-
-      virtual ~GPUImageOperation(void);
-
-      IndexSpace<N, T> add_source(const IndexSpace<N2, T2> &source);
-
-      virtual void execute(void);
-
-      virtual void print(std::ostream &os) const;
-
-    protected:
-      IndexSpace<N, T> parent;
-      DomainTransform<N, T, N2, T2> domain_transform;
-      std::vector<IndexSpace<N2, T2> > sources;
-      std::vector<SparsityMap<N, T> > images;
-      size_t buffer_size;
-      RegionInstance buffer;
-    };
-
-    template<int N, typename T, int N2, typename T2>
     class GPUImageMicroOp : public GPUMicroOp<N, T> {
     public:
         GPUImageMicroOp(
             const IndexSpace<N, T> &_parent,
             const DomainTransform<N, T, N2, T2> &_domain_transform,
-            bool _exclusive, size_t fixed_buffer_size = 0, RegionInstance buffer = RegionInstance::NO_INST);
+            bool _exclusive, RegionInstance buffer = RegionInstance::NO_INST);
 
         virtual ~GPUImageMicroOp(void);
 
@@ -203,7 +176,6 @@ namespace Realm {
         DomainTransform<N, T, N2, T2> domain_transform;
         std::vector<IndexSpace<N2, T2> > sources;
         std::vector<SparsityMap<N, T> > sparsity_outputs;
-        size_t fixed_buffer_size;
         RegionInstance buffer;
     };
 }; // namespace Realm
