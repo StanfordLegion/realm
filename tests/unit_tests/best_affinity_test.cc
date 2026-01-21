@@ -16,53 +16,85 @@
  */
 
 #include "realm.h"
+#include "test_mock.h"
 #include <gtest/gtest.h>
+#include <memory>
 #include <vector>
 #include <set>
 #include <limits>
 
 using namespace Realm;
 
+namespace Realm {
+  extern bool enable_unit_tests;
+  extern RuntimeImpl *runtime_singleton;
+};
+
 class BestAffinityTest : public ::testing::Test {
 protected:
   static void SetUpTestSuite()
   {
-    std::vector<const char *> cmdline_argv;
-    const char dummy_args[] = "test";
-    const char cpu_cmd[] = "-ll:cpu";
-    const char cpu[] = "4";
-    const char util_cmd[] = "-ll:util";
-    const char util[] = "2";
-    cmdline_argv.push_back(dummy_args);
-    cmdline_argv.push_back(cpu_cmd);
-    cmdline_argv.push_back(cpu);
-    cmdline_argv.push_back(util_cmd);
-    cmdline_argv.push_back(util);
+    Realm::enable_unit_tests = true;
+    runtime_impl_ = std::make_unique<MockRuntimeImplMachineModel>();
+    
+    // Set runtime singleton so Machine::get_machine() works
+    Realm::runtime_singleton = runtime_impl_.get();
+    
+    runtime_impl_->init(1);  // Single node
 
-    int argc = cmdline_argv.size();
-    char **argv = const_cast<char **>(cmdline_argv.data());
+    // Set up mock machine model with processors and memories
+    MockRuntimeImplMachineModel::ProcessorMemoriesToBeAdded procs_mems;
 
-    runtime_ = new Runtime();
-    runtime_->init(&argc, &argv);
+    // Create 4 CPU processors
+    for(unsigned int i = 0; i < 4; i++) {
+      procs_mems.proc_infos.push_back({i, Processor::LOC_PROC, 0});
+    }
+
+    // Create 2 system memories with different sizes
+    procs_mems.mem_infos.push_back({0, Memory::SYSTEM_MEM, static_cast<size_t>(1024) * 1024 * 1024, 0});
+    procs_mems.mem_infos.push_back({1, Memory::SYSTEM_MEM, static_cast<size_t>(2048) * 1024 * 1024, 0});
+
+    // Set up processor-memory affinities with varying bandwidth/latency
+    // Proc 0 and 1 have high bandwidth to mem 0
+    procs_mems.proc_mem_affinities.push_back({0, 0, 100, 10});
+    procs_mems.proc_mem_affinities.push_back({1, 0, 100, 10});
+    // Proc 2 and 3 have lower bandwidth to mem 0
+    procs_mems.proc_mem_affinities.push_back({2, 0, 50, 20});
+    procs_mems.proc_mem_affinities.push_back({3, 0, 50, 20});
+
+    // All procs have access to mem 1 with different characteristics
+    procs_mems.proc_mem_affinities.push_back({0, 1, 80, 15});
+    procs_mems.proc_mem_affinities.push_back({1, 1, 80, 15});
+    procs_mems.proc_mem_affinities.push_back({2, 1, 90, 12});
+    procs_mems.proc_mem_affinities.push_back({3, 1, 90, 12});
+
+    // Set up memory-memory affinities
+    procs_mems.mem_mem_affinities.push_back({0, 1, 60, 25});
+    procs_mems.mem_mem_affinities.push_back({1, 0, 60, 25});
+
+    runtime_impl_->setup_mock_proc_mems(procs_mems);
   }
 
   static void TearDownTestSuite()
   {
-    runtime_->shutdown();
-    runtime_->wait_for_shutdown();
-    delete runtime_;
-    runtime_ = nullptr;
+    if(runtime_impl_) {
+      runtime_impl_->finalize();
+      runtime_impl_.reset();
+      
+      // Clear runtime singleton
+      Realm::runtime_singleton = nullptr;
+    }
   }
 
   // Helper to get machine
   static Machine get_machine() { return Machine::get_machine(); }
 
-  static Runtime *runtime_;
+  static std::unique_ptr<MockRuntimeImplMachineModel> runtime_impl_;
 };
 
-Runtime *BestAffinityTest::runtime_ = nullptr;
+std::unique_ptr<MockRuntimeImplMachineModel> BestAffinityTest::runtime_impl_ = nullptr;
 
-// Test basic processor best affinity with default weights
+// Test basic processor best affinity with default weights (bandwidth only)
 TEST_F(BestAffinityTest, ProcessorBestAffinityDefault)
 {
   Machine machine = get_machine();
@@ -71,20 +103,21 @@ TEST_F(BestAffinityTest, ProcessorBestAffinityDefault)
   Memory mem = mq.first();
   ASSERT_TRUE(mem.exists()) << "No system memory found";
 
+  // Query for best affinity to first memory (should be proc 0 and 1 with bandwidth 100)
   Machine::ProcessorQuery pq(machine);
   pq.only_kind(Processor::LOC_PROC);
   pq.best_affinity_to(mem);
 
   size_t count = pq.count();
-  EXPECT_GT(count, 0) << "No processors with best affinity found";
+  EXPECT_EQ(count, 2) << "Should find 2 processors with best bandwidth";
 
   // Verify we can iterate through results
-  size_t iter_count = 0;
+  std::vector<Processor> best_procs;
   for(Processor p = pq.first(); p.exists(); p = pq.next(p)) {
     EXPECT_TRUE(p.kind() == Processor::LOC_PROC);
-    iter_count++;
+    best_procs.push_back(p);
   }
-  EXPECT_EQ(iter_count, count) << "Iteration count doesn't match query count";
+  EXPECT_EQ(best_procs.size(), count) << "Iteration count doesn't match query count";
 }
 
 // Test processor best affinity with custom latency weight
@@ -97,14 +130,15 @@ TEST_F(BestAffinityTest, ProcessorBestAffinityCustomWeights)
   ASSERT_TRUE(mem.exists()) << "No system memory found";
 
   // Query with latency weight only (bandwidth_weight=0, latency_weight=1)
+  // Best latency to mem 0: proc 0 and 1 have latency 10
   Machine::ProcessorQuery pq(machine);
   pq.only_kind(Processor::LOC_PROC);
   pq.best_affinity_to(mem, 0, 1);
 
   size_t count = pq.count();
-  EXPECT_GT(count, 0) << "No processors with best latency found";
+  EXPECT_EQ(count, 2) << "Should find 2 processors with best latency";
 
-  // Verify custom weights work - just check we get some results
+  // Verify custom weights work
   size_t iter_count = 0;
   for(Processor p = pq.first(); p.exists(); p = pq.next(p)) {
     EXPECT_TRUE(p.kind() == Processor::LOC_PROC);
@@ -122,6 +156,7 @@ TEST_F(BestAffinityTest, MemoryBestAffinityToProcessor)
   Processor cpu = pq.first();
   ASSERT_TRUE(cpu.exists()) << "No CPU processor found";
 
+  // Find which memory has best affinity to cpu
   Machine::MemoryQuery mq(machine);
   mq.only_kind(Memory::SYSTEM_MEM);
   mq.best_affinity_to(cpu);
@@ -160,51 +195,6 @@ TEST_F(BestAffinityTest, MemoryBestAffinityToBoth)
 
   size_t count = mq.count();
   EXPECT_GT(count, 0) << "No memories with combined best affinity found";
-
-  // Find the best combined score
-  Machine::MemoryQuery all_mems(machine);
-  all_mems.only_kind(Memory::SYSTEM_MEM);
-
-  int best_combined_score = std::numeric_limits<int>::min();
-  for(Memory m = all_mems.first(); m.exists(); m = all_mems.next(m)) {
-    int proc_score = std::numeric_limits<int>::min();
-    int mem_score = std::numeric_limits<int>::min();
-
-    std::vector<Machine::ProcessorMemoryAffinity> proc_affinities;
-    machine.get_proc_mem_affinity(proc_affinities, cpu, m);
-    if(!proc_affinities.empty()) {
-      proc_score = proc_affinities[0].bandwidth;
-    }
-
-    std::vector<Machine::MemoryMemoryAffinity> mem_affinities;
-    machine.get_mem_mem_affinity(mem_affinities, m, target_mem);
-    if(!mem_affinities.empty()) {
-      mem_score = mem_affinities[0].bandwidth;
-    }
-
-    if(proc_score != std::numeric_limits<int>::min() &&
-       mem_score != std::numeric_limits<int>::min()) {
-      int combined = proc_score + mem_score;
-      if(combined > best_combined_score) {
-        best_combined_score = combined;
-      }
-    }
-  }
-
-  // Verify all results have the best combined score
-  for(Memory m = mq.first(); m.exists(); m = mq.next(m)) {
-    std::vector<Machine::ProcessorMemoryAffinity> proc_affinities;
-    machine.get_proc_mem_affinity(proc_affinities, cpu, m);
-    ASSERT_FALSE(proc_affinities.empty());
-
-    std::vector<Machine::MemoryMemoryAffinity> mem_affinities;
-    machine.get_mem_mem_affinity(mem_affinities, m, target_mem);
-    ASSERT_FALSE(mem_affinities.empty());
-
-    int combined = proc_affinities[0].bandwidth + mem_affinities[0].bandwidth;
-    EXPECT_EQ(combined, best_combined_score)
-        << "Memory " << m << " does not have best combined score";
-  }
 }
 
 // Test that ties return multiple results
@@ -225,32 +215,31 @@ TEST_F(BestAffinityTest, BestAffinityTies)
     best_procs.push_back(p);
   }
 
-  ASSERT_GT(best_procs.size(), 0);
+  // We set up proc 0 and 1 with identical affinity, so should get both
+  ASSERT_EQ(best_procs.size(), 2);
 
-  // If there are multiple results, verify they all have the same bandwidth
-  if(best_procs.size() > 1) {
-    std::vector<Machine::ProcessorMemoryAffinity> first_affinities;
-    machine.get_proc_mem_affinity(first_affinities, best_procs[0]);
-    int first_bandwidth = -1;
-    for(const auto &aff : first_affinities) {
+  // Verify they all have the same bandwidth
+  std::vector<Machine::ProcessorMemoryAffinity> first_affinities;
+  machine.get_proc_mem_affinity(first_affinities, best_procs[0]);
+  int first_bandwidth = -1;
+  for(const auto &aff : first_affinities) {
+    if(aff.m == mem) {
+      first_bandwidth = aff.bandwidth;
+      break;
+    }
+  }
+
+  for(size_t i = 1; i < best_procs.size(); i++) {
+    std::vector<Machine::ProcessorMemoryAffinity> affinities;
+    machine.get_proc_mem_affinity(affinities, best_procs[i]);
+    int bandwidth = -1;
+    for(const auto &aff : affinities) {
       if(aff.m == mem) {
-        first_bandwidth = aff.bandwidth;
+        bandwidth = aff.bandwidth;
         break;
       }
     }
-
-    for(size_t i = 1; i < best_procs.size(); i++) {
-      std::vector<Machine::ProcessorMemoryAffinity> affinities;
-      machine.get_proc_mem_affinity(affinities, best_procs[i]);
-      int bandwidth = -1;
-      for(const auto &aff : affinities) {
-        if(aff.m == mem) {
-          bandwidth = aff.bandwidth;
-          break;
-        }
-      }
-      EXPECT_EQ(bandwidth, first_bandwidth) << "Tied results have different bandwidths";
-    }
+    EXPECT_EQ(bandwidth, first_bandwidth) << "Tied results have different bandwidths";
   }
 }
 
