@@ -2060,9 +2060,10 @@ namespace Realm {
           if(ok) {
             // Calculate affinity score for this candidate
             if(best_affinities.empty()) {
-              machine->get_proc_mem_affinity(best_affinities, Processor::NO_PROC, best_affinity_cost->memory);
+              machine->get_proc_mem_affinity(best_affinities, Processor::NO_PROC,
+                                             best_affinity_cost->memory);
             }
-            for(const Machine::ProcessorMemoryAffinity& affinity : best_affinities) {
+            for(const Machine::ProcessorMemoryAffinity &affinity : best_affinities) {
               if(affinity.p == it2->first) {
                 int score = (affinity.bandwidth * best_affinity_cost->bandwidth_weight) +
                             (affinity.latency * best_affinity_cost->latency_weight);
@@ -3000,10 +3001,12 @@ namespace Realm {
             // Add processor affinity score if specified
             if(best_proc_affinity_cost.has_value()) {
               if(best_proc_affinities.empty()) {
-                machine->get_proc_mem_affinity(best_proc_affinities, best_proc_affinity_cost->proc);
+                machine->get_proc_mem_affinity(best_proc_affinities,
+                                               best_proc_affinity_cost->proc);
               }
               bool found_proc_affinity = false;
-              for(const Machine::ProcessorMemoryAffinity& affinity : best_proc_affinities) {
+              for(const Machine::ProcessorMemoryAffinity &affinity :
+                  best_proc_affinities) {
                 if(affinity.m == it2->first) {
                   score +=
                       (affinity.bandwidth * best_proc_affinity_cost->bandwidth_weight) +
@@ -3021,10 +3024,11 @@ namespace Realm {
             // Add memory affinity score if specified
             if(has_required_affinity && best_mem_affinity_cost.has_value()) {
               if(best_mem_affinities.empty()) {
-                machine->get_mem_mem_affinity(best_mem_affinities, best_mem_affinity_cost->memory);
+                machine->get_mem_mem_affinity(best_mem_affinities,
+                                              best_mem_affinity_cost->memory);
               }
               bool found_mem_affinity = false;
-              for(const Machine::MemoryMemoryAffinity& affinity : best_mem_affinities) {
+              for(const Machine::MemoryMemoryAffinity &affinity : best_mem_affinities) {
                 if(affinity.m2 == it2->first) {
                   score +=
                       (affinity.bandwidth * best_mem_affinity_cost->bandwidth_weight) +
