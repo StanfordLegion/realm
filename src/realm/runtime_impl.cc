@@ -1352,17 +1352,17 @@ namespace Realm {
 
   std::optional<uint64_t> RuntimeImpl::key_value_store_local_group(void) const
   {
-    return key_value_store_get_int(KeyValueStoreVtable::group_key);
+    return key_value_store_get_int(Runtime::KeyValueStoreVtable::group_key);
   }
 
   std::optional<uint64_t> RuntimeImpl::key_value_store_local_rank(void) const
   {
-    return key_value_store_get_int(KeyValueStoreVtable::rank_key);
+    return key_value_store_get_int(Runtime::KeyValueStoreVtable::rank_key);
   }
 
   std::optional<uint64_t> RuntimeImpl::key_value_store_local_ranks(void) const
   {
-    return key_value_store_get_int(KeyValueStoreVtable::ranks_key);
+    return key_value_store_get_int(Runtime::KeyValueStoreVtable::ranks_key);
   }
 
   std::optional<uint64_t>
