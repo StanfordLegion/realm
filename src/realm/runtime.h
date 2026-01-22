@@ -157,6 +157,9 @@ namespace Realm {
        * across groups. Realm will generate a unique address space for
        * each process as part of the bootstrap.
        */
+      inline static constexpr std::string_view group_key = "realm_group";
+      inline static constexpr std::string_view rank_key = "realm_rank";
+      inline static constexpr std::string_view ranks_key = "realm_ranks";
       bool (*bar)(const void *vtable_data, size_t vtable_data_size) = nullptr;
       /**
        * The "cas" function should be provided in cases of elastic
