@@ -23,10 +23,7 @@
 
 namespace App {
 
-  // Realm KeyValueStoreVtable required keys
-  static constexpr const char *REALM_KEY_RANK = "realm_rank";
-  static constexpr const char *REALM_KEY_RANKS = "realm_ranks";
-  static constexpr const char *REALM_KEY_GROUP = "realm_group";
+  using KVVtable = Realm::Runtime::KeyValueStoreVtable;
 
   struct VtableContext {
     // pending_sync is an optimization to avoid redundant PMIx_Commit() calls
@@ -67,7 +64,7 @@ namespace App {
 
     std::string k(static_cast<const char *>(key), key_size);
 
-    if(k == REALM_KEY_RANK) {
+    if(k == KVVtable::rank_key) {
       if(*value_size < sizeof(uint32_t)) {
         *value_size = 0;
         return false;
@@ -77,7 +74,7 @@ namespace App {
       *value_size = sizeof(v);
       return true;
     }
-    if(k == REALM_KEY_RANKS) {
+    if(k == KVVtable::ranks_key) {
       if(*value_size < sizeof(uint32_t)) {
         *value_size = 0;
         return false;
@@ -87,7 +84,7 @@ namespace App {
       *value_size = sizeof(v);
       return true;
     }
-    if(k == REALM_KEY_GROUP) {
+    if(k == KVVtable::group_key) {
       if(*value_size < sizeof(uint32_t)) {
         *value_size = 0;
         return false;
