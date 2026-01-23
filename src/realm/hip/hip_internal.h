@@ -1,5 +1,5 @@
 /*
- * Copyright 2025 Stanford University, NVIDIA Corporation, Los Alamos National Laboratory
+ * Copyright 2026 Stanford University, NVIDIA Corporation, Los Alamos National Laboratory
  * SPDX-License-Identifier: Apache-2.0
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -174,7 +174,8 @@ namespace Realm {
       ~GPUStream(void);
 
       GPU *get_gpu(void) const;
-      hipStream_t get_stream(void) const;
+      REALM_INTERNAL_API_EXTERNAL_LINKAGE hipStream_t
+      get_stream(void) const; // needed by librealm_kokkos.so
 
       // may be called by anybody to enqueue a copy or an event
       void add_fence(GPUWorkFence *fence);
@@ -344,7 +345,8 @@ namespace Realm {
       bool can_access_peer(GPU *peer);
 
       GPUStream *find_stream(hipStream_t stream) const;
-      GPUStream *get_null_task_stream(void) const;
+      REALM_INTERNAL_API_EXTERNAL_LINKAGE GPUStream *
+      get_null_task_stream(void) const; // needed by librealm_kokkos.so
       GPUStream *get_next_task_stream(bool create = false);
       GPUStream *get_next_d2d_stream();
 
@@ -421,7 +423,8 @@ namespace Realm {
       GPU *gpu;
     };
 
-    class GPUProcessor : public Realm::LocalTaskProcessor {
+    class REALM_INTERNAL_API_EXTERNAL_LINKAGE GPUProcessor // needed by librealm_kokkos.so
+      : public Realm::LocalTaskProcessor {
     public:
       GPUProcessor(RuntimeImpl *runtime_impl, GPU *_gpu, Processor _me,
                    Realm::CoreReservationSet &crs, size_t _stack_size);

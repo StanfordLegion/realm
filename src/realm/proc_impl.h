@@ -1,5 +1,5 @@
 /*
- * Copyright 2025 Stanford University, NVIDIA Corporation
+ * Copyright 2026 Stanford University, NVIDIA Corporation, Los Alamos National Laboratory
  * SPDX-License-Identifier: Apache-2.0
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -47,7 +47,8 @@ namespace Realm {
     extern thread_local int scheduler_lock;
   }; // namespace ThreadLocal
 
-  class ProcessorImpl {
+  class REALM_INTERNAL_API_EXTERNAL_LINKAGE
+      ProcessorImpl { // needed by librealm_kokkos.so
   public:
     ProcessorImpl(RuntimeImpl *runtime_impl, Processor _me, Processor::Kind _kind,
                   int _num_cores = 1);
