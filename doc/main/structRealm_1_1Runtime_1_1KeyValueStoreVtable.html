@@ -44,7 +44,7 @@
    <!-- BEGIN version select -->
     <br />
     <div class="dropdown">
-     <button class="dropbtn">Version 25.6.1-rc.4+11f29ee3</button>
+     <button class="dropbtn">Version 25.6.1-rc.4+ff9dc203</button>
      <div class="dropdown-content"></div>
     </div>
     <script type="text/javascript" src="../selectversion.js"></script>
@@ -133,6 +133,7 @@ $(document).ready(function(){initNavTree('structRealm_1_1Runtime_1_1KeyValueStor
 <div class="header">
   <div class="summary">
 <a href="#pub-attribs">Public Attributes</a> &#124;
+<a href="#pub-static-attribs">Static Public Attributes</a> &#124;
 <a href="structRealm_1_1Runtime_1_1KeyValueStoreVtable-members.html">List of all members</a>  </div>
   <div class="headertitle"><div class="title">Realm::Runtime::KeyValueStoreVtable Struct Reference</div></div>
 </div><!--header-->
@@ -154,6 +155,15 @@ Public Attributes</h2></td></tr>
 <tr class="separator:a0d8592a72ec9641bf3cb27c1eb23c98a"><td class="memSeparator" colspan="2">&#160;</td></tr>
 <tr class="memitem:a5a12572f75a8f7a9a13611743fe86123" id="r_a5a12572f75a8f7a9a13611743fe86123"><td class="memItemLeft" align="right" valign="top">bool(*&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="structRealm_1_1Runtime_1_1KeyValueStoreVtable.html#a5a12572f75a8f7a9a13611743fe86123">cas</a> )(const void *key, size_t key_size, void *expected, size_t *expected_size, const void *desired, size_t desired_size, const void *<a class="el" href="structRealm_1_1Runtime_1_1KeyValueStoreVtable.html#a8a4e9695f41060b9cae73c3366cb95f9">vtable_data</a>, size_t <a class="el" href="structRealm_1_1Runtime_1_1KeyValueStoreVtable.html#ace5436fe9fcf2f38b0908cd07327d59f">vtable_data_size</a>) = nullptr</td></tr>
 <tr class="separator:a5a12572f75a8f7a9a13611743fe86123"><td class="memSeparator" colspan="2">&#160;</td></tr>
+</table><table class="memberdecls">
+<tr class="heading"><td colspan="2"><h2 class="groupheader"><a id="pub-static-attribs" name="pub-static-attribs"></a>
+Static Public Attributes</h2></td></tr>
+<tr class="memitem:acb6e2c5b5a0a1f758bbaa9bdb84899a1" id="r_acb6e2c5b5a0a1f758bbaa9bdb84899a1"><td class="memItemLeft" align="right" valign="top">static constexpr std::string_view&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="structRealm_1_1Runtime_1_1KeyValueStoreVtable.html#acb6e2c5b5a0a1f758bbaa9bdb84899a1">group_key</a> = &quot;realm_group&quot;</td></tr>
+<tr class="separator:acb6e2c5b5a0a1f758bbaa9bdb84899a1"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:a3b0053107b8cf9112c41cc6abad25860" id="r_a3b0053107b8cf9112c41cc6abad25860"><td class="memItemLeft" align="right" valign="top">static constexpr std::string_view&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="structRealm_1_1Runtime_1_1KeyValueStoreVtable.html#a3b0053107b8cf9112c41cc6abad25860">rank_key</a> = &quot;realm_rank&quot;</td></tr>
+<tr class="separator:a3b0053107b8cf9112c41cc6abad25860"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:a951c0d5d552550848f57bd0cedcc638d" id="r_a951c0d5d552550848f57bd0cedcc638d"><td class="memItemLeft" align="right" valign="top">static constexpr std::string_view&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="structRealm_1_1Runtime_1_1KeyValueStoreVtable.html#a951c0d5d552550848f57bd0cedcc638d">ranks_key</a> = &quot;realm_ranks&quot;</td></tr>
+<tr class="separator:a951c0d5d552550848f57bd0cedcc638d"><td class="memSeparator" colspan="2">&#160;</td></tr>
 </table>
 <a name="details" id="details"></a><h2 class="groupheader">Detailed Description</h2>
 <div class="textblock"><p>Some networks prefer to bootstrap via callbacks using a vtable A client provides an implementation of the functions in the vtable and <a class="el" href="namespaceRealm.html">Realm</a> will invoke them as part of bootstrapping the network and providing support for elasticity (when networks support it). Some functions are required while others are either/or options. All callbacks will either be performed in an external thread (one not made by <a class="el" href="namespaceRealm.html">Realm</a> but has called into <a class="el" href="namespaceRealm.html">Realm</a>) or by a designated <a class="el" href="namespaceRealm.html">Realm</a> thread independent of <a class="el" href="namespaceRealm.html">Realm</a>'s background worker threads so that clients can use non-Realm synchronization primitives in the implementation of these functions and not need to worry about blocking or impacting forward progress. </p>
@@ -169,11 +179,6 @@ Public Attributes</h2></td></tr>
         </tr>
       </table>
 </div><div class="memdoc">
-<p>The "bar" function should be provided in cases where processes are joining and leaving the <a class="el" href="namespaceRealm.html">Realm</a> as a group. It must perform a barrier across all the processes in the (implicit) group that this process is a part of along with flushing any puts done before it. It should return true if the barrier succeeds and false if it fails. If the barrier fails then it can be expected the <a class="el" href="namespaceRealm.html">Realm</a> bootstrap will also fail. If you provide a bar method, then you must also provide support in the "get" method for three special keys:</p><ul>
-<li>"realm_group": the value associated with this key must be interpretable as an integer that is the same for all processes that cooperate in this barrier. It must be distinct from any other group identifier for other processes that are joining the same <a class="el" href="namespaceRealm.html">Realm</a>.</li>
-<li>"realm_ranks": the value associated with this key must be interpretable as an integer that indicates how many processes are participating in this barrier operation together.</li>
-<li>"realm_rank": the value associated with this key must be interpretable as an integer that uniquely identifies this process in its local group. It must be in the range [0, realm_ranks). Note that each group should have its rank numbering start at zero and grow incrementally. Rank numbers are therefore the same across groups. <a class="el" href="namespaceRealm.html">Realm</a> will generate a unique address space for each process as part of the bootstrap. </li>
-</ul>
 
 </div>
 </div>
@@ -207,6 +212,33 @@ Public Attributes</h2></td></tr>
 
 </div>
 </div>
+<a id="acb6e2c5b5a0a1f758bbaa9bdb84899a1" name="acb6e2c5b5a0a1f758bbaa9bdb84899a1"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#acb6e2c5b5a0a1f758bbaa9bdb84899a1">&#9670;&#160;</a></span>group_key</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">constexpr std::string_view Realm::Runtime::KeyValueStoreVtable::group_key = &quot;realm_group&quot;</td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel">inline</span><span class="mlabel">static</span><span class="mlabel">constexpr</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+<p>The "bar" function should be provided in cases where processes are joining and leaving the <a class="el" href="namespaceRealm.html">Realm</a> as a group. It must perform a barrier across all the processes in the (implicit) group that this process is a part of along with flushing any puts done before it. It should return true if the barrier succeeds and false if it fails. If the barrier fails then it can be expected the <a class="el" href="namespaceRealm.html">Realm</a> bootstrap will also fail. If you provide a bar method, then you must also provide support in the "get" method for three special keys:</p><ul>
+<li>"realm_group": the value associated with this key must be interpretable as an integer that is the same for all processes that cooperate in this barrier. It must be distinct from any other group identifier for other processes that are joining the same <a class="el" href="namespaceRealm.html">Realm</a>.</li>
+<li>"realm_ranks": the value associated with this key must be interpretable as an integer that indicates how many processes are participating in this barrier operation together.</li>
+<li>"realm_rank": the value associated with this key must be interpretable as an integer that uniquely identifies this process in its local group. It must be in the range [0, realm_ranks). Note that each group should have its rank numbering start at zero and grow incrementally. Rank numbers are therefore the same across groups. <a class="el" href="namespaceRealm.html">Realm</a> will generate a unique address space for each process as part of the bootstrap. </li>
+</ul>
+
+</div>
+</div>
 <a id="ad664af62bb1e06c6c421f2969545c056" name="ad664af62bb1e06c6c421f2969545c056"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#ad664af62bb1e06c6c421f2969545c056">&#9670;&#160;</a></span>put</h2>
 
@@ -219,6 +251,50 @@ Public Attributes</h2></td></tr>
       </table>
 </div><div class="memdoc">
 <p>The "put" function must store a global key value pair in a way that it can be retrieved from any other process using a corresponding get call. The function is passed a buffer containing a key and buffer containing a value. The implementation must copy these values before returning from the callback if it needs to persist them as they are not guaranteed to live longer than the function call. The function should return true if the put succeeds and false if it doesn't. If the call fails then it is likely that the network initialization might not succeed. </p>
+
+</div>
+</div>
+<a id="a3b0053107b8cf9112c41cc6abad25860" name="a3b0053107b8cf9112c41cc6abad25860"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a3b0053107b8cf9112c41cc6abad25860">&#9670;&#160;</a></span>rank_key</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">constexpr std::string_view Realm::Runtime::KeyValueStoreVtable::rank_key = &quot;realm_rank&quot;</td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel">inline</span><span class="mlabel">static</span><span class="mlabel">constexpr</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+</div>
+</div>
+<a id="a951c0d5d552550848f57bd0cedcc638d" name="a951c0d5d552550848f57bd0cedcc638d"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a951c0d5d552550848f57bd0cedcc638d">&#9670;&#160;</a></span>ranks_key</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">constexpr std::string_view Realm::Runtime::KeyValueStoreVtable::ranks_key = &quot;realm_ranks&quot;</td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel">inline</span><span class="mlabel">static</span><span class="mlabel">constexpr</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
 
 </div>
 </div>
