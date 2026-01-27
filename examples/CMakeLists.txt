@@ -79,7 +79,22 @@ add_example_test(saxpy)
 set(stencil_ARGS -ll:cpu 4)
 add_example_test(stencil)
 if(REALM_USE_UCX)
-add_example_test(vtable)
+  add_subdirectory(vtable)
+
+  # MPI-based vtable example
+  add_test(NAME example_vtable_mpi COMMAND $<TARGET_FILE:vtable_mpi>)
+  set_property(TEST example_vtable_mpi PROPERTY RESOURCE_LOCK ${TEST_RESOURCE_LOCK})
+  add_dependencies(vtable_mpi realm_ucp_bootstrap_mpi)
+  list(APPEND _example_list example_vtable_mpi)
+
+  ### PMIx-based vtable example builds but is not tested in CI
+  ### (requires prterun launcher and has known PMIx caching issues)
+  # if(TARGET vtable_pmix)
+  #   add_test(NAME example_vtable_pmix COMMAND $<TARGET_FILE:vtable_pmix>)
+  #   set_property(TEST example_vtable_pmix PROPERTY RESOURCE_LOCK ${TEST_RESOURCE_LOCK})
+  #   add_dependencies(vtable_pmix realm_ucp_bootstrap_mpi)
+  #   list(APPEND _example_list example_vtable_pmix)
+  # endif()
 endif()
 
 set_tests_properties(
