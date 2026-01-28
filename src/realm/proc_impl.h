@@ -160,17 +160,25 @@ namespace Realm {
     virtual bool register_task(Processor::TaskFuncID func_id, CodeDescriptor &codedesc,
                                const ByteArrayRef &user_data);
 
-    // Subgraph related APIs.
+    // Configure a processor to start a subgraph replay.
     virtual void install_subgraph_replay(ProcSubgraphReplayState* state);
 
-    // TODO (rohany): Scaffold implementation for first pass at GPU
-    //  subgraph execution implementation.
+    // Method for a processor to set up and tear down a context
+    // surrounding a subgraph replay. For example, a GPU processor
+    // may push and pop a context that scopes the processor thread
+    // to issue kernels to a particular device.
     virtual void push_subgraph_replay_context() {};
     virtual void pop_subgraph_replay_context() {};
+    // Similar to above, but controls the context a processor may
+    // push and pop when executing an individual task. The pop method
+    // accepts opaque "tokens" that describe asynchronous effects of the task.
     virtual void push_subgraph_task_replay_context(SubgraphOperationProfilingInfo* prof) {};
     virtual void pop_subgraph_task_replay_context(void** token, void* trigger, SubgraphOperationProfilingInfo* prof) {};
+    // Processor-specific method to synchronize against the asynchronous effects
+    // of another subgraph operation.
     virtual void sync_task_async_effect(void* token) {};
-    virtual void defer_task_effect_trigger(void* token, void* trigger) {};
+    // Some kinds of asynchronous tokens may need to be returned to
+    // a pool that they are allocated from (like CUDA events).
     virtual void return_subgraph_async_tokens(const std::vector<void*>& tokens) {};
 
     // starts worker threads and performs any per-processor initialization

@@ -775,11 +775,15 @@ namespace Realm {
     };
 
     // Utility methods for asynchronous XferDes objects to
-    // interact with subgraphs.
+    // interact with subgraphs. Must be called from within
+    // a CUDA context.
 
-    // Must be called from within a CUDA context.
+    // Synchronize with any previous subgraph work launched on the given stream.
     void sync_subgraph_incoming_deps(ProcSubgraphReplayState* all_proc_states, unsigned index, GPUStream* stream);
+    // Add a GPUCompletionNotification to the given stream, which tracks
+    // when work launched by a transfer is done.
     void add_transfer_completion_notification(ProcSubgraphReplayState* all_proc_states, GPUStream* stream, GPUStream* depstream, GPUCompletionNotification* completion);
+    // Notify the subgraph that the control side of GPU subgraph operation has completed.
     void notify_subgraph_control_completion(ProcSubgraphReplayState* all_proc_states, unsigned subgraph_index, unsigned xd_index, GPUStream* depstream);
 
     class GPUChannel;
