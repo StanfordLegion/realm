@@ -40,6 +40,8 @@
 namespace Realm {
 
   class ProcessorGroupImpl;
+  struct ProcSubgraphReplayState;
+  struct SubgraphOperationProfilingInfo;
 
   namespace ThreadLocal {
     // if nonzero, prevents application thread from yielding execution
@@ -86,14 +88,18 @@ namespace Realm {
     static Processor::Kind get_processor_kind(RuntimeImpl *runtime_impl,
                                               Processor processor);
 
+    virtual void install_subgraph_replay(ProcSubgraphReplayState* state) {
+      assert(false);
+    }
+
+    virtual void execute_task(Processor::TaskFuncID func_id,
+                              const ByteArrayRef &task_args);
+
   protected:
     friend class Task;
 
     // Event free list cache variables
     LocalEventTableAllocator::FreeList free_local_events;
-
-    virtual void execute_task(Processor::TaskFuncID func_id,
-                              const ByteArrayRef &task_args);
 
     struct DeferredSpawnCache {
       static const size_t MAX_ENTRIES = 4;
@@ -154,6 +160,27 @@ namespace Realm {
     virtual bool register_task(Processor::TaskFuncID func_id, CodeDescriptor &codedesc,
                                const ByteArrayRef &user_data);
 
+    // Configure a processor to start a subgraph replay.
+    virtual void install_subgraph_replay(ProcSubgraphReplayState* state);
+
+    // Method for a processor to set up and tear down a context
+    // surrounding a subgraph replay. For example, a GPU processor
+    // may push and pop a context that scopes the processor thread
+    // to issue kernels to a particular device.
+    virtual void push_subgraph_replay_context() {};
+    virtual void pop_subgraph_replay_context() {};
+    // Similar to above, but controls the context a processor may
+    // push and pop when executing an individual task. The pop method
+    // accepts opaque "tokens" that describe asynchronous effects of the task.
+    virtual void push_subgraph_task_replay_context(SubgraphOperationProfilingInfo* prof) {};
+    virtual void pop_subgraph_task_replay_context(void** token, void* trigger, SubgraphOperationProfilingInfo* prof) {};
+    // Processor-specific method to synchronize against the asynchronous effects
+    // of another subgraph operation.
+    virtual void sync_task_async_effect(void* token) {};
+    // Some kinds of asynchronous tokens may need to be returned to
+    // a pool that they are allocated from (like CUDA events).
+    virtual void return_subgraph_async_tokens(const std::vector<void*>& tokens) {};
+
     // starts worker threads and performs any per-processor initialization
     virtual void start_threads(void);
 
@@ -167,10 +194,15 @@ namespace Realm {
     // runs an internal Realm operation on this processor
     virtual void add_internal_task(InternalTask *task);
 
+  public:
+    // TODO (rohany): ...
+    ThreadedTaskScheduler *sched;
+    virtual void execute_task(Processor::TaskFuncID func_id,
+                              const ByteArrayRef &task_args);
+
   protected:
     void set_scheduler(ThreadedTaskScheduler *_sched);
 
-    ThreadedTaskScheduler *sched;
     TaskQueue task_queue; // ready tasks
     ProfilingGauges::AbsoluteRangeGauge<int> ready_task_count;
     DeferredSpawnCache deferred_spawn_cache;
@@ -183,8 +215,6 @@ namespace Realm {
     RWLock task_table_mutex;
     std::map<Processor::TaskFuncID, TaskTableEntry> task_table;
 
-    virtual void execute_task(Processor::TaskFuncID func_id,
-                              const ByteArrayRef &task_args);
   };
 
   // three simple subclasses for:

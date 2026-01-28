@@ -19,8 +19,12 @@
 
 #include "realm/tasks.h"
 
+#include "realm/realm_c.h"
 #include "realm/runtime_impl.h"
 #include "realm/proc_impl.h"
+#include "realm/subgraph_impl.h"
+#include "realm/transfer/transfer.h"
+#include "realm/transfer/memcpy_channel.h"
 
 #if defined(REALM_USE_CACHING_ALLOCATOR)
 #include "realm/caching_allocator.h"
@@ -30,6 +34,11 @@ namespace Realm {
 
   Logger log_task("task");
   Logger log_sched("sched");
+
+  // Track when a thread is executing a task as part of a subgraph.
+  namespace ThreadLocal {
+    thread_local bool in_subgraph_exec = false;
+  };
 
   ////////////////////////////////////////////////////////////////////////
   //
@@ -1065,9 +1074,24 @@ namespace Realm {
     work_counter.increment_counter();
   }
 
+  template<typename LOCK>
+  class SchedulerReplayTriggerContext : public SubgraphTriggerContext {
+  public:
+    SchedulerReplayTriggerContext(LOCK& _lock) : lock(_lock) {}
+    virtual void enter() override { lock.unlock(); }
+    virtual void exit() override { lock.lock(); }
+  private:
+    LOCK& lock;
+  };
+
   // the main scheduler loop
   void ThreadedTaskScheduler::scheduler_loop(void)
   {
+    // Prefetch this configuration out of the loop to avoid running it
+    // on every scheduler iteration.
+    bool sg_sched_spin = false;
+    ModuleConfig* core = get_runtime()->get_module_config("core");
+    assert(core->get_property("subgraph_scheduler_spin", sg_sched_spin) == REALM_SUCCESS);
     // the entire body of this method, except for when running an actual task, is
     //   a critical section - lock should be taken by caller
     {
@@ -1128,6 +1152,252 @@ namespace Realm {
           // and we're back to being unassigned
           update_worker_count(0, +1);
         }
+
+  // If we're not working on a subgraph right now, see if there's
+  // anything to pop on the pending subgraph queue.
+  if (current_subgraph == nullptr) {
+    {
+      RWLock::AutoReaderLock al(pending_subgraphs_lock);
+      if (!pending_subgraphs.empty()) {
+        current_subgraph = pending_subgraphs.front();
+        pending_subgraphs.pop();
+      }
+    }
+    // See if we acquired a subgraph.
+    if (current_subgraph != nullptr) {
+      auto proc_index = current_subgraph->proc_index;
+      current_subgraph->subgraph->all_proc_impls[proc_index]->push_subgraph_replay_context();
+    }
+  }
+
+  // First, check if we have subgraph work to do.
+  {
+    ProcSubgraphReplayState* replay = current_subgraph;
+    if (replay) {
+      int32_t proc_index = replay->proc_index;
+      SubgraphImpl* subgraph = replay->subgraph;
+
+      size_t queue_index = subgraph->operations.proc_offsets[proc_index] + replay->next_op_index;
+      atomic<int64_t>& queue_entry = replay->queue[queue_index];
+      // Spin until an entry has been added into the queue.
+      int64_t queue_entry_value = queue_entry.load_acquire();
+
+      if (queue_entry_value == SUBGRAPH_EMPTY_QUEUE_ENTRY && sg_sched_spin) {
+        // If we didn't find anything and we're supposed to spin, start spinning.
+        while (queue_entry_value == SUBGRAPH_EMPTY_QUEUE_ENTRY) {
+          queue_entry_value = queue_entry.load_acquire();
+        }
+      }
+
+      // When queue_entry_value is SUBGRAPH_EMPTY_QUEUE_ENTRY and we're not
+      // supposed to spin, we're going to jump past this next block of code
+      // and go to the normal scheduler code, which will put this thread
+      // to sleep if there are no normal tasks to run.
+      if (queue_entry_value != SUBGRAPH_EMPTY_QUEUE_ENTRY) {
+        // We found some work to do! Do it.
+        auto local_op_index = queue_entry_value;
+        auto op_index = subgraph->operations.proc_offsets[proc_index] + local_op_index;
+        auto& op_key = subgraph->operations.data[op_index];
+
+        auto interp_proc_offset = subgraph->interpolations.proc_offsets[proc_index];
+        auto first_interp = subgraph->interpolations.task_offsets[interp_proc_offset + local_op_index];
+        auto num_interps = subgraph->interpolations.task_offsets[interp_proc_offset + local_op_index + 1] - first_interp;
+
+        // Potentially record a token that captures the completion of asynchronous
+        // effects of this operation.
+        void* token = nullptr;
+
+        // Execute the operation.
+        switch (op_key.first) {
+        case SubgraphDefinition::OPKIND_TASK:
+        {
+          // Perform interpolations directly into the task descriptor, then run
+          // the task.
+          auto& taskDesc = subgraph->defn->tasks[op_key.second];
+          if (num_interps > 0) {
+            do_interpolation_inline(
+                subgraph->interpolations.data,
+                first_interp,
+                num_interps,
+                SubgraphDefinition::Interpolation::TARGET_TASK_ARGS,
+                op_key.second,
+                replay->args,
+                replay->arglen,
+                taskDesc.args.base(),
+                taskDesc.args.size()
+            );
+          }
+
+          auto pimpl = subgraph->all_proc_impls[proc_index];
+
+          // Extract profiling info for this task.
+          auto prof = replay->get_profiling_info(SubgraphDefinition::OPKIND_TASK, op_key.second);
+          if (prof && prof->wants_proc_usage) {
+            prof->proc.proc = pimpl->me;
+          }
+
+          // Set thread local state before starting any task related work.
+          ThreadLocal::current_processor = pimpl->me;
+          ThreadLocal::in_subgraph_exec = true;
+
+          lock.unlock();
+
+          // TODO (rohany): This is kind of a hack for Legion profiling specifically,
+          //  but if profiling is requested, then we might have a finish event for this
+          //  task. If we do, we can actually set this for the Thread.
+          Thread* thread = Thread::self();
+          if (prof && prof->wants_fevent) {
+            prof->fevent_user = UserEvent::create_user_event();
+            prof->fevent.finish_event = prof->fevent_user;
+            thread->set_cur_event(&prof->fevent_user);
+          }
+
+          pimpl->push_subgraph_task_replay_context(prof);
+
+          // Wait on any necessary asynchronous operations.
+          {
+            auto proc_offset = replay->subgraph->async_incoming_infos.proc_offsets[proc_index];
+            auto start = replay->subgraph->async_incoming_infos.task_offsets[proc_offset + local_op_index];
+            auto end = replay->subgraph->async_incoming_infos.task_offsets[proc_offset + local_op_index + 1];
+            for (size_t i = start; i < end; i++) {
+              auto& info = replay->subgraph->async_incoming_infos.data[i];
+              switch (info.kind) {
+                case SubgraphImpl::CompletionInfo::STATIC_TO_STATIC: {
+                  auto pred_op_idx = replay->subgraph->operations.proc_offsets[info.proc] + info.index;
+                  pimpl->sync_task_async_effect(replay->async_operation_events[pred_op_idx]);
+                  break;
+                }
+                case SubgraphImpl::CompletionInfo::BGWORK_TO_STATIC: {
+                  // Wait on all events in the given range, if they aren't null.
+                  for (int64_t j = replay->subgraph->bgwork_async_event_counts[info.index]; j < replay->subgraph->bgwork_async_event_counts[info.index + 1]; j++) {
+                    auto bgtoken = replay->async_bgwork_events[j];
+                    if (bgtoken != nullptr)
+                      pimpl->sync_task_async_effect(bgtoken);
+                  }
+                  break;
+                }
+                default:
+                  assert(false);
+              }
+            }
+          }
+
+          // Record start and stop times.
+          if (prof && prof->wants_timeline) {
+            prof->timeline.record_start_time();
+          }
+
+          pimpl->execute_task(taskDesc.task_id, ByteArrayRef(taskDesc.args.base(), taskDesc.args.size()));
+
+          if (prof && prof->wants_timeline) {
+            prof->timeline.record_end_time();
+          }
+
+          // Potentially set up waiters on asynchronous effects the task may have.
+          void* trigger = nullptr;
+          {
+            auto proc_offset = replay->subgraph->async_outgoing_infos.proc_offsets[proc_index];
+            auto start = replay->subgraph->async_outgoing_infos.task_offsets[proc_offset + local_op_index];
+            auto end = replay->subgraph->async_outgoing_infos.task_offsets[proc_offset + local_op_index + 1];
+            auto sp = span<SubgraphImpl::CompletionInfo>(replay->subgraph->async_outgoing_infos.data.data() + start, end - start);
+            // Async final events need to decrement the pending async counter.
+            atomic<int32_t>* final_ctr = nullptr;
+            auto& opmeta = subgraph->operation_meta.data[op_index];
+            if (opmeta.is_final_event && opmeta.is_async) {
+              final_ctr = &replay->pending_async_count;
+            }
+            if (!opmeta.is_async && prof) {
+              // Non-async operations are done here.
+              if (prof->wants_timeline) {
+                prof->timeline.record_complete_time();
+              }
+              if (prof->wants_fevent) {
+                prof->fevent_user.trigger();
+              }
+            }
+            // The notifier needs to be created if there are post-conditions,
+            // or this task is a final event.
+            if (!sp.empty() || final_ctr != nullptr) {
+              trigger = new(&replay->async_operation_effect_triggerers[op_index]) SubgraphImpl::AsyncGPUWorkTriggerer(
+                  replay->all_proc_states, sp, final_ctr);
+            }
+          }
+
+          pimpl->pop_subgraph_task_replay_context(&token, trigger, prof);
+
+          lock.lock();
+
+          // Unset thread local state. Note that we don't unset
+          // current processor, as this seems to confuse other parts
+          // of the runtime.
+          ThreadLocal::in_subgraph_exec = false;
+
+          if (prof && prof->wants_fevent) {
+            thread->unset_cur_event();
+          }
+
+          break;
+        }
+        default:
+          assert(false);
+        }
+
+        // Record the (potentially null) token.
+        replay->async_operation_events[op_index] = token;
+
+        // Go and trigger whoever we have to trigger.
+        auto completion_proc_offset = subgraph->completion_infos.proc_offsets[proc_index];
+        auto completion_task_offset_start = subgraph->completion_infos.task_offsets[completion_proc_offset + local_op_index];
+        auto completion_task_offset_end = subgraph->completion_infos.task_offsets[completion_proc_offset + local_op_index + 1];
+        for (size_t i = completion_task_offset_start; i < completion_task_offset_end; i++) {
+          SubgraphImpl::CompletionInfo& info = subgraph->completion_infos.data[i];
+          assert(info.kind == SubgraphImpl::CompletionInfo::EdgeKind::STATIC_TO_STATIC ||
+                 info.kind == SubgraphImpl::CompletionInfo::EdgeKind::STATIC_TO_DYNAMIC ||
+                 info.kind == SubgraphImpl::CompletionInfo::EdgeKind::STATIC_TO_BGWORK);
+          // Only wake up the target processor if it isn't us. We have to do
+          // a bit of work to make sure that the call to trigger can actually
+          // trigger an event (which means releasing the lock and taking it
+          // back after the trigger is done).
+          // Note: While other places in the code hold onto ProcSubgraphReplayState
+          // objects on the stack for fear of them getting deleted after the call
+          // to trigger_subgraph_operation_completion, we are safe from that happening
+          // here. That is because every processor must execute the code below that
+          // checks the finish counter before the processor state can be collected.
+          SchedulerReplayTriggerContext<decltype(lock)> ctx(lock);
+          trigger_subgraph_operation_completion(replay->all_proc_states, info, info.proc != proc_index, &ctx);
+        }
+
+        // Increment the state after consuming entry next_op_index in the queue.
+        replay->next_op_index++;
+        uint64_t task_end = subgraph->operations.proc_offsets[proc_index+1];
+        if ((replay->next_op_index + subgraph->operations.proc_offsets[proc_index]) == task_end) {
+          // Pop off any local replay state.
+          current_subgraph->subgraph->all_proc_impls[proc_index]->pop_subgraph_replay_context();
+
+          // We're done! Drop the replay state and exit.
+          this->current_subgraph = nullptr;
+
+          // Decrement the processor completion counter. Only one
+          // processor needs to contribute to the trigger. Making sure
+          // the processor contributes to this counter here ensures that
+          // the subgraph can't be deleted by an async task that finishes
+          // quickly before the processor reaches this point.
+          int32_t remaining = replay->finish_counter->fetch_sub_acqrel(1) - 1;
+          if (remaining == 0) {
+            // The scheduler lock can't be held during the trigger.
+            lock.unlock();
+            replay->finish_event.trigger();
+            lock.lock();
+          }
+        }
+
+        // Since we did some work, break out of the loop and go right
+        // back to the top. We're giving subgraph tasks priority here
+        // over normal tasks submitted to this processor.
+        continue;
+      }
+    }
+  }
 
         // if we have both resumable and new ready tasks, we want the one that
         //  is the highest priority, with ties going to resumable tasks - we

@@ -183,6 +183,9 @@ namespace Realm {
     // barriers
     int barrier_broadcast_radix = 4;
 
+    bool static_subgraph_opt = false;
+    bool subgraph_scheduler_spin = false;
+
     // topology of the host
     const HardwareTopology *host_topology = nullptr;
   };
@@ -406,6 +409,7 @@ namespace Realm {
     BackgroundWorkManager bgwork;
     IncomingMessageManager *message_manager;
     EventTriggerNotifier event_triggerer;
+    SubgraphResourceReaper subgraph_reaper;
 
     OperationTable optable;
 
@@ -485,9 +489,13 @@ namespace Realm {
     std::vector<NetworkSegment *> network_segments;
 
     std::map<std::string, ModuleConfig *> module_configs;
-
     Runtime::KeyValueStoreVtable key_value_store_vtable;
     std::vector<uint8_t> key_value_store_vtable_data;
+    public:
+      // Cache data from other node's subgraphs to avoid communication
+      // at execution time.
+      RWLock remote_subgraph_meta_lock;
+      std::map<ID::IDType, RemoteSubgraphMeta> remote_subgraph_meta;
   };
 
   extern RuntimeImpl *runtime_singleton;

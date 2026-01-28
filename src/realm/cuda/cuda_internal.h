@@ -191,15 +191,6 @@ namespace Realm {
       GPUProcessor *proc = nullptr; // TODO(cperry): delete me
     };
 
-    // an interface for receiving completion notification for a GPU operation
-    //  (right now, just copies)
-    class GPUCompletionNotification {
-    public:
-      virtual ~GPUCompletionNotification(void) {}
-
-      virtual void request_completed(void) = 0;
-    };
-
     class GPUWorkFence : public Realm::Operation::AsyncWorkItem {
     public:
       GPUWorkFence(GPU *gpu, Realm::Operation *op);
@@ -258,7 +249,7 @@ namespace Realm {
       void add_notification(GPUCompletionNotification *notification);
       void add_event(CUevent event, GPUWorkFence *fence,
                      GPUCompletionNotification *notification = NULL,
-                     GPUWorkStart *start = NULL);
+                     GPUWorkStart *start = NULL, bool return_event = true);
       void wait_on_streams(const std::set<GPUStream *> &other_streams);
 
       // atomically checks rate limit counters and returns true if 'bytes'
@@ -280,6 +271,7 @@ namespace Realm {
       Mutex mutex;
       struct PendingEvent {
         CUevent event;
+        bool return_event = true;
         GPUWorkFence *fence;
         GPUWorkStart *start;
         GPUCompletionNotification *notification;
@@ -345,6 +337,7 @@ namespace Realm {
 
       CUevent get_event(bool external = false);
       void return_event(CUevent e, bool external = false);
+      void return_events(CUevent* events, size_t num_events);
 
     protected:
       Mutex mutex;
@@ -544,6 +537,14 @@ namespace Realm {
                                  const ByteArrayRef &user_data);
 
       virtual void shutdown(void);
+
+      virtual void push_subgraph_replay_context() override;
+      virtual void pop_subgraph_replay_context() override;
+
+      virtual void push_subgraph_task_replay_context(SubgraphOperationProfilingInfo* prof) override;
+      virtual void pop_subgraph_task_replay_context(void** token, void* trigger, SubgraphOperationProfilingInfo* prof) override;
+      virtual void sync_task_async_effect(void* token) override;
+      virtual void return_subgraph_async_tokens(const std::vector<void*>& tokens) override;
 
     protected:
       virtual void execute_task(Processor::TaskFuncID func_id,
@@ -773,6 +774,18 @@ namespace Realm {
       size_t width_in_bytes, height, depth;
     };
 
+    // Utility methods for asynchronous XferDes objects to
+    // interact with subgraphs. Must be called from within
+    // a CUDA context.
+
+    // Synchronize with any previous subgraph work launched on the given stream.
+    void sync_subgraph_incoming_deps(ProcSubgraphReplayState* all_proc_states, unsigned index, GPUStream* stream);
+    // Add a GPUCompletionNotification to the given stream, which tracks
+    // when work launched by a transfer is done.
+    void add_transfer_completion_notification(ProcSubgraphReplayState* all_proc_states, GPUStream* stream, GPUStream* depstream, GPUCompletionNotification* completion);
+    // Notify the subgraph that the control side of GPU subgraph operation has completed.
+    void notify_subgraph_control_completion(ProcSubgraphReplayState* all_proc_states, unsigned subgraph_index, unsigned xd_index, GPUStream* depstream);
+
     class GPUChannel;
 
     class GPUXferDes : public XferDes {
@@ -784,6 +797,10 @@ namespace Realm {
       long get_requests(Request **requests, long nr);
 
       bool progress_xd(GPUChannel *channel, TimeLimit work_until);
+
+      bool launches_async_work_locally() override { return true; }
+      void on_subgraph_control_completion() override;
+      LocalTaskProcessor* get_async_event_proc() override;
 
     private:
       std::vector<GPU *> src_gpus, dst_gpus;
@@ -802,6 +819,10 @@ namespace Realm {
       long get_requests(Request **requests, long nr);
       bool progress_xd(GPUIndirectChannel *channel, TimeLimit work_until);
 
+      bool launches_async_work_locally() override { return true; }
+      void on_subgraph_control_completion() override;
+      LocalTaskProcessor* get_async_event_proc() override;
+
     protected:
       std::vector<GPU *> src_gpus, dst_gpus;
       std::vector<bool> dst_is_ipc;
@@ -811,7 +832,6 @@ namespace Realm {
       : public SingleXDQChannel<GPUIndirectChannel, GPUIndirectXferDes> {
     public:
       GPUIndirectChannel(GPU *_src_gpu, XferDesKind _kind, BackgroundWorkManager *bgwork);
-      ~GPUIndirectChannel();
 
       // multi-threading of cuda copies for a given device is disabled by
       //  default (can be re-enabled with -cuda:mtdma 1)
@@ -841,10 +861,12 @@ namespace Realm {
 
       long submit(Request **requests, long nr);
       GPU *get_gpu() const { return src_gpu; }
+      void shutdown() override;
 
     protected:
       friend class GPUIndirectXferDes;
       GPU *src_gpu;
+      GPUStream* subgraph_stream;
     };
 
     class GPUIndirectRemoteChannelInfo : public SimpleRemoteChannelInfo {
@@ -887,7 +909,6 @@ namespace Realm {
     class GPUChannel : public SingleXDQChannel<GPUChannel, GPUXferDes> {
     public:
       GPUChannel(GPU *_src_gpu, XferDesKind _kind, BackgroundWorkManager *bgwork);
-      ~GPUChannel();
 
       // multi-threading of cuda copies for a given device is disabled by
       //  default (can be re-enabled with -cuda:mtdma 1)
@@ -903,10 +924,13 @@ namespace Realm {
 
       long submit(Request **requests, long nr);
       GPU *get_gpu() const { return src_gpu; }
+      void shutdown() override;
 
     private:
+      friend class GPUXferDes;
       GPU *src_gpu;
-      // std::deque<Request*> pending_copies;
+      // Stream to manage interaction with potential subgraph replays.
+      GPUStream* subgraph_stream;
     };
 
     class GPUfillChannel;
@@ -918,12 +942,19 @@ namespace Realm {
                      const std::vector<XferDesPortInfo> &outputs_info, int _priority,
                      const void *_fill_data, size_t _fill_size, size_t _fill_total);
 
+      void reset(const std::vector<off_t>& ib_offsets) override;
+
       long get_requests(Request **requests, long nr);
 
       bool progress_xd(GPUfillChannel *channel, TimeLimit work_until);
 
+      bool launches_async_work_locally() override { return true; }
+      void on_subgraph_control_completion() override;
+      LocalTaskProcessor* get_async_event_proc() override;
+
     protected:
       size_t reduced_fill_size;
+      size_t fill_total;
     };
 
     class GPUfillChannel : public SingleXDQChannel<GPUfillChannel, GPUfillXferDes> {
@@ -942,11 +973,13 @@ namespace Realm {
                                        size_t fill_total);
 
       long submit(Request **requests, long nr);
+      void shutdown() override;
 
     protected:
       friend class GPUfillXferDes;
 
       GPU *gpu;
+      GPUStream* subgraph_stream;
     };
 
     class GPUreduceChannel;
@@ -961,6 +994,10 @@ namespace Realm {
       long get_requests(Request **requests, long nr);
 
       bool progress_xd(GPUreduceChannel *channel, TimeLimit work_until);
+
+      bool launches_async_work_locally() override { return true; }
+      void on_subgraph_control_completion() override;
+      LocalTaskProcessor* get_async_event_proc() override;
 
     protected:
       XferDesRedopInfo redop_info;
@@ -992,11 +1029,13 @@ namespace Realm {
                                size_t fill_total) override;
 
       long submit(Request **requests, long nr) override;
+      void shutdown() override;
 
     protected:
       friend class GPUreduceXferDes;
 
       GPU *gpu;
+      GPUStream* subgraph_stream;
     };
 
     class GPUreduceRemoteChannelInfo : public SimpleRemoteChannelInfo {

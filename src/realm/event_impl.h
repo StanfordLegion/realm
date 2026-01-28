@@ -41,6 +41,10 @@
 
 namespace Realm {
 
+  namespace ThreadLocal {
+    extern thread_local bool in_subgraph_exec;
+  };
+
   class GenEventImpl;
 
   extern Logger log_poison; // defined in event_impl.cc

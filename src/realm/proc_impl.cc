@@ -24,6 +24,7 @@
 #include "realm/profiling.h"
 #include "realm/utils.h"
 #include "realm/activemsg.h"
+#include "realm/subgraph_impl.h"
 
 #include <sys/types.h>
 
@@ -123,6 +124,11 @@ namespace Realm {
   /*static*/ Event Processor::get_current_finish_event(void)
   {
     Operation *op = Thread::self()->get_operation();
+    if (op == nullptr) {
+      Event* ev = Thread::self()->get_event();
+      assert(ev != nullptr);
+      return *ev;
+    }
     assert(op != 0);
     return op->get_finish_event();
   }
@@ -1060,6 +1066,12 @@ namespace Realm {
                           finish_gen, priority);
 
     enqueue_or_defer_task(task, start_event, &deferred_spawn_cache);
+  }
+
+  void LocalTaskProcessor::install_subgraph_replay(Realm::ProcSubgraphReplayState *state) {
+    RWLock::AutoWriterLock al(this->sched->pending_subgraphs_lock);
+    this->sched->pending_subgraphs.push(state);
+    this->sched->work_counter.increment_counter();
   }
 
   bool LocalTaskProcessor::register_task(Processor::TaskFuncID func_id,

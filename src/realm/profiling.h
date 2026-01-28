@@ -146,6 +146,8 @@ namespace Realm {
       timestamp_t start_time; // when was the GPU started?
       timestamp_t end_time;   // when was the GPU completed?
 
+      inline void record_start_time(void);
+      inline void record_end_time(void);
       inline bool is_valid(void) const;
     };
 
@@ -373,6 +375,10 @@ namespace Realm {
                                   Processor::TaskFuncID response_task_id,
                                   const void *payload = 0, size_t payload_size = 0,
                                   int priority = 0, bool report_if_empty = false);
+
+    // import_requests ingests all profiling requests from an existing
+    // ProfilingRequestSet object.
+    void import_requests(const ProfilingRequestSet& rhs);
 
     size_t request_count(void) const;
     bool empty(void) const;

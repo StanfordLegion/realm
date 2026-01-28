@@ -65,6 +65,7 @@ namespace Realm {
     [[nodiscard]] size_t *begin_entry(int max_dim, bool wrap_around = true);
     void commit_entry(int act_dim, size_t bytes);
     void attach_field_block(const FieldBlock *_field_block);
+    void reset();
 
     [[nodiscard]] size_t bytes_pending() const;
     [[nodiscard]] size_t full_field_bytes();
@@ -102,6 +103,7 @@ namespace Realm {
     AddressListCursor();
 
     void set_addrlist(AddressList *_addrlist);
+    void reset();
 
     // ─── layout accessors ──────────────────────────────────────────────────────
     [[nodiscard]] int get_dim() const;

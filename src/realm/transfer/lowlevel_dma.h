@@ -177,6 +177,7 @@ namespace Realm {
 
     virtual void reset(void);
     virtual bool done(void);
+    void set_base(size_t _base) { base = _base; }
 
     virtual size_t get_base_offset(void) const;
 

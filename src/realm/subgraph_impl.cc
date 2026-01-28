@@ -18,7 +18,13 @@
 // Realm subgraph implementation
 
 #include "realm/subgraph_impl.h"
+#include "realm/event_impl.h"
 #include "realm/runtime_impl.h"
+#include "realm/proc_impl.h"
+#include "realm/idx_impl.h"
+#include "realm/transfer/transfer.h"
+
+#include <unordered_set>
 
 namespace Realm {
 
@@ -42,6 +48,18 @@ namespace Realm {
     subgraph = impl->me.convert<Subgraph>();
 
     impl->defn = new SubgraphDefinition(defn);
+    // The subgraph needs to hold onto CopyIndirection metadata with a longer
+    // lifetime than what was passed into the creation call. Clone all
+    // indirection objects, and we'll free them in the destructor. I decided
+    // to not put this in the SubgraphDefinition copy constructor to avoid
+    // accidentally copying these objects in other unsuspecting places and
+    // leaking memory.
+    for (size_t i = 0; i < impl->defn->copies.size(); i++) {
+      auto& copy = impl->defn->copies[i];
+      for (size_t j = 0; j < copy.indirects.size(); j++) {
+        copy.indirects[j] = reinterpret_cast<CopyIndirectionGeneric*>(copy.indirects[j])->clone();
+      }
+    }
 
     // no handling of preconditions or profiling yet
     assert(wait_on.has_triggered());
@@ -59,7 +77,7 @@ namespace Realm {
     }
   }
 
-  void Subgraph::destroy(Event wait_on /*= Event::NO_EVENT*/) const
+  Event Subgraph::destroy(Event wait_on /*= Event::NO_EVENT*/) const
   {
     NodeID owner = ID(*this).subgraph_owner_node();
 
@@ -68,20 +86,41 @@ namespace Realm {
     if(owner == Network::my_node_id) {
       SubgraphImpl *subgraph = get_runtime()->get_subgraph_impl(*this);
 
-      if(wait_on.has_triggered())
+      // Ensure that all pending executions finish before the
+      // deletion starts. This helps the user not have to worry
+      // about tracking graph instantiations.
+      if (subgraph->defn->concurrency_mode == SubgraphDefinition::INSTANTIATION_ORDER) {
+        AutoLock<Mutex> al(subgraph->instantiation_lock);
+        wait_on = Event::merge_events(
+          wait_on,
+          subgraph->previous_instantiation_completion,
+          subgraph->previous_cleanup_completion
+        );
+      }
+
+      if(wait_on.has_triggered()) {
         subgraph->destroy();
-      else
-        subgraph->deferred_destroy.defer(subgraph, wait_on);
+        return Event::NO_EVENT;
+      }
+      else {
+        UserEvent trigger = UserEvent::create_user_event();
+        subgraph->deferred_destroy.defer(subgraph, wait_on, trigger);
+        return trigger;
+      }
     } else {
+      // TODO (rohany): Handle this case later.
+      assert(false);
       ActiveMessage<SubgraphDestroyMessage> amsg(owner);
       amsg->subgraph = *this;
       amsg->wait_on = wait_on;
       amsg.commit();
+      return Event::NO_EVENT;
     }
   }
 
   Event Subgraph::instantiate(const void *args, size_t arglen,
-                              const ProfilingRequestSet &prs,
+                              const ProfilingRequestSet& prs,
+                              const SubgraphInstantiationProfilingRequestsDesc &sprs,
                               Event wait_on /*= Event::NO_EVENT*/,
                               int priority_adjust /*= 0*/) const
   {
@@ -94,10 +133,13 @@ namespace Realm {
 
     if(target_node == Network::my_node_id) {
       SubgraphImpl *impl = get_runtime()->get_subgraph_impl(*this);
-      impl->instantiate(args, arglen, prs, empty_span() /*preconditions*/,
+      impl->instantiate(args, arglen, prs, sprs, empty_span() /*preconditions*/,
                         empty_span() /*postconditions*/, wait_on, finish_event,
                         priority_adjust);
     } else {
+      // TODO (rohany): Support serialization of the new PRs for remote
+      //  subgraph executions later ...
+      assert(sprs.empty());
       Serialization::ByteCountSerializer bcs;
       {
         bool ok = (bcs.append_bytes(args, arglen) && (bcs << span<const Event>()) &&
@@ -123,7 +165,8 @@ namespace Realm {
   }
 
   Event Subgraph::instantiate(const void *args, size_t arglen,
-                              const ProfilingRequestSet &prs,
+                              const ProfilingRequestSet& prs,
+                              const SubgraphInstantiationProfilingRequestsDesc &sprs,
                               const std::vector<Event> &preconditions,
                               std::vector<Event> &postconditions,
                               Event wait_on /*= Event::NO_EVENT*/,
@@ -144,9 +187,12 @@ namespace Realm {
 
     if(target_node == Network::my_node_id) {
       SubgraphImpl *impl = get_runtime()->get_subgraph_impl(*this);
-      impl->instantiate(args, arglen, prs, preconditions, postconditions, wait_on,
+      impl->instantiate(args, arglen, prs, sprs, preconditions, postconditions, wait_on,
                         finish_event, priority_adjust);
     } else {
+      // TODO (rohany): Support serialization of the new PRs for remote
+      //  subgraph executions later ...
+      assert(sprs.empty());
       Serialization::ByteCountSerializer bcs;
       {
         bool ok = (bcs.append_bytes(args, arglen) && (bcs << preconditions) &&
@@ -169,6 +215,492 @@ namespace Realm {
     }
     return finish_event;
   }
+
+  bool SubgraphImpl::task_has_async_effects(SubgraphDefinition::TaskDesc& task) {
+    switch (task.proc.kind()) {
+      case Processor::TOC_PROC: {
+        // TODO (rohany): Query an API in the future.
+        return true;
+      }
+      default:
+        return false;
+    }
+  }
+
+  bool SubgraphImpl::copy_has_any_async_effects(unsigned op_idx) {
+    // We can't just look at the source and destination of the copy,
+    // as the GPU's copy engines can even be used sometimes for H2H
+    // copies. So just look at the XD and see if it has async effects.
+    for (uint64_t i = planned_copy_xds.offsets[op_idx]; i < planned_copy_xds.offsets[op_idx + 1]; i++) {
+      // We're async if any of the xd's launches async work.
+      auto xd = planned_copy_xds.data[i];
+      // Remote XD's are not asynchronous.
+      if (!xd)
+        continue;
+      if (xd->launches_async_work())
+        return true;
+    }
+    return false;
+  }
+
+  bool SubgraphImpl::copy_has_all_async_effects(unsigned op_idx) {
+    // We can't just look at the source and destination of the copy,
+    // as the GPU's copy engines can even be used sometimes for H2H
+    // copies. So just look at the XD and see if it has async effects.
+    for (uint64_t i = planned_copy_xds.offsets[op_idx]; i < planned_copy_xds.offsets[op_idx + 1]; i++) {
+      auto xd = planned_copy_xds.data[i];
+      // Remote XD's are not asynchronous.
+      if (!xd || !xd->launches_async_work())
+        return false;
+    }
+    return true;
+  }
+
+  bool SubgraphImpl::task_respects_async_effects(SubgraphDefinition::TaskDesc& src, SubgraphDefinition::TaskDesc& dst) {
+    // TODO (rohany): Do more detailed analysis in the future.
+    return src.proc.kind() == Processor::TOC_PROC && dst.proc.kind() == Processor::TOC_PROC;
+  }
+
+  bool SubgraphImpl::operation_respects_async_effects(
+    SubgraphDefinition::OpKind src_op_kind, unsigned src_op_idx,
+    SubgraphDefinition::OpKind dst_op_kind, unsigned dst_op_idx
+  ) {
+    switch (dst_op_kind) {
+      case SubgraphDefinition::OPKIND_TASK: {
+        switch (src_op_kind) {
+          case SubgraphDefinition::OPKIND_TASK: {
+            return task_respects_async_effects(defn->tasks[src_op_idx], defn->tasks[dst_op_idx]);
+          }
+          case SubgraphDefinition::OPKIND_COPY: {
+            // TODO (rohany): I don't know the right way that this API
+            //  could look yet, so for now, a "copy being async" means
+            //  that it pushes work onto a GPU. So the check here is
+            //  just copy is async + task is on GPU.
+            return copy_has_any_async_effects(src_op_idx) && task_has_async_effects(defn->tasks[dst_op_idx]);
+          }
+          default:
+            return false;
+        }
+      }
+      case SubgraphDefinition::OPKIND_COPY: {
+        // See the comment above in the COPY->TASK case. We'll pretend
+        // an async copy is really a copy serviced by the GPU. Copies
+        // only respect asynchronous effects if all of their XD's
+        // are asynchronous.
+        switch (src_op_kind) {
+          case SubgraphDefinition::OPKIND_TASK: {
+            return task_has_async_effects(defn->tasks[src_op_idx]) && copy_has_all_async_effects(dst_op_idx);
+          }
+          case SubgraphDefinition::OPKIND_COPY: {
+            return copy_has_any_async_effects(src_op_idx) && copy_has_all_async_effects(dst_op_idx);
+          }
+          default:
+            return false;
+        }
+      }
+      default:
+        return false;
+    }
+  }
+
+  bool SubgraphImpl::operation_has_async_effects(SubgraphDefinition::OpKind op_kind, unsigned op_idx) {
+    switch (op_kind) {
+      case SubgraphDefinition::OPKIND_TASK: {
+        return task_has_async_effects(defn->tasks[op_idx]);
+      }
+      case SubgraphDefinition::OPKIND_COPY: {
+        return copy_has_any_async_effects(op_idx);
+      }
+      case SubgraphDefinition::OPKIND_EXT_PRECOND: [[fallthrough]];
+      case SubgraphDefinition::OPKIND_ARRIVAL: {
+        return false;
+      }
+      default: {
+        assert(false);
+        return false;
+      }
+    }
+  }
+
+  int32_t SubgraphImpl::bgwork_operation_count(SubgraphDefinition::OpKind op_kind, unsigned int op_idx) {
+    switch (op_kind) {
+      case SubgraphDefinition::OPKIND_COPY: {
+        // Just return the number of XD's planned for this copy.
+        return planned_copy_xds.offsets[op_idx + 1] - planned_copy_xds.offsets[op_idx];
+      }
+      case SubgraphDefinition::OPKIND_ARRIVAL: {
+        return 1;
+      }
+      default:
+        assert(false);
+        return 0;
+    }
+  }
+
+  int32_t SubgraphImpl::bgwork_async_operation_count(SubgraphDefinition::OpKind op_kind, unsigned int op_idx) {
+    if (!operation_has_async_effects(op_kind, op_idx))
+      return 0;
+    switch (op_kind) {
+      case SubgraphDefinition::OPKIND_COPY: {
+        int32_t count = 0;
+        for (uint64_t i = planned_copy_xds.offsets[op_idx]; i < planned_copy_xds.offsets[op_idx + 1]; i++) {
+          auto xd = planned_copy_xds.data[i];
+          // Remote XDs are not asynchronous.
+          if (!xd)
+            continue;
+          if (xd->launches_async_work())
+            count++;
+          }
+        return count;
+      }
+      case SubgraphDefinition::OPKIND_ARRIVAL: {
+        return 0;
+      }
+      default:
+        assert(false);
+        return 0;
+    }
+  }
+
+  TransferDesc* SubgraphImpl::get_transfer_desc(unsigned op_idx) {
+    // We'll lazily initialize these.
+    if (copy_transfer_descs.empty())
+      copy_transfer_descs.resize(defn->copies.size(), nullptr);
+    if (copy_transfer_descs[op_idx] != nullptr)
+      return copy_transfer_descs[op_idx];
+
+    // In this case, we actually have to make the TransferDesc.
+    auto& copy = defn->copies[op_idx];
+    TransferDesc* td = copy.space.impl->make_transfer_desc(copy.srcs, copy.dsts, copy.indirects);
+    assert(td->analysis_complete.load() && td->analysis_successful);
+    copy_transfer_descs[op_idx] = td;
+    return td;
+  }
+
+  bool SubgraphImpl::is_plannable_copy(unsigned op_idx) {
+    // No more restrictions on copies!
+    return true;
+  }
+
+
+  // Active messages to create an XD on a remote node.
+
+  struct SubgraphXferDesCreateAcknowledged {
+    SubgraphXferDesCreateAcknowledged(SubgraphImpl* _subgraph) : subgraph(_subgraph) {}
+    void operator()() const {
+      subgraph->pending_remote_xd_creations.fetch_sub_acqrel(1);
+    }
+    SubgraphImpl* subgraph;
+  };
+
+  struct SubgraphXferDesCreateMessage {
+    static void handle_message(NodeID sender,
+                               const SubgraphXferDesCreateMessage &args,
+                               const void *data,
+                               size_t datalen) {
+      std::vector<XferDesPortInfo> inputs_info, outputs_info;
+      int priority = 0;
+      XferDesRedopInfo redop_info;
+      unsigned op_index;
+      unsigned xd_index;
+      ID::IDType subgraph_id;
+      size_t fill_total = 0;
+
+      Realm::Serialization::FixedBufferDeserializer fbd(data, datalen);
+
+      bool ok = ((fbd >> inputs_info) &&
+                 (fbd >> outputs_info) &&
+                 (fbd >> priority) &&
+                 (fbd >> redop_info) &&
+                 (fbd >> op_index) &&
+                 (fbd >> xd_index) &&
+                 (fbd >> subgraph_id) &&
+                 (fbd >> fill_total));
+      assert(ok);
+      const void *fill_data;
+      size_t fill_size;
+      if(fbd.bytes_left() == 0) {
+        fill_data = 0;
+        fill_size = 0;
+      } else {
+        fill_size = fbd.bytes_left();
+        fill_data = fbd.peek_bytes(fill_size);
+      }
+      LocalChannel *c = reinterpret_cast<LocalChannel *>(args.channel);
+      XferDes *xd = c->create_xfer_des(args.dma_op, args.launch_node,
+                                       args.guid,
+                                       inputs_info,
+                                       outputs_info,
+                                       priority,
+                                       redop_info,
+                                       fill_data, fill_size, fill_total);
+      // Detach the XD from its DMA op.
+      xd->dma_op = 0;
+
+      // Now, register the XD for this subgraph.
+      {
+        RuntimeImpl* rt = get_runtime();
+        RWLock::AutoWriterLock al(rt->remote_subgraph_meta_lock);
+        auto& meta = rt->remote_subgraph_meta;
+        meta[subgraph_id].xds[{op_index, xd_index}] = xd;
+      }
+    }
+    uintptr_t dma_op;
+    XferDesID guid;
+    NodeID launch_node;
+    uintptr_t channel;
+    // Note: we can't include these fields in the header because
+    // the header can only fit 4 words.
+    // unsigned op_index;
+    // unsigned xd_index;
+    // ID subgraph_id;
+  };
+
+  // Active message to request starting an XD on a remote node.
+  struct SubgraphXferDesEnqueueMessage {
+    static void handle_message(NodeID sender,
+                               const SubgraphXferDesEnqueueMessage &args,
+                               const void *data,
+                               size_t datalen) {
+      std::vector<unsigned> xd_indexes;
+      std::vector<off_t> ib_offsets;
+      Realm::Serialization::FixedBufferDeserializer fbd(data, datalen);
+      bool ok = ((fbd >> xd_indexes) &&
+                 (fbd >> ib_offsets));
+      assert(ok);
+      RuntimeImpl* rt = get_runtime();
+      RWLock::AutoReaderLock al(rt->remote_subgraph_meta_lock);
+      auto& xds = rt->remote_subgraph_meta.at(args.subgraph_id.id).xds;
+      // Launch the requested XDs.
+      for (auto xd_index : xd_indexes) {
+        // TODO (rohany): Deduplicate some of this code?
+        XferDes* xd = xds.at({args.op_index, xd_index});
+        assert(xd);
+        xd->reset(ib_offsets);
+        xd->subgraph_replay_state = reinterpret_cast<ProcSubgraphReplayState*>(args.all_proc_states);
+        xd->subgraph_index = args.subgraph_index;
+        xd->op_index = args.op_index;
+        xd->xd_index = xd_index;
+        xd->add_reference();
+        xd->channel->enqueue_ready_xd(xd);
+      }
+    }
+    ID subgraph_id;
+    uintptr_t all_proc_states;
+    unsigned op_index;
+    unsigned subgraph_index;
+    // These fields come in the payload.
+    // std::vector<unsigned> xd_indexes;
+    // std::vector<off_t> ib_offsets;
+  };
+
+  struct SubgraphXferDesNotifyCompletionMessage {
+    static void handle_message(NodeID sender,
+                               const SubgraphXferDesNotifyCompletionMessage &args,
+                               const void *data,
+                               size_t datalen) {
+      ProcSubgraphReplayState* all_states = reinterpret_cast<ProcSubgraphReplayState*>(args.all_proc_states);
+      ProcSubgraphReplayState& state = all_states[0];
+      // Handle profiling.
+      auto sg = state.subgraph;
+      auto& item = sg->bgwork_items[args.subgraph_index];
+      auto prof = state.get_profiling_info(SubgraphDefinition::OPKIND_COPY, item.op_index);
+      if (prof) {
+        if (prof->wants_timeline || prof->wants_fevent) {
+          // Ensure that only the last XD to complete contributes
+          // to the profiling.
+          auto remaining = prof->pending_work_items.fetch_sub_acqrel(1) - 1;
+          if (remaining == 0) {
+            // TODO (rohany): Handle copies with async work more tightly later.
+            if (prof->wants_timeline) {
+              prof->timeline.record_end_time();
+              prof->timeline.record_complete_time();
+            }
+            if (prof->wants_fevent) {
+              prof->fevent_user.trigger();
+            }
+          }
+        }
+      }
+
+#ifdef REALM_USE_NVTX
+      // Complete the nvtx range for this XD.
+      nvtx_range_end(sg->nvtx_xd_ranges[sg->planned_copy_xds.offsets[item.op_index] + args.xd_index]);
+#endif
+
+      // Handle normal postconditions.
+      auto& postconds = sg->bgwork_postconditions;
+      for (uint64_t i = postconds.offsets[args.subgraph_index]; i < postconds.offsets[args.subgraph_index + 1]; i++) {
+        auto& info = postconds.data[i];
+        trigger_subgraph_operation_completion(all_states, info, true /* incr_counter */, nullptr);
+      }
+
+      // Make sure to use sg here instead of state.subgraph, as all_states
+      // could get deleted here as soon as we trigger the completion operation.
+      // However, we know it won't have gotten deleted if this operation is
+      // a final event.
+      if (sg->bgwork_items[args.subgraph_index].is_final_event) {
+        // TODO (rohany): Hackily including the contributions of bgwork
+        //  operations in the proc 0 counters.
+        int32_t remaining = state.pending_async_count.fetch_sub_acqrel(1) - 1;
+        if (remaining == 0) {
+          maybe_trigger_subgraph_final_completion_event(state);
+        }
+      }
+    }
+    uintptr_t all_proc_states; // ProcSubgraphReplayState*
+    unsigned subgraph_index;
+#ifdef REALM_USE_NVTX
+    unsigned xd_index;
+#endif
+  };
+
+  void send_subgraph_remote_xd_completion(
+    NodeID launch_node,
+    ProcSubgraphReplayState* all_proc_states,
+    unsigned subgraph_index
+#ifdef REALM_USE_NVTX
+    , unsigned xd_index
+#endif
+  ) {
+    ActiveMessage<SubgraphXferDesNotifyCompletionMessage> amsg(launch_node);
+    amsg->all_proc_states = reinterpret_cast<uintptr_t>(all_proc_states);
+    amsg->subgraph_index = subgraph_index;
+#ifdef REALM_USE_NVTX
+    amsg->xd_index = xd_index;
+#endif
+    amsg.commit();
+  }
+
+  // Activate message to release remote resources from a subgraph.
+
+  struct SubgraphRemoteDeletionAcknowledged {
+    SubgraphRemoteDeletionAcknowledged(SubgraphImpl* _subgraph) : subgraph(_subgraph) {}
+    void operator()() const {
+      subgraph->pending_peer_deletions.fetch_sub_acqrel(1);
+    }
+    SubgraphImpl* subgraph;
+  };
+
+  struct SubgraphRemoteResourceDeletionMessage {
+    static void handle_message(NodeID sender,
+                               const SubgraphRemoteResourceDeletionMessage &args,
+                               const void *data,
+                               size_t datalen) {
+      RuntimeImpl* rt = get_runtime();
+      RWLock::AutoWriterLock al(rt->remote_subgraph_meta_lock);
+      // Delete all the XD's we cached.
+      auto& meta = rt->remote_subgraph_meta[args.subgraph_id.id];
+      for (auto& it : meta.xds) {
+        it.second->remove_reference();
+      }
+      meta.xds.clear();
+      rt->remote_subgraph_meta.erase(args.subgraph_id.id);
+    }
+    ID subgraph_id;
+  };
+
+  class MockXDFactory : public XferDesFactory {
+  public:
+    MockXDFactory() {}
+    MockXDFactory(
+      XferDesFactory* _factory,
+      SubgraphImpl* _subgraph,
+      unsigned _op_index,
+      unsigned _xd_index)
+      : factory(_factory),
+        subgraph(_subgraph),
+        op_index(_op_index),
+        xd_index(_xd_index) {}
+    MockXDFactory& operator=(const MockXDFactory& rhs) {
+      factory = rhs.factory;
+      subgraph = rhs.subgraph;
+      op_index = rhs.op_index;
+      xd_index = rhs.xd_index;
+      return *this;
+    }
+
+    virtual bool needs_release() override { return false; }
+    virtual void create_xfer_des(uintptr_t dma_op,
+                                 NodeID launch_node,
+                                 NodeID target_node,
+                                 XferDesID guid,
+                                 const std::vector<XferDesPortInfo>& inputs_info,
+                                 const std::vector<XferDesPortInfo>& outputs_info,
+                                 int priority,
+                                 XferDesRedopInfo redop_info,
+                                 const void *fill_data, size_t fill_size,
+                                 size_t fill_total) override {
+      assert(launch_node == Network::my_node_id);
+      auto sxdf = dynamic_cast<SimpleXferDesFactory*>(factory);
+      assert(sxdf != nullptr);
+      uintptr_t channel = sxdf->get_channel();
+      if (target_node == Network::my_node_id) {
+        LocalChannel *c = reinterpret_cast<LocalChannel *>(channel);
+        xd = c->create_xfer_des(dma_op, launch_node, guid,
+                                inputs_info, outputs_info,
+                                priority, redop_info,
+                                fill_data, fill_size, fill_total);
+      } else {
+        // Remember who we talked to.
+        subgraph->peers.insert(target_node);
+        remote = true;
+        xd_target_node = target_node;
+        // Increment the pending XD creations counter.
+        subgraph->pending_remote_xd_creations.fetch_add_acqrel(1);
+
+        // Copied from the SimpleXferDesFactory.
+        Serialization::ByteCountSerializer bcs;
+        {
+          bool ok = ((bcs << inputs_info) &&
+                     (bcs << outputs_info) &&
+                     (bcs << priority) &&
+                     (bcs << redop_info) &&
+                     (bcs << op_index) &&
+                     (bcs << xd_index) &&
+                     (bcs << ID::IDType(subgraph->me.id)) &&
+                     (bcs << fill_total));
+          if(ok && (fill_size > 0))
+            ok = bcs.append_bytes(fill_data, fill_size);
+          assert(ok);
+        }
+        size_t req_size = bcs.bytes_used();
+        ActiveMessage<SubgraphXferDesCreateMessage> amsg(target_node, req_size);
+        amsg->launch_node = launch_node;
+        amsg->guid = guid;
+        amsg->dma_op = dma_op;
+        amsg->channel = channel;
+        {
+          bool ok = ((amsg << inputs_info) &&
+                     (amsg << outputs_info) &&
+                     (amsg << priority) &&
+                     (amsg << redop_info) &&
+                     (amsg << op_index) &&
+                     (amsg << xd_index) &&
+                     (amsg << ID::IDType(subgraph->me.id)) &&
+                     (amsg << fill_total));
+          if(ok && (fill_size > 0))
+            amsg.add_payload(fill_data, fill_size);
+          assert(ok);
+        }
+        amsg.add_remote_completion(SubgraphXferDesCreateAcknowledged(subgraph));
+        amsg.commit();
+
+        // Delete the iterators as they have been sent to a remote node.
+        for (auto& it : inputs_info)
+          delete it.iter;
+        for (auto& it : outputs_info)
+          delete it.iter;
+      }
+    }
+    XferDesFactory* factory = nullptr;
+    SubgraphImpl* subgraph = nullptr;
+    unsigned op_index = (unsigned)-1;
+    unsigned xd_index = (unsigned)-1;
+    XferDes* xd = nullptr;
+    bool remote = false;
+    NodeID xd_target_node = -1;
+  };
 
   ////////////////////////////////////////////////////////////////////////
   //
@@ -209,7 +741,7 @@ namespace Realm {
     {
       if(needed > N) {
         need_free = true;
-        base = static_cast<char *>(malloc(N));
+        base = static_cast<char *>(malloc(_needed));
         assert(base != 0);
       } else {
         need_free = false;
@@ -281,38 +813,36 @@ namespace Realm {
     return ((scratch_buffer != 0) ? scratch_buffer : dstdata);
   }
 
-  // a typed version for interpolating small values
-  template <typename T>
-  static T
-  do_interpolation(const std::vector<SubgraphDefinition::Interpolation> &interpolations,
-                   unsigned first_interp, unsigned num_interps,
-                   SubgraphDefinition::Interpolation::TargetKind target_kind,
-                   unsigned target_index, const void *srcdata, size_t srclen, T dstdata)
+  void
+  do_interpolation_inline(const std::vector<SubgraphDefinition::Interpolation> &interpolations,
+                          unsigned first_interp, unsigned num_interps,
+                          SubgraphDefinition::Interpolation::TargetKind target_kind,
+                          unsigned target_index,
+                          const void *srcdata, size_t srclen,
+                          void *dstdata, size_t dstlen)
   {
-    T val = dstdata;
-
     for(unsigned i = 0; i < num_interps; i++) {
       const SubgraphDefinition::Interpolation &it = interpolations[first_interp + i];
-      if((it.target_kind != target_kind) || (it.target_index != target_index))
+      if ((it.target_kind != target_kind) || (it.target_index != target_index))
         continue;
 
       assert((it.offset + it.bytes) <= srclen);
       if(it.redop_id == 0) {
         // overwrite
-        assert((it.target_offset + it.bytes) <= sizeof(T));
-        memcpy(reinterpret_cast<char *>(&val) + it.target_offset,
+        assert((it.target_offset + it.bytes) <= dstlen);
+        memcpy(reinterpret_cast<char *>(dstdata) + it.target_offset,
                reinterpret_cast<const char *>(srcdata) + it.offset, it.bytes);
       } else {
-        const ReductionOpUntyped *redop =
-            get_runtime()->reduce_op_table.get(it.redop_id, 0);
-        assert((it.target_offset + redop->sizeof_lhs) <= sizeof(T));
-        (redop->cpu_apply_excl_fn)(reinterpret_cast<char *>(&val) + it.target_offset, 0,
-                                   reinterpret_cast<const char *>(srcdata) + it.offset, 0,
-                                   1 /*count*/, redop->userdata);
+        assert(false);
+        // const ReductionOpUntyped *redop =
+        //     get_runtime()->reduce_op_table.get(it.redop_id, 0);
+        // assert((it.target_offset + redop->sizeof_lhs) <= dstlen);
+        // (redop->cpu_apply_excl_fn)(reinterpret_cast<char *>(scratch_buffer) +
+        //                            it.target_offset,
+        //                            0, reinterpret_cast<const char *>(srcdata) + it.offset,
+        //                            0, 1 /*count*/, redop->userdata);
       }
     }
-
-    return val;
   }
 
   class SortInterpolationsByKindAndIndex {
@@ -331,6 +861,14 @@ namespace Realm {
 
   bool SubgraphImpl::compile(void)
   {
+
+    ModuleConfig *core = Runtime::get_runtime().get_module_config("core");
+    bool rt_opt = false;
+    assert(core->get_property("static_subgraph_opt", rt_opt) == REALM_SUCCESS);
+    opt = rt_opt && defn->concurrency_mode == SubgraphDefinition::INSTANTIATION_ORDER;
+    if (opt)
+      log_subgraph.info() << "Performing static subgraph optimizations.";
+
     typedef std::map<std::pair<SubgraphDefinition::OpKind, unsigned>, unsigned> TopoMap;
     TopoMap toposort;
 
@@ -348,6 +886,16 @@ namespace Realm {
     for(unsigned i = 0; i < defn->releases.size(); i++)
       toposort[std::make_pair(SubgraphDefinition::OPKIND_RELEASE, i)] = nextval++;
     unsigned total_ops = nextval;
+
+    // See if there's any need to allocate profiling data structures.
+    for (auto& td : defn->tasks) {
+      if (!td.prs.empty())
+        has_static_profiling_requests = true;
+    }
+    for (auto& cd : defn->copies) {
+      if (!cd.prs.empty())
+        has_static_profiling_requests = true;
+    }
 
     // for subgraph instantiations, we need to do a pass over the dependencies
     //  to see which ports are used
@@ -437,92 +985,10 @@ namespace Realm {
       schedule[it->second].op_index = it->first.second;
     }
 
-    // count number of intermediate events - instantiations can produce more
-    //  than one
-    num_intermediate_events = 0;
-    num_final_events = 0;
-    for(std::vector<SubgraphScheduleEntry>::iterator it = schedule.begin();
-        it != schedule.end(); ++it) {
-      if(it->op_kind != SubgraphDefinition::OPKIND_EXT_POSTCOND) {
-        // we'll clear this later if we find our contribution to the final
-        //  event is done transitively
-        it->is_final_event = true;
-        num_final_events++;
-      } else
-        it->is_final_event = false;
-
-      it->intermediate_event_base = num_intermediate_events;
-
-      if(it->op_kind == SubgraphDefinition::OPKIND_INSTANTIATION)
-        it->intermediate_event_count = inst_post_max_port[it->op_index] + 1;
-      else if(it->op_kind != SubgraphDefinition::OPKIND_EXT_POSTCOND)
-        it->intermediate_event_count = 1;
-      else
-        it->intermediate_event_count = 0;
-
-      num_intermediate_events += it->intermediate_event_count;
-    }
-
-    for(std::vector<SubgraphDefinition::Dependency>::const_iterator it =
-            defn->dependencies.begin();
-        it != defn->dependencies.end(); ++it) {
-      TopoMap::const_iterator tgt =
-          toposort.find(std::make_pair(it->tgt_op_kind, it->tgt_op_index));
-      assert(tgt != toposort.end());
-
-      switch(it->src_op_kind) {
-      case SubgraphDefinition::OPKIND_EXT_PRECOND:
-      {
-        // external preconditions are encoded as negative indices
-        int idx = -1 - (int)(it->src_op_index);
-        schedule[tgt->second].preconditions.push_back(
-            std::make_pair(it->tgt_op_port, idx));
-        break;
-      }
-
-      default:
-      {
-        TopoMap::const_iterator src =
-            toposort.find(std::make_pair(it->src_op_kind, it->src_op_index));
-        assert(src != toposort.end());
-        unsigned ev_idx = schedule[src->second].intermediate_event_base + it->src_op_port;
-        schedule[tgt->second].preconditions.push_back(
-            std::make_pair(it->tgt_op_port, ev_idx));
-        // if we are depending on port 0 of another node and we're not an
-        //  external postcondition, then the preceeding node is not final
-        if((it->src_op_port == 0) &&
-           (it->tgt_op_kind != SubgraphDefinition::OPKIND_EXT_POSTCOND) &&
-           (schedule[src->second].is_final_event)) {
-          schedule[src->second].is_final_event = false;
-          num_final_events--;
-        }
-        break;
-      }
-      }
-    }
-
-    // now sort the preconditions for each entry - allows us to group by port
-    //  and also notice duplicates
-    max_preconditions = 1; // have to count global precondition when needed
-    for(std::vector<SubgraphScheduleEntry>::iterator it = schedule.begin();
-        it != schedule.end(); ++it) {
-      if(it->preconditions.empty())
-        continue;
-
-      std::sort(it->preconditions.begin(), it->preconditions.end());
-      // look for duplicates past the first event
-      size_t num_unique = 1;
-      for(size_t i = 1; i < it->preconditions.size(); i++)
-        if(it->preconditions[i] != it->preconditions[num_unique - 1]) {
-          if(num_unique < i)
-            it->preconditions[num_unique] = it->preconditions[i];
-          num_unique++;
-        }
-      if(num_unique < it->preconditions.size())
-        it->preconditions.resize(num_unique);
-      if(num_unique >= max_preconditions)
-        max_preconditions = num_unique + 1;
-    }
+    // Maintain a separate collection of tasks to interpolation metadata.
+    // We'll use this when extracting the interpolation metadata for the
+    // statically scheduled graph component.
+    std::map<std::pair<SubgraphDefinition::OpKind, size_t>, std::pair<size_t, size_t>> op_to_interpolation_data;
 
     // sort the interpolations so that each operation has a compact range
     //  to iterate through
@@ -564,6 +1030,7 @@ namespace Realm {
               hi++;
             it->first_interp = lo;
             it->num_interps = hi - lo;
+            op_to_interpolation_data[{it->op_kind, it->op_index}] = {lo, hi-lo};
             // log_subgraph.print() << "search (" << it->op_kind << "," << it->op_index <<
             // ") -> " << lo << " .. " << hi;
             break;
@@ -575,7 +1042,7 @@ namespace Realm {
     // also sanity-check that any interpolation using a reduction op has it
     //  defined and sizes match up
     for(std::vector<SubgraphDefinition::Interpolation>::iterator it =
-            defn->interpolations.begin();
+        defn->interpolations.begin();
         it != defn->interpolations.end(); ++it) {
       if(it->redop_id != 0) {
         const ReductionOpUntyped *redop =
@@ -591,34 +1058,1002 @@ namespace Realm {
       }
     }
 
+    // Perform "final event" analysis before partitioning the schedule.
+    num_final_events = 0;
+    for(std::vector<SubgraphScheduleEntry>::iterator it = schedule.begin();
+        it != schedule.end(); ++it) {
+      if(it->op_kind != SubgraphDefinition::OPKIND_EXT_POSTCOND) {
+        // We'll clear this later if we find our contribution to the final
+        //  event is done transitively
+        it->is_final_event = true;
+        num_final_events++;
+      } else
+        it->is_final_event = false;
+      }
+
+    // Any operation that points into a final event is not a final event.
+    for(std::vector<SubgraphDefinition::Dependency>::const_iterator it =
+        defn->dependencies.begin();
+        it != defn->dependencies.end(); ++it) {
+      if (it->src_op_kind == SubgraphDefinition::OPKIND_EXT_PRECOND)
+        continue;
+      TopoMap::const_iterator src =
+          toposort.find(std::make_pair(it->src_op_kind, it->src_op_index));
+      // If we are depending on port 0 of another node and we're not an
+      //  external postcondition, then the preceeding node is not final.
+      if((it->src_op_port == 0) &&
+         (it->tgt_op_kind != SubgraphDefinition::OPKIND_EXT_POSTCOND) &&
+         (schedule[src->second].is_final_event)) {
+        schedule[src->second].is_final_event = false;
+        num_final_events--;
+      }
+    }
+
+    // Separate the schedules into "static" and "dynamic" portions of
+    // the original schedule.
+    // Construct a separate schedule for operations that are not
+    // included in the "statically-optimized" portion of the graph.
+    std::vector<SubgraphScheduleEntry> dynamic_schedule;
+    std::vector<SubgraphScheduleEntry> static_schedule;
+    // Similar to toposort, but for background work items.
+    std::vector<SubgraphDefinition::OpKind> allowed_kinds;
+    allowed_kinds.push_back(SubgraphDefinition::OPKIND_TASK);
+    allowed_kinds.push_back(SubgraphDefinition::OPKIND_EXT_PRECOND);
+    // TODO (rohany): Comment ...
+    std::map<std::pair<SubgraphDefinition::OpKind, unsigned>, unsigned> bgwork_schedule;
+
+    if (opt) {
+      // Reset the toposort for the new schedule.
+      toposort.clear();
+      for (auto& it : schedule) {
+        auto key = std::make_pair(it.op_kind, it.op_index);
+        // Copies require special handling, as they don't go into the
+        // per-processor local schedules. We'll also include arrivals
+        // in the bgwork slots, as we don't want them to get stuck
+        // behind other tasks in the processor queues.
+        if ((it.op_kind == SubgraphDefinition::OPKIND_COPY && is_plannable_copy(it.op_index)) ||
+             it.op_kind == SubgraphDefinition::OPKIND_ARRIVAL) {
+          bgwork_schedule[key] = bgwork_items.size();
+          bgwork_items.push_back(it);
+          if (it.is_final_event)
+            num_final_events--;
+          continue;
+        }
+
+        // Operations we know how to handle go into the static schedule.
+        if (std::find(allowed_kinds.begin(), allowed_kinds.end(), it.op_kind) != allowed_kinds.end()) {
+            static_schedule.push_back(it);
+          // If we're moving an operation into the static part of the schedule,
+          // its contribution to the final event in the subgraph will be done
+          // separately, so remove it from the "dynamic" set of final events.
+          if (it.is_final_event)
+            num_final_events--;
+        } else {
+          toposort[{it.op_kind, it.op_index}] = dynamic_schedule.size();
+          dynamic_schedule.push_back(it);
+        }
+      }
+
+      // The schedule is now only the dynamic portion.
+      schedule = dynamic_schedule;
+    }
+
+    // Also record a table of operations that are in the dynamic
+    // schedule portion.
+    for (auto& it : schedule) {
+      dynamic_operations.insert({it.op_kind, it.op_index});
+    }
+
+    // count number of intermediate events - instantiations can produce more
+    //  than one
+    num_intermediate_events = 0;
+    for(std::vector<SubgraphScheduleEntry>::iterator it = schedule.begin();
+        it != schedule.end(); ++it) {
+      it->intermediate_event_base = num_intermediate_events;
+      if(it->op_kind == SubgraphDefinition::OPKIND_INSTANTIATION)
+        it->intermediate_event_count = inst_post_max_port[it->op_index] + 1;
+      else if(it->op_kind != SubgraphDefinition::OPKIND_EXT_POSTCOND)
+        it->intermediate_event_count = 1;
+      else
+        it->intermediate_event_count = 0;
+      num_intermediate_events += it->intermediate_event_count;
+    }
+
+    for(std::vector<SubgraphDefinition::Dependency>::const_iterator it =
+            defn->dependencies.begin();
+        it != defn->dependencies.end(); ++it) {
+      TopoMap::const_iterator tgt =
+          toposort.find(std::make_pair(it->tgt_op_kind, it->tgt_op_index));
+      // If we can't find the target, that means the target is part
+      // of the static schedule, and will be handled by that logic.
+      if (tgt == toposort.end()) {
+        continue;
+      }
+      assert(tgt != toposort.end());
+
+      switch(it->src_op_kind) {
+      case SubgraphDefinition::OPKIND_EXT_PRECOND: {
+        // external preconditions are encoded as negative indices
+        int idx = -1 - (int)(it->src_op_index);
+        schedule[tgt->second].preconditions.push_back(
+            std::make_pair(it->tgt_op_port, idx));
+        break;
+      }
+
+      default: {
+        TopoMap::const_iterator src =
+            toposort.find(std::make_pair(it->src_op_kind, it->src_op_index));
+        // Same story for the source edge.
+        if (src == toposort.end())
+          continue;
+        unsigned ev_idx = schedule[src->second].intermediate_event_base + it->src_op_port;
+        schedule[tgt->second].preconditions.push_back(
+            std::make_pair(it->tgt_op_port, ev_idx));
+        break;
+      }
+      }
+    }
+
+    // now sort the preconditions for each entry - allows us to group by port
+    //  and also notice duplicates
+    max_preconditions = 1; // have to count global precondition when needed
+    for(std::vector<SubgraphScheduleEntry>::iterator it = schedule.begin();
+        it != schedule.end(); ++it) {
+      if(it->preconditions.empty())
+        continue;
+
+      std::sort(it->preconditions.begin(), it->preconditions.end());
+      // look for duplicates past the first event
+      size_t num_unique = 1;
+      for(size_t i = 1; i < it->preconditions.size(); i++)
+        if(it->preconditions[i] != it->preconditions[num_unique - 1]) {
+          if(num_unique < i)
+            it->preconditions[num_unique] = it->preconditions[i];
+          num_unique++;
+        }
+      if(num_unique < it->preconditions.size())
+        it->preconditions.resize(num_unique);
+      if(num_unique >= max_preconditions)
+        max_preconditions = num_unique + 1;
+    }
+
+    std::map<std::pair<SubgraphDefinition::OpKind, unsigned>, std::vector<std::pair<SubgraphDefinition::OpKind, unsigned>>> incoming_edges;
+    std::map<std::pair<SubgraphDefinition::OpKind, unsigned>, std::vector<std::pair<SubgraphDefinition::OpKind, unsigned>>> outgoing_edges;
+    // Perform a group-by on the dependencies list.
+    for (auto& it : defn->dependencies) {
+      // Add the incoming edge.
+      auto skey = std::make_pair(it.src_op_kind, it.src_op_index);
+      auto tkey = std::make_pair(it.tgt_op_kind, it.tgt_op_index);
+      incoming_edges[tkey].push_back(skey);
+      outgoing_edges[skey].push_back(tkey);
+    }
+
+    // If we're doing optimization, make sure that the graph only
+    // contains operations we know about.
+    if (opt) {
+      std::vector<SubgraphDefinition::OpKind> disallowed_edges;
+      disallowed_edges.push_back(SubgraphDefinition::OPKIND_INSTANTIATION);
+      for (auto& it : incoming_edges) {
+        // For now, tasks should only depend on allowed operations.
+        for (auto& edge : it.second) {
+          assert(std::find(disallowed_edges.begin(), disallowed_edges.end(), edge.first) == disallowed_edges.end());
+        }
+      }
+      // Each node's outgoing edge should also to an allowed operation.
+      for (auto& it : outgoing_edges) {
+        for (auto& edge : it.second) {
+          assert(std::find(disallowed_edges.begin(), disallowed_edges.end(), edge.first) == disallowed_edges.end());
+        }
+      }
+    }
+
+    // Plan all copies in the static subgraph schedule.
+    {
+      // In case we do any remote XD creations, set up the pending counter.
+      pending_remote_xd_creations.store_release(0);
+      std::vector<std::vector<XferDes*>> xds(defn->copies.size());
+      remote_xd_groupings.resize(defn->copies.size());
+      prof_copy_infos.resize(defn->copies.size());
+      prof_copy_memory_usages.resize(defn->copies.size());
+      for (auto& it : bgwork_items) {
+        if (it.op_kind != SubgraphDefinition::OPKIND_COPY)
+          continue;
+        plan_copy(
+          it.op_index,
+          xds[it.op_index],
+          remote_xd_groupings[it.op_index],
+          prof_copy_infos[it.op_index],
+          prof_copy_memory_usages[it.op_index]
+        );
+      }
+      planned_copy_xds = xds;
+      // Initialize allocators for all copies (they will only be used for
+      // copies that need IB allocations).
+      copy_ib_allocators.resize(defn->copies.size());
+      // Wait until all remote XD creations are done.
+      while (pending_remote_xd_creations.load_acquire() != 0) {}
+
+#ifdef REALM_USE_NVTX
+      // Initialize some profiling data structures.
+      nvtx_bgwork_launches.resize(bgwork_items.size());
+      nvtx_xd_ranges.resize(planned_copy_xds.data.size());
+#endif
+    }
+
+    std::map<Processor, int32_t> proc_to_index;
+    std::map<Processor, std::vector<std::pair<SubgraphDefinition::OpKind, unsigned>>> local_schedules;
+    std::map<Processor, std::vector<OpMeta>> local_op_meta;
+    std::map<Processor, std::vector<int32_t>> local_incoming;
+    std::map<Processor, std::vector<std::vector<CompletionInfo>>> local_outgoing;
+    std::map<Processor, std::vector<std::vector<CompletionInfo>>> async_effect_triggers;
+    std::map<Processor, std::vector<std::vector<CompletionInfo>>> async_incoming_events;
+    // Gather the interpolations into compacted lists for each processor.
+    std::map<Processor, std::vector<std::vector<SubgraphDefinition::Interpolation>>> local_interpolations;
+    // Figure out which operations each external precondition
+    // is going to trigger.
+    std::map<unsigned, std::vector<CompletionInfo>> external_preconditions;
+
+    // Set up the processor -> id mapping.
+    for (auto& it : static_schedule) {
+      switch (it.op_kind) {
+        case SubgraphDefinition::OPKIND_TASK: {
+          auto& task = defn->tasks[it.op_index];
+          // During iteration, also initialize the mapping
+          // of processor IDs to local indices.
+          if (proc_to_index.find(task.proc) == proc_to_index.end()) {
+            proc_to_index[task.proc] = int32_t(proc_to_index.size());
+            all_procs.push_back(task.proc);
+            auto pimpl = get_runtime()->get_processor_impl(task.proc);
+            auto lp = dynamic_cast<LocalTaskProcessor*>(pimpl);
+            assert(lp);
+            all_proc_impls.push_back(lp);
+          }
+          break;
+        }
+        case SubgraphDefinition::OPKIND_COPY: [[fallthrough]];
+        case SubgraphDefinition::OPKIND_ARRIVAL:
+          break;
+        default:
+          assert(false);
+      }
+    }
+
+    // Remember where we placed all of our operations.
+    std::map<std::pair<SubgraphDefinition::OpKind, unsigned>, size_t> operation_indices;
+    std::map<std::pair<SubgraphDefinition::OpKind, unsigned>, int32_t> operation_procs;
+
+    // For now, round-robin arrivals across the available
+    // processors. In the future, we should put an arrival on the
+    // likely last processor to trigger it.
+    size_t arrival_proc_idx = 0;
+
+    for (auto& it : static_schedule) {
+      auto desc = std::make_pair(it.op_kind, it.op_index);
+      switch (it.op_kind) {
+        case SubgraphDefinition::OPKIND_TASK: {
+          auto& task = defn->tasks[it.op_index];
+          operation_indices[desc] = local_schedules[task.proc].size();
+          operation_procs[desc] = proc_to_index[task.proc];
+          local_schedules[task.proc].push_back(desc);
+          // Comment for here and below. It's OK that incoming_edges
+          // can contain edges that point from the dynamic partition
+          // into the static partition. The total count of preconditions
+          // is still valid, as the precondition from the other partition
+          // still has to be respected.
+          local_incoming[task.proc].push_back(int32_t(incoming_edges[desc].size()));
+          OpMeta meta;
+          meta.is_final_event = it.is_final_event;
+          meta.is_async = task_has_async_effects(task);
+          local_op_meta[task.proc].push_back(meta);
+          break;
+        }
+        case SubgraphDefinition::OPKIND_ARRIVAL: {
+          auto proc = all_procs[arrival_proc_idx++ % all_procs.size()];
+          operation_indices[desc] = local_schedules[proc].size();
+          operation_procs[desc] = proc_to_index[proc];
+          local_schedules[proc].push_back(desc);
+          local_incoming[proc].push_back(int32_t(incoming_edges[desc].size()));
+          OpMeta meta;
+          meta.is_final_event = it.is_final_event;
+          meta.is_async = false;
+          local_op_meta[proc].push_back(meta);
+          break;
+        }
+        default:
+          assert(false);
+      }
+    }
+
+    // Initialize the record of static->dynamic edges.
+    static_to_dynamic_counts = std::vector<int32_t>(schedule.size(), 0);
+
+    // Also initialize preconditions of bgwork items.
+    bgwork_preconditions = std::vector<int32_t>(bgwork_items.size(), 0);
+    // Create temporary versions of the bgwork pre/postconditions buffers. These
+    // will be compacted into flattened buffers during finalization of compilation.
+    std::vector<std::vector<CompletionInfo>> bgwork_postconditions_build(bgwork_items.size());
+    std::vector<std::vector<CompletionInfo>> bgwork_async_preconditions_build(bgwork_items.size());
+    std::vector<std::vector<CompletionInfo>> bgwork_async_postconditions_build(bgwork_items.size());
+    bgwork_interpolation_ranges = std::vector<std::pair<size_t, size_t>>(bgwork_items.size(), {0, 0});
+
+    // First, initialize all the bgwork precondition counts, as iterating through
+    // the edges will modify the sizes.
+    for (size_t i = 0; i < bgwork_items.size(); i++) {
+      auto& it = bgwork_items[i];
+      auto key = std::make_pair(it.op_kind, it.op_index);
+      bgwork_preconditions[i] = int32_t(incoming_edges[key].size());
+
+      // This is an _extremely_ subtle change. The final event analysis
+      // is precise and sound in terms of marking operations as final events.
+      // The dependence analysis below is _also_ sound in terms of hooking
+      // up the correct async dependencies with each other. However, a subtle
+      // race can occur when considering the callbacks made by asynchronous
+      // bgwork items. In particular, consider the mark_completed call done
+      // by an XD. The XD will launch its async work, its dependencies will
+      // pick up on that, and those final events will get triggered. However,
+      // if the XD is not a final event, there is no one waiting on its
+      // other callbacks (like mark_completed) to run! There's a transitive
+      // dependence from the copy kernels it launches to the finish event,
+      // but not one from the finalizing callbacks to the finish event. As
+      // a result, non-final event copies could find themselves trying to run
+      // mark_completed after the subgraph instantiation had triggered its
+      // completion event, resulting in the call to mark_completed looking
+      // at some deleted data. The most sane way to get around this is to
+      // mark all asynchronous background work items as finish events to force
+      // all of these callbacks in the state machine to finish before the
+      // subgraph instantiation is considered done.
+      if (operation_has_async_effects(it.op_kind, it.op_index)) {
+        it.is_final_event = true;
+      }
+
+      // Record any interpolations used by this bgwork item.
+      auto interp_it = op_to_interpolation_data.find(key);
+      if (interp_it != op_to_interpolation_data.end()) {
+        bgwork_interpolation_ranges[i] = interp_it->second;
+      }
+    }
+
+    // Next, identify where each async bgwork item should write their
+    // async tokens into.
+    bgwork_async_event_counts = std::vector<int64_t>(bgwork_items.size() + 1, 0);
+    {
+      int64_t sum = 0;
+      for (size_t i = 0; i < bgwork_items.size(); i++) {
+        auto& it = bgwork_items[i];
+        bgwork_async_event_counts[i] = sum;
+
+        // Remember the range of indices of events that will need to
+        // be collected, and back into which processor.
+        switch (it.op_kind) {
+          case SubgraphDefinition::OPKIND_COPY: {
+            for (uint64_t j = planned_copy_xds.offsets[it.op_index]; j < planned_copy_xds.offsets[it.op_index + 1]; j++) {
+              auto xd = planned_copy_xds.data[j];
+              // Remote XDs are not asynchronous.
+              if (!xd)
+                continue;
+              if (xd->launches_async_work()) {
+                auto proc = xd->get_async_event_proc();
+                auto bgwork_event_idx = sum + (j - planned_copy_xds.offsets[it.op_index]);
+                bgwork_async_event_procs[proc].push_back(bgwork_event_idx);
+              }
+            }
+            break;
+          }
+          case SubgraphDefinition::OPKIND_ARRIVAL:
+            break;
+          default:
+            assert(false);
+        }
+
+        // Instead of async_operation_count, this is just operation_count. That's because
+        // if a bgwork item has some async and some sync items, the encoding scheme assumes
+        // that we can just access the i'th item's token, whether or not its async.
+        sum += bgwork_operation_count(it.op_kind, it.op_index);
+      }
+      bgwork_async_event_counts[bgwork_items.size()] = sum;
+    }
+
+    // Next, do edge analysis for bgwork items.
+    for (size_t i = 0; i < bgwork_items.size(); i++) {
+      auto& it = bgwork_items[i];
+      auto key = std::make_pair(it.op_kind, it.op_index);
+
+      auto& outgoing = bgwork_postconditions_build[i];
+      // Handle each outgoing edge. Ensure that counters for bgwork
+      // items with multiple operations are correctly accounted for,
+      // as each operation will decrement the same counter. Since
+      // each bgwork item is already contributing 1 count through
+      // its presence in the edge list, subtract one from each call
+      // to bgwork_operation_count.
+      for (auto& edge : outgoing_edges[key]) {
+        if (bgwork_schedule.find(edge) != bgwork_schedule.end()) {
+          auto idx = bgwork_schedule.at(edge);
+          CompletionInfo info(-1, idx, CompletionInfo::EdgeKind::BGWORK_TO_BGWORK);
+          outgoing.push_back(info);
+          bgwork_preconditions[idx] += (bgwork_operation_count(it.op_kind, it.op_index) - 1);
+        } else if (toposort.find(edge) != toposort.end()) {
+          auto idx = toposort.at(edge);
+          static_to_dynamic_counts[idx] += bgwork_operation_count(it.op_kind, it.op_index);
+          CompletionInfo info(-1, idx, CompletionInfo::EdgeKind::BGWORK_TO_DYNAMIC);
+          outgoing.push_back(info);
+        } else {
+          CompletionInfo info(operation_procs[edge], operation_indices[edge], CompletionInfo::EdgeKind::BGWORK_TO_STATIC);
+          outgoing.push_back(info);
+          auto procidx = operation_procs[edge];
+          auto schedidx = operation_indices[edge];
+          local_incoming[all_procs[procidx]][schedidx] += (bgwork_operation_count(it.op_kind, it.op_index) - 1);
+        }
+      }
+
+      // TODO (rohany): This is some unfortunate code duplication, where we
+      //  basically have to do the same thing as below ...
+      if (operation_has_async_effects(it.op_kind, it.op_index)) {
+        for (auto& edge : outgoing_edges[key]) {
+          // Similar to below, see if the edge is to the dynamic partition.
+          if (toposort.find(edge) != toposort.end()) {
+            auto idx = toposort.at(edge);
+            static_to_dynamic_counts[idx] += bgwork_async_operation_count(it.op_kind, it.op_index);
+            bgwork_async_postconditions_build[i].emplace_back(-1, idx, CompletionInfo::EdgeKind::BGWORK_TO_DYNAMIC);
+            continue;
+          }
+
+          // Respects case.
+          if (operation_respects_async_effects(it.op_kind, it.op_index, edge.first, edge.second)) {
+            // If the child operation knows how to sequence itself
+            // after us without blocking, then we don't have to worry.
+            continue;
+          }
+
+          auto bgwork_it = bgwork_schedule.find(edge);
+          if (bgwork_it != bgwork_schedule.end()) {
+            bgwork_preconditions[bgwork_it->second] += bgwork_async_operation_count(it.op_kind, it.op_index);
+            bgwork_async_postconditions_build[i].emplace_back(-1, bgwork_it->second, CompletionInfo::EdgeKind::BGWORK_TO_BGWORK);
+          } else {
+            auto procidx = operation_procs[edge];
+            auto schedidx = operation_indices[edge];
+            local_incoming[all_procs[procidx]][schedidx] += bgwork_async_operation_count(it.op_kind, it.op_index);
+            // Remember the processors that this operation will have to trigger.
+            bgwork_async_postconditions_build[i].emplace_back(procidx, schedidx, CompletionInfo::EdgeKind::BGWORK_TO_STATIC);
+          }
+        }
+        for (auto& edge : incoming_edges[key]) {
+          // Similar to below, case when operation doesn't respect the asynchrony
+          // of the incoming edge.
+          if (toposort.find(edge) != toposort.end() ||
+              !operation_has_async_effects(edge.first, edge.second) ||
+              !operation_respects_async_effects(edge.first, edge.second, it.op_kind, it.op_index)) {
+            continue;
+          }
+          // When we do respect asynchrony, remember the events to synchronize against.
+          auto bgwork_it = bgwork_schedule.find(edge);
+          if (bgwork_it != bgwork_schedule.end()) {
+            bgwork_async_preconditions_build[i].emplace_back(-1, bgwork_it->second, CompletionInfo::EdgeKind::BGWORK_TO_BGWORK);
+          } else {
+            bgwork_async_preconditions_build[i].emplace_back(operation_procs[edge], operation_indices[edge], CompletionInfo::EdgeKind::STATIC_TO_BGWORK);
+          }
+        }
+      }
+    }
+
+    // TODO (rohany): Perform a big refactor of this code that unifies
+    //  the background work items with the normal schedule. Since we have
+    //  the dynamic queue etc, we don't need things to be assigned solely
+    //  to processors etc and have it as rigid as it is right now. We can
+    //  do it "badly" once, and then fix it the next time.
+    // Now that all tasks have been added, fill out per-task information
+    // like outgoing neighbors and interpolations.
+    for (auto& it : static_schedule) {
+      auto key = std::make_pair(it.op_kind, it.op_index);
+      auto proc = all_procs[operation_procs[key]];
+
+      std::vector<CompletionInfo> outgoing;
+      for (auto& edge : outgoing_edges[key]) {
+        if (bgwork_schedule.find(edge) != bgwork_schedule.end()) {
+          auto idx = bgwork_schedule.at(edge);
+          CompletionInfo info(-1, idx, CompletionInfo::EdgeKind::STATIC_TO_BGWORK);
+          outgoing.push_back(info);
+        } else if (toposort.find(edge) != toposort.end()) {
+          // NOTE: External postconditions are already included in the dynamic
+          //  schedule, and wouldn't be mapped into the static schedule. So
+          //  they are included implicitly in this case.
+          auto idx = toposort.at(edge);
+          static_to_dynamic_counts[idx]++;
+          CompletionInfo info(-1, idx, CompletionInfo::EdgeKind::STATIC_TO_DYNAMIC);
+          outgoing.push_back(info);
+        } else {
+          CompletionInfo info(operation_procs[edge], operation_indices[edge], CompletionInfo::EdgeKind::STATIC_TO_STATIC);
+          outgoing.push_back(info);
+        }
+      }
+      local_outgoing[proc].push_back(outgoing);
+
+      // Handle tasks with potentially asynchronous behavior.
+      if (operation_has_async_effects(it.op_kind, it.op_index)) {
+        // If an operation is asynchronous, then we might need extra
+        // bookkeeping for dependent operations that can only start once
+        // the asynchronous effects are complete.
+        std::vector<CompletionInfo> to_trigger;
+        for (auto& edge : outgoing_edges[key]) {
+          // If the consumer of this operation is outside the static
+          // partition of the graph, then it is opaque to us, and we have
+          // to wait for all effects of this task to complete before
+          // it can start. Note that external postconditions are also
+          // included by this case.
+          if (toposort.find(edge) != toposort.end()) {
+            auto idx = toposort.at(edge);
+            static_to_dynamic_counts[idx]++;
+            to_trigger.emplace_back(-1, idx, CompletionInfo::EdgeKind::STATIC_TO_DYNAMIC);
+            continue;
+          }
+
+          if (operation_respects_async_effects(it.op_kind, it.op_index, edge.first, edge.second)) {
+            // If the child operation knows how to sequence itself
+            // after us without blocking, then we don't have to worry.
+            continue;
+          }
+
+          // Otherwise, make the dependent operation have to wait on the
+          // control code of this operation completing, _and_ its
+          // asynchronous effect.
+          auto bgwork_it = bgwork_schedule.find(edge);
+          if (bgwork_it != bgwork_schedule.end()) {
+            bgwork_preconditions[bgwork_it->second]++;
+            to_trigger.emplace_back(-1, bgwork_it->second, CompletionInfo::EdgeKind::STATIC_TO_BGWORK);
+          } else {
+            auto procidx = operation_procs[edge];
+            auto schedidx = operation_indices[edge];
+            local_incoming[all_procs[procidx]][schedidx]++;
+            // Remember the processors that this operation will have to trigger.
+            to_trigger.emplace_back(procidx, schedidx, CompletionInfo::EdgeKind::STATIC_TO_STATIC);
+          }
+        }
+        async_effect_triggers[proc].push_back(to_trigger);
+        // Additionally, we need to "wait" on the right "tokens" of
+        // incoming asynchronous operations.
+        std::vector<CompletionInfo> will_trigger;
+        for (auto& edge : incoming_edges[key]) {
+          if (toposort.find(edge) != toposort.end() ||
+              !operation_has_async_effects(edge.first, edge.second) ||
+              !operation_respects_async_effects(edge.first, edge.second, it.op_kind, it.op_index)) {
+            // There are three cases in which we don't need to worry about
+            // asynchronous predecessors.
+            // 1) The predecessor is not asynchronous.
+            // 2) We don't know how to handle async effects. In this case,
+            //    we've already registered ourselves as dependent on the
+            //    asynchronous effects completing.
+            // 3) The operation is coming from the dynamic portion of
+            //    the subgraph, in which case there's nothing we can do.
+            continue;
+          }
+          // If we do know how to handle the incoming async effect, then
+          // remember the async predecessor tasks to wait on.
+          auto bgwork_it = bgwork_schedule.find(edge);
+          if (bgwork_it != bgwork_schedule.end()) {
+            will_trigger.emplace_back(-1, bgwork_it->second, CompletionInfo::EdgeKind::BGWORK_TO_STATIC);
+          } else {
+            will_trigger.emplace_back(operation_procs[edge], operation_indices[edge], CompletionInfo::EdgeKind::STATIC_TO_STATIC);
+          }
+        }
+        async_incoming_events[proc].push_back(will_trigger);
+      } else {
+        // Otherwise, initialize the metadata structures with null data.
+        async_effect_triggers[proc].push_back({});
+        async_incoming_events[proc].push_back({});
+      }
+
+      std::vector<SubgraphDefinition::Interpolation> interps;
+      auto interp_it = op_to_interpolation_data.find(key);
+      if (interp_it != op_to_interpolation_data.end()) {
+        auto& meta = interp_it->second;
+        for (size_t i = meta.first; i < meta.first + meta.second; i++) {
+          interps.push_back(defn->interpolations[i]);
+        }
+      }
+      local_interpolations[proc].push_back(interps);
+    }
+
+    // Preallocate a set of vectors for external operations
+    // to trigger upon completion.
+    dynamic_to_static_triggers.resize(schedule.size());
+    // Perform external precondition analysis.
+    unsigned max_ext_precond_id = 0;
+    for (auto& it : static_schedule) {
+      auto key = std::make_pair(it.op_kind, it.op_index);
+      CompletionInfo info(operation_procs[key], operation_indices[key], CompletionInfo::EdgeKind::DYNAMIC_TO_STATIC);
+      for (auto& edge : incoming_edges[key]) {
+        if (edge.first == SubgraphDefinition::OPKIND_EXT_PRECOND) {
+          external_preconditions[edge.second].push_back(info);
+          max_ext_precond_id = std::max(max_ext_precond_id, edge.second);
+        } else if (toposort.find(edge) != toposort.end()) {
+          // In this case, we have an incoming edge from
+          // the dynamic partition into the static partition.
+          dynamic_to_static_triggers[toposort.at(edge)].to_trigger.push_back(info);
+        }
+      }
+    }
+    // Do the same analysis for bgwork items.
+    for (size_t i = 0; i < bgwork_items.size(); i++) {
+      auto& it = bgwork_items[i];
+      auto key = std::make_pair(it.op_kind, it.op_index);
+      CompletionInfo info(-1, i, CompletionInfo::EdgeKind::DYNAMIC_TO_BGWORK);
+      for (auto& edge : incoming_edges[key]) {
+        if (edge.first == SubgraphDefinition::OPKIND_EXT_PRECOND) {
+          external_preconditions[edge.second].push_back(info);
+          max_ext_precond_id = std::max(max_ext_precond_id, edge.second);
+        } else if (toposort.find(edge) != toposort.end()) {
+          // In this case, we have an incoming edge from
+          // the dynamic partition into the static partition.
+          dynamic_to_static_triggers[toposort.at(edge)].to_trigger.push_back(info);
+        }
+      }
+    }
+
+    // Collapse the metadata for each external waiter.
+    if (!external_preconditions.empty()) {
+      external_precondition_info.resize(max_ext_precond_id + 1);
+      for (size_t i = 0; i < max_ext_precond_id + 1; i++) {
+        external_precondition_info[i].to_trigger = external_preconditions[i];
+      }
+    }
+
+    // Construct the initial "queue" for each processor. This will contain
+    // all operations that do not have any preconditions, and then a default
+    // value for all other spaces in the queue.
+    std::map<Processor, std::vector<int64_t>> processor_queues;
+    initial_queue_entry_count = std::vector<uint64_t>(all_procs.size());
+    for (size_t i = 0; i < all_procs.size(); i++) {
+      auto proc = all_procs[i];
+      auto& preds = local_incoming[proc];
+      std::vector<int64_t> queue(preds.size(), SUBGRAPH_EMPTY_QUEUE_ENTRY);
+      size_t idx = 0;
+      for (size_t j = 0; j < preds.size(); j++) {
+        if (preds[j] == 0) {
+          // Record that the operation at index `j` of this
+          // processor is ready to run.
+          queue[idx++] = j;
+          // Record separately (for profiling) all the operations that
+          // run without any preconditions.
+          initial_queue_items.push_back(local_schedules[proc][j]);
+        }
+      }
+      processor_queues[proc] = queue;
+      initial_queue_entry_count[i] = idx;
+    }
+
+    bgwork_finish_events = 0;
+    for (size_t i = 0; i < bgwork_items.size(); i++) {
+      auto& it = bgwork_items[i];
+      // Collect the bgwork items that should be triggered immediately
+      // upon subgraph replay starting.
+      if (bgwork_preconditions[i] == 0)
+        bgwork_items_without_preconditions.push_back(i);
+      // Also collect the number of bgwork items the subgraph
+      // replay needs to finish before being considered done.
+      if (bgwork_items[i].is_final_event) {
+        bgwork_finish_events += bgwork_operation_count(it.op_kind, it.op_index);
+        if (operation_has_async_effects(it.op_kind, it.op_index)) {
+          bgwork_finish_events += bgwork_async_operation_count(it.op_kind, it.op_index);
+        }
+      }
+    }
+
+    // Identify how many asynchronous operations will contribute to
+    // the subgraph's completion event.
+    async_finish_events = std::vector<int32_t>(all_procs.size(), 0);
+    for (auto& it : static_schedule) {
+      if (it.is_final_event && operation_has_async_effects(it.op_kind, it.op_index)) {
+        auto proc = operation_procs.at({it.op_kind, it.op_index});
+        async_finish_events[proc]++;
+      }
+    }
+    // TODO (rohany): This feels like an big hack, but I should
+    //  probably unify the async items per proc with "anything async
+    //  happening not in the task launch side of the world".
+    if (opt) {
+      assert(!all_procs.empty());
+      async_finish_events[0] += bgwork_finish_events;
+    }
+
+    // Flatten the operations.
+    operations = FlattenedProcMap<std::pair<SubgraphDefinition::OpKind, unsigned>>(all_procs, local_schedules);
+    operation_meta = FlattenedProcMap<OpMeta>(all_procs, local_op_meta);
+
+    // Collapse the per-processor queues into a single flattened vector.
+    initial_queue_state.reserve(operations.data.size());
+    for (size_t i = 0; i < all_procs.size(); i++) {
+      for (auto& v : processor_queues[all_procs[i]]) {
+        initial_queue_state.push_back(v);
+      }
+    }
+
+    // Flatten all nested metadata structures into flat buffers.
+    completion_infos = {all_procs, local_outgoing};
+    interpolations = {all_procs, local_interpolations};
+    original_preconditions = {all_procs, local_incoming};
+    async_outgoing_infos = {all_procs, async_effect_triggers};
+    async_incoming_infos = {all_procs, async_incoming_events};
+    bgwork_postconditions = bgwork_postconditions_build;
+    bgwork_async_postconditions = bgwork_async_postconditions_build;
+    bgwork_async_preconditions = bgwork_async_preconditions_build;
+
     return true;
   }
 
   void SubgraphImpl::instantiate(const void *args, size_t arglen,
-                                 const ProfilingRequestSet &prs,
+                                 const ProfilingRequestSet& prs,
+                                 const SubgraphInstantiationProfilingRequestsDesc &sprs,
                                  span<const Event> preconditions,
                                  span<const Event> postconditions, Event start_event,
                                  Event finish_event, int priority_adjust)
   {
+    // If we're an instantiation order subgraph, we need to lock the
+    // subgraph to make sure that no one is trying to do a concurrent
+    // launch. We need to do this to set state on the subgraph that will
+    // correctly sequence the subgraph against previous instantiations.
+    if (defn->concurrency_mode == SubgraphDefinition::INSTANTIATION_ORDER) {
+      instantiation_lock.lock();
+      start_event = Event::merge_events(start_event, previous_instantiation_completion);
+    }
+
+    // If we're running with the static scheduling optimization, then
+    // there's extra work to be done. We have to preemptively
+    // declare some data set by the optimization path though.
+    GenEventImpl *event_impl = get_genevent_impl(finish_event);
+    UserEvent* dynamic_events = nullptr;
+    ExternalPreconditionTriggerer* dynamic_precondition_waiters = nullptr;
+    atomic<int32_t>* precondition_ctrs = nullptr;
+    ProcSubgraphReplayState* state = nullptr;
+    UserEvent instantiation_cleanup_completion = UserEvent::NO_USER_EVENT;
+    if (opt) {
+      // We're going to return early before completing the interpolations,
+      // so we need to make a copy of the argument buffer to read from.
+      void* copied_args = nullptr;
+      if (args != nullptr && arglen > 0) {
+        copied_args = malloc(arglen);
+        memcpy(copied_args, args, arglen);
+      }
+
+      // Create a fresh copy of the preconditions array.
+      static_assert(sizeof(int32_t) == sizeof(atomic<int32_t>));
+      size_t precondition_ctr_bytes = sizeof(atomic<int32_t>) * original_preconditions.data.size();
+      precondition_ctrs = (atomic<int32_t>*)malloc(precondition_ctr_bytes);
+      memcpy(precondition_ctrs, original_preconditions.data.data(), precondition_ctr_bytes);
+
+      // Allocate the data structures necessary to let control
+      // flow from the static partition to the dynamic one.
+      size_t dynamic_precondition_ctr_bytes = sizeof(atomic<int32_t>) * static_to_dynamic_counts.size();
+      auto dynamic_precondition_ctrs = (atomic<int32_t>*)malloc(dynamic_precondition_ctr_bytes);
+      memcpy(dynamic_precondition_ctrs, static_to_dynamic_counts.data(), dynamic_precondition_ctr_bytes);
+      size_t dynamic_event_bytes = sizeof(UserEvent) * static_to_dynamic_counts.size();
+      dynamic_events = (UserEvent*)malloc(dynamic_event_bytes);
+      for (size_t i = 0; i < static_to_dynamic_counts.size(); i++) {
+        if (static_to_dynamic_counts[i] > 0)
+          dynamic_events[i] = UserEvent::create_user_event();
+      }
+
+      size_t bgwork_precondition_ctr_bytes = sizeof(atomic<int32_t>) * bgwork_preconditions.size();
+      auto bgwork_precondition_ctrs = (atomic<int32_t>*)malloc(bgwork_precondition_ctr_bytes);
+      memcpy(bgwork_precondition_ctrs, bgwork_preconditions.data(), bgwork_precondition_ctr_bytes);
+
+      // Create a fresh queue vector for this instantiation of the graph.
+      static_assert(sizeof(int64_t) == sizeof(atomic<int64_t>));
+      size_t queue_bytes = sizeof(atomic<int64_t>) * initial_queue_state.size();
+      auto queue = (atomic<int64_t>*)malloc(queue_bytes);
+      memcpy(queue, initial_queue_state.data(), queue_bytes);
+
+      // TODO (rohany): In the future, these allocations could be sized more
+      //  tightly, rather than for each operation.
+      auto async_operation_events = (void**)malloc(sizeof(void*) * operations.data.size());
+      auto async_operation_effect_triggerers = (AsyncGPUWorkTriggerer*)malloc(sizeof(AsyncGPUWorkTriggerer) * operations.data.size());
+      auto async_bgwork_events = (void**)malloc(sizeof(void*) * bgwork_async_event_counts[bgwork_items.size()]);
+
+      // Potential dynamic modifiers to the pending async counters
+      // of the subgraph.
+      int32_t* async_prof_counts = static_cast<int32_t*>(alloca(all_procs.size() * sizeof(int32_t)));
+      for (size_t i = 0; i < all_procs.size(); i++) {
+        async_prof_counts[i] = 0;
+      }
+      // Allocate the state for each processor in the replay.
+      state = new ProcSubgraphReplayState[all_procs.size()];
+
+      // TODO (rohany): Experiment if this profiling stuff adds noticeable
+      //  latency to subgraph execution. If it does, this initialize could
+      //  get moved to when the operation starts.
+      // Handle profiling requests for the static subgraph component (only
+      // if it is actually needed).
+      SubgraphOperationProfilingInfo* inst_profiling_info = nullptr;
+      if (has_static_profiling_requests || !sprs.empty()) {
+        // We have to do some bookkeeping for tasks in the static
+        // subgraph portion that launch async work. We'll increment
+        // the async finish counts of each processor for each async
+        // task the processor will launch.
+        std::unordered_map<realm_id_t, unsigned> proc_to_index;
+        for (size_t i = 0; i < all_procs.size(); i++) {
+          proc_to_index[all_procs[i].id] = i;
+        }
+
+        // We'll stick profiling information for tasks and copies into the
+        // same array, with copies coming after tasks.
+        auto prof_size = defn->tasks.size() + defn->copies.size();
+        inst_profiling_info = new SubgraphOperationProfilingInfo[prof_size]{};
+        // Set up some profiling information.
+        for (size_t i = 0; i < prof_size; i++) {
+          auto& info = inst_profiling_info[i];
+          info.all_proc_states = state;
+          // There's an annoying resource usage dependency here, where we can't
+          // add to the requests and measurements fields at the same time, as the
+          // measurements field also takes ownership of some memory in the requests
+          // field. So we have to import all requests into `info.requests` before
+          // doing a final import of `info.requests` into `info.measurements`.
+          if (i < defn->tasks.size()) {
+            info.requests.import_requests(defn->tasks[i].prs);
+            if (i < sprs.task_prs.size()) {
+              info.requests.import_requests(sprs.task_prs[i]);
+            }
+          } else {
+            auto idx = i - defn->tasks.size();
+            info.requests.import_requests(defn->copies[idx].prs);
+            if (idx < sprs.copy_prs.size()) {
+              info.requests.import_requests(sprs.copy_prs[idx]);
+            }
+          }
+          auto& mts = info.measurements;
+          mts.import_requests(info.requests);
+          // See which profiling requests we need.
+          info.wants_timeline = mts.wants_measurement<ProfilingMeasurements::OperationTimeline>();
+          info.wants_gpu_timeline = mts.wants_measurement<ProfilingMeasurements::OperationTimelineGPU>();
+          info.wants_event_waits = mts.wants_measurement<ProfilingMeasurements::OperationEventWaits>();
+          info.wants_proc_usage = mts.wants_measurement<ProfilingMeasurements::OperationProcessorUsage>();
+          info.wants_mem_usage = mts.wants_measurement<ProfilingMeasurements::OperationMemoryUsage>();
+          info.wants_copy_info = mts.wants_measurement<ProfilingMeasurements::OperationCopyInfo>();
+          info.wants_fevent = mts.wants_measurement<ProfilingMeasurements::OperationFinishEvent>();
+
+          // Mark all operations as created now.
+          if (info.wants_timeline) {
+            info.timeline.record_create_time();
+          }
+
+          // If we're a task that launches asynchronous work, we need to make
+          // sure that the finish event isn't triggered before we record our
+          // profiling information.
+          if (i < defn->tasks.size() &&
+              dynamic_operations.find({SubgraphDefinition::OPKIND_TASK, i}) == dynamic_operations.end() &&
+              task_has_async_effects(defn->tasks[i]) &&
+              (info.wants_timeline || info.wants_gpu_timeline || info.wants_fevent)) {
+            auto proc_idx = proc_to_index[defn->tasks[i].proc.id];
+            async_prof_counts[proc_idx]++;
+            // Remember the counter we're supposed to go decrement.
+            info.final_ev_counter = &state[proc_idx].pending_async_count;
+          }
+        }
+      }
+
+      // Initialize a counter that all processors will decrement upon completion.
+      auto finish_counter = (atomic<int32_t>*)malloc(sizeof(atomic<int32_t>));
+      {
+        // Each processor will decrement this counter upon exit. Make sure
+        // that the processors don't get the chance to exit early if there
+        // is pending asynchronous work though.
+        int32_t val = all_procs.size();
+        for (size_t i = 0; i < all_procs.size(); i++) {
+          if ((async_finish_events[i] + async_prof_counts[i]) > 0)
+            val++;
+        }
+        finish_counter->store_release(val);
+      }
+      auto static_finish_event = UserEvent::create_user_event();
+
+      // Arm the result merger with the completion event, and
+      // the final events from the dynamic portion.
+      event_impl->merger.prepare_merger(finish_event, false /*!ignore_faults*/,
+                                     num_final_events + 1);
+      event_impl->merger.add_precondition(static_finish_event);
+
+      // Separate the installation and state creation steps
+      // to enable deferring the launch of the subgraph.
+      for (size_t i = 0; i < all_procs.size(); i++) {
+        state[i].all_proc_states = state;
+        state[i].subgraph = this;
+        state[i].finish_counter = finish_counter;
+        state[i].finish_event = static_finish_event;
+        state[i].proc_index = int32_t(i);
+        state[i].args = copied_args;
+        state[i].arglen = arglen;
+        state[i].preconditions = precondition_ctrs;
+        state[i].dynamic_preconditions = dynamic_precondition_ctrs;
+        state[i].dynamic_events = dynamic_events;
+        state[i].bgwork_preconditions = bgwork_precondition_ctrs;
+        state[i].async_operation_events = async_operation_events;
+        state[i].async_operation_effect_triggerers = async_operation_effect_triggerers;
+        state[i].async_bgwork_events = async_bgwork_events;
+        state[i].pending_async_count.store(async_finish_events[i] + async_prof_counts[i]);
+        state[i].queue = queue;
+        state[i].next_queue_slot.store(operations.proc_offsets[i] + initial_queue_entry_count[i]);
+        state[i].inst_profiling_info = inst_profiling_info;
+      }
+
+      // Since we have a fresh precondition vector, we can
+      // just queue up the external precondition waiters
+      // to start directly on the new data.
+      auto external_precondition_waiters = (ExternalPreconditionTriggerer*)malloc(sizeof(ExternalPreconditionTriggerer) * external_precondition_info.size());
+      for (size_t i = 0; i < external_precondition_info.size(); i++) {
+        // Note that the user may not provide all the preconditions
+        // they said they would.
+        Event precond = Event::NO_EVENT;
+        if (i < preconditions.size())
+          precond = preconditions[i];
+        // Some trickiness here: we can't let this external precondition trigger
+        // before the subgraph start event triggers. This could inadvertently
+        // cause state to be reused across two back-to-back replays. Consider
+        // a copy that only has an external precondition. If this event waiter
+        // triggers early, the copy could be enqueued before the subgraph actually
+        // starts, meaning that a previous execution is already running.
+        precond = Event::merge_events(precond, start_event);
+        auto meta = &external_precondition_info[i];
+        auto waiter = new (&external_precondition_waiters[i]) ExternalPreconditionTriggerer(meta, state);
+        if (!precond.exists() || precond.has_triggered()) {
+          waiter->trigger();
+        } else {
+          EventImpl::add_waiter(precond, waiter);
+        }
+      }
+
+      // Also allocate precondition waiters for external events to
+      // trigger from dynamic operations into static the static
+      // subgraph. We'll lazily initialize it as we issue operations
+      // from the dynamic portion of the subgraph.
+      dynamic_precondition_waiters = (ExternalPreconditionTriggerer*)(malloc(sizeof(ExternalPreconditionTriggerer) * dynamic_to_static_triggers.size()));
+
+      // If there's nothing to defer, start the subgraph right away.
+      if (!start_event.exists() || start_event.has_triggered()) {
+        SubgraphWorkLauncher(state, this).launch();
+      } else {
+        // Otherwise, allocate a launcher and queue
+        // it up to be launched. The launcher will
+        // clean itself up.
+        auto launcher = new SubgraphWorkLauncher(state, this);
+        EventImpl::add_waiter(start_event, launcher);
+      }
+
+      // Issue a cleanup background work item. The item
+      // will clean itself up.
+      instantiation_cleanup_completion = UserEvent::create_user_event();
+      auto cleanup = new InstantiationCleanup(
+        instantiation_cleanup_completion,
+        all_procs.size(),
+        state,
+        copied_args,
+        precondition_ctrs,
+        queue,
+        external_precondition_waiters,
+        dynamic_precondition_waiters,
+        async_operation_events,
+        async_operation_effect_triggerers,
+        bgwork_precondition_ctrs,
+        async_bgwork_events,
+        dynamic_precondition_ctrs,
+        dynamic_events,
+        finish_counter,
+        inst_profiling_info
+      );
+      EventImpl::add_waiter(finish_event, cleanup);
+    } else {
+      event_impl->merger.prepare_merger(finish_event, false /*!ignore_faults*/, num_final_events);
+    }
+
     // we precomputed the number of intermediate events we need, so put them
     //  on the stack
     Event *intermediate_events =
         static_cast<Event *>(alloca(num_intermediate_events * sizeof(Event)));
     size_t cur_intermediate_events = 0;
 
-    // we've also computed how many events will contribute to the finish
-    //  event, so we can arm the merger as we go
-    GenEventImpl *event_impl = 0;
-    if(num_final_events > 0) {
-      event_impl = get_genevent_impl(finish_event);
-      event_impl->merger.prepare_merger(finish_event, false /*!ignore_faults*/,
-                                        num_final_events);
-    }
-
-    Event *preconds = static_cast<Event *>(alloca(max_preconditions * sizeof(Event)));
+    // Allocate one extra precondition slot for triggers from the
+    // static subgraph into the dynamic subgraph.
+    Event *preconds = static_cast<Event *>(alloca((max_preconditions + 1) * sizeof(Event)));
 
     for(std::vector<SubgraphScheduleEntry>::const_iterator it = schedule.begin();
         it != schedule.end(); ++it) {
+      size_t sched_idx = it - schedule.begin();
       // assemble precondition
       size_t num_preconds = 0;
       bool need_global_precond = start_event.exists();
@@ -647,8 +2082,10 @@ namespace Realm {
       }
       if(need_global_precond)
         preconds[num_preconds++] = start_event;
+      if (static_to_dynamic_counts[sched_idx] > 0 && dynamic_events)
+        preconds[num_preconds++] = dynamic_events[sched_idx];
 
-      assert(num_preconds <= max_preconditions);
+      assert(num_preconds <= max_preconditions + 1);
 
       // for external postconditions, merge the preconditions directly into the
       //  returned event
@@ -703,8 +2140,21 @@ namespace Realm {
             SubgraphDefinition::Interpolation::TARGET_TASK_ARGS, it->op_index, args,
             arglen, td.args.base(), td.args.size(), ish);
 
-        e = proc.spawn(task_id, task_args, td.args.size(), td.prs, pre,
-                       priority + priority_adjust);
+        // A bit of code duplication to avoid any copies. If we have any
+        // dynamic profiling requests, then construct a new request that
+        // has all the desired requests. Otherwise, use the existing
+        // request set attached to the task.
+        if (it->op_index < sprs.task_prs.size() && !sprs.task_prs[it->op_index].empty()) {
+          ProfilingRequestSet tprs;
+          tprs.import_requests(td.prs);
+          tprs.import_requests(sprs.task_prs[it->op_index]);
+          e = proc.spawn(task_id, task_args, td.args.size(), tprs, pre,
+                         priority + priority_adjust);
+        } else {
+          e = proc.spawn(task_id, task_args, td.args.size(), td.prs, pre,
+                         priority + priority_adjust);
+        }
+
         intermediate_events[cur_intermediate_events++] = e;
         break;
       }
@@ -712,7 +2162,17 @@ namespace Realm {
       case SubgraphDefinition::OPKIND_COPY:
       {
         const SubgraphDefinition::CopyDesc &cd = defn->copies[it->op_index];
-        e = cd.space.copy(cd.srcs, cd.dsts, cd.prs, pre);
+
+        // Similarly to above, handle when some dynamic profiling is requested.
+        if (it->op_index < sprs.copy_prs.size() && !sprs.copy_prs[it->op_index].empty()) {
+          ProfilingRequestSet cprs;
+          cprs.import_requests(cd.prs);
+          cprs.import_requests(sprs.copy_prs[it->op_index]);
+          e = cd.space.copy(cd.srcs, cd.dsts, cd.indirects, cprs, pre);
+        } else {
+          e = cd.space.copy(cd.srcs, cd.dsts, cd.indirects, cd.prs, pre);
+        }
+
         intermediate_events[cur_intermediate_events++] = e;
         break;
       }
@@ -819,7 +2279,10 @@ namespace Realm {
           inst_postconds.resize(it->intermediate_event_count - 1);
         }
 
-        e = sg_inner.instantiate(inst_args, id.args.size(), id.prs, inst_preconds,
+        // TODO (rohany): Not handling this case right now ...
+        assert(sprs.empty());
+
+        e = sg_inner.instantiate(inst_args, id.args.size(), id.prs, sprs, inst_preconds,
                                  inst_postconds, pre, priority_adjust);
 
         intermediate_events[cur_intermediate_events] = e;
@@ -837,22 +2300,110 @@ namespace Realm {
       // contribute to the final event if we need to
       if(it->is_final_event)
         event_impl->merger.add_precondition(e);
+
+      // The resulting event may need to contribute to
+      // triggering some work in the static component
+      // of the subgraph.
+      if (opt && !dynamic_to_static_triggers[sched_idx].to_trigger.empty()) {
+        auto meta = &dynamic_to_static_triggers[sched_idx];
+        auto waiter = new (&dynamic_precondition_waiters[sched_idx]) ExternalPreconditionTriggerer(meta, state);
+        if (!e.exists() || e.has_triggered()) {
+          waiter->trigger();
+        } else {
+          EventImpl::add_waiter(e, waiter);
+        }
+      }
     }
 
     // sanity-check that we counted right
     assert(cur_intermediate_events == num_intermediate_events);
 
-    if(num_final_events > 0) {
+    if (opt) {
       event_impl->merger.arm_merger();
     } else {
-      GenEventImpl::trigger(finish_event, false /*!poisoned*/);
+      if(num_final_events > 0) {
+        event_impl->merger.arm_merger();
+      } else {
+        GenEventImpl::trigger(finish_event, false /*!poisoned*/);
+      }
+    }
+
+    // After everything in the graph is launched, record the finish
+    // event inside the subgraph and release this lock. Releasing the
+    // lock here should be safe, as there isn't a way that triggering
+    // any events from inside this function causes a recursive entrance
+    // into the instantiate method.
+    if (defn->concurrency_mode == SubgraphDefinition::INSTANTIATION_ORDER) {
+      previous_instantiation_completion = finish_event;
+      previous_cleanup_completion = Event::merge_events(previous_cleanup_completion, instantiation_cleanup_completion);
+      instantiation_lock.unlock();
     }
   }
 
   void SubgraphImpl::destroy(void)
   {
+    // Tell all our peers that we're destroying this subgraph.
+    pending_peer_deletions.store_release(peers.size());
+    for (auto& it : peers) {
+      ActiveMessage<SubgraphRemoteResourceDeletionMessage> amsg(it, 0 /* inline_storage */);
+      amsg->subgraph_id = me;
+      amsg.add_remote_completion(SubgraphRemoteDeletionAcknowledged(this));
+      amsg.commit();
+    }
+
+    // Before deleting the definition itself, free pointers to copy
+    // indirection objects that were created for this subgraph.
+    for (auto& it : defn->copies) {
+      for (auto& it2 : it.indirects) {
+        delete reinterpret_cast<CopyIndirectionGeneric*>(it2);
+      }
+    }
+
     delete defn;
     schedule.clear();
+
+    // Clean up all state used for the static portion of the subgraph.
+    all_procs.clear();
+    all_proc_impls.clear();
+    async_finish_events.clear();
+    operations.clear();
+    operation_meta.clear();
+    completion_infos.clear();
+    original_preconditions.clear();
+    async_outgoing_infos.clear();
+    async_incoming_infos.clear();
+    interpolations.clear();
+    bgwork_interpolation_ranges.clear();
+    initial_queue_state.clear();
+    initial_queue_entry_count.clear();
+    initial_queue_items.clear();
+    external_precondition_info.clear();
+    dynamic_to_static_triggers.clear();
+    static_to_dynamic_counts.clear();
+
+    bgwork_items.clear();
+    for (auto td : copy_transfer_descs) {
+      if (td)
+        td->remove_reference();
+    }
+    copy_transfer_descs.clear();
+    copy_ib_allocators.clear();
+    for (auto xd : planned_copy_xds.data) {
+      if (xd)
+        xd->remove_reference();
+    }
+    planned_copy_xds.clear();
+    remote_xd_groupings.clear();
+    bgwork_preconditions.clear();
+    bgwork_postconditions.clear();
+    bgwork_items_without_preconditions.clear();
+    bgwork_async_postconditions.clear();
+    bgwork_async_preconditions.clear();
+    bgwork_async_event_procs.clear();
+    bgwork_async_event_counts.clear();
+    prof_copy_infos.clear();
+    prof_copy_memory_usages.clear();
+    dynamic_operations.clear();
 
     // TODO: when we create subgraphs on remote nodes, send a message to the
     //  creator node so they can add it to their free list
@@ -860,6 +2411,10 @@ namespace Realm {
     assert(creator_node == Network::my_node_id);
     NodeID owner_node = ID(me).subgraph_owner_node();
     assert(owner_node == Network::my_node_id);
+
+    // We can't return (or release this object) until all pending
+    // deletions on remote nodes have completed.
+    while (pending_peer_deletions.load_acquire() != 0) {}
 
     get_runtime()->local_subgraph_free_lists[owner_node]->free_entry(this);
   }
@@ -869,9 +2424,10 @@ namespace Realm {
   // class SubgraphImpl::DeferredDestroy
   //
 
-  void SubgraphImpl::DeferredDestroy::defer(SubgraphImpl *_subgraph, Event wait_on)
+  void SubgraphImpl::DeferredDestroy::defer(SubgraphImpl *_subgraph, Event wait_on, UserEvent _trigger)
   {
     subgraph = _subgraph;
+    trigger = _trigger;
     EventImpl::add_waiter(wait_on, this);
   }
 
@@ -879,6 +2435,7 @@ namespace Realm {
   {
     assert(!poisoned);
     subgraph->destroy();
+    trigger.trigger();
   }
 
   void SubgraphImpl::DeferredDestroy::print(std::ostream &os) const
@@ -888,6 +2445,274 @@ namespace Realm {
 
   Event SubgraphImpl::DeferredDestroy::get_finish_event(void) const
   {
+    return Event::NO_EVENT;
+  }
+
+  void SubgraphImpl::InstantiationCleanup::print(std::ostream &os) const {
+    os << "deferred instantiation cleanup";
+  }
+
+  SubgraphImpl::InstantiationCleanup::InstantiationCleanup(
+    UserEvent _trigger,
+    size_t _num_procs,
+    ProcSubgraphReplayState* _state,
+    void* _args,
+    atomic<int32_t>* _preconds,
+    atomic<int64_t>* _queue,
+    ExternalPreconditionTriggerer* _external_preconds,
+    ExternalPreconditionTriggerer* _dynamic_preconds,
+    void** _async_operation_events,
+    AsyncGPUWorkTriggerer* _async_operation_event_triggerers,
+    void* _bgwork_preconds,
+    void** _async_bgwork_events,
+    atomic<int32_t>* _dynamic_precond_counters,
+    UserEvent* _dynamic_events,
+    atomic<int32_t>* _finish_counter,
+    SubgraphOperationProfilingInfo* _inst_profiling_info
+  ) : EventWaiter(), trigger(_trigger), num_procs(_num_procs), state(_state), args(_args), preconds(_preconds), queue(_queue),
+      external_preconds(_external_preconds), dynamic_preconds(_dynamic_preconds),
+      async_operation_events(_async_operation_events), async_operation_event_triggerers(_async_operation_event_triggerers),
+      bgwork_preconds(_bgwork_preconds), async_bgwork_events(_async_bgwork_events),
+      dynamic_precond_counters(_dynamic_precond_counters), dynamic_events(_dynamic_events), finish_counter(_finish_counter),
+      inst_profiling_info(_inst_profiling_info) {}
+
+  void SubgraphImpl::InstantiationCleanup::cleanup() {
+    // Before we free async_operation_events, make sure that we return all
+    // GPU events appropriately.
+    assert(num_procs > 0);
+    auto sg = state[0].subgraph;
+    std::vector<void*> tokens;
+    for (size_t proc = 0; proc < num_procs; proc++) {
+      auto pimpl = sg->all_proc_impls[proc];
+      for (size_t j = sg->operations.proc_offsets[proc]; j < sg->operations.proc_offsets[proc + 1]; j++) {
+        if (async_operation_events[j] != nullptr)
+          tokens.push_back(async_operation_events[j]);
+      }
+      pimpl->return_subgraph_async_tokens(tokens);
+      tokens.clear();
+    }
+    // Separately handle the returning of bgwork tokens,
+    // in case there are processors used by the bgwork items
+    // that tasks are not running on (example CPU task + GPU copy).
+    tokens.clear();
+    for (auto& it : sg->bgwork_async_event_procs) {
+      for (auto& it2 : it.second) {
+        tokens.push_back(async_bgwork_events[it2]);
+      }
+      it.first->return_subgraph_async_tokens(tokens);
+      tokens.clear();
+    }
+
+    // Send profiling responses.
+    if (inst_profiling_info != nullptr) {
+      auto prof_size = sg->defn->tasks.size() + sg->defn->copies.size();
+      for (size_t i = 0; i < prof_size; i++) {
+        auto send_prof = [&](SubgraphOperationProfilingInfo* info, unsigned idx) {
+          if (info->wants_timeline)
+            info->measurements.add_measurement(info->timeline);
+          if (info->wants_gpu_timeline)
+            info->measurements.add_measurement(info->timeline_gpu);
+          if (info->wants_proc_usage)
+            info->measurements.add_measurement(info->proc);
+          if (info->wants_event_waits)
+            info->measurements.add_measurement(info->waits);
+          if (info->wants_mem_usage)
+            info->measurements.add_measurement(sg->prof_copy_memory_usages[idx]);
+          if (info->wants_copy_info)
+            info->measurements.add_measurement(sg->prof_copy_infos[idx]);
+          if (info->wants_fevent)
+            info->measurements.add_measurement(info->fevent);
+          info->measurements.send_responses(info->requests);
+        };
+        if (i < sg->defn->tasks.size()) {
+          // Ignore profiling requests for dynamic operations, as they
+          // are already handled in the standard code path.
+          if (sg->dynamic_operations.find({SubgraphDefinition::OPKIND_TASK, i}) != sg->dynamic_operations.end()) {
+            continue;
+          }
+          send_prof(&inst_profiling_info[i], i);
+        } else {
+          auto idx = i - sg->defn->tasks.size();
+          if (sg->dynamic_operations.find({SubgraphDefinition::OPKIND_COPY, idx}) != sg->dynamic_operations.end()) {
+            continue;
+          }
+          send_prof(&inst_profiling_info[i], idx);
+        }
+      }
+    }
+
+    delete[] state;
+    free(args);
+    free(preconds);
+    free(queue);
+    free(external_preconds);
+    free(dynamic_preconds);
+    free(async_operation_events);
+    free(async_operation_event_triggerers);
+    free(bgwork_preconds);
+    free(async_bgwork_events);
+    free(dynamic_precond_counters);
+    free(dynamic_events);
+    free(finish_counter);
+    delete[] inst_profiling_info;
+    trigger.trigger();
+
+    log_subgraph.info() << "Finished subgraph cleanup.";
+  }
+
+  void SubgraphImpl::InstantiationCleanup::event_triggered(bool poisoned, Realm::TimeLimit work_until) {
+    // Defer cleanup work to a background worker to ensure that this
+    // event triggering doesn't hold up any future work.
+    get_runtime()->subgraph_reaper.add_work(this);
+  }
+
+  Event SubgraphImpl::InstantiationCleanup::get_finish_event() const {
+    return Event::NO_EVENT;
+  }
+
+  SubgraphImpl::ExternalPreconditionTriggerer::ExternalPreconditionTriggerer(
+    ExternalPreconditionMeta* _meta,
+    ProcSubgraphReplayState* _all_proc_states
+  ) : EventWaiter(), meta(_meta), all_proc_states(_all_proc_states) {}
+
+  void SubgraphImpl::ExternalPreconditionTriggerer::trigger() {
+    for (auto& info : meta->to_trigger) {
+      trigger_subgraph_operation_completion(all_proc_states, info, true /* incr_counter */, nullptr /* ctx */);
+    }
+  }
+
+  void SubgraphImpl::ExternalPreconditionTriggerer::event_triggered(bool poisoned, Realm::TimeLimit work_until) {
+    trigger();
+  }
+
+  void SubgraphImpl::ExternalPreconditionTriggerer::print(std::ostream &os) const {
+    os << "External precondition triggerer";
+  }
+
+  Event SubgraphImpl::ExternalPreconditionTriggerer::get_finish_event() const {
+    return Event::NO_EVENT;
+  }
+
+  SubgraphImpl::AsyncGPUWorkTriggerer::AsyncGPUWorkTriggerer(
+    ProcSubgraphReplayState* _all_proc_states,
+    span<Realm::SubgraphImpl::CompletionInfo> _infos,
+    atomic<int32_t>* _final_ev_counter
+  ) : all_proc_states(_all_proc_states), infos(_infos), final_ev_counter(_final_ev_counter) {}
+
+  void SubgraphImpl::AsyncGPUWorkTriggerer::request_completed() {
+    for (size_t i = 0; i < infos.size(); i++) {
+      auto& info = infos[i];
+      trigger_subgraph_operation_completion(all_proc_states, info, true /* incr_counter */, nullptr /* ctx */);
+    }
+    // Also see if we need to go trigger the completion event.
+    if (final_ev_counter) {
+      int32_t remaining = final_ev_counter->fetch_sub_acqrel(1) - 1;
+      if (remaining == 0) {
+        maybe_trigger_subgraph_final_completion_event(all_proc_states[0]);
+      }
+    }
+  }
+
+  void GPUProfInfoTrigger::request_completed() {
+    if (start) {
+    using timestamp_t = ProfilingMeasurements::OperationTimelineGPU::timestamp_t;
+      const timestamp_t INVALID_TIMESTAMP =
+          ProfilingMeasurements::OperationTimelineGPU::INVALID_TIMESTAMP;
+      uint64_t timestamp = Clock::current_time_in_nanoseconds();
+      info->timeline_gpu.start_time =
+          std::min<timestamp_t>(timestamp, info->timeline_gpu.start_time == INVALID_TIMESTAMP
+                                               ? timestamp
+                                               : info->timeline_gpu.start_time);
+    } else {
+      if (info->wants_gpu_timeline) {
+        using timestamp_t = ProfilingMeasurements::OperationTimelineGPU::timestamp_t;
+
+        uint64_t timestamp = Clock::current_time_in_nanoseconds();
+        info->timeline_gpu.end_time = std::max<timestamp_t>(timestamp, info->timeline_gpu.end_time);
+      }
+      if (info->wants_timeline) {
+        info->timeline.record_complete_time();
+      }
+      if (info->wants_fevent) {
+        info->fevent_user.trigger();
+      }
+      // Go signal that we've recorded the necessary profiling information.
+      assert(info->final_ev_counter != nullptr);
+      int32_t remaining = info->final_ev_counter->fetch_sub_acqrel(1) - 1;
+      if (remaining == 0) {
+        maybe_trigger_subgraph_final_completion_event(info->all_proc_states[0]);
+      }
+    }
+    // Delete ourselves at the end to make this a "fire and forget" notification.
+    delete this;
+  }
+
+  SubgraphResourceReaper::SubgraphResourceReaper() : BackgroundWorkItem("subgraph cleanup") {}
+
+  void SubgraphResourceReaper::add_work(SubgraphImpl::InstantiationCleanup* cleanup) {
+    {
+      AutoLock<> al(mutex);
+      work.push(cleanup);
+    }
+    make_active();
+  }
+
+  bool SubgraphResourceReaper::do_work(TimeLimit work_until) {
+    size_t left = 0;
+    SubgraphImpl::InstantiationCleanup* item = nullptr;
+    {
+      AutoLock<> al(mutex);
+      if (!work.empty()) {
+        item = work.front();
+        work.pop();
+        left = work.size();
+      }
+    }
+    if (!item)
+      return false;
+
+    item->cleanup();
+    delete item;
+    return left > 0;
+  }
+
+  SubgraphImpl::SubgraphWorkLauncher::SubgraphWorkLauncher(Realm::ProcSubgraphReplayState *_state,
+                                                           Realm::SubgraphImpl *_subgraph)
+                                                           : EventWaiter(), state(_state), subgraph(_subgraph) {}
+
+  void SubgraphImpl::SubgraphWorkLauncher::event_triggered(bool poisoned, Realm::TimeLimit work_until) {
+    launch();
+    delete this;
+  }
+
+  void SubgraphImpl::SubgraphWorkLauncher::launch() {
+    // If profiling, mark that all items without preconditions
+    // are ready.
+    if (state[0].inst_profiling_info != nullptr) {
+      for (auto& it : subgraph->initial_queue_items) {
+        auto prof = state[0].get_profiling_info(it.first, it.second);
+        if (prof && prof->wants_timeline) {
+          prof->timeline.record_ready_time();
+        }
+      }
+    }
+
+    // Install each processor's replay state.
+    for (size_t i = 0; i < subgraph->all_proc_impls.size(); i++) {
+      subgraph->all_proc_impls[i]->install_subgraph_replay(&state[i]);
+    }
+    // Start up any background work items without any preconditions.
+    auto sg = state[0].subgraph;
+    for (auto idx : sg->bgwork_items_without_preconditions) {
+      launch_async_bgwork_item(state, idx, nullptr /* ctx */);
+    }
+  }
+
+  void SubgraphImpl::SubgraphWorkLauncher::print(std::ostream &os) const {
+    os << "Subgraph work launcher";
+  }
+
+  Event SubgraphImpl::SubgraphWorkLauncher::get_finish_event() const {
     return Event::NO_EVENT;
   }
 
@@ -912,7 +2737,7 @@ namespace Realm {
       ok = (fbd >> prs);
     assert(ok);
 
-    subgraph->instantiate(data, msg.arglen, prs, preconditions, postconditions,
+    subgraph->instantiate(data, msg.arglen, prs, SubgraphInstantiationProfilingRequestsDesc(), preconditions, postconditions,
                           msg.wait_on, msg.finish_event, msg.priority_adjust);
   }
 
@@ -929,12 +2754,406 @@ namespace Realm {
   {
     SubgraphImpl *subgraph = get_runtime()->get_subgraph_impl(msg.subgraph);
 
-    if(msg.wait_on.has_triggered())
+    Event wait = msg.wait_on;
+    // Ensure that all pending executions finish before the
+    // deletion starts. This helps the user not have to worry
+    // about tracking graph instantiations.
+    if (subgraph->defn->concurrency_mode == SubgraphDefinition::INSTANTIATION_ORDER) {
+      AutoLock<Mutex> al(subgraph->instantiation_lock);
+      wait = Event::merge_events(msg.wait_on, subgraph->previous_instantiation_completion);
+    }
+
+    // Not handling this case yet.
+    assert(false);
+
+    if(wait.has_triggered())
       subgraph->destroy();
     else
-      subgraph->deferred_destroy.defer(subgraph, msg.wait_on);
+      subgraph->deferred_destroy.defer(subgraph, wait, UserEvent::NO_USER_EVENT);
   }
 
   ActiveMessageHandlerReg<SubgraphDestroyMessage> subgraph_destroy_message_handler;
+
+  void trigger_subgraph_operation_completion(
+      ProcSubgraphReplayState* all_proc_states,
+      const SubgraphImpl::CompletionInfo& info,
+      bool incr_counter,
+      SubgraphTriggerContext* ctx
+  ) {
+    switch (info.kind) {
+      case SubgraphImpl::CompletionInfo::BGWORK_TO_STATIC: [[fallthrough]];
+      case SubgraphImpl::CompletionInfo::EdgeKind::STATIC_TO_STATIC: [[fallthrough]];
+      case SubgraphImpl::CompletionInfo::EdgeKind::DYNAMIC_TO_STATIC: {
+        auto& state = all_proc_states[info.proc];
+        auto subgraph = state.subgraph;
+        auto local_index = subgraph->original_preconditions.proc_offsets[info.proc] + info.index;
+        auto& trigger = state.preconditions[local_index];
+        // Decrement the counter. fetch_sub returns the value before
+        // the decrement, so if it was 1, then we've done the final trigger.
+        // If we were the final trigger, we need to also add the triggered
+        // operation into the target processors queue.
+        int32_t remaining = trigger.fetch_sub_acqrel(1) - 1;
+        if (remaining == 0) {
+          // Handle profiling (before the task is enqueued).
+          auto& op = subgraph->operations.data[local_index];
+          auto prof = state.get_profiling_info(op.first, op.second);
+          if (prof && prof->wants_timeline) {
+            prof->timeline.record_ready_time();
+          }
+
+          // Get a slot to insert at.
+          auto index = state.next_queue_slot.fetch_add(1);
+          // Write out the value.
+          state.queue[index].store_release(int64_t(info.index));
+
+          // If requested to increment the scheduler's counter, do so.
+          if (incr_counter) {
+            auto lp = subgraph->all_proc_impls[info.proc];
+            lp->sched->work_counter.increment_counter();
+          }
+        }
+        break;
+      }
+      case SubgraphImpl::CompletionInfo::BGWORK_TO_DYNAMIC: [[fallthrough]];
+      case SubgraphImpl::CompletionInfo::EdgeKind::STATIC_TO_DYNAMIC: {
+        // If we're in the static-to-dynamic case, the CompletionInfo
+        // edge doesn't have a processor associated with it, so pick
+        // the first one (arbitrarily).
+        auto& state = all_proc_states[0];
+        auto& trigger = state.dynamic_preconditions[info.index];
+        int32_t remaining = trigger.fetch_sub_acqrel(1) - 1;
+        if (remaining == 0) {
+          // Need some help from the caller about allowing the surrounding
+          // context to make an event trigger.
+          if (ctx) { ctx->enter(); }
+          state.dynamic_events[info.index].trigger();
+          if (ctx) { ctx->exit(); }
+        }
+        break;
+      }
+      case SubgraphImpl::CompletionInfo::STATIC_TO_BGWORK: [[fallthrough]];
+      case SubgraphImpl::CompletionInfo::DYNAMIC_TO_BGWORK: [[fallthrough]];
+      case SubgraphImpl::CompletionInfo::BGWORK_TO_BGWORK: {
+        // The *-bgwork cases also don't have an associated processor.
+        auto& state = all_proc_states[0];
+        auto& trigger = state.bgwork_preconditions[info.index];
+        int32_t remaining = trigger.fetch_sub_acqrel(1) - 1;
+        if (remaining == 0) {
+          launch_async_bgwork_item(all_proc_states, info.index, ctx);
+        }
+        break;
+      }
+      default:
+        assert(false);
+    }
+  }
+
+  void maybe_trigger_subgraph_final_completion_event(ProcSubgraphReplayState& state) {
+    // Trigger check for the final event. All processors
+    // share the same finish counter and finish event, so any
+    // entry of all_proc_states can be passed.
+    int32_t remaining = state.finish_counter->fetch_sub_acqrel(1) - 1;
+    if (remaining == 0) {
+      state.finish_event.trigger();
+    }
+  }
+
+  void SubgraphIBAllocator::launch_copy_xds() {
+    auto& offs = subgraph->planned_copy_xds.offsets;
+#ifdef REALM_USE_NVTX
+    nvtx_range_end(subgraph->nvtx_bgwork_iballocs[subgraph_index]);
+    for (uint64_t i = offs[op_idx]; i < offs[op_idx + 1]; i++) {
+      subgraph->nvtx_xd_ranges[i] = nvtx_range_start("subgraph", "xd execution");
+    }
+#endif
+
+    for (uint64_t i = offs[op_idx]; i < offs[op_idx + 1]; i++) {
+      auto xd = subgraph->planned_copy_xds.data[i];
+      // If the XD is null, then it is remote and will be handled
+      // in the next step.
+      if (!xd) {
+        continue;
+      }
+      xd->reset(ib_offsets);
+      xd->subgraph_replay_state = all_proc_states;
+      xd->subgraph_index = subgraph_index;
+      xd->xd_index = i - offs[op_idx];
+      xd->op_index = op_idx;
+      // Add a reference before enqueing the XD, as each pass through the pipeline
+      // removes a reference upon completion.
+      xd->add_reference();
+      xd->channel->enqueue_ready_xd(xd);
+    }
+
+    // Send messages to enqueue any remote XDs.
+    auto& remote_xds = subgraph->remote_xd_groupings[op_idx];
+    if (!remote_xds.empty()) {
+      for (auto& it : remote_xds) {
+        // Set the async token for each of the remote XDs to null,
+        // as dependent operations check whether these tokens are null to
+        // include them or not, and remote copies are not treated as async.
+        for (auto xd_index : it.second) {
+          auto tokidx = subgraph->bgwork_async_event_counts[subgraph_index] + xd_index;
+          all_proc_states[0].async_bgwork_events[tokidx] = nullptr;
+        }
+
+        Serialization::ByteCountSerializer bcs;
+        {
+          bool ok = ((bcs << it.second) && (bcs << ib_offsets));
+          assert(ok);
+        }
+        ActiveMessage<SubgraphXferDesEnqueueMessage> amsg(it.first, bcs.bytes_used());
+        amsg->subgraph_id = subgraph->me;
+        amsg->all_proc_states = reinterpret_cast<uintptr_t>(all_proc_states);
+        amsg->op_index = op_idx;
+        amsg->subgraph_index = subgraph_index;
+        {
+          bool ok = ((amsg << it.second) && (amsg << ib_offsets));
+          assert(ok);
+        }
+        amsg.commit();
+      }
+    }
+  }
+
+  void SubgraphIBAllocator::allocate_and_launch_xds(
+    ProcSubgraphReplayState* _all_proc_states,
+    unsigned _subgraph_index,
+    unsigned _op_idx
+  ) {
+    all_proc_states = _all_proc_states;
+    subgraph_index = _subgraph_index;
+    op_idx = _op_idx;
+    subgraph = all_proc_states[0].subgraph;
+    const TransferGraph& graph = subgraph->get_transfer_desc(op_idx)->get_transfer_graph();
+    // Allocation immediately succeeds for copies without ibs.
+    if (graph.ib_edges.empty()) {
+      launch_copy_xds();
+      return;
+    }
+    // Initialize the offsets vector -- this allocation will only happen on
+    // the first replay of the subgraph.
+    ib_offsets.assign(graph.ib_edges.size(), -1);
+    // Use the same trick from TransferOperation::allocate_ibs() to ensure
+    // that the allocation request doesn't trigger completion before we
+    // leave this function.
+    pending_responses.store(int32_t(graph.ib_edges.size() + 1));
+    allocate_ib_memories_from_graph(graph, this);
+    // Subtract another 1 from the pending responses to indicate that this
+    // function is now complete.
+    auto remaining = pending_responses.fetch_sub_acqrel(1) - 1;
+    // If there are no more pending responses, the inline allocation
+    // was successful.
+    if (remaining == 0) {
+      launch_copy_xds();
+    }
+  }
+
+  void SubgraphIBAllocator::notify_ib_allocation(unsigned int ib_index, off_t ib_offset) {
+    TransferDesc* desc = subgraph->get_transfer_desc(op_idx);
+
+    // Code stolen from TransferOperation::notify_ib_allocation.
+    ib_index = desc->get_transfer_graph().ib_alloc_order[ib_index];
+    assert(ib_index < ib_offsets.size());
+    // TODO: handle failed immediate allocation attempts
+    assert(ib_offset >= 0);
+#ifdef DEBUG_REALM
+    assert(ib_offsets[ib_index] == -1);
+#endif
+    ib_offsets[ib_index] = ib_offset;
+
+    auto remaining = pending_responses.fetch_sub_acqrel(1) - 1;
+    if (remaining == 0) {
+      launch_copy_xds();
+    }
+  }
+
+  void SubgraphIBAllocator::notify_ib_allocations(unsigned int count, unsigned int first_index, const off_t *offsets) {
+    TransferDesc* desc = subgraph->get_transfer_desc(op_idx);
+
+    // Code stolen from TransferOperation::notify_ib_allocations.
+    assert((first_index + count) <= ib_offsets.size());
+    // TODO: handle failed immediate allocation attempts
+    assert(offsets);
+
+    for(unsigned i = 0; i < count; i++) {
+      // translate alloc order back to original ib index
+      unsigned ib_index = desc->get_transfer_graph().ib_alloc_order[first_index + i];
+#ifdef DEBUG_REALM
+      assert(ib_offsets[ib_index] == -1);
+#endif
+      ib_offsets[ib_index] = offsets[i];
+    }
+
+    auto remaining = pending_responses.fetch_sub_acqrel(int32_t(count)) - count;
+    if (remaining == 0) {
+      launch_copy_xds();
+    }
+  }
+
+  void launch_async_bgwork_item(ProcSubgraphReplayState* all_proc_states, unsigned index, SubgraphTriggerContext* ctx) {
+    auto& state = all_proc_states[0];
+    auto subgraph = state.subgraph;
+    auto& item = subgraph->bgwork_items[index];
+
+    switch (item.op_kind) {
+      case SubgraphDefinition::OPKIND_COPY: {
+        assert(item.op_kind == SubgraphDefinition::OPKIND_COPY);
+        auto& offs = subgraph->planned_copy_xds.offsets;
+
+        auto prof = state.get_profiling_info(item.op_kind, item.op_index);
+        if (prof) {
+          if (prof->wants_timeline || prof->wants_fevent) {
+            // Record how many XD's will complete before this is counted as done.
+            prof->pending_work_items.store(int32_t(offs[item.op_index + 1] - offs[item.op_index]));
+          }
+          if (prof->wants_timeline) {
+            prof->timeline.record_ready_time();
+            // TODO (rohany): I don't have a good hook into the
+            //  XD infrastructure that this would make more sense
+            //  to put (like once the XD gets pulled off the queue),
+            //  so we'll stick it in here for now.
+            prof->timeline.record_start_time();
+          }
+          if (prof->wants_fevent) {
+            prof->fevent_user = UserEvent::create_user_event();
+            prof->fevent.finish_event = prof->fevent_user;
+          }
+        }
+#ifdef REALM_USE_NVTX
+        subgraph->nvtx_bgwork_launches[index] = nvtx_range_start("subgraph", "copy initiation");
+#endif
+
+        // Perform the necessary IB allocation. If no IBs are necessary,
+        // the allocation process short circuits.
+        if (ctx) { ctx->enter(); }
+        SubgraphIBAllocator& allocator = subgraph->copy_ib_allocators[item.op_index];
+        allocator.allocate_and_launch_xds(all_proc_states, index, item.op_index);
+        if (ctx) { ctx->exit(); }
+        break;
+      }
+      case SubgraphDefinition::OPKIND_ARRIVAL: {
+        auto& arrivalDesc = subgraph->defn->arrivals[item.op_index];
+        auto& interpMeta = subgraph->bgwork_interpolation_ranges[index];
+        auto first_interp = interpMeta.first;
+        auto num_interps = interpMeta.second;
+        Barrier b =
+            do_interpolation(subgraph->defn->interpolations, first_interp, num_interps,
+                             SubgraphDefinition::Interpolation::TARGET_ARRIVAL_BARRIER, item.op_index,
+                             state.args, state.arglen, arrivalDesc.barrier);
+        // Do the reduction value interpolation directly into the arrival desc.
+        do_interpolation_inline(
+            subgraph->defn->interpolations, first_interp, num_interps,
+            SubgraphDefinition::Interpolation::TARGET_ARRIVAL_VALUE, item.op_index, state.args, state.arglen,
+            arrivalDesc.reduce_value.base(), arrivalDesc.reduce_value.size());
+        unsigned count = arrivalDesc.count;
+
+        if (ctx) { ctx->enter(); }
+        b.arrive(count, Event::NO_EVENT, arrivalDesc.reduce_value.base(), arrivalDesc.reduce_value.size());
+        if (ctx) { ctx->exit(); }
+
+        // Since we just triggered the barrier, we're free to also kick off
+        // anything that depends on the barrier being triggered.
+        auto& postconds = subgraph->bgwork_postconditions;
+        for (uint64_t i = postconds.offsets[index]; i < postconds.offsets[index + 1]; i++) {
+          auto& info = postconds.data[i];
+          trigger_subgraph_operation_completion(all_proc_states, info, true /* incr_counter */, ctx);
+        }
+        if (subgraph->bgwork_items[index].is_final_event) {
+          // TODO (rohany): Hackily including the contributions of bgwork
+          //  operations in the proc 0 counters.
+          int32_t remaining = all_proc_states[0].pending_async_count.fetch_sub_acqrel(1) - 1;
+          if (remaining == 0) {
+            maybe_trigger_subgraph_final_completion_event(all_proc_states[0]);
+          }
+        }
+        break;
+      }
+      default:
+        assert(false);
+    }
+  }
+
+  void SubgraphImpl::plan_copy(
+    unsigned op_idx,
+    std::vector<XferDes*>& result,
+    std::map<NodeID, std::vector<unsigned>>& remote_xds,
+    ProfilingMeasurements::OperationCopyInfo& copy_info,
+    ProfilingMeasurements::OperationMemoryUsage& mem_info
+  ) {
+    TransferDesc* td = get_transfer_desc(op_idx);
+    // Extract profiling information about the copy requested from
+    // the transfer descriptor for later use.
+    copy_info = td->prof_cpinfo;
+    mem_info = td->prof_usage;
+
+    // Just constructing a TransferDescriptor should perform all the
+    // copy analysis inline. It could be deferred, but if all the instances
+    // have been created already, then the analysis happens right away.
+    // Assert that this is true.
+    assert(td->analysis_complete.load() && td->analysis_successful);
+    TransferGraph& graph = td->graph;
+    // Now, spoof the XDFactory inside each node of the transfer
+    // graph so that we can extract the XD's.
+    std::vector<MockXDFactory> factories(graph.xd_nodes.size());
+    for (size_t i = 0; i < graph.xd_nodes.size(); i++) {
+      factories[i] = MockXDFactory(graph.xd_nodes[i].factory, this, op_idx, i);
+      graph.xd_nodes[i].factory = &factories[i];
+    }
+
+    // It looks like we will have to make a new GenEvent for each copy,
+    // but it's not the end of the world.
+    GenEventImpl *finish_event = GenEventImpl::create_genevent();
+    Event ev = finish_event->current_event();
+    TransferOperation *op = new TransferOperation(*td, Event::NO_EVENT, finish_event,
+                                                  ID(ev).event_generation(), 0 /* priority */);
+
+    // Skip IB allocation and create XD's immediately. Skipping
+    // TransferOperation::allocate_ibs() means that we first need to
+    // mark the operation as "ready". The XD creation assumes that
+    // the ib_offsets vector is of the right size though, so preallocate it.
+    // When actually replaying this copy, we'll perform the necessary
+    // ib allocations and hook them up into each XD.
+    if (!graph.ib_edges.empty()) {
+      op->ib_offsets.resize(graph.ib_edges.size(), -1);
+    }
+    bool ok = op->mark_ready();
+    assert(ok);
+    // Now we're ready to create the XDs.
+    op->create_xds();
+
+    // After TransferOperation::create_xds(), our mock factory should
+    // have been invoked to handle the creation. The resulting XD may be
+    // null if the XD was intended to be created on a remote node.
+    for (size_t i = 0; i < factories.size(); i++) {
+      auto& factory = factories[i];
+      if (factory.remote) {
+        remote_xds[factory.xd_target_node].push_back(i);
+      } else {
+        assert(factory.xd != nullptr);
+      }
+    }
+
+    // We need to make the TransferOperation think that it is finished.
+    // The SubgraphImpl will take over the reference to the XD.
+    for (auto& tracker : op->xd_trackers) {
+      tracker->mark_finished(true /* successful */);
+    }
+
+    for (auto& factory : factories) {
+      auto xd = factory.xd;
+      if (xd != nullptr) {
+        // Detach the xd from its DMA op.
+        xd->dma_op = 0;
+      }
+      result.push_back(xd);
+    }
+  }
+
+  // Active message handler registrations.
+  ActiveMessageHandlerReg<SubgraphXferDesCreateMessage> subgraph_xfer_des_create_request_message_handler;
+  ActiveMessageHandlerReg<SubgraphXferDesEnqueueMessage> subgraph_xfer_des_enqueue_message_handler;
+  ActiveMessageHandlerReg<SubgraphXferDesNotifyCompletionMessage> subgraph_notify_xfer_des_completion_message;
+  ActiveMessageHandlerReg<SubgraphRemoteResourceDeletionMessage> subgraph_remote_resource_deletion_request_message_handler;
 
 }; // namespace Realm

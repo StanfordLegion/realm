@@ -51,6 +51,7 @@ namespace Realm {
   class Channel;
   class DmaRequest;
   class TransferIterator;
+  struct ProcSubgraphReplayState;
 
   extern Logger log_new_dma;
 
@@ -137,6 +138,9 @@ namespace Realm {
     SequenceAssembler(const SequenceAssembler &copy_from);
     ~SequenceAssembler(void);
 
+    // Not thread-safe.
+    void reset();
+
     // NOT thread-safe - caller must ensure neither *this nor other is being
     //  modified during this call
     void swap(SequenceAssembler &other);
@@ -189,6 +193,8 @@ namespace Realm {
     // size_t nbytes;
   };
 
+  // NOTE: If this struct definition changes, make sure to update
+  //  the corresponding serialization functions in transfer.inl.
   struct XferDesPortInfo {
     enum /*PortType*/
     {
@@ -203,6 +209,9 @@ namespace Realm {
     Memory mem;
     RegionInstance inst;
     size_t ib_offset, ib_size;
+    // ib_index holds what index in the ib_offsets vector
+    // corresponds to the ib data for this port.
+    unsigned ib_index;
     TransferIterator *iter;
     CustomSerdezID serdez_id;
   };
@@ -297,6 +306,24 @@ namespace Realm {
     // current input and output port mask
     uint64_t current_in_port_mask, current_out_port_mask;
     uint64_t current_in_port_remain, current_out_port_remain;
+    // Maintain information within an XD about the surrounding
+    // subgraph replay (if applicable).
+    // IMPORTANT NOTE: subgraph_replay_state is a pointer to
+    // the subgraph_replay_state ON THE NODE THAT LAUNCHED the copy.
+    // XD implementers must be careful to gaurd accesses to
+    // subgraph_replay_state with checks that the XD is running locally.
+    ProcSubgraphReplayState* subgraph_replay_state = nullptr;
+    // subgraph_index represents the op_index of the xd within
+    // the subgraph (i.e. which copy it corresponds to).
+    unsigned subgraph_index = (unsigned)(-1);
+    // xd_index corresponds to which xd of the copy at op_index
+    // this xd is, as a copy may launch multiple xd's.
+    unsigned xd_index = (unsigned)(-1);
+    // op_index is the operation index of the copy within the subgraph.
+    unsigned op_index = (unsigned)(-1);
+    // Stored to help reset XD state in subgraph replays.
+    int gather_control_port = -1;
+    int scatter_control_port = -1;
     struct XferPort {
       MemoryImpl *mem;
       TransferIterator *iter;
@@ -314,6 +341,9 @@ namespace Realm {
       //  to complete)
       Memory ib_mem;
       size_t ib_offset, ib_size;
+      // Used when resetting an XD, records which ib_offset
+      // should be used.
+      unsigned ib_index;
       AddressList addrlist;
       AddressListCursor addrcursor;
     };
@@ -396,6 +426,7 @@ namespace Realm {
     void remove_reference(void);
 
     void add_update_pre_bytes_total_received(void);
+    virtual void reset(const std::vector<off_t>& ib_offsets);
 
   protected:
     virtual ~XferDes();
@@ -420,6 +451,44 @@ namespace Realm {
     void update_pre_bytes_write(int port_idx, size_t offset, size_t size);
     void update_pre_bytes_total(int port_idx, size_t pre_bytes_total);
     void update_next_bytes_read(int port_idx, size_t offset, size_t size);
+
+    bool running_locally() const {
+      return launch_node == Network::my_node_id;
+    }
+    // Separate "launches_async_work" into a wrapper method to make sure
+    // that XD's running remotely don't count as doing asynchronous things.
+    virtual bool launches_async_work() final {
+      if (!running_locally())
+        return false;
+      return launches_async_work_locally();
+    }
+  protected:
+    // TODO (rohany): Used for subgraph replays.
+    //  Implemented right now for progress, but in theory would
+    //  be a pure virtual method to force child classes to declare.
+    // TODO (rohany): Not sure the right interface for declaring
+    //  "respects async work of certain processor kinds".
+    virtual bool launches_async_work_locally() { assert(false); return false; }
+  public:
+    // Triggers for different phases of XD completion. All copies
+    // have to trigger completion when their work on the CPU finishes
+    // (for some copies that might also be all the effects). Some
+    // copies must also have triggers for when all of their asynchronous
+    // work completes (like GPU copies).
+    virtual void trigger_subgraph_control_completion();
+    virtual void trigger_subgraph_async_completion();
+    // If this XD launches asynchronous work, then it is responsible
+    // for constructing an "event" (not a Realm event) that represents
+    // the completion of its work. That even may need to be "returned"
+    // to a processor. get_async_event_proc() tells the subgraph where
+    // one of these events should be returned to.
+    virtual LocalTaskProcessor* get_async_event_proc() { return nullptr; }
+  protected:
+    // on_subgraph_*_completion are methods that XD's can override
+    // to add extra logic to stage completions.
+    virtual void on_subgraph_control_completion() {}
+    virtual void on_subgraph_async_completion() {}
+  public:
 
     // called once iteration is complete, but we need to track in flight
     //  writes, flush byte counts, etc.
@@ -550,7 +619,15 @@ namespace Realm {
     virtual Request *dequeue_request();
     virtual void enqueue_request(Request *req);
 
+    // Note: not including the override to avoid warnings with
+    // the rest of the functions not marked override.
+    bool launches_async_work_locally() /* override */ { return false; }
+    void reset(const std::vector<off_t>& ib_offsets);
+
     bool progress_xd(MemfillChannel *channel, TimeLimit work_until);
+  protected:
+    // Used to help reset the XD.
+    size_t fill_total;
   };
 
   class MemreduceChannel;
@@ -565,6 +642,10 @@ namespace Realm {
     long get_requests(Request **requests, long nr);
 
     bool progress_xd(MemreduceChannel *channel, TimeLimit work_until);
+
+    // Note: not including the override to avoid warnings with
+    // the rest of the functions not marked override.
+    bool launches_async_work_locally() /* override */ { return false; }
 
   protected:
     XferDesRedopInfo redop_info;
@@ -610,6 +691,10 @@ namespace Realm {
     // doesn't do pre_bytes_write updates, since the remote write message
     //  takes care of it with lower latency
     virtual void update_bytes_write(int port_idx, size_t offset, size_t size);
+
+    // Note: not including the override to avoid warnings with
+    // the rest of the functions not marked override.
+    bool launches_async_work_locally() /* override */ { return false; }
 
     bool progress_xd(RemoteWriteChannel *channel, TimeLimit work_until);
 
@@ -673,7 +758,9 @@ namespace Realm {
                                  const void *fill_data, size_t fill_size,
                                  size_t fill_total);
 
+    uintptr_t get_channel() { return channel; }
   protected:
+    //  making this public.
     uintptr_t channel;
   };
 

@@ -24,6 +24,8 @@
 
 namespace Realm {
 
+  class TransferDesc;
+
   class IndexSpaceGenericImpl {
   public:
     IndexSpaceGenericImpl() = default;
@@ -39,6 +41,11 @@ namespace Realm {
                        const void *indirects_data, size_t indirect_len,
                        const ProfilingRequestSet &requests, Event wait_on,
                        int priority) const = 0;
+
+    // TODO (rohany): Only supporting direct copies for now.
+    virtual TransferDesc* make_transfer_desc(const std::vector<CopySrcDstField> &srcs,
+                                             const std::vector<CopySrcDstField> &dsts,
+                                             const std::vector<void*> &indirects) const = 0;
 
     // given an instance layout, attempts to provide bounds (start relative to
     //  the base of the instance and relative limit - i.e. first nonaccessibly
@@ -67,6 +74,10 @@ namespace Realm {
                        const void *indirects_data, size_t indirect_len,
                        const ProfilingRequestSet &requests, Event wait_on,
                        int priority) const;
+
+    virtual TransferDesc* make_transfer_desc(const std::vector<CopySrcDstField> &srcs,
+                                             const std::vector<CopySrcDstField> &dsts,
+                                             const std::vector<void*> &indirects) const;
 
     virtual bool compute_affine_bounds(const InstanceLayoutGeneric *ilg, FieldID fid,
                                        uintptr_t &rel_base, uintptr_t &limit) const;

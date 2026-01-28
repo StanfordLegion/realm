@@ -20,6 +20,10 @@
 #include "realm/cuda/cuda_access.h"
 #include "realm/cuda/cuda_memcpy.h"
 
+#ifdef REALM_USE_NVTX
+#include "realm/nvtx.h"
+#endif
+
 namespace Realm {
 
   extern Logger log_xd;
@@ -538,6 +542,67 @@ namespace Realm {
       return false;
     }
 
+    void sync_subgraph_incoming_deps(ProcSubgraphReplayState* all_proc_states, unsigned index, GPUStream* stream) {
+      // We can arbitrarily use the first processor's state.
+      auto& state = all_proc_states[0];
+      auto& preconds = state.subgraph->bgwork_async_preconditions;
+      for (uint64_t i = preconds.offsets[index]; i < preconds.offsets[index + 1]; i++) {
+        auto& info = preconds.data[i];
+        switch (info.kind) {
+          case SubgraphImpl::CompletionInfo::STATIC_TO_BGWORK: {
+            auto idx = state.subgraph->operations.proc_offsets[info.proc] + info.index;
+            auto ev = (CUevent_st*)(state.async_operation_events[idx]);
+            CHECK_CU(CUDA_DRIVER_FNPTR(cuStreamWaitEvent)(stream->get_stream(), ev, 0));
+            break;
+          }
+          case SubgraphImpl::CompletionInfo::BGWORK_TO_BGWORK: {
+            // Wait on all events in the given range, if they aren't null.
+            for (uint64_t j = state.subgraph->bgwork_async_event_counts[info.index]; j < state.subgraph->bgwork_async_event_counts[info.index + 1]; j++) {
+              auto token = state.async_bgwork_events[j];
+              if (token != nullptr) {
+                auto ev = (CUevent_st*)(token);
+                CHECK_CU(CUDA_DRIVER_FNPTR(cuStreamWaitEvent)(stream->get_stream(), ev, 0));
+              }
+            }
+            break;
+          }
+          default:
+            assert(false);
+        }
+      }
+    }
+
+    void add_transfer_completion_notification(ProcSubgraphReplayState* all_proc_states, GPUStream* stream, GPUStream* depstream, GPUCompletionNotification* completion) {
+      // Record an event of all the work submitted so far.
+      auto gpu = depstream->get_gpu();
+      auto ev = gpu->event_pool.get_event();
+      CHECK_CU(CUDA_DRIVER_FNPTR(cuEventRecord)(ev, stream->get_stream()));
+      // Synchronize with this event on the outgoing stream. This allows
+      // for depstream to capture a dependence on the work issued on stream,
+      // but does not serialize any of the work issued on stream with any
+      // other pending work or future work to be issued on stream.
+      CHECK_CU(CUDA_DRIVER_FNPTR(cuStreamWaitEvent)(depstream->get_stream(), ev, 0));
+      // Now throw the event back into the stream with
+      // the completion attached.
+      stream->add_event(ev, nullptr, completion);
+    }
+
+    void notify_subgraph_control_completion(ProcSubgraphReplayState* all_proc_states, unsigned subgraph_index, unsigned xd_index, GPUStream* depstream) {
+      // Write the final event on subgraph_output
+      // into the async work data structure.
+      auto gpu = depstream->get_gpu();
+      auto ev = gpu->event_pool.get_event();
+      {
+        AutoGPUContext agc(gpu);
+        CHECK_CU(CUDA_DRIVER_FNPTR(cuEventRecord)(ev, depstream->get_stream()));
+      }
+      ProcSubgraphReplayState* state = (ProcSubgraphReplayState*)(all_proc_states);
+      // The event will be returned on subgraph completion.
+      auto subgraph = state[0].subgraph;
+      auto index = subgraph->bgwork_async_event_counts[subgraph_index] + xd_index;
+      state[0].async_bgwork_events[index] = ev;
+    }
+
     bool GPUXferDes::progress_xd(GPUChannel *channel, TimeLimit work_until)
     {
       // Mininum amount to transfer in a single quantum before returning in order to
@@ -563,6 +628,10 @@ namespace Realm {
       memset(&cuda_copy, 0, sizeof(cuda_copy));
       memset(&transpose_copy, 0, sizeof(transpose_copy));
       memset(&copy_infos, 0, sizeof(copy_infos));
+
+#ifdef REALM_USE_NVTX
+      nvtxScopedRange _nvtx_range("dma", __PRETTY_FUNCTION__, 0);
+#endif
 
       // The general algorithm here can be described in three loops:
       // 1) Outer loop - iterates over all the addresses for each request.  This typically
@@ -667,6 +736,12 @@ namespace Realm {
         }
         if(transpose_copy.src != 0) {
           memset(&transpose_copy, 0, sizeof(transpose_copy));
+        }
+
+        // Handle synchronization against any pending subgraph work. Optimization
+        // only applies when this XD is running locally.
+        if (subgraph_replay_state != nullptr && running_locally()) {
+          sync_subgraph_incoming_deps(subgraph_replay_state, subgraph_index, stream);
         }
 
         // 2) Batch loop - Collect all the rectangles for this inport/outport pair by
@@ -867,9 +942,17 @@ namespace Realm {
           log_gpudma.info() << "gpu memcpy fence: stream=" << stream << " xd=" << std::hex
                             << guid << std::dec << " bytes=" << bytes_to_fence;
 
-          stream->add_notification(new GPUTransferCompletion(
-              this, input_control.current_io_port, in_span_start, bytes_to_fence,
-              output_control.current_io_port, out_span_start, bytes_to_fence));
+          auto completion = new GPUTransferCompletion(
+               this, input_control.current_io_port, in_span_start, bytes_to_fence,
+               output_control.current_io_port, out_span_start, bytes_to_fence);
+
+          // Subgraph optimizations only apply when running locally.
+          if (subgraph_replay_state != nullptr && running_locally()) {
+            add_transfer_completion_notification(subgraph_replay_state, stream, channel->subgraph_stream, completion);
+          } else {
+            stream->add_notification(completion);
+          }
+
           record_address_consumption(bytes_to_fence, bytes_to_fence);
           total_bytes += bytes_to_fence;
         }
@@ -879,6 +962,16 @@ namespace Realm {
       wseqcache.flush();
 
       return total_bytes > 0;
+    }
+
+    void GPUXferDes::on_subgraph_control_completion() {
+      auto gpuchan = static_cast<GPUChannel*>(channel);
+      notify_subgraph_control_completion(subgraph_replay_state, subgraph_index, xd_index, gpuchan->subgraph_stream);
+    }
+
+    LocalTaskProcessor* GPUXferDes::get_async_event_proc() {
+      auto gpuchan = static_cast<GPUChannel*>(channel);
+      return gpuchan->get_gpu()->proc;
     }
 
     ////////////////////////////////////////////////////////////////////////
@@ -954,6 +1047,10 @@ namespace Realm {
       bool did_work = false;
       // TODO: add span
       ReadSequenceCache rseqcache(this, 2 << 20);
+
+#ifdef REALM_USE_NVTX
+      nvtxScopedRange _nvtx_range("dma", __PRETTY_FUNCTION__, 0);
+#endif
 
       while(true) {
         size_t min_xfer_size = 4 << 20;
@@ -1083,6 +1180,11 @@ namespace Realm {
                                     in_port->mem, out_port->mem);
         AutoGPUContext agc(stream->get_gpu());
 
+        // Subgraph optimizations apply only when running locally.
+        if (subgraph_replay_state != nullptr && running_locally()) {
+          sync_subgraph_incoming_deps(subgraph_replay_state, subgraph_index, stream);
+        }
+
         // We can't do gather-scatter yet.
         assert(!(out_port->indirect_port_idx >= 0 && in_port->indirect_port_idx >= 0));
         assert(!in_nonaffine && !out_nonaffine);
@@ -1117,11 +1219,17 @@ namespace Realm {
                             << " read_ind_bytes:" << read_ind_bytes
                             << " write_ind_bytes:" << write_ind_bytes;
 
-          stream->add_notification(new GPUIndirectTransferCompletion(
+          auto completion = new GPUIndirectTransferCompletion(
               this, input_control.current_io_port, in_span_start, total_bytes,
               output_control.current_io_port, out_span_start, bytes_to_fence,
               in_port->indirect_port_idx, 0, read_ind_bytes, out_port->indirect_port_idx,
-              0, write_ind_bytes));
+              0, write_ind_bytes);
+          // Subgraph optimizations only apply when running locally.
+          if (subgraph_replay_state != nullptr && running_locally()) {
+            add_transfer_completion_notification(subgraph_replay_state, stream, channel->subgraph_stream, completion);
+          } else {
+            stream->add_notification(completion);
+          }
         }
 
         if(total_bytes > 0) {
@@ -1135,6 +1243,16 @@ namespace Realm {
 
       rseqcache.flush();
       return did_work;
+    }
+
+    void GPUIndirectXferDes::on_subgraph_control_completion() {
+      auto gpuchan = static_cast<GPUIndirectChannel*>(channel);
+      notify_subgraph_control_completion(subgraph_replay_state, subgraph_index, xd_index, gpuchan->subgraph_stream);
+    }
+
+    LocalTaskProcessor* GPUIndirectXferDes::get_async_event_proc() {
+      auto gpuchan = static_cast<GPUIndirectChannel*>(channel);
+      return gpuchan->get_gpu()->proc;
     }
 
     ////////////////////////////////////////////////////////////////////////
@@ -1270,9 +1388,19 @@ namespace Realm {
       default:
         assert(0);
       }
+
+      {
+        AutoGPUContext agc(src_gpu);
+        subgraph_stream = new GPUStream(src_gpu, src_gpu->worker);
+      }
     }
 
-    GPUIndirectChannel::~GPUIndirectChannel() {}
+    void GPUIndirectChannel::shutdown() {
+      {
+        AutoGPUContext agc(src_gpu);
+        delete subgraph_stream;
+      }
+    }
 
     Memory GPUIndirectChannel::suggest_ib_memories() const
     {
@@ -1647,9 +1775,22 @@ namespace Realm {
       default:
         assert(0);
       }
+
+      {
+        AutoGPUContext agc(src_gpu);
+        subgraph_input = new GPUStream(src_gpu, src_gpu->worker);
+        subgraph_output = new GPUStream(src_gpu, src_gpu->worker);
+      }
     }
 
-    GPUChannel::~GPUChannel() {}
+    void GPUChannel::shutdown()
+    {
+      {
+        AutoGPUContext agc(src_gpu);
+        delete subgraph_input;
+        delete subgraph_output;
+      }
+    }
 
     XferDes *GPUChannel::create_xfer_des(uintptr_t dma_op, NodeID launch_node,
                                          XferDesID guid,
@@ -1826,6 +1967,10 @@ namespace Realm {
       ReadSequenceCache rseqcache(this, 2 << 20);
       WriteSequenceCache wseqcache(this, 2 << 20);
 
+#ifdef REALM_USE_NVTX
+      nvtxScopedRange _nvtx_range("dma", __PRETTY_FUNCTION__, 0);
+#endif
+
       while(true) {
         size_t min_xfer_size = 4096; // TODO: make controllable
         size_t max_bytes = get_addresses(min_xfer_size, &rseqcache);
@@ -1852,6 +1997,12 @@ namespace Realm {
 
           AutoGPUContext agc(channel->gpu);
           GPUStream *stream = channel->gpu->get_next_d2d_stream();
+
+          // Subgraph optimizations apply only when running locally.
+          if (subgraph_replay_state != nullptr && running_locally()) {
+            sync_subgraph_incoming_deps(subgraph_replay_state, subgraph_index, stream);
+          }
+
           Realm::Cuda::AffineFillInfo<2, size_t> fill_info{};
           size_t total_info_bytes = 0;
           for(size_t offset = 0;
@@ -2082,6 +2233,15 @@ namespace Realm {
           stream->add_notification(
               new GPUTransferCompletion(this, -1, 0, 0, output_control.current_io_port,
                                         out_span_start, total_bytes));
+
+          auto completion = new GPUTransferCompletion(this, -1, 0, 0, output_control.current_io_port,
+                                                      out_span_start, total_bytes);
+          // Subgraph optimizations only apply when running locally.
+          if (subgraph_replay_state != nullptr && running_locally()) {
+            add_transfer_completion_notification(subgraph_replay_state, stream, channel->subgraph_stream, completion);
+          } else {
+            stream->add_notification(completion);
+          }
           out_span_start += total_bytes;
         }
 
@@ -2096,6 +2256,16 @@ namespace Realm {
       rseqcache.flush();
 
       return did_work;
+    }
+
+    void GPUfillXferDes::on_subgraph_control_completion() {
+      auto gpuchan = static_cast<GPUfillChannel*>(channel);
+      notify_subgraph_control_completion(subgraph_replay_state, subgraph_index, xd_index, gpuchan->subgraph_stream);
+    }
+
+    LocalTaskProcessor* GPUfillXferDes::get_async_event_proc() {
+      auto gpuchan = static_cast<GPUfillChannel*>(channel);
+      return gpuchan->gpu->proc;
     }
 
     ////////////////////////////////////////////////////////////////////////
@@ -2164,6 +2334,18 @@ namespace Realm {
       }
 
       xdq.add_to_manager(bgwork);
+
+      {
+        AutoGPUContext agc(gpu);
+        subgraph_stream = new GPUStream(gpu, gpu->worker);
+      }
+    }
+
+    void GPUfillChannel::shutdown() {
+      {
+        AutoGPUContext agc(gpu);
+        delete subgraph_stream;
+      }
     }
 
     XferDes *
@@ -2293,6 +2475,14 @@ namespace Realm {
       }
     }
 
+    void GPUfillXferDes::reset(const std::vector<off_t>& ib_offsets) {
+      XferDes::reset(ib_offsets);
+      assert(input_control.control_port_idx == -1);
+      input_control.current_io_port = -1;
+      input_control.remaining_count = fill_total;
+      input_control.eos_received = true;
+    }
+
     long GPUreduceXferDes::get_requests(Request **requests, long nr)
     {
       // unused
@@ -2305,6 +2495,10 @@ namespace Realm {
       bool did_work = false;
       ReadSequenceCache rseqcache(this, 2 << 20);
       ReadSequenceCache wseqcache(this, 2 << 20);
+
+#ifdef REALM_USE_NVTX
+      nvtxScopedRange _nvtx_range("dma", __PRETTY_FUNCTION__, 0);
+#endif
 
       const size_t in_elem_size = redop->sizeof_rhs;
       const size_t out_elem_size =
@@ -2359,6 +2553,11 @@ namespace Realm {
             // no support for reducing into an intermediate buffer
             assert(out_port->peer_guid == XFERDES_NO_GUID);
           }
+        }
+
+        // Subgraph optimizations apply only when running locally.
+        if (subgraph_replay_state != nullptr && running_locally()) {
+          sync_subgraph_incoming_deps(subgraph_replay_state, subgraph_index, stream);
         }
 
         size_t total_elems = 0;
@@ -2487,6 +2686,19 @@ namespace Realm {
                     this, input_control.current_io_port, in_span_start,
                     elems * in_elem_size, output_control.current_io_port, out_span_start,
                     elems * out_elem_size));
+                auto completion = new GPUTransferCompletion(this,
+                                                            input_control.current_io_port,
+                                                            in_span_start,
+                                                            elems * in_elem_size,
+                                                            output_control.current_io_port,
+                                                            out_span_start,
+                                                            elems * out_elem_size);
+                // Subgraph optimizations only apply when running locally.
+                if (subgraph_replay_state != nullptr && running_locally()) {
+                  add_transfer_completion_notification(subgraph_replay_state, stream, channel->subgraph_stream, completion);
+                } else {
+                    stream->add_notification(completion);
+                }
               }
 
               in_span_start += elems * in_elem_size;
@@ -2544,6 +2756,16 @@ namespace Realm {
       wseqcache.flush();
 
       return did_work;
+    }
+
+    void GPUreduceXferDes::on_subgraph_control_completion() {
+      auto gpuchan = static_cast<GPUreduceChannel*>(channel);
+      notify_subgraph_control_completion(subgraph_replay_state, subgraph_index, xd_index, gpuchan->subgraph_stream);
+    }
+
+    LocalTaskProcessor* GPUreduceXferDes::get_async_event_proc() {
+      auto gpuchan = static_cast<GPUreduceChannel*>(channel);
+      return gpuchan->gpu->proc;
     }
 
     ////////////////////////////////////////////////////////////////////////
@@ -2653,6 +2875,18 @@ namespace Realm {
       }
 
       xdq.add_to_manager(bgwork);
+
+      {
+        AutoGPUContext agc(gpu);
+        subgraph_stream = new GPUStream(gpu, gpu->worker);
+      }
+    }
+
+    void GPUreduceChannel::shutdown() {
+      {
+        AutoGPUContext agc(gpu);
+        delete subgraph_stream;
+      }
     }
 
     bool GPUreduceChannel::supports_redop(ReductionOpID redop_id) const
