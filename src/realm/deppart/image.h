@@ -97,7 +97,7 @@ namespace Realm {
         ImageOperation(const IndexSpace<N, T> &_parent,
                        const DomainTransform<N, T, N2, T2> &_domain_transform,
                        const ProfilingRequestSet &reqs, GenEventImpl *_finish_event,
-                       EventImpl::gen_t _finish_gen, RegionInstance buffer = RegionInstance::NO_INST);
+                       EventImpl::gen_t _finish_gen, DeppartOutput* buffers = nullptr);
 
         virtual ~ImageOperation(void);
 
@@ -122,7 +122,7 @@ namespace Realm {
         std::vector<IndexSpace<N, T> > diff_rhss;
         std::vector<SparsityMap<N, T> > images;
         bool is_intersection;
-        RegionInstance buffer;
+        DeppartOutput* buffers;
     };
 
     template<int N, typename T, int N2, typename T2>

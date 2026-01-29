@@ -50,10 +50,12 @@ namespace Realm {
   template class GPUImageMicroOp<N1, T1, N2, T2>;																	 \
   template class ImageOperation<N1,T1,N2,T2>;                                                                        \
   template ImageMicroOp<N1,T1,N2,T2>::ImageMicroOp(NodeID, AsyncMicroOp *, Serialization::FixedBufferDeserializer&); \
+  template void IndexSpace<N1, T1>::estimate_image(                                                      \
+    const DeppartInput<N2, T2>&, DeppartSuggestion&);							     \
   template Event IndexSpace<N1, T1>::create_subspaces_by_image(                                                      \
       const DomainTransform<N1, T1, N2, T2> &, const std::vector<IndexSpace<N2, T2> > &,                             \
       std::vector<IndexSpace<N1, T1> > &, const ProfilingRequestSet &, Event,					     \
-	RegionInstance, std::pair<size_t, size_t>*)  const;							     \
+	DeppartOutput*)  const;							     \
   template Event IndexSpace<N1,T1>::create_subspaces_by_image_with_difference(                                       \
       const DomainTransform<N1, T1, N2, T2> &,                                                                       \
 									       const std::vector<IndexSpace<N2,T2> >&,                                                     \
