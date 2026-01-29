@@ -111,6 +111,21 @@ namespace Realm {
     size_t field_offset;
   };
 
+  template <int N, typename T>
+  struct DeppartInput {
+    std::vector<std::pair<IndexSpace<N, T>, Memory>> insts;
+    std::vector<size_t> source_sizes;
+    size_t parent_size;
+  };
+
+  struct DeppartSuggestion {
+    std::map<Memory, std::pair<size_t, size_t>> suggestions;
+  };
+
+  struct DeppartOutput {
+    std::map<Memory, RegionInstance> buffers;
+  };
+
   /**
    * \class TranslationTransform
    * A translation transform is a special case of an affine transform
@@ -780,8 +795,14 @@ namespace Realm {
         const DomainTransform<N, T, N2, T2> &domain_transform,
         const std::vector<IndexSpace<N2, T2>> &sources,
         std::vector<IndexSpace<N, T>> &images, const ProfilingRequestSet &reqs,
-        Event wait_on = Event::NO_EVENT, RegionInstance buffer = RegionInstance::NO_INST,
-        std::pair<size_t, size_t>* buffer_bounds = nullptr) const;
+        Event wait_on = Event::NO_EVENT, DeppartOutput *buffers = nullptr) const;
+
+    template<int N2, typename T2>
+    REALM_PUBLIC_API void estimate_image(
+        const DeppartInput<N2, T2> &input,
+        DeppartSuggestion &suggestion);
+
+
     ///@}
 
 
@@ -814,8 +835,7 @@ namespace Realm {
             &field_data,
         const std::vector<IndexSpace<N2, T2>> &sources,
         std::vector<IndexSpace<N, T>> &images, const ProfilingRequestSet &reqs,
-        Event wait_on = Event::NO_EVENT, RegionInstance buffer = RegionInstance::NO_INST,
-        std::pair<size_t, size_t>* buffer_bounds = nullptr) const;
+        Event wait_on = Event::NO_EVENT, DeppartOutput* buffers = nullptr) const;
 
     // range versions
     template <int N2, typename T2>
@@ -831,8 +851,7 @@ namespace Realm {
             &field_data,
         const std::vector<IndexSpace<N2, T2>> &sources,
         std::vector<IndexSpace<N, T>> &images, const ProfilingRequestSet &reqs,
-        Event wait_on = Event::NO_EVENT, RegionInstance buffer = RegionInstance::NO_INST,
-        std::pair<size_t, size_t>* buffer_bounds = nullptr) const;
+        Event wait_on = Event::NO_EVENT, DeppartOutput* buffers = nullptr) const;
     ///@}
 
     ///@{

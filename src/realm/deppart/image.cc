@@ -32,63 +32,54 @@ namespace Realm {
 
   template <int N, typename T>
   template <int N2, typename T2>
+  void IndexSpace<N, T>::estimate_image(
+      const DeppartInput<N2, T2>& input,
+      DeppartSuggestion& suggestion) {
+    size_t minimal_size = 0;
+    size_t source_entries = 0;
+    bool bvh = false;
+    for (size_t size : input.source_sizes) {
+      source_entries += size == 0 ? 1 : size;
+    }
+    minimal_size += sizeof(Rect<N2, T2>) * source_entries;
+    if (this->dense()) {
+      minimal_size += sizeof(Rect<N, T>);
+    } else {
+      minimal_size += sizeof(Rect<N, T>) * input.parent_size;
+    }
+    if (bvh) {
+      minimal_size +=
+        (source_entries * sizeof(uint64_t)) +
+        (source_entries * sizeof(size_t)) +
+        ((2*source_entries - 1) * sizeof(Rect<N, T>)) +
+        (2 * (2*source_entries - 1) * sizeof(int)) +
+        sizeof(Rect<N, T>) +
+        (2 * source_entries * sizeof(uint64_t)) +
+        (source_entries * sizeof(uint64_t));
+    }
+    for (size_t i = 0; i < input.insts.size(); i++) {
+      IndexSpace<N2, T2> is = input.insts[i].first;
+      Memory mem = input.insts[i].second;
+      size_t optimal_size = is.bounds.volume() * sizeof(Rect<N, T>) * input.source_sizes.size() + minimal_size;
+      suggestion.suggestions[mem] = std::make_pair(minimal_size, optimal_size);
+    }
+  }
+
+  template <int N, typename T>
+  template <int N2, typename T2>
   Event IndexSpace<N, T>::create_subspaces_by_image(
       const DomainTransform<N, T, N2, T2> &domain_transform,
       const std::vector<IndexSpace<N2, T2>> &sources,
       std::vector<IndexSpace<N, T>> &images, const ProfilingRequestSet &reqs,
-      Event wait_on,
-      RegionInstance buffer, std::pair<size_t, size_t>* buffer_bounds) const {
+      Event wait_on, DeppartOutput* buffers) const {
    // output vector should start out empty
    assert(images.empty());
-
-   if (buffer_bounds != nullptr || buffer != RegionInstance::NO_INST) {
-      size_t optimal_size = 0;
-      for (size_t i = 0; i < sources.size(); i++) {
-        optimal_size += 5 * sources[i].volume() * sizeof(RectDesc<N, T>);
-      }
-      size_t minimal_size = 0;
-      size_t source_entries = 0;
-      bool bvh = false;
-      for (size_t i = 0; i < sources.size(); ++i) {
-        IndexSpace<N2,T2> my_space = sources[i];
-        if (my_space.dense()) {
-          source_entries += 1;
-        } else {
-          bvh = true;
-          source_entries += my_space.sparsity.impl()->get_entries().size();
-        }
-      }
-      minimal_size += sizeof(Rect<N2, T2>) * source_entries;
-      if (this->dense()) {
-        minimal_size += sizeof(Rect<N, T>);
-      } else {
-        minimal_size += sizeof(Rect<N, T>) * this->sparsity.impl()->get_entries().size();
-      }
-      if (bvh) {
-        minimal_size +=
-          (source_entries * sizeof(uint64_t)) +
-          (source_entries * sizeof(size_t)) +
-          ((2*source_entries - 1) * sizeof(Rect<N, T>)) +
-          (2 * (2*source_entries - 1) * sizeof(int)) +
-          sizeof(Rect<N, T>) +
-          (2 * source_entries * sizeof(uint64_t)) +
-          (source_entries * sizeof(uint64_t));
-      }
-      if (buffer_bounds != nullptr && buffer == RegionInstance::NO_INST) {
-	*buffer_bounds = std::make_pair(minimal_size, minimal_size + optimal_size);
-      	return Event::NO_EVENT;
-      }
-      assert(buffer != RegionInstance::NO_INST);
-      size_t buffer_size = buffer.get_layout()->bytes_used;
-      assert(buffer_size >= minimal_size);
-    }
-
 
    GenEventImpl *finish_event = GenEventImpl::create_genevent();
    Event e = finish_event->current_event();
 
    ImageOperation<N, T, N2, T2> *op = new ImageOperation<N, T, N2, T2>(
-       *this, domain_transform, reqs, finish_event, ID(e).event_generation(), buffer);
+       *this, domain_transform, reqs, finish_event, ID(e).event_generation(), buffers);
 
    size_t n = sources.size();
    images.resize(n);
@@ -480,11 +471,11 @@ namespace Realm {
       const IndexSpace<N, T> &_parent,
       const DomainTransform<N, T, N2, T2> &_domain_transform,
       const ProfilingRequestSet &reqs, GenEventImpl *_finish_event,
-      EventImpl::gen_t _finish_gen, RegionInstance _buffer)
+      EventImpl::gen_t _finish_gen, DeppartOutput* _buffers)
       : PartitioningOperation(reqs, _finish_event, _finish_gen),
         parent(_parent),
         domain_transform(_domain_transform),
-	buffer(_buffer) {}
+	buffers(_buffers) {}
 
   template <int N, typename T, int N2, typename T2>
   ImageOperation<N,T,N2,T2>::~ImageOperation(void)
@@ -592,14 +583,14 @@ namespace Realm {
   template <int N, typename T, int N2, typename T2>
   void ImageOperation<N, T, N2, T2>::execute(void) {
 
-  	std::vector<FieldDataDescriptor<IndexSpace<N2,T2>,Point<N, T>> > gpu_ptr_data;
+  	std::map<Memory, std::vector<FieldDataDescriptor<IndexSpace<N2,T2>,Point<N, T>> >> gpu_ptr_data;
   	std::vector<FieldDataDescriptor<IndexSpace<N2,T2>,Point<N, T>> > cpu_ptr_data;
-  	std::vector<FieldDataDescriptor<IndexSpace<N2,T2>,Rect<N, T>> > gpu_rect_data;
+  	std::map<Memory, std::vector<FieldDataDescriptor<IndexSpace<N2,T2>,Rect<N, T>> >> gpu_rect_data;
   	std::vector<FieldDataDescriptor<IndexSpace<N2,T2>,Rect<N, T>> > cpu_rect_data;
   	for (size_t i = 0; i < domain_transform.ptr_data.size(); i++) {
   		if (domain_transform.ptr_data[i].inst.get_location().kind() ==
 		      Memory::GPU_FB_MEM) {
-  			gpu_ptr_data.push_back(domain_transform.ptr_data[i]);
+  			gpu_ptr_data[domain_transform.ptr_data[i].inst.get_location()].push_back(domain_transform.ptr_data[i]);
 		      } else {
 		      	cpu_ptr_data.push_back(domain_transform.ptr_data[i]);
 		      }
@@ -607,13 +598,12 @@ namespace Realm {
   	for (size_t i = 0; i < domain_transform.range_data.size(); i++) {
   		if (domain_transform.range_data[i].inst.get_location().kind() ==
 		      Memory::GPU_FB_MEM) {
-  			gpu_rect_data.push_back(domain_transform.range_data[i]);
+  			gpu_rect_data[domain_transform.range_data[i].inst.get_location()].push_back(domain_transform.range_data[i]);
 		      } else {
 		      	cpu_rect_data.push_back(domain_transform.range_data[i]);
 		      }
   	}
   	bool gpu_data = !gpu_ptr_data.empty() || !gpu_rect_data.empty();
-  	bool cpu_data = !cpu_ptr_data.empty() || !cpu_rect_data.empty();
     if (domain_transform.type ==
        DomainTransform<N, T, N2, T2>::DomainTransformType::STRUCTURED && !gpu_data) {
 
@@ -649,54 +639,55 @@ namespace Realm {
 
        	uop->dispatch(this, true /* ok to run in this thread */);
     } else {
-    if (cpu_data) {
-	    	// launch full cross-product of image micro ops right away
-	    	for (size_t i = 0; i < sources.size(); i++)
-	    		SparsityMapImpl<N, T>::lookup(images[i])->set_contributor_count(
-				cpu_ptr_data.size() +
-				cpu_rect_data.size() + (gpu_data ? 1 : 0));
-
-	    	for (size_t i = 0; i < cpu_ptr_data.size(); i++) {
-	    		ImageMicroOp<N, T, N2, T2> *uop = new ImageMicroOp<N, T, N2, T2>(
-				parent, cpu_ptr_data[i].index_space,
-				cpu_ptr_data[i].inst,
-				cpu_ptr_data[i].field_offset, false /*ptrs*/);
-	    		for (size_t j = 0; j < sources.size(); j++)
-	    			if (diff_rhss.empty())
-	    				uop->add_sparsity_output(sources[j], images[j]);
-	    			else
-	    				uop->add_sparsity_output_with_difference(sources[j], diff_rhss[j],
-										     images[j]);
-
-	    		uop->dispatch(this, true /* ok to run in this thread */);
-	    	}
-
-	    	for (size_t i = 0; i < cpu_rect_data.size(); i++) {
-	    		ImageMicroOp<N, T, N2, T2> *uop = new ImageMicroOp<N, T, N2, T2>(
-				parent, cpu_rect_data[i].index_space,
-				cpu_rect_data[i].inst,
-				cpu_rect_data[i].field_offset, true /*ranges*/);
-	    		for (size_t j = 0; j < sources.size(); j++)
-	    			if (diff_rhss.empty())
-	    				uop->add_sparsity_output(sources[j], images[j]);
-	    			else
-	    				uop->add_sparsity_output_with_difference(sources[j], diff_rhss[j],
-										     images[j]);
-
-	    		uop->dispatch(this, true /* ok to run in this thread */);
-	    	}
-	    }
-    if (gpu_data) {
-    	std::swap(domain_transform.ptr_data, gpu_ptr_data);
-    	std::swap(domain_transform.range_data, gpu_rect_data);
-    	GPUImageMicroOp<N, T, N2, T2> *micro_op =
-	       new GPUImageMicroOp<N, T, N2, T2>(
-		 parent, domain_transform, !cpu_data, buffer);
-    	for (size_t j = 0; j < sources.size(); j++) {
-    		micro_op->add_sparsity_output(sources[j], images[j]);
+      if (gpu_data) assert(buffers);
+      bool opcount = cpu_ptr_data.size() + cpu_rect_data.size() + gpu_ptr_data.size() + gpu_rect_data.size();
+      bool exclusive = gpu_data && (opcount == 1);
+      if (!exclusive) {
+    	// launch full cross-product of image micro ops right away
+    	for (size_t i = 0; i < sources.size(); i++) {
+    		SparsityMapImpl<N, T>::lookup(images[i])->set_contributor_count(opcount);
     	}
-    	micro_op->dispatch(this, true);
-    }
+      }
+      for (size_t i = 0; i < cpu_ptr_data.size(); i++) {
+      	ImageMicroOp<N, T, N2, T2> *uop = new ImageMicroOp<N, T, N2, T2>(
+  		parent, cpu_ptr_data[i].index_space,
+  		cpu_ptr_data[i].inst,
+  		cpu_ptr_data[i].field_offset, false /*ptrs*/);
+      	for (size_t j = 0; j < sources.size(); j++)
+      		if (diff_rhss.empty())
+      			uop->add_sparsity_output(sources[j], images[j]);
+      		else
+      			uop->add_sparsity_output_with_difference(sources[j], diff_rhss[j],
+  								     images[j]);
+      	uop->dispatch(this, true /* ok to run in this thread */);
+      }
+      for (size_t i = 0; i < cpu_rect_data.size(); i++) {
+      	ImageMicroOp<N, T, N2, T2> *uop = new ImageMicroOp<N, T, N2, T2>(
+  		parent, cpu_rect_data[i].index_space,
+  		cpu_rect_data[i].inst,
+  		cpu_rect_data[i].field_offset, true /*ranges*/);
+      	for (size_t j = 0; j < sources.size(); j++)
+      		if (diff_rhss.empty())
+      			uop->add_sparsity_output(sources[j], images[j]);
+      		else
+      			uop->add_sparsity_output_with_difference(sources[j], diff_rhss[j],
+  								     images[j]);
+      	uop->dispatch(this, true /* ok to run in this thread */);
+      }
+      for (auto it = gpu_ptr_data.begin(); it != gpu_ptr_data.end(); it++) {
+          	// launch full cross-product of image micro ops right away
+          Memory my_mem = it->first;
+          domain_transform.ptr_data = it->second;
+          assert(buffers->buffers.find(my_mem) != buffers->buffers.end());
+          RegionInstance buffer = buffers->buffers[my_mem];
+      	  GPUImageMicroOp<N, T, N2, T2> *micro_op =
+  	         new GPUImageMicroOp<N, T, N2, T2>(
+  		   parent, domain_transform, exclusive, buffer);
+      	  for (size_t j = 0; j < sources.size(); j++) {
+      		  micro_op->add_sparsity_output(sources[j], images[j]);
+      	  }
+      	  micro_op->dispatch(this, true);
+      }
    }
   }
 
