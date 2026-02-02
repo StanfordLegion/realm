@@ -506,11 +506,58 @@ private:
   RegionInstance inst, red_src_inst, copy_dst_inst;
 };
 
+// Verify that barrier arrivals are executed by the subgraph.
+class BarrierArrivalTest : public SubgraphTest {
+public:
+  BarrierArrivalTest() {}
+  ~BarrierArrivalTest() {}
+  std::string name() const override { return "BarrierArrivalTest"; }
+
+  bool can_run() override { return true; }
+
+  void init() override
+  {
+    // Create 3 barriers, each expecting 1 arrival.
+    barriers[0] = Barrier::create_barrier(1);
+    barriers[1] = Barrier::create_barrier(1);
+    barriers[2] = Barrier::create_barrier(1);
+
+    // Define the subgraph with 3 barrier arrivals.
+    SubgraphDefinition sd;
+    sd.concurrency_mode = SubgraphDefinition::INSTANTIATION_ORDER;
+
+    // Add barrier arrival operations for each barrier.
+    for(int i = 0; i < 3; i++) {
+      SubgraphDefinition::ArrivalDesc ad;
+      ad.barrier = barriers[i];
+      sd.arrivals.push_back(ad);
+    }
+
+    Subgraph::create_subgraph(sg, sd, ProfilingRequestSet()).wait();
+  }
+
+  void run() override { sg.instantiate(nullptr, 0, ProfilingRequestSet()).wait(); }
+
+  bool check() override
+  {
+    // Wait on each barrier event to verify they have been triggered.
+    for(int i = 0; i < 3; i++) {
+      barriers[i].wait();
+    }
+    return true;
+  }
+
+  void cleanup() override { sg.destroy(); }
+
+private:
+  Subgraph sg;
+  Barrier barriers[3];
+};
+
 // TODO (rohany): Some more tests to write:
 // * A test with dependencies between tasks and copies.
 // * A test with interpolations.
 // * A test with external pre/post-conditions.
-// * A test with barrier arrivals.
 // * A test with chained subgraphs.
 // * A test that instantiation order subgraphs are respected? (maybe not).
 
@@ -520,6 +567,7 @@ void top_level_task(const void *args, size_t arglen, const void *userdata, size_
   std::vector<std::unique_ptr<SubgraphTest>> tests;
   tests.emplace_back(new SimpleTasksTest());
   tests.emplace_back(new SimpleCopyTest());
+  tests.emplace_back(new BarrierArrivalTest());
 
   log_app.info() << "Beginning subgraph tests.";
   std::vector<std::string> failed_tests;
