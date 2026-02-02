@@ -16,6 +16,7 @@
  */
 
 #include "realm.h"
+#include "realm/indexspace.h"
 #include "realm/subgraph.h"
 
 #include <vector>
@@ -42,6 +43,9 @@ enum
 {
     FID_DATA = 100,
 };
+
+// A counter for tests that may want to perform reduction copies.
+static int32_t redop_id_counter = 100;
 
 // Parent class for subgraph unit tests.
 class SubgraphTest {
@@ -82,6 +86,40 @@ int make_task_desc(SubgraphDefinition& sd, Processor proc, int task_id, void* ar
     return sd.tasks.size() - 1;
 }
 
+int make_copy_desc(SubgraphDefinition& sd, IndexSpace<1> space, RegionInstance src, RegionInstance dst, FieldID field_id, size_t size) {
+    SubgraphDefinition::CopyDesc cd;
+    cd.space = space;
+    cd.srcs.resize(1);
+    cd.srcs[0].set_field(src, field_id, size);
+    cd.dsts.resize(1);
+    cd.dsts[0].set_field(dst, field_id, size);
+    sd.copies.push_back(cd);
+    return sd.copies.size() - 1;
+}
+
+int make_fill_desc(SubgraphDefinition& sd, IndexSpace<1> space, RegionInstance inst, FieldID field_id, void* fill_value, size_t fill_value_size) {
+    SubgraphDefinition::CopyDesc cd;
+    cd.space = space;
+    cd.srcs.resize(1);
+    cd.srcs[0].set_fill(fill_value, fill_value_size);
+    cd.dsts.resize(1);
+    cd.dsts[0].set_field(inst, FID_DATA, sizeof(int));
+    sd.copies.push_back(cd);
+    return sd.copies.size() - 1;
+}
+
+int make_reduction_copy_desc(SubgraphDefinition& sd, IndexSpace<1> space, RegionInstance src, RegionInstance dst, FieldID field_id, int redop_id) {
+    SubgraphDefinition::CopyDesc cd;
+    cd.space = space;
+    cd.srcs.resize(1);
+    cd.srcs[0].set_field(src, field_id, sizeof(int));
+    cd.dsts.resize(1);
+    cd.dsts[0].set_field(dst, field_id, sizeof(int));
+    cd.dsts[0].set_redop(redop_id, false /* is_fold */);
+    sd.copies.push_back(cd);
+    return sd.copies.size() - 1;
+}
+
 void add_dependency(SubgraphDefinition& sd, SubgraphDefinition::OpKind src_op_kind, int src_op_index, SubgraphDefinition::OpKind tgt_op_kind, int tgt_op_index) {
     SubgraphDefinition::Dependency dep;
     dep.src_op_kind = src_op_kind;
@@ -92,6 +130,7 @@ void add_dependency(SubgraphDefinition& sd, SubgraphDefinition::OpKind src_op_ki
     sd.dependencies.push_back(dep);
 }
 
+// SimpleTasksTests is a simple subgraph that only contains tasks.
 class SimpleTasksTest : public SubgraphTest {
 public:
     SimpleTasksTest() {}
@@ -235,8 +274,177 @@ private:
     bool error = false;
 };
 
-// TODO (rohany): Some tests to start out writing:
-// * A simple test that only contains copies.
+
+// SimpleCopyTest is a simple subgraph that contains the three
+// kinds of copies that Realm supports.
+class SimpleCopyTest : public SubgraphTest {
+public:
+    SimpleCopyTest() {}
+    ~SimpleCopyTest() {}
+    std::string name() const override { return "SimpleCopyTest"; }
+
+    // Simple integer addition reduction operation
+    struct SumReduction {
+        typedef int LHS;
+        typedef int RHS;
+        static const RHS identity = 0;
+
+        template <bool EXCL>
+        void apply(LHS &lhs, const RHS &rhs) const {
+            lhs += rhs;
+        }
+
+        template <bool EXCL>
+        void fold(RHS &rhs1, const RHS &rhs2) const {
+            rhs1 += rhs2;
+        }
+    };
+
+    void register_test() override {
+        redop_id = redop_id_counter++;
+        Runtime rt = Runtime::get_runtime();
+        rt.register_reduction<SumReduction>(redop_id);
+    }
+
+    bool can_run() override {
+        // Just need a system memory.
+        Memory sysmem = Machine::MemoryQuery(Machine::get_machine())
+                        .only_kind(Memory::Kind::SYSTEM_MEM)
+                        .first();
+        return sysmem.exists();
+    }
+
+    void init() override {
+        Memory sysmem = Machine::MemoryQuery(Machine::get_machine())
+                        .only_kind(Memory::Kind::SYSTEM_MEM)
+                        .first();
+        assert(sysmem.exists());
+
+        // Create 2 regions with 10 elements.
+        // In inst:
+        // Elements 0-4: will be filled.
+        // Elements 5-9: will be reduced.
+        IndexSpace<1> is = Rect<1>(0, 9);
+        std::map<FieldID, size_t> field_sizes = { { FID_DATA, sizeof(int) } };
+        RegionInstance::create_instance(inst, sysmem, is, field_sizes, 0, ProfilingRequestSet()).wait();
+        assert(inst.exists());
+        // In copy_dst_inst:
+        // Elements 0-4 will be copied from inst.
+        // The remaining elements will be filled to test the sub-piece copy.
+        RegionInstance::create_instance(copy_dst_inst, sysmem, is, field_sizes, 0, ProfilingRequestSet()).wait();
+        assert(copy_dst_inst.exists());
+        {
+            int fill_value = -1;
+            std::vector<CopySrcDstField> dsts;
+            dsts.resize(1);
+            dsts[0].set_field(copy_dst_inst, FID_DATA, sizeof(int));
+            is.fill(dsts, ProfilingRequestSet(), &fill_value, sizeof(fill_value)).wait();
+        }
+
+        // Create an external instance that will be used as part of the reduction source.
+        IndexSpace<1> red_src_is = Rect<1>(5, 9);
+        RegionInstance::create_instance(red_src_inst, sysmem, red_src_is, field_sizes, 0, ProfilingRequestSet()).wait();
+        assert(red_src_inst.exists());
+        {
+            int fill_value = 42;
+            std::vector<CopySrcDstField> dsts;
+            dsts.resize(1);
+            dsts[0].set_field(red_src_inst, FID_DATA, sizeof(int));
+            red_src_is.fill(dsts, ProfilingRequestSet(), &fill_value, sizeof(fill_value)).wait();
+        }
+
+
+        {
+            SubgraphDefinition sd;
+            sd.concurrency_mode = SubgraphDefinition::INSTANTIATION_ORDER;
+
+            // Fill elements 0-4 with value 15210.
+            int fill_value = 15210;
+            int f1 = make_fill_desc(sd, IndexSpace<1>(Rect<1>(0, 4)), inst, FID_DATA, &fill_value, sizeof(fill_value));
+
+            // Initialize the target of the reduction with value 5.
+            fill_value = 5;
+            int f2 = make_fill_desc(sd, IndexSpace<1>(Rect<1>(5, 9)), inst, FID_DATA, &fill_value, sizeof(fill_value));
+
+            // For the range 5-9, do a copy-reduction.
+            int r1 = make_reduction_copy_desc(sd, IndexSpace<1>(Rect<1>(5, 9)), red_src_inst, inst, FID_DATA, redop_id);
+
+            // Copy between inst and copy_dst_inst.
+            int c1 = make_copy_desc(sd, IndexSpace<1>(Rect<1>(0, 4)), inst, copy_dst_inst, FID_DATA, sizeof(int));
+
+            // The copy depends on the first fill.
+            add_dependency(sd, SubgraphDefinition::OPKIND_COPY, f1, SubgraphDefinition:: OPKIND_COPY, c1);
+            // The reductions depend on the second fill.
+            add_dependency(sd, SubgraphDefinition::OPKIND_COPY, f2, SubgraphDefinition:: OPKIND_COPY, r1);
+            Subgraph::create_subgraph(sg, sd, ProfilingRequestSet()).wait();
+        }
+    }
+
+    void run() override {
+        sg.instantiate(nullptr, 0, ProfilingRequestSet()).wait();
+    }
+
+    bool check() override {
+        AffineAccessor<int, 1> acc_inst(inst, FID_DATA);
+        AffineAccessor<int, 1> acc_copy_dst_inst(copy_dst_inst, FID_DATA);
+        bool success = true;
+
+        // [0,4] of inst was filled to 15210.
+        for (int i = 0; i <= 4; i++) {
+            int expected = 15210;
+            int actual = acc_inst[i];
+            if (actual != expected) {
+                log_app.error() << "MISMATCH at " << i << ": " << actual << " != " << expected;
+                success = false;
+            }
+        }
+
+        // [5,9] of inst was filled to 5, and [5,9] of red_src_inst was filled to 42.
+        for (int i = 5; i <= 9; i++) {
+            int expected = 5 + 42;
+            int actual = acc_inst[i];
+            if (actual != expected) {
+                log_app.error() << "MISMATCH at " << i << ": " << actual << " != " << expected;
+                success = false;
+            }
+        }
+
+        // [0,4] of copy_dst_inst was copied from [0,4] of inst.
+        for (int i = 0; i <= 4; i++) {
+            int expected = 15210;
+            int actual = acc_copy_dst_inst[i];
+            if (actual != expected) {
+                log_app.error() << "MISMATCH at " << i << ": " << actual << " != " << expected;
+                success = false;
+            }
+        }
+        // [5,9] of copy_dst_inst was filled to -1.
+        for (int i = 5; i <= 9; i++) {
+            int expected = -1;
+            int actual = acc_copy_dst_inst[i];
+            if (actual != expected) {
+                log_app.error() << "MISMATCH at " << i << ": " << actual << " != " << expected;
+                success = false;
+            }
+        }
+
+        return success;
+    }
+
+    void cleanup() override {
+        sg.destroy();
+        inst.destroy();
+        copy_dst_inst.destroy();
+        red_src_inst.destroy();
+    }
+
+private:
+    ReductionOpID redop_id;
+    Subgraph sg;
+    RegionInstance inst, red_src_inst, copy_dst_inst;
+};
+
+// TODO (rohany): Some more tests to write: 
 // * A test with dependencies between tasks and copies.
 // * A test with interpolations.
 // * A test with external pre/post-conditions.
@@ -247,6 +455,7 @@ private:
 void top_level_task(const void* args, size_t arglen, const void* userdata, size_t userlen, Processor p) {
     std::vector<std::unique_ptr<SubgraphTest>> tests;
     tests.emplace_back(new SimpleTasksTest());
+    tests.emplace_back(new SimpleCopyTest());
 
     log_app.info() << "Beginning subgraph tests.";
     std::vector<std::string> failed_tests;
