@@ -17,8 +17,10 @@
 
 #include "realm.h"
 #include "realm/indexspace.h"
+#include "realm/serialize.h"
 #include "realm/subgraph.h"
 
+#include <cstdint>
 #include <vector>
 
 using namespace Realm;
@@ -39,13 +41,40 @@ enum
 // don't need a gigantic enum with all of the task IDs.
 static int32_t task_id_counter = TOP_LEVEL_TASK + 1;
 
+// Field IDs.
 enum
 {
   FID_DATA = 100,
 };
 
-// A counter for tests that may want to perform reduction copies.
-static int32_t redop_id_counter = 100;
+// Common reduction operation IDs.
+enum
+{
+  REDOP_INT_ADD = 100,
+};
+
+// A counter for tests that may want to dynamically register
+// reduction operations.
+static int32_t redop_id_counter = REDOP_INT_ADD + 1;
+
+// SumReduction is a simple integer addition reduction operation.
+struct SumReduction {
+  typedef int LHS;
+  typedef int RHS;
+  static const RHS identity = 0;
+
+  template <bool EXCL>
+  void apply(LHS &lhs, const RHS &rhs) const
+  {
+    lhs += rhs;
+  }
+
+  template <bool EXCL>
+  void fold(RHS &rhs1, const RHS &rhs2) const
+  {
+    rhs1 += rhs2;
+  }
+};
 
 // Parent class for subgraph unit tests.
 class SubgraphTest {
@@ -140,6 +169,41 @@ void add_dependency(SubgraphDefinition &sd, SubgraphDefinition::OpKind src_op_ki
   dep.tgt_op_index = tgt_op_index;
   // TODO (rohany): Allow for specifying ports.
   sd.dependencies.push_back(dep);
+}
+
+void add_task_interpolation(SubgraphDefinition &sd, int task_index, size_t offset,
+                            size_t bytes, size_t target_offset)
+{
+  SubgraphDefinition::Interpolation interp;
+  interp.offset = offset;
+  interp.bytes = bytes;
+  interp.target_kind = SubgraphDefinition::Interpolation::TARGET_TASK_ARGS;
+  interp.target_index = task_index;
+  interp.target_offset = target_offset;
+  sd.interpolations.push_back(interp);
+}
+
+void add_arrival_barrier_interpolation(SubgraphDefinition &sd, int arrival_index,
+                                       size_t offset, size_t bytes)
+{
+  SubgraphDefinition::Interpolation interp;
+  interp.offset = offset;
+  interp.bytes = bytes;
+  interp.target_kind = SubgraphDefinition::Interpolation::TARGET_ARRIVAL_BARRIER;
+  interp.target_index = arrival_index;
+  sd.interpolations.push_back(interp);
+}
+
+void add_arrival_redvalue_interpolation(SubgraphDefinition &sd, int arrival_index,
+                                        size_t offset, size_t bytes, int redop_id)
+{
+  SubgraphDefinition::Interpolation interp;
+  interp.offset = offset;
+  interp.bytes = bytes;
+  interp.target_kind = SubgraphDefinition::Interpolation::TARGET_ARRIVAL_VALUE;
+  interp.target_index = arrival_index;
+  interp.redop_id = redop_id;
+  sd.interpolations.push_back(interp);
 }
 
 // SimpleTasksTests is a simple subgraph that only contains tasks.
@@ -328,32 +392,6 @@ public:
   ~SimpleCopyTest() {}
   std::string name() const override { return "SimpleCopyTest"; }
 
-  // Simple integer addition reduction operation
-  struct SumReduction {
-    typedef int LHS;
-    typedef int RHS;
-    static const RHS identity = 0;
-
-    template <bool EXCL>
-    void apply(LHS &lhs, const RHS &rhs) const
-    {
-      lhs += rhs;
-    }
-
-    template <bool EXCL>
-    void fold(RHS &rhs1, const RHS &rhs2) const
-    {
-      rhs1 += rhs2;
-    }
-  };
-
-  void register_test() override
-  {
-    redop_id = redop_id_counter++;
-    Runtime rt = Runtime::get_runtime();
-    rt.register_reduction<SumReduction>(redop_id);
-  }
-
   bool can_run() override
   {
     // Just need a system memory.
@@ -426,7 +464,7 @@ public:
 
       // For the range 5-9, do a copy-reduction.
       int r1 = make_reduction_copy_desc(sd, IndexSpace<1>(Rect<1>(5, 9)), red_src_inst,
-                                        inst, FID_DATA, redop_id);
+                                        inst, FID_DATA, REDOP_INT_ADD);
 
       // Copy between inst and copy_dst_inst.
       int c1 = make_copy_desc(sd, IndexSpace<1>(Rect<1>(0, 4)), inst, copy_dst_inst,
@@ -501,7 +539,6 @@ public:
   }
 
 private:
-  ReductionOpID redop_id;
   Subgraph sg;
   RegionInstance inst, red_src_inst, copy_dst_inst;
 };
@@ -554,9 +591,206 @@ private:
   Barrier barriers[3];
 };
 
+// Test the interpolation of subgraph arguments.
+class InterpolationTest : public SubgraphTest {
+public:
+  InterpolationTest() {}
+  ~InterpolationTest() {}
+  std::string name() const override { return "InterpolationTest"; }
+
+  struct WriterTaskArgs {
+    WriterTaskArgs(RegionInstance inst32, RegionInstance inst64, int32_t value1,
+                   int64_t value2, int32_t value3)
+      : inst32(inst32)
+      , inst64(inst64)
+      , value1(value1)
+      , value2(value2)
+      , value3(value3)
+    {}
+    RegionInstance inst32;
+    RegionInstance inst64;
+    int32_t value1;
+    // Test interpolations of different sizes.
+    int64_t value2;
+    int32_t value3;
+  };
+
+  static void writer_task(const void *args, size_t arglen, const void *userdata,
+                          size_t userlen, Processor p)
+  {
+    const WriterTaskArgs *task_args = static_cast<const WriterTaskArgs *>(args);
+    AffineAccessor<int32_t, 1> acc32(task_args->inst32, FID_DATA);
+    AffineAccessor<int64_t, 1> acc64(task_args->inst64, FID_DATA);
+    // Write out the interpolated elements.
+    acc32[0] = task_args->value1;
+    acc64[0] = task_args->value2;
+    acc32[1] = task_args->value3;
+  }
+
+  void register_test() override
+  {
+    writer_task_id = task_id_counter++;
+    Runtime rt = Runtime::get_runtime();
+    rt.register_task(writer_task_id, writer_task);
+  }
+
+  bool can_run() override
+  {
+    // Need at least 1 CPU and system memory.
+    Machine::ProcessorQuery pq =
+        Machine::ProcessorQuery(Machine::get_machine()).only_kind(Processor::LOC_PROC);
+    Memory sysmem = Machine::MemoryQuery(Machine::get_machine())
+                        .only_kind(Memory::Kind::SYSTEM_MEM)
+                        .first();
+    return pq.count() >= 1 && sysmem.exists();
+  }
+
+  void init() override
+  {
+    Machine::ProcessorQuery pq =
+        Machine::ProcessorQuery(Machine::get_machine()).only_kind(Processor::LOC_PROC);
+    Processor cpu = pq.first();
+    Memory sysmem = Machine::MemoryQuery(Machine::get_machine())
+                        .only_kind(Memory::Kind::SYSTEM_MEM)
+                        .first();
+    assert(sysmem.exists());
+
+    IndexSpace<1> is1 = Rect<1>(0, 1);
+    IndexSpace<1> is2 = Rect<1>(0, 0);
+    std::map<FieldID, size_t> field_sizes32 = {{FID_DATA, sizeof(int32_t)}};
+    std::map<FieldID, size_t> field_sizes64 = {{FID_DATA, sizeof(int64_t)}};
+    RegionInstance::create_instance(inst32, sysmem, is1, field_sizes32, 0,
+                                    ProfilingRequestSet())
+        .wait();
+    assert(inst32.exists());
+    RegionInstance::create_instance(inst64, sysmem, is2, field_sizes64, 0,
+                                    ProfilingRequestSet())
+        .wait();
+    assert(inst64.exists());
+
+    // Create a barrier for the subgraph to arrive on.
+    int initial_reduce_value = 0; // Will be interpolated
+    interpolated_barrier = Barrier::create_barrier(
+        1, REDOP_INT_ADD, &initial_reduce_value, sizeof(initial_reduce_value));
+
+    {
+      SubgraphDefinition sd;
+      sd.concurrency_mode = SubgraphDefinition::INSTANTIATION_ORDER;
+
+      // Create a task with arguments that will be overwritten by interpolation.
+      WriterTaskArgs wargs(inst32, inst64, 0, 0, 0);
+      int task_idx = make_task_desc(sd, cpu, writer_task_id, &wargs, sizeof(wargs));
+
+      // Create a barrier arrival with a placeholder barrier and reduction value.
+      SubgraphDefinition::ArrivalDesc ad;
+      ad.barrier = Barrier::NO_BARRIER;
+      ad.reduce_value.set(&initial_reduce_value, sizeof(initial_reduce_value));
+      sd.arrivals.push_back(ad);
+      int arrival_idx = 0;
+
+      // Register the interpolations with the subgraph. Maintain the
+      // offset in the instantiation arguments.
+      size_t offset = 0;
+      add_task_interpolation(sd, task_idx, offset, sizeof(int32_t),
+                             offsetof(WriterTaskArgs, value1));
+      offset += sizeof(int32_t);
+      add_task_interpolation(sd, task_idx, offset, sizeof(int64_t),
+                             offsetof(WriterTaskArgs, value2));
+      offset += sizeof(int64_t);
+      add_task_interpolation(sd, task_idx, offset, sizeof(int32_t),
+                             offsetof(WriterTaskArgs, value3));
+      offset += sizeof(int32_t);
+
+      add_arrival_barrier_interpolation(sd, arrival_idx, offset, sizeof(Barrier));
+      offset += sizeof(Barrier);
+      add_arrival_redvalue_interpolation(sd, arrival_idx, offset, sizeof(int),
+                                         REDOP_INT_ADD);
+
+      Subgraph::create_subgraph(sg, sd, ProfilingRequestSet()).wait();
+    }
+  }
+
+  void run() override
+  {
+    // Prepare instantiation arguments with interpolation data.
+
+    // Allocate a buffer for the instantiation arguments.
+    size_t args_size = sizeof(int32_t) + sizeof(int64_t) + sizeof(int32_t) +
+                       sizeof(Barrier) + sizeof(int);
+    Serialization::DynamicBufferSerializer serializer(args_size);
+    serializer << expected_value1;
+    serializer << expected_value2;
+    serializer << expected_value3;
+    serializer << interpolated_barrier;
+    serializer << expected_reduce_value;
+
+    // Instantiate the subgraph with interpolation arguments. The subgraph
+    // will make a copy of the buffer before returning.
+    sg.instantiate(serializer.get_buffer(), serializer.bytes_used(),
+                   ProfilingRequestSet())
+        .wait();
+  }
+
+  bool check() override
+  {
+    bool success = true;
+
+    // Check task argument interpolations
+    AffineAccessor<int32_t, 1> acc32(inst32, FID_DATA);
+    AffineAccessor<int64_t, 1> acc64(inst64, FID_DATA);
+
+    int32_t actual1 = acc32[0];
+    if(actual1 != expected_value1) {
+      log_app.error() << "MISMATCH value1: " << actual1 << " != " << expected_value1;
+      success = false;
+    }
+
+    int64_t actual2 = acc64[0];
+    if(actual2 != expected_value2) {
+      log_app.error() << "MISMATCH value2: " << actual2 << " != " << expected_value2;
+      success = false;
+    }
+
+    int32_t actual3 = acc32[1];
+    if(actual3 != expected_value3) {
+      log_app.error() << "MISMATCH value3: " << actual3 << " != " << expected_value3;
+      success = false;
+    }
+
+    // Wait on the barrier to ensure it was triggered.
+    interpolated_barrier.wait();
+
+    int reduction_result = 0;
+    if(!interpolated_barrier.get_result(&reduction_result, sizeof(int)) ||
+       (reduction_result != expected_reduce_value)) {
+      log_app.error() << "Interpolated barrier reduction failed.";
+      success = false;
+    }
+
+    return success;
+  }
+
+  void cleanup() override
+  {
+    sg.destroy();
+    inst32.destroy();
+    inst64.destroy();
+  }
+
+private:
+  int writer_task_id = 0;
+  Subgraph sg;
+  // Separate instances for 32 bit and 64 bit values.
+  RegionInstance inst32, inst64;
+  Barrier interpolated_barrier;
+  int32_t expected_value1 = 15210;
+  int64_t expected_value2 = int64_t(INT32_MAX) * 2;
+  int32_t expected_value3 = 42;
+  int expected_reduce_value = 99;
+};
+
 // TODO (rohany): Some more tests to write:
 // * A test with dependencies between tasks and copies.
-// * A test with interpolations.
 // * A test with external pre/post-conditions.
 // * A test with chained subgraphs.
 // * A test that instantiation order subgraphs are respected? (maybe not).
@@ -568,6 +802,7 @@ void top_level_task(const void *args, size_t arglen, const void *userdata, size_
   tests.emplace_back(new SimpleTasksTest());
   tests.emplace_back(new SimpleCopyTest());
   tests.emplace_back(new BarrierArrivalTest());
+  tests.emplace_back(new InterpolationTest());
 
   log_app.info() << "Beginning subgraph tests.";
   std::vector<std::string> failed_tests;
@@ -612,6 +847,7 @@ int main(int argc, char **argv)
 
   // Register the top-level task.
   rt.register_task(TOP_LEVEL_TASK, top_level_task);
+  rt.register_reduction<SumReduction>(REDOP_INT_ADD);
 
   // Kick off the top-level task.
   Processor p = Machine::ProcessorQuery(Machine::get_machine())
