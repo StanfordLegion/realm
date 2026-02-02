@@ -50,7 +50,7 @@ namespace Realm {
   template class GPUImageMicroOp<N1, T1, N2, T2>;																	 \
   template class ImageOperation<N1,T1,N2,T2>;                                                                        \
   template ImageMicroOp<N1,T1,N2,T2>::ImageMicroOp(NodeID, AsyncMicroOp *, Serialization::FixedBufferDeserializer&); \
-  template void IndexSpace<N1, T1>::suggest_deppart_buffer_size(						     \
+  template void IndexSpace<N1, T1>::suggest_image_buffer_size(						     \
 	const std::vector<DeppartSubspace<N2,T2>>&,							     \
 	const std::vector<DeppartEstimateInput<N2,T2>>&,							     \
 	std::vector<DeppartEstimateSuggestion>&) const;							     \

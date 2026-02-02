@@ -20,7 +20,8 @@
 #ifndef REALM_DEPPART_PREIMAGE_H
 #define REALM_DEPPART_PREIMAGE_H
 
-#include "realm/deppart/partitions.h"
+#include "partitions.h"
+#include "realm/deppart/rectlist.h"
 
 namespace Realm {
 
@@ -150,6 +151,36 @@ namespace Realm {
    IndexSpace<N, T> parent_space;
    std::vector<IndexSpace<N2, T2> > targets;
    std::vector<SparsityMap<N, T> > sparsity_outputs;
+  };
+
+  template <int N, typename T, int N2, typename T2>
+  class GPUPreimageMicroOp : public GPUMicroOp<N, T> {
+  public:
+    static const int DIM = N;
+    typedef T IDXTYPE;
+    static const int DIM2 = N2;
+    typedef T2 IDXTYPE2;
+
+    GPUPreimageMicroOp(const DomainTransform<N2, T2, N, T> &_domain_transform,
+                              IndexSpace<N, T> _parent_space, bool _exclusive);
+
+    virtual ~GPUPreimageMicroOp(void);
+
+    void add_sparsity_output(IndexSpace<N2,T2> _target, SparsityMap<N,T> _sparsity);
+
+    virtual void execute(void);
+
+    void dispatch(PartitioningOperation *op, bool inline_ok);
+
+  protected:
+
+    void gpu_populate_ranges();
+    void gpu_populate_bitmasks();
+
+    DomainTransform<N2, T2, N, T> domain_transform;
+    IndexSpace<N, T> parent_space;
+    std::vector<IndexSpace<N2, T2> > targets;
+    std::vector<SparsityMap<N, T> > sparsity_outputs;
   };
 
   };  // namespace Realm

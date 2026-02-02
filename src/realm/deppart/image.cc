@@ -32,7 +32,7 @@ namespace Realm {
 
   template <int N, typename T>
   template <int N2, typename T2>
-  void IndexSpace<N,T>::suggest_deppart_buffer_size(
+  void IndexSpace<N,T>::suggest_image_buffer_size(
     const std::vector<DeppartSubspace<N2,T2>>& source_spaces,
     const std::vector<DeppartEstimateInput<N2,T2>>& inputs,
     std::vector<DeppartEstimateSuggestion>& suggestions) const {
@@ -58,7 +58,7 @@ namespace Realm {
         (2 * source_entries * sizeof(uint64_t)) +
         (source_entries * sizeof(uint64_t));
     }
-    std::vector<DeppartEstimateSuggestion> result(inputs.size());
+    suggestions = std::vector<DeppartEstimateSuggestion>(inputs.size());
     for (size_t i = 0; i < inputs.size(); i++) {
       IndexSpace<N2, T2> is = inputs[i].space;
       Memory mem = inputs[i].location;
@@ -71,13 +71,13 @@ namespace Realm {
       	}
         minimal_size = max(minimal_size, device_size);
       	size_t optimal_size = is.bounds.volume() * sizeof(Rect<N, T>) * source_spaces.size() + minimal_size;
-      	result[i].suggested = mem;
-      	result[i].lower_bound = minimal_size;
-      	result[i].upper_bound = optimal_size;
+      	suggestions[i].suggested = mem;
+      	suggestions[i].lower_bound = minimal_size;
+      	suggestions[i].upper_bound = optimal_size;
       } else {
-	result[i].suggested = Memory::NO_MEMORY;
-      	result[i].lower_bound = 0;
-      	result[i].upper_bound = 0;
+	suggestions[i].suggested = Memory::NO_MEMORY;
+      	suggestions[i].lower_bound = 0;
+      	suggestions[i].upper_bound = 0;
       }
     }
   }

@@ -52,7 +52,11 @@ namespace Realm {
 							     const std::vector<F>&, \
 							     std::vector<IndexSpace<N,T> >&, \
 							     const ProfilingRequestSet &, \
-							     Event) const;
+							     Event) const;      \
+  template void IndexSpace<N, T>::suggest_byfield_buffer_size<F>(					\
+	const std::vector<DeppartEstimateInput<N,T>>&,						\
+	std::vector<DeppartEstimateSuggestion>&) const;
+
   
 FOREACH_NTF(DOIT)
 

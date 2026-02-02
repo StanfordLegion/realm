@@ -29,6 +29,34 @@ namespace Realm {
   extern Logger log_part;
   extern Logger log_uop_timing;
 
+  template <int N, typename T>
+  template<typename FT>
+  void IndexSpace<N,T>::suggest_byfield_buffer_size(
+    const std::vector<DeppartEstimateInput<N,T>>& inputs,
+    std::vector<DeppartEstimateSuggestion>& suggestions) const {
+    suggestions = std::vector<DeppartEstimateSuggestion>(inputs.size());
+    for (size_t i = 0; i < inputs.size(); i++) {
+      IndexSpace<N, T> is = inputs[i].space;
+      Memory mem = inputs[i].location;
+      if (mem.kind() == Memory::GPU_FB_MEM ||
+          mem.kind() == Memory::Z_COPY_MEM) {
+        const char* val = std::getenv("MIN_SIZE");  // or any env var
+        size_t device_size = 2000000; //default
+        if (val) {
+          device_size = atoi(val);
+        }
+        size_t optimal_size = is.bounds.volume() * sizeof(Rect<N, T>);
+        suggestions[i].suggested = mem;
+        suggestions[i].lower_bound = device_size;
+        suggestions[i].upper_bound = max(device_size, optimal_size);
+          } else {
+            suggestions[i].suggested = Memory::NO_MEMORY;
+            suggestions[i].lower_bound = 0;
+            suggestions[i].upper_bound = 0;
+          }
+    }
+  }
+
 
   template <int N, typename T>
   template <typename FT>
@@ -380,33 +408,35 @@ namespace Realm {
     std::vector<FieldDataDescriptor<IndexSpace<N,T>,FT> > gpu_field_data;
     std::vector<FieldDataDescriptor<IndexSpace<N,T>,FT> > cpu_field_data;
     for (size_t i = 0; i < field_data.size(); i++) {
-      if (field_data[i].inst.get_location().kind() == Memory::GPU_FB_MEM) {
+      if (field_data[i].inst.get_location().kind() == Memory::GPU_FB_MEM
+        || field_data[i].inst.get_location().kind() == Memory::Z_COPY_MEM) {
         gpu_field_data.push_back(field_data[i]);
       } else {
         cpu_field_data.push_back(field_data[i]);
       }
     }
-    if (!cpu_field_data.empty()) {
+    bool exclusive = (gpu_field_data.size() == 1) && cpu_field_data.empty();
+    if (!exclusive) {
       for (size_t i = 0; i < subspaces.size(); i++)
-        SparsityMapImpl<N, T>::lookup(subspaces[i])->set_contributor_count(cpu_field_data.size() + (gpu_field_data.empty() ? 0 : 1));
-      for (size_t i = 0; i < cpu_field_data.size(); i++) {
-        ByFieldMicroOp<N, T, FT> *uop = new ByFieldMicroOp<N, T, FT>(parent,
-                                                                     cpu_field_data[i].index_space,
-                                                                     cpu_field_data[i].inst,
-                                                                     cpu_field_data[i].field_offset);
-        for (size_t j = 0; j < colors.size(); j++)
-          uop->add_sparsity_output(colors[j], subspaces[j]);
-
-        uop->dispatch(this, true /* ok to run in this thread */);
-      }
+        SparsityMapImpl<N, T>::lookup(subspaces[i])->set_contributor_count(cpu_field_data.size() + gpu_field_data.size());
     }
-    if (!gpu_field_data.empty()) {
-      GPUByFieldMicroOp<N, T, FT> *uop = new GPUByFieldMicroOp<N, T, FT>(parent, gpu_field_data, cpu_field_data.empty());
+    for (size_t i = 0; i < cpu_field_data.size(); i++) {
+      ByFieldMicroOp<N, T, FT> *uop = new ByFieldMicroOp<N, T, FT>(parent,
+                                                                   cpu_field_data[i].index_space,
+                                                                   cpu_field_data[i].inst,
+                                                                   cpu_field_data[i].field_offset);
+      for (size_t j = 0; j < colors.size(); j++)
+        uop->add_sparsity_output(colors[j], subspaces[j]);
+
+      uop->dispatch(this, true /* ok to run in this thread */);
+    }
+    for (auto fdd : gpu_field_data) {
+      std::vector<FieldDataDescriptor<IndexSpace<N,T>,FT> > single_gpu_field_data = {fdd};
+      GPUByFieldMicroOp<N, T, FT> *uop = new GPUByFieldMicroOp<N, T, FT>(parent, single_gpu_field_data, exclusive);
       for (size_t i = 0; i < colors.size(); i++) {
         uop->add_sparsity_output(colors[i], subspaces[i]);
       }
       uop->dispatch(this, false);
-
     }
   }
 

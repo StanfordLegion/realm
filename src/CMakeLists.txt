@@ -158,7 +158,7 @@ endforeach()
 # Generate per-dimension object files for GPU deppart.
 foreach(INST_N1 RANGE 1 ${REALM_MAX_DIM})
     foreach(INST_N2 RANGE 1 ${REALM_MAX_DIM})
-        foreach(SRCFILE realm/deppart/byfield realm/deppart/image)
+        foreach(SRCFILE realm/deppart/byfield realm/deppart/image realm/deppart/preimage)
             set(_result_file "${CMAKE_CURRENT_BINARY_DIR}/${SRCFILE}_gpu_${INST_N1}_${INST_N2}.cu")
             # use cmake's configure_file for a portable way of creating wrapper source files
             configure_file("${PROJECT_SOURCE_DIR}/cmake/deppart_tmpl.cu.in" "${_result_file}")

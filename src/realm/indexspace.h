@@ -736,6 +736,11 @@ namespace Realm {
         const std::vector<FT> &colors, std::vector<IndexSpace<N, T>> &subspaces,
         const ProfilingRequestSet &reqs, Event wait_on = Event::NO_EVENT) const;
 
+    template <typename FT>
+    REALM_PUBLIC_API void suggest_byfield_buffer_size(
+        const std::vector<DeppartEstimateInput<N,T>>& inputs,
+        std::vector<DeppartEstimateSuggestion>& suggestions) const;
+
     ///@{
     /**
      * Allows the "function" described by the field to be composed with a
@@ -802,7 +807,7 @@ namespace Realm {
         Event wait_on = Event::NO_EVENT) const;
 
     template<int N2, typename T2>
-    REALM_PUBLIC_API void suggest_deppart_buffer_size(
+    REALM_PUBLIC_API void suggest_image_buffer_size(
         const std::vector<DeppartSubspace<N2,T2>>& source_spaces,
         const std::vector<DeppartEstimateInput<N2,T2>>& inputs,
         std::vector<DeppartEstimateSuggestion>& suggestions) const;
@@ -927,6 +932,12 @@ namespace Realm {
         const std::vector<IndexSpace<N2, T2>> &targets,
         std::vector<IndexSpace<N, T>> &preimages, const ProfilingRequestSet &reqs,
         Event wait_on = Event::NO_EVENT) const;
+
+    template<int N2, typename T2>
+    REALM_PUBLIC_API void suggest_preimage_buffer_size(
+        const std::vector<DeppartSubspace<N2,T2>>& target_spaces,
+        const std::vector<DeppartEstimateInput<N,T>>& inputs,
+        std::vector<DeppartEstimateSuggestion>& suggestions) const;
     ///@}
 
     ///@{
