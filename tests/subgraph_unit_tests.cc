@@ -21,6 +21,7 @@
 #include "realm/subgraph.h"
 
 #include <cstdint>
+#include <memory>
 #include <vector>
 
 using namespace Realm;
