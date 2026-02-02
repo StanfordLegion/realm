@@ -513,7 +513,6 @@ public:
                                                      Realm::ProfilingRequestSet(),
                                                      e01);
     if(wait_on_events) e02.wait();
-    DeppartOutput output;
 
     // an image of p_edges through out_node gives us all the shared nodes, along
     //  with some private nodes
@@ -524,14 +523,14 @@ public:
     }
     std::vector<size_t> byte_fields = {sizeof(char)};
     IndexSpace<1> instance_index_space(Rect<1>(0, tile_size-1));
-    RegionInstance buffer;
-    RegionInstance::create_instance(buffer, gpu_memory, instance_index_space, byte_fields, 0, Realm::ProfilingRequestSet()).wait();
-    output.buffers[gpu_memory] = buffer;
+    for (size_t i = 0; i < src_field_data_gpu.size(); i++) {
+      RegionInstance::create_instance(src_field_data_gpu[i].scratch_buffer, gpu_memory, instance_index_space, byte_fields, 0, Realm::ProfilingRequestSet()).wait();
+    }
     Event e03 = is_nodes.create_subspaces_by_image(src_field_data_gpu,
                                                   p_garbage_edges,
                                                   p_garbage_rd,
                                                   Realm::ProfilingRequestSet(),
-                                                  e02, &output);
+                                                  e02);
     if(wait_on_events) e03.wait();
 
     Event e04 = is_edges.create_subspaces_by_preimage(dst_node_field_data,
@@ -566,7 +565,7 @@ public:
                                                   p_edges,
                                                   p_rd,
                                                   Realm::ProfilingRequestSet(),
-                                                  e2, &output);
+                                                  e2);
     if(wait_on_events) e3.wait();
   	log_app.info() << "GPU Image complete " << Clock::current_time_in_microseconds() << "\n";
   	log_app.info() << "Starting second GPU preimage " << Clock::current_time_in_microseconds() << "\n";

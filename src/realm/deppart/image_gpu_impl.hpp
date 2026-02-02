@@ -224,6 +224,8 @@ void GPUImageMicroOp<N,T,N2,T2>::gpu_populate_ptrs()
       return;
     }
 
+    RegionInstance buffer = domain_transform.ptr_data[0].scratch_buffer;
+
     NVTX_DEPPART(gpu_image);
 
     Memory sysmem;
@@ -233,8 +235,7 @@ void GPUImageMicroOp<N,T,N2,T2>::gpu_populate_ptrs()
 
     size_t tile_size = buffer.get_layout()->bytes_used;
     std::cout << "Using tile size of " << tile_size << " bytes." << std::endl;
-    RegionInstance fixed_buffer = buffer;
-    Arena buffer_arena(reinterpret_cast<void *>(AffineAccessor<char, 1>(fixed_buffer, 0).base), tile_size);
+    Arena buffer_arena(reinterpret_cast<void *>(AffineAccessor<char, 1>(buffer, 0).base), tile_size);
 
     collapsed_space<N2, T2> src_space;
     src_space.offsets = buffer_arena.alloc<size_t>(sources.size()+1);

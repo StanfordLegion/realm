@@ -97,7 +97,7 @@ namespace Realm {
         ImageOperation(const IndexSpace<N, T> &_parent,
                        const DomainTransform<N, T, N2, T2> &_domain_transform,
                        const ProfilingRequestSet &reqs, GenEventImpl *_finish_event,
-                       EventImpl::gen_t _finish_gen, DeppartOutput* buffers = nullptr);
+                       EventImpl::gen_t _finish_gen);
 
         virtual ~ImageOperation(void);
 
@@ -122,7 +122,6 @@ namespace Realm {
         std::vector<IndexSpace<N, T> > diff_rhss;
         std::vector<SparsityMap<N, T> > images;
         bool is_intersection;
-        DeppartOutput* buffers;
     };
 
     template<int N, typename T, int N2, typename T2>
@@ -156,7 +155,7 @@ namespace Realm {
         GPUImageMicroOp(
             const IndexSpace<N, T> &_parent,
             const DomainTransform<N, T, N2, T2> &_domain_transform,
-            bool _exclusive, RegionInstance buffer = RegionInstance::NO_INST);
+            bool _exclusive);
 
         virtual ~GPUImageMicroOp(void);
 
@@ -176,7 +175,6 @@ namespace Realm {
         DomainTransform<N, T, N2, T2> domain_transform;
         std::vector<IndexSpace<N2, T2> > sources;
         std::vector<SparsityMap<N, T> > sparsity_outputs;
-        RegionInstance buffer;
     };
 }; // namespace Realm
 

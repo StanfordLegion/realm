@@ -32,20 +32,21 @@ namespace Realm {
 
   template <int N, typename T>
   template <int N2, typename T2>
-  void IndexSpace<N, T>::estimate_image(
-      const DeppartInput<N2, T2>& input,
-      DeppartSuggestion& suggestion) {
+  void IndexSpace<N,T>::suggest_deppart_buffer_size(
+    const std::vector<DeppartSubspace<N2,T2>>& source_spaces,
+    const std::vector<DeppartEstimateInput<N2,T2>>& inputs,
+    std::vector<DeppartEstimateSuggestion>& suggestions) const {
     size_t minimal_size = 0;
     size_t source_entries = 0;
     bool bvh = false;
-    for (size_t size : input.source_sizes) {
-      source_entries += size == 0 ? 1 : size;
+    for (auto subspace : source_spaces) {
+      source_entries += subspace.entries == 0 ? 1 : subspace.entries;
     }
     minimal_size += sizeof(Rect<N2, T2>) * source_entries;
     if (this->dense()) {
       minimal_size += sizeof(Rect<N, T>);
     } else {
-      minimal_size += sizeof(Rect<N, T>) * input.parent_size;
+      minimal_size += sizeof(Rect<N, T>) * this->sparsity.impl()->get_entries().size();
     }
     if (bvh) {
       minimal_size +=
@@ -57,11 +58,27 @@ namespace Realm {
         (2 * source_entries * sizeof(uint64_t)) +
         (source_entries * sizeof(uint64_t));
     }
-    for (size_t i = 0; i < input.insts.size(); i++) {
-      IndexSpace<N2, T2> is = input.insts[i].first;
-      Memory mem = input.insts[i].second;
-      size_t optimal_size = is.bounds.volume() * sizeof(Rect<N, T>) * input.source_sizes.size() + minimal_size;
-      suggestion.suggestions[mem] = std::make_pair(minimal_size, optimal_size);
+    std::vector<DeppartEstimateSuggestion> result(inputs.size());
+    for (size_t i = 0; i < inputs.size(); i++) {
+      IndexSpace<N2, T2> is = inputs[i].space;
+      Memory mem = inputs[i].location;
+      if (mem.kind() == Memory::GPU_FB_MEM ||
+          mem.kind() == Memory::Z_COPY_MEM) {
+      	const char* val = std::getenv("MIN_SIZE");  // or any env var
+      	size_t device_size = 2000000; //default
+      	if (val) {
+      		device_size = atoi(val);
+      	}
+        minimal_size = max(minimal_size, device_size);
+      	size_t optimal_size = is.bounds.volume() * sizeof(Rect<N, T>) * source_spaces.size() + minimal_size;
+      	result[i].suggested = mem;
+      	result[i].lower_bound = minimal_size;
+      	result[i].upper_bound = optimal_size;
+      } else {
+	result[i].suggested = Memory::NO_MEMORY;
+      	result[i].lower_bound = 0;
+      	result[i].upper_bound = 0;
+      }
     }
   }
 
@@ -71,7 +88,7 @@ namespace Realm {
       const DomainTransform<N, T, N2, T2> &domain_transform,
       const std::vector<IndexSpace<N2, T2>> &sources,
       std::vector<IndexSpace<N, T>> &images, const ProfilingRequestSet &reqs,
-      Event wait_on, DeppartOutput* buffers) const {
+      Event wait_on) const {
    // output vector should start out empty
    assert(images.empty());
 
@@ -79,7 +96,7 @@ namespace Realm {
    Event e = finish_event->current_event();
 
    ImageOperation<N, T, N2, T2> *op = new ImageOperation<N, T, N2, T2>(
-       *this, domain_transform, reqs, finish_event, ID(e).event_generation(), buffers);
+       *this, domain_transform, reqs, finish_event, ID(e).event_generation());
 
    size_t n = sources.size();
    images.resize(n);
@@ -471,11 +488,10 @@ namespace Realm {
       const IndexSpace<N, T> &_parent,
       const DomainTransform<N, T, N2, T2> &_domain_transform,
       const ProfilingRequestSet &reqs, GenEventImpl *_finish_event,
-      EventImpl::gen_t _finish_gen, DeppartOutput* _buffers)
+      EventImpl::gen_t _finish_gen)
       : PartitioningOperation(reqs, _finish_event, _finish_gen),
         parent(_parent),
-        domain_transform(_domain_transform),
-	buffers(_buffers) {}
+        domain_transform(_domain_transform) {}
 
   template <int N, typename T, int N2, typename T2>
   ImageOperation<N,T,N2,T2>::~ImageOperation(void)
@@ -583,26 +599,26 @@ namespace Realm {
   template <int N, typename T, int N2, typename T2>
   void ImageOperation<N, T, N2, T2>::execute(void) {
 
-  	std::map<Memory, std::vector<FieldDataDescriptor<IndexSpace<N2,T2>,Point<N, T>> >> gpu_ptr_data;
+  	std::vector<FieldDataDescriptor<IndexSpace<N2,T2>,Point<N, T>> > gpu_ptr_data;
   	std::vector<FieldDataDescriptor<IndexSpace<N2,T2>,Point<N, T>> > cpu_ptr_data;
-  	std::map<Memory, std::vector<FieldDataDescriptor<IndexSpace<N2,T2>,Rect<N, T>> >> gpu_rect_data;
+  	std::vector<FieldDataDescriptor<IndexSpace<N2,T2>,Rect<N, T>> > gpu_rect_data;
   	std::vector<FieldDataDescriptor<IndexSpace<N2,T2>,Rect<N, T>> > cpu_rect_data;
   	for (size_t i = 0; i < domain_transform.ptr_data.size(); i++) {
   		if (domain_transform.ptr_data[i].inst.get_location().kind() ==
-		      Memory::GPU_FB_MEM) {
-  			gpu_ptr_data[domain_transform.ptr_data[i].inst.get_location()].push_back(domain_transform.ptr_data[i]);
+		      Memory::GPU_FB_MEM || domain_transform.ptr_data[i].inst.get_location().kind() == Memory::Z_COPY_MEM) {
+  		        gpu_ptr_data.push_back(domain_transform.ptr_data[i]);
 		      } else {
 		      	cpu_ptr_data.push_back(domain_transform.ptr_data[i]);
 		      }
   	}
-  	for (size_t i = 0; i < domain_transform.range_data.size(); i++) {
-  		if (domain_transform.range_data[i].inst.get_location().kind() ==
-		      Memory::GPU_FB_MEM) {
-  			gpu_rect_data[domain_transform.range_data[i].inst.get_location()].push_back(domain_transform.range_data[i]);
-		      } else {
-		      	cpu_rect_data.push_back(domain_transform.range_data[i]);
-		      }
-  	}
+        for (size_t i = 0; i < domain_transform.range_data.size(); i++) {
+          if (domain_transform.range_data[i].inst.get_location().kind() ==
+              Memory::GPU_FB_MEM || domain_transform.range_data[i].inst.get_location().kind() == Memory::Z_COPY_MEM) {
+                gpu_rect_data.push_back(domain_transform.range_data[i]);
+              } else {
+                cpu_rect_data.push_back(domain_transform.range_data[i]);
+              }
+        }
   	bool gpu_data = !gpu_ptr_data.empty() || !gpu_rect_data.empty();
     if (domain_transform.type ==
        DomainTransform<N, T, N2, T2>::DomainTransformType::STRUCTURED && !gpu_data) {
@@ -639,8 +655,7 @@ namespace Realm {
 
        	uop->dispatch(this, true /* ok to run in this thread */);
     } else {
-      if (gpu_data) assert(buffers);
-      bool opcount = cpu_ptr_data.size() + cpu_rect_data.size() + gpu_ptr_data.size() + gpu_rect_data.size();
+      size_t opcount = cpu_ptr_data.size() + cpu_rect_data.size() + gpu_ptr_data.size() + gpu_rect_data.size();
       bool exclusive = gpu_data && (opcount == 1);
       if (!exclusive) {
     	// launch full cross-product of image micro ops right away
@@ -674,19 +689,29 @@ namespace Realm {
   								     images[j]);
       	uop->dispatch(this, true /* ok to run in this thread */);
       }
-      for (auto it = gpu_ptr_data.begin(); it != gpu_ptr_data.end(); it++) {
+      for (auto ptr_fdd : gpu_ptr_data) {
           	// launch full cross-product of image micro ops right away
-          Memory my_mem = it->first;
-          domain_transform.ptr_data = it->second;
-          assert(buffers->buffers.find(my_mem) != buffers->buffers.end());
-          RegionInstance buffer = buffers->buffers[my_mem];
+          assert(ptr_fdd.scratch_buffer != RegionInstance::NO_INST);
+          domain_transform.ptr_data = {ptr_fdd};
       	  GPUImageMicroOp<N, T, N2, T2> *micro_op =
-  	         new GPUImageMicroOp<N, T, N2, T2>(
-  		   parent, domain_transform, exclusive, buffer);
+           new GPUImageMicroOp<N, T, N2, T2>(
+  	   parent, domain_transform, exclusive);
       	  for (size_t j = 0; j < sources.size(); j++) {
       		  micro_op->add_sparsity_output(sources[j], images[j]);
       	  }
       	  micro_op->dispatch(this, true);
+      }
+      for (auto rect_fdd : gpu_rect_data) {
+        // launch full cross-product of image micro ops right away
+        assert(rect_fdd.scratch_buffer != RegionInstance::NO_INST);
+        domain_transform.range_data = {rect_fdd};
+        GPUImageMicroOp<N, T, N2, T2> *micro_op =
+           new GPUImageMicroOp<N, T, N2, T2>(
+             parent, domain_transform, exclusive);
+        for (size_t j = 0; j < sources.size(); j++) {
+          micro_op->add_sparsity_output(sources[j], images[j]);
+        }
+        micro_op->dispatch(this, true);
       }
    }
   }
@@ -897,8 +922,8 @@ namespace Realm {
   GPUImageMicroOp<N, T, N2, T2>::GPUImageMicroOp(
       const IndexSpace<N, T> &_parent,
       const DomainTransform<N, T, N2, T2> &_domain_transform,
-      bool _exclusive, RegionInstance _buffer)
-      : parent_space(_parent), domain_transform(_domain_transform), buffer(_buffer)
+      bool _exclusive)
+      : parent_space(_parent), domain_transform(_domain_transform)
   {
 	  this->exclusive = _exclusive;
   }

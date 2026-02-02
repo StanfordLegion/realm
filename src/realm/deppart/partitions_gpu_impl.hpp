@@ -1524,7 +1524,7 @@ namespace Realm {
           std::vector<Rect<N, T>> h_rects(end - start);
           CUDA_CHECK(cudaMemcpyAsync(h_rects.data(), final_rects + start, (end - start) * sizeof(Rect<N,T>), cudaMemcpyDeviceToHost, stream), stream);
           CUDA_CHECK(cudaStreamSynchronize(stream), stream);
-          impl->contribute_dense_rect_list(h_rects, true);
+          impl->contribute_dense_rect_list(h_rects, false);
         } else {
           impl->contribute_nothing();
         }

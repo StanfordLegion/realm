@@ -968,10 +968,10 @@ namespace Realm {
       const std::vector<FieldDataDescriptor<IndexSpace<N2, T2>, Point<N, T>>> &field_data,
       const std::vector<IndexSpace<N2, T2>> &sources,
       std::vector<IndexSpace<N, T>> &images, const ProfilingRequestSet &reqs,
-      Event wait_on, DeppartOutput* buffers) const
+      Event wait_on) const
   {
     return create_subspaces_by_image(DomainTransform<N, T, N2, T2>(field_data), sources,
-                                     images, reqs, wait_on, buffers);
+                                     images, reqs, wait_on);
   }
 
   template <int N, typename T>
@@ -980,10 +980,10 @@ namespace Realm {
       const std::vector<FieldDataDescriptor<IndexSpace<N2, T2>, Rect<N, T>>> &field_data,
       const std::vector<IndexSpace<N2, T2>> &sources,
       std::vector<IndexSpace<N, T>> &images, const ProfilingRequestSet &reqs,
-      Event wait_on, DeppartOutput* buffers) const
+      Event wait_on) const
   {
     return create_subspaces_by_image(DomainTransform<N, T, N2, T2>(field_data), sources,
-                                     images, reqs, wait_on, buffers);
+                                     images, reqs, wait_on);
   }
 
   template <int N, typename T>

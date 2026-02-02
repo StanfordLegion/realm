@@ -109,21 +109,25 @@ namespace Realm {
     IS index_space;
     RegionInstance inst;
     size_t field_offset;
+    RegionInstance scratch_buffer = RegionInstance::NO_INST;
   };
 
   template <int N, typename T>
-  struct DeppartInput {
-    std::vector<std::pair<IndexSpace<N, T>, Memory>> insts;
-    std::vector<size_t> source_sizes;
-    size_t parent_size;
+  struct DeppartSubspace {
+    IndexSpace<N, T> space;
+    size_t entries;
   };
 
-  struct DeppartSuggestion {
-    std::map<Memory, std::pair<size_t, size_t>> suggestions;
+  template <int N, typename T>
+  struct DeppartEstimateInput {
+    IndexSpace<N, T> space;
+    Memory location;
   };
 
-  struct DeppartOutput {
-    std::map<Memory, RegionInstance> buffers;
+  struct DeppartEstimateSuggestion {
+    Memory suggested;
+    size_t lower_bound;
+    size_t upper_bound;
   };
 
   /**
@@ -795,12 +799,13 @@ namespace Realm {
         const DomainTransform<N, T, N2, T2> &domain_transform,
         const std::vector<IndexSpace<N2, T2>> &sources,
         std::vector<IndexSpace<N, T>> &images, const ProfilingRequestSet &reqs,
-        Event wait_on = Event::NO_EVENT, DeppartOutput *buffers = nullptr) const;
+        Event wait_on = Event::NO_EVENT) const;
 
     template<int N2, typename T2>
-    REALM_PUBLIC_API void estimate_image(
-        const DeppartInput<N2, T2> &input,
-        DeppartSuggestion &suggestion);
+    REALM_PUBLIC_API void suggest_deppart_buffer_size(
+        const std::vector<DeppartSubspace<N2,T2>>& source_spaces,
+        const std::vector<DeppartEstimateInput<N2,T2>>& inputs,
+        std::vector<DeppartEstimateSuggestion>& suggestions) const;
 
 
     ///@}
@@ -835,7 +840,7 @@ namespace Realm {
             &field_data,
         const std::vector<IndexSpace<N2, T2>> &sources,
         std::vector<IndexSpace<N, T>> &images, const ProfilingRequestSet &reqs,
-        Event wait_on = Event::NO_EVENT, DeppartOutput* buffers = nullptr) const;
+        Event wait_on = Event::NO_EVENT) const;
 
     // range versions
     template <int N2, typename T2>
@@ -851,7 +856,7 @@ namespace Realm {
             &field_data,
         const std::vector<IndexSpace<N2, T2>> &sources,
         std::vector<IndexSpace<N, T>> &images, const ProfilingRequestSet &reqs,
-        Event wait_on = Event::NO_EVENT, DeppartOutput* buffers = nullptr) const;
+        Event wait_on = Event::NO_EVENT) const;
     ///@}
 
     ///@{
