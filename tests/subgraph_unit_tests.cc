@@ -16,7 +16,9 @@
  */
 
 #include "realm.h"
+#include "realm/event.h"
 #include "realm/indexspace.h"
+#include "realm/profiling.h"
 #include "realm/serialize.h"
 #include "realm/subgraph.h"
 
@@ -790,9 +792,333 @@ private:
   int expected_reduce_value = 99;
 };
 
+// Test that external preconditions to individual operations
+// in the subgraph are respected.
+class ExternalPreconditionTest : public SubgraphTest {
+public:
+  ExternalPreconditionTest() {}
+  ~ExternalPreconditionTest() {}
+  std::string name() const override { return "ExternalPreconditionTest"; }
+
+  struct WriterTaskArgs {
+    WriterTaskArgs(RegionInstance inst, IndexSpace<1> is, int value)
+      : inst(inst)
+      , is(is)
+      , value(value)
+    {}
+    RegionInstance inst;
+    IndexSpace<1> is;
+    int value;
+  };
+
+  static void writer_task(const void *args, size_t arglen, const void *userdata,
+                          size_t userlen, Processor p)
+  {
+    const WriterTaskArgs *task_args = static_cast<const WriterTaskArgs *>(args);
+    AffineAccessor<int, 1> acc(task_args->inst, FID_DATA);
+    for(int i = task_args->is.bounds.lo[0]; i <= task_args->is.bounds.hi[0]; i++) {
+      acc[i] = task_args->value;
+    }
+  }
+
+  struct ReaderTaskArgs {
+    ReaderTaskArgs(RegionInstance inst, IndexSpace<1> is1, IndexSpace<1> is2,
+                   ExternalPreconditionTest *test)
+      : inst(inst)
+      , is1(is1)
+      , is2(is2)
+      , test(test)
+    {}
+    RegionInstance inst;
+    IndexSpace<1> is1;
+    IndexSpace<1> is2;
+    ExternalPreconditionTest *test;
+  };
+
+  static void reader_task(const void *args, size_t arglen, const void *userdata,
+                          size_t userlen, Processor p)
+  {
+    const ReaderTaskArgs *task_args = static_cast<const ReaderTaskArgs *>(args);
+    AffineAccessor<int, 1> acc(task_args->inst, FID_DATA);
+
+    // Check first half
+    for(int i = task_args->is1.bounds.lo[0]; i <= task_args->is1.bounds.hi[0]; i++) {
+      int expected = task_args->test->expected_value1;
+      int actual = acc[i];
+      if(actual != expected) {
+        log_app.error() << "MISMATCH at " << i << ": " << actual << " != " << expected;
+        task_args->test->error = true;
+      }
+    }
+
+    // Check second half
+    for(int i = task_args->is2.bounds.lo[0]; i <= task_args->is2.bounds.hi[0]; i++) {
+      int expected = task_args->test->expected_value2;
+      int actual = acc[i];
+      if(actual != expected) {
+        log_app.error() << "MISMATCH at " << i << ": " << actual << " != " << expected;
+        task_args->test->error = true;
+      }
+    }
+  }
+
+  void register_test() override
+  {
+    writer_task_id = task_id_counter++;
+    reader_task_id = task_id_counter++;
+
+    Runtime rt = Runtime::get_runtime();
+    rt.register_task(writer_task_id, writer_task);
+    rt.register_task(reader_task_id, reader_task);
+  }
+
+  bool can_run() override
+  {
+    // Require 2 CPUs.
+    return Machine::ProcessorQuery(Machine::get_machine())
+               .only_kind(Processor::LOC_PROC)
+               .count() >= 2;
+  }
+
+  void init() override
+  {
+    // Get the CPUs and system memory.
+    Machine::ProcessorQuery pq =
+        Machine::ProcessorQuery(Machine::get_machine()).only_kind(Processor::LOC_PROC);
+    cpus = {pq.begin(), pq.end()};
+
+    Memory sysmem = Machine::MemoryQuery(Machine::get_machine())
+                        .only_kind(Memory::Kind::SYSTEM_MEM)
+                        .first();
+    assert(sysmem.exists());
+
+    // Create a RegionInstance with 10 elements.
+    IndexSpace<1> is = Rect<1>(0, 9);
+    std::map<FieldID, size_t> field_sizes = {{FID_DATA, sizeof(int)}};
+    RegionInstance::create_instance(inst, sysmem, is, field_sizes, 0,
+                                    ProfilingRequestSet())
+        .wait();
+    assert(inst.exists());
+    // Fill the instance with default values.
+    {
+      std::vector<CopySrcDstField> dsts(1);
+      dsts[0].set_field(inst, FID_DATA, sizeof(int));
+      int initial_value = 0;
+      is.fill(dsts, ProfilingRequestSet(), &initial_value, sizeof(initial_value)).wait();
+    }
+
+    // Define the subgraph with a reader task that has 2 external preconditions.
+    {
+      SubgraphDefinition sd;
+      sd.concurrency_mode = SubgraphDefinition::INSTANTIATION_ORDER;
+
+      // Create a reader task that will wait on the external preconditions.
+      ReaderTaskArgs rargs(inst, IndexSpace<1>(Rect<1>(0, 4)),
+                           IndexSpace<1>(Rect<1>(5, 9)), this);
+      int task = make_task_desc(sd, cpus[0], reader_task_id, &rargs, sizeof(rargs));
+
+      // Mark that this task has 2 external preconditions.
+      add_dependency(sd, SubgraphDefinition::OPKIND_EXT_PRECOND, 0,
+                     SubgraphDefinition::OPKIND_TASK, task);
+      add_dependency(sd, SubgraphDefinition::OPKIND_EXT_PRECOND, 1,
+                     SubgraphDefinition::OPKIND_TASK, task);
+
+      Subgraph::create_subgraph(sg, sd, ProfilingRequestSet()).wait();
+    }
+  }
+
+  void run() override
+  {
+    // First, launch the subgraph to give it a chance to race against the
+    // tasks which it should depend on.
+    UserEvent pre1 = UserEvent::create_user_event();
+    UserEvent pre2 = UserEvent::create_user_event();
+    std::vector<Event> ext_preconds = {pre1, pre2};
+    std::vector<Event> ext_postconds;
+    Event sg_done =
+        sg.instantiate(nullptr, 0, ProfilingRequestSet(), ext_preconds, ext_postconds);
+
+    // Launch the two external tasks, and have them trigger the external preconditions.
+    WriterTaskArgs wargs1(inst, IndexSpace<1>(Rect<1>(0, 4)), expected_value1);
+    WriterTaskArgs wargs2(inst, IndexSpace<1>(Rect<1>(5, 9)), expected_value2);
+    pre1.trigger(cpus[0].spawn(writer_task_id, &wargs1, sizeof(wargs1)));
+    pre2.trigger(cpus[1].spawn(writer_task_id, &wargs2, sizeof(wargs2)));
+
+    // Wait on the subgraph to complete.
+    sg_done.wait();
+  }
+
+  void cleanup() override
+  {
+    sg.destroy();
+    inst.destroy();
+  }
+
+  bool check() override { return !error; }
+
+private:
+  int writer_task_id = 0;
+  int reader_task_id = 0;
+  Subgraph sg;
+  RegionInstance inst;
+  std::vector<Processor> cpus;
+  int expected_value1 = 15210;
+  int expected_value2 = 42;
+  bool error = false;
+};
+
+// Test that external postconditions extracted from individual
+// subgraph operations are appropriately signalled.
+class ExternalPostconditionTest : public SubgraphTest {
+public:
+  ExternalPostconditionTest() {}
+  ~ExternalPostconditionTest() {}
+  std::string name() const override { return "ExternalPostconditionTest"; }
+
+  struct WriterTaskArgs {
+    WriterTaskArgs(RegionInstance inst, IndexSpace<1> is, int value)
+      : inst(inst)
+      , is(is)
+      , value(value)
+    {}
+    RegionInstance inst;
+    IndexSpace<1> is;
+    int value;
+  };
+
+  static void writer_task(const void *args, size_t arglen, const void *userdata,
+                          size_t userlen, Processor p)
+  {
+    const WriterTaskArgs *task_args = static_cast<const WriterTaskArgs *>(args);
+    AffineAccessor<int, 1> acc(task_args->inst, FID_DATA);
+    for(int i = task_args->is.bounds.lo[0]; i <= task_args->is.bounds.hi[0]; i++) {
+      acc[i] = task_args->value;
+    }
+  }
+
+  void register_test() override
+  {
+    writer_task_id = task_id_counter++;
+    Runtime rt = Runtime::get_runtime();
+    rt.register_task(writer_task_id, writer_task);
+  }
+
+  bool can_run() override
+  {
+    // Require 2 CPUs.
+    return Machine::ProcessorQuery(Machine::get_machine())
+               .only_kind(Processor::LOC_PROC)
+               .count() >= 2;
+  }
+
+  void init() override
+  {
+    // Get the CPUs and system memory.
+    Machine::ProcessorQuery pq =
+        Machine::ProcessorQuery(Machine::get_machine()).only_kind(Processor::LOC_PROC);
+    cpus = {pq.begin(), pq.end()};
+
+    Memory sysmem = Machine::MemoryQuery(Machine::get_machine())
+                        .only_kind(Memory::Kind::SYSTEM_MEM)
+                        .first();
+    assert(sysmem.exists());
+
+    // Create a RegionInstance with 10 elements.
+    IndexSpace<1> is = Rect<1>(0, 9);
+    std::map<FieldID, size_t> field_sizes = {{FID_DATA, sizeof(int)}};
+    RegionInstance::create_instance(inst, sysmem, is, field_sizes, 0,
+                                    ProfilingRequestSet())
+        .wait();
+    assert(inst.exists());
+    // Fill the instance with default values.
+    {
+      std::vector<CopySrcDstField> dsts(1);
+      dsts[0].set_field(inst, FID_DATA, sizeof(int));
+      int initial_value = 0;
+      is.fill(dsts, ProfilingRequestSet(), &initial_value, sizeof(initial_value)).wait();
+    }
+
+    // Define the subgraph with two writer tasks that will be marked
+    // as external postconditions.
+    {
+      SubgraphDefinition sd;
+      sd.concurrency_mode = SubgraphDefinition::INSTANTIATION_ORDER;
+
+      // Create two writer tasks that write to different halves of the region.
+      WriterTaskArgs wargs1(inst, IndexSpace<1>(Rect<1>(0, 4)), expected_value1);
+      WriterTaskArgs wargs2(inst, IndexSpace<1>(Rect<1>(5, 9)), expected_value2);
+      int task1 = make_task_desc(sd, cpus[0], writer_task_id, &wargs1, sizeof(wargs1));
+      int task2 = make_task_desc(sd, cpus[1], writer_task_id, &wargs2, sizeof(wargs2));
+
+      // Mark these tasks as having external postconditions.
+      add_dependency(sd, SubgraphDefinition::OPKIND_TASK, task1,
+                     SubgraphDefinition::OPKIND_EXT_POSTCOND, 0);
+      add_dependency(sd, SubgraphDefinition::OPKIND_TASK, task2,
+                     SubgraphDefinition::OPKIND_EXT_POSTCOND, 1);
+
+      Subgraph::create_subgraph(sg, sd, ProfilingRequestSet()).wait();
+    }
+  }
+
+  void run() override
+  {
+    // Instantiate the subgraph and capture external postconditions.
+    // We have to provide to Realm a vector with the total number of
+    // postconditions that we expect to receive.
+    ext_postconds.resize(2);
+    sg.instantiate(nullptr, 0, ProfilingRequestSet(), {}, ext_postconds).wait();
+  }
+
+  bool check() override
+  {
+    // Wait on both external postconditions.
+    Event::merge_events(ext_postconds).wait();
+
+    // Now check that the written data is visible.
+    AffineAccessor<int, 1> acc(inst, FID_DATA);
+    bool success = true;
+
+    // Check first half (written by task1).
+    for(int i = 0; i <= 4; i++) {
+      int expected = expected_value1;
+      int actual = acc[i];
+      if(actual != expected) {
+        log_app.error() << "MISMATCH at " << i << ": " << actual << " != " << expected;
+        success = false;
+      }
+    }
+
+    // Check second half (written by task2).
+    for(int i = 5; i <= 9; i++) {
+      int expected = expected_value2;
+      int actual = acc[i];
+      if(actual != expected) {
+        log_app.error() << "MISMATCH at " << i << ": " << actual << " != " << expected;
+        success = false;
+      }
+    }
+
+    return success;
+  }
+
+  void cleanup() override
+  {
+    sg.destroy();
+    inst.destroy();
+  }
+
+private:
+  int writer_task_id = 0;
+  Subgraph sg;
+  RegionInstance inst;
+  std::vector<Processor> cpus;
+  std::vector<Event> ext_postconds;
+  int expected_value1 = 15210;
+  int expected_value2 = 42;
+};
+
 // TODO (rohany): Some more tests to write:
 // * A test with dependencies between tasks and copies.
-// * A test with external pre/post-conditions.
 // * A test with chained subgraphs.
 // * A test that instantiation order subgraphs are respected? (maybe not).
 
@@ -804,6 +1130,8 @@ void top_level_task(const void *args, size_t arglen, const void *userdata, size_
   tests.emplace_back(new SimpleCopyTest());
   tests.emplace_back(new BarrierArrivalTest());
   tests.emplace_back(new InterpolationTest());
+  tests.emplace_back(new ExternalPreconditionTest());
+  tests.emplace_back(new ExternalPostconditionTest());
 
   log_app.info() << "Beginning subgraph tests.";
   std::vector<std::string> failed_tests;
