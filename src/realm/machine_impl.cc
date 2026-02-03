@@ -2027,25 +2027,29 @@ namespace Realm {
 
     // Iterate through all candidates matching other predicates
     std::map<NodeID, MachineNodeInfo *>::const_iterator it;
-    if(is_restricted_node)
+    if(is_restricted_node) {
       it = machine->nodeinfos.lower_bound(restricted_node_id);
-    else
+    } else {
       it = machine->nodeinfos.begin();
+    }
 
     while(it != machine->nodeinfos.end()) {
-      if(is_restricted_node && (it->first != restricted_node_id))
+      if(is_restricted_node && (it->first != restricted_node_id)) {
         break;
+      }
 
       const std::map<Processor, MachineProcInfo *> *plist = 0;
       if(is_restricted_kind) {
         std::map<Processor::Kind, std::map<Processor, MachineProcInfo *>>::const_iterator
             it2 = it->second->proc_by_kind.find(restricted_kind);
-        if(it2 != it->second->proc_by_kind.end())
+        if(it2 != it->second->proc_by_kind.end()) {
           plist = &(it2->second);
-        else
+        } else {
           plist = 0;
-      } else
+        }
+      } else {
         plist = &(it->second->procs);
+      }
 
       if(plist) {
         std::map<Processor, MachineProcInfo *>::const_iterator it2 = plist->begin();
@@ -2054,8 +2058,9 @@ namespace Realm {
           bool ok = true;
           // Check all non-best-affinity predicates
           for(std::vector<ProcQueryPredicate *>::const_iterator it3 = predicates.begin();
-              ok && (it3 != predicates.end()); it3++)
+              ok && (it3 != predicates.end()); it3++) {
             ok = (*it3)->matches_predicate(machine, it2->first, it2->second);
+          }
 
           if(ok) {
             // Calculate affinity score for this candidate
@@ -2959,25 +2964,29 @@ namespace Realm {
 
     // Iterate through all candidates matching other predicates
     std::map<NodeID, MachineNodeInfo *>::const_iterator it;
-    if(is_restricted_node)
+    if(is_restricted_node) {
       it = machine->nodeinfos.lower_bound(restricted_node_id);
-    else
+    } else {
       it = machine->nodeinfos.begin();
+    }
 
     while(it != machine->nodeinfos.end()) {
-      if(is_restricted_node && (it->first != restricted_node_id))
+      if(is_restricted_node && (it->first != restricted_node_id)) {
         break;
+      }
 
       const std::map<Memory, MachineMemInfo *> *plist;
       if(is_restricted_kind) {
         std::map<Memory::Kind, std::map<Memory, MachineMemInfo *>>::const_iterator it2 =
             it->second->mem_by_kind.find(restricted_kind);
-        if(it2 != it->second->mem_by_kind.end())
+        if(it2 != it->second->mem_by_kind.end()) {
           plist = &(it2->second);
-        else
+        } else {
           plist = 0;
-      } else
+        }
+      } else {
         plist = &(it->second->mems);
+      }
 
       if(plist) {
         std::map<Memory, MachineMemInfo *>::const_iterator it2 = plist->begin();
@@ -2991,8 +3000,9 @@ namespace Realm {
           // Check all non-best-affinity predicates
           for(std::vector<MemoryQueryPredicate *>::const_iterator it3 =
                   predicates.begin();
-              ok && (it3 != predicates.end()); it3++)
+              ok && (it3 != predicates.end()); it3++) {
             ok = (*it3)->matches_predicate(machine, it2->first, it2->second);
+          }
 
           if(ok) {
             // Calculate affinity score for this candidate
