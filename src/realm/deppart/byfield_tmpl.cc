@@ -43,9 +43,15 @@ namespace Realm {
 #define N1 INST_N1
 #define N2 INST_N2
 
+#ifdef REALM_USE_CUDA
+  #define GPU_BYFIELD_LINE(N, T, ...) template class GPUByFieldMicroOp<N,T,__VA_ARGS__>;
+#else
+  #define GPU_BYFIELD_LINE(N, T, ...) /* no CUDA */
+#endif
+
 #define DOIT(N,T,F) \
   template class ByFieldMicroOp<N,T,F>; \
-  template class GPUByFieldMicroOp<N,T,F>; \
+  GPU_BYFIELD_LINE(N, T, F) \
   template class ByFieldOperation<N,T,F>; \
   template ByFieldMicroOp<N,T,F>::ByFieldMicroOp(NodeID, AsyncMicroOp *, Serialization::FixedBufferDeserializer&); \
   template Event IndexSpace<N,T>::create_subspaces_by_field(const std::vector<FieldDataDescriptor<IndexSpace<N,T>,F> >&, \

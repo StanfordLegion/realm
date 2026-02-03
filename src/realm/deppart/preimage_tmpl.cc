@@ -43,9 +43,15 @@ namespace Realm {
 #define N1 INST_N1
 #define N2 INST_N2
 
+#ifdef REALM_USE_CUDA
+  #define GPU_PREIMAGE_LINE(N1,T1,N2,T2) template class GPUPreimageMicroOp<N1, T1, N2, T2>;
+#else
+  #define GPU_PREIMAGE_LINE(N1,T1,N2,T2) /* no CUDA */
+#endif
+
 #define DOIT(T1,T2)			    \
 template class PreimageMicroOp<N1,T1,N2,T2>; \
-template class GPUPreimageMicroOp<N1,T1,N2,T2>; \
+GPU_PREIMAGE_LINE(N1,T1,N2,T2) \
 template class StructuredPreimageMicroOp<N1,T1,N2,T2>; \
 template class PreimageOperation<N1,T1,N2,T2>; \
 template PreimageMicroOp<N1,T1,N2,T2>::PreimageMicroOp(NodeID, AsyncMicroOp *, Serialization::FixedBufferDeserializer&); \

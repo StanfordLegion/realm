@@ -44,10 +44,16 @@ namespace Realm {
 #define N1 INST_N1
 #define N2 INST_N2
 
+#ifdef REALM_USE_CUDA
+  #define GPU_IMAGE_LINE(N1,T1,N2,T2) template class GPUImageMicroOp<N1, T1, N2, T2>;
+#else
+  #define GPU_IMAGE_LINE(N1,T1,N2,T2) /* no CUDA */
+#endif
+
 #define DOIT(T1,T2)			                                                                                             \
   template class StructuredImageMicroOp<N1,T1,N2,T2>;                                                                \
   template class ImageMicroOp<N1,T1,N2,T2>;																			 \
-  template class GPUImageMicroOp<N1, T1, N2, T2>;																	 \
+  GPU_IMAGE_LINE(N1, T1, N2, T2)																	 \
   template class ImageOperation<N1,T1,N2,T2>;                                                                        \
   template ImageMicroOp<N1,T1,N2,T2>::ImageMicroOp(NodeID, AsyncMicroOp *, Serialization::FixedBufferDeserializer&); \
   template void IndexSpace<N1, T1>::suggest_image_buffer_size(						     \

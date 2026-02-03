@@ -43,21 +43,7 @@ namespace Realm {
   class PartitioningMicroOp;
   class PartitioningOperation;
 
-  template <typename T>
-  constexpr std::string_view type_name() {
-  #if defined(__clang__)
-      std::string_view p = __PRETTY_FUNCTION__;
-      return {p.data() + 34, p.size() - 34 - 1};
-  #elif defined(__GNUC__)
-      std::string_view p = __PRETTY_FUNCTION__;
-      return {p.data() + 49, p.size() - 49 - 1};
-  #elif defined(_MSC_VER)
-      std::string_view p = __FUNCSIG__;
-      return {p.data() + 84, p.size() - 84 - 7};
-  #else
-      return "unknown";
-  #endif
-  }
+#ifdef REALM_USE_CUDA
 
   template<typename T>
   struct HiFlag {
@@ -139,19 +125,7 @@ namespace Realm {
 
     template <typename T>
     T* alloc(size_t count = 1) {
-      try {
-        if (parity_) {
-          return alloc_right<T>(count);
-        } else {
-          return alloc_left<T>(count);
-        }
-      } catch (arena_oom&) {
-        std::cout << "Arena OOM: requested " << count << " of " << type_name<T>()
-                  << " capacity " << cap_ << " bytes, "
-                  << " used " << used() << " bytes, "
-                  << " left " << (cap_ - left_ - right_) << " bytes.\n";
-        throw arena_oom{};
-      }
+      return parity_ ? alloc_right<T>(count) : alloc_left<T>(count);
     }
 
     void flip_parity(void) noexcept {
@@ -240,6 +214,9 @@ namespace Realm {
     size_t base_left_;
     size_t base_right_;
   };
+
+
+#endif
 
   template <int N, typename T>
   class OverlapTester {
@@ -349,6 +326,7 @@ namespace Realm {
     std::vector<SparsityMapImpl<N,T> *> extra_deps;
   };
 
+#ifdef REALM_USE_CUDA
   //The parent class for all GPU partitioning micro-ops. Provides output utility functions
 
   template<int N, typename T>
@@ -387,6 +365,7 @@ namespace Realm {
     bool exclusive = false;
 
   };
+#endif
 
   ////////////////////////////////////////
   //

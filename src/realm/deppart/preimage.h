@@ -153,6 +153,8 @@ namespace Realm {
    std::vector<SparsityMap<N, T> > sparsity_outputs;
   };
 
+  #ifdef REALM_USE_CUDA
+
   template <int N, typename T, int N2, typename T2>
   class GPUPreimageMicroOp : public GPUMicroOp<N, T> {
   public:
@@ -182,6 +184,8 @@ namespace Realm {
     std::vector<IndexSpace<N2, T2> > targets;
     std::vector<SparsityMap<N, T> > sparsity_outputs;
   };
+
+#endif
 
   };  // namespace Realm
 

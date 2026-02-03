@@ -309,6 +309,7 @@ namespace Realm {
   ActiveMessageHandlerReg<RemoteMicroOpMessage<ByFieldMicroOp<N, T, FT> > > ByFieldMicroOp<N, T, FT>::areg;
 
 
+#ifdef REALM_USE_CUDA
   ////////////////////////////////////////////////////////////////////////
   //
   // class GPUByFieldMicroOp<N, T, FT>
@@ -354,6 +355,8 @@ namespace Realm {
     colors.push_back(_val);
     sparsity_outputs[_val] = _sparsity;
   }
+
+#endif
 
 
   ////////////////////////////////////////////////////////////////////////
@@ -430,6 +433,7 @@ namespace Realm {
 
       uop->dispatch(this, true /* ok to run in this thread */);
     }
+#ifdef REALM_USE_CUDA
     for (auto fdd : gpu_field_data) {
       std::vector<FieldDataDescriptor<IndexSpace<N,T>,FT> > single_gpu_field_data = {fdd};
       GPUByFieldMicroOp<N, T, FT> *uop = new GPUByFieldMicroOp<N, T, FT>(parent, single_gpu_field_data, exclusive);
@@ -438,6 +442,9 @@ namespace Realm {
       }
       uop->dispatch(this, false);
     }
+#else
+    assert(gpu_field_data.empty());
+#endif
   }
 
   template <int N, typename T, typename FT>

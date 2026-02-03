@@ -484,6 +484,7 @@ namespace Realm {
 					uop->add_sparsity_output(targets[j], preimages[j]);
 				uop->dispatch(this, true /* ok to run in this thread */);
 			}
+#ifdef REALM_USE_CUDA
 			for (auto ptr_fdd : gpu_ptr_data) {
 				domain_transform.ptr_data = {ptr_fdd};
 				GPUPreimageMicroOp<N, T, N2, T2> *micro_op =
@@ -504,6 +505,10 @@ namespace Realm {
 		          }
 		          micro_op->dispatch(this, true);
 		        }
+#else
+			assert(!gpu_data);
+#endif
+
 		}
 	}
 
@@ -782,6 +787,7 @@ namespace Realm {
 	////////////////////////////////////////////////////////////////////////
 	//
 	// class GPUPreimageMicroOp<N,T,N2,T2>
+#ifdef REALM_USE_CUDA
 
 	template<int N, typename T, int N2, typename T2>
 	GPUPreimageMicroOp<N, T, N2, T2>::GPUPreimageMicroOp(
@@ -837,6 +843,8 @@ namespace Realm {
 
 		this->finish_dispatch(op, inline_ok);
 	}
+#endif
+
 
 	// instantiations of templates handled in preimage_tmpl.cc
 }; // namespace Realm

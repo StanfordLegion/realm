@@ -689,6 +689,7 @@ namespace Realm {
   								     images[j]);
       	uop->dispatch(this, true /* ok to run in this thread */);
       }
+#ifdef REALM_USE_CUDA
       for (auto ptr_fdd : gpu_ptr_data) {
           	// launch full cross-product of image micro ops right away
           assert(ptr_fdd.scratch_buffer != RegionInstance::NO_INST);
@@ -713,6 +714,9 @@ namespace Realm {
         }
         micro_op->dispatch(this, true);
       }
+#else
+    	assert(!gpu_data);
+#endif
    }
   }
 
@@ -916,7 +920,9 @@ namespace Realm {
 
     ////////////////////////////////////////////////////////////////////////
   //
-  // class StructuredImageMicroOp<N, T, N2, T2>
+  // class GPUImageMicroOp<N, T, N2, T2>
+
+#ifdef REALM_USE_CUDA
 
   template <int N, typename T, int N2, typename T2>
   GPUImageMicroOp<N, T, N2, T2>::GPUImageMicroOp(
@@ -979,6 +985,8 @@ namespace Realm {
       gpu_populate_rngs();
     }
   }
+#endif
+
 
   ////////////////////////////////////////////////////////////////////////
 

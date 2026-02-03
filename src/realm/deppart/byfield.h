@@ -68,6 +68,8 @@ namespace Realm {
     std::map<FT, SparsityMap<N,T> > sparsity_outputs;
   };
 
+#ifdef REALM_USE_CUDA
+
   template<int N, typename T, typename FT>
     class GPUByFieldMicroOp : public GPUMicroOp<N, T> {
   public:
@@ -90,6 +92,8 @@ namespace Realm {
     std::vector<FT> colors;
     std::map<FT, SparsityMap<N,T> > sparsity_outputs;
   };
+
+#endif
 
   template <int N, typename T, typename FT>
   class ByFieldOperation : public PartitioningOperation {
