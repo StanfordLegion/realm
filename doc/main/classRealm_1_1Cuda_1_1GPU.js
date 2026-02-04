@@ -15,7 +15,7 @@ var classRealm_1_1Cuda_1_1GPU =
     [ "find_stream", "classRealm_1_1Cuda_1_1GPU.html#ad888c365660f692119f1605485f1a3d2", null ],
     [ "get_next_d2d_stream", "classRealm_1_1Cuda_1_1GPU.html#a5490d12c87d66178f869ea6df27e3fdb", null ],
     [ "get_next_task_stream", "classRealm_1_1Cuda_1_1GPU.html#a8545a866ef5c94871ce4ab4fc268ce21", null ],
-    [ "get_null_task_stream", "classRealm_1_1Cuda_1_1GPU.html#a6dcf4fbe85bbedf6d628bdb162e67310", null ],
+    [ "get_null_task_stream", "classRealm_1_1Cuda_1_1GPU.html#a26ab77f2a38c399bb9757eaaa2f1fbd1", null ],
     [ "is_accessible_gpu_mem", "classRealm_1_1Cuda_1_1GPU.html#afba538603cb5b33ebd45f123ecd43acc", null ],
     [ "is_accessible_host_mem", "classRealm_1_1Cuda_1_1GPU.html#adb1a7b0c3e96590ea8f9a7adacf962b6", null ],
     [ "launch_batch_affine_fill_kernel", "classRealm_1_1Cuda_1_1GPU.html#aaffdf2a60daa75d8cca1346f9bebecb7", null ],

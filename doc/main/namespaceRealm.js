@@ -634,7 +634,7 @@ var namespaceRealm =
     [ "get_event_impl", "namespaceRealm.html#a5deb3455fa93484d6d46512a4df746d2", null ],
     [ "get_genevent_impl", "namespaceRealm.html#a252cd4b31dbb0dabac1e4959c34f411a", null ],
     [ "get_machine", "namespaceRealm.html#a9bf4b3ce1f777ec61adea80c716307c2", null ],
-    [ "get_runtime", "namespaceRealm.html#ac8e99613053321d4b95f8348e0e1f8ee", null ],
+    [ "get_runtime", "namespaceRealm.html#ac0baec98e6aa4b88e6f9e3b19ed1c0a6", null ],
     [ "get_shm_name", "namespaceRealm.html#a4aff7e88b1d890313b20823e90868707", null ],
     [ "hash_combine", "namespaceRealm.html#a0b5ef45a7d65d3d72fdfa4c459167a60", null ],
     [ "hash_fnv1a", "namespaceRealm.html#a519480d9cc7e6da1a76368cf25e0e3b2", null ],
@@ -735,5 +735,5 @@ var namespaceRealm =
     [ "log_new_dma", "namespaceRealm.html#a3dbb9226b0a26d1e15c655c8d1a8e3fe", null ],
     [ "log_poison", "namespaceRealm.html#a0bc1e32fd83e0c414739bacdc5b3857f", null ],
     [ "machine_singleton", "namespaceRealm.html#acbabfb91d5923534056ce315d6a70129", null ],
-    [ "runtime_singleton", "namespaceRealm.html#a3f709c2a8d05935161f0f9b2cdd2a6cc", null ]
+    [ "runtime_singleton", "namespaceRealm.html#a92a11817c234fa0c945b2bc28fc5feba", null ]
 ];

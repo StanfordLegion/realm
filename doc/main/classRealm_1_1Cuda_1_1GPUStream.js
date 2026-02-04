@@ -8,7 +8,7 @@ var classRealm_1_1Cuda_1_1GPUStream =
     [ "add_notification", "classRealm_1_1Cuda_1_1GPUStream.html#a17e2246fa98e7df926be402805d0eb99", null ],
     [ "add_start_event", "classRealm_1_1Cuda_1_1GPUStream.html#a3cbffede5c26d5e9e5e9c7ddfafad93e", null ],
     [ "get_gpu", "classRealm_1_1Cuda_1_1GPUStream.html#a84b5774109992936af1743c450960918", null ],
-    [ "get_stream", "classRealm_1_1Cuda_1_1GPUStream.html#af8934ef103de49474ea20522088cc0f6", null ],
+    [ "get_stream", "classRealm_1_1Cuda_1_1GPUStream.html#a0fc99da2ba05a1246ae6590ee5d563c2", null ],
     [ "has_work", "classRealm_1_1Cuda_1_1GPUStream.html#a7468bb08bcfc73e54a0d0bbb38797780", null ],
     [ "ok_to_submit_copy", "classRealm_1_1Cuda_1_1GPUStream.html#a0a98a4d38a01fa600c633f7c35a39bf0", null ],
     [ "reap_events", "classRealm_1_1Cuda_1_1GPUStream.html#ac5a79419ebab7cded59e07eac339380d", null ],

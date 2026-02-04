@@ -12,7 +12,7 @@ var classRealm_1_1Hip_1_1GPU =
     [ "find_stream", "classRealm_1_1Hip_1_1GPU.html#a13050ce64ac9ee27dd990ca4e345e723", null ],
     [ "get_next_d2d_stream", "classRealm_1_1Hip_1_1GPU.html#adcc7fa5ccfb051d00d7b335a0906d2b3", null ],
     [ "get_next_task_stream", "classRealm_1_1Hip_1_1GPU.html#afdffac0123ccc80fface40d682b4d9fe", null ],
-    [ "get_null_task_stream", "classRealm_1_1Hip_1_1GPU.html#a1638f7080bc985871da78773b813a95b", null ],
+    [ "get_null_task_stream", "classRealm_1_1Hip_1_1GPU.html#a99644ad6a122d50ed76dad962cff4e66", null ],
     [ "load_hip_module", "classRealm_1_1Hip_1_1GPU.html#a489318f4622a75b2dfb0c9f33a06ce7a", null ],
     [ "pop_context", "classRealm_1_1Hip_1_1GPU.html#a7ed00ad93a279cb16145d9ccd979f839", null ],
     [ "push_context", "classRealm_1_1Hip_1_1GPU.html#a9ca1dffa6fab692e1ce3275052503a5c", null ],

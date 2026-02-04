@@ -19,7 +19,7 @@ var runtime__impl_8h =
     [ "get_barrier_impl", "runtime__impl_8h.html#af25831dfb0750434780497eb136daf31", null ],
     [ "get_event_impl", "runtime__impl_8h.html#a5deb3455fa93484d6d46512a4df746d2", null ],
     [ "get_genevent_impl", "runtime__impl_8h.html#a252cd4b31dbb0dabac1e4959c34f411a", null ],
-    [ "get_runtime", "runtime__impl_8h.html#ac8e99613053321d4b95f8348e0e1f8ee", null ],
+    [ "get_runtime", "runtime__impl_8h.html#ac0baec98e6aa4b88e6f9e3b19ed1c0a6", null ],
     [ "operator<<", "runtime__impl_8h.html#a845eb434b07961f1c944bdd0202c4d7c", null ],
-    [ "runtime_singleton", "runtime__impl_8h.html#a3f709c2a8d05935161f0f9b2cdd2a6cc", null ]
+    [ "runtime_singleton", "runtime__impl_8h.html#a92a11817c234fa0c945b2bc28fc5feba", null ]
 ];
