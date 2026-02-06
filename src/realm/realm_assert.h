@@ -32,7 +32,7 @@
 #define REALM_ASSERT(cond)                                                               \
   do {                                                                                   \
     if(!(cond)) {                                                                        \
-      __assert_fail(#cond, __FILE__, __LINE__, __func__);                                \
+      __builtin_trap();                                                                  \
     }                                                                                    \
   } while(0)
 
