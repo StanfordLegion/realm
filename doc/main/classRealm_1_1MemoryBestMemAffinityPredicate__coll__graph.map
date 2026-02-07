@@ -1,8 +1,0 @@
-<map id="Realm::MemoryBestMemAffinityPredicate" name="Realm::MemoryBestMemAffinityPredicate">
-<area shape="rect" id="Node000001" title=" " alt="" coords="5,93,240,133"/>
-<area shape="rect" id="Node000002" href="$classRealm_1_1QueryPredicate.html" title=" " alt="" coords="13,5,189,31"/>
-<area shape="poly" id="edge1_Node000001_Node000002" title=" " alt="" coords="110,43,121,93,116,94,104,45"/>
-<area shape="rect" id="Node000003" href="$classRealm_1_1Memory.html" title=" " alt="" coords="214,5,341,31"/>
-<area shape="poly" id="edge2_Node000001_Node000003" title=" " alt="" coords="248,40,155,95,153,91,245,35"/>
-<area shape="poly" id="edge3_Node000003_Node000003" title=" " alt="" coords="356,10,367,18,359,26,341,28,341,23,357,21,362,18,353,14"/>
-</map>

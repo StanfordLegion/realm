@@ -1,11 +1,13 @@
 var classRealm_1_1ProcessorQueryImpl =
 [
+    [ "BestAffinityCostFn", "structRealm_1_1ProcessorQueryImpl_1_1BestAffinityCostFn.html", "structRealm_1_1ProcessorQueryImpl_1_1BestAffinityCostFn" ],
     [ "ProcessorQueryImpl", "classRealm_1_1ProcessorQueryImpl.html#acfb949fa128d63b7ddf138d404957bc8", null ],
     [ "ProcessorQueryImpl", "classRealm_1_1ProcessorQueryImpl.html#a255f817d096c6e802c2502eafc718d15", null ],
     [ "ProcessorQueryImpl", "classRealm_1_1ProcessorQueryImpl.html#a27b7a7d35fd369b646bd310e327f4567", null ],
     [ "~ProcessorQueryImpl", "classRealm_1_1ProcessorQueryImpl.html#a2e0d8258723615486ffa05c82b3f8d02", null ],
     [ "add_predicate", "classRealm_1_1ProcessorQueryImpl.html#ad5274854ad65ab8298b0da5bafda1b51", null ],
     [ "add_reference", "classRealm_1_1ProcessorQueryImpl.html#a8cf62835fc628af7314b1922175dc976", null ],
+    [ "build_best_affinity_cache", "classRealm_1_1ProcessorQueryImpl.html#abd426e549a7bde25f84feb4920ec3a96", null ],
     [ "cache_next", "classRealm_1_1ProcessorQueryImpl.html#a63a0a8049d7fbf4128fbcd345c677d20", null ],
     [ "cached_list", "classRealm_1_1ProcessorQueryImpl.html#a2360e304ac7a7c498a00e78bbdbebcd4", null ],
     [ "cached_query", "classRealm_1_1ProcessorQueryImpl.html#ae0dad16c806cf1a9df1028a81fa47f1f", null ],
@@ -23,6 +25,8 @@ var classRealm_1_1ProcessorQueryImpl =
     [ "restrict_to_node", "classRealm_1_1ProcessorQueryImpl.html#a33037cb775c9ca28c331cf186b0b5c72", null ],
     [ "set_cached_mem", "classRealm_1_1ProcessorQueryImpl.html#a1f2b6855f12ab1697aacef0415b57688", null ],
     [ "writeable_reference", "classRealm_1_1ProcessorQueryImpl.html#a6388e0c620618707f6999e2db7e691c1", null ],
+    [ "Machine::ProcessorQuery::best_affinity_to", "classRealm_1_1ProcessorQueryImpl.html#a27aa909c038edeb8de1346976a6872d7", null ],
+    [ "best_affinity_cost", "classRealm_1_1ProcessorQueryImpl.html#a2e103325bb4b4cf7bd22f73f5093412c", null ],
     [ "cached_mem", "classRealm_1_1ProcessorQueryImpl.html#a87f6a02c9e3e98779d73ade8e5d825f5", null ],
     [ "cur_cached_list", "classRealm_1_1ProcessorQueryImpl.html#a3be595dc0650e89e478451290dc44096", null ],
     [ "cur_index", "classRealm_1_1ProcessorQueryImpl.html#a7ed119517c53a74431d7822768f40e59", null ],

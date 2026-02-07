@@ -1,9 +1,0 @@
-<map id="Realm::UCP::UCPRemoteMemory" name="Realm::UCP::UCPRemoteMemory">
-<area shape="rect" id="Node000001" title=" " alt="" coords="121,167,360,192"/>
-<area shape="rect" id="Node000002" href="$classRealm_1_1UCP_1_1UCPRemoteMemoryCommon.html" title=" " alt="" coords="5,79,244,119"/>
-<area shape="poly" id="edge1_Node000001_Node000002" title=" " alt="" coords="166,124,225,164,222,169,163,129"/>
-<area shape="rect" id="Node000003" href="$classRealm_1_1RemoteMemory.html" title=" " alt="" coords="268,86,445,111"/>
-<area shape="poly" id="edge2_Node000001_Node000003" title=" " alt="" coords="330,121,259,169,256,164,327,117"/>
-<area shape="rect" id="Node000004" href="$classRealm_1_1MemoryImpl.html" title=" " alt="" coords="279,5,434,31"/>
-<area shape="poly" id="edge3_Node000003_Node000004" title=" " alt="" coords="359,44,359,86,354,86,354,44"/>
-</map>

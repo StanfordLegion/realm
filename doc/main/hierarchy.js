@@ -151,6 +151,9 @@ var hierarchy =
       [ "Realm::SizedRangeAllocator< RT, TT, SORTED >", "classRealm_1_1SizedRangeAllocator.html", null ]
     ] ],
     [ "Realm::BasicRangeAllocator< size_t, RegionInstance >", "classRealm_1_1BasicRangeAllocator.html", null ],
+    [ "Realm::ProcessorQueryImpl::BestAffinityCostFn", "structRealm_1_1ProcessorQueryImpl_1_1BestAffinityCostFn.html", null ],
+    [ "Realm::MemoryQueryImpl::BestMemAffinityCostFn", "structRealm_1_1MemoryQueryImpl_1_1BestMemAffinityCostFn.html", null ],
+    [ "Realm::MemoryQueryImpl::BestProcAffinityCostFn", "structRealm_1_1MemoryQueryImpl_1_1BestProcAffinityCostFn.html", null ],
     [ "Realm::bitfield< _BITS, _SHIFT >", "structRealm_1_1bitfield.html", null ],
     [ "Realm::bitpack< T >", "classRealm_1_1bitpack.html", null ],
     [ "Realm::bitpack< IDType >", "classRealm_1_1bitpack.html", null ],
@@ -937,11 +940,8 @@ var hierarchy =
     [ "Realm::PythonInterpreter", "classRealm_1_1PythonInterpreter.html", null ],
     [ "Realm::PyThreadState", "structRealm_1_1PyThreadState.html", null ],
     [ "Realm::QueryPredicate< T, T2 >", "classRealm_1_1QueryPredicate.html", [
-      [ "Realm::MemoryBestMemAffinityPredicate", "classRealm_1_1MemoryBestMemAffinityPredicate.html", null ],
-      [ "Realm::MemoryBestProcAffinityPredicate", "classRealm_1_1MemoryBestProcAffinityPredicate.html", null ],
       [ "Realm::MemoryHasMemAffinityPredicate", "classRealm_1_1MemoryHasMemAffinityPredicate.html", null ],
       [ "Realm::MemoryHasProcAffinityPredicate", "classRealm_1_1MemoryHasProcAffinityPredicate.html", null ],
-      [ "Realm::ProcessorBestAffinityPredicate", "classRealm_1_1ProcessorBestAffinityPredicate.html", null ],
       [ "Realm::ProcessorHasAffinityPredicate", "classRealm_1_1ProcessorHasAffinityPredicate.html", null ]
     ] ],
     [ "QuiescenceChecker", "classQuiescenceChecker.html", null ],
