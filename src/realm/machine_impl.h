@@ -27,6 +27,7 @@
 
 #include <vector>
 #include <set>
+#include <optional>
 
 namespace Realm {
 
@@ -189,22 +190,6 @@ namespace Realm {
     unsigned max_latency;
   };
 
-  class ProcessorBestAffinityPredicate : public ProcQueryPredicate {
-  public:
-    ProcessorBestAffinityPredicate(Memory _memory, int _bandwidth_weight,
-                                   int _latency_weight);
-
-    virtual ProcQueryPredicate *clone(void) const;
-
-    virtual bool matches_predicate(const MachineImpl *machine, Processor thing,
-                                   const MachineProcInfo *info = 0) const;
-
-  protected:
-    Memory memory;
-    int bandwidth_weight;
-    int latency_weight;
-  };
-
   namespace Config {
     extern bool use_machine_query_cache;
   };
@@ -262,6 +247,19 @@ namespace Realm {
     };
     Processor cache_next(Processor after);
 
+  public:
+    // Best affinity cost function structure
+    struct BestAffinityCostFn {
+      Memory memory;
+      int bandwidth_weight;
+      int latency_weight;
+    };
+
+    // Friend declarations for Machine::ProcessorQuery methods
+    friend Machine::ProcessorQuery &
+    Machine::ProcessorQuery::best_affinity_to(Memory m, int bandwidth_weight,
+                                              int latency_weight);
+
   protected:
     atomic<int> references;
     const MachineImpl *machine;
@@ -270,10 +268,16 @@ namespace Realm {
     bool is_restricted_kind;
     Processor::Kind restricted_kind;
     std::vector<ProcQueryPredicate *> predicates;
+
+    // Best affinity cost function (not a predicate)
+    std::optional<BestAffinityCostFn> best_affinity_cost;
+
     Memory cached_mem;
-    bool is_cached_mem, shared_cached_list, valid_cache;
-    std::vector<Processor> *cur_cached_list;
-    unsigned int invalid_count, cur_index;
+    bool is_cached_mem;
+    mutable bool shared_cached_list, valid_cache;
+    mutable std::vector<Processor> *cur_cached_list;
+    mutable unsigned int invalid_count;
+    unsigned int cur_index;
     // cached list of processors
     std::vector<Processor> *cached_list() const;
     bool cached_query(Processor p, Processor &pval);
@@ -281,6 +285,8 @@ namespace Realm {
     bool cached_query(size_t &count) const;
     Processor mutated_cached_query(Processor p);
     Processor next(Processor after);
+    // helper to compute best affinity filtered results and store in cur_cached_list
+    Processor build_best_affinity_cache() const;
   };
 
   typedef QueryPredicate<Memory, MachineMemInfo> MemoryQueryPredicate;
@@ -315,38 +321,6 @@ namespace Realm {
     Memory memory;
     unsigned min_bandwidth;
     unsigned max_latency;
-  };
-
-  class MemoryBestProcAffinityPredicate : public MemoryQueryPredicate {
-  public:
-    MemoryBestProcAffinityPredicate(Processor _proc, int _bandwidth_weight,
-                                    int _latency_weight);
-
-    virtual MemoryQueryPredicate *clone(void) const;
-
-    virtual bool matches_predicate(const MachineImpl *machine, Memory thing,
-                                   const MachineMemInfo *info = 0) const;
-
-  protected:
-    Processor proc;
-    int bandwidth_weight;
-    int latency_weight;
-  };
-
-  class MemoryBestMemAffinityPredicate : public MemoryQueryPredicate {
-  public:
-    MemoryBestMemAffinityPredicate(Memory _memory, int _bandwidth_weight,
-                                   int _latency_weight);
-
-    virtual MemoryQueryPredicate *clone(void) const;
-
-    virtual bool matches_predicate(const MachineImpl *machine, Memory thing,
-                                   const MachineMemInfo *info = 0) const;
-
-  protected:
-    Memory memory;
-    int bandwidth_weight;
-    int latency_weight;
   };
 
   class MemoryQueryImpl {
@@ -384,6 +358,27 @@ namespace Realm {
     bool cached_query(size_t &count) const;
     Memory mutated_cached_query(Memory p);
 
+  public:
+    // Best affinity cost function structures
+    struct BestProcAffinityCostFn {
+      Processor proc;
+      int bandwidth_weight;
+      int latency_weight;
+    };
+    struct BestMemAffinityCostFn {
+      Memory memory;
+      int bandwidth_weight;
+      int latency_weight;
+    };
+
+    // Friend declarations for Machine::MemoryQuery methods
+    friend Machine::MemoryQuery &
+    Machine::MemoryQuery::best_affinity_to(Memory m, int bandwidth_weight,
+                                           int latency_weight);
+    friend Machine::MemoryQuery &
+    Machine::MemoryQuery::best_affinity_to(Processor p, int bandwidth_weight,
+                                           int latency_weight);
+
   protected:
     atomic<int> references;
     const MachineImpl *machine;
@@ -392,12 +387,20 @@ namespace Realm {
     bool is_restricted_kind;
     Memory::Kind restricted_kind;
     size_t restricted_min_capacity;
-    bool shared_cached_list, valid_cache;
-    std::vector<Memory> *cur_cached_list;
-    unsigned int invalid_count, cur_index;
+    mutable bool shared_cached_list, valid_cache;
+    mutable std::vector<Memory> *cur_cached_list;
+    mutable unsigned int invalid_count;
+    unsigned int cur_index;
     std::vector<MemoryQueryPredicate *> predicates;
+
+    // Best affinity cost functions (not predicates)
+    std::optional<BestProcAffinityCostFn> best_proc_affinity_cost;
+    std::optional<BestMemAffinityCostFn> best_mem_affinity_cost;
+
     std::vector<Memory> *cached_list() const;
     Memory next(Memory after);
+    // helper to compute best affinity filtered results and store in cur_cached_list
+    Memory build_best_affinity_cache() const;
   };
 
   extern MachineImpl *machine_singleton;
