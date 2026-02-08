@@ -51,11 +51,12 @@ protected:
     }
 
     // Create 2 system memories with different sizes
-    // Use smaller sizes for 32-bit compatibility (affinity tests don't need large buffers)
+    // Use smaller sizes for 32-bit compatibility (affinity tests don't need large
+    // buffers)
     procs_mems.mem_infos.push_back(
-        {0, Memory::SYSTEM_MEM, static_cast<size_t>(1024) * 1024, 0});  // 1 MB
+        {0, Memory::SYSTEM_MEM, static_cast<size_t>(1024) * 1024, 0}); // 1 MB
     procs_mems.mem_infos.push_back(
-        {1, Memory::SYSTEM_MEM, static_cast<size_t>(2048) * 1024, 0});  // 2 MB
+        {1, Memory::SYSTEM_MEM, static_cast<size_t>(2048) * 1024, 0}); // 2 MB
 
     // Set up processor-memory affinities with varying bandwidth/latency
     // Proc 0 and 1 have high bandwidth to mem 0
