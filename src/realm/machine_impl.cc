@@ -1618,8 +1618,8 @@ namespace Realm {
     , cached_mem(copy_from.cached_mem)
     , is_cached_mem(copy_from.is_cached_mem)
     , shared_cached_list(copy_from.shared_cached_list)
-    , valid_cache(copy_from.valid_cache)
-    , cur_cached_list(copy_from.cur_cached_list)
+    , valid_cache(false)  // Copy starts with invalid cache
+    , cur_cached_list(NULL)  // Copy doesn't share cache pointer
     , invalid_count(copy_from.invalid_count)
   {
     predicates.reserve(copy_from.predicates.size());
@@ -1628,10 +1628,10 @@ namespace Realm {
         it != copy_from.predicates.end(); it++)
       predicates.push_back((*it)->clone());
 
-    if(!shared_cached_list) {
-      cur_cached_list = NULL;
-      valid_cache = false;
-    }
+    // Always null out cur_cached_list in copies to avoid sharing mutable state
+    // The copy will rebuild its cache when needed
+    cur_cached_list = NULL;
+    valid_cache = false;
   }
 
   ProcessorQueryImpl::~ProcessorQueryImpl(void)
@@ -2613,8 +2613,8 @@ namespace Realm {
     , restricted_kind(copy_from.restricted_kind)
     , restricted_min_capacity(copy_from.restricted_min_capacity)
     , shared_cached_list(copy_from.shared_cached_list)
-    , valid_cache(copy_from.valid_cache)
-    , cur_cached_list(copy_from.cur_cached_list)
+    , valid_cache(false)  // Copy starts with invalid cache
+    , cur_cached_list(NULL)  // Copy doesn't share cache pointer
     , invalid_count(cache_invalid_count)
     , best_proc_affinity_cost(copy_from.best_proc_affinity_cost)
     , best_mem_affinity_cost(copy_from.best_mem_affinity_cost)
@@ -2625,10 +2625,8 @@ namespace Realm {
         it != copy_from.predicates.end(); it++)
       predicates.push_back((*it)->clone());
 
-    if(!shared_cached_list) {
-      cur_cached_list = NULL;
-      valid_cache = false;
-    }
+    // Always null out cur_cached_list in copies to avoid sharing mutable state
+    // The copy will rebuild its cache when needed
   }
 
   MemoryQueryImpl::~MemoryQueryImpl(void)
