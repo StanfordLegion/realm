@@ -108,6 +108,7 @@ check_ipo_supported(RESULT REALM_SUPPORTS_LTO LANGUAGES CXX C)
 
 #region Depedency auto-detection
 find_package(CUDAToolkit 11.7 QUIET)
+find_package(Doxygen QUIET)
 find_package(hip QUIET CONFIG)
 find_package(HDF5 QUIET)
 find_package(OpenMP QUIET COMPONENTS C CXX)
@@ -142,7 +143,11 @@ option(REALM_BUILD_TESTS "Build tests" ${PROJECT_IS_TOPLEVEL})
 option(REALM_BUILD_EXAMPLES "Build examples" ${PROJECT_IS_TOPLEVEL})
 option(REALM_BUILD_BENCHMARKS "Build benchmarks" ${PROJECT_IS_TOPLEVEL})
 option(REALM_BUILD_TUTORIALS "Build tutorials" ${PROJECT_IS_TOPLEVEL})
-option(REALM_BUILD_DOCS "Build documentation" ${PROJECT_IS_TOPLEVEL})
+if(Doxygen_FOUND)
+  option(REALM_BUILD_DOCS "Build documentation" ${PROJECT_IS_TOPLEVEL})
+else()
+  option(REALM_BUILD_DOCS "Build documentation" OFF)
+endif()
 
 cmake_dependent_option(REALM_ENABLE_RDTSC "Compile with RDTSC support" ON "NOT WIN32" OFF)
 option(REALM_ENABLE_CUDA "Compile with CUDA support" ${CUDAToolkit_FOUND})
@@ -1051,7 +1056,7 @@ add_feature_info(tutorials REALM_BUILD_TUTORIALS "Build tutorials")
 
 #region Documentation
 # TODO(cperry): fix me
-if(REALM_BUILD_DOCS AND DOXYGEN_FOUND)
+if(REALM_BUILD_DOCS)
   set(DOXYGEN_PROJECT_LOGO ${CMAKE_CURRENT_SOURCE_DIR}/doxygen/logo.png)
   set(DOXYGEN_PROJECT_NUMBER ${REALM_VERSION})
   set(DOXYGEN_GENERATE_HTML ${REALM_GENERATE_HTML})
