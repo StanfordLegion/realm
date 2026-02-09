@@ -1679,7 +1679,7 @@ namespace Realm {
       restricted_node_id = new_node_id;
     }
     // any constraint to processor query will invalidate cached list
-    if(valid_cache && cur_cached_list) {
+    if(valid_cache && cur_cached_list && !shared_cached_list) {
       delete cur_cached_list;
       cur_cached_list = NULL;
     }
@@ -1697,7 +1697,7 @@ namespace Realm {
       is_restricted_kind = true;
       restricted_kind = new_kind;
     }
-    if(valid_cache && cur_cached_list) {
+    if(valid_cache && cur_cached_list && !shared_cached_list) {
       delete cur_cached_list;
       cur_cached_list = NULL;
     }
@@ -1708,7 +1708,7 @@ namespace Realm {
   {
     // a writer is always unique, so no need for mutexes
     predicates.push_back(pred);
-    if(valid_cache && cur_cached_list) {
+    if(valid_cache && cur_cached_list && !shared_cached_list) {
       delete cur_cached_list;
       cur_cached_list = NULL;
     }
@@ -2672,7 +2672,7 @@ namespace Realm {
       is_restricted_node = true;
       restricted_node_id = new_node_id;
     }
-    if(valid_cache && cur_cached_list) {
+    if(valid_cache && cur_cached_list && !shared_cached_list) {
       delete cur_cached_list;
       cur_cached_list = NULL;
     }
@@ -2690,7 +2690,7 @@ namespace Realm {
       is_restricted_kind = true;
       restricted_kind = new_kind;
     }
-    if(valid_cache && cur_cached_list) {
+    if(valid_cache && cur_cached_list && !shared_cached_list) {
       delete cur_cached_list;
       cur_cached_list = NULL;
     }
@@ -2700,7 +2700,7 @@ namespace Realm {
   void MemoryQueryImpl::restrict_by_capacity(size_t new_min_bytes)
   {
     restricted_min_capacity = std::max(restricted_min_capacity, new_min_bytes);
-    if(valid_cache && cur_cached_list) {
+    if(valid_cache && cur_cached_list && !shared_cached_list) {
       delete cur_cached_list;
       cur_cached_list = NULL;
     }
@@ -2711,7 +2711,7 @@ namespace Realm {
   {
     // a writer is always unique, so no need for mutexes
     predicates.push_back(pred);
-    if(valid_cache && cur_cached_list) {
+    if(valid_cache && cur_cached_list && !shared_cached_list) {
       delete cur_cached_list;
       cur_cached_list = NULL;
     }
