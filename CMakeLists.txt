@@ -145,12 +145,12 @@ option(REALM_BUILD_TUTORIALS "Build tutorials" ${PROJECT_IS_TOPLEVEL})
 option(REALM_BUILD_DOCS "Build documentation" ${PROJECT_IS_TOPLEVEL})
 
 cmake_dependent_option(REALM_ENABLE_RDTSC "Compile with RDTSC support" ON "NOT WIN32" OFF)
-cmake_dependent_option(REALM_ENABLE_CUDA "Compile with CUDA support" ON "CUDAToolkit_FOUND" OFF)
-cmake_dependent_option(REALM_ENABLE_HIP "Compile with HIP support" ON "hip_FOUND" OFF)
+option(REALM_ENABLE_CUDA "Compile with CUDA support" ${CUDAToolkit_FOUND})
+option(REALM_ENABLE_HIP "Compile with HIP support" ${hip_FOUND})
 option(REALM_ENABLE_LLVM "Compile with LLVMJIT support" OFF)
-cmake_dependent_option(REALM_ENABLE_HDF5 "Compile with HDF5 support" ON "HDF5_FOUND" OFF)
+option(REALM_ENABLE_HDF5 "Compile with HDF5 support" ${HDF5_FOUND})
 option(REALM_ENABLE_MPI "Compile with MPI support" OFF)
-cmake_dependent_option(REALM_ENABLE_OPENMP "Compile with OpenMP support" ON "OpenMP_FOUND" OFF)
+option(REALM_ENABLE_OPENMP "Compile with OpenMP support" ${OpenMP_FOUND})
 option(REALM_ENABLE_KOKKOS "Compile with kokkos support" OFF)
 cmake_dependent_option(REALM_ENABLE_UCX "Compile with UCX support" OFF "NOT WIN32" OFF)
 cmake_dependent_option(
@@ -158,7 +158,7 @@ cmake_dependent_option(
   OFF
 )
 option(REALM_ENABLE_HWLOC "Compile with hwloc hardware discovery support" OFF)
-cmake_dependent_option(REALM_ENABLE_PAPI "Compile with PAPI thread profiling support" ON "Papi_FOUND" OFF)
+option(REALM_ENABLE_PAPI "Compile with PAPI thread profiling support" ${Papi_FOUND})
 option(REALM_ENABLE_CPPTRACE "Compile with cpptrace backtrace support" OFF)
 option(REALM_ENABLE_PREALM "Compile with realm profiler" OFF)
 cmake_dependent_option(
@@ -175,7 +175,7 @@ cmake_dependent_option(
   "REALM_ENABLE_GASNETEX_WRAPPER" OFF
 )
 cmake_dependent_option(
-  REALM_ENABLE_PYTHON "Compile with Python support" ON "REALM_ENABLE_LIBDL; Python3_FOUND" OFF
+  REALM_ENABLE_PYTHON "Compile with Python support" ${Python3_FOUND} "REALM_ENABLE_LIBDL" OFF
 )
 
 cmake_dependent_option(
