@@ -32,7 +32,7 @@ namespace Realm {
 
 class BestAffinityTest : public ::testing::Test {
 protected:
-  static void SetUpTestSuite()
+  void SetUp() override
   {
     Realm::enable_unit_tests = true;
     runtime_impl_ = std::make_unique<MockRuntimeImplMachineModel>();
@@ -79,7 +79,7 @@ protected:
     runtime_impl_->setup_mock_proc_mems(procs_mems);
   }
 
-  static void TearDownTestSuite()
+  void TearDown() override
   {
     if(runtime_impl_) {
       runtime_impl_->finalize();
@@ -91,12 +91,10 @@ protected:
   }
 
   // Helper to get machine
-  static Machine get_machine() { return Machine::get_machine(); }
+  Machine get_machine() { return Machine::get_machine(); }
 
-  static std::unique_ptr<MockRuntimeImplMachineModel> runtime_impl_;
+  std::unique_ptr<MockRuntimeImplMachineModel> runtime_impl_;
 };
-
-std::unique_ptr<MockRuntimeImplMachineModel> BestAffinityTest::runtime_impl_ = nullptr;
 
 // Test basic processor best affinity with default weights (bandwidth only)
 TEST_F(BestAffinityTest, ProcessorBestAffinityDefault)
