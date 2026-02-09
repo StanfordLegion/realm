@@ -32,10 +32,10 @@ namespace Realm {
 
   template <int N, typename T>
   template <int N2, typename T2>
-  void IndexSpace<N,T>::suggest_image_buffer_size(
+  void IndexSpace<N,T>::required_image_buffer_size(
     const std::vector<DeppartSubspace<N2,T2>>& source_spaces,
     const std::vector<DeppartEstimateInput<N2,T2>>& inputs,
-    std::vector<DeppartEstimateSuggestion>& suggestions) const {
+    std::vector<DeppartBufferRequirements>& requirements) const {
     size_t minimal_size = 0;
     size_t source_entries = 0;
     bool bvh = false;
@@ -58,7 +58,7 @@ namespace Realm {
         (2 * source_entries * sizeof(uint64_t)) +
         (source_entries * sizeof(uint64_t));
     }
-    suggestions = std::vector<DeppartEstimateSuggestion>(inputs.size());
+    requirements = std::vector<DeppartBufferRequirements>(inputs.size());
     for (size_t i = 0; i < inputs.size(); i++) {
       IndexSpace<N2, T2> is = inputs[i].space;
       Memory mem = inputs[i].location;
@@ -71,13 +71,24 @@ namespace Realm {
       	}
         minimal_size = max(minimal_size, device_size);
       	size_t optimal_size = is.bounds.volume() * sizeof(Rect<N, T>) * source_spaces.size() + minimal_size;
-      	suggestions[i].suggested = mem;
-      	suggestions[i].lower_bound = minimal_size;
-      	suggestions[i].upper_bound = optimal_size;
+      	std::vector<Machine::ProcessorMemoryAffinity> affinities;
+        unsigned best_bandwidth = 0;
+        Processor best_proc = Processor::NO_PROC;
+        Machine::get_machine().get_proc_mem_affinity(affinities, Processor::NO_PROC, mem);
+        for (auto affinity : affinities) {
+          if (affinity.bandwidth > best_bandwidth) {
+            best_bandwidth = affinity.bandwidth;
+            best_proc = affinity.p;
+          }
+        }
+        requirements[i].target_proc = best_proc;
+      	requirements[i].lower_bound = minimal_size;
+      	requirements[i].upper_bound = optimal_size;
+        requirements[i].minimum_alignment = 128;
       } else {
-	suggestions[i].suggested = Memory::NO_MEMORY;
-      	suggestions[i].lower_bound = 0;
-      	suggestions[i].upper_bound = 0;
+	requirements[i].target_proc = Processor::NO_PROC;
+      	requirements[i].lower_bound = 0;
+      	requirements[i].upper_bound = 0;
       }
     }
   }

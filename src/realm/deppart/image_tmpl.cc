@@ -56,10 +56,10 @@ namespace Realm {
   GPU_IMAGE_LINE(N1, T1, N2, T2)																	 \
   template class ImageOperation<N1,T1,N2,T2>;                                                                        \
   template ImageMicroOp<N1,T1,N2,T2>::ImageMicroOp(NodeID, AsyncMicroOp *, Serialization::FixedBufferDeserializer&); \
-  template void IndexSpace<N1, T1>::suggest_image_buffer_size(						     \
+  template void IndexSpace<N1, T1>::required_image_buffer_size(						     \
 	const std::vector<DeppartSubspace<N2,T2>>&,							     \
 	const std::vector<DeppartEstimateInput<N2,T2>>&,							     \
-	std::vector<DeppartEstimateSuggestion>&) const;							     \
+	std::vector<DeppartBufferRequirements>&) const;							     \
   template Event IndexSpace<N1, T1>::create_subspaces_by_image(                                                      \
       const DomainTransform<N1, T1, N2, T2> &, const std::vector<IndexSpace<N2, T2> > &,                             \
       std::vector<IndexSpace<N1, T1> > &, const ProfilingRequestSet &, Event)  const;					\

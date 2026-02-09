@@ -31,28 +31,40 @@ namespace Realm {
 
   template <int N, typename T>
   template<typename FT>
-  void IndexSpace<N,T>::suggest_byfield_buffer_size(
+  void IndexSpace<N,T>::required_byfield_buffer_size(
     const std::vector<DeppartEstimateInput<N,T>>& inputs,
-    std::vector<DeppartEstimateSuggestion>& suggestions) const {
-    suggestions = std::vector<DeppartEstimateSuggestion>(inputs.size());
+    std::vector<DeppartBufferRequirements>& requirements) const {
+    requirements = std::vector<DeppartBufferRequirements>(inputs.size());
     for (size_t i = 0; i < inputs.size(); i++) {
       IndexSpace<N, T> is = inputs[i].space;
       Memory mem = inputs[i].location;
       if (mem.kind() == Memory::GPU_FB_MEM ||
           mem.kind() == Memory::Z_COPY_MEM) {
-        const char* val = std::getenv("MIN_SIZE");  // or any env var
-        size_t device_size = 2000000; //default
-        if (val) {
-          device_size = atoi(val);
-        }
-        size_t optimal_size = is.bounds.volume() * sizeof(Rect<N, T>);
-        suggestions[i].suggested = mem;
-        suggestions[i].lower_bound = device_size;
-        suggestions[i].upper_bound = max(device_size, optimal_size);
+            const char* val = std::getenv("MIN_SIZE");  // or any env var
+            size_t device_size = 2000000; //default
+            if (val) {
+              device_size = atoi(val);
+            }
+            size_t optimal_size = is.bounds.volume() * sizeof(Rect<N, T>);
+            std::vector<Machine::ProcessorMemoryAffinity> affinities;
+            unsigned best_bandwidth = 0;
+            Processor best_proc = Processor::NO_PROC;
+            Machine::get_machine().get_proc_mem_affinity(affinities, Processor::NO_PROC, mem);
+            for (auto affinity : affinities) {
+              if (affinity.bandwidth > best_bandwidth) {
+                best_bandwidth = affinity.bandwidth;
+                best_proc = affinity.p;
+              }
+            }
+            requirements[i].target_proc = best_proc;
+            requirements[i].lower_bound = device_size;
+            requirements[i].upper_bound = max(device_size, optimal_size);
+            requirements[i].minimum_alignment = 128;
           } else {
-            suggestions[i].suggested = Memory::NO_MEMORY;
-            suggestions[i].lower_bound = 0;
-            suggestions[i].upper_bound = 0;
+            requirements[i].target_proc = Processor::NO_PROC;
+            requirements[i].lower_bound = 0;
+            requirements[i].upper_bound = 0;
+            requirements[i].minimum_alignment = 0;
           }
     }
   }
