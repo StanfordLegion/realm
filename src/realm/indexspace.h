@@ -127,7 +127,7 @@ namespace Realm {
   struct DeppartBufferRequirements {
     size_t lower_bound;
     size_t upper_bound;
-    size_t minimum_alignment = 128;
+    size_t minimum_alignment;
     Processor target_proc;
   };
 
