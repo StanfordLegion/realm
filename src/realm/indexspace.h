@@ -737,7 +737,6 @@ namespace Realm {
         const std::vector<FT> &colors, std::vector<IndexSpace<N, T>> &subspaces,
         const ProfilingRequestSet &reqs, Event wait_on = Event::NO_EVENT) const;
 
-    template <typename FT>
     REALM_PUBLIC_API void required_byfield_buffer_size(
         const std::vector<DeppartEstimateInput<N,T>>& inputs,
         std::vector<DeppartBufferRequirements>& suggestions) const;

@@ -45,6 +45,13 @@ namespace Realm {
 
 #ifdef REALM_USE_CUDA
   #define GPU_BYFIELD_LINE(N, T, ...) template class GPUByFieldMicroOp<N,T,__VA_ARGS__>;
+  #define DOIT_NT(N, T) \
+      template void IndexSpace<N, T>::required_byfield_buffer_size(						     \
+	const std::vector<DeppartEstimateInput<N,T>>&,							     \
+	std::vector<DeppartBufferRequirements>&) const;
+
+FOREACH_NT(DOIT_NT)
+
 #else
   #define GPU_BYFIELD_LINE(N, T, ...) /* no CUDA */
 #endif
@@ -58,10 +65,9 @@ namespace Realm {
 							     const std::vector<F>&, \
 							     std::vector<IndexSpace<N,T> >&, \
 							     const ProfilingRequestSet &, \
-							     Event) const;      \
-  template void IndexSpace<N, T>::required_byfield_buffer_size<F>(					\
-	const std::vector<DeppartEstimateInput<N,T>>&,						\
-	std::vector<DeppartBufferRequirements>&) const;
+							     Event) const;
+
+
 
   
 FOREACH_NTF(DOIT)

@@ -559,6 +559,9 @@ public:
   	log_app.info() << "GPU Preimage complete " << Clock::current_time_in_microseconds() << "\n";
 	log_app.info() << "Starting GPU Image " << Clock::current_time_in_microseconds() << "\n";
 
+    std::vector<DeppartEstimateInput<1, int>> spaces = {};
+    std::vector<DeppartBufferRequirements> requirements;
+    is_nodes.required_byfield_buffer_size(spaces, requirements);
     // an image of p_edges through out_node gives us all the shared nodes, along
     //  with some private nodes
     Event e3 = is_nodes.create_subspaces_by_image(src_field_data_gpu,

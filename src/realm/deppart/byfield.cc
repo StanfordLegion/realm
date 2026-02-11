@@ -30,7 +30,6 @@ namespace Realm {
   extern Logger log_uop_timing;
 
   template <int N, typename T>
-  template<typename FT>
   void IndexSpace<N,T>::required_byfield_buffer_size(
     const std::vector<DeppartEstimateInput<N,T>>& inputs,
     std::vector<DeppartBufferRequirements>& requirements) const {
