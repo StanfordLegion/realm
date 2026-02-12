@@ -3054,7 +3054,7 @@ namespace Realm {
   bool RuntimeImpl::create_configs(int argc, char **argv)
   {
     // initialize topology
-    if (!topology_init) {
+    if(!topology_init) {
       host_topology = HardwareTopology::create_topology();
       topology_init = true;
     }
