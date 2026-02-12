@@ -128,7 +128,7 @@ namespace Realm {
     size_t lower_bound;
     size_t upper_bound;
     size_t minimum_alignment;
-    Processor target_proc;
+    Processor affinity_processor;
   };
 
   /**
@@ -737,9 +737,9 @@ namespace Realm {
         const std::vector<FT> &colors, std::vector<IndexSpace<N, T>> &subspaces,
         const ProfilingRequestSet &reqs, Event wait_on = Event::NO_EVENT) const;
 
-    REALM_PUBLIC_API void required_byfield_buffer_size(
+    REALM_PUBLIC_API void by_field_buffer_requirements(
         const std::vector<DeppartEstimateInput<N,T>>& inputs,
-        std::vector<DeppartBufferRequirements>& suggestions) const;
+        std::vector<DeppartBufferRequirements>& requirements) const;
 
     ///@{
     /**
@@ -807,10 +807,10 @@ namespace Realm {
         Event wait_on = Event::NO_EVENT) const;
 
     template<int N2, typename T2>
-    REALM_PUBLIC_API void required_image_buffer_size(
+    REALM_PUBLIC_API void by_image_buffer_requirements(
         const std::vector<DeppartSubspace<N2,T2>>& source_spaces,
         const std::vector<DeppartEstimateInput<N2,T2>>& inputs,
-        std::vector<DeppartBufferRequirements>& suggestions) const;
+        std::vector<DeppartBufferRequirements>& requirements) const;
 
 
     ///@}
@@ -934,10 +934,10 @@ namespace Realm {
         Event wait_on = Event::NO_EVENT) const;
 
     template<int N2, typename T2>
-    REALM_PUBLIC_API void required_preimage_buffer_size(
+    REALM_PUBLIC_API void by_preimage_buffer_requirements(
         const std::vector<DeppartSubspace<N2,T2>>& target_spaces,
         const std::vector<DeppartEstimateInput<N,T>>& inputs,
-        std::vector<DeppartBufferRequirements>& suggestions) const;
+        std::vector<DeppartBufferRequirements>& requirements) const;
     ///@}
 
     ///@{

@@ -55,7 +55,7 @@ GPU_PREIMAGE_LINE(N1,T1,N2,T2) \
 template class StructuredPreimageMicroOp<N1,T1,N2,T2>; \
 template class PreimageOperation<N1,T1,N2,T2>; \
 template PreimageMicroOp<N1,T1,N2,T2>::PreimageMicroOp(NodeID, AsyncMicroOp *, Serialization::FixedBufferDeserializer&); \
-template void IndexSpace<N1, T1>::required_preimage_buffer_size(						     \
+template void IndexSpace<N1, T1>::by_preimage_buffer_requirements(						     \
 	const std::vector<DeppartSubspace<N2,T2>>&,							     \
 	const std::vector<DeppartEstimateInput<N1,T1>>&,							     \
 	std::vector<DeppartBufferRequirements>&) const;	\

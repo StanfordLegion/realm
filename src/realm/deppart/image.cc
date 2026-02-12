@@ -32,7 +32,7 @@ namespace Realm {
 
   template <int N, typename T>
   template <int N2, typename T2>
-  void IndexSpace<N,T>::required_image_buffer_size(
+  void IndexSpace<N,T>::by_image_buffer_requirements(
     const std::vector<DeppartSubspace<N2,T2>>& source_spaces,
     const std::vector<DeppartEstimateInput<N2,T2>>& inputs,
     std::vector<DeppartBufferRequirements>& requirements) const {
@@ -81,12 +81,12 @@ namespace Realm {
             best_proc = affinity.p;
           }
         }
-        requirements[i].target_proc = best_proc;
+        requirements[i].affinity_processor = best_proc;
       	requirements[i].lower_bound = minimal_size;
       	requirements[i].upper_bound = optimal_size;
         requirements[i].minimum_alignment = 128;
       } else {
-	requirements[i].target_proc = Processor::NO_PROC;
+	requirements[i].affinity_processor = Processor::NO_PROC;
       	requirements[i].lower_bound = 0;
       	requirements[i].upper_bound = 0;
       }

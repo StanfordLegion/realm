@@ -561,7 +561,7 @@ public:
 
     std::vector<DeppartEstimateInput<1, int>> spaces = {};
     std::vector<DeppartBufferRequirements> requirements;
-    is_nodes.required_byfield_buffer_size(spaces, requirements);
+    is_nodes.by_field_buffer_requirements(spaces, requirements);
     // an image of p_edges through out_node gives us all the shared nodes, along
     //  with some private nodes
     Event e3 = is_nodes.create_subspaces_by_image(src_field_data_gpu,

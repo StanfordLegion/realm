@@ -30,7 +30,7 @@ namespace Realm {
   extern Logger log_uop_timing;
 
   template <int N, typename T>
-  void IndexSpace<N,T>::required_byfield_buffer_size(
+  void IndexSpace<N,T>::by_field_buffer_requirements(
     const std::vector<DeppartEstimateInput<N,T>>& inputs,
     std::vector<DeppartBufferRequirements>& requirements) const {
     requirements = std::vector<DeppartBufferRequirements>(inputs.size());
@@ -55,12 +55,12 @@ namespace Realm {
                 best_proc = affinity.p;
               }
             }
-            requirements[i].target_proc = best_proc;
+            requirements[i].affinity_processor = best_proc;
             requirements[i].lower_bound = device_size;
             requirements[i].upper_bound = max(device_size, optimal_size);
             requirements[i].minimum_alignment = 128;
           } else {
-            requirements[i].target_proc = Processor::NO_PROC;
+            requirements[i].affinity_processor = Processor::NO_PROC;
             requirements[i].lower_bound = 0;
             requirements[i].upper_bound = 0;
             requirements[i].minimum_alignment = 0;
