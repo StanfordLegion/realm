@@ -20,6 +20,7 @@
 #include "realm/proc_impl.h"
 #include "realm/mem_impl.h"
 #include "realm/inst_impl.h"
+#include "realm/logging.h"
 #include <vector>
 
 using namespace Realm;
@@ -54,6 +55,9 @@ public:
     my_node_id = 0;
     Realm::Network::max_node_id = _num_nodes - 1;
     Realm::Network::my_node_id = my_node_id;
+    // Initialize logger subsystem to prevent destruction order issues
+    std::vector<std::string> empty_cmdline;
+    Logger::configure_from_cmdline(empty_cmdline);
   }
 
   void finalize(void)
