@@ -125,9 +125,9 @@ namespace Realm {
   };
 
   struct DeppartBufferRequirements {
-    size_t lower_bound;
-    size_t upper_bound;
-    size_t minimum_alignment;
+    size_t lower_bound = 0;
+    size_t upper_bound = 0;
+    size_t minimum_alignment = 0;
     Processor affinity_processor;
   };
 
