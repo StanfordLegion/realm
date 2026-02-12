@@ -1,4 +1,4 @@
-# Copyright 2025 Stanford University, NVIDIA Corporation
+# Copyright 2026 Stanford University, NVIDIA Corporation
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -13,17 +13,15 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-prefix=@CMAKE_INSTALL_PREFIX@
-exec_prefix="${prefix}"
-libdir="@PKGCONFIG_CMAKE_INSTALL_LIBDIR@"
-includedir="@PKGCONFIG_CMAKE_INSTALL_INCLUDEDIR@"
-datarootdir="@PKGCONFIG_CMAKE_INSTALL_DATAROOTDIR@"
-datadir="@PKGCONFIG_CMAKE_INSTALL_DATAROOTDIR@"
+cmake_minimum_required(VERSION 3.22 FATAL_ERROR)
+project(RealmExample_vtable)
 
-Name: @PROJECT_NAME@
-Description: @CMAKE_PROJECT_DESCRIPTION@
-Version: @REALM_VERSION@
-URL: @CMAKE_PROJECT_HOMEPAGE_URL@
-Requires.private: @REALM_PKGCONF_REQUIRES@
-Cflags: -I${includedir} @REALM_COMPILE_DEFINITIONS@
-Libs: -L${libdir} -lrealm @CMAKE_THREAD_LIBS_INIT@
+add_subdirectory(mpi)
+
+find_package(PkgConfig QUIET)
+if(PkgConfig_FOUND)
+  pkg_check_modules(PMIX QUIET pmix)
+  if(PMIX_FOUND)
+    add_subdirectory(pmix)
+  endif()
+endif()

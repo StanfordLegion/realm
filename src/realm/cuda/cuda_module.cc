@@ -4627,7 +4627,7 @@ namespace Realm {
         // semantics)
         size_t registered_size = 0;
         CUdeviceptr base_addr = 0;
-        void *values[] = {(void *)&base_addr, (void *)&size};
+        void *values[] = {(void *)&base_addr, (void *)&registered_size};
         CUpointer_attribute attrs[] = {CU_POINTER_ATTRIBUTE_RANGE_START_ADDR,
                                        CU_POINTER_ATTRIBUTE_RANGE_SIZE};
         ret = CUDA_DRIVER_FNPTR(cuPointerGetAttributes)(sizeof(attrs) / sizeof(attrs[0]),

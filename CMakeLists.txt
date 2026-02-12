@@ -1,4 +1,4 @@
-# Copyright 2025 Stanford University, NVIDIA Corporation
+# Copyright 2025 Stanford University, NVIDIA Corporation, Los Alamos National Laboratory
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -57,16 +57,18 @@ if(Realm_SHORT_VERSION STREQUAL "" AND EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/VERSIO
   file(READ ${CMAKE_CURRENT_SOURCE_DIR}/VERSION _REALM_FULL_VERSION)
   string(STRIP "${_REALM_FULL_VERSION}" _REALM_FULL_VERSION)
   string(REGEX MATCH "v([0-9\.]+)(-.+)?" _ "${_REALM_FULL_VERSION}")
-  set(Realm_SHORT_VERSION ${CMAKE_MATCH_1})
-  set(Realm_VERSION_META ${CMAKE_MATCH_2})
-else()
-  if(Realm_SHORT_VERSION STREQUAL "")
-    set(Realm_SHORT_VERSION 0.0.1)
-    if(Realm_VERSION_META STREQUAL "")
-      set(Realm_VERSION_META "-unknown")
-    endif()
+  if(CMAKE_MATCH_1)
+    set(Realm_SHORT_VERSION ${CMAKE_MATCH_1})
+    set(Realm_VERSION_META ${CMAKE_MATCH_2})
   endif()
 endif()
+if(Realm_SHORT_VERSION STREQUAL "")
+  set(Realm_SHORT_VERSION 0.0.1)
+  if(Realm_VERSION_META STREQUAL "")
+    set(Realm_VERSION_META "-unknown")
+  endif()
+endif()
+message("-- Realm version: ${Realm_SHORT_VERSION}${Realm_VERSION_META}")
 #endregion
 
 project(
@@ -510,8 +512,7 @@ if(REALM_ENABLE_KOKKOS)
   find_package(Kokkos COMPONENTS separable_compilation)
   if (Kokkos_FOUND)
     enable_language(${Kokkos_COMPILE_LANGUAGE})
-    list(APPEND REALM_STATIC_DEPENDS Kokkos)
-    list(APPEND REALM_LIBRARIES Kokkos::kokkoscore)
+    list(APPEND REALM_LIBRARIES realm_kokkos)
   endif()
 endif()
 

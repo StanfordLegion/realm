@@ -18,7 +18,7 @@ project(RealmExample_saxpy)
 
 # Only search if were building stand-alone and not as part of Realm
 if(NOT TARGET Realm::Realm)
-  find_package(Realm REQUIRED)
+  find_package(Realm REQUIRED OPTIONAL_COMPONENTS cuda hip)
 endif()
 
 set(SAXPY_SRCS saxpy_cpu.cc)
