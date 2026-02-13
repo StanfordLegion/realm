@@ -1,0 +1,47 @@
+<map id="Realm::Serialization::PolymorphicSerdezIntfc&lt; T &gt;" name="Realm::Serialization::PolymorphicSerdezIntfc&lt; T &gt;">
+<area shape="rect" id="Node000001" title=" " alt="" coords="5,1031,228,1071"/>
+<area shape="rect" id="Node000002" href="$classRealm_1_1Serialization_1_1PolymorphicSerdezSubclass.html" title=" " alt="" coords="314,5,577,89"/>
+<area shape="poly" id="edge1_Node000001_Node000002" title=" " alt="" coords="116,1017,126,830,136,698,151,555,172,413,198,283,214,225,232,175,252,133,274,100,292,84,312,71,315,75,295,88,278,104,256,135,237,177,219,227,203,284,177,414,156,556,142,698,131,830,122,1017"/>
+<area shape="rect" id="Node000003" href="$classRealm_1_1Serialization_1_1PolymorphicSerdezSubclass.html" title=" " alt="" coords="276,114,615,183"/>
+<area shape="poly" id="edge2_Node000001_Node000003" title=" " alt="" coords="117,1017,129,846,155,599,176,472,202,355,235,259,253,222,274,194,287,181,291,185,278,197,258,225,239,261,207,357,181,473,161,599,134,846,122,1018"/>
+<area shape="rect" id="Node000004" href="$classRealm_1_1Serialization_1_1PolymorphicSerdezSubclass.html" title=" " alt="" coords="279,207,612,277"/>
+<area shape="poly" id="edge3_Node000001_Node000004" title=" " alt="" coords="118,1017,132,863,161,644,182,532,208,429,238,345,255,312,274,287,287,275,291,279,278,290,260,315,243,347,213,431,187,533,166,645,137,863,123,1018"/>
+<area shape="rect" id="Node000005" href="$classRealm_1_1Serialization_1_1PolymorphicSerdezSubclass.html" title=" " alt="" coords="304,301,587,385"/>
+<area shape="poly" id="edge4_Node000001_Node000005" title=" " alt="" coords="119,1017,137,883,169,697,191,603,215,516,243,445,258,418,274,396,302,374,305,378,278,400,262,420,248,448,220,518,196,604,175,698,142,884,124,1018"/>
+<area shape="rect" id="Node000006" href="$classRealm_1_1Serialization_1_1PolymorphicSerdezSubclass.html" title=" " alt="" coords="309,410,582,479"/>
+<area shape="poly" id="edge5_Node000001_Node000006" title=" " alt="" coords="114,1018,117,916,124,848,137,774,157,697,185,622,224,551,247,519,274,489,307,466,310,471,278,493,252,523,228,554,190,624,162,699,142,775,130,849,123,916,120,1018"/>
+<area shape="rect" id="Node000007" href="$classRealm_1_1Serialization_1_1PolymorphicSerdezSubclass.html" title=" " alt="" coords="299,503,591,573"/>
+<area shape="poly" id="edge6_Node000001_Node000007" title=" " alt="" coords="116,1017,125,931,135,874,149,814,169,751,196,690,231,633,274,583,297,565,301,570,278,587,235,636,201,692,174,753,154,815,140,875,130,931,122,1018"/>
+<area shape="rect" id="Node000008" href="$classRealm_1_1Serialization_1_1PolymorphicSerdezSubclass.html" title=" " alt="" coords="289,597,601,666"/>
+<area shape="poly" id="edge7_Node000001_Node000008" title=" " alt="" coords="120,1017,134,946,162,854,182,806,207,758,238,714,274,676,290,664,294,668,278,680,242,718,212,761,187,808,167,856,139,947,125,1018"/>
+<area shape="rect" id="Node000009" href="$classRealm_1_1Serialization_1_1PolymorphicSerdezSubclass.html" title=" " alt="" coords="315,690,575,759"/>
+<area shape="poly" id="edge8_Node000001_Node000009" title=" " alt="" coords="125,1017,144,963,175,896,218,828,244,796,274,769,314,747,316,751,278,773,248,800,222,831,180,899,149,965,130,1019"/>
+<area shape="rect" id="Node000010" href="$classRealm_1_1Serialization_1_1PolymorphicSerdezSubclass.html" title=" " alt="" coords="315,783,575,853"/>
+<area shape="poly" id="edge9_Node000001_Node000010" title=" " alt="" coords="134,1018,158,981,191,939,230,898,275,862,314,843,316,847,277,867,233,902,195,943,163,984,139,1021"/>
+<area shape="rect" id="Node000011" href="$classRealm_1_1Serialization_1_1PolymorphicSerdezSubclass.html" title=" " alt="" coords="305,877,586,946"/>
+<area shape="poly" id="edge10_Node000001_Node000011" title=" " alt="" coords="157,1021,212,988,275,956,306,944,308,949,277,960,214,992,160,1026"/>
+<area shape="rect" id="Node000012" href="$classRealm_1_1Serialization_1_1PolymorphicSerdezSubclass.html" title=" " alt="" coords="295,970,596,1039"/>
+<area shape="poly" id="edge11_Node000001_Node000012" title=" " alt="" coords="242,1031,294,1023,295,1029,242,1036"/>
+<area shape="rect" id="Node000013" href="$classRealm_1_1Serialization_1_1PolymorphicSerdezSubclass.html" title=" " alt="" coords="315,1063,575,1133"/>
+<area shape="poly" id="edge12_Node000001_Node000013" title=" " alt="" coords="242,1066,316,1077,315,1082,241,1072"/>
+<area shape="rect" id="Node000014" href="$classRealm_1_1Serialization_1_1PolymorphicSerdezSubclass.html" title=" " alt="" coords="297,1157,593,1226"/>
+<area shape="poly" id="edge13_Node000001_Node000014" title=" " alt="" coords="160,1077,214,1111,277,1142,308,1154,306,1159,275,1147,212,1115,157,1081"/>
+<area shape="rect" id="Node000015" href="$classRealm_1_1Serialization_1_1PolymorphicSerdezSubclass.html" title=" " alt="" coords="320,1251,571,1335"/>
+<area shape="poly" id="edge14_Node000001_Node000015" title=" " alt="" coords="139,1082,195,1159,234,1200,277,1236,321,1259,318,1263,275,1240,230,1204,191,1162,135,1085"/>
+<area shape="rect" id="Node000016" href="$classRealm_1_1Serialization_1_1PolymorphicSerdezSubclass.html" title=" " alt="" coords="284,1359,607,1429"/>
+<area shape="poly" id="edge15_Node000001_Node000016" title=" " alt="" coords="129,1084,148,1141,178,1211,221,1283,247,1315,278,1344,297,1357,294,1361,274,1348,243,1319,216,1286,173,1213,143,1142,124,1085"/>
+<area shape="rect" id="Node000017" href="$classRealm_1_1Serialization_1_1PolymorphicSerdezSubclass.html" title=" " alt="" coords="318,1453,573,1522"/>
+<area shape="poly" id="edge16_Node000001_Node000017" title=" " alt="" coords="124,1084,137,1158,164,1254,184,1304,210,1353,241,1399,278,1439,297,1453,319,1464,316,1469,294,1457,274,1443,236,1402,205,1356,180,1306,159,1255,132,1159,119,1085"/>
+<area shape="rect" id="Node000018" href="$classRealm_1_1Serialization_1_1PolymorphicSerdezSubclass.html" title=" " alt="" coords="324,1546,567,1615"/>
+<area shape="poly" id="edge17_Node000001_Node000018" title=" " alt="" coords="121,1085,129,1175,138,1232,152,1295,172,1359,199,1422,234,1481,278,1532,300,1549,325,1561,323,1565,297,1553,274,1536,230,1484,194,1425,167,1361,147,1296,133,1233,124,1175,116,1086"/>
+<area shape="rect" id="Node000019" href="$classRealm_1_1Serialization_1_1PolymorphicSerdezSubclass.html" title=" " alt="" coords="303,1639,587,1709"/>
+<area shape="poly" id="edge18_Node000001_Node000019" title=" " alt="" coords="125,1085,145,1205,179,1368,200,1450,224,1524,250,1585,278,1625,305,1645,302,1650,274,1629,245,1587,219,1526,195,1451,174,1369,140,1206,120,1086"/>
+<area shape="rect" id="Node000020" href="$classRealm_1_1Serialization_1_1PolymorphicSerdezSubclass.html" title=" " alt="" coords="313,1733,578,1802"/>
+<area shape="poly" id="edge19_Node000001_Node000020" title=" " alt="" coords="124,1084,141,1222,172,1413,193,1510,218,1598,246,1670,262,1698,278,1719,294,1733,314,1744,311,1748,291,1737,274,1723,257,1701,242,1673,213,1600,188,1511,167,1414,136,1223,119,1085"/>
+<area shape="rect" id="Node000021" href="$classRealm_1_1Serialization_1_1PolymorphicSerdezSubclass.html" title=" " alt="" coords="320,1827,571,1911"/>
+<area shape="poly" id="edge20_Node000001_Node000021" title=" " alt="" coords="123,1085,138,1239,168,1457,189,1569,214,1671,244,1755,260,1788,278,1812,298,1830,321,1843,318,1847,295,1834,274,1816,256,1790,239,1757,209,1673,183,1570,162,1458,133,1239,118,1085"/>
+<area shape="rect" id="Node000022" href="$classRealm_1_1Serialization_1_1PolymorphicSerdezSubclass.html" title=" " alt="" coords="333,1935,558,2019"/>
+<area shape="poly" id="edge21_Node000001_Node000022" title=" " alt="" coords="122,1085,134,1259,161,1509,182,1638,208,1757,240,1854,258,1892,278,1920,303,1942,334,1957,331,1961,300,1946,274,1924,253,1894,235,1856,203,1758,176,1639,156,1510,129,1259,117,1085"/>
+<area shape="rect" id="Node000023" href="$classRealm_1_1Serialization_1_1PolymorphicSerdezSubclass.html" title=" " alt="" coords="330,2043,561,2113"/>
+<area shape="poly" id="edge22_Node000001_Node000023" title=" " alt="" coords="121,1085,130,1278,139,1414,153,1561,174,1708,200,1843,217,1902,235,1953,255,1996,278,2028,302,2048,331,2062,328,2067,299,2053,274,2032,251,1999,230,1955,212,1903,195,1844,168,1709,148,1562,134,1414,124,1278,116,1085"/>
+</map>

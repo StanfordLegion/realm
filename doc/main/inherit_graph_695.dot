@@ -1,9 +1,0 @@
-digraph "Graphical Class Hierarchy"
-{
- // LATEX_PDF_SIZE
-  bgcolor="transparent";
-  edge [fontname=Helvetica,fontsize=10,labelfontname=Helvetica,labelfontsize=10];
-  node [fontname=Helvetica,fontsize=10,shape=box,height=0.2,width=0.4];
-  rankdir="LR";
-  Node0 [id="Node000000",label="std::less\< Realm::Point\l\< N, T \> \>",height=0.2,width=0.4,color="grey40", fillcolor="white", style="filled",URL="$structstd_1_1less_3_01Realm_1_1Point_3_01N_00_01T_01_4_01_4.html",tooltip=" "];
-}
