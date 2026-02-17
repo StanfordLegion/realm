@@ -3054,9 +3054,10 @@ namespace Realm {
   bool RuntimeImpl::create_configs(int argc, char **argv)
   {
     // initialize topology
-    assert(topology_init == false);
-    host_topology = HardwareTopology::create_topology();
-    topology_init = true;
+    if(!topology_init) {
+      host_topology = HardwareTopology::create_topology();
+      topology_init = true;
+    }
 
     if(!module_configs_created) {
       std::vector<std::string> cmdline;
