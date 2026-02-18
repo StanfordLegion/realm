@@ -515,6 +515,35 @@ if(REALM_ENABLE_KOKKOS)
   # the user to install it themselves.
   find_package(Kokkos REQUIRED COMPONENTS separable_compilation)
   enable_language(${Kokkos_COMPILE_LANGUAGE})
+
+  if(NOT BUILD_SHARED_LIBS)
+    include(CheckSourceCompiles)
+
+    function(realm_check_kokkos_compilation)
+      set(CMAKE_REQUIRED_LIBRARIES Kokkos::kokkoscore)
+      unset(REALM_CXX_COMPILER_CAN_COMPILE_KOKKOS CACHE)
+      check_source_compiles(
+          CXX "
+#include <Kokkos_Core.hpp>
+int main(int argc, char** argv) {
+  Kokkos::initialize(argc, argv);
+  {
+    Kokkos::View<int*> v(\"v\", 1);
+    (void)v;
+  }
+  Kokkos::finalize();
+  return 0;
+}
+" REALM_CXX_COMPILER_CAN_COMPILE_KOKKOS)
+    endfunction()
+
+    realm_check_kokkos_compilation()
+
+    if(NOT REALM_CXX_COMPILER_CAN_COMPILE_KOKKOS)
+      message(FATAL_ERROR "Current Realm C++ compiler will not work with Kokkos during STATIC build.")
+    endif()
+  endif()
+
   list(APPEND REALM_PUBLIC_LIBRARIES realm_kokkos)
 endif()
 
