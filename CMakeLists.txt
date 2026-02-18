@@ -515,7 +515,7 @@ if(REALM_ENABLE_KOKKOS)
   # the user to install it themselves.
   find_package(Kokkos REQUIRED COMPONENTS separable_compilation)
   enable_language(${Kokkos_COMPILE_LANGUAGE})
-  list(APPEND REALM_LIBRARIES realm_kokkos)
+  list(APPEND REALM_PUBLIC_LIBRARIES realm_kokkos)
 endif()
 
 if(REALM_ENABLE_LLVM)
@@ -945,6 +945,8 @@ endif()
 
 target_link_libraries(realm_obj PRIVATE ${REALM_LIBRARIES})
 target_link_libraries(Realm PRIVATE ${REALM_LIBRARIES})
+target_link_libraries(realm_obj PUBLIC ${REALM_PUBLIC_LIBRARIES})
+target_link_libraries(Realm PUBLIC ${REALM_PUBLIC_LIBRARIES})
 
 target_include_directories(
   realm_obj
