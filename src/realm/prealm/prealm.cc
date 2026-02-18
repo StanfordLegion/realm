@@ -1811,9 +1811,8 @@ namespace PRealm {
        << "fevent:unsigned long long:" << sizeof(Event) << "}" << std::endl;
 
     ss << "PartitionInstInfo {"
-       << "id:" << PARTITION_INST_INFO_ID << delim
-       << "src:MemID:" << sizeof(MemID) << delim
-       << "fid:unsigned:" << sizeof(FieldID) << delim
+       << "id:" << PARTITION_INST_INFO_ID << delim << "src:MemID:" << sizeof(MemID)
+       << delim << "fid:unsigned:" << sizeof(FieldID) << delim
        << "src_inst:unsigned long long:" << sizeof(Event) << delim
        << "src_expr:unsigned long long:" << sizeof(unsigned long long) << delim
        << "fevent:unsigned long long:" << sizeof(Event) << "}" << std::endl;
