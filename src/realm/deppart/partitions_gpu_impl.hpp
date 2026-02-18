@@ -104,6 +104,8 @@ namespace Realm {
   void GPUMicroOp<N,T>::collapse_multi_space(const std::vector<space_t>& spaces, collapsed_space<N, T> &out_space, Arena &my_arena, cudaStream_t stream)
   {
 
+    out_space.bounds = Rect<N, T>::make_empty();
+
     char *val = std::getenv("SHATTER_SIZE");  // or any env var
     int shatter_size = 1; //default
     if (val) {
@@ -123,6 +125,7 @@ namespace Realm {
       } else {
         my_space = spaces[i].index_space;
       }
+      out_space.bounds = out_space.bounds.union_bbox(my_space.bounds);
       if (my_space.dense()) {
         if constexpr (std::is_same_v<space_t, IndexSpace<N,T>>) {
           out_space.num_entries += 1;
@@ -208,6 +211,7 @@ namespace Realm {
       entry.bounds = parent_space.bounds;
       out_space.entries_buffer = my_arena.alloc<SparsityMapEntry<N, T>>(1);
       out_space.num_entries = 1;
+      out_space.bounds = parent_space.bounds;
       CUDA_CHECK(cudaMemcpyAsync(out_space.entries_buffer, &entry, sizeof(SparsityMapEntry<N,T>), cudaMemcpyHostToDevice, stream), stream);
     } else {
       span<SparsityMapEntry<N, T>> tmp =  parent_space.sparsity.impl()->get_entries();
@@ -225,7 +229,6 @@ namespace Realm {
   template<int N, typename T>
   void GPUMicroOp<N, T>::build_bvh(const collapsed_space<N, T> &space, BVH<N, T> &result, Arena &my_arena, cudaStream_t stream)
   {
-
       //We want to keep the entire BVH that we return in one instance for convenience.
       size_t indices_instance_size = space.num_entries * sizeof(uint64_t);
       size_t labels_instance_size = space.offsets == nullptr ? 0 : space.num_entries * sizeof(size_t);
@@ -1316,18 +1319,28 @@ namespace Realm {
       CUDA_CHECK(cudaMemcpyAsync(&last_grp, &group_ids[num_intermediate-1], sizeof(size_t), cudaMemcpyDeviceToHost, stream), stream);
       CUDA_CHECK(cudaStreamSynchronize(stream), stream);
 
-      my_arena.rollback(prev);
       my_arena.flip_parity();
       assert(my_arena.get_parity());
-      my_arena.reset(true);
+
+      if (out_rects == 1) {
+        my_arena.reset(true);
+      }
       d_rects_out = my_arena.alloc<RectDesc<N,T>>(last_grp);
-      my_arena.commit(true);
+      if (out_rects == 1) {
+        my_arena.commit(true);
+      }
 
       init_rects_dim<<<grid_size, threads_per_block, 0, stream>>>(d_rects_in, d_hi_flags_out, break_points, group_ids, d_rects_out, num_intermediate, 0);
       KERNEL_CHECK(stream);
 
       num_intermediate = last_grp;
-      std::swap(d_rects_in, d_rects_out);
+      if (out_rects == 2) {
+        my_arena.flip_parity();
+        d_rects_in = my_arena.alloc<RectDesc<N,T>>(num_intermediate);
+        CUDA_CHECK(cudaMemcpyAsync(d_rects_in, d_rects_out, num_intermediate * sizeof(RectDesc<N,T>), cudaMemcpyDeviceToDevice, stream), stream);
+      } else {
+        std::swap(d_rects_in, d_rects_out);
+      }
 
       CUDA_CHECK(cudaStreamSynchronize(stream), stream);
     }
@@ -1495,6 +1508,8 @@ namespace Realm {
     CUDA_CHECK(cudaMemsetAsync(d_starts, 0, ctr.size()*sizeof(size_t),stream), stream);
     CUDA_CHECK(cudaMemsetAsync(d_ends, 0, ctr.size()*sizeof(size_t),stream), stream);
 
+
+    CUDA_CHECK(cudaStreamSynchronize(stream), stream);
 
     //Convert RectDesc to SparsityMapEntry and determine where each src's rectangles start and end.
     build_final_output<<<COMPUTE_GRID(total_rects), THREADS_PER_BLOCK, 0, stream>>>(d_rects, final_entries, final_rects, d_starts, d_ends, total_rects);

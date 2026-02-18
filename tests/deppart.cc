@@ -1612,11 +1612,41 @@ public:
     std::vector<IndexSpace<1>> p_garbage_rects, p_garbage_colors;
     log_app.info() << "WARMING UP " << "\n";
 
+    std::vector<DeppartEstimateInput<1, int>> field_estimate_input(rect_id_data_gpu.size());
+    std::vector<DeppartBufferRequirements> field_estimate_output(rect_id_data_gpu.size());
+    std::vector<DeppartEstimateInput<1, int>> image_estimate_input(rect_val_data_gpu.size());
+    std::vector<DeppartBufferRequirements> image_estimate_output(rect_val_data_gpu.size());
+    std::vector<DeppartSubspace<1, int>> subspace_input(colors.size());
+    for (size_t i = 0; i < rect_id_data_gpu.size(); i++) {
+      field_estimate_input[i].location = rect_id_data_gpu[i].inst.get_location();
+      field_estimate_input[i].space = rect_id_data_gpu[i].index_space;
+    }
+    for (size_t i = 0; i < rect_val_data_gpu.size(); i++) {
+      image_estimate_input[i].location = rect_val_data_gpu[i].inst.get_location();
+      image_estimate_input[i].space = rect_val_data_gpu[i].index_space;
+    }
+
+    is_rects.by_field_buffer_requirements(field_estimate_input, field_estimate_output);
+    std::vector<size_t> byte_fields = {sizeof(char)};
+    for (size_t i = 0; i < rect_id_data_gpu.size(); i++) {
+      IndexSpace<1> instance_index_space(Rect<1>(0, field_estimate_output[i].upper_bound-1));
+      RegionInstance::create_instance(rect_id_data_gpu[i].scratch_buffer, gpu_memory, instance_index_space, byte_fields, 0, Realm::ProfilingRequestSet()).wait();
+    }
+
     Event e001 = is_rects.create_subspaces_by_field(rect_id_data_gpu,
                                                   colors,
                                                   p_garbage_colors,
                                                   Realm::ProfilingRequestSet());
     if (wait_on_events) e001.wait();
+    for (size_t i = 0; i < colors.size(); i++) {
+      subspace_input[i].space = p_garbage_colors[i];
+      subspace_input[i].entries = p_garbage_colors[i].sparsity.impl()->get_entries().size();
+    }
+    is_nodes.by_image_buffer_requirements(subspace_input, image_estimate_input, image_estimate_output);
+    for (size_t i = 0; i < rect_val_data_gpu.size(); i++) {
+      IndexSpace<1> instance_index_space(Rect<1>(0, (image_estimate_output[i].upper_bound)/4-1));
+      RegionInstance::create_instance(rect_val_data_gpu[i].scratch_buffer, gpu_memory, instance_index_space, byte_fields, 0, Realm::ProfilingRequestSet()).wait();
+    }
     Event e002 = is_nodes.create_subspaces_by_image(rect_val_data_gpu,
                                                      p_garbage_colors,
                                                      p_garbage_rects,

@@ -674,6 +674,7 @@ void mark_breaks_dim(const RectDesc<N,T>* in,
                      int                   d)
 {
   size_t i = blockIdx.x*blockDim.x + threadIdx.x;
+
   if(i >= M) return;
   if(i == 0) { brk[0] = 1; return; }
 

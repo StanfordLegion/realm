@@ -38,7 +38,7 @@ namespace Realm {
     std::vector<DeppartBufferRequirements>& requirements) const {
     size_t minimal_size = 0;
     size_t source_entries = 0;
-    bool bvh = false;
+    bool bvh = true;
     for (auto subspace : source_spaces) {
       source_entries += subspace.entries == 0 ? 1 : subspace.entries;
     }
@@ -70,7 +70,7 @@ namespace Realm {
       		device_size = atoi(val);
       	}
         minimal_size = max(minimal_size, device_size);
-      	size_t optimal_size = is.bounds.volume() * sizeof(Rect<N, T>) * source_spaces.size() + minimal_size;
+      	size_t optimal_size = is.bounds.volume() * sizeof(Rect<N, T>) * source_spaces.size() * 10 + minimal_size;
       	std::vector<Machine::ProcessorMemoryAffinity> affinities;
         unsigned best_bandwidth = 0;
         Processor best_proc = Processor::NO_PROC;
@@ -285,6 +285,7 @@ namespace Realm {
 		if(!bmpp) bmpp = &bitmasks[i];
 		if(!*bmpp) *bmpp = new BM;
 		(*bmpp)->add_rect(it3.rect);
+
 	      }
 	    }
 	  }
@@ -704,10 +705,11 @@ namespace Realm {
       for (auto ptr_fdd : gpu_ptr_data) {
           	// launch full cross-product of image micro ops right away
           assert(ptr_fdd.scratch_buffer != RegionInstance::NO_INST);
-          domain_transform.ptr_data = {ptr_fdd};
+          DomainTransform<N, T, N2, T2> domain_transform_copy = domain_transform;
+          domain_transform_copy.ptr_data = {ptr_fdd};
       	  GPUImageMicroOp<N, T, N2, T2> *micro_op =
            new GPUImageMicroOp<N, T, N2, T2>(
-  	   parent, domain_transform, exclusive);
+  	   parent, domain_transform_copy, exclusive);
       	  for (size_t j = 0; j < sources.size(); j++) {
       		  micro_op->add_sparsity_output(sources[j], images[j]);
       	  }
@@ -716,10 +718,11 @@ namespace Realm {
       for (auto rect_fdd : gpu_rect_data) {
         // launch full cross-product of image micro ops right away
         assert(rect_fdd.scratch_buffer != RegionInstance::NO_INST);
-        domain_transform.range_data = {rect_fdd};
+        DomainTransform<N, T, N2, T2> domain_transform_copy = domain_transform;
+        domain_transform_copy.range_data = {rect_fdd};
         GPUImageMicroOp<N, T, N2, T2> *micro_op =
            new GPUImageMicroOp<N, T, N2, T2>(
-             parent, domain_transform, exclusive);
+             parent, domain_transform_copy, exclusive);
         for (size_t j = 0; j < sources.size(); j++) {
           micro_op->add_sparsity_output(sources[j], images[j]);
         }
