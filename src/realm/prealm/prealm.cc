@@ -1598,7 +1598,7 @@ namespace PRealm {
     std::stringstream ss;
     ss << "FileType: BinaryLegionProf v: " << LEGION_PROF_VERSION << std::endl;
     // Hard code a Legion version that we work with for now
-    ss << "d06e529a4b7e945f80a8ec563588e1753d82d056" << std::endl;
+    ss << "e1d009f4e6a3d5a06edf5a2f6748a3c7f5ae051d" << std::endl;
 
     const std::string delim = ", ";
 
