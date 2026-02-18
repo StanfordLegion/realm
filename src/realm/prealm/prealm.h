@@ -489,6 +489,9 @@ namespace PRealm {
     // profiling
     Event unique_event;
   };
+  // Even though we add extra data to the RegionInstance in the form of a
+  // unique event for naming the instance, the struct should still be packed
+  static_assert(std::has_unique_object_representations_v<RegionInstance>);
   using Realm::ExternalFileResource;
   using Realm::ExternalMemoryResource;
 
