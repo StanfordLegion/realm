@@ -1661,7 +1661,8 @@ namespace PRealm {
        << "dim:unsigned:" << sizeof(unsigned) << delim
        << "dim_kind:unsigned:" << sizeof(unsigned) << "}" << std::endl;
 
-    ss << "PhysicalInstanceSpaces {" << "id:" << PHYSICAL_INST_SPACES_ID << delim
+    ss << "PhysicalInstanceSpaces {"
+       << "id:" << PHYSICAL_INST_SPACES_ID << delim
        << "inst_uid:unsigned long long:" << sizeof(Event) << delim
        << "union_space:unsigned long long:" << sizeof(unsigned long long) << delim
        << "piece_space:unsigned long long:" << sizeof(unsigned long long) << "}"
@@ -1809,9 +1810,11 @@ namespace PRealm {
        << "critical:unsigned long long:" << sizeof(Event) << delim
        << "fevent:unsigned long long:" << sizeof(Event) << "}" << std::endl;
 
-    ss << "PartitionInstInfo {" << "id:" << PARTITION_INST_INFO_ID << delim
-       << "src:MemID:" << sizeof(MemID) << delim << "fid:unsigned:" << sizeof(FieldID)
-       << delim << "src_inst:unsigned long long:" << sizeof(Event) << delim
+    ss << "PartitionInstInfo {"
+       << "id:" << PARTITION_INST_INFO_ID << delim
+       << "src:MemID:" << sizeof(MemID) << delim
+       << "fid:unsigned:" << sizeof(FieldID) << delim
+       << "src_inst:unsigned long long:" << sizeof(Event) << delim
        << "src_expr:unsigned long long:" << sizeof(unsigned long long) << delim
        << "fevent:unsigned long long:" << sizeof(Event) << "}" << std::endl;
 
