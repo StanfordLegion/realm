@@ -1,7 +1,6 @@
 var realm__defines_8h =
 [
     [ "COMPILE_TIME_MIN_LEVEL", "realm__defines_8h.html#acab5a4e4a2a3a52bb58294c69c530b53", null ],
-    [ "REALM_CUDA_DYNAMIC_LOAD", "realm__defines_8h.html#aca81d26f41763ea5cd650fa129d1a895", null ],
     [ "REALM_MAX_DIM", "realm__defines_8h.html#a0734de92aef351d235bacd69ca16f258", null ],
     [ "REALM_OPENMP_GOMP_SUPPORT", "realm__defines_8h.html#ae40629d489769ec34cf29de6e5dabf62", null ],
     [ "REALM_OPENMP_KMP_SUPPORT", "realm__defines_8h.html#a05c20f7d9527a658fcca01733967a8ab", null ],

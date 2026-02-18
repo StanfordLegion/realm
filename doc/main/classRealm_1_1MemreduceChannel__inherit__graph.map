@@ -1,9 +1,0 @@
-<map id="Realm::MemreduceChannel" name="Realm::MemreduceChannel">
-<area shape="rect" id="Node000001" title=" " alt="" coords="30,255,233,280"/>
-<area shape="rect" id="Node000002" href="$classRealm_1_1SingleXDQChannel.html" title=" " alt="" coords="5,152,257,207"/>
-<area shape="poly" id="edge1_Node000001_Node000002" title=" " alt="" coords="134,220,134,254,129,254,129,220"/>
-<area shape="rect" id="Node000003" href="$classRealm_1_1LocalChannel.html" title=" " alt="" coords="52,79,211,104"/>
-<area shape="poly" id="edge2_Node000002_Node000003" title=" " alt="" coords="134,118,134,152,129,152,129,118"/>
-<area shape="rect" id="Node000004" href="$classRealm_1_1Channel.html" title=" " alt="" coords="69,5,194,31"/>
-<area shape="poly" id="edge3_Node000003_Node000004" title=" " alt="" coords="134,44,134,79,129,79,129,44"/>
-</map>
