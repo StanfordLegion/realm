@@ -30,7 +30,7 @@ static constexpr unsigned LEGION_PROF_VERSION =
 #if 0
 #include "legion/legion_profiling_version.h"
 #else
-    1010 // the current Legion Prof version we work with
+    1011 // the current Legion Prof version we work with
 #endif
     ;
 // pr_fopen expects filename to be a std::string
@@ -290,6 +290,7 @@ namespace PRealm {
     PHYSICAL_INST_LAYOUT_ID,
     PHYSICAL_INST_LAYOUT_DIM_ID,
     PHYSICAL_INST_USAGE_ID,
+    PHYSICAL_INST_SPACES_ID,
     TASK_KIND_ID,
     TASK_VARIANT_ID,
     TASK_WAIT_INFO_ID,
@@ -302,6 +303,7 @@ namespace PRealm {
     FILL_INST_INFO_ID,
     INST_TIMELINE_INFO_ID,
     PARTITION_INFO_ID,
+    PARTITION_INST_INFO_ID,
     BACKTRACE_DESC_ID,
     EVENT_WAIT_INFO_ID,
     EVENT_MERGER_INFO_ID,
@@ -467,8 +469,18 @@ namespace PRealm {
         it++)
       closure->add_instance(it->inst);
     for(std::vector<CopySrcDstField>::const_iterator it = dsts.begin(); it != dsts.end();
-        it++)
+        it++) {
       closure->add_instance(it->inst);
+      if(it->redop_id) {
+        if(closure->redop == 0) {
+          closure->redop = it->redop_id;
+        } else if(closure->redop != it->redop_id) {
+          // TODO: if you hit this handle multiple different reductions in the same copy
+          // operation
+          std::abort();
+        }
+      }
+    }
     args.id.closure = closure;
     args.provenance = get_fevent();
     Processor current = get_callback_processor();
@@ -776,15 +788,20 @@ namespace PRealm {
     return result;
   }
 
-  void ThreadProfiler::record_instance_usage(RegionInstance inst, FieldID field)
+  void ThreadProfiler::record_instance_usage(RegionInstance inst, FieldID field,
+                                             timestamp_t start, timestamp_t stop,
+                                             bool read, bool write)
   {
     Profiler &profiler = Profiler::get_profiler();
-    if(!profiler.enabled)
+    if(!profiler.enabled || (!read && !write))
       return;
     InstanceUsageInfo &info = instance_usage_infos.emplace_back(InstanceUsageInfo());
     info.inst_event = inst.unique_event;
-    info.op_id = get_fevent().id;
+    info.fevent = get_fevent();
     info.field = field;
+    info.start = start;
+    info.stop = stop;
+    info.privilege = (read ? 0x1 : 0) | (write ? 0x2 : 0);
     profiler.update_footprint(sizeof(info), this);
   }
 
@@ -887,6 +904,7 @@ namespace PRealm {
         record_barrier_use(args->critical);
       assert(!cpinfo.inst_info.empty());
       NameClosure *closure = args->id.closure;
+      info.redop = closure->redop;
       for(std::vector<InstInfo>::const_iterator it = cpinfo.inst_info.begin();
           it != cpinfo.inst_info.end(); it++) {
         assert(it->src_fields.size() == it->dst_fields.size());
@@ -1643,12 +1661,24 @@ namespace PRealm {
        << "dim:unsigned:" << sizeof(unsigned) << delim
        << "dim_kind:unsigned:" << sizeof(unsigned) << "}" << std::endl;
 
+    ss << "PhysicalInstanceSpaces {" << "id:" << PHYSICAL_INST_SPACES_ID << delim
+       << "inst_uid:unsigned long long:" << sizeof(Event) << delim
+       << "union_space:unsigned long long:" << sizeof(unsigned long long) << delim
+       << "piece_space:unsigned long long:" << sizeof(unsigned long long) << "}"
+       << std::endl;
+
     ss << "PhysicalInstanceUsage {"
        << "id:" << PHYSICAL_INST_USAGE_ID << delim
        << "inst_uid:unsigned long long:" << sizeof(Event) << delim
+       << "fevent:unsigned long long:" << sizeof(Event) << delim
        << "op_id:UniqueID:" << sizeof(UniqueID) << delim
-       << "index_id:unsigned:" << sizeof(unsigned) << delim
-       << "field_id:unsigned:" << sizeof(unsigned) << "}" << std::endl;
+       << "start:timestamp_t:" << sizeof(timestamp_t) << delim
+       << "stop:timestamp_t:" << sizeof(timestamp_t) << delim
+       << "index_expr:unsigned long long:" << sizeof(unsigned long long) << delim
+       << "field:unsigned:" << sizeof(unsigned) << delim
+       << "index:unsigned:" << sizeof(unsigned) << delim
+       << "mode:unsigned:" << sizeof(unsigned) << delim
+       << "redop:unsigned:" << sizeof(unsigned) << "}" << std::endl;
 
     ss << "TaskKind {"
        << "id:" << TASK_KIND_ID << delim << "task_id:TaskID:" << sizeof(TaskID) << delim
@@ -1721,7 +1751,10 @@ namespace PRealm {
        << "creator:unsigned long long:" << sizeof(Event) << delim
        << "critical:unsigned long long:" << sizeof(Event) << delim
        << "fevent:unsigned long long:" << sizeof(Event) << delim
-       << "collective:unsigned:" << sizeof(unsigned) << "}" << std::endl;
+       << "collective:unsigned:" << sizeof(unsigned) << delim
+       << "reduction:unsigned:" << sizeof(ReductionOpID) << delim
+       << "copy_expr:unsigned long long:" << sizeof(unsigned long long) << "}"
+       << std::endl;
 
     ss << "CopyInstInfo {"
        << "id:" << COPY_INST_INFO_ID << delim << "src:MemID:" << sizeof(MemID) << delim
@@ -1729,6 +1762,8 @@ namespace PRealm {
        << delim << "dst_fid:unsigned:" << sizeof(FieldID) << delim
        << "src_inst:unsigned long long:" << sizeof(Event) << delim
        << "dst_inst:unsigned long long:" << sizeof(Event) << delim
+       << "src_expr:unsigned long long:" << sizeof(unsigned long long) << delim
+       << "dst_expr:unsigned long long:" << sizeof(unsigned long long) << delim
        << "fevent:unsigned long long:" << sizeof(Event) << delim
        << "num_hops:unsigned:" << sizeof(unsigned) << delim
        << "indirect:bool:" << sizeof(bool) << "}" << std::endl;
@@ -1742,7 +1777,9 @@ namespace PRealm {
        << "stop:timestamp_t:" << sizeof(timestamp_t) << delim
        << "creator:unsigned long long:" << sizeof(Event) << delim
        << "critical:unsigned long long:" << sizeof(Event) << delim
-       << "fevent:unsigned long long:" << sizeof(Event) << "}" << std::endl;
+       << "fevent:unsigned long long:" << sizeof(Event) << delim
+       << "fill_expr:unsigned long long:" << sizeof(unsigned long long) << "}"
+       << std::endl;
 
     ss << "FillInstInfo {"
        << "id:" << FILL_INST_INFO_ID << delim << "dst:MemID:" << sizeof(MemID) << delim
@@ -1770,6 +1807,12 @@ namespace PRealm {
        << "stop:timestamp_t:" << sizeof(timestamp_t) << delim
        << "creator:unsigned long long:" << sizeof(Event) << delim
        << "critical:unsigned long long:" << sizeof(Event) << delim
+       << "fevent:unsigned long long:" << sizeof(Event) << "}" << std::endl;
+
+    ss << "PartitionInstInfo {" << "id:" << PARTITION_INST_INFO_ID << delim
+       << "src:MemID:" << sizeof(MemID) << delim << "fid:unsigned:" << sizeof(FieldID)
+       << delim << "src_inst:unsigned long long:" << sizeof(Event) << delim
+       << "src_expr:unsigned long long:" << sizeof(unsigned long long) << delim
        << "fevent:unsigned long long:" << sizeof(Event) << "}" << std::endl;
 
     ss << "BacktraceDesc {"
@@ -2154,10 +2197,18 @@ namespace PRealm {
     int ID = PHYSICAL_INST_USAGE_ID;
     pr_fwrite(f, (char *)&ID, sizeof(ID));
     pr_fwrite(f, (char *)&(info.inst_event.id), sizeof(info.inst_event.id));
-    pr_fwrite(f, (char *)&(info.op_id), sizeof(info.op_id));
+    pr_fwrite(f, (char *)&(info.fevent.id), sizeof(info.fevent.id));
+    // Looks like a duplicate but it's not, we use fevent ID as OpID
+    pr_fwrite(f, (char *)&(info.fevent.id), sizeof(info.fevent.id));
+    pr_fwrite(f, (char *)&(info.start), sizeof(info.start));
+    pr_fwrite(f, (char *)&(info.stop), sizeof(info.stop));
+    // TODO: Support geomerty in PRealm
+    unsigned long long index_expr = 0;
+    pr_fwrite(f, (char *)&(index_expr), sizeof(index_expr));
+    pr_fwrite(f, (char *)&(info.field), sizeof(info.field));
     unsigned index = 0; // All these have the same "region requirement for now
     pr_fwrite(f, (char *)&(index), sizeof(index));
-    pr_fwrite(f, (char *)&(info.field), sizeof(info.field));
+    pr_fwrite(f, (char *)&(info.privilege), sizeof(info.privilege));
   }
 
   void Profiler::serialize(const ThreadProfiler::FillInfo &fill_info) const
@@ -2174,6 +2225,11 @@ namespace PRealm {
     pr_fwrite(f, (char *)&(fill_info.creator), sizeof(fill_info.creator));
     pr_fwrite(f, (char *)&(fill_info.critical), sizeof(fill_info.critical));
     pr_fwrite(f, (char *)&(fill_info.fevent), sizeof(fill_info.fevent.id));
+    unsigned collective = 0; // no collective fills here
+    pr_fwrite(f, (char *)&(collective), sizeof(collective));
+    // TODO: support geometry in PRealm
+    const unsigned long long index_expr = 0;
+    pr_fwrite(f, (char *)&(index_expr), sizeof(index_expr));
     ID = FILL_INST_INFO_ID;
     for(std::vector<ThreadProfiler::FillInstInfo>::const_iterator it =
             fill_info.inst_infos.begin();
@@ -2202,8 +2258,12 @@ namespace PRealm {
     pr_fwrite(f, (char *)&(copy_info.creator), sizeof(copy_info.creator));
     pr_fwrite(f, (char *)&(copy_info.critical), sizeof(copy_info.critical));
     pr_fwrite(f, (char *)&(copy_info.fevent), sizeof(copy_info.fevent.id));
-    unsigned collective = 0; // no collective copies ehre
+    unsigned collective = 0; // no collective copies here
     pr_fwrite(f, (char *)&(collective), sizeof(collective));
+    pr_fwrite(f, (char *)&(copy_info.redop), sizeof(copy_info.redop));
+    // TODO: support geometry in PRealm
+    const unsigned long long index_expr = 0;
+    pr_fwrite(f, (char *)&(index_expr), sizeof(index_expr));
     ID = COPY_INST_INFO_ID;
     for(std::vector<ThreadProfiler::CopyInstInfo>::const_iterator it =
             copy_info.inst_infos.begin();
@@ -2218,6 +2278,9 @@ namespace PRealm {
                 sizeof(copy_inst.src_inst_uid.id));
       pr_fwrite(f, (char *)&(copy_inst.dst_inst_uid.id),
                 sizeof(copy_inst.dst_inst_uid.id));
+      // TODO: support geometry in PRealm for source and destination
+      pr_fwrite(f, (char *)&(index_expr), sizeof(index_expr));
+      pr_fwrite(f, (char *)&(index_expr), sizeof(index_expr));
       pr_fwrite(f, (char *)&(copy_info.fevent), sizeof(copy_info.fevent.id));
       pr_fwrite(f, (char *)&(copy_inst.num_hops), sizeof(copy_inst.num_hops));
       pr_fwrite(f, (char *)&(copy_inst.indirect), sizeof(copy_inst.indirect));
@@ -2936,19 +2999,28 @@ namespace PRealm {
   bool Runtime::configure_from_command_line(int argc, char **argv)
   {
     Profiler::get_profiler().parse_command_line(argc, argv);
-    return Realm::Runtime::configure_from_command_line(argc, argv);
+    const bool result = Realm::Runtime::configure_from_command_line(argc, argv);
+    Profiler::get_profiler().initialize();
+    return result;
   }
 
   bool Runtime::configure_from_command_line(std::vector<std::string> &cmdline,
                                             bool remove_args)
   {
     Profiler::get_profiler().parse_command_line(cmdline, remove_args);
-    return Realm::Runtime::configure_from_command_line(cmdline, remove_args);
+    const bool result = Realm::Runtime::configure_from_command_line(cmdline, remove_args);
+    Profiler::get_profiler().initialize();
+    return result;
+  }
+
+  void Runtime::finish_configure(void)
+  {
+    Realm::Runtime::finish_configure();
+    Profiler::get_profiler().initialize();
   }
 
   void Runtime::start(void)
   {
-    Profiler::get_profiler().initialize();
     // Register our profiling callback function with all the local processors
     Machine machine = Machine::get_machine();
     Realm::Machine::ProcessorQuery local_procs(machine);

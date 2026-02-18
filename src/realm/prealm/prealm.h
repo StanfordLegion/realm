@@ -644,6 +644,7 @@ namespace PRealm {
     bool configure_from_command_line(int argc, char **argv);
     bool configure_from_command_line(std::vector<std::string> &cmdline,
                                      bool remove_realm_args = false);
+    void finish_configure(void);
     void start(void);
     bool init(int *argc, char ***argv);
     bool register_task(Processor::TaskFuncID taskid, Processor::TaskFuncPtr taskptr);
@@ -673,6 +674,8 @@ namespace PRealm {
   };
   static_assert(sizeof(Runtime) == sizeof(Realm::Runtime));
 
+  template <typename FT>
+  using AccessorRefHelper = Realm::AccessorRefHelper<FT>;
   template <typename FT, int N, typename T = int>
   class REALM_PUBLIC_API GenericAccessor : public Realm::GenericAccessor<FT, N, T> {
   public:
@@ -680,6 +683,19 @@ namespace PRealm {
     GenericAccessor(RegionInstance inst, FieldID field_id, size_t subfield_offset = 0);
     GenericAccessor(RegionInstance inst, FieldID field_id, const Rect<N, T> &subrect,
                     size_t subfield_offset = 0);
+    ~GenericAccessor(void);
+
+  public:
+    inline FT read(const Point<N, T> &p);
+    inline void write(const Point<N, T> &p, FT newval);
+    inline AccessorRefHelper<FT> operator[](const Point<N, T> &p);
+
+  private:
+    long long start;
+    RegionInstance instance;
+    FieldID field_id;
+    bool did_read = false;
+    bool did_write = false;
   };
   template <typename FT, int N, typename T = int>
   class REALM_PUBLIC_API AffineAccessor : public Realm::AffineAccessor<FT, N, T> {
@@ -698,12 +714,31 @@ namespace PRealm {
                    const Point<N2, T2> &offset, FieldID field_id,
                    const Rect<N, T> &subrect, size_t subfield_offset = 0);
     REALM_CUDA_HD
-    ~AffineAccessor(void) {}
+    ~AffineAccessor(void);
 
     AffineAccessor(const AffineAccessor &) = default;
     AffineAccessor &operator=(const AffineAccessor &) = default;
     AffineAccessor(AffineAccessor &&) noexcept = default;
     AffineAccessor &operator=(AffineAccessor &&) noexcept = default;
+
+  public:
+    REALM_CUDA_HD
+    FT *ptr(const Point<N, T> &p) const;
+    REALM_CUDA_HD
+    FT read(const Point<N, T> &p) const;
+    REALM_CUDA_HD
+    void write(const Point<N, T> &p, FT newval) const;
+    REALM_CUDA_HD
+    FT &operator[](const Point<N, T> &p) const;
+
+  private:
+    inline void initialize(RegionInstance inst, FieldID fid);
+    long long start;
+    RegionInstance instance;
+    FieldID field_id;
+    mutable bool did_read = false;
+    mutable bool did_write = false;
+    mutable bool escaped = false;
   };
   template <typename FT, int N, typename T>
   class REALM_PUBLIC_API MultiAffineAccessor
@@ -716,12 +751,43 @@ namespace PRealm {
     MultiAffineAccessor(RegionInstance inst, FieldID field_id, const Rect<N, T> &subrect,
                         size_t subfield_offset = 0);
     REALM_CUDA_HD
-    ~MultiAffineAccessor(void) {}
+    ~MultiAffineAccessor(void);
 
     MultiAffineAccessor(const MultiAffineAccessor &) = default;
     MultiAffineAccessor &operator=(const MultiAffineAccessor &) = default;
     MultiAffineAccessor(MultiAffineAccessor &&) noexcept = default;
     MultiAffineAccessor &operator=(MultiAffineAccessor &&) noexcept = default;
+
+  public:
+    REALM_CUDA_HD
+    FT *ptr(const Point<N, T> &p) const;
+    REALM_CUDA_HD
+    FT *ptr(const Rect<N, T> &r, size_t strides[N]) const;
+    REALM_CUDA_HD
+    FT read(const Point<N, T> &p) const;
+    REALM_CUDA_HD
+    void write(const Point<N, T> &p, FT newval) const;
+    REALM_CUDA_HD
+    FT &operator[](const Point<N, T> &p) const;
+    REALM_CUDA_HD
+    FT *ptr(const Point<N, T> &p);
+    REALM_CUDA_HD
+    FT *ptr(const Rect<N, T> &r, size_t strides[N]);
+    REALM_CUDA_HD
+    FT read(const Point<N, T> &p);
+    REALM_CUDA_HD
+    void write(const Point<N, T> &p, FT newval);
+    REALM_CUDA_HD
+    FT &operator[](const Point<N, T> &p);
+
+  private:
+    inline void initialize(RegionInstance inst, FieldID fid);
+    long long start;
+    RegionInstance instance;
+    FieldID field_id;
+    mutable bool did_read = false;
+    mutable bool did_write = false;
+    mutable bool escaped = false;
   };
 
   // from indexspace.h
