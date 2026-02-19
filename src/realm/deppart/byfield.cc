@@ -44,7 +44,7 @@ namespace Realm {
             if (val) {
               device_size = atoi(val);
             }
-            size_t optimal_size = is.bounds.volume() * sizeof(Rect<N, T>);
+            size_t optimal_size = is.bounds.volume() * sizeof(Rect<N, T>) * 100;
             std::vector<Machine::ProcessorMemoryAffinity> affinities;
             unsigned best_bandwidth = 0;
             Processor best_proc = Processor::NO_PROC;
@@ -446,6 +446,7 @@ namespace Realm {
     }
 #ifdef REALM_USE_CUDA
     for (auto fdd : gpu_field_data) {
+      assert(fdd.scratch_buffer != RegionInstance::NO_INST);
       std::vector<FieldDataDescriptor<IndexSpace<N,T>,FT> > single_gpu_field_data = {fdd};
       GPUByFieldMicroOp<N, T, FT> *uop = new GPUByFieldMicroOp<N, T, FT>(parent, single_gpu_field_data, exclusive);
       for (size_t i = 0; i < colors.size(); i++) {

@@ -679,8 +679,6 @@ namespace Realm {
 
     RegionInstance exc_sum_instance = this->realm_malloc(num_corners * total_rects * sizeof(size_t), my_mem);
 
-    size_t per_elem_size = 2*alloc_size_1 + sizeof(uint8_t) + sizeof(size_t);
-
     size_t* d_src_keys_in = reinterpret_cast<size_t*>(AffineAccessor<char,1>(shared_instance, 0).base);
     size_t* d_src_keys_out = reinterpret_cast<size_t*>(AffineAccessor<char,1>(shared_instance, 0).base) + num_corners * total_rects;
     T* d_coord_keys_in = reinterpret_cast<T*>(AffineAccessor<char,1>(shared_instance, 0).base);
@@ -962,17 +960,6 @@ namespace Realm {
         CUDA_CHECK(cudaMemcpyAsync(&last_count, &d_seg_counters[num_segments-1], sizeof(uint32_t), cudaMemcpyDeviceToHost, stream), stream);
         CUDA_CHECK(cudaStreamSynchronize(stream), stream);
         next_round += last_count;
-        if (out_rects > 0 && (next_round + last_count) * per_elem_size > out_rects) {
-          shared_instance.destroy();
-          flags_instance.destroy();
-          exc_sum_instance.destroy();
-          seg_bound_instance.destroy();
-          seg_counters.destroy();
-          seg_counters_out.destroy();
-          corners_instance.destroy();
-          out_rects = std::numeric_limits<size_t>::max();
-          return;
-        }
 
         num_intermediate = next_round;
 
@@ -1190,10 +1177,6 @@ namespace Realm {
       CUDA_CHECK(cudaStreamSynchronize(stream), stream);
     }
 
-    heads_instance.destroy();
-    shared_instance.destroy();
-    tmp_instance.destroy();
-
     //And... we're done
     if (out_rects > 0) {
       d_out_rects = d_rects_in;
@@ -1369,7 +1352,8 @@ namespace Realm {
 
     NVTX_DEPPART(complete_pipeline);
 
-    size_t prev = my_arena.mark();
+    my_arena.flip_parity();
+
 
     cudaStream_t stream = Cuda::get_task_cuda_stream();
 
@@ -1466,7 +1450,7 @@ namespace Realm {
         num_intermediate = last_grp;
         std::swap(d_rects_in, d_rects_out);
       }
-      my_arena.rollback(prev);
+      my_arena.flip_parity();
       d_out_rects = my_arena.alloc<RectDesc<N, T>>(num_intermediate);
       CUDA_CHECK(cudaMemcpyAsync(d_out_rects, d_rects_in, num_intermediate * sizeof(RectDesc<N,T>), cudaMemcpyDeviceToDevice, stream), stream);
       CUDA_CHECK(cudaStreamSynchronize(stream), stream);
@@ -1476,7 +1460,6 @@ namespace Realm {
       out_rects = num_intermediate;
     } else {
       this->send_output(d_rects_in, num_intermediate, my_arena, ctr, getIndex, getMap);
-      my_arena.rollback(prev);
     }
   }
 

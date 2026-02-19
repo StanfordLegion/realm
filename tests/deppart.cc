@@ -44,7 +44,7 @@ enum
   INIT_BASIC_DATA_TASK,
   INIT_TILE_DATA_TASK,
   INIT_RANGE_DATA_TASK,
-  INIT_2D_DATA_TASK,
+  INIT_RANGE2D_DATA_TASK,
   INIT_PENNANT_DATA_TASK,
   INIT_MINIAERO_DATA_TASK,
 };
@@ -501,6 +501,19 @@ public:
     }
 	wait_on_events = true;
         log_app.info() << "warming up" << Clock::current_time_in_microseconds() << "\n";
+        const char* val = std::getenv("TILE_SIZE");  // or any env var
+        size_t tile_size = 100000000; //default
+        if (val) {
+          tile_size = atoi(val);
+        }
+        std::vector<size_t> byte_fields = {sizeof(char)};
+        IndexSpace<1> instance_index_space(Rect<1>(0, tile_size-1));
+        for (size_t i = 0; i < piece_field_data_gpu.size(); i++) {
+          RegionInstance::create_instance(piece_field_data_gpu[i].scratch_buffer, gpu_memory, instance_index_space, byte_fields, 0, Realm::ProfilingRequestSet()).wait();
+        }
+        for (size_t i = 0; i < src_field_data_gpu.size(); i++) {
+          RegionInstance::create_instance(src_field_data_gpu[i].scratch_buffer, gpu_memory, instance_index_space, byte_fields, 0, Realm::ProfilingRequestSet()).wait();
+        }
         std::vector<IndexSpace<1> > p_garbage_nodes, p_garbage_edges, p_garbage_rd, p_garbage_preimage_edges;
     Event e01 = is_nodes.create_subspaces_by_field(piece_field_data_gpu,
                                                   colors,
@@ -516,16 +529,6 @@ public:
 
     // an image of p_edges through out_node gives us all the shared nodes, along
     //  with some private nodes
-    const char* val = std::getenv("TILE_SIZE");  // or any env var
-    size_t tile_size = 100000000; //default
-    if (val) {
-      tile_size = atoi(val);
-    }
-    std::vector<size_t> byte_fields = {sizeof(char)};
-    IndexSpace<1> instance_index_space(Rect<1>(0, tile_size-1));
-    for (size_t i = 0; i < src_field_data_gpu.size(); i++) {
-      RegionInstance::create_instance(src_field_data_gpu[i].scratch_buffer, gpu_memory, instance_index_space, byte_fields, 0, Realm::ProfilingRequestSet()).wait();
-    }
     Event e03 = is_nodes.create_subspaces_by_image(src_field_data_gpu,
                                                   p_garbage_edges,
                                                   p_garbage_rd,
@@ -1738,6 +1741,518 @@ public:
       for (IndexSpaceIterator<1> it(p_rects_cpu[i]); it.valid; it.step()) {
         for (PointInRectIterator<1> point(it.rect); point.valid; point.step()) {
           if(!p_rects[i].contains(point.p)) {
+            log_app.error() << "Mismatch! GPU is missing rect point " << point.p
+                            << " on piece " << i << "\n";
+            errors++;
+          }
+        }
+      }
+    }
+    return errors;
+  }
+};
+
+class Range2DTest : public TestInterface {
+public:
+  // graph config parameters
+  int num_nodes = 1000;
+  int num_rects = 1000;
+  int max_rect_size = 10;
+  int num_pieces = 4;
+
+  Range2DTest(int argc, const char *argv[])
+  {
+    for(int i = 1; i < argc; i++) {
+
+      if(!strcmp(argv[i], "-p")) {
+	num_pieces = atoi(argv[++i]);
+	continue;
+      }
+
+        if(!strcmp(argv[i], "-n")) {
+          num_nodes = atoi(argv[++i]);
+          continue;
+        }
+
+        if (!strcmp(argv[i], "-r")) {
+          num_rects = atoi(argv[++i]);
+          continue;
+        }
+
+        if (!strcmp(argv[i], "-m")) {
+          max_rect_size = atoi(argv[++i]);
+          continue;
+        }
+    }
+
+    if (num_nodes <= 0 || num_rects <= 0) {
+      log_app.error() << "Invalid graph dimensions in input file: rects=" << num_rects << " nodes=" << num_nodes;
+      exit(1);
+    }
+
+  }
+
+
+
+  struct InitDataArgs {
+    int index;
+    RegionInstance ri_nodes;
+    RegionInstance ri_rects;
+  };
+
+  enum PRNGStreams {
+    NODE_SUBGRAPH_STREAM,
+  };
+
+  void random_rect_data(int idx, int& subgraph)
+  {
+    if(random_colors)
+      subgraph = Philox_2x32<>::rand_int(random_seed, idx, NODE_SUBGRAPH_STREAM, num_pieces);
+    else
+      subgraph = idx * num_pieces / num_rects;
+  }
+
+  void random_node_data(int idx, int& subgraph)
+  {
+    if(true)
+      subgraph = Philox_2x32<>::rand_int(random_seed, idx, NODE_SUBGRAPH_STREAM, num_pieces);
+    else
+      subgraph = idx * num_pieces / num_nodes;
+  }
+
+  void initialize_rect_data(int idx, Rect<2> &rect, int max_rect_size = 10)
+  {
+
+    int x = Philox_2x32<>::rand_int(random_seed, idx, NODE_SUBGRAPH_STREAM, num_nodes);
+    int y = Philox_2x32<>::rand_int(random_seed, idx + 1, NODE_SUBGRAPH_STREAM, num_nodes);
+    int length = Philox_2x32<>::rand_int(random_seed, idx + 2, NODE_SUBGRAPH_STREAM, max_rect_size);
+    int height = Philox_2x32<>::rand_int(random_seed, idx + 3, NODE_SUBGRAPH_STREAM, max_rect_size);
+    rect.lo[0] = x;
+    rect.hi[0] = x + length;
+    rect.lo[1] = y;
+    rect.hi[1] = y + height;
+  }
+
+
+  static void init_data_task_wrapper(const void *args, size_t arglen,
+				     const void *userdata, size_t userlen, Processor p)
+  {
+    Range2DTest *me = (Range2DTest *)testcfg;
+    me->init_data_task(args, arglen, p);
+  }
+
+  void init_data_task(const void *args, size_t arglen, Processor p)
+  {
+    const InitDataArgs& i_args = *(const InitDataArgs *)args;
+
+    log_app.info() << "init task #" << i_args.index << " (ri_nodes=" << i_args.ri_nodes << ", ri_rects=" << i_args.ri_rects << ")";
+
+    i_args.ri_nodes.fetch_metadata(p).wait();
+    i_args.ri_rects.fetch_metadata(p).wait();
+
+    IndexSpace<2> is_nodes = i_args.ri_nodes.get_indexspace<2>();
+    IndexSpace<1> is_rects = i_args.ri_rects.get_indexspace<1>();
+
+    log_app.debug() << "N: " << is_nodes;
+    log_app.debug() << "E: " << is_rects;
+
+    {
+      AffineAccessor<int,1> a_piece_id(i_args.ri_rects, 0 /* offset */);
+
+      for(int i = is_rects.bounds.lo; i <= is_rects.bounds.hi; i++) {
+	      int subgraph;
+	      random_rect_data(i, subgraph);
+	      a_piece_id.write(i, subgraph);
+      }
+    }
+    {
+      AffineAccessor<int,2> a_piece_id(i_args.ri_nodes, 0 /* offset */);
+
+      for(int i = is_nodes.bounds.lo[0]; i <= is_nodes.bounds.hi[0]; i++) {
+        for (int j = is_nodes.bounds.lo[1]; j <= is_nodes.bounds.hi[1]; j++) {
+          int idx = i * (is_nodes.bounds.hi[1] - is_nodes.bounds.lo[1] + 1) + j;
+          int subgraph;
+          random_node_data(idx, subgraph);
+          a_piece_id.write(Point<2>(i, j), subgraph);
+        }
+      }
+    }
+
+
+    {
+
+      AffineAccessor<Rect<2>, 1> a_rect(i_args.ri_rects, 1 * sizeof(int) /* offset */);
+
+      // Read edges line by line
+      for(int i = is_rects.bounds.lo; i <= is_rects.bounds.hi; i++) {
+        Rect<2> rect;
+        initialize_rect_data(i, rect, max_rect_size);
+        a_rect.write(i, rect);
+      }
+    }
+
+    if(show_graph) {
+      AffineAccessor<int,2> a_piece_id(i_args.ri_nodes, 0 /* offset */);
+
+      for(int i = is_nodes.bounds.lo[0]; i <= is_nodes.bounds.hi[1]; i++) {
+        for (int j = is_nodes.bounds.lo[1]; j <= is_nodes.bounds.hi[1]; j++) {
+          Point<2> p(i, j);
+          log_app.info() << "node_id[" << p << "] = " << a_piece_id.read(p) << "\n";
+        }
+      }
+
+      AffineAccessor<int,1> a_rect_id(i_args.ri_rects, 0 * sizeof(Point<1>) /* offset */);
+
+      for(int i = is_rects.bounds.lo; i <= is_rects.bounds.hi; i++)
+	log_app.info() << "rect_id[" << i << "] = " << a_rect_id.read(i) << "\n";
+
+      AffineAccessor<Rect<2>,1> a_rect_val(i_args.ri_rects, 1 * sizeof(int) /* offset */);
+
+      for(int i = is_rects.bounds.lo; i <= is_rects.bounds.hi; i++)
+	log_app.info() << "rect_val[" << i << "] = " << a_rect_val.read(i) << "\n";
+    }
+  }
+
+  IndexSpace<1> is_rects;
+  IndexSpace<2> is_nodes;
+  std::vector<RegionInstance> ri_nodes;
+  std::vector<FieldDataDescriptor<IndexSpace<2>, int> > node_id_field_data;
+  std::vector<RegionInstance> ri_rects;
+  std::vector<FieldDataDescriptor<IndexSpace<1>, int> > rect_id_field_data;
+  std::vector<FieldDataDescriptor<IndexSpace<1>, Rect<2> > > rect_val_field_data;
+
+  virtual void print_info(void)
+  {
+    printf("Realm dependent partitioning test - 2D ranges: %d nodes, %d rects, %d pieces\n",
+	   (int)num_nodes, (int)num_rects, (int)num_pieces);
+  }
+
+  virtual Event initialize_data(const std::vector<Memory>& memories,
+				const std::vector<Processor>& procs)
+  {
+    // now create index spaces for nodes and edges
+    is_nodes = Rect<2>(Point<2>(0, 0), Point<2>(num_nodes - 1, num_nodes - 1));
+    is_rects = Rect<1>(0, num_rects - 1);
+
+    // equal partition is used to do initial population of edges and nodes
+    std::vector<IndexSpace<2> > ss_nodes_eq;
+    std::vector<IndexSpace<1> > ss_rects_eq;
+
+    log_app.info() << "Creating equal subspaces" << "\n";
+
+    is_nodes.create_equal_subspaces(num_pieces, 1, ss_nodes_eq, Realm::ProfilingRequestSet()).wait();
+    is_rects.create_equal_subspaces(num_pieces, 1, ss_rects_eq, Realm::ProfilingRequestSet()).wait();
+
+    log_app.debug() << "Initial partitions:\n";
+    for(size_t i = 0; i < ss_nodes_eq.size(); i++)
+      log_app.debug() << " Nodes #" << i << ": " << ss_nodes_eq[i];
+    for(size_t i = 0; i < ss_rects_eq.size(); i++)
+      log_app.debug() << " Rects #" << i << ": " << ss_rects_eq[i];
+
+    // create instances for each of these subspaces
+    std::vector<size_t> node_fields, rect_fields;
+    node_fields.push_back(sizeof(int));  // piece_id
+    rect_fields.push_back(sizeof(int));  // src_node
+    rect_fields.push_back(sizeof(Rect<2>));  // dst_node
+
+    ri_nodes.resize(num_pieces);
+    node_id_field_data.resize(num_pieces);
+
+    for(size_t i = 0; i < ss_nodes_eq.size(); i++) {
+      RegionInstance ri;
+      RegionInstance::create_instance(ri,
+				      memories[i % memories.size()],
+				      ss_nodes_eq[i],
+				      node_fields,
+				      0 /*SOA*/,
+				      Realm::ProfilingRequestSet()).wait();
+      ri_nodes[i] = ri;
+
+      node_id_field_data[i].index_space = ss_nodes_eq[i];
+      node_id_field_data[i].inst = ri_nodes[i];
+      node_id_field_data[i].field_offset = 0;
+    }
+
+    ri_rects.resize(num_pieces);
+    rect_id_field_data.resize(num_pieces);
+    rect_val_field_data.resize(num_pieces);
+
+    for(size_t i = 0; i < ss_rects_eq.size(); i++) {
+      RegionInstance ri;
+      RegionInstance::create_instance(ri,
+				      memories[i % memories.size()],
+				      ss_rects_eq[i],
+				      rect_fields,
+				      0 /*SOA*/,
+				      Realm::ProfilingRequestSet()).wait();
+      ri_rects[i] = ri;
+
+      rect_id_field_data[i].index_space = ss_rects_eq[i];
+      rect_id_field_data[i].inst = ri_rects[i];
+      rect_id_field_data[i].field_offset = 0;
+
+      rect_val_field_data[i].index_space = ss_rects_eq[i];
+      rect_val_field_data[i].inst = ri_rects[i];
+      rect_val_field_data[i].field_offset = 1 * sizeof(int);
+    }
+
+    // fire off tasks to initialize data
+    std::set<Event> events;
+    for(int i = 0; i < num_pieces; i++) {
+      Processor p = procs[i % procs.size()];
+      InitDataArgs args;
+      args.index = i;
+      args.ri_nodes = ri_nodes[i];
+      args.ri_rects = ri_rects[i];
+      Event e = p.spawn(INIT_RANGE2D_DATA_TASK, &args, sizeof(args));
+      events.insert(e);
+    }
+
+    return Event::merge_events(events);
+  }
+
+  // the outputs of our partitioning will be:
+  //  is_private, is_shared - subsets of is_nodes based on private/shared
+  //  p_rd, p_wr, p_ghost - subsets of the above split by subckt
+  //  p_edges               - subsets of is_edges for each subckt
+
+  std::vector<IndexSpace<1> > p_colored_rects;
+  std::vector<IndexSpace<2>> p_rects, p_intersect, p_diff;
+  std::vector<IndexSpace<1>> p_colored_rects_cpu;
+  std::vector<IndexSpace<2>> p_rects_cpu, p_intersect_cpu, p_diff_cpu;
+
+  IndexSpace<2> cpu_union, gpu_union, garbage_union;
+
+  virtual Event perform_partitioning(void)
+  {
+    // first partition nodes by subckt id (this is the independent partition,
+    //  but not actually used by the app)
+
+    std::vector<int> colors(num_pieces);
+    for(int i = 0; i < num_pieces; i++)
+      colors[i] = i;
+
+    Memory gpu_memory;
+    bool found_gpu_memory = false;
+    Machine machine = Machine::get_machine();
+    std::set<Memory> all_memories;
+    machine.get_all_memories(all_memories);
+    for(auto& memory : all_memories) {
+      if(memory.kind() == Memory::GPU_FB_MEM) {
+        gpu_memory = memory;
+        found_gpu_memory = true;
+        break;
+      }
+    }
+    assert(found_gpu_memory);
+    std::vector<size_t> rect_fields;
+    rect_fields.push_back(sizeof(int));
+    rect_fields.push_back(sizeof(Rect<2>));
+    std::vector<size_t> node_fields;
+    node_fields.push_back(sizeof(int));
+
+    std::vector<FieldDataDescriptor<IndexSpace<2>, int > > node_id_data_gpu;
+    std::vector<FieldDataDescriptor<IndexSpace<1>, int > > rect_id_data_gpu;
+    std::vector<FieldDataDescriptor<IndexSpace<1>, Rect<2>>> rect_val_data_gpu;
+    node_id_data_gpu.resize(num_pieces);
+    rect_id_data_gpu.resize(num_pieces);
+    rect_val_data_gpu.resize(num_pieces);
+    for (int i = 0; i < num_pieces; i++) {
+	RegionInstance node_id_instance;
+	RegionInstance rect_id_instance;
+    	RegionInstance rect_val_instance;
+        RegionInstance::create_instance(node_id_instance,
+				      gpu_memory,
+				      node_id_field_data[i].index_space,
+				      node_fields,
+				      0 /*SOA*/,
+				      Realm::ProfilingRequestSet()).wait();
+        RegionInstance::create_instance(rect_id_instance,
+				      gpu_memory,
+				      rect_id_field_data[i].index_space,
+				      rect_fields,
+				      0 /*SOA*/,
+				      Realm::ProfilingRequestSet()).wait();
+    	RegionInstance::create_instance(rect_val_instance,
+					  gpu_memory,
+					  rect_val_field_data[i].index_space,
+					  rect_fields,
+					  0 /*SOA*/,
+					  Realm::ProfilingRequestSet()).wait();
+      CopySrcDstField node_id_gpu_field, node_id_cpu_field, rect_id_gpu_field, rect_id_cpu_field, rect_val_gpu_field, rect_val_cpu_field;
+      node_id_gpu_field.inst = node_id_instance;
+      node_id_gpu_field.size = sizeof(int);
+      node_id_gpu_field.field_id = 0;
+      node_id_cpu_field.inst = node_id_field_data[i].inst;
+      node_id_cpu_field.size = sizeof(int);
+      node_id_cpu_field.field_id = 0;
+      rect_id_gpu_field.inst = rect_id_instance;
+      rect_id_gpu_field.size = sizeof(int);
+      rect_id_gpu_field.field_id = 0;
+      rect_id_cpu_field.inst = rect_id_field_data[i].inst;
+      rect_id_cpu_field.size = sizeof(int);
+      rect_id_cpu_field.field_id = 0;
+      rect_val_gpu_field.inst = rect_val_instance;
+      rect_val_gpu_field.size = sizeof(Rect<2>);
+      rect_val_gpu_field.field_id = sizeof(int);
+      rect_val_cpu_field.inst = rect_val_field_data[i].inst;
+      rect_val_cpu_field.size = sizeof(Rect<2>);
+      rect_val_cpu_field.field_id = sizeof(int);
+      std::vector<CopySrcDstField> node_id_gpu_data, node_id_cpu_data, rect_id_gpu_data, rect_id_cpu_data, rect_val_gpu_data, rect_val_cpu_data;
+      node_id_gpu_data.push_back(node_id_gpu_field);
+      node_id_cpu_data.push_back(node_id_cpu_field);
+      rect_id_gpu_data.push_back(rect_id_gpu_field);
+      rect_id_cpu_data.push_back(rect_id_cpu_field);
+      rect_val_gpu_data.push_back(rect_val_gpu_field);
+      rect_val_cpu_data.push_back(rect_val_cpu_field);
+      Event copy_event = node_id_field_data[i].index_space.copy(node_id_cpu_data, node_id_gpu_data, Realm::ProfilingRequestSet());
+      copy_event.wait();
+      Event second_copy_event = rect_id_field_data[i].index_space.copy(rect_id_cpu_data, rect_id_gpu_data, Realm::ProfilingRequestSet());
+      second_copy_event.wait();
+      Event third_copy_event = rect_val_field_data[i].index_space.copy(rect_val_cpu_data, rect_val_gpu_data, Realm::ProfilingRequestSet());
+      third_copy_event.wait();
+      node_id_data_gpu[i].inst = node_id_instance;
+      node_id_data_gpu[i].index_space = node_id_field_data[i].index_space;
+      node_id_data_gpu[i].field_offset = 0;
+      rect_id_data_gpu[i].inst = rect_id_instance;
+      rect_id_data_gpu[i].index_space = rect_id_field_data[i].index_space;
+      rect_id_data_gpu[i].field_offset = 0;
+      rect_val_data_gpu[i].inst = rect_val_instance;
+      rect_val_data_gpu[i].index_space = rect_val_field_data[i].index_space;
+      rect_val_data_gpu[i].field_offset = sizeof(int);
+    }
+    wait_on_events = true;
+    std::vector<IndexSpace<1>> p_garbage_colors;
+    std::vector<IndexSpace<2>> p_garbage_rects;
+    log_app.info() << "WARMING UP " << "\n";
+
+    std::vector<DeppartEstimateInput<1, int>> field_estimate_input(rect_id_data_gpu.size());
+    std::vector<DeppartBufferRequirements> field_estimate_output(rect_id_data_gpu.size());
+    std::vector<DeppartEstimateInput<1, int>> image_estimate_input(rect_val_data_gpu.size());
+    std::vector<DeppartBufferRequirements> image_estimate_output(rect_val_data_gpu.size());
+    std::vector<DeppartSubspace<1, int>> subspace_input(colors.size());
+    for (size_t i = 0; i < rect_id_data_gpu.size(); i++) {
+      field_estimate_input[i].location = rect_id_data_gpu[i].inst.get_location();
+      field_estimate_input[i].space = rect_id_data_gpu[i].index_space;
+    }
+    for (size_t i = 0; i < rect_val_data_gpu.size(); i++) {
+      image_estimate_input[i].location = rect_val_data_gpu[i].inst.get_location();
+      image_estimate_input[i].space = rect_val_data_gpu[i].index_space;
+    }
+
+    is_rects.by_field_buffer_requirements(field_estimate_input, field_estimate_output);
+    std::vector<size_t> byte_fields = {sizeof(char)};
+    for (size_t i = 0; i < rect_id_data_gpu.size(); i++) {
+      IndexSpace<1> instance_index_space(Rect<1>(0, field_estimate_output[i].upper_bound-1));
+      RegionInstance::create_instance(rect_id_data_gpu[i].scratch_buffer, gpu_memory, instance_index_space, byte_fields, 0, Realm::ProfilingRequestSet()).wait();
+    }
+
+    Event e001 = is_rects.create_subspaces_by_field(rect_id_data_gpu,
+                                                  colors,
+                                                  p_garbage_colors,
+                                                  Realm::ProfilingRequestSet());
+    if (wait_on_events) e001.wait();
+    for (size_t i = 0; i < colors.size(); i++) {
+      subspace_input[i].space = p_garbage_colors[i];
+      subspace_input[i].entries = p_garbage_colors[i].sparsity.impl()->get_entries().size();
+    }
+    is_nodes.by_image_buffer_requirements(subspace_input, image_estimate_input, image_estimate_output);
+    for (size_t i = 0; i < rect_val_data_gpu.size(); i++) {
+      IndexSpace<1> instance_index_space(Rect<1>(0, (image_estimate_output[i].upper_bound*5)-1));
+      RegionInstance::create_instance(rect_val_data_gpu[i].scratch_buffer, gpu_memory, instance_index_space, byte_fields, 0, Realm::ProfilingRequestSet()).wait();
+    }
+    Event e002 = is_nodes.create_subspaces_by_image(rect_val_data_gpu,
+                                                     p_garbage_colors,
+                                                     p_garbage_rects,
+                                                     Realm::ProfilingRequestSet(),
+                                                     e001);
+    if(wait_on_events) e002.wait();
+
+    log_app.info() << "FINISHED WARMING UP " << "\n";
+    log_app.info() << "starting GPU  partitioning " << Clock::current_time_in_microseconds() << "\n";
+
+    log_app.info() << "STARTING GPU BY FIELD " << Clock::current_time_in_microseconds() << "\n";
+
+    Event e01 = is_rects.create_subspaces_by_field(rect_id_data_gpu,
+                                                  colors,
+                                                  p_colored_rects,
+                                                  Realm::ProfilingRequestSet());
+        if (wait_on_events) e01.wait();
+
+    log_app.info() << "FINISHED GPU BY FIELD " << Clock::current_time_in_microseconds() << "\n";
+    log_app.info() << "STARTING GPU BY IMAGE " << Clock::current_time_in_microseconds() << "\n";
+    Event e02 = is_nodes.create_subspaces_by_image(rect_val_data_gpu,
+                                                     p_colored_rects,
+                                                     p_rects,
+                                                     Realm::ProfilingRequestSet(),
+                                                     e01);
+    if(wait_on_events) e02.wait();
+    log_app.info() << "FINISHED GPU BY IMAGE " << Clock::current_time_in_microseconds() << "\n";
+    log_app.info() << "GPU Partitioning complete " << Clock::current_time_in_microseconds() << "\n";
+
+    log_app.info() << "STARTING CPU  partitioning " << Clock::current_time_in_microseconds() << "\n";
+    log_app.info() << "STARTING CPU BY FIELD " << Clock::current_time_in_microseconds() << "\n";
+    Event e1 = is_rects.create_subspaces_by_field(rect_id_field_data,
+                                                  colors,
+                                                  p_colored_rects_cpu,
+                                                  Realm::ProfilingRequestSet());
+    if (wait_on_events) e1.wait();
+    log_app.info() << "FINISHED CPU BY FIELD " << Clock::current_time_in_microseconds() << "\n";
+    log_app.info() << "STARTING CPU BY IMAGE " << Clock::current_time_in_microseconds() << "\n";
+    Event e2 = is_nodes.create_subspaces_by_image(rect_val_field_data,
+                                                     p_colored_rects_cpu,
+                                                     p_rects_cpu,
+                                                     Realm::ProfilingRequestSet(),
+                                                     e1);
+    if(wait_on_events) e2.wait();
+    log_app.info() << "FINISHED CPU BY IMAGE " << Clock::current_time_in_microseconds() << "\n";
+    log_app.info() << "CPU Partitioning complete " << Clock::current_time_in_microseconds() << "\n";
+    return e2;
+  }
+
+
+
+  virtual int perform_dynamic_checks(void)
+  {
+    return 0;
+  }
+
+  virtual int check_partitioning(void)
+  {
+    log_app.info() << "Checking correctness of partitioning " << "\n";
+    int errors = 0;
+
+    for (int i = 0; i < num_pieces; i++) {
+      for (IndexSpaceIterator<1> it(p_colored_rects[i]); it.valid; it.step()) {
+        for (PointInRectIterator<1> point(it.rect); point.valid; point.step()) {
+          if(!p_colored_rects_cpu[i].contains(point.p)) {
+            log_app.error() << "Mismatch! GPU has extra colored rect point " << point.p
+                            << " on piece " << i << "\n";
+            errors++;
+          }
+        }
+      }
+      for (IndexSpaceIterator<1> it(p_colored_rects_cpu[i]); it.valid; it.step()) {
+        for (PointInRectIterator<1> point(it.rect); point.valid; point.step()) {
+          if (!p_colored_rects[i].contains(point.p)) {
+            log_app.error() << "Mismatch! GPU is missing colored rect point " << point.p
+                            << " on piece " << i << "\n";
+            errors++;
+          }
+        }
+      }
+      for (IndexSpaceIterator<2> it(p_rects[i]); it.valid; it.step()) {
+        for (PointInRectIterator<2> point(it.rect); point.valid; point.step()) {
+          if (!p_rects_cpu[i].contains(point.p)) {
+            log_app.error() << "Mismatch! GPU has extra rect point " << point.p
+                            << " on piece " << i << "\n";
+            errors++;
+          }
+        }
+      }
+      for (IndexSpaceIterator<2> it(p_rects_cpu[i]); it.valid; it.step()) {
+        for (PointInRectIterator<2> point(it.rect); point.valid; point.step()) {
+          if (!p_rects[i].contains(point.p)) {
             log_app.error() << "Mismatch! GPU is missing rect point " << point.p
                             << " on piece " << i << "\n";
             errors++;
@@ -4430,6 +4945,11 @@ int main(int argc, char **argv)
       break;
     }
 
+    if (!strcmp(argv[i], "multi")) {
+      testcfg = new Range2DTest(argc - i, const_cast<const char **>(argv + i));
+      break;
+    }
+
     if(!strcmp(argv[i], "pennant")) {
       testcfg = new PennantTest(argc - i, const_cast<const char **>(argv + i));
       break;
@@ -4469,6 +4989,7 @@ int main(int argc, char **argv)
   rt.register_task(INIT_BASIC_DATA_TASK, BasicTest::init_data_task_wrapper);
   rt.register_task(INIT_TILE_DATA_TASK, TileTest::init_data_task_wrapper);
   rt.register_task(INIT_RANGE_DATA_TASK, RangeTest::init_data_task_wrapper);
+  rt.register_task(INIT_RANGE2D_DATA_TASK, Range2DTest::init_data_task_wrapper);
   rt.register_task(INIT_MINIAERO_DATA_TASK, MiniAeroTest::init_data_task_wrapper);
 
   signal(SIGALRM, sigalrm_handler);

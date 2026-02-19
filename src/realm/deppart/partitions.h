@@ -123,6 +123,18 @@ namespace Realm {
       }
     }
 
+    size_t mark(bool dir) const noexcept {
+      return dir ? right_ : left_;
+    }
+
+    void rollback(size_t mark, bool dir) noexcept {
+      if (dir) {
+        right_ = mark;
+      } else {
+        left_ = mark;
+      }
+    }
+
     template <typename T>
     T* alloc(size_t count = 1) {
       return parity_ ? alloc_right<T>(count) : alloc_left<T>(count);
@@ -171,16 +183,22 @@ namespace Realm {
 
     void* alloc_left_bytes(size_t bytes, size_t align = alignof(std::max_align_t)) {
       const size_t aligned = align_up(left_, align);
-      if (aligned + bytes + right_ > cap_) throw arena_oom{};
+      if (aligned + bytes + right_ > cap_) {
+        throw arena_oom{};
+      }
       void* p = base_ + aligned;
       left_ = aligned + bytes;
       return p;
     }
 
     void* alloc_right_bytes(size_t bytes, size_t align = alignof(std::max_align_t)) {
-      if (bytes + right_ > cap_) throw arena_oom{};
+      if (bytes + right_ > cap_) {
+        throw arena_oom{};
+      }
       const size_t aligned = align_down(cap_ - right_ - bytes, align);
-      if (aligned < left_) throw arena_oom{};
+      if (aligned < left_) {
+        throw arena_oom{};
+      }
       void *p = base_ + aligned;
       right_ = cap_ - aligned;
       return p;

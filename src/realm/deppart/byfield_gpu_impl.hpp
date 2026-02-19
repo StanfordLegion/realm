@@ -23,23 +23,14 @@ void GPUByFieldMicroOp<N,T,FT>::execute()
 
   cudaStream_t stream = Cuda::get_task_cuda_stream();
 
-  Memory my_mem = field_data[0].inst.get_location();
-
   collapsed_space<N, T> inst_space;
 
-  const char* val = std::getenv("TILE_SIZE");  // or any env var
-  size_t tile_size = 100000000; //default
-  if (val) {
-    tile_size = atoi(val);
-  }
+  size_t tile_size = field_data[0].scratch_buffer.get_layout()->bytes_used;
 
-  RegionInstance fixed_buffer = this->realm_malloc(tile_size, my_mem);
-  Arena buffer_arena(reinterpret_cast<void *>(AffineAccessor<char, 1>(fixed_buffer, 0).base), tile_size);
+  Arena buffer_arena(reinterpret_cast<void *>(AffineAccessor<char, 1>(field_data[0].scratch_buffer, 0).base), tile_size);
 
   inst_space.offsets = buffer_arena.alloc<size_t>(field_data.size() + 1);
   inst_space.num_children = field_data.size();
-
-  GPUMicroOp<N, T>::collapse_multi_space(field_data, inst_space, buffer_arena, stream);
 
   collapsed_space<N, T> collapsed_parent;
 
@@ -49,14 +40,45 @@ void GPUByFieldMicroOp<N,T,FT>::execute()
 
   // This is used for count + emit: first pass counts how many rectangles survive intersection, second pass uses the counter
   // to figure out where to write each rectangle.
-  RegionInstance inst_counters_instance = this->realm_malloc((2*field_data.size() + 1) * sizeof(uint32_t), my_mem);
-  uint32_t* d_inst_counters = reinterpret_cast<uint32_t*>(AffineAccessor<char,1>(inst_counters_instance, 0).base);
+  uint32_t* d_inst_counters = buffer_arena.alloc<uint32_t>(2*field_data.size() + 1);
 
   // This will be a prefix sum over the counters, used first to figure out where to write in the emit phase, and second
   // to track which instance each rectangle came from in the populate phase.
   uint32_t* d_inst_prefix = d_inst_counters + field_data.size();
   size_t num_valid_rects = 0;
   Rect<N, T>* d_valid_rects;
+
+  FT* d_colors;
+
+
+  // Memcpying a boolean vector breaks things for some reason so we have this disgusting workaround.
+  if constexpr(std::is_same_v<FT,bool>) {
+    std::vector<uint8_t> flat_colors(colors.size());
+    for (size_t i = 0; i < colors.size(); i++) {
+      flat_colors[i] = colors[i] ? 1 : 0;
+    }
+    uint8_t* d_flat_colors = buffer_arena.alloc<uint8_t>(colors.size());
+    CUDA_CHECK(cudaMemcpyAsync(d_flat_colors, flat_colors.data(), colors.size() * sizeof(uint8_t), cudaMemcpyHostToDevice, stream), stream);
+    d_colors = reinterpret_cast<FT*>(d_flat_colors);
+  } else {
+    d_colors = buffer_arena.alloc<FT>(colors.size());
+    CUDA_CHECK(cudaMemcpyAsync(d_colors, colors.data(), colors.size() * sizeof(FT), cudaMemcpyHostToDevice, stream), stream);
+  }
+
+
+  Memory zcpy_mem;
+  assert(find_memory(zcpy_mem, Memory::Z_COPY_MEM));
+
+  // We need to pass the accessors to the GPU so it can read field values.
+  RegionInstance accessors_instance = this->realm_malloc(field_data.size() * sizeof(AffineAccessor<FT,N,T>), zcpy_mem);
+  AffineAccessor<FT,N,T>* d_accessors = reinterpret_cast<AffineAccessor<FT,N,T>*>(AffineAccessor<char,1>(accessors_instance, 0).base);
+  for (size_t i = 0; i < field_data.size(); ++i) {
+    d_accessors[i] = AffineAccessor<FT,N,T>(field_data[i].inst, field_data[i].field_offset);
+  }
+
+  buffer_arena.commit(false);
+
+  GPUMicroOp<N, T>::collapse_multi_space(field_data, inst_space, buffer_arena, stream);
 
   // Here we intersect the instance spaces with the parent space, and make sure we know which instance each resulting rectangle came from.
   GPUMicroOp<N, T>::template construct_input_rectlist<Rect<N, T>>(inst_space, collapsed_parent, d_valid_rects, num_valid_rects, d_inst_counters, d_inst_prefix, buffer_arena, stream);
@@ -72,7 +94,6 @@ void GPUByFieldMicroOp<N,T,FT>::execute()
         impl->contribute_nothing();
       }
     }
-    inst_counters_instance.destroy();
     return;
   }
 
@@ -84,41 +105,9 @@ void GPUByFieldMicroOp<N,T,FT>::execute()
   GPUMicroOp<N, T>::volume_prefix_sum(d_valid_rects, num_valid_rects, d_prefix_rects, total_pts, buffer_arena, stream);
 
   // Now we have everything we need to actually populate our outputs.
-  RegionInstance points_instance = this->realm_malloc(total_pts * sizeof(PointDesc<N,T>), my_mem);
-  PointDesc<N,T>* d_points = reinterpret_cast<PointDesc<N,T>*>(AffineAccessor<char,1>(points_instance, 0).base);
-
-  FT* d_colors;
-  RegionInstance colors_instance;
-
-
-  // Memcpying a boolean vector breaks things for some reason so we have this disgusting workaround.
-  if constexpr(std::is_same_v<FT,bool>) {
-    std::vector<uint8_t> flat_colors(colors.size());
-    for (size_t i = 0; i < colors.size(); i++) {
-      flat_colors[i] = colors[i] ? 1 : 0;
-    }
-    colors_instance = this->realm_malloc(total_pts * sizeof(PointDesc<N,T>), my_mem);
-    uint8_t* d_flat_colors = reinterpret_cast<uint8_t*>(AffineAccessor<char,1>(colors_instance, 0).base);
-    CUDA_CHECK(cudaMemcpyAsync(d_flat_colors, flat_colors.data(), colors.size() * sizeof(uint8_t), cudaMemcpyHostToDevice, stream), stream);
-    d_colors = reinterpret_cast<FT*>(d_flat_colors);
-  } else {
-    colors_instance = this->realm_malloc(colors.size() * sizeof(FT), my_mem);
-    d_colors = reinterpret_cast<FT*>(AffineAccessor<char,1>(colors_instance, 0).base);
-    CUDA_CHECK(cudaMemcpyAsync(d_colors, colors.data(), colors.size() * sizeof(FT), cudaMemcpyHostToDevice, stream), stream);
-  }
-
-
-  Memory zcpy_mem;
-  assert(find_memory(zcpy_mem, Memory::Z_COPY_MEM));
-
-  // We need to pass the accessors to the GPU so it can read field values.
-  RegionInstance accessors_instance = this->realm_malloc(field_data.size() * sizeof(AffineAccessor<FT,N,T>), zcpy_mem);
-  AffineAccessor<FT,N,T>* d_accessors = reinterpret_cast<AffineAccessor<FT,N,T>*>(AffineAccessor<char,1>(accessors_instance, 0).base);
-  for (size_t i = 0; i < field_data.size(); ++i) {
-    d_accessors[i] = AffineAccessor<FT,N,T>(field_data[i].inst, field_data[i].field_offset);
-  }
-
-
+  buffer_arena.flip_parity();
+  assert(!buffer_arena.get_parity());
+  PointDesc<N,T>* d_points = buffer_arena.alloc<PointDesc<N,T>>(total_pts);
 
   // This is where the work is actually done - each thread figures out which points to read, reads it, marks a PointDesc with its color, and writes it out.
   byfield_gpuPopulateBitmasksKernel<N,T,FT><<<COMPUTE_GRID(total_pts), THREADS_PER_BLOCK, 0, stream>>>(d_accessors, d_valid_rects, d_prefix_rects, d_inst_prefix, d_colors, total_pts, colors.size(), num_valid_rects, field_data.size(), d_points);
@@ -132,9 +121,6 @@ void GPUByFieldMicroOp<N,T,FT>::execute()
   }
 
   CUDA_CHECK(cudaStreamSynchronize(stream), stream);
-  colors_instance.destroy();
-  accessors_instance.destroy();
-  inst_counters_instance.destroy();
 
   // Ship off the points for final processing.
   size_t out_rects = 0;
@@ -149,7 +135,5 @@ void GPUByFieldMicroOp<N,T,FT>::execute()
                           // return the SparsityMap key itself
                           return kv.second;
                        });
-
-    points_instance.destroy();
 }
 }
