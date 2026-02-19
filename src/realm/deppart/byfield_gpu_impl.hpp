@@ -33,10 +33,12 @@ void GPUByFieldMicroOp<N,T,FT>::execute()
   inst_space.num_children = field_data.size();
 
   collapsed_space<N, T> collapsed_parent;
+  collapsed_parent.offsets = buffer_arena.alloc<size_t>(2);
+  collapsed_parent.num_children = 1;
+  std::vector<IndexSpace<N, T>> parent_spaces = {parent_space};
 
   // We collapse the parent space to undifferentiate between dense and sparse and match downstream APIs.
-  GPUMicroOp<N, T>::collapse_parent_space(parent_space, collapsed_parent, buffer_arena, stream);
-
+  GPUMicroOp<N, T>::collapse_multi_space(parent_spaces, collapsed_parent, buffer_arena, stream);
 
   // This is used for count + emit: first pass counts how many rectangles survive intersection, second pass uses the counter
   // to figure out where to write each rectangle.
@@ -107,7 +109,9 @@ void GPUByFieldMicroOp<N,T,FT>::execute()
   // Now we have everything we need to actually populate our outputs.
   buffer_arena.flip_parity();
   assert(!buffer_arena.get_parity());
-  PointDesc<N,T>* d_points = buffer_arena.alloc<PointDesc<N,T>>(total_pts);
+
+  RegionInstance points_instance = this->realm_malloc(total_pts * sizeof(PointDesc<N,T>), zcpy_mem);
+  PointDesc<N,T>* d_points = reinterpret_cast<PointDesc<N, T>*>(AffineAccessor<char,1>(points_instance, 0).base);
 
   // This is where the work is actually done - each thread figures out which points to read, reads it, marks a PointDesc with its color, and writes it out.
   byfield_gpuPopulateBitmasksKernel<N,T,FT><<<COMPUTE_GRID(total_pts), THREADS_PER_BLOCK, 0, stream>>>(d_accessors, d_valid_rects, d_prefix_rects, d_inst_prefix, d_colors, total_pts, colors.size(), num_valid_rects, field_data.size(), d_points);

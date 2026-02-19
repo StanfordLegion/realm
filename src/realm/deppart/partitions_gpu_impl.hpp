@@ -515,35 +515,30 @@ namespace Realm {
     cudaStream_t stream = Cuda::get_task_cuda_stream();
 
     Memory my_mem;
-    bool found = find_memory(my_mem, Memory::GPU_FB_MEM);
-    assert(found);
+    assert(find_memory(my_mem, Memory::GPU_FB_MEM));
 
-    RegionInstance srcs_instance = this->realm_malloc(4*total_rects*sizeof(int32_t), my_mem);
-    RegionInstance crds_instance = this->realm_malloc(4*total_rects*sizeof(T), my_mem);
-    RegionInstance heads_instance = this->realm_malloc(2*total_rects * sizeof(uint8_t), my_mem);
-    RegionInstance sum_instance = this->realm_malloc(2*total_rects * sizeof(size_t), my_mem);
+    assert(!my_arena.get_parity());
+    size_t beginning = my_arena.mark();
 
-    RegionInstance B_src_inst[N];
-    RegionInstance B_coord_inst[N];
+    uint32_t* srcs_ptr = my_arena.alloc<uint32_t>(4 * total_rects);
+    T* crds_ptr = my_arena.alloc<T>(4 * total_rects);
+    uint8_t* heads_ptr = my_arena.alloc<uint8_t>(2 * total_rects);
+    size_t* sums_ptr = my_arena.alloc<size_t>(2 * total_rects);
+
+    size_t left_restore = my_arena.mark();
+    size_t right_restore = my_arena.mark(true);
 
     size_t *B_starts[N];
     size_t *B_ends[N];
 
     T* B_coord[N];
     size_t B_size[N];
-
-    RegionInstance B_ptrs_instance = this->realm_malloc(2 * N * sizeof(size_t*), my_mem);
-    size_t** B_start_ptrs = reinterpret_cast<size_t**>(AffineAccessor<char,1>(B_ptrs_instance, 0).base);
-    size_t** B_end_ptrs = reinterpret_cast<size_t**>(AffineAccessor<char,1>(B_ptrs_instance, 0).base) + N;
-
-    RegionInstance B_coord_ptrs_instance = this->realm_malloc(N * sizeof(T*), my_mem);
-    T** B_coord_ptrs = reinterpret_cast<T**>(AffineAccessor<char,1>(B_coord_ptrs_instance, 0).base);
     
     int threads_per_block = 256;
     size_t grid_size = (total_rects + threads_per_block - 1) / threads_per_block;
 
-    RegionInstance tmp_instance;
     size_t orig_tmp = 0;
+    size_t temp_restore = my_arena.mark();
     void *tmp_storage = nullptr;
 
     //Our first step is to find all the unique "boundaries" in each dimension (lo coord or hi+1 coord)
@@ -553,10 +548,10 @@ namespace Realm {
 
         //We need the coordinates to be sorted by our curent dim and separated by src idx
         grid_size = (total_rects + threads_per_block - 1) / threads_per_block;
-        uint32_t* d_srcs_in = reinterpret_cast<uint32_t*>(AffineAccessor<char,1>(srcs_instance, 0).base);
-        uint32_t* d_srcs_out = reinterpret_cast<uint32_t*>(AffineAccessor<char,1>(srcs_instance, 0).base) + 2* total_rects;
-        T* d_coord_keys_in = reinterpret_cast<T*>(AffineAccessor<char,1>(crds_instance,0).base);
-        T* d_coord_keys_out = reinterpret_cast<T*>(AffineAccessor<char,1>(crds_instance,0).base) + 2 * total_rects;
+        uint32_t* d_srcs_in = srcs_ptr;
+        uint32_t* d_srcs_out = srcs_ptr + 2* total_rects;
+        T* d_coord_keys_in = crds_ptr;
+        T* d_coord_keys_out = crds_ptr + 2 * total_rects;
         mark_endpoints<<<grid_size, threads_per_block, 0, stream>>>(d_rects, total_rects, d, d_srcs_in, d_coord_keys_in);
         KERNEL_CHECK(stream);
         size_t temp_bytes;
@@ -566,11 +561,10 @@ namespace Realm {
                                             2 * total_rects, 0, 8*sizeof(T), stream);
         if (temp_bytes > orig_tmp) {
           if (orig_tmp > 0) {
-            tmp_instance.destroy();
+            my_arena.rollback(temp_restore);
           }
-          tmp_instance = this->realm_malloc(temp_bytes, my_mem);
           orig_tmp = temp_bytes;
-          tmp_storage = reinterpret_cast<void*>(AffineAccessor<char,1>(tmp_instance, 0).base);
+          tmp_storage = reinterpret_cast<void*>(my_arena.alloc<char>(temp_bytes));
         }
         cub::DeviceRadixSort::SortPairs(tmp_storage, temp_bytes,
                                                   d_coord_keys_in, d_coord_keys_out,
@@ -584,11 +578,10 @@ namespace Realm {
                                             2 * total_rects, 0, 8*sizeof(uint32_t), stream);
         if (temp_bytes > orig_tmp) {
           if (orig_tmp > 0) {
-            tmp_instance.destroy();
+            my_arena.rollback(temp_restore);
           }
-          tmp_instance = this->realm_malloc(temp_bytes, my_mem);
           orig_tmp = temp_bytes;
-          tmp_storage = reinterpret_cast<void*>(AffineAccessor<char,1>(tmp_instance, 0).base);
+          tmp_storage = reinterpret_cast<void*>(my_arena.alloc<char>(temp_bytes));
         }
         cub::DeviceRadixSort::SortPairs(tmp_storage, temp_bytes,
                                             d_srcs_in, d_srcs_out,
@@ -597,19 +590,18 @@ namespace Realm {
 
         //Now mark the unique keys
         grid_size = (2*total_rects + threads_per_block - 1) / threads_per_block;
-        uint8_t * d_heads = reinterpret_cast<uint8_t*>(AffineAccessor<char,1>(heads_instance, 0).base);
-        size_t *d_output = reinterpret_cast<size_t *>(AffineAccessor<char,1>(sum_instance, 0).base);
+        uint8_t * d_heads = heads_ptr;
+        size_t *d_output = sums_ptr;
         mark_heads<<<grid_size, threads_per_block, 0, stream>>>(d_srcs_out, d_coord_keys_out, 2 * total_rects, d_heads);
         KERNEL_CHECK(stream);
 
         cub::DeviceScan::ExclusiveSum(nullptr, temp_bytes, d_heads, d_output, 2 * total_rects, stream);
         if (temp_bytes > orig_tmp) {
           if (orig_tmp > 0) {
-            tmp_instance.destroy();
+            my_arena.rollback(temp_restore);
           }
-          tmp_instance = this->realm_malloc(temp_bytes, my_mem);
           orig_tmp = temp_bytes;
-          tmp_storage = reinterpret_cast<void*>(AffineAccessor<char,1>(tmp_instance, 0).base);
+          tmp_storage = reinterpret_cast<void*>(my_arena.alloc<char>(temp_bytes));
         }
         cub::DeviceScan::ExclusiveSum(tmp_storage, temp_bytes, d_heads, d_output, 2 * total_rects, stream);
 
@@ -620,13 +612,21 @@ namespace Realm {
         CUDA_CHECK(cudaStreamSynchronize(stream), stream);
         num_unique += last_bit;
 
+        my_arena.flip_parity();
+        assert(my_arena.get_parity());
+        my_arena.rollback(right_restore);
+
         //Collect all the data we'll need later for this dimension - starts/ends by src, unique boundaries, unique boundaries count
-        B_coord_inst[d] = this->realm_malloc(num_unique * sizeof(T), my_mem);
-        B_src_inst[d] = this->realm_malloc(2*ctr.size() * sizeof(size_t), my_mem);
-        B_starts[d] = reinterpret_cast<size_t*>(AffineAccessor<char,1>(B_src_inst[d], 0).base);
-        B_ends[d] = reinterpret_cast<size_t*>(AffineAccessor<char,1>(B_src_inst[d], 0).base) + ctr.size();
-        B_coord[d] = reinterpret_cast<T*>(AffineAccessor<char,1>(B_coord_inst[d], 0).base);
+        B_starts[d] = my_arena.alloc<size_t>(2 *ctr.size());
+        B_ends[d] = B_starts[d] + ctr.size();
+        B_coord[d] = my_arena.alloc<T>(num_unique);
         B_size[d] = num_unique;
+
+        right_restore = my_arena.mark();
+        my_arena.flip_parity();
+        assert(!my_arena.get_parity());
+        my_arena.rollback(left_restore);
+
         CUDA_CHECK(cudaMemsetAsync(B_starts[d], 0, ctr.size() * sizeof(size_t), stream), stream);
         CUDA_CHECK(cudaMemsetAsync(B_ends[d], 0, ctr.size() * sizeof(size_t), stream), stream);
         scatter_unique<<<grid_size, threads_per_block, 0, stream>>>(d_srcs_out, d_coord_keys_out, d_output, d_heads, 2 * total_rects, B_starts[d], B_ends[d], B_coord[d]);
@@ -645,13 +645,24 @@ namespace Realm {
         CUDA_CHECK(cudaMemcpyAsync(B_ends[d], d_ends_host.data(), ctr.size() * sizeof(size_t), cudaMemcpyHostToDevice, stream), stream);
       }
 
+      assert(!my_arena.get_parity());
+      my_arena.rollback(beginning);
+
       CUDA_CHECK(cudaStreamSynchronize(stream), stream);
     }
-    srcs_instance.destroy();
-    crds_instance.destroy();
-    heads_instance.destroy();
-    sum_instance.destroy();
 
+    orig_tmp = 0;
+
+    my_arena.flip_parity();
+    assert(my_arena.get_parity());
+    my_arena.rollback(right_restore);
+    
+    size_t** B_start_ptrs = my_arena.alloc<size_t*>(2 * N);
+    size_t** B_end_ptrs = B_start_ptrs + N;
+
+    T** B_coord_ptrs = my_arena.alloc<T*>(N);
+
+    right_restore = my_arena.mark();
 
     //We need the arrays themselves on the device
     CUDA_CHECK(cudaMemcpyAsync(B_coord_ptrs, B_coord, N * sizeof(T*), cudaMemcpyHostToDevice, stream), stream);
@@ -660,50 +671,54 @@ namespace Realm {
 
     //Next up, we generate all the corners of all the rectangles and mark them by parity
     size_t num_corners = (1 << N);
-    RegionInstance corners_instance = this->realm_malloc(2 * num_corners * total_rects * sizeof(CornerDesc<N, T>), my_mem);
-    CornerDesc<N, T>* d_corners_in = reinterpret_cast<CornerDesc<N, T>*>(AffineAccessor<char,1>(corners_instance, 0).base);
-    CornerDesc<N, T>* d_corners_out = reinterpret_cast<CornerDesc<N, T>*>(AffineAccessor<char,1>(corners_instance, 0).base) + num_corners * total_rects;
+    CornerDesc<N, T>* d_corners_in = my_arena.alloc<CornerDesc<N, T>>(2 * num_corners * total_rects);
+    CornerDesc<N, T>* d_corners_out = d_corners_in + num_corners * total_rects;
+
+    size_t corner_restore = my_arena.mark();
+
+    my_arena.flip_parity();
+    assert(!my_arena.get_parity());
+    my_arena.flip_parity();
+    my_arena.rollback(corner_restore);
 
     populate_corners<<<grid_size, threads_per_block, 0, stream>>>(d_rects, total_rects, d_corners_in);
     KERNEL_CHECK(stream);
 
 
     // We have a LOT of bookkeeping to do
-    std::set<Event> RLE_alloc_events;
 
     size_t alloc_size_1 = std::max({sizeof(size_t), sizeof(T), sizeof(int32_t), sizeof(DeltaFlag)});
+    size_t align_1 = std::max({alignof(size_t), alignof(T), alignof(int32_t), alignof(DeltaFlag)});
 
-    RegionInstance shared_instance = this->realm_malloc(2 * num_corners * total_rects * alloc_size_1, my_mem);
+    char* shared_ptr = reinterpret_cast<char *>(my_arena.alloc_bytes(2 * num_corners * total_rects * alloc_size_1, align_1));
+    uint8_t* d_flags = my_arena.alloc<uint8_t>(num_corners * total_rects);
+    size_t* d_exc_sum = my_arena.alloc<size_t>(num_corners * total_rects);
 
-    RegionInstance flags_instance = this->realm_malloc(num_corners * total_rects * sizeof(uint8_t), my_mem);
+    size_t* d_src_keys_in = reinterpret_cast<size_t*>(shared_ptr);
+    size_t* d_src_keys_out = d_src_keys_in + num_corners * total_rects;
+    T* d_coord_keys_in = reinterpret_cast<T*>(shared_ptr);
+    T* d_coord_keys_out = d_coord_keys_in + num_corners * total_rects;
+    int32_t* d_deltas = reinterpret_cast<int32_t*>(shared_ptr);
+    int32_t* d_deltas_out = d_deltas + num_corners * total_rects;
+    DeltaFlag* d_delta_flags_in = reinterpret_cast<DeltaFlag*>(shared_ptr);
+    DeltaFlag* d_delta_flags_out = d_delta_flags_in + num_corners * total_rects;
 
-    RegionInstance exc_sum_instance = this->realm_malloc(num_corners * total_rects * sizeof(size_t), my_mem);
-
-    size_t* d_src_keys_in = reinterpret_cast<size_t*>(AffineAccessor<char,1>(shared_instance, 0).base);
-    size_t* d_src_keys_out = reinterpret_cast<size_t*>(AffineAccessor<char,1>(shared_instance, 0).base) + num_corners * total_rects;
-    T* d_coord_keys_in = reinterpret_cast<T*>(AffineAccessor<char,1>(shared_instance, 0).base);
-    T* d_coord_keys_out = reinterpret_cast<T*>(AffineAccessor<char,1>(shared_instance, 0).base) + num_corners * total_rects;
-    int32_t* d_deltas = reinterpret_cast<int32_t*>(AffineAccessor<char,1>(shared_instance, 0).base);
-    int32_t* d_deltas_out = reinterpret_cast<int32_t*>(AffineAccessor<char,1>(shared_instance, 0).base) + num_corners * total_rects;
-    DeltaFlag* d_delta_flags_in = reinterpret_cast<DeltaFlag*>(AffineAccessor<char,1>(shared_instance, 0).base);
-    DeltaFlag* d_delta_flags_out = reinterpret_cast<DeltaFlag*>(AffineAccessor<char,1>(shared_instance, 0).base) + num_corners * total_rects;
-    uint8_t* d_flags = reinterpret_cast<uint8_t*>(AffineAccessor<char,1>(flags_instance, 0).base);
-    size_t* d_exc_sum = reinterpret_cast<size_t*>(AffineAccessor<char,1>(exc_sum_instance, 0).base);
-
-    RegionInstance seg_bound_instance;
     size_t* seg_starts;
     size_t* seg_ends;
 
-    RegionInstance seg_counters;
     uint32_t* d_seg_counters;
 
-    RegionInstance seg_counters_out;
     uint32_t* d_seg_counters_out;
 
     grid_size = (num_corners * total_rects + threads_per_block - 1) / threads_per_block;
 
+    orig_tmp = 0;
+    temp_restore = my_arena.mark();
+    tmp_storage = nullptr;
+
     //We need to reduce duplicate corners by their parity, so we sort to get duplicates next to each other and then reduce by key
     {
+
       NVTX_DEPPART(sort_corners);
       for (int dim = 0; dim < N; dim++) {
         build_coord_key<<<grid_size, threads_per_block, 0, stream>>>(d_coord_keys_in, d_corners_in, num_corners * total_rects, dim);
@@ -714,10 +729,11 @@ namespace Realm {
                                             d_corners_in, d_corners_out,
                                             num_corners * total_rects, 0, 8*sizeof(T), stream);
         if (temp_bytes > orig_tmp) {
-          tmp_instance.destroy();
-          tmp_instance = this->realm_malloc(temp_bytes, my_mem);
+          if (orig_tmp > 0) {
+            my_arena.rollback(temp_restore);
+          }
           orig_tmp = temp_bytes;
-          tmp_storage = reinterpret_cast<void*>(AffineAccessor<char,1>(tmp_instance, 0).base);
+          tmp_storage = reinterpret_cast<void*>(my_arena.alloc<char>(temp_bytes));
         }
         cub::DeviceRadixSort::SortPairs(tmp_storage, temp_bytes,
                                                         d_coord_keys_in, d_coord_keys_out,
@@ -737,10 +753,11 @@ namespace Realm {
                                             d_corners_in, d_corners_out,
                                             num_corners * total_rects, 0, 8*sizeof(size_t), stream);
     if (temp_bytes > orig_tmp) {
-      tmp_instance.destroy();
-      tmp_instance = this->realm_malloc(temp_bytes, my_mem);
+      if (orig_tmp > 0) {
+        my_arena.rollback(temp_restore);
+      }
       orig_tmp = temp_bytes;
-      tmp_storage = reinterpret_cast<void*>(AffineAccessor<char,1>(tmp_instance, 0).base);
+      tmp_storage = reinterpret_cast<void*>(my_arena.alloc<char>(temp_bytes));
     }
     cub::DeviceRadixSort::SortPairs(tmp_storage, temp_bytes,
                                                     d_src_keys_in, d_src_keys_out,
@@ -751,8 +768,8 @@ namespace Realm {
     get_delta<<<grid_size, threads_per_block, 0, stream>>>(d_deltas, d_corners_in, num_corners * total_rects);
     KERNEL_CHECK(stream);
 
-    RegionInstance num_runs_instance = this->realm_malloc(sizeof(int), my_mem);
-    int* d_num_runs = reinterpret_cast<int*>(AffineAccessor<char,1>(num_runs_instance, 0).base);
+    my_arena.rollback(temp_restore);
+    int* d_num_runs = my_arena.alloc<int>(1);
 
     //See above, we have custom equality and reduction operators for CornerDesc
     CustomSum red_op;
@@ -765,12 +782,7 @@ namespace Realm {
         /*num_items=*/(int) (num_corners * total_rects),
          /*stream=*/stream);
 
-    if (temp_bytes > orig_tmp) {
-      tmp_instance.destroy();
-      tmp_instance = this->realm_malloc(temp_bytes, my_mem);
-      orig_tmp = temp_bytes;
-      tmp_storage = reinterpret_cast<void*>(AffineAccessor<char,1>(tmp_instance, 0).base);
-    }
+    tmp_storage = reinterpret_cast<void*>(my_arena.alloc<char>(temp_bytes));
     cub::DeviceReduce::ReduceByKey(
         tmp_storage, temp_bytes,
         d_corners_in, d_corners_out,
@@ -784,7 +796,7 @@ namespace Realm {
     CUDA_CHECK(cudaMemcpyAsync(&num_unique_corners, d_num_runs, sizeof(int), cudaMemcpyDeviceToHost, stream), stream);
     CUDA_CHECK(cudaStreamSynchronize(stream), stream);
 
-    num_runs_instance.destroy();
+    my_arena.rollback(temp_restore);
 
     grid_size = (num_unique_corners + threads_per_block - 1) / threads_per_block;
     set_delta<<<grid_size, threads_per_block, 0, stream>>>(d_deltas_out, d_corners_out, num_unique_corners);
@@ -813,12 +825,10 @@ namespace Realm {
                                             d_coord_keys_in, d_coord_keys_out,
                                             d_corners_in, d_corners_out,
                                             num_intermediate, 0, 8*sizeof(T), stream);
-        if (temp_bytes > orig_tmp) {
-          tmp_instance.destroy();
-          tmp_instance = this->realm_malloc(temp_bytes, my_mem);
-          orig_tmp = temp_bytes;
-          tmp_storage = reinterpret_cast<void*>(AffineAccessor<char,1>(tmp_instance, 0).base);
-        }
+
+        my_arena.rollback(temp_restore);
+        tmp_storage = reinterpret_cast<void*>(my_arena.alloc<char>(temp_bytes));
+
         cub::DeviceRadixSort::SortPairs(tmp_storage, temp_bytes,
                                                         d_coord_keys_in, d_coord_keys_out,
                                                         d_corners_in, d_corners_out,
@@ -838,12 +848,10 @@ namespace Realm {
                                               d_coord_keys_in, d_coord_keys_out,
                                               d_corners_in, d_corners_out,
                                               num_intermediate, 0, 8*sizeof(T), stream);
-          if (temp_bytes > orig_tmp) {
-            tmp_instance.destroy();
-            tmp_instance = this->realm_malloc(temp_bytes, my_mem);
-            orig_tmp = temp_bytes;
-            tmp_storage = reinterpret_cast<void*>(AffineAccessor<char,1>(tmp_instance, 0).base);
-          }
+
+          my_arena.rollback(temp_restore);
+          tmp_storage = reinterpret_cast<void*>(my_arena.alloc<char>(temp_bytes));
+
           cub::DeviceRadixSort::SortPairs(tmp_storage, temp_bytes,
                                                           d_coord_keys_in, d_coord_keys_out,
                                                           d_corners_in, d_corners_out,
@@ -859,12 +867,10 @@ namespace Realm {
                                                 d_src_keys_in, d_src_keys_out,
                                                 d_corners_in, d_corners_out,
                                                 num_intermediate, 0, 8*sizeof(size_t), stream);
-        if (temp_bytes > orig_tmp) {
-          tmp_instance.destroy();
-          tmp_instance = this->realm_malloc(temp_bytes, my_mem);
-          orig_tmp = temp_bytes;
-          tmp_storage = reinterpret_cast<void*>(AffineAccessor<char,1>(tmp_instance, 0).base);
-        }
+
+        my_arena.rollback(temp_restore);
+        tmp_storage = reinterpret_cast<void*>(my_arena.alloc<char>(temp_bytes));
+
         cub::DeviceRadixSort::SortPairs(tmp_storage, temp_bytes,
                                                         d_src_keys_in, d_src_keys_out,
                                                         d_corners_in, d_corners_out,
@@ -879,23 +885,20 @@ namespace Realm {
         KERNEL_CHECK(stream);
 
         cub::DeviceScan::InclusiveSum(nullptr, temp_bytes, d_flags, d_exc_sum, num_intermediate, stream);
-        if (temp_bytes > orig_tmp) {
-          if (orig_tmp > 0) {
-            tmp_instance.destroy();
-          }
-          tmp_instance = this->realm_malloc(temp_bytes, my_mem);
-          orig_tmp = temp_bytes;
-          tmp_storage = reinterpret_cast<void*>(AffineAccessor<char,1>(tmp_instance, 0).base);
-        }
+
+        my_arena.rollback(temp_restore);
+        tmp_storage = reinterpret_cast<void*>(my_arena.alloc<char>(temp_bytes));
+
         cub::DeviceScan::InclusiveSum(tmp_storage, temp_bytes, d_flags, d_exc_sum, num_intermediate, stream);
 
         CUDA_CHECK(cudaMemcpyAsync(&num_segments, &d_exc_sum[num_intermediate-1], sizeof(size_t), cudaMemcpyDeviceToHost, stream), stream);
         CUDA_CHECK(cudaStreamSynchronize(stream), stream);
 
         //Mark the beginning and end of each segment for our kernel to use in binary search
-        seg_bound_instance = this->realm_malloc(2 * num_segments * sizeof(size_t), my_mem);
-        seg_starts = reinterpret_cast<size_t*>(AffineAccessor<char,1>(seg_bound_instance, 0).base);
-        seg_ends = reinterpret_cast<size_t*>(AffineAccessor<char,1>(seg_bound_instance, 0).base) + num_segments;
+        seg_starts = my_arena.alloc<size_t>(2 * num_segments);
+        seg_ends = seg_starts + num_segments;
+
+        temp_restore = my_arena.mark();
 
         seg_boundaries<<<grid_size, threads_per_block, 0, stream>>>(d_flags, d_exc_sum, num_intermediate, seg_starts, seg_ends);
         KERNEL_CHECK(stream);
@@ -911,12 +914,8 @@ namespace Realm {
           /*stream=*/    stream
         );
 
-        if (temp_bytes > orig_tmp) {
-          tmp_instance.destroy();
-          tmp_instance = this->realm_malloc(temp_bytes, my_mem);
-          orig_tmp = temp_bytes;
-          tmp_storage = reinterpret_cast<void*>(AffineAccessor<char,1>(tmp_instance, 0).base);
-        }
+        my_arena.rollback(temp_restore);
+        tmp_storage = reinterpret_cast<void*>(my_arena.alloc<char>(temp_bytes));
 
         cub::DeviceScan::InclusiveScan(
           /*d_temp=*/    tmp_storage,
@@ -932,26 +931,21 @@ namespace Realm {
 
         //Per usual, we do a count + emit pass to track active segments and limit memory usage. If the evaluated prefix sum for a boundary within a segment
         //is 0, we can skip it because it won't contribute anything to future sums and also won't be emitted.
-        seg_counters = this->realm_malloc(num_segments * sizeof(uint32_t), my_mem);
-        d_seg_counters = reinterpret_cast<uint32_t*>(AffineAccessor<char,1>(seg_counters, 0).base);
+        d_seg_counters = my_arena.alloc<uint32_t>(2 * num_segments);
+        d_seg_counters_out = d_seg_counters + num_segments;
         CUDA_CHECK(cudaMemsetAsync(d_seg_counters, 0, num_segments * sizeof(uint32_t), stream), stream);
+
+        temp_restore = my_arena.mark();
 
         grid_size = ((num_segments*B_size[d]) + threads_per_block - 1) / threads_per_block;
         count_segments<<<grid_size, threads_per_block, 0, stream>>>(d_delta_flags_out, seg_starts, seg_ends, B_starts[d], B_ends[d], d_corners_in, B_coord[d], B_size[d], num_segments, d, d_seg_counters);
         KERNEL_CHECK(stream);
 
-        seg_counters_out = this->realm_malloc(num_segments * sizeof(uint32_t), my_mem);
-        d_seg_counters_out = reinterpret_cast<uint32_t*>(AffineAccessor<char,1>(seg_counters_out, 0).base);
-
         cub::DeviceScan::ExclusiveSum(nullptr, temp_bytes, d_seg_counters, d_seg_counters_out, num_segments, stream);
-        if (temp_bytes > orig_tmp) {
-          if (orig_tmp > 0) {
-            tmp_instance.destroy();
-          }
-          tmp_instance = this->realm_malloc(temp_bytes, my_mem);
-          orig_tmp = temp_bytes;
-          tmp_storage = reinterpret_cast<void*>(AffineAccessor<char,1>(tmp_instance, 0).base);
-        }
+
+        my_arena.rollback(temp_restore);
+        tmp_storage = reinterpret_cast<void*>(my_arena.alloc<char>(temp_bytes));
+
         cub::DeviceScan::ExclusiveSum(tmp_storage, temp_bytes, d_seg_counters, d_seg_counters_out, num_segments, stream);
 
         uint32_t next_round;
@@ -968,52 +962,57 @@ namespace Realm {
           break;
         }
 
-        RegionInstance next_corners_instance = this->realm_malloc(2 * next_round * sizeof(CornerDesc<N, T>), my_mem);
-        CornerDesc<N, T>* d_next_corners = reinterpret_cast<CornerDesc<N, T>*>(AffineAccessor<char,1>(next_corners_instance, 0).base);
+        my_arena.flip_parity();
+        if (my_arena.get_parity()) {
+          my_arena.rollback(right_restore);
+        }
+
+        CornerDesc<N, T>* d_next_corners = my_arena.alloc<CornerDesc<N, T>>(2 * next_round);
         CUDA_CHECK(cudaMemsetAsync(d_seg_counters, 0, num_segments*sizeof(uint32_t), stream), stream);
+
+        corner_restore = my_arena.mark();
+        my_arena.flip_parity();
+        my_arena.flip_parity();
+        my_arena.rollback(corner_restore);
 
         write_segments<<<grid_size, threads_per_block, 0, stream>>>(d_delta_flags_out, seg_starts, seg_ends, B_starts[d], B_ends[d], d_corners_in, B_coord[d], d_seg_counters_out, B_size[d], num_segments, d, d_seg_counters, d_next_corners);
         KERNEL_CHECK(stream);
 
         CUDA_CHECK(cudaStreamSynchronize(stream), stream);
-        corners_instance.destroy();
-        corners_instance = next_corners_instance;
         d_corners_in = d_next_corners;
         d_corners_out = d_next_corners + next_round;
 
         //The segment count in each iter is not monotonic, so we have to realloc each time
+        shared_ptr = reinterpret_cast<char *>(my_arena.alloc_bytes(2 * num_intermediate * alloc_size_1, align_1));
+        d_flags = my_arena.alloc<uint8_t>(num_intermediate);
+        d_exc_sum = my_arena.alloc<size_t>(num_intermediate);
 
-        shared_instance.destroy();
-        flags_instance.destroy();
-        exc_sum_instance.destroy();
-        seg_bound_instance.destroy();
-        seg_counters.destroy();
-        seg_counters_out.destroy();
+        temp_restore = my_arena.mark();
 
-        shared_instance = this->realm_malloc(2 * num_intermediate * alloc_size_1, my_mem);
-        flags_instance = this->realm_malloc(num_intermediate * sizeof(uint8_t), my_mem);
-        exc_sum_instance = this->realm_malloc(num_intermediate * sizeof(size_t), my_mem);
+        d_src_keys_in = reinterpret_cast<size_t*>(shared_ptr);
+        d_src_keys_out = reinterpret_cast<size_t*>(shared_ptr) + num_intermediate;
 
-        d_src_keys_in = reinterpret_cast<size_t*>(AffineAccessor<char,1>(shared_instance, 0).base);
-        d_src_keys_out = reinterpret_cast<size_t*>(AffineAccessor<char,1>(shared_instance, 0).base) + num_intermediate;
-        d_coord_keys_in = reinterpret_cast<T*>(AffineAccessor<char,1>(shared_instance, 0).base);
-        d_coord_keys_out = reinterpret_cast<T*>(AffineAccessor<char,1>(shared_instance, 0).base) + num_intermediate;
-        d_deltas = reinterpret_cast<int32_t*>(AffineAccessor<char,1>(shared_instance, 0).base);
-        d_deltas_out = reinterpret_cast<int32_t*>(AffineAccessor<char,1>(shared_instance, 0).base) + num_intermediate;
+        d_coord_keys_in = reinterpret_cast<T*>(shared_ptr);
+        d_coord_keys_out = reinterpret_cast<T*>(shared_ptr) + num_intermediate;
 
-        d_flags = reinterpret_cast<uint8_t*>(AffineAccessor<char,1>(flags_instance, 0).base);
-        d_exc_sum = reinterpret_cast<size_t*>(AffineAccessor<char,1>(exc_sum_instance, 0).base);
-        d_delta_flags_in = reinterpret_cast<DeltaFlag*>(AffineAccessor<char,1>(shared_instance, 0).base);
-        d_delta_flags_out = reinterpret_cast<DeltaFlag*>(AffineAccessor<char,1>(shared_instance, 0).base) + num_intermediate;
+        d_deltas = reinterpret_cast<int32_t*>(shared_ptr);
+        d_deltas_out = reinterpret_cast<int32_t*>(shared_ptr) + num_intermediate;
+
+        d_delta_flags_in = reinterpret_cast<DeltaFlag*>(shared_ptr);
+        d_delta_flags_out = reinterpret_cast<DeltaFlag*>(shared_ptr) + num_intermediate;
 
       }
     }
 
+    //Get to a known state
+    my_arena.flip_parity();
+    if (my_arena.get_parity()) {
+      my_arena.rollback(right_restore);
+    }
+
 
     //For our last dim, we emit rectangles rather than segments. These rectangles are a disjoint, precise covering of the original set.
-    RegionInstance rects_out_instance = this->realm_malloc(2 * num_intermediate * sizeof(RectDesc<N,T>), my_mem);
-    RectDesc<N,T>* d_rects_out = reinterpret_cast<RectDesc<N,T>*>(AffineAccessor<char,1>(rects_out_instance, 0).base);
-    RectDesc<N, T>* d_rects_in = reinterpret_cast<RectDesc<N,T>*>(AffineAccessor<char,1>(rects_out_instance, 0).base) + num_intermediate;
+    RectDesc<N,T>* d_rects_out = my_arena.alloc<RectDesc<N, T>>(num_intermediate);
     CUDA_CHECK(cudaMemsetAsync(d_seg_counters, 0, num_segments*sizeof(uint32_t), stream), stream);
 
     write_segments<<<grid_size, threads_per_block, 0, stream>>>(d_delta_flags_out, seg_starts, seg_ends, B_start_ptrs, B_end_ptrs, d_corners_in, B_coord_ptrs, d_seg_counters_out, B_size[0], num_segments, d_seg_counters, d_rects_out);
@@ -1021,36 +1020,37 @@ namespace Realm {
 
     CUDA_CHECK(cudaStreamSynchronize(stream), stream);
 
-    //Don't need these anymore
-    flags_instance.destroy();
-    exc_sum_instance.destroy();
-    seg_bound_instance.destroy();
-    seg_counters.destroy();
-    seg_counters_out.destroy();
-    corners_instance.destroy();
-    for (int d = 0; d < N; d++) {
-      B_coord_inst[d].destroy();
-      B_src_inst[d].destroy();
+    //Force the rectangles to the left side of the buffer
+    if (my_arena.get_parity()) {
+      my_arena.flip_parity();
+      RectDesc<N, T>* tmp_out = my_arena.alloc<RectDesc<N, T>>(num_intermediate);
+      CUDA_CHECK(cudaMemcpyAsync(tmp_out, d_rects_out, num_intermediate * sizeof(RectDesc<N, T>), cudaMemcpyDeviceToDevice, stream), stream);
     }
-    B_ptrs_instance.destroy();
-    B_coord_ptrs_instance.destroy();
 
-    std::swap(d_rects_out, d_rects_in);
+    //Clear everything out, we should be on the left
+    my_arena.flip_parity();
+    my_arena.flip_parity();
+    assert(!my_arena.get_parity());
 
-    shared_instance.destroy();
+    RectDesc<N, T>* d_rects_in = my_arena.alloc<RectDesc<N, T>>(2 * num_intermediate);
+    d_rects_out = d_rects_in + num_intermediate;
+
     size_t alloc_size_2 = max(sizeof(size_t), sizeof(T));
+    size_t align_2 = max(alignof(size_t), alignof(T));
 
-    shared_instance = this->realm_malloc(2 * num_intermediate * alloc_size_2, my_mem);
 
-    d_src_keys_in = reinterpret_cast<size_t*>(AffineAccessor<char,1>(shared_instance, 0).base);
-    d_src_keys_out = reinterpret_cast<size_t*>(AffineAccessor<char,1>(shared_instance, 0).base) + num_intermediate;
-    d_coord_keys_in = reinterpret_cast<T*>(AffineAccessor<char,1>(shared_instance, 0).base);
-    d_coord_keys_out = reinterpret_cast<T*>(AffineAccessor<char,1>(shared_instance, 0).base) + num_intermediate;
+    shared_ptr = reinterpret_cast<char *>(my_arena.alloc_bytes(2 * num_intermediate * alloc_size_2, align_2));
 
-    RegionInstance break_points_instance = this->realm_malloc(num_intermediate * sizeof(uint8_t), my_mem);
-    uint8_t* break_points = reinterpret_cast<uint8_t*>(AffineAccessor<char,1>(break_points_instance, 0).base);
+    d_src_keys_in = reinterpret_cast<size_t*>(shared_ptr);
+    d_src_keys_out = reinterpret_cast<size_t*>(shared_ptr) + num_intermediate;
+    d_coord_keys_in = reinterpret_cast<T*>(shared_ptr);
+    d_coord_keys_out = reinterpret_cast<T*>(shared_ptr) + num_intermediate;
 
-    size_t* group_ids = reinterpret_cast<size_t*>(AffineAccessor<char,1>(shared_instance, 0).base);
+    size_t* group_ids = reinterpret_cast<size_t*>(shared_ptr);
+
+    uint8_t* break_points = my_arena.alloc<uint8_t>(num_intermediate);
+
+    temp_restore = my_arena.mark();
 
     //Now that we have disjoint rectangles, we can do our usual sort and coalesce pass
     size_t last = INT_MAX;
@@ -1074,12 +1074,10 @@ namespace Realm {
                                               d_coord_keys_in, d_coord_keys_out,
                                               d_rects_in, d_rects_out,
                                               num_intermediate, 0, 8*sizeof(T), stream);
-          if (temp_bytes > orig_tmp) {
-            tmp_instance.destroy();
-            tmp_instance = this->realm_malloc(temp_bytes, my_mem);
-            orig_tmp = temp_bytes;
-            tmp_storage = reinterpret_cast<void*>(AffineAccessor<char,1>(tmp_instance, 0).base);
-          }
+
+          my_arena.rollback(temp_restore);
+          tmp_storage = reinterpret_cast<void*>(my_arena.alloc<char>(temp_bytes));
+
           cub::DeviceRadixSort::SortPairs(tmp_storage, temp_bytes,
                                                           d_coord_keys_in, d_coord_keys_out,
                                                           d_rects_in, d_rects_out,
@@ -1097,12 +1095,10 @@ namespace Realm {
                                                 d_coord_keys_in, d_coord_keys_out,
                                                 d_rects_in, d_rects_out,
                                                 num_intermediate, 0, 8*sizeof(T), stream);
-            if (temp_bytes > orig_tmp) {
-              tmp_instance.destroy();
-              tmp_instance = this->realm_malloc(temp_bytes, my_mem);
-              orig_tmp = temp_bytes;
-              tmp_storage = reinterpret_cast<void*>(AffineAccessor<char,1>(tmp_instance, 0).base);
-            }
+
+            my_arena.rollback(temp_restore);
+            tmp_storage = reinterpret_cast<void*>(my_arena.alloc<char>(temp_bytes));
+
             cub::DeviceRadixSort::SortPairs(tmp_storage, temp_bytes,
                                                             d_coord_keys_in, d_coord_keys_out,
                                                             d_rects_in, d_rects_out,
@@ -1115,12 +1111,10 @@ namespace Realm {
                                                 d_coord_keys_in, d_coord_keys_out,
                                                 d_rects_in, d_rects_out,
                                                 num_intermediate, 0, 8*sizeof(T), stream);
-            if (temp_bytes > orig_tmp) {
-              tmp_instance.destroy();
-              tmp_instance = this->realm_malloc(temp_bytes, my_mem);
-              orig_tmp = temp_bytes;
-              tmp_storage = reinterpret_cast<void*>(AffineAccessor<char,1>(tmp_instance, 0).base);
-            }
+
+            my_arena.rollback(temp_restore);
+            tmp_storage = reinterpret_cast<void*>(my_arena.alloc<char>(temp_bytes));
+
             cub::DeviceRadixSort::SortPairs(tmp_storage, temp_bytes,
                                                             d_coord_keys_in, d_coord_keys_out,
                                                             d_rects_in, d_rects_out,
@@ -1136,12 +1130,10 @@ namespace Realm {
                                                   d_src_keys_in, d_src_keys_out,
                                                   d_rects_in, d_rects_out,
                                                   num_intermediate, 0, 8*sizeof(size_t), stream);
-          if (temp_bytes > orig_tmp) {
-            tmp_instance.destroy();
-            tmp_instance = this->realm_malloc(temp_bytes, my_mem);
-            orig_tmp = temp_bytes;
-            tmp_storage = reinterpret_cast<void*>(AffineAccessor<char,1>(tmp_instance, 0).base);
-          }
+
+          my_arena.rollback(temp_restore);
+          tmp_storage = reinterpret_cast<void*>(my_arena.alloc<char>(temp_bytes));
+
           cub::DeviceRadixSort::SortPairs(tmp_storage, temp_bytes,
                                                           d_src_keys_in, d_src_keys_out,
                                                           d_rects_in, d_rects_out,
@@ -1154,12 +1146,8 @@ namespace Realm {
 
           cub::DeviceScan::InclusiveSum(nullptr, temp_bytes, break_points, group_ids, num_intermediate, stream);
 
-          if (temp_bytes > orig_tmp) {
-            tmp_instance.destroy();
-            tmp_instance = this->realm_malloc(temp_bytes, my_mem);
-            orig_tmp = temp_bytes;
-            tmp_storage = reinterpret_cast<void*>(AffineAccessor<char,1>(tmp_instance, 0).base);
-          }
+          my_arena.rollback(temp_restore);
+          tmp_storage = reinterpret_cast<void*>(my_arena.alloc<char>(temp_bytes));
 
           cub::DeviceScan::InclusiveSum(tmp_storage, temp_bytes, break_points, group_ids, num_intermediate, stream);
 
@@ -1177,15 +1165,26 @@ namespace Realm {
       CUDA_CHECK(cudaStreamSynchronize(stream), stream);
     }
 
-    //And... we're done
-    if (out_rects > 0) {
-      d_out_rects = d_rects_in;
+    if (out_rects == 2) {
+      d_out_rects = d_rects;
+      if (d_out_rects != d_rects_in) {
+        CUDA_CHECK(cudaMemcpyAsync(d_out_rects, d_rects_in, num_intermediate * sizeof(RectDesc<N, T>), cudaMemcpyDeviceToDevice, stream), stream);
+      }
+      out_rects = num_intermediate;
+    } else if (out_rects == 1) {
+      my_arena.reset(true);
+      d_out_rects = my_arena.alloc<RectDesc<N, T>>(num_intermediate);
+      my_arena.commit(true);
+      if (d_rects_in + num_intermediate >= d_out_rects) {
+        assert(d_rects_out < d_rects_in);
+        CUDA_CHECK(cudaMemcpyAsync(d_rects_out, d_rects_in, num_intermediate * sizeof(RectDesc<N, T>), cudaMemcpyDeviceToDevice, stream), stream);
+        std::swap(d_rects_in, d_rects_out);
+      }
+      CUDA_CHECK(cudaMemcpyAsync(d_out_rects, d_rects_in, num_intermediate * sizeof(RectDesc<N, T>), cudaMemcpyDeviceToDevice, stream), stream);
       out_rects = num_intermediate;
     } else {
       this->send_output(d_rects_in, num_intermediate, my_arena, ctr, getIndex, getMap);
-      rects_out_instance.destroy();
     }
-
   }
 
   /*
@@ -1212,8 +1211,9 @@ namespace Realm {
     size_t bytes_S   = total_rects * sizeof(size_t);
     size_t bytes_HF  = total_rects * sizeof(HiFlag<T>);
     size_t max_bytes = std::max({bytes_T, bytes_HF, bytes_S});
+    size_t max_align = std::max({alignof(T), alignof(HiFlag<T>), alignof(size_t)});
 
-    char* aux_ptr = my_arena.alloc<char>(2 * max_bytes);
+    char* aux_ptr = reinterpret_cast<char *>(my_arena.alloc_bytes(2 * max_bytes, max_align));
 
     uint8_t* break_points = my_arena.alloc<uint8_t>(total_rects);
     size_t* group_ids = my_arena.alloc<size_t>(total_rects);

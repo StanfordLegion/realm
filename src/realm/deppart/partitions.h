@@ -137,7 +137,12 @@ namespace Realm {
 
     template <typename T>
     T* alloc(size_t count = 1) {
-      return parity_ ? alloc_right<T>(count) : alloc_left<T>(count);
+      static_assert(!std::is_void_v<T>, "alloc<void> is invalid");
+      return reinterpret_cast<T*>(alloc_bytes(count * sizeof(T), alignof(T)));
+    }
+
+    void* alloc_bytes(size_t bytes, size_t align = alignof(std::max_align_t)) {
+      return parity_ ? alloc_right_bytes(bytes, align) : alloc_left_bytes(bytes, align);
     }
 
     void flip_parity(void) noexcept {
@@ -202,18 +207,6 @@ namespace Realm {
       void *p = base_ + aligned;
       right_ = cap_ - aligned;
       return p;
-    }
-
-    template <typename T>
-    T* alloc_left(size_t count = 1) {
-      static_assert(!std::is_void_v<T>, "alloc<void> is invalid");
-      return reinterpret_cast<T*>(alloc_left_bytes(sizeof(T) * count, alignof(T)));
-    }
-
-    template <typename T>
-    T* alloc_right(size_t count = 1) {
-      static_assert(!std::is_void_v<T>, "alloc<void> is invalid");
-      return reinterpret_cast<T*>(alloc_right_bytes(sizeof(T) * count, alignof(T)));
     }
 
     static size_t align_up(size_t x, size_t a) noexcept {
