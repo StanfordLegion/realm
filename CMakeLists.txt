@@ -516,14 +516,15 @@ if(REALM_ENABLE_KOKKOS)
   find_package(Kokkos REQUIRED COMPONENTS separable_compilation)
   enable_language(${Kokkos_COMPILE_LANGUAGE})
 
-  if(NOT BUILD_SHARED_LIBS)
+  if(NOT BUILD_SHARED_LIBS AND "${Kokkos_COMPILE_LANGUAGE}" STREQUAL CXX)
     include(CheckSourceCompiles)
+    include(CMakePushCheckState)
 
-    function(realm_check_kokkos_compilation)
+    cmake_push_check_state(RESET)
       set(CMAKE_REQUIRED_LIBRARIES Kokkos::kokkoscore)
-      unset(REALM_CXX_COMPILER_CAN_COMPILE_KOKKOS CACHE)
+      unset(REALM_${Kokkos_COMPILE_LANGUAGE}_COMPILER_CAN_COMPILE_KOKKOS CACHE)
       check_source_compiles(
-          CXX "
+          ${Kokkos_COMPILE_LANGUAGE} "
 #include <Kokkos_Core.hpp>
 int main(int argc, char** argv) {
   Kokkos::initialize(argc, argv);
@@ -534,13 +535,11 @@ int main(int argc, char** argv) {
   Kokkos::finalize();
   return 0;
 }
-" REALM_CXX_COMPILER_CAN_COMPILE_KOKKOS)
-    endfunction()
+" REALM_${Kokkos_COMPILE_LANGUAGE}_COMPILER_CAN_COMPILE_KOKKOS)
+    cmake_pop_check_state()
 
-    realm_check_kokkos_compilation()
-
-    if(NOT REALM_CXX_COMPILER_CAN_COMPILE_KOKKOS)
-      message(FATAL_ERROR "Current Realm C++ compiler will not work with Kokkos during STATIC build.")
+    if(NOT ${REALM_${Kokkos_COMPILE_LANGUAGE}_COMPILER_CAN_COMPILE_KOKKOS})
+      message(FATAL_ERROR "Current Realm ${Kokkos_COMPILE_LANGUAGE} compiler will not work with Kokkos during STATIC build.")
     endif()
   endif()
 
