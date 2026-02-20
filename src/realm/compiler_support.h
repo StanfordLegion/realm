@@ -95,35 +95,6 @@
 #define REALM_CUDA_HD
 #endif
 
-namespace Realm {
-  class Logger;
-  extern Logger log_runtime;
-} // namespace Realm
-
-// REALM_ASSERT(cond) - abort program if 'cond' is not true
-#ifdef NDEBUG
-#if(defined(__CUDACC__) && defined(__CUDA_ARCH__)) ||                                    \
-    (defined(__HIPCC__) && defined(__HIP_DEVICE_COMPILE__))
-#define REALM_ASSERT(cond)                                                               \
-  do {                                                                                   \
-    if(!(cond)) {                                                                        \
-      __trap();                                                                          \
-    }                                                                                    \
-  } while(0)
-#else
-#define REALM_ASSERT(cond)                                                               \
-  do {                                                                                   \
-    if(!(cond)) {                                                                        \
-      Realm::log_runtime.fatal("Assertion failed: (%s), at %s:%d", #cond, __FILE__,      \
-                               __LINE__);                                                \
-      abort();                                                                           \
-    }                                                                                    \
-  } while(0)
-#endif
-#else
-#define REALM_ASSERT(cond) assert(cond)
-#endif
-
 // REALM_LIKELY(expr) - suggest that `expr` is usually true
 // REALM_UNLILELY(expr) - suggest that `expr` is usually false
 // REALM_EXPECT(expr, expval) - suggest that `expr` usually evaluates to `expval`

@@ -112,14 +112,15 @@ namespace mesh {
       std::string id(BUFSIZE, '\0');
 
       int exp_bytes{BUFSIZE};
-      int sz = recv(s, static_cast<void *>(id.data()), BUFSIZE, 0);
+      int sz =
+          recv(s, const_cast<void *>(static_cast<const void *>(id.data())), BUFSIZE, 0);
       while(sz != exp_bytes) {
         if(sz < 0) {
           *p2p_log_ << "Failed to receive from socket " << s << std::endl;
           return -1;
         }
         exp_bytes -= sz;
-        sz = recv(s, static_cast<char *>(id.data()) + BUFSIZE - exp_bytes, exp_bytes, 0);
+        sz = recv(s, const_cast<char *>(id.data()) + (BUFSIZE - exp_bytes), exp_bytes, 0);
       }
 
       // TODO : Remove trailing null characters
