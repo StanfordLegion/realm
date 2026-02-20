@@ -32,6 +32,9 @@ void GPUByFieldMicroOp<N,T,FT>::execute()
   inst_space.offsets = buffer_arena.alloc<size_t>(field_data.size() + 1);
   inst_space.num_children = field_data.size();
 
+  Arena sys_arena;
+  GPUMicroOp<N, T>::collapse_multi_space(field_data, inst_space, sys_arena, stream);
+
   collapsed_space<N, T> collapsed_parent;
   collapsed_parent.offsets = buffer_arena.alloc<size_t>(2);
   collapsed_parent.num_children = 1;
@@ -80,14 +83,125 @@ void GPUByFieldMicroOp<N,T,FT>::execute()
 
   buffer_arena.commit(false);
 
-  GPUMicroOp<N, T>::collapse_multi_space(field_data, inst_space, buffer_arena, stream);
+  // Map colors to their output index to match send output iterator.
+  std::map<FT, size_t> color_indices;
+  for (size_t i = 0; i < colors.size(); i++) {
+    color_indices[colors[i]] = i;
+  }
 
-  // Here we intersect the instance spaces with the parent space, and make sure we know which instance each resulting rectangle came from.
-  GPUMicroOp<N, T>::template construct_input_rectlist<Rect<N, T>>(inst_space, collapsed_parent, d_valid_rects, num_valid_rects, d_inst_counters, d_inst_prefix, buffer_arena, stream);
+  size_t num_output = 0;
+  RectDesc<N, T>* output_start = nullptr;
+  size_t num_completed = 0;
+  size_t curr_tile = tile_size / 2;
+  int count = 0;
+  while (num_completed < inst_space.num_entries) {
+    try {
+      std::cout << "Byfield iteration " << count++ << ", completed " << num_completed << " / " << inst_space.num_entries << " entries." << std::endl;
+      buffer_arena.start();
+      if (num_completed + curr_tile > inst_space.num_entries) {
+        curr_tile = inst_space.num_entries - num_completed;
+      }
+
+      collapsed_space<N, T> inst_space_tile = inst_space;
+      inst_space_tile.num_entries = curr_tile;
+      inst_space_tile.entries_buffer = buffer_arena.alloc<SparsityMapEntry<N,T>>(curr_tile);
+      CUDA_CHECK(cudaMemcpyAsync(inst_space_tile.entries_buffer, inst_space.entries_buffer + num_completed, curr_tile * sizeof(SparsityMapEntry<N,T>), cudaMemcpyHostToDevice, stream), stream);
+
+      // Here we intersect the instance spaces with the parent space, and make sure we know which instance each resulting rectangle came from.
+      GPUMicroOp<N, T>::template construct_input_rectlist<Rect<N, T>>(inst_space_tile, collapsed_parent, d_valid_rects, num_valid_rects, d_inst_counters, d_inst_prefix, buffer_arena, stream);
 
 
-  // Early out if we don't have any rectangles.
-  if (num_valid_rects == 0) {
+      // Early out if we don't have any rectangles.
+      if (num_valid_rects == 0) {
+        num_completed += curr_tile;
+        curr_tile = tile_size / 2;
+        subtract_const<<<COMPUTE_GRID(field_data.size()), THREADS_PER_BLOCK, 0, stream>>>(inst_space.offsets, field_data.size()+1, curr_tile);
+        KERNEL_CHECK(stream);
+        CUDA_CHECK(cudaStreamSynchronize(stream), stream);
+        continue;
+      }
+
+
+      // Prefix sum the valid rectangles by volume.
+      size_t total_pts;
+      size_t* d_prefix_rects;
+
+      GPUMicroOp<N, T>::volume_prefix_sum(d_valid_rects, num_valid_rects, d_prefix_rects, total_pts, buffer_arena, stream);
+
+      // Now we have everything we need to actually populate our outputs.
+      buffer_arena.flip_parity();
+      assert(!buffer_arena.get_parity());
+
+      PointDesc<N,T>* d_points = buffer_arena.alloc<PointDesc<N,T>>(total_pts);
+
+      // This is where the work is actually done - each thread figures out which points to read, reads it, marks a PointDesc with its color, and writes it out.
+      byfield_gpuPopulateBitmasksKernel<N,T,FT><<<COMPUTE_GRID(total_pts), THREADS_PER_BLOCK, 0, stream>>>(d_accessors, d_valid_rects, d_prefix_rects, d_inst_prefix, d_colors, total_pts, colors.size(), num_valid_rects, field_data.size(), d_points);
+      KERNEL_CHECK(stream);
+
+      CUDA_CHECK(cudaStreamSynchronize(stream), stream);
+
+      // Ship off the points for final processing.
+      size_t num_new_rects = (num_output == 0) ? 1 : 2;
+      assert(!buffer_arena.get_parity());
+      RectDesc<N, T>* d_new_rects;
+      this->complete_pipeline(d_points, total_pts, d_new_rects, num_new_rects, buffer_arena,
+        /* the Container: */  sparsity_outputs,
+        /* getIndex: */       [&](auto const& kv){
+                                // elem is a SparsityMap<N,T> from the vector
+                                return color_indices.at(kv.first);
+                             },
+        /* getMap: */         [&](auto const& kv){
+                              // return the SparsityMap key itself
+                              return kv.second;
+                           });
+
+      if (num_output==0) {
+        num_output = num_new_rects;
+        output_start = d_new_rects;
+        num_completed += curr_tile;
+        subtract_const<<<COMPUTE_GRID(field_data.size()), THREADS_PER_BLOCK, 0, stream>>>(inst_space.offsets, field_data.size()+1, curr_tile);
+        KERNEL_CHECK(stream);
+        curr_tile = tile_size / 2;
+        CUDA_CHECK(cudaStreamSynchronize(stream), stream);
+        continue;
+      }
+
+        //Otherwise we merge with existing rectangles
+        RectDesc<N, T>* d_old_rects = buffer_arena.alloc<RectDesc<N, T>>(num_output);
+        assert(d_old_rects == d_new_rects + num_new_rects);
+        CUDA_CHECK(cudaMemcpyAsync(d_old_rects, output_start, num_output * sizeof(RectDesc<N,T>), cudaMemcpyDeviceToDevice, stream), stream);
+        CUDA_CHECK(cudaStreamSynchronize(stream), stream);
+
+        size_t num_final_rects = 1;
+
+        //Send it off for processing
+        this->complete_rect_pipeline(d_new_rects, num_output + num_new_rects, output_start, num_final_rects, buffer_arena,
+        /* the Container: */  sparsity_outputs,
+        /* getIndex: */       [&](auto const& kv){
+                                // elem is a SparsityMap<N,T> from the vector
+                                return color_indices.at(kv.first);
+                             },
+        /* getMap: */         [&](auto const& kv){
+                              // return the SparsityMap key itself
+                              return kv.second;
+                           });
+        num_completed += curr_tile;
+        num_output = num_final_rects;
+        subtract_const<<<COMPUTE_GRID(field_data.size()), THREADS_PER_BLOCK, 0, stream>>>(inst_space.offsets, field_data.size()+1, curr_tile);
+        KERNEL_CHECK(stream);
+        curr_tile = tile_size / 2;
+        CUDA_CHECK(cudaStreamSynchronize(stream), stream);
+      } catch (arena_oom&) {
+        std::cout << "Caught arena_oom, reducing tile size from " << curr_tile << " to " << curr_tile / 2 << std::endl;
+        std::cout << buffer_arena.used() << " bytes used in arena." << std::endl;
+        curr_tile /= 2;
+        if (curr_tile == 0) {
+          throw;
+        }
+      }
+    }
+
+  if (num_output == 0) {
     for (std::pair<const FT, SparsityMap<N, T>> it : sparsity_outputs) {
       SparsityMapImpl<N, T> *impl = SparsityMapImpl<N, T>::lookup(it.second);
       if (this->exclusive) {
@@ -99,45 +213,15 @@ void GPUByFieldMicroOp<N,T,FT>::execute()
     return;
   }
 
+  this->send_output(output_start, num_output, buffer_arena, sparsity_outputs,
+        /* getIndex: */       [&](auto const& kv){
+                                // elem is a SparsityMap<N,T> from the vector
+                                return color_indices.at(kv.first);
+                             },
+        /* getMap: */         [&](auto const& kv){
+                              // return the SparsityMap key itself
+                              return kv.second;
+                           });
 
-  // Prefix sum the valid rectangles by volume.
-  size_t total_pts;
-
-  size_t* d_prefix_rects;
-  GPUMicroOp<N, T>::volume_prefix_sum(d_valid_rects, num_valid_rects, d_prefix_rects, total_pts, buffer_arena, stream);
-
-  // Now we have everything we need to actually populate our outputs.
-  buffer_arena.flip_parity();
-  assert(!buffer_arena.get_parity());
-
-  RegionInstance points_instance = this->realm_malloc(total_pts * sizeof(PointDesc<N,T>), zcpy_mem);
-  PointDesc<N,T>* d_points = reinterpret_cast<PointDesc<N, T>*>(AffineAccessor<char,1>(points_instance, 0).base);
-
-  // This is where the work is actually done - each thread figures out which points to read, reads it, marks a PointDesc with its color, and writes it out.
-  byfield_gpuPopulateBitmasksKernel<N,T,FT><<<COMPUTE_GRID(total_pts), THREADS_PER_BLOCK, 0, stream>>>(d_accessors, d_valid_rects, d_prefix_rects, d_inst_prefix, d_colors, total_pts, colors.size(), num_valid_rects, field_data.size(), d_points);
-  KERNEL_CHECK(stream);
-
-
-  // Map colors to their output index to match send output iterator.
-  std::map<FT, size_t> color_indices;
-  for (size_t i = 0; i < colors.size(); i++) {
-    color_indices[colors[i]] = i;
-  }
-
-  CUDA_CHECK(cudaStreamSynchronize(stream), stream);
-
-  // Ship off the points for final processing.
-  size_t out_rects = 0;
-  RectDesc<N, T>* trash;
-  this->complete_pipeline(d_points, total_pts, trash, out_rects, buffer_arena,
-    /* the Container: */  sparsity_outputs,
-    /* getIndex: */       [&](auto const& kv){
-                            // elem is a SparsityMap<N,T> from the vector
-                            return color_indices.at(kv.first);
-                         },
-    /* getMap: */         [&](auto const& kv){
-                          // return the SparsityMap key itself
-                          return kv.second;
-                       });
 }
 }

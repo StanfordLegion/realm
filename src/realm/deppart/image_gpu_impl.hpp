@@ -93,7 +93,6 @@ void GPUImageMicroOp<N,T,N2,T2>::gpu_populate_rngs()
     uint32_t* d_src_prefix = d_src_counters + sources.size();
 
     buffer_arena.commit(false);
-    size_t left = buffer_arena.used();
 
     size_t num_output = 0;
     RectDesc<N, T>* output_start = nullptr;
@@ -102,7 +101,7 @@ void GPUImageMicroOp<N,T,N2,T2>::gpu_populate_rngs()
     int count = 0;
     while (num_completed < inst_space.num_entries) {
       try {
-        std::cout << "Tile iteration " << count++ << ", completed " << num_completed << " / " << inst_space.num_entries << " entries." << std::endl;
+        std::cout << "Image Range iteration " << count++ << ", completed " << num_completed << " / " << inst_space.num_entries << " entries." << std::endl;
         buffer_arena.start();
         buffer_arena.flip_parity();
         if (num_completed + curr_tile > inst_space.num_entries) {
@@ -177,7 +176,7 @@ void GPUImageMicroOp<N,T,N2,T2>::gpu_populate_rngs()
 
         CUDA_CHECK(cudaStreamSynchronize(stream), stream);
 
-        size_t num_new_rects = 2;
+        size_t num_new_rects = (num_output == 0) ? 1 : 2;
         assert(!buffer_arena.get_parity());
         RectDesc<N, T>* d_new_rects;
 
@@ -197,13 +196,9 @@ void GPUImageMicroOp<N,T,N2,T2>::gpu_populate_rngs()
           if (num_output==0) {
 
             //We need to place the new output at the rightmost end of the buffer
-            buffer_arena.flip_parity();
-            buffer_arena.reset(true);
-            output_start = buffer_arena.alloc<RectDesc<N, T>>(num_new_rects);
-            buffer_arena.commit(true);
-            CUDA_CHECK(cudaMemcpyAsync(output_start, d_new_rects, num_new_rects * sizeof(RectDesc<N,T>), cudaMemcpyDeviceToDevice, stream), stream);
             num_output = num_new_rects;
             num_completed += curr_tile;
+            output_start = d_new_rects;
             subtract_const<<<COMPUTE_GRID(domain_transform.range_data.size()), THREADS_PER_BLOCK, 0, stream>>>(inst_space.offsets, domain_transform.range_data.size()+1, curr_tile);
             KERNEL_CHECK(stream);
             curr_tile = tile_size / 2;
@@ -342,7 +337,7 @@ void GPUImageMicroOp<N,T,N2,T2>::gpu_populate_ptrs()
     int count = 0;
     while (num_completed < inst_space.num_entries) {
       try {
-        std::cout << "Tile iteration " << count++ << ", completed " << num_completed << " / " << inst_space.num_entries << " entries." << std::endl;
+        std::cout << "Image iteration " << count++ << ", completed " << num_completed << " / " << inst_space.num_entries << " entries." << std::endl;
         buffer_arena.start();
         std::cout << "Amount Used: " << buffer_arena.used() << std::endl;
         std::cout << "Expected Amount Used: " << left + num_output * sizeof(RectDesc<N,T>) << std::endl;
@@ -409,7 +404,7 @@ void GPUImageMicroOp<N,T,N2,T2>::gpu_populate_ptrs()
         CUDA_CHECK(cudaStreamSynchronize(stream), stream);
 
 
-        size_t num_new_rects = 1;
+        size_t num_new_rects = num_output == 0 ? 1 : 2;
         assert(!buffer_arena.get_parity());
         RectDesc<N, T>* d_new_rects;
 
@@ -426,13 +421,9 @@ void GPUImageMicroOp<N,T,N2,T2>::gpu_populate_ptrs()
                            });
 
         if (num_output==0) {
-          buffer_arena.flip_parity();
-          buffer_arena.reset(true);
-          output_start = buffer_arena.alloc<RectDesc<N, T>>(num_new_rects);
-          buffer_arena.commit(true);
-          CUDA_CHECK(cudaMemcpyAsync(output_start, d_new_rects, num_new_rects * sizeof(RectDesc<N,T>), cudaMemcpyDeviceToDevice, stream), stream);
           num_output = num_new_rects;
           num_completed += curr_tile;
+          output_start = d_new_rects;
           subtract_const<<<COMPUTE_GRID(domain_transform.ptr_data.size()), THREADS_PER_BLOCK, 0, stream>>>(inst_space.offsets, domain_transform.ptr_data.size()+1, curr_tile);
           KERNEL_CHECK(stream);
           curr_tile = tile_size / 2;

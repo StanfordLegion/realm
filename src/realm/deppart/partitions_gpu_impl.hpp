@@ -1352,7 +1352,9 @@ namespace Realm {
 
     NVTX_DEPPART(complete_pipeline);
 
-    my_arena.flip_parity();
+    if (out_rects == 2) {
+      my_arena.flip_parity();
+    }
 
 
     cudaStream_t stream = Cuda::get_task_cuda_stream();
@@ -1451,12 +1453,21 @@ namespace Realm {
         std::swap(d_rects_in, d_rects_out);
       }
       my_arena.flip_parity();
+      if (out_rects == 2) {
+        assert(!my_arena.get_parity());
+      } else if (out_rects == 1) {
+        assert(my_arena.get_parity());
+        my_arena.reset(true);
+      }
       d_out_rects = my_arena.alloc<RectDesc<N, T>>(num_intermediate);
+      if (out_rects == 1) {
+        my_arena.commit(true);
+      }
       CUDA_CHECK(cudaMemcpyAsync(d_out_rects, d_rects_in, num_intermediate * sizeof(RectDesc<N,T>), cudaMemcpyDeviceToDevice, stream), stream);
       CUDA_CHECK(cudaStreamSynchronize(stream), stream);
     }
 
-    if (out_rects==1) {
+    if (out_rects > 0) {
       out_rects = num_intermediate;
     } else {
       this->send_output(d_rects_in, num_intermediate, my_arena, ctr, getIndex, getMap);
