@@ -435,7 +435,7 @@ namespace Realm {
     // execution space instance conversions from processor.h
 #ifdef KOKKOS_ENABLE_SERIAL
   template <>
-  Processor::KokkosExecInstance::operator Kokkos::Serial() const
+  REALM_PUBLIC_API Processor::KokkosExecInstance::operator Kokkos::Serial() const
   {
     return Kokkos::Serial();
   }
@@ -443,7 +443,7 @@ namespace Realm {
 
 #ifdef KOKKOS_ENABLE_OPENMP
   template <>
-  Processor::KokkosExecInstance::operator Kokkos::OpenMP() const
+  REALM_PUBLIC_API Processor::KokkosExecInstance::operator Kokkos::OpenMP() const
   {
     return Kokkos::OpenMP();
   }
@@ -451,7 +451,7 @@ namespace Realm {
 
 #ifdef KOKKOS_ENABLE_CUDA
   template <>
-  Processor::KokkosExecInstance::operator Kokkos::Cuda() const
+  REALM_PUBLIC_API Processor::KokkosExecInstance::operator Kokkos::Cuda() const
   {
 #ifdef REALM_USE_CUDA
     ProcessorImpl *impl = get_runtime()->get_processor_impl(p);
@@ -487,7 +487,7 @@ namespace Realm {
 
 #ifdef KOKKOS_ENABLE_HIP
   template <>
-  Processor::KokkosExecInstance::operator Kokkos::HIP() const
+  REALM_PUBLIC_API Processor::KokkosExecInstance::operator Kokkos::HIP() const
   {
 #ifdef REALM_USE_HIP
     ProcessorImpl *impl = get_runtime()->get_processor_impl(p);

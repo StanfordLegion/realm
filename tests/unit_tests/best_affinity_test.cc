@@ -32,7 +32,7 @@ namespace Realm {
 
 class BestAffinityTest : public ::testing::Test {
 protected:
-  static void SetUpTestSuite()
+  void SetUp() override
   {
     Realm::enable_unit_tests = true;
     runtime_impl_ = std::make_unique<MockRuntimeImplMachineModel>();
@@ -51,10 +51,12 @@ protected:
     }
 
     // Create 2 system memories with different sizes
+    // Use smaller sizes for 32-bit compatibility (affinity tests don't need large
+    // buffers)
     procs_mems.mem_infos.push_back(
-        {0, Memory::SYSTEM_MEM, static_cast<size_t>(1024) * 1024 * 1024, 0});
+        {0, Memory::SYSTEM_MEM, static_cast<size_t>(1024) * 1024, 0}); // 1 MB
     procs_mems.mem_infos.push_back(
-        {1, Memory::SYSTEM_MEM, static_cast<size_t>(2048) * 1024 * 1024, 0});
+        {1, Memory::SYSTEM_MEM, static_cast<size_t>(2048) * 1024, 0}); // 2 MB
 
     // Set up processor-memory affinities with varying bandwidth/latency
     // Proc 0 and 1 have high bandwidth to mem 0
@@ -77,7 +79,7 @@ protected:
     runtime_impl_->setup_mock_proc_mems(procs_mems);
   }
 
-  static void TearDownTestSuite()
+  void TearDown() override
   {
     if(runtime_impl_) {
       runtime_impl_->finalize();
@@ -89,12 +91,10 @@ protected:
   }
 
   // Helper to get machine
-  static Machine get_machine() { return Machine::get_machine(); }
+  Machine get_machine() { return Machine::get_machine(); }
 
-  static std::unique_ptr<MockRuntimeImplMachineModel> runtime_impl_;
+  std::unique_ptr<MockRuntimeImplMachineModel> runtime_impl_;
 };
-
-std::unique_ptr<MockRuntimeImplMachineModel> BestAffinityTest::runtime_impl_ = nullptr;
 
 // Test basic processor best affinity with default weights (bandwidth only)
 TEST_F(BestAffinityTest, ProcessorBestAffinityDefault)
