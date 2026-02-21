@@ -101,7 +101,7 @@ namespace PRealm {
     Event(void) { id = 0; }
     Event(::realm_id_t i)
     {
-      assert(Realm::ID{i}.is_event() || Realm::ID{i}.is_barrier());
+      assert(Realm::ID{i}.is_event() || Realm::ID{i}.is_barrier() || (id == 0));
       id = i;
     }
     Event(const Realm::Event &e)
