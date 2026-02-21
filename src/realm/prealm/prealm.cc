@@ -1018,8 +1018,7 @@ namespace PRealm {
       if(args->critical.is_barrier())
         record_barrier_use(args->critical);
       ProfilingMeasurements::OperationTimelineGPU timeline_gpu;
-      if(response.get_measurement(timeline_gpu)) {
-        assert(timeline_gpu.is_valid());
+      if(response.get_measurement(timeline_gpu) && timeline_gpu.is_valid()) {
 
         GPUTaskInfo &info = gpu_task_infos.emplace_back(GPUTaskInfo());
         info.task_id = args->id.task;
