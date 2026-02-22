@@ -1351,3 +1351,38 @@ namespace PRealm {
   }
 
 } // namespace PRealm
+
+template<>
+struct std::hash<PRealm::Event> {
+  std::size_t operator()(const PRealm::Event& e) const noexcept {
+    return std::hash<realm_id_t>()(e.id);
+  }
+};
+
+template<>
+struct std::hash<PRealm::UserEvent> {
+  std::size_t operator()(const PRealm::UserEvent& e) const noexcept {
+    return std::hash<realm_id_t>()(e.id);
+  }
+};
+
+template<>
+struct std::hash<PRealm::Barrier> {
+  std::size_t operator()(const PRealm::Barrier& e) const noexcept {
+    return std::hash<realm_id_t>()(e.id);
+  }
+};
+
+template<>
+struct std::hash<PRealm::RegionInstance> {
+  std::size_t operator()(const PRealm::RegionInstance& r) const noexcept {
+    return std::hash<realm_id_t>()(r.id);
+  }
+};
+
+template<>
+struct std::hash<PRealm::Processor> {
+  std::size_t operator()(const PRealm::Processor& p) const noexcept {
+    return std::hash<realm_id_t>()(p.id);
+  }
+};
