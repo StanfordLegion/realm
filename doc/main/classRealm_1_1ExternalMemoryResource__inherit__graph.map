@@ -1,0 +1,9 @@
+<map id="Realm::ExternalMemoryResource" name="Realm::ExternalMemoryResource">
+<area shape="rect" id="Node000001" title=" " alt="" coords="97,79,337,104"/>
+<area shape="rect" id="Node000003" href="$classRealm_1_1ExternalCudaPinnedHostResource.html" title=" " alt="" coords="5,152,208,192"/>
+<area shape="poly" id="edge2_Node000001_Node000003" title=" " alt="" coords="191,114,135,154,132,150,188,110"/>
+<area shape="rect" id="Node000004" href="$classRealm_1_1ExternalHipPinnedHostResource.html" title=" " alt="" coords="232,152,424,192"/>
+<area shape="poly" id="edge3_Node000001_Node000004" title=" " alt="" coords="246,110,303,150,300,154,243,114"/>
+<area shape="rect" id="Node000002" href="$classRealm_1_1ExternalInstanceResource.html" title=" " alt="" coords="97,5,338,31"/>
+<area shape="poly" id="edge1_Node000001_Node000002" title=" " alt="" coords="220,44,220,79,215,79,215,44"/>
+</map>
