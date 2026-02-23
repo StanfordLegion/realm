@@ -461,9 +461,11 @@ target_link_libraries(c_external_inst ${TEST_GPU_LIBS})
 
 add_integration_test(c_event_poisoned "${REALM_TEST_DIR}/c/test_event_poisoned.cc")
 
-target_link_libraries(
-  machine_config_test ${TEST_GPU_LIBS} $<TARGET_NAME_IF_EXISTS:CUDA::cuda_driver>
-)
+if(REALM_USE_CUDA)
+  target_link_libraries(
+    machine_config_test ${TEST_GPU_LIBS} $<TARGET_NAME_IF_EXISTS:CUDA::cuda_driver>
+  )
+endif()
 target_link_libraries(test_profiling ${TEST_GPU_LIBS})
 if(REALM_USE_LIBDL)
   target_link_libraries(taskreg ${CMAKE_DL_LIBS})
