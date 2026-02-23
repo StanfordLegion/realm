@@ -114,6 +114,13 @@ find_package(HDF5 QUIET)
 find_package(OpenMP QUIET COMPONENTS C CXX)
 find_package(Papi QUIET)
 find_package(Python3 QUIET COMPONENTS Development)
+
+# Only enable CUDA automatically if driver is also available.
+if(CUDAToolkit_FOUND AND TARGET CUDA::cuda_driver)
+  set(REALM_CUDA_AUTO_DETECT ON)
+else()
+  set(REALM_CUDA_AUTO_DETECT OFF)
+endif()
 #endregion
 
 #region Build options
@@ -150,7 +157,7 @@ else()
 endif()
 
 cmake_dependent_option(REALM_ENABLE_RDTSC "Compile with RDTSC support" ON "NOT WIN32" OFF)
-option(REALM_ENABLE_CUDA "Compile with CUDA support" ${CUDAToolkit_FOUND})
+option(REALM_ENABLE_CUDA "Compile with CUDA support" ${REALM_CUDA_AUTO_DETECT})
 option(REALM_ENABLE_HIP "Compile with HIP support" ${hip_FOUND})
 option(REALM_ENABLE_LLVM "Compile with LLVMJIT support" OFF)
 option(REALM_ENABLE_HDF5 "Compile with HDF5 support" ${HDF5_FOUND})
