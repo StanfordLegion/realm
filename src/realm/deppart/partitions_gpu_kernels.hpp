@@ -794,9 +794,11 @@ void build_final_output(const RectDesc<N,T>* d_rects,
   size_t idx = blockIdx.x * blockDim.x + threadIdx.x;
   if (idx >= numRects) return;
   d_rects_out[idx] = d_rects[idx].rect;
-  d_entries_out[idx].bounds = d_rects[idx].rect;
-  d_entries_out[idx].sparsity.id = 0;
-  d_entries_out[idx].bitmap = 0;
+  if (d_entries_out != nullptr) {
+    d_entries_out[idx].bounds = d_rects[idx].rect;
+    d_entries_out[idx].sparsity.id = 0;
+    d_entries_out[idx].bitmap = 0;
+  }
 
   //Checks if we're the first value for a given src
   if (idx == 0 || d_rects[idx].src_idx != d_rects[idx-1].src_idx) {

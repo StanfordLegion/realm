@@ -1474,6 +1474,100 @@ namespace Realm {
     }
   }
 
+  template<int N, typename T>
+  void GPUMicroOp<N,T>::split_output(RectDesc<N, T>* d_rects, size_t total_rects, std::vector<RegionInstance> &output_instances, std::vector<size_t> &output_counts, Arena &my_arena)
+  {
+    NVTX_DEPPART(send_output);
+
+    cudaStream_t stream = Cuda::get_task_cuda_stream();
+    bool use_sysmem = false;
+    RegionInstance sys_instance = RegionInstance::NO_INST;
+
+    Memory sysmem;
+    assert(find_memory(sysmem, Memory::SYSTEM_MEM));
+
+    Rect<N,T>* final_rects;
+    std::vector<size_t> d_starts_host(output_instances.size()), d_ends_host(output_instances.size());
+
+    try {
+      final_rects = my_arena.alloc<Rect<N,T>>(total_rects);
+
+      size_t* d_starts = my_arena.alloc<size_t>(2 * output_instances.size());
+      size_t* d_ends = d_starts + output_instances.size();
+
+      CUDA_CHECK(cudaMemsetAsync(d_starts, 0, output_instances.size()*sizeof(size_t),stream), stream);
+      CUDA_CHECK(cudaMemsetAsync(d_ends, 0, output_instances.size()*sizeof(size_t),stream), stream);
+      CUDA_CHECK(cudaStreamSynchronize(stream), stream);
+
+      //Convert RectDesc to SparsityMapEntry and determine where each src's rectangles start and end.
+      build_final_output<N, T><<<COMPUTE_GRID(total_rects), THREADS_PER_BLOCK, 0, stream>>>(d_rects, nullptr, final_rects, d_starts, d_ends, total_rects);
+      KERNEL_CHECK(stream);
+
+
+      //Copy starts and ends back to host and handle empty partitions
+
+      CUDA_CHECK(cudaMemcpyAsync(d_starts_host.data(), d_starts, output_instances.size() * sizeof(size_t), cudaMemcpyDeviceToHost, stream), stream);
+      CUDA_CHECK(cudaMemcpyAsync(d_ends_host.data(), d_ends, output_instances.size() * sizeof(size_t), cudaMemcpyDeviceToHost, stream), stream);
+      CUDA_CHECK(cudaStreamSynchronize(stream), stream);
+    } catch (arena_oom&) {
+      use_sysmem = true;
+      RegionInstance tmp_instance = this->realm_malloc(total_rects * sizeof(RectDesc<N,T>), sysmem);
+      sys_instance = this->realm_malloc(total_rects * sizeof(Rect<N,T>), sysmem);
+      RectDesc<N, T>* h_tmp_rects = reinterpret_cast<RectDesc<N,T>*>(tmp_instance.pointer_untyped(0, total_rects * sizeof(RectDesc<N,T>)));
+      final_rects = reinterpret_cast<Rect<N,T>*>(sys_instance.pointer_untyped(0, total_rects * sizeof(Rect<N,T>)));
+      CUDA_CHECK(cudaMemcpyAsync(h_tmp_rects, d_rects, total_rects * sizeof(RectDesc<N,T>), cudaMemcpyDeviceToHost, stream), stream);
+      CUDA_CHECK(cudaStreamSynchronize(stream), stream);
+      for (size_t idx = 0; idx < total_rects; idx++ ) {
+        final_rects[idx] = h_tmp_rects[idx].rect;
+
+        //Checks if we're the first value for a given src
+        if (idx == 0 || h_tmp_rects[idx].src_idx != h_tmp_rects[idx-1].src_idx) {
+          d_starts_host[h_tmp_rects[idx].src_idx] = idx;
+        }
+
+        //Checks if we're the last value for a given src
+        if (idx == total_rects-1 || h_tmp_rects[idx].src_idx != h_tmp_rects[idx+1].src_idx) {
+          d_ends_host[h_tmp_rects[idx].src_idx] = idx+1;
+        }
+      }
+      tmp_instance.destroy();
+    }
+
+    for (size_t i = 1; i < output_instances.size(); i++) {
+      if (d_starts_host[i] < d_ends_host[i-1]) {
+        d_starts_host[i] = d_ends_host[i-1];
+        d_ends_host[i] = d_ends_host[i-1];
+      }
+    }
+
+    for (size_t i = 0; i < output_instances.size(); i++) {
+      if (d_ends_host[i] > d_starts_host[i]) {
+        size_t end = d_ends_host[i];
+        size_t start = d_starts_host[i];
+        if (end - start > 0) {
+          RegionInstance new_instance = this->realm_malloc(((end - start) + output_counts[i]) * sizeof(Rect<N, T>), sysmem);
+          Rect<N, T>* h_new_rects = reinterpret_cast<Rect<N, T>*>(new_instance.pointer_untyped(0, ((end - start) + output_counts[i]) * sizeof(Rect<N, T>)));
+          if (output_counts[i] > 0) {
+            Rect<N, T>* h_old_rects = reinterpret_cast<Rect<N, T>*>(output_instances[i].pointer_untyped(0, output_counts[i] * sizeof(Rect<N, T>)));
+            std::memcpy(h_new_rects, h_old_rects, output_counts[i] * sizeof(Rect<N, T>));
+            output_instances[i].destroy();
+          }
+          if (use_sysmem) {
+            std::memcpy(h_new_rects + output_counts[i], final_rects + start, (end - start) * sizeof(Rect<N, T>));
+          } else {
+            CUDA_CHECK(cudaMemcpyAsync(h_new_rects + output_counts[i], final_rects + start, (end - start) * sizeof(Rect<N, T>), cudaMemcpyDeviceToHost, stream), stream);
+            CUDA_CHECK(cudaStreamSynchronize(stream), stream);
+          }
+          output_instances[i] = new_instance;
+          output_counts[i] += end - start;
+        }
+      }
+    }
+    if (use_sysmem) {
+      sys_instance.destroy();
+    }
+  }
+
   /*
    *  Input: An array of disjoint rectangles sorted by src idx.
    *  Output: Fills the sparsity output for each src with a host region instance
@@ -1491,8 +1585,6 @@ namespace Realm {
 
     cudaStream_t stream = Cuda::get_task_cuda_stream();
 
-    std::set<Event> output_allocs;
-
     SparsityMapEntry<N,T>* final_entries = my_arena.alloc<SparsityMapEntry<N,T>>(total_rects);
     Rect<N,T>* final_rects = my_arena.alloc<Rect<N,T>>(total_rects);
 
@@ -1501,9 +1593,6 @@ namespace Realm {
 
     CUDA_CHECK(cudaMemsetAsync(d_starts, 0, ctr.size()*sizeof(size_t),stream), stream);
     CUDA_CHECK(cudaMemsetAsync(d_ends, 0, ctr.size()*sizeof(size_t),stream), stream);
-
-
-    CUDA_CHECK(cudaStreamSynchronize(stream), stream);
 
     //Convert RectDesc to SparsityMapEntry and determine where each src's rectangles start and end.
     build_final_output<<<COMPUTE_GRID(total_rects), THREADS_PER_BLOCK, 0, stream>>>(d_rects, final_entries, final_rects, d_starts, d_ends, total_rects);
@@ -1522,6 +1611,8 @@ namespace Realm {
       }
     }
 
+    Memory sysmem;
+    assert(find_memory(sysmem, Memory::SYSTEM_MEM));
     if (!this->exclusive) {
       for (auto const& elem : ctr) {
         size_t idx = getIndex(elem);
@@ -1530,17 +1621,18 @@ namespace Realm {
         if (d_ends_host[idx] > d_starts_host[idx]) {
           size_t end = d_ends_host[idx];
           size_t start = d_starts_host[idx];
-          std::vector<Rect<N, T>> h_rects(end - start);
-          CUDA_CHECK(cudaMemcpyAsync(h_rects.data(), final_rects + start, (end - start) * sizeof(Rect<N,T>), cudaMemcpyDeviceToHost, stream), stream);
+          RegionInstance h_rects_instance = this->realm_malloc((end - start) * sizeof(Rect<N,T>), sysmem);
+          Rect<N, T> *h_rects = reinterpret_cast<Rect<N,T> *>(AffineAccessor<char, 1>(h_rects_instance, 0).base);
+          CUDA_CHECK(cudaMemcpyAsync(h_rects, final_rects + start, (end - start) * sizeof(Rect<N,T>), cudaMemcpyDeviceToHost, stream), stream);
           CUDA_CHECK(cudaStreamSynchronize(stream), stream);
-          impl->contribute_dense_rect_list(h_rects, false);
+          span<Rect<N, T>> h_rects_span(h_rects, end - start);
+          impl->contribute_dense_rect_list(h_rects_span, false);
+          h_rects_instance.destroy();
         } else {
           impl->contribute_nothing();
         }
       }
     } else {
-      Memory sysmem;
-      assert(find_memory(sysmem, Memory::SYSTEM_MEM));
 
       //Use provided lambdas to iterate over sparsity output container (map or vector)
       for (auto const& elem : ctr) {

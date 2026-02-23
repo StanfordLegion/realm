@@ -408,7 +408,7 @@ namespace Realm {
 			    }
 		}
 		bool gpu_data = !gpu_ptr_data.empty() || !gpu_rect_data.empty();
-	        bool opcount = cpu_ptr_data.size() + cpu_rect_data.size() + gpu_ptr_data.size() + gpu_rect_data.size();
+	        size_t opcount = cpu_ptr_data.size() + cpu_rect_data.size() + gpu_ptr_data.size() + gpu_rect_data.size();
 	        bool exclusive = (gpu_data && (opcount == 1));
 		if (domain_transform.type ==
 		           DomainTransform<N2, T2, N, T>::DomainTransformType::STRUCTURED && !gpu_data) {

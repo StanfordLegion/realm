@@ -370,6 +370,8 @@ namespace Realm {
     template<typename Container, typename IndexFn, typename MapFn>
     void complete1d_pipeline(RectDesc<N, T>* d_rects, size_t total_rects, RectDesc<N, T>* &d_out_rects, size_t &out_rects, Arena &my_arena, const Container& ctr, IndexFn getIndex, MapFn getMap);
 
+    void split_output(RectDesc<N, T>* d_rects, size_t total_rects, std::vector<RegionInstance> &output_instances, std::vector<size_t> &output_counts, Arena &my_arena);
+
     template<typename Container, typename IndexFn, typename MapFn>
     void send_output(RectDesc<N, T>* d_rects, size_t total_rects, Arena &my_arena, const Container& ctr, IndexFn getIndex, MapFn getMap);
 

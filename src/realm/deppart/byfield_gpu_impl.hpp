@@ -89,11 +89,17 @@ void GPUByFieldMicroOp<N,T,FT>::execute()
     color_indices[colors[i]] = i;
   }
 
+  Memory sysmem;
+  assert(find_memory(sysmem, Memory::SYSTEM_MEM));
+
   size_t num_output = 0;
   RectDesc<N, T>* output_start = nullptr;
   size_t num_completed = 0;
   size_t curr_tile = tile_size / 2;
   int count = 0;
+  bool host_fallback = false;
+  std::vector<RegionInstance> h_instances(colors.size(), RegionInstance::NO_INST);
+  std::vector<size_t> entry_counts(colors.size(), 0);
   while (num_completed < inst_space.num_entries) {
     try {
       std::cout << "Byfield iteration " << count++ << ", completed " << num_completed << " / " << inst_space.num_entries << " entries." << std::endl;
@@ -155,7 +161,11 @@ void GPUByFieldMicroOp<N,T,FT>::execute()
                               return kv.second;
                            });
 
-      if (num_output==0) {
+      if (host_fallback) {
+        this->split_output(d_new_rects, num_new_rects, h_instances, entry_counts, buffer_arena);
+      }
+
+      if (num_output==0 || host_fallback) {
         num_output = num_new_rects;
         output_start = d_new_rects;
         num_completed += curr_tile;
@@ -166,40 +176,44 @@ void GPUByFieldMicroOp<N,T,FT>::execute()
         continue;
       }
 
-        //Otherwise we merge with existing rectangles
-        RectDesc<N, T>* d_old_rects = buffer_arena.alloc<RectDesc<N, T>>(num_output);
-        assert(d_old_rects == d_new_rects + num_new_rects);
-        CUDA_CHECK(cudaMemcpyAsync(d_old_rects, output_start, num_output * sizeof(RectDesc<N,T>), cudaMemcpyDeviceToDevice, stream), stream);
-        CUDA_CHECK(cudaStreamSynchronize(stream), stream);
+      //Otherwise we merge with existing rectangles
+      RectDesc<N, T>* d_old_rects = buffer_arena.alloc<RectDesc<N, T>>(num_output);
+      assert(d_old_rects == d_new_rects + num_new_rects);
+      CUDA_CHECK(cudaMemcpyAsync(d_old_rects, output_start, num_output * sizeof(RectDesc<N,T>), cudaMemcpyDeviceToDevice, stream), stream);
+      CUDA_CHECK(cudaStreamSynchronize(stream), stream);
 
-        size_t num_final_rects = 1;
+      size_t num_final_rects = 1;
+      //Send it off for processing
+      this->complete_rect_pipeline(d_new_rects, num_output + num_new_rects, output_start, num_final_rects, buffer_arena,
+      /* the Container: */  sparsity_outputs,
+      /* getIndex: */       [&](auto const& kv){
+                              // elem is a SparsityMap<N,T> from the vector
+                              return color_indices.at(kv.first);
+                           },
+      /* getMap: */         [&](auto const& kv){
+                            // return the SparsityMap key itself
+                            return kv.second;
+                         });
+      num_completed += curr_tile;
+      num_output = num_final_rects;
+      subtract_const<<<COMPUTE_GRID(field_data.size()), THREADS_PER_BLOCK, 0, stream>>>(inst_space.offsets, field_data.size()+1, curr_tile);
+      KERNEL_CHECK(stream);
+      curr_tile = tile_size / 2;
+      CUDA_CHECK(cudaStreamSynchronize(stream), stream);
 
-        //Send it off for processing
-        this->complete_rect_pipeline(d_new_rects, num_output + num_new_rects, output_start, num_final_rects, buffer_arena,
-        /* the Container: */  sparsity_outputs,
-        /* getIndex: */       [&](auto const& kv){
-                                // elem is a SparsityMap<N,T> from the vector
-                                return color_indices.at(kv.first);
-                             },
-        /* getMap: */         [&](auto const& kv){
-                              // return the SparsityMap key itself
-                              return kv.second;
-                           });
-        num_completed += curr_tile;
-        num_output = num_final_rects;
-        subtract_const<<<COMPUTE_GRID(field_data.size()), THREADS_PER_BLOCK, 0, stream>>>(inst_space.offsets, field_data.size()+1, curr_tile);
-        KERNEL_CHECK(stream);
-        curr_tile = tile_size / 2;
-        CUDA_CHECK(cudaStreamSynchronize(stream), stream);
-      } catch (arena_oom&) {
-        std::cout << "Caught arena_oom, reducing tile size from " << curr_tile << " to " << curr_tile / 2 << std::endl;
-        std::cout << buffer_arena.used() << " bytes used in arena." << std::endl;
-        curr_tile /= 2;
-        if (curr_tile == 0) {
-          throw;
+    } catch (arena_oom&) {
+      std::cout << "Caught arena_oom, reducing tile size from " << curr_tile << " to " << curr_tile / 2 << std::endl;
+      std::cout << buffer_arena.used() << " bytes used in arena." << std::endl;
+      curr_tile /= 2;
+      if (curr_tile == 0) {
+        host_fallback = true;
+        if (num_output > 0) {
+          this->split_output(output_start, num_output, h_instances, entry_counts, buffer_arena);
         }
+        curr_tile = tile_size / 2;
       }
     }
+  }
 
   if (num_output == 0) {
     for (std::pair<const FT, SparsityMap<N, T>> it : sparsity_outputs) {
@@ -213,7 +227,9 @@ void GPUByFieldMicroOp<N,T,FT>::execute()
     return;
   }
 
-  this->send_output(output_start, num_output, buffer_arena, sparsity_outputs,
+  if (!host_fallback) {
+    try {
+      this->send_output(output_start, num_output, buffer_arena, sparsity_outputs,
         /* getIndex: */       [&](auto const& kv){
                                 // elem is a SparsityMap<N,T> from the vector
                                 return color_indices.at(kv.first);
@@ -222,6 +238,29 @@ void GPUByFieldMicroOp<N,T,FT>::execute()
                               // return the SparsityMap key itself
                               return kv.second;
                            });
+    } catch (arena_oom&) {
+      this->split_output(output_start, num_output, h_instances, entry_counts, buffer_arena);
+      host_fallback = true;
+    }
+  }
+
+  if (host_fallback) {
+    for (std::pair<const FT, SparsityMap<N, T>> it : sparsity_outputs) {
+      SparsityMapImpl<N, T> *impl = SparsityMapImpl<N, T>::lookup(it.second);
+      if (this->exclusive) {
+        impl->set_contributor_count(1);
+      }
+      size_t idx = color_indices.at(it.first);
+      if (entry_counts[idx] > 0) {
+        Rect<N, T>* h_rects = reinterpret_cast<Rect<N,T> *>(AffineAccessor<char,1>(h_instances[idx], 0).base);
+        span<Rect<N, T>> h_rects_span(h_rects, entry_counts[idx]);
+        impl->contribute_dense_rect_list(h_rects_span, false);
+        h_instances[idx].destroy();
+      } else {
+        impl->contribute_nothing();
+      }
+    }
+  }
 
 }
 }

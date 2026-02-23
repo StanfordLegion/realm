@@ -1145,6 +1145,19 @@ SparsityMapImpl<N, T>::~SparsityMapImpl(void)
   }
 
   template <int N, typename T>
+  void
+  SparsityMapImpl<N, T>::contribute_dense_rect_list(const span<Rect<N, T>> &rects,
+                                                    bool disjoint)
+  {
+
+    HybridRectangleList<N, T> h_rect_list;
+    for (size_t i = 0; i < rects.size(); ++i) {
+      h_rect_list.add_rect(rects[i]);
+    }
+    contribute_dense_rect_list(h_rect_list.convert_to_vector(), disjoint);
+  }
+
+  template <int N, typename T>
   void SparsityMapImpl<N, T>::contribute_raw_rects(const Rect<N, T> *rects, size_t count,
                                                    size_t piece_count, bool disjoint,
                                                    size_t total_count)
