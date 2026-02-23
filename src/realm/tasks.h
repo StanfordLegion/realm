@@ -1,5 +1,5 @@
 /*
- * Copyright 2025 Stanford University, NVIDIA Corporation
+ * Copyright 2026 Stanford University, NVIDIA Corporation, Los Alamos National Laboratory
  * SPDX-License-Identifier: Apache-2.0
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -178,7 +178,7 @@ namespace Realm {
 
   // an internal task is an arbitrary blob of work that needs to happen on
   //  a processor's actual thread(s)
-  class InternalTask {
+  class REALM_INTERNAL_API_EXTERNAL_LINKAGE InternalTask { // needed by librealm_kokkos.so
   protected:
     // cannot be destroyed directly
     virtual ~InternalTask() {}

@@ -55,7 +55,6 @@ namespace Realm {
       if(pre_initialized) {
         MPI_Query_thread(&mpi_thread_model);
       } else {
-        int mpi_thread_model;
         MPI_Init_thread(NULL, NULL, MPI_THREAD_MULTIPLE, &mpi_thread_model);
       }
       if(mpi_thread_model < MPI_THREAD_MULTIPLE) {

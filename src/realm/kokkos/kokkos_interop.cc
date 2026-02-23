@@ -1,5 +1,5 @@
 /*
- * Copyright 2025 Stanford University, NVIDIA Corporation, Los Alamos National Laboratory
+ * Copyright 2026 Stanford University, NVIDIA Corporation, Los Alamos National Laboratory
  * SPDX-License-Identifier: Apache-2.0
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -261,7 +261,8 @@ namespace Realm {
     };
 #endif
 
-    void kokkos_initialize(const std::vector<ProcessorImpl *> &local_procs)
+    REALM_PUBLIC_API void kokkos_initialize(
+        const std::vector<ProcessorImpl *> &local_procs) // needed by librealm.so
     {
       // use Kokkos::Impl::{pre,post}_initialize to allow us to do our own
       //  execution space initialization
@@ -387,7 +388,8 @@ namespace Realm {
       Kokkos::Impl::post_initialize(kokkos_init_args);
     }
 
-    void kokkos_finalize(const std::vector<ProcessorImpl *> &local_procs)
+    REALM_PUBLIC_API void kokkos_finalize(
+        const std::vector<ProcessorImpl *> &local_procs) // needed by librealm.so
     {
 #if KOKKOS_VERSION >= 40000
       Kokkos::Impl::pre_finalize();
@@ -433,7 +435,7 @@ namespace Realm {
     // execution space instance conversions from processor.h
 #ifdef KOKKOS_ENABLE_SERIAL
   template <>
-  Processor::KokkosExecInstance::operator Kokkos::Serial() const
+  REALM_PUBLIC_API Processor::KokkosExecInstance::operator Kokkos::Serial() const
   {
     return Kokkos::Serial();
   }
@@ -441,7 +443,7 @@ namespace Realm {
 
 #ifdef KOKKOS_ENABLE_OPENMP
   template <>
-  Processor::KokkosExecInstance::operator Kokkos::OpenMP() const
+  REALM_PUBLIC_API Processor::KokkosExecInstance::operator Kokkos::OpenMP() const
   {
     return Kokkos::OpenMP();
   }
@@ -449,7 +451,7 @@ namespace Realm {
 
 #ifdef KOKKOS_ENABLE_CUDA
   template <>
-  Processor::KokkosExecInstance::operator Kokkos::Cuda() const
+  REALM_PUBLIC_API Processor::KokkosExecInstance::operator Kokkos::Cuda() const
   {
 #ifdef REALM_USE_CUDA
     ProcessorImpl *impl = get_runtime()->get_processor_impl(p);
@@ -485,7 +487,7 @@ namespace Realm {
 
 #ifdef KOKKOS_ENABLE_HIP
   template <>
-  Processor::KokkosExecInstance::operator Kokkos::HIP() const
+  REALM_PUBLIC_API Processor::KokkosExecInstance::operator Kokkos::HIP() const
   {
 #ifdef REALM_USE_HIP
     ProcessorImpl *impl = get_runtime()->get_processor_impl(p);

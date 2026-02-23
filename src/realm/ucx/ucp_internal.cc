@@ -1,5 +1,5 @@
 /*
- * Copyright 2025 NVIDIA Corporation
+ * Copyright 2026 NVIDIA Corporation
  * SPDX-License-Identifier: Apache-2.0
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -24,6 +24,7 @@
 #include "realm/logging.h"
 #include "unistd.h"
 #include <cstdint>
+#include <chrono>
 
 #ifdef REALM_USE_CUDA
 #include "realm/cuda/cuda_module.h"
@@ -804,9 +805,11 @@ namespace Realm {
       assert(!initialized_boot && !initialized_ucp);
 
       BootstrapConfig boot_config;
-
       const char *bootstrap_mode_str = getenv("REALM_UCP_BOOTSTRAP_MODE");
-      if(bootstrap_mode_str == NULL) {
+      // If we have a direct vtable from the client alaways prefer that
+      if(runtime->has_key_value_store()) {
+        boot_config.mode = Realm::UCP::BOOTSTRAP_VTABLE;
+      } else if(bootstrap_mode_str == NULL) {
         // use MPI as the default bootstrap
         boot_config.mode = Realm::UCP::BOOTSTRAP_MPI;
       } else if(strcmp(bootstrap_mode_str, "mpi") == 0) {
@@ -817,12 +820,14 @@ namespace Realm {
         boot_config.mode = Realm::UCP::BOOTSTRAP_PLUGIN;
       } else {
         log_ucp.fatal() << "invalid UCP bootstrap mode %s" << bootstrap_mode_str;
-        goto err;
+        return false;
       }
 
       boot_config.plugin_name = getenv("REALM_UCP_BOOTSTRAP_PLUGIN");
-      CHKERR_JUMP(bootstrap_init(&boot_config, &boot_handle), "failed to bootstrap ucp",
-                  log_ucp, err);
+      if(bootstrap_init(&boot_config, &boot_handle) != 0) {
+        log_ucp.error() << "failed to bootstrap ucp";
+        return false;
+      }
 
       ucc_comm.reset(
           new ucc::UCCComm(boot_handle.pg_rank, boot_handle.pg_size, &boot_handle));
@@ -830,27 +835,68 @@ namespace Realm {
       status = ucc_comm->init();
       if(UCC_OK != status) {
         log_ucp.error() << "Failed to initialize ucc collectives\n";
-        goto err;
+        return false;
       }
 
       // Compute shared ranks
       if(!compute_shared_ranks()) {
         log_ucp.error() << "Failed to compute shared ranks \n";
-        goto err;
+        return false;
       }
 
       Network::my_node_id = ucc_comm->get_rank();
       Network::max_node_id = ucc_comm->get_world_size() - 1;
-      Network::all_peers.add_range(0, ucc_comm->get_world_size() - 1);
-      Network::all_peers.remove(ucc_comm->get_rank());
+      if(runtime->is_key_value_store_elastic()) {
+        // If we're part of an elastic job then we need to do more work here
+        uint64_t offset = 0;
+        if(Network::my_node_id == 0) {
+          // Do the work to do the CAS to bump the number of processes
+          constexpr std::string_view key("realm_total_spaces");
+          size_t offset_size = sizeof(offset);
+          uint64_t desired = ucc_comm->get_world_size();
+          bool success = false;
+          using clock = std::chrono::steady_clock;
+          using seconds = std::chrono::duration<double>;
+          // Give this up to 10 seconds to succeed
+          constexpr seconds timeout{10.0};
+          const auto start = clock::now();
+          const auto deadline = start + timeout;
+          // Iterate until the timeout
+          while(clock::now() < deadline) {
+            if(runtime->key_value_store_cas(key.data(), key.size(), &offset, &offset_size,
+                                            &desired, sizeof(desired))) {
+              success = true;
+              break;
+            }
+            if(offset_size != sizeof(offset)) {
+              log_ucp.error() << "UCP failed to join Realm due to CAS failure";
+              return false;
+            }
+            offset += ucc_comm->get_world_size();
+          }
+          if(!success) {
+            log_ucp.error() << "UCP timed out after " << timeout.count()
+                            << " seconds trying to join Realm";
+            return false;
+          }
+        }
+        if(ucc_comm->UCC_Bcast(&offset, 1, UCC_DT_UINT64, 0) != UCC_OK) {
+          log_ucp.error() << "Failed ucc broadcast during boostrap";
+          return false;
+        }
+        Network::my_node_id += offset;
+        // TODO: this is only instantaneously valid, it could already
+        // be stale so we ultimately need to remove this from all of Realm
+        Network::max_node_id += offset;
+      }
+      // TODO: what to do about processes that have already left
+      Network::all_peers.add_range(0, Network::max_node_id);
+      Network::all_peers.remove(Network::my_node_id);
 
       initialized_boot = true;
       log_ucp.info() << "bootstrapped UCP network module";
 
       return true;
-
-    err:
-      return false;
     }
 
     bool UCPInternal::compute_shared_ranks()
