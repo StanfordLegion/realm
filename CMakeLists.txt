@@ -859,7 +859,7 @@ add_feature_info(
 #region Source lists
 add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/src)
 
-if(REALM_ENABLE_CUDA)
+if(REALM_USE_CUDA)
   add_library(realm_cuda_fatbin OBJECT ${REALM_CUDA_SOURCES})
   target_compile_options(
     realm_cuda_fatbin
@@ -957,21 +957,25 @@ target_include_directories(
   realm_obj
   PUBLIC $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}> $<BUILD_INTERFACE:${REALM_SOURCE_DIR}/..>
          $<BUILD_INTERFACE:${CMAKE_CURRENT_BINARY_DIR}/include>
-  PRIVATE $<$<TARGET_EXISTS:CUDA::cuda_driver>:${CUDAToolkit_CUPTI_INCLUDE_DIR}>
-          $<$<TARGET_EXISTS:CUDA::cuda_driver>:${CUDAToolkit_INCLUDE_DIR}>
-          $<$<TARGET_EXISTS:Python3::Python>:${Python_INCLUDE_DIRS}>
+  PRIVATE $<$<TARGET_EXISTS:Python3::Python>:${Python_INCLUDE_DIRS}>
           $<$<TARGET_EXISTS:hip::host>:${HIP_INCLUDE_DIR}>
 )
 target_include_directories(
   Realm
   PUBLIC $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}> $<BUILD_INTERFACE:${REALM_SOURCE_DIR}/..>
          $<BUILD_INTERFACE:${CMAKE_CURRENT_BINARY_DIR}/include>
-  PRIVATE $<$<TARGET_EXISTS:CUDA::cuda_driver>:${CUDAToolkit_CUPTI_INCLUDE_DIR}>
-          $<$<TARGET_EXISTS:CUDA::cuda_driver>:${CUDAToolkit_INCLUDE_DIR}>
-          $<$<TARGET_EXISTS:Python3::Python>:${Python_INCLUDE_DIRS}>
+  PRIVATE $<$<TARGET_EXISTS:Python3::Python>:${Python_INCLUDE_DIRS}>
           $<$<TARGET_EXISTS:hip::host>:${HIP_INCLUDE_DIR}>
 )
-if(REALM_ENABLE_GASNETEX)
+if(REALM_USE_CUDA)
+  target_include_directories(
+    realm_obj PRIVATE ${CUDAToolkit_CUPTI_INCLUDE_DIR} ${CUDAToolkit_INCLUDE_DIR}
+  )
+  target_include_directories(
+    Realm PRIVATE ${CUDAToolkit_CUPTI_INCLUDE_DIR} ${CUDAToolkit_INCLUDE_DIR}
+  )
+endif()
+if(REALM_USE_GASNETEX)
   # Force the creation of the export header for the wrapper we need, but nothing else
   add_dependencies(Realm realm_gex_wrapper_objs)
   add_dependencies(realm_obj realm_gex_wrapper_objs)
