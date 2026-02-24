@@ -24,6 +24,7 @@ var namespacePRealm =
     [ "Reservation", "classPRealm_1_1Reservation.html", "classPRealm_1_1Reservation" ],
     [ "Runtime", "classPRealm_1_1Runtime.html", "classPRealm_1_1Runtime" ],
     [ "UserEvent", "classPRealm_1_1UserEvent.html", "classPRealm_1_1UserEvent" ],
+    [ "AccessorRefHelper", "namespacePRealm.html#a10d9422a56665f28242fb0aea86574f1", null ],
     [ "AffineLayoutPiece", "namespacePRealm.html#a69c3677eb8badd4449b97663ccf23ec1", null ],
     [ "AffineTransform", "namespacePRealm.html#a8a627c1c0530730214fddaae5c2b5400", null ],
     [ "CopyIndirection", "namespacePRealm.html#ac3f27231588cdba9ce92562515dd9e0e", null ],

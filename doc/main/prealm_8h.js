@@ -18,6 +18,7 @@ var prealm_8h =
     [ "PRealm::MultiAffineAccessor< FT, N, T >", "classPRealm_1_1MultiAffineAccessor.html", "classPRealm_1_1MultiAffineAccessor" ],
     [ "PRealm::IndexSpace< N, T >", "classPRealm_1_1IndexSpace.html", "classPRealm_1_1IndexSpace" ],
     [ "PRealm::IndexSpaceGeneric", "classPRealm_1_1IndexSpaceGeneric.html", "classPRealm_1_1IndexSpaceGeneric" ],
+    [ "AccessorRefHelper", "prealm_8h.html#a10d9422a56665f28242fb0aea86574f1", null ],
     [ "AffineLayoutPiece", "prealm_8h.html#a69c3677eb8badd4449b97663ccf23ec1", null ],
     [ "AffineTransform", "prealm_8h.html#a8a627c1c0530730214fddaae5c2b5400", null ],
     [ "CopyIndirection", "prealm_8h.html#ac3f27231588cdba9ce92562515dd9e0e", null ],

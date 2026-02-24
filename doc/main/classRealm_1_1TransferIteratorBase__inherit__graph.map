@@ -1,9 +1,0 @@
-<map id="Realm::TransferIteratorBase&lt; N, T &gt;" name="Realm::TransferIteratorBase&lt; N, T &gt;">
-<area shape="rect" id="Node000001" title=" " alt="" coords="126,79,330,119"/>
-<area shape="rect" id="Node000003" href="$classRealm_1_1TransferIteratorIndexSpace.html" title=" " alt="" coords="5,167,213,207"/>
-<area shape="poly" id="edge2_Node000001_Node000003" title=" " alt="" coords="192,129,137,169,134,164,189,125"/>
-<area shape="rect" id="Node000004" href="$classRealm_1_1TransferIteratorIndirect.html" title=" " alt="" coords="237,167,459,207"/>
-<area shape="poly" id="edge3_Node000001_Node000004" title=" " alt="" coords="268,125,323,164,320,169,264,129"/>
-<area shape="rect" id="Node000002" href="$classRealm_1_1TransferIterator.html" title=" " alt="" coords="142,5,314,31"/>
-<area shape="poly" id="edge1_Node000001_Node000002" title=" " alt="" coords="231,44,231,79,225,79,225,44"/>
-</map>

@@ -7,6 +7,7 @@ var classPRealm_1_1Runtime =
     [ "collective_spawn_by_kind", "classPRealm_1_1Runtime.html#ab8dbfccb6beebbcb0abacfcea4d0e926", null ],
     [ "configure_from_command_line", "classPRealm_1_1Runtime.html#ae1ef3ec73becd2e6cf43e11512309be2", null ],
     [ "configure_from_command_line", "classPRealm_1_1Runtime.html#aed3a41457bfe28c1113e8e620575c413", null ],
+    [ "finish_configure", "classPRealm_1_1Runtime.html#a1aba079df7d9645e521fc8a1d1b69496", null ],
     [ "get_module", "classPRealm_1_1Runtime.html#afa687790980ff3dd05e0329585b53f98", null ],
     [ "get_module_untyped", "classPRealm_1_1Runtime.html#a392d44ecccb453e500263eea3423c899", null ],
     [ "init", "classPRealm_1_1Runtime.html#ac00c1e82da4601dc037c5a0379eb691b", null ],

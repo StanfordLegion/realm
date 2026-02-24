@@ -9,5 +9,9 @@ var classPRealm_1_1AffineAccessor =
     [ "AffineAccessor", "classPRealm_1_1AffineAccessor.html#a490666a83a72e434916380150e0f9a5c", null ],
     [ "AffineAccessor", "classPRealm_1_1AffineAccessor.html#abd7412f03498f576fc9608408b6f2d34", null ],
     [ "operator=", "classPRealm_1_1AffineAccessor.html#a9b26845a2c81891e7e101a4295bd54d2", null ],
-    [ "operator=", "classPRealm_1_1AffineAccessor.html#a005687a05111278953859497fa7355d8", null ]
+    [ "operator=", "classPRealm_1_1AffineAccessor.html#a005687a05111278953859497fa7355d8", null ],
+    [ "operator[]", "classPRealm_1_1AffineAccessor.html#a0996411d90078b044f001c569bbc61ee", null ],
+    [ "ptr", "classPRealm_1_1AffineAccessor.html#a13ad9a1a8149912e5694de512a0b4a52", null ],
+    [ "read", "classPRealm_1_1AffineAccessor.html#ac3d16046de1eeb6fb56ab94299c9f7d6", null ],
+    [ "write", "classPRealm_1_1AffineAccessor.html#a2cd1ff0ad516cc2ebc2d96eae4ec95c7", null ]
 ];

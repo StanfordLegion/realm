@@ -1,0 +1,25 @@
+digraph "Graphical Class Hierarchy"
+{
+ // LATEX_PDF_SIZE
+  bgcolor="transparent";
+  edge [fontname=Helvetica,fontsize=10,labelfontname=Helvetica,labelfontsize=10];
+  node [fontname=Helvetica,fontsize=10,shape=box,height=0.2,width=0.4];
+  rankdir="LR";
+  Node0 [id="Node000000",label="Realm::ExternalInstanceResource",height=0.2,width=0.4,color="grey40", fillcolor="white", style="filled",URL="$classRealm_1_1ExternalInstanceResource.html",tooltip=" "];
+  Node0 -> Node1 [id="edge142_Node000000_Node000001",dir="back",color="steelblue1",style="solid",tooltip=" "];
+  Node1 [id="Node000001",label="Realm::ExternalCudaArray\lResource",height=0.2,width=0.4,color="grey40", fillcolor="white", style="filled",URL="$classRealm_1_1ExternalCudaArrayResource.html",tooltip=" "];
+  Node0 -> Node2 [id="edge143_Node000000_Node000002",dir="back",color="steelblue1",style="solid",tooltip=" "];
+  Node2 [id="Node000002",label="Realm::ExternalCudaMemory\lResource",height=0.2,width=0.4,color="grey40", fillcolor="white", style="filled",URL="$classRealm_1_1ExternalCudaMemoryResource.html",tooltip=" "];
+  Node0 -> Node3 [id="edge144_Node000000_Node000003",dir="back",color="steelblue1",style="solid",tooltip=" "];
+  Node3 [id="Node000003",label="Realm::ExternalFileResource",height=0.2,width=0.4,color="grey40", fillcolor="white", style="filled",URL="$classRealm_1_1ExternalFileResource.html",tooltip=" "];
+  Node0 -> Node4 [id="edge145_Node000000_Node000004",dir="back",color="steelblue1",style="solid",tooltip=" "];
+  Node4 [id="Node000004",label="Realm::ExternalHDF5Resource",height=0.2,width=0.4,color="grey40", fillcolor="white", style="filled",URL="$classRealm_1_1ExternalHDF5Resource.html",tooltip=" "];
+  Node0 -> Node5 [id="edge146_Node000000_Node000005",dir="back",color="steelblue1",style="solid",tooltip=" "];
+  Node5 [id="Node000005",label="Realm::ExternalHipMemory\lResource",height=0.2,width=0.4,color="grey40", fillcolor="white", style="filled",URL="$classRealm_1_1ExternalHipMemoryResource.html",tooltip=" "];
+  Node0 -> Node6 [id="edge147_Node000000_Node000006",dir="back",color="steelblue1",style="solid",tooltip=" "];
+  Node6 [id="Node000006",label="Realm::ExternalMemoryResource",height=0.2,width=0.4,color="grey40", fillcolor="white", style="filled",URL="$classRealm_1_1ExternalMemoryResource.html",tooltip=" "];
+  Node6 -> Node7 [id="edge148_Node000006_Node000007",dir="back",color="steelblue1",style="solid",tooltip=" "];
+  Node7 [id="Node000007",label="Realm::ExternalCudaPinned\lHostResource",height=0.2,width=0.4,color="grey40", fillcolor="white", style="filled",URL="$classRealm_1_1ExternalCudaPinnedHostResource.html",tooltip=" "];
+  Node6 -> Node8 [id="edge149_Node000006_Node000008",dir="back",color="steelblue1",style="solid",tooltip=" "];
+  Node8 [id="Node000008",label="Realm::ExternalHipPinned\lHostResource",height=0.2,width=0.4,color="grey40", fillcolor="white", style="filled",URL="$classRealm_1_1ExternalHipPinnedHostResource.html",tooltip=" "];
+}
