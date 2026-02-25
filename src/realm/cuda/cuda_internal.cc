@@ -2570,25 +2570,11 @@ namespace Realm {
       std::vector<Memory> mapped_cpu_mems;
       // iterate over pinned_sysmems and add to mapped_cpu_mems if it is peer-accessible
       for(Memory mem : gpu->pinned_sysmems) {
-        AutoGPUContext agc(gpu);
         MemoryImpl *mem_impl = get_runtime()->get_memory_impl(mem);
         assert(mem_impl != nullptr);
-        // GPU *mem_gpu = mem_to_gpu(mem_impl);
-        // if(gpu->can_access_peer(mem_gpu)) {
-        //   mapped_cpu_mems.push_back(mem);
-        // }
-        void *ptr = mem_impl->get_direct_ptr(0, 0);
-        CUpointer_attribute attribs[] = {
-          CU_POINTER_ATTRIBUTE_MEMORY_TYPE,
-          CU_POINTER_ATTRIBUTE_DEVICE_POINTER
-      };
-        unsigned int memType = 0;
-        CUdeviceptr devPtr = 0;
-        void* data[] = { &memType, &devPtr};
-        CUresult res = CUDA_DRIVER_FNPTR(cuPointerGetAttributes)(2, attribs, data, (CUdeviceptr)ptr);
-        if(res == CUDA_SUCCESS && memType == CU_MEMORYTYPE_HOST && devPtr != 0) {
-            mapped_cpu_mems.push_back(mem);
-            log_gpu.info() << "adding pinned_sysmem " << mem << " to mapped_cpu_mems, gpu=" << gpu->info->index;
+        GPU *mem_gpu = mem_to_gpu(mem_impl);
+        if(gpu->can_access_peer(mem_gpu)) {
+          mapped_cpu_mems.push_back(mem);
         }
       }
 
