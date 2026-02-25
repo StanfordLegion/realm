@@ -2568,16 +2568,8 @@ namespace Realm {
       }
 
       std::vector<Memory> mapped_cpu_mems;
-      // iterate over pinned_sysmems and add to mapped_cpu_mems if it is peer-accessible
-      for(Memory mem : gpu->pinned_sysmems) {
-        MemoryImpl *mem_impl = get_runtime()->get_memory_impl(mem);
-        assert(mem_impl != nullptr);
-        GPU *mem_gpu = mem_to_gpu(mem_impl);
-        if(gpu->can_access_peer(mem_gpu)) {
-          mapped_cpu_mems.push_back(mem);
-        }
-      }
-
+      mapped_cpu_mems.insert(mapped_cpu_mems.end(), gpu->pinned_sysmems.begin(),
+                             gpu->pinned_sysmems.end());
       // treat managed memory as usually being on the host as well
       mapped_cpu_mems.insert(mapped_cpu_mems.end(), gpu->managed_mems.begin(),
                              gpu->managed_mems.end());
