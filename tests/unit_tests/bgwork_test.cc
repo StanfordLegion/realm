@@ -34,8 +34,8 @@ namespace Realm {
 // holds a raw pointer to it).
 class CapturingLogStream : public LoggerOutputStream {
 public:
-  void log_msg(Logger::LoggingLevel level, const char *name,
-               const char *msgdata, size_t msglen) override
+  void log_msg(Logger::LoggingLevel level, const char *name, const char *msgdata,
+               size_t msglen) override
   {
     if(level == Logger::LEVEL_WARNING) {
       warning_count++;
@@ -75,8 +75,8 @@ static void ensure_logger_configured()
   static bool done = false;
   if(!done) {
     LoggerAccessor &acc = static_cast<LoggerAccessor &>(log_bgwork);
-    acc.add_stream(&get_capture(), Logger::LEVEL_WARNING,
-                   false /*delete_when_done*/, false /*flush_each_write*/);
+    acc.add_stream(&get_capture(), Logger::LEVEL_WARNING, false /*delete_when_done*/,
+                   true /*flush_each_write*/);
     acc.configure_done();
     done = true;
   }
@@ -105,18 +105,14 @@ public:
 #ifdef DEBUG_REALM
   ~SlowWorkItem() override = default;
 
-  void prepare_for_shutdown()
-  {
-    shutdown_work_item();
-  }
+  void prepare_for_shutdown() { shutdown_work_item(); }
 #endif
 
   long long sleep_ns;
 };
 
 // Helper: register item, run worker inline, clean up debug state.
-static void run_single_work_item(BackgroundWorkManager &mgr,
-                                 SlowWorkItem &item)
+static void run_single_work_item(BackgroundWorkManager &mgr, SlowWorkItem &item)
 {
   item.add_to_manager(&mgr);
   item.activate();
@@ -145,8 +141,7 @@ TEST_F(BgWorkOverrunTest, NoWarningWithinBudget)
 {
   BackgroundWorkManager mgr;
   // timeslice=1,000,000 ns (1ms), threshold=10x -> limit=10ms
-  std::vector<std::string> args = {"-ll:bgslice", "1000000",
-                                   "-ll:bgoverrun", "10"};
+  std::vector<std::string> args = {"-ll:bgslice", "1000000", "-ll:bgoverrun", "10"};
   mgr.configure_from_cmdline(args);
 
   // Work item that takes ~100us - well within the 10ms limit
@@ -162,8 +157,7 @@ TEST_F(BgWorkOverrunTest, WarningOnOverrun)
 {
   BackgroundWorkManager mgr;
   // timeslice=100,000 ns (100us), threshold=2x -> limit=200,000 ns (200us)
-  std::vector<std::string> args = {"-ll:bgslice", "100000",
-                                   "-ll:bgoverrun", "2"};
+  std::vector<std::string> args = {"-ll:bgslice", "100000", "-ll:bgoverrun", "2"};
   mgr.configure_from_cmdline(args);
 
   // Work item that takes ~5ms - well above the 200us limit
@@ -172,8 +166,7 @@ TEST_F(BgWorkOverrunTest, WarningOnOverrun)
 
   EXPECT_GE(get_capture().warning_count, 1);
   // Verify the warning identifies the work item by name
-  EXPECT_NE(get_capture().last_warning.find("slow_test_item"),
-            std::string::npos);
+  EXPECT_NE(get_capture().last_warning.find("slow_test_item"), std::string::npos);
   // Verify the warning mentions unresponsiveness
   EXPECT_NE(get_capture().last_warning.find("runtime may appear unresponsive"),
             std::string::npos);
@@ -184,8 +177,7 @@ TEST_F(BgWorkOverrunTest, DisabledWhenZero)
 {
   BackgroundWorkManager mgr;
   // timeslice=100,000 ns (100us), threshold=0 -> disabled
-  std::vector<std::string> args = {"-ll:bgslice", "100000",
-                                   "-ll:bgoverrun", "0"};
+  std::vector<std::string> args = {"-ll:bgslice", "100000", "-ll:bgoverrun", "0"};
   mgr.configure_from_cmdline(args);
 
   // Work item that takes ~5ms - would exceed any reasonable limit,
@@ -210,6 +202,5 @@ TEST_F(BgWorkOverrunTest, DefaultConfigWarns)
   run_single_work_item(mgr, item);
 
   EXPECT_GE(get_capture().warning_count, 1);
-  EXPECT_NE(get_capture().last_warning.find("default_config_item"),
-            std::string::npos);
+  EXPECT_NE(get_capture().last_warning.find("default_config_item"), std::string::npos);
 }
