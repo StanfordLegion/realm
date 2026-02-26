@@ -262,10 +262,18 @@ namespace Realm {
         .add_option_int("-ll:bgnumapin", cfg.pin_numa)
         .add_option_int("-ll:bgstack", cfg.worker_stacksize_in_kb)
         .add_option_int("-ll:bgspin", cfg.worker_spin_interval)
-        .add_option_int("-ll:bgslice", cfg.work_item_timeslice);
+        .add_option_int("-ll:bgslice", cfg.work_item_timeslice)
+        .add_option_int("-ll:bgoverrun", cfg.work_item_overrun_threshold);
 
     bool ok = cp.parse_command_line(cmdline);
     assert(ok);
+
+    // precompute overrun limit in nanoseconds to avoid per-dispatch multiply
+    if(cfg.work_item_overrun_threshold > 0)
+      cfg.work_item_overrun_limit =
+          cfg.work_item_overrun_threshold * cfg.work_item_timeslice;
+    else
+      cfg.work_item_overrun_limit = 0;
   }
 
   void BackgroundWorkManager::start_dedicated_workers(Realm::CoreReservationSet &crs)
@@ -605,13 +613,37 @@ namespace Realm {
             } else
               break;
           }
+          // shared timestamp for overrun detection and/or profiling
+          {
+            bool need_tstop = (manager->cfg.work_item_overrun_limit > 0);
 #ifdef REALM_BGWORK_PROFILE
-          long long t_stop = Clock::current_time_in_nanoseconds(true /*absolute*/);
-          long long elapsed = t_stop - t_start;
-          long long overshoot = ((t_stop > t_quantum) ? (t_stop - t_quantum) : 0);
-          log_bgwork.print() << "work: slot=" << slot << " elapsed=" << elapsed
-                             << " overshoot=" << overshoot;
+            need_tstop = true;
 #endif
+            if(need_tstop) {
+              long long t_stop = Clock::current_time_in_nanoseconds(true /*absolute*/);
+              long long elapsed = t_stop - t_start;
+
+              // overrun detection (limit precomputed during configure)
+              if(elapsed > manager->cfg.work_item_overrun_limit &&
+                 manager->cfg.work_item_overrun_limit > 0) {
+                log_bgwork.warning()
+                    << "work item '" << item->name << "' (slot " << slot
+                    << ") exceeded overrun"
+                    << " threshold: elapsed=" << elapsed << " ns ("
+                    << (elapsed / manager->cfg.work_item_timeslice)
+                    << "x), budget=" << manager->cfg.work_item_timeslice
+                    << " ns, limit=" << manager->cfg.work_item_overrun_limit << " ns ("
+                    << manager->cfg.work_item_overrun_threshold << "x)"
+                    << " - runtime may appear unresponsive";
+              }
+
+#ifdef REALM_BGWORK_PROFILE
+              long long overshoot = ((t_stop > t_quantum) ? (t_stop - t_quantum) : 0);
+              log_bgwork.print() << "work: slot=" << slot << " elapsed=" << elapsed
+                                 << " overshoot=" << overshoot;
+#endif
+            }
+          }
           // we're done with this slot for now
           manager->work_item_usecounts[slot].fetch_sub_acqrel(1);
 
