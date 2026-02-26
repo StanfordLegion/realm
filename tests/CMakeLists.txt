@@ -116,6 +116,7 @@ list(
   gather_scatter_test.cc
   sparsity_map_test.cc
   addrsplit_channel_test.cc
+  bgwork_test.cc
   topology_test.cc
   hash.cc
   hpp_span_test.cc
