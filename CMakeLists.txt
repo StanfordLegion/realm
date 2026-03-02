@@ -522,7 +522,35 @@ if(REALM_ENABLE_KOKKOS)
   # the user to install it themselves.
   find_package(Kokkos REQUIRED COMPONENTS separable_compilation)
   enable_language(${Kokkos_COMPILE_LANGUAGE})
-  list(APPEND REALM_LIBRARIES realm_kokkos)
+
+  if(NOT BUILD_SHARED_LIBS AND "${Kokkos_COMPILE_LANGUAGE}" STREQUAL CXX)
+    include(CheckSourceCompiles)
+    include(CMakePushCheckState)
+
+    cmake_push_check_state(RESET)
+      set(CMAKE_REQUIRED_LIBRARIES Kokkos::kokkoscore)
+      unset(REALM_${Kokkos_COMPILE_LANGUAGE}_COMPILER_CAN_COMPILE_KOKKOS CACHE)
+      check_source_compiles(
+          ${Kokkos_COMPILE_LANGUAGE} "
+#include <Kokkos_Core.hpp>
+int main(int argc, char** argv) {
+  Kokkos::initialize(argc, argv);
+  {
+    Kokkos::View<int*> v(\"v\", 1);
+    (void)v;
+  }
+  Kokkos::finalize();
+  return 0;
+}
+" REALM_${Kokkos_COMPILE_LANGUAGE}_COMPILER_CAN_COMPILE_KOKKOS)
+    cmake_pop_check_state()
+
+    if(NOT ${REALM_${Kokkos_COMPILE_LANGUAGE}_COMPILER_CAN_COMPILE_KOKKOS})
+      message(FATAL_ERROR "Current Realm ${Kokkos_COMPILE_LANGUAGE} compiler will not work with Kokkos during STATIC build.")
+    endif()
+  endif()
+
+  list(APPEND REALM_PUBLIC_LIBRARIES realm_kokkos)
 endif()
 
 if(REALM_ENABLE_LLVM)
@@ -952,6 +980,8 @@ endif()
 
 target_link_libraries(realm_obj PRIVATE ${REALM_LIBRARIES})
 target_link_libraries(Realm PRIVATE ${REALM_LIBRARIES})
+target_link_libraries(realm_obj PUBLIC ${REALM_PUBLIC_LIBRARIES})
+target_link_libraries(Realm PUBLIC ${REALM_PUBLIC_LIBRARIES})
 
 target_include_directories(
   realm_obj
