@@ -18,7 +18,7 @@ project(RealmTutorial_hello_world)
 
 # Only search if were building stand-alone and not as part of Realm
 if(NOT TARGET Realm::Realm)
-  find_package(Realm REQUIRED)
+  find_package(Realm REQUIRED OPTIONAL_COMPONENTS openmp cuda hip)
 endif()
 
 find_package(OpenMP COMPONENTS C CXX)

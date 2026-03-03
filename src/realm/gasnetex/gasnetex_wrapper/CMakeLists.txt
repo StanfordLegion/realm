@@ -24,9 +24,9 @@ project(
 
 # This is needed to retrieve the FindGASNet and FetchAndBuildGASNet cmake
 # scripts
-set(LEGION_SOURCE_DIR
+set(REALM_SOURCE_DIR
     "${CMAKE_CURRENT_SOURCE_DIR}/../../../.."
-    CACHE STRING "Location of legion source directory"
+    CACHE STRING "Location of realm source directory"
 )
 option(GEX_BUILD_SHARED "Build shared lib" ON)
 option(GEX_DEBUG "Enable extra debugging output" OFF)
@@ -34,15 +34,10 @@ option(GEX_NO_INSTALL "Disable installing of gex_wrapper library" OFF)
 
 include(GenerateExportHeader)
 
-list(APPEND CMAKE_MODULE_PATH "${LEGION_SOURCE_DIR}/cmake")
+list(APPEND CMAKE_MODULE_PATH "${REALM_SOURCE_DIR}/cmake")
 
 # Get GASNet dependency
-find_package(GASNet)
-if(NOT GASNet_FOUND)
-  set(GASNet_BUILD_SHARED TRUE)
-  include(${LEGION_SOURCE_DIR}/cmake/FetchAndBuildGASNet.cmake)
-  find_package(GASNet REQUIRED)
-endif()
+find_package(GASNet REQUIRED)
 
 set(REALM_GASNETEX_WRAPPER_SRCS gasnetex_handlers.cc gasnetex_wrapper_internal.h gasnetex_wrapper.h
                                 gasnetex_wrapper.cc

@@ -119,6 +119,9 @@ list(
   topology_test.cc
   hash.cc
   hpp_span_test.cc
+  hpp_runtime_test.cc
+  hpp_event_test.cc
+  key_value_store_test.cc
 )
 list(TRANSFORM REALM_UNIT_TESTS PREPEND "${REALM_TEST_DIR}/unit_tests/")
 add_executable(realm_unit_tests ${REALM_UNIT_TESTS})
@@ -146,6 +149,7 @@ list(
   c_runtime_version.cc
   c_runtime_attr.cc
   c_affinity.cc
+  best_affinity_test.cc
 )
 list(TRANSFORM REALM_C_UNIT_TESTS PREPEND "${REALM_TEST_DIR}/unit_tests/")
 add_executable(realm_c_unit_tests ${REALM_C_UNIT_TESTS})
@@ -162,7 +166,14 @@ if((NOT REALM_SANITIZER OR REALM_SANITIZER STREQUAL "NONE")
    AND NOT CMAKE_CROSSCOMPILING
 )
   gtest_discover_tests(realm_unit_tests NO_PRETTY_TYPES NO_PRETTY_VALUES PROPERTIES LABELS "unit")
-  gtest_discover_tests(realm_c_unit_tests NO_PRETTY_TYPES NO_PRETTY_VALUES PROPERTIES LABELS "unit")
+  # Discover c_unit_tests but exclude BestAffinityTest (runtime init not safe for per-test isolation)
+  gtest_discover_tests(realm_c_unit_tests NO_PRETTY_TYPES NO_PRETTY_VALUES 
+                       TEST_FILTER "-BestAffinityTest.*"
+                       PROPERTIES LABELS "unit")
+  # Add BestAffinityTest as a single batch test
+  add_test(NAME BestAffinityTest 
+           COMMAND $<TARGET_FILE:realm_c_unit_tests> "--gtest_filter=BestAffinityTest.*")
+  set_tests_properties(BestAffinityTest PROPERTIES LABELS "unit")
 else()
   add_test(NAME realm_unit_tests COMMAND $<TARGET_FILE:realm_unit_tests>)
   add_test(NAME realm_c_unit_tests COMMAND $<TARGET_FILE:realm_c_unit_tests>)
@@ -284,6 +295,8 @@ set(sparse_construct_ARGS -verbose)
 add_integration_test(sparse_construct "${REALM_TEST_DIR}/sparse_construct.cc")
 add_integration_test(extres_alias "${REALM_TEST_DIR}/extres_alias.cc")
 add_integration_test(reservations "${REALM_TEST_DIR}/reservations.cc")
+set(machine_queries_ARGS -ll:cpu 4 -ll:util 2)
+add_integration_test(machine_queries "${REALM_TEST_DIR}/machine_queries.cc")
 set(machine_config_test_ARGS
     -test_args
     1
@@ -448,9 +461,11 @@ target_link_libraries(c_external_inst ${TEST_GPU_LIBS})
 
 add_integration_test(c_event_poisoned "${REALM_TEST_DIR}/c/test_event_poisoned.cc")
 
-target_link_libraries(
-  machine_config_test ${TEST_GPU_LIBS} $<TARGET_NAME_IF_EXISTS:CUDA::cuda_driver>
-)
+if(REALM_USE_CUDA)
+  target_link_libraries(
+    machine_config_test ${TEST_GPU_LIBS} $<TARGET_NAME_IF_EXISTS:CUDA::cuda_driver>
+  )
+endif()
 target_link_libraries(test_profiling ${TEST_GPU_LIBS})
 if(REALM_USE_LIBDL)
   target_link_libraries(taskreg ${CMAKE_DL_LIBS})

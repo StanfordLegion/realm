@@ -188,8 +188,16 @@ namespace Realm {
 
   /*static*/ LoggerConfig *LoggerConfig::get_config(void)
   {
-    static LoggerConfig cfg;
-    return &cfg;
+    // Intentionally leak this singleton to avoid cross-DSO static destruction
+    // order issues.  When Realm submodules (e.g. realm_kokkos) are built as
+    // separate shared libraries, their file-scope Logger globals may be
+    // destroyed after this translation unit's statics, causing a use-after-free
+    // in Logger::~Logger -> remove_logger -> pending_configs.erase().
+    // A heap-allocated singleton is never destroyed, so it is always safe to
+    // access during Logger destruction regardless of library unload order.
+    // Stream flushing is handled separately via atexit(flush_all_streams).
+    static LoggerConfig *cfg = new LoggerConfig;
+    return cfg;
   }
 
   /*static*/ void LoggerConfig::flush_all_streams(void)
