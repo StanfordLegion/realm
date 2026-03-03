@@ -477,7 +477,7 @@ namespace Realm {
       nested_poisoned = &second_list;
     }
 
-    do {
+    while(!trigger_until.is_expired()) {
       // TODO: triggers are fast - consider doing more than one per time check?
       if(!nested_normal->empty()) {
         EventWaiter *w = nested_normal->pop_front();
@@ -491,7 +491,7 @@ namespace Realm {
         nested_normal = nested_poisoned = 0;
         return;
       }
-    } while(!trigger_until.is_expired());
+    }
 
     // do we have any triggers we want to defer?
     if(!nested_normal->empty() || !nested_poisoned->empty()) {
@@ -837,7 +837,7 @@ namespace Realm {
   void EventMerger::arm_merger(void)
   {
     assert(is_active());
-    precondition_triggered(false /*!poisoned*/, TimeLimit::responsive());
+    precondition_triggered(false /*!poisoned*/, TimeLimit::relative(0));
   }
 
   void EventMerger::precondition_triggered(bool poisoned, TimeLimit work_until,
