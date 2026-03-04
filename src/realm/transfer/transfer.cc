@@ -4328,7 +4328,7 @@ namespace Realm {
       return;
     }
     if(poisoned) {
-      handle_poisoned_precondition(precondition);
+      handle_poisoned_precondition(defer);
       return;
     }
     // Add ourselves to the copy analysis queue
