@@ -4251,8 +4251,9 @@ namespace Realm {
 
   bool CopyAnalyzer::do_work(TimeLimit until)
   {
-    // Always do at least one to guarantee forward progress
     bool done;
+    bool first = true;
+    // Always do at least one to guarantee forward progress
     do {
       TransferOperation *op;
       {
@@ -4263,6 +4264,15 @@ namespace Realm {
         op = pending_copies.front();
         pending_copies.pop_front();
         done = pending_copies.empty();
+      }
+      // If there are more pending copies on the first invocation
+      // then reenable this background work item for other threads
+      // to be able to invoke it in parallel
+      if(first) {
+        if(!done) {
+          make_active();
+        }
+        first = false;
       }
       op->analyze();
     } while(!until.is_expired());
