@@ -21,7 +21,6 @@
 #define NOMINMAX
 #endif
 
-#include "realm/shm.h"
 #include "realm/transfer/channel_common.h"
 #include "realm/transfer/memcpy_channel.h"
 #include "realm/transfer/transfer.h"
