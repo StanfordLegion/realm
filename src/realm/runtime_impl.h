@@ -55,6 +55,8 @@
 #include "realm/shm.h"
 #include "realm/hardware_topology.h"
 
+#include "realm/transfer/transfer.h"
+
 #include <optional>
 #include <unordered_map>
 #include <memory>
@@ -407,6 +409,7 @@ namespace Realm {
     BackgroundWorkManager bgwork;
     IncomingMessageManager *message_manager;
     EventTriggerNotifier event_triggerer;
+    CopyAnalyzer copy_analyzer;
 
     OperationTable optable;
 

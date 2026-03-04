@@ -1953,6 +1953,7 @@ namespace Realm {
 #endif
 
     event_triggerer.add_to_manager(&bgwork);
+    copy_analyzer.add_to_manager(&bgwork);
 
     // initialize barrier timestamp
     BarrierImpl::barrier_adjustment_timestamp.store(

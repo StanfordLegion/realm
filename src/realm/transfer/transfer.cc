@@ -3518,23 +3518,7 @@ namespace Realm {
     }
   }
 
-  bool TransferDesc::request_analysis(TransferOperation *op)
-  {
-    // early out without lock
-    if(analysis_complete.load_acquire()) {
-      return true;
-    }
-
-    AutoLock<> al(mutex);
-    if(analysis_complete.load()) {
-      return true;
-    } else {
-      pending_ops.push_back(op);
-      return false;
-    }
-  }
-
-  void TransferDesc::check_analysis_preconditions()
+  void TransferDesc::check_analysis_preconditions(std::vector<Event> &preconditions) const
   {
     log_xplan.info() << "created: plan=" << (void *)this << " domain=" << *domain
                      << " srcs=" << srcs.size() << " dsts=" << dsts.size();
@@ -3552,8 +3536,6 @@ namespace Realm {
                           << "]=" << *indirects[i];
       }
     }
-
-    std::vector<Event> preconditions;
 
     // we need metadata for the domain and every instance
     {
@@ -3598,18 +3580,6 @@ namespace Realm {
         preconditions.push_back(e);
       }
     }
-
-    if(!preconditions.empty()) {
-      Event merged = Event::merge_events(preconditions);
-      if(merged.exists()) {
-        deferred_analysis.precondition = merged;
-        EventImpl::add_waiter(merged, &deferred_analysis);
-        return;
-      }
-    }
-
-    // no (untriggered) preconditions, so we fall through to immediate analysis
-    perform_analysis();
   }
 
   static size_t compute_ib_size(size_t combined_field_size, size_t domain_size,
@@ -3678,7 +3648,7 @@ namespace Realm {
     const std::vector<TransferGraph::IBInfo> &edges;
   };
 
-  void TransferDesc::perform_analysis()
+  void TransferDesc::perform_analysis(TransferOperation *op)
   {
     // initialize profiling data
     prof_usage.source = Memory::NO_MEMORY;
@@ -3688,20 +3658,8 @@ namespace Realm {
     // quick check - if the domain is empty, there's nothing to actually do
     if(domain->empty()) {
       log_xplan.debug() << "analysis: plan=" << (void *)this << " empty";
-
-      // well, we still have to poke pending ops
-      std::vector<TransferOperation *> to_alloc;
-      {
-        AutoLock<> al(mutex);
-        to_alloc.swap(pending_ops);
-        // release before the mutex is released so to_alloc is visible before the
-        // analysis_complete flag is set
-        analysis_complete.store_release(true);
-      }
-
-      for(size_t i = 0; i < to_alloc.size(); i++) {
-        to_alloc[i]->allocate_ibs();
-      }
+      // well, we still have to allocate ibs
+      op->allocate_ibs();
       return;
     }
 
@@ -4242,70 +4200,71 @@ namespace Realm {
       }
     }
 
-    // mark that the analysis is complete and see if there are any pending
-    //  ops that can start allocating ibs
-    std::vector<TransferOperation *> to_alloc;
-    {
-      AutoLock<> al(mutex);
-      to_alloc.swap(pending_ops);
-      analysis_successful = true;
-      // release before the mutex is released so to_alloc is visible before the
-      // analysis_complete flag is set
-      analysis_complete.store_release(true);
-    }
-
-    for(size_t i = 0; i < to_alloc.size(); i++) {
-      to_alloc[i]->allocate_ibs();
-    }
-  }
-
-  void TransferDesc::cancel_analysis(Event failed_precondition)
-  {
-    // mark that the analysis is failed and see if there are any pending
-    //  ops that need to also fail
-    std::vector<TransferOperation *> to_alloc;
-    {
-      AutoLock<> al(mutex);
-      to_alloc.swap(pending_ops);
-      analysis_successful = false;
-      // release before the mutex is released so to_alloc is visible before the
-      // analysis_complete flag is set
-      analysis_complete.store_release(true);
-    }
-
-    for(size_t i = 0; i < to_alloc.size(); i++) {
-      to_alloc[i]->handle_poisoned_precondition(failed_precondition);
-    }
+    // start allocating intermediate buffers
+    op->allocate_ibs();
   }
 
   ////////////////////////////////////////////////////////////////////////
   //
-  // class TransferDesc::DeferredAnalysis
+  // class CopyAnalyzer
   //
 
-  TransferDesc::DeferredAnalysis::DeferredAnalysis(TransferDesc *_desc)
-    : desc(_desc)
+  CopyAnalyzer::CopyAnalyzer(void)
+    : BackgroundWorkItem("copy analyzer")
   {}
 
-  void TransferDesc::DeferredAnalysis::event_triggered(bool poisoned,
-                                                       TimeLimit work_until)
+  void CopyAnalyzer::analyze_copy(TransferOperation *op)
   {
-    // TODO: respect time limit
-    if(poisoned) {
-      desc->cancel_analysis(precondition);
-    } else {
-      desc->perform_analysis();
+    bool activate = false;
+    {
+      AutoLock<> al(mutex);
+      if(pending_copies.empty()) {
+        pending_copies.push_back(op);
+        activate = true;
+      } else {
+        // Need to insert in the right place in the queue by priority
+        const int priority = op->get_priority();
+        if(priority <= pending_copies.back()->get_priority()) {
+          // Same or lower priority as the back goes on the back
+          pending_copies.push_back(op);
+        } else if(pending_copies.front()->get_priority() < priority) {
+          // Higher priority than the front goes on the front
+          pending_copies.push_front(op);
+        } else {
+          // Insert it at the right place in the deque
+          pending_copies.insert(
+              std::lower_bound(
+                  pending_copies.begin(), pending_copies.end(), op,
+                  [](const TransferOperation *lhs, const TransferOperation *rhs) {
+                    // Only goes to the left in the deque if it has strictly
+                    // higher priority than the right
+                    return lhs->get_priority() > rhs->get_priority();
+                  }),
+              op);
+        }
+      }
+    }
+    if(activate) {
+      make_active();
     }
   }
 
-  void TransferDesc::DeferredAnalysis::print(std::ostream &os) const
+  bool CopyAnalyzer::do_work(TimeLimit until)
   {
-    os << "deferred_analysis(" << (void *)desc << ")";
-  }
-
-  Event TransferDesc::DeferredAnalysis::get_finish_event(void) const
-  {
-    return Event::NO_EVENT;
+    // Always do at least one to guarantee forward progress
+    do {
+      TransferOperation *op;
+      {
+        AutoLock<> al(mutex);
+        if(pending_copies.empty()) {
+          return false;
+        }
+        op = pending_copies.front();
+        pending_copies.pop_front();
+      }
+      op->analyze();
+    } while(!until.is_expired());
+    return true;
   }
 
   ////////////////////////////////////////////////////////////////////////
@@ -4339,24 +4298,29 @@ namespace Realm {
                    << " created - plan=" << (void *)&desc << " before=" << precondition
                    << " after=" << get_finish_event();
 
+    std::vector<Event> preconditions;
+    desc.check_analysis_preconditions(preconditions);
+    Event defer;
+    if(!preconditions.empty()) {
+      if(precondition.exists())
+        preconditions.push_back(precondition);
+      defer = Event::merge_events(preconditions);
+    } else {
+      defer = precondition;
+    }
+
     bool poisoned;
-    if(!precondition.has_triggered_faultaware(poisoned)) {
-      deferred_start.precondition = precondition;
-      EventImpl::add_waiter(precondition, &deferred_start);
+    if(!defer.has_triggered_faultaware(poisoned)) {
+      deferred_start.precondition = defer;
+      EventImpl::add_waiter(defer, &deferred_start);
       return;
     }
     if(poisoned) {
       handle_poisoned_precondition(precondition);
       return;
     }
-
-    // see if we need to wait for the transfer description analysis
-    if(desc.request_analysis(this)) {
-      // it's ready - go ahead and do ib creation
-      allocate_ibs();
-    } else {
-      // do nothing - the TransferDesc will call us when it's ready
-    }
+    // Add ourselves to the copy analysis queue
+    get_runtime()->copy_analyzer.analyze_copy(this);
   }
 
   bool TransferOperation::mark_ready(void)
@@ -4399,11 +4363,7 @@ namespace Realm {
       return;
     }
 
-    // if the transfer analysis was not successful, we can't continue
-    if(!desc.analysis_successful) {
-      mark_terminated(0, ByteArray());
-      return;
-    }
+    // Only here if we're successful now
 
     const TransferGraph &tg = desc.graph;
 
@@ -4977,13 +4937,8 @@ namespace Realm {
     if(poisoned) {
       op->handle_poisoned_precondition(precondition);
     } else {
-      // see if we need to wait for the transfer description analysis
-      if(op->desc.request_analysis(op)) {
-        // it's ready - go ahead and do ib creation
-        op->allocate_ibs();
-      } else {
-        // do nothing - the TransferDesc will call us when it's ready
-      }
+      // Add ourselves to the copy analysis queue
+      get_runtime()->copy_analyzer.analyze_copy(op);
     }
   }
 

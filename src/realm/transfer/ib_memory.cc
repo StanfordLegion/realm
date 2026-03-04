@@ -19,6 +19,7 @@
 
 #include "realm/transfer/ib_memory.h"
 
+#include "realm/runtime_impl.h"
 #include "realm/transfer/transfer.h"
 
 namespace Realm {

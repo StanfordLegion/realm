@@ -20,12 +20,15 @@
 #ifndef REALM_TRANSFER_H
 #define REALM_TRANSFER_H
 
+#include "realm/bgwork.h"
 #include "realm/event.h"
 #include "realm/memory.h"
 #include "realm/indexspace.h"
+#include "realm/inst_impl.h"
 #include "realm/atomics.h"
 #include "realm/network.h"
 #include "realm/operation.h"
+#include "realm/transfer/address_list.h"
 #include "realm/transfer/channel.h"
 #include "realm/profiling.h"
 
@@ -35,6 +38,7 @@ namespace Realm {
   //  type of IndexSpace that is driving the transfer, so we need a widget that
   //  can hold an arbitrary IndexSpace and dispatch based on its type
 
+  struct Node;
   class XferDes;
   class AddressList;
 
@@ -410,11 +414,6 @@ namespace Realm {
     void add_reference();
     void remove_reference();
 
-    // returns true if the analysis is complete, and ib allocation can proceed
-    // if the analysis isn't, returns false and op->allocate_ibs() will be
-    //   called once it is
-    bool request_analysis(TransferOperation *op);
-
     struct FieldInfo {
       FieldID id;
       size_t offset, size;
@@ -424,21 +423,8 @@ namespace Realm {
   protected:
     atomic<int> refcount;
 
-    void check_analysis_preconditions();
-    void perform_analysis();
-    void cancel_analysis(Event failed_precondition);
-
-    class DeferredAnalysis : public EventWaiter {
-    public:
-      DeferredAnalysis(TransferDesc *_desc);
-      virtual void event_triggered(bool poisoned, TimeLimit work_until);
-      virtual void print(std::ostream &os) const;
-      virtual Event get_finish_event(void) const;
-
-      TransferDesc *desc;
-      Event precondition;
-    };
-    DeferredAnalysis deferred_analysis;
+    void check_analysis_preconditions(std::vector<Event> &preconditions) const;
+    void perform_analysis(TransferOperation *op);
 
     friend class TransferOperation;
 
@@ -448,9 +434,6 @@ namespace Realm {
     ProfilingRequestSet prs;
 
     Mutex mutex;
-    atomic<bool> analysis_complete;
-    bool analysis_successful;
-    std::vector<TransferOperation *> pending_ops;
     TransferGraph graph;
     std::vector<int> dim_order;
     std::vector<FieldInfo> src_fields, dst_fields;
@@ -458,6 +441,21 @@ namespace Realm {
     size_t fill_size;
     ProfilingMeasurements::OperationMemoryUsage prof_usage;
     ProfilingMeasurements::OperationCopyInfo prof_cpinfo;
+  };
+
+  // analyzing copies before dispatching them is expensive so we have a
+  // background worker item for doing that
+  class CopyAnalyzer : public BackgroundWorkItem {
+  public:
+    CopyAnalyzer(void);
+
+    void analyze_copy(TransferOperation *op);
+
+    virtual bool do_work(TimeLimit work_until) override;
+
+  protected:
+    Mutex mutex;
+    std::deque<TransferOperation *> pending_copies;
   };
 
   class IndirectionInfo {
@@ -598,6 +596,9 @@ namespace Realm {
                       int priority);
 
     ~TransferOperation();
+
+    inline int get_priority(void) const { return priority; }
+    inline void analyze(void) { desc.perform_analysis(this); }
 
     virtual void print(std::ostream &os) const;
 
