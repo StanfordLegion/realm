@@ -4252,6 +4252,7 @@ namespace Realm {
   bool CopyAnalyzer::do_work(TimeLimit until)
   {
     // Always do at least one to guarantee forward progress
+    bool done;
     do {
       TransferOperation *op;
       {
@@ -4261,10 +4262,11 @@ namespace Realm {
         }
         op = pending_copies.front();
         pending_copies.pop_front();
+        done = pending_copies.empty();
       }
       op->analyze();
     } while(!until.is_expired());
-    return true;
+    return !done;
   }
 
   ////////////////////////////////////////////////////////////////////////
