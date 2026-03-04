@@ -1,0 +1,9 @@
+<map id="Realm::RWLock" name="Realm::RWLock">
+<area shape="rect" id="Node000001" title=" " alt="" coords="129,5,253,31"/>
+<area shape="rect" id="Node000002" href="$structRealm_1_1RWLock_1_1Writer.html" title=" " alt="" coords="5,93,177,119"/>
+<area shape="poly" id="edge2_Node000002_Node000001" title=" " alt="" coords="117,33,99,43,86,56,82,64,82,74,88,92,83,94,77,74,77,63,81,53,96,38,115,28"/>
+<area shape="rect" id="Node000003" href="$structRealm_1_1RWLock_1_1Reader.html" title=" " alt="" coords="210,93,389,119"/>
+<area shape="poly" id="edge4_Node000003_Node000001" title=" " alt="" coords="206,42,226,67,246,81,267,91,264,96,243,85,223,71,202,45"/>
+<area shape="poly" id="edge1_Node000001_Node000002" title=" " alt="" coords="114,82,176,29,180,33,118,86"/>
+<area shape="poly" id="edge3_Node000001_Node000003" title=" " alt="" coords="291,82,276,56,258,43,237,33,239,28,261,38,280,53,295,79"/>
+</map>
