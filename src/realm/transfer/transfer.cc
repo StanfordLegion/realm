@@ -3545,14 +3545,15 @@ namespace Realm {
       }
     }
 
-    std::set<RegionInstance> insts_seen;
-    for(size_t i = 0; i < srcs.size(); i++) {
-      if(srcs[i].inst.exists()) {
-        if(insts_seen.count(srcs[i].inst) > 0) {
+    std::vector<RegionInstance> insts_seen;
+    for(const CopySrcDstField &src : srcs) {
+      if(src.inst.exists()) {
+        auto finder = std::lower_bound(insts_seen.begin(), insts_seen.end(), src.inst);
+        if((finder != insts_seen.end()) && (*finder == src.inst)) {
           continue;
         }
-        insts_seen.insert(srcs[i].inst);
-        RegionInstanceImpl *impl = get_runtime()->get_instance_impl(srcs[i].inst);
+        insts_seen.insert(finder, src.inst);
+        RegionInstanceImpl *impl = get_runtime()->get_instance_impl(src.inst);
         Event e = impl->request_metadata();
         if(e.exists()) {
           preconditions.push_back(e);
@@ -3560,13 +3561,14 @@ namespace Realm {
       }
     }
 
-    for(size_t i = 0; i < dsts.size(); i++) {
-      if(dsts[i].inst.exists()) {
-        if(insts_seen.count(dsts[i].inst) > 0) {
+    for(const CopySrcDstField &dst : dsts) {
+      if(dst.inst.exists()) {
+        auto finder = std::lower_bound(insts_seen.begin(), insts_seen.end(), dst.inst);
+        if((finder != insts_seen.end()) && (*finder == dst.inst)) {
           continue;
         }
-        insts_seen.insert(dsts[i].inst);
-        RegionInstanceImpl *impl = get_runtime()->get_instance_impl(dsts[i].inst);
+        insts_seen.insert(finder, dst.inst);
+        RegionInstanceImpl *impl = get_runtime()->get_instance_impl(dst.inst);
         Event e = impl->request_metadata();
         if(e.exists()) {
           preconditions.push_back(e);
@@ -3650,6 +3652,14 @@ namespace Realm {
 
   void TransferDesc::perform_analysis(TransferOperation *op)
   {
+    // make sure we haven't been cancelled
+    bool ok_to_run = op->mark_ready();
+    if(!ok_to_run) {
+      op->mark_finished(false /*!successful*/);
+      return;
+    }
+    // Only here if we're successful now
+
     // initialize profiling data
     prof_usage.source = Memory::NO_MEMORY;
     prof_usage.target = Memory::NO_MEMORY;
@@ -4368,15 +4378,6 @@ namespace Realm {
 
   void TransferOperation::allocate_ibs()
   {
-    // make sure we haven't been cancelled
-    bool ok_to_run = mark_ready();
-    if(!ok_to_run) {
-      mark_finished(false /*!successful*/);
-      return;
-    }
-
-    // Only here if we're successful now
-
     const TransferGraph &tg = desc.graph;
 
     if(!tg.ib_edges.empty()) {
