@@ -3652,12 +3652,6 @@ namespace Realm {
 
   void TransferDesc::perform_analysis(TransferOperation *op)
   {
-    // make sure we haven't been cancelled
-    bool ok_to_run = op->mark_ready();
-    if(!ok_to_run) {
-      op->mark_finished(false /*!successful*/);
-      return;
-    }
     // Only here if we're successful now
 
     // initialize profiling data
@@ -4341,8 +4335,13 @@ namespace Realm {
       handle_poisoned_precondition(defer);
       return;
     }
-    // Add ourselves to the copy analysis queue
-    get_runtime()->copy_analyzer.analyze_copy(this);
+    // Check that nobody cancelled us
+    if(mark_ready()) {
+      // Add ourselves to the copy analysis queue
+      get_runtime()->copy_analyzer.analyze_copy(this);
+    } else {
+      mark_finished(false /*successful*/);
+    }
   }
 
   bool TransferOperation::mark_ready(void)
@@ -4949,9 +4948,11 @@ namespace Realm {
     // TODO: respect time limit
     if(poisoned) {
       op->handle_poisoned_precondition(precondition);
-    } else {
+    } else if(op->mark_ready()) {
       // Add ourselves to the copy analysis queue
       get_runtime()->copy_analyzer.analyze_copy(op);
+    } else {
+      op->mark_finished(false /*successful*/);
     }
   }
 
