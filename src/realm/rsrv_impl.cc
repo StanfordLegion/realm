@@ -20,6 +20,7 @@
 #include "realm/logging.h"
 #include "realm/event_impl.h"
 #include "realm/runtime_impl.h"
+#include "realm/timers.h"
 
 namespace Realm {
 
@@ -766,6 +767,7 @@ namespace Realm {
     Event rsrv_ready;           // ready event for a pending rsrv request
     unsigned sleeper_count;
     Event sleeper_event;
+    UserEvent waiter_event; // for spin-timeout waiters
     Mutex::CondVar condvar; // for external waiters
 
     // pointer math to obtain FastRsrvState reference
@@ -852,6 +854,7 @@ namespace Realm {
     frs.rsrv_ready = Event::NO_EVENT;
     frs.sleeper_count = 0;
     frs.sleeper_event = Event::NO_EVENT;
+    frs.waiter_event = UserEvent();
     if(Config::use_fast_reservation_fallback) {
       state.fetch_or(STATE_SLOW_FALLBACK);
       if(!frs.rsrv_impl)
@@ -927,6 +930,7 @@ namespace Realm {
     }
 
     // repeat until we succeed
+    long long spin_deadline = -1;
     while(1) {
       // read the current state to see if any exceptional conditions exist
       State cur_state = state.load_acquire();
@@ -944,7 +948,12 @@ namespace Realm {
 
         // if it failed and we've been asked to spin, assume this is regular
         //  contention and try again shortly
-        if((mode == SPIN) || (mode == ALWAYS_SPIN)) {
+        if((mode == ALWAYS_SPIN) ||
+           ((mode == SPIN) && ((spin_deadline == -1) ||
+                               (Clock::current_time_in_nanoseconds() < spin_deadline)))) {
+          if(spin_deadline == -1)
+            spin_deadline = Clock::current_time_in_nanoseconds() + 10000; // 10 us
+
           // if we're going to spin as a writer, set a flag that prevents
           //  new readers from taking the lock until we (or some other writer)
           //  get our turn
@@ -959,8 +968,12 @@ namespace Realm {
           continue;
         }
 
-        // waiting is more complicated
-        assert(0);
+        if(mode == SPIN) {
+          // spin timeout expired - fall through to mutex path
+        } else {
+          // waiting is more complicated
+          assert(0);
+        }
       }
 
       // any other transition requires holding the fast reservation's mutex
@@ -992,7 +1005,17 @@ namespace Realm {
           //   after all
           if((cur_state &
               ~(STATE_READER_COUNT_MASK | STATE_WRITER | STATE_WRITER_WAITING)) == 0) {
-            wait_for = Event::NO_EVENT;
+            // if we got here because a spin timeout expired, we need an
+            //  event to return - create a waiter_event if one doesn't
+            //  already exist
+            if((mode == SPIN) && (spin_deadline != -1) &&
+               (cur_state & (STATE_WRITER | STATE_READER_COUNT_MASK)) != 0) {
+              if(!frs.waiter_event.exists())
+                frs.waiter_event = UserEvent::create_user_event();
+              wait_for = frs.waiter_event;
+            } else {
+              wait_for = Event::NO_EVENT;
+            }
             break;
           }
 
@@ -1144,6 +1167,7 @@ namespace Realm {
     }
 
     // repeat until we succeed
+    long long spin_deadline = -1;
     while(1) {
       // check the current state for things that might involve waiting
       //  before trying to increment the count
@@ -1173,13 +1197,22 @@ namespace Realm {
 
         // if it failed and we've been asked to spin, assume this is regular
         //  contention and try again shortly
-        if((mode == SPIN) || (mode == ALWAYS_SPIN)) {
+        if((mode == ALWAYS_SPIN) ||
+           ((mode == SPIN) && ((spin_deadline == -1) ||
+                               (Clock::current_time_in_nanoseconds() < spin_deadline)))) {
+          if(spin_deadline == -1)
+            spin_deadline = Clock::current_time_in_nanoseconds() + 10000; // 10 us
+
           REALM_SPIN_YIELD();
           continue;
         }
 
-        // waiting is more complicated
-        assert(0);
+        if(mode == SPIN) {
+          // spin timeout expired - fall through to mutex path
+        } else {
+          // waiting is more complicated
+          assert(0);
+        }
       }
 
       // any other transition requires holding the fast reservation's mutex
@@ -1233,7 +1266,17 @@ namespace Realm {
           //   after all
           if((cur_state &
               ~(STATE_READER_COUNT_MASK | STATE_WRITER | STATE_WRITER_WAITING)) == 0) {
-            wait_for = Event::NO_EVENT;
+            // if we got here because a spin timeout expired, we need an
+            //  event to return - create a waiter_event if one doesn't
+            //  already exist
+            if((mode == SPIN) && (spin_deadline != -1) &&
+               (cur_state & (STATE_WRITER | STATE_READER_COUNT_MASK)) != 0) {
+              if(!frs.waiter_event.exists())
+                frs.waiter_event = UserEvent::create_user_event();
+              wait_for = frs.waiter_event;
+            } else {
+              wait_for = Event::NO_EVENT;
+            }
             break;
           }
 
@@ -1374,8 +1417,11 @@ namespace Realm {
         frs.rsrv_impl->release(TimeLimit::responsive());
       }
 
-      // now we can clear the WRITER bit and finish
-      state.fetch_sub_acqrel(STATE_WRITER);
+      // now we can clear the WRITER and WRITER_WAITING bits and finish
+      State bits_to_clear = STATE_WRITER;
+      if((cur_state & STATE_WRITER_WAITING) != 0)
+        bits_to_clear |= STATE_WRITER_WAITING;
+      state.fetch_sub_acqrel(bits_to_clear);
     } else {
       // we'd better be a reader then
       unsigned reader_count = (cur_state & STATE_READER_COUNT_MASK);
@@ -1397,7 +1443,15 @@ namespace Realm {
       state.fetch_sub_acqrel(1);
     }
 
-    frs.mutex.unlock();
+    // if any waiters are waiting on a spin-timeout event, trigger it
+    if(frs.waiter_event.exists()) {
+      UserEvent to_trigger = frs.waiter_event;
+      frs.waiter_event = UserEvent();
+      frs.mutex.unlock();
+      to_trigger.trigger();
+    } else {
+      frs.mutex.unlock();
+    }
   }
 
   void FastReservation::advise_sleep_entry(UserEvent guard_event)
