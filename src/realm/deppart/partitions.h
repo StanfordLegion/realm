@@ -81,6 +81,7 @@ namespace Realm {
     size_t* offsets;
     size_t num_children;
     Rect<N, T> bounds;
+    RegionInstance h_instance = RegionInstance::NO_INST;
   };
 
   // Stores everything necessary to query a BVH
@@ -348,6 +349,8 @@ namespace Realm {
 
     virtual void execute(void) = 0;
 
+    static void shatter_rects(collapsed_space<N, T> & inst_space, size_t &num_completed);
+
     template <typename space_t>
     static void collapse_multi_space(const std::vector<space_t>& field_data, collapsed_space<N, T> &out_space, Arena &my_arena, cudaStream_t stream);
 
@@ -374,6 +377,8 @@ namespace Realm {
 
     template<typename Container, typename IndexFn, typename MapFn>
     void send_output(RectDesc<N, T>* d_rects, size_t total_rects, Arena &my_arena, const Container& ctr, IndexFn getIndex, MapFn getMap);
+
+    virtual bool is_image_microop() const { return false; }
 
     bool exclusive = false;
 

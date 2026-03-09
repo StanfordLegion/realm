@@ -30,6 +30,7 @@
 #include "realm/atomics.h"
 
 #include <iostream>
+#include <mutex>
 #include <vector>
 
 /**
@@ -154,6 +155,44 @@ namespace Realm {
   };
 
   template <int N, typename T>
+  struct CPU_BVH {
+    struct Node {
+      Rect<N, T> bounds;
+      int left = -1;
+      int right = -1;
+
+      // range in leaf_entries covered by this subtree
+      uint32_t begin = 0;
+      uint32_t end = 0;
+
+      bool is_leaf() const { return left < 0; }
+    };
+
+    std::vector<Node> nodes;
+    std::vector<uint32_t> leaf_entries;
+    int root = -1;
+
+    bool valid() const {
+      return root >= 0;
+    }
+
+    void clear() {
+      nodes.clear();
+      leaf_entries.clear();
+      root = -1;
+    }
+
+    bool contains(const span<SparsityMapEntry<N,T>>& entries,
+                  const Point<N,T>& p) const;
+
+    bool contains_any(const span<SparsityMapEntry<N,T>>& entries,
+                      const Rect<N,T>& r) const;
+
+    bool contains_all(const span<SparsityMapEntry<N,T>>& entries,
+                      const Rect<N,T>& r) const;
+  };
+
+  template <int N, typename T>
   REALM_PUBLIC_API std::ostream &operator<<(std::ostream &os,
                                             const SparsityMapEntry<N, T> &entry);
 
@@ -172,6 +211,12 @@ namespace Realm {
   protected:
     // cannot be constructed directly
     SparsityMapPublicImpl(void);
+
+    int choose_bvh_split_axis(const std::vector<uint32_t>& entry_ids,
+                                size_t lo, size_t hi) const;
+    bool bvh_centroid_less(int axis, uint32_t a, uint32_t b) const;
+    int build_bvh_subtree(CPU_BVH<N, T> &bvh, std::vector<uint32_t> &entry_ids,
+                          size_t lo, size_t hi) const;
 
   public:
     /**
@@ -244,8 +289,27 @@ namespace Realm {
     bool compute_covering(const Rect<N, T> &bounds, size_t max_rects, int max_overhead,
                           std::vector<Rect<N, T>> &covering);
 
+    /**
+     * If this sparsity map doesn't already have an acceleration structure,
+     * build a BVH over the entries.
+     */
+    REALM_PUBLIC_API
+    void request_bvh(void);
+
+    /**
+     * Determine whether this sparsity map has an acceleration structure.
+     * @return true if the sparsity map has a valid bvh, false otherwise
+     */
+    bool has_bvh() const;
+
+    CPU_BVH<N, T> entries_bvh;
+
+
+
   protected:
-    atomic<bool> entries_valid{false}, approx_valid{false};
+    atomic<bool> entries_valid{false}, approx_valid{false}, bvh_valid{false};
+
+    std::mutex bvh_mutex;
 
     //BOTH RegionInstance and vector are returned as a span
     //only on can be valid (i.e. only finalize or gpu_finalize can be called, not both)

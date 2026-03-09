@@ -43,6 +43,9 @@ namespace Realm {
     bool bvh = false;
     for (auto subspace : target_spaces) {
       source_entries += subspace.entries == 0 ? 1 : subspace.entries;
+      if (subspace.entries > 1) {
+        bvh = true;
+      }
     }
     minimal_size += sizeof(Rect<N2, T2>) * source_entries;
     if (this->dense()) {
@@ -54,9 +57,9 @@ namespace Realm {
       minimal_size +=
         (source_entries * sizeof(uint64_t)) +
         (source_entries * sizeof(size_t)) +
-        ((2*source_entries - 1) * sizeof(Rect<N, T>)) +
+        ((2*source_entries - 1) * sizeof(Rect<N2, T2>)) +
         (2 * (2*source_entries - 1) * sizeof(int)) +
-        sizeof(Rect<N, T>) +
+        sizeof(Rect<N2, T2>) +
         (2 * source_entries * sizeof(uint64_t)) +
         (source_entries * sizeof(uint64_t));
     }
@@ -72,7 +75,7 @@ namespace Realm {
           device_size = atoi(val);
         }
         minimal_size = max(minimal_size, device_size);
-        size_t optimal_size = is.bounds.volume() * sizeof(Rect<N, T>) * target_spaces.size() + minimal_size;
+        size_t optimal_size = is.bounds.volume() * sizeof(Rect<N, T>) * target_spaces.size() * 10 + minimal_size;
         std::vector<Machine::ProcessorMemoryAffinity> affinities;
         unsigned best_bandwidth = 0;
         Processor best_proc = Processor::NO_PROC;
@@ -216,6 +219,13 @@ namespace Realm {
   {
     TimeStamp ts("PreimageMicroOp::execute", true, &log_uop_timing);
     std::map<int, DenseRectangleList<N,T> *> rect_map;
+    if (is_ranged || N2 > 1) {
+      for (const IndexSpace<N2, T2>& target : targets) {
+        if (!target.dense()) {
+          target.sparsity.impl()->request_bvh();
+        }
+      }
+    }
 
     if(is_ranged)
       populate_bitmasks_ranges(rect_map);
@@ -736,6 +746,14 @@ namespace Realm {
 	void StructuredPreimageMicroOp<N, T, N2, T2>::execute(void) {
 		TimeStamp ts("PreimageMicroOp::execute", true, &log_uop_timing);
 		std::map<int, DenseRectangleList<N, T> *> rect_map;
+
+	        if (N2 > 1) {
+	          for (const IndexSpace<N2, T2>& target : targets) {
+                    if (!target.dense()) {
+                      target.sparsity.impl()->request_bvh();
+                    }
+                  }
+	        }
 
 		populate_bitmasks(rect_map);
 #ifdef DEBUG_PARTITIONING

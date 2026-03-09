@@ -883,6 +883,334 @@ namespace Realm {
     }
   }
 
+  template <int N, typename T>
+  int SparsityMapPublicImpl<N, T>::choose_bvh_split_axis(
+    const std::vector<uint32_t>& entry_ids,
+    size_t lo, size_t hi) const
+  {
+    assert(lo < hi);
+
+    Rect<N, T> bbox = entries[entry_ids[lo]].bounds;
+    for(size_t i = lo + 1; i < hi; i++)
+      bbox = bbox.union_bbox(entries[entry_ids[i]].bounds);
+
+    int split_axis = 0;
+    long double best_extent =
+      static_cast<long double>(bbox.hi[0]) - static_cast<long double>(bbox.lo[0]);
+
+    for(int d = 1; d < N; d++) {
+      long double extent =
+        static_cast<long double>(bbox.hi[d]) - static_cast<long double>(bbox.lo[d]);
+      if(extent > best_extent) {
+        best_extent = extent;
+        split_axis = d;
+      }
+    }
+
+    return split_axis;
+  }
+
+  template <int N, typename T>
+bool SparsityMapPublicImpl<N, T>::bvh_centroid_less(int axis,
+                                                    uint32_t a,
+                                                    uint32_t b) const
+  {
+    const Rect<N, T>& ra = entries[a].bounds;
+    const Rect<N, T>& rb = entries[b].bounds;
+
+    // comparing (lo + hi) is equivalent to comparing centroids along the axis
+    const auto sa = ra.lo[axis] + ra.hi[axis];
+    const auto sb = rb.lo[axis] + rb.hi[axis];
+    if(sa != sb)
+      return (sa < sb);
+
+    // deterministic tie-break
+    for(int i = 0; i < N; i++) {
+      if(ra.lo[i] != rb.lo[i]) return (ra.lo[i] < rb.lo[i]);
+      if(ra.hi[i] != rb.hi[i]) return (ra.hi[i] < rb.hi[i]);
+    }
+
+    return (a < b);
+  }
+
+  template <int N, typename T>
+  int SparsityMapPublicImpl<N, T>::build_bvh_subtree(CPU_BVH<N, T>& bvh,
+                                                   std::vector<uint32_t>& entry_ids,
+                                                   size_t lo,
+                                                   size_t hi) const
+  {
+    assert(lo < hi);
+
+    // leaf: exactly one sparsity-map entry
+    if((hi - lo) == 1) {
+      const uint32_t entry_idx = entry_ids[lo];
+      const uint32_t leaf_slot = static_cast<uint32_t>(bvh.leaf_entries.size());
+      bvh.leaf_entries.push_back(entry_idx);
+
+      typename CPU_BVH<N, T>::Node node;
+      node.bounds = entries[entry_idx].bounds;
+      node.left = -1;
+      node.right = -1;
+      node.begin = leaf_slot;
+      node.end = leaf_slot + 1;
+
+      const int node_idx = static_cast<int>(bvh.nodes.size());
+      bvh.nodes.push_back(node);
+      return node_idx;
+    }
+
+    const int split_axis = choose_bvh_split_axis(entry_ids, lo, hi);
+    const size_t mid = lo + ((hi - lo) >> 1);
+
+    std::nth_element(entry_ids.begin() + lo,
+                     entry_ids.begin() + mid,
+                     entry_ids.begin() + hi,
+                     [this, split_axis](uint32_t a, uint32_t b) {
+                       return bvh_centroid_less(split_axis, a, b);
+                     });
+
+    const int left_idx = build_bvh_subtree(bvh, entry_ids, lo, mid);
+    const int right_idx = build_bvh_subtree(bvh, entry_ids, mid, hi);
+
+    typename CPU_BVH<N, T>::Node node;
+    node.left = left_idx;
+    node.right = right_idx;
+    node.begin = bvh.nodes[left_idx].begin;
+    node.end = bvh.nodes[right_idx].end;
+    node.bounds = bvh.nodes[left_idx].bounds.union_bbox(bvh.nodes[right_idx].bounds);
+
+    const int node_idx = static_cast<int>(bvh.nodes.size());
+    bvh.nodes.push_back(node);
+    return node_idx;
+  }
+
+  template <int N, typename T>
+  void SparsityMapPublicImpl<N, T>::request_bvh(void)
+  {
+    // fast path
+    if(bvh_valid.load_acquire())
+      return;
+
+    // the BVH indexes the entry list, so entries must already exist
+    if(!entries_valid.load_acquire())
+      assert(false);
+
+    if (from_gpu) {
+      auto gpu_entries = get_entries();
+      entries = std::vector<SparsityMapEntry<N, T>>(gpu_entries.data(), gpu_entries.data() + gpu_entries.size());
+    }
+
+    std::lock_guard<std::mutex> lock(bvh_mutex);
+
+    // somebody else may have built it while we were waiting
+    if(bvh_valid.load())
+      return;
+
+    CPU_BVH<N, T> new_bvh;
+    new_bvh.clear();
+
+    const size_t count = entries.size();
+
+    // empty sparsity map: publish an empty-but-valid BVH
+    if(count == 0) {
+      entries_bvh = std::move(new_bvh);
+      bvh_valid.store_release(true);
+      return;
+    }
+
+    // one leaf per sparsity-map entry
+    std::vector<uint32_t> entry_ids(count);
+    for(uint32_t i = 0; i < count; i++) {
+      assert(!entries[i].sparsity.exists() && (entries[i].bitmap == 0));
+      entry_ids[i] = i;
+    }
+
+    // exact upper bounds for a binary tree with one entry per leaf
+    new_bvh.nodes.reserve((2 * count) - 1);
+    new_bvh.leaf_entries.reserve(count);
+
+    new_bvh.root = build_bvh_subtree(new_bvh, entry_ids, 0, count);
+
+    // publish only after construction is complete
+    entries_bvh = std::move(new_bvh);
+    bvh_valid.store_release(true);
+  }
+
+  template <int N, typename T> bool SparsityMapPublicImpl<N, T>::has_bvh() const
+  {
+    return bvh_valid.load_acquire();
+  }
+
+
+  template <int N, typename T>
+  bool CPU_BVH<N, T>::contains(const span<SparsityMapEntry<N,T>>& entries,
+                               const Point<N,T>& p) const
+  {
+    if(!valid())
+      return false;
+
+    // Root bbox reject.
+    if(!nodes[root].bounds.contains(p))
+      return false;
+
+    std::vector<int> stack;
+    stack.reserve(64);
+    stack.push_back(root);
+
+    while(!stack.empty()) {
+      const int node_idx = stack.back();
+      stack.pop_back();
+
+      const Node& node = nodes[node_idx];
+      if(!node.bounds.contains(p))
+        continue;
+
+      if(node.is_leaf()) {
+        // Leaves currently correspond to exactly one entry, but use the range
+        // to keep the code compatible with future small-bucket leaves.
+        for(uint32_t i = node.begin; i < node.end; i++) {
+          const uint32_t entry_idx = leaf_entries[i];
+          const SparsityMapEntry<N,T>& entry = entries[entry_idx];
+
+          if(!entry.bounds.contains(p))
+            continue;
+
+          if(entry.sparsity.exists()) {
+            assert(0);
+          } else if(entry.bitmap != 0) {
+            assert(0);
+          } else {
+            return true;
+          }
+        }
+      } else {
+        // Push children whose bbox might still contain the point.
+        const int left = node.left;
+        const int right = node.right;
+
+        if((right >= 0) && nodes[right].bounds.contains(p))
+          stack.push_back(right);
+        if((left >= 0) && nodes[left].bounds.contains(p))
+          stack.push_back(left);
+      }
+    }
+
+    return false;
+  }
+
+  template <int N, typename T>
+  bool CPU_BVH<N, T>::contains_any(const span<SparsityMapEntry<N,T>>& entries,
+                                   const Rect<N,T>& r) const
+  {
+    if(!valid())
+      return false;
+
+    // Root bbox reject.
+    if(!nodes[root].bounds.overlaps(r))
+      return false;
+
+    std::vector<int> stack;
+    stack.reserve(64);
+    stack.push_back(root);
+
+    while(!stack.empty()) {
+      const int node_idx = stack.back();
+      stack.pop_back();
+
+      const Node& node = nodes[node_idx];
+      if(!node.bounds.overlaps(r))
+        continue;
+
+      if(node.is_leaf()) {
+        for(uint32_t i = node.begin; i < node.end; i++) {
+          const uint32_t entry_idx = leaf_entries[i];
+          const SparsityMapEntry<N,T>& entry = entries[entry_idx];
+
+          if(!entry.bounds.overlaps(r))
+            continue;
+
+          if(entry.sparsity.exists()) {
+            assert(0);
+          } else if(entry.bitmap != 0) {
+            assert(0);
+          } else {
+            return true;
+          }
+        }
+      } else {
+        const int left = node.left;
+        const int right = node.right;
+
+        if((right >= 0) && nodes[right].bounds.overlaps(r))
+          stack.push_back(right);
+        if((left >= 0) && nodes[left].bounds.overlaps(r))
+          stack.push_back(left);
+      }
+    }
+
+    return false;
+  }
+
+  template <int N, typename T>
+  bool CPU_BVH<N, T>::contains_all(const span<SparsityMapEntry<N,T>>& entries,
+                                   const Rect<N,T>& r) const
+  {
+    if(!valid())
+      return false;
+
+    // Root bbox reject.
+    if(!nodes[root].bounds.contains(r))
+      return false;
+
+    size_t total_volume = 0;
+
+    std::vector<int> stack;
+    stack.reserve(64);
+    stack.push_back(root);
+
+    while(!stack.empty()) {
+      const int node_idx = stack.back();
+      stack.pop_back();
+
+      const Node& node = nodes[node_idx];
+      if(!node.bounds.overlaps(r))
+        continue;
+
+      if(node.is_leaf()) {
+        for(uint32_t i = node.begin; i < node.end; i++) {
+          const uint32_t entry_idx = leaf_entries[i];
+          const SparsityMapEntry<N,T>& entry = entries[entry_idx];
+
+          if(!entry.bounds.overlaps(r))
+            continue;
+
+          if(entry.sparsity.exists()) {
+            assert(0);
+          } else if(entry.bitmap != 0) {
+            assert(0);
+          } else {
+            Rect<N,T> isect = entry.bounds.intersection(r);
+            total_volume += isect.volume();
+
+            // Early out as soon as we know we've covered enough.
+            if(total_volume >= r.volume())
+              return true;
+          }
+        }
+      } else {
+        const int left = node.left;
+        const int right = node.right;
+
+        if((right >= 0) && nodes[right].bounds.overlaps(r))
+          stack.push_back(right);
+        if((left >= 0) && nodes[left].bounds.overlaps(r))
+          stack.push_back(left);
+      }
+    }
+
+    return (total_volume >= r.volume());
+  }
+
   ////////////////////////////////////////////////////////////////////////
   //
   // class SparsityMapImpl<N,T>
@@ -2036,7 +2364,8 @@ SparsityMapImpl<N, T>::~SparsityMapImpl(void)
 #define DOIT(N, T)                                                                       \
   template class SparsityMapPublicImpl<N, T>;                                            \
   template class SparsityMapImpl<N, T>;                                                  \
-  template class SparsityMap<N, T>;
+  template class SparsityMap<N, T>;                                                      \
+  template struct CPU_BVH<N, T>;
   FOREACH_NT(DOIT)
 
 }; // namespace Realm

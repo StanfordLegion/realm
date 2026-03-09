@@ -19,9 +19,9 @@ namespace Realm {
 
     size_t tile_size = buffer.get_layout()->bytes_used;
     std::cout << "Using tile size of " << tile_size << " bytes." << std::endl;
-    Arena buffer_arena(reinterpret_cast<void *>(AffineAccessor<char, 1>(buffer, 0).base), tile_size);
+    Arena buffer_arena(buffer.pointer_untyped(0, tile_size), tile_size);
 
-    NVTX_DEPPART(gpu_preimage);
+    NVTX_DEPPART(gpu_preimage_range);
 
     Memory sysmem;
     find_memory(sysmem, Memory::SYSTEM_MEM);
@@ -85,7 +85,6 @@ namespace Realm {
 
         std::cout << "Preimage iteration " << count++ << ", completed " << num_completed << " / " << inst_space.num_entries << " entries." << std::endl;
         buffer_arena.start();
-        std::cout << "Amount Used: " << buffer_arena.used() << std::endl;
         if (num_completed + curr_tile > inst_space.num_entries) {
           curr_tile = inst_space.num_entries - num_completed;
         }
@@ -113,8 +112,6 @@ namespace Realm {
         size_t total_pts;
         size_t* d_prefix_rects;
         GPUMicroOp<N, T>::volume_prefix_sum(d_valid_rects, num_valid_rects, d_prefix_rects, total_pts, buffer_arena, stream);
-
-        nvtx_range_push("cuda", "build target entries");
 
         PointDesc<N,T>* d_points;
         size_t num_valid_points;
@@ -258,14 +255,18 @@ namespace Realm {
 
       } catch (arena_oom&) {
         std::cout << "Caught arena_oom, reducing tile size from " << curr_tile << " to " << curr_tile / 2 << std::endl;
-        std::cout << buffer_arena.used() << " bytes used in arena." << std::endl;
         curr_tile /= 2;
         if (curr_tile == 0) {
-          host_fallback = true;
-          if (num_output > 0) {
-            this->split_output(output_start, num_output, h_instances, entry_counts, buffer_arena);
+          if (host_fallback) {
+            GPUMicroOp<N, T>::shatter_rects(inst_space, num_completed);
+            curr_tile = 1;
+          } else {
+            host_fallback = true;
+            if (num_output > 0) {
+              this->split_output(output_start, num_output, h_instances, entry_counts, buffer_arena);
+            }
+            curr_tile = tile_size / 2;
           }
-          curr_tile = tile_size / 2;
         }
       }
     }
@@ -307,7 +308,7 @@ namespace Realm {
         if (entry_counts[idx] > 0) {
           Rect<N, T>* h_rects = reinterpret_cast<Rect<N,T> *>(AffineAccessor<char,1>(h_instances[idx], 0).base);
           span<Rect<N, T>> h_rects_span(h_rects, entry_counts[idx]);
-          impl->contribute_dense_rect_list(h_rects_span, false);
+          impl->contribute_dense_rect_list(h_rects_span, true);
           h_instances[idx].destroy();
         } else {
           impl->contribute_nothing();
@@ -326,14 +327,14 @@ namespace Realm {
 
     size_t tile_size = buffer.get_layout()->bytes_used;
     std::cout << "Using tile size of " << tile_size << " bytes." << std::endl;
-    Arena buffer_arena(reinterpret_cast<void *>(AffineAccessor<char, 1>(buffer, 0).base), tile_size);
-
-    NVTX_DEPPART(gpu_preimage);
+    Arena buffer_arena(buffer.pointer_untyped(0, tile_size), tile_size);
 
     Memory sysmem;
     find_memory(sysmem, Memory::SYSTEM_MEM);
 
     cudaStream_t stream = Cuda::get_task_cuda_stream();
+
+    NVTX_DEPPART(gpu_preimage);
 
     collapsed_space<N, T> inst_space;
 
@@ -392,7 +393,6 @@ namespace Realm {
 
         std::cout << "Preimage iteration " << count++ << ", completed " << num_completed << " / " << inst_space.num_entries << " entries." << std::endl;
         buffer_arena.start();
-        std::cout << "Amount Used: " << buffer_arena.used() << std::endl;
         if (num_completed + curr_tile > inst_space.num_entries) {
           curr_tile = inst_space.num_entries - num_completed;
         }
@@ -420,8 +420,6 @@ namespace Realm {
         size_t total_pts;
         size_t* d_prefix_rects;
         GPUMicroOp<N, T>::volume_prefix_sum(d_valid_rects, num_valid_rects, d_prefix_rects, total_pts, buffer_arena, stream);
-
-        nvtx_range_push("cuda", "build target entries");
 
         PointDesc<N,T>* d_points;
         size_t num_valid_points;
@@ -565,14 +563,18 @@ namespace Realm {
 
       } catch (arena_oom&) {
         std::cout << "Caught arena_oom, reducing tile size from " << curr_tile << " to " << curr_tile / 2 << std::endl;
-        std::cout << buffer_arena.used() << " bytes used in arena." << std::endl;
         curr_tile /= 2;
         if (curr_tile == 0) {
-          host_fallback = true;
-          if (num_output > 0) {
-            this->split_output(output_start, num_output, h_instances, entry_counts, buffer_arena);
+          if (host_fallback) {
+            GPUMicroOp<N, T>::shatter_rects(inst_space, num_completed);
+            curr_tile = 1;
+          } else {
+            host_fallback = true;
+            if (num_output > 0) {
+              this->split_output(output_start, num_output, h_instances, entry_counts, buffer_arena);
+            }
+            curr_tile = tile_size / 2;
           }
-          curr_tile = tile_size / 2;
         }
       }
     }
@@ -614,7 +616,7 @@ namespace Realm {
         if (entry_counts[idx] > 0) {
           Rect<N, T>* h_rects = reinterpret_cast<Rect<N,T> *>(AffineAccessor<char,1>(h_instances[idx], 0).base);
           span<Rect<N, T>> h_rects_span(h_rects, entry_counts[idx]);
-          impl->contribute_dense_rect_list(h_rects_span, false);
+          impl->contribute_dense_rect_list(h_rects_span, true);
           h_instances[idx].destroy();
         } else {
           impl->contribute_nothing();

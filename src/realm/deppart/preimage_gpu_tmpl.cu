@@ -13,8 +13,6 @@
  * limitations under the License.
  */
 
-// per‐dimension instantiator for the GPU version of
-// ImageMicroOp<…>::gpu_populate_bitmasks_ptrs
 
 #define REALM_TEMPLATES_ONLY
 #include "realm/deppart/preimage_gpu_kernels.hpp"
@@ -48,14 +46,6 @@ namespace Realm {
   #define N1 INST_N1
   #define N2 INST_N2
 
-  // Replace MyBitmask with whatever bitmask‐type you actually use
-  // (it must have an `as_vector.rects` member that your code touches).
-  //
-  // This explicitly instantiates:
-  //   template void
-  //   ImageMicroOp<N1,T1,N2,T2>::gpu_populate_bitmasks_ptrs<MyBitmask>(
-  //     std::map<int,MyBitmask*>&);
-  //
   #define DO_DOUBLE(T1,T2) \
     template class GPUPreimageMicroOp<N1,T1,N2,T2>; \
     template class PreimageMicroOp<N1,T1,N2,T2>;

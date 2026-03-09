@@ -7,8 +7,6 @@
 #include <thrust/transform.h>
 #include "realm/nvtx.h"
 
-#include <H5Rpublic.h>
-
 namespace Realm {
 
 //TODO: INTERSECTING INPUT/OUTPUT RECTS CAN BE DONE WITH BVH IF BECOME EXPENSIVE
@@ -46,12 +44,12 @@ void GPUImageMicroOp<N,T,N2,T2>::gpu_populate_rngs()
       return;
     }
 
-    NVTX_DEPPART(gpu_image);
+    NVTX_DEPPART(gpu_image_range);
 
     RegionInstance buffer = domain_transform.range_data[0].scratch_buffer;
     size_t tile_size = buffer.get_layout()->bytes_used;
     std::cout << "Using tile size of " << tile_size << " bytes." << std::endl;
-    Arena buffer_arena(reinterpret_cast<void *>(AffineAccessor<char, 1>(buffer, 0).base), tile_size);
+    Arena buffer_arena(buffer.pointer_untyped(0, tile_size), tile_size);
 
     cudaStream_t stream = Cuda::get_task_cuda_stream();
 
@@ -244,14 +242,18 @@ void GPUImageMicroOp<N,T,N2,T2>::gpu_populate_rngs()
       }
       catch (arena_oom&) {
         std::cout << "Caught arena_oom, reducing tile size from " << curr_tile << " to " << curr_tile / 2 << std::endl;
-        std::cout << buffer_arena.used() << " bytes used in arena." << std::endl;
         curr_tile /= 2;
         if (curr_tile == 0) {
-          host_fallback = true;
-          if (num_output > 0) {
-            this->split_output(output_start, num_output, h_instances, entry_counts, buffer_arena);
+          if (host_fallback) {
+            GPUMicroOp<N2, T2>::shatter_rects(inst_space, num_completed);
+            curr_tile = 1;
+          } else {
+            host_fallback = true;
+            if (num_output > 0) {
+              this->split_output(output_start, num_output, h_instances, entry_counts, buffer_arena);
+            }
+            curr_tile = tile_size / 2;
           }
-          curr_tile = tile_size / 2;
         }
       }
   }
@@ -331,7 +333,7 @@ void GPUImageMicroOp<N,T,N2,T2>::gpu_populate_ptrs()
 
     size_t tile_size = buffer.get_layout()->bytes_used;
     std::cout << "Using tile size of " << tile_size << " bytes." << std::endl;
-    Arena buffer_arena(reinterpret_cast<void *>(AffineAccessor<char, 1>(buffer, 0).base), tile_size);
+    Arena buffer_arena(buffer.pointer_untyped(0, tile_size), tile_size);
 
     collapsed_space<N2, T2> src_space;
     src_space.offsets = buffer_arena.alloc<size_t>(sources.size()+1);
@@ -390,8 +392,6 @@ void GPUImageMicroOp<N,T,N2,T2>::gpu_populate_ptrs()
       try {
         std::cout << "Image iteration " << count++ << ", completed " << num_completed << " / " << inst_space.num_entries << " entries." << std::endl;
         buffer_arena.start();
-        std::cout << "Amount Used: " << buffer_arena.used() << std::endl;
-        std::cout << "Expected Amount Used: " << left + num_output * sizeof(RectDesc<N,T>) << std::endl;
         if (num_completed + curr_tile > inst_space.num_entries) {
           curr_tile = inst_space.num_entries - num_completed;
         }
@@ -514,14 +514,18 @@ void GPUImageMicroOp<N,T,N2,T2>::gpu_populate_ptrs()
       }
       catch (arena_oom&) {
         std::cout << "Caught arena_oom, reducing tile size from " << curr_tile << " to " << curr_tile / 2 << std::endl;
-        std::cout << buffer_arena.used() << " bytes used in arena." << std::endl;
         curr_tile /= 2;
         if (curr_tile == 0) {
-          host_fallback = true;
-          if (num_output > 0) {
-            this->split_output(output_start, num_output, h_instances, entry_counts, buffer_arena);
+          if (host_fallback) {
+            GPUMicroOp<N2, T2>::shatter_rects(inst_space, num_completed);
+            curr_tile = 1;
+          } else {
+            host_fallback = true;
+            if (num_output > 0) {
+              this->split_output(output_start, num_output, h_instances, entry_counts, buffer_arena);
+            }
+            curr_tile = tile_size / 2;
           }
-          curr_tile = tile_size / 2;
         }
       }
     }

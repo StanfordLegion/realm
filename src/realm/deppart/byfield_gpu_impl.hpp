@@ -27,7 +27,7 @@ void GPUByFieldMicroOp<N,T,FT>::execute()
 
   size_t tile_size = field_data[0].scratch_buffer.get_layout()->bytes_used;
 
-  Arena buffer_arena(reinterpret_cast<void *>(AffineAccessor<char, 1>(field_data[0].scratch_buffer, 0).base), tile_size);
+  Arena buffer_arena(field_data[0].scratch_buffer.pointer_untyped(0, tile_size), tile_size);
 
   inst_space.offsets = buffer_arena.alloc<size_t>(field_data.size() + 1);
   inst_space.num_children = field_data.size();
@@ -203,14 +203,18 @@ void GPUByFieldMicroOp<N,T,FT>::execute()
 
     } catch (arena_oom&) {
       std::cout << "Caught arena_oom, reducing tile size from " << curr_tile << " to " << curr_tile / 2 << std::endl;
-      std::cout << buffer_arena.used() << " bytes used in arena." << std::endl;
       curr_tile /= 2;
       if (curr_tile == 0) {
-        host_fallback = true;
-        if (num_output > 0) {
-          this->split_output(output_start, num_output, h_instances, entry_counts, buffer_arena);
+        if (host_fallback) {
+          GPUMicroOp<N, T>::shatter_rects(inst_space, num_completed);
+          curr_tile = 1;
+        } else {
+          host_fallback = true;
+          if (num_output > 0) {
+            this->split_output(output_start, num_output, h_instances, entry_counts, buffer_arena);
+          }
+          curr_tile = tile_size / 2;
         }
-        curr_tile = tile_size / 2;
       }
     }
   }
@@ -254,7 +258,7 @@ void GPUByFieldMicroOp<N,T,FT>::execute()
       if (entry_counts[idx] > 0) {
         Rect<N, T>* h_rects = reinterpret_cast<Rect<N,T> *>(AffineAccessor<char,1>(h_instances[idx], 0).base);
         span<Rect<N, T>> h_rects_span(h_rects, entry_counts[idx]);
-        impl->contribute_dense_rect_list(h_rects_span, false);
+        impl->contribute_dense_rect_list(h_rects_span, true);
         h_instances[idx].destroy();
       } else {
         impl->contribute_nothing();

@@ -40,10 +40,18 @@
 //NVTX macros to only add ranges if defined.
 #ifdef REALM_USE_NVTX
 
-  #define NVTX_CAT(a,b)  a##b
+#include <atomic>
 
-  #define NVTX_DEPPART(message) \
-  nvtxScopedRange NVTX_CAT(nvtx_, message)("cuda", #message, 0)
+inline int32_t next_nvtx_payload() {
+  static std::atomic<int32_t> counter{0};
+  return counter.fetch_add(1, std::memory_order_relaxed);
+}
+
+#define NVTX_CAT2(a, b) a##b
+#define NVTX_CAT(a, b) NVTX_CAT2(a, b)
+
+#define NVTX_DEPPART(message) \
+  nvtxScopedRange NVTX_CAT(nvtx_, __LINE__)("cuda", #message, next_nvtx_payload())
 
 #else
 
@@ -98,12 +106,93 @@ namespace Realm {
     return found;
   }
 
+  template <int N, typename T>
+  void GPUMicroOp<N, T>::shatter_rects(collapsed_space<N, T> & inst_space, size_t &num_completed) {
+
+    NVTX_DEPPART(shatter_rects);
+    cudaStream_t stream = Cuda::get_task_cuda_stream();
+    size_t new_size = (inst_space.entries_buffer[num_completed].bounds.volume() + 1) / 2;
+    assert(new_size > 0);
+    size_t num_new_entries = 0;
+    std::vector<size_t> offsets(inst_space.num_children + 1);
+    std::vector<size_t> new_offsets(inst_space.num_children + 1);
+    CUDA_CHECK(cudaMemcpyAsync(offsets.data(), inst_space.offsets, (inst_space.num_children + 1) * sizeof(size_t), cudaMemcpyDeviceToHost, stream), stream);
+    CUDA_CHECK(cudaStreamSynchronize(stream), stream);
+    for (size_t i = 0; i < inst_space.num_children; ++i) {
+      new_offsets[i] = num_new_entries;
+      if (offsets[i+1] <= num_completed) {
+        continue;
+      }
+      for (size_t j = offsets[i]; j < offsets[i+1]; ++j) {
+        if (j >= num_completed) {
+          num_new_entries += (inst_space.entries_buffer[j].bounds.volume() + new_size - 1) / new_size;
+        }
+      }
+    }
+    new_offsets[inst_space.num_children] = num_new_entries;
+    CUDA_CHECK(cudaMemcpyAsync(inst_space.offsets, new_offsets.data(), (inst_space.num_children + 1) * sizeof(size_t), cudaMemcpyHostToDevice, stream), stream);
+    RegionInstance new_entries_buffer = realm_malloc(num_new_entries * sizeof(SparsityMapEntry<N,T>), inst_space.h_instance.get_location());
+    SparsityMapEntry<N,T> *new_entries_ptr = reinterpret_cast<SparsityMapEntry<N, T> *>(new_entries_buffer.pointer_untyped(0, num_new_entries * sizeof(SparsityMapEntry<N,T>)));
+
+    size_t write_loc = 0;
+    for (size_t i = num_completed; i < inst_space.num_entries; i++) {
+      Rect<N, T> bounds = inst_space.entries_buffer[i].bounds;
+      if (bounds.volume() <= new_size) {
+        new_entries_ptr[write_loc] = inst_space.entries_buffer[i];
+        write_loc++;
+        continue;
+      }
+      size_t count = (bounds.volume() + new_size - 1) / new_size;
+      // split in the largest dimension available
+      int split_dim = 0;
+      T total = std::max(bounds.hi[0] - bounds.lo[0] + 1, T(0));
+      if(N > 1) {
+        for(int d = 1; d < N; d++) {
+          T extent = std::max(bounds.hi[d] - bounds.lo[d] + 1, T(0));
+          if(extent > total) {
+            total = extent;
+            split_dim = d;
+          }
+        }
+      }
+      T px = bounds.lo[split_dim];
+      // have to divide before multiplying to avoid overflow
+      T base_span_size = total / count;
+      T base_span_rem = total - (base_span_size * count);
+      T leftover = 0;
+      for(size_t j = 0; j < count; j++) {
+        new_entries_ptr[write_loc] = inst_space.entries_buffer[i];
+        T nx = px + (base_span_size - 1);
+        if(base_span_rem != 0) {
+          leftover += base_span_rem;
+          if(leftover >= T(count)) {
+            nx += 1;
+            leftover -= count;
+          }
+        }
+        new_entries_ptr[write_loc].bounds.lo[split_dim] = px;
+        new_entries_ptr[write_loc].bounds.hi[split_dim] = nx;
+        px = nx + 1;
+        write_loc++;
+      }
+    }
+
+    num_completed = 0;
+    inst_space.entries_buffer = new_entries_ptr;
+    inst_space.num_entries = num_new_entries;
+    inst_space.h_instance.destroy();
+    inst_space.h_instance = new_entries_buffer;
+    CUDA_CHECK(cudaStreamSynchronize(stream), stream);
+
+  }
+
   //Given a list of spaces, compacts them all into one collapsed_space
   template<int N, typename T>
   template<typename space_t>
   void GPUMicroOp<N,T>::collapse_multi_space(const std::vector<space_t>& spaces, collapsed_space<N, T> &out_space, Arena &my_arena, cudaStream_t stream)
   {
 
+    NVTX_DEPPART(collapse_multi_space);
     out_space.bounds = Rect<N, T>::make_empty();
 
     char *val = std::getenv("SHATTER_SIZE");  // or any env var
@@ -197,6 +286,8 @@ namespace Realm {
       CUDA_CHECK(cudaMemcpyAsync(out_space.entries_buffer, h_entries, out_space.num_entries * sizeof(SparsityMapEntry<N,T>), cudaMemcpyHostToDevice, stream), stream);
       CUDA_CHECK(cudaStreamSynchronize(stream), stream);
       h_instance.destroy();
+    } else {
+      out_space.h_instance = h_instance;
     }
     CUDA_CHECK(cudaStreamSynchronize(stream), stream);
 
@@ -206,6 +297,8 @@ namespace Realm {
   template<int N, typename T>
   void GPUMicroOp<N,T>::collapse_parent_space(const IndexSpace<N, T>& parent_space, collapsed_space<N, T> &out_space, Arena &my_arena, cudaStream_t stream)
   {
+
+    NVTX_DEPPART(collapse_parent_space);
     if (parent_space.dense()) {
       SparsityMapEntry<N,T> entry;
       entry.bounds = parent_space.bounds;
@@ -229,6 +322,7 @@ namespace Realm {
   template<int N, typename T>
   void GPUMicroOp<N, T>::build_bvh(const collapsed_space<N, T> &space, BVH<N, T> &result, Arena &my_arena, cudaStream_t stream)
   {
+      NVTX_DEPPART(build_bvh);
       //We want to keep the entire BVH that we return in one instance for convenience.
       size_t indices_instance_size = space.num_entries * sizeof(uint64_t);
       size_t labels_instance_size = space.offsets == nullptr ? 0 : space.num_entries * sizeof(size_t);
@@ -329,6 +423,7 @@ namespace Realm {
   void GPUMicroOp<N,T>::construct_input_rectlist(const collapsed_space<N, T> &lhs, const collapsed_space<N, T> &rhs, out_t* &d_valid_rects, size_t& out_size, uint32_t* counters, uint32_t* out_offsets, Arena &my_arena, cudaStream_t stream)
   {
 
+    NVTX_DEPPART(construct_input_rectlist);
     CUDA_CHECK(cudaMemsetAsync(counters, 0, (lhs.num_children) * sizeof(uint32_t), stream), stream);
 
     BVH<N, T> my_bvh;
@@ -388,6 +483,8 @@ namespace Realm {
   template<typename out_t>
   void GPUMicroOp<N, T>::volume_prefix_sum(const out_t* d_rects, size_t total_rects, size_t* &d_prefix_rects, size_t& num_pts, Arena &my_arena, cudaStream_t stream)
   {
+
+    NVTX_DEPPART(volume_prefix_sum);
     d_prefix_rects = my_arena.alloc<size_t>(total_rects+1);
     CUDA_CHECK(cudaMemsetAsync(d_prefix_rects, 0, sizeof(size_t), stream), stream);
 
@@ -1477,7 +1574,7 @@ namespace Realm {
   template<int N, typename T>
   void GPUMicroOp<N,T>::split_output(RectDesc<N, T>* d_rects, size_t total_rects, std::vector<RegionInstance> &output_instances, std::vector<size_t> &output_counts, Arena &my_arena)
   {
-    NVTX_DEPPART(send_output);
+    NVTX_DEPPART(split_output);
 
     cudaStream_t stream = Cuda::get_task_cuda_stream();
     bool use_sysmem = false;
@@ -1626,7 +1723,8 @@ namespace Realm {
           CUDA_CHECK(cudaMemcpyAsync(h_rects, final_rects + start, (end - start) * sizeof(Rect<N,T>), cudaMemcpyDeviceToHost, stream), stream);
           CUDA_CHECK(cudaStreamSynchronize(stream), stream);
           span<Rect<N, T>> h_rects_span(h_rects, end - start);
-          impl->contribute_dense_rect_list(h_rects_span, false);
+          bool disjoint = !this->is_image_microop();
+          impl->contribute_dense_rect_list(h_rects_span, disjoint);
           h_rects_instance.destroy();
         } else {
           impl->contribute_nothing();

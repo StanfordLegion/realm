@@ -18,7 +18,6 @@
 // index space partitioning for Realm
 
 #include "realm/deppart/partitions.h"
-
 #include "realm/profiling.h"
 
 #include "realm/runtime_impl.h"

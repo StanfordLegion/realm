@@ -613,6 +613,11 @@ namespace Realm {
       }
       return true;
     } else {
+
+      if (impl->has_bvh()) {
+        return impl->entries_bvh.contains(entries, p);
+      }
+
       for(size_t i = 0; i < entries.size(); i++) {
         SparsityMapEntry<N, T> entry = entries[i];
 	if(!entry.bounds.contains(p)) {
@@ -639,30 +644,34 @@ namespace Realm {
     if(!bounds.contains(r))
       return false;
 
-    if(!dense()) {
-      // test against sparsity map too
-      size_t total_volume = 0;
-      SparsityMapPublicImpl<N,T> *impl = sparsity.impl();
-      span<SparsityMapEntry<N, T>> entries = impl->get_entries();
-      for(size_t i = 0; i < entries.size(); i++) {
-        SparsityMapEntry<N, T> entry = entries[i];
-	if(!entry.bounds.overlaps(r)) continue;
-	if(entry.sparsity.exists()) {
-	  assert(0);
-	} else if(entry.bitmap != 0) {
-	  assert(0);
-	} else {
-          Rect<N,T> isect = entry.bounds.intersection(r);
-          total_volume += isect.volume();
-	}
-      }
+    if(dense()) {
+      return true;
+    }
+    // test against sparsity map too
+    size_t total_volume = 0;
+    SparsityMapPublicImpl<N, T> *impl = sparsity.impl();
+    span<SparsityMapEntry<N, T>> entries = impl->get_entries();
 
-      // did we miss anything?
-      if(total_volume < r.volume())
-        return false;
+    if(impl->has_bvh()) {
+      return impl->entries_bvh.contains_all(entries, r);
     }
 
-    return true;
+    for(size_t i = 0; i < entries.size(); i++) {
+      SparsityMapEntry<N, T> entry = entries[i];
+      if(!entry.bounds.overlaps(r))
+        continue;
+      if(entry.sparsity.exists()) {
+        assert(0);
+      } else if(entry.bitmap != 0) {
+        assert(0);
+      } else {
+        Rect<N, T> isect = entry.bounds.intersection(r);
+        total_volume += isect.volume();
+      }
+    }
+
+    // did we miss anything?
+    return (total_volume == r.volume());
   }
 
   template <int N, typename T>
@@ -672,26 +681,31 @@ namespace Realm {
     if(!bounds.overlaps(r))
       return false;
 
-    if(!dense()) {
-      // test against sparsity map too
-      SparsityMapPublicImpl<N,T> *impl = sparsity.impl();
-      span<SparsityMapEntry<N, T>> entries = impl->get_entries();
-      for(size_t i = 0; i < entries.size(); i++) {
-        SparsityMapEntry<N, T> entry = entries[i];
-	if(!entry.bounds.overlaps(r)) continue;
-	if(entry.sparsity.exists()) {
-	  assert(0);
-	} else if(entry.bitmap != 0) {
-	  assert(0);
-	} else {
-	  return true;
-	}
-      }
-      
-      return false;
+    if(dense()) {
+      return true;
+    }
+    // test against sparsity map too
+    SparsityMapPublicImpl<N, T> *impl = sparsity.impl();
+    span<SparsityMapEntry<N, T>> entries = impl->get_entries();
+
+    if(impl->has_bvh()) {
+      return impl->entries_bvh.contains_any(entries, r);
     }
 
-    return true;
+    for(size_t i = 0; i < entries.size(); i++) {
+      SparsityMapEntry<N, T> entry = entries[i];
+      if(!entry.bounds.overlaps(r))
+        continue;
+      if(entry.sparsity.exists()) {
+        assert(0);
+      } else if(entry.bitmap != 0) {
+        assert(0);
+      } else {
+        return true;
+      }
+    }
+
+    return false;
   }
 
   template <int N, typename T>

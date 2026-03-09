@@ -38,9 +38,12 @@ namespace Realm {
     std::vector<DeppartBufferRequirements>& requirements) const {
     size_t minimal_size = 0;
     size_t source_entries = 0;
-    bool bvh = true;
+    bool bvh = false;
     for (auto subspace : source_spaces) {
       source_entries += subspace.entries == 0 ? 1 : subspace.entries;
+      if (subspace.entries > 1) {
+        bvh = true;
+      }
     }
     minimal_size += sizeof(Rect<N2, T2>) * source_entries;
     if (this->dense()) {

@@ -171,6 +171,8 @@ namespace Realm {
         void add_sparsity_output(IndexSpace<N2, T2> _source,
                                  SparsityMap<N, T> _sparsity);
 
+        bool is_image_microop() const override { return true; }
+
     protected:
         IndexSpace<N, T> parent_space;
         DomainTransform<N, T, N2, T2> domain_transform;

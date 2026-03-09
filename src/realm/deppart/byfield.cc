@@ -44,7 +44,7 @@ namespace Realm {
             if (val) {
               device_size = atoi(val);
             }
-            size_t optimal_size = is.bounds.volume() * sizeof(RectDesc<N, T>);
+            size_t optimal_size = is.bounds.volume() * 10 * sizeof(RectDesc<N, T>);
             std::vector<Machine::ProcessorMemoryAffinity> affinities;
             unsigned best_bandwidth = 0;
             Processor best_proc = Processor::NO_PROC;
