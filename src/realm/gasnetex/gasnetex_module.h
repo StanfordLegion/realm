@@ -118,6 +118,8 @@ namespace Realm {
                                            const RemoteAddress &dest_payload_addr,
                                            bool with_congestion, size_t header_size);
 
+    virtual size_t max_payload_size(size_t header_size);
+
   public:
     bool cfg_use_immediate;
     bool cfg_use_negotiated;

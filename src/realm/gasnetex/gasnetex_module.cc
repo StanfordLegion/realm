@@ -798,4 +798,11 @@ namespace Realm {
         with_congestion, header_size, dest_payload_addr.ptr);
   }
 
+  size_t GASNetEXModule::max_payload_size(size_t header_size)
+  {
+    // use the non-congestion medium message limit as the hard ceiling
+    return recommended_max_payload(Network::my_node_id, false /*with_congestion*/,
+                                   header_size);
+  }
+
 }; // namespace Realm

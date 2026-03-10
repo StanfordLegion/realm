@@ -991,4 +991,9 @@ namespace Realm {
                                    header_size);
   }
 
+  size_t MPIModule::max_payload_size(size_t header_size)
+  {
+    return (AM_BUF_SIZE - header_size);
+  }
+
 }; // namespace Realm

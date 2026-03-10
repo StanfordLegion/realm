@@ -268,7 +268,7 @@ namespace Realm {
       static void send_request(NodeID target, ID::IDType barrier_id, const void *data,
                                size_t datalen, size_t max_payload_size)
       {
-        ActiveMessageAuto<BarrierTriggerMessage> amsg(target, max_payload_size);
+        ActiveMessage<BarrierTriggerMessage> amsg(target, datalen);
         amsg->barrier_id = barrier_id;
         amsg.add_payload(data, datalen);
         amsg.commit();
@@ -1582,9 +1582,6 @@ namespace Realm {
     return true;
   }
 
-#ifdef BARRIER_ENABLE_BROADCAST
-  AutoMessageRegistrar<BarrierTriggerMessage> handler;
-#endif
   ActiveMessageHandlerReg<BarrierTriggerMessage> barrier_handler_trigger;
   ActiveMessageHandlerReg<BarrierAdjustMessage> barrier_adjust_message_handler;
   ActiveMessageHandlerReg<BarrierSubscribeMessage> barrier_subscribe_message_handler;

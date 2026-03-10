@@ -926,4 +926,9 @@ namespace Realm {
     return std::min(maxlong, std::min(bytes_per_line, size_t(4 << 20)));
   }
 
+  size_t GASNet1Module::max_payload_size(size_t header_size)
+  {
+    return gasnet_AMMaxMedium();
+  }
+
 }; // namespace Realm

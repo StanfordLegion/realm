@@ -25,6 +25,8 @@
 #include "realm/ucx/ucp_module.h"
 #include "realm/ucx/ucp_internal.h"
 
+#include <limits>
+
 #ifdef REALM_UCX_MODULE_DYNAMIC
 REGISTER_REALM_NETWORK_MODULE_DYNAMIC(Realm::UCPModule);
 #endif
@@ -331,6 +333,14 @@ namespace Realm {
         static_cast<char *>(src_payload_addr.segment->base) + src_payload_addr.offset;
     return internal->recommended_max_payload(
         data, src_payload_addr.segment, &dest_payload_addr, with_congestion, header_size);
+  }
+
+  size_t UCPModule::max_payload_size(size_t header_size)
+  {
+    // UCX handles fragmentation internally via eager/rendezvous protocol
+    //  selection, so there is no practical upper bound on payload size
+    (void)header_size;
+    return std::numeric_limits<size_t>::max();
   }
 
 }; // namespace Realm

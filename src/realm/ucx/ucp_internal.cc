@@ -1936,7 +1936,6 @@ namespace Realm {
     void *UCPInternal::pbuf_get(UCPWorker *worker, size_t size)
     {
       char *buf;
-      assert(size <= ib_seg_size);
 #ifdef REALM_USE_CUDA
       // we should never ask for a payload buffer from a GPU ucp context
       assert(!worker->get_context()->gpu);
