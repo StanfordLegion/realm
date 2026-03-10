@@ -4337,6 +4337,8 @@ namespace Realm {
     }
     // Check that nobody cancelled us
     if(mark_ready()) {
+      // analyzing copies before dispatching them is expensive so we have a
+      // background worker item for doing that
       // Add ourselves to the copy analysis queue
       get_runtime()->copy_analyzer.analyze_copy(this);
     } else {

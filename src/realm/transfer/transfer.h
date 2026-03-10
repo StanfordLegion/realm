@@ -443,8 +443,6 @@ namespace Realm {
     ProfilingMeasurements::OperationCopyInfo prof_cpinfo;
   };
 
-  // analyzing copies before dispatching them is expensive so we have a
-  // background worker item for doing that
   class CopyAnalyzer : public BackgroundWorkItem {
   public:
     CopyAnalyzer(void);
