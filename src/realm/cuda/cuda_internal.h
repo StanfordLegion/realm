@@ -979,7 +979,7 @@ namespace Realm {
       bool progress_xd(GPUreduceChannel *channel, TimeLimit work_until);
       bool progress_basic_xd(GPUreduceChannel *channel, TimeLimit work_until);
       bool progress_custom_xd_data(GPUreduceChannel *channel, TimeLimit work_until);
-      void setup_redop_kernel(GPUreduceChannel *channel, void *params, void *src_base,
+      void setup_redop_kernel(GPUreduceChannel *channel, void *params,
                               const size_t in_span_start, const size_t out_span_start,
                               const size_t in_elem_size, const size_t out_elem_size,
                               const size_t elems, const bool has_transpose);

@@ -19,6 +19,7 @@
 #include "realm/cuda/cuda_module.h"
 #include "realm/cuda/cuda_access.h"
 #include "realm/cuda/cuda_memcpy.h"
+#include "realm/realm_assert.h"
 
 namespace Realm {
 
@@ -2257,10 +2258,6 @@ namespace Realm {
           // to ensure the CUfunction pointer is valid for this specific GPU
           gpu->push_context();
 
-#ifdef REALM_USE_CUDART_HIJACK
-          ThreadLocal::current_gpu_stream = stream;
-#endif
-
           int result = reinterpret_cast<PFN_cudaGetFuncBySymbol>(
               redop->cudaGetFuncBySymbol_fn)((void **)&kernel, host_proxy);
           CHECK_CUDART(result);
@@ -2302,13 +2299,10 @@ namespace Realm {
       return 0;
     }
 
-    void GPUreduceXferDes::setup_redop_kernel(GPUreduceChannel *channel, void *redop_args,
-                                              void *src_base, const size_t in_span_start,
-                                              const size_t out_span_start,
-                                              const size_t in_elem_size,
-                                              const size_t out_elem_size,
-                                              const size_t elems,
-                                              const bool has_transpose)
+    void GPUreduceXferDes::setup_redop_kernel(
+        GPUreduceChannel *channel, void *redop_args, const size_t in_span_start,
+        const size_t out_span_start, const size_t in_elem_size,
+        const size_t out_elem_size, const size_t elems, const bool has_transpose)
     {
       GPU *gpu = checked_cast<GPUreduceChannel *>(channel)->gpu;
       AutoGPUContext agc(channel->gpu);
@@ -2326,9 +2320,7 @@ namespace Realm {
         if(redop->cudaGetFuncBySymbol_fn != 0) {
           // we can ask the runtime to perform the mapping for us
           gpu->push_context();
-#ifdef REALM_USE_CUDART_HIJACK
-          ThreadLocal::current_gpu_stream = stream;
-#endif
+
           CHECK_CUDART(reinterpret_cast<PFN_cudaGetFuncBySymbol>(
               redop->cudaGetFuncBySymbol_fn)((void **)&kernel_ptr, host_proxy));
           gpu->pop_context();
@@ -2350,9 +2342,7 @@ namespace Realm {
         if(redop->cudaGetFuncBySymbol_fn != 0) {
           // we can ask the runtime to perform the mapping for us
           gpu->push_context();
-#ifdef REALM_USE_CUDART_HIJACK
-          ThreadLocal::current_gpu_stream = stream;
-#endif
+
           CHECK_CUDART(reinterpret_cast<PFN_cudaGetFuncBySymbol>(
               redop->cudaGetFuncBySymbol_fn)((void **)&kernel_ptr, host_proxy));
           gpu->pop_context();
@@ -2987,34 +2977,33 @@ namespace Realm {
       size_t bytes_left = max_bytes;
       bool has_transpose = false;
       size_t bytes_to_copy = 0;
-      if(!in_nonaffine && !out_nonaffine) {
-        bytes_to_copy = populate_affine_reduc_info(
-            copy_infos, transpose_copy, in_alc, in_base, in_gpu, out_alc, out_base,
-            out_gpu, bytes_left, in_elem_size, out_elem_size);
-        has_transpose = (transpose_copy.extents[0] != 0);
-        log_reduc_gpu.info() << "bytes to reduce: " << bytes_to_copy
-                             << ", has_transpose: " << has_transpose;
-      } else
-        assert(0);
-
+      REALM_ASSERT(!in_nonaffine && !out_nonaffine);
+      bytes_to_copy = populate_affine_reduc_info(
+          copy_infos, transpose_copy, in_alc, in_base, in_gpu, out_alc, out_base, out_gpu,
+          bytes_left, in_elem_size, out_elem_size);
+      has_transpose = (transpose_copy.extents[0] != 0);
+      log_reduc_gpu.info() << "bytes to reduce: " << bytes_to_copy
+                           << ", has_transpose: " << has_transpose;
       // fill in the arguments to the kernel
       size_t elems = bytes_to_copy / in_elem_size;
       if(has_transpose) {
-        setup_redop_kernel(channel, /*params*/ (void *)&transpose_copy,
-                           (void *)(transpose_copy.src), in_span_start, out_span_start,
-                           in_elem_size, out_elem_size, elems, has_transpose);
+        setup_redop_kernel(channel, /*params*/ (void *)&transpose_copy, in_span_start,
+                           out_span_start, in_elem_size, out_elem_size, elems,
+                           has_transpose);
       } else {
-        setup_redop_kernel(channel, /*params*/ (void *)&copy_infos,
-                           (void *)(copy_infos.subrects[0].src.addr), in_span_start,
+        setup_redop_kernel(channel, /*params*/ (void *)&copy_infos, in_span_start,
                            out_span_start, in_elem_size, out_elem_size, elems,
                            has_transpose);
       }
       size_t total_read_bytes = elems * in_elem_size;
       size_t total_write_bytes = elems * out_elem_size;
-      if(has_transpose)
-        print_transpose_info(transpose_copy);
-      else
-        print_copy_info(copy_infos);
+      if(log_reduc_gpu.want_info()) {
+        if(has_transpose)
+          print_transpose_info(transpose_copy);
+        else {
+          print_copy_info(copy_infos);
+        }
+      }
       log_reduc_gpu.info() << "record_address_consumption: read: " << total_read_bytes
                            << ", write: " << total_write_bytes;
       record_address_consumption(total_read_bytes, total_write_bytes);
