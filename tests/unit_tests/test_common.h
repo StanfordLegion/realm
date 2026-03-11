@@ -27,7 +27,7 @@
 namespace Realm {
 
   template <int N, typename T>
-  RegionInstanceImpl *create_inst(Rect<N, T> bounds,
+  RegionInstanceImpl *create_inst(MemoryImpl *mem_impl, Rect<N, T> bounds,
                                   const std::vector<FieldID> &field_ids,
                                   const std::vector<size_t> &field_sizes);
 

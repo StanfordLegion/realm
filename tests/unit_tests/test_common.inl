@@ -29,6 +29,8 @@ namespace Realm {
            "Given field ids and sizes must match");
 
     inst_layout->piece_lists.resize(field_ids.size());
+    inst_layout->bytes_used = 0;
+    inst_layout->space = bounds;
 
     for(size_t i = 0; i < field_ids.size(); i++) {
       InstanceLayoutGeneric::FieldLayout field_layout;
@@ -46,22 +48,22 @@ namespace Realm {
         mult *= (bounds.hi[d - 1] - bounds.lo[d - 1] + 1);
       }
 
-      inst_layout->space = bounds;
       inst_layout->fields[field_ids[i]] = field_layout;
       inst_layout->piece_lists[i].pieces.push_back(affine_piece);
+      inst_layout->bytes_used += bounds.volume() * field_sizes[i];
     }
 
     return inst_layout;
   }
 
   template <int N, typename T>
-  RegionInstanceImpl *create_inst(Rect<N, T> bounds,
+  RegionInstanceImpl *create_inst(MemoryImpl *mem_impl, Rect<N, T> bounds,
                                   const std::vector<FieldID> &field_ids,
                                   const std::vector<size_t> &field_sizes)
   {
     RegionInstance inst = ID::make_instance(0, 0, 0, 0).convert<RegionInstance>();
     InstanceLayout<N, T> *inst_layout = create_layout(bounds, field_ids, field_sizes);
-    RegionInstanceImpl *impl = new RegionInstanceImpl(nullptr, inst, inst.get_location());
+    RegionInstanceImpl *impl = new RegionInstanceImpl(nullptr, inst, mem_impl);
     impl->metadata.layout = inst_layout;
     impl->metadata.inst_offset = 0;
     return impl;

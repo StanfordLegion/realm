@@ -95,13 +95,6 @@
 #define REALM_CUDA_HD
 #endif
 
-// REALM_ASSERT(cond, message) - abort program if 'cond' is not true
-#if defined(__CUDACC__) || defined(__HIPCC__)
-#define REALM_ASSERT(cond, message) assert(cond)
-#else
-#define REALM_ASSERT(cond, message) assert((cond) && (message))
-#endif
-
 // REALM_LIKELY(expr) - suggest that `expr` is usually true
 // REALM_UNLILELY(expr) - suggest that `expr` is usually false
 // REALM_EXPECT(expr, expval) - suggest that `expr` usually evaluates to `expval`

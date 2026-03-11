@@ -55,7 +55,7 @@ namespace Realm {
   public:
     // RegionInstanceImpl creation/deletion is handled by MemoryImpl
     RegionInstanceImpl(const RuntimeImpl *_runtime_impl, RegionInstance _me,
-                       Memory _memory);
+                       MemoryImpl *_memory);
     ~RegionInstanceImpl(void);
 
     class DeferredCreate : public EventWaiter {
@@ -92,10 +92,16 @@ namespace Realm {
 
   public:
     // entry point for both create_instance and create_external_instance
-    static Event create_instance(const RuntimeImpl *runtime_impl, RegionInstance &inst,
-                                 Memory memory, InstanceLayoutGeneric *ilg,
+    static Event create_instance(RegionInstance &inst, MemoryImpl *memory,
+                                 InstanceLayoutGeneric *ilg,
                                  const ExternalInstanceResource *res,
                                  const ProfilingRequestSet &prs, Event wait_on);
+
+    /// @brief Release this instance and the resources it holds after \p wait_on has been
+    /// triggered
+    /// @param wait_on precondition event that will defer the actual release until
+    /// triggered
+    void release(Event wait_on);
 
     Event redistrict(RegionInstance *instances, const InstanceLayoutGeneric **layouts,
                      size_t num_layouts, const ProfilingRequestSet *prs,
@@ -150,7 +156,8 @@ namespace Realm {
     friend class RegionInstance;
 
     RegionInstance me;
-    Memory memory; // not part of metadata because it's determined from ID alone
+    // not part of metadata because it's determined from ID alone
+    MemoryImpl *mem_impl = nullptr;
     // Profiling info only needed on creation node
     ProfilingRequestSet requests;
     ProfilingMeasurementCollection measurements;

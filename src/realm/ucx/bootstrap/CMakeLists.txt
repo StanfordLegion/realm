@@ -72,7 +72,16 @@ if(UCX_BOOTSTRAP_ENABLE_MPI)
     )
   endif()
 endif()
-add_backend_plugin(NAME realm_bootstrap_p2p SOURCES ${UCX_BOOTSTRAP_ROOT_DIR}/bootstrap_p2p.cc)
+add_backend_plugin(
+  NAME realm_ucp_bootstrap_p2p
+  SOURCES
+    ${UCX_BOOTSTRAP_ROOT_DIR}/bootstrap_p2p.cc
+    ${UCX_BOOTSTRAP_ROOT_DIR}/p2p_comm.cc
+    ${UCX_BOOTSTRAP_ROOT_DIR}/worker.cc
+    ${UCX_BOOTSTRAP_ROOT_DIR}/client.cc
+    ${UCX_BOOTSTRAP_ROOT_DIR}/server.cc
+    ${UCX_BOOTSTRAP_ROOT_DIR}/logger.cc
+)
 #endregion
 
 if(UCX_BOOTSTRAP_INSTALL)

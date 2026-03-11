@@ -71,7 +71,8 @@ void run_test_case(const TrasferItTestCaseData<N> &test_case)
       std::make_unique<TransferIteratorIndexSpace<N, T>>(
           test_case.dim_order.data(), test_case.field_ids, test_case.field_offsets,
           test_case.field_sizes,
-          create_inst<N, T>(test_case.domain, test_case.field_ids, test_case.field_sizes),
+          create_inst<N, T>(nullptr, test_case.domain, test_case.field_ids,
+                            test_case.field_sizes),
           test_case.domain, impl.get());
   const InstanceLayoutPieceBase *nonaffine;
   AddressList addrlist;
@@ -262,7 +263,7 @@ const static IteratorStepTestCase kIteratorStepTestCases[] = {
         .it = new TransferIteratorIndexSpace<1, int>(
             0, {0}, {0},
             /*field_sizes=*/{kByteSize},
-            create_inst<1, int>(Rect<1, int>(0, 1), {0}, {kByteSize}),
+            create_inst<1, int>(nullptr, Rect<1, int>(0, 1), {0}, {kByteSize}),
             Rect<1, int>(0, 1)),
         .infos = {TransferIterator::AddressInfo{/*offset=*/0,
                                                 /*bytes_per_el=*/kByteSize,
@@ -286,8 +287,8 @@ const static IteratorStepTestCase kIteratorStepTestCases[] = {
         .it = new TransferIteratorIndexSpace<2, int>(
             0, {0}, {0},
             /*field_sizes=*/{kByteSize},
-            create_inst<2, int>(Rect<2, int>(Point<2, int>(0), Point<2, int>(1)), {0},
-                                {kByteSize}),
+            create_inst<2, int>(nullptr, Rect<2, int>(Point<2, int>(0), Point<2, int>(1)),
+                                {0}, {kByteSize}),
             Rect<2, int>(Point<2, int>(0), Point<2, int>(1))),
 
         .infos = {TransferIterator::AddressInfo{/*offset=*/0,
@@ -312,8 +313,8 @@ const static IteratorStepTestCase kIteratorStepTestCases[] = {
     IteratorStepTestCase{
         .it = new TransferIteratorIndexSpace<2, int>(
             0, {0}, {0}, /*field_sizes=*/{kByteSize},
-            create_inst<2, int>(Rect<2, int>(Point<2, int>(0), Point<2, int>(3)), {0},
-                                {kByteSize}),
+            create_inst<2, int>(nullptr, Rect<2, int>(Point<2, int>(0), Point<2, int>(3)),
+                                {0}, {kByteSize}),
             Rect<2, int>(Point<2, int>(0), Point<2, int>(1))),
         .infos = {TransferIterator::AddressInfo{/*offset=*/0,
                                                 /*bytes_per_el=*/kByteSize * 2,
@@ -338,8 +339,8 @@ const static IteratorStepTestCase kIteratorStepTestCases[] = {
     IteratorStepTestCase{
         .it = new TransferIteratorIndexSpace<2, int>(
             0, {0}, {0}, /*field_sizes=*/{kByteSize},
-            create_inst<2, int>(Rect<2, int>(Point<2, int>(0), Point<2, int>(1)), {0},
-                                {kByteSize}),
+            create_inst<2, int>(nullptr, Rect<2, int>(Point<2, int>(0), Point<2, int>(1)),
+                                {0}, {kByteSize}),
             Rect<2, int>(Point<2, int>(0), Point<2, int>(1))),
         .infos = {TransferIterator::AddressInfo{/*offset=*/0,
                                                 /*bytes_per_el=*/kByteSize * 4,
@@ -359,8 +360,8 @@ const static IteratorStepTestCase kIteratorStepTestCases[] = {
     IteratorStepTestCase{
         .it = new TransferIteratorIndexSpace<3, int>(
             0, {0}, {0}, /*field_sizes=*/{kByteSize},
-            create_inst<3, int>(Rect<3, int>(Point<3, int>(0), Point<3, int>(1)), {0},
-                                {kByteSize}),
+            create_inst<3, int>(nullptr, Rect<3, int>(Point<3, int>(0), Point<3, int>(1)),
+                                {0}, {kByteSize}),
             Rect<3, int>(Point<3, int>(0), Point<3, int>(1))),
         .infos = {TransferIterator::AddressInfo{/*offset=*/0,
                                                 /*bytes_per_el=*/kByteSize * 8,
@@ -375,14 +376,15 @@ const static IteratorStepTestCase kIteratorStepTestCases[] = {
 #endif
 
     // Case 6: step with empty rect
-    IteratorStepTestCase{.it = new TransferIteratorIndexSpace<1, int>(
-                             0, {0}, {0},
-                             /*field_sizes=*/{kByteSize},
-                             create_inst<1, int>(Rect<1, int>(0, 1), {0}, {kByteSize}),
-                             Rect<1, int>::make_empty()),
-                         .max_bytes = {0},
-                         .exp_bytes = {0},
-                         .num_steps = 1},
+    IteratorStepTestCase{
+        .it = new TransferIteratorIndexSpace<1, int>(
+            0, {0}, {0},
+            /*field_sizes=*/{kByteSize},
+            create_inst<1, int>(nullptr, Rect<1, int>(0, 1), {0}, {kByteSize}),
+            Rect<1, int>::make_empty()),
+        .max_bytes = {0},
+        .exp_bytes = {0},
+        .num_steps = 1},
 
     // TODO(apryakhin): This currently hits an assert which should be
     // converted into an error.

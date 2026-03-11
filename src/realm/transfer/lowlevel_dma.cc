@@ -857,7 +857,7 @@ namespace Realm {
     //  the same location twice)
     size_t lines = std::max<size_t>((1 << 30) / size, 1);
     int dim = (lines > 1) ? 2 : 1;
-    size_t *data = addrlist.begin_nd_entry(dim);
+    size_t *data = addrlist.begin_entry(dim);
     if(!data)
       return true; // can't add more until some is consumed
 
@@ -868,7 +868,7 @@ namespace Realm {
       data[2] = lines;
       data[3] = 0; // stride
     }
-    addrlist.commit_nd_entry(dim, size * lines);
+    addrlist.commit_entry(dim, size * lines);
 
     return false; // we can add more if asked
   }

@@ -210,7 +210,8 @@ void run_test_case(const MemcpyXferTestCaseData<N> &test_case)
   TransferIteratorIndexSpace<N, T> *src_it = new TransferIteratorIndexSpace<N, T>(
       test_case.dim_order.data(), test_case.field_ids, test_case.field_offsets,
       test_case.field_sizes,
-      create_inst<N, T>(test_case.domain, test_case.field_ids, test_case.field_sizes),
+      create_inst<N, T>(nullptr, test_case.domain, test_case.field_ids,
+                        test_case.field_sizes),
       test_case.domain, impl.get());
 
   std::vector<XferDesPortInfo> inputs_info;
@@ -235,7 +236,8 @@ void run_test_case(const MemcpyXferTestCaseData<N> &test_case)
   TransferIteratorIndexSpace<N, T> *dst_it = new TransferIteratorIndexSpace<N, T>(
       test_case.dim_order.data(), test_case.field_ids, test_case.field_offsets,
       test_case.field_sizes,
-      create_inst<N, T>(test_case.domain, test_case.field_ids, test_case.field_sizes),
+      create_inst<N, T>(nullptr, test_case.domain, test_case.field_ids,
+                        test_case.field_sizes),
       test_case.domain, impl.get());
 
   xfer_desc->output_ports.resize(1);

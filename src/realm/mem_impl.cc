@@ -511,7 +511,7 @@ namespace Realm {
         if(ilist->instances[idx] == 0) {
           RegionInstance i = id.convert<RegionInstance>();
           log_inst.info() << "creating proxy for remotely-created instance: " << i;
-          ilist->instances[idx] = new RegionInstanceImpl(runtime_impl, i, me);
+          ilist->instances[idx] = new RegionInstanceImpl(runtime_impl, i, this);
         }
 
         return ilist->instances[idx];
@@ -595,7 +595,7 @@ namespace Realm {
                             mem_id.memory_mem_idx(), inst_idx)
               .convert<RegionInstance>();
       log_inst.info() << "creating new local instance: " << i;
-      inst_impl = new RegionInstanceImpl(runtime_impl, i, me);
+      inst_impl = new RegionInstanceImpl(runtime_impl, i, this);
       {
         RWLock::AutoWriterLock al(local_instances.mutex);
         local_instances.instances[inst_idx] = inst_impl;

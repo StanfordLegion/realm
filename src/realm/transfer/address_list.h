@@ -19,54 +19,112 @@
 #define ADDRESS_LIST
 
 #include "realm/realm_config.h"
+#include "realm/indexspace.h"
 #include "realm/id.h"
+
+#include <array>
+#include <cstring>
+#include <unordered_map>
 
 namespace Realm {
 
+  template <typename FieldID>
+  struct FieldBlockBase {
+    std::size_t count;
+    FieldID fields[1];
+
+    // allocate a FieldBlock via heap.alloc_obj and store n field IDs
+    template <typename Heap>
+    static FieldBlockBase<FieldID> *create(Heap &heap, const FieldID *src, size_t n,
+                                           size_t align = 16)
+    {
+      const size_t bytes = sizeof(FieldBlockBase<FieldID>) + (n - 1) * sizeof(FieldID);
+      void *mem = heap.alloc_obj(bytes, align);
+      FieldBlockBase<FieldID> *field_block = new(mem) FieldBlockBase<FieldID>;
+      field_block->count = n;
+      std::copy_n(src, n, field_block->fields);
+      return field_block;
+    }
+  };
+
+  using FieldBlock = FieldBlockBase<int>;
+
+  // =================================================================================================
+  //                                             AddressList
+  // =================================================================================================
   class AddressList {
   public:
-    AddressList();
+    AddressList(size_t _max_entries = 1000);
 
-    size_t *begin_nd_entry(int max_dim);
-    void commit_nd_entry(int act_dim, size_t bytes);
+    // ─── entry construction ──────────────────────────────────────────────────────
+    [[nodiscard]] bool
+    append_entry(int dims, size_t contig_bytes, size_t total_bytes, size_t base_offset,
+                 const std::unordered_map<int, std::pair<size_t, size_t>> &count_strides,
+                 bool wrap_around = false);
 
-    size_t bytes_pending() const;
+    [[nodiscard]] size_t *begin_entry(int max_dim, bool wrap_around = true);
+    void commit_entry(int act_dim, size_t bytes);
+    void attach_field_block(const FieldBlock *_field_block);
+
+    [[nodiscard]] size_t bytes_pending() const;
+    [[nodiscard]] size_t full_field_bytes();
+
+    // entry packs:
+    // the contiguous byte count (contig_bytes) in the upper bitsthe
+    // the actual dimension count (act_dim) in the lower 4 bits
+    [[nodiscard]] static size_t pack_entry_header(size_t contig_bytes, int dims);
+
+    // ─── layout constants ───────────────────────────────────────────────────────
+    static constexpr size_t SLOT_HEADER = 0;
+    static constexpr size_t SLOT_BASE = 1;
+    static constexpr size_t DIM_SLOTS = 2;
+    static constexpr size_t DIM_MASK = 0xF;
+    static constexpr size_t CONTIG_SHIFT = 4;
 
   protected:
     friend class AddressListCursor;
+    [[nodiscard]] const size_t *read_entry();
 
-    const size_t *read_entry();
+    const FieldBlock *field_block{nullptr};
 
-    size_t total_bytes;
-    unsigned write_pointer;
-    unsigned read_pointer;
-    static const size_t MAX_ENTRIES = 1000;
-    size_t data[MAX_ENTRIES];
+    size_t total_bytes{0};
+    size_t write_pointer{0};
+    size_t read_pointer{0};
+    size_t max_entries{0};
+    std::vector<size_t> data;
   };
 
+  // =================================================================================================
+  //                                           AddressListCursor
+  // =================================================================================================
   class AddressListCursor {
   public:
     AddressListCursor();
 
     void set_addrlist(AddressList *_addrlist);
 
-    int get_dim() const;
-    uintptr_t get_offset() const;
-    uintptr_t get_stride(int dim) const;
-    size_t remaining(int dim) const;
-    void advance(int dim, size_t amount);
+    // ─── layout accessors ──────────────────────────────────────────────────────
+    [[nodiscard]] int get_dim() const;
+    [[nodiscard]] uintptr_t get_offset() const;
+    [[nodiscard]] uintptr_t get_stride(int dim) const;
+    [[nodiscard]] size_t remaining(int dim) const;
 
+    // ─── progress───────────────────────────────────────────────────────────────
+    void advance(int dim, size_t amount, int f = 1);
     void skip_bytes(size_t bytes);
 
+    // ─── field accessors ──────────────────────────────────────────────────────
+    [[nodiscard]] const FieldBlock *field_block() const;
+    [[nodiscard]] const FieldID *fields_data() const;
+    [[nodiscard]] size_t remaining_fields() const;
+
+    AddressList *addrlist{nullptr};
+    bool partial{false}; // inside a dimension
+
   protected:
-    AddressList *addrlist;
-    bool partial;
-    // we need to be one larger than any index space realm supports, since
-    //  we use the contiguous bytes within a field as a "dimension" in some
-    //  cases
-    static const int MAX_DIM = REALM_MAX_DIM + 1;
-    int partial_dim;
-    size_t pos[MAX_DIM];
+    int partial_dim{0}; // dimension index
+    size_t partial_fields{0};
+    std::array<size_t, REALM_MAX_DIM + 1> pos{};
   };
 
   std::ostream &operator<<(std::ostream &os, const AddressListCursor &alc);

@@ -16,6 +16,9 @@
  * limitations under the License.
  */
 
+#define _GNU_SOURCE
+#include <dlfcn.h>
+
 #include <stdlib.h>
 #include <limits.h>
 #include <mpi.h>
@@ -221,6 +224,24 @@ out:
 
 int realm_ucp_bootstrap_plugin_init(void *mpi_comm, bootstrap_handle_t *handle)
 {
+  // protect self from unload
+  // for details, please refer to https://github.com/StanfordLegion/realm/issues/331
+  Dl_info info;
+  if(dladdr((void *)&realm_ucp_bootstrap_plugin_init, &info) == 0) {
+    fprintf(stderr, "dladdr failed: cannot find shared object for this function\n");
+    return -1;
+  }
+  if(info.dli_fname == NULL) {
+    fprintf(stderr, "dladdr returned NULL dli_fname\n");
+    return -1;
+  }
+  void *self_handle = dlopen(info.dli_fname, RTLD_NOW | RTLD_NODELETE);
+  if(self_handle == NULL) {
+    fprintf(stderr, "dlopen failed for %s: %s\n", info.dli_fname, dlerror());
+    return -1;
+  }
+  dlclose(self_handle);
+
   int status = MPI_SUCCESS, initialized = 0, finalized = 0;
   MPI_Comm src_comm;
 

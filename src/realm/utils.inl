@@ -22,7 +22,7 @@
 // nop, but helps IDEs
 #include "realm/utils.h"
 
-#include <assert.h>
+#include "realm/realm_assert.h"
 #include <stdlib.h>
 #include <string.h>
 
@@ -69,7 +69,7 @@ namespace Realm {
       curlen = pptr() - external_buffer;
       external_buffer_size = curlen * 2;
       char *new_buffer = (char *)malloc(external_buffer_size);
-      assert(new_buffer != 0);
+      REALM_ASSERT(new_buffer != 0);
       memcpy(new_buffer, external_buffer, curlen);
       free(external_buffer);
       external_buffer = new_buffer;
@@ -78,7 +78,7 @@ namespace Realm {
       curlen = pptr() - internal_buffer;
       external_buffer_size = INITIAL_EXTERNAL_BUFFER_SIZE;
       external_buffer = (char *)malloc(external_buffer_size);
-      assert(external_buffer != 0);
+      REALM_ASSERT(external_buffer != 0);
       memcpy(external_buffer, internal_buffer, curlen);
     }
     if(c >= 0)
@@ -107,7 +107,7 @@ namespace Realm {
   T *DeferredConstructor<T>::construct()
   {
 #ifdef DEBUG_REALM
-    assert(!ptr);
+    REALM_ASSERT(!ptr);
 #endif
     ptr = new(raw_storage) T();
     return ptr;
@@ -118,7 +118,7 @@ namespace Realm {
   T *DeferredConstructor<T>::construct(T1 arg1)
   {
 #ifdef DEBUG_REALM
-    assert(!ptr);
+    REALM_ASSERT(!ptr);
 #endif
     ptr = new(raw_storage) T(arg1);
     return ptr;
@@ -128,7 +128,7 @@ namespace Realm {
   T &DeferredConstructor<T>::operator*()
   {
 #ifdef DEBUG_REALM
-    assert(ptr != 0);
+    REALM_ASSERT(ptr != 0);
 #endif
     return *ptr;
   }
@@ -137,7 +137,7 @@ namespace Realm {
   T *DeferredConstructor<T>::operator->()
   {
 #ifdef DEBUG_REALM
-    assert(ptr != 0);
+    REALM_ASSERT(ptr != 0);
 #endif
     return ptr;
   }
@@ -146,7 +146,7 @@ namespace Realm {
   const T &DeferredConstructor<T>::operator*() const
   {
 #ifdef DEBUG_REALM
-    assert(ptr != 0);
+    REALM_ASSERT(ptr != 0);
 #endif
     return *ptr;
   }
@@ -155,7 +155,7 @@ namespace Realm {
   const T *DeferredConstructor<T>::operator->() const
   {
 #ifdef DEBUG_REALM
-    assert(ptr != 0);
+    REALM_ASSERT(ptr != 0);
 #endif
     return ptr;
   }
