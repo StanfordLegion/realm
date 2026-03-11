@@ -107,10 +107,9 @@ namespace Realm {
   }
 
   template <int N, typename T>
-  void GPUMicroOp<N, T>::shatter_rects(collapsed_space<N, T> & inst_space, size_t &num_completed) {
+  void GPUMicroOp<N, T>::shatter_rects(collapsed_space<N, T> & inst_space, size_t &num_completed, CUstream stream) {
 
     NVTX_DEPPART(shatter_rects);
-    cudaStream_t stream = Cuda::get_task_cuda_stream();
     size_t new_size = (inst_space.entries_buffer[num_completed].bounds.volume() + 1) / 2;
     assert(new_size > 0);
     size_t num_new_entries = 0;
@@ -189,7 +188,7 @@ namespace Realm {
   //Given a list of spaces, compacts them all into one collapsed_space
   template<int N, typename T>
   template<typename space_t>
-  void GPUMicroOp<N,T>::collapse_multi_space(const std::vector<space_t>& spaces, collapsed_space<N, T> &out_space, Arena &my_arena, cudaStream_t stream)
+  void GPUMicroOp<N,T>::collapse_multi_space(const std::vector<space_t>& spaces, collapsed_space<N, T> &out_space, Arena &my_arena, CUstream stream)
   {
 
     NVTX_DEPPART(collapse_multi_space);
@@ -609,7 +608,7 @@ namespace Realm {
       return;
     }
     NVTX_DEPPART(complete_rect_pipeline);
-    cudaStream_t stream = Cuda::get_task_cuda_stream();
+    CUstream stream = this->stream->get_stream();
 
     Memory my_mem;
     assert(find_memory(my_mem, Memory::GPU_FB_MEM));
@@ -1300,7 +1299,7 @@ namespace Realm {
   {
 
     NVTX_DEPPART(complete1d_pipeline);
-    cudaStream_t stream = Cuda::get_task_cuda_stream();
+    CUstream stream = this->stream->get_stream();
 
     RectDesc<N,T>* d_rects_in = d_rects;
 
@@ -1454,7 +1453,7 @@ namespace Realm {
     }
 
 
-    cudaStream_t stream = Cuda::get_task_cuda_stream();
+    CUstream stream = this->stream->get_stream();
 
     size_t bytes_T   = total_pts * sizeof(T);
     size_t bytes_S   = total_pts * sizeof(size_t);
@@ -1576,7 +1575,7 @@ namespace Realm {
   {
     NVTX_DEPPART(split_output);
 
-    cudaStream_t stream = Cuda::get_task_cuda_stream();
+    CUstream stream = this->stream->get_stream();
     bool use_sysmem = false;
     RegionInstance sys_instance = RegionInstance::NO_INST;
 
@@ -1680,7 +1679,7 @@ namespace Realm {
 
     size_t prev = my_arena.mark();
 
-    cudaStream_t stream = Cuda::get_task_cuda_stream();
+    CUstream stream = this->stream->get_stream();
 
     SparsityMapEntry<N,T>* final_entries = my_arena.alloc<SparsityMapEntry<N,T>>(total_rects);
     Rect<N,T>* final_rects = my_arena.alloc<Rect<N,T>>(total_rects);

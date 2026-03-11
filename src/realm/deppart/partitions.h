@@ -34,9 +34,14 @@
 #include "realm/deppart/sparsity_impl.h"
 #include "realm/deppart/inst_helper.h"
 #include "realm/bgwork.h"
+#ifdef REALM_USE_CUDA
+#include "realm/cuda/cuda_module.h"
 
 struct CUstream_st;
-typedef CUstream_st* cudaStream_t;
+typedef CUstream_st* CUstream;
+
+#endif
+
 
 namespace Realm {
 
@@ -44,6 +49,10 @@ namespace Realm {
   class PartitioningOperation;
 
 #ifdef REALM_USE_CUDA
+
+  namespace Cuda {
+    class GPUStream;
+  }
 
   template<typename T>
   struct HiFlag {
@@ -349,20 +358,20 @@ namespace Realm {
 
     virtual void execute(void) = 0;
 
-    static void shatter_rects(collapsed_space<N, T> & inst_space, size_t &num_completed);
+    static void shatter_rects(collapsed_space<N, T> & inst_space, size_t &num_completed, CUstream stream);
 
     template <typename space_t>
-    static void collapse_multi_space(const std::vector<space_t>& field_data, collapsed_space<N, T> &out_space, Arena &my_arena, cudaStream_t stream);
+    static void collapse_multi_space(const std::vector<space_t>& field_data, collapsed_space<N, T> &out_space, Arena &my_arena, CUstream stream);
 
-    static void collapse_parent_space(const IndexSpace<N, T>& parent_space, collapsed_space<N, T> &out_space, Arena &my_arena, cudaStream_t stream);
+    static void collapse_parent_space(const IndexSpace<N, T>& parent_space, collapsed_space<N, T> &out_space, Arena &my_arena, CUstream stream);
 
-    static void build_bvh(const collapsed_space<N, T> &space, BVH<N, T> &bvh, Arena &my_arena, cudaStream_t stream);
-
-    template <typename out_t>
-    static void construct_input_rectlist(const collapsed_space<N, T> &lhs, const collapsed_space<N, T> &rhs, out_t* &d_valid_rects, size_t& out_size, uint32_t* counters, uint32_t* out_offsets, Arena &my_arena, cudaStream_t stream);
+    static void build_bvh(const collapsed_space<N, T> &space, BVH<N, T> &bvh, Arena &my_arena, CUstream stream);
 
     template <typename out_t>
-    static void volume_prefix_sum(const out_t* d_rects, size_t total_rects, size_t* &d_prefix_rects, size_t& num_pts, Arena &my_arena, cudaStream_t stream);
+    static void construct_input_rectlist(const collapsed_space<N, T> &lhs, const collapsed_space<N, T> &rhs, out_t* &d_valid_rects, size_t& out_size, uint32_t* counters, uint32_t* out_offsets, Arena &my_arena, CUstream stream);
+
+    template <typename out_t>
+    static void volume_prefix_sum(const out_t* d_rects, size_t total_rects, size_t* &d_prefix_rects, size_t& num_pts, Arena &my_arena, CUstream stream);
 
     template<typename Container, typename IndexFn, typename MapFn>
     void complete_pipeline(PointDesc<N, T>* d_points, size_t total_pts, RectDesc<N, T>* &d_out_rects, size_t &out_rects, Arena &my_arena, const Container& ctr, IndexFn getIndex, MapFn getMap);
@@ -381,6 +390,8 @@ namespace Realm {
     virtual bool is_image_microop() const { return false; }
 
     bool exclusive = false;
+    Cuda::GPU* gpu;
+    Cuda::GPUStream* stream;
 
   };
 #endif
@@ -489,6 +500,22 @@ namespace Realm {
 
     static ActiveMessageHandlerReg<RemoteMicroOpCompleteMessage> areg;
   };
+
+  // Finds a memory of the specified kind. Returns true on success, false otherwise.
+  inline bool choose_proc(Processor &best_proc, Memory location)
+  {
+    std::vector<Machine::ProcessorMemoryAffinity> affinities;
+    unsigned best_bandwidth = 0;
+    best_proc = Processor::NO_PROC;
+    Machine::get_machine().get_proc_mem_affinity(affinities, Processor::NO_PROC, location);
+    for (auto affinity : affinities) {
+      if (affinity.bandwidth > best_bandwidth) {
+        best_bandwidth = affinity.bandwidth;
+        best_proc = affinity.p;
+      }
+    }
+    return best_proc != Processor::NO_PROC;
+  }
 
 
 };

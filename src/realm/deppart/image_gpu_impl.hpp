@@ -48,10 +48,10 @@ void GPUImageMicroOp<N,T,N2,T2>::gpu_populate_rngs()
 
     RegionInstance buffer = domain_transform.range_data[0].scratch_buffer;
     size_t tile_size = buffer.get_layout()->bytes_used;
-    std::cout << "Using tile size of " << tile_size << " bytes." << std::endl;
+    //std::cout << "Using tile size of " << tile_size << " bytes." << std::endl;
     Arena buffer_arena(buffer.pointer_untyped(0, tile_size), tile_size);
 
-    cudaStream_t stream = Cuda::get_task_cuda_stream();
+    CUstream stream = this->stream->get_stream();
 
     collapsed_space<N2, T2> src_space;
     src_space.offsets = buffer_arena.alloc<size_t>(sources.size()+1);
@@ -98,13 +98,13 @@ void GPUImageMicroOp<N,T,N2,T2>::gpu_populate_rngs()
     size_t num_completed = 0;
     size_t curr_tile = tile_size / 2;
     int count = 0;
-
+    if (count) {}
     bool host_fallback = false;
     std::vector<RegionInstance> h_instances(sources.size(), RegionInstance::NO_INST);
     std::vector<size_t> entry_counts(sources.size(), 0);
     while (num_completed < inst_space.num_entries) {
       try {
-        std::cout << "Image Range iteration " << count++ << ", completed " << num_completed << " / " << inst_space.num_entries << " entries." << std::endl;
+        //std::cout << "Image Range iteration " << count++ << ", completed " << num_completed << " / " << inst_space.num_entries << " entries." << std::endl;
         buffer_arena.start();
         buffer_arena.flip_parity();
         if (num_completed + curr_tile > inst_space.num_entries) {
@@ -241,11 +241,11 @@ void GPUImageMicroOp<N,T,N2,T2>::gpu_populate_rngs()
           CUDA_CHECK(cudaStreamSynchronize(stream), stream);
       }
       catch (arena_oom&) {
-        std::cout << "Caught arena_oom, reducing tile size from " << curr_tile << " to " << curr_tile / 2 << std::endl;
+        //std::cout << "Caught arena_oom, reducing tile size from " << curr_tile << " to " << curr_tile / 2 << std::endl;
         curr_tile /= 2;
         if (curr_tile == 0) {
           if (host_fallback) {
-            GPUMicroOp<N2, T2>::shatter_rects(inst_space, num_completed);
+            GPUMicroOp<N2, T2>::shatter_rects(inst_space, num_completed, stream);
             curr_tile = 1;
           } else {
             host_fallback = true;
@@ -329,10 +329,10 @@ void GPUImageMicroOp<N,T,N2,T2>::gpu_populate_ptrs()
     Memory sysmem;
     find_memory(sysmem, Memory::SYSTEM_MEM);
 
-    cudaStream_t stream = Cuda::get_task_cuda_stream();
+    CUstream stream = this->stream->get_stream();
 
     size_t tile_size = buffer.get_layout()->bytes_used;
-    std::cout << "Using tile size of " << tile_size << " bytes." << std::endl;
+    //std::cout << "Using tile size of " << tile_size << " bytes." << std::endl;
     Arena buffer_arena(buffer.pointer_untyped(0, tile_size), tile_size);
 
     collapsed_space<N2, T2> src_space;
@@ -385,12 +385,13 @@ void GPUImageMicroOp<N,T,N2,T2>::gpu_populate_ptrs()
     size_t num_completed = 0;
     size_t curr_tile = tile_size / 2;
     int count = 0;
+    if (count) {}
     bool host_fallback = false;
     std::vector<RegionInstance> h_instances(sources.size(), RegionInstance::NO_INST);
     std::vector<size_t> entry_counts(sources.size(), 0);
     while (num_completed < inst_space.num_entries) {
       try {
-        std::cout << "Image iteration " << count++ << ", completed " << num_completed << " / " << inst_space.num_entries << " entries." << std::endl;
+        //std::cout << "Image iteration " << count++ << ", completed " << num_completed << " / " << inst_space.num_entries << " entries." << std::endl;
         buffer_arena.start();
         if (num_completed + curr_tile > inst_space.num_entries) {
           curr_tile = inst_space.num_entries - num_completed;
@@ -513,11 +514,11 @@ void GPUImageMicroOp<N,T,N2,T2>::gpu_populate_ptrs()
         CUDA_CHECK(cudaStreamSynchronize(stream), stream);
       }
       catch (arena_oom&) {
-        std::cout << "Caught arena_oom, reducing tile size from " << curr_tile << " to " << curr_tile / 2 << std::endl;
+        //std::cout << "Caught arena_oom, reducing tile size from " << curr_tile << " to " << curr_tile / 2 << std::endl;
         curr_tile /= 2;
         if (curr_tile == 0) {
           if (host_fallback) {
-            GPUMicroOp<N2, T2>::shatter_rects(inst_space, num_completed);
+            GPUMicroOp<N2, T2>::shatter_rects(inst_space, num_completed, stream);
             curr_tile = 1;
           } else {
             host_fallback = true;

@@ -23,6 +23,7 @@
 #include "realm/deppart/rectlist.h"
 #include "realm/deppart/inst_helper.h"
 #include "realm/logging.h"
+#include "realm/cuda/cuda_internal.h"
 
 namespace Realm {
 
@@ -45,16 +46,8 @@ namespace Realm {
               device_size = atoi(val);
             }
             size_t optimal_size = is.bounds.volume() * 10 * sizeof(RectDesc<N, T>);
-            std::vector<Machine::ProcessorMemoryAffinity> affinities;
-            unsigned best_bandwidth = 0;
             Processor best_proc = Processor::NO_PROC;
-            Machine::get_machine().get_proc_mem_affinity(affinities, Processor::NO_PROC, mem);
-            for (auto affinity : affinities) {
-              if (affinity.bandwidth > best_bandwidth) {
-                best_bandwidth = affinity.bandwidth;
-                best_proc = affinity.p;
-              }
-            }
+            assert(choose_proc(best_proc, mem));
             requirements[i].affinity_processor = best_proc;
             requirements[i].lower_bound = device_size;
             requirements[i].upper_bound = max(device_size, optimal_size);
@@ -332,6 +325,13 @@ namespace Realm {
     bool _exclusive)
     : parent_space(_parent), field_data(_field_data) {
     this->exclusive = _exclusive;
+    Memory my_mem = field_data[0].inst.get_location();
+    Processor best_proc;
+    assert(choose_proc(best_proc, my_mem));
+    Cuda::GPUProcessor* gpu_proc = dynamic_cast<Cuda::GPUProcessor*>(get_runtime()->get_processor_impl(best_proc));
+    assert(gpu_proc);
+    this->gpu = gpu_proc->gpu;
+    this->stream = gpu_proc->gpu->get_deppart_stream();
   }
 
   template<int N, typename T, typename FT>

@@ -18,7 +18,7 @@ namespace Realm {
     RegionInstance buffer = domain_transform.range_data[0].scratch_buffer;
 
     size_t tile_size = buffer.get_layout()->bytes_used;
-    std::cout << "Using tile size of " << tile_size << " bytes." << std::endl;
+    //std::cout << "Using tile size of " << tile_size << " bytes." << std::endl;
     Arena buffer_arena(buffer.pointer_untyped(0, tile_size), tile_size);
 
     NVTX_DEPPART(gpu_preimage_range);
@@ -26,7 +26,7 @@ namespace Realm {
     Memory sysmem;
     find_memory(sysmem, Memory::SYSTEM_MEM);
 
-    cudaStream_t stream = Cuda::get_task_cuda_stream();
+    CUstream stream = this->stream->get_stream();
 
     collapsed_space<N, T> inst_space;
 
@@ -76,14 +76,14 @@ namespace Realm {
     size_t num_completed = 0;
     size_t curr_tile = tile_size / 2;
     int count = 0;
-
+    if (count) {}
     bool host_fallback = false;
     std::vector<RegionInstance> h_instances(targets.size(), RegionInstance::NO_INST);
     std::vector<size_t> entry_counts(targets.size(), 0);
     while (num_completed < inst_space.num_entries) {
       try {
 
-        std::cout << "Preimage iteration " << count++ << ", completed " << num_completed << " / " << inst_space.num_entries << " entries." << std::endl;
+        //std::cout << "Preimage iteration " << count++ << ", completed " << num_completed << " / " << inst_space.num_entries << " entries." << std::endl;
         buffer_arena.start();
         if (num_completed + curr_tile > inst_space.num_entries) {
           curr_tile = inst_space.num_entries - num_completed;
@@ -254,11 +254,11 @@ namespace Realm {
         CUDA_CHECK(cudaStreamSynchronize(stream), stream);
 
       } catch (arena_oom&) {
-        std::cout << "Caught arena_oom, reducing tile size from " << curr_tile << " to " << curr_tile / 2 << std::endl;
+        //std::cout << "Caught arena_oom, reducing tile size from " << curr_tile << " to " << curr_tile / 2 << std::endl;
         curr_tile /= 2;
         if (curr_tile == 0) {
           if (host_fallback) {
-            GPUMicroOp<N, T>::shatter_rects(inst_space, num_completed);
+            GPUMicroOp<N, T>::shatter_rects(inst_space, num_completed, stream);
             curr_tile = 1;
           } else {
             host_fallback = true;
@@ -326,13 +326,13 @@ namespace Realm {
     RegionInstance buffer = domain_transform.ptr_data[0].scratch_buffer;
 
     size_t tile_size = buffer.get_layout()->bytes_used;
-    std::cout << "Using tile size of " << tile_size << " bytes." << std::endl;
+    //std::cout << "Using tile size of " << tile_size << " bytes." << std::endl;
     Arena buffer_arena(buffer.pointer_untyped(0, tile_size), tile_size);
 
     Memory sysmem;
     find_memory(sysmem, Memory::SYSTEM_MEM);
 
-    cudaStream_t stream = Cuda::get_task_cuda_stream();
+    CUstream stream = this->stream->get_stream();
 
     NVTX_DEPPART(gpu_preimage);
 
@@ -384,14 +384,14 @@ namespace Realm {
     size_t num_completed = 0;
     size_t curr_tile = tile_size / 2;
     int count = 0;
-
+    if (count) {}
     bool host_fallback = false;
     std::vector<RegionInstance> h_instances(targets.size(), RegionInstance::NO_INST);
     std::vector<size_t> entry_counts(targets.size(), 0);
     while (num_completed < inst_space.num_entries) {
       try {
 
-        std::cout << "Preimage iteration " << count++ << ", completed " << num_completed << " / " << inst_space.num_entries << " entries." << std::endl;
+        //std::cout << "Preimage iteration " << count++ << ", completed " << num_completed << " / " << inst_space.num_entries << " entries." << std::endl;
         buffer_arena.start();
         if (num_completed + curr_tile > inst_space.num_entries) {
           curr_tile = inst_space.num_entries - num_completed;
@@ -562,11 +562,11 @@ namespace Realm {
         CUDA_CHECK(cudaStreamSynchronize(stream), stream);
 
       } catch (arena_oom&) {
-        std::cout << "Caught arena_oom, reducing tile size from " << curr_tile << " to " << curr_tile / 2 << std::endl;
+        //std::cout << "Caught arena_oom, reducing tile size from " << curr_tile << " to " << curr_tile / 2 << std::endl;
         curr_tile /= 2;
         if (curr_tile == 0) {
           if (host_fallback) {
-            GPUMicroOp<N, T>::shatter_rects(inst_space, num_completed);
+            GPUMicroOp<N, T>::shatter_rects(inst_space, num_completed, stream);
             curr_tile = 1;
           } else {
             host_fallback = true;

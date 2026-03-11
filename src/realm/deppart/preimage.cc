@@ -26,6 +26,7 @@
 #include "../logging.h"
 #include <sstream>
 #include <ctime>
+#include "realm/cuda/cuda_internal.h"
 
 namespace Realm {
 
@@ -76,16 +77,8 @@ namespace Realm {
         }
         minimal_size = max(minimal_size, device_size);
         size_t optimal_size = is.bounds.volume() * sizeof(Rect<N, T>) * target_spaces.size() * 10 + minimal_size;
-        std::vector<Machine::ProcessorMemoryAffinity> affinities;
-        unsigned best_bandwidth = 0;
         Processor best_proc = Processor::NO_PROC;
-        Machine::get_machine().get_proc_mem_affinity(affinities, Processor::NO_PROC, mem);
-        for (auto affinity : affinities) {
-          if (affinity.bandwidth > best_bandwidth) {
-            best_bandwidth = affinity.bandwidth;
-            best_proc = affinity.p;
-          }
-        }
+      	assert(choose_proc(best_proc, mem));
         requirements[i].affinity_processor = best_proc;
         requirements[i].lower_bound = minimal_size;
         requirements[i].upper_bound = optimal_size;
@@ -825,6 +818,13 @@ namespace Realm {
 		IndexSpace<N, T> _parent_space, bool _exclusive)
 		: domain_transform(_domain_transform), parent_space(_parent_space) {
 		this->exclusive = _exclusive;
+		Memory my_mem = domain_transform.ptr_data.empty() ? domain_transform.range_data[0].inst.get_location() : domain_transform.ptr_data[0].inst.get_location();
+		Processor best_proc;
+		assert(choose_proc(best_proc, my_mem));
+		Cuda::GPUProcessor* gpu_proc = dynamic_cast<Cuda::GPUProcessor*>(get_runtime()->get_processor_impl(best_proc));
+		assert(gpu_proc);
+		this->gpu = gpu_proc->gpu;
+		this->stream = gpu_proc->gpu->get_deppart_stream();
 	}
 
 	template<int N, typename T, int N2, typename T2>
@@ -841,6 +841,7 @@ namespace Realm {
 	template<int N, typename T, int N2, typename T2>
 	void GPUPreimageMicroOp<N, T, N2, T2>::execute(void) {
 		TimeStamp ts("GPUPreimageMicroOp::execute", true, &log_uop_timing);
+		Cuda::AutoGPUContext agc(this->gpu);
 	        if (domain_transform.ptr_data.size() > 0) {
 	          gpu_populate_bitmasks();
 	        } else if (domain_transform.range_data.size() > 0) {
