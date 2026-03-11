@@ -137,7 +137,7 @@ Event alloc_piece(RegionInstance &result, size_t size, Memory location) {
   assert(location != Memory::NO_MEMORY);
   assert(size > 0);
   std::vector<size_t> byte_fields = {sizeof(char)};
-  IndexSpace<1> instance_index_space(Rect<1>(0, size-1));
+  IndexSpace<1, long long> instance_index_space(Rect<1, long long>(0, size-1));
   return RegionInstance::create_instance(result, location, instance_index_space, byte_fields, 0, Realm::ProfilingRequestSet());
 }
 
@@ -720,6 +720,7 @@ public:
 
     for (int i = 0; i < num_pieces; i++) {
       size_t alloc_size = image_requirements[i].lower_bound + (image_requirements[i].upper_bound - image_requirements[i].lower_bound) * buffer_size / 100;
+      std::cout << "Allocating scratch buffer with size " << alloc_size << " for piece " << i << "\n";
       alloc_piece(point_field_data_gpu[i].scratch_buffer, alloc_size, gpu_memory).wait();
     }
 
@@ -1058,6 +1059,7 @@ public:
 
     for (int i = 0; i < num_pieces; i++) {
       size_t alloc_size = image_requirements[i].lower_bound + (image_requirements[i].upper_bound - image_requirements[i].lower_bound) * buffer_size / 100;
+      std::cout << "allocating buffer of size " << alloc_size << " for piece " << i << "\n";
       alloc_piece(rect_field_data_gpu[i].scratch_buffer, alloc_size, gpu_memory).wait();
     }
 

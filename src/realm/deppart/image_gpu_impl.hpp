@@ -332,7 +332,7 @@ void GPUImageMicroOp<N,T,N2,T2>::gpu_populate_ptrs()
     CUstream stream = this->stream->get_stream();
 
     size_t tile_size = buffer.get_layout()->bytes_used;
-    //std::cout << "Using tile size of " << tile_size << " bytes." << std::endl;
+    std::cout << "Using tile size of " << tile_size << " bytes." << std::endl;
     Arena buffer_arena(buffer.pointer_untyped(0, tile_size), tile_size);
 
     collapsed_space<N2, T2> src_space;
@@ -449,6 +449,10 @@ void GPUImageMicroOp<N,T,N2,T2>::gpu_populate_ptrs()
 
         buffer_arena.flip_parity();
         PointDesc<N,T>* d_valid_points = buffer_arena.alloc<PointDesc<N,T>>(num_valid_points);
+        buffer_arena.start();
+        d_valid_points = buffer_arena.alloc<PointDesc<N,T>>(num_valid_points);
+
+        std::cout << "Tile has " << num_valid_rects << " valid rects and " << num_valid_points << " valid points." << std::endl;
 
         CUDA_CHECK(cudaMemsetAsync(d_inst_counters, 0, (domain_transform.ptr_data.size()) * sizeof(uint32_t), stream), stream);
 

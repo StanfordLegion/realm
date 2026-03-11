@@ -74,13 +74,15 @@ namespace Realm {
       		device_size = atoi(val);
       	}
         minimal_size = max(minimal_size, device_size);
-      	size_t optimal_size = is.bounds.volume() * sizeof(Rect<N, T>) * source_spaces.size() * 20 + minimal_size;
+      	size_t optimal_size = is.bounds.volume() * sizeof(RectDesc<N, T>) * source_spaces.size() * 20 + minimal_size;
+        optimal_size += 2 * (is.dense() ? 1 : is.sparsity.impl()->get_entries().size()) * sizeof(Rect<N, T>) * source_entries;
       	Processor best_proc;
       	assert(choose_proc(best_proc, mem));
         requirements[i].affinity_processor = best_proc;
       	requirements[i].lower_bound = minimal_size;
       	requirements[i].upper_bound = optimal_size;
         requirements[i].minimum_alignment = 128;
+        std::cout << "UPPER BOUND IS " << optimal_size << std::endl;
       } else {
 	requirements[i].affinity_processor = Processor::NO_PROC;
       	requirements[i].lower_bound = 0;
