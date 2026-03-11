@@ -426,7 +426,7 @@ namespace Realm {
     CUDA_CHECK(cudaMemsetAsync(counters, 0, (lhs.num_children) * sizeof(uint32_t), stream), stream);
 
     BVH<N, T> my_bvh;
-    bool bvh_valid = rhs.num_children < rhs.num_entries;
+    bool bvh_valid = rhs.num_children < rhs.num_entries && lhs.num_children < lhs.num_entries;
     if (bvh_valid) {
       build_bvh(rhs, my_bvh, my_arena, stream);
     }
