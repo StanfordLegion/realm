@@ -720,7 +720,6 @@ public:
 
     for (int i = 0; i < num_pieces; i++) {
       size_t alloc_size = image_requirements[i].lower_bound + (image_requirements[i].upper_bound - image_requirements[i].lower_bound) * buffer_size / 100;
-      std::cout << "Allocating scratch buffer with size " << alloc_size << " for piece " << i << "\n";
       alloc_piece(point_field_data_gpu[i].scratch_buffer, alloc_size, gpu_memory).wait();
     }
 
@@ -1059,7 +1058,6 @@ public:
 
     for (int i = 0; i < num_pieces; i++) {
       size_t alloc_size = image_requirements[i].lower_bound + (image_requirements[i].upper_bound - image_requirements[i].lower_bound) * buffer_size / 100;
-      std::cout << "allocating buffer of size " << alloc_size << " for piece " << i << "\n";
       alloc_piece(rect_field_data_gpu[i].scratch_buffer, alloc_size, gpu_memory).wait();
     }
 

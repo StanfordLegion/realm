@@ -82,7 +82,6 @@ namespace Realm {
       	requirements[i].lower_bound = minimal_size;
       	requirements[i].upper_bound = optimal_size;
         requirements[i].minimum_alignment = 128;
-        std::cout << "UPPER BOUND IS " << optimal_size << std::endl;
       } else {
 	requirements[i].affinity_processor = Processor::NO_PROC;
       	requirements[i].lower_bound = 0;

@@ -1462,15 +1462,8 @@ namespace Realm {
     size_t max_aux_bytes = std::max({bytes_T, bytes_S, bytes_R});
     size_t max_pg_bytes = std::max({bytes_p, bytes_S});
 
-    std::cout << "COMPLETE PIPELINE HAS USED " << my_arena.used() << " bytes" << " out of " << my_arena.capacity() << std::endl;
-    std::cout << "TOTAL POINTS IS " << total_pts << std::endl;
-
-    std::cout << "AUX BYTES: " << max_aux_bytes << std::endl;
-
     // Instance shared by coordinate keys, source keys, and rectangle outputs
     char* aux_ptr = my_arena.alloc<char>(2 * max_aux_bytes);
-
-    std::cout << "PG BYTES: " << max_pg_bytes << std::endl;
 
     //Instance shared by group ids (RLE) and intermediate points in sorting
     char* pg_ptr = my_arena.alloc<char>(max_pg_bytes);
@@ -1499,11 +1492,7 @@ namespace Realm {
     //Temporary storage instance shared by CUB operations.
     size_t temp_bytes = std::max({t1, t2, t3});
 
-    std::cout << "TEMP BYTES: " << temp_bytes << std::endl;
     void *temp_storage = my_arena.alloc<char>(temp_bytes);
-
-    std::cout << "TOTAL BYTES: " << my_arena.used() + temp_bytes << std::endl;
-
 
     //Sort along each dimension from LSB to MSB (0 to N-1)
     size_t use_bytes = temp_bytes;
