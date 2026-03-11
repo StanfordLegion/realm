@@ -113,6 +113,7 @@ Event copy_piece(FieldDataDescriptor<IS, FT> src_data, FieldDataDescriptor<IS, F
     offset += fields[i];
   }
   size_t size = fields[field_idx];
+  dst_data.index_space = src_data.index_space;
   RegionInstance::create_instance(dst_data.inst,
                                         dst_memory,
                                         src_data.index_space,
@@ -126,7 +127,6 @@ Event copy_piece(FieldDataDescriptor<IS, FT> src_data, FieldDataDescriptor<IS, F
   dst_field.inst = dst_data.inst;
   dst_field.size = size;
   dst_field.field_id = offset;
-  dst_data.index_space = src_data.index_space;
   dst_data.field_offset = src_data.field_offset;
   std::vector<CopySrcDstField> src_fields = {src_field};
   std::vector<CopySrcDstField> dst_fields = {dst_field};
@@ -664,7 +664,7 @@ public:
     // Partition nodes by subgraph id - do this twice, once on CPU and once on GPU
     // Ensure that the results are identical
 
-    std::vector<IndexSpace<N2>> sources(num_pieces);
+    std::vector<IndexSpace<N2>> sources(num_spaces);
     for(int i = 0; i < num_spaces; i++) {
       if (sparse_factor <= 1) {
         sources[i] = point_field_data[i % num_pieces].index_space;
@@ -730,23 +730,24 @@ public:
                                                   Realm::ProfilingRequestSet());
     warmup.wait();
 
+    long long start_gpu = Clock::current_time_in_microseconds();
     Event gpu_call = is_edges.create_subspaces_by_image(point_field_data_gpu,
                                                   sources,
                                                   p_edges,
                                                   Realm::ProfilingRequestSet());
 
-    if ( wait_on_events ) {
-      gpu_call.wait();
-    }
-
+    gpu_call.wait();
+    long long gpu_us = Clock::current_time_in_microseconds() - start_gpu;
+    long long start_cpu = Clock::current_time_in_microseconds();
     Event cpu_call = is_edges.create_subspaces_by_image(point_field_data,
                                                   sources,
                                                   p_edges_cpu,
                                                   Realm::ProfilingRequestSet());
 
-    if ( wait_on_events ) {
-      cpu_call.wait();
-    }
+    cpu_call.wait();
+    long long cpu_us = Clock::current_time_in_microseconds() - start_cpu;
+    printf("RESULT,op=image,d1=%d,d2=%d,num_nodes=%d,num_edges=%d,num_spaces=%d,sparse_factor=%d,buffer_size=%zu,gpu_us=%lld,cpu_us=%lld\n",
+                 N1, N2, num_nodes, num_edges, num_spaces, sparse_factor, buffer_size, gpu_us, cpu_us);
 
     return Event::merge_events({gpu_call, cpu_call});
 
@@ -1067,23 +1068,26 @@ public:
                                                   Realm::ProfilingRequestSet());
     warmup.wait();
 
+    long long start_gpu = Clock::current_time_in_microseconds();
     Event gpu_call = is_edges.create_subspaces_by_image(rect_field_data_gpu,
                                                   sources,
                                                   p_edges,
                                                   Realm::ProfilingRequestSet());
 
-    if ( wait_on_events ) {
-      gpu_call.wait();
-    }
 
+    gpu_call.wait();
+    long long gpu_us = Clock::current_time_in_microseconds() - start_gpu;
+    long long start_cpu = Clock::current_time_in_microseconds();
     Event cpu_call = is_edges.create_subspaces_by_image(rect_field_data,
                                                   sources,
                                                   p_edges_cpu,
                                                   Realm::ProfilingRequestSet());
 
-    if ( wait_on_events ) {
-      cpu_call.wait();
-    }
+    cpu_call.wait();
+    long long cpu_us = Clock::current_time_in_microseconds() - start_cpu;
+
+    printf("RESULT,op=image,d1=%d,d2=%d,num_nodes=%d,num_edges=%d,num_spaces=%d,sparse_factor=%d,buffer_size=%zu,gpu_us=%lld,cpu_us=%lld\n",
+                 N1, N2, num_nodes, num_edges, num_spaces, sparse_factor, buffer_size, gpu_us, cpu_us);
 
     return Event::merge_events({gpu_call, cpu_call});
 
