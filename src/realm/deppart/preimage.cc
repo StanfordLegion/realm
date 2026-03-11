@@ -76,7 +76,7 @@ namespace Realm {
           device_size = atoi(val);
         }
         minimal_size = max(minimal_size, device_size);
-        size_t optimal_size = is.bounds.volume() * sizeof(Rect<N, T>) * target_spaces.size() * 10 + minimal_size;
+        size_t optimal_size = is.bounds.volume() * sizeof(Rect<N, T>) * target_spaces.size() * 20 + minimal_size;
         Processor best_proc = Processor::NO_PROC;
       	assert(choose_proc(best_proc, mem));
         requirements[i].affinity_processor = best_proc;
