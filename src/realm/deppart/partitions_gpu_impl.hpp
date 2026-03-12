@@ -90,20 +90,22 @@ namespace Realm {
   };
 
   // Finds a memory of the specified kind. Returns true on success, false otherwise.
-  inline bool find_memory(Memory &output, Memory::Kind kind)
+  inline bool find_memory(Memory &output, Memory::Kind kind, Memory input = Memory::NO_MEMORY)
   {
-    bool found = false;
-    Machine machine = Machine::get_machine();
-    std::set<Memory> all_memories;
-    machine.get_all_memories(all_memories);
-    for(auto& memory : all_memories) {
-      if(memory.kind() == kind) {
-        output = memory;
-        found = true;
-        break;
+    std::vector<Machine::MemoryMemoryAffinity> affinities;
+    unsigned best_bandwidth = 0;
+    output = Memory::NO_MEMORY;
+    Machine::get_machine().get_mem_mem_affinity(affinities, input, Memory::NO_MEMORY);
+    for (auto affinity : affinities) {
+      if (affinity.m2.kind() != kind) {
+        continue;
+      }
+      if (affinity.bandwidth > best_bandwidth) {
+        best_bandwidth = affinity.bandwidth;
+        output = affinity.m2;
       }
     }
-    return found;
+    return output != Memory::NO_MEMORY;
   }
 
   template <int N, typename T>
@@ -228,7 +230,7 @@ namespace Realm {
 
     //We copy into one contiguous host buffer, then copy to device
     Memory sysmem;
-    assert(find_memory(sysmem, Memory::SYSTEM_MEM));
+    assert(find_memory(sysmem, Memory::SYSTEM_MEM, my_arena.location));
 
 
     RegionInstance h_instance = realm_malloc(out_space.num_entries * sizeof(SparsityMapEntry<N,T>), sysmem);
@@ -609,9 +611,6 @@ namespace Realm {
     }
     NVTX_DEPPART(complete_rect_pipeline);
     CUstream stream = this->stream->get_stream();
-
-    Memory my_mem;
-    assert(find_memory(my_mem, Memory::GPU_FB_MEM));
 
     assert(!my_arena.get_parity());
     size_t beginning = my_arena.mark();
@@ -1579,7 +1578,7 @@ namespace Realm {
     RegionInstance sys_instance = RegionInstance::NO_INST;
 
     Memory sysmem;
-    assert(find_memory(sysmem, Memory::SYSTEM_MEM));
+    assert(find_memory(sysmem, Memory::SYSTEM_MEM, my_arena.location));
 
     Rect<N,T>* final_rects;
     std::vector<size_t> d_starts_host(output_instances.size()), d_ends_host(output_instances.size());
@@ -1707,7 +1706,7 @@ namespace Realm {
     }
 
     Memory sysmem;
-    assert(find_memory(sysmem, Memory::SYSTEM_MEM));
+    assert(find_memory(sysmem, Memory::SYSTEM_MEM, my_arena.location));
     if (!this->exclusive) {
       for (auto const& elem : ctr) {
         size_t idx = getIndex(elem);

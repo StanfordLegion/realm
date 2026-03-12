@@ -31,7 +31,7 @@ void GPUByFieldMicroOp<N,T,FT>::execute()
 
   //std::cout << "Using tile size of " << tile_size << " bytes." << std::endl;
 
-  Arena buffer_arena(field_data[0].scratch_buffer.pointer_untyped(0, tile_size), tile_size);
+  Arena buffer_arena(field_data[0].scratch_buffer);
 
   inst_space.offsets = buffer_arena.alloc<size_t>(field_data.size() + 1);
   inst_space.num_children = field_data.size();
@@ -76,7 +76,7 @@ void GPUByFieldMicroOp<N,T,FT>::execute()
 
 
   Memory zcpy_mem;
-  assert(find_memory(zcpy_mem, Memory::Z_COPY_MEM));
+  assert(find_memory(zcpy_mem, Memory::Z_COPY_MEM, buffer_arena.location));
 
   // We need to pass the accessors to the GPU so it can read field values.
   RegionInstance accessors_instance = this->realm_malloc(field_data.size() * sizeof(AffineAccessor<FT,N,T>), zcpy_mem);
@@ -94,7 +94,7 @@ void GPUByFieldMicroOp<N,T,FT>::execute()
   }
 
   Memory sysmem;
-  assert(find_memory(sysmem, Memory::SYSTEM_MEM));
+  assert(find_memory(sysmem, Memory::SYSTEM_MEM, buffer_arena.location));
 
   size_t num_output = 0;
   RectDesc<N, T>* output_start = nullptr;

@@ -49,7 +49,7 @@ void GPUImageMicroOp<N,T,N2,T2>::gpu_populate_rngs()
     RegionInstance buffer = domain_transform.range_data[0].scratch_buffer;
     size_t tile_size = buffer.get_layout()->bytes_used;
     //std::cout << "Using tile size of " << tile_size << " bytes." << std::endl;
-    Arena buffer_arena(buffer.pointer_untyped(0, tile_size), tile_size);
+    Arena buffer_arena(buffer);
 
     CUstream stream = this->stream->get_stream();
 
@@ -81,7 +81,7 @@ void GPUImageMicroOp<N,T,N2,T2>::gpu_populate_rngs()
     GPUMicroOp<N, T>::collapse_parent_space(parent_space, collapsed_parent, buffer_arena, stream);
 
     Memory zcpy_mem;
-    assert(find_memory(zcpy_mem, Memory::Z_COPY_MEM));
+    assert(find_memory(zcpy_mem, Memory::Z_COPY_MEM, buffer_arena.location));
     RegionInstance accessors_instance = this->realm_malloc(domain_transform.range_data.size() * sizeof(AffineAccessor<Rect<N,T>,N2,T2>), zcpy_mem);
     AffineAccessor<Rect<N,T>,N2,T2>* d_accessors = reinterpret_cast<AffineAccessor<Rect<N,T>,N2,T2>*>(AffineAccessor<char,1>(accessors_instance, 0).base);
     for (size_t i = 0; i < domain_transform.range_data.size(); ++i) {
@@ -326,14 +326,14 @@ void GPUImageMicroOp<N,T,N2,T2>::gpu_populate_ptrs()
 
     NVTX_DEPPART(gpu_image);
 
-    Memory sysmem;
-    find_memory(sysmem, Memory::SYSTEM_MEM);
-
     CUstream stream = this->stream->get_stream();
 
     size_t tile_size = buffer.get_layout()->bytes_used;
     //std::cout << "Using tile size of " << tile_size << " bytes." << std::endl;
-    Arena buffer_arena(buffer.pointer_untyped(0, tile_size), tile_size);
+    Arena buffer_arena(buffer);
+
+    Memory sysmem;
+    assert(find_memory(sysmem, Memory::SYSTEM_MEM, buffer_arena.location));
 
     collapsed_space<N2, T2> src_space;
     src_space.offsets = buffer_arena.alloc<size_t>(sources.size()+1);
@@ -366,7 +366,7 @@ void GPUImageMicroOp<N,T,N2,T2>::gpu_populate_ptrs()
     GPUMicroOp<N, T>::collapse_parent_space(parent_space, collapsed_parent, buffer_arena, stream);
 
     Memory zcpy_mem;
-    assert(find_memory(zcpy_mem, Memory::Z_COPY_MEM));
+    assert(find_memory(zcpy_mem, Memory::Z_COPY_MEM, buffer_arena.location));
     RegionInstance accessors_instance = this->realm_malloc(domain_transform.ptr_data.size() * sizeof(AffineAccessor<Point<N,T>,N2,T2>), zcpy_mem);
     AffineAccessor<Point<N,T>,N2,T2>* d_accessors = reinterpret_cast<AffineAccessor<Point<N,T>,N2,T2>*>(AffineAccessor<char,1>(accessors_instance, 0).base);
     for (size_t i = 0; i < domain_transform.ptr_data.size(); ++i) {

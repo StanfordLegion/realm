@@ -52,6 +52,7 @@ namespace Realm {
 
   namespace Cuda {
     class GPUStream;
+    class GPUProcessor;
   }
 
   template<typename T>
@@ -114,9 +115,10 @@ namespace Realm {
   public:
     using byte = std::byte;
 
-    Arena() noexcept : base_(nullptr), cap_(0), parity_(false), left_(0), right_(0), base_left_(0), base_right_(0) {}
-    Arena(void* buffer, size_t bytes) noexcept
-      : base_(reinterpret_cast<byte*>(buffer)), cap_(bytes), parity_(false), left_(0), right_(0), base_left_(0), base_right_(0) {}
+    Arena() noexcept : location(Memory::NO_MEMORY), base_(nullptr), cap_(0), parity_(false), left_(0), right_(0), base_left_(0), base_right_(0) {}
+    Arena(void* buffer, size_t bytes, Memory location) noexcept
+      : location(location), base_(reinterpret_cast<byte*>(buffer)), cap_(bytes), parity_(false), left_(0), right_(0), base_left_(0), base_right_(0) {}
+    Arena(RegionInstance buffer) : Arena(buffer.pointer_untyped(0, buffer.get_layout()->bytes_used), buffer.get_layout()->bytes_used, buffer.get_location()) {}
 
     size_t capacity() const noexcept { return cap_; }
     size_t used() const noexcept { return left_ + right_; }
@@ -193,6 +195,8 @@ namespace Realm {
       right_ = base_right_;
       parity_ = false;
     }
+
+    Memory location;
 
   private:
 
