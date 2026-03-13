@@ -335,12 +335,19 @@ namespace Realm {
         data, src_payload_addr.segment, &dest_payload_addr, with_congestion, header_size);
   }
 
-  size_t UCPModule::max_payload_size(size_t header_size)
+  size_t UCPModule::max_payload_size(size_t header_size, const void *src_payload_addr)
   {
-    // UCX handles fragmentation internally via eager/rendezvous protocol
-    //  selection, so there is no practical upper bound on payload size
-    (void)header_size;
-    return std::numeric_limits<size_t>::max();
+    if(src_payload_addr) {
+      // UCX handles fragmentation internally via eager/rendezvous protocol
+      //  selection, so there is no practical upper bound when the caller
+      //  provides the source buffer
+      return std::numeric_limits<size_t>::max();
+    } else {
+      // when the network must provide the buffer, the payload is limited
+      //  by the internal buffer pool capacity
+      return internal->recommended_max_payload(nullptr, nullptr, nullptr,
+                                               false /*with_congestion*/, header_size);
+    }
   }
 
 }; // namespace Realm

@@ -219,13 +219,13 @@ namespace Realm {
             dest_payload_addr, with_congestion, header_size);
     }
 
-    inline size_t max_payload_size(size_t header_size)
+    inline size_t max_payload_size(size_t header_size, const void *src_payload_addr)
     {
 #ifdef REALM_USE_MULTIPLE_NETWORKS
       if(REALM_UNLIKELY(single_network == 0)) {
       } else
 #endif
-        return single_network->max_payload_size(header_size);
+        return single_network->max_payload_size(header_size, src_payload_addr);
     }
 
   }; // namespace Network

@@ -179,9 +179,13 @@ namespace Realm {
     size_t network_max_payload_; // 0 = normal (non-chunked) mode
     NodeID chunk_target_;
     std::vector<char> chunk_buffer_;
+    // data-ref chunked mode: caller-provided data, sliced directly (no copy)
+    const void *chunk_src_data_;
+    size_t chunk_src_datalen_;
 
   private:
     void init_chunked(NodeID _target, size_t _max_payload_size);
+    void init_chunked_data(NodeID _target, const void *_data, size_t _datalen);
     void commit_chunked(void);
     static uint64_t next_chunk_message_id(NodeID node_id);
   };

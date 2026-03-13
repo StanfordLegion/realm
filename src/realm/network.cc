@@ -228,7 +228,7 @@ namespace Realm {
                                            const RemoteAddress &dest_payload_addr,
                                            bool with_congestion, size_t header_size);
 
-    virtual size_t max_payload_size(size_t header_size);
+    virtual size_t max_payload_size(size_t header_size, const void *src_payload_addr);
   };
 
   LoopbackNetworkModule::LoopbackNetworkModule()
@@ -438,9 +438,11 @@ namespace Realm {
     return 0;
   }
 
-  size_t LoopbackNetworkModule::max_payload_size(size_t header_size)
+  size_t LoopbackNetworkModule::max_payload_size(size_t header_size,
+                                                 const void *src_payload_addr)
   {
     // loopback has no real limit
+    (void)src_payload_addr;
     return std::numeric_limits<size_t>::max();
   }
 

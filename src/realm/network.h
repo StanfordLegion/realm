@@ -143,7 +143,7 @@ namespace Realm {
     //  of congestion, source/dest registration, etc.
     // network backends that handle fragmentation internally (e.g. UCX) may
     //  return SIZE_MAX to indicate no practical limit
-    size_t max_payload_size(size_t header_size);
+    size_t max_payload_size(size_t header_size, const void *src_payload_addr);
   }; // namespace Network
 
   // a network module provides additional functionality on top of a normal Realm
@@ -243,7 +243,7 @@ namespace Realm {
                                            const RemoteAddress &dest_payload_addr,
                                            bool with_congestion, size_t header_size) = 0;
 
-    virtual size_t max_payload_size(size_t header_size) = 0;
+    virtual size_t max_payload_size(size_t header_size, const void *src_payload_addr) = 0;
   };
 
   namespace NetworkSegmentInfo {

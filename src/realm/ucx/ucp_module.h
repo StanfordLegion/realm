@@ -121,7 +121,7 @@ namespace Realm {
                                            const RemoteAddress &dest_payload_addr,
                                            bool with_congestion, size_t header_size);
 
-    virtual size_t max_payload_size(size_t header_size);
+    virtual size_t max_payload_size(size_t header_size, const void *src_payload_addr);
 
   protected:
     Realm::UCP::UCPInternal *internal;

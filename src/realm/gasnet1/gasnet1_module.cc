@@ -926,8 +926,12 @@ namespace Realm {
     return std::min(maxlong, std::min(bytes_per_line, size_t(4 << 20)));
   }
 
-  size_t GASNet1Module::max_payload_size(size_t header_size)
+  size_t GASNet1Module::max_payload_size(size_t header_size, const void *src_payload_addr)
   {
+    // without a RemoteAddress destination, GASNet-1 always uses Medium
+    //  messages regardless of source registration (Long messages require
+    //  a dest_payload_addr)
+    (void)src_payload_addr;
     return gasnet_AMMaxMedium();
   }
 

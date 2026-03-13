@@ -37,6 +37,8 @@ namespace Realm {
     : impl(0)
     , header(0)
     , network_max_payload_(0)
+    , chunk_src_data_(nullptr)
+    , chunk_src_datalen_(0)
   {}
 
   template <typename T, size_t INLINE_STORAGE>
@@ -57,7 +59,7 @@ namespace Realm {
     // (only for non-wrapped types - wrapped types are already chunk fragments)
     if constexpr(!is_wrapped_with_frag_info<T>::value) {
       if(_max_payload_size > 0) {
-        size_t net_max = Network::max_payload_size(sizeof(T));
+        size_t net_max = Network::max_payload_size(sizeof(T), nullptr);
         if(_max_payload_size > net_max) {
           init_chunked(_target, _max_payload_size);
           return;
@@ -136,6 +138,15 @@ namespace Realm {
                                               size_t _datalen)
   {
     assert(impl == 0);
+    if constexpr(!is_wrapped_with_frag_info<T>::value) {
+      if(_datalen > 0) {
+        size_t net_max = Network::max_payload_size(sizeof(T), _data);
+        if(_datalen > net_max) {
+          init_chunked_data(_target, _data, _datalen);
+          return;
+        }
+      }
+    }
     network_max_payload_ = 0;
     unsigned short msgid = activemsg_handler_table.lookup_message_id<T>();
     impl =
@@ -184,6 +195,9 @@ namespace Realm {
                                               const void *_data, size_t _datalen)
   {
     assert(impl == 0);
+    // TODO: chunking not yet supported for NodeSet data-providing variants
+    assert(_datalen == 0 ||
+           _datalen <= Network::max_payload_size(sizeof(T), _data));
     network_max_payload_ = 0;
     unsigned short msgid = activemsg_handler_table.lookup_message_id<T>();
     impl = Network::create_active_message_impl(_targets, msgid, sizeof(T), _datalen,
@@ -208,10 +222,34 @@ namespace Realm {
                                               size_t _line_stride)
   {
     assert(impl == 0);
+    size_t total_bytes = _bytes_per_line * _lines;
+    if constexpr(!is_wrapped_with_frag_info<T>::value) {
+      if(total_bytes > 0) {
+        size_t net_max = Network::max_payload_size(sizeof(T), _data);
+        if(total_bytes > net_max) {
+          // linearize 2D data, then chunk
+          if(_line_stride == _bytes_per_line) {
+            // contiguous - can reference directly
+            init_chunked_data(_target, _data, total_bytes);
+          } else {
+            // strided - must linearize into chunk_buffer_
+            init_chunked(_target, total_bytes);
+            const char *src = static_cast<const char *>(_data);
+            char *dst = chunk_buffer_.data();
+            for(size_t i = 0; i < _lines; i++) {
+              memcpy(dst, src + (i * _line_stride), _bytes_per_line);
+              dst += _bytes_per_line;
+            }
+            fbs.reset(dst, 0); // all data written, no space left
+          }
+          return;
+        }
+      }
+    }
     network_max_payload_ = 0;
     unsigned short msgid = activemsg_handler_table.lookup_message_id<T>();
     impl = Network::create_active_message_impl(
-        _target, msgid, sizeof(T), _bytes_per_line * _lines, _data, _lines, _line_stride,
+        _target, msgid, sizeof(T), total_bytes, _data, _lines, _line_stride,
         &inline_capacity, sizeof(inline_capacity));
     header = new(impl->header_base) T;
   }
@@ -262,10 +300,14 @@ namespace Realm {
                                               size_t _lines, size_t _line_stride)
   {
     assert(impl == 0);
+    // TODO: chunking not yet supported for NodeSet data-providing variants
+    size_t total_bytes = _bytes_per_line * _lines;
+    assert(total_bytes == 0 ||
+           total_bytes <= Network::max_payload_size(sizeof(T), _data));
     network_max_payload_ = 0;
     unsigned short msgid = activemsg_handler_table.lookup_message_id<T>();
     impl = Network::create_active_message_impl(
-        _targets, msgid, sizeof(T), _bytes_per_line * _lines, _data, _lines, _line_stride,
+        _targets, msgid, sizeof(T), total_bytes, _data, _lines, _line_stride,
         &inline_capacity, sizeof(inline_capacity));
     header = new(impl->header_base) T;
   }
@@ -463,6 +505,8 @@ namespace Realm {
       // chunked mode - just clean up the local state
       header->~T();
       header = 0;
+      chunk_src_data_ = nullptr;
+      chunk_src_datalen_ = 0;
       chunk_buffer_.clear();
       chunk_buffer_.shrink_to_fit();
       network_max_payload_ = 0;
@@ -626,14 +670,40 @@ namespace Realm {
     } else {
       // compute the per-chunk payload capacity using the wrapped header size
       size_t wrapped_hdr_size = sizeof(WrappedWithFragInfo<T>);
-      network_max_payload_ = Network::max_payload_size(wrapped_hdr_size);
+      network_max_payload_ = Network::max_payload_size(wrapped_hdr_size, nullptr);
       assert(network_max_payload_ > 0);
 
       chunk_target_ = _target;
+      chunk_src_data_ = nullptr;
+      chunk_src_datalen_ = 0;
       chunk_buffer_.resize(_max_payload_size);
       // place the header in inline_capacity (it's not sent to the network yet)
       header = new(&inline_capacity) T;
       fbs.reset(chunk_buffer_.data(), _max_payload_size);
+      // impl stays null in chunked mode
+    }
+  }
+
+  template <typename T, size_t INLINE_STORAGE>
+  void ActiveMessage<T, INLINE_STORAGE>::init_chunked_data(NodeID _target,
+                                                           const void *_data,
+                                                           size_t _datalen)
+  {
+    if constexpr(is_wrapped_with_frag_info<T>::value) {
+      assert(0 && "init_chunked_data called on WrappedWithFragInfo type");
+    } else {
+      // compute the per-chunk payload capacity using the wrapped header size
+      // pass the caller's data pointer so the backend can check registration
+      size_t wrapped_hdr_size = sizeof(WrappedWithFragInfo<T>);
+      network_max_payload_ = Network::max_payload_size(wrapped_hdr_size, _data);
+      assert(network_max_payload_ > 0);
+
+      chunk_target_ = _target;
+      chunk_src_data_ = _data;
+      chunk_src_datalen_ = _datalen;
+      // place the header in inline_capacity (it's not sent to the network yet)
+      header = new(&inline_capacity) T;
+      // no fbs/chunk_buffer_ needed - data is referenced directly
       // impl stays null in chunked mode
     }
   }
@@ -644,7 +714,19 @@ namespace Realm {
     if constexpr(is_wrapped_with_frag_info<T>::value) {
       assert(0 && "commit_chunked called on WrappedWithFragInfo type");
     } else {
-      size_t total_payload = chunk_buffer_.size() - fbs.bytes_left();
+      // determine total payload and data source
+      const char *payload_data;
+      size_t total_payload;
+
+      if(chunk_src_data_) {
+        // data-ref mode: caller provided data directly
+        payload_data = static_cast<const char *>(chunk_src_data_);
+        total_payload = chunk_src_datalen_;
+      } else {
+        // buffer mode: data was written into chunk_buffer_
+        payload_data = chunk_buffer_.data();
+        total_payload = chunk_buffer_.size() - fbs.bytes_left();
+      }
 
       uint64_t msg_id = next_chunk_message_id(chunk_target_);
       size_t max_chunk = network_max_payload_;
@@ -661,7 +743,7 @@ namespace Realm {
         chunk_msg->frag_info = {chunk_id, total_chunks, msg_id};
         chunk_msg->user = *header;
         if(chunk_size > 0)
-          chunk_msg.add_payload(chunk_buffer_.data() + offset, chunk_size);
+          chunk_msg.add_payload(payload_data + offset, chunk_size);
         chunk_msg.commit();
 
         offset += chunk_size;
@@ -670,6 +752,8 @@ namespace Realm {
       // clean up
       header->~T();
       header = 0;
+      chunk_src_data_ = nullptr;
+      chunk_src_datalen_ = 0;
       chunk_buffer_.clear();
       chunk_buffer_.shrink_to_fit();
       network_max_payload_ = 0;
