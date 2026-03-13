@@ -1005,7 +1005,7 @@ namespace Realm {
             // if we got here because a spin timeout expired, we need an
             //  event to return - create a waiter_event if one doesn't
             //  already exist
-            if((mode == SPIN) && timeout.is_expired()) { 
+            if((mode == SPIN) && timeout.is_expired()) {
               if(!frs.waiter_event.exists())
                 frs.waiter_event = UserEvent::create_user_event();
               wait_for = frs.waiter_event;
