@@ -344,9 +344,8 @@ namespace Realm {
       return std::numeric_limits<size_t>::max();
     } else {
       // when the network must provide the buffer, the payload is limited
-      //  by the internal buffer pool capacity
-      return internal->recommended_max_payload(nullptr, nullptr, nullptr,
-                                               false /*with_congestion*/, header_size);
+      //  by the internal pbuf pool object size
+      return internal->config.pbuf_max_size;
     }
   }
 
