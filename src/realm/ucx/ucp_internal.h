@@ -104,6 +104,7 @@ namespace Realm {
     class UCPInternal {
     public:
       friend class UCPMessageImpl;
+      friend class UCPModule;
       struct Config {
         AmWithRemoteAddrMode am_wra_mode{AM_WITH_REMOTE_ADDR_MODE_AUTO};
         bool bind_hostmem{true};
