@@ -930,7 +930,9 @@ namespace Realm {
     }
 
     // repeat until we succeed
-    long long spin_deadline = -1;
+    TimeLimit timeout;
+    if(mode == SPIN)
+      timeout = TimeLimit::responsive();
     while(1) {
       // read the current state to see if any exceptional conditions exist
       State cur_state = state.load_acquire();
@@ -948,12 +950,7 @@ namespace Realm {
 
         // if it failed and we've been asked to spin, assume this is regular
         //  contention and try again shortly
-        if((mode == ALWAYS_SPIN) ||
-           ((mode == SPIN) && ((spin_deadline == -1) ||
-                               (Clock::current_time_in_nanoseconds() < spin_deadline)))) {
-          if(spin_deadline == -1)
-            spin_deadline = Clock::current_time_in_nanoseconds() + 10000; // 10 us
-
+        if((mode == ALWAYS_SPIN) || ((mode == SPIN) && !timeout.is_expired())) {
           // if we're going to spin as a writer, set a flag that prevents
           //  new readers from taking the lock until we (or some other writer)
           //  get our turn
@@ -972,7 +969,7 @@ namespace Realm {
           // spin timeout expired - fall through to mutex path
         } else {
           // waiting is more complicated
-          assert(0);
+          std::abort();
         }
       }
 
@@ -1008,8 +1005,7 @@ namespace Realm {
             // if we got here because a spin timeout expired, we need an
             //  event to return - create a waiter_event if one doesn't
             //  already exist
-            if((mode == SPIN) && (spin_deadline != -1) &&
-               (cur_state & (STATE_WRITER | STATE_READER_COUNT_MASK)) != 0) {
+            if((mode == SPIN) && timeout.is_expired()) { 
               if(!frs.waiter_event.exists())
                 frs.waiter_event = UserEvent::create_user_event();
               wait_for = frs.waiter_event;
@@ -1168,6 +1164,9 @@ namespace Realm {
 
     // repeat until we succeed
     long long spin_deadline = -1;
+    TimeLimit timeout;
+    if(mode == SPIN)
+      timeout = TimeLimit::responsive();
     while(1) {
       // check the current state for things that might involve waiting
       //  before trying to increment the count
@@ -1197,12 +1196,7 @@ namespace Realm {
 
         // if it failed and we've been asked to spin, assume this is regular
         //  contention and try again shortly
-        if((mode == ALWAYS_SPIN) ||
-           ((mode == SPIN) && ((spin_deadline == -1) ||
-                               (Clock::current_time_in_nanoseconds() < spin_deadline)))) {
-          if(spin_deadline == -1)
-            spin_deadline = Clock::current_time_in_nanoseconds() + 10000; // 10 us
-
+        if((mode == ALWAYS_SPIN) || ((mode == SPIN) && !timeout.is_expired())) {
           REALM_SPIN_YIELD();
           continue;
         }
@@ -1211,7 +1205,7 @@ namespace Realm {
           // spin timeout expired - fall through to mutex path
         } else {
           // waiting is more complicated
-          assert(0);
+          std::abort();
         }
       }
 
