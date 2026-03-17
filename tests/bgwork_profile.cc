@@ -121,16 +121,19 @@ static bool validate_profile_file(const std::string &filename)
   }
 
   // read header fields individually to avoid struct padding issues
+  // header: magic(4) + version(2) + flags(2) + node_id(4) + zero_time(8) +
+  //         work_item_count(4) + sub_item_count(4) + descriptor_offset(8) = 36 bytes
   char magic[4];
   uint16_t version, flags;
   uint32_t node_id;
   int64_t zero_time;
   uint32_t work_item_count, sub_item_count;
+  uint64_t descriptor_offset;
 
   if(!read_exact(fd, magic, 4) || !read_exact(fd, &version, 2) ||
      !read_exact(fd, &flags, 2) || !read_exact(fd, &node_id, 4) ||
      !read_exact(fd, &zero_time, 8) || !read_exact(fd, &work_item_count, 4) ||
-     !read_exact(fd, &sub_item_count, 4)) {
+     !read_exact(fd, &sub_item_count, 4) || !read_exact(fd, &descriptor_offset, 8)) {
     fprintf(stderr, "VALIDATE: failed to read file header\n");
     close(fd);
     return false;
@@ -146,8 +149,18 @@ static bool validate_profile_file(const std::string &filename)
 
   fprintf(stdout, "VALIDATE: magic OK, version=%u, flags=0x%04x, node_id=%u\n", version,
           flags, node_id);
-  fprintf(stdout, "VALIDATE: zero_time=%lld, work_items=%u, sub_items=%u\n",
-          (long long)zero_time, work_item_count, sub_item_count);
+  fprintf(stdout,
+          "VALIDATE: zero_time=%lld, work_items=%u, sub_items=%u, desc_offset=%llu\n",
+          (long long)zero_time, work_item_count, sub_item_count,
+          (unsigned long long)descriptor_offset);
+
+  // seek to descriptor tables (at end of file, after data blocks)
+  if(lseek(fd, descriptor_offset, SEEK_SET) < 0) {
+    fprintf(stderr, "VALIDATE: failed to seek to descriptor table at offset %llu\n",
+            (unsigned long long)descriptor_offset);
+    close(fd);
+    return false;
+  }
 
   // read work item descriptors
   for(uint32_t i = 0; i < work_item_count; i++) {
@@ -187,10 +200,17 @@ static bool validate_profile_file(const std::string &filename)
             (int)name_len, name.data());
   }
 
+  // seek back to read data blocks (from offset 36 to descriptor_offset)
+  if(lseek(fd, 36, SEEK_SET) < 0) {
+    fprintf(stderr, "VALIDATE: failed to seek to data blocks\n");
+    close(fd);
+    return false;
+  }
+
   // read data blocks
   uint32_t total_blocks = 0;
   uint32_t total_records = 0;
-  while(true) {
+  while(lseek(fd, 0, SEEK_CUR) < (off_t)descriptor_offset) {
     // read block header fields individually to avoid padding
     uint64_t blk_thread_id;
     uint32_t blk_sequence, blk_record_count;
@@ -276,12 +296,12 @@ static bool validate_profile_file(const std::string &filename)
         break;
       case 0x12: // FINE_END: no payload
         break;
-      case 0x21: // GPU_WORK: 1 byte gpu_index + 4 byte duration
-        if(pos + 5 > blk_data_size) {
+      case 0x21: // GPU_WORK: 8 byte proc_id + 1 byte slot + 8 byte start + 8 byte stop
+        if(pos + 25 > blk_data_size) {
           close(fd);
           return false;
         }
-        pos += 5;
+        pos += 25;
         break;
       default:
         fprintf(stderr, "VALIDATE: unknown record type 0x%02x in block %u record %u\n",
