@@ -18,6 +18,7 @@
 // manager for background work that can be performed by available threads
 
 #include "realm/bgwork.h"
+#include "realm/bgwork_profile.h"
 #include "realm/timers.h"
 #include "realm/logging.h"
 #include "realm/utils.h"
@@ -78,6 +79,8 @@ namespace Realm {
 
   void BackgroundWorkThread::main_loop(void)
   {
+    bgwork_profile_thread_init();
+
     BackgroundWorkManager::Worker worker;
     worker.set_manager(manager);
     worker.set_numa_domain(numa_domain);
@@ -378,6 +381,8 @@ namespace Realm {
                       << " slot=" << index << " name=" << name
                       << " domain=" << numa_domain
                       << " timeslice=" << min_timeslice_needed;
+    if(bgwork_profiler.get_level() > 0)
+      bgwork_profiler.register_work_item(static_cast<uint16_t>(index), name);
   }
 
   // mark this work item as active (i.e. having work to do)
@@ -472,6 +477,10 @@ namespace Realm {
   bool BackgroundWorkManager::Worker::do_work(long long max_time_in_ns,
                                               atomic<bool> *interrupt_flag)
   {
+    // lazily initialize profiling state for this thread
+    if(bgwork_profiler.get_level() > 0 && !tl_bgwork_profile)
+      bgwork_profile_thread_init();
+
     // set our deadline for returning
     long long work_until_time =
         ((max_time_in_ns > 0)
@@ -563,6 +572,7 @@ namespace Realm {
           log_bgwork.debug() << "work claimed: manager=" << manager << " slot=" << slot
                              << " worker=" << this;
           long long t_start = Clock::current_time_in_nanoseconds(true /*absolute*/);
+          bgwork_profile_begin(static_cast<uint8_t>(slot));
           // don't spend more than 1ms on any single task before going on to the
           //  next thing - TODO: pull this out as a config variable
           long long t_quantum = (manager->cfg.work_item_timeslice + t_start);
@@ -605,13 +615,7 @@ namespace Realm {
             } else
               break;
           }
-#ifdef REALM_BGWORK_PROFILE
-          long long t_stop = Clock::current_time_in_nanoseconds(true /*absolute*/);
-          long long elapsed = t_stop - t_start;
-          long long overshoot = ((t_stop > t_quantum) ? (t_stop - t_quantum) : 0);
-          log_bgwork.print() << "work: slot=" << slot << " elapsed=" << elapsed
-                             << " overshoot=" << overshoot;
-#endif
+          bgwork_profile_end();
           // we're done with this slot for now
           manager->work_item_usecounts[slot].fetch_sub_acqrel(1);
 

@@ -140,6 +140,9 @@ namespace Realm {
     //  completed (or if 'make_active' has already been called)
     virtual bool do_work(TimeLimit work_until) = 0;
 
+    // returns the slot index assigned by the background work manager
+    unsigned get_slot() const { return index; }
+
   protected:
     friend class BackgroundWorkManager::Worker;
 

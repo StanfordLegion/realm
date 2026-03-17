@@ -1125,6 +1125,7 @@ namespace Realm {
     bool GPUreduceXferDes::progress_xd(GPUreduceChannel *channel, TimeLimit work_until)
     {
       bool did_work = false;
+      BgWorkGpuHipNotification *gpu_timing = nullptr;
       ReadSequenceCache rseqcache(this, 2 << 20);
       ReadSequenceCache wseqcache(this, 2 << 20);
 
@@ -1260,6 +1261,12 @@ namespace Realm {
               {
                 AutoGPUContext agc(channel->gpu);
 
+                if(!gpu_timing && tl_bgwork_profile) {
+                  gpu_timing = new BgWorkGpuHipNotification(
+                      stream->get_gpu()->proc->me.id, channel->get_bgwork_slot());
+                  stream->add_notification(gpu_timing);
+                }
+
                 void *src_ptr = (void *)args->src_base;
                 void *src_device = src_ptr;
 #ifndef __HIP_PLATFORM_NVIDIA__
@@ -1349,6 +1356,9 @@ namespace Realm {
         if(done || work_until.is_expired())
           break;
       }
+
+      if(gpu_timing)
+        stream->add_notification(gpu_timing);
 
       rseqcache.flush();
       wseqcache.flush();

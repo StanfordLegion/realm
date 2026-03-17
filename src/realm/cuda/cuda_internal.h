@@ -43,6 +43,7 @@
 #include "realm/proc_impl.h"
 #include "realm/mem_impl.h"
 #include "realm/bgwork.h"
+#include "realm/bgwork_profile.h"
 #include "realm/transfer/channel.h"
 #include "realm/transfer/ib_memory.h"
 #include "realm/cuda/cuda_memcpy.h"
@@ -200,6 +201,22 @@ namespace Realm {
       virtual void request_completed(void) = 0;
     };
 
+    // Profiling notification for GPU kernel timing in background work items.
+    // Registered as a GPUCompletionNotification on a stream twice: once before
+    // GPU kernel submissions (start marker) and once after (end marker).
+    // Uses host-side timestamps taken when the existing events are reaped.
+    class BgWorkGpuCudaNotification : public GPUCompletionNotification {
+    public:
+      BgWorkGpuCudaNotification(uint64_t _proc_id, uint8_t _slot);
+      void request_completed(void) override;
+
+    private:
+      uint64_t proc_id;
+      uint8_t slot;
+      int64_t start_time;
+      bool started;
+    };
+
     class GPUWorkFence : public Realm::Operation::AsyncWorkItem {
     public:
       GPUWorkFence(GPU *gpu, Realm::Operation *op);
@@ -330,6 +347,10 @@ namespace Realm {
       Realm::Thread *worker_thread;
       bool thread_sleeping;
       atomic<bool> worker_shutdown_requested;
+
+      // Level 2 bgwork profiling
+      uint16_t profile_sub_item_id;
+      bool profile_id_registered;
     };
 
     // a little helper class to manage a pool of CUevents that can be reused

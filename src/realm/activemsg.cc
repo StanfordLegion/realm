@@ -19,6 +19,7 @@
 #include "realm/atomics.h"
 
 #include "realm/activemsg.h"
+#include "realm/bgwork_profile.h"
 #include "realm/mutex.h"
 #include "realm/cmdline.h"
 #include "realm/logging.h"
@@ -190,6 +191,8 @@ namespace Realm {
       // at least one of the two above must be non-null
       assert((e.handler != 0) || (e.handler_notimeout != 0));
       e.handler_inline = nextreg->get_handler_inline();
+      e.profile_sub_item_id = 0;
+      e.profile_id_registered = false;
       handlers.push_back(e);
     }
 
@@ -754,14 +757,28 @@ namespace Realm {
       long long t_start = 0;
       bool do_profile = Config::profile_activemsg_handlers;
 
+      // lazily register this handler for fine-grained profiling
+      if(bgwork_profiler.get_level() >= 2 &&
+         !current_msg->handler->profile_id_registered) {
+        current_msg->handler->profile_sub_item_id = bgwork_profiler.register_sub_item(
+            BGWP_SUB_AM_HANDLER, current_msg->handler->name);
+        current_msg->handler->profile_id_registered = true;
+      }
+
       // do we have a handler that understands time limits?
       if(current_msg->handler->handler != 0) {
         if(do_profile)
           t_start = Clock::current_time_in_nanoseconds();
 
+        if(current_msg->handler->profile_id_registered)
+          bgwork_profile_fine_begin(current_msg->handler->profile_sub_item_id);
+
         (current_msg->handler->handler)(current_msg->sender, current_msg->hdr,
                                         current_msg->payload, current_msg->payload_size,
                                         work_until);
+
+        if(current_msg->handler->profile_id_registered)
+          bgwork_profile_fine_end();
       } else {
         // estimate how long this handler will take, clamping at a
         //  semi-arbitrary 20us
@@ -788,9 +805,15 @@ namespace Realm {
         do_profile = true;
         t_start = Clock::current_time_in_nanoseconds();
 
+        if(current_msg->handler->profile_id_registered)
+          bgwork_profile_fine_begin(current_msg->handler->profile_sub_item_id);
+
         (current_msg->handler->handler_notimeout)(current_msg->sender, current_msg->hdr,
                                                   current_msg->payload,
                                                   current_msg->payload_size);
+
+        if(current_msg->handler->profile_id_registered)
+          bgwork_profile_fine_end();
       }
 
       long long t_end = 0;

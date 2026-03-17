@@ -839,6 +839,7 @@ namespace Realm {
     : BackgroundWorkItem("deppart op queue")
     , shutdown_flag(false), rsrv(_rsrv), condvar(mutex)
     , work_advertised(false)
+    , profile_sub_item_id(0), profile_id_registered(false)
   {
     if(_bgwork)
       add_to_manager(_bgwork);
@@ -969,6 +970,13 @@ namespace Realm {
       make_active();
     }
 
+    // lazily register for fine-grained profiling
+    if(bgwork_profiler.get_level() >= 2 && !profile_id_registered) {
+      profile_sub_item_id =
+          bgwork_profiler.register_sub_item(BGWP_SUB_DEPPART_OP, "deppart op");
+      profile_id_registered = true;
+    }
+
     // now we can work on the op we got in parallel with everybody else
     //  (neither branch will be taken if there are dedicated workers and they
     //  already got to the queued operations)
@@ -976,7 +984,11 @@ namespace Realm {
       bool ok_to_run = op->mark_started();
       if(ok_to_run) {
 	log_part.info() << "worker " << this << " starting op " << op;
+	if(profile_id_registered)
+	  bgwork_profile_fine_begin(profile_sub_item_id);
 	op->execute();
+	if(profile_id_registered)
+	  bgwork_profile_fine_end();
 	log_part.info() << "worker " << this << " finished op " << op;
 	op->mark_finished(true /*successful*/);
       } else {
@@ -988,7 +1000,11 @@ namespace Realm {
     if(uop != 0) {
       log_part.info() << "worker " << this << " starting uop " << uop;
       uop->mark_started();
+      if(profile_id_registered)
+	bgwork_profile_fine_begin(profile_sub_item_id);
       uop->execute();
+      if(profile_id_registered)
+	bgwork_profile_fine_end();
       log_part.info() << "worker " << this << " finished uop " << uop;
       uop->mark_finished();
     }

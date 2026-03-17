@@ -293,6 +293,29 @@ namespace Realm {
 
     ////////////////////////////////////////////////////////////////////////
     //
+    // class BgWorkGpuHipNotification
+
+    BgWorkGpuHipNotification::BgWorkGpuHipNotification(uint64_t _proc_id, uint8_t _slot)
+      : proc_id(_proc_id)
+      , slot(_slot)
+      , start_time(0)
+      , started(false)
+    {}
+
+    void BgWorkGpuHipNotification::request_completed(void)
+    {
+      if(!started) {
+        start_time = Clock::current_time_in_nanoseconds(true /*absolute*/);
+        started = true;
+      } else {
+        int64_t stop_time = Clock::current_time_in_nanoseconds(true /*absolute*/);
+        bgwork_profile_gpu_work(proc_id, slot, start_time, stop_time);
+        delete this;
+      }
+    }
+
+    ////////////////////////////////////////////////////////////////////////
+    //
     // class GPUWorkFence
 
     GPUWorkFence::GPUWorkFence(Realm::Operation *op)
@@ -1050,6 +1073,8 @@ namespace Realm {
       , worker_thread(0)
       , thread_sleeping(false)
       , worker_shutdown_requested(false)
+      , profile_sub_item_id(0)
+      , profile_id_registered(false)
     {}
 
     GPUWorker::~GPUWorker(void)
@@ -1136,10 +1161,22 @@ namespace Realm {
       if(still_not_empty)
         make_active();
 
+      // lazily register for fine-grained profiling
+      if(bgwork_profiler.get_level() >= 2 && !profile_id_registered) {
+        profile_sub_item_id =
+            bgwork_profiler.register_sub_item(BGWP_SUB_GPU_REAP, "hip gpu reap");
+        profile_id_registered = true;
+      }
+
       // do work for the stream we popped, paying attention to the cutoff
       //  time
       bool was_empty = false;
-      if(stream->reap_events(work_until)) {
+      if(profile_id_registered)
+        bgwork_profile_fine_begin(profile_sub_item_id);
+      bool has_more = stream->reap_events(work_until);
+      if(profile_id_registered)
+        bgwork_profile_fine_end();
+      if(has_more) {
         AutoLock<> al(lock);
 
         was_empty = active_streams.empty();

@@ -99,6 +99,8 @@ namespace Realm {
     , channel(_channel)
     , ordered_mode(_ordered)
     , in_ordered_worker(false)
+    , profile_sub_item_id(0)
+    , profile_id_registered(false)
   {}
 
   template <typename CHANNEL, typename XD>
@@ -151,6 +153,13 @@ namespace Realm {
       if(still_more && !ordered_mode)
         make_active();
 
+      // lazily register for fine-grained profiling
+      if(bgwork_profiler.get_level() >= 2 && !profile_id_registered) {
+        profile_sub_item_id =
+            bgwork_profiler.register_sub_item(BGWP_SUB_XFER_CHANNEL, name);
+        profile_id_registered = true;
+      }
+
       // now process this transfer request, paying attention to our deadline
 
       while(true) {
@@ -159,7 +168,11 @@ namespace Realm {
           //  on it
           unsigned progress = xd->current_progress();
 
+          if(profile_id_registered)
+            bgwork_profile_fine_begin(profile_sub_item_id);
           bool did_work = xd->progress_xd(static_cast<CHANNEL *>(channel), work_until);
+          if(profile_id_registered)
+            bgwork_profile_fine_end();
 
           // if we didn't do any work, and we're not done (i.e. by
           //  concluding there wasn't any work to actually do), re-check
