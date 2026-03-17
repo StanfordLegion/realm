@@ -2957,8 +2957,8 @@ namespace Realm {
 #ifdef DEBUG_REALM
     event_triggerer.shutdown_work_item();
 #endif
-    bgwork_profiler.shutdown();
     bgwork.stop_dedicated_workers();
+    bgwork_profiler.shutdown();
 
     // tear down the active message manager
     message_manager->shutdown();

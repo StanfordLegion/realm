@@ -164,7 +164,9 @@ namespace Realm {
         // disable profiling for this thread
         // (the thread_local pointer was set to state, but we can't clear
         //  other threads' TLS - they should have stopped by now)
+        delete state;
       }
+      thread_states.clear();
     }
 
     // Flush all remaining in-memory data blocks to disk
