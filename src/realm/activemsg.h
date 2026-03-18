@@ -372,7 +372,7 @@ namespace Realm {
 
     void shutdown(void);
 
-    virtual bool do_work(TimeLimit work_until, BgWorkProfileState &profstate);
+    virtual bool do_work(TimeLimit work_until);
 
     void handler_thread_loop(void);
 

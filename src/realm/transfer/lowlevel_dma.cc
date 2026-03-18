@@ -543,7 +543,7 @@ namespace Realm {
     }
   }
 
-  bool AsyncFileIOContext::do_work(TimeLimit work_until, BgWorkProfileState &profstate)
+  bool AsyncFileIOContext::do_work(TimeLimit work_until)
   {
     // first, reap as many events as we can - oldest first
 #ifdef REALM_USE_KERNEL_AIO
@@ -590,7 +590,6 @@ namespace Realm {
         AIOOperation *op = launched_operations.front();
         if(!op->check_completion())
           break;
-        profstate.worked();
         log_aio.debug("aio op completed: op=%p", static_cast<void *>(op));
         // <NEW_DMA>
         if(op->req != NULL) {

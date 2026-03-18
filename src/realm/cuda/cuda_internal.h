@@ -324,7 +324,7 @@ namespace Realm {
       void start_background_thread(Realm::CoreReservationSet &crs, size_t stack_size);
       void shutdown_background_thread(void);
 
-      bool do_work(TimeLimit work_until, BgWorkProfileState &profstate);
+      bool do_work(TimeLimit work_until);
 
     public:
       void thread_main(void);
@@ -346,10 +346,6 @@ namespace Realm {
       Realm::Thread *worker_thread;
       bool thread_sleeping;
       atomic<bool> worker_shutdown_requested;
-
-      // Level 2 bgwork profiling
-      uint16_t profile_sub_item_id;
-      bool profile_id_registered;
     };
 
     // a little helper class to manage a pool of CUevents that can be reused

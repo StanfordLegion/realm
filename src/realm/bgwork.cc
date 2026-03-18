@@ -445,6 +445,8 @@ namespace Realm {
     if(level > 0) {
       bgwork_profiler.register_thread_state(this);
     }
+    // Save ourselves into the thread local variable
+    ThreadLocal::bgwork_profstate = this;
   }
 
   BgWorkProfileState::~BgWorkProfileState(void)
@@ -540,7 +542,7 @@ namespace Realm {
         spin_until = -1;
 
         // do work until there's none left
-        while(worker.do_work(-1 /*max_time*/, 0 /*interrupt_flag*/, profstate)) {
+        while(worker.do_work(-1 /*max_time*/, 0 /*interrupt_flag*/)) {
         }
 
         // and then retest state variable
@@ -916,8 +918,7 @@ namespace Realm {
   }
 
   bool BackgroundWorkManager::Worker::do_work(long long max_time_in_ns,
-                                              atomic<bool> *interrupt_flag,
-                                              BgWorkProfileState &profstate)
+                                              atomic<bool> *interrupt_flag)
   {
     // set our deadline for returning
     long long work_until_time =
@@ -1010,7 +1011,7 @@ namespace Realm {
           log_bgwork.debug() << "work claimed: manager=" << manager << " slot=" << slot
                              << " worker=" << this;
           long long t_start = Clock::current_time_in_nanoseconds(true /*absolute*/);
-          profstate.begin(static_cast<uint8_t>(slot));
+          ThreadLocal::bgwork_profstate->begin(static_cast<uint8_t>(slot));
           // don't spend more than 1ms on any single task before going on to the
           //  next thing - TODO: pull this out as a config variable
           long long t_quantum = (manager->cfg.work_item_timeslice + t_start);
@@ -1028,9 +1029,9 @@ namespace Realm {
 #ifdef DEBUG_REALM
           item->make_inactive();
 #endif
+          TimeLimit time_limit = TimeLimit::absolute(t_quantum, interrupt_flag);
           while(true) {
-            bool requeue =
-                item->do_work(TimeLimit::absolute(t_quantum, interrupt_flag), profstate);
+            bool requeue = item->do_work(time_limit);
             if(requeue) {
               // we can just call this item's work function again if we're not out
               //  of time and if there's nothing else to do
@@ -1044,6 +1045,7 @@ namespace Realm {
                   t_quantum = (manager->cfg.work_item_timeslice + now);
                   if((work_until_time > 0) && (work_until_time < t_quantum))
                     t_quantum = work_until_time;
+                  time_limit = TimeLimit::absolute(t_quantum, interrupt_flag);
                   continue;
                 }
               }
@@ -1054,7 +1056,8 @@ namespace Realm {
             } else
               break;
           }
-          profstate.end(); // end() checks did_work internally
+          ThreadLocal::bgwork_profstate->end(
+              time_limit); // end() checks did_work internally
           // we're done with this slot for now
           manager->work_item_usecounts[slot].fetch_sub_acqrel(1);
 

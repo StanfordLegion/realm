@@ -17,8 +17,8 @@
 
 // tasks and task scheduling for Realm
 
+#include "realm/bgwork.h"
 #include "realm/tasks.h"
-
 #include "realm/runtime_impl.h"
 #include "realm/proc_impl.h"
 
@@ -1076,6 +1076,10 @@ namespace Realm {
   // the main scheduler loop
   void ThreadedTaskScheduler::scheduler_loop(void)
   {
+    // Need a background profiling state on these threads in case they need
+    // to handle any background work, lives for the duration of this thread
+    BgWorkProfileState profstate;
+
     // the entire body of this method, except for when running an actual task, is
     //   a critical section - lock should be taken by caller
     {
@@ -1321,8 +1325,7 @@ namespace Realm {
 
     if(max_bgwork_timeslice > 0) {
       // try to be productive while we're waiting
-      BgWorkProfileState profstate;
-      bgworker.do_work(max_bgwork_timeslice, &bgworker_interrupt, profstate);
+      bgworker.do_work(max_bgwork_timeslice, &bgworker_interrupt);
     } else {
       // just let the work counter wake us up when there's stuff to do
       work_counter.wait_for_work(old_work_counter);

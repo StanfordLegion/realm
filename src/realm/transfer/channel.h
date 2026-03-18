@@ -999,7 +999,7 @@ namespace Realm {
 
     void enqueue_xd(XD *xd, bool at_front = false);
 
-    virtual bool do_work(TimeLimit work_until, BgWorkProfileState &profstate);
+    virtual bool do_work(TimeLimit work_until);
 
   protected:
     friend CHANNEL;

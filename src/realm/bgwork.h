@@ -151,11 +151,11 @@ namespace Realm {
     ~BgWorkProfileState(void);
     // recording methods (all no-op when level == 0)
     inline void begin(uint8_t slot);
-    inline void end(void);
-    inline void worked(void)
+    inline void end(const TimeLimit &time_limit);
+    inline void set_worked(bool worked)
     {
       if(level > 0)
-        did_work = true;
+        did_work = worked;
     }
     inline void discard(void);
     inline void fine_begin(uint16_t sub_item_id);
@@ -166,6 +166,10 @@ namespace Realm {
   private:
     uint8_t *ensure_space(size_t needed);
     static size_t encode_timestamp(uint8_t *buf, int64_t delta, int64_t absolute);
+  };
+
+  namespace ThreadLocal {
+    inline thread_local BgWorkProfileState *bgwork_profstate = nullptr;
   };
 
   struct BgWorkItemDescriptor {
@@ -289,8 +293,7 @@ namespace Realm {
       void set_max_timeslice(long long _timeslice_in_ns);
       void set_numa_domain(int _numa_domain); // -1 == dont care
 
-      bool do_work(long long max_time_in_ns, atomic<bool> *interrupt_flag,
-                   BgWorkProfileState &profstate);
+      bool do_work(long long max_time_in_ns, atomic<bool> *interrupt_flag);
 
     protected:
       BackgroundWorkManager *manager;
@@ -358,7 +361,7 @@ namespace Realm {
     //  true to request requeuing (this is more efficient than calling
     //  'make_active' at the end of 'do_work') or false if all work has been
     //  completed (or if 'make_active' has already been called)
-    virtual bool do_work(TimeLimit work_until, BgWorkProfileState &profstate) = 0;
+    virtual bool do_work(TimeLimit work_until) = 0;
 
     // returns the slot index assigned by the background work manager
     unsigned get_slot() const { return index; }

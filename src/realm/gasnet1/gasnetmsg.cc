@@ -2389,7 +2389,7 @@ public:
 
   void stop_threads(void);
 
-  virtual bool do_work(TimeLimit work_until, BgWorkProfileState &profstate);
+  virtual bool do_work(TimeLimit work_until);
 
 protected:
   // runs in a separate thread
@@ -2614,6 +2614,7 @@ static void handle_new_activemsg(gasnet_token_t token, void *buf, size_t nbytes,
     }
   } else
     record_message(src, false);
+  ThreadLocal::bgwork_profstate->set_worked(true);
 }
 
 void gasnet_parse_command_line(std::vector<std::string> &cmdline)
@@ -2794,10 +2795,14 @@ void EndpointManager::stop_threads(void)
 #endif
 }
 
-bool EndpointManager::do_work(TimeLimit work_until, BgWorkProfileState &profstate)
+bool EndpointManager::do_work(TimeLimit work_until)
 {
   // make sure nested active mesage calls respect the time limit
   ThreadLocal::gasnet_work_until = &work_until;
+
+  // This is a polling background work item so make it look like
+  // we did no work unless we actually do
+  ThreadLocal::bgwork_profstate->set_worked(false);
 
   push_messages(max_msgs_to_send, false /*!wait*/, work_until);
 

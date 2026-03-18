@@ -83,6 +83,7 @@ namespace Realm {
     if(level == 0)
       return;
     REALM_ASSERT(!did_work);
+    did_work = true;
 
     int64_t now = Clock::current_time_in_nanoseconds(true /*absolute*/);
 
@@ -112,16 +113,18 @@ namespace Realm {
     last_timestamp = now;
   }
 
-  inline void BgWorkProfileState::end(void)
+  inline void BgWorkProfileState::end(const TimeLimit& time_limit)
   {
     if(level == 0)
       return;
 
-    if(!did_work) {
+    if(did_work) {
+      did_work = false;
+    } else if(!time_limit.is_expired()) {
+      // If the timelimit expired we still record this
+      // because it is surprising that it took that long
       discard();
       return;
-    } else {
-      did_work = false;
     }
 
     int64_t now = Clock::current_time_in_nanoseconds(true /*absolute*/);
@@ -194,8 +197,6 @@ namespace Realm {
     if(level < 2)
       return;
 
-    did_work = true;
-
     int64_t now = Clock::current_time_in_nanoseconds(true /*absolute*/);
 
     // max: 8 + 1 = 9
@@ -223,8 +224,6 @@ namespace Realm {
   {
     if(level == 0)
       return;
-
-    did_work = true;
 
     int64_t now = Clock::current_time_in_nanoseconds(true /*absolute*/);
 
