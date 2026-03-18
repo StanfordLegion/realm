@@ -886,8 +886,10 @@ namespace Realm {
         }
       }
 
-      if(gpu_timing)
+      if(gpu_timing) {
+        AutoGPUContext agc(stream->get_gpu());
         stream->add_notification(gpu_timing);
+      }
 
       rseqcache.flush();
       wseqcache.flush();
@@ -2121,8 +2123,10 @@ namespace Realm {
           break;
       }
 
-      if(gpu_timing)
+      if(gpu_timing) {
+        AutoGPUContext agc(channel->gpu);
         gpu_timing_stream->add_notification(gpu_timing);
+      }
 
       rseqcache.flush();
 
@@ -2576,8 +2580,10 @@ namespace Realm {
           break;
       }
 
-      if(gpu_timing)
+      if(gpu_timing) {
+        AutoGPUContext agc(channel->gpu);
         stream->add_notification(gpu_timing);
+      }
 
       rseqcache.flush();
       wseqcache.flush();
