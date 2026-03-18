@@ -3068,7 +3068,7 @@ namespace Realm {
     return (head != nullptr);
   }
 
-  bool ReverseGetter::do_work(TimeLimit work_until, BgWorkProfileState &profstate)
+  bool ReverseGetter::do_work(TimeLimit work_until)
   {
     // we're not going to use immedate mode for rgets, so don't have more
     //  than one dequeuer at a time - do this by peeking at the head but

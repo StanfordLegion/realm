@@ -210,7 +210,7 @@ namespace Realm {
           return true; // oldest event hasn't triggered - check again later
         } else if(first) {
           // As long as we did at least one event we did work
-          ThreadLocal::bgwork_profstate->set_worked(true);
+          Realm::ThreadLocal::bgwork_profstate->set_worked(true);
           first = false;
         }
 
@@ -316,7 +316,7 @@ namespace Realm {
         started = true;
       } else {
         int64_t stop_time = Clock::current_time_in_nanoseconds(true /*absolute*/);
-        ThreadLocal::bgwork_profstate->gpu_work(proc_id, slot, start_time, stop_time);
+        Realm::ThreadLocal::bgwork_profstate->gpu_work(proc_id, slot, start_time, stop_time);
         delete this;
       }
     }
@@ -1080,8 +1080,6 @@ namespace Realm {
       , worker_thread(0)
       , thread_sleeping(false)
       , worker_shutdown_requested(false)
-      , profile_sub_item_id(0)
-      , profile_id_registered(false)
     {}
 
     GPUWorker::~GPUWorker(void)
@@ -1154,7 +1152,7 @@ namespace Realm {
     bool GPUWorker::do_work(TimeLimit work_until)
     {
       // This is a polling background work item so flip work polarity
-      ThreadLocal::bgwork_profstate->set_worked(false);
+      Realm::ThreadLocal::bgwork_profstate->set_worked(false);
       // pop the first stream off the list and immediately become re-active
       //  if more streams remain
       GPUStream *stream = 0;
