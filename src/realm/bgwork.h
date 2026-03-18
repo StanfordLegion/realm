@@ -145,13 +145,18 @@ namespace Realm {
     uint32_t begin_block_used = 0;
     uint32_t begin_block_num_records = 0;
     int64_t begin_last_timestamp = 0;
+
   public:
     BgWorkProfileState(void);
     ~BgWorkProfileState(void);
     // recording methods (all no-op when level == 0)
     inline void begin(uint8_t slot);
     inline void end(void);
-    inline void worked(void) { if(level > 0) did_work = true; }
+    inline void worked(void)
+    {
+      if(level > 0)
+        did_work = true;
+    }
     inline void discard(void);
     inline void fine_begin(uint16_t sub_item_id);
     inline void fine_end();

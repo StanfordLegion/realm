@@ -149,7 +149,7 @@ namespace Realm {
     {
       AutoLock<> al(thread_mutex);
       for(BgWorkProfileState *state : thread_states) {
-        ProfileBlock* current_block = state->flush();
+        ProfileBlock *current_block = state->flush();
         if(current_block) {
           if(current_block->num_records > 0) {
             AutoLock<> bl(block_mutex);
@@ -434,11 +434,13 @@ namespace Realm {
 
   ////////////////////////////////////////////////////////////////////////
   //
-  // class BgWorkProfileState 
+  // class BgWorkProfileState
   //
 
   BgWorkProfileState::BgWorkProfileState(void)
-    : level(bgwork_profiler.get_level()), thread_id(static_cast<uint64_t>(std::hash<std::thread::id>{}(std::this_thread::get_id())))
+    : level(bgwork_profiler.get_level())
+    , thread_id(
+          static_cast<uint64_t>(std::hash<std::thread::id>{}(std::this_thread::get_id())))
   {
     if(level > 0) {
       bgwork_profiler.register_thread_state(this);
@@ -459,7 +461,7 @@ namespace Realm {
     }
   }
 
-  ProfileBlock* BgWorkProfileState::flush(void)
+  ProfileBlock *BgWorkProfileState::flush(void)
   {
     ProfileBlock *current = current_block;
     current_block = nullptr;
@@ -588,7 +590,7 @@ namespace Realm {
         }
       }
       log_bgwork.debug() << "dedicated worker awake - worker=" << this;
-    } 
+    }
 
     log_bgwork.info() << "dedicated worker terminating - worker=" << this;
   }

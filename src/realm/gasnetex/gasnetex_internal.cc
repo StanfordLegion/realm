@@ -130,7 +130,7 @@ namespace Realm {
 
   namespace ThreadLocal {
     thread_local const TimeLimit *gex_work_until = nullptr;
-    thread_local BgWorkProfileState* gex_bgwork_profstate = nullptr;
+    thread_local BgWorkProfileState *gex_bgwork_profstate = nullptr;
     thread_local bool in_am_handler = false;
   }; // namespace ThreadLocal
 
