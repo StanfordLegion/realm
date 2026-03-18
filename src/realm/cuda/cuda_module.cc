@@ -20,6 +20,7 @@
 #include "realm/cuda/cuda_internal.h"
 #include "realm/cuda/cuda_memcpy.h"
 
+#include "realm/bgwork.h"
 #include "realm/tasks.h"
 #include "realm/logging.h"
 #include "realm/cmdline.h"
@@ -1562,8 +1563,11 @@ namespace Realm {
 
       worker.set_manager(&(get_runtime()->bgwork));
 
+      BgWorkProfileState bgwork_profstate;
+
       while(!completed.load())
-        worker.do_work(-1 /* as long as it takes */, &completed /* until this is set */);
+        worker.do_work(-1 /* as long as it takes */, &completed /* until this is set */,
+                       bgwork_profstate);
     }
 
     ////////////////////////////////////////////////////////////////////////
