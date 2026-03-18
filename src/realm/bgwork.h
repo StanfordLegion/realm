@@ -32,6 +32,7 @@ namespace Realm {
 
   class BackgroundWorkItem;
   class BackgroundWorkThread;
+  class BgWorkProfileManager;
 
   class BackgroundWorkManager {
   public:
@@ -101,6 +102,7 @@ namespace Realm {
     BackgroundWorkItem *work_items[MAX_WORK_ITEMS];
 
     friend class BackgroundWorkThread;
+    friend class BgWorkProfileManager;
 
     // to manage sleeping workers, we need to stuff three things into a
     //  single atomically-updatable state variable:
@@ -145,6 +147,7 @@ namespace Realm {
 
   protected:
     friend class BackgroundWorkManager::Worker;
+    friend class BgWorkProfileManager;
 
     // mark this work item as active (i.e. having work to do)
     void make_active(void);

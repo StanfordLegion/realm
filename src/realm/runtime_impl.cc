@@ -2159,6 +2159,7 @@ namespace Realm {
     bgwork.start_dedicated_workers(*core_reservations);
 
     bgwork_profiler.initialize(Network::my_node_id);
+    bgwork_profiler.register_existing_items(bgwork);
 
     PartitioningOpQueue::start_worker_threads(*core_reservations, &bgwork);
 

@@ -86,6 +86,8 @@
 
 namespace Realm {
 
+  class BackgroundWorkManager;
+
   // Record type constants
   enum BgWorkProfileRecordType : uint8_t
   {
@@ -161,6 +163,10 @@ namespace Realm {
     // descriptor registration (called during module init, before recording starts)
     void register_work_item(uint16_t slot, const std::string &name);
     uint16_t register_sub_item(uint8_t type, const std::string &name);
+
+    // retroactively register any work items that were added to the manager
+    // before the profiler was configured (e.g., network layer items)
+    void register_existing_items(BackgroundWorkManager &mgr);
 
     // block management (called by recording functions)
     ProfileBlock *alloc_block(uint64_t thread_id);

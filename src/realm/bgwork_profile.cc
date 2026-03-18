@@ -18,6 +18,7 @@
 // Background work profiling manager implementation
 
 #include "realm/bgwork_profile.h"
+#include "realm/bgwork.h"
 #include "realm/timers.h"
 #include "realm/logging.h"
 #include "realm/network.h"
@@ -225,6 +226,16 @@ namespace Realm {
     log_bgwork_profile.debug() << "registered sub-item: id=" << id
                                << " type=" << (int)type << " name=" << name;
     return id;
+  }
+
+  void BgWorkProfileManager::register_existing_items(BackgroundWorkManager &mgr)
+  {
+    unsigned count = mgr.num_work_items.load();
+    for(unsigned i = 0; i < count; i++) {
+      BackgroundWorkItem *item = mgr.work_items[i];
+      if(item)
+        register_work_item(static_cast<uint16_t>(i), item->name);
+    }
   }
 
   ProfileBlock *BgWorkProfileManager::alloc_block(uint64_t thread_id)
