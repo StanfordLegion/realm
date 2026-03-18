@@ -29,7 +29,6 @@
 #include "realm/proc_impl.h"
 #include "realm/mem_impl.h"
 #include "realm/bgwork.h"
-#include "realm/bgwork_profile.h"
 #include "realm/transfer/channel.h"
 #include "realm/transfer/ib_memory.h"
 
@@ -254,7 +253,7 @@ namespace Realm {
       void start_background_thread(Realm::CoreReservationSet &crs, size_t stack_size);
       void shutdown_background_thread(void);
 
-      bool do_work(TimeLimit work_until);
+      bool do_work(TimeLimit work_until, BgWorkProfileState &profstate);
 
     public:
       void thread_main(void);

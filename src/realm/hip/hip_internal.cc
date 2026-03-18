@@ -514,7 +514,7 @@ namespace Realm {
       : SingleXDQChannel<GPUChannel, GPUXferDes>(
             bgwork, _kind,
             stringbuilder() << "hip channel (gpu=" << _src_gpu->info->index
-                            << " kind=" << (int)_kind << ")")
+                            << " kind=" << _kind << ")")
     {
       src_gpu = _src_gpu;
 
@@ -1261,7 +1261,7 @@ namespace Realm {
               {
                 AutoGPUContext agc(channel->gpu);
 
-                if(!gpu_timing && tl_bgwork_profile) {
+                if(!gpu_timing && bgwork_profiler.get_level() > 0) {
                   gpu_timing = new BgWorkGpuHipNotification(
                       stream->get_gpu()->proc->me.id, channel->get_bgwork_slot());
                   stream->add_notification(gpu_timing);

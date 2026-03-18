@@ -943,7 +943,7 @@ namespace Realm {
       make_active();
   }
 
-  bool PartitioningOpQueue::do_work(TimeLimit work_until)
+  bool PartitioningOpQueue::do_work(TimeLimit work_until, BgWorkProfileState &profstate)
   {
     // attempt to take one item off the work queue - readvertise work if
     //  more remains
@@ -981,14 +981,15 @@ namespace Realm {
     //  (neither branch will be taken if there are dedicated workers and they
     //  already got to the queued operations)
     if(op != 0) {
+      profstate.worked();
       bool ok_to_run = op->mark_started();
       if(ok_to_run) {
 	log_part.info() << "worker " << this << " starting op " << op;
 	if(profile_id_registered)
-	  bgwork_profile_fine_begin(profile_sub_item_id);
+	  profstate.fine_begin(profile_sub_item_id);
 	op->execute();
 	if(profile_id_registered)
-	  bgwork_profile_fine_end();
+	  profstate.fine_end();
 	log_part.info() << "worker " << this << " finished op " << op;
 	op->mark_finished(true /*successful*/);
       } else {
@@ -998,13 +999,14 @@ namespace Realm {
     }
 
     if(uop != 0) {
+      profstate.worked();
       log_part.info() << "worker " << this << " starting uop " << uop;
       uop->mark_started();
       if(profile_id_registered)
-	bgwork_profile_fine_begin(profile_sub_item_id);
+	profstate.fine_begin(profile_sub_item_id);
       uop->execute();
       if(profile_id_registered)
-	bgwork_profile_fine_end();
+	profstate.fine_end();
       log_part.info() << "worker " << this << " finished uop " << uop;
       uop->mark_finished();
     }

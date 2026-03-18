@@ -764,7 +764,7 @@ namespace Realm {
 
         if(in_gpu && in_gpu->can_access_peer(out_gpu) && transpose_copy.extents[0] != 0 &&
            transpose_copy.extents[0] <= CUDA_MAX_FIELD_BYTES) {
-          if(!gpu_timing && tl_bgwork_profile) {
+          if(!gpu_timing && bgwork_profiler.get_level() > 0) {
             gpu_timing = new BgWorkGpuCudaNotification(stream->get_gpu()->proc->me.id,
                                                        channel->get_bgwork_slot());
             stream->add_notification(gpu_timing);
@@ -827,7 +827,7 @@ namespace Realm {
           log_gpudma.info() << "\tLaunching kernel for rects=" << copy_infos.num_rects
                             << " bytes=" << copy_info_total
                             << " out_is_ipc=" << out_is_ipc;
-          if(!gpu_timing && tl_bgwork_profile) {
+          if(!gpu_timing && bgwork_profiler.get_level() > 0) {
             gpu_timing = new BgWorkGpuCudaNotification(stream->get_gpu()->proc->me.id,
                                                        channel->get_bgwork_slot());
             stream->add_notification(gpu_timing);
@@ -1186,7 +1186,7 @@ namespace Realm {
       : SingleXDQChannel<GPUIndirectChannel, GPUIndirectXferDes>(
             bgwork, _kind,
             stringbuilder() << "cuda channel (gpu=" << _src_gpu->info->index
-                            << " kind=" << (int)_kind << ")")
+                            << " kind=" << _kind << ")")
     {
       src_gpu = _src_gpu;
 
@@ -1467,7 +1467,7 @@ namespace Realm {
       : SingleXDQChannel<GPUChannel, GPUXferDes>(
             bgwork, _kind,
             stringbuilder() << "cuda channel (gpu=" << _src_gpu->info->index
-                            << " kind=" << (int)_kind << ")")
+                            << " kind=" << _kind << ")")
     {
       src_gpu = _src_gpu;
 
@@ -1911,7 +1911,7 @@ namespace Realm {
                  Realm::Cuda::AffineFillInfo<2, size_t>::MAX_NUM_RECTS) {
                 // Filled the current info, time to start all over
                 log_gpudma.info() << "pushing fill kernel";
-                if(!gpu_timing && tl_bgwork_profile) {
+                if(!gpu_timing && bgwork_profiler.get_level() > 0) {
                   gpu_timing = new BgWorkGpuCudaNotification(
                       stream->get_gpu()->proc->me.id, channel->get_bgwork_slot());
                   stream->add_notification(gpu_timing);
@@ -2095,7 +2095,7 @@ namespace Realm {
 
           if(fill_info.num_rects > 0) {
             log_gpudma.info() << "pushing fill kernel";
-            if(!gpu_timing && tl_bgwork_profile) {
+            if(!gpu_timing && bgwork_profiler.get_level() > 0) {
               gpu_timing = new BgWorkGpuCudaNotification(stream->get_gpu()->proc->me.id,
                                                          channel->get_bgwork_slot());
               stream->add_notification(gpu_timing);
@@ -2489,7 +2489,7 @@ namespace Realm {
               {
                 AutoGPUContext agc(channel->gpu);
 
-                if(!gpu_timing && tl_bgwork_profile) {
+                if(!gpu_timing && bgwork_profiler.get_level() > 0) {
                   gpu_timing = new BgWorkGpuCudaNotification(
                       stream->get_gpu()->proc->me.id, channel->get_bgwork_slot());
                   stream->add_notification(gpu_timing);

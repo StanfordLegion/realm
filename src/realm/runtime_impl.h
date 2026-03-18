@@ -48,7 +48,6 @@
 #include "realm/network.h"
 
 #include "realm/bgwork.h"
-#include "realm/bgwork_profile.h"
 #include "realm/activemsg.h"
 #include "realm/repl_heap.h"
 #include "realm/dynamic_table.h"

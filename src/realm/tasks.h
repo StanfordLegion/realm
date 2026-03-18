@@ -362,6 +362,7 @@ namespace Realm {
     WorkCounterUpdater<ResumableQueue> wcu_resume_queue;
 
     BackgroundWorkManager::Worker bgworker;
+    BgWorkProfileState bgwork_profstate;
     atomic<bool> bgworker_interrupt;
     long long max_bgwork_timeslice;
 

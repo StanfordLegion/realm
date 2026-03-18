@@ -70,7 +70,7 @@ namespace Realm {
     void trigger_event_waiters(EventWaiter::EventWaiterList &to_trigger, bool poisoned,
                                TimeLimit trigger_until);
 
-    virtual bool do_work(TimeLimit work_until);
+    virtual bool do_work(TimeLimit work_until, BgWorkProfileState &profstate);
 
   protected:
     Mutex mutex;

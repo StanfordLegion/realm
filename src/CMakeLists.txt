@@ -23,7 +23,6 @@ set(REALM_SOURCES
     timers.cc
     utils.cc
     bgwork.cc
-    bgwork_profile.cc
     comp_queue_impl.cc
     event_impl.cc
     barrier_impl.cc

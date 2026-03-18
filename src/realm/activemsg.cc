@@ -19,7 +19,6 @@
 #include "realm/atomics.h"
 
 #include "realm/activemsg.h"
-#include "realm/bgwork_profile.h"
 #include "realm/mutex.h"
 #include "realm/cmdline.h"
 #include "realm/logging.h"
@@ -722,7 +721,8 @@ namespace Realm {
     return now_active;
   }
 
-  bool IncomingMessageManager::do_work(TimeLimit work_until)
+  bool IncomingMessageManager::do_work(TimeLimit work_until,
+                                       BgWorkProfileState &profstate)
   {
     // now that we've been called, our previous request for bgwork has been
     //  granted and we will need another one if/when more work comes
@@ -748,6 +748,7 @@ namespace Realm {
     size_t num_handled = 0;
 
     while(current_msg) {
+      profstate.worked();
       Message *next_msg = current_msg->next_msg;
 #ifdef DETAILED_MESSAGE_TIMING
       int timing_idx = detailed_message_timing
@@ -771,14 +772,14 @@ namespace Realm {
           t_start = Clock::current_time_in_nanoseconds();
 
         if(current_msg->handler->profile_id_registered)
-          bgwork_profile_fine_begin(current_msg->handler->profile_sub_item_id);
+          profstate.fine_begin(current_msg->handler->profile_sub_item_id);
 
         (current_msg->handler->handler)(current_msg->sender, current_msg->hdr,
                                         current_msg->payload, current_msg->payload_size,
                                         work_until);
 
         if(current_msg->handler->profile_id_registered)
-          bgwork_profile_fine_end();
+          profstate.fine_end();
       } else {
         // estimate how long this handler will take, clamping at a
         //  semi-arbitrary 20us
@@ -806,14 +807,14 @@ namespace Realm {
         t_start = Clock::current_time_in_nanoseconds();
 
         if(current_msg->handler->profile_id_registered)
-          bgwork_profile_fine_begin(current_msg->handler->profile_sub_item_id);
+          profstate.fine_begin(current_msg->handler->profile_sub_item_id);
 
         (current_msg->handler->handler_notimeout)(current_msg->sender, current_msg->hdr,
                                                   current_msg->payload,
                                                   current_msg->payload_size);
 
         if(current_msg->handler->profile_id_registered)
-          bgwork_profile_fine_end();
+          profstate.fine_end();
       }
 
       long long t_end = 0;

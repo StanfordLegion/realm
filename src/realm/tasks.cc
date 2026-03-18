@@ -1321,7 +1321,8 @@ namespace Realm {
 
     if(max_bgwork_timeslice > 0) {
       // try to be productive while we're waiting
-      bgworker.do_work(max_bgwork_timeslice, &bgworker_interrupt);
+      BgWorkProfileState profstate;
+      bgworker.do_work(max_bgwork_timeslice, &bgworker_interrupt, profstate);
     } else {
       // just let the work counter wake us up when there's stuff to do
       work_counter.wait_for_work(old_work_counter);

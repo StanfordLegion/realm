@@ -52,6 +52,10 @@ namespace Realm {
 
   namespace Hip {
 
+    // file-local thread_local used by GPUWorker::do_work to communicate
+    // the profiling state to BgWorkGpuHipNotification::request_completed
+    static thread_local BgWorkProfileState *tl_gpu_profstate = nullptr;
+
     Logger log_gpu("hip");
     Logger log_gpudma("hipdma");
     Logger log_cudart("cudart");
@@ -309,7 +313,8 @@ namespace Realm {
         started = true;
       } else {
         int64_t stop_time = Clock::current_time_in_nanoseconds(true /*absolute*/);
-        bgwork_profile_gpu_work(proc_id, slot, start_time, stop_time);
+        if(tl_gpu_profstate)
+          tl_gpu_profstate->gpu_work(proc_id, slot, start_time, stop_time);
         delete this;
       }
     }
@@ -1067,7 +1072,7 @@ namespace Realm {
     }
 
     GPUWorker::GPUWorker(void)
-      : BackgroundWorkItem("gpu worker")
+      : BackgroundWorkItem("hip poll")
       , condvar(lock)
       , core_rsrv(0)
       , worker_thread(0)
@@ -1144,8 +1149,11 @@ namespace Realm {
         make_active();
     }
 
-    bool GPUWorker::do_work(TimeLimit work_until)
+    bool GPUWorker::do_work(TimeLimit work_until, BgWorkProfileState &profstate)
     {
+      // make profstate available to GPU notifications during reap_events
+      tl_gpu_profstate = &profstate;
+
       // pop the first stream off the list and immediately become re-active
       //  if more streams remain
       GPUStream *stream = 0;
@@ -1172,11 +1180,12 @@ namespace Realm {
       //  time
       bool was_empty = false;
       if(profile_id_registered)
-        bgwork_profile_fine_begin(profile_sub_item_id);
+        profstate.fine_begin(profile_sub_item_id);
       bool has_more = stream->reap_events(work_until);
       if(profile_id_registered)
-        bgwork_profile_fine_end();
+        profstate.fine_end();
       if(has_more) {
+        profstate.worked();
         AutoLock<> al(lock);
 
         was_empty = active_streams.empty();

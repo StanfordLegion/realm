@@ -86,7 +86,7 @@ namespace Realm {
       void begin_polling();
       void end_polling();
       void wait_polling();
-      bool do_work(TimeLimit work_until);
+      bool do_work(TimeLimit work_until, BgWorkProfileState &profstate);
       void add_worker(UCPWorker *worker);
 
     private:

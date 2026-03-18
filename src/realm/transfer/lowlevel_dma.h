@@ -146,7 +146,7 @@ namespace Realm {
 
     static AsyncFileIOContext *get_singleton(void);
 
-    virtual bool do_work(TimeLimit work_until);
+    virtual bool do_work(TimeLimit work_until, BgWorkProfileState &profstate);
 
     class AIOOperation {
     public:

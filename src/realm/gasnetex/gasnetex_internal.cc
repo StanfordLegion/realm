@@ -130,6 +130,7 @@ namespace Realm {
 
   namespace ThreadLocal {
     thread_local const TimeLimit *gex_work_until = nullptr;
+    thread_local BgWorkProfileState* gex_bgwork_profstate = nullptr;
     thread_local bool in_am_handler = false;
   }; // namespace ThreadLocal
 
@@ -566,8 +567,9 @@ namespace Realm {
       make_active();
   }
 
-  bool OutbufManager::do_work(TimeLimit work_until)
+  bool OutbufManager::do_work(TimeLimit work_until, BgWorkProfileState &profstate)
   {
+    profstate.worked();
     // take the mutex and grab the first overflow and reserved realbuf -
     //  don't decrement the counts yet, because we don't want more than one
     //  thread working on this at a time
@@ -2714,8 +2716,9 @@ namespace Realm {
     return !ready_xpairs.empty();
   }
 
-  bool GASNetEXInjector::do_work(TimeLimit work_until)
+  bool GASNetEXInjector::do_work(TimeLimit work_until, BgWorkProfileState &profstate)
   {
+    profstate.worked();
     // we're not supposed to end up handling AMs, but set this just in case
     //  we do
     ThreadLocal::gex_work_until = &work_until;
@@ -2804,9 +2807,10 @@ namespace Realm {
     return (!critical_xpairs.empty() || !pending_events.empty());
   }
 
-  bool GASNetEXPoller::do_work(TimeLimit work_until)
+  bool GASNetEXPoller::do_work(TimeLimit work_until, BgWorkProfileState &profstate)
   {
     ThreadLocal::gex_work_until = &work_until;
+    ThreadLocal::gex_bgwork_profstate = &profstate;
 
     // we're going to try to be frugal about acquiring mutexes here, so peek
     //  ahead in the critical xpair list to avoid the extra mutex acquire that
@@ -2876,6 +2880,7 @@ namespace Realm {
     // try to push packets for any xmit pairs that are critical (i.e. cannot
     //  use immediate mode)
     while(have_crit_xpairs) {
+      profstate.worked();
       XmitSrcDestPair *xpair = nullptr;
 
       // don't wait on contention for the mutex - just skip and get it
@@ -2921,6 +2926,7 @@ namespace Realm {
     gex_wrapper_handle.gex_am_poll();
 
     ThreadLocal::gex_work_until = nullptr;
+    ThreadLocal::gex_bgwork_profstate = nullptr;
 
     // if there was a pollwaiter before we started the poll, we can wake it
     //  now
@@ -2976,7 +2982,7 @@ namespace Realm {
 
   bool GASNetEXCompleter::has_work_remaining() { return has_work.load(); }
 
-  bool GASNetEXCompleter::do_work(TimeLimit work_until)
+  bool GASNetEXCompleter::do_work(TimeLimit work_until, BgWorkProfileState &profstate)
   {
     // grab all the events but don't clear 'has_work' since we don't want
     //  to be reactivated yet
@@ -2987,6 +2993,7 @@ namespace Realm {
     }
 
     while(!todo.empty()) {
+      profstate.worked();
       GASNetEXEvent *ev = todo.pop_front();
       ev->trigger(internal);
       internal->event_alloc.free_obj(ev);
@@ -3066,8 +3073,9 @@ namespace Realm {
     return (head != nullptr);
   }
 
-  bool ReverseGetter::do_work(TimeLimit work_until)
+  bool ReverseGetter::do_work(TimeLimit work_until, BgWorkProfileState &profstate)
   {
+    profstate.worked();
     // we're not going to use immedate mode for rgets, so don't have more
     //  than one dequeuer at a time - do this by peeking at the head but
     //  not popping it until we've actually issued the rget
@@ -5028,6 +5036,8 @@ namespace Realm {
         ((ThreadLocal::gex_work_until != nullptr) ? *ThreadLocal::gex_work_until
                                                   : TimeLimit::relative(0)));
     ThreadLocal::in_am_handler = false;
+    if(ThreadLocal::gex_bgwork_profstate)
+      ThreadLocal::gex_bgwork_profstate->worked();
 
     if(handled) {
       // if the message was handled immediately, we can use a reply for
@@ -5078,6 +5088,8 @@ namespace Realm {
         ((ThreadLocal::gex_work_until != nullptr) ? *ThreadLocal::gex_work_until
                                                   : TimeLimit::relative(0)));
     ThreadLocal::in_am_handler = false;
+    if(ThreadLocal::gex_bgwork_profstate)
+      ThreadLocal::gex_bgwork_profstate->worked();
 
     if(handled) {
       // if the message was handled immediately, we can use a reply for
@@ -5129,6 +5141,8 @@ namespace Realm {
         ((ThreadLocal::gex_work_until != nullptr) ? *ThreadLocal::gex_work_until
                                                   : TimeLimit::relative(0)));
     ThreadLocal::in_am_handler = false;
+    if(ThreadLocal::gex_bgwork_profstate)
+      ThreadLocal::gex_bgwork_profstate->worked();
 
     if(handled) {
       // if the message was handled immediately, we can use a reply for
@@ -5294,6 +5308,8 @@ namespace Realm {
     }
 
     ThreadLocal::in_am_handler = false;
+    if(ThreadLocal::gex_bgwork_profstate)
+      ThreadLocal::gex_bgwork_profstate->worked();
   }
 
 }; // namespace Realm

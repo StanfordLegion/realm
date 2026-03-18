@@ -125,7 +125,7 @@ namespace Realm {
   }
 
   template <typename CHANNEL, typename XD>
-  bool XDQueue<CHANNEL, XD>::do_work(TimeLimit work_until)
+  bool XDQueue<CHANNEL, XD>::do_work(TimeLimit work_until, BgWorkProfileState &profstate)
   {
     bool first_iteration = true;
     while(true) {
@@ -169,10 +169,12 @@ namespace Realm {
           unsigned progress = xd->current_progress();
 
           if(profile_id_registered)
-            bgwork_profile_fine_begin(profile_sub_item_id);
+            profstate.fine_begin(profile_sub_item_id);
           bool did_work = xd->progress_xd(static_cast<CHANNEL *>(channel), work_until);
           if(profile_id_registered)
-            bgwork_profile_fine_end();
+            profstate.fine_end();
+          if(did_work)
+            profstate.worked();
 
           // if we didn't do any work, and we're not done (i.e. by
           //  concluding there wasn't any work to actually do), re-check

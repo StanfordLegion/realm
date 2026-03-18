@@ -510,7 +510,7 @@ namespace Realm {
     nested_normal = nested_poisoned = 0;
   }
 
-  bool EventTriggerNotifier::do_work(TimeLimit work_until)
+  bool EventTriggerNotifier::do_work(TimeLimit work_until, BgWorkProfileState &profstate)
   {
     // take the lock and grab both lists
     EventWaiter::EventWaiterList todo_normal, todo_poisoned;
@@ -529,9 +529,11 @@ namespace Realm {
       // TODO: triggers are fast - consider doing more than one per time check?
       if(!todo_normal.empty()) {
         EventWaiter *w = todo_normal.pop_front();
+        profstate.worked();
         w->event_triggered(false /*!poisoned*/, work_until);
       } else if(!todo_poisoned.empty()) {
         EventWaiter *w = todo_poisoned.pop_front();
+        profstate.worked();
         w->event_triggered(true /*poisoned*/, work_until);
       } else
         break;

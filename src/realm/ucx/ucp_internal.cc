@@ -84,6 +84,7 @@ namespace Realm {
 
     namespace ThreadLocal {
       thread_local const TimeLimit *ucp_work_until = nullptr;
+      thread_local BgWorkProfileState *ucp_bgwork_profstate = nullptr;
     };
 
     struct CompList {
@@ -327,15 +328,17 @@ namespace Realm {
       poll_notify_cond.wait();
     }
 
-    bool UCPPoller::do_work(TimeLimit work_until)
+    bool UCPPoller::do_work(TimeLimit work_until, BgWorkProfileState &profstate)
     {
       ThreadLocal::ucp_work_until = &work_until;
+      ThreadLocal::ucp_bgwork_profstate = &profstate;
 
       for(auto worker : workers) {
         (void)worker->progress();
       }
 
       ThreadLocal::ucp_work_until = nullptr;
+      ThreadLocal::ucp_bgwork_profstate = nullptr;
 
       // if a poll notify has been requested, wake the waiter
       if(poll_notify_flag.load()) {
@@ -1195,6 +1198,8 @@ namespace Realm {
           &am_realm_comp_handler, cb_data1, 0,
           (ThreadLocal::ucp_work_until != nullptr) ? *ThreadLocal::ucp_work_until
                                                    : TimeLimit::relative(0));
+      if(ThreadLocal::ucp_bgwork_profstate)
+        ThreadLocal::ucp_bgwork_profstate->worked();
 
       if(completed) {
         am_realm_comp_handler(ucp_msg_hdr->src, cb_data1, 0);

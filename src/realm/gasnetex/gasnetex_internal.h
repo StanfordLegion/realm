@@ -142,7 +142,7 @@ namespace Realm {
                                  bool new_endpoint);
     void free_outbuf(OutbufMetadata *md);
 
-    virtual bool do_work(TimeLimit work_until);
+    virtual bool do_work(TimeLimit work_until, BgWorkProfileState &profstate);
 
   protected:
     OutbufMetadata *metadatas;
@@ -510,7 +510,7 @@ namespace Realm {
 
     bool has_work_remaining();
 
-    virtual bool do_work(TimeLimit work_until);
+    virtual bool do_work(TimeLimit work_until, BgWorkProfileState &profstate);
 
   protected:
     GASNetEXInternal *internal;
@@ -531,7 +531,7 @@ namespace Realm {
 
     bool has_work_remaining();
 
-    virtual bool do_work(TimeLimit work_until);
+    virtual bool do_work(TimeLimit work_until, BgWorkProfileState &profstate);
 
     // causes calling thread to wait for a full call to gasnet_AMPoll() to
     //  be performed by the poller
@@ -557,7 +557,7 @@ namespace Realm {
 
     bool has_work_remaining();
 
-    virtual bool do_work(TimeLimit work_until);
+    virtual bool do_work(TimeLimit work_until, BgWorkProfileState &profstate);
 
   protected:
     GASNetEXInternal *internal;
@@ -626,7 +626,7 @@ namespace Realm {
 
     bool has_work_remaining();
 
-    virtual bool do_work(TimeLimit work_until);
+    virtual bool do_work(TimeLimit work_until, BgWorkProfileState &profstate);
 
   protected:
     friend class GASNetEXEvent;
