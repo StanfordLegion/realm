@@ -2392,8 +2392,6 @@ namespace Realm {
               in_base = reinterpret_cast<uintptr_t>(in_port->mem->get_direct_ptr(0, 0));
             }
 
-            assert(channel->gpu->can_access_peer(in_gpu));
-
             while(total_elems < max_elems) {
               AddressListCursor &in_alc = in_port->addrcursor;
               AddressListCursor &out_alc = out_port->addrcursor;
