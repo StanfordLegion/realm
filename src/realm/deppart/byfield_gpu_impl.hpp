@@ -17,6 +17,20 @@ namespace Realm {
 template <int N, typename T, typename FT>
 void GPUByFieldMicroOp<N,T,FT>::execute()
 {
+  // Resolve the local GPU processor now that we are guaranteed to be on the
+  // correct node (dispatch() forwarded us here if the instance was remote).
+  {
+    Memory my_mem = field_data[0].inst.get_location();
+    Processor best_proc;
+    assert(choose_proc(best_proc, my_mem));
+    Cuda::GPUProcessor *gpu_proc =
+        dynamic_cast<Cuda::GPUProcessor *>(get_runtime()->get_processor_impl(best_proc));
+    assert(gpu_proc);
+    this->gpu = gpu_proc->gpu;
+    this->stream = gpu_proc->gpu->get_deppart_stream();
+  }
+
+
 
   Cuda::AutoGPUContext agc(this->gpu);
 
@@ -75,15 +89,14 @@ void GPUByFieldMicroOp<N,T,FT>::execute()
   }
 
 
-  Memory zcpy_mem;
-  assert(find_memory(zcpy_mem, Memory::Z_COPY_MEM, buffer_arena.location));
-
-  // We need to pass the accessors to the GPU so it can read field values.
-  RegionInstance accessors_instance = this->realm_malloc(field_data.size() * sizeof(AffineAccessor<FT,N,T>), zcpy_mem);
-  AffineAccessor<FT,N,T>* d_accessors = reinterpret_cast<AffineAccessor<FT,N,T>*>(AffineAccessor<char,1>(accessors_instance, 0).base);
+  std::vector<AffineAccessor<FT,N,T>> h_accessors(field_data.size());
   for (size_t i = 0; i < field_data.size(); ++i) {
-    d_accessors[i] = AffineAccessor<FT,N,T>(field_data[i].inst, field_data[i].field_offset);
+    h_accessors[i] = AffineAccessor<FT,N,T>(field_data[i].inst, field_data[i].field_offset);
   }
+  AffineAccessor<FT,N,T>* d_accessors = buffer_arena.alloc<AffineAccessor<FT,N,T>>(field_data.size());
+  CUDA_CHECK(cudaMemcpyAsync(d_accessors, h_accessors.data(),
+                             field_data.size() * sizeof(AffineAccessor<FT,N,T>),
+                             cudaMemcpyHostToDevice, stream), stream);
 
   buffer_arena.commit(false);
 
@@ -103,7 +116,7 @@ void GPUByFieldMicroOp<N,T,FT>::execute()
   int count = 0;
   if (count) {}
   bool host_fallback = false;
-  std::vector<RegionInstance> h_instances(colors.size(), RegionInstance::NO_INST);
+  std::vector<Rect<N, T>*> host_rect_buffers(colors.size(), nullptr);
   std::vector<size_t> entry_counts(colors.size(), 0);
   while (num_completed < inst_space.num_entries) {
     try {
@@ -167,7 +180,7 @@ void GPUByFieldMicroOp<N,T,FT>::execute()
                            });
 
       if (host_fallback) {
-        this->split_output(d_new_rects, num_new_rects, h_instances, entry_counts, buffer_arena);
+        this->split_output(d_new_rects, num_new_rects, host_rect_buffers, entry_counts, buffer_arena);
       }
 
       if (num_output==0 || host_fallback) {
@@ -216,7 +229,7 @@ void GPUByFieldMicroOp<N,T,FT>::execute()
         } else {
           host_fallback = true;
           if (num_output > 0) {
-            this->split_output(output_start, num_output, h_instances, entry_counts, buffer_arena);
+            this->split_output(output_start, num_output, host_rect_buffers, entry_counts, buffer_arena);
           }
           curr_tile = tile_size / 2;
         }
@@ -248,7 +261,7 @@ void GPUByFieldMicroOp<N,T,FT>::execute()
                               return kv.second;
                            });
     } catch (arena_oom&) {
-      this->split_output(output_start, num_output, h_instances, entry_counts, buffer_arena);
+      this->split_output(output_start, num_output, host_rect_buffers, entry_counts, buffer_arena);
       host_fallback = true;
     }
   }
@@ -261,10 +274,9 @@ void GPUByFieldMicroOp<N,T,FT>::execute()
       }
       size_t idx = color_indices.at(it.first);
       if (entry_counts[idx] > 0) {
-        Rect<N, T>* h_rects = reinterpret_cast<Rect<N,T> *>(AffineAccessor<char,1>(h_instances[idx], 0).base);
-        span<Rect<N, T>> h_rects_span(h_rects, entry_counts[idx]);
+        span<Rect<N, T>> h_rects_span(host_rect_buffers[idx], entry_counts[idx]);
         impl->contribute_dense_rect_list(h_rects_span, true);
-        h_instances[idx].destroy();
+        deppart_host_free(host_rect_buffers[idx]);
       } else {
         impl->contribute_nothing();
       }

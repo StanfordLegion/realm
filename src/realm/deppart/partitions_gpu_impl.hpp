@@ -36,6 +36,17 @@
 #define COMPUTE_GRID(num_items) \
   (((num_items) + THREADS_PER_BLOCK - 1) / THREADS_PER_BLOCK)
 
+#define CUDA_HOST_CHECK(call)                                                   \
+  do {                                                                          \
+    cudaError_t err = (call);                                                   \
+    if (err != cudaSuccess) {                                                   \
+      std::cerr << "CUDA host error at " << __FILE__ << ":" << __LINE__        \
+                << " '" #call "' failed with "                                 \
+                << cudaGetErrorString(err) << " (" << err << ")\n";            \
+      assert(false);                                                            \
+    }                                                                           \
+  } while (0)
+
 
 //NVTX macros to only add ranges if defined.
 #ifdef REALM_USE_NVTX
@@ -60,6 +71,21 @@ inline int32_t next_nvtx_payload() {
 #endif
 
 namespace Realm {
+
+  template <typename T>
+  inline T *deppart_host_alloc(size_t count, unsigned flags = cudaHostAllocPortable)
+  {
+    if(count == 0) return nullptr;
+    void *ptr = nullptr;
+    CUDA_HOST_CHECK(cudaHostAlloc(&ptr, count * sizeof(T), flags));
+    return reinterpret_cast<T *>(ptr);
+  }
+
+  inline void deppart_host_free(void *ptr)
+  {
+    if(ptr != nullptr)
+      CUDA_HOST_CHECK(cudaFreeHost(ptr));
+  }
 
   // Used by cub::DeviceReduce to compute bad GPU approximation.
   template<int N, typename T>
@@ -105,7 +131,18 @@ namespace Realm {
         output = affinity.m2;
       }
     }
-    return output != Memory::NO_MEMORY;
+    if (output == Memory::NO_MEMORY) {
+      std::set<Memory> memories;
+      Machine::get_machine().get_all_memories(memories);
+      for (auto mem : memories) {
+        if (mem.kind() == kind) {
+          output = mem;
+          return true;
+        }
+      }
+      return false;
+    }
+    return true;
   }
 
   template <int N, typename T>
@@ -132,8 +169,7 @@ namespace Realm {
     }
     new_offsets[inst_space.num_children] = num_new_entries;
     CUDA_CHECK(cudaMemcpyAsync(inst_space.offsets, new_offsets.data(), (inst_space.num_children + 1) * sizeof(size_t), cudaMemcpyHostToDevice, stream), stream);
-    RegionInstance new_entries_buffer = realm_malloc(num_new_entries * sizeof(SparsityMapEntry<N,T>), inst_space.h_instance.get_location());
-    SparsityMapEntry<N,T> *new_entries_ptr = reinterpret_cast<SparsityMapEntry<N, T> *>(new_entries_buffer.pointer_untyped(0, num_new_entries * sizeof(SparsityMapEntry<N,T>)));
+    SparsityMapEntry<N,T> *new_entries_ptr = deppart_host_alloc<SparsityMapEntry<N, T>>(num_new_entries);
 
     size_t write_loc = 0;
     for (size_t i = num_completed; i < inst_space.num_entries; i++) {
@@ -181,8 +217,8 @@ namespace Realm {
     num_completed = 0;
     inst_space.entries_buffer = new_entries_ptr;
     inst_space.num_entries = num_new_entries;
-    inst_space.h_instance.destroy();
-    inst_space.h_instance = new_entries_buffer;
+    deppart_host_free(inst_space.host_entries_owner);
+    inst_space.host_entries_owner = new_entries_ptr;
     CUDA_CHECK(cudaStreamSynchronize(stream), stream);
 
   }
@@ -229,15 +265,11 @@ namespace Realm {
     space_offsets[spaces.size()] = out_space.num_entries;
 
     //We copy into one contiguous host buffer, then copy to device
-    Memory sysmem;
-    assert(find_memory(sysmem, Memory::SYSTEM_MEM, my_arena.location));
-
-
-    RegionInstance h_instance = realm_malloc(out_space.num_entries * sizeof(SparsityMapEntry<N,T>), sysmem);
-    SparsityMapEntry<N, T>* h_entries = reinterpret_cast<SparsityMapEntry<N,T>*>(AffineAccessor<char,1>(h_instance, 0).base);
+    SparsityMapEntry<N, T>* h_entries = deppart_host_alloc<SparsityMapEntry<N, T>>(out_space.num_entries);
 
     if (my_arena.capacity()==0) {
-      out_space.entries_buffer = reinterpret_cast<SparsityMapEntry<N,T>*>(AffineAccessor<char,1>(h_instance, 0).base);
+      out_space.entries_buffer = h_entries;
+      out_space.host_entries_owner = h_entries;
     } else {
       out_space.entries_buffer = my_arena.alloc<SparsityMapEntry<N,T> >(out_space.num_entries);
     }
@@ -286,9 +318,7 @@ namespace Realm {
     if (my_arena.capacity() != 0) {
       CUDA_CHECK(cudaMemcpyAsync(out_space.entries_buffer, h_entries, out_space.num_entries * sizeof(SparsityMapEntry<N,T>), cudaMemcpyHostToDevice, stream), stream);
       CUDA_CHECK(cudaStreamSynchronize(stream), stream);
-      h_instance.destroy();
-    } else {
-      out_space.h_instance = h_instance;
+      deppart_host_free(h_entries);
     }
     CUDA_CHECK(cudaStreamSynchronize(stream), stream);
 
@@ -1569,16 +1599,12 @@ namespace Realm {
   }
 
   template<int N, typename T>
-  void GPUMicroOp<N,T>::split_output(RectDesc<N, T>* d_rects, size_t total_rects, std::vector<RegionInstance> &output_instances, std::vector<size_t> &output_counts, Arena &my_arena)
+  void GPUMicroOp<N,T>::split_output(RectDesc<N, T>* d_rects, size_t total_rects, std::vector<Rect<N, T> *> &output_instances, std::vector<size_t> &output_counts, Arena &my_arena)
   {
     NVTX_DEPPART(split_output);
 
     CUstream stream = this->stream->get_stream();
     bool use_sysmem = false;
-    RegionInstance sys_instance = RegionInstance::NO_INST;
-
-    Memory sysmem;
-    assert(find_memory(sysmem, Memory::SYSTEM_MEM, my_arena.location));
 
     Rect<N,T>* final_rects;
     std::vector<size_t> d_starts_host(output_instances.size()), d_ends_host(output_instances.size());
@@ -1605,10 +1631,8 @@ namespace Realm {
       CUDA_CHECK(cudaStreamSynchronize(stream), stream);
     } catch (arena_oom&) {
       use_sysmem = true;
-      RegionInstance tmp_instance = this->realm_malloc(total_rects * sizeof(RectDesc<N,T>), sysmem);
-      sys_instance = this->realm_malloc(total_rects * sizeof(Rect<N,T>), sysmem);
-      RectDesc<N, T>* h_tmp_rects = reinterpret_cast<RectDesc<N,T>*>(tmp_instance.pointer_untyped(0, total_rects * sizeof(RectDesc<N,T>)));
-      final_rects = reinterpret_cast<Rect<N,T>*>(sys_instance.pointer_untyped(0, total_rects * sizeof(Rect<N,T>)));
+      RectDesc<N, T>* h_tmp_rects = deppart_host_alloc<RectDesc<N, T>>(total_rects);
+      final_rects = deppart_host_alloc<Rect<N, T>>(total_rects);
       CUDA_CHECK(cudaMemcpyAsync(h_tmp_rects, d_rects, total_rects * sizeof(RectDesc<N,T>), cudaMemcpyDeviceToHost, stream), stream);
       CUDA_CHECK(cudaStreamSynchronize(stream), stream);
       for (size_t idx = 0; idx < total_rects; idx++ ) {
@@ -1624,7 +1648,7 @@ namespace Realm {
           d_ends_host[h_tmp_rects[idx].src_idx] = idx+1;
         }
       }
-      tmp_instance.destroy();
+      deppart_host_free(h_tmp_rects);
     }
 
     for (size_t i = 1; i < output_instances.size(); i++) {
@@ -1639,12 +1663,10 @@ namespace Realm {
         size_t end = d_ends_host[i];
         size_t start = d_starts_host[i];
         if (end - start > 0) {
-          RegionInstance new_instance = this->realm_malloc(((end - start) + output_counts[i]) * sizeof(Rect<N, T>), sysmem);
-          Rect<N, T>* h_new_rects = reinterpret_cast<Rect<N, T>*>(new_instance.pointer_untyped(0, ((end - start) + output_counts[i]) * sizeof(Rect<N, T>)));
+          Rect<N, T>* h_new_rects = deppart_host_alloc<Rect<N, T>>((end - start) + output_counts[i]);
           if (output_counts[i] > 0) {
-            Rect<N, T>* h_old_rects = reinterpret_cast<Rect<N, T>*>(output_instances[i].pointer_untyped(0, output_counts[i] * sizeof(Rect<N, T>)));
-            std::memcpy(h_new_rects, h_old_rects, output_counts[i] * sizeof(Rect<N, T>));
-            output_instances[i].destroy();
+            std::memcpy(h_new_rects, output_instances[i], output_counts[i] * sizeof(Rect<N, T>));
+            deppart_host_free(output_instances[i]);
           }
           if (use_sysmem) {
             std::memcpy(h_new_rects + output_counts[i], final_rects + start, (end - start) * sizeof(Rect<N, T>));
@@ -1652,13 +1674,13 @@ namespace Realm {
             CUDA_CHECK(cudaMemcpyAsync(h_new_rects + output_counts[i], final_rects + start, (end - start) * sizeof(Rect<N, T>), cudaMemcpyDeviceToHost, stream), stream);
             CUDA_CHECK(cudaStreamSynchronize(stream), stream);
           }
-          output_instances[i] = new_instance;
+          output_instances[i] = h_new_rects;
           output_counts[i] += end - start;
         }
       }
     }
     if (use_sysmem) {
-      sys_instance.destroy();
+      deppart_host_free(final_rects);
     }
   }
 
@@ -1715,30 +1737,31 @@ namespace Realm {
         if (d_ends_host[idx] > d_starts_host[idx]) {
           size_t end = d_ends_host[idx];
           size_t start = d_starts_host[idx];
-          RegionInstance h_rects_instance = this->realm_malloc((end - start) * sizeof(Rect<N,T>), sysmem);
-          Rect<N, T> *h_rects = reinterpret_cast<Rect<N,T> *>(AffineAccessor<char, 1>(h_rects_instance, 0).base);
+          Rect<N, T> *h_rects = deppart_host_alloc<Rect<N, T>>(end - start);
           CUDA_CHECK(cudaMemcpyAsync(h_rects, final_rects + start, (end - start) * sizeof(Rect<N,T>), cudaMemcpyDeviceToHost, stream), stream);
           CUDA_CHECK(cudaStreamSynchronize(stream), stream);
           span<Rect<N, T>> h_rects_span(h_rects, end - start);
           bool disjoint = !this->is_image_microop();
           impl->contribute_dense_rect_list(h_rects_span, disjoint);
-          h_rects_instance.destroy();
+          deppart_host_free(h_rects);
         } else {
           impl->contribute_nothing();
         }
       }
     } else {
+      std::vector<SparsityMapImpl<N, T> *> local_finalizations;
 
       //Use provided lambdas to iterate over sparsity output container (map or vector)
       for (auto const& elem : ctr) {
         size_t idx = getIndex(elem);
         auto mapOpj = getMap(elem);
         SparsityMapImpl<N, T> *impl = SparsityMapImpl<N, T>::lookup(mapOpj);
+        NodeID owner = ID(mapOpj).sparsity_creator_node();
+        assert(owner == Network::my_node_id);
         if (d_ends_host[idx] > d_starts_host[idx]) {
           size_t end = d_ends_host[idx];
           size_t start = d_starts_host[idx];
-          RegionInstance entries = this->realm_malloc((end - start) * sizeof(SparsityMapEntry<N,T>), sysmem);
-          SparsityMapEntry<N, T> *h_entries = reinterpret_cast<SparsityMapEntry<N, T> *>(AffineAccessor<char, 1>(entries, 0).base);
+          SparsityMapEntry<N, T> *h_entries = deppart_host_alloc<SparsityMapEntry<N, T>>(end - start);
           CUDA_CHECK(cudaMemcpyAsync(h_entries, final_entries + start, (end - start) * sizeof(SparsityMapEntry<N,T>), cudaMemcpyDeviceToHost, stream), stream);
 
           Rect<N,T> *approx_rects;
@@ -1779,17 +1802,44 @@ namespace Realm {
             );
             CUDA_CHECK(cudaStreamSynchronize(stream), stream);
           }
-          RegionInstance approx_entries = this->realm_malloc(num_approx * sizeof(Rect<N,T>), sysmem);
-          SparsityMapEntry<N, T> *h_approx_entries = reinterpret_cast<SparsityMapEntry<N, T> *>(AffineAccessor<char, 1>(approx_entries, 0).base);
+          Rect<N, T> *h_approx_entries = deppart_host_alloc<Rect<N, T>>(num_approx);
           CUDA_CHECK(cudaMemcpyAsync(h_approx_entries, approx_rects, num_approx * sizeof(Rect<N,T>), cudaMemcpyDeviceToHost, stream), stream);
           CUDA_CHECK(cudaStreamSynchronize(stream), stream);
-          impl->set_instance(entries, end - start);
-          impl->set_approx_instance(approx_entries, num_approx);
+          if(owner == Network::my_node_id) {
+            impl->set_gpu_entries(h_entries, end - start);
+            impl->set_gpu_approx_rects(h_approx_entries, num_approx);
+            local_finalizations.push_back(impl);
+          } else {
+            size_t payload_bytes = ((end - start) * sizeof(SparsityMapEntry<N, T>)) +
+                                   (num_approx * sizeof(Rect<N, T>));
+            ActiveMessage<typename SparsityMapImpl<N, T>::RemoteGpuFinalizeMessage>
+                amsg(owner, payload_bytes);
+            amsg->sparsity = mapOpj;
+            amsg->num_entries = end - start;
+            amsg->num_approx = num_approx;
+            amsg.add_payload(h_entries, (end - start) * sizeof(SparsityMapEntry<N, T>),
+                             PAYLOAD_COPY);
+            amsg.add_payload(h_approx_entries, num_approx * sizeof(Rect<N, T>),
+                             PAYLOAD_COPY);
+            amsg.commit();
+            deppart_host_free(h_entries);
+            deppart_host_free(h_approx_entries);
+          }
+        } else {
+          if(owner == Network::my_node_id) {
+            local_finalizations.push_back(impl);
+          } else {
+            ActiveMessage<typename SparsityMapImpl<N, T>::RemoteGpuFinalizeMessage>
+                amsg(owner);
+            amsg->sparsity = mapOpj;
+            amsg->num_entries = 0;
+            amsg->num_approx = 0;
+            amsg.commit();
+          }
         }
       }
       CUDA_CHECK(cudaStreamSynchronize(stream), stream);
-      for (auto const& elem : ctr) {
-        SparsityMapImpl<N, T> *impl = SparsityMapImpl<N, T>::lookup(getMap(elem));
+      for (SparsityMapImpl<N, T> *impl : local_finalizations) {
         impl->gpu_finalize();
       }
     }

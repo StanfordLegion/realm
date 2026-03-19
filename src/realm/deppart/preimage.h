@@ -100,6 +100,7 @@ namespace Realm {
 
   protected:
     static ActiveMessageHandlerReg<ApproxImageResponseMessage<PreimageOperation<N,T,N2,T2> > > areg;
+    NodeID exclusive_gpu_exec_node(void) const;
 
     IndexSpace<N, T> parent;
     DomainTransform<N2, T2, N, T> domain_transform;
@@ -111,6 +112,7 @@ namespace Realm {
     atomic<int> remaining_sparse_images;
     std::vector<atomic<int> > contrib_counts;
     AsyncMicroOp *dummy_overlap_uop;
+    int exclusive_gpu_owner;
   };
 
   template <typename T>
@@ -175,6 +177,16 @@ namespace Realm {
     void dispatch(PartitioningOperation *op, bool inline_ok);
 
   protected:
+    friend struct RemoteMicroOpMessage<GPUPreimageMicroOp<N,T,N2,T2> >;
+    static ActiveMessageHandlerReg<RemoteMicroOpMessage<GPUPreimageMicroOp<N,T,N2,T2> > > areg;
+
+    friend class PartitioningMicroOp;
+    template <typename S>
+    REALM_ATTR_WARN_UNUSED(bool serialize_params(S& s) const);
+
+    // construct from received packet
+    template <typename S>
+    GPUPreimageMicroOp(NodeID _requestor, AsyncMicroOp *_async_microop, S& s);
 
     void gpu_populate_ranges();
     void gpu_populate_bitmasks();

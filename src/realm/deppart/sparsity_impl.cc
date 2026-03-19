@@ -25,8 +25,180 @@
 #include "realm/deppart/rectlist.h"
 #include "realm/deppart/inst_helper.h"
 #include "realm/logging.h"
+#include "realm/machine.h"
+#ifdef REALM_USE_CUDA
+#include <cuda_runtime_api.h>
+#endif
+#include <cstdio>
+#include <cstdlib>
+#include <cstring>
+#include <condition_variable>
+#include <mutex>
+#include <unordered_map>
 
 namespace Realm {
+
+  namespace {
+    struct PendingOutputSparsityAllocation {
+      std::mutex mutex;
+      std::condition_variable cv;
+      ID result{ID::ID_NULL};
+      bool ready{false};
+    };
+
+    atomic<uint64_t> next_output_sparsity_request{1};
+    std::mutex pending_output_sparsity_mutex;
+    std::unordered_map<uint64_t, PendingOutputSparsityAllocation *>
+        pending_output_sparsity_allocations;
+
+    struct OutputSparsityAllocationRequest {
+      uint64_t request_id;
+
+      static void handle_message(NodeID sender,
+                                 const OutputSparsityAllocationRequest &msg,
+                                 const void *data,
+                                 size_t datalen);
+    };
+
+    struct OutputSparsityAllocationResponse {
+      uint64_t request_id;
+      ID sparsity;
+
+      static void handle_message(NodeID sender,
+                                 const OutputSparsityAllocationResponse &msg,
+                                 const void *data,
+                                 size_t datalen);
+    };
+
+    ActiveMessageHandlerReg<OutputSparsityAllocationRequest>
+        output_sparsity_allocation_request_reg;
+    ActiveMessageHandlerReg<OutputSparsityAllocationResponse>
+        output_sparsity_allocation_response_reg;
+
+    template <typename T>
+    inline T *deppart_gpu_host_alloc(size_t count)
+    {
+      if(count == 0) return nullptr;
+#ifdef REALM_USE_CUDA
+      void *ptr = nullptr;
+      cudaError_t err = cudaHostAlloc(&ptr, count * sizeof(T), cudaHostAllocPortable);
+      assert(err == cudaSuccess);
+      return reinterpret_cast<T *>(ptr);
+#else
+      return static_cast<T *>(std::malloc(count * sizeof(T)));
+#endif
+    }
+
+    inline void deppart_gpu_host_free(void *ptr)
+    {
+      if(ptr == nullptr) return;
+#ifdef REALM_USE_CUDA
+      cudaError_t err = cudaFreeHost(ptr);
+      assert(err == cudaSuccess);
+#else
+      std::free(ptr);
+#endif
+    }
+
+    inline bool deppart_sparsity_trace_enabled(void)
+    {
+      static int enabled = -1;
+      if(enabled < 0)
+        enabled = (std::getenv("REALM_DEPPART_SPARSITY_TRACE") != nullptr) ? 1 : 0;
+      return (enabled == 1);
+    }
+
+    inline void deppart_sparsity_trace(const char *tag,
+                                       ::realm_id_t sparsity,
+                                       NodeID owner,
+                                       NodeID node,
+                                       int remaining_contrib,
+                                       int total_pieces,
+                                       int remaining_pieces,
+                                       size_t extra0 = 0,
+                                       size_t extra1 = 0)
+    {
+      if(!deppart_sparsity_trace_enabled())
+        return;
+      std::fprintf(stderr,
+                   "[deppart-trace] %s map=%llx owner=%d node=%d rem_contrib=%d "
+                   "total_pieces=%d rem_pieces=%d extra0=%zu extra1=%zu\n",
+                   tag,
+                   static_cast<unsigned long long>(sparsity),
+                   owner,
+                   node,
+                   remaining_contrib,
+                   total_pieces,
+                   remaining_pieces,
+                   extra0,
+                   extra1);
+      std::fflush(stderr);
+    }
+  }
+
+  ID create_deppart_output_sparsity(NodeID target_node)
+  {
+    if(target_node == Network::my_node_id) {
+      SparsityMapImplWrapper *wrap =
+          get_runtime()->get_available_sparsity_impl(target_node);
+      wrap->add_references(1);
+      return ID(wrap->me);
+    }
+
+    PendingOutputSparsityAllocation pending;
+    uint64_t request_id = next_output_sparsity_request.fetch_add(1);
+    {
+      std::lock_guard<std::mutex> lock(pending_output_sparsity_mutex);
+      pending_output_sparsity_allocations.emplace(request_id, &pending);
+    }
+
+    ActiveMessage<OutputSparsityAllocationRequest> amsg(target_node);
+    amsg->request_id = request_id;
+    amsg.commit();
+
+    std::unique_lock<std::mutex> lock(pending.mutex);
+    pending.cv.wait(lock, [&pending]() { return pending.ready; });
+    return pending.result;
+  }
+
+  void OutputSparsityAllocationRequest::handle_message(
+      NodeID sender,
+      const OutputSparsityAllocationRequest &msg,
+      const void *data,
+      size_t datalen)
+  {
+    SparsityMapImplWrapper *wrap =
+        get_runtime()->get_available_sparsity_impl(Network::my_node_id);
+    wrap->add_references(1);
+
+    ActiveMessage<OutputSparsityAllocationResponse> amsg(sender);
+    amsg->request_id = msg.request_id;
+    amsg->sparsity = wrap->me;
+    amsg.commit();
+  }
+
+  void OutputSparsityAllocationResponse::handle_message(
+      NodeID sender,
+      const OutputSparsityAllocationResponse &msg,
+      const void *data,
+      size_t datalen)
+  {
+    PendingOutputSparsityAllocation *pending = nullptr;
+    {
+      std::lock_guard<std::mutex> lock(pending_output_sparsity_mutex);
+      auto it = pending_output_sparsity_allocations.find(msg.request_id);
+      assert(it != pending_output_sparsity_allocations.end());
+      pending = it->second;
+      pending_output_sparsity_allocations.erase(it);
+    }
+
+    {
+      std::lock_guard<std::mutex> lock(pending->mutex);
+      pending->result = msg.sparsity;
+      pending->ready = true;
+    }
+    pending->cv.notify_one();
+  }
 
   extern Logger log_part;
 
@@ -1233,13 +1405,8 @@ bool SparsityMapPublicImpl<N, T>::bvh_centroid_less(int axis,
 template<int N, typename T>
 SparsityMapImpl<N, T>::~SparsityMapImpl(void)
 {
-     //We are responsible for our instances
-     //if (this->entries_instance.exists()) {
-     //    this->entries_instance.destroy();
-     //}
-     //if (this->approx_instance.exists()) {
-     //    this->approx_instance.destroy();
-     //}
+     deppart_gpu_host_free(this->gpu_entries);
+     deppart_gpu_host_free(this->gpu_approx_rects);
 }
 
   template <int N, typename T>
@@ -1324,6 +1491,14 @@ SparsityMapImpl<N, T>::~SparsityMapImpl(void)
   template <int N, typename T>
   void SparsityMapImpl<N, T>::set_contributor_count(int count)
   {
+    deppart_sparsity_trace("set_contributor_count.enter",
+                           me.id,
+                           ID(me).sparsity_creator_node(),
+                           Network::my_node_id,
+                           remaining_contributor_count.load(),
+                           total_piece_count.load(),
+                           remaining_piece_count.load(),
+                           count);
     if(NodeID(ID(me).sparsity_creator_node()) == Network::my_node_id) {
       // increment the count atomically - if it brings the total up to 0
       //  (which covers count == 0), immediately propagate the total piece
@@ -1341,8 +1516,23 @@ SparsityMapImpl<N, T>::~SparsityMapImpl(void)
       }
     } else {
       // send the contributor count to the owner node
-      sparsity_comm->send_contribute(me, count, 0, false);
+      // NOTE: must use SetContribCountMessage, not send_contribute!
+      // send_contribute arrives as contribute_raw_rects which DECREMENTS
+      // remaining_contributor_count by 1 (treating it as one contributor's piece),
+      // but set_contributor_count should INCREMENT by count.
+      ActiveMessage<SetContribCountMessage> amsg(ID(me).sparsity_creator_node());
+      amsg->sparsity = me;
+      amsg->count = count;
+      amsg.commit();
     }
+    deppart_sparsity_trace("set_contributor_count.exit",
+                           me.id,
+                           ID(me).sparsity_creator_node(),
+                           Network::my_node_id,
+                           remaining_contributor_count.load(),
+                           total_piece_count.load(),
+                           remaining_piece_count.load(),
+                           count);
   }
 
   template <int N, typename T>
@@ -1410,6 +1600,13 @@ SparsityMapImpl<N, T>::~SparsityMapImpl(void)
   template <int N, typename T>
   void SparsityMapImpl<N, T>::contribute_nothing(void)
   {
+    deppart_sparsity_trace("contribute_nothing.enter",
+                           me.id,
+                           ID(me).sparsity_creator_node(),
+                           Network::my_node_id,
+                           remaining_contributor_count.load(),
+                           total_piece_count.load(),
+                           remaining_piece_count.load());
     NodeID owner = ID(me).sparsity_creator_node();
 
     if(owner != Network::my_node_id) {
@@ -1432,6 +1629,13 @@ SparsityMapImpl<N, T>::~SparsityMapImpl(void)
       if(have_all_pieces)
         finalize();
     }
+    deppart_sparsity_trace("contribute_nothing.exit",
+                           me.id,
+                           ID(me).sparsity_creator_node(),
+                           Network::my_node_id,
+                           remaining_contributor_count.load(),
+                           total_piece_count.load(),
+                           remaining_piece_count.load());
   }
 
   template <int N, typename T>
@@ -1490,6 +1694,15 @@ SparsityMapImpl<N, T>::~SparsityMapImpl(void)
                                                    size_t piece_count, bool disjoint,
                                                    size_t total_count)
   {
+    deppart_sparsity_trace("contribute_raw_rects.enter",
+                           me.id,
+                           ID(me).sparsity_creator_node(),
+                           Network::my_node_id,
+                           remaining_contributor_count.load(),
+                           total_piece_count.load(),
+                           remaining_piece_count.load(),
+                           count,
+                           piece_count);
     if(count > 0) {
       AutoLock<> al(mutex);
 
@@ -1727,6 +1940,15 @@ SparsityMapImpl<N, T>::~SparsityMapImpl(void)
 
       finalize();
     }
+    deppart_sparsity_trace("contribute_raw_rects.exit",
+                           me.id,
+                           ID(me).sparsity_creator_node(),
+                           Network::my_node_id,
+                           remaining_contributor_count.load(),
+                           total_piece_count.load(),
+                           remaining_piece_count.load(),
+                           count,
+                           piece_count);
   }
 
   // adds a microop as a waiter for valid sparsity map data - returns true
@@ -1735,6 +1957,14 @@ SparsityMapImpl<N, T>::~SparsityMapImpl(void)
   template <int N, typename T>
   bool SparsityMapImpl<N, T>::add_waiter(PartitioningMicroOp *uop, bool precise)
   {
+    deppart_sparsity_trace("add_waiter.enter",
+                           me.id,
+                           ID(me).sparsity_creator_node(),
+                           Network::my_node_id,
+                           remaining_contributor_count.load(),
+                           total_piece_count.load(),
+                           remaining_piece_count.load(),
+                           precise ? 1 : 0);
 
     // early out
     if(precise ? this->entries_valid.load_acquire() : this->approx_valid.load_acquire())
@@ -1784,6 +2014,15 @@ SparsityMapImpl<N, T>::~SparsityMapImpl(void)
       sparsity_comm->send_request(me, request_precise, request_approx);
     }
 
+    deppart_sparsity_trace("add_waiter.exit",
+                           me.id,
+                           ID(me).sparsity_creator_node(),
+                           Network::my_node_id,
+                           remaining_contributor_count.load(),
+                           total_piece_count.load(),
+                           remaining_piece_count.load(),
+                           precise ? 1 : 0,
+                           registered ? 1 : 0);
     return registered;
   }
 
@@ -1827,6 +2066,15 @@ SparsityMapImpl<N, T>::~SparsityMapImpl(void)
   void SparsityMapImpl<N, T>::remote_data_reply(NodeID requestor, bool reply_precise,
                                                 bool reply_approx)
   {
+    deppart_sparsity_trace("remote_data_reply.enter",
+                           me.id,
+                           ID(me).sparsity_creator_node(),
+                           Network::my_node_id,
+                           remaining_contributor_count.load(),
+                           total_piece_count.load(),
+                           remaining_piece_count.load(),
+                           reply_precise ? 1 : 0,
+                           reply_approx ? 1 : 0);
     if(reply_approx) {
       // TODO
       if(!this->approx_valid.load_acquire())
@@ -1879,6 +2127,15 @@ SparsityMapImpl<N, T>::~SparsityMapImpl(void)
       sparsity_comm->send_contribute(requestor, me, num_pieces + 1, total_count,
                                      /*disjoint=*/true, rdata, bytes);
     }
+    deppart_sparsity_trace("remote_data_reply.exit",
+                           me.id,
+                           ID(me).sparsity_creator_node(),
+                           Network::my_node_id,
+                           remaining_contributor_count.load(),
+                           total_piece_count.load(),
+                           remaining_piece_count.load(),
+                           reply_precise ? 1 : 0,
+                           reply_approx ? 1 : 0);
   }
 
   template <int N, typename T>
@@ -2039,6 +2296,14 @@ SparsityMapImpl<N, T>::~SparsityMapImpl(void)
   template <int N, typename T>
   void SparsityMapImpl<N, T>::finalize(void)
   {
+    deppart_sparsity_trace("finalize.enter",
+                           me.id,
+                           ID(me).sparsity_creator_node(),
+                           Network::my_node_id,
+                           remaining_contributor_count.load(),
+                           total_piece_count.load(),
+                           remaining_piece_count.load(),
+                           this->entries.size());
 
     this->from_gpu = false;
 
@@ -2180,6 +2445,15 @@ SparsityMapImpl<N, T>::~SparsityMapImpl(void)
     if(trigger_precise.exists())
       GenEventImpl::trigger(trigger_precise, false /*!poisoned*/);
 
+    deppart_sparsity_trace("finalize.exit",
+                           me.id,
+                           ID(me).sparsity_creator_node(),
+                           Network::my_node_id,
+                           remaining_contributor_count.load(),
+                           total_piece_count.load(),
+                           remaining_piece_count.load(),
+                           this->entries.size());
+
   }
 
 
@@ -2189,7 +2463,16 @@ SparsityMapImpl<N, T>::~SparsityMapImpl(void)
   template <int N, typename T>
   void SparsityMapImpl<N, T>::gpu_finalize(void)
   {
-    this->from_gpu = true;
+    deppart_sparsity_trace("gpu_finalize.enter",
+                           me.id,
+                           ID(me).sparsity_creator_node(),
+                           Network::my_node_id,
+                           remaining_contributor_count.load(),
+                           total_piece_count.load(),
+                           remaining_piece_count.load(),
+                           this->num_entries,
+                           this->num_approx);
+    this->from_gpu = ((this->gpu_entries != nullptr) || (this->gpu_approx_rects != nullptr));
 
     if(true /*ID(me).sparsity_creator_node() == Network::my_node_id*/) {
       assert(!this->approx_valid.load());
@@ -2273,22 +2556,33 @@ SparsityMapImpl<N, T>::~SparsityMapImpl(void)
 
     if(trigger_precise.exists())
       GenEventImpl::trigger(trigger_precise, false /*!poisoned*/);
+    deppart_sparsity_trace("gpu_finalize.exit",
+                           me.id,
+                           ID(me).sparsity_creator_node(),
+                           Network::my_node_id,
+                           remaining_contributor_count.load(),
+                           total_piece_count.load(),
+                           remaining_piece_count.load(),
+                           this->num_entries,
+                           this->num_approx);
   }
 
 
-  //Allows a GPU deppart client to set the entries directly with a host region instance
   template<int N, typename T>
-    void SparsityMapImpl<N, T>::set_instance(RegionInstance _entries_instance, size_t size)
+  void SparsityMapImpl<N, T>::set_gpu_entries(SparsityMapEntry<N, T> *entries, size_t size)
   {
-    this->entries_instance = _entries_instance;
+    deppart_gpu_host_free(this->gpu_entries);
+    this->gpu_entries = entries;
+    this->entries.clear();
     this->num_entries = size;
   }
 
-  //Allows a GPU deppart client to set the approx rects directly with a host region instance
   template<int N, typename T>
-  void SparsityMapImpl<N, T>::set_approx_instance(RegionInstance _approx_instance, size_t size)
+  void SparsityMapImpl<N, T>::set_gpu_approx_rects(Rect<N, T> *approx_rects, size_t size)
   {
-    this->approx_instance = _approx_instance;
+    deppart_gpu_host_free(this->gpu_approx_rects);
+    this->gpu_approx_rects = approx_rects;
+    this->approx_rects.clear();
     this->num_approx = size;
   }
 
@@ -2304,6 +2598,10 @@ SparsityMapImpl<N, T>::~SparsityMapImpl(void)
   /*static*/ ActiveMessageHandlerReg<
       typename SparsityMapImpl<N, T>::SetContribCountMessage>
       SparsityMapImpl<N, T>::set_contrib_count_msg_reg;
+  template <int N, typename T>
+  /*static*/ ActiveMessageHandlerReg<
+      typename SparsityMapImpl<N, T>::RemoteGpuFinalizeMessage>
+      SparsityMapImpl<N, T>::remote_gpu_finalize_msg_reg;
 
   /*static*/ ActiveMessageHandlerReg<
       typename SparsityMapRefCounter::SparsityMapAddReferenceMessage>
@@ -2359,6 +2657,42 @@ SparsityMapImpl<N, T>::~SparsityMapImpl(void)
     log_part.info() << "received contributor count: sparsity=" << msg.sparsity
                     << " count=" << msg.count;
     SparsityMapImpl<N, T>::lookup(msg.sparsity)->set_contributor_count(msg.count);
+  }
+
+  ////////////////////////////////////////////////////////////////////////
+  //
+  // class SparsityMapImpl<N,T>::RemoteGpuFinalizeMessage
+
+  template <int N, typename T>
+  inline /*static*/ void SparsityMapImpl<N, T>::RemoteGpuFinalizeMessage::handle_message(
+      NodeID sender, const SparsityMapImpl<N, T>::RemoteGpuFinalizeMessage &msg,
+      const void *data, size_t datalen)
+  {
+    size_t expected = (msg.num_entries * sizeof(SparsityMapEntry<N, T>)) +
+                      (msg.num_approx * sizeof(Rect<N, T>));
+    assert(datalen == expected);
+    (void)sender;
+
+    const char *payload = static_cast<const char *>(data);
+    SparsityMapImpl<N, T> *impl = SparsityMapImpl<N, T>::lookup(msg.sparsity);
+
+    if(msg.num_entries > 0) {
+      SparsityMapEntry<N, T> *entries = deppart_gpu_host_alloc<SparsityMapEntry<N, T>>(msg.num_entries);
+      std::memcpy(entries, payload, msg.num_entries * sizeof(SparsityMapEntry<N, T>));
+      impl->set_gpu_entries(entries, msg.num_entries);
+      payload += msg.num_entries * sizeof(SparsityMapEntry<N, T>);
+    } else {
+      impl->set_gpu_entries(nullptr, 0);
+    }
+
+    if(msg.num_approx > 0) {
+      Rect<N, T> *approx = deppart_gpu_host_alloc<Rect<N, T>>(msg.num_approx);
+      std::memcpy(approx, payload, msg.num_approx * sizeof(Rect<N, T>));
+      impl->set_gpu_approx_rects(approx, msg.num_approx);
+    } else {
+      impl->set_gpu_approx_rects(nullptr, 0);
+    }
+    impl->gpu_finalize();
   }
 
 #define DOIT(N, T)                                                                       \

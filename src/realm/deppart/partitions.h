@@ -91,7 +91,7 @@ namespace Realm {
     size_t* offsets;
     size_t num_children;
     Rect<N, T> bounds;
-    RegionInstance h_instance = RegionInstance::NO_INST;
+    SparsityMapEntry<N, T>* host_entries_owner = nullptr;
   };
 
   // Stores everything necessary to query a BVH
@@ -310,8 +310,6 @@ namespace Realm {
     template <int N, typename T>
     void sparsity_map_ready(SparsityMapImpl<N,T> *sparsity, bool precise);
 
-    static RegionInstance realm_malloc(size_t size, Memory location = Memory::NO_MEMORY);
-
     IntrusiveListLink<PartitioningMicroOp> uop_link;
     REALM_PMTA_DEFN(PartitioningMicroOp,IntrusiveListLink<PartitioningMicroOp>,uop_link);
     typedef IntrusiveList<PartitioningMicroOp, REALM_PMTA_USE(PartitioningMicroOp,uop_link), DummyLock> MicroOpList;
@@ -358,6 +356,8 @@ namespace Realm {
   class GPUMicroOp : public PartitioningMicroOp {
   public:
     GPUMicroOp(void) = default;
+    GPUMicroOp(NodeID _requestor, AsyncMicroOp *_async_microop)
+      : PartitioningMicroOp(_requestor, _async_microop) {}
     virtual ~GPUMicroOp(void) = default;
 
     virtual void execute(void) = 0;
@@ -386,7 +386,7 @@ namespace Realm {
     template<typename Container, typename IndexFn, typename MapFn>
     void complete1d_pipeline(RectDesc<N, T>* d_rects, size_t total_rects, RectDesc<N, T>* &d_out_rects, size_t &out_rects, Arena &my_arena, const Container& ctr, IndexFn getIndex, MapFn getMap);
 
-    void split_output(RectDesc<N, T>* d_rects, size_t total_rects, std::vector<RegionInstance> &output_instances, std::vector<size_t> &output_counts, Arena &my_arena);
+    void split_output(RectDesc<N, T>* d_rects, size_t total_rects, std::vector<Rect<N, T> *> &output_instances, std::vector<size_t> &output_counts, Arena &my_arena);
 
     template<typename Container, typename IndexFn, typename MapFn>
     void send_output(RectDesc<N, T>* d_rects, size_t total_rects, Arena &my_arena, const Container& ctr, IndexFn getIndex, MapFn getMap);
@@ -527,4 +527,3 @@ namespace Realm {
 #include "realm/deppart/partitions.inl"
 
 #endif // REALM_PARTITIONS_H
-

@@ -41,6 +41,7 @@ void GPUImageMicroOp<N,T,N2,T2>::gpu_populate_rngs()
 {
 
     if (sources.size() == 0) {
+      assert(sparsity_outputs.empty());
       return;
     }
 
@@ -80,13 +81,15 @@ void GPUImageMicroOp<N,T,N2,T2>::gpu_populate_rngs()
     // We collapse the parent space to undifferentiate between dense and sparse and match downstream APIs.
     GPUMicroOp<N, T>::collapse_parent_space(parent_space, collapsed_parent, buffer_arena, stream);
 
-    Memory zcpy_mem;
-    assert(find_memory(zcpy_mem, Memory::Z_COPY_MEM, buffer_arena.location));
-    RegionInstance accessors_instance = this->realm_malloc(domain_transform.range_data.size() * sizeof(AffineAccessor<Rect<N,T>,N2,T2>), zcpy_mem);
-    AffineAccessor<Rect<N,T>,N2,T2>* d_accessors = reinterpret_cast<AffineAccessor<Rect<N,T>,N2,T2>*>(AffineAccessor<char,1>(accessors_instance, 0).base);
+    std::vector<AffineAccessor<Rect<N,T>,N2,T2>> h_accessors(domain_transform.range_data.size());
     for (size_t i = 0; i < domain_transform.range_data.size(); ++i) {
-      d_accessors[i] = AffineAccessor<Rect<N,T>,N2,T2>(domain_transform.range_data[i].inst, domain_transform.range_data[i].field_offset);
+      h_accessors[i] = AffineAccessor<Rect<N,T>,N2,T2>(domain_transform.range_data[i].inst, domain_transform.range_data[i].field_offset);
     }
+    AffineAccessor<Rect<N,T>,N2,T2>* d_accessors =
+        buffer_arena.alloc<AffineAccessor<Rect<N,T>,N2,T2>>(domain_transform.range_data.size());
+    CUDA_CHECK(cudaMemcpyAsync(d_accessors, h_accessors.data(),
+                               domain_transform.range_data.size() * sizeof(AffineAccessor<Rect<N,T>,N2,T2>),
+                               cudaMemcpyHostToDevice, stream), stream);
 
     uint32_t* d_src_counters = buffer_arena.alloc<uint32_t>(2 * sources.size() + 1);
     uint32_t* d_src_prefix = d_src_counters + sources.size();
@@ -100,7 +103,7 @@ void GPUImageMicroOp<N,T,N2,T2>::gpu_populate_rngs()
     int count = 0;
     if (count) {}
     bool host_fallback = false;
-    std::vector<RegionInstance> h_instances(sources.size(), RegionInstance::NO_INST);
+    std::vector<Rect<N, T>*> host_rect_buffers(sources.size(), nullptr);
     std::vector<size_t> entry_counts(sources.size(), 0);
     while (num_completed < inst_space.num_entries) {
       try {
@@ -197,7 +200,7 @@ void GPUImageMicroOp<N,T,N2,T2>::gpu_populate_rngs()
                           });
 
           if (host_fallback) {
-            this->split_output(d_new_rects, num_new_rects, h_instances, entry_counts, buffer_arena);
+            this->split_output(d_new_rects, num_new_rects, host_rect_buffers, entry_counts, buffer_arena);
           }
 
           //Set our first set of output rectangles
@@ -250,7 +253,7 @@ void GPUImageMicroOp<N,T,N2,T2>::gpu_populate_rngs()
           } else {
             host_fallback = true;
             if (num_output > 0) {
-              this->split_output(output_start, num_output, h_instances, entry_counts, buffer_arena);
+              this->split_output(output_start, num_output, host_rect_buffers, entry_counts, buffer_arena);
             }
             curr_tile = tile_size / 2;
           }
@@ -282,7 +285,7 @@ void GPUImageMicroOp<N,T,N2,T2>::gpu_populate_rngs()
                             return elem;
                          });
     } catch (arena_oom&) {
-      this->split_output(output_start, num_output, h_instances, entry_counts, buffer_arena);
+      this->split_output(output_start, num_output, host_rect_buffers, entry_counts, buffer_arena);
       host_fallback = true;
     }
   }
@@ -294,10 +297,9 @@ void GPUImageMicroOp<N,T,N2,T2>::gpu_populate_rngs()
         impl->set_contributor_count(1);
       }
       if (entry_counts[idx] > 0) {
-        Rect<N, T>* h_rects = reinterpret_cast<Rect<N,T> *>(AffineAccessor<char,1>(h_instances[idx], 0).base);
-        span<Rect<N, T>> h_rects_span(h_rects, entry_counts[idx]);
+        span<Rect<N, T>> h_rects_span(host_rect_buffers[idx], entry_counts[idx]);
         impl->contribute_dense_rect_list(h_rects_span, false);
-        h_instances[idx].destroy();
+        deppart_host_free(host_rect_buffers[idx]);
       } else {
         impl->contribute_nothing();
       }
@@ -319,6 +321,7 @@ template <int N, typename T, int N2, typename T2>
 void GPUImageMicroOp<N,T,N2,T2>::gpu_populate_ptrs()
 {
     if (sources.size() == 0) {
+      assert(sparsity_outputs.empty());
       return;
     }
 
@@ -365,13 +368,15 @@ void GPUImageMicroOp<N,T,N2,T2>::gpu_populate_ptrs()
     // We collapse the parent space to undifferentiate between dense and sparse and match downstream APIs.
     GPUMicroOp<N, T>::collapse_parent_space(parent_space, collapsed_parent, buffer_arena, stream);
 
-    Memory zcpy_mem;
-    assert(find_memory(zcpy_mem, Memory::Z_COPY_MEM, buffer_arena.location));
-    RegionInstance accessors_instance = this->realm_malloc(domain_transform.ptr_data.size() * sizeof(AffineAccessor<Point<N,T>,N2,T2>), zcpy_mem);
-    AffineAccessor<Point<N,T>,N2,T2>* d_accessors = reinterpret_cast<AffineAccessor<Point<N,T>,N2,T2>*>(AffineAccessor<char,1>(accessors_instance, 0).base);
+    std::vector<AffineAccessor<Point<N,T>,N2,T2>> h_accessors(domain_transform.ptr_data.size());
     for (size_t i = 0; i < domain_transform.ptr_data.size(); ++i) {
-      d_accessors[i] = AffineAccessor<Point<N,T>,N2,T2>(domain_transform.ptr_data[i].inst, domain_transform.ptr_data[i].field_offset);
+      h_accessors[i] = AffineAccessor<Point<N,T>,N2,T2>(domain_transform.ptr_data[i].inst, domain_transform.ptr_data[i].field_offset);
     }
+    AffineAccessor<Point<N,T>,N2,T2>* d_accessors =
+        buffer_arena.alloc<AffineAccessor<Point<N,T>,N2,T2>>(domain_transform.ptr_data.size());
+    CUDA_CHECK(cudaMemcpyAsync(d_accessors, h_accessors.data(),
+                               domain_transform.ptr_data.size() * sizeof(AffineAccessor<Point<N,T>,N2,T2>),
+                               cudaMemcpyHostToDevice, stream), stream);
 
     uint32_t* d_prefix_points = buffer_arena.alloc<uint32_t>(domain_transform.ptr_data.size()+1);
 
@@ -387,7 +392,7 @@ void GPUImageMicroOp<N,T,N2,T2>::gpu_populate_ptrs()
     int count = 0;
     if (count) {}
     bool host_fallback = false;
-    std::vector<RegionInstance> h_instances(sources.size(), RegionInstance::NO_INST);
+    std::vector<Rect<N, T>*> host_rect_buffers(sources.size(), nullptr);
     std::vector<size_t> entry_counts(sources.size(), 0);
     while (num_completed < inst_space.num_entries) {
       try {
@@ -475,9 +480,9 @@ void GPUImageMicroOp<N,T,N2,T2>::gpu_populate_ptrs()
                               return elem;
                            });
 
-        if (host_fallback) {
-          this->split_output(d_new_rects, num_new_rects, h_instances, entry_counts, buffer_arena);
-        }
+          if (host_fallback) {
+            this->split_output(d_new_rects, num_new_rects, host_rect_buffers, entry_counts, buffer_arena);
+          }
 
         if (num_output==0 || host_fallback) {
           num_output = num_new_rects;
@@ -525,7 +530,7 @@ void GPUImageMicroOp<N,T,N2,T2>::gpu_populate_ptrs()
           } else {
             host_fallback = true;
             if (num_output > 0) {
-              this->split_output(output_start, num_output, h_instances, entry_counts, buffer_arena);
+              this->split_output(output_start, num_output, host_rect_buffers, entry_counts, buffer_arena);
             }
             curr_tile = tile_size / 2;
           }
@@ -557,7 +562,7 @@ void GPUImageMicroOp<N,T,N2,T2>::gpu_populate_ptrs()
                             return elem;
                          });
     } catch (arena_oom&) {
-      this->split_output(output_start, num_output, h_instances, entry_counts, buffer_arena);
+      this->split_output(output_start, num_output, host_rect_buffers, entry_counts, buffer_arena);
       host_fallback = true;
     }
   }
@@ -569,10 +574,9 @@ void GPUImageMicroOp<N,T,N2,T2>::gpu_populate_ptrs()
         impl->set_contributor_count(1);
       }
       if (entry_counts[idx] > 0) {
-        Rect<N, T>* h_rects = reinterpret_cast<Rect<N,T> *>(AffineAccessor<char,1>(h_instances[idx], 0).base);
-        span<Rect<N, T>> h_rects_span(h_rects, entry_counts[idx]);
+        span<Rect<N, T>> h_rects_span(host_rect_buffers[idx], entry_counts[idx]);
         impl->contribute_dense_rect_list(h_rects_span, false);
-        h_instances[idx].destroy();
+        deppart_host_free(host_rect_buffers[idx]);
       } else {
         impl->contribute_nothing();
       }

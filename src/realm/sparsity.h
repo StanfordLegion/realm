@@ -318,11 +318,11 @@ namespace Realm {
     std::vector<SparsityMapEntry<N,T> > entries;
     std::vector<Rect<N,T> > approx_rects;
 
-    //Stores rectangles for GPU deppart (allows fast copy after merged on GPU)
-    RegionInstance entries_instance = RegionInstance::NO_INST;
+    // Stores rectangles for GPU deppart in host buffers owned by the sparsity map.
+    SparsityMapEntry<N, T> *gpu_entries = nullptr;
     size_t num_entries = 0;
 
-    RegionInstance approx_instance = RegionInstance::NO_INST;
+    Rect<N, T> *gpu_approx_rects = nullptr;
     size_t num_approx = 0;
 
     //Tracks whether to use instance or vector

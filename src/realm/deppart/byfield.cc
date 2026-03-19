@@ -325,13 +325,61 @@ namespace Realm {
     bool _exclusive)
     : parent_space(_parent), field_data(_field_data) {
     this->exclusive = _exclusive;
-    Memory my_mem = field_data[0].inst.get_location();
-    Processor best_proc;
-    assert(choose_proc(best_proc, my_mem));
-    Cuda::GPUProcessor* gpu_proc = dynamic_cast<Cuda::GPUProcessor*>(get_runtime()->get_processor_impl(best_proc));
-    assert(gpu_proc);
-    this->gpu = gpu_proc->gpu;
-    this->stream = gpu_proc->gpu->get_deppart_stream();
+    areg.force_instantiation();
+    // GPU setup (this->gpu, this->stream) deferred to execute(), which runs on the
+    // correct node after dispatch() has forwarded to the instance owner if needed.
+  }
+
+  template<int N, typename T, typename FT>
+  template <typename S>
+  GPUByFieldMicroOp<N, T, FT>::GPUByFieldMicroOp(
+    NodeID _requestor, AsyncMicroOp *_async_microop, S& s)
+    : GPUMicroOp<N,T>(_requestor, _async_microop)
+    , parent_space() {
+    bool ok = true;
+    size_t n = 0;
+    ok = ok && (s >> parent_space);
+    ok = ok && (s >> this->exclusive);
+    ok = ok && (s >> n);
+    field_data.resize(n);
+    for(size_t i = 0; i < n && ok; i++)
+      ok = ok && (s >> field_data[i].index_space) &&
+                 (s >> field_data[i].inst) &&
+                 (s >> field_data[i].field_offset) &&
+                 (s >> field_data[i].scratch_buffer);
+    // Deserialize colors manually to avoid std::vector<bool> proxy issues
+    size_t nc = 0;
+    ok = ok && (s >> nc);
+    for(size_t i = 0; i < nc && ok; i++) {
+      FT c;
+      ok = ok && (s >> c);
+      if(ok) colors.push_back(c);
+    }
+    ok = ok && (s >> sparsity_outputs);
+    assert(ok);
+    (void)ok;
+  }
+
+  template<int N, typename T, typename FT>
+  template <typename S>
+  bool GPUByFieldMicroOp<N, T, FT>::serialize_params(S& s) const {
+    bool ok = true;
+    ok = ok && (s << parent_space);
+    ok = ok && (s << this->exclusive);
+    ok = ok && (s << field_data.size());
+    for(size_t i = 0; i < field_data.size() && ok; i++)
+      ok = ok && (s << field_data[i].index_space) &&
+                 (s << field_data[i].inst) &&
+                 (s << field_data[i].field_offset) &&
+                 (s << field_data[i].scratch_buffer);
+    // Serialize colors manually to avoid std::vector<bool> proxy issues
+    ok = ok && (s << colors.size());
+    for(size_t i = 0; i < colors.size() && ok; i++) {
+      FT c = colors[i];
+      ok = ok && (s << c);
+    }
+    ok = ok && (s << sparsity_outputs);
+    return ok;
   }
 
   template<int N, typename T, typename FT>
@@ -341,6 +389,17 @@ namespace Realm {
   template<int N, typename T, typename FT>
   void GPUByFieldMicroOp<N, T, FT>::dispatch(
     PartitioningOperation *op, bool inline_ok) {
+
+    // GPU by-field must execute on the node that owns the GPU memory
+    NodeID exec_node = ID(field_data[0].inst).instance_owner_node();
+    if(this->exclusive) {
+      for(const auto& it : sparsity_outputs)
+        assert(NodeID(ID(it.second).sparsity_creator_node()) == exec_node);
+    }
+    if(exec_node != Network::my_node_id) {
+      PartitioningMicroOp::template forward_microop<GPUByFieldMicroOp<N,T,FT> >(exec_node, op, this);
+      return;
+    }
 
     // We have to register ourselves as a waiter on sparse inputs before dispatching.
 
@@ -367,6 +426,10 @@ namespace Realm {
     sparsity_outputs[_val] = _sparsity;
   }
 
+  template <int N, typename T, typename FT>
+  ActiveMessageHandlerReg<RemoteMicroOpMessage<GPUByFieldMicroOp<N, T, FT> > >
+      GPUByFieldMicroOp<N, T, FT>::areg;
+
 #endif
 
 
@@ -383,11 +446,25 @@ namespace Realm {
     : PartitioningOperation(reqs, _finish_event, _finish_gen)
     , parent(_parent)
     , field_data(_field_data)
+    , exclusive_gpu_owner(exclusive_gpu_exec_node())
   {}
 
   template <int N, typename T, typename FT>
   ByFieldOperation<N,T,FT>::~ByFieldOperation(void)
   {}
+
+  template <int N, typename T, typename FT>
+  NodeID ByFieldOperation<N,T,FT>::exclusive_gpu_exec_node(void) const
+  {
+    if(field_data.size() != 1)
+      return -1;
+
+    Memory::Kind kind = field_data[0].inst.get_location().kind();
+    if((kind != Memory::GPU_FB_MEM) && (kind != Memory::Z_COPY_MEM))
+      return -1;
+
+    return ID(field_data[0].inst).instance_owner_node();
+  }
 
   template <int N, typename T, typename FT>
   IndexSpace<N,T> ByFieldOperation<N,T,FT>::add_color(FT color)
@@ -401,8 +478,13 @@ namespace Realm {
     subspace.bounds = parent.bounds;
 
     // get a sparsity ID by round-robin'ing across the nodes that have field data
-    int target_node = ID(field_data[colors.size() % field_data.size()].inst).instance_owner_node();
-    SparsityMap<N,T> sparsity = get_runtime()->get_available_sparsity_impl(target_node)->me.convert<SparsityMap<N,T> >();
+    int target_node = (exclusive_gpu_owner >= 0) ?
+        exclusive_gpu_owner :
+        ID(field_data[colors.size() % field_data.size()].inst).instance_owner_node();
+    if(exclusive_gpu_owner >= 0)
+      assert(target_node == exclusive_gpu_exec_node());
+    SparsityMap<N,T> sparsity =
+        create_deppart_output_sparsity(target_node).convert<SparsityMap<N, T>>();
     subspace.sparsity = sparsity;
 
     colors.push_back(color);

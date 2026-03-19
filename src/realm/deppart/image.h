@@ -116,12 +116,15 @@ namespace Realm {
         virtual void set_overlap_tester(void *tester);
 
     protected:
+        NodeID exclusive_gpu_exec_node(void) const;
+
         IndexSpace<N, T> parent;
         DomainTransform<N, T, N2, T2> domain_transform;
         std::vector<IndexSpace<N2, T2> > sources;
         std::vector<IndexSpace<N, T> > diff_rhss;
         std::vector<SparsityMap<N, T> > images;
         bool is_intersection;
+        int exclusive_gpu_owner;
     };
 
     template<int N, typename T, int N2, typename T2>
@@ -153,6 +156,11 @@ namespace Realm {
     template<int N, typename T, int N2, typename T2>
     class GPUImageMicroOp : public GPUMicroOp<N, T> {
     public:
+        static const int DIM = N;
+        typedef T IDXTYPE;
+        static const int DIM2 = N2;
+        typedef T2 IDXTYPE2;
+
         GPUImageMicroOp(
             const IndexSpace<N, T> &_parent,
             const DomainTransform<N, T, N2, T2> &_domain_transform,
@@ -174,6 +182,17 @@ namespace Realm {
         bool is_image_microop() const override { return true; }
 
     protected:
+        friend struct RemoteMicroOpMessage<GPUImageMicroOp<N,T,N2,T2> >;
+        static ActiveMessageHandlerReg<RemoteMicroOpMessage<GPUImageMicroOp<N,T,N2,T2> > > areg;
+
+        friend class PartitioningMicroOp;
+        template <typename S>
+        REALM_ATTR_WARN_UNUSED(bool serialize_params(S& s) const);
+
+        // construct from received packet
+        template <typename S>
+        GPUImageMicroOp(NodeID _requestor, AsyncMicroOp *_async_microop, S& s);
+
         IndexSpace<N, T> parent_space;
         DomainTransform<N, T, N2, T2> domain_transform;
         std::vector<IndexSpace<N2, T2> > sources;

@@ -25,6 +25,7 @@
 #include "realm/deppart/preimage.h"
 #include "realm/logging.h"
 #include "realm/cuda/cuda_internal.h"
+#include <cstdio>
 
 namespace Realm {
 
@@ -500,11 +501,42 @@ namespace Realm {
       EventImpl::gen_t _finish_gen)
       : PartitioningOperation(reqs, _finish_event, _finish_gen),
         parent(_parent),
-        domain_transform(_domain_transform) {}
+        domain_transform(_domain_transform),
+        is_intersection(false),
+        exclusive_gpu_owner(exclusive_gpu_exec_node())
+  {}
 
   template <int N, typename T, int N2, typename T2>
   ImageOperation<N,T,N2,T2>::~ImageOperation(void)
   {}
+
+  template <int N, typename T, int N2, typename T2>
+  NodeID ImageOperation<N, T, N2, T2>::exclusive_gpu_exec_node(void) const
+  {
+    size_t gpu_ptrs = 0, gpu_rects = 0, cpu_ptrs = 0, cpu_rects = 0;
+    for(size_t i = 0; i < domain_transform.ptr_data.size(); i++) {
+      Memory::Kind kind = domain_transform.ptr_data[i].inst.get_location().kind();
+      if((kind == Memory::GPU_FB_MEM) || (kind == Memory::Z_COPY_MEM))
+        gpu_ptrs++;
+      else
+        cpu_ptrs++;
+    }
+    for(size_t i = 0; i < domain_transform.range_data.size(); i++) {
+      Memory::Kind kind = domain_transform.range_data[i].inst.get_location().kind();
+      if((kind == Memory::GPU_FB_MEM) || (kind == Memory::Z_COPY_MEM))
+        gpu_rects++;
+      else
+        cpu_rects++;
+    }
+    size_t opcount = gpu_ptrs + gpu_rects + cpu_ptrs + cpu_rects;
+    if((gpu_ptrs + gpu_rects) == 0 || (opcount != 1))
+      return -1;
+    if(gpu_ptrs == 1)
+      return ID(domain_transform.ptr_data[0].inst).instance_owner_node();
+    if(gpu_rects == 1)
+      return ID(domain_transform.range_data[0].inst).instance_owner_node();
+    return -1;
+  }
 
   template <int N, typename T, int N2, typename T2>
   IndexSpace<N,T> ImageOperation<N,T,N2,T2>::add_source(const IndexSpace<N2,T2>& source)
@@ -520,17 +552,22 @@ namespace Realm {
     // if the source has a sparsity map, use the same node - otherwise
     // get a sparsity ID by round-robin'ing across the nodes that have field data
     int target_node = 0;
-    if(!source.dense())
+    if(exclusive_gpu_owner >= 0)
+      target_node = exclusive_gpu_owner;
+    else if(!source.dense())
       target_node = ID(source.sparsity).sparsity_creator_node();
     else
       if(!domain_transform.ptr_data.empty())
 	target_node = ID(domain_transform.ptr_data[sources.size() % domain_transform.ptr_data.size()].inst).instance_owner_node();
       else
 	target_node = ID(domain_transform.range_data[sources.size() % domain_transform.range_data.size()].inst).instance_owner_node();
+    if(exclusive_gpu_owner >= 0) {
+      assert(target_node == exclusive_gpu_exec_node());
+    }
 
-    SparsityMap<N,T> sparsity = get_runtime()->get_available_sparsity_impl(target_node)->me.convert<SparsityMap<N,T> >();
+    SparsityMap<N,T> sparsity =
+        create_deppart_output_sparsity(target_node).convert<SparsityMap<N, T>>();
     image.sparsity = sparsity;
-
     sources.push_back(source);
     images.push_back(sparsity);
 
@@ -552,17 +589,22 @@ namespace Realm {
     // if the source has a sparsity map, use the same node - otherwise
     // get a sparsity ID by round-robin'ing across the nodes that have field data
     int target_node;
-    if(!source.dense())
+    if(exclusive_gpu_owner >= 0)
+      target_node = exclusive_gpu_owner;
+    else if(!source.dense())
       target_node = ID(source.sparsity).sparsity_creator_node();
     else
       if(!domain_transform.ptr_data.empty())
         target_node = ID(domain_transform.ptr_data[sources.size() % domain_transform.ptr_data.size()].inst).instance_owner_node();
       else
 	      target_node = ID(domain_transform.range_data[sources.size() % domain_transform.range_data.size()].inst).instance_owner_node();
+    if(exclusive_gpu_owner >= 0) {
+      assert(target_node == exclusive_gpu_exec_node());
+    }
 
-    SparsityMap<N,T> sparsity = get_runtime()->get_available_sparsity_impl(target_node)->me.convert<SparsityMap<N,T> >();
+    SparsityMap<N,T> sparsity =
+        create_deppart_output_sparsity(target_node).convert<SparsityMap<N, T>>();
     image.sparsity = sparsity;
-
     sources.push_back(source);
     diff_rhss.push_back(diff_rhs);
     images.push_back(sparsity);
@@ -586,17 +628,22 @@ namespace Realm {
     // if the source has a sparsity map, use the same node - otherwise
     // get a sparsity ID by round-robin'ing across the nodes that have field data
     int target_node;
-    if(!source.dense())
+    if(exclusive_gpu_owner >= 0)
+      target_node = exclusive_gpu_owner;
+    else if(!source.dense())
       target_node = ID(source.sparsity).sparsity_creator_node();
     else
       if(!domain_transform.ptr_data.empty())
         target_node = ID(domain_transform.ptr_data[sources.size() % domain_transform.ptr_data.size()].inst).instance_owner_node();
       else
 	      target_node = ID(domain_transform.range_data[sources.size() % domain_transform.range_data.size()].inst).instance_owner_node();
+    if(exclusive_gpu_owner >= 0) {
+      assert(target_node == exclusive_gpu_exec_node());
+    }
 
-    SparsityMap<N,T> sparsity = get_runtime()->get_available_sparsity_impl(target_node)->me.convert<SparsityMap<N,T> >();
+    SparsityMap<N,T> sparsity =
+        create_deppart_output_sparsity(target_node).convert<SparsityMap<N, T>>();
     image.sparsity = sparsity;
-
     sources.push_back(source);
     diff_rhss.push_back(diff_rhs);
     images.push_back(sparsity);
@@ -666,6 +713,15 @@ namespace Realm {
     } else {
       size_t opcount = cpu_ptr_data.size() + cpu_rect_data.size() + gpu_ptr_data.size() + gpu_rect_data.size();
       bool exclusive = gpu_data && (opcount == 1);
+      if(exclusive) {
+        NodeID expected_owner = exclusive_gpu_exec_node();
+        assert(exclusive_gpu_owner >= 0);
+        assert(NodeID(exclusive_gpu_owner) == expected_owner);
+        for(size_t i = 0; i < images.size(); i++) {
+          NodeID output_owner = NodeID(ID(images[i]).sparsity_creator_node());
+          assert(output_owner == NodeID(exclusive_gpu_owner));
+        }
+      }
       if (!exclusive) {
     	// launch full cross-product of image micro ops right away
     	for (size_t i = 0; i < sources.size(); i++) {
@@ -702,6 +758,10 @@ namespace Realm {
       for (auto ptr_fdd : gpu_ptr_data) {
           	// launch full cross-product of image micro ops right away
           assert(ptr_fdd.scratch_buffer != RegionInstance::NO_INST);
+          if(exclusive) {
+            NodeID microop_exec_node = ID(ptr_fdd.inst).instance_owner_node();
+            assert(NodeID(exclusive_gpu_owner) == microop_exec_node);
+          }
           DomainTransform<N, T, N2, T2> domain_transform_copy = domain_transform;
           domain_transform_copy.ptr_data = {ptr_fdd};
       	  GPUImageMicroOp<N, T, N2, T2> *micro_op =
@@ -715,6 +775,10 @@ namespace Realm {
       for (auto rect_fdd : gpu_rect_data) {
         // launch full cross-product of image micro ops right away
         assert(rect_fdd.scratch_buffer != RegionInstance::NO_INST);
+        if(exclusive) {
+          NodeID microop_exec_node = ID(rect_fdd.inst).instance_owner_node();
+          assert(NodeID(exclusive_gpu_owner) == microop_exec_node);
+        }
         DomainTransform<N, T, N2, T2> domain_transform_copy = domain_transform;
         domain_transform_copy.range_data = {rect_fdd};
         GPUImageMicroOp<N, T, N2, T2> *micro_op =
@@ -942,14 +1006,76 @@ namespace Realm {
       bool _exclusive)
       : parent_space(_parent), domain_transform(_domain_transform)
   {
-	this->exclusive = _exclusive;
-  	Memory my_mem = domain_transform.ptr_data.empty() ? domain_transform.range_data[0].inst.get_location() : domain_transform.ptr_data[0].inst.get_location();
-  	Processor best_proc;
-  	assert(choose_proc(best_proc, my_mem));
-  	Cuda::GPUProcessor* gpu_proc = dynamic_cast<Cuda::GPUProcessor*>(get_runtime()->get_processor_impl(best_proc));
-  	assert(gpu_proc);
-  	this->gpu = gpu_proc->gpu;
-  	this->stream = gpu_proc->gpu->get_deppart_stream();
+    this->exclusive = _exclusive;
+    areg.force_instantiation();
+    // GPU setup (this->gpu, this->stream) deferred to execute(), which runs on the
+    // correct node after dispatch() has forwarded to the instance owner if needed.
+  }
+
+  template <int N, typename T, int N2, typename T2>
+  template <typename S>
+  GPUImageMicroOp<N, T, N2, T2>::GPUImageMicroOp(
+      NodeID _requestor, AsyncMicroOp *_async_microop, S& s)
+      : GPUMicroOp<N,T>(_requestor, _async_microop)
+  {
+    bool ok = true;
+    bool use_ptr_data = false;
+    ok = ok && (s >> parent_space);
+    ok = ok && (s >> this->exclusive);
+    ok = ok && (s >> use_ptr_data);
+    if(use_ptr_data) {
+      domain_transform.type = DomainTransform<N,T,N2,T2>::DomainTransformType::UNSTRUCTURED_PTR;
+      size_t n = 0;
+      ok = ok && (s >> n);
+      domain_transform.ptr_data.resize(n);
+      for(size_t i = 0; i < n && ok; i++)
+        ok = ok && (s >> domain_transform.ptr_data[i].index_space) &&
+                   (s >> domain_transform.ptr_data[i].inst) &&
+                   (s >> domain_transform.ptr_data[i].field_offset) &&
+                   (s >> domain_transform.ptr_data[i].scratch_buffer);
+    } else {
+      domain_transform.type = DomainTransform<N,T,N2,T2>::DomainTransformType::UNSTRUCTURED_RANGE;
+      size_t n = 0;
+      ok = ok && (s >> n);
+      domain_transform.range_data.resize(n);
+      for(size_t i = 0; i < n && ok; i++)
+        ok = ok && (s >> domain_transform.range_data[i].index_space) &&
+                   (s >> domain_transform.range_data[i].inst) &&
+                   (s >> domain_transform.range_data[i].field_offset) &&
+                   (s >> domain_transform.range_data[i].scratch_buffer);
+    }
+    ok = ok && (s >> sources);
+    ok = ok && (s >> sparsity_outputs);
+    assert(ok);
+    (void)ok;
+  }
+
+  template <int N, typename T, int N2, typename T2>
+  template <typename S>
+  bool GPUImageMicroOp<N, T, N2, T2>::serialize_params(S& s) const {
+    bool ok = true;
+    bool use_ptr_data = !domain_transform.ptr_data.empty();
+    ok = ok && (s << parent_space);
+    ok = ok && (s << this->exclusive);
+    ok = ok && (s << use_ptr_data);
+    if(use_ptr_data) {
+      ok = ok && (s << domain_transform.ptr_data.size());
+      for(size_t i = 0; i < domain_transform.ptr_data.size() && ok; i++)
+        ok = ok && (s << domain_transform.ptr_data[i].index_space) &&
+                   (s << domain_transform.ptr_data[i].inst) &&
+                   (s << domain_transform.ptr_data[i].field_offset) &&
+                   (s << domain_transform.ptr_data[i].scratch_buffer);
+    } else {
+      ok = ok && (s << domain_transform.range_data.size());
+      for(size_t i = 0; i < domain_transform.range_data.size() && ok; i++)
+        ok = ok && (s << domain_transform.range_data[i].index_space) &&
+                   (s << domain_transform.range_data[i].inst) &&
+                   (s << domain_transform.range_data[i].field_offset) &&
+                   (s << domain_transform.range_data[i].scratch_buffer);
+    }
+    ok = ok && (s << sources);
+    ok = ok && (s << sparsity_outputs);
+    return ok;
   }
 
   template <int N, typename T, int N2, typename T2>
@@ -958,6 +1084,20 @@ namespace Realm {
   template <int N, typename T, int N2, typename T2>
   void GPUImageMicroOp<N, T, N2, T2>::dispatch(
       PartitioningOperation *op, bool inline_ok) {
+
+    // GPU image must execute on the node that owns the GPU memory
+    NodeID exec_node = domain_transform.ptr_data.empty() ?
+        ID(domain_transform.range_data[0].inst).instance_owner_node() :
+        ID(domain_transform.ptr_data[0].inst).instance_owner_node();
+    if(this->exclusive) {
+      for(size_t i = 0; i < sparsity_outputs.size(); i++) {
+        assert(NodeID(ID(sparsity_outputs[i]).sparsity_creator_node()) == exec_node);
+      }
+    }
+    if(exec_node != Network::my_node_id) {
+      PartitioningMicroOp::template forward_microop<GPUImageMicroOp<N,T,N2,T2> >(exec_node, op, this);
+      return;
+    }
 
     for (size_t i = 0; i < domain_transform.ptr_data.size(); i++) {
       IndexSpace<N2, T2> inst_space = domain_transform.ptr_data[i].index_space;
@@ -969,6 +1109,16 @@ namespace Realm {
           this->wait_count.fetch_add(1);
       }
     }
+  	for (size_t i = 0; i < domain_transform.range_data.size(); i++) {
+  		IndexSpace<N2, T2> inst_space = domain_transform.range_data[i].index_space;
+  		if (!inst_space.dense()) {
+  			// it's safe to add the count after the registration only because we initialized
+  			//  the count to 2 instead of 1
+  			bool registered = SparsityMapImpl<N2,T2>::lookup(inst_space.sparsity)->add_waiter(this, true /*precise*/);
+  			if(registered)
+  				this->wait_count.fetch_add(1);
+  		}
+  	}
 
     for (size_t i = 0; i < sources.size(); i++) {
       if (!sources[i].dense()) {
@@ -995,8 +1145,27 @@ namespace Realm {
   }
 
   template <int N, typename T, int N2, typename T2>
+  ActiveMessageHandlerReg<RemoteMicroOpMessage<GPUImageMicroOp<N, T, N2, T2> > >
+      GPUImageMicroOp<N, T, N2, T2>::areg;
+
+  template <int N, typename T, int N2, typename T2>
   void GPUImageMicroOp<N, T, N2, T2>::execute(void) {
     TimeStamp ts("GPUImageMicroOp::execute", true, &log_uop_timing);
+
+    // Resolve the local GPU processor now that we are guaranteed to be on the
+    // correct node (dispatch() forwarded us here if the instance was remote).
+    {
+      Memory my_mem = domain_transform.ptr_data.empty() ?
+          domain_transform.range_data[0].inst.get_location() :
+          domain_transform.ptr_data[0].inst.get_location();
+      Processor best_proc;
+      assert(choose_proc(best_proc, my_mem));
+      Cuda::GPUProcessor *gpu_proc =
+          dynamic_cast<Cuda::GPUProcessor *>(get_runtime()->get_processor_impl(best_proc));
+      assert(gpu_proc);
+      this->gpu = gpu_proc->gpu;
+      this->stream = gpu_proc->gpu->get_deppart_stream();
+    }
 
     Cuda::AutoGPUContext agc(this->gpu);
     if (domain_transform.ptr_data.size() > 0) {

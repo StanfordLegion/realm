@@ -91,10 +91,7 @@ namespace Realm {
       if (num_entries == 0) {
         return span<SparsityMapEntry<N, T>>();
       }
-      return span<SparsityMapEntry<N, T>>(
-          reinterpret_cast<SparsityMapEntry<N, T> *>(entries_instance.pointer_untyped(
-              0, num_entries * sizeof(SparsityMapEntry<N, T>))),
-          num_entries);
+      return span<SparsityMapEntry<N, T>>(gpu_entries, num_entries);
     } else {
       return span<SparsityMapEntry<N, T>>(entries.data(), entries.size());
     }
@@ -108,10 +105,7 @@ namespace Realm {
       if (num_approx == 0) {
         return span<Rect<N, T>>();
       }
-      return span<Rect<N, T>>(
-          reinterpret_cast<Rect<N, T> *>(
-              approx_instance.pointer_untyped(0, num_approx * sizeof(Rect<N, T>))),
-          num_approx);
+      return span<Rect<N, T>>(gpu_approx_rects, num_approx);
     } else {
       return span<Rect<N, T>>(approx_rects.data(), approx_rects.size());
     }

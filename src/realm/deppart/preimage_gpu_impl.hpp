@@ -12,6 +12,7 @@ namespace Realm {
   template<int N, typename T, int N2, typename T2>
   void GPUPreimageMicroOp<N, T, N2, T2>::gpu_populate_ranges() {
     if (targets.size() == 0) {
+      assert(sparsity_outputs.empty());
       return;
     }
 
@@ -57,13 +58,15 @@ namespace Realm {
 
     GPUMicroOp<N2, T2>::collapse_multi_space(targets, target_space, buffer_arena, stream);
 
-    Memory zcpy_mem;
-    assert(find_memory(zcpy_mem, Memory::Z_COPY_MEM, buffer_arena.location));
-    RegionInstance accessors_instance = this->realm_malloc(domain_transform.range_data.size() * sizeof(AffineAccessor<Rect<N2,T2>,N,T>), zcpy_mem);
-    AffineAccessor<Rect<N2,T2>,N,T>* d_accessors = reinterpret_cast<AffineAccessor<Rect<N2,T2>,N,T>*>(AffineAccessor<char,1>(accessors_instance, 0).base);
+    std::vector<AffineAccessor<Rect<N2,T2>,N,T>> h_accessors(domain_transform.range_data.size());
     for (size_t i = 0; i < domain_transform.range_data.size(); ++i) {
-      d_accessors[i] = AffineAccessor<Rect<N2,T2>,N,T>(domain_transform.range_data[i].inst, domain_transform.range_data[i].field_offset);
+      h_accessors[i] = AffineAccessor<Rect<N2,T2>,N,T>(domain_transform.range_data[i].inst, domain_transform.range_data[i].field_offset);
     }
+    AffineAccessor<Rect<N2,T2>,N,T>* d_accessors =
+        buffer_arena.alloc<AffineAccessor<Rect<N2,T2>,N,T>>(domain_transform.range_data.size());
+    CUDA_CHECK(cudaMemcpyAsync(d_accessors, h_accessors.data(),
+                               domain_transform.range_data.size() * sizeof(AffineAccessor<Rect<N2,T2>,N,T>),
+                               cudaMemcpyHostToDevice, stream), stream);
 
     uint32_t* d_target_counters = buffer_arena.alloc<uint32_t>(2*targets.size() + 1);
     uint32_t* d_targets_prefix = d_target_counters + targets.size();
@@ -78,7 +81,7 @@ namespace Realm {
     int count = 0;
     if (count) {}
     bool host_fallback = false;
-    std::vector<RegionInstance> h_instances(targets.size(), RegionInstance::NO_INST);
+    std::vector<Rect<N, T>*> host_rect_buffers(targets.size(), nullptr);
     std::vector<size_t> entry_counts(targets.size(), 0);
     while (num_completed < inst_space.num_entries) {
       try {
@@ -214,7 +217,7 @@ namespace Realm {
                            });
 
         if (host_fallback) {
-          this->split_output(d_new_rects, num_new_rects, h_instances, entry_counts, buffer_arena);
+          this->split_output(d_new_rects, num_new_rects, host_rect_buffers, entry_counts, buffer_arena);
         }
 
         if (num_output==0 || host_fallback) {
@@ -263,7 +266,7 @@ namespace Realm {
           } else {
             host_fallback = true;
             if (num_output > 0) {
-              this->split_output(output_start, num_output, h_instances, entry_counts, buffer_arena);
+              this->split_output(output_start, num_output, host_rect_buffers, entry_counts, buffer_arena);
             }
             curr_tile = tile_size / 2;
           }
@@ -294,7 +297,7 @@ namespace Realm {
                               return elem;
                            });
       } catch (arena_oom&) {
-        this->split_output(output_start, num_output, h_instances, entry_counts, buffer_arena);
+        this->split_output(output_start, num_output, host_rect_buffers, entry_counts, buffer_arena);
         host_fallback = true;
       }
     }
@@ -306,10 +309,9 @@ namespace Realm {
           impl->set_contributor_count(1);
         }
         if (entry_counts[idx] > 0) {
-          Rect<N, T>* h_rects = reinterpret_cast<Rect<N,T> *>(AffineAccessor<char,1>(h_instances[idx], 0).base);
-          span<Rect<N, T>> h_rects_span(h_rects, entry_counts[idx]);
+          span<Rect<N, T>> h_rects_span(host_rect_buffers[idx], entry_counts[idx]);
           impl->contribute_dense_rect_list(h_rects_span, true);
-          h_instances[idx].destroy();
+          deppart_host_free(host_rect_buffers[idx]);
         } else {
           impl->contribute_nothing();
         }
@@ -320,6 +322,7 @@ namespace Realm {
   template<int N, typename T, int N2, typename T2>
   void GPUPreimageMicroOp<N, T, N2, T2>::gpu_populate_bitmasks() {
     if (targets.size() == 0) {
+      assert(sparsity_outputs.empty());
       return;
     }
 
@@ -365,13 +368,15 @@ namespace Realm {
 
     GPUMicroOp<N2, T2>::collapse_multi_space(targets, target_space, buffer_arena, stream);
 
-    Memory zcpy_mem;
-    assert(find_memory(zcpy_mem, Memory::Z_COPY_MEM, buffer_arena.location));
-    RegionInstance accessors_instance = this->realm_malloc(domain_transform.ptr_data.size() * sizeof(AffineAccessor<Point<N2,T2>,N,T>), zcpy_mem);
-    AffineAccessor<Point<N2,T2>,N,T>* d_accessors = reinterpret_cast<AffineAccessor<Point<N2,T2>,N,T>*>(AffineAccessor<char,1>(accessors_instance, 0).base);
+    std::vector<AffineAccessor<Point<N2,T2>,N,T>> h_accessors(domain_transform.ptr_data.size());
     for (size_t i = 0; i < domain_transform.ptr_data.size(); ++i) {
-      d_accessors[i] = AffineAccessor<Point<N2,T2>,N,T>(domain_transform.ptr_data[i].inst, domain_transform.ptr_data[i].field_offset);
+      h_accessors[i] = AffineAccessor<Point<N2,T2>,N,T>(domain_transform.ptr_data[i].inst, domain_transform.ptr_data[i].field_offset);
     }
+    AffineAccessor<Point<N2,T2>,N,T>* d_accessors =
+        buffer_arena.alloc<AffineAccessor<Point<N2,T2>,N,T>>(domain_transform.ptr_data.size());
+    CUDA_CHECK(cudaMemcpyAsync(d_accessors, h_accessors.data(),
+                               domain_transform.ptr_data.size() * sizeof(AffineAccessor<Point<N2,T2>,N,T>),
+                               cudaMemcpyHostToDevice, stream), stream);
 
     uint32_t* d_target_counters = buffer_arena.alloc<uint32_t>(2*targets.size() + 1);
     uint32_t* d_targets_prefix = d_target_counters + targets.size();
@@ -386,7 +391,7 @@ namespace Realm {
     int count = 0;
     if (count) {}
     bool host_fallback = false;
-    std::vector<RegionInstance> h_instances(targets.size(), RegionInstance::NO_INST);
+    std::vector<Rect<N, T>*> host_rect_buffers(targets.size(), nullptr);
     std::vector<size_t> entry_counts(targets.size(), 0);
     while (num_completed < inst_space.num_entries) {
       try {
@@ -522,7 +527,7 @@ namespace Realm {
                            });
 
         if (host_fallback) {
-          this->split_output(d_new_rects, num_new_rects, h_instances, entry_counts, buffer_arena);
+          this->split_output(d_new_rects, num_new_rects, host_rect_buffers, entry_counts, buffer_arena);
         }
 
         if (num_output==0 || host_fallback) {
@@ -571,7 +576,7 @@ namespace Realm {
           } else {
             host_fallback = true;
             if (num_output > 0) {
-              this->split_output(output_start, num_output, h_instances, entry_counts, buffer_arena);
+              this->split_output(output_start, num_output, host_rect_buffers, entry_counts, buffer_arena);
             }
             curr_tile = tile_size / 2;
           }
@@ -602,7 +607,7 @@ namespace Realm {
                               return elem;
                            });
       } catch (arena_oom&) {
-        this->split_output(output_start, num_output, h_instances, entry_counts, buffer_arena);
+        this->split_output(output_start, num_output, host_rect_buffers, entry_counts, buffer_arena);
         host_fallback = true;
       }
     }
@@ -614,10 +619,9 @@ namespace Realm {
           impl->set_contributor_count(1);
         }
         if (entry_counts[idx] > 0) {
-          Rect<N, T>* h_rects = reinterpret_cast<Rect<N,T> *>(AffineAccessor<char,1>(h_instances[idx], 0).base);
-          span<Rect<N, T>> h_rects_span(h_rects, entry_counts[idx]);
+          span<Rect<N, T>> h_rects_span(host_rect_buffers[idx], entry_counts[idx]);
           impl->contribute_dense_rect_list(h_rects_span, true);
-          h_instances[idx].destroy();
+          deppart_host_free(host_rect_buffers[idx]);
         } else {
           impl->contribute_nothing();
         }
