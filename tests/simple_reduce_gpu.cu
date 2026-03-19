@@ -81,6 +81,42 @@ void register_gpu_reduction(Realm::Runtime &realm, Realm::ReductionOpID redop_id
           static_cast<cudaFunction_t *>(&desc.fold_nonexcl),
           reinterpret_cast<const void *>(Realm::Cuda::ReductionKernels::fold_cuda_kernel<
                                          ReductionOpMixedAdd, false>)));
+
+      CHECK_CURT(cudaGetFuncBySymbol(
+          static_cast<cudaFunction_t *>(&desc.apply_excl_adv),
+          reinterpret_cast<const void *>(Realm::Cuda::ReductionKernelsAdv::apply_cuda_kernel<
+                                         ReductionOpMixedAdd, true>)));
+      CHECK_CURT(cudaGetFuncBySymbol(
+          static_cast<cudaFunction_t *>(&desc.apply_nonexcl_adv),
+          reinterpret_cast<const void *>(Realm::Cuda::ReductionKernelsAdv::apply_cuda_kernel<
+                                         ReductionOpMixedAdd, false>)));
+      CHECK_CURT(cudaGetFuncBySymbol(
+          static_cast<cudaFunction_t *>(&desc.fold_excl_adv),
+          reinterpret_cast<const void *>(Realm::Cuda::ReductionKernelsAdv::fold_cuda_kernel<
+                                         ReductionOpMixedAdd, true>)));
+      CHECK_CURT(cudaGetFuncBySymbol(
+          static_cast<cudaFunction_t *>(&desc.fold_nonexcl_adv),
+          reinterpret_cast<const void *>(Realm::Cuda::ReductionKernelsAdv::fold_cuda_kernel<
+                                         ReductionOpMixedAdd, false>)));
+
+
+      CHECK_CURT(cudaGetFuncBySymbol(
+          static_cast<cudaFunction_t *>(&desc.apply_excl_tran_adv),
+          reinterpret_cast<const void *>(Realm::Cuda::ReductionKernelsAdvTranspose::apply_cuda_kernel<
+                                         ReductionOpMixedAdd, true>)));
+      CHECK_CURT(cudaGetFuncBySymbol(
+          static_cast<cudaFunction_t *>(&desc.apply_nonexcl_tran_adv),
+          reinterpret_cast<const void *>(Realm::Cuda::ReductionKernelsAdvTranspose::apply_cuda_kernel<
+                                         ReductionOpMixedAdd, false>)));
+      CHECK_CURT(cudaGetFuncBySymbol(
+          static_cast<cudaFunction_t *>(&desc.fold_excl_tran_adv),
+          reinterpret_cast<const void *>(Realm::Cuda::ReductionKernelsAdvTranspose::fold_cuda_kernel<
+                                         ReductionOpMixedAdd, true>)));
+      CHECK_CURT(cudaGetFuncBySymbol(
+          static_cast<cudaFunction_t *>(&desc.fold_nonexcl_tran_adv),
+          reinterpret_cast<const void *>(Realm::Cuda::ReductionKernelsAdvTranspose::fold_cuda_kernel<
+                                         ReductionOpMixedAdd, false>)));
+
       descs.push_back(desc);
     }
     Realm::Event e = Realm::Event::NO_EVENT;

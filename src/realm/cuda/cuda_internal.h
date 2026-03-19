@@ -977,17 +977,23 @@ namespace Realm {
       long get_requests(Request **requests, long nr);
 
       bool progress_xd(GPUreduceChannel *channel, TimeLimit work_until);
-      bool progress_basic_xd(GPUreduceChannel *channel, TimeLimit work_until);
-      bool progress_custom_xd_data(GPUreduceChannel *channel, TimeLimit work_until);
+      bool fast_reduction_kernel_mode(GPUreduceChannel *channel, const size_t max_bytes,
+                                      XferPort *in_port, XferPort *out_port,
+                                      const size_t in_span_start,
+                                      const size_t out_span_start);
+
       void setup_redop_kernel(GPUreduceChannel *channel, void *params,
                               const size_t in_span_start, const size_t out_span_start,
                               const size_t in_elem_size, const size_t out_elem_size,
                               const size_t elems, const bool has_transpose);
+      void record_redop_advanced_kernel(GPU *gpu);
 
     protected:
       XferDesRedopInfo redop_info;
       const ReductionOpUntyped *redop;
       CUfunction kernel;
+      CUfunction kernel_adv;
+      CUfunction kernel_tran_adv;
       const void *kernel_host_proxy;
       const void *kernel_host_proxy_adv;
       const void *kernel_host_proxy_tran_adv;

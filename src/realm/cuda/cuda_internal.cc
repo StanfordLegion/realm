@@ -2206,6 +2206,12 @@ namespace Realm {
       redop = get_runtime()->reduce_op_table.get(redop_info.id, 0);
       kernel = 0;
       kernel_host_proxy = nullptr;
+
+      kernel_adv = 0;
+      kernel_tran_adv = 0;
+
+      kernel_host_proxy_adv = nullptr;
+      kernel_host_proxy_tran_adv = nullptr;
       assert(redop);
 
       src_is_ipc.resize(inputs_info.size(), false);
@@ -2290,6 +2296,8 @@ namespace Realm {
           assert(redop->cudaLaunchKernel_fn != 0);
         }
       }
+      // record advanced reduction kernels
+      record_redop_advanced_kernel(gpu);
     }
 
     long GPUreduceXferDes::get_requests(Request **requests, long nr)
@@ -2299,40 +2307,81 @@ namespace Realm {
       return 0;
     }
 
-    void GPUreduceXferDes::setup_redop_kernel(
-        GPUreduceChannel *channel, void *redop_args, const size_t in_span_start,
-        const size_t out_span_start, const size_t in_elem_size,
-        const size_t out_elem_size, const size_t elems, const bool has_transpose)
+    void GPUreduceXferDes::record_redop_advanced_kernel(GPU *gpu)
     {
-      GPU *gpu = checked_cast<GPUreduceChannel *>(channel)->gpu;
-      AutoGPUContext agc(channel->gpu);
-      size_t threads_per_block = 256;
-      size_t blocks_per_grid = 1 + ((elems - 1) / threads_per_block);
-      void *host_proxy = nullptr;
-      CUfunction kernel_ptr = nullptr;
-      // select reduction kernel now - translate to CUfunction if possible
-      if(!has_transpose) {
-        host_proxy = (redop_info.is_fold
-                          ? (redop_info.is_exclusive ? redop->cuda_fold_excl_fn_adv
-                                                     : redop->cuda_fold_nonexcl_fn_adv)
-                          : (redop_info.is_exclusive ? redop->cuda_apply_excl_fn_adv
-                                                     : redop->cuda_apply_nonexcl_fn_adv));
-        if(redop->cudaGetFuncBySymbol_fn != 0) {
-          // we can ask the runtime to perform the mapping for us
-          gpu->push_context();
+      // Per-GPU kernel caching: Check if we already have a kernel for this specific GPU
+      // IMPORTANT: CUfunction pointers are context-specific - a kernel obtained for
+      // GPU0's context cannot be used on GPU1's context. In multi-GPU setups, each GPU
+      {
+        AutoLock<Mutex> al(gpu->alloc_mutex);
+        std::unordered_map<ReductionOpID, GPU::GPUReductionOpEntry>::const_iterator
+            gpu_red_it = gpu->gpu_reduction_table.find(redop_info.id);
+        if(gpu_red_it != gpu->gpu_reduction_table.end()) {
+          kernel_adv =
+              (redop_info.is_fold
+                   ? (redop_info.is_exclusive ? gpu_red_it->second.fold_excl_adv
+                                              : gpu_red_it->second.fold_nonexcl_adv)
+                   : (redop_info.is_exclusive ? gpu_red_it->second.apply_excl_adv
+                                              : gpu_red_it->second.apply_nonexcl_adv));
 
-          CHECK_CUDART(reinterpret_cast<PFN_cudaGetFuncBySymbol>(
-              redop->cudaGetFuncBySymbol_fn)((void **)&kernel_ptr, host_proxy));
+          kernel_tran_adv =
+              (redop_info.is_fold
+                   ? (redop_info.is_exclusive ? gpu_red_it->second.fold_excl_tran_adv
+                                              : gpu_red_it->second.fold_nonexcl_tran_adv)
+                   : (redop_info.is_exclusive
+                          ? gpu_red_it->second.apply_excl_tran_adv
+                          : gpu_red_it->second.apply_nonexcl_tran_adv));
+        }
+      }
+
+      if(kernel_adv == nullptr) {
+        // select reduction kernel now - translate to CUfunction if possible
+        void *host_proxy =
+            (redop_info.is_fold
+                 ? (redop_info.is_exclusive ? redop->cuda_fold_excl_fn_adv
+                                            : redop->cuda_fold_nonexcl_fn_adv)
+                 : (redop_info.is_exclusive ? redop->cuda_apply_excl_fn_adv
+                                            : redop->cuda_apply_nonexcl_fn_adv));
+
+        if(redop->cudaGetFuncBySymbol_fn != 0) {
+          // We can ask the runtime to perform the mapping for us
+          // CRITICAL: Must obtain the kernel within the correct GPU's CUDA context
+          // to ensure the CUfunction pointer is valid for this specific GPU
+          gpu->push_context();
+          int result = reinterpret_cast<PFN_cudaGetFuncBySymbol>(
+              redop->cudaGetFuncBySymbol_fn)((void **)&kernel_adv, host_proxy);
+          CHECK_CUDART(result);
           gpu->pop_context();
+
+          // Cache this kernel in the GPU's local reduction table for future reuse
+          // This avoids repeated cudaGetFuncBySymbol calls and ensures each GPU
+          // has its own context-specific kernel instance
+          {
+            AutoLock<Mutex> al(gpu->alloc_mutex);
+            GPU::GPUReductionOpEntry &entry = gpu->gpu_reduction_table[redop_info.id];
+            if(redop_info.is_fold) {
+              if(redop_info.is_exclusive)
+                entry.fold_excl_adv = kernel_adv;
+              else
+                entry.fold_nonexcl_adv = kernel_adv;
+            } else {
+              if(redop_info.is_exclusive)
+                entry.apply_excl_adv = kernel_adv;
+              else
+                entry.apply_nonexcl_adv = kernel_adv;
+            }
+          }
         } else {
           // no way to ask the runtime to perform the mapping, so we'll have
-          // to actually launch the kernels with the runtime API using the launch
-          // kernel function provided
+          //  to actually launch the kernels with the runtime API using the launch
+          //  kernel function provided
           kernel_host_proxy_adv = host_proxy;
           assert(redop->cudaLaunchKernel_fn != 0);
         }
-      } else { // has_transpose
-        host_proxy =
+      }
+      if(kernel_tran_adv == nullptr) {
+        // select reduction kernel now - translate to CUfunction if possible
+        void *host_proxy =
             (redop_info.is_fold
                  ? (redop_info.is_exclusive ? redop->cuda_fold_excl_fn_tran_adv
                                             : redop->cuda_fold_nonexcl_fn_tran_adv)
@@ -2340,19 +2389,62 @@ namespace Realm {
                                             : redop->cuda_apply_nonexcl_fn_tran_adv));
 
         if(redop->cudaGetFuncBySymbol_fn != 0) {
-          // we can ask the runtime to perform the mapping for us
+          // We can ask the runtime to perform the mapping for us
+          // CRITICAL: Must obtain the kernel within the correct GPU's CUDA context
+          // to ensure the CUfunction pointer is valid for this specific GPU
           gpu->push_context();
 
-          CHECK_CUDART(reinterpret_cast<PFN_cudaGetFuncBySymbol>(
-              redop->cudaGetFuncBySymbol_fn)((void **)&kernel_ptr, host_proxy));
+          int result = reinterpret_cast<PFN_cudaGetFuncBySymbol>(
+              redop->cudaGetFuncBySymbol_fn)((void **)&kernel_tran_adv, host_proxy);
+          CHECK_CUDART(result);
+
           gpu->pop_context();
+
+          // Cache this kernel in the GPU's local reduction table for future reuse
+          // This avoids repeated cudaGetFuncBySymbol calls and ensures each GPU
+          // has its own context-specific kernel instance
+          {
+            AutoLock<Mutex> al(gpu->alloc_mutex);
+            GPU::GPUReductionOpEntry &entry = gpu->gpu_reduction_table[redop_info.id];
+            if(redop_info.is_fold) {
+              if(redop_info.is_exclusive)
+                entry.fold_excl_tran_adv = kernel_tran_adv;
+              else
+                entry.fold_nonexcl_tran_adv = kernel_tran_adv;
+            } else {
+              if(redop_info.is_exclusive)
+                entry.apply_excl_tran_adv = kernel_tran_adv;
+              else
+                entry.apply_nonexcl_tran_adv = kernel_tran_adv;
+            }
+          }
         } else {
           // no way to ask the runtime to perform the mapping, so we'll have
-          // to actually launch the kernels with the runtime API using the launch
-          // kernel function provided
+          //  to actually launch the kernels with the runtime API using the launch
+          //  kernel function provided
           kernel_host_proxy_tran_adv = host_proxy;
           assert(redop->cudaLaunchKernel_fn != 0);
         }
+      }
+    }
+
+    void GPUreduceXferDes::setup_redop_kernel(
+        GPUreduceChannel *channel, void *redop_args, const size_t in_span_start,
+        const size_t out_span_start, const size_t in_elem_size,
+        const size_t out_elem_size, const size_t elems, const bool has_transpose)
+    {
+      AutoGPUContext agc(channel->gpu);
+      size_t threads_per_block = 256;
+      size_t blocks_per_grid = 1 + ((elems - 1) / threads_per_block);
+      const void *host_proxy = nullptr;
+      CUfunction kernel_ptr = nullptr;
+      // select reduction kernel now - translate to CUfunction if possible
+      if(!has_transpose) {
+        kernel_ptr = kernel_adv;
+        host_proxy = kernel_host_proxy_adv;
+      } else {
+        kernel_ptr = kernel_tran_adv;
+        host_proxy = kernel_host_proxy_tran_adv;
       }
       // launch based on kernel or host_proxy
       AffineReducInfo<3> *args_copy = nullptr;
@@ -2435,10 +2527,11 @@ namespace Realm {
           output_control.current_io_port, out_span_start, elems * out_elem_size));
     }
 
-    bool GPUreduceXferDes::progress_basic_xd(GPUreduceChannel *channel,
-                                             TimeLimit work_until)
+    bool GPUreduceXferDes::progress_xd(GPUreduceChannel *channel, TimeLimit work_until)
     {
       bool did_work = false;
+      bool done = false;
+      const size_t MIN_XFER_SIZE = 4 << 20;
       ReadSequenceCache rseqcache(this, 2 << 20);
       ReadSequenceCache wseqcache(this, 2 << 20);
 
@@ -2454,13 +2547,15 @@ namespace Realm {
       };
       KernelArgs *args = 0; // allocate on demand
       size_t args_size = sizeof(KernelArgs) + redop->sizeof_userdata;
-
       while(true) {
         size_t min_xfer_size = 4096; // TODO: make controllable
-        size_t max_bytes = get_addresses(min_xfer_size, &rseqcache);
-        if(max_bytes == 0)
+        const InstanceLayoutPieceBase *in_nonaffine, *out_nonaffine;
+        size_t max_bytes =
+            get_addresses(MIN_XFER_SIZE, &rseqcache, in_nonaffine, out_nonaffine);
+        const bool non_affine = in_nonaffine || out_nonaffine;
+        if(max_bytes == 0) {
           break;
-
+        }
         XferPort *in_port = 0, *out_port = 0;
         size_t in_span_start = 0, out_span_start = 0;
         if(input_control.current_io_port >= 0) {
@@ -2471,163 +2566,174 @@ namespace Realm {
           out_port = &output_ports[output_control.current_io_port];
           out_span_start = out_port->local_bytes_total;
         }
-
-        // have to count in terms of elements, which requires redoing some math
-        //  if in/out sizes do not match
-        size_t max_elems;
-        if(in_elem_size == out_elem_size) {
-          max_elems = max_bytes / in_elem_size;
+        // add optimized kernels if the condition is satisfied
+        if(in_port && out_port && !non_affine &&
+           (redop->sizeof_rhs == redop->sizeof_lhs)) {
+          done = fast_reduction_kernel_mode(channel, max_bytes, in_port, out_port,
+                                            in_span_start, out_span_start);
+          did_work = true;
+          if(done || work_until.is_expired())
+            break;
         } else {
-          max_elems = std::min(input_control.remaining_count / in_elem_size,
-                               output_control.remaining_count / out_elem_size);
+          // have to count in terms of elements, which requires redoing some math
+          //  if in/out sizes do not match
+          size_t max_elems;
+          if(in_elem_size == out_elem_size) {
+            max_elems = max_bytes / in_elem_size;
+          } else {
+            max_elems = std::min(input_control.remaining_count / in_elem_size,
+                                 output_control.remaining_count / out_elem_size);
+            if(in_port != 0) {
+              max_elems =
+                  std::min(max_elems, in_port->addrlist.bytes_pending() / in_elem_size);
+              if(in_port->peer_guid != XFERDES_NO_GUID) {
+                size_t read_bytes_avail = in_port->seq_remote.span_exists(
+                    in_port->local_bytes_total, (max_elems * in_elem_size));
+                max_elems = std::min(max_elems, (read_bytes_avail / in_elem_size));
+              }
+            }
+            if(out_port != 0) {
+              max_elems =
+                  std::min(max_elems, out_port->addrlist.bytes_pending() / out_elem_size);
+              // no support for reducing into an intermediate buffer
+              assert(out_port->peer_guid == XFERDES_NO_GUID);
+            }
+          }
+
+          size_t total_elems = 0;
           if(in_port != 0) {
-            max_elems =
-                std::min(max_elems, in_port->addrlist.bytes_pending() / in_elem_size);
-            if(in_port->peer_guid != XFERDES_NO_GUID) {
-              size_t read_bytes_avail = in_port->seq_remote.span_exists(
-                  in_port->local_bytes_total, (max_elems * in_elem_size));
-              max_elems = std::min(max_elems, (read_bytes_avail / in_elem_size));
-            }
-          }
-          if(out_port != 0) {
-            max_elems =
-                std::min(max_elems, out_port->addrlist.bytes_pending() / out_elem_size);
-            // no support for reducing into an intermediate buffer
-            assert(out_port->peer_guid == XFERDES_NO_GUID);
-          }
-        }
+            if(out_port != 0) {
+              // input and output both exist - transfer what we can
+              log_xd.info() << "gpureduce chunk: min=" << min_xfer_size
+                            << " max_elems=" << max_elems;
 
-        size_t total_elems = 0;
-        if(in_port != 0) {
-          if(out_port != 0) {
-            // input and output both exist - transfer what we can
-            log_xd.info() << "gpureduce chunk: min=" << min_xfer_size
-                          << " max_elems=" << max_elems;
+              uintptr_t in_base = 0;
+              uintptr_t out_base =
+                  reinterpret_cast<uintptr_t>(out_port->mem->get_direct_ptr(0, 0));
 
-            uintptr_t in_base = 0;
-            uintptr_t out_base =
-                reinterpret_cast<uintptr_t>(out_port->mem->get_direct_ptr(0, 0));
+              GPU *in_gpu = nullptr;
 
-            GPU *in_gpu = nullptr;
-
-            bool in_is_ipc = false;
-            if(input_control.current_io_port >= 0) {
-              in_gpu = src_gpus[input_control.current_io_port];
-              if(in_gpu == nullptr) {
-                in_gpu = channel->gpu;
+              bool in_is_ipc = false;
+              if(input_control.current_io_port >= 0) {
+                in_gpu = src_gpus[input_control.current_io_port];
+                if(in_gpu == nullptr) {
+                  in_gpu = channel->gpu;
+                }
+                in_is_ipc = src_is_ipc[input_control.current_io_port];
               }
-              in_is_ipc = src_is_ipc[input_control.current_io_port];
-            }
 
-            if(in_is_ipc) {
-              const GPU::CudaIpcMapping *in_mapping =
-                  channel->gpu->find_ipc_mapping(in_port->mem->me);
-              assert(in_mapping);
-              in_base = in_mapping->local_base;
-            } else {
-              in_base = reinterpret_cast<uintptr_t>(in_port->mem->get_direct_ptr(0, 0));
-            }
-
-            while(total_elems < max_elems) {
-              AddressListCursor &in_alc = in_port->addrcursor;
-              AddressListCursor &out_alc = out_port->addrcursor;
-
-              uintptr_t in_offset = in_alc.get_offset();
-              uintptr_t out_offset = out_alc.get_offset();
-
-              // the reported dim is reduced for partially consumed address
-              //  ranges - whatever we get can be assumed to be regular
-              int in_dim = in_alc.get_dim();
-              int out_dim = out_alc.get_dim();
-
-              // the current reduction op interface can reduce multiple elements
-              //  with a fixed address stride, which looks to us like either
-              //  1D (stride = elem_size), or 2D with 1 elem/line
-
-              size_t icount = in_alc.remaining(0) / in_elem_size;
-              size_t ocount = out_alc.remaining(0) / out_elem_size;
-              size_t istride, ostride;
-              if((in_dim > 1) && (icount == 1)) {
-                in_dim = 2;
-                icount = in_alc.remaining(1);
-                istride = in_alc.get_stride(1);
+              if(in_is_ipc) {
+                const GPU::CudaIpcMapping *in_mapping =
+                    channel->gpu->find_ipc_mapping(in_port->mem->me);
+                assert(in_mapping);
+                in_base = in_mapping->local_base;
               } else {
-                in_dim = 1;
-                istride = in_elem_size;
-              }
-              if((out_dim > 1) && (ocount == 1)) {
-                out_dim = 2;
-                ocount = out_alc.remaining(1);
-                ostride = out_alc.get_stride(1);
-              } else {
-                out_dim = 1;
-                ostride = out_elem_size;
+                in_base = reinterpret_cast<uintptr_t>(in_port->mem->get_direct_ptr(0, 0));
               }
 
-              size_t elems_left = max_elems - total_elems;
-              size_t elems = std::min(std::min(icount, ocount), elems_left);
-              assert(elems > 0);
+              while(total_elems < max_elems) {
+                AddressListCursor &in_alc = in_port->addrcursor;
+                AddressListCursor &out_alc = out_port->addrcursor;
 
-              // allocate kernel arg structure if this is our first call
-              if(!args) {
-                args = static_cast<KernelArgs *>(alloca(args_size));
-                if(redop->sizeof_userdata)
-                  memcpy(args + 1, redop->userdata, redop->sizeof_userdata);
-              }
+                uintptr_t in_offset = in_alc.get_offset();
+                uintptr_t out_offset = out_alc.get_offset();
 
-              args->dst_base = out_base + out_offset;
-              args->dst_stride = ostride;
-              args->src_base = in_base + in_offset;
-              args->src_stride = istride;
-              args->count = elems;
+                // the reported dim is reduced for partially consumed address
+                //  ranges - whatever we get can be assumed to be regular
+                int in_dim = in_alc.get_dim();
+                int out_dim = out_alc.get_dim();
 
-              size_t threads_per_block = 256;
-              size_t blocks_per_grid =
-                  std::min(1 + ((elems - 1) / threads_per_block),
-                           static_cast<size_t>(CUDA_MAX_BLOCKS_PER_GRID));
+                // the current reduction op interface can reduce multiple elements
+                //  with a fixed address stride, which looks to us like either
+                //  1D (stride = elem_size), or 2D with 1 elem/line
 
-              {
-                AutoGPUContext agc(channel->gpu);
-
-                if(kernel != 0) {
-                  // Use params array to pass kernel arguments (pointers to each
-                  // parameter) instead of CU_LAUNCH_PARAM_BUFFER_POINTER (packed buffer).
-                  // The params array method is more robust for reduction operators with
-                  // small userdata structs (e.g., 1-byte REDOP structs), as it avoids
-                  // alignment issues that can cause CUDA_ERROR_LAUNCH_OUT_OF_RESOURCES
-                  // (error 701). The last parameter (args + 1) points to the REDOP struct
-                  // stored after KernelArgs.
-                  void *params[] = {&args->dst_base,   &args->dst_stride, &args->src_base,
-                                    &args->src_stride, &args->count,      args + 1};
-
-                  CHECK_CU(CUDA_DRIVER_FNPTR(cuLaunchKernel)(
-                      kernel, blocks_per_grid, 1, 1, threads_per_block, 1, 1,
-                      0 /*sharedmem*/, stream->get_stream(), params, 0 /*extra*/));
+                size_t icount = in_alc.remaining(0) / in_elem_size;
+                size_t ocount = out_alc.remaining(0) / out_elem_size;
+                size_t istride, ostride;
+                if((in_dim > 1) && (icount == 1)) {
+                  in_dim = 2;
+                  icount = in_alc.remaining(1);
+                  istride = in_alc.get_stride(1);
                 } else {
-                  // Runtime API fallback path - also use params array for consistency
-                  void *params[] = {&args->dst_base,   &args->dst_stride, &args->src_base,
-                                    &args->src_stride, &args->count,      args + 1};
-                  assert(redop->cudaLaunchKernel_fn != 0);
-                  CHECK_CUDART(reinterpret_cast<PFN_cudaLaunchKernel>(
-                      redop->cudaLaunchKernel_fn)(kernel_host_proxy,
-                                                  dim3(blocks_per_grid, 1, 1),
-                                                  dim3(threads_per_block, 1, 1), params,
-                                                  0 /*sharedMem*/, stream->get_stream()));
+                  in_dim = 1;
+                  istride = in_elem_size;
+                }
+                if((out_dim > 1) && (ocount == 1)) {
+                  out_dim = 2;
+                  ocount = out_alc.remaining(1);
+                  ostride = out_alc.get_stride(1);
+                } else {
+                  out_dim = 1;
+                  ostride = out_elem_size;
                 }
 
-                // insert fence to track completion of reduction kernel
-                add_reference(); // released by transfer completion
-                stream->add_notification(new GPUTransferCompletion(
-                    this, input_control.current_io_port, in_span_start,
-                    elems * in_elem_size, output_control.current_io_port, out_span_start,
-                    elems * out_elem_size));
-              }
+                size_t elems_left = max_elems - total_elems;
+                size_t elems = std::min(std::min(icount, ocount), elems_left);
+                assert(elems > 0);
 
-              in_span_start += elems * in_elem_size;
-              out_span_start += elems * out_elem_size;
+                // allocate kernel arg structure if this is our first call
+                if(!args) {
+                  args = static_cast<KernelArgs *>(alloca(args_size));
+                  if(redop->sizeof_userdata)
+                    memcpy(args + 1, redop->userdata, redop->sizeof_userdata);
+                }
 
-              in_alc.advance(in_dim - 1, elems * ((in_dim == 1) ? in_elem_size : 1));
-              out_alc.advance(out_dim - 1, elems * ((out_dim == 1) ? out_elem_size : 1));
+                args->dst_base = out_base + out_offset;
+                args->dst_stride = ostride;
+                args->src_base = in_base + in_offset;
+                args->src_stride = istride;
+                args->count = elems;
+
+                size_t threads_per_block = 256;
+                size_t blocks_per_grid =
+                    std::min(1 + ((elems - 1) / threads_per_block),
+                             static_cast<size_t>(CUDA_MAX_BLOCKS_PER_GRID));
+
+                {
+                  AutoGPUContext agc(channel->gpu);
+
+                  if(kernel != 0) {
+                    // Use params array to pass kernel arguments (pointers to each
+                    // parameter) instead of CU_LAUNCH_PARAM_BUFFER_POINTER (packed
+                    // buffer). The params array method is more robust for reduction
+                    // operators with small userdata structs (e.g., 1-byte REDOP structs),
+                    // as it avoids alignment issues that can cause
+                    // CUDA_ERROR_LAUNCH_OUT_OF_RESOURCES (error 701). The last parameter
+                    // (args + 1) points to the REDOP struct stored after KernelArgs.
+                    void *params[] = {&args->dst_base, &args->dst_stride,
+                                      &args->src_base, &args->src_stride,
+                                      &args->count,    args + 1};
+
+                    CHECK_CU(CUDA_DRIVER_FNPTR(cuLaunchKernel)(
+                        kernel, blocks_per_grid, 1, 1, threads_per_block, 1, 1,
+                        0 /*sharedmem*/, stream->get_stream(), params, 0 /*extra*/));
+                  } else {
+                    // Runtime API fallback path - also use params array for consistency
+                    void *params[] = {&args->dst_base, &args->dst_stride,
+                                      &args->src_base, &args->src_stride,
+                                      &args->count,    args + 1};
+                    assert(redop->cudaLaunchKernel_fn != 0);
+                    CHECK_CUDART(reinterpret_cast<PFN_cudaLaunchKernel>(
+                        redop->cudaLaunchKernel_fn)(
+                        kernel_host_proxy, dim3(blocks_per_grid, 1, 1),
+                        dim3(threads_per_block, 1, 1), params, 0 /*sharedMem*/,
+                        stream->get_stream()));
+                  }
+
+                  // insert fence to track completion of reduction kernel
+                  add_reference(); // released by transfer completion
+                  stream->add_notification(new GPUTransferCompletion(
+                      this, input_control.current_io_port, in_span_start,
+                      elems * in_elem_size, output_control.current_io_port,
+                      out_span_start, elems * out_elem_size));
+                }
+
+                in_span_start += elems * in_elem_size;
+                out_span_start += elems * out_elem_size;
+
+                in_alc.advance(in_dim - 1, elems * ((in_dim == 1) ? in_elem_size : 1));
+                out_alc.advance(out_dim - 1,
+                                elems * ((out_dim == 1) ? out_elem_size : 1));
 
 #ifdef DEBUG_REALM
               assert(elems <= elems_left);
@@ -2639,62 +2745,45 @@ namespace Realm {
               if(((total_elems * in_elem_size) >= min_xfer_size) &&
                  work_until.is_expired())
                 break;
+              }
+            } else {
+              // input but no output, so skip input bytes
+              total_elems = max_elems;
+              in_port->addrcursor.skip_bytes(total_elems * in_elem_size);
+
+              rseqcache.add_span(input_control.current_io_port, in_span_start,
+                                 total_elems * in_elem_size);
+              in_span_start += total_elems * in_elem_size;
             }
           } else {
-            // input but no output, so skip input bytes
-            total_elems = max_elems;
-            in_port->addrcursor.skip_bytes(total_elems * in_elem_size);
+            if(out_port != 0) {
+              // output but no input, so skip output bytes
+              total_elems = max_elems;
+              out_port->addrcursor.skip_bytes(total_elems * out_elem_size);
 
-            rseqcache.add_span(input_control.current_io_port, in_span_start,
-                               total_elems * in_elem_size);
-            in_span_start += total_elems * in_elem_size;
+              wseqcache.add_span(output_control.current_io_port, out_span_start,
+                                 total_elems * out_elem_size);
+              out_span_start += total_elems * out_elem_size;
+            } else {
+              // skipping both input and output is possible for simultaneous
+              //  gather+scatter
+              total_elems = max_elems;
+            }
           }
-        } else {
-          if(out_port != 0) {
-            // output but no input, so skip output bytes
-            total_elems = max_elems;
-            out_port->addrcursor.skip_bytes(total_elems * out_elem_size);
 
-            wseqcache.add_span(output_control.current_io_port, out_span_start,
-                               total_elems * out_elem_size);
-            out_span_start += total_elems * out_elem_size;
-          } else {
-            // skipping both input and output is possible for simultaneous
-            //  gather+scatter
-            total_elems = max_elems;
-          }
-        }
+          done = record_address_consumption(total_elems * in_elem_size,
+                                            total_elems * out_elem_size);
 
-        bool done = record_address_consumption(total_elems * in_elem_size,
-                                               total_elems * out_elem_size);
+          did_work = true;
 
-        did_work = true;
-
-        if(done || work_until.is_expired())
-          break;
+          if(done || work_until.is_expired())
+            break;
+        } // ends the slow case
       }
-
       rseqcache.flush();
       wseqcache.flush();
 
       return did_work;
-    }
-
-    bool GPUreduceXferDes::progress_xd(GPUreduceChannel *channel, TimeLimit work_until)
-    {
-      assert(redop_info.in_place); // TODO: support for out-of-place reduces
-      const InstanceLayoutPieceBase *in_nonaffine, *out_nonaffine;
-      const size_t MIN_XFER_SIZE = 4 << 20;
-      ReadSequenceCache rseqcache(this, 2 << 20);
-      const size_t max_bytes =
-          get_addresses(MIN_XFER_SIZE, &rseqcache, in_nonaffine, out_nonaffine);
-      if(max_bytes == 0)
-        return true;
-      bool non_affine = in_nonaffine || out_nonaffine;
-      if((redop->sizeof_rhs != redop->sizeof_lhs) || (non_affine))
-        return progress_basic_xd(channel, work_until);
-      else
-        return progress_custom_xd_data(channel, work_until);
     }
 
     static size_t populate_affine_reduc_info(AffineReducInfo<3> &copy_infos,
@@ -2897,46 +2986,29 @@ namespace Realm {
                            << " copy_info.elem_size:" << copy_info.elem_size;
     }
 
-    bool GPUreduceXferDes::progress_custom_xd_data(GPUreduceChannel *channel,
-                                                   TimeLimit work_until)
+    bool GPUreduceXferDes::fast_reduction_kernel_mode(
+        GPUreduceChannel *channel, const size_t max_bytes, XferPort *in_port,
+        XferPort *out_port, const size_t in_span_start, const size_t out_span_start)
+
     {
-      const size_t MIN_XFER_SIZE = 4 << 20;
       AffineReducInfo<3> copy_infos;
       MemReducInfo<size_t> transpose_copy;
       memset(&transpose_copy, 0, sizeof(transpose_copy));
       memset(&copy_infos, 0, sizeof(copy_infos));
-      ReadSequenceCache rseqcache(this, 2 << 20);
-      const InstanceLayoutPieceBase *in_nonaffine, *out_nonaffine;
-      XferPort *in_port = 0, *out_port = 0;
-      size_t in_span_start = 0, out_span_start = 0;
       GPU *in_gpu = 0, *out_gpu = 0;
       size_t max_elems = 0;
       const size_t in_elem_size = redop->sizeof_rhs;
       const size_t out_elem_size =
           (redop_info.is_fold ? redop->sizeof_rhs : redop->sizeof_lhs);
-      assert(redop_info.in_place); // TODO: support for out-of-place reduces
-
-      // get the maximum bytes
-      const size_t max_bytes =
-          get_addresses(MIN_XFER_SIZE, &rseqcache, in_nonaffine, out_nonaffine);
-
-      if(max_bytes == 0) {
-        return true;
-      }
+      REALM_ASSERT(redop_info.in_place); // TODO: support for out-of-place reduces
+      REALM_ASSERT(in_elem_size == out_elem_size); // TODO: support different elem sizes
       bool in_is_ipc = false;
-      if(input_control.current_io_port >= 0) {
-        in_port = &input_ports[input_control.current_io_port];
-        in_span_start = in_port->local_bytes_total;
-        in_gpu = src_gpus[input_control.current_io_port];
-        if(in_gpu == nullptr)
-          in_gpu = checked_cast<GPUreduceChannel *>(channel)->gpu;
-        in_is_ipc = src_is_ipc[input_control.current_io_port];
+      in_gpu = src_gpus[input_control.current_io_port];
+      if(in_gpu == nullptr) {
+        in_gpu = channel->gpu;
       }
-      if(output_control.current_io_port >= 0) {
-        out_port = &output_ports[output_control.current_io_port];
-        out_span_start = out_port->local_bytes_total;
-        out_gpu = checked_cast<GPUreduceChannel *>(channel)->gpu;
-      }
+      in_is_ipc = src_is_ipc[input_control.current_io_port];
+      out_gpu = channel->gpu;
       // have to count in terms of elements, which requires redoing some math
       // if in/out sizes do not match
       if(in_elem_size == out_elem_size) {
@@ -2977,7 +3049,6 @@ namespace Realm {
       size_t bytes_left = max_bytes;
       bool has_transpose = false;
       size_t bytes_to_copy = 0;
-      REALM_ASSERT(!in_nonaffine && !out_nonaffine);
       bytes_to_copy = populate_affine_reduc_info(
           copy_infos, transpose_copy, in_alc, in_base, in_gpu, out_alc, out_base, out_gpu,
           bytes_left, in_elem_size, out_elem_size);
@@ -3006,9 +3077,8 @@ namespace Realm {
       }
       log_reduc_gpu.info() << "record_address_consumption: read: " << total_read_bytes
                            << ", write: " << total_write_bytes;
-      record_address_consumption(total_read_bytes, total_write_bytes);
-      rseqcache.flush();
-      return true;
+      bool done = record_address_consumption(total_read_bytes, total_write_bytes);
+      return done;
     }
 
     ////////////////////////////////////////////////////////////////////////

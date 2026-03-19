@@ -25,7 +25,6 @@
 
 namespace Realm {
   namespace Cuda {
-    static const size_t MAX_PARAM_CONSTBANK_SIZE = 4 * 1024;
     template <typename Offset_t>
     struct MemReducInfo {
       Offset_t extents[3];

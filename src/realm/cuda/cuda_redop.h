@@ -30,7 +30,8 @@ namespace Realm {
 #ifdef __CUDACC__
     template <size_t N, typename Offset_t = size_t>
     static __device__ inline void index_to_coords(Offset_t *coords, Offset_t index,
-                                                  const Offset_t *extents)
+                                                  const Offset_t *extents,
+                                                  const size_t elem_size)
     {
       size_t div = index;
 #pragma unroll
@@ -40,17 +41,18 @@ namespace Realm {
         div = div_tmp;
       }
       coords[N - 1] = div;
+      coords[0] = coords[0] * elem_size;
     }
 
     template <size_t N, typename Offset_t = size_t>
-    static __device__ inline size_t
-    coords_to_index(Offset_t *coords, const Offset_t *strides, size_t elem_size)
+    static __device__ inline size_t coords_to_index(const Offset_t *coords,
+                                                    const Offset_t *strides,
+                                                    const size_t elem_size)
     {
-
       size_t i = 0;
       size_t vol = 1;
       int d = 0;
-      coords[0] = coords[0] * elem_size;
+
 #pragma unroll
       for(; d < N - 1; d++) {
         i += vol * coords[d];
@@ -63,8 +65,8 @@ namespace Realm {
     }
 
     template <size_t N, typename Offset_t = size_t>
-    static __device__ inline size_t
-    coords_to_index_trans(Offset_t *coords, const Offset_t *strides, size_t elem_size)
+    static __device__ inline size_t coords_to_index_trans(const Offset_t *coords,
+                                                          const Offset_t *strides)
     {
       size_t i = 0;
       i = coords[1] * strides[0] + coords[2] * strides[1] + coords[0];
@@ -85,14 +87,12 @@ namespace Realm {
         typename REDOP::RHS *src =
             reinterpret_cast<typename REDOP::RHS *>(current_info.src.addr);
         for(size_t idx = off; idx < vol; idx += blockDim.x * gridDim.x) {
-          size_t src_coords[3];
-          index_to_coords<3, size_t>(src_coords, idx, current_info.extents);
+          size_t coords[3];
+          index_to_coords<3, size_t>(coords, idx, current_info.extents, redop_rhs_size);
           const size_t src_idx = coords_to_index<3, size_t>(
-              src_coords, current_info.src.strides, redop_rhs_size);
-          size_t dst_coords[3];
-          index_to_coords<3, size_t>(dst_coords, idx, current_info.extents);
+              coords, current_info.src.strides, redop_rhs_size);
           const size_t dst_idx = coords_to_index<3, size_t>(
-              dst_coords, current_info.dst.strides, redop_rhs_size);
+              coords, current_info.dst.strides, redop_rhs_size);
           redop.template fold_cuda<EXCL>(
               *reinterpret_cast<typename REDOP::RHS *>(&dst[dst_idx * num_elems_rhs]),
               *reinterpret_cast<const typename REDOP::RHS *>(
@@ -115,14 +115,12 @@ namespace Realm {
         typename REDOP::RHS *src =
             reinterpret_cast<typename REDOP::RHS *>(current_info.src.addr);
         for(size_t idx = off; idx < vol; idx += blockDim.x * gridDim.x) {
-          size_t src_coords[3];
-          index_to_coords<3, size_t>(src_coords, idx, current_info.extents);
+          size_t coords[3];
+          index_to_coords<3, size_t>(coords, idx, current_info.extents, redop_rhs_size);
           const size_t src_idx = coords_to_index<3, size_t>(
-              src_coords, current_info.src.strides, redop_rhs_size);
-          size_t dst_coords[3];
-          index_to_coords<3, size_t>(dst_coords, idx, current_info.extents);
+              coords, current_info.src.strides, redop_rhs_size);
           const size_t dst_idx = coords_to_index<3, size_t>(
-              dst_coords, current_info.dst.strides, redop_lhs_size);
+              coords, current_info.dst.strides, redop_lhs_size);
           redop.template apply_cuda<EXCL>(
               *reinterpret_cast<typename REDOP::LHS *>(&(dst[dst_idx * num_elems_lhs])),
               *reinterpret_cast<const typename REDOP::RHS *>(
@@ -138,21 +136,18 @@ namespace Realm {
       {
         size_t offset = blockIdx.x * blockDim.x + threadIdx.x;
         size_t vol = current_info.volume;
-        size_t redop_rhs_size = sizeof(typename REDOP::RHS);
         size_t num_elems = current_info.elem_size / sizeof(typename REDOP::RHS);
         typename REDOP::RHS *dst =
             reinterpret_cast<typename REDOP::RHS *>(current_info.dst);
         typename REDOP::RHS *src =
             reinterpret_cast<typename REDOP::RHS *>(current_info.src);
         for(size_t idx = offset; idx < vol; idx += blockDim.x * gridDim.x) {
-          size_t src_coords[3];
-          index_to_coords<3, size_t>(src_coords, idx, current_info.extents);
-          const size_t src_idx = coords_to_index_trans<3, size_t>(
-              src_coords, current_info.src_strides, redop_rhs_size);
-          size_t dst_coords[3];
-          index_to_coords<3, size_t>(dst_coords, idx, current_info.extents);
-          const size_t dst_idx = coords_to_index_trans<3, size_t>(
-              dst_coords, current_info.dst_strides, redop_rhs_size);
+          size_t coords[3];
+          index_to_coords<3, size_t>(coords, idx, current_info.extents, 1);
+          const size_t src_idx =
+              coords_to_index_trans<3, size_t>(coords, current_info.src_strides);
+          const size_t dst_idx =
+              coords_to_index_trans<3, size_t>(coords, current_info.dst_strides);
           redop.template fold_cuda<EXCL>(
               *reinterpret_cast<typename REDOP::RHS *>(&dst[dst_idx * num_elems]),
               *reinterpret_cast<const typename REDOP::RHS *>(&src[src_idx * num_elems]));
@@ -172,14 +167,12 @@ namespace Realm {
             reinterpret_cast<typename REDOP::RHS *>(current_info.src);
 
         for(size_t idx = offset; idx < vol; idx += blockDim.x * gridDim.x) {
-          size_t src_coords[3];
-          index_to_coords<3, size_t>(src_coords, idx, current_info.extents);
-          const size_t src_idx = coords_to_index_trans<3, size_t>(
-              src_coords, current_info.src_strides, sizeof(typename REDOP::RHS));
-          size_t dst_coords[3];
-          index_to_coords<3, size_t>(dst_coords, idx, current_info.extents);
-          const size_t dst_idx = coords_to_index_trans<3, size_t>(
-              dst_coords, current_info.dst_strides, sizeof(typename REDOP::LHS));
+          size_t coords[3];
+          index_to_coords<3, size_t>(coords, idx, current_info.extents, 1);
+          const size_t src_idx =
+              coords_to_index_trans<3, size_t>(coords, current_info.src_strides);
+          const size_t dst_idx =
+              coords_to_index_trans<3, size_t>(coords, current_info.dst_strides);
           redop.template apply_cuda<EXCL>(
               *reinterpret_cast<typename REDOP::LHS *>(&dst[dst_idx * num_elems]),
               *reinterpret_cast<const typename REDOP::RHS *>(&src[src_idx * num_elems]));
