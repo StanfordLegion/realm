@@ -1199,7 +1199,6 @@ namespace Realm {
           &am_realm_comp_handler, cb_data1, 0,
           (ThreadLocal::ucp_work_until != nullptr) ? *ThreadLocal::ucp_work_until
                                                    : TimeLimit::relative(0));
-      ThreadLocal::bgwork_profstate->set_worked(true);
 
       if(completed) {
         am_realm_comp_handler(ucp_msg_hdr->src, cb_data1, 0);

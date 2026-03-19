@@ -2614,7 +2614,9 @@ static void handle_new_activemsg(gasnet_token_t token, void *buf, size_t nbytes,
     }
   } else
     record_message(src, false);
-  ThreadLocal::bgwork_profstate->set_worked(true);
+  if(ThreadLocal::bgwork_profstate) {
+    ThreadLocal::bgwork_profstate->set_worked(true);
+  }
 }
 
 void gasnet_parse_command_line(std::vector<std::string> &cmdline)

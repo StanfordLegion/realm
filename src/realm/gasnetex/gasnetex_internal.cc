@@ -5030,7 +5030,6 @@ namespace Realm {
         ((ThreadLocal::gex_work_until != nullptr) ? *ThreadLocal::gex_work_until
                                                   : TimeLimit::relative(0)));
     ThreadLocal::in_am_handler = false;
-    ThreadLocal::bgwork_profstate->set_worked(true);
 
     if(handled) {
       // if the message was handled immediately, we can use a reply for
@@ -5081,7 +5080,6 @@ namespace Realm {
         ((ThreadLocal::gex_work_until != nullptr) ? *ThreadLocal::gex_work_until
                                                   : TimeLimit::relative(0)));
     ThreadLocal::in_am_handler = false;
-    ThreadLocal::bgwork_profstate->set_worked(true);
 
     if(handled) {
       // if the message was handled immediately, we can use a reply for
@@ -5133,7 +5131,6 @@ namespace Realm {
         ((ThreadLocal::gex_work_until != nullptr) ? *ThreadLocal::gex_work_until
                                                   : TimeLimit::relative(0)));
     ThreadLocal::in_am_handler = false;
-    ThreadLocal::bgwork_profstate->set_worked(true);
 
     if(handled) {
       // if the message was handled immediately, we can use a reply for
@@ -5299,7 +5296,9 @@ namespace Realm {
     }
 
     ThreadLocal::in_am_handler = false;
-    ThreadLocal::bgwork_profstate->set_worked(true);
+    if(ThreadLocal::bgwork_profstate) {
+      ThreadLocal::bgwork_profstate->set_worked(true);
+    }
   }
 
 }; // namespace Realm

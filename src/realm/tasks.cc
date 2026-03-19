@@ -1076,10 +1076,6 @@ namespace Realm {
   // the main scheduler loop
   void ThreadedTaskScheduler::scheduler_loop(void)
   {
-    // Need a background profiling state on these threads in case they need
-    // to handle any background work, lives for the duration of this thread
-    BgWorkProfileState profstate;
-
     // the entire body of this method, except for when running an actual task, is
     //   a critical section - lock should be taken by caller
     {
@@ -1324,6 +1320,8 @@ namespace Realm {
     lock.unlock();
 
     if(max_bgwork_timeslice > 0) {
+      // If we're going to go off and do background work then we need to profile it
+      BgWorkProfileState profstate;
       // try to be productive while we're waiting
       bgworker.do_work(max_bgwork_timeslice, &bgworker_interrupt);
     } else {

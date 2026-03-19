@@ -19,6 +19,7 @@
 #include "realm/atomics.h"
 
 #include "realm/activemsg.h"
+#include "realm/bgwork.h"
 #include "realm/mutex.h"
 #include "realm/cmdline.h"
 #include "realm/logging.h"
@@ -393,6 +394,10 @@ namespace Realm {
 #ifdef DEBUG_INCOMING
     printf("adding incoming message from %d\n", sender);
 #endif
+    // Record that we did work handling a message for any networks
+    if(ThreadLocal::bgwork_profstate) {
+      ThreadLocal::bgwork_profstate->set_worked(true);
+    }
 
     // look up which message this is
     ActiveMessageHandlerTable::HandlerEntry *handler =

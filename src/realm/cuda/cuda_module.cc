@@ -390,7 +390,8 @@ namespace Realm {
         started = true;
       } else {
         int64_t stop_time = Clock::current_time_in_nanoseconds(true /*absolute*/);
-        Realm::ThreadLocal::bgwork_profstate->gpu_work(proc_id, slot, start_time, stop_time);
+        Realm::ThreadLocal::bgwork_profstate->gpu_work(proc_id, slot, start_time,
+                                                       stop_time);
         delete this;
       }
     }
