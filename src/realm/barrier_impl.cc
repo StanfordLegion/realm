@@ -268,9 +268,8 @@ namespace Realm {
       static void send_request(NodeID target, ID::IDType barrier_id, const void *data,
                                size_t datalen, size_t max_payload_size)
       {
-        ActiveMessage<BarrierTriggerMessage> amsg(target, datalen);
+        ActiveMessage<BarrierTriggerMessage> amsg(target, data, datalen);
         amsg->barrier_id = barrier_id;
-        amsg.add_payload(data, datalen);
         amsg.commit();
       }
     };
@@ -300,13 +299,12 @@ namespace Realm {
                                NodeID sender, bool forwarded, const void *data,
                                size_t datalen)
       {
-        ActiveMessage<BarrierAdjustMessage> amsg(target, datalen);
+        ActiveMessage<BarrierAdjustMessage> amsg(target, data, datalen);
         amsg->barrier = barrier;
         amsg->delta = delta;
         amsg->wait_on = wait_on;
         amsg->sender = sender;
         amsg->forwarded = forwarded;
-        amsg.add_payload(data, datalen);
         amsg.commit();
       }
     };
@@ -344,7 +342,7 @@ namespace Realm {
       ReductionOpID redop_id, NodeID migration_target, unsigned base_arrival_count,
       const void *data, size_t datalen)
   {
-    ActiveMessage<BarrierTriggerMessage> amsg(target, datalen);
+    ActiveMessage<BarrierTriggerMessage> amsg(target, data, datalen);
     amsg->barrier_id = barrier_id;
     amsg->trigger_gen = trigger_gen;
     amsg->previous_gen = previous_gen;
@@ -352,7 +350,6 @@ namespace Realm {
     amsg->redop_id = redop_id;
     amsg->migration_target = migration_target;
     amsg->base_arrival_count = base_arrival_count;
-    amsg.add_payload(data, datalen);
     amsg.commit();
   }
 

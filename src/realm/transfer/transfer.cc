@@ -4486,21 +4486,21 @@ namespace Realm {
             amsg.commit();
           } else {
             size_t bytes = (rem_count * (sizeof(Memory) + sizeof(size_t)));
-            ActiveMessage<RemoteIBAllocRequestMultiple> amsg(first_owner, bytes);
+            Serialization::DynamicBufferSerializer dbs(bytes);
+            for(unsigned i = 0; i < rem_count; i++) {
+              dbs << tg.ib_edges[tg.ib_alloc_order[immed_count + i]].memory;
+            }
+            for(unsigned i = 0; i < rem_count; i++) {
+              dbs << tg.ib_edges[tg.ib_alloc_order[immed_count + i]].size;
+            }
+            ActiveMessage<RemoteIBAllocRequestMultiple> amsg(
+                first_owner, dbs.get_buffer(), dbs.bytes_used());
             amsg->requestor = Network::my_node_id;
             amsg->count = rem_count;
             amsg->first_index = immed_count;
             amsg->curr_index = 0;
             amsg->req_op = reinterpret_cast<uintptr_t>(this);
             amsg->immediate = false;
-
-            for(unsigned i = 0; i < rem_count; i++) {
-              amsg << tg.ib_edges[tg.ib_alloc_order[immed_count + i]].memory;
-            }
-            for(unsigned i = 0; i < rem_count; i++) {
-              amsg << tg.ib_edges[tg.ib_alloc_order[immed_count + i]].size;
-            }
-
             amsg.commit();
           }
         }

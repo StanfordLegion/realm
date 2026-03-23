@@ -1997,14 +1997,18 @@ namespace Realm {
     assert(ok);
     size_t layout_bytes = bcs.bytes_used();
 
-    ActiveMessage<MemStorageAllocRequest> amsg(target, layout_bytes);
+    Serialization::DynamicBufferSerializer dbs(layout_bytes);
+    ok = dbs << *inst->metadata.layout;
+    if(ok && (inst->metadata.ext_resource != 0))
+      ok = dbs << *inst->metadata.ext_resource;
+    assert(ok);
+
+    ActiveMessage<MemStorageAllocRequest> amsg(target, dbs.get_buffer(),
+                                               dbs.bytes_used());
     amsg->memory = me;
     amsg->inst = inst->me;
     amsg->need_alloc_result = need_alloc_result;
     amsg->precondition = precondition;
-    amsg << *inst->metadata.layout;
-    if(inst->metadata.ext_resource != 0)
-      amsg << *inst->metadata.ext_resource;
     amsg.commit();
     return ALLOC_DEFERRED /*asynchronous notification*/;
   }

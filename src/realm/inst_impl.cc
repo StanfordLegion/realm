@@ -967,24 +967,11 @@ namespace Realm {
     Serialization::DynamicBufferSerializer dbs(4096);
     metadata.serialize_msg(dbs);
 
-    // fragment serialized metadata if needed
-    size_t offset = 0;
-    size_t total_bytes = dbs.bytes_used();
-
-    while(offset < total_bytes) {
-      size_t to_send =
-          std::min(total_bytes - offset,
-                   ActiveMessage<MetadataResponseMessage>::recommended_max_payload(
-                       early_reqs, false /*without congestion*/));
-
-      ActiveMessage<MetadataResponseMessage> amsg(early_reqs, to_send);
+    for(NodeID node : early_reqs) {
+      ActiveMessage<MetadataResponseMessage> amsg(node, dbs.get_buffer(),
+                                                  dbs.bytes_used());
       amsg->id = ID(me).id;
-      amsg->offset = offset;
-      amsg->total_bytes = total_bytes;
-      amsg.add_payload(static_cast<const char *>(dbs.get_buffer()) + offset, to_send);
       amsg.commit();
-
-      offset += to_send;
     }
   }
 

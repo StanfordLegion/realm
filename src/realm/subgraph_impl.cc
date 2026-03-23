@@ -105,18 +105,19 @@ namespace Realm {
         assert(ok);
       }
       size_t msglen = bcs.bytes_used();
-      ActiveMessage<SubgraphInstantiateMessage> amsg(target_node, msglen);
+      Serialization::DynamicBufferSerializer dbs(msglen);
+      {
+        bool ok = (dbs.append_bytes(args, arglen) && (dbs << span<const Event>()) &&
+                   (dbs << span<const Event>()) && (dbs << prs));
+        assert(ok);
+      }
+      ActiveMessage<SubgraphInstantiateMessage> amsg(target_node, dbs.get_buffer(),
+                                                     dbs.bytes_used());
       amsg->subgraph = *this;
       amsg->wait_on = wait_on;
       amsg->finish_event = finish_event;
       amsg->arglen = arglen;
       amsg->priority_adjust = priority_adjust;
-      {
-        amsg.add_payload(args, arglen);
-        bool ok = ((amsg << span<const Event>()) && (amsg << span<const Event>()) &&
-                   (amsg << prs));
-        assert(ok);
-      }
       amsg.commit();
     }
     return finish_event;
@@ -154,17 +155,19 @@ namespace Realm {
         assert(ok);
       }
       size_t msglen = bcs.bytes_used();
-      ActiveMessage<SubgraphInstantiateMessage> amsg(target_node, msglen);
+      Serialization::DynamicBufferSerializer dbs(msglen);
+      {
+        bool ok = (dbs.append_bytes(args, arglen) && (dbs << preconditions) &&
+                   (dbs << postconditions) && (dbs << prs));
+        assert(ok);
+      }
+      ActiveMessage<SubgraphInstantiateMessage> amsg(target_node, dbs.get_buffer(),
+                                                     dbs.bytes_used());
       amsg->subgraph = *this;
       amsg->wait_on = wait_on;
       amsg->finish_event = finish_event;
       amsg->arglen = arglen;
       amsg->priority_adjust = priority_adjust;
-      {
-        amsg.add_payload(args, arglen);
-        bool ok = ((amsg << preconditions) && (amsg << postconditions) && (amsg << prs));
-        assert(ok);
-      }
       amsg.commit();
     }
     return finish_event;
