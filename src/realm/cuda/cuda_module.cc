@@ -812,6 +812,10 @@ namespace Realm {
 
     void GPUContextManager::destroy_context(Task *task, void *context) const
     {
+      CUcontext current_ctx;
+      CHECK_CU(CUDA_DRIVER_FNPTR(cuCtxGetCurrent)(&current_ctx));
+      assert(current_ctx == gpu->context);
+
       GPUWorkFence *fence = static_cast<GPUWorkFence *>(context);
       GPUStream *s = ThreadLocal::current_gpu_stream;
       // if the user could have put work on any other streams then make our
