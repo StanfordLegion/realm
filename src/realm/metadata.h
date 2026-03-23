@@ -70,7 +70,6 @@ namespace Realm {
     State state; // current state
     Event valid_event;
     NodeSet remote_copies;
-
   };
 
   // active messages
