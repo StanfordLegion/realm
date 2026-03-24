@@ -1005,11 +1005,32 @@ namespace Realm {
             // if we got here because a spin timeout expired, we need an
             //  event to return - create a waiter_event if one doesn't
             //  already exist
-            if((mode == SPIN) && timeout.is_expired()) {
+            if((mode == SPIN) && timeout.is_expired() &&
+               (cur_state & (STATE_WRITER | STATE_READER_COUNT_MASK)) != 0) {
               if(!frs.waiter_event.exists())
                 frs.waiter_event = UserEvent::create_user_event();
-              wait_for = frs.waiter_event;
+              // set STATE_WRITER_WAITING to force the lock holder's
+              //  unlock through the slow path where waiter_event
+              //  will be triggered
+              state.fetch_or(STATE_WRITER_WAITING);
+              // re-check: if the lock holder already released via the
+              //  fast path before we set WRITER_WAITING, nobody will
+              //  trigger our event - clean up and retry instead
+              cur_state = state.load_acquire();
+              if((cur_state & (STATE_WRITER | STATE_READER_COUNT_MASK)) == 0) {
+                frs.waiter_event.trigger();
+                frs.waiter_event = UserEvent();
+                state.fetch_and(~STATE_WRITER_WAITING);
+                wait_for = Event::NO_EVENT;
+              } else {
+                wait_for = frs.waiter_event;
+              }
             } else {
+              // if WRITER_WAITING is set but no lock holder exists,
+              //  it's an orphaned flag - clear it so acquisition can proceed
+              if((cur_state & STATE_WRITER_WAITING) != 0 &&
+                 (cur_state & (STATE_WRITER | STATE_READER_COUNT_MASK)) == 0)
+                state.fetch_and(~STATE_WRITER_WAITING);
               wait_for = Event::NO_EVENT;
             }
             break;
@@ -1163,7 +1184,6 @@ namespace Realm {
     }
 
     // repeat until we succeed
-    long long spin_deadline = -1;
     TimeLimit timeout;
     if(mode == SPIN)
       timeout = TimeLimit::responsive();
@@ -1263,12 +1283,32 @@ namespace Realm {
             // if we got here because a spin timeout expired, we need an
             //  event to return - create a waiter_event if one doesn't
             //  already exist
-            if((mode == SPIN) && (spin_deadline != -1) &&
+            if((mode == SPIN) && timeout.is_expired() &&
                (cur_state & (STATE_WRITER | STATE_READER_COUNT_MASK)) != 0) {
               if(!frs.waiter_event.exists())
                 frs.waiter_event = UserEvent::create_user_event();
-              wait_for = frs.waiter_event;
+              // set STATE_WRITER_WAITING to force the lock holder's
+              //  unlock through the slow path where waiter_event
+              //  will be triggered
+              state.fetch_or(STATE_WRITER_WAITING);
+              // re-check: if the lock holder already released via the
+              //  fast path before we set WRITER_WAITING, nobody will
+              //  trigger our event - clean up and retry instead
+              cur_state = state.load_acquire();
+              if((cur_state & (STATE_WRITER | STATE_READER_COUNT_MASK)) == 0) {
+                frs.waiter_event.trigger();
+                frs.waiter_event = UserEvent();
+                state.fetch_and(~STATE_WRITER_WAITING);
+                wait_for = Event::NO_EVENT;
+              } else {
+                wait_for = frs.waiter_event;
+              }
             } else {
+              // if WRITER_WAITING is set but no lock holder exists,
+              //  it's an orphaned flag - clear it so readers can proceed
+              if((cur_state & STATE_WRITER_WAITING) != 0 &&
+                 (cur_state & (STATE_WRITER | STATE_READER_COUNT_MASK)) == 0)
+                state.fetch_and(~STATE_WRITER_WAITING);
               wait_for = Event::NO_EVENT;
             }
             break;
@@ -1435,9 +1475,19 @@ namespace Realm {
 
       // finally, decrement the read count
       state.fetch_sub_acqrel(1);
+
+      // only trigger waiter_event if we were the last reader (and no
+      //  writer) - otherwise the waiter can't acquire yet and would
+      //  just have to create a new event
+      if(reader_count > 1 || (cur_state & STATE_WRITER) != 0) {
+        frs.mutex.unlock();
+        return;
+      }
     }
 
     // if any waiters are waiting on a spin-timeout event, trigger it
+    //  (writer unlock always gets here; reader unlock only if lock is
+    //  now free)
     if(frs.waiter_event.exists()) {
       UserEvent to_trigger = frs.waiter_event;
       frs.waiter_event = UserEvent();
@@ -1464,8 +1514,16 @@ namespace Realm {
       State old_state = state.fetch_add(STATE_SLEEPER);
       assert((old_state & STATE_SLEEPER) == 0);
       // if the WRITER_WAITING bit is set, clear it, since it'll sleep now
-      if((old_state & STATE_WRITER_WAITING) != 0)
+      if((old_state & STATE_WRITER_WAITING) != 0) {
         state.fetch_and(~STATE_WRITER_WAITING);
+        // if a waiter_event exists, trigger it so the waiter wakes up
+        //  and transitions to waiting on sleeper_event instead
+        if(frs.waiter_event.exists()) {
+          UserEvent to_trigger = frs.waiter_event;
+          frs.waiter_event = UserEvent();
+          to_trigger.trigger();
+        }
+      }
       frs.sleeper_count = 1;
     } else {
       assert(frs.sleeper_event.exists());
