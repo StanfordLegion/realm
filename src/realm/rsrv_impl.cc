@@ -1026,6 +1026,11 @@ namespace Realm {
                 wait_for = frs.waiter_event;
               }
             } else {
+              // if WRITER_WAITING is set but no lock holder exists,
+              //  it's an orphaned flag - clear it so acquisition can proceed
+              if((cur_state & STATE_WRITER_WAITING) != 0 &&
+                 (cur_state & (STATE_WRITER | STATE_READER_COUNT_MASK)) == 0)
+                state.fetch_and(~STATE_WRITER_WAITING);
               wait_for = Event::NO_EVENT;
             }
             break;
@@ -1299,6 +1304,11 @@ namespace Realm {
                 wait_for = frs.waiter_event;
               }
             } else {
+              // if WRITER_WAITING is set but no lock holder exists,
+              //  it's an orphaned flag - clear it so readers can proceed
+              if((cur_state & STATE_WRITER_WAITING) != 0 &&
+                 (cur_state & (STATE_WRITER | STATE_READER_COUNT_MASK)) == 0)
+                state.fetch_and(~STATE_WRITER_WAITING);
               wait_for = Event::NO_EVENT;
             }
             break;
