@@ -1,7 +1,0 @@
-<map id="Realm::XferDesCreateMessageBase" name="Realm::XferDesCreateMessageBase">
-<area shape="rect" id="Node000001" title=" " alt="" coords="95,5,353,31"/>
-<area shape="rect" id="Node000002" href="$structRealm_1_1AddressSplitXferDesCreateMessage.html" title=" " alt="" coords="5,79,211,119"/>
-<area shape="poly" id="edge1_Node000001_Node000002" title=" " alt="" coords="197,41,137,81,134,76,194,36"/>
-<area shape="rect" id="Node000003" href="$structRealm_1_1SimpleXferDesCreateMessage.html" title=" " alt="" coords="235,79,447,119"/>
-<area shape="poly" id="edge2_Node000001_Node000003" title=" " alt="" coords="254,36,314,76,312,81,251,40"/>
-</map>

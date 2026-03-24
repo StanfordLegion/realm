@@ -1,7 +1,0 @@
-<map id="Realm::InstanceLayoutGeneric" name="Realm::InstanceLayoutGeneric">
-<area shape="rect" id="Node000001" title=" " alt="" coords="89,5,311,31"/>
-<area shape="rect" id="Node000002" href="$classRealm_1_1InstanceLayout.html" title=" " alt="" coords="5,79,176,119"/>
-<area shape="poly" id="edge1_Node000001_Node000002" title=" " alt="" coords="175,41,119,81,115,76,171,36"/>
-<area shape="rect" id="Node000003" href="$classRealm_1_1InstanceLayoutOpaque.html" title=" " alt="" coords="200,86,421,111"/>
-<area shape="poly" id="edge2_Node000001_Node000003" title=" " alt="" coords="229,37,296,84,293,88,226,41"/>
-</map>

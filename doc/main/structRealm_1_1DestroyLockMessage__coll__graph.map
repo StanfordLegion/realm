@@ -1,9 +1,0 @@
-<map id="Realm::DestroyLockMessage" name="Realm::DestroyLockMessage">
-<area shape="rect" id="Node000001" title=" " alt="" coords="125,108,335,133"/>
-<area shape="rect" id="Node000002" href="$classRealm_1_1Reservation.html" title=" " alt="" coords="5,5,156,31"/>
-<area shape="poly" id="edge1_Node000001_Node000002" title=" " alt="" coords="111,36,215,106,212,110,108,41"/>
-<area shape="poly" id="edge2_Node000002_Node000002" title=" " alt="" coords="171,9,183,18,174,26,157,30,156,24,172,22,177,18,168,13"/>
-<area shape="rect" id="Node000003" href="$classRealm_1_1Event.html" title=" " alt="" coords="326,5,435,31"/>
-<area shape="poly" id="edge3_Node000001_Node000003" title=" " alt="" coords="354,41,249,110,246,106,351,36"/>
-<area shape="poly" id="edge4_Node000003_Node000003" title=" " alt="" coords="450,8,458,11,462,18,454,27,436,30,435,25,451,22,457,18,455,16,448,13"/>
-</map>
