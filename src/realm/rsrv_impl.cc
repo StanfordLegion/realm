@@ -1013,7 +1013,18 @@ namespace Realm {
               //  unlock through the slow path where waiter_event
               //  will be triggered
               state.fetch_or(STATE_WRITER_WAITING);
-              wait_for = frs.waiter_event;
+              // re-check: if the lock holder already released via the
+              //  fast path before we set WRITER_WAITING, nobody will
+              //  trigger our event - clean up and retry instead
+              cur_state = state.load_acquire();
+              if((cur_state & (STATE_WRITER | STATE_READER_COUNT_MASK)) == 0) {
+                frs.waiter_event.trigger();
+                frs.waiter_event = UserEvent();
+                state.fetch_and(~STATE_WRITER_WAITING);
+                wait_for = Event::NO_EVENT;
+              } else {
+                wait_for = frs.waiter_event;
+              }
             } else {
               wait_for = Event::NO_EVENT;
             }
@@ -1275,7 +1286,18 @@ namespace Realm {
               //  unlock through the slow path where waiter_event
               //  will be triggered
               state.fetch_or(STATE_WRITER_WAITING);
-              wait_for = frs.waiter_event;
+              // re-check: if the lock holder already released via the
+              //  fast path before we set WRITER_WAITING, nobody will
+              //  trigger our event - clean up and retry instead
+              cur_state = state.load_acquire();
+              if((cur_state & (STATE_WRITER | STATE_READER_COUNT_MASK)) == 0) {
+                frs.waiter_event.trigger();
+                frs.waiter_event = UserEvent();
+                state.fetch_and(~STATE_WRITER_WAITING);
+                wait_for = Event::NO_EVENT;
+              } else {
+                wait_for = frs.waiter_event;
+              }
             } else {
               wait_for = Event::NO_EVENT;
             }
