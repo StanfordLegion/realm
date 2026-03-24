@@ -1321,6 +1321,7 @@ namespace Realm {
   __op__(cuCtxPopCurrent, CUDA_VERSION_MIN);                                             \
   __op__(cuCtxPushCurrent, CUDA_VERSION_MIN);                                            \
   __op__(cuCtxSynchronize, CUDA_VERSION_MIN);                                            \
+  __op__(cuCtxGetCurrent, CUDA_VERSION_MIN);                                             \
   __op__(cuDeviceCanAccessPeer, CUDA_VERSION_MIN);                                       \
   __op__(cuDeviceGet, CUDA_VERSION_MIN);                                                 \
   __op__(cuDeviceGetUuid, CUDA_VERSION_MIN);                                             \
