@@ -127,6 +127,11 @@ namespace Realm {
         operation = CallbackOperation::CLEAR_CTX;
         break;
       }
+      case CUPTI_DRIVER_TRACE_CBID_cuDevicePrimaryCtxReset:
+      {
+        assert(false);
+        break;
+      }
       default:
       {
         return;
@@ -210,20 +215,21 @@ namespace Realm {
       // init cuda driver api callbacks
       const CUpti_CallbackId enabled_callbacks[] = {
           // launch kernel
-          CUPTI_DRIVER_TRACE_CBID_cuLaunchKernel,
-          // memcpy
-          CUPTI_DRIVER_TRACE_CBID_cuMemcpyHtoDAsync_v2,
-          CUPTI_DRIVER_TRACE_CBID_cuMemcpyDtoHAsync_v2,
-          CUPTI_DRIVER_TRACE_CBID_cuMemcpyDtoDAsync_v2,
-          CUPTI_DRIVER_TRACE_CBID_cuMemcpy2DAsync_v2,
-          CUPTI_DRIVER_TRACE_CBID_cuMemcpy3DAsync_v2,
-          // stream
-          CUPTI_DRIVER_TRACE_CBID_cuStreamSynchronize,
-          // event
-          CUPTI_DRIVER_TRACE_CBID_cuEventRecord,
-          CUPTI_DRIVER_TRACE_CBID_cuEventSynchronize,
+          // CUPTI_DRIVER_TRACE_CBID_cuLaunchKernel,
+          // // memcpy
+          // CUPTI_DRIVER_TRACE_CBID_cuMemcpyHtoDAsync_v2,
+          // CUPTI_DRIVER_TRACE_CBID_cuMemcpyDtoHAsync_v2,
+          // CUPTI_DRIVER_TRACE_CBID_cuMemcpyDtoDAsync_v2,
+          // CUPTI_DRIVER_TRACE_CBID_cuMemcpy2DAsync_v2,
+          // CUPTI_DRIVER_TRACE_CBID_cuMemcpy3DAsync_v2,
+          // // stream
+          // CUPTI_DRIVER_TRACE_CBID_cuStreamSynchronize,
+          // // event
+          // CUPTI_DRIVER_TRACE_CBID_cuEventRecord,
+          // CUPTI_DRIVER_TRACE_CBID_cuEventSynchronize,
           // ctx
-          CUPTI_DRIVER_TRACE_CBID_cuCtxSynchronize,
+          // CUPTI_DRIVER_TRACE_CBID_cuCtxSynchronize,
+          CUPTI_DRIVER_TRACE_CBID_cuDevicePrimaryCtxReset,
       };
 
       for(const auto &cbid : enabled_callbacks) {

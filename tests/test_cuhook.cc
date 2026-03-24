@@ -21,6 +21,7 @@
 #ifdef REALM_USE_CUDA
 #include "realm/cuda/cuda_module.h"
 #include <cuda_runtime.h>
+// #include <cuda.h>
 #else
 #include "realm/hip/hip_module.h"
 #include <hip/hip_runtime.h>
@@ -55,6 +56,9 @@ void gpu_task(const void *args, size_t arglen, const void *userdata, size_t user
   
   gpu_kernel_wrapper(stream);
   // cudaStreamSynchronize(stream);
+
+  // cuDevicePrimaryCtxReset(0);
+  cudaDeviceReset();
 }
 
 void top_level_task(const void *args, size_t arglen, const void *userdata, size_t userlen,
