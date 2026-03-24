@@ -155,7 +155,7 @@ namespace Realm {
   };
 
   template <int N, typename T>
-  struct CPU_BVH {
+  struct REALM_INTERNAL_API_EXTERNAL_LINKAGE CPU_BVH {
     struct Node {
       Rect<N, T> bounds;
       int left = -1;
