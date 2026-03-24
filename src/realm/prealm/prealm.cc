@@ -347,9 +347,9 @@ namespace PRealm {
     std::deque<TaskVariantDesc> task_variants;
     std::deque<BacktraceDesc> backtrace_descs;
     std::deque<ProvenanceDesc> provenance_descs;
-    std::atomic<PendingBacktrace*> pending_backtraces = {nullptr};
+    std::atomic<PendingBacktrace *> pending_backtraces = {nullptr};
     // Lock-free dump list for async dump tasks
-    std::atomic<ThreadProfiler*> dump_list = {nullptr};
+    std::atomic<ThreadProfiler *> dump_list = {nullptr};
     Realm::Event last_dump_task;
 #ifdef REALM_USE_CUDA
     Cuda::CudaModule *cuda_module;
@@ -451,9 +451,9 @@ namespace PRealm {
     : local_proc(local)
     , implicit_fevent(implicit)
     , start_time(start)
-  { }
+  {}
 
-  ThreadProfiler* ThreadProfiler::dump(void)
+  ThreadProfiler *ThreadProfiler::dump(void)
   {
     ThreadProfiler *clone = new ThreadProfiler(local_proc, implicit_fevent, start_time);
     event_wait_infos.swap(clone->event_wait_infos);
@@ -845,8 +845,10 @@ namespace PRealm {
       // the external event has triggered, we'll use that to determine
       // the trigger time for the event
       const ExternalTriggerArgs args{profiler.no_critical_paths ? Event::NO_EVENT : event,
-                                     get_fevent(), local_proc,
-                                     profiler.find_provenance_id(prov), start_time,
+                                     get_fevent(),
+                                     local_proc,
+                                     profiler.find_provenance_id(prov),
+                                     start_time,
                                      ASYNC_EFFECT};
       // Need to dispatch this on a base realm processor to avoid
       // profiling ourselves when we do this
@@ -886,8 +888,11 @@ namespace PRealm {
     } else {
       // Spawn a no-op task to measure when the event triggers
       const ExternalTriggerArgs args{profiler.no_critical_paths ? Event::NO_EVENT : event,
-                                     get_fevent(), local_proc, 0,
-                                     std::optional<long long>(), MAKE_VALID_EFFECT};
+                                     get_fevent(),
+                                     local_proc,
+                                     0,
+                                     std::optional<long long>(),
+                                     MAKE_VALID_EFFECT};
       const Realm::Processor local = get_callback_processor();
 #ifdef DEBUG_REALM
       profiler.increment_total_outstanding_requests(EXTERNAL_PROF);
@@ -922,8 +927,11 @@ namespace PRealm {
       profiler.update_footprint(sizeof(info), this);
     } else {
       const ExternalTriggerArgs args{profiler.no_critical_paths ? Event::NO_EVENT : event,
-                                     get_fevent(), local_proc, inst_uid.id,
-                                     std::optional<long long>(), FETCH_METADATA_EFFECT};
+                                     get_fevent(),
+                                     local_proc,
+                                     inst_uid.id,
+                                     std::optional<long long>(),
+                                     FETCH_METADATA_EFFECT};
       const Realm::Processor local = get_callback_processor();
 #ifdef DEBUG_REALM
       profiler.increment_total_outstanding_requests(EXTERNAL_PROF);
@@ -2947,9 +2955,11 @@ namespace PRealm {
       }
       backtrace_ids[hash] = result;
       backtrace_descs.emplace_back(BacktraceDesc{result, std::move(str)});
-      total_memory_footprint.fetch_add(sizeof(BacktraceDesc) + backtrace_descs.back().backtrace.size());
+      total_memory_footprint.fetch_add(sizeof(BacktraceDesc) +
+                                       backtrace_descs.back().backtrace.size());
     } else {
-      PendingBacktrace *pending = new PendingBacktrace{{result, std::move(str)}, hash, nullptr};
+      PendingBacktrace *pending =
+          new PendingBacktrace{{result, std::move(str)}, hash, nullptr};
       PendingBacktrace *head = pending_backtraces.load();
       pending->next = head;
       while(!pending_backtraces.compare_exchange_weak(head, pending))
@@ -3018,7 +3028,8 @@ namespace PRealm {
       std::string name;
       name += "Task ";
       name += std::to_string(task_id);
-      task_kinds.emplace_back(TaskKindDesc{task_id, std::move(name), false /*overwrite*/});
+      task_kinds.emplace_back(
+          TaskKindDesc{task_id, std::move(name), false /*overwrite*/});
       registered_tasks.insert(task_id);
     }
   }
@@ -3206,8 +3217,8 @@ namespace PRealm {
         const Realm::Event precondition = last_dump_task;
         last_dump_task = dump_event;
         const Realm::ProfilingRequestSet no_requests;
-        local_proc.spawn(DUMP_TASK_ID, &args, sizeof(args), no_requests,
-                         precondition, CALLBACK_TASK_PRIORITY);
+        local_proc.spawn(DUMP_TASK_ID, &args, sizeof(args), no_requests, precondition,
+                         CALLBACK_TASK_PRIORITY);
       }
     }
   }
@@ -3354,8 +3365,7 @@ namespace PRealm {
       if(diff > 0)
         total_memory_footprint.fetch_sub(diff);
       // If we don't have an instance to dump, we're done
-      if(instance == nullptr ||
-         !instance->dump_inter(t_stop))
+      if(instance == nullptr || !instance->dump_inter(t_stop))
         break;
       // Finished this instance, go around again
       delete instance;
@@ -3366,8 +3376,7 @@ namespace PRealm {
       // Check if there were additional items queued behind us while
       // we were dumping - if so we need to launch a continuation
       // regardless of the re-enqueue result.
-      const bool had_more =
-          (instance->next.load() != nullptr);
+      const bool had_more = (instance->next.load() != nullptr);
       // Re-enqueue the partial instance on the dump list
       ThreadProfiler *head = dump_list.load();
       instance->next.store(head);

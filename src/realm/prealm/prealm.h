@@ -492,7 +492,7 @@ namespace PRealm {
   // Even though we add extra data to the RegionInstance in the form of a
   // unique event for naming the instance, the struct should still be packed
   // Turns out this assertion is too hard for some compilers to prove
-  //static_assert(std::has_unique_object_representations_v<RegionInstance>);
+  // static_assert(std::has_unique_object_representations_v<RegionInstance>);
   using Realm::ExternalFileResource;
   using Realm::ExternalMemoryResource;
 
