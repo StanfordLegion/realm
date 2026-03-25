@@ -181,7 +181,9 @@ namespace Realm {
     NodeID chunk_target_;
     const void *chunk_src_data_;
     size_t chunk_src_datalen_;
+    char *chunk_alloc_; // owned buffer for network-allocated chunked mode
 
+    void init_chunked(NodeID _target, size_t _max_payload_size);
     void init_chunked_data(NodeID _target, const void *_data, size_t _datalen);
     void commit_chunked(void);
     static uint64_t next_chunk_message_id(NodeID node_id);

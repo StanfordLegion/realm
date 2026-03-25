@@ -431,11 +431,10 @@ namespace Realm {
 
     // if we're creating a remote group, send a message as well
     if(owner_node != Network::my_node_id) {
-      ActiveMessage<ProcGroupCreateMessage> amsg(owner_node,
+      ActiveMessage<ProcGroupCreateMessage> amsg(owner_node, members.data(),
                                                  members.size() * sizeof(Processor));
       amsg->pgrp = pgrp;
       amsg->num_members = members.size();
-      amsg.add_payload(members.data(), members.size() * sizeof(Processor));
       amsg.commit();
     }
 

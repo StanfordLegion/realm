@@ -3530,9 +3530,8 @@ namespace Realm {
       }
 
       size_t bytes = exported.size() * sizeof(HipIpcResponseEntry);
-      ActiveMessage<HipIpcResponse> amsg(sender, bytes);
+      ActiveMessage<HipIpcResponse> amsg(sender, exported.data(), bytes);
       amsg->count = exported.size();
-      amsg.add_payload(exported.data(), bytes);
       amsg.commit();
     }
 

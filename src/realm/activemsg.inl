@@ -39,6 +39,7 @@ namespace Realm {
     , network_max_payload_(0)
     , chunk_src_data_(nullptr)
     , chunk_src_datalen_(0)
+    , chunk_alloc_(nullptr)
   {}
 
   template <typename T, size_t INLINE_STORAGE>
@@ -55,10 +56,15 @@ namespace Realm {
                                               size_t _max_payload_size /*= 0*/)
   {
     assert(impl == 0);
-    // payload must fit within the network's hard limit when using this
-    //  init variant - use init(target, data, len) for automatic chunking
-    assert(_max_payload_size == 0 ||
-           _max_payload_size <= Network::max_payload_size(sizeof(T), nullptr));
+    if constexpr(!is_wrapped_with_frag_info<T>::value) {
+      if(_max_payload_size > 0) {
+        size_t net_max = Network::max_payload_size(sizeof(T), nullptr);
+        if(_max_payload_size > net_max) {
+          init_chunked(_target, _max_payload_size);
+          return;
+        }
+      }
+    }
     network_max_payload_ = 0;
     unsigned short msgid = activemsg_handler_table.lookup_message_id<T>();
     impl = Network::create_active_message_impl(_target, msgid, sizeof(T),
@@ -399,7 +405,14 @@ namespace Realm {
   template <typename T, size_t INLINE_STORAGE>
   void *ActiveMessage<T, INLINE_STORAGE>::payload_ptr(size_t datalen)
   {
-    assert(network_max_payload_ == 0 && "payload_ptr not supported in chunked mode");
+    if(network_max_payload_ != 0) {
+      assert(chunk_alloc_ != nullptr);
+      char *eob = chunk_alloc_ + chunk_src_datalen_;
+      char *curpos = eob - fbs.bytes_left();
+      char *nextpos = curpos + datalen;
+      fbs.reset(nextpos, eob - nextpos);
+      return curpos;
+    }
     char *eob = reinterpret_cast<char *>(impl->payload_base) + impl->payload_size;
     char *curpos = eob - fbs.bytes_left();
     char *nextpos = curpos + datalen;
@@ -467,6 +480,10 @@ namespace Realm {
       // chunked mode - just clean up the local state
       header->~T();
       header = 0;
+      if(chunk_alloc_) {
+        delete[] chunk_alloc_;
+        chunk_alloc_ = nullptr;
+      }
       chunk_src_data_ = nullptr;
       chunk_src_datalen_ = 0;
       network_max_payload_ = 0;
@@ -621,6 +638,26 @@ namespace Realm {
   //
 
   template <typename T, size_t INLINE_STORAGE>
+  void ActiveMessage<T, INLINE_STORAGE>::init_chunked(NodeID _target,
+                                                      size_t _max_payload_size)
+  {
+    if constexpr(is_wrapped_with_frag_info<T>::value) {
+      assert(0 && "init_chunked called on WrappedWithFragInfo type");
+    } else {
+      size_t wrapped_hdr_size = sizeof(WrappedWithFragInfo<T>);
+      network_max_payload_ = Network::max_payload_size(wrapped_hdr_size, nullptr);
+      assert(network_max_payload_ > 0);
+
+      chunk_target_ = _target;
+      chunk_alloc_ = new char[_max_payload_size];
+      chunk_src_data_ = chunk_alloc_;
+      chunk_src_datalen_ = _max_payload_size;
+      header = new(&inline_capacity) T;
+      fbs.reset(chunk_alloc_, _max_payload_size);
+    }
+  }
+
+  template <typename T, size_t INLINE_STORAGE>
   void ActiveMessage<T, INLINE_STORAGE>::init_chunked_data(NodeID _target,
                                                            const void *_data,
                                                            size_t _datalen)
@@ -651,6 +688,10 @@ namespace Realm {
       assert(0 && "commit_chunked called on WrappedWithFragInfo type");
     } else {
       assert(chunk_src_data_ != nullptr);
+      if(chunk_alloc_) {
+        // buffer mode: actual payload is what was written via fbs
+        chunk_src_datalen_ -= fbs.bytes_left();
+      }
       const char *payload_data = static_cast<const char *>(chunk_src_data_);
       size_t total_payload = chunk_src_datalen_;
 
@@ -680,6 +721,10 @@ namespace Realm {
       // clean up
       header->~T();
       header = 0;
+      if(chunk_alloc_) {
+        delete[] chunk_alloc_;
+        chunk_alloc_ = nullptr;
+      }
       chunk_src_data_ = nullptr;
       chunk_src_datalen_ = 0;
       network_max_payload_ = 0;

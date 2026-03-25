@@ -1050,15 +1050,12 @@ namespace Realm {
                                                       size_t total_count, bool disjoint,
                                                       const void *data, size_t datalen)
   {
-    ActiveMessage<typename SparsityMapImpl<N, T>::RemoteSparsityContrib> amsg(target,
+    ActiveMessage<typename SparsityMapImpl<N, T>::RemoteSparsityContrib> amsg(target, data,
                                                                               datalen);
     amsg->sparsity = me;
     amsg->piece_count = piece_count;
     amsg->total_count = total_count;
     amsg->disjoint = disjoint;
-    if(data && datalen) {
-      amsg.add_payload(data, datalen, PAYLOAD_COPY);
-    }
     amsg.commit();
   }
 

@@ -685,10 +685,9 @@ namespace Realm {
       for(NodeSet::const_iterator it = copy_waiters.begin(); it != copy_waiters.end();
           ++it)
         *pos++ = *it;
-      ActiveMessage<LockGrantMessage> amsg(grant_target, payload_size);
+      ActiveMessage<LockGrantMessage> amsg(grant_target, payload, payload_size);
       amsg->lock = me;
       amsg->mode = 0; // TODO: figure out shared cases
-      amsg.add_payload(payload, payload_size);
       amsg.commit();
     }
 
@@ -1641,10 +1640,9 @@ namespace Realm {
       for(NodeSet::const_iterator it = copy_waiters.begin(); it != copy_waiters.end();
           ++it)
         *pos++ = *it;
-      ActiveMessage<LockGrantMessage> amsg(grant_target, payload_size);
+      ActiveMessage<LockGrantMessage> amsg(grant_target, payload, payload_size);
       amsg->lock = args.lock;
       amsg->mode = 0; // always grant exclusive for now
-      amsg.add_payload(payload, payload_size);
       amsg.commit();
     }
   }
