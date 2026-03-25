@@ -1011,19 +1011,41 @@ namespace Realm {
                 frs.waiter_event = UserEvent::create_user_event();
               // set STATE_WRITER_WAITING to force the lock holder's
               //  unlock through the slow path where waiter_event
-              //  will be triggered
-              state.fetch_or(STATE_WRITER_WAITING);
-              // re-check: if the lock holder already released via the
-              //  fast path before we set WRITER_WAITING, nobody will
-              //  trigger our event - clean up and retry instead
-              cur_state = state.load_acquire();
-              if((cur_state & (STATE_WRITER | STATE_READER_COUNT_MASK)) == 0) {
-                frs.waiter_event.trigger();
-                frs.waiter_event = UserEvent();
-                state.fetch_and(~STATE_WRITER_WAITING);
-                wait_for = Event::NO_EVENT;
-              } else {
-                wait_for = frs.waiter_event;
+              //  will be triggered - must re-check and re-set in a
+              //  loop because a concurrent CAS(WW, WRITER) in
+              //  wrlock_slow can clear WW while acquiring the lock.
+              //  This loop is bounded to at most 2 iterations:
+              //   iteration 1: we set WW, but CAS(WW,WRITER) may
+              //     clear it (acquiring the lock in the process)
+              //   iteration 2: we re-set WW, giving state=WRITER|WW.
+              //     Now WW cannot be cleared: CAS(WW,WRITER) requires
+              //     state==WW which doesn't match, unlock needs
+              //     frs.mutex which we hold, and no other path clears
+              //     WW without the mutex.
+              for(int attempts = 0; attempts < 3; attempts++) {
+                if(attempts == 2) {
+                  log_reservation.fatal()
+                      << "wrlock_slow: WW set loop exceeded 2 iterations, state = "
+                      << std::hex << cur_state << std::dec;
+                  std::abort();
+                }
+                state.fetch_or(STATE_WRITER_WAITING);
+                cur_state = state.load_acquire();
+                if((cur_state & (STATE_WRITER | STATE_READER_COUNT_MASK)) == 0) {
+                  // lock is free - clean up and retry
+                  frs.waiter_event.trigger();
+                  frs.waiter_event = UserEvent();
+                  state.fetch_and(~STATE_WRITER_WAITING);
+                  wait_for = Event::NO_EVENT;
+                  break;
+                }
+                if((cur_state & STATE_WRITER_WAITING) != 0) {
+                  // WW is set and lock is held - safe to return event
+                  wait_for = frs.waiter_event;
+                  break;
+                }
+                // WW was cleared (e.g. by CAS(WW,WRITER)) but lock is
+                //  still held - re-set it
               }
             } else {
               // if WRITER_WAITING is set but no lock holder exists,
@@ -1289,19 +1311,41 @@ namespace Realm {
                 frs.waiter_event = UserEvent::create_user_event();
               // set STATE_WRITER_WAITING to force the lock holder's
               //  unlock through the slow path where waiter_event
-              //  will be triggered
-              state.fetch_or(STATE_WRITER_WAITING);
-              // re-check: if the lock holder already released via the
-              //  fast path before we set WRITER_WAITING, nobody will
-              //  trigger our event - clean up and retry instead
-              cur_state = state.load_acquire();
-              if((cur_state & (STATE_WRITER | STATE_READER_COUNT_MASK)) == 0) {
-                frs.waiter_event.trigger();
-                frs.waiter_event = UserEvent();
-                state.fetch_and(~STATE_WRITER_WAITING);
-                wait_for = Event::NO_EVENT;
-              } else {
-                wait_for = frs.waiter_event;
+              //  will be triggered - must re-check and re-set in a
+              //  loop because a concurrent CAS(WW, WRITER) in
+              //  wrlock_slow can clear WW while acquiring the lock.
+              //  This loop is bounded to at most 2 iterations:
+              //   iteration 1: we set WW, but CAS(WW,WRITER) may
+              //     clear it (acquiring the lock in the process)
+              //   iteration 2: we re-set WW, giving state=WRITER|WW.
+              //     Now WW cannot be cleared: CAS(WW,WRITER) requires
+              //     state==WW which doesn't match, unlock needs
+              //     frs.mutex which we hold, and no other path clears
+              //     WW without the mutex.
+              for(int attempts = 0; attempts < 3; attempts++) {
+                if(attempts == 2) {
+                  log_reservation.fatal()
+                      << "rdlock_slow: WW set loop exceeded 2 iterations, state = "
+                      << std::hex << cur_state << std::dec;
+                  std::abort();
+                }
+                state.fetch_or(STATE_WRITER_WAITING);
+                cur_state = state.load_acquire();
+                if((cur_state & (STATE_WRITER | STATE_READER_COUNT_MASK)) == 0) {
+                  // lock is free - clean up and retry
+                  frs.waiter_event.trigger();
+                  frs.waiter_event = UserEvent();
+                  state.fetch_and(~STATE_WRITER_WAITING);
+                  wait_for = Event::NO_EVENT;
+                  break;
+                }
+                if((cur_state & STATE_WRITER_WAITING) != 0) {
+                  // WW is set and lock is held - safe to return event
+                  wait_for = frs.waiter_event;
+                  break;
+                }
+                // WW was cleared (e.g. by CAS(WW,WRITER)) but lock is
+                //  still held - re-set it
               }
             } else {
               // if WRITER_WAITING is set but no lock holder exists,
