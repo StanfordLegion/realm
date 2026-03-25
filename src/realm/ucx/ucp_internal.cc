@@ -2259,8 +2259,11 @@ namespace Realm {
       req->ucp.am.header = &ucp_msg_hdr;
       req->ucp.am.header_size = ucp_msg_hdr_size;
 
-      // Copy the payload if we used the inline header buffer for it
-      if(payload_base_type == PAYLOAD_BASE_INLINE) {
+      // Copy the payload into a network-owned buffer if the current buffer
+      //  is not safe for async send (inline header buffer or caller-provided
+      //  external buffer that may be freed after commit returns)
+      if(payload_base_type == PAYLOAD_BASE_INLINE ||
+         payload_base_type == PAYLOAD_BASE_EXTERNAL) {
         req->ucp.payload = internal->pbuf_get(worker, act_payload_size);
         CHKERR_JUMP(req->ucp.payload == nullptr, "failed to get payload buffer", log_ucp,
                     err_rel_req);
