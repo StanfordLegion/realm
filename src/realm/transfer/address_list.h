@@ -65,6 +65,7 @@ namespace Realm {
     [[nodiscard]] size_t *begin_entry(int max_dim, bool wrap_around = true);
     void commit_entry(int act_dim, size_t bytes);
     void attach_field_block(const FieldBlock *_field_block);
+    void reset();
 
     [[nodiscard]] size_t bytes_pending() const;
     [[nodiscard]] size_t full_field_bytes();
@@ -112,6 +113,7 @@ namespace Realm {
     // ─── progress───────────────────────────────────────────────────────────────
     void advance(int dim, size_t amount, int f = 1);
     void skip_bytes(size_t bytes);
+    void reset();
 
     // ─── field accessors ──────────────────────────────────────────────────────
     [[nodiscard]] const FieldBlock *field_block() const;

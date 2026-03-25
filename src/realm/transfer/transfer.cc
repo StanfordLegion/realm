@@ -947,6 +947,10 @@ namespace Realm {
   {
     TransferIteratorBase<N, T>::reset();
     piece_idx = 0;
+    addrs_in->reset();
+    addrs_in_offset = 0;
+    point_pos = 0;
+    num_points = 0;
   }
 
   template <int N, typename T>
@@ -1192,6 +1196,8 @@ namespace Realm {
   {
     TransferIteratorBase<N, T>::reset();
     addrs_in->reset();
+    point_pos = 0;
+    num_points = 0;
   }
 
   template <int N, typename T>
@@ -4714,6 +4720,7 @@ namespace Realm {
           ii.inst = RegionInstance::NO_INST;
           ii.ib_offset = ib_offsets[xdn.inputs[j].edge];
           ii.ib_size = tg.ib_edges[xdn.inputs[j].edge].size;
+          ii.ib_index = xdn.inputs[j].edge;
           ii.iter = new WrappingFIFOIterator(ii.ib_offset, ii.ib_size);
           ii.serdez_id = 0;
           break;
@@ -4845,6 +4852,7 @@ namespace Realm {
           oi.inst = RegionInstance::NO_INST;
           oi.ib_offset = ib_offsets[xdn.outputs[j].edge];
           oi.ib_size = tg.ib_edges[xdn.outputs[j].edge].size;
+          oi.ib_index = xdn.outputs[j].edge;
           oi.iter = new WrappingFIFOIterator(oi.ib_offset, oi.ib_size);
           oi.serdez_id = 0;
           break;
