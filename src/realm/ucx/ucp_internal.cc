@@ -333,7 +333,7 @@ namespace Realm {
 
       // This is a polling background work item, so clear the
       // worked bit and only set it if we do real work
-      ThreadLocal::bgwork_profstate->set_worked(false);
+      Realm::ThreadLocal::bgwork_profstate->set_worked(false);
 
       for(auto worker : workers) {
         (void)worker->progress();
