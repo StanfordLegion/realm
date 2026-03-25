@@ -64,7 +64,7 @@ namespace Realm {
       return i;
     }
 
-    template <size_t N, typename Offset_t = size_t>
+    template <typename Offset_t = size_t>
     static __device__ inline size_t coords_to_index_trans(const Offset_t *coords,
                                                           const Offset_t *strides)
     {
@@ -145,9 +145,9 @@ namespace Realm {
           size_t coords[3];
           index_to_coords<3, size_t>(coords, idx, current_info.extents, 1);
           const size_t src_idx =
-              coords_to_index_trans<3, size_t>(coords, current_info.src_strides);
+              coords_to_index_trans<size_t>(coords, current_info.src_strides);
           const size_t dst_idx =
-              coords_to_index_trans<3, size_t>(coords, current_info.dst_strides);
+              coords_to_index_trans<size_t>(coords, current_info.dst_strides);
           redop.template fold_cuda<EXCL>(
               *reinterpret_cast<typename REDOP::RHS *>(&dst[dst_idx * num_elems]),
               *reinterpret_cast<const typename REDOP::RHS *>(&src[src_idx * num_elems]));
@@ -170,9 +170,9 @@ namespace Realm {
           size_t coords[3];
           index_to_coords<3, size_t>(coords, idx, current_info.extents, 1);
           const size_t src_idx =
-              coords_to_index_trans<3, size_t>(coords, current_info.src_strides);
+              coords_to_index_trans<size_t>(coords, current_info.src_strides);
           const size_t dst_idx =
-              coords_to_index_trans<3, size_t>(coords, current_info.dst_strides);
+              coords_to_index_trans<size_t>(coords, current_info.dst_strides);
           redop.template apply_cuda<EXCL>(
               *reinterpret_cast<typename REDOP::LHS *>(&dst[dst_idx * num_elems]),
               *reinterpret_cast<const typename REDOP::RHS *>(&src[src_idx * num_elems]));

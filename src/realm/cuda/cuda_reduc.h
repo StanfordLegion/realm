@@ -55,6 +55,7 @@ namespace Realm {
       // the pair
       size_t volume;
     };
+    // TODO: batch mode, MAX_RECTS > 1
     template <size_t N, size_t MAX_RECTS = 1>
     struct AffineReducInfo {
       enum
