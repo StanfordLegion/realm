@@ -35,6 +35,8 @@ namespace Realm {
   MetadataBase::MetadataBase(void)
     : state(STATE_INVALID)
     , valid_event(Event::NO_EVENT)
+    , frag_buffer(0)
+    , frag_bytes_received(0)
   {}
 
   MetadataBase::~MetadataBase(void) {}
@@ -254,10 +256,24 @@ namespace Realm {
     }
 
     if(send_response) {
-      ActiveMessage<MetadataResponseMessage> amsg(sender, dbs.get_buffer(),
-                                                  dbs.bytes_used());
-      amsg->id = args.id;
-      amsg.commit();
+      size_t offset = 0;
+      size_t total_bytes = dbs.bytes_used();
+
+      while(offset < total_bytes) {
+        size_t to_send =
+            std::min(total_bytes - offset,
+                     ActiveMessage<MetadataResponseMessage>::recommended_max_payload(
+                         sender, false /*without congestion*/));
+
+        ActiveMessage<MetadataResponseMessage> amsg(sender, to_send);
+        amsg->id = args.id;
+        amsg->offset = offset;
+        amsg->total_bytes = total_bytes;
+        amsg.add_payload(static_cast<const char *>(dbs.get_buffer()) + offset, to_send);
+        amsg.commit();
+
+        offset += to_send;
+      }
     }
   }
 
@@ -277,8 +293,39 @@ namespace Realm {
     ID id(args.id);
     if(id.is_instance()) {
       RegionInstanceImpl *impl = get_runtime()->get_instance_impl(args.id);
-      impl->metadata.deserialize(data, datalen);
-      impl->metadata.handle_response();
+      if(args.total_bytes == datalen) {
+        // complete message - can deserialize directly
+        impl->metadata.deserialize(data, datalen);
+        impl->metadata.handle_response();
+      } else {
+        // fragment reassembly required
+        char *buffer = impl->metadata.frag_buffer.load_acquire();
+        if(!buffer) {
+          char *new_buffer = new char[args.total_bytes];
+          if(impl->metadata.frag_buffer.compare_exchange(buffer, new_buffer)) {
+            // we're using our buffer
+            buffer = new_buffer;
+          } else {
+            // somebody else allocated, free ours
+            delete[] new_buffer;
+          }
+        }
+        assert((args.offset + datalen) <= args.total_bytes);
+        memcpy(buffer + args.offset, data, datalen);
+        size_t prev_bytes_done = impl->metadata.frag_bytes_received.fetch_add(datalen);
+        assert((prev_bytes_done + datalen) <= args.total_bytes);
+        if((prev_bytes_done + datalen) == args.total_bytes) {
+          // safe to deserialize now, but detach reassembly buffer first (to avoid
+          //  races with reuse of the instance)
+          impl->metadata.frag_buffer.store(0);
+          impl->metadata.frag_bytes_received.store_release(0);
+
+          impl->metadata.deserialize(buffer, args.total_bytes);
+          impl->metadata.handle_response();
+
+          delete[] buffer;
+        }
+      }
     } else {
       assert(0);
     }

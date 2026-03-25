@@ -372,6 +372,7 @@ namespace Realm {
     Processor proc;
     Event finish_event;
     Processor::TaskFuncID func_id;
+    size_t offset, total_bytes;
 
     static void handle_message(NodeID sender, const SpawnTaskMessage &msg,
                                const void *data, size_t datalen);

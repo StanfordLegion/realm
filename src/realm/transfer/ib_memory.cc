@@ -239,11 +239,11 @@ namespace Realm {
             amsg.commit();
           } else {
             size_t bytes = reqs->count * sizeof(off_t);
-            ActiveMessage<RemoteIBAllocResponseMultiple> amsg(
-                reqs->sender, reqs->offsets.data(), bytes);
+            ActiveMessage<RemoteIBAllocResponseMultiple> amsg(reqs->sender, bytes);
             amsg->req_op = reqs->req_op;
             amsg->count = reqs->count;
             amsg->first_index = reqs->first_req;
+            amsg.add_payload(reqs->offsets.data(), bytes);
             amsg.commit();
           }
         }

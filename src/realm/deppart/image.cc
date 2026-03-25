@@ -324,9 +324,10 @@ namespace Realm {
 	op->provide_sparse_image(approx_output_index, &approx_rects.rects[0], approx_rects.rects.size());
       } else {
 	size_t payload_size = approx_rects.rects.size() * sizeof(Rect<N,T>);
-	ActiveMessage<ApproxImageResponseMessage<PreimageOperation<N2,T2,N,T> > > amsg(requestor, &approx_rects.rects[0], payload_size);
+	ActiveMessage<ApproxImageResponseMessage<PreimageOperation<N2,T2,N,T> > > amsg(requestor, payload_size);
 	amsg->approx_output_op = approx_output_op;
 	amsg->approx_output_index = approx_output_index;
+	amsg.add_payload(&approx_rects.rects[0], payload_size);
 	amsg.commit();
       }
     }

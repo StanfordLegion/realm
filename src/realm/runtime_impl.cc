@@ -3642,27 +3642,30 @@ namespace Realm {
     // Send the notification to my left child if they weren't the ones that sent me the
     // notification
     if(((child_offset + 1) < num_peers) && (sender != NodeID(child_offset + 1))) {
-      ActiveMessage<ReductionNotification> amsg(NodeID(child_offset + 1), data, datalen);
+      ActiveMessage<ReductionNotification> amsg(NodeID(child_offset + 1), datalen);
       *amsg = notification;                // Copy over the header
       amsg->response_handle = resp_handle; // Update the response handle
+      amsg.add_payload(data, datalen);
       amsg.commit();
     }
 
     // Send the notification to my right child if they weren't the ones that sent me the
     // notification
     if(((child_offset + 2) < num_peers) && (sender != NodeID(child_offset + 2))) {
-      ActiveMessage<ReductionNotification> amsg(NodeID(child_offset + 2), data, datalen);
+      ActiveMessage<ReductionNotification> amsg(NodeID(child_offset + 2), datalen);
       *amsg = notification;                // Copy over the header
       amsg->response_handle = resp_handle; // Update the response handle
+      amsg.add_payload(data, datalen);
       amsg.commit();
     }
 
     // Send the notification to my parent if they weren't the ones that sent me the
     // notification
     if((Network::my_node_id > 0) && (parent_index != sender)) {
-      ActiveMessage<ReductionNotification> amsg(NodeID(parent_index), data, datalen);
+      ActiveMessage<ReductionNotification> amsg(NodeID(parent_index), datalen);
       *amsg = notification;                // Copy over the header
       amsg->response_handle = resp_handle; // Update the response handle
+      amsg.add_payload(data, datalen);
       amsg.commit();
     }
 

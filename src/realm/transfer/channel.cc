@@ -3741,21 +3741,19 @@ namespace Realm {
         assert(ok);
       }
       size_t req_size = bcs.bytes_used();
-      Serialization::DynamicBufferSerializer dbs(req_size);
-      {
-        bool ok = ((dbs << inputs_info) && (dbs << outputs_info) && (dbs << priority) &&
-                   (dbs << redop_info) && (dbs << fill_total));
-        if(ok && (fill_size > 0))
-          ok = dbs.append_bytes(fill_data, fill_size);
-        assert(ok);
-      }
-      ActiveMessage<SimpleXferDesCreateMessage> amsg(target_node, dbs.get_buffer(),
-                                                     dbs.bytes_used());
+      ActiveMessage<SimpleXferDesCreateMessage> amsg(target_node, req_size);
       // amsg->inst = inst;
       amsg->launch_node = launch_node;
       amsg->guid = guid;
       amsg->dma_op = dma_op;
       amsg->channel = channel;
+      {
+        bool ok = ((amsg << inputs_info) && (amsg << outputs_info) &&
+                   (amsg << priority) && (amsg << redop_info) && (amsg << fill_total));
+        if(ok && (fill_size > 0))
+          amsg.add_payload(fill_data, fill_size);
+        assert(ok);
+      }
       amsg.commit();
 
       // normally ownership of input and output iterators would be taken

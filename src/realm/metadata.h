@@ -70,6 +70,11 @@ namespace Realm {
     State state; // current state
     Event valid_event;
     NodeSet remote_copies;
+
+    // for handling fragmentation of metadata responses
+    friend struct MetadataResponseMessage;
+    atomic<char *> frag_buffer;
+    atomic<size_t> frag_bytes_received;
   };
 
   // active messages
@@ -83,6 +88,7 @@ namespace Realm {
 
   struct MetadataResponseMessage {
     ID::IDType id;
+    size_t offset, total_bytes;
     static void handle_message(NodeID sender, const MetadataResponseMessage &msg,
                                const void *data, size_t datalen);
   };

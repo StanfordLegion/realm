@@ -272,9 +272,11 @@ namespace Realm {
     size_t count = cq->pop_events(events, max_to_pop);
 
     size_t bytes = (msg.discard_events ? 0 : count * sizeof(Event));
-    ActiveMessage<CompQueuePopResponseMessage> amsg(sender, events, bytes);
+    ActiveMessage<CompQueuePopResponseMessage> amsg(sender, bytes);
     amsg->count = count;
     amsg->request = msg.request;
+    if(bytes > 0)
+      amsg.add_payload(events, bytes, PAYLOAD_COPY);
     amsg.commit();
   }
 
