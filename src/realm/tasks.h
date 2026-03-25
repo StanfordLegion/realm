@@ -33,9 +33,16 @@
 #include "realm/mutex.h"
 #include "realm/bgwork.h"
 
+#include <queue>
+
 namespace Realm {
 
+  namespace ThreadLocal {
+    extern thread_local bool in_subgraph_exec;
+  };
+
   class ProcessorImpl;
+  struct ProcSubgraphReplayState;
 
   // information for a task launch
   class Task final : public Operation {
@@ -240,6 +247,11 @@ namespace Realm {
 
     void add_internal_task(InternalTask *itask);
 
+    // TODO (rohany): Multiple pending ...
+    RWLock pending_subgraphs_lock;
+    std::queue<ProcSubgraphReplayState*> pending_subgraphs;
+    ProcSubgraphReplayState* current_subgraph = nullptr;
+
   public:
     // the main scheduler loop - lock should be held before calling
     void scheduler_loop(void);
@@ -327,7 +339,9 @@ namespace Realm {
       DoorbellList db_list;
     };
 
+  public:
     WorkCounter work_counter;
+  protected:
 
     virtual void wait_for_work(uint64_t old_work_counter);
 

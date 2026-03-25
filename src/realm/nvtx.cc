@@ -39,6 +39,8 @@ namespace Realm {
   static std::map<std::string, nvtx_category_id_color> nvtx_categories_predefined = {
       {"amsg", {1, nvtx_color::red}},
       {"bgwork", {2, nvtx_color::blue}},
+      {"subgraph", {3, nvtx_color::purple}},
+      {"dma", {4, nvtx_color::lawn_green}},
 #ifdef REALM_USE_CUDA
       {"cuda", {100, nvtx_color::green}},
 #endif

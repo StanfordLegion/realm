@@ -227,6 +227,7 @@ namespace Realm {
 
     PendingIBRequests *next_req;
     NodeID sender;
+    // req_op is actually a IBAllocationCompletion.
     uintptr_t req_op;
     unsigned count;
     unsigned first_req;
@@ -234,6 +235,14 @@ namespace Realm {
     std::vector<Memory> memories;
     std::vector<size_t> sizes;
     std::vector<off_t> offsets;
+  };
+
+  // IBAllocationCompletion is a base class for handling when pending
+  // IB allocation requests complete.
+  class IBAllocationCompletion {
+  public:
+    virtual void notify_ib_allocation(unsigned ib_index, off_t ib_offset) = 0;
+    virtual void notify_ib_allocations(unsigned count, unsigned first_index, const off_t *offsets) = 0;
   };
 
   // manages a basic free list of ranges (using range type RT) and allocated

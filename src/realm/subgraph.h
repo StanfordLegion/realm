@@ -22,6 +22,7 @@
 
 #include "realm/realm_c.h"
 
+#include "realm/tasks.h"
 #include "realm/event.h"
 #include "realm/indexspace.h"
 #include "realm/processor.h"
@@ -32,6 +33,7 @@ namespace Realm {
 
   // TODO: C equivalent: realm_subgraph_defn_t
   struct SubgraphDefinition;
+  struct SubgraphInstantiationProfilingRequestsDesc;
 
   class REALM_PUBLIC_API Subgraph {
   public:
@@ -52,12 +54,14 @@ namespace Realm {
 
     // TODO: collective construction
 
-    void destroy(Event wait_on = Event::NO_EVENT) const;
+    Event destroy(Event wait_on = Event::NO_EVENT) const;
 
     Event instantiate(const void *args, size_t arglen, const ProfilingRequestSet &prs,
+                      const SubgraphInstantiationProfilingRequestsDesc &sprs,
                       Event wait_on = Event::NO_EVENT, int priority_adjust = 0) const;
 
     Event instantiate(const void *args, size_t arglen, const ProfilingRequestSet &prs,
+                      const SubgraphInstantiationProfilingRequestsDesc &sprs,
                       const std::vector<Event> &preconditions,
                       std::vector<Event> &postconditions, Event wait_on = Event::NO_EVENT,
                       int priority_adjust = 0) const;
@@ -67,6 +71,14 @@ namespace Realm {
 
   struct REALM_PUBLIC_API SubgraphDefinition {
     SubgraphDefinition();
+
+    // Operations may provide ProfilingRequestSets as
+    // part of the SubgraphDefinition that are always
+    // included when the subgraph instantiated. Profiling
+    // requests may also be provided at instantiation time
+    // with a SubgraphInstantiationProfilingRequestsDesc,
+    // which enables instantiation-time control over what
+    // profiling requests are included.
 
     // operations permitted in a subgraph:
     //  task spawn
@@ -102,6 +114,12 @@ namespace Realm {
       IndexSpaceGeneric space; // type-erase here to avoid template explosion
       std::vector<CopySrcDstField> srcs;
       std::vector<CopySrcDstField> dsts;
+      // TODO (rohany): We're not going to be able to support sending copies
+      //  with indirections over the network yet.
+      // The indirection code is very heavily templated. To use indirection
+      // copies in subgraphs, users must pass void pointers to the "correctly"
+      // templated argument types (CopyIndirection<N,T>::Base* objects).
+      std::vector<void*> indirects;
       ProfilingRequestSet prs;
       ReductionOpID redop_id /*= 0*/;
       bool red_fold /*= false*/;
@@ -251,6 +269,16 @@ namespace Realm {
     //  conditional execution
     //  loops
     //  local "scratchpad" for small-value-communication
+  };
+
+  // Used to describe instantiation-specific profiling
+  // requests sent to a Subgraph instantiation.
+  struct SubgraphInstantiationProfilingRequestsDesc {
+    std::vector<ProfilingRequestSet> task_prs;
+    std::vector<ProfilingRequestSet> copy_prs;
+    // Not supporting recursive instantiations right now.
+
+    bool empty() const { return task_prs.empty() && copy_prs.empty(); }
   };
 
 }; // namespace Realm

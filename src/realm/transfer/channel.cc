@@ -28,6 +28,7 @@
 #include "realm/transfer/lowlevel_dma.h"
 #include "realm/transfer/ib_memory.h"
 #include "realm/utils.h"
+#include "realm/subgraph_impl.h"
 
 #include <algorithm>
 
@@ -57,6 +58,14 @@ namespace Realm {
     , mutex(0)
     , spans(copy_from.spans)
   {}
+
+  void SequenceAssembler::reset() {
+    contig_amount_x2.store(0);
+    first_noncontig.store((size_t)-1);
+    // TODO (rohany): Unclear if we need to cache
+    //  these spans or not.
+    spans.clear();
+  }
 
   SequenceAssembler::~SequenceAssembler(void)
   {
@@ -462,8 +471,6 @@ namespace Realm {
     , nb_update_pre_bytes_total_calls_received(0)
   {
     input_ports.resize(inputs_info.size());
-    int gather_control_port = -1;
-    int scatter_control_port = -1;
     for(size_t i = 0; i < inputs_info.size(); i++) {
       XferPort &p = input_ports[i];
       const XferDesPortInfo &ii = inputs_info[i];
@@ -489,6 +496,7 @@ namespace Realm {
       p.remote_bytes_total.store(size_t(-1));
       p.ib_offset = ii.ib_offset;
       p.ib_size = ii.ib_size;
+      p.ib_index = ii.ib_index;
       p.addrcursor.set_addrlist(&p.addrlist);
       switch(ii.port_type) {
       case XferDesPortInfo::GATHER_CONTROL_PORT:
@@ -555,6 +563,7 @@ namespace Realm {
       p.remote_bytes_total.store(size_t(-1));
       p.ib_offset = oi.ib_offset;
       p.ib_size = oi.ib_size;
+      p.ib_index = oi.ib_index;
       p.addrcursor.set_addrlist(&p.addrlist);
 
       // if we're writing into an IB, the first 'ib_size' byte
@@ -637,6 +646,8 @@ namespace Realm {
 
   void XferDes::mark_completed()
   {
+    // TODO (rohany): At some point, an XD might need to know that
+    //  it shouldn't actually free some of its IBs.
     for(std::vector<XferPort>::const_iterator it = input_ports.begin();
         it != input_ports.end(); ++it) {
       if(it->ib_size > 0) {
@@ -644,16 +655,211 @@ namespace Realm {
       }
     }
 
-    // notify owning DmaRequest upon completion of this XferDes
-    // printf("complete XD = %lu\n", guid);
-    if(launch_node == Network::my_node_id) {
-      TransferOperation *op = reinterpret_cast<TransferOperation *>(dma_op);
-      op->notify_xd_completion(guid);
+    // XD completion is different if the XD is part of a subgraph.
+    if (subgraph_replay_state != nullptr) {
+      // No matter what, the XferDes needs to be deleted from the
+      // xferdes guid table. Sanity check that this is safe.
+      // TODO (rohany): We may revisit this, if it proves to be racy.
+      NodeID execution_node = guid >> (XferDesQueue::NODE_BITS + XferDesQueue::INDEX_BITS);
+      assert(execution_node == Network::my_node_id);
+      // Enqueueing the XD onto channels adds the guid of the
+      // xd into a set on the XferDesQueue. We need to remove the
+      // xd from there upon completion to avoid the XferDesQueue
+      // from thinking there's still a xd pending on shutdown.
+      destroy_xfer_des(guid);
+      if (running_locally()) {
+
+        // Handle profiling. This has to be done _before_ calling
+        // the completion functions, as once those functions get called
+        // the XD is free to be reused by another thread, which could
+        // invalidate pointers like subgraph_replay_state.
+        auto sg = subgraph_replay_state[0].subgraph;
+        auto& item = sg->bgwork_items[subgraph_index];
+        auto prof = subgraph_replay_state[0].get_profiling_info(SubgraphDefinition::OPKIND_COPY, item.op_index);
+        if (prof) {
+          if (prof->wants_timeline || prof->wants_fevent) {
+            // Ensure that only the last XD to complete contributes
+            // to the profiling.
+            auto remaining = prof->pending_work_items.fetch_sub_acqrel(1) - 1;
+            if (remaining == 0) {
+              // TODO (rohany): Handle copies with async work more tightly later.
+              if (prof->wants_timeline) {
+                prof->timeline.record_end_time();
+                prof->timeline.record_complete_time();
+              }
+              if (prof->wants_fevent) {
+                prof->fevent_user.trigger();
+              }
+            }
+          }
+        }
+#ifdef REALM_USE_NVTX
+        // Complete the nvtx range for this XD.
+        nvtx_range_end(sg->nvtx_xd_ranges[sg->planned_copy_xds.offsets[item.op_index] + xd_index]);
+#endif
+        // Depending on whether we launch async work, the control
+        // completion function may have already been called.
+        if (launches_async_work()) {
+          trigger_subgraph_async_completion();
+        } else {
+          trigger_subgraph_control_completion();
+        }
+      } else {
+        // If this XD is remotely executing, send completion metadata
+        // back to the owner node.
+        send_subgraph_remote_xd_completion(
+          launch_node,
+          subgraph_replay_state,
+          subgraph_index
+#ifdef REALM_USE_NVTX
+          , xd_index
+#endif
+        );
+      }
     } else {
-      TransferOperation *op = reinterpret_cast<TransferOperation *>(dma_op);
-      NotifyXferDesCompleteMessage::send_request(launch_node, op, guid);
+      if (running_locally()) {
+        TransferOperation *op = reinterpret_cast<TransferOperation *>(dma_op);
+        op->notify_xd_completion(guid);
+      } else {
+        assert(dma_op != 0);
+        TransferOperation *op = reinterpret_cast<TransferOperation *>(dma_op);
+        NotifyXferDesCompleteMessage::send_request(launch_node, op, guid);
+      }
     }
   }
+
+  void XferDes::trigger_subgraph_control_completion() {
+    // This function should only be called when this XD is executing locally.
+    assert(running_locally());
+    assert(subgraph_replay_state != nullptr);
+    // Before asking the concrete XD anything, write a null pointer into
+    // the async token slot for this XD. If the concrete XD actually launched
+    // some async work, it is responsible for writing a non-null token.
+    auto subgraph = subgraph_replay_state[0].subgraph;
+    auto tokidx = subgraph->bgwork_async_event_counts[subgraph_index] + xd_index;
+    subgraph_replay_state[0].async_bgwork_events[tokidx] = nullptr;
+
+    // First, do whatever the concrete XD wants to do.
+    on_subgraph_control_completion();
+
+    assert(subgraph_replay_state != nullptr);
+    auto& postconds = subgraph->bgwork_postconditions;
+    for (uint64_t i = postconds.offsets[subgraph_index]; i < postconds.offsets[subgraph_index + 1]; i++) {
+      auto& info = postconds.data[i];
+      trigger_subgraph_operation_completion(subgraph_replay_state, info, true /* incr_counter */, nullptr);
+    }
+    if (subgraph->bgwork_items[subgraph_index].is_final_event) {
+      // TODO (rohany): Hackily including the contributions of bgwork
+      //  operations in the proc 0 counters.
+      int32_t remaining = subgraph_replay_state[0].pending_async_count.fetch_sub_acqrel(1) - 1;
+      if (remaining == 0) {
+        maybe_trigger_subgraph_final_completion_event(subgraph_replay_state[0]);
+      }
+    }
+  }
+
+  void XferDes::trigger_subgraph_async_completion() {
+    // This function should only be called when this XD is executing locally.
+    assert(running_locally());
+
+    // First, do whatever the concrete XD wants to do.
+    on_subgraph_async_completion();
+
+    assert(subgraph_replay_state != nullptr);
+    // Pull subgraph out of the subgraph_replay_state because the
+    // subgraph_replay_state might get deleted as soon as we trigger
+    // follow-up operations to start running.
+    auto subgraph = subgraph_replay_state[0].subgraph;
+    auto& postconds = subgraph->bgwork_async_postconditions;
+    for (uint64_t i = postconds.offsets[subgraph_index]; i < postconds.offsets[subgraph_index + 1]; i++) {
+      auto& info = postconds.data[i];
+      trigger_subgraph_operation_completion(subgraph_replay_state, info, true /* incr_counter */, nullptr);
+    }
+    if (subgraph->bgwork_items[subgraph_index].is_final_event) {
+      // TODO (rohany): Hackily including the contributions of bgwork
+      //  operations in the proc 0 counters.
+      int32_t remaining = subgraph_replay_state[0].pending_async_count.fetch_sub_acqrel(1) - 1;
+      if (remaining == 0) {
+        maybe_trigger_subgraph_final_completion_event(subgraph_replay_state[0]);
+      }
+    }
+  }
+
+  void XferDes::reset(const std::vector<off_t>& ib_offsets) {
+   iteration_completed.store_release(false);
+   bytes_write_pending.store_release(0);
+   transfer_completed.store_release(false);
+   progress_counter.store_release(0);
+   nb_update_pre_bytes_total_calls_received.store_release(0);
+   for (auto& info : input_ports) {
+     info.iter->reset();
+     info.local_bytes_total = 0;
+     info.local_bytes_cons.store_release(0);
+     info.remote_bytes_total.store_release(size_t(-1));
+     info.needs_pbt_update.store(false);
+     info.seq_local.reset();
+     info.seq_remote.reset();
+     info.addrlist.reset();
+     info.addrcursor.reset();
+     // If this XD is using an IB, update its offset value
+     // to the latest one for this copy instantiation.
+     if (info.ib_size > 0) {
+       info.ib_offset = ib_offsets[info.ib_index];
+       // TODO (rohany): This is pretty hacky, but I don't know
+       //  a better way to do it...
+       auto wrapit = dynamic_cast<WrappingFIFOIterator*>(info.iter);
+       assert(wrapit);
+       wrapit->set_base(info.ib_offset);
+     }
+   }
+
+   if(gather_control_port >= 0) {
+     input_control.control_port_idx = gather_control_port;
+     input_control.current_io_port = 0;
+     input_control.remaining_count = 0;
+     input_control.eos_received = false;
+   } else {
+     input_control.control_port_idx = -1;
+     input_control.current_io_port = 0;
+     input_control.remaining_count = size_t(-1);
+     input_control.eos_received = false;
+   }
+
+   for (auto& info : output_ports) {
+     info.iter->reset();
+     info.needs_pbt_update.store_release(info.peer_guid != XFERDES_NO_GUID);
+     info.local_bytes_total = 0;
+     info.local_bytes_cons.store_release(0);
+     info.remote_bytes_total.store_release(size_t(-1));
+     info.seq_local.reset();
+     info.seq_remote.reset();
+     info.addrlist.reset();
+     info.addrcursor.reset();
+     if (info.ib_size > 0) {
+       info.ib_offset = ib_offsets[info.ib_index];
+       // TODO (rohany): This is pretty hacky, but I don't know
+       //  a better way to do it...
+       auto wrapit = dynamic_cast<WrappingFIFOIterator*>(info.iter);
+       assert(wrapit);
+       wrapit->set_base(info.ib_offset);
+       // Also mark the remote sequence assembler as capable of
+       // writing into the ib memory.
+       info.seq_remote.add_span(0, info.ib_size);
+     }
+   }
+
+   if(scatter_control_port >= 0) {
+     output_control.control_port_idx = scatter_control_port;
+     output_control.current_io_port = 0;
+     output_control.remaining_count = 0;
+     output_control.eos_received = false;
+   } else {
+     output_control.control_port_idx = -1;
+     output_control.current_io_port = 0;
+     output_control.remaining_count = size_t(-1);
+     output_control.eos_received = false;
+   }
+ }
 
 #define MAX_GEN_REQS 3
 
@@ -1841,6 +2047,14 @@ namespace Realm {
     assert(pending >= 0);
     if(pending == 0)
       transfer_completed.store_release(true);
+
+    // If this xd launched some asynchronous work within a subgraph replay,
+    // then we can trigger the subgraph and tell it that the control side
+    // of this XD execution has completed, which will allow other components
+    // of the subgraph that depend on launched asynchronous work to continue.
+    if (subgraph_replay_state != nullptr && launches_async_work()) {
+      trigger_subgraph_control_completion();
+    }
   }
 
   void XferDes::update_bytes_read(int port_idx, size_t offset, size_t size)
@@ -1995,7 +2209,7 @@ namespace Realm {
                                  int _priority, const void *_fill_data, size_t _fill_size,
                                  size_t _fill_total)
     : XferDes(_dma_op, _channel, _launch_node, _guid, inputs_info, outputs_info,
-              _priority, _fill_data, _fill_size)
+              _priority, _fill_data, _fill_size), fill_total(_fill_total)
   {
     kind = XFER_MEM_FILL;
 
@@ -2004,6 +2218,14 @@ namespace Realm {
     assert(input_control.control_port_idx == -1);
     input_control.current_io_port = -1;
     input_control.remaining_count = _fill_total;
+    input_control.eos_received = true;
+  }
+
+  void MemfillXferDes::reset(const std::vector<off_t>& ib_offsets) {
+    XferDes::reset(ib_offsets);
+    assert(input_control.control_port_idx == -1);
+    input_control.current_io_port = -1;
+    input_control.remaining_count = fill_total;
     input_control.eos_received = true;
   }
 
@@ -2039,6 +2261,10 @@ namespace Realm {
     bool did_work = false;
     ReadSequenceCache rseqcache(this, 2 << 20);
     WriteSequenceCache wseqcache(this, 2 << 20);
+
+#ifdef REALM_USE_NVTX
+    nvtxScopedRange _nvtx_range("dma", __PRETTY_FUNCTION__, 0);
+#endif
 
     while(true) {
       size_t min_xfer_size = 4096; // TODO: make controllable
@@ -2184,6 +2410,10 @@ namespace Realm {
     const size_t out_elem_size =
         (redop_info.is_fold ? redop->sizeof_rhs : redop->sizeof_lhs);
     assert(redop_info.in_place); // TODO: support for out-of-place reduces
+
+#ifdef REALM_USE_NVTX
+    nvtxScopedRange _nvtx_range("dma", __PRETTY_FUNCTION__, 0);
+#endif
 
     while(true) {
       size_t min_xfer_size = 4096; // TODO: make controllable
@@ -2516,6 +2746,10 @@ namespace Realm {
     //  while immediate acks for writes happen only if we skip output
     ReadSequenceCache rseqcache(this);
     WriteSequenceCache wseqcache(this);
+
+#ifdef REALM_USE_NVTX
+    nvtxScopedRange _nvtx_range("dma", __PRETTY_FUNCTION__, 0);
+#endif
 
     const size_t MAX_ASSEMBLY_SIZE = 4096;
     while(true) {

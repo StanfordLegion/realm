@@ -96,6 +96,20 @@ namespace Realm {
       return ((start_time != INVALID_TIMESTAMP) && (end_time != INVALID_TIMESTAMP));
     }
 
+    inline void OperationTimelineGPU::record_start_time(void)
+    {
+      auto timestamp = Clock::current_time_in_nanoseconds();
+      start_time = std::min<timestamp_t>(timestamp, start_time == INVALID_TIMESTAMP
+                                           ? timestamp
+                                           : start_time);
+    }
+
+    inline void OperationTimelineGPU::record_end_time(void)
+    {
+      auto timestamp = Clock::current_time_in_nanoseconds();
+      end_time = std::max<timestamp_t>(timestamp, end_time);
+    }
+
     ////////////////////////////////////////////////////////////////////////
     //
     // struct OperationTimeLine

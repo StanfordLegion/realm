@@ -947,6 +947,10 @@ namespace Realm {
   {
     TransferIteratorBase<N, T>::reset();
     piece_idx = 0;
+    addrs_in->reset();
+    addrs_in_offset = 0;
+    point_pos = 0;
+    num_points = 0;
   }
 
   template <int N, typename T>
@@ -1192,6 +1196,8 @@ namespace Realm {
   {
     TransferIteratorBase<N, T>::reset();
     addrs_in->reset();
+    point_pos = 0;
+    num_points = 0;
   }
 
   template <int N, typename T>
@@ -4390,6 +4396,100 @@ namespace Realm {
     Operation::mark_completed();
   }
 
+  void allocate_ib_memories_from_graph(const TransferGraph& tg, IBAllocationCompletion* completion) {
+    // respect computed ib allocation order
+    // TODO: attempt opportunistic unordered allocation
+
+    // see who owns the first memory we need to allocate from
+    NodeID first_owner =
+        ID(tg.ib_edges[tg.ib_alloc_order[0]].memory).memory_owner_node();
+    unsigned immed_count = 0;
+    if(first_owner == Network::my_node_id) {
+      // attempt immediate allocation of local IBs
+      std::vector<size_t> sizes;
+      std::vector<off_t> offsets;
+      while(immed_count < tg.ib_edges.size()) {
+        Memory tgt_mem = tg.ib_edges[tg.ib_alloc_order[immed_count]].memory;
+        first_owner = ID(tgt_mem).memory_owner_node();
+        // if we've gotten to IB requests that are non-local, stop
+        if(first_owner != Network::my_node_id) {
+          break;
+        }
+        sizes.assign(1, tg.ib_edges[tg.ib_alloc_order[immed_count]].size);
+        unsigned same_mem = 1;
+        while(((immed_count + same_mem) < tg.ib_edges.size()) &&
+              (tgt_mem ==
+               tg.ib_edges[tg.ib_alloc_order[immed_count + same_mem]].memory)) {
+          sizes.push_back(tg.ib_edges[tg.ib_alloc_order[immed_count + same_mem]].size);
+          same_mem += 1;
+        }
+
+        offsets.assign(same_mem, -1);
+        IBMemory *ib_mem = get_runtime()->get_ib_memory_impl(tgt_mem);
+        if(ib_mem->attempt_immediate_allocation(
+            Network::my_node_id, reinterpret_cast<uintptr_t>(completion), same_mem,
+            sizes.data(), offsets.data())) {
+          log_ib_alloc.debug()
+              << "satisfied: op=" << Network::my_node_id << "/" << (void *)completion
+              << " index=" << immed_count << "+" << same_mem << " mem=" << tgt_mem;
+
+          completion->notify_ib_allocations(same_mem, immed_count, offsets.data());
+          immed_count += same_mem;
+        } else {
+          // an immediate allocation failed, so it's time to enqueue
+          break;
+        }
+      }
+    }
+
+    unsigned rem_count = tg.ib_edges.size() - immed_count;
+    if(rem_count > 0) {
+      if(first_owner == Network::my_node_id) {
+        // enqueue all remaining requests with the first memory
+        PendingIBRequests *reqs = new PendingIBRequests(
+            Network::my_node_id, reinterpret_cast<uintptr_t>(completion), rem_count,
+            immed_count, 0);
+        for(unsigned i = 0; i < rem_count; i++) {
+          reqs->memories.push_back(
+              tg.ib_edges[tg.ib_alloc_order[immed_count + i]].memory);
+          reqs->sizes.push_back(tg.ib_edges[tg.ib_alloc_order[immed_count + i]].size);
+        }
+
+        IBMemory *ib_mem = get_runtime()->get_ib_memory_impl(reqs->memories[0]);
+        ib_mem->enqueue_requests(reqs);
+      } else {
+        // active message time - special case for rem_count == 1
+        if(rem_count == 1) {
+          ActiveMessage<RemoteIBAllocRequestSingle> amsg(first_owner);
+          amsg->memory = tg.ib_edges[tg.ib_alloc_order[immed_count]].memory;
+          amsg->size = tg.ib_edges[tg.ib_alloc_order[immed_count]].size;
+          amsg->req_op = reinterpret_cast<uintptr_t>(completion);
+          amsg->req_index = immed_count;
+          amsg->immediate = false;
+          amsg.commit();
+        } else {
+          size_t bytes = (rem_count * (sizeof(Memory) + sizeof(size_t)));
+          ActiveMessage<RemoteIBAllocRequestMultiple> amsg(first_owner, bytes);
+          amsg->requestor = Network::my_node_id;
+          amsg->count = rem_count;
+          amsg->first_index = immed_count;
+          amsg->curr_index = 0;
+          amsg->req_op = reinterpret_cast<uintptr_t>(completion);
+          amsg->immediate = false;
+
+          for(unsigned i = 0; i < rem_count; i++) {
+            amsg << tg.ib_edges[tg.ib_alloc_order[immed_count + i]].memory;
+          }
+          for(unsigned i = 0; i < rem_count; i++) {
+            amsg << tg.ib_edges[tg.ib_alloc_order[immed_count + i]].size;
+          }
+
+          amsg.commit();
+        }
+      }
+    }
+  }
+
   void TransferOperation::allocate_ibs()
   {
     // make sure we haven't been cancelled
@@ -4411,100 +4511,12 @@ namespace Realm {
       ib_offsets.resize(tg.ib_edges.size(), -1);
 
       // increase the count by one to prevent a trigger before we finish
-      //  this loop
+      //  this call to allocate_ibs().
       ib_responses_needed.store(tg.ib_edges.size() + 1);
 
-      // respect computed ib allocation order
-      // TODO: attempt opportunistic unordered allocation
-
-      // see who owns the first memory we need to allocate from
-      NodeID first_owner =
-          ID(tg.ib_edges[tg.ib_alloc_order[0]].memory).memory_owner_node();
-      unsigned immed_count = 0;
-      if(first_owner == Network::my_node_id) {
-        // attempt immediate allocation of local IBs
-        std::vector<size_t> sizes;
-        std::vector<off_t> offsets;
-        while(immed_count < tg.ib_edges.size()) {
-          Memory tgt_mem = tg.ib_edges[tg.ib_alloc_order[immed_count]].memory;
-          first_owner = ID(tgt_mem).memory_owner_node();
-          // if we've gotten to IB requests that are non-local, stop
-          if(first_owner != Network::my_node_id) {
-            break;
-          }
-          sizes.assign(1, tg.ib_edges[tg.ib_alloc_order[immed_count]].size);
-          unsigned same_mem = 1;
-          while(((immed_count + same_mem) < tg.ib_edges.size()) &&
-                (tgt_mem ==
-                 tg.ib_edges[tg.ib_alloc_order[immed_count + same_mem]].memory)) {
-            sizes.push_back(tg.ib_edges[tg.ib_alloc_order[immed_count + same_mem]].size);
-            same_mem += 1;
-          }
-
-          offsets.assign(same_mem, -1);
-          IBMemory *ib_mem = get_runtime()->get_ib_memory_impl(tgt_mem);
-          if(ib_mem->attempt_immediate_allocation(
-                 Network::my_node_id, reinterpret_cast<uintptr_t>(this), same_mem,
-                 sizes.data(), offsets.data())) {
-            log_ib_alloc.debug()
-                << "satisfied: op=" << Network::my_node_id << "/" << (void *)this
-                << " index=" << immed_count << "+" << same_mem << " mem=" << tgt_mem;
-
-            notify_ib_allocations(same_mem, immed_count, offsets.data());
-            immed_count += same_mem;
-          } else {
-            // an immediate allocation failed, so it's time to enqueue
-            break;
-          }
-        }
-      }
-
-      unsigned rem_count = tg.ib_edges.size() - immed_count;
-      if(rem_count > 0) {
-        if(first_owner == Network::my_node_id) {
-          // enqueue all remaining requests with the first memory
-          PendingIBRequests *reqs = new PendingIBRequests(
-              Network::my_node_id, reinterpret_cast<uintptr_t>(this), rem_count,
-              immed_count, 0);
-          for(unsigned i = 0; i < rem_count; i++) {
-            reqs->memories.push_back(
-                tg.ib_edges[tg.ib_alloc_order[immed_count + i]].memory);
-            reqs->sizes.push_back(tg.ib_edges[tg.ib_alloc_order[immed_count + i]].size);
-          }
-
-          IBMemory *ib_mem = get_runtime()->get_ib_memory_impl(reqs->memories[0]);
-          ib_mem->enqueue_requests(reqs);
-        } else {
-          // active message time - special case for rem_count == 1
-          if(rem_count == 1) {
-            ActiveMessage<RemoteIBAllocRequestSingle> amsg(first_owner);
-            amsg->memory = tg.ib_edges[tg.ib_alloc_order[immed_count]].memory;
-            amsg->size = tg.ib_edges[tg.ib_alloc_order[immed_count]].size;
-            amsg->req_op = reinterpret_cast<uintptr_t>(this);
-            amsg->req_index = immed_count;
-            amsg->immediate = false;
-            amsg.commit();
-          } else {
-            size_t bytes = (rem_count * (sizeof(Memory) + sizeof(size_t)));
-            ActiveMessage<RemoteIBAllocRequestMultiple> amsg(first_owner, bytes);
-            amsg->requestor = Network::my_node_id;
-            amsg->count = rem_count;
-            amsg->first_index = immed_count;
-            amsg->curr_index = 0;
-            amsg->req_op = reinterpret_cast<uintptr_t>(this);
-            amsg->immediate = false;
-
-            for(unsigned i = 0; i < rem_count; i++) {
-              amsg << tg.ib_edges[tg.ib_alloc_order[immed_count + i]].memory;
-            }
-            for(unsigned i = 0; i < rem_count; i++) {
-              amsg << tg.ib_edges[tg.ib_alloc_order[immed_count + i]].size;
-            }
-
-            amsg.commit();
-          }
-        }
-      }
+      // Actually perform IB allocation. ib_responses_needed will be decremented
+      // through the TransferOperation's overload of IBAllocationCompletion.
+      allocate_ib_memories_from_graph(tg, this);
 
       // once all requests are made, do the extra decrement and continue if they
       //  are all satisfied
@@ -4714,6 +4726,7 @@ namespace Realm {
           ii.inst = RegionInstance::NO_INST;
           ii.ib_offset = ib_offsets[xdn.inputs[j].edge];
           ii.ib_size = tg.ib_edges[xdn.inputs[j].edge].size;
+          ii.ib_index = xdn.inputs[j].edge;
           ii.iter = new WrappingFIFOIterator(ii.ib_offset, ii.ib_size);
           ii.serdez_id = 0;
           break;
@@ -4845,6 +4858,7 @@ namespace Realm {
           oi.inst = RegionInstance::NO_INST;
           oi.ib_offset = ib_offsets[xdn.outputs[j].edge];
           oi.ib_size = tg.ib_edges[xdn.outputs[j].edge].size;
+          oi.ib_index = xdn.outputs[j].edge;
           oi.iter = new WrappingFIFOIterator(oi.ib_offset, oi.ib_size);
           oi.serdez_id = 0;
           break;
@@ -5059,7 +5073,8 @@ namespace Realm {
   template class TransferIteratorIndirectRange<N, T>;                                    \
   template class AddressSplitXferDesFactory<N, T>;                                       \
   template class AddressSplitCommunicator<N, T>;                                         \
-  template class TransferDomainIndexSpace<N, T>;
+  template class TransferDomainIndexSpace<N, T>;                                         \
+  template TransferDomain* TransferDomain::construct<N,T>(const IndexSpace<N, T>& is);
   FOREACH_NT(DOIT)
 
 #define DOIT2(N, T, N2, T2)                                                              \

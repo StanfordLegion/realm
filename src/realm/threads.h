@@ -57,6 +57,7 @@ namespace Realm {
   }; // namespace Threading
 
   class Operation;
+  class Event;
 
   // ALL work inside Realm (i.e. both tasks and internal Realm work) should be done
   //  inside a Thread, which comes in (at least) two flavors:
@@ -175,6 +176,11 @@ namespace Realm {
     void stop_operation(Operation *op);
     Operation *get_operation(void) const;
 
+    // TODO (rohany): This is a hack.
+    void set_cur_event(Event* ev) { current_event = ev; }
+    void unset_cur_event() { current_event = nullptr; }
+    Event* get_event() const { return current_event; }
+
     // changes the priority of the thread (and, by extension, the operation it
     //   is working on)
     void set_priority(int new_priority);
@@ -228,6 +234,7 @@ namespace Realm {
     atomic<State> state;
     ThreadScheduler *scheduler;
     Operation *current_op;
+    Event* current_event;
     int exception_handler_count;
     atomic<int> signal_count;
     Mutex signal_mutex;

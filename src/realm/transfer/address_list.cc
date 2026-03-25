@@ -55,6 +55,13 @@ namespace Realm {
     data.reserve(max_entries);
   }
 
+  void AddressList::reset() {
+    total_bytes = 0;
+    write_pointer = 0;
+    read_pointer = 0;
+    memset(data.data(), 0, max_entries * sizeof(size_t));
+  }
+
   bool AddressList::append_entry(
       int dims, size_t contig_bytes, size_t total_bytes, size_t base_offset,
       const std::unordered_map<int, std::pair<size_t, size_t>> &count_strides,
@@ -165,6 +172,14 @@ namespace Realm {
   //
 
   AddressListCursor::AddressListCursor() { pos.fill(0); }
+
+  void AddressListCursor::reset() {
+    // Not touching the addrlist.
+    partial = false;
+    partial_dim = 0;
+    for(size_t i = 0; i < pos.size(); i++)
+      pos[i] = 0;
+  }
 
   void AddressListCursor::set_addrlist(AddressList *_addrlist) { addrlist = _addrlist; }
 

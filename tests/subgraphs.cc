@@ -16,6 +16,7 @@
  */
 
 #include "realm.h"
+#include "realm/serialize.h"
 
 #include <cstdio>
 #include <cstdlib>
@@ -39,6 +40,9 @@ enum
   WRITER_TASK,
   READER_TASK,
   CLEANUP_TASK,
+  DUMMY_TASK,
+  TEST_READ_TASK,
+  PROF_RESPONSE_TASK,
 };
 
 enum
@@ -99,6 +103,28 @@ void writer_task(const void *args, size_t arglen, const void *userdata, size_t u
 
 int correct = 0;
 
+struct TaskArgs {
+  int32_t value;
+  RegionInstance inst;
+};
+
+void dummy_task(const void *args, size_t arglen,
+                const void *userdata, size_t userlen, Processor p) {
+  if (arglen > 0) {
+    int32_t value = *(int32_t*)(args);
+    log_app.info() << "In dummy task -- " << value << "!";
+  } else {
+    log_app.info() << "In dummy task!";
+  }
+}
+
+Realm::atomic<int32_t> recieved_profs;
+
+void prof_response_task(const void *args, size_t arglen,
+                const void *userdata, size_t userlen, Processor p) {
+  recieved_profs.fetch_sub_acqrel(1);
+}
+
 void reader_task(const void *args, size_t arglen, const void *userdata, size_t userlen,
                  Processor p)
 {
@@ -145,6 +171,7 @@ void cleanup_task(const void *args, size_t arglen, const void *userdata, size_t 
   std::vector<Event> preconditions;
   std::vector<Event> postconditions(1);
   Event e = cta.subgraph.instantiate(&sg_args, sizeof(sg_args), ProfilingRequestSet(),
+                                     SubgraphInstantiationProfilingRequestsDesc(),
                                      preconditions, postconditions, cta.precond);
 
   // technically e already dominates postconditions[0], but do this to make
@@ -156,6 +183,17 @@ void cleanup_task(const void *args, size_t arglen, const void *userdata, size_t 
   cta.subgraph.destroy(e);
   cta.subgraph_inner.destroy(e);
   cta.cleanup_done.trigger(e);
+}
+
+void test_read_task(const void *args, size_t arglen,
+                    const void *userdata, size_t userlen, Processor p) {
+  auto inst = (RegionInstance*)(args);
+  AffineAccessor<int32_t, 1> acc = AffineAccessor<int32_t, 1>(*inst, 0);
+  std::stringstream ss;
+  for(PointInRectIterator<1> it(inst->get_indexspace<1>().bounds); it.valid; it.step()) {
+    ss << acc[it.p] << " ";
+  }
+  log_app.info() << "INST DATA: " << ss.str();
 }
 
 // clang doesn't permit use of offsetof when there are non-POD types involved
@@ -171,239 +209,609 @@ static size_t compute_offset(U T::*field_ptr)
 
 #define OFFSETOF(type, field) compute_offset<type>(&type::field)
 
-void top_level_task(const void *args, size_t arglen, const void *userdata, size_t userlen,
-                    Processor p)
+void top_level_task(const void *args, size_t arglen,
+                    const void *userdata, size_t userlen, Processor p)
 {
   log_app.print() << "Realm subgraphs test";
+  auto pq = Machine::ProcessorQuery(Machine::get_machine()).only_kind(Processor::LOC_PROC);
+  std::vector<Processor> cpus(pq.begin(), pq.end());
 
-  // do everything on this processor - get a good memory to use
-  Memory m = Machine::MemoryQuery(Machine::get_machine()).has_affinity_to(p).first();
-  assert(m.exists());
+//  auto pq = Machine::ProcessorQuery(Machine::get_machine()).only_kind(Processor::TOC_PROC);
+//  std::vector<Processor> gpus(pq.begin(), pq.end());
 
-  IndexSpace<1> is = Rect<1>(0, 9);
-  RegionInstance inst1, inst2;
-  std::map<FieldID, size_t> field_sizes;
-  field_sizes[FID_DATA] = sizeof(int);
+//  auto mq = Machine::MemoryQuery(Machine::get_machine()).only_kind(Memory::GPU_FB_MEM);
+//  std::vector<Memory> fbmems(mq.begin(), mq.end());
 
-  Event e = RegionInstance::create_instance(inst1, m, is, field_sizes,
-                                            0 /*block_size=SOA*/, ProfilingRequestSet());
+auto sq = Machine::MemoryQuery(Machine::get_machine()).only_kind(Memory::SYSTEM_MEM);
+std::vector<Memory> sysmems(sq.begin(), sq.end());
 
-  e = RegionInstance::create_instance(inst2, m, is, field_sizes, 0 /*block_size=SOA*/,
-                                      ProfilingRequestSet(), e);
+std::map<FieldID, size_t> field_sizes;
+field_sizes[0] = sizeof(int32_t);
+IndexSpace<1> is2 = Rect<1>(0, 10);
+RegionInstance src_inst, dst_inst, dst_inst2, fill_inst, fill_inst2;
+RegionInstance::create_instance(src_inst, sysmems[0],
+                                is2, field_sizes,
+                                0 /*SOA*/, ProfilingRequestSet()).wait();
+RegionInstance::create_instance(dst_inst, sysmems[0],
+                                is2, field_sizes,
+                                0 /*SOA*/, ProfilingRequestSet()).wait();
+RegionInstance::create_instance(dst_inst2, sysmems[0],
+                                is2, field_sizes,
+                                0 /*SOA*/, ProfilingRequestSet()).wait();
+RegionInstance::create_instance(fill_inst, sysmems[0],
+                                is2, field_sizes,
+                                0 /*SOA*/, ProfilingRequestSet()).wait();
+RegionInstance::create_instance(fill_inst2, sysmems[0],
+                                is2, field_sizes,
+                                0 /*SOA*/, ProfilingRequestSet()).wait();
 
-  // immediate mode - no subgraph
-  WriterTaskArgs w_args;
-  w_args.is = is;
-  w_args.inst = inst1;
-  w_args.wrval = 5;
-  e = p.spawn(WRITER_TASK, &w_args, sizeof(w_args), e);
+// Let's try out some partial copies.
+RegionInstance partial_inst, partial_inst2;
+RegionInstance::create_instance(partial_inst, sysmems[0],
+                                is2, field_sizes,
+                                0 /*SOA*/, ProfilingRequestSet()).wait();
+RegionInstance::create_instance(partial_inst2, sysmems[0],
+                                is2, field_sizes,
+                                0 /*SOA*/, ProfilingRequestSet()).wait();
+Event e1, e2, e3;
+// Fill the source.
+{
+  std::vector<CopySrcDstField> info(1);
+  info[0].set_field(src_inst, 0, sizeof(int32_t));
+  int32_t value = 42;
+  e1 = is2.fill(info, ProfilingRequestSet(), &value, sizeof(int32_t));
+}
+// Also fill the destination to be sure the copy did something.
+{
+  std::vector<CopySrcDstField> info(1);
+  info[0].set_field(dst_inst, 0, sizeof(int32_t));
+  int32_t value = 15210;
+  e2 = is2.fill(info, ProfilingRequestSet(), &value, sizeof(int32_t));
+}
+{
+  std::vector<CopySrcDstField> info(2);
+  info[0].set_field(partial_inst, 0, sizeof(int32_t));
+  info[1].set_field(partial_inst2, 0, sizeof(int32_t));
+  int32_t value = 15213;
+  e3 = is2.fill(info, ProfilingRequestSet(), &value, sizeof(int32_t));
+}
+Event::merge_events(e1, e2, e3).wait();
 
-  std::vector<CopySrcDstField> copy_src(1), copy_dst(1);
-  copy_src[0].set_field(inst1, FID_DATA, sizeof(int));
-  copy_dst[0].set_field(inst2, FID_DATA, sizeof(int));
-  e = is.copy(copy_src, copy_dst, ProfilingRequestSet(), e);
+IndexSpace<1> pis1 = Rect<1>(0, 0);
+IndexSpace<1> pis2;
+{
+  IndexSpace<1> t1(Rect<1>(0, 0)), t2(Rect<1>(2, 2)), t3(Rect<1>(4, 4));
+  Event e = Event::NO_EVENT;
+  e = IndexSpace<1>::compute_union(Rect<1>(0, 0), Rect<1>(2, 2), pis2, ProfilingRequestSet(), e);
+  e = IndexSpace<1>::compute_union(pis2, Rect<1>(4, 4), pis2, ProfilingRequestSet(), e);
+  e = IndexSpace<1>::compute_union(pis2, Rect<1>(6, 6), pis2, ProfilingRequestSet(), e);
+  e = IndexSpace<1>::compute_union(pis2, Rect<1>(8, 8), pis2, ProfilingRequestSet(), e);
+  e = IndexSpace<1>::compute_union(pis2, Rect<1>(10, 10), pis2, ProfilingRequestSet(), e);
+  e.wait();
+}
 
-  ReaderTaskArgs r_args;
-  r_args.is = is;
-  r_args.inst = inst2;
-  r_args.rdval = 5;
-  e = p.spawn(READER_TASK, &r_args, sizeof(r_args), e);
+  auto bar = Barrier::create_barrier(1);
+
+  ProfilingRequestSet prs;
+  auto& req = prs.add_request(cpus[1], PROF_RESPONSE_TASK);
+  req.add_measurement<ProfilingMeasurements::OperationFinishEvent>();
+
+  log_app.info() << "Diamond subgraph.";
+  Subgraph diamond;
+  SubgraphDefinition sd;
+  {
+    sd.concurrency_mode = SubgraphDefinition::INSTANTIATION_ORDER;
+    // Add four diamond tasks.
+    sd.tasks.resize(5);
+    for (int i = 0; i < 5; i++) {
+      // sd.tasks[i].proc = gpus[(i % 2) % gpus.size()];
+      sd.tasks[i].task_id = DUMMY_TASK;
+      sd.tasks[i].prs = prs;
+      // sd.tasks[i].proc = p;
+    }
+
+    sd.tasks[0].proc = cpus[0];
+    sd.tasks[1].proc = cpus[1];
+    sd.tasks[2].proc = cpus[2];
+    // sd.tasks[3].proc = gpus[1];
+    sd.tasks[3].proc = cpus[3];
+    sd.tasks[4].proc = cpus[2];
+
+    TaskArgs args;
+    args.value = 0;
+    sd.tasks[0].args = ByteArray(&args, sizeof(TaskArgs));
+    sd.tasks[1].args = ByteArray(&args, sizeof(TaskArgs));
+    sd.tasks[2].args = ByteArray(&args, sizeof(TaskArgs));
+    sd.tasks[3].args = ByteArray(&args, sizeof(TaskArgs));
+    sd.tasks[4].args = ByteArray(&args, sizeof(TaskArgs));
+
+    sd.interpolations.resize(6);
+    sd.interpolations[0].offset = 0;
+    sd.interpolations[0].bytes = sizeof(int32_t);
+    sd.interpolations[0].target_kind = SubgraphDefinition::Interpolation::TARGET_TASK_ARGS;
+    sd.interpolations[0].target_index = 0;
+    sd.interpolations[0].target_offset = 0;
+
+    sd.interpolations[1].offset = 4;
+    sd.interpolations[1].bytes = sizeof(int32_t);
+    sd.interpolations[1].target_kind = SubgraphDefinition::Interpolation::TARGET_TASK_ARGS;
+    sd.interpolations[1].target_index = 1;
+    sd.interpolations[1].target_offset = 0;
+
+    sd.interpolations[2].offset = 8;
+    sd.interpolations[2].bytes = sizeof(int32_t);
+    sd.interpolations[2].target_kind = SubgraphDefinition::Interpolation::TARGET_TASK_ARGS;
+    sd.interpolations[2].target_index = 2;
+    sd.interpolations[2].target_offset = 0;
+
+    sd.interpolations[3].offset = 12;
+    sd.interpolations[3].bytes = sizeof(int32_t);
+    sd.interpolations[3].target_kind = SubgraphDefinition::Interpolation::TARGET_TASK_ARGS;
+    sd.interpolations[3].target_index = 3;
+    sd.interpolations[3].target_offset = 0;
+
+    sd.interpolations[4].offset = 16;
+    sd.interpolations[4].bytes = sizeof(int32_t);
+    sd.interpolations[4].target_kind = SubgraphDefinition::Interpolation::TARGET_TASK_ARGS;
+    sd.interpolations[4].target_index = 4;
+    sd.interpolations[4].target_offset = 0;
+
+    sd.arrivals.resize(1);
+    sd.arrivals[0].barrier = bar;
+    sd.interpolations[5].offset = 20;
+    sd.interpolations[5].bytes = sizeof(Barrier);
+    sd.interpolations[5].target_kind = SubgraphDefinition::Interpolation::TARGET_ARRIVAL_BARRIER;
+
+    sd.copies.resize(4);
+    {
+      std::vector<CopySrcDstField> src(1), dst(1);
+      src[0].set_field(src_inst, 0, sizeof(int32_t));
+      dst[0].set_field(dst_inst, 0, sizeof(int32_t));
+      sd.copies[0].space = is2;
+      sd.copies[0].srcs = src;
+      sd.copies[0].dsts = dst;
+    }
+    {
+      std::vector<CopySrcDstField> src(2), dst(2);
+      int32_t value = 13;
+      src[0].set_fill(value);
+      dst[0].set_field(fill_inst, 0, sizeof(int32_t));
+      src[1].set_fill(value);
+      dst[1].set_field(fill_inst2, 0, sizeof(int32_t));
+      sd.copies[1].space = is2;
+      sd.copies[1].srcs = src;
+      sd.copies[1].dsts = dst;
+    }
+    {
+      std::vector<CopySrcDstField> src(1), dst(1);
+      int32_t value = 15451;
+      src[0].set_fill(value);
+      dst[0].set_field(partial_inst, 0, sizeof(int32_t));
+      sd.copies[2].space = pis1;
+      sd.copies[2].srcs = src;
+      sd.copies[2].dsts = dst;
+    }
+    {
+      std::vector<CopySrcDstField> src(1), dst(1);
+      int32_t value = 15451;
+      src[0].set_fill(value);
+      dst[0].set_field(partial_inst2, 0, sizeof(int32_t));
+      sd.copies[3].space = pis2;
+      sd.copies[3].srcs = src;
+      sd.copies[3].dsts = dst;
+    }
+    for (auto& cpy : sd.copies) {
+      cpy.prs = prs;
+    }
+
+    // Add the necessary dependencies.
+    sd.dependencies.resize(16);
+
+    sd.dependencies[0].src_op_kind = SubgraphDefinition::OPKIND_TASK;
+    sd.dependencies[0].src_op_index = 0;
+    sd.dependencies[0].tgt_op_kind = SubgraphDefinition::OPKIND_TASK;
+    sd.dependencies[0].tgt_op_index = 1;
+
+    sd.dependencies[1].src_op_kind = SubgraphDefinition::OPKIND_TASK;
+    sd.dependencies[1].src_op_index = 0;
+    sd.dependencies[1].tgt_op_kind = SubgraphDefinition::OPKIND_TASK;
+    sd.dependencies[1].tgt_op_index = 2;
+
+    sd.dependencies[2].src_op_kind = SubgraphDefinition::OPKIND_TASK;
+    sd.dependencies[2].src_op_index = 1;
+    sd.dependencies[2].tgt_op_kind = SubgraphDefinition::OPKIND_TASK;
+    sd.dependencies[2].tgt_op_index = 3;
+
+    sd.dependencies[3].src_op_kind = SubgraphDefinition::OPKIND_TASK;
+    sd.dependencies[3].src_op_index = 2;
+    sd.dependencies[3].tgt_op_kind = SubgraphDefinition::OPKIND_TASK;
+    sd.dependencies[3].tgt_op_index = 3;
+
+
+    // Extra ...
+    sd.dependencies[4].src_op_kind = SubgraphDefinition::OPKIND_TASK;
+    sd.dependencies[4].src_op_index = 0;
+    sd.dependencies[4].tgt_op_kind = SubgraphDefinition::OPKIND_TASK;
+    sd.dependencies[4].tgt_op_index = 3;
+
+    sd.dependencies[5].src_op_kind = SubgraphDefinition::OPKIND_TASK;
+    sd.dependencies[5].src_op_index = 1;
+    sd.dependencies[5].tgt_op_kind = SubgraphDefinition::OPKIND_TASK;
+    sd.dependencies[5].tgt_op_index = 2;
+
+    sd.dependencies[6].src_op_kind = SubgraphDefinition::OPKIND_TASK;
+    sd.dependencies[6].src_op_index = 1;
+    sd.dependencies[6].tgt_op_kind = SubgraphDefinition::OPKIND_TASK;
+    sd.dependencies[6].tgt_op_index = 4;
+
+    // External precondition ...
+    sd.dependencies[7].src_op_kind = SubgraphDefinition::OPKIND_EXT_PRECOND;
+    // TODO (rohany): Try making this not the first etc ...
+    sd.dependencies[7].src_op_index = 0;
+    sd.dependencies[7].tgt_op_kind = SubgraphDefinition::OPKIND_TASK;
+    sd.dependencies[7].tgt_op_index = 0;
+
+    // Copy dependencies.
+    sd.dependencies[8].src_op_kind = SubgraphDefinition::OPKIND_TASK;
+    sd.dependencies[8].src_op_index = 0;
+    sd.dependencies[8].tgt_op_kind = SubgraphDefinition::OPKIND_COPY;
+    sd.dependencies[8].tgt_op_index = 0;
+
+    sd.dependencies[9].src_op_kind = SubgraphDefinition::OPKIND_COPY;
+    sd.dependencies[9].src_op_index = 0;
+    sd.dependencies[9].tgt_op_kind = SubgraphDefinition::OPKIND_TASK;
+    sd.dependencies[9].tgt_op_index = 1;
+
+    sd.dependencies[10].src_op_kind = SubgraphDefinition::OPKIND_TASK;
+    sd.dependencies[10].src_op_index = 2;
+    sd.dependencies[10].tgt_op_kind = SubgraphDefinition::OPKIND_EXT_POSTCOND;
+    sd.dependencies[10].tgt_op_index = 0;
+
+    sd.dependencies[11].src_op_kind = SubgraphDefinition::OPKIND_COPY;
+    sd.dependencies[11].src_op_index = 0;
+    sd.dependencies[11].tgt_op_kind = SubgraphDefinition::OPKIND_EXT_POSTCOND;
+    sd.dependencies[11].tgt_op_index = 1;
+
+    sd.dependencies[12].src_op_kind = SubgraphDefinition::OPKIND_TASK;
+    sd.dependencies[12].src_op_index = 3;
+    sd.dependencies[12].tgt_op_kind = SubgraphDefinition::OPKIND_EXT_POSTCOND;
+    sd.dependencies[12].tgt_op_index = 1;
+
+    sd.dependencies[13].src_op_kind = SubgraphDefinition::OPKIND_COPY;
+    sd.dependencies[13].src_op_index = 1;
+    sd.dependencies[13].tgt_op_kind = SubgraphDefinition::OPKIND_COPY;
+    sd.dependencies[13].tgt_op_index = 2;
+
+    sd.dependencies[14].src_op_kind = SubgraphDefinition::OPKIND_TASK;
+    sd.dependencies[14].src_op_index = 3;
+    sd.dependencies[14].tgt_op_kind = SubgraphDefinition::OPKIND_COPY;
+    sd.dependencies[14].tgt_op_index = 3;
+
+    sd.dependencies[15].src_op_kind = SubgraphDefinition::OPKIND_COPY;
+    sd.dependencies[15].src_op_index = 1;
+    sd.dependencies[15].tgt_op_kind = SubgraphDefinition::OPKIND_TASK;
+    sd.dependencies[15].tgt_op_index = 2;
+
+    Subgraph::create_subgraph(diamond, sd, ProfilingRequestSet()).wait();
+  }
+
+  // We're going to run the subgraph twice.
+  recieved_profs.store_release(2 * (sd.tasks.size() + sd.copies.size()));
+
+  auto next_bar = bar.advance_barrier();
+
+  Event e = Event::NO_EVENT;
+  Serialization::DynamicBufferSerializer ser(256);
+  ser << 0;
+  ser << 1;
+  ser << 2;
+  ser << 3;
+  ser << 4;
+  ser << next_bar;
+  std::vector<Event> ext_preconds;
+  ext_preconds.push_back(bar);
+  std::vector<Event> ext_postconds(2);
+  // First run will trigger the external post conds.
+  e = diamond.instantiate(ser.get_buffer(), ser.bytes_used(), ProfilingRequestSet(), SubgraphInstantiationProfilingRequestsDesc(), ext_preconds, ext_postconds);
+  ser.reset();
+
+  // Arrive to allow the instantiation to continue.
+  bar.arrive();
+
+  e = cpus[0].spawn(TEST_READ_TASK, &fill_inst, sizeof(fill_inst), e);
+  e = cpus[0].spawn(TEST_READ_TASK, &fill_inst2, sizeof(fill_inst2), e);
+  e = cpus[0].spawn(TEST_READ_TASK, &dst_inst, sizeof(dst_inst), e);
+  e = cpus[0].spawn(TEST_READ_TASK, &partial_inst, sizeof(partial_inst), e);
+  e = cpus[0].spawn(TEST_READ_TASK, &partial_inst2, sizeof(partial_inst2), e);
+  {
+    std::vector<CopySrcDstField> info(5);
+    info[0].set_field(src_inst, 0, sizeof(int32_t));
+    info[1].set_field(fill_inst, 0, sizeof(int32_t));
+    info[2].set_field(fill_inst2, 0, sizeof(int32_t));
+    info[3].set_field(partial_inst, 0, sizeof(int32_t));
+    info[4].set_field(partial_inst2, 0, sizeof(int32_t));
+    int32_t value = 242;
+    e = is2.fill(info, ProfilingRequestSet(), &value, sizeof(int32_t), e);
+  }
+
+  auto next_next_bar = next_bar.advance_barrier();
+  // Set interp to some new data, just to be sure it works on a second replay.
+  ser << 5;
+  ser << 6;
+  ser << 7;
+  ser << 8;
+  ser << 9;
+  ser << next_next_bar;
+
+  ext_preconds.clear();
+  ext_preconds.push_back(next_bar);
+  std::vector<Event> ext_postconds_2(2);
+  e = diamond.instantiate(ser.get_buffer(), ser.bytes_used(), ProfilingRequestSet(), SubgraphInstantiationProfilingRequestsDesc(), ext_preconds, ext_postconds_2, e);
+
+  // The subgraph itself should sequence deletions after pending replays
+  // complete, so test that here.
+  Event destroy = diamond.destroy();
+
+  e = cpus[0].spawn(TEST_READ_TASK, &fill_inst, sizeof(fill_inst), e);
+  e = cpus[0].spawn(TEST_READ_TASK, &fill_inst2, sizeof(fill_inst2), e);
+  e = cpus[0].spawn(TEST_READ_TASK, &dst_inst, sizeof(dst_inst), e);
+  e = cpus[0].spawn(TEST_READ_TASK, &partial_inst, sizeof(partial_inst), e);
+  e = cpus[0].spawn(TEST_READ_TASK, &partial_inst2, sizeof(partial_inst2), e);
 
   e.wait();
 
-  // create an inner subgraph that just does a barrier arrival
-  Subgraph sg_inner;
-  {
-    SubgraphDefinition sd_inner;
+  for (auto& e : ext_postconds)
+    assert(e.exists() && e.has_triggered());
+  for (auto& e : ext_postconds_2)
+    assert(e.exists() && e.has_triggered());
+  assert(next_next_bar.has_triggered());
 
-    sd_inner.arrivals.resize(1);
-    sd_inner.arrivals[0].barrier = Barrier::NO_BARRIER; // will be interpolated
-    sd_inner.arrivals[0].count = 1;
-    int rv = 5;
-    sd_inner.arrivals[0].reduce_value.set(&rv, sizeof(rv));
+  // The subgraph deletion event should trigger.
+  destroy.wait();
 
-    sd_inner.interpolations.resize(2);
-    sd_inner.interpolations[0].offset = OFFSETOF(InnerSubgraphArgs, b);
-    sd_inner.interpolations[0].bytes = sizeof(Barrier);
-    sd_inner.interpolations[0].target_kind =
-        SubgraphDefinition::Interpolation::TARGET_ARRIVAL_BARRIER;
-    sd_inner.interpolations[0].target_index = 0;
-    sd_inner.interpolations[0].target_offset = 0;
-    sd_inner.interpolations[0].redop_id = 0;
+  // Profiling responses are async tasks launched by cleanups, and the
+  // cleanup worker does not wait for those tasks to finish before returning.
+  while (recieved_profs.load_acquire() != 0) {}
 
-    sd_inner.interpolations[1].offset = OFFSETOF(InnerSubgraphArgs, arr_value);
-    sd_inner.interpolations[1].bytes = sizeof(int);
-    sd_inner.interpolations[1].target_kind =
-        SubgraphDefinition::Interpolation::TARGET_ARRIVAL_VALUE;
-    sd_inner.interpolations[1].target_index = 0;
-    sd_inner.interpolations[1].target_offset = 0;
-    sd_inner.interpolations[1].redop_id = 0;
+  log_app.info() << "Done!";
 
-    Subgraph::create_subgraph(sg_inner, sd_inner, ProfilingRequestSet()).wait();
-  }
-
-  Reservation rsrv = Reservation::create_reservation();
-
-  int ival = 77;
-  Barrier barrier = Barrier::create_barrier(5, REDOP_INT_ADD, &ival, sizeof(ival));
-
-  SubgraphDefinition sd;
-  sd.tasks.resize(2);
-  sd.tasks[0].proc = p;
-  sd.tasks[0].task_id = WRITER_TASK;
-  w_args.wrval = 6;
-  sd.tasks[0].args.set(&w_args, sizeof(w_args));
-  sd.tasks[1].proc = p;
-  sd.tasks[1].task_id = READER_TASK;
-  r_args.rdval = 7;
-  sd.tasks[1].args.set(&r_args, sizeof(r_args));
-
-  sd.copies.resize(1);
-  sd.copies[0].space = is;
-  sd.copies[0].srcs = copy_src;
-  sd.copies[0].dsts = copy_dst;
-
-  sd.instantiations.resize(1);
-  sd.instantiations[0].subgraph = sg_inner;
-  InnerSubgraphArgs inner_args;
-  inner_args.b = barrier;
-  inner_args.arr_value = 7;
-  sd.instantiations[0].args.set(&inner_args, sizeof(inner_args));
-  sd.instantiations[0].priority_adjust = 0;
-
-  sd.acquires.resize(1);
-  sd.acquires[0].rsrv = rsrv;
-
-  sd.releases.resize(1);
-  sd.releases[0].rsrv = rsrv;
-
-  sd.dependencies.resize(7);
-  sd.dependencies[0].src_op_kind = SubgraphDefinition::OPKIND_TASK;
-  sd.dependencies[0].src_op_index = 0;
-  sd.dependencies[0].tgt_op_kind = SubgraphDefinition::OPKIND_COPY;
-  sd.dependencies[0].tgt_op_index = 0;
-
-  sd.dependencies[1].src_op_kind = SubgraphDefinition::OPKIND_COPY;
-  sd.dependencies[1].src_op_index = 0;
-  sd.dependencies[1].tgt_op_kind = SubgraphDefinition::OPKIND_TASK;
-  sd.dependencies[1].tgt_op_index = 1;
-
-  sd.dependencies[2].src_op_kind = SubgraphDefinition::OPKIND_ACQUIRE;
-  sd.dependencies[2].src_op_index = 0;
-  sd.dependencies[2].tgt_op_kind = SubgraphDefinition::OPKIND_TASK;
-  sd.dependencies[2].tgt_op_index = 0;
-
-  sd.dependencies[3].src_op_kind = SubgraphDefinition::OPKIND_TASK;
-  sd.dependencies[3].src_op_index = 1;
-  sd.dependencies[3].tgt_op_kind = SubgraphDefinition::OPKIND_RELEASE;
-  sd.dependencies[3].tgt_op_index = 0;
-
-  sd.dependencies[4].src_op_kind = SubgraphDefinition::OPKIND_EXT_PRECOND;
-  sd.dependencies[4].src_op_index = 0;
-  sd.dependencies[4].tgt_op_kind = SubgraphDefinition::OPKIND_ACQUIRE;
-  sd.dependencies[4].tgt_op_index = 0;
-
-  sd.dependencies[5].src_op_kind = SubgraphDefinition::OPKIND_ACQUIRE;
-  sd.dependencies[5].src_op_index = 0;
-  sd.dependencies[5].tgt_op_kind = SubgraphDefinition::OPKIND_EXT_POSTCOND;
-  sd.dependencies[5].tgt_op_index = 0;
-
-  sd.dependencies[6].src_op_kind = SubgraphDefinition::OPKIND_ACQUIRE;
-  sd.dependencies[6].src_op_index = 0;
-  sd.dependencies[6].tgt_op_kind = SubgraphDefinition::OPKIND_INSTANTIATION;
-  sd.dependencies[6].tgt_op_index = 0;
-  sd.dependencies[6].tgt_op_port = 1;
-
-  sd.interpolations.resize(3);
-  sd.interpolations[0].offset = OFFSETOF(SubgraphArgs, rdwr_val);
-  sd.interpolations[0].bytes = sizeof(int);
-  sd.interpolations[0].target_kind = SubgraphDefinition::Interpolation::TARGET_TASK_ARGS;
-  sd.interpolations[0].target_index = 0;
-  sd.interpolations[0].target_offset = OFFSETOF(WriterTaskArgs, wrval);
-
-  sd.interpolations[1].offset = OFFSETOF(SubgraphArgs, rdwr_val);
-  sd.interpolations[1].bytes = sizeof(int);
-  sd.interpolations[1].target_kind = SubgraphDefinition::Interpolation::TARGET_TASK_ARGS;
-  sd.interpolations[1].target_index = 1;
-  sd.interpolations[1].target_offset = OFFSETOF(ReaderTaskArgs, rdval);
-
-  sd.interpolations[2].offset = OFFSETOF(SubgraphArgs, arr_inc);
-  sd.interpolations[2].bytes = sizeof(int);
-  sd.interpolations[2].target_kind =
-      SubgraphDefinition::Interpolation::TARGET_INSTANCE_ARGS;
-  sd.interpolations[2].target_index = 0;
-  sd.interpolations[2].target_offset = OFFSETOF(InnerSubgraphArgs, arr_value);
-  sd.interpolations[2].redop_id = REDOP_INT_ADD;
-
-  Subgraph sg;
-  e = Subgraph::create_subgraph(sg, sd, ProfilingRequestSet());
-
-  std::vector<UserEvent> start_events(4);
-  std::vector<Event> acquire_events(4);
-  std::vector<Event> finish_events(4);
-  for(int i = 0; i < 4; i++) {
-    SubgraphArgs sg_args;
-    sg_args.rdwr_val = 100 * (i + 1);
-    sg_args.arr_inc = (i + 1);
-    start_events[i] = UserEvent::create_user_event();
-    std::vector<Event> preconds(1, start_events[i]);
-    std::vector<Event> postconds(1);
-    finish_events[i] = sg.instantiate(&sg_args, sizeof(sg_args), ProfilingRequestSet(),
-                                      preconds, postconds, e);
-    acquire_events[i] = postconds[0];
-  }
-  e = Event::merge_events(finish_events);
-
-  // do one more invocation on a remote processor if we can, and have it
-  //  do the subgraph cleanup
-  Machine::ProcessorQuery pq(Machine::get_machine());
-  pq.only_kind(Processor::LOC_PROC);
-  Processor lastp = Processor::NO_PROC;
-  for(Machine::ProcessorQuery::iterator it = pq.begin(); it != pq.end(); ++it)
-    lastp = *it;
-  assert(lastp.exists());
-
-  // pass the merged finish event to this task as an arg, not a precondition
-  //  of the task itself
-  CleanupTaskArgs cleanup_args;
-  cleanup_args.precond = e;
-  cleanup_args.subgraph = sg;
-  cleanup_args.subgraph_inner = sg_inner;
-  cleanup_args.cleanup_done = UserEvent::create_user_event();
-  lastp.spawn(CLEANUP_TASK, &cleanup_args, sizeof(CleanupTaskArgs),
-              ProfilingRequestSet());
-
-  // connect up start events
-  start_events[0].trigger(acquire_events[1]);
-  start_events[1].trigger(acquire_events[2]);
-  start_events[2].trigger(acquire_events[3]);
-  start_events[3].trigger();
-
-  cleanup_args.cleanup_done.wait();
+  // do everything on this processor - get a good memory to use
+//  Memory m = Machine::MemoryQuery(Machine::get_machine()).has_affinity_to(p).first();
+//  assert(m.exists());
+//
+//  IndexSpace<1> is = Rect<1>(0, 9);
+//  RegionInstance inst1, inst2;
+//  std::map<FieldID, size_t> field_sizes;
+//  field_sizes[FID_DATA] = sizeof(int);
+//
+//  Event e = RegionInstance::create_instance(inst1, m, is, field_sizes,
+//					    0 /*block_size=SOA*/,
+//					    ProfilingRequestSet());
+//
+//  e = RegionInstance::create_instance(inst2, m, is, field_sizes,
+//				      0 /*block_size=SOA*/,
+//				      ProfilingRequestSet(), e);
+//
+//  // immediate mode - no subgraph
+//  WriterTaskArgs w_args;
+//  w_args.is = is;
+//  w_args.inst = inst1;
+//  w_args.wrval = 5;
+//  e = p.spawn(WRITER_TASK, &w_args, sizeof(w_args), e);
+//
+//  std::vector<CopySrcDstField> copy_src(1), copy_dst(1);
+//  copy_src[0].set_field(inst1, FID_DATA, sizeof(int));
+//  copy_dst[0].set_field(inst2, FID_DATA, sizeof(int));
+//  e = is.copy(copy_src, copy_dst, ProfilingRequestSet(), e);
+//
+//  ReaderTaskArgs r_args;
+//  r_args.is = is;
+//  r_args.inst = inst2;
+//  r_args.rdval = 5;
+//  e = p.spawn(READER_TASK, &r_args, sizeof(r_args), e);
+//
+//  e.wait();
+//
+//  // create an inner subgraph that just does a barrier arrival
+//  Subgraph sg_inner;
+//  {
+//    SubgraphDefinition sd_inner;
+//
+//    sd_inner.arrivals.resize(1);
+//    sd_inner.arrivals[0].barrier = Barrier::NO_BARRIER; // will be interpolated
+//    sd_inner.arrivals[0].count = 1;
+//    int rv = 5;
+//    sd_inner.arrivals[0].reduce_value.set(&rv, sizeof(rv));
+//
+//    sd_inner.interpolations.resize(2);
+//    sd_inner.interpolations[0].offset = OFFSETOF(InnerSubgraphArgs, b);
+//    sd_inner.interpolations[0].bytes = sizeof(Barrier);
+//    sd_inner.interpolations[0].target_kind = SubgraphDefinition::Interpolation::TARGET_ARRIVAL_BARRIER;
+//    sd_inner.interpolations[0].target_index = 0;
+//    sd_inner.interpolations[0].target_offset = 0;
+//    sd_inner.interpolations[0].redop_id = 0;
+//
+//    sd_inner.interpolations[1].offset = OFFSETOF(InnerSubgraphArgs, arr_value);
+//    sd_inner.interpolations[1].bytes = sizeof(int);
+//    sd_inner.interpolations[1].target_kind = SubgraphDefinition::Interpolation::TARGET_ARRIVAL_VALUE;
+//    sd_inner.interpolations[1].target_index = 0;
+//    sd_inner.interpolations[1].target_offset = 0;
+//    sd_inner.interpolations[1].redop_id = 0;
+//
+//    Subgraph::create_subgraph(sg_inner,
+//			      sd_inner,
+//			      ProfilingRequestSet()).wait();
+//  }
+//
+//  Reservation rsrv = Reservation::create_reservation();
+//
+//  int ival = 77;
+//  Barrier barrier = Barrier::create_barrier(5, REDOP_INT_ADD,
+//					    &ival, sizeof(ival));
+//
+//  SubgraphDefinition sd;
+//  sd.tasks.resize(2);
+//  sd.tasks[0].proc = p;
+//  sd.tasks[0].task_id = WRITER_TASK;
+//  w_args.wrval = 6;
+//  sd.tasks[0].args.set(&w_args, sizeof(w_args));
+//  sd.tasks[1].proc = p;
+//  sd.tasks[1].task_id = READER_TASK;
+//  r_args.rdval = 7;
+//  sd.tasks[1].args.set(&r_args, sizeof(r_args));
+//
+//  sd.copies.resize(1);
+//  sd.copies[0].space = is;
+//  sd.copies[0].srcs = copy_src;
+//  sd.copies[0].dsts = copy_dst;
+//
+//  sd.instantiations.resize(1);
+//  sd.instantiations[0].subgraph = sg_inner;
+//  InnerSubgraphArgs inner_args;
+//  inner_args.b = barrier;
+//  inner_args.arr_value = 7;
+//  sd.instantiations[0].args.set(&inner_args, sizeof(inner_args));
+//  sd.instantiations[0].priority_adjust = 0;
+//
+//  sd.acquires.resize(1);
+//  sd.acquires[0].rsrv = rsrv;
+//
+//  sd.releases.resize(1);
+//  sd.releases[0].rsrv = rsrv;
+//
+//  sd.dependencies.resize(7);
+//  sd.dependencies[0].src_op_kind = SubgraphDefinition::OPKIND_TASK;
+//  sd.dependencies[0].src_op_index = 0;
+//  sd.dependencies[0].tgt_op_kind = SubgraphDefinition::OPKIND_COPY;
+//  sd.dependencies[0].tgt_op_index = 0;
+//
+//  sd.dependencies[1].src_op_kind = SubgraphDefinition::OPKIND_COPY;
+//  sd.dependencies[1].src_op_index = 0;
+//  sd.dependencies[1].tgt_op_kind = SubgraphDefinition::OPKIND_TASK;
+//  sd.dependencies[1].tgt_op_index = 1;
+//
+//  sd.dependencies[2].src_op_kind = SubgraphDefinition::OPKIND_ACQUIRE;
+//  sd.dependencies[2].src_op_index = 0;
+//  sd.dependencies[2].tgt_op_kind = SubgraphDefinition::OPKIND_TASK;
+//  sd.dependencies[2].tgt_op_index = 0;
+//
+//  sd.dependencies[3].src_op_kind = SubgraphDefinition::OPKIND_TASK;
+//  sd.dependencies[3].src_op_index = 1;
+//  sd.dependencies[3].tgt_op_kind = SubgraphDefinition::OPKIND_RELEASE;
+//  sd.dependencies[3].tgt_op_index = 0;
+//
+//  sd.dependencies[4].src_op_kind = SubgraphDefinition::OPKIND_EXT_PRECOND;
+//  sd.dependencies[4].src_op_index = 0;
+//  sd.dependencies[4].tgt_op_kind = SubgraphDefinition::OPKIND_ACQUIRE;
+//  sd.dependencies[4].tgt_op_index = 0;
+//
+//  sd.dependencies[5].src_op_kind = SubgraphDefinition::OPKIND_ACQUIRE;
+//  sd.dependencies[5].src_op_index = 0;
+//  sd.dependencies[5].tgt_op_kind = SubgraphDefinition::OPKIND_EXT_POSTCOND;
+//  sd.dependencies[5].tgt_op_index = 0;
+//
+//  sd.dependencies[6].src_op_kind = SubgraphDefinition::OPKIND_ACQUIRE;
+//  sd.dependencies[6].src_op_index = 0;
+//  sd.dependencies[6].tgt_op_kind = SubgraphDefinition::OPKIND_INSTANTIATION;
+//  sd.dependencies[6].tgt_op_index = 0;
+//  sd.dependencies[6].tgt_op_port = 1;
+//
+//  sd.interpolations.resize(3);
+//  sd.interpolations[0].offset = OFFSETOF(SubgraphArgs, rdwr_val);
+//  sd.interpolations[0].bytes = sizeof(int);
+//  sd.interpolations[0].target_kind = SubgraphDefinition::Interpolation::TARGET_TASK_ARGS;
+//  sd.interpolations[0].target_index = 0;
+//  sd.interpolations[0].target_offset = OFFSETOF(WriterTaskArgs, wrval);
+//
+//  sd.interpolations[1].offset = OFFSETOF(SubgraphArgs, rdwr_val);
+//  sd.interpolations[1].bytes = sizeof(int);
+//  sd.interpolations[1].target_kind = SubgraphDefinition::Interpolation::TARGET_TASK_ARGS;
+//  sd.interpolations[1].target_index = 1;
+//  sd.interpolations[1].target_offset = OFFSETOF(ReaderTaskArgs, rdval);
+//
+//  sd.interpolations[2].offset = OFFSETOF(SubgraphArgs, arr_inc);
+//  sd.interpolations[2].bytes = sizeof(int);
+//  sd.interpolations[2].target_kind = SubgraphDefinition::Interpolation::TARGET_INSTANCE_ARGS;
+//  sd.interpolations[2].target_index = 0;
+//  sd.interpolations[2].target_offset = OFFSETOF(InnerSubgraphArgs, arr_value);
+//  sd.interpolations[2].redop_id = REDOP_INT_ADD;
+//
+//  Subgraph sg;
+//  e = Subgraph::create_subgraph(sg,
+//				sd,
+//				ProfilingRequestSet());
+//
+//  std::vector<UserEvent> start_events(4);
+//  std::vector<Event> acquire_events(4);
+//  std::vector<Event> finish_events(4);
+//  for(int i = 0; i < 4; i++) {
+//    SubgraphArgs sg_args;
+//    sg_args.rdwr_val = 100 * (i + 1);
+//    sg_args.arr_inc = (i + 1);
+//    start_events[i] = UserEvent::create_user_event();
+//    std::vector<Event> preconds(1, start_events[i]);
+//    std::vector<Event> postconds(1);
+//    finish_events[i] = sg.instantiate(&sg_args, sizeof(sg_args),
+//				      ProfilingRequestSet(),
+//				      preconds,
+//				      postconds,
+//				      e);
+//    acquire_events[i] = postconds[0];
+//  }
+//  e = Event::merge_events(finish_events);
+//
+//  // do one more invocation on a remote processor if we can, and have it
+//  //  do the subgraph cleanup
+//  Machine::ProcessorQuery pq(Machine::get_machine());
+//  pq.only_kind(Processor::LOC_PROC);
+//  Processor lastp = Processor::NO_PROC;
+//  for(Machine::ProcessorQuery::iterator it = pq.begin(); it != pq.end(); ++it)
+//    lastp = *it;
+//  assert(lastp.exists());
+//
+//  // pass the merged finish event to this task as an arg, not a precondition
+//  //  of the task itself
+//  CleanupTaskArgs cleanup_args;
+//  cleanup_args.precond = e;
+//  cleanup_args.subgraph = sg;
+//  cleanup_args.subgraph_inner = sg_inner;
+//  cleanup_args.cleanup_done = UserEvent::create_user_event();
+//  lastp.spawn(CLEANUP_TASK, &cleanup_args, sizeof(CleanupTaskArgs),
+//	      ProfilingRequestSet());
+//
+//  // connect up start events
+//  start_events[0].trigger(acquire_events[1]);
+//  start_events[1].trigger(acquire_events[2]);
+//  start_events[2].trigger(acquire_events[3]);
+//  start_events[3].trigger();
+//
+//  cleanup_args.cleanup_done.wait();
+//
+//  bool ok = true;
+//
+//  // make sure the barrier got triggered with the right values
+//  barrier.wait();
+//  int exp_bar_value = 77 + (7 + 1) + (7 + 2) + (7 + 3) + (7 + 4) + (7 + 10);
+//  int act_bar_value = 0;
+//  {
+//    bool ok = barrier.get_result(&act_bar_value, sizeof(act_bar_value));
+//    assert(ok);
+//  }
+//  if(exp_bar_value != act_bar_value) {
+//    log_app.error() << "barrier value mismatch: exp=" << exp_bar_value
+//		    << " act=" << act_bar_value;
+//    ok = false;
+//  }
+//
+//  int expcorrect = 60;  // counting the cleanup task
+//  if(expcorrect != correct) {
+//    log_app.error() << correct << " correct comparisons (out of " << expcorrect << ")";
+//    ok = false;
+//  }
 
   bool ok = true;
-
-  // make sure the barrier got triggered with the right values
-  barrier.wait();
-  int exp_bar_value = 77 + (7 + 1) + (7 + 2) + (7 + 3) + (7 + 4) + (7 + 10);
-  int act_bar_value = 0;
-  {
-    bool ok = barrier.get_result(&act_bar_value, sizeof(act_bar_value));
-    assert(ok);
-  }
-  if(exp_bar_value != act_bar_value) {
-    log_app.error() << "barrier value mismatch: exp=" << exp_bar_value
-                    << " act=" << act_bar_value;
-    ok = false;
-  }
-
-  int expcorrect = 60; // counting the cleanup task
-  if(expcorrect != correct) {
-    log_app.error() << correct << " correct comparisons (out of " << expcorrect << ")";
-    ok = false;
-  }
-
-  Runtime::get_runtime().shutdown(Event::NO_EVENT, ok ? 0 : 1);
+  Runtime::get_runtime().shutdown(Event::NO_EVENT,
+                                  ok ? 0 : 1);
 }
 
 int main(int argc, char **argv)
@@ -426,6 +834,9 @@ int main(int argc, char **argv)
   rt.register_task(WRITER_TASK, writer_task);
   rt.register_task(READER_TASK, reader_task);
   rt.register_task(CLEANUP_TASK, cleanup_task);
+  rt.register_task(DUMMY_TASK, dummy_task);
+  rt.register_task(TEST_READ_TASK, test_read_task);
+  rt.register_task(PROF_RESPONSE_TASK, prof_response_task);
 
   rt.register_reduction<ReductionOpIntAdd>(REDOP_INT_ADD);
 

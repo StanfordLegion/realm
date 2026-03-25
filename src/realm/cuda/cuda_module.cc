@@ -230,7 +230,7 @@ namespace Realm {
 
     void GPUStream::add_event(CUevent event, GPUWorkFence *fence,
                               GPUCompletionNotification *notification,
-                              GPUWorkStart *start)
+                              GPUWorkStart *start, bool return_event)
     {
       bool add_to_worker = false;
       {
@@ -245,6 +245,7 @@ namespace Realm {
         e.fence = fence;
         e.start = start;
         e.notification = notification;
+        e.return_event = return_event;
 
         pending_events.push_back(e);
       }
@@ -320,14 +321,15 @@ namespace Realm {
         log_stream.debug() << "CUDA event " << event << " triggered on stream " << stream
                            << " (GPU " << gpu << ")";
 
-        // give event back to GPU for reuse
-        gpu->event_pool.return_event(event);
-
         // this event has triggered, so figure out the fence/notification to trigger
         //  and also peek at the next event
         GPUWorkFence *fence = 0;
         GPUWorkStart *start = 0;
         GPUCompletionNotification *notification = 0;
+        bool return_event = false;
+        // The logic below may change the value stored in
+        // `event`, so save it before manipulating the queue.
+        CUevent event_to_return = event;
 
         {
           AutoLock<> al(mutex);
@@ -337,6 +339,7 @@ namespace Realm {
           fence = e.fence;
           start = e.start;
           notification = e.notification;
+          return_event = e.return_event;
           pending_events.pop_front();
 
           if(pending_events.empty()) {
@@ -344,6 +347,10 @@ namespace Realm {
             work_left = has_work();
           } else
             event = pending_events.front().event;
+        }
+
+        if (return_event) {
+          gpu->event_pool.return_event(event_to_return);
         }
 
         if(start) {
@@ -583,6 +590,16 @@ namespace Realm {
       }
 
       available_events[current_size++] = e;
+    }
+
+    void GPUEventPool::return_events(CUevent* events, size_t num_events) {
+      AutoLock<> al(mutex);
+
+      assert(current_size < total_size);
+
+      for (size_t i = 0; i < num_events; i++) {
+        available_events[current_size++] = events[i];
+      }
     }
 
     ////////////////////////////////////////////////////////////////////////
@@ -990,9 +1007,9 @@ namespace Realm {
         }
       }
       params.set_num_cores(1);
-      params.set_alu_usage(params.CORE_USAGE_SHARED);
-      params.set_fpu_usage(params.CORE_USAGE_SHARED);
-      params.set_ldst_usage(params.CORE_USAGE_SHARED);
+      params.set_alu_usage(params.CORE_USAGE_EXCLUSIVE);
+      params.set_fpu_usage(params.CORE_USAGE_EXCLUSIVE);
+      params.set_ldst_usage(params.CORE_USAGE_EXCLUSIVE);
       params.set_max_stack_size(_stack_size);
 
       std::string name = stringbuilder() << "GPU proc " << _me;
@@ -1012,6 +1029,85 @@ namespace Realm {
     }
 
     GPUProcessor::~GPUProcessor(void) { delete core_rsrv; }
+
+   void GPUProcessor::push_subgraph_replay_context() {
+     gpu->push_context();
+   }
+
+   void GPUProcessor::pop_subgraph_replay_context() {
+     gpu->pop_context();
+   }
+
+   void GPUProcessor::push_subgraph_task_replay_context(SubgraphOperationProfilingInfo* prof) {
+     // TODO (rohany): A good chunk of this is ripped from the
+     //  GPUContextManager...
+     assert(ThreadLocal::current_gpu_stream == nullptr);
+     GPUStream *s = gpu->get_next_task_stream();
+     ThreadLocal::current_gpu_stream = s;
+     assert(!ThreadLocal::created_gpu_streams);
+
+     // a task can force context sync on task completion either on or off during
+     //  execution, so use -1 as a "no preference" value
+     ThreadLocal::context_sync_required = -1;
+
+     // Push profiling information, if necessary. This completion operation
+     // will set just the GPU start timeline.
+     if (prof && prof->wants_gpu_timeline) {
+       auto e = gpu->event_pool.get_event();
+       CHECK_CU(CUDA_DRIVER_FNPTR(cuEventRecord)(e, s->get_stream()));
+       auto completion = new GPUProfInfoTrigger(prof, true /* start */);
+       s->add_event(e, nullptr, completion, nullptr, true /* return_event */);
+     }
+  }
+
+   void GPUProcessor::pop_subgraph_task_replay_context(void** token, void* trigger, SubgraphOperationProfilingInfo* prof) {
+    GPUStream *s = ThreadLocal::current_gpu_stream;
+    assert(!ThreadLocal::created_gpu_streams);
+
+    assert(!gpu->module->config->cfg_task_legacy_sync);
+    assert(ThreadLocal::context_sync_required == 0);
+
+    // Again, handle post-task GPU timeline information. This must happen
+    // before we enqueue the trigger, otherwise the profiling information
+    // may not get recorded by the time the subgraph finishes and it is
+    // sent out during subgraph cleanup. It has to handle several different
+    // kinds of profiling requests on operation finish.
+    if (prof && (prof->wants_gpu_timeline || prof->wants_timeline || prof->wants_fevent)) {
+      auto e = gpu->event_pool.get_event();
+      CHECK_CU(CUDA_DRIVER_FNPTR(cuEventRecord)(e, s->get_stream()));
+      auto completion = new GPUProfInfoTrigger(prof, false /* start */);
+      s->add_event(e, nullptr, completion, nullptr, true /* return_event */);
+    }
+
+    // Record an event for the completion of kernels launched by the task.
+    auto e = gpu->event_pool.get_event();
+    // Return the event to the caller. The caller is responsible
+    // for cleaning up this
+    *(CUevent_st**)(token) = e;
+    // Actually record the event.
+    CHECK_CU(CUDA_DRIVER_FNPTR(cuEventRecord)(e, s->get_stream()));
+
+    // Enqueue a poller for the completion of the launched kernels.
+    if (trigger) {
+      auto completion = static_cast<GPUCompletionNotification*>(trigger);
+      // The subgraph cleanup will be responsible for cleaning up
+      // and returning events to the pool.
+      s->add_event(e, nullptr, completion, nullptr, false /* return_event */);
+    }
+
+    ThreadLocal::current_gpu_stream = nullptr;
+  }
+
+   void GPUProcessor::sync_task_async_effect(void *token) {
+     // The GPUProcessor will only ever return CUevent_st* to the scheduler.
+     CUevent_st* e = (CUevent_st*)(token);
+     GPUStream *s = ThreadLocal::current_gpu_stream;
+     CHECK_CU(CUDA_DRIVER_FNPTR(cuStreamWaitEvent)(s->get_stream(), e, 0));
+   }
+
+   void GPUProcessor::return_subgraph_async_tokens(const std::vector<void*>& tokens) {
+     gpu->event_pool.return_events((CUevent_st**)tokens.data(), tokens.size());
+   }
 
     GPUStream *GPU::find_stream(CUstream stream) const
     {

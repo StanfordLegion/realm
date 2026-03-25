@@ -106,6 +106,16 @@ namespace Realm {
     class GPUZCMemory;
     class GPUReplHeapListener;
 
+    // TODO (rohany): Moving this out of the CUDA module (for now).
+    // an interface for receiving completion notification for a GPU operation
+    //  (right now, just copies)
+    class GPUCompletionNotification {
+      public:
+        virtual ~GPUCompletionNotification(void) {}
+
+        virtual void request_completed(void) = 0;
+    };
+
     class CudaModuleConfig : public ModuleConfig {
       friend class CudaModule;
 

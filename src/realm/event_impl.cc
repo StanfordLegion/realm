@@ -222,6 +222,17 @@ namespace Realm {
     if(e->has_triggered(gen, poisoned))
       return;
 
+    // This bordering on a giant hack, but I think it makes sense. In a subgraph,
+    // none of the tasks should be launching async work or waiting on events --
+    // all dependencies should be expressed with the subgraph itself! However,
+    // Legion tasks like to use DeferredBuffers, which may result in an event
+    // wait for the instance to become ready. For limited cases like this, just
+    // spin until the waited on event is triggered within a subgraph.
+    if (ThreadLocal::in_subgraph_exec) {
+      while (!e->has_triggered(gen, poisoned)) {}
+      return;
+    }
+
     // if not called from a task, use external_wait instead
     if(!ThreadLocal::current_processor.exists()) {
       log_event.info() << "external thread blocked: event=" << *this;

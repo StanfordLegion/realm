@@ -37,6 +37,7 @@ namespace Realm {
 
   class XferDes;
   class AddressList;
+  class SubgraphImpl;
 
   class TransferIterator {
   public:
@@ -421,6 +422,8 @@ namespace Realm {
       CustomSerdezID serdez_id;
     };
 
+    const TransferGraph& get_transfer_graph() const { return graph; }
+
   protected:
     atomic<int> refcount;
 
@@ -441,6 +444,7 @@ namespace Realm {
     DeferredAnalysis deferred_analysis;
 
     friend class TransferOperation;
+    friend class SubgraphImpl;
 
     TransferDomain *domain;
     std::vector<CopySrcDstField> srcs, dsts;
@@ -590,8 +594,14 @@ namespace Realm {
     Channel *addr_split_channel;
   };
 
+  // Helper routine to perform the IB allocations requested within
+  // a given TransferGraph. This routine can create pending requests to
+  // IB memories -- the input completion object will be notified
+  // when the allocations are completed and what the results are.
+  void allocate_ib_memories_from_graph(const TransferGraph& tg, IBAllocationCompletion* completion);
+
   // a TransferOperation is an application-requested copy/fill/reduce
-  class TransferOperation : public Operation {
+  class TransferOperation : public Operation, public IBAllocationCompletion {
   public:
     TransferOperation(TransferDesc &_desc, Event _precondition,
                       GenEventImpl *_finish_event, EventImpl::gen_t _finish_gen,
@@ -609,9 +619,12 @@ namespace Realm {
     void allocate_ibs();
     void create_xds();
 
-    void notify_ib_allocation(unsigned ib_index, off_t ib_offset);
-    void notify_ib_allocations(unsigned count, unsigned first_index,
-                               const off_t *offsets);
+    // Overrides from IBAllocationCompletion. `override` is not used to
+    // avoid warnings about inconsistent use of `override`.
+    virtual void notify_ib_allocation(unsigned ib_index, off_t ib_offset) /* override */;
+    virtual void notify_ib_allocations(unsigned count, unsigned first_index,
+                               const off_t *offsets) /* override */;
+
     void notify_xd_completion(XferDesID xd_id);
 
     class XDLifetimeTracker : public Operation::AsyncWorkItem {
@@ -625,6 +638,8 @@ namespace Realm {
     };
 
   protected:
+    friend class SubgraphImpl;
+
     virtual void mark_completed(void);
 
     class DeferredStart : public EventWaiter {
