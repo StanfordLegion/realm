@@ -2514,7 +2514,7 @@ namespace Realm {
           args1 = static_cast<void *>(alloca(sizeof(MemReducInfo<size_t>)));
           memcpy(args1, redop_args, sizeof(MemReducInfo<size_t>));
         }
-        void *params[] = {args, args1};
+        void *params[] = {args1, args};
         // setup the params
         CHECK_CUDART(reinterpret_cast<PFN_cudaLaunchKernel>(redop->cudaLaunchKernel_fn)(
             host_proxy, dim3(blocks_per_grid, 1, 1), dim3(threads_per_block, 1, 1),
@@ -2531,7 +2531,6 @@ namespace Realm {
     {
       bool did_work = false;
       bool done = false;
-      const size_t MIN_XFER_SIZE = 4 << 20;
       ReadSequenceCache rseqcache(this, 2 << 20);
       ReadSequenceCache wseqcache(this, 2 << 20);
 
@@ -2549,9 +2548,10 @@ namespace Realm {
       size_t args_size = sizeof(KernelArgs) + redop->sizeof_userdata;
       while(true) {
         size_t min_xfer_size = 4096; // TODO: make controllable
-        const InstanceLayoutPieceBase *in_nonaffine, *out_nonaffine;
+        const InstanceLayoutPieceBase *in_nonaffine = nullptr;
+        const InstanceLayoutPieceBase *out_nonaffine = nullptr;
         size_t max_bytes =
-            get_addresses(MIN_XFER_SIZE, &rseqcache, in_nonaffine, out_nonaffine);
+            get_addresses(min_xfer_size, &rseqcache, in_nonaffine, out_nonaffine);
         const bool non_affine = in_nonaffine || out_nonaffine;
         if(max_bytes == 0) {
           break;
@@ -2567,6 +2567,7 @@ namespace Realm {
           out_span_start = out_port->local_bytes_total;
         }
         // add optimized kernels if the condition is satisfied
+        // TODO: support different elem sizes
         if(in_port && out_port && !non_affine &&
            (redop->sizeof_rhs == redop->sizeof_lhs)) {
           done = fast_reduction_kernel_mode(channel, max_bytes, in_port, out_port,
@@ -2794,7 +2795,7 @@ namespace Realm {
                                              size_t bytes_left, size_t in_elem_size,
                                              size_t out_elem_size)
     {
-      AffineReducPair<3> &copy_info = copy_infos.subrects[copy_infos.num_rects++];
+      AffineReducPair<3> &copy_info = copy_infos.subrects[copy_infos.num_rects];
       uintptr_t in_offset = in_alc.get_offset();
       uintptr_t out_offset = out_alc.get_offset();
       // the reported dim is reduced for partially consumed address
@@ -2936,7 +2937,6 @@ namespace Realm {
         transpose_info.extents[2] = planes;
         transpose_info.volume = (planes * lines * contig_bytes) / in_elem_size;
         transpose_info.elem_size = in_elem_size;
-        copy_infos.num_rects--;
       } else {
         copy_info.dst.strides[0] = out_lstride;
         copy_info.dst.strides[1] = out_pstride / out_lstride;
@@ -2948,15 +2948,16 @@ namespace Realm {
         copy_info.src.elem_size = in_elem_size;
         copy_info.dst.elem_size = out_elem_size;
         copy_info.volume = (planes * lines * contig_bytes) / in_elem_size;
+        copy_infos.num_rects++;
       }
       in_alc.advance(id, planes * iscale);
       out_alc.advance(od, planes * oscale);
       return planes * lines * contig_bytes;
     }
-    static void print_copy_info(AffineReducInfo<3> copy_infos)
+    static void print_copy_info(const AffineReducInfo<3> &copy_infos)
     {
       for(unsigned i = 0; i < copy_infos.num_rects; i++) {
-        AffineReducPair<3> &copy_info = copy_infos.subrects[i];
+        const AffineReducPair<3> &copy_info = copy_infos.subrects[i];
         log_reduc_gpu.info() << "RECT[" << i << "]:"
                              << "copy_info.dst.strides[0]: " << copy_info.dst.strides[0]
                              << ", copy_info.dst.strides[1]: " << copy_info.dst.strides[1]
@@ -2971,7 +2972,7 @@ namespace Realm {
                              << " copy_info.dst.elem_size: " << copy_info.dst.elem_size;
       }
     }
-    static void print_transpose_info(MemReducInfo<size_t> copy_info)
+    static void print_transpose_info(const MemReducInfo<size_t> &copy_info)
     {
       log_reduc_gpu.info() << "TRANSPOSE: "
                            << "copy_info.dst_strides[0]: " << copy_info.dst_strides[0]

@@ -20,8 +20,6 @@
 
 #include <cstddef>
 #include <cstdint>
-#include <vector>
-#include "realm/point.h"
 
 namespace Realm {
   namespace Cuda {
