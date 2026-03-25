@@ -114,7 +114,11 @@ static bool decode_timestamp(const uint8_t *data, size_t data_size, size_t &pos,
 
 static bool validate_profile_file(const std::string &filename)
 {
+#ifdef REALM_ON_WINDOWS
+  int fd = _open(filename.c_str(), _O_RDONLY | _O_BINARY);
+#else
   int fd = open(filename.c_str(), O_RDONLY);
+#endif
   if(fd < 0) {
     fprintf(stderr, "VALIDATE: cannot open file: %s\n", filename.c_str());
     return false;
