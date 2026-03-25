@@ -2207,11 +2207,11 @@ namespace Realm {
       kernel = 0;
       kernel_host_proxy = nullptr;
 
-      kernel_adv = 0;
-      kernel_tran_adv = 0;
+      kernel_advanced = 0;
+      kernel_transpose = 0;
 
-      kernel_host_proxy_adv = nullptr;
-      kernel_host_proxy_tran_adv = nullptr;
+      kernel_host_proxy_advanced = nullptr;
+      kernel_host_proxy_transpose = nullptr;
       assert(redop);
 
       src_is_ipc.resize(inputs_info.size(), false);
@@ -2317,31 +2317,32 @@ namespace Realm {
         std::unordered_map<ReductionOpID, GPU::GPUReductionOpEntry>::const_iterator
             gpu_red_it = gpu->gpu_reduction_table.find(redop_info.id);
         if(gpu_red_it != gpu->gpu_reduction_table.end()) {
-          kernel_adv =
+          kernel_advanced =
               (redop_info.is_fold
-                   ? (redop_info.is_exclusive ? gpu_red_it->second.fold_excl_adv
-                                              : gpu_red_it->second.fold_nonexcl_adv)
-                   : (redop_info.is_exclusive ? gpu_red_it->second.apply_excl_adv
-                                              : gpu_red_it->second.apply_nonexcl_adv));
-
-          kernel_tran_adv =
-              (redop_info.is_fold
-                   ? (redop_info.is_exclusive ? gpu_red_it->second.fold_excl_tran_adv
-                                              : gpu_red_it->second.fold_nonexcl_tran_adv)
+                   ? (redop_info.is_exclusive ? gpu_red_it->second.fold_excl_advanced
+                                              : gpu_red_it->second.fold_nonexcl_advanced)
                    : (redop_info.is_exclusive
-                          ? gpu_red_it->second.apply_excl_tran_adv
-                          : gpu_red_it->second.apply_nonexcl_tran_adv));
+                          ? gpu_red_it->second.apply_excl_advanced
+                          : gpu_red_it->second.apply_nonexcl_advanced));
+
+          kernel_transpose =
+              (redop_info.is_fold
+                   ? (redop_info.is_exclusive ? gpu_red_it->second.fold_excl_transpose
+                                              : gpu_red_it->second.fold_nonexcl_transpose)
+                   : (redop_info.is_exclusive
+                          ? gpu_red_it->second.apply_excl_transpose
+                          : gpu_red_it->second.apply_nonexcl_transpose));
         }
       }
 
-      if(kernel_adv == nullptr) {
+      if(kernel_advanced == nullptr) {
         // select reduction kernel now - translate to CUfunction if possible
         void *host_proxy =
             (redop_info.is_fold
-                 ? (redop_info.is_exclusive ? redop->cuda_fold_excl_fn_adv
-                                            : redop->cuda_fold_nonexcl_fn_adv)
-                 : (redop_info.is_exclusive ? redop->cuda_apply_excl_fn_adv
-                                            : redop->cuda_apply_nonexcl_fn_adv));
+                 ? (redop_info.is_exclusive ? redop->cuda_fold_excl_fn_advanced
+                                            : redop->cuda_fold_nonexcl_fn_advanced)
+                 : (redop_info.is_exclusive ? redop->cuda_apply_excl_fn_advanced
+                                            : redop->cuda_apply_nonexcl_fn_advanced));
 
         if(redop->cudaGetFuncBySymbol_fn != 0) {
           // We can ask the runtime to perform the mapping for us
@@ -2349,7 +2350,7 @@ namespace Realm {
           // to ensure the CUfunction pointer is valid for this specific GPU
           gpu->push_context();
           int result = reinterpret_cast<PFN_cudaGetFuncBySymbol>(
-              redop->cudaGetFuncBySymbol_fn)((void **)&kernel_adv, host_proxy);
+              redop->cudaGetFuncBySymbol_fn)((void **)&kernel_advanced, host_proxy);
           CHECK_CUDART(result);
           gpu->pop_context();
 
@@ -2361,32 +2362,32 @@ namespace Realm {
             GPU::GPUReductionOpEntry &entry = gpu->gpu_reduction_table[redop_info.id];
             if(redop_info.is_fold) {
               if(redop_info.is_exclusive)
-                entry.fold_excl_adv = kernel_adv;
+                entry.fold_excl_advanced = kernel_advanced;
               else
-                entry.fold_nonexcl_adv = kernel_adv;
+                entry.fold_nonexcl_advanced = kernel_advanced;
             } else {
               if(redop_info.is_exclusive)
-                entry.apply_excl_adv = kernel_adv;
+                entry.apply_excl_advanced = kernel_advanced;
               else
-                entry.apply_nonexcl_adv = kernel_adv;
+                entry.apply_nonexcl_advanced = kernel_advanced;
             }
           }
         } else {
           // no way to ask the runtime to perform the mapping, so we'll have
           //  to actually launch the kernels with the runtime API using the launch
           //  kernel function provided
-          kernel_host_proxy_adv = host_proxy;
+          kernel_host_proxy_advanced = host_proxy;
           assert(redop->cudaLaunchKernel_fn != 0);
         }
       }
-      if(kernel_tran_adv == nullptr) {
+      if(kernel_transpose == nullptr) {
         // select reduction kernel now - translate to CUfunction if possible
         void *host_proxy =
             (redop_info.is_fold
-                 ? (redop_info.is_exclusive ? redop->cuda_fold_excl_fn_tran_adv
-                                            : redop->cuda_fold_nonexcl_fn_tran_adv)
-                 : (redop_info.is_exclusive ? redop->cuda_apply_excl_fn_tran_adv
-                                            : redop->cuda_apply_nonexcl_fn_tran_adv));
+                 ? (redop_info.is_exclusive ? redop->cuda_fold_excl_fn_transpose
+                                            : redop->cuda_fold_nonexcl_fn_transpose)
+                 : (redop_info.is_exclusive ? redop->cuda_apply_excl_fn_transpose
+                                            : redop->cuda_apply_nonexcl_fn_transpose));
 
         if(redop->cudaGetFuncBySymbol_fn != 0) {
           // We can ask the runtime to perform the mapping for us
@@ -2395,7 +2396,7 @@ namespace Realm {
           gpu->push_context();
 
           int result = reinterpret_cast<PFN_cudaGetFuncBySymbol>(
-              redop->cudaGetFuncBySymbol_fn)((void **)&kernel_tran_adv, host_proxy);
+              redop->cudaGetFuncBySymbol_fn)((void **)&kernel_transpose, host_proxy);
           CHECK_CUDART(result);
 
           gpu->pop_context();
@@ -2408,21 +2409,21 @@ namespace Realm {
             GPU::GPUReductionOpEntry &entry = gpu->gpu_reduction_table[redop_info.id];
             if(redop_info.is_fold) {
               if(redop_info.is_exclusive)
-                entry.fold_excl_tran_adv = kernel_tran_adv;
+                entry.fold_excl_transpose = kernel_transpose;
               else
-                entry.fold_nonexcl_tran_adv = kernel_tran_adv;
+                entry.fold_nonexcl_transpose = kernel_transpose;
             } else {
               if(redop_info.is_exclusive)
-                entry.apply_excl_tran_adv = kernel_tran_adv;
+                entry.apply_excl_transpose = kernel_transpose;
               else
-                entry.apply_nonexcl_tran_adv = kernel_tran_adv;
+                entry.apply_nonexcl_transpose = kernel_transpose;
             }
           }
         } else {
           // no way to ask the runtime to perform the mapping, so we'll have
           //  to actually launch the kernels with the runtime API using the launch
           //  kernel function provided
-          kernel_host_proxy_tran_adv = host_proxy;
+          kernel_host_proxy_transpose = host_proxy;
           assert(redop->cudaLaunchKernel_fn != 0);
         }
       }
@@ -2440,11 +2441,11 @@ namespace Realm {
       CUfunction kernel_ptr = nullptr;
       // select reduction kernel now - translate to CUfunction if possible
       if(!has_transpose) {
-        kernel_ptr = kernel_adv;
-        host_proxy = kernel_host_proxy_adv;
+        kernel_ptr = kernel_advanced;
+        host_proxy = kernel_host_proxy_advanced;
       } else {
-        kernel_ptr = kernel_tran_adv;
-        host_proxy = kernel_host_proxy_tran_adv;
+        kernel_ptr = kernel_transpose;
+        host_proxy = kernel_host_proxy_transpose;
       }
       // launch based on kernel or host_proxy
       AffineReducInfo<3> *args_copy = nullptr;

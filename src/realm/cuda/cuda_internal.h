@@ -426,14 +426,13 @@ namespace Realm {
       bool is_accessible_host_mem(const MemoryImpl *mem) const;
       bool is_accessible_gpu_mem(const MemoryImpl *mem) const;
 
-      bool register_reduction(ReductionOpID redop_id, CUfunction apply_excl,
-                              CUfunction apply_nonexcl, CUfunction fold_excl,
-                              CUfunction fold_nonexcl, CUfunction apply_excl_adv,
-                              CUfunction apply_nonexcl_adv, CUfunction fold_excl_adv,
-                              CUfunction fold_nonexcl_adv, CUfunction apply_excl_tran_adv,
-                              CUfunction apply_nonexcl_tran_adv,
-                              CUfunction fold_excl_tran_adv,
-                              CUfunction fold_nonexcl_tran_adv);
+      bool register_reduction(
+          ReductionOpID redop_id, CUfunction apply_excl, CUfunction apply_nonexcl,
+          CUfunction fold_excl, CUfunction fold_nonexcl, CUfunction apply_excl_advanced,
+          CUfunction apply_nonexcl_advanced, CUfunction fold_excl_advanced,
+          CUfunction fold_nonexcl_advanced, CUfunction apply_excl_transpose,
+          CUfunction apply_nonexcl_transpose, CUfunction fold_excl_transpose,
+          CUfunction fold_nonexcl_transpose);
 
     protected:
       CUmodule load_cuda_module(const void *data);
@@ -524,14 +523,14 @@ namespace Realm {
         CUfunction apply_excl = nullptr;
         CUfunction fold_nonexcl = nullptr;
         CUfunction fold_excl = nullptr;
-        CUfunction apply_nonexcl_adv = nullptr;
-        CUfunction apply_excl_adv = nullptr;
-        CUfunction fold_nonexcl_adv = nullptr;
-        CUfunction fold_excl_adv = nullptr;
-        CUfunction apply_nonexcl_tran_adv = nullptr;
-        CUfunction apply_excl_tran_adv = nullptr;
-        CUfunction fold_nonexcl_tran_adv = nullptr;
-        CUfunction fold_excl_tran_adv = nullptr;
+        CUfunction apply_nonexcl_advanced = nullptr;
+        CUfunction apply_excl_advanced = nullptr;
+        CUfunction fold_nonexcl_advanced = nullptr;
+        CUfunction fold_excl_advanced = nullptr;
+        CUfunction apply_nonexcl_transpose = nullptr;
+        CUfunction apply_excl_transpose = nullptr;
+        CUfunction fold_nonexcl_transpose = nullptr;
+        CUfunction fold_excl_transpose = nullptr;
       };
 
       std::unordered_map<ReductionOpID, GPUReductionOpEntry> gpu_reduction_table;
@@ -992,11 +991,11 @@ namespace Realm {
       XferDesRedopInfo redop_info;
       const ReductionOpUntyped *redop;
       CUfunction kernel;
-      CUfunction kernel_adv;
-      CUfunction kernel_tran_adv;
+      CUfunction kernel_advanced;
+      CUfunction kernel_transpose;
       const void *kernel_host_proxy;
-      const void *kernel_host_proxy_adv;
-      const void *kernel_host_proxy_tran_adv;
+      const void *kernel_host_proxy_advanced;
+      const void *kernel_host_proxy_transpose;
       GPUStream *stream;
       std::vector<GPU *> src_gpus;
       std::vector<bool> src_is_ipc;

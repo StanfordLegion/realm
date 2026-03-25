@@ -28,23 +28,24 @@ namespace Realm {
   namespace Cuda {
 
 #ifdef __CUDACC__
-    template <size_t N, typename Offset_t = size_t>
+    template <typename Offset_t = size_t>
     static __device__ inline void index_to_coords(Offset_t *coords, Offset_t index,
                                                   const Offset_t *extents,
                                                   const size_t elem_size)
     {
       size_t div = index;
+      const unsigned n = 3;
 #pragma unroll
-      for(int i = 0; i < N - 1; i++) {
+      for(int i = 0; i < n - 1; i++) {
         size_t div_tmp = div / extents[i];
         coords[i] = div - div_tmp * extents[i];
         div = div_tmp;
       }
-      coords[N - 1] = div;
+      coords[n - 1] = div;
       coords[0] = coords[0] * elem_size;
     }
 
-    template <size_t N, typename Offset_t = size_t>
+    template <typename Offset_t = size_t>
     static __device__ inline size_t coords_to_index(const Offset_t *coords,
                                                     const Offset_t *strides,
                                                     const size_t elem_size)
@@ -52,9 +53,9 @@ namespace Realm {
       size_t i = 0;
       size_t vol = 1;
       int d = 0;
-
+      const unsigned n = 3;
 #pragma unroll
-      for(; d < N - 1; d++) {
+      for(; d < n - 1; d++) {
         i += vol * coords[d];
         vol *= strides[d];
       }
@@ -65,15 +66,15 @@ namespace Realm {
     }
 
     template <typename Offset_t = size_t>
-    static __device__ inline size_t coords_to_index_trans(const Offset_t *coords,
-                                                          const Offset_t *strides)
+    static __device__ inline size_t coords_to_index_transpose(const Offset_t *coords,
+                                                              const Offset_t *strides)
     {
       size_t i = 0;
       i = coords[1] * strides[0] + coords[2] * strides[1] + coords[0];
       return i;
     }
 
-    namespace ReductionKernelsAdv {
+    namespace ReductionKernelsAdvanced {
       template <typename REDOP, bool EXCL>
       __global__ void fold_cuda_kernel(Realm::Cuda::AffineReducInfo<3> info, REDOP redop)
       {
@@ -88,11 +89,11 @@ namespace Realm {
             reinterpret_cast<typename REDOP::RHS *>(current_info.src.addr);
         for(size_t idx = off; idx < vol; idx += blockDim.x * gridDim.x) {
           size_t coords[3];
-          index_to_coords<3, size_t>(coords, idx, current_info.extents, redop_rhs_size);
-          const size_t src_idx = coords_to_index<3, size_t>(
-              coords, current_info.src.strides, redop_rhs_size);
-          const size_t dst_idx = coords_to_index<3, size_t>(
-              coords, current_info.dst.strides, redop_rhs_size);
+          index_to_coords<size_t>(coords, idx, current_info.extents, redop_rhs_size);
+          const size_t src_idx =
+              coords_to_index<size_t>(coords, current_info.src.strides, redop_rhs_size);
+          const size_t dst_idx =
+              coords_to_index<size_t>(coords, current_info.dst.strides, redop_rhs_size);
           redop.template fold_cuda<EXCL>(
               *reinterpret_cast<typename REDOP::RHS *>(&dst[dst_idx * num_elems_rhs]),
               *reinterpret_cast<const typename REDOP::RHS *>(
@@ -116,20 +117,20 @@ namespace Realm {
             reinterpret_cast<typename REDOP::RHS *>(current_info.src.addr);
         for(size_t idx = off; idx < vol; idx += blockDim.x * gridDim.x) {
           size_t coords[3];
-          index_to_coords<3, size_t>(coords, idx, current_info.extents, redop_rhs_size);
-          const size_t src_idx = coords_to_index<3, size_t>(
-              coords, current_info.src.strides, redop_rhs_size);
-          const size_t dst_idx = coords_to_index<3, size_t>(
-              coords, current_info.dst.strides, redop_lhs_size);
+          index_to_coords<size_t>(coords, idx, current_info.extents, redop_rhs_size);
+          const size_t src_idx =
+              coords_to_index<size_t>(coords, current_info.src.strides, redop_rhs_size);
+          const size_t dst_idx =
+              coords_to_index<size_t>(coords, current_info.dst.strides, redop_lhs_size);
           redop.template apply_cuda<EXCL>(
               *reinterpret_cast<typename REDOP::LHS *>(&(dst[dst_idx * num_elems_lhs])),
               *reinterpret_cast<const typename REDOP::RHS *>(
                   &src[src_idx * num_elems_rhs]));
         }
       }
-    }; // namespace ReductionKernelsAdv
+    }; // namespace ReductionKernelsAdvanced
 
-    namespace ReductionKernelsAdvTranspose {
+    namespace ReductionKernelsTranspose {
       template <typename REDOP, bool EXCL>
       __global__ void fold_cuda_kernel(Realm::Cuda::MemReducInfo<size_t> current_info,
                                        REDOP redop)
@@ -143,11 +144,11 @@ namespace Realm {
             reinterpret_cast<typename REDOP::RHS *>(current_info.src);
         for(size_t idx = offset; idx < vol; idx += blockDim.x * gridDim.x) {
           size_t coords[3];
-          index_to_coords<3, size_t>(coords, idx, current_info.extents, 1);
+          index_to_coords<size_t>(coords, idx, current_info.extents, 1);
           const size_t src_idx =
-              coords_to_index_trans<size_t>(coords, current_info.src_strides);
+              coords_to_index_transpose<size_t>(coords, current_info.src_strides);
           const size_t dst_idx =
-              coords_to_index_trans<size_t>(coords, current_info.dst_strides);
+              coords_to_index_transpose<size_t>(coords, current_info.dst_strides);
           redop.template fold_cuda<EXCL>(
               *reinterpret_cast<typename REDOP::RHS *>(&dst[dst_idx * num_elems]),
               *reinterpret_cast<const typename REDOP::RHS *>(&src[src_idx * num_elems]));
@@ -168,17 +169,17 @@ namespace Realm {
 
         for(size_t idx = offset; idx < vol; idx += blockDim.x * gridDim.x) {
           size_t coords[3];
-          index_to_coords<3, size_t>(coords, idx, current_info.extents, 1);
+          index_to_coords<size_t>(coords, idx, current_info.extents, 1);
           const size_t src_idx =
-              coords_to_index_trans<size_t>(coords, current_info.src_strides);
+              coords_to_index_transpose<size_t>(coords, current_info.src_strides);
           const size_t dst_idx =
-              coords_to_index_trans<size_t>(coords, current_info.dst_strides);
+              coords_to_index_transpose<size_t>(coords, current_info.dst_strides);
           redop.template apply_cuda<EXCL>(
               *reinterpret_cast<typename REDOP::LHS *>(&dst[dst_idx * num_elems]),
               *reinterpret_cast<const typename REDOP::RHS *>(&src[src_idx * num_elems]));
         }
       }
-    }; // namespace ReductionKernelsAdvTranspose
+    }; // namespace ReductionKernelsTranspose
 
     // the ability to add CUDA kernels to a reduction op is only available
     //  when using a compiler that understands CUDA
@@ -233,28 +234,28 @@ namespace Realm {
     }; // namespace ReductionKernels
 
     template <typename REDOP, typename T /*= ReductionOpUntyped*/>
-    void add_cuda_redop_kernels_adv(T *redop)
+    void add_cuda_redop_kernels_advanced(T *redop)
     {
-      redop->cuda_apply_excl_fn_adv =
-          reinterpret_cast<void *>(&ReductionKernelsAdv::apply_cuda_kernel<REDOP, true>);
-      redop->cuda_apply_nonexcl_fn_adv =
-          reinterpret_cast<void *>(&ReductionKernelsAdv::apply_cuda_kernel<REDOP, false>);
-      redop->cuda_fold_excl_fn_adv =
-          reinterpret_cast<void *>(&ReductionKernelsAdv::fold_cuda_kernel<REDOP, true>);
-      redop->cuda_fold_nonexcl_fn_adv =
-          reinterpret_cast<void *>(&ReductionKernelsAdv::fold_cuda_kernel<REDOP, false>);
+      redop->cuda_apply_excl_fn_advanced = reinterpret_cast<void *>(
+          &ReductionKernelsAdvanced::apply_cuda_kernel<REDOP, true>);
+      redop->cuda_apply_nonexcl_fn_advanced = reinterpret_cast<void *>(
+          &ReductionKernelsAdvanced::apply_cuda_kernel<REDOP, false>);
+      redop->cuda_fold_excl_fn_advanced = reinterpret_cast<void *>(
+          &ReductionKernelsAdvanced::fold_cuda_kernel<REDOP, true>);
+      redop->cuda_fold_nonexcl_fn_advanced = reinterpret_cast<void *>(
+          &ReductionKernelsAdvanced::fold_cuda_kernel<REDOP, false>);
 
-      redop->cuda_apply_excl_fn_tran_adv = reinterpret_cast<void *>(
-          &ReductionKernelsAdvTranspose::apply_cuda_kernel<REDOP, true>);
+      redop->cuda_apply_excl_fn_transpose = reinterpret_cast<void *>(
+          &ReductionKernelsTranspose::apply_cuda_kernel<REDOP, true>);
 
-      redop->cuda_apply_nonexcl_fn_tran_adv = reinterpret_cast<void *>(
-          &ReductionKernelsAdvTranspose::apply_cuda_kernel<REDOP, false>);
+      redop->cuda_apply_nonexcl_fn_transpose = reinterpret_cast<void *>(
+          &ReductionKernelsTranspose::apply_cuda_kernel<REDOP, false>);
 
-      redop->cuda_fold_excl_fn_tran_adv = reinterpret_cast<void *>(
-          &ReductionKernelsAdvTranspose::fold_cuda_kernel<REDOP, true>);
+      redop->cuda_fold_excl_fn_transpose = reinterpret_cast<void *>(
+          &ReductionKernelsTranspose::fold_cuda_kernel<REDOP, true>);
 
-      redop->cuda_fold_nonexcl_fn_tran_adv = reinterpret_cast<void *>(
-          &ReductionKernelsAdvTranspose::fold_cuda_kernel<REDOP, false>);
+      redop->cuda_fold_nonexcl_fn_transpose = reinterpret_cast<void *>(
+          &ReductionKernelsTranspose::fold_cuda_kernel<REDOP, false>);
     }
 
     // this helper adds the appropriate kernels for REDOP to a
@@ -273,7 +274,7 @@ namespace Realm {
           reinterpret_cast<void *>(&ReductionKernels::fold_cuda_kernel<REDOP, true>);
       redop->cuda_fold_nonexcl_fn =
           reinterpret_cast<void *>(&ReductionKernels::fold_cuda_kernel<REDOP, false>);
-      add_cuda_redop_kernels_adv<REDOP, T>(redop);
+      add_cuda_redop_kernels_advanced<REDOP, T>(redop);
       // Store some connections to the client's runtime instance that will be
       // used for launching the above instantiations
       // We use static cast here for type safety, as cudart is not ABI stable,
