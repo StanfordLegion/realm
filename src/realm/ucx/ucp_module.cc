@@ -337,16 +337,11 @@ namespace Realm {
 
   size_t UCPModule::max_payload_size(size_t header_size, const void *src_payload_addr)
   {
-    if(src_payload_addr) {
-      // UCX handles fragmentation internally via eager/rendezvous protocol
-      //  selection, so there is no practical upper bound when the caller
-      //  provides the source buffer
-      return std::numeric_limits<size_t>::max();
-    } else {
-      // when the network must provide the buffer, the payload is limited
-      //  by the internal pbuf pool object size
-      return internal->config.pbuf_max_size;
-    }
+    // caller-provided payloads are always copied into a pbuf before async
+    //  send, so the limit is the same regardless of src_payload_addr
+    (void)header_size;
+    (void)src_payload_addr;
+    return internal->config.pbuf_max_size;
   }
 
 }; // namespace Realm
