@@ -1,9 +1,7 @@
 #pragma once
 #include "deppart_config.h"
 #include "partitions.h"
-#ifdef REALM_USE_NVTX
-#include "realm/nvtx.h"
-#endif
+
 #include "realm/cuda/cuda_internal.h"
 #include "realm/deppart/partitions_gpu_kernels.hpp"
 #include <cub/cub.cuh>
@@ -47,44 +45,18 @@
     }                                                                           \
   } while (0)
 
-
-//NVTX macros to only add ranges if defined.
-#ifdef REALM_USE_NVTX
-
-#include <atomic>
-
-inline int32_t next_nvtx_payload() {
-  static std::atomic<int32_t> counter{0};
-  return counter.fetch_add(1, std::memory_order_relaxed);
-}
-
-#define NVTX_CAT2(a, b) a##b
-#define NVTX_CAT(a, b) NVTX_CAT2(a, b)
-
-#define NVTX_DEPPART(message) \
-  nvtxScopedRange NVTX_CAT(nvtx_, __LINE__)("cuda", #message, next_nvtx_payload())
-
-#else
-
-  #define NVTX_DEPPART(message) do { } while (0)
-
-#endif
-
 namespace Realm {
 
   template <typename T>
   inline T *deppart_host_alloc(size_t count, unsigned flags = cudaHostAllocPortable)
   {
-    if(count == 0) return nullptr;
-    void *ptr = nullptr;
-    CUDA_HOST_CHECK(cudaHostAlloc(&ptr, count * sizeof(T), flags));
-    return reinterpret_cast<T *>(ptr);
+    (void)flags;
+    return static_cast<T *>(deppart_pinned_host_alloc_bytes(count * sizeof(T)));
   }
 
   inline void deppart_host_free(void *ptr)
   {
-    if(ptr != nullptr)
-      CUDA_HOST_CHECK(cudaFreeHost(ptr));
+    deppart_pinned_host_free(ptr);
   }
 
   // Used by cub::DeviceReduce to compute bad GPU approximation.
@@ -1731,13 +1703,18 @@ namespace Realm {
     assert(find_memory(sysmem, Memory::SYSTEM_MEM, my_arena.location));
     if (!this->exclusive) {
       for (auto const& elem : ctr) {
+        NVTX_DEPPART(cpu_finalize);
         size_t idx = getIndex(elem);
         auto mapOpj = getMap(elem);
         SparsityMapImpl<N, T> *impl = SparsityMapImpl<N, T>::lookup(mapOpj);
         if (d_ends_host[idx] > d_starts_host[idx]) {
           size_t end = d_ends_host[idx];
           size_t start = d_starts_host[idx];
-          Rect<N, T> *h_rects = deppart_host_alloc<Rect<N, T>>(end - start);
+          Rect<N, T> * h_rects;
+          {
+            NVTX_DEPPART(rects_alloc);
+            h_rects = deppart_host_alloc<Rect<N, T>>(end - start);
+          }
           CUDA_CHECK(cudaMemcpyAsync(h_rects, final_rects + start, (end - start) * sizeof(Rect<N,T>), cudaMemcpyDeviceToHost, stream), stream);
           CUDA_CHECK(cudaStreamSynchronize(stream), stream);
           span<Rect<N, T>> h_rects_span(h_rects, end - start);
@@ -1753,6 +1730,7 @@ namespace Realm {
 
       //Use provided lambdas to iterate over sparsity output container (map or vector)
       for (auto const& elem : ctr) {
+        NVTX_DEPPART(gpu_finalize);
         size_t idx = getIndex(elem);
         auto mapOpj = getMap(elem);
         SparsityMapImpl<N, T> *impl = SparsityMapImpl<N, T>::lookup(mapOpj);
@@ -1761,7 +1739,11 @@ namespace Realm {
         if (d_ends_host[idx] > d_starts_host[idx]) {
           size_t end = d_ends_host[idx];
           size_t start = d_starts_host[idx];
-          SparsityMapEntry<N, T> *h_entries = deppart_host_alloc<SparsityMapEntry<N, T>>(end - start);
+          SparsityMapEntry<N, T> *h_entries;
+          {
+            NVTX_DEPPART(alloc_entries);
+            h_entries = deppart_host_alloc<SparsityMapEntry<N, T>>(end - start);
+          }
           CUDA_CHECK(cudaMemcpyAsync(h_entries, final_entries + start, (end - start) * sizeof(SparsityMapEntry<N,T>), cudaMemcpyDeviceToHost, stream), stream);
 
           Rect<N,T> *approx_rects;
@@ -1838,6 +1820,7 @@ namespace Realm {
           }
         }
       }
+      NVTX_DEPPART(cleanup);
       CUDA_CHECK(cudaStreamSynchronize(stream), stream);
       for (SparsityMapImpl<N, T> *impl : local_finalizations) {
         impl->gpu_finalize();

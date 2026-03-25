@@ -42,6 +42,31 @@ typedef CUstream_st* CUstream;
 
 #endif
 
+#ifdef REALM_USE_NVTX
+#include "realm/nvtx.h"
+#endif
+
+//NVTX macros to only add ranges if defined.
+#ifdef REALM_USE_NVTX
+
+#include <atomic>
+
+inline int32_t next_nvtx_payload() {
+  static std::atomic<int32_t> counter{0};
+  return counter.fetch_add(1, std::memory_order_relaxed);
+}
+
+#define NVTX_CAT2(a, b) a##b
+#define NVTX_CAT(a, b) NVTX_CAT2(a, b)
+
+#define NVTX_DEPPART(message) \
+  nvtxScopedRange NVTX_CAT(nvtx_, __LINE__)("cuda", #message, next_nvtx_payload())
+
+#else
+
+  #define NVTX_DEPPART(message) do { } while (0)
+
+#endif
 
 namespace Realm {
 
