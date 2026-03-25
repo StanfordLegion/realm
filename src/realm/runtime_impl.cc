@@ -841,6 +841,10 @@ namespace Realm {
     // enabled.
     cp.add_option_int("-ll:path_cache_size", Config::path_cache_lru_size);
 
+    cp.add_option_int("-ll:bgworkprofile", bgwork_profile_level);
+    cp.add_option_string("-ll:bgworkprofile_logfile", bgwork_profile_logfile);
+    cp.add_option_int("-ll:bgworkprofile_bufsize", bgwork_profile_bufsize);
+
     bool cmdline_ok = cp.parse_command_line(cmdline);
 
     if(!cmdline_ok) {
@@ -868,6 +872,12 @@ namespace Realm {
               "WARNING: prefix set, but NODE_LOGGING not enabled at compile time!\n");
     }
 #endif
+
+    // configure background work profiler
+    bgwork_profiler.set_level(bgwork_profile_level);
+    if(!bgwork_profile_logfile.empty())
+      bgwork_profiler.set_logfile(bgwork_profile_logfile);
+    bgwork_profiler.set_bufsize(bgwork_profile_bufsize);
   }
 
   CoreModule::CoreModule(void)
@@ -2148,6 +2158,9 @@ namespace Realm {
 
     bgwork.start_dedicated_workers(*core_reservations);
 
+    bgwork_profiler.initialize(Network::my_node_id);
+    bgwork_profiler.register_existing_items(bgwork);
+
     PartitioningOpQueue::start_worker_threads(*core_reservations, &bgwork);
 
 #ifdef EVENT_TRACING
@@ -2946,6 +2959,7 @@ namespace Realm {
     event_triggerer.shutdown_work_item();
 #endif
     bgwork.stop_dedicated_workers();
+    bgwork_profiler.shutdown();
 
     // tear down the active message manager
     message_manager->shutdown();

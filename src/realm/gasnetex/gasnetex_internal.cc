@@ -2807,6 +2807,8 @@ namespace Realm {
   bool GASNetEXPoller::do_work(TimeLimit work_until)
   {
     ThreadLocal::gex_work_until = &work_until;
+    // This is a poller so only count this as doing work if we handle messages
+    ThreadLocal::bgwork_profstate->set_worked(false);
 
     // we're going to try to be frugal about acquiring mutexes here, so peek
     //  ahead in the critical xpair list to avoid the extra mutex acquire that
@@ -5294,6 +5296,9 @@ namespace Realm {
     }
 
     ThreadLocal::in_am_handler = false;
+    if(ThreadLocal::bgwork_profstate) {
+      ThreadLocal::bgwork_profstate->set_worked(true);
+    }
   }
 
 }; // namespace Realm

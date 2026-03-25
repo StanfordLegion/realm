@@ -218,6 +218,8 @@ namespace Realm {
     Mutex::CondVar condvar;
     std::vector<Thread *> workers;
     bool work_advertised;
+    uint16_t profile_sub_item_id;
+    bool profile_id_registered;
   };
 
 

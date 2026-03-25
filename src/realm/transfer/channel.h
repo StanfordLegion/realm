@@ -1008,6 +1008,8 @@ namespace Realm {
     bool ordered_mode, in_ordered_worker;
     Mutex mutex;
     XferDes::XferDesList ready_xds;
+    uint16_t profile_sub_item_id;
+    bool profile_id_registered;
   };
 
   template <typename CHANNEL, typename XD>
@@ -1015,6 +1017,8 @@ namespace Realm {
   public:
     SingleXDQChannel(BackgroundWorkManager *bgwork, XferDesKind _kind,
                      const std::string &_name, int _numa_domain = -1);
+
+    unsigned get_bgwork_slot() const { return xdq.get_slot(); }
 
     virtual void shutdown();
 

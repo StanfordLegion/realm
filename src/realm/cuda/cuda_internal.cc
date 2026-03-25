@@ -555,6 +555,7 @@ namespace Realm {
       WriteSequenceCache wseqcache(this, 2 << 20);
       GPUStream *stream = 0;
       size_t total_bytes = 0;
+      BgWorkGpuCudaNotification *gpu_timing = nullptr;
 
       AffineCopyInfo<3> copy_infos;
       CUDA_MEMCPY3D cuda_copy;
@@ -763,6 +764,11 @@ namespace Realm {
 
         if(in_gpu && in_gpu->can_access_peer(out_gpu) && transpose_copy.extents[0] != 0 &&
            transpose_copy.extents[0] <= CUDA_MAX_FIELD_BYTES) {
+          if(!gpu_timing && bgwork_profiler.get_level() > 0) {
+            gpu_timing = new BgWorkGpuCudaNotification(stream->get_gpu()->proc->me.id,
+                                                       channel->get_bgwork_slot());
+            stream->add_notification(gpu_timing);
+          }
           stream->get_gpu()->launch_transpose_kernel(transpose_copy, min_align, stream);
           bytes_to_fence += transpose_copy.extents[0] * transpose_copy.extents[1] *
                             transpose_copy.extents[2];
@@ -821,6 +827,11 @@ namespace Realm {
           log_gpudma.info() << "\tLaunching kernel for rects=" << copy_infos.num_rects
                             << " bytes=" << copy_info_total
                             << " out_is_ipc=" << out_is_ipc;
+          if(!gpu_timing && bgwork_profiler.get_level() > 0) {
+            gpu_timing = new BgWorkGpuCudaNotification(stream->get_gpu()->proc->me.id,
+                                                       channel->get_bgwork_slot());
+            stream->add_notification(gpu_timing);
+          }
           stream->get_gpu()->launch_batch_affine_kernel(
               &copy_infos, 3, min_align, copy_info_total / min_align, stream);
           bytes_to_fence += copy_info_total;
@@ -873,6 +884,11 @@ namespace Realm {
           record_address_consumption(bytes_to_fence, bytes_to_fence);
           total_bytes += bytes_to_fence;
         }
+      }
+
+      if(gpu_timing) {
+        AutoGPUContext agc(stream->get_gpu());
+        stream->add_notification(gpu_timing);
       }
 
       rseqcache.flush();
@@ -1170,7 +1186,7 @@ namespace Realm {
       : SingleXDQChannel<GPUIndirectChannel, GPUIndirectXferDes>(
             bgwork, _kind,
             stringbuilder() << "cuda channel (gpu=" << _src_gpu->info->index
-                            << " kind=" << (int)_kind << ")")
+                            << " kind=" << _kind << ")")
     {
       src_gpu = _src_gpu;
 
@@ -1451,7 +1467,7 @@ namespace Realm {
       : SingleXDQChannel<GPUChannel, GPUXferDes>(
             bgwork, _kind,
             stringbuilder() << "cuda channel (gpu=" << _src_gpu->info->index
-                            << " kind=" << (int)_kind << ")")
+                            << " kind=" << _kind << ")")
     {
       src_gpu = _src_gpu;
 
@@ -1823,6 +1839,8 @@ namespace Realm {
     bool GPUfillXferDes::progress_xd(GPUfillChannel *channel, TimeLimit work_until)
     {
       bool did_work = false;
+      BgWorkGpuCudaNotification *gpu_timing = nullptr;
+      GPUStream *gpu_timing_stream = nullptr;
       ReadSequenceCache rseqcache(this, 2 << 20);
       WriteSequenceCache wseqcache(this, 2 << 20);
 
@@ -1893,6 +1911,12 @@ namespace Realm {
                  Realm::Cuda::AffineFillInfo<2, size_t>::MAX_NUM_RECTS) {
                 // Filled the current info, time to start all over
                 log_gpudma.info() << "pushing fill kernel";
+                if(!gpu_timing && bgwork_profiler.get_level() > 0) {
+                  gpu_timing = new BgWorkGpuCudaNotification(
+                      stream->get_gpu()->proc->me.id, channel->get_bgwork_slot());
+                  stream->add_notification(gpu_timing);
+                  gpu_timing_stream = stream;
+                }
                 stream->get_gpu()->launch_batch_affine_fill_kernel(
                     &fill_info, 2, reduced_fill_size,
                     total_info_bytes / reduced_fill_size, stream);
@@ -2071,6 +2095,12 @@ namespace Realm {
 
           if(fill_info.num_rects > 0) {
             log_gpudma.info() << "pushing fill kernel";
+            if(!gpu_timing && bgwork_profiler.get_level() > 0) {
+              gpu_timing = new BgWorkGpuCudaNotification(stream->get_gpu()->proc->me.id,
+                                                         channel->get_bgwork_slot());
+              stream->add_notification(gpu_timing);
+              gpu_timing_stream = stream;
+            }
             stream->get_gpu()->launch_batch_affine_fill_kernel(
                 &fill_info, 2, reduced_fill_size, total_info_bytes / reduced_fill_size,
                 stream);
@@ -2091,6 +2121,11 @@ namespace Realm {
 
         if(done || work_until.is_expired())
           break;
+      }
+
+      if(gpu_timing) {
+        AutoGPUContext agc(channel->gpu);
+        gpu_timing_stream->add_notification(gpu_timing);
       }
 
       rseqcache.flush();
@@ -2303,6 +2338,7 @@ namespace Realm {
     bool GPUreduceXferDes::progress_xd(GPUreduceChannel *channel, TimeLimit work_until)
     {
       bool did_work = false;
+      BgWorkGpuCudaNotification *gpu_timing = nullptr;
       ReadSequenceCache rseqcache(this, 2 << 20);
       ReadSequenceCache wseqcache(this, 2 << 20);
 
@@ -2453,6 +2489,12 @@ namespace Realm {
               {
                 AutoGPUContext agc(channel->gpu);
 
+                if(!gpu_timing && bgwork_profiler.get_level() > 0) {
+                  gpu_timing = new BgWorkGpuCudaNotification(
+                      stream->get_gpu()->proc->me.id, channel->get_bgwork_slot());
+                  stream->add_notification(gpu_timing);
+                }
+
                 if(kernel != 0) {
                   // Use params array to pass kernel arguments (pointers to each
                   // parameter) instead of CU_LAUNCH_PARAM_BUFFER_POINTER (packed buffer).
@@ -2536,6 +2578,11 @@ namespace Realm {
 
         if(done || work_until.is_expired())
           break;
+      }
+
+      if(gpu_timing) {
+        AutoGPUContext agc(channel->gpu);
+        stream->add_notification(gpu_timing);
       }
 
       rseqcache.flush();

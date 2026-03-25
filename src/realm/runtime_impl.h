@@ -183,6 +183,11 @@ namespace Realm {
     // barriers
     int barrier_broadcast_radix = 4;
 
+    // background work profiling
+    int bgwork_profile_level = 0;
+    std::string bgwork_profile_logfile;
+    int bgwork_profile_bufsize = 1024; // MB
+
     // topology of the host
     const HardwareTopology *host_topology = nullptr;
   };

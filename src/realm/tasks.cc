@@ -17,8 +17,8 @@
 
 // tasks and task scheduling for Realm
 
+#include "realm/bgwork.h"
 #include "realm/tasks.h"
-
 #include "realm/runtime_impl.h"
 #include "realm/proc_impl.h"
 
@@ -1320,6 +1320,8 @@ namespace Realm {
     lock.unlock();
 
     if(max_bgwork_timeslice > 0) {
+      // If we're going to go off and do background work then we need to profile it
+      BgWorkProfileState profstate;
       // try to be productive while we're waiting
       bgworker.do_work(max_bgwork_timeslice, &bgworker_interrupt);
     } else {

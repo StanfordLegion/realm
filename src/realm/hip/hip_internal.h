@@ -110,6 +110,22 @@ namespace Realm {
       virtual void request_completed(void) = 0;
     };
 
+    // Profiling notification for GPU kernel timing in background work items.
+    // Registered as a GPUCompletionNotification on a stream twice: once before
+    // GPU kernel submissions (start marker) and once after (end marker).
+    // Uses host-side timestamps taken when the existing events are reaped.
+    class BgWorkGpuHipNotification : public GPUCompletionNotification {
+    public:
+      BgWorkGpuHipNotification(uint64_t _proc_id, uint8_t _slot);
+      void request_completed(void) override;
+
+    private:
+      uint64_t proc_id;
+      uint8_t slot;
+      int64_t start_time;
+      bool started;
+    };
+
     class GPUPreemptionWaiter : public GPUCompletionNotification {
     public:
       GPUPreemptionWaiter(GPU *gpu);

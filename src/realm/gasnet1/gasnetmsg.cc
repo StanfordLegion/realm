@@ -33,6 +33,7 @@
 #include "realm/threads.h"
 #include "realm/timers.h"
 #include "realm/logging.h"
+#include "realm/bgwork.h"
 
 // so OpenMPI borrowed gasnet's platform-detection code and didn't change
 //  the define names - work around it by undef'ing anything set via mpi.h
@@ -2613,6 +2614,9 @@ static void handle_new_activemsg(gasnet_token_t token, void *buf, size_t nbytes,
     }
   } else
     record_message(src, false);
+  if(ThreadLocal::bgwork_profstate) {
+    ThreadLocal::bgwork_profstate->set_worked(true);
+  }
 }
 
 void gasnet_parse_command_line(std::vector<std::string> &cmdline)
@@ -2797,6 +2801,10 @@ bool EndpointManager::do_work(TimeLimit work_until)
 {
   // make sure nested active mesage calls respect the time limit
   ThreadLocal::gasnet_work_until = &work_until;
+
+  // This is a polling background work item so make it look like
+  // we did no work unless we actually do
+  ThreadLocal::bgwork_profstate->set_worked(false);
 
   push_messages(max_msgs_to_send, false /*!wait*/, work_until);
 

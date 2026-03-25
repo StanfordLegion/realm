@@ -331,6 +331,10 @@ namespace Realm {
     {
       ThreadLocal::ucp_work_until = &work_until;
 
+      // This is a polling background work item, so clear the
+      // worked bit and only set it if we do real work
+      Realm::ThreadLocal::bgwork_profstate->set_worked(false);
+
       for(auto worker : workers) {
         (void)worker->progress();
       }

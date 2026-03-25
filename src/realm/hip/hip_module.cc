@@ -19,6 +19,7 @@
 #include "realm/hip/hip_internal.h"
 #include "realm/hip/hip_access.h"
 
+#include "realm/bgwork.h"
 #include "realm/tasks.h"
 #include "realm/logging.h"
 #include "realm/cmdline.h"
@@ -200,12 +201,18 @@ namespace Realm {
       }
 
       // we'll keep looking at events until we find one that hasn't triggered
+      bool first = true;
       bool work_left = true;
       while(event_valid) {
         hipError_t res = hipEventQuery(event);
 
-        if(res == hipErrorNotReady)
+        if(res == hipErrorNotReady) {
           return true; // oldest event hasn't triggered - check again later
+        } else if(first) {
+          // As long as we did at least one event we did work
+          Realm::ThreadLocal::bgwork_profstate->set_worked(true);
+          first = false;
+        }
 
         // no other kind of error is expected
         if(res != hipSuccess) {
@@ -288,6 +295,30 @@ namespace Realm {
       // only create a p2p channel if we have peers (and an fb)
       if(!peer_fbs.empty() || !hipipc_mappings.empty()) {
         r->add_dma_channel(new GPUChannel(this, XFER_GPU_PEER_FB, &r->bgwork));
+      }
+    }
+
+    ////////////////////////////////////////////////////////////////////////
+    //
+    // class BgWorkGpuHipNotification
+
+    BgWorkGpuHipNotification::BgWorkGpuHipNotification(uint64_t _proc_id, uint8_t _slot)
+      : proc_id(_proc_id)
+      , slot(_slot)
+      , start_time(0)
+      , started(false)
+    {}
+
+    void BgWorkGpuHipNotification::request_completed(void)
+    {
+      if(!started) {
+        start_time = Clock::current_time_in_nanoseconds(true /*absolute*/);
+        started = true;
+      } else {
+        int64_t stop_time = Clock::current_time_in_nanoseconds(true /*absolute*/);
+        Realm::ThreadLocal::bgwork_profstate->gpu_work(proc_id, slot, start_time,
+                                                       stop_time);
+        delete this;
       }
     }
 
@@ -1044,7 +1075,7 @@ namespace Realm {
     }
 
     GPUWorker::GPUWorker(void)
-      : BackgroundWorkItem("gpu worker")
+      : BackgroundWorkItem("hip poll")
       , condvar(lock)
       , core_rsrv(0)
       , worker_thread(0)
@@ -1121,6 +1152,8 @@ namespace Realm {
 
     bool GPUWorker::do_work(TimeLimit work_until)
     {
+      // This is a polling background work item so flip work polarity
+      Realm::ThreadLocal::bgwork_profstate->set_worked(false);
       // pop the first stream off the list and immediately become re-active
       //  if more streams remain
       GPUStream *stream = 0;
@@ -1204,9 +1237,18 @@ namespace Realm {
 
     void GPUWorker::thread_main(void)
     {
+      // Create a background worker profiling state for this thread
+      BgWorkProfileState profstate;
+      const TimeLimit unlimited;
+      const uint8_t slot = get_slot();
       // TODO: consider busy-waiting in some cases to reduce latency?
       while(!worker_shutdown_requested.load()) {
+        // This is a kind of background work item we're processing so time it
+        profstate.begin(slot);
+        // We're polling so set worked to false
+        profstate.set_worked(false);
         bool work_left = process_streams(true);
+        profstate.end(unlimited);
 
         // if there was work left, yield our thread for now to avoid a tight spin loop
         // TODO: enqueue a callback so we can go to sleep and wake up sooner than a kernel
@@ -1214,50 +1256,6 @@ namespace Realm {
         if(work_left)
           Realm::Thread::yield();
       }
-    }
-
-    ////////////////////////////////////////////////////////////////////////
-    //
-    // class BlockingCompletionNotification
-
-    class BlockingCompletionNotification : public GPUCompletionNotification {
-    public:
-      BlockingCompletionNotification(void);
-      virtual ~BlockingCompletionNotification(void);
-
-      virtual void request_completed(void);
-
-      virtual void wait(void);
-
-    public:
-      atomic<bool> completed;
-    };
-
-    BlockingCompletionNotification::BlockingCompletionNotification(void)
-      : completed(false)
-    {}
-
-    BlockingCompletionNotification::~BlockingCompletionNotification(void) {}
-
-    void BlockingCompletionNotification::request_completed(void)
-    {
-      // no condition variable needed - the waiter is spinning
-      completed.store(true);
-    }
-
-    void BlockingCompletionNotification::wait(void)
-    {
-      // blocking completion is horrible and should die as soon as possible
-      // in the mean time, we need to assist with background work to avoid
-      //  the risk of deadlock
-      // note that this means you can get NESTED blocking completion
-      //  notifications, which is just one of the ways this is horrible
-      BackgroundWorkManager::Worker worker;
-
-      worker.set_manager(&(get_runtime()->bgwork));
-
-      while(!completed.load())
-        worker.do_work(-1 /* as long as it takes */, &completed /* until this is set */);
     }
 
     ////////////////////////////////////////////////////////////////////////

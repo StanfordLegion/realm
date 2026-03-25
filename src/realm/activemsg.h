@@ -271,6 +271,9 @@ namespace Realm {
       ActiveMessageHandlerStats stats;
 
       std::optional<const FragmentInfo &(*)(const void *)> extract_frag_info;
+
+      uint16_t profile_sub_item_id;
+      bool profile_id_registered;
     };
 
     HandlerEntry *lookup_message_handler(MessageID id);
