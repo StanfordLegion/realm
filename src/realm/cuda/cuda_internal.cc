@@ -2307,128 +2307,99 @@ namespace Realm {
       return 0;
     }
 
-    void GPUreduceXferDes::record_redop_advanced_kernel(GPU *gpu)
+    // Helper: resolve a single kernel slot, translating host→CUfunction and caching
+    // per-GPU Returns true if the kernel was successfully resolved.
+    bool GPUreduceXferDes::resolve_kernel_slot(
+        GPU *gpu, void *host_proxy, CUfunction &kernel_out,
+        CUfunction GPU::GPUReductionOpEntry::*cache_field)
     {
-      // Per-GPU kernel caching: Check if we already have a kernel for this specific GPU
-      // IMPORTANT: CUfunction pointers are context-specific - a kernel obtained for
-      // GPU0's context cannot be used on GPU1's context. In multi-GPU setups, each GPU
+      // Fast path: check cache under lock
       {
         AutoLock<Mutex> al(gpu->alloc_mutex);
-        std::unordered_map<ReductionOpID, GPU::GPUReductionOpEntry>::const_iterator
-            gpu_red_it = gpu->gpu_reduction_table.find(redop_info.id);
-        if(gpu_red_it != gpu->gpu_reduction_table.end()) {
-          kernel_advanced =
-              (redop_info.is_fold
-                   ? (redop_info.is_exclusive ? gpu_red_it->second.fold_excl_advanced
-                                              : gpu_red_it->second.fold_nonexcl_advanced)
-                   : (redop_info.is_exclusive
-                          ? gpu_red_it->second.apply_excl_advanced
-                          : gpu_red_it->second.apply_nonexcl_advanced));
-
-          kernel_transpose =
-              (redop_info.is_fold
-                   ? (redop_info.is_exclusive ? gpu_red_it->second.fold_excl_transpose
-                                              : gpu_red_it->second.fold_nonexcl_transpose)
-                   : (redop_info.is_exclusive
-                          ? gpu_red_it->second.apply_excl_transpose
-                          : gpu_red_it->second.apply_nonexcl_transpose));
+        auto it = gpu->gpu_reduction_table.find(redop_info.id);
+        if(it != gpu->gpu_reduction_table.end()) {
+          CUfunction cached = it->second.*cache_field;
+          if(cached != nullptr) {
+            kernel_out = cached;
+            return true;
+          }
         }
       }
-
-      if(kernel_advanced == nullptr) {
-        // select reduction kernel now - translate to CUfunction if possible
-        void *host_proxy =
-            (redop_info.is_fold
-                 ? (redop_info.is_exclusive ? redop->cuda_fold_excl_fn_advanced
-                                            : redop->cuda_fold_nonexcl_fn_advanced)
-                 : (redop_info.is_exclusive ? redop->cuda_apply_excl_fn_advanced
-                                            : redop->cuda_apply_nonexcl_fn_advanced));
-
-        if(redop->cudaGetFuncBySymbol_fn != 0) {
-          // We can ask the runtime to perform the mapping for us
-          // CRITICAL: Must obtain the kernel within the correct GPU's CUDA context
-          // to ensure the CUfunction pointer is valid for this specific GPU
-          gpu->push_context();
-          int result = reinterpret_cast<PFN_cudaGetFuncBySymbol>(
-              redop->cudaGetFuncBySymbol_fn)((void **)&kernel_advanced, host_proxy);
-          CHECK_CUDART(result);
-          gpu->pop_context();
-
-          // Cache this kernel in the GPU's local reduction table for future reuse
-          // This avoids repeated cudaGetFuncBySymbol calls and ensures each GPU
-          // has its own context-specific kernel instance
-          {
-            AutoLock<Mutex> al(gpu->alloc_mutex);
-            GPU::GPUReductionOpEntry &entry = gpu->gpu_reduction_table[redop_info.id];
-            if(redop_info.is_fold) {
-              if(redop_info.is_exclusive)
-                entry.fold_excl_advanced = kernel_advanced;
-              else
-                entry.fold_nonexcl_advanced = kernel_advanced;
-            } else {
-              if(redop_info.is_exclusive)
-                entry.apply_excl_advanced = kernel_advanced;
-              else
-                entry.apply_nonexcl_advanced = kernel_advanced;
-            }
-          }
-        } else {
-          // no way to ask the runtime to perform the mapping, so we'll have
-          //  to actually launch the kernels with the runtime API using the launch
-          //  kernel function provided
-          kernel_host_proxy_advanced = host_proxy;
-          assert(redop->cudaLaunchKernel_fn != 0);
+      if(redop->cudaGetFuncBySymbol_fn != 0) {
+        // Resolve host symbol → CUfunction within the correct GPU context
+        gpu->push_context();
+        int result = reinterpret_cast<PFN_cudaGetFuncBySymbol>(
+            redop->cudaGetFuncBySymbol_fn)((void **)&kernel_out, host_proxy);
+        CHECK_CUDART(result);
+        gpu->pop_context();
+        // Write back to cache
+        {
+          AutoLock<Mutex> al(gpu->alloc_mutex);
+          gpu->gpu_reduction_table[redop_info.id].*cache_field = kernel_out;
         }
-      }
-      if(kernel_transpose == nullptr) {
-        // select reduction kernel now - translate to CUfunction if possible
-        void *host_proxy =
-            (redop_info.is_fold
-                 ? (redop_info.is_exclusive ? redop->cuda_fold_excl_fn_transpose
-                                            : redop->cuda_fold_nonexcl_fn_transpose)
-                 : (redop_info.is_exclusive ? redop->cuda_apply_excl_fn_transpose
-                                            : redop->cuda_apply_nonexcl_fn_transpose));
-
-        if(redop->cudaGetFuncBySymbol_fn != 0) {
-          // We can ask the runtime to perform the mapping for us
-          // CRITICAL: Must obtain the kernel within the correct GPU's CUDA context
-          // to ensure the CUfunction pointer is valid for this specific GPU
-          gpu->push_context();
-
-          int result = reinterpret_cast<PFN_cudaGetFuncBySymbol>(
-              redop->cudaGetFuncBySymbol_fn)((void **)&kernel_transpose, host_proxy);
-          CHECK_CUDART(result);
-
-          gpu->pop_context();
-
-          // Cache this kernel in the GPU's local reduction table for future reuse
-          // This avoids repeated cudaGetFuncBySymbol calls and ensures each GPU
-          // has its own context-specific kernel instance
-          {
-            AutoLock<Mutex> al(gpu->alloc_mutex);
-            GPU::GPUReductionOpEntry &entry = gpu->gpu_reduction_table[redop_info.id];
-            if(redop_info.is_fold) {
-              if(redop_info.is_exclusive)
-                entry.fold_excl_transpose = kernel_transpose;
-              else
-                entry.fold_nonexcl_transpose = kernel_transpose;
-            } else {
-              if(redop_info.is_exclusive)
-                entry.apply_excl_transpose = kernel_transpose;
-              else
-                entry.apply_nonexcl_transpose = kernel_transpose;
-            }
-          }
-        } else {
-          // no way to ask the runtime to perform the mapping, so we'll have
-          //  to actually launch the kernels with the runtime API using the launch
-          //  kernel function provided
-          kernel_host_proxy_transpose = host_proxy;
-          assert(redop->cudaLaunchKernel_fn != 0);
-        }
+        return true;
+      } else {
+        // Fall back to runtime launch via cudaLaunchKernel
+        assert(redop->cudaLaunchKernel_fn != 0);
+        assert(host_proxy != nullptr);
+        return false;
       }
     }
 
+    KernelVariantDesc GPUreduceXferDes::describe_kernel_variant(GPU *gpu,
+                                                                bool is_advanced)
+    {
+      // Select the four-way fold×exclusive host function pointer
+      void *host_proxy;
+      CUfunction GPU::GPUReductionOpEntry::*cache_field;
+      if(is_advanced) {
+        host_proxy =
+            redop_info.is_fold
+                ? (redop_info.is_exclusive ? redop->cuda_fold_excl_fn_advanced
+                                           : redop->cuda_fold_nonexcl_fn_advanced)
+                : (redop_info.is_exclusive ? redop->cuda_apply_excl_fn_advanced
+                                           : redop->cuda_apply_nonexcl_fn_advanced);
+        cache_field = redop_info.is_fold
+                          ? (redop_info.is_exclusive
+                                 ? &GPU::GPUReductionOpEntry::fold_excl_advanced
+                                 : &GPU::GPUReductionOpEntry::fold_nonexcl_advanced)
+                          : (redop_info.is_exclusive
+                                 ? &GPU::GPUReductionOpEntry::apply_excl_advanced
+                                 : &GPU::GPUReductionOpEntry::apply_nonexcl_advanced);
+      } else {
+        // transpose variant
+        host_proxy =
+            redop_info.is_fold
+                ? (redop_info.is_exclusive ? redop->cuda_fold_excl_fn_transpose
+                                           : redop->cuda_fold_nonexcl_fn_transpose)
+                : (redop_info.is_exclusive ? redop->cuda_apply_excl_fn_transpose
+                                           : redop->cuda_apply_nonexcl_fn_transpose);
+        cache_field = redop_info.is_fold
+                          ? (redop_info.is_exclusive
+                                 ? &GPU::GPUReductionOpEntry::fold_excl_transpose
+                                 : &GPU::GPUReductionOpEntry::fold_nonexcl_transpose)
+                          : (redop_info.is_exclusive
+                                 ? &GPU::GPUReductionOpEntry::apply_excl_transpose
+                                 : &GPU::GPUReductionOpEntry::apply_nonexcl_transpose);
+      }
+
+      return {host_proxy, cache_field};
+    }
+
+    void GPUreduceXferDes::record_redop_advanced_kernel(GPU *gpu)
+    {
+      // IMPORTANT: CUfunction pointers are context-specific.
+      // Each GPU must resolve and cache its own instance.
+      auto adv = describe_kernel_variant(gpu, /*is_advanced=*/true);
+      if(!resolve_kernel_slot(gpu, adv.host_proxy, kernel_advanced, adv.cache_field)) {
+        kernel_host_proxy_advanced = adv.host_proxy; // fall back to runtime launch
+      }
+      auto trans = describe_kernel_variant(gpu, /*is_advanced=*/false);
+      if(!resolve_kernel_slot(gpu, trans.host_proxy, kernel_transpose,
+                              trans.cache_field)) {
+        kernel_host_proxy_transpose = trans.host_proxy;
+      }
+    }
     void GPUreduceXferDes::setup_redop_kernel(
         GPUreduceChannel *channel, void *redop_args, const size_t in_span_start,
         const size_t out_span_start, const size_t in_elem_size,
@@ -2962,11 +2933,13 @@ namespace Realm {
       for(unsigned i = 0; i < copy_infos.num_rects; i++) {
         const AffineReducPair<3> &copy_info = copy_infos.subrects[i];
         log_reduc_gpu.info() << "RECT[" << i << "]:"
-                             << "copy_info.dst.strides[0]: " << copy_info.dst.strides[0]
+                             << "copy_info.dst.strides[0]:width in bytes "
+                             << copy_info.dst.strides[0]
                              << ", copy_info.dst.strides[1]: " << copy_info.dst.strides[1]
-                             << ", copy_info.src.strides[0]: " << copy_info.src.strides[0]
+                             << ", copy_info.src.strides[0]:width in bytes  "
+                             << copy_info.src.strides[0]
                              << ", copy_info.src.strides[1]: " << copy_info.src.strides[1]
-                             << ", copy_info.extents[0]:contig_bytes "
+                             << ", copy_info.extents[0]:contig_elems "
                              << copy_info.extents[0] << ", copy_info.extents[1]:lines "
                              << copy_info.extents[1] << ", copy_info.extents[2]:planes "
                              << copy_info.extents[2]

@@ -966,6 +966,11 @@ namespace Realm {
 
     class GPUreduceChannel;
 
+    struct KernelVariantDesc {
+      void *host_proxy;
+      CUfunction GPU::GPUReductionOpEntry::*cache_field;
+    };
+
     class GPUreduceXferDes : public XferDes {
     public:
       GPUreduceXferDes(uintptr_t _dma_op, Channel *_channel, NodeID _launch_node,
@@ -986,6 +991,10 @@ namespace Realm {
                               const size_t in_elem_size, const size_t out_elem_size,
                               const size_t elems, const bool has_transpose);
       void record_redop_advanced_kernel(GPU *gpu);
+
+      KernelVariantDesc describe_kernel_variant(GPU *cpu, bool is_advanced);
+      bool resolve_kernel_slot(GPU *gpu, void *host_proxy, CUfunction &kernel_out,
+                               CUfunction GPU::GPUReductionOpEntry::*cache_field);
 
     protected:
       XferDesRedopInfo redop_info;
