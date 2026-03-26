@@ -252,13 +252,11 @@ namespace Realm {
 
   inline void Thread::start_subgraph_task_execution()
   {
-    assert(!in_subgraph_task_exec);
     in_subgraph_task_exec = true;
   }
 
   inline void Thread::stop_subgraph_task_execution()
   {
-    assert(in_subgraph_task_exec);
     in_subgraph_task_exec = false;
   }
 

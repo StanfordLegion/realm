@@ -176,7 +176,6 @@ namespace Realm {
     // the completion event of the last instantiation.
     mutable Mutex instantiation_lock;
     mutable Event previous_instantiation_completion = Event::NO_EVENT;
-    // TODO (rohany): Make sure that this is implemented.
     // previous_cleanup_completion tracks cleanup work launched
     // by subgraph instantiations.
     mutable Event previous_cleanup_completion = Event::NO_EVENT;
@@ -185,8 +184,7 @@ namespace Realm {
     ID me;
     SubgraphImpl *next_free;
     SubgraphDefinition *defn;
-    // TODO (rohany): Rename this later to be "interpreted_schedule" or something.
-    std::vector<SubgraphScheduleEntry> schedule;
+    std::vector<SubgraphScheduleEntry> interpreted_schedule;
     size_t num_intermediate_events, num_final_events, max_preconditions;
 
     DeferredDestroy deferred_destroy;
@@ -281,7 +279,7 @@ namespace Realm {
     // a processor, background work item, CUDA stream notifier, etc.)
     // must trigger finish_event to wake up anyone who needs to know
     // when this subgraph is complete.
-    atomic<int64_t> *finish_counter;
+    atomic<int64_t> finish_counter;
     UserEvent finish_event;
 
     // The precondition array that contains the number of pending
@@ -291,21 +289,18 @@ namespace Realm {
     // A single array that contains the per-processor queues for subgraph execution.
     atomic<int64_t> *processor_queues;
 
-    // TODO (rohany): This kind of setup will require us to put the "processor index"
-    //  somewhere else when setting up the SubgraphExecutor logic.
     struct ProcessorLocalState {
-      // TODO (rohany): Rename this to "queue_back" or something.
       // Maintains the next available slot in the per-processor queue
       // to place ready operations. This slot is "zero-indexed", meaning
       // that it is local to the current processor only and is not a global
       // index into processor_queues.
-      atomic<int64_t> next_queue_slot;
+      atomic<int64_t> queue_back;
 
       // Ensure processor-local state does not accidentally cause
       // false sharing between processor cache lines.
       char _cache_line_padding[64];
     };
-    ProcessorLocalState *processor_state;
+    std::vector<ProcessorLocalState> processor_state;
   };
 
   // ProcSubgraphExecutor manages the logic of what a Processor should
@@ -319,18 +314,22 @@ namespace Realm {
     // Executes a unit of subgraph work. Returns true if work was performed.
     bool execute_subgraph_work();
 
-    // TODO (rohany): Comment these.
-    bool try_acquire_subgraph();
-    void release_subgraph();
-
-    // TODO (rohany): These context controllers should manage thread-local
-    //  state that should be set for the entirety of a subgraphs execution.
-    void push_subgraph_execution_context();
-    void pop_subgraph_execution_context();
-
     // Enqueue work onto this subgraph executor. This method is thread-safe.
     void enqueue_subgraph(SubgraphExecutionState *subgraph);
 
+  private:
+    // Attempt to acquire a subgraph to execute. Returns true if
+    // a new subgraph was acquired successfully.
+    bool try_acquire_subgraph();
+    // Reset resources from an acquired subgraph.
+    void release_subgraph();
+
+    // These context controllers should manage thread-local
+    // state that should be set for the entirety of a subgraphs execution.
+    void push_subgraph_execution_context();
+    void pop_subgraph_execution_context();
+
+    // Check if this executor has an active subgraph to execute.
     bool has_active_subgraph() const { return current_subgraph != nullptr; }
 
   private:

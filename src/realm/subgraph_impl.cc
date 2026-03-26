@@ -55,7 +55,7 @@ namespace Realm {
 
     if(impl->compile()) {
       log_subgraph.info() << "created: subgraph=" << subgraph
-                          << " ops=" << impl->schedule.size();
+                          << " ops=" << impl->interpreted_schedule.size();
       return Event::NO_EVENT;
     } else {
       // fatal error for now - once we have profiling, return a poisoned event
@@ -539,18 +539,18 @@ namespace Realm {
     for(unsigned i = 0; i < num_ext_postcond; i++)
       toposort[std::make_pair(SubgraphDefinition::OPKIND_EXT_POSTCOND, i)] = total_ops++;
 
-    schedule.resize(total_ops);
+    interpreted_schedule.resize(total_ops);
     for(TopoMap::const_iterator it = toposort.begin(); it != toposort.end(); ++it) {
-      schedule[it->second].op_kind = it->first.first;
-      schedule[it->second].op_index = it->first.second;
+      interpreted_schedule[it->second].op_kind = it->first.first;
+      interpreted_schedule[it->second].op_index = it->first.second;
     }
 
     // sort the interpolations so that each operation has a compact range
     //  to iterate through
     std::sort(defn->interpolations.begin(), defn->interpolations.end(),
               SortInterpolationsByKindAndIndex());
-    for(std::vector<SubgraphScheduleEntry>::iterator it = schedule.begin();
-        it != schedule.end(); ++it) {
+    for(std::vector<SubgraphScheduleEntry>::iterator it = interpreted_schedule.begin();
+        it != interpreted_schedule.end(); ++it) {
       // binary search to find an interpolation for this operation
       unsigned lo = 0;
       unsigned hi = defn->interpolations.size();
@@ -612,8 +612,8 @@ namespace Realm {
 
     // Perform final event analysis before partitioning the schedule.
     num_final_events = 0;
-    for(std::vector<SubgraphScheduleEntry>::iterator it = schedule.begin();
-        it != schedule.end(); ++it) {
+    for(std::vector<SubgraphScheduleEntry>::iterator it = interpreted_schedule.begin();
+        it != interpreted_schedule.end(); ++it) {
       if(it->op_kind != SubgraphDefinition::OPKIND_EXT_POSTCOND) {
         // We'll clear this later if we find our contribution to the final
         //  event is done transitively
@@ -635,8 +635,8 @@ namespace Realm {
       //  external postcondition, then the preceeding node is not final.
       if((it->src_op_port == 0) &&
          (it->tgt_op_kind != SubgraphDefinition::OPKIND_EXT_POSTCOND) &&
-         (schedule[src->second].is_final_event)) {
-        schedule[src->second].is_final_event = false;
+         (interpreted_schedule[src->second].is_final_event)) {
+        interpreted_schedule[src->second].is_final_event = false;
         num_final_events--;
       }
     }
@@ -659,7 +659,7 @@ namespace Realm {
       // that can't be part of the compiled graph. In the current phase this should be
       // empty, but will be extended in future work.
       toposort.clear();
-      for(auto &it : schedule) {
+      for(auto &it : interpreted_schedule) {
         OpInfo key = std::make_pair(it.op_kind, it.op_index);
 
         // We should only be compiling tasks right now, but I'll keep
@@ -685,7 +685,7 @@ namespace Realm {
         }
       }
       // Now, schedule is only the dynamic schedule.
-      schedule = dynamic_schedule;
+      interpreted_schedule = dynamic_schedule;
 
       // Construct the compiled_subgraph_operations vector.
       // TODO (rohany): Something to investigate is potentially sorting
@@ -809,8 +809,8 @@ namespace Realm {
     // has been done, we can finish the calculation of intermediate events. Note that
     // instantiations can produce more than one intermediate event.
     num_intermediate_events = 0;
-    for(std::vector<SubgraphScheduleEntry>::iterator it = schedule.begin();
-        it != schedule.end(); ++it) {
+    for(std::vector<SubgraphScheduleEntry>::iterator it = interpreted_schedule.begin();
+        it != interpreted_schedule.end(); ++it) {
       it->intermediate_event_base = num_intermediate_events;
       if(it->op_kind == SubgraphDefinition::OPKIND_INSTANTIATION)
         it->intermediate_event_count = inst_post_max_port[it->op_index] + 1;
@@ -838,7 +838,7 @@ namespace Realm {
       {
         // external preconditions are encoded as negative indices
         int idx = -1 - (int)(it->src_op_index);
-        schedule[tgt->second].preconditions.push_back(
+        interpreted_schedule[tgt->second].preconditions.push_back(
             std::make_pair(it->tgt_op_port, idx));
         break;
       }
@@ -850,8 +850,9 @@ namespace Realm {
         // Same story for the source edge.
         if(src == toposort.end())
           continue;
-        unsigned ev_idx = schedule[src->second].intermediate_event_base + it->src_op_port;
-        schedule[tgt->second].preconditions.push_back(
+        unsigned ev_idx =
+            interpreted_schedule[src->second].intermediate_event_base + it->src_op_port;
+        interpreted_schedule[tgt->second].preconditions.push_back(
             std::make_pair(it->tgt_op_port, ev_idx));
         break;
       }
@@ -861,8 +862,8 @@ namespace Realm {
     // Now sort the preconditions for each entry - allows us to group by port
     // and also notice duplicates.
     max_preconditions = 1; // have to count global precondition when needed
-    for(std::vector<SubgraphScheduleEntry>::iterator it = schedule.begin();
-        it != schedule.end(); ++it) {
+    for(std::vector<SubgraphScheduleEntry>::iterator it = interpreted_schedule.begin();
+        it != interpreted_schedule.end(); ++it) {
       if(it->preconditions.empty())
         continue;
 
@@ -959,8 +960,9 @@ namespace Realm {
 
     Event *preconds = static_cast<Event *>(alloca(max_preconditions * sizeof(Event)));
 
-    for(std::vector<SubgraphScheduleEntry>::const_iterator it = schedule.begin();
-        it != schedule.end(); ++it) {
+    for(std::vector<SubgraphScheduleEntry>::const_iterator it =
+            interpreted_schedule.begin();
+        it != interpreted_schedule.end(); ++it) {
       // assemble precondition
       size_t num_preconds = 0;
       bool need_global_precond = start_event.exists();
@@ -1209,7 +1211,7 @@ namespace Realm {
   void SubgraphImpl::destroy(void)
   {
     delete defn;
-    schedule.clear();
+    interpreted_schedule.clear();
 
     subgraph_processors.clear();
     subgraph_processor_impls.clear();
@@ -1444,11 +1446,10 @@ namespace Realm {
     : subgraph(subgraph)
     , args(nullptr)
     , arglen(arglen)
-    , finish_counter(nullptr)
+    , finish_counter(0)
     , finish_event(finish_event)
     , preconditions(nullptr)
     , processor_queues(nullptr)
-    , processor_state(nullptr)
   {
     // Make a copy of the arguments passed to the subgraph.
     if(_args != nullptr && arglen > 0) {
@@ -1478,18 +1479,17 @@ namespace Realm {
     // counter will also include asynchronous finish items to ensure that the
     // subgraph completion event is only triggered after all subgraph work
     // is completed.
-    finish_counter = new atomic<int64_t>(0);
     {
       int64_t count = subgraph->subgraph_processors.size();
       // In the future, we'll increment counter to include asynchronous
       // finish items, asynchronous background work items, and
       // profiling responses.
-      finish_counter->store(count);
+      finish_counter.store(count);
     }
 
-    processor_state = new ProcessorLocalState[subgraph->subgraph_processors.size()];
+    processor_state.resize(subgraph->subgraph_processors.size());
     for(size_t i = 0; i < subgraph->subgraph_processors.size(); i++) {
-      processor_state[i].next_queue_slot.store(subgraph->initial_queue_entry_counts[i]);
+      processor_state[i].queue_back.store(subgraph->initial_queue_entry_counts[i]);
     }
   }
 
@@ -1500,8 +1500,6 @@ namespace Realm {
     }
     free(preconditions);
     free(processor_queues);
-    delete finish_counter;
-    delete[] processor_state;
   }
 
   ////////////////////////////////////////////////////////////////////////
@@ -1631,7 +1629,7 @@ namespace Realm {
         auto target_proc_index =
             current_subgraph->subgraph->processor_to_index.at(target_task_desc.proc);
         auto target_queue_slot = current_subgraph->processor_state[target_proc_index]
-                                     .next_queue_slot.fetch_add_acqrel(1);
+                                     .queue_back.fetch_add_acqrel(1);
         // Turn the target_queue_slot into a global index into the processor_queues array.
         target_queue_slot =
             target_proc_index +
@@ -1656,7 +1654,7 @@ namespace Realm {
       // Note that in the future, there may be pending asynchronous work that
       // is also contributing to the finish counter, so even if all processors finish
       // the counter is still not 0.
-      int64_t finish_count = current_subgraph->finish_counter->fetch_sub_acqrel(1) - 1;
+      int64_t finish_count = current_subgraph->finish_counter.fetch_sub_acqrel(1) - 1;
       if(finish_count == 0) {
         // We can't hold the scheduler lock while we trigger the event.
         scheduler->lock.unlock();

@@ -1142,7 +1142,7 @@ namespace Realm {
 
         // TODO (rohany): I'm not sure yet if we need to break this method up
         //  into two pieces (an acquire and execute step) so that we can do the
-        // . worker manipulation that is happening below when a task is acquired.
+        //  worker manipulation that is happening below when a task is acquired.
         // Try to execute subgraph-related work. If we actually did any, then
         // we can continue around the loop.
         if(subgraph_executor && subgraph_executor->execute_subgraph_work()) {
@@ -1349,8 +1349,7 @@ namespace Realm {
 
   KernelThreadTaskScheduler::KernelThreadTaskScheduler(Processor _proc,
                                                        CoreReservation &_core_rsrv)
-    : ThreadedTaskScheduler(
-          std::unique_ptr<ProcSubgraphExecutor>(new ProcSubgraphExecutor(_proc, this)))
+    : ThreadedTaskScheduler(std::make_unique<ProcSubgraphExecutor>(_proc, this))
     , proc(_proc)
     , core_rsrv(_core_rsrv)
     , shutdown_condvar(lock)
