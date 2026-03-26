@@ -2831,6 +2831,7 @@ namespace Realm {
         copy_info.src.strides[0] = contig_bytes;
         copy_info.dst.strides[0] = contig_bytes;
         copy_info.volume = contig_bytes / in_elem_size;
+        copy_infos.num_rects++;
         in_alc.advance(0, contig_bytes);
         out_alc.advance(0, contig_bytes);
         return contig_bytes;
@@ -2889,6 +2890,7 @@ namespace Realm {
         copy_info.volume = (lines * contig_bytes) / in_elem_size;
         copy_info.src.elem_size = in_elem_size;
         copy_info.dst.elem_size = out_elem_size;
+        copy_infos.num_rects++;
         in_alc.advance(id, lines * iscale);
         out_alc.advance(od, lines * oscale);
         return lines * contig_bytes;
