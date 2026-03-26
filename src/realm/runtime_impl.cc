@@ -1953,6 +1953,7 @@ namespace Realm {
 #endif
 
     event_triggerer.add_to_manager(&bgwork);
+    subgraph_resource_reaper.add_to_manager(&bgwork);
 
     // initialize barrier timestamp
     BarrierImpl::barrier_adjustment_timestamp.store(
@@ -2944,6 +2945,7 @@ namespace Realm {
 
 #ifdef DEBUG_REALM
     event_triggerer.shutdown_work_item();
+    subgraph_resource_reaper.shutdown_work_item();
 #endif
     bgwork.stop_dedicated_workers();
 

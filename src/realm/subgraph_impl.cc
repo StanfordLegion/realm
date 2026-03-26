@@ -20,8 +20,10 @@
 #include "realm/subgraph_impl.h"
 #include "realm/memory.h"
 #include "realm/network.h"
+#include "realm/proc_impl.h"
 #include "realm/runtime_impl.h"
 #include "realm/subgraph.h"
+#include "realm/tasks.h"
 
 namespace Realm {
 
@@ -362,6 +364,16 @@ namespace Realm {
                                   "tasks running on the local node";
           return false;
         }
+        if(task.priority != 0) {
+          log_subgraph.error()
+              << "compiled subgraphs do not currently support tasks with priorities";
+          return false;
+        }
+        if(!task.prs.empty()) {
+          log_subgraph.error() << "compiled subgraphs do not currently support tasks "
+                                  "with profiling requests";
+          return false;
+        }
       }
       if(!defn->copies.empty()) {
         log_subgraph.error() << "compiled subgraphs do not currently support copies";
@@ -691,14 +703,19 @@ namespace Realm {
       // work quickly. The second (and will be implemented in the future) is
       // to do something similar for all background work items.
 
-      // TODO (rohany): Unclear if we need these indices.
       // Collect all processors used in this subgraph (which may be none).
       // To avoid indirections later, we'll map processors to indices.
-      std::map<Processor, int32_t> processor_to_index;
+      processor_to_index.clear();
+      subgraph_processors.clear();
+      subgraph_processor_impls.clear();
       for(auto &task : defn->tasks) {
         if(processor_to_index.find(task.proc) == processor_to_index.end()) {
           processor_to_index[task.proc] = subgraph_processors.size();
           subgraph_processors.push_back(task.proc);
+          LocalTaskProcessor *ltp = dynamic_cast<LocalTaskProcessor *>(
+              get_runtime()->get_processor_impl(task.proc));
+          assert(ltp != nullptr);
+          subgraph_processor_impls.push_back(ltp);
         }
       }
 
@@ -883,63 +900,21 @@ namespace Realm {
     // TODO (rohany): Here is where we chain subgraph executions through the lock that
     //  protects instantiation order.
 
+    // Handle extra execution setup required for launching a compiled subgraph.
     UserEvent static_finish_event = UserEvent::NO_USER_EVENT;
     if(defn->execution_mode == SubgraphDefinition::COMPILED) {
-      // We need to copy the input arguments to the compiled subgraph, since
-      // the caller may deallocate or modify the buffer for the next graph launch.
-      void *args_copy = nullptr;
-      if(args != nullptr && arglen > 0) {
-        args_copy = malloc(arglen);
-        memcpy(args_copy, args, arglen);
-      }
-
-      // Start allocating fresh data structures used for the current replay
-      // of the subgraph.
-
-      // TODO (rohany): Can we assume that int32_t is enough to store the
-      //  number of preconditions held for each operation?
-      // First, allocate a fresh copy of the preconditions array and copy the
-      // pre-computed precondition counters into it.
-      static_assert(sizeof(int64_t) == sizeof(atomic<int64_t>));
-      size_t precondition_ctr_bytes =
-          sizeof(atomic<int64_t>) * operation_precondition_counters.size();
-      atomic<int64_t> *preconditions =
-          static_cast<atomic<int64_t> *>(malloc(precondition_ctr_bytes));
-      memcpy(preconditions, operation_precondition_counters.data(),
-             precondition_ctr_bytes);
-
-      // Next, create a fresh queue for each processor.
-      size_t queue_bytes = sizeof(atomic<int64_t>) * initial_processor_queues.data.size();
-      atomic<int64_t> *processor_queues =
-          static_cast<atomic<int64_t> *>(malloc(queue_bytes));
-      memcpy(processor_queues, initial_processor_queues.data.data(), queue_bytes);
-      // TODO (rohany): Copy in the initial_queue_entry_counts into the processor queues.
-
-      // Allocate the finish counter. All processors will decrement this counter
-      // upon finishing their work. When asynchronous work is implemented, this
-      // counter will also include asynchronous finish items to ensure that the
-      // subgraph completion event is only triggered after all subgraph work
-      // is completed.
-      atomic<int64_t> *finish_counter = new atomic<int64_t>(0);
-      {
-        int64_t count = subgraph_processors.size();
-        // In the future, we'll increment counter to include asynchronous
-        // finish items, asynchronous background work items, and
-        // profiling responses.
-        finish_counter->store(count);
-      }
       static_finish_event = UserEvent::create_user_event();
-
       // Allocate the state for this subgraph replay.
-      SubgraphExecutionState *exec_state = new SubgraphExecutionState(
-          this, args_copy, arglen, finish_counter, static_finish_event, preconditions,
-          processor_queues);
+      SubgraphExecutionState *exec_state =
+          new SubgraphExecutionState(this, args, arglen, static_finish_event);
 
-      // TODO (rohany): Install subgraph replay state onto each processor.
-
-      // TODO (rohany): Start or defer the subgraph execution.
-
-      // TODO (rohany): Register the cleanup background work item.
+      // Issue the static portion of the subgraph.
+      SubgraphWorkLauncher::launch_or_defer(exec_state, start_event);
+      // Register a cleanup operation for when this subgraph execution
+      // is complete.
+      SubgraphInstantiationCleanup *cleanup =
+          new SubgraphInstantiationCleanup(exec_state);
+      EventImpl::add_waiter(finish_event, cleanup);
     }
 
     // we precomputed the number of intermediate events we need, so put them
@@ -1287,5 +1262,415 @@ namespace Realm {
   }
 
   ActiveMessageHandlerReg<SubgraphDestroyMessage> subgraph_destroy_message_handler;
+
+  ////////////////////////////////////////////////////////////////////////
+  //
+  // class SubgraphWorkLauncher
+  //
+  ////////////////////////////////////////////////////////////////////////
+
+  SubgraphWorkLauncher::SubgraphWorkLauncher(SubgraphExecutionState *subgraph)
+    : subgraph(subgraph)
+  {}
+
+  /*static*/ void SubgraphWorkLauncher::launch_or_defer(SubgraphExecutionState *subgraph,
+                                                        Event wait_on)
+  {
+    if(!wait_on.exists() || wait_on.has_triggered()) {
+      // If there isn't a precondition, or the precondition is already triggered,
+      // then just launch the subgraph.
+      SubgraphWorkLauncher(subgraph).launch();
+    } else {
+      // Otherwise, allocate the launcher to start up the subgraph. It will
+      // clean itself up.
+      SubgraphWorkLauncher *launcher = new SubgraphWorkLauncher(subgraph);
+      EventImpl::add_waiter(wait_on, launcher);
+    }
+  }
+
+  void SubgraphWorkLauncher::launch()
+  {
+    // Install the subrgraph onto the target processors. In the future
+    // this method will also handle starting background work items with
+    // no preconditions.
+    for(auto &proc : subgraph->subgraph->subgraph_processor_impls) {
+      proc->enqueue_subgraph(subgraph);
+    }
+  }
+
+  void SubgraphWorkLauncher::event_triggered(bool poisoned, TimeLimit work_until)
+  {
+    // Launch the subgraph and clean up after ourselves.
+    launch();
+    delete this;
+  }
+
+  void SubgraphWorkLauncher::print(std::ostream &os) const
+  {
+    os << "SubgraphWorkLauncher: subgraph=" << subgraph->subgraph->me;
+  }
+
+  Event SubgraphWorkLauncher::get_finish_event(void) const { return Event::NO_EVENT; }
+
+  ////////////////////////////////////////////////////////////////////////
+  //
+  // class SubgraphInstantiationCleanup
+  //
+  ////////////////////////////////////////////////////////////////////////
+
+  SubgraphInstantiationCleanup::SubgraphInstantiationCleanup(
+      SubgraphExecutionState *subgraph)
+    : subgraph(subgraph)
+  {}
+
+  void SubgraphInstantiationCleanup::cleanup()
+  {
+    delete subgraph;
+    // We'll have more work to do here once we add more features to
+    // the compiled subgraph implementation.
+  }
+
+  void SubgraphInstantiationCleanup::event_triggered(bool poisoned, TimeLimit work_until)
+  {
+    // Defer the cleanup to a background worker so we don't make this
+    // event waiter wake unnecessarily expensive.
+    get_runtime()->subgraph_resource_reaper.enqueue_cleanup(this);
+  }
+
+  void SubgraphInstantiationCleanup::print(std::ostream &os) const
+  {
+    os << "SubgraphInstantiationCleanup: subgraph=" << subgraph->subgraph->me;
+  }
+
+  Event SubgraphInstantiationCleanup::get_finish_event(void) const
+  {
+    return Event::NO_EVENT;
+  }
+
+  ////////////////////////////////////////////////////////////////////////
+  //
+  // class SubgraphResourceReaper
+  //
+  ////////////////////////////////////////////////////////////////////////
+
+  SubgraphResourceReaper::SubgraphResourceReaper()
+    : BackgroundWorkItem("SubgraphResourceReaper")
+  {}
+
+  void SubgraphResourceReaper::enqueue_cleanup(SubgraphInstantiationCleanup *item)
+  {
+    {
+      AutoLock<> al(mutex);
+      pending_cleanups.push(item);
+    }
+    make_active();
+  }
+
+  bool SubgraphResourceReaper::do_work(TimeLimit work_until)
+  {
+    size_t left = 0;
+    SubgraphInstantiationCleanup *item = nullptr;
+    {
+      AutoLock<> al(mutex);
+      if(!pending_cleanups.empty()) {
+        item = pending_cleanups.front();
+        pending_cleanups.pop();
+        left = pending_cleanups.size();
+      }
+    }
+    if(!item)
+      return false;
+
+    item->cleanup();
+    delete item;
+    return left > 0;
+  }
+
+  ////////////////////////////////////////////////////////////////////////
+  //
+  // struct SubgraphExecutionState
+  //
+  ////////////////////////////////////////////////////////////////////////
+
+  SubgraphExecutionState::SubgraphExecutionState(SubgraphImpl *subgraph,
+                                                 const void *_args, size_t arglen,
+                                                 UserEvent finish_event)
+    : subgraph(subgraph)
+    , args(nullptr)
+    , arglen(arglen)
+    , finish_counter(nullptr)
+    , finish_event(finish_event)
+    , preconditions(nullptr)
+    , processor_queues(nullptr)
+    , processor_state(nullptr)
+  {
+    // Make a copy of the arguments passed to the subgraph.
+    if(_args != nullptr && arglen > 0) {
+      args = malloc(arglen);
+      memcpy(args, _args, arglen);
+    }
+
+    // TODO (rohany): Can we assume that int32_t is enough to store the
+    //  number of preconditions held for each operation?
+    // Allocate a fresh copy of the preconditions array and copy the
+    // pre-computed precondition counters into it.
+    static_assert(sizeof(int64_t) == sizeof(atomic<int64_t>));
+    size_t precondition_ctr_bytes =
+        sizeof(atomic<int64_t>) * subgraph->operation_precondition_counters.size();
+    preconditions = static_cast<atomic<int64_t> *>(malloc(precondition_ctr_bytes));
+    memcpy(preconditions, subgraph->operation_precondition_counters.data(),
+           precondition_ctr_bytes);
+
+    // Next, create a fresh queue for each processor.
+    size_t queue_bytes =
+        sizeof(atomic<int64_t>) * subgraph->initial_processor_queues.data.size();
+    processor_queues = static_cast<atomic<int64_t> *>(malloc(queue_bytes));
+    memcpy(processor_queues, subgraph->initial_processor_queues.data.data(), queue_bytes);
+
+    // Allocate the finish counter. All processors will decrement this counter
+    // upon finishing their work. When asynchronous work is implemented, this
+    // counter will also include asynchronous finish items to ensure that the
+    // subgraph completion event is only triggered after all subgraph work
+    // is completed.
+    finish_counter = new atomic<int64_t>(0);
+    {
+      int64_t count = subgraph->subgraph_processors.size();
+      // In the future, we'll increment counter to include asynchronous
+      // finish items, asynchronous background work items, and
+      // profiling responses.
+      finish_counter->store(count);
+    }
+
+    processor_state = new ProcessorLocalState[subgraph->subgraph_processors.size()];
+    for(size_t i = 0; i < subgraph->subgraph_processors.size(); i++) {
+      processor_state[i].next_queue_slot.store(subgraph->initial_queue_entry_counts[i]);
+    }
+  }
+
+  SubgraphExecutionState::~SubgraphExecutionState()
+  {
+    if(args != nullptr) {
+      free(args);
+    }
+    free(preconditions);
+    free(processor_queues);
+    delete finish_counter;
+    delete[] processor_state;
+  }
+
+  ////////////////////////////////////////////////////////////////////////
+  //
+  // class ProcSubgraphExecutor
+  //
+  ////////////////////////////////////////////////////////////////////////
+
+  ProcSubgraphExecutor::ProcSubgraphExecutor(Processor _proc,
+                                             ThreadedTaskScheduler *_scheduler)
+    : current_subgraph(nullptr)
+    , proc(_proc)
+    , proc_index(-1)
+    , queue_front(-1)
+    , scheduler(_scheduler)
+  {}
+
+  ProcSubgraphExecutor::~ProcSubgraphExecutor() {}
+
+  bool ProcSubgraphExecutor::execute_subgraph_work()
+  {
+    // If we don't currently have a subgraph, try to acquire one.
+    if(!has_active_subgraph()) {
+      if(!try_acquire_subgraph()) {
+        return false;
+      }
+
+      // TODO (rohany): This is going to be trickier when we actually have
+      //  a real context to manage that messes with thread-local state and
+      //  we allow for subgraph tasks to get pre-empted and other (either kernel
+      //  or user-threads) will then start interacting with this executor. We'll
+      //  punt on this for now though.
+      // We definitely have some work now. Since we just acquired a subgraph,
+      // push the execution context for this subgraph.
+      push_subgraph_execution_context();
+    }
+    assert(current_subgraph != nullptr && proc_index != -1 && queue_front >= 0);
+    SubgraphImpl *subgraph_impl = current_subgraph->subgraph;
+    LocalTaskProcessor *proc_impl = subgraph_impl->subgraph_processor_impls[proc_index];
+
+    // Find the offset into the big processor queue for this processor.
+    int64_t queue_proc_offset =
+        subgraph_impl->initial_processor_queues.offsets[proc_index];
+    // The next slot to read in the queue is the current queue_front value.
+    int64_t queue_index = queue_proc_offset + queue_front;
+
+    // We also need to make sure that queue_front here is within the range of what
+    // locations are allowed for this processor. What could happen if we don't is the
+    // following:
+    // 1. This thread gets the last task that this processor is assigned in the subgraph.
+    // 2. The thread runs the task and waits on an event to go to sleep.
+    // 3. The scheduler spawns/wakes another thread to run other work in the scheduler and
+    //    enters this function and looks at the next place in the queue which actually
+    //    another processor's queue and starts running work for the other processor.
+    if(queue_index >= subgraph_impl->initial_processor_queues.offsets[proc_index + 1]) {
+      return false;
+    }
+
+    atomic<int64_t> &queue_slot = current_subgraph->processor_queues[queue_index];
+    // Try to get a piece of work from the queue.
+    int64_t queue_entry = queue_slot.load_acquire();
+    if(queue_entry == SUBGRAPH_EMPTY_QUEUE_ENTRY) {
+      // In this case, we didn't find any work to do. The prototype
+      // implementation of the subgraph compilation had the option to
+      // spin in the scheduler here until work appeared, which we can
+      // investigate later if it becomes important for performance.
+      return false;
+    }
+
+    // If we're here, that means we actually found some work to do, so
+    // let's execute it. Before we start that, we need to bump the
+    // next_queue_slot pointer for this processor. We need to do this
+    // so that if we go to sleep running the acquired task, the next thread
+    // woken up by the scheduler will pick a different task to run instead
+    // of the same task that we would have just gone to sleep running. We'll
+    // also pull this onto the stack to avoid it changing from underneath us.
+    int64_t next_queue_front = queue_front++;
+
+    // Find the operation to run.
+    const SubgraphImpl::SubgraphOperationDesc &op_desc =
+        subgraph_impl->compiled_subgraph_operations[queue_entry];
+    // Processors should only be running tasks.
+    assert(op_desc.op_kind == SubgraphDefinition::OPKIND_TASK);
+    const SubgraphDefinition::TaskDesc &task_desc =
+        subgraph_impl->defn->tasks[op_desc.op_index];
+    // TODO (rohany): In future work, support interpolations.
+
+    // Set thread-local state before starting the task.
+    ThreadLocal::current_processor = proc;
+    // TODO (rohany): I want to set somewhere that we're executing a subgraph task.
+    //  I'm not sure if that should be a ThreadLocal, or stored in the Realm::Thread.
+
+    // We can't hold the lock while executing tasks.
+    scheduler->lock.unlock();
+    // Execute the task.
+    proc_impl->execute_task(task_desc.task_id, task_desc.args);
+    // Re-acquire the scheduler lock.
+    scheduler->lock.lock();
+
+    // Restore thread-local state after the task.
+    ThreadLocal::current_processor = Processor::NO_PROC;
+
+    // Trigger the out-bound dependencies of this operation.
+    const auto &outgoing_edges = subgraph_impl->operation_outgoing_edges;
+    for(unsigned i = outgoing_edges.offsets[queue_entry];
+        i < outgoing_edges.offsets[queue_entry + 1]; i++) {
+      const SubgraphImpl::EdgeInfo &edge_info = outgoing_edges.data[i];
+      const SubgraphImpl::SubgraphOperationDesc &target_op =
+          subgraph_impl->compiled_subgraph_operations[edge_info.index];
+      // We should only be dealing with tasks in the current implementation.
+      assert(target_op.op_kind == SubgraphDefinition::OPKIND_TASK);
+      const SubgraphDefinition::TaskDesc &target_task_desc =
+          subgraph_impl->defn->tasks[target_op.op_index];
+
+      // TODO (rohany): When there are more cases to handle here, we'll want to
+      //  extract this logic into a centralized helper function.
+      // Decrement the precondition counter for this operation. If we are
+      // final dependency, then we need to add the operation to the target
+      // processor's work queue. This operation is analagous to "sending the
+      // target actor a message" in the view of the compiled subgraph as a
+      // translation to an actor-based programming model.
+      atomic<int64_t> &trigger = current_subgraph->preconditions[edge_info.index];
+      int64_t remaining = trigger.fetch_sub_acqrel(1) - 1;
+      if(remaining == 0) {
+        // Get a slot to insert the next task for the target processor at.
+        auto target_proc_index =
+            current_subgraph->subgraph->processor_to_index.at(target_task_desc.proc);
+        auto target_queue_slot = current_subgraph->processor_state[target_proc_index]
+                                     .next_queue_slot.fetch_add_acqrel(1);
+        // Turn the target_queue_slot into a global index into the processor_queues array.
+        target_queue_slot =
+            target_proc_index +
+            subgraph_impl->initial_processor_queues.offsets[target_proc_index];
+        current_subgraph->processor_queues[target_queue_slot].store_release(
+            edge_info.index);
+        // Notify the target processor's scheduler that there might be new work.
+        subgraph_impl->subgraph_processor_impls[target_proc_index]
+            ->notify_scheduler_of_new_work();
+      }
+    }
+
+    // If we hit the end of the queue for this processor, then we can potentially start
+    // the cleanup process for this subgraph.
+    if(subgraph_impl->initial_processor_queues.offsets[proc_index] + next_queue_front ==
+       subgraph_impl->initial_processor_queues.offsets[proc_index + 1]) {
+      // Clear the execution context for this subgraph.
+      pop_subgraph_execution_context();
+
+      // Decrement the finish counter for this subgraph. If this processor
+      // was the last one to finish, then we can trigger the finish event.
+      // Note that in the future, there may be pending asynchronous work that
+      // is also contributing to the finish counter, so even if all processors finish
+      // the counter is still not 0.
+      int64_t finish_count = current_subgraph->finish_counter->fetch_sub_acqrel(1) - 1;
+      if(finish_count == 0) {
+        // We can't hold the scheduler lock while we trigger the event.
+        scheduler->lock.unlock();
+        current_subgraph->finish_event.trigger();
+        scheduler->lock.lock();
+      }
+
+      // Now that we're done with all the work, we can release this subgraph from
+      // the current processor.
+      release_subgraph();
+    }
+
+    // Work was done, so return true.
+    return true;
+  }
+
+  bool ProcSubgraphExecutor::try_acquire_subgraph()
+  {
+    // Peek at the top of the pending subgraphs queue. If taking
+    // this reader lock in the case that we don't have contention is
+    // expensive, we can pivot to a work-counter based implementation
+    // that skips this entire check if it is known that no subgraphs
+    // have been enqueued since the last check.
+    RWLock::AutoReaderLock al(pending_subgraphs_lock);
+    if(!pending_subgraphs.empty()) {
+      current_subgraph = pending_subgraphs.front();
+      pending_subgraphs.pop();
+      proc_index = current_subgraph->subgraph->processor_to_index.at(proc);
+      queue_front = 0;
+      return true;
+    }
+    return false;
+  }
+
+  void ProcSubgraphExecutor::release_subgraph()
+  {
+    // Subgraph release just unsets some fields in the ProcSubgraphExecutor.
+    // The subgraph data itself will be cleaned up by separate processes.
+    current_subgraph = nullptr;
+    proc_index = -1;
+    queue_front = -1;
+  }
+
+  void ProcSubgraphExecutor::push_subgraph_execution_context()
+  {
+    // This is currently a no-op.
+  }
+
+  void ProcSubgraphExecutor::pop_subgraph_execution_context()
+  {
+    // This is currently a no-op.
+  }
+
+  void ProcSubgraphExecutor::enqueue_subgraph(SubgraphExecutionState *subgraph)
+  {
+    {
+      RWLock::AutoWriterLock al(pending_subgraphs_lock);
+      pending_subgraphs.push(subgraph);
+    }
+    // Notify the scheduler that there is new work available.
+    scheduler->notify_of_new_work();
+  }
 
 }; // namespace Realm

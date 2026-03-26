@@ -16,6 +16,7 @@
  */
 
 #include "realm/proc_impl.h"
+#include "realm/subgraph_impl.h"
 
 #include "realm/timers.h"
 #include "realm/runtime_impl.h"
@@ -123,6 +124,8 @@ namespace Realm {
   /*static*/ Event Processor::get_current_finish_event(void)
   {
     Operation *op = Thread::self()->get_operation();
+    // TODO (rohany): Add the proper error guarding here if
+    //  this is called during a subgraph execution.
     assert(op != 0);
     return op->get_finish_event();
   }
@@ -1188,6 +1191,13 @@ namespace Realm {
   void LocalTaskProcessor::add_internal_task(InternalTask *task)
   {
     sched->add_internal_task(task);
+  }
+
+  void LocalTaskProcessor::notify_scheduler_of_new_work() { sched->notify_of_new_work(); }
+
+  void LocalTaskProcessor::enqueue_subgraph(SubgraphExecutionState *subgraph)
+  {
+    sched->subgraph_executor->enqueue_subgraph(subgraph);
   }
 
   ////////////////////////////////////////////////////////////////////////

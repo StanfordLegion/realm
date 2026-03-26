@@ -25,8 +25,15 @@
 #include "realm/id.h"
 #include "realm/event_impl.h"
 #include "realm/operation.h"
+#include "realm/bgwork.h"
 
 namespace Realm {
+
+  class LocalTaskProcessor;
+  class ProcSubgraphExecutor;
+  class ThreadedTaskScheduler;
+  struct SubgraphExecutionState;
+  class SubgraphWorkLauncher;
 
   struct SubgraphScheduleEntry {
     SubgraphDefinition::OpKind op_kind;
@@ -103,11 +110,20 @@ namespace Realm {
   protected:
     // TODO (rohany): Make sure to handle clearing / initializing
     //  some of these fields when a SubgraphImpl gets reused.
+    // TODO (rohany): Should make many of these maps we access unordered_maps
+    //  or a faster "small-map" implementation.
 
     // Fields populated by the compilation step in the compiled
     // execution mode of subgraphs.
 
+    // Maintain the processors and a mapping from each processor its index.
+    // We extract the LocalTaskProcessor* implementations from each processor
+    // so that we don't have to query the runtime for these during the execution
+    // of the subgraph.
     std::vector<Processor> subgraph_processors;
+    std::vector<LocalTaskProcessor *> subgraph_processor_impls;
+    std::map<Processor, int32_t> processor_to_index;
+
     struct SubgraphOperationDesc {
       SubgraphOperationDesc(SubgraphDefinition::OpKind _op_kind, unsigned _op_index,
                             bool _is_final_event, bool _is_async)
@@ -128,10 +144,10 @@ namespace Realm {
     // EdgeInfo contains the necessary metadata about an edge
     // in the compiled subgraph to trigger dependencies.
     struct EdgeInfo {
-      EdgeInfo(uint64_t _op_index)
-        : op_index(_op_index)
+      EdgeInfo(uint64_t _index)
+        : index(_index)
       {}
-      uint64_t op_index;
+      uint64_t index;
     };
     // operation_{incoming,outgoing}_edges contains the edges that
     // every operation in compiled_subgraph_operations needs to
@@ -151,6 +167,10 @@ namespace Realm {
     // queue entries for each processor.
     std::vector<int64_t> initial_queue_entry_counts;
 
+    friend class ProcSubgraphExecutor;
+    friend class SubgraphExecutionState;
+    friend class SubgraphWorkLauncher;
+
     // TODO (rohany): This is work for future PRs.
     // TODO (rohany): Asynchronous edges.
     // TODO (rohany): Extra stuff here like background work? Connections between
@@ -158,7 +178,6 @@ namespace Realm {
     // TODO (rohany): Instantiation lock.
 
     // TODO (rohany): This is work for the _current_ pull request.
-    // TODO (rohany): The concrete replay state and the subgraph executor object.
     // TODO (rohany): The resource cleanup infrastructure.
 
   public:
@@ -192,33 +211,59 @@ namespace Realm {
                                const void *data, size_t datalen);
   };
 
-  // TODO (rohany): Comment ...
-  // TODO (rohany): In the original design, there was a separate state object
-  //  per-processor. Looking back, I don't think this is completely necessary
-  //  and we can share a good amount of the state and have just a small piece
-  //  of it be local to each processor.
-  // TODO (rohany): Set up the initialization of these objects to happen in a constructor.
-  struct SubgraphExecutionState {
-    // TODO (rohany): Move this definition to the .cc file.
-    SubgraphExecutionState(SubgraphImpl *subgraph, void *args, size_t arglen,
-                           atomic<int64_t> *finish_counter, UserEvent finish_event,
-                           atomic<int64_t> *preconditions,
-                           atomic<int64_t> *processor_queues)
-      : subgraph(subgraph)
-      , args(args)
-      , arglen(arglen)
-      , finish_counter(finish_counter)
-      , finish_event(finish_event)
-      , preconditions(preconditions)
-      , processor_queues(processor_queues)
-    {}
+  // SubgraphWorkLauncher is a helper class that manages the logic of installing
+  // a subgraph when the preconditions for execution are met.
+  class SubgraphWorkLauncher : public EventWaiter {
+  public:
+    SubgraphWorkLauncher(SubgraphExecutionState *subgraph);
+    static void launch_or_defer(SubgraphExecutionState *subgraph, Event wait_on);
+    void launch();
 
-    // TODO (rohany): Move this definition to the .cc file.
-    ~SubgraphExecutionState()
-    {
-      // TODO (rohany): Implement this ...
-      assert(false);
-    }
+    virtual void event_triggered(bool poisoned, TimeLimit work_until) override;
+    virtual void print(std::ostream &os) const override;
+    virtual Event get_finish_event(void) const override;
+
+  private:
+    SubgraphExecutionState *subgraph;
+  };
+
+  // SubgraphInstantiationCleanup waits for a subgraph's finish event
+  // and then cleans up the SubgraphExecutionState resources.
+  class SubgraphInstantiationCleanup : public EventWaiter {
+  public:
+    SubgraphInstantiationCleanup(SubgraphExecutionState *subgraph);
+    void cleanup();
+
+    virtual void event_triggered(bool poisoned, TimeLimit work_until) override;
+    virtual void print(std::ostream &os) const override;
+    virtual Event get_finish_event(void) const override;
+
+  private:
+    SubgraphExecutionState *subgraph;
+  };
+
+  // SubgraphResourceReaper is a background work item that processes
+  // SubgraphInstantiationCleanup items asynchronously, freeing resources
+  // allocated for subgraph instantiation after the subgraph has finished.
+  class SubgraphResourceReaper : public BackgroundWorkItem {
+  public:
+    SubgraphResourceReaper();
+
+    void enqueue_cleanup(SubgraphInstantiationCleanup *item);
+
+    virtual bool do_work(TimeLimit work_until) override;
+
+  private:
+    Mutex mutex;
+    std::queue<SubgraphInstantiationCleanup *> pending_cleanups;
+  };
+
+  // SubgraphExecutionState describes the state needed for a compiled
+  // subgraph execution.
+  struct SubgraphExecutionState {
+    SubgraphExecutionState(SubgraphImpl *subgraph, const void *args, size_t arglen,
+                           UserEvent finish_event);
+    ~SubgraphExecutionState();
 
     // The subgraph being executed.
     SubgraphImpl *subgraph;
@@ -247,8 +292,11 @@ namespace Realm {
     // TODO (rohany): This kind of setup will require us to put the "processor index"
     //  somewhere else when setting up the SubgraphExecutor logic.
     struct ProcessorLocalState {
+      // TODO (rohany): Rename this to "queue_back" or something.
       // Maintains the next available slot in the per-processor queue
-      // to place ready operations.
+      // to place ready operations. This slot is "zero-indexed", meaning
+      // that it is local to the current processor only and is not a global
+      // index into processor_queues.
       atomic<int64_t> next_queue_slot;
 
       // Ensure processor-local state does not accidentally cause
@@ -258,30 +306,40 @@ namespace Realm {
     ProcessorLocalState *processor_state;
   };
 
-  // TODO (rohany): Not sure yet what this is going to look like.
-  class SubgraphExecutor {
+  // ProcSubgraphExecutor manages the logic of what a Processor should
+  // actually do when executing components of a compiled subgraph.
+  class ProcSubgraphExecutor {
   public:
-    SubgraphExecutor();
-    ~SubgraphExecutor();
+    ProcSubgraphExecutor(Processor _proc, ThreadedTaskScheduler *_scheduler);
+    ~ProcSubgraphExecutor();
 
-    bool try_acquire_subgraph(SubgraphImpl *subgraph);
-    void release_subgraph(SubgraphImpl *subgraph);
+    // This is the main point of interaction with the ThreadedTaskScheduler.
+    // Executes a unit of subgraph work. Returns true if work was performed.
+    bool execute_subgraph_work();
+
+    // TODO (rohany): Comment these.
+    bool try_acquire_subgraph();
+    void release_subgraph();
+
+    // TODO (rohany): These context controllers should manage thread-local
+    //  state that should be set for the entirety of a subgraphs execution.
+    void push_subgraph_execution_context();
+    void pop_subgraph_execution_context();
+
+    // Enqueue work onto this subgraph executor. This method is thread-safe.
+    void enqueue_subgraph(SubgraphExecutionState *subgraph);
+
+    bool has_active_subgraph() const { return current_subgraph != nullptr; }
+
+  private:
+    RWLock pending_subgraphs_lock;
+    std::queue<SubgraphExecutionState *> pending_subgraphs;
+    SubgraphExecutionState *current_subgraph;
+    Processor proc;
+    int proc_index;
+    int64_t queue_front;
+    ThreadedTaskScheduler *scheduler;
   };
-
-  // TODO (rohany): I need to look at the details of this Operation class to
-  //  see if this is what I actually want or not. The alternative is to keep
-  //  doing the EventWaiter thing that I have going on right now. I'm not entirely
-  //  sure that this makes sense right now.
-  // class ExecuteCompiledSubgraphOperation : public Operation {
-  // public:
-  //   ExecuteCompiledSubgraphOperation(SubgraphImpl *subgraph);
-  //   ~ExecuteCompiledSubgraphOperation();
-
-  //   virtual bool mark_ready(void);
-  //   virtual bool mark_started(void);
-  //   virtual void mark_finished(bool successful);
-  //   virtual void mark_terminated(int error_code, const ByteArray &details);
-  // };
 
 }; // namespace Realm
 
