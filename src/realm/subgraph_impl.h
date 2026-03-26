@@ -32,7 +32,7 @@ namespace Realm {
   class LocalTaskProcessor;
   class ProcSubgraphExecutor;
   class ThreadedTaskScheduler;
-  struct SubgraphExecutionState;
+  class SubgraphExecutionState;
   class SubgraphWorkLauncher;
 
   struct SubgraphScheduleEntry {
@@ -202,6 +202,7 @@ namespace Realm {
   struct SubgraphDestroyMessage {
     Subgraph subgraph;
     Event wait_on;
+    UserEvent to_trigger;
 
     static void handle_message(NodeID sender, const SubgraphDestroyMessage &msg,
                                const void *data, size_t datalen);
@@ -257,10 +258,15 @@ namespace Realm {
 
   // SubgraphExecutionState describes the state needed for a compiled
   // subgraph execution.
-  struct SubgraphExecutionState {
+  class SubgraphExecutionState {
+  public:
     SubgraphExecutionState(SubgraphImpl *subgraph, const void *args, size_t arglen,
                            UserEvent finish_event);
     ~SubgraphExecutionState();
+    SubgraphImpl *get_subgraph() const { return subgraph; }
+
+  private:
+    friend class ProcSubgraphExecutor;
 
     // The subgraph being executed.
     SubgraphImpl *subgraph;
@@ -269,7 +275,7 @@ namespace Realm {
     // that can be modified by the interpolation process (which
     // will happen in future work).
     void *args;
-    size_t arglen;
+    size_t arglen [[maybe_unused]];
 
     // finish_counter tracks the amount of pending work launched by
     // this subgraph. Whoever decrements this counter to 0 (whether
@@ -291,7 +297,7 @@ namespace Realm {
       // to place ready operations. This slot is "zero-indexed", meaning
       // that it is local to the current processor only and is not a global
       // index into processor_queues.
-      atomic<int64_t> queue_back;
+      atomic<uint64_t> queue_back;
 
       // Ensure processor-local state does not accidentally cause
       // false sharing between processor cache lines.
@@ -335,7 +341,7 @@ namespace Realm {
     SubgraphExecutionState *current_subgraph;
     Processor proc;
     int proc_index;
-    int64_t queue_front;
+    uint64_t queue_front;
     ThreadedTaskScheduler *scheduler;
   };
 

@@ -39,7 +39,7 @@ namespace Realm {
 
   class ProcessorImpl;
   class ProcSubgraphExecutor;
-  struct SubgraphExecutionState;
+  class SubgraphExecutionState;
 
   // information for a task launch
   class Task final : public Operation {

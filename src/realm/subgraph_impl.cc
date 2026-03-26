@@ -93,12 +93,13 @@ namespace Realm {
         return done;
       }
     } else {
-      // TODO (rohany): Forward a UserEvent through this active message.
+      UserEvent done = UserEvent::create_user_event();
       ActiveMessage<SubgraphDestroyMessage> amsg(owner);
       amsg->subgraph = *this;
       amsg->wait_on = wait_on;
+      amsg->to_trigger = done;
       amsg.commit();
-      return Event::NO_EVENT;
+      return done;
     }
   }
 
@@ -689,9 +690,9 @@ namespace Realm {
       // TODO (rohany): Something to investigate is potentially sorting
       //  compiled_subgraph_operations by some key so that there is more
       //  locality in data accessed by each processor / background worker.
-      compiled_subgraph_operations.resize(static_schedule.size());
+      compiled_subgraph_operations.reserve(static_schedule.size());
       for(unsigned i = 0; i < static_schedule.size(); i++) {
-        compiled_subgraph_operations[i] = SubgraphOperationDesc(
+        compiled_subgraph_operations.emplace_back(
             static_schedule[i].op_kind, static_schedule[i].op_index,
             static_schedule[i].is_final_event,
             // TODO (rohany): In future work, we'll handle tasks that launch
@@ -1294,10 +1295,12 @@ namespace Realm {
   {
     SubgraphImpl *subgraph = get_runtime()->get_subgraph_impl(msg.subgraph);
 
-    if(msg.wait_on.has_triggered())
+    if(msg.wait_on.has_triggered()) {
       subgraph->destroy();
-    else
-      subgraph->deferred_destroy.defer(subgraph, msg.wait_on);
+      msg.to_trigger.trigger();
+    } else {
+      subgraph->deferred_destroy.defer(subgraph, msg.wait_on, msg.to_trigger);
+    }
   }
 
   ActiveMessageHandlerReg<SubgraphDestroyMessage> subgraph_destroy_message_handler;
@@ -1332,7 +1335,7 @@ namespace Realm {
     // Install the subrgraph onto the target processors. In the future
     // this method will also handle starting background work items with
     // no preconditions.
-    for(auto &proc : subgraph->subgraph->subgraph_processor_impls) {
+    for(auto &proc : subgraph->get_subgraph()->subgraph_processor_impls) {
       proc->enqueue_subgraph(subgraph);
     }
   }
@@ -1346,7 +1349,7 @@ namespace Realm {
 
   void SubgraphWorkLauncher::print(std::ostream &os) const
   {
-    os << "SubgraphWorkLauncher: subgraph=" << subgraph->subgraph->me;
+    os << "SubgraphWorkLauncher: subgraph=" << subgraph->get_subgraph()->me;
   }
 
   Event SubgraphWorkLauncher::get_finish_event(void) const { return Event::NO_EVENT; }
@@ -1380,7 +1383,7 @@ namespace Realm {
 
   void SubgraphInstantiationCleanup::print(std::ostream &os) const
   {
-    os << "SubgraphInstantiationCleanup: subgraph=" << subgraph->subgraph->me;
+    os << "SubgraphInstantiationCleanup: subgraph=" << subgraph->get_subgraph()->me;
   }
 
   Event SubgraphInstantiationCleanup::get_finish_event(void) const
@@ -1429,7 +1432,7 @@ namespace Realm {
 
   ////////////////////////////////////////////////////////////////////////
   //
-  // struct SubgraphExecutionState
+  // class SubgraphExecutionState
   //
   ////////////////////////////////////////////////////////////////////////
 
@@ -1540,10 +1543,10 @@ namespace Realm {
     LocalTaskProcessor *proc_impl = subgraph_impl->subgraph_processor_impls[proc_index];
 
     // Find the offset into the big processor queue for this processor.
-    int64_t queue_proc_offset =
+    uint64_t queue_proc_offset =
         subgraph_impl->initial_processor_queues.offsets[proc_index];
     // The next slot to read in the queue is the current queue_front value.
-    int64_t queue_index = queue_proc_offset + queue_front;
+    uint64_t queue_index = queue_proc_offset + queue_front;
 
     // We also need to make sure that queue_front here is within the range of what
     // locations are allowed for this processor. What could happen if we don't is the
@@ -1575,7 +1578,7 @@ namespace Realm {
     // woken up by the scheduler will pick a different task to run instead
     // of the same task that we would have just gone to sleep running. We'll
     // also pull this onto the stack to avoid it changing from underneath us.
-    int64_t next_queue_front = queue_front++;
+    uint64_t next_queue_front = queue_front++;
 
     // Find the operation to run.
     const SubgraphImpl::SubgraphOperationDesc &op_desc =
