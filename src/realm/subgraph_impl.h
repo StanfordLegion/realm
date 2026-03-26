@@ -109,9 +109,6 @@ namespace Realm {
     };
 
   protected:
-    // TODO (rohany): Should make many of these maps we access unordered_maps
-    //  or a faster "small-map" implementation.
-
     // Fields populated by the compilation step in the compiled
     // execution mode of subgraphs.
 
@@ -121,7 +118,7 @@ namespace Realm {
     // of the subgraph.
     std::vector<Processor> subgraph_processors;
     std::vector<LocalTaskProcessor *> subgraph_processor_impls;
-    std::map<Processor, int32_t> processor_to_index;
+    std::unordered_map<Processor, int32_t> processor_to_index;
 
     struct SubgraphOperationDesc {
       SubgraphOperationDesc(SubgraphDefinition::OpKind _op_kind, unsigned _op_index,

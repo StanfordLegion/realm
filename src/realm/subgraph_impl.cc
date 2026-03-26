@@ -653,8 +653,6 @@ namespace Realm {
       std::map<OpInfo, unsigned> static_op_to_index;
       std::map<OpInfo, unsigned> dynamic_op_to_index;
 
-      // TODO (rohany): Maybe extract this stuff into clearer helper functions.
-
       // Clear toposort because we will produce a new toposort of leftover operations
       // that can't be part of the compiled graph. In the current phase this should be
       // empty, but will be extended in future work.
@@ -702,6 +700,11 @@ namespace Realm {
         );
       }
 
+      // There are two main phases of subgraph compilation. The first is
+      // to construct data structures for each processor to manage the pending
+      // work quickly. The second (and will be implemented in the future) is
+      // to do something similar for all background work items.
+
       // Perform a group-by on the dependencies list to have quick access
       // to the incoming and outgoing edges for each operation.
       std::map<OpInfo, std::vector<OpInfo>> incoming_edges;
@@ -711,24 +714,6 @@ namespace Realm {
         OpInfo tgt = std::make_pair(it.tgt_op_kind, it.tgt_op_index);
         incoming_edges[tgt].push_back(src);
         outgoing_edges[src].push_back(tgt);
-      }
-
-      // There are two main phases of subgraph compilation. The first is
-      // to construct data structures for each processor to manage the pending
-      // work quickly. The second (and will be implemented in the future) is
-      // to do something similar for all background work items.
-
-      // Collect all processors used in this subgraph (which may be none).
-      // To avoid indirections later, we'll map processors to indices.
-      for(auto &task : defn->tasks) {
-        if(processor_to_index.find(task.proc) == processor_to_index.end()) {
-          processor_to_index[task.proc] = subgraph_processors.size();
-          subgraph_processors.push_back(task.proc);
-          LocalTaskProcessor *ltp = dynamic_cast<LocalTaskProcessor *>(
-              get_runtime()->get_processor_impl(task.proc));
-          assert(ltp != nullptr);
-          subgraph_processor_impls.push_back(ltp);
-        }
       }
 
       // Set up the incoming and outgoing edges for each operation.
@@ -753,6 +738,19 @@ namespace Realm {
           op_outgoing_edges[i].push_back(EdgeInfo(it2->second));
         }
         operation_precondition_counters[i] = op_incoming_edges[i].size();
+      }
+
+      // Collect all processors used in this subgraph (which may be none).
+      // To avoid indirections later, we'll map processors to indices.
+      for(auto &task : defn->tasks) {
+        if(processor_to_index.find(task.proc) == processor_to_index.end()) {
+          processor_to_index[task.proc] = subgraph_processors.size();
+          subgraph_processors.push_back(task.proc);
+          LocalTaskProcessor *ltp = dynamic_cast<LocalTaskProcessor *>(
+              get_runtime()->get_processor_impl(task.proc));
+          assert(ltp != nullptr);
+          subgraph_processor_impls.push_back(ltp);
+        }
       }
 
       // Collect the tasks per processor. We'll use this information
@@ -918,9 +916,6 @@ namespace Realm {
         start_event = Event::merge_events(start_event, previous_instantiation_completion);
       }
     }
-
-    // TODO (rohany): Here is where we chain subgraph executions through the lock that
-    //  protects instantiation order.
 
     // Handle extra execution setup required for launching a compiled subgraph.
     UserEvent static_finish_event = UserEvent::NO_USER_EVENT;
@@ -1195,8 +1190,6 @@ namespace Realm {
       GenEventImpl::trigger(finish_event, false /*!poisoned*/);
     }
 
-    // TODO (rohany): Here we would connect the instantiation order of
-    // the subgraph execution with the stored lock.
     if(defn->concurrency_mode == SubgraphDefinition::INSTANTIATION_ORDER &&
        defn->execution_mode == SubgraphDefinition::COMPILED) {
       // Chain the finish event of this subgraph launch through
