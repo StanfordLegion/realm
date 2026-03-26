@@ -1450,6 +1450,12 @@ namespace Realm {
       memcpy(args, _args, arglen);
     }
 
+    // preconditions and queues are initialized as malloc'd data rather than
+    // vectors because we don't want to pay for the constructor of atomic<>
+    // on every element, which is going to do an atomic store at location 
+    // instead of the cheaper memcpy we want to do instead. This means that
+    // we have to manage that memory ourselves.
+
     // TODO (rohany): Can we assume that int32_t is enough to store the
     //  number of preconditions held for each operation?
     // Allocate a fresh copy of the preconditions array and copy the
