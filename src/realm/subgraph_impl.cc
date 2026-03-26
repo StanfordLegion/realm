@@ -773,6 +773,7 @@ namespace Realm {
       // Flatten the nested metadata produced from the compilation process.
       operation_incoming_edges = op_incoming_edges;
       operation_outgoing_edges = op_outgoing_edges;
+      initial_processor_queues = processor_queues;
     }
 
     // Once the subgraph compilation has completed, the subgraph has also been
