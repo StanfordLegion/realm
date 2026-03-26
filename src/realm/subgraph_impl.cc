@@ -705,9 +705,6 @@ namespace Realm {
 
       // Collect all processors used in this subgraph (which may be none).
       // To avoid indirections later, we'll map processors to indices.
-      processor_to_index.clear();
-      subgraph_processors.clear();
-      subgraph_processor_impls.clear();
       for(auto &task : defn->tasks) {
         if(processor_to_index.find(task.proc) == processor_to_index.end()) {
           processor_to_index[task.proc] = subgraph_processors.size();
@@ -1179,6 +1176,16 @@ namespace Realm {
   {
     delete defn;
     schedule.clear();
+
+    subgraph_processors.clear();
+    subgraph_processor_impls.clear();
+    processor_to_index.clear();
+    compiled_subgraph_operations.clear();
+    operation_incoming_edges.clear();
+    operation_outgoing_edges.clear();
+    operation_precondition_counters.clear();
+    initial_processor_queues.clear();
+    initial_queue_entry_counts.clear();
 
     // TODO: when we create subgraphs on remote nodes, send a message to the
     //  creator node so they can add it to their free list

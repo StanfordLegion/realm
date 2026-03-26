@@ -108,8 +108,6 @@ namespace Realm {
     };
 
   protected:
-    // TODO (rohany): Make sure to handle clearing / initializing
-    //  some of these fields when a SubgraphImpl gets reused.
     // TODO (rohany): Should make many of these maps we access unordered_maps
     //  or a faster "small-map" implementation.
 
