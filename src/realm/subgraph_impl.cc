@@ -1552,8 +1552,8 @@ namespace Realm {
 
     // Set thread-local state before starting the task.
     ThreadLocal::current_processor = proc;
-    // TODO (rohany): I want to set somewhere that we're executing a subgraph task.
-    //  I'm not sure if that should be a ThreadLocal, or stored in the Realm::Thread.
+    Thread *thread = Thread::self();
+    thread->start_subgraph_task_execution();
 
     // We can't hold the lock while executing tasks.
     scheduler->lock.unlock();
@@ -1563,6 +1563,7 @@ namespace Realm {
     scheduler->lock.lock();
 
     // Restore thread-local state after the task.
+    thread->stop_subgraph_task_execution();
     ThreadLocal::current_processor = Processor::NO_PROC;
 
     // Trigger the out-bound dependencies of this operation.

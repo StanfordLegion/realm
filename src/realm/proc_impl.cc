@@ -123,6 +123,16 @@ namespace Realm {
   // returns the finish event for the currently running task
   /*static*/ Event Processor::get_current_finish_event(void)
   {
+    Thread *thread = Thread::self();
+    if(thread->in_subgraph_task_execution()) {
+      // We will not support getting the finish event during
+      // a compiled subgraph yet, but will relax this restriction
+      // in the future.
+      assert(false && "get_current_finish_event during compiled subgraph task execution "
+                      "is not currently supported");
+      return Event::NO_EVENT;
+    }
+
     Operation *op = Thread::self()->get_operation();
     // TODO (rohany): Add the proper error guarding here if
     //  this is called during a subgraph execution.
@@ -1197,7 +1207,7 @@ namespace Realm {
 
   void LocalTaskProcessor::enqueue_subgraph(SubgraphExecutionState *subgraph)
   {
-    sched->subgraph_executor->enqueue_subgraph(subgraph);
+    sched->add_subgraph(subgraph);
   }
 
   ////////////////////////////////////////////////////////////////////////
