@@ -18,6 +18,7 @@
 // Realm subgraph implementation
 
 #include "realm/subgraph_impl.h"
+#include "realm/event.h"
 #include "realm/memory.h"
 #include "realm/network.h"
 #include "realm/proc_impl.h"
@@ -64,7 +65,7 @@ namespace Realm {
     }
   }
 
-  void Subgraph::destroy(Event wait_on /*= Event::NO_EVENT*/) const
+  Event Subgraph::destroy(Event wait_on /*= Event::NO_EVENT*/) const
   {
     NodeID owner = ID(*this).subgraph_owner_node();
 
@@ -73,15 +74,31 @@ namespace Realm {
     if(owner == Network::my_node_id) {
       SubgraphImpl *subgraph = get_runtime()->get_subgraph_impl(*this);
 
-      if(wait_on.has_triggered())
+      // Help the user out here to make deletion of Subgraphs only finish
+      // when all pending instantiations are done.
+      if(subgraph->defn->concurrency_mode == SubgraphDefinition::INSTANTIATION_ORDER &&
+         subgraph->defn->execution_mode == SubgraphDefinition::COMPILED) {
+        AutoLock<Mutex> al(subgraph->instantiation_lock);
+        wait_on =
+            Event::merge_events(wait_on, subgraph->previous_instantiation_completion,
+                                subgraph->previous_cleanup_completion);
+      }
+
+      if(wait_on.has_triggered()) {
         subgraph->destroy();
-      else
-        subgraph->deferred_destroy.defer(subgraph, wait_on);
+        return Event::NO_EVENT;
+      } else {
+        UserEvent done = UserEvent::create_user_event();
+        subgraph->deferred_destroy.defer(subgraph, wait_on, done);
+        return done;
+      }
     } else {
+      // TODO (rohany): Forward a UserEvent through this active message.
       ActiveMessage<SubgraphDestroyMessage> amsg(owner);
       amsg->subgraph = *this;
       amsg->wait_on = wait_on;
       amsg.commit();
+      return Event::NO_EVENT;
     }
   }
 
@@ -440,8 +457,6 @@ namespace Realm {
       toposort[std::make_pair(SubgraphDefinition::OPKIND_RELEASE, i)] = nextval++;
     unsigned total_ops = nextval;
 
-    // TODO (rohany): Do some of this analysis after we separate the subgraph.
-
     // for subgraph instantiations, we need to do a pass over the dependencies
     //  to see which ports are used
     std::vector<unsigned> inst_pre_max_port(defn->instantiations.size(), 0);
@@ -760,7 +775,6 @@ namespace Realm {
         }
       }
 
-      // TODO (rohany): Be consistent about the integer widths of all the data here.
       // Construct the initial queue for each processor. This will contain all operations
       // that do not have any preconditions, followed by a default value for all other
       // entries in the queue.
@@ -892,6 +906,16 @@ namespace Realm {
             << "compiled subgraphs do not currently support external postconditions";
         assert(false);
       }
+
+      if(defn->concurrency_mode == SubgraphDefinition::INSTANTIATION_ORDER) {
+        // Since we're an instantiation-order subgraph, we get to assume that
+        // subgraph executions are happening in-order. So, make sure that we're
+        // the only launcher of this subgraph.
+        instantiation_lock.lock();
+        // Next, make sure that we're starting only when the previous instantiation
+        // has completed.
+        start_event = Event::merge_events(start_event, previous_instantiation_completion);
+      }
     }
 
     // TODO (rohany): Here is where we chain subgraph executions through the lock that
@@ -899,6 +923,7 @@ namespace Realm {
 
     // Handle extra execution setup required for launching a compiled subgraph.
     UserEvent static_finish_event = UserEvent::NO_USER_EVENT;
+    UserEvent cleanup_done_event = UserEvent::NO_USER_EVENT;
     if(defn->execution_mode == SubgraphDefinition::COMPILED) {
       static_finish_event = UserEvent::create_user_event();
       // Allocate the state for this subgraph replay.
@@ -910,7 +935,7 @@ namespace Realm {
       // Register a cleanup operation for when this subgraph execution
       // is complete.
       SubgraphInstantiationCleanup *cleanup =
-          new SubgraphInstantiationCleanup(exec_state);
+          new SubgraphInstantiationCleanup(exec_state, cleanup_done_event);
       EventImpl::add_waiter(finish_event, cleanup);
     }
 
@@ -1170,6 +1195,15 @@ namespace Realm {
 
     // TODO (rohany): Here we would connect the instantiation order of
     // the subgraph execution with the stored lock.
+    if(defn->concurrency_mode == SubgraphDefinition::INSTANTIATION_ORDER &&
+       defn->execution_mode == SubgraphDefinition::COMPILED) {
+      // Chain the finish event of this subgraph launch through
+      // the state of this subgraph for future launches.
+      previous_instantiation_completion = finish_event;
+      previous_cleanup_completion =
+          Event::merge_events(previous_cleanup_completion, cleanup_done_event);
+      instantiation_lock.unlock();
+    }
   }
 
   void SubgraphImpl::destroy(void)
@@ -1202,9 +1236,11 @@ namespace Realm {
   // class SubgraphImpl::DeferredDestroy
   //
 
-  void SubgraphImpl::DeferredDestroy::defer(SubgraphImpl *_subgraph, Event wait_on)
+  void SubgraphImpl::DeferredDestroy::defer(SubgraphImpl *_subgraph, Event wait_on,
+                                            UserEvent _to_trigger)
   {
     subgraph = _subgraph;
+    to_trigger = _to_trigger;
     EventImpl::add_waiter(wait_on, this);
   }
 
@@ -1212,6 +1248,7 @@ namespace Realm {
   {
     assert(!poisoned);
     subgraph->destroy();
+    to_trigger.trigger();
   }
 
   void SubgraphImpl::DeferredDestroy::print(std::ostream &os) const
@@ -1326,8 +1363,9 @@ namespace Realm {
   ////////////////////////////////////////////////////////////////////////
 
   SubgraphInstantiationCleanup::SubgraphInstantiationCleanup(
-      SubgraphExecutionState *subgraph)
+      SubgraphExecutionState *subgraph, UserEvent to_trigger)
     : subgraph(subgraph)
+    , to_trigger(to_trigger)
   {}
 
   void SubgraphInstantiationCleanup::cleanup()
@@ -1335,6 +1373,7 @@ namespace Realm {
     delete subgraph;
     // We'll have more work to do here once we add more features to
     // the compiled subgraph implementation.
+    to_trigger.trigger();
   }
 
   void SubgraphInstantiationCleanup::event_triggered(bool poisoned, TimeLimit work_until)

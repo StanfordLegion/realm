@@ -98,13 +98,14 @@ namespace Realm {
 
     class DeferredDestroy : public EventWaiter {
     public:
-      void defer(SubgraphImpl *_subgraph, Event wait_on);
+      void defer(SubgraphImpl *_subgraph, Event wait_on, UserEvent to_trigger);
       virtual void event_triggered(bool poisoned, TimeLimit work_until);
       virtual void print(std::ostream &os) const;
       virtual Event get_finish_event(void) const;
 
     protected:
       SubgraphImpl *subgraph;
+      UserEvent to_trigger;
     };
 
   protected:
@@ -168,15 +169,17 @@ namespace Realm {
     friend class ProcSubgraphExecutor;
     friend class SubgraphExecutionState;
     friend class SubgraphWorkLauncher;
+    friend class Subgraph;
 
-    // TODO (rohany): This is work for future PRs.
-    // TODO (rohany): Asynchronous edges.
-    // TODO (rohany): Extra stuff here like background work? Connections between
-    //  the interpreted and compiled parts of the subgraph?
-    // TODO (rohany): Instantiation lock.
-
-    // TODO (rohany): This is work for the _current_ pull request.
-    // TODO (rohany): The resource cleanup infrastructure.
+    // When concurrency_mode == INSTANTIATION_ORDER, the subgraph will
+    // implicitly order instantiations of the subgraph by tracking
+    // the completion event of the last instantiation.
+    mutable Mutex instantiation_lock;
+    mutable Event previous_instantiation_completion = Event::NO_EVENT;
+    // TODO (rohany): Make sure that this is implemented.
+    // previous_cleanup_completion tracks cleanup work launched
+    // by subgraph instantiations.
+    mutable Event previous_cleanup_completion = Event::NO_EVENT;
 
   public:
     ID me;
@@ -229,7 +232,7 @@ namespace Realm {
   // and then cleans up the SubgraphExecutionState resources.
   class SubgraphInstantiationCleanup : public EventWaiter {
   public:
-    SubgraphInstantiationCleanup(SubgraphExecutionState *subgraph);
+    SubgraphInstantiationCleanup(SubgraphExecutionState *subgraph, UserEvent to_trigger);
     void cleanup();
 
     virtual void event_triggered(bool poisoned, TimeLimit work_until) override;
@@ -238,6 +241,7 @@ namespace Realm {
 
   private:
     SubgraphExecutionState *subgraph;
+    UserEvent to_trigger;
   };
 
   // SubgraphResourceReaper is a background work item that processes

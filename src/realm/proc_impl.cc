@@ -134,8 +134,6 @@ namespace Realm {
     }
 
     Operation *op = Thread::self()->get_operation();
-    // TODO (rohany): Add the proper error guarding here if
-    //  this is called during a subgraph execution.
     assert(op != 0);
     return op->get_finish_event();
   }
