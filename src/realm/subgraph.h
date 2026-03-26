@@ -247,6 +247,21 @@ namespace Realm {
 
     ConcurrencyMode concurrency_mode;
 
+    // Execution mode, which controls the optimization strategy used
+    // to execute the subgraph.
+    enum ExecutionMode
+    {
+      // Executed by issuing operations within the subgraph as standard
+      // Realm operations, with some optimizations.
+      INTERPRETED,
+      // Executed by compiling the subgraph and executing the operations
+      // through a specialized component of Realm that offers significantly
+      // lower execution overhead at the cost of some restrictions on the
+      // flexibility of operations within the subgraph.
+      COMPILED,
+    };
+    ExecutionMode execution_mode;
+
     // longer term possibilites:
     //  conditional execution
     //  loops

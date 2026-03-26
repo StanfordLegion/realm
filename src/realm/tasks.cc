@@ -1129,6 +1129,18 @@ namespace Realm {
           update_worker_count(0, +1);
         }
 
+        // This loop is taken with a lock, so access into the scheduler itself
+        // is sequential. Modifications to objects within the scheduler are safe
+        // to make without locks and atomics aren't needed to observe the updates.
+        // Subgraph executor stuff goes into here...
+        // Want something like:
+        // if (subgraph_executor.try_acquire_subgraph(this)) {
+        //
+        // }
+        // if (subgraph_executor.is_active()) {
+        //   subgraph_executor.execute_work();
+        // }
+
         // if we have both resumable and new ready tasks, we want the one that
         //  is the highest priority, with ties going to resumable tasks - we
         //  can do this cleanly by taking advantage of the fact that the
