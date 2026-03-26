@@ -30,6 +30,22 @@ namespace Realm {
 
   Logger log_subgraph("subgraph");
 
+  std::ostream &operator<<(std::ostream &os, SubgraphDefinition::ExecutionMode mode)
+  {
+    switch(mode) {
+    case SubgraphDefinition::INTERPRETED:
+      os << "INTERPRETED";
+      break;
+    case SubgraphDefinition::COMPILED:
+      os << "COMPILED";
+      break;
+    default:
+      os << "UNKNOWN";
+      break;
+    }
+    return os;
+  }
+
   ////////////////////////////////////////////////////////////////////////
   //
   // class Subgraph
@@ -931,6 +947,7 @@ namespace Realm {
       SubgraphWorkLauncher::launch_or_defer(exec_state, start_event);
       // Register a cleanup operation for when this subgraph execution
       // is complete.
+      cleanup_done_event = UserEvent::create_user_event();
       SubgraphInstantiationCleanup *cleanup =
           new SubgraphInstantiationCleanup(exec_state, cleanup_done_event);
       EventImpl::add_waiter(finish_event, cleanup);
@@ -1578,7 +1595,7 @@ namespace Realm {
     // woken up by the scheduler will pick a different task to run instead
     // of the same task that we would have just gone to sleep running. We'll
     // also pull this onto the stack to avoid it changing from underneath us.
-    uint64_t next_queue_front = queue_front++;
+    uint64_t next_queue_front = ++queue_front;
 
     // Find the operation to run.
     const SubgraphImpl::SubgraphOperationDesc &op_desc =
@@ -1634,7 +1651,7 @@ namespace Realm {
                                      .queue_back.fetch_add_acqrel(1);
         // Turn the target_queue_slot into a global index into the processor_queues array.
         target_queue_slot =
-            target_proc_index +
+            target_queue_slot +
             subgraph_impl->initial_processor_queues.offsets[target_proc_index];
         current_subgraph->processor_queues[target_queue_slot].store_release(
             edge_info.index);

@@ -268,6 +268,8 @@ namespace Realm {
     //  local "scratchpad" for small-value-communication
   };
 
+  std::ostream &operator<<(std::ostream &os, SubgraphDefinition::ExecutionMode mode);
+
 }; // namespace Realm
 
 #include "realm/subgraph.inl"
