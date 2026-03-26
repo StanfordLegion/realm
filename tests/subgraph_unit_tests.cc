@@ -187,6 +187,7 @@ public:
 
   void init(SubgraphDefinition::ExecutionMode mode) override
   {
+    execution_mode = mode;
     // Get the CPUs and the system memory.
     Machine::ProcessorQuery pq =
         Machine::ProcessorQuery(Machine::get_machine()).only_kind(Processor::LOC_PROC);
@@ -266,8 +267,35 @@ public:
 
   void run() override
   {
-    // Invoke the subgraph once.
-    sg.instantiate(nullptr, 0, ProfilingRequestSet()).wait();
+
+    int iterations = 5;
+    // Run the subgraph in a few configurations, depending on the execution mode.
+    if(execution_mode == SubgraphDefinition::INTERPRETED) {
+      // For the interpreted mode, just execute the subgraph back
+      // to back a few times, and chain event dependencies between
+      // the instantiations.
+      Event e = Event::NO_EVENT;
+      for(int i = 0; i < iterations; i++) {
+        e = sg.instantiate(nullptr, 0, ProfilingRequestSet(), e);
+      }
+      e.wait();
+    } else {
+      // In the compiled mode, the same thing should also work.
+      Event e = Event::NO_EVENT;
+      for(int i = 0; i < iterations; i++) {
+        e = sg.instantiate(nullptr, 0, ProfilingRequestSet(), e);
+      }
+
+      // However, because the subgraph should order itself based on
+      // the instantiation order execution mode, we should be able to
+      // run the invocations without event dependencies between them
+      // and still get a correct answer.
+      std::vector<Event> evs(iterations);
+      for(int i = 0; i < iterations; i++) {
+        evs[i] = sg.instantiate(nullptr, 0, ProfilingRequestSet());
+      }
+      Event::merge_events(evs).wait();
+    }
   }
 
   void cleanup() override
@@ -284,6 +312,7 @@ private:
   Subgraph sg;
   RegionInstance inst;
   bool error = false;
+  SubgraphDefinition::ExecutionMode execution_mode;
 };
 
 void top_level_task(const void *args, size_t arglen, const void *userdata, size_t userlen,

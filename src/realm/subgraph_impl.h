@@ -27,6 +27,8 @@
 #include "realm/operation.h"
 #include "realm/bgwork.h"
 
+#include <queue>
+
 namespace Realm {
 
   class LocalTaskProcessor;
