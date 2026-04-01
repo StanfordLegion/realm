@@ -1167,13 +1167,21 @@ namespace Realm {
 
       return nullptr;
     }
-    bool GPU::register_reduction(ReductionOpID redop_id, CUfunction apply_excl,
-                                 CUfunction apply_nonexcl, CUfunction fold_excl,
-                                 CUfunction fold_nonexcl)
+    bool GPU::register_reduction(
+        ReductionOpID redop_id, CUfunction apply_excl, CUfunction apply_nonexcl,
+        CUfunction fold_excl, CUfunction fold_nonexcl, CUfunction apply_excl_advanced,
+        CUfunction apply_nonexcl_advanced, CUfunction fold_excl_advanced,
+        CUfunction fold_nonexcl_advanced, CUfunction apply_excl_transpose,
+        CUfunction apply_nonexcl_transpose, CUfunction fold_excl_transpose,
+        CUfunction fold_nonexcl_transpose)
     {
       AutoLock<> al(alloc_mutex);
       return gpu_reduction_table
-          .insert({redop_id, {apply_excl, apply_nonexcl, fold_excl, fold_nonexcl}})
+          .insert({redop_id,
+                   {apply_excl, apply_nonexcl, fold_excl, fold_nonexcl,
+                    apply_excl_advanced, apply_nonexcl_advanced, fold_excl_advanced,
+                    fold_nonexcl_advanced, apply_excl_transpose, apply_nonexcl_transpose,
+                    fold_excl_transpose, fold_nonexcl_transpose}})
           .second;
     }
 
@@ -4155,7 +4163,11 @@ namespace Realm {
       for(size_t didx = 0; didx < num; didx++) {
         if(!redop_gpus[didx]->register_reduction(
                descs[didx].redop_id, descs[didx].apply_excl, descs[didx].apply_nonexcl,
-               descs[didx].fold_excl, descs[didx].fold_nonexcl)) {
+               descs[didx].fold_excl, descs[didx].fold_nonexcl,
+               descs[didx].apply_excl_advanced, descs[didx].apply_nonexcl_advanced,
+               descs[didx].fold_excl_advanced, descs[didx].fold_nonexcl_advanced,
+               descs[didx].apply_excl_transpose, descs[didx].apply_nonexcl_transpose,
+               descs[didx].fold_excl_transpose, descs[didx].fold_nonexcl_transpose)) {
           failed_reg = true;
           break;
         }
