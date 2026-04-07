@@ -425,7 +425,7 @@ namespace Realm {
     atomic<int> refcount;
 
     void check_analysis_preconditions();
-    void perform_analysis();
+    bool perform_analysis(TimeLimit work_until);
     void cancel_analysis(Event failed_precondition);
 
     class DeferredAnalysis : public EventWaiter {
@@ -456,6 +456,11 @@ namespace Realm {
     std::vector<FieldInfo> src_fields, dst_fields;
     void *fill_data;
     size_t fill_size;
+    bool analysis_init_done;
+    size_t analysis_field_idx;
+    size_t analysis_fld_start;
+    size_t analysis_fill_ofs;
+    std::vector<bool> analysis_field_done;
     ProfilingMeasurements::OperationMemoryUsage prof_usage;
     ProfilingMeasurements::OperationCopyInfo prof_cpinfo;
   };
