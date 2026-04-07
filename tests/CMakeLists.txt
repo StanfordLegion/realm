@@ -112,6 +112,7 @@ list(
   nodeset_test.cc
   transfer_iterator_test.cc
   lowlevel_dma_test.cc
+  perform_analysis_test.cc
   circ_queue_test.cc
   gather_scatter_test.cc
   sparsity_map_test.cc

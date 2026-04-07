@@ -29,6 +29,8 @@
 #include "realm/transfer/channel.h"
 #include "realm/profiling.h"
 
+class PerformAnalysisTest;
+
 namespace Realm {
 
   // the data transfer engine has too much code to have it all be templated on the
@@ -441,6 +443,7 @@ namespace Realm {
     DeferredAnalysis deferred_analysis;
 
     friend class TransferOperation;
+    friend class ::PerformAnalysisTest;
 
     TransferDomain *domain;
     std::vector<CopySrcDstField> srcs, dsts;
