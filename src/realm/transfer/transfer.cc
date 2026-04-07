@@ -1897,12 +1897,12 @@ namespace Realm {
                                               const std::vector<FieldID> &fields,
                                               const std::vector<size_t> &fld_offsets,
                                               const std::vector<size_t> &fld_sizes,
-                                              bool idindexed_fields = false);
+                                              bool idindexed_fields = false) const;
 
     virtual TransferIterator *create_iterator(RegionInstance inst, RegionInstance peer,
                                               const std::vector<FieldID> &fields,
                                               const std::vector<size_t> &fld_offsets,
-                                              const std::vector<size_t> &fld_sizes);
+                                              const std::vector<size_t> &fld_sizes) const;
 
     virtual void print(std::ostream &os) const;
 
@@ -2348,7 +2348,7 @@ namespace Realm {
   TransferIterator *TransferDomainIndexSpace<N, T>::create_iterator(
       RegionInstance inst, const std::vector<int> &dim_order,
       const std::vector<FieldID> &fields, const std::vector<size_t> &fld_offsets,
-      const std::vector<size_t> &fld_sizes, bool idindexed_fields)
+      const std::vector<size_t> &fld_sizes, bool idindexed_fields) const
   {
     assert(dim_order.size() == N);
     RegionInstanceImpl *impl = get_runtime()->get_instance_impl(inst);
@@ -2371,7 +2371,7 @@ namespace Realm {
   template <int N, typename T>
   TransferIterator *TransferDomainIndexSpace<N, T>::create_iterator(
       RegionInstance inst, RegionInstance peer, const std::vector<FieldID> &fields,
-      const std::vector<size_t> &fld_offsets, const std::vector<size_t> &fld_sizes)
+      const std::vector<size_t> &fld_offsets, const std::vector<size_t> &fld_sizes) const
   {
     std::vector<int> dim_order(N, -1);
     bool have_ordering = false;
