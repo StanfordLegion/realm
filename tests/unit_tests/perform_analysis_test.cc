@@ -21,6 +21,49 @@
 
 using namespace Realm;
 
+// Minimal TransferDomain implementation that avoids runtime dependencies.
+// Used to replace the empty domain after construction so that perform_analysis
+// takes the non-empty path and enters the main field loop.
+class MockTransferDomain : public TransferDomain {
+public:
+  TransferDomain *clone() const override { return new MockTransferDomain; }
+  Event request_metadata() override { return Event::NO_EVENT; }
+  bool empty() const override { return false; }
+  size_t volume() const override { return 10; }
+  void choose_dim_order(std::vector<int> &dim_order,
+                        const std::vector<CopySrcDstField> &srcs,
+                        const std::vector<CopySrcDstField> &dsts,
+                        const std::vector<IndirectionInfo *> &indirects,
+                        bool force_fortran_order, size_t max_stride) const override
+  {
+    dim_order.clear();
+    dim_order.push_back(0);
+  }
+  void count_fragments(RegionInstance inst, const std::vector<int> &dim_order,
+                       const std::vector<FieldID> &fields,
+                       const std::vector<size_t> &fld_sizes,
+                       std::vector<size_t> &fragments) const override
+  {
+    fragments.clear();
+  }
+  TransferIterator *create_iterator(RegionInstance inst,
+                                    const std::vector<int> &dim_order,
+                                    const std::vector<FieldID> &fields,
+                                    const std::vector<size_t> &fld_offsets,
+                                    const std::vector<size_t> &fld_sizes) const override
+  {
+    return nullptr;
+  }
+  TransferIterator *create_iterator(RegionInstance inst, RegionInstance peer,
+                                    const std::vector<FieldID> &fields,
+                                    const std::vector<size_t> &fld_offsets,
+                                    const std::vector<size_t> &fld_sizes) const override
+  {
+    return nullptr;
+  }
+  void print(std::ostream &os) const override { os << "MockTransferDomain"; }
+};
+
 // PerformAnalysisTest is a friend of TransferDesc, allowing direct access to
 // protected members for testing the incremental analysis behavior.
 class PerformAnalysisTest : public ::testing::Test {
@@ -43,10 +86,9 @@ protected:
   // again with a non-empty domain and dummy fields.
   static void reset_for_nonempty_analysis(TransferDesc *desc, size_t num_fields)
   {
-    // Replace the empty domain with a non-empty 1D domain
+    // Replace the empty domain with a non-empty mock domain
     delete desc->domain;
-    IndexSpace<1, int> nonempty_is(Rect<1, int>(0, 9));
-    desc->domain = TransferDomain::construct(nonempty_is);
+    desc->domain = new MockTransferDomain;
 
     // Reset analysis state
     desc->analysis_complete.store(false);
@@ -106,10 +148,7 @@ protected:
   {
     return desc->analysis_field_idx;
   }
-  static size_t get_dim_order_size(TransferDesc *desc)
-  {
-    return desc->dim_order.size();
-  }
+  static size_t get_dim_order_size(TransferDesc *desc) { return desc->dim_order.size(); }
   static const int *get_dim_order_data(TransferDesc *desc)
   {
     return desc->dim_order.data();
