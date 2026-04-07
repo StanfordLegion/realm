@@ -70,7 +70,7 @@ set(REALM_SOURCES
 )
 
 if(REALM_USE_CUDA)
-  list(APPEND REALM_SOURCES cuda/cuda_module.cc cuda/cuda_internal.cc cuda/cuda_access.cc)
+  list(APPEND REALM_SOURCES cuda/cuda_module.cc cuda/cuda_internal.cc cuda/cuda_access.cc cuda/cuda_hook.cc)
   if(REALM_USE_NVTX)
     list(APPEND REALM_SOURCES nvtx.cc)
   endif()
