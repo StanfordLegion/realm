@@ -10,5 +10,6 @@ var classRealm_1_1InstanceLayoutGeneric =
     [ "relocate", "classRealm_1_1InstanceLayoutGeneric.html#a88f0b2674d6de4e5efe436b918cac401", null ],
     [ "alignment_reqd", "classRealm_1_1InstanceLayoutGeneric.html#af82b990d4519e0cdfdf670e205284adf", null ],
     [ "bytes_used", "classRealm_1_1InstanceLayoutGeneric.html#aa6ca51a7a373f0d3aa3b4c6f3fe1f072", null ],
-    [ "fields", "classRealm_1_1InstanceLayoutGeneric.html#a8969450b90275e2ff9c0a593d84564d7", null ]
+    [ "fields", "classRealm_1_1InstanceLayoutGeneric.html#a8969450b90275e2ff9c0a593d84564d7", null ],
+    [ "idindexed_fields", "classRealm_1_1InstanceLayoutGeneric.html#a2b43a5b9e0ea4db19470e7939721c2d4", null ]
 ];

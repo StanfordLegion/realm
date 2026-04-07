@@ -48,6 +48,9 @@ var hierarchy =
     [ "Realm::Cuda::AffineFillRect< N, Offset_t >", "structRealm_1_1Cuda_1_1AffineFillRect.html", null ],
     [ "Realm::Cuda::AffineFillRect< N, size_t >", "structRealm_1_1Cuda_1_1AffineFillRect.html", null ],
     [ "Realm::Cuda::AffineLargeFillInfo< N, Offset_t >", "structRealm_1_1Cuda_1_1AffineLargeFillInfo.html", null ],
+    [ "Realm::Cuda::AffineReducInfo< N, MAX_RECTS >", "structRealm_1_1Cuda_1_1AffineReducInfo.html", null ],
+    [ "Realm::Cuda::AffineReducPair< N >", "structRealm_1_1Cuda_1_1AffineReducPair.html", null ],
+    [ "Realm::Cuda::AffineReducSubRect< N >", "structRealm_1_1Cuda_1_1AffineReducSubRect.html", null ],
     [ "Realm::Cuda::AffineSubRect< N, Offset_t >", "structRealm_1_1Cuda_1_1AffineSubRect.html", null ],
     [ "Realm::Cuda::AffineSubRect< N, size_t >", "structRealm_1_1Cuda_1_1AffineSubRect.html", null ],
     [ "Realm::AffineTransform< M, N, T >", "classRealm_1_1AffineTransform.html", null ],
@@ -216,6 +219,7 @@ var hierarchy =
       ] ],
       [ "Realm::RemoteChannel", "classRealm_1_1RemoteChannel.html", [
         [ "Realm::Cuda::GPUIndirectRemoteChannel", "classRealm_1_1Cuda_1_1GPUIndirectRemoteChannel.html", null ],
+        [ "Realm::Cuda::GPURemoteChannel", "classRealm_1_1Cuda_1_1GPURemoteChannel.html", null ],
         [ "Realm::Cuda::GPUreduceRemoteChannel", "classRealm_1_1Cuda_1_1GPUreduceRemoteChannel.html", null ],
         [ "Realm::Hip::GPUreduceRemoteChannel", "classRealm_1_1Hip_1_1GPUreduceRemoteChannel.html", null ]
       ] ]
@@ -508,6 +512,7 @@ var hierarchy =
     [ "Realm::InstanceLayoutConstraints", "classRealm_1_1InstanceLayoutConstraints.html", null ],
     [ "Realm::InstanceLayoutGeneric", "classRealm_1_1InstanceLayoutGeneric.html", [
       [ "Realm::InstanceLayout< N, T >", "classRealm_1_1InstanceLayout.html", null ],
+      [ "Realm::InstanceLayout< N, T >", "classRealm_1_1InstanceLayout.html", null ],
       [ "Realm::InstanceLayoutOpaque", "classRealm_1_1InstanceLayoutOpaque.html", null ]
     ] ],
     [ "Realm::InstanceLayoutPieceBase", "classRealm_1_1InstanceLayoutPieceBase.html", [
@@ -586,6 +591,7 @@ var hierarchy =
     [ "Realm::TransferGraph::XDTemplate::IO", "structRealm_1_1TransferGraph_1_1XDTemplate_1_1IO.html", null ],
     [ "Realm::ProfilingMeasurements::IPCPerfCounters", "structRealm_1_1ProfilingMeasurements_1_1IPCPerfCounters.html", null ],
     [ "is_copy_serializable", "structis__copy__serializable.html", null ],
+    [ "Realm::Cuda::KernelVariantDesc", "structRealm_1_1Cuda_1_1KernelVariantDesc.html", null ],
     [ "Realm::Runtime::KeyValueStoreVtable", "structRealm_1_1Runtime_1_1KeyValueStoreVtable.html", null ],
     [ "Realm::Hip::GPUProcessor::LaunchConfig", "structRealm_1_1Hip_1_1GPUProcessor_1_1LaunchConfig.html", [
       [ "Realm::Hip::GPUProcessor::CallConfig", "structRealm_1_1Hip_1_1GPUProcessor_1_1CallConfig.html", null ]
@@ -685,6 +691,7 @@ var hierarchy =
     [ "Realm::MemoryQueryImpl", "classRealm_1_1MemoryQueryImpl.html", null ],
     [ "Realm::BasicRangeAllocator< RT, TT >::MemoryStats", "structRealm_1_1BasicRangeAllocator_1_1MemoryStats.html", null ],
     [ "Realm::MemPathInfo", "structRealm_1_1MemPathInfo.html", null ],
+    [ "Realm::Cuda::MemReducInfo< Offset_t >", "structRealm_1_1Cuda_1_1MemReducInfo.html", null ],
     [ "Realm::MemSpecificInfo", "classRealm_1_1MemSpecificInfo.html", [
       [ "Realm::Cuda::MemSpecificCudaArray", "classRealm_1_1Cuda_1_1MemSpecificCudaArray.html", null ],
       [ "Realm::FileMemory::OpenFileInfo", "classRealm_1_1FileMemory_1_1OpenFileInfo.html", null ]
@@ -867,6 +874,7 @@ var hierarchy =
     [ "Realm::Serialization::PolymorphicSerdezIntfc< T >", "classRealm_1_1Serialization_1_1PolymorphicSerdezIntfc.html", [
       [ "Realm::Serialization::PolymorphicSerdezSubclass< Realm::InstanceLayoutPiece< N, int >, Realm::AffineLayoutPiece< N, int > >", "classRealm_1_1Serialization_1_1PolymorphicSerdezSubclass.html", null ],
       [ "Realm::Serialization::PolymorphicSerdezSubclass< Realm::RemoteChannelInfo, Realm::Cuda::GPUIndirectRemoteChannelInfo >", "classRealm_1_1Serialization_1_1PolymorphicSerdezSubclass.html", null ],
+      [ "Realm::Serialization::PolymorphicSerdezSubclass< Realm::RemoteChannelInfo, Realm::Cuda::GPURemoteChannelInfo >", "classRealm_1_1Serialization_1_1PolymorphicSerdezSubclass.html", null ],
       [ "Realm::Serialization::PolymorphicSerdezSubclass< Realm::RemoteChannelInfo, Realm::Cuda::GPUreduceRemoteChannelInfo >", "classRealm_1_1Serialization_1_1PolymorphicSerdezSubclass.html", null ],
       [ "Realm::Serialization::PolymorphicSerdezSubclass< Realm::InstanceLayoutPiece< N, T >, Realm::CudaArrayLayoutPiece< N, T > >", "classRealm_1_1Serialization_1_1PolymorphicSerdezSubclass.html", null ],
       [ "Realm::Serialization::PolymorphicSerdezSubclass< Realm::ExternalInstanceResource, Realm::ExternalCudaArrayResource >", "classRealm_1_1Serialization_1_1PolymorphicSerdezSubclass.html", null ],
@@ -880,6 +888,8 @@ var hierarchy =
       [ "Realm::Serialization::PolymorphicSerdezSubclass< Realm::CodeImplementation, Realm::FunctionPointerImplementation >", "classRealm_1_1Serialization_1_1PolymorphicSerdezSubclass.html", null ],
       [ "Realm::Serialization::PolymorphicSerdezSubclass< Realm::InstanceLayoutPiece< N, T >, Realm::HDF5LayoutPiece< N, T > >", "classRealm_1_1Serialization_1_1PolymorphicSerdezSubclass.html", null ],
       [ "Realm::Serialization::PolymorphicSerdezSubclass< Realm::RemoteChannelInfo, Realm::Hip::GPUreduceRemoteChannelInfo >", "classRealm_1_1Serialization_1_1PolymorphicSerdezSubclass.html", null ],
+      [ "Realm::Serialization::PolymorphicSerdezSubclass< Realm::TransferIterator, Realm::IDIndexedFieldsIterator< N, T > >", "classRealm_1_1Serialization_1_1PolymorphicSerdezSubclass.html", null ],
+      [ "Realm::Serialization::PolymorphicSerdezSubclass< Realm::InstanceLayoutGeneric, Realm::InstanceLayout< N, T > >", "classRealm_1_1Serialization_1_1PolymorphicSerdezSubclass.html", null ],
       [ "Realm::Serialization::PolymorphicSerdezSubclass< Realm::InstanceLayoutGeneric, Realm::InstanceLayout< N, int > >", "classRealm_1_1Serialization_1_1PolymorphicSerdezSubclass.html", null ],
       [ "Realm::Serialization::PolymorphicSerdezSubclass< Realm::CodeImplementation, Realm::LLVMIRImplementation >", "classRealm_1_1Serialization_1_1PolymorphicSerdezSubclass.html", null ],
       [ "Realm::Serialization::PolymorphicSerdezSubclass< Realm::CodeImplementation, Realm::PythonSourceImplementation >", "classRealm_1_1Serialization_1_1PolymorphicSerdezSubclass.html", null ],
@@ -982,6 +992,7 @@ var hierarchy =
     [ "Realm::RemoteChannelInfo", "classRealm_1_1RemoteChannelInfo.html", [
       [ "Realm::SimpleRemoteChannelInfo", "classRealm_1_1SimpleRemoteChannelInfo.html", [
         [ "Realm::Cuda::GPUIndirectRemoteChannelInfo", "classRealm_1_1Cuda_1_1GPUIndirectRemoteChannelInfo.html", null ],
+        [ "Realm::Cuda::GPURemoteChannelInfo", "classRealm_1_1Cuda_1_1GPURemoteChannelInfo.html", null ],
         [ "Realm::Cuda::GPUreduceRemoteChannelInfo", "classRealm_1_1Cuda_1_1GPUreduceRemoteChannelInfo.html", null ],
         [ "Realm::Hip::GPUreduceRemoteChannelInfo", "classRealm_1_1Hip_1_1GPUreduceRemoteChannelInfo.html", null ]
       ] ]
@@ -1104,6 +1115,7 @@ var hierarchy =
     [ "Realm::TransferGraph", "structRealm_1_1TransferGraph.html", null ],
     [ "Realm::TransferIterator", "classRealm_1_1TransferIterator.html", [
       [ "Realm::TransferIteratorBase< N, T >", "classRealm_1_1TransferIteratorBase.html", [
+        [ "Realm::IDIndexedFieldsIterator< N, T >", "classRealm_1_1IDIndexedFieldsIterator.html", null ],
         [ "Realm::TransferIteratorIndexSpace< N, T >", "classRealm_1_1TransferIteratorIndexSpace.html", null ],
         [ "Realm::TransferIteratorIndirect< N, T >", "classRealm_1_1TransferIteratorIndirect.html", null ]
       ] ],

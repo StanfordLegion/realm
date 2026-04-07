@@ -248,6 +248,7 @@ var namespaceRealm =
     [ "HybridRectangleList", "classRealm_1_1HybridRectangleList.html", "classRealm_1_1HybridRectangleList" ],
     [ "IBMemory", "classRealm_1_1IBMemory.html", "classRealm_1_1IBMemory" ],
     [ "ID", "classRealm_1_1ID.html", "classRealm_1_1ID" ],
+    [ "IDIndexedFieldsIterator", "classRealm_1_1IDIndexedFieldsIterator.html", "classRealm_1_1IDIndexedFieldsIterator" ],
     [ "ImageMicroOp", "classRealm_1_1ImageMicroOp.html", "classRealm_1_1ImageMicroOp" ],
     [ "ImageOperation", "classRealm_1_1ImageOperation.html", "classRealm_1_1ImageOperation" ],
     [ "IncomingMessageManager", "classRealm_1_1IncomingMessageManager.html", "classRealm_1_1IncomingMessageManager" ],

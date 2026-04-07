@@ -1,0 +1,11 @@
+<map id="Realm::SingleXDQChannel&lt; CHANNEL, XD &gt;" name="Realm::SingleXDQChannel&lt; CHANNEL, XD &gt;">
+<area shape="rect" id="Node000001" title=" " alt="" coords="29,243,224,283"/>
+<area shape="rect" id="Node000002" href="$classRealm_1_1LocalChannel.html" title=" " alt="" coords="47,168,206,193"/>
+<area shape="poly" id="edge1_Node000001_Node000002" title=" " alt="" coords="129,207,129,243,124,243,124,207"/>
+<area shape="rect" id="Node000003" href="$classRealm_1_1Channel.html" title=" " alt="" coords="5,80,131,105"/>
+<area shape="poly" id="edge2_Node000002_Node000003" title=" " alt="" coords="86,115,121,166,116,169,81,118"/>
+<area shape="rect" id="Node000004" href="$classRealm_1_1SimpleXferDesFactory.html" title=" " alt="" coords="155,80,371,105"/>
+<area shape="poly" id="edge3_Node000002_Node000004" title=" " alt="" coords="234,115,147,170,144,165,232,110"/>
+<area shape="rect" id="Node000005" href="$classRealm_1_1XferDesFactory.html" title=" " alt="" coords="177,5,348,31"/>
+<area shape="poly" id="edge4_Node000004_Node000005" title=" " alt="" coords="265,45,265,80,260,80,260,45"/>
+</map>

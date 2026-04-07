@@ -44,7 +44,7 @@
    <!-- BEGIN version select -->
     <br />
     <div class="dropdown">
-     <button class="dropbtn">Version 25.6.1-rc.4+87ec0ada</button>
+     <button class="dropbtn">Version 25.6.1-rc.4+442cab57</button>
      <div class="dropdown-content"></div>
     </div>
     <script type="text/javascript" src="../selectversion.js"></script>
@@ -146,7 +146,7 @@ $(document).ready(function(){initNavTree('classRealm_1_1Channel.html',''); initR
 <div class="dynheader">
 Inheritance diagram for Realm::Channel:</div>
 <div class="dyncontent">
-<div class="center"><!-- SVG 0 --></div>
+<div class="center"><iframe scrolling="no" frameborder="0" src="classRealm_1_1Channel__inherit__graph.svg" width="972" height="1218"><p><b>This browser is not able to show SVG: try Firefox, Chrome, Safari, or Opera instead.</b></p></iframe></div>
 <center><span class="legend">[<a target="top" href="graph_legend.html">legend</a>]</span></center></div>
 <table class="memberdecls">
 <tr class="heading"><td colspan="2"><h2 class="groupheader"><a id="nested-classes" name="nested-classes"></a>
@@ -166,6 +166,8 @@ Public Member Functions</h2></td></tr>
 <tr class="separator:ab57aa620e5e00083154b11d094d8a75a"><td class="memSeparator" colspan="2">&#160;</td></tr>
 <tr class="memitem:ae6a167afc2ae35e911e2d7299a429a2a" id="r_ae6a167afc2ae35e911e2d7299a429a2a"><td class="memItemLeft" align="right" valign="top">virtual bool&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="classRealm_1_1Channel.html#ae6a167afc2ae35e911e2d7299a429a2a">supports_redop</a> (<a class="el" href="namespaceRealm.html#ac4b330dde1ad1a2988e6241e3ad39d2d">ReductionOpID</a> redop_id) const</td></tr>
 <tr class="separator:ae6a167afc2ae35e911e2d7299a429a2a"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:a3fc1d5f2f4cf29907b5d643124ee52ac" id="r_a3fc1d5f2f4cf29907b5d643124ee52ac"><td class="memItemLeft" align="right" valign="top">virtual bool&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="classRealm_1_1Channel.html#a3fc1d5f2f4cf29907b5d643124ee52ac">support_idindexed_fields</a> (<a class="el" href="classRealm_1_1Memory.html">Memory</a> src_mem, <a class="el" href="classRealm_1_1Memory.html">Memory</a> dst_mem) const</td></tr>
+<tr class="separator:a3fc1d5f2f4cf29907b5d643124ee52ac"><td class="memSeparator" colspan="2">&#160;</td></tr>
 <tr class="memitem:a02e6e6a616bc281cf00364ee3b584dea" id="r_a02e6e6a616bc281cf00364ee3b584dea"><td class="memItemLeft" align="right" valign="top">virtual long&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="classRealm_1_1Channel.html#a02e6e6a616bc281cf00364ee3b584dea">progress_xd</a> (<a class="el" href="classRealm_1_1XferDes.html">XferDes</a> *xd, long max_nr)</td></tr>
 <tr class="separator:a02e6e6a616bc281cf00364ee3b584dea"><td class="memSeparator" colspan="2">&#160;</td></tr>
 <tr class="memitem:abede5af207f8e9d5080579303fd3b3cb" id="r_abede5af207f8e9d5080579303fd3b3cb"><td class="memItemLeft" align="right" valign="top">virtual long&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="classRealm_1_1Channel.html#abede5af207f8e9d5080579303fd3b3cb">submit</a> (<a class="el" href="classRealm_1_1Request.html">Request</a> **requests, long nr)=0</td></tr>
@@ -648,7 +650,7 @@ Protected Attributes</h2></td></tr>
 </table>
 </div><div class="memdoc">
 
-<p>Reimplemented in <a class="el" href="classRealm_1_1Cuda_1_1GPUIndirectChannel.html#a816e38071364b6e1ee915f4198782d99">Realm::Cuda::GPUIndirectChannel</a>, <a class="el" href="classRealm_1_1Hip_1_1GPUreduceChannel.html#a8a76ee8eec973458fff5a20cc2482e04">Realm::Hip::GPUreduceChannel</a>, and <a class="el" href="classRealm_1_1Cuda_1_1GPUreduceChannel.html#a2af71a471a5d82d1321621c71f135c80">Realm::Cuda::GPUreduceChannel</a>.</p>
+<p>Reimplemented in <a class="el" href="classRealm_1_1Cuda_1_1GPUIndirectChannel.html#a816e38071364b6e1ee915f4198782d99">Realm::Cuda::GPUIndirectChannel</a>, <a class="el" href="classRealm_1_1Cuda_1_1GPUChannel.html#a79544c183eaeeff2be69ebd6063661e3">Realm::Cuda::GPUChannel</a>, <a class="el" href="classRealm_1_1Hip_1_1GPUreduceChannel.html#a8a76ee8eec973458fff5a20cc2482e04">Realm::Hip::GPUreduceChannel</a>, and <a class="el" href="classRealm_1_1Cuda_1_1GPUreduceChannel.html#a2af71a471a5d82d1321621c71f135c80">Realm::Cuda::GPUreduceChannel</a>.</p>
 
 </div>
 </div>
@@ -950,6 +952,44 @@ Protected Attributes</h2></td></tr>
   </tr>
 </table>
 </div><div class="memdoc">
+
+</div>
+</div>
+<a id="a3fc1d5f2f4cf29907b5d643124ee52ac" name="a3fc1d5f2f4cf29907b5d643124ee52ac"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a3fc1d5f2f4cf29907b5d643124ee52ac">&#9670;&#160;</a></span>support_idindexed_fields()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">virtual bool Realm::Channel::support_idindexed_fields </td>
+          <td>(</td>
+          <td class="paramtype"><a class="el" href="classRealm_1_1Memory.html">Memory</a>&#160;</td>
+          <td class="paramname"><em>src_mem</em>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype"><a class="el" href="classRealm_1_1Memory.html">Memory</a>&#160;</td>
+          <td class="paramname"><em>dst_mem</em>&#160;</td>
+        </tr>
+        <tr>
+          <td></td>
+          <td>)</td>
+          <td></td><td> const</td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel">inline</span><span class="mlabel">virtual</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>Reimplemented in <a class="el" href="classRealm_1_1Cuda_1_1GPUChannel.html#a1ea5f9d9ea21c8187b93eeec39171a7e">Realm::Cuda::GPUChannel</a>, and <a class="el" href="classRealm_1_1Cuda_1_1GPURemoteChannel.html#a327ec506c875a12c509831179651bff0">Realm::Cuda::GPURemoteChannel</a>.</p>
 
 </div>
 </div>

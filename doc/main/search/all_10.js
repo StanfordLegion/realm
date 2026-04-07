@@ -1,6 +1,6 @@
 var searchData=
 [
-  ['l_0',['l',['../structRealm_1_1XmitSrcDestPair_1_1LongRgetData.html#a3583ccc796fd657423382d68dd880ec8',1,'Realm::XmitSrcDestPair::LongRgetData']]],
+  ['l_0',['l',['../structRealm_1_1XmitSrcDestPair_1_1LongRgetData.html#a15611ba8205e4dfc2d816780cb13419f',1,'Realm::XmitSrcDestPair::LongRgetData']]],
   ['l1dcacheperfcounters_1',['L1DCachePerfCounters',['../namespaceRealm_1_1ProfilingMeasurements.html#a85045a8c1b4e33b846311f5c10230dbb',1,'Realm::ProfilingMeasurements']]],
   ['l1icacheperfcounters_2',['L1ICachePerfCounters',['../namespaceRealm_1_1ProfilingMeasurements.html#a5caeaab0524172211c91bbbe95fc03e0',1,'Realm::ProfilingMeasurements']]],
   ['l2_5fclear_3',['l2_clear',['../classRealm_1_1NodeSetBitmask.html#ae318f36d275f1c78e61bda7d804d4a3d',1,'Realm::NodeSetBitmask']]],
@@ -22,7 +22,7 @@ var searchData=
   ['latency_5fweight_19',['latency_weight',['../structRealm_1_1ProcessorQueryImpl_1_1BestAffinityCostFn.html#aa174305d1a376d9e8e36f59dce0d87d9',1,'Realm::ProcessorQueryImpl::BestAffinityCostFn::latency_weight'],['../structRealm_1_1MemoryQueryImpl_1_1BestProcAffinityCostFn.html#a10fcbb27c14e91e8010d4afaffdd5d82',1,'Realm::MemoryQueryImpl::BestProcAffinityCostFn::latency_weight'],['../structRealm_1_1MemoryQueryImpl_1_1BestMemAffinityCostFn.html#ad8be49930c9300a2e1b88a10975adf47',1,'Realm::MemoryQueryImpl::BestMemAffinityCostFn::latency_weight']]],
   ['launch_20',['launch',['../classRealm_1_1PartitioningOperation.html#ad05edee7206b218cdb2dee7329ab93a2',1,'Realm::PartitioningOperation::launch()'],['../classRealm_1_1AsyncFileIOContext_1_1AIOOperation.html#a3644b6b5ce44f43cfdb1e40c528c1f2f',1,'Realm::AsyncFileIOContext::AIOOperation::launch()']]],
   ['launch_5fbatch_5faffine_5ffill_5fkernel_21',['launch_batch_affine_fill_kernel',['../classRealm_1_1Cuda_1_1GPU.html#aaffdf2a60daa75d8cca1346f9bebecb7',1,'Realm::Cuda::GPU']]],
-  ['launch_5fbatch_5faffine_5fkernel_22',['launch_batch_affine_kernel',['../classRealm_1_1Cuda_1_1GPU.html#a0dd6bae8369e544ee60a0396ca529688',1,'Realm::Cuda::GPU']]],
+  ['launch_5fbatch_5faffine_5fkernel_22',['launch_batch_affine_kernel',['../classRealm_1_1Cuda_1_1GPU.html#a1f712010dbe2b8b76436a61cf0895324',1,'Realm::Cuda::GPU']]],
   ['launch_5fconfigs_23',['launch_configs',['../classRealm_1_1Hip_1_1GPUProcessor.html#a138ebca786a36afbfa4beb59a5bc1593',1,'Realm::Hip::GPUProcessor']]],
   ['launch_5findirect_5fcopy_5fkernel_24',['launch_indirect_copy_kernel',['../classRealm_1_1Cuda_1_1GPU.html#a86401309baa87373f932d0ba11c6972a',1,'Realm::Cuda::GPU']]],
   ['launch_5fnode_25',['launch_node',['../structRealm_1_1XferDesCreateMessageBase.html#ad1a338d60dd5b122bc86ea04d2568660',1,'Realm::XferDesCreateMessageBase::launch_node'],['../classRealm_1_1XferDes.html#a69f547cd997402fee1f5d928a12d981f',1,'Realm::XferDes::launch_node']]],
@@ -68,7 +68,7 @@ var searchData=
   ['linearize_65',['linearize',['../classRealm_1_1LinearizedIndexSpace.html#a3a0dcac855f15de88611071678a630b6',1,'Realm::LinearizedIndexSpace::linearize()'],['../classRealm_1_1AffineLinearizedIndexSpace.html#a34090957a4d70fd16bef413f786309b2',1,'Realm::AffineLinearizedIndexSpace::linearize()']]],
   ['linearizedindexspace_66',['linearizedindexspace',['../classRealm_1_1LinearizedIndexSpace.html#aa0ca6faa32863b64c969585dfefb0997',1,'Realm::LinearizedIndexSpace::LinearizedIndexSpace()'],['../classRealm_1_1LinearizedIndexSpace.html',1,'Realm::LinearizedIndexSpace&lt; N, T &gt;']]],
   ['linearizedindexspaceintfc_67',['linearizedindexspaceintfc',['../classRealm_1_1LinearizedIndexSpaceIntfc.html',1,'Realm::LinearizedIndexSpaceIntfc'],['../classRealm_1_1LinearizedIndexSpaceIntfc.html#a02b6eae513a7228b3d33a2a5165e3a94',1,'Realm::LinearizedIndexSpaceIntfc::LinearizedIndexSpaceIntfc()']]],
-  ['lines_5fok_68',['LINES_OK',['../classRealm_1_1TransferIterator.html#a53b7df3f863f522cca8bf5ef0f83bb1ea5957ab751e9e4b2ebba4614b3af0ac36',1,'Realm::TransferIterator']]],
+  ['lines_5fok_68',['LINES_OK',['../classRealm_1_1TransferIterator.html#ae40e9bd7c12432c280353ede39272b13a5957ab751e9e4b2ebba4614b3af0ac36',1,'Realm::TransferIterator']]],
   ['list_5fidx_69',['list_idx',['../structRealm_1_1InstanceLayoutGeneric_1_1FieldLayout.html#a377674d601cdf4797262fe354d56b7af',1,'Realm::InstanceLayoutGeneric::FieldLayout']]],
   ['list_5flength_70',['list_length',['../classRealm_1_1Task_1_1DeferredSpawn.html#ab162db09364ab2afb4ed0c6705c6c102',1,'Realm::Task::DeferredSpawn']]],
   ['listener_71',['Listener',['../classRealm_1_1ReplicatedHeap_1_1Listener.html',1,'Realm::ReplicatedHeap']]],

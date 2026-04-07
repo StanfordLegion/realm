@@ -44,7 +44,7 @@
    <!-- BEGIN version select -->
     <br />
     <div class="dropdown">
-     <button class="dropbtn">Version 25.6.1-rc.4+87ec0ada</button>
+     <button class="dropbtn">Version 25.6.1-rc.4+442cab57</button>
      <div class="dropdown-content"></div>
     </div>
     <script type="text/javascript" src="../selectversion.js"></script>
@@ -132,6 +132,7 @@ $(document).ready(function(){initNavTree('structRealm_1_1Cuda_1_1AffineSubRect.h
 
 <div class="header">
   <div class="summary">
+<a href="#pub-types">Public Types</a> &#124;
 <a href="#pub-attribs">Public Attributes</a> &#124;
 <a href="structRealm_1_1Cuda_1_1AffineSubRect-members.html">List of all members</a>  </div>
   <div class="headertitle"><div class="title">Realm::Cuda::AffineSubRect&lt; N, Offset_t &gt; Struct Template Reference</div></div>
@@ -140,13 +141,41 @@ $(document).ready(function(){initNavTree('structRealm_1_1Cuda_1_1AffineSubRect.h
 
 <p><code>#include &lt;<a class="el" href="cuda__memcpy_8h_source.html">cuda_memcpy.h</a>&gt;</code></p>
 <table class="memberdecls">
+<tr class="heading"><td colspan="2"><h2 class="groupheader"><a id="pub-types" name="pub-types"></a>
+Public Types</h2></td></tr>
+<tr class="memitem:a5563d0a29c76be4a101defd5288cdbbf" id="r_a5563d0a29c76be4a101defd5288cdbbf"><td class="memItemLeft" align="right" valign="top">using&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="structRealm_1_1Cuda_1_1AffineSubRect.html#a5563d0a29c76be4a101defd5288cdbbf">FieldID</a> = int</td></tr>
+<tr class="separator:a5563d0a29c76be4a101defd5288cdbbf"><td class="memSeparator" colspan="2">&#160;</td></tr>
+</table><table class="memberdecls">
 <tr class="heading"><td colspan="2"><h2 class="groupheader"><a id="pub-attribs" name="pub-attribs"></a>
 Public Attributes</h2></td></tr>
 <tr class="memitem:a21939e8842114cf4f4096536addd66c5" id="r_a21939e8842114cf4f4096536addd66c5"><td class="memItemLeft" align="right" valign="top">Offset_t&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="structRealm_1_1Cuda_1_1AffineSubRect.html#a21939e8842114cf4f4096536addd66c5">strides</a> [N - 1]</td></tr>
 <tr class="separator:a21939e8842114cf4f4096536addd66c5"><td class="memSeparator" colspan="2">&#160;</td></tr>
 <tr class="memitem:adca67a4ebf485a9ed3b50d541e249015" id="r_adca67a4ebf485a9ed3b50d541e249015"><td class="memItemLeft" align="right" valign="top">uintptr_t&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="structRealm_1_1Cuda_1_1AffineSubRect.html#adca67a4ebf485a9ed3b50d541e249015">addr</a></td></tr>
 <tr class="separator:adca67a4ebf485a9ed3b50d541e249015"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:a2537618478090c6dd23c170f60df752e" id="r_a2537618478090c6dd23c170f60df752e"><td class="memItemLeft" align="right" valign="top">const <a class="el" href="structRealm_1_1Cuda_1_1AffineSubRect.html#a5563d0a29c76be4a101defd5288cdbbf">FieldID</a> *&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="structRealm_1_1Cuda_1_1AffineSubRect.html#a2537618478090c6dd23c170f60df752e">fields</a></td></tr>
+<tr class="separator:a2537618478090c6dd23c170f60df752e"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:a4f33f8d7f1b1f7eb81c64f6684172e46" id="r_a4f33f8d7f1b1f7eb81c64f6684172e46"><td class="memItemLeft" align="right" valign="top">size_t&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="structRealm_1_1Cuda_1_1AffineSubRect.html#a4f33f8d7f1b1f7eb81c64f6684172e46">num_fields</a></td></tr>
+<tr class="separator:a4f33f8d7f1b1f7eb81c64f6684172e46"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:a12786b13e8094a8a1b184ca323fa3787" id="r_a12786b13e8094a8a1b184ca323fa3787"><td class="memItemLeft" align="right" valign="top">Offset_t&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="structRealm_1_1Cuda_1_1AffineSubRect.html#a12786b13e8094a8a1b184ca323fa3787">field_stride</a></td></tr>
+<tr class="separator:a12786b13e8094a8a1b184ca323fa3787"><td class="memSeparator" colspan="2">&#160;</td></tr>
 </table>
+<h2 class="groupheader">Member Typedef Documentation</h2>
+<a id="a5563d0a29c76be4a101defd5288cdbbf" name="a5563d0a29c76be4a101defd5288cdbbf"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a5563d0a29c76be4a101defd5288cdbbf">&#9670;&#160;</a></span>FieldID</h2>
+
+<div class="memitem">
+<div class="memproto">
+<div class="memtemplate">
+template&lt;size_t N, typename Offset_t  = size_t&gt; </div>
+      <table class="memname">
+        <tr>
+          <td class="memname">using <a class="el" href="structRealm_1_1Cuda_1_1AffineSubRect.html">Realm::Cuda::AffineSubRect</a>&lt; N, Offset_t &gt;::FieldID =  int</td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+
+</div>
+</div>
 <h2 class="groupheader">Member Data Documentation</h2>
 <a id="adca67a4ebf485a9ed3b50d541e249015" name="adca67a4ebf485a9ed3b50d541e249015"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#adca67a4ebf485a9ed3b50d541e249015">&#9670;&#160;</a></span>addr</h2>
@@ -158,6 +187,54 @@ template&lt;size_t N, typename Offset_t  = size_t&gt; </div>
       <table class="memname">
         <tr>
           <td class="memname">uintptr_t <a class="el" href="structRealm_1_1Cuda_1_1AffineSubRect.html">Realm::Cuda::AffineSubRect</a>&lt; N, Offset_t &gt;::addr</td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+
+</div>
+</div>
+<a id="a12786b13e8094a8a1b184ca323fa3787" name="a12786b13e8094a8a1b184ca323fa3787"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a12786b13e8094a8a1b184ca323fa3787">&#9670;&#160;</a></span>field_stride</h2>
+
+<div class="memitem">
+<div class="memproto">
+<div class="memtemplate">
+template&lt;size_t N, typename Offset_t  = size_t&gt; </div>
+      <table class="memname">
+        <tr>
+          <td class="memname">Offset_t <a class="el" href="structRealm_1_1Cuda_1_1AffineSubRect.html">Realm::Cuda::AffineSubRect</a>&lt; N, Offset_t &gt;::field_stride</td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+
+</div>
+</div>
+<a id="a2537618478090c6dd23c170f60df752e" name="a2537618478090c6dd23c170f60df752e"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a2537618478090c6dd23c170f60df752e">&#9670;&#160;</a></span>fields</h2>
+
+<div class="memitem">
+<div class="memproto">
+<div class="memtemplate">
+template&lt;size_t N, typename Offset_t  = size_t&gt; </div>
+      <table class="memname">
+        <tr>
+          <td class="memname">const <a class="el" href="structRealm_1_1Cuda_1_1AffineSubRect.html#a5563d0a29c76be4a101defd5288cdbbf">FieldID</a>* <a class="el" href="structRealm_1_1Cuda_1_1AffineSubRect.html">Realm::Cuda::AffineSubRect</a>&lt; N, Offset_t &gt;::fields</td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+
+</div>
+</div>
+<a id="a4f33f8d7f1b1f7eb81c64f6684172e46" name="a4f33f8d7f1b1f7eb81c64f6684172e46"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a4f33f8d7f1b1f7eb81c64f6684172e46">&#9670;&#160;</a></span>num_fields</h2>
+
+<div class="memitem">
+<div class="memproto">
+<div class="memtemplate">
+template&lt;size_t N, typename Offset_t  = size_t&gt; </div>
+      <table class="memname">
+        <tr>
+          <td class="memname">size_t <a class="el" href="structRealm_1_1Cuda_1_1AffineSubRect.html">Realm::Cuda::AffineSubRect</a>&lt; N, Offset_t &gt;::num_fields</td>
         </tr>
       </table>
 </div><div class="memdoc">

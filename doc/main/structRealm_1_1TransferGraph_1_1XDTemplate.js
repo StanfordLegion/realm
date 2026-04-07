@@ -11,6 +11,7 @@ var structRealm_1_1TransferGraph_1_1XDTemplate =
     [ "channel", "structRealm_1_1TransferGraph_1_1XDTemplate.html#a0146ef0fae4b9fa3b643d8d86b3453a8", null ],
     [ "factory", "structRealm_1_1TransferGraph_1_1XDTemplate.html#a3e831044ddb4542a36619195985054e8", null ],
     [ "gather_control_input", "structRealm_1_1TransferGraph_1_1XDTemplate.html#a27046f6e87bbcc51b3a0eebdc29dcaa0", null ],
+    [ "idindexed_fields", "structRealm_1_1TransferGraph_1_1XDTemplate.html#a06d8a5edc5333edd55f639beeee80119", null ],
     [ "inputs", "structRealm_1_1TransferGraph_1_1XDTemplate.html#a6a8c4cf11ecdbae53f62bac91572e078", null ],
     [ "outputs", "structRealm_1_1TransferGraph_1_1XDTemplate.html#a6d34a47346e62371c136dfc01c715dae", null ],
     [ "redop", "structRealm_1_1TransferGraph_1_1XDTemplate.html#a3e740fdae16df0a574b509c95a63f226", null ],

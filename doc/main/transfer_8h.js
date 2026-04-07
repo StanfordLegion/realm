@@ -5,6 +5,7 @@ var transfer_8h =
     [ "Realm::TransferIterator::AddressInfoCustom", "classRealm_1_1TransferIterator_1_1AddressInfoCustom.html", "classRealm_1_1TransferIterator_1_1AddressInfoCustom" ],
     [ "Realm::TransferIteratorBase< N, T >", "classRealm_1_1TransferIteratorBase.html", "classRealm_1_1TransferIteratorBase" ],
     [ "Realm::TransferIteratorIndexSpace< N, T >", "classRealm_1_1TransferIteratorIndexSpace.html", "classRealm_1_1TransferIteratorIndexSpace" ],
+    [ "Realm::IDIndexedFieldsIterator< N, T >", "classRealm_1_1IDIndexedFieldsIterator.html", "classRealm_1_1IDIndexedFieldsIterator" ],
     [ "Realm::TransferIteratorIndirect< N, T >", "classRealm_1_1TransferIteratorIndirect.html", "classRealm_1_1TransferIteratorIndirect" ],
     [ "Realm::TransferDomain", "classRealm_1_1TransferDomain.html", "classRealm_1_1TransferDomain" ],
     [ "Realm::TransferGraph", "structRealm_1_1TransferGraph.html", "structRealm_1_1TransferGraph" ],

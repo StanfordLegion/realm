@@ -15,6 +15,7 @@ var searchData=
   ['cuda_5fmemcpy_2eh_12',['cuda_memcpy.h',['../cuda__memcpy_8h.html',1,'']]],
   ['cuda_5fmodule_2eh_13',['cuda_module.h',['../cuda__module_8h.html',1,'']]],
   ['cuda_5fredop_2eh_14',['cuda_redop.h',['../cuda__redop_8h.html',1,'']]],
-  ['cudart_5fhijack_2eh_15',['cudart_hijack.h',['../cudart__hijack_8h.html',1,'']]],
-  ['custom_5fserdez_2eh_16',['custom_serdez.h',['../custom__serdez_8h.html',1,'']]]
+  ['cuda_5freduc_2eh_15',['cuda_reduc.h',['../cuda__reduc_8h.html',1,'']]],
+  ['cudart_5fhijack_2eh_16',['cudart_hijack.h',['../cudart__hijack_8h.html',1,'']]],
+  ['custom_5fserdez_2eh_17',['custom_serdez.h',['../custom__serdez_8h.html',1,'']]]
 ];

@@ -13,6 +13,7 @@ var classRealm_1_1CoreModuleConfig =
     [ "concurrent_io_threads", "classRealm_1_1CoreModuleConfig.html#aa446e2d54dac75391cfb8bc244c16936", null ],
     [ "cpu_bgwork_timeslice", "classRealm_1_1CoreModuleConfig.html#af93a40af4b05f5df522ec2e6448ff234", null ],
     [ "disk_mem_size", "classRealm_1_1CoreModuleConfig.html#ac6e0d9ae5a56b21b259954f68c658cce", null ],
+    [ "dma_multi_field", "classRealm_1_1CoreModuleConfig.html#a8b9288a73a9d1111031fab618a532b0d", null ],
     [ "dma_worker_threads", "classRealm_1_1CoreModuleConfig.html#a03aadd388933637141e70b5090991376", null ],
     [ "dummy_reservation_ok", "classRealm_1_1CoreModuleConfig.html#ac477c558715274cbf3b80e22a44fbb91", null ],
     [ "event_trace_file", "classRealm_1_1CoreModuleConfig.html#ac8e76a7d81d26822723b5dc3b1d20104", null ],

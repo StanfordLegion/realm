@@ -5,5 +5,6 @@ var dir_a4d6ae311adfc804423539110c391532 =
     [ "cuda_memcpy.h", "cuda__memcpy_8h.html", "cuda__memcpy_8h" ],
     [ "cuda_module.h", "cuda__module_8h.html", "cuda__module_8h" ],
     [ "cuda_redop.h", "cuda__redop_8h.html", null ],
+    [ "cuda_reduc.h", "cuda__reduc_8h.html", "cuda__reduc_8h" ],
     [ "cudart_hijack.h", "cudart__hijack_8h.html", "cudart__hijack_8h" ]
 ];

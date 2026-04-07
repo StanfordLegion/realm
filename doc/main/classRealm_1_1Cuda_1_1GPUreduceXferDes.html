@@ -44,7 +44,7 @@
    <!-- BEGIN version select -->
     <br />
     <div class="dropdown">
-     <button class="dropbtn">Version 25.6.1-rc.4+87ec0ada</button>
+     <button class="dropbtn">Version 25.6.1-rc.4+442cab57</button>
      <div class="dropdown-content"></div>
     </div>
     <script type="text/javascript" src="../selectversion.js"></script>
@@ -143,12 +143,12 @@ $(document).ready(function(){initNavTree('classRealm_1_1Cuda_1_1GPUreduceXferDes
 <div class="dynheader">
 Inheritance diagram for Realm::Cuda::GPUreduceXferDes:</div>
 <div class="dyncontent">
-<div class="center"><!-- SVG 0 --></div>
+<div class="center"><iframe scrolling="no" frameborder="0" src="classRealm_1_1Cuda_1_1GPUreduceXferDes__inherit__graph.svg" width="248" height="110"><p><b>This browser is not able to show SVG: try Firefox, Chrome, Safari, or Opera instead.</b></p></iframe></div>
 <center><span class="legend">[<a target="top" href="graph_legend.html">legend</a>]</span></center></div>
 <div class="dynheader">
 Collaboration diagram for Realm::Cuda::GPUreduceXferDes:</div>
 <div class="dyncontent">
-<div class="center"><!-- SVG 1 --></div>
+<div class="center"><iframe scrolling="no" frameborder="0" src="classRealm_1_1Cuda_1_1GPUreduceXferDes__coll__graph.svg" width="3355" height="1792"><p><b>This browser is not able to show SVG: try Firefox, Chrome, Safari, or Opera instead.</b></p></iframe></div>
 <center><span class="legend">[<a target="top" href="graph_legend.html">legend</a>]</span></center></div>
 <table class="memberdecls">
 <tr class="heading"><td colspan="2"><h2 class="groupheader"><a id="pub-methods" name="pub-methods"></a>
@@ -159,6 +159,16 @@ Public Member Functions</h2></td></tr>
 <tr class="separator:a030c6285a47ca90f94d43c721495ab3c"><td class="memSeparator" colspan="2">&#160;</td></tr>
 <tr class="memitem:a5f6ec6e3b7abfb442156c646d9550091" id="r_a5f6ec6e3b7abfb442156c646d9550091"><td class="memItemLeft" align="right" valign="top">bool&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="classRealm_1_1Cuda_1_1GPUreduceXferDes.html#a5f6ec6e3b7abfb442156c646d9550091">progress_xd</a> (<a class="el" href="classRealm_1_1Cuda_1_1GPUreduceChannel.html">GPUreduceChannel</a> *<a class="el" href="classRealm_1_1XferDes.html#a1331baf92b21f6c1e9eebf758bc68367">channel</a>, <a class="el" href="classRealm_1_1TimeLimit.html">TimeLimit</a> work_until)</td></tr>
 <tr class="separator:a5f6ec6e3b7abfb442156c646d9550091"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:ab7b42670ca5c8b36b69107f9482a229d" id="r_ab7b42670ca5c8b36b69107f9482a229d"><td class="memItemLeft" align="right" valign="top">bool&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="classRealm_1_1Cuda_1_1GPUreduceXferDes.html#ab7b42670ca5c8b36b69107f9482a229d">fast_reduction_kernel_mode</a> (<a class="el" href="classRealm_1_1Cuda_1_1GPUreduceChannel.html">GPUreduceChannel</a> *<a class="el" href="classRealm_1_1XferDes.html#a1331baf92b21f6c1e9eebf758bc68367">channel</a>, const size_t max_bytes, <a class="el" href="structRealm_1_1XferDes_1_1XferPort.html">XferPort</a> *in_port, <a class="el" href="structRealm_1_1XferDes_1_1XferPort.html">XferPort</a> *out_port, const size_t in_span_start, const size_t out_span_start)</td></tr>
+<tr class="separator:ab7b42670ca5c8b36b69107f9482a229d"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:af21aeed2a7f84c0fdd31b0d3c0be4ec8" id="r_af21aeed2a7f84c0fdd31b0d3c0be4ec8"><td class="memItemLeft" align="right" valign="top">void&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="classRealm_1_1Cuda_1_1GPUreduceXferDes.html#af21aeed2a7f84c0fdd31b0d3c0be4ec8">setup_redop_kernel</a> (<a class="el" href="classRealm_1_1Cuda_1_1GPUreduceChannel.html">GPUreduceChannel</a> *<a class="el" href="classRealm_1_1XferDes.html#a1331baf92b21f6c1e9eebf758bc68367">channel</a>, void *params, const size_t in_span_start, const size_t out_span_start, const size_t in_elem_size, const size_t out_elem_size, const size_t elems, const bool has_transpose)</td></tr>
+<tr class="separator:af21aeed2a7f84c0fdd31b0d3c0be4ec8"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:a5c3b51307a3b1bab162ba31d196a6b1b" id="r_a5c3b51307a3b1bab162ba31d196a6b1b"><td class="memItemLeft" align="right" valign="top">void&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="classRealm_1_1Cuda_1_1GPUreduceXferDes.html#a5c3b51307a3b1bab162ba31d196a6b1b">record_redop_advanced_kernel</a> (<a class="el" href="classRealm_1_1Cuda_1_1GPU.html">GPU</a> *gpu)</td></tr>
+<tr class="separator:a5c3b51307a3b1bab162ba31d196a6b1b"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:ae4b2268bf91a23632ceeaf5d002b566d" id="r_ae4b2268bf91a23632ceeaf5d002b566d"><td class="memItemLeft" align="right" valign="top"><a class="el" href="structRealm_1_1Cuda_1_1KernelVariantDesc.html">KernelVariantDesc</a>&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="classRealm_1_1Cuda_1_1GPUreduceXferDes.html#ae4b2268bf91a23632ceeaf5d002b566d">describe_kernel_variant</a> (<a class="el" href="classRealm_1_1Cuda_1_1GPU.html">GPU</a> *cpu, bool is_advanced)</td></tr>
+<tr class="separator:ae4b2268bf91a23632ceeaf5d002b566d"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:af2e74f780753eecb65da376580383b2b" id="r_af2e74f780753eecb65da376580383b2b"><td class="memItemLeft" align="right" valign="top">bool&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="classRealm_1_1Cuda_1_1GPUreduceXferDes.html#af2e74f780753eecb65da376580383b2b">resolve_kernel_slot</a> (<a class="el" href="classRealm_1_1Cuda_1_1GPU.html">GPU</a> *gpu, void *host_proxy, CUfunction &amp;kernel_out, CUfunction GPU::GPUReductionOpEntry::*cache_field)</td></tr>
+<tr class="separator:af2e74f780753eecb65da376580383b2b"><td class="memSeparator" colspan="2">&#160;</td></tr>
 <tr class="inherit_header pub_methods_classRealm_1_1XferDes"><td colspan="2" onclick="javascript:toggleInherit('pub_methods_classRealm_1_1XferDes')"><img src="closed.png" alt="-"/>&#160;Public Member Functions inherited from <a class="el" href="classRealm_1_1XferDes.html">Realm::XferDes</a></td></tr>
 <tr class="memitem:a7bd3542f149d9ab84232955962ac45ae inherit pub_methods_classRealm_1_1XferDes" id="r_a7bd3542f149d9ab84232955962ac45ae"><td class="memItemLeft" align="right" valign="top">&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="classRealm_1_1XferDes.html#a7bd3542f149d9ab84232955962ac45ae">REALM_ALIGNED_TYPE_CONST</a> (AlignedStorage, <a class="el" href="structRealm_1_1XferDes_1_1UnalignedStorage.html">UnalignedStorage</a>, 16)</td></tr>
 <tr class="separator:a7bd3542f149d9ab84232955962ac45ae inherit pub_methods_classRealm_1_1XferDes"><td class="memSeparator" colspan="2">&#160;</td></tr>
@@ -233,8 +243,16 @@ Protected Attributes</h2></td></tr>
 <tr class="separator:ad387e947135ab4f62f8f317b04439c9d"><td class="memSeparator" colspan="2">&#160;</td></tr>
 <tr class="memitem:a720e02879150777dc3385aecdd902ea1" id="r_a720e02879150777dc3385aecdd902ea1"><td class="memItemLeft" align="right" valign="top">CUfunction&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="classRealm_1_1Cuda_1_1GPUreduceXferDes.html#a720e02879150777dc3385aecdd902ea1">kernel</a></td></tr>
 <tr class="separator:a720e02879150777dc3385aecdd902ea1"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:af7703f18597a803483adce1b3a4e2b4f" id="r_af7703f18597a803483adce1b3a4e2b4f"><td class="memItemLeft" align="right" valign="top">CUfunction&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="classRealm_1_1Cuda_1_1GPUreduceXferDes.html#af7703f18597a803483adce1b3a4e2b4f">kernel_advanced</a></td></tr>
+<tr class="separator:af7703f18597a803483adce1b3a4e2b4f"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:ae95bbbb84ea78c7f32989d5bc197e805" id="r_ae95bbbb84ea78c7f32989d5bc197e805"><td class="memItemLeft" align="right" valign="top">CUfunction&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="classRealm_1_1Cuda_1_1GPUreduceXferDes.html#ae95bbbb84ea78c7f32989d5bc197e805">kernel_transpose</a></td></tr>
+<tr class="separator:ae95bbbb84ea78c7f32989d5bc197e805"><td class="memSeparator" colspan="2">&#160;</td></tr>
 <tr class="memitem:a5f655920e19cbf3cc84d8a9611474e81" id="r_a5f655920e19cbf3cc84d8a9611474e81"><td class="memItemLeft" align="right" valign="top">const void *&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="classRealm_1_1Cuda_1_1GPUreduceXferDes.html#a5f655920e19cbf3cc84d8a9611474e81">kernel_host_proxy</a></td></tr>
 <tr class="separator:a5f655920e19cbf3cc84d8a9611474e81"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:a2bab0546abcac169f8e86f4984385795" id="r_a2bab0546abcac169f8e86f4984385795"><td class="memItemLeft" align="right" valign="top">const void *&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="classRealm_1_1Cuda_1_1GPUreduceXferDes.html#a2bab0546abcac169f8e86f4984385795">kernel_host_proxy_advanced</a></td></tr>
+<tr class="separator:a2bab0546abcac169f8e86f4984385795"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:a6761d7e83efdb4e27530659710840f3e" id="r_a6761d7e83efdb4e27530659710840f3e"><td class="memItemLeft" align="right" valign="top">const void *&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="classRealm_1_1Cuda_1_1GPUreduceXferDes.html#a6761d7e83efdb4e27530659710840f3e">kernel_host_proxy_transpose</a></td></tr>
+<tr class="separator:a6761d7e83efdb4e27530659710840f3e"><td class="memSeparator" colspan="2">&#160;</td></tr>
 <tr class="memitem:a2fae025ac381e8e76186a37071d37c30" id="r_a2fae025ac381e8e76186a37071d37c30"><td class="memItemLeft" align="right" valign="top"><a class="el" href="classRealm_1_1Cuda_1_1GPUStream.html">GPUStream</a> *&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="classRealm_1_1Cuda_1_1GPUreduceXferDes.html#a2fae025ac381e8e76186a37071d37c30">stream</a></td></tr>
 <tr class="separator:a2fae025ac381e8e76186a37071d37c30"><td class="memSeparator" colspan="2">&#160;</td></tr>
 <tr class="memitem:aad01d7061302f272b8816e5f1b7f229d" id="r_aad01d7061302f272b8816e5f1b7f229d"><td class="memItemLeft" align="right" valign="top">std::vector&lt; <a class="el" href="classRealm_1_1Cuda_1_1GPU.html">GPU</a> * &gt;&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="classRealm_1_1Cuda_1_1GPUreduceXferDes.html#aad01d7061302f272b8816e5f1b7f229d">src_gpus</a></td></tr>
@@ -250,9 +268,9 @@ Protected Attributes</h2></td></tr>
 <tr class="heading"><td colspan="2"><h2 class="groupheader"><a id="inherited" name="inherited"></a>
 Additional Inherited Members</h2></td></tr>
 <tr class="inherit_header pub_types_classRealm_1_1XferDes"><td colspan="2" onclick="javascript:toggleInherit('pub_types_classRealm_1_1XferDes')"><img src="closed.png" alt="-"/>&#160;Public Types inherited from <a class="el" href="classRealm_1_1XferDes.html">Realm::XferDes</a></td></tr>
-<tr class="memitem:ac1ae4572171c4b4cd3a362729187445c inherit pub_types_classRealm_1_1XferDes" id="r_ac1ae4572171c4b4cd3a362729187445c"><td class="memItemLeft" align="right" valign="top">enum &#160;</td><td class="memItemRight" valign="bottom">{ <a class="el" href="classRealm_1_1XferDes.html#ac1ae4572171c4b4cd3a362729187445ca764d66e32ac2a997e3a6a50445a0ac43">XFERDES_NO_GUID</a> = 0
+<tr class="memitem:ac06cab17de07c1e7c7c1806878c2cc35 inherit pub_types_classRealm_1_1XferDes" id="r_ac06cab17de07c1e7c7c1806878c2cc35"><td class="memItemLeft" align="right" valign="top">enum &#160;</td><td class="memItemRight" valign="bottom">{ <a class="el" href="classRealm_1_1XferDes.html#ac06cab17de07c1e7c7c1806878c2cc35a764d66e32ac2a997e3a6a50445a0ac43">XFERDES_NO_GUID</a> = 0
  }</td></tr>
-<tr class="separator:ac1ae4572171c4b4cd3a362729187445c inherit pub_types_classRealm_1_1XferDes"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="separator:ac06cab17de07c1e7c7c1806878c2cc35 inherit pub_types_classRealm_1_1XferDes"><td class="memSeparator" colspan="2">&#160;</td></tr>
 <tr class="memitem:ad04088e965a5d9b65dc2d7932c08f23b inherit pub_types_classRealm_1_1XferDes" id="r_ad04088e965a5d9b65dc2d7932c08f23b"><td class="memItemLeft" align="right" valign="top">typedef <a class="el" href="classRealm_1_1IntrusivePriorityList.html">IntrusivePriorityList</a>&lt; <a class="el" href="classRealm_1_1XferDes.html">XferDes</a>, int, <a class="el" href="lists_8h.html#a1297d026ed21c073d701eef3cc481b1b">REALM_PMTA_USE</a>(<a class="el" href="classRealm_1_1XferDes.html">XferDes</a>, <a class="el" href="classRealm_1_1XferDes.html#a4485bc339f168d4b301739a6d7816aa5">xd_link</a>), <a class="el" href="lists_8h.html#a1297d026ed21c073d701eef3cc481b1b">REALM_PMTA_USE</a>(<a class="el" href="classRealm_1_1XferDes.html">XferDes</a>, <a class="el" href="classRealm_1_1XferDes.html#a97f1881e8be76dfd21cbf71286a462df">priority</a>), <a class="el" href="classRealm_1_1DummyLock.html">DummyLock</a> &gt;&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="classRealm_1_1XferDes.html#ad04088e965a5d9b65dc2d7932c08f23b">XferDesList</a></td></tr>
 <tr class="separator:ad04088e965a5d9b65dc2d7932c08f23b inherit pub_types_classRealm_1_1XferDes"><td class="memSeparator" colspan="2">&#160;</td></tr>
 <tr class="memitem:a505062df199da7ab6a5daab994eb4081 inherit pub_types_classRealm_1_1XferDes" id="r_a505062df199da7ab6a5daab994eb4081"><td class="memItemLeft" align="right" valign="top">typedef <a class="el" href="classRealm_1_1XferDes_1_1SequenceCache.html">SequenceCache</a>&lt;&amp;<a class="el" href="classRealm_1_1XferDes.html#a27cc7e0bec2d99cadbf457687da3f2fc">XferDes::update_bytes_read</a> &gt;&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="classRealm_1_1XferDes.html#a505062df199da7ab6a5daab994eb4081">ReadSequenceCache</a></td></tr>
@@ -397,6 +415,86 @@ Additional Inherited Members</h2></td></tr>
 </div>
 </div>
 <h2 class="groupheader">Member Function Documentation</h2>
+<a id="ae4b2268bf91a23632ceeaf5d002b566d" name="ae4b2268bf91a23632ceeaf5d002b566d"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#ae4b2268bf91a23632ceeaf5d002b566d">&#9670;&#160;</a></span>describe_kernel_variant()</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname"><a class="el" href="structRealm_1_1Cuda_1_1KernelVariantDesc.html">KernelVariantDesc</a> Realm::Cuda::GPUreduceXferDes::describe_kernel_variant </td>
+          <td>(</td>
+          <td class="paramtype"><a class="el" href="classRealm_1_1Cuda_1_1GPU.html">GPU</a> *&#160;</td>
+          <td class="paramname"><em>cpu</em>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype">bool&#160;</td>
+          <td class="paramname"><em>is_advanced</em>&#160;</td>
+        </tr>
+        <tr>
+          <td></td>
+          <td>)</td>
+          <td></td><td></td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+
+</div>
+</div>
+<a id="ab7b42670ca5c8b36b69107f9482a229d" name="ab7b42670ca5c8b36b69107f9482a229d"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#ab7b42670ca5c8b36b69107f9482a229d">&#9670;&#160;</a></span>fast_reduction_kernel_mode()</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname">bool Realm::Cuda::GPUreduceXferDes::fast_reduction_kernel_mode </td>
+          <td>(</td>
+          <td class="paramtype"><a class="el" href="classRealm_1_1Cuda_1_1GPUreduceChannel.html">GPUreduceChannel</a> *&#160;</td>
+          <td class="paramname"><em>channel</em>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype">const size_t&#160;</td>
+          <td class="paramname"><em>max_bytes</em>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype"><a class="el" href="structRealm_1_1XferDes_1_1XferPort.html">XferPort</a> *&#160;</td>
+          <td class="paramname"><em>in_port</em>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype"><a class="el" href="structRealm_1_1XferDes_1_1XferPort.html">XferPort</a> *&#160;</td>
+          <td class="paramname"><em>out_port</em>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype">const size_t&#160;</td>
+          <td class="paramname"><em>in_span_start</em>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype">const size_t&#160;</td>
+          <td class="paramname"><em>out_span_start</em>&#160;</td>
+        </tr>
+        <tr>
+          <td></td>
+          <td>)</td>
+          <td></td><td></td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+
+</div>
+</div>
 <a id="a030c6285a47ca90f94d43c721495ab3c" name="a030c6285a47ca90f94d43c721495ab3c"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#a030c6285a47ca90f94d43c721495ab3c">&#9670;&#160;</a></span>get_requests()</h2>
 
@@ -463,6 +561,128 @@ Additional Inherited Members</h2></td></tr>
 
 </div>
 </div>
+<a id="a5c3b51307a3b1bab162ba31d196a6b1b" name="a5c3b51307a3b1bab162ba31d196a6b1b"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a5c3b51307a3b1bab162ba31d196a6b1b">&#9670;&#160;</a></span>record_redop_advanced_kernel()</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname">void Realm::Cuda::GPUreduceXferDes::record_redop_advanced_kernel </td>
+          <td>(</td>
+          <td class="paramtype"><a class="el" href="classRealm_1_1Cuda_1_1GPU.html">GPU</a> *&#160;</td>
+          <td class="paramname"><em>gpu</em></td><td>)</td>
+          <td></td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+
+</div>
+</div>
+<a id="af2e74f780753eecb65da376580383b2b" name="af2e74f780753eecb65da376580383b2b"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#af2e74f780753eecb65da376580383b2b">&#9670;&#160;</a></span>resolve_kernel_slot()</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname">bool Realm::Cuda::GPUreduceXferDes::resolve_kernel_slot </td>
+          <td>(</td>
+          <td class="paramtype"><a class="el" href="classRealm_1_1Cuda_1_1GPU.html">GPU</a> *&#160;</td>
+          <td class="paramname"><em>gpu</em>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype">void *&#160;</td>
+          <td class="paramname"><em>host_proxy</em>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype">CUfunction &amp;&#160;</td>
+          <td class="paramname"><em>kernel_out</em>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype">CUfunction GPU::GPUReductionOpEntry::*&#160;</td>
+          <td class="paramname"><em>cache_field</em>&#160;</td>
+        </tr>
+        <tr>
+          <td></td>
+          <td>)</td>
+          <td></td><td></td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+
+</div>
+</div>
+<a id="af21aeed2a7f84c0fdd31b0d3c0be4ec8" name="af21aeed2a7f84c0fdd31b0d3c0be4ec8"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#af21aeed2a7f84c0fdd31b0d3c0be4ec8">&#9670;&#160;</a></span>setup_redop_kernel()</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname">void Realm::Cuda::GPUreduceXferDes::setup_redop_kernel </td>
+          <td>(</td>
+          <td class="paramtype"><a class="el" href="classRealm_1_1Cuda_1_1GPUreduceChannel.html">GPUreduceChannel</a> *&#160;</td>
+          <td class="paramname"><em>channel</em>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype">void *&#160;</td>
+          <td class="paramname"><em>params</em>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype">const size_t&#160;</td>
+          <td class="paramname"><em>in_span_start</em>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype">const size_t&#160;</td>
+          <td class="paramname"><em>out_span_start</em>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype">const size_t&#160;</td>
+          <td class="paramname"><em>in_elem_size</em>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype">const size_t&#160;</td>
+          <td class="paramname"><em>out_elem_size</em>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype">const size_t&#160;</td>
+          <td class="paramname"><em>elems</em>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype">const bool&#160;</td>
+          <td class="paramname"><em>has_transpose</em>&#160;</td>
+        </tr>
+        <tr>
+          <td></td>
+          <td>)</td>
+          <td></td><td></td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+
+</div>
+</div>
 <h2 class="groupheader">Member Data Documentation</h2>
 <a id="a720e02879150777dc3385aecdd902ea1" name="a720e02879150777dc3385aecdd902ea1"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#a720e02879150777dc3385aecdd902ea1">&#9670;&#160;</a></span>kernel</h2>
@@ -486,6 +706,28 @@ Additional Inherited Members</h2></td></tr>
 
 </div>
 </div>
+<a id="af7703f18597a803483adce1b3a4e2b4f" name="af7703f18597a803483adce1b3a4e2b4f"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#af7703f18597a803483adce1b3a4e2b4f">&#9670;&#160;</a></span>kernel_advanced</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">CUfunction Realm::Cuda::GPUreduceXferDes::kernel_advanced</td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel">protected</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+</div>
+</div>
 <a id="a5f655920e19cbf3cc84d8a9611474e81" name="a5f655920e19cbf3cc84d8a9611474e81"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#a5f655920e19cbf3cc84d8a9611474e81">&#9670;&#160;</a></span>kernel_host_proxy</h2>
 
@@ -497,6 +739,72 @@ Additional Inherited Members</h2></td></tr>
       <table class="memname">
         <tr>
           <td class="memname">const void* Realm::Cuda::GPUreduceXferDes::kernel_host_proxy</td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel">protected</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+</div>
+</div>
+<a id="a2bab0546abcac169f8e86f4984385795" name="a2bab0546abcac169f8e86f4984385795"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a2bab0546abcac169f8e86f4984385795">&#9670;&#160;</a></span>kernel_host_proxy_advanced</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">const void* Realm::Cuda::GPUreduceXferDes::kernel_host_proxy_advanced</td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel">protected</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+</div>
+</div>
+<a id="a6761d7e83efdb4e27530659710840f3e" name="a6761d7e83efdb4e27530659710840f3e"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a6761d7e83efdb4e27530659710840f3e">&#9670;&#160;</a></span>kernel_host_proxy_transpose</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">const void* Realm::Cuda::GPUreduceXferDes::kernel_host_proxy_transpose</td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel">protected</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+</div>
+</div>
+<a id="ae95bbbb84ea78c7f32989d5bc197e805" name="ae95bbbb84ea78c7f32989d5bc197e805"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#ae95bbbb84ea78c7f32989d5bc197e805">&#9670;&#160;</a></span>kernel_transpose</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">CUfunction Realm::Cuda::GPUreduceXferDes::kernel_transpose</td>
         </tr>
       </table>
   </td>

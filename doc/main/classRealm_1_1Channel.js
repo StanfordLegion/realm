@@ -21,6 +21,7 @@ var classRealm_1_1Channel =
     [ "submit", "classRealm_1_1Channel.html#abede5af207f8e9d5080579303fd3b3cb", null ],
     [ "suggest_ib_memories", "classRealm_1_1Channel.html#addafafba161bc1f19006560be2a6970a", null ],
     [ "suggest_ib_memories_for_node", "classRealm_1_1Channel.html#a02ee5f9de202c0d1903b3a41de6a7238", null ],
+    [ "support_idindexed_fields", "classRealm_1_1Channel.html#a3fc1d5f2f4cf29907b5d643124ee52ac", null ],
     [ "supports_indirection_memory", "classRealm_1_1Channel.html#a784d0b355cb7553f3168e8a8b3e6e760", null ],
     [ "supports_path", "classRealm_1_1Channel.html#a9b7a5ffbbdfe463bdb3709f4acd3326e", null ],
     [ "supports_redop", "classRealm_1_1Channel.html#ae6a167afc2ae35e911e2d7299a429a2a", null ],

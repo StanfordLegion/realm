@@ -44,7 +44,7 @@
    <!-- BEGIN version select -->
     <br />
     <div class="dropdown">
-     <button class="dropbtn">Version 25.6.1-rc.4+87ec0ada</button>
+     <button class="dropbtn">Version 25.6.1-rc.4+442cab57</button>
      <div class="dropdown-content"></div>
     </div>
     <script type="text/javascript" src="../selectversion.js"></script>
@@ -143,12 +143,12 @@ $(document).ready(function(){initNavTree('classRealm_1_1Cuda_1_1GPUChannel.html'
 <div class="dynheader">
 Inheritance diagram for Realm::Cuda::GPUChannel:</div>
 <div class="dyncontent">
-<div class="center"><!-- SVG 0 --></div>
+<div class="center"><iframe scrolling="no" frameborder="0" src="classRealm_1_1Cuda_1_1GPUChannel__inherit__graph.svg" width="232" height="271"><p><b>This browser is not able to show SVG: try Firefox, Chrome, Safari, or Opera instead.</b></p></iframe></div>
 <center><span class="legend">[<a target="top" href="graph_legend.html">legend</a>]</span></center></div>
 <div class="dynheader">
 Collaboration diagram for Realm::Cuda::GPUChannel:</div>
 <div class="dyncontent">
-<div class="center"><!-- SVG 1 --></div>
+<div class="center"><iframe scrolling="no" frameborder="0" src="classRealm_1_1Cuda_1_1GPUChannel__coll__graph.svg" width="3087" height="1010"><p><b>This browser is not able to show SVG: try Firefox, Chrome, Safari, or Opera instead.</b></p></iframe></div>
 <center><span class="legend">[<a target="top" href="graph_legend.html">legend</a>]</span></center></div>
 <table class="memberdecls">
 <tr class="heading"><td colspan="2"><h2 class="groupheader"><a id="pub-methods" name="pub-methods"></a>
@@ -163,6 +163,10 @@ Public Member Functions</h2></td></tr>
 <tr class="separator:a77b20ac260d759444177f991c6450193"><td class="memSeparator" colspan="2">&#160;</td></tr>
 <tr class="memitem:a826a2aa61178a92cf25fbd1ac1e0df5d" id="r_a826a2aa61178a92cf25fbd1ac1e0df5d"><td class="memItemLeft" align="right" valign="top"><a class="el" href="classRealm_1_1Cuda_1_1GPU.html">GPU</a> *&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="classRealm_1_1Cuda_1_1GPUChannel.html#a826a2aa61178a92cf25fbd1ac1e0df5d">get_gpu</a> () const</td></tr>
 <tr class="separator:a826a2aa61178a92cf25fbd1ac1e0df5d"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:a79544c183eaeeff2be69ebd6063661e3" id="r_a79544c183eaeeff2be69ebd6063661e3"><td class="memItemLeft" align="right" valign="top">virtual <a class="el" href="classRealm_1_1RemoteChannelInfo.html">RemoteChannelInfo</a> *&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="classRealm_1_1Cuda_1_1GPUChannel.html#a79544c183eaeeff2be69ebd6063661e3">construct_remote_info</a> () const</td></tr>
+<tr class="separator:a79544c183eaeeff2be69ebd6063661e3"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:a1ea5f9d9ea21c8187b93eeec39171a7e" id="r_a1ea5f9d9ea21c8187b93eeec39171a7e"><td class="memItemLeft" align="right" valign="top">virtual bool&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="classRealm_1_1Cuda_1_1GPUChannel.html#a1ea5f9d9ea21c8187b93eeec39171a7e">support_idindexed_fields</a> (<a class="el" href="classRealm_1_1Memory.html">Memory</a> src_mem, <a class="el" href="classRealm_1_1Memory.html">Memory</a> dst_mem) const</td></tr>
+<tr class="separator:a1ea5f9d9ea21c8187b93eeec39171a7e"><td class="memSeparator" colspan="2">&#160;</td></tr>
 <tr class="inherit_header pub_methods_classRealm_1_1SingleXDQChannel"><td colspan="2" onclick="javascript:toggleInherit('pub_methods_classRealm_1_1SingleXDQChannel')"><img src="closed.png" alt="-"/>&#160;Public Member Functions inherited from <a class="el" href="classRealm_1_1SingleXDQChannel.html">Realm::SingleXDQChannel&lt; GPUChannel, GPUXferDes &gt;</a></td></tr>
 <tr class="memitem:a7adab18ffe9827a1fa7611c931c704b3 inherit pub_methods_classRealm_1_1SingleXDQChannel" id="r_a7adab18ffe9827a1fa7611c931c704b3"><td class="memItemLeft" align="right" valign="top">&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="classRealm_1_1SingleXDQChannel.html#a7adab18ffe9827a1fa7611c931c704b3">SingleXDQChannel</a> (<a class="el" href="classRealm_1_1BackgroundWorkManager.html">BackgroundWorkManager</a> *bgwork, <a class="el" href="namespaceRealm.html#a6c09d16f55cd4dfdd047ed66caec9e43">XferDesKind</a> _kind, const std::string &amp;_name, int _numa_domain=-1)</td></tr>
 <tr class="separator:a7adab18ffe9827a1fa7611c931c704b3 inherit pub_methods_classRealm_1_1SingleXDQChannel"><td class="memSeparator" colspan="2">&#160;</td></tr>
@@ -205,8 +209,6 @@ Public Member Functions</h2></td></tr>
 <tr class="separator:a02ee5f9de202c0d1903b3a41de6a7238 inherit pub_methods_classRealm_1_1Channel"><td class="memSeparator" colspan="2">&#160;</td></tr>
 <tr class="memitem:a6881a58ee8449cda172164385509af5e inherit pub_methods_classRealm_1_1Channel" id="r_a6881a58ee8449cda172164385509af5e"><td class="memItemLeft" align="right" valign="top">virtual bool&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="classRealm_1_1Channel.html#a6881a58ee8449cda172164385509af5e">needs_wrapping_iterator</a> () const</td></tr>
 <tr class="separator:a6881a58ee8449cda172164385509af5e inherit pub_methods_classRealm_1_1Channel"><td class="memSeparator" colspan="2">&#160;</td></tr>
-<tr class="memitem:aca84e41c5e00afec62f8c9bca7311052 inherit pub_methods_classRealm_1_1Channel" id="r_aca84e41c5e00afec62f8c9bca7311052"><td class="memItemLeft" align="right" valign="top">virtual <a class="el" href="classRealm_1_1RemoteChannelInfo.html">RemoteChannelInfo</a> *&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="classRealm_1_1Channel.html#aca84e41c5e00afec62f8c9bca7311052">construct_remote_info</a> () const</td></tr>
-<tr class="separator:aca84e41c5e00afec62f8c9bca7311052 inherit pub_methods_classRealm_1_1Channel"><td class="memSeparator" colspan="2">&#160;</td></tr>
 <tr class="memitem:a85ff91b546a3d68edcb950a29c23c771 inherit pub_methods_classRealm_1_1Channel" id="r_a85ff91b546a3d68edcb950a29c23c771"><td class="memItemLeft" align="right" valign="top">void&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="classRealm_1_1Channel.html#a85ff91b546a3d68edcb950a29c23c771">print</a> (std::ostream &amp;os) const</td></tr>
 <tr class="separator:a85ff91b546a3d68edcb950a29c23c771 inherit pub_methods_classRealm_1_1Channel"><td class="memSeparator" colspan="2">&#160;</td></tr>
 </table><table class="memberdecls">
@@ -300,6 +302,33 @@ Additional Inherited Members</h2></td></tr>
 </div>
 </div>
 <h2 class="groupheader">Member Function Documentation</h2>
+<a id="a79544c183eaeeff2be69ebd6063661e3" name="a79544c183eaeeff2be69ebd6063661e3"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a79544c183eaeeff2be69ebd6063661e3">&#9670;&#160;</a></span>construct_remote_info()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">virtual <a class="el" href="classRealm_1_1RemoteChannelInfo.html">RemoteChannelInfo</a> * Realm::Cuda::GPUChannel::construct_remote_info </td>
+          <td>(</td>
+          <td class="paramname"></td><td>)</td>
+          <td> const</td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel">virtual</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>Reimplemented from <a class="el" href="classRealm_1_1Channel.html#aca84e41c5e00afec62f8c9bca7311052">Realm::Channel</a>.</p>
+
+</div>
+</div>
 <a id="ac55b209d130e6c3e029366e6be392d6e" name="ac55b209d130e6c3e029366e6be392d6e"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#ac55b209d130e6c3e029366e6be392d6e">&#9670;&#160;</a></span>create_xfer_des()</h2>
 
@@ -446,6 +475,44 @@ Additional Inherited Members</h2></td></tr>
 </div><div class="memdoc">
 
 <p>Implements <a class="el" href="classRealm_1_1Channel.html#abede5af207f8e9d5080579303fd3b3cb">Realm::Channel</a>.</p>
+
+</div>
+</div>
+<a id="a1ea5f9d9ea21c8187b93eeec39171a7e" name="a1ea5f9d9ea21c8187b93eeec39171a7e"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a1ea5f9d9ea21c8187b93eeec39171a7e">&#9670;&#160;</a></span>support_idindexed_fields()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">virtual bool Realm::Cuda::GPUChannel::support_idindexed_fields </td>
+          <td>(</td>
+          <td class="paramtype"><a class="el" href="classRealm_1_1Memory.html">Memory</a>&#160;</td>
+          <td class="paramname"><em>src_mem</em>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype"><a class="el" href="classRealm_1_1Memory.html">Memory</a>&#160;</td>
+          <td class="paramname"><em>dst_mem</em>&#160;</td>
+        </tr>
+        <tr>
+          <td></td>
+          <td>)</td>
+          <td></td><td> const</td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel">inline</span><span class="mlabel">virtual</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>Reimplemented from <a class="el" href="classRealm_1_1Channel.html#a3fc1d5f2f4cf29907b5d643124ee52ac">Realm::Channel</a>.</p>
 
 </div>
 </div>

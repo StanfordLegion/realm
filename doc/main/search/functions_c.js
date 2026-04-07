@@ -5,7 +5,7 @@ var searchData=
   ['l2_5fset_2',['l2_set',['../classRealm_1_1NodeSetBitmask.html#a02398b6345f111949c71505956044b6a',1,'Realm::NodeSetBitmask']]],
   ['launch_3',['launch',['../classRealm_1_1PartitioningOperation.html#ad05edee7206b218cdb2dee7329ab93a2',1,'Realm::PartitioningOperation::launch()'],['../classRealm_1_1AsyncFileIOContext_1_1AIOOperation.html#a3644b6b5ce44f43cfdb1e40c528c1f2f',1,'Realm::AsyncFileIOContext::AIOOperation::launch()']]],
   ['launch_5fbatch_5faffine_5ffill_5fkernel_4',['launch_batch_affine_fill_kernel',['../classRealm_1_1Cuda_1_1GPU.html#aaffdf2a60daa75d8cca1346f9bebecb7',1,'Realm::Cuda::GPU']]],
-  ['launch_5fbatch_5faffine_5fkernel_5',['launch_batch_affine_kernel',['../classRealm_1_1Cuda_1_1GPU.html#a0dd6bae8369e544ee60a0396ca529688',1,'Realm::Cuda::GPU']]],
+  ['launch_5fbatch_5faffine_5fkernel_5',['launch_batch_affine_kernel',['../classRealm_1_1Cuda_1_1GPU.html#a1f712010dbe2b8b76436a61cf0895324',1,'Realm::Cuda::GPU']]],
   ['launch_5findirect_5fcopy_5fkernel_6',['launch_indirect_copy_kernel',['../classRealm_1_1Cuda_1_1GPU.html#a86401309baa87373f932d0ba11c6972a',1,'Realm::Cuda::GPU']]],
   ['launch_5ftranspose_5fkernel_7',['launch_transpose_kernel',['../classRealm_1_1Cuda_1_1GPU.html#a0c27c69b930e9470de0297c598c5fad5',1,'Realm::Cuda::GPU']]],
   ['launchconfig_8',['LaunchConfig',['../structRealm_1_1Hip_1_1GPUProcessor_1_1LaunchConfig.html#aff10869d291d253621ce10504f6de8e1',1,'Realm::Hip::GPUProcessor::LaunchConfig']]],
