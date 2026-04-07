@@ -52,13 +52,6 @@ namespace Kokkos {
 
 #include <Kokkos_Core.hpp>
 
-// during the development of Kokkos 3.7.00, initialization data structures
-//  were changed - detect the presence of a new header (included indirectly
-//  via Kokkos_Core.hpp)
-#ifdef KOKKOS_INITIALIZATION_SETTINGS_HPP
-#define REALM_USE_KOKKOS_INITIALIZATION_SETTINGS
-#endif
-
 #include <stdlib.h>
 
 namespace Realm {
@@ -128,14 +121,9 @@ namespace Realm {
       virtual void execute_on_processor(Processor p)
       {
         log_kokkos.info() << "doing openmp init on proc " << p;
-#ifdef REALM_USE_KOKKOS_INITIALIZATION_SETTINGS
-        Kokkos::InitializationSettings init_settings;
-        init_settings.set_num_threads(-1); // todo - get from proc
-        Kokkos::OpenMP::impl_initialize(init_settings);
-#else
-        int thread_count = -1; // todo - get from proc
-        Kokkos::OpenMP::impl_initialize(thread_count);
-#endif
+          Kokkos::InitializationSettings init_settings;
+          init_settings.set_num_threads(1);
+          Kokkos::OpenMP::impl_initialize(init_settings);
         mark_done();
       }
     };
@@ -163,28 +151,13 @@ namespace Realm {
       {
         log_kokkos.info() << "doing cuda init on proc " << p;
 
-        ProcessorImpl *impl = get_runtime()->get_processor_impl(p);
-        assert(impl != nullptr && "invalid processor handle");
-        assert(impl->kind == Processor::TOC_PROC);
-        Cuda::GPUProcessor *gpu = checked_cast<Cuda::GPUProcessor *>(impl);
+          ProcessorImpl *impl = get_runtime()->get_processor_impl(p);
+          assert(impl->kind == Processor::TOC_PROC);
+          Cuda::GPUProcessor *gpu = checked_cast<Cuda::GPUProcessor *>(impl);
 
-#ifdef REALM_USE_KOKKOS_INITIALIZATION_SETTINGS
-        Kokkos::InitializationSettings init_settings;
-        init_settings.set_device_id(gpu->gpu->info->index);
-        init_settings.set_num_devices(1);
-        Kokkos::Cuda::impl_initialize(init_settings);
-#else
-        int cuda_device_id = gpu->gpu->info->index;
-        int num_instances = 1; // unused in kokkos?
-
-        Kokkos::Cuda::impl_initialize(Kokkos::Cuda::SelectDevice(cuda_device_id),
-                                      num_instances);
-#endif
-        {
-          // some init is deferred until an instance is created
-          Kokkos::Cuda dummy;
-        }
-        mark_done();
+          Kokkos::InitializationSettings init_settings;
+          Kokkos::Cuda::impl_initialize(init_settings);
+          mark_done();
       }
     };
 
@@ -224,16 +197,10 @@ namespace Realm {
         assert(impl->kind == Processor::TOC_PROC);
         Hip::GPUProcessor *gpu = checked_cast<Hip::GPUProcessor *>(impl);
 
-#ifdef REALM_USE_KOKKOS_INITIALIZATION_SETTINGS
         Kokkos::InitializationSettings init_settings;
         init_settings.set_device_id(gpu->gpu->info->index);
         init_settings.set_num_devices(1);
         Kokkos::HIP::impl_initialize(init_settings);
-#else
-        int hip_device_id = gpu->gpu->info->index;
-
-        Kokkos::HIP::impl_initialize(Kokkos::HIP::SelectDevice(hip_device_id));
-#endif
         {
           // some init is deferred until an instance is created
           Kokkos::HIP dummy;
@@ -266,22 +233,14 @@ namespace Realm {
     {
       // use Kokkos::Impl::{pre,post}_initialize to allow us to do our own
       //  execution space initialization
-#ifdef REALM_USE_KOKKOS_INITIALIZATION_SETTINGS
       Kokkos::InitializationSettings kokkos_init_args;
-#else
-      Kokkos::InitArguments kokkos_init_args;
-#endif
       log_kokkos.info() << "doing general pre-initialization";
       Kokkos::Impl::pre_initialize(kokkos_init_args);
 
 #ifdef KOKKOS_ENABLE_SERIAL
       // nothing thread-specific for serial execution space, so just call it
       //  here
-#ifdef REALM_USE_KOKKOS_INITIALIZATION_SETTINGS
       Kokkos::Serial::impl_initialize(kokkos_init_args);
-#else
-      Kokkos::Serial::impl_initialize();
-#endif
 #endif
 
 #ifdef KOKKOS_ENABLE_OPENMP
@@ -391,9 +350,8 @@ namespace Realm {
     REALM_PUBLIC_API void kokkos_finalize(
         const std::vector<ProcessorImpl *> &local_procs) // needed by librealm.so
     {
-#if KOKKOS_VERSION >= 40000
       Kokkos::Impl::pre_finalize();
-#endif
+
       // per processor finalization on the correct threads
 #ifdef KOKKOS_ENABLE_OPENMP
       for(std::vector<ProcessorImpl *>::const_iterator it = kokkos_omp_procs.begin();
@@ -423,11 +381,7 @@ namespace Realm {
 #endif
 
       log_kokkos.info() << "doing general finalization";
-#if KOKKOS_VERSION >= 40000
       Kokkos::Impl::post_finalize();
-#else
-      Kokkos::finalize();
-#endif
     }
 
   }; // namespace KokkosInterop
