@@ -3886,20 +3886,20 @@ namespace Realm {
   {
     log_xplan.info() << "created: plan=" << (void *)this << " domain=" << *domain
                      << " srcs=" << srcs.size() << " dsts=" << dsts.size();
-    // if(log_xplan.want_debug()) {
-    for(size_t i = 0; i < srcs.size(); i++) {
-      log_xplan.info() << "created: plan=" << (void *)this << " srcs[" << i
-                       << "]=" << srcs[i];
+    if(log_xplan.want_debug()) {
+      for(size_t i = 0; i < srcs.size(); i++) {
+        log_xplan.info() << "created: plan=" << (void *)this << " srcs[" << i
+                         << "]=" << srcs[i];
+      }
+      for(size_t i = 0; i < dsts.size(); i++) {
+        log_xplan.info() << "created: plan=" << (void *)this << " dsts[" << i
+                         << "]=" << dsts[i];
+      }
+      for(size_t i = 0; i < indirects.size(); i++) {
+        log_xplan.info() << "created: plan=" << (void *)this << " indirects[" << i
+                         << "]=" << *indirects[i];
+      }
     }
-    for(size_t i = 0; i < dsts.size(); i++) {
-      log_xplan.info() << "created: plan=" << (void *)this << " dsts[" << i
-                       << "]=" << dsts[i];
-    }
-    for(size_t i = 0; i < indirects.size(); i++) {
-      log_xplan.info() << "created: plan=" << (void *)this << " indirects[" << i
-                       << "]=" << *indirects[i];
-    }
-    //}
 
     std::vector<Event> preconditions;
 

@@ -1171,13 +1171,21 @@ namespace Realm {
 
       return nullptr;
     }
-    bool GPU::register_reduction(ReductionOpID redop_id, CUfunction apply_excl,
-                                 CUfunction apply_nonexcl, CUfunction fold_excl,
-                                 CUfunction fold_nonexcl)
+    bool GPU::register_reduction(
+        ReductionOpID redop_id, CUfunction apply_excl, CUfunction apply_nonexcl,
+        CUfunction fold_excl, CUfunction fold_nonexcl, CUfunction apply_excl_advanced,
+        CUfunction apply_nonexcl_advanced, CUfunction fold_excl_advanced,
+        CUfunction fold_nonexcl_advanced, CUfunction apply_excl_transpose,
+        CUfunction apply_nonexcl_transpose, CUfunction fold_excl_transpose,
+        CUfunction fold_nonexcl_transpose)
     {
       AutoLock<> al(alloc_mutex);
       return gpu_reduction_table
-          .insert({redop_id, {apply_excl, apply_nonexcl, fold_excl, fold_nonexcl}})
+          .insert({redop_id,
+                   {apply_excl, apply_nonexcl, fold_excl, fold_nonexcl,
+                    apply_excl_advanced, apply_nonexcl_advanced, fold_excl_advanced,
+                    fold_nonexcl_advanced, apply_excl_transpose, apply_nonexcl_transpose,
+                    fold_excl_transpose, fold_nonexcl_transpose}})
           .second;
     }
 
@@ -4168,7 +4176,11 @@ namespace Realm {
       for(size_t didx = 0; didx < num; didx++) {
         if(!redop_gpus[didx]->register_reduction(
                descs[didx].redop_id, descs[didx].apply_excl, descs[didx].apply_nonexcl,
-               descs[didx].fold_excl, descs[didx].fold_nonexcl)) {
+               descs[didx].fold_excl, descs[didx].fold_nonexcl,
+               descs[didx].apply_excl_advanced, descs[didx].apply_nonexcl_advanced,
+               descs[didx].fold_excl_advanced, descs[didx].fold_nonexcl_advanced,
+               descs[didx].apply_excl_transpose, descs[didx].apply_nonexcl_transpose,
+               descs[didx].fold_excl_transpose, descs[didx].fold_nonexcl_transpose)) {
           failed_reg = true;
           break;
         }
@@ -4791,25 +4803,18 @@ namespace Realm {
         goto Done;
       }
 
-      if(!peer_enabled) {
-        desc.resize(1);
-        desc[0].flags = CU_MEM_ACCESS_FLAGS_PROT_READWRITE;
-        desc[0].location.type = CU_MEM_LOCATION_TYPE_DEVICE;
-        desc[0].location.id = gpu->info->index;
-      } else {
-        size_t peer_offset = 0;
-        desc.resize(gpu->info->peers.size());
-        for(int peer_idx : gpu->info->peers) {
-          desc[peer_offset].flags = CU_MEM_ACCESS_FLAGS_PROT_READWRITE;
-          desc[peer_offset].location.type = CU_MEM_LOCATION_TYPE_DEVICE;
-          desc[peer_offset].location.id = peer_idx;
-          peer_offset++;
-        }
-      }
       if(map_host) {
 #if CUDA_VERSION >= 12030
+        // map the host memory to all GPUs
+        size_t peer_offset = 0;
+        desc.resize(gpu->module->gpus.size() + 1);
+        for(GPU *peer_gpu : gpu->module->gpus) {
+          desc[peer_offset].flags = CU_MEM_ACCESS_FLAGS_PROT_READWRITE;
+          desc[peer_offset].location.type = CU_MEM_LOCATION_TYPE_DEVICE;
+          desc[peer_offset].location.id = peer_gpu->info->index;
+          peer_offset++;
+        }
         // Map this to the CPU as well!
-        desc.push_back({});
         desc.back().flags = CU_MEM_ACCESS_FLAGS_PROT_READWRITE;
         desc.back().location.type = CU_MEM_LOCATION_TYPE_HOST_NUMA;
         desc.back().location.id = 0;
@@ -4817,6 +4822,22 @@ namespace Realm {
         res = CUDA_ERROR_NOT_SUPPORTED;
         goto Done;
 #endif // CUDA_VERSION >= 12000
+      } else {
+        if(!peer_enabled) {
+          desc.resize(1);
+          desc[0].flags = CU_MEM_ACCESS_FLAGS_PROT_READWRITE;
+          desc[0].location.type = CU_MEM_LOCATION_TYPE_DEVICE;
+          desc[0].location.id = gpu->info->index;
+        } else {
+          size_t peer_offset = 0;
+          desc.resize(gpu->info->peers.size());
+          for(int peer_idx : gpu->info->peers) {
+            desc[peer_offset].flags = CU_MEM_ACCESS_FLAGS_PROT_READWRITE;
+            desc[peer_offset].location.type = CU_MEM_LOCATION_TYPE_DEVICE;
+            desc[peer_offset].location.id = peer_idx;
+            peer_offset++;
+          }
+        }
       }
 
       res = CUDA_DRIVER_FNPTR(cuMemSetAccess)(dev_ptr, size, desc.data(), desc.size());

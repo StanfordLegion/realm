@@ -427,9 +427,13 @@ namespace Realm {
       bool is_accessible_host_mem(const MemoryImpl *mem) const;
       bool is_accessible_gpu_mem(const MemoryImpl *mem) const;
 
-      bool register_reduction(ReductionOpID redop_id, CUfunction apply_excl,
-                              CUfunction apply_nonexcl, CUfunction fold_excl,
-                              CUfunction fold_nonexcl);
+      bool register_reduction(
+          ReductionOpID redop_id, CUfunction apply_excl, CUfunction apply_nonexcl,
+          CUfunction fold_excl, CUfunction fold_nonexcl, CUfunction apply_excl_advanced,
+          CUfunction apply_nonexcl_advanced, CUfunction fold_excl_advanced,
+          CUfunction fold_nonexcl_advanced, CUfunction apply_excl_transpose,
+          CUfunction apply_nonexcl_transpose, CUfunction fold_excl_transpose,
+          CUfunction fold_nonexcl_transpose);
 
     protected:
       CUmodule load_cuda_module(const void *data);
@@ -522,6 +526,14 @@ namespace Realm {
         CUfunction apply_excl = nullptr;
         CUfunction fold_nonexcl = nullptr;
         CUfunction fold_excl = nullptr;
+        CUfunction apply_nonexcl_advanced = nullptr;
+        CUfunction apply_excl_advanced = nullptr;
+        CUfunction fold_nonexcl_advanced = nullptr;
+        CUfunction fold_excl_advanced = nullptr;
+        CUfunction apply_nonexcl_transpose = nullptr;
+        CUfunction apply_excl_transpose = nullptr;
+        CUfunction fold_nonexcl_transpose = nullptr;
+        CUfunction fold_excl_transpose = nullptr;
       };
 
       std::unordered_map<ReductionOpID, GPUReductionOpEntry> gpu_reduction_table;
@@ -1013,6 +1025,11 @@ namespace Realm {
 
     class GPUreduceChannel;
 
+    struct KernelVariantDesc {
+      void *host_proxy;
+      CUfunction GPU::GPUReductionOpEntry::*cache_field;
+    };
+
     class GPUreduceXferDes : public XferDes {
     public:
       GPUreduceXferDes(uintptr_t _dma_op, Channel *_channel, NodeID _launch_node,
@@ -1023,12 +1040,30 @@ namespace Realm {
       long get_requests(Request **requests, long nr);
 
       bool progress_xd(GPUreduceChannel *channel, TimeLimit work_until);
+      bool fast_reduction_kernel_mode(GPUreduceChannel *channel, const size_t max_bytes,
+                                      XferPort *in_port, XferPort *out_port,
+                                      const size_t in_span_start,
+                                      const size_t out_span_start);
+
+      void setup_redop_kernel(GPUreduceChannel *channel, void *params,
+                              const size_t in_span_start, const size_t out_span_start,
+                              const size_t in_elem_size, const size_t out_elem_size,
+                              const size_t elems, const bool has_transpose);
+      void record_redop_advanced_kernel(GPU *gpu);
+
+      KernelVariantDesc describe_kernel_variant(GPU *cpu, bool is_advanced);
+      bool resolve_kernel_slot(GPU *gpu, void *host_proxy, CUfunction &kernel_out,
+                               CUfunction GPU::GPUReductionOpEntry::*cache_field);
 
     protected:
       XferDesRedopInfo redop_info;
       const ReductionOpUntyped *redop;
       CUfunction kernel;
+      CUfunction kernel_advanced;
+      CUfunction kernel_transpose;
       const void *kernel_host_proxy;
+      const void *kernel_host_proxy_advanced;
+      const void *kernel_host_proxy_transpose;
       GPUStream *stream;
       std::vector<GPU *> src_gpus;
       std::vector<bool> src_is_ipc;

@@ -13,8 +13,13 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+# since we use separable_compilation, we need a knob to override
+# KOKKOS_CXX_COMPILER with the appropriate wrapper.
+# In the STATIC case, CMAKE_CXX_COMPILER and KOKKOS_CXX_COMPILER must both be the correct wrapper.
+set(KOKKOS_CXX_COMPILER ${Kokkos_CXX_COMPILER} CACHE STRING "C++ compiler used by Kokkos")
+
 # Kokkos interop library - compiled separately with Kokkos-specific compiler settings
-set(CMAKE_CXX_COMPILER "${Kokkos_CXX_COMPILER}")
+set(CMAKE_CXX_COMPILER "${KOKKOS_CXX_COMPILER}")
 
 set(REALM_KOKKOS_SOURCES
     kokkos_interop.cc
