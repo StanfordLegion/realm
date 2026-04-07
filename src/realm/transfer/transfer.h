@@ -363,10 +363,11 @@ namespace Realm {
                                               const std::vector<size_t> &fld_sizes,
                                               bool idindexed_fields = false) const = 0;
 
-    virtual TransferIterator *create_iterator(RegionInstance inst, RegionInstance peer,
-                                              const std::vector<FieldID> &fields,
-                                              const std::vector<size_t> &fld_offsets,
-                                              const std::vector<size_t> &fld_sizes) const = 0;
+    virtual TransferIterator *
+    create_iterator(RegionInstance inst, RegionInstance peer,
+                    const std::vector<FieldID> &fields,
+                    const std::vector<size_t> &fld_offsets,
+                    const std::vector<size_t> &fld_sizes) const = 0;
 
     virtual void print(std::ostream &os) const = 0;
   };
