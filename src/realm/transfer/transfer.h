@@ -426,6 +426,11 @@ namespace Realm {
   protected:
     atomic<int> refcount;
 
+    // test-only constructor: creates a TransferDesc with the given domain,
+    // bypassing check_analysis_preconditions and TransferDomain::construct
+    struct TestTag {};
+    TransferDesc(TestTag, TransferDomain *_domain);
+
     void check_analysis_preconditions();
     bool perform_analysis(TimeLimit work_until);
     void cancel_analysis(Event failed_precondition);

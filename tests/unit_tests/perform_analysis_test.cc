@@ -68,58 +68,20 @@ public:
 // protected members for testing the incremental analysis behavior.
 class PerformAnalysisTest : public ::testing::Test {
 protected:
-  // Helper to construct a TransferDesc with an empty domain and no fields.
-  // The constructor calls check_analysis_preconditions -> perform_analysis,
-  // which returns immediately for an empty domain (no runtime needed).
-  static TransferDesc *create_empty_desc()
+  // Helper to construct a TransferDesc using the test-only constructor.
+  // This bypasses TransferDomain::construct and check_analysis_preconditions,
+  // avoiding runtime dependencies.
+  static TransferDesc *create_desc(TransferDomain *domain)
   {
-    IndexSpace<1, int> empty_is = IndexSpace<1, int>::make_empty();
-    std::vector<CopySrcDstField> srcs;
-    std::vector<CopySrcDstField> dsts;
-    std::vector<const CopyIndirection<1, int>::Base *> indirects;
-    ProfilingRequestSet prs;
-    TransferDesc *desc = new TransferDesc(empty_is, srcs, dsts, indirects, prs);
-    return desc;
+    return new TransferDesc(TransferDesc::TestTag{}, domain);
   }
 
-  // Reset a TransferDesc's analysis state so perform_analysis can be called
-  // again with a non-empty domain and dummy fields.
-  static void reset_for_nonempty_analysis(TransferDesc *desc, size_t num_fields)
+  // Set up dummy src/dst field pairs on a TransferDesc. Uses NO_INST so that
+  // choose_dim_order skips the preferred_dim_order call (which requires
+  // the runtime). The loop body won't execute in timeout tests since
+  // is_expired() fires before any per-field work.
+  static void setup_dummy_fields(TransferDesc *desc, size_t num_fields)
   {
-    // Replace the empty domain with a non-empty mock domain
-    delete desc->domain;
-    desc->domain = new MockTransferDomain;
-
-    // Reset analysis state
-    desc->analysis_complete.store(false);
-    desc->analysis_successful = false;
-    desc->analysis_init_done = false;
-    desc->analysis_field_idx = 0;
-    desc->analysis_fld_start = 0;
-    desc->analysis_fill_ofs = 0;
-    desc->analysis_field_done.clear();
-
-    // Reset graph
-    desc->graph.xd_nodes.clear();
-    desc->graph.ib_edges.clear();
-    desc->graph.ib_alloc_order.clear();
-
-    // Reset fields
-    desc->dim_order.clear();
-    desc->src_fields.clear();
-    desc->dst_fields.clear();
-    if(desc->fill_data) {
-      free(desc->fill_data);
-      desc->fill_data = nullptr;
-    }
-    desc->fill_size = 0;
-
-    // Set up dummy src/dst field pairs. Use NO_INST so that
-    // choose_dim_order skips the preferred_dim_order call (which requires
-    // the runtime). The loop body won't execute in timeout tests since
-    // is_expired() fires before any per-field work.
-    desc->srcs.clear();
-    desc->dsts.clear();
     for(size_t i = 0; i < num_fields; i++) {
       CopySrcDstField src;
       src.set_field(RegionInstance::NO_INST, FieldID(i), /*size=*/8);
@@ -166,10 +128,17 @@ protected:
 // Test that perform_analysis returns true immediately for an empty domain.
 TEST_F(PerformAnalysisTest, EmptyDomainCompletesImmediately)
 {
-  TransferDesc *desc = create_empty_desc();
+  // MockEmptyDomain returns empty() == true
+  class MockEmptyDomain : public MockTransferDomain {
+  public:
+    bool empty() const override { return true; }
+    size_t volume() const override { return 0; }
+  };
 
-  // The constructor already ran perform_analysis, which completed for the
-  // empty domain case.
+  TransferDesc *desc = create_desc(new MockEmptyDomain);
+
+  bool completed = call_perform_analysis(desc, TimeLimit());
+  EXPECT_TRUE(completed);
   EXPECT_TRUE(get_analysis_complete(desc));
 
   desc->remove_reference();
@@ -179,14 +148,9 @@ TEST_F(PerformAnalysisTest, EmptyDomainCompletesImmediately)
 // false (timed out) without completing the analysis.
 TEST_F(PerformAnalysisTest, ExpiredTimeLimitCausesTimeout)
 {
-  TransferDesc *desc = create_empty_desc();
-  ASSERT_TRUE(get_analysis_complete(desc));
-
-  // Reset state for a non-empty analysis with multiple fields
   const size_t num_fields = 5;
-  reset_for_nonempty_analysis(desc, num_fields);
-  ASSERT_FALSE(get_analysis_complete(desc));
-  ASSERT_FALSE(get_analysis_init_done(desc));
+  TransferDesc *desc = create_desc(new MockTransferDomain);
+  setup_dummy_fields(desc, num_fields);
 
   // Call perform_analysis with an already-expired time limit.
   // The init phase runs (it doesn't check the time limit), but the loop
@@ -208,10 +172,9 @@ TEST_F(PerformAnalysisTest, ExpiredTimeLimitCausesTimeout)
 // TimeLimit preserves the init state (doesn't redo it).
 TEST_F(PerformAnalysisTest, InitStatePreservedAcrossTimeoutCalls)
 {
-  TransferDesc *desc = create_empty_desc();
-
   const size_t num_fields = 3;
-  reset_for_nonempty_analysis(desc, num_fields);
+  TransferDesc *desc = create_desc(new MockTransferDomain);
+  setup_dummy_fields(desc, num_fields);
 
   // First call: times out immediately
   bool completed = call_perform_analysis(desc, TimeLimit::relative(0));

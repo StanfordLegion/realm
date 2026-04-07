@@ -3534,6 +3534,19 @@ namespace Realm {
     }
   }
 
+  TransferDesc::TransferDesc(TestTag, TransferDomain *_domain)
+    : refcount(1)
+    , deferred_analysis(this)
+    , prs()
+    , analysis_complete(false)
+    , analysis_successful(false)
+    , fill_data(0)
+    , fill_size(0)
+    , analysis_init_done(false)
+  {
+    domain = _domain;
+  }
+
   void TransferDesc::check_analysis_preconditions()
   {
     log_xplan.info() << "created: plan=" << (void *)this << " domain=" << *domain
