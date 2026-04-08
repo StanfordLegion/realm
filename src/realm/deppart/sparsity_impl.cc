@@ -29,8 +29,6 @@
 #ifdef REALM_USE_CUDA
 #include <cuda_runtime_api.h>
 #endif
-
-
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
@@ -41,77 +39,6 @@
 namespace Realm {
 
   namespace {
-    class DeppartPinnedHostPool {
-    public:
-      void *alloc(size_t bytes)
-      {
-        if(bytes == 0)
-          return nullptr;
-
-        const size_t bucket_size = round_up(bytes);
-        void *ptr = nullptr;
-        {
-          std::lock_guard<std::mutex> lock(mutex);
-          std::vector<void *> &bucket = free_blocks[bucket_size];
-          if(!bucket.empty()) {
-            ptr = bucket.back();
-            bucket.pop_back();
-          }
-        }
-
-        if(ptr == nullptr) {
-#ifdef REALM_USE_CUDA
-          cudaError_t err = cudaHostAlloc(&ptr, bucket_size, cudaHostAllocPortable);
-          assert(err == cudaSuccess);
-#else
-          ptr = std::malloc(bucket_size);
-          assert(ptr != nullptr);
-#endif
-        }
-
-        {
-          std::lock_guard<std::mutex> lock(mutex);
-          live_blocks[ptr] = bucket_size;
-        }
-        return ptr;
-      }
-
-      void release(void *ptr)
-      {
-        if(ptr == nullptr)
-          return;
-
-        std::lock_guard<std::mutex> lock(mutex);
-        auto it = live_blocks.find(ptr);
-        assert(it != live_blocks.end());
-        free_blocks[it->second].push_back(ptr);
-        live_blocks.erase(it);
-      }
-
-    private:
-      static size_t round_up(size_t bytes)
-      {
-        size_t rounded = 4096;
-        while((rounded < bytes) && (rounded < (size_t(1) << 30)))
-          rounded <<= 1;
-        if(rounded >= bytes)
-          return rounded;
-
-        const size_t granularity = size_t(1) << 20;
-        return ((bytes + granularity - 1) / granularity) * granularity;
-      }
-
-      std::mutex mutex;
-      std::unordered_map<size_t, std::vector<void *>> free_blocks;
-      std::unordered_map<void *, size_t> live_blocks;
-    };
-
-    DeppartPinnedHostPool &get_deppart_pinned_host_pool(void)
-    {
-      static DeppartPinnedHostPool *pool = new DeppartPinnedHostPool();
-      return *pool;
-    }
-
     struct PendingOutputSparsityAllocation {
       std::mutex mutex;
       std::condition_variable cv;
@@ -147,6 +74,31 @@ namespace Realm {
         output_sparsity_allocation_request_reg;
     ActiveMessageHandlerReg<OutputSparsityAllocationResponse>
         output_sparsity_allocation_response_reg;
+
+    template <typename T>
+    inline T *deppart_gpu_host_alloc(size_t count)
+    {
+      if(count == 0) return nullptr;
+#ifdef REALM_USE_CUDA
+      void *ptr = nullptr;
+      cudaError_t err = cudaHostAlloc(&ptr, count * sizeof(T), cudaHostAllocPortable);
+      assert(err == cudaSuccess);
+      return reinterpret_cast<T *>(ptr);
+#else
+      return static_cast<T *>(std::malloc(count * sizeof(T)));
+#endif
+    }
+
+    inline void deppart_gpu_host_free(void *ptr)
+    {
+      if(ptr == nullptr) return;
+#ifdef REALM_USE_CUDA
+      cudaError_t err = cudaFreeHost(ptr);
+      assert(err == cudaSuccess);
+#else
+      std::free(ptr);
+#endif
+    }
 
     inline bool deppart_sparsity_trace_enabled(void)
     {
@@ -246,16 +198,6 @@ namespace Realm {
       pending->ready = true;
     }
     pending->cv.notify_one();
-  }
-
-  void *deppart_pinned_host_alloc_bytes(size_t bytes)
-  {
-    return get_deppart_pinned_host_pool().alloc(bytes);
-  }
-
-  void deppart_pinned_host_free(void *ptr)
-  {
-    get_deppart_pinned_host_pool().release(ptr);
   }
 
   extern Logger log_part;
@@ -1463,8 +1405,8 @@ bool SparsityMapPublicImpl<N, T>::bvh_centroid_less(int axis,
 template<int N, typename T>
 SparsityMapImpl<N, T>::~SparsityMapImpl(void)
 {
-     deppart_pinned_host_free(this->gpu_entries);
-     deppart_pinned_host_free(this->gpu_approx_rects);
+     deppart_gpu_host_free(this->gpu_entries);
+     deppart_gpu_host_free(this->gpu_approx_rects);
 }
 
   template <int N, typename T>
@@ -1752,8 +1694,6 @@ SparsityMapImpl<N, T>::~SparsityMapImpl(void)
                                                    size_t piece_count, bool disjoint,
                                                    size_t total_count)
   {
-    NVTX_DEPPART(contribute_raw_rects);
-
     deppart_sparsity_trace("contribute_raw_rects.enter",
                            me.id,
                            ID(me).sparsity_creator_node(),
@@ -2356,7 +2296,6 @@ SparsityMapImpl<N, T>::~SparsityMapImpl(void)
   template <int N, typename T>
   void SparsityMapImpl<N, T>::finalize(void)
   {
-    NVTX_DEPPART(finalize);
     deppart_sparsity_trace("finalize.enter",
                            me.id,
                            ID(me).sparsity_creator_node(),
@@ -2565,7 +2504,6 @@ SparsityMapImpl<N, T>::~SparsityMapImpl(void)
     Event trigger_approx = Event::NO_EVENT;
     std::vector<PartitioningMicroOp *> precise_waiters_copy, approx_waiters_copy;
     {
-      NVTX_DEPPART(synchronization);
       AutoLock<> al(mutex);
 
       assert(!this->entries_valid.load());
@@ -2595,7 +2533,6 @@ SparsityMapImpl<N, T>::~SparsityMapImpl(void)
       (*it)->sparsity_map_ready(this, false);
 
     if(!sendto_approx.empty()) {
-      NVTX_DEPPART(send_to_approx);
       for(NodeID i = 0; (i <= Network::max_node_id) && !sendto_approx.empty(); i++)
         if(sendto_approx.contains(i)) {
           bool also_precise = sendto_precise.contains(i);
@@ -2607,7 +2544,6 @@ SparsityMapImpl<N, T>::~SparsityMapImpl(void)
     }
 
     if(!sendto_precise.empty()) {
-      NVTX_DEPPART(sendto_precise);
       for(NodeID i = 0; (i <= Network::max_node_id) && !sendto_precise.empty(); i++)
         if(sendto_precise.contains(i)) {
           remote_data_reply(i, true, false);
@@ -2635,7 +2571,7 @@ SparsityMapImpl<N, T>::~SparsityMapImpl(void)
   template<int N, typename T>
   void SparsityMapImpl<N, T>::set_gpu_entries(SparsityMapEntry<N, T> *entries, size_t size)
   {
-    deppart_pinned_host_free(this->gpu_entries);
+    deppart_gpu_host_free(this->gpu_entries);
     this->gpu_entries = entries;
     this->entries.clear();
     this->num_entries = size;
@@ -2644,7 +2580,7 @@ SparsityMapImpl<N, T>::~SparsityMapImpl(void)
   template<int N, typename T>
   void SparsityMapImpl<N, T>::set_gpu_approx_rects(Rect<N, T> *approx_rects, size_t size)
   {
-    deppart_pinned_host_free(this->gpu_approx_rects);
+    deppart_gpu_host_free(this->gpu_approx_rects);
     this->gpu_approx_rects = approx_rects;
     this->approx_rects.clear();
     this->num_approx = size;
@@ -2741,9 +2677,7 @@ SparsityMapImpl<N, T>::~SparsityMapImpl(void)
     SparsityMapImpl<N, T> *impl = SparsityMapImpl<N, T>::lookup(msg.sparsity);
 
     if(msg.num_entries > 0) {
-      SparsityMapEntry<N, T> *entries =
-          static_cast<SparsityMapEntry<N, T> *>(deppart_pinned_host_alloc_bytes(
-              msg.num_entries * sizeof(SparsityMapEntry<N, T>)));
+      SparsityMapEntry<N, T> *entries = deppart_gpu_host_alloc<SparsityMapEntry<N, T>>(msg.num_entries);
       std::memcpy(entries, payload, msg.num_entries * sizeof(SparsityMapEntry<N, T>));
       impl->set_gpu_entries(entries, msg.num_entries);
       payload += msg.num_entries * sizeof(SparsityMapEntry<N, T>);
@@ -2752,8 +2686,7 @@ SparsityMapImpl<N, T>::~SparsityMapImpl(void)
     }
 
     if(msg.num_approx > 0) {
-      Rect<N, T> *approx = static_cast<Rect<N, T> *>(deppart_pinned_host_alloc_bytes(
-          msg.num_approx * sizeof(Rect<N, T>)));
+      Rect<N, T> *approx = deppart_gpu_host_alloc<Rect<N, T>>(msg.num_approx);
       std::memcpy(approx, payload, msg.num_approx * sizeof(Rect<N, T>));
       impl->set_gpu_approx_rects(approx, msg.num_approx);
     } else {

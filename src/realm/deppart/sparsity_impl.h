@@ -36,12 +36,6 @@ namespace Realm {
   REALM_INTERNAL_API_EXTERNAL_LINKAGE
   ID create_deppart_output_sparsity(NodeID target_node);
 
-  REALM_INTERNAL_API_EXTERNAL_LINKAGE
-  void *deppart_pinned_host_alloc_bytes(size_t bytes);
-
-  REALM_INTERNAL_API_EXTERNAL_LINKAGE
-  void deppart_pinned_host_free(void *ptr);
-
   class PartitioningMicroOp;
 
   /**
