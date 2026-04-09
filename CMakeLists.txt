@@ -1,4 +1,4 @@
-# Copyright 2025 Stanford University, NVIDIA Corporation
+# Copyright 2025 Stanford University, NVIDIA Corporation, Los Alamos National Laboratory
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -57,16 +57,18 @@ if(Realm_SHORT_VERSION STREQUAL "" AND EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/VERSIO
   file(READ ${CMAKE_CURRENT_SOURCE_DIR}/VERSION _REALM_FULL_VERSION)
   string(STRIP "${_REALM_FULL_VERSION}" _REALM_FULL_VERSION)
   string(REGEX MATCH "v([0-9\.]+)(-.+)?" _ "${_REALM_FULL_VERSION}")
-  set(Realm_SHORT_VERSION ${CMAKE_MATCH_1})
-  set(Realm_VERSION_META ${CMAKE_MATCH_2})
-else()
-  if(Realm_SHORT_VERSION STREQUAL "")
-    set(Realm_SHORT_VERSION 0.0.1)
-    if(Realm_VERSION_META STREQUAL "")
-      set(Realm_VERSION_META "-unknown")
-    endif()
+  if(CMAKE_MATCH_1)
+    set(Realm_SHORT_VERSION ${CMAKE_MATCH_1})
+    set(Realm_VERSION_META ${CMAKE_MATCH_2})
   endif()
 endif()
+if(Realm_SHORT_VERSION STREQUAL "")
+  set(Realm_SHORT_VERSION 0.0.1)
+  if(Realm_VERSION_META STREQUAL "")
+    set(Realm_VERSION_META "-unknown")
+  endif()
+endif()
+message("-- Realm version: ${Realm_SHORT_VERSION}${Realm_VERSION_META}")
 #endregion
 
 project(
@@ -104,6 +106,23 @@ include("${CMAKE_CURRENT_SOURCE_DIR}/cmake/CPM.cmake")
 check_ipo_supported(RESULT REALM_SUPPORTS_LTO LANGUAGES CXX C)
 #endregion
 
+#region Depedency auto-detection
+find_package(CUDAToolkit 11.7 QUIET)
+find_package(Doxygen QUIET)
+find_package(hip QUIET CONFIG)
+find_package(HDF5 QUIET)
+find_package(OpenMP QUIET COMPONENTS C CXX)
+find_package(Papi QUIET)
+find_package(Python3 QUIET COMPONENTS Development)
+
+# Only enable CUDA automatically if driver is also available.
+if(CUDAToolkit_FOUND AND TARGET CUDA::cuda_driver)
+  set(REALM_CUDA_AUTO_DETECT ON)
+else()
+  set(REALM_CUDA_AUTO_DETECT OFF)
+endif()
+#endregion
+
 #region Build options
 
 # These should all be prefixed with 'REALM_' to prevent subproject name clashes
@@ -131,15 +150,19 @@ option(REALM_BUILD_TESTS "Build tests" ${PROJECT_IS_TOPLEVEL})
 option(REALM_BUILD_EXAMPLES "Build examples" ${PROJECT_IS_TOPLEVEL})
 option(REALM_BUILD_BENCHMARKS "Build benchmarks" ${PROJECT_IS_TOPLEVEL})
 option(REALM_BUILD_TUTORIALS "Build tutorials" ${PROJECT_IS_TOPLEVEL})
-option(REALM_BUILD_DOCS "Build documentation" ${PROJECT_IS_TOPLEVEL})
+if(Doxygen_FOUND)
+  option(REALM_BUILD_DOCS "Build documentation" ${PROJECT_IS_TOPLEVEL})
+else()
+  option(REALM_BUILD_DOCS "Build documentation" OFF)
+endif()
 
 cmake_dependent_option(REALM_ENABLE_RDTSC "Compile with RDTSC support" ON "NOT WIN32" OFF)
-option(REALM_ENABLE_CUDA "Compile with CUDA support" ON)
-option(REALM_ENABLE_HIP "Compile with HIP support" ON)
+option(REALM_ENABLE_CUDA "Compile with CUDA support" ${REALM_CUDA_AUTO_DETECT})
+option(REALM_ENABLE_HIP "Compile with HIP support" ${hip_FOUND})
 option(REALM_ENABLE_LLVM "Compile with LLVMJIT support" OFF)
-option(REALM_ENABLE_HDF5 "Compile with HDF5 support" ON)
+option(REALM_ENABLE_HDF5 "Compile with HDF5 support" ${HDF5_FOUND})
 option(REALM_ENABLE_MPI "Compile with MPI support" OFF)
-option(REALM_ENABLE_OPENMP "Compile with OpenMP support" ON)
+option(REALM_ENABLE_OPENMP "Compile with OpenMP support" ${OpenMP_FOUND})
 option(REALM_ENABLE_KOKKOS "Compile with kokkos support" OFF)
 cmake_dependent_option(REALM_ENABLE_UCX "Compile with UCX support" OFF "NOT WIN32" OFF)
 cmake_dependent_option(
@@ -147,7 +170,7 @@ cmake_dependent_option(
   OFF
 )
 option(REALM_ENABLE_HWLOC "Compile with hwloc hardware discovery support" OFF)
-option(REALM_ENABLE_PAPI "Compile with PAPI thread profiling support" ON)
+option(REALM_ENABLE_PAPI "Compile with PAPI thread profiling support" ${Papi_FOUND})
 option(REALM_ENABLE_CPPTRACE "Compile with cpptrace backtrace support" OFF)
 option(REALM_ENABLE_PREALM "Compile with realm profiler" OFF)
 cmake_dependent_option(
@@ -164,7 +187,7 @@ cmake_dependent_option(
   "REALM_ENABLE_GASNETEX_WRAPPER" OFF
 )
 cmake_dependent_option(
-  REALM_ENABLE_PYTHON "Compile with Python support" ON "REALM_ENABLE_LIBDL" OFF
+  REALM_ENABLE_PYTHON "Compile with Python support" ${Python3_FOUND} "REALM_ENABLE_LIBDL" OFF
 )
 
 cmake_dependent_option(
@@ -263,7 +286,7 @@ if(UNIX AND NOT APPLE)
 endif()
 
 if(REALM_BUILD_DOCS)
-  find_package(Doxygen)
+  find_package(Doxygen REQUIRED)
 endif()
 
 if(REALM_ENABLE_AIO)
@@ -321,19 +344,15 @@ if(REALM_ENABLE_CPPTRACE)
 endif()
 
 if(REALM_ENABLE_HWLOC)
-  find_package(HWLOC)
-  if(HWLOC_FOUND)
-    list(APPEND REALM_STATIC_DEPENDS HWLOC)
-    list(APPEND REALM_LIBRARIES HWLOC::HWLOC)
-  endif()
+  find_package(HWLOC REQUIRED)
+  list(APPEND REALM_STATIC_DEPENDS HWLOC)
+  list(APPEND REALM_LIBRARIES HWLOC::HWLOC)
 endif()
 
 if(REALM_ENABLE_PAPI)
-  find_package(Papi)
-  if(Papi_FOUND)
-    list(APPEND REALM_STATIC_DEPENDS Papi)
-    list(APPEND REALM_LIBRARIES Papi::Papi)
-  endif()
+  find_package(Papi REQUIRED)
+  list(APPEND REALM_STATIC_DEPENDS Papi)
+  list(APPEND REALM_LIBRARIES Papi::Papi)
 endif()
 
 if(REALM_ENABLE_COVERAGE)
@@ -348,7 +367,7 @@ if(REALM_ENABLE_COVERAGE)
 endif()
 
 if(REALM_ENABLE_CUDA OR (REALM_ENABLE_HIP AND CMAKE_HIP_PLATFORM STREQUAL "nvidia"))
-  find_package(CUDAToolkit 11.7)
+  find_package(CUDAToolkit 11.7 REQUIRED)
   if(CUDAToolkit_FOUND)
     if(NOT DEFINED CMAKE_CUDA_COMPILER)
       set(CMAKE_CUDA_COMPILER ${CUDAToolkit_NVCC_EXECUTABLE})
@@ -443,7 +462,7 @@ if(REALM_ENABLE_HIP)
   endif()
   list(APPEND CMAKE_PREFIX_PATH "${ROCM_PATH}")
   set(HIP_PLATFORM ${CMAKE_HIP_PLATFORM})
-  find_package(hip CONFIG)
+  find_package(hip REQUIRED CONFIG)
   if(CMAKE_HIP_PLATFORM STREQUAL "nvidia")
     # nvidia HIP_PLATFORM requies 3.28+ for enable_language(HIP) to work properly
     cmake_minimum_required(VERSION 3.28 FATAL_ERROR)
@@ -472,33 +491,27 @@ if(REALM_ENABLE_HIP)
 endif()
 
 if(REALM_ENABLE_MPI)
-  find_package(MPI)
-  if(MPI_FOUND)
-    cmake_push_check_state()
-    list(APPEND CMAKE_REQUIRED_LIBRARIES ${MPI_mpi_LIBRARY})
-    list(APPEND CMAKE_REQUIRED_INCLUDES ${MPI_C_INCLUDE_DIRS})
-    check_symbol_exists(MPI_Comm_split_type "mpi.h" REALM_MPI_HAS_COMM_SPLIT_TYPE)
-    cmake_pop_check_state()
-    list(APPEND REALM_STATIC_DEPENDS MPI)
-    list(APPEND REALM_LIBRARIES MPI::MPI_CXX)
-  endif()
+  find_package(MPI REQUIRED)
+  cmake_push_check_state()
+  list(APPEND CMAKE_REQUIRED_LIBRARIES ${MPI_mpi_LIBRARY})
+  list(APPEND CMAKE_REQUIRED_INCLUDES ${MPI_C_INCLUDE_DIRS})
+  check_symbol_exists(MPI_Comm_split_type "mpi.h" REALM_MPI_HAS_COMM_SPLIT_TYPE)
+  cmake_pop_check_state()
+  list(APPEND REALM_STATIC_DEPENDS MPI)
+  list(APPEND REALM_LIBRARIES MPI::MPI_CXX)
 endif()
 
 if(REALM_ENABLE_OPENMP)
   if(REALM_OPENMP_SYSTEM_RUNTIME)
-    find_package(OpenMP COMPONENTS C CXX)
-    if(OpenMP_FOUND)
-      list(APPEND REALM_STATIC_DEPENDS OpenMP)
-      list(APPEND REALM_LIBRARIES OpenMP::OpenMP_CXX)
-    endif()
+    find_package(OpenMP REQUIRED COMPONENTS C CXX)
+    list(APPEND REALM_STATIC_DEPENDS OpenMP)
+    list(APPEND REALM_LIBRARIES OpenMP::OpenMP_CXX)
   endif()
 endif()
 
 if(REALM_ENABLE_PYTHON)
-  find_package(Python3 COMPONENTS Development)
-  if(Python3_FOUND)
-    list(APPEND REALM_STATIC_DEPENDS Python3)
-  endif()
+  find_package(Python3 REQUIRED COMPONENTS Development)
+  list(APPEND REALM_STATIC_DEPENDS Python3)
 endif()
 
 if(REALM_ENABLE_KOKKOS)
@@ -507,36 +520,55 @@ if(REALM_ENABLE_KOKKOS)
   # when you use it that way and the build environment to get kokkos working
   # with cuda, hip, etc needs to be very finely tuned.  So we give up and ask
   # the user to install it themselves.
-  find_package(Kokkos COMPONENTS separable_compilation)
-  if (Kokkos_FOUND)
-    enable_language(${Kokkos_COMPILE_LANGUAGE})
-    list(APPEND REALM_STATIC_DEPENDS Kokkos)
-    list(APPEND REALM_LIBRARIES Kokkos::kokkoscore)
+  find_package(Kokkos REQUIRED COMPONENTS separable_compilation)
+  enable_language(${Kokkos_COMPILE_LANGUAGE})
+
+  if(NOT BUILD_SHARED_LIBS AND "${Kokkos_COMPILE_LANGUAGE}" STREQUAL CXX)
+    include(CheckSourceCompiles)
+    include(CMakePushCheckState)
+
+    cmake_push_check_state(RESET)
+      set(CMAKE_REQUIRED_LIBRARIES Kokkos::kokkoscore)
+      unset(REALM_${Kokkos_COMPILE_LANGUAGE}_COMPILER_CAN_COMPILE_KOKKOS CACHE)
+      check_source_compiles(
+          ${Kokkos_COMPILE_LANGUAGE} "
+#include <Kokkos_Core.hpp>
+int main(int argc, char** argv) {
+  Kokkos::initialize(argc, argv);
+  {
+    Kokkos::View<int*> v(\"v\", 1);
+    (void)v;
+  }
+  Kokkos::finalize();
+  return 0;
+}
+" REALM_${Kokkos_COMPILE_LANGUAGE}_COMPILER_CAN_COMPILE_KOKKOS)
+    cmake_pop_check_state()
+
+    if(NOT ${REALM_${Kokkos_COMPILE_LANGUAGE}_COMPILER_CAN_COMPILE_KOKKOS})
+      message(FATAL_ERROR "Current Realm ${Kokkos_COMPILE_LANGUAGE} compiler will not work with Kokkos during STATIC build.")
+    endif()
   endif()
+
+  list(APPEND REALM_PUBLIC_LIBRARIES realm_kokkos)
 endif()
 
 if(REALM_ENABLE_LLVM)
-  find_package(LLVM)
-  if(LLVM_FOUND)
-    list(APPEND REALM_STATIC_DEPENDS LLVM)
-    list(APPEND REALM_LIBRARIES LLVM::LLVM)
-  endif()
+  find_package(LLVM REQUIRED)
+  list(APPEND REALM_STATIC_DEPENDS LLVM)
+  list(APPEND REALM_LIBRARIES LLVM::LLVM)
 endif()
 
 if(REALM_ENABLE_HDF5)
-  find_package(HDF5)
-  if(HDF5_FOUND)
-    list(APPEND REALM_STATIC_DEPENDS HDF5)
-    list(APPEND REALM_LIBRARIES hdf5::hdf5)
-  endif()
+  find_package(HDF5 REQUIRED)
+  list(APPEND REALM_STATIC_DEPENDS HDF5)
+  list(APPEND REALM_LIBRARIES hdf5::hdf5)
 endif()
 
 if(REALM_ENABLE_PREALM)
-  find_package(ZLIB)
-  if(ZLIB_FOUND)
-    list(APPEND REALM_STATIC_DEPENDS ZLIB)
-    list(APPEND REALM_LIBRARIES ZLIB::ZLIB)
-  endif()
+  find_package(ZLIB REQUIRED)
+  list(APPEND REALM_STATIC_DEPENDS ZLIB)
+  list(APPEND REALM_LIBRARIES ZLIB::ZLIB)
 endif()
 
 if(REALM_ENABLE_UCX)
@@ -789,54 +821,54 @@ endif()
 #endregion
 
 #region Feature Defines
-if(TARGET CUDA::cuda_driver AND REALM_ENABLE_CUDA)
+if(REALM_ENABLE_CUDA)
   set(REALM_USE_CUDA TRUE)
 endif()
 
 add_feature_info(nvtx REALM_USE_NVTX "Enables NVTX annotations for profiling visibility")
 
-if(TARGET hip::host AND REALM_ENABLE_HIP)
+if(REALM_ENABLE_HIP)
   set(REALM_USE_HIP TRUE)
 endif()
-if(TARGET LLVM::LLVM AND REALM_ENABLE_LLVM)
+if(REALM_ENABLE_LLVM)
   set(REALM_USE_LLVM TRUE)
 endif()
-if(TARGET hdf5::hdf5 AND REALM_ENABLE_HDF5)
+if(REALM_ENABLE_HDF5)
   set(REALM_USE_HDF5 TRUE)
 endif()
-if(TARGET Python3::Python AND REALM_ENABLE_PYTHON)
+if(REALM_ENABLE_PYTHON)
   set(REALM_USE_PYTHON TRUE)
 endif()
-if(TARGET MPI::MPI_CXX AND REALM_ENABLE_MPI)
+if(REALM_ENABLE_MPI)
   set(REALM_USE_MPI TRUE)
 endif()
-if(REALM_ENABLE_OPENMP AND REALM_ENABLE_OPENMP)
+if(REALM_ENABLE_OPENMP)
   set(REALM_USE_OPENMP TRUE)
 endif()
 add_feature_info(openmp REALM_USE_OPENMP "Enables OpenMP support")
 
-if(TARGET ZLIB::ZLIB)
-  set(REALM_USE_PREALM ${REALM_ENABLE_PREALM})
+if(REALM_ENABLE_PREALM)
+  set(REALM_USE_PREALM TRUE)
 endif()
 add_feature_info(prealm REALM_USE_PREALM "Enables Realm Profiling support")
 
-if(TARGET Kokkos::kokkoscore AND REALM_ENABLE_KOKKOS)
+if(REALM_ENABLE_KOKKOS)
   set(REALM_USE_KOKKOS TRUE)
 endif()
-if(TARGET GASNet::GASNet AND REALM_ENABLE_GASNETEX)
+if(REALM_ENABLE_GASNETEX)
   set(REALM_USE_GASNETEX TRUE)
   set(REALM_USE_GASNETEX_WRAPPER ${REALM_ENABLE_GASNETEX_WRAPPER})
 endif()
-if(TARGET ucx::ucp AND REALM_ENABLE_UCX)
+if(REALM_ENABLE_UCX)
   set(REALM_USE_UCX TRUE)
 endif()
-if(TARGET HWLOC::HWLOC AND REALM_ENABLE_HWLOC)
+if(REALM_ENABLE_HWLOC)
   set(REALM_USE_HWLOC TRUE)
 endif()
-if(TARGET Papi::Papi AND REALM_ENABLE_PAPI)
+if(REALM_ENABLE_PAPI)
   set(REALM_USE_PAPI TRUE)
 endif()
-if(TARGET cpptrace::cpptrace AND REALM_ENABLE_CPPTRACE)
+if(REALM_ENABLE_CPPTRACE)
   set(REALM_USE_CPPTRACE TRUE)
 endif()
 
@@ -855,7 +887,7 @@ add_feature_info(
 #region Source lists
 add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/src)
 
-if(TARGET CUDA::cuda_driver AND REALM_ENABLE_CUDA)
+if(REALM_USE_CUDA)
   add_library(realm_cuda_fatbin OBJECT ${REALM_CUDA_SOURCES})
   target_compile_options(
     realm_cuda_fatbin
@@ -948,26 +980,32 @@ endif()
 
 target_link_libraries(realm_obj PRIVATE ${REALM_LIBRARIES})
 target_link_libraries(Realm PRIVATE ${REALM_LIBRARIES})
+target_link_libraries(realm_obj PUBLIC ${REALM_PUBLIC_LIBRARIES})
+target_link_libraries(Realm PUBLIC ${REALM_PUBLIC_LIBRARIES})
 
 target_include_directories(
   realm_obj
   PUBLIC $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}> $<BUILD_INTERFACE:${REALM_SOURCE_DIR}/..>
          $<BUILD_INTERFACE:${CMAKE_CURRENT_BINARY_DIR}/include>
-  PRIVATE $<$<TARGET_EXISTS:CUDA::cuda_driver>:${CUDAToolkit_CUPTI_INCLUDE_DIR}>
-          $<$<TARGET_EXISTS:CUDA::cuda_driver>:${CUDAToolkit_INCLUDE_DIR}>
-          $<$<TARGET_EXISTS:Python3::Python>:${Python_INCLUDE_DIRS}>
+  PRIVATE $<$<TARGET_EXISTS:Python3::Python>:${Python_INCLUDE_DIRS}>
           $<$<TARGET_EXISTS:hip::host>:${HIP_INCLUDE_DIR}>
 )
 target_include_directories(
   Realm
   PUBLIC $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}> $<BUILD_INTERFACE:${REALM_SOURCE_DIR}/..>
          $<BUILD_INTERFACE:${CMAKE_CURRENT_BINARY_DIR}/include>
-  PRIVATE $<$<TARGET_EXISTS:CUDA::cuda_driver>:${CUDAToolkit_CUPTI_INCLUDE_DIR}>
-          $<$<TARGET_EXISTS:CUDA::cuda_driver>:${CUDAToolkit_INCLUDE_DIR}>
-          $<$<TARGET_EXISTS:Python3::Python>:${Python_INCLUDE_DIRS}>
+  PRIVATE $<$<TARGET_EXISTS:Python3::Python>:${Python_INCLUDE_DIRS}>
           $<$<TARGET_EXISTS:hip::host>:${HIP_INCLUDE_DIR}>
 )
-if(REALM_ENABLE_GASNETEX)
+if(REALM_USE_CUDA)
+  target_include_directories(
+    realm_obj PRIVATE ${CUDAToolkit_CUPTI_INCLUDE_DIR} ${CUDAToolkit_INCLUDE_DIR}
+  )
+  target_include_directories(
+    Realm PRIVATE ${CUDAToolkit_CUPTI_INCLUDE_DIR} ${CUDAToolkit_INCLUDE_DIR}
+  )
+endif()
+if(REALM_USE_GASNETEX)
   # Force the creation of the export header for the wrapper we need, but nothing else
   add_dependencies(Realm realm_gex_wrapper_objs)
   add_dependencies(realm_obj realm_gex_wrapper_objs)
@@ -1059,7 +1097,7 @@ add_feature_info(tutorials REALM_BUILD_TUTORIALS "Build tutorials")
 
 #region Documentation
 # TODO(cperry): fix me
-if(REALM_BUILD_DOCS AND DOXYGEN_FOUND)
+if(REALM_BUILD_DOCS)
   set(DOXYGEN_PROJECT_LOGO ${CMAKE_CURRENT_SOURCE_DIR}/doxygen/logo.png)
   set(DOXYGEN_PROJECT_NUMBER ${REALM_VERSION})
   set(DOXYGEN_GENERATE_HTML ${REALM_GENERATE_HTML})

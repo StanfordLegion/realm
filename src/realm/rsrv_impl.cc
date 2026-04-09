@@ -20,6 +20,7 @@
 #include "realm/logging.h"
 #include "realm/event_impl.h"
 #include "realm/runtime_impl.h"
+#include "realm/timers.h"
 
 namespace Realm {
 
@@ -766,6 +767,7 @@ namespace Realm {
     Event rsrv_ready;           // ready event for a pending rsrv request
     unsigned sleeper_count;
     Event sleeper_event;
+    UserEvent waiter_event; // for spin-timeout waiters
     Mutex::CondVar condvar; // for external waiters
 
     // pointer math to obtain FastRsrvState reference
@@ -852,6 +854,7 @@ namespace Realm {
     frs.rsrv_ready = Event::NO_EVENT;
     frs.sleeper_count = 0;
     frs.sleeper_event = Event::NO_EVENT;
+    frs.waiter_event = UserEvent();
     if(Config::use_fast_reservation_fallback) {
       state.fetch_or(STATE_SLOW_FALLBACK);
       if(!frs.rsrv_impl)
@@ -927,6 +930,9 @@ namespace Realm {
     }
 
     // repeat until we succeed
+    TimeLimit timeout;
+    if(mode == SPIN)
+      timeout = TimeLimit::responsive();
     while(1) {
       // read the current state to see if any exceptional conditions exist
       State cur_state = state.load_acquire();
@@ -944,7 +950,7 @@ namespace Realm {
 
         // if it failed and we've been asked to spin, assume this is regular
         //  contention and try again shortly
-        if((mode == SPIN) || (mode == ALWAYS_SPIN)) {
+        if((mode == ALWAYS_SPIN) || ((mode == SPIN) && !timeout.is_expired())) {
           // if we're going to spin as a writer, set a flag that prevents
           //  new readers from taking the lock until we (or some other writer)
           //  get our turn
@@ -959,8 +965,12 @@ namespace Realm {
           continue;
         }
 
-        // waiting is more complicated
-        assert(0);
+        if(mode == SPIN) {
+          // spin timeout expired - fall through to mutex path
+        } else {
+          // waiting is more complicated
+          std::abort();
+        }
       }
 
       // any other transition requires holding the fast reservation's mutex
@@ -992,7 +1002,59 @@ namespace Realm {
           //   after all
           if((cur_state &
               ~(STATE_READER_COUNT_MASK | STATE_WRITER | STATE_WRITER_WAITING)) == 0) {
-            wait_for = Event::NO_EVENT;
+            // if we got here because a spin timeout expired, we need an
+            //  event to return - create a waiter_event if one doesn't
+            //  already exist
+            if((mode == SPIN) && timeout.is_expired() &&
+               (cur_state & (STATE_WRITER | STATE_READER_COUNT_MASK)) != 0) {
+              if(!frs.waiter_event.exists())
+                frs.waiter_event = UserEvent::create_user_event();
+              // set STATE_WRITER_WAITING to force the lock holder's
+              //  unlock through the slow path where waiter_event
+              //  will be triggered - must re-check and re-set in a
+              //  loop because a concurrent CAS(WW, WRITER) in
+              //  wrlock_slow can clear WW while acquiring the lock.
+              //  This loop is bounded to at most 2 iterations:
+              //   iteration 1: we set WW, but CAS(WW,WRITER) may
+              //     clear it (acquiring the lock in the process)
+              //   iteration 2: we re-set WW, giving state=WRITER|WW.
+              //     Now WW cannot be cleared: CAS(WW,WRITER) requires
+              //     state==WW which doesn't match, unlock needs
+              //     frs.mutex which we hold, and no other path clears
+              //     WW without the mutex.
+              for(int attempts = 0; attempts < 3; attempts++) {
+                if(attempts == 2) {
+                  log_reservation.fatal()
+                      << "wrlock_slow: WW set loop exceeded 2 iterations, state = "
+                      << std::hex << cur_state << std::dec;
+                  std::abort();
+                }
+                state.fetch_or(STATE_WRITER_WAITING);
+                cur_state = state.load_acquire();
+                if((cur_state & (STATE_WRITER | STATE_READER_COUNT_MASK)) == 0) {
+                  // lock is free - clean up and retry
+                  frs.waiter_event.trigger();
+                  frs.waiter_event = UserEvent();
+                  state.fetch_and(~STATE_WRITER_WAITING);
+                  wait_for = Event::NO_EVENT;
+                  break;
+                }
+                if((cur_state & STATE_WRITER_WAITING) != 0) {
+                  // WW is set and lock is held - safe to return event
+                  wait_for = frs.waiter_event;
+                  break;
+                }
+                // WW was cleared (e.g. by CAS(WW,WRITER)) but lock is
+                //  still held - re-set it
+              }
+            } else {
+              // if WRITER_WAITING is set but no lock holder exists,
+              //  it's an orphaned flag - clear it so acquisition can proceed
+              if((cur_state & STATE_WRITER_WAITING) != 0 &&
+                 (cur_state & (STATE_WRITER | STATE_READER_COUNT_MASK)) == 0)
+                state.fetch_and(~STATE_WRITER_WAITING);
+              wait_for = Event::NO_EVENT;
+            }
             break;
           }
 
@@ -1144,6 +1206,9 @@ namespace Realm {
     }
 
     // repeat until we succeed
+    TimeLimit timeout;
+    if(mode == SPIN)
+      timeout = TimeLimit::responsive();
     while(1) {
       // check the current state for things that might involve waiting
       //  before trying to increment the count
@@ -1173,13 +1238,17 @@ namespace Realm {
 
         // if it failed and we've been asked to spin, assume this is regular
         //  contention and try again shortly
-        if((mode == SPIN) || (mode == ALWAYS_SPIN)) {
+        if((mode == ALWAYS_SPIN) || ((mode == SPIN) && !timeout.is_expired())) {
           REALM_SPIN_YIELD();
           continue;
         }
 
-        // waiting is more complicated
-        assert(0);
+        if(mode == SPIN) {
+          // spin timeout expired - fall through to mutex path
+        } else {
+          // waiting is more complicated
+          std::abort();
+        }
       }
 
       // any other transition requires holding the fast reservation's mutex
@@ -1233,7 +1302,59 @@ namespace Realm {
           //   after all
           if((cur_state &
               ~(STATE_READER_COUNT_MASK | STATE_WRITER | STATE_WRITER_WAITING)) == 0) {
-            wait_for = Event::NO_EVENT;
+            // if we got here because a spin timeout expired, we need an
+            //  event to return - create a waiter_event if one doesn't
+            //  already exist
+            if((mode == SPIN) && timeout.is_expired() &&
+               (cur_state & (STATE_WRITER | STATE_READER_COUNT_MASK)) != 0) {
+              if(!frs.waiter_event.exists())
+                frs.waiter_event = UserEvent::create_user_event();
+              // set STATE_WRITER_WAITING to force the lock holder's
+              //  unlock through the slow path where waiter_event
+              //  will be triggered - must re-check and re-set in a
+              //  loop because a concurrent CAS(WW, WRITER) in
+              //  wrlock_slow can clear WW while acquiring the lock.
+              //  This loop is bounded to at most 2 iterations:
+              //   iteration 1: we set WW, but CAS(WW,WRITER) may
+              //     clear it (acquiring the lock in the process)
+              //   iteration 2: we re-set WW, giving state=WRITER|WW.
+              //     Now WW cannot be cleared: CAS(WW,WRITER) requires
+              //     state==WW which doesn't match, unlock needs
+              //     frs.mutex which we hold, and no other path clears
+              //     WW without the mutex.
+              for(int attempts = 0; attempts < 3; attempts++) {
+                if(attempts == 2) {
+                  log_reservation.fatal()
+                      << "rdlock_slow: WW set loop exceeded 2 iterations, state = "
+                      << std::hex << cur_state << std::dec;
+                  std::abort();
+                }
+                state.fetch_or(STATE_WRITER_WAITING);
+                cur_state = state.load_acquire();
+                if((cur_state & (STATE_WRITER | STATE_READER_COUNT_MASK)) == 0) {
+                  // lock is free - clean up and retry
+                  frs.waiter_event.trigger();
+                  frs.waiter_event = UserEvent();
+                  state.fetch_and(~STATE_WRITER_WAITING);
+                  wait_for = Event::NO_EVENT;
+                  break;
+                }
+                if((cur_state & STATE_WRITER_WAITING) != 0) {
+                  // WW is set and lock is held - safe to return event
+                  wait_for = frs.waiter_event;
+                  break;
+                }
+                // WW was cleared (e.g. by CAS(WW,WRITER)) but lock is
+                //  still held - re-set it
+              }
+            } else {
+              // if WRITER_WAITING is set but no lock holder exists,
+              //  it's an orphaned flag - clear it so readers can proceed
+              if((cur_state & STATE_WRITER_WAITING) != 0 &&
+                 (cur_state & (STATE_WRITER | STATE_READER_COUNT_MASK)) == 0)
+                state.fetch_and(~STATE_WRITER_WAITING);
+              wait_for = Event::NO_EVENT;
+            }
             break;
           }
 
@@ -1374,8 +1495,11 @@ namespace Realm {
         frs.rsrv_impl->release(TimeLimit::responsive());
       }
 
-      // now we can clear the WRITER bit and finish
-      state.fetch_sub_acqrel(STATE_WRITER);
+      // now we can clear the WRITER and WRITER_WAITING bits and finish
+      State bits_to_clear = STATE_WRITER;
+      if((cur_state & STATE_WRITER_WAITING) != 0)
+        bits_to_clear |= STATE_WRITER_WAITING;
+      state.fetch_sub_acqrel(bits_to_clear);
     } else {
       // we'd better be a reader then
       unsigned reader_count = (cur_state & STATE_READER_COUNT_MASK);
@@ -1395,9 +1519,27 @@ namespace Realm {
 
       // finally, decrement the read count
       state.fetch_sub_acqrel(1);
+
+      // only trigger waiter_event if we were the last reader (and no
+      //  writer) - otherwise the waiter can't acquire yet and would
+      //  just have to create a new event
+      if(reader_count > 1 || (cur_state & STATE_WRITER) != 0) {
+        frs.mutex.unlock();
+        return;
+      }
     }
 
-    frs.mutex.unlock();
+    // if any waiters are waiting on a spin-timeout event, trigger it
+    //  (writer unlock always gets here; reader unlock only if lock is
+    //  now free)
+    if(frs.waiter_event.exists()) {
+      UserEvent to_trigger = frs.waiter_event;
+      frs.waiter_event = UserEvent();
+      frs.mutex.unlock();
+      to_trigger.trigger();
+    } else {
+      frs.mutex.unlock();
+    }
   }
 
   void FastReservation::advise_sleep_entry(UserEvent guard_event)
@@ -1416,8 +1558,16 @@ namespace Realm {
       State old_state = state.fetch_add(STATE_SLEEPER);
       assert((old_state & STATE_SLEEPER) == 0);
       // if the WRITER_WAITING bit is set, clear it, since it'll sleep now
-      if((old_state & STATE_WRITER_WAITING) != 0)
+      if((old_state & STATE_WRITER_WAITING) != 0) {
         state.fetch_and(~STATE_WRITER_WAITING);
+        // if a waiter_event exists, trigger it so the waiter wakes up
+        //  and transitions to waiting on sleeper_event instead
+        if(frs.waiter_event.exists()) {
+          UserEvent to_trigger = frs.waiter_event;
+          frs.waiter_event = UserEvent();
+          to_trigger.trigger();
+        }
+      }
       frs.sleeper_count = 1;
     } else {
       assert(frs.sleeper_event.exists());

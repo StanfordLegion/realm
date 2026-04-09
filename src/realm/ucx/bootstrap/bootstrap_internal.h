@@ -1,5 +1,5 @@
 /*
- * Copyright 2025 NVIDIA Corporation
+ * Copyright 2026 NVIDIA Corporation
  * SPDX-License-Identifier: Apache-2.0
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -32,7 +32,8 @@ namespace Realm {
     {
       BOOTSTRAP_MPI,
       BOOTSTRAP_P2P,
-      BOOTSTRAP_PLUGIN
+      BOOTSTRAP_PLUGIN,
+      BOOTSTRAP_VTABLE,
     };
 
     struct BootstrapConfig {
