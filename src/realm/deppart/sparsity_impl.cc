@@ -2540,6 +2540,7 @@ SparsityMapImpl<N, T>::~SparsityMapImpl(void)
             sendto_precise.remove(i);
           remote_data_reply(i, also_precise, true);
           sendto_approx.remove(i);
+          std::cout << "REMOTE MESSAGE TRIGGERED IN GPU_FINALIZE" << std::endl;
         }
     }
 
