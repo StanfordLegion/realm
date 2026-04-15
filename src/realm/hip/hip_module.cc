@@ -51,8 +51,7 @@
 
 #define IS_DEFAULT_STREAM(stream) ((stream) == 0)
 
-extern unsigned char realm_hipcc_memcpy_co[];
-
+extern unsigned char realm_hip_fatbin[];
 namespace Realm {
 
   extern Logger log_taskreg;
@@ -781,7 +780,7 @@ namespace Realm {
       else
         fence->enqueue_on_stream(s);
 
-        // A useful debugging macro
+      // A useful debugging macro
 #ifdef FORCE_GPU_STREAM_SYNCHRONIZE
       CHECK_HIP(hipStreamSynchronize(s->get_stream()));
 #endif
@@ -2175,8 +2174,8 @@ namespace Realm {
       CHECK_HIP(hipGetDevice(&dev));
       CHECK_HIP(
           hipDeviceGetAttribute(&numSMs, hipDeviceAttributeMultiprocessorCount, dev));
+      CHECK_HIP(hipModuleLoadData(&device_module, (void *)realm_hip_fatbin));
 
-      CHECK_HIP(hipModuleLoadData(&device_module, (void *)realm_hipcc_memcpy_co));
       for(unsigned int log_bit_sz = 0; log_bit_sz < HIP_MEMCPY_KERNEL_MAX2_LOG2_BYTES;
           log_bit_sz++) {
         const unsigned int bit_sz = 8U << log_bit_sz;
@@ -3828,4 +3827,4 @@ namespace Realm {
 #endif
 
   }; // namespace Hip
-};   // namespace Realm
+}; // namespace Realm

@@ -920,33 +920,70 @@ endif()
 #endregion
 
 if(REALM_USE_HIP)
-  add_library(realm_hip_fatbin OBJECT ${REALM_HIP_SOURCES})
-  target_compile_options(
-    realm_hip_fatbin
-    PRIVATE $<$<COMPILE_LANG_AND_ID:HIP,clang>:
-            --fatbin>
-  )
-  target_compile_definitions(realm_hip_fatbin PRIVATE "HIP_FATBIN_COMPILATION")
+#User - facing arch list
+  set(REALM_HIP_ARCH, ${CMAKE_HIP_ARCHITECTURES})
+  if(NOT REALM_HIP_ARCH OR REALM_HIP_ARCH STREQUAL "")
+    set(REALM_HIP_ARCH "gfx906;gfx908;gfx90a;gfx942;gfx1030;gfx1100"
+        CACHE STRING "Semicolon-separated list of AMD GPU architectures to target")
+  endif()
 
-  target_include_directories(
-    realm_hip_fatbin PRIVATE "${REALM_SOURCE_DIR}/.." "${CMAKE_CURRENT_BINARY_DIR}/include"
-  )
-  set_target_properties(realm_hip_fatbin PROPERTIES HIP_STANDARD ${REALM_CXX_STANDARD})
+#Find hipcc
+  find_program(HIPCC hipcc HINTS /opt/rocm/bin REQUIRED)
 
-  set(realm_fatbin_cc "${CMAKE_CURRENT_BINARY_DIR}/realm_hipcc_memcpy.cc")
+#Build-- offload - arch flags from the arch list
+  set(HIP_OFFLOAD_ARCH_FLAGS "")
+  foreach(arch ${REALM_HIP_ARCH})
+    list(APPEND HIP_OFFLOAD_ARCH_FLAGS "--offload-arch=${arch}")
+  endforeach()
+
+#Flags mirroring target_compile_definitions / target_include_directories
+  set(HIP_EXTRA_FLAGS
+    -std=c++${REALM_CXX_STANDARD}
+    -fPIC
+    -DHIP_FATBIN_COMPILATION
+    -I${REALM_SOURCE_DIR}/..
+    -I${CMAKE_CURRENT_BINARY_DIR}/include
+    -Wno-unused-result
+  )
+
+
+#Compile all.hip sources together into one fat binary using hipcc-- genco
+#-- genco is the hipcc wrapper flag for emitting a device - only code object
+#-- offload - arch replaces the deprecated -- amdgpu - target
+  set(HIP_FATBIN "${CMAKE_CURRENT_BINARY_DIR}/realm_hip.hsaco")
   add_custom_command(
-    OUTPUT "${realm_fatbin_cc}"
+    OUTPUT ${HIP_FATBIN}
+    COMMAND ${CMAKE_COMMAND} -E make_directory "${CMAKE_CURRENT_BINARY_DIR}/hipco"
+    COMMAND ${HIPCC}
+      --genco
+      ${HIP_OFFLOAD_ARCH_FLAGS}
+      ${HIP_EXTRA_FLAGS}
+      ${REALM_HIP_SOURCES}
+      -o ${HIP_FATBIN}
+    DEPENDS ${REALM_HIP_SOURCES}
+    COMMENT "Compiling HIP fat binary -> realm_hip.hsaco"
+    VERBATIM
+  )
+
+#Embed the fat binary as a.cc file using bin2c.cmake.
+#VAR_NAME = realm_fatbin must match the extern declaration in hip_module.cc
+  set(realm_hip_fatbin_cc "${CMAKE_CURRENT_BINARY_DIR}/realm_hip_fatbin.cc")
+  add_custom_command(
+    OUTPUT "${realm_hip_fatbin_cc}"
     COMMAND
-      ${CMAKE_COMMAND} "-DVAR_NAME=realm_fatbin" "-DDEFINES_HEADER=realm/realm_config.h"
-      "-DIN_FILE=$<TARGET_OBJECTS:realm_hip_fatbin>" "-DOUT_FILE=${realm_fatbin_cc}" -P
-      ${PROJECT_SOURCE_DIR}/cmake/bin2c.cmake
+      ${CMAKE_COMMAND}
+        "-DVAR_NAME=realm_hip_fatbin"
+        "-DDEFINES_HEADER=realm/realm_config.h"
+        "-DIN_FILE=${HIP_FATBIN}"
+        "-DOUT_FILE=${realm_hip_fatbin_cc}"
+        -P ${PROJECT_SOURCE_DIR}/cmake/bin2c.cmake
     VERBATIM
     WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
-    DEPENDS realm_hip_fatbin
-    COMMENT "Embedding binary objects realm_hip_fatbin -> ${realm_fatbin_cc}"
+    DEPENDS ${HIP_FATBIN}
+    COMMENT "Embedding HIP fat binary -> ${realm_hip_fatbin_cc}"
   )
-  add_custom_target(realm_fatbin_tgt DEPENDS "${realm_fatbin_cc}")
-  list(APPEND REALM_SOURCES "${realm_fatbin_cc}")
+  add_custom_target(realm_fatbin_tgt DEPENDS "${realm_hip_fatbin_cc}")
+  list(APPEND REALM_SOURCES "${realm_hip_fatbin_cc}")
 endif()
 #region Library compilation
 
