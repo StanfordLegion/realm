@@ -6,6 +6,7 @@ var classRealm_1_1XmitSrcDestPair =
     [ "XmitSrcDestPair", "classRealm_1_1XmitSrcDestPair.html#ae916988e38d9ffc62408e4c0be1997dc", null ],
     [ "~XmitSrcDestPair", "classRealm_1_1XmitSrcDestPair.html#a7138d52d83bb7168704b09afe3b5a1ad", null ],
     [ "cancel_pbuf", "classRealm_1_1XmitSrcDestPair.html#ad9e243deefa5a207a5ce8260ded27484", null ],
+    [ "cancel_push", "classRealm_1_1XmitSrcDestPair.html#a5fb66f93bca935fbb533afab23ee5d86", null ],
     [ "commit_pbuf_helper", "classRealm_1_1XmitSrcDestPair.html#a21c325d50429b27e827b17ac42e3476a", null ],
     [ "commit_pbuf_inline", "classRealm_1_1XmitSrcDestPair.html#a1c2c9601a70389ea4f67e8453ad9ca60", null ],
     [ "commit_pbuf_long", "classRealm_1_1XmitSrcDestPair.html#aca3c042ca2b27efbb5e1058348c92ea5", null ],

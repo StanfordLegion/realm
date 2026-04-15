@@ -5,6 +5,7 @@ var classRealm_1_1GASNetEXPoller =
     [ "add_pending_event", "classRealm_1_1GASNetEXPoller.html#a6ddec85fe778a9ebce0ab0db77810106", null ],
     [ "begin_polling", "classRealm_1_1GASNetEXPoller.html#a1d55ab51e55a180a97215283942bed45", null ],
     [ "do_work", "classRealm_1_1GASNetEXPoller.html#a725646368202072ff06475406e7e2190", null ],
+    [ "drain_xpairs", "classRealm_1_1GASNetEXPoller.html#a2bba3336fe6d8c376aa0f5b3df73ef59", null ],
     [ "end_polling", "classRealm_1_1GASNetEXPoller.html#adb2baba1682d3858707ff37c6e20aa0a", null ],
     [ "has_work_remaining", "classRealm_1_1GASNetEXPoller.html#a75bd40449e6b80821c827108df3255d9", null ],
     [ "wait_for_full_poll_cycle", "classRealm_1_1GASNetEXPoller.html#ac5f4926c6cbbadfd716afd071f8dc806", null ],
@@ -16,5 +17,6 @@ var classRealm_1_1GASNetEXPoller =
     [ "pollwait_flag", "classRealm_1_1GASNetEXPoller.html#afb320b9354fe33ac9ba25bc4909efd49", null ],
     [ "shutdown_cond", "classRealm_1_1GASNetEXPoller.html#aa4000f25d7d25ff01594d489392463c9", null ],
     [ "shutdown_flag", "classRealm_1_1GASNetEXPoller.html#a960b10f5c133a579672615c0c39f524a", null ],
-    [ "started", "classRealm_1_1GASNetEXPoller.html#aac092e2d1862d4ae1e89cb8dbf0dea36", null ]
+    [ "started", "classRealm_1_1GASNetEXPoller.html#aac092e2d1862d4ae1e89cb8dbf0dea36", null ],
+    [ "work_active", "classRealm_1_1GASNetEXPoller.html#ab2d22270730eba655e508660701e2e30", null ]
 ];

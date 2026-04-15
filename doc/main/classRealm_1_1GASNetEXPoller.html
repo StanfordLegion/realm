@@ -44,7 +44,7 @@
    <!-- BEGIN version select -->
     <br />
     <div class="dropdown">
-     <button class="dropbtn">Version 25.6.1-rc.4+442cab57</button>
+     <button class="dropbtn">Version 25.6.1-rc.4+d393ba4e</button>
      <div class="dropdown-content"></div>
     </div>
     <script type="text/javascript" src="../selectversion.js"></script>
@@ -143,12 +143,12 @@ $(document).ready(function(){initNavTree('classRealm_1_1GASNetEXPoller.html','')
 <div class="dynheader">
 Inheritance diagram for Realm::GASNetEXPoller:</div>
 <div class="dyncontent">
-<div class="center"><iframe scrolling="no" frameborder="0" src="classRealm_1_1GASNetEXPoller__inherit__graph.svg" width="223" height="110"><p><b>This browser is not able to show SVG: try Firefox, Chrome, Safari, or Opera instead.</b></p></iframe></div>
+<div class="center"><!-- SVG 0 --></div>
 <center><span class="legend">[<a target="top" href="graph_legend.html">legend</a>]</span></center></div>
 <div class="dynheader">
 Collaboration diagram for Realm::GASNetEXPoller:</div>
 <div class="dyncontent">
-<div class="center"><iframe scrolling="no" frameborder="0" src="classRealm_1_1GASNetEXPoller__coll__graph.svg" width="4143" height="2027"><p><b>This browser is not able to show SVG: try Firefox, Chrome, Safari, or Opera instead.</b></p></iframe></div>
+<div class="center"><!-- SVG 1 --></div>
 <center><span class="legend">[<a target="top" href="graph_legend.html">legend</a>]</span></center></div>
 <table class="memberdecls">
 <tr class="heading"><td colspan="2"><h2 class="groupheader"><a id="pub-methods" name="pub-methods"></a>
@@ -161,6 +161,8 @@ Public Member Functions</h2></td></tr>
 <tr class="separator:adb2baba1682d3858707ff37c6e20aa0a"><td class="memSeparator" colspan="2">&#160;</td></tr>
 <tr class="memitem:a9169133e18e896af878bcf35d57e8e3c" id="r_a9169133e18e896af878bcf35d57e8e3c"><td class="memItemLeft" align="right" valign="top">void&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="classRealm_1_1GASNetEXPoller.html#a9169133e18e896af878bcf35d57e8e3c">add_critical_xpair</a> (<a class="el" href="classRealm_1_1XmitSrcDestPair.html">XmitSrcDestPair</a> *xpair)</td></tr>
 <tr class="separator:a9169133e18e896af878bcf35d57e8e3c"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:a2bba3336fe6d8c376aa0f5b3df73ef59" id="r_a2bba3336fe6d8c376aa0f5b3df73ef59"><td class="memItemLeft" align="right" valign="top">void&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="classRealm_1_1GASNetEXPoller.html#a2bba3336fe6d8c376aa0f5b3df73ef59">drain_xpairs</a> ()</td></tr>
+<tr class="separator:a2bba3336fe6d8c376aa0f5b3df73ef59"><td class="memSeparator" colspan="2">&#160;</td></tr>
 <tr class="memitem:a6ddec85fe778a9ebce0ab0db77810106" id="r_a6ddec85fe778a9ebce0ab0db77810106"><td class="memItemLeft" align="right" valign="top">void&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="classRealm_1_1GASNetEXPoller.html#a6ddec85fe778a9ebce0ab0db77810106">add_pending_event</a> (<a class="el" href="classRealm_1_1GASNetEXEvent.html">GASNetEXEvent</a> *event)</td></tr>
 <tr class="separator:a6ddec85fe778a9ebce0ab0db77810106"><td class="memSeparator" colspan="2">&#160;</td></tr>
 <tr class="memitem:a75bd40449e6b80821c827108df3255d9" id="r_a75bd40449e6b80821c827108df3255d9"><td class="memItemLeft" align="right" valign="top">bool&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="classRealm_1_1GASNetEXPoller.html#a75bd40449e6b80821c827108df3255d9">has_work_remaining</a> ()</td></tr>
@@ -193,6 +195,8 @@ Protected Attributes</h2></td></tr>
 <tr class="separator:afb320b9354fe33ac9ba25bc4909efd49"><td class="memSeparator" colspan="2">&#160;</td></tr>
 <tr class="memitem:a846e8797cb63ee69430f468b069f71e8" id="r_a846e8797cb63ee69430f468b069f71e8"><td class="memItemLeft" align="right" valign="top"><a class="el" href="classRealm_1_1UnfairMutex.html#a44c0f520b52e5a4c7f61844fd1bd9764">Mutex::CondVar</a>&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="classRealm_1_1GASNetEXPoller.html#a846e8797cb63ee69430f468b069f71e8">pollwait_cond</a></td></tr>
 <tr class="separator:a846e8797cb63ee69430f468b069f71e8"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:ab2d22270730eba655e508660701e2e30" id="r_ab2d22270730eba655e508660701e2e30"><td class="memItemLeft" align="right" valign="top"><a class="el" href="classRealm_1_1atomic.html">atomic</a>&lt; bool &gt;&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="classRealm_1_1GASNetEXPoller.html#ab2d22270730eba655e508660701e2e30">work_active</a></td></tr>
+<tr class="separator:ab2d22270730eba655e508660701e2e30"><td class="memSeparator" colspan="2">&#160;</td></tr>
 <tr class="memitem:a87170b9b183deedb99a55df99fa5a026" id="r_a87170b9b183deedb99a55df99fa5a026"><td class="memItemLeft" align="right" valign="top"><a class="el" href="classRealm_1_1XmitSrcDestPair.html#a580fa65b80ffc95855547d5c2260a442">XmitSrcDestPair::XmitPairList</a>&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="classRealm_1_1GASNetEXPoller.html#a87170b9b183deedb99a55df99fa5a026">critical_xpairs</a></td></tr>
 <tr class="separator:a87170b9b183deedb99a55df99fa5a026"><td class="memSeparator" colspan="2">&#160;</td></tr>
 <tr class="memitem:a59aff4a1d632d705bf47ac3e6167b81a" id="r_a59aff4a1d632d705bf47ac3e6167b81a"><td class="memItemLeft" align="right" valign="top"><a class="el" href="classRealm_1_1GASNetEXEvent.html#ac79103237abff69c0e155aaf9b6931a1">GASNetEXEvent::EventList</a>&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="classRealm_1_1GASNetEXPoller.html#a59aff4a1d632d705bf47ac3e6167b81a">pending_events</a></td></tr>
@@ -313,6 +317,23 @@ Additional Inherited Members</h2></td></tr>
 </div><div class="memdoc">
 
 <p>Implements <a class="el" href="classRealm_1_1BackgroundWorkItem.html#ab16171673deba2734dd7e0d33fbb5ffd">Realm::BackgroundWorkItem</a>.</p>
+
+</div>
+</div>
+<a id="a2bba3336fe6d8c376aa0f5b3df73ef59" name="a2bba3336fe6d8c376aa0f5b3df73ef59"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a2bba3336fe6d8c376aa0f5b3df73ef59">&#9670;&#160;</a></span>drain_xpairs()</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname">void Realm::GASNetEXPoller::drain_xpairs </td>
+          <td>(</td>
+          <td class="paramname"></td><td>)</td>
+          <td></td>
+        </tr>
+      </table>
+</div><div class="memdoc">
 
 </div>
 </div>
@@ -555,6 +576,28 @@ Additional Inherited Members</h2></td></tr>
       <table class="memname">
         <tr>
           <td class="memname">bool Realm::GASNetEXPoller::started = false</td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel">protected</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+</div>
+</div>
+<a id="ab2d22270730eba655e508660701e2e30" name="ab2d22270730eba655e508660701e2e30"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#ab2d22270730eba655e508660701e2e30">&#9670;&#160;</a></span>work_active</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname"><a class="el" href="classRealm_1_1atomic.html">atomic</a>&lt;bool&gt; Realm::GASNetEXPoller::work_active</td>
         </tr>
       </table>
   </td>
