@@ -35,6 +35,7 @@
 #include <condition_variable>
 #include <mutex>
 #include <unordered_map>
+#include <realm/nvtx.h>
 
 namespace Realm {
 
@@ -2538,7 +2539,10 @@ SparsityMapImpl<N, T>::~SparsityMapImpl(void)
           bool also_precise = sendto_precise.contains(i);
           if(also_precise)
             sendto_precise.remove(i);
+
+          nvtx_range_push("cuda", "remote_data_reply");
           remote_data_reply(i, also_precise, true);
+          nvtx_range_pop();
           sendto_approx.remove(i);
           std::cout << "REMOTE MESSAGE TRIGGERED IN GPU_FINALIZE" << std::endl;
         }
