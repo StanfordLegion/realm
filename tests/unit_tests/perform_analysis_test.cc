@@ -50,7 +50,8 @@ public:
                                     const std::vector<int> &dim_order,
                                     const std::vector<FieldID> &fields,
                                     const std::vector<size_t> &fld_offsets,
-                                    const std::vector<size_t> &fld_sizes) const override
+                                    const std::vector<size_t> &fld_sizes,
+                                    bool idindexed_fields = false) const override
   {
     return nullptr;
   }
