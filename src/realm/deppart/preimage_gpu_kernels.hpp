@@ -6,7 +6,7 @@ namespace Realm {
 
 template <int N, typename T>
 __global__ void preimage_build_morton_codes(
-  const SparsityMapEntry<N,T>* d_targets_entries,
+  const Rect<N,T>* d_targets_entries,
   const size_t* d_offsets_rects,
   const Rect<N,T>* d_global_bounds,
   size_t total_rects,
@@ -17,7 +17,7 @@ __global__ void preimage_build_morton_codes(
   size_t idx = blockIdx.x * blockDim.x + threadIdx.x;
   if (idx >= total_rects) return;
   const auto &entry = d_targets_entries[idx];
-  d_morton_codes[idx] = bvh_morton_code(entry.bounds, *d_global_bounds);
+  d_morton_codes[idx] = bvh_morton_code(entry, *d_global_bounds);
   d_indices[idx] = idx;
   size_t low = 0, high = num_targets;
     while (low < high) {
@@ -34,7 +34,7 @@ __global__ void preimage_build_morton_codes(
 template<int N, typename T>
 __global__
 void preimage_init_leaf_boxes_kernel(
-    const SparsityMapEntry<N,T> *rects,    // [G] all flattened Rects
+    const Rect<N,T> *rects,    // [G] all flattened Rects
     const uint64_t    *leafIdx, // [n] maps leaf→orig Rect index
     size_t total_rects,
     Rect<N,T> *boxes)                 // [(2n−1)]
@@ -43,7 +43,7 @@ void preimage_init_leaf_boxes_kernel(
   if (k >= total_rects) return;
 
   size_t orig = leafIdx[k];
-  boxes[k + total_rects - 1] = rects[orig].bounds;
+  boxes[k + total_rects - 1] = rects[orig];
 }
 
   template<int N, typename T, int N2, typename T2, typename Q>
@@ -189,7 +189,7 @@ void preimage_dense_populate_bitmasks_kernel(
   Rect<N,T>* rects,
   size_t* prefix,
   uint32_t* inst_offsets,
-  SparsityMapEntry<N2,T2>* targets_entries,
+  Rect<N2,T2>* targets_entries,
   size_t* target_offsets,
   size_t numPoints,
   size_t numRects,
@@ -227,14 +227,14 @@ void preimage_dense_populate_bitmasks_kernel(
     bool inside = false;
     for (size_t j = target_offsets[i]; j < target_offsets[i+1]; j++) {
       if constexpr (std::is_same_v<Q, Rect<N2,T2>>) {
-        if (targets_entries[j].bounds.overlaps(ptr)) {
+        if (targets_entries[j].overlaps(ptr)) {
           inside = true;
           break;
         }
       } else {
         static_assert(std::is_same_v<Q, Point<N2,T2>>,
                       "Q must be Rect<N2,T2> or Point<N2,T2>");
-        if (targets_entries[j].bounds.contains(ptr)) {
+        if (targets_entries[j].contains(ptr)) {
           inside = true;
           break;
         }

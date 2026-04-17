@@ -602,18 +602,15 @@ namespace Realm {
         }
       }
     } else {
-      span<SparsityMapEntry<N, T>> entries1 = get_entries();
-      span<SparsityMapEntry<N, T>> entries2 = other->get_entries();
+      span<Rect<N, T>> entries1 = get_entries();
+      span<Rect<N, T>> entries2 = other->get_entries();
       for(size_t i = 0; i < entries1.size(); i++) {
-        Rect<N, T> isect = entries1[i].bounds.intersection(bounds);
+        Rect<N, T> isect = entries1[i].intersection(bounds);
         if(isect.empty())
           continue;
         for(size_t j = 0; j < entries2.size(); j++) {
-          if(!entries2[j].bounds.overlaps(isect))
+          if(!entries2[j].overlaps(isect))
             continue;
-          // TODO: handle further sparsity in either side
-          assert(!entries1[i].sparsity.exists() && (entries1[i].bitmap == 0) &&
-                 !entries2[j].sparsity.exists() && (entries2[j].bitmap == 0));
           return true;
         }
       }
@@ -625,14 +622,14 @@ namespace Realm {
   template <int N, typename T>
   class SparsityMapToRectAdapter {
   public:
-    SparsityMapToRectAdapter(const std::vector<SparsityMapEntry<N, T>> &_entries)
+    SparsityMapToRectAdapter(const std::vector<Rect<N, T>> &_entries)
       : entries(_entries)
     {}
     size_t size() const { return entries.size(); }
-    const Rect<N, T> &operator[](size_t i) const { return entries[i].bounds; }
+    const Rect<N, T> &operator[](size_t i) const { return entries[i]; }
 
   protected:
-    const std::vector<SparsityMapEntry<N, T>> &entries;
+    const std::vector<Rect<N, T>> &entries;
   };
 
   // NOTE: for N > 1, this is only safe to use if you know all rectangles
@@ -642,7 +639,7 @@ namespace Realm {
   template <int N, typename T, typename ENTRIES>
   bool merge_1d_gaps(const Rect<N, T> *bounds, int merge_dim, size_t max_waste,
                      size_t max_rects, const ENTRIES &entries,
-                     // const std::vector<SparsityMapEntry<N,T> >& entries,
+                     // const std::vector<Rect<N,T> >& entries,
                      std::vector<Rect<N, T>> &approx_rects)
   {
     assert(max_rects > 1);
@@ -773,8 +770,7 @@ namespace Realm {
     std::vector<size_t> in_bounds;
     in_bounds.reserve(entries.size());
     for(size_t i = 0; i < entries.size(); i++) {
-      assert(!entries[i].sparsity.exists() && (entries[i].bitmap == 0));
-      if(bounds.overlaps(entries[i].bounds))
+      if(bounds.overlaps(entries[i]))
         in_bounds.push_back(i);
     }
 
@@ -784,7 +780,7 @@ namespace Realm {
       //  no storage overhead
       covering.resize(in_bounds.size());
       for(size_t i = 0; i < in_bounds.size(); i++)
-        covering[i] = bounds.intersection(entries[in_bounds[i]].bounds);
+        covering[i] = bounds.intersection(entries[in_bounds[i]]);
       return true;
     }
 
@@ -798,10 +794,10 @@ namespace Realm {
     if(max_rects == 1) {
       // compute our actual bounding box, which may be smaller than what
       //  we were given
-      Rect<N, T> bbox = bounds.intersection(entries[in_bounds[0]].bounds);
+      Rect<N, T> bbox = bounds.intersection(entries[in_bounds[0]]);
       size_t vol = bbox.volume();
       for(size_t i = 1; i < in_bounds.size(); i++) {
-        Rect<N, T> r = bounds.intersection(entries[in_bounds[i]].bounds);
+        Rect<N, T> r = bounds.intersection(entries[in_bounds[i]]);
         bbox = bbox.union_bbox(r);
         vol += r.volume();
       }
@@ -824,7 +820,7 @@ namespace Realm {
       if(max_overhead >= 0) {
         size_t vol = 0;
         for(size_t i = 0; i < in_bounds.size(); i++) {
-          Rect<N, T> r = bounds.intersection(entries[in_bounds[i]].bounds);
+          Rect<N, T> r = bounds.intersection(entries[in_bounds[i]]);
           vol += r.volume();
         }
         // round up to be as permissive as possible
@@ -849,7 +845,7 @@ namespace Realm {
       int mismatched_dim = -1;
       int num_mismatched = 0;
       for(size_t i = 0; i < in_bounds.size(); i++) {
-        Rect<N, T> r = bounds.intersection(entries[in_bounds[i]].bounds);
+        Rect<N, T> r = bounds.intersection(entries[in_bounds[i]]);
         to_cover[i] = r;
         vol += r.volume();
         if((i > 0) && (num_mismatched < 2))
@@ -1063,9 +1059,9 @@ namespace Realm {
   {
     assert(lo < hi);
 
-    Rect<N, T> bbox = entries[entry_ids[lo]].bounds;
+    Rect<N, T> bbox = entries[entry_ids[lo]];
     for(size_t i = lo + 1; i < hi; i++)
-      bbox = bbox.union_bbox(entries[entry_ids[i]].bounds);
+      bbox = bbox.union_bbox(entries[entry_ids[i]]);
 
     int split_axis = 0;
     long double best_extent =
@@ -1088,8 +1084,8 @@ bool SparsityMapPublicImpl<N, T>::bvh_centroid_less(int axis,
                                                     uint32_t a,
                                                     uint32_t b) const
   {
-    const Rect<N, T>& ra = entries[a].bounds;
-    const Rect<N, T>& rb = entries[b].bounds;
+    const Rect<N, T>& ra = entries[a];
+    const Rect<N, T>& rb = entries[b];
 
     // comparing (lo + hi) is equivalent to comparing centroids along the axis
     const auto sa = ra.lo[axis] + ra.hi[axis];
@@ -1121,7 +1117,7 @@ bool SparsityMapPublicImpl<N, T>::bvh_centroid_less(int axis,
       bvh.leaf_entries.push_back(entry_idx);
 
       typename CPU_BVH<N, T>::Node node;
-      node.bounds = entries[entry_idx].bounds;
+      node.bounds = entries[entry_idx];
       node.left = -1;
       node.right = -1;
       node.begin = leaf_slot;
@@ -1170,7 +1166,8 @@ bool SparsityMapPublicImpl<N, T>::bvh_centroid_less(int axis,
 
     if (from_gpu) {
       auto gpu_entries = get_entries();
-      entries = std::vector<SparsityMapEntry<N, T>>(gpu_entries.data(), gpu_entries.data() + gpu_entries.size());
+      entries = std::vector<Rect<N, T>>(gpu_entries.data(),
+                                        gpu_entries.data() + gpu_entries.size());
     }
 
     std::lock_guard<std::mutex> lock(bvh_mutex);
@@ -1194,7 +1191,6 @@ bool SparsityMapPublicImpl<N, T>::bvh_centroid_less(int axis,
     // one leaf per sparsity-map entry
     std::vector<uint32_t> entry_ids(count);
     for(uint32_t i = 0; i < count; i++) {
-      assert(!entries[i].sparsity.exists() && (entries[i].bitmap == 0));
       entry_ids[i] = i;
     }
 
@@ -1216,7 +1212,7 @@ bool SparsityMapPublicImpl<N, T>::bvh_centroid_less(int axis,
 
 
   template <int N, typename T>
-  bool CPU_BVH<N, T>::contains(const span<SparsityMapEntry<N,T>>& entries,
+  bool CPU_BVH<N, T>::contains(const span<Rect<N,T>>& entries,
                                const Point<N,T>& p) const
   {
     if(!valid())
@@ -1243,18 +1239,11 @@ bool SparsityMapPublicImpl<N, T>::bvh_centroid_less(int axis,
         // to keep the code compatible with future small-bucket leaves.
         for(uint32_t i = node.begin; i < node.end; i++) {
           const uint32_t entry_idx = leaf_entries[i];
-          const SparsityMapEntry<N,T>& entry = entries[entry_idx];
+          const Rect<N,T>& entry = entries[entry_idx];
 
-          if(!entry.bounds.contains(p))
+          if(!entry.contains(p))
             continue;
-
-          if(entry.sparsity.exists()) {
-            assert(0);
-          } else if(entry.bitmap != 0) {
-            assert(0);
-          } else {
-            return true;
-          }
+          return true;
         }
       } else {
         // Push children whose bbox might still contain the point.
@@ -1272,7 +1261,7 @@ bool SparsityMapPublicImpl<N, T>::bvh_centroid_less(int axis,
   }
 
   template <int N, typename T>
-  bool CPU_BVH<N, T>::contains_any(const span<SparsityMapEntry<N,T>>& entries,
+  bool CPU_BVH<N, T>::contains_any(const span<Rect<N,T>>& entries,
                                    const Rect<N,T>& r) const
   {
     if(!valid())
@@ -1297,18 +1286,11 @@ bool SparsityMapPublicImpl<N, T>::bvh_centroid_less(int axis,
       if(node.is_leaf()) {
         for(uint32_t i = node.begin; i < node.end; i++) {
           const uint32_t entry_idx = leaf_entries[i];
-          const SparsityMapEntry<N,T>& entry = entries[entry_idx];
+          const Rect<N,T>& entry = entries[entry_idx];
 
-          if(!entry.bounds.overlaps(r))
+          if(!entry.overlaps(r))
             continue;
-
-          if(entry.sparsity.exists()) {
-            assert(0);
-          } else if(entry.bitmap != 0) {
-            assert(0);
-          } else {
-            return true;
-          }
+          return true;
         }
       } else {
         const int left = node.left;
@@ -1325,7 +1307,7 @@ bool SparsityMapPublicImpl<N, T>::bvh_centroid_less(int axis,
   }
 
   template <int N, typename T>
-  bool CPU_BVH<N, T>::contains_all(const span<SparsityMapEntry<N,T>>& entries,
+  bool CPU_BVH<N, T>::contains_all(const span<Rect<N,T>>& entries,
                                    const Rect<N,T>& r) const
   {
     if(!valid())
@@ -1352,23 +1334,14 @@ bool SparsityMapPublicImpl<N, T>::bvh_centroid_less(int axis,
       if(node.is_leaf()) {
         for(uint32_t i = node.begin; i < node.end; i++) {
           const uint32_t entry_idx = leaf_entries[i];
-          const SparsityMapEntry<N,T>& entry = entries[entry_idx];
+          const Rect<N,T>& entry = entries[entry_idx];
 
-          if(!entry.bounds.overlaps(r))
+          if(!entry.overlaps(r))
             continue;
-
-          if(entry.sparsity.exists()) {
-            assert(0);
-          } else if(entry.bitmap != 0) {
-            assert(0);
-          } else {
-            Rect<N,T> isect = entry.bounds.intersection(r);
-            total_volume += isect.volume();
-
-            // Early out as soon as we know we've covered enough.
-            if(total_volume >= r.volume())
-              return true;
-          }
+          Rect<N,T> isect = entry.intersection(r);
+          total_volume += isect.volume();
+          if(total_volume >= r.volume())
+            return true;
         }
       } else {
         const int left = node.left;
@@ -1713,13 +1686,7 @@ SparsityMapImpl<N, T>::~SparsityMapImpl(void)
       if(disjoint) {
         // provider promises that all the pieces we will see are disjoint, so
         //  just stick them on the end of the list and we'll sort in finalize()
-        size_t cur_size = this->entries.size();
-        this->entries.resize(cur_size + count);
-        for(unsigned i = 0; i < count; i++) {
-          this->entries[cur_size + i].bounds = rects[i];
-          this->entries[cur_size + i].sparsity.id = 0;
-          this->entries[cur_size + i].bitmap = 0;
-        }
+        this->entries.insert(this->entries.end(), rects, rects + count);
       } else if(N == 1) {
         // demand that our input data is sorted
         for(size_t i = 1; i < count; i++)
@@ -1727,53 +1694,39 @@ SparsityMapImpl<N, T>::~SparsityMapImpl(void)
 
         // fast case - all these rectangles are after all the ones we have now
         if(this->entries.empty() ||
-           (this->entries.rbegin()->bounds.hi[0] < rects[0].lo[0])) {
+           (this->entries.rbegin()->hi[0] < rects[0].lo[0])) {
           // special case when merging occurs with the last entry from before
           size_t n = this->entries.size();
-          if((n > 0) && (this->entries.rbegin()->bounds.hi[0] == (rects[0].lo[0] - 1))) {
-            this->entries.resize(n + count - 1);
-            assert(!this->entries[n - 1].sparsity.exists());
-            assert(this->entries[n - 1].bitmap == 0);
-            this->entries[n - 1].bounds.hi = rects[0].hi;
-            for(size_t i = 1; i < count; i++) {
-              this->entries[n - 1 + i].bounds = rects[i];
-              this->entries[n - 1 + i].sparsity.id = 0; // no sparsity map
-              this->entries[n - 1 + i].bitmap = 0;
-            }
+          if((n > 0) && (this->entries.rbegin()->hi[0] == (rects[0].lo[0] - 1))) {
+            this->entries[n - 1].hi = rects[0].hi;
+            this->entries.insert(this->entries.end(), rects + 1, rects + count);
           } else {
-            this->entries.resize(n + count);
-            for(size_t i = 0; i < count; i++) {
-              this->entries[n + i].bounds = rects[i];
-              this->entries[n + i].sparsity.id = 0; // no sparsity map
-              this->entries[n + i].bitmap = 0;
-            }
+            this->entries.insert(this->entries.end(), rects, rects + count);
           }
         } else {
           // do a merge of the new data with the old
-          std::vector<SparsityMapEntry<N, T>> old_data;
+          std::vector<Rect<N, T>> old_data;
           old_data.swap(this->entries);
           size_t i = 0;
           size_t n = 0;
-          typename std::vector<SparsityMapEntry<N, T>>::iterator old_it = old_data.begin();
+          typename std::vector<Rect<N, T>>::iterator old_it = old_data.begin();
           while((i < count) && (old_it != old_data.end())) {
-            if(rects[i].hi[0] < (old_it->bounds.lo[0] - 1)) {
+            if(rects[i].hi[0] < (old_it->lo[0] - 1)) {
               this->entries.resize(n + 1);
-              this->entries[n].bounds = rects[i];
-              this->entries[n].sparsity.id = 0; // no sparsity map
-              this->entries[n].bitmap = 0;
+              this->entries[n] = rects[i];
               n++;
               i++;
               continue;
             }
 
-            if(old_it->bounds.hi[0] < (rects[i].lo[0] - 1)) {
+            if(old_it->hi[0] < (rects[i].lo[0] - 1)) {
               this->entries.push_back(*old_it);
               n++;
               old_it++;
               continue;
             }
 
-            Rect<N, T> u = rects[i].union_bbox(old_it->bounds);
+            Rect<N, T> u = rects[i].union_bbox(*old_it);
             // step rects, but not old_it - want sanity checks below to be done
             i++;
             while(true) {
@@ -1782,10 +1735,8 @@ SparsityMapImpl<N, T>::~SparsityMapImpl(void)
                 i++;
                 continue;
               }
-              if((old_it != old_data.end()) && (old_it->bounds.lo[0] <= (u.hi[0] + 1))) {
-                assert(!old_it->sparsity.exists());
-                assert(old_it->bitmap == 0);
-                u.hi[0] = std::max(u.hi[0], old_it->bounds.hi[0]);
+              if((old_it != old_data.end()) && (old_it->lo[0] <= (u.hi[0] + 1))) {
+                u.hi[0] = std::max(u.hi[0], old_it->hi[0]);
                 old_it++;
                 continue;
               }
@@ -1793,18 +1744,14 @@ SparsityMapImpl<N, T>::~SparsityMapImpl(void)
               break;
             }
             this->entries.resize(n + 1);
-            this->entries[n].bounds = u;
-            this->entries[n].sparsity.id = 0; // no sparsity map
-            this->entries[n].bitmap = 0;
+            this->entries[n] = u;
             n++;
           }
 
           // leftovers...
           while(i < count) {
             this->entries.resize(n + 1);
-            this->entries[n].bounds = rects[i];
-            this->entries[n].sparsity.id = 0; // no sparsity map
-            this->entries[n].bitmap = 0;
+            this->entries[n] = rects[i];
             n++;
             i++;
           }
@@ -1827,48 +1774,40 @@ SparsityMapImpl<N, T>::~SparsityMapImpl(void)
           size_t idx;
           std::vector<size_t> absorbed;
           for(idx = 0; idx < this->entries.size(); idx++) {
-            SparsityMapEntry<N, T> &e = this->entries[idx];
-            if(e.bounds.contains(r)) {
-              // existing entry contains us - still three cases though
-              if(e.sparsity.exists()) {
-                assert(0);
-              } else if(e.bitmap != 0) {
-                assert(0);
-              } else {
-                // dense entry containing new one - nothing to do
-                break;
-              }
+            Rect<N, T> &e = this->entries[idx];
+            if(e.contains(r)) {
+              break;
             }
 
-            if(r.contains(e.bounds)) {
+            if(r.contains(e)) {
               // we contain the old rectangle, so absorb it and continue
               absorbed.push_back(idx);
               continue;
             }
 
-            if(!e.sparsity.exists() && (e.bitmap == 0) && can_merge(e.bounds, r)) {
+            if(can_merge(e, r)) {
               // we can absorb an adjacent rectangle
-              r = r.union_bbox(e.bounds);
+              r = r.union_bbox(e);
               absorbed.push_back(idx);
               continue;
             }
 
-            if(e.bounds.overlaps(r)) {
+            if(e.overlaps(r)) {
               // partial overlap requires splitting the current rectangle into
               //  up to 2N-1 pieces that need to be rescanned
               for(int j = 0; j < N; j++) {
-                if(r.lo[j] < e.bounds.lo[j]) {
+                if(r.lo[j] < e.lo[j]) {
                   // leftover "below"
                   Rect<N, T> subr = r;
-                  subr.hi[j] = e.bounds.lo[j] - 1;
-                  r.lo[j] = e.bounds.lo[j];
+                  subr.hi[j] = e.lo[j] - 1;
+                  r.lo[j] = e.lo[j];
                   to_add.push_back(subr);
                 }
-                if(r.hi[j] > e.bounds.hi[j]) {
+                if(r.hi[j] > e.hi[j]) {
                   // leftover "above"
                   Rect<N, T> subr = r;
-                  subr.lo[j] = e.bounds.hi[j] + 1;
-                  r.hi[j] = e.bounds.hi[j];
+                  subr.lo[j] = e.hi[j] + 1;
+                  r.hi[j] = e.hi[j];
                   to_add.push_back(subr);
                 }
               }
@@ -1885,9 +1824,7 @@ SparsityMapImpl<N, T>::~SparsityMapImpl(void)
               idx = absorbed.back();
               absorbed.pop_back();
             }
-            this->entries[idx].bounds = r;
-            this->entries[idx].sparsity.id = 0; // SparsityMap<N,T>::NO_SPACE;
-            this->entries[idx].bitmap = 0;
+            this->entries[idx] = r;
           }
 
           // compact out any remaining holes from absorbed entries
@@ -2088,21 +2025,7 @@ SparsityMapImpl<N, T>::~SparsityMapImpl(void)
 
       if(!this->entries_valid.load_acquire())
         assert(false);
-      // scan the entry list, sending bitmaps first and making a list of rects
-      std::vector<Rect<N, T>> rects;
-      for(size_t i = 0; i < this->get_entries().size(); i++) {
-        const SparsityMapEntry<N, T> &entry = this->get_entries()[i];
-        if(entry.bitmap) {
-          // TODO: send bitmap
-          assert(0);
-        } else if(entry.sparsity.exists()) {
-          // TODO: ?
-          assert(0);
-        } else {
-          rects.push_back(entry.bounds);
-        }
-      }
-
+      const span<Rect<N, T>> rects = this->get_entries();
       const Rect<N, T> *rdata = &rects[0];
       size_t total_count = rects.size();
       size_t remaining = total_count;
@@ -2145,13 +2068,13 @@ SparsityMapImpl<N, T>::~SparsityMapImpl(void)
       : dim_order(_dim_order)
     {}
 
-    bool operator()(const SparsityMapEntry<N, T> &lhs,
-                    const SparsityMapEntry<N, T> &rhs) const
+    bool operator()(const Rect<N, T> &lhs,
+                    const Rect<N, T> &rhs) const
     {
       for(int i = 0; i < N; i++) {
-        if(lhs.bounds.lo[dim_order[i]] < rhs.bounds.lo[dim_order[i]])
+        if(lhs.lo[dim_order[i]] < rhs.lo[dim_order[i]])
           return true;
-        if(lhs.bounds.lo[dim_order[i]] > rhs.bounds.lo[dim_order[i]])
+        if(lhs.lo[dim_order[i]] > rhs.lo[dim_order[i]])
           return false;
       }
       return false;
@@ -2161,7 +2084,7 @@ SparsityMapImpl<N, T>::~SparsityMapImpl(void)
   };
 
   template <int N, typename T>
-  static void compute_approximation(const span<SparsityMapEntry<N, T>> &entries,
+  static void compute_approximation(const span<Rect<N, T>> &entries,
                                     std::vector<Rect<N, T>> &approx_rects, int max_rects)
   {
     size_t n = entries.size();
@@ -2169,21 +2092,21 @@ SparsityMapImpl<N, T>::~SparsityMapImpl(void)
     if(n <= (size_t)max_rects) {
       approx_rects.resize(n);
       for(size_t i = 0; i < n; i++)
-        approx_rects[i] = entries[i].bounds;
+        approx_rects[i] = entries[i];
       return;
     }
 
     // TODO: partial k-d tree?
     // for now, just approximate with the bounding box
-    Rect<N, T> bbox = entries[0].bounds;
+    Rect<N, T> bbox = entries[0];
     for(size_t i = 1; i < n; i++)
-      bbox = bbox.union_bbox(entries[i].bounds);
+      bbox = bbox.union_bbox(entries[i]);
     approx_rects.resize(1);
     approx_rects[0] = bbox;
   }
 
   template <typename T>
-  static void compute_approximation(const span<SparsityMapEntry<1, T>> &entries,
+  static void compute_approximation(const span<Rect<1, T>> &entries,
                                     std::vector<Rect<1, T>> &approx_rects, int max_rects)
   {
     int n = entries.size();
@@ -2191,7 +2114,7 @@ SparsityMapImpl<N, T>::~SparsityMapImpl(void)
     if(n <= max_rects) {
       approx_rects.resize(n);
       for(int i = 0; i < n; i++)
-        approx_rects[i] = entries[i].bounds;
+        approx_rects[i] = entries[i];
       return;
     }
 
@@ -2201,7 +2124,7 @@ SparsityMapImpl<N, T>::~SparsityMapImpl(void)
     std::vector<T> gap_sizes(max_rects - 1, 0);
     std::vector<int> gap_idxs(max_rects - 1, -1);
     for(int i = 1; i < n; i++) {
-      T gap = entries[i].bounds.lo[0] - entries[i - 1].bounds.hi[0];
+      T gap = entries[i].lo[0] - entries[i - 1].hi[0];
       if(gap <= gap_sizes[0])
         continue;
       // the smallest gap is discarded and we insertion-sort this new value in
@@ -2222,12 +2145,12 @@ SparsityMapImpl<N, T>::~SparsityMapImpl(void)
     // now just sort the gap indices so we can emit the right rectangles
     std::sort(gap_idxs.begin(), gap_idxs.end());
     approx_rects.resize(max_rects);
-    approx_rects[0].lo = entries[0].bounds.lo;
+    approx_rects[0].lo = entries[0].lo;
     for(int i = 0; i < max_rects - 1; i++) {
-      approx_rects[i].hi = entries[gap_idxs[i] - 1].bounds.hi;
-      approx_rects[i + 1].lo = entries[gap_idxs[i]].bounds.lo;
+      approx_rects[i].hi = entries[gap_idxs[i] - 1].hi;
+      approx_rects[i + 1].lo = entries[gap_idxs[i]].lo;
     }
-    approx_rects[max_rects - 1].hi = entries[n - 1].bounds.hi;
+    approx_rects[max_rects - 1].hi = entries[n - 1].hi;
     // std::cout << "[[[";
     // for(size_t i = 0; i < approx_rects.size(); i++)
     //   std::cout << " " << approx_rects[i];
@@ -2235,7 +2158,7 @@ SparsityMapImpl<N, T>::~SparsityMapImpl(void)
   }
 
   template <int N, typename T>
-  bool sort_and_merge_entries(int merge_dim, std::vector<SparsityMapEntry<N, T>> &entries)
+  bool sort_and_merge_entries(int merge_dim, std::vector<Rect<N, T>> &entries)
   {
     int dim_order[N];
     for(int i = 0; i < N - 1; i++)
@@ -2253,35 +2176,27 @@ SparsityMapImpl<N, T>::~SparsityMapImpl(void)
       rpos++;
 
       // see if we can absorb any more
-      if((entries[wpos].sparsity.id == 0) && (entries[wpos].bitmap == 0)) {
-        while(rpos < entries.size() && (entries[rpos].sparsity.id == 0) &&
-              (entries[rpos].bitmap == 0)) {
-          // has to match in all dimensions except for the merge dimension
-          bool merge_ok = true;
-          for(int i = 0; i < N; i++)
-            if((i != merge_dim) &&
-               ((entries[wpos].bounds.lo[i] != entries[rpos].bounds.lo[i]) ||
-                (entries[wpos].bounds.hi[i] != entries[rpos].bounds.hi[i]))) {
-              merge_ok = false;
-              break;
-            }
-          if(!merge_ok)
+      while(rpos < entries.size()) {
+        bool merge_ok = true;
+        for(int i = 0; i < N; i++)
+          if((i != merge_dim) &&
+             ((entries[wpos].lo[i] != entries[rpos].lo[i]) ||
+              (entries[wpos].hi[i] != entries[rpos].hi[i]))) {
+            merge_ok = false;
             break;
+          }
+        if(!merge_ok)
+          break;
 
 #ifdef DEBUG_REALM
-          // should be no overlap here
-          assert(entries[wpos].bounds.hi[merge_dim] < entries[rpos].bounds.lo[merge_dim]);
+        assert(entries[wpos].hi[merge_dim] < entries[rpos].lo[merge_dim]);
 #endif
 
-          // if there's a gap, we can't merge
-          if((entries[wpos].bounds.hi[merge_dim] + 1) !=
-             entries[rpos].bounds.lo[merge_dim])
-            break;
+        if((entries[wpos].hi[merge_dim] + 1) != entries[rpos].lo[merge_dim])
+          break;
 
-          // merge this in and keep going
-          entries[wpos].bounds.hi[merge_dim] = entries[rpos].bounds.hi[merge_dim];
-          rpos++;
-        }
+        entries[wpos].hi[merge_dim] = entries[rpos].hi[merge_dim];
+        rpos++;
       }
       wpos++;
     }
@@ -2326,7 +2241,7 @@ SparsityMapImpl<N, T>::~SparsityMapImpl(void)
       int nontrivial_dim = -1;
       for(size_t i = 0; (i < this->entries.size()) && !multiple_dims; i++)
         for(int j = 0; j < N; j++)
-          if(this->entries[i].bounds.lo[j] < this->entries[i].bounds.hi[j]) {
+          if(this->entries[i].lo[j] < this->entries[i].hi[j]) {
             if(nontrivial_dim == -1) {
               nontrivial_dim = j;
             } else if(j != nontrivial_dim) {
@@ -2363,7 +2278,7 @@ SparsityMapImpl<N, T>::~SparsityMapImpl(void)
     // now that we've got our entries nice and tidy, build a bounded approximation of them
     if(true /*ID(me).sparsity_creator_node() == Network::my_node_id*/) {
       assert(!this->approx_valid.load());
-      compute_approximation(span<SparsityMapEntry<N,T>>(this->entries.data(), this->entries.size()), this->approx_rects,
+      compute_approximation(span<Rect<N,T>>(this->entries.data(), this->entries.size()), this->approx_rects,
                             DeppartConfig::cfg_max_rects_in_approximation);
       this->approx_valid.store_release(true);
     }
@@ -2374,9 +2289,7 @@ SparsityMapImpl<N, T>::~SparsityMapImpl(void)
         msg << "finalizing " << me << "(" << this << "), " << this->entries.size()
             << " entries";
         for(size_t i = 0; i < this->entries.size(); i++)
-          msg << "\n  [" << i << "]: bounds=" << this->entries[i].bounds
-              << " sparsity=" << this->entries[i].sparsity
-              << " bitmap=" << this->entries[i].bitmap;
+          msg << "\n  [" << i << "]: bounds=" << this->entries[i];
       }
     }
 
@@ -2384,9 +2297,7 @@ SparsityMapImpl<N, T>::~SparsityMapImpl(void)
     std::cout << "finalizing " << this << ", " << this->entries.size() << " entries"
               << std::endl;
     for(size_t i = 0; i < this->entries.size(); i++)
-      std::cout << "  [" << i << "]: bounds=" << this->entries[i].bounds
-                << " sparsity=" << this->entries[i].sparsity
-                << " bitmap=" << this->entries[i].bitmap << std::endl;
+      std::cout << "  [" << i << "]: bounds=" << this->entries[i] << std::endl;
 #endif
     NodeSet sendto_precise, sendto_approx;
     Event trigger_precise = Event::NO_EVENT;
@@ -2486,9 +2397,7 @@ SparsityMapImpl<N, T>::~SparsityMapImpl(void)
         msg << "finalizing " << me << "(" << this << "), " << this->entries.size()
             << " entries";
         for(size_t i = 0; i < this->entries.size(); i++)
-          msg << "\n  [" << i << "]: bounds=" << this->entries[i].bounds
-              << " sparsity=" << this->entries[i].sparsity
-              << " bitmap=" << this->entries[i].bitmap;
+          msg << "\n  [" << i << "]: bounds=" << this->entries[i];
       }
     }
 
@@ -2496,9 +2405,7 @@ SparsityMapImpl<N, T>::~SparsityMapImpl(void)
     std::cout << "finalizing " << this << ", " << this->entries.size() << " entries"
               << std::endl;
     for(size_t i = 0; i < this->entries.size(); i++)
-      std::cout << "  [" << i << "]: bounds=" << this->entries[i].bounds
-                << " sparsity=" << this->entries[i].sparsity
-                << " bitmap=" << this->entries[i].bitmap << std::endl;
+      std::cout << "  [" << i << "]: bounds=" << this->entries[i] << std::endl;
 #endif
     NodeSet sendto_precise, sendto_approx;
     Event trigger_precise = Event::NO_EVENT;
@@ -2574,7 +2481,7 @@ SparsityMapImpl<N, T>::~SparsityMapImpl(void)
 
 
   template<int N, typename T>
-  void SparsityMapImpl<N, T>::set_gpu_entries(SparsityMapEntry<N, T> *entries, size_t size)
+  void SparsityMapImpl<N, T>::set_gpu_entries(Rect<N, T> *entries, size_t size)
   {
     deppart_gpu_host_free(this->gpu_entries);
     this->gpu_entries = entries;
@@ -2673,7 +2580,7 @@ SparsityMapImpl<N, T>::~SparsityMapImpl(void)
       NodeID sender, const SparsityMapImpl<N, T>::RemoteGpuFinalizeMessage &msg,
       const void *data, size_t datalen)
   {
-    size_t expected = (msg.num_entries * sizeof(SparsityMapEntry<N, T>)) +
+    size_t expected = (msg.num_entries * sizeof(Rect<N, T>)) +
                       (msg.num_approx * sizeof(Rect<N, T>));
     assert(datalen == expected);
     (void)sender;
@@ -2682,10 +2589,10 @@ SparsityMapImpl<N, T>::~SparsityMapImpl(void)
     SparsityMapImpl<N, T> *impl = SparsityMapImpl<N, T>::lookup(msg.sparsity);
 
     if(msg.num_entries > 0) {
-      SparsityMapEntry<N, T> *entries = deppart_gpu_host_alloc<SparsityMapEntry<N, T>>(msg.num_entries);
-      std::memcpy(entries, payload, msg.num_entries * sizeof(SparsityMapEntry<N, T>));
+      Rect<N, T> *entries = deppart_gpu_host_alloc<Rect<N, T>>(msg.num_entries);
+      std::memcpy(entries, payload, msg.num_entries * sizeof(Rect<N, T>));
       impl->set_gpu_entries(entries, msg.num_entries);
-      payload += msg.num_entries * sizeof(SparsityMapEntry<N, T>);
+      payload += msg.num_entries * sizeof(Rect<N, T>);
     } else {
       impl->set_gpu_entries(nullptr, 0);
     }

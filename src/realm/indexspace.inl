@@ -493,7 +493,7 @@ namespace Realm {
       // always use precise info if it's available
       if(impl->is_valid(true /*precise*/)) {
         IndexSpace<N, T> result;
-        span<SparsityMapEntry<N, T>> entries = impl->get_entries();
+        span<Rect<N, T>> entries = impl->get_entries();
         // three cases:
         // 1) empty index space
         if(entries.empty()) {
@@ -501,9 +501,8 @@ namespace Realm {
         } else
 
           // 2) single dense rectangle
-          if((entries.size() == 1) && !entries[0].sparsity.exists() &&
-             (entries[0].bitmap == 0)) {
-            result = IndexSpace<N, T>(bounds.intersection(entries[0].bounds));
+          if(entries.size() == 1) {
+            result = IndexSpace<N, T>(bounds.intersection(entries[0]));
           } else
 
           // 3) anything else - walk rectangles and count/union those that
@@ -513,20 +512,16 @@ namespace Realm {
           {
             size_t overlap_count = 0;
             size_t volume_sum = 0;
-            bool need_sparsity = false;
             result = IndexSpace<N, T>::make_empty();
             for(size_t i = 0; i < entries.size(); i++) {
-              Rect<N, T> isect = bounds.intersection(entries[i].bounds);
+              Rect<N, T> isect = bounds.intersection(entries[i]);
               if(!isect.empty()) {
                 overlap_count++;
                 volume_sum += isect.volume();
                 result.bounds = result.bounds.union_bbox(isect);
-                if(entries[i].sparsity.exists() || (entries[i].bitmap != 0))
-                  need_sparsity = true;
               }
             }
-            if(need_sparsity ||
-               ((overlap_count > 1) && (result.bounds.volume() > volume_sum)))
+            if((overlap_count > 1) && (result.bounds.volume() > volume_sum))
               result.sparsity = sparsity;
           }
 
@@ -560,7 +555,7 @@ namespace Realm {
   //  the index of the entry that contains the point, or the first one to appear after
   //  that point
   template <int N, typename T>
-  static size_t bsearch_map_entries(const span<SparsityMapEntry<N, T>> &entries,
+  static size_t bsearch_map_entries(const span<Rect<N, T>> &entries,
                                     const Point<N, T> &p)
   {
     assert(N == 1);
@@ -569,9 +564,9 @@ namespace Realm {
     int hi = entries.size();
     while(lo < hi) {
       size_t mid = (lo + hi) >> 1; // rounding down keeps up from picking hi
-      if(p[0] < entries[mid].bounds.lo[0])
+      if(p[0] < entries[mid].lo[0])
         hi = mid;
-      else if(p[0] > entries[mid].bounds.hi[0])
+      else if(p[0] > entries[mid].hi[0])
         lo = mid + 1;
       else
         return mid;
@@ -592,25 +587,18 @@ namespace Realm {
       return true;
 
     SparsityMapPublicImpl<N,T> *impl = sparsity.impl();
-    span<SparsityMapEntry<N, T>> entries = impl->get_entries();
+    span<Rect<N, T>> entries = impl->get_entries();
     if(N == 1) {
       // binary search to find the element we want
       size_t idx = bsearch_map_entries<N,T>(entries, p);
       if(idx >= entries.size()) return false;
 
-      const SparsityMapEntry<N,T>& e = entries[idx];
+      const Rect<N,T>& e = entries[idx];
 
       // the search guaranteed we're below the upper bound of the returned entry,
       //  but we might be below the lower bound
-      if(p[0] < e.bounds.lo[0])
+      if(p[0] < e.lo[0])
 	return false;
-
-      if(e.sparsity.exists()) {
-	assert(0);
-      }
-      if(e.bitmap != 0) {
-	assert(0);
-      }
       return true;
     } else {
 
@@ -619,17 +607,11 @@ namespace Realm {
       }
 
       for(size_t i = 0; i < entries.size(); i++) {
-        SparsityMapEntry<N, T> entry = entries[i];
-	if(!entry.bounds.contains(p)) {
+        Rect<N, T> entry = entries[i];
+	if(!entry.contains(p)) {
 	  continue;
 	}
-	if(entry.sparsity.exists()) {
-	  assert(0);
-	} else if(entry.bitmap != 0) {
-	  assert(0);
-	} else {
-	  return true;
-	}
+	return true;
       }
     }
 
@@ -650,24 +632,18 @@ namespace Realm {
     // test against sparsity map too
     size_t total_volume = 0;
     SparsityMapPublicImpl<N, T> *impl = sparsity.impl();
-    span<SparsityMapEntry<N, T>> entries = impl->get_entries();
+    span<Rect<N, T>> entries = impl->get_entries();
 
     if(impl->has_bvh()) {
       return impl->entries_bvh.contains_all(entries, r);
     }
 
     for(size_t i = 0; i < entries.size(); i++) {
-      SparsityMapEntry<N, T> entry = entries[i];
-      if(!entry.bounds.overlaps(r))
+      Rect<N, T> entry = entries[i];
+      if(!entry.overlaps(r))
         continue;
-      if(entry.sparsity.exists()) {
-        assert(0);
-      } else if(entry.bitmap != 0) {
-        assert(0);
-      } else {
-        Rect<N, T> isect = entry.bounds.intersection(r);
-        total_volume += isect.volume();
-      }
+      Rect<N, T> isect = entry.intersection(r);
+      total_volume += isect.volume();
     }
 
     // did we miss anything?
@@ -686,23 +662,17 @@ namespace Realm {
     }
     // test against sparsity map too
     SparsityMapPublicImpl<N, T> *impl = sparsity.impl();
-    span<SparsityMapEntry<N, T>> entries = impl->get_entries();
+    span<Rect<N, T>> entries = impl->get_entries();
 
     if(impl->has_bvh()) {
       return impl->entries_bvh.contains_any(entries, r);
     }
 
     for(size_t i = 0; i < entries.size(); i++) {
-      SparsityMapEntry<N, T> entry = entries[i];
-      if(!entry.bounds.overlaps(r))
+      Rect<N, T> entry = entries[i];
+      if(!entry.overlaps(r))
         continue;
-      if(entry.sparsity.exists()) {
-        assert(0);
-      } else if(entry.bitmap != 0) {
-        assert(0);
-      } else {
-        return true;
-      }
+      return true;
     }
 
     return false;
@@ -740,19 +710,13 @@ namespace Realm {
 
     size_t total = 0;
     SparsityMapPublicImpl<N, T> *impl = sparsity.impl();
-   span<SparsityMapEntry<N, T>> entries = impl->get_entries();
+   span<Rect<N, T>> entries = impl->get_entries();
     for(size_t i = 0; i < entries.size(); i++) {
-      SparsityMapEntry<N, T> entry = entries[i];
-      Rect<N, T> isect = bounds.intersection(entry.bounds);
+      Rect<N, T> entry = entries[i];
+      Rect<N, T> isect = bounds.intersection(entry);
       if(isect.empty())
         continue;
-      if(entry.sparsity.exists()) {
-        assert(0);
-      } else if(entry.bitmap != 0) {
-        assert(0);
-      } else {
-        total += isect.volume();
-      }
+      total += isect.volume();
     }
 
     return total;
@@ -1327,18 +1291,16 @@ namespace Realm {
 
     rect = Rect<N, T>::make_empty();
 
-    span<SparsityMapEntry<N, T>> entries = s_impl->get_entries();
+    span<Rect<N, T>> entries = s_impl->get_entries();
     // find the first entry that overlaps our restriction - speed this up with a
     //  binary search on the low end of the restriction if we're 1-D
 
     cur_entry = (N == 1) ? bsearch_map_entries(entries, restriction.lo) : 0;
 
     while(cur_entry < entries.size()) {
-      const SparsityMapEntry<N, T> &e = entries[cur_entry];
-      rect = restriction.intersection(e.bounds);
+      const Rect<N, T> &e = entries[cur_entry];
+      rect = restriction.intersection(e);
       if(!rect.empty()) {
-        assert(!e.sparsity.exists());
-        assert(e.bitmap == 0);
         valid = true;
         return;
       }
@@ -1363,10 +1325,10 @@ namespace Realm {
     // TODO: handle iteration within a sparsity entry
 
     // move onto the next sparsity entry (that overlaps our restriction)
-    const span<SparsityMapEntry<N, T>> entries = s_impl->get_entries();
+    const span<Rect<N, T>> entries = s_impl->get_entries();
     for(cur_entry++; cur_entry < entries.size(); cur_entry++) {
-      const SparsityMapEntry<N, T> &e = entries[cur_entry];
-      rect = restriction.intersection(e.bounds);
+      const Rect<N, T> &e = entries[cur_entry];
+      rect = restriction.intersection(e);
 
       if(rect.empty()) {
         // in 1-D, our entries are sorted, so the first one whose bounds fall
@@ -1377,8 +1339,6 @@ namespace Realm {
           continue;
       }
 
-      assert(!e.sparsity.exists());
-      assert(e.bitmap == 0);
       return true;
     }
 

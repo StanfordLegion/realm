@@ -117,19 +117,19 @@ void GPUByFieldMicroOp<N,T,FT>::execute()
   if (count) {}
   bool host_fallback = false;
   std::vector<Rect<N, T>*> host_rect_buffers(colors.size(), nullptr);
-  std::vector<size_t> entry_counts(colors.size(), 0);
-  while (num_completed < inst_space.num_entries) {
+  std::vector<size_t> rect_counts(colors.size(), 0);
+  while (num_completed < inst_space.num_rects) {
     try {
-      //std::cout << "Byfield iteration " << count++ << ", completed " << num_completed << " / " << inst_space.num_entries << " entries." << std::endl;
+      //std::cout << "Byfield iteration " << count++ << ", completed " << num_completed << " / " << inst_space.num_rects << " rects." << std::endl;
       buffer_arena.start();
-      if (num_completed + curr_tile > inst_space.num_entries) {
-        curr_tile = inst_space.num_entries - num_completed;
+      if (num_completed + curr_tile > inst_space.num_rects) {
+        curr_tile = inst_space.num_rects - num_completed;
       }
 
       collapsed_space<N, T> inst_space_tile = inst_space;
-      inst_space_tile.num_entries = curr_tile;
-      inst_space_tile.entries_buffer = buffer_arena.alloc<SparsityMapEntry<N,T>>(curr_tile);
-      CUDA_CHECK(cudaMemcpyAsync(inst_space_tile.entries_buffer, inst_space.entries_buffer + num_completed, curr_tile * sizeof(SparsityMapEntry<N,T>), cudaMemcpyHostToDevice, stream), stream);
+      inst_space_tile.num_rects = curr_tile;
+      inst_space_tile.rects_buffer = buffer_arena.alloc<Rect<N,T>>(curr_tile);
+      CUDA_CHECK(cudaMemcpyAsync(inst_space_tile.rects_buffer, inst_space.rects_buffer + num_completed, curr_tile * sizeof(Rect<N,T>), cudaMemcpyHostToDevice, stream), stream);
 
       // Here we intersect the instance spaces with the parent space, and make sure we know which instance each resulting rectangle came from.
       GPUMicroOp<N, T>::template construct_input_rectlist<Rect<N, T>>(inst_space_tile, collapsed_parent, d_valid_rects, num_valid_rects, d_inst_counters, d_inst_prefix, buffer_arena, stream);
@@ -180,7 +180,7 @@ void GPUByFieldMicroOp<N,T,FT>::execute()
                            });
 
       if (host_fallback) {
-        this->split_output(d_new_rects, num_new_rects, host_rect_buffers, entry_counts, buffer_arena);
+        this->split_output(d_new_rects, num_new_rects, host_rect_buffers, rect_counts, buffer_arena);
       }
 
       if (num_output==0 || host_fallback) {
@@ -229,7 +229,7 @@ void GPUByFieldMicroOp<N,T,FT>::execute()
         } else {
           host_fallback = true;
           if (num_output > 0) {
-            this->split_output(output_start, num_output, host_rect_buffers, entry_counts, buffer_arena);
+            this->split_output(output_start, num_output, host_rect_buffers, rect_counts, buffer_arena);
           }
           curr_tile = tile_size / 2;
         }
@@ -261,7 +261,7 @@ void GPUByFieldMicroOp<N,T,FT>::execute()
                               return kv.second;
                            });
     } catch (arena_oom&) {
-      this->split_output(output_start, num_output, host_rect_buffers, entry_counts, buffer_arena);
+      this->split_output(output_start, num_output, host_rect_buffers, rect_counts, buffer_arena);
       host_fallback = true;
     }
   }
@@ -273,8 +273,8 @@ void GPUByFieldMicroOp<N,T,FT>::execute()
         impl->set_contributor_count(1);
       }
       size_t idx = color_indices.at(it.first);
-      if (entry_counts[idx] > 0) {
-        span<Rect<N, T>> h_rects_span(host_rect_buffers[idx], entry_counts[idx]);
+      if (rect_counts[idx] > 0) {
+        span<Rect<N, T>> h_rects_span(host_rect_buffers[idx], rect_counts[idx]);
         impl->contribute_dense_rect_list(h_rects_span, true);
         deppart_host_free(host_rect_buffers[idx]);
       } else {

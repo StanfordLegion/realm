@@ -62,38 +62,22 @@ namespace Realm {
   }
 
   template <int N, typename T>
-  REALM_PUBLIC_API inline std::ostream &operator<<(std::ostream &os,
-                                                   const SparsityMapEntry<N, T> &entry)
-  {
-    os << entry.bounds;
-    if(entry.sparsity.id)
-      os << ",sparsity=" << std::hex << entry.sparsity.id << std::dec;
-    if(entry.bitmap)
-      os << ",bitmap=" << entry.bitmap;
-    return os;
-  }
-
-  ////////////////////////////////////////////////////////////////////////
-  //
-  // class SparsityMapPublicImpl<N,T>
-
-  template <int N, typename T>
   inline bool SparsityMapPublicImpl<N, T>::is_valid(bool precise /*= true*/)
   {
     return (precise ? entries_valid.load_acquire() : approx_valid.load_acquire());
   }
 
   template <int N, typename T>
-  inline const span<SparsityMapEntry<N, T>> SparsityMapPublicImpl<N, T>::get_entries(void)
+  inline const span<Rect<N, T>> SparsityMapPublicImpl<N, T>::get_entries(void)
   {
     REALM_ASSERT(entries_valid.load_acquire());
     if(from_gpu) {
       if (num_entries == 0) {
-        return span<SparsityMapEntry<N, T>>();
+        return span<Rect<N, T>>();
       }
-      return span<SparsityMapEntry<N, T>>(gpu_entries, num_entries);
+      return span<Rect<N, T>>(gpu_entries, num_entries);
     } else {
-      return span<SparsityMapEntry<N, T>>(entries.data(), entries.size());
+      return span<Rect<N, T>>(entries.data(), entries.size());
     }
   }
 

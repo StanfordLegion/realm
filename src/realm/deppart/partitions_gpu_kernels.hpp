@@ -32,8 +32,8 @@ __global__ void subtract_const(
 
 template <int N, typename T, typename out_t>
 __global__ void intersect_input_rects(
-  const SparsityMapEntry<N,T>* d_lhs_entries,
-  const SparsityMapEntry<N,T>* d_rhs_entries,
+  const Rect<N,T>* d_lhs_entries,
+  const Rect<N,T>* d_rhs_entries,
   const size_t *d_lhs_offsets,
   const uint32_t *d_lhs_prefix,
   const size_t* d_rhs_offsets,
@@ -50,9 +50,9 @@ __global__ void intersect_input_rects(
   size_t idx_y = idx / numRHSRects;
   assert(idx_x < numRHSRects);
   assert(idx_y < numLHSRects);
-  const SparsityMapEntry<N, T> rhs_entry = d_rhs_entries[idx_x];
-  const SparsityMapEntry<N, T> lhs_entry = d_lhs_entries[idx_y];
-  Rect<N,T> rect_output = lhs_entry.bounds.intersection(rhs_entry.bounds);
+  const Rect<N, T> rhs_entry = d_rhs_entries[idx_x];
+  const Rect<N, T> lhs_entry = d_lhs_entries[idx_y];
+  Rect<N,T> rect_output = lhs_entry.intersection(rhs_entry);
   if (rect_output.empty()) {
     return;
   }
@@ -107,7 +107,7 @@ __device__ __forceinline__ uint64_t bvh_morton_code(const Rect<N,T>& rect,
 
 template <int N, typename T>
 __global__ void bvh_build_morton_codes(
-  const SparsityMapEntry<N,T>* d_targets_entries,
+  const Rect<N,T>* d_targets_entries,
   const size_t* d_offsets_rects,
   const Rect<N,T>* d_global_bounds,
   size_t total_rects,
@@ -118,7 +118,7 @@ __global__ void bvh_build_morton_codes(
   size_t idx = blockIdx.x * blockDim.x + threadIdx.x;
   if (idx >= total_rects) return;
   const auto &entry = d_targets_entries[idx];
-  d_morton_codes[idx] = bvh_morton_code(entry.bounds, *d_global_bounds);
+  d_morton_codes[idx] = bvh_morton_code(entry, *d_global_bounds);
   d_indices[idx] = idx;
   if (d_offsets_rects != nullptr) {
     d_targets_indices[idx] = bsearch(d_offsets_rects, num_targets, idx);
@@ -143,7 +143,7 @@ void bvh_build_root_kernel(
 template<int N, typename T>
 __global__
 void bvh_init_leaf_boxes_kernel(
-    const SparsityMapEntry<N,T> *rects,    // [G] all flattened Rects
+    const Rect<N,T> *rects,    // [G] all flattened Rects
     const uint64_t    *leafIdx, // [n] maps leaf→orig Rect index
     size_t total_rects,
     Rect<N,T> *boxes)                 // [(2n−1)]
@@ -152,7 +152,7 @@ void bvh_init_leaf_boxes_kernel(
   if (k >= total_rects) return;
 
   size_t orig = leafIdx[k];
-  boxes[k + total_rects - 1] = rects[orig].bounds;
+  boxes[k + total_rects - 1] = rects[orig];
 }
 
 template<int N, typename T>
@@ -191,7 +191,7 @@ void bvh_merge_internal_boxes_kernel(
 template <int N, typename T, typename out_t>
 __global__
 void query_input_bvh(
-  SparsityMapEntry<N, T>* queries,
+  Rect<N, T>* queries,
   size_t* d_query_offsets,
   int root,
   int *childLeft,
@@ -208,7 +208,7 @@ void query_input_bvh(
 ) {
   size_t idx = blockIdx.x * blockDim.x + threadIdx.x;
   if (idx >= numQueries) return;
-  Rect<N, T> in_rect = queries[idx].bounds;
+  Rect<N, T> in_rect = queries[idx];
   size_t lhs_idx = bsearch(d_query_offsets, numLHSChildren, idx);
 
   constexpr int MAX_STACK = 64; // max stack size for BVH traversal
@@ -782,23 +782,17 @@ void init_rects_dim(const RectDesc<N,T>* in,
   }
 }
 
-//Convert RectDesc to sparsity output and determine [d_start[i], d_end[i]) for each src i
+// Convert RectDesc to Rect output and determine [d_start[i], d_end[i]) for each src i.
 template<int N, typename T>
 __global__
 void build_final_output(const RectDesc<N,T>* d_rects,
-                              SparsityMapEntry<N,T>* d_entries_out,
-                              Rect<N,T>* d_rects_out,
-                              size_t* d_starts,
-                              size_t* d_ends,
-                              size_t numRects) {
+                        Rect<N,T>* d_rects_out,
+                        size_t* d_starts,
+                        size_t* d_ends,
+                        size_t numRects) {
   size_t idx = blockIdx.x * blockDim.x + threadIdx.x;
   if (idx >= numRects) return;
   d_rects_out[idx] = d_rects[idx].rect;
-  if (d_entries_out != nullptr) {
-    d_entries_out[idx].bounds = d_rects[idx].rect;
-    d_entries_out[idx].sparsity.id = 0;
-    d_entries_out[idx].bitmap = 0;
-  }
 
   //Checks if we're the first value for a given src
   if (idx == 0 || d_rects[idx].src_idx != d_rects[idx-1].src_idx) {

@@ -86,12 +86,12 @@ namespace Realm {
   // If multiple, offsets tracks transitions between spaces
   template<int N, typename T>
   struct collapsed_space {
-    SparsityMapEntry<N, T>* entries_buffer;
-    size_t num_entries;
+    Rect<N, T>* rects_buffer;
+    size_t num_rects;
     size_t* offsets;
     size_t num_children;
     Rect<N, T> bounds;
-    SparsityMapEntry<N, T>* host_entries_owner = nullptr;
+    Rect<N, T>* host_rects_owner = nullptr;
   };
 
   // Stores everything necessary to query a BVH

@@ -148,13 +148,6 @@ namespace Realm {
   REALM_PUBLIC_API std::ostream &operator<<(std::ostream &os, SparsityMap<N, T> s);
 
   template <int N, typename T>
-  struct SparsityMapEntry {
-    Rect<N, T> bounds;
-    SparsityMap<N, T> sparsity;
-    HierarchicalBitMap<N, T> *bitmap;
-  };
-
-  template <int N, typename T>
   struct REALM_INTERNAL_API_EXTERNAL_LINKAGE CPU_BVH {
     struct Node {
       Rect<N, T> bounds;
@@ -182,19 +175,15 @@ namespace Realm {
       root = -1;
     }
 
-    bool contains(const span<SparsityMapEntry<N,T>>& entries,
+    bool contains(const span<Rect<N,T>>& entries,
                   const Point<N,T>& p) const;
 
-    bool contains_any(const span<SparsityMapEntry<N,T>>& entries,
+    bool contains_any(const span<Rect<N,T>>& entries,
                       const Rect<N,T>& r) const;
 
-    bool contains_all(const span<SparsityMapEntry<N,T>>& entries,
+    bool contains_all(const span<Rect<N,T>>& entries,
                       const Rect<N,T>& r) const;
   };
-
-  template <int N, typename T>
-  REALM_PUBLIC_API std::ostream &operator<<(std::ostream &os,
-                                            const SparsityMapEntry<N, T> &entry);
 
   /**
    * \class SparsityMapPublicImpl
@@ -242,15 +231,11 @@ namespace Realm {
     bool is_valid(bool precise = true);
 
     /**
-     * Get the entries of this sparsity map.
-     * A sparsity map entry is similar to an IndexSpace - it's a rectangle and
-     * optionally a reference to another SparsityMap OR a pointer to a
-     * HierarchicalBitMap, which is a dense array of bits describing the
-     * validity of each point in the rectangle.
-     * @return the entries of this sparsity map
+     * Get the rectangles of this sparsity map.
+     * @return the rectangles of this sparsity map
      */
     REALM_PUBLIC_API
-    const span<SparsityMapEntry<N, T>> get_entries(void);
+    const span<Rect<N, T>> get_entries(void);
 
     /**
      * Get the approximate rectangles of this sparsity map.
@@ -315,11 +300,11 @@ namespace Realm {
     //only on can be valid (i.e. only finalize or gpu_finalize can be called, not both)
 
     //Stores rectangles for CPU deppart (easy manipulation for sort/merge entries)
-    std::vector<SparsityMapEntry<N,T> > entries;
+    std::vector<Rect<N,T> > entries;
     std::vector<Rect<N,T> > approx_rects;
 
     // Stores rectangles for GPU deppart in host buffers owned by the sparsity map.
-    SparsityMapEntry<N, T> *gpu_entries = nullptr;
+    Rect<N, T> *gpu_entries = nullptr;
     size_t num_entries = 0;
 
     Rect<N, T> *gpu_approx_rects = nullptr;

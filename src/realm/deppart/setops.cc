@@ -1073,14 +1073,12 @@ namespace Realm {
 	bitmask.add_rect(it->bounds);
       } else {
 	SparsityMapImpl<N,T> *impl = SparsityMapImpl<N,T>::lookup(it->sparsity);
-	span<SparsityMapEntry<N, T>> entries = impl->get_entries();
+	span<Rect<N, T>> entries = impl->get_entries();
 	for(size_t i = 0; i < entries.size(); i++) {
-          SparsityMapEntry<N, T> entry = entries[i];
-	  Rect<N,T> isect = it->bounds.intersection(entry.bounds);
+          Rect<N, T> entry = entries[i];
+	  Rect<N,T> isect = it->bounds.intersection(entry);
 	  if(isect.empty())
 	    continue;
-	  assert(!entry.sparsity.exists());
-	  assert(entry.bitmap == 0);
 	  bitmask.add_rect(isect);
 	}
       }
@@ -1439,14 +1437,12 @@ namespace Realm {
       todo.push_back(lhs.bounds);
     } else {
       SparsityMapImpl<N,T> *l_impl = SparsityMapImpl<N,T>::lookup(lhs.sparsity);
-      span<SparsityMapEntry<N, T>> entries = l_impl->get_entries();
+      span<Rect<N, T>> entries = l_impl->get_entries();
       for(size_t i = 0; i < entries.size(); i++) {
-        SparsityMapEntry<N, T> entry = entries[i];
-	Rect<N,T> isect = lhs.bounds.intersection(entry.bounds);
+        Rect<N, T> entry = entries[i];
+	Rect<N,T> isect = lhs.bounds.intersection(entry);
 	if(isect.empty())
 	  continue;
-	assert(!entry.sparsity.exists());
-	assert(entry.bitmap == 0);
 	todo.push_back(isect);
       }
     }

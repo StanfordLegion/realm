@@ -70,7 +70,7 @@ namespace Realm {
 				      size_t start, size_t count, size_t volume,
 				      IndexSpace<N,T> *results,
 				      size_t first_result, size_t last_result,
-				      const span<SparsityMapEntry<N,T> >& entries)
+				      const span<Rect<N,T> >& entries)
   {
     // should never be here with empty bounds
     assert(!bounds.empty());
@@ -112,7 +112,7 @@ namespace Realm {
       lo_volume[i] = 0;
     for(size_t j = 0; j < entries.size(); j++) {
       for(int i = 0; i < N; i++)
-	lo_volume[i] += entries[j].bounds.intersection(lo_half[i]).volume();
+	lo_volume[i] += entries[j].intersection(lo_half[i]).volume();
     }
     // now compute how many subspaces would fall in each half and the
     //  inefficiency of the split
@@ -230,7 +230,7 @@ namespace Realm {
     // TODO: sparse case where we have to wait
     SparsityMapPublicImpl<N,T> *impl = sparsity.impl();
     assert(impl->is_valid());
-    const span<SparsityMapEntry<N,T> >& entries = impl->get_entries();
+    const span<Rect<N,T> >& entries = impl->get_entries();
     // initially every subspace will be a copy of this one, and then
     //  we'll decompose the bounds
     subspace = *this;
@@ -304,7 +304,7 @@ namespace Realm {
     // TODO: sparse case where we have to wait
     SparsityMapPublicImpl<N,T> *impl = sparsity.impl();
     assert(impl->is_valid());
-    span<SparsityMapEntry<N, T>> entries = impl->get_entries();
+    span<Rect<N, T>> entries = impl->get_entries();
     // initially every subspace will be a copy of this one, and then
     //  we'll decompose the bounds
     subspaces.resize(count, *this);

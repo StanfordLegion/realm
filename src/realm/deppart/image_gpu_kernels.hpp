@@ -8,12 +8,12 @@ namespace Realm {
 template<int N, typename T>
 __device__ bool image_isInIndexSpace(
     const Point<N,T>& p,
-    const SparsityMapEntry<N,T>*  parent_entries,
+    const Rect<N,T>*  parent_entries,
     size_t              numRects)
 {
   // for each rectangle, check all dims…
   for(size_t i = 0; i < numRects; ++i) {
-    const auto &r = parent_entries[i].bounds;
+    const auto &r = parent_entries[i];
     bool inside = true;
     #pragma unroll
     for(int d = 0; d < N; ++d) {
@@ -36,7 +36,7 @@ __global__
 void image_gpuPopulateBitmasksPtrsKernel(
   AffineAccessor<Point<N,T>,N2,T2> *accessors,
   RectDesc<N2,T2>* rects,
-  SparsityMapEntry<N,T>* parent_entries,
+  Rect<N,T>* parent_entries,
   size_t* prefix,
   uint32_t *inst_offsets,
   uint32_t *d_inst_prefix,
@@ -90,7 +90,7 @@ void image_gpuPopulateBitmasksPtrsKernel(
 //rather than input rectangles and parent rectangles
   template <int N, typename T>
 __global__ void image_intersect_output(
-  const SparsityMapEntry<N,T>* d_parent_entries,
+  const Rect<N,T>* d_parent_entries,
   const RectDesc<N,T>* d_output_rngs,
   const uint32_t* d_src_prefix,
   size_t numParentRects,
@@ -105,7 +105,7 @@ __global__ void image_intersect_output(
   const auto parent_entry = d_parent_entries[idx_x];
   const auto output_entry = d_output_rngs[idx_y];
   RectDesc<N,T> rect_output;
-  rect_output.rect = parent_entry.bounds.intersection(output_entry.rect);
+  rect_output.rect = parent_entry.intersection(output_entry.rect);
   if (!rect_output.rect.empty()) {
     uint32_t local = atomicAdd(&d_src_counters[output_entry.src_idx], 1);
     if (d_rects != nullptr) {

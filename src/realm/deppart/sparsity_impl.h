@@ -142,7 +142,7 @@ namespace Realm {
     void remote_data_request(NodeID requestor, bool send_precise, bool send_approx);
     void remote_data_reply(NodeID requestor, bool send_precise, bool send_approx);
 
-    void set_gpu_entries(SparsityMapEntry<N, T> *entries, size_t size);
+    void set_gpu_entries(Rect<N, T> *entries, size_t size);
     void set_gpu_approx_rects(Rect<N, T> *approx_rects, size_t size);
     void gpu_finalize(void);
 

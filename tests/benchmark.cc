@@ -1202,7 +1202,7 @@ public:
   {
     NODE_SUBGRAPH_STREAM,
   };
-ci
+
   // assign subgraph ids to nodes
   void chase_point(int idx, Point<N2>& color)
   {

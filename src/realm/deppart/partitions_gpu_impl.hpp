@@ -149,33 +149,33 @@ namespace Realm {
   void GPUMicroOp<N, T>::shatter_rects(collapsed_space<N, T> & inst_space, size_t &num_completed, CUstream stream) {
 
     NVTX_DEPPART(shatter_rects);
-    size_t new_size = (inst_space.entries_buffer[num_completed].bounds.volume() + 1) / 2;
+    size_t new_size = (inst_space.rects_buffer[num_completed].volume() + 1) / 2;
     assert(new_size > 0);
-    size_t num_new_entries = 0;
+    size_t num_new_rects = 0;
     std::vector<size_t> offsets(inst_space.num_children + 1);
     std::vector<size_t> new_offsets(inst_space.num_children + 1);
     CUDA_CHECK(cudaMemcpyAsync(offsets.data(), inst_space.offsets, (inst_space.num_children + 1) * sizeof(size_t), cudaMemcpyDeviceToHost, stream), stream);
     CUDA_CHECK(cudaStreamSynchronize(stream), stream);
     for (size_t i = 0; i < inst_space.num_children; ++i) {
-      new_offsets[i] = num_new_entries;
+      new_offsets[i] = num_new_rects;
       if (offsets[i+1] <= num_completed) {
         continue;
       }
       for (size_t j = offsets[i]; j < offsets[i+1]; ++j) {
         if (j >= num_completed) {
-          num_new_entries += (inst_space.entries_buffer[j].bounds.volume() + new_size - 1) / new_size;
+          num_new_rects += (inst_space.rects_buffer[j].volume() + new_size - 1) / new_size;
         }
       }
     }
-    new_offsets[inst_space.num_children] = num_new_entries;
+    new_offsets[inst_space.num_children] = num_new_rects;
     CUDA_CHECK(cudaMemcpyAsync(inst_space.offsets, new_offsets.data(), (inst_space.num_children + 1) * sizeof(size_t), cudaMemcpyHostToDevice, stream), stream);
-    SparsityMapEntry<N,T> *new_entries_ptr = deppart_host_alloc<SparsityMapEntry<N, T>>(num_new_entries);
+    Rect<N,T> *new_rects_ptr = deppart_host_alloc<Rect<N, T>>(num_new_rects);
 
     size_t write_loc = 0;
-    for (size_t i = num_completed; i < inst_space.num_entries; i++) {
-      Rect<N, T> bounds = inst_space.entries_buffer[i].bounds;
+    for (size_t i = num_completed; i < inst_space.num_rects; i++) {
+      Rect<N, T> bounds = inst_space.rects_buffer[i];
       if (bounds.volume() <= new_size) {
-        new_entries_ptr[write_loc] = inst_space.entries_buffer[i];
+        new_rects_ptr[write_loc] = inst_space.rects_buffer[i];
         write_loc++;
         continue;
       }
@@ -198,7 +198,7 @@ namespace Realm {
       T base_span_rem = total - (base_span_size * count);
       T leftover = 0;
       for(size_t j = 0; j < count; j++) {
-        new_entries_ptr[write_loc] = inst_space.entries_buffer[i];
+        new_rects_ptr[write_loc] = inst_space.rects_buffer[i];
         T nx = px + (base_span_size - 1);
         if(base_span_rem != 0) {
           leftover += base_span_rem;
@@ -207,18 +207,18 @@ namespace Realm {
             leftover -= count;
           }
         }
-        new_entries_ptr[write_loc].bounds.lo[split_dim] = px;
-        new_entries_ptr[write_loc].bounds.hi[split_dim] = nx;
+        new_rects_ptr[write_loc].lo[split_dim] = px;
+        new_rects_ptr[write_loc].hi[split_dim] = nx;
         px = nx + 1;
         write_loc++;
       }
     }
 
     num_completed = 0;
-    inst_space.entries_buffer = new_entries_ptr;
-    inst_space.num_entries = num_new_entries;
-    deppart_host_free(inst_space.host_entries_owner);
-    inst_space.host_entries_owner = new_entries_ptr;
+    inst_space.rects_buffer = new_rects_ptr;
+    inst_space.num_rects = num_new_rects;
+    deppart_host_free(inst_space.host_rects_owner);
+    inst_space.host_rects_owner = new_rects_ptr;
     CUDA_CHECK(cudaStreamSynchronize(stream), stream);
 
   }
@@ -241,10 +241,10 @@ namespace Realm {
     std::vector<size_t> space_offsets(spaces.size() + 1);
 
     // Determine size of allocation for combined rects.
-    out_space.num_entries = 0;
+    out_space.num_rects = 0;
 
     for (size_t i = 0; i < spaces.size(); ++i) {
-      space_offsets[i] = out_space.num_entries;
+      space_offsets[i] = out_space.num_rects;
       IndexSpace<N,T> my_space;
       if constexpr (std::is_same_v<space_t, IndexSpace<N,T>>) {
         my_space = spaces[i];
@@ -254,24 +254,24 @@ namespace Realm {
       out_space.bounds = out_space.bounds.union_bbox(my_space.bounds);
       if (my_space.dense()) {
         if constexpr (std::is_same_v<space_t, IndexSpace<N,T>>) {
-          out_space.num_entries += 1;
+          out_space.num_rects += 1;
         } else {
-          out_space.num_entries += shatter_size;
+          out_space.num_rects += shatter_size;
         }
       } else {
-        out_space.num_entries += my_space.sparsity.impl()->get_entries().size();
+        out_space.num_rects += my_space.sparsity.impl()->get_entries().size();
       }
     }
-    space_offsets[spaces.size()] = out_space.num_entries;
+    space_offsets[spaces.size()] = out_space.num_rects;
 
-    //We copy into one contiguous host buffer, then copy to device
-    SparsityMapEntry<N, T>* h_entries = deppart_host_alloc<SparsityMapEntry<N, T>>(out_space.num_entries);
+    // We copy into one contiguous host buffer, then copy to device.
+    Rect<N, T>* h_rects = deppart_host_alloc<Rect<N, T>>(out_space.num_rects);
 
     if (my_arena.capacity()==0) {
-      out_space.entries_buffer = h_entries;
-      out_space.host_entries_owner = h_entries;
+      out_space.rects_buffer = h_rects;
+      out_space.host_rects_owner = h_rects;
     } else {
-      out_space.entries_buffer = my_arena.alloc<SparsityMapEntry<N,T> >(out_space.num_entries);
+      out_space.rects_buffer = my_arena.alloc<Rect<N,T> >(out_space.num_rects);
     }
 
 
@@ -286,39 +286,34 @@ namespace Realm {
       }
       if (my_space.dense()) {
         if constexpr (std::is_same_v<space_t, IndexSpace<N,T>>) {
-          SparsityMapEntry<N,T> entry;
-          entry.bounds = my_space.bounds;
-          memcpy(h_entries + pos, &entry, sizeof(SparsityMapEntry<N,T>));
+          Rect<N,T> rect = my_space.bounds;
+          memcpy(h_rects + pos, &rect, sizeof(Rect<N,T>));
           ++pos;
         } else {
-          std::vector<SparsityMapEntry<N,T> > tmp(shatter_size);
+          std::vector<Rect<N,T> > tmp(shatter_size);
           int ppt = (my_space.bounds.hi[0] - my_space.bounds.lo[0]+1) / shatter_size;
           for (int i = 0; i < shatter_size; ++i) {
             Rect<N,T> new_rect = my_space.bounds;
             new_rect.lo[0] = my_space.bounds.lo[0] + i * ppt;
             new_rect.hi[0] = (i == shatter_size - 1) ? my_space.bounds.hi[0] : (new_rect.lo[0] + ppt - 1);
-            SparsityMapEntry<N,T> entry;
-            entry.bounds = new_rect;
-            entry.sparsity.id = 0;
-            entry.bitmap = 0;
-            tmp[i] = entry;
+            tmp[i] = new_rect;
           }
-          memcpy(h_entries + pos, tmp.data(), tmp.size() * sizeof(SparsityMapEntry<N,T>));
+          memcpy(h_rects + pos, tmp.data(), tmp.size() * sizeof(Rect<N,T>));
           pos += shatter_size;
         }
       } else {
-        span<SparsityMapEntry<N, T>> tmp = my_space.sparsity.impl()->get_entries();
-        memcpy(h_entries + pos, tmp.data(), tmp.size() * sizeof(SparsityMapEntry<N,T>));
+        span<Rect<N, T>> tmp = my_space.sparsity.impl()->get_entries();
+        memcpy(h_rects + pos, tmp.data(), tmp.size() * sizeof(Rect<N,T>));
         pos += tmp.size();
       }
     }
 
-    //Now we copy our entries and offsets to the device
+    // Now we copy our rectangles and offsets to the device.
     CUDA_CHECK(cudaMemcpyAsync(out_space.offsets, space_offsets.data(), (spaces.size() + 1) * sizeof(size_t), cudaMemcpyHostToDevice, stream), stream);
     if (my_arena.capacity() != 0) {
-      CUDA_CHECK(cudaMemcpyAsync(out_space.entries_buffer, h_entries, out_space.num_entries * sizeof(SparsityMapEntry<N,T>), cudaMemcpyHostToDevice, stream), stream);
+      CUDA_CHECK(cudaMemcpyAsync(out_space.rects_buffer, h_rects, out_space.num_rects * sizeof(Rect<N,T>), cudaMemcpyHostToDevice, stream), stream);
       CUDA_CHECK(cudaStreamSynchronize(stream), stream);
-      deppart_host_free(h_entries);
+      deppart_host_free(h_rects);
     }
     CUDA_CHECK(cudaStreamSynchronize(stream), stream);
 
@@ -331,18 +326,17 @@ namespace Realm {
 
     NVTX_DEPPART(collapse_parent_space);
     if (parent_space.dense()) {
-      SparsityMapEntry<N,T> entry;
-      entry.bounds = parent_space.bounds;
-      out_space.entries_buffer = my_arena.alloc<SparsityMapEntry<N, T>>(1);
-      out_space.num_entries = 1;
+      Rect<N,T> rect = parent_space.bounds;
+      out_space.rects_buffer = my_arena.alloc<Rect<N, T>>(1);
+      out_space.num_rects = 1;
       out_space.bounds = parent_space.bounds;
-      CUDA_CHECK(cudaMemcpyAsync(out_space.entries_buffer, &entry, sizeof(SparsityMapEntry<N,T>), cudaMemcpyHostToDevice, stream), stream);
+      CUDA_CHECK(cudaMemcpyAsync(out_space.rects_buffer, &rect, sizeof(Rect<N,T>), cudaMemcpyHostToDevice, stream), stream);
     } else {
-      span<SparsityMapEntry<N, T>> tmp =  parent_space.sparsity.impl()->get_entries();
-      out_space.num_entries = tmp.size();
-      out_space.entries_buffer = my_arena.alloc<SparsityMapEntry<N, T>>(tmp.size());
+      span<Rect<N, T>> tmp =  parent_space.sparsity.impl()->get_entries();
+      out_space.num_rects = tmp.size();
+      out_space.rects_buffer = my_arena.alloc<Rect<N, T>>(tmp.size());
       out_space.bounds = parent_space.bounds;
-      CUDA_CHECK(cudaMemcpyAsync(out_space.entries_buffer, tmp.data(), tmp.size() * sizeof(SparsityMapEntry<N,T>), cudaMemcpyHostToDevice, stream), stream);
+      CUDA_CHECK(cudaMemcpyAsync(out_space.rects_buffer, tmp.data(), tmp.size() * sizeof(Rect<N,T>), cudaMemcpyHostToDevice, stream), stream);
     }
     out_space.offsets = nullptr;
     out_space.num_children = 1;
@@ -355,15 +349,15 @@ namespace Realm {
   {
       NVTX_DEPPART(build_bvh);
       //We want to keep the entire BVH that we return in one instance for convenience.
-      size_t indices_instance_size = space.num_entries * sizeof(uint64_t);
-      size_t labels_instance_size = space.offsets == nullptr ? 0 : space.num_entries * sizeof(size_t);
-      size_t boxes_instance_size =  (2*space.num_entries - 1) * sizeof(Rect<N, T>);
-      size_t child_instance_size = (2*space.num_entries - 1) * sizeof(int);
+      size_t indices_instance_size = space.num_rects * sizeof(uint64_t);
+      size_t labels_instance_size = space.offsets == nullptr ? 0 : space.num_rects * sizeof(size_t);
+      size_t boxes_instance_size =  (2*space.num_rects - 1) * sizeof(Rect<N, T>);
+      size_t child_instance_size = (2*space.num_rects - 1) * sizeof(int);
 
       size_t total_instance_size = indices_instance_size + labels_instance_size + boxes_instance_size + 2 * child_instance_size;
       char* bvh_ptr = my_arena.alloc<char>(total_instance_size);
 
-      result.num_leaves = space.num_entries;
+      result.num_leaves = space.num_rects;
 
       size_t curr_idx = 0;
       result.indices = reinterpret_cast<uint64_t*>(bvh_ptr + curr_idx);
@@ -383,27 +377,27 @@ namespace Realm {
       CUDA_CHECK(cudaMemcpyAsync(d_global_bounds, &space.bounds, sizeof(Rect<N,T>), cudaMemcpyHostToDevice, stream), stream);
 
       // These are intermediate instances we'll destroy before returning.
-      char* d_morton_visit = my_arena.alloc<char>(2 * space.num_entries * max(sizeof(uint64_t), sizeof(int)));
+      char* d_morton_visit = my_arena.alloc<char>(2 * space.num_rects * max(sizeof(uint64_t), sizeof(int)));
       uint64_t* d_morton_codes = reinterpret_cast<uint64_t*>(d_morton_visit);
 
       size_t intermed = my_arena.mark();
 
-      uint64_t* d_indices_in = my_arena.alloc<uint64_t>(space.num_entries);
+      uint64_t* d_indices_in = my_arena.alloc<uint64_t>(space.num_rects);
 
       // We compute morton codes for each leaf and sort, labeling if necessary.
-      bvh_build_morton_codes<N, T><<<COMPUTE_GRID(space.num_entries), THREADS_PER_BLOCK, 0, stream>>>(space.entries_buffer, space.offsets, d_global_bounds, space.num_entries, space.num_children, d_morton_codes, d_indices_in, result.labels);
+      bvh_build_morton_codes<N, T><<<COMPUTE_GRID(space.num_rects), THREADS_PER_BLOCK, 0, stream>>>(space.rects_buffer, space.offsets, d_global_bounds, space.num_rects, space.num_children, d_morton_codes, d_indices_in, result.labels);
       KERNEL_CHECK(stream);
 
-      uint64_t* d_morton_codes_out = d_morton_codes + space.num_entries;
+      uint64_t* d_morton_codes_out = d_morton_codes + space.num_rects;
       uint64_t* d_indices_out = result.indices;
 
       void *bvh_temp = nullptr;
       size_t bvh_temp_bytes = 0;
       cub::DeviceRadixSort::SortPairs(bvh_temp, bvh_temp_bytes, d_morton_codes, d_morton_codes_out, d_indices_in,
-                                      d_indices_out, space.num_entries, 0, 64, stream);
+                                      d_indices_out, space.num_rects, 0, 64, stream);
       bvh_temp = reinterpret_cast<void*>(my_arena.alloc<char>(bvh_temp_bytes));
       cub::DeviceRadixSort::SortPairs(bvh_temp, bvh_temp_bytes, d_morton_codes, d_morton_codes_out, d_indices_in,
-                                      d_indices_out, space.num_entries, 0, 64, stream);
+                                      d_indices_out, space.num_rects, 0, 64, stream);
 
       std::swap(d_morton_codes, d_morton_codes_out);
 
@@ -411,12 +405,12 @@ namespace Realm {
 
 
       // Another temporary instance.
-      int* d_parent = my_arena.alloc<int>(2*space.num_entries - 1);
-      CUDA_CHECK(cudaMemsetAsync(d_parent, -1, (2*space.num_entries - 1) * sizeof(int), stream), stream);
+      int* d_parent = my_arena.alloc<int>(2*space.num_rects - 1);
+      CUDA_CHECK(cudaMemsetAsync(d_parent, -1, (2*space.num_rects - 1) * sizeof(int), stream), stream);
 
       // Here's where we actually build the BVH
-      int n = (int) space.num_entries;
-      bvh_build_radix_tree_kernel<<< COMPUTE_GRID(space.num_entries - 1), THREADS_PER_BLOCK, 0, stream>>>(d_morton_codes, result.indices, n, result.childLeft, result.childRight, d_parent);
+      int n = (int) space.num_rects;
+      bvh_build_radix_tree_kernel<<< COMPUTE_GRID(space.num_rects - 1), THREADS_PER_BLOCK, 0, stream>>>(d_morton_codes, result.indices, n, result.childLeft, result.childRight, d_parent);
       KERNEL_CHECK(stream);
 
       // Figure out which node didn't get its parent set.
@@ -424,20 +418,20 @@ namespace Realm {
 
       CUDA_CHECK(cudaMemsetAsync(d_root, -1, sizeof(int), stream), stream);
 
-      bvh_build_root_kernel<<< COMPUTE_GRID(2 * space.num_entries - 1), THREADS_PER_BLOCK, 0, stream>>>(d_root, d_parent, space.num_entries);
+      bvh_build_root_kernel<<< COMPUTE_GRID(2 * space.num_rects - 1), THREADS_PER_BLOCK, 0, stream>>>(d_root, d_parent, space.num_rects);
       KERNEL_CHECK(stream);
 
       CUDA_CHECK(cudaMemcpyAsync(&result.root, d_root, sizeof(int), cudaMemcpyDeviceToHost, stream), stream);
       CUDA_CHECK(cudaStreamSynchronize(stream), stream);
 
       // Now we materialize the tree into something the client can query.
-      bvh_init_leaf_boxes_kernel<N, T><<<COMPUTE_GRID(space.num_entries), THREADS_PER_BLOCK, 0, stream>>>(space.entries_buffer, result.indices, space.num_entries, result.boxes);
+      bvh_init_leaf_boxes_kernel<N, T><<<COMPUTE_GRID(space.num_rects), THREADS_PER_BLOCK, 0, stream>>>(space.rects_buffer, result.indices, space.num_rects, result.boxes);
       KERNEL_CHECK(stream);
 
       int* d_visitCount = reinterpret_cast<int*>(d_morton_visit);
-      CUDA_CHECK(cudaMemsetAsync(d_visitCount, 0, (2*space.num_entries - 1) * sizeof(int), stream), stream);
+      CUDA_CHECK(cudaMemsetAsync(d_visitCount, 0, (2*space.num_rects - 1) * sizeof(int), stream), stream);
 
-      bvh_merge_internal_boxes_kernel < N, T ><<< COMPUTE_GRID(space.num_entries), THREADS_PER_BLOCK, 0, stream>>>(space.num_entries, result.childLeft, result.childRight, d_parent, result.boxes, d_visitCount);
+      bvh_merge_internal_boxes_kernel < N, T ><<< COMPUTE_GRID(space.num_rects), THREADS_PER_BLOCK, 0, stream>>>(space.num_rects, result.childLeft, result.childRight, d_parent, result.boxes, d_visitCount);
       KERNEL_CHECK(stream);
 
       // Cleanup.
@@ -458,16 +452,16 @@ namespace Realm {
     CUDA_CHECK(cudaMemsetAsync(counters, 0, (lhs.num_children) * sizeof(uint32_t), stream), stream);
 
     BVH<N, T> my_bvh;
-    bool bvh_valid = rhs.num_children < rhs.num_entries && lhs.num_children < lhs.num_entries && lhs.num_entries > 1000;
+    bool bvh_valid = rhs.num_children < rhs.num_rects && lhs.num_children < lhs.num_rects && lhs.num_rects > 1000;
     if (bvh_valid) {
       build_bvh(rhs, my_bvh, my_arena, stream);
     }
 
     // First pass: figure out how many rectangles survive intersection.
     if (!bvh_valid) {
-      intersect_input_rects<N, T, out_t><<<COMPUTE_GRID(lhs.num_entries * rhs.num_entries), THREADS_PER_BLOCK, 0, stream>>>(lhs.entries_buffer, rhs.entries_buffer, lhs.offsets, nullptr, rhs.offsets, lhs.num_entries, rhs.num_entries, lhs.num_children, rhs.num_children, counters, nullptr);
+      intersect_input_rects<N, T, out_t><<<COMPUTE_GRID(lhs.num_rects * rhs.num_rects), THREADS_PER_BLOCK, 0, stream>>>(lhs.rects_buffer, rhs.rects_buffer, lhs.offsets, nullptr, rhs.offsets, lhs.num_rects, rhs.num_rects, lhs.num_children, rhs.num_children, counters, nullptr);
     } else {
-      query_input_bvh<N, T, out_t><<<COMPUTE_GRID(lhs.num_entries), THREADS_PER_BLOCK, 0, stream>>>(lhs.entries_buffer, lhs.offsets, my_bvh.root, my_bvh.childLeft, my_bvh.childRight, my_bvh.indices, my_bvh.labels, my_bvh.boxes, lhs.num_entries, my_bvh.num_leaves, lhs.num_children, nullptr, counters, nullptr);
+      query_input_bvh<N, T, out_t><<<COMPUTE_GRID(lhs.num_rects), THREADS_PER_BLOCK, 0, stream>>>(lhs.rects_buffer, lhs.offsets, my_bvh.root, my_bvh.childLeft, my_bvh.childRight, my_bvh.indices, my_bvh.labels, my_bvh.boxes, lhs.num_rects, my_bvh.num_leaves, lhs.num_children, nullptr, counters, nullptr);
     }
     KERNEL_CHECK(stream);
 
@@ -501,9 +495,9 @@ namespace Realm {
 
     // Second pass: recompute intersection, but this time write to output.
     if (!bvh_valid) {
-      intersect_input_rects<N, T, out_t><<<COMPUTE_GRID(lhs.num_entries * rhs.num_entries), THREADS_PER_BLOCK, 0, stream>>>(lhs.entries_buffer, rhs.entries_buffer, lhs.offsets, out_offsets, rhs.offsets, lhs.num_entries, rhs.num_entries, lhs.num_children, rhs.num_children, counters, d_valid_rects);
+      intersect_input_rects<N, T, out_t><<<COMPUTE_GRID(lhs.num_rects * rhs.num_rects), THREADS_PER_BLOCK, 0, stream>>>(lhs.rects_buffer, rhs.rects_buffer, lhs.offsets, out_offsets, rhs.offsets, lhs.num_rects, rhs.num_rects, lhs.num_children, rhs.num_children, counters, d_valid_rects);
     } else {
-      query_input_bvh<N, T, out_t><<<COMPUTE_GRID(lhs.num_entries), THREADS_PER_BLOCK, 0, stream>>>(lhs.entries_buffer, lhs.offsets, my_bvh.root, my_bvh.childLeft, my_bvh.childRight, my_bvh.indices, my_bvh.labels, my_bvh.boxes, lhs.num_entries, my_bvh.num_leaves, lhs.num_children, out_offsets, counters, d_valid_rects);
+      query_input_bvh<N, T, out_t><<<COMPUTE_GRID(lhs.num_rects), THREADS_PER_BLOCK, 0, stream>>>(lhs.rects_buffer, lhs.offsets, my_bvh.root, my_bvh.childLeft, my_bvh.childRight, my_bvh.indices, my_bvh.labels, my_bvh.boxes, lhs.num_rects, my_bvh.num_leaves, lhs.num_children, out_offsets, counters, d_valid_rects);
     }
     KERNEL_CHECK(stream);
     CUDA_CHECK(cudaStreamSynchronize(stream), stream);
@@ -1619,8 +1613,8 @@ namespace Realm {
       CUDA_CHECK(cudaMemsetAsync(d_ends, 0, output_instances.size()*sizeof(size_t),stream), stream);
       CUDA_CHECK(cudaStreamSynchronize(stream), stream);
 
-      //Convert RectDesc to SparsityMapEntry and determine where each src's rectangles start and end.
-      build_final_output<N, T><<<COMPUTE_GRID(total_rects), THREADS_PER_BLOCK, 0, stream>>>(d_rects, nullptr, final_rects, d_starts, d_ends, total_rects);
+      // Convert RectDesc to Rect and determine where each src's rectangles start and end.
+      build_final_output<N, T><<<COMPUTE_GRID(total_rects), THREADS_PER_BLOCK, 0, stream>>>(d_rects, final_rects, d_starts, d_ends, total_rects);
       KERNEL_CHECK(stream);
 
 
@@ -1701,7 +1695,6 @@ namespace Realm {
 
     CUstream stream = this->stream->get_stream();
 
-    SparsityMapEntry<N,T>* final_entries = my_arena.alloc<SparsityMapEntry<N,T>>(total_rects);
     Rect<N,T>* final_rects = my_arena.alloc<Rect<N,T>>(total_rects);
 
     size_t* d_starts = my_arena.alloc<size_t>(2 * ctr.size());
@@ -1710,8 +1703,8 @@ namespace Realm {
     CUDA_CHECK(cudaMemsetAsync(d_starts, 0, ctr.size()*sizeof(size_t),stream), stream);
     CUDA_CHECK(cudaMemsetAsync(d_ends, 0, ctr.size()*sizeof(size_t),stream), stream);
 
-    //Convert RectDesc to SparsityMapEntry and determine where each src's rectangles start and end.
-    build_final_output<<<COMPUTE_GRID(total_rects), THREADS_PER_BLOCK, 0, stream>>>(d_rects, final_entries, final_rects, d_starts, d_ends, total_rects);
+    // Convert RectDesc to Rect and determine where each src's rectangles start and end.
+    build_final_output<<<COMPUTE_GRID(total_rects), THREADS_PER_BLOCK, 0, stream>>>(d_rects, final_rects, d_starts, d_ends, total_rects);
     KERNEL_CHECK(stream);
 
 
@@ -1761,8 +1754,8 @@ namespace Realm {
         if (d_ends_host[idx] > d_starts_host[idx]) {
           size_t end = d_ends_host[idx];
           size_t start = d_starts_host[idx];
-          SparsityMapEntry<N, T> *h_entries = deppart_host_alloc<SparsityMapEntry<N, T>>(end - start);
-          CUDA_CHECK(cudaMemcpyAsync(h_entries, final_entries + start, (end - start) * sizeof(SparsityMapEntry<N,T>), cudaMemcpyDeviceToHost, stream), stream);
+          Rect<N, T> *h_rects = deppart_host_alloc<Rect<N, T>>(end - start);
+          CUDA_CHECK(cudaMemcpyAsync(h_rects, final_rects + start, (end - start) * sizeof(Rect<N,T>), cudaMemcpyDeviceToHost, stream), stream);
 
           Rect<N,T> *approx_rects;
           size_t num_approx;
@@ -1806,23 +1799,23 @@ namespace Realm {
           CUDA_CHECK(cudaMemcpyAsync(h_approx_entries, approx_rects, num_approx * sizeof(Rect<N,T>), cudaMemcpyDeviceToHost, stream), stream);
           CUDA_CHECK(cudaStreamSynchronize(stream), stream);
           if(owner == Network::my_node_id) {
-            impl->set_gpu_entries(h_entries, end - start);
+            impl->set_gpu_entries(h_rects, end - start);
             impl->set_gpu_approx_rects(h_approx_entries, num_approx);
             local_finalizations.push_back(impl);
           } else {
-            size_t payload_bytes = ((end - start) * sizeof(SparsityMapEntry<N, T>)) +
+            size_t payload_bytes = ((end - start) * sizeof(Rect<N, T>)) +
                                    (num_approx * sizeof(Rect<N, T>));
             ActiveMessage<typename SparsityMapImpl<N, T>::RemoteGpuFinalizeMessage>
                 amsg(owner, payload_bytes);
             amsg->sparsity = mapOpj;
             amsg->num_entries = end - start;
             amsg->num_approx = num_approx;
-            amsg.add_payload(h_entries, (end - start) * sizeof(SparsityMapEntry<N, T>),
+            amsg.add_payload(h_rects, (end - start) * sizeof(Rect<N, T>),
                              PAYLOAD_COPY);
             amsg.add_payload(h_approx_entries, num_approx * sizeof(Rect<N, T>),
                              PAYLOAD_COPY);
             amsg.commit();
-            deppart_host_free(h_entries);
+            deppart_host_free(h_rects);
             deppart_host_free(h_approx_entries);
           }
         } else {

@@ -91,15 +91,9 @@ void dump_sparse_index_space(const char *pfx, IndexSpace<N, T> is)
   if(!is.sparsity.exists())
     return;
   SparsityMapPublicImpl<N, T> *impl = is.sparsity.impl();
-  span<SparsityMapEntry<N, T>> entries = impl->get_entries();
+  span<Rect<N, T>> entries = impl->get_entries();
   for(size_t i = 0; i < entries.size(); i++) {
-    SparsityMapEntry<N, T> entry = entries[i];
-    std::cout << "  " << entry.bounds;
-    if(entry.bitmap)
-      std::cout << " bitmap(" << entry.bitmap << ")";
-    if(entry.sparsity.exists())
-      std::cout << " sparsity(" << entry.sparsity << ")";
-    std::cout << "\n";
+    std::cout << "  " << entries[i] << "\n";
   }
 }
 
