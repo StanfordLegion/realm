@@ -3892,8 +3892,7 @@ namespace Realm {
     , fill_data(0)
     , fill_size(0)
     , analysis_init_done(false)
-  {
-  }
+  {}
 
   void TransferDesc::check_analysis_preconditions()
   {
@@ -4088,8 +4087,8 @@ namespace Realm {
       // for now, pick a global dimension ordering
       // TODO: allow this to vary for independent subgraphs (or dependent ones
       //   with transposes in line)
-      domain->choose_dim_order(dim_order, srcs, dsts, indirects,
-                               (domain->volume() == 1), 65536 /*max_stride*/);
+      domain->choose_dim_order(dim_order, srcs, dsts, indirects, (domain->volume() == 1),
+                               65536 /*max_stride*/);
 
       src_fields.resize(srcs.size());
       dst_fields.resize(dsts.size());
