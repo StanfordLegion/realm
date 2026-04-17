@@ -179,6 +179,13 @@ namespace Realm {
     //   is working on)
     void set_priority(int new_priority);
 
+    // Called from within a thread to indicate whether a thread is currently
+    // being used to execute a subgraph task. We use this instead of TLS to
+    // handle both kernel and user threads.
+    void start_subgraph_task_execution();
+    void stop_subgraph_task_execution();
+    bool in_subgraph_task_execution() const { return in_subgraph_task_exec; }
+
 #ifdef REALM_USE_USER_THREADS
     // perform a user-level thread switch
     // if called from a kernel thread, that thread becomes the "host" for the user thread
@@ -228,6 +235,7 @@ namespace Realm {
     atomic<State> state;
     ThreadScheduler *scheduler;
     Operation *current_op;
+    bool in_subgraph_task_exec;
     int exception_handler_count;
     atomic<int> signal_count;
     Mutex signal_mutex;

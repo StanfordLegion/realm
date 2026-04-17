@@ -52,7 +52,7 @@ namespace Realm {
 
     // TODO: collective construction
 
-    void destroy(Event wait_on = Event::NO_EVENT) const;
+    Event destroy(Event wait_on = Event::NO_EVENT) const;
 
     Event instantiate(const void *args, size_t arglen, const ProfilingRequestSet &prs,
                       Event wait_on = Event::NO_EVENT, int priority_adjust = 0) const;
@@ -247,11 +247,28 @@ namespace Realm {
 
     ConcurrencyMode concurrency_mode;
 
+    // Execution mode, which controls the optimization strategy used
+    // to execute the subgraph.
+    enum ExecutionMode
+    {
+      // Executed by issuing operations within the subgraph as standard
+      // Realm operations, with some optimizations.
+      INTERPRETED,
+      // Executed by compiling the subgraph and executing the operations
+      // through a specialized component of Realm that offers significantly
+      // lower execution overhead at the cost of some restrictions on the
+      // flexibility of operations within the subgraph.
+      COMPILED,
+    };
+    ExecutionMode execution_mode;
+
     // longer term possibilites:
     //  conditional execution
     //  loops
     //  local "scratchpad" for small-value-communication
   };
+
+  std::ostream &operator<<(std::ostream &os, SubgraphDefinition::ExecutionMode mode);
 
 }; // namespace Realm
 

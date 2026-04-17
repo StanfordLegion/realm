@@ -40,6 +40,8 @@
 namespace Realm {
 
   class ProcessorGroupImpl;
+  class ProcSubgraphExecutor;
+  class SubgraphExecutionState;
 
   namespace ThreadLocal {
     // if nonzero, prevents application thread from yielding execution
@@ -168,8 +170,16 @@ namespace Realm {
     // runs an internal Realm operation on this processor
     virtual void add_internal_task(InternalTask *task);
 
+    // Enqueue a subgraph for execution onto this processor.
+    void enqueue_subgraph(SubgraphExecutionState *subgraph);
+
   protected:
     void set_scheduler(ThreadedTaskScheduler *_sched);
+
+    // Allow the ProcSubgraphExecutor to notify the scheduler
+    // for this processor that new subgraph work might be ready.
+    friend class ProcSubgraphExecutor;
+    void notify_scheduler_of_new_work();
 
     ThreadedTaskScheduler *sched;
     TaskQueue task_queue; // ready tasks
