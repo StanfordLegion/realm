@@ -464,10 +464,10 @@ namespace Realm {
     std::vector<FieldInfo> src_fields, dst_fields;
     void *fill_data;
     size_t fill_size;
-    bool analysis_init_done;
-    size_t analysis_field_idx;
-    size_t analysis_fld_start;
-    size_t analysis_fill_ofs;
+    bool analysis_init_done = false;
+    size_t analysis_field_idx = 0;
+    size_t analysis_fld_start = 0;
+    size_t analysis_fill_ofs = 0;
     std::vector<bool> analysis_field_done;
     ProfilingMeasurements::OperationMemoryUsage prof_usage;
     ProfilingMeasurements::OperationCopyInfo prof_cpinfo;

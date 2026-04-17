@@ -3537,6 +3537,7 @@ namespace Realm {
   TransferDesc::TransferDesc(TestTag, TransferDomain *_domain)
     : refcount(1)
     , deferred_analysis(this)
+    , domain(_domain)
     , prs()
     , analysis_complete(false)
     , analysis_successful(false)
@@ -3544,7 +3545,6 @@ namespace Realm {
     , fill_size(0)
     , analysis_init_done(false)
   {
-    domain = _domain;
   }
 
   void TransferDesc::check_analysis_preconditions()
