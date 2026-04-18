@@ -2034,16 +2034,20 @@ SparsityMapImpl<N, T>::~SparsityMapImpl(void)
           sparsity_comm->recommend_max_payload(requestor, false /*!with_congestion*/);
       const size_t max_to_send = max_bytes_per_packet / sizeof(Rect<N, T>);
       assert(max_to_send > 0);
+      std::cout << "MAX TO SEND = " << max_to_send << " for total count " << total_count
+                << " with recommended max payload " << max_bytes_per_packet << "\n";
       size_t num_pieces = 0;
 
       // send partial messages first
       while(remaining > max_to_send) {
+        nvtx_range_push("cuda", "sending message");
         size_t bytes = max_to_send * sizeof(Rect<N, T>);
         sparsity_comm->send_contribute(requestor, me, 0, total_count, /*disjoint=*/true,
                                        rdata, bytes);
         num_pieces++;
         remaining -= max_to_send;
         rdata += max_to_send;
+        nvtx_range_pop();
       }
 
       // final message includes the count of all messages (including this one!)
