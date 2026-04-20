@@ -76,31 +76,6 @@ namespace Realm {
     ActiveMessageHandlerReg<OutputSparsityAllocationResponse>
         output_sparsity_allocation_response_reg;
 
-    template <typename T>
-    inline T *deppart_gpu_host_alloc(size_t count)
-    {
-      if(count == 0) return nullptr;
-#ifdef REALM_USE_CUDA
-      void *ptr = nullptr;
-      cudaError_t err = cudaHostAlloc(&ptr, count * sizeof(T), cudaHostAllocPortable);
-      assert(err == cudaSuccess);
-      return reinterpret_cast<T *>(ptr);
-#else
-      return static_cast<T *>(std::malloc(count * sizeof(T)));
-#endif
-    }
-
-    inline void deppart_gpu_host_free(void *ptr)
-    {
-      if(ptr == nullptr) return;
-#ifdef REALM_USE_CUDA
-      cudaError_t err = cudaFreeHost(ptr);
-      assert(err == cudaSuccess);
-#else
-      std::free(ptr);
-#endif
-    }
-
     inline bool deppart_sparsity_trace_enabled(void)
     {
       static int enabled = -1;
@@ -1379,8 +1354,8 @@ bool SparsityMapPublicImpl<N, T>::bvh_centroid_less(int axis,
 template<int N, typename T>
 SparsityMapImpl<N, T>::~SparsityMapImpl(void)
 {
-     deppart_gpu_host_free(this->gpu_entries);
-     deppart_gpu_host_free(this->gpu_approx_rects);
+     deppart_host_free(this->gpu_entries);
+     deppart_host_free(this->gpu_approx_rects);
 }
 
   template <int N, typename T>
@@ -2487,7 +2462,7 @@ SparsityMapImpl<N, T>::~SparsityMapImpl(void)
   template<int N, typename T>
   void SparsityMapImpl<N, T>::set_gpu_entries(Rect<N, T> *entries, size_t size)
   {
-    deppart_gpu_host_free(this->gpu_entries);
+    deppart_host_free(this->gpu_entries);
     this->gpu_entries = entries;
     this->entries.clear();
     this->num_entries = size;
@@ -2496,7 +2471,7 @@ SparsityMapImpl<N, T>::~SparsityMapImpl(void)
   template<int N, typename T>
   void SparsityMapImpl<N, T>::set_gpu_approx_rects(Rect<N, T> *approx_rects, size_t size)
   {
-    deppart_gpu_host_free(this->gpu_approx_rects);
+    deppart_host_free(this->gpu_approx_rects);
     this->gpu_approx_rects = approx_rects;
     this->approx_rects.clear();
     this->num_approx = size;
@@ -2593,7 +2568,7 @@ SparsityMapImpl<N, T>::~SparsityMapImpl(void)
     SparsityMapImpl<N, T> *impl = SparsityMapImpl<N, T>::lookup(msg.sparsity);
 
     if(msg.num_entries > 0) {
-      Rect<N, T> *entries = deppart_gpu_host_alloc<Rect<N, T>>(msg.num_entries);
+      Rect<N, T> *entries = deppart_host_alloc<Rect<N, T>>(msg.num_entries);
       std::memcpy(entries, payload, msg.num_entries * sizeof(Rect<N, T>));
       impl->set_gpu_entries(entries, msg.num_entries);
       payload += msg.num_entries * sizeof(Rect<N, T>);
@@ -2602,7 +2577,7 @@ SparsityMapImpl<N, T>::~SparsityMapImpl(void)
     }
 
     if(msg.num_approx > 0) {
-      Rect<N, T> *approx = deppart_gpu_host_alloc<Rect<N, T>>(msg.num_approx);
+      Rect<N, T> *approx = deppart_host_alloc<Rect<N, T>>(msg.num_approx);
       std::memcpy(approx, payload, msg.num_approx * sizeof(Rect<N, T>));
       impl->set_gpu_approx_rects(approx, msg.num_approx);
     } else {

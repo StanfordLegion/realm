@@ -72,21 +72,6 @@ inline int32_t next_nvtx_payload() {
 
 namespace Realm {
 
-  template <typename T>
-  inline T *deppart_host_alloc(size_t count, unsigned flags = cudaHostAllocPortable)
-  {
-    if(count == 0) return nullptr;
-    void *ptr = nullptr;
-    CUDA_HOST_CHECK(cudaHostAlloc(&ptr, count * sizeof(T), flags));
-    return reinterpret_cast<T *>(ptr);
-  }
-
-  inline void deppart_host_free(void *ptr)
-  {
-    if(ptr != nullptr)
-      CUDA_HOST_CHECK(cudaFreeHost(ptr));
-  }
-
   // Used by cub::DeviceReduce to compute bad GPU approximation.
   template<int N, typename T>
   struct UnionRectOp {
