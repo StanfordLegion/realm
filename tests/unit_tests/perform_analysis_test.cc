@@ -22,8 +22,6 @@
 using namespace Realm;
 
 // Minimal TransferDomain implementation that avoids runtime dependencies.
-// Used to replace the empty domain after construction so that perform_analysis
-// takes the non-empty path and enters the main field loop.
 class MockTransferDomain : public TransferDomain {
 public:
   TransferDomain *clone() const override { return new MockTransferDomain; }
@@ -65,137 +63,112 @@ public:
   void print(std::ostream &os) const override { os << "MockTransferDomain"; }
 };
 
-// PerformAnalysisTest is a friend of TransferDesc, allowing direct access to
-// protected members for testing the incremental analysis behavior.
-class PerformAnalysisTest : public ::testing::Test {
-protected:
-  // Helper to construct a TransferDesc using the test-only constructor.
-  // This bypasses TransferDomain::construct and check_analysis_preconditions,
-  // avoiding runtime dependencies.
-  static TransferDesc *create_desc(TransferDomain *domain)
-  {
-    return new TransferDesc(TransferDesc::TestTag{}, domain);
-  }
+// Test subclass that exposes TransferDesc's protected members for testing.
+// Uses the TestTag constructor to bypass check_analysis_preconditions (which
+// requires the runtime).
+class TestableTransferDesc : public TransferDesc {
+public:
+  TestableTransferDesc(TransferDomain *domain)
+    : TransferDesc(TestTag{}, domain)
+  {}
 
-  // Set up dummy src/dst field pairs on a TransferDesc. Uses NO_INST so that
-  // choose_dim_order skips the preferred_dim_order call (which requires
-  // the runtime). The loop body won't execute in timeout tests since
-  // is_expired() fires before any per-field work.
-  static void setup_dummy_fields(TransferDesc *desc, size_t num_fields)
+  using TransferDesc::perform_analysis;
+
+  // Accessors for protected state
+  bool get_analysis_complete() const { return analysis_complete.load(); }
+  bool get_analysis_init_done() const { return analysis_init_done; }
+  size_t get_analysis_field_idx() const { return analysis_field_idx; }
+  size_t get_dim_order_size() const { return dim_order.size(); }
+  const int *get_dim_order_data() const { return dim_order.data(); }
+  size_t get_src_fields_size() const { return src_fields.size(); }
+  size_t get_dst_fields_size() const { return dst_fields.size(); }
+
+  // Set up dummy src/dst field pairs. Uses NO_INST so that choose_dim_order
+  // skips the preferred_dim_order call (which requires the runtime). The
+  // loop body won't execute in timeout tests since is_expired() fires
+  // before any per-field work.
+  void add_dummy_fields(size_t num_fields)
   {
     for(size_t i = 0; i < num_fields; i++) {
       CopySrcDstField src;
       src.set_field(RegionInstance::NO_INST, FieldID(i), /*size=*/8);
       CopySrcDstField dst;
       dst.set_field(RegionInstance::NO_INST, FieldID(i), /*size=*/8);
-      desc->srcs.push_back(src);
-      desc->dsts.push_back(dst);
+      srcs.push_back(src);
+      dsts.push_back(dst);
     }
-  }
-
-  // Accessors for protected members (friendship is not inherited by TEST_F
-  // subclasses, so all access must go through PerformAnalysisTest methods).
-  static bool call_perform_analysis(TransferDesc *desc, TimeLimit work_until)
-  {
-    return desc->perform_analysis(work_until);
-  }
-  static bool get_analysis_complete(TransferDesc *desc)
-  {
-    return desc->analysis_complete.load();
-  }
-  static bool get_analysis_init_done(TransferDesc *desc)
-  {
-    return desc->analysis_init_done;
-  }
-  static size_t get_analysis_field_idx(TransferDesc *desc)
-  {
-    return desc->analysis_field_idx;
-  }
-  static size_t get_dim_order_size(TransferDesc *desc) { return desc->dim_order.size(); }
-  static const int *get_dim_order_data(TransferDesc *desc)
-  {
-    return desc->dim_order.data();
-  }
-  static size_t get_src_fields_size(TransferDesc *desc)
-  {
-    return desc->src_fields.size();
-  }
-  static size_t get_dst_fields_size(TransferDesc *desc)
-  {
-    return desc->dst_fields.size();
   }
 };
 
 // Test that perform_analysis returns true immediately for an empty domain.
-TEST_F(PerformAnalysisTest, EmptyDomainCompletesImmediately)
+TEST(PerformAnalysisTest, EmptyDomainCompletesImmediately)
 {
-  // MockEmptyDomain returns empty() == true
   class MockEmptyDomain : public MockTransferDomain {
   public:
     bool empty() const override { return true; }
     size_t volume() const override { return 0; }
   };
 
-  TransferDesc *desc = create_desc(new MockEmptyDomain);
+  TestableTransferDesc *desc = new TestableTransferDesc(new MockEmptyDomain);
 
-  bool completed = call_perform_analysis(desc, TimeLimit());
+  bool completed = desc->perform_analysis(TimeLimit());
   EXPECT_TRUE(completed);
-  EXPECT_TRUE(get_analysis_complete(desc));
+  EXPECT_TRUE(desc->get_analysis_complete());
 
   desc->remove_reference();
 }
 
 // Test that perform_analysis with an immediately-expired TimeLimit returns
 // false (timed out) without completing the analysis.
-TEST_F(PerformAnalysisTest, ExpiredTimeLimitCausesTimeout)
+TEST(PerformAnalysisTest, ExpiredTimeLimitCausesTimeout)
 {
   const size_t num_fields = 5;
-  TransferDesc *desc = create_desc(new MockTransferDomain);
-  setup_dummy_fields(desc, num_fields);
+  TestableTransferDesc *desc = new TestableTransferDesc(new MockTransferDomain);
+  desc->add_dummy_fields(num_fields);
 
   // Call perform_analysis with an already-expired time limit.
   // The init phase runs (it doesn't check the time limit), but the loop
   // should immediately detect the expired limit and return false.
-  bool completed = call_perform_analysis(desc, TimeLimit::relative(0));
+  bool completed = desc->perform_analysis(TimeLimit::relative(0));
 
   EXPECT_FALSE(completed);
   // Init should have completed
-  EXPECT_TRUE(get_analysis_init_done(desc));
+  EXPECT_TRUE(desc->get_analysis_init_done());
   // But the field loop should not have progressed
-  EXPECT_EQ(get_analysis_field_idx(desc), 0u);
+  EXPECT_EQ(desc->get_analysis_field_idx(), 0u);
   // analysis_complete should still be false
-  EXPECT_FALSE(get_analysis_complete(desc));
+  EXPECT_FALSE(desc->get_analysis_complete());
 
   desc->remove_reference();
 }
 
 // Test that after a timeout, calling perform_analysis again with an expired
 // TimeLimit preserves the init state (doesn't redo it).
-TEST_F(PerformAnalysisTest, InitStatePreservedAcrossTimeoutCalls)
+TEST(PerformAnalysisTest, InitStatePreservedAcrossTimeoutCalls)
 {
   const size_t num_fields = 3;
-  TransferDesc *desc = create_desc(new MockTransferDomain);
-  setup_dummy_fields(desc, num_fields);
+  TestableTransferDesc *desc = new TestableTransferDesc(new MockTransferDomain);
+  desc->add_dummy_fields(num_fields);
 
   // First call: times out immediately
-  bool completed = call_perform_analysis(desc, TimeLimit::relative(0));
+  bool completed = desc->perform_analysis(TimeLimit::relative(0));
   ASSERT_FALSE(completed);
-  ASSERT_TRUE(get_analysis_init_done(desc));
+  ASSERT_TRUE(desc->get_analysis_init_done());
 
   // Verify that dim_order was set during init (1D domain -> single entry)
-  EXPECT_EQ(get_dim_order_size(desc), 1u);
+  EXPECT_EQ(desc->get_dim_order_size(), 1u);
   // Verify src/dst fields were resized during init
-  EXPECT_EQ(get_src_fields_size(desc), num_fields);
-  EXPECT_EQ(get_dst_fields_size(desc), num_fields);
+  EXPECT_EQ(desc->get_src_fields_size(), num_fields);
+  EXPECT_EQ(desc->get_dst_fields_size(), num_fields);
 
   // Second call: also times out, but init should not be redone.
   // Capture dim_order pointer to verify it's the same vector (not reallocated).
-  const int *dim_order_data = get_dim_order_data(desc);
-  completed = call_perform_analysis(desc, TimeLimit::relative(0));
+  const int *dim_order_data = desc->get_dim_order_data();
+  completed = desc->perform_analysis(TimeLimit::relative(0));
   EXPECT_FALSE(completed);
-  EXPECT_TRUE(get_analysis_init_done(desc));
+  EXPECT_TRUE(desc->get_analysis_init_done());
   // dim_order should not have been modified (init was skipped)
-  EXPECT_EQ(get_dim_order_data(desc), dim_order_data);
+  EXPECT_EQ(desc->get_dim_order_data(), dim_order_data);
 
   desc->remove_reference();
 }
