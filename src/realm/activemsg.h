@@ -86,13 +86,9 @@ namespace Realm {
     ActiveMessage(NodeID _target, const LocalAddress &_src_payload_addr, size_t _datalen,
                   const RemoteAddress &_dest_payload_addr);
     ActiveMessage(const Realm::NodeSet &_targets, const void *_data, size_t _datalen);
-    ActiveMessage(NodeID _target, const void *_data, size_t _bytes_per_line,
-                  size_t _lines, size_t _line_stride);
     ActiveMessage(NodeID _target, const LocalAddress &_src_payload_addr,
                   size_t _bytes_per_line, size_t _lines, size_t _line_stride,
                   const RemoteAddress &_dest_payload_addr);
-    ActiveMessage(const Realm::NodeSet &_targets, const void *_data,
-                  size_t _bytes_per_line, size_t _lines, size_t _line_stride);
 
     ~ActiveMessage(void);
 
@@ -105,13 +101,9 @@ namespace Realm {
     void init(NodeID _target, const LocalAddress &_src_payload_addr, size_t _datalen,
               const RemoteAddress &_dest_payload_addr);
     void init(const Realm::NodeSet &_targets, const void *_data, size_t _datalen);
-    void init(NodeID _target, const void *_data, size_t _bytes_per_line, size_t _lines,
-              size_t _line_stride);
     void init(NodeID _target, const LocalAddress &_src_payload_addr,
               size_t _bytes_per_line, size_t _lines, size_t _line_stride,
               const RemoteAddress &_dest_payload_addr);
-    void init(const Realm::NodeSet &_targets, const void *_data, size_t _bytes_per_line,
-              size_t _lines, size_t _line_stride);
 
     // large messages may need to be fragmented, so use cases that can
     //  handle the fragmentation at a higher level may want to know the
@@ -177,14 +169,17 @@ namespace Realm {
   private:
     // chunked-mode state: only used when the requested payload exceeds the
     //  network's hard limit for a single message
-    size_t network_max_payload_; // 0 = normal (non-chunked) mode
-    NodeID chunk_target_;
-    const void *chunk_src_data_;
-    size_t chunk_src_datalen_;
-    char *chunk_alloc_; // owned buffer for network-allocated chunked mode
+    size_t network_max_payload_{0}; // 0 = normal (non-chunked) mode
+    NodeID chunk_target_{0};
+    NodeSet *chunk_targets_{nullptr}; // allocated for multicast chunked mode
+    const void *chunk_src_data_{nullptr};
+    size_t chunk_src_datalen_{0};
+    char *chunk_alloc_{nullptr}; // owned buffer for network-allocated chunked mode
 
     void init_chunked(NodeID _target, size_t _max_payload_size);
+    void init_chunked(const NodeSet &_targets, size_t _max_payload_size);
     void init_chunked_data(NodeID _target, const void *_data, size_t _datalen);
+    void init_chunked_data(const NodeSet &_targets, const void *_data, size_t _datalen);
     void commit_chunked(void);
     static uint64_t next_chunk_message_id(NodeID node_id);
   };
