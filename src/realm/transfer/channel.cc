@@ -2542,6 +2542,17 @@ namespace Realm {
           log_xd.info() << "remote write chunk: min=" << min_xfer_size
                         << " max=" << max_bytes;
 
+          // multi-field fast path: when an IDIndexedFieldsIterator has
+          // attached a FieldBlock to one or both address lists, each such
+          // entry describes one rectangle covering N fields at offsets
+          // field_id * field_stride.  The 1D-dst / 1D-src branch below (by
+          // far the common case, and the only one that can be reached when
+          // idindexed_fields is set - 2D dst and scatter dst are assert(0),
+          // 2D src and gather are #ifdef-gated) picks up per-field offset
+          // adjustment and - when both sides have a FieldBlock - batches
+          // advance() by fields_left so XferDes/iterator setup is amortized
+          // across all fields in the block.
+
           while(total_bytes < max_bytes) {
             AddressListCursor &in_alc = in_port->addrcursor;
             AddressListCursor &out_alc = out_port->addrcursor;
@@ -2627,34 +2638,79 @@ namespace Realm {
                 if(src_1d_maxbytes == 0)
                   break;
 
-                // 1D source
+                // 1D source - single AM per field (N fields per full-rect
+                // consume when both sides have a FieldBlock).  The AM
+                // framing cost is not amortized by batching - each field
+                // gets its own message - but the XferDes/iterator setup is
+                // amortized across all fields (one XD for the whole block
+                // instead of N).
                 bytes = src_1d_maxbytes;
-                // log_xd.info() << "remote write 1d: guid=" << guid
-                //              << " src=" << src_buf << " dst=" << dst_buf
-                //              << " bytes=" << bytes;
-                ActiveMessage<Write1DMessage> amsg(dst_node, src_buf, bytes, dst_buf);
-                amsg->next_xd_guid = out_port->peer_guid;
-                amsg->next_port_idx = out_port->peer_port_idx;
-                amsg->span_start = out_span_start;
-
-                // reads aren't consumed until local completion, but
-                //  only ask if we have a previous xd that's going to
-                //  care
-                if(in_port->peer_guid != XFERDES_NO_GUID) {
-                  // a ReadBytesUpdater holds a reference to the xd
-                  add_reference();
-                  amsg.add_local_completion(ReadBytesUpdater(
-                      this, input_control.current_io_port, in_span_start, bytes));
+                const FieldBlock *fblock_in = in_alc.field_block();
+                const FieldBlock *fblock_out = out_alc.field_block();
+                const size_t src_fstride =
+                    fblock_in ? in_alc.addrlist->full_field_bytes() : 0;
+                const size_t dst_fstride =
+                    fblock_out ? out_alc.addrlist->full_field_bytes() : 0;
+                const FieldID *const src_fields_arr =
+                    fblock_in ? in_alc.fields_data() : nullptr;
+                const FieldID *const dst_fields_arr =
+                    fblock_out ? out_alc.fields_data() : nullptr;
+                const size_t fields_left_in = fblock_in ? in_alc.remaining_fields() : 1;
+                const size_t fields_left_out =
+                    fblock_out ? out_alc.remaining_fields() : 1;
+#ifdef DEBUG_REALM
+                if(fblock_in && fblock_out) {
+                  assert(fields_left_in == fields_left_out);
                 }
-                in_span_start += bytes;
-                // the write isn't complete until it's ack'd by the target
-                amsg.add_remote_completion(WriteBytesUpdater(
-                    this, output_control.current_io_port, out_span_start, bytes));
-                out_span_start += bytes;
+#endif
+                const size_t fields_left = std::min(fields_left_in, fields_left_out);
+                const bool full_rect_src = (in_dim == 1) && (bytes == icount);
+                const bool full_rect_dst = (out_dim == 1) && (bytes == ocount);
+                const size_t n =
+                    (fblock_in && fblock_out && full_rect_src && full_rect_dst)
+                        ? fields_left
+                        : 1;
+#ifdef DEBUG_REALM
+                assert(n == 1 || (full_rect_src && full_rect_dst));
+#endif
 
-                amsg.commit();
-                in_alc.advance(0, bytes);
-                out_alc.advance(0, bytes);
+                for(size_t f = 0; f < n; f++) {
+                  const uintptr_t src_fofs =
+                      src_fields_arr ? (uintptr_t(src_fields_arr[f]) * src_fstride) : 0;
+                  const uintptr_t dst_fofs =
+                      dst_fields_arr ? (uintptr_t(dst_fields_arr[f]) * dst_fstride) : 0;
+                  LocalAddress src_buf_f = src_buf;
+                  src_buf_f.offset += src_fofs;
+                  RemoteAddress dst_buf_f = dst_buf;
+                  dst_buf_f.ptr += dst_fofs;
+
+                  ActiveMessage<Write1DMessage> amsg(dst_node, src_buf_f, bytes,
+                                                     dst_buf_f);
+                  amsg->next_xd_guid = out_port->peer_guid;
+                  amsg->next_port_idx = out_port->peer_port_idx;
+                  amsg->span_start = out_span_start;
+
+                  // reads aren't consumed until local completion, but
+                  //  only ask if we have a previous xd that's going to
+                  //  care
+                  if(in_port->peer_guid != XFERDES_NO_GUID) {
+                    // a ReadBytesUpdater holds a reference to the xd
+                    add_reference();
+                    amsg.add_local_completion(ReadBytesUpdater(
+                        this, input_control.current_io_port, in_span_start, bytes));
+                  }
+                  in_span_start += bytes;
+                  // the write isn't complete until it's ack'd by the target
+                  amsg.add_remote_completion(WriteBytesUpdater(
+                      this, output_control.current_io_port, out_span_start, bytes));
+                  out_span_start += bytes;
+
+                  amsg.commit();
+                }
+
+                in_alc.advance(0, bytes, n);
+                out_alc.advance(0, bytes, n);
+                bytes *= n;
               } else if(src_2d_maxbytes >= src_ga_maxbytes) {
                 // 2D source
                 size_t bytes_per_line = icount;
@@ -4206,6 +4262,19 @@ namespace Realm {
   }
 
   RemoteWriteChannel::~RemoteWriteChannel() {}
+
+  bool RemoteWriteChannel::support_idindexed_fields(Memory src_mem, Memory dst_mem) const
+  {
+    // The multi-field branch in RemoteWriteXferDes::progress_xd reuses the
+    // existing per-rect 1D/1D active-message path, issuing one message per
+    // field of the attached FieldBlock.  This is safe for any memory pair
+    // that RemoteWriteChannel already accepts (same preconditions as the
+    // single-field slow path); the real win is amortizing XferDes/iterator
+    // setup across all the fields in the block rather than paying it N
+    // times.  2D/scatter dst and 2D/gather src remain single-field (they
+    // are gated assert(0) or #ifdef today).
+    return true;
+  }
 
   XferDes *RemoteWriteChannel::create_xfer_des(
       uintptr_t dma_op, NodeID launch_node, XferDesID guid,

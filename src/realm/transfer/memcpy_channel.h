@@ -76,6 +76,8 @@ namespace Realm {
                                      const void *fill_data, size_t fill_size,
                                      size_t fill_total);
 
+    virtual bool support_idindexed_fields(Memory src_mem, Memory dst_mem) const override;
+
     virtual long submit(Request **requests, long nr);
 
     const Node *node = nullptr;
