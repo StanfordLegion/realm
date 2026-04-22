@@ -62,8 +62,8 @@ namespace {
   // is the shape that IDIndexedFieldsIterator expects.
   template <int N, typename T>
   static InstanceLayout<N, T> *make_aos_layout(Rect<N, T> bounds,
-                                                const std::vector<FieldID> &field_ids,
-                                                size_t field_size)
+                                               const std::vector<FieldID> &field_ids,
+                                               size_t field_size)
   {
     auto *inst_layout = new InstanceLayout<N, T>();
     inst_layout->bytes_used = 0;
@@ -72,8 +72,7 @@ namespace {
 
     size_t stride = field_size;
     for(int d = 0; d < N; d++) {
-      const size_t count =
-          static_cast<size_t>(bounds.hi[d] - bounds.lo[d] + 1);
+      const size_t count = static_cast<size_t>(bounds.hi[d] - bounds.lo[d] + 1);
       // Fields are packed first, so the next-higher spatial dim stride is
       // (num_fields * field_size * prefix product).
       stride *= count;
@@ -111,10 +110,9 @@ namespace {
   }
 
   template <int N, typename T>
-  static RegionInstanceImpl *make_aos_inst(Rect<N, T> bounds,
-                                            const std::vector<FieldID> &field_ids,
-                                            size_t field_size,
-                                            uintptr_t storage_base_offset = 0)
+  static RegionInstanceImpl *
+  make_aos_inst(Rect<N, T> bounds, const std::vector<FieldID> &field_ids,
+                size_t field_size, uintptr_t storage_base_offset = 0)
   {
     RegionInstance inst = ID::make_instance(0, 0, 0, 0).convert<RegionInstance>();
     auto *layout = make_aos_layout<N, T>(bounds, field_ids, field_size);
@@ -136,10 +134,9 @@ namespace {
   // and verify every field's byte pattern landed correctly at the right
   // destination offset.
   template <int N, typename T>
-  static void run_multi_field_case(Rect<N, T> bounds,
-                                   const std::vector<FieldID> &src_fids,
-                                   const std::vector<FieldID> &dst_fids,
-                                   size_t field_size)
+  static void
+  run_multi_field_case(Rect<N, T> bounds, const std::vector<FieldID> &src_fids,
+                       const std::vector<FieldID> &dst_fids, size_t field_size)
   {
     ASSERT_EQ(src_fids.size(), dst_fids.size());
 
@@ -176,31 +173,30 @@ namespace {
     std::vector<int> dim_order(N);
     std::iota(dim_order.begin(), dim_order.end(), 0);
 
-    auto *src_it = new IDIndexedFieldsIterator<N, T>(
-        dim_order.data(), src_fids, field_size, src_inst, bounds, &heap);
-    auto *dst_it = new IDIndexedFieldsIterator<N, T>(
-        dim_order.data(), dst_fids, field_size, dst_inst, bounds, &heap);
+    auto *src_it = new IDIndexedFieldsIterator<N, T>(dim_order.data(), src_fids,
+                                                     field_size, src_inst, bounds, &heap);
+    auto *dst_it = new IDIndexedFieldsIterator<N, T>(dim_order.data(), dst_fids,
+                                                     field_size, dst_inst, bounds, &heap);
 
     // -------- MemcpyXferDes wiring (mirrors memcpy_channel_test) --------
     Node node_data;
     std::unordered_map<realm_id_t, SharedMemoryInfo> remote_shared_memory_mappings;
     XferDesRedopInfo redop_info;
     auto bgwork = std::make_unique<BackgroundWorkManager>();
-    auto channel = std::make_unique<MemcpyChannel>(
-        bgwork.get(), &node_data, remote_shared_memory_mappings);
+    auto channel = std::make_unique<MemcpyChannel>(bgwork.get(), &node_data,
+                                                   remote_shared_memory_mappings);
 
     std::vector<XferDesPortInfo> inputs_info, outputs_info;
-    std::unique_ptr<MemcpyXferDes> xfer_desc(
-        dynamic_cast<MemcpyXferDes *>(channel->create_xfer_des(
-            0, 0 /*owner*/, 0 /*guid*/, inputs_info, outputs_info, 0 /*priority*/,
-            redop_info, nullptr, 0, 0)));
+    std::unique_ptr<MemcpyXferDes> xfer_desc(dynamic_cast<MemcpyXferDes *>(
+        channel->create_xfer_des(0, 0 /*owner*/, 0 /*guid*/, inputs_info, outputs_info,
+                                 0 /*priority*/, redop_info, nullptr, 0, 0)));
 
-    auto src_mem = std::make_unique<LocalCPUMemory>(
-        nullptr, Memory::NO_MEMORY, src_storage.size(), 0, Memory::SYSTEM_MEM,
-        src_storage.data());
-    auto dst_mem = std::make_unique<LocalCPUMemory>(
-        nullptr, Memory::NO_MEMORY, dst_storage.size(), 0, Memory::SYSTEM_MEM,
-        dst_storage.data());
+    auto src_mem =
+        std::make_unique<LocalCPUMemory>(nullptr, Memory::NO_MEMORY, src_storage.size(),
+                                         0, Memory::SYSTEM_MEM, src_storage.data());
+    auto dst_mem =
+        std::make_unique<LocalCPUMemory>(nullptr, Memory::NO_MEMORY, dst_storage.size(),
+                                         0, Memory::SYSTEM_MEM, dst_storage.data());
 
     xfer_desc->input_ports.resize(1);
     auto &input_port = xfer_desc->input_ports[0];
@@ -251,17 +247,17 @@ namespace {
 TEST(MemcpyMultiField, OneDim_TwoFields_Sequential)
 {
   run_multi_field_case<1, int>(Rect<1, int>(0, 63),
-                                /*src_fids=*/{0, 1},
-                                /*dst_fids=*/{0, 1},
-                                /*field_size=*/sizeof(int));
+                               /*src_fids=*/{0, 1},
+                               /*dst_fids=*/{0, 1},
+                               /*field_size=*/sizeof(int));
 }
 
 TEST(MemcpyMultiField, OneDim_FourFields_Sequential)
 {
   run_multi_field_case<1, int>(Rect<1, int>(0, 255),
-                                /*src_fids=*/{0, 1, 2, 3},
-                                /*dst_fids=*/{0, 1, 2, 3},
-                                /*field_size=*/sizeof(int));
+                               /*src_fids=*/{0, 1, 2, 3},
+                               /*dst_fids=*/{0, 1, 2, 3},
+                               /*field_size=*/sizeof(int));
 }
 
 TEST(MemcpyMultiField, OneDim_FieldReorder)
@@ -269,9 +265,9 @@ TEST(MemcpyMultiField, OneDim_FieldReorder)
   // src reads fields 0..3, dst writes into fields 4..7 (reordered).
   // Confirms per-field offsets on src and dst can differ.
   run_multi_field_case<1, int>(Rect<1, int>(0, 127),
-                                /*src_fids=*/{0, 1, 2, 3},
-                                /*dst_fids=*/{4, 5, 6, 7},
-                                /*field_size=*/sizeof(int));
+                               /*src_fids=*/{0, 1, 2, 3},
+                               /*dst_fids=*/{4, 5, 6, 7},
+                               /*field_size=*/sizeof(int));
 }
 
 TEST(MemcpyMultiField, OneDim_FieldPermutation)
@@ -280,9 +276,9 @@ TEST(MemcpyMultiField, OneDim_FieldPermutation)
   // offset pairing tracks src_fields[k] <-> dst_fields[k] rather than
   // assuming both arrays are sorted.
   run_multi_field_case<1, int>(Rect<1, int>(0, 63),
-                                /*src_fids=*/{3, 1, 0, 2},
-                                /*dst_fids=*/{0, 2, 3, 1},
-                                /*field_size=*/sizeof(int));
+                               /*src_fids=*/{3, 1, 0, 2},
+                               /*dst_fids=*/{0, 2, 3, 1},
+                               /*field_size=*/sizeof(int));
 }
 
 TEST(MemcpyMultiField, OneDim_ManyFields)
@@ -293,9 +289,9 @@ TEST(MemcpyMultiField, OneDim_ManyFields)
   std::vector<FieldID> fids(1024);
   std::iota(fids.begin(), fids.end(), 0);
   run_multi_field_case<1, int>(Rect<1, int>(0, 15),
-                                /*src_fids=*/fids,
-                                /*dst_fids=*/fids,
-                                /*field_size=*/sizeof(int));
+                               /*src_fids=*/fids,
+                               /*dst_fids=*/fids,
+                               /*field_size=*/sizeof(int));
 }
 
 // ---- 2D cases ----
@@ -303,17 +299,17 @@ TEST(MemcpyMultiField, OneDim_ManyFields)
 TEST(MemcpyMultiField, TwoDim_FourFields)
 {
   run_multi_field_case<2, int>(Rect<2, int>({0, 0}, {15, 15}),
-                                /*src_fids=*/{0, 1, 2, 3},
-                                /*dst_fids=*/{0, 1, 2, 3},
-                                /*field_size=*/sizeof(int));
+                               /*src_fids=*/{0, 1, 2, 3},
+                               /*dst_fids=*/{0, 1, 2, 3},
+                               /*field_size=*/sizeof(int));
 }
 
 TEST(MemcpyMultiField, TwoDim_FieldReorder)
 {
   run_multi_field_case<2, int>(Rect<2, int>({0, 0}, {31, 7}),
-                                /*src_fids=*/{2, 0, 1},
-                                /*dst_fids=*/{0, 1, 2},
-                                /*field_size=*/sizeof(long long));
+                               /*src_fids=*/{2, 0, 1},
+                               /*dst_fids=*/{0, 1, 2},
+                               /*field_size=*/sizeof(long long));
 }
 
 // ---- 3D cases ----
@@ -321,9 +317,9 @@ TEST(MemcpyMultiField, TwoDim_FieldReorder)
 TEST(MemcpyMultiField, ThreeDim_ThreeFields)
 {
   run_multi_field_case<3, int>(Rect<3, int>({0, 0, 0}, {7, 7, 7}),
-                                /*src_fids=*/{0, 1, 2},
-                                /*dst_fids=*/{0, 1, 2},
-                                /*field_size=*/sizeof(int));
+                               /*src_fids=*/{0, 1, 2},
+                               /*dst_fids=*/{0, 1, 2},
+                               /*field_size=*/sizeof(int));
 }
 
 // ---- single-field sanity ----
@@ -335,7 +331,7 @@ TEST(MemcpyMultiField, OneDim_SingleField_LegacyPath)
   // throughout.  Confirms the fast-path code does the right thing when
   // there's nothing to batch.
   run_multi_field_case<1, int>(Rect<1, int>(0, 63),
-                                /*src_fids=*/{5},
-                                /*dst_fids=*/{7},
-                                /*field_size=*/sizeof(int));
+                               /*src_fids=*/{5},
+                               /*dst_fids=*/{7},
+                               /*field_size=*/sizeof(int));
 }
