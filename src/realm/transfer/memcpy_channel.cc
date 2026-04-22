@@ -182,6 +182,14 @@ namespace Realm {
           uintptr_t out_base =
               reinterpret_cast<uintptr_t>(out_port->mem->get_direct_ptr(0, 0));
 
+          // multi-field fast path: each FieldBlock-attached address list (via
+          // IDIndexedFieldsIterator) has entries that describe one rectangle
+          // covering N fields at offsets field_id * field_stride.  Both ports
+          // have a FieldBlock in the common case (instance-to-instance copy).
+          // Asymmetric cases (e.g. instance <-> IB boundary XD) leave one
+          // side without a FieldBlock; the side that has one still needs its
+          // per-field offset added on every rect slab, but batching (n>1)
+          // requires both sides.
           while(total_bytes < max_bytes) {
             AddressListCursor &in_alc = in_port->addrcursor;
             AddressListCursor &out_alc = out_port->addrcursor;
@@ -194,12 +202,43 @@ namespace Realm {
             int in_dim = in_alc.get_dim();
             int out_dim = out_alc.get_dim();
 
+            const FieldBlock *fblock_in = in_alc.field_block();
+            const FieldBlock *fblock_out = out_alc.field_block();
+            // multi-field: per-field rect stride (= per-field bytes in this entry)
+            const size_t src_fstride =
+                fblock_in ? in_alc.addrlist->full_field_bytes() : 0;
+            const size_t dst_fstride =
+                fblock_out ? out_alc.addrlist->full_field_bytes() : 0;
+            const FieldID *const src_fields = fblock_in ? in_alc.fields_data() : nullptr;
+            const FieldID *const dst_fields =
+                fblock_out ? out_alc.fields_data() : nullptr;
+            const size_t fields_left_in = fblock_in ? in_alc.remaining_fields() : 1;
+            const size_t fields_left_out = fblock_out ? out_alc.remaining_fields() : 1;
+#ifdef DEBUG_REALM
+            if(fblock_in && fblock_out) {
+              assert(fields_left_in == fields_left_out);
+            }
+#endif
+            const size_t fields_left = std::min(fields_left_in, fields_left_out);
+
             size_t bytes = 0;
             size_t bytes_left = max_bytes - total_bytes;
             // memcpys don't need to be particularly big to achieve
             //  peak efficiency, so trim to something that takes
-            //  10's of us to be responsive to the time limit
+            //  10's of us to be responsive to the time limit.  This is a
+            //  per-field cap - a multi-field iteration may issue up to
+            //  fields_left copies of a rectangle up to this size.
             bytes_left = std::min(bytes_left, size_t(256 << 10));
+
+            // geometry computed by the 1D/2D/3D selection below, then
+            // dispatched at the bottom - this lets multi-field vs single-field
+            // share a single memcpy dispatch.
+            int copy_kind = 0; // 1, 2, or 3 dimensions
+            size_t copy_contig = 0, copy_lines = 1, copy_planes = 1;
+            uintptr_t copy_in_lstride = 0, copy_out_lstride = 0;
+            uintptr_t copy_in_pstride = 0, copy_out_pstride = 0;
+            int adv_id = 0, adv_od = 0;
+            size_t adv_amt_in = 0, adv_amt_out = 0;
 
             if(in_dim > 0) {
               if(out_dim > 0) {
@@ -213,10 +252,12 @@ namespace Realm {
                 if((contig_bytes == bytes_left) ||
                    ((contig_bytes == icount) && (in_dim == 1)) ||
                    ((contig_bytes == ocount) && (out_dim == 1))) {
-                  bytes = contig_bytes;
-                  memcpy_1d(out_base + out_offset, in_base + in_offset, bytes);
-                  in_alc.advance(0, bytes);
-                  out_alc.advance(0, bytes);
+                  copy_kind = 1;
+                  copy_contig = contig_bytes;
+                  adv_id = 0;
+                  adv_amt_in = contig_bytes;
+                  adv_od = 0;
+                  adv_amt_out = contig_bytes;
                 } else {
                   // grow to a 2D copy
                   int id;
@@ -268,11 +309,15 @@ namespace Realm {
                   if(((contig_bytes * lines) == bytes_left) ||
                      ((lines == icount) && (id == (in_dim - 1))) ||
                      ((lines == ocount) && (od == (out_dim - 1)))) {
-                    bytes = contig_bytes * lines;
-                    memcpy_2d(out_base + out_offset, out_lstride, in_base + in_offset,
-                              in_lstride, contig_bytes, lines);
-                    in_alc.advance(id, lines * iscale);
-                    out_alc.advance(od, lines * oscale);
+                    copy_kind = 2;
+                    copy_contig = contig_bytes;
+                    copy_lines = lines;
+                    copy_in_lstride = in_lstride;
+                    copy_out_lstride = out_lstride;
+                    adv_id = id;
+                    adv_amt_in = lines * iscale;
+                    adv_od = od;
+                    adv_amt_out = lines * oscale;
                   } else {
                     uintptr_t in_pstride;
                     if(lines < icount) {
@@ -308,12 +353,18 @@ namespace Realm {
 
                     size_t planes = std::min(std::min(icount, ocount),
                                              (bytes_left / (contig_bytes * lines)));
-                    bytes = contig_bytes * lines * planes;
-                    memcpy_3d(out_base + out_offset, out_lstride, out_pstride,
-                              in_base + in_offset, in_lstride, in_pstride, contig_bytes,
-                              lines, planes);
-                    in_alc.advance(id, planes * iscale);
-                    out_alc.advance(od, planes * oscale);
+                    copy_kind = 3;
+                    copy_contig = contig_bytes;
+                    copy_lines = lines;
+                    copy_planes = planes;
+                    copy_in_lstride = in_lstride;
+                    copy_in_pstride = in_pstride;
+                    copy_out_lstride = out_lstride;
+                    copy_out_pstride = out_pstride;
+                    adv_id = id;
+                    adv_amt_in = planes * iscale;
+                    adv_od = od;
+                    adv_amt_out = planes * oscale;
                   }
                 }
               } else {
@@ -330,8 +381,53 @@ namespace Realm {
               }
             }
 
+            // ---- dispatch ------------------------------------------------
+            // multi-field promotes to n=fields_left only when both sides have
+            // a FieldBlock and the advance completes the rectangle on both
+            // cursors (AddressListCursor only bumps partial_fields on a full-
+            // rect consume - see AddressListCursor::advance in
+            // address_list.cc).  partial-rect consumes and asymmetric cases
+            // always run one field at a time (n=1, f=1) so the partial_fields
+            // counter stays in lockstep with the data actually moved.
+            const bool full_rect_src = (adv_id == (in_alc.get_dim() - 1)) &&
+                                       (adv_amt_in == in_alc.remaining(adv_id));
+            const bool full_rect_dst = (adv_od == (out_alc.get_dim() - 1)) &&
+                                       (adv_amt_out == out_alc.remaining(adv_od));
+            const size_t n = (fblock_in && fblock_out && full_rect_src && full_rect_dst)
+                                 ? fields_left
+                                 : 1;
 #ifdef DEBUG_REALM
-            assert(bytes <= bytes_left);
+            // invariant: advance() with f>1 is only valid on a full-rect
+            // consume; see AddressListCursor::advance in address_list.cc.
+            assert(n == 1 || (full_rect_src && full_rect_dst));
+#endif
+
+            for(size_t f = 0; f < n; f++) {
+              const uintptr_t src_fofs =
+                  src_fields ? (uintptr_t(src_fields[f]) * src_fstride) : 0;
+              const uintptr_t dst_fofs =
+                  dst_fields ? (uintptr_t(dst_fields[f]) * dst_fstride) : 0;
+              if(copy_kind == 1) {
+                memcpy_1d(out_base + out_offset + dst_fofs,
+                          in_base + in_offset + src_fofs, copy_contig);
+              } else if(copy_kind == 2) {
+                memcpy_2d(out_base + out_offset + dst_fofs, copy_out_lstride,
+                          in_base + in_offset + src_fofs, copy_in_lstride, copy_contig,
+                          copy_lines);
+              } else {
+                memcpy_3d(out_base + out_offset + dst_fofs, copy_out_lstride,
+                          copy_out_pstride, in_base + in_offset + src_fofs,
+                          copy_in_lstride, copy_in_pstride, copy_contig, copy_lines,
+                          copy_planes);
+              }
+            }
+
+            bytes = copy_contig * copy_lines * copy_planes * n;
+            in_alc.advance(adv_id, adv_amt_in, n);
+            out_alc.advance(adv_od, adv_amt_out, n);
+
+#ifdef DEBUG_REALM
+            assert(bytes <= bytes_left * n);
 #endif
             total_bytes += bytes;
 
@@ -472,6 +568,17 @@ namespace Realm {
     assert(fill_size == 0);
     return new MemcpyXferDes(dma_op, this, launch_node, guid, inputs_info, outputs_info,
                              priority);
+  }
+
+  bool MemcpyChannel::support_idindexed_fields(Memory src_mem, Memory dst_mem) const
+  {
+    // MemcpyChannel only accepts paths where both memories are host-direct
+    // addressable (local system memories plus remote-shared-memory segments
+    // whose get_direct_ptr resolves - see constructor's add_path calls).  Any
+    // pair path-enumeration has already routed through this channel is safe
+    // to batch multi-field, because the multi-field progress_xd branch uses
+    // the same get_direct_ptr + memcpy_1d/2d/3d calls as the legacy branch.
+    return true;
   }
 
   long MemcpyChannel::submit(Request **requests, long nr)

@@ -55,7 +55,25 @@ namespace TestConfig {
   size_t num_fields = 1;
   size_t field_size = sizeof(ElementType);
   size_t size = 4ULL * 256ULL; // 1024ULL * 4ULL;//1024ULL;
+  // Which memory to allocate instances in.  Accepts "cpu" / "sysmem" for
+  // host system memory, and "gpu" / "fbmem" for GPU framebuffer memory.
+  // The caller is expected to state the intent explicitly - there is no
+  // hidden autoselection based on what's available.
+  std::string memkind = "cpu";
 };                             // namespace TestConfig
+
+static Realm::Memory::Kind parse_memkind(const std::string &s)
+{
+  if(s == "cpu" || s == "sysmem" || s == "SYSTEM_MEM") {
+    return Realm::Memory::SYSTEM_MEM;
+  }
+  if(s == "gpu" || s == "fbmem" || s == "GPU_FB_MEM") {
+    return Realm::Memory::GPU_FB_MEM;
+  }
+  log_app.fatal() << "unrecognized -memkind " << s
+                  << " (expected cpu/sysmem or gpu/fbmem)";
+  abort();
+}
 
 template <int N, typename T, typename FT>
 inline void copy(RegionInstance src_inst, RegionInstance dst_inst,
@@ -700,9 +718,10 @@ static void update_operation_time(const void *args, size_t arglen, const void *u
 static void bench_timing_task(const void *args, size_t arglen, const void *userdata,
                               size_t userlen, Processor p)
 {
-  log_app.print("=== Memory Info ===");
+  const Memory::Kind selected_kind = parse_memkind(TestConfig::memkind);
+  log_app.print() << "=== Memory Info (kind=" << TestConfig::memkind << ") ===";
   Realm::Machine::MemoryQuery mq(Realm::Machine::get_machine());
-  mq.only_kind(Memory::GPU_FB_MEM).has_capacity(1);
+  mq.only_kind(selected_kind).has_capacity(1);
   std::vector<Realm::Memory> memories(mq.begin(), mq.end());
   for(Memory m : memories) {
     display_memory_info(m);
@@ -712,6 +731,9 @@ static void bench_timing_task(const void *args, size_t arglen, const void *userd
   // mq = mq.has_capacity(pow(TestConfig::size, MAX_DIM) * sizeof(ElementType));
   memories.assign(mq.begin(), mq.end());
   if(memories.size() == 0) {
+    log_app.fatal() << "no memories of kind " << TestConfig::memkind
+                    << " available - check runtime flags (-ll:gpu N for gpu, "
+                       "-ll:csize M for cpu)";
     abort();
   }
 
@@ -784,7 +806,8 @@ int main(int argc, char **argv)
       .add_option_int("-field_size", TestConfig::field_size)
       .add_option_int("-graphviz", TestConfig::graphviz)
       .add_option_int("-max_ops", TestConfig::max_ops)
-      .add_option_int("-verify", TestConfig::verify);
+      .add_option_int("-verify", TestConfig::verify)
+      .add_option_string("-memkind", TestConfig::memkind);
   ok = cp.parse_command_line(argc, (const char **)argv);
   assert(ok);
 

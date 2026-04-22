@@ -1913,6 +1913,15 @@ namespace Realm {
     template <typename S>
     bool serialize(S &serializer) const;
 
+    // Minimum field count for switching from the per-field iterator to the
+    // IDIndexedFieldsIterator fast path.  Derivation: the per-path latencies
+    // are
+    //   T_slow = N * C_iter + W/B_eff             (one iterator per field)
+    //   T_fast = C_iter + C_fb + W/B_eff          (one iterator + FieldBlock)
+    // so T_slow - T_fast = (N-1)*C_iter - C_fb.  With C_fb ~ one replicated-
+    // heap alloc + a short memcpy of the field-ID list and C_iter comparable
+    // in magnitude, the break-even is N >= 2 in expectation.  At N=1 there
+    // is no batch to form, so the slow path is forced.
     static constexpr size_t MIN_IDINDEXED_FIELDS = 2;
 
     // protected:
@@ -4387,14 +4396,12 @@ namespace Realm {
               xdn.scatter_control_input = -1;
               xdn.target_node = path_info.xd_channels[j]->node;
 
-              bool enable_multi_field = false;
-              RealmStatus success =
-                  get_runtime()->get_module_config("core")->get_property(
-                      "dma_multi_field", enable_multi_field);
-              assert(success == REALM_SUCCESS);
-
+              // The fast path is selected automatically: the channel votes
+              // on capability (support_idindexed_fields) and TransferDesc::
+              // create_iterator adds the layout/field-count gate
+              // (MIN_IDINDEXED_FIELDS).  No user-facing knob - Realm picks
+              // the lower-latency path from the copy parameters.
               xdn.idindexed_fields =
-                  enable_multi_field &&
                   path_info.xd_channels[j]->support_idindexed_fields(src_mem, dst_mem);
 
               xdn.channel = path_info.xd_channels[j];

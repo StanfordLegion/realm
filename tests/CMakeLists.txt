@@ -97,6 +97,7 @@ list(
   fragmented_message_test.cc
   incoming_message_manager_test.cc
   memcpy_channel_test.cc
+  memcpy_multi_field_test.cc
   comp_queue_test.cc
   event_test.cc
   path_cache_test.cc
@@ -292,6 +293,16 @@ add_integration_test(coverings "${REALM_TEST_DIR}/coverings.cc")
 set(alltoall_ARGS -ll:csize 1024)
 add_integration_test(alltoall "${REALM_TEST_DIR}/alltoall.cc")
 add_integration_test(realm_reinit "${REALM_TEST_DIR}/realm_reinit.cc")
+# multifield_transfer supports CPU and GPU memories via -memkind.  Always
+# build and run the CPU variant; GPU variant is registered below when CUDA
+# is enabled.
+set(multifield_transfer_ARGS
+    # max_ops=1 serializes the copy operations so verification is deterministic
+    # (concurrent copies on the same dst_inst race).  Raise max_ops for
+    # throughput testing with -verify 0.
+    -memkind cpu -num_fields 32 -size 256 -max_ops 1 -ll:cpu 2 -ll:csize 1024 -verify 1
+)
+add_integration_test(multifield_transfer "${REALM_TEST_DIR}/multifield_transfer.cc")
 set(sparse_construct_ARGS -verbose)
 add_integration_test(sparse_construct "${REALM_TEST_DIR}/sparse_construct.cc")
 add_integration_test(extres_alias "${REALM_TEST_DIR}/extres_alias.cc")
@@ -429,10 +440,14 @@ if(TEST_USE_GPU)
     target_link_libraries(cuda_memcpy_test CUDA::cudart)
     target_link_libraries(cuda_scatter_test CUDA::cudart)
     target_link_libraries(test_cuhook CUDA::cudart)
-    set(multifield_transfer_ARGS -ll:gpu 1)
-    set(multifield_transfer_RESOURCE_LOCK gpu)
-    add_integration_test(multifield_transfer "${REALM_TEST_DIR}/multifield_transfer.cc")
-    target_link_libraries(multifield_transfer CUDA::cudart)
+    # Re-use the multifield_transfer binary (built unconditionally above) with
+    # GPU-mode args.  The binary itself has no CUDA code.
+    add_test(NAME multifield_transfer_gpu
+             COMMAND $<TARGET_FILE:multifield_transfer>
+                     -memkind gpu -num_fields 32 -size 256 -max_ops 1 -ll:gpu 1
+                     -verify 1)
+    set_property(TEST multifield_transfer_gpu PROPERTY RESOURCE_LOCK gpu)
+    list(APPEND _integ_list multifield_transfer_gpu)
   endif()
   set(transpose_test_gpu_ARGS -ll:gpu 1)
   set(transpose_test_gpu_RESOURCE_LOCK gpu)
