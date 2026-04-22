@@ -21,8 +21,9 @@
 #include <realm/cmdline.h>
 
 #include <random>
-#include <unistd.h>
 #include <limits>
+
+#include "osdep.h"
 
 using namespace Realm;
 
