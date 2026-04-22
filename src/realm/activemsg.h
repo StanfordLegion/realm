@@ -31,6 +31,7 @@
 #include "realm/threads.h"
 #include "realm/bgwork.h"
 #include <atomic>
+#include <cstddef>
 #include <limits>
 #include <type_traits>
 #include <mutex>
@@ -164,17 +165,18 @@ namespace Realm {
     ActiveMessageImpl *impl;
     T *header;
     Realm::Serialization::FixedBufferSerializer fbs;
-    uint64_t inline_capacity[INLINE_STORAGE / sizeof(uint64_t)];
+    alignas(alignof(T) > alignof(uint64_t) ? alignof(T) : alignof(uint64_t)) uint64_t
+        inline_capacity[INLINE_STORAGE / sizeof(uint64_t)];
 
   private:
     // chunked-mode state: only used when the requested payload exceeds the
     //  network's hard limit for a single message
     size_t network_max_payload_{0}; // 0 = normal (non-chunked) mode
-    NodeID chunk_target_{0};
-    NodeSet *chunk_targets_{nullptr}; // allocated for multicast chunked mode
+    NodeSet chunk_targets_;
     const void *chunk_src_data_{nullptr};
     size_t chunk_src_datalen_{0};
-    char *chunk_alloc_{nullptr}; // owned buffer for network-allocated chunked mode
+    std::vector<std::byte>
+        chunk_alloc_; // owned buffer for network-allocated chunked mode
 
     void init_chunked(NodeID _target, size_t _max_payload_size);
     void init_chunked(const NodeSet &_targets, size_t _max_payload_size);

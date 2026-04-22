@@ -355,8 +355,9 @@ namespace Realm {
   void *ActiveMessage<T, INLINE_STORAGE>::payload_ptr(size_t datalen)
   {
     if(network_max_payload_ != 0) {
-      assert(chunk_alloc_ != nullptr);
-      char *eob = chunk_alloc_ + chunk_src_datalen_;
+      assert(!chunk_alloc_.empty());
+      char *buf_begin = reinterpret_cast<char *>(chunk_alloc_.data());
+      char *eob = buf_begin + chunk_src_datalen_;
       char *curpos = eob - fbs.bytes_left();
       char *nextpos = curpos + datalen;
       fbs.reset(nextpos, eob - nextpos);
@@ -429,14 +430,9 @@ namespace Realm {
       // chunked mode - just clean up the local state
       header->~T();
       header = 0;
-      if(chunk_alloc_) {
-        delete[] chunk_alloc_;
-        chunk_alloc_ = nullptr;
-      }
-      if(chunk_targets_) {
-        delete chunk_targets_;
-        chunk_targets_ = nullptr;
-      }
+      chunk_alloc_.clear();
+      chunk_alloc_.shrink_to_fit();
+      chunk_targets_.clear();
       chunk_src_data_ = nullptr;
       chunk_src_datalen_ = 0;
       network_max_payload_ = 0;
@@ -601,12 +597,12 @@ namespace Realm {
       network_max_payload_ = Network::max_payload_size(wrapped_hdr_size, nullptr);
       assert(network_max_payload_ > 0);
 
-      chunk_target_ = _target;
-      chunk_alloc_ = new char[_max_payload_size];
-      chunk_src_data_ = chunk_alloc_;
+      chunk_targets_.add(_target);
+      chunk_alloc_.resize(_max_payload_size);
+      chunk_src_data_ = chunk_alloc_.data();
       chunk_src_datalen_ = _max_payload_size;
       header = new(&inline_capacity) T;
-      fbs.reset(chunk_alloc_, _max_payload_size);
+      fbs.reset(chunk_alloc_.data(), _max_payload_size);
     }
   }
 
@@ -621,12 +617,12 @@ namespace Realm {
       network_max_payload_ = Network::max_payload_size(wrapped_hdr_size, nullptr);
       assert(network_max_payload_ > 0);
 
-      chunk_targets_ = new NodeSet(_targets);
-      chunk_alloc_ = new char[_max_payload_size];
-      chunk_src_data_ = chunk_alloc_;
+      chunk_targets_ = _targets;
+      chunk_alloc_.resize(_max_payload_size);
+      chunk_src_data_ = chunk_alloc_.data();
       chunk_src_datalen_ = _max_payload_size;
       header = new(&inline_capacity) T;
-      fbs.reset(chunk_alloc_, _max_payload_size);
+      fbs.reset(chunk_alloc_.data(), _max_payload_size);
     }
   }
 
@@ -644,7 +640,7 @@ namespace Realm {
       network_max_payload_ = Network::max_payload_size(wrapped_hdr_size, _data);
       assert(network_max_payload_ > 0);
 
-      chunk_target_ = _target;
+      chunk_targets_.add(_target);
       chunk_src_data_ = _data;
       chunk_src_datalen_ = _datalen;
       // place the header in inline_capacity (it's not sent to the network yet)
@@ -666,7 +662,7 @@ namespace Realm {
       network_max_payload_ = Network::max_payload_size(wrapped_hdr_size, _data);
       assert(network_max_payload_ > 0);
 
-      chunk_targets_ = new NodeSet(_targets);
+      chunk_targets_ = _targets;
       chunk_src_data_ = _data;
       chunk_src_datalen_ = _datalen;
       header = new(&inline_capacity) T;
@@ -680,7 +676,7 @@ namespace Realm {
       assert(0 && "commit_chunked called on WrappedWithFragInfo type");
     } else {
       assert(chunk_src_data_ != nullptr);
-      if(chunk_alloc_) {
+      if(!chunk_alloc_.empty()) {
         // buffer mode: actual payload is what was written via fbs
         chunk_src_datalen_ -= fbs.bytes_left();
       }
@@ -701,24 +697,13 @@ namespace Realm {
       for(uint32_t chunk_id = 0; chunk_id < total_chunks; ++chunk_id) {
         size_t chunk_size = std::min(max_chunk, total_payload - offset);
 
-        // dispatch to NodeSet or single-target constructor based on mode
-        if(chunk_targets_) {
-          ActiveMessage<WrappedWithFragInfo<T>> chunk_msg(*chunk_targets_, chunk_size);
-          chunk_msg->frag_info = {chunk_id, total_chunks, msg_id};
-          chunk_msg->user = *header;
-          if(chunk_size > 0) {
-            chunk_msg.add_payload(payload_data + offset, chunk_size);
-          }
-          chunk_msg.commit();
-        } else {
-          ActiveMessage<WrappedWithFragInfo<T>> chunk_msg(chunk_target_, chunk_size);
-          chunk_msg->frag_info = {chunk_id, total_chunks, msg_id};
-          chunk_msg->user = *header;
-          if(chunk_size > 0) {
-            chunk_msg.add_payload(payload_data + offset, chunk_size);
-          }
-          chunk_msg.commit();
+        ActiveMessage<WrappedWithFragInfo<T>> chunk_msg(chunk_targets_, chunk_size);
+        chunk_msg->frag_info = {chunk_id, total_chunks, msg_id};
+        chunk_msg->user = *header;
+        if(chunk_size > 0) {
+          chunk_msg.add_payload(payload_data + offset, chunk_size);
         }
+        chunk_msg.commit();
 
         offset += chunk_size;
       }
@@ -726,14 +711,9 @@ namespace Realm {
       // clean up
       header->~T();
       header = 0;
-      if(chunk_alloc_) {
-        delete[] chunk_alloc_;
-        chunk_alloc_ = nullptr;
-      }
-      if(chunk_targets_) {
-        delete chunk_targets_;
-        chunk_targets_ = nullptr;
-      }
+      chunk_alloc_.clear();
+      chunk_alloc_.shrink_to_fit();
+      chunk_targets_.clear();
       chunk_src_data_ = nullptr;
       chunk_src_datalen_ = 0;
       network_max_payload_ = 0;
