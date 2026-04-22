@@ -1096,6 +1096,7 @@ var hierarchy =
     [ "Realm::LocalPythonProcessor::TaskTableEntry", "structRealm_1_1LocalPythonProcessor_1_1TaskTableEntry.html", null ],
     [ "Realm::LocalTaskProcessor::TaskTableEntry", "structRealm_1_1LocalTaskProcessor_1_1TaskTableEntry.html", null ],
     [ "is_copy_serializable::test< T >", "structis__copy__serializable_1_1test.html", null ],
+    [ "Realm::TransferDesc::TestTag", "structRealm_1_1TransferDesc_1_1TestTag.html", null ],
     [ "Realm::Thread", "classRealm_1_1Thread.html", null ],
     [ "Realm::ThreadLaunchParameters", "classRealm_1_1ThreadLaunchParameters.html", null ],
     [ "Realm::ThreadPool", "classRealm_1_1ThreadPool.html", null ],

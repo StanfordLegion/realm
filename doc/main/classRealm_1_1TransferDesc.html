@@ -44,7 +44,7 @@
    <!-- BEGIN version select -->
     <br />
     <div class="dropdown">
-     <button class="dropbtn">Version 25.6.1-rc.4+d393ba4e</button>
+     <button class="dropbtn">Version 25.6.1-rc.4+c271dec0</button>
      <div class="dropdown-content"></div>
     </div>
     <script type="text/javascript" src="../selectversion.js"></script>
@@ -146,7 +146,7 @@ $(document).ready(function(){initNavTree('classRealm_1_1TransferDesc.html',''); 
 <div class="dynheader">
 Collaboration diagram for Realm::TransferDesc:</div>
 <div class="dyncontent">
-<div class="center"><!-- SVG 0 --></div>
+<div class="center"><iframe scrolling="no" frameborder="0" src="classRealm_1_1TransferDesc__coll__graph.svg" width="1562" height="423"><p><b>This browser is not able to show SVG: try Firefox, Chrome, Safari, or Opera instead.</b></p></iframe></div>
 <center><span class="legend">[<a target="top" href="graph_legend.html">legend</a>]</span></center></div>
 <table class="memberdecls">
 <tr class="heading"><td colspan="2"><h2 class="groupheader"><a id="nested-classes" name="nested-classes"></a>
@@ -154,6 +154,8 @@ Classes</h2></td></tr>
 <tr class="memitem:"><td class="memItemLeft" align="right" valign="top">class &#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="classRealm_1_1TransferDesc_1_1DeferredAnalysis.html">DeferredAnalysis</a></td></tr>
 <tr class="separator:"><td class="memSeparator" colspan="2">&#160;</td></tr>
 <tr class="memitem:"><td class="memItemLeft" align="right" valign="top">struct &#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="structRealm_1_1TransferDesc_1_1FieldInfo.html">FieldInfo</a></td></tr>
+<tr class="separator:"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:"><td class="memItemLeft" align="right" valign="top">struct &#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="structRealm_1_1TransferDesc_1_1TestTag.html">TestTag</a></td></tr>
 <tr class="separator:"><td class="memSeparator" colspan="2">&#160;</td></tr>
 </table><table class="memberdecls">
 <tr class="heading"><td colspan="2"><h2 class="groupheader"><a id="pub-methods" name="pub-methods"></a>
@@ -175,10 +177,12 @@ Public Member Functions</h2></td></tr>
 Protected Member Functions</h2></td></tr>
 <tr class="memitem:a58cd81eba81b5b3b18e31c561851a702" id="r_a58cd81eba81b5b3b18e31c561851a702"><td class="memItemLeft" align="right" valign="top">&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="classRealm_1_1TransferDesc.html#a58cd81eba81b5b3b18e31c561851a702">~TransferDesc</a> ()</td></tr>
 <tr class="separator:a58cd81eba81b5b3b18e31c561851a702"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:af200be270b3a814934ebd72d5841c4db" id="r_af200be270b3a814934ebd72d5841c4db"><td class="memItemLeft" align="right" valign="top">&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="classRealm_1_1TransferDesc.html#af200be270b3a814934ebd72d5841c4db">TransferDesc</a> (<a class="el" href="structRealm_1_1TransferDesc_1_1TestTag.html">TestTag</a>, <a class="el" href="classRealm_1_1TransferDomain.html">TransferDomain</a> *_domain)</td></tr>
+<tr class="separator:af200be270b3a814934ebd72d5841c4db"><td class="memSeparator" colspan="2">&#160;</td></tr>
 <tr class="memitem:a9b9cf8a79941312ec8b94aa23c469127" id="r_a9b9cf8a79941312ec8b94aa23c469127"><td class="memItemLeft" align="right" valign="top">void&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="classRealm_1_1TransferDesc.html#a9b9cf8a79941312ec8b94aa23c469127">check_analysis_preconditions</a> ()</td></tr>
 <tr class="separator:a9b9cf8a79941312ec8b94aa23c469127"><td class="memSeparator" colspan="2">&#160;</td></tr>
-<tr class="memitem:a1f85ed2e3058587527e65eb632bad6be" id="r_a1f85ed2e3058587527e65eb632bad6be"><td class="memItemLeft" align="right" valign="top">void&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="classRealm_1_1TransferDesc.html#a1f85ed2e3058587527e65eb632bad6be">perform_analysis</a> ()</td></tr>
-<tr class="separator:a1f85ed2e3058587527e65eb632bad6be"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:a39050d8153eab6d6f234f48216a3b77a" id="r_a39050d8153eab6d6f234f48216a3b77a"><td class="memItemLeft" align="right" valign="top">bool&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="classRealm_1_1TransferDesc.html#a39050d8153eab6d6f234f48216a3b77a">perform_analysis</a> (<a class="el" href="classRealm_1_1TimeLimit.html">TimeLimit</a> work_until)</td></tr>
+<tr class="separator:a39050d8153eab6d6f234f48216a3b77a"><td class="memSeparator" colspan="2">&#160;</td></tr>
 <tr class="memitem:a2a7ffb578d4f457af0e265dde75d82c9" id="r_a2a7ffb578d4f457af0e265dde75d82c9"><td class="memItemLeft" align="right" valign="top">void&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="classRealm_1_1TransferDesc.html#a2a7ffb578d4f457af0e265dde75d82c9">cancel_analysis</a> (<a class="el" href="classRealm_1_1Event.html">Event</a> failed_precondition)</td></tr>
 <tr class="separator:a2a7ffb578d4f457af0e265dde75d82c9"><td class="memSeparator" colspan="2">&#160;</td></tr>
 </table><table class="memberdecls">
@@ -218,6 +222,16 @@ Protected Attributes</h2></td></tr>
 <tr class="separator:ad497c40f0bc0b428332301ddfc65bd68"><td class="memSeparator" colspan="2">&#160;</td></tr>
 <tr class="memitem:a48b203649fb4b3a83614546e1355e584" id="r_a48b203649fb4b3a83614546e1355e584"><td class="memItemLeft" align="right" valign="top">size_t&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="classRealm_1_1TransferDesc.html#a48b203649fb4b3a83614546e1355e584">fill_size</a></td></tr>
 <tr class="separator:a48b203649fb4b3a83614546e1355e584"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:a91ecf3ecd068d197dfcc2e857cc93279" id="r_a91ecf3ecd068d197dfcc2e857cc93279"><td class="memItemLeft" align="right" valign="top">bool&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="classRealm_1_1TransferDesc.html#a91ecf3ecd068d197dfcc2e857cc93279">analysis_init_done</a> = false</td></tr>
+<tr class="separator:a91ecf3ecd068d197dfcc2e857cc93279"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:aef7552be2cb1f7601baf0d89f3b810ea" id="r_aef7552be2cb1f7601baf0d89f3b810ea"><td class="memItemLeft" align="right" valign="top">size_t&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="classRealm_1_1TransferDesc.html#aef7552be2cb1f7601baf0d89f3b810ea">analysis_field_idx</a> = 0</td></tr>
+<tr class="separator:aef7552be2cb1f7601baf0d89f3b810ea"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:a1234b9ba4138a1842bf741b4e99c0d6f" id="r_a1234b9ba4138a1842bf741b4e99c0d6f"><td class="memItemLeft" align="right" valign="top">size_t&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="classRealm_1_1TransferDesc.html#a1234b9ba4138a1842bf741b4e99c0d6f">analysis_fld_start</a> = 0</td></tr>
+<tr class="separator:a1234b9ba4138a1842bf741b4e99c0d6f"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:a56b57b2f02b5ae8e2087cc1d9df1bd24" id="r_a56b57b2f02b5ae8e2087cc1d9df1bd24"><td class="memItemLeft" align="right" valign="top">size_t&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="classRealm_1_1TransferDesc.html#a56b57b2f02b5ae8e2087cc1d9df1bd24">analysis_fill_ofs</a> = 0</td></tr>
+<tr class="separator:a56b57b2f02b5ae8e2087cc1d9df1bd24"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:ab447bf9f3977392e992f4b6e7062571c" id="r_ab447bf9f3977392e992f4b6e7062571c"><td class="memItemLeft" align="right" valign="top">std::vector&lt; bool &gt;&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="classRealm_1_1TransferDesc.html#ab447bf9f3977392e992f4b6e7062571c">analysis_field_done</a></td></tr>
+<tr class="separator:ab447bf9f3977392e992f4b6e7062571c"><td class="memSeparator" colspan="2">&#160;</td></tr>
 <tr class="memitem:a41d17dc5384583d9fdc12b9fe694901a" id="r_a41d17dc5384583d9fdc12b9fe694901a"><td class="memItemLeft" align="right" valign="top"><a class="el" href="structRealm_1_1ProfilingMeasurements_1_1OperationMemoryUsage.html">ProfilingMeasurements::OperationMemoryUsage</a>&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="classRealm_1_1TransferDesc.html#a41d17dc5384583d9fdc12b9fe694901a">prof_usage</a></td></tr>
 <tr class="separator:a41d17dc5384583d9fdc12b9fe694901a"><td class="memSeparator" colspan="2">&#160;</td></tr>
 <tr class="memitem:a9191e91c037e6a5b58c3b00076fce57c" id="r_a9191e91c037e6a5b58c3b00076fce57c"><td class="memItemLeft" align="right" valign="top"><a class="el" href="structRealm_1_1ProfilingMeasurements_1_1OperationCopyInfo.html">ProfilingMeasurements::OperationCopyInfo</a>&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="classRealm_1_1TransferDesc.html#a9191e91c037e6a5b58c3b00076fce57c">prof_cpinfo</a></td></tr>
@@ -230,7 +244,7 @@ Friends</h2></td></tr>
 </table>
 <h2 class="groupheader">Constructor &amp; Destructor Documentation</h2>
 <a id="ae3a20f4800b6edc43b69af6dd08ccf84" name="ae3a20f4800b6edc43b69af6dd08ccf84"></a>
-<h2 class="memtitle"><span class="permalink"><a href="#ae3a20f4800b6edc43b69af6dd08ccf84">&#9670;&#160;</a></span>TransferDesc() <span class="overload">[1/2]</span></h2>
+<h2 class="memtitle"><span class="permalink"><a href="#ae3a20f4800b6edc43b69af6dd08ccf84">&#9670;&#160;</a></span>TransferDesc() <span class="overload">[1/3]</span></h2>
 
 <div class="memitem">
 <div class="memproto">
@@ -278,7 +292,7 @@ template&lt;int N, typename T &gt; </div>
 </div>
 </div>
 <a id="ad9a533767383771ad7d416ae9a7b33a8" name="ad9a533767383771ad7d416ae9a7b33a8"></a>
-<h2 class="memtitle"><span class="permalink"><a href="#ad9a533767383771ad7d416ae9a7b33a8">&#9670;&#160;</a></span>TransferDesc() <span class="overload">[2/2]</span></h2>
+<h2 class="memtitle"><span class="permalink"><a href="#ad9a533767383771ad7d416ae9a7b33a8">&#9670;&#160;</a></span>TransferDesc() <span class="overload">[2/3]</span></h2>
 
 <div class="memitem">
 <div class="memproto">
@@ -339,6 +353,42 @@ template&lt;int N, typename T &gt; </div>
           <td>(</td>
           <td class="paramname"></td><td>)</td>
           <td></td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel">protected</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+</div>
+</div>
+<a id="af200be270b3a814934ebd72d5841c4db" name="af200be270b3a814934ebd72d5841c4db"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#af200be270b3a814934ebd72d5841c4db">&#9670;&#160;</a></span>TransferDesc() <span class="overload">[3/3]</span></h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">Realm::TransferDesc::TransferDesc </td>
+          <td>(</td>
+          <td class="paramtype"><a class="el" href="structRealm_1_1TransferDesc_1_1TestTag.html">TestTag</a>&#160;</td>
+          <td class="paramname">, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype"><a class="el" href="classRealm_1_1TransferDomain.html">TransferDomain</a> *&#160;</td>
+          <td class="paramname"><em>_domain</em>&#160;</td>
+        </tr>
+        <tr>
+          <td></td>
+          <td>)</td>
+          <td></td><td></td>
         </tr>
       </table>
   </td>
@@ -419,8 +469,8 @@ template&lt;int N, typename T &gt; </div>
 
 </div>
 </div>
-<a id="a1f85ed2e3058587527e65eb632bad6be" name="a1f85ed2e3058587527e65eb632bad6be"></a>
-<h2 class="memtitle"><span class="permalink"><a href="#a1f85ed2e3058587527e65eb632bad6be">&#9670;&#160;</a></span>perform_analysis()</h2>
+<a id="a39050d8153eab6d6f234f48216a3b77a" name="a39050d8153eab6d6f234f48216a3b77a"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a39050d8153eab6d6f234f48216a3b77a">&#9670;&#160;</a></span>perform_analysis()</h2>
 
 <div class="memitem">
 <div class="memproto">
@@ -429,9 +479,10 @@ template&lt;int N, typename T &gt; </div>
   <td class="mlabels-left">
       <table class="memname">
         <tr>
-          <td class="memname">void Realm::TransferDesc::perform_analysis </td>
+          <td class="memname">bool Realm::TransferDesc::perform_analysis </td>
           <td>(</td>
-          <td class="paramname"></td><td>)</td>
+          <td class="paramtype"><a class="el" href="classRealm_1_1TimeLimit.html">TimeLimit</a>&#160;</td>
+          <td class="paramname"><em>work_until</em></td><td>)</td>
           <td></td>
         </tr>
       </table>
@@ -514,6 +565,116 @@ template&lt;int N, typename T &gt; </div>
       <table class="memname">
         <tr>
           <td class="memname"><a class="el" href="classRealm_1_1atomic.html">atomic</a>&lt;bool&gt; Realm::TransferDesc::analysis_complete</td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel">protected</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+</div>
+</div>
+<a id="ab447bf9f3977392e992f4b6e7062571c" name="ab447bf9f3977392e992f4b6e7062571c"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#ab447bf9f3977392e992f4b6e7062571c">&#9670;&#160;</a></span>analysis_field_done</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">std::vector&lt;bool&gt; Realm::TransferDesc::analysis_field_done</td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel">protected</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+</div>
+</div>
+<a id="aef7552be2cb1f7601baf0d89f3b810ea" name="aef7552be2cb1f7601baf0d89f3b810ea"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#aef7552be2cb1f7601baf0d89f3b810ea">&#9670;&#160;</a></span>analysis_field_idx</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">size_t Realm::TransferDesc::analysis_field_idx = 0</td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel">protected</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+</div>
+</div>
+<a id="a56b57b2f02b5ae8e2087cc1d9df1bd24" name="a56b57b2f02b5ae8e2087cc1d9df1bd24"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a56b57b2f02b5ae8e2087cc1d9df1bd24">&#9670;&#160;</a></span>analysis_fill_ofs</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">size_t Realm::TransferDesc::analysis_fill_ofs = 0</td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel">protected</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+</div>
+</div>
+<a id="a1234b9ba4138a1842bf741b4e99c0d6f" name="a1234b9ba4138a1842bf741b4e99c0d6f"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a1234b9ba4138a1842bf741b4e99c0d6f">&#9670;&#160;</a></span>analysis_fld_start</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">size_t Realm::TransferDesc::analysis_fld_start = 0</td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel">protected</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+</div>
+</div>
+<a id="a91ecf3ecd068d197dfcc2e857cc93279" name="a91ecf3ecd068d197dfcc2e857cc93279"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a91ecf3ecd068d197dfcc2e857cc93279">&#9670;&#160;</a></span>analysis_init_done</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">bool Realm::TransferDesc::analysis_init_done = false</td>
         </tr>
       </table>
   </td>
