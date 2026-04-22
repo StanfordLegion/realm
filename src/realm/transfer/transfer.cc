@@ -3882,6 +3882,18 @@ namespace Realm {
     }
   }
 
+  TransferDesc::TransferDesc(TestTag, TransferDomain *_domain)
+    : refcount(1)
+    , deferred_analysis(this)
+    , domain(_domain)
+    , prs()
+    , analysis_complete(false)
+    , analysis_successful(false)
+    , fill_data(0)
+    , fill_size(0)
+    , analysis_init_done(false)
+  {}
+
   void TransferDesc::check_analysis_preconditions()
   {
     log_xplan.info() << "created: plan=" << (void *)this << " domain=" << *domain
@@ -3957,7 +3969,7 @@ namespace Realm {
     }
 
     // no (untriggered) preconditions, so we fall through to immediate analysis
-    perform_analysis();
+    perform_analysis(TimeLimit());
   }
 
   static size_t compute_ib_size(size_t combined_field_size, size_t domain_size,
@@ -4031,66 +4043,81 @@ namespace Realm {
     const std::vector<TransferGraph::IBInfo> &edges;
   };
 
-  void TransferDesc::perform_analysis()
+  bool TransferDesc::perform_analysis(TimeLimit work_until)
   {
-    // initialize profiling data
-    prof_usage.source = Memory::NO_MEMORY;
-    prof_usage.target = Memory::NO_MEMORY;
-    prof_usage.size = 0;
+    if(!analysis_init_done) {
+      // initialize profiling data
+      prof_usage.source = Memory::NO_MEMORY;
+      prof_usage.target = Memory::NO_MEMORY;
+      prof_usage.size = 0;
 
-    // quick check - if the domain is empty, there's nothing to actually do
-    if(domain->empty()) {
-      log_xplan.debug() << "analysis: plan=" << (void *)this << " empty";
+      // quick check - if the domain is empty, there's nothing to actually do
+      if(domain->empty()) {
+        log_xplan.debug() << "analysis: plan=" << (void *)this << " empty";
 
-      // well, we still have to poke pending ops
-      std::vector<TransferOperation *> to_alloc;
-      {
-        AutoLock<> al(mutex);
-        to_alloc.swap(pending_ops);
-        // release before the mutex is released so to_alloc is visible before the
-        // analysis_complete flag is set
-        analysis_complete.store_release(true);
+        // well, we still have to poke pending ops
+        std::vector<TransferOperation *> to_alloc;
+        {
+          AutoLock<> al(mutex);
+          to_alloc.swap(pending_ops);
+          // release before the mutex is released so to_alloc is visible before the
+          // analysis_complete flag is set
+          analysis_complete.store_release(true);
+        }
+
+        for(size_t i = 0; i < to_alloc.size(); i++) {
+          to_alloc[i]->allocate_ibs();
+        }
+        return true;
       }
 
-      for(size_t i = 0; i < to_alloc.size(); i++) {
-        to_alloc[i]->allocate_ibs();
+      // first, scan over the sources and figure out how much space we need
+      //  for fill data - don't need to know field order yet
+      for(size_t i = 0; i < srcs.size(); i++) {
+        if(srcs[i].field_id == FieldID(-1)) {
+          fill_size += srcs[i].size;
+        }
       }
-      return;
+
+      if(fill_size > 0) {
+        fill_data = malloc(fill_size);
+        assert(fill_data);
+      }
+
+      // for now, pick a global dimension ordering
+      // TODO: allow this to vary for independent subgraphs (or dependent ones
+      //   with transposes in line)
+      domain->choose_dim_order(dim_order, srcs, dsts, indirects, (domain->volume() == 1),
+                               65536 /*max_stride*/);
+
+      src_fields.resize(srcs.size());
+      dst_fields.resize(dsts.size());
+
+      analysis_init_done = true;
+      analysis_field_idx = 0;
+      analysis_fld_start = 0;
+      analysis_fill_ofs = 0;
+      analysis_field_done.assign(srcs.size(), false);
     }
 
     size_t domain_size = domain->volume();
 
-    // first, scan over the sources and figure out how much space we need
-    //  for fill data - don't need to know field order yet
-    for(size_t i = 0; i < srcs.size(); i++) {
-      if(srcs[i].field_id == FieldID(-1)) {
-        fill_size += srcs[i].size;
-      }
-    }
-
-    size_t fill_ofs = 0;
-    if(fill_size > 0) {
-      fill_data = malloc(fill_size);
-      assert(fill_data);
-    }
-
-    // for now, pick a global dimension ordering
-    // TODO: allow this to vary for independent subgraphs (or dependent ones
-    //   with transposes in line)
-
-    domain->choose_dim_order(dim_order, srcs, dsts, indirects, (domain->volume() == 1),
-                             65536 /*max_stride*/);
-
-    src_fields.resize(srcs.size());
-    dst_fields.resize(dsts.size());
-
     // TODO: look at layouts and decide if fields should be grouped into
     //  a smaller number of copies
     assert(srcs.size() == dsts.size());
-    std::vector<bool> field_done(srcs.size(), false);
+    size_t fill_ofs = analysis_fill_ofs;
+    size_t fld_start = analysis_fld_start;
+    auto &field_done = analysis_field_done;
     // fields will get reordered to be contiguous per xd subgraph
-    size_t fld_start = 0;
-    for(size_t i = 0; i < srcs.size(); i++) {
+    for(size_t i = analysis_field_idx; i < srcs.size(); i++) {
+      // check time limit between field iterations
+      if(work_until.is_expired()) {
+        analysis_fill_ofs = fill_ofs;
+        analysis_fld_start = fld_start;
+        analysis_field_idx = i;
+        return false;
+      }
+
       // did this field already get grouped into a previous path?
       if(field_done[i]) {
         continue;
@@ -4622,6 +4649,7 @@ namespace Realm {
     for(size_t i = 0; i < to_alloc.size(); i++) {
       to_alloc[i]->allocate_ibs();
     }
+    return true;
   }
 
   void TransferDesc::cancel_analysis(Event failed_precondition)
@@ -4659,7 +4687,7 @@ namespace Realm {
     if(poisoned) {
       desc->cancel_analysis(precondition);
     } else {
-      desc->perform_analysis();
+      desc->perform_analysis(TimeLimit());
     }
   }
 
