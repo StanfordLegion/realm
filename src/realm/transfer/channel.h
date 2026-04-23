@@ -141,6 +141,9 @@ namespace Realm {
     //  modified during this call
     void swap(SequenceAssembler &other);
 
+    // NOT thread-safe.
+    void reset();
+
     // imports data from this assembler into another (this is thread-safe
     //  on the `other` but assumes no changes being made on `this`)
     void import(SequenceAssembler &other) const;
@@ -203,6 +206,9 @@ namespace Realm {
     Memory mem;
     RegionInstance inst;
     size_t ib_offset, ib_size;
+    // ib_index holds what index in the ib_offsets vector
+    // corresponds to the ib data for this port.
+    unsigned ib_index;
     TransferIterator *iter;
     CustomSerdezID serdez_id;
   };
@@ -297,6 +303,9 @@ namespace Realm {
     // current input and output port mask
     uint64_t current_in_port_mask, current_out_port_mask;
     uint64_t current_in_port_remain, current_out_port_remain;
+    // Stored to help reset XD state.
+    int gather_control_port = -1;
+    int scatter_control_port = -1;
     struct XferPort {
       MemoryImpl *mem;
       TransferIterator *iter;
@@ -314,6 +323,9 @@ namespace Realm {
       //  to complete)
       Memory ib_mem;
       size_t ib_offset, ib_size;
+      // Used when resetting an XD, records which ib_offset
+      // should be used.
+      unsigned ib_index;
       AddressList addrlist;
       AddressListCursor addrcursor;
     };
@@ -396,6 +408,14 @@ namespace Realm {
     void remove_reference(void);
 
     void add_update_pre_bytes_total_received(void);
+
+    // Used to reset an XD so that it can be reused for a new copy.
+    // reset accepts a vector of ib_offsets that correspond to the
+    // ib's to be used after the XD is reset. Resetting an XD retains
+    // all pointers to the backing instance data, and it is up to the
+    // user to ensure that the data referenced by the XD is valid when
+    // the XD is used again after it is reset.
+    virtual void reset(const std::vector<off_t> &ib_offsets);
 
   protected:
     virtual ~XferDes();
@@ -550,7 +570,12 @@ namespace Realm {
     virtual Request *dequeue_request();
     virtual void enqueue_request(Request *req);
 
+    void reset(const std::vector<off_t> &ib_offsets);
+
     bool progress_xd(MemfillChannel *channel, TimeLimit work_until);
+
+  protected:
+    size_t fill_total;
   };
 
   class MemreduceChannel;

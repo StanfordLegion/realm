@@ -125,6 +125,14 @@ namespace Realm {
     field_block = _field_block;
   }
 
+  void AddressList::reset()
+  {
+    total_bytes = 0;
+    write_pointer = 0;
+    read_pointer = 0;
+    memset(data.data(), 0, max_entries * sizeof(size_t));
+  }
+
   size_t AddressList::bytes_pending() const { return total_bytes; }
 
   size_t AddressList::full_field_bytes()
@@ -347,6 +355,15 @@ namespace Realm {
         }
       }
     }
+  }
+
+  void AddressListCursor::reset()
+  {
+    // Not touching the addrlist.
+    partial = false;
+    partial_dim = 0;
+    for(size_t i = 0; i < pos.size(); i++)
+      pos[i] = 0;
   }
 
   const FieldBlock *AddressListCursor::field_block() const
