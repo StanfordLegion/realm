@@ -23,6 +23,8 @@
 #include "philox.h"
 
 #include "osdep.h"
+#include <thread>
+#include <chrono>
 
 using namespace Realm;
 
@@ -68,7 +70,7 @@ void worker_task(const void *args, size_t arglen, const void *userdata, size_t u
   const WorkTaskArgs &w_args = *reinterpret_cast<const WorkTaskArgs *>(args);
 
   // we model doing work by just sleeping for the requested amount of time
-  usleep(w_args.exec_time);
+  std::this_thread::sleep_for(std::chrono::microseconds(w_args.exec_time));
 }
 
 void reap_events(CompletionQueue cq, size_t &in_flight, size_t max_in_flight,
