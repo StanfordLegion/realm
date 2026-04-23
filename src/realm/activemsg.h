@@ -80,9 +80,11 @@ namespace Realm {
                   const RemoteAddress &_dest_payload_addr);
     ActiveMessage(const Realm::NodeSet &_targets, size_t _max_payload_size = 0);
 
-    // providing the payload (as a 1D or 2D reference, which must be PAYLOAD_KEEP)
+    // providing the payload (as a 1D reference, which must be PAYLOAD_KEEP)
     //  up front can avoid a copy if the source location is directly accessible
     //  by the networking hardware
+    //  Per the semantics of PAYLOAD_KEEP, you must keep the payload buffer
+    //  alive and unmodified until the call to commit or cancel returns
     ActiveMessage(NodeID _target, const void *_data, size_t _datalen);
     ActiveMessage(NodeID _target, const LocalAddress &_src_payload_addr, size_t _datalen,
                   const RemoteAddress &_dest_payload_addr);
