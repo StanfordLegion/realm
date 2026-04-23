@@ -144,3 +144,33 @@ add_custom_target(
   DEPENDS ${_bench_list}
   COMMAND ${CMAKE_CTEST_COMMAND} -j --output-on-failure
 )
+
+ # unit benchmark
+
+cpmfindpackage(
+  NAME
+  googlebenchmark
+  GIT_REPOSITORY
+  https://github.com/google/benchmark.git
+  GIT_TAG
+  v1.9.4
+  EXCLUDE_FROM_ALL
+  YES
+  SYSTEM
+  YES
+  OPTIONS
+  "INSTALL_GTEST OFF"
+  "BUILD_SHARED_LIBS OFF"
+  "BENCHMARK_ENABLE_TESTING OFF"
+)
+if(googlebenchmark_ADDED)
+  set_property(GLOBAL APPEND PROPERTY PACKAGES_FOUND googlebenchmark)
+  get_property(_NOT_FOUND GLOBAL PROPERTY PACKAGES_NOT_FOUND)
+  list(REMOVE_ITEM _NOT_FOUND googlebenchmark)
+  set_property(GLOBAL PROPERTY PACKAGES_NOT_FOUND "${_NOT_FOUND}")
+endif()
+
+add_executable(realm_unit_remote_channel_bench "${REALM_BENCH_DIR}/unit_benchmarks/remote_channel_bench.cc")
+target_link_libraries(
+  realm_unit_remote_channel_bench PRIVATE realm_obj benchmark::benchmark ${REALM_LIBRARIES} ${REALM_EXTRA_OBJS}
+)
