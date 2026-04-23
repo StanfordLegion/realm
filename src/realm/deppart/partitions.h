@@ -34,12 +34,214 @@
 #include "realm/deppart/sparsity_impl.h"
 #include "realm/deppart/inst_helper.h"
 #include "realm/bgwork.h"
+#ifdef REALM_USE_CUDA
+#include "realm/cuda/cuda_module.h"
+
+struct CUstream_st;
+typedef CUstream_st* CUstream;
+
+#endif
+
 
 namespace Realm {
 
   class PartitioningMicroOp;
   class PartitioningOperation;
 
+#ifdef REALM_USE_CUDA
+
+  namespace Cuda {
+    class GPUStream;
+    class GPUProcessor;
+  }
+
+  template<typename T>
+  struct HiFlag {
+    T hi;
+    uint8_t head;
+  };
+
+  struct DeltaFlag {
+    int32_t delta;
+    uint8_t head;
+  };
+
+  // Data representations for GPU micro-ops
+  // src idx tracks which subspace each rect/point
+  // belongs to and allows multiple subspaces to be
+  // computed together in a micro-op
+  template<int N, typename T>
+  struct RectDesc {
+    Rect<N,T> rect;
+    size_t src_idx;
+  };
+
+  template<int N, typename T>
+  struct PointDesc {
+    Point<N,T> point;
+    size_t src_idx;
+  };
+
+  // Combines one or multiple index spaces into a single struct
+  // If multiple, offsets tracks transitions between spaces
+  template<int N, typename T>
+  struct collapsed_space {
+    Rect<N, T>* rects_buffer;
+    size_t num_rects;
+    size_t* offsets;
+    size_t num_children;
+    Rect<N, T> bounds;
+    Rect<N, T>* host_rects_owner = nullptr;
+  };
+
+  // Stores everything necessary to query a BVH
+  // Used with GPUMicroOp<N, T>::build_bvh
+  template<int N, typename T>
+  struct BVH {
+    int root;
+    size_t num_leaves;
+    Rect<N,T>* boxes;
+    uint64_t* indices;
+    size_t* labels;
+    int* childLeft;
+    int* childRight;
+  };
+
+  struct arena_oom : std::bad_alloc {
+    const char* what() const noexcept override { return "arena_oom"; }
+  };
+
+  class Arena {
+  public:
+    using byte = std::byte;
+
+    Arena() noexcept : location(Memory::NO_MEMORY), base_(nullptr), cap_(0), parity_(false), left_(0), right_(0), base_left_(0), base_right_(0) {}
+    Arena(void* buffer, size_t bytes, Memory location) noexcept
+      : location(location), base_(reinterpret_cast<byte*>(buffer)), cap_(bytes), parity_(false), left_(0), right_(0), base_left_(0), base_right_(0) {}
+    Arena(RegionInstance buffer) : Arena(buffer.pointer_untyped(0, buffer.get_layout()->bytes_used), buffer.get_layout()->bytes_used, buffer.get_location()) {}
+
+    size_t capacity() const noexcept { return cap_; }
+    size_t used() const noexcept { return left_ + right_; }
+
+    size_t mark() const noexcept {
+      return parity_ ? right_ : left_;
+    }
+
+    void rollback(size_t mark) noexcept {
+      if (parity_) {
+        right_ = mark;
+      } else {
+        left_ = mark;
+      }
+    }
+
+    size_t mark(bool dir) const noexcept {
+      return dir ? right_ : left_;
+    }
+
+    void rollback(size_t mark, bool dir) noexcept {
+      if (dir) {
+        right_ = mark;
+      } else {
+        left_ = mark;
+      }
+    }
+
+    template <typename T>
+    T* alloc(size_t count = 1) {
+      static_assert(!std::is_void_v<T>, "alloc<void> is invalid");
+      return reinterpret_cast<T*>(alloc_bytes(count * sizeof(T), alignof(T)));
+    }
+
+    void* alloc_bytes(size_t bytes, size_t align = alignof(std::max_align_t)) {
+      return parity_ ? alloc_right_bytes(bytes, align) : alloc_left_bytes(bytes, align);
+    }
+
+    void flip_parity(void) noexcept {
+      if (parity_) {
+        // switching from right to left
+        left_ = base_left_;
+      } else {
+        // switching from left to right
+        right_ = base_right_;
+      }
+      parity_ = !parity_;
+    }
+
+    void commit(bool parity) noexcept {
+      if (parity) {
+        base_right_ = right_;
+      } else {
+        base_left_ = left_;
+      }
+    }
+
+    void reset(bool parity) noexcept {
+      if (parity) {
+        base_right_ = 0;
+        right_ = 0;
+      } else {
+        base_left_ = 0;
+        left_ = 0;
+      }
+    }
+
+    bool get_parity(void) const noexcept {
+      return parity_;
+    }
+
+    void start(void) noexcept {
+      left_ = base_left_;
+      right_ = base_right_;
+      parity_ = false;
+    }
+
+    Memory location;
+
+  private:
+
+    void* alloc_left_bytes(size_t bytes, size_t align = alignof(std::max_align_t)) {
+      const size_t aligned = align_up(left_, align);
+      if (aligned + bytes + right_ > cap_) {
+        throw arena_oom{};
+      }
+      void* p = base_ + aligned;
+      left_ = aligned + bytes;
+      return p;
+    }
+
+    void* alloc_right_bytes(size_t bytes, size_t align = alignof(std::max_align_t)) {
+      if (bytes + right_ > cap_) {
+        throw arena_oom{};
+      }
+      const size_t aligned = align_down(cap_ - right_ - bytes, align);
+      if (aligned < left_) {
+        throw arena_oom{};
+      }
+      void *p = base_ + aligned;
+      right_ = cap_ - aligned;
+      return p;
+    }
+
+    static size_t align_up(size_t x, size_t a) noexcept {
+      return (x + (a - 1)) & ~(a - 1);
+    }
+
+    static size_t align_down(size_t x, size_t a) noexcept {
+      return x & ~(a - 1);
+    }
+
+    byte* base_;
+    size_t cap_;
+    bool parity_;
+    size_t left_;
+    size_t right_;
+    size_t base_left_;
+    size_t base_right_;
+  };
+
+
+#endif
 
   template <int N, typename T>
   class OverlapTester {
@@ -147,6 +349,57 @@ namespace Realm {
     std::vector<SparsityMapImpl<N,T> *> extra_deps;
   };
 
+#ifdef REALM_USE_CUDA
+  //The parent class for all GPU partitioning micro-ops. Provides output utility functions
+
+  template<int N, typename T>
+  class GPUMicroOp : public PartitioningMicroOp {
+  public:
+    GPUMicroOp(void) = default;
+    GPUMicroOp(NodeID _requestor, AsyncMicroOp *_async_microop)
+      : PartitioningMicroOp(_requestor, _async_microop) {}
+    virtual ~GPUMicroOp(void) = default;
+
+    virtual void execute(void) = 0;
+
+    static void shatter_rects(collapsed_space<N, T> & inst_space, size_t &num_completed, CUstream stream);
+
+    template <typename space_t>
+    static void collapse_multi_space(const std::vector<space_t>& field_data, collapsed_space<N, T> &out_space, Arena &my_arena, CUstream stream);
+
+    static void collapse_parent_space(const IndexSpace<N, T>& parent_space, collapsed_space<N, T> &out_space, Arena &my_arena, CUstream stream);
+
+    static void build_bvh(const collapsed_space<N, T> &space, BVH<N, T> &bvh, Arena &my_arena, CUstream stream);
+
+    template <typename out_t>
+    static void construct_input_rectlist(const collapsed_space<N, T> &lhs, const collapsed_space<N, T> &rhs, out_t* &d_valid_rects, size_t& out_size, uint32_t* counters, uint32_t* out_offsets, Arena &my_arena, CUstream stream);
+
+    template <typename out_t>
+    static void volume_prefix_sum(const out_t* d_rects, size_t total_rects, size_t* &d_prefix_rects, size_t& num_pts, Arena &my_arena, CUstream stream);
+
+    template<typename Container, typename IndexFn, typename MapFn>
+    void complete_pipeline(PointDesc<N, T>* d_points, size_t total_pts, RectDesc<N, T>* &d_out_rects, size_t &out_rects, Arena &my_arena, const Container& ctr, IndexFn getIndex, MapFn getMap);
+
+    template<typename Container, typename IndexFn, typename MapFn>
+    void complete_rect_pipeline(RectDesc<N, T>* d_rects, size_t total_rects, RectDesc<N, T>* &d_out_rects, size_t &out_rects, Arena &my_arena, const Container& ctr, IndexFn getIndex, MapFn getMap);
+
+    template<typename Container, typename IndexFn, typename MapFn>
+    void complete1d_pipeline(RectDesc<N, T>* d_rects, size_t total_rects, RectDesc<N, T>* &d_out_rects, size_t &out_rects, Arena &my_arena, const Container& ctr, IndexFn getIndex, MapFn getMap);
+
+    void split_output(RectDesc<N, T>* d_rects, size_t total_rects, std::vector<Rect<N, T> *> &output_instances, std::vector<size_t> &output_counts, Arena &my_arena);
+
+    template<typename Container, typename IndexFn, typename MapFn>
+    void send_output(RectDesc<N, T>* d_rects, size_t total_rects, Arena &my_arena, const Container& ctr, IndexFn getIndex, MapFn getMap);
+
+    virtual bool is_image_microop() const { return false; }
+
+    bool exclusive = false;
+    Cuda::GPU* gpu;
+    Cuda::GPUStream* stream;
+
+  };
+#endif
+
   ////////////////////////////////////////
   //
   
@@ -252,10 +505,25 @@ namespace Realm {
     static ActiveMessageHandlerReg<RemoteMicroOpCompleteMessage> areg;
   };
 
+  // Finds a memory of the specified kind. Returns true on success, false otherwise.
+  inline bool choose_proc(Processor &best_proc, Memory location)
+  {
+    std::vector<Machine::ProcessorMemoryAffinity> affinities;
+    unsigned best_bandwidth = 0;
+    best_proc = Processor::NO_PROC;
+    Machine::get_machine().get_proc_mem_affinity(affinities, Processor::NO_PROC, location);
+    for (auto affinity : affinities) {
+      if (affinity.bandwidth > best_bandwidth) {
+        best_bandwidth = affinity.bandwidth;
+        best_proc = affinity.p;
+      }
+    }
+    return best_proc != Processor::NO_PROC;
+  }
+
 
 };
 
 #include "realm/deppart/partitions.inl"
 
 #endif // REALM_PARTITIONS_H
-

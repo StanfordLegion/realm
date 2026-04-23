@@ -44,15 +44,25 @@ namespace Realm {
 #define N1 INST_N1
 #define N2 INST_N2
 
+#ifdef REALM_USE_CUDA
+  #define GPU_IMAGE_LINE(N1,T1,N2,T2) template class GPUImageMicroOp<N1, T1, N2, T2>;
+#else
+  #define GPU_IMAGE_LINE(N1,T1,N2,T2) /* no CUDA */
+#endif
+
 #define DOIT(T1,T2)			                                                                                             \
   template class StructuredImageMicroOp<N1,T1,N2,T2>;                                                                \
-  template class ImageMicroOp<N1,T1,N2,T2>;                                                                          \
+  template class ImageMicroOp<N1,T1,N2,T2>;																			 \
+  GPU_IMAGE_LINE(N1, T1, N2, T2)																	 \
   template class ImageOperation<N1,T1,N2,T2>;                                                                        \
   template ImageMicroOp<N1,T1,N2,T2>::ImageMicroOp(NodeID, AsyncMicroOp *, Serialization::FixedBufferDeserializer&); \
+  template void IndexSpace<N1, T1>::by_image_buffer_requirements(						     \
+	const std::vector<DeppartSubspace<N2,T2>>&,							     \
+	const std::vector<DeppartEstimateInput<N2,T2>>&,							     \
+	std::vector<DeppartBufferRequirements>&) const;							     \
   template Event IndexSpace<N1, T1>::create_subspaces_by_image(                                                      \
       const DomainTransform<N1, T1, N2, T2> &, const std::vector<IndexSpace<N2, T2> > &,                             \
-      std::vector<IndexSpace<N1, T1> > &, const ProfilingRequestSet &, Event)                                        \
-      const;                                                                                                         \
+      std::vector<IndexSpace<N1, T1> > &, const ProfilingRequestSet &, Event)  const;					\
   template Event IndexSpace<N1,T1>::create_subspaces_by_image_with_difference(                                       \
       const DomainTransform<N1, T1, N2, T2> &,                                                                       \
 									       const std::vector<IndexSpace<N2,T2> >&,                                                     \

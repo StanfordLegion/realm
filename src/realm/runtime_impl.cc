@@ -25,6 +25,7 @@
 #include "realm/transfer/ib_memory.h"
 
 #include "realm/activemsg.h"
+#include "realm/deppart/deppart_config.h"
 #include "realm/deppart/preimage.h"
 
 #include "realm/cmdline.h"
@@ -2934,6 +2935,7 @@ namespace Realm {
     stop_dma_system();
 
     repl_heap.cleanup();
+    deppart_host_pool_shutdown();
 
     // let network-dependent cleanup happen before we detach
     for(std::vector<Module *>::iterator it = modules.begin(); it != modules.end(); it++) {

@@ -33,6 +33,9 @@
 
 namespace Realm {
 
+  REALM_INTERNAL_API_EXTERNAL_LINKAGE
+  ID create_deppart_output_sparsity(NodeID target_node);
+
   class PartitioningMicroOp;
 
   /**
@@ -109,6 +112,8 @@ namespace Realm {
     SparsityMapImpl(SparsityMap<N, T> _me, NodeSet &subscribers,
                     SparsityMapCommunicator<N, T> *_sparsity_comm);
 
+    ~SparsityMapImpl();
+
     // actual implementation - SparsityMapPublicImpl's version just calls this one
     Event make_valid(bool precise = true);
 
@@ -125,6 +130,7 @@ namespace Realm {
 
     void contribute_nothing(void);
     void contribute_dense_rect_list(const std::vector<Rect<N, T>> &rects, bool disjoint);
+    void contribute_dense_rect_list(const span<Rect<N, T>> &rects, bool disjoint);
     void contribute_raw_rects(const Rect<N, T> *rects, size_t count, size_t piece_count,
                               bool disjoint, size_t total_count);
 
@@ -135,6 +141,10 @@ namespace Realm {
 
     void remote_data_request(NodeID requestor, bool send_precise, bool send_approx);
     void remote_data_reply(NodeID requestor, bool send_precise, bool send_approx);
+
+    void set_gpu_entries(Rect<N, T> *entries, size_t size);
+    void set_gpu_approx_rects(Rect<N, T> *approx_rects, size_t size);
+    void gpu_finalize(void);
 
     SparsityMap<N, T> me;
 
@@ -167,12 +177,22 @@ namespace Realm {
                                  const void *data, size_t datalen);
     };
 
+    struct RemoteGpuFinalizeMessage {
+      SparsityMap<N, T> sparsity;
+      size_t num_entries;
+      size_t num_approx;
+
+      static void handle_message(NodeID sender, const RemoteGpuFinalizeMessage &msg,
+                                 const void *data, size_t datalen);
+    };
+
   protected:
     void finalize(void);
 
     static ActiveMessageHandlerReg<RemoteSparsityRequest> remote_sparsity_request_reg;
     static ActiveMessageHandlerReg<RemoteSparsityContrib> remote_sparsity_contrib_reg;
     static ActiveMessageHandlerReg<SetContribCountMessage> set_contrib_count_msg_reg;
+    static ActiveMessageHandlerReg<RemoteGpuFinalizeMessage> remote_gpu_finalize_msg_reg;
 
     atomic<int> remaining_contributor_count{0};
     atomic<int> total_piece_count{0}, remaining_piece_count{0};

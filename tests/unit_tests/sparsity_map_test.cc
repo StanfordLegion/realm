@@ -284,12 +284,12 @@ void run_contribute_dense_case(const ContributeDenseRectTestData<N> &test_case)
   impl->set_contributor_count(1);
   impl->contribute_dense_rect_list(test_case.rects, test_case.disjoint);
 
-  std::vector<SparsityMapEntry<N, T>> entries = public_impl->get_entries();
+  span<Rect<N, T>> entries = public_impl->get_entries();
   ASSERT_TRUE(public_impl->is_valid());
   ASSERT_EQ(entries.size(), test_case.expected.size());
   for(size_t i = 0; i < entries.size(); i++) {
-    ASSERT_EQ(entries[i].bounds.lo, test_case.expected[i].lo);
-    ASSERT_EQ(entries[i].bounds.hi, test_case.expected[i].hi);
+    ASSERT_EQ(entries[i].lo, test_case.expected[i].lo);
+    ASSERT_EQ(entries[i].hi, test_case.expected[i].hi);
   }
 }
 

@@ -18,9 +18,9 @@
 // sparsity maps for Realm
 
 // nop, but helps IDEs
+#include "realm/inst_layout.h"
 #include "realm/sparsity.h"
 
-#include "realm/realm_assert.h"
 #include "realm/serialize.h"
 
 TEMPLATE_TYPE_IS_SERIALIZABLE2(int N, typename T, Realm::SparsityMap<N, T>);
@@ -62,41 +62,37 @@ namespace Realm {
   }
 
   template <int N, typename T>
-  REALM_PUBLIC_API inline std::ostream &operator<<(std::ostream &os,
-                                                   const SparsityMapEntry<N, T> &entry)
-  {
-    os << entry.bounds;
-    if(entry.sparsity.id)
-      os << ",sparsity=" << std::hex << entry.sparsity.id << std::dec;
-    if(entry.bitmap)
-      os << ",bitmap=" << entry.bitmap;
-    return os;
-  }
-
-  ////////////////////////////////////////////////////////////////////////
-  //
-  // class SparsityMapPublicImpl<N,T>
-
-  template <int N, typename T>
   inline bool SparsityMapPublicImpl<N, T>::is_valid(bool precise /*= true*/)
   {
     return (precise ? entries_valid.load_acquire() : approx_valid.load_acquire());
   }
 
   template <int N, typename T>
-  inline const std::vector<SparsityMapEntry<N, T>> &
-  SparsityMapPublicImpl<N, T>::get_entries(void)
+  inline const span<Rect<N, T>> SparsityMapPublicImpl<N, T>::get_entries(void)
   {
     REALM_ASSERT(entries_valid.load_acquire());
-    return entries;
+    if(from_gpu) {
+      if (num_entries == 0) {
+        return span<Rect<N, T>>();
+      }
+      return span<Rect<N, T>>(gpu_entries, num_entries);
+    } else {
+      return span<Rect<N, T>>(entries.data(), entries.size());
+    }
   }
 
   template <int N, typename T>
-  inline const std::vector<Rect<N, T>> &
-  SparsityMapPublicImpl<N, T>::get_approx_rects(void)
+  inline const span<Rect<N, T>> SparsityMapPublicImpl<N, T>::get_approx_rects(void)
   {
     REALM_ASSERT(approx_valid.load_acquire());
-    return approx_rects;
+    if(from_gpu) {
+      if (num_approx == 0) {
+        return span<Rect<N, T>>();
+      }
+      return span<Rect<N, T>>(gpu_approx_rects, num_approx);
+    } else {
+      return span<Rect<N, T>>(approx_rects.data(), approx_rects.size());
+    }
   }
 
 }; // namespace Realm

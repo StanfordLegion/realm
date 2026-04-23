@@ -18,10 +18,10 @@
 // index space partitioning for Realm
 
 #include "realm/deppart/partitions.h"
-
 #include "realm/profiling.h"
 
 #include "realm/runtime_impl.h"
+#include "realm/mem_impl.h"
 #include "realm/deppart/inst_helper.h"
 #include "realm/deppart/rectlist.h"
 
@@ -29,6 +29,14 @@
 #include "realm/deppart/preimage.h"
 #include "realm/deppart/byfield.h"
 #include "realm/deppart/setops.h"
+
+#ifdef REALM_USE_CUDA
+#include "realm/cuda/cuda_module.h"
+#include "realm/cuda/cuda_internal.h"
+#endif
+
+#include <cstdlib>
+#include <unordered_map>
 
 namespace Realm {
 
@@ -46,10 +54,160 @@ namespace Realm {
     int cfg_max_rects_in_approximation = 32;
     bool cfg_worker_threads_sleep = true;
     bool cfg_allow_inline_operations = false;
+    size_t cfg_host_pool_size = 64 << 20;
   };
 
   // TODO: C++11 has type_traits and std::make_unsigned
   namespace {
+    class DeppartHostPool {
+    public:
+      static constexpr size_t ALIGNMENT = 256;
+
+      DeppartHostPool() = default;
+      ~DeppartHostPool() = default;
+
+      void init(size_t bytes)
+      {
+        AutoLock<> al(mutex);
+        assert(!initialized);
+
+        size = bytes;
+        if(size == 0) {
+          initialized = true;
+          return;
+        }
+
+        base_orig = static_cast<char *>(std::malloc(size + ALIGNMENT - 1));
+        if(base_orig == nullptr) {
+          log_part.fatal() << "failed to allocate deppart host pool: bytes=" << size;
+          abort();
+        }
+
+        size_t ofs = reinterpret_cast<size_t>(base_orig) % ALIGNMENT;
+        base = (ofs > 0) ? (base_orig + (ALIGNMENT - ofs)) : base_orig;
+        allocator.add_range(0, size);
+
+#ifdef REALM_USE_CUDA
+        RuntimeImpl *runtime = get_runtime();
+        assert(runtime != nullptr);
+        Cuda::CudaModule *cuda_module = runtime->get_module<Cuda::CudaModule>("cuda");
+        if((cuda_module != nullptr) && !cuda_module->gpus.empty()) {
+          using namespace Cuda;
+          CUresult ret;
+          {
+            Cuda::AutoGPUContext agc(cuda_module->gpus[0]);
+            ret = CUDA_DRIVER_FNPTR(cuMemHostRegister)(
+                base, size, CU_MEMHOSTREGISTER_PORTABLE | CU_MEMHOSTREGISTER_DEVICEMAP);
+          }
+          if(ret != CUDA_SUCCESS) {
+            log_part.fatal() << "failed to register deppart host pool: base="
+                             << static_cast<void *>(base) << " size=" << size
+                             << " ret=" << ret;
+            abort();
+          }
+          cuda_registered = true;
+        }
+#endif
+
+        initialized = true;
+      }
+
+      void shutdown(void)
+      {
+        AutoLock<> al(mutex);
+        if(!initialized)
+          return;
+
+#ifdef REALM_USE_CUDA
+        if(cuda_registered) {
+          RuntimeImpl *runtime = get_runtime();
+          assert(runtime != nullptr);
+          Cuda::CudaModule *cuda_module = runtime->get_module<Cuda::CudaModule>("cuda");
+          if((cuda_module != nullptr) && !cuda_module->gpus.empty()) {
+            using namespace Cuda;
+            CUresult ret;
+            {
+              Cuda::AutoGPUContext agc(cuda_module->gpus[0]);
+              ret = CUDA_DRIVER_FNPTR(cuMemHostUnregister)(base);
+            }
+            if(ret != CUDA_SUCCESS) {
+              log_part.fatal() << "failed to unregister deppart host pool: base="
+                               << static_cast<void *>(base) << " ret=" << ret;
+              abort();
+            }
+          }
+          cuda_registered = false;
+        }
+#endif
+
+        ptr_to_tag.clear();
+        allocator = BasicRangeAllocator<size_t, uintptr_t>();
+
+        if(base_orig != nullptr)
+          std::free(base_orig);
+
+        base = nullptr;
+        base_orig = nullptr;
+        size = 0;
+        next_tag = 1;
+        initialized = false;
+      }
+
+      void *alloc(size_t bytes, size_t alignment)
+      {
+        AutoLock<> al(mutex);
+        assert(initialized);
+
+        if(bytes == 0)
+          return nullptr;
+
+        size_t offset = 0;
+        const uintptr_t tag = next_tag++;
+        if(!allocator.allocate(tag, bytes, alignment, offset)) {
+          log_part.fatal() << "deppart host oom: requested_bytes=" << bytes
+                           << " alignment=" << alignment << " pool_bytes=" << size;
+          abort();
+        }
+
+        void *ptr = base + offset;
+        ptr_to_tag[ptr] = tag;
+        return ptr;
+      }
+
+      void free(void *ptr)
+      {
+        if(ptr == nullptr)
+          return;
+
+        AutoLock<> al(mutex);
+        assert(initialized);
+
+        auto it = ptr_to_tag.find(ptr);
+        if(it == ptr_to_tag.end()) {
+          log_part.fatal() << "invalid deppart host free: ptr=" << ptr;
+          abort();
+        }
+
+        allocator.deallocate(it->second);
+        ptr_to_tag.erase(it);
+      }
+
+    private:
+      Mutex mutex;
+      bool initialized{false};
+      char *base{nullptr};
+      char *base_orig{nullptr};
+      size_t size{0};
+      uintptr_t next_tag{1};
+      BasicRangeAllocator<size_t, uintptr_t> allocator;
+      std::unordered_map<void *, uintptr_t> ptr_to_tag;
+#ifdef REALM_USE_CUDA
+      bool cuda_registered{false};
+#endif
+    };
+
+    DeppartHostPool deppart_host_pool;
+
     template <typename T> struct MakeUnsigned { typedef T U; };
 #define SIGNED_CASE(S) \
     template <> struct MakeUnsigned<S> { typedef unsigned S U; }
@@ -59,6 +217,21 @@ namespace Realm {
     SIGNED_CASE(long long);
 #undef SIGNED_CASE
   };
+
+  void *deppart_host_alloc_bytes(size_t bytes, size_t alignment)
+  {
+    return deppart_host_pool.alloc(bytes, alignment);
+  }
+
+  void deppart_host_free(void *ptr)
+  {
+    deppart_host_pool.free(ptr);
+  }
+
+  void deppart_host_pool_shutdown(void)
+  {
+    deppart_host_pool.shutdown();
+  }
 
   ////////////////////////////////////////////////////////////////////////
   //
@@ -71,7 +244,7 @@ namespace Realm {
 				      size_t start, size_t count, size_t volume,
 				      IndexSpace<N,T> *results,
 				      size_t first_result, size_t last_result,
-				      const std::vector<SparsityMapEntry<N,T> >& entries)
+				      const span<Rect<N,T> >& entries)
   {
     // should never be here with empty bounds
     assert(!bounds.empty());
@@ -111,13 +284,11 @@ namespace Realm {
     size_t lo_volume[N];
     for(int i = 0; i < N; i++)
       lo_volume[i] = 0;
-    for(typename std::vector<SparsityMapEntry<N,T> >::const_iterator it = entries.begin();
-	it != entries.end();
-	it++) {
+    for(size_t j = 0; j < entries.size(); j++) {
       for(int i = 0; i < N; i++)
-	lo_volume[i] += it->bounds.intersection(lo_half[i]).volume();
+	lo_volume[i] += entries[j].intersection(lo_half[i]).volume();
     }
-    // now compute how many subspaces would fall in each half and the 
+    // now compute how many subspaces would fall in each half and the
     //  inefficiency of the split
     size_t lo_count[N], inefficiency[N];
     for(int i = 0; i < N; i++) {
@@ -233,7 +404,7 @@ namespace Realm {
     // TODO: sparse case where we have to wait
     SparsityMapPublicImpl<N,T> *impl = sparsity.impl();
     assert(impl->is_valid());
-    const std::vector<SparsityMapEntry<N,T> >& entries = impl->get_entries();
+    const span<Rect<N,T> >& entries = impl->get_entries();
     // initially every subspace will be a copy of this one, and then
     //  we'll decompose the bounds
     subspace = *this;
@@ -307,7 +478,7 @@ namespace Realm {
     // TODO: sparse case where we have to wait
     SparsityMapPublicImpl<N,T> *impl = sparsity.impl();
     assert(impl->is_valid());
-    const std::vector<SparsityMapEntry<N,T> >& entries = impl->get_entries();
+    span<Rect<N, T>> entries = impl->get_entries();
     // initially every subspace will be a copy of this one, and then
     //  we'll decompose the bounds
     subspaces.resize(count, *this);
@@ -498,7 +669,7 @@ namespace Realm {
   template <typename T>
   class RectListAdapter {
   public:
-    RectListAdapter(const std::vector<Rect<1,T> >& _rects)
+    RectListAdapter(const span<Rect<1,T> >& _rects)
       : rects(_rects.empty() ? 0 : &_rects[0]), count(_rects.size()) {}
     RectListAdapter(const Rect<1,T> *_rects, size_t _count)
       : rects(_rects), count(_count) {}
@@ -582,7 +753,6 @@ namespace Realm {
   {
     os << "AsyncMicroOp(" << (void *)uop << ")";
   }
-
 
   ////////////////////////////////////////////////////////////////////////
   //
@@ -858,6 +1028,7 @@ namespace Realm {
     cp.add_option_bool("-dp:noisectopt", DeppartConfig::cfg_disable_intersection_optimization);
     cp.add_option_int("-dp:sleep", DeppartConfig::cfg_worker_threads_sleep);
     cp.add_option_int("-dp:inline_ok", DeppartConfig::cfg_allow_inline_operations);
+    cp.add_option_int_units("-dp:hpool", DeppartConfig::cfg_host_pool_size, 'm');
 
     cp.parse_command_line(cmdline);
   }
@@ -866,6 +1037,7 @@ namespace Realm {
 				     BackgroundWorkManager *_bgwork)
   {
     assert(deppart_op_queue == 0);
+    deppart_host_pool.init(DeppartConfig::cfg_host_pool_size);
     CoreReservation *rsrv = 0;
     if(DeppartConfig::cfg_num_partitioning_workers > 0)
       rsrv = new CoreReservation("partitioning", crs,
@@ -1061,4 +1233,3 @@ namespace Realm {
   FOREACH_NTNT(DOIT2)
 
 };
-
