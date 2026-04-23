@@ -816,6 +816,15 @@ namespace Realm {
       CHECK_CU(CUDA_DRIVER_FNPTR(cuCtxGetCurrent)(&current_ctx));
       assert(current_ctx == gpu->context);
 
+      unsigned int ctx_flags = 0;
+      int ctx_active = 0;
+      CHECK_CU(CUDA_DRIVER_FNPTR(cuDevicePrimaryCtxGetState)(gpu->info->device, &ctx_flags, &ctx_active));
+      assert(ctx_active);
+
+      log_stream.print() << "destroying context: ctx=" << current_ctx << " gpu=" << gpu->info->index
+                         << " func_id=" << task->func_id
+                         << " ctx_active=" << ctx_active << " ctx_flags=" << ctx_flags;
+
       GPUWorkFence *fence = static_cast<GPUWorkFence *>(context);
       GPUStream *s = ThreadLocal::current_gpu_stream;
       // if the user could have put work on any other streams then make our
@@ -864,6 +873,14 @@ namespace Realm {
         gpu->event_pool.return_event(e);
       }
 
+      CHECK_CU(CUDA_DRIVER_FNPTR(cuCtxGetCurrent)(&current_ctx));
+      assert(current_ctx == gpu->context);
+
+      ctx_flags = 0;
+      ctx_active = 0;
+      CHECK_CU(CUDA_DRIVER_FNPTR(cuDevicePrimaryCtxGetState)(gpu->info->device, &ctx_flags, &ctx_active));
+      assert(ctx_active);
+
       if((ThreadLocal::context_sync_required > 0) ||
          ((ThreadLocal::context_sync_required < 0) &&
           gpu->module->config->cfg_task_context_sync)) {
@@ -884,6 +901,14 @@ namespace Realm {
           gpu->ctxsync.add_fence(fence);
         }
       } else {
+        CHECK_CU(CUDA_DRIVER_FNPTR(cuCtxGetCurrent)(&current_ctx));
+        assert(current_ctx == gpu->context);
+
+        ctx_flags = 0;
+        ctx_active = 0;
+        CHECK_CU(CUDA_DRIVER_FNPTR(cuDevicePrimaryCtxGetState)(gpu->info->device, &ctx_flags, &ctx_active));
+        assert(ctx_active);
+
         // Just wait for the fence
         fence->enqueue_on_stream(s);
       }
