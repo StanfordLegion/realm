@@ -1949,7 +1949,21 @@ namespace Realm {
       // For alignment's sake, allocate AM_ALIGNMENT extra bytes.
       size += AM_ALIGNMENT;
 
-      if(size > config.pbuf_mp_max_size + AM_ALIGNMENT) {
+      if(size < config.pbuf_mp_thresh) {
+        if(config.pbuf_malloc) {
+          buf = reinterpret_cast<char *>(malloc(size));
+        } else {
+          buf = reinterpret_cast<char *>(worker->mmp_get(size));
+        }
+        CHKERR_JUMP(!buf, "", log_ucp, err);
+        *buf = 0;
+      } else if(size <= config.pbuf_mp_max_size + AM_ALIGNMENT) {
+        // TODO: put an upper bound on the mpool size
+        //       context->pbuf_mp->has(size, false /* with_expand */)
+        buf = reinterpret_cast<char *>(worker->pbuf_get(size));
+        CHKERR_JUMP(!buf, "", log_ucp, err);
+        *buf = 1;
+      } else {
         // Oversize payload: cannot use pbuf_mp (fixed element size) and cannot
         // use mmp (capped at mmp_max_obj_size). Fall back to plain malloc.
         // The buffer will not be pre-registered with UCP, so transfers
@@ -1963,20 +1977,6 @@ namespace Realm {
         CHKERR_JUMP(!buf, "failed to malloc payload buffer of size " << size, log_ucp,
                     err);
         *buf = 2;
-      } else if(size < config.pbuf_mp_thresh) {
-        if(config.pbuf_malloc) {
-          buf = reinterpret_cast<char *>(malloc(size));
-        } else {
-          buf = reinterpret_cast<char *>(worker->mmp_get(size));
-        }
-        CHKERR_JUMP(!buf, "", log_ucp, err);
-        *buf = 0;
-      } else {
-        // TODO: put an upper bound on the mpool size
-        //       context->pbuf_mp->has(size, false /* with_expand */)
-        buf = reinterpret_cast<char *>(worker->pbuf_get(size));
-        CHKERR_JUMP(!buf, "", log_ucp, err);
-        *buf = 1;
       }
 
       log_ucp_ar.debug() << "acquired payload buffer " << buf + AM_ALIGNMENT << " size "
