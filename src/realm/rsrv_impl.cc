@@ -21,6 +21,7 @@
 #include "realm/event_impl.h"
 #include "realm/runtime_impl.h"
 #include "realm/timers.h"
+#include "realm/realm_assert.h"
 
 namespace Realm {
 
@@ -944,7 +945,12 @@ namespace Realm {
       if((cur_state & (STATE_SLOW_FALLBACK | STATE_BASE_RSRV | STATE_BASE_RSRV_WAITING |
                        STATE_SLEEPER)) == 0) {
         State prev_state = (cur_state & STATE_WRITER_WAITING);
-        State new_state = STATE_WRITER;
+        // preserve WRITER_WAITING when acquiring - if a waiter_event is
+        //  registered, we need the unlock to go through the slow path so
+        //  the event gets triggered.  Without this, acquiring via
+        //  CAS(WW, WRITER) would clear WW and the next unlock would take
+        //  the fast path, orphaning the waiter_event.
+        State new_state = STATE_WRITER | prev_state;
         if(state.compare_exchange(prev_state, new_state))
           return Event::NO_EVENT;
 
@@ -1011,17 +1017,13 @@ namespace Realm {
                 frs.waiter_event = UserEvent::create_user_event();
               // set STATE_WRITER_WAITING to force the lock holder's
               //  unlock through the slow path where waiter_event
-              //  will be triggered - must re-check and re-set in a
-              //  loop because a concurrent CAS(WW, WRITER) in
-              //  wrlock_slow can clear WW while acquiring the lock.
-              //  This loop is bounded to at most 2 iterations:
-              //   iteration 1: we set WW, but CAS(WW,WRITER) may
-              //     clear it (acquiring the lock in the process)
-              //   iteration 2: we re-set WW, giving state=WRITER|WW.
-              //     Now WW cannot be cleared: CAS(WW,WRITER) requires
-              //     state==WW which doesn't match, unlock needs
-              //     frs.mutex which we hold, and no other path clears
-              //     WW without the mutex.
+              //  will be triggered.  With CAS(WW, W|WW) at line 948,
+              //  WW is preserved across writer acquisition, so WW
+              //  cannot be cleared while we hold frs.mutex - other
+              //  paths that clear WW (unlock_slow, advise_sleep_entry,
+              //  orphan cleanup) all require frs.mutex. This means
+              //  the loop should terminate in 1 iteration; we keep
+              //  the bounded loop with abort as defense-in-depth.
               for(int attempts = 0; attempts < 3; attempts++) {
                 if(attempts == 2) {
                   log_reservation.fatal()
@@ -1049,10 +1051,18 @@ namespace Realm {
               }
             } else {
               // if WRITER_WAITING is set but no lock holder exists,
-              //  it's an orphaned flag - clear it so acquisition can proceed
+              //  it's an orphaned flag - clear it so acquisition can proceed.
+              //  also defensively trigger any registered waiter_event,
+              //  since clearing WW would otherwise let a subsequent
+              //  acquisition and fast-path unlock skip the trigger path
               if((cur_state & STATE_WRITER_WAITING) != 0 &&
-                 (cur_state & (STATE_WRITER | STATE_READER_COUNT_MASK)) == 0)
+                 (cur_state & (STATE_WRITER | STATE_READER_COUNT_MASK)) == 0) {
                 state.fetch_and(~STATE_WRITER_WAITING);
+                if(frs.waiter_event.exists()) {
+                  frs.waiter_event.trigger();
+                  frs.waiter_event = UserEvent();
+                }
+              }
               wait_for = Event::NO_EVENT;
             }
             break;
@@ -1280,7 +1290,10 @@ namespace Realm {
             //      the BASE_RSRV_WAITING bit, it'll back out its read count
             //      and then come here
             if((cur_state & (STATE_WRITER | STATE_READER_COUNT_MASK)) == 0) {
-              // swap RSRV_WAITING for RSRV
+              // swap RSRV_WAITING for RSRV - this requires BR to not already
+              //  be set, otherwise the subtraction would underflow into the
+              //  reader count bits
+              REALM_ASSERT((cur_state & STATE_BASE_RSRV) == 0);
               state.fetch_sub(STATE_BASE_RSRV_WAITING - STATE_BASE_RSRV);
               frs.rsrv_impl->release(TimeLimit::responsive());
             }
@@ -1311,17 +1324,13 @@ namespace Realm {
                 frs.waiter_event = UserEvent::create_user_event();
               // set STATE_WRITER_WAITING to force the lock holder's
               //  unlock through the slow path where waiter_event
-              //  will be triggered - must re-check and re-set in a
-              //  loop because a concurrent CAS(WW, WRITER) in
-              //  wrlock_slow can clear WW while acquiring the lock.
-              //  This loop is bounded to at most 2 iterations:
-              //   iteration 1: we set WW, but CAS(WW,WRITER) may
-              //     clear it (acquiring the lock in the process)
-              //   iteration 2: we re-set WW, giving state=WRITER|WW.
-              //     Now WW cannot be cleared: CAS(WW,WRITER) requires
-              //     state==WW which doesn't match, unlock needs
-              //     frs.mutex which we hold, and no other path clears
-              //     WW without the mutex.
+              //  will be triggered.  With CAS(WW, W|WW) at line 948,
+              //  WW is preserved across writer acquisition, so WW
+              //  cannot be cleared while we hold frs.mutex - other
+              //  paths that clear WW (unlock_slow, advise_sleep_entry,
+              //  orphan cleanup) all require frs.mutex. This means
+              //  the loop should terminate in 1 iteration; we keep
+              //  the bounded loop with abort as defense-in-depth.
               for(int attempts = 0; attempts < 3; attempts++) {
                 if(attempts == 2) {
                   log_reservation.fatal()
@@ -1349,10 +1358,18 @@ namespace Realm {
               }
             } else {
               // if WRITER_WAITING is set but no lock holder exists,
-              //  it's an orphaned flag - clear it so readers can proceed
+              //  it's an orphaned flag - clear it so readers can proceed.
+              //  also defensively trigger any registered waiter_event,
+              //  since clearing WW would otherwise let a subsequent
+              //  acquisition and fast-path unlock skip the trigger path
               if((cur_state & STATE_WRITER_WAITING) != 0 &&
-                 (cur_state & (STATE_WRITER | STATE_READER_COUNT_MASK)) == 0)
+                 (cur_state & (STATE_WRITER | STATE_READER_COUNT_MASK)) == 0) {
                 state.fetch_and(~STATE_WRITER_WAITING);
+                if(frs.waiter_event.exists()) {
+                  frs.waiter_event.trigger();
+                  frs.waiter_event = UserEvent();
+                }
+              }
               wait_for = Event::NO_EVENT;
             }
             break;
@@ -1490,7 +1507,10 @@ namespace Realm {
 
       // if the base reservation is waiting, give it back
       if((cur_state & STATE_BASE_RSRV_WAITING) != 0) {
-        // swap RSRV_WAITING for RSRV
+        // swap RSRV_WAITING for RSRV - this requires BR to not already
+        //  be set, otherwise the subtraction would underflow into the
+        //  reader count bits
+        REALM_ASSERT((cur_state & STATE_BASE_RSRV) == 0);
         state.fetch_sub(STATE_BASE_RSRV_WAITING - STATE_BASE_RSRV);
         frs.rsrv_impl->release(TimeLimit::responsive());
       }
@@ -1512,7 +1532,10 @@ namespace Realm {
       // if the base reservation is waiting and we're the last reader,
       //  give it back
       if((cur_state & STATE_BASE_RSRV_WAITING) != 0) {
-        // swap RSRV_WAITING for RSRV
+        // swap RSRV_WAITING for RSRV - this requires BR to not already
+        //  be set, otherwise the subtraction would underflow into the
+        //  reader count bits
+        REALM_ASSERT((cur_state & STATE_BASE_RSRV) == 0);
         state.fetch_sub(STATE_BASE_RSRV_WAITING - STATE_BASE_RSRV);
         frs.rsrv_impl->release(TimeLimit::responsive());
       }
