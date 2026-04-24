@@ -1,0 +1,9 @@
+digraph "Graphical Class Hierarchy"
+{
+ // LATEX_PDF_SIZE
+  bgcolor="transparent";
+  edge [fontname=Helvetica,fontsize=10,labelfontname=Helvetica,labelfontsize=10];
+  node [fontname=Helvetica,fontsize=10,shape=box,height=0.2,width=0.4];
+  rankdir="LR";
+  Node0 [id="Node000000",label="Realm::DynamicTemplates\l::TypeListElem\< _HEAD,\l _TAIL \>::IndexToType\<\l 0, ORIG \>",height=0.2,width=0.4,color="grey40", fillcolor="white", style="filled",URL="$structRealm_1_1DynamicTemplates_1_1TypeListElem_1_1IndexToType_3_010_00_01ORIG_01_4.html",tooltip=" "];
+}
