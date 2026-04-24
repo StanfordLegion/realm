@@ -69,6 +69,11 @@ namespace Realm {
     static constexpr unsigned AM_ID_RDMA = 2;
     static constexpr unsigned AM_ID_REPLY = 3;
     static constexpr size_t AM_ALIGNMENT = 8;
+
+    static constexpr char PBUF_TAG_MMP = 0;    // worker->mmp_release
+    static constexpr char PBUF_TAG_PMP = 1;    // worker->pbuf_release (pbuf_mp: pre-registered mpool)
+    static constexpr char PBUF_TAG_MALLOC = 2; // free
+
     static constexpr size_t GET_ZCOPY_MAX = (1 << 30);     // 1G
     static constexpr size_t IB_SEG_SIZE = (8 << 10);       // 8K
     static constexpr size_t ZCOPY_THRESH_HOST = (2 << 10); // 2K
@@ -1941,28 +1946,27 @@ namespace Realm {
       // we should never ask for a payload buffer from a GPU ucp context
       assert(!worker->get_context()->gpu);
 #endif
-      // use one extra byte at the beginning of the buffer to encode which
-      // allocator owns it (so pbuf_release knows where to return it):
-      //   0 -> mmp / malloc (small)
-      //   1 -> pre-registered pbuf mpool
-      //   2 -> raw malloc (oversize fallback)
-      // For alignment's sake, allocate AM_ALIGNMENT extra bytes.
+      // Reserve a leading PBUF_TAG_* byte so pbuf_release can tell which
+      // allocator owns the buffer. AM_ALIGNMENT extra bytes (rather than
+      // just one) are used so the returned payload pointer stays aligned.
       size += AM_ALIGNMENT;
 
       if(size < config.pbuf_mp_thresh) {
         if(config.pbuf_malloc) {
           buf = reinterpret_cast<char *>(malloc(size));
+          CHKERR_JUMP(!buf, "", log_ucp, err);
+          *buf = PBUF_TAG_MALLOC;
         } else {
           buf = reinterpret_cast<char *>(worker->mmp_get(size));
+          CHKERR_JUMP(!buf, "", log_ucp, err);
+          *buf = PBUF_TAG_MMP;
         }
-        CHKERR_JUMP(!buf, "", log_ucp, err);
-        *buf = 0;
       } else if(size <= config.pbuf_mp_max_size + AM_ALIGNMENT) {
         // TODO: put an upper bound on the mpool size
         //       context->pbuf_mp->has(size, false /* with_expand */)
         buf = reinterpret_cast<char *>(worker->pbuf_get(size));
         CHKERR_JUMP(!buf, "", log_ucp, err);
-        *buf = 1;
+        *buf = PBUF_TAG_PMP;
       } else {
         // Oversize payload: cannot use pbuf_mp (fixed element size) and cannot
         // use mmp (capped at mmp_max_obj_size). Fall back to plain malloc.
@@ -1976,7 +1980,7 @@ namespace Realm {
         buf = reinterpret_cast<char *>(malloc(size));
         CHKERR_JUMP(!buf, "failed to malloc payload buffer of size " << size, log_ucp,
                     err);
-        *buf = 2;
+        *buf = PBUF_TAG_MALLOC;
       }
 
       log_ucp_ar.debug() << "acquired payload buffer " << buf + AM_ALIGNMENT << " size "
@@ -1991,17 +1995,13 @@ namespace Realm {
     {
       char *alloc = reinterpret_cast<char *>(buf) - AM_ALIGNMENT;
       switch(*alloc) {
-      case 0:
-        if(config.pbuf_malloc) {
-          free(alloc);
-        } else {
-          worker->mmp_release(alloc);
-        }
+      case PBUF_TAG_MMP:
+        worker->mmp_release(alloc);
         break;
-      case 1:
+      case PBUF_TAG_PMP:
         worker->pbuf_release(alloc);
         break;
-      case 2:
+      case PBUF_TAG_MALLOC:
         free(alloc);
         break;
       default:
