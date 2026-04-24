@@ -113,10 +113,10 @@ namespace Realm {
     cp.add_option_int("-ucx:rdesc_rel_max", config.rdesc_rel_max);
 
     // pbuf mpool
-    cp.add_option_int("-ucx:pb_init_count", config.pbuf_init_count);
-    cp.add_option_int("-ucx:pb_max_count", config.pbuf_max_count);
-    cp.add_option_int_units("-ucx:pb_max_size", config.pbuf_max_size);
-    cp.add_option_int_units("-ucx:pb_max_chunk_size", config.pbuf_max_chunk_size);
+    cp.add_option_int("-ucx:pb_mp_init_count", config.pbuf_mp_init_count);
+    cp.add_option_int("-ucx:pb_mp_max_count", config.pbuf_mp_max_count);
+    cp.add_option_int_units("-ucx:pb_mp_max_size", config.pbuf_mp_max_size);
+    cp.add_option_int_units("-ucx:pb_mp_max_chunk_size", config.pbuf_mp_max_chunk_size);
     cp.add_option_int_units("-ucx:pb_mp_thresh", config.pbuf_mp_thresh);
 
     // malloc mpool
@@ -341,7 +341,7 @@ namespace Realm {
     //  send, so the limit is the same regardless of src_payload_addr
     (void)header_size;
     (void)src_payload_addr;
-    return internal->config.pbuf_max_size;
+    return internal->config.pbuf_mp_max_size;
   }
 
 }; // namespace Realm

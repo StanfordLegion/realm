@@ -120,10 +120,10 @@ namespace Realm {
         bool use_wakeup{false};
         size_t priority_size_max{64};
         size_t fp_max{2 << 10 /* 2K */}; // fast path max message size
-        size_t pbuf_max_size{8 << 10 /* 8K */};
-        size_t pbuf_max_chunk_size{4 << 20 /* 4M */};
-        size_t pbuf_max_count{SIZE_MAX};
-        size_t pbuf_init_count{1024};
+        size_t pbuf_mp_max_size{8 << 10 /* 8K */};
+        size_t pbuf_mp_max_chunk_size{4 << 20 /* 4M */};
+        size_t pbuf_mp_max_count{SIZE_MAX};
+        size_t pbuf_mp_init_count{1024};
         size_t pbuf_mp_thresh{2 << 10 /* 2K */};
         size_t mmp_max_obj_size{2 << 10 /* 2K */}; // malloc mpool max object size
         size_t outstanding_reqs_limit{1 << 17 /* 128K (count) */};
