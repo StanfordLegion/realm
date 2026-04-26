@@ -2789,6 +2789,10 @@ namespace Realm {
       assert(!shutdown_flag.load());
       shutdown_flag.store(true);
       shutdown_cond.wait();
+      // poller is no longer being requeued by bgwork - clear 'started' so
+      //  any future call to wait_for_full_poll_cycle() trips an assertion
+      //  rather than deadlocking on pollwait_cond
+      started = false;
     }
   }
 
@@ -2974,6 +2978,9 @@ namespace Realm {
   void GASNetEXPoller::wait_for_full_poll_cycle()
   {
     AutoLock<> al(mutex);
+    // the poller must still be scheduled by bgwork - otherwise nothing will
+    //  ever clear pollwait_flag and the wait below would block forever
+    assert(started);
     pollwait_flag.store(true);
     pollwait_cond.wait();
   }
@@ -3452,6 +3459,10 @@ namespace Realm {
 
   void GASNetEXInternal::detach()
   {
+    // NOTE: check_for_quiescence() must not be called after this point -
+    //  end_polling() stops the poller from being requeued by bgwork, which
+    //  would cause wait_for_full_poll_cycle() inside the quiescence check
+    //  to deadlock (an assert in wait_for_full_poll_cycle catches violations)
     poller.end_polling();
 
     // drain any xpairs that were enqueued (via request_push) but never
@@ -3638,7 +3649,17 @@ namespace Realm {
       log_gex_quiesce.debug() << "total counts: " << total_counts[0] << " "
                               << total_counts[1] << " " << total_counts[2];
 
-    return ((total_counts[0] == 0) && (total_counts[1] == total_counts[2]));
+    bool quiescent = ((total_counts[0] == 0) && (total_counts[1] == total_counts[2]));
+
+    // if we're not quiescent, force at least one more full poll cycle before
+    //  returning so the caller's next snapshot can't outrun the poller - the
+    //  ireduce above only guarantees one poll cycle if it completed slowly,
+    //  and a fast collective leaves the system with no settle time between
+    //  retries (unlike UCX's wait_polling and MPI's ensure_polling_progress)
+    if(!quiescent)
+      poller.wait_for_full_poll_cycle();
+
+    return quiescent;
   }
 
   PendingCompletion *GASNetEXInternal::get_available_comp()
