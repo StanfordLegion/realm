@@ -337,11 +337,16 @@ namespace Realm {
 
   size_t UCPModule::max_payload_size(size_t header_size, const void *src_payload_addr)
   {
-    // caller-provided payloads are always copied into a pbuf before async
-    //  send, so the limit is the same regardless of src_payload_addr
     (void)header_size;
     (void)src_payload_addr;
-    return internal->config.pbuf_mp_max_size;
+    // UCX can transport messages of any size and pbuf_get can satisfy
+    //  allocation requests of any size, so there is no hard upper bound to
+    //  report here. Note that this is the maximum *supported* size, not the
+    //  most efficient one: payloads larger than config.pbuf_mp_max_size fall
+    //  off the pre-registered fast path and pay on-the-fly UCP memory
+    //  registration, so callers that care about throughput should query
+    //  recommended_max_payload() instead and chunk accordingly.
+    return SIZE_MAX;
   }
 
 }; // namespace Realm
