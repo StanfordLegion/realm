@@ -488,8 +488,13 @@ namespace Realm {
   protected:
     atomic<int> refcount;
 
+    // test-only constructor: creates a TransferDesc with the given domain,
+    // bypassing check_analysis_preconditions and TransferDomain::construct
+    struct TestTag {};
+    TransferDesc(TestTag, TransferDomain *_domain);
+
     void check_analysis_preconditions();
-    void perform_analysis();
+    bool perform_analysis(TimeLimit work_until);
     void cancel_analysis(Event failed_precondition);
 
     class DeferredAnalysis : public EventWaiter {
@@ -520,6 +525,11 @@ namespace Realm {
     std::vector<FieldInfo> src_fields, dst_fields;
     void *fill_data;
     size_t fill_size;
+    bool analysis_init_done = false;
+    size_t analysis_field_idx = 0;
+    size_t analysis_fld_start = 0;
+    size_t analysis_fill_ofs = 0;
+    std::vector<bool> analysis_field_done;
     ProfilingMeasurements::OperationMemoryUsage prof_usage;
     ProfilingMeasurements::OperationCopyInfo prof_cpinfo;
   };

@@ -189,6 +189,7 @@ namespace Realm {
     , analysis_successful(false)
     , fill_data(0)
     , fill_size(0)
+    , analysis_init_done(false)
   {
     domain = TransferDomain::construct(_is);
 
