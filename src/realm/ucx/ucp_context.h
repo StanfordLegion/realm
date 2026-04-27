@@ -85,8 +85,8 @@ namespace Realm {
                 unsigned prog_boff_max /*progress thread maximum backoff*/,
                 int prog_itr_max, int rdesc_rel_max, ucs_thread_mode_t thread_mode,
                 size_t user_req_size, size_t user_req_alignment, size_t pbuf_mp_max_size,
-                size_t pbuf_mp_max_chunk_size, size_t pbuf_mp_max_count, size_t pbuf_mp_init_count,
-                size_t mmp_max_obj_size, bool leak_check);
+                size_t pbuf_mp_max_chunk_size, size_t pbuf_mp_max_count,
+                size_t pbuf_mp_init_count, size_t mmp_max_obj_size, bool leak_check);
       ~UCPWorker();
       bool init();
       void finalize();

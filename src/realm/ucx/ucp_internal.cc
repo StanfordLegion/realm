@@ -70,8 +70,9 @@ namespace Realm {
     static constexpr unsigned AM_ID_REPLY = 3;
     static constexpr size_t AM_ALIGNMENT = 8;
 
-    static constexpr char PBUF_TAG_MMP = 0;    // worker->mmp_release
-    static constexpr char PBUF_TAG_PMP = 1;    // worker->pbuf_release (pbuf_mp: pre-registered mpool)
+    static constexpr char PBUF_TAG_MMP = 0; // worker->mmp_release
+    static constexpr char PBUF_TAG_PMP =
+        1; // worker->pbuf_release (pbuf_mp: pre-registered mpool)
     static constexpr char PBUF_TAG_MALLOC = 2; // free
 
     static constexpr size_t GET_ZCOPY_MAX = (1 << 30);     // 1G
@@ -541,8 +542,8 @@ namespace Realm {
               (wt == UCPWorker::WORKER_TX) ? UCS_THREAD_MODE_MULTI
                                            : UCS_THREAD_MODE_SERIALIZED,
               sizeof(Request), alignof(Request), config.pbuf_mp_max_size + AM_ALIGNMENT,
-              config.pbuf_mp_max_chunk_size, config.pbuf_mp_max_count, config.pbuf_mp_init_count,
-              config.mmp_max_obj_size, config.mpool_leakcheck);
+              config.pbuf_mp_max_chunk_size, config.pbuf_mp_max_count,
+              config.pbuf_mp_init_count, config.mmp_max_obj_size, config.mpool_leakcheck);
 
           CHKERR_JUMP(!worker->init(),
                       "failed to init worker for host context " << context, log_ucp, err);
@@ -1820,8 +1821,7 @@ namespace Realm {
         log_ucp.warning() << "recommended max payload 0 without congestion"
                           << " zcopy_thresh_host " << zcopy_thresh_host << " ib_seg_size "
                           << ib_seg_size << " header_size " << header_size
-                          << " GET_ZCOPY_MAX " << GET_ZCOPY_MAX
-                          << " pbuf_mp_max_size "
+                          << " GET_ZCOPY_MAX " << GET_ZCOPY_MAX << " pbuf_mp_max_size "
                           << config.pbuf_mp_max_size;
       }
 
@@ -1973,8 +1973,7 @@ namespace Realm {
         // The buffer will not be pre-registered with UCP, so transfers
         // using it will pay an on-the-fly registration cost (once).
         log_ucp.warning() << "payload size " << size - AM_ALIGNMENT
-                          << " exceeds pbuf_mp_max_size "
-                          << config.pbuf_mp_max_size
+                          << " exceeds pbuf_mp_max_size " << config.pbuf_mp_max_size
                           << "; falling back to malloc (consider increasing "
                           << "-ucx:pb_mp_max_size)";
         buf = reinterpret_cast<char *>(malloc(size));
