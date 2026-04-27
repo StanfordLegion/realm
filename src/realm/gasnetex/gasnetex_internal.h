@@ -768,6 +768,13 @@ namespace Realm {
     // TODO: split counter into per-thread values to avoid contention?
     atomic<uint64_t> total_packets_received;
 
+    // remembers the last set of allreduced counters from check_for_quiescence
+    //  so we can log per-iteration deltas when quiescence is failing - only
+    //  read/written on rank 0
+    static constexpr int NUM_QUIESCE_COUNTERS = 7;
+    uint64_t prev_quiescence_totals[NUM_QUIESCE_COUNTERS] = {0};
+    bool have_prev_quiescence_totals = false;
+
     // manage a single open databuf for all endpoints
     Mutex databuf_mutex;
     OutbufMetadata *databuf_md;
