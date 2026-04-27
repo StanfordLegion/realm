@@ -137,6 +137,21 @@ namespace Realm {
                                    size_t line_stride,
                                    const RemoteAddress &dest_payload_addr,
                                    bool with_congestion, size_t header_size);
+
+    // returns the strict upper bound on payload size for a single active
+    //  message - payloads larger than this CANNOT be sent without
+    //  fragmentation
+    // if src_payload_addr is non-null, the limit may be higher because the
+    //  backend can use the caller's buffer directly (e.g. UCX rendezvous);
+    //  if null, the network must allocate the buffer internally
+    // network backends that handle fragmentation internally (e.g. UCX with
+    //  caller-provided buffers) may return SIZE_MAX to indicate no
+    //  practical limit
+    // NOTE: sending payloads up to this limit is safe but may not be
+    //  optimal - use recommended_max_payload() to query the size that
+    //  avoids performance penalties such as protocol downgrades, extra
+    //  copies, or increased latency
+    size_t max_payload_size(size_t header_size, const void *src_payload_addr);
   }; // namespace Network
 
   // a network module provides additional functionality on top of a normal Realm
@@ -235,6 +250,11 @@ namespace Realm {
                                            size_t line_stride,
                                            const RemoteAddress &dest_payload_addr,
                                            bool with_congestion, size_t header_size) = 0;
+
+    // returns the hard upper bound on payload size - see Network::max_payload_size
+    //  for full documentation; callers wanting optimal performance should use
+    //  recommended_max_payload() instead
+    virtual size_t max_payload_size(size_t header_size, const void *src_payload_addr) = 0;
   };
 
   namespace NetworkSegmentInfo {

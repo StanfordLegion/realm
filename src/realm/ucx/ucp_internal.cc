@@ -69,6 +69,12 @@ namespace Realm {
     static constexpr unsigned AM_ID_RDMA = 2;
     static constexpr unsigned AM_ID_REPLY = 3;
     static constexpr size_t AM_ALIGNMENT = 8;
+
+    static constexpr char PBUF_TAG_MMP = 0; // worker->mmp_release
+    static constexpr char PBUF_TAG_PMP =
+        1; // worker->pbuf_release (pbuf_mp: pre-registered mpool)
+    static constexpr char PBUF_TAG_MALLOC = 2; // free
+
     static constexpr size_t GET_ZCOPY_MAX = (1 << 30);     // 1G
     static constexpr size_t IB_SEG_SIZE = (8 << 10);       // 8K
     static constexpr size_t ZCOPY_THRESH_HOST = (2 << 10); // 2K
@@ -535,9 +541,9 @@ namespace Realm {
               config.prog_itr_max, config.rdesc_rel_max,
               (wt == UCPWorker::WORKER_TX) ? UCS_THREAD_MODE_MULTI
                                            : UCS_THREAD_MODE_SERIALIZED,
-              sizeof(Request), alignof(Request), config.pbuf_max_size + AM_ALIGNMENT,
-              config.pbuf_max_chunk_size, config.pbuf_max_count, config.pbuf_init_count,
-              config.mmp_max_obj_size, config.mpool_leakcheck);
+              sizeof(Request), alignof(Request), config.pbuf_mp_max_size + AM_ALIGNMENT,
+              config.pbuf_mp_max_chunk_size, config.pbuf_mp_max_count,
+              config.pbuf_mp_init_count, config.mmp_max_obj_size, config.mpool_leakcheck);
 
           CHKERR_JUMP(!worker->init(),
                       "failed to init worker for host context " << context, log_ucp, err);
@@ -684,17 +690,17 @@ namespace Realm {
       assert(!initialized_ucp);
 
       // payload buffer mpool config
-      if(config.pbuf_init_count > config.pbuf_max_count) {
-        log_ucp.info() << "pbuf_init_count " << config.pbuf_init_count
-                       << " gt pbuf_max_count " << config.pbuf_max_count
-                       << "; decreased it to " << config.pbuf_max_count;
-        config.pbuf_init_count = config.pbuf_max_count;
+      if(config.pbuf_mp_init_count > config.pbuf_mp_max_count) {
+        log_ucp.info() << "pbuf_mp_init_count " << config.pbuf_mp_init_count
+                       << " gt pbuf_mp_max_count " << config.pbuf_mp_max_count
+                       << "; decreased it to " << config.pbuf_mp_max_count;
+        config.pbuf_mp_init_count = config.pbuf_mp_max_count;
       }
-      if(config.pbuf_max_size > config.pbuf_max_chunk_size) {
-        log_ucp.info() << "pbuf_max_size " << config.pbuf_max_size
-                       << " gt pbuf_max_chunk_size " << config.pbuf_max_chunk_size
-                       << "; decreased it to " << config.pbuf_max_chunk_size;
-        config.pbuf_max_size = config.pbuf_max_chunk_size;
+      if(config.pbuf_mp_max_size > config.pbuf_mp_max_chunk_size) {
+        log_ucp.info() << "pbuf_mp_max_size " << config.pbuf_mp_max_size
+                       << " gt pbuf_mp_max_chunk_size " << config.pbuf_mp_max_chunk_size
+                       << "; decreased it to " << config.pbuf_mp_max_chunk_size;
+        config.pbuf_mp_max_size = config.pbuf_mp_max_chunk_size;
       }
       if(config.mmp_max_obj_size < config.pbuf_mp_thresh) {
         log_ucp.warning() << "WARNING: mmp_max_obj_size " << config.mmp_max_obj_size
@@ -1804,10 +1810,10 @@ namespace Realm {
         // source buffer is not given
         if(dest_payload_addr) {
           // rndv is enforced
-          ret = config.pbuf_max_size;
+          ret = config.pbuf_mp_max_size;
         } else {
           // eager may be used
-          ret = std::min(eager_max, config.pbuf_max_size);
+          ret = std::min(eager_max, config.pbuf_mp_max_size);
         }
       }
 
@@ -1815,8 +1821,8 @@ namespace Realm {
         log_ucp.warning() << "recommended max payload 0 without congestion"
                           << " zcopy_thresh_host " << zcopy_thresh_host << " ib_seg_size "
                           << ib_seg_size << " header_size " << header_size
-                          << " GET_ZCOPY_MAX " << GET_ZCOPY_MAX << " pbuf_max_size "
-                          << config.pbuf_max_size;
+                          << " GET_ZCOPY_MAX " << GET_ZCOPY_MAX << " pbuf_mp_max_size "
+                          << config.pbuf_mp_max_size;
       }
 
       return ret;
@@ -1936,30 +1942,44 @@ namespace Realm {
     void *UCPInternal::pbuf_get(UCPWorker *worker, size_t size)
     {
       char *buf;
-      assert(size <= ib_seg_size);
 #ifdef REALM_USE_CUDA
       // we should never ask for a payload buffer from a GPU ucp context
       assert(!worker->get_context()->gpu);
 #endif
-      // use one extra byte at the beginning of the buffer
-      // to determine whether the buffer is from context mpool or malloc.
-      // But, for alignment's sake, allocate AM_ALIGNMENT extra bytes.
+      // Reserve a leading PBUF_TAG_* byte so pbuf_release can tell which
+      // allocator owns the buffer. AM_ALIGNMENT extra bytes (rather than
+      // just one) are used so the returned payload pointer stays aligned.
       size += AM_ALIGNMENT;
 
       if(size < config.pbuf_mp_thresh) {
         if(config.pbuf_malloc) {
           buf = reinterpret_cast<char *>(malloc(size));
+          CHKERR_JUMP(!buf, "", log_ucp, err);
+          *buf = PBUF_TAG_MALLOC;
         } else {
           buf = reinterpret_cast<char *>(worker->mmp_get(size));
+          CHKERR_JUMP(!buf, "", log_ucp, err);
+          *buf = PBUF_TAG_MMP;
         }
-        CHKERR_JUMP(!buf, "", log_ucp, err);
-        *buf = 0;
-      } else {
+      } else if(size <= config.pbuf_mp_max_size + AM_ALIGNMENT) {
         // TODO: put an upper bound on the mpool size
         //       context->pbuf_mp->has(size, false /* with_expand */)
         buf = reinterpret_cast<char *>(worker->pbuf_get(size));
         CHKERR_JUMP(!buf, "", log_ucp, err);
-        *buf = 1;
+        *buf = PBUF_TAG_PMP;
+      } else {
+        // Oversize payload: cannot use pbuf_mp (fixed element size) and cannot
+        // use mmp (capped at mmp_max_obj_size). Fall back to plain malloc.
+        // The buffer will not be pre-registered with UCP, so transfers
+        // using it will pay an on-the-fly registration cost (once).
+        log_ucp.warning() << "payload size " << size - AM_ALIGNMENT
+                          << " exceeds pbuf_mp_max_size " << config.pbuf_mp_max_size
+                          << "; falling back to malloc (consider increasing "
+                          << "-ucx:pb_mp_max_size)";
+        buf = reinterpret_cast<char *>(malloc(size));
+        CHKERR_JUMP(!buf, "failed to malloc payload buffer of size " << size, log_ucp,
+                    err);
+        *buf = PBUF_TAG_MALLOC;
       }
 
       log_ucp_ar.debug() << "acquired payload buffer " << buf + AM_ALIGNMENT << " size "
@@ -1973,14 +1993,20 @@ namespace Realm {
     void UCPInternal::pbuf_release(UCPWorker *worker, void *buf)
     {
       char *alloc = reinterpret_cast<char *>(buf) - AM_ALIGNMENT;
-      if(*alloc == 0) {
-        if(config.pbuf_malloc) {
-          free(alloc);
-        } else {
-          worker->mmp_release(alloc);
-        }
-      } else {
+      switch(*alloc) {
+      case PBUF_TAG_MMP:
+        worker->mmp_release(alloc);
+        break;
+      case PBUF_TAG_PMP:
         worker->pbuf_release(alloc);
+        break;
+      case PBUF_TAG_MALLOC:
+        free(alloc);
+        break;
+      default:
+        log_ucp.error() << "pbuf_release: unknown allocator tag "
+                        << static_cast<int>(*alloc) << " for buffer " << buf;
+        abort();
       }
 
       log_ucp_ar.debug() << "released payload buffer " << buf;
