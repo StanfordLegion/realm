@@ -3567,33 +3567,42 @@ namespace Realm {
     // 4) no reverse gets in progress
     // 5) all packets sent have been received
 
-    // we handle 1-4 by having each count how many of 1-4 are violated locally
-    //  and then doing a reduction sum over all nodes
-    // we handle 5 by having each rank determine the total packets it has sent
-    //  and received (regardless of which xpair), summing those over all ranks,
-    //  and demanding that the sum of packets sent matches the sum of received
-    uint64_t local_counts[3] = {0, 0, 0};
+    // we use a per-component breakdown rather than a single "anybody busy"
+    //  count so that, when quiescence is failing, the failure log identifies
+    //  which subsystem holds the residual work
+    enum
+    {
+      SLOT_POLLER_BUSY = 0,
+      SLOT_INJECTOR_BUSY,
+      SLOT_COMPLETER_BUSY,
+      SLOT_RGETTER_BUSY,
+      SLOT_PENDING_COMPS,
+      SLOT_RESERVED,
+      SLOT_RECEIVED,
+    };
+    static_assert(SLOT_RECEIVED + 1 == NUM_QUIESCE_COUNTERS, "slot enum mismatch");
+
+    uint64_t local_counts[NUM_QUIESCE_COUNTERS] = {0};
 
     if(poller.has_work_remaining()) {
       log_gex_quiesce.debug() << "poller busy";
-      local_counts[0]++;
+      local_counts[SLOT_POLLER_BUSY] = 1;
     }
     if(injector.has_work_remaining()) {
       log_gex_quiesce.debug() << "injector busy";
-      local_counts[0]++;
+      local_counts[SLOT_INJECTOR_BUSY] = 1;
     }
     if(completer.has_work_remaining()) {
       log_gex_quiesce.debug() << "completer busy";
-      local_counts[0]++;
+      local_counts[SLOT_COMPLETER_BUSY] = 1;
     }
     if(rgetter.has_work_remaining()) {
       log_gex_quiesce.debug() << "rgetter busy";
-      local_counts[0]++;
+      local_counts[SLOT_RGETTER_BUSY] = 1;
     }
-    if(compmgr.num_completions_pending() > 0) {
-      log_gex_quiesce.debug() << "compmgr busy";
-      local_counts[0]++;
-    }
+    local_counts[SLOT_PENDING_COMPS] = compmgr.num_completions_pending();
+    if(local_counts[SLOT_PENDING_COMPS] > 0)
+      log_gex_quiesce.debug() << "compmgr busy: " << local_counts[SLOT_PENDING_COMPS];
     for(gex_ep_index_t src_ep_index = 0; src_ep_index < xmitsrcs.size(); src_ep_index++) {
       atomic<XmitSrcDestPair *> *pairptrs = xmitsrcs[src_ep_index]->pairs;
       for(gex_ep_index_t tgt_ep_index = 0; tgt_ep_index < gex_wrapper_handle.max_eps;
@@ -3607,7 +3616,7 @@ namespace Realm {
             log_gex_quiesce.debug()
                 << "xpair reserved: " << src_ep_index << "->" << tgt_rank << "/"
                 << tgt_ep_index << " " << num_rsrvd;
-            local_counts[1] += num_rsrvd;
+            local_counts[SLOT_RESERVED] += num_rsrvd;
           }
         }
     }
@@ -3615,16 +3624,21 @@ namespace Realm {
     //  manager was drained - if the actual 'total_packets_received' has
     //  increased since, we're obviously not quiescent, but we need every
     //  other rank to know that too
-    local_counts[2] = sampled_receive_count;
+    local_counts[SLOT_RECEIVED] = sampled_receive_count;
 
-    log_gex_quiesce.debug() << "local counts: " << local_counts[0] << " "
-                            << local_counts[1] << " " << local_counts[2];
+    log_gex_quiesce.debug() << "local counts: poller=" << local_counts[SLOT_POLLER_BUSY]
+                            << " injector=" << local_counts[SLOT_INJECTOR_BUSY]
+                            << " completer=" << local_counts[SLOT_COMPLETER_BUSY]
+                            << " rgetter=" << local_counts[SLOT_RGETTER_BUSY]
+                            << " pending_comps=" << local_counts[SLOT_PENDING_COMPS]
+                            << " reserved=" << local_counts[SLOT_RESERVED]
+                            << " received=" << local_counts[SLOT_RECEIVED];
 
-    uint64_t total_counts[3];
+    uint64_t total_counts[NUM_QUIESCE_COUNTERS];
     gex_flags_t flags = 0;
     gex_event_opaque_t done = gex_wrapper_handle.gex_coll_ireduce(
-        prim_tm, total_counts, local_counts, GEX_WRAPPER_DT_U64, sizeof(uint64_t), 3,
-        GEX_WRAPPER_OP_ADD, flags);
+        prim_tm, total_counts, local_counts, GEX_WRAPPER_DT_U64, sizeof(uint64_t),
+        NUM_QUIESCE_COUNTERS, GEX_WRAPPER_OP_ADD, flags);
 
     // wait on completion of the collective reduction, but keep track of time
     //  and complain if it takes too long
@@ -3642,22 +3656,70 @@ namespace Realm {
       poller.wait_for_full_poll_cycle();
     } while(gex_wrapper_handle.gex_event_test(done) != GEX_WRAPPER_OK);
 
-    if(prim_rank == 0)
-      log_gex_quiesce.info() << "total counts: " << total_counts[0] << " "
-                             << total_counts[1] << " " << total_counts[2];
-    else
-      log_gex_quiesce.debug() << "total counts: " << total_counts[0] << " "
-                              << total_counts[1] << " " << total_counts[2];
+    bool quiescent = ((total_counts[SLOT_POLLER_BUSY] == 0) &&
+                      (total_counts[SLOT_INJECTOR_BUSY] == 0) &&
+                      (total_counts[SLOT_COMPLETER_BUSY] == 0) &&
+                      (total_counts[SLOT_RGETTER_BUSY] == 0) &&
+                      (total_counts[SLOT_PENDING_COMPS] == 0) &&
+                      (total_counts[SLOT_RESERVED] == total_counts[SLOT_RECEIVED]));
 
-    bool quiescent = ((total_counts[0] == 0) && (total_counts[1] == total_counts[2]));
+    if(quiescent) {
+      // success path - one brief line on rank 0, nothing on the others
+      if(prim_rank == 0)
+        log_gex_quiesce.info() << "quiescent: reserved=received="
+                               << total_counts[SLOT_RESERVED];
+    } else {
+      // failure path - log the breakdown so the diagnostic in the failure
+      //  case identifies the offending subsystem(s)
+      if(prim_rank == 0) {
+        // print absolute totals plus deltas vs the previous iteration to
+        //  distinguish "system is settling slowly" from "counters are stuck"
+        auto delta = [&](int slot) -> int64_t {
+          return have_prev_quiescence_totals
+                     ? (int64_t)total_counts[slot] - (int64_t)prev_quiescence_totals[slot]
+                     : 0;
+        };
+        log_gex_quiesce.warning()
+            << "not quiescent: pollers=" << total_counts[SLOT_POLLER_BUSY] << " (d"
+            << delta(SLOT_POLLER_BUSY) << ")"
+            << " injectors=" << total_counts[SLOT_INJECTOR_BUSY] << " (d"
+            << delta(SLOT_INJECTOR_BUSY) << ")"
+            << " completers=" << total_counts[SLOT_COMPLETER_BUSY] << " (d"
+            << delta(SLOT_COMPLETER_BUSY) << ")"
+            << " rgetters=" << total_counts[SLOT_RGETTER_BUSY] << " (d"
+            << delta(SLOT_RGETTER_BUSY) << ")"
+            << " pending_comps=" << total_counts[SLOT_PENDING_COMPS] << " (d"
+            << delta(SLOT_PENDING_COMPS) << ")"
+            << " reserved=" << total_counts[SLOT_RESERVED] << " (d"
+            << delta(SLOT_RESERVED) << ")"
+            << " received=" << total_counts[SLOT_RECEIVED] << " (d"
+            << delta(SLOT_RECEIVED) << ")"
+            << " imbalance="
+            << ((int64_t)total_counts[SLOT_RESERVED] -
+                (int64_t)total_counts[SLOT_RECEIVED]);
+        memcpy(prev_quiescence_totals, total_counts, sizeof(total_counts));
+        have_prev_quiescence_totals = true;
+      }
+      // every rank logs its own contribution so cross-rank logs can identify
+      //  which rank(s) actually hold the stuck work; also include the post-drain
+      //  total_packets_received to expose any packets that landed during drain
+      log_gex_quiesce.warning() << "not quiescent: rank=" << prim_rank
+                                << " local: poller=" << local_counts[SLOT_POLLER_BUSY]
+                                << " injector=" << local_counts[SLOT_INJECTOR_BUSY]
+                                << " completer=" << local_counts[SLOT_COMPLETER_BUSY]
+                                << " rgetter=" << local_counts[SLOT_RGETTER_BUSY]
+                                << " pending_comps=" << local_counts[SLOT_PENDING_COMPS]
+                                << " reserved=" << local_counts[SLOT_RESERVED]
+                                << " received_sampled=" << local_counts[SLOT_RECEIVED]
+                                << " received_now=" << total_packets_received.load();
 
-    // if we're not quiescent, force at least one more full poll cycle before
-    //  returning so the caller's next snapshot can't outrun the poller - the
-    //  ireduce above only guarantees one poll cycle if it completed slowly,
-    //  and a fast collective leaves the system with no settle time between
-    //  retries (unlike UCX's wait_polling and MPI's ensure_polling_progress)
-    if(!quiescent)
+      // force at least one more full poll cycle before returning so the
+      //  caller's next snapshot can't outrun the poller - the ireduce above
+      //  only guarantees one poll cycle if it completed slowly, and a fast
+      //  collective leaves the system with no settle time between retries
+      //  (unlike UCX's wait_polling and MPI's ensure_polling_progress)
       poller.wait_for_full_poll_cycle();
+    }
 
     return quiescent;
   }
