@@ -3866,35 +3866,7 @@ namespace Realm {
     }
   }
 
-  bool TransferDesc::request_analysis(TransferOperation *op)
-  {
-    // early out without lock
-    if(analysis_complete.load_acquire()) {
-      return true;
-    }
-
-    AutoLock<> al(mutex);
-    if(analysis_complete.load()) {
-      return true;
-    } else {
-      pending_ops.push_back(op);
-      return false;
-    }
-  }
-
-  TransferDesc::TransferDesc(TestTag, TransferDomain *_domain)
-    : refcount(1)
-    , deferred_analysis(this)
-    , domain(_domain)
-    , prs()
-    , analysis_complete(false)
-    , analysis_successful(false)
-    , fill_data(0)
-    , fill_size(0)
-    , analysis_init_done(false)
-  {}
-
-  void TransferDesc::check_analysis_preconditions()
+  void TransferDesc::check_analysis_preconditions(std::vector<Event> &preconditions) const
   {
     log_xplan.info() << "created: plan=" << (void *)this << " domain=" << *domain
                      << " srcs=" << srcs.size() << " dsts=" << dsts.size();
@@ -3913,8 +3885,6 @@ namespace Realm {
       }
     }
 
-    std::vector<Event> preconditions;
-
     // we need metadata for the domain and every instance
     {
       Event e = domain->request_metadata();
@@ -3923,14 +3893,15 @@ namespace Realm {
       }
     }
 
-    std::set<RegionInstance> insts_seen;
-    for(size_t i = 0; i < srcs.size(); i++) {
-      if(srcs[i].inst.exists()) {
-        if(insts_seen.count(srcs[i].inst) > 0) {
+    std::vector<RegionInstance> insts_seen;
+    for(const CopySrcDstField &src : srcs) {
+      if(src.inst.exists()) {
+        auto finder = std::lower_bound(insts_seen.begin(), insts_seen.end(), src.inst);
+        if((finder != insts_seen.end()) && (*finder == src.inst)) {
           continue;
         }
-        insts_seen.insert(srcs[i].inst);
-        RegionInstanceImpl *impl = get_runtime()->get_instance_impl(srcs[i].inst);
+        insts_seen.insert(finder, src.inst);
+        RegionInstanceImpl *impl = get_runtime()->get_instance_impl(src.inst);
         Event e = impl->request_metadata();
         if(e.exists()) {
           preconditions.push_back(e);
@@ -3938,13 +3909,14 @@ namespace Realm {
       }
     }
 
-    for(size_t i = 0; i < dsts.size(); i++) {
-      if(dsts[i].inst.exists()) {
-        if(insts_seen.count(dsts[i].inst) > 0) {
+    for(const CopySrcDstField &dst : dsts) {
+      if(dst.inst.exists()) {
+        auto finder = std::lower_bound(insts_seen.begin(), insts_seen.end(), dst.inst);
+        if((finder != insts_seen.end()) && (*finder == dst.inst)) {
           continue;
         }
-        insts_seen.insert(dsts[i].inst);
-        RegionInstanceImpl *impl = get_runtime()->get_instance_impl(dsts[i].inst);
+        insts_seen.insert(finder, dst.inst);
+        RegionInstanceImpl *impl = get_runtime()->get_instance_impl(dst.inst);
         Event e = impl->request_metadata();
         if(e.exists()) {
           preconditions.push_back(e);
@@ -3958,18 +3930,6 @@ namespace Realm {
         preconditions.push_back(e);
       }
     }
-
-    if(!preconditions.empty()) {
-      Event merged = Event::merge_events(preconditions);
-      if(merged.exists()) {
-        deferred_analysis.precondition = merged;
-        EventImpl::add_waiter(merged, &deferred_analysis);
-        return;
-      }
-    }
-
-    // no (untriggered) preconditions, so we fall through to immediate analysis
-    perform_analysis(TimeLimit());
   }
 
   static size_t compute_ib_size(size_t combined_field_size, size_t domain_size,
@@ -4043,7 +4003,7 @@ namespace Realm {
     const std::vector<TransferGraph::IBInfo> &edges;
   };
 
-  bool TransferDesc::perform_analysis(TimeLimit work_until)
+  bool TransferDesc::perform_analysis(TransferOperation *op, TimeLimit work_until)
   {
     if(!analysis_init_done) {
       // initialize profiling data
@@ -4054,21 +4014,9 @@ namespace Realm {
       // quick check - if the domain is empty, there's nothing to actually do
       if(domain->empty()) {
         log_xplan.debug() << "analysis: plan=" << (void *)this << " empty";
-
-        // well, we still have to poke pending ops
-        std::vector<TransferOperation *> to_alloc;
-        {
-          AutoLock<> al(mutex);
-          to_alloc.swap(pending_ops);
-          // release before the mutex is released so to_alloc is visible before the
-          // analysis_complete flag is set
-          analysis_complete.store_release(true);
-        }
-
-        for(size_t i = 0; i < to_alloc.size(); i++) {
-          to_alloc[i]->allocate_ibs();
-        }
-        return true;
+        analysis_init_done = true;
+        analysis_field_idx = srcs.size();
+        return op->allocate_ibs(work_until);
       }
 
       // first, scan over the sources and figure out how much space we need
@@ -4098,6 +4046,12 @@ namespace Realm {
       analysis_fld_start = 0;
       analysis_fill_ofs = 0;
       analysis_field_done.assign(srcs.size(), false);
+    }
+
+    // if we've already finished enumerating per-field paths on a prior call,
+    //  everything below is already done and we go straight to allocate_ibs
+    if(analysis_field_idx >= srcs.size()) {
+      return op->allocate_ibs(work_until);
     }
 
     size_t domain_size = domain->volume();
@@ -4572,6 +4526,12 @@ namespace Realm {
         }
       }
     }
+    // mark that we've enumerated every field so a re-entry skips directly to
+    //  allocate_ibs rather than re-running the loop
+    analysis_field_idx = srcs.size();
+    analysis_fld_start = fld_start;
+    analysis_fill_ofs = fill_ofs;
+
     // make sure the reordered field list includes them all
     assert(fld_start == srcs.size());
 
@@ -4621,84 +4581,100 @@ namespace Realm {
       }
     }
 
-    for(size_t i = 0; i < graph.ib_edges.size(); i++) {
-      log_xplan.info() << "analysis: plan=" << (void *)this << " ibs[" << i
-                       << "]: memory=" << graph.ib_edges[i].memory << ":"
-                       << graph.ib_edges[i].memory.kind()
-                       << " size=" << graph.ib_edges[i].size;
-    }
-
-    if(!graph.ib_edges.empty()) {
-      log_xplan.info() << "analysis: plan=" << (void *)this
-                       << " ib_alloc=" << PrettyVector<unsigned>(graph.ib_alloc_order);
-    }
-    //}
-
-    // mark that the analysis is complete and see if there are any pending
-    //  ops that can start allocating ibs
-    std::vector<TransferOperation *> to_alloc;
-    {
-      AutoLock<> al(mutex);
-      to_alloc.swap(pending_ops);
-      analysis_successful = true;
-      // release before the mutex is released so to_alloc is visible before the
-      // analysis_complete flag is set
-      analysis_complete.store_release(true);
-    }
-
-    for(size_t i = 0; i < to_alloc.size(); i++) {
-      to_alloc[i]->allocate_ibs();
-    }
-    return true;
-  }
-
-  void TransferDesc::cancel_analysis(Event failed_precondition)
-  {
-    // mark that the analysis is failed and see if there are any pending
-    //  ops that need to also fail
-    std::vector<TransferOperation *> to_alloc;
-    {
-      AutoLock<> al(mutex);
-      to_alloc.swap(pending_ops);
-      analysis_successful = false;
-      // release before the mutex is released so to_alloc is visible before the
-      // analysis_complete flag is set
-      analysis_complete.store_release(true);
-    }
-
-    for(size_t i = 0; i < to_alloc.size(); i++) {
-      to_alloc[i]->handle_poisoned_precondition(failed_precondition);
-    }
+    // start allocating intermediate buffers
+    return op->allocate_ibs(work_until);
   }
 
   ////////////////////////////////////////////////////////////////////////
   //
-  // class TransferDesc::DeferredAnalysis
+  // class CopyAnalyzer
   //
 
-  TransferDesc::DeferredAnalysis::DeferredAnalysis(TransferDesc *_desc)
-    : desc(_desc)
+  CopyAnalyzer::CopyAnalyzer(void)
+    : BackgroundWorkItem("copy analyzer")
   {}
 
-  void TransferDesc::DeferredAnalysis::event_triggered(bool poisoned,
-                                                       TimeLimit work_until)
+  void CopyAnalyzer::analyze_copy(TransferOperation *op)
   {
-    // TODO: respect time limit
-    if(poisoned) {
-      desc->cancel_analysis(precondition);
-    } else {
-      desc->perform_analysis(TimeLimit());
+    bool activate = false;
+    // Try to analyze this operation inline with a responsive time limit
+    // If it doesn't finish then we'll defer it
+    if(!op->analyze(TimeLimit::responsive())) {
+      AutoLock<> al(mutex);
+      if(pending_copies.empty()) {
+        pending_copies.push_back(op);
+        activate = true;
+      } else {
+        // Need to insert in the right place in the queue by priority
+        const int priority = op->get_priority();
+        if(priority <= pending_copies.back()->get_priority()) {
+          // Same or lower priority as the back goes on the back
+          pending_copies.push_back(op);
+        } else if(pending_copies.front()->get_priority() < priority) {
+          // Higher priority than the front goes on the front
+          pending_copies.push_front(op);
+        } else {
+          // Insert it at the right place in the deque
+          pending_copies.insert(
+              std::lower_bound(
+                  pending_copies.begin(), pending_copies.end(), op,
+                  [](const TransferOperation *lhs, const TransferOperation *rhs) {
+                    // Only goes to the left in the deque if it has strictly
+                    // higher priority than the right
+                    return lhs->get_priority() > rhs->get_priority();
+                  }),
+              op);
+        }
+      }
+    }
+    if(activate) {
+      make_active();
     }
   }
 
-  void TransferDesc::DeferredAnalysis::print(std::ostream &os) const
+  void CopyAnalyzer::requeue_front(TransferOperation *op)
   {
-    os << "deferred_analysis(" << (void *)desc << ")";
+    bool activate;
+    {
+      AutoLock<> al(mutex);
+      activate = pending_copies.empty();
+      pending_copies.push_front(op);
+    }
+    if(activate) {
+      make_active();
+    }
   }
 
-  Event TransferDesc::DeferredAnalysis::get_finish_event(void) const
+  bool CopyAnalyzer::do_work(TimeLimit until)
   {
-    return Event::NO_EVENT;
+    bool reactivate;
+    TransferOperation *op = nullptr;
+    {
+      AutoLock<> al(mutex);
+      if(pending_copies.empty()) {
+        return false;
+      }
+      op = pending_copies.front();
+      pending_copies.pop_front();
+      reactivate = !pending_copies.empty();
+    }
+    // If there are more pending copies then reenable this background
+    // work item for other threads to be able to invoke it in parallel
+    if(reactivate) {
+      make_active();
+    }
+    while(op->analyze(until)) {
+      AutoLock<> al(mutex);
+      if(pending_copies.empty()) {
+        return false;
+      }
+      op = pending_copies.front();
+      pending_copies.pop_front();
+    }
+    // Didn't finish with this operation so put it back on the list
+    AutoLock<> al(mutex);
+    pending_copies.push_front(op);
+    return true;
   }
 
   ////////////////////////////////////////////////////////////////////////
@@ -4732,23 +4708,35 @@ namespace Realm {
                    << " created - plan=" << (void *)&desc << " before=" << precondition
                    << " after=" << get_finish_event();
 
+    std::vector<Event> preconditions;
+    desc.check_analysis_preconditions(preconditions);
+    Event defer;
+    if(!preconditions.empty()) {
+      if(precondition.exists())
+        preconditions.push_back(precondition);
+      defer = Event::merge_events(preconditions);
+    } else {
+      defer = precondition;
+    }
+
     bool poisoned;
-    if(!precondition.has_triggered_faultaware(poisoned)) {
-      deferred_start.precondition = precondition;
-      EventImpl::add_waiter(precondition, &deferred_start);
+    if(!defer.has_triggered_faultaware(poisoned)) {
+      deferred_start.precondition = defer;
+      EventImpl::add_waiter(defer, &deferred_start);
       return;
     }
     if(poisoned) {
-      handle_poisoned_precondition(precondition);
+      handle_poisoned_precondition(defer);
       return;
     }
-
-    // see if we need to wait for the transfer description analysis
-    if(desc.request_analysis(this)) {
-      // it's ready - go ahead and do ib creation
-      allocate_ibs();
+    // Check that nobody cancelled us
+    if(mark_ready()) {
+      // analyzing copies before dispatching them is expensive so we have a
+      // background worker item for doing that
+      // Add ourselves to the copy analysis queue
+      get_runtime()->copy_analyzer.analyze_copy(this);
     } else {
-      // do nothing - the TransferDesc will call us when it's ready
+      mark_finished(false /*successful*/);
     }
   }
 
@@ -4783,131 +4771,149 @@ namespace Realm {
     Operation::mark_completed();
   }
 
-  void TransferOperation::allocate_ibs()
+  bool TransferOperation::allocate_ibs(TimeLimit work_until)
   {
-    // make sure we haven't been cancelled
-    bool ok_to_run = mark_ready();
-    if(!ok_to_run) {
-      mark_finished(false /*!successful*/);
-      return;
-    }
-
-    // if the transfer analysis was not successful, we can't continue
-    if(!desc.analysis_successful) {
-      mark_terminated(0, ByteArray());
-      return;
-    }
-
     const TransferGraph &tg = desc.graph;
 
     if(!tg.ib_edges.empty()) {
-      ib_offsets.resize(tg.ib_edges.size(), -1);
+      if(!allocate_ibs_init_done) {
+        ib_offsets.resize(tg.ib_edges.size(), -1);
 
-      // increase the count by one to prevent a trigger before we finish
-      //  this loop
-      ib_responses_needed.store(tg.ib_edges.size() + 1);
-
-      // respect computed ib allocation order
-      // TODO: attempt opportunistic unordered allocation
-
-      // see who owns the first memory we need to allocate from
-      NodeID first_owner =
-          ID(tg.ib_edges[tg.ib_alloc_order[0]].memory).memory_owner_node();
-      unsigned immed_count = 0;
-      if(first_owner == Network::my_node_id) {
-        // attempt immediate allocation of local IBs
-        std::vector<size_t> sizes;
-        std::vector<off_t> offsets;
-        while(immed_count < tg.ib_edges.size()) {
-          Memory tgt_mem = tg.ib_edges[tg.ib_alloc_order[immed_count]].memory;
-          first_owner = ID(tgt_mem).memory_owner_node();
-          // if we've gotten to IB requests that are non-local, stop
-          if(first_owner != Network::my_node_id) {
-            break;
-          }
-          sizes.assign(1, tg.ib_edges[tg.ib_alloc_order[immed_count]].size);
-          unsigned same_mem = 1;
-          while(((immed_count + same_mem) < tg.ib_edges.size()) &&
-                (tgt_mem ==
-                 tg.ib_edges[tg.ib_alloc_order[immed_count + same_mem]].memory)) {
-            sizes.push_back(tg.ib_edges[tg.ib_alloc_order[immed_count + same_mem]].size);
-            same_mem += 1;
-          }
-
-          offsets.assign(same_mem, -1);
-          IBMemory *ib_mem = get_runtime()->get_ib_memory_impl(tgt_mem);
-          if(ib_mem->attempt_immediate_allocation(
-                 Network::my_node_id, reinterpret_cast<uintptr_t>(this), same_mem,
-                 sizes.data(), offsets.data())) {
-            log_ib_alloc.debug()
-                << "satisfied: op=" << Network::my_node_id << "/" << (void *)this
-                << " index=" << immed_count << "+" << same_mem << " mem=" << tgt_mem;
-
-            notify_ib_allocations(same_mem, immed_count, offsets.data());
-            immed_count += same_mem;
-          } else {
-            // an immediate allocation failed, so it's time to enqueue
-            break;
-          }
+        // one-time post-analysis logging that used to live at the end of
+        //  TransferDesc::perform_analysis; it describes the IB allocation
+        //  data set up there
+        for(size_t i = 0; i < tg.ib_edges.size(); i++) {
+          log_xplan.info() << "analysis: plan=" << (void *)&desc << " ibs[" << i
+                           << "]: memory=" << tg.ib_edges[i].memory << ":"
+                           << tg.ib_edges[i].memory.kind()
+                           << " size=" << tg.ib_edges[i].size;
         }
+        log_xplan.info() << "analysis: plan=" << (void *)&desc
+                         << " ib_alloc=" << PrettyVector<unsigned>(tg.ib_alloc_order);
+
+        // increase the count by one to prevent a trigger before we finish
+        //  this loop
+        ib_responses_needed.store(tg.ib_edges.size() + 1);
+
+        allocate_ibs_init_done = true;
+        allocate_ibs_immed_count = 0;
       }
 
-      unsigned rem_count = tg.ib_edges.size() - immed_count;
-      if(rem_count > 0) {
+      if(!allocate_ibs_requests_sent) {
+        // respect computed ib allocation order
+        // TODO: attempt opportunistic unordered allocation
+
+        unsigned immed_count = allocate_ibs_immed_count;
+
+        // see who owns the memory we need to allocate from (re-derived on
+        //  every entry so resumes work correctly)
+        NodeID first_owner =
+            ID(tg.ib_edges[tg.ib_alloc_order[immed_count]].memory).memory_owner_node();
         if(first_owner == Network::my_node_id) {
-          // enqueue all remaining requests with the first memory
-          PendingIBRequests *reqs = new PendingIBRequests(
-              Network::my_node_id, reinterpret_cast<uintptr_t>(this), rem_count,
-              immed_count, 0);
-          for(unsigned i = 0; i < rem_count; i++) {
-            reqs->memories.push_back(
-                tg.ib_edges[tg.ib_alloc_order[immed_count + i]].memory);
-            reqs->sizes.push_back(tg.ib_edges[tg.ib_alloc_order[immed_count + i]].size);
-          }
-
-          IBMemory *ib_mem = get_runtime()->get_ib_memory_impl(reqs->memories[0]);
-          ib_mem->enqueue_requests(reqs);
-        } else {
-          // active message time - special case for rem_count == 1
-          if(rem_count == 1) {
-            ActiveMessage<RemoteIBAllocRequestSingle> amsg(first_owner);
-            amsg->memory = tg.ib_edges[tg.ib_alloc_order[immed_count]].memory;
-            amsg->size = tg.ib_edges[tg.ib_alloc_order[immed_count]].size;
-            amsg->req_op = reinterpret_cast<uintptr_t>(this);
-            amsg->req_index = immed_count;
-            amsg->immediate = false;
-            amsg.commit();
-          } else {
-            size_t bytes = (rem_count * (sizeof(Memory) + sizeof(size_t)));
-            ActiveMessage<RemoteIBAllocRequestMultiple> amsg(first_owner, bytes);
-            amsg->requestor = Network::my_node_id;
-            amsg->count = rem_count;
-            amsg->first_index = immed_count;
-            amsg->curr_index = 0;
-            amsg->req_op = reinterpret_cast<uintptr_t>(this);
-            amsg->immediate = false;
-
-            for(unsigned i = 0; i < rem_count; i++) {
-              amsg << tg.ib_edges[tg.ib_alloc_order[immed_count + i]].memory;
+          // attempt immediate allocation of local IBs
+          std::vector<size_t> sizes;
+          std::vector<off_t> offsets;
+          while(immed_count < tg.ib_edges.size()) {
+            // honor the caller's time limit between coalesced allocation
+            //  attempts
+            if(work_until.is_expired()) {
+              allocate_ibs_immed_count = immed_count;
+              return false;
             }
-            for(unsigned i = 0; i < rem_count; i++) {
-              amsg << tg.ib_edges[tg.ib_alloc_order[immed_count + i]].size;
+            Memory tgt_mem = tg.ib_edges[tg.ib_alloc_order[immed_count]].memory;
+            first_owner = ID(tgt_mem).memory_owner_node();
+            // if we've gotten to IB requests that are non-local, stop
+            if(first_owner != Network::my_node_id) {
+              break;
+            }
+            sizes.assign(1, tg.ib_edges[tg.ib_alloc_order[immed_count]].size);
+            unsigned same_mem = 1;
+            while(((immed_count + same_mem) < tg.ib_edges.size()) &&
+                  (tgt_mem ==
+                   tg.ib_edges[tg.ib_alloc_order[immed_count + same_mem]].memory)) {
+              sizes.push_back(
+                  tg.ib_edges[tg.ib_alloc_order[immed_count + same_mem]].size);
+              same_mem += 1;
             }
 
-            amsg.commit();
+            offsets.assign(same_mem, -1);
+            IBMemory *ib_mem = get_runtime()->get_ib_memory_impl(tgt_mem);
+            if(ib_mem->attempt_immediate_allocation(
+                   Network::my_node_id, reinterpret_cast<uintptr_t>(this), same_mem,
+                   sizes.data(), offsets.data())) {
+              log_ib_alloc.debug()
+                  << "satisfied: op=" << Network::my_node_id << "/" << (void *)this
+                  << " index=" << immed_count << "+" << same_mem << " mem=" << tgt_mem;
+
+              notify_ib_allocations(same_mem, immed_count, offsets.data(), work_until);
+              immed_count += same_mem;
+            } else {
+              // an immediate allocation failed, so it's time to enqueue
+              break;
+            }
           }
         }
-      }
+        allocate_ibs_immed_count = immed_count;
 
-      // once all requests are made, do the extra decrement and continue if they
-      //  are all satisfied
-      if(ib_responses_needed.fetch_sub_acqrel(1) > 1) {
-        return;
+        unsigned rem_count = tg.ib_edges.size() - immed_count;
+        if(rem_count > 0) {
+          if(first_owner == Network::my_node_id) {
+            // enqueue all remaining requests with the first memory
+            PendingIBRequests *reqs = new PendingIBRequests(
+                Network::my_node_id, reinterpret_cast<uintptr_t>(this), rem_count,
+                immed_count, 0);
+            for(unsigned i = 0; i < rem_count; i++) {
+              reqs->memories.push_back(
+                  tg.ib_edges[tg.ib_alloc_order[immed_count + i]].memory);
+              reqs->sizes.push_back(tg.ib_edges[tg.ib_alloc_order[immed_count + i]].size);
+            }
+
+            IBMemory *ib_mem = get_runtime()->get_ib_memory_impl(reqs->memories[0]);
+            ib_mem->enqueue_requests(reqs, work_until);
+          } else {
+            // active message time - special case for rem_count == 1
+            if(rem_count == 1) {
+              ActiveMessage<RemoteIBAllocRequestSingle> amsg(first_owner);
+              amsg->memory = tg.ib_edges[tg.ib_alloc_order[immed_count]].memory;
+              amsg->size = tg.ib_edges[tg.ib_alloc_order[immed_count]].size;
+              amsg->req_op = reinterpret_cast<uintptr_t>(this);
+              amsg->req_index = immed_count;
+              amsg->immediate = false;
+              amsg.commit();
+            } else {
+              size_t bytes = (rem_count * (sizeof(Memory) + sizeof(size_t)));
+              ActiveMessage<RemoteIBAllocRequestMultiple> amsg(first_owner, bytes);
+              amsg->requestor = Network::my_node_id;
+              amsg->count = rem_count;
+              amsg->first_index = immed_count;
+              amsg->curr_index = 0;
+              amsg->req_op = reinterpret_cast<uintptr_t>(this);
+              amsg->immediate = false;
+
+              for(unsigned i = 0; i < rem_count; i++) {
+                amsg << tg.ib_edges[tg.ib_alloc_order[immed_count + i]].memory;
+              }
+              for(unsigned i = 0; i < rem_count; i++) {
+                amsg << tg.ib_edges[tg.ib_alloc_order[immed_count + i]].size;
+              }
+
+              amsg.commit();
+            }
+          }
+        }
+
+        allocate_ibs_requests_sent = true;
+
+        // once all requests are made, do the extra decrement and hand off to
+        //  the async notification path if any responses are still outstanding
+        if(ib_responses_needed.fetch_sub_acqrel(1) > 1) {
+          return true;
+        }
       }
     }
 
     // fall through to creating xds
-    create_xds();
+    return create_xds(work_until);
   }
 
   std::ostream &operator<<(std::ostream &os, const TransferGraph::XDTemplate::IO &io)
@@ -4936,7 +4942,8 @@ namespace Realm {
     return os;
   }
 
-  void TransferOperation::notify_ib_allocation(unsigned ib_index, off_t ib_offset)
+  void TransferOperation::notify_ib_allocation(unsigned ib_index, off_t ib_offset,
+                                               TimeLimit work_until)
   {
     log_ib_alloc.info() << "notify: op=" << (void *)this << " index=" << ib_index << "+1"
                         << " ok=" << ((ib_offset >= 0) ? 1 : 0);
@@ -4953,12 +4960,17 @@ namespace Realm {
 
     // if this was the last response needed, we can continue on to creating xds
     if(ib_responses_needed.fetch_sub_acqrel(1) == 1) {
-      create_xds();
+      if(!create_xds(work_until)) {
+        // timed out finishing the last bit of work - let the bg worker finish
+        //  it, pushing us to the front because we've already been in the queue
+        get_runtime()->copy_analyzer.requeue_front(this);
+      }
     }
   }
 
   void TransferOperation::notify_ib_allocations(unsigned count, unsigned first_index,
-                                                const off_t *offsets)
+                                                const off_t *offsets,
+                                                TimeLimit work_until)
   {
     log_ib_alloc.info() << "notify: op=" << (void *)this << " index=" << first_index
                         << "+" << count << " ok=" << ((offsets != 0) ? 1 : 0);
@@ -4978,56 +4990,70 @@ namespace Realm {
 
     // if this was the last response needed, we can continue on to creating xds
     if(ib_responses_needed.fetch_sub_acqrel(count) == count) {
-      create_xds();
+      if(!create_xds(work_until)) {
+        get_runtime()->copy_analyzer.requeue_front(this);
+      }
     }
   }
 
-  void TransferOperation::create_xds()
+  bool TransferOperation::create_xds(TimeLimit work_until)
   {
-    // make sure we haven't been cancelled
-    bool ok_to_run = this->mark_started();
-    if(!ok_to_run) {
-      mark_finished(false /*!successful*/);
-      return;
-    }
-
     const TransferGraph &tg = desc.graph;
 
-    // we're going to need pre/next xdguids, so precreate all of them
-    xd_ids.resize(tg.xd_nodes.size(), XferDes::XFERDES_NO_GUID);
-    typedef std::pair<XferDesID, int> IBEdge;
-    const IBEdge dfl_edge(XferDes::XFERDES_NO_GUID, 0);
-    std::vector<IBEdge> ib_pre_ids(tg.ib_edges.size(), dfl_edge);
-    std::vector<IBEdge> ib_next_ids(tg.ib_edges.size(), dfl_edge);
+    if(!create_xds_init_done) {
+      // make sure we haven't been cancelled
+      bool ok_to_run = this->mark_started();
+      if(!ok_to_run) {
+        mark_finished(false /*!successful*/);
+        create_xds_init_done = true;
+        create_xds_i = tg.xd_nodes.size(); // skip main construction loop
+        return true;
+      }
 
-    XferDesQueue *xdq = XferDesQueue::get_singleton();
-    for(size_t i = 0; i < tg.xd_nodes.size(); i++) {
-      const TransferGraph::XDTemplate &xdn = tg.xd_nodes[i];
+      // we're going to need pre/next xdguids, so precreate all of them
+      xd_ids.resize(tg.xd_nodes.size(), XferDes::XFERDES_NO_GUID);
+      const std::pair<XferDesID, int> dfl_edge(XferDes::XFERDES_NO_GUID, 0);
+      ib_pre_ids.assign(tg.ib_edges.size(), dfl_edge);
+      ib_next_ids.assign(tg.ib_edges.size(), dfl_edge);
 
-      XferDesID new_xdid = xdq->get_guid(xdn.target_node);
+      XferDesQueue *xdq = XferDesQueue::get_singleton();
+      for(size_t i = 0; i < tg.xd_nodes.size(); i++) {
+        const TransferGraph::XDTemplate &xdn = tg.xd_nodes[i];
 
-      xd_ids[i] = new_xdid;
+        XferDesID new_xdid = xdq->get_guid(xdn.target_node);
 
-      for(size_t j = 0; j < xdn.inputs.size(); j++) {
-        if(xdn.inputs[j].iotype == TransferGraph::XDTemplate::IO_EDGE) {
-          ib_next_ids[xdn.inputs[j].edge] = std::make_pair(new_xdid, j);
+        xd_ids[i] = new_xdid;
+
+        for(size_t j = 0; j < xdn.inputs.size(); j++) {
+          if(xdn.inputs[j].iotype == TransferGraph::XDTemplate::IO_EDGE) {
+            ib_next_ids[xdn.inputs[j].edge] = std::make_pair(new_xdid, j);
+          }
+        }
+
+        for(size_t j = 0; j < xdn.outputs.size(); j++) {
+          if(xdn.outputs[j].iotype == TransferGraph::XDTemplate::IO_EDGE) {
+            ib_pre_ids[xdn.outputs[j].edge] = std::make_pair(new_xdid, j);
+          }
         }
       }
 
-      for(size_t j = 0; j < xdn.outputs.size(); j++) {
-        if(xdn.outputs[j].iotype == TransferGraph::XDTemplate::IO_EDGE) {
-          ib_pre_ids[xdn.outputs[j].edge] = std::make_pair(new_xdid, j);
-        }
-      }
+      log_new_dma.info() << "plan=" << std::hex << &desc << std::dec
+                         << ", xds created: " << std::hex
+                         << PrettyVector<XferDesID>(xd_ids) << std::dec;
+
+      // now actually create xfer descriptors for each template node in our DAG
+      xd_trackers.resize(tg.xd_nodes.size(), 0);
+
+      create_xds_init_done = true;
+      create_xds_i = 0;
     }
 
-    log_new_dma.info() << "plan=" << std::hex << &desc << std::dec
-                       << ", xds created: " << std::hex << PrettyVector<XferDesID>(xd_ids)
-                       << std::dec;
-
-    // now actually create xfer descriptors for each template node in our DAG
-    xd_trackers.resize(tg.xd_nodes.size(), 0);
-    for(size_t i = 0; i < tg.xd_nodes.size(); i++) {
+    for(size_t i = create_xds_i; i < tg.xd_nodes.size(); i++) {
+      // honor the caller's time limit between XferDes constructions
+      if(work_until.is_expired()) {
+        create_xds_i = i;
+        return false;
+      }
       const TransferGraph::XDTemplate &xdn = tg.xd_nodes[i];
 
       NodeID xd_target_node = xdn.target_node;
@@ -5299,6 +5325,7 @@ namespace Realm {
         delete xd_factory;
       }
     }
+    create_xds_i = tg.xd_nodes.size();
 
     // record requested profiling information
     {
@@ -5314,6 +5341,7 @@ namespace Realm {
     }
 
     mark_finished(true /*successful*/);
+    return true;
   }
 
   void TransferOperation::notify_xd_completion(XferDesID xd_id)
@@ -5371,14 +5399,11 @@ namespace Realm {
     // TODO: respect time limit
     if(poisoned) {
       op->handle_poisoned_precondition(precondition);
+    } else if(op->mark_ready()) {
+      // Add ourselves to the copy analysis queue
+      get_runtime()->copy_analyzer.analyze_copy(op);
     } else {
-      // see if we need to wait for the transfer description analysis
-      if(op->desc.request_analysis(op)) {
-        // it's ready - go ahead and do ib creation
-        op->allocate_ibs();
-      } else {
-        // do nothing - the TransferDesc will call us when it's ready
-      }
+      op->mark_finished(false /*successful*/);
     }
   }
 
