@@ -521,11 +521,29 @@ namespace Realm {
 
     virtual bool do_work(TimeLimit work_until);
 
+    // diagnostic for the quiescence check: when has_work_remaining() returns
+    //  true, this populates whether there is currently a do_work invocation
+    //  inside push_packets (in_progress_out) and whether ready_xpairs is
+    //  empty under the mutex (queue_empty_out) - parallel to the completer's
+    //  diagnostic_state, lets the failure log distinguish "currently
+    //  injecting" (legitimate busy) from "xpairs queued but injector not
+    //  running" (which the new design should make impossible)
+    void diagnostic_state(bool &in_progress_out, bool &queue_empty_out);
+
+    // diagnostic: total number of times do_work has been entered since
+    //  startup - lets the failure log distinguish "injector is being run
+    //  but xpairs keep arriving" from "injector has been silent" (or "a
+    //  single push_packets has been running forever")
+    uint64_t diagnostic_do_work_calls() const { return do_work_call_count.load(); }
+
   protected:
     GASNetEXInternal *internal;
     Mutex mutex;
-    atomic<bool> work_active; // set during do_work when xpairs are on stack
+    // true while a do_work invocation has popped an xpair and is inside
+    //  push_packets for it - read/written only under 'mutex'
+    bool in_progress = false;
     XmitSrcDestPair::XmitPairList ready_xpairs;
+    atomic<uint64_t> do_work_call_count{0}; // diagnostic-only
   };
 
   class GASNetEXPoller : public BackgroundWorkItem {
@@ -551,6 +569,20 @@ namespace Realm {
     //  be performed by the poller
     void wait_for_full_poll_cycle();
 
+    // diagnostic for the quiescence check: when has_work_remaining() returns
+    //  true, this populates whether the work_active flag is set, and whether
+    //  each of the two queues (critical_xpairs and pending_events) is empty
+    //  - all three pieces are read under the same mutex acquisition for a
+    //  consistent snapshot
+    void diagnostic_state(bool &work_active_out, bool &critical_empty_out,
+                          bool &pending_empty_out);
+
+    // diagnostic: total number of times do_work has been entered since
+    //  startup - lets the failure log distinguish "poller is being run but
+    //  events keep arriving" from "poller has been silent" or "a single
+    //  do_work has been running forever"
+    uint64_t diagnostic_do_work_calls() const { return do_work_call_count.load(); }
+
   protected:
     bool started = false;
     GASNetEXInternal *internal;
@@ -562,6 +594,7 @@ namespace Realm {
     atomic<bool> work_active; // set during do_work when items are on stack
     XmitSrcDestPair::XmitPairList critical_xpairs;
     GASNetEXEvent::EventList pending_events;
+    atomic<uint64_t> do_work_call_count{0}; // diagnostic-only
   };
 
   class GASNetEXCompleter : public BackgroundWorkItem {
@@ -574,12 +607,14 @@ namespace Realm {
 
     virtual bool do_work(TimeLimit work_until);
 
-    // diagnostic for the quiescence check: returns true if has_work is set
-    //  but ready_events is actually empty under the mutex - i.e., the busy
-    //  flag is "stale" with no events behind it - which would point at a
-    //  has_work flag-management bug rather than stuck/un-drained events
-    //  (returns false if has_work is unset, or if events are genuinely present)
-    bool busy_flag_is_stale();
+    // diagnostic for the quiescence check: when has_work_remaining() returns
+    //  true, this populates whether there is currently a do_work invocation
+    //  holding events in its local todo (in_progress_out) and whether
+    //  ready_events is empty under the mutex (queue_empty_out) - lets the
+    //  failure log distinguish "currently triggering events" (legitimate
+    //  busy state) from "events queued but completer not running" (which
+    //  the new design should make impossible)
+    void diagnostic_state(bool &in_progress_out, bool &queue_empty_out);
 
     // diagnostic: total number of times do_work has been entered since
     //  startup - lets the failure log distinguish "completer is being run
@@ -589,7 +624,10 @@ namespace Realm {
   protected:
     GASNetEXInternal *internal;
     Mutex mutex;
-    atomic<bool> has_work; // can be read without mutex
+    // true while a do_work invocation has events in its local 'todo' (i.e.
+    //  events that have been swap'd out of ready_events but not yet
+    //  triggered) - read/written only under 'mutex'
+    bool in_progress = false;
     GASNetEXEvent::EventList ready_events;
     atomic<uint64_t> do_work_call_count{0}; // diagnostic-only
   };
@@ -656,6 +694,18 @@ namespace Realm {
 
     virtual bool do_work(TimeLimit work_until);
 
+    // diagnostic for the quiescence check: returns whether the rgetter's
+    //  pending-rget list is empty under the mutex - the rgetter has no
+    //  in_progress flag because do_work hands events off to the poller's
+    //  pending_events list as soon as iget is issued, so "in flight"
+    //  rgets are visible via the poller, not here
+    void diagnostic_state(bool &queue_empty_out);
+
+    // diagnostic: total number of times do_work has been entered since
+    //  startup - lets the failure log distinguish "rgetter is being run"
+    //  from "rgetter has been silent"
+    uint64_t diagnostic_do_work_calls() const { return do_work_call_count.load(); }
+
   protected:
     friend class GASNetEXEvent;
     void reverse_get_complete(PendingReverseGet *rget);
@@ -665,6 +715,7 @@ namespace Realm {
     PendingReverseGet *head;
     PendingReverseGet **tailp;
     ChunkedRecycler<PendingReverseGet, 8> rget_alloc;
+    atomic<uint64_t> do_work_call_count{0}; // diagnostic-only
   };
 
   class GASNetEXInternal {

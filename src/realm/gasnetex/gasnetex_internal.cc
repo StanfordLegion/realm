@@ -2692,23 +2692,24 @@ namespace Realm {
   GASNetEXInjector::GASNetEXInjector(GASNetEXInternal *_internal)
     : BackgroundWorkItem("gex-inj")
     , internal(_internal)
-    , work_active(false)
   {}
 
   void GASNetEXInjector::add_ready_xpair(XmitSrcDestPair *xpair)
   {
     log_gex_xpair.info() << "xpair ready: xpair=" << xpair;
 
-    // take mutex to enqueue pair
-    bool new_work;
     {
       AutoLock<> al(mutex);
-      new_work = ready_xpairs.empty();
       ready_xpairs.push_back(xpair);
     }
-
-    if(new_work)
-      make_active();
+    // always advertise - bgwork's advertise_work is idempotent (returns
+    //  early if our slot bit is already set), so the cost is at most one
+    //  redundant atomic fetch_or per call.  this is what eliminates the
+    //  "xpair queued but make_active was skipped" failure mode where the
+    //  prior gating on 'list-was-empty-before-push' relied on a previous
+    //  caller's make_active still being effective even after bgwork had
+    //  claimed and cleared the slot bit
+    make_active();
   }
 
   void GASNetEXInjector::drain_xpairs()
@@ -2722,25 +2723,40 @@ namespace Realm {
 
   bool GASNetEXInjector::has_work_remaining()
   {
+    // query the truth under the lock rather than a cached flag - 'in_progress'
+    //  captures the legitimate "a do_work is currently inside push_packets"
+    //  state that quiescence needs to see as busy; ready_xpairs.empty()
+    //  captures whether anything is queued
     AutoLock<> al(mutex);
-    return !ready_xpairs.empty() || work_active.load();
+    return in_progress || !ready_xpairs.empty();
+  }
+
+  void GASNetEXInjector::diagnostic_state(bool &in_progress_out, bool &queue_empty_out)
+  {
+    AutoLock<> al(mutex);
+    in_progress_out = in_progress;
+    queue_empty_out = ready_xpairs.empty();
   }
 
   bool GASNetEXInjector::do_work(TimeLimit work_until)
   {
+    do_work_call_count.fetch_add(1);
     // we're not supposed to end up handling AMs, but set this just in case
     //  we do
     ThreadLocal::gex_work_until = &work_until;
 
     // take the first xpair on the list, and immediately requeue if there
-    //  are other ready xpairs that another thread can work on
+    //  are other ready xpairs that another thread can work on - the inline
+    //  make_active is needed even though add_ready_xpair already advertises,
+    //  because bgwork's claim of our slot will have cleared the bit and we
+    //  want to allow another worker to pick up the next xpair concurrently
     bool more_work;
     XmitSrcDestPair *xpair;
     {
       AutoLock<> al(mutex);
       xpair = ready_xpairs.pop_front();
       more_work = !ready_xpairs.empty();
-      work_active.store(true);
+      in_progress = true;
     }
     assert(xpair);
     if(more_work)
@@ -2752,7 +2768,10 @@ namespace Realm {
     //   runs out of time or hits backpressure
     xpair->push_packets(true /*immediate_mode*/, work_until);
 
-    work_active.store(false);
+    {
+      AutoLock<> al(mutex);
+      in_progress = false;
+    }
 
     ThreadLocal::gex_work_until = nullptr;
 
@@ -2833,8 +2852,18 @@ namespace Realm {
     return (!critical_xpairs.empty() || !pending_events.empty() || work_active.load());
   }
 
+  void GASNetEXPoller::diagnostic_state(bool &work_active_out, bool &critical_empty_out,
+                                        bool &pending_empty_out)
+  {
+    AutoLock<> al(mutex);
+    work_active_out = work_active.load();
+    critical_empty_out = critical_xpairs.empty();
+    pending_empty_out = pending_events.empty();
+  }
+
   bool GASNetEXPoller::do_work(TimeLimit work_until)
   {
+    do_work_call_count.fetch_add(1);
     ThreadLocal::gex_work_until = &work_until;
 
     // we're going to try to be frugal about acquiring mutexes here, so peek
@@ -2993,42 +3022,55 @@ namespace Realm {
   GASNetEXCompleter::GASNetEXCompleter(GASNetEXInternal *_internal)
     : BackgroundWorkItem("gex-complete")
     , internal(_internal)
-    , has_work(false)
   {}
 
   void GASNetEXCompleter::add_ready_events(GASNetEXEvent::EventList &newly_ready)
   {
-    bool enqueue = false;
-
-    if(!newly_ready.empty()) {
+    if(newly_ready.empty())
+      return;
+    {
       AutoLock<> al(mutex);
-      // use has_work rather than list emptiness to decide whether to enqueue
-      enqueue = !has_work.load();
-      has_work.store(true);
       ready_events.absorb_append(newly_ready);
     }
-
-    if(enqueue)
-      make_active();
+    // always advertise - bgwork's advertise_work is idempotent (returns
+    //  early if our slot bit is already set), so the cost is at most one
+    //  redundant atomic fetch_or per call.  this is what eliminates the
+    //  "events queued but make_active was skipped" failure mode where a
+    //  cached has_work flag let the caller think the completer was already
+    //  scheduled when in fact bgwork had already finished its last do_work
+    //  and unscheduled it
+    make_active();
   }
 
-  bool GASNetEXCompleter::has_work_remaining() { return has_work.load(); }
+  bool GASNetEXCompleter::has_work_remaining()
+  {
+    // query the truth under the lock rather than a cached flag - 'in_progress'
+    //  captures the legitimate "a do_work is currently triggering events"
+    //  state that quiescence needs to see as busy; ready_events.empty()
+    //  captures whether anything is queued
+    AutoLock<> al(mutex);
+    return in_progress || !ready_events.empty();
+  }
 
-  bool GASNetEXCompleter::busy_flag_is_stale()
+  void GASNetEXCompleter::diagnostic_state(bool &in_progress_out, bool &queue_empty_out)
   {
     AutoLock<> al(mutex);
-    return has_work.load() && ready_events.empty();
+    in_progress_out = in_progress;
+    queue_empty_out = ready_events.empty();
   }
 
   bool GASNetEXCompleter::do_work(TimeLimit work_until)
   {
     do_work_call_count.fetch_add(1);
-    // grab all the events but don't clear 'has_work' since we don't want
-    //  to be reactivated yet
     GASNetEXEvent::EventList todo;
     {
       AutoLock<> al(mutex);
       todo.swap(ready_events);
+      // 'in_progress' tracks events held in 'todo' - assert it only if we
+      //  actually grabbed something so a do_work that found nothing doesn't
+      //  spuriously make has_work_remaining return true
+      if(!todo.empty())
+        in_progress = true;
     }
 
     while(!todo.empty()) {
@@ -3040,22 +3082,19 @@ namespace Realm {
         break;
     }
 
-    // retake lock to either put back events we didn't get to or clear
-    //  'has_work' flag
     bool requeue = false;
     {
       AutoLock<> al(mutex);
-      if(todo.empty()) {
-        if(ready_events.empty())
-          has_work.store(false);
-        else
-          requeue = true; // new events showed up
-      } else {
-        // the events we didn't get to should be at the front of the list
+      if(!todo.empty()) {
+        // partial - put unprocessed events back at the front of ready_events
         todo.absorb_append(ready_events);
         ready_events.swap(todo);
-        requeue = true;
       }
+      // we no longer hold any events ourselves; whether the bgwork system
+      //  needs to keep us scheduled is purely a function of whether there
+      //  are any in ready_events
+      in_progress = false;
+      requeue = !ready_events.empty();
     }
 
     return requeue;
@@ -3111,8 +3150,15 @@ namespace Realm {
     return (head != nullptr);
   }
 
+  void ReverseGetter::diagnostic_state(bool &queue_empty_out)
+  {
+    AutoLock<> al(mutex);
+    queue_empty_out = (head == nullptr);
+  }
+
   bool ReverseGetter::do_work(TimeLimit work_until)
   {
+    do_work_call_count.fetch_add(1);
     // we're not going to use immedate mode for rgets, so don't have more
     //  than one dequeuer at a time - do this by peeking at the head but
     //  not popping it until we've actually issued the rget
@@ -3721,19 +3767,73 @@ namespace Realm {
                                 << " received_now=" << total_packets_received.load();
 
       // when the local rank's completer is reporting busy, dump enough state
-      //  to distinguish "stale has_work flag" (busy_flag_stale=1) from
-      //  "stuck events the completer never gets scheduled for" (stale=0):
-      //  - busy_flag_stale=1: ready_events is empty but has_work=true -
-      //    flag-management bug in add_ready_events/do_work
-      //  - busy_flag_stale=0: events genuinely sitting in ready_events -
-      //    look at do_work_calls trend to tell if completer is being run
-      //  do_work_calls is monotonic across iterations - if it's stuck, the
-      //  completer isn't being scheduled by bgwork at all
+      //  to distinguish the legitimate "currently triggering events" busy
+      //  state from any pathological queued-but-not-running state:
+      //  - in_progress=1, queue_empty=1: a do_work is actively triggering -
+      //    legitimate; a quiescent run will resolve it within a few
+      //    iterations once the do_work returns
+      //  - in_progress=0, queue_empty=0: events queued.  with the new design,
+      //    the slot bit is always advertised when events are added, so this
+      //    state should resolve on its own.  if it doesn't (do_work_calls
+      //    not increasing), bgwork is failing to dispatch the slot
+      //  - other combinations indicate the new state machine itself is
+      //    broken
       if(local_counts[SLOT_COMPLETER_BUSY] != 0) {
+        bool in_progress = false, queue_empty = true;
+        completer.diagnostic_state(in_progress, queue_empty);
         log_gex_quiesce.warning()
             << "not quiescent: rank=" << prim_rank
-            << " completer state: busy_flag_stale=" << completer.busy_flag_is_stale()
+            << " completer state: in_progress=" << in_progress
+            << " queue_empty=" << queue_empty
             << " do_work_calls=" << completer.diagnostic_do_work_calls();
+      }
+
+      // same diagnostic for the injector when it's the busy-flag holder:
+      //  - in_progress=1, queue_empty=1, do_work_calls rising: legitimate
+      //    "currently inside push_packets" - should resolve in 1-2 iterations
+      //  - in_progress=1, queue_empty=1, do_work_calls flat: push_packets is
+      //    hung - real bug, in XmitSrcDestPair::push_packets, not the injector
+      //  - in_progress=0, queue_empty=0, do_work_calls rising: xpairs arriving
+      //    via request_push roughly as fast as they drain (recursion?)
+      //  - in_progress=0, queue_empty=0, do_work_calls flat: bgwork is not
+      //    dispatching the slot despite the unconditional make_active
+      if(local_counts[SLOT_INJECTOR_BUSY] != 0) {
+        bool in_progress = false, queue_empty = true;
+        injector.diagnostic_state(in_progress, queue_empty);
+        log_gex_quiesce.warning()
+            << "not quiescent: rank=" << prim_rank
+            << " injector state: in_progress=" << in_progress
+            << " queue_empty=" << queue_empty
+            << " do_work_calls=" << injector.diagnostic_do_work_calls();
+      }
+
+      // poller still uses the older work_active flag pattern (we haven't
+      //  rewritten its state machine).  the diagnostic just exposes what's
+      //  there so we can tell which of the three conditions is making
+      //  has_work_remaining return true (work_active flag, critical xpairs
+      //  queued, or pending events queued)
+      if(local_counts[SLOT_POLLER_BUSY] != 0) {
+        bool work_active = false, critical_empty = true, pending_empty = true;
+        poller.diagnostic_state(work_active, critical_empty, pending_empty);
+        log_gex_quiesce.warning()
+            << "not quiescent: rank=" << prim_rank
+            << " poller state: work_active=" << work_active
+            << " critical_empty=" << critical_empty << " pending_empty=" << pending_empty
+            << " do_work_calls=" << poller.diagnostic_do_work_calls();
+      }
+
+      // rgetter has only a single piece of state (the pending-rget list);
+      //  has_work_remaining returns true iff that list is non-empty.  if a
+      //  do_work has popped an rget and is in the middle of issuing iget,
+      //  the rget has already moved to the poller's pending_events, so
+      //  in-flight is visible there.
+      if(local_counts[SLOT_RGETTER_BUSY] != 0) {
+        bool queue_empty = true;
+        rgetter.diagnostic_state(queue_empty);
+        log_gex_quiesce.warning()
+            << "not quiescent: rank=" << prim_rank
+            << " rgetter state: queue_empty=" << queue_empty
+            << " do_work_calls=" << rgetter.diagnostic_do_work_calls();
       }
 
       // force at least one more full poll cycle before returning so the
