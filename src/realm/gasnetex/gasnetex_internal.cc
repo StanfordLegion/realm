@@ -3014,8 +3014,15 @@ namespace Realm {
 
   bool GASNetEXCompleter::has_work_remaining() { return has_work.load(); }
 
+  bool GASNetEXCompleter::busy_flag_is_stale()
+  {
+    AutoLock<> al(mutex);
+    return has_work.load() && ready_events.empty();
+  }
+
   bool GASNetEXCompleter::do_work(TimeLimit work_until)
   {
+    do_work_call_count.fetch_add(1);
     // grab all the events but don't clear 'has_work' since we don't want
     //  to be reactivated yet
     GASNetEXEvent::EventList todo;
@@ -3712,6 +3719,22 @@ namespace Realm {
                                 << " reserved=" << local_counts[SLOT_RESERVED]
                                 << " received_sampled=" << local_counts[SLOT_RECEIVED]
                                 << " received_now=" << total_packets_received.load();
+
+      // when the local rank's completer is reporting busy, dump enough state
+      //  to distinguish "stale has_work flag" (busy_flag_stale=1) from
+      //  "stuck events the completer never gets scheduled for" (stale=0):
+      //  - busy_flag_stale=1: ready_events is empty but has_work=true -
+      //    flag-management bug in add_ready_events/do_work
+      //  - busy_flag_stale=0: events genuinely sitting in ready_events -
+      //    look at do_work_calls trend to tell if completer is being run
+      //  do_work_calls is monotonic across iterations - if it's stuck, the
+      //  completer isn't being scheduled by bgwork at all
+      if(local_counts[SLOT_COMPLETER_BUSY] != 0) {
+        log_gex_quiesce.warning()
+            << "not quiescent: rank=" << prim_rank
+            << " completer state: busy_flag_stale=" << completer.busy_flag_is_stale()
+            << " do_work_calls=" << completer.diagnostic_do_work_calls();
+      }
 
       // force at least one more full poll cycle before returning so the
       //  caller's next snapshot can't outrun the poller - the ireduce above

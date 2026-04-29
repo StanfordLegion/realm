@@ -574,11 +574,24 @@ namespace Realm {
 
     virtual bool do_work(TimeLimit work_until);
 
+    // diagnostic for the quiescence check: returns true if has_work is set
+    //  but ready_events is actually empty under the mutex - i.e., the busy
+    //  flag is "stale" with no events behind it - which would point at a
+    //  has_work flag-management bug rather than stuck/un-drained events
+    //  (returns false if has_work is unset, or if events are genuinely present)
+    bool busy_flag_is_stale();
+
+    // diagnostic: total number of times do_work has been entered since
+    //  startup - lets the failure log distinguish "completer is being run
+    //  but events keep coming in" from "completer has been silent"
+    uint64_t diagnostic_do_work_calls() const { return do_work_call_count.load(); }
+
   protected:
     GASNetEXInternal *internal;
     Mutex mutex;
     atomic<bool> has_work; // can be read without mutex
     GASNetEXEvent::EventList ready_events;
+    atomic<uint64_t> do_work_call_count{0}; // diagnostic-only
   };
 
   struct PendingPutHeader {
