@@ -482,8 +482,11 @@ namespace Realm {
     std::vector<Module *> modules;
     std::vector<CodeTranslator *> code_translators;
 
+  public:
     std::vector<NetworkModule *> network_modules;
     std::vector<NetworkSegment *> network_segments;
+
+  protected:
 
     std::map<std::string, ModuleConfig *> module_configs;
 

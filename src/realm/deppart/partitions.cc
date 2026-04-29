@@ -87,8 +87,9 @@ namespace Realm {
         base = (ofs > 0) ? (base_orig + (ALIGNMENT - ofs)) : base_orig;
         allocator.add_range(0, size);
 
-#ifdef REALM_USE_CUDA
         RuntimeImpl *runtime = get_runtime();
+
+#ifdef REALM_USE_CUDA
         assert(runtime != nullptr);
         Cuda::CudaModule *cuda_module = runtime->get_module<Cuda::CudaModule>("cuda");
         if((cuda_module != nullptr) && !cuda_module->gpus.empty()) {
@@ -108,6 +109,10 @@ namespace Realm {
           cuda_registered = true;
         }
 #endif
+
+        segment.assign(NetworkSegmentInfo::HostMem, base, size);
+        runtime->network_segments.push_back(&segment);
+
 
         initialized = true;
       }
@@ -192,7 +197,10 @@ namespace Realm {
         ptr_to_tag.erase(it);
       }
 
+
+
     private:
+      NetworkSegment segment;
       Mutex mutex;
       bool initialized{false};
       char *base{nullptr};

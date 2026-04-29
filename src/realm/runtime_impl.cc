@@ -2097,18 +2097,7 @@ namespace Realm {
         network_segments.push_back(seg);
     }
 
-    // attach to the network
-    for(std::vector<NetworkModule *>::const_iterator it = network_modules.begin();
-        it != network_modules.end(); it++)
-      (*it)->attach(this, network_segments);
 
-    {
-      // try to get all nodes to have roughly the same idea of the "zero
-      //  "time" by using network barriers
-      Network::barrier();
-      Realm::Clock::set_zero_time();
-      Network::barrier();
-    }
 
 #ifdef DEADLOCK_TRACE
     next_thread = 0;
@@ -2151,6 +2140,18 @@ namespace Realm {
 
     PartitioningOpQueue::start_worker_threads(*core_reservations, &bgwork);
 
+    // attach to the network
+      for(std::vector<NetworkModule *>::const_iterator it = network_modules.begin();
+          it != network_modules.end(); it++)
+        (*it)->attach(this, network_segments);
+
+      {
+        // try to get all nodes to have roughly the same idea of the "zero
+        //  "time" by using network barriers
+        Network::barrier();
+        Realm::Clock::set_zero_time();
+        Network::barrier();
+      }
 #ifdef EVENT_TRACING
     // Always initialize even if we won't dump to file, otherwise segfaults happen
     // when we try to save event info
@@ -2932,7 +2933,6 @@ namespace Realm {
     stop_dma_system();
 
     repl_heap.cleanup();
-    deppart_host_pool_shutdown();
 
     // let network-dependent cleanup happen before we detach
     for(std::vector<Module *>::iterator it = modules.begin(); it != modules.end(); it++) {
