@@ -2393,18 +2393,9 @@ namespace Realm {
           alloc = GPUAllocation::allocate_mmap(gpu, mem_prop, size, 0,
                                                /*peer_enabled=*/true);
         }
-        if(alloc == nullptr) {
-#if defined(REALM_ON_WINDOWS)
-          mem_prop.requestedHandleTypes = CU_MEM_HANDLE_TYPE_WIN32;
-#else
-          mem_prop.requestedHandleTypes = CU_MEM_HANDLE_TYPE_POSIX_FILE_DESCRIPTOR;
+      }
 #endif
-          alloc = GPUAllocation::allocate_mmap(gpu, mem_prop, size, 0,
-                                               /*peer_enabled=*/true);
-        }
-      } else
-#endif
-      {
+      if(alloc == nullptr) {
         alloc = GPUAllocation::allocate_dev(gpu, size, /*peer_enabled=*/true,
                                             /*shareable=*/true);
       }
