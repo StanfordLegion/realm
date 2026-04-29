@@ -1,0 +1,17 @@
+<map id="Realm::PartitioningOperation" name="Realm::PartitioningOperation">
+<area shape="rect" id="Node000001" title=" " alt="" coords="189,173,400,198"/>
+<area shape="rect" id="Node000003" href="$classRealm_1_1ByFieldOperation.html" title=" " alt="" coords="463,5,647,45"/>
+<area shape="poly" id="edge2_Node000001_Node000003" title=" " alt="" coords="315,161,371,108,408,80,447,55,473,43,475,48,449,60,411,84,375,112,319,165"/>
+<area shape="rect" id="Node000004" href="$classRealm_1_1DifferenceOperation.html" title=" " alt="" coords="453,69,656,109"/>
+<area shape="poly" id="edge3_Node000001_Node000004" title=" " alt="" coords="335,165,447,119,482,107,484,112,449,124,337,170"/>
+<area shape="rect" id="Node000005" href="$classRealm_1_1ImageOperation.html" title=" " alt="" coords="466,133,643,173"/>
+<area shape="poly" id="edge4_Node000001_Node000005" title=" " alt="" coords="411,168,466,162,466,167,412,174"/>
+<area shape="rect" id="Node000006" href="$classRealm_1_1IntersectionOperation.html" title=" " alt="" coords="448,197,661,237"/>
+<area shape="poly" id="edge5_Node000001_Node000006" title=" " alt="" coords="412,197,448,202,447,207,411,202"/>
+<area shape="rect" id="Node000007" href="$classRealm_1_1PreimageOperation.html" title=" " alt="" coords="455,261,654,301"/>
+<area shape="poly" id="edge6_Node000001_Node000007" title=" " alt="" coords="337,201,449,247,484,259,482,264,447,252,335,206"/>
+<area shape="rect" id="Node000008" href="$classRealm_1_1UnionOperation.html" title=" " alt="" coords="467,325,642,365"/>
+<area shape="poly" id="edge7_Node000001_Node000008" title=" " alt="" coords="319,206,375,259,411,287,449,311,475,323,473,328,447,316,408,291,371,263,315,210"/>
+<area shape="rect" id="Node000002" href="$classRealm_1_1Operation.html" title=" " alt="" coords="5,173,141,198"/>
+<area shape="poly" id="edge1_Node000001_Node000002" title=" " alt="" coords="155,183,189,183,189,188,155,188"/>
+</map>

@@ -44,7 +44,7 @@
    <!-- BEGIN version select -->
     <br />
     <div class="dropdown">
-     <button class="dropbtn">Version 25.6.1-rc.4+d9c0cb75</button>
+     <button class="dropbtn">Version 25.6.1-rc.4+028915c6</button>
      <div class="dropdown-content"></div>
     </div>
     <script type="text/javascript" src="../selectversion.js"></script>
@@ -148,7 +148,7 @@ $(document).ready(function(){initNavTree('classRealm_1_1FastReservation.html',''
 <div class="dynheader">
 Inheritance diagram for Realm::FastReservation:</div>
 <div class="dyncontent">
-<div class="center"><!-- SVG 0 --></div>
+<div class="center"><iframe scrolling="no" frameborder="0" src="classRealm_1_1FastReservation__inherit__graph.svg" width="195" height="110"><p><b>This browser is not able to show SVG: try Firefox, Chrome, Safari, or Opera instead.</b></p></iframe></div>
 <center><span class="legend">[<a target="top" href="graph_legend.html">legend</a>]</span></center></div>
 <table class="memberdecls">
 <tr class="heading"><td colspan="2"><h2 class="groupheader"><a id="pub-types" name="pub-types"></a>
@@ -189,8 +189,10 @@ Public Member Functions</h2></td></tr>
 </table><table class="memberdecls">
 <tr class="heading"><td colspan="2"><h2 class="groupheader"><a id="pub-static-attribs" name="pub-static-attribs"></a>
 Static Public Attributes</h2></td></tr>
-<tr class="memitem:afe8331683212f721b6e610e5211d2d41" id="r_afe8331683212f721b6e610e5211d2d41"><td class="memItemLeft" align="right" valign="top">static const <a class="el" href="classRealm_1_1FastReservation.html#a83229d2de0674354aad82fc4931d6587">State</a>&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="classRealm_1_1FastReservation.html#afe8331683212f721b6e610e5211d2d41">STATE_READER_COUNT_MASK</a> = 0x03ffffff</td></tr>
+<tr class="memitem:afe8331683212f721b6e610e5211d2d41" id="r_afe8331683212f721b6e610e5211d2d41"><td class="memItemLeft" align="right" valign="top">static const <a class="el" href="classRealm_1_1FastReservation.html#a83229d2de0674354aad82fc4931d6587">State</a>&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="classRealm_1_1FastReservation.html#afe8331683212f721b6e610e5211d2d41">STATE_READER_COUNT_MASK</a> = 0x01ffffff</td></tr>
 <tr class="separator:afe8331683212f721b6e610e5211d2d41"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:ae665029184aca3cca7b29315cc84f9a7" id="r_ae665029184aca3cca7b29315cc84f9a7"><td class="memItemLeft" align="right" valign="top">static const <a class="el" href="classRealm_1_1FastReservation.html#a83229d2de0674354aad82fc4931d6587">State</a>&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="classRealm_1_1FastReservation.html#ae665029184aca3cca7b29315cc84f9a7">STATE_RELEASING</a> = 0x02000000</td></tr>
+<tr class="separator:ae665029184aca3cca7b29315cc84f9a7"><td class="memSeparator" colspan="2">&#160;</td></tr>
 <tr class="memitem:a0e55a5a73bcadf05429c63d12d1dd0b5" id="r_a0e55a5a73bcadf05429c63d12d1dd0b5"><td class="memItemLeft" align="right" valign="top">static const <a class="el" href="classRealm_1_1FastReservation.html#a83229d2de0674354aad82fc4931d6587">State</a>&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="classRealm_1_1FastReservation.html#a0e55a5a73bcadf05429c63d12d1dd0b5">STATE_SLEEPER</a> = 0x04000000</td></tr>
 <tr class="separator:a0e55a5a73bcadf05429c63d12d1dd0b5"><td class="memSeparator" colspan="2">&#160;</td></tr>
 <tr class="memitem:a23e644784ab1c8293f30b73da6028fef" id="r_a23e644784ab1c8293f30b73da6028fef"><td class="memItemLeft" align="right" valign="top">static const <a class="el" href="classRealm_1_1FastReservation.html#a83229d2de0674354aad82fc4931d6587">State</a>&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="classRealm_1_1FastReservation.html#a23e644784ab1c8293f30b73da6028fef">STATE_WRITER</a> = 0x08000000</td></tr>
@@ -788,7 +790,29 @@ Friends</h2></td></tr>
   <td class="mlabels-left">
       <table class="memname">
         <tr>
-          <td class="memname">const <a class="el" href="classRealm_1_1FastReservation.html#a83229d2de0674354aad82fc4931d6587">State</a> Realm::FastReservation::STATE_READER_COUNT_MASK = 0x03ffffff</td>
+          <td class="memname">const <a class="el" href="classRealm_1_1FastReservation.html#a83229d2de0674354aad82fc4931d6587">State</a> Realm::FastReservation::STATE_READER_COUNT_MASK = 0x01ffffff</td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel">static</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+</div>
+</div>
+<a id="ae665029184aca3cca7b29315cc84f9a7" name="ae665029184aca3cca7b29315cc84f9a7"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#ae665029184aca3cca7b29315cc84f9a7">&#9670;&#160;</a></span>STATE_RELEASING</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">const <a class="el" href="classRealm_1_1FastReservation.html#a83229d2de0674354aad82fc4931d6587">State</a> Realm::FastReservation::STATE_RELEASING = 0x02000000</td>
         </tr>
       </table>
   </td>
