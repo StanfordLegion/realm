@@ -22,6 +22,7 @@
 #include "realm/runtime_impl.h"
 #include "realm/mem_impl.h"
 #include "realm/logging.h"
+#include "realm/faults.h" // for Backtrace, used by push_packets watchdog
 
 #ifdef REALM_USE_CUDA
 #include "realm/cuda/cuda_module.h"
@@ -1656,9 +1657,53 @@ namespace Realm {
     log_gex.debug() << "pushing: " << src_ep_index << " " << tgt_rank << " "
                     << tgt_ep_index;
 
+    // diagnostic: clear push_phase on every return path so a future
+    //  diagnostic_state observer doesn't see stale phase data after a
+    //  legitimate push_packets completes
+    struct PhaseGuard {
+      XmitSrcDestPair *xp;
+      ~PhaseGuard()
+      {
+        xp->push_phase.store(PHASE_IDLE);
+        xp->push_phase_iter_count.store(0);
+      }
+    };
+    PhaseGuard phase_guard{this};
+
+    // diagnostic: capture a backtrace if push_packets has been running for
+    //  longer than this threshold (well past the bgwork timeslice of ~1ms,
+    //  but well before the quiescence-check loop fires).  fires at most
+    //  once per push_packets call to avoid log spam.  intent is to identify
+    //  hangs inside push_packets where the bgwork worker has stopped
+    //  honoring the work_until deadline
+    long long push_t_entry = Clock::current_time_in_nanoseconds();
+    static const long long PUSH_WATCHDOG_NS = 100000000; // 100 ms
+    bool push_watchdog_fired = false;
+    auto push_watchdog_check = [&]() {
+      if(push_watchdog_fired)
+        return;
+      long long now = Clock::current_time_in_nanoseconds();
+      if((now - push_t_entry) <= PUSH_WATCHDOG_NS)
+        return;
+      Backtrace bt;
+      bt.capture_backtrace();
+      std::vector<std::string> syms;
+      bt.print_symbols(syms);
+      log_gex_xpair.warning() << "push_packets watchdog fired: xpair=" << this
+                              << " phase=" << push_phase.load()
+                              << " iter_count=" << push_phase_iter_count.load()
+                              << " elapsed_ns=" << (now - push_t_entry)
+                              << " (continuing past threshold)";
+      for(const auto &s : syms)
+        log_gex_xpair.warning() << "  " << s;
+      push_watchdog_fired = true;
+    };
+
     // we can test comp_reply_count without taking the mutex because if it's
     //  nonzero, only we can reduce it
     if(comp_reply_count.load() > 0) {
+      push_phase.store(PHASE_COMP_REPLIES);
+      push_phase_iter_count.store(0);
       const unsigned MAX_COMPS = 16;
       unsigned ncomps = 0;
       gex_am_arg_t comps[MAX_COMPS];
@@ -1676,6 +1721,9 @@ namespace Realm {
       }
 
       do {
+        push_phase_iter_count.fetch_add(1);
+        push_watchdog_check();
+
         gex_flags_t flags = 0;
         if(immediate_mode)
           flags |= GEX_WRAPPER_FLAG_IMMEDIATE;
@@ -1745,9 +1793,15 @@ namespace Realm {
     //  a copy of the head and walk the list without a lock
     PendingPutHeader *orig_put = put_head.load_acquire();
     if(orig_put) {
+      push_phase.store(PHASE_PUT_HEADERS);
+      push_phase_iter_count.store(0);
+
       PendingPutHeader *cur_put = orig_put;
       PendingPutHeader *prev_put = orig_put; // used if we fall off end
       while(cur_put) {
+        push_phase_iter_count.fetch_add(1);
+        push_watchdog_check();
+
         gex_event_opaque_t *lc_opt =
             GEX_WRAPPER_EVENT_NOW; // insist on local copy of header
         gex_flags_t flags = 0;
@@ -1852,7 +1906,14 @@ namespace Realm {
     OutbufMetadata *head = first_pbuf.load_acquire();
     assert(head);
 
+    push_phase.store(PHASE_PACKET_LOOP_OUTER);
+    push_phase_iter_count.store(0);
+
     while(true) {
+      push_phase.store(PHASE_PACKET_LOOP_OUTER);
+      push_phase_iter_count.fetch_add(1);
+      push_watchdog_check();
+
       assert(head->state == OutbufMetadata::STATE_PKTBUF);
 
       OutbufMetadata *realbuf;
@@ -1878,7 +1939,16 @@ namespace Realm {
       // grab snapshot of the ready packet count, synchronizing the pkt types
       //  for any packet that's ready at this instant
       int ready_packets = head->pktbuf_ready_packets.load_acquire();
+      push_phase.store(PHASE_PACKET_LOOP_INNER);
+      push_phase_iter_count.store(0);
       while(head->pktbuf_sent_packets < ready_packets) {
+        // diagnostic: throttled watchdog check (every 1024 inner iterations)
+        //  to avoid the cost of Clock::current_time_in_nanoseconds in the
+        //  packet-send hot path
+        uint64_t inner_iter = push_phase_iter_count.fetch_add(1);
+        if((inner_iter & 1023) == 0)
+          push_watchdog_check();
+
         bool pkt_sent = false;
         bool force_critical = false;
         OutbufMetadata::PktType pkttype =
@@ -3805,6 +3875,33 @@ namespace Realm {
             << " injector state: in_progress=" << in_progress
             << " queue_empty=" << queue_empty
             << " do_work_calls=" << injector.diagnostic_do_work_calls();
+        // when in_progress=1, somewhere a do_work is currently inside
+        //  push_packets - find the xpair holding the call (i.e., the one
+        //  with non-IDLE push_phase) and dump its phase + iteration count
+        //  so we know which loop it's stuck in.  this iterates the same
+        //  xpair table the slot-1 reserved-count loop walks above
+        if(in_progress) {
+          for(gex_ep_index_t src_ep_index = 0; src_ep_index < xmitsrcs.size();
+              src_ep_index++) {
+            atomic<XmitSrcDestPair *> *pairptrs = xmitsrcs[src_ep_index]->pairs;
+            for(gex_ep_index_t tgt_ep_index = 0;
+                tgt_ep_index < gex_wrapper_handle.max_eps; tgt_ep_index++)
+              for(gex_rank_t tgt_rank = 0; tgt_rank < prim_size; tgt_rank++) {
+                XmitSrcDestPair *xpair = (pairptrs++)->load_acquire();
+                if(!xpair)
+                  continue;
+                int phase = xpair->push_phase.load();
+                if(phase != XmitSrcDestPair::PHASE_IDLE) {
+                  log_gex_quiesce.warning()
+                      << "not quiescent: rank=" << prim_rank << " push_packets stuck"
+                      << " xpair=" << xpair << " src_ep=" << src_ep_index
+                      << " tgt_rank=" << tgt_rank << " tgt_ep=" << tgt_ep_index
+                      << " phase=" << phase
+                      << " iter_count=" << xpair->push_phase_iter_count.load();
+                }
+              }
+          }
+        }
       }
 
       // poller still uses the older work_active flag pattern (we haven't

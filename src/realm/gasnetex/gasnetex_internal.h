@@ -410,6 +410,22 @@ namespace Realm {
       PendingPutHeader *put;
     };
 
+    // diagnostic-only: tracks where push_packets is currently executing.
+    //  set to PHASE_IDLE except while a push_packets is in progress; the
+    //  iteration counter is reset on phase transitions and incremented within
+    //  each phase's loop.  read without the mutex from the failure-path of
+    //  the quiescence check
+    enum PushPhase
+    {
+      PHASE_IDLE = 0,
+      PHASE_COMP_REPLIES,
+      PHASE_PUT_HEADERS,
+      PHASE_PACKET_LOOP_OUTER,
+      PHASE_PACKET_LOOP_INNER,
+    };
+    atomic<int> push_phase{PHASE_IDLE};
+    atomic<uint64_t> push_phase_iter_count{0};
+
   protected:
     friend class GASNetEXInternal;
 
