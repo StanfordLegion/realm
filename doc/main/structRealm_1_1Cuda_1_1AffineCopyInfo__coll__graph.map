@@ -1,7 +1,0 @@
-<map id="Realm::Cuda::AffineCopyInfo&lt; N, Offset_t, MAX_RECTS &gt;" name="Realm::Cuda::AffineCopyInfo&lt; N, Offset_t, MAX_RECTS &gt;">
-<area shape="rect" id="Node000001" title=" " alt="" coords="5,225,215,265"/>
-<area shape="rect" id="Node000002" href="$structRealm_1_1Cuda_1_1AffineCopyPair.html" title=" " alt="" coords="6,123,214,163"/>
-<area shape="poly" id="edge1_Node000001_Node000002" title=" " alt="" coords="113,177,113,225,107,225,107,177"/>
-<area shape="rect" id="Node000003" href="$structRealm_1_1Cuda_1_1AffineSubRect.html" title=" " alt="" coords="8,5,212,45"/>
-<area shape="poly" id="edge2_Node000002_Node000003" title=" " alt="" coords="113,59,113,122,107,122,107,59"/>
-</map>
