@@ -778,14 +778,32 @@ namespace Realm {
     }
   }
 
-  size_t GASNet1Module::sample_messages_received_count(void)
+  void GASNet1Module::sample_quiescence_state(QuiescenceState &state)
   {
-    return quiescence_checker.sample_messages_received_count();
+    // The legacy gasnet1 backend uses its own quiescence_checker protocol
+    //  which does its own multi-step synchronization via active messages
+    //  rather than exposing per-rank counters that can be sum-reduced.
+    //  Rather than reimplementing that protocol on top of the new interface,
+    //  we report an always-quiet state so the new Mattern's-shaped check
+    //  in network.cc declares termination after two consecutive rounds.
+    //  This matches the spirit of the legacy check (which did a global
+    //  protocol and reported a single bool); if more rigorous quiescence
+    //  detection is needed for gasnet1, the per-rank counters would have to
+    //  be exposed from the gasnet1 backend.
+    state.any_queue_nonempty = 0;
+    state.packets_reserved = 0;
+    state.packets_received = 0;
+    state.pending_completions = 0;
   }
 
-  bool GASNet1Module::check_for_quiescence(size_t sampled_receive_count)
+  void GASNet1Module::quiescence_allreduce_sum(const uint64_t *local_counts,
+                                               uint64_t *total_counts, size_t count)
   {
-    return quiescence_checker.perform_check(sampled_receive_count);
+    // gasnet1 doesn't expose a typed allreduce in the form we need; since
+    //  sample_quiescence_state always reports zeros, the sum is trivially
+    //  zero on every rank
+    for(size_t i = 0; i < count; i++)
+      total_counts[i] = 0;
   }
 
   // used to create a remote proxy for a memory

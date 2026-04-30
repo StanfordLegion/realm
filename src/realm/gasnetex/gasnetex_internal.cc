@@ -3542,47 +3542,28 @@ namespace Realm {
                                            offsets.data(), 0);
   }
 
-  size_t GASNetEXInternal::sample_messages_received_count()
+  void GASNetEXInternal::sample_quiescence_state(NetworkModule::QuiescenceState &state)
   {
-    return total_packets_received.load();
-  }
+    // any_queue_nonempty: 1 if any of our background-work queues has work
+    //  pending, 0 otherwise.  These are the queues from which a future
+    //  network message could spontaneously originate (e.g., a put-completion
+    //  event firing and enqueuing a put header).  We do NOT include "is a
+    //  worker currently inside push_packets / trigger" here - that produces
+    //  timing-sensitive false negatives on quiescence and is unnecessary
+    //  given the two-round Mattern's stability check at the network.cc level.
+    uint64_t any_queue = 0;
+    if(poller.has_work_remaining())
+      any_queue = 1;
+    else if(injector.has_work_remaining())
+      any_queue = 1;
+    else if(completer.has_work_remaining())
+      any_queue = 1;
+    else if(rgetter.has_work_remaining())
+      any_queue = 1;
 
-  bool GASNetEXInternal::check_for_quiescence(size_t sampled_receive_count)
-  {
-    // in order to be quiescent, the following things should be true:
-    // 1) no unsent packets in any xpair
-    // 2) no unsent completions in any xpair
-    // 3) no pending complations remain
-    // 4) no reverse gets in progress
-    // 5) all packets sent have been received
-
-    // we handle 1-4 by having each count how many of 1-4 are violated locally
-    //  and then doing a reduction sum over all nodes
-    // we handle 5 by having each rank determine the total packets it has sent
-    //  and received (regardless of which xpair), summing those over all ranks,
-    //  and demanding that the sum of packets sent matches the sum of received
-    uint64_t local_counts[3] = {0, 0, 0};
-
-    if(poller.has_work_remaining()) {
-      log_gex_quiesce.debug() << "poller busy";
-      local_counts[0]++;
-    }
-    if(injector.has_work_remaining()) {
-      log_gex_quiesce.debug() << "injector busy";
-      local_counts[0]++;
-    }
-    if(completer.has_work_remaining()) {
-      log_gex_quiesce.debug() << "completer busy";
-      local_counts[0]++;
-    }
-    if(rgetter.has_work_remaining()) {
-      log_gex_quiesce.debug() << "rgetter busy";
-      local_counts[0]++;
-    }
-    if(compmgr.num_completions_pending() > 0) {
-      log_gex_quiesce.debug() << "compmgr busy";
-      local_counts[0]++;
-    }
+    // packets_reserved: cumulative count of network messages this rank has
+    //  originated.  Sum across all xpairs (per src/dst endpoint pair).
+    uint64_t reserved = 0;
     for(gex_ep_index_t src_ep_index = 0; src_ep_index < xmitsrcs.size(); src_ep_index++) {
       atomic<XmitSrcDestPair *> *pairptrs = xmitsrcs[src_ep_index]->pairs;
       for(gex_ep_index_t tgt_ep_index = 0; tgt_ep_index < gex_wrapper_handle.max_eps;
@@ -3591,32 +3572,32 @@ namespace Realm {
           XmitSrcDestPair *xpair = (pairptrs++)->load_acquire();
           if(!xpair)
             continue;
-          size_t num_rsrvd = xpair->packets_reserved.load();
-          if(num_rsrvd > 0) {
-            log_gex_quiesce.debug()
-                << "xpair reserved: " << src_ep_index << "->" << tgt_rank << "/"
-                << tgt_ep_index << " " << num_rsrvd;
-            local_counts[1] += num_rsrvd;
-          }
+          reserved += xpair->packets_reserved.load();
         }
     }
-    // use the receive count that was sampled before the incoming message
-    //  manager was drained - if the actual 'total_packets_received' has
-    //  increased since, we're obviously not quiescent, but we need every
-    //  other rank to know that too
-    local_counts[2] = sampled_receive_count;
 
-    log_gex_quiesce.debug() << "local counts: " << local_counts[0] << " "
-                            << local_counts[1] << " " << local_counts[2];
+    state.any_queue_nonempty = any_queue;
+    state.packets_reserved = reserved;
+    state.packets_received = total_packets_received.load();
+    state.pending_completions = compmgr.num_completions_pending();
 
-    uint64_t total_counts[3];
+    log_gex_quiesce.debug() << "quiescence sample:"
+                            << " any_queue=" << state.any_queue_nonempty
+                            << " reserved=" << state.packets_reserved
+                            << " received=" << state.packets_received
+                            << " pending_comps=" << state.pending_completions;
+  }
+
+  void GASNetEXInternal::quiescence_allreduce_sum(const uint64_t *local_counts,
+                                                  uint64_t *total_counts, size_t count)
+  {
     gex_flags_t flags = 0;
     gex_event_opaque_t done = gex_wrapper_handle.gex_coll_ireduce(
-        prim_tm, total_counts, local_counts, GEX_WRAPPER_DT_U64, sizeof(uint64_t), 3,
-        GEX_WRAPPER_OP_ADD, flags);
+        prim_tm, total_counts, const_cast<uint64_t *>(local_counts), GEX_WRAPPER_DT_U64,
+        sizeof(uint64_t), count, GEX_WRAPPER_OP_ADD, flags);
 
-    // wait on completion of the collective reduction, but keep track of time
-    //  and complain if it takes too long
+    // Wait on completion of the collective reduction, polling so the network
+    //  can make progress.  Complain if it takes too long.
     long long t_start = Clock::current_time_in_nanoseconds();
     long long t_complain = t_start;
     do {
@@ -3626,19 +3607,10 @@ namespace Realm {
                                << " ns";
         t_complain = t_now;
       }
-      // we can't perform the poll ourselves, but make sure at least one full
-      //  poll succeeds before we continue
+      // We can't perform the poll ourselves; make sure at least one full
+      //  poll cycle has succeeded before we re-check the event.
       poller.wait_for_full_poll_cycle();
     } while(gex_wrapper_handle.gex_event_test(done) != GEX_WRAPPER_OK);
-
-    if(prim_rank == 0)
-      log_gex_quiesce.info() << "total counts: " << total_counts[0] << " "
-                             << total_counts[1] << " " << total_counts[2];
-    else
-      log_gex_quiesce.debug() << "total counts: " << total_counts[0] << " "
-                              << total_counts[1] << " " << total_counts[2];
-
-    return ((total_counts[0] == 0) && (total_counts[1] == total_counts[2]));
   }
 
   PendingCompletion *GASNetEXInternal::get_available_comp()

@@ -55,18 +55,120 @@ namespace Realm {
     REALM_INTERNAL_API_EXTERNAL_LINKAGE NodeSet shared_peers;
     NetworkModule *single_network = 0;
 
-    bool check_for_quiescence(IncomingMessageManager *message_manager)
+    // Persistent state across calls to check_for_quiescence.  The function
+    //  is only invoked from RuntimeImpl::wait_for_shutdown, single-threaded,
+    //  so a translation-unit-local static is sufficient.  Reset in
+    //  reset_quiescence_state() below if the runtime ever needs to start over.
+    namespace QuiescenceCheck {
+      static NetworkModule::QuiescenceState prev_totals = {};
+      static bool have_prev = false;
+      // number of consecutive iterations during which the global totals did
+      //  not change but the state was not quiet - if we hit this many in a
+      //  row, the algorithm declares STUCK so the runtime can abort with a
+      //  diagnostic
+      static unsigned stuck_iterations = 0;
+      // threshold for declaring stuck.  A value of 2 is the smallest correct
+      //  choice (one iteration to record state, a second to detect that it
+      //  hasn't changed); larger values are more conservative but waste time
+      //  on non-bug failures.  3 gives a small safety margin
+      static const unsigned STUCK_THRESHOLD = 3;
+    } // namespace QuiescenceCheck
+
+    void reset_quiescence_state(void)
+    {
+      QuiescenceCheck::prev_totals = NetworkModule::QuiescenceState{};
+      QuiescenceCheck::have_prev = false;
+      QuiescenceCheck::stuck_iterations = 0;
+    }
+
+    QuiescenceStatus check_for_quiescence(IncomingMessageManager *message_manager)
     {
 #ifdef REALM_USE_MULTIPLE_NETWORKS
       if(REALM_UNLIKELY(single_network == 0)) {
-        return false;
-      } else
-#endif
-      {
-        size_t messages_received = single_network->sample_messages_received_count();
-        message_manager->drain_incoming_messages(messages_received);
-        return single_network->check_for_quiescence(messages_received);
+        return QuiescenceStatus::DONE;
       }
+#endif
+
+      // Drain the incoming-message queue first, so that any messages already
+      //  delivered by the network layer have been counted in
+      //  packets_received and dispatched to their handlers (which may queue
+      //  more local work, also captured by any_queue_nonempty).  The drain
+      //  uses the current 'received' count as its target, which means by the
+      //  time it returns, the receive counter and the queue state are
+      //  internally consistent on this rank.
+      NetworkModule::QuiescenceState predrain;
+      single_network->sample_quiescence_state(predrain);
+      message_manager->drain_incoming_messages(predrain.packets_received);
+
+      // Now sample the actual local state we'll feed into the allreduce.
+      //  Sampling AFTER the drain matters: drain may have caused handlers to
+      //  fire, which may have changed any_queue_nonempty and pending counts.
+      NetworkModule::QuiescenceState local;
+      single_network->sample_quiescence_state(local);
+
+      // Allreduce the four fields.  All four use SUM:
+      //   any_queue_nonempty: each rank contributes 0 or 1; sum > 0 means
+      //     at least one rank has work queued
+      //   packets_reserved/received: cumulative counts; sum across ranks
+      //   pending_completions: count per rank; sum > 0 means at least one
+      //     rank is waiting on a remote completion
+      uint64_t local_arr[4] = {local.any_queue_nonempty, local.packets_reserved,
+                               local.packets_received, local.pending_completions};
+      uint64_t total_arr[4] = {0, 0, 0, 0};
+      single_network->quiescence_allreduce_sum(local_arr, total_arr, 4);
+
+      NetworkModule::QuiescenceState totals = {total_arr[0], total_arr[1], total_arr[2],
+                                               total_arr[3]};
+
+      // Quiet means: no rank has anything queued, no rank is waiting on a
+      //  remote completion, and the cumulative sent/received counts balance
+      //  globally (no messages in flight).  These are the conditions Mattern's
+      //  algorithm requires for termination of one round.
+      bool quiet_now = (totals.any_queue_nonempty == 0) &&
+                       (totals.pending_completions == 0) &&
+                       (totals.packets_reserved == totals.packets_received);
+
+      // The Mattern's stability check: termination is confirmed only when
+      //  two CONSECUTIVE rounds both observe a quiet state AND the same
+      //  cumulative counts.  If anything changed between rounds (a new send
+      //  was initiated, a queued message was processed, etc.), the counters
+      //  will differ, and we restart.  Two-round agreement rules out the
+      //  ghost-message scenario where a work item runs between rounds and
+      //  produces a send that happens to be in flight at exactly the wrong
+      //  moment.
+      bool stable =
+          QuiescenceCheck::have_prev &&
+          (totals.packets_reserved == QuiescenceCheck::prev_totals.packets_reserved) &&
+          (totals.packets_received == QuiescenceCheck::prev_totals.packets_received) &&
+          (totals.pending_completions ==
+           QuiescenceCheck::prev_totals.pending_completions) &&
+          (totals.any_queue_nonempty == QuiescenceCheck::prev_totals.any_queue_nonempty);
+
+      if(quiet_now && stable) {
+        // both rounds agreed on a quiet state - termination confirmed
+        reset_quiescence_state();
+        return QuiescenceStatus::DONE;
+      }
+
+      // Track whether the global state is stuck (counters frozen but not
+      //  quiet).  If it stays frozen for STUCK_THRESHOLD iterations in a row,
+      //  this is a real bug rather than a slow but progressing system.
+      if(stable && !quiet_now) {
+        QuiescenceCheck::stuck_iterations++;
+        if(QuiescenceCheck::stuck_iterations >= QuiescenceCheck::STUCK_THRESHOLD) {
+          // do NOT reset the state here - the caller may want to inspect
+          //  prev_totals via the diagnostic logging
+          return QuiescenceStatus::STUCK;
+        }
+      } else {
+        // counters changed - we're making progress
+        QuiescenceCheck::stuck_iterations = 0;
+      }
+
+      // not quiet (or first iteration) - record state for the next round
+      QuiescenceCheck::prev_totals = totals;
+      QuiescenceCheck::have_prev = true;
+      return QuiescenceStatus::PROGRESSING;
     }
   } // namespace Network
 
@@ -174,8 +276,9 @@ namespace Realm {
     virtual void allgatherv(const char *val_in, size_t bytes, std::vector<char> &vals_out,
                             std::vector<size_t> &lengths);
 
-    virtual size_t sample_messages_received_count(void);
-    virtual bool check_for_quiescence(size_t sampled_receive_count);
+    virtual void sample_quiescence_state(QuiescenceState &state);
+    virtual void quiescence_allreduce_sum(const uint64_t *local_counts,
+                                          uint64_t *total_counts, size_t count);
 
     // used to create a remote proxy for a memory
     virtual MemoryImpl *create_remote_memory(RuntimeImpl *runtime, Memory m, size_t size,
@@ -318,11 +421,20 @@ namespace Realm {
     memcpy(vals_out.data(), val_in, bytes);
   }
 
-  size_t LoopbackNetworkModule::sample_messages_received_count(void) { return 0; }
-
-  bool LoopbackNetworkModule::check_for_quiescence(size_t sampled_receive_count)
+  void LoopbackNetworkModule::sample_quiescence_state(QuiescenceState &state)
   {
-    return true;
+    // single-rank loopback: nothing to send to anyone, nothing in flight.
+    //  All counters are zero, no queues, no pending.
+    state = QuiescenceState{0, 0, 0, 0};
+  }
+
+  void LoopbackNetworkModule::quiescence_allreduce_sum(const uint64_t *local_counts,
+                                                       uint64_t *total_counts,
+                                                       size_t count)
+  {
+    // single-rank: the "all-reduced sum" is just the local value
+    for(size_t i = 0; i < count; i++)
+      total_counts[i] = local_counts[i];
   }
 
   // used to create a remote proxy for a memory

@@ -153,8 +153,9 @@ namespace Realm {
                      size_t *lengths);
       void allgatherv(const char *val_in, size_t bytes, std::vector<char> &vals_out,
                       std::vector<size_t> &lengths);
-      size_t sample_messages_received_count();
-      bool check_for_quiescence(size_t sampled_receive_count);
+      void sample_quiescence_state(NetworkModule::QuiescenceState &state);
+      void quiescence_allreduce_sum(const uint64_t *local_counts, uint64_t *total_counts,
+                                    size_t count);
       size_t recommended_max_payload(const void *data, const NetworkSegment *src_segment,
                                      const RemoteAddress *dest_payload_addr,
                                      bool with_congestion, size_t header_size);

@@ -677,8 +677,9 @@ namespace Realm {
     void allgatherv(const char *val_in, size_t bytes, std::vector<char> &vals_out,
                     std::vector<size_t> &lengths);
 
-    size_t sample_messages_received_count();
-    bool check_for_quiescence(size_t sampled_receive_count);
+    void sample_quiescence_state(NetworkModule::QuiescenceState &state);
+    void quiescence_allreduce_sum(const uint64_t *local_counts, uint64_t *total_counts,
+                                  size_t count);
 
     PendingCompletion *get_available_comp();
     PendingCompletion *early_local_completion(PendingCompletion *comp);

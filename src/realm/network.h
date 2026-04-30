@@ -80,9 +80,30 @@ namespace Realm {
     // and a few "global" operations that abstract over any/all networks
     void barrier(void);
 
-    // a quiescence check across all nodes (i.e. has anybody sent anything
-    //  since the previous quiescence check)
-    bool check_for_quiescence(IncomingMessageManager *message_manager);
+    // result of a single quiescence-check round.  The runtime's shutdown loop
+    //  calls Network::check_for_quiescence repeatedly and uses this to decide
+    //  whether to keep iterating, declare termination, or abort
+    enum class QuiescenceStatus
+    {
+      // confirmed quiescent: two consecutive rounds agreed on the global state
+      //  AND the state is "no in-flight messages, no queued work, no pending
+      //  completions".  The runtime can safely proceed with detach.
+      DONE,
+      // counters changed since the previous round (or this is the first call) -
+      //  the system is making progress, the runtime should call again
+      PROGRESSING,
+      // counters have been frozen for several consecutive rounds but the global
+      //  state is not quiet - this indicates a real bug (a leak in the message
+      //  accounting or a permanently-stuck queue), not just a slow operation
+      STUCK,
+    };
+
+    // a quiescence check across all nodes - returns whether the global system
+    //  is quiescent, still progressing, or stuck.  The implementation is a
+    //  Mattern's-shaped two-round stability check; correctness requires that
+    //  the application has already promised it will not initiate new work
+    //  (e.g., post-precondition during shutdown).
+    QuiescenceStatus check_for_quiescence(IncomingMessageManager *message_manager);
 
     // collective communication across all nodes (TODO: subcommunicators?)
     template <typename T>
@@ -180,8 +201,46 @@ namespace Realm {
     virtual void allgatherv(const char *val_in, size_t bytes, std::vector<char> &vals_out,
                             std::vector<size_t> &lengths) = 0;
 
-    virtual size_t sample_messages_received_count(void) = 0;
-    virtual bool check_for_quiescence(size_t sampled_receive_count) = 0;
+    // Per-rank state used by the quiescence-detection algorithm in
+    //  Network::check_for_quiescence.  Each backend exposes its current local
+    //  state, the algorithm sums/ORs across ranks, and termination is declared
+    //  when two consecutive rounds agree on a quiet state.
+    //
+    // Correctness depends on every source of "future messages from this rank"
+    //  being captured by either:
+    //   - any_queue_nonempty (anything queued that could spontaneously
+    //     produce a send when it runs), or
+    //   - packets_reserved exceeding packets_received globally (anything
+    //     in flight on the wire), or
+    //   - pending_completions > 0 (any local-completion bookkeeping that
+    //     could fire and produce comp replies)
+    struct QuiescenceState {
+      // 1 if any work-item queue, message-manager queue, or pending in-flight
+      //  GASNet/UCX/MPI request is non-empty at sample time; 0 otherwise.
+      //  Reduced via SUM (any rank reporting nonzero leaves the sum nonzero)
+      uint64_t any_queue_nonempty;
+      // cumulative count of network messages this rank has originated.
+      //  At quiescence, sum across ranks must equal sum of packets_received
+      uint64_t packets_reserved;
+      // cumulative count of network messages this rank has received and
+      //  counted - sampled post-drain so the count reflects everything the
+      //  drain in Network::check_for_quiescence delivered to handlers
+      uint64_t packets_received;
+      // count of pending remote completions on this rank waiting for replies
+      //  to arrive; reduced via SUM
+      uint64_t pending_completions;
+    };
+
+    // Sample the current quiescence state of this network.  Called after the
+    //  IncomingMessageManager has been drained, so 'packets_received' reflects
+    //  every received message that has been dispatched as of the call.
+    virtual void sample_quiescence_state(QuiescenceState &state) = 0;
+
+    // Sum-reduce a small array of uint64_t across all ranks.  Used by the
+    //  Mattern's-shaped Network::check_for_quiescence loop to combine
+    //  per-rank QuiescenceState samples into a global tally.
+    virtual void quiescence_allreduce_sum(const uint64_t *local_counts,
+                                          uint64_t *total_counts, size_t count) = 0;
 
     // used to create a remote proxy for a memory
     virtual MemoryImpl *create_remote_memory(RuntimeImpl *runtime, Memory m, size_t size,

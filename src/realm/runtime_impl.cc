@@ -2884,23 +2884,35 @@ namespace Realm {
     // the operation tables on every rank should be clear of work
     optable.shutdown_check();
 
-    // make sure the network is completely quiescent
+    // make sure the network is completely quiescent.  The check is a
+    //  Mattern's-shaped two-round stability protocol that returns one of
+    //  three statuses: DONE (confirmed quiescent), PROGRESSING (counters are
+    //  changing - keep iterating, no upper bound on iterations because slow
+    //  but progressing systems are not bugs), or STUCK (counters frozen but
+    //  the system isn't quiet - real bug, fail fast with a diagnostic).
     if(Network::max_node_id > 0) {
       int tries = 0;
       while(true) {
         tries++;
-        bool done = Network::check_for_quiescence(message_manager);
-        if(done) {
+        Network::QuiescenceStatus status = Network::check_for_quiescence(message_manager);
+        if(status == Network::QuiescenceStatus::DONE) {
           if(Network::my_node_id == 0)
             log_runtime.info() << "quiescent after " << tries << " attempts";
           break;
         }
-
-        if(tries >= 10) {
-          log_runtime.fatal() << "network still not quiescent after " << tries
-                              << " attempts";
+        if(status == Network::QuiescenceStatus::STUCK) {
+          // counters are frozen but the system is not in a quiet state -
+          //  this points at a real accounting bug (a leaked send or queue
+          //  entry that will never drain), not a slow-but-progressing
+          //  operation.  Failing fast with a clear message is more useful
+          //  than continuing forever
+          log_runtime.fatal()
+              << "network not quiescent and counters are frozen after " << tries
+              << " attempts - this indicates a real accounting bug, not just a slow "
+                 "operation";
           abort();
         }
+        // PROGRESSING: counters are still moving, keep iterating
       }
     }
 
