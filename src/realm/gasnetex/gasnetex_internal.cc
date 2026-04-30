@@ -2546,6 +2546,8 @@ namespace Realm {
                              << " old=" << prev << " new=" << (prev + count);
   }
 
+  void XmitSrcDestPair::cancel_push() { push_mutex_check.unlock(); }
+
   ////////////////////////////////////////////////////////////////////////
   //
   // class XmitSrc
@@ -2690,6 +2692,7 @@ namespace Realm {
   GASNetEXInjector::GASNetEXInjector(GASNetEXInternal *_internal)
     : BackgroundWorkItem("gex-inj")
     , internal(_internal)
+    , work_active(false)
   {}
 
   void GASNetEXInjector::add_ready_xpair(XmitSrcDestPair *xpair)
@@ -2708,10 +2711,19 @@ namespace Realm {
       make_active();
   }
 
+  void GASNetEXInjector::drain_xpairs()
+  {
+    AutoLock<> al(mutex);
+    while(!ready_xpairs.empty()) {
+      XmitSrcDestPair *xpair = ready_xpairs.pop_front();
+      xpair->cancel_push();
+    }
+  }
+
   bool GASNetEXInjector::has_work_remaining()
   {
     AutoLock<> al(mutex);
-    return !ready_xpairs.empty();
+    return !ready_xpairs.empty() || work_active.load();
   }
 
   bool GASNetEXInjector::do_work(TimeLimit work_until)
@@ -2728,6 +2740,7 @@ namespace Realm {
       AutoLock<> al(mutex);
       xpair = ready_xpairs.pop_front();
       more_work = !ready_xpairs.empty();
+      work_active.store(true);
     }
     assert(xpair);
     if(more_work)
@@ -2738,6 +2751,8 @@ namespace Realm {
     // now tell the xpair to inject as many packets as it can until it
     //   runs out of time or hits backpressure
     xpair->push_packets(true /*immediate_mode*/, work_until);
+
+    work_active.store(false);
 
     ThreadLocal::gex_work_until = nullptr;
 
@@ -2757,6 +2772,7 @@ namespace Realm {
     , shutdown_cond(mutex)
     , pollwait_flag(false)
     , pollwait_cond(mutex)
+    , work_active(false)
   {}
 
   void GASNetEXPoller::begin_polling()
@@ -2788,6 +2804,15 @@ namespace Realm {
     // no need to signal because the poller is always awake
   }
 
+  void GASNetEXPoller::drain_xpairs()
+  {
+    AutoLock<> al(mutex);
+    while(!critical_xpairs.empty()) {
+      XmitSrcDestPair *xpair = critical_xpairs.pop_front();
+      xpair->cancel_push();
+    }
+  }
+
   void GASNetEXPoller::add_pending_event(GASNetEXEvent *event)
   {
     // take mutex to enqueue event
@@ -2801,7 +2826,7 @@ namespace Realm {
   bool GASNetEXPoller::has_work_remaining()
   {
     AutoLock<> al(mutex);
-    return (!critical_xpairs.empty() || !pending_events.empty());
+    return (!critical_xpairs.empty() || !pending_events.empty() || work_active.load());
   }
 
   bool GASNetEXPoller::do_work(TimeLimit work_until)
@@ -2825,6 +2850,8 @@ namespace Realm {
       if(mutex.trylock()) {
         to_check.swap(pending_events);
         have_crit_xpairs = !critical_xpairs.empty();
+        if(!to_check.empty() || have_crit_xpairs)
+          work_active.store(true);
         mutex.unlock();
       }
 
@@ -2913,6 +2940,10 @@ namespace Realm {
       if(work_until.is_expired())
         break;
     }
+
+    // all dequeued work items have been processed or handed off - clear
+    //  the work_active flag so that quiescence checks can see we're idle
+    work_active.store(false);
 
     // sample pollwait flag before we perform gasnet_AMPoll
     bool pollwait_snapshot = pollwait_flag.load();
@@ -3422,6 +3453,12 @@ namespace Realm {
   void GASNetEXInternal::detach()
   {
     poller.end_polling();
+
+    // drain any xpairs that were enqueued (via request_push) but never
+    //  had push_packets called - this balances the push_mutex_check lock
+    //  that request_push acquired
+    poller.drain_xpairs();
+    injector.drain_xpairs();
 
 #ifdef DEBUG_REALM
     poller.shutdown_work_item();

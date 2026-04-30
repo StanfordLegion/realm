@@ -161,6 +161,22 @@ namespace Realm {
       CUfunc_st *apply_nonexcl = nullptr;
       CUfunc_st *fold_excl = nullptr;
       CUfunc_st *fold_nonexcl = nullptr;
+      // apply reduction with advanced kernels that support upto 3D multidimensional
+      // affine layout
+      CUfunc_st *apply_excl_advanced = nullptr;
+      CUfunc_st *apply_nonexcl_advanced = nullptr;
+      // fold reduction with advanced kernels that support upto 3D multidimensional
+      // affine layout
+      CUfunc_st *fold_excl_advanced = nullptr;
+      CUfunc_st *fold_nonexcl_advanced = nullptr;
+      // apply reduction with advanced kernels that support upto 3D multidimensional
+      // transpose layout
+      CUfunc_st *apply_excl_transpose = nullptr;
+      CUfunc_st *apply_nonexcl_transpose = nullptr;
+      // fold reduction with advanced kernels that support upto 3D multidimensional
+      // transpose layout
+      CUfunc_st *fold_excl_transpose = nullptr;
+      CUfunc_st *fold_nonexcl_transpose = nullptr;
     };
 
     // our interface to the rest of the runtime
