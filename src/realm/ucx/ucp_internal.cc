@@ -1705,37 +1705,41 @@ namespace Realm {
       //  (i.e., something we've handed to UCX that hasn't completed yet).
       //  outstanding_reqs is decremented in request_release() at request
       //  completion time, so it captures both queued sends and unfinished
-      //  receive operations.  We also need to make sure outstanding remote
-      //  completions are reflected (they're tracked separately via the
-      //  total_rcomp_sent/received pair).
-      uint64_t any_queue = (outstanding_reqs.load() > 0) ? 1 : 0;
+      //  receive operations.
+      state.any_queue_nonempty = (outstanding_reqs.load() > 0) ? 1 : 0;
 
-      // packets_reserved/received: cumulative message counters.  These count
-      //  ordinary AMs.  Remote completions are tracked separately and added
-      //  into pending_completions below so that the Mattern's loop sees a
-      //  single "are remote completions outstanding" signal.
-      state.any_queue_nonempty = any_queue;
-      state.packets_reserved = total_msg_sent.load();
-      state.packets_received = total_msg_received.load();
-
-      // pending_completions: difference between sent and received remote
-      //  completions.  When all remote completions have been delivered, this
-      //  is zero - matches the semantics of GASNet-EX's compmgr.num_pending
-      //  globally summed.  (The two are summed across ranks separately, so
-      //  this rank's contribution is just the local imbalance.)
+      // packets_reserved/received: cumulative wire-packet counters.  UCX
+      //  separately tracks ordinary AMs (total_msg_*) and remote completion
+      //  replies (total_rcomp_*), each of which is an independently balanced
+      //  send-vs-receive pair at the global level.  We fold both into the
+      //  reserved/received counts so the Mattern's-loop equality check
+      //  catches imbalances in either category.
+      //
+      // It is NOT correct to derive a per-rank "pending_completions" value
+      //  from (rcomp_sent - rcomp_received): per-rank rcomp_sent and
+      //  rcomp_received can legitimately differ in either direction (peers
+      //  don't have to send the same number of completions both ways), and
+      //  clamping the negative case to zero produces a permanent positive
+      //  cross-rank sum that never drains - even when global rcomp_sent ==
+      //  global rcomp_received.  Only the SUM-reduced equality is correct.
+      uint64_t msg_sent = total_msg_sent.load();
+      uint64_t msg_received = total_msg_received.load();
       uint64_t rcomp_sent = total_rcomp_sent.load();
       uint64_t rcomp_received = total_rcomp_received.load();
-      state.pending_completions =
-          (rcomp_sent >= rcomp_received) ? (rcomp_sent - rcomp_received) : 0;
+      state.packets_reserved = msg_sent + rcomp_sent;
+      state.packets_received = msg_received + rcomp_received;
+
+      // pending_completions is unused on UCX - everything that needs
+      //  balancing is already in the reserved/received pair above.
+      state.pending_completions = 0;
 
       log_ucp.debug() << "quiescence sample:"
                       << " any_queue=" << state.any_queue_nonempty
-                      << " reserved=" << state.packets_reserved
-                      << " received=" << state.packets_received
-                      << " pending_comps=" << state.pending_completions
-                      << " (outstanding_reqs=" << outstanding_reqs.load()
-                      << " rcomp_sent=" << rcomp_sent << " rcomp_recv=" << rcomp_received
-                      << ")";
+                      << " reserved=" << state.packets_reserved << " (msg=" << msg_sent
+                      << "+rcomp=" << rcomp_sent << ")"
+                      << " received=" << state.packets_received << " (msg=" << msg_received
+                      << "+rcomp=" << rcomp_received << ")"
+                      << " outstanding_reqs=" << outstanding_reqs.load();
 
       // Give the poller threads a chance to make progress before the caller
       //  proceeds to the allreduce.  Mirrors the old "wait_polling on failure"

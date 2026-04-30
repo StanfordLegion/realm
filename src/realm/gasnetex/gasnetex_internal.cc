@@ -2722,8 +2722,17 @@ namespace Realm {
 
   bool GASNetEXInjector::has_work_remaining()
   {
+    // Used only by GASNetEXInternal::sample_quiescence_state; intentionally
+    //  excludes the work_active "currently inside do_work / push_packets"
+    //  flag because that flag is timing-sensitive and produces spurious
+    //  not-quiet reports during a single slow GASNet send (the worker holds
+    //  work_active for the full duration of the send even when no work is
+    //  actually queued).  Mattern's two-round stability check at the
+    //  Network::check_for_quiescence level handles the legitimate "worker
+    //  is mid-execution and might still produce a send" case via the
+    //  counter-stability requirement.
     AutoLock<> al(mutex);
-    return !ready_xpairs.empty() || work_active.load();
+    return !ready_xpairs.empty();
   }
 
   bool GASNetEXInjector::do_work(TimeLimit work_until)
@@ -2825,8 +2834,10 @@ namespace Realm {
 
   bool GASNetEXPoller::has_work_remaining()
   {
+    // See GASNetEXInjector::has_work_remaining: same rationale for excluding
+    //  work_active from the quiescence-visible "is there work" check.
     AutoLock<> al(mutex);
-    return (!critical_xpairs.empty() || !pending_events.empty() || work_active.load());
+    return (!critical_xpairs.empty() || !pending_events.empty());
   }
 
   bool GASNetEXPoller::do_work(TimeLimit work_until)
@@ -3005,7 +3016,18 @@ namespace Realm {
       make_active();
   }
 
-  bool GASNetEXCompleter::has_work_remaining() { return has_work.load(); }
+  bool GASNetEXCompleter::has_work_remaining()
+  {
+    // See GASNetEXInjector::has_work_remaining: query the actual queue under
+    //  the mutex rather than the cached has_work flag, which is set true for
+    //  the duration of a do_work invocation even when the events have been
+    //  swapped out into the worker's local todo and the visible queue is
+    //  empty - that produces a spurious not-quiet report during a slow
+    //  trigger (e.g., a put-completion event whose enqueue_put_header is
+    //  blocked in GASNet).
+    AutoLock<> al(mutex);
+    return !ready_events.empty();
+  }
 
   bool GASNetEXCompleter::do_work(TimeLimit work_until)
   {
