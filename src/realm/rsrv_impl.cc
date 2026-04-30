@@ -938,6 +938,17 @@ namespace Realm {
       // read the current state to see if any exceptional conditions exist
       State cur_state = state.load_acquire();
 
+      // if the previous lock holder is in the middle of releasing the lock,
+      //  spin briefly until they finish.  We must not enter the mutex path
+      //  in this case because creating a new waiter_event would orphan it
+      //  (the releasing thread has already done its waiter_event handling).
+      //  STATE_RELEASING is only set transiently between the releaser's
+      //  mutex.unlock and their final state.fetch_sub.
+      if((cur_state & STATE_RELEASING) != 0) {
+        REALM_SPIN_YIELD();
+        continue;
+      }
+
       // if there are no exceptional conditions (sleepers, base_rsrv stuff),
       //  try to clear the WRITER_WAITING (if set), set WRITER, on the
       //  assumption that the READER_COUNT is 0 (i.e. we want the CAS to fail
@@ -987,6 +998,16 @@ namespace Realm {
         //  cannot change out from under us
         cur_state = state.load_acquire();
 
+        // STATE_RELEASING may have been set by a previous holder's
+        //  unlock_slow between our outer-loop check and our mutex
+        //  acquisition. If it's set, release the mutex and spin in the
+        //  outer loop instead of creating a waiter_event.
+        if((cur_state & STATE_RELEASING) != 0) {
+          frs.mutex.unlock();
+          REALM_SPIN_YIELD();
+          continue;
+        }
+
         // goal is to find (or possibly create) a condition we can wait
         //  on before trying again
         Event wait_for = Event::NO_EVENT;
@@ -998,13 +1019,29 @@ namespace Realm {
             break;
           }
 
-          // case 2: a current lock holder is sleeping
+          // case 2: the base reservation has requested the lock back
+          //  (mirrors rdlock_slow case 2)
+          if((cur_state & STATE_BASE_RSRV_WAITING) != 0) {
+            // a) if no holders, swap RSRV_WAITING for RSRV and give the
+            //     base reservation back to the requester
+            if((cur_state & (STATE_WRITER | STATE_READER_COUNT_MASK)) == 0) {
+              REALM_ASSERT((cur_state & STATE_BASE_RSRV) == 0);
+              state.fetch_sub(STATE_BASE_RSRV_WAITING - STATE_BASE_RSRV);
+              frs.rsrv_impl->release(TimeLimit::responsive());
+            }
+            // b) request the reservation back and wait on the grant
+            //     before we attempt to lock again
+            wait_for = frs.request_base_rsrv(*this);
+            break;
+          }
+
+          // case 3: a current lock holder is sleeping
           if((cur_state & STATE_SLEEPER) != 0) {
             wait_for = frs.sleeper_event;
             break;
           }
 
-          // case 3: if we're back to normal readers/writers, don't sleep
+          // case 4: if we're back to normal readers/writers, don't sleep
           //   after all
           if((cur_state &
               ~(STATE_READER_COUNT_MASK | STATE_WRITER | STATE_WRITER_WAITING)) == 0) {
@@ -1132,9 +1169,13 @@ namespace Realm {
       if(state.compare_exchange(cur_state, STATE_WRITER)) // updates cur_state
         return true;
 
-      // simple contention just causes us to return
-      if((cur_state & (STATE_READER_COUNT_MASK | STATE_WRITER | STATE_WRITER_WAITING)) !=
-         0)
+      // simple contention just causes us to return.  STATE_RELEASING
+      //  also counts as contention since the previous holder hasn't
+      //  fully released yet.  STATE_BASE_RSRV_WAITING also counts as
+      //  contention - we cannot cleanly acquire while a remote node has
+      //  demanded the base reservation back.
+      if((cur_state & (STATE_READER_COUNT_MASK | STATE_WRITER | STATE_WRITER_WAITING |
+                       STATE_RELEASING | STATE_BASE_RSRV_WAITING)) != 0)
         return false;
 
       // any other transition requires holding the fast reservation's mutex
@@ -1144,6 +1185,15 @@ namespace Realm {
         // resample the state - since we hold the lock, exceptional bits
         //  cannot change out from under us
         cur_state = state.load_acquire();
+
+        // if a previous holder is in the middle of releasing, or the base
+        //  reservation has been demanded back by a remote node, fail the
+        //  trylock attempt - either condition means we can't cleanly
+        //  acquire without waiting
+        if((cur_state & (STATE_RELEASING | STATE_BASE_RSRV_WAITING)) != 0) {
+          frs.mutex.unlock();
+          return false;
+        }
 
         bool event_needed = false;
 
@@ -1163,9 +1213,9 @@ namespace Realm {
           }
 
           // case 3: if we're back to normal readers/writers, don't sleep
-          //   after all
-          if((cur_state &
-              ~(STATE_READER_COUNT_MASK | STATE_WRITER | STATE_WRITER_WAITING)) == 0) {
+          //   after all (including the transient STATE_RELEASING state)
+          if((cur_state & ~(STATE_READER_COUNT_MASK | STATE_WRITER |
+                            STATE_WRITER_WAITING | STATE_RELEASING)) == 0) {
             break;
           }
 
@@ -1224,6 +1274,13 @@ namespace Realm {
       //  before trying to increment the count
       State cur_state = state.load_acquire();
 
+      // if the previous lock holder is in the middle of releasing the lock,
+      //  spin briefly until they finish.  See wrlock_slow for details.
+      if((cur_state & STATE_RELEASING) != 0) {
+        REALM_SPIN_YIELD();
+        continue;
+      }
+
       // if there are no exceptional conditions (sleeping writer (sleeping
       //  reader is ok), base_rsrv stuff), increment the
       //  reader count and then make sure we didn't race with some other
@@ -1268,6 +1325,16 @@ namespace Realm {
         // resample the state - since we hold the lock, exceptional bits
         //  cannot change out from under us
         cur_state = state.load_acquire();
+
+        // STATE_RELEASING may have been set by a previous holder's
+        //  unlock_slow between our outer-loop check and our mutex
+        //  acquisition. If it's set, release the mutex and spin in the
+        //  outer loop instead of creating a waiter_event.
+        if((cur_state & STATE_RELEASING) != 0) {
+          frs.mutex.unlock();
+          REALM_SPIN_YIELD();
+          continue;
+        }
 
         // goal is to find (or possibly create) a condition we can wait
         //  on before trying again
@@ -1498,14 +1565,26 @@ namespace Realm {
     //  hold exceptional conditions still and then modify state
     frs.mutex.lock();
 
+    // CRITICAL: the public lock release (the final state.fetch_sub that
+    //  clears WRITER or decrements the last reader to zero) must be the
+    //  LAST operation, after all frs.* accesses (including frs.mutex.unlock).
+    //  Once the public lock is released, the FastReservation may be
+    //  deallocated by an external owner, so accessing frs.mutex or
+    //  frs.waiter_event after the release is a use-after-free.
+
     // based on the current state, decide if we're undoing a write lock or
     //  a read lock
     State cur_state = state.load_acquire();
+
+    UserEvent to_trigger;
+    State bits_to_clear = 0;
+
     if((cur_state & STATE_WRITER) != 0) {
       // neither SLEEPER nor BASE_RSRV should be set here
       assert((cur_state & (STATE_SLEEPER | STATE_BASE_RSRV)) == 0);
 
-      // if the base reservation is waiting, give it back
+      // if the base reservation is waiting, give it back (state still has
+      //  STATE_WRITER, so the object cannot be deallocated yet)
       if((cur_state & STATE_BASE_RSRV_WAITING) != 0) {
         // swap RSRV_WAITING for RSRV - this requires BR to not already
         //  be set, otherwise the subtraction would underflow into the
@@ -1515,11 +1594,30 @@ namespace Realm {
         frs.rsrv_impl->release(TimeLimit::responsive());
       }
 
-      // now we can clear the WRITER and WRITER_WAITING bits and finish
-      State bits_to_clear = STATE_WRITER;
-      if((cur_state & STATE_WRITER_WAITING) != 0)
+      // capture waiter_event - writer unlock always frees the lock
+      if(frs.waiter_event.exists()) {
+        to_trigger = frs.waiter_event;
+        frs.waiter_event = UserEvent();
+      }
+
+      // Set STATE_RELEASING under the mutex.  This blocks any new
+      //  thread entering the mutex path (or the line-962 spinner CAS)
+      //  from creating a new waiter_event between our mutex.unlock and
+      //  our final fetch_sub.  Both wrlock_slow and rdlock_slow check
+      //  STATE_RELEASING at the top of their outer loops and spin
+      //  until it clears.  We then atomically clear STATE_WRITER,
+      //  STATE_RELEASING, and STATE_WRITER_WAITING (if set) in a
+      //  single fetch_sub.
+      // We use fetch_or's return value (the state immediately before
+      //  RELEASING was set) rather than the earlier cur_state load to
+      //  catch any STATE_WRITER_WAITING that a spinner may have set
+      //  via line-962 CAS between our load and this fetch_or.  After
+      //  RELEASING is set, no more spinner CASes can succeed, so this
+      //  captures every WW bit we need to clear.
+      State pre_release_state = state.fetch_or(STATE_RELEASING);
+      bits_to_clear = STATE_WRITER | STATE_RELEASING;
+      if((pre_release_state & STATE_WRITER_WAITING) != 0)
         bits_to_clear |= STATE_WRITER_WAITING;
-      state.fetch_sub_acqrel(bits_to_clear);
     } else {
       // we'd better be a reader then
       unsigned reader_count = (cur_state & STATE_READER_COUNT_MASK);
@@ -1540,29 +1638,50 @@ namespace Realm {
         frs.rsrv_impl->release(TimeLimit::responsive());
       }
 
-      // finally, decrement the read count
-      state.fetch_sub_acqrel(1);
+      // For the reader path, when we're not the last reader the lock
+      //  remains held after our decrement, so the object stays alive and
+      //  frs.mutex.unlock() afterward is safe. We do the decrement and
+      //  unlock under the mutex to keep concurrent reader unlocks
+      //  serialized correctly.
+      bool last_reader = (reader_count == 1) && ((cur_state & STATE_WRITER) == 0);
 
-      // only trigger waiter_event if we were the last reader (and no
-      //  writer) - otherwise the waiter can't acquire yet and would
-      //  just have to create a new event
-      if(reader_count > 1 || (cur_state & STATE_WRITER) != 0) {
+      if(!last_reader) {
+        state.fetch_sub_acqrel(1);
         frs.mutex.unlock();
         return;
       }
+
+      // we are the last reader; capture waiter_event, set STATE_RELEASING
+      //  (see writer-path comment), and defer the decrement until after
+      //  we release the mutex.  Use fetch_or's return value (pre-set
+      //  state) to also clear any STATE_WRITER_WAITING that a spinner
+      //  may have set between our cur_state load and this fetch_or -
+      //  see the writer-path comment for the full rationale.
+      if(frs.waiter_event.exists()) {
+        to_trigger = frs.waiter_event;
+        frs.waiter_event = UserEvent();
+      }
+      State pre_release_state = state.fetch_or(STATE_RELEASING);
+      bits_to_clear = 1 + STATE_RELEASING;
+      if((pre_release_state & STATE_WRITER_WAITING) != 0)
+        bits_to_clear |= STATE_WRITER_WAITING;
     }
 
-    // if any waiters are waiting on a spin-timeout event, trigger it
-    //  (writer unlock always gets here; reader unlock only if lock is
-    //  now free)
-    if(frs.waiter_event.exists()) {
-      UserEvent to_trigger = frs.waiter_event;
-      frs.waiter_event = UserEvent();
-      frs.mutex.unlock();
+    // release the mutex BEFORE the public lock release so the object is
+    //  guaranteed alive for our last access to frs.mutex
+    frs.mutex.unlock();
+
+    // release the public lock by atomically clearing all the bits we
+    //  set/owned (W or last reader, RELEASING, and WW if it was set in
+    //  cur_state).  RELEASING blocked any new waiter from entering the
+    //  mutex path during our window, so this fetch_sub cleanly transitions
+    //  the lock to fully released without orphaning anything.  After
+    //  this point the FastReservation may be deallocated.
+    state.fetch_sub_acqrel(bits_to_clear);
+
+    // trigger waiter_event (no frs access)
+    if(to_trigger.exists())
       to_trigger.trigger();
-    } else {
-      frs.mutex.unlock();
-    }
   }
 
   void FastReservation::advise_sleep_entry(UserEvent guard_event)
