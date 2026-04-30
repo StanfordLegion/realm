@@ -18,6 +18,7 @@
 
 #include "realm/cuda/cuda_hook.h"
 #include "realm/cuda/cuda_module.h"
+#include "realm/realm_assert.h"
 
 #include <assert.h>
 #include <dlfcn.h>
@@ -127,6 +128,32 @@ namespace Realm {
         operation = CallbackOperation::CLEAR_CTX;
         break;
       }
+      case CUPTI_DRIVER_TRACE_CBID_cuStreamDestroy:
+      case CUPTI_DRIVER_TRACE_CBID_cuStreamDestroy_v2:
+      {
+        // cuStreamDestroy_params and cuStreamDestroy_v2_params share the same
+        // layout (a single CUstream hStream field).
+        CUstream destroyed =
+            ((cuStreamDestroy_v2_params *)(cbInfo->functionParams))->hStream;
+        CUstream task_stream = ThreadLocal::current_gpu_stream->get_stream();
+        if(destroyed == task_stream) {
+          log_cuhook.fatal(
+              "The task is destroying a Realm-owned CUDA stream %p via %s; "
+              "tasks must NOT call cuStreamDestroy/cudaStreamDestroy on streams "
+              "returned by get_task_cuda_stream",
+              (void *)destroyed, function_name);
+          REALM_ASSERT(false);
+        }
+        return;
+      }
+      case CUPTI_DRIVER_TRACE_CBID_cuDevicePrimaryCtxReset:
+      {
+        log_cuhook.fatal("The task is resetting the primary context via %s; "
+                         "tasks must NOT destroy the primary context.",
+                         function_name);
+        REALM_ASSERT(false);
+        break;
+      }
       default:
       {
         return;
@@ -219,11 +246,15 @@ namespace Realm {
           CUPTI_DRIVER_TRACE_CBID_cuMemcpy3DAsync_v2,
           // stream
           CUPTI_DRIVER_TRACE_CBID_cuStreamSynchronize,
+          // catch user-task code that destroys a Realm-owned task stream
+          CUPTI_DRIVER_TRACE_CBID_cuStreamDestroy,
+          CUPTI_DRIVER_TRACE_CBID_cuStreamDestroy_v2,
           // event
           CUPTI_DRIVER_TRACE_CBID_cuEventRecord,
           CUPTI_DRIVER_TRACE_CBID_cuEventSynchronize,
           // ctx
           CUPTI_DRIVER_TRACE_CBID_cuCtxSynchronize,
+          CUPTI_DRIVER_TRACE_CBID_cuDevicePrimaryCtxReset,
       };
 
       for(const auto &cbid : enabled_callbacks) {
