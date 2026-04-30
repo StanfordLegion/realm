@@ -1737,8 +1737,8 @@ namespace Realm {
                       << " any_queue=" << state.any_queue_nonempty
                       << " reserved=" << state.packets_reserved << " (msg=" << msg_sent
                       << "+rcomp=" << rcomp_sent << ")"
-                      << " received=" << state.packets_received << " (msg=" << msg_received
-                      << "+rcomp=" << rcomp_received << ")"
+                      << " received=" << state.packets_received
+                      << " (msg=" << msg_received << "+rcomp=" << rcomp_received << ")"
                       << " outstanding_reqs=" << outstanding_reqs.load();
 
       // Give the poller threads a chance to make progress before the caller
