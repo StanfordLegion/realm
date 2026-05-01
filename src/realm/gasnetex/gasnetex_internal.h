@@ -740,6 +740,7 @@ namespace Realm {
     friend class GASNetEXEvent;
     friend class GASNetEXPoller;
     friend class GASNetEXCompleter;
+    friend class GASNetEXInjector;
 
     // callbacks from IncomingMessageManager
     static void short_message_complete(NodeID sender, uintptr_t objptr,
