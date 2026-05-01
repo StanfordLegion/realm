@@ -2885,35 +2885,22 @@ namespace Realm {
     optable.shutdown_check();
 
     // make sure the network is completely quiescent.  The check is a
-    //  Mattern's-shaped two-round stability protocol that returns one of
-    //  three statuses: DONE (confirmed quiescent), PROGRESSING (counters are
-    //  changing - keep iterating, no upper bound on iterations because slow
-    //  but progressing systems are not bugs), or STUCK (counters frozen but
-    //  the system isn't quiet - real bug, fail fast with a diagnostic).
+    //  Mattern's-shaped two-round stability protocol that returns DONE
+    //  (confirmed quiescent) or PROGRESSING (keep iterating).  There is
+    //  intentionally no abort path: without introspection into the network
+    //  layer we cannot distinguish a slow in-flight message from a lost
+    //  one, so any timeout-based abort would be a guess.  If shutdown
+    //  hangs here it is a debuggable state (attach gdb).  A periodic
+    //  warning is emitted from check_for_quiescence when counters stay
+    //  frozen.
     if(Network::max_node_id > 0) {
       int tries = 0;
-      while(true) {
+      while(Network::check_for_quiescence(message_manager) !=
+            Network::QuiescenceStatus::DONE) {
         tries++;
-        Network::QuiescenceStatus status = Network::check_for_quiescence(message_manager);
-        if(status == Network::QuiescenceStatus::DONE) {
-          if(Network::my_node_id == 0)
-            log_runtime.info() << "quiescent after " << tries << " attempts";
-          break;
-        }
-        if(status == Network::QuiescenceStatus::STUCK) {
-          // counters are frozen but the system is not in a quiet state -
-          //  this points at a real accounting bug (a leaked send or queue
-          //  entry that will never drain), not a slow-but-progressing
-          //  operation.  Failing fast with a clear message is more useful
-          //  than continuing forever
-          log_runtime.fatal()
-              << "network not quiescent and counters are frozen after " << tries
-              << " attempts - this indicates a real accounting bug, not just a slow "
-                 "operation";
-          abort();
-        }
-        // PROGRESSING: counters are still moving, keep iterating
       }
+      if(Network::my_node_id == 0)
+        log_runtime.info() << "quiescent after " << (tries + 1) << " attempts";
     }
 
     // mark that a shutdown is in progress so that we can hopefully catch

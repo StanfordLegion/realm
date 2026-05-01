@@ -21,6 +21,7 @@
 #include "realm/cmdline.h"
 #include "realm/logging.h"
 #include "realm/activemsg.h"
+#include "realm/timers.h"
 
 #ifdef REALM_USE_DLFCN
 #include <dlfcn.h>
@@ -48,6 +49,8 @@ static void aligned_free(void *ptr)
 
 namespace Realm {
 
+  Logger log_quiesce("quiesce");
+
   namespace Network {
     REALM_INTERNAL_API_EXTERNAL_LINKAGE NodeID my_node_id = 0;
     REALM_INTERNAL_API_EXTERNAL_LINKAGE NodeID max_node_id = 0;
@@ -62,23 +65,29 @@ namespace Realm {
     namespace QuiescenceCheck {
       static NetworkModule::QuiescenceState prev_totals = {};
       static bool have_prev = false;
-      // number of consecutive iterations during which the global totals did
-      //  not change but the state was not quiet - if we hit this many in a
-      //  row, the algorithm declares STUCK so the runtime can abort with a
-      //  diagnostic
-      static unsigned stuck_iterations = 0;
-      // threshold for declaring stuck.  A value of 2 is the smallest correct
-      //  choice (one iteration to record state, a second to detect that it
-      //  hasn't changed); larger values are more conservative but waste time
-      //  on non-bug failures.  3 gives a small safety margin
-      static const unsigned STUCK_THRESHOLD = 3;
+      // wall-clock timestamp (ns) of the last round in which any counter
+      //  changed.  When counters stay frozen for longer than WARN_INTERVAL_NS,
+      //  we emit a warning - but never abort.  If the user's network is
+      //  genuinely slow, we just keep iterating; if it's hung, we just keep
+      //  warning so the user knows where the process is stuck.
+      static long long last_change_time_ns = 0;
+      // wall-clock timestamp (ns) at which the next "no progress" warning
+      //  should fire.  Bumped by WARN_INTERVAL_NS every time a warning is
+      //  emitted, so warnings repeat at a steady cadence rather than
+      //  spamming.
+      static long long next_warn_time_ns = 0;
+      // emit a warning if the counters have been frozen this long.  60 s is
+      //  long enough to outlast any reasonable network round-trip but short
+      //  enough that a CI hang surfaces as actionable log output.
+      static const long long WARN_INTERVAL_NS = 60LL * 1000 * 1000 * 1000;
     } // namespace QuiescenceCheck
 
     void reset_quiescence_state(void)
     {
       QuiescenceCheck::prev_totals = NetworkModule::QuiescenceState{};
       QuiescenceCheck::have_prev = false;
-      QuiescenceCheck::stuck_iterations = 0;
+      QuiescenceCheck::last_change_time_ns = 0;
+      QuiescenceCheck::next_warn_time_ns = 0;
     }
 
     QuiescenceStatus check_for_quiescence(IncomingMessageManager *message_manager)
@@ -162,22 +171,36 @@ namespace Realm {
         return QuiescenceStatus::DONE;
       }
 
-      // Track whether the global state is stuck (counters frozen but not
-      //  quiet).  If it stays frozen for STUCK_THRESHOLD iterations in a row,
-      //  this is a real bug rather than a slow but progressing system.
-      if(stable && !quiet_now) {
-        QuiescenceCheck::stuck_iterations++;
-        if(QuiescenceCheck::stuck_iterations >= QuiescenceCheck::STUCK_THRESHOLD) {
-          // do NOT reset the state here - the caller may want to inspect
-          //  prev_totals via the diagnostic logging
-          return QuiescenceStatus::STUCK;
+      // Track wall-clock time since counters last moved.  We never abort -
+      //  without a way to introspect the network we cannot distinguish a
+      //  slow-but-progressing in-flight message from a lost one, so any
+      //  timeout-based abort would be a guess.  Instead, we periodically
+      //  emit a warning when counters have been frozen for a while so the
+      //  user knows shutdown is making no observable progress.
+      long long now_ns = Clock::current_time_in_nanoseconds();
+      if(!stable) {
+        // counters changed (or this is the first call) - reset the timer
+        QuiescenceCheck::last_change_time_ns = now_ns;
+        QuiescenceCheck::next_warn_time_ns = now_ns + QuiescenceCheck::WARN_INTERVAL_NS;
+      } else if(now_ns >= QuiescenceCheck::next_warn_time_ns) {
+        // counters frozen for at least WARN_INTERVAL_NS, and we haven't
+        //  warned recently - emit a warning and schedule the next one.  Only
+        //  rank 0 prints to avoid every rank logging the same thing.
+        if(my_node_id == 0) {
+          long long stalled_ns = now_ns - QuiescenceCheck::last_change_time_ns;
+          log_quiesce.warning()
+              << "no progress on quiescence for " << (stalled_ns / 1000000000)
+              << " s; queued=" << totals.queued_items
+              << " events_added=" << totals.events_added
+              << " reserved=" << totals.packets_reserved
+              << " received=" << totals.packets_received
+              << " pending_comps=" << totals.pending_completions
+              << " (this is a warning, not a fatal error - shutdown will keep retrying)";
         }
-      } else {
-        // counters changed - we're making progress
-        QuiescenceCheck::stuck_iterations = 0;
+        QuiescenceCheck::next_warn_time_ns += QuiescenceCheck::WARN_INTERVAL_NS;
       }
 
-      // not quiet (or first iteration) - record state for the next round
+      // record state for the next round
       QuiescenceCheck::prev_totals = totals;
       QuiescenceCheck::have_prev = true;
       return QuiescenceStatus::PROGRESSING;

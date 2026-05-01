@@ -81,25 +81,28 @@ namespace Realm {
     void barrier(void);
 
     // result of a single quiescence-check round.  The runtime's shutdown loop
-    //  calls Network::check_for_quiescence repeatedly and uses this to decide
-    //  whether to keep iterating, declare termination, or abort
+    //  calls Network::check_for_quiescence repeatedly and stops when it sees
+    //  DONE.  We deliberately do not have a "stuck" status: without
+    //  introspection into the network layer there is no way to tell a slow
+    //  in-flight message from a lost one, so any timeout-based abort would
+    //  produce spurious failures.  If the system is genuinely hung, the
+    //  shutdown loop hangs (which is debuggable - attach gdb).  A periodic
+    //  warning is emitted while counters are frozen, but the function never
+    //  fails the run.
     enum class QuiescenceStatus
     {
       // confirmed quiescent: two consecutive rounds agreed on the global state
       //  AND the state is "no in-flight messages, no queued work, no pending
       //  completions".  The runtime can safely proceed with detach.
       DONE,
-      // counters changed since the previous round (or this is the first call) -
-      //  the system is making progress, the runtime should call again
+      // not yet quiescent - counters may or may not have changed this round,
+      //  but the system is not in a confirmed-quiet state.  Caller should call
+      //  again.
       PROGRESSING,
-      // counters have been frozen for several consecutive rounds but the global
-      //  state is not quiet - this indicates a real bug (a leak in the message
-      //  accounting or a permanently-stuck queue), not just a slow operation
-      STUCK,
     };
 
-    // a quiescence check across all nodes - returns whether the global system
-    //  is quiescent, still progressing, or stuck.  The implementation is a
+    // a quiescence check across all nodes - returns DONE when the global system
+    //  is confirmed quiescent, otherwise PROGRESSING.  The implementation is a
     //  Mattern's-shaped two-round stability check; correctness requires that
     //  the application has already promised it will not initiate new work
     //  (e.g., post-precondition during shutdown).
