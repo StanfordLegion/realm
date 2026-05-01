@@ -203,22 +203,27 @@ namespace Realm {
 
     // Per-rank state used by the quiescence-detection algorithm in
     //  Network::check_for_quiescence.  Each backend exposes its current local
-    //  state, the algorithm sums/ORs across ranks, and termination is declared
+    //  state, the algorithm sums across ranks, and termination is declared
     //  when two consecutive rounds agree on a quiet state.
     //
     // Correctness depends on every source of "future messages from this rank"
     //  being captured by either:
-    //   - any_queue_nonempty (anything queued that could spontaneously
+    //   - queued_items > 0 (anything queued that could spontaneously
     //     produce a send when it runs), or
     //   - packets_reserved exceeding packets_received globally (anything
     //     in flight on the wire), or
     //   - pending_completions > 0 (any local-completion bookkeeping that
     //     could fire and produce comp replies)
     struct QuiescenceState {
-      // 1 if any work-item queue, message-manager queue, or pending in-flight
-      //  GASNet/UCX/MPI request is non-empty at sample time; 0 otherwise.
-      //  Reduced via SUM (any rank reporting nonzero leaves the sum nonzero)
-      uint64_t any_queue_nonempty;
+      // total number of items currently queued on this rank that could
+      //  produce a future network operation: work-item queues (injector,
+      //  completer, poller, rgetter), pending in-flight requests, etc.
+      //  This is a COUNT, not a 0/1 boolean, because a draining queue must
+      //  register as "progressing" (count decreasing across rounds) rather
+      //  than "stuck" (count unchanged).  A queue going 5 -> 4 -> 3 -> ...
+      //  -> 0 is the legitimate "slow drain" pattern; a queue stuck at 5
+      //  forever indicates a real bug.  Reduced via SUM.
+      uint64_t queued_items;
       // cumulative count of network messages this rank has originated.
       //  At quiescence, sum across ranks must equal sum of packets_received
       uint64_t packets_reserved;

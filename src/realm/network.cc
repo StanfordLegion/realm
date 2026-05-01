@@ -92,7 +92,7 @@ namespace Realm {
       // Drain the incoming-message queue first, so that any messages already
       //  delivered by the network layer have been counted in
       //  packets_received and dispatched to their handlers (which may queue
-      //  more local work, also captured by any_queue_nonempty).  The drain
+      //  more local work, also captured by queued_items).  The drain
       //  uses the current 'received' count as its target, which means by the
       //  time it returns, the receive counter and the queue state are
       //  internally consistent on this rank.
@@ -102,17 +102,19 @@ namespace Realm {
 
       // Now sample the actual local state we'll feed into the allreduce.
       //  Sampling AFTER the drain matters: drain may have caused handlers to
-      //  fire, which may have changed any_queue_nonempty and pending counts.
+      //  fire, which may have changed queued_items and pending counts.
       NetworkModule::QuiescenceState local;
       single_network->sample_quiescence_state(local);
 
       // Allreduce the four fields.  All four use SUM:
-      //   any_queue_nonempty: each rank contributes 0 or 1; sum > 0 means
-      //     at least one rank has work queued
+      //   queued_items: each rank contributes its current queue-item count;
+      //     sum > 0 means at least one rank has work queued, AND draining
+      //     queues register as "progressing" (sum decreasing) rather than
+      //     "stuck" (sum unchanged at non-zero)
       //   packets_reserved/received: cumulative counts; sum across ranks
       //   pending_completions: count per rank; sum > 0 means at least one
       //     rank is waiting on a remote completion
-      uint64_t local_arr[4] = {local.any_queue_nonempty, local.packets_reserved,
+      uint64_t local_arr[4] = {local.queued_items, local.packets_reserved,
                                local.packets_received, local.pending_completions};
       uint64_t total_arr[4] = {0, 0, 0, 0};
       single_network->quiescence_allreduce_sum(local_arr, total_arr, 4);
@@ -124,25 +126,27 @@ namespace Realm {
       //  remote completion, and the cumulative sent/received counts balance
       //  globally (no messages in flight).  These are the conditions Mattern's
       //  algorithm requires for termination of one round.
-      bool quiet_now = (totals.any_queue_nonempty == 0) &&
-                       (totals.pending_completions == 0) &&
+      bool quiet_now = (totals.queued_items == 0) && (totals.pending_completions == 0) &&
                        (totals.packets_reserved == totals.packets_received);
 
       // The Mattern's stability check: termination is confirmed only when
       //  two CONSECUTIVE rounds both observe a quiet state AND the same
-      //  cumulative counts.  If anything changed between rounds (a new send
-      //  was initiated, a queued message was processed, etc.), the counters
-      //  will differ, and we restart.  Two-round agreement rules out the
-      //  ghost-message scenario where a work item runs between rounds and
-      //  produces a send that happens to be in flight at exactly the wrong
-      //  moment.
+      //  cumulative counts.  If anything changed between rounds - a new send
+      //  was initiated, a queued event was processed and the count dropped,
+      //  etc. - the counters will differ, and we restart.  Two-round
+      //  agreement rules out the ghost-message scenario where a work item
+      //  runs between rounds and produces a send that happens to be in
+      //  flight at exactly the wrong moment.  Crucially, queued_items being
+      //  a count rather than a 0/1 boolean means a draining queue gets
+      //  detected as "not stable" and the algorithm waits patiently rather
+      //  than firing STUCK on a slow-but-progressing drain.
       bool stable =
           QuiescenceCheck::have_prev &&
           (totals.packets_reserved == QuiescenceCheck::prev_totals.packets_reserved) &&
           (totals.packets_received == QuiescenceCheck::prev_totals.packets_received) &&
           (totals.pending_completions ==
            QuiescenceCheck::prev_totals.pending_completions) &&
-          (totals.any_queue_nonempty == QuiescenceCheck::prev_totals.any_queue_nonempty);
+          (totals.queued_items == QuiescenceCheck::prev_totals.queued_items);
 
       if(quiet_now && stable) {
         // both rounds agreed on a quiet state - termination confirmed

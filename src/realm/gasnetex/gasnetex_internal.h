@@ -519,6 +519,11 @@ namespace Realm {
 
     bool has_work_remaining();
 
+    // O(n) walk of ready_xpairs under the mutex - used by quiescence
+    //  detection to report a draining queue as "progressing" rather than
+    //  the binary "non-empty" boolean which would otherwise look stable
+    size_t queue_size();
+
     virtual bool do_work(TimeLimit work_until);
 
   protected:
@@ -544,6 +549,10 @@ namespace Realm {
     void add_pending_event(GASNetEXEvent *event);
 
     bool has_work_remaining();
+
+    // O(n) walk of critical_xpairs + pending_events under the mutex.  See
+    //  GASNetEXInjector::queue_size for why this is needed.
+    size_t queue_size();
 
     virtual bool do_work(TimeLimit work_until);
 
@@ -571,6 +580,10 @@ namespace Realm {
     void add_ready_events(GASNetEXEvent::EventList &newly_ready);
 
     bool has_work_remaining();
+
+    // O(n) walk of ready_events under the mutex.  See
+    //  GASNetEXInjector::queue_size for why this is needed.
+    size_t queue_size();
 
     virtual bool do_work(TimeLimit work_until);
 
@@ -640,6 +653,10 @@ namespace Realm {
                          size_t payload_bytes);
 
     bool has_work_remaining();
+
+    // O(n) walk of the pending-rget list under the mutex.  See
+    //  GASNetEXInjector::queue_size for why this is needed.
+    size_t queue_size();
 
     virtual bool do_work(TimeLimit work_until);
 

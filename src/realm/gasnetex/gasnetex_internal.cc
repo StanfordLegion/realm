@@ -2735,6 +2735,12 @@ namespace Realm {
     return !ready_xpairs.empty();
   }
 
+  size_t GASNetEXInjector::queue_size()
+  {
+    AutoLock<> al(mutex);
+    return ready_xpairs.size();
+  }
+
   bool GASNetEXInjector::do_work(TimeLimit work_until)
   {
     // we're not supposed to end up handling AMs, but set this just in case
@@ -2838,6 +2844,12 @@ namespace Realm {
     //  work_active from the quiescence-visible "is there work" check.
     AutoLock<> al(mutex);
     return (!critical_xpairs.empty() || !pending_events.empty());
+  }
+
+  size_t GASNetEXPoller::queue_size()
+  {
+    AutoLock<> al(mutex);
+    return critical_xpairs.size() + pending_events.size();
   }
 
   bool GASNetEXPoller::do_work(TimeLimit work_until)
@@ -3029,6 +3041,12 @@ namespace Realm {
     return !ready_events.empty();
   }
 
+  size_t GASNetEXCompleter::queue_size()
+  {
+    AutoLock<> al(mutex);
+    return ready_events.size();
+  }
+
   bool GASNetEXCompleter::do_work(TimeLimit work_until)
   {
     // grab all the events but don't clear 'has_work' since we don't want
@@ -3117,6 +3135,15 @@ namespace Realm {
   {
     AutoLock<> al(mutex);
     return (head != nullptr);
+  }
+
+  size_t ReverseGetter::queue_size()
+  {
+    AutoLock<> al(mutex);
+    size_t n = 0;
+    for(PendingReverseGet *p = head; p; p = p->next_rget)
+      n++;
+    return n;
   }
 
   bool ReverseGetter::do_work(TimeLimit work_until)
@@ -3566,22 +3593,24 @@ namespace Realm {
 
   void GASNetEXInternal::sample_quiescence_state(NetworkModule::QuiescenceState &state)
   {
-    // any_queue_nonempty: 1 if any of our background-work queues has work
-    //  pending, 0 otherwise.  These are the queues from which a future
-    //  network message could spontaneously originate (e.g., a put-completion
-    //  event firing and enqueuing a put header).  We do NOT include "is a
-    //  worker currently inside push_packets / trigger" here - that produces
-    //  timing-sensitive false negatives on quiescence and is unnecessary
-    //  given the two-round Mattern's stability check at the network.cc level.
-    uint64_t any_queue = 0;
-    if(poller.has_work_remaining())
-      any_queue = 1;
-    else if(injector.has_work_remaining())
-      any_queue = 1;
-    else if(completer.has_work_remaining())
-      any_queue = 1;
-    else if(rgetter.has_work_remaining())
-      any_queue = 1;
+    // queued_items: total count across all four background-work queues
+    //  (injector ready_xpairs, completer ready_events, poller
+    //  critical_xpairs + pending_events, rgetter pending list).  Reporting
+    //  the actual count rather than a 0/1 boolean is critical: a queue
+    //  draining slowly (e.g., pending_events full of GASNet local-completion
+    //  events that haven't fired yet) shows up as "count decreasing" across
+    //  rounds, which the Mattern's stability check correctly classifies as
+    //  PROGRESSING.  A 0/1 boolean would look stable while the queue
+    //  drained, tripping STUCK on a legitimately-draining system.
+    //
+    //  We deliberately use queue size, NOT has_work_remaining(), so that the
+    //  cached "currently inside do_work" flags on the work items don't bleed
+    //  into the quiescence signal.  Mattern's two-round stability handles
+    //  the "worker is mid-execution" case via counter stability across
+    //  rounds; the work_active/has_work flags are timing-sensitive and not
+    //  relevant to whether the system is in a quiescent state.
+    uint64_t queued = (poller.queue_size() + injector.queue_size() +
+                       completer.queue_size() + rgetter.queue_size());
 
     // packets_reserved: cumulative count of network messages this rank has
     //  originated.  Sum across all xpairs (per src/dst endpoint pair).
@@ -3598,13 +3627,17 @@ namespace Realm {
         }
     }
 
-    state.any_queue_nonempty = any_queue;
+    state.queued_items = queued;
     state.packets_reserved = reserved;
     state.packets_received = total_packets_received.load();
     state.pending_completions = compmgr.num_completions_pending();
 
     log_gex_quiesce.debug() << "quiescence sample:"
-                            << " any_queue=" << state.any_queue_nonempty
+                            << " queued=" << state.queued_items
+                            << " (inj=" << injector.queue_size()
+                            << " comp=" << completer.queue_size()
+                            << " poll=" << poller.queue_size()
+                            << " rget=" << rgetter.queue_size() << ")"
                             << " reserved=" << state.packets_reserved
                             << " received=" << state.packets_received
                             << " pending_comps=" << state.pending_completions;

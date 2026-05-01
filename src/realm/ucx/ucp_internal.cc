@@ -1701,12 +1701,15 @@ namespace Realm {
 
     void UCPInternal::sample_quiescence_state(NetworkModule::QuiescenceState &state)
     {
-      // any_queue_nonempty: 1 if there are UCX-level requests still in flight
-      //  (i.e., something we've handed to UCX that hasn't completed yet).
-      //  outstanding_reqs is decremented in request_release() at request
-      //  completion time, so it captures both queued sends and unfinished
-      //  receive operations.
-      state.any_queue_nonempty = (outstanding_reqs.load() > 0) ? 1 : 0;
+      // queued_items: number of UCX-level requests still in flight (things
+      //  we've handed to UCX that haven't completed yet).  outstanding_reqs
+      //  is decremented in request_release() at request completion time, so
+      //  it captures both queued sends and unfinished receive operations.
+      //  Reporting the actual count rather than a 0/1 boolean lets the
+      //  Mattern's-loop stability check see a draining queue (count
+      //  decreasing across rounds) as progress, avoiding spurious STUCK
+      //  during a slow drain of in-flight requests.
+      state.queued_items = outstanding_reqs.load();
 
       // packets_reserved/received: cumulative wire-packet counters.  UCX
       //  separately tracks ordinary AMs (total_msg_*) and remote completion
@@ -1734,12 +1737,11 @@ namespace Realm {
       state.pending_completions = 0;
 
       log_ucp.debug() << "quiescence sample:"
-                      << " any_queue=" << state.any_queue_nonempty
+                      << " queued=" << state.queued_items
                       << " reserved=" << state.packets_reserved << " (msg=" << msg_sent
                       << "+rcomp=" << rcomp_sent << ")"
                       << " received=" << state.packets_received
-                      << " (msg=" << msg_received << "+rcomp=" << rcomp_received << ")"
-                      << " outstanding_reqs=" << outstanding_reqs.load();
+                      << " (msg=" << msg_received << "+rcomp=" << rcomp_received << ")";
 
       // Give the poller threads a chance to make progress before the caller
       //  proceeds to the allreduce.  Mirrors the old "wait_polling on failure"

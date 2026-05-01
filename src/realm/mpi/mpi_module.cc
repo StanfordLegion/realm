@@ -842,7 +842,7 @@ namespace Realm {
     //  imbalance rather than as a queue.  The two-round Mattern's stability
     //  check at the network.cc level catches cases where messages are still
     //  flowing because the counters won't match across consecutive rounds.
-    state.any_queue_nonempty = 0;
+    state.queued_items = 0;
   }
 
   void MPIModule::quiescence_allreduce_sum(const uint64_t *local_counts,

@@ -790,7 +790,7 @@ namespace Realm {
     //  protocol and reported a single bool); if more rigorous quiescence
     //  detection is needed for gasnet1, the per-rank counters would have to
     //  be exposed from the gasnet1 backend.
-    state.any_queue_nonempty = 0;
+    state.queued_items = 0;
     state.packets_reserved = 0;
     state.packets_received = 0;
     state.pending_completions = 0;
