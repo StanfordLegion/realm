@@ -370,6 +370,7 @@ namespace Realm {
       , total_rcomp_sent(0)
       , total_rcomp_received(0)
       , outstanding_reqs(0)
+      , total_reqs_acquired(0)
     {}
 
     UCPInternal::~UCPInternal() { assert(!initialized_ucp && !initialized_boot); }
@@ -1711,6 +1712,13 @@ namespace Realm {
       //  during a slow drain of in-flight requests.
       state.queued_items = outstanding_reqs.load();
 
+      // events_added: monotonic count of requests ever acquired.  Bumped in
+      //  request_get alongside outstanding_reqs.fetch_add(1), but never
+      //  decremented, so even when outstanding_reqs returns to the same
+      //  value across two Mattern's rounds (e.g., a request finished and
+      //  another started), this counter shows the activity.
+      state.events_added = total_reqs_acquired.load();
+
       // packets_reserved/received: cumulative wire-packet counters.  UCX
       //  separately tracks ordinary AMs (total_msg_*) and remote completion
       //  replies (total_rcomp_*), each of which is an independently balanced
@@ -1738,6 +1746,7 @@ namespace Realm {
 
       log_ucp.debug() << "quiescence sample:"
                       << " queued=" << state.queued_items
+                      << " events_added=" << state.events_added
                       << " reserved=" << state.packets_reserved << " (msg=" << msg_sent
                       << "+rcomp=" << rcomp_sent << ")"
                       << " received=" << state.packets_received
@@ -1908,6 +1917,7 @@ namespace Realm {
       req->internal = this;
       req->worker = worker;
       (void)outstanding_reqs.fetch_add(1);
+      (void)total_reqs_acquired.fetch_add(1);
       log_ucp_ar.debug() << "acquired request " << req;
 
       return req;

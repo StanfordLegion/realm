@@ -106,21 +106,25 @@ namespace Realm {
       NetworkModule::QuiescenceState local;
       single_network->sample_quiescence_state(local);
 
-      // Allreduce the four fields.  All four use SUM:
+      // Allreduce the five fields.  All use SUM:
       //   queued_items: each rank contributes its current queue-item count;
       //     sum > 0 means at least one rank has work queued, AND draining
       //     queues register as "progressing" (sum decreasing) rather than
       //     "stuck" (sum unchanged at non-zero)
+      //   events_added: monotonic count of items ever added to any queue;
+      //     required to detect activity in cases where queued_items happens
+      //     to be the same value across rounds while contents flowed through
       //   packets_reserved/received: cumulative counts; sum across ranks
       //   pending_completions: count per rank; sum > 0 means at least one
       //     rank is waiting on a remote completion
-      uint64_t local_arr[4] = {local.queued_items, local.packets_reserved,
-                               local.packets_received, local.pending_completions};
-      uint64_t total_arr[4] = {0, 0, 0, 0};
-      single_network->quiescence_allreduce_sum(local_arr, total_arr, 4);
+      uint64_t local_arr[5] = {local.queued_items, local.events_added,
+                               local.packets_reserved, local.packets_received,
+                               local.pending_completions};
+      uint64_t total_arr[5] = {0, 0, 0, 0, 0};
+      single_network->quiescence_allreduce_sum(local_arr, total_arr, 5);
 
       NetworkModule::QuiescenceState totals = {total_arr[0], total_arr[1], total_arr[2],
-                                               total_arr[3]};
+                                               total_arr[3], total_arr[4]};
 
       // Quiet means: no rank has anything queued, no rank is waiting on a
       //  remote completion, and the cumulative sent/received counts balance
@@ -136,8 +140,11 @@ namespace Realm {
       //  etc. - the counters will differ, and we restart.  Two-round
       //  agreement rules out the ghost-message scenario where a work item
       //  runs between rounds and produces a send that happens to be in
-      //  flight at exactly the wrong moment.  Crucially, queued_items being
-      //  a count rather than a 0/1 boolean means a draining queue gets
+      //  flight at exactly the wrong moment.  events_added is a monotonic
+      //  counter, so any add+remove activity that nets to zero in
+      //  queued_items between the two rounds still registers as a change
+      //  here and forces another round.  Crucially, queued_items being a
+      //  count rather than a 0/1 boolean means a draining queue gets
       //  detected as "not stable" and the algorithm waits patiently rather
       //  than firing STUCK on a slow-but-progressing drain.
       bool stable =
@@ -146,7 +153,8 @@ namespace Realm {
           (totals.packets_received == QuiescenceCheck::prev_totals.packets_received) &&
           (totals.pending_completions ==
            QuiescenceCheck::prev_totals.pending_completions) &&
-          (totals.queued_items == QuiescenceCheck::prev_totals.queued_items);
+          (totals.queued_items == QuiescenceCheck::prev_totals.queued_items) &&
+          (totals.events_added == QuiescenceCheck::prev_totals.events_added);
 
       if(quiet_now && stable) {
         // both rounds agreed on a quiet state - termination confirmed
@@ -429,7 +437,7 @@ namespace Realm {
   {
     // single-rank loopback: nothing to send to anyone, nothing in flight.
     //  All counters are zero, no queues, no pending.
-    state = QuiescenceState{0, 0, 0, 0};
+    state = QuiescenceState{0, 0, 0, 0, 0};
   }
 
   void LoopbackNetworkModule::quiescence_allreduce_sum(const uint64_t *local_counts,

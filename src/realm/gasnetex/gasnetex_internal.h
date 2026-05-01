@@ -786,6 +786,18 @@ namespace Realm {
     // TODO: split counter into per-thread values to avoid contention?
     atomic<uint64_t> total_packets_received;
 
+    // Monotonic count of items ever added to any of the four background-work
+    //  queues (injector ready_xpairs, poller critical_xpairs/pending_events,
+    //  completer ready_events, rgetter pending list).  Sampled by
+    //  sample_quiescence_state and reduced via SUM as
+    //  QuiescenceState::events_added.  Required because queued_items is a
+    //  snapshot count that can be the same across rounds while items flow
+    //  through (e.g., a put-completion event firing pops 1 from
+    //  pending_events and adds 1 to ready_xpairs - net change 0 in
+    //  queued_items, but real activity).  Bumped at the same sites that call
+    //  make_active() / push_back into a queue.
+    atomic<uint64_t> total_events_added;
+
     // manage a single open databuf for all endpoints
     Mutex databuf_mutex;
     OutbufMetadata *databuf_md;

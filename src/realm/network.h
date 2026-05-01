@@ -218,12 +218,24 @@ namespace Realm {
       // total number of items currently queued on this rank that could
       //  produce a future network operation: work-item queues (injector,
       //  completer, poller, rgetter), pending in-flight requests, etc.
-      //  This is a COUNT, not a 0/1 boolean, because a draining queue must
-      //  register as "progressing" (count decreasing across rounds) rather
-      //  than "stuck" (count unchanged).  A queue going 5 -> 4 -> 3 -> ...
-      //  -> 0 is the legitimate "slow drain" pattern; a queue stuck at 5
-      //  forever indicates a real bug.  Reduced via SUM.
+      //  This is a SNAPSHOT (rises and falls); for stability detection it
+      //  must be combined with events_added (monotonic) so that a queue
+      //  whose count happens to stay the same across rounds while items
+      //  flow through still registers as activity.  Reduced via SUM.
       uint64_t queued_items;
+      // monotonic count of items ever added to any queue on this rank.
+      //  REQUIRED for stability detection: queued_items alone can be the
+      //  same value across two consecutive rounds while the queue
+      //  contents change (e.g., a put-completion event firing pops 1 from
+      //  pending_events and adds 1 to ready_xpairs - net change in
+      //  queued_items is zero, but real work happened).  events_added
+      //  goes up whenever any queue gains an entry, so concurrent
+      //  add+remove activity that nets to zero in queued_items still
+      //  shows as a change in events_added.  Together with queued_items
+      //  (snapshot) this fully captures queue-level activity: pure pops
+      //  show up as queued_items decreasing, pure adds show up in both,
+      //  and balanced add+pop shows up in events_added.  Reduced via SUM.
+      uint64_t events_added;
       // cumulative count of network messages this rank has originated.
       //  At quiescence, sum across ranks must equal sum of packets_received
       uint64_t packets_reserved;
@@ -232,7 +244,11 @@ namespace Realm {
       //  drain in Network::check_for_quiescence delivered to handlers
       uint64_t packets_received;
       // count of pending remote completions on this rank waiting for replies
-      //  to arrive; reduced via SUM
+      //  to arrive; reduced via SUM.  This field is also a snapshot (rises
+      //  and falls), but its only "decrement-without-monotonic-bump" path
+      //  is comp_reply receipt, which is immediately visible as a change
+      //  to pending_completions itself, so the stability check on this
+      //  field alone is sufficient.
       uint64_t pending_completions;
     };
 

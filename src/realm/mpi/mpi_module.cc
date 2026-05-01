@@ -843,6 +843,10 @@ namespace Realm {
     //  check at the network.cc level catches cases where messages are still
     //  flowing because the counters won't match across consecutive rounds.
     state.queued_items = 0;
+    // No queues, so no monotonic add counter to track either.  Activity
+    //  shows up exclusively in packets_reserved/received imbalances, which
+    //  the stability check already monitors.
+    state.events_added = 0;
   }
 
   void MPIModule::quiescence_allreduce_sum(const uint64_t *local_counts,

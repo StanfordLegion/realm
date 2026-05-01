@@ -2706,6 +2706,7 @@ namespace Realm {
       new_work = ready_xpairs.empty();
       ready_xpairs.push_back(xpair);
     }
+    internal->total_events_added.fetch_add(1);
 
     if(new_work)
       make_active();
@@ -2816,6 +2817,7 @@ namespace Realm {
       AutoLock<> al(mutex);
       critical_xpairs.push_back(xpair);
     }
+    internal->total_events_added.fetch_add(1);
     // no need to signal because the poller is always awake
   }
 
@@ -2835,6 +2837,7 @@ namespace Realm {
       AutoLock<> al(mutex);
       pending_events.push_back(event);
     }
+    internal->total_events_added.fetch_add(1);
     // no need to signal because the poller is always awake
   }
 
@@ -3015,14 +3018,18 @@ namespace Realm {
   void GASNetEXCompleter::add_ready_events(GASNetEXEvent::EventList &newly_ready)
   {
     bool enqueue = false;
+    size_t added = 0;
 
     if(!newly_ready.empty()) {
       AutoLock<> al(mutex);
       // use has_work rather than list emptiness to decide whether to enqueue
       enqueue = !has_work.load();
       has_work.store(true);
+      added = newly_ready.size();
       ready_events.absorb_append(newly_ready);
     }
+    if(added > 0)
+      internal->total_events_added.fetch_add(added);
 
     if(enqueue)
       make_active();
@@ -3127,6 +3134,7 @@ namespace Realm {
       *tailp = rget;
       tailp = &rget->next_rget;
     }
+    internal->total_events_added.fetch_add(1);
     if(was_empty)
       make_active();
   }
@@ -3241,6 +3249,7 @@ namespace Realm {
     , completer(this)
     , rgetter(this)
     , total_packets_received(0)
+    , total_events_added(0)
     , databuf_md(nullptr)
   {}
 
@@ -3628,6 +3637,7 @@ namespace Realm {
     }
 
     state.queued_items = queued;
+    state.events_added = total_events_added.load();
     state.packets_reserved = reserved;
     state.packets_received = total_packets_received.load();
     state.pending_completions = compmgr.num_completions_pending();
@@ -3638,6 +3648,7 @@ namespace Realm {
                             << " comp=" << completer.queue_size()
                             << " poll=" << poller.queue_size()
                             << " rget=" << rgetter.queue_size() << ")"
+                            << " events_added=" << state.events_added
                             << " reserved=" << state.packets_reserved
                             << " received=" << state.packets_received
                             << " pending_comps=" << state.pending_completions;

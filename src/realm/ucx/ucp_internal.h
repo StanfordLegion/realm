@@ -273,6 +273,12 @@ namespace Realm {
       atomic<uint64_t> total_rcomp_sent;
       atomic<uint64_t> total_rcomp_received;
       atomic<uint64_t> outstanding_reqs;
+      // Monotonic count of requests ever acquired (mirrors
+      //  outstanding_reqs.fetch_add(1) in request_get but never decrements).
+      //  Sampled as QuiescenceState::events_added so the Mattern's stability
+      //  check can detect activity even when outstanding_reqs is the same
+      //  value across rounds while individual requests come and go.
+      atomic<uint64_t> total_reqs_acquired;
       MPool *rcba_mp;
       SpinLock rcba_mp_spinlock;
       size_t ib_seg_size;
