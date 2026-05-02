@@ -2738,8 +2738,17 @@ namespace Realm {
 
   size_t GASNetEXInjector::queue_size()
   {
+    // Include work_active so that an xpair that has been popped from
+    //  ready_xpairs but is currently being processed by push_packets is
+    //  still counted as in-flight work.  Without this, the quiescence check
+    //  can declare DONE while a worker has the xpair on its stack, and a
+    //  subsequent re-enqueue from push_packets ends up in a queue that
+    //  detach() has already drained - the locked push_mutex_check then
+    //  trips the MutexChecker assertion at xpair destruction.  This was
+    //  the exact failure that commit 30da2be37b ("Fix GASNet Races") fixed
+    //  by adding work_active to has_work_remaining.
     AutoLock<> al(mutex);
-    return ready_xpairs.size();
+    return ready_xpairs.size() + (work_active.load() ? 1 : 0);
   }
 
   bool GASNetEXInjector::do_work(TimeLimit work_until)
@@ -2851,8 +2860,11 @@ namespace Realm {
 
   size_t GASNetEXPoller::queue_size()
   {
+    // See GASNetEXInjector::queue_size: work_active covers the window
+    //  between "items dequeued from critical_xpairs/pending_events" and
+    //  "do_work returns".
     AutoLock<> al(mutex);
-    return critical_xpairs.size() + pending_events.size();
+    return critical_xpairs.size() + pending_events.size() + (work_active.load() ? 1 : 0);
   }
 
   bool GASNetEXPoller::do_work(TimeLimit work_until)
@@ -3050,8 +3062,19 @@ namespace Realm {
 
   size_t GASNetEXCompleter::queue_size()
   {
+    // do_work swaps ready_events into a worker-local todo before processing,
+    //  so during a trigger run ready_events is empty even though events are
+    //  in flight on the worker's stack.  has_work captures that window: it
+    //  stays true from add_ready_events until do_work observes both
+    //  ready_events and todo empty.  Count the in-flight events so the
+    //  quiescence check doesn't declare DONE mid-trigger.  See
+    //  GASNetEXInjector::queue_size for the full rationale (this is the
+    //  completer-equivalent of the work_active flag added in 30da2be37b).
     AutoLock<> al(mutex);
-    return ready_events.size();
+    size_t n = ready_events.size();
+    if(has_work.load() && n == 0)
+      n = 1;
+    return n;
   }
 
   bool GASNetEXCompleter::do_work(TimeLimit work_until)
