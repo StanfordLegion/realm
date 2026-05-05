@@ -1,0 +1,9 @@
+<map id="Realm::QueryPredicate&lt; T, T2 &gt;" name="Realm::QueryPredicate&lt; T, T2 &gt;">
+<area shape="rect" id="Node000001" title=" " alt="" coords="5,69,177,109"/>
+<area shape="rect" id="Node000002" href="$classRealm_1_1MemoryHasMemAffinityPredicate.html" title=" " alt="" coords="225,5,513,45"/>
+<area shape="poly" id="edge1_Node000001_Node000002" title=" " alt="" coords="187,64,225,55,277,43,278,48,226,60,188,69"/>
+<area shape="rect" id="Node000003" href="$classRealm_1_1MemoryHasProcAffinityPredicate.html" title=" " alt="" coords="225,69,513,109"/>
+<area shape="poly" id="edge2_Node000001_Node000003" title=" " alt="" coords="191,87,225,87,225,92,191,92"/>
+<area shape="rect" id="Node000004" href="$classRealm_1_1ProcessorHasAffinityPredicate.html" title=" " alt="" coords="243,134,495,189"/>
+<area shape="poly" id="edge3_Node000001_Node000004" title=" " alt="" coords="183,110,264,131,263,137,182,115"/>
+</map>

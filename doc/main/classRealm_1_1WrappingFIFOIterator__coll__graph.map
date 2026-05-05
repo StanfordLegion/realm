@@ -1,0 +1,9 @@
+<map id="Realm::WrappingFIFOIterator" name="Realm::WrappingFIFOIterator">
+<area shape="rect" id="Node000001" title=" " alt="" coords="667,41,879,67"/>
+<area shape="rect" id="Node000002" href="$classRealm_1_1TransferIterator.html" title=" " alt="" coords="307,5,479,31"/>
+<area shape="poly" id="edge1_Node000001_Node000002" title=" " alt="" coords="492,25,667,41,666,47,492,30"/>
+<area shape="rect" id="Node000003" href="$classRealm_1_1Serialization_1_1PolymorphicSerdezSubclass.html" title=" " alt="" coords="277,55,508,125"/>
+<area shape="poly" id="edge2_Node000001_Node000003" title=" " alt="" coords="522,75,666,61,667,67,522,80"/>
+<area shape="rect" id="Node000004" href="$classRealm_1_1Serialization_1_1PolymorphicSerdezIntfc.html" title=" " alt="" coords="5,70,228,110"/>
+<area shape="poly" id="edge3_Node000003_Node000004" title=" " alt="" coords="242,87,277,87,277,93,242,93"/>
+</map>
