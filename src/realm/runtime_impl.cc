@@ -25,6 +25,7 @@
 #include "realm/transfer/ib_memory.h"
 
 #include "realm/activemsg.h"
+#include "realm/deppart/deppart_config.h"
 #include "realm/deppart/preimage.h"
 
 #include "realm/cmdline.h"
@@ -2099,18 +2100,7 @@ namespace Realm {
         network_segments.push_back(seg);
     }
 
-    // attach to the network
-    for(std::vector<NetworkModule *>::const_iterator it = network_modules.begin();
-        it != network_modules.end(); it++)
-      (*it)->attach(this, network_segments);
 
-    {
-      // try to get all nodes to have roughly the same idea of the "zero
-      //  "time" by using network barriers
-      Network::barrier();
-      Realm::Clock::set_zero_time();
-      Network::barrier();
-    }
 
 #ifdef DEADLOCK_TRACE
     next_thread = 0;
@@ -2153,6 +2143,18 @@ namespace Realm {
 
     PartitioningOpQueue::start_worker_threads(*core_reservations, &bgwork);
 
+    // attach to the network
+      for(std::vector<NetworkModule *>::const_iterator it = network_modules.begin();
+          it != network_modules.end(); it++)
+        (*it)->attach(this, network_segments);
+
+      {
+        // try to get all nodes to have roughly the same idea of the "zero
+        //  "time" by using network barriers
+        Network::barrier();
+        Realm::Clock::set_zero_time();
+        Network::barrier();
+      }
 #ifdef EVENT_TRACING
     // Always initialize even if we won't dump to file, otherwise segfaults happen
     // when we try to save event info

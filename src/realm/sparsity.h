@@ -30,6 +30,7 @@
 #include "realm/atomics.h"
 
 #include <iostream>
+#include <mutex>
 #include <vector>
 
 /**
@@ -147,15 +148,42 @@ namespace Realm {
   REALM_PUBLIC_API std::ostream &operator<<(std::ostream &os, SparsityMap<N, T> s);
 
   template <int N, typename T>
-  struct SparsityMapEntry {
-    Rect<N, T> bounds;
-    SparsityMap<N, T> sparsity;
-    HierarchicalBitMap<N, T> *bitmap;
-  };
+  struct REALM_INTERNAL_API_EXTERNAL_LINKAGE CPU_BVH {
+    struct Node {
+      Rect<N, T> bounds;
+      int left = -1;
+      int right = -1;
 
-  template <int N, typename T>
-  REALM_PUBLIC_API std::ostream &operator<<(std::ostream &os,
-                                            const SparsityMapEntry<N, T> &entry);
+      // range in leaf_entries covered by this subtree
+      uint32_t begin = 0;
+      uint32_t end = 0;
+
+      bool is_leaf() const { return left < 0; }
+    };
+
+    std::vector<Node> nodes;
+    std::vector<uint32_t> leaf_entries;
+    int root = -1;
+
+    bool valid() const {
+      return root >= 0;
+    }
+
+    void clear() {
+      nodes.clear();
+      leaf_entries.clear();
+      root = -1;
+    }
+
+    bool contains(const span<Rect<N,T>>& entries,
+                  const Point<N,T>& p) const;
+
+    bool contains_any(const span<Rect<N,T>>& entries,
+                      const Rect<N,T>& r) const;
+
+    bool contains_all(const span<Rect<N,T>>& entries,
+                      const Rect<N,T>& r) const;
+  };
 
   /**
    * \class SparsityMapPublicImpl
@@ -172,6 +200,12 @@ namespace Realm {
   protected:
     // cannot be constructed directly
     SparsityMapPublicImpl(void);
+
+    int choose_bvh_split_axis(const std::vector<uint32_t>& entry_ids,
+                                size_t lo, size_t hi) const;
+    bool bvh_centroid_less(int axis, uint32_t a, uint32_t b) const;
+    int build_bvh_subtree(CPU_BVH<N, T> &bvh, std::vector<uint32_t> &entry_ids,
+                          size_t lo, size_t hi) const;
 
   public:
     /**
@@ -197,15 +231,11 @@ namespace Realm {
     bool is_valid(bool precise = true);
 
     /**
-     * Get the entries of this sparsity map.
-     * A sparsity map entry is similar to an IndexSpace - it's a rectangle and
-     * optionally a reference to another SparsityMap OR a pointer to a
-     * HierarchicalBitMap, which is a dense array of bits describing the
-     * validity of each point in the rectangle.
-     * @return the entries of this sparsity map
+     * Get the rectangles of this sparsity map.
+     * @return the rectangles of this sparsity map
      */
     REALM_PUBLIC_API
-    const std::vector<SparsityMapEntry<N, T>> &get_entries(void);
+    const span<Rect<N, T>> get_entries(void);
 
     /**
      * Get the approximate rectangles of this sparsity map.
@@ -215,7 +245,7 @@ namespace Realm {
      * @return the approximate rectangles of this sparsity map
      */
     REALM_PUBLIC_API
-    const std::vector<Rect<N, T>> &get_approx_rects(void);
+    const span<Rect<N, T>> get_approx_rects(void);
 
     /**
      * Check if this sparsity map overlaps another sparsity map.
@@ -244,10 +274,44 @@ namespace Realm {
     bool compute_covering(const Rect<N, T> &bounds, size_t max_rects, int max_overhead,
                           std::vector<Rect<N, T>> &covering);
 
+    /**
+     * If this sparsity map doesn't already have an acceleration structure,
+     * build a BVH over the entries.
+     */
+    REALM_PUBLIC_API
+    void request_bvh(void);
+
+    /**
+     * Determine whether this sparsity map has an acceleration structure.
+     * @return true if the sparsity map has a valid bvh, false otherwise
+     */
+    bool has_bvh() const;
+
+    CPU_BVH<N, T> entries_bvh;
+
+
+
   protected:
-    atomic<bool> entries_valid{false}, approx_valid{false};
-    std::vector<SparsityMapEntry<N, T>> entries;
-    std::vector<Rect<N, T>> approx_rects;
+    atomic<bool> entries_valid{false}, approx_valid{false}, bvh_valid{false};
+
+    std::mutex bvh_mutex;
+
+    //BOTH RegionInstance and vector are returned as a span
+    //only on can be valid (i.e. only finalize or gpu_finalize can be called, not both)
+
+    //Stores rectangles for CPU deppart (easy manipulation for sort/merge entries)
+    std::vector<Rect<N,T> > entries;
+    std::vector<Rect<N,T> > approx_rects;
+
+    // Stores rectangles for GPU deppart in host buffers owned by the sparsity map.
+    Rect<N, T> *gpu_entries = nullptr;
+    size_t num_entries = 0;
+
+    Rect<N, T> *gpu_approx_rects = nullptr;
+    size_t num_approx = 0;
+
+    //Tracks whether to use instance or vector
+    bool from_gpu = false;
   };
 
 }; // namespace Realm

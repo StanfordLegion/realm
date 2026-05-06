@@ -647,8 +647,10 @@ namespace Realm {
       // as_map.rbegin()->second << "\n";
       //  bigger than everything - see if we can merge with the last guy
       T &last = as_map.rbegin()->second;
-      if(last == (r.lo[0] - 1))
-        last = r.hi[0];
+      if(last >= (r.lo[0] - 1)) {
+        if (last < r.hi[0])
+          last = r.hi[0];
+      }
       else if(last < (r.lo[0] - 1))
         as_map[r.lo[0]] = r.hi[0];
     } else {

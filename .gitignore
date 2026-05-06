@@ -21,6 +21,7 @@ install/
 .idea/
 .vscode/
 .cursor/
+.codex
 
 # clangd LSP cache
 .cache/

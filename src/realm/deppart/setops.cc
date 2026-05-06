@@ -1073,15 +1073,12 @@ namespace Realm {
 	bitmask.add_rect(it->bounds);
       } else {
 	SparsityMapImpl<N,T> *impl = SparsityMapImpl<N,T>::lookup(it->sparsity);
-	const std::vector<SparsityMapEntry<N,T> >& entries = impl->get_entries();
-	for(typename std::vector<SparsityMapEntry<N,T> >::const_iterator it2 = entries.begin();
-	    it2 != entries.end();
-	    it2++) {
-	  Rect<N,T> isect = it->bounds.intersection(it2->bounds);
+	span<Rect<N, T>> entries = impl->get_entries();
+	for(size_t i = 0; i < entries.size(); i++) {
+          Rect<N, T> entry = entries[i];
+	  Rect<N,T> isect = it->bounds.intersection(entry);
 	  if(isect.empty())
 	    continue;
-	  assert(!it2->sparsity.exists());
-	  assert(it2->bitmap == 0);
 	  bitmask.add_rect(isect);
 	}
       }
@@ -1440,15 +1437,12 @@ namespace Realm {
       todo.push_back(lhs.bounds);
     } else {
       SparsityMapImpl<N,T> *l_impl = SparsityMapImpl<N,T>::lookup(lhs.sparsity);
-      const std::vector<SparsityMapEntry<N,T> >& entries = l_impl->get_entries();
-      for(typename std::vector<SparsityMapEntry<N,T> >::const_iterator it = entries.begin();
-	  it != entries.end();
-	  it++) {
-	Rect<N,T> isect = lhs.bounds.intersection(it->bounds);
+      span<Rect<N, T>> entries = l_impl->get_entries();
+      for(size_t i = 0; i < entries.size(); i++) {
+        Rect<N, T> entry = entries[i];
+	Rect<N,T> isect = lhs.bounds.intersection(entry);
 	if(isect.empty())
 	  continue;
-	assert(!it->sparsity.exists());
-	assert(it->bitmap == 0);
 	todo.push_back(isect);
       }
     }

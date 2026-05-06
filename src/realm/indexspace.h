@@ -29,6 +29,7 @@
 
 #include "realm/realm_c.h"
 #include "realm/realm_config.h"
+#include "realm/realm_assert.h"
 #include "realm/sparsity.h"
 #include "realm/dynamic_templates.h"
 
@@ -108,6 +109,26 @@ namespace Realm {
     IS index_space;
     RegionInstance inst;
     size_t field_offset;
+    RegionInstance scratch_buffer = RegionInstance::NO_INST;
+  };
+
+  template <int N, typename T>
+  struct DeppartSubspace {
+    IndexSpace<N, T> space;
+    size_t entries;
+  };
+
+  template <int N, typename T>
+  struct DeppartEstimateInput {
+    IndexSpace<N, T> space;
+    Memory location;
+  };
+
+  struct DeppartBufferRequirements {
+    size_t lower_bound = 0;
+    size_t upper_bound = 0;
+    size_t minimum_alignment = 0;
+    Processor affinity_processor;
   };
 
   /**
@@ -716,6 +737,10 @@ namespace Realm {
         const std::vector<FT> &colors, std::vector<IndexSpace<N, T>> &subspaces,
         const ProfilingRequestSet &reqs, Event wait_on = Event::NO_EVENT) const;
 
+    REALM_PUBLIC_API void by_field_buffer_requirements(
+        const std::vector<DeppartEstimateInput<N,T>>& inputs,
+        std::vector<DeppartBufferRequirements>& requirements) const;
+
     ///@{
     /**
      * Allows the "function" described by the field to be composed with a
@@ -780,7 +805,16 @@ namespace Realm {
         const std::vector<IndexSpace<N2, T2>> &sources,
         std::vector<IndexSpace<N, T>> &images, const ProfilingRequestSet &reqs,
         Event wait_on = Event::NO_EVENT) const;
+
+    template<int N2, typename T2>
+    REALM_PUBLIC_API void by_image_buffer_requirements(
+        const std::vector<DeppartSubspace<N2,T2>>& source_spaces,
+        const std::vector<DeppartEstimateInput<N2,T2>>& inputs,
+        std::vector<DeppartBufferRequirements>& requirements) const;
+
+
     ///@}
+
 
     ///@{
     /**
@@ -898,6 +932,12 @@ namespace Realm {
         const std::vector<IndexSpace<N2, T2>> &targets,
         std::vector<IndexSpace<N, T>> &preimages, const ProfilingRequestSet &reqs,
         Event wait_on = Event::NO_EVENT) const;
+
+    template<int N2, typename T2>
+    REALM_PUBLIC_API void by_preimage_buffer_requirements(
+        const std::vector<DeppartSubspace<N2,T2>>& target_spaces,
+        const std::vector<DeppartEstimateInput<N,T>>& inputs,
+        std::vector<DeppartBufferRequirements>& requirements) const;
     ///@}
 
     ///@{

@@ -1,5 +1,5 @@
 /*
- * Copyright 2025 Stanford University, NVIDIA Corporation
+* Copyright 2025 Stanford University, NVIDIA Corporation
  * SPDX-License-Identifier: Apache-2.0
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -28,30 +28,41 @@
 #endif
 
 #define FOREACH_TT(__func__) \
-  __func__(int,int) \
-  __func__(int,unsigned) \
-  __func__(int,long long) \
-  __func__(unsigned,int) \
-  __func__(unsigned,unsigned) \
-  __func__(unsigned,long long) \
-  __func__(long long,int) \
-  __func__(long long,unsigned) \
-  __func__(long long,long long)
+__func__(int,int) \
+__func__(int,unsigned) \
+__func__(int,long long) \
+__func__(unsigned,int) \
+__func__(unsigned,unsigned) \
+__func__(unsigned,long long) \
+__func__(long long,int) \
+__func__(long long,unsigned) \
+__func__(long long,long long)
 
 namespace Realm {
 
 #define N1 INST_N1
 #define N2 INST_N2
 
+#ifdef REALM_USE_CUDA
+  #define GPU_PREIMAGE_LINE(N1,T1,N2,T2) template class GPUPreimageMicroOp<N1, T1, N2, T2>;
+#else
+  #define GPU_PREIMAGE_LINE(N1,T1,N2,T2) /* no CUDA */
+#endif
+
 #define DOIT(T1,T2)			    \
-  template class PreimageMicroOp<N1,T1,N2,T2>; \
-  template class StructuredPreimageMicroOp<N1,T1,N2,T2>; \
-  template class PreimageOperation<N1,T1,N2,T2>; \
-  template PreimageMicroOp<N1,T1,N2,T2>::PreimageMicroOp(NodeID, AsyncMicroOp *, Serialization::FixedBufferDeserializer&); \
-  template Event IndexSpace<N1, T1>::create_subspaces_by_preimage(            \
-      const DomainTransform<N2, T2, N1, T1> &, const std::vector<IndexSpace<N2, T2> > &,            \
-      std::vector<IndexSpace<N1, T1> > &, const ProfilingRequestSet &, Event) \
-      const;
+template class PreimageMicroOp<N1,T1,N2,T2>; \
+GPU_PREIMAGE_LINE(N1,T1,N2,T2) \
+template class StructuredPreimageMicroOp<N1,T1,N2,T2>; \
+template class PreimageOperation<N1,T1,N2,T2>; \
+template PreimageMicroOp<N1,T1,N2,T2>::PreimageMicroOp(NodeID, AsyncMicroOp *, Serialization::FixedBufferDeserializer&); \
+template void IndexSpace<N1, T1>::by_preimage_buffer_requirements(						     \
+	const std::vector<DeppartSubspace<N2,T2>>&,							     \
+	const std::vector<DeppartEstimateInput<N1,T1>>&,							     \
+	std::vector<DeppartBufferRequirements>&) const;	\
+template Event IndexSpace<N1, T1>::create_subspaces_by_preimage(            \
+const DomainTransform<N2, T2, N1, T1> &, const std::vector<IndexSpace<N2, T2> > &,            \
+std::vector<IndexSpace<N1, T1> > &, const ProfilingRequestSet &, Event) \
+const;
 
   FOREACH_TT(DOIT)
 

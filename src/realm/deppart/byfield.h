@@ -21,6 +21,7 @@
 #define REALM_DEPPART_BYFIELD_H
 
 #include "realm/deppart/partitions.h"
+#include "realm/deppart/rectlist.h"
 
 namespace Realm {
 
@@ -67,6 +68,48 @@ namespace Realm {
     std::map<FT, SparsityMap<N,T> > sparsity_outputs;
   };
 
+#ifdef REALM_USE_CUDA
+
+  template<int N, typename T, typename FT>
+    class GPUByFieldMicroOp : public GPUMicroOp<N, T> {
+  public:
+    static const int DIM = N;
+    typedef T IDXTYPE;
+    typedef FT FIELDTYPE;
+
+    GPUByFieldMicroOp(
+        const IndexSpace<N, T> &_parent,
+        std::vector<FieldDataDescriptor<IndexSpace<N,T>,FT> > _field_data,
+        bool _exclusive);
+
+    virtual ~GPUByFieldMicroOp(void);
+
+    virtual void execute(void);
+
+    void dispatch(PartitioningOperation *op, bool inline_ok);
+
+    void add_sparsity_output(FT _val, SparsityMap<N, T> _sparsity);
+
+  protected:
+    friend struct RemoteMicroOpMessage<GPUByFieldMicroOp<N,T,FT> >;
+    static ActiveMessageHandlerReg<RemoteMicroOpMessage<GPUByFieldMicroOp<N,T,FT> > > areg;
+
+    friend class PartitioningMicroOp;
+    template <typename S>
+    REALM_ATTR_WARN_UNUSED(bool serialize_params(S& s) const);
+
+    // construct from received packet
+    template <typename S>
+    GPUByFieldMicroOp(NodeID _requestor, AsyncMicroOp *_async_microop, S& s);
+
+    IndexSpace<N, T> parent_space;
+    std::vector<FieldDataDescriptor<IndexSpace<N,T>,FT> > field_data;
+    std::vector<FT> colors;
+    std::map<FT, SparsityMap<N,T> > sparsity_outputs;
+  };
+
+#endif
+
   template <int N, typename T, typename FT>
   class ByFieldOperation : public PartitioningOperation {
   public:
@@ -84,10 +127,13 @@ namespace Realm {
     virtual void print(std::ostream& os) const;
 
   protected:
+    NodeID exclusive_gpu_exec_node(void) const;
+
     IndexSpace<N,T> parent;
     std::vector<FieldDataDescriptor<IndexSpace<N,T>,FT> > field_data;
     std::vector<FT> colors;
     std::vector<SparsityMap<N,T> > subspaces;
+    int exclusive_gpu_owner;
   };
     
 };

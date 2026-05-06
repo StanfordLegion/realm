@@ -412,6 +412,7 @@ namespace Realm {
       get_null_task_stream(void) const; // needed by librealm_kokkos.so
       GPUStream *get_next_task_stream(bool create = false);
       GPUStream *get_next_d2d_stream();
+      GPUStream *get_deppart_stream() const;
 
       void launch_batch_affine_fill_kernel(void *fill_info, size_t dim, size_t elemSize,
                                            size_t volume, GPUStream *stream);
@@ -496,6 +497,8 @@ namespace Realm {
       GPUStream *host_to_device_stream = nullptr;
       GPUStream *device_to_host_stream = nullptr;
       GPUStream *device_to_device_stream = nullptr;
+      GPUStream *deppart_stream = nullptr;
+
       std::vector<GPUStream *> device_to_device_streams;
       std::vector<GPUStream *> peer_to_peer_streams; // indexed by target
       std::vector<GPUStream *> task_streams;

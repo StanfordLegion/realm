@@ -30,10 +30,22 @@ namespace Realm {
     extern bool cfg_disable_intersection_optimization;
     extern int cfg_max_rects_in_approximation;
     extern bool cfg_worker_threads_sleep;
+    extern size_t cfg_host_pool_size;
 
   };
+
+  void *deppart_host_alloc_bytes(size_t bytes, size_t alignment);
+  void deppart_host_free(void *ptr);
+  void deppart_host_pool_shutdown(void);
+
+  template <typename T>
+  inline T *deppart_host_alloc(size_t count)
+  {
+    if(count == 0)
+      return nullptr;
+    return static_cast<T *>(deppart_host_alloc_bytes(count * sizeof(T), alignof(T)));
+  }
 
 }; // namespace Realm
 
 #endif // defined REALM_DEPPART_CONFIG_H
-

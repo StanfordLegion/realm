@@ -1058,6 +1058,11 @@ namespace Realm {
       return device_to_device_streams[d2d_stream_index];
     }
 
+    GPUStream *GPU::get_deppart_stream() const
+    {
+      return deppart_stream;
+    }
+
     static void launch_kernel(const Realm::Cuda::GPU::GPUFuncInfo &func_info,
                               void *params, size_t num_elems, GPUStream *stream)
     {
@@ -2052,6 +2057,7 @@ namespace Realm {
 
       host_to_device_stream = new GPUStream(this, worker);
       device_to_host_stream = new GPUStream(this, worker);
+      deppart_stream = new GPUStream(this, worker);
 
       CUdevice dev;
       int numSMs;
@@ -2185,6 +2191,7 @@ namespace Realm {
       // destroy streams
       delete host_to_device_stream;
       delete device_to_host_stream;
+      delete deppart_stream;
 
       delete_container_contents(device_to_device_streams);
 
