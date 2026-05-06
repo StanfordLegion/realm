@@ -899,9 +899,17 @@ namespace Realm {
         assert(grp_index < (1 << LOG2_MAXGROUPS));
       }
     }
-    // increment the num_groups - it's ok if these increments happen out of
-    //  order
-    num_groups.fetch_add(1);
+    // monotonically advance num_groups to at least grp_index + 1.  fetch_add
+    //  is incorrect here: when a concurrent allocator is preempted between
+    //  its successful CAS into groups[] and its update of num_groups, a later
+    //  allocator can read the stale num_groups, collide on the lower slot, and
+    //  win CAS at a higher grp_index.  if that higher-index thread then
+    //  finishes (with fetch_add it would advance num_groups by only 1) and
+    //  hands its newly-indexed completion to a caller that sends an AM, the
+    //  reply's lookup_completion sees grp_index >= num_groups and aborts even
+    //  though groups[grp_index] is fully populated.  fetch_max ensures
+    //  num_groups always covers the highest populated slot.
+    num_groups.fetch_max(grp_index + 1);
 
     // give all these new completions their indices and pointer to us
     for(size_t i = 0; i < (1 << PendingCompletionGroup::LOG2_GROUPSIZE); i++) {
