@@ -1,0 +1,11 @@
+<map id="Realm::XferDesPortInfo" name="Realm::XferDesPortInfo">
+<area shape="rect" id="Node000001" title=" " alt="" coords="268,93,443,119"/>
+<area shape="rect" id="Node000002" href="$classRealm_1_1Memory.html" title=" " alt="" coords="5,5,132,31"/>
+<area shape="poly" id="edge1_Node000001_Node000002" title=" " alt="" coords="121,32,318,91,316,96,119,37"/>
+<area shape="poly" id="edge2_Node000002_Node000002" title=" " alt="" coords="147,10,159,18,150,26,133,28,132,23,148,21,153,18,144,14"/>
+<area shape="rect" id="Node000003" href="$classRealm_1_1RegionInstance.html" title=" " alt="" coords="269,5,441,31"/>
+<area shape="poly" id="edge3_Node000001_Node000003" title=" " alt="" coords="358,45,358,93,353,93,353,45"/>
+<area shape="poly" id="edge4_Node000003_Node000003" title=" " alt="" coords="456,10,468,18,460,25,442,28,441,23,458,20,463,18,454,15"/>
+<area shape="rect" id="Node000004" href="$classRealm_1_1TransferIterator.html" title=" " alt="" coords="551,5,723,31"/>
+<area shape="poly" id="edge5_Node000001_Node000004" title=" " alt="" coords="586,37,394,96,392,91,585,32"/>
+</map>

@@ -1,0 +1,23 @@
+<map id="/home/runner/work/realm/realm/realm&#45;src/src/realm/inst_impl.h" name="/home/runner/work/realm/realm/realm&#45;src/src/realm/inst_impl.h">
+<area shape="rect" id="Node000001" title=" " alt="" coords="925,5,1120,60"/>
+<area shape="rect" id="Node000002" href="$channel_8h.html" title=" " alt="" coords="725,108,920,163"/>
+<area shape="poly" id="edge1_Node000001_Node000002" title=" " alt="" coords="960,68,876,110,874,106,957,64"/>
+<area shape="rect" id="Node000008" href="$lowlevel__dma_8h.html" title=" " alt="" coords="1395,211,1589,265"/>
+<area shape="poly" id="edge11_Node000001_Node000008" title=" " alt="" coords="1097,63,1433,208,1430,213,1095,68"/>
+<area shape="rect" id="Node000003" href="$cuda__internal_8h.html" title=" " alt="" coords="5,211,200,265"/>
+<area shape="poly" id="edge2_Node000002_Node000003" title=" " alt="" coords="712,150,484,175,219,213,201,217,200,211,218,208,483,170,711,144"/>
+<area shape="rect" id="Node000004" href="$hdf5__internal_8h.html" title=" " alt="" coords="767,313,961,368"/>
+<area shape="poly" id="edge3_Node000002_Node000004" title=" " alt="" coords="711,146,580,157,440,171,324,190,285,201,264,213,256,225,253,238,256,251,264,263,288,276,333,288,466,308,624,322,766,332,766,337,624,327,466,313,332,293,286,281,261,267,251,253,248,238,251,223,261,209,283,196,323,185,439,166,580,151,711,141"/>
+<area shape="rect" id="Node000005" href="$hip__internal_8h.html" title=" " alt="" coords="275,211,469,265"/>
+<area shape="poly" id="edge4_Node000002_Node000005" title=" " alt="" coords="713,163,482,213,470,216,469,211,481,208,711,157"/>
+<area shape="rect" id="Node000006" href="$addrsplit__channel_8h.html" title=" " alt="" coords="493,211,701,265"/>
+<area shape="poly" id="edge5_Node000002_Node000006" title=" " alt="" coords="753,171,657,213,655,208,751,166"/>
+<area shape="rect" id="Node000007" href="$channel__disk_8h.html" title=" " alt="" coords="725,211,920,265"/>
+<area shape="poly" id="edge6_Node000002_Node000007" title=" " alt="" coords="825,176,825,211,820,211,820,176"/>
+<area shape="poly" id="edge7_Node000002_Node000008" title=" " alt="" coords="934,145,1143,171,1383,208,1395,210,1394,216,1382,213,1142,176,933,151"/>
+<area shape="rect" id="Node000009" href="$memcpy__channel_8h.html" title=" " alt="" coords="944,211,1152,265"/>
+<area shape="poly" id="edge9_Node000002_Node000009" title=" " alt="" coords="895,166,990,208,988,213,893,171"/>
+<area shape="rect" id="Node000010" href="$transfer_8h.html" title=" " alt="" coords="1176,211,1371,265"/>
+<area shape="poly" id="edge10_Node000002_Node000010" title=" " alt="" coords="934,157,1165,208,1176,211,1175,216,1163,213,933,163"/>
+<area shape="poly" id="edge8_Node000008_Node000004" title=" " alt="" coords="1381,268,1152,306,962,331,961,325,1151,300,1380,263"/>
+</map>
