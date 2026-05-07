@@ -1848,12 +1848,25 @@ namespace Realm {
     }
 
     // get the head of our pbuf list - if it's empty, something's wrong because
-    //  we shouldn't have gotten here
-    OutbufMetadata *head = first_pbuf.load_acquire();
-    assert(head);
+    //  we shouldn't have gotten here.  the load and state check happen under
+    //  the mutex so that they're serialized against any concurrent pop in
+    //  reserve_pbuf_helper - without this, an unsynchronized load_acquire can
+    //  race with the reserver's pop+close (which runs outside the mutex) and
+    //  observe a buffer whose state has been transitioned to STATE_IDLE
+    OutbufMetadata *head;
+    {
+      AutoLock<> al(mutex);
+      // we should only reach this point with has_ready_packets true - the
+      //  comp_reply and put_head paths above are supposed to return early
+      //  otherwise.  assert it so we catch any path that violates the
+      //  invariant the lifetime guarantee depends on
+      assert(has_ready_packets);
+      head = first_pbuf.load();
+      assert(head);
+      assert(head->state == OutbufMetadata::STATE_PKTBUF);
+    }
 
     while(true) {
-      assert(head->state == OutbufMetadata::STATE_PKTBUF);
 
       OutbufMetadata *realbuf;
       if(head->is_overflow) {
@@ -2483,9 +2496,15 @@ namespace Realm {
             requeue = put_head.load() || (comp_reply_count.load() != 0);
             push_mutex_check.unlock();
           } else {
-            // we can remove the head and work on the next one
+            // we can remove the head and work on the next one - verify the
+            //  successor's state under the same mutex that serializes pops,
+            //  so that the iter-N+1 invariant check is race-free (the old
+            //  top-of-loop assert at line 1856 has been removed for the same
+            //  reason)
             new_head = head->nextbuf;
             first_pbuf.store(new_head);
+            assert(new_head);
+            assert(new_head->state == OutbufMetadata::STATE_PKTBUF);
           }
         } else {
           // more stuff in this pktbuf - requeue if we see any have become
