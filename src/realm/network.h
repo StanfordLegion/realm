@@ -253,6 +253,17 @@ namespace Realm {
       //  to pending_completions itself, so the stability check on this
       //  field alone is sufficient.
       uint64_t pending_completions;
+      // local-only (NOT reduced) count of messages this rank has received
+      //  that pass through IncomingMessageManager and need to be drained
+      //  before the post-drain sample is taken.  Must be a subset of
+      //  packets_received: any wire packet that bypasses IMM (e.g., UCX
+      //  remote-completion replies handled directly, GASNet-EX
+      //  comp_reply/rget control AMs that are processed inline) MUST be
+      //  excluded, otherwise drain_incoming_messages waits forever for
+      //  total_messages_handled to reach a target it cannot.  For backends
+      //  where every received packet goes through IMM (GASNet-EX, MPI),
+      //  this equals packets_received.
+      uint64_t messages_to_drain;
     };
 
     // Sample the current quiescence state of this network.  Called after the

@@ -99,15 +99,16 @@ namespace Realm {
 #endif
 
       // Drain the incoming-message queue first, so that any messages already
-      //  delivered by the network layer have been counted in
-      //  packets_received and dispatched to their handlers (which may queue
-      //  more local work, also captured by queued_items).  The drain
-      //  uses the current 'received' count as its target, which means by the
-      //  time it returns, the receive counter and the queue state are
-      //  internally consistent on this rank.
+      //  delivered by the network layer have been dispatched to their
+      //  handlers (which may queue more local work, also captured by
+      //  queued_items).  The drain target is messages_to_drain - a strict
+      //  subset of packets_received that excludes wire packets that don't
+      //  pass through IMM (UCX remote-completion replies in particular).
+      //  Using packets_received here would hang on UCX since IMM's
+      //  total_messages_handled can never include rcomp arrivals.
       NetworkModule::QuiescenceState predrain;
       single_network->sample_quiescence_state(predrain);
-      message_manager->drain_incoming_messages(predrain.packets_received);
+      message_manager->drain_incoming_messages(predrain.messages_to_drain);
 
       // Now sample the actual local state we'll feed into the allreduce.
       //  Sampling AFTER the drain matters: drain may have caused handlers to
@@ -460,7 +461,7 @@ namespace Realm {
   {
     // single-rank loopback: nothing to send to anyone, nothing in flight.
     //  All counters are zero, no queues, no pending.
-    state = QuiescenceState{0, 0, 0, 0, 0};
+    state = QuiescenceState{0, 0, 0, 0, 0, 0};
   }
 
   void LoopbackNetworkModule::quiescence_allreduce_sum(const uint64_t *local_counts,

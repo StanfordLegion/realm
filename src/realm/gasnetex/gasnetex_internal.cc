@@ -3691,6 +3691,11 @@ namespace Realm {
     state.packets_reserved = reserved;
     state.packets_received = total_packets_received.load();
     state.pending_completions = compmgr.num_completions_pending();
+    // total_packets_received is bumped only in handle_short/medium/long
+    //  (which all use add_incoming_message), not in handle_completion_reply
+    //  or handle_reverse_get, so every packet counted here passes through
+    //  IMM and the drain target equals packets_received.
+    state.messages_to_drain = state.packets_received;
 
     log_gex_quiesce.debug() << "quiescence sample:"
                             << " queued=" << state.queued_items

@@ -795,6 +795,7 @@ namespace Realm {
     state.packets_reserved = 0;
     state.packets_received = 0;
     state.pending_completions = 0;
+    state.messages_to_drain = 0;
   }
 
   void GASNet1Module::quiescence_allreduce_sum(const uint64_t *local_counts,

@@ -1744,6 +1744,14 @@ namespace Realm {
       //  balancing is already in the reserved/received pair above.
       state.pending_completions = 0;
 
+      // Only AM-style messages (msg_received) flow through
+      //  IncomingMessageManager; rcomp replies are handled directly by the
+      //  UCP completion callback and bypass IMM, so they must NOT be
+      //  included in the drain target.  Including them would deadlock
+      //  drain_incoming_messages since total_messages_handled in IMM never
+      //  counts rcomps.
+      state.messages_to_drain = msg_received;
+
       log_ucp.debug() << "quiescence sample:"
                       << " queued=" << state.queued_items
                       << " events_added=" << state.events_added
