@@ -145,6 +145,25 @@ configure_file(
   @ONLY
 )
 
+# Embed src/realm/realm-gdb.py into librealm's .debug_gdb_scripts ELF
+# section so that gdb auto-loads it whenever Realm code is debugged.  ELF
+# only -- macOS/Windows builds skip this entirely.
+if(CMAKE_SYSTEM_NAME STREQUAL "Linux" OR CMAKE_SYSTEM_NAME STREQUAL "FreeBSD")
+  set(REALM_GDB_PY_PATH "${REALM_SOURCE_DIR}/realm-gdb.py")
+  set(_gdb_script_cc "${CMAKE_CURRENT_BINARY_DIR}/gdb_script.cc")
+  configure_file(
+    "${REALM_SOURCE_DIR}/gdb_script.cc.in"
+    "${_gdb_script_cc}"
+    @ONLY
+  )
+  # Make the assembler's .incbin re-run when the .py changes.
+  set_source_files_properties(
+    "${_gdb_script_cc}"
+    PROPERTIES OBJECT_DEPENDS "${REALM_GDB_PY_PATH}"
+  )
+  list(APPEND REALM_SOURCES "${_gdb_script_cc}")
+endif()
+
 # generate per-dimension object files for deppart stuff
 foreach(INST_N1 RANGE 1 ${REALM_MAX_DIM})
   foreach(INST_N2 RANGE 1 ${REALM_MAX_DIM})
