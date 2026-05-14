@@ -3399,7 +3399,7 @@ namespace Realm {
       assert(0 && "invalid completion queue handle");
     }
 
-    Node *n = &nodes[id.pgroup_owner_node()];
+    Node *n = &nodes[id.compqueue_owner_node()];
     CompQueueImpl *impl =
         n->compqueues.lookup_entry(id.compqueue_cq_idx(), id.compqueue_owner_node());
     assert(impl->me == id.convert<CompletionQueue>());
