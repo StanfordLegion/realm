@@ -899,9 +899,17 @@ namespace Realm {
         assert(grp_index < (1 << LOG2_MAXGROUPS));
       }
     }
-    // increment the num_groups - it's ok if these increments happen out of
-    //  order
-    num_groups.fetch_add(1);
+    // monotonically advance num_groups to at least grp_index + 1.  fetch_add
+    //  is incorrect here: when a concurrent allocator is preempted between
+    //  its successful CAS into groups[] and its update of num_groups, a later
+    //  allocator can read the stale num_groups, collide on the lower slot, and
+    //  win CAS at a higher grp_index.  if that higher-index thread then
+    //  finishes (with fetch_add it would advance num_groups by only 1) and
+    //  hands its newly-indexed completion to a caller that sends an AM, the
+    //  reply's lookup_completion sees grp_index >= num_groups and aborts even
+    //  though groups[grp_index] is fully populated.  fetch_max ensures
+    //  num_groups always covers the highest populated slot.
+    num_groups.fetch_max(grp_index + 1);
 
     // give all these new completions their indices and pointer to us
     for(size_t i = 0; i < (1 << PendingCompletionGroup::LOG2_GROUPSIZE); i++) {
@@ -1848,12 +1856,25 @@ namespace Realm {
     }
 
     // get the head of our pbuf list - if it's empty, something's wrong because
-    //  we shouldn't have gotten here
-    OutbufMetadata *head = first_pbuf.load_acquire();
-    assert(head);
+    //  we shouldn't have gotten here.  the load and state check happen under
+    //  the mutex so that they're serialized against any concurrent pop in
+    //  reserve_pbuf_helper - without this, an unsynchronized load_acquire can
+    //  race with the reserver's pop+close (which runs outside the mutex) and
+    //  observe a buffer whose state has been transitioned to STATE_IDLE
+    OutbufMetadata *head;
+    {
+      AutoLock<> al(mutex);
+      // we should only reach this point with has_ready_packets true - the
+      //  comp_reply and put_head paths above are supposed to return early
+      //  otherwise.  assert it so we catch any path that violates the
+      //  invariant the lifetime guarantee depends on
+      assert(has_ready_packets);
+      head = first_pbuf.load();
+      assert(head);
+      assert(head->state == OutbufMetadata::STATE_PKTBUF);
+    }
 
     while(true) {
-      assert(head->state == OutbufMetadata::STATE_PKTBUF);
 
       OutbufMetadata *realbuf;
       if(head->is_overflow) {
@@ -2483,9 +2504,15 @@ namespace Realm {
             requeue = put_head.load() || (comp_reply_count.load() != 0);
             push_mutex_check.unlock();
           } else {
-            // we can remove the head and work on the next one
+            // we can remove the head and work on the next one - verify the
+            //  successor's state under the same mutex that serializes pops,
+            //  so that the iter-N+1 invariant check is race-free (the old
+            //  top-of-loop assert at line 1856 has been removed for the same
+            //  reason)
             new_head = head->nextbuf;
             first_pbuf.store(new_head);
+            assert(new_head);
+            assert(new_head->state == OutbufMetadata::STATE_PKTBUF);
           }
         } else {
           // more stuff in this pktbuf - requeue if we see any have become
