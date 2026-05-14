@@ -3963,6 +3963,11 @@ namespace Realm {
       Event merged = Event::merge_events(preconditions);
       if(merged.exists()) {
         deferred_analysis.precondition = merged;
+        // hold a reference until deferred_analysis fires - otherwise the only
+        //  references to this desc are held by TransferOperations, which can
+        //  go away (e.g. via a poisoned wait_on) before the analysis
+        //  precondition triggers, leaving &deferred_analysis dangling
+        add_reference();
         EventImpl::add_waiter(merged, &deferred_analysis);
         return;
       }
@@ -4684,11 +4689,16 @@ namespace Realm {
                                                        TimeLimit work_until)
   {
     // TODO: respect time limit
+    // stash desc locally - remove_reference() below may delete *desc, and
+    //  `this` is a member of *desc, so we must not touch either afterwards
+    TransferDesc *descriptor = desc;
     if(poisoned) {
-      desc->cancel_analysis(precondition);
+      descriptor->cancel_analysis(precondition);
     } else {
-      desc->perform_analysis(TimeLimit());
+      descriptor->perform_analysis(TimeLimit());
     }
+    // matches the add_reference() in check_analysis_preconditions
+    descriptor->remove_reference();
   }
 
   void TransferDesc::DeferredAnalysis::print(std::ostream &os) const
