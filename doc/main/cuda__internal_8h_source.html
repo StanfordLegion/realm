@@ -44,7 +44,7 @@
    <!-- BEGIN version select -->
     <br />
     <div class="dropdown">
-     <button class="dropbtn">Version 25.6.1-rc.4+782f7a56</button>
+     <button class="dropbtn">Version 25.6.1-rc.4+6c51034c</button>
      <div class="dropdown-content"></div>
     </div>
     <script type="text/javascript" src="../selectversion.js"></script>
@@ -1716,22 +1716,25 @@ $(document).ready(function(){initNavTree('cuda__internal_8h_source.html',''); in
 <div class="line"><a id="l01575" name="l01575"></a><span class="lineno"> 1575</span><span class="preprocessor">  __op__(cuptiActivityGetNextRecord);                                                    \</span></div>
 <div class="line"><a id="l01576" name="l01576"></a><span class="lineno"> 1576</span><span class="preprocessor">  __op__(cuptiActivityRegisterTimestampCallback);                                        \</span></div>
 <div class="line"><a id="l01577" name="l01577"></a><span class="lineno"> 1577</span><span class="preprocessor">  __op__(cuptiActivityPushExternalCorrelationId);                                        \</span></div>
-<div class="line"><a id="l01578" name="l01578"></a><span class="lineno"> 1578</span><span class="preprocessor">  __op__(cuptiActivityPopExternalCorrelationId);</span></div>
+<div class="line"><a id="l01578" name="l01578"></a><span class="lineno"> 1578</span><span class="preprocessor">  __op__(cuptiActivityPopExternalCorrelationId);                                         \</span></div>
+<div class="line"><a id="l01579" name="l01579"></a><span class="lineno"> 1579</span><span class="preprocessor">  __op__(cuptiSubscribe);                                                                \</span></div>
+<div class="line"><a id="l01580" name="l01580"></a><span class="lineno"> 1580</span><span class="preprocessor">  __op__(cuptiEnableCallback);                                                           \</span></div>
+<div class="line"><a id="l01581" name="l01581"></a><span class="lineno"> 1581</span><span class="preprocessor">  __op__(cuptiUnsubscribe);</span></div>
 </div>
-<div class="line"><a id="l01579" name="l01579"></a><span class="lineno"> 1579</span> </div>
-<div class="line"><a id="l01580" name="l01580"></a><span class="lineno"> 1580</span><span class="preprocessor">#define DECL_FNPTR_EXTERN(name) extern decltype(&amp;name) name##_fnptr;</span></div>
-<div class="line"><a id="l01581" name="l01581"></a><span class="lineno"> 1581</span>    <a class="code hl_define" href="cuda__internal_8h.html#a9db012d9f01205533fcf7cee4d7bfa2b">CUPTI_APIS</a>(<a class="code hl_define" href="cuda__internal_8h.html#a78a46ca86d0f01cef0906ea35fb99b1a">DECL_FNPTR_EXTERN</a>)</div>
-<div class="line"><a id="l01582" name="l01582"></a><span class="lineno"> 1582</span><span class="preprocessor">#undef DECL_FNPTR_EXTERN</span></div>
-<div class="line"><a id="l01583" name="l01583"></a><span class="lineno"> 1583</span> </div>
-<div class="line"><a id="l01584" name="l01584"></a><span class="lineno"><a class="line" href="cuda__internal_8h.html#af09a82d4b8c11e8e6adc1aed4c54d036"> 1584</a></span><span class="preprocessor">#define CUPTI_HAS_FNPTR(name) (name##_fnptr != nullptr)</span></div>
-<div class="line"><a id="l01585" name="l01585"></a><span class="lineno"><a class="line" href="cuda__internal_8h.html#a9f35720fe8dea542282800e22467da4e"> 1585</a></span><span class="preprocessor">#define CUPTI_FNPTR(name) (assert(name##_fnptr != nullptr), name##_fnptr)</span></div>
+<div class="line"><a id="l01582" name="l01582"></a><span class="lineno"> 1582</span> </div>
+<div class="line"><a id="l01583" name="l01583"></a><span class="lineno"> 1583</span><span class="preprocessor">#define DECL_FNPTR_EXTERN(name) extern decltype(&amp;name) name##_fnptr;</span></div>
+<div class="line"><a id="l01584" name="l01584"></a><span class="lineno"> 1584</span>    <a class="code hl_define" href="cuda__internal_8h.html#a9db012d9f01205533fcf7cee4d7bfa2b">CUPTI_APIS</a>(<a class="code hl_define" href="cuda__internal_8h.html#a78a46ca86d0f01cef0906ea35fb99b1a">DECL_FNPTR_EXTERN</a>)</div>
+<div class="line"><a id="l01585" name="l01585"></a><span class="lineno"> 1585</span><span class="preprocessor">#undef DECL_FNPTR_EXTERN</span></div>
 <div class="line"><a id="l01586" name="l01586"></a><span class="lineno"> 1586</span> </div>
-<div class="line"><a id="l01587" name="l01587"></a><span class="lineno"> 1587</span>  }; <span class="comment">// namespace Cuda</span></div>
+<div class="line"><a id="l01587" name="l01587"></a><span class="lineno"><a class="line" href="cuda__internal_8h.html#af09a82d4b8c11e8e6adc1aed4c54d036"> 1587</a></span><span class="preprocessor">#define CUPTI_HAS_FNPTR(name) (name##_fnptr != nullptr)</span></div>
+<div class="line"><a id="l01588" name="l01588"></a><span class="lineno"><a class="line" href="cuda__internal_8h.html#a9f35720fe8dea542282800e22467da4e"> 1588</a></span><span class="preprocessor">#define CUPTI_FNPTR(name) (assert(name##_fnptr != nullptr), name##_fnptr)</span></div>
+<div class="line"><a id="l01589" name="l01589"></a><span class="lineno"> 1589</span> </div>
+<div class="line"><a id="l01590" name="l01590"></a><span class="lineno"> 1590</span>  }; <span class="comment">// namespace Cuda</span></div>
 </div>
-<div class="line"><a id="l01588" name="l01588"></a><span class="lineno"> 1588</span> </div>
-<div class="line"><a id="l01589" name="l01589"></a><span class="lineno"> 1589</span>}; <span class="comment">// namespace Realm</span></div>
-<div class="line"><a id="l01590" name="l01590"></a><span class="lineno"> 1590</span> </div>
-<div class="line"><a id="l01591" name="l01591"></a><span class="lineno"> 1591</span><span class="preprocessor">#endif</span></div>
+<div class="line"><a id="l01591" name="l01591"></a><span class="lineno"> 1591</span> </div>
+<div class="line"><a id="l01592" name="l01592"></a><span class="lineno"> 1592</span>}; <span class="comment">// namespace Realm</span></div>
+<div class="line"><a id="l01593" name="l01593"></a><span class="lineno"> 1593</span> </div>
+<div class="line"><a id="l01594" name="l01594"></a><span class="lineno"> 1594</span><span class="preprocessor">#endif</span></div>
 <div class="ttc" id="abgwork_8h_html"><div class="ttname"><a href="bgwork_8h.html">bgwork.h</a></div></div>
 <div class="ttc" id="abootstrap_8h_html_a166f6908efd08a7b494a5053c851f398"><div class="ttname"><a href="bootstrap_8h.html#a166f6908efd08a7b494a5053c851f398">handle</a></div><div class="ttdeci">bootstrap_handle_t * handle</div><div class="ttdef"><b>Definition</b> bootstrap.h:61</div></div>
 <div class="ttc" id="achannel_8h_html"><div class="ttname"><a href="channel_8h.html">channel.h</a></div></div>
@@ -1781,7 +1784,7 @@ $(document).ready(function(){initNavTree('cuda__internal_8h_source.html',''); in
 <div class="ttc" id="aclassRealm_1_1Cuda_1_1CudaDeviceMemoryInfo_html_a4394b3605a40b36ec30fc9892ad88441"><div class="ttname"><a href="classRealm_1_1Cuda_1_1CudaDeviceMemoryInfo.html#a4394b3605a40b36ec30fc9892ad88441">Realm::Cuda::CudaDeviceMemoryInfo::CudaDeviceMemoryInfo</a></div><div class="ttdeci">CudaDeviceMemoryInfo(CUcontext _context)</div></div>
 <div class="ttc" id="aclassRealm_1_1Cuda_1_1CudaDeviceMemoryInfo_html_aca33a98dd5bd6f384a1030270f9015a7"><div class="ttname"><a href="classRealm_1_1Cuda_1_1CudaDeviceMemoryInfo.html#aca33a98dd5bd6f384a1030270f9015a7">Realm::Cuda::CudaDeviceMemoryInfo::gpu</a></div><div class="ttdeci">GPU * gpu</div><div class="ttdef"><b>Definition</b> cuda_internal.h:597</div></div>
 <div class="ttc" id="aclassRealm_1_1Cuda_1_1CudaDeviceMemoryInfo_html_ae2c443356a815c959bb71cadc2530984"><div class="ttname"><a href="classRealm_1_1Cuda_1_1CudaDeviceMemoryInfo.html#ae2c443356a815c959bb71cadc2530984">Realm::Cuda::CudaDeviceMemoryInfo::context</a></div><div class="ttdeci">CUcontext context</div><div class="ttdef"><b>Definition</b> cuda_internal.h:596</div></div>
-<div class="ttc" id="aclassRealm_1_1Cuda_1_1CudaModule_html"><div class="ttname"><a href="classRealm_1_1Cuda_1_1CudaModule.html">Realm::Cuda::CudaModule</a></div><div class="ttdef"><b>Definition</b> cuda_module.h:181</div></div>
+<div class="ttc" id="aclassRealm_1_1Cuda_1_1CudaModule_html"><div class="ttname"><a href="classRealm_1_1Cuda_1_1CudaModule.html">Realm::Cuda::CudaModule</a></div><div class="ttdef"><b>Definition</b> cuda_module.h:182</div></div>
 <div class="ttc" id="aclassRealm_1_1Cuda_1_1GPUAllocation_html"><div class="ttname"><a href="classRealm_1_1Cuda_1_1GPUAllocation.html">Realm::Cuda::GPUAllocation</a></div><div class="ttdoc">Class for managing the lifetime of a given gpu allocation. As instances of this class own an underlyi...</div><div class="ttdef"><b>Definition</b> cuda_internal.h:1148</div></div>
 <div class="ttc" id="aclassRealm_1_1Cuda_1_1GPUAllocation_html_a16b51dd9182532ba7aa16abae5e82fd8"><div class="ttname"><a href="classRealm_1_1Cuda_1_1GPUAllocation.html#a16b51dd9182532ba7aa16abae5e82fd8">Realm::Cuda::GPUAllocation::open_handle</a></div><div class="ttdeci">static GPUAllocation * open_handle(GPU *gpu, OsHandle hdl, size_t size, bool peer_enabled=true)</div><div class="ttdoc">Retrieves the GPUAllocation given the OsHandle.</div></div>
 <div class="ttc" id="aclassRealm_1_1Cuda_1_1GPUAllocation_html_a2a694c12956fa9cf2b6245e60fbd1124"><div class="ttname"><a href="classRealm_1_1Cuda_1_1GPUAllocation.html#a2a694c12956fa9cf2b6245e60fbd1124">Realm::Cuda::GPUAllocation::register_allocation</a></div><div class="ttdeci">static GPUAllocation * register_allocation(GPU *gpu, void *ptr, size_t size, bool peer_enabled=true)</div><div class="ttdoc">Create an allocation that registers the given CPU address range with CUDA, making it accessible from ...</div></div>

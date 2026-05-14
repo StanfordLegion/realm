@@ -1,5 +1,7 @@
 var NAVTREEINDEX45 =
 {
+"classRealm_1_1SparsityMapRefCounter.html#ad9445fa00cb0260ec6506b79d67bebe6":[2,0,3,387,3],
+"classRealm_1_1SparsityMapRefCounter.html#ad9445fa00cb0260ec6506b79d67bebe6":[1,0,3,398,3],
 "classRealm_1_1SparsityMapRefCounter.html#aedb3f8d1f6084e592d2e355943f88bb6":[2,0,3,387,2],
 "classRealm_1_1SparsityMapRefCounter.html#aedb3f8d1f6084e592d2e355943f88bb6":[1,0,3,398,2],
 "classRealm_1_1SparsityWrapperCommunicator.html":[2,0,3,388],
@@ -247,7 +249,5 @@ var NAVTREEINDEX45 =
 "classRealm_1_1TaskQueue.html#a245446d520aa2d535c9167991ffa4875":[2,0,3,404,9],
 "classRealm_1_1TaskQueue.html#a245446d520aa2d535c9167991ffa4875":[1,0,3,415,9],
 "classRealm_1_1TaskQueue.html#a38ec19e78d693ecc939183faff6c3ec2":[1,0,3,415,6],
-"classRealm_1_1TaskQueue.html#a38ec19e78d693ecc939183faff6c3ec2":[2,0,3,404,6],
-"classRealm_1_1TaskQueue.html#a58c534ea995bd2edbcfc672d4963f0e2":[2,0,3,404,16],
-"classRealm_1_1TaskQueue.html#a58c534ea995bd2edbcfc672d4963f0e2":[1,0,3,415,16]
+"classRealm_1_1TaskQueue.html#a38ec19e78d693ecc939183faff6c3ec2":[2,0,3,404,6]
 };

@@ -1,5 +1,7 @@
 var NAVTREEINDEX68 =
 {
+"structRealm_1_1PieceLookup_1_1AffinePiece.html#a37154e2dabc249c2ae04f8c79937e7c4":[1,0,3,17,1,0],
+"structRealm_1_1PieceLookup_1_1AffinePiece.html#a37154e2dabc249c2ae04f8c79937e7c4":[2,0,3,10,0,0],
 "structRealm_1_1PieceLookup_1_1AffinePiece.html#a3fdd49cd1b14b9f46af4a704685bea24":[2,0,3,10,0,5],
 "structRealm_1_1PieceLookup_1_1AffinePiece.html#a3fdd49cd1b14b9f46af4a704685bea24":[1,0,3,17,1,5],
 "structRealm_1_1PieceLookup_1_1AffinePiece.html#a48835a5382a18edafdbbf9a70269475e":[1,0,3,17,1,2],
@@ -247,7 +249,5 @@ var NAVTREEINDEX68 =
 "structRealm_1_1ProfilingMeasurements_1_1BranchPredictionPerfCounters.html":[2,0,3,13,0],
 "structRealm_1_1ProfilingMeasurements_1_1BranchPredictionPerfCounters.html":[1,0,3,20,0],
 "structRealm_1_1ProfilingMeasurements_1_1BranchPredictionPerfCounters.html#a4e8b1bb9702f2128b05ea9b1efdc6b15":[1,0,3,20,0,1],
-"structRealm_1_1ProfilingMeasurements_1_1BranchPredictionPerfCounters.html#a4e8b1bb9702f2128b05ea9b1efdc6b15":[2,0,3,13,0,1],
-"structRealm_1_1ProfilingMeasurements_1_1BranchPredictionPerfCounters.html#a8a934328870b8fc76fba8ccac76e33d4":[1,0,3,20,0,2],
-"structRealm_1_1ProfilingMeasurements_1_1BranchPredictionPerfCounters.html#a8a934328870b8fc76fba8ccac76e33d4":[2,0,3,13,0,2]
+"structRealm_1_1ProfilingMeasurements_1_1BranchPredictionPerfCounters.html#a4e8b1bb9702f2128b05ea9b1efdc6b15":[2,0,3,13,0,1]
 };

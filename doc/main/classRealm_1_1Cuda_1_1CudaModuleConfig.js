@@ -7,6 +7,7 @@ var classRealm_1_1Cuda_1_1CudaModuleConfig =
     [ "cfg_d2d_stream_priority", "classRealm_1_1Cuda_1_1CudaModuleConfig.html#a57f9d8094148f25da55eca1345bfa66f", null ],
     [ "cfg_d2d_streams", "classRealm_1_1Cuda_1_1CudaModuleConfig.html#a54477b93e421d134c4e8bc773cfaf875", null ],
     [ "cfg_dynfb_max_size", "classRealm_1_1Cuda_1_1CudaModuleConfig.html#a29bed5f46c92ca9087e09ff55ab68417", null ],
+    [ "cfg_enable_cuhook", "classRealm_1_1Cuda_1_1CudaModuleConfig.html#abdab4a54705be166ad374962dc6f0a5a", null ],
     [ "cfg_enable_cupti", "classRealm_1_1Cuda_1_1CudaModuleConfig.html#a488eced8fd728327caefab1ea9a7abde", null ],
     [ "cfg_fb_ib_size", "classRealm_1_1Cuda_1_1CudaModuleConfig.html#a6ec50adda70eedc32b53b55a38e13a79", null ],
     [ "cfg_fb_mem_size", "classRealm_1_1Cuda_1_1CudaModuleConfig.html#a1bcce758674263f9b99632d59ba954b1", null ],

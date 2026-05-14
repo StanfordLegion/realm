@@ -1,5 +1,7 @@
 var NAVTREEINDEX54 =
 {
+"functions_d.html":[2,3,0,4],
+"functions_e.html":[2,3,0,5],
 "functions_enum.html":[2,3,4],
 "functions_eval.html":[2,3,5],
 "functions_eval.html":[2,3,5,0],
@@ -247,7 +249,5 @@ var NAVTREEINDEX54 =
 "gasnetmsg_8h.html#acfed01decd1ab6d03b006f77b93dc9f8":[3,0,1,1,2,1,81],
 "gasnetmsg_8h.html#acfed01decd1ab6d03b006f77b93dc9f8a05b4546eb088f0e91d4b25bd18b6ada5":[3,0,1,1,2,1,81,62],
 "gasnetmsg_8h.html#acfed01decd1ab6d03b006f77b93dc9f8a09dd9c10890215d2a9cbb80c775dcae8":[3,0,1,1,2,1,81,51],
-"gasnetmsg_8h.html#acfed01decd1ab6d03b006f77b93dc9f8a0ee02ca3393f8088f512ba72743e6400":[3,0,1,1,2,1,81,41],
-"gasnetmsg_8h.html#acfed01decd1ab6d03b006f77b93dc9f8a1a258e4dc2ca095d1b1eadcd887e56a8":[3,0,1,1,2,1,81,10],
-"gasnetmsg_8h.html#acfed01decd1ab6d03b006f77b93dc9f8a1b1b00a29658aa4dda209c13ee7762a1":[3,0,1,1,2,1,81,56]
+"gasnetmsg_8h.html#acfed01decd1ab6d03b006f77b93dc9f8a0ee02ca3393f8088f512ba72743e6400":[3,0,1,1,2,1,81,41]
 };
