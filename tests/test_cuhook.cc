@@ -52,7 +52,7 @@ void gpu_task(const void *args, size_t arglen, const void *userdata, size_t user
 
   stream = Cuda::get_task_cuda_stream();
   Cuda::set_task_ctxsync_required(false);
-  
+
   gpu_kernel_wrapper(stream);
   // cudaStreamSynchronize(stream);
 }

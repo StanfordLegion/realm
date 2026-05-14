@@ -170,8 +170,8 @@ namespace Realm {
       static void record_call(CUpti_CallbackId cbid, const char *function_name,
                               const char *symbol_name, CUstream stream, CUevent event)
       {
-        log_cuhook.debug("Record driver API: %s, %s on stream %p, event %p",
-                         symbol_name, function_name, static_cast<void *>(stream),
+        log_cuhook.debug("Record driver API: %s, %s on stream %p, event %p", symbol_name,
+                         function_name, static_cast<void *>(stream),
                          static_cast<void *>(event));
         stream_status->operator[](stream) = std::make_pair(cbid, event);
       }
@@ -209,8 +209,7 @@ namespace Realm {
                                     const CUpti_CallbackData *cbInfo)
       {
         if(ThreadLocal::current_gpu_stream == nullptr) {
-          log_cuhook.debug("Callback outside task, function: %s",
-                           cbInfo->functionName);
+          log_cuhook.debug("Callback outside task, function: %s", cbInfo->functionName);
           return;
         }
 
@@ -225,8 +224,7 @@ namespace Realm {
         case CUPTI_DRIVER_TRACE_CBID_cuLaunchKernel:
         {
           CUstream stream =
-              static_cast<const cuLaunchKernel_params *>(cbInfo->functionParams)
-                  ->hStream;
+              static_cast<const cuLaunchKernel_params *>(cbInfo->functionParams)->hStream;
           record_call(cbid, function_name, cbInfo->symbolName, stream, nullptr);
           break;
         }
@@ -383,8 +381,8 @@ namespace Realm {
         };
 
         for(const auto &cbid : enabled_callbacks) {
-          CHECK_CUPTI(CUPTI_FNPTR(cuptiEnableCallback)(
-              1, subscriber, CUPTI_CB_DOMAIN_DRIVER_API, cbid));
+          CHECK_CUPTI(CUPTI_FNPTR(cuptiEnableCallback)(1, subscriber,
+                                                       CUPTI_CB_DOMAIN_DRIVER_API, cbid));
         }
         enabled = true;
       }
@@ -397,8 +395,7 @@ namespace Realm {
         nb_calls_per_task = 0;
       }
 
-      static void end_task(GPUStream *current_task_stream,
-                           Processor::TaskFuncID task_id)
+      static void end_task(GPUStream *current_task_stream, Processor::TaskFuncID task_id)
       {
         assert(ThreadLocal::current_gpu_stream == current_task_stream);
         sanity_check(current_task_stream->get_stream(), task_id);
@@ -4203,7 +4200,8 @@ namespace Realm {
       Module::create_dma_channels(runtime);
 
       if(cupti_api_fnptrs_loaded) {
-         if (config->cfg_enable_cupti && CUPTI_HAS_FNPTR(cuptiActivityPushExternalCorrelationId)) {
+        if(config->cfg_enable_cupti &&
+           CUPTI_HAS_FNPTR(cuptiActivityPushExternalCorrelationId)) {
           // Wait until the clock is fully calibrated before we register the timestamp
           // callback, otherwise cupti will normalize to the wrong timestamp and the GPU
           // timings will be incorrectly translated
@@ -4215,7 +4213,7 @@ namespace Realm {
               CUPTI_FNPTR(cuptiActivityEnable)(CUPTI_ACTIVITY_KIND_EXTERNAL_CORRELATION));
           cupti_api_initialized = true;
         }
-        if (config->cfg_enable_cuhook && CUPTI_HAS_FNPTR(cuptiSubscribe)) {
+        if(config->cfg_enable_cuhook && CUPTI_HAS_FNPTR(cuptiSubscribe)) {
           Cuhook::init();
         }
       }
