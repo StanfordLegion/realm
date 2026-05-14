@@ -105,7 +105,6 @@ namespace Realm {
     struct GPUInfo;
     class GPUZCMemory;
     class GPUReplHeapListener;
-    class CudaHook;
 
     class CudaModuleConfig : public ModuleConfig {
       friend class CudaModule;

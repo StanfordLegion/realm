@@ -19,13 +19,13 @@
 #include "realm/cuda/cuda_access.h"
 #include "realm/cuda/cuda_internal.h"
 #include "realm/cuda/cuda_memcpy.h"
-#include "realm/cuda/cuda_hook.h"
 
 #include "realm/tasks.h"
 #include "realm/logging.h"
 #include "realm/cmdline.h"
 #include "realm/event_impl.h"
 #include "realm/idx_impl.h"
+#include "realm/realm_assert.h"
 
 #include "realm/transfer/lowlevel_dma.h"
 #include "realm/transfer/channel.h"
@@ -52,6 +52,7 @@
 #include <sstream>
 #include <iomanip>
 #include <algorithm>
+#include <unordered_map>
 #include <utility>
 
 // The embedded fat binary that holds all the internal
@@ -94,12 +95,12 @@ namespace Realm {
       } data;
     };
 
-    extern Logger log_cuhook;
     Logger log_gpu("gpu");
     Logger log_gpudma("gpudma");
     Logger log_cudart("cudart");
     Logger log_cudaipc("cudaipc");
     Logger log_cupti("cupti");
+    Logger log_cuhook("cuhook");
 
     Logger log_stream("gpustream");
     bool nvml_api_fnptrs_loaded = false;
@@ -109,8 +110,6 @@ namespace Realm {
     CUresult cuda_init_code = CUDA_ERROR_UNKNOWN;
 
     bool cuda_api_fnptrs_loaded = false;
-
-    static std::unique_ptr<CudaHook> cuda_hook{nullptr};
 
 // Make sure to only use decltype here, to ensure it matches the cuda.h definition
 #define DEFINE_FNPTR(name, ver) decltype(&name) name##_fnptr = 0;
@@ -152,6 +151,262 @@ namespace Realm {
       static thread_local int context_sync_required = 0;
       thread_local bool block_on_synchronize = false;
     }; // namespace ThreadLocal
+
+    ////////////////////////////////////////////////////////////////////////
+    //
+    // CUDA driver-API hook (validates Realm-task CUDA usage via CUPTI)
+
+    namespace Cuhook {
+
+      using StreamMap =
+          std::unordered_map<CUstream, std::pair<CUpti_CallbackId, CUevent>>;
+
+      static bool enabled = false;
+      static CUpti_SubscriberHandle subscriber;
+
+      static thread_local StreamMap *stream_status = nullptr;
+      static thread_local int nb_calls_per_task = 0;
+
+      static void record_call(CUpti_CallbackId cbid, const char *function_name,
+                              const char *symbol_name, CUstream stream, CUevent event)
+      {
+        log_cuhook.debug("Record driver API: %s, %s on stream %p, event %p",
+                         symbol_name, function_name, static_cast<void *>(stream),
+                         static_cast<void *>(event));
+        stream_status->operator[](stream) = std::make_pair(cbid, event);
+      }
+
+      static void clear_stream(const char *function_name, CUstream stream)
+      {
+        log_cuhook.debug("Clear Stream driver API: %s on stream %p", function_name,
+                         static_cast<void *>(stream));
+        auto it = stream_status->find(stream);
+        if(it != stream_status->end()) {
+          stream_status->erase(it);
+        }
+      }
+
+      static void clear_event(const char *function_name, CUevent event)
+      {
+        log_cuhook.debug("Clear Event driver API: %s on event %p", function_name,
+                         static_cast<void *>(event));
+        for(auto it = stream_status->begin(); it != stream_status->end(); ++it) {
+          if(it->second.second == event) {
+            stream_status->erase(it);
+            break;
+          }
+        }
+      }
+
+      static void clear_ctx(const char *function_name)
+      {
+        log_cuhook.debug("Clear CTX driver API: %s", function_name);
+        stream_status->clear();
+      }
+
+      static void CUPTIAPI callback(void *userdata, CUpti_CallbackDomain domain,
+                                    CUpti_CallbackId cbid,
+                                    const CUpti_CallbackData *cbInfo)
+      {
+        if(ThreadLocal::current_gpu_stream == nullptr) {
+          log_cuhook.debug("Callback outside task, function: %s",
+                           cbInfo->functionName);
+          return;
+        }
+
+        if(domain != CUPTI_CB_DOMAIN_DRIVER_API ||
+           cbInfo->callbackSite != CUPTI_API_ENTER) {
+          return;
+        }
+
+        const char *function_name = cbInfo->functionName;
+
+        switch(cbid) {
+        case CUPTI_DRIVER_TRACE_CBID_cuLaunchKernel:
+        {
+          CUstream stream =
+              static_cast<const cuLaunchKernel_params *>(cbInfo->functionParams)
+                  ->hStream;
+          record_call(cbid, function_name, cbInfo->symbolName, stream, nullptr);
+          break;
+        }
+        case CUPTI_DRIVER_TRACE_CBID_cuMemcpyHtoDAsync_v2:
+        {
+          CUstream stream =
+              static_cast<const cuMemcpyHtoDAsync_v2_params *>(cbInfo->functionParams)
+                  ->hStream;
+          record_call(cbid, function_name, nullptr, stream, nullptr);
+          break;
+        }
+        case CUPTI_DRIVER_TRACE_CBID_cuMemcpyDtoHAsync_v2:
+        {
+          CUstream stream =
+              static_cast<const cuMemcpyDtoHAsync_v2_params *>(cbInfo->functionParams)
+                  ->hStream;
+          record_call(cbid, function_name, nullptr, stream, nullptr);
+          break;
+        }
+        case CUPTI_DRIVER_TRACE_CBID_cuMemcpyDtoDAsync_v2:
+        {
+          CUstream stream =
+              static_cast<const cuMemcpyDtoDAsync_v2_params *>(cbInfo->functionParams)
+                  ->hStream;
+          record_call(cbid, function_name, nullptr, stream, nullptr);
+          break;
+        }
+        case CUPTI_DRIVER_TRACE_CBID_cuMemcpy2DAsync_v2:
+        {
+          CUstream stream =
+              static_cast<const cuMemcpy2DAsync_v2_params *>(cbInfo->functionParams)
+                  ->hStream;
+          record_call(cbid, function_name, nullptr, stream, nullptr);
+          break;
+        }
+        case CUPTI_DRIVER_TRACE_CBID_cuMemcpy3DAsync_v2:
+        {
+          CUstream stream =
+              static_cast<const cuMemcpy3DAsync_v2_params *>(cbInfo->functionParams)
+                  ->hStream;
+          record_call(cbid, function_name, nullptr, stream, nullptr);
+          break;
+        }
+        case CUPTI_DRIVER_TRACE_CBID_cuStreamSynchronize:
+        {
+          CUstream stream =
+              static_cast<const cuStreamSynchronize_params *>(cbInfo->functionParams)
+                  ->hStream;
+          clear_stream(function_name, stream);
+          break;
+        }
+        case CUPTI_DRIVER_TRACE_CBID_cuEventRecord:
+        {
+          const cuEventRecord_params *params =
+              static_cast<const cuEventRecord_params *>(cbInfo->functionParams);
+          record_call(cbid, function_name, nullptr, params->hStream, params->hEvent);
+          break;
+        }
+        case CUPTI_DRIVER_TRACE_CBID_cuEventSynchronize:
+        {
+          CUevent event =
+              static_cast<const cuEventSynchronize_params *>(cbInfo->functionParams)
+                  ->hEvent;
+          clear_event(function_name, event);
+          break;
+        }
+        case CUPTI_DRIVER_TRACE_CBID_cuCtxSynchronize:
+        {
+          clear_ctx(function_name);
+          break;
+        }
+        case CUPTI_DRIVER_TRACE_CBID_cuStreamDestroy:
+        case CUPTI_DRIVER_TRACE_CBID_cuStreamDestroy_v2:
+        {
+          // cuStreamDestroy_params and cuStreamDestroy_v2_params share the same
+          // layout (a single CUstream hStream field).
+          CUstream destroyed =
+              static_cast<const cuStreamDestroy_v2_params *>(cbInfo->functionParams)
+                  ->hStream;
+          CUstream task_stream = ThreadLocal::current_gpu_stream->get_stream();
+          if(destroyed == task_stream) {
+            log_cuhook.fatal(
+                "The task is destroying a Realm-owned CUDA stream %p via %s; "
+                "tasks must NOT call cuStreamDestroy/cudaStreamDestroy on streams "
+                "returned by get_task_cuda_stream",
+                static_cast<void *>(destroyed), function_name);
+            REALM_ASSERT(false);
+          }
+          return;
+        }
+        case CUPTI_DRIVER_TRACE_CBID_cuDevicePrimaryCtxReset:
+        {
+          log_cuhook.fatal("The task is resetting the primary context via %s; "
+                           "tasks must NOT destroy the primary context.",
+                           function_name);
+          REALM_ASSERT(false);
+          return;
+        }
+        default:
+          return;
+        }
+
+        nb_calls_per_task++;
+      }
+
+      static void sanity_check(CUstream current_task_stream,
+                               Processor::TaskFuncID task_id)
+      {
+        if(stream_status->size() == 0) {
+          log_cuhook.info("END Task %u, cuda stream sanity check: safe, nb_calls %d",
+                          task_id, nb_calls_per_task);
+        } else {
+          // we remove streams that are realm's task streams
+          StreamMap::iterator stream_it = stream_status->find(current_task_stream);
+          if(stream_it != stream_status->end()) {
+            stream_status->erase(stream_it);
+          }
+          if(stream_status->size() == 0) {
+            log_cuhook.info("END Task %u, cuda stream sanity check: safe, nb calls %d",
+                            task_id, nb_calls_per_task);
+          } else {
+            log_cuhook.warning(
+                "END Task %u, cuda stream sanity check: unsafe, leak %ld, nb calls %d",
+                task_id, stream_status->size(), nb_calls_per_task);
+          }
+        }
+      }
+
+      static void init()
+      {
+        CHECK_CUPTI(CUPTI_FNPTR(cuptiSubscribe)(
+            &subscriber, reinterpret_cast<CUpti_CallbackFunc>(callback), nullptr));
+        // init cuda driver api callbacks
+        const CUpti_CallbackId enabled_callbacks[] = {
+            // launch kernel
+            CUPTI_DRIVER_TRACE_CBID_cuLaunchKernel,
+            // memcpy
+            CUPTI_DRIVER_TRACE_CBID_cuMemcpyHtoDAsync_v2,
+            CUPTI_DRIVER_TRACE_CBID_cuMemcpyDtoHAsync_v2,
+            CUPTI_DRIVER_TRACE_CBID_cuMemcpyDtoDAsync_v2,
+            CUPTI_DRIVER_TRACE_CBID_cuMemcpy2DAsync_v2,
+            CUPTI_DRIVER_TRACE_CBID_cuMemcpy3DAsync_v2,
+            // stream
+            CUPTI_DRIVER_TRACE_CBID_cuStreamSynchronize,
+            // catch user-task code that destroys a Realm-owned task stream
+            CUPTI_DRIVER_TRACE_CBID_cuStreamDestroy,
+            CUPTI_DRIVER_TRACE_CBID_cuStreamDestroy_v2,
+            // event
+            CUPTI_DRIVER_TRACE_CBID_cuEventRecord,
+            CUPTI_DRIVER_TRACE_CBID_cuEventSynchronize,
+            // ctx
+            CUPTI_DRIVER_TRACE_CBID_cuCtxSynchronize,
+            CUPTI_DRIVER_TRACE_CBID_cuDevicePrimaryCtxReset,
+        };
+
+        for(const auto &cbid : enabled_callbacks) {
+          CHECK_CUPTI(CUPTI_FNPTR(cuptiEnableCallback)(
+              1, subscriber, CUPTI_CB_DOMAIN_DRIVER_API, cbid));
+        }
+        enabled = true;
+      }
+
+      static void start_task(GPUStream *current_stream)
+      {
+        assert(ThreadLocal::current_gpu_stream == current_stream);
+        assert(stream_status == nullptr);
+        stream_status = new StreamMap();
+        nb_calls_per_task = 0;
+      }
+
+      static void end_task(GPUStream *current_task_stream,
+                           Processor::TaskFuncID task_id)
+      {
+        assert(ThreadLocal::current_gpu_stream == current_task_stream);
+        sanity_check(current_task_stream->get_stream(), task_id);
+        delete stream_status;
+        stream_status = nullptr;
+      }
+
+    } // namespace Cuhook
 
     ////////////////////////////////////////////////////////////////////////
     //
@@ -781,8 +1036,8 @@ namespace Realm {
       ThreadLocal::current_gpu_stream = s;
       assert(!ThreadLocal::created_gpu_streams);
 
-      if(cuda_hook) {
-        cuda_hook->start_task(s);
+      if(Cuhook::enabled) {
+        Cuhook::start_task(s);
       }
 
       // a task can force context sync on task completion either on or off during
@@ -903,8 +1158,8 @@ namespace Realm {
       // cuda stream sanity check and clear cuda hook calls
       // we only check against the current_gpu_stream because it is impossible to launch
       // tasks onto other realm gpu streams
-      if(cuda_hook) {
-        cuda_hook->end_task(s, task->func_id);
+      if(Cuhook::enabled) {
+        Cuhook::end_task(s, task->func_id);
       }
 
       ThreadLocal::current_gpu_stream = nullptr;
@@ -2591,7 +2846,7 @@ namespace Realm {
           .add_option_int("-cuda:pageable_access", cfg_pageable_access)
           .add_option_int("-cuda:cupti", cfg_enable_cupti)
           .add_option_int("-cuda:ipc", cfg_use_cuda_ipc)
-          .add_option_bool("-cuda:cuhook", cfg_enable_cuhook);
+          .add_option_bool("-cuda:validation", cfg_enable_cuhook);
 #ifdef REALM_USE_CUDART_HIJACK
       cp.add_option_int("-cuda:nongpusync", Cuda::cudart_hijack_nongpu_sync);
 #endif
@@ -3961,7 +4216,7 @@ namespace Realm {
           cupti_api_initialized = true;
         }
         if (config->cfg_enable_cuhook && CUPTI_HAS_FNPTR(cuptiSubscribe)) {
-          cuda_hook = std::make_unique<CudaHook>();
+          Cuhook::init();
         }
       }
     }
