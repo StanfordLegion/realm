@@ -14,32 +14,31 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+
 #ifndef HIP_REDUC_H
 #define HIP_REDUC_H
 
 #include <cstddef>
 #include <cstdint>
-#include <vector>
-#include "realm/point.h"
 
 namespace Realm {
   namespace Hip {
-    static const size_t MAX_PARAM_CONSTBANK_SIZE = 4 * 1024;
     template <typename Offset_t>
     struct MemReducInfo {
       Offset_t extents[3];
       Offset_t src_strides[2];
       Offset_t dst_strides[2];
-      Offset_t tile_size;
       uintptr_t dst;
       uintptr_t src;
       size_t volume;
+      size_t elem_size;
     };
 
     template <size_t N>
     struct AffineReducSubRect {
       // Extent of the ND array
       size_t strides[N - 1];
+      size_t elem_size;
       // Address of the ND array
       uintptr_t addr;
     };
@@ -54,6 +53,7 @@ namespace Realm {
       // the pair
       size_t volume;
     };
+    // TODO: batch mode, MAX_RECTS > 1
     template <size_t N, size_t MAX_RECTS = 1>
     struct AffineReducInfo {
       enum

@@ -3513,6 +3513,76 @@ namespace Realm {
       ThreadLocal::context_sync_required = (is_required ? 1 : 0);
     }
 
+    bool HipModule::register_reduction(Event &event, const HipRedOpDesc *descs,
+                                       size_t num)
+    {
+      std::vector<Event> events(num, Event::NO_EVENT);
+
+      // Validate all entries before making any changes
+      for(size_t didx = 0; didx < num; didx++) {
+        ReductionOpUntyped *redop =
+            get_runtime()->reduce_op_table.get(descs[didx].redop_id, nullptr);
+        if(redop == nullptr) {
+          log_gpu.debug("Failed to find pre-registered reduction operator %d",
+                        descs[didx].redop_id);
+          return false;
+        }
+        // Validate that proc is a GPU managed by this module
+        bool found_gpu = false;
+        for(GPU *g : gpus) {
+          if(g->proc->me == descs[didx].proc) {
+            found_gpu = true;
+            break;
+          }
+        }
+        if(!found_gpu) {
+          log_gpu.debug("register_reduction: proc not found in HIP module");
+          return false;
+        }
+      }
+
+      for(size_t didx = 0; didx < num; didx++) {
+        ReductionOpUntyped *redop =
+            get_runtime()->reduce_op_table.get(descs[didx].redop_id, nullptr);
+        assert(redop != nullptr); // already validated above
+
+        // store basic kernel host function pointers
+        if(descs[didx].apply_excl)
+          redop->hip_apply_excl_fn = descs[didx].apply_excl;
+        if(descs[didx].apply_nonexcl)
+          redop->hip_apply_nonexcl_fn = descs[didx].apply_nonexcl;
+        if(descs[didx].fold_excl)
+          redop->hip_fold_excl_fn = descs[didx].fold_excl;
+        if(descs[didx].fold_nonexcl)
+          redop->hip_fold_nonexcl_fn = descs[didx].fold_nonexcl;
+
+        // store advanced affine kernel host function pointers
+        if(descs[didx].apply_excl_advanced)
+          redop->hip_apply_excl_fn_advanced = descs[didx].apply_excl_advanced;
+        if(descs[didx].apply_nonexcl_advanced)
+          redop->hip_apply_nonexcl_fn_advanced = descs[didx].apply_nonexcl_advanced;
+        if(descs[didx].fold_excl_advanced)
+          redop->hip_fold_excl_fn_advanced = descs[didx].fold_excl_advanced;
+        if(descs[didx].fold_nonexcl_advanced)
+          redop->hip_fold_nonexcl_fn_advanced = descs[didx].fold_nonexcl_advanced;
+
+        // store transpose kernel host function pointers
+        if(descs[didx].apply_excl_transpose)
+          redop->hip_apply_excl_fn_transpose = descs[didx].apply_excl_transpose;
+        if(descs[didx].apply_nonexcl_transpose)
+          redop->hip_apply_nonexcl_fn_transpose = descs[didx].apply_nonexcl_transpose;
+        if(descs[didx].fold_excl_transpose)
+          redop->hip_fold_excl_fn_transpose = descs[didx].fold_excl_transpose;
+        if(descs[didx].fold_nonexcl_transpose)
+          redop->hip_fold_nonexcl_fn_transpose = descs[didx].fold_nonexcl_transpose;
+
+        events[didx] = get_runtime()->notify_register_reduction(descs[didx].redop_id);
+      }
+
+      event = Event::merge_events(events);
+      return true;
+    }
+
 #ifdef REALM_USE_HIP_HIJACK
     ////////////////////////////////////////////////////////////////////////
     //

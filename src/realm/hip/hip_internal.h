@@ -953,29 +953,30 @@ namespace Realm {
       long get_requests(Request **requests, long nr);
 
       bool progress_xd(GPUreduceChannel *channel, TimeLimit work_until);
-      bool progress_basic_xd(GPUreduceChannel *channel, TimeLimit work_until);
-      bool progress_custom_xd_data(GPUreduceChannel *channel, TimeLimit work_until);
-      void setup_redop_kernel(GPUreduceChannel *channel, void **params, void *src_base,
-                              const size_t reduc_size, const size_t in_span_start,
-                              const size_t out_span_start, const size_t in_elem_size,
-                              const size_t out_elem_size, const size_t elems,
-                              const bool has_transpose);
+      bool fast_reduction_kernel_mode(GPUreduceChannel *channel, size_t max_bytes,
+                                      XferPort *in_port, XferPort *out_port,
+                                      size_t in_span_start, size_t out_span_start);
+      void *describe_kernel_variant(bool is_advanced);
+      void setup_redop_kernel(GPUreduceChannel *channel, void *redop_args,
+                              const size_t in_span_start, const size_t out_span_start,
+                              const size_t in_elem_size, const size_t out_elem_size,
+                              const size_t elems, const bool has_transpose);
 
     protected:
       XferDesRedopInfo redop_info;
       const ReductionOpUntyped *redop;
 #if defined(REALM_USE_HIP_HIJACK)
       void *kernel;
-      void *kernel_adv;
-      void *kernel_tran_adv;
+      void *kernel_advanced;
+      void *kernel_transpose;
 #else
       void *kernel_host_proxy;
-      void *kernel_host_proxy_adv;
-      void *kernel_host_proxy_tran_adv;
+      void *kernel_host_proxy_advanced;
+      void *kernel_host_proxy_transpose;
 #endif
       GPUStream *stream;
-      std::vector<GPU *> src_gpus, dst_gpus;
-      std::vector<bool> dst_is_ipc;
+      std::vector<GPU *> src_gpus;
+      std::vector<bool> src_is_ipc;
     };
 
     class GPUreduceChannel : public SingleXDQChannel<GPUreduceChannel, GPUreduceXferDes> {

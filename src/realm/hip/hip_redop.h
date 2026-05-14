@@ -38,30 +38,34 @@ namespace Realm {
     // x = mod(I, D_x)                      = I % D_x
     // y = mod(div(I, D_x), D_y)            = (I / D_x) % D_y
     // z = mod(div(div((I,D_x),D_y), D_z)   = ((I / D_x) / D_y) % D_z
-    template <size_t N, typename Offset_t = size_t>
+    template <typename Offset_t = size_t>
     static __device__ inline void index_to_coords(Offset_t *coords, Offset_t index,
-                                                  const Offset_t *extents)
+                                                  const Offset_t *extents,
+                                                  const size_t elem_size)
     {
       size_t div = index;
+      const unsigned n = 3;
 #pragma unroll
-      for(int i = 0; i < N - 1; i++) {
+      for(int i = 0; i < n - 1; i++) {
         size_t div_tmp = div / extents[i];
         coords[i] = div - div_tmp * extents[i];
         div = div_tmp;
       }
-      coords[N - 1] = div;
+      coords[n - 1] = div;
+      coords[0] = coords[0] * elem_size;
     }
 
-    template <size_t N, typename Offset_t = size_t>
-    static __device__ inline size_t
-    coords_to_index(Offset_t *coords, const Offset_t *strides, size_t elem_size)
+    template <typename Offset_t = size_t>
+    static __device__ inline size_t coords_to_index(const Offset_t *coords,
+                                                    const Offset_t *strides,
+                                                    const size_t elem_size)
     {
       size_t i = 0;
       size_t vol = 1;
       int d = 0;
-      coords[0] = coords[0] * elem_size;
+      const unsigned n = 3;
 #pragma unroll
-      for(; d < N - 1; d++) {
+      for(; d < n - 1; d++) {
         i += vol * coords[d];
         vol *= strides[d];
       }
@@ -71,132 +75,93 @@ namespace Realm {
       return i;
     }
 
-    template <size_t N, typename Offset_t = size_t>
-    static __device__ inline size_t
-    coords_to_index_trans(Offset_t *coords, const Offset_t *strides, size_t elem_size)
+    template <typename Offset_t = size_t>
+    static __device__ inline size_t coords_to_index_transpose(const Offset_t *coords,
+                                                              const Offset_t *strides)
     {
       size_t i = 0;
       i = coords[1] * strides[0] + coords[2] * strides[1] + coords[0];
       return i;
     }
 
-    // the ability to add CUDA kernels to a reduction op is only available
-    //  when using a compiler that understands CUDA
-    namespace ReductionKernels {
-      template <typename REDOP, bool EXCL>
-      __global__ void apply_hip_kernel(uintptr_t lhs_base, uintptr_t lhs_stride,
-                                       uintptr_t rhs_base, uintptr_t rhs_stride,
-                                       size_t count, REDOP redop)
-      {
-        size_t tid = blockIdx.x * blockDim.x + threadIdx.x;
-        for(size_t idx = tid; tid < count; tid += blockDim.x * gridDim.x) {
-          redop.template apply_hip<EXCL>(
-              *reinterpret_cast<typename REDOP::LHS *>(lhs_base + idx * lhs_stride),
-              *reinterpret_cast<const typename REDOP::RHS *>(rhs_base +
-                                                             idx * rhs_stride));
-        }
-      }
-
-      template <typename REDOP, bool EXCL>
-      __global__ void fold_hip_kernel(uintptr_t rhs1_base, uintptr_t rhs1_stride,
-                                      uintptr_t rhs2_base, uintptr_t rhs2_stride,
-                                      size_t count, REDOP redop)
-      {
-        size_t tid = blockIdx.x * blockDim.x + threadIdx.x;
-        for(size_t idx = tid; tid < count; tid += blockDim.x * gridDim.x)
-          redop.template fold_hip<EXCL>(
-              *reinterpret_cast<typename REDOP::RHS *>(rhs1_base + idx * rhs1_stride),
-              *reinterpret_cast<const typename REDOP::RHS *>(rhs2_base +
-                                                             idx * rhs2_stride));
-      }
-    }; // namespace ReductionKernels
-
-    namespace ReductionKernelsAdv {
+    namespace ReductionKernelsAdvanced {
       template <typename REDOP, bool EXCL>
       __global__ void fold_hip_kernel(Realm::Hip::AffineReducInfo<3> info, REDOP redop)
       {
-        size_t nrects = info.num_rects;
-        size_t offset = blockIdx.x * blockDim.x + threadIdx.x;
-        for(size_t rect = 0; rect < nrects; rect++) {
-          Realm::Hip::AffineReducPair<3> &current_info = info.subrects[rect];
-          size_t vol = current_info.volume / sizeof(typename REDOP::LHS);
-          typename REDOP::RHS *dst =
-              reinterpret_cast<typename REDOP::RHS *>(current_info.dst.addr);
-          typename REDOP::RHS *src =
-              reinterpret_cast<typename REDOP::RHS *>(current_info.src.addr);
-          for(; offset < vol; offset += blockDim.x * gridDim.x) {
-            size_t src_coords[3];
-            index_to_coords<3, size_t>(src_coords, offset, current_info.extents);
-            const size_t src_idx = coords_to_index<3, size_t>(
-                src_coords, current_info.src.strides, sizeof(typename REDOP::RHS));
-            size_t dst_coords[3];
-            index_to_coords<3, size_t>(dst_coords, offset, current_info.extents);
-            const size_t dst_idx = coords_to_index<3, size_t>(
-                dst_coords, current_info.dst.strides, sizeof(typename REDOP::LHS));
-            redop.template fold_hip<EXCL>(
-                *reinterpret_cast<typename REDOP::RHS *>(&dst[dst_idx]),
-                *reinterpret_cast<typename REDOP::RHS *>(&src[src_idx]));
-          }
+        size_t off = blockIdx.x * blockDim.x + threadIdx.x;
+        Realm::Hip::AffineReducPair<3> &current_info = info.subrects[0];
+        size_t vol = current_info.volume;
+        size_t num_elems_rhs = current_info.src.elem_size / sizeof(typename REDOP::RHS);
+        size_t redop_rhs_size = sizeof(typename REDOP::RHS);
+        typename REDOP::RHS *dst =
+            reinterpret_cast<typename REDOP::RHS *>(current_info.dst.addr);
+        typename REDOP::RHS *src =
+            reinterpret_cast<typename REDOP::RHS *>(current_info.src.addr);
+        for(size_t idx = off; idx < vol; idx += blockDim.x * gridDim.x) {
+          size_t coords[3];
+          index_to_coords<size_t>(coords, idx, current_info.extents, redop_rhs_size);
+          const size_t src_idx =
+              coords_to_index<size_t>(coords, current_info.src.strides, redop_rhs_size);
+          const size_t dst_idx =
+              coords_to_index<size_t>(coords, current_info.dst.strides, redop_rhs_size);
+          redop.template fold_hip<EXCL>(
+              *reinterpret_cast<typename REDOP::RHS *>(&dst[dst_idx * num_elems_rhs]),
+              *reinterpret_cast<const typename REDOP::RHS *>(
+                  &src[src_idx * num_elems_rhs]));
         }
       }
 
       template <typename REDOP, bool EXCL>
       __global__ void apply_hip_kernel(Realm::Hip::AffineReducInfo<3> info, REDOP redop)
       {
-        size_t nrects = info.num_rects;
-        size_t offset = blockIdx.x * blockDim.x + threadIdx.x;
-        for(size_t rect = 0; rect < nrects; rect++) {
-          Realm::Hip::AffineReducPair<3> &current_info = info.subrects[rect];
-          size_t vol = current_info.volume / sizeof(typename REDOP::LHS);
-          typename REDOP::LHS *dst =
-              reinterpret_cast<typename REDOP::LHS *>(current_info.dst.addr);
-
-          typename REDOP::RHS *src =
-              reinterpret_cast<typename REDOP::RHS *>(current_info.src.addr);
-
-          for(; offset < vol; offset += blockDim.x * gridDim.x) {
-            size_t src_coords[3];
-            index_to_coords<3, size_t>(src_coords, offset, current_info.extents);
-            const size_t src_idx = coords_to_index<3, size_t>(
-                src_coords, current_info.src.strides, sizeof(typename REDOP::RHS));
-
-            size_t dst_coords[3];
-            index_to_coords<3, size_t>(dst_coords, offset, current_info.extents);
-            const size_t dst_idx = coords_to_index<3, size_t>(
-                dst_coords, current_info.dst.strides, sizeof(typename REDOP::LHS));
-            redop.template apply_hip<EXCL>(
-                *reinterpret_cast<typename REDOP::LHS *>(&dst[dst_idx]),
-                *reinterpret_cast<typename REDOP::RHS *>(&src[src_idx]));
-          }
+        size_t off = blockIdx.x * blockDim.x + threadIdx.x;
+        Realm::Hip::AffineReducPair<3> &current_info = info.subrects[0];
+        size_t vol = current_info.volume;
+        size_t num_elems_lhs = current_info.dst.elem_size / sizeof(typename REDOP::LHS);
+        size_t num_elems_rhs = current_info.src.elem_size / sizeof(typename REDOP::RHS);
+        size_t redop_lhs_size = sizeof(typename REDOP::LHS);
+        size_t redop_rhs_size = sizeof(typename REDOP::RHS);
+        typename REDOP::LHS *dst =
+            reinterpret_cast<typename REDOP::LHS *>(current_info.dst.addr);
+        typename REDOP::RHS *src =
+            reinterpret_cast<typename REDOP::RHS *>(current_info.src.addr);
+        for(size_t idx = off; idx < vol; idx += blockDim.x * gridDim.x) {
+          size_t coords[3];
+          index_to_coords<size_t>(coords, idx, current_info.extents, redop_rhs_size);
+          const size_t src_idx =
+              coords_to_index<size_t>(coords, current_info.src.strides, redop_rhs_size);
+          const size_t dst_idx =
+              coords_to_index<size_t>(coords, current_info.dst.strides, redop_lhs_size);
+          redop.template apply_hip<EXCL>(
+              *reinterpret_cast<typename REDOP::LHS *>(&(dst[dst_idx * num_elems_lhs])),
+              *reinterpret_cast<const typename REDOP::RHS *>(
+                  &src[src_idx * num_elems_rhs]));
         }
       }
-    }; // namespace ReductionKernelsAdv
+    }; // namespace ReductionKernelsAdvanced
 
-    namespace ReductionKernelsAdvTranspose {
+    namespace ReductionKernelsTranspose {
       template <typename REDOP, bool EXCL>
       __global__ void fold_hip_kernel(Realm::Hip::MemReducInfo<size_t> current_info,
                                       REDOP redop)
       {
         size_t offset = blockIdx.x * blockDim.x + threadIdx.x;
-        size_t vol = current_info.volume / sizeof(typename REDOP::LHS);
+        size_t vol = current_info.volume;
+        size_t num_elems = current_info.elem_size / sizeof(typename REDOP::RHS);
         typename REDOP::RHS *dst =
             reinterpret_cast<typename REDOP::RHS *>(current_info.dst);
         typename REDOP::RHS *src =
             reinterpret_cast<typename REDOP::RHS *>(current_info.src);
-
-        for(; offset < vol; offset += blockDim.x * gridDim.x) {
-          size_t src_coords[3];
-          index_to_coords<3, size_t>(src_coords, offset, current_info.extents);
-          const size_t src_idx = coords_to_index_trans<3, size_t>(
-              src_coords, current_info.src_strides, sizeof(typename REDOP::RHS));
-
-          size_t dst_coords[3];
-          index_to_coords<3, size_t>(dst_coords, offset, current_info.extents);
-          const size_t dst_idx = coords_to_index_trans<3, size_t>(
-              dst_coords, current_info.dst_strides, sizeof(typename REDOP::LHS));
+        for(size_t idx = offset; idx < vol; idx += blockDim.x * gridDim.x) {
+          size_t coords[3];
+          index_to_coords<size_t>(coords, idx, current_info.extents, 1);
+          const size_t src_idx =
+              coords_to_index_transpose<size_t>(coords, current_info.src_strides);
+          const size_t dst_idx =
+              coords_to_index_transpose<size_t>(coords, current_info.dst_strides);
           redop.template fold_hip<EXCL>(
-              *reinterpret_cast<typename REDOP::RHS *>(&dst[dst_idx]),
-              *reinterpret_cast<typename REDOP::RHS *>(&src[src_idx]));
+              *reinterpret_cast<typename REDOP::RHS *>(&dst[dst_idx * num_elems]),
+              *reinterpret_cast<const typename REDOP::RHS *>(&src[src_idx * num_elems]));
         }
       }
 
@@ -204,51 +169,100 @@ namespace Realm {
       __global__ void apply_hip_kernel(Realm::Hip::MemReducInfo<size_t> current_info,
                                        REDOP redop)
       {
-        size_t offset = blockIdx.x * blockDim.x + threadIdx.x;
-        size_t vol = current_info.volume / sizeof(typename REDOP::LHS);
-
+        const size_t offset = blockIdx.x * blockDim.x + threadIdx.x;
+        size_t vol = current_info.volume;
+        size_t num_elems = current_info.elem_size / sizeof(typename REDOP::RHS);
         typename REDOP::LHS *dst =
             reinterpret_cast<typename REDOP::LHS *>(current_info.dst);
-
         typename REDOP::RHS *src =
             reinterpret_cast<typename REDOP::RHS *>(current_info.src);
 
-        for(; offset < vol; offset += blockDim.x * gridDim.x) {
-          size_t src_coords[3];
-          index_to_coords<3, size_t>(src_coords, offset, current_info.extents);
-          const size_t src_idx = coords_to_index_trans<3, size_t>(
-              src_coords, current_info.src_strides, sizeof(typename REDOP::RHS));
-
-          size_t dst_coords[3];
-          index_to_coords<3, size_t>(dst_coords, offset, current_info.extents);
-          const size_t dst_idx = coords_to_index_trans<3, size_t>(
-              dst_coords, current_info.dst_strides, sizeof(typename REDOP::LHS));
+        for(size_t idx = offset; idx < vol; idx += blockDim.x * gridDim.x) {
+          size_t coords[3];
+          index_to_coords<size_t>(coords, idx, current_info.extents, 1);
+          const size_t src_idx =
+              coords_to_index_transpose<size_t>(coords, current_info.src_strides);
+          const size_t dst_idx =
+              coords_to_index_transpose<size_t>(coords, current_info.dst_strides);
           redop.template apply_hip<EXCL>(
-              *reinterpret_cast<typename REDOP::LHS *>(&dst[dst_idx]),
-              *reinterpret_cast<typename REDOP::RHS *>(&src[src_idx]));
+              *reinterpret_cast<typename REDOP::LHS *>(&dst[dst_idx * num_elems]),
+              *reinterpret_cast<const typename REDOP::RHS *>(&src[src_idx * num_elems]));
         }
       }
-    }; // namespace ReductionKernelsAdvTranspose
+    }; // namespace ReductionKernelsTranspose
+
+    // the ability to add HIP kernels to a reduction op is only available
+    //  when using a compiler that understands HIP
+    namespace ReductionKernels {
+
+      template <typename LHS, typename RHS, typename F>
+      __device__ void iter_hip_kernel(uintptr_t lhs_base, uintptr_t lhs_stride,
+                                      uintptr_t rhs_base, uintptr_t rhs_stride,
+                                      size_t count, F func, void *context = nullptr)
+      {
+        const size_t tid = blockIdx.x * blockDim.x + threadIdx.x;
+        for(size_t idx = tid; idx < count; idx += blockDim.x * gridDim.x) {
+          (*func)(*reinterpret_cast<LHS *>(lhs_base + idx * lhs_stride),
+                  *reinterpret_cast<const RHS *>(rhs_base + idx * rhs_stride), context);
+        }
+      }
+
+      template <typename REDOP, bool EXCL>
+      __device__ void redop_apply_wrapper(typename REDOP::LHS &lhs,
+                                          const typename REDOP::RHS &rhs, void *context)
+      {
+        REDOP &redop = *reinterpret_cast<REDOP *>(context);
+        redop.template apply_hip<EXCL>(lhs, rhs);
+      }
+      template <typename REDOP, bool EXCL>
+      __device__ void redop_fold_wrapper(typename REDOP::RHS &rhs1,
+                                         const typename REDOP::RHS &rhs2, void *context)
+      {
+        REDOP &redop = *reinterpret_cast<REDOP *>(context);
+        redop.template fold_hip<EXCL>(rhs1, rhs2);
+      }
+
+      template <typename REDOP, bool EXCL>
+      __global__ void apply_hip_kernel(uintptr_t lhs_base, uintptr_t lhs_stride,
+                                       uintptr_t rhs_base, uintptr_t rhs_stride,
+                                       size_t count, REDOP redop)
+      {
+        iter_hip_kernel<typename REDOP::LHS, typename REDOP::RHS>(
+            lhs_base, lhs_stride, rhs_base, rhs_stride, count,
+            redop_apply_wrapper<REDOP, EXCL>, (void *)&redop);
+      }
+
+      template <typename REDOP, bool EXCL>
+      __global__ void fold_hip_kernel(uintptr_t rhs1_base, uintptr_t rhs1_stride,
+                                      uintptr_t rhs2_base, uintptr_t rhs2_stride,
+                                      size_t count, REDOP redop)
+      {
+        iter_hip_kernel<typename REDOP::RHS, typename REDOP::RHS>(
+            rhs1_base, rhs1_stride, rhs2_base, rhs2_stride, count,
+            redop_fold_wrapper<REDOP, EXCL>, (void *)&redop);
+      }
+    }; // namespace ReductionKernels
 
     template <typename REDOP, typename T /*= ReductionOpUntyped*/>
-    void add_hip_redop_kernels_adv(T *redop)
+    void add_hip_redop_kernels_advanced(T *redop)
     {
-      redop->hip_apply_excl_fn_adv =
-          reinterpret_cast<void *>(&ReductionKernelsAdv::apply_hip_kernel<REDOP, true>);
-      redop->hip_apply_nonexcl_fn_adv =
-          reinterpret_cast<void *>(&ReductionKernelsAdv::apply_hip_kernel<REDOP, false>);
-      redop->hip_fold_excl_fn_adv =
-          reinterpret_cast<void *>(&ReductionKernelsAdv::fold_hip_kernel<REDOP, true>);
-      redop->hip_fold_nonexcl_fn_adv =
-          reinterpret_cast<void *>(&ReductionKernelsAdv::fold_hip_kernel<REDOP, false>);
-      redop->hip_apply_excl_fn_tran_adv = reinterpret_cast<void *>(
-          &ReductionKernelsAdvTranspose::apply_hip_kernel<REDOP, true>);
-      redop->hip_apply_nonexcl_fn_tran_adv = reinterpret_cast<void *>(
-          &ReductionKernelsAdvTranspose::apply_hip_kernel<REDOP, false>);
-      redop->hip_fold_excl_fn_tran_adv = reinterpret_cast<void *>(
-          &ReductionKernelsAdvTranspose::fold_hip_kernel<REDOP, true>);
-      redop->hip_fold_nonexcl_fn_tran_adv = reinterpret_cast<void *>(
-          &ReductionKernelsAdvTranspose::fold_hip_kernel<REDOP, false>);
+      redop->hip_apply_excl_fn_advanced = reinterpret_cast<void *>(
+          &ReductionKernelsAdvanced::apply_hip_kernel<REDOP, true>);
+      redop->hip_apply_nonexcl_fn_advanced = reinterpret_cast<void *>(
+          &ReductionKernelsAdvanced::apply_hip_kernel<REDOP, false>);
+      redop->hip_fold_excl_fn_advanced = reinterpret_cast<void *>(
+          &ReductionKernelsAdvanced::fold_hip_kernel<REDOP, true>);
+      redop->hip_fold_nonexcl_fn_advanced = reinterpret_cast<void *>(
+          &ReductionKernelsAdvanced::fold_hip_kernel<REDOP, false>);
+
+      redop->hip_apply_excl_fn_transpose = reinterpret_cast<void *>(
+          &ReductionKernelsTranspose::apply_hip_kernel<REDOP, true>);
+      redop->hip_apply_nonexcl_fn_transpose = reinterpret_cast<void *>(
+          &ReductionKernelsTranspose::apply_hip_kernel<REDOP, false>);
+      redop->hip_fold_excl_fn_transpose = reinterpret_cast<void *>(
+          &ReductionKernelsTranspose::fold_hip_kernel<REDOP, true>);
+      redop->hip_fold_nonexcl_fn_transpose = reinterpret_cast<void *>(
+          &ReductionKernelsTranspose::fold_hip_kernel<REDOP, false>);
     }
 
     // this helper adds the appropriate kernels for REDOP to a ReductionOpUntyped,
@@ -266,7 +280,7 @@ namespace Realm {
           reinterpret_cast<void *>(&ReductionKernels::fold_hip_kernel<REDOP, true>);
       redop->hip_fold_nonexcl_fn =
           reinterpret_cast<void *>(&ReductionKernels::fold_hip_kernel<REDOP, false>);
-      add_hip_redop_kernels_adv<REDOP, T>(redop);
+      add_hip_redop_kernels_advanced<REDOP, T>(redop);
     }
   }; // namespace Hip
 };   // namespace Realm

@@ -387,10 +387,18 @@ add_integration_test(
 )
 target_link_libraries(memspeed ${TEST_GPU_LIBS})
 set(simple_reduce_ARGS -all)
-if(NOT BUILD_SHARED_LIBS OR NOT REALM_ENABLE_HIP)
+if(REALM_USE_HIP AND TEST_USE_GPU)
+  # HIP variant: hipLaunchKernel accepts host-side void* pointers directly,
+  # so the kernel registration works correctly even with shared libs.
+  add_integration_test(
+    simple_reduce "${REALM_TEST_DIR}/simple_reduce.cc"
+    "${REALM_TEST_DIR}/simple_reduce_gpu.hip"
+  )
+  set_source_files_properties("${REALM_TEST_DIR}/simple_reduce_gpu.hip" PROPERTIES LANGUAGE HIP)
+elseif(NOT BUILD_SHARED_LIBS OR NOT REALM_ENABLE_HIP)
   # simple_reduce registers a kernel with the runtime, but uses a different instance of the runtime
   # than in librealm.so, which causes an "invalid device function" error.  This has been solved in
-  # the CUDA module, not the HIP module yet.
+  # the CUDA module but not for HIP + shared libs.
   add_integration_test(
     simple_reduce "${REALM_TEST_DIR}/simple_reduce.cc"
     "$<$<BOOL:TEST_USE_GPU>:${REALM_TEST_DIR}/simple_reduce_gpu.cu>"
