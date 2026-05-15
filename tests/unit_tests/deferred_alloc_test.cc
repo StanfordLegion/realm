@@ -181,10 +181,16 @@ TEST_F(DeferredAllocBadPathTest, ReorderFailDefersInstanceRecycle)
   RegionInstanceImpl *E = mem_->new_instance(ProfilingRequestSet());
   EXPECT_NE(ID(A->me).instance_inst_idx(), ID(E->me).instance_inst_idx());
 
-  // Step 4: drive B's deferred destroy to completion.  Calling
-  // release_storage_immediate directly is exactly what the
-  // DeferredDestroy callback does when the precondition fires.
-  mem_->release_storage_immediate(B, /*poisoned=*/false, TimeLimit::responsive());
+  // Step 4: fire B's precondition.  release_storage_deferrable registered
+  // B->deferred_destroy as a waiter on b_precondition; triggering the event
+  // walks that waiter list and dispatches release_storage_immediate(B, ...)
+  // via DeferredDestroy::event_triggered.  Calling release_storage_immediate
+  // directly here would also drain the allocator state, but it would leave
+  // the stale waiter pointing at B->deferred_destroy in b_precondition - and
+  // when the runtime tore down b_precondition's GenEventImpl after the test,
+  // ~GenEventImpl would walk the waiter list and hit a use-after-free on
+  // the already-freed RegionInstanceImpl.
+  GenEventImpl::trigger(b_precondition, /*poisoned=*/false);
 
   // B's release drains as the oldest, satisfies D, and the catch-up loop
   // then drains A as the next consecutive ready entry.  Both queues should
