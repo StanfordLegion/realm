@@ -522,8 +522,10 @@ namespace Realm {
       }
 
       // we may be able to compact dimensions, but ask for space to write a
-      //  an address record of the maximum possible dimension (i.e. N)
-      size_t *addr_data = addrlist.begin_entry(N);
+      //  an address record of the maximum possible dimension.  Worst case is
+      //  N + 1: 1 "contig" slot (used even when no dim compacts with
+      //  field_size) plus up to N stride-dim slots.
+      size_t *addr_data = addrlist.begin_entry(N + 1);
       if(!addr_data) {
         return true; // out of space for now
       }
