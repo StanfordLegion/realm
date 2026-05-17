@@ -233,6 +233,15 @@ namespace Realm {
     Thread *thread = Thread::self();
     assert(thread); // all tasks had better have a thread...
 
+    // For now, we're not going to support waiting on events during
+    // a compiled subgraph task execution. We will relax this restriction
+    // in the future.
+    if(thread->in_subgraph_task_execution()) {
+      assert(false && "waiting on events during compiled subgraph task execution is not "
+                      "currently supported");
+      return;
+    }
+
     log_event.info() << "thread blocked: thread=" << thread << " event=" << *this;
     // see if we are being asked to profile these waits
     ProfilingMeasurements::OperationEventWaits::WaitInterval *interval = 0;

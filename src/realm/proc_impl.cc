@@ -16,6 +16,7 @@
  */
 
 #include "realm/proc_impl.h"
+#include "realm/subgraph_impl.h"
 
 #include "realm/timers.h"
 #include "realm/runtime_impl.h"
@@ -122,6 +123,16 @@ namespace Realm {
   // returns the finish event for the currently running task
   /*static*/ Event Processor::get_current_finish_event(void)
   {
+    Thread *thread = Thread::self();
+    if(thread->in_subgraph_task_execution()) {
+      // We will not support getting the finish event during
+      // a compiled subgraph yet, but will relax this restriction
+      // in the future.
+      assert(false && "get_current_finish_event during compiled subgraph task execution "
+                      "is not currently supported");
+      return Event::NO_EVENT;
+    }
+
     Operation *op = Thread::self()->get_operation();
     assert(op != 0);
     return op->get_finish_event();
@@ -1188,6 +1199,13 @@ namespace Realm {
   void LocalTaskProcessor::add_internal_task(InternalTask *task)
   {
     sched->add_internal_task(task);
+  }
+
+  void LocalTaskProcessor::notify_scheduler_of_new_work() { sched->notify_of_new_work(); }
+
+  void LocalTaskProcessor::enqueue_subgraph(SubgraphExecutionState *subgraph)
+  {
+    sched->add_subgraph(subgraph);
   }
 
   ////////////////////////////////////////////////////////////////////////

@@ -41,6 +41,7 @@ namespace Realm {
 
   inline SubgraphDefinition::SubgraphDefinition()
     : concurrency_mode(CONCURRENT)
+    , execution_mode(INTERPRETED)
   {}
 
   template <typename S>
@@ -49,7 +50,8 @@ namespace Realm {
     return ((serdez & s.tasks) && (serdez & s.copies) && (serdez & s.arrivals) &&
             (serdez & s.instantiations) && (serdez & s.acquires) &&
             (serdez & s.releases) && (serdez & s.dependencies) &&
-            (serdez & s.interpolations) && (serdez & s.concurrency_mode));
+            (serdez & s.interpolations) && (serdez & s.concurrency_mode) &&
+            (serdez & s.execution_mode));
   }
 
   ////////////////////////////////////////////////////////////////////////
