@@ -44,7 +44,7 @@
    <!-- BEGIN version select -->
     <br />
     <div class="dropdown">
-     <button class="dropbtn">Version 25.6.1-rc.4+e56eef0c</button>
+     <button class="dropbtn">Version 25.6.1-rc.4+93fd5f98</button>
      <div class="dropdown-content"></div>
     </div>
     <script type="text/javascript" src="../selectversion.js"></script>
@@ -143,13 +143,13 @@ $(document).ready(function(){initNavTree('structRealm_1_1RemoteIBAllocRequestSin
 <div class="dynheader">
 Collaboration diagram for Realm::RemoteIBAllocRequestSingle:</div>
 <div class="dyncontent">
-<div class="center"><!-- SVG 0 --></div>
+<div class="center"><iframe scrolling="no" frameborder="0" src="structRealm_1_1RemoteIBAllocRequestSingle__coll__graph.svg" width="299" height="139"><p><b>This browser is not able to show SVG: try Firefox, Chrome, Safari, or Opera instead.</b></p></iframe></div>
 <center><span class="legend">[<a target="top" href="graph_legend.html">legend</a>]</span></center></div>
 <table class="memberdecls">
 <tr class="heading"><td colspan="2"><h2 class="groupheader"><a id="pub-static-methods" name="pub-static-methods"></a>
 Static Public Member Functions</h2></td></tr>
-<tr class="memitem:a1ce72084c65944e4e55b1ed142ef57b9" id="r_a1ce72084c65944e4e55b1ed142ef57b9"><td class="memItemLeft" align="right" valign="top">static void&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="structRealm_1_1RemoteIBAllocRequestSingle.html#a1ce72084c65944e4e55b1ed142ef57b9">handle_message</a> (<a class="el" href="namespaceRealm.html#a4ae47f41d88cffb2debee742cbbfe2dd">NodeID</a> sender, const <a class="el" href="structRealm_1_1RemoteIBAllocRequestSingle.html">RemoteIBAllocRequestSingle</a> &amp;args, const void *data, size_t msglen)</td></tr>
-<tr class="separator:a1ce72084c65944e4e55b1ed142ef57b9"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:a2f6228179a0ab13eb05648e320655a20" id="r_a2f6228179a0ab13eb05648e320655a20"><td class="memItemLeft" align="right" valign="top">static void&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="structRealm_1_1RemoteIBAllocRequestSingle.html#a2f6228179a0ab13eb05648e320655a20">handle_message</a> (<a class="el" href="namespaceRealm.html#a4ae47f41d88cffb2debee742cbbfe2dd">NodeID</a> sender, const <a class="el" href="structRealm_1_1RemoteIBAllocRequestSingle.html">RemoteIBAllocRequestSingle</a> &amp;args, const void *data, size_t msglen, <a class="el" href="classRealm_1_1TimeLimit.html">TimeLimit</a> work_until)</td></tr>
+<tr class="separator:a2f6228179a0ab13eb05648e320655a20"><td class="memSeparator" colspan="2">&#160;</td></tr>
 </table><table class="memberdecls">
 <tr class="heading"><td colspan="2"><h2 class="groupheader"><a id="pub-attribs" name="pub-attribs"></a>
 Public Attributes</h2></td></tr>
@@ -165,8 +165,8 @@ Public Attributes</h2></td></tr>
 <tr class="separator:a2bf4f9ff1b16228dbe105af35884bea1"><td class="memSeparator" colspan="2">&#160;</td></tr>
 </table>
 <h2 class="groupheader">Member Function Documentation</h2>
-<a id="a1ce72084c65944e4e55b1ed142ef57b9" name="a1ce72084c65944e4e55b1ed142ef57b9"></a>
-<h2 class="memtitle"><span class="permalink"><a href="#a1ce72084c65944e4e55b1ed142ef57b9">&#9670;&#160;</a></span>handle_message()</h2>
+<a id="a2f6228179a0ab13eb05648e320655a20" name="a2f6228179a0ab13eb05648e320655a20"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a2f6228179a0ab13eb05648e320655a20">&#9670;&#160;</a></span>handle_message()</h2>
 
 <div class="memitem">
 <div class="memproto">
@@ -196,7 +196,13 @@ Public Attributes</h2></td></tr>
           <td class="paramkey"></td>
           <td></td>
           <td class="paramtype">size_t&#160;</td>
-          <td class="paramname"><em>msglen</em>&#160;</td>
+          <td class="paramname"><em>msglen</em>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype"><a class="el" href="classRealm_1_1TimeLimit.html">TimeLimit</a>&#160;</td>
+          <td class="paramname"><em>work_until</em>&#160;</td>
         </tr>
         <tr>
           <td></td>

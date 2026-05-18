@@ -64,6 +64,7 @@ var classRealm_1_1RuntimeImpl =
     [ "Runtime", "classRealm_1_1RuntimeImpl.html#af3d14e26ba8af9e6cc5a32aad8446de7", null ],
     [ "bgwork", "classRealm_1_1RuntimeImpl.html#a117b3cb4d969fbf4f9443b436ab1caa0", null ],
     [ "code_translators", "classRealm_1_1RuntimeImpl.html#afe138984c9b17ca1cf3e43f23caca55d", null ],
+    [ "copy_analyzer", "classRealm_1_1RuntimeImpl.html#af1cf2c1935aa10339ca0707c6411ed86", null ],
     [ "core_reservations", "classRealm_1_1RuntimeImpl.html#abb0792038ca8aead5585f5cfc8cb1d15", null ],
     [ "custom_serdez_table", "classRealm_1_1RuntimeImpl.html#a219069db7bdc1873d87db40c140ba68d", null ],
     [ "deferred_shutdown", "classRealm_1_1RuntimeImpl.html#a431b4c4fce5e659317bf245b6f1deb53", null ],

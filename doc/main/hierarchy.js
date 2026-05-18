@@ -124,6 +124,7 @@ var hierarchy =
       [ "Realm::XDQueue< MemreduceChannel, MemreduceXferDes >", "classRealm_1_1XDQueue.html", null ],
       [ "Realm::XDQueue< RemoteWriteChannel, RemoteWriteXferDes >", "classRealm_1_1XDQueue.html", null ],
       [ "Realm::AsyncFileIOContext", "classRealm_1_1AsyncFileIOContext.html", null ],
+      [ "Realm::CopyAnalyzer", "classRealm_1_1CopyAnalyzer.html", null ],
       [ "Realm::Cuda::GPUWorker", "classRealm_1_1Cuda_1_1GPUWorker.html", null ],
       [ "Realm::EventTriggerNotifier", "classRealm_1_1EventTriggerNotifier.html", null ],
       [ "Realm::GASNetEXCompleter", "classRealm_1_1GASNetEXCompleter.html", null ],
@@ -369,7 +370,6 @@ var hierarchy =
       [ "Realm::RuntimeImpl::DeferredShutdown", "classRealm_1_1RuntimeImpl_1_1DeferredShutdown.html", null ],
       [ "Realm::SubgraphImpl::DeferredDestroy", "classRealm_1_1SubgraphImpl_1_1DeferredDestroy.html", null ],
       [ "Realm::Task::DeferredSpawn", "classRealm_1_1Task_1_1DeferredSpawn.html", null ],
-      [ "Realm::TransferDesc::DeferredAnalysis", "classRealm_1_1TransferDesc_1_1DeferredAnalysis.html", null ],
       [ "Realm::TransferOperation::DeferredStart", "classRealm_1_1TransferOperation_1_1DeferredStart.html", null ],
       [ "Realm::XferDes::DeferredXDEnqueue", "classRealm_1_1XferDes_1_1DeferredXDEnqueue.html", null ]
     ] ],
@@ -1096,7 +1096,6 @@ var hierarchy =
     [ "Realm::LocalPythonProcessor::TaskTableEntry", "structRealm_1_1LocalPythonProcessor_1_1TaskTableEntry.html", null ],
     [ "Realm::LocalTaskProcessor::TaskTableEntry", "structRealm_1_1LocalTaskProcessor_1_1TaskTableEntry.html", null ],
     [ "is_copy_serializable::test< T >", "structis__copy__serializable_1_1test.html", null ],
-    [ "Realm::TransferDesc::TestTag", "structRealm_1_1TransferDesc_1_1TestTag.html", null ],
     [ "Realm::Thread", "classRealm_1_1Thread.html", null ],
     [ "Realm::ThreadLaunchParameters", "classRealm_1_1ThreadLaunchParameters.html", null ],
     [ "Realm::ThreadPool", "classRealm_1_1ThreadPool.html", null ],

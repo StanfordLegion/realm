@@ -44,7 +44,7 @@
    <!-- BEGIN version select -->
     <br />
     <div class="dropdown">
-     <button class="dropbtn">Version 25.6.1-rc.4+e56eef0c</button>
+     <button class="dropbtn">Version 25.6.1-rc.4+93fd5f98</button>
      <div class="dropdown-content"></div>
     </div>
     <script type="text/javascript" src="../selectversion.js"></script>
@@ -144,12 +144,12 @@ $(document).ready(function(){initNavTree('classRealm_1_1IBMemory.html',''); init
 <div class="dynheader">
 Inheritance diagram for Realm::IBMemory:</div>
 <div class="dyncontent">
-<div class="center"><!-- SVG 0 --></div>
+<div class="center"><iframe scrolling="no" frameborder="0" src="classRealm_1_1IBMemory__inherit__graph.svg" width="700" height="183"><p><b>This browser is not able to show SVG: try Firefox, Chrome, Safari, or Opera instead.</b></p></iframe></div>
 <center><span class="legend">[<a target="top" href="graph_legend.html">legend</a>]</span></center></div>
 <div class="dynheader">
 Collaboration diagram for Realm::IBMemory:</div>
 <div class="dyncontent">
-<div class="center"><!-- SVG 1 --></div>
+<div class="center"><iframe scrolling="no" frameborder="0" src="classRealm_1_1IBMemory__coll__graph.svg" width="3498" height="1758"><p><b>This browser is not able to show SVG: try Firefox, Chrome, Safari, or Opera instead.</b></p></iframe></div>
 <center><span class="legend">[<a target="top" href="graph_legend.html">legend</a>]</span></center></div>
 <table class="memberdecls">
 <tr class="heading"><td colspan="2"><h2 class="groupheader"><a id="pub-methods" name="pub-methods"></a>
@@ -160,8 +160,8 @@ Public Member Functions</h2></td></tr>
 <tr class="separator:ade66db30fb767be1cc11e183b1cdbc48"><td class="memSeparator" colspan="2">&#160;</td></tr>
 <tr class="memitem:a94e5cc34bbd7ec117f76a62c3f57918c" id="r_a94e5cc34bbd7ec117f76a62c3f57918c"><td class="memItemLeft" align="right" valign="top">virtual off_t&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="classRealm_1_1IBMemory.html#a94e5cc34bbd7ec117f76a62c3f57918c">alloc_bytes_local</a> (size_t <a class="el" href="classRealm_1_1MemoryImpl.html#a3e5aad64db537a237030a401637c2d82">size</a>)</td></tr>
 <tr class="separator:a94e5cc34bbd7ec117f76a62c3f57918c"><td class="memSeparator" colspan="2">&#160;</td></tr>
-<tr class="memitem:a68b7acafe18ae108816e5339c0c8be24" id="r_a68b7acafe18ae108816e5339c0c8be24"><td class="memItemLeft" align="right" valign="top">virtual void&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="classRealm_1_1IBMemory.html#a68b7acafe18ae108816e5339c0c8be24">free_bytes_local</a> (off_t offset, size_t <a class="el" href="classRealm_1_1MemoryImpl.html#a3e5aad64db537a237030a401637c2d82">size</a>)</td></tr>
-<tr class="separator:a68b7acafe18ae108816e5339c0c8be24"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:ad63aef8a74d8c8209195b3a0db4b28b1" id="r_ad63aef8a74d8c8209195b3a0db4b28b1"><td class="memItemLeft" align="right" valign="top">void&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="classRealm_1_1IBMemory.html#ad63aef8a74d8c8209195b3a0db4b28b1">free_bytes_local</a> (off_t offset, size_t <a class="el" href="classRealm_1_1MemoryImpl.html#a3e5aad64db537a237030a401637c2d82">size</a>, <a class="el" href="classRealm_1_1TimeLimit.html">TimeLimit</a> work_until)</td></tr>
+<tr class="separator:ad63aef8a74d8c8209195b3a0db4b28b1"><td class="memSeparator" colspan="2">&#160;</td></tr>
 <tr class="memitem:a04e7c5f5dfa531318c8a4224c7e54711" id="r_a04e7c5f5dfa531318c8a4224c7e54711"><td class="memItemLeft" align="right" valign="top">virtual void *&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="classRealm_1_1IBMemory.html#a04e7c5f5dfa531318c8a4224c7e54711">get_direct_ptr</a> (off_t offset, size_t <a class="el" href="classRealm_1_1MemoryImpl.html#a3e5aad64db537a237030a401637c2d82">size</a>)</td></tr>
 <tr class="separator:a04e7c5f5dfa531318c8a4224c7e54711"><td class="memSeparator" colspan="2">&#160;</td></tr>
 <tr class="memitem:a704e4dad67ea55c426fe4c90031e75bb" id="r_a704e4dad67ea55c426fe4c90031e75bb"><td class="memItemLeft" align="right" valign="top">virtual <a class="el" href="classRealm_1_1MemoryImpl.html#a72bbbb67b90c7eda5b5b81dc8c45741d">AllocationResult</a>&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="classRealm_1_1IBMemory.html#a704e4dad67ea55c426fe4c90031e75bb">allocate_storage_immediate</a> (<a class="el" href="classRealm_1_1RegionInstanceImpl.html">RegionInstanceImpl</a> *inst, bool need_alloc_result, bool poisoned, <a class="el" href="classRealm_1_1TimeLimit.html">TimeLimit</a> work_until)</td></tr>
@@ -174,10 +174,10 @@ Public Member Functions</h2></td></tr>
 <tr class="separator:ac6a920e6007e1c43a0d08c393a9fa1f0"><td class="memSeparator" colspan="2">&#160;</td></tr>
 <tr class="memitem:a783571f67b023f2e7051efc8e30353c4" id="r_a783571f67b023f2e7051efc8e30353c4"><td class="memItemLeft" align="right" valign="top">bool&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="classRealm_1_1IBMemory.html#a783571f67b023f2e7051efc8e30353c4">attempt_immediate_allocation</a> (<a class="el" href="namespaceRealm.html#a4ae47f41d88cffb2debee742cbbfe2dd">NodeID</a> requestor, uintptr_t req_op, size_t count, const size_t *sizes, off_t *offsets)</td></tr>
 <tr class="separator:a783571f67b023f2e7051efc8e30353c4"><td class="memSeparator" colspan="2">&#160;</td></tr>
-<tr class="memitem:a071d491de20541e6e0afbb5ef78ef72b" id="r_a071d491de20541e6e0afbb5ef78ef72b"><td class="memItemLeft" align="right" valign="top">void&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="classRealm_1_1IBMemory.html#a071d491de20541e6e0afbb5ef78ef72b">enqueue_requests</a> (<a class="el" href="classRealm_1_1PendingIBRequests.html">PendingIBRequests</a> *reqs)</td></tr>
-<tr class="separator:a071d491de20541e6e0afbb5ef78ef72b"><td class="memSeparator" colspan="2">&#160;</td></tr>
-<tr class="memitem:a0b2bbfe4800e97f0abeef9746e3372bb" id="r_a0b2bbfe4800e97f0abeef9746e3372bb"><td class="memItemLeft" align="right" valign="top">void&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="classRealm_1_1IBMemory.html#a0b2bbfe4800e97f0abeef9746e3372bb">free_multiple</a> (size_t count, const off_t *offsets, const size_t *sizes)</td></tr>
-<tr class="separator:a0b2bbfe4800e97f0abeef9746e3372bb"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:aa52c1e4e2e4edbee29e03257eb528240" id="r_aa52c1e4e2e4edbee29e03257eb528240"><td class="memItemLeft" align="right" valign="top">void&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="classRealm_1_1IBMemory.html#aa52c1e4e2e4edbee29e03257eb528240">enqueue_requests</a> (<a class="el" href="classRealm_1_1PendingIBRequests.html">PendingIBRequests</a> *reqs, <a class="el" href="classRealm_1_1TimeLimit.html">TimeLimit</a> work_until)</td></tr>
+<tr class="separator:aa52c1e4e2e4edbee29e03257eb528240"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:a1841130e4bb5f70d0fc4f6cf7ee3c2f8" id="r_a1841130e4bb5f70d0fc4f6cf7ee3c2f8"><td class="memItemLeft" align="right" valign="top">void&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="classRealm_1_1IBMemory.html#a1841130e4bb5f70d0fc4f6cf7ee3c2f8">free_multiple</a> (size_t count, const off_t *offsets, const size_t *sizes, <a class="el" href="classRealm_1_1TimeLimit.html">TimeLimit</a> work_until)</td></tr>
+<tr class="separator:a1841130e4bb5f70d0fc4f6cf7ee3c2f8"><td class="memSeparator" colspan="2">&#160;</td></tr>
 <tr class="inherit_header pub_methods_classRealm_1_1MemoryImpl"><td colspan="2" onclick="javascript:toggleInherit('pub_methods_classRealm_1_1MemoryImpl')"><img src="closed.png" alt="-"/>&#160;Public Member Functions inherited from <a class="el" href="classRealm_1_1MemoryImpl.html">Realm::MemoryImpl</a></td></tr>
 <tr class="memitem:a8e123dae853bbe2181085157d812eef4 inherit pub_methods_classRealm_1_1MemoryImpl" id="r_a8e123dae853bbe2181085157d812eef4"><td class="memItemLeft" align="right" valign="top">&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="classRealm_1_1MemoryImpl.html#a8e123dae853bbe2181085157d812eef4">MemoryImpl</a> (<a class="el" href="classRealm_1_1RuntimeImpl.html">RuntimeImpl</a> *_runtime_impl, <a class="el" href="classRealm_1_1Memory.html">Memory</a> _me, size_t _size, <a class="el" href="classRealm_1_1MemoryImpl.html#a2556df02a71b9bf1ad4c3a2782db4e03">MemoryKind</a> _kind, <a class="el" href="classRealm_1_1Memory.html#a4d4d0769990b3dc75fcbab5ae292e839">Memory::Kind</a> _lowlevel_kind, <a class="el" href="classRealm_1_1NetworkSegment.html">NetworkSegment</a> *_segment)</td></tr>
 <tr class="separator:a8e123dae853bbe2181085157d812eef4 inherit pub_methods_classRealm_1_1MemoryImpl"><td class="memSeparator" colspan="2">&#160;</td></tr>
@@ -236,8 +236,8 @@ Protected Member Functions</h2></td></tr>
 <tr class="separator:af6809dc0eeb348e393c5bce158fb047a"><td class="memSeparator" colspan="2">&#160;</td></tr>
 <tr class="memitem:a27285cc3a77bbd5ff7b9ffbfe39f4fa6" id="r_a27285cc3a77bbd5ff7b9ffbfe39f4fa6"><td class="memItemLeft" align="right" valign="top"><a class="el" href="classRealm_1_1PendingIBRequests.html">PendingIBRequests</a> *&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="classRealm_1_1IBMemory.html#a27285cc3a77bbd5ff7b9ffbfe39f4fa6">satisfy_pending_reqs</a> ()</td></tr>
 <tr class="separator:a27285cc3a77bbd5ff7b9ffbfe39f4fa6"><td class="memSeparator" colspan="2">&#160;</td></tr>
-<tr class="memitem:af73968131886cecbce26ff562f257855" id="r_af73968131886cecbce26ff562f257855"><td class="memItemLeft" align="right" valign="top">void&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="classRealm_1_1IBMemory.html#af73968131886cecbce26ff562f257855">forward_satisfied_reqs</a> (<a class="el" href="classRealm_1_1PendingIBRequests.html">PendingIBRequests</a> *reqs)</td></tr>
-<tr class="separator:af73968131886cecbce26ff562f257855"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:ac3a40e24e3dc48d0d76aed6014d7a425" id="r_ac3a40e24e3dc48d0d76aed6014d7a425"><td class="memItemLeft" align="right" valign="top">void&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="classRealm_1_1IBMemory.html#ac3a40e24e3dc48d0d76aed6014d7a425">forward_satisfied_reqs</a> (<a class="el" href="classRealm_1_1PendingIBRequests.html">PendingIBRequests</a> *reqs, <a class="el" href="classRealm_1_1TimeLimit.html">TimeLimit</a> work_until)</td></tr>
+<tr class="separator:ac3a40e24e3dc48d0d76aed6014d7a425"><td class="memSeparator" colspan="2">&#160;</td></tr>
 </table><table class="memberdecls">
 <tr class="heading"><td colspan="2"><h2 class="groupheader"><a id="pro-attribs" name="pro-attribs"></a>
 Protected Attributes</h2></td></tr>
@@ -578,8 +578,8 @@ Additional Inherited Members</h2></td></tr>
 
 </div>
 </div>
-<a id="a071d491de20541e6e0afbb5ef78ef72b" name="a071d491de20541e6e0afbb5ef78ef72b"></a>
-<h2 class="memtitle"><span class="permalink"><a href="#a071d491de20541e6e0afbb5ef78ef72b">&#9670;&#160;</a></span>enqueue_requests()</h2>
+<a id="aa52c1e4e2e4edbee29e03257eb528240" name="aa52c1e4e2e4edbee29e03257eb528240"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#aa52c1e4e2e4edbee29e03257eb528240">&#9670;&#160;</a></span>enqueue_requests()</h2>
 
 <div class="memitem">
 <div class="memproto">
@@ -588,16 +588,26 @@ Additional Inherited Members</h2></td></tr>
           <td class="memname">void Realm::IBMemory::enqueue_requests </td>
           <td>(</td>
           <td class="paramtype"><a class="el" href="classRealm_1_1PendingIBRequests.html">PendingIBRequests</a> *&#160;</td>
-          <td class="paramname"><em>reqs</em></td><td>)</td>
+          <td class="paramname"><em>reqs</em>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
           <td></td>
+          <td class="paramtype"><a class="el" href="classRealm_1_1TimeLimit.html">TimeLimit</a>&#160;</td>
+          <td class="paramname"><em>work_until</em>&#160;</td>
+        </tr>
+        <tr>
+          <td></td>
+          <td>)</td>
+          <td></td><td></td>
         </tr>
       </table>
 </div><div class="memdoc">
 
 </div>
 </div>
-<a id="af73968131886cecbce26ff562f257855" name="af73968131886cecbce26ff562f257855"></a>
-<h2 class="memtitle"><span class="permalink"><a href="#af73968131886cecbce26ff562f257855">&#9670;&#160;</a></span>forward_satisfied_reqs()</h2>
+<a id="ac3a40e24e3dc48d0d76aed6014d7a425" name="ac3a40e24e3dc48d0d76aed6014d7a425"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#ac3a40e24e3dc48d0d76aed6014d7a425">&#9670;&#160;</a></span>forward_satisfied_reqs()</h2>
 
 <div class="memitem">
 <div class="memproto">
@@ -609,8 +619,18 @@ Additional Inherited Members</h2></td></tr>
           <td class="memname">void Realm::IBMemory::forward_satisfied_reqs </td>
           <td>(</td>
           <td class="paramtype"><a class="el" href="classRealm_1_1PendingIBRequests.html">PendingIBRequests</a> *&#160;</td>
-          <td class="paramname"><em>reqs</em></td><td>)</td>
+          <td class="paramname"><em>reqs</em>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
           <td></td>
+          <td class="paramtype"><a class="el" href="classRealm_1_1TimeLimit.html">TimeLimit</a>&#160;</td>
+          <td class="paramname"><em>work_until</em>&#160;</td>
+        </tr>
+        <tr>
+          <td></td>
+          <td>)</td>
+          <td></td><td></td>
         </tr>
       </table>
   </td>
@@ -622,17 +642,14 @@ Additional Inherited Members</h2></td></tr>
 
 </div>
 </div>
-<a id="a68b7acafe18ae108816e5339c0c8be24" name="a68b7acafe18ae108816e5339c0c8be24"></a>
-<h2 class="memtitle"><span class="permalink"><a href="#a68b7acafe18ae108816e5339c0c8be24">&#9670;&#160;</a></span>free_bytes_local()</h2>
+<a id="ad63aef8a74d8c8209195b3a0db4b28b1" name="ad63aef8a74d8c8209195b3a0db4b28b1"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#ad63aef8a74d8c8209195b3a0db4b28b1">&#9670;&#160;</a></span>free_bytes_local()</h2>
 
 <div class="memitem">
 <div class="memproto">
-<table class="mlabels">
-  <tr>
-  <td class="mlabels-left">
       <table class="memname">
         <tr>
-          <td class="memname">virtual void Realm::IBMemory::free_bytes_local </td>
+          <td class="memname">void Realm::IBMemory::free_bytes_local </td>
           <td>(</td>
           <td class="paramtype">off_t&#160;</td>
           <td class="paramname"><em>offset</em>, </td>
@@ -641,7 +658,13 @@ Additional Inherited Members</h2></td></tr>
           <td class="paramkey"></td>
           <td></td>
           <td class="paramtype">size_t&#160;</td>
-          <td class="paramname"><em>size</em>&#160;</td>
+          <td class="paramname"><em>size</em>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype"><a class="el" href="classRealm_1_1TimeLimit.html">TimeLimit</a>&#160;</td>
+          <td class="paramname"><em>work_until</em>&#160;</td>
         </tr>
         <tr>
           <td></td>
@@ -649,17 +672,12 @@ Additional Inherited Members</h2></td></tr>
           <td></td><td></td>
         </tr>
       </table>
-  </td>
-  <td class="mlabels-right">
-<span class="mlabels"><span class="mlabel">virtual</span></span>  </td>
-  </tr>
-</table>
 </div><div class="memdoc">
 
 </div>
 </div>
-<a id="a0b2bbfe4800e97f0abeef9746e3372bb" name="a0b2bbfe4800e97f0abeef9746e3372bb"></a>
-<h2 class="memtitle"><span class="permalink"><a href="#a0b2bbfe4800e97f0abeef9746e3372bb">&#9670;&#160;</a></span>free_multiple()</h2>
+<a id="a1841130e4bb5f70d0fc4f6cf7ee3c2f8" name="a1841130e4bb5f70d0fc4f6cf7ee3c2f8"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a1841130e4bb5f70d0fc4f6cf7ee3c2f8">&#9670;&#160;</a></span>free_multiple()</h2>
 
 <div class="memitem">
 <div class="memproto">
@@ -680,7 +698,13 @@ Additional Inherited Members</h2></td></tr>
           <td class="paramkey"></td>
           <td></td>
           <td class="paramtype">const size_t *&#160;</td>
-          <td class="paramname"><em>sizes</em>&#160;</td>
+          <td class="paramname"><em>sizes</em>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype"><a class="el" href="classRealm_1_1TimeLimit.html">TimeLimit</a>&#160;</td>
+          <td class="paramname"><em>work_until</em>&#160;</td>
         </tr>
         <tr>
           <td></td>

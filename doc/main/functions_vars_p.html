@@ -44,7 +44,7 @@
    <!-- BEGIN version select -->
     <br />
     <div class="dropdown">
-     <button class="dropbtn">Version 25.6.1-rc.4+e56eef0c</button>
+     <button class="dropbtn">Version 25.6.1-rc.4+93fd5f98</button>
      <div class="dropdown-content"></div>
     </div>
     <script type="text/javascript" src="../selectversion.js"></script>
@@ -223,6 +223,7 @@ $(document).ready(function(){initNavTree('functions_vars_p.html',''); initResiza
 <li>pending&#160;:&#160;<a class="el" href="structRealm_1_1BarrierImpl_1_1Generation_1_1PerNodeUpdates.html#ae13b11ab624b6091bb8f3647117c948d">Realm::BarrierImpl::Generation::PerNodeUpdates</a></li>
 <li>pending_allocs&#160;:&#160;<a class="el" href="classRealm_1_1LocalManagedMemory.html#af3b679413a3bd9c7a594ec44e10c2ae3">Realm::LocalManagedMemory</a></li>
 <li>pending_cancellation&#160;:&#160;<a class="el" href="structRealm_1_1OperationTable_1_1TableEntry.html#a4e09791e624a645795ce84ae617d6be1">Realm::OperationTable::TableEntry</a></li>
+<li>pending_copies&#160;:&#160;<a class="el" href="classRealm_1_1CopyAnalyzer.html#a86b5a57718c899ffc2844c46b2a98077">Realm::CopyAnalyzer</a></li>
 <li>pending_ends&#160;:&#160;<a class="el" href="classRealm_1_1IntervalTree.html#abd3e7b5e9d83a17ef73d0b6534cc529c">Realm::IntervalTree&lt; IT, LT &gt;</a></li>
 <li>pending_events&#160;:&#160;<a class="el" href="classRealm_1_1CompQueueImpl.html#a076d875c607d7993d5a17f6ccfe0faf1">Realm::CompQueueImpl</a>, <a class="el" href="classRealm_1_1Cuda_1_1GPUStream.html#ae6858375a12cd39f6f9f3ba03c2781a1">Realm::Cuda::GPUStream</a>, <a class="el" href="classRealm_1_1GASNetEXPoller.html#a59aff4a1d632d705bf47ac3e6167b81a">Realm::GASNetEXPoller</a>, <a class="el" href="classRealm_1_1Hip_1_1GPUStream.html#a1ebb4156f61dabb3a374b8aa9d570f35">Realm::Hip::GPUStream</a></li>
 <li>pending_handlers&#160;:&#160;<a class="el" href="classRealm_1_1ActiveMessageHandlerTable.html#aeb2f0497c7c3010d1ea67db39e37932f">Realm::ActiveMessageHandlerTable</a></li>
@@ -231,7 +232,6 @@ $(document).ready(function(){initNavTree('functions_vars_p.html',''); initResiza
 <li>pending_list&#160;:&#160;<a class="el" href="classRealm_1_1Task_1_1DeferredSpawn.html#a0095fce7c70d0f5b2d3a3b7ebfa236c2">Realm::Task::DeferredSpawn</a></li>
 <li>pending_list_mutex&#160;:&#160;<a class="el" href="classRealm_1_1Task_1_1DeferredSpawn.html#acfd55227515bd8a3037038d6d677cd5d">Realm::Task::DeferredSpawn</a></li>
 <li>pending_operations&#160;:&#160;<a class="el" href="classRealm_1_1AsyncFileIOContext.html#a2cdbb18fa977f7aa7ded7dcd953320cb">Realm::AsyncFileIOContext</a></li>
-<li>pending_ops&#160;:&#160;<a class="el" href="classRealm_1_1TransferDesc.html#aeb504d6809f98e863d225aad777a80f7">Realm::TransferDesc</a></li>
 <li>pending_releases&#160;:&#160;<a class="el" href="classRealm_1_1LocalManagedMemory.html#a785392016ff4ed07f060072ca23b49d8">Realm::LocalManagedMemory</a></li>
 <li>pending_soft_limit&#160;:&#160;<a class="el" href="classRealm_1_1PendingCompletionManager.html#a2384c168375b1de8016c65587479c015">Realm::PendingCompletionManager</a></li>
 <li>pending_sparse_images&#160;:&#160;<a class="el" href="classRealm_1_1PreimageOperation.html#ac2ee15c1f04972b982196308e466fce5">Realm::PreimageOperation&lt; N, T, N2, T2 &gt;</a></li>
@@ -293,7 +293,7 @@ $(document).ready(function(){initNavTree('functions_vars_p.html',''); initResiza
 <li>precise_ready_event&#160;:&#160;<a class="el" href="classRealm_1_1SparsityMapImpl.html#a5f055da867cc0da6e848064298d86d54">Realm::SparsityMapImpl&lt; N, T &gt;</a></li>
 <li>precise_requested&#160;:&#160;<a class="el" href="classRealm_1_1SparsityMapImpl.html#ac17fdabf1c0d094437730d8d489c695f">Realm::SparsityMapImpl&lt; N, T &gt;</a></li>
 <li>precise_waiters&#160;:&#160;<a class="el" href="classRealm_1_1SparsityMapImpl.html#af13500256c0dc5dbf0d2ffc2ea045e61">Realm::SparsityMapImpl&lt; N, T &gt;</a></li>
-<li>precondition&#160;:&#160;<a class="el" href="structRealm_1_1MemStorageAllocRequest.html#a8bf02c7ded59d8141c92a1e9abacc226">Realm::MemStorageAllocRequest</a>, <a class="el" href="structRealm_1_1MemStorageReleaseRequest.html#a32ad31c94556fbc5a49eae8880503ae4">Realm::MemStorageReleaseRequest</a>, <a class="el" href="classRealm_1_1TransferDesc_1_1DeferredAnalysis.html#aaf8ccc966af999f7a21b1ca61c518a2a">Realm::TransferDesc::DeferredAnalysis</a>, <a class="el" href="classRealm_1_1TransferOperation_1_1DeferredStart.html#a3fdfc3af271c1d31de0b354faecc808f">Realm::TransferOperation::DeferredStart</a>, <a class="el" href="classRealm_1_1TransferOperation.html#a054564fc747fe72c5f89d7808b604d97">Realm::TransferOperation</a></li>
+<li>precondition&#160;:&#160;<a class="el" href="structRealm_1_1MemStorageAllocRequest.html#a8bf02c7ded59d8141c92a1e9abacc226">Realm::MemStorageAllocRequest</a>, <a class="el" href="structRealm_1_1MemStorageReleaseRequest.html#a32ad31c94556fbc5a49eae8880503ae4">Realm::MemStorageReleaseRequest</a>, <a class="el" href="classRealm_1_1TransferOperation_1_1DeferredStart.html#a3fdfc3af271c1d31de0b354faecc808f">Realm::TransferOperation::DeferredStart</a>, <a class="el" href="classRealm_1_1TransferOperation.html#a054564fc747fe72c5f89d7808b604d97">Realm::TransferOperation</a></li>
 <li>precondition_offset&#160;:&#160;<a class="el" href="classRealm_1_1EventMerger.html#a7dafb2e92a9de7e503ba3518f1539cce">Realm::EventMerger</a></li>
 <li>preconditions&#160;:&#160;<a class="el" href="structRealm_1_1SubgraphScheduleEntry.html#a8a543d14e9bb60a7f237cdbd883e9e8a">Realm::SubgraphScheduleEntry</a></li>
 <li>predicates&#160;:&#160;<a class="el" href="classRealm_1_1MemoryQueryImpl.html#a749e31209b13e40177316a956efb2bea">Realm::MemoryQueryImpl</a>, <a class="el" href="classRealm_1_1ProcessorQueryImpl.html#a391b3165597c7849e2caa64b9f391ad4">Realm::ProcessorQueryImpl</a></li>

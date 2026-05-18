@@ -325,6 +325,7 @@ var annotated_dup =
       [ "CompletionQueue", "classRealm_1_1CompletionQueue.html", "classRealm_1_1CompletionQueue" ],
       [ "CompQueueImpl", "classRealm_1_1CompQueueImpl.html", "classRealm_1_1CompQueueImpl" ],
       [ "ComputeOverlapMicroOp", "classRealm_1_1ComputeOverlapMicroOp.html", "classRealm_1_1ComputeOverlapMicroOp" ],
+      [ "CopyAnalyzer", "classRealm_1_1CopyAnalyzer.html", "classRealm_1_1CopyAnalyzer" ],
       [ "CopyImplRouter", "structRealm_1_1CopyImplRouter.html", null ],
       [ "CopyIndirection", "classRealm_1_1CopyIndirection.html", "classRealm_1_1CopyIndirection" ],
       [ "CopySrcDstField", "structRealm_1_1CopySrcDstField.html", "structRealm_1_1CopySrcDstField" ],
