@@ -118,9 +118,10 @@ namespace Realm {
 
       // Allreduce the five fields.  All use SUM:
       //   queued_items: each rank contributes its current queue-item count;
-      //     sum > 0 means at least one rank has work queued, AND draining
-      //     queues register as "progressing" (sum decreasing) rather than
-      //     "stuck" (sum unchanged at non-zero)
+      //     sum > 0 means at least one rank has work queued.  Using a count
+      //     rather than a 0/1 boolean lets a draining queue register as
+      //     "progressing" (sum decreasing) instead of looking unchanged
+      //     across rounds while still non-zero
       //   events_added: monotonic count of items ever added to any queue;
       //     required to detect activity in cases where queued_items happens
       //     to be the same value across rounds while contents flowed through
@@ -153,10 +154,10 @@ namespace Realm {
       //  flight at exactly the wrong moment.  events_added is a monotonic
       //  counter, so any add+remove activity that nets to zero in
       //  queued_items between the two rounds still registers as a change
-      //  here and forces another round.  Crucially, queued_items being a
-      //  count rather than a 0/1 boolean means a draining queue gets
-      //  detected as "not stable" and the algorithm waits patiently rather
-      //  than firing STUCK on a slow-but-progressing drain.
+      //  here and forces another round.  Using a count for queued_items
+      //  also keeps a slow-but-progressing drain visible (the sum
+      //  decreases monotonically), so the loop keeps iterating
+      //  PROGRESSING rather than appearing stable at a non-zero value.
       bool stable =
           QuiescenceCheck::have_prev &&
           (totals.packets_reserved == QuiescenceCheck::prev_totals.packets_reserved) &&

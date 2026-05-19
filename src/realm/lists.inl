@@ -163,8 +163,9 @@ namespace Realm {
     //  walks the list head-to-tail without taking the lock.  Intended for
     //  diagnostic / quiescence-counting use; do not put it on a hot path.
     size_t n = 0;
-    for(T *p = head.next; p; p = REALM_PMTA_DEREF(p, LINK).next)
+    for(T *p = head.next; p; p = REALM_PMTA_DEREF(p, LINK).next) {
       n++;
+    }
     return n;
   }
 

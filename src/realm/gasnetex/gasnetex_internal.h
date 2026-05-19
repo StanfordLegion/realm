@@ -517,11 +517,14 @@ namespace Realm {
     //  pending pushes - called during shutdown
     void drain_xpairs();
 
-    bool has_work_remaining();
-
-    // O(n) walk of ready_xpairs under the mutex - used by quiescence
-    //  detection to report a draining queue as "progressing" rather than
-    //  the binary "non-empty" boolean which would otherwise look stable
+    // Count of items in ready_xpairs plus 1 if a worker has popped an
+    //  xpair and is currently inside push_packets (work_active).  Used by
+    //  GASNetEXInternal::sample_quiescence_state to feed
+    //  QuiescenceState::queued_items; reporting a count rather than a
+    //  boolean lets a draining queue surface as "progressing" across
+    //  Mattern's rounds, and including work_active keeps an in-flight
+    //  push_packets visible so the quiescence check doesn't fire DONE
+    //  mid-push.
     size_t queue_size();
 
     virtual bool do_work(TimeLimit work_until);
@@ -548,10 +551,9 @@ namespace Realm {
 
     void add_pending_event(GASNetEXEvent *event);
 
-    bool has_work_remaining();
-
-    // O(n) walk of critical_xpairs + pending_events under the mutex.  See
-    //  GASNetEXInjector::queue_size for why this is needed.
+    // Count of items in critical_xpairs + pending_events plus 1 if a
+    //  worker is currently inside do_work with items on its stack.  See
+    //  GASNetEXInjector::queue_size.
     size_t queue_size();
 
     virtual bool do_work(TimeLimit work_until);
@@ -579,10 +581,9 @@ namespace Realm {
 
     void add_ready_events(GASNetEXEvent::EventList &newly_ready);
 
-    bool has_work_remaining();
-
-    // O(n) walk of ready_events under the mutex.  See
-    //  GASNetEXInjector::queue_size for why this is needed.
+    // Count of items in ready_events; returns 1 instead of 0 when
+    //  has_work is set but ready_events has been swapped to a worker's
+    //  local todo list.  See GASNetEXInjector::queue_size.
     size_t queue_size();
 
     virtual bool do_work(TimeLimit work_until);
@@ -652,10 +653,8 @@ namespace Realm {
                          size_t hdr_bytes, uintptr_t src_ptr, uintptr_t tgt_ptr,
                          size_t payload_bytes);
 
-    bool has_work_remaining();
-
     // O(n) walk of the pending-rget list under the mutex.  See
-    //  GASNetEXInjector::queue_size for why this is needed.
+    //  GASNetEXInjector::queue_size.
     size_t queue_size();
 
     virtual bool do_work(TimeLimit work_until);

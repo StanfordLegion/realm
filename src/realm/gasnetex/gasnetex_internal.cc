@@ -2748,21 +2748,6 @@ namespace Realm {
     }
   }
 
-  bool GASNetEXInjector::has_work_remaining()
-  {
-    // Used only by GASNetEXInternal::sample_quiescence_state; intentionally
-    //  excludes the work_active "currently inside do_work / push_packets"
-    //  flag because that flag is timing-sensitive and produces spurious
-    //  not-quiet reports during a single slow GASNet send (the worker holds
-    //  work_active for the full duration of the send even when no work is
-    //  actually queued).  Mattern's two-round stability check at the
-    //  Network::check_for_quiescence level handles the legitimate "worker
-    //  is mid-execution and might still produce a send" case via the
-    //  counter-stability requirement.
-    AutoLock<> al(mutex);
-    return !ready_xpairs.empty();
-  }
-
   size_t GASNetEXInjector::queue_size()
   {
     // Include work_active so that an xpair that has been popped from
@@ -2773,7 +2758,7 @@ namespace Realm {
     //  detach() has already drained - the locked push_mutex_check then
     //  trips the MutexChecker assertion at xpair destruction.  This was
     //  the exact failure that commit 30da2be37b ("Fix GASNet Races") fixed
-    //  by adding work_active to has_work_remaining.
+    //  by tracking work_active alongside the queue.
     AutoLock<> al(mutex);
     return ready_xpairs.size() + (work_active.load() ? 1 : 0);
   }
@@ -2875,14 +2860,6 @@ namespace Realm {
     }
     internal->total_events_added.fetch_add(1);
     // no need to signal because the poller is always awake
-  }
-
-  bool GASNetEXPoller::has_work_remaining()
-  {
-    // See GASNetEXInjector::has_work_remaining: same rationale for excluding
-    //  work_active from the quiescence-visible "is there work" check.
-    AutoLock<> al(mutex);
-    return (!critical_xpairs.empty() || !pending_events.empty());
   }
 
   size_t GASNetEXPoller::queue_size()
@@ -3074,19 +3051,6 @@ namespace Realm {
       make_active();
   }
 
-  bool GASNetEXCompleter::has_work_remaining()
-  {
-    // See GASNetEXInjector::has_work_remaining: query the actual queue under
-    //  the mutex rather than the cached has_work flag, which is set true for
-    //  the duration of a do_work invocation even when the events have been
-    //  swapped out into the worker's local todo and the visible queue is
-    //  empty - that produces a spurious not-quiet report during a slow
-    //  trigger (e.g., a put-completion event whose enqueue_put_header is
-    //  blocked in GASNet).
-    AutoLock<> al(mutex);
-    return !ready_events.empty();
-  }
-
   size_t GASNetEXCompleter::queue_size()
   {
     // do_work swaps ready_events into a worker-local todo before processing,
@@ -3187,12 +3151,6 @@ namespace Realm {
     internal->total_events_added.fetch_add(1);
     if(was_empty)
       make_active();
-  }
-
-  bool ReverseGetter::has_work_remaining()
-  {
-    AutoLock<> al(mutex);
-    return (head != nullptr);
   }
 
   size_t ReverseGetter::queue_size()
@@ -3654,20 +3612,18 @@ namespace Realm {
   {
     // queued_items: total count across all four background-work queues
     //  (injector ready_xpairs, completer ready_events, poller
-    //  critical_xpairs + pending_events, rgetter pending list).  Reporting
-    //  the actual count rather than a 0/1 boolean is critical: a queue
-    //  draining slowly (e.g., pending_events full of GASNet local-completion
-    //  events that haven't fired yet) shows up as "count decreasing" across
-    //  rounds, which the Mattern's stability check correctly classifies as
-    //  PROGRESSING.  A 0/1 boolean would look stable while the queue
-    //  drained, tripping STUCK on a legitimately-draining system.
-    //
-    //  We deliberately use queue size, NOT has_work_remaining(), so that the
-    //  cached "currently inside do_work" flags on the work items don't bleed
-    //  into the quiescence signal.  Mattern's two-round stability handles
-    //  the "worker is mid-execution" case via counter stability across
-    //  rounds; the work_active/has_work flags are timing-sensitive and not
-    //  relevant to whether the system is in a quiescent state.
+    //  critical_xpairs + pending_events, rgetter pending list).  Each
+    //  queue_size() method adds 1 when its work_active / has_work flag
+    //  shows that an item has been popped from the visible queue but is
+    //  still being processed on a worker's stack - without that the
+    //  quiescence check would declare DONE mid-trigger and a subsequent
+    //  re-enqueue from push_packets could leak a locked push_mutex_check
+    //  past detach() (see commit 30da2be37b).  Reporting an actual count
+    //  rather than a 0/1 boolean also keeps a slow drain visible: as
+    //  items are processed the sum decreases across rounds, so the
+    //  Mattern's stability check correctly classifies the system as
+    //  PROGRESSING instead of treating an unchanging non-zero value as
+    //  steady state.
     uint64_t queued = (poller.queue_size() + injector.queue_size() +
                        completer.queue_size() + rgetter.queue_size());
 

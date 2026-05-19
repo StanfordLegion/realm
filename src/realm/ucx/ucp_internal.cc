@@ -1708,8 +1708,8 @@ namespace Realm {
       //  it captures both queued sends and unfinished receive operations.
       //  Reporting the actual count rather than a 0/1 boolean lets the
       //  Mattern's-loop stability check see a draining queue (count
-      //  decreasing across rounds) as progress, avoiding spurious STUCK
-      //  during a slow drain of in-flight requests.
+      //  decreasing across rounds) as PROGRESSING, instead of treating an
+      //  unchanging non-zero value as steady state.
       state.queued_items = outstanding_reqs.load();
 
       // events_added: monotonic count of requests ever acquired.  Bumped in
@@ -1777,9 +1777,10 @@ namespace Realm {
                                   count, UCC_DT_UINT64, UCC_OP_SUM);
       if(rc != UCC_OK) {
         log_ucp.error() << "allreduce failed in quiescence_allreduce_sum";
-        // can't fail gracefully here; return zeros so the caller will see
-        //  imbalance and continue iterating (eventually triggering the STUCK
-        //  detection in Network::check_for_quiescence)
+        // Can't fail gracefully here.  Return zeros so the caller sees the
+        //  counters as never reaching a balanced/quiet state and keeps
+        //  iterating PROGRESSING; the periodic "no progress" warning from
+        //  Network::check_for_quiescence will surface the stall.
         for(size_t i = 0; i < count; i++)
           total_counts[i] = 0;
       }
