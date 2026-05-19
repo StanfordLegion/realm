@@ -37,7 +37,6 @@
 #include <string.h>
 
 #include "realm/id.h"
-#include "realm/runtime_impl.h"
 #include "realm/mem_impl.h"
 #include "realm/inst_impl.h"
 #include "realm/bgwork.h"
@@ -425,7 +424,7 @@ namespace Realm {
     //  writes, flush byte counts, etc.
     void begin_completion();
 
-    void mark_completed();
+    void mark_completed(TimeLimit work_until);
 
     unsigned current_progress(void);
 
