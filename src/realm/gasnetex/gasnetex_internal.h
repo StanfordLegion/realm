@@ -118,30 +118,43 @@ namespace Realm {
     size_t pktbuf_sent_offset;
     int pktbuf_use_count;
 
-    // debug instrumentation: snapshot recorded at the moment this buffer was
-    //  last freed.  fields are overwritten on each free; alloc_caller is
-    //  refreshed on each alloc so we can tell if a re-alloc happened between
-    //  the free and a subsequent crash.  cost: ~10 stores + 1 syscall per
-    //  free_outbuf call - negligible compared to mutex acquire + list ops.
-    struct FreeSnapshot {
-      void *close_caller{
-          nullptr}; // PC of pktbuf_close call site (0 if free didn't go via close)
-      void *free_caller{nullptr}; // PC of free_outbuf call site
-      void *alloc_caller{
-          nullptr}; // PC of alloc that handed this buffer out most recently
-      void *xpair_at_free{nullptr}; // XmitSrcDestPair* that did the close
-      void *first_pbuf_at_free{nullptr};
-      void *cur_pbuf_at_free{nullptr};
-      uint64_t thread_id{0}; // gettid() at free time
-      int pktbuf_total_at_free{0};
-      int pktbuf_sent_at_free{0};
-      int pktbuf_ready_at_free{0};
-      int pktbuf_use_count_at_free{0};
-      int remain_count_at_free{0};
-      bool has_ready_at_free{false};
-      uint8_t close_path{0}; // 0=none, 1=reserve_helper, 2=push_packets advance
+    // debug instrumentation: ring buffer of recent lifecycle events on this
+    //  buffer (alloc / close / free / pop).  each event records the call
+    //  site PC, the thread that did it, a snapshot of the counters at that
+    //  moment, and (for close/pop events) the xpair-side state.  cost per
+    //  event: one cache-line write + one gettid() syscall (~50ns).
+    enum EventType : uint8_t
+    {
+      EVENT_NONE = 0,
+      EVENT_ALLOC = 1,       // alloc_outbuf returned this buffer
+      EVENT_CLOSE = 2,       // pktbuf_close entry (snapshot taken)
+      EVENT_FREE = 3,        // free_outbuf entry (state about to go IDLE)
+      EVENT_POP_RESERVE = 4, // popped via reserve_pbuf_helper pop branch
+      EVENT_POP_PUSH = 5,    // popped via push_packets advance
     };
-    FreeSnapshot last_free;
+    struct EventRecord {
+      void *caller{nullptr}; // PC of the call site of the recording function
+      uint64_t thread_id{0};
+      void *xpair{nullptr};      // XmitSrcDestPair* (close/pop events)
+      void *first_pbuf{nullptr}; // xpair->first_pbuf at the event
+      void *cur_pbuf{nullptr};   // xpair->cur_pbuf at the event
+      int pktbuf_total{0};
+      int pktbuf_sent{0};
+      int pktbuf_ready{0};
+      int pktbuf_use_count{0};
+      int remain_count{0};
+      bool has_ready{false};
+      EventType event_type{EVENT_NONE};
+    };
+    static const int EVENT_RING_SIZE = 16;
+    EventRecord event_ring[EVENT_RING_SIZE];
+    atomic<uint32_t> event_ring_seq{0};
+
+    // helper - records an event into the ring buffer.  defined in
+    //  gasnetex_internal.cc to keep this header free of syscall includes.
+    void record_event(EventType type, void *caller_pc, void *xpair = nullptr,
+                      void *first_pbuf_at = nullptr, void *cur_pbuf_at = nullptr,
+                      bool has_ready_at = false);
   };
 
   class OutbufUsecountDec {

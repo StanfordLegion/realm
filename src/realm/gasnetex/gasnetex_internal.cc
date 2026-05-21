@@ -295,15 +295,30 @@ namespace Realm {
     return true;
   }
 
+  void OutbufMetadata::record_event(EventType type, void *caller_pc, void *xpair,
+                                    void *first_pbuf_at, void *cur_pbuf_at,
+                                    bool has_ready_at)
+  {
+    uint32_t idx = event_ring_seq.fetch_add(1) & (EVENT_RING_SIZE - 1);
+    EventRecord &ev = event_ring[idx];
+    ev.caller = caller_pc;
+    ev.thread_id = static_cast<uint64_t>(syscall(SYS_gettid));
+    ev.xpair = xpair;
+    ev.first_pbuf = first_pbuf_at;
+    ev.cur_pbuf = cur_pbuf_at;
+    ev.pktbuf_total = pktbuf_total_packets.load();
+    ev.pktbuf_sent = pktbuf_sent_packets;
+    ev.pktbuf_ready = pktbuf_ready_packets.load();
+    ev.pktbuf_use_count = pktbuf_use_count;
+    ev.remain_count = remain_count.load();
+    ev.has_ready = has_ready_at;
+    ev.event_type = type;
+  }
+
   void OutbufMetadata::pktbuf_close()
   {
-    // debug instrumentation: record counters at close time and the call site
-    last_free.close_caller = __builtin_return_address(0);
-    last_free.pktbuf_total_at_free = pktbuf_total_packets.load();
-    last_free.pktbuf_sent_at_free = pktbuf_sent_packets;
-    last_free.pktbuf_ready_at_free = pktbuf_ready_packets.load();
-    last_free.pktbuf_use_count_at_free = pktbuf_use_count;
-    last_free.remain_count_at_free = remain_count.load();
+    // debug instrumentation: record close event before any state changes
+    record_event(EVENT_CLOSE, __builtin_return_address(0));
     assert(state == STATE_PKTBUF);
     if(is_overflow) {
       // update the use count on the realbuf, and then we can just delete
@@ -484,7 +499,7 @@ namespace Realm {
     if(REALM_LIKELY(md != nullptr)) {
       md->nextbuf = nullptr;
       md->set_state(state);
-      md->last_free.alloc_caller = __builtin_return_address(0);
+      md->record_event(OutbufMetadata::EVENT_ALLOC, __builtin_return_address(0));
       log_gex_obmgr.info() << "alloc outbuf: outbuf=" << md << " state=" << state
                            << " baseptr=" << std::hex << md->baseptr << std::dec;
       return md;
@@ -537,13 +552,13 @@ namespace Realm {
         // set up the realbuf as above
         realbuf->nextbuf = nullptr;
         realbuf->set_state(state);
-        realbuf->last_free.alloc_caller = __builtin_return_address(0);
+        realbuf->record_event(OutbufMetadata::EVENT_ALLOC, __builtin_return_address(0));
         log_gex_obmgr.info() << "alloc outbuf(2): outbuf=" << realbuf
                              << " state=" << state << " baseptr=" << std::hex
                              << realbuf->baseptr << std::dec;
         return realbuf;
       } else {
-        md->last_free.alloc_caller = __builtin_return_address(0);
+        md->record_event(OutbufMetadata::EVENT_ALLOC, __builtin_return_address(0));
         log_gex_obmgr.info() << "alloc overflow: ovbuf=" << md << " state=" << state
                              << " baseptr=" << std::hex << md->baseptr << std::dec;
 
@@ -554,9 +569,8 @@ namespace Realm {
 
   void OutbufManager::free_outbuf(OutbufMetadata *md)
   {
-    // debug instrumentation: record free-side caller and thread
-    md->last_free.free_caller = __builtin_return_address(0);
-    md->last_free.thread_id = syscall(SYS_gettid);
+    // debug instrumentation: record free event before state goes to IDLE
+    md->record_event(OutbufMetadata::EVENT_FREE, __builtin_return_address(0));
     // overflow bufs should never get here
     assert(!md->is_overflow);
     log_gex_obmgr.info() << "free outbuf: outbuf=" << md << " state=" << md->state
@@ -1232,14 +1246,10 @@ namespace Realm {
           if(!has_ready_packets && (cur_pbuf == first_pbuf.load()) &&
              (cur_pbuf->pktbuf_sent_packets == cur_pbuf->pktbuf_total_packets.load())) {
             popped_head = first_pbuf.load();
-            // debug instrumentation: record pop-site state before the store
-            //  (and before mutex release).  pktbuf_close() will fill in the
-            //  counter snapshot - we just record the xpair-side conditions.
-            popped_head->last_free.xpair_at_free = this;
-            popped_head->last_free.first_pbuf_at_free = popped_head;
-            popped_head->last_free.cur_pbuf_at_free = cur_pbuf;
-            popped_head->last_free.has_ready_at_free = has_ready_packets;
-            popped_head->last_free.close_path = 1;
+            // debug instrumentation: record pop event with xpair-side state
+            popped_head->record_event(
+                OutbufMetadata::EVENT_POP_RESERVE, __builtin_return_address(0), this,
+                popped_head /*first_pbuf*/, cur_pbuf /*cur_pbuf*/, has_ready_packets);
             first_pbuf.store(new_pbuf);
           } else
             cur_pbuf->nextbuf = new_pbuf;
@@ -2536,14 +2546,10 @@ namespace Realm {
             //  reason)
             new_head = head->nextbuf;
             first_pbuf.store(new_head);
-            // debug instrumentation: record xpair state at advance time on
-            //  the buffer about to be closed.  pktbuf_close() will fill in
-            //  the counter snapshot itself.
-            head->last_free.xpair_at_free = this;
-            head->last_free.first_pbuf_at_free = new_head;
-            head->last_free.cur_pbuf_at_free = cur_pbuf;
-            head->last_free.has_ready_at_free = has_ready_packets;
-            head->last_free.close_path = 2;
+            // debug instrumentation: record pop event with xpair-side state
+            head->record_event(
+                OutbufMetadata::EVENT_POP_PUSH, __builtin_return_address(0), this,
+                new_head /*first_pbuf after store*/, cur_pbuf, has_ready_packets);
             assert(new_head);
             assert(new_head->state == OutbufMetadata::STATE_PKTBUF);
           }
