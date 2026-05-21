@@ -1,9 +1,0 @@
-<map id="Realm::ProcSet::ProcSetModule" name="Realm::ProcSet::ProcSetModule">
-<area shape="rect" id="Node000001" title=" " alt="" coords="12,183,239,208"/>
-<area shape="rect" id="Node000002" href="$classRealm_1_1Module.html" title=" " alt="" coords="5,87,125,113"/>
-<area shape="poly" id="edge1_Node000001_Node000002" title=" " alt="" coords="82,123,120,181,116,184,78,126"/>
-<area shape="rect" id="Node000003" href="$classRealm_1_1ProcSet_1_1ProcSetModuleConfig.html" title=" " alt="" coords="149,80,376,120"/>
-<area shape="poly" id="edge2_Node000001_Node000003" title=" " alt="" coords="225,130,144,185,141,180,222,126"/>
-<area shape="rect" id="Node000004" href="$classRealm_1_1ModuleConfig.html" title=" " alt="" coords="182,5,343,31"/>
-<area shape="poly" id="edge3_Node000003_Node000004" title=" " alt="" coords="265,44,265,80,260,80,260,44"/>
-</map>

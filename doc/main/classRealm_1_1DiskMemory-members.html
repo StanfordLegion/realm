@@ -44,7 +44,7 @@
    <!-- BEGIN version select -->
     <br />
     <div class="dropdown">
-     <button class="dropbtn">Version 25.6.1-rc.4+93fd5f98</button>
+     <button class="dropbtn">Version 25.6.1-rc.4+826f74ca</button>
      <div class="dropdown-content"></div>
     </div>
     <script type="text/javascript" src="../selectversion.js"></script>
@@ -152,7 +152,7 @@ $(document).ready(function(){initNavTree('classRealm_1_1DiskMemory.html',''); in
   <tr class="even"><td class="entry"><a class="el" href="classRealm_1_1LocalManagedMemory.html#add03f8500df2de467bb4f032f9e27658">allocator_mutex</a></td><td class="entry"><a class="el" href="classRealm_1_1LocalManagedMemory.html">Realm::LocalManagedMemory</a></td><td class="entry"></td></tr>
   <tr class="odd"><td class="entry"><a class="el" href="classRealm_1_1LocalManagedMemory.html#ada5637044c0146189833e81bb97bb565">attempt_deferrable_allocation</a>(RegionInstanceImpl *inst, size_t bytes, size_t alignment, size_t &amp;inst_offset)</td><td class="entry"><a class="el" href="classRealm_1_1LocalManagedMemory.html">Realm::LocalManagedMemory</a></td><td class="entry"><span class="mlabel">protected</span></td></tr>
   <tr class="even"><td class="entry"><a class="el" href="classRealm_1_1DiskMemory.html#a3704e19b46f3e09911a80d5bd260ed8c">attempt_register_external_resource</a>(RegionInstanceImpl *inst, size_t &amp;inst_offset)</td><td class="entry"><a class="el" href="classRealm_1_1DiskMemory.html">Realm::DiskMemory</a></td><td class="entry"><span class="mlabel">virtual</span></td></tr>
-  <tr class="odd"><td class="entry"><a class="el" href="classRealm_1_1LocalManagedMemory.html#aa737edcf85c9debcc7f8433f39f3e56a">attempt_release_reordering</a>(std::vector&lt; std::pair&lt; RegionInstanceImpl *, size_t &gt; &gt; &amp;successful_allocs)</td><td class="entry"><a class="el" href="classRealm_1_1LocalManagedMemory.html">Realm::LocalManagedMemory</a></td><td class="entry"><span class="mlabel">protected</span></td></tr>
+  <tr class="odd"><td class="entry"><a class="el" href="classRealm_1_1LocalManagedMemory.html#a6e48cd626b588e86e51ae31dc78d8457">attempt_release_reordering</a>(std::vector&lt; std::pair&lt; RegionInstanceImpl *, size_t &gt; &gt; &amp;successful_allocs, std::vector&lt; RegionInstanceImpl * &gt; &amp;deferred_dealloc_notifies)</td><td class="entry"><a class="el" href="classRealm_1_1LocalManagedMemory.html">Realm::LocalManagedMemory</a></td><td class="entry"><span class="mlabel">protected</span></td></tr>
   <tr class="even"><td class="entry"><a class="el" href="classRealm_1_1LocalManagedMemory.html#a39a430130411981fb2fc40a39efe372d">cur_release_seqid</a></td><td class="entry"><a class="el" href="classRealm_1_1LocalManagedMemory.html">Realm::LocalManagedMemory</a></td><td class="entry"></td></tr>
   <tr class="odd"><td class="entry"><a class="el" href="classRealm_1_1LocalManagedMemory.html#aec90446ab15f751bd7c53e70fbcbb5ee">current_allocator</a></td><td class="entry"><a class="el" href="classRealm_1_1LocalManagedMemory.html">Realm::LocalManagedMemory</a></td><td class="entry"></td></tr>
   <tr class="even"><td class="entry"><a class="el" href="classRealm_1_1DiskMemory.html#add876e6622f8faa69385a18195fe9210">DiskMemory</a>(RuntimeImpl *_runtime_impl, Memory _me, size_t _size, const std::filesystem::path &amp;_file)</td><td class="entry"><a class="el" href="classRealm_1_1DiskMemory.html">Realm::DiskMemory</a></td><td class="entry"></td></tr>

@@ -8,7 +8,7 @@ var classRealm_1_1LocalManagedMemory =
     [ "allocate_storage_deferrable", "classRealm_1_1LocalManagedMemory.html#a0a2237989ebd48d8d6a36f034aa2357b", null ],
     [ "allocate_storage_immediate", "classRealm_1_1LocalManagedMemory.html#aac522a11f9d46d9b21403485b789bd1c", null ],
     [ "attempt_deferrable_allocation", "classRealm_1_1LocalManagedMemory.html#ada5637044c0146189833e81bb97bb565", null ],
-    [ "attempt_release_reordering", "classRealm_1_1LocalManagedMemory.html#aa737edcf85c9debcc7f8433f39f3e56a", null ],
+    [ "attempt_release_reordering", "classRealm_1_1LocalManagedMemory.html#a6e48cd626b588e86e51ae31dc78d8457", null ],
     [ "release_storage_deferrable", "classRealm_1_1LocalManagedMemory.html#afaea9a04eca61c6425448455d404dc81", null ],
     [ "release_storage_immediate", "classRealm_1_1LocalManagedMemory.html#a3a6dcb9beaa861ce4c5786cd7076cc98", null ],
     [ "remove_pending_release", "classRealm_1_1LocalManagedMemory.html#a55f3cbd0faedba27ea226e618d12faa3", null ],
