@@ -117,6 +117,31 @@ namespace Realm {
     int pktbuf_sent_packets;
     size_t pktbuf_sent_offset;
     int pktbuf_use_count;
+
+    // debug instrumentation: snapshot recorded at the moment this buffer was
+    //  last freed.  fields are overwritten on each free; alloc_caller is
+    //  refreshed on each alloc so we can tell if a re-alloc happened between
+    //  the free and a subsequent crash.  cost: ~10 stores + 1 syscall per
+    //  free_outbuf call - negligible compared to mutex acquire + list ops.
+    struct FreeSnapshot {
+      void *close_caller{
+          nullptr}; // PC of pktbuf_close call site (0 if free didn't go via close)
+      void *free_caller{nullptr}; // PC of free_outbuf call site
+      void *alloc_caller{
+          nullptr}; // PC of alloc that handed this buffer out most recently
+      void *xpair_at_free{nullptr}; // XmitSrcDestPair* that did the close
+      void *first_pbuf_at_free{nullptr};
+      void *cur_pbuf_at_free{nullptr};
+      uint64_t thread_id{0}; // gettid() at free time
+      int pktbuf_total_at_free{0};
+      int pktbuf_sent_at_free{0};
+      int pktbuf_ready_at_free{0};
+      int pktbuf_use_count_at_free{0};
+      int remain_count_at_free{0};
+      bool has_ready_at_free{false};
+      uint8_t close_path{0}; // 0=none, 1=reserve_helper, 2=push_packets advance
+    };
+    FreeSnapshot last_free;
   };
 
   class OutbufUsecountDec {
