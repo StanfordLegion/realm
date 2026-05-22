@@ -301,6 +301,7 @@ namespace Realm {
   {
     uint32_t idx = event_ring_seq.fetch_add(1) & (EVENT_RING_SIZE - 1);
     EventRecord &ev = event_ring[idx];
+    ev.timestamp = __builtin_ia32_rdtsc();
     ev.caller = caller_pc;
     ev.thread_id = static_cast<uint64_t>(syscall(SYS_gettid));
     ev.xpair = xpair;
@@ -311,6 +312,7 @@ namespace Realm {
     ev.pktbuf_ready = pktbuf_ready_packets.load();
     ev.pktbuf_use_count = pktbuf_use_count;
     ev.remain_count = remain_count.load();
+    ev.state_at_event = state;
     ev.has_ready = has_ready_at;
     ev.event_type = type;
   }

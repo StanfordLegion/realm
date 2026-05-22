@@ -133,6 +133,7 @@ namespace Realm {
       EVENT_POP_PUSH = 5,    // popped via push_packets advance
     };
     struct EventRecord {
+      uint64_t timestamp{0}; // rdtsc at event time - lets us detect preemption gaps
       void *caller{nullptr}; // PC of the call site of the recording function
       uint64_t thread_id{0};
       void *xpair{nullptr};      // XmitSrcDestPair* (close/pop events)
@@ -143,10 +144,11 @@ namespace Realm {
       int pktbuf_ready{0};
       int pktbuf_use_count{0};
       int remain_count{0};
+      State state_at_event{STATE_IDLE}; // buffer state at the moment of recording
       bool has_ready{false};
       EventType event_type{EVENT_NONE};
     };
-    static const int EVENT_RING_SIZE = 16;
+    static const int EVENT_RING_SIZE = 256;
     EventRecord event_ring[EVENT_RING_SIZE];
     atomic<uint32_t> event_ring_seq{0};
 
