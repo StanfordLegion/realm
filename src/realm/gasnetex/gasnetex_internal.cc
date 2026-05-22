@@ -294,12 +294,19 @@ namespace Realm {
   void OutbufMetadata::pktbuf_close()
   {
     assert(state == STATE_PKTBUF);
+    // snapshot use_count before the atomic op - the field is non-atomic and is
+    //  reset to 0 by set_state(STATE_PKTBUF) when the buffer is recycled.  if
+    //  this thread is preempted after the fetch_add and the buffer completes
+    //  a free/realloc cycle before we resume, a re-read of pktbuf_use_count
+    //  would see the new cycle's 0 and cause (prev + use_count) to compare
+    //  equal to 0 spuriously, freeing a buffer that's actively in use.
+    const int saved_use_count = pktbuf_use_count;
     if(is_overflow) {
       // update the use count on the realbuf, and then we can just delete
       //  ourselves
       assert(realbuf.load());
-      int prev = realbuf.load()->remain_count.fetch_add(pktbuf_use_count);
-      if((prev + pktbuf_use_count) == 0)
+      int prev = realbuf.load()->remain_count.fetch_add(saved_use_count);
+      if((prev + saved_use_count) == 0)
         manager->free_outbuf(realbuf.load());
 
       log_gex_obmgr.info() << "delete overflow: ovbuf=" << this << " baseptr=" << std::hex
@@ -313,8 +320,8 @@ namespace Realm {
     } else {
       // if the result of adding use_count to remain_count is 0, all uses have
       //  already been completed and we can free ourselves
-      int prev = remain_count.fetch_add(pktbuf_use_count);
-      if((prev + pktbuf_use_count) == 0)
+      int prev = remain_count.fetch_add(saved_use_count);
+      if((prev + saved_use_count) == 0)
         manager->free_outbuf(this);
     }
   }
