@@ -295,15 +295,22 @@ namespace Realm {
     return true;
   }
 
+  // debug instrumentation: global cross-buffer event ring definitions
+  GlobalEventRecord g_event_ring[GLOBAL_EVENT_RING_SIZE];
+  atomic<uint32_t> g_event_ring_seq{0};
+
   void OutbufMetadata::record_event(EventType type, void *caller_pc, void *xpair,
                                     void *first_pbuf_at, void *cur_pbuf_at,
                                     bool has_ready_at)
   {
+    uint64_t ts = __builtin_ia32_rdtsc();
+    uint64_t tid = static_cast<uint64_t>(syscall(SYS_gettid));
+
     uint32_t idx = event_ring_seq.fetch_add(1) & (EVENT_RING_SIZE - 1);
     EventRecord &ev = event_ring[idx];
-    ev.timestamp = __builtin_ia32_rdtsc();
+    ev.timestamp = ts;
     ev.caller = caller_pc;
-    ev.thread_id = static_cast<uint64_t>(syscall(SYS_gettid));
+    ev.thread_id = tid;
     ev.xpair = xpair;
     ev.first_pbuf = first_pbuf_at;
     ev.cur_pbuf = cur_pbuf_at;
@@ -315,10 +322,22 @@ namespace Realm {
     ev.state_at_event = state;
     ev.has_ready = has_ready_at;
     ev.event_type = type;
+
+    // also write to global cross-buffer ring for temporal correlation
+    uint32_t gidx = g_event_ring_seq.fetch_add(1) & (GLOBAL_EVENT_RING_SIZE - 1);
+    GlobalEventRecord &gev = g_event_ring[gidx];
+    gev.timestamp = ts;
+    gev.thread_id = tid;
+    gev.buffer = this;
+    gev.caller = caller_pc;
+    gev.event_type = static_cast<uint8_t>(type);
   }
 
   void OutbufMetadata::pktbuf_close()
   {
+    // debug instrumentation: increment entry counter BEFORE record_event so we
+    //  can detect if record_event is being elided (counter > CLOSE event count)
+    pktbuf_close_entries.fetch_add(1);
     // debug instrumentation: record close event before any state changes
     record_event(EVENT_CLOSE, __builtin_return_address(0));
     assert(state == STATE_PKTBUF);
@@ -571,6 +590,9 @@ namespace Realm {
 
   void OutbufManager::free_outbuf(OutbufMetadata *md)
   {
+    // debug instrumentation: increment entry counter BEFORE record_event so we
+    //  can detect if record_event is being elided (counter > FREE event count)
+    md->free_outbuf_entries.fetch_add(1);
     // debug instrumentation: record free event before state goes to IDLE
     md->record_event(OutbufMetadata::EVENT_FREE, __builtin_return_address(0));
     // overflow bufs should never get here

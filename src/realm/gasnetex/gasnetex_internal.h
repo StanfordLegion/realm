@@ -152,12 +152,38 @@ namespace Realm {
     EventRecord event_ring[EVENT_RING_SIZE];
     atomic<uint32_t> event_ring_seq{0};
 
+    // debug instrumentation: function-entry counters incremented as the very
+    //  first statement of pktbuf_close/free_outbuf respectively, BEFORE the
+    //  record_event call.  used to verify that record_event isn't being
+    //  elided - if entry counter > number of corresponding events in the ring,
+    //  record_event is being skipped somehow.
+    atomic<uint32_t> pktbuf_close_entries{0};
+    atomic<uint32_t> free_outbuf_entries{0};
+
     // helper - records an event into the ring buffer.  defined in
     //  gasnetex_internal.cc to keep this header free of syscall includes.
     void record_event(EventType type, void *caller_pc, void *xpair = nullptr,
                       void *first_pbuf_at = nullptr, void *cur_pbuf_at = nullptr,
                       bool has_ready_at = false);
   };
+
+  // debug instrumentation: global cross-buffer event ring.  every record_event
+  //  also writes a compact entry here, letting us correlate events across
+  //  buffers and threads at crash time.  sized to capture ~recent activity
+  //  across all buffers in the system.  event_type is the raw uint8_t value
+  //  of OutbufMetadata::EventType (which is protected, so we can't name it
+  //  directly here).
+  struct GlobalEventRecord {
+    uint64_t timestamp{0};
+    uint64_t thread_id{0};
+    void *buffer{nullptr}; // OutbufMetadata* this event was for
+    void *caller{nullptr};
+    uint8_t event_type{0}; // OutbufMetadata::EventType cast to uint8_t
+    uint8_t _pad[7]{};
+  };
+  static const int GLOBAL_EVENT_RING_SIZE = 8192;
+  extern GlobalEventRecord g_event_ring[GLOBAL_EVENT_RING_SIZE];
+  extern atomic<uint32_t> g_event_ring_seq;
 
   class OutbufUsecountDec {
   public:
