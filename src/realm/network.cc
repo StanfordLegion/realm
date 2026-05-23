@@ -155,13 +155,20 @@ namespace Realm {
       //  etc. - the counters will differ, and we restart.  Two-round
       //  agreement rules out the ghost-message scenario where a work item
       //  runs between rounds and produces a send that happens to be in
-      //  flight at exactly the wrong moment.  events_added is a monotonic
-      //  counter, so any add+remove activity that nets to zero in
-      //  queued_items between the two rounds still registers as a change
-      //  here and forces another round.  Using a count for queued_items
+      //  flight at exactly the wrong moment.  Using a count for queued_items
       //  also keeps a slow-but-progressing drain visible (the sum
       //  decreases monotonically), so the loop keeps iterating
       //  PROGRESSING rather than appearing stable at a non-zero value.
+      //
+      // ALIASING SAFETY: queued_items and pending_completions are
+      //  snapshot fields (non-monotonic).  Each is checked alongside its
+      //  monotonic mate so that activity which leaves the snapshot field
+      //  unchanged still surfaces:
+      //    queued_items       paired with events_added      (queue activity)
+      //    pending_completions paired with packets_reserved (comp alloc/recycle)
+      //  Joint stability of each pair rules out balanced add+remove
+      //  activity.  See QuiescenceState in network.h for the per-field
+      //  pairing argument.
       bool stable =
           QuiescenceCheck::have_prev &&
           (totals.packets_reserved == QuiescenceCheck::prev_totals.packets_reserved) &&

@@ -217,6 +217,21 @@ namespace Realm {
     //     in flight on the wire), or
     //   - pending_completions > 0 (any local-completion bookkeeping that
     //     could fire and produce comp replies)
+    //
+    // MONOTONICITY INVARIANT: the two-round stability check requires that
+    //  any real activity between rounds shows up as a counter change.  Two
+    //  of the five reduced fields below are snapshot counters (rises AND
+    //  falls): queued_items and pending_completions.  Snapshot counters
+    //  can alias - the same value across rounds while items flowed
+    //  through.  Each one is therefore paired with a monotonic field in
+    //  the same allreduce array, so the joint stability of the pair rules
+    //  out aliased activity:
+    //    queued_items       <- paired with -> events_added (monotonic)
+    //    pending_completions <- paired with -> packets_reserved (monotonic)
+    //  The monotonic fields packets_reserved, packets_received, and
+    //  events_added are themselves never decremented (paths that would
+    //  decrement them - e.g., cancel_pbuf in GASNet-EX - are stubbed to
+    //  abort).  See per-field comments for the pairing argument.
     struct QuiescenceState {
       // total number of items currently queued on this rank that could
       //  produce a future network operation: work-item queues (injector,
@@ -226,32 +241,43 @@ namespace Realm {
       //  whose count happens to stay the same across rounds while items
       //  flow through still registers as activity.  Reduced via SUM.
       uint64_t queued_items;
-      // monotonic count of items ever added to any queue on this rank.
-      //  REQUIRED for stability detection: queued_items alone can be the
-      //  same value across two consecutive rounds while the queue
-      //  contents change (e.g., a put-completion event firing pops 1 from
-      //  pending_events and adds 1 to ready_xpairs - net change in
-      //  queued_items is zero, but real work happened).  events_added
-      //  goes up whenever any queue gains an entry, so concurrent
-      //  add+remove activity that nets to zero in queued_items still
-      //  shows as a change in events_added.  Together with queued_items
-      //  (snapshot) this fully captures queue-level activity: pure pops
-      //  show up as queued_items decreasing, pure adds show up in both,
-      //  and balanced add+pop shows up in events_added.  Reduced via SUM.
+      // Monotonic count of items ever added to any queue on this rank;
+      //  the monotonic mate of queued_items.  REQUIRED for stability
+      //  detection: queued_items alone can be the same value across two
+      //  consecutive rounds while the queue contents change (e.g., a
+      //  put-completion event firing pops 1 from pending_events and adds
+      //  1 to ready_xpairs - net change in queued_items is zero, but
+      //  real work happened).  events_added goes up whenever any queue
+      //  gains an entry, so concurrent add+remove activity that nets to
+      //  zero in queued_items still shows as a change in events_added.
+      //  Together with queued_items (snapshot) this fully captures
+      //  queue-level activity: pure pops show up as queued_items
+      //  decreasing, pure adds show up in both, and balanced add+pop
+      //  shows up in events_added.  Reduced via SUM.
       uint64_t events_added;
-      // cumulative count of network messages this rank has originated.
-      //  At quiescence, sum across ranks must equal sum of packets_received
+      // Monotonic cumulative count of network messages this rank has
+      //  originated.  At quiescence, sum across ranks must equal sum of
+      //  packets_received.  Also serves as the monotonic mate of
+      //  pending_completions (see below): every alloc of a
+      //  PendingCompletion is co-located with a packets_reserved++ at the
+      //  same send site, so balanced alloc+recycle activity that leaves
+      //  pending_completions unchanged still shows up here.
       uint64_t packets_reserved;
-      // cumulative count of network messages this rank has received and
-      //  counted - sampled post-drain so the count reflects everything the
-      //  drain in Network::check_for_quiescence delivered to handlers
+      // Monotonic cumulative count of network messages this rank has
+      //  received and counted - sampled post-drain so the count reflects
+      //  every received message that has been dispatched to handlers as
+      //  of the call.
       uint64_t packets_received;
-      // count of pending remote completions on this rank waiting for replies
-      //  to arrive; reduced via SUM.  This field is also a snapshot (rises
-      //  and falls), but its only "decrement-without-monotonic-bump" path
-      //  is comp_reply receipt, which is immediately visible as a change
-      //  to pending_completions itself, so the stability check on this
-      //  field alone is sufficient.
+      // Snapshot count of pending remote completions on this rank waiting
+      //  for replies to arrive; rises on PendingCompletion alloc, falls
+      //  on recycle (comp_reply receipt or local-completion firing).
+      //  Reduced via SUM.  Although non-monotonic, the stability check is
+      //  aliasing-safe because every alloc is paired with packets_reserved++
+      //  at the same send site: between two rounds, if N allocs and M
+      //  recycles happened then Δpending = N-M and Δreserved = N.  Joint
+      //  stability of pending_completions AND packets_reserved forces
+      //  N = M = 0, ruling out balanced alloc+recycle activity that
+      //  pending_completions alone would miss.
       uint64_t pending_completions;
       // local-only (NOT reduced) count of messages this rank has received
       //  that pass through IncomingMessageManager and need to be drained
