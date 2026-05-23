@@ -1776,13 +1776,8 @@ namespace Realm {
           ucc_comm->UCC_Allreduce(const_cast<uint64_t *>(local_counts), total_counts,
                                   count, UCC_DT_UINT64, UCC_OP_SUM);
       if(rc != UCC_OK) {
-        log_ucp.error() << "allreduce failed in quiescence_allreduce_sum";
-        // Can't fail gracefully here.  Return zeros so the caller sees the
-        //  counters as never reaching a balanced/quiet state and keeps
-        //  iterating PROGRESSING; the periodic "no progress" warning from
-        //  Network::check_for_quiescence will surface the stall.
-        for(size_t i = 0; i < count; i++)
-          total_counts[i] = 0;
+        log_ucp.fatal() << "allreduce failed in quiescence_allreduce_sum";
+        abort();
       }
     }
 

@@ -847,10 +847,10 @@ namespace Realm {
     //  shows up exclusively in packets_reserved/received imbalances, which
     //  the stability check already monitors.
     state.events_added = 0;
-    // MPI folds completion replies into the same messages_rcvd counter as
-    //  application messages, so packets_received is also the IMM drain
-    //  target.
-    state.messages_to_drain = state.packets_received;
+    // Completion replies are counted in messages_rcvd but bypass
+    //  IncomingMessageManager, so the drain target must use the subset of
+    //  received messages actually handed to IMM.
+    state.messages_to_drain = MPI::messages_delivered_to_imm.load();
   }
 
   void MPIModule::quiescence_allreduce_sum(const uint64_t *local_counts,

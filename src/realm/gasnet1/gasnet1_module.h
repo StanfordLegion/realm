@@ -66,6 +66,8 @@ namespace Realm {
                             std::vector<size_t> &lengths);
 
     virtual void sample_quiescence_state(QuiescenceState &state);
+    virtual bool custom_quiescence_check(IncomingMessageManager *message_manager,
+                                         Network::QuiescenceStatus &status);
     virtual void quiescence_allreduce_sum(const uint64_t *local_counts,
                                           uint64_t *total_counts, size_t count);
 

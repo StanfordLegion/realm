@@ -780,16 +780,9 @@ namespace Realm {
 
   void GASNet1Module::sample_quiescence_state(QuiescenceState &state)
   {
-    // The legacy gasnet1 backend uses its own quiescence_checker protocol
-    //  which does its own multi-step synchronization via active messages
-    //  rather than exposing per-rank counters that can be sum-reduced.
-    //  Rather than reimplementing that protocol on top of the new interface,
-    //  we report an always-quiet state so the new Mattern's-shaped check
-    //  in network.cc declares termination after two consecutive rounds.
-    //  This matches the spirit of the legacy check (which did a global
-    //  protocol and reported a single bool); if more rigorous quiescence
-    //  detection is needed for gasnet1, the per-rank counters would have to
-    //  be exposed from the gasnet1 backend.
+    // Unused by gasnet1: custom_quiescence_check preserves the backend's
+    //  legacy active-message protocol, which does not expose per-rank sampled
+    //  counters for the generic Mattern-shaped algorithm.
     state.queued_items = 0;
     state.events_added = 0;
     state.packets_reserved = 0;
@@ -798,12 +791,22 @@ namespace Realm {
     state.messages_to_drain = 0;
   }
 
+  bool GASNet1Module::custom_quiescence_check(IncomingMessageManager *message_manager,
+                                              Network::QuiescenceStatus &status)
+  {
+    size_t messages_received = quiescence_checker.sample_messages_received_count();
+    message_manager->drain_incoming_messages(messages_received);
+    bool done = quiescence_checker.perform_check(messages_received);
+    status =
+        (done ? Network::QuiescenceStatus::DONE : Network::QuiescenceStatus::PROGRESSING);
+    return true;
+  }
+
   void GASNet1Module::quiescence_allreduce_sum(const uint64_t *local_counts,
                                                uint64_t *total_counts, size_t count)
   {
-    // gasnet1 doesn't expose a typed allreduce in the form we need; since
-    //  sample_quiescence_state always reports zeros, the sum is trivially
-    //  zero on every rank
+    // Not used - gasnet1 provides custom_quiescence_check instead.
+    (void)local_counts;
     for(size_t i = 0; i < count; i++)
       total_counts[i] = 0;
   }

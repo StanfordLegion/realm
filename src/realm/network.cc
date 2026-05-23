@@ -98,6 +98,10 @@ namespace Realm {
       }
 #endif
 
+      QuiescenceStatus custom_status;
+      if(single_network->custom_quiescence_check(message_manager, custom_status))
+        return custom_status;
+
       // Drain the incoming-message queue first, so that any messages already
       //  delivered by the network layer have been dispatched to their
       //  handlers (which may queue more local work, also captured by
@@ -221,6 +225,14 @@ namespace Realm {
   void NetworkModule::parse_command_line(RuntimeImpl *runtime,
                                          std::vector<std::string> &cmdline)
   {}
+
+  bool NetworkModule::custom_quiescence_check(IncomingMessageManager *message_manager,
+                                              Network::QuiescenceStatus &status)
+  {
+    (void)message_manager;
+    (void)status;
+    return false;
+  }
 
   ////////////////////////////////////////////////////////////////////////
   //

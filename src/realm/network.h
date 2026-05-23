@@ -261,8 +261,9 @@ namespace Realm {
       //  comp_reply/rget control AMs that are processed inline) MUST be
       //  excluded, otherwise drain_incoming_messages waits forever for
       //  total_messages_handled to reach a target it cannot.  For backends
-      //  where every received packet goes through IMM (GASNet-EX, MPI),
-      //  this equals packets_received.
+      //  where every received packet goes through IMM (GASNet-EX), this
+      //  equals packets_received.  MPI has a separate subset counter because
+      //  completion replies bypass IMM.
       uint64_t messages_to_drain;
     };
 
@@ -270,6 +271,12 @@ namespace Realm {
     //  IncomingMessageManager has been drained, so 'packets_received' reflects
     //  every received message that has been dispatched as of the call.
     virtual void sample_quiescence_state(QuiescenceState &state) = 0;
+
+    // Optional escape hatch for backends with an existing quiescence protocol
+    //  that does not naturally expose the sampled counters above.  Return true
+    //  after setting 'status' if the backend handled the check itself.
+    virtual bool custom_quiescence_check(IncomingMessageManager *message_manager,
+                                         Network::QuiescenceStatus &status);
 
     // Sum-reduce a small array of uint64_t across all ranks.  Used by the
     //  Mattern's-shaped Network::check_for_quiescence loop to combine
