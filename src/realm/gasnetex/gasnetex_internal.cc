@@ -267,16 +267,10 @@ namespace Realm {
   void OutbufMetadata::databuf_close()
   {
     assert(state == STATE_DATABUF);
-    // snapshot use_count before the atomic op - same rationale as pktbuf_close:
-    //  databuf_use_count is non-atomic and is reset to 0 by
-    //  set_state(STATE_DATABUF) when the buffer is recycled, so a re-read
-    //  after the fetch_add could see the new cycle's 0 and cause
-    //  (prev + use_count) to compare equal to 0 spuriously.
-    const int saved_use_count = databuf_use_count;
     // if the result of adding use_count to remain_count is 0, all uses have
     //  already been completed and we can free ourselves
-    int prev = remain_count.fetch_add(saved_use_count);
-    if((prev + saved_use_count) == 0)
+    int prev = remain_count.fetch_add(databuf_use_count);
+    if((prev + databuf_use_count) == 0)
       manager->free_outbuf(this);
   }
 
