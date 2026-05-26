@@ -217,15 +217,6 @@ namespace Realm {
   void OutbufMetadata::set_state(State new_state)
   {
     switch(new_state) {
-    case STATE_DATABUF:
-    {
-      assert(state == STATE_IDLE);
-      databuf_rsrv_offset = 0;
-      databuf_use_count = 0;
-      remain_count.store(0);
-      state = STATE_DATABUF;
-      break;
-    }
     case STATE_PKTBUF:
     {
       assert(state == STATE_IDLE);
@@ -258,25 +249,9 @@ namespace Realm {
 
   void OutbufMetadata::dec_usecount()
   {
-    assert((state == STATE_DATABUF) || (state == STATE_PKTBUF));
+    assert(state == STATE_PKTBUF);
     int prev = remain_count.fetch_sub(1);
     if(prev == 1)
-      manager->free_outbuf(this);
-  }
-
-  void OutbufMetadata::databuf_close()
-  {
-    assert(state == STATE_DATABUF);
-    // snapshot use_count before the atomic op - same rationale as pktbuf_close:
-    //  databuf_use_count is non-atomic and is reset to 0 by
-    //  set_state(STATE_DATABUF) when the buffer is recycled, so a re-read
-    //  after the fetch_add could see the new cycle's 0 and cause
-    //  (prev + use_count) to compare equal to 0 spuriously.
-    const int saved_use_count = databuf_use_count;
-    // if the result of adding use_count to remain_count is 0, all uses have
-    //  already been completed and we can free ourselves
-    int prev = remain_count.fetch_add(saved_use_count);
-    if((prev + saved_use_count) == 0)
       manager->free_outbuf(this);
   }
 
