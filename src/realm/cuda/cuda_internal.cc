@@ -2493,6 +2493,9 @@ namespace Realm {
           }
         }
       }
+      if(host_proxy == nullptr) {
+        return false;
+      }
       if(redop->cudaGetFuncBySymbol_fn != 0) {
         // Resolve host symbol → CUfunction within the correct GPU context
         gpu->push_context();
@@ -2509,7 +2512,6 @@ namespace Realm {
       } else {
         // Fall back to runtime launch via cudaLaunchKernel
         assert(redop->cudaLaunchKernel_fn != 0);
-        assert(host_proxy != nullptr);
         return false;
       }
     }
@@ -2708,8 +2710,11 @@ namespace Realm {
         }
         // add optimized kernels if the condition is satisfied
         // TODO: support different elem sizes
+        bool has_fast_kernels =
+            (kernel_advanced != 0 || kernel_host_proxy_advanced != nullptr) &&
+            (kernel_transpose != 0 || kernel_host_proxy_transpose != nullptr);
         if(in_port && out_port && !non_affine &&
-           (redop->sizeof_rhs == redop->sizeof_lhs)) {
+           (redop->sizeof_rhs == redop->sizeof_lhs) && has_fast_kernels) {
           done = fast_reduction_kernel_mode(channel, max_bytes, in_port, out_port,
                                             in_span_start, out_span_start);
           did_work = true;
