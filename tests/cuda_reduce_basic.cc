@@ -64,14 +64,11 @@ bool test_reduce_dim(Rect<N, PT> domain, Memory gpu_mem, Memory cpu_mem)
   IndexSpace<N, PT> is(domain);
 
   RegionInstance src_inst, dst_inst, cpu_inst;
-  RegionInstance::create_instance(src_inst, gpu_mem, is, fields, 0,
-                                  ProfilingRequestSet())
+  RegionInstance::create_instance(src_inst, gpu_mem, is, fields, 0, ProfilingRequestSet())
       .wait();
-  RegionInstance::create_instance(dst_inst, gpu_mem, is, fields, 0,
-                                  ProfilingRequestSet())
+  RegionInstance::create_instance(dst_inst, gpu_mem, is, fields, 0, ProfilingRequestSet())
       .wait();
-  RegionInstance::create_instance(cpu_inst, cpu_mem, is, fields, 0,
-                                  ProfilingRequestSet())
+  RegionInstance::create_instance(cpu_inst, cpu_mem, is, fields, 0, ProfilingRequestSet())
       .wait();
 
   size_t errors = 0;
