@@ -12,11 +12,9 @@ var classRealm_1_1OutbufMetadata =
     ] ],
     [ "State", "classRealm_1_1OutbufMetadata.html#ae4557239ff8015e12721cb950a5320e3", [
       [ "STATE_IDLE", "classRealm_1_1OutbufMetadata.html#ae4557239ff8015e12721cb950a5320e3aa48bf2cccbdb874f7e58f440790e8bf5", null ],
-      [ "STATE_DATABUF", "classRealm_1_1OutbufMetadata.html#ae4557239ff8015e12721cb950a5320e3ab5d0cd8fdca5ee2689b57799ec65b216", null ],
       [ "STATE_PKTBUF", "classRealm_1_1OutbufMetadata.html#ae4557239ff8015e12721cb950a5320e3a650643e56f5cec98368cf848358d88b2", null ]
     ] ],
     [ "OutbufMetadata", "classRealm_1_1OutbufMetadata.html#a76994d8d10e1e57400a13981908301f3", null ],
-    [ "databuf_close", "classRealm_1_1OutbufMetadata.html#aee1cb4efa153dbd44478e715ba16e177", null ],
     [ "dec_usecount", "classRealm_1_1OutbufMetadata.html#a187d39d2d653298deb675c17c7e4874e", null ],
     [ "pktbuf_close", "classRealm_1_1OutbufMetadata.html#a2ac4d1115ee9db55dc4bafb07a4d3728", null ],
     [ "pktbuf_commit", "classRealm_1_1OutbufMetadata.html#a9e544b575385d60049711c8b3afaf2db", null ],
@@ -26,8 +24,6 @@ var classRealm_1_1OutbufMetadata =
     [ "OutbufManager", "classRealm_1_1OutbufMetadata.html#adff5aa12c3f98180fe9fde4b18a7dd08", null ],
     [ "XmitSrcDestPair", "classRealm_1_1OutbufMetadata.html#a3305be6df13332855053de81a801567d", null ],
     [ "baseptr", "classRealm_1_1OutbufMetadata.html#af7387351248a2ccaa20ac5349b3a4a14", null ],
-    [ "databuf_rsrv_offset", "classRealm_1_1OutbufMetadata.html#a4cc4c8c6134d2128f2850463f7512cce", null ],
-    [ "databuf_use_count", "classRealm_1_1OutbufMetadata.html#a0c134915bd0fbf6a84fbec0e24bbbf7d", null ],
     [ "is_overflow", "classRealm_1_1OutbufMetadata.html#a12a16deb59c3e57a75f459f43973a3a3", null ],
     [ "manager", "classRealm_1_1OutbufMetadata.html#a0d117cf9ff8f868aba25ea4e60aca333", null ],
     [ "next_overflow", "classRealm_1_1OutbufMetadata.html#a5082ee927f440d0ed222120c400a0f6d", null ],

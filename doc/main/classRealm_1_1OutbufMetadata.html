@@ -44,7 +44,7 @@
    <!-- BEGIN version select -->
     <br />
     <div class="dropdown">
-     <button class="dropbtn">Version 25.6.1-rc.4+eedd0c47</button>
+     <button class="dropbtn">Version 25.6.1-rc.4+3fe7c858</button>
      <div class="dropdown-content"></div>
     </div>
     <script type="text/javascript" src="../selectversion.js"></script>
@@ -153,7 +153,6 @@ Collaboration diagram for Realm::OutbufMetadata:</div>
 <tr class="heading"><td colspan="2"><h2 class="groupheader"><a id="pub-types" name="pub-types"></a>
 Public Types</h2></td></tr>
 <tr class="memitem:ae4557239ff8015e12721cb950a5320e3" id="r_ae4557239ff8015e12721cb950a5320e3"><td class="memItemLeft" align="right" valign="top">enum &#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="classRealm_1_1OutbufMetadata.html#ae4557239ff8015e12721cb950a5320e3">State</a> { <a class="el" href="classRealm_1_1OutbufMetadata.html#ae4557239ff8015e12721cb950a5320e3aa48bf2cccbdb874f7e58f440790e8bf5">STATE_IDLE</a>
-, <a class="el" href="classRealm_1_1OutbufMetadata.html#ae4557239ff8015e12721cb950a5320e3ab5d0cd8fdca5ee2689b57799ec65b216">STATE_DATABUF</a>
 , <a class="el" href="classRealm_1_1OutbufMetadata.html#ae4557239ff8015e12721cb950a5320e3a650643e56f5cec98368cf848358d88b2">STATE_PKTBUF</a>
  }</td></tr>
 <tr class="separator:ae4557239ff8015e12721cb950a5320e3"><td class="memSeparator" colspan="2">&#160;</td></tr>
@@ -177,8 +176,6 @@ Public Member Functions</h2></td></tr>
 <tr class="separator:a76994d8d10e1e57400a13981908301f3"><td class="memSeparator" colspan="2">&#160;</td></tr>
 <tr class="memitem:a187d39d2d653298deb675c17c7e4874e" id="r_a187d39d2d653298deb675c17c7e4874e"><td class="memItemLeft" align="right" valign="top">void&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="classRealm_1_1OutbufMetadata.html#a187d39d2d653298deb675c17c7e4874e">dec_usecount</a> ()</td></tr>
 <tr class="separator:a187d39d2d653298deb675c17c7e4874e"><td class="memSeparator" colspan="2">&#160;</td></tr>
-<tr class="memitem:aee1cb4efa153dbd44478e715ba16e177" id="r_aee1cb4efa153dbd44478e715ba16e177"><td class="memItemLeft" align="right" valign="top">void&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="classRealm_1_1OutbufMetadata.html#aee1cb4efa153dbd44478e715ba16e177">databuf_close</a> ()</td></tr>
-<tr class="separator:aee1cb4efa153dbd44478e715ba16e177"><td class="memSeparator" colspan="2">&#160;</td></tr>
 <tr class="memitem:a1ff7bb9496fada67a72ecfb5e22262b8" id="r_a1ff7bb9496fada67a72ecfb5e22262b8"><td class="memItemLeft" align="right" valign="top">bool&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="classRealm_1_1OutbufMetadata.html#a1ff7bb9496fada67a72ecfb5e22262b8">pktbuf_reserve</a> (size_t bytes, int &amp;pktidx, uintptr_t &amp;offset)</td></tr>
 <tr class="separator:a1ff7bb9496fada67a72ecfb5e22262b8"><td class="memSeparator" colspan="2">&#160;</td></tr>
 <tr class="memitem:a2ac4d1115ee9db55dc4bafb07a4d3728" id="r_a2ac4d1115ee9db55dc4bafb07a4d3728"><td class="memItemLeft" align="right" valign="top">void&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="classRealm_1_1OutbufMetadata.html#a2ac4d1115ee9db55dc4bafb07a4d3728">pktbuf_close</a> ()</td></tr>
@@ -218,10 +215,6 @@ Protected Attributes</h2></td></tr>
 <tr class="separator:a4caa242f3eb433fe0a7b3a53c5ca240a"><td class="memSeparator" colspan="2">&#160;</td></tr>
 <tr class="memitem:a2157a3a9dcfba91afc04e6f19b9099e9" id="r_a2157a3a9dcfba91afc04e6f19b9099e9"><td class="memItemLeft" align="right" valign="top"><a class="el" href="classRealm_1_1atomic.html">atomic</a>&lt; int &gt;&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="classRealm_1_1OutbufMetadata.html#a2157a3a9dcfba91afc04e6f19b9099e9">remain_count</a></td></tr>
 <tr class="separator:a2157a3a9dcfba91afc04e6f19b9099e9"><td class="memSeparator" colspan="2">&#160;</td></tr>
-<tr class="memitem:a4cc4c8c6134d2128f2850463f7512cce" id="r_a4cc4c8c6134d2128f2850463f7512cce"><td class="memItemLeft" align="right" valign="top">size_t&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="classRealm_1_1OutbufMetadata.html#a4cc4c8c6134d2128f2850463f7512cce">databuf_rsrv_offset</a></td></tr>
-<tr class="separator:a4cc4c8c6134d2128f2850463f7512cce"><td class="memSeparator" colspan="2">&#160;</td></tr>
-<tr class="memitem:a0c134915bd0fbf6a84fbec0e24bbbf7d" id="r_a0c134915bd0fbf6a84fbec0e24bbbf7d"><td class="memItemLeft" align="right" valign="top">int&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="classRealm_1_1OutbufMetadata.html#a0c134915bd0fbf6a84fbec0e24bbbf7d">databuf_use_count</a></td></tr>
-<tr class="separator:a0c134915bd0fbf6a84fbec0e24bbbf7d"><td class="memSeparator" colspan="2">&#160;</td></tr>
 <tr class="memitem:a5bef71622fd07ec015bbe564ef32d005" id="r_a5bef71622fd07ec015bbe564ef32d005"><td class="memItemLeft" align="right" valign="top"><a class="el" href="classRealm_1_1atomic.html">atomic</a>&lt; int &gt;&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="classRealm_1_1OutbufMetadata.html#a5bef71622fd07ec015bbe564ef32d005">pktbuf_total_packets</a></td></tr>
 <tr class="separator:a5bef71622fd07ec015bbe564ef32d005"><td class="memSeparator" colspan="2">&#160;</td></tr>
 <tr class="memitem:a13f50a40d7902c2a174492fad1249861" id="r_a13f50a40d7902c2a174492fad1249861"><td class="memItemLeft" align="right" valign="top">size_t&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="classRealm_1_1OutbufMetadata.html#a13f50a40d7902c2a174492fad1249861">pktbuf_rsrv_offset</a></td></tr>
@@ -284,7 +277,6 @@ Friends</h2></td></tr>
 </div><div class="memdoc">
 <table class="fieldtable">
 <tr><th colspan="2">Enumerator</th></tr><tr><td class="fieldname"><a id="ae4557239ff8015e12721cb950a5320e3aa48bf2cccbdb874f7e58f440790e8bf5" name="ae4557239ff8015e12721cb950a5320e3aa48bf2cccbdb874f7e58f440790e8bf5"></a>STATE_IDLE&#160;</td><td class="fielddoc"></td></tr>
-<tr><td class="fieldname"><a id="ae4557239ff8015e12721cb950a5320e3ab5d0cd8fdca5ee2689b57799ec65b216" name="ae4557239ff8015e12721cb950a5320e3ab5d0cd8fdca5ee2689b57799ec65b216"></a>STATE_DATABUF&#160;</td><td class="fielddoc"></td></tr>
 <tr><td class="fieldname"><a id="ae4557239ff8015e12721cb950a5320e3a650643e56f5cec98368cf848358d88b2" name="ae4557239ff8015e12721cb950a5320e3a650643e56f5cec98368cf848358d88b2"></a>STATE_PKTBUF&#160;</td><td class="fielddoc"></td></tr>
 </table>
 
@@ -309,23 +301,6 @@ Friends</h2></td></tr>
 </div>
 </div>
 <h2 class="groupheader">Member Function Documentation</h2>
-<a id="aee1cb4efa153dbd44478e715ba16e177" name="aee1cb4efa153dbd44478e715ba16e177"></a>
-<h2 class="memtitle"><span class="permalink"><a href="#aee1cb4efa153dbd44478e715ba16e177">&#9670;&#160;</a></span>databuf_close()</h2>
-
-<div class="memitem">
-<div class="memproto">
-      <table class="memname">
-        <tr>
-          <td class="memname">void Realm::OutbufMetadata::databuf_close </td>
-          <td>(</td>
-          <td class="paramname"></td><td>)</td>
-          <td></td>
-        </tr>
-      </table>
-</div><div class="memdoc">
-
-</div>
-</div>
 <a id="a187d39d2d653298deb675c17c7e4874e" name="a187d39d2d653298deb675c17c7e4874e"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#a187d39d2d653298deb675c17c7e4874e">&#9670;&#160;</a></span>dec_usecount()</h2>
 
@@ -529,50 +504,6 @@ Friends</h2></td></tr>
       <table class="memname">
         <tr>
           <td class="memname">uintptr_t Realm::OutbufMetadata::baseptr</td>
-        </tr>
-      </table>
-  </td>
-  <td class="mlabels-right">
-<span class="mlabels"><span class="mlabel">protected</span></span>  </td>
-  </tr>
-</table>
-</div><div class="memdoc">
-
-</div>
-</div>
-<a id="a4cc4c8c6134d2128f2850463f7512cce" name="a4cc4c8c6134d2128f2850463f7512cce"></a>
-<h2 class="memtitle"><span class="permalink"><a href="#a4cc4c8c6134d2128f2850463f7512cce">&#9670;&#160;</a></span>databuf_rsrv_offset</h2>
-
-<div class="memitem">
-<div class="memproto">
-<table class="mlabels">
-  <tr>
-  <td class="mlabels-left">
-      <table class="memname">
-        <tr>
-          <td class="memname">size_t Realm::OutbufMetadata::databuf_rsrv_offset</td>
-        </tr>
-      </table>
-  </td>
-  <td class="mlabels-right">
-<span class="mlabels"><span class="mlabel">protected</span></span>  </td>
-  </tr>
-</table>
-</div><div class="memdoc">
-
-</div>
-</div>
-<a id="a0c134915bd0fbf6a84fbec0e24bbbf7d" name="a0c134915bd0fbf6a84fbec0e24bbbf7d"></a>
-<h2 class="memtitle"><span class="permalink"><a href="#a0c134915bd0fbf6a84fbec0e24bbbf7d">&#9670;&#160;</a></span>databuf_use_count</h2>
-
-<div class="memitem">
-<div class="memproto">
-<table class="mlabels">
-  <tr>
-  <td class="mlabels-left">
-      <table class="memname">
-        <tr>
-          <td class="memname">int Realm::OutbufMetadata::databuf_use_count</td>
         </tr>
       </table>
   </td>
