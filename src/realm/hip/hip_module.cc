@@ -3897,4 +3897,4 @@ namespace Realm {
 #endif
 
   }; // namespace Hip
-}; // namespace Realm
+};   // namespace Realm
