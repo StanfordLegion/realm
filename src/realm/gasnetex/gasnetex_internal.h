@@ -55,13 +55,10 @@ namespace Realm {
     enum State
     {
       STATE_IDLE,
-      STATE_DATABUF,
       STATE_PKTBUF,
     };
 
     void dec_usecount();
-
-    void databuf_close();
 
     enum PktType
     {
@@ -99,10 +96,6 @@ namespace Realm {
     atomic<OutbufMetadata *> realbuf;
 
     atomic<int> remain_count;
-
-    // dbuf reservations are NOT thread-safe - external serialization is used
-    size_t databuf_rsrv_offset;
-    int databuf_use_count;
 
     // pbuf reservatsions are NOT thread-safe - external serialization is used
     atomic<int> pktbuf_total_packets; // unsynchronized read ok
