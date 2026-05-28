@@ -87,6 +87,52 @@ def _set_regs(regs):
 _impersonate_stack = []
 
 
+def _restore_all_impersonations():
+    """Pop every outstanding realm-thread impersonation, restoring the
+    currently selected pthread's registers to the original snapshot.
+
+    Invoked from gdb hook- commands defined in _install_safety_hooks() so
+    that the user can't accidentally `continue`, `step`, or `thread N` with
+    clobbered registers."""
+    if not _impersonate_stack:
+        return
+    count = len(_impersonate_stack)
+    while _impersonate_stack:
+        regs = _impersonate_stack[-1]
+        try:
+            _set_regs(regs)
+        except gdb.error as e:
+            print("realm-gdb: WARNING: failed to restore registers: {}".format(e))
+            break
+        _impersonate_stack.pop()
+    print(
+        "realm-thread: auto-restored {} impersonation(s) before resume/switch.".format(
+            count
+        )
+    )
+
+
+def _install_safety_hooks():
+    """Install gdb hook-<cmd> commands that auto-restore impersonations
+    before any command that resumes the inferior or switches threads.  Each
+    hook just calls _restore_all_impersonations() via the Python interpreter
+    -- harmless when nothing is impersonating."""
+    cmds = (
+        "continue", "step", "next", "finish", "run", "start",
+        "until", "advance", "jump", "stepi", "nexti", "signal",
+        "thread",
+    )
+    body = "python _restore_all_impersonations()"
+    for c in cmds:
+        try:
+            gdb.execute(
+                "define hook-{c}\n{body}\nend\n".format(c=c, body=body),
+                to_string=True,
+            )
+        except gdb.error as e:
+            print("realm-gdb: WARNING: could not install hook-{}: {}".format(c, e))
+
+
 def _dump_parked_threads():
     parked = []
     for ut in _iter_user_threads():
@@ -290,6 +336,7 @@ class RealmThread(gdb.Command):
 if _supported():
     ThreadApply()
     RealmThread()
+    _install_safety_hooks()
     print(
         "realm-gdb.py loaded: 'thread apply all bt' includes parked user threads; "
         "use 'realm-thread' to inspect parked stacks."

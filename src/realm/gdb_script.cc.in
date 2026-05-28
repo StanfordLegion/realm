@@ -15,11 +15,12 @@ __asm__(
     ".pushsection \".debug_gdb_scripts\", \"MS\",@progbits,1\n"
     /* SECTION_SCRIPT_ID_PYTHON_TEXT == 4: inline python source follows */
     ".byte 4\n"
-    /* short name (NUL-terminated) -- shown in `info auto-load python-scripts` */
-    ".asciz \"realm-gdb.py\"\n"
+    /* script name -- terminated by newline (NOT NUL).  Must not contain
+       whitespace.  See gdb's "The .debug_gdb_scripts section" docs. */
+    ".ascii \"realm-gdb.py\\n\"\n"
     /* script body */
     ".incbin \"@REALM_GDB_PY_PATH@\"\n"
-    /* trailing NUL for the script body */
+    /* trailing NUL that terminates the whole entry */
     ".byte 0\n"
     ".popsection\n");
 
