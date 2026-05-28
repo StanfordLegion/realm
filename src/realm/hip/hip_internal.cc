@@ -2054,8 +2054,8 @@ namespace Realm {
 
     void GPUreduceXferDes::setup_redop_kernel(
         GPUreduceChannel *channel, void *redop_args, const size_t in_span_start,
-        const size_t out_span_start, const size_t in_elem_size, const size_t out_elem_size,
-        const size_t elems, const bool has_transpose)
+        const size_t out_span_start, const size_t in_elem_size,
+        const size_t out_elem_size, const size_t elems, const bool has_transpose)
     {
       size_t threads_per_block = 256;
       size_t blocks_per_grid = 1 + ((elems - 1) / threads_per_block);
@@ -2082,7 +2082,8 @@ namespace Realm {
                                 dim3(threads_per_block), params, 0 /*sharedmem*/,
                                 stream->get_stream()));
 #else
-      void *kernel_ptr = has_transpose ? kernel_host_proxy_transpose : kernel_host_proxy_advanced;
+      void *kernel_ptr =
+          has_transpose ? kernel_host_proxy_transpose : kernel_host_proxy_advanced;
       int orig_device;
       CHECK_HIP(hipGetDevice(&orig_device));
       CHECK_HIP(hipSetDevice(channel->gpu->info->index));
@@ -2150,10 +2151,11 @@ namespace Realm {
         }
 
 #ifdef REALM_USE_HIP_HIJACK
-        bool has_fast_kernels = (kernel_advanced != nullptr) && (kernel_transpose != nullptr);
-#else
         bool has_fast_kernels =
-            (kernel_host_proxy_advanced != nullptr) && (kernel_host_proxy_transpose != nullptr);
+            (kernel_advanced != nullptr) && (kernel_transpose != nullptr);
+#else
+        bool has_fast_kernels = (kernel_host_proxy_advanced != nullptr) &&
+                                (kernel_host_proxy_transpose != nullptr);
 #endif
         // add optimized kernels if the condition is satisfied
         // TODO: support different elem sizes
@@ -2210,8 +2212,7 @@ namespace Realm {
                 assert(in_mapping);
                 in_base = in_mapping->local_base;
               } else {
-                in_base =
-                    reinterpret_cast<uintptr_t>(in_port->mem->get_direct_ptr(0, 0));
+                in_base = reinterpret_cast<uintptr_t>(in_port->mem->get_direct_ptr(0, 0));
               }
 
               while(total_elems < max_elems) {
@@ -2307,8 +2308,8 @@ namespace Realm {
                   add_reference(); // released by transfer completion
                   stream->add_notification(new GPUTransferCompletion(
                       this, input_control.current_io_port, in_span_start,
-                      elems * in_elem_size, output_control.current_io_port, out_span_start,
-                      elems * out_elem_size));
+                      elems * in_elem_size, output_control.current_io_port,
+                      out_span_start, elems * out_elem_size));
                 }
 
                 in_span_start += elems * in_elem_size;
@@ -2627,8 +2628,9 @@ namespace Realm {
 
       size_t elems = bytes_to_copy / in_elem_size;
       if(has_transpose) {
-        setup_redop_kernel(channel, (void *)&transpose_copy, in_span_start, out_span_start,
-                           in_elem_size, out_elem_size, elems, has_transpose);
+        setup_redop_kernel(channel, (void *)&transpose_copy, in_span_start,
+                           out_span_start, in_elem_size, out_elem_size, elems,
+                           has_transpose);
       } else {
         setup_redop_kernel(channel, (void *)&copy_infos, in_span_start, out_span_start,
                            in_elem_size, out_elem_size, elems, has_transpose);

@@ -780,7 +780,7 @@ namespace Realm {
       else
         fence->enqueue_on_stream(s);
 
-      // A useful debugging macro
+        // A useful debugging macro
 #ifdef FORCE_GPU_STREAM_SYNCHRONIZE
       CHECK_HIP(hipStreamSynchronize(s->get_stream()));
 #endif
