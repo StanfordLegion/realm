@@ -41,11 +41,12 @@ namespace Realm {
       HipModule *mod = get_runtime()->get_module<HipModule>("hip");
       if(mod) {
         for(std::vector<GPU *>::const_iterator it = mod->gpus.begin();
-            it != mod->gpus.end(); ++it)
+            it != mod->gpus.end(); ++it) {
           if((*it)->device_id == _device_id) {
             gpu = *it;
             break;
           }
+        }
       }
     }
     ////////////////////////////////////////////////////////////////////////
@@ -88,8 +89,9 @@ namespace Realm {
       while(ok_dims < ndims) {
         int di = order[ok_dims];
         if(hi[di] != lo[di]) {
-          if(di <= prev_dim)
+          if(di <= prev_dim) {
             break;
+          }
           prev_dim = di;
           switch(di) {
           case 0:
@@ -267,8 +269,9 @@ namespace Realm {
     {
       // We don't need a full log2 here
       for(size_t a = 16; a > 1; a >>= 1) {
-        if((v & (a - 1)) == 0)
+        if((v & (a - 1)) == 0) {
           return a;
+        }
       }
       return 1; // Unfortunately this can only be byte aligned :(
     }
@@ -1046,7 +1049,7 @@ namespace Realm {
         AutoGPUContext agc(stream->get_gpu());
 
         // We can't do gather-scatter yet.
-        assert(!(out_port->indirect_port_idx >= 0 && in_port->indirect_port_idx >= 0));
+        assert(out_port->indirect_port_idx < 0 || in_port->indirect_port_idx < 0);
         assert(!in_nonaffine && !out_nonaffine);
 
         log_gpudma.info() << "\t launching hip gather/scatter kernel"
@@ -1838,9 +1841,8 @@ namespace Realm {
                   // logarithmic version requires that pstride be a multiple of
                   //  lstride
                   if((pstride % lstride) == 0) {
-                    hipMemcpy3DParms copy3d = {
-                        0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-                        0, 0, 0, 0, 0, 0, 0, 0, 0, hipMemcpyDeviceToDevice};
+                    hipMemcpy3DParms copy3d{};
+                    copy3d.kind = hipMemcpyDeviceToDevice;
                     void *srcDevice = (void *)(out_base + out_offset);
                     copy3d.srcPtr = make_hipPitchedPtr((void *)srcDevice, lstride, bytes,
                                                        pstride / lstride);
@@ -2108,6 +2110,16 @@ namespace Realm {
           (redop_info.is_fold ? redop->sizeof_rhs : redop->sizeof_lhs);
       assert(redop_info.in_place); // TODO: support for out-of-place reduces
 
+#ifdef REALM_USE_HIP_HIJACK
+      if(kernel == nullptr) {
+        return false;
+      }
+#else
+      if(kernel_host_proxy == nullptr) {
+        return false;
+      }
+#endif
+
       struct KernelArgs {
         uintptr_t dst_base, dst_stride;
         uintptr_t src_base, src_stride;
@@ -2138,14 +2150,15 @@ namespace Realm {
         }
 
 #ifdef REALM_USE_HIP_HIJACK
-        bool has_advanced_kernel = (kernel_advanced != nullptr);
+        bool has_fast_kernels = (kernel_advanced != nullptr) && (kernel_transpose != nullptr);
 #else
-        bool has_advanced_kernel = (kernel_host_proxy_advanced != nullptr);
+        bool has_fast_kernels =
+            (kernel_host_proxy_advanced != nullptr) && (kernel_host_proxy_transpose != nullptr);
 #endif
         // add optimized kernels if the condition is satisfied
         // TODO: support different elem sizes
         if(in_port && out_port && !non_affine &&
-           (redop->sizeof_rhs == redop->sizeof_lhs) && has_advanced_kernel) {
+           (redop->sizeof_rhs == redop->sizeof_lhs) && has_fast_kernels) {
           done = fast_reduction_kernel_mode(channel, max_bytes, in_port, out_port,
                                             in_span_start, out_span_start);
           did_work = true;
