@@ -114,13 +114,22 @@ def _restore_all_impersonations():
 
 def _install_safety_hooks():
     """Install gdb hook-<cmd> commands that auto-restore impersonations
-    before any command that resumes the inferior or switches threads.  Each
-    hook just calls _restore_all_impersonations() via the Python interpreter
-    -- harmless when nothing is impersonating."""
+    before any command that resumes the inferior, switches threads, or
+    detaches gdb from the process.  Each hook just calls
+    _restore_all_impersonations() via the Python interpreter -- harmless when
+    nothing is impersonating.
+
+    Also registers a gdb_exiting event handler as a fallback for the case
+    where gdb tears down without going through hook-quit (e.g., IDE
+    wrappers, EOF on stdin)."""
     cmds = (
+        # resume the inferior
         "continue", "step", "next", "finish", "run", "start",
         "until", "advance", "jump", "stepi", "nexti", "signal",
+        # switch threads (leaves impersonated regs stranded otherwise)
         "thread",
+        # gdb teardown -- detach/quit write registers back to the inferior
+        "detach", "quit",
     )
     body = "python _restore_all_impersonations()"
     for c in cmds:
@@ -131,6 +140,13 @@ def _install_safety_hooks():
             )
         except gdb.error as e:
             print("realm-gdb: WARNING: could not install hook-{}: {}".format(c, e))
+
+    # Fallback for gdb exits that don't route through hook-quit.  Added in
+    # gdb 12; ignore if missing on older builds.
+    try:
+        gdb.events.gdb_exiting.connect(lambda evt: _restore_all_impersonations())
+    except AttributeError:
+        pass
 
 
 def _dump_parked_threads():
