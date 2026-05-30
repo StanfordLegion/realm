@@ -147,9 +147,12 @@ inline void makecontext_wrap(ucontext_t *u, void (*fn)(), int args, ...)
 #endif
 
 // Force the linker to keep gdb_script.cc (which contributes the embedded
-// gdb auto-load script via the .debug_gdb_scripts section) when librealm is
-// consumed as a static archive.  Has no effect for shared-library builds.
-#if defined(REALM_ON_LINUX) || defined(REALM_ON_FREEBSD)
+// gdb auto-load script via the .debug_gdb_scripts section) when librealm
+// is consumed as a static archive.  Has no effect for shared-library
+// builds.  REALM_EMBED_GDB_SCRIPT is defined by CMake only when
+// gdb_script.cc is actually compiled (Debug / RelWithDebInfo on
+// Linux/FreeBSD), so the anchor symbol is guaranteed to be defined.
+#ifdef REALM_EMBED_GDB_SCRIPT
 extern "C" int realm_gdb_script_anchor;
 static int *const realm_gdb_script_anchor_ref __attribute__((used)) =
     &realm_gdb_script_anchor;

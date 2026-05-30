@@ -146,9 +146,17 @@ configure_file(
 )
 
 # Embed src/realm/realm-gdb.py into librealm's .debug_gdb_scripts ELF
-# section so that gdb auto-loads it whenever Realm code is debugged.  ELF
-# only -- macOS/Windows builds skip this entirely.
-if(CMAKE_SYSTEM_NAME STREQUAL "Linux" OR CMAKE_SYSTEM_NAME STREQUAL "FreeBSD")
+# section so that gdb auto-loads it whenever Realm code is debugged.
+# Only useful when the library carries DWARF, so restrict to Debug and
+# RelWithDebInfo builds.  ELF only -- macOS/Windows skip this entirely.
+set(_realm_embed_gdb_script FALSE)
+if((CMAKE_SYSTEM_NAME STREQUAL "Linux" OR CMAKE_SYSTEM_NAME STREQUAL "FreeBSD")
+   AND (CMAKE_BUILD_TYPE STREQUAL "Debug"
+        OR CMAKE_BUILD_TYPE STREQUAL "RelWithDebInfo"))
+  set(_realm_embed_gdb_script TRUE)
+endif()
+
+if(_realm_embed_gdb_script)
   set(REALM_GDB_PY_PATH "${REALM_SOURCE_DIR}/realm-gdb.py")
   set(_gdb_script_cc "${CMAKE_CURRENT_BINARY_DIR}/gdb_script.cc")
   configure_file(
@@ -163,6 +171,13 @@ if(CMAKE_SYSTEM_NAME STREQUAL "Linux" OR CMAKE_SYSTEM_NAME STREQUAL "FreeBSD")
   )
   list(APPEND REALM_SOURCES "${_gdb_script_cc}")
 endif()
+
+# Exported so the parent scope can add the matching compile define for
+# threads.cc's anchor reference.
+set(REALM_EMBED_GDB_SCRIPT
+    ${_realm_embed_gdb_script}
+    PARENT_SCOPE
+)
 
 # generate per-dimension object files for deppart stuff
 foreach(INST_N1 RANGE 1 ${REALM_MAX_DIM})

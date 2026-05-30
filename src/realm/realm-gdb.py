@@ -112,30 +112,67 @@ def _restore_all_impersonations():
     )
 
 
-def _install_safety_hooks():
-    """Install gdb hook-<cmd> commands that auto-restore impersonations
-    before any command that resumes the inferior, switches threads, or
-    detaches gdb from the process.  Each hook just calls
-    _restore_all_impersonations() via the Python interpreter -- harmless when
-    nothing is impersonating.
+def _block_if_impersonating(cmd_name):
+    """Refuse a single-thread step-like command while impersonating.
 
-    Also registers a gdb_exiting event handler as a fallback for the case
-    where gdb tears down without going through hook-quit (e.g., IDE
-    wrappers, EOF on stdin)."""
-    cmds = (
-        # resume the inferior
-        "continue", "step", "next", "finish", "run", "start",
-        "until", "advance", "jump", "stepi", "nexti", "signal",
-        # switch threads (leaves impersonated regs stranded otherwise)
+    Stepping while impersonating would step the host pthread, not the
+    parked user thread whose stack we're inspecting -- gdb has no way to
+    step a parked user thread because it isn't a real OS thread.  Rather
+    than silently auto-restore and step the wrong thing, raise an error
+    that aborts the command."""
+    if _impersonate_stack:
+        raise gdb.GdbError(
+            "realm-gdb: refusing to '{}' while impersonating a parked user "
+            "thread.  Single-thread step/next/finish/jump operate on the "
+            "host pthread, not on the parked user thread whose stack you "
+            "are inspecting (gdb has no way to step a parked user thread).  "
+            "Run 'realm-thread back' to restore the host pthread first, or "
+            "use 'continue' to resume the whole process.".format(cmd_name)
+        )
+
+
+def _install_safety_hooks():
+    """Install gdb hook-<cmd> commands in two categories.
+
+    Reject: single-thread step-like commands.  Aborted via gdb.GdbError
+    when an impersonation is active, since they would step the host
+    pthread rather than the user thread the user is looking at.
+
+    Auto-restore: whole-process resume, thread switch, and gdb teardown
+    commands.  These have well-defined semantics regardless of which
+    user thread the host pthread "looks like" -- continue resumes
+    everything, detach/quit walk away.  Restoring registers before they
+    run is just bookkeeping so the inferior ends up in a clean state."""
+
+    reject_cmds = (
+        "step", "stepi", "next", "nexti", "finish",
+        "until", "advance", "jump",
+    )
+    for c in reject_cmds:
+        try:
+            gdb.execute(
+                "define hook-{c}\n"
+                "python _block_if_impersonating(\"{c}\")\n"
+                "end\n".format(c=c),
+                to_string=True,
+            )
+        except gdb.error as e:
+            print("realm-gdb: WARNING: could not install hook-{}: {}".format(c, e))
+
+    restore_cmds = (
+        # whole-process resume
+        "continue", "run", "start", "signal",
+        # thread switch (leaves impersonated regs stranded otherwise)
         "thread",
         # gdb teardown -- detach/quit write registers back to the inferior
         "detach", "quit",
     )
-    body = "python _restore_all_impersonations()"
-    for c in cmds:
+    for c in restore_cmds:
         try:
             gdb.execute(
-                "define hook-{c}\n{body}\nend\n".format(c=c, body=body),
+                "define hook-{c}\n"
+                "python _restore_all_impersonations()\n"
+                "end\n".format(c=c),
                 to_string=True,
             )
         except gdb.error as e:
@@ -349,14 +386,62 @@ class RealmThread(gdb.Command):
         print("realm-thread: restored.")
 
 
+_HELP_BANNER = """\
+======================================================================
+realm-gdb.py loaded.  Realm user-thread debugging commands:
+
+  thread apply all bt       Built-in 'thread apply all bt' plus an
+                            extra section listing backtraces for every
+                            parked Realm user thread.  Also recognises
+                            'backtrace' and 'where' in place of 'bt'.
+
+  realm-thread              List parked Realm user threads with their
+                            UserThread pointers.
+
+  realm-thread <ptr>        Redirect the currently-selected pthread's
+                            registers to the given user thread's saved
+                            context.  Use 'bt', 'frame N', 'info locals',
+                            'print VAR' etc. as usual.  Calls nest --
+                            you can switch into another parked thread
+                            without restoring first.
+
+  realm-thread back         Pop one level of impersonation, restoring
+                            the previous register snapshot.
+
+  realm-help                Reprint this banner.
+
+Safety net:
+  * continue, run, signal, thread, detach, quit auto-restore every
+    outstanding impersonation before running, so you can't resume the
+    inferior (or detach gdb) with clobbered registers.
+  * step, stepi, next, nexti, finish, until, advance, jump are REFUSED
+    while impersonating -- they would step the host pthread, not the
+    parked user thread, which is almost never what you want.  Run
+    'realm-thread back' first, or use 'continue' if you just want to
+    let the program proceed.
+
+Linux x86-64 only.  Source: src/realm/realm-gdb.py in the Realm tree.
+======================================================================"""
+
+
+class RealmHelp(gdb.Command):
+    """realm-help
+
+    Print the realm-gdb.py command summary."""
+
+    def __init__(self):
+        super(RealmHelp, self).__init__("realm-help", gdb.COMMAND_USER)
+
+    def invoke(self, arg, from_tty):
+        print(_HELP_BANNER)
+
+
 if _supported():
     ThreadApply()
     RealmThread()
+    RealmHelp()
     _install_safety_hooks()
-    print(
-        "realm-gdb.py loaded: 'thread apply all bt' includes parked user threads; "
-        "use 'realm-thread' to inspect parked stacks."
-    )
+    print(_HELP_BANNER)
 else:
     # Other platforms / architectures: do nothing rather than provide a
     # half-working command.
