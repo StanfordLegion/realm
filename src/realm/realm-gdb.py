@@ -70,7 +70,13 @@ def _saved_regs(ut):
 
 
 def _current_regs():
+    """Snapshot the currently-selected thread's registers AND record which
+    thread we snapshot from, so the restore can target the same thread
+    even if the selected thread has changed in the meantime (e.g., during
+    gdb teardown when `gdb.events.gdb_exiting` fires)."""
+    t = gdb.selected_thread()
     return {
+        "thread_num": t.num if (t is not None and t.is_valid()) else None,
         "rip": int(gdb.parse_and_eval("(unsigned long)$rip")),
         "rsp": int(gdb.parse_and_eval("(unsigned long)$rsp")),
         "rbp": int(gdb.parse_and_eval("(unsigned long)$rbp")),
@@ -78,38 +84,172 @@ def _current_regs():
 
 
 def _set_regs(regs):
+    """Write rip/rsp/rbp to the currently-selected thread."""
     gdb.execute("set $rip = {:#x}".format(regs["rip"]), to_string=True)
     gdb.execute("set $rsp = {:#x}".format(regs["rsp"]), to_string=True)
     gdb.execute("set $rbp = {:#x}".format(regs["rbp"]), to_string=True)
 
 
-# Stack of saved register snapshots for nested `realm-thread`/`realm-thread back`.
+def _apply_snapshot(entry):
+    """Restore a snapshot taken by _current_regs().  Switches to the
+    originating thread first when possible, so registers are always
+    written back to the thread the snapshot came from -- never to whatever
+    thread happens to be selected right now.  Returns True on success."""
+    target_num = entry.get("thread_num")
+    if target_num is not None:
+        target = None
+        try:
+            for t in gdb.selected_inferior().threads():
+                if t.num == target_num:
+                    target = t
+                    break
+        except gdb.error:
+            target = None
+        if target is None or not target.is_valid():
+            print(
+                "realm-gdb: WARNING: cannot restore impersonation -- original "
+                "thread (gdb id {}) is gone; skipping snapshot.".format(target_num)
+            )
+            return False
+        try:
+            target.switch()
+        except gdb.error as e:
+            print(
+                "realm-gdb: WARNING: cannot switch to thread {} for restore: "
+                "{}".format(target_num, e)
+            )
+            return False
+    try:
+        _set_regs(entry)
+    except gdb.error as e:
+        print("realm-gdb: WARNING: failed to write registers: {}".format(e))
+        return False
+    return True
+
+
+# Stack of impersonation entries for nested `realm-thread`/`realm-thread back`.
+# Each entry is a dict:
+#   host_regs:        snapshot of the host pthread's registers BEFORE impersonation
+#                     (used to restore on `realm-thread back`, quit, continue, etc.)
+#   parked_regs:      the parked user thread's saved context (re-applied after an
+#                     inferior function call, which temporarily swaps host_regs back)
+#   user_thread_ptr:  the UserThread pointer the user named (informational)
+# Both host_regs and parked_regs are snapshots as returned by _current_regs:
+# {thread_num, rip, rsp, rbp}.  thread_num identifies which gdb thread the
+# entry applies to so restore writes to the right thread even if the
+# selected thread has shifted.
 _impersonate_stack = []
 
 
+# True while gdb is inside an inferior function call on the impersonated
+# thread (the window between InferiorCallPreEvent and InferiorCallPostEvent).
+# During this window the host's real registers have been written back so
+# the call uses the host pthread's stack instead of the parked user thread's
+# tiny mmap'd stack.  See _on_inferior_call_pre/_post.
+_call_suspended = False
+
+
 def _restore_all_impersonations():
-    """Pop every outstanding realm-thread impersonation, restoring the
-    currently selected pthread's registers to the original snapshot.
+    """Pop every outstanding realm-thread impersonation, writing each
+    host_regs snapshot back to the thread it came from.
 
     Invoked from gdb hook- commands defined in _install_safety_hooks() so
-    that the user can't accidentally `continue`, `step`, or `thread N` with
-    clobbered registers."""
+    that the user can't accidentally `continue`, `thread N`, `quit`, etc.
+    with clobbered registers.  Critically, this restores to the
+    originating thread by number, not to whatever thread happens to be
+    selected at restore time -- the selected thread can change between
+    impersonation and restore (gdb teardown, stop events, IDE wrappers),
+    and writing original-thread-A's registers onto thread-B would
+    silently corrupt thread-B's state."""
     if not _impersonate_stack:
         return
     count = len(_impersonate_stack)
+    saved_cur = None
+    try:
+        saved_cur = gdb.selected_thread()
+    except gdb.error:
+        pass
     while _impersonate_stack:
-        regs = _impersonate_stack[-1]
-        try:
-            _set_regs(regs)
-        except gdb.error as e:
-            print("realm-gdb: WARNING: failed to restore registers: {}".format(e))
+        if not _apply_snapshot(_impersonate_stack[-1]["host_regs"]):
             break
         _impersonate_stack.pop()
+    # Best-effort: leave selected thread as it was before the restore.
+    try:
+        if saved_cur is not None and saved_cur.is_valid():
+            saved_cur.switch()
+    except gdb.error:
+        pass
     print(
         "realm-thread: auto-restored {} impersonation(s) before resume/switch.".format(
             count
         )
     )
+
+
+def _thread_for_ptid(ptid):
+    """Find the gdb.InferiorThread with the given ptid tuple, or None."""
+    try:
+        for t in gdb.selected_inferior().threads():
+            if t.ptid == ptid:
+                return t
+    except gdb.error:
+        pass
+    return None
+
+
+def _on_inferior_call_pre(event):
+    """Before gdb runs an inferior function call (e.g. `p foo()`,
+    `call foo()`), if we're impersonating a parked user thread on the
+    same thread that's about to run the call, swap the host pthread's
+    real registers back in.  This is critical: a parked user thread's
+    stack is a small mmap'd region with a red-zone page at the end, so
+    a function called via gdb on the impersonated stack can easily
+    overflow it, fault, and get caught by realm_freeze -- corrupting
+    the host pthread's state in a way the regular safety net can't
+    undo.  By running the call on the host's normal stack, this stays
+    safe."""
+    global _call_suspended
+    if _call_suspended or not _impersonate_stack:
+        return
+    top = _impersonate_stack[-1]
+    target_num = top["host_regs"].get("thread_num")
+    if target_num is None:
+        return
+    call_thread = _thread_for_ptid(event.ptid)
+    if call_thread is None or call_thread.num != target_num:
+        return
+    if not _apply_snapshot(top["host_regs"]):
+        return
+    _call_suspended = True
+
+
+def _on_inferior_call_post(event):
+    """After the inferior call returns, re-apply the parked user thread's
+    saved context so the user's view of the impersonated stack is
+    restored.  No-op if we weren't impersonating during the call."""
+    global _call_suspended
+    if not _call_suspended:
+        return
+    _call_suspended = False
+    if not _impersonate_stack:
+        return
+    top = _impersonate_stack[-1]
+    try:
+        _apply_snapshot(top["parked_regs"])
+    except gdb.error as e:
+        print(
+            "realm-gdb: WARNING: failed to re-impersonate after inferior "
+            "call: {}".format(e)
+        )
+
+
+def _on_inferior_call(event):
+    """Dispatcher: gdb.events.inferior_call fires with either a
+    InferiorCallPreEvent or InferiorCallPostEvent."""
+    if isinstance(event, getattr(gdb, "InferiorCallPreEvent", ())):
+        _on_inferior_call_pre(event)
+    elif isinstance(event, getattr(gdb, "InferiorCallPostEvent", ())):
+        _on_inferior_call_post(event)
 
 
 def _block_if_impersonating(cmd_name):
@@ -184,6 +324,19 @@ def _install_safety_hooks():
         gdb.events.gdb_exiting.connect(lambda evt: _restore_all_impersonations())
     except AttributeError:
         pass
+
+    # Wrap inferior function calls (e.g. `p foo()`, `call foo()`).  Without
+    # this, calling a function via gdb while impersonating runs the call on
+    # the parked user thread's mmap'd stack; non-trivial calls overflow it
+    # and crash the host pthread via realm_freeze.
+    try:
+        gdb.events.inferior_call.connect(_on_inferior_call)
+    except AttributeError:
+        print(
+            "realm-gdb: WARNING: gdb.events.inferior_call not available -- "
+            "avoid 'p foo()' / 'call foo()' while impersonating (may crash "
+            "the host pthread)."
+        )
 
 
 def _dump_parked_threads():
@@ -358,13 +511,30 @@ class RealmThread(gdb.Command):
             return
         ut = val.cast(ut_type)
         try:
-            regs = _saved_regs(ut)
+            parked = _saved_regs(ut)
         except gdb.error as e:
             print("realm-thread: cannot read ctx: {}".format(e))
             return
-        _impersonate_stack.append(_current_regs())
+        host = _current_regs()
+        if host["thread_num"] is None:
+            print("realm-thread: no selected thread to impersonate on.")
+            return
+        # Tag parked regs with the same thread_num so _apply_snapshot writes
+        # them to the right thread on re-impersonation after an inferior call.
+        parked_with_thread = {
+            "thread_num": host["thread_num"],
+            "rip": parked["rip"],
+            "rsp": parked["rsp"],
+            "rbp": parked["rbp"],
+        }
+        entry = {
+            "host_regs": host,
+            "parked_regs": parked_with_thread,
+            "user_thread_ptr": int(ut),
+        }
+        _impersonate_stack.append(entry)
         try:
-            _set_regs(regs)
+            _set_regs(parked_with_thread)
         except gdb.error as e:
             _impersonate_stack.pop()
             print("realm-thread: failed to set registers: {}".format(e))
@@ -377,10 +547,9 @@ class RealmThread(gdb.Command):
         if not _impersonate_stack:
             print("realm-thread: nothing to restore.")
             return
-        try:
-            _set_regs(_impersonate_stack[-1])
-        except gdb.error as e:
-            print("realm-thread: failed to restore: {}".format(e))
+        # Use _apply_snapshot so the restore writes back to the originating
+        # thread by number, not to whatever thread is currently selected.
+        if not _apply_snapshot(_impersonate_stack[-1]["host_regs"]):
             return
         _impersonate_stack.pop()
         print("realm-thread: restored.")
@@ -419,6 +588,10 @@ Safety net:
     parked user thread, which is almost never what you want.  Run
     'realm-thread back' first, or use 'continue' if you just want to
     let the program proceed.
+  * Inferior function calls (e.g. 'p foo()', 'call foo()') temporarily
+    swap the host pthread's real registers back in for the call's
+    duration, then re-impersonate.  Without this, the call would run on
+    the parked user thread's small mmap'd stack and likely overflow it.
 
 Linux x86-64 only.  Source: src/realm/realm-gdb.py in the Realm tree.
 ======================================================================"""
