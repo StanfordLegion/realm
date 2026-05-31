@@ -287,6 +287,11 @@ def _install_safety_hooks():
     reject_cmds = (
         "step", "stepi", "next", "nexti", "finish",
         "until", "advance", "jump",
+        # record/replay variants (rr, gdb 'record full'): same hazard --
+        # they resume the inferior on a single thread.
+        "reverse-step", "reverse-stepi",
+        "reverse-next", "reverse-nexti",
+        "reverse-finish",
     )
     for c in reject_cmds:
         try:
@@ -302,6 +307,8 @@ def _install_safety_hooks():
     restore_cmds = (
         # whole-process resume
         "continue", "run", "start", "signal",
+        # record/replay whole-process resume
+        "reverse-continue",
         # thread switch (leaves impersonated regs stranded otherwise)
         "thread",
         # gdb teardown -- detach/quit write registers back to the inferior
@@ -349,6 +356,17 @@ def _dump_parked_threads():
     print()
     print("=== Parked Realm user threads ({}) ===".format(len(parked)))
     saved = _current_regs()
+    if saved["thread_num"] is None:
+        return
+    # If we're called while the user is already inside a realm-thread
+    # impersonation, the currently-loaded registers ARE the impersonated
+    # state, not the real host pthread state.  An inferior call during the
+    # parked-thread bt needs to swap back to the *actual* safe host
+    # registers, which live at the bottom of the impersonate stack.
+    if _impersonate_stack:
+        safe_host = _impersonate_stack[0]["host_regs"]
+    else:
+        safe_host = saved
     try:
         for ut in parked:
             try:
@@ -356,12 +374,29 @@ def _dump_parked_threads():
             except gdb.error as e:
                 print("\nUser thread {:#x}: <cannot read ctx: {}>".format(int(ut), e))
                 continue
+            parked_tagged = {
+                "thread_num": saved["thread_num"],
+                "rip": regs["rip"],
+                "rsp": regs["rsp"],
+                "rbp": regs["rbp"],
+            }
+            # Push a synthetic impersonation entry so the inferior_call
+            # event handler will swap to safe_host if a pretty-printer,
+            # display expression, or conditional breakpoint expression
+            # fires a function call while we're walking the parked stack.
+            _impersonate_stack.append({
+                "host_regs": safe_host,
+                "parked_regs": parked_tagged,
+                "user_thread_ptr": int(ut),
+            })
             print("\nUser thread {:#x}:".format(int(ut)))
             try:
-                _set_regs(regs)
+                _set_regs(parked_tagged)
                 gdb.execute("bt", to_string=False)
             except gdb.error as e:
                 print("  <bt failed: {}>".format(e))
+            finally:
+                _impersonate_stack.pop()
     finally:
         try:
             _set_regs(saved)
