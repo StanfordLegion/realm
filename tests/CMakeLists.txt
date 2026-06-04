@@ -113,7 +113,6 @@ list(
   transfer_iterator_test.cc
   idindexed_fields_iterator_test.cc
   lowlevel_dma_test.cc
-  perform_analysis_test.cc
   circ_queue_test.cc
   gather_scatter_test.cc
   sparsity_map_test.cc
@@ -124,6 +123,7 @@ list(
   hpp_runtime_test.cc
   hpp_event_test.cc
   key_value_store_test.cc
+  deferred_alloc_test.cc
 )
 list(TRANSFORM REALM_UNIT_TESTS PREPEND "${REALM_TEST_DIR}/unit_tests/")
 add_executable(realm_unit_tests ${REALM_UNIT_TESTS})

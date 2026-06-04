@@ -217,15 +217,6 @@ namespace Realm {
   void OutbufMetadata::set_state(State new_state)
   {
     switch(new_state) {
-    case STATE_DATABUF:
-    {
-      assert(state == STATE_IDLE);
-      databuf_rsrv_offset = 0;
-      databuf_use_count = 0;
-      remain_count.store(0);
-      state = STATE_DATABUF;
-      break;
-    }
     case STATE_PKTBUF:
     {
       assert(state == STATE_IDLE);
@@ -258,19 +249,9 @@ namespace Realm {
 
   void OutbufMetadata::dec_usecount()
   {
-    assert((state == STATE_DATABUF) || (state == STATE_PKTBUF));
+    assert(state == STATE_PKTBUF);
     int prev = remain_count.fetch_sub(1);
     if(prev == 1)
-      manager->free_outbuf(this);
-  }
-
-  void OutbufMetadata::databuf_close()
-  {
-    assert(state == STATE_DATABUF);
-    // if the result of adding use_count to remain_count is 0, all uses have
-    //  already been completed and we can free ourselves
-    int prev = remain_count.fetch_add(databuf_use_count);
-    if((prev + databuf_use_count) == 0)
       manager->free_outbuf(this);
   }
 
@@ -294,12 +275,19 @@ namespace Realm {
   void OutbufMetadata::pktbuf_close()
   {
     assert(state == STATE_PKTBUF);
+    // snapshot use_count before the atomic op - the field is non-atomic and is
+    //  reset to 0 by set_state(STATE_PKTBUF) when the buffer is recycled.  if
+    //  this thread is preempted after the fetch_add and the buffer completes
+    //  a free/realloc cycle before we resume, a re-read of pktbuf_use_count
+    //  would see the new cycle's 0 and cause (prev + use_count) to compare
+    //  equal to 0 spuriously, freeing a buffer that's actively in use.
+    const int saved_use_count = pktbuf_use_count;
     if(is_overflow) {
       // update the use count on the realbuf, and then we can just delete
       //  ourselves
       assert(realbuf.load());
-      int prev = realbuf.load()->remain_count.fetch_add(pktbuf_use_count);
-      if((prev + pktbuf_use_count) == 0)
+      int prev = realbuf.load()->remain_count.fetch_add(saved_use_count);
+      if((prev + saved_use_count) == 0)
         manager->free_outbuf(realbuf.load());
 
       log_gex_obmgr.info() << "delete overflow: ovbuf=" << this << " baseptr=" << std::hex
@@ -313,8 +301,8 @@ namespace Realm {
     } else {
       // if the result of adding use_count to remain_count is 0, all uses have
       //  already been completed and we can free ourselves
-      int prev = remain_count.fetch_add(pktbuf_use_count);
-      if((prev + pktbuf_use_count) == 0)
+      int prev = remain_count.fetch_add(saved_use_count);
+      if((prev + saved_use_count) == 0)
         manager->free_outbuf(this);
     }
   }
@@ -899,9 +887,17 @@ namespace Realm {
         assert(grp_index < (1 << LOG2_MAXGROUPS));
       }
     }
-    // increment the num_groups - it's ok if these increments happen out of
-    //  order
-    num_groups.fetch_add(1);
+    // monotonically advance num_groups to at least grp_index + 1.  fetch_add
+    //  is incorrect here: when a concurrent allocator is preempted between
+    //  its successful CAS into groups[] and its update of num_groups, a later
+    //  allocator can read the stale num_groups, collide on the lower slot, and
+    //  win CAS at a higher grp_index.  if that higher-index thread then
+    //  finishes (with fetch_add it would advance num_groups by only 1) and
+    //  hands its newly-indexed completion to a caller that sends an AM, the
+    //  reply's lookup_completion sees grp_index >= num_groups and aborts even
+    //  though groups[grp_index] is fully populated.  fetch_max ensures
+    //  num_groups always covers the highest populated slot.
+    num_groups.fetch_max(grp_index + 1);
 
     // give all these new completions their indices and pointer to us
     for(size_t i = 0; i < (1 << PendingCompletionGroup::LOG2_GROUPSIZE); i++) {
