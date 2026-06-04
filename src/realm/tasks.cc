@@ -21,6 +21,7 @@
 
 #include "realm/runtime_impl.h"
 #include "realm/proc_impl.h"
+#include "realm/utils.h"
 
 #if defined(REALM_USE_CACHING_ALLOCATOR)
 #include "realm/caching_allocator.h"
@@ -1393,6 +1394,14 @@ namespace Realm {
 
   void KernelThreadTaskScheduler::thread_starting(Thread *thread)
   {
+#ifdef REALM_USE_NVTX
+    // Name this OS (kernel) worker thread after the processor it serves so the
+    // proc's tasks show up under a clearly labeled row in NVTX tools.
+    std::string nvtx_thread_name = stringbuilder()
+        << "Realm " << Processor::get_kind_name(proc.kind()) << " " << proc;
+    init_nvtx_thread(nvtx_thread_name.c_str());
+#endif
+
     log_sched.info() << "scheduler worker started: sched=" << this
                      << " worker=" << thread;
 
@@ -1673,6 +1682,14 @@ namespace Realm {
 
   void UserThreadTaskScheduler::host_thread_loop(void)
   {
+#ifdef REALM_USE_NVTX
+    // With user threading the worker user threads are multiplexed on this host
+    // OS thread, so name the host thread after the processor it serves.
+    std::string nvtx_thread_name = stringbuilder()
+        << "Realm " << Processor::get_kind_name(proc.kind()) << " " << proc;
+    init_nvtx_thread(nvtx_thread_name.c_str());
+#endif
+
     log_sched.debug() << "host thread started: sched=" << this
                       << " thread=" << Thread::self();
     AutoLock<FIFOMutex> al(lock);

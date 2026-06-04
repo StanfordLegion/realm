@@ -838,7 +838,7 @@ namespace Realm {
   /*static*/ void *KernelThread::pthread_entry(void *data)
   {
 #ifdef REALM_USE_NVTX
-    init_nvtx_thread("RealmKernalThread");
+    init_nvtx_thread("RealmKernelThread");
 #endif
     KernelThread *thread = (KernelThread *)data;
 
@@ -918,7 +918,7 @@ namespace Realm {
   /*static*/ DWORD WINAPI KernelThread::winthread_entry(LPVOID data)
   {
 #ifdef REALM_USE_NVTX
-    init_nvtx_thread("RealmKernalThread");
+    init_nvtx_thread("RealmKernelThread");
 #endif
     KernelThread *thread = (KernelThread *)data;
 
