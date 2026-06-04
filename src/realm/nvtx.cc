@@ -98,6 +98,15 @@ namespace Realm {
 
   static atomic<uint32_t> nvtx_proc_starting_category_id{1000};
 
+  // Palette of visually distinct colors handed out by nvtx_get_next_color().
+  static constexpr nvtx3::color nvtx_auto_color_palette[] = {
+      nvtx_color::red,     nvtx_color::green,   nvtx_color::blue,
+      nvtx_color::purple,  nvtx_color::cyan,    nvtx_color::maroon,
+      nvtx_color::navy,    nvtx_color::magenta, nvtx_color::yellow,
+      nvtx_color::teal,    nvtx_color::olive,   nvtx_color::lawn_green,
+  };
+  static atomic<uint32_t> nvtx_next_color_index{0};
+
   // Create the category object, take ownership, and point its global handle at it.
   static void create_category(const std::string &name, const nvtx_category_def &def)
   {
@@ -156,6 +165,13 @@ namespace Realm {
   uint32_t nvtx_get_next_category_id(void)
   {
     return nvtx_proc_starting_category_id.fetch_add(1);
+  }
+
+  nvtx3::color nvtx_get_next_color(void)
+  {
+    constexpr size_t n =
+        sizeof(nvtx_auto_color_palette) / sizeof(nvtx_auto_color_palette[0]);
+    return nvtx_auto_color_palette[nvtx_next_color_index.fetch_add(1) % n];
   }
 
 }; // namespace Realm

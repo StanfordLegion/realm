@@ -124,8 +124,13 @@ namespace Realm {
   // Called by RuntimeImpl::wait_for_shutdown on the main thread.
   void finalize_nvtx(void);
 
-  // Called by an application to get the next available category id.
+  // Returns the next available category id.
   uint32_t nvtx_get_next_category_id(void);
+
+  // Returns the next auto-assigned color, cycling through a fixed palette of
+  // visually distinct colors. Handy for giving dynamically created categories
+  // distinguishable colors without picking one by hand.
+  nvtx3::color nvtx_get_next_color(void);
 
   // Internal helpers for the inline annotation calls below. Kept in the header
   // (inline) so the thin wrappers fully inline at call sites; in particular the
