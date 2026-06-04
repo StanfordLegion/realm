@@ -1159,7 +1159,7 @@ namespace Realm {
 
 #ifdef REALM_USE_NVTX
     std::string nvtx_msg = stringbuilder() << "task " << func_id;
-    nvtxScopedRange nvtx_range(nvtx_category.get(), nvtx_msg.c_str());
+    nvtxUniqueRange nvtx_range(nvtx_category.get(), nvtx_msg.c_str());
 #endif
 
     (tte.fnptr)(task_args.base(), task_args.size(), tte.user_data.base(),

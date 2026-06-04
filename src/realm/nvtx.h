@@ -211,6 +211,26 @@ namespace Realm {
     }
   }
 
+  // RAII range built on the Start/End API (nvtxDomainRangeStartEx/End) rather
+  // than Push/Pop. Start/End ranges are process-scoped, so NVTX tools display
+  // them grouped by category under a single domain row (and, for ranges whose
+  // start and end land on the same thread, also under that thread) instead of
+  // only nesting under the originating thread. A null `category` (disabled
+  // module) starts nothing and the destructor ends nothing.
+  struct [[nodiscard]] nvtxUniqueRange {
+    explicit nvtxUniqueRange(NvtxCategory *category, char const *message,
+                             nvtx3::payload payload = nvtx_no_payload)
+      : handle(nvtx_range_start(category, message, std::nullopt, payload))
+    {}
+    ~nvtxUniqueRange() { nvtx_range_end(handle); }
+
+    nvtxUniqueRange(const nvtxUniqueRange &) = delete;
+    nvtxUniqueRange &operator=(const nvtxUniqueRange &) = delete;
+
+  private:
+    nvtx3::range_handle handle;
+  };
+
   inline void nvtx_mark(NvtxCategory *category, const char *message,
                         std::optional<nvtx3::color> color = std::nullopt,
                         nvtx3::payload payload = nvtx_no_payload)
