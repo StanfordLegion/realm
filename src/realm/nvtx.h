@@ -20,12 +20,12 @@
 
 #include "realm/realm_config.h"
 
+// Realm's NVTX support is built on the nvtx3 C++ API. The C-only headers
+// (<nvtx3/nvToolsExt.h>) are intentionally not used as a fallback.
 #if __has_include(<nvtx3/nvtx3.hpp>)
 #include <nvtx3/nvtx3.hpp>
-#elif __has_include(<nvtx3/nvToolsExt.h>)
-#include <nvtx3/nvToolsExt.h>
 #else
-#error "Configuration failed to find suitable NVTX headers"
+#error "Realm NVTX support requires the nvtx3 C++ headers (<nvtx3/nvtx3.hpp>)"
 #endif
 
 #include <map>
@@ -71,55 +71,94 @@ namespace Realm {
     olive = NvtxARGB(128, 128, 0).to_uint(),
   };
 
+  // The single NVTX domain that groups all of Realm's annotations. This is an
+  // nvtx3 domain tag type: it just needs a static `name` member.
+  struct realm_nvtx_domain {
+    static constexpr char const *name{"Realm"};
+  };
+
+  // Metadata for one NVTX category. Immutable after construction. Categories are
+  // created only during init_nvtx (on the main thread, before worker threads are
+  // started), so no synchronization is needed.
+  //
+  // `category` carries the category id (via get_id()) and, on construction,
+  // registers the id<->name association with NVTX so tools display the name.
   struct NvtxCategory {
-    NvtxCategory(const std::string &category_name, uint32_t category_id, uint32_t color);
-    const std::string name;
-    nvtxEventAttributes_t nvtx_event;
+    NvtxCategory(const std::string &category_name, uint32_t category_id, uint32_t color)
+      : name(category_name)
+      , category(category_id, category_name.c_str())
+      , default_color(color)
+    {}
+    std::string name;
+    nvtx3::named_category_in<realm_nvtx_domain> category;
+    uint32_t default_color;
   };
 
+  // Handles to the predefined categories. Each is non-null only if its module
+  // was enabled via -ll:nvtx_modules; otherwise it stays null and annotation
+  // calls on it are cheap no-ops. Call sites pass these directly, with no name
+  // lookup. Defined in nvtx.cc.
+  extern NvtxCategory *nvtx_amsg;
+  extern NvtxCategory *nvtx_bgwork;
+#ifdef REALM_USE_CUDA
+  extern NvtxCategory *nvtx_cuda;
+#endif
+#ifdef REALM_USE_HIP
+  extern NvtxCategory *nvtx_hip;
+#endif
+#ifdef REALM_USE_GASNET1
+  extern NvtxCategory *nvtx_gasnet1;
+#endif
+#ifdef REALM_USE_GASNETEX
+  extern NvtxCategory *nvtx_gasnetex;
+#endif
+#ifdef REALM_USE_MPI
+  extern NvtxCategory *nvtx_mpi;
+#endif
+#ifdef REALM_USE_OPENMP
+  extern NvtxCategory *nvtx_openmp;
+#endif
+#ifdef REALM_USE_PYTHON
+  extern NvtxCategory *nvtx_python;
+#endif
+
+  // RAII nested range. A null `category` (disabled module) pushes nothing and
+  // the destructor pops nothing, keeping the NVTX range stack balanced.
   struct nvtxScopedRange {
-    nvtxScopedRange(NvtxCategory *category, char const *message, int32_t payload);
-    nvtxScopedRange(const std::string &name, char const *message, int32_t payload);
+    nvtxScopedRange(NvtxCategory *category, char const *message, int32_t payload = 0);
     ~nvtxScopedRange();
+
+  private:
+    bool active;
   };
 
+  // Base category id for application-defined categories (predefined ones use
+  // small ids). An application that wants its own category can construct an
+  // NvtxCategory with an id >= this value and pass its address to the calls below.
   static constexpr uint32_t nvtx_proc_starting_category_id = 1000;
 
-  // called by each kernel thread to init thread local variables.
+  // Called by each kernel thread to name the OS thread in NVTX tools.
   void init_nvtx_thread(const char *thread_name);
 
-  // called by RuntimeImpl::configure_from_command_line from the main thread to init nvtx
-  //   and its thread local variables.
+  // Called by RuntimeImpl::configure_from_command_line on the main thread to
+  // create the enabled categories. Must run before worker threads start.
   void init_nvtx(std::vector<std::string> &nvtx_modules);
 
-  // called by each kernel thread to delete thread local variables.
-  void finalize_nvtx_thread(void);
-
-  // called by RuntimeImpl::wait_for_shutdown from the main thread to finalize nvtx
-  //   and delete its thread local variables.
+  // Called by RuntimeImpl::wait_for_shutdown on the main thread.
   void finalize_nvtx(void);
 
-  // TODO(@Wei Wu): template it wih type T for payload
   void nvtx_range_push(NvtxCategory *category, const char *message,
-                       uint32_t color = nvtx_color::white, int32_t payload = 0);
-
-  void nvtx_range_push(const std::string &name, const char *message,
                        uint32_t color = nvtx_color::white, int32_t payload = 0);
 
   void nvtx_range_pop(void);
 
-  // TODO(@Wei Wu): template it wih type T for payload
-  nvtxRangeId_t nvtx_range_start(NvtxCategory *category, const char *message,
-                                 uint32_t color = nvtx_color::white, int32_t payload = 0);
-  nvtxRangeId_t nvtx_range_start(const std::string &name, const char *message,
-                                 uint32_t color = nvtx_color::white, int32_t payload = 0);
+  nvtx3::range_handle nvtx_range_start(NvtxCategory *category, const char *message,
+                                       uint32_t color = nvtx_color::white,
+                                       int32_t payload = 0);
 
-  void nvtx_range_end(nvtxRangeId_t id);
+  void nvtx_range_end(nvtx3::range_handle id);
 
-  // TODO(@Wei Wu): template it wih type T for payload
   void nvtx_mark(NvtxCategory *category, const char *message,
-                 uint32_t color = nvtx_color::white, int32_t payload = 0);
-  void nvtx_mark(const std::string &name, const char *message,
                  uint32_t color = nvtx_color::white, int32_t payload = 0);
 
 }; // namespace Realm

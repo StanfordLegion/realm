@@ -17,89 +17,108 @@
 
 #include "realm/nvtx.h"
 
-#include <assert.h>
+#include <functional>
 #include <iostream>
+#include <memory>
 #ifdef REALM_ON_WINDOWS
 #include <processthreadsapi.h>
 #else
+#include <pthread.h>
 #include <unistd.h>
 #endif
 
 namespace Realm {
 
-  struct realm_nvtx_domain {
-    static constexpr char const *name{"Realm"};
-  };
-
-  struct nvtx_category_id_color {
-    uint32_t id;
-    uint32_t color;
-  };
-
-  static std::map<std::string, nvtx_category_id_color> nvtx_categories_predefined = {
-      {"amsg", {1, nvtx_color::red}},
-      {"bgwork", {2, nvtx_color::blue}},
+  // Definitions of the predefined category handles declared in the header.
+  NvtxCategory *nvtx_amsg = nullptr;
+  NvtxCategory *nvtx_bgwork = nullptr;
 #ifdef REALM_USE_CUDA
-      {"cuda", {100, nvtx_color::green}},
+  NvtxCategory *nvtx_cuda = nullptr;
 #endif
 #ifdef REALM_USE_HIP
-      {"hip", {101, nvtx_color::purple}},
+  NvtxCategory *nvtx_hip = nullptr;
 #endif
 #ifdef REALM_USE_GASNET1
-      {"gasnet1", {102, nvtx_color::lawn_green}},
+  NvtxCategory *nvtx_gasnet1 = nullptr;
 #endif
 #ifdef REALM_USE_GASNETEX
-      {"gasnetex", {103, nvtx_color::cyan}},
+  NvtxCategory *nvtx_gasnetex = nullptr;
 #endif
 #ifdef REALM_USE_MPI
-      {"mpi", {104, nvtx_color::maroon}},
+  NvtxCategory *nvtx_mpi = nullptr;
 #endif
 #ifdef REALM_USE_OPENMP
-      {"openmp", {105, nvtx_color::navy}},
+  NvtxCategory *nvtx_openmp = nullptr;
 #endif
 #ifdef REALM_USE_PYTHON
-      {"python", {106, nvtx_color::magenta}},
+  NvtxCategory *nvtx_python = nullptr;
+#endif
+
+  // Static description of a predefined category: its id, default color, and the
+  // global handle to point at the created object. `slot` is a reference to one
+  // of the `nvtx_*` pointers defined above.
+  struct nvtx_category_def {
+    uint32_t id;
+    uint32_t color;
+    std::reference_wrapper<NvtxCategory *> slot;
+  };
+
+  static const std::map<std::string, nvtx_category_def> nvtx_categories_predefined = {
+      {"amsg", {1, nvtx_color::red, std::ref(nvtx_amsg)}},
+      {"bgwork", {2, nvtx_color::blue, std::ref(nvtx_bgwork)}},
+#ifdef REALM_USE_CUDA
+      {"cuda", {100, nvtx_color::green, std::ref(nvtx_cuda)}},
+#endif
+#ifdef REALM_USE_HIP
+      {"hip", {101, nvtx_color::purple, std::ref(nvtx_hip)}},
+#endif
+#ifdef REALM_USE_GASNET1
+      {"gasnet1", {102, nvtx_color::lawn_green, std::ref(nvtx_gasnet1)}},
+#endif
+#ifdef REALM_USE_GASNETEX
+      {"gasnetex", {103, nvtx_color::cyan, std::ref(nvtx_gasnetex)}},
+#endif
+#ifdef REALM_USE_MPI
+      {"mpi", {104, nvtx_color::maroon, std::ref(nvtx_mpi)}},
+#endif
+#ifdef REALM_USE_OPENMP
+      {"openmp", {105, nvtx_color::navy, std::ref(nvtx_openmp)}},
+#endif
+#ifdef REALM_USE_PYTHON
+      {"python", {106, nvtx_color::magenta, std::ref(nvtx_python)}},
 #endif
   };
 
-  thread_local std::map<std::string, NvtxCategory *> *nvtx_categories;
-
-  static nvtxDomainHandle_t nvtxRealmDomain = nullptr;
+  // Owns the category objects created at init; cleared at finalize. The global
+  // `nvtx_*` handles point into these.
+  static std::vector<std::unique_ptr<NvtxCategory>> nvtx_owned_categories;
 
   static std::vector<std::string> enabled_nvtx_modules;
 
-  static inline NvtxCategory *find_category_by_name(const std::string &name)
+  // Build a fresh event on the stack for each annotation. NVTX consumes the
+  // attributes synchronously, so there is no need to keep one around. A `white`
+  // color means "use the category's default color".
+  static inline nvtx3::event_attributes make_event(const NvtxCategory &category,
+                                                    const char *message, uint32_t color,
+                                                    int32_t payload)
   {
-    std::map<std::string, NvtxCategory *>::iterator it = nvtx_categories->find(name);
-    if(it != nvtx_categories->end()) {
-      return it->second;
-    } else {
-      return nullptr;
-    }
+    return nvtx3::event_attributes{
+        category.category,
+        nvtx3::color{color != nvtx_color::white ? color : category.default_color},
+        nvtx3::payload{payload}, nvtx3::message{message}};
   }
 
-  ////////////////////////////////////////////////////////////////////////
-  //
-  // class nvtxCategory
-
-  NvtxCategory::NvtxCategory(const std::string &category_name, uint32_t category_id,
-                             uint32_t color)
-    : name(category_name)
+  static inline nvtxDomainHandle_t realm_domain()
   {
-    // name the category
-    nvtxDomainNameCategoryA(nvtxRealmDomain, category_id, category_name.c_str());
+    return nvtx3::domain::get<realm_nvtx_domain>();
+  }
 
-    // create nvtx event attribute and set values
-    memset(&nvtx_event, 0, NVTX_EVENT_ATTRIB_STRUCT_SIZE);
-    nvtx_event.version = NVTX_VERSION;
-    nvtx_event.size = NVTX_EVENT_ATTRIB_STRUCT_SIZE;
-    nvtx_event.category = category_id;
-    nvtx_event.messageType = NVTX_MESSAGE_TYPE_ASCII;
-    nvtx_event.message.ascii = "";
-    nvtx_event.payloadType = NVTX_PAYLOAD_TYPE_INT32;
-    nvtx_event.payload.iValue = 0;
-    nvtx_event.colorType = NVTX_COLOR_ARGB;
-    nvtx_event.color = color;
+  // Create the category object, take ownership, and point its global handle at it.
+  static void create_category(const std::string &name, const nvtx_category_def &def)
+  {
+    nvtx_owned_categories.push_back(
+        std::make_unique<NvtxCategory>(name, def.id, def.color));
+    def.slot.get() = nvtx_owned_categories.back().get();
   }
 
   ////////////////////////////////////////////////////////////////////////
@@ -108,43 +127,40 @@ namespace Realm {
 
   nvtxScopedRange::nvtxScopedRange(NvtxCategory *category, char const *message,
                                    int32_t payload)
+    : active(false)
   {
-    category->nvtx_event.message.ascii = message;
-    category->nvtx_event.payload.iValue = payload;
-    nvtxDomainRangePushEx(nvtxRealmDomain, &(category->nvtx_event));
-  }
-
-  nvtxScopedRange::nvtxScopedRange(const std::string &name, char const *message,
-                                   int32_t payload)
-  {
-    NvtxCategory *category = find_category_by_name(name);
     if(category) {
-      category->nvtx_event.message.ascii = message;
-      category->nvtx_event.payload.iValue = payload;
-      nvtxDomainRangePushEx(nvtxRealmDomain, &(category->nvtx_event));
+      nvtx3::event_attributes attr =
+          make_event(*category, message, nvtx_color::white, payload);
+      nvtxDomainRangePushEx(realm_domain(), attr.get());
+      active = true;
     }
   }
 
-  nvtxScopedRange::~nvtxScopedRange() { nvtxDomainRangePop(nvtxRealmDomain); }
+  nvtxScopedRange::~nvtxScopedRange()
+  {
+    if(active) {
+      nvtxDomainRangePop(realm_domain());
+    }
+  }
 
   void init_nvtx_thread(const char *thread_name)
   {
 #ifdef REALM_ON_WINDOWS
-    nvtxNameOsThread(GetCurrentThreadId(), thread_name)
+    nvtxNameOsThread(GetCurrentThreadId(), thread_name);
 #else
     nvtxNameOsThread(pthread_self(), thread_name);
 #endif
+  }
 
-        nvtx_categories = new std::map<std::string, NvtxCategory *>();
-    nvtx_categories->clear();
+  void init_nvtx(std::vector<std::string> &nvtx_modules)
+  {
+    enabled_nvtx_modules = nvtx_modules;
 
-    if(enabled_nvtx_modules.size() == 1 and enabled_nvtx_modules[0] == "all") {
+    if(enabled_nvtx_modules.size() == 1 && enabled_nvtx_modules[0] == "all") {
       // handle -ll:nvtx_modules all
-      std::map<std::string, nvtx_category_id_color>::const_iterator it;
-      for(it = nvtx_categories_predefined.cbegin();
-          it != nvtx_categories_predefined.cend(); it++) {
-        nvtx_categories->insert(std::pair<std::string, NvtxCategory *>(
-            it->first, new NvtxCategory(it->first, it->second.id, it->second.color)));
+      for(const auto &entry : nvtx_categories_predefined) {
+        create_category(entry.first, entry.second);
       }
     } else {
       for(const std::string &name : enabled_nvtx_modules) {
@@ -152,123 +168,66 @@ namespace Realm {
           std::cerr << "If all specified, then no other modules are needed." << std::endl;
           abort();
         }
-        std::map<std::string, nvtx_category_id_color>::const_iterator it =
+        std::map<std::string, nvtx_category_def>::const_iterator it =
             nvtx_categories_predefined.find(name);
         if(it == nvtx_categories_predefined.end()) {
           std::cerr << "Unable to find specified nvtx module: " << name << std::endl;
           abort();
         }
-        nvtx_categories->insert(std::pair<std::string, NvtxCategory *>(
-            name, new NvtxCategory(name, it->second.id, it->second.color)));
+        create_category(it->first, it->second);
       }
     }
-  }
 
-  void finalize_nvtx_thread(void)
-  {
-    std::map<std::string, NvtxCategory *>::iterator it;
-    for(it = nvtx_categories->begin(); it != nvtx_categories->end(); it++) {
-      assert(it->second != nullptr);
-      delete it->second;
-    }
-    delete nvtx_categories;
-  }
-
-  void init_nvtx(std::vector<std::string> &nvtx_modules)
-  {
-    enabled_nvtx_modules = nvtx_modules;
-    nvtxInitialize(nullptr);
-    nvtxRealmDomain = nvtxDomainCreateA(realm_nvtx_domain::name);
     init_nvtx_thread("MainThread");
   }
 
   void finalize_nvtx(void)
   {
-    nvtxDomainDestroy(nvtxRealmDomain);
-    finalize_nvtx_thread();
+    // The nvtx3 domain is intentionally never destroyed (see nvtx3 docs). Drop
+    // the owned categories and reset the global handles so none dangle.
+    nvtx_owned_categories.clear();
+    for(const auto &entry : nvtx_categories_predefined) {
+      entry.second.slot.get() = nullptr;
+    }
   }
 
   void nvtx_range_push(NvtxCategory *category, const char *message, uint32_t color,
                        int32_t payload)
   {
-    uint32_t origin_color;
-    if(color != nvtx_color::white) {
-      origin_color = category->nvtx_event.color;
-      category->nvtx_event.color = color;
+    if(!category) {
+      return;
     }
-    category->nvtx_event.message.ascii = message;
-    category->nvtx_event.payload.iValue = payload;
-    nvtxDomainRangePushEx(nvtxRealmDomain, &(category->nvtx_event));
-    if(color != nvtx_color::white) {
-      category->nvtx_event.color = origin_color;
-    }
+    nvtx3::event_attributes attr = make_event(*category, message, color, payload);
+    nvtxDomainRangePushEx(realm_domain(), attr.get());
   }
 
-  void nvtx_range_push(const std::string &name, const char *message, uint32_t color,
-                       int32_t payload)
+  void nvtx_range_pop(void) { nvtxDomainRangePop(realm_domain()); }
+
+  nvtx3::range_handle nvtx_range_start(NvtxCategory *category, const char *message,
+                                       uint32_t color, int32_t payload)
   {
-    NvtxCategory *category = find_category_by_name(name);
-    if(category) {
-      nvtx_range_push(category, message, color, payload);
+    if(!category) {
+      return nullptr;
     }
+    nvtx3::event_attributes attr = make_event(*category, message, color, payload);
+    return nvtx3::start_range_in<realm_nvtx_domain>(attr);
   }
 
-  void nvtx_range_pop(void) { nvtxDomainRangePop(nvtxRealmDomain); }
-
-  nvtxRangeId_t nvtx_range_start(NvtxCategory *category, const char *message,
-                                 uint32_t color, int32_t payload)
+  void nvtx_range_end(nvtx3::range_handle id)
   {
-    uint32_t origin_color;
-    if(color != nvtx_color::white) {
-      origin_color = category->nvtx_event.color;
-      category->nvtx_event.color = color;
-    }
-    category->nvtx_event.message.ascii = message;
-    category->nvtx_event.payload.iValue = payload;
-    nvtxRangeId_t id = nvtxDomainRangeStartEx(nvtxRealmDomain, &(category->nvtx_event));
-    if(color != nvtx_color::white) {
-      category->nvtx_event.color = origin_color;
-    }
-    return id;
-  }
-
-  nvtxRangeId_t nvtx_range_start(const std::string &name, const char *message,
-                                 uint32_t color, int32_t payload)
-  {
-    NvtxCategory *category = find_category_by_name(name);
-    if(category) {
-      return nvtx_range_start(category, message, color, payload);
-    } else {
-      return 0;
+    if(id) {
+      nvtx3::end_range_in<realm_nvtx_domain>(id);
     }
   }
-
-  void nvtx_range_end(nvtxRangeId_t id) { nvtxDomainRangeEnd(nvtxRealmDomain, id); }
 
   void nvtx_mark(NvtxCategory *category, const char *message, uint32_t color,
                  int32_t payload)
   {
-    uint32_t origin_color;
-    if(color != nvtx_color::white) {
-      origin_color = category->nvtx_event.color;
-      category->nvtx_event.color = color;
+    if(!category) {
+      return;
     }
-    category->nvtx_event.message.ascii = message;
-    category->nvtx_event.color = color;
-    category->nvtx_event.payload.iValue = payload;
-    nvtxDomainMarkEx(nvtxRealmDomain, &(category->nvtx_event));
-    if(color != nvtx_color::white) {
-      category->nvtx_event.color = origin_color;
-    }
-  }
-
-  void nvtx_mark(const std::string &name, const char *message, uint32_t color,
-                 int32_t payload)
-  {
-    NvtxCategory *category = find_category_by_name(name);
-    if(category) {
-      nvtx_mark(category, message, color, payload);
-    }
+    nvtx3::event_attributes attr = make_event(*category, message, color, payload);
+    nvtx3::mark_in<realm_nvtx_domain>(attr);
   }
 
 }; // namespace Realm
