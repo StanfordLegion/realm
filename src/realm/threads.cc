@@ -910,10 +910,6 @@ namespace Realm {
     if(thread->scheduler)
       thread->scheduler->thread_terminating(thread);
 
-#ifdef REALM_USE_NVTX
-    finalize_nvtx_thread();
-#endif
-
     return 0;
   }
 #endif
@@ -945,10 +941,6 @@ namespace Realm {
     // this is last so that the scheduler can delete us if it wants to
     if(thread->scheduler)
       thread->scheduler->thread_terminating(thread);
-
-#ifdef REALM_USE_NVTX
-    finalize_nvtx_thread();
-#endif
 
     return 0;
   }

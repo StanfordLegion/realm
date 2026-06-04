@@ -20,6 +20,7 @@
 #include <functional>
 #include <iostream>
 #include <memory>
+#include "realm/atomics.h"
 #ifdef REALM_ON_WINDOWS
 #include <processthreadsapi.h>
 #else
@@ -59,7 +60,7 @@ namespace Realm {
   // of the `nvtx_*` pointers defined above.
   struct nvtx_category_def {
     uint32_t id;
-    uint32_t color;
+    nvtx3::color color;
     std::reference_wrapper<NvtxCategory *> slot;
   };
 
@@ -95,23 +96,7 @@ namespace Realm {
 
   static std::vector<std::string> enabled_nvtx_modules;
 
-  // Build a fresh event on the stack for each annotation. NVTX consumes the
-  // attributes synchronously, so there is no need to keep one around. A `white`
-  // color means "use the category's default color".
-  static inline nvtx3::event_attributes make_event(const NvtxCategory &category,
-                                                    const char *message, uint32_t color,
-                                                    int32_t payload)
-  {
-    return nvtx3::event_attributes{
-        category.category,
-        nvtx3::color{color != nvtx_color::white ? color : category.default_color},
-        nvtx3::payload{payload}, nvtx3::message{message}};
-  }
-
-  static inline nvtxDomainHandle_t realm_domain()
-  {
-    return nvtx3::domain::get<realm_nvtx_domain>();
-  }
+  static atomic<uint32_t> nvtx_proc_starting_category_id{1000};
 
   // Create the category object, take ownership, and point its global handle at it.
   static void create_category(const std::string &name, const nvtx_category_def &def)
@@ -119,29 +104,6 @@ namespace Realm {
     nvtx_owned_categories.push_back(
         std::make_unique<NvtxCategory>(name, def.id, def.color));
     def.slot.get() = nvtx_owned_categories.back().get();
-  }
-
-  ////////////////////////////////////////////////////////////////////////
-  //
-  // class nvtxScopedRange
-
-  nvtxScopedRange::nvtxScopedRange(NvtxCategory *category, char const *message,
-                                   int32_t payload)
-    : active(false)
-  {
-    if(category) {
-      nvtx3::event_attributes attr =
-          make_event(*category, message, nvtx_color::white, payload);
-      nvtxDomainRangePushEx(realm_domain(), attr.get());
-      active = true;
-    }
-  }
-
-  nvtxScopedRange::~nvtxScopedRange()
-  {
-    if(active) {
-      nvtxDomainRangePop(realm_domain());
-    }
   }
 
   void init_nvtx_thread(const char *thread_name)
@@ -191,43 +153,9 @@ namespace Realm {
     }
   }
 
-  void nvtx_range_push(NvtxCategory *category, const char *message, uint32_t color,
-                       int32_t payload)
+  uint32_t nvtx_get_next_category_id(void)
   {
-    if(!category) {
-      return;
-    }
-    nvtx3::event_attributes attr = make_event(*category, message, color, payload);
-    nvtxDomainRangePushEx(realm_domain(), attr.get());
-  }
-
-  void nvtx_range_pop(void) { nvtxDomainRangePop(realm_domain()); }
-
-  nvtx3::range_handle nvtx_range_start(NvtxCategory *category, const char *message,
-                                       uint32_t color, int32_t payload)
-  {
-    if(!category) {
-      return nullptr;
-    }
-    nvtx3::event_attributes attr = make_event(*category, message, color, payload);
-    return nvtx3::start_range_in<realm_nvtx_domain>(attr);
-  }
-
-  void nvtx_range_end(nvtx3::range_handle id)
-  {
-    if(id) {
-      nvtx3::end_range_in<realm_nvtx_domain>(id);
-    }
-  }
-
-  void nvtx_mark(NvtxCategory *category, const char *message, uint32_t color,
-                 int32_t payload)
-  {
-    if(!category) {
-      return;
-    }
-    nvtx3::event_attributes attr = make_event(*category, message, color, payload);
-    nvtx3::mark_in<realm_nvtx_domain>(attr);
+    return nvtx_proc_starting_category_id.fetch_add(1);
   }
 
 }; // namespace Realm
