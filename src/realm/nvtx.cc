@@ -25,6 +25,7 @@
 #include <processthreadsapi.h>
 #else
 #include <pthread.h>
+#include <sys/syscall.h>
 #include <unistd.h>
 #endif
 
@@ -120,7 +121,8 @@ namespace Realm {
 #ifdef REALM_ON_WINDOWS
     nvtxNameOsThread(GetCurrentThreadId(), thread_name);
 #else
-    nvtxNameOsThread(pthread_self(), thread_name);
+    // NVTX wants the OS-native (kernel) thread id, which on Linux is gettid(),
+    nvtxNameOsThread(static_cast<uint32_t>(syscall(SYS_gettid)), thread_name);
 #endif
   }
 
