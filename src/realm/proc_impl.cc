@@ -477,7 +477,8 @@ namespace Realm {
     , num_cores(_num_cores)
   {
 #ifdef REALM_USE_NVTX
-    std::string nvtx_name = stringbuilder() << me;
+    std::string nvtx_name =
+        stringbuilder() << Processor::get_kind_name(kind) << " " << me;
     nvtx_category = std::make_unique<NvtxCategory>(
         nvtx_name, nvtx_get_next_category_id(), nvtx_get_next_color());
 #endif
