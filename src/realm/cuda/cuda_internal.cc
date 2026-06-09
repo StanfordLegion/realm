@@ -737,8 +737,21 @@ namespace Realm {
         stream = select_stream(out_gpu, in_gpu, channel->get_gpu(), out_mapping,
                                in_port->mem, out_port->mem);
         assert(stream != NULL);
-
         AutoGPUContext agc(stream->get_gpu());
+
+        if(!stream->get_gpu()->info->host_gpu_same_va) {
+          CUdeviceptr in_device = static_cast<CUdeviceptr>(in_base);
+          CUdeviceptr out_device = static_cast<CUdeviceptr>(out_base);
+          if(CUDA_SUCCESS == CUDA_DRIVER_FNPTR(cuMemHostGetDevicePointer)(
+                                 &in_device, reinterpret_cast<void *>(in_base), 0)) {
+            in_base = static_cast<uintptr_t>(in_device);
+          }
+          if(CUDA_SUCCESS == CUDA_DRIVER_FNPTR(cuMemHostGetDevicePointer)(
+                                 &out_device, reinterpret_cast<void *>(out_base), 0)) {
+            out_base = static_cast<uintptr_t>(out_device);
+          }
+        }
+
         size_t copy_info_total = 0;
         size_t min_align = 16; // Hope for the highest type alignment we can get, 16 bytes
         copy_infos.num_rects = 0;
@@ -1119,6 +1132,22 @@ namespace Realm {
           }
         }
 
+        auto stream = select_stream(out_gpu, in_gpu, channel->get_gpu(), out_mapping,
+                                    in_port->mem, out_port->mem);
+        AutoGPUContext agc(stream->get_gpu());
+        if(!stream->get_gpu()->info->host_gpu_same_va) {
+          CUdeviceptr in_device = static_cast<CUdeviceptr>(in_base);
+          CUdeviceptr out_device = static_cast<CUdeviceptr>(out_base);
+          if(CUDA_SUCCESS == CUDA_DRIVER_FNPTR(cuMemHostGetDevicePointer)(
+                                 &in_device, reinterpret_cast<void *>(in_base), 0)) {
+            in_base = static_cast<uintptr_t>(in_device);
+          }
+          if(CUDA_SUCCESS == CUDA_DRIVER_FNPTR(cuMemHostGetDevicePointer)(
+                                 &out_device, reinterpret_cast<void *>(out_base), 0)) {
+            out_base = static_cast<uintptr_t>(out_device);
+          }
+        }
+
         TransferIterator::AddressInfo addr_info;
         memset(&addr_info, 0, sizeof(TransferIterator::AddressInfo));
 
@@ -1186,10 +1215,6 @@ namespace Realm {
           read_ind_bytes = (max_bytes / field_size) * addr_size;
         else
           write_ind_bytes = (max_bytes / field_size) * addr_size;
-
-        auto stream = select_stream(out_gpu, in_gpu, channel->get_gpu(), out_mapping,
-                                    in_port->mem, out_port->mem);
-        AutoGPUContext agc(stream->get_gpu());
 
         // We can't do gather-scatter yet.
         assert(!(out_port->indirect_port_idx >= 0 && in_port->indirect_port_idx >= 0));
@@ -2023,6 +2048,14 @@ namespace Realm {
 
           AutoGPUContext agc(channel->gpu);
           GPUStream *stream = channel->gpu->get_next_d2d_stream();
+          if(!stream->get_gpu()->info->host_gpu_same_va) {
+            CUdeviceptr out_device = static_cast<CUdeviceptr>(out_base);
+            if(CUDA_SUCCESS == CUDA_DRIVER_FNPTR(cuMemHostGetDevicePointer)(
+                                   &out_device, reinterpret_cast<void *>(out_base), 0)) {
+              out_base = static_cast<uintptr_t>(out_device);
+            }
+          }
+
           Realm::Cuda::AffineFillInfo<2, size_t> fill_info{};
           size_t total_info_bytes = 0;
           for(size_t offset = 0;
@@ -2573,7 +2606,6 @@ namespace Realm {
         const size_t out_span_start, const size_t in_elem_size,
         const size_t out_elem_size, const size_t elems, const bool has_transpose)
     {
-      AutoGPUContext agc(channel->gpu);
       size_t threads_per_block = 256;
       size_t blocks_per_grid = 1 + ((elems - 1) / threads_per_block);
       const void *host_proxy = nullptr;
@@ -2686,6 +2718,7 @@ namespace Realm {
       };
       KernelArgs *args = 0; // allocate on demand
       size_t args_size = sizeof(KernelArgs) + redop->sizeof_userdata;
+      AutoGPUContext agc(channel->gpu);
       while(true) {
         size_t min_xfer_size = 4096; // TODO: make controllable
         const InstanceLayoutPieceBase *in_nonaffine = nullptr;
@@ -2772,6 +2805,21 @@ namespace Realm {
                 in_base = reinterpret_cast<uintptr_t>(in_port->mem->get_direct_ptr(0, 0));
               }
 
+              if(!channel->gpu->info->host_gpu_same_va) {
+                CUdeviceptr in_device = static_cast<CUdeviceptr>(in_base);
+                CUdeviceptr out_device = static_cast<CUdeviceptr>(out_base);
+                if(CUDA_SUCCESS ==
+                   CUDA_DRIVER_FNPTR(cuMemHostGetDevicePointer)(
+                       &in_device, reinterpret_cast<void *>(in_base), 0)) {
+                  in_base = static_cast<uintptr_t>(in_device);
+                }
+                if(CUDA_SUCCESS ==
+                   CUDA_DRIVER_FNPTR(cuMemHostGetDevicePointer)(
+                       &out_device, reinterpret_cast<void *>(out_base), 0)) {
+                  out_base = static_cast<uintptr_t>(out_device);
+                }
+              }
+
               while(total_elems < max_elems) {
                 AddressListCursor &in_alc = in_port->addrcursor;
                 AddressListCursor &out_alc = out_port->addrcursor;
@@ -2831,8 +2879,6 @@ namespace Realm {
                              static_cast<size_t>(CUDA_MAX_BLOCKS_PER_GRID));
 
                 {
-                  AutoGPUContext agc(channel->gpu);
-
                   if(kernel != 0) {
                     // Use params array to pass kernel arguments (pointers to each
                     // parameter) instead of CU_LAUNCH_PARAM_BUFFER_POINTER (packed
@@ -3191,6 +3237,20 @@ namespace Realm {
       }
       uintptr_t out_base =
           reinterpret_cast<uintptr_t>(out_port->mem->get_direct_ptr(0, 0));
+
+      if(!stream->get_gpu()->info->host_gpu_same_va) {
+        CUdeviceptr in_device = static_cast<CUdeviceptr>(in_base);
+        CUdeviceptr out_device = static_cast<CUdeviceptr>(out_base);
+        if(CUDA_SUCCESS == CUDA_DRIVER_FNPTR(cuMemHostGetDevicePointer)(
+                               &in_device, reinterpret_cast<void *>(in_base), 0)) {
+          in_base = static_cast<uintptr_t>(in_device);
+        }
+        if(CUDA_SUCCESS == CUDA_DRIVER_FNPTR(cuMemHostGetDevicePointer)(
+                               &out_device, reinterpret_cast<void *>(out_base), 0)) {
+          out_base = static_cast<uintptr_t>(out_device);
+        }
+      }
+
       size_t bytes_left = max_bytes;
       bool has_transpose = false;
       size_t bytes_to_copy = 0;
