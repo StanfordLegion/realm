@@ -1970,7 +1970,8 @@ namespace Realm {
                               size_t num_elems, size_t arg_size, GPUStream *stream)
     {
       unsigned int num_blocks = 0, num_threads = 0;
-      num_threads = 32;
+      num_threads = std::min(static_cast<unsigned int>(func_info.occ_num_threads),
+                             static_cast<unsigned int>(num_elems));
       num_blocks = std::min(
           static_cast<unsigned int>((num_elems + num_threads - 1) / num_threads),
           static_cast<unsigned int>(
@@ -1990,11 +1991,8 @@ namespace Realm {
       size_t num_elems = copy_info.extents[1] * copy_info.extents[2];
       assert((1ULL << log_elem_size) <= elem_size);
 
-      GPUFuncInfo &func_info = transpose_kernels[log_elem_size];
+      const GPUFuncInfo &func_info = transpose_kernels[log_elem_size];
       unsigned int num_blocks = 0, num_threads = 0;
-      // SM_TODO : Use results from Occupancy (currently not properly supported)
-      func_info.occ_num_threads = 128;
-      func_info.occ_num_blocks = 32;
       size_t chunks = copy_info.extents[0] / elem_size;
       copy_info.tile_size = static_cast<size_t>(
           static_cast<size_t>(sqrt(func_info.occ_num_threads) / chunks) * chunks);
@@ -2007,16 +2005,6 @@ namespace Realm {
           std::min(static_cast<unsigned int>((num_elems + num_threads - 1) / num_threads),
                    static_cast<unsigned int>(func_info.occ_num_blocks));
       size_t offset = sizeof(copy_info);
-#if DEBUG_SM
-      unsigned int j = 0;
-      char *in = (char *)(&copy_info);
-      for(unsigned int i = 0; i < offset; i = i + 8) {
-        unsigned char c = ((unsigned char *)(in))[j];
-        j = j + 1;
-        int x = c & 0xff;
-        log_gpu.print() << "copy_info[" << j << "]:" << x;
-      }
-#endif
       void *config[] = {HIP_LAUNCH_PARAM_BUFFER_POINTER, &copy_info,
                         HIP_LAUNCH_PARAM_BUFFER_SIZE, &offset, HIP_LAUNCH_PARAM_END};
       CHECK_HIP(hipModuleLaunchKernel(func_info.func, num_blocks, 1, 1, num_threads, 1, 1,
@@ -2176,6 +2164,20 @@ namespace Realm {
           hipDeviceGetAttribute(&numSMs, hipDeviceAttributeMultiprocessorCount, dev));
       CHECK_HIP(hipModuleLoadData(&device_module, (void *)realm_hip_fatbin));
 
+      // hipModuleOccupancyMaxPotentialBlockSize ignores __launch_bounds__ on HIP (unlike
+      // CUDA's cuOccupancyMaxPotentialBlockSize). Query the kernel's declared maximum and
+      // pass it as blockSizeLimit so the occupancy calculator doesn't exceed it.
+      auto occupancy_max_block_size = [](int *grid_size, int *block_size,
+                                         hipFunction_t func, size_t dyn_shared_mem) {
+        int max_tpb = 0;
+        hipError_t e =
+            hipFuncGetAttribute(&max_tpb, HIP_FUNC_ATTRIBUTE_MAX_THREADS_PER_BLOCK, func);
+        if(e != hipSuccess)
+          return e;
+        return hipModuleOccupancyMaxPotentialBlockSize(grid_size, block_size, func,
+                                                       dyn_shared_mem, max_tpb);
+      };
+
       for(unsigned int log_bit_sz = 0; log_bit_sz < HIP_MEMCPY_KERNEL_MAX2_LOG2_BYTES;
           log_bit_sz++) {
         const unsigned int bit_sz = 8U << log_bit_sz;
@@ -2184,51 +2186,54 @@ namespace Realm {
         std::snprintf(name, sizeof(name), "memcpy_transpose%u", bit_sz);
         CHECK_HIP(hipModuleGetFunction(&func_info.func, device_module, name));
 
-#ifdef SM_TODO
-        auto blocksize_to_shared = [](int block_size) -> size_t {
-          int tile_size = sqrt(block_size);
-          return static_cast<size_t>(tile_size * (tile_size + 1) * HIP_MAX_FIELD_BYTES);
-        };
-#endif
-        size_t block_size = 64;
-        size_t blocksize_to_sharedmem =
-            sqrt(block_size) * (sqrt(block_size) + 1) * HIP_MAX_FIELD_BYTES;
-        log_gpu.debug() << "block size occupancy for function " << name << " , func"
-                        << func_info.func;
-        CHECK_HIP(hipModuleOccupancyMaxPotentialBlockSize(
-            &func_info.occ_num_blocks, &func_info.occ_num_threads, func_info.func,
-            blocksize_to_sharedmem, 0));
-
+        // hipModuleOccupancyMaxPotentialBlockSize takes a fixed dynSharedMemPerBlk rather
+        // than a callback (unlike cuOccupancyMaxPotentialBlockSize). Use a two-step
+        // approach: query without shared-mem constraint to get an initial block size,
+        // find the largest tile_size whose shared-mem fits, then re-query with that
+        // constraint to get the optimal block count.
+        {
+          int max_shared_mem = 0;
+          CHECK_HIP(hipDeviceGetAttribute(
+              &max_shared_mem, hipDeviceAttributeMaxSharedMemoryPerBlock, dev));
+          CHECK_HIP(occupancy_max_block_size(
+              &func_info.occ_num_blocks, &func_info.occ_num_threads, func_info.func, 0));
+          int tile_size =
+              static_cast<int>(sqrt(static_cast<double>(func_info.occ_num_threads)));
+          size_t sharedmem_needed = 0;
+          while(tile_size > 0) {
+            sharedmem_needed =
+                static_cast<size_t>(tile_size * (tile_size + 1)) * HIP_MAX_FIELD_BYTES;
+            if(sharedmem_needed <= static_cast<size_t>(max_shared_mem))
+              break;
+            tile_size--;
+          }
+          CHECK_HIP(occupancy_max_block_size(&func_info.occ_num_blocks,
+                                             &func_info.occ_num_threads, func_info.func,
+                                             sharedmem_needed));
+          // Clamp to tile_size^2: the occupancy call may suggest a larger block size
+          // than the tile can accommodate.
+          func_info.occ_num_threads = tile_size * tile_size;
+        }
         transpose_kernels[log_bit_sz] = func_info;
 
         for(unsigned int d = 1; d <= HIP_MAX_DIM; d++) {
           std::snprintf(name, sizeof(name), "memcpy_affine_batch%uD_%u", d, bit_sz);
           CHECK_HIP(hipModuleGetFunction(&func_info.func, device_module, name));
-          // Here, we don't have a constraint on the block size, so allow
-          // the driver to decide the best combination we can launch
-          CHECK_HIP(hipModuleOccupancyMaxPotentialBlockSize(
-              &func_info.occ_num_blocks, &func_info.occ_num_threads, func_info.func,
-              blocksize_to_sharedmem, 0));
-
+          // No shared memory used; allow the driver to choose the optimal block size.
+          CHECK_HIP(occupancy_max_block_size(
+              &func_info.occ_num_blocks, &func_info.occ_num_threads, func_info.func, 0));
           batch_affine_kernels[d - 1][log_bit_sz] = func_info;
 
           std::snprintf(name, sizeof(name), "fill_affine_large%uD_%u", d, bit_sz);
           CHECK_HIP(hipModuleGetFunction(&func_info.func, device_module, name));
-          // Here, we don't have a constraint on the block size, so allow
-          // the driver to decide the best combination we can launch
-          CHECK_HIP(hipModuleOccupancyMaxPotentialBlockSize(
-              &func_info.occ_num_blocks, &func_info.occ_num_threads, func_info.func,
-              blocksize_to_sharedmem, 0));
-
+          CHECK_HIP(occupancy_max_block_size(
+              &func_info.occ_num_blocks, &func_info.occ_num_threads, func_info.func, 0));
           fill_affine_large_kernels[d - 1][log_bit_sz] = func_info;
 
           std::snprintf(name, sizeof(name), "fill_affine_batch%uD_%u", d, bit_sz);
           CHECK_HIP(hipModuleGetFunction(&func_info.func, device_module, name));
-          // Here, we don't have a constraint on the block size, so allow
-          // the driver to decide the best combination we can launch
-          CHECK_HIP(hipModuleOccupancyMaxPotentialBlockSize(
-              &func_info.occ_num_blocks, &func_info.occ_num_threads, func_info.func,
-              blocksize_to_sharedmem, 0));
+          CHECK_HIP(occupancy_max_block_size(
+              &func_info.occ_num_blocks, &func_info.occ_num_threads, func_info.func, 0));
           batch_affine_fill_kernels[d - 1][log_bit_sz] = func_info;
 
           for(unsigned int log_addr_bit_sz = 2; log_addr_bit_sz < 4; log_addr_bit_sz++) {
@@ -2238,9 +2243,9 @@ namespace Realm {
 
             CHECK_HIP(hipModuleGetFunction(&func_info.func, device_module, name));
 
-            CHECK_HIP(hipModuleOccupancyMaxPotentialBlockSize(&func_info.occ_num_blocks,
-                                                              &func_info.occ_num_threads,
-                                                              func_info.func, 0, 0));
+            CHECK_HIP(occupancy_max_block_size(&func_info.occ_num_blocks,
+                                               &func_info.occ_num_threads, func_info.func,
+                                               0));
             indirect_copy_kernels[d - 1][log_addr_bit_sz][log_bit_sz] = func_info;
           }
         }

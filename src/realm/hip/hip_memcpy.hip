@@ -136,8 +136,8 @@ memcpy_affine_batch(Realm::Hip::AffineCopyPair<N, Offset_t> *info,
   for(size_t rect = 0; rect < nrects; rect++) {
     Realm::Hip::AffineCopyPair<N, Offset_t> &current_info = info[rect];
     const Offset_t vol = current_info.volume;
-     T* __restrict__ dst = reinterpret_cast<T *>(current_info.dst.addr);
-     T* __restrict__ src = reinterpret_cast<T *>(current_info.src.addr);
+    T *__restrict__ dst = reinterpret_cast<T *>(current_info.dst.addr);
+    T *__restrict__ src = reinterpret_cast<T *>(current_info.src.addr);
 
     while(offset < vol) {
       T tmp[MAX_UNROLL];
@@ -196,8 +196,8 @@ static __device__ inline void
 memcpy_indirect_points(Realm::Hip::MemcpyIndirectInfo<3, Offset_t> info)
 {
   Offset_t offset = blockIdx.x * blockDim.x + threadIdx.x;
-   T* __restrict__ dst_ind_base = reinterpret_cast<T *>(info.dst_ind_addr);
-   T* __restrict__ src_ind_base = reinterpret_cast<T *>(info.src_ind_addr);
+  T *__restrict__ dst_ind_base = reinterpret_cast<T *>(info.dst_ind_addr);
+  T *__restrict__ src_ind_base = reinterpret_cast<T *>(info.src_ind_addr);
 
   Offset_t chunks = info.field_size / sizeof(DT);
 
@@ -223,9 +223,9 @@ memcpy_indirect_points(Realm::Hip::MemcpyIndirectInfo<3, Offset_t> info)
       dst_index = index;
     }
 
-     DT* __restrict__ dst =
+    DT *__restrict__ dst =
         reinterpret_cast<DT *>(info.dst_addr + dst_index * info.field_size);
-     DT* __restrict__ src =
+    DT *__restrict__ src =
         reinterpret_cast<DT *>(info.src_addr + src_index * info.field_size);
     for(Offset_t chunk_idx = 0; chunk_idx < chunks; chunk_idx++) {
       dst[chunk_idx] = src[chunk_idx];
@@ -265,30 +265,31 @@ memfill_affine_batch(const Realm::Hip::AffineFillInfo<N, Offset_t>& info)
   }
 }
 
-#define MEMCPY_TEMPLATE_INST(type, dim, offt, name)                            \
-  extern "C" __global__ __launch_bounds__(256, 4) void                         \
-    memcpy_affine_batch##name(Realm::Hip::AffineCopyInfo<dim, offt> info) { \
-    memcpy_affine_batch<type, dim, offt>(info.subrects, info.num_rects); \
+#define MEMCPY_TEMPLATE_INST(type, dim, offt, name)                                      \
+  extern "C" __global__ __launch_bounds__(256, 4) void memcpy_affine_batch##name(        \
+      Realm::Hip::AffineCopyInfo<dim, offt> info)                                        \
+  {                                                                                      \
+    memcpy_affine_batch<type, dim, offt>(info.subrects, info.num_rects);                 \
   }
 
 #define FILL_TEMPLATE_INST(type, dim, offt, name)                                        \
   extern "C" __global__ void fill_affine_batch##name(                                    \
-      Realm::Hip::AffineFillInfo<dim, offt> info) {                                     \
+      Realm::Hip::AffineFillInfo<dim, offt> info)                                        \
+  {                                                                                      \
     memfill_affine_batch<dim, type, offt>(info);                                         \
   }
 
 #define FILL_LARGE_TEMPLATE_INST(type, dim, offt, name)                                  \
   extern "C" __global__ void fill_affine_large##name(                                    \
-	     Realm::Hip::AffineLargeFillInfo<dim, offt> info) \
+      Realm::Hip::AffineLargeFillInfo<dim, offt> info)                                   \
   {}
 
-#define MEMCPY_TRANSPOSE_TEMPLATE_INST(type, offt, name)		\
-  extern "C" __global__ __launch_bounds__(1024) void memcpy_transpose##name( \
-			    Realm::Hip::MemcpyTransposeInfo<offt> info)	\
-  {									\
-    extern __shared__ type tile_shared_##name[];			\
-    int offset = blockIdx.x * blockDim.x + threadIdx.x;			\
-    memcpy_kernel_transpose<type, offt>(info, tile_shared_##name);	\
+#define MEMCPY_TRANSPOSE_TEMPLATE_INST(type, offt, name)                                 \
+  extern "C" __global__ __launch_bounds__(1024) void memcpy_transpose##name(             \
+      Realm::Hip::MemcpyTransposeInfo<offt> info)                                        \
+  {                                                                                      \
+    extern __shared__ type tile_shared_##name[];                                         \
+    memcpy_kernel_transpose<type, offt>(info, tile_shared_##name);                       \
   }
 
 #define MEMCPY_INDIRECT_TEMPLATE_INST(addr_type, data_type, dim, offt, name)             \

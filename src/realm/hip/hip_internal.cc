@@ -2058,7 +2058,8 @@ namespace Realm {
         const size_t out_elem_size, const size_t elems, const bool has_transpose)
     {
       size_t threads_per_block = 256;
-      size_t blocks_per_grid = 1 + ((elems - 1) / threads_per_block);
+      size_t blocks_per_grid = std::min(1 + ((elems - 1) / threads_per_block),
+                                        static_cast<size_t>(HIP_MAX_BLOCKS_PER_GRID));
 
       // build kernel params: {copy_info_ptr, userdata_ptr}
       size_t reduc_size = redop->sizeof_userdata;
@@ -2269,7 +2270,9 @@ namespace Realm {
                 args->count = elems;
 
                 size_t threads_per_block = 256;
-                size_t blocks_per_grid = 1 + ((elems - 1) / threads_per_block);
+                size_t blocks_per_grid =
+                    std::min(1 + ((elems - 1) / threads_per_block),
+                             static_cast<size_t>(HIP_MAX_BLOCKS_PER_GRID));
 
                 {
                   AutoGPUContext agc(channel->gpu);
