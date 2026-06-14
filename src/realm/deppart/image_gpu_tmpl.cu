@@ -51,6 +51,7 @@ namespace Realm {
 
   #define DO_DOUBLE(T1,T2) \
     template class ImageMicroOp<N1,T1,N2,T2>; \
+    template class GPUApproxImageMicroOp<N1,T1,N2,T2>; \
     template class GPUImageMicroOp<N1,T1,N2,T2>;
 
   FOREACH_TT(DO_DOUBLE)

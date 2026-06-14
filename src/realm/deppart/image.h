@@ -153,6 +153,76 @@ namespace Realm {
     };
 #ifdef REALM_USE_CUDA
 
+    template<int N, typename T>
+    class ApproxImageReceiver {
+    public:
+        virtual void provide_approx_image(int index, const Rect<N,T> *rects,
+                                          size_t count) = 0;
+    };
+
+    template<int N, typename T, int N2, typename T2>
+    class GPUApproxImageMicroOp : public GPUMicroOp<N, T> {
+    public:
+        static const int DIM = N;
+        typedef T IDXTYPE;
+        static const int DIM2 = N2;
+        typedef T2 IDXTYPE2;
+
+        GPUApproxImageMicroOp(
+            const IndexSpace<N, T> &_parent,
+            const FieldDataDescriptor<IndexSpace<N2,T2>, Point<N,T> > &_field_data);
+
+        GPUApproxImageMicroOp(
+            const IndexSpace<N, T> &_parent,
+            const FieldDataDescriptor<IndexSpace<N2,T2>, Rect<N,T> > &_field_data);
+
+        virtual ~GPUApproxImageMicroOp(void);
+
+        virtual void execute(void);
+
+        virtual void gpu_populate_ptrs();
+
+        virtual void gpu_populate_rngs();
+
+        void dispatch(PartitioningOperation *op, bool inline_ok);
+
+        void add_approx_output(int index, ApproxImageReceiver<N,T> *receiver);
+
+        static size_t scratch_lower_bound(const IndexSpace<N, T> &_parent,
+                                          const IndexSpace<N2, T2> &_inst_space);
+
+        static size_t scratch_upper_bound(const IndexSpace<N, T> &_parent,
+                                          const IndexSpace<N2, T2> &_inst_space);
+
+    protected:
+        friend struct RemoteMicroOpMessage<GPUApproxImageMicroOp<N,T,N2,T2> >;
+        static ActiveMessageHandlerReg<RemoteMicroOpMessage<GPUApproxImageMicroOp<N,T,N2,T2> > > areg;
+
+        friend class PartitioningMicroOp;
+        template <typename S>
+        REALM_ATTR_WARN_UNUSED(bool serialize_params(S& s) const);
+
+        // construct from received packet
+        template <typename S>
+        GPUApproxImageMicroOp(NodeID _requestor, AsyncMicroOp *_async_microop, S& s);
+
+        void approximate_points(PointDesc<N,T> *d_points, size_t num_points,
+                                std::vector<Rect<N,T> > &approx_rects, Arena &arena);
+        void approximate_rects(RectDesc<N,T> *d_rects, size_t num_rects,
+                               std::vector<Rect<N,T> > &approx_rects, Arena &arena);
+        void send_approx_output(const std::vector<Rect<N,T> > &approx_rects);
+        size_t validated_scratch_bytes(void) const;
+
+        IndexSpace<N, T> parent_space;
+        IndexSpace<N2, T2> inst_space;
+        RegionInstance inst;
+        size_t field_offset;
+        RegionInstance scratch_buffer;
+        bool is_ranged;
+        int approx_output_index;
+        ApproxImageReceiver<N,T> *approx_output_receiver;
+    };
+
     template<int N, typename T, int N2, typename T2>
     class GPUImageMicroOp : public GPUMicroOp<N, T> {
     public:

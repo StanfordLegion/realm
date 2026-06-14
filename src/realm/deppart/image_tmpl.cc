@@ -45,7 +45,9 @@ namespace Realm {
 #define N2 INST_N2
 
 #ifdef REALM_USE_CUDA
-  #define GPU_IMAGE_LINE(N1,T1,N2,T2) template class GPUImageMicroOp<N1, T1, N2, T2>;
+  #define GPU_IMAGE_LINE(N1,T1,N2,T2)             \
+    template class GPUApproxImageMicroOp<N1, T1, N2, T2>; \
+    template class GPUImageMicroOp<N1, T1, N2, T2>;
 #else
   #define GPU_IMAGE_LINE(N1,T1,N2,T2) /* no CUDA */
 #endif

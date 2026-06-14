@@ -9,6 +9,8 @@
 
 namespace Realm {
 
+extern Logger log_part;
+
 //TODO: INTERSECTING INPUT/OUTPUT RECTS CAN BE DONE WITH BVH IF BECOME EXPENSIVE
 
 template <int N2, typename T2>
@@ -18,6 +20,398 @@ struct RectDescVolumeOp {
     return rd.rect.volume();
   }
 };
+
+template <int N, typename T, int N2, typename T2>
+void GPUApproxImageMicroOp<N,T,N2,T2>::send_approx_output(
+    const std::vector<Rect<N,T> > &approx_rects)
+{
+  if(approx_output_receiver != nullptr) {
+    approx_output_receiver->provide_approx_image(approx_output_index,
+                                                 approx_rects.empty() ? nullptr : approx_rects.data(),
+                                                 approx_rects.size());
+  }
+}
+
+template <int N, typename T, int N2, typename T2>
+void GPUApproxImageMicroOp<N,T,N2,T2>::approximate_rects(
+    RectDesc<N,T> *d_rects, size_t num_rects, std::vector<Rect<N,T> > &approx_rects,
+    Arena &buffer_arena)
+{
+  if(num_rects == 0) return;
+
+  CUstream stream = this->stream->get_stream();
+  const size_t max_rects =
+      std::max<size_t>(1, DeppartConfig::cfg_max_rects_in_approximation);
+
+  RectDesc<N,T> *d_merged = nullptr;
+  size_t num_merged = 1;
+  (void)d_merged;
+  (void)num_merged;
+
+  if constexpr (N == 1) {
+    std::vector<int> dummy;
+    this->complete1d_pipeline(d_rects, num_rects, d_merged, num_merged, buffer_arena,
+      dummy,
+      [&](auto const& elem) { return size_t(&elem - dummy.data()); },
+      [&](auto const& elem) { return SparsityMap<N,T>(); });
+
+    RectDesc<N,T> *d_approx = d_merged;
+    size_t num_approx = num_merged;
+    if(num_merged > max_rects) {
+      size_t num_gaps = num_merged - 1;
+      size_t num_kept = max_rects - 1;
+      T *d_gap_keys_in = buffer_arena.alloc<T>(num_gaps);
+      T *d_gap_keys_out = buffer_arena.alloc<T>(num_gaps);
+      size_t *d_gap_indices_in = buffer_arena.alloc<size_t>(num_gaps);
+      size_t *d_gap_indices_out = buffer_arena.alloc<size_t>(num_gaps);
+
+      image_buildGapKeys1d<N,T><<<COMPUTE_GRID(num_gaps), THREADS_PER_BLOCK, 0, stream>>>(
+          d_merged, d_gap_keys_in, d_gap_indices_in, num_gaps);
+      KERNEL_CHECK(stream);
+
+      size_t temp_bytes = 0;
+      cub::DeviceRadixSort::SortPairs(nullptr, temp_bytes,
+                                      d_gap_keys_in, d_gap_keys_out,
+                                      d_gap_indices_in, d_gap_indices_out,
+                                      num_gaps, 0, 8 * sizeof(T), stream);
+      void *temp_storage = buffer_arena.alloc<char>(temp_bytes);
+      cub::DeviceRadixSort::SortPairs(temp_storage, temp_bytes,
+                                      d_gap_keys_in, d_gap_keys_out,
+                                      d_gap_indices_in, d_gap_indices_out,
+                                      num_gaps, 0, 8 * sizeof(T), stream);
+
+      size_t *d_kept_indices_in = buffer_arena.alloc<size_t>(num_kept);
+      size_t *d_kept_indices_out = buffer_arena.alloc<size_t>(num_kept);
+      image_copyTopGapIndices<size_t><<<COMPUTE_GRID(num_kept), THREADS_PER_BLOCK, 0, stream>>>(
+          d_gap_indices_out, d_kept_indices_in, num_gaps, num_kept);
+      KERNEL_CHECK(stream);
+
+      temp_bytes = 0;
+      cub::DeviceRadixSort::SortKeys(nullptr, temp_bytes,
+                                     d_kept_indices_in, d_kept_indices_out,
+                                     num_kept, 0, 8 * sizeof(size_t), stream);
+      temp_storage = buffer_arena.alloc<char>(temp_bytes);
+      cub::DeviceRadixSort::SortKeys(temp_storage, temp_bytes,
+                                     d_kept_indices_in, d_kept_indices_out,
+                                     num_kept, 0, 8 * sizeof(size_t), stream);
+
+      d_approx = buffer_arena.alloc<RectDesc<N,T> >(max_rects);
+      image_emitApproxRects1d<N,T><<<COMPUTE_GRID(max_rects), THREADS_PER_BLOCK, 0, stream>>>(
+          d_merged, d_kept_indices_out, num_kept, num_merged, d_approx);
+      KERNEL_CHECK(stream);
+      num_approx = max_rects;
+    }
+
+    std::vector<RectDesc<N,T> > h_rect_descs(num_approx);
+    CUDA_CHECK(cudaMemcpyAsync(h_rect_descs.data(), d_approx,
+                               num_approx * sizeof(RectDesc<N,T>),
+                               cudaMemcpyDeviceToHost, stream), stream);
+    CUDA_CHECK(cudaStreamSynchronize(stream), stream);
+    for(size_t i = 0; i < num_approx; i++)
+      approx_rects.push_back(h_rect_descs[i].rect);
+  } else {
+    Rect<N,T> identity_rect;
+    for(int d = 0; d < N; d++) {
+      identity_rect.lo[d] = std::numeric_limits<T>::max();
+      identity_rect.hi[d] = std::numeric_limits<T>::min();
+    }
+
+    Rect<N,T> *d_plain_rects = buffer_arena.alloc<Rect<N,T> >(num_rects);
+    image_rectDescsToRects<N,T><<<COMPUTE_GRID(num_rects), THREADS_PER_BLOCK, 0, stream>>>(
+        d_rects, d_plain_rects, num_rects);
+    KERNEL_CHECK(stream);
+
+    Rect<N,T> *d_bbox = buffer_arena.alloc<Rect<N,T> >(1);
+    void *temp_storage = nullptr;
+    size_t temp_bytes = 0;
+    cub::DeviceReduce::Reduce(temp_storage, temp_bytes,
+                              d_plain_rects, d_bbox, num_rects,
+                              UnionRectOp<N,T>(), identity_rect, stream);
+    temp_storage = buffer_arena.alloc<char>(temp_bytes);
+    cub::DeviceReduce::Reduce(temp_storage, temp_bytes,
+                              d_plain_rects, d_bbox, num_rects,
+                              UnionRectOp<N,T>(), identity_rect, stream);
+    Rect<N,T> h_bbox;
+    CUDA_CHECK(cudaMemcpyAsync(&h_bbox, d_bbox, sizeof(Rect<N,T>),
+                               cudaMemcpyDeviceToHost, stream), stream);
+    CUDA_CHECK(cudaStreamSynchronize(stream), stream);
+    approx_rects.push_back(h_bbox);
+  }
+}
+
+template <int N, typename T, int N2, typename T2>
+void GPUApproxImageMicroOp<N,T,N2,T2>::approximate_points(
+    PointDesc<N,T> *d_points, size_t num_points, std::vector<Rect<N,T> > &approx_rects,
+    Arena &buffer_arena)
+{
+  if(num_points == 0) return;
+
+  CUstream stream = this->stream->get_stream();
+  RectDesc<N,T> *d_rects = buffer_arena.alloc<RectDesc<N,T> >(num_points);
+  points_to_rects<N,T><<<COMPUTE_GRID(num_points), THREADS_PER_BLOCK, 0, stream>>>(
+      d_points, d_rects, num_points);
+  KERNEL_CHECK(stream);
+
+  approximate_rects(d_rects, num_points, approx_rects, buffer_arena);
+}
+
+template <int N, typename T, int N2, typename T2>
+void GPUApproxImageMicroOp<N,T,N2,T2>::gpu_populate_ptrs()
+{
+  NVTX_DEPPART(gpu_approx_image);
+
+  RegionInstance buffer = scratch_buffer;
+  size_t tile_size = validated_scratch_bytes();
+  Arena buffer_arena(buffer);
+  CUstream stream = this->stream->get_stream();
+
+  FieldDataDescriptor<IndexSpace<N2,T2>, Point<N,T> > field_data;
+  field_data.index_space = inst_space;
+  field_data.inst = inst;
+  field_data.field_offset = field_offset;
+  field_data.scratch_buffer = scratch_buffer;
+  std::vector<FieldDataDescriptor<IndexSpace<N2,T2>, Point<N,T> > > fields(1, field_data);
+
+  collapsed_space<N2,T2> collapsed_inst;
+  collapsed_inst.offsets = buffer_arena.alloc<size_t>(2);
+  collapsed_inst.num_children = 1;
+  Arena sys_arena;
+  GPUMicroOp<N2,T2>::collapse_multi_space(fields, collapsed_inst, sys_arena, stream);
+
+  collapsed_space<N,T> collapsed_parent;
+  GPUMicroOp<N,T>::collapse_parent_space(parent_space, collapsed_parent, buffer_arena, stream);
+
+  AffineAccessor<Point<N,T>,N2,T2> accessor(inst, field_offset);
+  uint32_t *d_counter = buffer_arena.alloc<uint32_t>(1);
+
+  buffer_arena.commit(false);
+
+  DenseRectangleList<N,T> final_rects(DeppartConfig::cfg_max_rects_in_approximation);
+  Rect<N,T> nd_bbox = Rect<N,T>::make_empty();
+  bool nd_bbox_valid = false;
+  (void)nd_bbox;
+  (void)nd_bbox_valid;
+  size_t num_completed = 0;
+  size_t curr_tile = std::max<size_t>(1, tile_size / 2);
+
+  while(num_completed < collapsed_inst.num_rects) {
+    try {
+      buffer_arena.start();
+      if(num_completed + curr_tile > collapsed_inst.num_rects)
+        curr_tile = collapsed_inst.num_rects - num_completed;
+
+      Rect<N2,T2> *d_tile_rects = buffer_arena.alloc<Rect<N2,T2> >(curr_tile);
+      CUDA_CHECK(cudaMemcpyAsync(d_tile_rects, collapsed_inst.rects_buffer + num_completed,
+                                 curr_tile * sizeof(Rect<N2,T2>),
+                                 cudaMemcpyHostToDevice, stream), stream);
+
+      size_t *d_prefix_rects = nullptr;
+      size_t total_pts = 0;
+      GPUMicroOp<N2,T2>::volume_prefix_sum(d_tile_rects, curr_tile, d_prefix_rects,
+                                           total_pts, buffer_arena, stream);
+      if(total_pts == 0) {
+        num_completed += curr_tile;
+        curr_tile = std::max<size_t>(1, tile_size / 2);
+        continue;
+      }
+
+      CUDA_CHECK(cudaMemsetAsync(d_counter, 0, sizeof(uint32_t), stream), stream);
+      image_gpuApproxPtrsKernel<N,T,N2,T2><<<COMPUTE_GRID(total_pts), THREADS_PER_BLOCK, 0, stream>>>(
+          accessor, d_tile_rects, collapsed_parent.rects_buffer, d_prefix_rects,
+          total_pts, curr_tile, collapsed_parent.num_rects, d_counter, nullptr);
+      KERNEL_CHECK(stream);
+
+      uint32_t h_count = 0;
+      CUDA_CHECK(cudaMemcpyAsync(&h_count, d_counter, sizeof(uint32_t),
+                                 cudaMemcpyDeviceToHost, stream), stream);
+      CUDA_CHECK(cudaStreamSynchronize(stream), stream);
+      if(h_count == 0) {
+        num_completed += curr_tile;
+        curr_tile = std::max<size_t>(1, tile_size / 2);
+        continue;
+      }
+
+      PointDesc<N,T> *d_points = buffer_arena.alloc<PointDesc<N,T> >(h_count);
+      CUDA_CHECK(cudaMemsetAsync(d_counter, 0, sizeof(uint32_t), stream), stream);
+      image_gpuApproxPtrsKernel<N,T,N2,T2><<<COMPUTE_GRID(total_pts), THREADS_PER_BLOCK, 0, stream>>>(
+          accessor, d_tile_rects, collapsed_parent.rects_buffer, d_prefix_rects,
+          total_pts, curr_tile, collapsed_parent.num_rects, d_counter, d_points);
+      KERNEL_CHECK(stream);
+
+      std::vector<Rect<N,T> > tile_rects;
+      approximate_points(d_points, h_count, tile_rects, buffer_arena);
+      if constexpr (N == 1) {
+        for(size_t i = 0; i < tile_rects.size(); i++)
+          final_rects.add_rect(tile_rects[i]);
+      } else {
+        for(size_t i = 0; i < tile_rects.size(); i++) {
+          if(!nd_bbox_valid) {
+            nd_bbox = tile_rects[i];
+            nd_bbox_valid = true;
+          } else
+            nd_bbox = nd_bbox.union_bbox(tile_rects[i]);
+        }
+      }
+
+      num_completed += curr_tile;
+      curr_tile = std::max<size_t>(1, tile_size / 2);
+    } catch(arena_oom&) {
+      curr_tile /= 2;
+      if(curr_tile == 0) {
+        if(collapsed_inst.rects_buffer[num_completed].volume() <= 1) {
+          log_part.fatal()
+              << "GPUApproxImageMicroOp cannot make progress after scratch exhaustion";
+          std::abort();
+        }
+        size_t old_rects = collapsed_inst.num_rects;
+        GPUMicroOp<N2,T2>::shatter_rects(collapsed_inst, num_completed, stream);
+        if(collapsed_inst.num_rects <= old_rects) {
+          log_part.fatal()
+              << "GPUApproxImageMicroOp shatter did not increase available tiling";
+          std::abort();
+        }
+        curr_tile = 1;
+      }
+    }
+  }
+
+  if constexpr (N == 1) {
+    send_approx_output(final_rects.rects);
+  } else {
+    std::vector<Rect<N,T> > out;
+    if(nd_bbox_valid) out.push_back(nd_bbox);
+    send_approx_output(out);
+  }
+}
+
+template <int N, typename T, int N2, typename T2>
+void GPUApproxImageMicroOp<N,T,N2,T2>::gpu_populate_rngs()
+{
+  NVTX_DEPPART(gpu_approx_image_range);
+
+  RegionInstance buffer = scratch_buffer;
+  size_t tile_size = validated_scratch_bytes();
+  Arena buffer_arena(buffer);
+  CUstream stream = this->stream->get_stream();
+
+  FieldDataDescriptor<IndexSpace<N2,T2>, Rect<N,T> > field_data;
+  field_data.index_space = inst_space;
+  field_data.inst = inst;
+  field_data.field_offset = field_offset;
+  field_data.scratch_buffer = scratch_buffer;
+  std::vector<FieldDataDescriptor<IndexSpace<N2,T2>, Rect<N,T> > > fields(1, field_data);
+
+  collapsed_space<N2,T2> collapsed_inst;
+  collapsed_inst.offsets = buffer_arena.alloc<size_t>(2);
+  collapsed_inst.num_children = 1;
+  Arena sys_arena;
+  GPUMicroOp<N2,T2>::collapse_multi_space(fields, collapsed_inst, sys_arena, stream);
+
+  collapsed_space<N,T> collapsed_parent;
+  GPUMicroOp<N,T>::collapse_parent_space(parent_space, collapsed_parent, buffer_arena, stream);
+
+  AffineAccessor<Rect<N,T>,N2,T2> accessor(inst, field_offset);
+  uint32_t *d_counter = buffer_arena.alloc<uint32_t>(1);
+
+  buffer_arena.commit(false);
+
+  DenseRectangleList<N,T> final_rects(DeppartConfig::cfg_max_rects_in_approximation);
+  Rect<N,T> nd_bbox = Rect<N,T>::make_empty();
+  bool nd_bbox_valid = false;
+  (void)nd_bbox;
+  (void)nd_bbox_valid;
+  size_t num_completed = 0;
+  size_t curr_tile = std::max<size_t>(1, tile_size / 2);
+
+  while(num_completed < collapsed_inst.num_rects) {
+    try {
+      buffer_arena.start();
+      if(num_completed + curr_tile > collapsed_inst.num_rects)
+        curr_tile = collapsed_inst.num_rects - num_completed;
+
+      Rect<N2,T2> *d_tile_rects = buffer_arena.alloc<Rect<N2,T2> >(curr_tile);
+      CUDA_CHECK(cudaMemcpyAsync(d_tile_rects, collapsed_inst.rects_buffer + num_completed,
+                                 curr_tile * sizeof(Rect<N2,T2>),
+                                 cudaMemcpyHostToDevice, stream), stream);
+
+      size_t *d_prefix_rects = nullptr;
+      size_t total_pts = 0;
+      GPUMicroOp<N2,T2>::volume_prefix_sum(d_tile_rects, curr_tile, d_prefix_rects,
+                                           total_pts, buffer_arena, stream);
+      if(total_pts == 0) {
+        num_completed += curr_tile;
+        curr_tile = std::max<size_t>(1, tile_size / 2);
+        continue;
+      }
+
+      CUDA_CHECK(cudaMemsetAsync(d_counter, 0, sizeof(uint32_t), stream), stream);
+      image_gpuApproxRngsKernel<N,T,N2,T2><<<COMPUTE_GRID(total_pts), THREADS_PER_BLOCK, 0, stream>>>(
+          accessor, d_tile_rects, collapsed_parent.rects_buffer, d_prefix_rects,
+          total_pts, curr_tile, collapsed_parent.num_rects, d_counter, nullptr);
+      KERNEL_CHECK(stream);
+
+      uint32_t h_count = 0;
+      CUDA_CHECK(cudaMemcpyAsync(&h_count, d_counter, sizeof(uint32_t),
+                                 cudaMemcpyDeviceToHost, stream), stream);
+      CUDA_CHECK(cudaStreamSynchronize(stream), stream);
+      if(h_count == 0) {
+        num_completed += curr_tile;
+        curr_tile = std::max<size_t>(1, tile_size / 2);
+        continue;
+      }
+
+      RectDesc<N,T> *d_rects = buffer_arena.alloc<RectDesc<N,T> >(h_count);
+      CUDA_CHECK(cudaMemsetAsync(d_counter, 0, sizeof(uint32_t), stream), stream);
+      image_gpuApproxRngsKernel<N,T,N2,T2><<<COMPUTE_GRID(total_pts), THREADS_PER_BLOCK, 0, stream>>>(
+          accessor, d_tile_rects, collapsed_parent.rects_buffer, d_prefix_rects,
+          total_pts, curr_tile, collapsed_parent.num_rects, d_counter, d_rects);
+      KERNEL_CHECK(stream);
+
+      std::vector<Rect<N,T> > tile_rects;
+      approximate_rects(d_rects, h_count, tile_rects, buffer_arena);
+      if constexpr (N == 1) {
+        for(size_t i = 0; i < tile_rects.size(); i++)
+          final_rects.add_rect(tile_rects[i]);
+      } else {
+        for(size_t i = 0; i < tile_rects.size(); i++) {
+          if(!nd_bbox_valid) {
+            nd_bbox = tile_rects[i];
+            nd_bbox_valid = true;
+          } else
+            nd_bbox = nd_bbox.union_bbox(tile_rects[i]);
+        }
+      }
+
+      num_completed += curr_tile;
+      curr_tile = std::max<size_t>(1, tile_size / 2);
+    } catch(arena_oom&) {
+      curr_tile /= 2;
+      if(curr_tile == 0) {
+        if(collapsed_inst.rects_buffer[num_completed].volume() <= 1) {
+          log_part.fatal()
+              << "GPUApproxImageMicroOp cannot make progress after scratch exhaustion";
+          std::abort();
+        }
+        size_t old_rects = collapsed_inst.num_rects;
+        GPUMicroOp<N2,T2>::shatter_rects(collapsed_inst, num_completed, stream);
+        if(collapsed_inst.num_rects <= old_rects) {
+          log_part.fatal()
+              << "GPUApproxImageMicroOp shatter did not increase available tiling";
+          std::abort();
+        }
+        curr_tile = 1;
+      }
+    }
+  }
+
+  if constexpr (N == 1) {
+    send_approx_output(final_rects.rects);
+  } else {
+    std::vector<Rect<N,T> > out;
+    if(nd_bbox_valid) out.push_back(nd_bbox);
+    send_approx_output(out);
+  }
+}
 
   /*
    *  Input (stored in MicroOp): Array of field instances, a parent index space, and a list of source index spaces

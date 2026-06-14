@@ -29,6 +29,8 @@
 #include "osdep.h"
 
 #include "philox.h"
+#include "realm/deppart/deppart_config.h"
+#include "realm/deppart/image.h"
 
 using namespace Realm;
 
@@ -158,6 +160,321 @@ int find_split(const std::vector<T> &cuts, T v)
   assert(false);
   return 0;
 }
+
+#ifdef REALM_USE_CUDA
+class ApproxImageTest : public TestInterface, public ApproxImageReceiver<1, int> {
+public:
+  int num_points = 256;
+  int scratch_bytes = 2000000;
+  IndexSpace<1> is_domain, parent, stress_domain, stress_parent;
+  RegionInstance ptr_cpu_inst, ptr_gpu_inst, range_cpu_inst, range_gpu_inst;
+  RegionInstance stress_ptr_cpu_inst, stress_ptr_gpu_inst;
+  RegionInstance stress_range_cpu_inst, stress_range_gpu_inst;
+  RegionInstance ptr_scratch, range_scratch;
+  FieldDataDescriptor<IndexSpace<1>, Point<1> > ptr_gpu_field;
+  FieldDataDescriptor<IndexSpace<1>, Rect<1> > range_gpu_field;
+  FieldDataDescriptor<IndexSpace<1>, Point<1> > stress_ptr_gpu_field;
+  FieldDataDescriptor<IndexSpace<1>, Rect<1> > stress_range_gpu_field;
+  std::vector<Point<1> > exact_ptrs;
+  std::vector<Rect<1> > exact_ranges;
+  std::vector<Rect<1> > approx_ptrs, approx_ranges;
+  std::vector<Rect<1> > stress_approx_ptrs, stress_approx_ranges;
+  std::vector<Rect<1> > stress_expected_ptrs, stress_expected_ranges;
+
+  ApproxImageTest(int argc, const char *argv[])
+  {
+    for(int i = 1; i < argc; i++) {
+      if(!strcmp(argv[i], "-n")) {
+        num_points = atoi(argv[++i]);
+        continue;
+      }
+      if(!strcmp(argv[i], "-scratch")) {
+        scratch_bytes = atoi(argv[++i]);
+        continue;
+      }
+    }
+  }
+
+  virtual void print_info(void)
+  {
+    printf("Realm dependent partitioning test - approximage: %d field points\n",
+           num_points);
+  }
+
+  virtual Event initialize_data(const std::vector<Memory> &memories,
+                                const std::vector<Processor> &procs)
+  {
+    Memory gpu_memory = Memory::NO_MEMORY;
+    Machine machine = Machine::get_machine();
+    std::set<Memory> all_memories;
+    machine.get_all_memories(all_memories);
+    for(Memory memory : all_memories) {
+      if(memory.kind() == Memory::GPU_FB_MEM) {
+        gpu_memory = memory;
+        break;
+      }
+    }
+    if(!gpu_memory.exists()) {
+      log_app.error() << "No GPU memory found for approximage test";
+      exit(1);
+    }
+
+    Memory sysmem = memories[0];
+    is_domain = Rect<1>(0, num_points - 1);
+    parent = Rect<1>(0, 4 * num_points);
+    const int num_stress_points = 7;
+    stress_domain = Rect<1>(0, num_stress_points - 1);
+    stress_parent = Rect<1>(0, 100);
+
+    size_t scratch_lower = std::max(
+        GPUApproxImageMicroOp<1, int, 1, int>::scratch_lower_bound(parent, is_domain),
+        GPUApproxImageMicroOp<1, int, 1, int>::scratch_lower_bound(stress_parent,
+                                                                   stress_domain));
+    size_t scratch_upper = std::max(
+        GPUApproxImageMicroOp<1, int, 1, int>::scratch_upper_bound(parent, is_domain),
+        GPUApproxImageMicroOp<1, int, 1, int>::scratch_upper_bound(stress_parent,
+                                                                   stress_domain));
+    if((size_t)scratch_bytes < scratch_lower) {
+      log_app.error() << "Approximage scratch too small: bytes=" << scratch_bytes
+                      << " lower_bound=" << scratch_lower
+                      << " upper_bound=" << scratch_upper;
+      exit(1);
+    }
+
+    std::vector<size_t> ptr_fields(1, sizeof(Point<1>));
+    std::vector<size_t> range_fields(1, sizeof(Rect<1>));
+    std::vector<size_t> byte_fields(1, sizeof(char));
+    IndexSpace<1> scratch_space(Rect<1>(0, scratch_bytes - 1));
+
+    RegionInstance::create_instance(ptr_cpu_inst, sysmem, is_domain, ptr_fields, 0,
+                                    Realm::ProfilingRequestSet()).wait();
+    RegionInstance::create_instance(ptr_gpu_inst, gpu_memory, is_domain, ptr_fields, 0,
+                                    Realm::ProfilingRequestSet()).wait();
+    RegionInstance::create_instance(range_cpu_inst, sysmem, is_domain, range_fields, 0,
+                                    Realm::ProfilingRequestSet()).wait();
+    RegionInstance::create_instance(range_gpu_inst, gpu_memory, is_domain, range_fields, 0,
+                                    Realm::ProfilingRequestSet()).wait();
+    RegionInstance::create_instance(stress_ptr_cpu_inst, sysmem, stress_domain, ptr_fields,
+                                    0, Realm::ProfilingRequestSet()).wait();
+    RegionInstance::create_instance(stress_ptr_gpu_inst, gpu_memory, stress_domain, ptr_fields,
+                                    0, Realm::ProfilingRequestSet()).wait();
+    RegionInstance::create_instance(stress_range_cpu_inst, sysmem, stress_domain,
+                                    range_fields, 0,
+                                    Realm::ProfilingRequestSet()).wait();
+    RegionInstance::create_instance(stress_range_gpu_inst, gpu_memory, stress_domain,
+                                    range_fields, 0,
+                                    Realm::ProfilingRequestSet()).wait();
+    RegionInstance::create_instance(ptr_scratch, gpu_memory, scratch_space, byte_fields, 0,
+                                    Realm::ProfilingRequestSet()).wait();
+    RegionInstance::create_instance(range_scratch, gpu_memory, scratch_space, byte_fields, 0,
+                                    Realm::ProfilingRequestSet()).wait();
+
+    AffineAccessor<Point<1>, 1> a_ptr(ptr_cpu_inst, 0);
+    AffineAccessor<Rect<1>, 1> a_range(range_cpu_inst, 0);
+    for(int i = 0; i < num_points; i++) {
+      Point<1> p((3 * i + (i % 7)) % (4 * num_points + 1));
+      int lo = (5 * i + (i % 11)) % (4 * num_points);
+      Rect<1> r(lo, lo + (i % 3));
+      a_ptr.write(i, p);
+      a_range.write(i, r);
+      if(parent.contains(p))
+        exact_ptrs.push_back(p);
+      if(r.overlaps(parent.bounds))
+        exact_ranges.push_back(r);
+    }
+
+    const int stress_ptr_values[num_stress_points] = {1, 6, 20, 50, 90, 150, -10};
+    const Rect<1> stress_ranges[num_stress_points] = {
+      Rect<1>(0, 1), Rect<1>(5, 6), Rect<1>(16, 17), Rect<1>(40, 42),
+      Rect<1>(80, 83), Rect<1>(150, 155), Rect<1>(-20, -10)
+    };
+    AffineAccessor<Point<1>, 1> stress_ptr_accessor(stress_ptr_cpu_inst, 0);
+    AffineAccessor<Rect<1>, 1> stress_range_accessor(stress_range_cpu_inst, 0);
+    for(int i = 0; i < num_stress_points; i++) {
+      stress_ptr_accessor.write(i, Point<1>(stress_ptr_values[i]));
+      stress_range_accessor.write(i, stress_ranges[i]);
+    }
+    stress_expected_ptrs.push_back(Rect<1>(1, 20));
+    stress_expected_ptrs.push_back(Rect<1>(50, 50));
+    stress_expected_ptrs.push_back(Rect<1>(90, 90));
+    stress_expected_ranges.push_back(Rect<1>(0, 17));
+    stress_expected_ranges.push_back(Rect<1>(40, 42));
+    stress_expected_ranges.push_back(Rect<1>(80, 83));
+
+    CopySrcDstField ptr_src, ptr_dst, range_src, range_dst;
+    ptr_src.inst = ptr_cpu_inst;
+    ptr_src.field_id = 0;
+    ptr_src.size = sizeof(Point<1>);
+    ptr_dst.inst = ptr_gpu_inst;
+    ptr_dst.field_id = 0;
+    ptr_dst.size = sizeof(Point<1>);
+    range_src.inst = range_cpu_inst;
+    range_src.field_id = 0;
+    range_src.size = sizeof(Rect<1>);
+    range_dst.inst = range_gpu_inst;
+    range_dst.field_id = 0;
+    range_dst.size = sizeof(Rect<1>);
+    CopySrcDstField stress_ptr_src = ptr_src;
+    CopySrcDstField stress_ptr_dst = ptr_dst;
+    CopySrcDstField stress_range_src = range_src;
+    CopySrcDstField stress_range_dst = range_dst;
+    stress_ptr_src.inst = stress_ptr_cpu_inst;
+    stress_ptr_dst.inst = stress_ptr_gpu_inst;
+    stress_range_src.inst = stress_range_cpu_inst;
+    stress_range_dst.inst = stress_range_gpu_inst;
+
+    is_domain.copy(std::vector<CopySrcDstField>(1, ptr_src),
+                   std::vector<CopySrcDstField>(1, ptr_dst),
+                   Realm::ProfilingRequestSet()).wait();
+    is_domain.copy(std::vector<CopySrcDstField>(1, range_src),
+                   std::vector<CopySrcDstField>(1, range_dst),
+                   Realm::ProfilingRequestSet()).wait();
+    stress_domain.copy(std::vector<CopySrcDstField>(1, stress_ptr_src),
+                       std::vector<CopySrcDstField>(1, stress_ptr_dst),
+                       Realm::ProfilingRequestSet()).wait();
+    stress_domain.copy(std::vector<CopySrcDstField>(1, stress_range_src),
+                       std::vector<CopySrcDstField>(1, stress_range_dst),
+                       Realm::ProfilingRequestSet()).wait();
+
+    ptr_gpu_field.index_space = is_domain;
+    ptr_gpu_field.inst = ptr_gpu_inst;
+    ptr_gpu_field.field_offset = 0;
+    ptr_gpu_field.scratch_buffer = ptr_scratch;
+    range_gpu_field.index_space = is_domain;
+    range_gpu_field.inst = range_gpu_inst;
+    range_gpu_field.field_offset = 0;
+    range_gpu_field.scratch_buffer = range_scratch;
+    stress_ptr_gpu_field.index_space = stress_domain;
+    stress_ptr_gpu_field.inst = stress_ptr_gpu_inst;
+    stress_ptr_gpu_field.field_offset = 0;
+    stress_ptr_gpu_field.scratch_buffer = ptr_scratch;
+    stress_range_gpu_field.index_space = stress_domain;
+    stress_range_gpu_field.inst = stress_range_gpu_inst;
+    stress_range_gpu_field.field_offset = 0;
+    stress_range_gpu_field.scratch_buffer = range_scratch;
+
+    return Event::NO_EVENT;
+  }
+
+  virtual Event perform_partitioning(void)
+  {
+    GPUApproxImageMicroOp<1, int, 1, int> ptr_op(parent, ptr_gpu_field);
+    ptr_op.add_approx_output(0, this);
+    ptr_op.execute();
+
+    GPUApproxImageMicroOp<1, int, 1, int> range_op(parent, range_gpu_field);
+    range_op.add_approx_output(1, this);
+    range_op.execute();
+
+    int old_max_rects = DeppartConfig::cfg_max_rects_in_approximation;
+    DeppartConfig::cfg_max_rects_in_approximation = 3;
+    GPUApproxImageMicroOp<1, int, 1, int> stress_ptr_op(stress_parent,
+                                                        stress_ptr_gpu_field);
+    stress_ptr_op.add_approx_output(2, this);
+    stress_ptr_op.execute();
+
+    GPUApproxImageMicroOp<1, int, 1, int> stress_range_op(stress_parent,
+                                                          stress_range_gpu_field);
+    stress_range_op.add_approx_output(3, this);
+    stress_range_op.execute();
+    DeppartConfig::cfg_max_rects_in_approximation = old_max_rects;
+
+    return Event::NO_EVENT;
+  }
+
+  virtual int perform_dynamic_checks(void) { return 0; }
+
+  virtual void provide_approx_image(int index, const Rect<1, int> *rects, size_t count)
+  {
+    std::vector<Rect<1> > *dst = nullptr;
+    switch(index) {
+    case 0: dst = &approx_ptrs; break;
+    case 1: dst = &approx_ranges; break;
+    case 2: dst = &stress_approx_ptrs; break;
+    case 3: dst = &stress_approx_ranges; break;
+    default: assert(false); return;
+    }
+    if(count == 0)
+      dst->clear();
+    else
+      dst->assign(rects, rects + count);
+  }
+
+  bool covers_point(const std::vector<Rect<1> > &rects, Point<1> p) const
+  {
+    for(size_t i = 0; i < rects.size(); i++)
+      if(rects[i].contains(p))
+        return true;
+    return false;
+  }
+
+  bool covers_rect(const std::vector<Rect<1> > &rects, Rect<1> r) const
+  {
+    for(int p = r.lo[0]; p <= r.hi[0]; p++)
+      if(!covers_point(rects, Point<1>(p)))
+        return false;
+    return true;
+  }
+
+  bool rect_lists_match(const std::vector<Rect<1> > &actual,
+                        const std::vector<Rect<1> > &expected,
+                        const char *label) const
+  {
+    if(actual.size() != expected.size()) {
+      log_app.error() << label << " produced " << actual.size() << " rectangles, expected "
+                      << expected.size();
+      return false;
+    }
+    for(size_t i = 0; i < expected.size(); i++) {
+      if(actual[i] != expected[i]) {
+        log_app.error() << label << " rectangle " << i << " was " << actual[i]
+                        << ", expected " << expected[i];
+        return false;
+      }
+    }
+    return true;
+  }
+
+  virtual int check_partitioning(void)
+  {
+    int errors = 0;
+    if(approx_ptrs.size() > (size_t)DeppartConfig::cfg_max_rects_in_approximation) {
+      log_app.error() << "Pointer approximation has too many rectangles: "
+                      << approx_ptrs.size();
+      errors++;
+    }
+    if(approx_ranges.size() > (size_t)DeppartConfig::cfg_max_rects_in_approximation) {
+      log_app.error() << "Range approximation has too many rectangles: "
+                      << approx_ranges.size();
+      errors++;
+    }
+    for(size_t i = 0; i < exact_ptrs.size(); i++) {
+      if(!covers_point(approx_ptrs, exact_ptrs[i])) {
+        log_app.error() << "Pointer approximation missed " << exact_ptrs[i];
+        errors++;
+      }
+    }
+    for(size_t i = 0; i < exact_ranges.size(); i++) {
+      if(!covers_rect(approx_ranges, exact_ranges[i])) {
+        log_app.error() << "Range approximation missed " << exact_ranges[i];
+        errors++;
+      }
+    }
+    if(!rect_lists_match(stress_approx_ptrs, stress_expected_ptrs,
+                         "Stress pointer approximation"))
+      errors++;
+    if(!rect_lists_match(stress_approx_ranges, stress_expected_ranges,
+                         "Stress range approximation"))
+      errors++;
+    printf("APPROXIMAGE,ptr_rects=%zu,range_rects=%zu,ptr_exact=%zu,range_exact=%zu\n",
+           approx_ptrs.size(), approx_ranges.size(), exact_ptrs.size(),
+           exact_ranges.size());
+    printf("APPROXIMAGE_STRESS,ptr_rects=%zu,range_rects=%zu\n",
+           stress_approx_ptrs.size(), stress_approx_ranges.size());
+    return errors;
+  }
+};
+#endif
 
 /*
  * Basic test - create a graph, partition it by
@@ -4932,6 +5249,13 @@ int main(int argc, char **argv)
       testcfg = new BasicTest(argc - i, const_cast<const char **>(argv + i));
       break;
     }
+
+#ifdef REALM_USE_CUDA
+    if(!strcmp(argv[i], "approximage")) {
+      testcfg = new ApproxImageTest(argc - i, const_cast<const char **>(argv + i));
+      break;
+    }
+#endif
 
     if(!strcmp(argv[i], "tile")) {
       testcfg = new TileTest(argc - i, const_cast<const char **>(argv + i));

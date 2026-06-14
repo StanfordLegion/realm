@@ -32,6 +32,12 @@ namespace Realm {
   extern Logger log_part;
   extern Logger log_uop_timing;
 
+  static bool is_gpu_field_instance(RegionInstance inst)
+  {
+    Memory::Kind kind = inst.get_location().kind();
+    return (kind == Memory::GPU_FB_MEM) || (kind == Memory::Z_COPY_MEM);
+  }
+
   template <int N, typename T>
   template <int N2, typename T2>
   void IndexSpace<N,T>::by_image_buffer_requirements(
@@ -691,7 +697,8 @@ namespace Realm {
      micro_op->add_sparsity_output(sources[j], images[j]);
     }
     micro_op->dispatch(this, /*inline_ok=*/true);
-  } else if (!DeppartConfig::cfg_disable_intersection_optimization && !gpu_data) {
+  } else if (!DeppartConfig::cfg_disable_intersection_optimization &&
+             (!gpu_data || diff_rhss.empty())) {
        	// build the overlap tester based on the field index spaces - they're more
        	// likely to be known and
        	//  denser
@@ -826,21 +833,45 @@ namespace Realm {
       size_t n = overlaps.size();
       if(n == 0) continue;
 
-      ImageMicroOp<N,T,N2,T2> *uop = new ImageMicroOp<N,T,N2,T2>(parent,
-								 domain_transform.ptr_data[i].index_space,
-								 domain_transform.ptr_data[i].inst,
-								 domain_transform.ptr_data[i].field_offset,
-								 false /*ptrs*/);
-      for(std::set<int>::const_iterator it = overlaps.begin();
-	  it != overlaps.end();
-	  it++) {
-	int j = *it;
-        if(diff_rhss.empty())
-	  uop->add_sparsity_output(sources[j], images[j]);
-        else
-	  uop->add_sparsity_output_with_difference(sources[j], diff_rhss[j], images[j]);
+      if(is_gpu_field_instance(domain_transform.ptr_data[i].inst)) {
+#ifdef REALM_USE_CUDA
+        assert(diff_rhss.empty());
+        assert(domain_transform.ptr_data[i].scratch_buffer != RegionInstance::NO_INST);
+        std::vector<FieldDataDescriptor<IndexSpace<N2, T2>, Point<N, T> > > field_data(
+            1, domain_transform.ptr_data[i]);
+        DomainTransform<N, T, N2, T2> domain_transform_copy(field_data);
+        // The overlap path sets contributor counts explicitly, so use normal
+        // contributions instead of the exclusive GPU finalization path.
+        GPUImageMicroOp<N, T, N2, T2> *uop =
+            new GPUImageMicroOp<N, T, N2, T2>(parent, domain_transform_copy,
+                                              false /*exclusive*/);
+        for(std::set<int>::const_iterator it = overlaps.begin();
+            it != overlaps.end();
+            it++) {
+          int j = *it;
+          uop->add_sparsity_output(sources[j], images[j]);
+        }
+        uop->dispatch(this, true /* ok to run in this thread */);
+#else
+        assert(false);
+#endif
+      } else {
+        ImageMicroOp<N,T,N2,T2> *uop = new ImageMicroOp<N,T,N2,T2>(parent,
+                                                                   domain_transform.ptr_data[i].index_space,
+                                                                   domain_transform.ptr_data[i].inst,
+                                                                   domain_transform.ptr_data[i].field_offset,
+                                                                   false /*ptrs*/);
+        for(std::set<int>::const_iterator it = overlaps.begin();
+            it != overlaps.end();
+            it++) {
+          int j = *it;
+          if(diff_rhss.empty())
+            uop->add_sparsity_output(sources[j], images[j]);
+          else
+            uop->add_sparsity_output_with_difference(sources[j], diff_rhss[j], images[j]);
+        }
+        uop->dispatch(this, true /* ok to run in this thread */);
       }
-      uop->dispatch(this, true /* ok to run in this thread */);
     }
 
     for(size_t i = 0; i < domain_transform.range_data.size(); i++) {
@@ -848,21 +879,45 @@ namespace Realm {
       size_t n = overlaps.size();
       if(n == 0) continue;
 
-      ImageMicroOp<N,T,N2,T2> *uop = new ImageMicroOp<N,T,N2,T2>(parent,
-								 domain_transform.range_data[i].index_space,
-								 domain_transform.range_data[i].inst,
-								 domain_transform.range_data[i].field_offset,
-								 true /*ranges*/);
-      for(std::set<int>::const_iterator it = overlaps.begin();
-	  it != overlaps.end();
-	  it++) {
-	int j = *it;
-        if(diff_rhss.empty())
-	  uop->add_sparsity_output(sources[j], images[j]);
-        else
-	  uop->add_sparsity_output_with_difference(sources[j], diff_rhss[j], images[j]);
+      if(is_gpu_field_instance(domain_transform.range_data[i].inst)) {
+#ifdef REALM_USE_CUDA
+        assert(diff_rhss.empty());
+        assert(domain_transform.range_data[i].scratch_buffer != RegionInstance::NO_INST);
+        std::vector<FieldDataDescriptor<IndexSpace<N2, T2>, Rect<N, T> > > field_data(
+            1, domain_transform.range_data[i]);
+        DomainTransform<N, T, N2, T2> domain_transform_copy(field_data);
+        // The overlap path sets contributor counts explicitly, so use normal
+        // contributions instead of the exclusive GPU finalization path.
+        GPUImageMicroOp<N, T, N2, T2> *uop =
+            new GPUImageMicroOp<N, T, N2, T2>(parent, domain_transform_copy,
+                                              false /*exclusive*/);
+        for(std::set<int>::const_iterator it = overlaps.begin();
+            it != overlaps.end();
+            it++) {
+          int j = *it;
+          uop->add_sparsity_output(sources[j], images[j]);
+        }
+        uop->dispatch(this, true /* ok to run in this thread */);
+#else
+        assert(false);
+#endif
+      } else {
+        ImageMicroOp<N,T,N2,T2> *uop = new ImageMicroOp<N,T,N2,T2>(parent,
+                                                                   domain_transform.range_data[i].index_space,
+                                                                   domain_transform.range_data[i].inst,
+                                                                   domain_transform.range_data[i].field_offset,
+                                                                   true /*ranges*/);
+        for(std::set<int>::const_iterator it = overlaps.begin();
+            it != overlaps.end();
+            it++) {
+          int j = *it;
+          if(diff_rhss.empty())
+            uop->add_sparsity_output(sources[j], images[j]);
+          else
+            uop->add_sparsity_output_with_difference(sources[j], diff_rhss[j], images[j]);
+        }
+        uop->dispatch(this, true /* ok to run in this thread */);
       }
-      uop->dispatch(this, true /* ok to run in this thread */);
     }
   }
 
@@ -998,6 +1053,196 @@ namespace Realm {
   // class GPUImageMicroOp<N, T, N2, T2>
 
 #ifdef REALM_USE_CUDA
+
+  static size_t gpu_deppart_min_scratch_bytes(void)
+  {
+    const char *val = std::getenv("MIN_SIZE");
+    if(val)
+      return atoi(val);
+    return 2000000;
+  }
+
+  template <int N, typename T>
+  static size_t index_space_entry_count(const IndexSpace<N,T>& space)
+  {
+    return space.dense() ? 1 : space.sparsity.impl()->get_entries().size();
+  }
+
+  template <int N, typename T, int N2, typename T2>
+  GPUApproxImageMicroOp<N, T, N2, T2>::GPUApproxImageMicroOp(
+      const IndexSpace<N, T> &_parent,
+      const FieldDataDescriptor<IndexSpace<N2,T2>, Point<N,T> > &_field_data)
+      : parent_space(_parent)
+      , inst_space(_field_data.index_space)
+      , inst(_field_data.inst)
+      , field_offset(_field_data.field_offset)
+      , scratch_buffer(_field_data.scratch_buffer)
+      , is_ranged(false)
+      , approx_output_index(-1)
+      , approx_output_receiver(nullptr)
+  {
+    areg.force_instantiation();
+  }
+
+  template <int N, typename T, int N2, typename T2>
+  GPUApproxImageMicroOp<N, T, N2, T2>::GPUApproxImageMicroOp(
+      const IndexSpace<N, T> &_parent,
+      const FieldDataDescriptor<IndexSpace<N2,T2>, Rect<N,T> > &_field_data)
+      : parent_space(_parent)
+      , inst_space(_field_data.index_space)
+      , inst(_field_data.inst)
+      , field_offset(_field_data.field_offset)
+      , scratch_buffer(_field_data.scratch_buffer)
+      , is_ranged(true)
+      , approx_output_index(-1)
+      , approx_output_receiver(nullptr)
+  {
+    areg.force_instantiation();
+  }
+
+  template <int N, typename T, int N2, typename T2>
+  template <typename S>
+  GPUApproxImageMicroOp<N, T, N2, T2>::GPUApproxImageMicroOp(
+      NodeID _requestor, AsyncMicroOp *_async_microop, S& s)
+      : GPUMicroOp<N,T>(_requestor, _async_microop)
+      , approx_output_receiver(nullptr)
+  {
+    bool ok = true;
+    intptr_t receiver = 0;
+    ok = ok && (s >> parent_space);
+    ok = ok && (s >> inst_space);
+    ok = ok && (s >> inst);
+    ok = ok && (s >> field_offset);
+    ok = ok && (s >> scratch_buffer);
+    ok = ok && (s >> is_ranged);
+    ok = ok && (s >> approx_output_index);
+    ok = ok && (s >> receiver);
+    approx_output_receiver = reinterpret_cast<ApproxImageReceiver<N,T> *>(receiver);
+    assert(ok);
+    (void)ok;
+  }
+
+  template <int N, typename T, int N2, typename T2>
+  template <typename S>
+  bool GPUApproxImageMicroOp<N, T, N2, T2>::serialize_params(S& s) const {
+    bool ok = true;
+    ok = ok && (s << parent_space);
+    ok = ok && (s << inst_space);
+    ok = ok && (s << inst);
+    ok = ok && (s << field_offset);
+    ok = ok && (s << scratch_buffer);
+    ok = ok && (s << is_ranged);
+    ok = ok && (s << approx_output_index);
+    ok = ok && (s << reinterpret_cast<intptr_t>(approx_output_receiver));
+    return ok;
+  }
+
+  template <int N, typename T, int N2, typename T2>
+  GPUApproxImageMicroOp<N, T, N2, T2>::~GPUApproxImageMicroOp() {}
+
+  template <int N, typename T, int N2, typename T2>
+  size_t GPUApproxImageMicroOp<N, T, N2, T2>::scratch_lower_bound(
+      const IndexSpace<N, T> &_parent,
+      const IndexSpace<N2, T2> &_inst_space)
+  {
+    size_t structural_min = sizeof(size_t) * 2;
+    structural_min += index_space_entry_count(_parent) * sizeof(Rect<N,T>);
+    structural_min += sizeof(uint32_t);
+    // Keep room for the smallest useful tile and prefix data even when the
+    // configured device minimum is reduced for debugging.
+    structural_min += sizeof(Rect<N2,T2>) + (2 * sizeof(size_t));
+    structural_min += std::max(sizeof(PointDesc<N,T>), sizeof(RectDesc<N,T>));
+    structural_min += sizeof(RectDesc<N,T>);
+    (void)_inst_space;
+    return std::max(gpu_deppart_min_scratch_bytes(), structural_min);
+  }
+
+  template <int N, typename T, int N2, typename T2>
+  size_t GPUApproxImageMicroOp<N, T, N2, T2>::scratch_upper_bound(
+      const IndexSpace<N, T> &_parent,
+      const IndexSpace<N2, T2> &_inst_space)
+  {
+    const size_t lower = scratch_lower_bound(_parent, _inst_space);
+    const size_t inst_entries = index_space_entry_count(_inst_space);
+    const size_t per_point =
+        20 * std::max(sizeof(PointDesc<N,T>), sizeof(RectDesc<N,T>));
+    size_t useful = lower + (inst_entries * sizeof(Rect<N2,T2>));
+    useful += _inst_space.bounds.volume() * per_point;
+    return std::max(lower, useful);
+  }
+
+  template <int N, typename T, int N2, typename T2>
+  size_t GPUApproxImageMicroOp<N, T, N2, T2>::validated_scratch_bytes(void) const
+  {
+    assert(scratch_buffer != RegionInstance::NO_INST);
+    const size_t scratch_bytes = scratch_buffer.get_layout()->bytes_used;
+    const size_t lower = scratch_lower_bound(parent_space, inst_space);
+    const size_t upper = scratch_upper_bound(parent_space, inst_space);
+    if(scratch_bytes < lower) {
+      log_part.fatal() << "GPUApproxImageMicroOp scratch buffer too small: bytes="
+                       << scratch_bytes << " lower_bound=" << lower
+                       << " upper_bound=" << upper;
+      std::abort();
+    }
+    return std::min(scratch_bytes, upper);
+  }
+
+  template <int N, typename T, int N2, typename T2>
+  void GPUApproxImageMicroOp<N, T, N2, T2>::dispatch(
+      PartitioningOperation *op, bool inline_ok) {
+
+    NodeID exec_node = ID(inst).instance_owner_node();
+    if(exec_node != Network::my_node_id) {
+      assert(false && "remote GPU approximate image response is not wired yet");
+      PartitioningMicroOp::template forward_microop<GPUApproxImageMicroOp<N,T,N2,T2> >(exec_node, op, this);
+      return;
+    }
+
+    if (!inst_space.dense()) {
+      bool registered = SparsityMapImpl<N2,T2>::lookup(inst_space.sparsity)->add_waiter(this, true /*precise*/);
+      if(registered)
+        this->wait_count.fetch_add(1);
+    }
+    if (!parent_space.dense()) {
+      bool registered = SparsityMapImpl<N,T>::lookup(parent_space.sparsity)->add_waiter(this, true /*precise*/);
+      if(registered)
+        this->wait_count.fetch_add(1);
+    }
+    this->finish_dispatch(op, inline_ok);
+  }
+
+  template <int N, typename T, int N2, typename T2>
+  void GPUApproxImageMicroOp<N, T, N2, T2>::add_approx_output(
+      int index, ApproxImageReceiver<N,T> *receiver) {
+    approx_output_index = index;
+    approx_output_receiver = receiver;
+  }
+
+  template <int N, typename T, int N2, typename T2>
+  ActiveMessageHandlerReg<RemoteMicroOpMessage<GPUApproxImageMicroOp<N, T, N2, T2> > >
+      GPUApproxImageMicroOp<N, T, N2, T2>::areg;
+
+  template <int N, typename T, int N2, typename T2>
+  void GPUApproxImageMicroOp<N, T, N2, T2>::execute(void) {
+    TimeStamp ts("GPUApproxImageMicroOp::execute", true, &log_uop_timing);
+
+    Memory my_mem = inst.get_location();
+    Processor best_proc;
+    assert(choose_proc(best_proc, my_mem));
+    Cuda::GPUProcessor *gpu_proc =
+        dynamic_cast<Cuda::GPUProcessor *>(get_runtime()->get_processor_impl(best_proc));
+    assert(gpu_proc);
+    this->gpu = gpu_proc->gpu;
+    this->stream = gpu_proc->gpu->get_deppart_stream();
+
+    validated_scratch_bytes();
+
+    Cuda::AutoGPUContext agc(this->gpu);
+    if(is_ranged)
+      gpu_populate_rngs();
+    else
+      gpu_populate_ptrs();
+  }
 
   template <int N, typename T, int N2, typename T2>
   GPUImageMicroOp<N, T, N2, T2>::GPUImageMicroOp(

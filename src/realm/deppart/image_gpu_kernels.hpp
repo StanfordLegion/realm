@@ -86,6 +86,167 @@ void image_gpuPopulateBitmasksPtrsKernel(
   
 }
 
+template<int N, typename T>
+__device__ bool image_rectOverlapsIndexSpace(
+    const Rect<N,T>& r,
+    const Rect<N,T>* parent_entries,
+    size_t numRects)
+{
+  for(size_t i = 0; i < numRects; ++i) {
+    if(r.overlaps(parent_entries[i])) return true;
+  }
+  return false;
+}
+
+template <
+  int N, typename T,
+  int N2, typename T2
+>
+__global__
+void image_gpuApproxPtrsKernel(
+  AffineAccessor<Point<N,T>,N2,T2> accessor,
+  Rect<N2,T2>* rects,
+  Rect<N,T>* parent_entries,
+  size_t* prefix,
+  size_t numPoints,
+  size_t numRects,
+  size_t numParentRects,
+  uint32_t* d_counter,
+  PointDesc<N,T> *d_points
+) {
+  size_t idx = blockIdx.x * blockDim.x + threadIdx.x;
+  if (idx >= numPoints) return;
+  size_t low = 0, high = numRects;
+  while (low < high) {
+    size_t mid = (low + high) >> 1;
+    if (prefix[mid+1] <= idx) low = mid + 1;
+    else                      high = mid;
+  }
+  size_t r = low;
+  size_t offset = idx - prefix[r];
+  Point<N2, T2> p;
+  for (int k = N2-1; k >= 0; --k) {
+    size_t dim = rects[r].hi[k] + 1 - rects[r].lo[k];
+    p[k]  = rects[r].lo[k] + (offset % dim);
+    offset /= dim;
+  }
+  Point<N,T> ptr = accessor.read(p);
+  if (image_isInIndexSpace<N,T>(ptr, parent_entries, numParentRects)) {
+    uint32_t local = atomicAdd(d_counter, 1);
+    if (d_points != nullptr) {
+      PointDesc<N,T> point_desc;
+      point_desc.src_idx = 0;
+      point_desc.point = ptr;
+      d_points[local] = point_desc;
+    }
+  }
+}
+
+template <
+  int N, typename T,
+  int N2, typename T2
+>
+__global__
+void image_gpuApproxRngsKernel(
+  AffineAccessor<Rect<N,T>,N2,T2> accessor,
+  Rect<N2,T2>* rects,
+  Rect<N,T>* parent_entries,
+  size_t* prefix,
+  size_t numPoints,
+  size_t numRects,
+  size_t numParentRects,
+  uint32_t* d_counter,
+  RectDesc<N,T> *d_rects
+) {
+  size_t idx = blockIdx.x * blockDim.x + threadIdx.x;
+  if (idx >= numPoints) return;
+  size_t low = 0, high = numRects;
+  while (low < high) {
+    size_t mid = (low + high) >> 1;
+    if (prefix[mid+1] <= idx) low = mid + 1;
+    else                      high = mid;
+  }
+  size_t r = low;
+  size_t offset = idx - prefix[r];
+  Point<N2, T2> p;
+  for (int k = N2-1; k >= 0; --k) {
+    size_t dim = rects[r].hi[k] + 1 - rects[r].lo[k];
+    p[k]  = rects[r].lo[k] + (offset % dim);
+    offset /= dim;
+  }
+  Rect<N,T> rng = accessor.read(p);
+  if (image_rectOverlapsIndexSpace<N,T>(rng, parent_entries, numParentRects)) {
+    uint32_t local = atomicAdd(d_counter, 1);
+    if (d_rects != nullptr) {
+      RectDesc<N,T> rect_desc;
+      rect_desc.src_idx = 0;
+      rect_desc.rect = rng;
+      d_rects[local] = rect_desc;
+    }
+  }
+}
+
+template<int N, typename T>
+__global__
+void image_buildGapKeys1d(const RectDesc<N,T> *rects,
+                          T *gap_keys,
+                          size_t *gap_indices,
+                          size_t num_gaps)
+{
+  size_t idx = blockIdx.x * blockDim.x + threadIdx.x;
+  if(idx >= num_gaps) return;
+  gap_keys[idx] = rects[idx + 1].rect.lo[0] - rects[idx].rect.hi[0];
+  gap_indices[idx] = idx + 1;
+}
+
+template<typename T>
+__global__
+void image_copyTopGapIndices(const T *sorted_gap_indices,
+                             T *kept_gap_indices,
+                             T num_gaps,
+                             T num_kept)
+{
+  size_t idx = blockIdx.x * blockDim.x + threadIdx.x;
+  if(idx >= num_kept) return;
+  kept_gap_indices[idx] = sorted_gap_indices[num_gaps - num_kept + idx];
+}
+
+template<int N, typename T>
+__global__
+void image_emitApproxRects1d(const RectDesc<N,T> *rects,
+                             const size_t *kept_gap_indices,
+                             size_t num_kept,
+                             size_t num_rects,
+                             RectDesc<N,T> *out)
+{
+  size_t idx = blockIdx.x * blockDim.x + threadIdx.x;
+  if(idx > num_kept) return;
+
+  out[idx].src_idx = 0;
+  if(idx == 0) {
+    out[idx].rect.lo = rects[0].rect.lo;
+  } else {
+    out[idx].rect.lo = rects[kept_gap_indices[idx - 1]].rect.lo;
+  }
+
+  if(idx == num_kept) {
+    out[idx].rect.hi = rects[num_rects - 1].rect.hi;
+  } else {
+    out[idx].rect.hi = rects[kept_gap_indices[idx] - 1].rect.hi;
+  }
+}
+
+template<int N, typename T>
+__global__
+void image_rectDescsToRects(const RectDesc<N,T> *in,
+                            Rect<N,T> *out,
+                            size_t count)
+{
+  size_t idx = blockIdx.x * blockDim.x + threadIdx.x;
+  if(idx >= count) return;
+  out[idx] = in[idx].rect;
+}
+
 //Same as image_intersect_input, but for output rectangles and parent entries
 //rather than input rectangles and parent rectangles
   template <int N, typename T>
