@@ -2688,8 +2688,11 @@ namespace Realm {
       };
       KernelArgs *args = 0; // allocate on demand
       size_t args_size = sizeof(KernelArgs) + redop->sizeof_userdata;
+      bool has_fast_kernels =
+          (kernel_advanced != 0 || kernel_host_proxy_advanced != nullptr) &&
+          (kernel_transpose != 0 || kernel_host_proxy_transpose != nullptr);
+      const size_t min_xfer_size = 4096; // TODO: make controllable
       while(true) {
-        size_t min_xfer_size = 4096; // TODO: make controllable
         const InstanceLayoutPieceBase *in_nonaffine = nullptr;
         const InstanceLayoutPieceBase *out_nonaffine = nullptr;
         size_t max_bytes =
@@ -2710,11 +2713,8 @@ namespace Realm {
         }
         // add optimized kernels if the condition is satisfied
         // TODO: support different elem sizes
-        bool has_fast_kernels =
-            (kernel_advanced != 0 || kernel_host_proxy_advanced != nullptr) &&
-            (kernel_transpose != 0 || kernel_host_proxy_transpose != nullptr);
-        if(in_port && out_port && !non_affine &&
-           (redop->sizeof_rhs == redop->sizeof_lhs) && has_fast_kernels) {
+        if(in_port && out_port && !non_affine && (in_elem_size == out_elem_size) &&
+           has_fast_kernels) {
           done = fast_reduction_kernel_mode(channel, max_bytes, in_port, out_port,
                                             in_span_start, out_span_start);
           did_work = true;
@@ -2882,15 +2882,15 @@ namespace Realm {
                                 elems * ((out_dim == 1) ? out_elem_size : 1));
 
 #ifdef DEBUG_REALM
-              assert(elems <= elems_left);
+                assert(elems <= elems_left);
 #endif
-              total_elems += elems;
+                total_elems += elems;
 
-              // stop if it's been too long, but make sure we do at least the
-              //  minimum number of bytes
-              if(((total_elems * in_elem_size) >= min_xfer_size) &&
-                 work_until.is_expired())
-                break;
+                // stop if it's been too long, but make sure we do at least the
+                //  minimum number of bytes
+                if(((total_elems * in_elem_size) >= min_xfer_size) &&
+                   work_until.is_expired())
+                  break;
               }
             } else {
               // input but no output, so skip input bytes
