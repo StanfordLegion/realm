@@ -1,0 +1,9 @@
+<map id="Realm::MemcpyChannel" name="Realm::MemcpyChannel">
+<area shape="rect" id="Node000001" title=" " alt="" coords="53,240,235,265"/>
+<area shape="rect" id="Node000002" href="$classRealm_1_1SingleXDQChannel.html" title=" " alt="" coords="5,152,283,192"/>
+<area shape="poly" id="edge1_Node000001_Node000002" title=" " alt="" coords="147,206,147,240,141,240,141,206"/>
+<area shape="rect" id="Node000003" href="$classRealm_1_1LocalChannel.html" title=" " alt="" coords="65,79,223,104"/>
+<area shape="poly" id="edge2_Node000002_Node000003" title=" " alt="" coords="147,118,147,152,141,152,141,118"/>
+<area shape="rect" id="Node000004" href="$classRealm_1_1Channel.html" title=" " alt="" coords="81,5,207,31"/>
+<area shape="poly" id="edge3_Node000003_Node000004" title=" " alt="" coords="147,44,147,79,141,79,141,44"/>
+</map>

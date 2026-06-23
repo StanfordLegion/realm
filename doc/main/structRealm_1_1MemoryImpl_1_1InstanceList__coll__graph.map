@@ -1,0 +1,11 @@
+<map id="Realm::MemoryImpl::InstanceList" name="Realm::MemoryImpl::InstanceList">
+<area shape="rect" id="Node000001" title=" " alt="" coords="5,93,168,133"/>
+<area shape="rect" id="Node000002" href="$classRealm_1_1RWLock.html" title=" " alt="" coords="265,5,389,31"/>
+<area shape="poly" id="edge1_Node000001_Node000002" title=" " alt="" coords="260,37,194,57,118,96,116,91,192,52,258,31"/>
+<area shape="rect" id="Node000003" href="$structRealm_1_1RWLock_1_1Writer.html" title=" " alt="" coords="193,101,365,126"/>
+<area shape="poly" id="edge3_Node000003_Node000002" title=" " alt="" coords="268,39,250,56,247,67,251,78,267,99,263,102,246,80,242,67,246,53,265,35"/>
+<area shape="rect" id="Node000004" href="$structRealm_1_1RWLock_1_1Reader.html" title=" " alt="" coords="389,101,568,126"/>
+<area shape="poly" id="edge5_Node000004_Node000002" title=" " alt="" coords="353,37,397,67,456,98,453,103,395,72,350,41"/>
+<area shape="poly" id="edge2_Node000002_Node000003" title=" " alt="" coords="288,87,318,29,323,32,293,90"/>
+<area shape="poly" id="edge4_Node000002_Node000004" title=" " alt="" coords="469,89,460,72,448,57,419,40,388,30,390,24,422,35,451,53,465,69,474,87"/>
+</map>
