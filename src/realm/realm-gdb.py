@@ -16,20 +16,157 @@
 #     `realm-thread back` to restore the original registers.
 #   - `realm-thread` with no arguments lists parked user threads.
 #
-# Linux x86-64 only.  On other targets the script loads as a no-op.
+# Linux/FreeBSD on x86-64 or aarch64.  On other targets the script loads
+# as a no-op.
 
 import gdb
 import platform
 
 
-# glibc x86-64 ucontext gregs[] indices (see /usr/include/sys/ucontext.h).
-REG_RBP = 10
-REG_RSP = 15
-REG_RIP = 16
+# --------------------------------------------------------------------------
+# Architecture abstraction
+# --------------------------------------------------------------------------
+#
+# The minimum we need from each supported architecture is the ability to:
+#   * read the currently-selected gdb thread's program counter, stack
+#     pointer, and frame pointer (plus any other regs the unwinder needs
+#     to round-trip cleanly);
+#   * read those same registers out of a UserThread::ctx (which is a glibc
+#     ucontext_t laid out differently per arch);
+#   * write a register dict back to the currently-selected gdb thread.
+#
+# The rest of the script treats register dicts as opaque blobs that get
+# passed from current_regs()/saved_regs_from_ctx() into set_regs().  The
+# only constraint is that an arch's set_regs() must accept the same dict
+# its own current_regs()/saved_regs_from_ctx() produced.
+#
+# 64-bit unsigned mask used to coerce gdb's signed-int reads into the
+# unsigned address space the kernel saved.
+_U64 = (1 << 64) - 1
+
+
+class _Arch:
+    name = "<abstract>"
+
+    @staticmethod
+    def matches():
+        raise NotImplementedError
+
+    @staticmethod
+    def current_regs():
+        raise NotImplementedError
+
+    @staticmethod
+    def saved_regs_from_ctx(ut):
+        raise NotImplementedError
+
+    @staticmethod
+    def set_regs(regs):
+        raise NotImplementedError
+
+
+class _X86_64(_Arch):
+    name = "x86_64"
+    # glibc x86-64 ucontext gregs[] indices (see /usr/include/sys/ucontext.h).
+    _REG_RBP = 10
+    _REG_RSP = 15
+    _REG_RIP = 16
+
+    @staticmethod
+    def matches():
+        return platform.machine() in ("x86_64", "amd64")
+
+    @staticmethod
+    def current_regs():
+        t = gdb.selected_thread()
+        return {
+            "thread_num": t.num if (t is not None and t.is_valid()) else None,
+            "rip": int(gdb.parse_and_eval("(unsigned long)$rip")),
+            "rsp": int(gdb.parse_and_eval("(unsigned long)$rsp")),
+            "rbp": int(gdb.parse_and_eval("(unsigned long)$rbp")),
+        }
+
+    @staticmethod
+    def saved_regs_from_ctx(ut):
+        gregs = ut["ctx"]["uc_mcontext"]["gregs"]
+        return {
+            "rip": int(gregs[_X86_64._REG_RIP]) & _U64,
+            "rsp": int(gregs[_X86_64._REG_RSP]) & _U64,
+            "rbp": int(gregs[_X86_64._REG_RBP]) & _U64,
+        }
+
+    @staticmethod
+    def set_regs(regs):
+        gdb.execute("set $rip = {:#x}".format(regs["rip"]), to_string=True)
+        gdb.execute("set $rsp = {:#x}".format(regs["rsp"]), to_string=True)
+        gdb.execute("set $rbp = {:#x}".format(regs["rbp"]), to_string=True)
+
+
+class _AArch64(_Arch):
+    name = "aarch64"
+    # Linux/glibc aarch64 mcontext_t is `struct sigcontext` (see
+    # linux/arch/arm64/include/uapi/asm/sigcontext.h):
+    #     __u64 fault_address;
+    #     __u64 regs[31];     // X0..X30
+    #     __u64 sp;
+    #     __u64 pc;
+    #     __u64 pstate;
+    # Saved by glibc getcontext() at swapcontext time: pc holds the resume
+    # address (i.e. the LR at the getcontext call site), sp holds the SP,
+    # regs[29] holds the frame pointer, regs[30] holds the link register.
+    _REG_FP = 29
+    _REG_LR = 30
+
+    @staticmethod
+    def matches():
+        return platform.machine() in ("aarch64", "arm64")
+
+    @staticmethod
+    def current_regs():
+        t = gdb.selected_thread()
+        return {
+            "thread_num": t.num if (t is not None and t.is_valid()) else None,
+            "pc":  int(gdb.parse_and_eval("(unsigned long)$pc")),
+            "sp":  int(gdb.parse_and_eval("(unsigned long)$sp")),
+            "x29": int(gdb.parse_and_eval("(unsigned long)$x29")),
+            "x30": int(gdb.parse_and_eval("(unsigned long)$x30")),
+        }
+
+    @staticmethod
+    def saved_regs_from_ctx(ut):
+        mc = ut["ctx"]["uc_mcontext"]
+        regs = mc["regs"]
+        return {
+            "pc":  int(mc["pc"]) & _U64,
+            "sp":  int(mc["sp"]) & _U64,
+            "x29": int(regs[_AArch64._REG_FP]) & _U64,
+            "x30": int(regs[_AArch64._REG_LR]) & _U64,
+        }
+
+    @staticmethod
+    def set_regs(regs):
+        gdb.execute("set $pc  = {:#x}".format(regs["pc"]),  to_string=True)
+        gdb.execute("set $sp  = {:#x}".format(regs["sp"]),  to_string=True)
+        gdb.execute("set $x29 = {:#x}".format(regs["x29"]), to_string=True)
+        gdb.execute("set $x30 = {:#x}".format(regs["x30"]), to_string=True)
+
+
+def _detect_arch():
+    if platform.system() not in ("Linux", "FreeBSD"):
+        return None
+    for cls in (_X86_64, _AArch64):
+        if cls.matches():
+            return cls
+    return None
+
+
+# Selected once at script load; None on unsupported platforms (the
+# commands are not registered in that case).
+_arch = _detect_arch()
 
 
 def _supported():
-    return platform.system() == "Linux" and platform.machine() in ("x86_64", "amd64")
+    return _arch is not None
 
 
 def _registry_head():
@@ -61,12 +198,7 @@ def _is_parked(ut):
 
 
 def _saved_regs(ut):
-    gregs = ut["ctx"]["uc_mcontext"]["gregs"]
-    return {
-        "rip": int(gregs[REG_RIP]) & ((1 << 64) - 1),
-        "rsp": int(gregs[REG_RSP]) & ((1 << 64) - 1),
-        "rbp": int(gregs[REG_RBP]) & ((1 << 64) - 1),
-    }
+    return _arch.saved_regs_from_ctx(ut)
 
 
 def _current_regs():
@@ -74,20 +206,13 @@ def _current_regs():
     thread we snapshot from, so the restore can target the same thread
     even if the selected thread has changed in the meantime (e.g., during
     gdb teardown when `gdb.events.gdb_exiting` fires)."""
-    t = gdb.selected_thread()
-    return {
-        "thread_num": t.num if (t is not None and t.is_valid()) else None,
-        "rip": int(gdb.parse_and_eval("(unsigned long)$rip")),
-        "rsp": int(gdb.parse_and_eval("(unsigned long)$rsp")),
-        "rbp": int(gdb.parse_and_eval("(unsigned long)$rbp")),
-    }
+    return _arch.current_regs()
 
 
 def _set_regs(regs):
-    """Write rip/rsp/rbp to the currently-selected thread."""
-    gdb.execute("set $rip = {:#x}".format(regs["rip"]), to_string=True)
-    gdb.execute("set $rsp = {:#x}".format(regs["rsp"]), to_string=True)
-    gdb.execute("set $rbp = {:#x}".format(regs["rbp"]), to_string=True)
+    """Write the architecture-specific subset of registers (PC, SP, FP,
+    and arch-dependent extras) to the currently-selected thread."""
+    _arch.set_regs(regs)
 
 
 def _apply_snapshot(entry):
@@ -374,12 +499,7 @@ def _dump_parked_threads():
             except gdb.error as e:
                 print("\nUser thread {:#x}: <cannot read ctx: {}>".format(int(ut), e))
                 continue
-            parked_tagged = {
-                "thread_num": saved["thread_num"],
-                "rip": regs["rip"],
-                "rsp": regs["rsp"],
-                "rbp": regs["rbp"],
-            }
+            parked_tagged = dict(regs, thread_num=saved["thread_num"])
             # Push a synthetic impersonation entry so the inferior_call
             # event handler will swap to safe_host if a pretty-printer,
             # display expression, or conditional breakpoint expression
@@ -556,12 +676,7 @@ class RealmThread(gdb.Command):
             return
         # Tag parked regs with the same thread_num so _apply_snapshot writes
         # them to the right thread on re-impersonation after an inferior call.
-        parked_with_thread = {
-            "thread_num": host["thread_num"],
-            "rip": parked["rip"],
-            "rsp": parked["rsp"],
-            "rbp": parked["rbp"],
-        }
+        parked_with_thread = dict(parked, thread_num=host["thread_num"])
         entry = {
             "host_regs": host,
             "parked_regs": parked_with_thread,
@@ -628,7 +743,7 @@ Safety net:
     duration, then re-impersonate.  Without this, the call would run on
     the parked user thread's small mmap'd stack and likely overflow it.
 
-Linux x86-64 only.  Source: src/realm/realm-gdb.py in the Realm tree.
+Linux / FreeBSD on x86-64 or aarch64.  Source: src/realm/realm-gdb.py.
 ======================================================================"""
 
 

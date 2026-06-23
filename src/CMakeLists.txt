@@ -158,16 +158,35 @@ endif()
 
 if(_realm_embed_gdb_script)
   set(REALM_GDB_PY_PATH "${REALM_SOURCE_DIR}/realm-gdb.py")
+
+  # Re-run CMake configuration whenever realm-gdb.py changes so the
+  # embedded bytes pick up edits.
+  set_property(DIRECTORY APPEND PROPERTY
+    CMAKE_CONFIGURE_DEPENDS "${REALM_GDB_PY_PATH}"
+  )
+
+  # Assemble the .debug_gdb_scripts payload at configure time, framed as
+  # gdb expects (see gdb_script.cc.in for the format).  Doing it in CMake
+  # keeps the generated source plain C++ -- no inline asm / .incbin -- so
+  # it builds with any gcc/clang on any ELF target (x86_64, aarch64, etc.).
+  file(READ "${REALM_GDB_PY_PATH}" _gdb_py_hex HEX)
+  string(HEX "realm-gdb.py" _gdb_name_hex)
+  # 04 = SECTION_SCRIPT_ID_PYTHON_TEXT
+  # 0a = '\n' terminating the script name
+  # 00 = '\0' terminating the entry
+  set(_gdb_full_hex "04${_gdb_name_hex}0a${_gdb_py_hex}00")
+  string(REGEX REPLACE
+    "([0-9a-f][0-9a-f])"
+    "0x\\1,"
+    REALM_GDB_PAYLOAD_C_LITERAL
+    "${_gdb_full_hex}"
+  )
+
   set(_gdb_script_cc "${CMAKE_CURRENT_BINARY_DIR}/gdb_script.cc")
   configure_file(
     "${REALM_SOURCE_DIR}/gdb_script.cc.in"
     "${_gdb_script_cc}"
     @ONLY
-  )
-  # Make the assembler's .incbin re-run when the .py changes.
-  set_source_files_properties(
-    "${_gdb_script_cc}"
-    PROPERTIES OBJECT_DEPENDS "${REALM_GDB_PY_PATH}"
   )
   list(APPEND REALM_SOURCES "${_gdb_script_cc}")
 endif()
