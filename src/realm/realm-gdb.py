@@ -65,17 +65,17 @@ class _Arch:
         raise NotImplementedError
 
 
-class _X86_64(_Arch):
-    name = "x86_64"
-    # glibc x86-64 ucontext gregs[] indices (see /usr/include/sys/ucontext.h).
-    _REG_RBP = 10
-    _REG_RSP = 15
-    _REG_RIP = 16
+# Per-CPU bases: current_regs() / set_regs() depend only on the CPU
+# architecture (gdb register names are the same regardless of OS).
+# OS-specific leaf subclasses below override matches() and
+# saved_regs_from_ctx() because the ucontext_t layout is OS-specific:
+#   * glibc Linux x86-64 uses an indexed gregs[] array;
+#   * FreeBSD x86-64 uses named mc_rip / mc_rsp / mc_rbp fields;
+#   * Linux aarch64 uses `struct sigcontext` with regs[31] / sp / pc;
+#   * FreeBSD aarch64 uses mc_gpregs with gp_x[30] / gp_lr / gp_sp / gp_elr.
 
-    @staticmethod
-    def matches():
-        return platform.machine() in ("x86_64", "amd64")
 
+class _X86_64Base(_Arch):
     @staticmethod
     def current_regs():
         t = gdb.selected_thread()
@@ -87,23 +87,76 @@ class _X86_64(_Arch):
         }
 
     @staticmethod
-    def saved_regs_from_ctx(ut):
-        gregs = ut["ctx"]["uc_mcontext"]["gregs"]
-        return {
-            "rip": int(gregs[_X86_64._REG_RIP]) & _U64,
-            "rsp": int(gregs[_X86_64._REG_RSP]) & _U64,
-            "rbp": int(gregs[_X86_64._REG_RBP]) & _U64,
-        }
-
-    @staticmethod
     def set_regs(regs):
         gdb.execute("set $rip = {:#x}".format(regs["rip"]), to_string=True)
         gdb.execute("set $rsp = {:#x}".format(regs["rsp"]), to_string=True)
         gdb.execute("set $rbp = {:#x}".format(regs["rbp"]), to_string=True)
 
 
-class _AArch64(_Arch):
-    name = "aarch64"
+class _X86_64Linux(_X86_64Base):
+    name = "linux/x86_64"
+    # glibc x86-64 ucontext gregs[] indices (see /usr/include/sys/ucontext.h).
+    _REG_RBP = 10
+    _REG_RSP = 15
+    _REG_RIP = 16
+
+    @staticmethod
+    def matches():
+        return (platform.system() == "Linux"
+                and platform.machine() in ("x86_64", "amd64"))
+
+    @staticmethod
+    def saved_regs_from_ctx(ut):
+        gregs = ut["ctx"]["uc_mcontext"]["gregs"]
+        return {
+            "rip": int(gregs[_X86_64Linux._REG_RIP]) & _U64,
+            "rsp": int(gregs[_X86_64Linux._REG_RSP]) & _U64,
+            "rbp": int(gregs[_X86_64Linux._REG_RBP]) & _U64,
+        }
+
+
+class _X86_64FreeBSD(_X86_64Base):
+    name = "freebsd/x86_64"
+    # FreeBSD mcontext_t (sys/x86/include/ucontext.h) uses named fields,
+    # not a gregs[] array.  The relevant fields are mc_rip, mc_rsp, mc_rbp.
+
+    @staticmethod
+    def matches():
+        return (platform.system() == "FreeBSD"
+                and platform.machine() in ("x86_64", "amd64"))
+
+    @staticmethod
+    def saved_regs_from_ctx(ut):
+        mc = ut["ctx"]["uc_mcontext"]
+        return {
+            "rip": int(mc["mc_rip"]) & _U64,
+            "rsp": int(mc["mc_rsp"]) & _U64,
+            "rbp": int(mc["mc_rbp"]) & _U64,
+        }
+
+
+class _AArch64Base(_Arch):
+    @staticmethod
+    def current_regs():
+        t = gdb.selected_thread()
+        return {
+            "thread_num": t.num if (t is not None and t.is_valid()) else None,
+            "pc":  int(gdb.parse_and_eval("(unsigned long)$pc")),
+            "sp":  int(gdb.parse_and_eval("(unsigned long)$sp")),
+            "x29": int(gdb.parse_and_eval("(unsigned long)$x29")),
+            "x30": int(gdb.parse_and_eval("(unsigned long)$x30")),
+        }
+
+    @staticmethod
+    def set_regs(regs):
+        gdb.execute("set $pc  = {:#x}".format(regs["pc"]),  to_string=True)
+        gdb.execute("set $sp  = {:#x}".format(regs["sp"]),  to_string=True)
+        gdb.execute("set $x29 = {:#x}".format(regs["x29"]), to_string=True)
+        gdb.execute("set $x30 = {:#x}".format(regs["x30"]), to_string=True)
+
+
+class _AArch64Linux(_AArch64Base):
+    name = "linux/aarch64"
     # Linux/glibc aarch64 mcontext_t is `struct sigcontext` (see
     # linux/arch/arm64/include/uapi/asm/sigcontext.h):
     #     __u64 fault_address;
@@ -119,18 +172,8 @@ class _AArch64(_Arch):
 
     @staticmethod
     def matches():
-        return platform.machine() in ("aarch64", "arm64")
-
-    @staticmethod
-    def current_regs():
-        t = gdb.selected_thread()
-        return {
-            "thread_num": t.num if (t is not None and t.is_valid()) else None,
-            "pc":  int(gdb.parse_and_eval("(unsigned long)$pc")),
-            "sp":  int(gdb.parse_and_eval("(unsigned long)$sp")),
-            "x29": int(gdb.parse_and_eval("(unsigned long)$x29")),
-            "x30": int(gdb.parse_and_eval("(unsigned long)$x30")),
-        }
+        return (platform.system() == "Linux"
+                and platform.machine() in ("aarch64", "arm64"))
 
     @staticmethod
     def saved_regs_from_ctx(ut):
@@ -139,22 +182,47 @@ class _AArch64(_Arch):
         return {
             "pc":  int(mc["pc"]) & _U64,
             "sp":  int(mc["sp"]) & _U64,
-            "x29": int(regs[_AArch64._REG_FP]) & _U64,
-            "x30": int(regs[_AArch64._REG_LR]) & _U64,
+            "x29": int(regs[_AArch64Linux._REG_FP]) & _U64,
+            "x30": int(regs[_AArch64Linux._REG_LR]) & _U64,
         }
 
+
+class _AArch64FreeBSD(_AArch64Base):
+    name = "freebsd/aarch64"
+    # FreeBSD aarch64 mcontext_t (sys/arm64/include/ucontext.h):
+    #     struct gpregs {
+    #         __register_t  gp_x[30];   // X0..X29
+    #         __register_t  gp_lr;      // X30
+    #         __register_t  gp_sp;
+    #         __register_t  gp_elr;     // exception link register == PC
+    #         ...
+    #     };
+    #     typedef struct __mcontext {
+    #         struct gpregs  mc_gpregs;
+    #         ...
+    #     } mcontext_t;
+    _REG_FP = 29
+
     @staticmethod
-    def set_regs(regs):
-        gdb.execute("set $pc  = {:#x}".format(regs["pc"]),  to_string=True)
-        gdb.execute("set $sp  = {:#x}".format(regs["sp"]),  to_string=True)
-        gdb.execute("set $x29 = {:#x}".format(regs["x29"]), to_string=True)
-        gdb.execute("set $x30 = {:#x}".format(regs["x30"]), to_string=True)
+    def matches():
+        return (platform.system() == "FreeBSD"
+                and platform.machine() in ("aarch64", "arm64"))
+
+    @staticmethod
+    def saved_regs_from_ctx(ut):
+        gpr = ut["ctx"]["uc_mcontext"]["mc_gpregs"]
+        return {
+            "pc":  int(gpr["gp_elr"]) & _U64,
+            "sp":  int(gpr["gp_sp"]) & _U64,
+            "x29": int(gpr["gp_x"][_AArch64FreeBSD._REG_FP]) & _U64,
+            "x30": int(gpr["gp_lr"]) & _U64,
+        }
 
 
 def _detect_arch():
     if platform.system() not in ("Linux", "FreeBSD"):
         return None
-    for cls in (_X86_64, _AArch64):
+    for cls in (_X86_64Linux, _X86_64FreeBSD, _AArch64Linux, _AArch64FreeBSD):
         if cls.matches():
             return cls
     return None
