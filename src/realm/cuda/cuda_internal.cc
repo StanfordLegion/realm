@@ -653,7 +653,7 @@ namespace Realm {
 
       // 1) Outer loop - iterate over all the addresses for each request
       while(true) {
-        XferPort *in_port = 0, *out_port = 0;
+        XferPort *in_port = nullptr, *out_port = nullptr;
         size_t in_span_start = 0, out_span_start = 0;
         GPU *in_gpu = 0, *out_gpu = 0;
         const GPU::CudaIpcMapping *out_mapping = 0;
@@ -1068,7 +1068,7 @@ namespace Realm {
         const InstanceLayoutPieceBase *in_nonaffine, *out_nonaffine;
 
         size_t in_span_start = 0, out_span_start = 0;
-        XferPort *in_port = 0, *out_port = 0;
+        XferPort *in_port = nullptr, *out_port = nullptr;
         GPU *in_gpu = 0, *out_gpu = 0;
         bool out_is_ipc = false;
 
@@ -2493,6 +2493,9 @@ namespace Realm {
           }
         }
       }
+      if(host_proxy == nullptr) {
+        return false;
+      }
       if(redop->cudaGetFuncBySymbol_fn != 0) {
         // Resolve host symbol → CUfunction within the correct GPU context
         gpu->push_context();
@@ -2509,7 +2512,6 @@ namespace Realm {
       } else {
         // Fall back to runtime launch via cudaLaunchKernel
         assert(redop->cudaLaunchKernel_fn != 0);
-        assert(host_proxy != nullptr);
         return false;
       }
     }
@@ -2684,10 +2686,13 @@ namespace Realm {
         uintptr_t src_base, src_stride;
         uintptr_t count;
       };
-      KernelArgs *args = 0; // allocate on demand
-      size_t args_size = sizeof(KernelArgs) + redop->sizeof_userdata;
+      KernelArgs *args = nullptr; // allocate on demand
+      const size_t args_size = sizeof(KernelArgs) + redop->sizeof_userdata;
+      const bool has_fast_kernels =
+          (kernel_advanced != 0 || kernel_host_proxy_advanced != nullptr) &&
+          (kernel_transpose != 0 || kernel_host_proxy_transpose != nullptr);
+      const size_t min_xfer_size = 4096; // TODO: make controllable
       while(true) {
-        size_t min_xfer_size = 4096; // TODO: make controllable
         const InstanceLayoutPieceBase *in_nonaffine = nullptr;
         const InstanceLayoutPieceBase *out_nonaffine = nullptr;
         size_t max_bytes =
@@ -2696,7 +2701,7 @@ namespace Realm {
         if(max_bytes == 0) {
           break;
         }
-        XferPort *in_port = 0, *out_port = 0;
+        XferPort *in_port = nullptr, *out_port = nullptr;
         size_t in_span_start = 0, out_span_start = 0;
         if(input_control.current_io_port >= 0) {
           in_port = &input_ports[input_control.current_io_port];
@@ -2708,8 +2713,8 @@ namespace Realm {
         }
         // add optimized kernels if the condition is satisfied
         // TODO: support different elem sizes
-        if(in_port && out_port && !non_affine &&
-           (redop->sizeof_rhs == redop->sizeof_lhs)) {
+        if(in_port && out_port && !non_affine && (in_elem_size == out_elem_size) &&
+           has_fast_kernels) {
           done = fast_reduction_kernel_mode(channel, max_bytes, in_port, out_port,
                                             in_span_start, out_span_start);
           did_work = true;
@@ -2776,8 +2781,8 @@ namespace Realm {
                 AddressListCursor &in_alc = in_port->addrcursor;
                 AddressListCursor &out_alc = out_port->addrcursor;
 
-                uintptr_t in_offset = in_alc.get_offset();
-                uintptr_t out_offset = out_alc.get_offset();
+                const uintptr_t in_offset = in_alc.get_offset();
+                const uintptr_t out_offset = out_alc.get_offset();
 
                 // the reported dim is reduced for partially consumed address
                 //  ranges - whatever we get can be assumed to be regular
@@ -2808,8 +2813,8 @@ namespace Realm {
                   ostride = out_elem_size;
                 }
 
-                size_t elems_left = max_elems - total_elems;
-                size_t elems = std::min(std::min(icount, ocount), elems_left);
+                const size_t elems_left = max_elems - total_elems;
+                const size_t elems = std::min(std::min(icount, ocount), elems_left);
                 assert(elems > 0);
 
                 // allocate kernel arg structure if this is our first call
@@ -2825,8 +2830,8 @@ namespace Realm {
                 args->src_stride = istride;
                 args->count = elems;
 
-                size_t threads_per_block = 256;
-                size_t blocks_per_grid =
+                const size_t threads_per_block = 256;
+                const size_t blocks_per_grid =
                     std::min(1 + ((elems - 1) / threads_per_block),
                              static_cast<size_t>(CUDA_MAX_BLOCKS_PER_GRID));
 
@@ -2877,15 +2882,15 @@ namespace Realm {
                                 elems * ((out_dim == 1) ? out_elem_size : 1));
 
 #ifdef DEBUG_REALM
-              assert(elems <= elems_left);
+                assert(elems <= elems_left);
 #endif
-              total_elems += elems;
+                total_elems += elems;
 
-              // stop if it's been too long, but make sure we do at least the
-              //  minimum number of bytes
-              if(((total_elems * in_elem_size) >= min_xfer_size) &&
-                 work_until.is_expired())
-                break;
+                // stop if it's been too long, but make sure we do at least the
+                //  minimum number of bytes
+                if(((total_elems * in_elem_size) >= min_xfer_size) &&
+                   work_until.is_expired())
+                  break;
               }
             } else {
               // input but no output, so skip input bytes
