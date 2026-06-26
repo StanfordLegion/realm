@@ -991,4 +991,11 @@ namespace Realm {
                                    header_size);
   }
 
+  size_t MPIModule::max_payload_size(size_t header_size, const void *src_payload_addr)
+  {
+    // MPI has no concept of registered segments - same limit either way
+    (void)src_payload_addr;
+    return (AM_BUF_SIZE - header_size);
+  }
+
 }; // namespace Realm
