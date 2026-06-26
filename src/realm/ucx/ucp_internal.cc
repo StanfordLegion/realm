@@ -376,6 +376,7 @@ namespace Realm {
       , total_rcomp_sent(0)
       , total_rcomp_received(0)
       , outstanding_reqs(0)
+      , total_reqs_acquired(0)
     {}
 
     UCPInternal::~UCPInternal() { assert(!initialized_ucp && !initialized_boot); }
@@ -1705,62 +1706,85 @@ namespace Realm {
       }
     }
 
-    size_t UCPInternal::sample_messages_received_count()
+    void UCPInternal::sample_quiescence_state(NetworkModule::QuiescenceState &state)
     {
-      return total_msg_received.load();
+      // queued_items: number of UCX-level requests still in flight (things
+      //  we've handed to UCX that haven't completed yet).  outstanding_reqs
+      //  is decremented in request_release() at request completion time, so
+      //  it captures both queued sends and unfinished receive operations.
+      //  Reporting the actual count rather than a 0/1 boolean lets the
+      //  Mattern's-loop stability check see a draining queue (count
+      //  decreasing across rounds) as PROGRESSING, instead of treating an
+      //  unchanging non-zero value as steady state.
+      state.queued_items = outstanding_reqs.load();
+
+      // events_added: monotonic count of requests ever acquired.  Bumped in
+      //  request_get alongside outstanding_reqs.fetch_add(1), but never
+      //  decremented, so even when outstanding_reqs returns to the same
+      //  value across two Mattern's rounds (e.g., a request finished and
+      //  another started), this counter shows the activity.
+      state.events_added = total_reqs_acquired.load();
+
+      // packets_reserved/received: cumulative wire-packet counters.  UCX
+      //  separately tracks ordinary AMs (total_msg_*) and remote completion
+      //  replies (total_rcomp_*), each of which is an independently balanced
+      //  send-vs-receive pair at the global level.  We fold both into the
+      //  reserved/received counts so the Mattern's-loop equality check
+      //  catches imbalances in either category.
+      //
+      // It is NOT correct to derive a per-rank "pending_completions" value
+      //  from (rcomp_sent - rcomp_received): per-rank rcomp_sent and
+      //  rcomp_received can legitimately differ in either direction (peers
+      //  don't have to send the same number of completions both ways), and
+      //  clamping the negative case to zero produces a permanent positive
+      //  cross-rank sum that never drains - even when global rcomp_sent ==
+      //  global rcomp_received.  Only the SUM-reduced equality is correct.
+      uint64_t msg_sent = total_msg_sent.load();
+      uint64_t msg_received = total_msg_received.load();
+      uint64_t rcomp_sent = total_rcomp_sent.load();
+      uint64_t rcomp_received = total_rcomp_received.load();
+      state.packets_reserved = msg_sent + rcomp_sent;
+      state.packets_received = msg_received + rcomp_received;
+
+      // pending_completions is unused on UCX - everything that needs
+      //  balancing is already in the reserved/received pair above.
+      state.pending_completions = 0;
+
+      // Only AM-style messages (msg_received) flow through
+      //  IncomingMessageManager; rcomp replies are handled directly by the
+      //  UCP completion callback and bypass IMM, so they must NOT be
+      //  included in the drain target.  Including them would deadlock
+      //  drain_incoming_messages since total_messages_handled in IMM never
+      //  counts rcomps.
+      state.messages_to_drain = msg_received;
+
+      log_ucp.debug() << "quiescence sample:"
+                      << " queued=" << state.queued_items
+                      << " events_added=" << state.events_added
+                      << " reserved=" << state.packets_reserved << " (msg=" << msg_sent
+                      << "+rcomp=" << rcomp_sent << ")"
+                      << " received=" << state.packets_received
+                      << " (msg=" << msg_received << "+rcomp=" << rcomp_received << ")";
+
+      // Give the poller threads a chance to make progress before the caller
+      //  proceeds to the allreduce.  Mirrors the old "wait_polling on failure"
+      //  gating but applied unconditionally on every sample so the system has
+      //  a chance to settle between Mattern's rounds.
+      for(auto &poller : pollers) {
+        poller.wait_polling();
+      }
     }
 
-    bool UCPInternal::check_for_quiescence(size_t sampled_receive_count)
+    void UCPInternal::quiescence_allreduce_sum(const uint64_t *local_counts,
+                                               uint64_t *total_counts, size_t count)
     {
-      /* The check for outstanding_reqs must be collective. Otherwise,
-       * the rank(s) with outstanding requests will return false too quickly,
-       * which will consume quiescence-check iterations too quickly without
-       * giving communications a chance to be progressed.
-       */
-
-      static constexpr int num_counters = 6;
-      uint64_t total_counts[num_counters] = {0, 0, 0, 0, 0, 0};
-      uint64_t local_counts[num_counters] = {
-          total_msg_sent.load(),   total_msg_received.load(),   sampled_receive_count,
-          total_rcomp_sent.load(), total_rcomp_received.load(), outstanding_reqs.load(),
-      };
-
-      log_ucp.debug() << "local quiescence counters:"
-                      << " total_msg_sent " << local_counts[0] << " total_msg_received "
-                      << local_counts[1] << " sampled_receive_count " << local_counts[2]
-                      << " total_rcomp_sent " << local_counts[3]
-                      << " total_rcomp_received " << local_counts[4]
-                      << " outstanding_reqs " << local_counts[5];
-
-      ucc_status_t rc = ucc_comm->UCC_Allreduce(local_counts, total_counts, num_counters,
-                                                UCC_DT_UINT64, UCC_OP_SUM);
+      ucc_status_t rc =
+          ucc_comm->UCC_Allreduce(const_cast<uint64_t *>(local_counts), total_counts,
+                                  count, UCC_DT_UINT64, UCC_OP_SUM);
       if(rc != UCC_OK) {
-        log_ucp.error() << "allreduce failed in check_for_quiescence";
-        return false;
+        log_ucp.fatal() << "allreduce failed in quiescence_allreduce_sum";
+        abort();
       }
-
-      log_ucp.debug() << "reduced quiescence counters:"
-                      << " total_msg_sent " << total_counts[0] << " total_msg_received "
-                      << total_counts[1] << " sampled_receive_count " << total_counts[2]
-                      << " total_rcomp_sent " << total_counts[3]
-                      << " total_rcomp_received " << total_counts[4]
-                      << " outstanding_reqs " << total_counts[5];
-
-      bool ret = ((total_counts[0] == total_counts[1]) && // msg_sent == msg_recv
-                  (total_counts[1] == total_counts[2]) && // msg_recv == sampled
-                  (total_counts[3] == total_counts[4]) && // rcomp_sent == rcomp_recv
-                  (total_counts[5] == 0));                // outstanding_reqs == 0
-
-      if(!ret) {
-        // wait until the poller threads get a chance to
-        // progress communications before returning. Otherwise,
-        // we might consume quiescence-check iterations too quickly.
-        for(auto &poller : pollers) {
-          poller.wait_polling();
-        }
-      }
-
-      return ret;
     }
 
     bool UCPInternal::is_congested()
@@ -1903,6 +1927,7 @@ namespace Realm {
       req->internal = this;
       req->worker = worker;
       (void)outstanding_reqs.fetch_add(1);
+      (void)total_reqs_acquired.fetch_add(1);
       log_ucp_ar.debug() << "acquired request " << req;
 
       return req;

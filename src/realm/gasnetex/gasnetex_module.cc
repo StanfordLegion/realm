@@ -593,14 +593,15 @@ namespace Realm {
     internal->allgatherv(val_in, bytes, vals_out, lengths);
   }
 
-  size_t GASNetEXModule::sample_messages_received_count(void)
+  void GASNetEXModule::sample_quiescence_state(QuiescenceState &state)
   {
-    return internal->sample_messages_received_count();
+    internal->sample_quiescence_state(state);
   }
 
-  bool GASNetEXModule::check_for_quiescence(size_t sampled_receive_count)
+  void GASNetEXModule::quiescence_allreduce_sum(const uint64_t *local_counts,
+                                                uint64_t *total_counts, size_t count)
   {
-    return internal->check_for_quiescence(sampled_receive_count);
+    internal->quiescence_allreduce_sum(local_counts, total_counts, count);
   }
 
   // used to create a remote proxy for a memory

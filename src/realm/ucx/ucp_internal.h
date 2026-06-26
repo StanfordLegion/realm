@@ -154,8 +154,9 @@ namespace Realm {
                      size_t *lengths);
       void allgatherv(const char *val_in, size_t bytes, std::vector<char> &vals_out,
                       std::vector<size_t> &lengths);
-      size_t sample_messages_received_count();
-      bool check_for_quiescence(size_t sampled_receive_count);
+      void sample_quiescence_state(NetworkModule::QuiescenceState &state);
+      void quiescence_allreduce_sum(const uint64_t *local_counts, uint64_t *total_counts,
+                                    size_t count);
       size_t recommended_max_payload(const void *data, const NetworkSegment *src_segment,
                                      const RemoteAddress *dest_payload_addr,
                                      bool with_congestion, size_t header_size);
@@ -273,6 +274,12 @@ namespace Realm {
       atomic<uint64_t> total_rcomp_sent;
       atomic<uint64_t> total_rcomp_received;
       atomic<uint64_t> outstanding_reqs;
+      // Monotonic count of requests ever acquired (mirrors
+      //  outstanding_reqs.fetch_add(1) in request_get but never decrements).
+      //  Sampled as QuiescenceState::events_added so the Mattern's stability
+      //  check can detect activity even when outstanding_reqs is the same
+      //  value across rounds while individual requests come and go.
+      atomic<uint64_t> total_reqs_acquired;
       MPool *rcba_mp;
       SpinLock rcba_mp_spinlock;
       size_t ib_seg_size;
