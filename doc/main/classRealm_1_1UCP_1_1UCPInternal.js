@@ -28,6 +28,7 @@ var classRealm_1_1UCP_1_1UCPInternal =
     [ "request_get", "classRealm_1_1UCP_1_1UCPInternal.html#a58e5def2fc67882f11134e6c4c34bfff", null ],
     [ "request_release", "classRealm_1_1UCP_1_1UCPInternal.html#aa7795a84727b4035f5eb5964f1e462b0", null ],
     [ "sample_messages_received_count", "classRealm_1_1UCP_1_1UCPInternal.html#a7f3fa3c943d6f082a08920bf630daaea", null ],
+    [ "::Realm::UCPModule", "classRealm_1_1UCP_1_1UCPInternal.html#ad058d45e7584c65605f765e5da37b4ef", null ],
     [ "UCPMessageImpl", "classRealm_1_1UCP_1_1UCPInternal.html#a00b7168ed70e6a35d37ce66c9b4ce878", null ],
     [ "runtime", "classRealm_1_1UCP_1_1UCPInternal.html#a6706a501ad8cd22882887373937ace43", null ]
 ];

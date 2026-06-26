@@ -44,7 +44,7 @@
    <!-- BEGIN version select -->
     <br />
     <div class="dropdown">
-     <button class="dropbtn">Version 25.6.1-rc.4+74e7286b</button>
+     <button class="dropbtn">Version 25.6.1-rc.4+4c5e91c3</button>
      <div class="dropdown-content"></div>
     </div>
     <script type="text/javascript" src="../selectversion.js"></script>
@@ -132,7 +132,6 @@ $(document).ready(function(){initNavTree('activemsg_8h.html',''); initResizable(
   <div class="summary">
 <a href="#nested-classes">Classes</a> &#124;
 <a href="#namespaces">Namespaces</a> &#124;
-<a href="#typedef-members">Typedefs</a> &#124;
 <a href="#enum-members">Enumerations</a> &#124;
 <a href="#var-members">Variables</a>  </div>
   <div class="headertitle"><div class="title">activemsg.h File Reference</div></div>
@@ -147,19 +146,23 @@ $(document).ready(function(){initNavTree('activemsg_8h.html',''); initResizable(
 <code>#include &quot;<a class="el" href="atomics_8h_source.html">realm/atomics.h</a>&quot;</code><br />
 <code>#include &quot;<a class="el" href="threads_8h_source.html">realm/threads.h</a>&quot;</code><br />
 <code>#include &quot;<a class="el" href="bgwork_8h_source.html">realm/bgwork.h</a>&quot;</code><br />
+<code>#include &lt;atomic&gt;</code><br />
+<code>#include &lt;cstddef&gt;</code><br />
+<code>#include &lt;limits&gt;</code><br />
 <code>#include &lt;type_traits&gt;</code><br />
 <code>#include &lt;mutex&gt;</code><br />
+<code>#include &lt;vector&gt;</code><br />
 <code>#include &lt;optional&gt;</code><br />
 <code>#include &quot;realm/activemsg.inl&quot;</code><br />
 </div><div class="textblock"><div class="dynheader">
 Include dependency graph for activemsg.h:</div>
 <div class="dyncontent">
-<div class="center"><!-- SVG 0 --></div>
+<div class="center"><iframe scrolling="no" frameborder="0" src="activemsg_8h__incl.svg" width="2884" height="506"><p><b>This browser is not able to show SVG: try Firefox, Chrome, Safari, or Opera instead.</b></p></iframe></div>
 </div>
 </div><div class="textblock"><div class="dynheader">
 This graph shows which files directly or indirectly include this file:</div>
 <div class="dyncontent">
-<div class="center"><!-- SVG 1 --></div>
+<div class="center"><iframe scrolling="no" frameborder="0" src="activemsg_8h__dep__incl.svg" width="3794" height="990"><p><b>This browser is not able to show SVG: try Firefox, Chrome, Safari, or Opera instead.</b></p></iframe></div>
 </div>
 </div>
 <p><a href="activemsg_8h_source.html">Go to the source code of this file.</a></p>
@@ -196,9 +199,9 @@ Classes</h2></td></tr>
 <tr class="separator:"><td class="memSeparator" colspan="2">&#160;</td></tr>
 <tr class="memitem:"><td class="memItemLeft" align="right" valign="top">struct &#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="structRealm_1_1WrappedWithFragInfo.html">Realm::WrappedWithFragInfo&lt; UserHdr &gt;</a></td></tr>
 <tr class="separator:"><td class="memSeparator" colspan="2">&#160;</td></tr>
-<tr class="memitem:"><td class="memItemLeft" align="right" valign="top">class &#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="classRealm_1_1ActiveMessageAuto.html">Realm::ActiveMessageAuto&lt; UserHdr, Builder &gt;</a></td></tr>
+<tr class="memitem:"><td class="memItemLeft" align="right" valign="top">struct &#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="structRealm_1_1is__wrapped__with__frag__info.html">Realm::is_wrapped_with_frag_info&lt; T &gt;</a></td></tr>
 <tr class="separator:"><td class="memSeparator" colspan="2">&#160;</td></tr>
-<tr class="memitem:"><td class="memItemLeft" align="right" valign="top">struct &#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="structRealm_1_1AutoMessageRegistrar.html">Realm::AutoMessageRegistrar&lt; UserHdr &gt;</a></td></tr>
+<tr class="memitem:"><td class="memItemLeft" align="right" valign="top">struct &#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="structRealm_1_1is__wrapped__with__frag__info_3_01WrappedWithFragInfo_3_01U_01_4_01_4.html">Realm::is_wrapped_with_frag_info&lt; WrappedWithFragInfo&lt; U &gt; &gt;</a></td></tr>
 <tr class="separator:"><td class="memSeparator" colspan="2">&#160;</td></tr>
 </table><table class="memberdecls">
 <tr class="heading"><td colspan="2"><h2 class="groupheader"><a id="namespaces" name="namespaces"></a>
@@ -209,12 +212,6 @@ Namespaces</h2></td></tr>
 <tr class="separator:"><td class="memSeparator" colspan="2">&#160;</td></tr>
 <tr class="memitem:namespaceRealm_1_1ThreadLocal" id="r_namespaceRealm_1_1ThreadLocal"><td class="memItemLeft" align="right" valign="top">namespace &#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="namespaceRealm_1_1ThreadLocal.html">Realm::ThreadLocal</a></td></tr>
 <tr class="separator:"><td class="memSeparator" colspan="2">&#160;</td></tr>
-</table><table class="memberdecls">
-<tr class="heading"><td colspan="2"><h2 class="groupheader"><a id="typedef-members" name="typedef-members"></a>
-Typedefs</h2></td></tr>
-<tr class="memitem:a5700e3dd067fc390e62f4f9b5184aa03" id="r_a5700e3dd067fc390e62f4f9b5184aa03"><td class="memTemplParams" colspan="2">template&lt;typename Hdr &gt; </td></tr>
-<tr class="memitem:a5700e3dd067fc390e62f4f9b5184aa03"><td class="memTemplItemLeft" align="right" valign="top">using&#160;</td><td class="memTemplItemRight" valign="bottom"><a class="el" href="namespaceRealm.html#a5700e3dd067fc390e62f4f9b5184aa03">Realm::DefaultActiveMessageBuilder</a> = <a class="el" href="classRealm_1_1ActiveMessage.html">ActiveMessage</a>&lt; <a class="el" href="structRealm_1_1WrappedWithFragInfo.html">WrappedWithFragInfo</a>&lt; Hdr &gt; &gt;</td></tr>
-<tr class="separator:a5700e3dd067fc390e62f4f9b5184aa03"><td class="memSeparator" colspan="2">&#160;</td></tr>
 </table><table class="memberdecls">
 <tr class="heading"><td colspan="2"><h2 class="groupheader"><a id="enum-members" name="enum-members"></a>
 Enumerations</h2></td></tr>

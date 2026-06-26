@@ -16,6 +16,7 @@ var classRealm_1_1GASNet1Module =
     [ "detach", "classRealm_1_1GASNet1Module.html#a05ea3273deb1d5b6eaeefc7647cc5f70", null ],
     [ "gather", "classRealm_1_1GASNet1Module.html#a3d0e569358ef0a1cd04608d7d6f9f4b1", null ],
     [ "get_shared_peers", "classRealm_1_1GASNet1Module.html#ac1ec7e10a5f5aa24efe5f116f8f40970", null ],
+    [ "max_payload_size", "classRealm_1_1GASNet1Module.html#a35d09289af976676ebf9e9b40c806f51", null ],
     [ "parse_command_line", "classRealm_1_1GASNet1Module.html#ab838c9edec1c6f5682d4df1d60f32fab", null ],
     [ "recommended_max_payload", "classRealm_1_1GASNet1Module.html#abba3c1414e93506f62dc726914b79eb0", null ],
     [ "recommended_max_payload", "classRealm_1_1GASNet1Module.html#ad9312291b5360233776b1e7ad6df7bfd", null ],

@@ -16,6 +16,7 @@ var classRealm_1_1MPIModule =
     [ "detach", "classRealm_1_1MPIModule.html#af18295215ebc3d91000cf92ed8d2daa1", null ],
     [ "gather", "classRealm_1_1MPIModule.html#a6243e775d472297e9140aaed425fd350", null ],
     [ "get_shared_peers", "classRealm_1_1MPIModule.html#a836efaf228c8552630f25af494708eae", null ],
+    [ "max_payload_size", "classRealm_1_1MPIModule.html#a23261977b79773de88a446ca7ab22752", null ],
     [ "parse_command_line", "classRealm_1_1MPIModule.html#ae899c9956f89240df2eaf80a39e18f34", null ],
     [ "recommended_max_payload", "classRealm_1_1MPIModule.html#a6f7c84f1385e82a86dd2b9170536d3bf", null ],
     [ "recommended_max_payload", "classRealm_1_1MPIModule.html#aed0f39c60b706bf4f0e98ea4021a7ad7", null ],

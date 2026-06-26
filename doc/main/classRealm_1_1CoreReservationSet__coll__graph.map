@@ -1,0 +1,5 @@
+<map id="Realm::CoreReservationSet" name="Realm::CoreReservationSet">
+<area shape="rect" id="Node000001" title=" " alt="" coords="5,93,207,119"/>
+<area shape="rect" id="Node000002" href="$classRealm_1_1HardwareTopology.html" title="Represents the topology of the host processor cores and memory." alt="" coords="9,5,203,31"/>
+<area shape="poly" id="edge1_Node000001_Node000002" title=" " alt="" coords="109,45,109,93,103,93,103,45"/>
+</map>

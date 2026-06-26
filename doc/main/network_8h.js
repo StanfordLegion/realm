@@ -20,6 +20,7 @@ var network_8h =
     [ "gather", "network_8h.html#a3effd76cf06074e7438bf2a829a11fbc", null ],
     [ "gather", "network_8h.html#a4abc235b590cd22c017c646f6a90c5a2", null ],
     [ "get_network", "network_8h.html#ae42af32795a8f1b105b5b7549e70ef6a", null ],
+    [ "max_payload_size", "network_8h.html#a15237e52d62f5fc6b89e68485fba2dd8", null ],
     [ "recommended_max_payload", "network_8h.html#a7e67cc4f426ff9dbccbe3e27540c4fe7", null ],
     [ "recommended_max_payload", "network_8h.html#a6d25510c4341181a3b8eb0bff4311b03", null ],
     [ "recommended_max_payload", "network_8h.html#a60344c77a2d48fcbb5b26bcd706c0a73", null ],

@@ -15,6 +15,7 @@ var classRealm_1_1NetworkModule =
     [ "detach", "classRealm_1_1NetworkModule.html#a764987b8fede96669b500c6bf40a007e", null ],
     [ "gather", "classRealm_1_1NetworkModule.html#ad000fcc8d21431d1dfe8f300d1a8bef1", null ],
     [ "get_shared_peers", "classRealm_1_1NetworkModule.html#a796ee7149d808ef3c35c90babbb9419e", null ],
+    [ "max_payload_size", "classRealm_1_1NetworkModule.html#af5db03dc0ffe2bb641713a5304122320", null ],
     [ "parse_command_line", "classRealm_1_1NetworkModule.html#a32e5d9593547d8aa684ec1f561dca5c6", null ],
     [ "recommended_max_payload", "classRealm_1_1NetworkModule.html#af05232669bf560c448e406696fc4af41", null ],
     [ "recommended_max_payload", "classRealm_1_1NetworkModule.html#a2d48fa6bcc80a69cd47993039662d266", null ],

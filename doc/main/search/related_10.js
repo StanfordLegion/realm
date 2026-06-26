@@ -1,7 +1,7 @@
 var searchData=
 [
-  ['task_0',['Task',['../classRealm_1_1ProcessorImpl.html#aaa7728226b6ce66782e8816b1658dd9a',1,'Realm::ProcessorImpl']]],
-  ['threadscheduler_1',['ThreadScheduler',['../classRealm_1_1Thread.html#a8fb23556ff4e2ba3e1ff3ac97656ac77',1,'Realm::Thread']]],
-  ['threadwaker_2',['ThreadWaker',['../classRealm_1_1Thread.html#a2069ade42ead1457fbec91e28558373d',1,'Realm::Thread']]],
-  ['transferoperation_3',['TransferOperation',['../classRealm_1_1TransferDesc.html#a00d3759c8631402bedeb84ed21e00099',1,'Realm::TransferDesc']]]
+  ['samplingprofiler_0',['SamplingProfiler',['../classRealm_1_1SamplingProfilerImpl.html#a0376d7356c3c3a085f924fc8c2f1b87e',1,'Realm::SamplingProfilerImpl']]],
+  ['samplingprofilerimpl_1',['SamplingProfilerImpl',['../classRealm_1_1GaugeSampler.html#a2da1c2b356967cbef06d1519bf68648a',1,'Realm::GaugeSampler']]],
+  ['serialize_2',['serialize',['../classRealm_1_1Type.html#ad1a2bf85665e1e32f0d5937c6234ab42',1,'Realm::Type::serialize'],['../classRealm_1_1ProfilingRequest.html#a810853147dc64ec40879e4cbe4a1a1a1',1,'Realm::ProfilingRequest::serialize'],['../classRealm_1_1ProfilingRequestSet.html#a13ef0d9e94f0b4478c988a6e09d4a4e6',1,'Realm::ProfilingRequestSet::serialize']]],
+  ['simpleremotechannelinfo_3',['SimpleRemoteChannelInfo',['../classRealm_1_1RemoteChannel.html#ad318dc9968e8eb170d1137c1ca68131d',1,'Realm::RemoteChannel']]]
 ];

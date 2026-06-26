@@ -17,6 +17,7 @@ var classRealm_1_1UCPModule =
     [ "detach", "classRealm_1_1UCPModule.html#a97468af046c7b57ebc1fd99f188a127f", null ],
     [ "gather", "classRealm_1_1UCPModule.html#af7ceadc4aaa086d189ddb3169c71a39b", null ],
     [ "get_shared_peers", "classRealm_1_1UCPModule.html#ac4159f205dbd9b0b1ad0f79279a2688d", null ],
+    [ "max_payload_size", "classRealm_1_1UCPModule.html#af1b8fd7a1b2753635a8947189eb3072c", null ],
     [ "parse_command_line", "classRealm_1_1UCPModule.html#a585d8774de3244e3b7acbb06dc032425", null ],
     [ "recommended_max_payload", "classRealm_1_1UCPModule.html#affa34ec4c5d0300a1bc7a93a425d984c", null ],
     [ "recommended_max_payload", "classRealm_1_1UCPModule.html#a7c5cd39e6d14765805b942e4f412ee81", null ],

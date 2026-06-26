@@ -126,7 +126,8 @@ var menudata={children:[
 {text:"Class Hierarchy",url:"inherits.html"},
 {text:"Class Members",url:"functions.html",children:[
 {text:"All",url:"functions.html",children:[
-{text:"_",url:"functions.html#index__5F"},
+{text:":",url:"functions.html#index_:"},
+{text:"_",url:"functions__.html#index__5F"},
 {text:"a",url:"functions_a.html#index_a"},
 {text:"b",url:"functions_b.html#index_b"},
 {text:"c",url:"functions_c.html#index_c"},
@@ -267,6 +268,7 @@ var menudata={children:[
 {text:"x",url:"functions_eval_x.html#index_x"},
 {text:"z",url:"functions_eval_z.html#index_z"}]},
 {text:"Related Symbols",url:"functions_rela.html",children:[
+{text:":",url:"functions_rela.html#index_:"},
 {text:"a",url:"functions_rela.html#index_a"},
 {text:"b",url:"functions_rela.html#index_b"},
 {text:"c",url:"functions_rela.html#index_c"},

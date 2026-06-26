@@ -3,10 +3,8 @@ var hierarchy =
     [ "Realm::AccessorRefHelper< FT >", "classRealm_1_1AccessorRefHelper.html", null ],
     [ "Realm::SubgraphDefinition::AcquireDesc", "structRealm_1_1SubgraphDefinition_1_1AcquireDesc.html", null ],
     [ "Realm::ActiveMessage< T, INLINE_STORAGE >", "classRealm_1_1ActiveMessage.html", null ],
-    [ "Realm::ActiveMessageAuto< UserHdr, Builder >", "classRealm_1_1ActiveMessageAuto.html", null ],
     [ "Realm::ActiveMessageHandlerRegBase", "classRealm_1_1ActiveMessageHandlerRegBase.html", [
       [ "Realm::ActiveMessageHandlerReg< Realm::AddressSplitXferDesCreateMessage< N, T > >", "classRealm_1_1ActiveMessageHandlerReg.html", null ],
-      [ "Realm::ActiveMessageHandlerReg< Realm::WrappedWithFragInfo< UserHdr >, UserHdr >", "classRealm_1_1ActiveMessageHandlerReg.html", null ],
       [ "Realm::ActiveMessageHandlerReg< Realm::RemoteMicroOpMessage< Realm::ByFieldMicroOp< N, T, FT > > >", "classRealm_1_1ActiveMessageHandlerReg.html", null ],
       [ "Realm::ActiveMessageHandlerReg< Realm::RemoteMicroOpMessage< Realm::DifferenceMicroOp< N, T > > >", "classRealm_1_1ActiveMessageHandlerReg.html", null ],
       [ "Realm::ActiveMessageHandlerReg< Realm::RemoteMicroOpMessage< Realm::ImageMicroOp< N, T, N2, T2 > > >", "classRealm_1_1ActiveMessageHandlerReg.html", null ],
@@ -108,7 +106,6 @@ var hierarchy =
     [ "Realm::Cuda::AutoGPUContext", "classRealm_1_1Cuda_1_1AutoGPUContext.html", null ],
     [ "Realm::Hip::AutoGPUContext", "classRealm_1_1Hip_1_1AutoGPUContext.html", null ],
     [ "Realm::AutoLock< LT >", "classRealm_1_1AutoLock.html", null ],
-    [ "Realm::AutoMessageRegistrar< UserHdr >", "structRealm_1_1AutoMessageRegistrar.html", null ],
     [ "Realm::BackgroundWorkItem", "classRealm_1_1BackgroundWorkItem.html", [
       [ "Realm::XDQueue< AddressSplitChannel, AddressSplitXferDesBase >", "classRealm_1_1XDQueue.html", null ],
       [ "Realm::XDQueue< GPUChannel, GPUXferDes >", "classRealm_1_1XDQueue.html", null ],
@@ -391,6 +388,9 @@ var hierarchy =
         [ "Realm::ExternalCudaPinnedHostResource", "classRealm_1_1ExternalCudaPinnedHostResource.html", null ],
         [ "Realm::ExternalHipPinnedHostResource", "classRealm_1_1ExternalHipPinnedHostResource.html", null ]
       ] ]
+    ] ],
+    [ "std::false_type", null, [
+      [ "Realm::is_wrapped_with_frag_info< T >", "structRealm_1_1is__wrapped__with__frag__info.html", null ]
     ] ],
     [ "Realm::FastReservation", "classRealm_1_1FastReservation.html", [
       [ "PRealm::FastReservation", "classPRealm_1_1FastReservation.html", null ]
@@ -1123,6 +1123,9 @@ var hierarchy =
     ] ],
     [ "Realm::TranslationTransform< N, T >", "classRealm_1_1TranslationTransform.html", null ],
     [ "Realm::IntervalTree< IT, LT >::TreeNode", "structRealm_1_1IntervalTree_1_1TreeNode.html", null ],
+    [ "std::true_type", null, [
+      [ "Realm::is_wrapped_with_frag_info< WrappedWithFragInfo< U > >", "structRealm_1_1is__wrapped__with__frag__info_3_01WrappedWithFragInfo_3_01U_01_4_01_4.html", null ]
+    ] ],
     [ "Realm::Type", "classRealm_1_1Type.html", [
       [ "Realm::FunctionPointerType", "classRealm_1_1FunctionPointerType.html", null ],
       [ "Realm::IntegerType", "classRealm_1_1IntegerType.html", null ],

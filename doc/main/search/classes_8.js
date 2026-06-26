@@ -91,5 +91,7 @@ var searchData=
   ['intrusiveprioritylistlink_3c_20realm_3a_3axferdes_20_3e_88',['IntrusivePriorityListLink&lt; Realm::XferDes &gt;',['../structRealm_1_1IntrusivePriorityListLink.html',1,'Realm']]],
   ['io_89',['IO',['../structRealm_1_1TransferGraph_1_1XDTemplate_1_1IO.html',1,'Realm::TransferGraph::XDTemplate']]],
   ['ipcperfcounters_90',['IPCPerfCounters',['../structRealm_1_1ProfilingMeasurements_1_1IPCPerfCounters.html',1,'Realm::ProfilingMeasurements']]],
-  ['is_5fcopy_5fserializable_91',['is_copy_serializable',['../structis__copy__serializable.html',1,'']]]
+  ['is_5fcopy_5fserializable_91',['is_copy_serializable',['../structis__copy__serializable.html',1,'']]],
+  ['is_5fwrapped_5fwith_5ffrag_5finfo_92',['is_wrapped_with_frag_info',['../structRealm_1_1is__wrapped__with__frag__info.html',1,'Realm']]],
+  ['is_5fwrapped_5fwith_5ffrag_5finfo_3c_20wrappedwithfraginfo_3c_20u_20_3e_20_3e_93',['is_wrapped_with_frag_info&lt; WrappedWithFragInfo&lt; U &gt; &gt;',['../structRealm_1_1is__wrapped__with__frag__info_3_01WrappedWithFragInfo_3_01U_01_4_01_4.html',1,'Realm']]]
 ];
