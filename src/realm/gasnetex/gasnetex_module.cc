@@ -798,4 +798,15 @@ namespace Realm {
         with_congestion, header_size, dest_payload_addr.ptr);
   }
 
+  size_t GASNetEXModule::max_payload_size(size_t header_size,
+                                          const void *src_payload_addr)
+  {
+    // without a RemoteAddress destination, GASNet-EX always uses Medium
+    //  messages regardless of whether the source is in a registered segment
+    //  (Long messages require a dest_payload_addr)
+    (void)src_payload_addr;
+    return recommended_max_payload(Network::my_node_id, false /*with_congestion*/,
+                                   header_size);
+  }
+
 }; // namespace Realm
