@@ -430,6 +430,13 @@ if(TEST_USE_GPU)
     target_link_libraries(cuda_memcpy_test CUDA::cudart)
     target_link_libraries(cuda_scatter_test CUDA::cudart)
     target_link_libraries(test_cuhook CUDA::cudart)
+    set(cuda_reduce_basic_ARGS -ll:gpu 1)
+    set(cuda_reduce_basic_RESOURCE_LOCK gpu)
+    add_integration_test(
+      cuda_reduce_basic "${REALM_TEST_DIR}/cuda_reduce_basic.cc"
+                        "${REALM_TEST_DIR}/cuda_reduce_basic_gpu.cu"
+    )
+    target_link_libraries(cuda_reduce_basic CUDA::cudart)
     set(multifield_transfer_ARGS -ll:gpu 1)
     set(multifield_transfer_RESOURCE_LOCK gpu)
     add_integration_test(multifield_transfer "${REALM_TEST_DIR}/multifield_transfer.cc")
@@ -482,6 +489,7 @@ set_target_properties(taskreg PROPERTIES ENABLE_EXPORTS TRUE)
 set_target_properties(scatter PROPERTIES ENABLE_EXPORTS TRUE)
 if(REALM_USE_CUDA)
   set_target_properties(cuda_scatter_test PROPERTIES ENABLE_EXPORTS TRUE)
+  set_target_properties(cuda_reduce_basic PROPERTIES ENABLE_EXPORTS TRUE)
 endif()
 
 set_tests_properties(

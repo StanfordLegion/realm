@@ -564,13 +564,21 @@ namespace Realm {
         const char *config_name = &kv.first.c_str()[4];
 
         status = UCP_FNPTR(ucp_config_modify)(ucp_config, config_name, kv.second.c_str());
+        if(status == UCS_ERR_INVALID_PARAM) {
+          // On UCX >= 1.20.1, ucp_config_modify returns UCS_ERR_INVALID_PARAM
+          // for names not registered by any loaded UCT module (e.g. UCX built
+          // without IB on a non-IB system rejects IB_SEG_SIZE). Treat as a
+          // soft failure and keep going.
+          log_ucp.info() << "skipping unsupported UCX config " << kv.first << "="
+                         << kv.second;
+          continue;
+        }
         if(status != UCS_OK) {
           log_ucp.error() << "ucp_config_modify failed " << kv.first << " " << kv.second;
           goto err_rel_config;
-        } else {
-          log_ucp.info() << kv.first << " modified to " << kv.second << " for context "
-                         << this;
         }
+        log_ucp.info() << kv.first << " modified to " << kv.second << " for context "
+                       << this;
       }
 
       // Initialize UCX context
