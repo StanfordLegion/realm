@@ -955,6 +955,7 @@ var hierarchy =
       [ "Realm::ProcessorHasAffinityPredicate", "classRealm_1_1ProcessorHasAffinityPredicate.html", null ]
     ] ],
     [ "QuiescenceChecker", "classQuiescenceChecker.html", null ],
+    [ "Realm::NetworkModule::QuiescenceState", "structRealm_1_1NetworkModule_1_1QuiescenceState.html", null ],
     [ "Realm::BasicRangeAllocator< RT, TT >::Range", "structRealm_1_1BasicRangeAllocator_1_1Range.html", null ],
     [ "Realm::RWLock::Reader", "structRealm_1_1RWLock_1_1Reader.html", null ],
     [ "realm_affinity_details_t", "structrealm__affinity__details__t.html", null ],

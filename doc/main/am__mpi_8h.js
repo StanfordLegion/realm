@@ -11,6 +11,7 @@ var am__mpi_8h =
     [ "AMPoll", "am__mpi_8h.html#aaf2143b430ab3040a2f07e7522fec2a3", null ],
     [ "AMPoll_cancel", "am__mpi_8h.html#ad50ea28e5d515f23c756c440dd41e45e", null ],
     [ "AMSend", "am__mpi_8h.html#adae9680781dc06e3863ea42ee45bf368", null ],
+    [ "messages_delivered_to_imm", "am__mpi_8h.html#a47b96d1df13afcfbdc50c2dfedcdec72", null ],
     [ "messages_rcvd", "am__mpi_8h.html#a010c8ab1a0821400bc3e7d737602fa77", null ],
     [ "messages_sent", "am__mpi_8h.html#a109d14972455ff0311d7c05ac1f062c2", null ]
 ];

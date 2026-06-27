@@ -44,7 +44,7 @@
    <!-- BEGIN version select -->
     <br />
     <div class="dropdown">
-     <button class="dropbtn">Version 25.6.1-rc.4+4c5e91c3</button>
+     <button class="dropbtn">Version 25.6.1-rc.4+c6aca815</button>
      <div class="dropdown-content"></div>
     </div>
     <script type="text/javascript" src="../selectversion.js"></script>
@@ -145,12 +145,12 @@ $(document).ready(function(){initNavTree('classRealm_1_1UCPModule.html',''); ini
 <div class="dynheader">
 Inheritance diagram for Realm::UCPModule:</div>
 <div class="dyncontent">
-<div class="center"><iframe scrolling="no" frameborder="0" src="classRealm_1_1UCPModule__inherit__graph.svg" width="186" height="183"><p><b>This browser is not able to show SVG: try Firefox, Chrome, Safari, or Opera instead.</b></p></iframe></div>
+<div class="center"><!-- SVG 0 --></div>
 <center><span class="legend">[<a target="top" href="graph_legend.html">legend</a>]</span></center></div>
 <div class="dynheader">
 Collaboration diagram for Realm::UCPModule:</div>
 <div class="dyncontent">
-<div class="center"><iframe scrolling="no" frameborder="0" src="classRealm_1_1UCPModule__coll__graph.svg" width="195" height="274"><p><b>This browser is not able to show SVG: try Firefox, Chrome, Safari, or Opera instead.</b></p></iframe></div>
+<div class="center"><!-- SVG 1 --></div>
 <center><span class="legend">[<a target="top" href="graph_legend.html">legend</a>]</span></center></div>
 <table class="memberdecls">
 <tr class="heading"><td colspan="2"><h2 class="groupheader"><a id="pub-methods" name="pub-methods"></a>
@@ -175,10 +175,10 @@ Public Member Functions</h2></td></tr>
 <tr class="separator:af7ceadc4aaa086d189ddb3169c71a39b"><td class="memSeparator" colspan="2">&#160;</td></tr>
 <tr class="memitem:ab435ab028ff920044d6487490a9bcff6" id="r_ab435ab028ff920044d6487490a9bcff6"><td class="memItemLeft" align="right" valign="top">virtual void&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="classRealm_1_1UCPModule.html#ab435ab028ff920044d6487490a9bcff6">allgatherv</a> (const char *val_in, size_t bytes, std::vector&lt; char &gt; &amp;vals_out, std::vector&lt; size_t &gt; &amp;lengths)</td></tr>
 <tr class="separator:ab435ab028ff920044d6487490a9bcff6"><td class="memSeparator" colspan="2">&#160;</td></tr>
-<tr class="memitem:ad6e6b616915fcdc43e05a2d915d18187" id="r_ad6e6b616915fcdc43e05a2d915d18187"><td class="memItemLeft" align="right" valign="top">virtual size_t&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="classRealm_1_1UCPModule.html#ad6e6b616915fcdc43e05a2d915d18187">sample_messages_received_count</a> (void)</td></tr>
-<tr class="separator:ad6e6b616915fcdc43e05a2d915d18187"><td class="memSeparator" colspan="2">&#160;</td></tr>
-<tr class="memitem:a430f2bae64155f8a63950f362ec4ece3" id="r_a430f2bae64155f8a63950f362ec4ece3"><td class="memItemLeft" align="right" valign="top">virtual bool&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="classRealm_1_1UCPModule.html#a430f2bae64155f8a63950f362ec4ece3">check_for_quiescence</a> (size_t sampled_receive_count)</td></tr>
-<tr class="separator:a430f2bae64155f8a63950f362ec4ece3"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:ab4726d94550d79b28576b3384c42307b" id="r_ab4726d94550d79b28576b3384c42307b"><td class="memItemLeft" align="right" valign="top">virtual void&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="classRealm_1_1UCPModule.html#ab4726d94550d79b28576b3384c42307b">sample_quiescence_state</a> (<a class="el" href="structRealm_1_1NetworkModule_1_1QuiescenceState.html">QuiescenceState</a> &amp;state)</td></tr>
+<tr class="separator:ab4726d94550d79b28576b3384c42307b"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:a98ff0c09945ca682b277f7d9cb2cfd1b" id="r_a98ff0c09945ca682b277f7d9cb2cfd1b"><td class="memItemLeft" align="right" valign="top">virtual void&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="classRealm_1_1UCPModule.html#a98ff0c09945ca682b277f7d9cb2cfd1b">quiescence_allreduce_sum</a> (const uint64_t *local_counts, uint64_t *total_counts, size_t count)</td></tr>
+<tr class="separator:a98ff0c09945ca682b277f7d9cb2cfd1b"><td class="memSeparator" colspan="2">&#160;</td></tr>
 <tr class="memitem:a5e605ab1cccc3f0508dc8b681de34d08" id="r_a5e605ab1cccc3f0508dc8b681de34d08"><td class="memItemLeft" align="right" valign="top">virtual <a class="el" href="classRealm_1_1MemoryImpl.html">MemoryImpl</a> *&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="classRealm_1_1UCPModule.html#a5e605ab1cccc3f0508dc8b681de34d08">create_remote_memory</a> (<a class="el" href="classRealm_1_1RuntimeImpl.html">RuntimeImpl</a> *runtime, <a class="el" href="classRealm_1_1Memory.html">Memory</a> m, size_t size, <a class="el" href="classRealm_1_1Memory.html#a4d4d0769990b3dc75fcbab5ae292e839">Memory::Kind</a> kind, const <a class="el" href="classRealm_1_1ByteArray.html">ByteArray</a> &amp;rdma_info)</td></tr>
 <tr class="separator:a5e605ab1cccc3f0508dc8b681de34d08"><td class="memSeparator" colspan="2">&#160;</td></tr>
 <tr class="memitem:a757812fd64cf908ad9f77a8324b3592b" id="r_a757812fd64cf908ad9f77a8324b3592b"><td class="memItemLeft" align="right" valign="top">virtual <a class="el" href="classRealm_1_1IBMemory.html">IBMemory</a> *&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="classRealm_1_1UCPModule.html#a757812fd64cf908ad9f77a8324b3592b">create_remote_ib_memory</a> (<a class="el" href="classRealm_1_1RuntimeImpl.html">RuntimeImpl</a> *runtime, <a class="el" href="classRealm_1_1Memory.html">Memory</a> m, size_t size, <a class="el" href="classRealm_1_1Memory.html#a4d4d0769990b3dc75fcbab5ae292e839">Memory::Kind</a> kind, const <a class="el" href="classRealm_1_1ByteArray.html">ByteArray</a> &amp;rdma_info)</td></tr>
@@ -205,6 +205,9 @@ Public Member Functions</h2></td></tr>
 <tr class="separator:ae19dae2476882cd14713c63ca40623a1"><td class="memSeparator" colspan="2">&#160;</td></tr>
 <tr class="memitem:af1b8fd7a1b2753635a8947189eb3072c" id="r_af1b8fd7a1b2753635a8947189eb3072c"><td class="memItemLeft" align="right" valign="top">virtual size_t&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="classRealm_1_1UCPModule.html#af1b8fd7a1b2753635a8947189eb3072c">max_payload_size</a> (size_t header_size, const void *src_payload_addr)</td></tr>
 <tr class="separator:af1b8fd7a1b2753635a8947189eb3072c"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="inherit_header pub_methods_classRealm_1_1NetworkModule"><td colspan="2" onclick="javascript:toggleInherit('pub_methods_classRealm_1_1NetworkModule')"><img src="closed.png" alt="-"/>&#160;Public Member Functions inherited from <a class="el" href="classRealm_1_1NetworkModule.html">Realm::NetworkModule</a></td></tr>
+<tr class="memitem:acf2650aeab56e69c3e5a9f0e402e3a2b inherit pub_methods_classRealm_1_1NetworkModule" id="r_acf2650aeab56e69c3e5a9f0e402e3a2b"><td class="memItemLeft" align="right" valign="top">virtual bool&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="classRealm_1_1NetworkModule.html#acf2650aeab56e69c3e5a9f0e402e3a2b">custom_quiescence_check</a> (<a class="el" href="classRealm_1_1IncomingMessageManager.html">IncomingMessageManager</a> *message_manager, <a class="el" href="namespaceRealm_1_1Network.html#aab676d9e0b6744fb219251c5085c221e">Network::QuiescenceStatus</a> &amp;status)</td></tr>
+<tr class="separator:acf2650aeab56e69c3e5a9f0e402e3a2b inherit pub_methods_classRealm_1_1NetworkModule"><td class="memSeparator" colspan="2">&#160;</td></tr>
 <tr class="inherit_header pub_methods_classRealm_1_1Module"><td colspan="2" onclick="javascript:toggleInherit('pub_methods_classRealm_1_1Module')"><img src="closed.png" alt="-"/>&#160;Public Member Functions inherited from <a class="el" href="classRealm_1_1Module.html">Realm::Module</a></td></tr>
 <tr class="memitem:a41e520eac73b9f7d31e6be437a960983 inherit pub_methods_classRealm_1_1Module" id="r_a41e520eac73b9f7d31e6be437a960983"><td class="memItemLeft" align="right" valign="top">virtual&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="classRealm_1_1Module.html#a41e520eac73b9f7d31e6be437a960983">~Module</a> (void)</td></tr>
 <tr class="separator:a41e520eac73b9f7d31e6be437a960983 inherit pub_methods_classRealm_1_1Module"><td class="memSeparator" colspan="2">&#160;</td></tr>
@@ -463,34 +466,6 @@ Protected Attributes</h2></td></tr>
 </div><div class="memdoc">
 
 <p>Implements <a class="el" href="classRealm_1_1NetworkModule.html#a59f14c98da9736501821f562b03f193b">Realm::NetworkModule</a>.</p>
-
-</div>
-</div>
-<a id="a430f2bae64155f8a63950f362ec4ece3" name="a430f2bae64155f8a63950f362ec4ece3"></a>
-<h2 class="memtitle"><span class="permalink"><a href="#a430f2bae64155f8a63950f362ec4ece3">&#9670;&#160;</a></span>check_for_quiescence()</h2>
-
-<div class="memitem">
-<div class="memproto">
-<table class="mlabels">
-  <tr>
-  <td class="mlabels-left">
-      <table class="memname">
-        <tr>
-          <td class="memname">virtual bool Realm::UCPModule::check_for_quiescence </td>
-          <td>(</td>
-          <td class="paramtype">size_t&#160;</td>
-          <td class="paramname"><em>sampled_receive_count</em></td><td>)</td>
-          <td></td>
-        </tr>
-      </table>
-  </td>
-  <td class="mlabels-right">
-<span class="mlabels"><span class="mlabel">virtual</span></span>  </td>
-  </tr>
-</table>
-</div><div class="memdoc">
-
-<p>Implements <a class="el" href="classRealm_1_1NetworkModule.html#a03c1ed35b5e6d182db9c9a048f1b1fd4">Realm::NetworkModule</a>.</p>
 
 </div>
 </div>
@@ -1182,6 +1157,50 @@ Protected Attributes</h2></td></tr>
 
 </div>
 </div>
+<a id="a98ff0c09945ca682b277f7d9cb2cfd1b" name="a98ff0c09945ca682b277f7d9cb2cfd1b"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a98ff0c09945ca682b277f7d9cb2cfd1b">&#9670;&#160;</a></span>quiescence_allreduce_sum()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">virtual void Realm::UCPModule::quiescence_allreduce_sum </td>
+          <td>(</td>
+          <td class="paramtype">const uint64_t *&#160;</td>
+          <td class="paramname"><em>local_counts</em>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype">uint64_t *&#160;</td>
+          <td class="paramname"><em>total_counts</em>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype">size_t&#160;</td>
+          <td class="paramname"><em>count</em>&#160;</td>
+        </tr>
+        <tr>
+          <td></td>
+          <td>)</td>
+          <td></td><td></td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel">virtual</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>Implements <a class="el" href="classRealm_1_1NetworkModule.html#aa90ec7e91ad40e02f1d1144255814b07">Realm::NetworkModule</a>.</p>
+
+</div>
+</div>
 <a id="affa34ec4c5d0300a1bc7a93a425d984c" name="affa34ec4c5d0300a1bc7a93a425d984c"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#affa34ec4c5d0300a1bc7a93a425d984c">&#9670;&#160;</a></span>recommended_max_payload() <span class="overload">[1/6]</span></h2>
 
@@ -1530,8 +1549,8 @@ Protected Attributes</h2></td></tr>
 
 </div>
 </div>
-<a id="ad6e6b616915fcdc43e05a2d915d18187" name="ad6e6b616915fcdc43e05a2d915d18187"></a>
-<h2 class="memtitle"><span class="permalink"><a href="#ad6e6b616915fcdc43e05a2d915d18187">&#9670;&#160;</a></span>sample_messages_received_count()</h2>
+<a id="ab4726d94550d79b28576b3384c42307b" name="ab4726d94550d79b28576b3384c42307b"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#ab4726d94550d79b28576b3384c42307b">&#9670;&#160;</a></span>sample_quiescence_state()</h2>
 
 <div class="memitem">
 <div class="memproto">
@@ -1540,10 +1559,10 @@ Protected Attributes</h2></td></tr>
   <td class="mlabels-left">
       <table class="memname">
         <tr>
-          <td class="memname">virtual size_t Realm::UCPModule::sample_messages_received_count </td>
+          <td class="memname">virtual void Realm::UCPModule::sample_quiescence_state </td>
           <td>(</td>
-          <td class="paramtype">void&#160;</td>
-          <td class="paramname"></td><td>)</td>
+          <td class="paramtype"><a class="el" href="structRealm_1_1NetworkModule_1_1QuiescenceState.html">QuiescenceState</a> &amp;&#160;</td>
+          <td class="paramname"><em>state</em></td><td>)</td>
           <td></td>
         </tr>
       </table>
@@ -1554,7 +1573,7 @@ Protected Attributes</h2></td></tr>
 </table>
 </div><div class="memdoc">
 
-<p>Implements <a class="el" href="classRealm_1_1NetworkModule.html#a01e0000544814639892913f5df611fab">Realm::NetworkModule</a>.</p>
+<p>Implements <a class="el" href="classRealm_1_1NetworkModule.html#a208ca77e66f7b2fb342d9b23643cbf00">Realm::NetworkModule</a>.</p>
 
 </div>
 </div>

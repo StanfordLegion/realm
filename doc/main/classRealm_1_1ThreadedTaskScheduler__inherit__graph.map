@@ -1,9 +1,0 @@
-<map id="Realm::ThreadedTaskScheduler" name="Realm::ThreadedTaskScheduler">
-<area shape="rect" id="Node000001" title=" " alt="" coords="19,79,246,104"/>
-<area shape="rect" id="Node000003" href="$classRealm_1_1KernelThreadTaskScheduler.html" title=" " alt="" coords="7,152,258,177"/>
-<area shape="poly" id="edge2_Node000001_Node000003" title=" " alt="" coords="135,118,135,152,130,152,130,118"/>
-<area shape="rect" id="Node000002" href="$classRealm_1_1ThreadScheduler.html" title=" " alt="" coords="42,5,223,31"/>
-<area shape="poly" id="edge1_Node000001_Node000002" title=" " alt="" coords="135,44,135,79,130,79,130,44"/>
-<area shape="rect" id="Node000004" href="$classRealm_1_1PythonThreadTaskScheduler.html" title=" " alt="" coords="5,225,260,251"/>
-<area shape="poly" id="edge3_Node000003_Node000004" title=" " alt="" coords="135,191,135,225,130,225,130,191"/>
-</map>

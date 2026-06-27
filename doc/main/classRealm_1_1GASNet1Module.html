@@ -44,7 +44,7 @@
    <!-- BEGIN version select -->
     <br />
     <div class="dropdown">
-     <button class="dropbtn">Version 25.6.1-rc.4+4c5e91c3</button>
+     <button class="dropbtn">Version 25.6.1-rc.4+c6aca815</button>
      <div class="dropdown-content"></div>
     </div>
     <script type="text/javascript" src="../selectversion.js"></script>
@@ -145,12 +145,12 @@ $(document).ready(function(){initNavTree('classRealm_1_1GASNet1Module.html','');
 <div class="dynheader">
 Inheritance diagram for Realm::GASNet1Module:</div>
 <div class="dyncontent">
-<div class="center"><iframe scrolling="no" frameborder="0" src="classRealm_1_1GASNet1Module__inherit__graph.svg" width="190" height="183"><p><b>This browser is not able to show SVG: try Firefox, Chrome, Safari, or Opera instead.</b></p></iframe></div>
+<div class="center"><!-- SVG 0 --></div>
 <center><span class="legend">[<a target="top" href="graph_legend.html">legend</a>]</span></center></div>
 <div class="dynheader">
 Collaboration diagram for Realm::GASNet1Module:</div>
 <div class="dyncontent">
-<div class="center"><iframe scrolling="no" frameborder="0" src="classRealm_1_1GASNet1Module__coll__graph.svg" width="190" height="183"><p><b>This browser is not able to show SVG: try Firefox, Chrome, Safari, or Opera instead.</b></p></iframe></div>
+<div class="center"><!-- SVG 1 --></div>
 <center><span class="legend">[<a target="top" href="graph_legend.html">legend</a>]</span></center></div>
 <table class="memberdecls">
 <tr class="heading"><td colspan="2"><h2 class="groupheader"><a id="pub-methods" name="pub-methods"></a>
@@ -173,10 +173,12 @@ Public Member Functions</h2></td></tr>
 <tr class="separator:a3d0e569358ef0a1cd04608d7d6f9f4b1"><td class="memSeparator" colspan="2">&#160;</td></tr>
 <tr class="memitem:ac734442267e2c936d3d65b69539f279d" id="r_ac734442267e2c936d3d65b69539f279d"><td class="memItemLeft" align="right" valign="top">virtual void&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="classRealm_1_1GASNet1Module.html#ac734442267e2c936d3d65b69539f279d">allgatherv</a> (const char *val_in, size_t bytes, std::vector&lt; char &gt; &amp;vals_out, std::vector&lt; size_t &gt; &amp;lengths)</td></tr>
 <tr class="separator:ac734442267e2c936d3d65b69539f279d"><td class="memSeparator" colspan="2">&#160;</td></tr>
-<tr class="memitem:a6568db6106e9954669f0ee633274e85c" id="r_a6568db6106e9954669f0ee633274e85c"><td class="memItemLeft" align="right" valign="top">virtual size_t&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="classRealm_1_1GASNet1Module.html#a6568db6106e9954669f0ee633274e85c">sample_messages_received_count</a> (void)</td></tr>
-<tr class="separator:a6568db6106e9954669f0ee633274e85c"><td class="memSeparator" colspan="2">&#160;</td></tr>
-<tr class="memitem:a8344dd2e419bce41d77f1dc2215a82eb" id="r_a8344dd2e419bce41d77f1dc2215a82eb"><td class="memItemLeft" align="right" valign="top">virtual bool&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="classRealm_1_1GASNet1Module.html#a8344dd2e419bce41d77f1dc2215a82eb">check_for_quiescence</a> (size_t sampled_receive_count)</td></tr>
-<tr class="separator:a8344dd2e419bce41d77f1dc2215a82eb"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:abe64825628f8c8308989d6d66abba541" id="r_abe64825628f8c8308989d6d66abba541"><td class="memItemLeft" align="right" valign="top">virtual void&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="classRealm_1_1GASNet1Module.html#abe64825628f8c8308989d6d66abba541">sample_quiescence_state</a> (<a class="el" href="structRealm_1_1NetworkModule_1_1QuiescenceState.html">QuiescenceState</a> &amp;state)</td></tr>
+<tr class="separator:abe64825628f8c8308989d6d66abba541"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:a4087c178323717aed5b8d7c0c54ce5a6" id="r_a4087c178323717aed5b8d7c0c54ce5a6"><td class="memItemLeft" align="right" valign="top">virtual bool&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="classRealm_1_1GASNet1Module.html#a4087c178323717aed5b8d7c0c54ce5a6">custom_quiescence_check</a> (<a class="el" href="classRealm_1_1IncomingMessageManager.html">IncomingMessageManager</a> *message_manager, <a class="el" href="namespaceRealm_1_1Network.html#aab676d9e0b6744fb219251c5085c221e">Network::QuiescenceStatus</a> &amp;status)</td></tr>
+<tr class="separator:a4087c178323717aed5b8d7c0c54ce5a6"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:ad3533d00052d1950667b4745ce36d0f3" id="r_ad3533d00052d1950667b4745ce36d0f3"><td class="memItemLeft" align="right" valign="top">virtual void&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="classRealm_1_1GASNet1Module.html#ad3533d00052d1950667b4745ce36d0f3">quiescence_allreduce_sum</a> (const uint64_t *local_counts, uint64_t *total_counts, size_t count)</td></tr>
+<tr class="separator:ad3533d00052d1950667b4745ce36d0f3"><td class="memSeparator" colspan="2">&#160;</td></tr>
 <tr class="memitem:abe3da6fd7190394fcf8544460cfb07f7" id="r_abe3da6fd7190394fcf8544460cfb07f7"><td class="memItemLeft" align="right" valign="top">virtual <a class="el" href="classRealm_1_1MemoryImpl.html">MemoryImpl</a> *&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="classRealm_1_1GASNet1Module.html#abe3da6fd7190394fcf8544460cfb07f7">create_remote_memory</a> (<a class="el" href="classRealm_1_1RuntimeImpl.html">RuntimeImpl</a> *runtime, <a class="el" href="classRealm_1_1Memory.html">Memory</a> m, size_t size, <a class="el" href="classRealm_1_1Memory.html#a4d4d0769990b3dc75fcbab5ae292e839">Memory::Kind</a> kind, const <a class="el" href="classRealm_1_1ByteArray.html">ByteArray</a> &amp;rdma_info)</td></tr>
 <tr class="separator:abe3da6fd7190394fcf8544460cfb07f7"><td class="memSeparator" colspan="2">&#160;</td></tr>
 <tr class="memitem:a0913e40e7f39d18332580120112e410e" id="r_a0913e40e7f39d18332580120112e410e"><td class="memItemLeft" align="right" valign="top">virtual <a class="el" href="classRealm_1_1IBMemory.html">IBMemory</a> *&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="classRealm_1_1GASNet1Module.html#a0913e40e7f39d18332580120112e410e">create_remote_ib_memory</a> (<a class="el" href="classRealm_1_1RuntimeImpl.html">RuntimeImpl</a> *runtime, <a class="el" href="classRealm_1_1Memory.html">Memory</a> m, size_t size, <a class="el" href="classRealm_1_1Memory.html#a4d4d0769990b3dc75fcbab5ae292e839">Memory::Kind</a> kind, const <a class="el" href="classRealm_1_1ByteArray.html">ByteArray</a> &amp;rdma_info)</td></tr>
@@ -442,34 +444,6 @@ Protected Attributes</h2></td></tr>
 </div><div class="memdoc">
 
 <p>Implements <a class="el" href="classRealm_1_1NetworkModule.html#a59f14c98da9736501821f562b03f193b">Realm::NetworkModule</a>.</p>
-
-</div>
-</div>
-<a id="a8344dd2e419bce41d77f1dc2215a82eb" name="a8344dd2e419bce41d77f1dc2215a82eb"></a>
-<h2 class="memtitle"><span class="permalink"><a href="#a8344dd2e419bce41d77f1dc2215a82eb">&#9670;&#160;</a></span>check_for_quiescence()</h2>
-
-<div class="memitem">
-<div class="memproto">
-<table class="mlabels">
-  <tr>
-  <td class="mlabels-left">
-      <table class="memname">
-        <tr>
-          <td class="memname">virtual bool Realm::GASNet1Module::check_for_quiescence </td>
-          <td>(</td>
-          <td class="paramtype">size_t&#160;</td>
-          <td class="paramname"><em>sampled_receive_count</em></td><td>)</td>
-          <td></td>
-        </tr>
-      </table>
-  </td>
-  <td class="mlabels-right">
-<span class="mlabels"><span class="mlabel">virtual</span></span>  </td>
-  </tr>
-</table>
-</div><div class="memdoc">
-
-<p>Implements <a class="el" href="classRealm_1_1NetworkModule.html#a03c1ed35b5e6d182db9c9a048f1b1fd4">Realm::NetworkModule</a>.</p>
 
 </div>
 </div>
@@ -969,6 +943,44 @@ Protected Attributes</h2></td></tr>
 
 </div>
 </div>
+<a id="a4087c178323717aed5b8d7c0c54ce5a6" name="a4087c178323717aed5b8d7c0c54ce5a6"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a4087c178323717aed5b8d7c0c54ce5a6">&#9670;&#160;</a></span>custom_quiescence_check()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">virtual bool Realm::GASNet1Module::custom_quiescence_check </td>
+          <td>(</td>
+          <td class="paramtype"><a class="el" href="classRealm_1_1IncomingMessageManager.html">IncomingMessageManager</a> *&#160;</td>
+          <td class="paramname"><em>message_manager</em>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype"><a class="el" href="namespaceRealm_1_1Network.html#aab676d9e0b6744fb219251c5085c221e">Network::QuiescenceStatus</a> &amp;&#160;</td>
+          <td class="paramname"><em>status</em>&#160;</td>
+        </tr>
+        <tr>
+          <td></td>
+          <td>)</td>
+          <td></td><td></td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel">virtual</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>Reimplemented from <a class="el" href="classRealm_1_1NetworkModule.html#acf2650aeab56e69c3e5a9f0e402e3a2b">Realm::NetworkModule</a>.</p>
+
+</div>
+</div>
 <a id="a05ea3273deb1d5b6eaeefc7647cc5f70" name="a05ea3273deb1d5b6eaeefc7647cc5f70"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#a05ea3273deb1d5b6eaeefc7647cc5f70">&#9670;&#160;</a></span>detach()</h2>
 
@@ -1158,6 +1170,50 @@ Protected Attributes</h2></td></tr>
 </div><div class="memdoc">
 
 <p>Reimplemented from <a class="el" href="classRealm_1_1NetworkModule.html#a32e5d9593547d8aa684ec1f561dca5c6">Realm::NetworkModule</a>.</p>
+
+</div>
+</div>
+<a id="ad3533d00052d1950667b4745ce36d0f3" name="ad3533d00052d1950667b4745ce36d0f3"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#ad3533d00052d1950667b4745ce36d0f3">&#9670;&#160;</a></span>quiescence_allreduce_sum()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">virtual void Realm::GASNet1Module::quiescence_allreduce_sum </td>
+          <td>(</td>
+          <td class="paramtype">const uint64_t *&#160;</td>
+          <td class="paramname"><em>local_counts</em>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype">uint64_t *&#160;</td>
+          <td class="paramname"><em>total_counts</em>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype">size_t&#160;</td>
+          <td class="paramname"><em>count</em>&#160;</td>
+        </tr>
+        <tr>
+          <td></td>
+          <td>)</td>
+          <td></td><td></td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel">virtual</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>Implements <a class="el" href="classRealm_1_1NetworkModule.html#aa90ec7e91ad40e02f1d1144255814b07">Realm::NetworkModule</a>.</p>
 
 </div>
 </div>
@@ -1509,8 +1565,8 @@ Protected Attributes</h2></td></tr>
 
 </div>
 </div>
-<a id="a6568db6106e9954669f0ee633274e85c" name="a6568db6106e9954669f0ee633274e85c"></a>
-<h2 class="memtitle"><span class="permalink"><a href="#a6568db6106e9954669f0ee633274e85c">&#9670;&#160;</a></span>sample_messages_received_count()</h2>
+<a id="abe64825628f8c8308989d6d66abba541" name="abe64825628f8c8308989d6d66abba541"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#abe64825628f8c8308989d6d66abba541">&#9670;&#160;</a></span>sample_quiescence_state()</h2>
 
 <div class="memitem">
 <div class="memproto">
@@ -1519,10 +1575,10 @@ Protected Attributes</h2></td></tr>
   <td class="mlabels-left">
       <table class="memname">
         <tr>
-          <td class="memname">virtual size_t Realm::GASNet1Module::sample_messages_received_count </td>
+          <td class="memname">virtual void Realm::GASNet1Module::sample_quiescence_state </td>
           <td>(</td>
-          <td class="paramtype">void&#160;</td>
-          <td class="paramname"></td><td>)</td>
+          <td class="paramtype"><a class="el" href="structRealm_1_1NetworkModule_1_1QuiescenceState.html">QuiescenceState</a> &amp;&#160;</td>
+          <td class="paramname"><em>state</em></td><td>)</td>
           <td></td>
         </tr>
       </table>
@@ -1533,7 +1589,7 @@ Protected Attributes</h2></td></tr>
 </table>
 </div><div class="memdoc">
 
-<p>Implements <a class="el" href="classRealm_1_1NetworkModule.html#a01e0000544814639892913f5df611fab">Realm::NetworkModule</a>.</p>
+<p>Implements <a class="el" href="classRealm_1_1NetworkModule.html#a208ca77e66f7b2fb342d9b23643cbf00">Realm::NetworkModule</a>.</p>
 
 </div>
 </div>

@@ -44,7 +44,7 @@
    <!-- BEGIN version select -->
     <br />
     <div class="dropdown">
-     <button class="dropbtn">Version 25.6.1-rc.4+4c5e91c3</button>
+     <button class="dropbtn">Version 25.6.1-rc.4+c6aca815</button>
      <div class="dropdown-content"></div>
     </div>
     <script type="text/javascript" src="../selectversion.js"></script>
@@ -133,6 +133,7 @@ $(document).ready(function(){initNavTree('network_8h.html',''); initResizable();
 <a href="#nested-classes">Classes</a> &#124;
 <a href="#namespaces">Namespaces</a> &#124;
 <a href="#typedef-members">Typedefs</a> &#124;
+<a href="#enum-members">Enumerations</a> &#124;
 <a href="#func-members">Functions</a> &#124;
 <a href="#var-members">Variables</a>  </div>
   <div class="headertitle"><div class="title">network.h File Reference</div></div>
@@ -148,12 +149,12 @@ $(document).ready(function(){initNavTree('network_8h.html',''); initResizable();
 </div><div class="textblock"><div class="dynheader">
 Include dependency graph for network.h:</div>
 <div class="dyncontent">
-<div class="center"><iframe scrolling="no" frameborder="0" src="network_8h__incl.svg" width="2312" height="432"><p><b>This browser is not able to show SVG: try Firefox, Chrome, Safari, or Opera instead.</b></p></iframe></div>
+<div class="center"><!-- SVG 0 --></div>
 </div>
 </div><div class="textblock"><div class="dynheader">
 This graph shows which files directly or indirectly include this file:</div>
 <div class="dyncontent">
-<div class="center"><iframe scrolling="no" frameborder="0" src="network_8h__dep__incl.svg" width="3703" height="1092"><p><b>This browser is not able to show SVG: try Firefox, Chrome, Safari, or Opera instead.</b></p></iframe></div>
+<div class="center"><!-- SVG 1 --></div>
 </div>
 </div>
 <p><a href="network_8h_source.html">Go to the source code of this file.</a></p>
@@ -165,6 +166,8 @@ Classes</h2></td></tr>
 <tr class="memitem:"><td class="memItemLeft" align="right" valign="top">struct &#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="structRealm_1_1LocalAddress.html">Realm::LocalAddress</a></td></tr>
 <tr class="separator:"><td class="memSeparator" colspan="2">&#160;</td></tr>
 <tr class="memitem:"><td class="memItemLeft" align="right" valign="top">class &#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="classRealm_1_1NetworkModule.html">Realm::NetworkModule</a></td></tr>
+<tr class="separator:"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:"><td class="memItemLeft" align="right" valign="top">struct &#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="structRealm_1_1NetworkModule_1_1QuiescenceState.html">Realm::NetworkModule::QuiescenceState</a></td></tr>
 <tr class="separator:"><td class="memSeparator" colspan="2">&#160;</td></tr>
 <tr class="memitem:"><td class="memItemLeft" align="right" valign="top">struct &#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="structRealm_1_1NetworkSegmentInfo_1_1OptionFlags.html">Realm::NetworkSegmentInfo::OptionFlags</a></td></tr>
 <tr class="separator:"><td class="memSeparator" colspan="2">&#160;</td></tr>
@@ -189,14 +192,21 @@ Typedefs</h2></td></tr>
 <tr class="memitem:a8a2197df3970b61331dbc954f1cca5c8" id="r_a8a2197df3970b61331dbc954f1cca5c8"><td class="memItemLeft" align="right" valign="top">typedef unsigned&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="namespaceRealm_1_1NetworkSegmentInfo.html#a8a2197df3970b61331dbc954f1cca5c8">Realm::NetworkSegmentInfo::FlagsType</a></td></tr>
 <tr class="separator:a8a2197df3970b61331dbc954f1cca5c8"><td class="memSeparator" colspan="2">&#160;</td></tr>
 </table><table class="memberdecls">
+<tr class="heading"><td colspan="2"><h2 class="groupheader"><a id="enum-members" name="enum-members"></a>
+Enumerations</h2></td></tr>
+<tr class="memitem:aab676d9e0b6744fb219251c5085c221e" id="r_aab676d9e0b6744fb219251c5085c221e"><td class="memItemLeft" align="right" valign="top">enum class &#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="namespaceRealm_1_1Network.html#aab676d9e0b6744fb219251c5085c221e">Realm::Network::QuiescenceStatus</a> { <a class="el" href="namespaceRealm_1_1Network.html#aab676d9e0b6744fb219251c5085c221ea2ba22e58ca17bb728d522bba36cf8350">Realm::Network::DONE</a>
+, <a class="el" href="namespaceRealm_1_1Network.html#aab676d9e0b6744fb219251c5085c221ea50c83465aa7a1470ce23c928679bc9fb">Realm::Network::PROGRESSING</a>
+ }</td></tr>
+<tr class="separator:aab676d9e0b6744fb219251c5085c221e"><td class="memSeparator" colspan="2">&#160;</td></tr>
+</table><table class="memberdecls">
 <tr class="heading"><td colspan="2"><h2 class="groupheader"><a id="func-members" name="func-members"></a>
 Functions</h2></td></tr>
 <tr class="memitem:ae42af32795a8f1b105b5b7549e70ef6a" id="r_ae42af32795a8f1b105b5b7549e70ef6a"><td class="memItemLeft" align="right" valign="top"><a class="el" href="classRealm_1_1NetworkModule.html">NetworkModule</a> *&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="namespaceRealm_1_1Network.html#ae42af32795a8f1b105b5b7549e70ef6a">Realm::Network::get_network</a> (<a class="el" href="namespaceRealm.html#a4ae47f41d88cffb2debee742cbbfe2dd">NodeID</a> node)</td></tr>
 <tr class="separator:ae42af32795a8f1b105b5b7549e70ef6a"><td class="memSeparator" colspan="2">&#160;</td></tr>
 <tr class="memitem:ac2ec3aa1e17da432488c9ef87eec4e49" id="r_ac2ec3aa1e17da432488c9ef87eec4e49"><td class="memItemLeft" align="right" valign="top">void&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="namespaceRealm_1_1Network.html#ac2ec3aa1e17da432488c9ef87eec4e49">Realm::Network::barrier</a> (void)</td></tr>
 <tr class="separator:ac2ec3aa1e17da432488c9ef87eec4e49"><td class="memSeparator" colspan="2">&#160;</td></tr>
-<tr class="memitem:a49b2e54efa9c29b25ae13741bcb58768" id="r_a49b2e54efa9c29b25ae13741bcb58768"><td class="memItemLeft" align="right" valign="top">bool&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="namespaceRealm_1_1Network.html#a49b2e54efa9c29b25ae13741bcb58768">Realm::Network::check_for_quiescence</a> (<a class="el" href="classRealm_1_1IncomingMessageManager.html">IncomingMessageManager</a> *message_manager)</td></tr>
-<tr class="separator:a49b2e54efa9c29b25ae13741bcb58768"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:a6e445af8526cc388df97a691aa3022be" id="r_a6e445af8526cc388df97a691aa3022be"><td class="memItemLeft" align="right" valign="top"><a class="el" href="namespaceRealm_1_1Network.html#aab676d9e0b6744fb219251c5085c221e">QuiescenceStatus</a>&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="namespaceRealm_1_1Network.html#a6e445af8526cc388df97a691aa3022be">Realm::Network::check_for_quiescence</a> (<a class="el" href="classRealm_1_1IncomingMessageManager.html">IncomingMessageManager</a> *message_manager)</td></tr>
+<tr class="separator:a6e445af8526cc388df97a691aa3022be"><td class="memSeparator" colspan="2">&#160;</td></tr>
 <tr class="memitem:a19149043bb01577f845d9d105de494e1" id="r_a19149043bb01577f845d9d105de494e1"><td class="memTemplParams" colspan="2">template&lt;typename T &gt; </td></tr>
 <tr class="memitem:a19149043bb01577f845d9d105de494e1"><td class="memTemplItemLeft" align="right" valign="top">T&#160;</td><td class="memTemplItemRight" valign="bottom"><a class="el" href="namespaceRealm_1_1Network.html#a19149043bb01577f845d9d105de494e1">Realm::Network::broadcast</a> (<a class="el" href="namespaceRealm.html#a4ae47f41d88cffb2debee742cbbfe2dd">NodeID</a> root, T val)</td></tr>
 <tr class="separator:a19149043bb01577f845d9d105de494e1"><td class="memSeparator" colspan="2">&#160;</td></tr>

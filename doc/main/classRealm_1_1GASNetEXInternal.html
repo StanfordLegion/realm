@@ -44,7 +44,7 @@
    <!-- BEGIN version select -->
     <br />
     <div class="dropdown">
-     <button class="dropbtn">Version 25.6.1-rc.4+4c5e91c3</button>
+     <button class="dropbtn">Version 25.6.1-rc.4+c6aca815</button>
      <div class="dropdown-content"></div>
     </div>
     <script type="text/javascript" src="../selectversion.js"></script>
@@ -147,7 +147,7 @@ $(document).ready(function(){initNavTree('classRealm_1_1GASNetEXInternal.html','
 <div class="dynheader">
 Collaboration diagram for Realm::GASNetEXInternal:</div>
 <div class="dyncontent">
-<div class="center"><iframe scrolling="no" frameborder="0" src="classRealm_1_1GASNetEXInternal__coll__graph.svg" width="4204" height="2127"><p><b>This browser is not able to show SVG: try Firefox, Chrome, Safari, or Opera instead.</b></p></iframe></div>
+<div class="center"><!-- SVG 0 --></div>
 <center><span class="legend">[<a target="top" href="graph_legend.html">legend</a>]</span></center></div>
 <table class="memberdecls">
 <tr class="heading"><td colspan="2"><h2 class="groupheader"><a id="nested-classes" name="nested-classes"></a>
@@ -181,10 +181,10 @@ Public Member Functions</h2></td></tr>
 <tr class="separator:ac00f566a335a514f092f5aa269affe84"><td class="memSeparator" colspan="2">&#160;</td></tr>
 <tr class="memitem:ab7890fb550892dfaaf6e0cb97af51729" id="r_ab7890fb550892dfaaf6e0cb97af51729"><td class="memItemLeft" align="right" valign="top">void&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="classRealm_1_1GASNetEXInternal.html#ab7890fb550892dfaaf6e0cb97af51729">allgatherv</a> (const char *val_in, size_t bytes, std::vector&lt; char &gt; &amp;vals_out, std::vector&lt; size_t &gt; &amp;lengths)</td></tr>
 <tr class="separator:ab7890fb550892dfaaf6e0cb97af51729"><td class="memSeparator" colspan="2">&#160;</td></tr>
-<tr class="memitem:a751ceae626fe5fb89eb873f3773e5ba1" id="r_a751ceae626fe5fb89eb873f3773e5ba1"><td class="memItemLeft" align="right" valign="top">size_t&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="classRealm_1_1GASNetEXInternal.html#a751ceae626fe5fb89eb873f3773e5ba1">sample_messages_received_count</a> ()</td></tr>
-<tr class="separator:a751ceae626fe5fb89eb873f3773e5ba1"><td class="memSeparator" colspan="2">&#160;</td></tr>
-<tr class="memitem:a89e267db7bc4371af59048e51d761c2d" id="r_a89e267db7bc4371af59048e51d761c2d"><td class="memItemLeft" align="right" valign="top">bool&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="classRealm_1_1GASNetEXInternal.html#a89e267db7bc4371af59048e51d761c2d">check_for_quiescence</a> (size_t sampled_receive_count)</td></tr>
-<tr class="separator:a89e267db7bc4371af59048e51d761c2d"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:a2aedb3b2b74297786bddaf971b34672f" id="r_a2aedb3b2b74297786bddaf971b34672f"><td class="memItemLeft" align="right" valign="top">void&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="classRealm_1_1GASNetEXInternal.html#a2aedb3b2b74297786bddaf971b34672f">sample_quiescence_state</a> (<a class="el" href="structRealm_1_1NetworkModule_1_1QuiescenceState.html">NetworkModule::QuiescenceState</a> &amp;state)</td></tr>
+<tr class="separator:a2aedb3b2b74297786bddaf971b34672f"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:ad181114efab8ea9d435ceebf603895be" id="r_ad181114efab8ea9d435ceebf603895be"><td class="memItemLeft" align="right" valign="top">void&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="classRealm_1_1GASNetEXInternal.html#ad181114efab8ea9d435ceebf603895be">quiescence_allreduce_sum</a> (const uint64_t *local_counts, uint64_t *total_counts, size_t count)</td></tr>
+<tr class="separator:ad181114efab8ea9d435ceebf603895be"><td class="memSeparator" colspan="2">&#160;</td></tr>
 <tr class="memitem:a7c027ef4857e8004f4d6856139b982f6" id="r_a7c027ef4857e8004f4d6856139b982f6"><td class="memItemLeft" align="right" valign="top"><a class="el" href="classRealm_1_1PendingCompletion.html">PendingCompletion</a> *&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="classRealm_1_1GASNetEXInternal.html#a7c027ef4857e8004f4d6856139b982f6">get_available_comp</a> ()</td></tr>
 <tr class="separator:a7c027ef4857e8004f4d6856139b982f6"><td class="memSeparator" colspan="2">&#160;</td></tr>
 <tr class="memitem:a630801a7c8a0d162cbc1cf6fe5d9150d" id="r_a630801a7c8a0d162cbc1cf6fe5d9150d"><td class="memItemLeft" align="right" valign="top"><a class="el" href="classRealm_1_1PendingCompletion.html">PendingCompletion</a> *&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="classRealm_1_1GASNetEXInternal.html#a630801a7c8a0d162cbc1cf6fe5d9150d">early_local_completion</a> (<a class="el" href="classRealm_1_1PendingCompletion.html">PendingCompletion</a> *comp)</td></tr>
@@ -266,6 +266,8 @@ Protected Attributes</h2></td></tr>
 <tr class="separator:a41a03d0ed9569a32158512a1302823b3"><td class="memSeparator" colspan="2">&#160;</td></tr>
 <tr class="memitem:a0d1e4b113884ac1c01b304912a93fe7c" id="r_a0d1e4b113884ac1c01b304912a93fe7c"><td class="memItemLeft" align="right" valign="top"><a class="el" href="classRealm_1_1atomic.html">atomic</a>&lt; uint64_t &gt;&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="classRealm_1_1GASNetEXInternal.html#a0d1e4b113884ac1c01b304912a93fe7c">total_packets_received</a></td></tr>
 <tr class="separator:a0d1e4b113884ac1c01b304912a93fe7c"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:acb235231d576f96e8bd027bcfeee5f05" id="r_acb235231d576f96e8bd027bcfeee5f05"><td class="memItemLeft" align="right" valign="top"><a class="el" href="classRealm_1_1atomic.html">atomic</a>&lt; uint64_t &gt;&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="classRealm_1_1GASNetEXInternal.html#acb235231d576f96e8bd027bcfeee5f05">total_events_added</a></td></tr>
+<tr class="separator:acb235231d576f96e8bd027bcfeee5f05"><td class="memSeparator" colspan="2">&#160;</td></tr>
 <tr class="memitem:a32a59af2b8066d2ceb4b3fd1b34b0781" id="r_a32a59af2b8066d2ceb4b3fd1b34b0781"><td class="memItemLeft" align="right" valign="top"><a class="el" href="namespaceRealm.html#a4713e57139284efc3da66bd4bbc20ebe">Mutex</a>&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="classRealm_1_1GASNetEXInternal.html#a32a59af2b8066d2ceb4b3fd1b34b0781">databuf_mutex</a></td></tr>
 <tr class="separator:a32a59af2b8066d2ceb4b3fd1b34b0781"><td class="memSeparator" colspan="2">&#160;</td></tr>
 <tr class="memitem:a254b399d8181ed7988659975cb40c49c" id="r_a254b399d8181ed7988659975cb40c49c"><td class="memItemLeft" align="right" valign="top"><a class="el" href="classRealm_1_1OutbufMetadata.html">OutbufMetadata</a> *&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="classRealm_1_1GASNetEXInternal.html#a254b399d8181ed7988659975cb40c49c">databuf_md</a></td></tr>
@@ -293,6 +295,8 @@ Friends</h2></td></tr>
 <tr class="separator:aa0b504f6d330dc845b6d18c8f6268b25"><td class="memSeparator" colspan="2">&#160;</td></tr>
 <tr class="memitem:afae1174d2809610facbcc670434bb752" id="r_afae1174d2809610facbcc670434bb752"><td class="memItemLeft" align="right" valign="top">class&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="classRealm_1_1GASNetEXInternal.html#afae1174d2809610facbcc670434bb752">GASNetEXCompleter</a></td></tr>
 <tr class="separator:afae1174d2809610facbcc670434bb752"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:a5e32b0af727bdc7b7be59006383b96c5" id="r_a5e32b0af727bdc7b7be59006383b96c5"><td class="memItemLeft" align="right" valign="top">class&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="classRealm_1_1GASNetEXInternal.html#a5e32b0af727bdc7b7be59006383b96c5">GASNetEXInjector</a></td></tr>
+<tr class="separator:a5e32b0af727bdc7b7be59006383b96c5"><td class="memSeparator" colspan="2">&#160;</td></tr>
 </table>
 <h2 class="groupheader">Constructor &amp; Destructor Documentation</h2>
 <a id="a6413bc39266df7cbe8a7580fd36ec7b9" name="a6413bc39266df7cbe8a7580fd36ec7b9"></a>
@@ -513,24 +517,6 @@ Friends</h2></td></tr>
           <td>(</td>
           <td class="paramtype"><a class="el" href="structRealm_1_1PreparedMessage.html">PreparedMessage</a> *&#160;</td>
           <td class="paramname"><em>msg</em></td><td>)</td>
-          <td></td>
-        </tr>
-      </table>
-</div><div class="memdoc">
-
-</div>
-</div>
-<a id="a89e267db7bc4371af59048e51d761c2d" name="a89e267db7bc4371af59048e51d761c2d"></a>
-<h2 class="memtitle"><span class="permalink"><a href="#a89e267db7bc4371af59048e51d761c2d">&#9670;&#160;</a></span>check_for_quiescence()</h2>
-
-<div class="memitem">
-<div class="memproto">
-      <table class="memname">
-        <tr>
-          <td class="memname">bool Realm::GASNetEXInternal::check_for_quiescence </td>
-          <td>(</td>
-          <td class="paramtype">size_t&#160;</td>
-          <td class="paramname"><em>sampled_receive_count</em></td><td>)</td>
           <td></td>
         </tr>
       </table>
@@ -1245,6 +1231,40 @@ Friends</h2></td></tr>
 
 </div>
 </div>
+<a id="ad181114efab8ea9d435ceebf603895be" name="ad181114efab8ea9d435ceebf603895be"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#ad181114efab8ea9d435ceebf603895be">&#9670;&#160;</a></span>quiescence_allreduce_sum()</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname">void Realm::GASNetEXInternal::quiescence_allreduce_sum </td>
+          <td>(</td>
+          <td class="paramtype">const uint64_t *&#160;</td>
+          <td class="paramname"><em>local_counts</em>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype">uint64_t *&#160;</td>
+          <td class="paramname"><em>total_counts</em>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype">size_t&#160;</td>
+          <td class="paramname"><em>count</em>&#160;</td>
+        </tr>
+        <tr>
+          <td></td>
+          <td>)</td>
+          <td></td><td></td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+
+</div>
+</div>
 <a id="a0d7be22ecc2004c822108ca293ba7566" name="a0d7be22ecc2004c822108ca293ba7566"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#a0d7be22ecc2004c822108ca293ba7566">&#9670;&#160;</a></span>recommended_max_payload() <span class="overload">[1/3]</span></h2>
 
@@ -1389,16 +1409,17 @@ Friends</h2></td></tr>
 
 </div>
 </div>
-<a id="a751ceae626fe5fb89eb873f3773e5ba1" name="a751ceae626fe5fb89eb873f3773e5ba1"></a>
-<h2 class="memtitle"><span class="permalink"><a href="#a751ceae626fe5fb89eb873f3773e5ba1">&#9670;&#160;</a></span>sample_messages_received_count()</h2>
+<a id="a2aedb3b2b74297786bddaf971b34672f" name="a2aedb3b2b74297786bddaf971b34672f"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a2aedb3b2b74297786bddaf971b34672f">&#9670;&#160;</a></span>sample_quiescence_state()</h2>
 
 <div class="memitem">
 <div class="memproto">
       <table class="memname">
         <tr>
-          <td class="memname">size_t Realm::GASNetEXInternal::sample_messages_received_count </td>
+          <td class="memname">void Realm::GASNetEXInternal::sample_quiescence_state </td>
           <td>(</td>
-          <td class="paramname"></td><td>)</td>
+          <td class="paramtype"><a class="el" href="structRealm_1_1NetworkModule_1_1QuiescenceState.html">NetworkModule::QuiescenceState</a> &amp;&#160;</td>
+          <td class="paramname"><em>state</em></td><td>)</td>
           <td></td>
         </tr>
       </table>
@@ -1482,6 +1503,28 @@ Friends</h2></td></tr>
       <table class="memname">
         <tr>
           <td class="memname">friend class <a class="el" href="classRealm_1_1GASNetEXEvent.html">GASNetEXEvent</a></td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel">friend</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+</div>
+</div>
+<a id="a5e32b0af727bdc7b7be59006383b96c5" name="a5e32b0af727bdc7b7be59006383b96c5"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a5e32b0af727bdc7b7be59006383b96c5">&#9670;&#160;</a></span>GASNetEXInjector</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">friend class <a class="el" href="classRealm_1_1GASNetEXInjector.html">GASNetEXInjector</a></td>
         </tr>
       </table>
   </td>
@@ -2033,6 +2076,28 @@ Friends</h2></td></tr>
       <table class="memname">
         <tr>
           <td class="memname">std::vector&lt;<a class="el" href="structRealm_1_1GASNetEXInternal_1_1SegmentInfo.html">SegmentInfo</a>&gt; Realm::GASNetEXInternal::segments_by_addr</td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel">protected</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+</div>
+</div>
+<a id="acb235231d576f96e8bd027bcfeee5f05" name="acb235231d576f96e8bd027bcfeee5f05"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#acb235231d576f96e8bd027bcfeee5f05">&#9670;&#160;</a></span>total_events_added</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname"><a class="el" href="classRealm_1_1atomic.html">atomic</a>&lt;uint64_t&gt; Realm::GASNetEXInternal::total_events_added</td>
         </tr>
       </table>
   </td>

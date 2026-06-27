@@ -3,7 +3,7 @@ var classRealm_1_1ReverseGetter =
     [ "ReverseGetter", "classRealm_1_1ReverseGetter.html#ad57c65eed2840a4e97d58640f9f01c91", null ],
     [ "add_reverse_get", "classRealm_1_1ReverseGetter.html#a05b04280e6ae10f1652e8f825c466d4f", null ],
     [ "do_work", "classRealm_1_1ReverseGetter.html#ab1262b018f7bbc30c479fb5d512328f2", null ],
-    [ "has_work_remaining", "classRealm_1_1ReverseGetter.html#af77e1b6decef45fc5c226068110f5083", null ],
+    [ "queue_size", "classRealm_1_1ReverseGetter.html#aecdfe2e4424e702cd1cf8807d2f3aff9", null ],
     [ "reverse_get_complete", "classRealm_1_1ReverseGetter.html#ac18a3eaa7ef07f7fef2b570a5d09b625", null ],
     [ "GASNetEXEvent", "classRealm_1_1ReverseGetter.html#aae9d5a274f6df6a24d8a287e641fdba5", null ],
     [ "head", "classRealm_1_1ReverseGetter.html#a8e2969659f7c1f4ab563ca24874651c2", null ],

@@ -6,7 +6,6 @@ var classRealm_1_1UCPModule =
     [ "attach", "classRealm_1_1UCPModule.html#a027572d9c215b9ec2ab5b00dbf69e09f", null ],
     [ "barrier", "classRealm_1_1UCPModule.html#acf547adf0ba5c0728aec78cdb8b3c88d", null ],
     [ "broadcast", "classRealm_1_1UCPModule.html#a77a3251503e25350911604c65d2317c4", null ],
-    [ "check_for_quiescence", "classRealm_1_1UCPModule.html#a430f2bae64155f8a63950f362ec4ece3", null ],
     [ "create_active_message_impl", "classRealm_1_1UCPModule.html#a0eaf94992320febeb60eae4f4ca69509", null ],
     [ "create_active_message_impl", "classRealm_1_1UCPModule.html#a9f4d25bc060eacd34fb5d6a0e54aab26", null ],
     [ "create_active_message_impl", "classRealm_1_1UCPModule.html#a809801cbe53104a0e142969d4caf5248", null ],
@@ -19,12 +18,13 @@ var classRealm_1_1UCPModule =
     [ "get_shared_peers", "classRealm_1_1UCPModule.html#ac4159f205dbd9b0b1ad0f79279a2688d", null ],
     [ "max_payload_size", "classRealm_1_1UCPModule.html#af1b8fd7a1b2753635a8947189eb3072c", null ],
     [ "parse_command_line", "classRealm_1_1UCPModule.html#a585d8774de3244e3b7acbb06dc032425", null ],
+    [ "quiescence_allreduce_sum", "classRealm_1_1UCPModule.html#a98ff0c09945ca682b277f7d9cb2cfd1b", null ],
     [ "recommended_max_payload", "classRealm_1_1UCPModule.html#affa34ec4c5d0300a1bc7a93a425d984c", null ],
     [ "recommended_max_payload", "classRealm_1_1UCPModule.html#a7c5cd39e6d14765805b942e4f412ee81", null ],
     [ "recommended_max_payload", "classRealm_1_1UCPModule.html#a0d608dca0230b70d27e81e37f4cd1ee8", null ],
     [ "recommended_max_payload", "classRealm_1_1UCPModule.html#ae19dae2476882cd14713c63ca40623a1", null ],
     [ "recommended_max_payload", "classRealm_1_1UCPModule.html#a68ad794ca20d2de576c66023fe8b9c64", null ],
     [ "recommended_max_payload", "classRealm_1_1UCPModule.html#a8ad9145a2c2ac87b646fd6b41c9b1440", null ],
-    [ "sample_messages_received_count", "classRealm_1_1UCPModule.html#ad6e6b616915fcdc43e05a2d915d18187", null ],
+    [ "sample_quiescence_state", "classRealm_1_1UCPModule.html#ab4726d94550d79b28576b3384c42307b", null ],
     [ "internal", "classRealm_1_1UCPModule.html#a14be37a90ae7ebb2c5d201790cf61d7d", null ]
 ];

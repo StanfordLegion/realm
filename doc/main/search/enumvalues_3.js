@@ -8,8 +8,9 @@ var searchData=
   ['dim_5f1d_5',['DIM_1D',['../classRealm_1_1Request.html#a80798a498c54b58019dbe496f5d471a5a5c3a7de9a064de5a017e628f30da0667',1,'Realm::Request']]],
   ['dim_5f2d_6',['DIM_2D',['../classRealm_1_1Request.html#a80798a498c54b58019dbe496f5d471a5aa8f1800ba1d0935a8754ce61d8f0cbf3',1,'Realm::Request']]],
   ['dim_5f3d_7',['DIM_3D',['../classRealm_1_1Request.html#a80798a498c54b58019dbe496f5d471a5a41199f3a945cec22ed6ad38501688996',1,'Realm::Request']]],
-  ['dst_5fflagmask_8',['DST_FLAGMASK',['../classRealm_1_1TransferIterator.html#ae40e9bd7c12432c280353ede39272b13aadb7721bf816471fbe80cfc69404cc28',1,'Realm::TransferIterator']]],
-  ['dst_5flines_5fok_9',['DST_LINES_OK',['../classRealm_1_1TransferIterator.html#ae40e9bd7c12432c280353ede39272b13acee3b97dedde3dc817a91951bcdba434',1,'Realm::TransferIterator']]],
-  ['dst_5fpartial_5fok_10',['DST_PARTIAL_OK',['../classRealm_1_1TransferIterator.html#ae40e9bd7c12432c280353ede39272b13ad855ddb76613df750e82f72b45328b2b',1,'Realm::TransferIterator']]],
-  ['dst_5fplanes_5fok_11',['DST_PLANES_OK',['../classRealm_1_1TransferIterator.html#ae40e9bd7c12432c280353ede39272b13aeaa8f34ed43fb69f1cb9f901574a5c90',1,'Realm::TransferIterator']]]
+  ['done_8',['DONE',['../namespaceRealm_1_1Network.html#aab676d9e0b6744fb219251c5085c221ea2ba22e58ca17bb728d522bba36cf8350',1,'Realm::Network']]],
+  ['dst_5fflagmask_9',['DST_FLAGMASK',['../classRealm_1_1TransferIterator.html#ae40e9bd7c12432c280353ede39272b13aadb7721bf816471fbe80cfc69404cc28',1,'Realm::TransferIterator']]],
+  ['dst_5flines_5fok_10',['DST_LINES_OK',['../classRealm_1_1TransferIterator.html#ae40e9bd7c12432c280353ede39272b13acee3b97dedde3dc817a91951bcdba434',1,'Realm::TransferIterator']]],
+  ['dst_5fpartial_5fok_11',['DST_PARTIAL_OK',['../classRealm_1_1TransferIterator.html#ae40e9bd7c12432c280353ede39272b13ad855ddb76613df750e82f72b45328b2b',1,'Realm::TransferIterator']]],
+  ['dst_5fplanes_5fok_12',['DST_PLANES_OK',['../classRealm_1_1TransferIterator.html#ae40e9bd7c12432c280353ede39272b13aeaa8f34ed43fb69f1cb9f901574a5c90',1,'Realm::TransferIterator']]]
 ];

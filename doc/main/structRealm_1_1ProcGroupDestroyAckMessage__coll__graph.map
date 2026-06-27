@@ -1,9 +1,0 @@
-<map id="Realm::ProcGroupDestroyAckMessage" name="Realm::ProcGroupDestroyAckMessage">
-<area shape="rect" id="Node000001" title=" " alt="" coords="5,168,220,208"/>
-<area shape="rect" id="Node000002" href="$classRealm_1_1ProcessorGroup.html" title=" " alt="" coords="25,80,200,105"/>
-<area shape="poly" id="edge1_Node000001_Node000002" title=" " alt="" coords="115,119,115,168,110,168,110,119"/>
-<area shape="poly" id="edge4_Node000002_Node000002" title=" " alt="" coords="215,85,227,93,218,99,201,102,200,96,217,94,221,93,213,90"/>
-<area shape="rect" id="Node000003" href="$classRealm_1_1Processor.html" title=" " alt="" coords="45,5,180,31"/>
-<area shape="poly" id="edge2_Node000002_Node000003" title=" " alt="" coords="115,45,115,80,110,80,110,45"/>
-<area shape="poly" id="edge3_Node000003_Node000003" title=" " alt="" coords="195,10,207,18,198,25,181,27,180,22,196,20,201,18,193,15"/>
-</map>

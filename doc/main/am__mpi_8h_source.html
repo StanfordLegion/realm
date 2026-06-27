@@ -44,7 +44,7 @@
    <!-- BEGIN version select -->
     <br />
     <div class="dropdown">
-     <button class="dropbtn">Version 25.6.1-rc.4+4c5e91c3</button>
+     <button class="dropbtn">Version 25.6.1-rc.4+c6aca815</button>
      <div class="dropdown-content"></div>
     </div>
     <script type="text/javascript" src="../selectversion.js"></script>
@@ -186,7 +186,7 @@ $(document).ready(function(){initNavTree('am__mpi_8h_source.html',''); initResiz
 <div class="foldopen" id="foldopen00045" data-start="{" data-end="}">
 <div class="line"><a id="l00045" name="l00045"></a><span class="lineno"><a class="line" href="namespaceRealm_1_1MPI.html">   45</a></span>  <span class="keyword">namespace </span>MPI {</div>
 <div class="line"><a id="l00046" name="l00046"></a><span class="lineno">   46</span> </div>
-<div class="line"><a id="l00047" name="l00047"></a><span class="lineno"><a class="line" href="namespaceRealm_1_1MPI.html#a010c8ab1a0821400bc3e7d737602fa77">   47</a></span>    <span class="keyword">extern</span> <a class="code hl_class" href="classRealm_1_1atomic.html">atomic&lt;size_t&gt;</a> <a class="code hl_variable" href="namespaceRealm_1_1MPI.html#a109d14972455ff0311d7c05ac1f062c2">messages_sent</a>, <a class="code hl_variable" href="namespaceRealm_1_1MPI.html#a010c8ab1a0821400bc3e7d737602fa77">messages_rcvd</a>;</div>
+<div class="line"><a id="l00047" name="l00047"></a><span class="lineno"><a class="line" href="namespaceRealm_1_1MPI.html#a47b96d1df13afcfbdc50c2dfedcdec72">   47</a></span>    <span class="keyword">extern</span> <a class="code hl_class" href="classRealm_1_1atomic.html">atomic&lt;size_t&gt;</a> <a class="code hl_variable" href="namespaceRealm_1_1MPI.html#a109d14972455ff0311d7c05ac1f062c2">messages_sent</a>, <a class="code hl_variable" href="namespaceRealm_1_1MPI.html#a010c8ab1a0821400bc3e7d737602fa77">messages_rcvd</a>, <a class="code hl_variable" href="namespaceRealm_1_1MPI.html#a47b96d1df13afcfbdc50c2dfedcdec72">messages_delivered_to_imm</a>;</div>
 <div class="line"><a id="l00048" name="l00048"></a><span class="lineno">   48</span> </div>
 <div class="foldopen" id="foldopen00049" data-start="{" data-end="};">
 <div class="line"><a id="l00049" name="l00049"></a><span class="lineno"><a class="line" href="structRealm_1_1MPI_1_1AM__msg.html">   49</a></span>    <span class="keyword">struct </span><a class="code hl_struct" href="structRealm_1_1MPI_1_1AM__msg.html">AM_msg</a> {</div>
@@ -223,6 +223,7 @@ $(document).ready(function(){initNavTree('am__mpi_8h_source.html',''); initResiz
 <div class="ttc" id="aclassRealm_1_1atomic_html"><div class="ttname"><a href="classRealm_1_1atomic.html">Realm::atomic</a></div><div class="ttdef"><b>Definition</b> atomics.h:31</div></div>
 <div class="ttc" id="anamespaceRealm_1_1MPI_html_a010c8ab1a0821400bc3e7d737602fa77"><div class="ttname"><a href="namespaceRealm_1_1MPI.html#a010c8ab1a0821400bc3e7d737602fa77">Realm::MPI::messages_rcvd</a></div><div class="ttdeci">atomic&lt; size_t &gt; messages_rcvd</div><div class="ttdef"><b>Definition</b> am_mpi.h:47</div></div>
 <div class="ttc" id="anamespaceRealm_1_1MPI_html_a109d14972455ff0311d7c05ac1f062c2"><div class="ttname"><a href="namespaceRealm_1_1MPI.html#a109d14972455ff0311d7c05ac1f062c2">Realm::MPI::messages_sent</a></div><div class="ttdeci">atomic&lt; size_t &gt; messages_sent</div></div>
+<div class="ttc" id="anamespaceRealm_1_1MPI_html_a47b96d1df13afcfbdc50c2dfedcdec72"><div class="ttname"><a href="namespaceRealm_1_1MPI.html#a47b96d1df13afcfbdc50c2dfedcdec72">Realm::MPI::messages_delivered_to_imm</a></div><div class="ttdeci">atomic&lt; size_t &gt; messages_delivered_to_imm</div><div class="ttdef"><b>Definition</b> am_mpi.h:47</div></div>
 <div class="ttc" id="anamespaceRealm_1_1MPI_html_a78c3b4635a72dfb75a568b9b64e6f836"><div class="ttname"><a href="namespaceRealm_1_1MPI.html#a78c3b4635a72dfb75a568b9b64e6f836">Realm::MPI::AMComplete</a></div><div class="ttdeci">void AMComplete(void *remote_comp)</div></div>
 <div class="ttc" id="anamespaceRealm_1_1MPI_html_a87fa1f0ab8c5d9746cd7ad2764864e25"><div class="ttname"><a href="namespaceRealm_1_1MPI.html#a87fa1f0ab8c5d9746cd7ad2764864e25">Realm::MPI::AM_Init</a></div><div class="ttdeci">int AM_Init(int *p_node_this, int *p_node_size)</div></div>
 <div class="ttc" id="anamespaceRealm_1_1MPI_html_a9e2eaef534d0dda868ac9e4b4ab64560"><div class="ttname"><a href="namespaceRealm_1_1MPI.html#a9e2eaef534d0dda868ac9e4b4ab64560">Realm::MPI::AM_init_long_messages</a></div><div class="ttdeci">void AM_init_long_messages(MPI_Win win, void *am_base, Realm::IncomingMessageManager *message_manager)</div></div>

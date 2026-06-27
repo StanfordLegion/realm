@@ -7,7 +7,7 @@ var classRealm_1_1GASNetEXPoller =
     [ "do_work", "classRealm_1_1GASNetEXPoller.html#a725646368202072ff06475406e7e2190", null ],
     [ "drain_xpairs", "classRealm_1_1GASNetEXPoller.html#a2bba3336fe6d8c376aa0f5b3df73ef59", null ],
     [ "end_polling", "classRealm_1_1GASNetEXPoller.html#adb2baba1682d3858707ff37c6e20aa0a", null ],
-    [ "has_work_remaining", "classRealm_1_1GASNetEXPoller.html#a75bd40449e6b80821c827108df3255d9", null ],
+    [ "queue_size", "classRealm_1_1GASNetEXPoller.html#a29f931fc5c31da86c998182b409d42fb", null ],
     [ "wait_for_full_poll_cycle", "classRealm_1_1GASNetEXPoller.html#ac5f4926c6cbbadfd716afd071f8dc806", null ],
     [ "critical_xpairs", "classRealm_1_1GASNetEXPoller.html#a87170b9b183deedb99a55df99fa5a026", null ],
     [ "internal", "classRealm_1_1GASNetEXPoller.html#ab28d62863e1d4b81ebee9d0e63ac4a42", null ],

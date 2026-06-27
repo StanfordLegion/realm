@@ -36,10 +36,14 @@ var namespaceRealm =
     [ "LLVMJit", "namespaceRealm_1_1LLVMJit.html", "namespaceRealm_1_1LLVMJit" ],
     [ "MPI", "namespaceRealm_1_1MPI.html", "namespaceRealm_1_1MPI" ],
     [ "Network", "namespaceRealm_1_1Network.html", [
+      [ "QuiescenceStatus", "namespaceRealm_1_1Network.html#aab676d9e0b6744fb219251c5085c221e", [
+        [ "DONE", "namespaceRealm_1_1Network.html#aab676d9e0b6744fb219251c5085c221ea2ba22e58ca17bb728d522bba36cf8350", null ],
+        [ "PROGRESSING", "namespaceRealm_1_1Network.html#aab676d9e0b6744fb219251c5085c221ea50c83465aa7a1470ce23c928679bc9fb", null ]
+      ] ],
       [ "barrier", "namespaceRealm_1_1Network.html#ac2ec3aa1e17da432488c9ef87eec4e49", null ],
       [ "broadcast", "namespaceRealm_1_1Network.html#a8557ddbfbc2065628d1d2363ced865e6", null ],
       [ "broadcast", "namespaceRealm_1_1Network.html#a19149043bb01577f845d9d105de494e1", null ],
-      [ "check_for_quiescence", "namespaceRealm_1_1Network.html#a49b2e54efa9c29b25ae13741bcb58768", null ],
+      [ "check_for_quiescence", "namespaceRealm_1_1Network.html#a6e445af8526cc388df97a691aa3022be", null ],
       [ "create_active_message_impl", "namespaceRealm_1_1Network.html#a6510d721f6051b782faa9080b1e1cbec", null ],
       [ "create_active_message_impl", "namespaceRealm_1_1Network.html#ababf531a97e5aea3f69af71a29467b7a", null ],
       [ "create_active_message_impl", "namespaceRealm_1_1Network.html#ac511160936ccc2e5a9168ac516bec5c2", null ],

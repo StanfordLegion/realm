@@ -44,7 +44,7 @@
    <!-- BEGIN version select -->
     <br />
     <div class="dropdown">
-     <button class="dropbtn">Version 25.6.1-rc.4+4c5e91c3</button>
+     <button class="dropbtn">Version 25.6.1-rc.4+c6aca815</button>
      <div class="dropdown-content"></div>
     </div>
     <script type="text/javascript" src="../selectversion.js"></script>
@@ -145,7 +145,7 @@ $(document).ready(function(){initNavTree('classRealm_1_1UCP_1_1UCPInternal.html'
 <div class="dynheader">
 Collaboration diagram for Realm::UCP::UCPInternal:</div>
 <div class="dyncontent">
-<div class="center"><iframe scrolling="no" frameborder="0" src="classRealm_1_1UCP_1_1UCPInternal__coll__graph.svg" width="395" height="199"><p><b>This browser is not able to show SVG: try Firefox, Chrome, Safari, or Opera instead.</b></p></iframe></div>
+<div class="center"><!-- SVG 0 --></div>
 <center><span class="legend">[<a target="top" href="graph_legend.html">legend</a>]</span></center></div>
 <table class="memberdecls">
 <tr class="heading"><td colspan="2"><h2 class="groupheader"><a id="nested-classes" name="nested-classes"></a>
@@ -181,10 +181,10 @@ Public Member Functions</h2></td></tr>
 <tr class="separator:a172c97050d26ba949f2cfd302efb7fcc"><td class="memSeparator" colspan="2">&#160;</td></tr>
 <tr class="memitem:a1a3e01d971e970ebf96f41b35250c6df" id="r_a1a3e01d971e970ebf96f41b35250c6df"><td class="memItemLeft" align="right" valign="top">void&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="classRealm_1_1UCP_1_1UCPInternal.html#a1a3e01d971e970ebf96f41b35250c6df">allgatherv</a> (const char *val_in, size_t bytes, std::vector&lt; char &gt; &amp;vals_out, std::vector&lt; size_t &gt; &amp;lengths)</td></tr>
 <tr class="separator:a1a3e01d971e970ebf96f41b35250c6df"><td class="memSeparator" colspan="2">&#160;</td></tr>
-<tr class="memitem:a7f3fa3c943d6f082a08920bf630daaea" id="r_a7f3fa3c943d6f082a08920bf630daaea"><td class="memItemLeft" align="right" valign="top">size_t&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="classRealm_1_1UCP_1_1UCPInternal.html#a7f3fa3c943d6f082a08920bf630daaea">sample_messages_received_count</a> ()</td></tr>
-<tr class="separator:a7f3fa3c943d6f082a08920bf630daaea"><td class="memSeparator" colspan="2">&#160;</td></tr>
-<tr class="memitem:a4ca10fdded8a257362491c6b2b131cd0" id="r_a4ca10fdded8a257362491c6b2b131cd0"><td class="memItemLeft" align="right" valign="top">bool&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="classRealm_1_1UCP_1_1UCPInternal.html#a4ca10fdded8a257362491c6b2b131cd0">check_for_quiescence</a> (size_t sampled_receive_count)</td></tr>
-<tr class="separator:a4ca10fdded8a257362491c6b2b131cd0"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:ad4ce57bb216bc71b39c8d00222629004" id="r_ad4ce57bb216bc71b39c8d00222629004"><td class="memItemLeft" align="right" valign="top">void&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="classRealm_1_1UCP_1_1UCPInternal.html#ad4ce57bb216bc71b39c8d00222629004">sample_quiescence_state</a> (<a class="el" href="structRealm_1_1NetworkModule_1_1QuiescenceState.html">NetworkModule::QuiescenceState</a> &amp;state)</td></tr>
+<tr class="separator:ad4ce57bb216bc71b39c8d00222629004"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:a899cb80aecf01e734c08351e9c2de294" id="r_a899cb80aecf01e734c08351e9c2de294"><td class="memItemLeft" align="right" valign="top">void&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="classRealm_1_1UCP_1_1UCPInternal.html#a899cb80aecf01e734c08351e9c2de294">quiescence_allreduce_sum</a> (const uint64_t *local_counts, uint64_t *total_counts, size_t count)</td></tr>
+<tr class="separator:a899cb80aecf01e734c08351e9c2de294"><td class="memSeparator" colspan="2">&#160;</td></tr>
 <tr class="memitem:aa5854918f239a1663695caf61d817d16" id="r_aa5854918f239a1663695caf61d817d16"><td class="memItemLeft" align="right" valign="top">size_t&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="classRealm_1_1UCP_1_1UCPInternal.html#aa5854918f239a1663695caf61d817d16">recommended_max_payload</a> (const void *data, const <a class="el" href="classRealm_1_1NetworkSegment.html">NetworkSegment</a> *src_segment, const <a class="el" href="structRealm_1_1RemoteAddress.html">RemoteAddress</a> *dest_payload_addr, bool with_congestion, size_t header_size)</td></tr>
 <tr class="separator:aa5854918f239a1663695caf61d817d16"><td class="memSeparator" colspan="2">&#160;</td></tr>
 <tr class="memitem:adc99bcaabf65b0d59d79cee6cd7964e7" id="r_adc99bcaabf65b0d59d79cee6cd7964e7"><td class="memItemLeft" align="right" valign="top">bool&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="classRealm_1_1UCP_1_1UCPInternal.html#adc99bcaabf65b0d59d79cee6cd7964e7">get_ucp_ep</a> (const <a class="el" href="classRealm_1_1UCP_1_1UCPWorker.html">UCPWorker</a> *worker, <a class="el" href="namespaceRealm.html#a4ae47f41d88cffb2debee742cbbfe2dd">NodeID</a> target, const UCPRDMAInfo *rdma_info, ucp_ep_h *ep) const</td></tr>
@@ -435,24 +435,6 @@ Friends</h2></td></tr>
           <td></td>
           <td>)</td>
           <td></td><td></td>
-        </tr>
-      </table>
-</div><div class="memdoc">
-
-</div>
-</div>
-<a id="a4ca10fdded8a257362491c6b2b131cd0" name="a4ca10fdded8a257362491c6b2b131cd0"></a>
-<h2 class="memtitle"><span class="permalink"><a href="#a4ca10fdded8a257362491c6b2b131cd0">&#9670;&#160;</a></span>check_for_quiescence()</h2>
-
-<div class="memitem">
-<div class="memproto">
-      <table class="memname">
-        <tr>
-          <td class="memname">bool Realm::UCP::UCPInternal::check_for_quiescence </td>
-          <td>(</td>
-          <td class="paramtype">size_t&#160;</td>
-          <td class="paramname"><em>sampled_receive_count</em></td><td>)</td>
-          <td></td>
         </tr>
       </table>
 </div><div class="memdoc">
@@ -804,6 +786,40 @@ Friends</h2></td></tr>
 
 </div>
 </div>
+<a id="a899cb80aecf01e734c08351e9c2de294" name="a899cb80aecf01e734c08351e9c2de294"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a899cb80aecf01e734c08351e9c2de294">&#9670;&#160;</a></span>quiescence_allreduce_sum()</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname">void Realm::UCP::UCPInternal::quiescence_allreduce_sum </td>
+          <td>(</td>
+          <td class="paramtype">const uint64_t *&#160;</td>
+          <td class="paramname"><em>local_counts</em>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype">uint64_t *&#160;</td>
+          <td class="paramname"><em>total_counts</em>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype">size_t&#160;</td>
+          <td class="paramname"><em>count</em>&#160;</td>
+        </tr>
+        <tr>
+          <td></td>
+          <td>)</td>
+          <td></td><td></td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+
+</div>
+</div>
 <a id="aa5854918f239a1663695caf61d817d16" name="aa5854918f239a1663695caf61d817d16"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#aa5854918f239a1663695caf61d817d16">&#9670;&#160;</a></span>recommended_max_payload()</h2>
 
@@ -886,16 +902,17 @@ Friends</h2></td></tr>
 
 </div>
 </div>
-<a id="a7f3fa3c943d6f082a08920bf630daaea" name="a7f3fa3c943d6f082a08920bf630daaea"></a>
-<h2 class="memtitle"><span class="permalink"><a href="#a7f3fa3c943d6f082a08920bf630daaea">&#9670;&#160;</a></span>sample_messages_received_count()</h2>
+<a id="ad4ce57bb216bc71b39c8d00222629004" name="ad4ce57bb216bc71b39c8d00222629004"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#ad4ce57bb216bc71b39c8d00222629004">&#9670;&#160;</a></span>sample_quiescence_state()</h2>
 
 <div class="memitem">
 <div class="memproto">
       <table class="memname">
         <tr>
-          <td class="memname">size_t Realm::UCP::UCPInternal::sample_messages_received_count </td>
+          <td class="memname">void Realm::UCP::UCPInternal::sample_quiescence_state </td>
           <td>(</td>
-          <td class="paramname"></td><td>)</td>
+          <td class="paramtype"><a class="el" href="structRealm_1_1NetworkModule_1_1QuiescenceState.html">NetworkModule::QuiescenceState</a> &amp;&#160;</td>
+          <td class="paramname"><em>state</em></td><td>)</td>
           <td></td>
         </tr>
       </table>

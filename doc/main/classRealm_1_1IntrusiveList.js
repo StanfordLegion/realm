@@ -13,6 +13,7 @@ var classRealm_1_1IntrusiveList =
     [ "pop_front", "classRealm_1_1IntrusiveList.html#a714bdd3b9a6ffca421dacb6f93a840ed", null ],
     [ "push_back", "classRealm_1_1IntrusiveList.html#a7a10a5358b5c660121aafcb0de630ac8", null ],
     [ "push_front", "classRealm_1_1IntrusiveList.html#a443152d2c9c968d048696274d9ce9229", null ],
+    [ "size", "classRealm_1_1IntrusiveList.html#aef37998a890012c52d07e5b04c4f0deb", null ],
     [ "swap", "classRealm_1_1IntrusiveList.html#a241df0b5cb9c86cace7ef2c2732bba48", null ],
     [ "head", "classRealm_1_1IntrusiveList.html#a97945e0cb4bf82e191cf3d6d4376b26d", null ],
     [ "lastlink", "classRealm_1_1IntrusiveList.html#ad389bdd80006b605cb0411b17ee6cad8", null ],
