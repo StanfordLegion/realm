@@ -205,14 +205,15 @@ namespace Realm {
     internal->allgatherv(val_in, bytes, vals_out, lengths);
   }
 
-  size_t UCPModule::sample_messages_received_count(void)
+  void UCPModule::sample_quiescence_state(QuiescenceState &state)
   {
-    return internal->sample_messages_received_count();
+    internal->sample_quiescence_state(state);
   }
 
-  bool UCPModule::check_for_quiescence(size_t sampled_receive_count)
+  void UCPModule::quiescence_allreduce_sum(const uint64_t *local_counts,
+                                           uint64_t *total_counts, size_t count)
   {
-    return internal->check_for_quiescence(sampled_receive_count);
+    internal->quiescence_allreduce_sum(local_counts, total_counts, count);
   }
 
   MemoryImpl *UCPModule::create_remote_memory(RuntimeImpl *runtime, Memory me,
