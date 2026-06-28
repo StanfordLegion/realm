@@ -21,6 +21,7 @@
 #define REALM_DEPPART_PREIMAGE_H
 
 #include "partitions.h"
+#include "image.h"
 #include "realm/deppart/rectlist.h"
 
 namespace Realm {
@@ -73,7 +74,11 @@ namespace Realm {
   struct ApproxImageResponseMessage;
 
   template <int N, typename T, int N2, typename T2>
-  class PreimageOperation : public PartitioningOperation {
+  class PreimageOperation : public PartitioningOperation
+#ifdef REALM_USE_CUDA
+                          , public ApproxImageReceiver<N2,T2>
+#endif
+  {
   public:
     static const int DIM = N;
     typedef T IDXTYPE;
@@ -97,10 +102,16 @@ namespace Realm {
     virtual void set_overlap_tester(void *tester);
 
     void provide_sparse_image(int index, const Rect<N2,T2> *rects, size_t count);
+#ifdef REALM_USE_CUDA
+    void provide_approx_image(int index, const Rect<N2,T2> *rects,
+                              size_t count) override;
+#endif
 
   protected:
     static ActiveMessageHandlerReg<ApproxImageResponseMessage<PreimageOperation<N,T,N2,T2> > > areg;
     NodeID exclusive_gpu_exec_node(void) const;
+    void dispatch_precise_preimage(int index, const std::set<int> &overlaps,
+                                   bool inline_ok);
 
     IndexSpace<N, T> parent;
     DomainTransform<N2, T2, N, T> domain_transform;

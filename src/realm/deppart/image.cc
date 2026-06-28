@@ -388,15 +388,18 @@ namespace Realm {
 	populate_approx_bitmask_ptrs(approx_rects);
 
       if(requestor == Network::my_node_id) {
-	PreimageOperation<N2,T2,N,T> *op = reinterpret_cast<PreimageOperation<N2,T2,N,T> *>(approx_output_op);
-	op->provide_sparse_image(approx_output_index, &approx_rects.rects[0], approx_rects.rects.size());
+        PreimageOperation<N2,T2,N,T> *op = reinterpret_cast<PreimageOperation<N2,T2,N,T> *>(approx_output_op);
+        op->provide_sparse_image(approx_output_index,
+                                 approx_rects.rects.empty() ? 0 : &approx_rects.rects[0],
+                                 approx_rects.rects.size());
       } else {
-	size_t payload_size = approx_rects.rects.size() * sizeof(Rect<N,T>);
-	ActiveMessage<ApproxImageResponseMessage<PreimageOperation<N2,T2,N,T> > > amsg(requestor, payload_size);
-	amsg->approx_output_op = approx_output_op;
-	amsg->approx_output_index = approx_output_index;
-	amsg.add_payload(&approx_rects.rects[0], payload_size);
-	amsg.commit();
+        size_t payload_size = approx_rects.rects.size() * sizeof(Rect<N,T>);
+        ActiveMessage<ApproxImageResponseMessage<PreimageOperation<N2,T2,N,T> > > amsg(requestor, payload_size);
+        amsg->approx_output_op = approx_output_op;
+        amsg->approx_output_index = approx_output_index;
+        if(payload_size > 0)
+          amsg.add_payload(&approx_rects.rects[0], payload_size);
+        amsg.commit();
       }
     }
   }
@@ -1193,8 +1196,8 @@ namespace Realm {
 
     NodeID exec_node = ID(inst).instance_owner_node();
     if(exec_node != Network::my_node_id) {
-      assert(false && "remote GPU approximate image response is not wired yet");
-      PartitioningMicroOp::template forward_microop<GPUApproxImageMicroOp<N,T,N2,T2> >(exec_node, op, this);
+      log_part.fatal() << "remote GPU approximate image response is not wired yet";
+      std::abort();
       return;
     }
 

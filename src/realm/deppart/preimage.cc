@@ -33,6 +33,12 @@ namespace Realm {
   extern Logger log_part;
   extern Logger log_uop_timing;
 
+  static bool is_gpu_field_instance(RegionInstance inst)
+  {
+    Memory::Kind kind = inst.get_location().kind();
+    return (kind == Memory::GPU_FB_MEM) || (kind == Memory::Z_COPY_MEM);
+  }
+
   template <int N, typename T>
   template <int N2, typename T2>
   void IndexSpace<N,T>::by_preimage_buffer_requirements(
@@ -64,6 +70,14 @@ namespace Realm {
         (2 * source_entries * sizeof(uint64_t)) +
         (source_entries * sizeof(uint64_t));
     }
+    Rect<N2,T2> target_bbox = Rect<N2,T2>::make_empty();
+    for(size_t i = 0; i < target_spaces.size(); i++) {
+      if(i == 0)
+        target_bbox = target_spaces[i].space.bounds;
+      else
+        target_bbox = target_bbox.union_bbox(target_spaces[i].space.bounds);
+    }
+    IndexSpace<N2,T2> target_bbox_space(target_bbox);
     requirements = std::vector<DeppartBufferRequirements>(inputs.size());
     for (size_t i = 0; i < inputs.size(); i++) {
       IndexSpace<N, T> is = inputs[i].space;
@@ -75,12 +89,22 @@ namespace Realm {
         if (val) {
           device_size = atoi(val);
         }
-        minimal_size = max(minimal_size, device_size);
-        size_t optimal_size = is.bounds.volume() * sizeof(Rect<N, T>) * target_spaces.size() * 20 + minimal_size;
+        size_t lower_size = max(minimal_size, device_size);
+        size_t optimal_size = is.bounds.volume() * sizeof(Rect<N, T>) * target_spaces.size() * 20 + lower_size;
+#ifdef REALM_USE_CUDA
+        if(!target_spaces.empty()) {
+          size_t approx_lower =
+              GPUApproxImageMicroOp<N2,T2,N,T>::scratch_lower_bound(target_bbox_space, is);
+          size_t approx_upper =
+              GPUApproxImageMicroOp<N2,T2,N,T>::scratch_upper_bound(target_bbox_space, is);
+          lower_size = max(lower_size, approx_lower);
+          optimal_size = max(optimal_size, approx_upper);
+        }
+#endif
         Processor best_proc = Processor::NO_PROC;
       	assert(choose_proc(best_proc, mem));
         requirements[i].affinity_processor = best_proc;
-        requirements[i].lower_bound = minimal_size;
+        requirements[i].lower_bound = lower_size;
         requirements[i].upper_bound = optimal_size;
         requirements[i].minimum_alignment = 128;
           } else {
@@ -459,54 +483,80 @@ namespace Realm {
 				micro_op->add_sparsity_output(targets[j], preimages[j]);
 			}
 			micro_op->dispatch(this, true);
-		} else if (!DeppartConfig::cfg_disable_intersection_optimization && !gpu_data) {
-				// build the overlap tester based on the targets, since they're at least
-				// known
-				ComputeOverlapMicroOp<N2, T2> *uop =
-						new ComputeOverlapMicroOp<N2, T2>(this);
+    } else if (!DeppartConfig::cfg_disable_intersection_optimization) {
+      // build the overlap tester based on the targets, since they're at least
+      // known
+      ComputeOverlapMicroOp<N2, T2> *uop =
+          new ComputeOverlapMicroOp<N2, T2>(this);
 
-				remaining_sparse_images.store(domain_transform.ptr_data.size() +
-				                              domain_transform.range_data.size());
-				contrib_counts.resize(preimages.size(), atomic<int>(0));
+      remaining_sparse_images.store(domain_transform.ptr_data.size() +
+                                    domain_transform.range_data.size());
+      contrib_counts.resize(preimages.size(), atomic<int>(0));
 
-				// create a dummy async microop that lives until we've received all the
-				// sparse images
-				dummy_overlap_uop = new AsyncMicroOp(this, 0);
-				add_async_work_item(dummy_overlap_uop);
+      // create a dummy async microop that lives until we've received all the
+      // sparse images
+      dummy_overlap_uop = new AsyncMicroOp(this, 0);
+      add_async_work_item(dummy_overlap_uop);
 
-				// add each target, but also generate a bounding box for all of them
-				Rect<N2, T2> target_bbox;
-				for (size_t i = 0; i < targets.size(); i++) {
-					uop->add_input_space(targets[i]);
-					if (i == 0)
-						target_bbox = targets[i].bounds;
-					else
-						target_bbox = target_bbox.union_bbox(targets[i].bounds);
-				}
+      // add each target, but also generate a bounding box for all of them
+      Rect<N2, T2> target_bbox;
+      for (size_t i = 0; i < targets.size(); i++) {
+        uop->add_input_space(targets[i]);
+        if (i == 0)
+          target_bbox = targets[i].bounds;
+        else
+          target_bbox = target_bbox.union_bbox(targets[i].bounds);
+      }
 
-				for (size_t i = 0; i < domain_transform.ptr_data.size(); i++) {
-					// in parallel, we will request the approximate images of each instance's
-					//  data (ideally limited to the target_bbox)
-					ImageMicroOp<N2, T2, N, T> *img = new ImageMicroOp<N2, T2, N, T>(
-						target_bbox, domain_transform.ptr_data[i].index_space,
-						domain_transform.ptr_data[i].inst,
-						domain_transform.ptr_data[i].field_offset, false /*ptrs*/);
-					img->add_approx_output(i, this);
-					img->dispatch(this, false /* do not run in this thread */);
-				}
+      for (size_t i = 0; i < domain_transform.ptr_data.size(); i++) {
+        // in parallel, we will request the approximate images of each instance's
+        //  data (ideally limited to the target_bbox)
+        if(is_gpu_field_instance(domain_transform.ptr_data[i].inst)) {
+#ifdef REALM_USE_CUDA
+          assert(domain_transform.ptr_data[i].scratch_buffer != RegionInstance::NO_INST);
+          GPUApproxImageMicroOp<N2, T2, N, T> *img =
+            new GPUApproxImageMicroOp<N2, T2, N, T>(
+              target_bbox, domain_transform.ptr_data[i]);
+          img->add_approx_output(i, this);
+          img->dispatch(this, false /* do not run in this thread */);
+#else
+          assert(false);
+#endif
+        } else {
+          ImageMicroOp<N2, T2, N, T> *img = new ImageMicroOp<N2, T2, N, T>(
+            target_bbox, domain_transform.ptr_data[i].index_space,
+            domain_transform.ptr_data[i].inst,
+            domain_transform.ptr_data[i].field_offset, false /*ptrs*/);
+          img->add_approx_output(i, this);
+          img->dispatch(this, false /* do not run in this thread */);
+        }
+      }
 
-				for (size_t i = 0; i < domain_transform.range_data.size(); i++) {
-					// in parallel, we will request the approximate images of each instance's
-					//  data (ideally limited to the target_bbox)
-					ImageMicroOp<N2, T2, N, T> *img = new ImageMicroOp<N2, T2, N, T>(
-						target_bbox, domain_transform.range_data[i].index_space,
-						domain_transform.range_data[i].inst,
-						domain_transform.range_data[i].field_offset, true /*ranges*/);
-					img->add_approx_output(i + domain_transform.ptr_data.size(), this);
-					img->dispatch(this, false /* do not run in this thread */);
-				}
+      for (size_t i = 0; i < domain_transform.range_data.size(); i++) {
+        // in parallel, we will request the approximate images of each instance's
+        //  data (ideally limited to the target_bbox)
+        if(is_gpu_field_instance(domain_transform.range_data[i].inst)) {
+#ifdef REALM_USE_CUDA
+          assert(domain_transform.range_data[i].scratch_buffer != RegionInstance::NO_INST);
+          GPUApproxImageMicroOp<N2, T2, N, T> *img =
+            new GPUApproxImageMicroOp<N2, T2, N, T>(
+              target_bbox, domain_transform.range_data[i]);
+          img->add_approx_output(i + domain_transform.ptr_data.size(), this);
+          img->dispatch(this, false /* do not run in this thread */);
+#else
+          assert(false);
+#endif
+        } else {
+          ImageMicroOp<N2, T2, N, T> *img = new ImageMicroOp<N2, T2, N, T>(
+            target_bbox, domain_transform.range_data[i].index_space,
+            domain_transform.range_data[i].inst,
+            domain_transform.range_data[i].field_offset, true /*ranges*/);
+          img->add_approx_output(i + domain_transform.ptr_data.size(), this);
+          img->dispatch(this, false /* do not run in this thread */);
+        }
+      }
 
-				uop->dispatch(this, true /* ok to run in this thread */);
+      uop->dispatch(this, true /* ok to run in this thread */);
 		} else {
 			if (!exclusive) {
 			  for (size_t i = 0; i < preimages.size(); i++)
@@ -559,126 +609,153 @@ namespace Realm {
 		}
 	}
 
-	template<int N, typename T, int N2, typename T2>
-	void PreimageOperation<N, T, N2, T2>::provide_sparse_image(int index, const Rect<N2, T2> *rects, size_t count) {
-		// atomically check the overlap tester's readiness and queue us if not
-		bool tester_ready = false;
-		{
-			AutoLock<> al(mutex);
-			if (overlap_tester != 0) {
-				tester_ready = true;
-			} else {
-				std::vector<Rect<N2, T2> > &r = pending_sparse_images[index];
-				r.insert(r.end(), rects, rects + count);
-			}
-		}
+  template<int N, typename T, int N2, typename T2>
+  void PreimageOperation<N, T, N2, T2>::dispatch_precise_preimage(
+    int index, const std::set<int> &overlaps, bool inline_ok)
+  {
+    if ((size_t) index < domain_transform.ptr_data.size()) {
+      log_part.info() << "image of ptr_data[" << index << "] overlaps " << overlaps.size() << " targets";
+      const FieldDataDescriptor<IndexSpace<N, T>, Point<N2, T2> > &fdd =
+        domain_transform.ptr_data[index];
+      if(is_gpu_field_instance(fdd.inst)) {
+#ifdef REALM_USE_CUDA
+        assert(fdd.scratch_buffer != RegionInstance::NO_INST);
+        std::vector<FieldDataDescriptor<IndexSpace<N, T>, Point<N2, T2> > > fields(1, fdd);
+        DomainTransform<N2, T2, N, T> transform(fields);
+        GPUPreimageMicroOp<N, T, N2, T2> *uop =
+          new GPUPreimageMicroOp<N, T, N2, T2>(
+            transform, parent, false /*exclusive*/);
+        for (std::set<int>::const_iterator it2 = overlaps.begin();
+             it2 != overlaps.end();
+             it2++) {
+          int j = *it2;
+          contrib_counts[j].fetch_add(1);
+          uop->add_sparsity_output(targets[j], preimages[j]);
+        }
+        uop->dispatch(this, inline_ok);
+#else
+        assert(false);
+#endif
+      } else {
+        PreimageMicroOp<N, T, N2, T2> *uop = new PreimageMicroOp<N, T, N2, T2>(
+          parent, fdd.index_space, fdd.inst, fdd.field_offset, false /*ptrs*/);
+        for (std::set<int>::const_iterator it2 = overlaps.begin();
+             it2 != overlaps.end();
+             it2++) {
+          int j = *it2;
+          contrib_counts[j].fetch_add(1);
+          uop->add_sparsity_output(targets[j], preimages[j]);
+        }
+        uop->dispatch(this, inline_ok);
+      }
+    } else {
+      size_t rel_index = index - domain_transform.ptr_data.size();
+      assert(rel_index < domain_transform.range_data.size());
+      log_part.info() << "image of range_data[" << rel_index << "] overlaps " << overlaps.size() <<
+          " targets";
+      const FieldDataDescriptor<IndexSpace<N, T>, Rect<N2, T2> > &fdd =
+        domain_transform.range_data[rel_index];
+      if(is_gpu_field_instance(fdd.inst)) {
+#ifdef REALM_USE_CUDA
+        assert(fdd.scratch_buffer != RegionInstance::NO_INST);
+        std::vector<FieldDataDescriptor<IndexSpace<N, T>, Rect<N2, T2> > > fields(1, fdd);
+        DomainTransform<N2, T2, N, T> transform(fields);
+        GPUPreimageMicroOp<N, T, N2, T2> *uop =
+          new GPUPreimageMicroOp<N, T, N2, T2>(
+            transform, parent, false /*exclusive*/);
+        for (std::set<int>::const_iterator it2 = overlaps.begin();
+             it2 != overlaps.end();
+             it2++) {
+          int j = *it2;
+          contrib_counts[j].fetch_add(1);
+          uop->add_sparsity_output(targets[j], preimages[j]);
+        }
+        uop->dispatch(this, inline_ok);
+#else
+        assert(false);
+#endif
+      } else {
+        PreimageMicroOp<N, T, N2, T2> *uop = new PreimageMicroOp<N, T, N2, T2>(
+          parent, fdd.index_space, fdd.inst, fdd.field_offset, true /*ranges*/);
+        for (std::set<int>::const_iterator it2 = overlaps.begin();
+             it2 != overlaps.end();
+             it2++) {
+          int j = *it2;
+          contrib_counts[j].fetch_add(1);
+          uop->add_sparsity_output(targets[j], preimages[j]);
+        }
+        uop->dispatch(this, inline_ok);
+      }
+    }
+  }
 
-		if (tester_ready) {
-			// see which of the targets this image overlaps
-			std::set<int> overlaps;
-			overlap_tester->test_overlap(rects, count, overlaps);
-			if ((size_t) index < domain_transform.ptr_data.size()) {
-				log_part.info() << "image of ptr_data[" << index << "] overlaps " << overlaps.size() << " targets";
-				PreimageMicroOp<N, T, N2, T2> *uop = new PreimageMicroOp<N, T, N2, T2>(
-					parent, domain_transform.ptr_data[index].index_space,
-					domain_transform.ptr_data[index].inst,
-					domain_transform.ptr_data[index].field_offset, false /*ptrs*/);
-				for (std::set<int>::const_iterator it2 = overlaps.begin();
-				     it2 != overlaps.end();
-				     it2++) {
-					int j = *it2;
-					contrib_counts[j].fetch_add(1);
-					uop->add_sparsity_output(targets[j], preimages[j]);
-				}
-				uop->dispatch(this, false /* do not run in this thread */);
-			} else {
-				size_t rel_index = index - domain_transform.ptr_data.size();
-				assert(rel_index < domain_transform.range_data.size());
-				log_part.info() << "image of range_data[" << rel_index << "] overlaps " << overlaps.size() <<
-						" targets";
-				PreimageMicroOp<N, T, N2, T2> *uop = new PreimageMicroOp<N, T, N2, T2>(
-					parent, domain_transform.range_data[rel_index].index_space,
-					domain_transform.range_data[rel_index].inst,
-					domain_transform.range_data[rel_index].field_offset,
-					true /*ranges*/);
-				for (std::set<int>::const_iterator it2 = overlaps.begin();
-				     it2 != overlaps.end();
-				     it2++) {
-					int j = *it2;
-					contrib_counts[j].fetch_add(1);
-					uop->add_sparsity_output(targets[j], preimages[j]);
-				}
-				uop->dispatch(this, false /* do not run in this thread */);
-			}
+#ifdef REALM_USE_CUDA
+  template<int N, typename T, int N2, typename T2>
+  void PreimageOperation<N, T, N2, T2>::provide_approx_image(
+    int index, const Rect<N2,T2> *rects, size_t count)
+  {
+    provide_sparse_image(index, rects, count);
+  }
+#endif
 
-			// if these were the last sparse images, we can now set the contributor counts
-			int v = remaining_sparse_images.fetch_sub(1) - 1;
-			if (v == 0) {
-				for (size_t j = 0; j < preimages.size(); j++) {
-					log_part.info() << contrib_counts[j].load() << " total contributors to preimage " << j;
-					SparsityMapImpl<N, T>::lookup(preimages[j])->set_contributor_count(contrib_counts[j].load());
-				}
-				dummy_overlap_uop->mark_finished(true /*successful*/);
-			}
-		}
-	}
+  template<int N, typename T, int N2, typename T2>
+  void PreimageOperation<N, T, N2, T2>::provide_sparse_image(int index, const Rect<N2, T2> *rects, size_t count) {
+    // atomically check the overlap tester's readiness and queue us if not
+    bool tester_ready = false;
+    {
+      AutoLock<> al(mutex);
+      if (overlap_tester != 0) {
+        tester_ready = true;
+      } else {
+        std::vector<Rect<N2, T2> > &r = pending_sparse_images[index];
+        if(count > 0)
+          r.insert(r.end(), rects, rects + count);
+      }
+    }
 
-	template<int N, typename T, int N2, typename T2>
-	void PreimageOperation<N, T, N2, T2>::set_overlap_tester(void *tester) {
-		// atomically set the overlap tester and see if there are any pending entries
-		std::map<int, std::vector<Rect<N2, T2> > > pending;
-		{
-			AutoLock<> al(mutex);
-			assert(overlap_tester == 0);
-			overlap_tester = static_cast<OverlapTester<N2, T2> *>(tester);
-			pending.swap(pending_sparse_images);
-		}
+    if (tester_ready) {
+      // see which of the targets this image overlaps
+      std::set<int> overlaps;
+      overlap_tester->test_overlap(rects, count, overlaps);
+      dispatch_precise_preimage(index, overlaps,
+                                false /* do not run in this thread */);
 
-		// now issue work for any sparse images we got before the tester was ready
-		if (!pending.empty()) {
-			for (typename std::map<int, std::vector<Rect<N2, T2> > >::const_iterator it = pending.begin();
-			     it != pending.end();
-			     it++) {
-				// see which instance this is an image from
-				size_t idx = it->first;
-				// see which of the targets that image overlaps
-				std::set<int> overlaps;
-				overlap_tester->test_overlap(&it->second[0], it->second.size(), overlaps);
-				if (idx < domain_transform.ptr_data.size()) {
-					log_part.info() << "image of ptr_data[" << idx << "] overlaps " << overlaps.size() << " targets";
-					PreimageMicroOp<N, T, N2, T2> *uop =
-							new PreimageMicroOp<N, T, N2, T2>(
-								parent, domain_transform.ptr_data[idx].index_space,
-								domain_transform.ptr_data[idx].inst,
-								domain_transform.ptr_data[idx].field_offset, false /*ptrs*/);
-					for (std::set<int>::const_iterator it2 = overlaps.begin();
-					     it2 != overlaps.end();
-					     it2++) {
-						int j = *it2;
-						contrib_counts[j].fetch_add(1);
-						uop->add_sparsity_output(targets[j], preimages[j]);
-					}
-					uop->dispatch(this, true /* ok to run in this thread */);
-				} else {
-					size_t rel_index = idx - domain_transform.ptr_data.size();
-					assert(rel_index < domain_transform.range_data.size());
-					log_part.info() << "image of range_data[" << rel_index << "] overlaps " << overlaps.size() <<
-							" targets";
-					PreimageMicroOp<N, T, N2, T2> *uop =
-							new PreimageMicroOp<N, T, N2, T2>(
-								parent, domain_transform.range_data[rel_index].index_space,
-								domain_transform.range_data[rel_index].inst,
-								domain_transform.range_data[rel_index].field_offset,
-								true /*ranges*/);
-					for (std::set<int>::const_iterator it2 = overlaps.begin();
-					     it2 != overlaps.end();
-					     it2++) {
-						int j = *it2;
-						contrib_counts[j].fetch_add(1);
-						uop->add_sparsity_output(targets[j], preimages[j]);
-					}
-					uop->dispatch(this, true /* ok to run in this thread */);
-				}
+      // if these were the last sparse images, we can now set the contributor counts
+      int v = remaining_sparse_images.fetch_sub(1) - 1;
+      if (v == 0) {
+        for (size_t j = 0; j < preimages.size(); j++) {
+          log_part.info() << contrib_counts[j].load() << " total contributors to preimage " << j;
+          SparsityMapImpl<N, T>::lookup(preimages[j])->set_contributor_count(contrib_counts[j].load());
+        }
+        dummy_overlap_uop->mark_finished(true /*successful*/);
+      }
+    }
+  }
+
+  template<int N, typename T, int N2, typename T2>
+  void PreimageOperation<N, T, N2, T2>::set_overlap_tester(void *tester) {
+    // atomically set the overlap tester and see if there are any pending entries
+    std::map<int, std::vector<Rect<N2, T2> > > pending;
+    {
+      AutoLock<> al(mutex);
+      assert(overlap_tester == 0);
+      overlap_tester = static_cast<OverlapTester<N2, T2> *>(tester);
+      pending.swap(pending_sparse_images);
+    }
+
+    // now issue work for any sparse images we got before the tester was ready
+    if (!pending.empty()) {
+      for (typename std::map<int, std::vector<Rect<N2, T2> > >::const_iterator it = pending.begin();
+           it != pending.end();
+           it++) {
+        // see which instance this is an image from
+        size_t idx = it->first;
+        // see which of the targets that image overlaps
+        std::set<int> overlaps;
+        overlap_tester->test_overlap(it->second.empty() ? 0 : &it->second[0],
+                                     it->second.size(), overlaps);
+        dispatch_precise_preimage(idx, overlaps,
+                                  true /* ok to run in this thread */);
 			}
 
 			// if these were the last sparse images, we can now set the contributor counts
