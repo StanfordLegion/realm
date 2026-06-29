@@ -51,6 +51,9 @@ namespace Realm {
 
     int cfg_num_partitioning_workers = 0; // use bgwork by default
     bool cfg_disable_intersection_optimization = false;
+    bool cfg_enable_gpu_intersection_optimization = false;
+    bool cfg_enable_gpu_image_intersection_optimization = true;
+    bool cfg_enable_gpu_preimage_intersection_optimization = false;
     int cfg_max_rects_in_approximation = 32;
     bool cfg_worker_threads_sleep = true;
     bool cfg_allow_inline_operations = false;
@@ -1034,6 +1037,12 @@ namespace Realm {
 
     cp.add_option_int("-dp:workers", DeppartConfig::cfg_num_partitioning_workers);
     cp.add_option_bool("-dp:noisectopt", DeppartConfig::cfg_disable_intersection_optimization);
+    cp.add_option_bool("-dp:gpuisectopt",
+                       DeppartConfig::cfg_enable_gpu_intersection_optimization);
+    cp.add_option_bool("-dp:gpuimageisectopt",
+                       DeppartConfig::cfg_enable_gpu_image_intersection_optimization);
+    cp.add_option_bool("-dp:gpupreimageisectopt",
+                       DeppartConfig::cfg_enable_gpu_preimage_intersection_optimization);
     cp.add_option_int("-dp:sleep", DeppartConfig::cfg_worker_threads_sleep);
     cp.add_option_int("-dp:inline_ok", DeppartConfig::cfg_allow_inline_operations);
     cp.add_option_int_units("-dp:hpool", DeppartConfig::cfg_host_pool_size, 'm');

@@ -701,7 +701,10 @@ namespace Realm {
     }
     micro_op->dispatch(this, /*inline_ok=*/true);
   } else if (!DeppartConfig::cfg_disable_intersection_optimization &&
-             (!gpu_data || diff_rhss.empty())) {
+             (!gpu_data ||
+              ((DeppartConfig::cfg_enable_gpu_intersection_optimization ||
+                DeppartConfig::cfg_enable_gpu_image_intersection_optimization) &&
+               diff_rhss.empty()))) {
        	// build the overlap tester based on the field index spaces - they're more
        	// likely to be known and
        	//  denser

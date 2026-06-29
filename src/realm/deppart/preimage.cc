@@ -483,7 +483,10 @@ namespace Realm {
 				micro_op->add_sparsity_output(targets[j], preimages[j]);
 			}
 			micro_op->dispatch(this, true);
-    } else if (!DeppartConfig::cfg_disable_intersection_optimization) {
+    } else if (!DeppartConfig::cfg_disable_intersection_optimization &&
+               (!gpu_data ||
+                DeppartConfig::cfg_enable_gpu_intersection_optimization ||
+                DeppartConfig::cfg_enable_gpu_preimage_intersection_optimization)) {
       // build the overlap tester based on the targets, since they're at least
       // known
       ComputeOverlapMicroOp<N2, T2> *uop =

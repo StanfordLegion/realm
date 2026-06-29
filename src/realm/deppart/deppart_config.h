@@ -28,6 +28,9 @@ namespace Realm {
 
     extern int cfg_num_partitioning_workers;
     extern bool cfg_disable_intersection_optimization;
+    extern bool cfg_enable_gpu_intersection_optimization;
+    extern bool cfg_enable_gpu_image_intersection_optimization;
+    extern bool cfg_enable_gpu_preimage_intersection_optimization;
     extern int cfg_max_rects_in_approximation;
     extern bool cfg_worker_threads_sleep;
     extern size_t cfg_host_pool_size;

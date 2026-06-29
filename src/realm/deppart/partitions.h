@@ -378,13 +378,13 @@ namespace Realm {
     static void volume_prefix_sum(const out_t* d_rects, size_t total_rects, size_t* &d_prefix_rects, size_t& num_pts, Arena &my_arena, CUstream stream);
 
     template<typename Container, typename IndexFn, typename MapFn>
-    void complete_pipeline(PointDesc<N, T>* d_points, size_t total_pts, RectDesc<N, T>* &d_out_rects, size_t &out_rects, Arena &my_arena, const Container& ctr, IndexFn getIndex, MapFn getMap);
+    void complete_pipeline(PointDesc<N, T>* d_points, size_t total_pts, RectDesc<N, T>* &d_out_rects, size_t &out_rects, Arena &my_arena, const Container& ctr, IndexFn getIndex, MapFn getMap, int coord_end_bit = 8 * sizeof(T));
 
     template<typename Container, typename IndexFn, typename MapFn>
-    void complete_rect_pipeline(RectDesc<N, T>* d_rects, size_t total_rects, RectDesc<N, T>* &d_out_rects, size_t &out_rects, Arena &my_arena, const Container& ctr, IndexFn getIndex, MapFn getMap);
+    void complete_rect_pipeline(RectDesc<N, T>* d_rects, size_t total_rects, RectDesc<N, T>* &d_out_rects, size_t &out_rects, Arena &my_arena, const Container& ctr, IndexFn getIndex, MapFn getMap, int coord_end_bit = 8 * sizeof(T));
 
     template<typename Container, typename IndexFn, typename MapFn>
-    void complete1d_pipeline(RectDesc<N, T>* d_rects, size_t total_rects, RectDesc<N, T>* &d_out_rects, size_t &out_rects, Arena &my_arena, const Container& ctr, IndexFn getIndex, MapFn getMap);
+    void complete1d_pipeline(RectDesc<N, T>* d_rects, size_t total_rects, RectDesc<N, T>* &d_out_rects, size_t &out_rects, Arena &my_arena, const Container& ctr, IndexFn getIndex, MapFn getMap, int coord_end_bit = 8 * sizeof(T));
 
     void split_output(RectDesc<N, T>* d_rects, size_t total_rects, std::vector<Rect<N, T> *> &output_instances, std::vector<size_t> &output_counts, Arena &my_arena);
 

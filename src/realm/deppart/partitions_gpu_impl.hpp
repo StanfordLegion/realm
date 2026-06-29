@@ -72,6 +72,37 @@ inline int32_t next_nvtx_payload() {
 
 namespace Realm {
 
+  template<int N, typename T>
+  inline int coord_radix_bits_for_nonnegative_bounds(const Rect<N,T>& bounds)
+  {
+    const int full_bits = 8 * sizeof(T);
+    if(N != 1 || bounds.hi[0] < bounds.lo[0])
+      return full_bits;
+    if constexpr (std::numeric_limits<T>::is_signed) {
+      if(bounds.lo[0] < 0)
+        return full_bits;
+    }
+
+    uint64_t max_key = static_cast<uint64_t>(bounds.hi[0]);
+    int bits = 0;
+    while(max_key > 0) {
+      bits++;
+      max_key >>= 1;
+    }
+    return std::max(bits, 1);
+  }
+
+  inline int radix_bits_for_count(size_t count)
+  {
+    size_t max_key = (count > 0) ? (count - 1) : 0;
+    int bits = 0;
+    while(max_key > 0) {
+      bits++;
+      max_key >>= 1;
+    }
+    return std::max(bits, 1);
+  }
+
   // Used by cub::DeviceReduce to compute bad GPU approximation.
   template<int N, typename T>
   struct UnionRectOp {
@@ -610,16 +641,18 @@ namespace Realm {
   */
   template<int N, typename T>
   template<typename Container, typename IndexFn, typename MapFn>
-  void GPUMicroOp<N,T>::complete_rect_pipeline(RectDesc<N, T>* d_rects, size_t total_rects, RectDesc<N, T>* &d_out_rects, size_t &out_rects, Arena &my_arena, const Container& ctr, IndexFn getIndex, MapFn getMap)
+  void GPUMicroOp<N,T>::complete_rect_pipeline(RectDesc<N, T>* d_rects, size_t total_rects, RectDesc<N, T>* &d_out_rects, size_t &out_rects, Arena &my_arena, const Container& ctr, IndexFn getIndex, MapFn getMap, int coord_end_bit)
   {
 
     //1D case is much simpler
     if (N==1) {
-      this->complete1d_pipeline(d_rects, total_rects, d_out_rects, out_rects, my_arena, ctr, getIndex, getMap);
+      this->complete1d_pipeline(d_rects, total_rects, d_out_rects, out_rects, my_arena, ctr, getIndex, getMap, coord_end_bit);
       return;
     }
     NVTX_DEPPART(complete_rect_pipeline);
+    (void)coord_end_bit;
     CUstream stream = this->stream->get_stream();
+    const bool single_output = (ctr.size() == 1);
 
     assert(!my_arena.get_parity());
     size_t beginning = my_arena.mark();
@@ -676,27 +709,31 @@ namespace Realm {
                                                   2 * total_rects, 0, 8*sizeof(T), stream);
         std::swap(d_srcs_in, d_srcs_out);
         std::swap(d_coord_keys_in, d_coord_keys_out);
-        cub::DeviceRadixSort::SortPairs(nullptr, temp_bytes,
-                                            d_srcs_in, d_srcs_out,
-                                            d_coord_keys_in, d_coord_keys_out,
-                                            2 * total_rects, 0, 8*sizeof(uint32_t), stream);
-        if (temp_bytes > orig_tmp) {
-          if (orig_tmp > 0) {
-            my_arena.rollback(temp_restore);
+        if(!single_output) {
+          cub::DeviceRadixSort::SortPairs(nullptr, temp_bytes,
+                                              d_srcs_in, d_srcs_out,
+                                              d_coord_keys_in, d_coord_keys_out,
+                                              2 * total_rects, 0, radix_bits_for_count(ctr.size()), stream);
+          if (temp_bytes > orig_tmp) {
+            if (orig_tmp > 0) {
+              my_arena.rollback(temp_restore);
+            }
+            orig_tmp = temp_bytes;
+            tmp_storage = reinterpret_cast<void*>(my_arena.alloc<char>(temp_bytes));
           }
-          orig_tmp = temp_bytes;
-          tmp_storage = reinterpret_cast<void*>(my_arena.alloc<char>(temp_bytes));
+          cub::DeviceRadixSort::SortPairs(tmp_storage, temp_bytes,
+                                              d_srcs_in, d_srcs_out,
+                                              d_coord_keys_in, d_coord_keys_out,
+                                              2 * total_rects, 0, radix_bits_for_count(ctr.size()), stream);
+          std::swap(d_srcs_in, d_srcs_out);
+          std::swap(d_coord_keys_in, d_coord_keys_out);
         }
-        cub::DeviceRadixSort::SortPairs(tmp_storage, temp_bytes,
-                                            d_srcs_in, d_srcs_out,
-                                            d_coord_keys_in, d_coord_keys_out,
-                                            2 * total_rects, 0, 8*sizeof(uint32_t), stream);
 
         //Now mark the unique keys
         grid_size = (2*total_rects + threads_per_block - 1) / threads_per_block;
         uint8_t * d_heads = heads_ptr;
         size_t *d_output = sums_ptr;
-        mark_heads<<<grid_size, threads_per_block, 0, stream>>>(d_srcs_out, d_coord_keys_out, 2 * total_rects, d_heads);
+        mark_heads<<<grid_size, threads_per_block, 0, stream>>>(d_srcs_in, d_coord_keys_in, 2 * total_rects, d_heads);
         KERNEL_CHECK(stream);
 
         cub::DeviceScan::ExclusiveSum(nullptr, temp_bytes, d_heads, d_output, 2 * total_rects, stream);
@@ -733,7 +770,7 @@ namespace Realm {
 
         CUDA_CHECK(cudaMemsetAsync(B_starts[d], 0, ctr.size() * sizeof(size_t), stream), stream);
         CUDA_CHECK(cudaMemsetAsync(B_ends[d], 0, ctr.size() * sizeof(size_t), stream), stream);
-        scatter_unique<<<grid_size, threads_per_block, 0, stream>>>(d_srcs_out, d_coord_keys_out, d_output, d_heads, 2 * total_rects, B_starts[d], B_ends[d], B_coord[d]);
+        scatter_unique<<<grid_size, threads_per_block, 0, stream>>>(d_srcs_in, d_coord_keys_in, d_output, d_heads, 2 * total_rects, B_starts[d], B_ends[d], B_coord[d]);
         KERNEL_CHECK(stream);
         std::vector<size_t> d_starts_host(ctr.size()), d_ends_host(ctr.size());
         CUDA_CHECK(cudaMemcpyAsync(d_starts_host.data(), B_starts[d], ctr.size() * sizeof(size_t), cudaMemcpyDeviceToHost, stream), stream);
@@ -850,25 +887,27 @@ namespace Realm {
     }
 
     size_t temp_bytes;
-    build_src_key<<<grid_size, threads_per_block, 0, stream>>>(d_src_keys_in, d_corners_in, num_corners * total_rects);
-    KERNEL_CHECK(stream);
-    cub::DeviceRadixSort::SortPairs(nullptr, temp_bytes,
-                                            d_src_keys_in, d_src_keys_out,
-                                            d_corners_in, d_corners_out,
-                                            num_corners * total_rects, 0, 8*sizeof(size_t), stream);
-    if (temp_bytes > orig_tmp) {
-      if (orig_tmp > 0) {
-        my_arena.rollback(temp_restore);
+    if(!single_output) {
+      build_src_key<<<grid_size, threads_per_block, 0, stream>>>(d_src_keys_in, d_corners_in, num_corners * total_rects);
+      KERNEL_CHECK(stream);
+      cub::DeviceRadixSort::SortPairs(nullptr, temp_bytes,
+                                              d_src_keys_in, d_src_keys_out,
+                                              d_corners_in, d_corners_out,
+                                              num_corners * total_rects, 0, radix_bits_for_count(ctr.size()), stream);
+      if (temp_bytes > orig_tmp) {
+        if (orig_tmp > 0) {
+          my_arena.rollback(temp_restore);
+        }
+        orig_tmp = temp_bytes;
+        tmp_storage = reinterpret_cast<void*>(my_arena.alloc<char>(temp_bytes));
       }
-      orig_tmp = temp_bytes;
-      tmp_storage = reinterpret_cast<void*>(my_arena.alloc<char>(temp_bytes));
-    }
-    cub::DeviceRadixSort::SortPairs(tmp_storage, temp_bytes,
-                                                    d_src_keys_in, d_src_keys_out,
-                                                    d_corners_in, d_corners_out,
-                                                    num_corners * total_rects, 0, 8*sizeof(size_t), stream);
+      cub::DeviceRadixSort::SortPairs(tmp_storage, temp_bytes,
+                                                      d_src_keys_in, d_src_keys_out,
+                                                      d_corners_in, d_corners_out,
+                                                      num_corners * total_rects, 0, radix_bits_for_count(ctr.size()), stream);
 
-    std::swap(d_corners_in, d_corners_out);
+      std::swap(d_corners_in, d_corners_out);
+    }
     get_delta<<<grid_size, threads_per_block, 0, stream>>>(d_deltas, d_corners_in, num_corners * total_rects);
     KERNEL_CHECK(stream);
 
@@ -965,23 +1004,24 @@ namespace Realm {
 
         }
 
-        build_src_key<<<grid_size, threads_per_block, 0, stream>>>(d_src_keys_in, d_corners_in, num_intermediate);
-        KERNEL_CHECK(stream);
-        cub::DeviceRadixSort::SortPairs(nullptr, temp_bytes,
-                                                d_src_keys_in, d_src_keys_out,
-                                                d_corners_in, d_corners_out,
-                                                num_intermediate, 0, 8*sizeof(size_t), stream);
+        if(!single_output) {
+          build_src_key<<<grid_size, threads_per_block, 0, stream>>>(d_src_keys_in, d_corners_in, num_intermediate);
+          KERNEL_CHECK(stream);
+          cub::DeviceRadixSort::SortPairs(nullptr, temp_bytes,
+                                                  d_src_keys_in, d_src_keys_out,
+                                                  d_corners_in, d_corners_out,
+                                                  num_intermediate, 0, radix_bits_for_count(ctr.size()), stream);
 
-        my_arena.rollback(temp_restore);
-        tmp_storage = reinterpret_cast<void*>(my_arena.alloc<char>(temp_bytes));
+          my_arena.rollback(temp_restore);
+          tmp_storage = reinterpret_cast<void*>(my_arena.alloc<char>(temp_bytes));
 
-        cub::DeviceRadixSort::SortPairs(tmp_storage, temp_bytes,
-                                                        d_src_keys_in, d_src_keys_out,
-                                                        d_corners_in, d_corners_out,
-                                                        num_intermediate, 0, 8*sizeof(size_t), stream);
+          cub::DeviceRadixSort::SortPairs(tmp_storage, temp_bytes,
+                                                          d_src_keys_in, d_src_keys_out,
+                                                          d_corners_in, d_corners_out,
+                                                          num_intermediate, 0, radix_bits_for_count(ctr.size()), stream);
 
-        std::swap(d_corners_in, d_corners_out);
-
+          std::swap(d_corners_in, d_corners_out);
+        }
         //This serves 2 purposes
         // 1) Our segmented prefix sum needs to know where to start and stop
         // 2) We need to know how many unique segments (keyed on (src_idx, {every dimension but d}) we have
@@ -1228,23 +1268,24 @@ namespace Realm {
 
           }
 
-          build_src_key<<<grid_size, threads_per_block, 0, stream>>>(d_src_keys_in, d_rects_in, num_intermediate);
-          KERNEL_CHECK(stream);
-          cub::DeviceRadixSort::SortPairs(nullptr, temp_bytes,
-                                                  d_src_keys_in, d_src_keys_out,
-                                                  d_rects_in, d_rects_out,
-                                                  num_intermediate, 0, 8*sizeof(size_t), stream);
+          if(!single_output) {
+            build_src_key<<<grid_size, threads_per_block, 0, stream>>>(d_src_keys_in, d_rects_in, num_intermediate);
+            KERNEL_CHECK(stream);
+            cub::DeviceRadixSort::SortPairs(nullptr, temp_bytes,
+                                                    d_src_keys_in, d_src_keys_out,
+                                                    d_rects_in, d_rects_out,
+                                                    num_intermediate, 0, radix_bits_for_count(ctr.size()), stream);
 
-          my_arena.rollback(temp_restore);
-          tmp_storage = reinterpret_cast<void*>(my_arena.alloc<char>(temp_bytes));
+            my_arena.rollback(temp_restore);
+            tmp_storage = reinterpret_cast<void*>(my_arena.alloc<char>(temp_bytes));
 
-          cub::DeviceRadixSort::SortPairs(tmp_storage, temp_bytes,
-                                                          d_src_keys_in, d_src_keys_out,
-                                                          d_rects_in, d_rects_out,
-                                                          num_intermediate, 0, 8*sizeof(size_t), stream);
+            cub::DeviceRadixSort::SortPairs(tmp_storage, temp_bytes,
+                                                            d_src_keys_in, d_src_keys_out,
+                                                            d_rects_in, d_rects_out,
+                                                            num_intermediate, 0, radix_bits_for_count(ctr.size()), stream);
 
-          std::swap(d_rects_in, d_rects_out);
-
+            std::swap(d_rects_in, d_rects_out);
+          }
           mark_breaks_dim<<<grid_size, threads_per_block, 0, stream>>>(d_rects_in, break_points, num_intermediate, dim);
           KERNEL_CHECK(stream);
 
@@ -1303,10 +1344,11 @@ namespace Realm {
  */
   template<int N, typename T>
   template<typename Container, typename IndexFn, typename MapFn>
-  void GPUMicroOp<N,T>::complete1d_pipeline(RectDesc<N, T>* d_rects, size_t total_rects, RectDesc<N, T>* &d_out_rects, size_t &out_rects, Arena &my_arena, const Container& ctr, IndexFn getIndex, MapFn getMap)
+  void GPUMicroOp<N,T>::complete1d_pipeline(RectDesc<N, T>* d_rects, size_t total_rects, RectDesc<N, T>* &d_out_rects, size_t &out_rects, Arena &my_arena, const Container& ctr, IndexFn getIndex, MapFn getMap, int coord_end_bit)
   {
 
     NVTX_DEPPART(complete1d_pipeline);
+    const bool single_output = (ctr.size() == 1);
     CUstream stream = this->stream->get_stream();
 
     RectDesc<N,T>* d_rects_in = d_rects;
@@ -1339,7 +1381,7 @@ namespace Realm {
     size_t t1=0, t2 = 0, t3 = 0, t4 = 0;
     cub::DeviceRadixSort::SortPairs(nullptr, t1,
     d_keys_in, d_keys_out, d_rects_in, d_rects_out, num_intermediate,
-    0, 8*sizeof(T), stream);
+    0, coord_end_bit, stream);
     // exclusive scan
     cub::DeviceScan::ExclusiveScan(nullptr, t2,
       d_hi_flags_in, d_hi_flags_out,
@@ -1350,7 +1392,8 @@ namespace Realm {
       break_points, group_ids,
       num_intermediate, stream);
 
-    cub::DeviceRadixSort::SortPairs(nullptr, t4, d_src_keys_in, d_src_keys_out, d_rects_in, d_rects_out, num_intermediate, 0, 8*sizeof(size_t), stream);
+    if(!single_output)
+      cub::DeviceRadixSort::SortPairs(nullptr, t4, d_src_keys_in, d_src_keys_out, d_rects_in, d_rects_out, num_intermediate, 0, radix_bits_for_count(ctr.size()), stream);
 
     size_t temp_bytes = std::max({t1, t2, t3, t4});
     size_t use_bytes = temp_bytes;
@@ -1365,17 +1408,19 @@ namespace Realm {
 
       build_lo_key<<<grid_size, threads_per_block, 0, stream>>>(d_keys_in, d_rects_in, num_intermediate, 0);
       KERNEL_CHECK(stream);
-      cub::DeviceRadixSort::SortPairs(temp_storage, use_bytes, d_keys_in, d_keys_out, d_rects_in, d_rects_out, num_intermediate, 0, 8*sizeof(T), stream);
+      cub::DeviceRadixSort::SortPairs(temp_storage, use_bytes, d_keys_in, d_keys_out, d_rects_in, d_rects_out, num_intermediate, 0, coord_end_bit, stream);
       std::swap(d_rects_in, d_rects_out);
 
-      build_src_key<<<grid_size, threads_per_block, 0, stream>>>(d_src_keys_in, d_rects_in, num_intermediate);
-      KERNEL_CHECK(stream);
+      if(!single_output) {
+        build_src_key<<<grid_size, threads_per_block, 0, stream>>>(d_src_keys_in, d_rects_in, num_intermediate);
+        KERNEL_CHECK(stream);
 
-      use_bytes = temp_bytes;
-      cub::DeviceRadixSort::SortPairs(temp_storage, use_bytes, d_src_keys_in, d_src_keys_out, d_rects_in, d_rects_out, num_intermediate, 0, 8*sizeof(size_t), stream);
-      std::swap(d_rects_in, d_rects_out);
+        use_bytes = temp_bytes;
+        cub::DeviceRadixSort::SortPairs(temp_storage, use_bytes, d_src_keys_in, d_src_keys_out, d_rects_in, d_rects_out, num_intermediate, 0, radix_bits_for_count(ctr.size()), stream);
+        std::swap(d_rects_in, d_rects_out);
+      }
+
     }
-
     //Prefix max by hi segmented by src, then RLE to merge.
     {
       NVTX_DEPPART(run_length_encode);
@@ -1451,9 +1496,10 @@ namespace Realm {
   */
   template<int N, typename T>
   template<typename Container, typename IndexFn, typename MapFn>
-  void GPUMicroOp<N,T>::complete_pipeline(PointDesc<N, T>* d_points, size_t total_pts, RectDesc<N, T>* &d_out_rects, size_t &out_rects, Arena &my_arena, const Container& ctr, IndexFn getIndex, MapFn getMap)
+  void GPUMicroOp<N,T>::complete_pipeline(PointDesc<N, T>* d_points, size_t total_pts, RectDesc<N, T>* &d_out_rects, size_t &out_rects, Arena &my_arena, const Container& ctr, IndexFn getIndex, MapFn getMap, int coord_end_bit)
   {
 
+    const bool single_output = (ctr.size() == 1);
     NVTX_DEPPART(complete_pipeline);
 
     if (out_rects == 2) {
@@ -1493,8 +1539,9 @@ namespace Realm {
     size_t* d_src_keys_out = reinterpret_cast<size_t*>(aux_ptr + max_aux_bytes);
 
     size_t t1=0, t2=0, t3=0;
-    cub::DeviceRadixSort::SortPairs(nullptr, t1, d_keys_in, d_keys_out, d_points_in, d_points_out, total_pts, 0, 8*sizeof(T), stream);
-    cub::DeviceRadixSort::SortPairs(nullptr, t2, d_src_keys_in, d_src_keys_out, d_points_in, d_points_out, total_pts, 0, 8*sizeof(size_t), stream);
+    cub::DeviceRadixSort::SortPairs(nullptr, t1, d_keys_in, d_keys_out, d_points_in, d_points_out, total_pts, 0, coord_end_bit, stream);
+    if(!single_output)
+      cub::DeviceRadixSort::SortPairs(nullptr, t2, d_src_keys_in, d_src_keys_out, d_points_in, d_points_out, total_pts, 0, radix_bits_for_count(ctr.size()), stream);
     cub::DeviceScan::InclusiveSum(nullptr, t3, break_points, group_ids, total_pts, stream);
 
     //Temporary storage instance shared by CUB operations.
@@ -1510,20 +1557,22 @@ namespace Realm {
       for (int dim = 0; dim < N; ++dim) {
         build_coord_key<<<COMPUTE_GRID(total_pts), THREADS_PER_BLOCK, 0, stream>>>(d_keys_in, d_points_in, total_pts, dim);
         KERNEL_CHECK(stream);
-        cub::DeviceRadixSort::SortPairs(temp_storage, use_bytes, d_keys_in, d_keys_out, d_points_in, d_points_out, total_pts, 0, 8*sizeof(T), stream);
+        cub::DeviceRadixSort::SortPairs(temp_storage, use_bytes, d_keys_in, d_keys_out, d_points_in, d_points_out, total_pts, 0, coord_end_bit, stream);
         std::swap(d_keys_in, d_keys_out);
         std::swap(d_points_in, d_points_out);
       }
-
-      //Sort by source index now to keep individual partitions separate
-      build_src_key<<<COMPUTE_GRID(total_pts), THREADS_PER_BLOCK, 0, stream>>>(d_src_keys_in, d_points_in, total_pts);
-      KERNEL_CHECK(stream);
-      use_bytes = temp_bytes;
-      cub::DeviceRadixSort::SortPairs(temp_storage, use_bytes, d_src_keys_in, d_src_keys_out, d_points_in, d_points_out, total_pts, 0, 8*sizeof(size_t), stream);
+      // Sort by source index now to keep individual partitions separate.
+      if(!single_output) {
+        build_src_key<<<COMPUTE_GRID(total_pts), THREADS_PER_BLOCK, 0, stream>>>(d_src_keys_in, d_points_in, total_pts);
+        KERNEL_CHECK(stream);
+        use_bytes = temp_bytes;
+        cub::DeviceRadixSort::SortPairs(temp_storage, use_bytes, d_src_keys_in, d_src_keys_out, d_points_in, d_points_out, total_pts, 0, radix_bits_for_count(ctr.size()), stream);
+        d_points_in = d_points_out;
+      }
     }
 
 
-    points_to_rects<<<COMPUTE_GRID(total_pts), THREADS_PER_BLOCK, 0, stream>>>(d_points_out, d_rects_in, total_pts);
+    points_to_rects<<<COMPUTE_GRID(total_pts), THREADS_PER_BLOCK, 0, stream>>>(d_points_in, d_rects_in, total_pts);
     KERNEL_CHECK(stream);
 
     size_t num_intermediate = total_pts;

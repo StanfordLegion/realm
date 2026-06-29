@@ -3,6 +3,34 @@
 
 namespace Realm {
 
+template<int N, typename T>
+__device__ __forceinline__ bool image_pointInRect(const Point<N,T>& p,
+                                                  const Rect<N,T>& r)
+{
+#pragma unroll
+  for(int d = 0; d < N; ++d) {
+    if(p[d] < r.lo[d] || p[d] > r.hi[d])
+      return false;
+  }
+  return true;
+}
+
+__device__ __forceinline__ size_t image_findRectForPoint(
+    const size_t *prefix,
+    size_t numRects,
+    size_t idx)
+{
+  size_t low = 0, high = numRects;
+  while(low < high) {
+    size_t mid = (low + high) >> 1;
+    if(prefix[mid + 1] <= idx)
+      low = mid + 1;
+    else
+      high = mid;
+  }
+  return low;
+}
+
 //Device helper to check parent space for membership
 //TODO: if expensive, may benefit from BVH
 template<int N, typename T>
@@ -27,6 +55,17 @@ __device__ bool image_isInIndexSpace(
   return false;
 }
 
+template<int N, typename T>
+__device__ __forceinline__ bool image_pointInParentEntries(
+    const Point<N,T>& p,
+    const Rect<N,T>* parent_entries,
+    size_t numRects)
+{
+  if(numRects == 1)
+    return image_pointInRect(p, parent_entries[0]);
+  return image_isInIndexSpace<N,T>(p, parent_entries, numRects);
+}
+
 //Count + emit to chase pointers and check for membership in parent space
 template <
   int N, typename T,
@@ -49,22 +88,18 @@ void image_gpuPopulateBitmasksPtrsKernel(
 ) {
   size_t idx = blockIdx.x * blockDim.x + threadIdx.x;
   if (idx >= numPoints) return;
-  size_t low = 0, high = numRects;
-  while (low < high) {
-    size_t mid = (low + high) >> 1;
-    if (prefix[mid+1] <= idx) low = mid + 1;
-    else                      high = mid;
-  }
-  size_t r = low;
-  bool found = false;
-  size_t inst_idx;
-  for (inst_idx = 0; inst_idx < num_insts; ++inst_idx) {
-    if (inst_offsets[inst_idx] <= r && inst_offsets[inst_idx+1] > r) {
-      found = true;
-      break;
+  size_t r = image_findRectForPoint(prefix, numRects, idx);
+  size_t inst_idx = 0;
+  if(num_insts != 1) {
+    bool found = false;
+    for(; inst_idx < num_insts; ++inst_idx) {
+      if (inst_offsets[inst_idx] <= r && inst_offsets[inst_idx+1] > r) {
+        found = true;
+        break;
+      }
     }
+    assert(found);
   }
-  assert(found);
   size_t offset = idx - prefix[r];
   Point<N2, T2> p;
   for (int k = N2-1; k >= 0; --k) {
@@ -73,7 +108,7 @@ void image_gpuPopulateBitmasksPtrsKernel(
     offset /= dim;
   }
   Point<N,T> ptr = accessors[inst_idx].read(p);
-  if (image_isInIndexSpace<N,T>(ptr, parent_entries, numParentRects)) {
+  if (image_pointInParentEntries<N,T>(ptr, parent_entries, numParentRects)) {
     uint32_t local = atomicAdd(&d_inst_counters[inst_idx], 1);
     if (d_points != nullptr) {
       uint32_t out_idx = d_inst_prefix[inst_idx] + local;
@@ -84,6 +119,96 @@ void image_gpuPopulateBitmasksPtrsKernel(
     }
   }
   
+}
+
+template <
+  int N, typename T,
+  int N2, typename T2
+>
+__global__
+void image_gpuCountBitmasksPtrsByBlockKernel(
+  AffineAccessor<Point<N,T>,N2,T2> accessor,
+  RectDesc<N2,T2>* rects,
+  Rect<N,T>* parent_entries,
+  size_t* prefix,
+  size_t numPoints,
+  size_t numRects,
+  size_t numParentRects,
+  uint32_t* d_block_counts
+) {
+  size_t idx = blockIdx.x * blockDim.x + threadIdx.x;
+  __shared__ uint32_t block_count;
+  if(threadIdx.x == 0)
+    block_count = 0;
+  __syncthreads();
+
+  if(idx < numPoints) {
+    size_t r = image_findRectForPoint(prefix, numRects, idx);
+    size_t offset = idx - prefix[r];
+    Point<N2, T2> p;
+    for(int k = N2 - 1; k >= 0; --k) {
+      size_t dim = rects[r].rect.hi[k] + 1 - rects[r].rect.lo[k];
+      p[k] = rects[r].rect.lo[k] + (offset % dim);
+      offset /= dim;
+    }
+    Point<N,T> ptr = accessor.read(p);
+    if(image_pointInParentEntries<N,T>(ptr, parent_entries, numParentRects))
+      atomicAdd(&block_count, 1);
+  }
+
+  __syncthreads();
+  if(threadIdx.x == 0)
+    d_block_counts[blockIdx.x] = block_count;
+}
+
+template <
+  int N, typename T,
+  int N2, typename T2
+>
+__global__
+void image_gpuEmitBitmasksPtrsByBlockKernel(
+  AffineAccessor<Point<N,T>,N2,T2> accessor,
+  RectDesc<N2,T2>* rects,
+  Rect<N,T>* parent_entries,
+  size_t* prefix,
+  const uint32_t* d_block_offsets,
+  size_t numPoints,
+  size_t numRects,
+  size_t numParentRects,
+  PointDesc<N,T> *d_points
+) {
+  size_t idx = blockIdx.x * blockDim.x + threadIdx.x;
+  __shared__ uint32_t block_count;
+  if(threadIdx.x == 0)
+    block_count = 0;
+  __syncthreads();
+
+  PointDesc<N,T> point_desc;
+  bool valid = false;
+  if(idx < numPoints) {
+    size_t r = image_findRectForPoint(prefix, numRects, idx);
+    size_t offset = idx - prefix[r];
+    Point<N2, T2> p;
+    for(int k = N2 - 1; k >= 0; --k) {
+      size_t dim = rects[r].rect.hi[k] + 1 - rects[r].rect.lo[k];
+      p[k] = rects[r].rect.lo[k] + (offset % dim);
+      offset /= dim;
+    }
+    Point<N,T> ptr = accessor.read(p);
+    if(image_pointInParentEntries<N,T>(ptr, parent_entries, numParentRects)) {
+      point_desc.src_idx = rects[r].src_idx;
+      point_desc.point = ptr;
+      valid = true;
+    }
+  }
+
+  uint32_t local = 0;
+  if(valid)
+    local = atomicAdd(&block_count, 1);
+  __syncthreads();
+
+  if(valid)
+    d_points[d_block_offsets[blockIdx.x] + local] = point_desc;
 }
 
 template<int N, typename T>
@@ -116,13 +241,7 @@ void image_gpuApproxPtrsKernel(
 ) {
   size_t idx = blockIdx.x * blockDim.x + threadIdx.x;
   if (idx >= numPoints) return;
-  size_t low = 0, high = numRects;
-  while (low < high) {
-    size_t mid = (low + high) >> 1;
-    if (prefix[mid+1] <= idx) low = mid + 1;
-    else                      high = mid;
-  }
-  size_t r = low;
+  size_t r = image_findRectForPoint(prefix, numRects, idx);
   size_t offset = idx - prefix[r];
   Point<N2, T2> p;
   for (int k = N2-1; k >= 0; --k) {
@@ -160,13 +279,7 @@ void image_gpuApproxRngsKernel(
 ) {
   size_t idx = blockIdx.x * blockDim.x + threadIdx.x;
   if (idx >= numPoints) return;
-  size_t low = 0, high = numRects;
-  while (low < high) {
-    size_t mid = (low + high) >> 1;
-    if (prefix[mid+1] <= idx) low = mid + 1;
-    else                      high = mid;
-  }
-  size_t r = low;
+  size_t r = image_findRectForPoint(prefix, numRects, idx);
   size_t offset = idx - prefix[r];
   Point<N2, T2> p;
   for (int k = N2-1; k >= 0; --k) {
@@ -277,6 +390,61 @@ __global__ void image_intersect_output(
   }
 }
 
+template <int N, typename T>
+__global__ void image_countIntersectOutputSingleParentByBlock(
+  const Rect<N,T>* d_parent_entries,
+  const RectDesc<N,T>* d_output_rngs,
+  size_t numOutputRects,
+  uint32_t* d_block_counts
+) {
+  size_t idx = blockIdx.x * blockDim.x + threadIdx.x;
+  __shared__ uint32_t block_count;
+  if(threadIdx.x == 0)
+    block_count = 0;
+  __syncthreads();
+
+  if(idx < numOutputRects) {
+    Rect<N,T> rect_output = d_parent_entries[0].intersection(d_output_rngs[idx].rect);
+    if(!rect_output.empty())
+      atomicAdd(&block_count, 1);
+  }
+
+  __syncthreads();
+  if(threadIdx.x == 0)
+    d_block_counts[blockIdx.x] = block_count;
+}
+
+template <int N, typename T>
+__global__ void image_emitIntersectOutputSingleParentByBlock(
+  const Rect<N,T>* d_parent_entries,
+  const RectDesc<N,T>* d_output_rngs,
+  const uint32_t* d_block_offsets,
+  size_t numOutputRects,
+  RectDesc<N,T>* d_rects
+) {
+  size_t idx = blockIdx.x * blockDim.x + threadIdx.x;
+  __shared__ uint32_t block_count;
+  if(threadIdx.x == 0)
+    block_count = 0;
+  __syncthreads();
+
+  RectDesc<N,T> rect_output;
+  bool valid = false;
+  if(idx < numOutputRects) {
+    rect_output.src_idx = d_output_rngs[idx].src_idx;
+    rect_output.rect = d_parent_entries[0].intersection(d_output_rngs[idx].rect);
+    valid = !rect_output.rect.empty();
+  }
+
+  uint32_t local = 0;
+  if(valid)
+    local = atomicAdd(&block_count, 1);
+  __syncthreads();
+
+  if(valid)
+    d_rects[d_block_offsets[blockIdx.x] + local] = rect_output;
+}
+
 //Single pass function to chase pointers to rectangles.
   template <
   int N, typename T,
@@ -295,22 +463,18 @@ void image_gpuPopulateBitmasksRngsKernel(
 ) {
   size_t idx = blockIdx.x * blockDim.x + threadIdx.x;
   if (idx >= numPoints) return;
-  size_t low = 0, high = numRects;
-  while (low < high) {
-    size_t mid = (low + high) >> 1;
-    if (prefix[mid+1] <= idx) low = mid + 1;
-    else                      high = mid;
-  }
-  size_t r = low;
-  bool found = false;
-  size_t inst_idx;
-  for (inst_idx = 0; inst_idx < num_insts; ++inst_idx) {
-    if (inst_offsets[inst_idx] <= r && inst_offsets[inst_idx+1] > r) {
-      found = true;
-      break;
+  size_t r = image_findRectForPoint(prefix, numRects, idx);
+  size_t inst_idx = 0;
+  if(num_insts != 1) {
+    bool found = false;
+    for(; inst_idx < num_insts; ++inst_idx) {
+      if (inst_offsets[inst_idx] <= r && inst_offsets[inst_idx+1] > r) {
+        found = true;
+        break;
+      }
     }
+    assert(found);
   }
-  assert(found);
   size_t offset = idx - prefix[r];
   Point<N2, T2> p;
   for (int k = N2-1; k >= 0; --k) {

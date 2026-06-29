@@ -434,6 +434,7 @@ void GPUImageMicroOp<N,T,N2,T2>::gpu_populate_rngs()
     NVTX_DEPPART(gpu_image_range);
 
     RegionInstance buffer = domain_transform.range_data[0].scratch_buffer;
+    const int coord_end_bit = coord_radix_bits_for_nonnegative_bounds(parent_space.bounds);
     size_t tile_size = buffer.get_layout()->bytes_used;
     //std::cout << "Using tile size of " << tile_size << " bytes." << std::endl;
     Arena buffer_arena(buffer);
@@ -531,23 +532,70 @@ void GPUImageMicroOp<N,T,N2,T2>::gpu_populate_rngs()
         KERNEL_CHECK(stream);
 
 
-        CUDA_CHECK(cudaMemsetAsync(d_src_counters, 0, sources.size() * sizeof(uint32_t), stream), stream);
+        size_t num_valid_output = 0;
+        RectDesc<N,T>* d_valid_intersect = nullptr;
 
+        // Finally, intersect output rectangles with the parent.  The common CSR
+        // image-range case has one dense parent rectangle, so compact by block
+        // instead of contending on one atomic counter per source.
+        if (collapsed_parent.num_rects == 1) {
+          size_t num_blocks = COMPUTE_GRID(total_pts);
+          uint32_t *d_block_counts = buffer_arena.alloc<uint32_t>(2 * num_blocks);
+          uint32_t *d_block_prefix = d_block_counts + num_blocks;
 
-        //Finally, we do another two pass count + emit to intersect with the parent rectangles
-        image_intersect_output<N,T><<<COMPUTE_GRID(collapsed_parent.num_rects * total_pts), THREADS_PER_BLOCK, 0, stream>>>(collapsed_parent.rects_buffer, d_rngs, nullptr, collapsed_parent.num_rects, total_pts, d_src_counters, nullptr);
-        KERNEL_CHECK(stream);
+          image_countIntersectOutputSingleParentByBlock<N,T><<<num_blocks, THREADS_PER_BLOCK, 0, stream>>>(collapsed_parent.rects_buffer, d_rngs, total_pts, d_block_counts);
+          KERNEL_CHECK(stream);
 
-        std::vector<uint32_t> h_src_counters(sources.size()+1);
-        h_src_counters[0] = 0; // prefix sum starts at 0
-        CUDA_CHECK(cudaMemcpyAsync(h_src_counters.data()+1, d_src_counters, sources.size() * sizeof(uint32_t), cudaMemcpyDeviceToHost, stream), stream);
-        CUDA_CHECK(cudaStreamSynchronize(stream), stream);
+          size_t temp_bytes = 0;
+          cub::DeviceScan::ExclusiveSum(nullptr, temp_bytes, d_block_counts, d_block_prefix, num_blocks, stream);
+          void *temp_storage = buffer_arena.alloc<char>(temp_bytes);
+          cub::DeviceScan::ExclusiveSum(temp_storage, temp_bytes, d_block_counts, d_block_prefix, num_blocks, stream);
 
-        for (size_t i = 0; i < sources.size(); ++i) {
-          h_src_counters[i+1] += h_src_counters[i];
+          uint32_t last_prefix = 0, last_count = 0;
+          CUDA_CHECK(cudaMemcpyAsync(&last_prefix, d_block_prefix + num_blocks - 1, sizeof(uint32_t), cudaMemcpyDeviceToHost, stream), stream);
+          CUDA_CHECK(cudaMemcpyAsync(&last_count, d_block_counts + num_blocks - 1, sizeof(uint32_t), cudaMemcpyDeviceToHost, stream), stream);
+          CUDA_CHECK(cudaStreamSynchronize(stream), stream);
+          num_valid_output = size_t(last_prefix) + size_t(last_count);
+
+          if (num_valid_output > 0) {
+            buffer_arena.flip_parity();
+            d_valid_intersect = buffer_arena.alloc<RectDesc<N,T>>(num_valid_output);
+            image_emitIntersectOutputSingleParentByBlock<N,T><<<num_blocks, THREADS_PER_BLOCK, 0, stream>>>(collapsed_parent.rects_buffer, d_rngs, d_block_prefix, total_pts, d_valid_intersect);
+            KERNEL_CHECK(stream);
+            CUDA_CHECK(cudaStreamSynchronize(stream), stream);
+          }
+        } else {
+          CUDA_CHECK(cudaMemsetAsync(d_src_counters, 0, sources.size() * sizeof(uint32_t), stream), stream);
+
+          image_intersect_output<N,T><<<COMPUTE_GRID(collapsed_parent.num_rects * total_pts), THREADS_PER_BLOCK, 0, stream>>>(collapsed_parent.rects_buffer, d_rngs, nullptr, collapsed_parent.num_rects, total_pts, d_src_counters, nullptr);
+          KERNEL_CHECK(stream);
+
+          std::vector<uint32_t> h_src_counters(sources.size()+1);
+          h_src_counters[0] = 0; // prefix sum starts at 0
+          CUDA_CHECK(cudaMemcpyAsync(h_src_counters.data()+1, d_src_counters, sources.size() * sizeof(uint32_t), cudaMemcpyDeviceToHost, stream), stream);
+          CUDA_CHECK(cudaStreamSynchronize(stream), stream);
+
+          for (size_t i = 0; i < sources.size(); ++i) {
+            h_src_counters[i+1] += h_src_counters[i];
+          }
+
+          num_valid_output = h_src_counters[sources.size()];
+
+          if (num_valid_output > 0) {
+            buffer_arena.flip_parity();
+            d_valid_intersect = buffer_arena.alloc<RectDesc<N,T>>(num_valid_output);
+
+            CUDA_CHECK(cudaMemcpyAsync(d_src_prefix, h_src_counters.data(), (sources.size() + 1) * sizeof(uint32_t), cudaMemcpyHostToDevice, stream), stream);
+            CUDA_CHECK(cudaMemsetAsync(d_src_counters, 0, sources.size() * sizeof(uint32_t), stream), stream);
+
+            image_intersect_output<N,T><<<COMPUTE_GRID(collapsed_parent.num_rects * total_pts), THREADS_PER_BLOCK, 0, stream>>>(collapsed_parent.rects_buffer, d_rngs, d_src_prefix, collapsed_parent.num_rects, total_pts, d_src_counters, d_valid_intersect);
+            KERNEL_CHECK(stream);
+            CUDA_CHECK(cudaStreamSynchronize(stream), stream);
+          }
         }
 
-        size_t num_valid_output = h_src_counters[sources.size()];
+        if (num_valid_output > 0 && buffer_arena.get_parity())
+          buffer_arena.flip_parity();
 
         if (num_valid_output == 0) {
           num_completed += curr_tile;
@@ -557,17 +605,6 @@ void GPUImageMicroOp<N,T,N2,T2>::gpu_populate_rngs()
           curr_tile = tile_size / 2;
           continue;
         }
-
-        buffer_arena.flip_parity();
-        RectDesc<N,T>* d_valid_intersect = buffer_arena.alloc<RectDesc<N,T>>(num_valid_output);
-
-        CUDA_CHECK(cudaMemcpyAsync(d_src_prefix, h_src_counters.data(), (sources.size() + 1) * sizeof(uint32_t), cudaMemcpyHostToDevice, stream), stream);
-        CUDA_CHECK(cudaMemsetAsync(d_src_counters, 0, sources.size() * sizeof(uint32_t), stream), stream);
-
-        image_intersect_output<N,T><<<COMPUTE_GRID(collapsed_parent.num_rects * total_pts), THREADS_PER_BLOCK, 0, stream>>>(collapsed_parent.rects_buffer, d_rngs, d_src_prefix, collapsed_parent.num_rects, total_pts, d_src_counters, d_valid_intersect);
-        KERNEL_CHECK(stream);
-
-        CUDA_CHECK(cudaStreamSynchronize(stream), stream);
 
         size_t num_new_rects = (num_output == 0) ? 1 : 2;
         assert(!buffer_arena.get_parity());
@@ -583,7 +620,7 @@ void GPUImageMicroOp<N,T,N2,T2>::gpu_populate_rngs()
        /* getMap: */         [&](auto const& elem){
                              // return the SparsityMap key itself
                              return elem;
-                          });
+                          }, coord_end_bit);
 
           if (host_fallback) {
             this->split_output(d_new_rects, num_new_rects, host_rect_buffers, rect_counts, buffer_arena);
@@ -621,7 +658,7 @@ void GPUImageMicroOp<N,T,N2,T2>::gpu_populate_rngs()
           /* getMap: */         [&](auto const& elem){
                                 // return the SparsityMap key itself
                                 return elem;
-                             });
+                             }, coord_end_bit);
           num_completed += curr_tile;
           num_output = num_final_rects;
           subtract_const<<<COMPUTE_GRID(domain_transform.range_data.size()), THREADS_PER_BLOCK, 0, stream>>>(inst_space.offsets, domain_transform.range_data.size()+1, curr_tile);
@@ -717,6 +754,7 @@ void GPUImageMicroOp<N,T,N2,T2>::gpu_populate_ptrs()
 
     CUstream stream = this->stream->get_stream();
 
+    const int coord_end_bit = coord_radix_bits_for_nonnegative_bounds(parent_space.bounds);
     size_t tile_size = buffer.get_layout()->bytes_used;
     //std::cout << "Using tile size of " << tile_size << " bytes." << std::endl;
     Arena buffer_arena(buffer);
@@ -811,21 +849,47 @@ void GPUImageMicroOp<N,T,N2,T2>::gpu_populate_ptrs()
 
         GPUMicroOp<N2, T2>::volume_prefix_sum(d_valid_rects, num_valid_rects, d_prefix_rects, total_pts, buffer_arena, stream);
 
-        CUDA_CHECK(cudaMemsetAsync(d_inst_counters, 0, (domain_transform.ptr_data.size()) * sizeof(uint32_t), stream), stream);
+        size_t num_valid_points = 0;
+        const bool single_inst = (domain_transform.ptr_data.size() == 1);
+        size_t num_blocks = COMPUTE_GRID(total_pts);
+        uint32_t *d_block_counts = nullptr;
+        uint32_t *d_block_prefix = nullptr;
+        std::vector<uint32_t> h_inst_counters;
 
-        //We do a two pass count + emit to chase all the pointers in parallel and check for membership in the parent index space
-        image_gpuPopulateBitmasksPtrsKernel<N,T,N2,T2><<<COMPUTE_GRID(total_pts), THREADS_PER_BLOCK, 0, stream>>>(d_accessors, d_valid_rects, collapsed_parent.rects_buffer, d_prefix_rects, d_inst_prefix, nullptr, total_pts, num_valid_rects, domain_transform.ptr_data.size(), collapsed_parent.num_rects, d_inst_counters, nullptr);
-        KERNEL_CHECK(stream);
+        // The common CSR image case has one transform instance.  Count and
+        // compact by block to avoid one global atomic per valid point.
+        if (single_inst) {
+          d_block_counts = buffer_arena.alloc<uint32_t>(2 * num_blocks);
+          d_block_prefix = d_block_counts + num_blocks;
 
-        std::vector<uint32_t> h_inst_counters(domain_transform.ptr_data.size()+1);
-        h_inst_counters[0] = 0; // prefix sum starts at 0
-        CUDA_CHECK(cudaMemcpyAsync(h_inst_counters.data()+1, d_inst_counters, domain_transform.ptr_data.size() * sizeof(uint32_t), cudaMemcpyDeviceToHost, stream), stream);
-        CUDA_CHECK(cudaStreamSynchronize(stream), stream);
-        for (size_t i = 0; i < domain_transform.ptr_data.size(); ++i) {
-          h_inst_counters[i+1] += h_inst_counters[i];
+          image_gpuCountBitmasksPtrsByBlockKernel<N,T,N2,T2><<<num_blocks, THREADS_PER_BLOCK, 0, stream>>>(h_accessors[0], d_valid_rects, collapsed_parent.rects_buffer, d_prefix_rects, total_pts, num_valid_rects, collapsed_parent.num_rects, d_block_counts);
+          KERNEL_CHECK(stream);
+
+          size_t temp_bytes = 0;
+          cub::DeviceScan::ExclusiveSum(nullptr, temp_bytes, d_block_counts, d_block_prefix, num_blocks, stream);
+          void *temp_storage = buffer_arena.alloc<char>(temp_bytes);
+          cub::DeviceScan::ExclusiveSum(temp_storage, temp_bytes, d_block_counts, d_block_prefix, num_blocks, stream);
+
+          uint32_t last_prefix = 0, last_count = 0;
+          CUDA_CHECK(cudaMemcpyAsync(&last_prefix, d_block_prefix + num_blocks - 1, sizeof(uint32_t), cudaMemcpyDeviceToHost, stream), stream);
+          CUDA_CHECK(cudaMemcpyAsync(&last_count, d_block_counts + num_blocks - 1, sizeof(uint32_t), cudaMemcpyDeviceToHost, stream), stream);
+          CUDA_CHECK(cudaStreamSynchronize(stream), stream);
+          num_valid_points = size_t(last_prefix) + size_t(last_count);
+        } else {
+          CUDA_CHECK(cudaMemsetAsync(d_inst_counters, 0, (domain_transform.ptr_data.size()) * sizeof(uint32_t), stream), stream);
+
+          image_gpuPopulateBitmasksPtrsKernel<N,T,N2,T2><<<num_blocks, THREADS_PER_BLOCK, 0, stream>>>(d_accessors, d_valid_rects, collapsed_parent.rects_buffer, d_prefix_rects, d_inst_prefix, nullptr, total_pts, num_valid_rects, domain_transform.ptr_data.size(), collapsed_parent.num_rects, d_inst_counters, nullptr);
+          KERNEL_CHECK(stream);
+
+          h_inst_counters.resize(domain_transform.ptr_data.size()+1);
+          h_inst_counters[0] = 0; // prefix sum starts at 0
+          CUDA_CHECK(cudaMemcpyAsync(h_inst_counters.data()+1, d_inst_counters, domain_transform.ptr_data.size() * sizeof(uint32_t), cudaMemcpyDeviceToHost, stream), stream);
+          CUDA_CHECK(cudaStreamSynchronize(stream), stream);
+          for (size_t i = 0; i < domain_transform.ptr_data.size(); ++i) {
+            h_inst_counters[i+1] += h_inst_counters[i];
+          }
+          num_valid_points = h_inst_counters[domain_transform.ptr_data.size()];
         }
-
-        size_t num_valid_points = h_inst_counters[domain_transform.ptr_data.size()];
 
         if (num_valid_points == 0) {
           num_completed += curr_tile;
@@ -836,18 +900,21 @@ void GPUImageMicroOp<N,T,N2,T2>::gpu_populate_ptrs()
           continue;
         }
 
-        CUDA_CHECK(cudaMemcpyAsync(d_prefix_points, h_inst_counters.data(), (domain_transform.ptr_data.size() + 1) * sizeof(uint32_t), cudaMemcpyHostToDevice, stream), stream);
-
         buffer_arena.flip_parity();
         PointDesc<N,T>* d_valid_points = buffer_arena.alloc<PointDesc<N,T>>(num_valid_points);
-        buffer_arena.start();
-        d_valid_points = buffer_arena.alloc<PointDesc<N,T>>(num_valid_points);
 
-        CUDA_CHECK(cudaMemsetAsync(d_inst_counters, 0, (domain_transform.ptr_data.size()) * sizeof(uint32_t), stream), stream);
-
-        image_gpuPopulateBitmasksPtrsKernel<N,T,N2,T2><<<COMPUTE_GRID(total_pts), THREADS_PER_BLOCK, 0, stream>>>(d_accessors, d_valid_rects, collapsed_parent.rects_buffer, d_prefix_rects, d_inst_prefix, d_prefix_points, total_pts, num_valid_rects, domain_transform.ptr_data.size(), collapsed_parent.num_rects, d_inst_counters, d_valid_points);
-        KERNEL_CHECK(stream);
+        if (single_inst) {
+          image_gpuEmitBitmasksPtrsByBlockKernel<N,T,N2,T2><<<num_blocks, THREADS_PER_BLOCK, 0, stream>>>(h_accessors[0], d_valid_rects, collapsed_parent.rects_buffer, d_prefix_rects, d_block_prefix, total_pts, num_valid_rects, collapsed_parent.num_rects, d_valid_points);
+          KERNEL_CHECK(stream);
+        } else {
+          CUDA_CHECK(cudaMemcpyAsync(d_prefix_points, h_inst_counters.data(), (domain_transform.ptr_data.size() + 1) * sizeof(uint32_t), cudaMemcpyHostToDevice, stream), stream);
+          CUDA_CHECK(cudaMemsetAsync(d_inst_counters, 0, (domain_transform.ptr_data.size()) * sizeof(uint32_t), stream), stream);
+          image_gpuPopulateBitmasksPtrsKernel<N,T,N2,T2><<<num_blocks, THREADS_PER_BLOCK, 0, stream>>>(d_accessors, d_valid_rects, collapsed_parent.rects_buffer, d_prefix_rects, d_inst_prefix, d_prefix_points, total_pts, num_valid_rects, domain_transform.ptr_data.size(), collapsed_parent.num_rects, d_inst_counters, d_valid_points);
+          KERNEL_CHECK(stream);
+        }
         CUDA_CHECK(cudaStreamSynchronize(stream), stream);
+        if (buffer_arena.get_parity())
+          buffer_arena.flip_parity();
 
 
         size_t num_new_rects = num_output == 0 ? 1 : 2;
@@ -864,7 +931,7 @@ void GPUImageMicroOp<N,T,N2,T2>::gpu_populate_ptrs()
         /* getMap: */         [&](auto const& elem){
                               // return the SparsityMap key itself
                               return elem;
-                           });
+                           }, coord_end_bit);
 
           if (host_fallback) {
             this->split_output(d_new_rects, num_new_rects, host_rect_buffers, rect_counts, buffer_arena);
@@ -898,7 +965,7 @@ void GPUImageMicroOp<N,T,N2,T2>::gpu_populate_ptrs()
         /* getMap: */         [&](auto const& elem){
                               // return the SparsityMap key itself
                               return elem;
-                           });
+                           }, coord_end_bit);
         num_completed += curr_tile;
         num_output = num_final_rects;
         subtract_const<<<COMPUTE_GRID(domain_transform.ptr_data.size()), THREADS_PER_BLOCK, 0, stream>>>(inst_space.offsets, domain_transform.ptr_data.size()+1, curr_tile);
