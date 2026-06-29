@@ -954,6 +954,13 @@ set_target_properties(
              VISIBILITY_INLINES_HIDDEN ON
              POSITION_INDEPENDENT_CODE ON
 )
+
+# Tell threads.cc to emit the anchor reference only when gdb_script.cc is
+# actually compiled (Debug / RelWithDebInfo on Linux/FreeBSD).  Otherwise
+# the anchor is undefined and static-archive links would fail.
+if(REALM_EMBED_GDB_SCRIPT)
+  target_compile_definitions(realm_obj PRIVATE REALM_EMBED_GDB_SCRIPT=1)
+endif()
 add_library(Realm ${REALM_RC_SOURCES} $<TARGET_OBJECTS:realm_obj> ${REALM_EXTRA_OBJS})
 add_library(Realm::Realm ALIAS Realm)
 set_target_properties(
