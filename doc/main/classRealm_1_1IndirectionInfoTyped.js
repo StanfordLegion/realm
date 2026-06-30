@@ -14,6 +14,7 @@ var classRealm_1_1IndirectionInfoTyped =
     [ "print", "classRealm_1_1IndirectionInfoTyped.html#a1f39a8295d9e1ea309d8e064f00f09f5", null ],
     [ "request_metadata", "classRealm_1_1IndirectionInfoTyped.html#a8c10ecf515f8a9aacbdc011fc74456bc", null ],
     [ "addr_split_channel", "classRealm_1_1IndirectionInfoTyped.html#ab0698d86d6786c2e7c3f548b78404d2a", null ],
+    [ "cached_domain_size", "classRealm_1_1IndirectionInfoTyped.html#a4156887fc67c91241a44f0d1b9f676b6", null ],
     [ "domain", "classRealm_1_1IndirectionInfoTyped.html#a12ad6887443aef9331eb8f37fb2e6a0c", null ],
     [ "spaces", "classRealm_1_1IndirectionInfoTyped.html#ae6210300d8ba03bc2d6ef129b4028636", null ]
 ];

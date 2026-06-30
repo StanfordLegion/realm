@@ -1,0 +1,19 @@
+<map id="Realm::Cuda::GPUIndirectRemoteChannel" name="Realm::Cuda::GPUIndirectRemoteChannel">
+<area shape="rect" id="Node000001" title=" " alt="" coords="398,243,589,283"/>
+<area shape="rect" id="Node000002" href="$classRealm_1_1RemoteChannel.html" title=" " alt="" coords="405,168,581,193"/>
+<area shape="poly" id="edge1_Node000001_Node000002" title=" " alt="" coords="496,207,496,243,491,243,491,207"/>
+<area shape="rect" id="Node000003" href="$classRealm_1_1Channel.html" title=" " alt="" coords="601,80,727,105"/>
+<area shape="poly" id="edge2_Node000002_Node000003" title=" " alt="" coords="645,117,607,146,576,160,545,170,543,165,574,155,604,142,642,113"/>
+<area shape="rect" id="Node000004" href="$classRealm_1_1RWLock.html" title=" " alt="" coords="189,80,313,105"/>
+<area shape="poly" id="edge3_Node000002_Node000004" title=" " alt="" coords="297,107,353,127,462,165,460,170,351,132,295,112"/>
+<area shape="rect" id="Node000005" href="$structRealm_1_1RWLock_1_1Writer.html" title=" " alt="" coords="209,168,381,193"/>
+<area shape="poly" id="edge5_Node000005_Node000004" title=" " alt="" coords="285,113,297,128,302,149,300,168,295,168,296,149,292,130,281,116"/>
+<area shape="rect" id="Node000006" href="$structRealm_1_1RWLock_1_1Reader.html" title=" " alt="" coords="5,168,184,193"/>
+<area shape="poly" id="edge7_Node000006_Node000004" title=" " alt="" coords="176,101,142,112,113,131,102,149,98,168,93,167,97,147,109,127,140,107,174,96"/>
+<area shape="poly" id="edge4_Node000004_Node000005" title=" " alt="" coords="261,161,250,145,245,124,246,105,251,105,250,124,254,143,266,158"/>
+<area shape="poly" id="edge6_Node000004_Node000006" title=" " alt="" coords="126,159,228,103,231,108,129,164"/>
+<area shape="rect" id="Node000007" href="$classRealm_1_1SimpleXferDesFactory.html" title=" " alt="" coords="361,80,577,105"/>
+<area shape="poly" id="edge8_Node000002_Node000007" title=" " alt="" coords="479,118,493,167,487,168,474,119"/>
+<area shape="rect" id="Node000008" href="$classRealm_1_1XferDesFactory.html" title=" " alt="" coords="384,5,555,31"/>
+<area shape="poly" id="edge9_Node000007_Node000008" title=" " alt="" coords="472,45,472,80,467,80,467,45"/>
+</map>

@@ -9,6 +9,7 @@ var classRealm_1_1TransferDesc =
     [ "perform_analysis", "classRealm_1_1TransferDesc.html#aa6d67240e6a98d500ce5e0da843e3d48", null ],
     [ "remove_reference", "classRealm_1_1TransferDesc.html#ad59a6c82b43941e2b8244a6fcae0fd54", null ],
     [ "TransferOperation", "classRealm_1_1TransferDesc.html#a00d3759c8631402bedeb84ed21e00099", null ],
+    [ "analysis_domain_size", "classRealm_1_1TransferDesc.html#a8683b0fdeb55bea5eb0cdaf4dac013f7", null ],
     [ "analysis_field_done", "classRealm_1_1TransferDesc.html#ab447bf9f3977392e992f4b6e7062571c", null ],
     [ "analysis_field_idx", "classRealm_1_1TransferDesc.html#aef7552be2cb1f7601baf0d89f3b810ea", null ],
     [ "analysis_fill_ofs", "classRealm_1_1TransferDesc.html#a56b57b2f02b5ae8e2087cc1d9df1bd24", null ],
