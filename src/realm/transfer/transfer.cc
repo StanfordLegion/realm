@@ -4046,8 +4046,7 @@ namespace Realm {
       //   with transposes in line)
       analysis_domain_size = domain->volume();
       domain->choose_dim_order(dim_order, srcs, dsts, indirects,
-                               (analysis_domain_size == 1),
-                               65536 /*max_stride*/);
+                               (analysis_domain_size == 1), 65536 /*max_stride*/);
 
       src_fields.resize(srcs.size());
       dst_fields.resize(dsts.size());
