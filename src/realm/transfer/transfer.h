@@ -504,6 +504,7 @@ namespace Realm {
     void *fill_data;
     size_t fill_size;
     bool analysis_init_done = false;
+    size_t analysis_domain_size = 0;
     size_t analysis_field_idx = 0;
     size_t analysis_fld_start = 0;
     size_t analysis_fill_ofs = 0;
@@ -657,6 +658,8 @@ namespace Realm {
     IndexSpace<N, T> domain;
     std::vector<IndexSpace<N2, T2>> spaces;
     Channel *addr_split_channel;
+    mutable bool cached_domain_size_valid{false};
+    mutable size_t cached_domain_size{0};
   };
 
   // a TransferOperation is an application-requested copy/fill/reduce
