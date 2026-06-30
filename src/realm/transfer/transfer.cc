@@ -3076,6 +3076,7 @@ namespace Realm {
     std::vector<size_t> path_idx;
     std::vector<MemPathInfo> path_infos;
     path_idx.reserve(spaces_size);
+    const size_t ind_domain_size = domain_size();
     for(size_t i = 0; i < insts.size(); i++) {
       size_t idx = path_infos.size();
       for(size_t j = 0; j < i; j++) {
@@ -3089,14 +3090,14 @@ namespace Realm {
       if(idx >= path_infos.size()) {
         // new path to compute
         path_infos.resize(idx + 1);
-        std::vector<size_t> src_frags{domain_size()}, dst_frags{1};
+        std::vector<size_t> src_frags{ind_domain_size}, dst_frags{1};
         log_xpath.info() << "Find fastest path for gather op spaces:" << spaces_size;
         ChannelCopyInfo copy_info{insts[i].get_location(), dst_mem, inst.get_location(),
                                   spaces_size,
                                   /*is_scatter=*/false};
         populate_copy_info(copy_info);
         bool ok = find_fastest_path(nodes_info, path_cache, copy_info, serdez_id, 0,
-                                    domain_size() * bytes_per_element, &src_frags,
+                                    ind_domain_size * bytes_per_element, &src_frags,
                                     &dst_frags, path_infos[idx]);
         if(!ok) {
           // Couldn't find a path with the given indirect memory, so use a path without
@@ -3104,7 +3105,7 @@ namespace Realm {
           // it
           copy_info.ind_mem = Memory::NO_MEMORY;
           ok = find_fastest_path(nodes_info, path_cache, copy_info, serdez_id, 0,
-                                 domain_size() * bytes_per_element, &src_frags,
+                                 ind_domain_size * bytes_per_element, &src_frags,
                                  &dst_frags, path_infos[idx]);
         }
         assert(ok);
@@ -3390,6 +3391,7 @@ namespace Realm {
     std::vector<size_t> path_idx;
     std::vector<MemPathInfo> path_infos;
     path_idx.reserve(spaces_size);
+    const size_t ind_domain_size = domain_size();
     for(size_t i = 0; i < insts.size(); i++) {
       size_t idx = path_infos.size();
       for(size_t j = 0; j < i; j++) {
@@ -3410,14 +3412,14 @@ namespace Realm {
         // worst case. The actual number of consecutive rectangles (e.g
         // fragments) to handle can be less. Consider finding a
         // better way to handle this (same for gather op).
-        std::vector<size_t> src_frags{1}, dst_frags{domain_size()};
+        std::vector<size_t> src_frags{1}, dst_frags{ind_domain_size};
         log_xpath.info() << "Find fastest path for scatter op.";
         ChannelCopyInfo copy_info{src_mem, insts[i].get_location(), inst.get_location(),
                                   spaces_size,
                                   /*is_scatter=*/true};
         populate_copy_info(copy_info);
         bool ok = find_fastest_path(get_runtime()->nodes, path_cache, copy_info,
-                                    serdez_id, 0, domain_size() * bytes_per_element,
+                                    serdez_id, 0, ind_domain_size * bytes_per_element,
                                     &src_frags, &dst_frags, path_infos[idx]);
         if(!ok) {
           // Couldn't find a path with the given indirect memory, so use a path without
@@ -3425,7 +3427,7 @@ namespace Realm {
           // it
           copy_info.ind_mem = Memory::NO_MEMORY;
           ok = find_fastest_path(get_runtime()->nodes, path_cache, copy_info, serdez_id,
-                                 0, domain_size() * bytes_per_element, &src_frags,
+                                 0, ind_domain_size * bytes_per_element, &src_frags,
                                  &dst_frags, path_infos[idx]);
         }
         assert(ok);
@@ -3753,7 +3755,10 @@ namespace Realm {
   template <int N, typename T, int N2, typename T2>
   size_t IndirectionInfoTyped<N, T, N2, T2>::domain_size() const
   {
-    return domain.volume();
+    if(!cached_domain_size) {
+      cached_domain_size = domain.volume();
+    }
+    return *cached_domain_size;
   }
 
   template <int N, typename T, int N2, typename T2>
@@ -4016,6 +4021,7 @@ namespace Realm {
       // quick check - if the domain is empty, there's nothing to actually do
       if(domain->empty()) {
         log_xplan.debug() << "analysis: plan=" << (void *)this << " empty";
+        analysis_domain_size = 0;
         analysis_init_done = true;
         analysis_field_idx = srcs.size();
         return op->allocate_ibs(work_until);
@@ -4037,8 +4043,9 @@ namespace Realm {
       // for now, pick a global dimension ordering
       // TODO: allow this to vary for independent subgraphs (or dependent ones
       //   with transposes in line)
-      domain->choose_dim_order(dim_order, srcs, dsts, indirects, (domain->volume() == 1),
-                               65536 /*max_stride*/);
+      analysis_domain_size = domain->volume();
+      domain->choose_dim_order(dim_order, srcs, dsts, indirects,
+                               (analysis_domain_size == 1), 65536 /*max_stride*/);
 
       src_fields.resize(srcs.size());
       dst_fields.resize(dsts.size());
@@ -4056,7 +4063,7 @@ namespace Realm {
       return op->allocate_ibs(work_until);
     }
 
-    size_t domain_size = domain->volume();
+    size_t domain_size = analysis_domain_size;
 
     // TODO: look at layouts and decide if fields should be grouped into
     //  a smaller number of copies
