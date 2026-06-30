@@ -32,6 +32,8 @@
 #include "realm/transfer/channel.h"
 #include "realm/profiling.h"
 
+#include <optional>
+
 namespace Realm {
 
   // the data transfer engine has too much code to have it all be templated on the
@@ -658,8 +660,7 @@ namespace Realm {
     IndexSpace<N, T> domain;
     std::vector<IndexSpace<N2, T2>> spaces;
     Channel *addr_split_channel;
-    mutable bool cached_domain_size_valid{false};
-    mutable size_t cached_domain_size{0};
+    mutable std::optional<size_t> cached_domain_size;
   };
 
   // a TransferOperation is an application-requested copy/fill/reduce

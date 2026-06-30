@@ -3755,11 +3755,10 @@ namespace Realm {
   template <int N, typename T, int N2, typename T2>
   size_t IndirectionInfoTyped<N, T, N2, T2>::domain_size() const
   {
-    if(!cached_domain_size_valid) {
+    if(!cached_domain_size) {
       cached_domain_size = domain.volume();
-      cached_domain_size_valid = true;
     }
-    return cached_domain_size;
+    return *cached_domain_size;
   }
 
   template <int N, typename T, int N2, typename T2>
