@@ -475,7 +475,14 @@ namespace Realm {
     , me(_me)
     , kind(_kind)
     , num_cores(_num_cores)
-  {}
+  {
+#ifdef REALM_USE_NVTX
+    std::string nvtx_name =
+        stringbuilder() << Processor::get_kind_name(kind) << " " << me;
+    nvtx_category = std::make_unique<NvtxCategory>(
+        nvtx_name, nvtx_get_next_category_id(), nvtx_get_next_color());
+#endif
+  }
 
   ProcessorImpl::~ProcessorImpl(void) {}
 
@@ -1150,6 +1157,11 @@ namespace Realm {
 
     log_taskreg.debug() << "task " << func_id << " executing on " << me << ": "
                         << ((void *)(tte.fnptr));
+
+#ifdef REALM_USE_NVTX
+    std::string nvtx_msg = stringbuilder() << "task " << func_id;
+    nvtxUniqueRange nvtx_range(nvtx_category.get(), nvtx_msg.c_str());
+#endif
 
     (tte.fnptr)(task_args.base(), task_args.size(), tte.user_data.base(),
                 tte.user_data.size(), me);
