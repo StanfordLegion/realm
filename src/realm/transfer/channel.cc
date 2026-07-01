@@ -276,6 +276,13 @@ namespace Realm {
     }
   }
 
+  void SequenceAssembler::reset()
+  {
+    contig_amount_x2.store(0);
+    first_noncontig.store((size_t)-1);
+    spans.clear();
+  }
+
   ////////////////////////////////////////////////////////////////////////
   //
   // class ControlPort::Encoder
@@ -462,8 +469,6 @@ namespace Realm {
     , nb_update_pre_bytes_total_calls_received(0)
   {
     input_ports.resize(inputs_info.size());
-    int gather_control_port = -1;
-    int scatter_control_port = -1;
     for(size_t i = 0; i < inputs_info.size(); i++) {
       XferPort &p = input_ports[i];
       const XferDesPortInfo &ii = inputs_info[i];
@@ -489,6 +494,7 @@ namespace Realm {
       p.remote_bytes_total.store(size_t(-1));
       p.ib_offset = ii.ib_offset;
       p.ib_size = ii.ib_size;
+      p.ib_index = ii.ib_index;
       p.addrcursor.set_addrlist(&p.addrlist);
       switch(ii.port_type) {
       case XferDesPortInfo::GATHER_CONTROL_PORT:
@@ -555,6 +561,7 @@ namespace Realm {
       p.remote_bytes_total.store(size_t(-1));
       p.ib_offset = oi.ib_offset;
       p.ib_size = oi.ib_size;
+      p.ib_index = oi.ib_index;
       p.addrcursor.set_addrlist(&p.addrlist);
 
       // if we're writing into an IB, the first 'ib_size' byte
@@ -652,6 +659,83 @@ namespace Realm {
     } else {
       TransferOperation *op = reinterpret_cast<TransferOperation *>(dma_op);
       NotifyXferDesCompleteMessage::send_request(launch_node, op, guid);
+    }
+  }
+
+  void XferDes::reset(const std::vector<off_t> &ib_offsets)
+  {
+    iteration_completed.store_release(false);
+    bytes_write_pending.store_release(0);
+    transfer_completed.store_release(false);
+    progress_counter.store_release(0);
+    nb_update_pre_bytes_total_calls_received.store_release(0);
+    for(auto &info : input_ports) {
+      info.iter->reset();
+      info.local_bytes_total = 0;
+      info.local_bytes_cons.store_release(0);
+      info.remote_bytes_total.store_release(size_t(-1));
+      info.needs_pbt_update.store(false);
+      info.seq_local.reset();
+      info.seq_remote.reset();
+      info.addrlist.reset();
+      info.addrcursor.reset();
+      // If this XD is using an IB, update its offset value
+      // to the latest one for this copy instantiation.
+      if(info.ib_size > 0) {
+        info.ib_offset = ib_offsets[info.ib_index];
+        // TODO (rohany): This is pretty hacky, but I don't know
+        //  a better way to do it...
+        auto wrapit = dynamic_cast<WrappingFIFOIterator *>(info.iter);
+        assert(wrapit);
+        wrapit->set_base(info.ib_offset);
+      }
+    }
+
+    if(gather_control_port >= 0) {
+      input_control.control_port_idx = gather_control_port;
+      input_control.current_io_port = 0;
+      input_control.remaining_count = 0;
+      input_control.eos_received = false;
+    } else {
+      input_control.control_port_idx = -1;
+      input_control.current_io_port = 0;
+      input_control.remaining_count = size_t(-1);
+      input_control.eos_received = false;
+    }
+
+    for(auto &info : output_ports) {
+      info.iter->reset();
+      info.needs_pbt_update.store_release(info.peer_guid != XFERDES_NO_GUID);
+      info.local_bytes_total = 0;
+      info.local_bytes_cons.store_release(0);
+      info.remote_bytes_total.store_release(size_t(-1));
+      info.seq_local.reset();
+      info.seq_remote.reset();
+      info.addrlist.reset();
+      info.addrcursor.reset();
+      if(info.ib_size > 0) {
+        info.ib_offset = ib_offsets[info.ib_index];
+        // TODO (rohany): This is pretty hacky, but I don't know
+        //  a better way to do it...
+        auto wrapit = dynamic_cast<WrappingFIFOIterator *>(info.iter);
+        assert(wrapit);
+        wrapit->set_base(info.ib_offset);
+        // Also mark the remote sequence assembler as capable of
+        // writing into the ib memory.
+        info.seq_remote.add_span(0, info.ib_size);
+      }
+    }
+
+    if(scatter_control_port >= 0) {
+      output_control.control_port_idx = scatter_control_port;
+      output_control.current_io_port = 0;
+      output_control.remaining_count = 0;
+      output_control.eos_received = false;
+    } else {
+      output_control.control_port_idx = -1;
+      output_control.current_io_port = 0;
+      output_control.remaining_count = size_t(-1);
+      output_control.eos_received = false;
     }
   }
 
@@ -1996,6 +2080,7 @@ namespace Realm {
                                  size_t _fill_total)
     : XferDes(_dma_op, _channel, _launch_node, _guid, inputs_info, outputs_info,
               _priority, _fill_data, _fill_size)
+    , fill_total(_fill_total)
   {
     kind = XFER_MEM_FILL;
 
@@ -2004,6 +2089,15 @@ namespace Realm {
     assert(input_control.control_port_idx == -1);
     input_control.current_io_port = -1;
     input_control.remaining_count = _fill_total;
+    input_control.eos_received = true;
+  }
+
+  void MemfillXferDes::reset(const std::vector<off_t> &ib_offsets)
+  {
+    XferDes::reset(ib_offsets);
+    assert(input_control.control_port_idx == -1);
+    input_control.current_io_port = -1;
+    input_control.remaining_count = fill_total;
     input_control.eos_received = true;
   }
 
