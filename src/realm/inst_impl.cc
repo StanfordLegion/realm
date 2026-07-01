@@ -1198,14 +1198,14 @@ namespace Realm {
         measurements.add_measurement(usage);
       }
     }
-    if(ready_event.exists())
-      GenEventImpl::trigger(ready_event, false /*!poisoned*/, work_until);
-
     // metadata is now valid and can be shared
     NodeSet early_reqs;
     metadata.mark_valid(early_reqs);
     if(!early_reqs.empty())
       send_metadata(early_reqs);
+
+    if(ready_event.exists())
+      GenEventImpl::trigger(ready_event, false /*!poisoned*/, work_until);
 
     if(measurements.wants_measurement<ProfilingMeasurements::InstanceTimeline>()) {
       timeline.record_ready_time();
