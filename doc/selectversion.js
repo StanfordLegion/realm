@@ -42,11 +42,7 @@ $('.dropbtn').html("Version " + url2label(thisvers));
     .then((response) => response.text())
     .then((data) => {
       entries = data.split('\n');
-      entries = entries.splice(entries.indexOf(thisvers), -1);
-      if (thisvers != master) {
-        entries = entries.splice(entries.indexOf(master), -1);
-        entries.unshift(master);
-      }
+      entries = entries.filter(item => item !== thisvers && item !== '')
       entries.unshift(thisvers);
       entries = entries.map((x) => '<a class="verslink" href="'
                         + '/' + urlroot + '/' + x + '/">'
