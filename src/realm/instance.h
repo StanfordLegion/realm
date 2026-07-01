@@ -306,7 +306,7 @@ namespace Realm {
                                                        const ProfilingRequestSet &prs,
                                                        Event wait_on = Event::NO_EVENT));
 
-    void destroy(Event wait_on = Event::NO_EVENT) const;
+    Event destroy(Event wait_on = Event::NO_EVENT) const;
 
     AddressSpace address_space(void) const;
 

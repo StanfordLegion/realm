@@ -388,8 +388,8 @@ void main_task(const void *args, size_t arglen, const void *userdata, size_t use
     }
   }
 
-  src_inst.destroy();
-  dst_inst.destroy();
+  src_inst.destroy().wait();
+  dst_inst.destroy().wait();
 
   // collect profiling results
   task_result.done.wait();

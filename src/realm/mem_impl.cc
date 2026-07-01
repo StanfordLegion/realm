@@ -2085,6 +2085,7 @@ namespace Realm {
     amsg->memory = me;
     amsg->inst = inst->me;
     amsg->precondition = precondition;
+    amsg->destroy_event = inst->metadata.destroy_event;
     amsg.commit();
   }
 
@@ -2208,6 +2209,8 @@ namespace Realm {
     assert(impl != nullptr && "invalid memory handle");
     RegionInstanceImpl *inst = impl->get_instance(args.inst);
 
+    inst->metadata.destroy_event = args.destroy_event;
+
     impl->release_storage_deferrable(inst, args.precondition);
   }
 
@@ -2222,6 +2225,8 @@ namespace Realm {
                                             const void *data, size_t datalen)
   {
     RegionInstanceImpl *impl = get_runtime()->get_instance_impl(args.inst);
+
+    impl->metadata.destroy_event = args.destroy_event;
 
     impl->notify_deallocation();
   }

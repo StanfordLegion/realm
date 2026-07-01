@@ -227,9 +227,9 @@ bool do_reduction(IndexSpace<N, T> domain, IndexSpace<N, T> bloat, Memory dst_me
                                           /*field_size*/ sizeof(StructType),
                                           /*exp=*/StructType{11});
 
-  dst_inst1.destroy();
-  dst_inst0.destroy();
-  src_inst.destroy();
+  dst_inst1.destroy().wait();
+  dst_inst0.destroy().wait();
+  src_inst.destroy().wait();
   return success;
 }
 

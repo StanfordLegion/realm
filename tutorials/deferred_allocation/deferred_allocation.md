@@ -72,15 +72,23 @@ program and linked to processing tasks using a
     prev_event = p.spawn(
         READER_TASK, &task_args, sizeof(TaskArguments),
         p.spawn(WRITER_TASK, &task_args, sizeof(TaskArguments), create_event));
-    inst.destroy(prev_event);
+    prev_event = inst.destroy(prev_event);
   }
 ```
 
 Each allocation must be deleted before the next batch can proceed,
 but only after data processing is completed. Therefore, the deletion
 operation (`inst.destroy(...)`) is preconditioned with the `prev_event`.
-This deferred strategy schedules operations in a "future" and ensures
-that the next chain is allocated only when needed.
+This allows us to ensure we don't free the actual memory backing store until the
+process has completed.  Passing `prev_event` to `RegionInstance::create_instance`
+allows us defer the allocation of the backing store until we actually need it.
+While we could define `prev_event` to be when the task completes, this could race
+with the destruction of the previous iteration's allocation, potentially requiring
+more memory up front than actually needed for a short time while the last
+`inst.destroy` is in-flight.  Under memory pressure for the target memory, this
+could cause failures on allocation or possibly performance issues as Realm tries
+to find room for the instance.  Therefore, `prev_event` is then defined to be
+when the last iteration freed it's resources, avoiding these issues.
 
 The program starts by triggering the `start_event`,
 writes data to the allocated region instance, reads it, verifies

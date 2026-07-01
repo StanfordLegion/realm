@@ -366,7 +366,7 @@ void top_level_task(const void *args, size_t arglen, const void *userdata, size_
       dsts.push_back(cpu_z_field);
       z_ready = bounds.copy(srcs, dsts, ProfilingRequestSet(), e);
     }
-    gpu_inst.destroy(z_ready);
+    Processor::add_finish_event_precondition(gpu_inst.destroy(z_ready));
   } else {
     // Run the computation on the CPU
     Event fill_z;
@@ -390,8 +390,7 @@ void top_level_task(const void *args, size_t arglen, const void *userdata, size_
   Event done =
       first_cpu.spawn(CHECK_RESULT_TASK, &saxpy_args, sizeof(saxpy_args), z_ready);
   log_app.print() << "all work issued - done event=" << done;
-  done.wait();
-  cpu_inst.destroy();
+  Processor::add_finish_event_precondition(cpu_inst.destroy(done));
 }
 
 void cpu_saxpy_task(const void *args, size_t arglen, const void *userdata, size_t userlen,
