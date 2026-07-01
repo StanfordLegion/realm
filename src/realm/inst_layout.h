@@ -24,6 +24,7 @@
 #include "realm/serialize.h"
 
 #if defined(REALM_USE_KOKKOS)
+#include <Kokkos_Array.hpp>
 // we don't want to include Kokkos_View.hpp because it brings in too much
 //  other stuff, so forward declare the pieces we need to define a templated
 //  conversion from Realm accessor to Kokkos::View (anything that actually
@@ -35,8 +36,6 @@ namespace Kokkos {
   template <unsigned>
   struct MemoryTraits;
   struct LayoutStride;
-  template <class, size_t, class>
-  struct Array;
   namespace Experimental {
     template <class, class...>
     class OffsetView;

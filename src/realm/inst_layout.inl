@@ -1501,8 +1501,8 @@ namespace Realm {
                          Kokkos::MemoryTraits<Kokkos_Unmanaged>>
         unmanaged_view;
     // verify our Kokkos_Unmanaged enum was right
-    static_assert(unmanaged_view::traits::is_managed == 0,
-                  "incorrect value for Kokkos_Unmanaged!");
+    static_assert(unmanaged_view::memory_traits::is_unmanaged,
+                 "incorrect value for Kokkos_Unmanaged!");
 
     // verify the type and rank of the view match us - technically the type
     //  part would be caught by Kokkos if we passed an FT *, but the error
@@ -1511,7 +1511,7 @@ namespace Realm {
         std::is_same<typename unmanaged_view::value_type, FT>::value ||
             std::is_same<typename unmanaged_view::non_const_value_type, FT>::value,
         "base type mismatch between Kokkos view and accessor!");
-    static_assert(unmanaged_view::Rank == N,
+    static_assert(unmanaged_view::rank == N,
                   "rank mismatch between Kokkos view and accessor!");
 
     // we're relying on the check above for type safety, so hand the
@@ -1531,7 +1531,7 @@ namespace Realm {
       const
   {
     typename DeferType<Kokkos::LayoutStride, FT>::type kls;
-    Kokkos::Array<int64_t, N, void> begins;
+    Kokkos::Array<int64_t, N> begins;
     uintptr_t base_shifted = base;
     for(int i = 0; i < N; i++) {
       // a Kokkos::Experimental::OffsetView uses absolute indexing, but it's
@@ -1556,8 +1556,8 @@ namespace Realm {
                          Kokkos::MemoryTraits<Kokkos_Unmanaged>>
         unmanaged_view;
     // verify our Kokkos_Unmanaged enum was right
-    static_assert(unmanaged_view::traits::is_managed == 0,
-                  "incorrect value for Kokkos_Unmanaged!");
+    static_assert(unmanaged_view::memory_traits::is_unmanaged,
+                 "incorrect value for Kokkos_Unmanaged!");
 
     // verify the type and rank of the view match us - technically the type
     //  part would be caught by Kokkos if we passed an FT *, but the error
@@ -1566,7 +1566,7 @@ namespace Realm {
         std::is_same<typename unmanaged_view::value_type, FT>::value ||
             std::is_same<typename unmanaged_view::non_const_value_type, FT>::value,
         "base type mismatch between Kokkos view and accessor!");
-    static_assert(unmanaged_view::Rank == N,
+    static_assert(unmanaged_view::rank == N,
                   "rank mismatch between Kokkos view and accessor!");
 
     // we're relying on the check above for type safety, so hand the
