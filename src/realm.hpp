@@ -682,7 +682,7 @@ namespace REALM_NAMESPACE {
       REALM_CHECK(realm_runtime_get_runtime(&runtime));
       realm_event_t event_id_out;
       // Note: Using nullptr for ProfilingRequestSet since it's not available in C API yet
-      REALM_CHECK(realm_processor_spawn(runtime, id, func_id, args, arglen, nullptr,
+      REALM_CHECK(realm_processor_spawn(runtime, id, func_id, args, arglen, nullptr, 0,
                                         wait_on, priority, &event_id_out));
       return Event(event_id_out);
     }
@@ -706,7 +706,7 @@ namespace REALM_NAMESPACE {
       realm_event_t event_id_out;
       // Note: ProfilingRequestSet needs to be converted to realm_profiling_request_set_t
       // For now, using nullptr until the conversion is implemented
-      REALM_CHECK(realm_processor_spawn(runtime, id, func_id, args, arglen, nullptr,
+      REALM_CHECK(realm_processor_spawn(runtime, id, func_id, args, arglen, nullptr, 0,
                                         wait_on, priority, &event_id_out));
       return Event(event_id_out);
     }

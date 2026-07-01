@@ -167,6 +167,19 @@ namespace Realm {
     if(pr.response_task_id == Processor::TASK_ID_PROCESSOR_NOP)
       return;
 
+    std::vector<char> buffer;
+    dump_to_buffer(pr, buffer);
+    size_t bytes_needed = buffer.size();
+
+    if(bytes_needed > 0) {
+      pr.response_proc.spawn(pr.response_task_id, buffer.data(), bytes_needed,
+                             Event::NO_EVENT, pr.priority);
+    }
+  }
+
+  void ProfilingMeasurementCollection::dump_to_buffer(const ProfilingRequest &pr,
+                                                      std::vector<char> &buffer) const
+  {
     // for each request, find the intersection of the measurements it wants and the ones
     // we have
     std::set<ProfilingMeasurementID> ids;
@@ -196,8 +209,8 @@ namespace Realm {
     if((count == 0) && !pr.report_if_empty)
       return;
 
-    char *payload = (char *)malloc(bytes_needed);
-    assert(payload != 0);
+    buffer.resize(bytes_needed);
+    char *payload = buffer.data();
 
     int *header = (int *)payload; // first bunch of stuff is a big int array
     char *data = payload + (2 + 2 * count) * sizeof(int);
@@ -231,11 +244,6 @@ namespace Realm {
     }
 
     assert((size_t)(data - payload) == bytes_needed);
-
-    pr.response_proc.spawn(pr.response_task_id, payload, bytes_needed, Event::NO_EVENT,
-                           pr.priority);
-
-    free(payload);
   }
 
   void ProfilingMeasurementCollection::send_responses(const ProfilingRequestSet &prs)

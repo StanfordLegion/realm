@@ -120,7 +120,7 @@ TEST_F(CCreateInstFromExternalInstanceResourceTest, InvalidExternalResource)
   params.field_sizes = field_sizes;
   params.external_resource = &external_resource;
   realm_event_t event;
-  realm_status_t status = realm_region_instance_create(runtime, &params, nullptr,
+  realm_status_t status = realm_region_instance_create(runtime, &params, nullptr, 0,
                                                        REALM_NO_EVENT, &inst, &event);
   EXPECT_EQ(status, REALM_EXTERNAL_RESOURCE_ERROR_INVALID_TYPE);
 }
@@ -151,7 +151,7 @@ TEST_F(CCreateInstFromExternalInstanceResourceTest, InvalidBase)
   params.field_sizes = field_sizes;
   params.external_resource = &external_resource;
   realm_event_t event;
-  realm_status_t status = realm_region_instance_create(runtime, &params, nullptr,
+  realm_status_t status = realm_region_instance_create(runtime, &params, nullptr, 0,
                                                        REALM_NO_EVENT, &inst, &event);
   EXPECT_EQ(status, REALM_EXTERNAL_RESOURCE_ERROR_INVALID_BASE);
 }
@@ -186,7 +186,7 @@ TEST_F(CCreateInstFromExternalInstanceResourceTest, InvalidSize)
   params.field_sizes = field_sizes;
   params.external_resource = &external_resource;
   realm_event_t event;
-  realm_status_t status = realm_region_instance_create(runtime, &params, nullptr,
+  realm_status_t status = realm_region_instance_create(runtime, &params, nullptr, 0,
                                                        REALM_NO_EVENT, &inst, &event);
   EXPECT_EQ(status, REALM_EXTERNAL_RESOURCE_ERROR_INVALID_SIZE);
   ALIGNED_FREE(external_mem);
@@ -222,7 +222,7 @@ TEST_F(CCreateInstFromExternalInstanceResourceTest, CreateSuccess)
   params.field_sizes = field_sizes;
   params.external_resource = &external_resource;
   realm_event_t event;
-  realm_status_t status = realm_region_instance_create(runtime, &params, nullptr,
+  realm_status_t status = realm_region_instance_create(runtime, &params, nullptr, 0,
                                                        REALM_NO_EVENT, &inst, &event);
   EXPECT_EQ(status, REALM_SUCCESS);
   EXPECT_EQ(RegionInstance(inst).exists(), true);
@@ -260,8 +260,8 @@ protected:
     params.field_sizes = field_sizes;
     params.external_resource = nullptr;
     realm_event_t event;
-    ASSERT_REALM(realm_region_instance_create(runtime, &params, nullptr, REALM_NO_EVENT,
-                                              &inst, &event));
+    ASSERT_REALM(realm_region_instance_create(runtime, &params, nullptr, 0,
+                                              REALM_NO_EVENT, &inst, &event));
   }
 
   void TearDown() override
