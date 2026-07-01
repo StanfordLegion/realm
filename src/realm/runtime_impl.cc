@@ -1956,6 +1956,7 @@ namespace Realm {
 #endif
 
     event_triggerer.add_to_manager(&bgwork);
+    copy_analyzer.add_to_manager(&bgwork);
 
     // initialize barrier timestamp
     BarrierImpl::barrier_adjustment_timestamp.store(
@@ -2884,24 +2885,23 @@ namespace Realm {
     // the operation tables on every rank should be clear of work
     optable.shutdown_check();
 
-    // make sure the network is completely quiescent
+    // make sure the network is completely quiescent.  The check is a
+    //  Mattern's-shaped two-round stability protocol that returns DONE
+    //  (confirmed quiescent) or PROGRESSING (keep iterating).  There is
+    //  intentionally no abort path: without introspection into the network
+    //  layer we cannot distinguish a slow in-flight message from a lost
+    //  one, so any timeout-based abort would be a guess.  If shutdown
+    //  hangs here it is a debuggable state (attach gdb).  A periodic
+    //  warning is emitted from check_for_quiescence when counters stay
+    //  frozen.
     if(Network::max_node_id > 0) {
       int tries = 0;
-      while(true) {
+      while(Network::check_for_quiescence(message_manager) !=
+            Network::QuiescenceStatus::DONE) {
         tries++;
-        bool done = Network::check_for_quiescence(message_manager);
-        if(done) {
-          if(Network::my_node_id == 0)
-            log_runtime.info() << "quiescent after " << tries << " attempts";
-          break;
-        }
-
-        if(tries >= 10) {
-          log_runtime.fatal() << "network still not quiescent after " << tries
-                              << " attempts";
-          abort();
-        }
       }
+      if(Network::my_node_id == 0)
+        log_runtime.info() << "quiescent after " << (tries + 1) << " attempts";
     }
 
     // mark that a shutdown is in progress so that we can hopefully catch
@@ -2947,6 +2947,7 @@ namespace Realm {
 
 #ifdef DEBUG_REALM
     event_triggerer.shutdown_work_item();
+    copy_analyzer.shutdown_work_item();
 #endif
     bgwork.stop_dedicated_workers();
 
@@ -3399,7 +3400,7 @@ namespace Realm {
       assert(0 && "invalid completion queue handle");
     }
 
-    Node *n = &nodes[id.pgroup_owner_node()];
+    Node *n = &nodes[id.compqueue_owner_node()];
     CompQueueImpl *impl =
         n->compqueues.lookup_entry(id.compqueue_cq_idx(), id.compqueue_owner_node());
     assert(impl->me == id.convert<CompletionQueue>());
