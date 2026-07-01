@@ -1,0 +1,28 @@
+var classRealm_1_1TransferIteratorBase =
+[
+    [ "TransferIteratorBase", "classRealm_1_1TransferIteratorBase.html#a437072ae84dd7f775e75594ea4a1ea3c", null ],
+    [ "TransferIteratorBase", "classRealm_1_1TransferIteratorBase.html#aa1e003e8847ad68946f9e911c7cbaf9e", null ],
+    [ "cancel_step", "classRealm_1_1TransferIteratorBase.html#a49b6967a53a0d83b40fdd121121b7761", null ],
+    [ "confirm_step", "classRealm_1_1TransferIteratorBase.html#a6fe523fffaa4a0c9c6171f922d1f6a83", null ],
+    [ "done", "classRealm_1_1TransferIteratorBase.html#a7207b2bb5fa3fdd33f4692b2881c4824", null ],
+    [ "get_addresses", "classRealm_1_1TransferIteratorBase.html#aaf4309badfaa9b6215ab9ecf604ff5e7", null ],
+    [ "get_base_offset", "classRealm_1_1TransferIteratorBase.html#acad696f1ad7f87c40eaa34dde8d529c7", null ],
+    [ "get_next_rect", "classRealm_1_1TransferIteratorBase.html#af31972d95dd5566ad9fc06c5fbe9ae8b", null ],
+    [ "request_metadata", "classRealm_1_1TransferIteratorBase.html#a1f7ebb0dc77292d5782ba255279f53a1", null ],
+    [ "reset", "classRealm_1_1TransferIteratorBase.html#afb3c66adb3c4c271ab06221262e55cf7", null ],
+    [ "step", "classRealm_1_1TransferIteratorBase.html#a8563b30690b9cbaade64ea3b1bf56ad5", null ],
+    [ "step_custom", "classRealm_1_1TransferIteratorBase.html#af0d89273f885eef739b25bd51a0802d9", null ],
+    [ "carry", "classRealm_1_1TransferIteratorBase.html#a79216e3542ce29711956d0a39ad8aa7e", null ],
+    [ "cur_field_id", "classRealm_1_1TransferIteratorBase.html#aaa4fc6393eace69265f7277bc54fd2cb", null ],
+    [ "cur_field_offset", "classRealm_1_1TransferIteratorBase.html#a428f0212f1de4eee51ca7688e6f28be2", null ],
+    [ "cur_field_size", "classRealm_1_1TransferIteratorBase.html#acdb07d435568cb360fda3607c204e3b1", null ],
+    [ "cur_point", "classRealm_1_1TransferIteratorBase.html#a575a9c94cf58604f7c9fbfe4ef713ffe", null ],
+    [ "cur_rect", "classRealm_1_1TransferIteratorBase.html#a0c7d76c95517c1c1dcd9b9f0b3274f4a", null ],
+    [ "dim_order", "classRealm_1_1TransferIteratorBase.html#af29dbe0242db82ab95cffddc44c41431", null ],
+    [ "have_rect", "classRealm_1_1TransferIteratorBase.html#a459de55316f9ed7de8cabe0bdaa7f3d8", null ],
+    [ "inst_impl", "classRealm_1_1TransferIteratorBase.html#afa61f24135947dd374527e4eb1c9c265", null ],
+    [ "inst_offset", "classRealm_1_1TransferIteratorBase.html#acb500c0b5e0d427da5f2f34a63e10545", null ],
+    [ "is_done", "classRealm_1_1TransferIteratorBase.html#abdff20395a472ac1420c2fc5e47810da", null ],
+    [ "next_point", "classRealm_1_1TransferIteratorBase.html#a962607be31c0020cb6c5cdf0c80bc58b", null ],
+    [ "tentative_valid", "classRealm_1_1TransferIteratorBase.html#a8a02782f06fcf90519ba05c52c61610b", null ]
+];

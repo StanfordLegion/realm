@@ -1,0 +1,35 @@
+var structRealm_1_1Channel_1_1SupportedPath =
+[
+    [ "MemBitmask", "structRealm_1_1Channel_1_1SupportedPath_1_1MemBitmask.html", "structRealm_1_1Channel_1_1SupportedPath_1_1MemBitmask" ],
+    [ "SrcDstType", "structRealm_1_1Channel_1_1SupportedPath.html#a4ec629af60519e1e194683a4fc75fdc1", [
+      [ "SPECIFIC_MEMORY", "structRealm_1_1Channel_1_1SupportedPath.html#a4ec629af60519e1e194683a4fc75fdc1a8c78797e095005e8aef135ec3504c0c6", null ],
+      [ "LOCAL_KIND", "structRealm_1_1Channel_1_1SupportedPath.html#a4ec629af60519e1e194683a4fc75fdc1a5f6150108c72d2027abf1f44036f65d6", null ],
+      [ "GLOBAL_KIND", "structRealm_1_1Channel_1_1SupportedPath.html#a4ec629af60519e1e194683a4fc75fdc1acef1e75babf340df594f56297f637e7a", null ],
+      [ "LOCAL_RDMA", "structRealm_1_1Channel_1_1SupportedPath.html#a4ec629af60519e1e194683a4fc75fdc1a1589d1d9322ba5a2f91b79c6097f0af1", null ],
+      [ "REMOTE_RDMA", "structRealm_1_1Channel_1_1SupportedPath.html#a4ec629af60519e1e194683a4fc75fdc1aebbea6953b2124c1ec6ec775275293a0", null ],
+      [ "MEMORY_BITMASK", "structRealm_1_1Channel_1_1SupportedPath.html#a4ec629af60519e1e194683a4fc75fdc1aa3764ad73041abd39178b79136693132", null ]
+    ] ],
+    [ "SupportedPath", "structRealm_1_1Channel_1_1SupportedPath.html#af833335a6109bef579f1e514fe19c42e", null ],
+    [ "allow_redops", "structRealm_1_1Channel_1_1SupportedPath.html#acbcfcd32d67ab9ac5080868bb9f8ae21", null ],
+    [ "allow_serdez", "structRealm_1_1Channel_1_1SupportedPath.html#af19e064e87834de8b610e180255d2b6a", null ],
+    [ "populate_memory_bitmask", "structRealm_1_1Channel_1_1SupportedPath.html#a84b683ff345b93f8832d171a15b25a15", null ],
+    [ "set_max_dim", "structRealm_1_1Channel_1_1SupportedPath.html#ab45a84f173d63c85a46ef813862ed365", null ],
+    [ "set_max_dim", "structRealm_1_1Channel_1_1SupportedPath.html#a29aca2c5c25b6ca56621085cbb4be64d", null ],
+    [ "bandwidth", "structRealm_1_1Channel_1_1SupportedPath.html#ad6f0362a257f9b5243702c823ad2f305", null ],
+    [ "chain", "structRealm_1_1Channel_1_1SupportedPath.html#a4a0431a6dd76f2305d39441bfd9386f9", null ],
+    [ "dst_bitmask", "structRealm_1_1Channel_1_1SupportedPath.html#a4c8fc305f5fbb742ce782116af1c7bf0", null ],
+    [ "dst_kind", "structRealm_1_1Channel_1_1SupportedPath.html#ada7888334373833fce31d2f3056b2c90", null ],
+    [ "dst_mem", "structRealm_1_1Channel_1_1SupportedPath.html#aab4e4b3e0e0fca7787f5b3ccc4ea6635", null ],
+    [ "dst_type", "structRealm_1_1Channel_1_1SupportedPath.html#a6da603c6e98b3bfe0993eb0cbb3dbd9b", null ],
+    [ "frag_overhead", "structRealm_1_1Channel_1_1SupportedPath.html#a4f951637610394ed4df37cb094533e63", null ],
+    [ "latency", "structRealm_1_1Channel_1_1SupportedPath.html#a3847c4785c455f05850e43d64507b4d9", null ],
+    [ "max_dst_dim", "structRealm_1_1Channel_1_1SupportedPath.html#a832c0c551bdcd927bacc37f97ad9318e", null ],
+    [ "max_src_dim", "structRealm_1_1Channel_1_1SupportedPath.html#adb582198e9512c6cb88175ce1fc27ff1", null ],
+    [ "redops_allowed", "structRealm_1_1Channel_1_1SupportedPath.html#ae0b881f220639a515760aa7ffe2953a2", null ],
+    [ "serdez_allowed", "structRealm_1_1Channel_1_1SupportedPath.html#a1cc06396f0abd9a1df216b4b2776e6c3", null ],
+    [ "src_bitmask", "structRealm_1_1Channel_1_1SupportedPath.html#a12110358d6868a84f0fbd2c8a3845bf0", null ],
+    [ "src_kind", "structRealm_1_1Channel_1_1SupportedPath.html#aa977f95bab3167d1f6723e807b75a26c", null ],
+    [ "src_mem", "structRealm_1_1Channel_1_1SupportedPath.html#a55ae56b9b1972d8b8cdc4b41f54fcab7", null ],
+    [ "src_type", "structRealm_1_1Channel_1_1SupportedPath.html#a0b3683fc943700b4ebf882de30585e85", null ],
+    [ "xd_kind", "structRealm_1_1Channel_1_1SupportedPath.html#af2d26bfb1af30c3e66b90207147da913", null ]
+];
