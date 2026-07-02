@@ -101,6 +101,7 @@ list(
   event_test.cc
   path_cache_test.cc
   transfer_utils_test.cc
+  ib_redistribute_test.cc
   address_list_test.cc
   cmdline_parser_test.cc
   sequence_assembler_test.cc
