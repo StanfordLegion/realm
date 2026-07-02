@@ -1,9 +1,0 @@
-<map id="Realm::Processor" name="Realm::Processor">
-<area shape="rect" id="Node000001" title=" " alt="" coords="120,5,255,31"/>
-<area shape="rect" id="Node000002" href="$classPRealm_1_1Processor.html" title=" " alt="" coords="25,79,168,104"/>
-<area shape="poly" id="edge1_Node000001_Node000002" title=" " alt="" coords="163,41,113,81,110,76,160,37"/>
-<area shape="rect" id="Node000004" href="$classRealm_1_1ProcessorGroup.html" title=" " alt="" coords="192,79,367,104"/>
-<area shape="poly" id="edge3_Node000001_Node000004" title=" " alt="" coords="214,37,266,76,263,81,211,41"/>
-<area shape="rect" id="Node000003" href="$classPRealm_1_1ProcessorGroup.html" title=" " alt="" coords="5,152,188,177"/>
-<area shape="poly" id="edge2_Node000002_Node000003" title=" " alt="" coords="99,118,99,152,94,152,94,118"/>
-</map>

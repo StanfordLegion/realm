@@ -1,7 +1,0 @@
-<map id="Realm::XferDesFactory" name="Realm::XferDesFactory">
-<area shape="rect" id="Node000001" title=" " alt="" coords="140,5,311,31"/>
-<area shape="rect" id="Node000002" href="$classRealm_1_1AddressSplitXferDesFactory.html" title=" " alt="" coords="5,79,211,119"/>
-<area shape="poly" id="edge1_Node000001_Node000002" title=" " alt="" coords="198,40,138,81,135,76,195,36"/>
-<area shape="rect" id="Node000003" href="$classRealm_1_1SimpleXferDesFactory.html" title=" " alt="" coords="235,86,451,111"/>
-<area shape="poly" id="edge2_Node000001_Node000003" title=" " alt="" coords="256,36,327,84,324,88,253,41"/>
-</map>

@@ -1,9 +1,0 @@
-<map id="Realm::Hip::GPUCompletionNotification" name="Realm::Hip::GPUCompletionNotification">
-<area shape="rect" id="Node000001" title=" " alt="" coords="5,69,211,109"/>
-<area shape="rect" id="Node000002" href="$classRealm_1_1Hip_1_1GPUCompletionEvent.html" title=" " alt="" coords="285,5,490,45"/>
-<area shape="poly" id="edge1_Node000001_Node000002" title=" " alt="" coords="209,64,299,43,300,48,210,69"/>
-<area shape="rect" id="Node000003" href="$classRealm_1_1Hip_1_1GPUPreemptionWaiter.html" title=" " alt="" coords="285,69,490,109"/>
-<area shape="poly" id="edge2_Node000001_Node000003" title=" " alt="" coords="224,87,285,87,285,92,224,92"/>
-<area shape="rect" id="Node000004" href="$classRealm_1_1Hip_1_1GPUTransferCompletion.html" title=" " alt="" coords="259,134,516,159"/>
-<area shape="poly" id="edge3_Node000001_Node000004" title=" " alt="" coords="216,110,259,119,322,131,321,137,258,124,215,115"/>
-</map>
