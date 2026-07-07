@@ -93,7 +93,7 @@ endif()
 list(
   APPEND
   REALM_UNIT_TESTS
-  auto_actmsg_test.cc
+  actmsg_fragmentation_test.cc
   fragmented_message_test.cc
   incoming_message_manager_test.cc
   memcpy_channel_test.cc
@@ -113,7 +113,6 @@ list(
   transfer_iterator_test.cc
   idindexed_fields_iterator_test.cc
   lowlevel_dma_test.cc
-  perform_analysis_test.cc
   circ_queue_test.cc
   gather_scatter_test.cc
   sparsity_map_test.cc
@@ -124,6 +123,7 @@ list(
   hpp_runtime_test.cc
   hpp_event_test.cc
   key_value_store_test.cc
+  deferred_alloc_test.cc
 )
 list(TRANSFORM REALM_UNIT_TESTS PREPEND "${REALM_TEST_DIR}/unit_tests/")
 add_executable(realm_unit_tests ${REALM_UNIT_TESTS})
@@ -448,6 +448,13 @@ if(TEST_USE_GPU)
     target_link_libraries(cuda_memcpy_test CUDA::cudart)
     target_link_libraries(cuda_scatter_test CUDA::cudart)
     target_link_libraries(test_cuhook CUDA::cudart)
+    set(cuda_reduce_basic_ARGS -ll:gpu 1)
+    set(cuda_reduce_basic_RESOURCE_LOCK gpu)
+    add_integration_test(
+      cuda_reduce_basic "${REALM_TEST_DIR}/cuda_reduce_basic.cc"
+                        "${REALM_TEST_DIR}/cuda_reduce_basic_gpu.cu"
+    )
+    target_link_libraries(cuda_reduce_basic CUDA::cudart)
     set(multifield_transfer_ARGS -ll:gpu 1)
     set(multifield_transfer_RESOURCE_LOCK gpu)
     add_integration_test(multifield_transfer "${REALM_TEST_DIR}/multifield_transfer.cc")
@@ -500,6 +507,7 @@ set_target_properties(taskreg PROPERTIES ENABLE_EXPORTS TRUE)
 set_target_properties(scatter PROPERTIES ENABLE_EXPORTS TRUE)
 if(REALM_USE_CUDA)
   set_target_properties(cuda_scatter_test PROPERTIES ENABLE_EXPORTS TRUE)
+  set_target_properties(cuda_reduce_basic PROPERTIES ENABLE_EXPORTS TRUE)
 endif()
 
 set_tests_properties(
