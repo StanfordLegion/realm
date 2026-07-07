@@ -47,7 +47,7 @@
 
 #define IS_DEFAULT_STREAM(stream) ((stream) == 0)
 
-extern unsigned char realm_hip_fatbin[];
+extern const unsigned char realm_hip_fatbin[];
 namespace Realm {
 
   extern Logger log_taskreg;

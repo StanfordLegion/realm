@@ -2098,29 +2098,27 @@ namespace Realm {
           (redop_info.is_fold ? redop->sizeof_rhs : redop->sizeof_lhs);
       assert(redop_info.in_place); // TODO: support for out-of-place reduces
 
-      if(kernel_host_proxy == nullptr) {
-        return false;
-      }
-
       struct KernelArgs {
         uintptr_t dst_base, dst_stride;
         uintptr_t src_base, src_stride;
         uintptr_t count;
       };
-      KernelArgs *args = 0; // allocate on demand
-      size_t args_size = sizeof(KernelArgs) + redop->sizeof_userdata;
-
+      KernelArgs *args = nullptr; // allocate on demand
+      const size_t args_size = sizeof(KernelArgs) + redop->sizeof_userdata;
+      const bool has_fast_kernels = (kernel_host_proxy_advanced != nullptr) &&
+                                    (kernel_host_proxy_transpose != nullptr);
+      const size_t min_xfer_size = 4096; // TODO: make controllable
       while(true) {
-        size_t min_xfer_size = 4096; // TODO: make controllable
         const InstanceLayoutPieceBase *in_nonaffine = nullptr;
         const InstanceLayoutPieceBase *out_nonaffine = nullptr;
         size_t max_bytes =
             get_addresses(min_xfer_size, &rseqcache, in_nonaffine, out_nonaffine);
         const bool non_affine = in_nonaffine || out_nonaffine;
-        if(max_bytes == 0)
+        if(max_bytes == 0) {
           break;
+        }
 
-        XferPort *in_port = 0, *out_port = 0;
+        XferPort *in_port = nullptr, *out_port = nullptr;
         size_t in_span_start = 0, out_span_start = 0;
         if(input_control.current_io_port >= 0) {
           in_port = &input_ports[input_control.current_io_port];
@@ -2130,13 +2128,10 @@ namespace Realm {
           out_port = &output_ports[output_control.current_io_port];
           out_span_start = out_port->local_bytes_total;
         }
-
-        bool has_fast_kernels = (kernel_host_proxy_advanced != nullptr) &&
-                                (kernel_host_proxy_transpose != nullptr);
         // add optimized kernels if the condition is satisfied
         // TODO: support different elem sizes
-        if(in_port && out_port && !non_affine &&
-           (redop->sizeof_rhs == redop->sizeof_lhs) && has_fast_kernels) {
+        if(in_port && out_port && !non_affine && (in_elem_size == out_elem_size) &&
+           has_fast_kernels) {
           done = fast_reduction_kernel_mode(channel, max_bytes, in_port, out_port,
                                             in_span_start, out_span_start);
           did_work = true;
@@ -2151,7 +2146,7 @@ namespace Realm {
           } else {
             max_elems = std::min(input_control.remaining_count / in_elem_size,
                                  output_control.remaining_count / out_elem_size);
-            if(in_port != 0) {
+            if(in_port != nullptr) {
               max_elems =
                   std::min(max_elems, in_port->addrlist.bytes_pending() / in_elem_size);
               if(in_port->peer_guid != XFERDES_NO_GUID) {
@@ -2160,7 +2155,7 @@ namespace Realm {
                 max_elems = std::min(max_elems, (read_bytes_avail / in_elem_size));
               }
             }
-            if(out_port != 0) {
+            if(out_port != nullptr) {
               max_elems =
                   std::min(max_elems, out_port->addrlist.bytes_pending() / out_elem_size);
               // no support for reducing into an intermediate buffer
@@ -2169,8 +2164,8 @@ namespace Realm {
           }
 
           size_t total_elems = 0;
-          if(in_port != 0) {
-            if(out_port != 0) {
+          if(in_port != nullptr) {
+            if(out_port != nullptr) {
               // input and output both exist - transfer what we can
               log_xd.info() << "gpureduce chunk: min=" << min_xfer_size
                             << " max_elems=" << max_elems;
@@ -2195,8 +2190,8 @@ namespace Realm {
                 AddressListCursor &in_alc = in_port->addrcursor;
                 AddressListCursor &out_alc = out_port->addrcursor;
 
-                uintptr_t in_offset = in_alc.get_offset();
-                uintptr_t out_offset = out_alc.get_offset();
+                const uintptr_t in_offset = in_alc.get_offset();
+                const uintptr_t out_offset = out_alc.get_offset();
 
                 // the reported dim is reduced for partially consumed address
                 //  ranges - whatever we get can be assumed to be regular
@@ -2227,8 +2222,8 @@ namespace Realm {
                   ostride = out_elem_size;
                 }
 
-                size_t elems_left = max_elems - total_elems;
-                size_t elems = std::min(std::min(icount, ocount), elems_left);
+                const size_t elems_left = max_elems - total_elems;
+                const size_t elems = std::min(std::min(icount, ocount), elems_left);
                 assert(elems > 0);
 
                 // allocate kernel arg structure if this is our first call
@@ -2244,19 +2239,16 @@ namespace Realm {
                 args->src_stride = istride;
                 args->count = elems;
 
-                size_t threads_per_block = 256;
-                size_t blocks_per_grid =
+                const size_t threads_per_block = 256;
+                const size_t blocks_per_grid =
                     std::min(1 + ((elems - 1) / threads_per_block),
                              static_cast<size_t>(HIP_MAX_BLOCKS_PER_GRID));
 
                 {
-                  AutoGPUContext agc(channel->gpu);
-
-                  void *src_ptr = (void *)args->src_base;
-                  void *src_device = src_ptr;
 #ifndef __HIP_PLATFORM_NVIDIA__
                   // this is for src=host memory registered via hipHostRegister
                   // if src is allocated by hipHostMalloc, then this is not necessary
+                  void *src_ptr = (void *)args->src_base;
                   hipPointerAttribute_t src_attr;
                   CHECK_HIP(hipPointerGetAttributes(&src_attr, src_ptr));
 #if HIP_VERSION_MAJOR < 6
@@ -2264,10 +2256,12 @@ namespace Realm {
 #else
                   if(src_attr.type == hipMemoryTypeHost) {
 #endif
-                    CHECK_HIP(hipHostGetDevicePointer((void **)&src_device, src_ptr, 0));
+                    void *src_device = nullptr;
+                    CHECK_HIP(hipHostGetDevicePointer(&src_device, src_ptr, 0));
+                    args->src_base = reinterpret_cast<uintptr_t>(src_device);
                   }
 #endif
-                  void *params[] = {&args->dst_base,   &args->dst_stride, &src_device,
+                  void *params[] = {&args->dst_base,   &args->dst_stride, &args->src_base,
                                     &args->src_stride, &args->count,      args + 1};
                   int orig_device;
                   CHECK_HIP(hipGetDevice(&orig_device));
@@ -2312,7 +2306,7 @@ namespace Realm {
               in_span_start += total_elems * in_elem_size;
             }
           } else {
-            if(out_port != 0) {
+            if(out_port != nullptr) {
               // output but no input, so skip output bytes
               total_elems = max_elems;
               out_port->addrcursor.skip_bytes(total_elems * out_elem_size);
