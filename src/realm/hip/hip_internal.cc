@@ -1999,15 +1999,9 @@ namespace Realm {
                                                          : redop->hip_fold_nonexcl_fn)
                               : (redop_info.is_exclusive ? redop->hip_apply_excl_fn
                                                          : redop->hip_apply_nonexcl_fn));
-#ifdef REALM_USE_HIP_HIJACK
-      kernel = host_proxy;
-      kernel_advanced = describe_kernel_variant(/*is_advanced=*/true);
-      kernel_transpose = describe_kernel_variant(/*is_advanced=*/false);
-#else
       kernel_host_proxy = host_proxy;
       kernel_host_proxy_advanced = describe_kernel_variant(/*is_advanced=*/true);
       kernel_host_proxy_transpose = describe_kernel_variant(/*is_advanced=*/false);
-#endif
 
       stream = gpu->get_next_d2d_stream();
       kind = XFER_GPU_IN_FB; // TODO: is this needed at all?
@@ -2076,13 +2070,6 @@ namespace Realm {
       }
       void *params[] = {args1, args};
 
-#if defined(REALM_USE_HIP_HIJACK)
-      void *kernel_ptr = has_transpose ? kernel_transpose : kernel_advanced;
-      AutoGPUContext agc(channel->gpu);
-      CHECK_HIP(hipLaunchKernel(kernel_ptr, dim3(blocks_per_grid),
-                                dim3(threads_per_block), params, 0 /*sharedmem*/,
-                                stream->get_stream()));
-#else
       void *kernel_ptr =
           has_transpose ? kernel_host_proxy_transpose : kernel_host_proxy_advanced;
       int orig_device;
@@ -2092,7 +2079,6 @@ namespace Realm {
                                 dim3(threads_per_block), params, 0 /*sharedmem*/,
                                 stream->get_stream()));
       CHECK_HIP(hipSetDevice(orig_device));
-#endif
       // insert fence to track completion of reduction kernel
       add_reference(); // released by transfer completion
       stream->add_notification(new GPUTransferCompletion(
@@ -2112,15 +2098,9 @@ namespace Realm {
           (redop_info.is_fold ? redop->sizeof_rhs : redop->sizeof_lhs);
       assert(redop_info.in_place); // TODO: support for out-of-place reduces
 
-#ifdef REALM_USE_HIP_HIJACK
-      if(kernel == nullptr) {
-        return false;
-      }
-#else
       if(kernel_host_proxy == nullptr) {
         return false;
       }
-#endif
 
       struct KernelArgs {
         uintptr_t dst_base, dst_stride;
@@ -2151,13 +2131,8 @@ namespace Realm {
           out_span_start = out_port->local_bytes_total;
         }
 
-#ifdef REALM_USE_HIP_HIJACK
-        bool has_fast_kernels =
-            (kernel_advanced != nullptr) && (kernel_transpose != nullptr);
-#else
         bool has_fast_kernels = (kernel_host_proxy_advanced != nullptr) &&
                                 (kernel_host_proxy_transpose != nullptr);
-#endif
         // add optimized kernels if the condition is satisfied
         // TODO: support different elem sizes
         if(in_port && out_port && !non_affine &&
@@ -2294,11 +2269,6 @@ namespace Realm {
 #endif
                   void *params[] = {&args->dst_base,   &args->dst_stride, &src_device,
                                     &args->src_stride, &args->count,      args + 1};
-#if defined(REALM_USE_HIP_HIJACK)
-                  CHECK_HIP(hipLaunchKernel(kernel, dim3(blocks_per_grid),
-                                            dim3(threads_per_block), params,
-                                            0 /*sharedmem*/, stream->get_stream()));
-#else
                   int orig_device;
                   CHECK_HIP(hipGetDevice(&orig_device));
                   CHECK_HIP(hipSetDevice(channel->gpu->info->index));
@@ -2306,7 +2276,6 @@ namespace Realm {
                                             dim3(threads_per_block), params,
                                             0 /*sharedmem*/, stream->get_stream()));
                   CHECK_HIP(hipSetDevice(orig_device));
-#endif
                   // insert fence to track completion of reduction kernel
                   add_reference(); // released by transfer completion
                   stream->add_notification(new GPUTransferCompletion(

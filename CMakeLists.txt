@@ -921,7 +921,7 @@ endif()
 
 if(REALM_USE_HIP)
 #User - facing arch list
-  set(REALM_HIP_ARCH, ${CMAKE_HIP_ARCHITECTURES})
+  set(REALM_HIP_ARCH ${CMAKE_HIP_ARCHITECTURES})
   if(NOT REALM_HIP_ARCH OR REALM_HIP_ARCH STREQUAL "")
     set(REALM_HIP_ARCH "gfx906;gfx908;gfx90a;gfx942;gfx1030;gfx1100"
         CACHE STRING "Semicolon-separated list of AMD GPU architectures to target")

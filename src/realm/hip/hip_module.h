@@ -120,7 +120,6 @@ namespace Realm {
       bool cfg_use_worker_threads = false, cfg_use_shared_worker = true,
            cfg_pin_sysmem = true;
       bool cfg_fences_use_callbacks = false;
-      bool cfg_suppress_hijack_warning = false;
       unsigned cfg_skip_gpu_count = 0;
       bool cfg_skip_busy_gpus = false;
       size_t cfg_min_avail_mem = 0;

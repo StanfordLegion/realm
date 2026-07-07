@@ -64,21 +64,15 @@ namespace Realm {
 
   namespace Hip {
 
-    struct GPUInfo
-#ifdef REALM_USE_HIP_HIJACK
-      : public hipDeviceProp_t
-#endif
-    {
+    struct GPUInfo {
       int index; // index used by HIP runtime
       hipDevice_t device;
 
       static const size_t MAX_NAME_LEN = 64;
-#ifndef REALM_USE_HIP_HIJACK
       char name[MAX_NAME_LEN];
 
       int major, minor;
       size_t totalGlobalMem;
-#endif
       std::set<hipDevice_t> peers; // other GPUs we can do p2p copies with
     };
 
@@ -314,10 +308,6 @@ namespace Realm {
       CoreReservation *core_rsrv;
     };
 
-    struct FatBin;
-    struct RegisteredVariable;
-    struct RegisteredFunction;
-
     // a GPU object represents our use of a given HIP-capable GPU - this will
     //  have an associated HIP context, a (possibly shared) worker thread, a
     //  processor, and an FB memory (the ZC memory is shared across all GPUs)
@@ -328,15 +318,6 @@ namespace Realm {
 
       void push_context(void);
       void pop_context(void);
-
-#ifdef REALM_USE_HIP_HIJACK
-      void register_fat_binary(const FatBin *data);
-      void register_variable(const RegisteredVariable *var);
-      void register_function(const RegisteredFunction *func);
-
-      hipFunction_t lookup_function(const void *func);
-      char *lookup_variable(const void *var);
-#endif
 
       void create_processor(RuntimeImpl *runtime, size_t stack_size);
       void create_fb_memory(RuntimeImpl *runtime, size_t size, size_t ib_size);
@@ -443,12 +424,6 @@ namespace Realm {
       std::map<NodeID, GPUStream *> hipipc_streams;
 
       const HipIpcMapping *find_ipc_mapping(Memory mem) const;
-
-#ifdef REALM_USE_HIP_HIJACK
-      std::map<const FatBin *, hipModule_t> device_modules;
-      std::map<const void *, hipFunction_t> device_functions;
-      std::map<const void *, char *> device_variables;
-#endif
     };
 
     // helper to push/pop a GPU's context by scope
@@ -482,69 +457,19 @@ namespace Realm {
     public:
       static GPUProcessor *get_current_gpu_proc(void);
 
-#ifdef REALM_USE_HIP_HIJACK
-      // calls that come from the HIP runtime API
-      void push_call_configuration(dim3 grid_dim, dim3 block_dim, size_t shared_size,
-                                   void *stream);
-      void pop_call_configuration(dim3 *grid_dim, dim3 *block_dim, size_t *shared_size,
-                                  void *stream);
-#endif
-
       void stream_wait_on_event(hipStream_t stream, hipEvent_t event);
       void stream_synchronize(hipStream_t stream);
       void device_synchronize(void);
 
-#ifdef REALM_USE_HIP_HIJACK
-      void event_create(hipEvent_t *event, int flags);
-      void event_destroy(hipEvent_t event);
-      void event_record(hipEvent_t event, hipStream_t stream);
-      void event_synchronize(hipEvent_t event);
-      void event_elapsed_time(float *ms, hipEvent_t start, hipEvent_t end);
-
-      void configure_call(dim3 grid_dim, dim3 block_dim, size_t shared_memory,
-                          hipStream_t stream);
-      void setup_argument(const void *arg, size_t size, size_t offset);
-      void launch(const void *func);
-      void launch_kernel(const void *func, dim3 grid_dim, dim3 block_dim, void **args,
-                         size_t shared_memory, hipStream_t stream);
-#endif
-
       void gpu_memcpy(void *dst, const void *src, size_t size, hipMemcpyKind kind);
       void gpu_memcpy_async(void *dst, const void *src, size_t size, hipMemcpyKind kind,
                             hipStream_t stream);
-#ifdef REALM_USE_HIP_HIJACK
-      void gpu_memcpy_to_symbol(const void *dst, const void *src, size_t size,
-                                size_t offset, hipMemcpyKind kind);
-      void gpu_memcpy_to_symbol_async(const void *dst, const void *src, size_t size,
-                                      size_t offset, hipMemcpyKind kind,
-                                      hipStream_t stream);
-      void gpu_memcpy_from_symbol(void *dst, const void *src, size_t size, size_t offset,
-                                  hipMemcpyKind kind);
-      void gpu_memcpy_from_symbol_async(void *dst, const void *src, size_t size,
-                                        size_t offset, hipMemcpyKind kind,
-                                        hipStream_t stream);
-#endif
-
       void gpu_memset(void *dst, int value, size_t count);
       void gpu_memset_async(void *dst, int value, size_t count, hipStream_t stream);
 
     public:
       GPU *gpu;
 
-      // data needed for kernel launches
-      struct LaunchConfig {
-        dim3 grid;
-        dim3 block;
-        size_t shared;
-        LaunchConfig(dim3 _grid, dim3 _block, size_t _shared);
-      };
-      struct CallConfig : public LaunchConfig {
-        hipStream_t stream;
-        CallConfig(dim3 _grid, dim3 _block, size_t _shared, hipStream_t _stream);
-      };
-      std::vector<CallConfig> launch_configs;
-      std::vector<char> kernel_args;
-      std::vector<CallConfig> call_configs;
       bool block_on_synchronize;
       ContextSynchronizer ctxsync;
 
@@ -965,15 +890,9 @@ namespace Realm {
     protected:
       XferDesRedopInfo redop_info;
       const ReductionOpUntyped *redop;
-#if defined(REALM_USE_HIP_HIJACK)
-      void *kernel;
-      void *kernel_advanced;
-      void *kernel_transpose;
-#else
       void *kernel_host_proxy;
       void *kernel_host_proxy_advanced;
       void *kernel_host_proxy_transpose;
-#endif
       GPUStream *stream;
       std::vector<GPU *> src_gpus;
       std::vector<bool> src_is_ipc;
