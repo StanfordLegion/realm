@@ -1525,13 +1525,21 @@ namespace Realm {
     return v;
   }
 
+#if defined(REALM_USE_KOKKOS_ARRAY_LEGACY)
+  template<class T, std::size_t N>
+  using kokkos_array = Kokkos::Array<T, N, void>;
+#else
+  template<class T, std::size_t N>
+  using kokkos_array = Kokkos::Array<T, N>;
+#endif
+
   template <typename FT, int N, typename T>
   template <typename... Args>
   inline AffineAccessor<FT, N, T>::operator Kokkos::Experimental::OffsetView<Args...>()
       const
   {
     typename DeferType<Kokkos::LayoutStride, FT>::type kls;
-    Kokkos::Array<int64_t, N> begins;
+    kokkos_array<int64_t, N> begins;
     uintptr_t base_shifted = base;
     for(int i = 0; i < N; i++) {
       // a Kokkos::Experimental::OffsetView uses absolute indexing, but it's

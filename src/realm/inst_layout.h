@@ -24,7 +24,6 @@
 #include "realm/serialize.h"
 
 #if defined(REALM_USE_KOKKOS)
-#include <Kokkos_Array.hpp>
 // we don't want to include Kokkos_View.hpp because it brings in too much
 //  other stuff, so forward declare the pieces we need to define a templated
 //  conversion from Realm accessor to Kokkos::View (anything that actually
@@ -40,6 +39,13 @@ namespace Kokkos {
     template <class, class...>
     class OffsetView;
   };
+#if defined(REALM_USE_KOKKOS_ARRAY_LEGACY)
+  template<class T, std::size_t N, class Proxy>
+  struct Array;
+#else
+  template<class T, std::size_t N>
+  struct Array;
+#endif
 }; // namespace Kokkos
 // Kokkos::Unmanaged is an enum, which we can't forward declare - we'll test
 //  that we have the right value in the template though

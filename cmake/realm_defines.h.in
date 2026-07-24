@@ -56,6 +56,7 @@
 #cmakedefine REALM_USE_HIP
 
 #cmakedefine REALM_USE_KOKKOS
+#cmakedefine REALM_USE_KOKKOS_ARRAY_LEGACY
 
 #cmakedefine REALM_USE_GASNET1
 #cmakedefine REALM_USE_GASNETEX
