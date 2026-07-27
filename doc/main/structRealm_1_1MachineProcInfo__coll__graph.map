@@ -1,0 +1,8 @@
+<map id="Realm::MachineProcInfo" name="Realm::MachineProcInfo">
+<area shape="rect" id="Node000001" title=" " alt="" coords="359,85,539,111"/>
+<area shape="rect" id="Node000002" href="$classRealm_1_1Processor.html" title=" " alt="" coords="70,44,205,69"/>
+<area shape="poly" id="edge1_Node000001_Node000002" title=" " alt="" coords="219,65,359,83,358,89,218,70"/>
+<area shape="poly" id="edge2_Node000002_Node000002" title=" " alt="" coords="103,30,113,21,137,17,157,20,170,26,173,36,167,45,162,42,168,35,166,29,156,25,137,23,115,26,106,34"/>
+<area shape="rect" id="Node000003" href="$structRealm_1_1MachineAffinityInfo.html" title=" " alt="" coords="5,93,269,148"/>
+<area shape="poly" id="edge3_Node000001_Node000003" title=" " alt="" coords="283,111,334,107,358,105,358,111,335,113,283,116"/>
+</map>

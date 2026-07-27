@@ -1,0 +1,10 @@
+<map id="Realm::MachineMemInfo" name="Realm::MachineMemInfo">
+<area shape="rect" id="Node000001" title=" " alt="" coords="395,108,580,133"/>
+<area shape="rect" id="Node000002" href="$classRealm_1_1Memory.html" title=" " alt="" coords="78,44,205,69"/>
+<area shape="poly" id="edge1_Node000001_Node000002" title=" " alt="" coords="218,67,278,78,421,105,420,111,277,83,217,73"/>
+<area shape="poly" id="edge2_Node000002_Node000002" title=" " alt="" coords="103,30,115,21,141,17,163,20,177,26,180,36,173,45,169,42,175,35,173,29,162,25,141,23,117,26,107,34"/>
+<area shape="rect" id="Node000003" href="$structRealm_1_1MachineAffinityInfo.html" title=" " alt="" coords="5,93,277,148"/>
+<area shape="poly" id="edge3_Node000001_Node000003" title=" " alt="" coords="291,118,395,118,395,123,291,123"/>
+<area shape="rect" id="Node000004" href="$structRealm_1_1MachineAffinityInfo.html" title=" " alt="" coords="14,172,269,227"/>
+<area shape="poly" id="edge4_Node000001_Node000004" title=" " alt="" coords="282,172,370,153,447,131,448,136,371,158,283,177"/>
+</map>

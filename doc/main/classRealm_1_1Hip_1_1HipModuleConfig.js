@@ -19,7 +19,6 @@ var classRealm_1_1Hip_1_1HipModuleConfig =
     [ "cfg_pin_sysmem", "classRealm_1_1Hip_1_1HipModuleConfig.html#a09aadabc8785886b2850d6c25f832c4f", null ],
     [ "cfg_skip_busy_gpus", "classRealm_1_1Hip_1_1HipModuleConfig.html#af78d58aadbc783b65009e20664944397", null ],
     [ "cfg_skip_gpu_count", "classRealm_1_1Hip_1_1HipModuleConfig.html#af8c638d5107f79180510af0f266951a7", null ],
-    [ "cfg_suppress_hijack_warning", "classRealm_1_1Hip_1_1HipModuleConfig.html#a914793b198dceb647147dac9660cfc41", null ],
     [ "cfg_task_context_sync", "classRealm_1_1Hip_1_1HipModuleConfig.html#a3938595ca90059fe5a1fada79f1fbbfe", null ],
     [ "cfg_task_streams", "classRealm_1_1Hip_1_1HipModuleConfig.html#a99eca0353ca9b4cd62d576ce4afb3e8f", null ],
     [ "cfg_use_dynamic_fb", "classRealm_1_1Hip_1_1HipModuleConfig.html#a13de42aef86f493fa07c4d348b0e76c0", null ],

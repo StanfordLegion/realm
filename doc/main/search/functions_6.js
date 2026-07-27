@@ -1,6 +1,6 @@
 var searchData=
 [
-  ['fast_5freduction_5fkernel_5fmode_0',['fast_reduction_kernel_mode',['../classRealm_1_1Cuda_1_1GPUreduceXferDes.html#ab7b42670ca5c8b36b69107f9482a229d',1,'Realm::Cuda::GPUreduceXferDes']]],
+  ['fast_5freduction_5fkernel_5fmode_0',['fast_reduction_kernel_mode',['../classRealm_1_1Hip_1_1GPUreduceXferDes.html#a9966951fc65256dc3cbefb3ff0fa5739',1,'Realm::Hip::GPUreduceXferDes::fast_reduction_kernel_mode()'],['../classRealm_1_1Cuda_1_1GPUreduceXferDes.html#ab7b42670ca5c8b36b69107f9482a229d',1,'Realm::Cuda::GPUreduceXferDes::fast_reduction_kernel_mode()']]],
   ['fastreservation_1',['FastReservation',['../classRealm_1_1FastReservation.html#aa010dfc4c4636e04ea3cb20e6c1b6458',1,'Realm::FastReservation']]],
   ['fatal_2',['fatal',['../classRealm_1_1Logger.html#a9ec85193b59db802482fc24700172b19',1,'Realm::Logger']]],
   ['fetch_5fadd_3',['fetch_add',['../classRealm_1_1atomic.html#abb734fc0e32f8e731f4c1d91d36eb5bb',1,'Realm::atomic']]],
@@ -9,7 +9,7 @@ var searchData=
   ['fetch_5fand_5facqrel_6',['fetch_and_acqrel',['../classRealm_1_1atomic.html#a3317783faabced8ded1c273a2c8f9287',1,'Realm::atomic']]],
   ['fetch_5fmax_7',['fetch_max',['../classRealm_1_1atomic.html#a87b67b18e9730a5b858f50bddffc853a',1,'Realm::atomic']]],
   ['fetch_5fmax_5facqrel_8',['fetch_max_acqrel',['../classRealm_1_1atomic.html#a627836f15fabf96b39d77354ef283931',1,'Realm::atomic']]],
-  ['fetch_5fmetadata_9',['fetch_metadata',['../classRealm_1_1RegionInstanceImpl.html#aa0ac7097344d1045293f6b89ef2e0f2b',1,'Realm::RegionInstanceImpl::fetch_metadata()'],['../classRealm_1_1RegionInstance.html#afb883947307c45ac6e6a3e53ec6d5940',1,'Realm::RegionInstance::fetch_metadata()'],['../classPRealm_1_1RegionInstance.html#a24124ea4be6c227c1939b7ef371f82ef',1,'PRealm::RegionInstance::fetch_metadata()']]],
+  ['fetch_5fmetadata_9',['fetch_metadata',['../classRealm_1_1RegionInstanceImpl.html#aa0ac7097344d1045293f6b89ef2e0f2b',1,'Realm::RegionInstanceImpl::fetch_metadata()'],['../classPRealm_1_1RegionInstance.html#a24124ea4be6c227c1939b7ef371f82ef',1,'PRealm::RegionInstance::fetch_metadata()'],['../classRealm_1_1RegionInstance.html#afb883947307c45ac6e6a3e53ec6d5940',1,'Realm::RegionInstance::fetch_metadata()']]],
   ['fetch_5fmin_10',['fetch_min',['../classRealm_1_1atomic.html#a6e6068dd57b9744f8e77ab6fe131b0e7',1,'Realm::atomic']]],
   ['fetch_5fmin_5facqrel_11',['fetch_min_acqrel',['../classRealm_1_1atomic.html#a6480897020dde29d4494a3d801a7cff6',1,'Realm::atomic']]],
   ['fetch_5for_12',['fetch_or',['../classRealm_1_1atomic.html#a8ef378a54675246fb397eca0d8e4de1b',1,'Realm::atomic']]],

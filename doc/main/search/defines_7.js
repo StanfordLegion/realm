@@ -63,5 +63,7 @@ var searchData=
   ['handlerarg_5fvals_5f6_60',['HANDLERARG_VALS_6',['../gasnetmsg_8h.html#aa3a3a354af874a811ebcd0cdb45b34fb',1,'gasnetmsg.h']]],
   ['handlerarg_5fvals_5f7_61',['HANDLERARG_VALS_7',['../gasnetmsg_8h.html#a012b1ae20f6aedb74102b0149d59a84f',1,'gasnetmsg.h']]],
   ['handlerarg_5fvals_5f8_62',['HANDLERARG_VALS_8',['../gasnetmsg_8h.html#a4d7028c5f9855fad2601755398677787',1,'gasnetmsg.h']]],
-  ['handlerarg_5fvals_5f9_63',['HANDLERARG_VALS_9',['../gasnetmsg_8h.html#aa2b4150aa77edd0fe4a532ccc8f9266a',1,'gasnetmsg.h']]]
+  ['handlerarg_5fvals_5f9_63',['HANDLERARG_VALS_9',['../gasnetmsg_8h.html#aa2b4150aa77edd0fe4a532ccc8f9266a',1,'gasnetmsg.h']]],
+  ['hip_5fmax_5fblocks_5fper_5fgrid_64',['HIP_MAX_BLOCKS_PER_GRID',['../hip__memcpy_8h.html#a3dbe682c34788f96608596ce48a9da96',1,'hip_memcpy.h']]],
+  ['hip_5fmax_5ffield_5fbytes_65',['HIP_MAX_FIELD_BYTES',['../hip__memcpy_8h.html#a0fef36ade8a05f84e569fc61e1104215',1,'hip_memcpy.h']]]
 ];

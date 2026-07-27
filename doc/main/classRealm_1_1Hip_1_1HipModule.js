@@ -10,6 +10,7 @@ var classRealm_1_1Hip_1_1HipModule =
     [ "get_task_hip_stream", "classRealm_1_1Hip_1_1HipModule.html#a52d4b81b0b60c042ebf8b32f725ecc2c", null ],
     [ "initialize", "classRealm_1_1Hip_1_1HipModule.html#a59797ab34e55d34451057c5d7fde2bd8", null ],
     [ "pre_detach_cleanup", "classRealm_1_1Hip_1_1HipModule.html#a57f94fcd03c355e98dfb40173ad67f5d", null ],
+    [ "register_reduction", "classRealm_1_1Hip_1_1HipModule.html#a20f131364ca93e29061d474aa4976a11", null ],
     [ "set_task_ctxsync_required", "classRealm_1_1Hip_1_1HipModule.html#a99f4444d35696c2cc59c99610cfd794b", null ],
     [ "config", "classRealm_1_1Hip_1_1HipModule.html#a7147bbf11f6d4c94049b2d9f56134191", null ],
     [ "dedicated_workers", "classRealm_1_1Hip_1_1HipModule.html#a4c1e7a94b5935311d5bbc9eafb59f01c", null ],

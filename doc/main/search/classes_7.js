@@ -22,5 +22,6 @@ var searchData=
   ['hipipcresponse_19',['HipIpcResponse',['../structRealm_1_1Hip_1_1HipIpcResponse.html',1,'Realm::Hip']]],
   ['hipmodule_20',['HipModule',['../classRealm_1_1Hip_1_1HipModule.html',1,'Realm::Hip']]],
   ['hipmoduleconfig_21',['HipModuleConfig',['../classRealm_1_1Hip_1_1HipModuleConfig.html',1,'Realm::Hip']]],
-  ['hybridrectanglelist_22',['HybridRectangleList',['../classRealm_1_1HybridRectangleList.html',1,'Realm']]]
+  ['hipredopdesc_22',['HipRedOpDesc',['../structRealm_1_1Hip_1_1HipRedOpDesc.html',1,'Realm::Hip']]],
+  ['hybridrectanglelist_23',['HybridRectangleList',['../classRealm_1_1HybridRectangleList.html',1,'Realm']]]
 ];

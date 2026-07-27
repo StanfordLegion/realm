@@ -44,7 +44,7 @@
    <!-- BEGIN version select -->
     <br />
     <div class="dropdown">
-     <button class="dropbtn">Version 26.7.1+dba83452</button>
+     <button class="dropbtn">Version 26.7.1+ca8809d9</button>
      <div class="dropdown-content"></div>
     </div>
     <script type="text/javascript" src="../selectversion.js"></script>
@@ -135,6 +135,7 @@ $(document).ready(function(){initNavTree('classRealm_1_1Hip_1_1GPU.html',''); in
 <a href="#nested-classes">Classes</a> &#124;
 <a href="#pub-methods">Public Member Functions</a> &#124;
 <a href="#pub-attribs">Public Attributes</a> &#124;
+<a href="#pub-static-attribs">Static Public Attributes</a> &#124;
 <a href="#pro-methods">Protected Member Functions</a> &#124;
 <a href="classRealm_1_1Hip_1_1GPU-members.html">List of all members</a>  </div>
   <div class="headertitle"><div class="title">Realm::Hip::GPU Class Reference<div class="ingroups">module <a class="el" href="module_nullptr.html">nullptr</a></div></div></div>
@@ -145,11 +146,13 @@ $(document).ready(function(){initNavTree('classRealm_1_1Hip_1_1GPU.html',''); in
 <div class="dynheader">
 Collaboration diagram for Realm::Hip::GPU:</div>
 <div class="dyncontent">
-<div class="center"><!-- SVG 0 --></div>
+<div class="center"><iframe scrolling="no" frameborder="0" src="classRealm_1_1Hip_1_1GPU__coll__graph.svg" width="3074" height="1882"><p><b>This browser is not able to show SVG: try Firefox, Chrome, Safari, or Opera instead.</b></p></iframe></div>
 <center><span class="legend">[<a target="top" href="graph_legend.html">legend</a>]</span></center></div>
 <table class="memberdecls">
 <tr class="heading"><td colspan="2"><h2 class="groupheader"><a id="nested-classes" name="nested-classes"></a>
 Classes</h2></td></tr>
+<tr class="memitem:"><td class="memItemLeft" align="right" valign="top">struct &#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="structRealm_1_1Hip_1_1GPU_1_1GPUFuncInfo.html">GPUFuncInfo</a></td></tr>
+<tr class="separator:"><td class="memSeparator" colspan="2">&#160;</td></tr>
 <tr class="memitem:"><td class="memItemLeft" align="right" valign="top">struct &#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="structRealm_1_1Hip_1_1GPU_1_1HipIpcMapping.html">HipIpcMapping</a></td></tr>
 <tr class="separator:"><td class="memSeparator" colspan="2">&#160;</td></tr>
 </table><table class="memberdecls">
@@ -171,8 +174,8 @@ Public Member Functions</h2></td></tr>
 <tr class="separator:ad493ae95da7f86ebeb6f2078fe9510a4"><td class="memSeparator" colspan="2">&#160;</td></tr>
 <tr class="memitem:a728f62c6a0c0677da8680cb6d272fd7e" id="r_a728f62c6a0c0677da8680cb6d272fd7e"><td class="memItemLeft" align="right" valign="top">void&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="classRealm_1_1Hip_1_1GPU.html#a728f62c6a0c0677da8680cb6d272fd7e">create_dma_channels</a> (<a class="el" href="classRealm_1_1RuntimeImpl.html">Realm::RuntimeImpl</a> *r)</td></tr>
 <tr class="separator:a728f62c6a0c0677da8680cb6d272fd7e"><td class="memSeparator" colspan="2">&#160;</td></tr>
-<tr class="memitem:aa93a55868f948fee7114e59bb64caa62" id="r_aa93a55868f948fee7114e59bb64caa62"><td class="memItemLeft" align="right" valign="top">bool&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="classRealm_1_1Hip_1_1GPU.html#aa93a55868f948fee7114e59bb64caa62">can_access_peer</a> (<a class="el" href="classRealm_1_1Hip_1_1GPU.html">GPU</a> *peer)</td></tr>
-<tr class="separator:aa93a55868f948fee7114e59bb64caa62"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:a962e5280ad0d59f6ca0a67fd723715aa" id="r_a962e5280ad0d59f6ca0a67fd723715aa"><td class="memItemLeft" align="right" valign="top">bool&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="classRealm_1_1Hip_1_1GPU.html#a962e5280ad0d59f6ca0a67fd723715aa">can_access_peer</a> (const <a class="el" href="classRealm_1_1Hip_1_1GPU.html">GPU</a> *peer) const</td></tr>
+<tr class="separator:a962e5280ad0d59f6ca0a67fd723715aa"><td class="memSeparator" colspan="2">&#160;</td></tr>
 <tr class="memitem:a13050ce64ac9ee27dd990ca4e345e723" id="r_a13050ce64ac9ee27dd990ca4e345e723"><td class="memItemLeft" align="right" valign="top"><a class="el" href="classRealm_1_1Hip_1_1GPUStream.html">GPUStream</a> *&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="classRealm_1_1Hip_1_1GPU.html#a13050ce64ac9ee27dd990ca4e345e723">find_stream</a> (hipStream_t stream) const</td></tr>
 <tr class="separator:a13050ce64ac9ee27dd990ca4e345e723"><td class="memSeparator" colspan="2">&#160;</td></tr>
 <tr class="memitem:a99644ad6a122d50ed76dad962cff4e66" id="r_a99644ad6a122d50ed76dad962cff4e66"><td class="memItemLeft" align="right" valign="top"><a class="el" href="compiler__support_8h.html#a0fcea358ba9f4a1ddd8bf87ae21772f7">REALM_INTERNAL_API_EXTERNAL_LINKAGE</a> <a class="el" href="classRealm_1_1Hip_1_1GPUStream.html">GPUStream</a> *&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="classRealm_1_1Hip_1_1GPU.html#a99644ad6a122d50ed76dad962cff4e66">get_null_task_stream</a> (void) const</td></tr>
@@ -181,6 +184,18 @@ Public Member Functions</h2></td></tr>
 <tr class="separator:afdffac0123ccc80fface40d682b4d9fe"><td class="memSeparator" colspan="2">&#160;</td></tr>
 <tr class="memitem:adcc7fa5ccfb051d00d7b335a0906d2b3" id="r_adcc7fa5ccfb051d00d7b335a0906d2b3"><td class="memItemLeft" align="right" valign="top"><a class="el" href="classRealm_1_1Hip_1_1GPUStream.html">GPUStream</a> *&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="classRealm_1_1Hip_1_1GPU.html#adcc7fa5ccfb051d00d7b335a0906d2b3">get_next_d2d_stream</a> ()</td></tr>
 <tr class="separator:adcc7fa5ccfb051d00d7b335a0906d2b3"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:a702429ff6f516e0c54fca5be29443a38" id="r_a702429ff6f516e0c54fca5be29443a38"><td class="memItemLeft" align="right" valign="top">void&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="classRealm_1_1Hip_1_1GPU.html#a702429ff6f516e0c54fca5be29443a38">launch_batch_affine_kernel</a> (void *copy_info, size_t dim, size_t elemSize, size_t volume, <a class="el" href="classRealm_1_1Hip_1_1GPUStream.html">GPUStream</a> *stream, size_t arg_size)</td></tr>
+<tr class="separator:a702429ff6f516e0c54fca5be29443a38"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:acfd8126a1ea333f8814be22e4b173158" id="r_acfd8126a1ea333f8814be22e4b173158"><td class="memItemLeft" align="right" valign="top">void&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="classRealm_1_1Hip_1_1GPU.html#acfd8126a1ea333f8814be22e4b173158">launch_batch_affine_fill_kernel</a> (void *fill_info, size_t dim, size_t elem_size, size_t volume, size_t arg_size, <a class="el" href="classRealm_1_1Hip_1_1GPUStream.html">GPUStream</a> *stream)</td></tr>
+<tr class="separator:acfd8126a1ea333f8814be22e4b173158"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:aad241a88345532dc8200cd52b6645a34" id="r_aad241a88345532dc8200cd52b6645a34"><td class="memItemLeft" align="right" valign="top">void&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="classRealm_1_1Hip_1_1GPU.html#aad241a88345532dc8200cd52b6645a34">launch_transpose_kernel</a> (<a class="el" href="structRealm_1_1Hip_1_1MemcpyTransposeInfo.html">MemcpyTransposeInfo</a>&lt; size_t &gt; &amp;copy_info, size_t elemSize, <a class="el" href="classRealm_1_1Hip_1_1GPUStream.html">GPUStream</a> *stream)</td></tr>
+<tr class="separator:aad241a88345532dc8200cd52b6645a34"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:ab8a89f9c4f7a472b36c1cd2e931c9dad" id="r_ab8a89f9c4f7a472b36c1cd2e931c9dad"><td class="memItemLeft" align="right" valign="top">void&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="classRealm_1_1Hip_1_1GPU.html#ab8a89f9c4f7a472b36c1cd2e931c9dad">launch_indirect_copy_kernel</a> (void *copy_info, size_t dim, size_t addr_size, size_t field_size, size_t volume, size_t arg_size, <a class="el" href="classRealm_1_1Hip_1_1GPUStream.html">GPUStream</a> *stream)</td></tr>
+<tr class="separator:ab8a89f9c4f7a472b36c1cd2e931c9dad"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:aece003faef34fd3eada7d4290f3084c0" id="r_aece003faef34fd3eada7d4290f3084c0"><td class="memItemLeft" align="right" valign="top">bool&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="classRealm_1_1Hip_1_1GPU.html#aece003faef34fd3eada7d4290f3084c0">is_accessible_host_mem</a> (const <a class="el" href="classRealm_1_1MemoryImpl.html">MemoryImpl</a> *mem) const</td></tr>
+<tr class="separator:aece003faef34fd3eada7d4290f3084c0"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:a8619aa88c8bf9ebca55b059bc83174de" id="r_a8619aa88c8bf9ebca55b059bc83174de"><td class="memItemLeft" align="right" valign="top">bool&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="classRealm_1_1Hip_1_1GPU.html#a8619aa88c8bf9ebca55b059bc83174de">is_accessible_gpu_mem</a> (const <a class="el" href="classRealm_1_1MemoryImpl.html">MemoryImpl</a> *mem) const</td></tr>
+<tr class="separator:a8619aa88c8bf9ebca55b059bc83174de"><td class="memSeparator" colspan="2">&#160;</td></tr>
 <tr class="memitem:a48a35b103a1f29eb14e43df058fd7954" id="r_a48a35b103a1f29eb14e43df058fd7954"><td class="memItemLeft" align="right" valign="top">const <a class="el" href="structRealm_1_1Hip_1_1GPU_1_1HipIpcMapping.html">HipIpcMapping</a> *&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="classRealm_1_1Hip_1_1GPU.html#a48a35b103a1f29eb14e43df058fd7954">find_ipc_mapping</a> (<a class="el" href="classRealm_1_1Memory.html">Memory</a> mem) const</td></tr>
 <tr class="separator:a48a35b103a1f29eb14e43df058fd7954"><td class="memSeparator" colspan="2">&#160;</td></tr>
 </table><table class="memberdecls">
@@ -200,6 +215,18 @@ Public Attributes</h2></td></tr>
 <tr class="separator:af8b42f4b05f638e0e82e24b55bc5ab84"><td class="memSeparator" colspan="2">&#160;</td></tr>
 <tr class="memitem:a0ab7319c8fb95050043932dfd198a6a3" id="r_a0ab7319c8fb95050043932dfd198a6a3"><td class="memItemLeft" align="right" valign="top">int&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="classRealm_1_1Hip_1_1GPU.html#a0ab7319c8fb95050043932dfd198a6a3">device_id</a> = -1</td></tr>
 <tr class="separator:a0ab7319c8fb95050043932dfd198a6a3"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:ad0d3ec8dead0d2c4ef705f1e60ffa6e6" id="r_ad0d3ec8dead0d2c4ef705f1e60ffa6e6"><td class="memItemLeft" align="right" valign="top">hipModule_t&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="classRealm_1_1Hip_1_1GPU.html#ad0d3ec8dead0d2c4ef705f1e60ffa6e6">device_module</a> = nullptr</td></tr>
+<tr class="separator:ad0d3ec8dead0d2c4ef705f1e60ffa6e6"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:ac4d58a9173cc0888f529a314a48e3014" id="r_ac4d58a9173cc0888f529a314a48e3014"><td class="memItemLeft" align="right" valign="top"><a class="el" href="structRealm_1_1Hip_1_1GPU_1_1GPUFuncInfo.html">GPUFuncInfo</a>&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="classRealm_1_1Hip_1_1GPU.html#ac4d58a9173cc0888f529a314a48e3014">batch_affine_kernels</a> [<a class="el" href="realm__config_8h.html#a0734de92aef351d235bacd69ca16f258">REALM_MAX_DIM</a>][<a class="el" href="classRealm_1_1Hip_1_1GPU.html#a5a7cd8fdec37589a001f93cac7be904e">HIP_MEMCPY_KERNEL_MAX2_LOG2_BYTES</a>]</td></tr>
+<tr class="separator:ac4d58a9173cc0888f529a314a48e3014"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:a578ff4d34fd2feb71cf432bfe331a2a8" id="r_a578ff4d34fd2feb71cf432bfe331a2a8"><td class="memItemLeft" align="right" valign="top"><a class="el" href="structRealm_1_1Hip_1_1GPU_1_1GPUFuncInfo.html">GPUFuncInfo</a>&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="classRealm_1_1Hip_1_1GPU.html#a578ff4d34fd2feb71cf432bfe331a2a8">batch_affine_fill_kernels</a> [<a class="el" href="realm__config_8h.html#a0734de92aef351d235bacd69ca16f258">REALM_MAX_DIM</a>][<a class="el" href="classRealm_1_1Hip_1_1GPU.html#a5a7cd8fdec37589a001f93cac7be904e">HIP_MEMCPY_KERNEL_MAX2_LOG2_BYTES</a>]</td></tr>
+<tr class="separator:a578ff4d34fd2feb71cf432bfe331a2a8"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:a5490ab45901a96e87c8eb13a11ab11cd" id="r_a5490ab45901a96e87c8eb13a11ab11cd"><td class="memItemLeft" align="right" valign="top"><a class="el" href="structRealm_1_1Hip_1_1GPU_1_1GPUFuncInfo.html">GPUFuncInfo</a>&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="classRealm_1_1Hip_1_1GPU.html#a5490ab45901a96e87c8eb13a11ab11cd">fill_affine_large_kernels</a> [<a class="el" href="realm__config_8h.html#a0734de92aef351d235bacd69ca16f258">REALM_MAX_DIM</a>][<a class="el" href="classRealm_1_1Hip_1_1GPU.html#a5a7cd8fdec37589a001f93cac7be904e">HIP_MEMCPY_KERNEL_MAX2_LOG2_BYTES</a>]</td></tr>
+<tr class="separator:a5490ab45901a96e87c8eb13a11ab11cd"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:ab761c49437ac6a22f6a148ea7c83742f" id="r_ab761c49437ac6a22f6a148ea7c83742f"><td class="memItemLeft" align="right" valign="top"><a class="el" href="structRealm_1_1Hip_1_1GPU_1_1GPUFuncInfo.html">GPUFuncInfo</a>&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="classRealm_1_1Hip_1_1GPU.html#ab761c49437ac6a22f6a148ea7c83742f">indirect_copy_kernels</a> [<a class="el" href="realm__config_8h.html#a0734de92aef351d235bacd69ca16f258">REALM_MAX_DIM</a>][<a class="el" href="classRealm_1_1Hip_1_1GPU.html#a5a7cd8fdec37589a001f93cac7be904e">HIP_MEMCPY_KERNEL_MAX2_LOG2_BYTES</a>][<a class="el" href="classRealm_1_1Hip_1_1GPU.html#a5a7cd8fdec37589a001f93cac7be904e">HIP_MEMCPY_KERNEL_MAX2_LOG2_BYTES</a>]</td></tr>
+<tr class="separator:ab761c49437ac6a22f6a148ea7c83742f"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:a97e6a09d31700021a24fa3ea68003114" id="r_a97e6a09d31700021a24fa3ea68003114"><td class="memItemLeft" align="right" valign="top"><a class="el" href="structRealm_1_1Hip_1_1GPU_1_1GPUFuncInfo.html">GPUFuncInfo</a>&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="classRealm_1_1Hip_1_1GPU.html#a97e6a09d31700021a24fa3ea68003114">transpose_kernels</a> [<a class="el" href="classRealm_1_1Hip_1_1GPU.html#a5a7cd8fdec37589a001f93cac7be904e">HIP_MEMCPY_KERNEL_MAX2_LOG2_BYTES</a>]</td></tr>
+<tr class="separator:a97e6a09d31700021a24fa3ea68003114"><td class="memSeparator" colspan="2">&#160;</td></tr>
 <tr class="memitem:a76b723bad28552f77ae2c069dbf4b79e" id="r_a76b723bad28552f77ae2c069dbf4b79e"><td class="memItemLeft" align="right" valign="top">char *&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="classRealm_1_1Hip_1_1GPU.html#a76b723bad28552f77ae2c069dbf4b79e">fbmem_base</a> = nullptr</td></tr>
 <tr class="separator:a76b723bad28552f77ae2c069dbf4b79e"><td class="memSeparator" colspan="2">&#160;</td></tr>
 <tr class="memitem:a335adfd964411ceba729858f86bcb6b2" id="r_a335adfd964411ceba729858f86bcb6b2"><td class="memItemLeft" align="right" valign="top">char *&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="classRealm_1_1Hip_1_1GPU.html#a335adfd964411ceba729858f86bcb6b2">fb_ibmem_base</a> = nullptr</td></tr>
@@ -236,6 +263,11 @@ Public Attributes</h2></td></tr>
 <tr class="separator:a178e6689c5b741d8a70c03e5a5156d38"><td class="memSeparator" colspan="2">&#160;</td></tr>
 <tr class="memitem:ae8345d4b3de9e3687a891e30d90b4974" id="r_ae8345d4b3de9e3687a891e30d90b4974"><td class="memItemLeft" align="right" valign="top">std::map&lt; <a class="el" href="namespaceRealm.html#a4ae47f41d88cffb2debee742cbbfe2dd">NodeID</a>, <a class="el" href="classRealm_1_1Hip_1_1GPUStream.html">GPUStream</a> * &gt;&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="classRealm_1_1Hip_1_1GPU.html#ae8345d4b3de9e3687a891e30d90b4974">hipipc_streams</a></td></tr>
 <tr class="separator:ae8345d4b3de9e3687a891e30d90b4974"><td class="memSeparator" colspan="2">&#160;</td></tr>
+</table><table class="memberdecls">
+<tr class="heading"><td colspan="2"><h2 class="groupheader"><a id="pub-static-attribs" name="pub-static-attribs"></a>
+Static Public Attributes</h2></td></tr>
+<tr class="memitem:a5a7cd8fdec37589a001f93cac7be904e" id="r_a5a7cd8fdec37589a001f93cac7be904e"><td class="memItemLeft" align="right" valign="top">static const size_t&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="classRealm_1_1Hip_1_1GPU.html#a5a7cd8fdec37589a001f93cac7be904e">HIP_MEMCPY_KERNEL_MAX2_LOG2_BYTES</a> = 5</td></tr>
+<tr class="separator:a5a7cd8fdec37589a001f93cac7be904e"><td class="memSeparator" colspan="2">&#160;</td></tr>
 </table><table class="memberdecls">
 <tr class="heading"><td colspan="2"><h2 class="groupheader"><a id="pro-methods" name="pro-methods"></a>
 Protected Member Functions</h2></td></tr>
@@ -302,8 +334,8 @@ Protected Member Functions</h2></td></tr>
 </div>
 </div>
 <h2 class="groupheader">Member Function Documentation</h2>
-<a id="aa93a55868f948fee7114e59bb64caa62" name="aa93a55868f948fee7114e59bb64caa62"></a>
-<h2 class="memtitle"><span class="permalink"><a href="#aa93a55868f948fee7114e59bb64caa62">&#9670;&#160;</a></span>can_access_peer()</h2>
+<a id="a962e5280ad0d59f6ca0a67fd723715aa" name="a962e5280ad0d59f6ca0a67fd723715aa"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a962e5280ad0d59f6ca0a67fd723715aa">&#9670;&#160;</a></span>can_access_peer()</h2>
 
 <div class="memitem">
 <div class="memproto">
@@ -311,9 +343,9 @@ Protected Member Functions</h2></td></tr>
         <tr>
           <td class="memname">bool Realm::Hip::GPU::can_access_peer </td>
           <td>(</td>
-          <td class="paramtype"><a class="el" href="classRealm_1_1Hip_1_1GPU.html">GPU</a> *&#160;</td>
+          <td class="paramtype">const <a class="el" href="classRealm_1_1Hip_1_1GPU.html">GPU</a> *&#160;</td>
           <td class="paramname"><em>peer</em></td><td>)</td>
-          <td></td>
+          <td> const</td>
         </tr>
       </table>
 </div><div class="memdoc">
@@ -517,6 +549,238 @@ Protected Member Functions</h2></td></tr>
 
 </div>
 </div>
+<a id="a8619aa88c8bf9ebca55b059bc83174de" name="a8619aa88c8bf9ebca55b059bc83174de"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a8619aa88c8bf9ebca55b059bc83174de">&#9670;&#160;</a></span>is_accessible_gpu_mem()</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname">bool Realm::Hip::GPU::is_accessible_gpu_mem </td>
+          <td>(</td>
+          <td class="paramtype">const <a class="el" href="classRealm_1_1MemoryImpl.html">MemoryImpl</a> *&#160;</td>
+          <td class="paramname"><em>mem</em></td><td>)</td>
+          <td> const</td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+
+</div>
+</div>
+<a id="aece003faef34fd3eada7d4290f3084c0" name="aece003faef34fd3eada7d4290f3084c0"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#aece003faef34fd3eada7d4290f3084c0">&#9670;&#160;</a></span>is_accessible_host_mem()</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname">bool Realm::Hip::GPU::is_accessible_host_mem </td>
+          <td>(</td>
+          <td class="paramtype">const <a class="el" href="classRealm_1_1MemoryImpl.html">MemoryImpl</a> *&#160;</td>
+          <td class="paramname"><em>mem</em></td><td>)</td>
+          <td> const</td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+
+</div>
+</div>
+<a id="acfd8126a1ea333f8814be22e4b173158" name="acfd8126a1ea333f8814be22e4b173158"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#acfd8126a1ea333f8814be22e4b173158">&#9670;&#160;</a></span>launch_batch_affine_fill_kernel()</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname">void Realm::Hip::GPU::launch_batch_affine_fill_kernel </td>
+          <td>(</td>
+          <td class="paramtype">void *&#160;</td>
+          <td class="paramname"><em>fill_info</em>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype">size_t&#160;</td>
+          <td class="paramname"><em>dim</em>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype">size_t&#160;</td>
+          <td class="paramname"><em>elem_size</em>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype">size_t&#160;</td>
+          <td class="paramname"><em>volume</em>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype">size_t&#160;</td>
+          <td class="paramname"><em>arg_size</em>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype"><a class="el" href="classRealm_1_1Hip_1_1GPUStream.html">GPUStream</a> *&#160;</td>
+          <td class="paramname"><em>stream</em>&#160;</td>
+        </tr>
+        <tr>
+          <td></td>
+          <td>)</td>
+          <td></td><td></td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+
+</div>
+</div>
+<a id="a702429ff6f516e0c54fca5be29443a38" name="a702429ff6f516e0c54fca5be29443a38"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a702429ff6f516e0c54fca5be29443a38">&#9670;&#160;</a></span>launch_batch_affine_kernel()</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname">void Realm::Hip::GPU::launch_batch_affine_kernel </td>
+          <td>(</td>
+          <td class="paramtype">void *&#160;</td>
+          <td class="paramname"><em>copy_info</em>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype">size_t&#160;</td>
+          <td class="paramname"><em>dim</em>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype">size_t&#160;</td>
+          <td class="paramname"><em>elemSize</em>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype">size_t&#160;</td>
+          <td class="paramname"><em>volume</em>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype"><a class="el" href="classRealm_1_1Hip_1_1GPUStream.html">GPUStream</a> *&#160;</td>
+          <td class="paramname"><em>stream</em>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype">size_t&#160;</td>
+          <td class="paramname"><em>arg_size</em>&#160;</td>
+        </tr>
+        <tr>
+          <td></td>
+          <td>)</td>
+          <td></td><td></td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+
+</div>
+</div>
+<a id="ab8a89f9c4f7a472b36c1cd2e931c9dad" name="ab8a89f9c4f7a472b36c1cd2e931c9dad"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#ab8a89f9c4f7a472b36c1cd2e931c9dad">&#9670;&#160;</a></span>launch_indirect_copy_kernel()</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname">void Realm::Hip::GPU::launch_indirect_copy_kernel </td>
+          <td>(</td>
+          <td class="paramtype">void *&#160;</td>
+          <td class="paramname"><em>copy_info</em>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype">size_t&#160;</td>
+          <td class="paramname"><em>dim</em>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype">size_t&#160;</td>
+          <td class="paramname"><em>addr_size</em>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype">size_t&#160;</td>
+          <td class="paramname"><em>field_size</em>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype">size_t&#160;</td>
+          <td class="paramname"><em>volume</em>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype">size_t&#160;</td>
+          <td class="paramname"><em>arg_size</em>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype"><a class="el" href="classRealm_1_1Hip_1_1GPUStream.html">GPUStream</a> *&#160;</td>
+          <td class="paramname"><em>stream</em>&#160;</td>
+        </tr>
+        <tr>
+          <td></td>
+          <td>)</td>
+          <td></td><td></td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+
+</div>
+</div>
+<a id="aad241a88345532dc8200cd52b6645a34" name="aad241a88345532dc8200cd52b6645a34"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#aad241a88345532dc8200cd52b6645a34">&#9670;&#160;</a></span>launch_transpose_kernel()</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname">void Realm::Hip::GPU::launch_transpose_kernel </td>
+          <td>(</td>
+          <td class="paramtype"><a class="el" href="structRealm_1_1Hip_1_1MemcpyTransposeInfo.html">MemcpyTransposeInfo</a>&lt; size_t &gt; &amp;&#160;</td>
+          <td class="paramname"><em>copy_info</em>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype">size_t&#160;</td>
+          <td class="paramname"><em>elemSize</em>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype"><a class="el" href="classRealm_1_1Hip_1_1GPUStream.html">GPUStream</a> *&#160;</td>
+          <td class="paramname"><em>stream</em>&#160;</td>
+        </tr>
+        <tr>
+          <td></td>
+          <td>)</td>
+          <td></td><td></td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+
+</div>
+</div>
 <a id="a489318f4622a75b2dfb0c9f33a06ce7a" name="a489318f4622a75b2dfb0c9f33a06ce7a"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#a489318f4622a75b2dfb0c9f33a06ce7a">&#9670;&#160;</a></span>load_hip_module()</h2>
 
@@ -580,6 +844,34 @@ Protected Member Functions</h2></td></tr>
 </div>
 </div>
 <h2 class="groupheader">Member Data Documentation</h2>
+<a id="a578ff4d34fd2feb71cf432bfe331a2a8" name="a578ff4d34fd2feb71cf432bfe331a2a8"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a578ff4d34fd2feb71cf432bfe331a2a8">&#9670;&#160;</a></span>batch_affine_fill_kernels</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname"><a class="el" href="structRealm_1_1Hip_1_1GPU_1_1GPUFuncInfo.html">GPUFuncInfo</a> Realm::Hip::GPU::batch_affine_fill_kernels[<a class="el" href="realm__config_8h.html#a0734de92aef351d235bacd69ca16f258">REALM_MAX_DIM</a>][<a class="el" href="classRealm_1_1Hip_1_1GPU.html#a5a7cd8fdec37589a001f93cac7be904e">HIP_MEMCPY_KERNEL_MAX2_LOG2_BYTES</a>]</td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+
+</div>
+</div>
+<a id="ac4d58a9173cc0888f529a314a48e3014" name="ac4d58a9173cc0888f529a314a48e3014"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#ac4d58a9173cc0888f529a314a48e3014">&#9670;&#160;</a></span>batch_affine_kernels</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname"><a class="el" href="structRealm_1_1Hip_1_1GPU_1_1GPUFuncInfo.html">GPUFuncInfo</a> Realm::Hip::GPU::batch_affine_kernels[<a class="el" href="realm__config_8h.html#a0734de92aef351d235bacd69ca16f258">REALM_MAX_DIM</a>][<a class="el" href="classRealm_1_1Hip_1_1GPU.html#a5a7cd8fdec37589a001f93cac7be904e">HIP_MEMCPY_KERNEL_MAX2_LOG2_BYTES</a>]</td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+
+</div>
+</div>
 <a id="a0ab7319c8fb95050043932dfd198a6a3" name="a0ab7319c8fb95050043932dfd198a6a3"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#a0ab7319c8fb95050043932dfd198a6a3">&#9670;&#160;</a></span>device_id</h2>
 
@@ -588,6 +880,20 @@ Protected Member Functions</h2></td></tr>
       <table class="memname">
         <tr>
           <td class="memname">int Realm::Hip::GPU::device_id = -1</td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+
+</div>
+</div>
+<a id="ad0d3ec8dead0d2c4ef705f1e60ffa6e6" name="ad0d3ec8dead0d2c4ef705f1e60ffa6e6"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#ad0d3ec8dead0d2c4ef705f1e60ffa6e6">&#9670;&#160;</a></span>device_module</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname">hipModule_t Realm::Hip::GPU::device_module = nullptr</td>
         </tr>
       </table>
 </div><div class="memdoc">
@@ -720,6 +1026,20 @@ Protected Member Functions</h2></td></tr>
 
 </div>
 </div>
+<a id="a5490ab45901a96e87c8eb13a11ab11cd" name="a5490ab45901a96e87c8eb13a11ab11cd"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a5490ab45901a96e87c8eb13a11ab11cd">&#9670;&#160;</a></span>fill_affine_large_kernels</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname"><a class="el" href="structRealm_1_1Hip_1_1GPU_1_1GPUFuncInfo.html">GPUFuncInfo</a> Realm::Hip::GPU::fill_affine_large_kernels[<a class="el" href="realm__config_8h.html#a0734de92aef351d235bacd69ca16f258">REALM_MAX_DIM</a>][<a class="el" href="classRealm_1_1Hip_1_1GPU.html#a5a7cd8fdec37589a001f93cac7be904e">HIP_MEMCPY_KERNEL_MAX2_LOG2_BYTES</a>]</td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+
+</div>
+</div>
 <a id="a5b33ff5e0df13bace2790c84c27c8945" name="a5b33ff5e0df13bace2790c84c27c8945"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#a5b33ff5e0df13bace2790c84c27c8945">&#9670;&#160;</a></span>greatest_stream_priority</h2>
 
@@ -730,6 +1050,28 @@ Protected Member Functions</h2></td></tr>
           <td class="memname">int Realm::Hip::GPU::greatest_stream_priority</td>
         </tr>
       </table>
+</div><div class="memdoc">
+
+</div>
+</div>
+<a id="a5a7cd8fdec37589a001f93cac7be904e" name="a5a7cd8fdec37589a001f93cac7be904e"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a5a7cd8fdec37589a001f93cac7be904e">&#9670;&#160;</a></span>HIP_MEMCPY_KERNEL_MAX2_LOG2_BYTES</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">const size_t Realm::Hip::GPU::HIP_MEMCPY_KERNEL_MAX2_LOG2_BYTES = 5</td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel">static</span></span>  </td>
+  </tr>
+</table>
 </div><div class="memdoc">
 
 </div>
@@ -770,6 +1112,20 @@ Protected Member Functions</h2></td></tr>
       <table class="memname">
         <tr>
           <td class="memname"><a class="el" href="classRealm_1_1Hip_1_1GPUStream.html">GPUStream</a>* Realm::Hip::GPU::host_to_device_stream = nullptr</td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+
+</div>
+</div>
+<a id="ab761c49437ac6a22f6a148ea7c83742f" name="ab761c49437ac6a22f6a148ea7c83742f"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#ab761c49437ac6a22f6a148ea7c83742f">&#9670;&#160;</a></span>indirect_copy_kernels</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname"><a class="el" href="structRealm_1_1Hip_1_1GPU_1_1GPUFuncInfo.html">GPUFuncInfo</a> Realm::Hip::GPU::indirect_copy_kernels[<a class="el" href="realm__config_8h.html#a0734de92aef351d235bacd69ca16f258">REALM_MAX_DIM</a>][<a class="el" href="classRealm_1_1Hip_1_1GPU.html#a5a7cd8fdec37589a001f93cac7be904e">HIP_MEMCPY_KERNEL_MAX2_LOG2_BYTES</a>][<a class="el" href="classRealm_1_1Hip_1_1GPU.html#a5a7cd8fdec37589a001f93cac7be904e">HIP_MEMCPY_KERNEL_MAX2_LOG2_BYTES</a>]</td>
         </tr>
       </table>
 </div><div class="memdoc">
@@ -910,6 +1266,20 @@ Protected Member Functions</h2></td></tr>
       <table class="memname">
         <tr>
           <td class="memname">std::vector&lt;<a class="el" href="classRealm_1_1Hip_1_1GPUStream.html">GPUStream</a> *&gt; Realm::Hip::GPU::task_streams</td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+
+</div>
+</div>
+<a id="a97e6a09d31700021a24fa3ea68003114" name="a97e6a09d31700021a24fa3ea68003114"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a97e6a09d31700021a24fa3ea68003114">&#9670;&#160;</a></span>transpose_kernels</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname"><a class="el" href="structRealm_1_1Hip_1_1GPU_1_1GPUFuncInfo.html">GPUFuncInfo</a> Realm::Hip::GPU::transpose_kernels[<a class="el" href="classRealm_1_1Hip_1_1GPU.html#a5a7cd8fdec37589a001f93cac7be904e">HIP_MEMCPY_KERNEL_MAX2_LOG2_BYTES</a>]</td>
         </tr>
       </table>
 </div><div class="memdoc">

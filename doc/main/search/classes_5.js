@@ -1,7 +1,7 @@
 var searchData=
 [
   ['fastreservation_0',['fastreservation',['../classRealm_1_1FastReservation.html',1,'Realm::FastReservation'],['../classPRealm_1_1FastReservation.html',1,'PRealm::FastReservation']]],
-  ['fatbin_1',['fatbin',['../structRealm_1_1Cuda_1_1FatBin.html',1,'Realm::Cuda::FatBin'],['../structRealm_1_1Hip_1_1FatBin.html',1,'Realm::Hip::FatBin']]],
+  ['fatbin_1',['FatBin',['../structRealm_1_1Cuda_1_1FatBin.html',1,'Realm::Cuda']]],
   ['fieldblockbase_2',['FieldBlockBase',['../structRealm_1_1FieldBlockBase.html',1,'Realm']]],
   ['fielddatadescriptor_3',['FieldDataDescriptor',['../structRealm_1_1FieldDataDescriptor.html',1,'Realm']]],
   ['fieldinfo_4',['fieldinfo',['../structRealm_1_1InstanceLayoutConstraints_1_1FieldInfo.html',1,'Realm::InstanceLayoutConstraints::FieldInfo'],['../structRealm_1_1TransferDesc_1_1FieldInfo.html',1,'Realm::TransferDesc::FieldInfo']]],

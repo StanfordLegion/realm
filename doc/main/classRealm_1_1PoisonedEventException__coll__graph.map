@@ -1,0 +1,16 @@
+<map id="Realm::PoisonedEventException" name="Realm::PoisonedEventException">
+<area shape="rect" id="Node000001" title=" " alt="" coords="185,256,417,281"/>
+<area shape="rect" id="Node000002" href="$classRealm_1_1ExecutionException.html" title=" " alt="" coords="114,168,313,193"/>
+<area shape="poly" id="edge1_Node000001_Node000002" title=" " alt="" coords="237,201,291,254,287,257,233,205"/>
+<area shape="rect" id="Node000003" title=" " alt="" coords="5,80,120,105"/>
+<area shape="poly" id="edge2_Node000002_Node000003" title=" " alt="" coords="96,110,194,165,192,170,93,115"/>
+<area shape="rect" id="Node000004" href="$classRealm_1_1ByteArray.html" title=" " alt="" coords="145,80,282,105"/>
+<area shape="poly" id="edge3_Node000002_Node000004" title=" " alt="" coords="216,119,216,167,211,167,211,119"/>
+<area shape="rect" id="Node000005" href="$classRealm_1_1ByteArrayRef.html" title=" " alt="" coords="134,5,293,31"/>
+<area shape="poly" id="edge4_Node000004_Node000005" title=" " alt="" coords="216,45,216,80,211,80,211,45"/>
+<area shape="rect" id="Node000006" href="$classRealm_1_1Backtrace.html" title=" " alt="" coords="306,80,443,105"/>
+<area shape="poly" id="edge5_Node000002_Node000006" title=" " alt="" coords="342,114,237,170,234,165,339,110"/>
+<area shape="rect" id="Node000007" href="$classRealm_1_1Event.html" title=" " alt="" coords="337,168,447,193"/>
+<area shape="poly" id="edge6_Node000001_Node000007" title=" " alt="" coords="372,205,316,257,312,254,368,201"/>
+<area shape="poly" id="edge7_Node000007_Node000007" title=" " alt="" coords="462,172,473,181,465,189,447,191,446,186,463,184,468,181,459,177"/>
+</map>
