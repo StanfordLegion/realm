@@ -54,6 +54,17 @@ namespace Realm {
       }
     };
 
+    class TestLoggerMessage : public LoggerMessage {
+    public:
+      TestLoggerMessage(Logger &logger, bool active)
+        : LoggerMessage(&logger, active, Logger::LEVEL_INFO)
+      {}
+
+      TestLoggerMessage(TestLoggerMessage &&to_move)
+        : LoggerMessage(std::move(to_move))
+      {}
+    };
+
     static_assert(!std::is_copy_constructible<LoggerMessage>::value,
                   "LoggerMessage must not be copy constructible");
     static_assert(!std::is_copy_assignable<LoggerMessage>::value,
@@ -70,10 +81,10 @@ namespace Realm {
       const std::string message(256, 'x');
 
       {
-        LoggerMessage source = logger.info();
+        TestLoggerMessage source(logger, true);
         source << message;
 
-        LoggerMessage destination(std::move(source));
+        TestLoggerMessage destination(std::move(source));
 
         EXPECT_FALSE(source.is_active());
         EXPECT_TRUE(destination.is_active());
@@ -89,10 +100,10 @@ namespace Realm {
       TestLogger logger("move_stream_formatting", &output);
 
       {
-        LoggerMessage source = logger.info();
+        TestLoggerMessage source(logger, true);
         source << "value=" << std::hex << std::showbase;
 
-        LoggerMessage destination(std::move(source));
+        TestLoggerMessage destination(std::move(source));
         destination << 42;
       }
 
@@ -106,11 +117,11 @@ namespace Realm {
       TestLogger logger("move_inactive_message", &output);
 
       {
-        LoggerMessage source = logger.info();
+        TestLoggerMessage source(logger, true);
         source << "deactivated";
         source.deactivate();
 
-        LoggerMessage destination(std::move(source));
+        TestLoggerMessage destination(std::move(source));
 
         EXPECT_FALSE(source.is_active());
         EXPECT_FALSE(destination.is_active());
