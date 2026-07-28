@@ -77,20 +77,6 @@ make -j$(nproc)
 ctest --output-on-failure
 ```
 
-For a HIP build, use CMake's standard HIP platform and architecture controls:
-
-```bash
-cmake .. \
-      -DREALM_ENABLE_CUDA=OFF \
-      -DREALM_ENABLE_HIP=ON \
-      -DCMAKE_HIP_PLATFORM=amd \
-      -DCMAKE_HIP_ARCHITECTURES=gfx90a
-```
-
-If `CMAKE_HIP_ARCHITECTURES` is omitted, CMake selects an architecture from the
-compiler and available GPU. HIP-on-NVIDIA builds use
-`-DCMAKE_HIP_PLATFORM=nvidia` and require CMake 3.28 or newer.
-
 The full list of CMake toggles is documented inside [`CMakeLists.txt`](CMakeLists.txt).  Common switches include:
 
 | Option | Default | Purpose |

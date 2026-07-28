@@ -464,7 +464,7 @@ if(REALM_ENABLE_HIP)
   set(HIP_PLATFORM ${CMAKE_HIP_PLATFORM})
   find_package(hip REQUIRED CONFIG)
   if(CMAKE_HIP_PLATFORM STREQUAL "nvidia")
-    # The NVIDIA HIP platform requires CMake 3.28+ for enable_language(HIP).
+    # nvidia HIP_PLATFORM requies 3.28+ for enable_language(HIP) to work properly
     cmake_minimum_required(VERSION 3.28 FATAL_ERROR)
     set_target_properties(
       hip::host PROPERTIES INTERFACE_COMPILE_DEFINITIONS "__HIP_PLATFORM_NVIDIA__"
