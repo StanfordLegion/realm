@@ -46,6 +46,8 @@ namespace Realm {
       size_t worker_stacksize_in_kb = 1024;
       long long worker_spin_interval = 0;
       long long work_item_timeslice = 100000;
+      long long work_item_overrun_threshold = 100; // multiplier; 0 = disabled
+      long long work_item_overrun_limit = 0;       // precomputed: threshold * timeslice
     };
 
     void configure_from_cmdline(std::vector<std::string> &cmdline);
