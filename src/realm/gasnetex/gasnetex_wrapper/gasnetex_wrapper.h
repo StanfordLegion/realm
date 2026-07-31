@@ -122,8 +122,8 @@ typedef struct gex_wrapper_handle_s {
                             gex_client_opaque_t client, gex_addr_opaque_t address,
                             uintptr_t length, gex_mk_opaque_t kind, gex_flags_t flags);
 
-  void (*gex_ep_bind_segment)(gex_ep_opaque_t ep, gex_segment_opaque_t segment,
-                              gex_flags_t flags);
+  int (*gex_ep_bind_segment)(gex_ep_opaque_t ep, gex_segment_opaque_t segment,
+                             gex_flags_t flags);
 
   void (*gex_query_shared_peers)(gex_rank_t *num_shared_ranks, gex_rank_t **shared_ranks);
 
