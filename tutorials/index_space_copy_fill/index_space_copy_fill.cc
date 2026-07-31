@@ -106,8 +106,8 @@ void main_task(const void *args, size_t arglen, const void *userdata, size_t use
 
   assert(success);
 
-  inst2.destroy();
-  inst1.destroy();
+  inst2.destroy().wait();
+  inst1.destroy().wait();
 }
 
 int main(int argc, char **argv)

@@ -21,7 +21,8 @@
 #include <realm/cmdline.h>
 #include <realm/id.h>
 
-#include "osdep.h"
+#include <chrono>
+#include <thread>
 
 using namespace Realm;
 
@@ -61,7 +62,7 @@ void waiter_task(const void *args, size_t arglen, const void *userdata, size_t u
   //  no matter how long we wait
   int delay = 0;
   while(delay < 1000000) {
-    usleep(100000);
+    std::this_thread::sleep_for(std::chrono::microseconds(1000000));
     delay += 100000;
     if(e.has_triggered()) {
       log_app.fatal() << "event updated without subsubscription - e=" << e
@@ -76,7 +77,7 @@ void waiter_task(const void *args, size_t arglen, const void *userdata, size_t u
   // and now expect the event's trigger to become visible fairly quickly
   delay = 0;
   while(delay < 1000000) {
-    usleep(10000);
+    std::this_thread::sleep_for(std::chrono::microseconds(10000));
     delay += 10000;
     if(e.has_triggered()) {
       log_app.info() << "event update observed - e=" << e << " t=" << delay << "us";
