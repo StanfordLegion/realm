@@ -850,7 +850,7 @@ namespace Realm {
   /*static*/ void *KernelThread::pthread_entry(void *data)
   {
 #ifdef REALM_USE_NVTX
-    init_nvtx_thread("RealmKernalThread");
+    init_nvtx_thread("RealmKernelThread");
 #endif
     KernelThread *thread = (KernelThread *)data;
 
@@ -922,10 +922,6 @@ namespace Realm {
     if(thread->scheduler)
       thread->scheduler->thread_terminating(thread);
 
-#ifdef REALM_USE_NVTX
-    finalize_nvtx_thread();
-#endif
-
     return 0;
   }
 #endif
@@ -934,7 +930,7 @@ namespace Realm {
   /*static*/ DWORD WINAPI KernelThread::winthread_entry(LPVOID data)
   {
 #ifdef REALM_USE_NVTX
-    init_nvtx_thread("RealmKernalThread");
+    init_nvtx_thread("RealmKernelThread");
 #endif
     KernelThread *thread = (KernelThread *)data;
 
@@ -957,10 +953,6 @@ namespace Realm {
     // this is last so that the scheduler can delete us if it wants to
     if(thread->scheduler)
       thread->scheduler->thread_terminating(thread);
-
-#ifdef REALM_USE_NVTX
-    finalize_nvtx_thread();
-#endif
 
     return 0;
   }
