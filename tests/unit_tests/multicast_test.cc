@@ -30,6 +30,7 @@
 #include "realm/timers.h"
 
 #include <algorithm>
+#include <cassert>
 #include <deque>
 #include <iomanip>
 #include <iostream>
@@ -39,8 +40,24 @@
 #include <set>
 #include <string>
 #include <vector>
+
+// the guard page under FuzzedPayloadsNeverReadPastTheEndOfTheBuffer needs the
+//  platform's virtual memory calls
+#ifdef REALM_ON_WINDOWS
+#ifndef WIN32_LEAN_AND_MEAN
+#define WIN32_LEAN_AND_MEAN 1
+#endif
+// windows.h defines macros called 'min' and 'max' otherwise, which the std::min and
+//  std::max calls below would trip over
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+#include <windows.h>
+#else
 #include <sys/mman.h>
 #include <unistd.h>
+#endif
+
 #include <gtest/gtest.h>
 
 using namespace Realm;
@@ -1095,14 +1112,27 @@ TEST(MulticastDecodeTest, VarintRoundTrip)
 
 namespace {
 
-  // A buffer whose last byte sits immediately before an unmapped page, so that a
-  //  decoder reading even one byte past the end of what it was given takes a SIGSEGV
-  //  instead of quietly picking up adjacent heap.  This is what makes "no out-of-bounds
-  //  read" (plan section 22) an observed property rather than a code-reading claim.
+  // A buffer whose last byte sits immediately before an inaccessible page, so that a
+  //  decoder reading even one byte past the end of what it was given faults instead of
+  //  quietly picking up adjacent heap.  This is what makes "no out-of-bounds read"
+  //  (plan section 22) an observed property rather than a code-reading claim.
   class GuardedBuffer {
   public:
     GuardedBuffer(void)
     {
+#ifdef REALM_ON_WINDOWS
+      SYSTEM_INFO sysinfo;
+      GetSystemInfo(&sysinfo);
+      page_size = sysinfo.dwPageSize;
+      base = static_cast<unsigned char *>(
+          VirtualAlloc(nullptr, 2 * page_size, MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE));
+      assert(base != nullptr);
+      // second page is unreadable - anything past the end of the payload faults
+      DWORD prev_protect = 0;
+      BOOL ok = VirtualProtect(base + page_size, page_size, PAGE_NOACCESS, &prev_protect);
+      assert(ok != 0);
+      (void)ok;
+#else
       page_size = static_cast<size_t>(sysconf(_SC_PAGESIZE));
       base = static_cast<unsigned char *>(mmap(nullptr, 2 * page_size,
                                                PROT_READ | PROT_WRITE,
@@ -1112,9 +1142,17 @@ namespace {
       int ret = mprotect(base + page_size, page_size, PROT_NONE);
       assert(ret == 0);
       (void)ret;
+#endif
     }
 
-    ~GuardedBuffer(void) { munmap(base, 2 * page_size); }
+    ~GuardedBuffer(void)
+    {
+#ifdef REALM_ON_WINDOWS
+      VirtualFree(base, 0, MEM_RELEASE);
+#else
+      munmap(base, 2 * page_size);
+#endif
+    }
 
     size_t capacity(void) const { return page_size; }
 
