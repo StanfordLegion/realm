@@ -93,37 +93,6 @@ namespace Realm {
   }
 
   template <typename T, size_t INLINE_STORAGE>
-  ActiveMessage<T, INLINE_STORAGE>::ActiveMessage(const Realm::NodeSet &_targets,
-                                                  size_t _max_payload_size /*= 0*/)
-    : impl(0)
-  {
-    init(_targets, _max_payload_size);
-  }
-
-  template <typename T, size_t INLINE_STORAGE>
-  void ActiveMessage<T, INLINE_STORAGE>::init(const Realm::NodeSet &_targets,
-                                              size_t _max_payload_size /*= 0*/)
-  {
-    assert(impl == 0);
-    if constexpr(!is_wrapped_with_frag_info<T>::value) {
-      if(_max_payload_size > 0) {
-        size_t net_max = Network::max_payload_size(sizeof(T), nullptr);
-        if(_max_payload_size > net_max) {
-          init_chunked(_targets, _max_payload_size);
-          return;
-        }
-      }
-    }
-    network_max_payload_ = 0;
-    unsigned short msgid = activemsg_handler_table.lookup_message_id<T>();
-    impl = Network::create_active_message_impl(_targets, msgid, sizeof(T),
-                                               _max_payload_size, 0, 0, 0,
-                                               &inline_capacity, sizeof(inline_capacity));
-    header = new(impl->header_base) T;
-    fbs.reset(impl->payload_base, impl->payload_size);
-  }
-
-  template <typename T, size_t INLINE_STORAGE>
   ActiveMessage<T, INLINE_STORAGE>::ActiveMessage(NodeID _target, const void *_data,
                                                   size_t _datalen)
     : impl(0)
@@ -179,36 +148,6 @@ namespace Realm {
   }
 
   template <typename T, size_t INLINE_STORAGE>
-  ActiveMessage<T, INLINE_STORAGE>::ActiveMessage(const Realm::NodeSet &_targets,
-                                                  const void *_data, size_t _datalen)
-    : impl(0)
-  {
-    init(_targets, _data, _datalen);
-  }
-
-  template <typename T, size_t INLINE_STORAGE>
-  void ActiveMessage<T, INLINE_STORAGE>::init(const Realm::NodeSet &_targets,
-                                              const void *_data, size_t _datalen)
-  {
-    assert(impl == 0);
-    if constexpr(!is_wrapped_with_frag_info<T>::value) {
-      if(_datalen > 0) {
-        size_t net_max = Network::max_payload_size(sizeof(T), _data);
-        if(_datalen > net_max) {
-          init_chunked_data(_targets, _data, _datalen);
-          return;
-        }
-      }
-    }
-    network_max_payload_ = 0;
-    unsigned short msgid = activemsg_handler_table.lookup_message_id<T>();
-    impl = Network::create_active_message_impl(_targets, msgid, sizeof(T), _datalen,
-                                               _data, 0, 0, &inline_capacity,
-                                               sizeof(inline_capacity));
-    header = new(impl->header_base) T;
-  }
-
-  template <typename T, size_t INLINE_STORAGE>
   ActiveMessage<T, INLINE_STORAGE>::ActiveMessage(NodeID _target,
                                                   const LocalAddress &_src_payload_addr,
                                                   size_t _bytes_per_line, size_t _lines,
@@ -251,14 +190,6 @@ namespace Realm {
   }
 
   template <typename T, size_t INLINE_STORAGE>
-  /*static*/ size_t
-  ActiveMessage<T, INLINE_STORAGE>::recommended_max_payload(const NodeSet &targets,
-                                                            bool with_congestion)
-  {
-    return Network::recommended_max_payload(targets, with_congestion, sizeof(T));
-  }
-
-  template <typename T, size_t INLINE_STORAGE>
   /*static*/ size_t ActiveMessage<T, INLINE_STORAGE>::recommended_max_payload(
       NodeID target, const RemoteAddress &dest_payload_addr, bool with_congestion)
   {
@@ -272,15 +203,6 @@ namespace Realm {
       size_t line_stride, bool with_congestion)
   {
     return Network::recommended_max_payload(target, data, bytes_per_line, lines,
-                                            line_stride, with_congestion, sizeof(T));
-  }
-
-  template <typename T, size_t INLINE_STORAGE>
-  /*static*/ size_t ActiveMessage<T, INLINE_STORAGE>::recommended_max_payload(
-      const NodeSet &targets, const void *data, size_t bytes_per_line, size_t lines,
-      size_t line_stride, bool with_congestion)
-  {
-    return Network::recommended_max_payload(targets, data, bytes_per_line, lines,
                                             line_stride, with_congestion, sizeof(T));
   }
 
@@ -432,7 +354,7 @@ namespace Realm {
       header = 0;
       chunk_alloc_.clear();
       chunk_alloc_.shrink_to_fit();
-      chunk_targets_.clear();
+      chunk_target_ = -1;
       chunk_src_data_ = nullptr;
       chunk_src_datalen_ = 0;
       network_max_payload_ = 0;
@@ -567,8 +489,7 @@ namespace Realm {
 
     // automatically register a WrappedWithFragInfo<T> handler so that
     //  fragmented messages of any type can be reassembled
-    if constexpr(!is_wrapped_with_frag_info<T>::value &&
-                 std::is_same<T, T2>::value) {
+    if constexpr(!is_wrapped_with_frag_info<T>::value && std::is_same<T, T2>::value) {
       auto *wrapped_reg = new ActiveMessageHandlerReg<WrappedWithFragInfo<T>, T>();
       (void)wrapped_reg; // leaked intentionally - lives for program lifetime
     }
@@ -597,27 +518,7 @@ namespace Realm {
       network_max_payload_ = Network::max_payload_size(wrapped_hdr_size, nullptr);
       assert(network_max_payload_ > 0);
 
-      chunk_targets_.add(_target);
-      chunk_alloc_.resize(_max_payload_size);
-      chunk_src_data_ = chunk_alloc_.data();
-      chunk_src_datalen_ = _max_payload_size;
-      header = new(&inline_capacity) T;
-      fbs.reset(chunk_alloc_.data(), _max_payload_size);
-    }
-  }
-
-  template <typename T, size_t INLINE_STORAGE>
-  void ActiveMessage<T, INLINE_STORAGE>::init_chunked(const NodeSet &_targets,
-                                                      size_t _max_payload_size)
-  {
-    if constexpr(is_wrapped_with_frag_info<T>::value) {
-      assert(0 && "init_chunked called on WrappedWithFragInfo type");
-    } else {
-      size_t wrapped_hdr_size = sizeof(WrappedWithFragInfo<T>);
-      network_max_payload_ = Network::max_payload_size(wrapped_hdr_size, nullptr);
-      assert(network_max_payload_ > 0);
-
-      chunk_targets_ = _targets;
+      chunk_target_ = _target;
       chunk_alloc_.resize(_max_payload_size);
       chunk_src_data_ = chunk_alloc_.data();
       chunk_src_datalen_ = _max_payload_size;
@@ -640,32 +541,13 @@ namespace Realm {
       network_max_payload_ = Network::max_payload_size(wrapped_hdr_size, _data);
       assert(network_max_payload_ > 0);
 
-      chunk_targets_.add(_target);
+      chunk_target_ = _target;
       chunk_src_data_ = _data;
       chunk_src_datalen_ = _datalen;
       // place the header in inline_capacity (it's not sent to the network yet)
       header = new(&inline_capacity) T;
       // no fbs/chunk_buffer_ needed - data is referenced directly
       // impl stays null in chunked mode
-    }
-  }
-
-  template <typename T, size_t INLINE_STORAGE>
-  void ActiveMessage<T, INLINE_STORAGE>::init_chunked_data(const NodeSet &_targets,
-                                                           const void *_data,
-                                                           size_t _datalen)
-  {
-    if constexpr(is_wrapped_with_frag_info<T>::value) {
-      assert(0 && "init_chunked_data called on WrappedWithFragInfo type");
-    } else {
-      size_t wrapped_hdr_size = sizeof(WrappedWithFragInfo<T>);
-      network_max_payload_ = Network::max_payload_size(wrapped_hdr_size, _data);
-      assert(network_max_payload_ > 0);
-
-      chunk_targets_ = _targets;
-      chunk_src_data_ = _data;
-      chunk_src_datalen_ = _datalen;
-      header = new(&inline_capacity) T;
     }
   }
 
@@ -684,7 +566,6 @@ namespace Realm {
       size_t total_payload = chunk_src_datalen_;
 
       // msg_id only needs to be unique per-sender, so using my_node_id is fine
-      //  for both unicast and multicast chunked sends
       uint64_t msg_id = next_chunk_message_id(Network::my_node_id);
       size_t max_chunk = network_max_payload_;
       uint32_t total_chunks =
@@ -697,7 +578,7 @@ namespace Realm {
       for(uint32_t chunk_id = 0; chunk_id < total_chunks; ++chunk_id) {
         size_t chunk_size = std::min(max_chunk, total_payload - offset);
 
-        ActiveMessage<WrappedWithFragInfo<T>> chunk_msg(chunk_targets_, chunk_size);
+        ActiveMessage<WrappedWithFragInfo<T>> chunk_msg(chunk_target_, chunk_size);
         chunk_msg->frag_info = {chunk_id, total_chunks, msg_id};
         chunk_msg->user = *header;
         if(chunk_size > 0) {
@@ -713,7 +594,7 @@ namespace Realm {
       header = 0;
       chunk_alloc_.clear();
       chunk_alloc_.shrink_to_fit();
-      chunk_targets_.clear();
+      chunk_target_ = -1;
       chunk_src_data_ = nullptr;
       chunk_src_datalen_ = 0;
       network_max_payload_ = 0;
@@ -884,6 +765,44 @@ namespace Realm {
   ActiveMessageHandlerReg<T, T2>::get_handler_inline(void) const
   {
     return HandlerWrappers::template get_handler_inline<T, T2>(0);
+  }
+
+  ////////////////////////////////////////////////////////////////////////
+  //
+  // multicast completion callbacks and multicast_message (plan section 7.5)
+  //
+
+  template <typename CALLABLE>
+  class MulticastCompletionCallbackImpl : public MulticastCompletionCallback {
+  public:
+    MulticastCompletionCallbackImpl(const CALLABLE &_callable)
+      : callable(_callable)
+    {}
+    virtual void invoke(void) { callable(); }
+
+  protected:
+    CALLABLE callable;
+  };
+
+  // convenience wrapper, mirroring ActiveMessage::add_remote_completion's callable
+  template <typename CALLABLE>
+  inline MulticastCompletionCallback *make_multicast_completion(const CALLABLE &callable)
+  {
+    return new MulticastCompletionCallbackImpl<CALLABLE>(callable);
+  }
+
+  //  there is deliberately no remote-address/RDMA form (see plan section 7.5 and the
+  //  comment on MulticastForwarder::send).
+  template <typename T>
+  inline void multicast_message(const MulticastTargetSet &targets, const T &header,
+                                const void *payload = 0, size_t payload_size = 0,
+                                MulticastMetricsSink *metrics = 0,
+                                MulticastCompletionCallback *on_remote_complete = 0)
+  {
+    MulticastForwarder::send(get_runtime_multicast_transport(), targets,
+                             activemsg_handler_table.lookup_message_id<T>(), &header,
+                             sizeof(T), payload, payload_size, TimeLimit(), metrics,
+                             on_remote_complete);
   }
 
 }; // namespace Realm

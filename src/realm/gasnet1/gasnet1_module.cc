@@ -344,10 +344,6 @@ namespace Realm {
                        size_t _max_payload_size, const void *_src_payload_addr,
                        size_t _src_payload_lines, size_t _src_payload_line_stride,
                        void *_dest_payload_addr);
-    GASNet1MessageImpl(const Realm::NodeSet &_targets, unsigned short _msgid,
-                       size_t _header_size, size_t _max_payload_size,
-                       const void *_src_payload_addr, size_t _src_payload_lines,
-                       size_t _src_payload_line_stride);
 
     virtual ~GASNet1MessageImpl();
 
@@ -359,8 +355,6 @@ namespace Realm {
 
   protected:
     NodeID target;
-    Realm::NodeSet targets;
-    bool is_multicast;
     const void *src_payload_addr;
     size_t src_payload_lines;
     size_t src_payload_line_stride;
@@ -383,37 +377,10 @@ namespace Realm {
                                          size_t _src_payload_line_stride,
                                          void *_dest_payload_addr)
     : target(_target)
-    , is_multicast(false)
     , src_payload_addr(_src_payload_addr)
     , src_payload_lines(_src_payload_lines)
     , src_payload_line_stride(_src_payload_line_stride)
     , dest_payload_addr(_dest_payload_addr)
-    , comp(0)
-    , header_size(_header_size)
-  {
-    if(_max_payload_size && (src_payload_addr == 0)) {
-      payload_base = reinterpret_cast<char *>(malloc(_max_payload_size));
-    } else {
-      payload_base = 0;
-    }
-    payload_size = _max_payload_size;
-    args.msgid = _msgid;
-    header_base = &args.msg_header;
-    assert((sizeof(BaseMedium) + 8 + header_size) <= 16 * sizeof(handlerarg_t));
-  }
-
-  GASNet1MessageImpl::GASNet1MessageImpl(const Realm::NodeSet &_targets,
-                                         unsigned short _msgid, size_t _header_size,
-                                         size_t _max_payload_size,
-                                         const void *_src_payload_addr,
-                                         size_t _src_payload_lines,
-                                         size_t _src_payload_line_stride)
-    : targets(_targets)
-    , is_multicast(true)
-    , src_payload_addr(_src_payload_addr)
-    , src_payload_lines(_src_payload_lines)
-    , src_payload_line_stride(_src_payload_line_stride)
-    , dest_payload_addr(0)
     , comp(0)
     , header_size(_header_size)
   {
@@ -452,48 +419,19 @@ namespace Realm {
     args.sender = Network::my_node_id;
     args.payload_len = act_payload_size;
 
-    if(is_multicast) {
-      assert(dest_payload_addr == 0);
-      assert(comp == 0);
-      size_t count = targets.size();
-      if(count > 0) {
-        for(NodeSet::const_iterator it = targets.begin(); it != targets.end(); ++it) {
-          if(src_payload_addr != 0) {
-            if(src_payload_lines > 1)
-              enqueue_message(*it, MSGID_NEW_ACTIVEMSG, &args, header_size + 24,
-                              src_payload_addr, act_payload_size / src_payload_lines,
-                              src_payload_line_stride, src_payload_lines, PAYLOAD_KEEP,
-                              0);
-            else
-              enqueue_message(*it, MSGID_NEW_ACTIVEMSG, &args, header_size + 24,
-                              src_payload_addr, act_payload_size, PAYLOAD_KEEP, 0);
-          } else
-            enqueue_message(*it, MSGID_NEW_ACTIVEMSG, &args, header_size + 24,
-                            payload_base, act_payload_size,
-                            ((count > 0) ? PAYLOAD_COPY : PAYLOAD_FREE), 0);
-          count--;
-        }
-      } else {
-        // free the (unused) payload ourselves
-        if((payload_size > 0) && (src_payload_addr == 0))
-          free(payload_base);
-      }
-    } else {
-      if(src_payload_addr != 0) {
-        if(src_payload_lines > 1)
-          enqueue_message(target, MSGID_NEW_ACTIVEMSG, &args, header_size + 24,
-                          src_payload_addr, (act_payload_size / src_payload_lines),
-                          src_payload_line_stride, src_payload_lines, PAYLOAD_KEEP, comp,
-                          dest_payload_addr);
-        else
-          enqueue_message(target, MSGID_NEW_ACTIVEMSG, &args, header_size + 24,
-                          src_payload_addr, act_payload_size, PAYLOAD_KEEP, comp,
-                          dest_payload_addr);
-      } else
+    if(src_payload_addr != 0) {
+      if(src_payload_lines > 1)
         enqueue_message(target, MSGID_NEW_ACTIVEMSG, &args, header_size + 24,
-                        payload_base, act_payload_size, PAYLOAD_FREE, comp,
+                        src_payload_addr, (act_payload_size / src_payload_lines),
+                        src_payload_line_stride, src_payload_lines, PAYLOAD_KEEP, comp,
                         dest_payload_addr);
-    }
+      else
+        enqueue_message(target, MSGID_NEW_ACTIVEMSG, &args, header_size + 24,
+                        src_payload_addr, act_payload_size, PAYLOAD_KEEP, comp,
+                        dest_payload_addr);
+    } else
+      enqueue_message(target, MSGID_NEW_ACTIVEMSG, &args, header_size + 24, payload_base,
+                      act_payload_size, PAYLOAD_FREE, comp, dest_payload_addr);
   }
 
   void GASNet1MessageImpl::cancel()
@@ -886,26 +824,8 @@ namespace Realm {
     return impl;
   }
 
-  ActiveMessageImpl *GASNet1Module::create_active_message_impl(
-      const NodeSet &targets, unsigned short msgid, size_t header_size,
-      size_t max_payload_size, const void *src_payload_addr, size_t src_payload_lines,
-      size_t src_payload_line_stride, void *storage_base, size_t storage_size)
-  {
-    assert(storage_size >= sizeof(GASNet1MessageImpl));
-    GASNet1MessageImpl *impl = new(storage_base)
-        GASNet1MessageImpl(targets, msgid, header_size, max_payload_size,
-                           src_payload_addr, src_payload_lines, src_payload_line_stride);
-    return impl;
-  }
-
   size_t GASNet1Module::recommended_max_payload(NodeID target, bool with_congestion,
                                                 size_t header_size)
-  {
-    return gasnet_AMMaxMedium();
-  }
-
-  size_t GASNet1Module::recommended_max_payload(const NodeSet &targets,
-                                                bool with_congestion, size_t header_size)
   {
     return gasnet_AMMaxMedium();
   }
@@ -920,14 +840,6 @@ namespace Realm {
   }
 
   size_t GASNet1Module::recommended_max_payload(NodeID target, const void *data,
-                                                size_t bytes_per_line, size_t lines,
-                                                size_t line_stride, bool with_congestion,
-                                                size_t header_size)
-  {
-    return gasnet_AMMaxMedium();
-  }
-
-  size_t GASNet1Module::recommended_max_payload(const NodeSet &targets, const void *data,
                                                 size_t bytes_per_line, size_t lines,
                                                 size_t line_stride, bool with_congestion,
                                                 size_t header_size)
