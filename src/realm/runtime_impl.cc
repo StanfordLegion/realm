@@ -154,6 +154,7 @@ namespace Realm {
 
   Logger log_runtime("realm");
   Logger log_collective("collective");
+  Logger log_rsrv("rsrv");
   extern Logger log_task;    // defined in proc_impl.cc
   extern Logger log_taskreg; // defined in proc_impl.cc
   extern Logger log_machine; // defined in machine_impl.cc
@@ -2241,9 +2242,20 @@ namespace Realm {
     //  threads that have already been requested
     bool ok = core_reservations->satisfy_reservations(config->dummy_reservation_ok);
     if(ok) {
+      // The topology/reservation dump can go to stdout (-ll:show_rsrv) and/or to
+      //  the "rsrv" logger (-level rsrv=2); both are independent.  Funnel each
+      //  active sink through the same ostream-based formatting so it isn't
+      //  duplicated - operator<<(HardwareTopology) and report_reservations()
+      //  already take a generic std::ostream&.
+      auto report_topology = [&](std::ostream &os) {
+        os << host_topology << std::endl;
+        core_reservations->report_reservations(os);
+      };
       if(config->show_reservations) {
-        std::cout << host_topology << std::endl;
-        core_reservations->report_reservations(std::cout);
+        report_topology(std::cout);
+      }
+      if(LoggerMessage msg = log_rsrv.info(); msg.is_active()) {
+        report_topology(msg.get_stream());
       }
     } else {
       printf("HELP!  Could not satisfy all core reservations!\n");
