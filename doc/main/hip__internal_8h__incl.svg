@@ -203,7 +203,7 @@
 <g id="Node000153" class="node">
 <title>Node153</title>
 <g id="a_Node000153"><a xlink:href="ib__memory_8h.html" target="_top" xlink:title=" ">
-<polygon fill="white" stroke="#666666" points="2551.9,-514 2399.9,-514 2399.9,-495 2551.9,-495 2551.9,-514"/>
+<polygon fill="#fff0f0" stroke="red" points="2551.9,-514 2399.9,-514 2399.9,-495 2551.9,-495 2551.9,-514"/>
 <text text-anchor="middle" x="2475.9" y="-502" font-family="Helvetica,sans-Serif" font-size="10.00">realm/transfer/ib_memory.h</text>
 </a>
 </g>

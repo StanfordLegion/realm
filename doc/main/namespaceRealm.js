@@ -641,6 +641,7 @@ var namespaceRealm =
     [ "get_shm_name", "namespaceRealm.html#a4aff7e88b1d890313b20823e90868707", null ],
     [ "hash_combine", "namespaceRealm.html#a0b5ef45a7d65d3d72fdfa4c459167a60", null ],
     [ "hash_fnv1a", "namespaceRealm.html#a519480d9cc7e6da1a76368cf25e0e3b2", null ],
+    [ "ib_align_up", "namespaceRealm.html#af3332a2aa3e52a7591d525bec8e05076", null ],
     [ "init_dma_handler", "namespaceRealm.html#a28283023011dd1f6676f4db85f57db80", null ],
     [ "init_nvtx", "namespaceRealm.html#a8156b7ddaa5a6b4f65cef2bee40e3ebd", null ],
     [ "init_nvtx_thread", "namespaceRealm.html#ab88939994c78bc26b1e25690ad4da19c", null ],
