@@ -1,5 +1,11 @@
 var NAVTREEINDEX70 =
 {
+"structRealm_1_1ProfilingGauges_1_1AbsoluteGauge_1_1Sample.html":[2,0,3,12,0,0],
+"structRealm_1_1ProfilingGauges_1_1AbsoluteGauge_1_1Sample.html#a0c7812cc581edd6b65d89b9751bd7bd1":[1,0,3,19,0,0,0],
+"structRealm_1_1ProfilingGauges_1_1AbsoluteGauge_1_1Sample.html#a0c7812cc581edd6b65d89b9751bd7bd1":[2,0,3,12,0,0,0],
+"structRealm_1_1ProfilingGauges_1_1AbsoluteGauge_1_1Sample.html#a67c46e7f420a58df1028ca31c39fc18a":[1,0,3,19,0,0,1],
+"structRealm_1_1ProfilingGauges_1_1AbsoluteGauge_1_1Sample.html#a67c46e7f420a58df1028ca31c39fc18a":[2,0,3,12,0,0,1],
+"structRealm_1_1ProfilingGauges_1_1AbsoluteRangeGauge_1_1Sample.html":[1,0,3,19,1,0],
 "structRealm_1_1ProfilingGauges_1_1AbsoluteRangeGauge_1_1Sample.html":[2,0,3,12,1,0],
 "structRealm_1_1ProfilingGauges_1_1AbsoluteRangeGauge_1_1Sample.html#a20c4b91d8e2fe810fe904c5e582629dd":[1,0,3,19,1,0,3],
 "structRealm_1_1ProfilingGauges_1_1AbsoluteRangeGauge_1_1Sample.html#a20c4b91d8e2fe810fe904c5e582629dd":[2,0,3,12,1,0,3],
@@ -243,11 +249,5 @@ var NAVTREEINDEX70 =
 "structRealm_1_1ProfilingMeasurements_1_1OperationTimelineGPU.html":[2,0,3,13,18],
 "structRealm_1_1ProfilingMeasurements_1_1OperationTimelineGPU.html#a09b07a4001ee22bb8d0de45d02b7e8ea":[1,0,3,20,18,3],
 "structRealm_1_1ProfilingMeasurements_1_1OperationTimelineGPU.html#a09b07a4001ee22bb8d0de45d02b7e8ea":[2,0,3,13,18,3],
-"structRealm_1_1ProfilingMeasurements_1_1OperationTimelineGPU.html#a1b8a7d22d1a5fc735a940629c8df2617":[2,0,3,13,18,1],
-"structRealm_1_1ProfilingMeasurements_1_1OperationTimelineGPU.html#a1b8a7d22d1a5fc735a940629c8df2617":[1,0,3,20,18,1],
-"structRealm_1_1ProfilingMeasurements_1_1OperationTimelineGPU.html#a51ad6e43b58cd23993bd91105b6a1d2c":[1,0,3,20,18,4],
-"structRealm_1_1ProfilingMeasurements_1_1OperationTimelineGPU.html#a51ad6e43b58cd23993bd91105b6a1d2c":[2,0,3,13,18,4],
-"structRealm_1_1ProfilingMeasurements_1_1OperationTimelineGPU.html#a7fff4c8b180403457a668484f9b1749f":[1,0,3,20,18,2],
-"structRealm_1_1ProfilingMeasurements_1_1OperationTimelineGPU.html#a7fff4c8b180403457a668484f9b1749f":[2,0,3,13,18,2],
-"structRealm_1_1ProfilingMeasurements_1_1OperationTimelineGPU.html#af71fe3a56b131dd431b78c8811a85562":[2,0,3,13,18,0]
+"structRealm_1_1ProfilingMeasurements_1_1OperationTimelineGPU.html#a1b8a7d22d1a5fc735a940629c8df2617":[2,0,3,13,18,1]
 };

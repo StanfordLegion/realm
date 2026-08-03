@@ -1,5 +1,11 @@
 var NAVTREEINDEX65 =
 {
+"structRealm_1_1Hip_1_1AffineReducInfo.html#a9ec04ea7aa18ea77abf86f8d9a491235":[1,0,3,8,6,1],
+"structRealm_1_1Hip_1_1AffineReducPair.html":[1,0,3,8,7],
+"structRealm_1_1Hip_1_1AffineReducPair.html":[2,0,3,4,7],
+"structRealm_1_1Hip_1_1AffineReducPair.html#a216b3c41312930454cc548876d8b4960":[2,0,3,4,7,1],
+"structRealm_1_1Hip_1_1AffineReducPair.html#a216b3c41312930454cc548876d8b4960":[1,0,3,8,7,1],
+"structRealm_1_1Hip_1_1AffineReducPair.html#a547a02bd71fe9db46557f61185088876":[2,0,3,4,7,0],
 "structRealm_1_1Hip_1_1AffineReducPair.html#a547a02bd71fe9db46557f61185088876":[1,0,3,8,7,0],
 "structRealm_1_1Hip_1_1AffineReducPair.html#ac20ebe40685fbb141bbb9e7e7ebd0265":[1,0,3,8,7,2],
 "structRealm_1_1Hip_1_1AffineReducPair.html#ac20ebe40685fbb141bbb9e7e7ebd0265":[2,0,3,4,7,2],
@@ -243,11 +249,5 @@ var NAVTREEINDEX65 =
 "structRealm_1_1ID_1_1FMT__Sparsity.html#a96d7996b488ade8d35294fa65efbf4cd":[1,0,3,184,9,1],
 "structRealm_1_1ID_1_1FMT__Sparsity.html#a9ca462b92d9efa0345d44ea12aad15f1":[2,0,3,173,9,3],
 "structRealm_1_1ID_1_1FMT__Sparsity.html#a9ca462b92d9efa0345d44ea12aad15f1":[1,0,3,184,9,3],
-"structRealm_1_1ID_1_1FMT__Subgraph.html":[2,0,3,173,10],
-"structRealm_1_1ID_1_1FMT__Subgraph.html":[1,0,3,184,10],
-"structRealm_1_1ID_1_1FMT__Subgraph.html#a0218b7092f3a36775aa5da99546bc67f":[1,0,3,184,10,2],
-"structRealm_1_1ID_1_1FMT__Subgraph.html#a0218b7092f3a36775aa5da99546bc67f":[2,0,3,173,10,2],
-"structRealm_1_1ID_1_1FMT__Subgraph.html#a2eb52e2752cf59b8edc9079dce68d8b8":[1,0,3,184,10,0],
-"structRealm_1_1ID_1_1FMT__Subgraph.html#a2eb52e2752cf59b8edc9079dce68d8b8":[2,0,3,173,10,0],
-"structRealm_1_1ID_1_1FMT__Subgraph.html#a3d426f2ab9a9340f35b381cf1267b364":[1,0,3,184,10,3]
+"structRealm_1_1ID_1_1FMT__Subgraph.html":[2,0,3,173,10]
 };
