@@ -138,11 +138,6 @@ namespace Realm {
                         size_t _max_payload_size, const void *_src_payload_addr,
                         size_t _src_payload_lines, size_t _src_payload_line_stride,
                         uintptr_t _dest_payload_addr, gex_ep_index_t _dest_ep_index);
-    GASNetEXMessageImpl(GASNetEXInternal *_internal, const Realm::NodeSet &_targets,
-                        unsigned short _msgid, size_t _header_size,
-                        size_t _max_payload_size, const void *_src_payload_addr,
-                        size_t _src_payload_lines, size_t _src_payload_line_stride);
-
     virtual ~GASNetEXMessageImpl();
 
     virtual void *add_local_completion(size_t size);
@@ -154,8 +149,6 @@ namespace Realm {
   protected:
     GASNetEXInternal *internal;
     NodeID target;
-    Realm::NodeSet targets;
-    bool is_multicast;
     unsigned short msgid;
     const void *src_payload_addr;
     size_t src_payload_lines;
@@ -184,7 +177,6 @@ namespace Realm {
       uintptr_t _dest_payload_addr, gex_ep_index_t _dest_ep_index)
     : internal(_internal)
     , target(_target)
-    , is_multicast(false)
     , msgid(_msgid)
     , src_payload_addr(_src_payload_addr)
     , src_payload_lines(_src_payload_lines)
@@ -216,42 +208,6 @@ namespace Realm {
                                   payload_base, payload_size, _dest_payload_addr);
   }
 
-  GASNetEXMessageImpl::GASNetEXMessageImpl(
-      GASNetEXInternal *_internal, const Realm::NodeSet &_targets, unsigned short _msgid,
-      size_t _header_size, size_t _max_payload_size, const void *_src_payload_addr,
-      size_t _src_payload_lines, size_t _src_payload_line_stride)
-    : internal(_internal)
-    , targets(_targets)
-    , is_multicast(true)
-    , msgid(_msgid)
-    , src_payload_addr(_src_payload_addr)
-    , src_payload_lines(_src_payload_lines)
-    , src_payload_line_stride(_src_payload_line_stride)
-    , comp(nullptr)
-  {
-    // for multicast messages, we store the payload in a temp buffer
-    assert(_header_size <= INLINE_SIZE);
-    header_size = _header_size;
-    header_base = &msg_data[0];
-    size_t header_padded = roundup_pow2(header_size, 8);
-
-    payload_size = _max_payload_size;
-    if(payload_size > 0) {
-      if(src_payload_addr != nullptr) {
-        // use the caller's storage for now
-        payload_base = const_cast<void *>(src_payload_addr);
-      } else if((header_padded + payload_size) <= INLINE_SIZE) {
-        // we can use the rest of our internal storage
-        payload_base = &msg_data[header_padded / sizeof(gex_am_arg_t)];
-      } else {
-        // have to dynamically allocate storage
-        payload_base = malloc(payload_size);
-        assert(payload_base != 0);
-      }
-    } else
-      payload_base = nullptr;
-  }
-
   GASNetEXMessageImpl::~GASNetEXMessageImpl() {}
 
   void *GASNetEXMessageImpl::add_local_completion(size_t size)
@@ -272,88 +228,32 @@ namespace Realm {
 
   void GASNetEXMessageImpl::commit(size_t act_payload_size)
   {
-    if(is_multicast) {
-      // if/when we build a tree for multicast, expected local may be
-      //  lower than expected remote
-      unsigned exp_local = targets.size();
-      unsigned exp_remote = exp_local;
-      if(comp && !comp->mark_ready(exp_local, exp_remote))
-        comp = nullptr;
+    // arm the pending completion (if present)
+    if(comp && !comp->mark_ready(1 /*exp_local*/, 1 /*exp_remote*/))
+      comp = nullptr;
 
-      for(NodeID tgt : targets) {
-        void *act_header = header_base;
-        // can't use src payload directly if it's 2d
-        void *act_payload = ((src_payload_lines <= 1) ? payload_base : nullptr);
-
-        PreparedMessage *msg;
-        msg = internal->prepare_message(tgt, 0 /*always prim EP*/, msgid, act_header,
-                                        header_size, act_payload, act_payload_size,
-                                        0 /* no RDMA destination*/);
-
-        if(act_header != header_base)
-          memcpy(act_header, header_base, header_size);
-        if(act_payload != payload_base) {
-          if(src_payload_lines > 1) {
-            // copy line by line
-            size_t bytes_per_line = act_payload_size / src_payload_lines;
-            for(size_t i = 0; i < src_payload_lines; i++)
-              memcpy(static_cast<char *>(act_payload) + (i * bytes_per_line),
-                     static_cast<const char *>(payload_base) +
-                         (i * src_payload_line_stride),
-                     bytes_per_line);
-          } else {
-            // simple memcpy
-            memcpy(act_payload, payload_base, act_payload_size);
-          }
-        }
-
-        internal->commit_message(msg, comp, act_header, header_size, act_payload,
-                                 act_payload_size);
+    if((src_payload_addr != 0) && (payload_base != src_payload_addr)) {
+      if(src_payload_lines > 1) {
+        // copy line by line
+        size_t bytes_per_line = act_payload_size / src_payload_lines;
+        for(size_t i = 0; i < src_payload_lines; i++)
+          memcpy(static_cast<char *>(payload_base) + (i * bytes_per_line),
+                 static_cast<const char *>(src_payload_addr) +
+                     (i * src_payload_line_stride),
+                 bytes_per_line);
+      } else {
+        // simple memcpy
+        memcpy(payload_base, src_payload_addr, act_payload_size);
       }
 
-      // if we dynamically allocated space for the payload, free that now
-      if((payload_size > 0) && (src_payload_addr == nullptr) &&
-         ((header_size + payload_size) > INLINE_SIZE))
-        free(payload_base);
-    } else {
-      // arm the pending completion (if present)
-      if(comp && !comp->mark_ready(1 /*exp_local*/, 1 /*exp_remote*/))
-        comp = nullptr;
-
-      if((src_payload_addr != 0) && (payload_base != src_payload_addr)) {
-        if(src_payload_lines > 1) {
-          // copy line by line
-          size_t bytes_per_line = act_payload_size / src_payload_lines;
-          for(size_t i = 0; i < src_payload_lines; i++)
-            memcpy(static_cast<char *>(payload_base) + (i * bytes_per_line),
-                   static_cast<const char *>(src_payload_addr) +
-                       (i * src_payload_line_stride),
-                   bytes_per_line);
-        } else {
-          // simple memcpy
-          memcpy(payload_base, src_payload_addr, act_payload_size);
-        }
-
-        comp = internal->early_local_completion(comp);
-      }
-
-      internal->commit_message(msg, comp, header_base, header_size, payload_base,
-                               act_payload_size);
+      comp = internal->early_local_completion(comp);
     }
+
+    internal->commit_message(msg, comp, header_base, header_size, payload_base,
+                             act_payload_size);
   }
 
-  void GASNetEXMessageImpl::cancel()
-  {
-    if(is_multicast) {
-      // we never told the internal gex logic about this, so all we have to
-      //  is free payload memory if we allocated it
-      if((payload_size > 0) && (src_payload_addr == nullptr) &&
-         ((header_size + payload_size) > INLINE_SIZE))
-        free(payload_base);
-    } else {
-      internal->cancel_message(msg);
-    }
-  }
+  void GASNetEXMessageImpl::cancel() { internal->cancel_message(msg); }
 
   ////////////////////////////////////////////////////////////////////////
   //
@@ -688,34 +588,6 @@ namespace Realm {
     return impl;
   }
 
-  ActiveMessageImpl *GASNetEXModule::create_active_message_impl(
-      const NodeSet &targets, unsigned short msgid, size_t header_size,
-      size_t max_payload_size, const void *src_payload_addr, size_t src_payload_lines,
-      size_t src_payload_line_stride, void *storage_base, size_t storage_size)
-  {
-    // if checksums are enabled, we'll tack it on to the end of the header
-    //  to avoid any alignment issues
-    if(cfg_do_checksums)
-      header_size =
-          roundup_pow2(header_size + sizeof(gex_am_arg_t), sizeof(gex_am_arg_t));
-
-    assert(storage_size >= sizeof(GASNetEXMessageImpl));
-    if(targets.size() == 1) {
-      // optimization - if there's exactly 1 target, redirect to the unicast mode
-      NodeID target = *(targets.begin());
-      GASNetEXMessageImpl *impl = new(storage_base) GASNetEXMessageImpl(
-          internal, target, msgid, header_size, max_payload_size, src_payload_addr,
-          src_payload_lines, src_payload_line_stride, 0, 0);
-      return impl;
-    } else {
-      // zero or 2+ targets - we'll make a temporary copy of the payload for now
-      GASNetEXMessageImpl *impl = new(storage_base) GASNetEXMessageImpl(
-          internal, targets, msgid, header_size, max_payload_size, src_payload_addr,
-          src_payload_lines, src_payload_line_stride);
-      return impl;
-    }
-  }
-
   size_t GASNetEXModule::recommended_max_payload(NodeID target, bool with_congestion,
                                                  size_t header_size)
   {
@@ -725,24 +597,6 @@ namespace Realm {
 
     return internal->recommended_max_payload(target, 0 /*ep_index*/, with_congestion,
                                              header_size, 0 /*no dest_ptr*/);
-  }
-
-  size_t GASNetEXModule::recommended_max_payload(const NodeSet &targets,
-                                                 bool with_congestion, size_t header_size)
-  {
-    if(cfg_do_checksums)
-      header_size =
-          roundup_pow2(header_size + sizeof(gex_am_arg_t), sizeof(gex_am_arg_t));
-
-    if(targets.size() == 1) {
-      // optimization - if there's exactly 1 target, redirect to the unicast mode
-      NodeID target = *(targets.begin());
-      return internal->recommended_max_payload(target, 0 /*ep_index*/, with_congestion,
-                                               header_size, 0 /*no dest_ptr*/);
-    } else {
-      // ask without specifying a target - gets conservative answer
-      return internal->recommended_max_payload(with_congestion, header_size);
-    }
   }
 
   size_t GASNetEXModule::recommended_max_payload(NodeID target,
@@ -766,23 +620,6 @@ namespace Realm {
     return internal->recommended_max_payload(target, 0 /*ep_index*/, data, bytes_per_line,
                                              lines, line_stride, with_congestion,
                                              header_size, 0 /*no dest_ptr*/);
-  }
-
-  size_t GASNetEXModule::recommended_max_payload(const NodeSet &targets, const void *data,
-                                                 size_t bytes_per_line, size_t lines,
-                                                 size_t line_stride, bool with_congestion,
-                                                 size_t header_size)
-  {
-    if(targets.size() == 1) {
-      // optimization - if there's exactly 1 target, redirect to the unicast mode
-      NodeID target = *(targets.begin());
-      return internal->recommended_max_payload(
-          target, 0 /*ep_index*/, data, bytes_per_line, lines, line_stride,
-          with_congestion, header_size, 0 /*no dest_ptr*/);
-    } else {
-      // ask without specifying a target - gets conservative answer
-      return internal->recommended_max_payload(with_congestion, header_size);
-    }
   }
 
   size_t GASNetEXModule::recommended_max_payload(NodeID target,

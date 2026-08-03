@@ -142,8 +142,16 @@ void waiter_task(const void *args, size_t arglen, const void *userdata, size_t u
   }
 }
 
+// Barrier::ParticipantInfo was a dead explicit-pattern API (its only definitions were
+//  assert(0) stubs) and has been removed.  This test only ever used it as a convenient
+//  data holder, so it carries its own.
+struct TestParticipantInfo {
+  AddressSpace address_space;
+  unsigned count;
+};
+
 struct BarrierArrivalInfo {
-  std::vector<Barrier::ParticipantInfo> participants;
+  std::vector<TestParticipantInfo> participants;
   std::vector<NodeID> waiter_address_spaces;
 };
 

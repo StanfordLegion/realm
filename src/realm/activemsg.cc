@@ -19,6 +19,9 @@
 #include "realm/atomics.h"
 
 #include "realm/activemsg.h"
+#include "realm/module_config.h"
+#include "realm/multicast.h"
+#include "realm/runtime_impl.h"
 #include "realm/mutex.h"
 #include "realm/cmdline.h"
 #include "realm/logging.h"
@@ -901,6 +904,905 @@ namespace Realm {
       // we always handle all the messages, but still indicate we're done
       return_messages(sender, num_handled, 0, 0);
     }
+  }
+
+  ////////////////////////////////////////////////////////////////////////
+  //
+  // multicast envelope and bounded-radix forwarding (plan sections 7.3 and 7.4)
+  //
+
+  Logger log_multicast("multicast");
+
+  MulticastMetricsSink::~MulticastMetricsSink(void) {}
+
+  MulticastTransport::~MulticastTransport(void) {}
+
+  MulticastCompletionCallback::~MulticastCompletionCallback(void) {}
+
+  ////////////////////////////////////////////////////////////////////////
+  //
+  // struct MulticastFatalContext
+  //
+
+  void MulticastFatalContext::describe(std::ostream &os) const
+  {
+    os << rule << " (local=" << local_node << " sender=" << sender
+       << " origin=" << origin_node << " multicast_id=" << multicast_id
+       << " message_id=" << original_message_id
+       << " encoding_kind=" << target_encoding_kind
+       << " encoding_size=" << target_encoding_size
+       << " header_size=" << original_header_size
+       << " payload_size=" << original_payload_size
+       << " received_bytes=" << received_payload_size << " depth=" << depth
+       << " decode_status=" << status << ")";
+  }
+
+  std::string MulticastFatalContext::to_string(void) const
+  {
+    std::ostringstream os;
+    describe(os);
+    return os.str();
+  }
+
+  namespace {
+
+    class DefaultMulticastFatalReporter : public MulticastFatalReporter {
+    public:
+      virtual void report(const MulticastFatalContext &ctx)
+      {
+        log_multicast.fatal() << "multicast protocol violation: " << ctx.to_string();
+        abort();
+      }
+    };
+
+    DefaultMulticastFatalReporter default_multicast_fatal_reporter;
+
+    // installed only by tests, and only while no multicast traffic is in flight, so a
+    //  plain pointer is sufficient here
+    MulticastFatalReporter *installed_multicast_fatal_reporter = nullptr;
+
+  }; // namespace
+
+  MulticastFatalReporter *set_multicast_fatal_reporter(MulticastFatalReporter *reporter)
+  {
+    MulticastFatalReporter *previous = installed_multicast_fatal_reporter;
+    installed_multicast_fatal_reporter = reporter;
+    return previous;
+  }
+
+  MulticastFatalReporter *get_multicast_fatal_reporter(void)
+  {
+    return installed_multicast_fatal_reporter;
+  }
+
+  void report_multicast_fatal(const MulticastFatalContext &ctx)
+  {
+    if(installed_multicast_fatal_reporter != nullptr) {
+      installed_multicast_fatal_reporter->report(ctx);
+      return;
+    }
+    default_multicast_fatal_reporter.report(ctx);
+  }
+
+  ////////////////////////////////////////////////////////////////////////
+  //
+  // class MulticastCompletionState
+  //
+
+  MulticastCompletionState::MulticastCompletionState(void) {}
+
+  MulticastCompletionState::~MulticastCompletionState(void)
+  {
+    // plan section 2 (final bullet) and 7.1: nothing may outlive the multicasts it
+    //  belongs to, so a nonempty table here means a subtree never acknowledged
+    assert(pending.empty() &&
+           "multicast completion state outlived the multicasts it was tracking");
+  }
+
+  void MulticastCompletionState::begin_origin(NodeID origin, uint64_t multicast_id,
+                                              size_t outstanding,
+                                              MulticastCompletionCallback *callback)
+  {
+    assert(outstanding > 0);
+    assert(callback != nullptr);
+    MulticastCompletionKey key;
+    key.origin = origin;
+    key.multicast_id = multicast_id;
+
+    Record rec;
+    rec.parent = origin;
+    rec.outstanding = outstanding;
+    rec.callback = callback;
+    rec.is_origin = true;
+
+    AutoLock<> al(mutex);
+    bool inserted = pending.insert(std::make_pair(key, rec)).second;
+    assert(inserted && "duplicate multicast completion record at the origin");
+    (void)inserted;
+    if(pending.size() > peak)
+      peak = pending.size();
+  }
+
+  void MulticastCompletionState::begin_relay(NodeID origin, uint64_t multicast_id,
+                                             NodeID parent, size_t outstanding)
+  {
+    assert(outstanding > 0);
+    MulticastCompletionKey key;
+    key.origin = origin;
+    key.multicast_id = multicast_id;
+
+    Record rec;
+    rec.parent = parent;
+    rec.outstanding = outstanding;
+    rec.callback = nullptr;
+    rec.is_origin = false;
+
+    AutoLock<> al(mutex);
+    bool inserted = pending.insert(std::make_pair(key, rec)).second;
+    assert(inserted && "duplicate multicast completion record at a relay");
+    (void)inserted;
+    if(pending.size() > peak)
+      peak = pending.size();
+  }
+
+  MulticastCompletionState::Notification
+  MulticastCompletionState::note_completion(NodeID origin, uint64_t multicast_id)
+  {
+    MulticastCompletionKey key;
+    key.origin = origin;
+    key.multicast_id = multicast_id;
+
+    Notification result;
+    {
+      AutoLock<> al(mutex);
+      std::map<MulticastCompletionKey, Record>::iterator it = pending.find(key);
+      if(it == pending.end()) {
+        result.action = Notification::UNKNOWN;
+        return result;
+      }
+      assert(it->second.outstanding > 0);
+      if(--it->second.outstanding > 0)
+        return result; // NOTHING
+
+      // the subtree is complete: reclaim the record BEFORE telling anyone, so that no
+      //  state survives the acknowledgement (plan section 7.5)
+      result.action = (it->second.is_origin ? Notification::INVOKE_CALLBACK
+                                            : Notification::ACK_PARENT);
+      result.parent = it->second.parent;
+      result.callback = it->second.callback;
+      pending.erase(it);
+    }
+    return result;
+  }
+
+  size_t MulticastCompletionState::num_pending(void) const
+  {
+    AutoLock<> al(mutex);
+    return pending.size();
+  }
+
+  size_t MulticastCompletionState::peak_pending(void) const
+  {
+    AutoLock<> al(mutex);
+    return peak;
+  }
+
+  void MulticastCompletionState::reset_peak(void)
+  {
+    AutoLock<> al(mutex);
+    peak = pending.size();
+  }
+
+  ////////////////////////////////////////////////////////////////////////
+  //
+  // forwarding helpers
+  //
+
+  namespace {
+
+#ifdef DEBUG_REALM
+    // Plan section 21.1 requires partition overlap (or a slice that is not actually a
+    //  subset of what we were asked to forward) to be fatal in debug builds.  The check
+    //  is exact and linear in the number of runs: walking the slices in order, every
+    //  run must start after the previous one ended and must fit inside a run of the
+    //  source, and the cardinalities must add up.  Containment plus disjointness plus
+    //  equal cardinality is exactly "the slices partition the source".
+    void validate_partition(const MulticastTargetSet &source,
+                            const std::vector<MulticastTargetSet> &slices)
+    {
+      typedef MulticastTargetSet::Range Range;
+      size_t src_idx = 0;
+      size_t total = 0;
+      bool have_prev = false;
+      NodeID prev_last = 0;
+      for(size_t i = 0; i < slices.size(); i++) {
+        assert(!slices[i].empty() && "multicast partition produced an empty slice");
+        const std::vector<Range> &runs = slices[i].ranges();
+        for(size_t j = 0; j < runs.size(); j++) {
+          assert((!have_prev || (runs[j].first > prev_last)) &&
+                 "multicast partition slices overlap");
+          while((src_idx < source.num_ranges()) &&
+                (source.ranges()[src_idx].last < runs[j].first))
+            src_idx++;
+          assert((src_idx < source.num_ranges()) &&
+                 "multicast partition slice is not part of the target set");
+          assert((runs[j].first >= source.ranges()[src_idx].first) &&
+                 (runs[j].last <= source.ranges()[src_idx].last) &&
+                 "multicast partition slice is not part of the target set");
+          prev_last = runs[j].last;
+          have_prev = true;
+        }
+        total += slices[i].size();
+      }
+      assert((total == source.size()) && "multicast partition dropped targets");
+    }
+#endif
+
+    // Everything that is identical for every child envelope of one forwarding step -
+    //  the original message, the multicast identity, and whether this multicast is
+    //  completion tracked.
+    struct OutboundMulticast {
+      NodeID origin = 0;
+      uint64_t multicast_id = 0;
+      ActiveMessageHandlerTable::MessageID msgid = 0;
+      const void *hdr = nullptr;
+      size_t hdr_size = 0;
+      const void *payload = nullptr;
+      size_t payload_size = 0;
+      uint32_t flags = 0;
+      unsigned depth = 0;
+      // node the child subtree must acknowledge to, i.e. the node doing the sending -
+      //  only meaningful when COMPLETION_TRACKED is set in 'flags'
+      NodeID completion_parent = 0;
+
+      bool tracked(void) const
+      {
+        return ((flags & MulticastEnvelopeFlags::COMPLETION_TRACKED) != 0);
+      }
+    };
+
+    // Builds one envelope for 'slice' and hands it to the transport.  The relay is the
+    //  first node of the slice (plan section 7.3 step 3).
+    void send_one_slice(MulticastTransport &transport, const MulticastTargetSet &slice,
+                        const OutboundMulticast &out, MulticastMetricsSink *metrics)
+    {
+      assert(!slice.empty());
+
+      EncodedMulticastTargets enc =
+          EncodedMulticastTargets::encode(slice, transport.num_nodes());
+      if(metrics != nullptr)
+        metrics->record_encoding_choice(enc.kind());
+
+      // a fire-and-forget multicast carries no completion metadata whatsoever
+      const size_t comp_size =
+          (out.tracked()
+               ? MulticastWire::varint_size(static_cast<uint64_t>(out.completion_parent))
+               : 0);
+
+      MulticastEnvelopeMessage env;
+      env.multicast_id = out.multicast_id;
+      env.origin_node = out.origin;
+      env.original_payload_size = static_cast<uint32_t>(out.payload_size);
+      env.target_encoding_size = static_cast<uint32_t>(enc.bytes());
+      env.completion_size = static_cast<uint32_t>(comp_size);
+      env.flags = out.flags;
+      env.original_message_id = out.msgid;
+      env.original_header_size = static_cast<uint16_t>(out.hdr_size);
+      env.depth = out.depth;
+      env.target_encoding_kind = static_cast<unsigned char>(enc.kind());
+
+      // the variable portion is copied here, which is what makes the caller's
+      //  PAYLOAD_KEEP lifetime guarantee hold across commit() (plan section 7.5)
+      std::vector<unsigned char> buf;
+      buf.reserve(enc.bytes() + out.hdr_size + out.payload_size + comp_size);
+      buf.insert(buf.end(), enc.wire_bytes().begin(), enc.wire_bytes().end());
+      if(out.hdr_size > 0) {
+        const unsigned char *hdr_bytes = static_cast<const unsigned char *>(out.hdr);
+        buf.insert(buf.end(), hdr_bytes, hdr_bytes + out.hdr_size);
+      }
+      if(out.payload_size > 0) {
+        const unsigned char *body = static_cast<const unsigned char *>(out.payload);
+        buf.insert(buf.end(), body, body + out.payload_size);
+      }
+      if(comp_size > 0)
+        MulticastWire::append_varint(buf, static_cast<uint64_t>(out.completion_parent));
+
+      transport.send_envelope(slice.first_node(), env, buf.data(), buf.size());
+    }
+
+    // Partitions 'remaining' into at most R slices WITHOUT sending anything.  Splitting
+    //  planning from sending matters for completion tracking: the number of children
+    //  has to be known (and the record retained) before the first child can possibly
+    //  acknowledge.
+    void plan_children(MulticastTransport &transport, const MulticastTargetSet &remaining,
+                       std::vector<MulticastTargetSet> &slices)
+    {
+      slices.clear();
+      if(remaining.empty())
+        return;
+
+      const size_t radix = transport.radix();
+      assert(radix >= 1);
+
+      remaining.partition(radix, slices);
+#ifdef DEBUG_REALM
+      validate_partition(remaining, slices);
+#endif
+      assert(slices.size() <= radix);
+    }
+
+  }; // namespace
+
+  ////////////////////////////////////////////////////////////////////////
+  //
+  // class MulticastForwarder
+  //
+
+  /*static*/ uint64_t MulticastForwarder::next_multicast_id(void)
+  {
+    // only the local half of (origin_node, counter) - the origin node is carried
+    //  separately in the envelope, so this only has to be unique per origin
+    static atomic<uint64_t> counter(0);
+    return counter.fetch_add(1) + 1;
+  }
+
+  namespace {
+
+    // Post-handler notification for a local delivery that could not be handled inline.
+    //  The token is heap allocated because IncomingMessageManager only carries two
+    //  uintptr_t of callback data, and it is captured rather than rederived because
+    //  this runs on a handler thread, potentially long after dispatch_local returned.
+    void deferred_local_delivery_callback(NodeID /*sender*/,
+                                          IncomingMessageManager::CallbackData data1,
+                                          IncomingMessageManager::CallbackData /*data2*/)
+    {
+      MulticastCompletionToken *token =
+          reinterpret_cast<MulticastCompletionToken *>(data1);
+      MulticastCompletionToken copy = *token;
+      delete token;
+      MulticastForwarder::settle(copy);
+    }
+
+  }; // namespace
+
+  /*static*/ void MulticastForwarder::settle(const MulticastCompletionToken &token)
+  {
+    assert(token.state != nullptr);
+    MulticastCompletionState::Notification note =
+        token.state->note_completion(token.origin, token.multicast_id);
+
+    switch(note.action) {
+    case MulticastCompletionState::Notification::NOTHING:
+      break;
+
+    case MulticastCompletionState::Notification::ACK_PARENT:
+    {
+      // exactly one acknowledgement per subtree, sent after the record was reclaimed
+      assert(token.transport != nullptr);
+      token.transport->send_ack(token.local, note.parent, token.origin,
+                                token.multicast_id);
+      break;
+    }
+
+    case MulticastCompletionState::Notification::INVOKE_CALLBACK:
+    {
+      // the origin's callback runs exactly once, after every target has HANDLED the
+      //  message, and the state is already gone (plan section 7.5)
+      assert(note.callback != nullptr);
+      note.callback->invoke();
+      delete note.callback;
+      break;
+    }
+
+    case MulticastCompletionState::Notification::UNKNOWN:
+    {
+      MulticastFatalContext ctx;
+      ctx.local_node = token.local;
+      ctx.sender = token.local;
+      ctx.origin_node = token.origin;
+      ctx.multicast_id = token.multicast_id;
+      ctx.rule = "multicast acknowledgement does not match any multicast in flight";
+      report_multicast_fatal(ctx);
+      break;
+    }
+    }
+  }
+
+  /*static*/ void MulticastForwarder::handle_ack(MulticastTransport &transport,
+                                                 NodeID sender,
+                                                 const MulticastAckMessage &ack)
+  {
+    MulticastCompletionToken token;
+    token.transport = &transport;
+    token.state = &transport.completion_state();
+    token.local = transport.my_node_id();
+    token.origin = ack.origin_node;
+    token.multicast_id = ack.multicast_id;
+    (void)sender;
+    settle(token);
+  }
+
+  /*static*/ bool MulticastForwarder::dispatch_local(
+      IncomingMessageManager *manager, NodeID sender,
+      ActiveMessageHandlerTable::MessageID msgid, const void *hdr, size_t hdr_size,
+      const void *payload, size_t payload_size, TimeLimit work_until,
+      const MulticastCompletionToken *completion)
+  {
+    assert(manager != nullptr);
+
+    IncomingMessageManager::CallbackFnptr fnptr = nullptr;
+    IncomingMessageManager::CallbackData data1 = 0;
+    MulticastCompletionToken *token = nullptr;
+    if(completion != nullptr) {
+#ifdef DEBUG_REALM
+      // A message type that carries its own FragmentInfo is reassembled inside
+      //  add_incoming_message, and an incomplete fragment returns without ever reaching
+      //  a handler - so "handled" would be unobservable and the notification would be
+      //  lost.  Such a type must not be the ORIGINAL message of a completion-tracked
+      //  multicast; multicast its unfragmented form and let the envelope be chunked.
+      ActiveMessageHandlerTable::HandlerEntry *entry =
+          activemsg_handler_table.lookup_message_handler(msgid);
+      assert((entry != nullptr) && !entry->extract_frag_info.has_value() &&
+             "completion-tracked multicast of a fragment-carrying message type");
+#endif
+      token = new MulticastCompletionToken(*completion);
+      fnptr = &deferred_local_delivery_callback;
+      data1 = reinterpret_cast<IncomingMessageManager::CallbackData>(token);
+    }
+
+    // Reuse of the ordinary incoming path is deliberate: it looks the handler up by
+    //  message ID in the same ActiveMessageHandlerTable, honors an inline handler when
+    //  there is time for one, and otherwise queues the message for a handler thread
+    //  with the same TimeLimit semantics as a message that arrived off the wire.  No
+    //  handler-signature detection is duplicated here (plan section 7.4).
+    bool handled = manager->add_incoming_message(
+        sender, msgid, hdr, hdr_size, PAYLOAD_COPY, payload, payload_size, PAYLOAD_COPY,
+        fnptr, data1, 0, work_until);
+
+    if(token != nullptr) {
+      if(handled) {
+        // handled inline, so the post-handler callback will NOT run - settle here
+        MulticastCompletionToken copy = *token;
+        delete token;
+        settle(copy);
+      }
+      // otherwise deferred_local_delivery_callback owns and frees it
+    }
+
+    return handled;
+  }
+
+  /*static*/ void MulticastForwarder::send(
+      MulticastTransport &transport, const MulticastTargetSet &targets,
+      ActiveMessageHandlerTable::MessageID msgid, const void *hdr, size_t hdr_size,
+      const void *payload, size_t payload_size, TimeLimit work_until,
+      MulticastMetricsSink *metrics, MulticastCompletionCallback *on_remote_complete)
+  {
+    // the envelope's length fields are 16/32 bits wide
+    assert(hdr_size <= 0xffff);
+    assert(payload_size <= 0xffffffffULL);
+
+    // plan section 7.5: an empty target set is a successful no-op.  Every one of the
+    //  zero targets has trivially already handled the message, so a requested remote
+    //  completion fires immediately and no state is created.
+    if(targets.empty()) {
+      if(on_remote_complete != nullptr) {
+        on_remote_complete->invoke();
+        delete on_remote_complete;
+      }
+      return;
+    }
+
+    const NodeID local = transport.my_node_id();
+    const NodeID num_nodes = transport.num_nodes();
+
+    if(!targets.fits_node_count(num_nodes)) {
+      MulticastFatalContext ctx;
+      ctx.local_node = local;
+      ctx.sender = local;
+      ctx.origin_node = local;
+      ctx.original_message_id = msgid;
+      ctx.original_header_size = hdr_size;
+      ctx.original_payload_size = payload_size;
+      ctx.status = MulticastDecodeStatus::NODE_OUT_OF_RANGE;
+      ctx.rule = "multicast target set contains a node outside the configured node "
+                 "count";
+      report_multicast_fatal(ctx);
+      // nothing was sent, so the callback must not claim that everyone handled it
+      delete on_remote_complete;
+      return;
+    }
+
+    // 1. if the origin is a target, arrange local delivery and remove it from the
+    //    forwarding set (plan section 7.3)
+    MulticastTargetSet remaining(targets);
+    const bool deliver_here = remaining.remove(local);
+
+    OutboundMulticast out;
+    out.origin = local;
+    out.msgid = msgid;
+    out.hdr = hdr;
+    out.hdr_size = hdr_size;
+    out.payload = payload;
+    out.payload_size = payload_size;
+    out.depth = 1;
+    out.completion_parent = local;
+    // every multicast gets the globally unique (origin_node, counter) identity plan
+    //  section 7.4 requires, whether or not it is completion tracked - it is what a
+    //  fatal diagnostic names, and what an acknowledgement is keyed on
+    out.multicast_id = next_multicast_id();
+
+    // A fire-and-forget multicast sets no flag, puts no completion metadata on the wire
+    //  and creates no state anywhere (plan section 7.5).
+    const bool tracked = (on_remote_complete != nullptr);
+    if(tracked)
+      out.flags |= MulticastEnvelopeFlags::COMPLETION_TRACKED;
+
+    // decide the whole shape of the first hop before anything is transmitted, so that
+    //  the origin's record can be retained before a child can possibly acknowledge
+    const bool unicast_fast_path =
+        ((remaining.size() == 1) && transport.can_send_original(hdr_size, payload_size));
+    std::vector<MulticastTargetSet> slices;
+    if(!remaining.empty() && !unicast_fast_path)
+      plan_children(transport, remaining, slices);
+
+    const size_t first_hops = (unicast_fast_path ? 1 : slices.size());
+
+    MulticastCompletionToken token;
+    if(tracked) {
+      token.transport = &transport;
+      token.state = &transport.completion_state();
+      token.local = local;
+      token.origin = local;
+      token.multicast_id = out.multicast_id;
+      // one unit per first hop, plus one for our own delivery if we are a target
+      token.state->begin_origin(local, out.multicast_id,
+                                first_hops + (deliver_here ? 1 : 0), on_remote_complete);
+    }
+
+    if(unicast_fast_path) {
+      // plan section 7.5: a singleton target uses the ordinary unicast fast path.  This
+      //  is only safe at the origin, where the local node already IS the sender the
+      //  handler must see.  A tracked send rides the ordinary active-message remote
+      //  completion, which by definition fires once the target has handled it.
+      transport.send_original(remaining.first_node(), msgid, hdr, hdr_size, payload,
+                              payload_size, (tracked ? &token : nullptr));
+    } else {
+      // 2-4. one envelope per slice, addressed to that slice's first node
+      for(size_t i = 0; i < slices.size(); i++)
+        send_one_slice(transport, slices[i], out, metrics);
+    }
+    if((metrics != nullptr) && (first_hops > 0))
+      metrics->record_first_hops(first_hops);
+
+    // forward-before-deliver (plan section 7.3 step 4) applies at the origin too: a
+    //  handler such as runtime shutdown may stop progress
+    if(deliver_here)
+      transport.deliver_local(local, msgid, hdr, hdr_size, payload, payload_size,
+                              work_until, (tracked ? &token : nullptr));
+  }
+
+  /*static*/ void MulticastForwarder::forward(MulticastTransport &transport,
+                                              NodeID sender,
+                                              const MulticastEnvelopeMessage &env,
+                                              const void *payload, size_t payload_size,
+                                              TimeLimit work_until,
+                                              MulticastMetricsSink *metrics)
+  {
+    const NodeID local = transport.my_node_id();
+    const NodeID num_nodes = transport.num_nodes();
+
+    MulticastFatalContext ctx;
+    ctx.local_node = local;
+    ctx.sender = sender;
+    ctx.origin_node = env.origin_node;
+    ctx.multicast_id = env.multicast_id;
+    ctx.original_message_id = env.original_message_id;
+    ctx.target_encoding_kind = env.target_encoding_kind;
+    ctx.target_encoding_size = env.target_encoding_size;
+    ctx.original_header_size = env.original_header_size;
+    ctx.original_payload_size = env.original_payload_size;
+    ctx.received_payload_size = payload_size;
+    ctx.depth = env.depth;
+
+    // the four variable-length pieces must account for exactly the bytes we received -
+    //  nothing below is sized from an unvalidated remote length (plan section 22)
+    const size_t targets_bytes = env.target_encoding_size;
+    const size_t hdr_bytes = env.original_header_size;
+    const size_t body_bytes = env.original_payload_size;
+    const size_t comp_bytes = env.completion_size;
+    if((targets_bytes + hdr_bytes + body_bytes + comp_bytes) != payload_size) {
+      ctx.status = MulticastDecodeStatus::TRUNCATED;
+      ctx.rule = "multicast envelope length fields do not match the received payload";
+      report_multicast_fatal(ctx);
+      return;
+    }
+
+    if((env.flags & ~static_cast<uint32_t>(MulticastEnvelopeFlags::ALL_KNOWN)) != 0) {
+      ctx.rule = "multicast envelope carries unknown flags";
+      report_multicast_fatal(ctx);
+      return;
+    }
+
+    const unsigned char *base = static_cast<const unsigned char *>(payload);
+
+    // 0. completion metadata is present if and only if this multicast is tracked, and
+    //    names the node this whole subtree must acknowledge to (plan section 7.5)
+    const bool tracked = ((env.flags & MulticastEnvelopeFlags::COMPLETION_TRACKED) != 0);
+    NodeID parent = 0;
+    if(tracked) {
+      size_t pos = 0;
+      uint64_t raw = 0;
+      MulticastDecodeStatus cstat = MulticastWire::read_varint(
+          base + targets_bytes + hdr_bytes + body_bytes, comp_bytes, pos, raw);
+      if((cstat != MulticastDecodeStatus::OK) || (pos != comp_bytes) ||
+         (raw >= static_cast<uint64_t>(num_nodes))) {
+        ctx.status = ((cstat != MulticastDecodeStatus::OK)
+                          ? cstat
+                          : MulticastDecodeStatus::NODE_OUT_OF_RANGE);
+        ctx.rule = "malformed multicast completion metadata";
+        report_multicast_fatal(ctx);
+        return;
+      }
+      parent = static_cast<NodeID>(raw);
+      if(parent != sender) {
+        ctx.rule = "multicast completion metadata names a parent that is not the sender";
+        report_multicast_fatal(ctx);
+        return;
+      }
+    } else if(comp_bytes != 0) {
+      ctx.rule = "multicast envelope carries completion metadata without the completion "
+                 "flag";
+      report_multicast_fatal(ctx);
+      return;
+    }
+
+    // 1a. decode and fully validate the target slice
+    MulticastTargetSet slice;
+    MulticastDecodeStatus status =
+        EncodedMulticastTargets::decode(base, targets_bytes, num_nodes, slice);
+    if(status != MulticastDecodeStatus::OK) {
+      ctx.status = status;
+      ctx.rule = "malformed multicast target encoding";
+      report_multicast_fatal(ctx);
+      return;
+    }
+    if(base[0] != env.target_encoding_kind) {
+      ctx.status = MulticastDecodeStatus::UNKNOWN_KIND;
+      ctx.rule = "multicast envelope encoding kind disagrees with its payload";
+      report_multicast_fatal(ctx);
+      return;
+    }
+
+    // 1b. validate that the relay is included in the received slice (plan sections 7.3
+    //     and 21.1)
+    if(!slice.contains(local)) {
+      ctx.rule = "multicast relay is not a member of the slice it was sent";
+      report_multicast_fatal(ctx);
+      return;
+    }
+
+    // 2. save the original sender from the envelope - a relay must never become the
+    //    apparent sender just because it transmitted the final hop (plan section 7.4)
+    const NodeID origin = env.origin_node;
+
+    if(metrics != nullptr)
+      metrics->record_tree_depth(env.depth);
+
+    // 3. remove ourselves from the slice
+    bool was_present = slice.remove(local);
+    assert(was_present);
+    (void)was_present;
+
+    OutboundMulticast out;
+    out.origin = origin;
+    out.multicast_id = env.multicast_id;
+    out.msgid = env.original_message_id;
+    out.hdr = base + targets_bytes;
+    out.hdr_size = hdr_bytes;
+    out.payload = (body_bytes > 0) ? (base + targets_bytes + hdr_bytes) : nullptr;
+    out.payload_size = body_bytes;
+    out.flags = env.flags;
+    out.depth = env.depth + 1;
+    // a child acknowledges to US, not to whoever sent us this envelope
+    out.completion_parent = local;
+
+    // 4. partition and enqueue child envelopes BEFORE invoking the original local
+    //    handler.  Forward-before-deliver matters for handlers such as runtime shutdown
+    //    whose handler may stop progress.  We are on the ordinary (non-inline) handler
+    //    path, so these sends are not recursive forwarding out of an inline handler
+    //    (plan section 22).
+    std::vector<MulticastTargetSet> slices;
+    plan_children(transport, slice, slices);
+
+    // The relay's transient record: its parent, its own (not yet finished) local
+    //  delivery, and one outstanding acknowledgement per child.  It has to exist before
+    //  the first child envelope goes out, because a child can acknowledge at any time
+    //  after that (plan section 7.5).
+    MulticastCompletionToken token;
+    if(tracked) {
+      token.transport = &transport;
+      token.state = &transport.completion_state();
+      token.local = local;
+      token.origin = origin;
+      token.multicast_id = env.multicast_id;
+      token.state->begin_relay(origin, env.multicast_id, parent, slices.size() + 1);
+    }
+
+    for(size_t i = 0; i < slices.size(); i++)
+      send_one_slice(transport, slices[i], out, metrics);
+
+    // 5. deliver the original typed message locally exactly once
+    transport.deliver_local(origin, env.original_message_id, out.hdr, out.hdr_size,
+                            out.payload, out.payload_size, work_until,
+                            (tracked ? &token : nullptr));
+  }
+
+  ////////////////////////////////////////////////////////////////////////
+  //
+  // struct MulticastEnvelopeMessage
+  //
+
+  /*static*/ void MulticastEnvelopeMessage::handle_message(
+      NodeID sender, const MulticastEnvelopeMessage &hdr, const void *payload,
+      size_t payload_size, TimeLimit work_until)
+  {
+    MulticastForwarder::forward(get_runtime_multicast_transport(), sender, hdr, payload,
+                                payload_size, work_until);
+  }
+
+  ActiveMessageHandlerReg<MulticastEnvelopeMessage> multicast_envelope_message_handler;
+
+  ////////////////////////////////////////////////////////////////////////
+  //
+  // struct MulticastAckMessage
+  //
+
+  /*static*/ void MulticastAckMessage::handle_message(NodeID sender,
+                                                      const MulticastAckMessage &hdr,
+                                                      const void * /*payload*/,
+                                                      size_t /*payload_size*/,
+                                                      TimeLimit /*work_until*/)
+  {
+    MulticastForwarder::handle_ack(get_runtime_multicast_transport(), sender, hdr);
+  }
+
+  ActiveMessageHandlerReg<MulticastAckMessage> multicast_ack_message_handler;
+
+  ////////////////////////////////////////////////////////////////////////
+  //
+  // the runtime's multicast transport
+  //
+
+  namespace {
+
+    class RuntimeMulticastTransport : public MulticastTransport {
+    public:
+      virtual NodeID my_node_id(void) const { return Network::my_node_id; }
+
+      virtual NodeID num_nodes(void) const { return Network::max_node_id + 1; }
+
+      virtual size_t radix(void) const
+      {
+        size_t cached = cached_radix.load();
+        if(cached != 0)
+          return cached;
+
+        // initially the existing -ll:barrier_radix / barrier_broadcast_radix value
+        //  (plan section 7.3).  The answer is only cached once the core module config
+        //  actually exists, so a call made before the runtime is up falls back to the
+        //  default without poisoning the cache.
+        RuntimeImpl *runtime = get_runtime();
+        if(runtime != nullptr) {
+          ModuleConfig *core = runtime->get_module_config("core");
+          if(core != nullptr) {
+            int configured = 0;
+            if((core->get_property("barrier_broadcast_radix", configured) ==
+                REALM_SUCCESS) &&
+               (configured >= 1)) {
+              cached_radix.store(static_cast<size_t>(configured));
+              return static_cast<size_t>(configured);
+            }
+          }
+        }
+        return MULTICAST_DEFAULT_RADIX;
+      }
+
+      virtual void send_envelope(NodeID relay, const MulticastEnvelopeMessage &env,
+                                 const void *payload, size_t payload_bytes)
+      {
+        // an oversized envelope is fragmented here by the ordinary ActiveMessage
+        //  machinery and reassembled before the relay repartitions it
+        ActiveMessage<MulticastEnvelopeMessage> amsg(relay, payload_bytes);
+        *amsg = env;
+        if(payload_bytes > 0)
+          amsg.add_payload(payload, payload_bytes);
+        amsg.commit();
+      }
+
+      virtual bool can_send_original(size_t hdr_size, size_t payload_size) const
+      {
+        if(payload_size == 0)
+          return true;
+        // fragmentation of the original message would need its compile-time type, and
+        //  all we have here is a message ID - such a send goes through an envelope
+        //  instead, which the backend can fragment
+        return payload_size <= Network::max_payload_size(hdr_size, nullptr);
+      }
+
+      virtual void send_original(NodeID target,
+                                 ActiveMessageHandlerTable::MessageID msgid,
+                                 const void *hdr, size_t hdr_size, const void *payload,
+                                 size_t payload_size,
+                                 const MulticastCompletionToken *completion)
+      {
+        // same sequence ActiveMessage<T> performs, except that the message ID and the
+        //  header bytes are chosen at run time rather than by type
+        uint64_t storage[32];
+        ActiveMessageImpl *impl = Network::create_active_message_impl(
+            target, msgid, hdr_size, payload_size, 0, 0, 0, &storage, sizeof(storage));
+        memcpy(impl->header_base, hdr, hdr_size);
+        if(payload_size > 0)
+          memcpy(impl->payload_base, payload, payload_size);
+        if(completion != nullptr) {
+          // an ordinary remote completion already means "received AND HANDLED by the
+          //  target", which for a single target is exactly the aggregate we want
+          UnicastCompletionNotifier notifier;
+          notifier.token = *completion;
+          size_t bytes = sizeof(CompletionCallback<UnicastCompletionNotifier>);
+          bytes = (((bytes - 1) / CompletionCallbackBase::ALIGNMENT) + 1) *
+                  CompletionCallbackBase::ALIGNMENT;
+          void *ptr = impl->add_remote_completion(bytes);
+          new(ptr) CompletionCallback<UnicastCompletionNotifier>(notifier);
+        }
+        impl->commit(payload_size);
+        impl->~ActiveMessageImpl();
+      }
+
+      virtual void send_ack(NodeID from, NodeID parent, NodeID origin,
+                            uint64_t multicast_id)
+      {
+        assert(from == Network::my_node_id);
+        (void)from;
+        ActiveMessage<MulticastAckMessage> amsg(parent);
+        amsg->multicast_id = multicast_id;
+        amsg->origin_node = origin;
+        amsg.commit();
+      }
+
+      virtual void deliver_local(NodeID origin,
+                                 ActiveMessageHandlerTable::MessageID msgid,
+                                 const void *hdr, size_t hdr_size, const void *payload,
+                                 size_t payload_size, TimeLimit work_until,
+                                 const MulticastCompletionToken *completion)
+      {
+        RuntimeImpl *runtime = get_runtime();
+        assert((runtime != nullptr) && (runtime->message_manager != nullptr));
+        MulticastForwarder::dispatch_local(runtime->message_manager, origin, msgid, hdr,
+                                           hdr_size, payload, payload_size, work_until,
+                                           completion);
+      }
+
+      virtual MulticastCompletionState &completion_state(void) { return completion; }
+
+    protected:
+      // callable form of "one unicast fast-path target has handled the message"
+      struct UnicastCompletionNotifier {
+        MulticastCompletionToken token;
+        void operator()(void) const { MulticastForwarder::settle(token); }
+      };
+
+      mutable atomic<size_t> cached_radix{0};
+      MulticastCompletionState completion;
+    };
+
+    RuntimeMulticastTransport runtime_multicast_transport;
+
+  }; // namespace
+
+  MulticastTransport &get_runtime_multicast_transport(void)
+  {
+    return runtime_multicast_transport;
   }
 
 }; // namespace Realm
