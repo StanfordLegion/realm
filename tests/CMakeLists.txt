@@ -102,6 +102,7 @@ list(
   multicast_test.cc
   path_cache_test.cc
   transfer_utils_test.cc
+  ib_redistribute_test.cc
   address_list_test.cc
   cmdline_parser_test.cc
   sequence_assembler_test.cc
@@ -125,6 +126,7 @@ list(
   hpp_event_test.cc
   key_value_store_test.cc
   deferred_alloc_test.cc
+  logging_test.cc
 )
 list(TRANSFORM REALM_UNIT_TESTS PREPEND "${REALM_TEST_DIR}/unit_tests/")
 add_executable(realm_unit_tests ${REALM_UNIT_TESTS})
