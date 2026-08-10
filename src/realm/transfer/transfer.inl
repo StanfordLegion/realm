@@ -76,7 +76,7 @@ namespace Realm {
   {
     return ((s << i.port_type) && (s << i.peer_guid) && (s << i.peer_port_idx) &&
             (s << i.indirect_port_idx) && (s << i.mem) && (s << i.inst) &&
-            (s << i.ib_offset) && (s << i.ib_size) && (s << *i.iter) &&
+            (s << i.ib_offset) && (s << i.ib_size) && (s << i.ib_index) && (s << *i.iter) &&
             (s << i.serdez_id));
   }
 
@@ -85,7 +85,7 @@ namespace Realm {
   {
     if(!((s >> i.port_type) && (s >> i.peer_guid) && (s >> i.peer_port_idx) &&
          (s >> i.indirect_port_idx) && (s >> i.mem) && (s >> i.inst) &&
-         (s >> i.ib_offset) && (s >> i.ib_size))) {
+         (s >> i.ib_offset) && (s >> i.ib_size) && (s >> i.ib_index))) {
       return false;
     }
     i.iter = TransferIterator::deserialize_new(s);
