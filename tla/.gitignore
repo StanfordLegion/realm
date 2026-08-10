@@ -1,0 +1,9 @@
+# TLC working directories and downloaded tooling
+states/
+jtmp/
+tla2tools.jar
+tools/
+*.log
+*.out
+*.old
+*_TTrace_*.tla
