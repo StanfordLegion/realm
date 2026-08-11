@@ -277,7 +277,13 @@ explicitly **not** `has_triggered`, which must stay lock-free.
 - Measured as watermark delta since last consultation, so it is robust to the
   owner coalescing several triggers into one notification.
 - K adapts by doubling on observed churn (a leave→rejoin within a short window),
-  which is also the metric worth exporting.
+  which is also the metric worth exporting. The window must be measured on an
+  **honest clock**: a departed node receives no notifications, so its own
+  watermark freezes at the depart point and would read every return as churn.
+  A voluntary-consult rejoin is therefore judged against the **subscribe
+  reply's watermark**, not the local one; the forced rule-6 re-subscribe may
+  judge locally, because the removal notification it just processed carried
+  the current watermark.
 - Departures are **unicast to the owner**, staggered by `K + (node_id mod J)`
   with **J ≈ 16–32**. Phase changes retire many nodes at once, so the stagger is
   load-bearing rather than defensive. J is sized for spike smoothing, not

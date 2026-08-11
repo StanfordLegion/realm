@@ -807,6 +807,12 @@ namespace Realm {
     //  the churn window's origin, and it is not evidence the node actually left
     //  - the owner may have declined.
     gen_t last_depart_wm = 0;
+    // a rejoin whose churn judgment is waiting on the subscribe REPLY.  A
+    //  departed node receives no notifications, so its own watermark FROZE at
+    //  the depart point; judging a voluntary-consult rejoin with the local
+    //  clock would call EVERY such rejoin churn, however long the node was
+    //  really gone.  The reply's watermark is the honest clock (action RP).
+    bool rejoin_judge_pending = false;
     // K, doubled on observed churn and capped at DEPART_K_MAX
     unsigned depart_K = DEPART_K_INITIAL;
     // one request per idle episode.  Cleared when this node next consults
@@ -1381,9 +1387,18 @@ namespace Realm {
     void note_consultation_locked(void);
 
     // this node is going from "not a member" back to wanting in.  If it had
-    //  asked to leave, that is a leave->rejoin cycle; inside
-    //  DEPART_CHURN_WINDOW generations it is CHURN and doubles K.
+    //  asked to leave, that is a leave->rejoin cycle; one that lands inside
+    //  DEPART_CHURN_WINDOW generations is CHURN and doubles K - measured on an
+    //  honest clock, which is what splits these three.  The rule-6 sites call
+    //  note_rejoin_locked() and judge immediately: their local watermark is
+    //  current, because the node learned of its removal from the removal
+    //  notification itself.  The voluntary-consult site (action C) calls
+    //  note_rejoin_deferred_locked(): a departed node's watermark froze at the
+    //  depart point, so the judgment waits for the subscribe reply's watermark
+    //  (action RP), which is what judge_rejoin_locked() consumes.
     void note_rejoin_locked(void);
+    void note_rejoin_deferred_locked(void);
+    void judge_rejoin_locked(gen_t now_wm);
 
     // action N step 6 / action RP - the departure eligibility test, evaluated
     //  where the watermark moves.  Records the unicast intent in 'sends'.

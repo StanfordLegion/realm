@@ -66,12 +66,26 @@ enum Phase
                 //  stale plan the SAME way, so this is the probe for whether
                 //  the owner can ever re-learn a plan whose deviation is
                 //  discovered mid-generation (the partial-evidence question).
+  P_DEPART,     // notification rules 3/6 + the K-doubling adaptation.  The
+                //  upper half of the ranks keeps ARRIVING every generation but
+                //  stops CONSULTING (waiting) except at widely spaced
+                //  checkpoints, so the delivered-generation watermark crosses
+                //  the departure threshold MID-WINDOW and they ask to leave
+                //  the subscriber set while triggers are still flowing - the
+                //  lower half waits every generation, so the owner always has
+                //  a next trigger at which to weigh (and grant) the shrink.
+                //  This is what the split phase cannot do: there the departs
+                //  are products of the FINAL triggers' notification burst, so
+                //  they always arrive after the last trigger and die with the
+                //  barrier, never weighed.  Needs -gens >= 384 for the full
+                //  cycle count; shorter runs exercise a prefix (>= 128 gets
+                //  the churn arm), and the default 32 degenerates to steady.
   P_NUM_PHASES
 };
 
 static const char *phase_names[P_NUM_PHASES] = {"steady", "over",  "outsider", "runahead",
                                                 "churn",  "alter", "split",    "poison",
-                                                "chaos",  "step"};
+                                                "chaos",  "step",  "depart"};
 
 namespace TestConfig {
   int gens = 32;       // generations per phase
@@ -192,6 +206,7 @@ static int arrivals_for(int phase, int seed, int nranks, int gens, int g, int r)
   case P_STEADY:
   case P_RUNAHEAD:
   case P_POISON:
+  case P_DEPART: // deviation is in the WAIT schedule, not the arrivals
   default:
     return 1;
   }
@@ -256,10 +271,46 @@ static void worker_task(const void *args, size_t arglen, const void *userdata,
     }
 
     // waits: everyone waits every generation, except the split phase (only
-    //  the non-arrivers wait) and run-ahead (waits lag behind arrivals)
+    //  the non-arrivers wait), run-ahead (waits lag behind arrivals), and
+    //  depart (the upper half waits only at checkpoints)
     bool do_wait = true;
     if(wa.phase == P_SPLITWAIT && N > 1) {
       do_wait = (R >= (N + 1) / 2);
+    }
+    if(wa.phase == P_DEPART && N > 1 && (R >= (N + 1) / 2)) {
+      // Checkpoint waits only.  Between checkpoints this rank arrives blind,
+      //  so its watermark delta since the last consultation crosses the
+      //  departure eligibility threshold - DEPART_K_INITIAL(8) plus a
+      //  node_id%DEPART_STAGGER_J(32) stagger, so at most 39 - somewhere
+      //  mid-window, and it asks to leave.  The two window sizes bracket
+      //  DEPART_CHURN_WINDOW(64): with W=128 the rejoin at the next
+      //  checkpoint lands MORE than 64 generations after the depart, the
+      //  cycle is clean, K stays 8, and it repeats every window; with W=64
+      //  the rejoin is churn, K doubles until the threshold outgrows the
+      //  window, and the rank correctly stops asking.  (Constants from
+      //  barrier_impl.h, restated here because that header is not public.)
+      const int W = ((R % 2) == 0) ? 64 : 128;
+      do_wait = ((g % W) == (W - 1));
+      if(do_wait) {
+        // let the trigger frontier - paced by the lower half's every-generation
+        //  waits - run well PAST this rank's depart point before it consults
+        //  again.  All this rank's arrivals for the window are already issued,
+        //  so the frontier does not need it; without the pause the next waiter
+        //  registers within a generation or two of the departure in OWNER-clock
+        //  terms and even the honest judge calls every rejoin churn.  A
+        //  departed node cannot poll for the frontier instead: it receives no
+        //  notifications, so its local knowledge is frozen until it consults.
+        //
+        // The two arms gate EACH OTHER: the frontier can only pass a sleeping
+        //  rank's last issued arrival, so it advances one 64-generation
+        //  churn-arm window per churn-arm sleep and stalls exactly at those
+        //  64-multiple checkpoints.  The clean arm must therefore sleep past
+        //  TWO churn-arm epochs, or its rejoin lands on a stall point exactly
+        //  64 generations after its depart - the churn boundary - instead of
+        //  the full 128 its window implies.  Oversleeping costs nothing but
+        //  wall clock: the frontier caps at this rank's own issued arrivals.
+        usleep(((R % 2) == 0) ? 100000 : 250000);
+      }
     }
     if(do_wait && (g >= lag)) {
       const int wg = g - lag;

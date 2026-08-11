@@ -909,6 +909,7 @@ namespace Realm {
     //  this one.
     last_consult_wm = 0;
     last_depart_wm = 0;
+    rejoin_judge_pending = false;
     depart_K = DEPART_K_INITIAL;
     depart_outstanding = false;
     shrink_hint = true;
@@ -2803,8 +2804,11 @@ namespace Realm {
     if(member != MEMBER_NO) {
       return;
     }
-    // rule 8 - coming back after having asked to leave is the churn signal
-    note_rejoin_locked();
+    // rule 8 - coming back after having asked to leave is a rejoin, but its
+    //  churn judgment waits for the reply: this node's own watermark froze
+    //  when it departed, so only the owner's clock can say how long it was
+    //  really gone
+    note_rejoin_deferred_locked();
     member = MEMBER_PENDING;
     pull_outstanding = true;
     pull_deferred = false;
@@ -2884,6 +2888,35 @@ namespace Realm {
   //
   // 'last_depart_wm' is the guard, so a node that has never asked to leave -
   //  including one subscribing for the very first time - is never counted.
+  //
+  // THE CLOCK MATTERS.  A departed node receives no notifications, so its own
+  //  watermark froze at the depart point; judging a voluntary-consult rejoin
+  //  against generation.load() reads a delta of ~1 no matter how long the node
+  //  was really gone, calls every return churn, and ratchets K to DEPART_K_MAX
+  //  in a handful of episodes - after which a legitimately idle-then-returning
+  //  node never departs again.  So the judgment is split from the bookkeeping:
+  //  the rule-6 sites judge immediately (their clock IS current - the removal
+  //  notification they just processed carried it), while action C defers to
+  //  the subscribe reply's watermark via 'rejoin_judge_pending'.
+  void BarrierImpl::judge_rejoin_locked(gen_t now_wm)
+  {
+    REALM_BARRIER_ASSERT_LOCKED();
+    if(last_depart_wm == 0) {
+      return;
+    }
+    if((now_wm - last_depart_wm) <= DEPART_CHURN_WINDOW) {
+      counters.churn_backoffs++;
+      if(depart_K < DEPART_K_MAX) {
+        depart_K = ((depart_K * 2) < DEPART_K_MAX) ? (depart_K * 2) : DEPART_K_MAX;
+      }
+      log_barrier.info() << "barrier departure churn: " << me << " wm=" << now_wm
+                         << " asked_to_leave_at=" << last_depart_wm
+                         << " new_K=" << depart_K;
+    }
+    last_depart_wm = 0;
+    rejoin_judge_pending = false;
+  }
+
   void BarrierImpl::note_rejoin_locked(void)
   {
     REALM_BARRIER_ASSERT_LOCKED();
@@ -2893,19 +2926,26 @@ namespace Realm {
     if(last_depart_wm == 0) {
       return;
     }
-
-    const gen_t wm = generation.load();
-    counters.leave_rejoin_cycles++;
-    if((wm - last_depart_wm) <= DEPART_CHURN_WINDOW) {
-      counters.churn_backoffs++;
-      if(depart_K < DEPART_K_MAX) {
-        depart_K = ((depart_K * 2) < DEPART_K_MAX) ? (depart_K * 2) : DEPART_K_MAX;
-      }
-      log_barrier.info() << "barrier departure churn: " << me << " wm=" << wm
-                         << " asked_to_leave_at=" << last_depart_wm
-                         << " new_K=" << depart_K;
+    // a deferred judgment reaches here only if this node was removed AGAIN
+    //  while its subscribe was in flight; the episode was already counted at
+    //  the consult, so only the judgment runs
+    if(!rejoin_judge_pending) {
+      counters.leave_rejoin_cycles++;
     }
-    last_depart_wm = 0;
+    judge_rejoin_locked(generation.load());
+  }
+
+  void BarrierImpl::note_rejoin_deferred_locked(void)
+  {
+    REALM_BARRIER_ASSERT_LOCKED();
+    if(last_depart_wm == 0) {
+      return;
+    }
+    if(rejoin_judge_pending) {
+      return; // one episode, one count - the reply will judge it
+    }
+    counters.leave_rejoin_cycles++;
+    rejoin_judge_pending = true;
   }
 
   // Action N step 6 / action RP - the eligibility test.  It lives where the
@@ -4971,6 +5011,17 @@ namespace Realm {
       // STEP 4 - if the reply is not fresh, do not merge.  Safe because this
       //  node's poison knowledge is already exactly the truth up to its own
       //  (higher) watermark.
+
+      // STEP 4.5 - the DEFERRED rule-8 judgment (see note_rejoin_locked): the
+      //  reply's watermark is the first honest reading of how far the barrier
+      //  moved while this node was out, so the churn test for a
+      //  voluntary-consult rejoin runs here rather than at the consult.  The
+      //  max() guards the rare case of a stale reply arriving after newer
+      //  knowledge: judging with the LARGER clock only ever errs toward clean.
+      if(rejoin_judge_pending) {
+        const gen_t local_wm = generation.load();
+        judge_rejoin_locked((wm > local_wm) ? wm : local_wm);
+      }
 
       // STEP 5 - re-issue whatever rule 7 suppressed while this pull was
       //  outstanding.  The model only suppresses while a SUBSCRIBE is in
