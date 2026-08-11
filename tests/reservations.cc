@@ -242,6 +242,10 @@ static void top_level_task(const void *args, size_t arglen, const void *userdata
       }
     }
   }
+
+  reservation_instance.destroy().wait();
+  value_instance.destroy().wait();
+
   log_app.print("&&&& PASSED");
 }
 
@@ -277,8 +281,7 @@ static void make_reservations_task(const void *args, size_t arglen, const void *
   Event e = put_data(params.reservation_instance, update_rect, 0, sizeof(Reservation),
                      tmp_instance);
 
-  e.wait();
-  tmp_instance.destroy(e);
+  tmp_instance.destroy(e).wait();
 }
 
 static void chain_reservations_task(const void *args, size_t arglen, const void *userdata,
@@ -315,7 +318,7 @@ static void chain_reservations_task(const void *args, size_t arglen, const void 
   }
 
   if(local_rsrv_instance != params.reservation_instance) {
-    local_rsrv_instance.destroy(e);
+    local_rsrv_instance.destroy(e).wait();
   }
   e.wait();
 }
@@ -358,7 +361,7 @@ static void random_reservations_task(const void *args, size_t arglen,
     Event e = Event::merge_events(events);
 
     if(local_rsrv_instance != params.reservation_instance) {
-      local_rsrv_instance.destroy(e);
+      local_rsrv_instance.destroy(e).wait();
     }
     e.wait();
   }
@@ -384,7 +387,7 @@ static void update_value_task(const void *args, size_t arglen, const void *userd
       put_data(params.value_instance, region_rect, 0, sizeof(size_t), value_instance);
 
   if(value_instance != params.value_instance) {
-    value_instance.destroy(e);
+    value_instance.destroy(e).wait();
   }
   e.wait();
 }

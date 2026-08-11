@@ -114,7 +114,7 @@ void top_level_task(const void *args, size_t arglen, const void *userdata, size_
       instances.pop_front();
       finish_events.pop_front();
       e.wait();
-      inst.destroy();
+      inst.destroy().wait();
     }
   }
 
@@ -124,7 +124,7 @@ void top_level_task(const void *args, size_t arglen, const void *userdata, size_
     instances.pop_front();
     finish_events.pop_front();
     e.wait();
-    inst.destroy();
+    inst.destroy().wait();
   }
 }
 

@@ -101,7 +101,8 @@ namespace Realm {
     /// triggered
     /// @param wait_on precondition event that will defer the actual release until
     /// triggered
-    void release(Event wait_on);
+    /// @return Event to wait on for the release to complete
+    Event release(Event wait_on);
 
     Event redistrict(RegionInstance *instances, const InstanceLayoutGeneric **layouts,
                      size_t num_layouts, const ProfilingRequestSet *prs,
@@ -190,7 +191,8 @@ namespace Realm {
 
     public:
       size_t inst_offset;
-      Event ready_event;
+      Event ready_event = Event::NO_EVENT;
+      Event destroy_event = Event::NO_EVENT;
       bool need_alloc_result, need_notify_dealloc;
       InstanceLayoutGeneric *layout;
       ExternalInstanceResource *ext_resource;
