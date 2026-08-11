@@ -74,10 +74,10 @@ static const char *phase_names[P_NUM_PHASES] = {"steady", "over",  "outsider", "
                                                 "chaos",  "step"};
 
 namespace TestConfig {
-  int gens = 32; // generations per phase
-  int seed = 12345;
+  int gens = 32;       // generations per phase
   int runahead = 4;    // max generations arrivals may lead waits (P_RUNAHEAD)
   int phase_mask = -1; // bitmask of phases to run, -1 = all
+  int seed = 12345;
 }; // namespace TestConfig
 
 struct WorkerArgs {
