@@ -115,6 +115,15 @@ namespace Realm {
     uint64_t set_ver;
     uint32_t num_poisoned;
     uint32_t departing_bytes;
+    // ARRIVAL_PROTOCOL section 11.5 - the GATHERING GENERATION rides the
+    //  trigger notification (0 = none).  It must: the notification is what
+    //  wakes the waiters whose next arrivals the gathering needs to catch,
+    //  and a separate flush message down a multi-hop tree loses that race
+    //  every time (measured: the P_STEP probe declined with gathered=7-of-8
+    //  on almost every post-shift generation).  Carried here, the receiver
+    //  marks the generation eager in the SAME critical section that wakes
+    //  its waiters, so no woken arrival can report planned.
+    EventImpl::gen_t gather_gen;
     // NOTIFICATION_PROTOCOL rule 8, the optional ONE-BYTE HINT: does shrinking
     //  the subscriber set currently pay?  It is the verdict the owner's cost
     //  test returned the last time it actually evaluated one, so a node that
@@ -128,7 +137,8 @@ namespace Realm {
                                const void *data, size_t datalen, TimeLimit work_until);
 
     static void send_request(const MulticastTargetSet &targets, ID::IDType barrier_id,
-                             EventImpl::gen_t wm, EventImpl::gen_t prev, uint64_t set_ver,
+                             EventImpl::gen_t wm, EventImpl::gen_t prev,
+                             EventImpl::gen_t gather_gen, uint64_t set_ver,
                              bool shrink_hint,
                              const std::vector<EventImpl::gen_t> &poison,
                              const std::vector<unsigned char> &departing);
@@ -468,9 +478,9 @@ namespace Realm {
     //  node's own membership, computed by the handler from the departing set
     //  the message carried - see BarrierNotifyMessage.  'shrink_hint' is rule
     //  8's advisory byte.
-    void handle_remote_notify(gen_t wm, gen_t prev, uint64_t sv, const gen_t *poison,
-                              size_t num_poisoned, bool inset, bool hint,
-                              TimeLimit work_until);
+    void handle_remote_notify(gen_t wm, gen_t prev, gen_t gather_gen, uint64_t sv,
+                              const gen_t *poison, size_t num_poisoned, bool inset,
+                              bool hint, TimeLimit work_until);
 
     // NOTIFICATION_PROTOCOL action D, OWNER SIDE (rule 8).  Collect one
     //  departure intent; it is applied - or declined - at the next trigger,
@@ -860,6 +870,13 @@ namespace Realm {
     // The next plan index to hand out.  Epochs are monotone and never reused,
     //  which is what makes the invalidate/newplan race resolvable locally
     //  (rule 5).  0 means "no plan has ever existed", so counting starts at 1.
+    // ARRIVAL_PROTOCOL section 11.5 - the O(1) memory the identical-plan skip
+    //  and the gathering backoff need.  A hash stands in for the last plan
+    //  (storing the plan itself is the O(N^2) blow-up D9 forbids); a false
+    //  match merely skips one install and the continuing deviations retry.
+    uint64_t last_plan_hash = 0;
+    uint32_t gather_backoff = 0;        // doubles on identical outcomes, cap 32
+    uint32_t declines_until_gather = 0; // countdown while backing off
     uint32_t next_epoch = 1;
     // Set by the only thing that can tell the owner its plan is wrong: the
     //  owner entering eager-flush mode (a 'direct' from a node the plan did not
@@ -1006,6 +1023,7 @@ namespace Realm {
       MulticastTargetSet targets; // the PRE-SHRINK subscriber set
       gen_t wm = 0;
       gen_t prev = 0;
+      gen_t gather_gen = 0; // section 11.5, rides the wake (see the message)
       uint64_t set_ver = 0;
       std::vector<gen_t> poison;            // poisoned generations in (prev, wm]
       std::vector<unsigned char> departing; // encoded R; empty if set_ver is
@@ -1133,6 +1151,19 @@ namespace Realm {
       //     the number that would show it silently growing if it ever stopped
       //     being one.
       uint64_t plan_rebuilds = 0;
+      uint64_t identical_plans_skipped = 0; // section 11.5: a rebuild that
+                                            //  reproduced the current plan was
+                                            //  not installed (no broadcast)
+      uint64_t gathering_declared = 0;      // section 11.5: next generation
+                                            //  declared fully eager so its
+                                            //  evidence completes by
+                                            //  construction
+      uint64_t plan_rebuilds_declined = 0;  // partial evidence or overflow: the
+                                            //  gate said no.  A high ratio of
+                                            //  declined:done under a PERSISTENT
+                                            //  pattern shift means the owner
+                                            //  cannot re-learn and is stuck
+                                            //  eager - the P_STEP probe.
       size_t agg_peak_entries = 0;
 
       // --- RULE 10, the pinned-edge machinery (SCALE_TEST_PLAN section 1).

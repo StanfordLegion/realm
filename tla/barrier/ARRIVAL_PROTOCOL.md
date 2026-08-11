@@ -863,6 +863,50 @@ are already specified and verified (§5 rules 5 and 6); only the payload is new.
 
 ---
 
+### 11.5 The gathering generation (added after scale testing; NOT modelled)
+
+Scale testing (the `P_STEP` probe, 8 ranks, depth-3 trees) found that §11.1's
+gathering is **structurally incomplete for any deviation discovered
+mid-generation**: traffic that flowed before the flush reached its senders is
+bare rule-1 counts, so the owner's evidence can never be complete, every
+generation of a *persistent* pattern shift declines identically, and the
+barrier stays eager forever (measured: 1 rebuild, 66 declines, permanent
+flushing over 128 generations).
+
+Four mechanisms close it, all in the implementation only — the plan lifecycle
+remains the unmodelled stage, and these are performance mechanisms whose
+failure modes are bandwidth, not correctness:
+
+1. **On a partial-evidence decline, the owner declares the next generation a
+   gathering generation** — fully eager from its first arrival, so its
+   evidence completes by construction and the rebuild at its trigger succeeds.
+   Cost: one eager generation per pattern shift.
+2. **The declaration rides the trigger notification** (`gather_gen` on
+   `BarrierNotifyMessage`), applied by the receiver in the same critical
+   section that wakes its waiters. It must: a separate flush message down a
+   multi-hop tree loses the wake→arrive race on nearly every generation
+   (measured: `gathered=7 of 8` declines, forever).
+3. **The identical-plan skip**: a rebuild that reproduces the current plan
+   (64-bit hash — storing the plan itself is the O(N²) blow-up D9 forbids) is
+   not installed, saving an invalidate+newplan broadcast that buys nothing.
+4. **Gathering backoff**: identical outcomes double a suppression window
+   (cap 32), so an *alternating* pattern — where no single plan fits — decays
+   to the pre-gathering behaviour instead of gathering forever. A rebuild that
+   produces a *different* plan resets the backoff, so genuine shifts still
+   converge immediately.
+
+Measured on the probes (8 ranks, radix 2, 128 generations): a persistent shift
+converges in two eager generations (flush episodes 526 → 42); the adversarial
+alternating pattern's rebuild storm is capped (65 → 19 and decaying); steady
+state is untouched except for one **startup transient**: the first plan's
+broadcast races the first trigger notification, a rank that wakes first is
+still legitimately an outsider, and its case-3 signal costs one tree-wide
+flush and one identical-skip (occasionally one decline + one gathering).
+Traced, bounded, self-quieting — and *cheaper* than before these mechanisms,
+which is when the same race silently installed a redundant plan with a fresh
+epoch. Expect `identical_plans_skipped >= 1` per barrier as the normal
+signature.
+
 ## 12. Atomicity
 
 **Neither this model nor `BarrierNotify.tla` represents concurrency.** Every

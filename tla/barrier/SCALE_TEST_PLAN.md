@@ -85,6 +85,9 @@ already holds the mutex):
 | `stale_edge_forwards` | receiver forwards a non-child report | rule 10.5 |
 | `report_edges_pinned` / `pin_conflicts_avoided` | first-report pin; pinned target ≠ current parent at report time | rule 10.1 |
 | `gap_pulls` (notification) | delta discarded, pull sent | notification rule 4 |
+| `plan_rebuilds_declined` | completeness gate said no | §11.5 — high ratio vs `plan_rebuilds` under P_STEP = cannot re-learn |
+| `gathering_declared` | owner declared a gathering generation | §11.5 convergence |
+| `identical_plans_skipped` | rebuild reproduced the current plan | §11.5; ≥1 per barrier at startup is the normal signature |
 
 Add a per-rank end-of-run dump (aggregate across barriers) and a tiny reducer
 script that merges all ranks' dumps into one table with zero-counters
@@ -137,6 +140,7 @@ rank knows the full script (seeded), so expected counts are computable locally.
 | P9 waiters | waiter set disjoint from arriver set (few-to-many / many-to-few); far-future waiters (wait on g+50) | notification rules 1–7, far-future waiter, subscribe race | `gap_pulls` (opportunistic), subscribe fan-in, re-subscribes |
 | P10 poison | poisoned precondition feeds an arrival, rotating | Q4 poison propagation | oracle check 4 |
 | P11 chaos | seeded random: participants, counts, waiters, alters, run-ahead all drawn per generation | everything at once — the runtime analogue of TLC's nondeterminism | full counter spread; **report zero-counters** |
+| P12 step | ONE persistent pattern shift at mid-phase | §11.5: can the owner re-learn a plan whose deviation is discovered mid-generation? | `plan_rebuilds` = 2, `gathering_declared` ~ 1, flush quiet after convergence |
 
 Phases P6/P7 deserve emphasis: the race-window cases (park, dead-plan discard,
 gap-pull) **cannot be forced deterministically from application level** — they

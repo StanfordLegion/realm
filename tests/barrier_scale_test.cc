@@ -61,12 +61,17 @@ enum Phase
   P_SPLITWAIT,  // notification: waiters disjoint from arrivers + far-future
   P_POISON,     // Q4: poisoned arrival poisons exactly its generation
   P_CHAOS,      // everything above, seeded random
+  P_STEP,       // ONE persistent pattern shift at mid-phase: the realistic
+                //  Legion case.  Every post-shift generation deviates from the
+                //  stale plan the SAME way, so this is the probe for whether
+                //  the owner can ever re-learn a plan whose deviation is
+                //  discovered mid-generation (the partial-evidence question).
   P_NUM_PHASES
 };
 
-static const char *phase_names[P_NUM_PHASES] = {"steady",   "over",   "outsider",
-                                                "runahead", "churn",  "alter",
-                                                "split",    "poison", "chaos"};
+static const char *phase_names[P_NUM_PHASES] = {"steady", "over",  "outsider", "runahead",
+                                                "churn",  "alter", "split",    "poison",
+                                                "chaos",  "step"};
 
 namespace TestConfig {
   int gens = 32; // generations per phase
@@ -99,7 +104,7 @@ static uint64_t mix(uint64_t a, uint64_t b, uint64_t c)
 // r is ALWAYS nranks (the create-time expected count), except in P_ALTER where
 // the alteration adds one from its generation onward - through the API, which
 // is the point.
-static int arrivals_for(int phase, int seed, int nranks, int g, int r)
+static int arrivals_for(int phase, int seed, int nranks, int gens, int g, int r)
 {
   if(nranks == 1) {
     return 1; // every deviation needs a second rank; degenerate to steady
@@ -155,6 +160,20 @@ static int arrivals_for(int phase, int seed, int nranks, int g, int r)
     int base = nranks / arrivers;
     int extra = nranks % arrivers;
     return base + ((r < extra) ? 1 : 0);
+  }
+  case P_STEP:
+  {
+    // pattern A (everyone 1) for the first half; pattern B (rank 0 silent,
+    //  rank 1 doubled) for the second - constant within each half, total
+    //  conserved.  A healthy plan lifecycle re-learns ONCE at the shift and
+    //  aggregates thereafter; a broken one declines and stays eager forever.
+    if(g < gens / 2)
+      return 1;
+    if(r == 0)
+      return 0;
+    if(r == 1)
+      return 2;
+    return 1;
   }
   case P_CHAOS:
   {
@@ -212,7 +231,7 @@ static void worker_task(const void *args, size_t arglen, const void *userdata,
   for(int g = 0; g < G; g++) {
     wait_handles.push_back(ab);
 
-    int count = arrivals_for(wa.phase, wa.seed, N, g, R);
+    int count = arrivals_for(wa.phase, wa.seed, N, G, g, R);
     if(i_alter && (g == alter_at)) {
       // the contract: hold an unissued arrival from the pre-alteration count
       //  while altering, then use the returned (timestamped) handle

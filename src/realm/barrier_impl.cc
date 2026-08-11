@@ -680,15 +680,15 @@ namespace Realm {
       inset = !departing.contains(Network::my_node_id);
     }
 
-    impl->handle_remote_notify(args.wm, args.prev, args.set_ver, poison,
+    impl->handle_remote_notify(args.wm, args.prev, args.gather_gen, args.set_ver, poison,
                                args.num_poisoned, inset, (args.shrink_hint != 0),
                                work_until);
   }
 
   /*static*/ void BarrierNotifyMessage::send_request(
       const MulticastTargetSet &targets, ID::IDType barrier_id, EventImpl::gen_t wm,
-      EventImpl::gen_t prev, uint64_t set_ver, bool shrink_hint,
-      const std::vector<EventImpl::gen_t> &poison,
+      EventImpl::gen_t prev, EventImpl::gen_t gather_gen, uint64_t set_ver,
+      bool shrink_hint, const std::vector<EventImpl::gen_t> &poison,
       const std::vector<unsigned char> &departing)
   {
     if(targets.empty()) {
@@ -709,6 +709,7 @@ namespace Realm {
     hdr.barrier_id = barrier_id;
     hdr.wm = wm;
     hdr.prev = prev;
+    hdr.gather_gen = gather_gen;
     hdr.set_ver = set_ver;
     hdr.num_poisoned = static_cast<uint32_t>(poison.size());
     hdr.departing_bytes = static_cast<uint32_t>(departing.size());
@@ -812,6 +813,7 @@ namespace Realm {
     return (departs_sent | departs_suppressed | leave_rejoin_cycles | churn_backoffs |
             subscribe_fan_in | departs_received | shrinks_applied | shrinks_declined |
             nodes_removed | flush_episodes | flush_report_bytes | plan_rebuilds |
+            plan_rebuilds_declined | gathering_declared | identical_plans_skipped |
             plans_parked | parked_plans_applied | dead_plans_discarded |
             retro_flushes_sent | stale_edge_forwards | report_edges_pinned |
             pin_conflicts_avoided | gap_pulls) != 0;
@@ -842,6 +844,9 @@ namespace Realm {
                        << " flush_report_bytes=" << counters.flush_report_bytes
                        << " flush_report_bytes_max=" << counters.flush_report_bytes_max
                        << " plan_rebuilds=" << counters.plan_rebuilds
+                       << " plan_rebuilds_declined=" << counters.plan_rebuilds_declined
+                       << " gathering_declared=" << counters.gathering_declared
+                       << " identical_plans_skipped=" << counters.identical_plans_skipped
                        << " agg_peak_entries=" << counters.agg_peak_entries
                        << " plans_parked=" << counters.plans_parked
                        << " parked_plans_applied=" << counters.parked_plans_applied
@@ -2252,6 +2257,7 @@ namespace Realm {
         continue;
       }
       if(it->second > static_cast<int64_t>(UINT32_MAX)) {
+        counters.plan_rebuilds_declined++;
         log_barrier.info() << "declining barrier plan rebuild (count overflow): " << me
                            << " node=" << it->first << " count=" << it->second;
         return;
@@ -2305,8 +2311,40 @@ namespace Realm {
     //  complete under the stale plan forces a full flush before it triggers,
     //  and that flush is exactly what makes the gathering complete.
     if((tree_arrivals > 0) && (gathered != tree_arrivals)) {
+      counters.plan_rebuilds_declined++;
       log_barrier.info() << "declining barrier plan rebuild (partial evidence): " << me
-                         << " gathered=" << gathered << " of " << tree_arrivals;
+                         << " gen=" << (generation.load()) << " gathered=" << gathered
+                         << " of " << tree_arrivals;
+      // THE GATHERING GENERATION (ARRIVAL_PROTOCOL section 11.5).  Partial
+      //  evidence is STRUCTURAL, not transient: a deviation discovered
+      //  mid-generation can never yield complete maps, because the traffic
+      //  that flowed before the flush reached its senders was bare rule-1
+      //  counts.  Declining alone therefore never converges - under a
+      //  PERSISTENT pattern shift every generation declines the same way and
+      //  the barrier stays eager forever (the P_STEP probe measures exactly
+      //  this).  So the owner DECLARES the next generation a gathering
+      //  generation: it enters flush for it now, and the fan-out below makes
+      //  every node eager for that generation from its first arrival.  Its
+      //  evidence is then complete BY CONSTRUCTION, the rebuild at its
+      //  trigger succeeds, and the plan it produces governs the generation
+      //  after.  Cost: one fully-eager generation per pattern shift.
+      //  enter_flush_locked is idempotent and re-arms plan_rebuild_pending,
+      //  so repeated declines while the gathering generation is already
+      //  declared collapse into one declaration.
+      if(declines_until_gather > 0) {
+        // backing off: the last gathering(s) reproduced the current plan, so
+        //  this deviation pattern has no better plan to learn right now
+        declines_until_gather--;
+      } else {
+        const gen_t gather_gen = generation.load() + 1;
+        Generation *ng = get_generation_locked(gather_gen);
+        if(!ng->flushing) {
+          counters.gathering_declared++;
+          log_barrier.info() << "declaring gathering generation: " << me
+                             << " gen=" << gather_gen;
+        }
+        enter_flush_locked(*ng, gather_gen, sends);
+      }
       return;
     }
 
@@ -2318,6 +2356,7 @@ namespace Realm {
     const gen_t plan_from = generation.load() + 1;
     const int64_t expected = expected_locked(plan_from);
     if(total > expected) {
+      counters.plan_rebuilds_declined++;
       log_barrier.info() << "declining barrier plan rebuild (would over-predict): " << me
                          << " sum=" << total << " expected=" << expected;
       return;
@@ -2326,6 +2365,39 @@ namespace Realm {
     // IMPLEMENTATION_PLAN section 5 - PLAN REBUILD FREQUENCY.  Counted past the
     //  declines, so it measures plans actually installed: a steady workload
     //  should build one and then stop.
+    // THE IDENTICAL-PLAN SKIP (section 11.5).  Under an ALTERNATING pattern -
+    //  no single plan fits, e.g. every odd generation deviates the same way -
+    //  each gathering generation reproduces the plan already installed, and
+    //  installing it would buy an invalidate+newplan broadcast per rebuild for
+    //  nothing (measured: 65 rebuilds per 128 generations on the OVER probe).
+    //  A 64-bit hash stands in for the last plan; on a match the install is
+    //  skipped and the GATHERING BACKOFF doubles, so an adversarial pattern
+    //  decays to the pre-gathering behaviour (deviating generations flush,
+    //  conforming ones aggregate) instead of gathering forever.  A pattern
+    //  shift that produces a DIFFERENT plan resets the backoff, so a genuine
+    //  step-change still converges immediately.
+    {
+      uint64_t h = 0x9E3779B97F4A7C15ull;
+      for(size_t i = 0; i < tv.size(); i++) {
+        h = (h ^ static_cast<uint64_t>(tv[i])) * 0x100000001B3ull;
+        h = (h ^ static_cast<uint64_t>(quota[i])) * 0x100000001B3ull;
+      }
+      if((my_epoch != 0) && (h == last_plan_hash)) {
+        counters.identical_plans_skipped++;
+        gather_backoff = (gather_backoff == 0)
+                             ? 1
+                             : ((gather_backoff < 32) ? (gather_backoff * 2) : 32);
+        declines_until_gather = gather_backoff;
+        log_barrier.info() << "skipping identical barrier plan: " << me
+                           << " gen=" << generation.load()
+                           << " backoff=" << gather_backoff;
+        return;
+      }
+      last_plan_hash = h;
+      gather_backoff = 0;
+      declines_until_gather = 0;
+    }
+
     counters.plan_rebuilds++;
 
     const uint32_t new_epoch = next_epoch++;
@@ -2520,9 +2592,9 @@ namespace Realm {
                          << " pois=" << sends.notify.poison.size()
                          << " dep=" << sends.notify.departing.size();
       BarrierNotifyMessage::send_request(sends.notify.targets, me.id, sends.notify.wm,
-                                         sends.notify.prev, sends.notify.set_ver,
-                                         sends.notify.shrink_hint, sends.notify.poison,
-                                         sends.notify.departing);
+                                         sends.notify.prev, sends.notify.gather_gen,
+                                         sends.notify.set_ver, sends.notify.shrink_hint,
+                                         sends.notify.poison, sends.notify.departing);
     }
 
     // NOTIFICATION_PROTOCOL rule 8 - the departure intent.  UNICAST to the
@@ -3222,6 +3294,18 @@ namespace Realm {
         sends.notify.valid = true;
         sends.notify.wm = trigger_gen;
         sends.notify.prev = old_watermark;
+        // section 11.5: if the rebuild declined and declared the next
+        //  generation a gathering generation, the declaration RIDES THIS
+        //  NOTIFICATION - the receiver marks it eager in the same critical
+        //  section that wakes its waiters, which is the only ordering that
+        //  beats the wake->arrive race (P_STEP measured the flush-message
+        //  version losing on nearly every generation).
+        {
+          std::map<gen_t, Generation *>::iterator git = generations.find(trigger_gen + 1);
+          sends.notify.gather_gen = ((git != generations.end()) && git->second->flushing)
+                                        ? (trigger_gen + 1)
+                                        : 0;
+        }
         sends.notify.set_ver = set_ver;
         // rule 8's one-byte hint rides the notification that was going out
         //  anyway, so it costs nothing on the wire
@@ -4750,9 +4834,10 @@ namespace Realm {
   // NOTIFICATION_PROTOCOL action N - a notification arrives (BarrierNotify
   //  RecvNotify).  ONE critical section, in this order.
   //
-  void BarrierImpl::handle_remote_notify(gen_t wm, gen_t prev, uint64_t sv,
-                                         const gen_t *poison, size_t num_poisoned,
-                                         bool inset, bool hint, TimeLimit work_until)
+  void BarrierImpl::handle_remote_notify(gen_t wm, gen_t prev, gen_t gather_gen,
+                                         uint64_t sv, const gen_t *poison,
+                                         size_t num_poisoned, bool inset, bool hint,
+                                         TimeLimit work_until)
   {
     EventWaiter::EventWaiterList local_notifications, poisoned_notifications;
     PendingSends sends;
@@ -4780,6 +4865,20 @@ namespace Realm {
           //  that kept it from asking twice has done its job
           depart_outstanding = false;
         }
+      }
+
+      // STEP 2.5 (ordered BEFORE the wake in step 3b) - THE GATHERING
+      //  GENERATION (ARRIVAL_PROTOCOL section 11.5).  The owner declared the
+      //  generation after this trigger fully eager so that the next rebuild's
+      //  evidence completes by construction.  The declaration rides THIS
+      //  message precisely so it can be applied in the same critical section
+      //  that wakes this node's waiters: a woken waiter's next arrival then
+      //  finds 'flushing' already set and reports WITH a map.  A separate
+      //  flush message loses that race on nearly every generation (measured
+      //  by the P_STEP probe: gathered=7-of-8 declines, forever).
+      if(gather_gen > generation.load()) {
+        Generation *ng = get_generation_locked(gather_gen);
+        enter_flush_locked(*ng, gather_gen, sends);
       }
 
       // STEP 2 - the gap test.  A delta is only applicable if this node has
