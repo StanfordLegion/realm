@@ -470,7 +470,6 @@ if(REALM_ENABLE_HIP)
       hip::host PROPERTIES INTERFACE_COMPILE_DEFINITIONS "__HIP_PLATFORM_NVIDIA__"
                            INTERFACE_LINK_LIBRARIES CUDA::cudart
     )
-    set(CMAKE_HIP_COMPILER ${CUDAToolkit_NVCC_EXECUTABLE})
   endif()
   if(NOT HIP_ROOT_DIR)
     set(HIP_ROOT_DIR "${ROCM_PATH}")
@@ -914,59 +913,39 @@ if(REALM_USE_CUDA)
     DEPENDS realm_cuda_fatbin
     COMMENT "Embedding binary objects realm_cuda_fatbin -> ${realm_fatbin_cc}"
   )
-  add_custom_target(realm_fatbin_tgt DEPENDS "${realm_fatbin_cc}")
+  add_custom_target(realm_cuda_fatbin_tgt DEPENDS "${realm_fatbin_cc}")
   list(APPEND REALM_SOURCES "${realm_fatbin_cc}")
 endif()
 #endregion
 
 if(REALM_USE_HIP)
-#User - facing arch list
-  set(REALM_HIP_ARCH ${CMAKE_HIP_ARCHITECTURES})
-  if(NOT REALM_HIP_ARCH OR REALM_HIP_ARCH STREQUAL "")
-    set(REALM_HIP_ARCH "gfx906;gfx908;gfx90a;gfx942;gfx1030;gfx1100"
-        CACHE STRING "Semicolon-separated list of AMD GPU architectures to target")
-  endif()
+  set_source_files_properties(${REALM_HIP_SOURCES} PROPERTIES LANGUAGE HIP)
+  add_library(realm_hip_fatbin OBJECT ${REALM_HIP_SOURCES})
+  # CMake does not yet have a HIP equivalent of CUDA_FATBIN_COMPILATION, so ask
+  # the HIP language compiler for device-only output while leaving compiler and
+  # architecture selection to CMake.
+  target_compile_options(
+    realm_hip_fatbin
+    PRIVATE $<$<COMPILE_LANG_AND_ID:HIP,Clang>:--offload-device-only>
+            $<$<COMPILE_LANG_AND_ID:HIP,Clang>:-Wno-unused-result>
+            $<$<COMPILE_LANG_AND_ID:HIP,NVIDIA>:--fatbin>
+  )
+  target_compile_definitions(realm_hip_fatbin PRIVATE "HIP_FATBIN_COMPILATION")
+  target_link_libraries(realm_hip_fatbin PRIVATE hip::host)
 
-#Find hipcc
-  find_program(HIPCC hipcc HINTS /opt/rocm/bin REQUIRED)
-
-#Build-- offload - arch flags from the arch list
-  set(HIP_OFFLOAD_ARCH_FLAGS "")
-  foreach(arch ${REALM_HIP_ARCH})
-    list(APPEND HIP_OFFLOAD_ARCH_FLAGS "--offload-arch=${arch}")
-  endforeach()
-
-#Flags mirroring target_compile_definitions / target_include_directories
-  set(HIP_EXTRA_FLAGS
-    -std=c++${REALM_CXX_STANDARD}
-    -fPIC
-    -DHIP_FATBIN_COMPILATION
-    -I${REALM_SOURCE_DIR}/..
-    -I${CMAKE_CURRENT_BINARY_DIR}/include
-    -Wno-unused-result
+  target_include_directories(
+    realm_hip_fatbin PRIVATE "${REALM_SOURCE_DIR}/.." "${CMAKE_CURRENT_BINARY_DIR}/include"
   )
 
-
-#Compile all.hip sources together into one fat binary using hipcc-- genco
-#-- genco is the hipcc wrapper flag for emitting a device - only code object
-#-- offload - arch replaces the deprecated -- amdgpu - target
-  set(HIP_FATBIN "${CMAKE_CURRENT_BINARY_DIR}/realm_hip.hsaco")
-  add_custom_command(
-    OUTPUT ${HIP_FATBIN}
-    COMMAND ${CMAKE_COMMAND} -E make_directory "${CMAKE_CURRENT_BINARY_DIR}/hipco"
-    COMMAND ${HIPCC}
-      --genco
-      ${HIP_OFFLOAD_ARCH_FLAGS}
-      ${HIP_EXTRA_FLAGS}
-      ${REALM_HIP_SOURCES}
-      -o ${HIP_FATBIN}
-    DEPENDS ${REALM_HIP_SOURCES}
-    COMMENT "Compiling HIP fat binary -> realm_hip.hsaco"
-    VERBATIM
+  set_target_properties(
+    realm_hip_fatbin
+    PROPERTIES HIP_ARCHITECTURES "${CMAKE_HIP_ARCHITECTURES}"
+               HIP_STANDARD ${REALM_CXX_STANDARD}
+               HIP_STANDARD_REQUIRED ON
   )
 
-#Embed the fat binary as a.cc file using bin2c.cmake.
-#VAR_NAME = realm_fatbin must match the extern declaration in hip_module.cc
+  # Embed the fat binary as a .cc file using bin2c.cmake. VAR_NAME must match the
+  # extern declaration in hip_module.cc.
   set(realm_hip_fatbin_cc "${CMAKE_CURRENT_BINARY_DIR}/realm_hip_fatbin.cc")
   add_custom_command(
     OUTPUT "${realm_hip_fatbin_cc}"
@@ -974,15 +953,15 @@ if(REALM_USE_HIP)
       ${CMAKE_COMMAND}
         "-DVAR_NAME=realm_hip_fatbin"
         "-DDEFINES_HEADER=realm/realm_config.h"
-        "-DIN_FILE=${HIP_FATBIN}"
+        "-DIN_FILE=$<TARGET_OBJECTS:realm_hip_fatbin>"
         "-DOUT_FILE=${realm_hip_fatbin_cc}"
         -P ${PROJECT_SOURCE_DIR}/cmake/bin2c.cmake
     VERBATIM
     WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
-    DEPENDS ${HIP_FATBIN}
-    COMMENT "Embedding HIP fat binary -> ${realm_hip_fatbin_cc}"
+    DEPENDS realm_hip_fatbin
+    COMMENT "Embedding binary objects realm_hip_fatbin -> ${realm_hip_fatbin_cc}"
   )
-  add_custom_target(realm_fatbin_tgt DEPENDS "${realm_hip_fatbin_cc}")
+  add_custom_target(realm_hip_fatbin_tgt DEPENDS "${realm_hip_fatbin_cc}")
   list(APPEND REALM_SOURCES "${realm_hip_fatbin_cc}")
 endif()
 #region Library compilation
@@ -1002,10 +981,10 @@ if(TARGET realm_gex_wrapper_objs AND NOT REALM_ENABLE_GASNETEX_WRAPPER)
   list(APPEND REALM_EXTRA_OBJS $<TARGET_OBJECTS:realm_gex_wrapper_objs>)
 endif()
 
-# Remove NDEBUG from definitions for cxx, c, and cuda flags for those that might have it
+# Remove NDEBUG from definitions for C, C++, CUDA, and HIP flags for those that might have it
 # TODO(cperry): remove this once we clean up all the asserts that have side effects
 foreach(_build RELEASE RELWITHDEBINFO MINSIZEREL)
-  foreach(_lang C CXX CUDA)
+  foreach(_lang C CXX CUDA HIP)
     string(REPLACE "/DNDEBUG" "" CMAKE_${_lang}_FLAGS_${_build} "${CMAKE_${_lang}_FLAGS_${_build}}")
     string(REPLACE "-DNDEBUG" "" CMAKE_${_lang}_FLAGS_${_build} "${CMAKE_${_lang}_FLAGS_${_build}}")
   endforeach()
@@ -1090,10 +1069,12 @@ if(REALM_USE_GASNETEX)
   )
 endif()
 
-if(TARGET realm_fatbin_tgt)
-  add_dependencies(Realm realm_fatbin_tgt)
-  add_dependencies(realm_obj realm_fatbin_tgt)
-endif()
+foreach(_realm_fatbin_tgt realm_cuda_fatbin_tgt realm_hip_fatbin_tgt)
+  if(TARGET ${_realm_fatbin_tgt})
+    add_dependencies(Realm ${_realm_fatbin_tgt})
+    add_dependencies(realm_obj ${_realm_fatbin_tgt})
+  endif()
+endforeach()
 
 target_compile_features(Realm PUBLIC cxx_std_${REALM_CXX_STANDARD})
 target_compile_features(realm_obj PUBLIC cxx_std_${REALM_CXX_STANDARD})
