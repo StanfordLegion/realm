@@ -470,6 +470,9 @@ if(REALM_ENABLE_HIP)
       hip::host PROPERTIES INTERFACE_COMPILE_DEFINITIONS "__HIP_PLATFORM_NVIDIA__"
                            INTERFACE_LINK_LIBRARIES CUDA::cudart
     )
+    if(NOT DEFINED CMAKE_HIP_RUNTIME_LIBRARY)
+      set(CMAKE_HIP_RUNTIME_LIBRARY "Shared")
+    endif()
   endif()
   if(NOT HIP_ROOT_DIR)
     set(HIP_ROOT_DIR "${ROCM_PATH}")
