@@ -1,0 +1,14 @@
+<map id="Realm::BarrierImpl::Generation" name="Realm::BarrierImpl::Generation">
+<area shape="rect" id="Node000001" title=" " alt="" coords="916,29,1061,69"/>
+<area shape="rect" id="Node000002" href="$classRealm_1_1IntrusiveList.html" title=" " alt="" coords="564,14,777,83"/>
+<area shape="poly" id="edge1_Node000001_Node000002" title=" " alt="" coords="791,46,916,46,916,51,791,51"/>
+<area shape="rect" id="Node000003" href="$classRealm_1_1DummyLock.html" title=" " alt="" coords="299,5,453,31"/>
+<area shape="poly" id="edge2_Node000002_Node000003" title=" " alt="" coords="467,25,564,35,564,40,467,30"/>
+<area shape="rect" id="Node000004" href="$structRealm_1_1IntrusiveListLink.html" title=" " alt="" coords="287,58,465,98"/>
+<area shape="poly" id="edge3_Node000002_Node000004" title=" " alt="" coords="479,78,540,74,563,71,564,76,540,79,480,83"/>
+<area shape="rect" id="Node000005" href="$classRealm_1_1EventWaiter.html" title=" " alt="" coords="5,111,156,136"/>
+<area shape="poly" id="edge4_Node000004_Node000005" title=" " alt="" coords="169,107,286,89,287,94,170,112"/>
+<area shape="rect" id="Node000006" href="$structRealm_1_1IntrusiveListLink.html" title=" " alt="" coords="285,135,467,175"/>
+<area shape="poly" id="edge6_Node000006_Node000005" title=" " alt="" coords="170,130,285,143,285,148,170,136"/>
+<area shape="poly" id="edge5_Node000005_Node000006" title=" " alt="" coords="272,175,226,175,179,170,137,156,102,138,104,134,139,151,181,165,226,170,272,169"/>
+</map>

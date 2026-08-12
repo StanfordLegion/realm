@@ -1,0 +1,11 @@
+<map id="Realm::ChunkedRecycler&lt; T, CHUNK_SIZE &gt;::WithPtr" name="Realm::ChunkedRecycler&lt; T, CHUNK_SIZE &gt;::WithPtr">
+<area shape="rect" id="Node000001" title=" " alt="" coords="5,196,213,236"/>
+<area shape="rect" id="Node000002" href="$structRealm_1_1ChunkedRecycler_1_1Chunk.html" title=" " alt="" coords="157,93,358,133"/>
+<area shape="poly" id="edge1_Node000001_Node000002" title=" " alt="" coords="217,143,192,160,137,198,134,194,189,155,214,139"/>
+<area shape="poly" id="edge3_Node000002_Node000002" title=" " alt="" coords="373,105,385,113,377,121,359,124,358,119,374,116,379,114,370,109"/>
+<area shape="rect" id="Node000004" href="$structRealm_1_1ChunkedRecycler_1_1WithPtr.html" title=" " alt="" coords="237,196,445,236"/>
+<area shape="poly" id="edge5_Node000004_Node000002" title=" " alt="" coords="251,147,252,160,256,171,267,183,281,194,278,198,263,187,251,173,246,161,246,147"/>
+<area shape="rect" id="Node000003" href="$classRealm_1_1atomic.html" title=" " alt="" coords="154,5,361,31"/>
+<area shape="poly" id="edge2_Node000002_Node000003" title=" " alt="" coords="260,44,260,93,255,93,255,44"/>
+<area shape="poly" id="edge4_Node000002_Node000004" title=" " alt="" coords="326,185,310,159,284,135,288,131,314,156,331,182"/>
+</map>

@@ -1,0 +1,7 @@
+<map id="Realm::ModuleSpecificInfo" name="Realm::ModuleSpecificInfo">
+<area shape="rect" id="Node000001" title=" " alt="" coords="185,5,379,31"/>
+<area shape="rect" id="Node000002" href="$classRealm_1_1Cuda_1_1CudaDeviceMemoryInfo.html" title=" " alt="" coords="5,79,276,104"/>
+<area shape="poly" id="edge1_Node000001_Node000002" title=" " alt="" coords="249,39,165,81,163,76,246,34"/>
+<area shape="rect" id="Node000003" href="$classRealm_1_1Hip_1_1HipDeviceMemoryInfo.html" title=" " alt="" coords="299,79,547,104"/>
+<area shape="poly" id="edge2_Node000001_Node000003" title=" " alt="" coords="318,34,401,76,399,81,315,39"/>
+</map>
