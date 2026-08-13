@@ -1,9 +1,0 @@
-<map id="Graphical Class Hierarchy" name="Graphical Class Hierarchy">
-<area shape="rect" id="Node000000" href="$classRealm_1_1MemSpecificInfo.html" title=" " alt="" coords="5,77,185,102"/>
-<area shape="rect" id="Node000001" href="$classRealm_1_1Cuda_1_1MemSpecificCudaArray.html" title=" " alt="" coords="239,5,435,45"/>
-<area shape="poly" id="edge192_Node000000_Node000001" title=" " alt="" coords="157,70,260,43,261,48,158,76"/>
-<area shape="rect" id="Node000002" href="$classRealm_1_1FileMemory_1_1OpenFileInfo.html" title=" " alt="" coords="259,69,415,109"/>
-<area shape="poly" id="edge193_Node000000_Node000002" title=" " alt="" coords="199,87,259,87,259,92,199,92"/>
-<area shape="rect" id="Node000003" href="$classRealm_1_1Hip_1_1MemSpecificHipArray.html" title=" " alt="" coords="233,133,440,173"/>
-<area shape="poly" id="edge194_Node000000_Node000003" title=" " alt="" coords="158,103,261,131,260,136,157,108"/>
-</map>

@@ -1,0 +1,18 @@
+digraph "Realm::SubgraphDefinition::ArrivalDesc"
+{
+ // LATEX_PDF_SIZE
+  bgcolor="transparent";
+  edge [fontname=Helvetica,fontsize=10,labelfontname=Helvetica,labelfontsize=10];
+  node [fontname=Helvetica,fontsize=10,shape=box,height=0.2,width=0.4];
+  Node1 [id="Node000001",label="Realm::SubgraphDefinition\l::ArrivalDesc",height=0.2,width=0.4,color="gray40", fillcolor="grey60", style="filled", fontcolor="black",tooltip=" "];
+  Node2 -> Node1 [id="edge1_Node000001_Node000002",dir="back",color="darkorchid3",style="dashed",tooltip=" ",label=" barrier",fontcolor="grey" ];
+  Node2 [id="Node000002",label="Realm::Barrier",height=0.2,width=0.4,color="gray40", fillcolor="white", style="filled",URL="$classRealm_1_1Barrier.html",tooltip=" "];
+  Node3 -> Node2 [id="edge2_Node000002_Node000003",dir="back",color="steelblue1",style="solid",tooltip=" "];
+  Node3 [id="Node000003",label="Realm::Event",height=0.2,width=0.4,color="gray40", fillcolor="white", style="filled",URL="$classRealm_1_1Event.html",tooltip=" "];
+  Node3 -> Node3 [id="edge3_Node000003_Node000003",dir="back",color="darkorchid3",style="dashed",tooltip=" ",label=" NO_EVENT",fontcolor="grey" ];
+  Node2 -> Node2 [id="edge4_Node000002_Node000002",dir="back",color="darkorchid3",style="dashed",tooltip=" ",label=" NO_BARRIER",fontcolor="grey" ];
+  Node4 -> Node1 [id="edge5_Node000001_Node000004",dir="back",color="darkorchid3",style="dashed",tooltip=" ",label=" reduce_value",fontcolor="grey" ];
+  Node4 [id="Node000004",label="Realm::ByteArray",height=0.2,width=0.4,color="gray40", fillcolor="white", style="filled",URL="$classRealm_1_1ByteArray.html",tooltip=" "];
+  Node5 -> Node4 [id="edge6_Node000004_Node000005",dir="back",color="steelblue1",style="solid",tooltip=" "];
+  Node5 [id="Node000005",label="Realm::ByteArrayRef",height=0.2,width=0.4,color="gray40", fillcolor="white", style="filled",URL="$classRealm_1_1ByteArrayRef.html",tooltip=" "];
+}
