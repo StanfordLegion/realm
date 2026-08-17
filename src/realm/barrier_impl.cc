@@ -816,14 +816,16 @@ namespace Realm {
             plan_rebuilds_declined | gathering_declared | identical_plans_skipped |
             plans_parked | parked_plans_applied | dead_plans_discarded |
             retro_flushes_sent | stale_edge_forwards | report_edges_pinned |
-            pin_conflicts_avoided | gap_pulls) != 0;
+            pin_conflicts_avoided | gap_pulls | reports_received | notifies_received) !=
+           0;
   }
 
   // IMPLEMENTATION_PLAN section 5 - the counters' way out.  Everything in
   //  BarrierCounters is written under 'mutex' beside the state it describes and
   //  nothing branches on any of it, so without this it would be write-only.
-  //  One line, at 'info' level, only for a barrier that actually exercised the
-  //  deviation or hysteresis paths - a barrier that behaved is silent.
+  //  One line, at 'info' level, for any barrier with remote traffic (the
+  //  reports/notifies fast-path counters make every remotely-used barrier
+  //  report); a purely local barrier is silent.
   void BarrierImpl::dump_counters(const char *why) const
   {
     if(!counters.any()) {
@@ -855,7 +857,9 @@ namespace Realm {
                        << " stale_edge_forwards=" << counters.stale_edge_forwards
                        << " report_edges_pinned=" << counters.report_edges_pinned
                        << " pin_conflicts_avoided=" << counters.pin_conflicts_avoided
-                       << " gap_pulls=" << counters.gap_pulls;
+                       << " gap_pulls=" << counters.gap_pulls
+                       << " reports_received=" << counters.reports_received
+                       << " notifies_received=" << counters.notifies_received;
   }
 
 #ifdef DEBUG_REALM
@@ -3803,6 +3807,7 @@ namespace Realm {
 
     do {
       AutoLock<> a(mutex);
+      counters.reports_received++;
 
       // step 1: a report for a generation that has already triggered is dropped
       //  SILENTLY.  This is exactly what makes freeing a triggered generation's
@@ -4884,6 +4889,7 @@ namespace Realm {
 
     {
       AutoLock<> a(mutex);
+      counters.notifies_received++;
 
       // STEP 0 - RULE 8's advisory byte.  Not version gated and not ordered
       //  against anything: it is a hint, the worst a stale one can do is waste

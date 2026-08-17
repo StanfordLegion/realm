@@ -207,3 +207,72 @@ Scaling assertions worth automating:
 Each tier's artifact: merged counter table + oracle violations (must be zero) +
 RSS curve + (T4) the perf comparison. Keep the seeds of any failing run —
 a seed is this program's equivalent of a TLC trace.
+
+---
+
+## 6. Campaign record — eos, August 2026 (COMPLETE through T4 functional)
+
+The ladder was run on eos (GASNet-EX/IB, 4 ranks/node, `gens=512`,
+`phases=-1`, radix 2 and radix 4 at every rung). **Every rung passed every
+phase on every seed**; the driver grew an 11th phase (`depart`, mask 1024)
+mid-campaign to reach the notification-shrink machinery the split phase
+structurally cannot exercise (its departs are products of the final triggers,
+so they always arrive after the last trigger and die unweighed with the
+barrier).
+
+| Ranks (nodes) | Seeds×radix | Result | Firsts at this rung |
+|---|---|---|---|
+| 8 (2) | 4×2, +depart probe | PASS | gathering-generation fix validated; depart phase: `shrinks_applied`, `leave_rejoin`, `churn_backoffs` all first-ever |
+| 16 (4) | 4×2 | PASS | `pin_conflicts_avoided` (53, radix 2) |
+| 32 (8) | 10×2 + 512-gen soak | PASS | decline storm confirmed dead at scale |
+| 64 (16) | 10×2 | PASS | `dead_plans_discarded` (2, radix 2, install-guard door) — **last dormant counter; exercise table 100% complete** |
+| 128 (32) | 5×2 | PASS | — |
+| 256 (64) | 3×2 | PASS | — |
+| 512 (128) | 2×2 | PASS | — |
+
+**Scaling shape (the campaign's quantitative findings):**
+
+- **Decline volume is generation-linear and rank-invariant**: ~285/seed at
+  gens=128 and ~1210–1280/seed at gens=512, flat across SIX rank doublings
+  (8→512). Partial-evidence declines are a per-generation constant, not a
+  scaling term.
+- **Steady state converges in one plan build** (plus at most one
+  identical-plan skip from the documented startup transient, which vanishes
+  entirely at ≥256 ranks). Step converges in exactly two builds within ~4
+  generations of the shift at every rung.
+- **`flush_report_bytes_max` approaches linear-in-nodes**: 64→73→101→155 KB
+  across 64→512 ranks (per-doubling ratio 1.15→1.38→1.53). This is the design
+  floor, not a defect — flush reports carry per-node counts — but budget
+  ~O(nodes) bytes for worst-case reports during full-eager windows
+  (~1.2 MB at 4K nodes; fragmented-message territory).
+- **`pin_conflicts_avoided` scales with tree depth** (radix 2 ≫ radix 4;
+  ~24.5k/seed at 512 ranks) with zero conservation failures — rule 10.1 is
+  load-bearing in production, not just in TLC.
+
+**Behaviors observed and classified as design-working-as-intended:**
+
+- At ≥256 ranks the depart phase's shrinks collapse to zero via the rule-3
+  cost test + rule-8 hint: the phase's even-rank departure pattern is the
+  encoded-target worst case (scattered removals shatter a compact range set
+  into a per-delivery bitmap — see `multicast_cost()` in barrier_impl.cc,
+  whose comment predicts exactly this). Contiguous idle blocks — the realistic
+  phase-change pattern — keep paying at any scale. Coverage for the
+  shrink/rejoin paths comes from the ≤128-rank rungs.
+- The depart phase's churn arm sits deliberately on the
+  `DEPART_CHURN_WINDOW` boundary, so its churn/clean classification flips
+  with per-generation latency across rungs (all-churn at 128 ranks, all-clean
+  at 256 ranks, radix-dependent in between). The honest-clock judgment
+  (deferred to the subscribe reply — see NOTIFICATION_PROTOCOL.md) was
+  validated at 8 ranks where both arms behave deterministically.
+
+**Never exercised (and why that is acceptable):**
+
+- The **dead-parked-plan door** ("discarding dead parked barrier plan") never
+  fired; both 64-rank kills came through the install guard. It requires an
+  invalidation to overtake its own newplan in flight, and GASNet-over-IB
+  delivery is near-FIFO per peer pair. TLC-verified (MCStrand2); not
+  reachable on this fabric without message-reordering injection.
+
+**Still open from §4/§5:** the T3 soak (10⁵ generations, RSS curve) and the
+T4 A/B performance comparison against `main`. The functional ladder is
+complete; the scaling-performance claims remain to be measured.

@@ -1187,6 +1187,15 @@ namespace Realm {
       uint64_t pin_conflicts_avoided = 0; // pinned target differed from current parent
       uint64_t gap_pulls = 0;             // NOTIFICATION rule 4 gap -> pull
 
+      // --- FAST-PATH PROOF (SCALE_TEST_PLAN section 4's scaling assertions).
+      //     In steady PLANNED state the owner and every relay receive ~radix
+      //     reports per generation - flat in N - and every subscriber at most
+      //     one notify per generation (fewer when coalesced).  These state
+      //     "the tree is engaged" in a form timing noise cannot fake, which is
+      //     what the A/B benchmark cross-checks its wall-clock numbers against.
+      uint64_t reports_received = 0;  // planned/eager reports delivered here
+      uint64_t notifies_received = 0; // trigger notifications delivered here
+
       // has anything at all happened worth reporting?
       bool any(void) const;
     };
