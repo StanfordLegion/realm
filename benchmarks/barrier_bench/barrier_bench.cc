@@ -119,16 +119,6 @@ static int count_for(int pattern, int nranks, int r)
   return 0;
 }
 
-static double percentile(std::vector<double> &v, double p)
-{
-  if(v.empty()) {
-    return 0.0;
-  }
-  std::sort(v.begin(), v.end());
-  size_t idx = (size_t)(p * (v.size() - 1));
-  return v[idx];
-}
-
 static void worker_task(const void *args, size_t arglen, const void *userdata,
                         size_t userlen, Processor p)
 {
@@ -167,10 +157,15 @@ static void worker_task(const void *args, size_t arglen, const void *userdata,
       }
       std::vector<double> steady(gen_us.begin() + std::min(TestConfig::warmup, G - 1),
                                  gen_us.end());
-      std::vector<double> tmp(steady);
-      printf("serial: pattern=%s rep=%d gens=%d median_us=%.2f p95_us=%.2f min_us=%.2f\n",
-             pattern_names[wa.pattern], wa.rep, G, percentile(steady, 0.5),
-             percentile(tmp, 0.95), *std::min_element(steady.begin(), steady.end()));
+      std::sort(steady.begin(), steady.end());
+      const size_t n = steady.size();
+      // the p99/max tail matters as much as the median: a rare multi-ms stall
+      //  barely moves p95 but eats hundreds of generations of pipe throughput
+      printf("serial: pattern=%s rep=%d gens=%d median_us=%.2f p95_us=%.2f "
+             "p99_us=%.2f max_us=%.2f min_us=%.2f\n",
+             pattern_names[wa.pattern], wa.rep, G, steady[n / 2],
+             steady[(size_t)(0.95 * (n - 1))], steady[(size_t)(0.99 * (n - 1))],
+             steady[n - 1], steady[0]);
       fflush(stdout);
     }
     return;
