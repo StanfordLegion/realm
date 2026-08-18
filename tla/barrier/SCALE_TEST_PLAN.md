@@ -273,6 +273,65 @@ barrier).
   delivery is near-FIFO per peer pair. TLC-verified (MCStrand2); not
   reachable on this fabric without message-reordering injection.
 
-**Still open from §4/§5:** the T3 soak (10⁵ generations, RSS curve) and the
-T4 A/B performance comparison against `main`. The functional ladder is
-complete; the scaling-performance claims remain to be measured.
+**Still open from §4/§5:** the T3 soak (10⁵ generations, RSS curve). The
+T4 A/B performance comparison is COMPLETE — see §7.
+
+---
+
+## 7. Benchmark record — T4 A/B, eos, August 2026 (COMPLETE)
+
+Instrument: `benchmarks/barrier_bench` (public-API-only; the identical source
+compiles against both builds, so A/B is by build) driven by
+`benchmarks/barrier_bench/barrier_bench.sbatch` (interleaved A,B,A,B reps in
+one allocation).  Fast-path proof comes from the `reports_received` /
+`notifies_received` counters, not from timing.  Patterns: `uniform` (all
+arrive 1) and `half` (lower half arrive 2, upper half only wait).
+
+**Serial medians (µs, one arrive→trigger→notify→wake round) and pipelined
+throughput (gens/sec, window 32), default plan radix 8:**
+
+| Ranks | serial uniform main→new | serial half main→new | pipe uniform | pipe half |
+|---|---|---|---|---|
+| 8   | 41 → 47 (main +15%) | 35 → 42 (main +20%) | comparable | comparable |
+| 32  | 124 → 90 (**1.4×**) | 109 → 71 (**1.5×**) | comparable | comparable |
+| 128 | 485 → 211 (**2.3×**) | 425 → 130 (**3.3×**) | 6.0k → 10.9k (**1.8×**) | 5.4–8.9k → 11.1k |
+| 512 | 7503 → 591 (**12.7×**) | 1650 → 344 (**4.8×**) | 585 → ~5.9k (**~10×**) | ~1.0k → ~6.8k (**6.5×**) |
+
+- **Crossover ≈ 16 ranks.**  Legacy's round grows linearly in N (its 512-rank
+  uniform trace shows EVERY generation at 7.4–9.7 ms — the O(N) owner incast
+  plus O(N) unicast notification saturated into the steady state); the new
+  path grows sub-linearly (16× ranks → 6.6× time).
+- **Adoption cost**: the plan installs in 2–4 generations at every scale
+  (spikes of ~3–17 ms, then flat), `plan_rebuilds=1`, flush confined to
+  startup.  Legacy has no adoption but also no fast path to adopt.
+- **Tails**: at 128 ranks the implementations stall in OPPOSITE patterns —
+  main-half is catastrophic (p95 4–12 ms in 4/5 reps) while new-half is
+  pristine (p99 ≤ 145 µs every rep); main-uniform is saturated-but-smooth
+  while new-uniform stalls episodically (rare multi-ms maxes).  The common
+  trigger is per-generation message burst size at the owner.
+
+**The cascade (measured, radix-independent).**  The verified no-child-wait
+rule means a relay forwards every child report that arrives after its own
+quota lands, so steady-state owner fan-in is NOT O(radix): measured ≈ N−1
+per generation in serial mode and ≈ N/6 pipelined, at EVERY plan radix
+(2/4/8/16).  The tree buys latency and relay locality, not owner message
+count.  This cascade is the sole source of the new build's remaining tail
+artifact (episodic uniform-serial stalls) and the likely ceiling on its pipe
+throughput.
+
+**Plan-radix sweep at 512 ranks**: serial medians are radix-flat (±10%);
+radix 8 wins throughput (6.1k vs 4.9k @16, 3.5k @4, 2.1k @2); radix 16 has
+the cleanest tails; radix 2 is pathological (nine forwarding hops amplify
+the cascade storm: half p95 11.3 ms).  **Default radix 8 is validated.**
+The sweep also refuted burst-SHAPE mitigation: deeper trees make tails
+worse, so only reducing the COUNT helps.
+
+**Follow-up identified (TLC-first, not yet designed): quota-gated
+forwarding.**  Gate a relay's re-reports on its subtree quota so the owner
+sees ~radix messages per steady generation instead of ~N−1.  Child-wait was
+removed as a verified stranding trap, but rule 10.1's pinned edges postdate
+that decision and fix a generation's inflow at first touch, which may make
+quota-gating safe now (deviations already bypass via flush mode).  Requires
+new mutation-battery rows against MCStale/MCStrand2/MCDeepSwitch before any
+implementation.  Expected payoff: removes the last tail artifact and lifts
+pipelined throughput.

@@ -40,6 +40,10 @@
 #include "realm/cmdline.h"
 #include "realm/network.h"
 
+#ifdef __linux__
+#include <unistd.h>
+#endif
+
 using namespace Realm;
 
 Logger log_app("app");
@@ -218,6 +222,32 @@ static bool poisoned_gen(int phase, int gens, int g)
   return (phase == P_POISON) && (g == gens / 2);
 }
 
+// T3 soak instrumentation (SCALE_TEST_PLAN sections 4/5): resident-set samples
+//  from rank 0, cheap enough to leave on unconditionally.  A leak in
+//  per-generation state shows as MONOTONE GROWTH across a 1e5-generation
+//  phase; the expectation is a flat line after the first sample (the
+//  generation records, flush maps and aggregation structures all drain as
+//  generations trigger - agg_peak_entries is the counter-side view of the
+//  same bound).
+static long rss_mb(void)
+{
+#ifdef __linux__
+  FILE *f = fopen("/proc/self/statm", "r");
+  if(f == NULL) {
+    return -1;
+  }
+  long total = 0, resident = 0;
+  int n = fscanf(f, "%ld %ld", &total, &resident);
+  fclose(f);
+  if(n != 2) {
+    return -1;
+  }
+  return (resident * sysconf(_SC_PAGESIZE)) >> 20;
+#else
+  return -1; // sampled on the cluster; not meaningful elsewhere
+#endif
+}
+
 static void worker_task(const void *args, size_t arglen, const void *userdata,
                         size_t userlen, Processor p)
 {
@@ -245,6 +275,14 @@ static void worker_task(const void *args, size_t arglen, const void *userdata,
   wait_handles.reserve(G);
   for(int g = 0; g < G; g++) {
     wait_handles.push_back(ab);
+
+    if((R == 0) && ((g % 8192) == 0)) {
+      const long mb = rss_mb();
+      if(mb >= 0) {
+        log_app.print() << "rss_mb: phase=" << phase_names[wa.phase] << " gen=" << g
+                        << " mb=" << mb;
+      }
+    }
 
     int count = arrivals_for(wa.phase, wa.seed, N, G, g, R);
     if(i_alter && (g == alter_at)) {
@@ -335,6 +373,14 @@ static void worker_task(const void *args, size_t arglen, const void *userdata,
       bool poisoned = false;
       wait_handles[wg].wait_faultaware(poisoned);
       assert(poisoned == poisoned_gen(wa.phase, G, wg));
+    }
+  }
+
+  if(R == 0) {
+    const long mb = rss_mb();
+    if(mb >= 0) {
+      log_app.print() << "rss_mb: phase=" << phase_names[wa.phase] << " gen=" << G
+                      << " mb=" << mb;
     }
   }
 
