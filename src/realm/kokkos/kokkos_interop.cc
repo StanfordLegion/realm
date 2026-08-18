@@ -127,7 +127,9 @@ namespace Realm {
       bool is_first;
 
     public:
-      KokkosOpenMPInitializer(bool first) : is_first(first)  {}
+      KokkosOpenMPInitializer(bool first)
+        : is_first(first)
+      {}
 
       virtual void execute_on_processor(Processor p)
       {
@@ -138,9 +140,10 @@ namespace Realm {
           return;
         }
         ProcessorImpl *impl = get_runtime()->get_processor_impl(p);
-        int num_threads = (impl->kind == Processor::OMP_PROC)
-                              ? checked_cast<LocalOpenMPProcessor *>(impl)->get_num_threads()
-                              : 1;
+        int num_threads =
+            (impl->kind == Processor::OMP_PROC)
+                ? checked_cast<LocalOpenMPProcessor *>(impl)->get_num_threads()
+                : 1;
         Kokkos::InitializationSettings init_settings;
         init_settings.set_num_threads(num_threads);
         Kokkos::OpenMP::impl_initialize(init_settings);
@@ -152,7 +155,9 @@ namespace Realm {
       bool is_last;
 
     public:
-      KokkosOpenMPFinalizer(bool last) : is_last(last) {}
+      KokkosOpenMPFinalizer(bool last)
+        : is_last(last)
+      {}
 
       virtual void execute_on_processor(Processor p)
       {
@@ -182,8 +187,11 @@ namespace Realm {
 
     class KokkosCudaInitializer : public KokkosInternalTask {
       bool is_first;
+
     public:
-      KokkosCudaInitializer(bool first) : is_first(first) {}
+      KokkosCudaInitializer(bool first)
+        : is_first(first)
+      {}
 
       virtual void execute_on_processor(Processor p)
       {
@@ -225,8 +233,11 @@ namespace Realm {
 
     class KokkosCudaFinalizer : public KokkosInternalTask {
       bool is_last;
+
     public:
-      KokkosCudaFinalizer(bool last) : is_last(last) {}
+      KokkosCudaFinalizer(bool last)
+        : is_last(last)
+      {}
 
       virtual void execute_on_processor(Processor p)
       {
@@ -288,8 +299,11 @@ namespace Realm {
 
     class KokkosHipFinalizer : public KokkosInternalTask {
       bool is_last;
+
     public:
-      KokkosHipFinalizer(bool last) : is_last(last) {}
+      KokkosHipFinalizer(bool last)
+        : is_last(last)
+      {}
 
       virtual void execute_on_processor(Processor p)
       {
@@ -349,8 +363,10 @@ namespace Realm {
 #ifndef REALM_OPENMP_SYSTEM_RUNTIME
             LocalOpenMPProcessor *omp = checked_cast<LocalOpenMPProcessor *>(*it);
             int num_threads = omp->get_num_threads();
-            if (num_threads != 1) {
-              log_kokkos.fatal() << "Kokkos OpenMP support under Realm OpenMP requires exactly 1 thread per proc (found " << num_threads << ") - suggest -ll:othr 1";
+            if(num_threads != 1) {
+              log_kokkos.fatal() << "Kokkos OpenMP support under Realm OpenMP requires "
+                                    "exactly 1 thread per proc (found "
+                                 << num_threads << ") - suggest -ll:othr 1";
               abort();
             }
 #endif
@@ -364,7 +380,8 @@ namespace Realm {
             it != local_procs.end(); ++it)
           if((*it)->kind == Processor::LOC_PROC) {
             count++;
-            if (count > 1) continue;
+            if(count > 1)
+              continue;
             KokkosOpenMPInitializer ompinit(count == 1);
             (*it)->add_internal_task(&ompinit);
             ompinit.wait_done();
@@ -495,7 +512,8 @@ namespace Realm {
     Kokkos::OpenMP *inst = nullptr;
     {
       AutoLock<> al(KokkosInterop::omp_instance_map_mutex);
-      std::map<Processor, Kokkos::OpenMP *>::iterator it = KokkosInterop::omp_instance_map.find(p);
+      std::map<Processor, Kokkos::OpenMP *>::iterator it =
+          KokkosInterop::omp_instance_map.find(p);
       if(it != KokkosInterop::omp_instance_map.end()) {
         inst = it->second;
       } else {

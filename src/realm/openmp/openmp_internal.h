@@ -33,7 +33,8 @@ namespace Realm {
   // this is nearly identical to a LocalCPUProcessor, but it asks for its thread(s)
   //  to run on the specified numa domain
 
-  class REALM_INTERNAL_API_EXTERNAL_LINKAGE LocalOpenMPProcessor : public LocalTaskProcessor {
+  class REALM_INTERNAL_API_EXTERNAL_LINKAGE LocalOpenMPProcessor
+    : public LocalTaskProcessor {
   public:
     LocalOpenMPProcessor(RuntimeImpl *runtime_impl, Processor _me, int _numa_node,
                          int _num_threads, bool _fake_cpukind, CoreReservationSet &crs,
