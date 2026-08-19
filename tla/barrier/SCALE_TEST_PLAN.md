@@ -273,8 +273,8 @@ barrier).
   delivery is near-FIFO per peer pair. TLC-verified (MCStrand2); not
   reachable on this fabric without message-reordering injection.
 
-**Still open from §4/§5:** the T3 soak (10⁵ generations, RSS curve). The
-T4 A/B performance comparison is COMPLETE — see §7.
+**T3 soak and T4 A/B are both COMPLETE — see §7 and §8.  Every tier of §4
+has now run.**
 
 ---
 
@@ -327,7 +327,7 @@ The sweep also refuted burst-SHAPE mitigation: deeper trees make tails
 worse, so only reducing the COUNT helps.
 
 **Follow-up identified (TLC-first, not yet designed): quota-gated
-forwarding.**  Gate a relay's re-reports on its subtree quota so the owner
+forwarding (see end of §8).**  Gate a relay's re-reports on its subtree quota so the owner
 sees ~radix messages per steady generation instead of ~N−1.  Child-wait was
 removed as a verified stranding trap, but rule 10.1's pinned edges postdate
 that decision and fix a generation's inflow at first touch, which may make
@@ -335,3 +335,32 @@ quota-gating safe now (deviations already bypass via flush mode).  Requires
 new mutation-battery rows against MCStale/MCStrand2/MCDeepSwitch before any
 implementation.  Expected payoff: removes the last tail artifact and lifts
 pipelined throughput.
+
+---
+
+## 8. Soak record — T3, eos, August 2026 (COMPLETE)
+
+One seed, 64 nodes / 256 ranks, plan radix 8 (the shipping default),
+`PHASES=272` (churn + chaos — the two plan-lifecycle stress phases),
+`GENS=100000` each.  Instrumentation: `rss_mb` samples from rank 0 every
+8192 generations (tests/barrier_scale_test.cc), plus the counter dump.
+
+- **Both phases PASS**: 2×10⁵ generations, ~790 s wall (churn 3.7 ms/gen at
+  radix 8; an aborted first attempt at radix 2 ran exactly 2× slower,
+  consistent with §7's radix findings — its per-seed `RUN_TIMEOUT` was the
+  only failure).
+- **RSS flat**: 1193 → 1201 MB end to end; +5 MB in the first sample
+  interval (warm-up), then +3 MB across ~190k generations — a per-generation
+  residue bound of ~15 bytes, allocator noise.  No leak.
+- **Memory bound held by counters too**: `agg_peak_entries = 510`
+  (= 2 barriers × 255 participants) and `flush_report_bytes_max = 4130` —
+  both track PARTICIPANTS, not generation count, at 200× the campaign's
+  generation length.  `subscribe_fan_in = 510`: once per barrier, never per
+  generation (§4's scaling assertion, verified at soak length).
+- **Plan lifecycle held cadence without drift**: `plan_rebuilds = 100001`
+  over 2×10⁵ generations — exactly the one-rebuild-per-two-generations
+  churn/chaos design rate, sustained; 899 parks, all applied.
+
+With §6 (functional ladder), §7 (A/B benchmark) and this section, every
+tier of §4 has run and every claim in §0's gates is either verified or
+recorded with its measured value.
