@@ -1,5 +1,7 @@
 var NAVTREEINDEX74 =
 {
+"structRealm_1_1TransferGraph_1_1XDTemplate_1_1IO.html#af0fb11cf8ef53da0682f88559fd2577a":[1,0,3,427,1,0,0],
+"structRealm_1_1TransferGraph_1_1XDTemplate_1_1IO.html#afc7744713808b202ef1fd6e626e100cc":[1,0,3,427,1,0,4],
 "structRealm_1_1TransferGraph_1_1XDTemplate_1_1IO.html#afc7744713808b202ef1fd6e626e100cc":[2,0,3,416,1,0,4],
 "structRealm_1_1TransferIterator_1_1AddressInfo.html":[2,0,3,417,0],
 "structRealm_1_1TransferIterator_1_1AddressInfo.html":[1,0,3,428,0],
@@ -247,7 +249,5 @@ var NAVTREEINDEX74 =
 "structRealm_1_1XferDesRedopInfo.html":[2,0,3,443],
 "structRealm_1_1XferDesRedopInfo.html#a105472cf8f4f2c431e0766279dcf08c7":[2,0,3,443,0],
 "structRealm_1_1XferDesRedopInfo.html#a105472cf8f4f2c431e0766279dcf08c7":[1,0,3,454,0],
-"structRealm_1_1XferDesRedopInfo.html#a37306ce801ff2b7903d48140df41a89d":[2,0,3,443,2],
-"structRealm_1_1XferDesRedopInfo.html#a37306ce801ff2b7903d48140df41a89d":[1,0,3,454,2],
-"structRealm_1_1XferDesRedopInfo.html#a796eb6f1b0881affa36f6e632033a28f":[1,0,3,454,1]
+"structRealm_1_1XferDesRedopInfo.html#a37306ce801ff2b7903d48140df41a89d":[2,0,3,443,2]
 };

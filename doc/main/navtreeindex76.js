@@ -1,5 +1,7 @@
 var NAVTREEINDEX76 =
 {
+"tasks_8h.html":[3,0,1,1,77],
+"tasks_8h_source.html":[3,0,1,1,77],
 "threads_8h.html":[3,0,1,1,78],
 "threads_8h.html#a63393c0b8bb5e5c791eca71856619955":[3,0,1,1,78,10],
 "threads_8h.html#a9d9e9ad7f2ab22efbad4809486478401":[3,0,1,1,78,9],

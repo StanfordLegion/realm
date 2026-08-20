@@ -1,5 +1,7 @@
 var NAVTREEINDEX72 =
 {
+"structRealm_1_1ReservationImpl_1_1RetryInfo.html#a5e8db2a7ce079e6f3baec2ef973acf12":[2,0,3,361,1,0],
+"structRealm_1_1ReservationImpl_1_1RetryInfo.html#a94342438027f1fe335dffa767b2ca8cb":[1,0,3,372,1,1],
 "structRealm_1_1ReservationImpl_1_1RetryInfo.html#a94342438027f1fe335dffa767b2ca8cb":[2,0,3,361,1,1],
 "structRealm_1_1RuntimeShutdownMessage.html":[1,0,3,376],
 "structRealm_1_1RuntimeShutdownMessage.html":[2,0,3,365],
@@ -247,7 +249,5 @@ var NAVTREEINDEX72 =
 "structRealm_1_1SubgraphDefinition_1_1Dependency.html#aeaace56ba215ff611df0175437535b16":[1,0,3,409,3,4],
 "structRealm_1_1SubgraphDefinition_1_1Dependency.html#aef012691c7fc4301eb2e5beb3b7804a2":[1,0,3,409,3,5],
 "structRealm_1_1SubgraphDefinition_1_1Dependency.html#aef012691c7fc4301eb2e5beb3b7804a2":[2,0,3,398,3,5],
-"structRealm_1_1SubgraphDefinition_1_1InstantiationDesc.html":[1,0,3,409,4],
-"structRealm_1_1SubgraphDefinition_1_1InstantiationDesc.html":[2,0,3,398,4],
-"structRealm_1_1SubgraphDefinition_1_1InstantiationDesc.html#a05982a3ab0f6a58f9d3dcfef8be2fb5c":[2,0,3,398,4,3]
+"structRealm_1_1SubgraphDefinition_1_1InstantiationDesc.html":[1,0,3,409,4]
 };
