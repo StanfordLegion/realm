@@ -510,14 +510,14 @@ namespace Realm {
     //  pending pushes - called during shutdown
     void drain_xpairs();
 
-    // Count of items in ready_xpairs plus 1 if a worker has popped an
-    //  xpair and is currently inside push_packets (work_active).  Used by
+    // Count of items in ready_xpairs plus the number of workers that have
+    //  popped an xpair and are currently inside push_packets.  Used by
     //  GASNetEXInternal::sample_quiescence_state to feed
-    //  QuiescenceState::queued_items; reporting a count rather than a
-    //  boolean lets a draining queue surface as "progressing" across
-    //  Mattern's rounds, and including work_active keeps an in-flight
-    //  push_packets visible so the quiescence check doesn't fire DONE
-    //  mid-push.
+    //  QuiescenceState::queued_items; reporting the number of items rather
+    //  than just their presence lets a draining queue surface as "progressing"
+    //  across Mattern's rounds, and including active_workers keeps all
+    //  in-flight push_packets visible so the quiescence check doesn't fire
+    //  DONE mid-push.
     size_t queue_size();
 
     virtual bool do_work(TimeLimit work_until);
@@ -525,7 +525,8 @@ namespace Realm {
   protected:
     GASNetEXInternal *internal;
     Mutex mutex;
-    atomic<bool> work_active; // set during do_work when xpairs are on stack
+    // Multiple background workers may execute do_work concurrently.
+    atomic<unsigned> active_workers;
     XmitSrcDestPair::XmitPairList ready_xpairs;
   };
 
