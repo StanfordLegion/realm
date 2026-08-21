@@ -425,6 +425,44 @@ covers every driver-reachable deviation shape, and the valve's unique cases
 rare-interleaving paths for phase 3's scale runs to hunt, exactly as
 `pin_conflicts_avoided` was.
 
-**Phase 3** re-runs the functional ladder and the §7 A/B rungs; the
-prediction to check is new-uniform tails collapsing to new-half's profile
-and a pipe-throughput lift, with owner fan-in ≈ radix at every scale.
+**Phase 3, functional half — COMPLETE** (eos: 2 nodes ×2 radices ×2 seeds,
+16 nodes ×2 radices ×3 seeds, all 11 phases green).  `reports_gated` = 340k
+(radix 2) / 564k (radix 8) per 3-seed job at 64 ranks; declines stayed
+generation-flat (and DROPPED at radix 2 — gating reduces eager traffic);
+steady/step convergence signatures unchanged.  And a first: the
+**dead-PARKED-plan door fired on hardware** ("discarding dead parked
+barrier plan: parked=65 retired-by=65", churn, radix 2) — the one mechanism
+§6 documented as fabric-unreachable; gating's hold patterns widened exactly
+that window.  Every arrival-protocol mechanism has now been exercised on
+real hardware except `owner_valve_flushes`, whose scenarios are
+TLC-certified and whose hardware hunt continues at the A/B scales.
+
+**Phase 3, A/B half — COMPLETE.**  The §7 rungs re-run with the gated
+build (main arm unchanged); every prediction verified:
+
+| Ranks | serial uniform main→gated (ungated) | pipe uniform main→gated (ungated) | owner fan-in serial (was) |
+|---|---|---|---|
+| 32  | 123 → **83 µs** (90)   | 22k → 24k (21k)          | **8.1/gen** (31)  |
+| 128 | 486 → **116 µs** (211) | 6.1k → **~23k** (10.9k)  | **9.4/gen** (126) |
+| 512 | 7570 → **~150 µs** (591) | 570 → **~17k** (5.9k)  | **13.8/gen** (501) |
+
+- **Owner fan-in tracks the radix, not N, at every scale and radix**
+  (512-rank sweep, pipe barriers: 6.2/7.1/8.6/17.0 per gen at radix
+  2/4/8/16 - was ~N/6 to N−1).  The cascade is gone.
+- **At 512 ranks the gated build is ~50× main on serial-uniform latency
+  and ~30× on pipe throughput**, and 2.6-4× better than its own ungated
+  self.  Gated serial-uniform grows 83→116→147 µs across 32→512 ranks
+  (~+27% per 4× ranks) - the log-depth shape the tree was built for.
+- Half-pattern tails: max ≤ 181 µs every rep at 128 ranks.  Uniform tails
+  improved from most-reps-stalling to ~1-2 reps in 5 with episodic maxes,
+  no longer N-scaling and now appearing in BOTH patterns at 512 - i.e. a
+  background transport event, not protocol incast.  Radix 2 - pathological
+  ungated BECAUSE of the cascade - improved ~9× on pipe and is no longer an
+  outlier; **radix 8 stays the default**.
+- `owner_valve_flushes` = 0 on hardware everywhere (4096 counter lines at
+  512 ranks): the valve's strand shapes remain TLC-certified
+  (MCGateOver/Move/Demote/Park) but unreproduced by this fabric, joining
+  the §6 note on reordering-dependent paths.
+
+Quota-gated forwarding is COMPLETE: verified (§9 phases 1), implemented
+(phase 2), and measured at target scale (this section).

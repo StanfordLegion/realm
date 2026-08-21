@@ -91,7 +91,8 @@ namespace TestConfig {
   int reps = 3;     // repetitions (fresh barrier each) per mode+pattern
   int adopt = 32;   // adoption-curve generations printed from serial rep 0
   int pattern = -1; // -1 = both, else a single Pattern
-};
+  int dummy_to_prevent_bad_formatting = 0;
+}; // namespace TestConfig
 
 struct WorkerArgs {
   Barrier barrier;
