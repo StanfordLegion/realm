@@ -24,15 +24,19 @@
 (*                                                                         *)
 (* THE PROTOCOL                                                             *)
 (*                                                                         *)
-(*  1. STEADY STATE.  A node forwards its cumulative subtree total when it  *)
-(*     matches the quota its plan predicts.  Below quota it stays SILENT.   *)
-(*     It does NOT additionally wait for its predicted children.  Reports   *)
-(*     are cumulative and REPLACE, so a forward that omits a child is       *)
-(*     superseded when that child reports, and Trigger demands exact        *)
-(*     equality so a low total simply does not fire.  An earlier draft had  *)
-(*     a child-wait and this file warned against removing it; seven         *)
-(*     scenarios say otherwise - see rule 4.  Only nodes with a non-zero    *)
-(*     expected contribution are in a plan at all.                          *)
+(*  1. STEADY STATE - QUOTA-GATED FORWARDING.  A node forwards its          *)
+(*     cumulative subtree total when it reaches (>=, never =) the SUBTREE   *)
+(*     quota its plan predicts; below it, it stays SILENT and aggregates.   *)
+(*     One report per edge per steady generation is the entire point: the   *)
+(*     ungated design's owner fan-in measured ~N-1 messages per generation  *)
+(*     under synchronized arrivals, at every radix (SCALE_TEST_PLAN.md      *)
+(*     section 7).  Reports remain cumulative and REPLACE, and Trigger      *)
+(*     demands exact equality, so a low total simply does not fire.         *)
+(*                                                                         *)
+(*     THE GATE IS ONLY SAFE BECAUSE OF ITS VALVES (rule 6): an earlier     *)
+(*     design gated on the LOCAL quota precisely because subtree-waiting    *)
+(*     strands when counts route around the waiter.  Six MCGate scenarios   *)
+(*     each deadlock with one valve removed.                                *)
 (*  2. OVER-ARRIVAL at a predicted node -> eager flush for that generation, *)
 (*     report at once, announce the mode to its children.                   *)
 (*  3. ARRIVAL AT A NODE OUTSIDE THE PLAN -> it cannot wait for a match, so *)
@@ -52,6 +56,29 @@
 (*     generation strands on a child that already reported elsewhere.       *)
 (*  5. A cumulative total only ever increases; a report that does not       *)
 (*     increase the stored value is stale and is discarded.                 *)
+(*  6. THE GATE'S VALVES - every way counts can route around a gated relay  *)
+(*     has a feed-forward detector whose response is the owner flushing the *)
+(*     generation down the current tree:                                    *)
+(*      - OWNER RECEIPT VALVE: a report from a sender the current plan does *)
+(*        not list as an owner child (MCGateAhead), or whose value exceeds  *)
+(*        the sender's predicted subtree quota (MCGateOver).                *)
+(*      - OWNER SWITCH AUDIT: installing plan k re-judges every accepted    *)
+(*        value against k's subtree quotas - a value accepted legally under *)
+(*        k-1 can be deviant under k (MCGateMove) or orphaned entirely      *)
+(*        (MCGateDemote).                                                   *)
+(*      - INSTALL RE-FAN: flush fans are kid-list snapshots, so a plan      *)
+(*        install re-announces every open flushed generation to the NEW     *)
+(*        children (MCGateDemote for newplan, MCGatePark for a parked       *)
+(*        install).                                                         *)
+(*      - STALE-EDGE SIGNAL: the relay that receives a report over a pinned *)
+(*        edge the current plan disowns is the one witness that counts are  *)
+(*        routing irregularly; it forwards AND signals the owner            *)
+(*        (MCGatePark).                                                     *)
+(*     Under these valves the case-3 flush signals (immediate and           *)
+(*     retroactive) are no longer load-bearing for safety - the mask probe  *)
+(*     found no scenario that strands without them - but they REMAIN in the *)
+(*     implementation: their flush traffic is the plan-learning evidence    *)
+(*     (ARRIVAL_PROTOCOL.md section 11).                                    *)
 (*                                                                         *)
 (* Feed forward throughout: every action is caused by an arrival or by the  *)
 (* receipt of a message.  No timers, no polling, no background sweep.       *)
@@ -193,10 +220,14 @@ ReportWith(n, g, v) ==
     IF n = Owner THEN {}
     ELSE {[ kind |-> "report", from |-> n, to |-> Owner, gen |-> g, val |-> v ]}
 
-\* NOTE: a report goes to the node's PARENT.  The parent is whoever currently
-\*  lists n as a child; modelled by addressing the report to that node.
-ParentOf(n) == IF \E p \in Nodes : n \in curPlan[p].kids
-                 THEN CHOOSE p \in Nodes : n \in curPlan[p].kids
+\* NOTE: a report goes to the node's PARENT - the explicit parent field of
+\*  the plan record THIS NODE installed (barrier_impl report_target_locked),
+\*  modelled as a lookup in this node's own epoch's static plan.  A planless
+\*  node has no parent and reports to the owner (case 3).  Never derived from
+\*  other nodes' records: the implementation cannot see those.
+ParentOf(n) == IF curPlan[n].inplan
+                    /\ \E p \in Nodes : n \in Plans[myEpoch[n]][p].kids
+                 THEN CHOOSE p \in Nodes : n \in Plans[myEpoch[n]][p].kids
                  ELSE Owner
 
 TargetOf(n, g) == IF reportTo[n][g] # NoTarget THEN reportTo[n][g] ELSE ParentOf(n)
@@ -214,6 +245,30 @@ FlushFan(n, g) == { [ kind |-> "flush", from |-> n, to |-> c, gen |-> g ] : c \i
 PlanSatisfied(n, g) ==
     /\ curPlan[n].inplan
     /\ localTotal[n][g] = curPlan[n].quota
+
+\* THE SUBTREE QUOTA - what the current plan predicts this node's whole
+\*  subtree contributes per generation.  The implementation computes it at
+\*  install time from the plan payload (tree shape is a deterministic
+\*  function of the (node, quota) vector), so it costs nothing on the wire.
+RECURSIVE SubQ(_, _)
+SubQ(e, n) == Plans[e][n].quota +
+              LET kids == Plans[e][n].kids
+              IN  IF kids = {} THEN 0
+                  ELSE SumFn(kids, [c \in kids |-> SubQ(e, c)])
+
+SubQCur(n) == SubQ(myEpoch[n], n)
+
+\* THE OWNER VALVE.  A gated relay can strand only when counts route AROUND
+\*  it, and every such routing produces exactly one of two owner-visible
+\*  symptoms: a report from a sender the current plan does not list as an
+\*  owner child (the sender pinned direct while planless, or a retired
+\*  relay's invalidation-time forward), or a child whose cumulative value
+\*  EXCEEDS its predicted subtree quota (a stowaway count folded into a
+\*  legitimate chain).  Either way the owner flushes the generation down the
+\*  current tree, which un-gates every holder.
+OwnerDeviant(m) == /\ m.to = Owner
+                   /\ \/ m.from \notin KidsOf(Owner)
+                      \/ m.val > SubQ(myEpoch[Owner], m.from)
 
 Init ==
     /\ unissued   = [n \in Nodes |-> [g \in Gens |-> Pattern[g][n]]]
@@ -284,11 +339,11 @@ Arrive(n, g) ==
                 /\ reportedUp' = [reportedUp EXCEPT ![n][g] = sub]
              \/ /\ ~flushing[n][g] /\ curPlan[n].inplan
                 /\ lt <= curPlan[n].quota
-                /\ \/ /\ lt = curPlan[n].quota                      \* case 1: matched
+                /\ \/ /\ sub >= SubQCur(n)                          \* case 1: subtree done
                       /\ msgs' = msgs \cup Send(n, g, sub)
                       /\ reportedUp' = [reportedUp EXCEPT ![n][g] = sub]
-                   \/ /\ ~( lt = curPlan[n].quota )
-                      /\ UNCHANGED << msgs, reportedUp >>            \* SILENCE
+                   \/ /\ sub < SubQCur(n)
+                      /\ UNCHANGED << msgs, reportedUp >>            \* SILENCE (the GATE)
                 /\ UNCHANGED flushing
     /\ reportTo' = Pin(reportTo, n, {g})
     /\ UNCHANGED << childAcc, curPlan, myEpoch, invalEpoch, deferEpoch,
@@ -316,10 +371,14 @@ RecvReport(m) ==
                       \*  nothing will ever make that quota relevant again.
                       \/ (m.from \notin KidsOf(m.to))
                       \/ /\ curPlan[m.to].inplan
-                         /\ localTotal[m.to][m.gen] = curPlan[m.to].quota
+                         /\ sub2 >= SubQCur(m.to)
        IN  /\ childAcc' = acc2
            /\ msgs' = (msgs \ {m}) \cup (IF fwd THEN Send(m.to, m.gen, sub2) ELSE {})
-                      \cup (IF (m.kind = "direct") /\ ~flushing[Owner][m.gen]
+                      \cup (IF (m.from \notin KidsOf(m.to)) /\ (m.to # Owner)
+                              THEN {[ kind |-> "flush", from |-> m.to, to |-> Owner,
+                                      gen |-> m.gen ]} ELSE {})
+                      \cup (IF ((m.kind = "direct") \/ OwnerDeviant(m))
+                              /\ ~flushing[Owner][m.gen]
                               THEN FlushFan(Owner, m.gen) ELSE {})
            /\ reportedUp' = IF fwd THEN [reportedUp EXCEPT ![m.to][m.gen] = sub2]
                                    ELSE reportedUp
@@ -327,7 +386,7 @@ RecvReport(m) ==
                             THEN [ownerAcc EXCEPT ![m.gen] =
                                     @ - childAcc[Owner][m.from][m.gen] + m.val]
                             ELSE ownerAcc
-           /\ flushing' = IF m.kind = "direct"
+           /\ flushing' = IF (m.kind = "direct") \/ OwnerDeviant(m)
                             THEN [flushing EXCEPT ![Owner][m.gen] = TRUE]
                             ELSE flushing
     /\ reportTo' = Pin(reportTo, m.to, {m.gen})
@@ -380,8 +439,16 @@ Trigger(g) ==
     /\ watermark' = g
     /\ LET switch == { k \in Epochs : (k > 1) /\ (PlanStart[k] = g + 1) }
        IN  IF switch = {}
-             THEN UNCHANGED << msgs, curPlan, myEpoch, invalEpoch, deferEpoch >>
+             THEN UNCHANGED << msgs, curPlan, myEpoch, invalEpoch, deferEpoch,
+                               flushing >>
              ELSE LET k == CHOOSE x \in switch : TRUE
+                      deviant == { h \in Gens :
+                                     /\ h > g
+                                     /\ \/ flushing[Owner][h]
+                                        \/ \E s \in Nodes \ {Owner} :
+                                             \/ childAcc[Owner][s][h] > SubQ(k, s)
+                                             \/ /\ childAcc[Owner][s][h] > 0
+                                                /\ s \notin Plans[k][Owner].kids }
                   IN  /\ msgs' = msgs
                                  \cup { [ kind |-> "invalidate", from |-> Owner,
                                           to |-> c, epoch |-> myEpoch[Owner] ] :
@@ -389,11 +456,18 @@ Trigger(g) ==
                                  \cup { [ kind |-> "newplan", from |-> Owner,
                                           to |-> c, epoch |-> k ] :
                                           c \in Plans[k][Owner].kids }
+                                 \cup UNION { { [ kind |-> "flush", from |-> Owner,
+                                                  to |-> c, gen |-> h ] :
+                                                  c \in Plans[k][Owner].kids } :
+                                                h \in deviant }
                       /\ curPlan'    = [curPlan    EXCEPT ![Owner] = Plans[k][Owner]]
                       /\ myEpoch'    = [myEpoch    EXCEPT ![Owner] = k]
                       /\ invalEpoch' = [invalEpoch EXCEPT ![Owner] = k - 1]
+                      /\ flushing'   = [flushing EXCEPT ![Owner] =
+                                          [h \in Gens |-> IF h \in deviant THEN TRUE
+                                                           ELSE flushing[Owner][h]]]
                       /\ UNCHANGED deferEpoch
-    /\ UNCHANGED << unissued, localTotal, reportedUp, childAcc, flushing, ownerAcc >>
+    /\ UNCHANGED << unissued, localTotal, reportedUp, childAcc, ownerAcc >>
     /\ UNCHANGED alterVars
     /\ UNCHANGED reportTo
 
@@ -429,6 +503,14 @@ RecvInvalidate(m) ==
                                          THEN { [ kind |-> "newplan", from |-> m.to,
                                                   to |-> c, epoch |-> dk ] :
                                                   c \in Plans[dk][m.to].kids }
+                                              \cup
+                                              UNION { { [ kind |-> "flush", from |-> m.to,
+                                                          to |-> c, gen |-> x ] :
+                                                          c \in Plans[dk][m.to].kids } :
+                                                        x \in { h \in Gens :
+                                                                  ~triggered[h]
+                                                                  /\ (flushing[m.to][h]
+                                                                       \/ SubtreeKnown(m.to, h) > 0) } }
                                          ELSE {})
                                  \* RETROACTIVE CASE 3.  A node that ran ahead
                                  \*  arrived believing itself a plan member, so
@@ -514,6 +596,12 @@ RecvNewPlan(m) ==
                                         \cup { [ kind |-> "newplan", from |-> m.to,
                                                  to |-> c, epoch |-> m.epoch ] :
                                                  c \in Plans[m.epoch][m.to].kids }
+                                        \cup UNION { { [ kind |-> "flush", from |-> m.to,
+                                                         to |-> c, gen |-> h ] :
+                                                         c \in Plans[m.epoch][m.to].kids } :
+                                                       h \in { x \in Gens :
+                                                                 ~triggered[x]
+                                                                 /\ flushing[m.to][x] } }
                                         \cup UNION { Send(m.to, g, SubtreeKnown(m.to, g)) :
                                                        g \in held }
                              /\ reportedUp' = [reportedUp EXCEPT ![m.to] =

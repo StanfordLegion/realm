@@ -816,8 +816,8 @@ namespace Realm {
             plan_rebuilds_declined | gathering_declared | identical_plans_skipped |
             plans_parked | parked_plans_applied | dead_plans_discarded |
             retro_flushes_sent | stale_edge_forwards | report_edges_pinned |
-            pin_conflicts_avoided | gap_pulls | reports_received | notifies_received) !=
-           0;
+            pin_conflicts_avoided | gap_pulls | reports_received | notifies_received |
+            reports_gated | owner_valve_flushes) != 0;
   }
 
   // IMPLEMENTATION_PLAN section 5 - the counters' way out.  Everything in
@@ -859,7 +859,9 @@ namespace Realm {
                        << " pin_conflicts_avoided=" << counters.pin_conflicts_avoided
                        << " gap_pulls=" << counters.gap_pulls
                        << " reports_received=" << counters.reports_received
-                       << " notifies_received=" << counters.notifies_received;
+                       << " notifies_received=" << counters.notifies_received
+                       << " reports_gated=" << counters.reports_gated
+                       << " owner_valve_flushes=" << counters.owner_valve_flushes;
   }
 
 #ifdef DEBUG_REALM
@@ -1165,38 +1167,8 @@ namespace Realm {
     return g;
   }
 
-  // ARRIVAL_PROTOCOL rule 1 - the steady state, and BOTH of its halves are
-  //  required.  A node forwards its cumulative subtree total only when its
-  //  local arrival count equals the quota its plan predicts AND every child the
-  //  plan predicts has reported at least once.
-  //
-  // The child-wait is a CORRECTNESS requirement, not an optimisation.  Early
-  //  forwarding does NOT self-correct just because reports are cumulative: at
-  //  depth >= 3, where a relay sits below another relay, dropping the child-wait
-  //  is a mutation TLC catches.  Do not simplify it away.
-  bool BarrierImpl::plan_satisfied_locked(const Generation &g) const
-  {
-    REALM_BARRIER_ASSERT_LOCKED();
-    // MEMBERSHIP: a node with no plan has no completion condition at all
-    if(!cur_plan.inplan) {
-      return false;
-    }
-    if(g.local_total != static_cast<int64_t>(cur_plan.quota)) {
-      return false;
-    }
-    // NO CHILD-WAIT (ARRIVAL_PROTOCOL rule 1).  A relay does NOT additionally
-    //  wait for every predicted child.  Reports are cumulative and REPLACE, so
-    //  a forward that omits an absent child is superseded when that child
-    //  reports, and a generation only triggers on exact equality with the
-    //  expected count, so a low total cannot fire early.
-    //
-    //  This is load-bearing for rule 5: the child-wait is the only reason a
-    //  relay cares WHICH child reports to it, and therefore the only reason a
-    //  re-parented generation can strand on a child that already reported by
-    //  the retiring tree.  Removing it is what lets flush stop being sticky.
-    //  Do not reintroduce it.
-    return true;
-  }
+  // (rule 1's steady-state test now lives inline in should_report_locked() -
+  //  see QUOTA-GATED FORWARDING below)
 
   // ARRIVAL_PROTOCOL section 8.1: the parent is STORED in the plan record, not
   //  derived by searching for whoever lists us as a child.  A node outside the
@@ -1320,8 +1292,19 @@ namespace Realm {
     if(flush_mode_locked(gen, g)) {
       return true;
     }
-    // rule 1 - both halves
-    return plan_satisfied_locked(g);
+    // rule 1 / ARRIVAL_PROTOCOL section 13 - QUOTA-GATED FORWARDING.  In
+    //  planned mode a node speaks exactly ONCE per steady generation: when its
+    //  cumulative subtree total reaches the plan's subtree quota.  The gate is
+    //  >= and never = (MCGateJump: a cumulative REPLACE can jump PAST the
+    //  quota in one accepted report).  An earlier design gated on the LOCAL
+    //  quota only, which made the owner's fan-in ~N-1 messages per generation
+    //  under synchronized arrivals (SCALE_TEST_PLAN.md section 7); gating on
+    //  the subtree is safe ONLY because of the valves - the owner's receipt
+    //  tests and switch audit, the install re-fan, and the stale-edge signal -
+    //  each certified by a scenario that deadlocks without it (the gate
+    //  battery suite).  Do not strengthen or weaken this test without re-running
+    //  battery.py.
+    return cur_plan.inplan && (g.subtree_known() >= cur_plan.subtree_quota);
   }
 
   ////////////////////////////////////////////////////////////////////////
@@ -2008,6 +1991,29 @@ namespace Realm {
       return (off == datalen);
     }
 
+    // Total predicted arrivals in a plan payload - the SUBTREE QUOTA of the
+    //  node the payload is addressed to (ARRIVAL_PROTOCOL section 13).  Same
+    //  wire format as decode_plan_subtree, summed recursively; -1 on a
+    //  malformed slice.  Each node receives its ENTIRE subtree, so this is
+    //  computable at install with nothing new on the wire.
+    int64_t plan_subtree_total(const void *data, size_t datalen)
+    {
+      PlanSubtree sub;
+      if(!decode_plan_subtree(data, datalen, sub)) {
+        return -1;
+      }
+      int64_t total = sub.quota;
+      for(size_t i = 0; i < sub.kids.size(); i++) {
+        const int64_t k =
+            plan_subtree_total(sub.kid_payload[i].first, sub.kid_payload[i].second);
+        if(k < 0) {
+          return -1;
+        }
+        total += k;
+      }
+      return total;
+    }
+
     // Fan-out of a constructed plan.  This is a shape choice, not a protocol
     //  rule - the model verifies that ANY plan is safe to adopt - and 8 keeps a
     //  few-thousand-node barrier at depth 4.
@@ -2131,6 +2137,21 @@ namespace Realm {
     cur_plan.inplan = true;
     cur_plan.parent = parent;
     cur_plan.kids = sub.kids;
+    // section 13 - the gate's threshold and (owner-read) per-child subtree
+    //  totals, from the payload slices already in hand
+    cur_plan.kid_subq.clear();
+    cur_plan.subtree_quota = sub.quota;
+    for(size_t i = 0; i < sub.kids.size(); i++) {
+      const int64_t k =
+          plan_subtree_total(sub.kid_payload[i].first, sub.kid_payload[i].second);
+      if(k < 0) {
+        log_barrier.fatal() << "malformed barrier plan kid slice: " << me
+                            << " epoch=" << epoch << " kid=" << sub.kids[i];
+        abort();
+      }
+      cur_plan.kid_subq.push_back(k);
+      cur_plan.subtree_quota += k;
+    }
     my_epoch = epoch;
 
     // A PLAN INSTALL NEVER CLEARS FLUSH (BarrierArrive, a caught mutation on
@@ -2432,8 +2453,73 @@ namespace Realm {
     for(size_t k = 1; (k <= barrier_plan_radix()) && (k < tv.size()); k++) {
       cur_plan.kids.push_back(tv[k]);
     }
+    // section 13 - subtree quotas from the heap layout: the parent of index i
+    //  is (i-1)/radix, so one reverse pass folds every node's quota into its
+    //  ancestors.  The owner's own subtree quota is the whole tree.
+    {
+      const size_t radix = barrier_plan_radix();
+      std::vector<int64_t> sub_q(quota.begin(), quota.end());
+      for(size_t i = sub_q.size(); i-- > 1;) {
+        sub_q[(i - 1) / radix] += sub_q[i];
+      }
+      cur_plan.subtree_quota = sub_q[0];
+      cur_plan.kid_subq.clear();
+      for(size_t k = 1; (k <= radix) && (k < sub_q.size()); k++) {
+        cur_plan.kid_subq.push_back(sub_q[k]);
+      }
+    }
     my_epoch = new_epoch;
     inval_epoch = new_epoch - 1;
+
+    // section 13 - THE SWITCH-TIME AUDIT (MCGateMove, MCGateDemote) and the
+    //  owner-side flush re-fan (the non-owner half lives in apply_plan_locked
+    //  step 4).  The receipt valve judges a report against the plan CURRENT at
+    //  delivery, but installing this plan can make an already-accepted value
+    //  deviant retroactively: a total that was exactly what the old plan
+    //  predicted (a stowaway count inside a legitimate chain), or a sender the
+    //  new plan no longer lists under the owner at all.  No further report
+    //  ever arrives to re-run the receipt test, so the owner re-judges its
+    //  accepted values HERE, and flushes the generations that no longer add
+    //  up.  Already-flushed generations are re-announced to the new child
+    //  list for the same reason apply_plan_locked re-fans: a flush fan is a
+    //  snapshot of the fanning node's kid list.
+    {
+      const gen_t watermark = generation.load();
+      for(std::map<gen_t, Generation *>::const_iterator git = generations.begin();
+          git != generations.end(); ++git) {
+        if(git->first <= watermark) {
+          continue;
+        }
+        Generation *ng = git->second;
+        if(ng->flushing) {
+          if(!cur_plan.kids.empty()) {
+            sends.flushes.push_back(PendingFlush());
+            PendingFlush &pf = sends.flushes.back();
+            pf.gen = git->first;
+            pf.to.insert(pf.to.end(), cur_plan.kids.begin(), cur_plan.kids.end());
+          }
+          continue;
+        }
+        bool deviant = false;
+        for(std::map<NodeID, Generation::ChildReport>::const_iterator cit =
+                ng->child_acc.begin();
+            !deviant && (cit != ng->child_acc.end()); ++cit) {
+          if(cit->second.total <= 0) {
+            continue;
+          }
+          size_t ki = 0;
+          while((ki < cur_plan.kids.size()) && (cur_plan.kids[ki] != cit->first)) {
+            ki++;
+          }
+          deviant =
+              (ki == cur_plan.kids.size()) || (cit->second.total > cur_plan.kid_subq[ki]);
+        }
+        if(deviant) {
+          counters.owner_valve_flushes++;
+          enter_flush_locked(*ng, git->first, sends);
+        }
+      }
+    }
 
     // (4) DISTRIBUTION (section 11.4): each child is sent ITS OWN SUBTREE, not
     //     just an epoch number - its quota, its child list, and recursively
@@ -3902,7 +3988,30 @@ namespace Realm {
         //  '*g'.  Fanning a flush for a generation that then triggers in the
         //  same section is harmless - the recipients' own reports come back
         //  for an already-triggered generation and action R step 1 drops them.
-        if(is_direct && (redop_id == 0)) {
+        // section 13 - THE RECEIPT HALF OF THE OWNER VALVE (MCGateAhead,
+        //  MCGateOver).  With relays gated on subtree quotas, counts that
+        //  route AROUND a gated relay strand it unless the owner notices and
+        //  flushes.  Two owner-visible symptoms cover every such routing: a
+        //  sender the current plan does not list as an owner child (a retired
+        //  relay's invalidation-time forward - 'is_direct' covers the
+        //  sender-aware cases, this covers the rest), or a child whose
+        //  cumulative total EXCEEDS its predicted subtree quota (an
+        //  over-arrival straddling a gated relay elsewhere).  The response is
+        //  the same as for a 'direct': flush the generation down the current
+        //  tree, which un-gates every holder.
+        bool valve = is_direct;
+        if(!valve && cur_plan.inplan && !g->flushing && (redop_id == 0)) {
+          size_t ki = 0;
+          while((ki < cur_plan.kids.size()) && (cur_plan.kids[ki] != from)) {
+            ki++;
+          }
+          valve =
+              (ki == cur_plan.kids.size()) || (it->second.total > cur_plan.kid_subq[ki]);
+          if(valve) {
+            counters.owner_valve_flushes++;
+          }
+        }
+        if(valve && (redop_id == 0)) {
           enter_flush_locked(*g, report_gen, sends);
         }
 
@@ -3943,9 +4052,25 @@ namespace Realm {
         //  completes this relay
         if(stale_edge) {
           counters.stale_edge_forwards++;
+          // section 13 - THE STALE-EDGE SIGNAL (MCGatePark).  This relay is
+          //  the one witness that counts are routing over an edge the current
+          //  plan disowns; the forward below keeps them flowing, but a gated
+          //  holder ANYWHERE can be starving on exactly these counts, hidden
+          //  value-legal inside a legitimate chain where the owner's receipt
+          //  tests see nothing.  A count-free flush to the owner lets its fan
+          //  reach every holder.  Idempotent there, so duplicates cost one
+          //  message each and nothing else.
+          sends.flushes.push_back(PendingFlush());
+          PendingFlush &pf = sends.flushes.back();
+          pf.gen = report_gen;
+          pf.to.push_back(owner);
         }
         if(stale_edge || should_report_locked(report_gen, *g)) {
           record_report_locked(*g, report_gen, sends);
+        } else if(g->holding() && cur_plan.inplan && !flush_mode_locked(report_gen, *g)) {
+          // the gate held a forward the local-quota design would have sent -
+          //  the message-count saving, made visible (section 13)
+          counters.reports_gated++;
         }
       }
     } while(0);

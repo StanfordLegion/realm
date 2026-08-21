@@ -865,6 +865,15 @@ namespace Realm {
                                 //  derived - the model's global ParentOf() search
                                 //  is a modelling convenience (section 8.1)
       std::vector<NodeID> kids; // O(radix)
+      // QUOTA-GATED FORWARDING (ARRIVAL_PROTOCOL section 13).  What the plan
+      //  predicts this node's WHOLE subtree contributes per generation - the
+      //  gate in should_report_locked() - and per-child subtree totals, which
+      //  only the owner's receipt valve and switch audit read.  Both computed
+      //  at install from the plan payload (each node receives its entire
+      //  subtree slice), so nothing new travels on the wire and storage stays
+      //  O(radix).
+      int64_t subtree_quota = 0;
+      std::vector<int64_t> kid_subq; // parallel to 'kids'
     };
 
     ArrivalPlan cur_plan;     // curPlan[n]
@@ -1196,6 +1205,15 @@ namespace Realm {
       uint64_t reports_received = 0;  // planned/eager reports delivered here
       uint64_t notifies_received = 0; // trigger notifications delivered here
 
+      // --- QUOTA-GATED FORWARDING (ARRIVAL_PROTOCOL section 13).  The gate's
+      //     exercise proof: 'reports_gated' counts forwards the subtree quota
+      //     held back (each one is a message the ungated design would have
+      //     sent), 'owner_valve_flushes' counts the owner's deviation valve
+      //     firing (receipt tests and the switch-time audit) - the safety
+      //     mechanism that makes gating strand-free.
+      uint64_t reports_gated = 0;
+      uint64_t owner_valve_flushes = 0;
+
       // has anything at all happened worth reporting?
       bool any(void) const;
     };
@@ -1236,10 +1254,10 @@ namespace Realm {
     // find or create the record for 'gen'
     Generation *get_generation_locked(gen_t gen);
 
-    // ARRIVAL_PROTOCOL rule 1, BOTH halves: this node's local arrival count
-    //  equals the quota its plan predicts AND every child the plan predicts has
-    //  reported at least once.
-    bool plan_satisfied_locked(const Generation &g) const;
+    // ARRIVAL_PROTOCOL rule 1 / section 13 - QUOTA-GATED FORWARDING: in
+    //  planned, non-flushing mode a node speaks exactly once per generation,
+    //  when its subtree total reaches (>=) the plan's subtree quota.  The test
+    //  lives inline in should_report_locked().
 
     // where a report from this node goes (section 8.1: the parent is stored)
     NodeID report_target_locked(void) const;

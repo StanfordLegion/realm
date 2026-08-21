@@ -958,3 +958,60 @@ path — see the notification document's rule 8.
 The previous implementation attempt did not fail on protocol logic; it failed on
 a deferred handler path that reached a null runtime. A correct protocol applied
 non-atomically is still broken, and neither model can catch it.
+
+## 13. Quota-gated forwarding
+
+**Motivation (measured, SCALE_TEST_PLAN.md §7):** with the local-quota gate,
+a relay forwards every child report that arrives after its own quota lands, so
+steady-state owner fan-in is ≈N−1 messages per generation under synchronized
+arrivals — at every plan radix — and that incast is what trips the transport's
+episodic multi-millisecond stalls at ≥128 ranks.
+
+**The rule (BarrierArrive rule 1, revised):** in planned, non-flushing mode, a
+relay reports only when its cumulative subtree total **reaches or exceeds**
+(`>=`, never `=` — MCGateJump) the plan's **subtree quota** — its own quota
+plus its descendants', computable at install time from the plan payload since
+the tree shape is a deterministic function of the (node, quota) vector. One
+report per edge per steady generation; the owner receives radix messages.
+
+**The valves (rule 6) — how a gated holder is guaranteed to be released when
+counts route around it.** Each is certified by a scenario that deadlocks
+without exactly it:
+
+| Valve | Where | Catches | Scenario |
+|---|---|---|---|
+| receipt: sender not an owner-child of the current plan | owner report handler | a retired relay's forward, a planless direct pin | MCGateAhead |
+| receipt: value exceeds sender's subtree quota | owner report handler | over-arrival straddling a gated relay | MCGateOver |
+| switch audit: re-judge accepted values against the NEW plan (value-exceeds and orphaned-sender tests) | owner, at plan install | values accepted legally under plan k−1 made deviant by plan k | MCGateMove, MCGateDemote |
+| install re-fan: re-announce every open flushed generation to the NEW children | every plan install (newplan and parked) | flush fans are kid-list snapshots; later-gained children never heard | MCGateDemote, MCGatePark |
+| stale-edge signal: the stale-edge forwarder also sends a count-free flush to the owner | any relay | mis-pinned counts hiding value-legal inside a legitimate chain | MCGatePark |
+
+The response to every symptom is the same: the owner flushes the generation
+down the current tree, and flush (per-generation, cleared only by trigger)
+un-gates every holder. All feed-forward; no timers.
+
+**Subsumption (mask-probed):** under these valves the case-3 flush signals —
+immediate and retroactive (rules 3 and 10.4) — are no longer load-bearing for
+*safety*: no scenario strands without them. They remain in the protocol
+because their flush traffic is the plan-learning evidence (§11). Their battery
+rows are documented-benign.
+
+**Model fidelity note (§8 addendum):** landing this rule required correcting
+`ParentOf` to read the sender's own epoch's plan — the implementation's
+`report_target_locked()` reads `cur_plan.parent`, an explicit field of the
+record the node installed, and can never re-aim to the owner because some
+*other* node's record went planless. The old global derivation manufactured a
+phantom strand (MCDouble under the gate) that the implementation cannot
+exhibit.
+
+**Implementation mapping:**
+- `should_report_locked`: the planned branch tests `subtree_known >= subtree_quota`
+  (computed at `apply_plan_locked` from the plan payload).
+- owner's `handle_remote_report`: the receipt valve (non-kid ∨ value-exceeds
+  ⇒ `enter_flush_locked` + fan), alongside the existing `is_direct` handling.
+- `build_new_plan_locked`/install: the switch audit over `child_acc`, and the
+  flush re-fan over open flushed generations.
+- stale-edge branch of `handle_remote_report`: add the count-free flush to the
+  owner beside the existing immediate forward.
+- Counters: `reports_gated`, `gate_releases` join the exercise-proof table;
+  the acceptance metric is owner `reports_received`/generation ≈ plan radix.

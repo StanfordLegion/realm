@@ -364,3 +364,67 @@ One seed, 64 nodes / 256 ranks, plan radix 8 (the shipping default),
 With §6 (functional ladder), §7 (A/B benchmark) and this section, every
 tier of §4 has run and every claim in §0's gates is either verified or
 recorded with its measured value.
+
+---
+
+## 9. Quota-gated forwarding — TLC campaign record (follow-up phase 1, COMPLETE)
+
+§7 identified the follow-up: cut steady-state owner fan-in from ≈N−1 to
+≈radix messages per generation by gating a relay's report on its SUBTREE
+quota.  Child-wait was a verified stranding trap in the original design, so
+this went TLC-first.  Seven design iterations, four of them killed by
+counterexamples — each kill producing a permanent probe scenario:
+
+| Iter | Killed by | Lesson | Mechanism added |
+|---|---|---|---|
+| v1 | MCDouble | model infidelity: report targets were derived from OTHER nodes' records, a re-aiming barrier_impl cannot perform | F0: parent from the sender's own epoch's plan |
+| v2 | MCGateAhead | owner silently accepts counts from plan-disowned senders | owner receipt valve: non-kid ⇒ flush |
+| v4 | MCGateMove | a value accepted legally under plan k−1 is made deviant RETROACTIVELY by plan k | owner switch-time audit (value-exceeds + orphaned-sender) |
+| v5 | MCGateDemote | flush fans are kid-list snapshots; later-gained children never hear | install-time re-fan (newplan + parked) |
+| v6 | MCGatePark | mis-pinned counts hide value-legal inside a legitimate chain; only the stale-edge forwarder witnesses it | stale-edge ⇒ count-free flush signal to the owner |
+
+**Final design (v7), landed in BarrierArrive.tla rules 1 and 6**: the `>=`
+subtree-quota gate at relays, the composite owner valve (receipt +
+switch-audit), install re-fans, and the stale-edge signal.  Full protocol
+text: ARRIVAL_PROTOCOL.md §13.
+
+**Verification record (all from the landed repo files):**
+- 16 scenarios pass: the 10 affordable arrival scenarios plus the 6 new
+  MCGate probes.  MCLate — previously outgrown — COMPLETES again under
+  gating (~22M distinct states, checkpointed); MCDeepSwitch remains
+  bounded-partial (no violation, ~50M+ generated states), as it already was
+  on the ungated spec.
+- Battery: arrival 14/14, gate 9/9 (8 mechanisms CATCH-certified + the gate
+  itself documented-benign to remove), alter 4/4.  MCGatePark certifies TWO
+  mechanisms through its two interleavings.
+- Mask probe: under the valves, the case-3 flush signals (immediate and
+  retroactive) are NO LONGER LOAD-BEARING FOR SAFETY — no scenario strands
+  without them across the full roster.  They stay in the protocol as the
+  plan-learning evidence (§11); their battery rows are documented-benign.
+- Control: the F0 fidelity fix alone passes the entire ungated fast suite.
+
+**Phase 2 (implementation) — COMPLETE.**  Landed per §13's mapping:
+`should_report_locked` gates on `subtree_quota` (computed at install from
+the payload slices each node already receives — nothing new on the wire,
+O(radix) storage); the owner receipt valve and switch-time audit in
+`handle_remote_report`/`build_new_plan_locked`; the receiver-side
+stale-edge signal (the sender-side `is_direct` half already existed, and
+the C++ already had the install re-fan the model campaign had to add — the
+implementation was AHEAD of the model on two mechanisms).  Counters
+`reports_gated` and `owner_valve_flushes` join the exercise table.
+
+Local validation (8 ranks, MPI, gens=512): all 11 functional phases PASS at
+plan radix 2 and 8, several seeds; `barrier_arrivals`/`barrier_reduce`
+regression OK.  **The acceptance metric holds exactly: owner
+`reports_received` = 2.01/gen serial and 2.04/gen pipelined at radix 2 —
+down from the measured 4.35 and ~5 — i.e. fan-in = radix, with
+`reports_gated` counting thousands of suppressed forwards.**
+`owner_valve_flushes` stayed 0 locally: the broad `is_direct` machinery
+covers every driver-reachable deviation shape, and the valve's unique cases
+(stowaway values across switches, receiver-side stale edges) are
+rare-interleaving paths for phase 3's scale runs to hunt, exactly as
+`pin_conflicts_avoided` was.
+
+**Phase 3** re-runs the functional ladder and the §7 A/B rungs; the
+prediction to check is new-uniform tails collapsing to new-half's profile
+and a pipe-throughput lift, with owner fan-in ≈ radix at every scale.

@@ -70,7 +70,12 @@ ARRIVAL = [
                                           to |-> c, epoch |-> m.epoch ] : c \\in kids }""", "")]),
  ("accept stale reports (running total may go down)", "Double.cfg", "MCDouble", "CATCH",
   [("    /\\ m.val > childAcc[m.to][m.from][m.gen]\n", "")]),
- ("case 3 sends its count but NO flush signal", "Stale.cfg", "MCStale", "CATCH",
+ # SUBSUMED BY THE OWNER VALVE (BarrierArrive rule 6): under quota-gated
+ #  forwarding the mask probe found NO scenario that strands without the
+ #  case-3 flush signal - the owner's non-kid/value tests recover every one.
+ #  The signal stays in the implementation regardless: its flush traffic is
+ #  the plan-learning evidence (ARRIVAL_PROTOCOL.md section 11).
+ ("case 3 sends its count but NO flush signal (subsumed)", "Stale.cfg", "MCStale", "BENIGN",
   [("""                /\\ msgs' = msgs \\cup Send(n, g, sub)
                            \\cup {[ kind |-> "flush", from |-> n, to |-> Owner, gen |-> g ]}""",
     """                /\\ msgs' = msgs \\cup Send(n, g, sub)""")]),
@@ -85,12 +90,16 @@ ARRIVAL = [
  ("no install guard: newplan installed after its retirement was seen", "Strand2.cfg", "MCStrand2", "CATCH",
   [("    /\\ IF (myEpoch[m.to] >= m.epoch) \\/ (invalEpoch[m.to] >= m.epoch)",
     "    /\\ IF myEpoch[m.to] >= m.epoch")]),
- ("no planless-outsider", "Stale.cfg", "MCStale", "CATCH",
+ # REPOINTED under quota-gated forwarding: the owner valve rescues MCStale's
+ #  strand, but five other scenarios still catch this one.
+ ("no planless-outsider", "Double.cfg", "MCDouble", "CATCH",
   [("""                                            ELSE [curPlan EXCEPT ![m.to] =
                                                     [quota |-> 0, inplan |-> FALSE,
                                                      kids |-> {}]]""",
     """                                            ELSE curPlan""")]),
- ("no retroactive case 3", "Stale.cfg", "MCStale", "CATCH",
+ # SUBSUMED BY THE OWNER VALVE, same verdict and same caveat as the
+ #  immediate case-3 signal above: retained for plan learning.
+ ("no retroactive case 3 (subsumed)", "Stale.cfg", "MCStale", "BENIGN",
   [("""                                 \\cup (IF ~live /\\ (m.to # Owner)
                                          THEN { [ kind |-> "flush", from |-> m.to,
                                                   to |-> Owner, gen |-> g ] :
@@ -121,6 +130,77 @@ ARRIVAL = [
     """                                           IF (g = watermark + 1) /\\ ~triggered[g]
                                                 /\\ SubtreeKnown(m.to, g) > 0
                                              THEN TRUE""")]),
+]
+
+# QUOTA-GATED FORWARDING (BarrierArrive rules 1 and 6).  Each row removes one
+#  of the gate's mechanisms; the MCGate* scenarios were each built to strand
+#  without exactly one of them (the iteration record is SCALE_TEST_PLAN.md).
+#  MCGatePark catches two different mechanisms through its two interleavings:
+#  counts arriving before the parked install need the re-fan, counts arriving
+#  after it need the stale-edge signal.
+GATE = [
+ ("audit: switch-time value/orphan audit removed", "GateMove.cfg", "MCGateMove", "CATCH",
+  [("""                                     /\\ \\/ flushing[Owner][h]
+                                        \\/ \\E s \\in Nodes \\ {Owner} :
+                                             \\/ childAcc[Owner][s][h] > SubQ(k, s)
+                                             \\/ /\\ childAcc[Owner][s][h] > 0
+                                                /\\ s \\notin Plans[k][Owner].kids }""",
+    """                                     /\\ flushing[Owner][h] }""")]),
+ ("valve: receipt-time value-exceeds test removed", "GateOver.cfg", "MCGateOver", "CATCH",
+  [("""OwnerDeviant(m) == /\\ m.to = Owner
+                   /\\ \\/ m.from \\notin KidsOf(Owner)
+                      \\/ m.val > SubQ(myEpoch[Owner], m.from)""",
+    """OwnerDeviant(m) == /\\ m.to = Owner
+                   /\\ m.from \\notin KidsOf(Owner)""")]),
+ ("valve: receipt-time non-kid test removed", "GateDemote.cfg", "MCGateDemote", "CATCH",
+  [("""OwnerDeviant(m) == /\\ m.to = Owner
+                   /\\ \\/ m.from \\notin KidsOf(Owner)
+                      \\/ m.val > SubQ(myEpoch[Owner], m.from)""",
+    """OwnerDeviant(m) == /\\ m.to = Owner
+                   /\\ m.val > SubQ(myEpoch[Owner], m.from)""")]),
+ ("audit: orphaned-sender branch removed", "GateDemote.cfg", "MCGateDemote", "CATCH",
+  [("""                                             \\/ /\\ childAcc[Owner][s][h] > 0
+                                                /\\ s \\notin Plans[k][Owner].kids }""",
+    """                                             }""")]),
+ ("re-fan: newplan install does not re-announce flush", "GateDemote.cfg", "MCGateDemote", "CATCH",
+  [("""                                        \\cup UNION { { [ kind |-> "flush", from |-> m.to,
+                                                         to |-> c, gen |-> h ] :
+                                                         c \\in Plans[m.epoch][m.to].kids } :
+                                                       h \\in { x \\in Gens :
+                                                                 ~triggered[x]
+                                                                 /\\ flushing[m.to][x] } }
+""", "")]),
+ ("re-fan: parked install does not re-announce flush", "GatePark.cfg", "MCGatePark", "CATCH",
+  [("""                                              \\cup
+                                              UNION { { [ kind |-> "flush", from |-> m.to,
+                                                          to |-> c, gen |-> x ] :
+                                                          c \\in Plans[dk][m.to].kids } :
+                                                        x \\in { h \\in Gens :
+                                                                  ~triggered[h]
+                                                                  /\\ (flushing[m.to][h]
+                                                                       \\/ SubtreeKnown(m.to, h) > 0) } }
+""", "")]),
+ ("stale-edge receipt sends no owner flush signal", "GatePark.cfg", "MCGatePark", "CATCH",
+  [("""                      \\cup (IF (m.from \\notin KidsOf(m.to)) /\\ (m.to # Owner)
+                              THEN {[ kind |-> "flush", from |-> m.to, to |-> Owner,
+                                      gen |-> m.gen ]} ELSE {})
+""", "")]),
+ ("gate: closes on exact equality (>= becomes =)", "GateJump.cfg", "MCGateJump", "CATCH",
+  [("""                /\\ \\/ /\\ sub >= SubQCur(n)                          \\* case 1: subtree done""",
+    """                /\\ \\/ /\\ sub = SubQCur(n)                           \\* case 1: subtree done"""),
+   ("""                   \\/ /\\ sub < SubQCur(n)""",
+    """                   \\/ /\\ ~( sub = SubQCur(n) )"""),
+   ("""                         /\\ sub2 >= SubQCur(m.to)""",
+    """                         /\\ sub2 = SubQCur(m.to)""")]),
+ # the gate itself is an OPTIMIZATION: removing it reverts to the previously
+ #  verified eager design, so its removal is documented-benign.
+ ("gate removed entirely (reverts to verified eager design)", "GateMove.cfg", "MCGateMove", "BENIGN",
+  [("""                /\\ \\/ /\\ sub >= SubQCur(n)                          \\* case 1: subtree done""",
+    """                /\\ \\/ /\\ TRUE                                       \\* eager: no gate"""),
+   ("""                   \\/ /\\ sub < SubQCur(n)""",
+    """                   \\/ /\\ FALSE"""),
+   ("""                         /\\ sub2 >= SubQCur(m.to)""",
+    """                         /\\ localTotal[m.to][m.gen] = curPlan[m.to].quota""")]),
 ]
 
 ALTER = [
@@ -176,6 +256,7 @@ NOTIFY = [
 
 SUITES = {
     "arrival": ("BarrierArrive.tla", ARRIVAL),
+    "gate": ("BarrierArrive.tla", GATE),
     "alter": ("BarrierArrive.tla", ALTER),
     "notify": ("BarrierNotify.tla", NOTIFY),
 }

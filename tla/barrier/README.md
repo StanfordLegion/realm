@@ -83,11 +83,18 @@ kills mutations — see the battery table in each document.
 | `MCDeviate` | 5 nodes | the outsider (case 3) |
 | `MCChain` | 5 nodes | a relay below a relay |
 | `MCAlter` | 4 nodes | `alter_arrival_count`, altering node is a relay |
-| `MCDeepSwitch` | 5 nodes | three plans over a relay chain — found the `NoOverCount` violation that forced rule 10; **no longer completes** on the final spec |
+| `MCGateOver` | 4 nodes | quota gate: over/under pair straddling a gated relay (the value-exceeds valve) |
+| `MCGateAhead` | 4 nodes | quota gate: run-ahead mixed pins routing counts around the new relay (the non-kid valve) |
+| `MCGateMove` | 4 nodes | quota gate: a value accepted legally under plan k−1 made deviant by plan k (the switch audit) |
+| `MCGateDemote` | 4 nodes | quota gate: demoted owner-child + flush fan dying at a planless relay (audit orphan branch; install re-fan) |
+| `MCGatePark` | 4 nodes | quota gate: parked install — catches the parked re-fan AND the stale-edge signal via its two interleavings |
+| `MCGateJump` | 3 nodes | quota gate: cumulative replace jumps PAST the quota (why `>=`, never `=`) |
+| `MCLate` | 5 nodes | plan governs only generations after the deviation; outgrew the ungated spec, **completes again under quota gating** (~22M distinct states, checkpointed) |
+| `MCDeepSwitch` | 5 nodes | three plans over a relay chain — found the `NoOverCount` violation that forced rule 10; **no longer completes** (bounded partial runs only, no violation) |
 | `MCNotify` | 3 nodes | notification baseline (83M states) |
 | `MCNotifySmall` | 2 nodes | small enough to *clear* a guard-removal mutation (negative controls) |
 
-Historical, kept as records (do not extend): `MCSeven`, `MCLarge`, `MCLate`
+Historical, kept as records (do not extend): `MCSeven`, `MCLarge`
 — early scenarios that outgrew practical checking as the spec gained rules; `BarrierArrival.tla` + `MCPlanned.tla` +
 `DeadlockNoFlush.cfg` — the model of the *previous* barrier design, in which
 TLC proved a terminal deadlock (all arrivals issued, network empty, no action
