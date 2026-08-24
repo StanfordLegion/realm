@@ -62,7 +62,7 @@ void REALM_FNPTR top_level_task(const void *args, size_t arglen, const void *use
     args.user_event = user_events[i];
     args.wait_on = wait_on;
     CHECK_REALM(realm_processor_spawn(runtime, proc, EVENT_TASK, &args, sizeof(args),
-                                      nullptr, 0, 0, &task_events[i]));
+                                      nullptr, 0, REALM_NO_EVENT, 0, &task_events[i]));
   }
 
   realm_event_t merged_event;
