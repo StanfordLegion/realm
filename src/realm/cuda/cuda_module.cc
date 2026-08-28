@@ -39,6 +39,7 @@
 #include <dlfcn.h>
 #endif
 
+#include "realm/activemsg.h"
 #include "realm/mutex.h"
 #include "realm/utils.h"
 
@@ -4158,22 +4159,32 @@ namespace Realm {
           enumerate_ipc_entries(entries, n.memories);
           enumerate_ipc_entries(entries, n.ib_memories);
 
-          // Broadcast all the IPC handles to all my peers
+          // Broadcast all the IPC handles to all my peers over the bounded-radix
+          //  multicast tree (plan section 7.6).  The payload layout is unchanged -
+          //  [HOST_NAME_MAX hostname bytes][entries] on POSIX, [entries] on Windows -
+          //  but it is now assembled into one contiguous buffer, since the multicast
+          //  layer takes a single copied 1-D payload and fragments the envelope itself
+          //  if it is too large for one message.
           // TODO: this could be replaced with ipc_mailbox
           size_t datalen = entries.size() * sizeof(entries[0]);
-          ActiveMessage<CudaIpcImportRequest> amsg(
-              ipc_peers,
-              ActiveMessage<CudaIpcImportRequest>::recommended_max_payload(
-                  ipc_peers, entries.data(), HOST_NAME_MAX + datalen, 1, datalen, true));
+          CudaIpcImportRequest msg{};
+          std::vector<char> msg_payload;
 #if !defined(REALM_IS_WINDOWS)
-          amsg->hostid = gethostid();
+          msg.hostid = gethostid();
           char hostname[HOST_NAME_MAX];
           gethostname(hostname, sizeof(hostname));
-          amsg.add_payload(hostname, sizeof(hostname));
+          msg_payload.resize(sizeof(hostname) + datalen);
+          memcpy(msg_payload.data(), hostname, sizeof(hostname));
+          if(datalen > 0)
+            memcpy(msg_payload.data() + sizeof(hostname), entries.data(), datalen);
+#else
+          msg_payload.resize(datalen);
+          if(datalen > 0)
+            memcpy(msg_payload.data(), entries.data(), datalen);
 #endif
-          amsg->count = entries.size();
-          amsg.add_payload(entries.data(), datalen);
-          amsg.commit();
+          msg.count = entries.size();
+          multicast_message(MulticastTargetSet(ipc_peers), msg, msg_payload.data(),
+                            msg_payload.size());
 
           log_cudaipc.debug() << "Sent " << entries.size() << " IPC entries";
 
