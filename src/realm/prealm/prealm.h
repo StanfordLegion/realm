@@ -489,9 +489,14 @@ namespace PRealm {
     // profiling
     Event unique_event;
   };
+  static_assert(sizeof(RegionInstance) == sizeof(Realm::RegionInstance) + sizeof(Event));
   // Even though we add extra data to the RegionInstance in the form of a
   // unique event for naming the instance, the struct should still be packed
+#ifndef __CUDACC__
   static_assert(std::has_unique_object_representations_v<RegionInstance>);
+#else
+  static_assert(std::is_trivially_copyable_v<RegionInstance>);
+#endif
   using Realm::ExternalFileResource;
   using Realm::ExternalMemoryResource;
 
