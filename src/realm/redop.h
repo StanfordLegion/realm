@@ -77,7 +77,10 @@ namespace Realm {
     //  to look up the actual kernels
     void *cuda_apply_excl_fn, *cuda_apply_nonexcl_fn;
     void *cuda_fold_excl_fn, *cuda_fold_nonexcl_fn;
-
+    void *cuda_apply_excl_fn_advanced, *cuda_apply_nonexcl_fn_advanced;
+    void *cuda_fold_excl_fn_advanced, *cuda_fold_nonexcl_fn_advanced;
+    void *cuda_apply_excl_fn_transpose, *cuda_apply_nonexcl_fn_transpose;
+    void *cuda_fold_excl_fn_transpose, *cuda_fold_nonexcl_fn_transpose;
     // These function pointers make the connection to the app's runtime
     // instance in order to properly translate and capture the correct
     // function to launch.
@@ -93,6 +96,10 @@ namespace Realm {
     //  to look up the actual kernels
     void *hip_apply_excl_fn, *hip_apply_nonexcl_fn;
     void *hip_fold_excl_fn, *hip_fold_nonexcl_fn;
+    void *hip_apply_excl_fn_advanced, *hip_apply_nonexcl_fn_advanced;
+    void *hip_fold_excl_fn_advanced, *hip_fold_nonexcl_fn_advanced;
+    void *hip_apply_excl_fn_transpose, *hip_apply_nonexcl_fn_transpose;
+    void *hip_fold_excl_fn_transpose, *hip_fold_nonexcl_fn_transpose;
 #endif
 
     ReductionOpUntyped()
@@ -111,6 +118,14 @@ namespace Realm {
       , cuda_apply_nonexcl_fn(0)
       , cuda_fold_excl_fn(0)
       , cuda_fold_nonexcl_fn(0)
+      , cuda_apply_excl_fn_advanced(0)
+      , cuda_apply_nonexcl_fn_advanced(0)
+      , cuda_fold_excl_fn_advanced(0)
+      , cuda_fold_nonexcl_fn_advanced(0)
+      , cuda_apply_excl_fn_transpose(0)
+      , cuda_apply_nonexcl_fn_transpose(0)
+      , cuda_fold_excl_fn_transpose(0)
+      , cuda_fold_nonexcl_fn_transpose(0)
       , cudaLaunchKernel_fn(0)
       , cudaGetFuncBySymbol_fn(0)
 #endif
@@ -119,6 +134,14 @@ namespace Realm {
       , hip_apply_nonexcl_fn(0)
       , hip_fold_excl_fn(0)
       , hip_fold_nonexcl_fn(0)
+      , hip_apply_excl_fn_advanced(0)
+      , hip_apply_nonexcl_fn_advanced(0)
+      , hip_fold_excl_fn_advanced(0)
+      , hip_fold_nonexcl_fn_advanced(0)
+      , hip_apply_excl_fn_transpose(0)
+      , hip_apply_nonexcl_fn_transpose(0)
+      , hip_fold_excl_fn_transpose(0)
+      , hip_fold_nonexcl_fn_transpose(0)
 #endif
     {}
 

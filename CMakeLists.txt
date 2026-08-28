@@ -470,7 +470,9 @@ if(REALM_ENABLE_HIP)
       hip::host PROPERTIES INTERFACE_COMPILE_DEFINITIONS "__HIP_PLATFORM_NVIDIA__"
                            INTERFACE_LINK_LIBRARIES CUDA::cudart
     )
-    set(CMAKE_HIP_COMPILER ${CUDAToolkit_NVCC_EXECUTABLE})
+    if(NOT DEFINED CMAKE_HIP_RUNTIME_LIBRARY)
+      set(CMAKE_HIP_RUNTIME_LIBRARY "Shared")
+    endif()
   endif()
   if(NOT HIP_ROOT_DIR)
     set(HIP_ROOT_DIR "${ROCM_PATH}")
@@ -505,7 +507,7 @@ if(REALM_ENABLE_OPENMP)
   if(REALM_OPENMP_SYSTEM_RUNTIME)
     find_package(OpenMP REQUIRED COMPONENTS C CXX)
     list(APPEND REALM_STATIC_DEPENDS OpenMP)
-    list(APPEND REALM_LIBRARIES OpenMP::OpenMP_CXX)
+    list(APPEND REALM_PUBLIC_LIBRARIES OpenMP::OpenMP_CXX)
   endif()
 endif()
 
@@ -593,12 +595,12 @@ if(REALM_ENABLE_UCX)
       list(APPEND UCX_CONFIG_ARGS "--with-cuda=${CUDAToolkit_LIBRARY_ROOT}")
     endif()
     set(ucx_ROOT_DIR "${CMAKE_CURRENT_BINARY_DIR}/_deps/ucx-install")
-    set(ucx_VERSION 1.17.0)
+    set(ucx_VERSION 1.20.1)
     # cmake-format: off
     ExternalProject_Add(
       ucx_external
-      URL "https://github.com/openucx/ucx/releases/download/v1.17.0/ucx-1.17.0.tar.gz"
-      URL_HASH SHA256=34658e282f99f89ce7a991c542e9727552734ac6ad408c52f22b4c2653b04276
+      URL "https://github.com/openucx/ucx/releases/download/v1.20.1/ucx-1.20.1.tar.gz"
+      URL_HASH SHA256=545c419a7b5e04643cb8bff5a19b3b5071a8f8f0605f1e8efb36f8f3d7bfb9d3
       SOURCE_DIR "${CMAKE_CURRENT_BINARY_DIR}/_deps/ucx"
       INSTALL_DIR "${ucx_ROOT_DIR}"
       CONFIGURE_COMMAND ${CMAKE_COMMAND} -E env CC=${CMAKE_C_COMPILER} CXX=${CMAKE_CXX_COMPILER}
@@ -640,12 +642,12 @@ if(REALM_ENABLE_UCX)
         list(APPEND UCC_CONFIG_ARGS "--with-cuda=${CUDAToolkit_LIBRARY_ROOT}")
       endif()
       set(ucc_ROOT_DIR "${CMAKE_CURRENT_BINARY_DIR}/_deps/ucc-install")
-      set(ucc_VERSION 1.3.0)
+      set(ucc_VERSION 1.7.0)
       # cmake-format: off
       ExternalProject_Add(
         ucc_external
-        URL "https://github.com/openucx/ucc/archive/refs/tags/v1.3.0.tar.gz"
-        URL_HASH SHA256=b56379abe5f1c125bfa83be305d78d81a64aa271b7b5fff0ac17b86725ff3acf
+        URL "https://github.com/openucx/ucc/archive/refs/tags/v1.7.0.tar.gz"
+        URL_HASH SHA256=b40df0db75b8505844547574a3a7dad16c9033d7e1ca099ea8508bc57a62b454
         SOURCE_DIR "${CMAKE_CURRENT_BINARY_DIR}/_deps/ucc"
         INSTALL_DIR "${CMAKE_CURRENT_BINARY_DIR}/_deps/ucc-install"
         CONFIGURE_COMMAND ${CMAKE_COMMAND} -E env CC=${CMAKE_C_COMPILER} CXX=${CMAKE_CXX_COMPILER} ./autogen.sh
@@ -914,11 +916,57 @@ if(REALM_USE_CUDA)
     DEPENDS realm_cuda_fatbin
     COMMENT "Embedding binary objects realm_cuda_fatbin -> ${realm_fatbin_cc}"
   )
-  add_custom_target(realm_fatbin_tgt DEPENDS "${realm_fatbin_cc}")
+  add_custom_target(realm_cuda_fatbin_tgt DEPENDS "${realm_fatbin_cc}")
   list(APPEND REALM_SOURCES "${realm_fatbin_cc}")
 endif()
 #endregion
 
+if(REALM_USE_HIP)
+  set_source_files_properties(${REALM_HIP_SOURCES} PROPERTIES LANGUAGE HIP)
+  add_library(realm_hip_fatbin OBJECT ${REALM_HIP_SOURCES})
+  # CMake does not yet have a HIP equivalent of CUDA_FATBIN_COMPILATION, so ask
+  # the HIP language compiler for device-only output while leaving compiler and
+  # architecture selection to CMake.
+  target_compile_options(
+    realm_hip_fatbin
+    PRIVATE $<$<COMPILE_LANG_AND_ID:HIP,Clang>:--offload-device-only>
+            $<$<COMPILE_LANG_AND_ID:HIP,Clang>:-Wno-unused-result>
+            $<$<COMPILE_LANG_AND_ID:HIP,NVIDIA>:--fatbin>
+  )
+  target_compile_definitions(realm_hip_fatbin PRIVATE "HIP_FATBIN_COMPILATION")
+  target_link_libraries(realm_hip_fatbin PRIVATE hip::host)
+
+  target_include_directories(
+    realm_hip_fatbin PRIVATE "${REALM_SOURCE_DIR}/.." "${CMAKE_CURRENT_BINARY_DIR}/include"
+  )
+
+  set_target_properties(
+    realm_hip_fatbin
+    PROPERTIES HIP_ARCHITECTURES "${CMAKE_HIP_ARCHITECTURES}"
+               HIP_STANDARD ${REALM_CXX_STANDARD}
+               HIP_STANDARD_REQUIRED ON
+  )
+
+  # Embed the fat binary as a .cc file using bin2c.cmake. VAR_NAME must match the
+  # extern declaration in hip_module.cc.
+  set(realm_hip_fatbin_cc "${CMAKE_CURRENT_BINARY_DIR}/realm_hip_fatbin.cc")
+  add_custom_command(
+    OUTPUT "${realm_hip_fatbin_cc}"
+    COMMAND
+      ${CMAKE_COMMAND}
+        "-DVAR_NAME=realm_hip_fatbin"
+        "-DDEFINES_HEADER=realm/realm_config.h"
+        "-DIN_FILE=$<TARGET_OBJECTS:realm_hip_fatbin>"
+        "-DOUT_FILE=${realm_hip_fatbin_cc}"
+        -P ${PROJECT_SOURCE_DIR}/cmake/bin2c.cmake
+    VERBATIM
+    WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+    DEPENDS realm_hip_fatbin
+    COMMENT "Embedding binary objects realm_hip_fatbin -> ${realm_hip_fatbin_cc}"
+  )
+  add_custom_target(realm_hip_fatbin_tgt DEPENDS "${realm_hip_fatbin_cc}")
+  list(APPEND REALM_SOURCES "${realm_hip_fatbin_cc}")
+endif()
 #region Library compilation
 
 # Specifically for adding extra object libraries' target objects to prevent
@@ -936,10 +984,10 @@ if(TARGET realm_gex_wrapper_objs AND NOT REALM_ENABLE_GASNETEX_WRAPPER)
   list(APPEND REALM_EXTRA_OBJS $<TARGET_OBJECTS:realm_gex_wrapper_objs>)
 endif()
 
-# Remove NDEBUG from definitions for cxx, c, and cuda flags for those that might have it
+# Remove NDEBUG from definitions for C, C++, CUDA, and HIP flags for those that might have it
 # TODO(cperry): remove this once we clean up all the asserts that have side effects
 foreach(_build RELEASE RELWITHDEBINFO MINSIZEREL)
-  foreach(_lang C CXX CUDA)
+  foreach(_lang C CXX CUDA HIP)
     string(REPLACE "/DNDEBUG" "" CMAKE_${_lang}_FLAGS_${_build} "${CMAKE_${_lang}_FLAGS_${_build}}")
     string(REPLACE "-DNDEBUG" "" CMAKE_${_lang}_FLAGS_${_build} "${CMAKE_${_lang}_FLAGS_${_build}}")
   endforeach()
@@ -954,6 +1002,13 @@ set_target_properties(
              VISIBILITY_INLINES_HIDDEN ON
              POSITION_INDEPENDENT_CODE ON
 )
+
+# Tell threads.cc to emit the anchor reference only when gdb_script.cc is
+# actually compiled (Debug / RelWithDebInfo on Linux/FreeBSD).  Otherwise
+# the anchor is undefined and static-archive links would fail.
+if(REALM_EMBED_GDB_SCRIPT)
+  target_compile_definitions(realm_obj PRIVATE REALM_EMBED_GDB_SCRIPT=1)
+endif()
 add_library(Realm ${REALM_RC_SOURCES} $<TARGET_OBJECTS:realm_obj> ${REALM_EXTRA_OBJS})
 add_library(Realm::Realm ALIAS Realm)
 set_target_properties(
@@ -1017,10 +1072,12 @@ if(REALM_USE_GASNETEX)
   )
 endif()
 
-if(TARGET realm_fatbin_tgt)
-  add_dependencies(Realm realm_fatbin_tgt)
-  add_dependencies(realm_obj realm_fatbin_tgt)
-endif()
+foreach(_realm_fatbin_tgt realm_cuda_fatbin_tgt realm_hip_fatbin_tgt)
+  if(TARGET ${_realm_fatbin_tgt})
+    add_dependencies(Realm ${_realm_fatbin_tgt})
+    add_dependencies(realm_obj ${_realm_fatbin_tgt})
+  endif()
+endforeach()
 
 target_compile_features(Realm PUBLIC cxx_std_${REALM_CXX_STANDARD})
 target_compile_features(realm_obj PUBLIC cxx_std_${REALM_CXX_STANDARD})
