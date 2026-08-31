@@ -162,9 +162,12 @@ namespace Realm {
             inst, need_alloc_result, false /*!alloc_poisoned*/, TimeLimit::responsive());
       }
     } else {
-      // defer allocation attempt
+      // defer allocation attempt (the release seqid cap is only meaningful
+      //  for memories that support deferred allocation - see
+      //  LocalManagedMemory::allocate_storage_deferrable)
       inst->metadata.inst_offset = RegionInstanceImpl::INSTOFFSET_DELAYEDALLOC;
-      inst->deferred_create.defer(inst, this, need_alloc_result, precondition);
+      inst->deferred_create.defer(inst, this, need_alloc_result,
+                                  0 /*release_seqid_cap - unused*/, precondition);
       result = ALLOC_DEFERRED /*asynchronous notification*/;
     }
 
@@ -710,9 +713,20 @@ namespace Realm {
         // attempt allocation below
       }
     } else {
-      // defer allocation attempt
+      // defer allocation attempt - snapshot the release seqid so the
+      //  eventual attempt only considers funding from deletions requested
+      //  before this creation: once we hand out the creation event below,
+      //  any newly requested deletion may (transitively) depend on it, and
+      //  planning the allocation out of such a deletion's space would
+      //  deadlock
+      unsigned release_seqid_cap;
+      {
+        AutoLock<> al(allocator_mutex);
+        release_seqid_cap = cur_release_seqid;
+      }
       inst->metadata.inst_offset = RegionInstanceImpl::INSTOFFSET_DELAYEDALLOC;
-      inst->deferred_create.defer(inst, this, need_alloc_result, precondition);
+      inst->deferred_create.defer(inst, this, need_alloc_result, release_seqid_cap,
+                                  precondition);
       return ALLOC_DEFERRED /*asynchronous notification*/;
     }
 
@@ -731,9 +745,11 @@ namespace Realm {
       // normal allocation from our managed pool
       AutoLock<> al(allocator_mutex);
 
+      // the precondition was already triggered at request time, so every
+      //  pending release predates this request and may fund it
       result = attempt_deferrable_allocation(inst, inst->metadata.layout->bytes_used,
                                              inst->metadata.layout->alignment_reqd,
-                                             inst_offset);
+                                             inst_offset, cur_release_seqid);
     }
 
     // if we needed an alloc result, send deferred responses too
@@ -747,63 +763,123 @@ namespace Realm {
   // for internal use by allocation routines - must be called with
   //  allocator_mutex held!
   MemoryImpl::AllocationResult LocalManagedMemory::attempt_deferrable_allocation(
-      RegionInstanceImpl *inst, size_t bytes, size_t alignment, size_t &inst_offset)
+      RegionInstanceImpl *inst, size_t bytes, size_t alignment, size_t &inst_offset,
+      unsigned release_seqid_cap)
   {
+#ifdef DEBUG_REALM
+    // ready releases are swept whenever the allocation queue drains, so an
+    //  empty queue implies nothing in the release list is ready
+    if(pending_allocs.empty())
+      for(std::deque<PendingRelease>::const_iterator it = pending_releases.begin();
+          it != pending_releases.end(); ++it)
+        assert(!it->is_ready);
+#endif
+
     // as long as there aren't any pending allocations, we can attempt to
     //  satisfy the allocation based on the current state
     if(pending_allocs.empty()) {
       bool ok = current_allocator.allocate(inst->me, bytes, alignment, inst_offset);
-      if(ok) {
+      if(ok)
         return ALLOC_INSTANT_SUCCESS;
-      } else {
-        // doesn't currently fit - are there any pending deletes that
-        //  might allow it to fit in the future?
-        // also, check that deferred allocations are even permitted
-        if(pending_releases.empty() || !Config::deferred_instance_allocation) {
-          // nope - this allocation can't succeed based on what we know
-          //  right now
-          return ALLOC_INSTANT_FAILURE;
-        } else {
-          // build the future state based on those deletes and try again
-          future_allocator = current_allocator;
-          for(std::deque<PendingRelease>::iterator it = pending_releases.begin();
-              it != pending_releases.end(); ++it) {
-            // shouldn't have any ready ones here
-            assert(!it->is_ready);
-            // due to network delays, it's possible for multiple
-            //  deallocations of the same instance to be in our list,
-            //  so ignore failures to deallocate from the future state
-            //  (this is conservative, because it can only cause a
-            //  false-failure of a future allocation)
-            it->release(future_allocator, true /*missing ok*/);
-          }
 
-          bool ok = future_allocator.allocate(inst->me, bytes, alignment, inst_offset);
-          if(ok) {
-            pending_allocs.emplace_back(
-                PendingAlloc(inst, bytes, alignment, cur_release_seqid));
-            // now that we have pending allocs, we need release_allocator
-            //  to be valid
-            release_allocator = current_allocator;
-            return ALLOC_DEFERRED;
-          } else {
-            return ALLOC_INSTANT_FAILURE; /*immediate notification*/
-                                          // NOTE: future_allocator becomes invalid
-          }
-        }
+      // doesn't currently fit - are there any pending deletes that
+      //  might allow it to fit in the future?
+      // also, check that deferred allocations are even permitted
+      if(pending_releases.empty() || !Config::deferred_instance_allocation) {
+        // nope - this allocation can't succeed based on what we know
+        //  right now
+        return ALLOC_INSTANT_FAILURE;
       }
     } else {
-      // with other pending allocs, we can only tentatively allocate based
-      //  on future state
-      bool ok = future_allocator.allocate(inst->me, bytes, alignment, inst_offset);
-      if(ok) {
-        pending_allocs.emplace_back(
-            PendingAlloc(inst, bytes, alignment, cur_release_seqid));
-        return ALLOC_DEFERRED;
-      } else {
-        return ALLOC_INSTANT_FAILURE; /*immediate notification*/
+      // newer allocations may not be funded by older releases than any
+      //  already-queued allocation - this keeps last_release_seqid
+      //  non-decreasing along 'pending_allocs', which the drain and replay
+      //  logic depend on (and an inversion between two deferred creations
+      //  is exactly the shape that would rebuild a funding cycle)
+      if(release_seqid_cap < pending_allocs.back().last_release_seqid)
+        return ALLOC_INSTANT_FAILURE;
+
+      // fast path: a request whose precondition had already triggered
+      //  (cap == cur_release_seqid) can be tested directly against the
+      //  maintained future state - future_allocator is kept in canonical
+      //  (seqid watermark) order and a fresh allocation's watermark
+      //  position is its end, so the direct test is equivalent to the
+      //  canonical replay below (see tla/allocation/bugs/BLUEPRINT-REVIEW.md
+      //  section 1.8)
+      if(release_seqid_cap == cur_release_seqid) {
+        bool ok = future_allocator.allocate(inst->me, bytes, alignment, inst_offset);
+        if(ok) {
+          pending_allocs.emplace_back(
+              PendingAlloc(inst, bytes, alignment, release_seqid_cap));
+          return ALLOC_DEFERRED;
+        } else {
+          return ALLOC_INSTANT_FAILURE; /*immediate notification*/
+        }
       }
     }
+
+    // test whether the releases requested no later than our snapshot (for
+    //  owner-node creations, exactly the ones that cannot depend on our
+    //  creation event - remote creations have a known snapshot-window gap,
+    //  see tla/allocation/FUTURE-VERIFICATION.md "multi-node create
+    //  ordering"), together with the already-queued allocations, make room
+    //  for this request: replay them onto a scratch copy of the current
+    //  state in canonical (seqid watermark) order
+    RangeAllocator test_allocator = current_allocator;
+    std::deque<PendingRelease>::iterator rel_it = pending_releases.begin();
+    for(std::deque<PendingAlloc>::iterator a_it = pending_allocs.begin();
+        a_it != pending_allocs.end(); ++a_it) {
+      // releases up to this allocation's watermark are applied first
+      //  (watermarks are <= our cap by the monotonicity check above)
+      while((rel_it != pending_releases.end()) &&
+            (rel_it->seqid <= a_it->last_release_seqid)) {
+        // due to network delays, it's possible for multiple deallocations
+        //  of the same instance to be in our list, so ignore failures to
+        //  deallocate from the replayed state (this is conservative,
+        //  because it can only cause a false-failure of the test)
+        rel_it->release(test_allocator, true /*missing ok*/);
+        ++rel_it;
+      }
+      size_t offset = 0;
+      bool placed =
+          test_allocator.allocate(a_it->inst->me, a_it->bytes, a_it->alignment, offset);
+      // every queued allocation was admitted against exactly this replayed
+      //  state, and completions apply the same operations in the same
+      //  order, so the placement must succeed
+      assert(placed);
+      if(!placed)
+        return ALLOC_INSTANT_FAILURE; /*conservative in release builds*/
+    }
+    // remaining releases within our own funding bound
+    while((rel_it != pending_releases.end()) && (rel_it->seqid <= release_seqid_cap)) {
+      rel_it->release(test_allocator, true /*missing ok*/);
+      ++rel_it;
+    }
+
+    if(!test_allocator.allocate(inst->me, bytes, alignment, inst_offset)) {
+      // even the releases we may legally wait for don't make room -
+      //  fail immediately (and honestly) rather than risk planning a
+      //  funding cycle
+      // NOTE: future_allocator is deliberately left untouched here
+      return ALLOC_INSTANT_FAILURE; /*immediate notification*/
+    }
+
+    // accepted - queue it up with the cap as its watermark, and extend the
+    //  test state into the new future state: everything past our funding
+    //  bound applies after us in canonical order (no queued allocation can
+    //  follow us with a smaller watermark)
+    pending_allocs.emplace_back(PendingAlloc(inst, bytes, alignment, release_seqid_cap));
+    while(rel_it != pending_releases.end()) {
+      rel_it->release(test_allocator, true /*missing ok*/);
+      ++rel_it;
+    }
+    future_allocator.swap(test_allocator);
+    if(pending_allocs.size() == 1) {
+      // now that we have pending allocs, we need release_allocator
+      //  to be valid
+      release_allocator = current_allocator;
+    }
+    return ALLOC_DEFERRED;
   }
 
   // release storage associated with an instance
@@ -1133,9 +1209,13 @@ namespace Realm {
             result = ALLOC_INSTANT_FAILURE;
           }
         } else {
-          result = attempt_deferrable_allocation(inst, inst->metadata.layout->bytes_used,
-                                                 inst->metadata.layout->alignment_reqd,
-                                                 inst_offset);
+          // fund only from releases that were already requested when this
+          //  creation was requested (the snapshot taken at deferral time) -
+          //  releases requested in between may depend on our creation event
+          result = attempt_deferrable_allocation(
+              inst, inst->metadata.layout->bytes_used,
+              inst->metadata.layout->alignment_reqd, inst_offset,
+              inst->deferred_create.get_release_seqid_cap());
         }
       }
 
@@ -1481,6 +1561,13 @@ namespace Realm {
         }
       }
 
+      // ready releases must never outlive the allocation queue - if it has
+      //  drained (on either the poisoned or unpoisoned path above), apply
+      //  and retire any that remain
+      if(pending_allocs.empty()) {
+        sweep_ready_releases(deferred_dealloc_notifies);
+      }
+
 #ifdef DEBUG_DEFERRED_ALLOCATIONS
       log_defalloc.print()
           << "deferred redistrict done: m=" << me << " inst=" << old_inst->me
@@ -1592,6 +1679,74 @@ namespace Realm {
             it2 = pending_allocs.erase(it2);
           }
         }
+      }
+
+      // any allocations whose watermark exceeds every surviving release's
+      //  seqid were not reconsidered by the loop above - continue the
+      //  replay from where it stopped (NOT from the beginning: earlier
+      //  entries are already placed in the future state, and re-placing
+      //  one would double-allocate its tag) so that every remaining
+      //  allocation is either re-placed in the rebuilt future state or
+      //  failed
+      while(it2 != pending_allocs.end()) {
+        size_t offset;
+        bool ok =
+            future_allocator.allocate(it2->inst->me, it2->bytes, it2->alignment, offset);
+        if(ok) {
+          ++it2;
+        } else {
+          // this should only happen if we've seen the poisoned release
+          assert(found);
+
+          failed_allocs.push_back(it2->inst);
+          it2 = pending_allocs.erase(it2);
+        }
+      }
+
+      if(!pending_allocs.empty()) {
+        // release_allocator was rebuilt from the current state above -
+        //  restore the ready releases that survive the removal
+        //  (release state = current state + ready releases)
+        for(std::deque<PendingRelease>::iterator it3 = pending_releases.begin();
+            it3 != pending_releases.end(); ++it3) {
+          if(it3->is_ready) {
+            it3->release(release_allocator);
+          }
+        }
+      }
+      // if the replay failed the last pending allocation(s), the caller's
+      //  sweep of ready releases will run once we return (see
+      //  sweep_ready_releases call sites)
+    }
+  }
+
+  // applies (in list order) and erases any ready pending releases - called
+  //  whenever 'pending_allocs' has drained.  ready entries only ever come
+  //  into existence while allocations are queued (their application to the
+  //  current state was deferred to keep the planned future consistent), so
+  //  once the queue drains they must not linger: their tags are still in
+  //  current_allocator and their dealloc notifications are still deferred
+  void LocalManagedMemory::sweep_ready_releases(
+      std::vector<RegionInstanceImpl *> &deferred_dealloc_notifies)
+  {
+    assert(pending_allocs.empty());
+    std::deque<PendingRelease>::iterator it = pending_releases.begin();
+    while(it != pending_releases.end()) {
+      if(it->is_ready) {
+        // a redistrict entry carves its children out of the parent's range
+        //  here - the children were already notified of their offsets when
+        //  the entry became ready, and those offsets provably match this
+        //  split: split_range carves children sequentially from the parent
+        //  range's own start, and allocated ranges never move, so the
+        //  parent interval (and hence every child offset) is identical in
+        //  the promise-time future/release state and the current state
+        it->release(current_allocator);
+        if(it->deferred_dealloc_notify) {
+          deferred_dealloc_notifies.push_back(it->inst);
+        }
+        it = pending_releases.erase(it);
+      } else {
+        ++it;
       }
     }
   }
@@ -1753,6 +1908,13 @@ namespace Realm {
         }
       } else {
         remove_pending_release(inst, failed_allocs);
+      }
+
+      // ready releases must never outlive the allocation queue - if it has
+      //  drained (on either the poisoned or unpoisoned path above), apply
+      //  and retire any that remain
+      if(pending_allocs.empty()) {
+        sweep_ready_releases(deferred_dealloc_notifies);
       }
 
 #ifdef DEBUG_DEFERRED_ALLOCATIONS
