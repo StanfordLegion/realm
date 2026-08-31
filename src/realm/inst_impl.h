@@ -61,15 +61,28 @@ namespace Realm {
     class DeferredCreate : public EventWaiter {
     public:
       void defer(RegionInstanceImpl *_inst, MemoryImpl *_mem, bool _need_alloc_result,
-                 Event wait_on);
+                 unsigned _release_seqid_cap, Event wait_on);
       virtual void event_triggered(bool poisoned, TimeLimit work_until);
       virtual void print(std::ostream &os) const;
       virtual Event get_finish_event(void) const;
+
+      // snapshot of the memory's pending-release sequence id taken when the
+      //  deferred creation was requested - the eventual allocation attempt
+      //  is only funded by releases with seqids no newer than this, since a
+      //  release requested afterwards may depend on our creation event and
+      //  funding from it can deadlock.  NOTE: this ordering argument is only
+      //  airtight for creations issued on the memory's owner node - a remote
+      //  creation publishes its creation event at the creator before the
+      //  owner takes this snapshot, so a release requested in that window
+      //  can slip under the cap (known gap, see
+      //  tla/allocation/FUTURE-VERIFICATION.md "multi-node create ordering")
+      unsigned get_release_seqid_cap(void) const { return release_seqid_cap; }
 
     protected:
       RegionInstanceImpl *inst;
       MemoryImpl *mem;
       bool need_alloc_result;
+      unsigned release_seqid_cap = 0;
     };
     DeferredCreate deferred_create;
 

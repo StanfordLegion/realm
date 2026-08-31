@@ -376,8 +376,25 @@ namespace Realm {
   protected:
     // for internal use by allocation routines - must be called with
     //  allocator_mutex held!
+    // 'release_seqid_cap' bounds which pending releases may fund a deferred
+    //  admission: only releases with seqid <= cap (i.e. requested no later
+    //  than the creation request) are considered - a release requested after
+    //  the creation request may depend on the instance's creation event, and
+    //  planning the allocation out of its space can deadlock
     AllocationResult attempt_deferrable_allocation(RegionInstanceImpl *inst, size_t bytes,
-                                                   size_t alignment, size_t &inst_offset);
+                                                   size_t alignment, size_t &inst_offset,
+                                                   unsigned release_seqid_cap);
+
+    // applies (in list order) and erases any ready pending releases - called
+    //  whenever 'pending_allocs' has drained so that ready releases (and the
+    //  deferred dealloc notifications they hold) never outlive the
+    //  allocations they were queued behind.  Erased entries with
+    //  deferred_dealloc_notify set are appended to
+    //  'deferred_dealloc_notifies' so the caller can fire their
+    //  notify_deallocation() once the allocator_mutex has been released.
+    //  must be called with allocator_mutex held!
+    void
+    sweep_ready_releases(std::vector<RegionInstanceImpl *> &deferred_dealloc_notifies);
 
     // attempts to satisfy pending allocations based on reordering releases to
     //  move the ready ones first - assumes 'release_allocator' has been
@@ -400,9 +417,17 @@ namespace Realm {
     // current: always valid - tracks all completed allocations and all
     //                releases that can be applied without risking deadlock
     // future: valid if pending_allocs exist - tracks heap state including
-    //                all pending allocs and releases
+    //                all pending allocs and releases, applied in canonical
+    //                (seqid watermark) order: for each release in seqid
+    //                order, the release is applied and then any pending
+    //                allocs whose last_release_seqid equals that seqid are
+    //                placed
     // release: valid if pending_allocs exist - models heap state with
     //                completed allocations and any ready releases
+    //
+    // invariant: ready entries never outlive the allocation queue - whenever
+    //  'pending_allocs' drains, any ready 'pending_releases' entries are
+    //  swept into current_allocator (see sweep_ready_releases)
 
     // Pick which kind of range allocator we want to use
     using RangeAllocator = BasicRangeAllocator<size_t, RegionInstance>;
@@ -413,6 +438,11 @@ namespace Realm {
     struct PendingAlloc {
       RegionInstanceImpl *inst;
       size_t bytes, alignment;
+      // the newest pending release this allocation may be funded by: the
+      //  release seqid snapshot taken when the creation was REQUESTED (not
+      //  when its precondition triggered) - releases requested later may
+      //  depend on this instance's creation event.  non-decreasing along
+      //  'pending_allocs' (enforced at admission)
       unsigned last_release_seqid;
       PendingAlloc(RegionInstanceImpl *_inst, size_t _bytes, size_t _align,
                    unsigned _release_seqid);

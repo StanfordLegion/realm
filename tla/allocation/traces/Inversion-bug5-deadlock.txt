@@ -1,0 +1,495 @@
+TLC2 Version 2.19 of 08 August 2024 (rev: 5a47802)
+Running breadth-first search Model-Checking with fp 55 and seed 946484794130481354 with 4 workers on 10 cores with 3641MB heap and 64MB offheap memory [pid: 7809] (Mac OS X 15.7.7 aarch64, Homebrew 26.0.2 x86_64, MSBDiskFPSet, DiskStateQueue).
+Parsing file /Users/mebauer/realm/tla/allocation/MCDeferredAlloc.tla
+Parsing file /Users/mebauer/realm/tla/allocation/DeferredAlloc.tla
+Parsing file /private/tmp/claude-502/-Users-mebauer-realm-src-realm/e16dc9f9-47a4-47cb-a4d3-fd41b34c5bce/scratchpad/tlc-jtmp/Integers.tla
+Parsing file /private/tmp/claude-502/-Users-mebauer-realm-src-realm/e16dc9f9-47a4-47cb-a4d3-fd41b34c5bce/scratchpad/tlc-jtmp/Sequences.tla
+Parsing file /private/tmp/claude-502/-Users-mebauer-realm-src-realm/e16dc9f9-47a4-47cb-a4d3-fd41b34c5bce/scratchpad/tlc-jtmp/FiniteSets.tla
+Parsing file /private/tmp/claude-502/-Users-mebauer-realm-src-realm/e16dc9f9-47a4-47cb-a4d3-fd41b34c5bce/scratchpad/tlc-jtmp/TLC.tla
+Parsing file /private/tmp/claude-502/-Users-mebauer-realm-src-realm/e16dc9f9-47a4-47cb-a4d3-fd41b34c5bce/scratchpad/tlc-jtmp/Naturals.tla
+Semantic processing of module Naturals
+Semantic processing of module Integers
+Semantic processing of module Sequences
+Semantic processing of module FiniteSets
+Semantic processing of module TLC
+Semantic processing of module DeferredAlloc
+Semantic processing of module MCDeferredAlloc
+Starting... (2026-08-25 23:58:00)
+Computing initial states...
+Finished computing initial states: 1 distinct state generated at 2026-08-25 23:58:00.
+Error: Deadlock reached.
+Error: The behavior up to this point is:
+State 1: <Initial predicate>
+/\ destroyRequested = <<FALSE, FALSE, FALSE>>
+/\ balC = <<"NONE", "NONE", "NONE">>
+/\ balD = <<"NONE", "NONE", "NONE">>
+/\ instOffset = <<-1, -1, -1>>
+/\ preC = << [deps |-> {}, ballistic |-> FALSE],
+   [deps |-> {}, ballistic |-> FALSE],
+   [deps |-> {}, ballistic |-> FALSE] >>
+/\ preD = << [deps |-> {}, ballistic |-> FALSE],
+   [deps |-> {}, ballistic |-> FALSE],
+   [deps |-> {}, ballistic |-> FALSE] >>
+/\ seqCtr = 0
+/\ cur = << >>
+/\ allocatedEver = {}
+/\ futMismatch = FALSE
+/\ createWaiter = <<FALSE, FALSE, FALSE>>
+/\ pendingReleases = <<>>
+/\ curFreed = {}
+/\ failedVia = <<"NONE", "NONE", "NONE">>
+/\ missingFree = FALSE
+/\ rel = << >>
+/\ readyAtRebuild = FALSE
+/\ pendingAllocs = <<>>
+/\ wasDeferred = {}
+/\ structuralAssertFailed = FALSE
+/\ fut = << >>
+/\ eCreated = <<"UNFIRED", "UNFIRED", "UNFIRED">>
+/\ instState = <<"UNREQUESTED", "UNREQUESTED", "UNREQUESTED">>
+/\ createRequested = <<FALSE, FALSE, FALSE>>
+/\ unblockFailed = FALSE
+/\ notifyCount = <<0, 0, 0>>
+/\ reqCap = <<0, 0, 0>>
+/\ dupAlloc = FALSE
+/\ poisonReplayBad = FALSE
+/\ destroyWaiter = <<FALSE, FALSE, FALSE>>
+
+State 2: <ClientRequestCreate line 186, col 3 to line 197, col 62 of module MCDeferredAlloc>
+/\ destroyRequested = <<FALSE, FALSE, FALSE>>
+/\ balC = <<"NONE", "NONE", "NONE">>
+/\ balD = <<"NONE", "NONE", "NONE">>
+/\ instOffset = <<0, -1, -1>>
+/\ preC = << [deps |-> {}, ballistic |-> FALSE],
+   [deps |-> {}, ballistic |-> FALSE],
+   [deps |-> {}, ballistic |-> FALSE] >>
+/\ preD = << [deps |-> {}, ballistic |-> FALSE],
+   [deps |-> {}, ballistic |-> FALSE],
+   [deps |-> {}, ballistic |-> FALSE] >>
+/\ seqCtr = 0
+/\ cur = <<[first |-> 0, size |-> 3]>>
+/\ allocatedEver = {1}
+/\ futMismatch = FALSE
+/\ createWaiter = <<FALSE, FALSE, FALSE>>
+/\ pendingReleases = <<>>
+/\ curFreed = {}
+/\ failedVia = <<"NONE", "NONE", "NONE">>
+/\ missingFree = FALSE
+/\ rel = << >>
+/\ readyAtRebuild = FALSE
+/\ pendingAllocs = <<>>
+/\ wasDeferred = {}
+/\ structuralAssertFailed = FALSE
+/\ fut = << >>
+/\ eCreated = <<"CLEAN", "UNFIRED", "UNFIRED">>
+/\ instState = <<"ALLOCATED", "UNREQUESTED", "UNREQUESTED">>
+/\ createRequested = <<TRUE, FALSE, FALSE>>
+/\ unblockFailed = FALSE
+/\ notifyCount = <<0, 0, 0>>
+/\ reqCap = <<0, 0, 0>>
+/\ dupAlloc = FALSE
+/\ poisonReplayBad = FALSE
+/\ destroyWaiter = <<FALSE, FALSE, FALSE>>
+
+State 3: <ClientRequestCreate line 186, col 3 to line 197, col 62 of module MCDeferredAlloc>
+/\ destroyRequested = <<FALSE, FALSE, FALSE>>
+/\ balC = <<"NONE", "PENDING", "NONE">>
+/\ balD = <<"NONE", "NONE", "NONE">>
+/\ instOffset = <<0, -1, -1>>
+/\ preC = << [deps |-> {}, ballistic |-> FALSE],
+   [deps |-> {}, ballistic |-> TRUE],
+   [deps |-> {}, ballistic |-> FALSE] >>
+/\ preD = << [deps |-> {}, ballistic |-> FALSE],
+   [deps |-> {}, ballistic |-> FALSE],
+   [deps |-> {}, ballistic |-> FALSE] >>
+/\ seqCtr = 0
+/\ cur = <<[first |-> 0, size |-> 3]>>
+/\ allocatedEver = {1}
+/\ futMismatch = FALSE
+/\ createWaiter = <<FALSE, TRUE, FALSE>>
+/\ pendingReleases = <<>>
+/\ curFreed = {}
+/\ failedVia = <<"NONE", "NONE", "NONE">>
+/\ missingFree = FALSE
+/\ rel = << >>
+/\ readyAtRebuild = FALSE
+/\ pendingAllocs = <<>>
+/\ wasDeferred = {}
+/\ structuralAssertFailed = FALSE
+/\ fut = << >>
+/\ eCreated = <<"CLEAN", "UNFIRED", "UNFIRED">>
+/\ instState = <<"ALLOCATED", "CREATE_PENDING", "UNREQUESTED">>
+/\ createRequested = <<TRUE, TRUE, FALSE>>
+/\ unblockFailed = FALSE
+/\ notifyCount = <<0, 0, 0>>
+/\ reqCap = <<0, 0, 0>>
+/\ dupAlloc = FALSE
+/\ poisonReplayBad = FALSE
+/\ destroyWaiter = <<FALSE, FALSE, FALSE>>
+
+State 4: <ClientRequestDestroy line 200, col 3 to line 219, col 60 of module MCDeferredAlloc>
+/\ destroyRequested = <<TRUE, FALSE, FALSE>>
+/\ balC = <<"NONE", "PENDING", "NONE">>
+/\ balD = <<"NONE", "NONE", "NONE">>
+/\ instOffset = <<0, -1, -1>>
+/\ preC = << [deps |-> {}, ballistic |-> FALSE],
+   [deps |-> {}, ballistic |-> TRUE],
+   [deps |-> {}, ballistic |-> FALSE] >>
+/\ preD = << [deps |-> {1, 2}, ballistic |-> FALSE],
+   [deps |-> {}, ballistic |-> FALSE],
+   [deps |-> {}, ballistic |-> FALSE] >>
+/\ seqCtr = 1
+/\ cur = <<[first |-> 0, size |-> 3]>>
+/\ allocatedEver = {1}
+/\ futMismatch = FALSE
+/\ createWaiter = <<FALSE, TRUE, FALSE>>
+/\ pendingReleases = <<[inst |-> 1, isReady |-> FALSE, defNote |-> FALSE, seq |-> 1]>>
+/\ curFreed = {}
+/\ failedVia = <<"NONE", "NONE", "NONE">>
+/\ missingFree = FALSE
+/\ rel = << >>
+/\ readyAtRebuild = FALSE
+/\ pendingAllocs = <<>>
+/\ wasDeferred = {}
+/\ structuralAssertFailed = FALSE
+/\ fut = << >>
+/\ eCreated = <<"CLEAN", "UNFIRED", "UNFIRED">>
+/\ instState = <<"ALLOCATED", "CREATE_PENDING", "UNREQUESTED">>
+/\ createRequested = <<TRUE, TRUE, FALSE>>
+/\ unblockFailed = FALSE
+/\ notifyCount = <<0, 0, 0>>
+/\ reqCap = <<0, 0, 0>>
+/\ dupAlloc = FALSE
+/\ poisonReplayBad = FALSE
+/\ destroyWaiter = <<TRUE, FALSE, FALSE>>
+
+State 5: <ClientRequestDestroy line 200, col 3 to line 219, col 60 of module MCDeferredAlloc>
+/\ destroyRequested = <<TRUE, TRUE, FALSE>>
+/\ balC = <<"NONE", "PENDING", "NONE">>
+/\ balD = <<"NONE", "NONE", "NONE">>
+/\ instOffset = <<0, -1, -1>>
+/\ preC = << [deps |-> {}, ballistic |-> FALSE],
+   [deps |-> {}, ballistic |-> TRUE],
+   [deps |-> {}, ballistic |-> FALSE] >>
+/\ preD = << [deps |-> {1, 2}, ballistic |-> FALSE],
+   [deps |-> {2}, ballistic |-> FALSE],
+   [deps |-> {}, ballistic |-> FALSE] >>
+/\ seqCtr = 1
+/\ cur = <<[first |-> 0, size |-> 3]>>
+/\ allocatedEver = {1}
+/\ futMismatch = FALSE
+/\ createWaiter = <<FALSE, TRUE, FALSE>>
+/\ pendingReleases = <<[inst |-> 1, isReady |-> FALSE, defNote |-> FALSE, seq |-> 1]>>
+/\ curFreed = {}
+/\ failedVia = <<"NONE", "NONE", "NONE">>
+/\ missingFree = FALSE
+/\ rel = << >>
+/\ readyAtRebuild = FALSE
+/\ pendingAllocs = <<>>
+/\ wasDeferred = {}
+/\ structuralAssertFailed = FALSE
+/\ fut = << >>
+/\ eCreated = <<"CLEAN", "UNFIRED", "UNFIRED">>
+/\ instState = <<"ALLOCATED", "CREATE_PENDING_DESTROY", "UNREQUESTED">>
+/\ createRequested = <<TRUE, TRUE, FALSE>>
+/\ unblockFailed = FALSE
+/\ notifyCount = <<0, 0, 0>>
+/\ reqCap = <<0, 0, 0>>
+/\ dupAlloc = FALSE
+/\ poisonReplayBad = FALSE
+/\ destroyWaiter = <<TRUE, TRUE, FALSE>>
+
+State 6: <FireBallisticC line 225, col 3 to line 230, col 50 of module MCDeferredAlloc>
+/\ destroyRequested = <<TRUE, TRUE, FALSE>>
+/\ balC = <<"NONE", "FIRED", "NONE">>
+/\ balD = <<"NONE", "NONE", "NONE">>
+/\ instOffset = <<0, -1, -1>>
+/\ preC = << [deps |-> {}, ballistic |-> FALSE],
+   [deps |-> {}, ballistic |-> TRUE],
+   [deps |-> {}, ballistic |-> FALSE] >>
+/\ preD = << [deps |-> {1, 2}, ballistic |-> FALSE],
+   [deps |-> {2}, ballistic |-> FALSE],
+   [deps |-> {}, ballistic |-> FALSE] >>
+/\ seqCtr = 1
+/\ cur = <<[first |-> 0, size |-> 3]>>
+/\ allocatedEver = {1}
+/\ futMismatch = FALSE
+/\ createWaiter = <<FALSE, TRUE, FALSE>>
+/\ pendingReleases = <<[inst |-> 1, isReady |-> FALSE, defNote |-> FALSE, seq |-> 1]>>
+/\ curFreed = {}
+/\ failedVia = <<"NONE", "NONE", "NONE">>
+/\ missingFree = FALSE
+/\ rel = << >>
+/\ readyAtRebuild = FALSE
+/\ pendingAllocs = <<>>
+/\ wasDeferred = {}
+/\ structuralAssertFailed = FALSE
+/\ fut = << >>
+/\ eCreated = <<"CLEAN", "UNFIRED", "UNFIRED">>
+/\ instState = <<"ALLOCATED", "CREATE_PENDING_DESTROY", "UNREQUESTED">>
+/\ createRequested = <<TRUE, TRUE, FALSE>>
+/\ unblockFailed = FALSE
+/\ notifyCount = <<0, 0, 0>>
+/\ reqCap = <<0, 0, 0>>
+/\ dupAlloc = FALSE
+/\ poisonReplayBad = FALSE
+/\ destroyWaiter = <<TRUE, TRUE, FALSE>>
+
+State 7: <EnvTriggerCreate line 241, col 3 to line 246, col 41 of module MCDeferredAlloc>
+/\ destroyRequested = <<TRUE, TRUE, FALSE>>
+/\ balC = <<"NONE", "FIRED", "NONE">>
+/\ balD = <<"NONE", "NONE", "NONE">>
+/\ instOffset = <<0, -2, -1>>
+/\ preC = << [deps |-> {}, ballistic |-> FALSE],
+   [deps |-> {}, ballistic |-> TRUE],
+   [deps |-> {}, ballistic |-> FALSE] >>
+/\ preD = << [deps |-> {1, 2}, ballistic |-> FALSE],
+   [deps |-> {2}, ballistic |-> FALSE],
+   [deps |-> {}, ballistic |-> FALSE] >>
+/\ seqCtr = 2
+/\ cur = <<[first |-> 0, size |-> 3]>>
+/\ allocatedEver = {1}
+/\ futMismatch = FALSE
+/\ createWaiter = <<FALSE, FALSE, FALSE>>
+/\ pendingReleases = << [inst |-> 1, isReady |-> FALSE, defNote |-> FALSE, seq |-> 1],
+   [inst |-> 2, isReady |-> FALSE, defNote |-> FALSE, seq |-> 2] >>
+/\ curFreed = {}
+/\ failedVia = <<"NONE", "INSTANT", "NONE">>
+/\ missingFree = FALSE
+/\ rel = << >>
+/\ readyAtRebuild = FALSE
+/\ pendingAllocs = <<>>
+/\ wasDeferred = {}
+/\ structuralAssertFailed = FALSE
+/\ fut = << >>
+/\ eCreated = <<"CLEAN", "POISONED", "UNFIRED">>
+/\ instState = <<"ALLOCATED", "FAILED", "UNREQUESTED">>
+/\ createRequested = <<TRUE, TRUE, FALSE>>
+/\ unblockFailed = FALSE
+/\ notifyCount = <<0, 0, 0>>
+/\ reqCap = <<0, 0, 0>>
+/\ dupAlloc = FALSE
+/\ poisonReplayBad = FALSE
+/\ destroyWaiter = <<TRUE, TRUE, FALSE>>
+
+State 8: <ClientRequestCreate line 186, col 3 to line 197, col 62 of module MCDeferredAlloc>
+/\ destroyRequested = <<TRUE, TRUE, FALSE>>
+/\ balC = <<"NONE", "FIRED", "PENDING">>
+/\ balD = <<"NONE", "NONE", "NONE">>
+/\ instOffset = <<0, -2, -1>>
+/\ preC = << [deps |-> {}, ballistic |-> FALSE],
+   [deps |-> {}, ballistic |-> TRUE],
+   [deps |-> {}, ballistic |-> TRUE] >>
+/\ preD = << [deps |-> {1, 2}, ballistic |-> FALSE],
+   [deps |-> {2}, ballistic |-> FALSE],
+   [deps |-> {}, ballistic |-> FALSE] >>
+/\ seqCtr = 2
+/\ cur = <<[first |-> 0, size |-> 3]>>
+/\ allocatedEver = {1}
+/\ futMismatch = FALSE
+/\ createWaiter = <<FALSE, FALSE, TRUE>>
+/\ pendingReleases = << [inst |-> 1, isReady |-> FALSE, defNote |-> FALSE, seq |-> 1],
+   [inst |-> 2, isReady |-> FALSE, defNote |-> FALSE, seq |-> 2] >>
+/\ curFreed = {}
+/\ failedVia = <<"NONE", "INSTANT", "NONE">>
+/\ missingFree = FALSE
+/\ rel = << >>
+/\ readyAtRebuild = FALSE
+/\ pendingAllocs = <<>>
+/\ wasDeferred = {}
+/\ structuralAssertFailed = FALSE
+/\ fut = << >>
+/\ eCreated = <<"CLEAN", "POISONED", "UNFIRED">>
+/\ instState = <<"ALLOCATED", "FAILED", "CREATE_PENDING">>
+/\ createRequested = <<TRUE, TRUE, TRUE>>
+/\ unblockFailed = FALSE
+/\ notifyCount = <<0, 0, 0>>
+/\ reqCap = <<0, 0, 2>>
+/\ dupAlloc = FALSE
+/\ poisonReplayBad = FALSE
+/\ destroyWaiter = <<TRUE, TRUE, FALSE>>
+
+State 9: <EnvTriggerDestroy line 253, col 3 to line 258, col 41 of module MCDeferredAlloc>
+/\ destroyRequested = <<TRUE, TRUE, FALSE>>
+/\ balC = <<"NONE", "FIRED", "PENDING">>
+/\ balD = <<"NONE", "NONE", "NONE">>
+/\ instOffset = <<0, -2, -1>>
+/\ preC = << [deps |-> {}, ballistic |-> FALSE],
+   [deps |-> {}, ballistic |-> TRUE],
+   [deps |-> {}, ballistic |-> TRUE] >>
+/\ preD = << [deps |-> {1, 2}, ballistic |-> FALSE],
+   [deps |-> {2}, ballistic |-> FALSE],
+   [deps |-> {}, ballistic |-> FALSE] >>
+/\ seqCtr = 2
+/\ cur = <<[first |-> 0, size |-> 3]>>
+/\ allocatedEver = {1}
+/\ futMismatch = FALSE
+/\ createWaiter = <<FALSE, FALSE, TRUE>>
+/\ pendingReleases = <<[inst |-> 1, isReady |-> FALSE, defNote |-> FALSE, seq |-> 1]>>
+/\ curFreed = {}
+/\ failedVia = <<"NONE", "INSTANT", "NONE">>
+/\ missingFree = FALSE
+/\ rel = << >>
+/\ readyAtRebuild = FALSE
+/\ pendingAllocs = <<>>
+/\ wasDeferred = {}
+/\ structuralAssertFailed = FALSE
+/\ fut = << >>
+/\ eCreated = <<"CLEAN", "POISONED", "UNFIRED">>
+/\ instState = <<"ALLOCATED", "FAILED", "CREATE_PENDING">>
+/\ createRequested = <<TRUE, TRUE, TRUE>>
+/\ unblockFailed = FALSE
+/\ notifyCount = <<0, 0, 0>>
+/\ reqCap = <<0, 0, 2>>
+/\ dupAlloc = FALSE
+/\ poisonReplayBad = FALSE
+/\ destroyWaiter = <<TRUE, FALSE, FALSE>>
+
+State 10: <FireBallisticC line 225, col 3 to line 230, col 50 of module MCDeferredAlloc>
+/\ destroyRequested = <<TRUE, TRUE, FALSE>>
+/\ balC = <<"NONE", "FIRED", "FIRED">>
+/\ balD = <<"NONE", "NONE", "NONE">>
+/\ instOffset = <<0, -2, -1>>
+/\ preC = << [deps |-> {}, ballistic |-> FALSE],
+   [deps |-> {}, ballistic |-> TRUE],
+   [deps |-> {}, ballistic |-> TRUE] >>
+/\ preD = << [deps |-> {1, 2}, ballistic |-> FALSE],
+   [deps |-> {2}, ballistic |-> FALSE],
+   [deps |-> {}, ballistic |-> FALSE] >>
+/\ seqCtr = 2
+/\ cur = <<[first |-> 0, size |-> 3]>>
+/\ allocatedEver = {1}
+/\ futMismatch = FALSE
+/\ createWaiter = <<FALSE, FALSE, TRUE>>
+/\ pendingReleases = <<[inst |-> 1, isReady |-> FALSE, defNote |-> FALSE, seq |-> 1]>>
+/\ curFreed = {}
+/\ failedVia = <<"NONE", "INSTANT", "NONE">>
+/\ missingFree = FALSE
+/\ rel = << >>
+/\ readyAtRebuild = FALSE
+/\ pendingAllocs = <<>>
+/\ wasDeferred = {}
+/\ structuralAssertFailed = FALSE
+/\ fut = << >>
+/\ eCreated = <<"CLEAN", "POISONED", "UNFIRED">>
+/\ instState = <<"ALLOCATED", "FAILED", "CREATE_PENDING">>
+/\ createRequested = <<TRUE, TRUE, TRUE>>
+/\ unblockFailed = FALSE
+/\ notifyCount = <<0, 0, 0>>
+/\ reqCap = <<0, 0, 2>>
+/\ dupAlloc = FALSE
+/\ poisonReplayBad = FALSE
+/\ destroyWaiter = <<TRUE, FALSE, FALSE>>
+
+State 11: <EnvTriggerCreate line 241, col 3 to line 246, col 41 of module MCDeferredAlloc>
+/\ destroyRequested = <<TRUE, TRUE, FALSE>>
+/\ balC = <<"NONE", "FIRED", "FIRED">>
+/\ balD = <<"NONE", "NONE", "NONE">>
+/\ instOffset = <<0, -2, -1>>
+/\ preC = << [deps |-> {}, ballistic |-> FALSE],
+   [deps |-> {}, ballistic |-> TRUE],
+   [deps |-> {}, ballistic |-> TRUE] >>
+/\ preD = << [deps |-> {1, 2}, ballistic |-> FALSE],
+   [deps |-> {2}, ballistic |-> FALSE],
+   [deps |-> {}, ballistic |-> FALSE] >>
+/\ seqCtr = 2
+/\ cur = <<[first |-> 0, size |-> 3]>>
+/\ allocatedEver = {1}
+/\ futMismatch = FALSE
+/\ createWaiter = <<FALSE, FALSE, FALSE>>
+/\ pendingReleases = <<[inst |-> 1, isReady |-> FALSE, defNote |-> FALSE, seq |-> 1]>>
+/\ curFreed = {}
+/\ failedVia = <<"NONE", "INSTANT", "NONE">>
+/\ missingFree = FALSE
+/\ rel = <<[first |-> 0, size |-> 3]>>
+/\ readyAtRebuild = FALSE
+/\ pendingAllocs = <<[inst |-> 3, size |-> 2, lastSeq |-> 2]>>
+/\ wasDeferred = {3}
+/\ structuralAssertFailed = FALSE
+/\ fut = (3 :> [first |-> 0, size |-> 2])
+/\ eCreated = <<"CLEAN", "POISONED", "UNFIRED">>
+/\ instState = <<"ALLOCATED", "FAILED", "ALLOC_DEFERRED">>
+/\ createRequested = <<TRUE, TRUE, TRUE>>
+/\ unblockFailed = FALSE
+/\ notifyCount = <<0, 0, 0>>
+/\ reqCap = <<0, 0, 0>>
+/\ dupAlloc = FALSE
+/\ poisonReplayBad = FALSE
+/\ destroyWaiter = <<TRUE, FALSE, FALSE>>
+
+State 12: <EnvTriggerDestroy line 253, col 3 to line 258, col 41 of module MCDeferredAlloc>
+/\ destroyRequested = <<TRUE, TRUE, FALSE>>
+/\ balC = <<"NONE", "FIRED", "FIRED">>
+/\ balD = <<"NONE", "NONE", "NONE">>
+/\ instOffset = <<0, -2, -1>>
+/\ preC = << [deps |-> {}, ballistic |-> FALSE],
+   [deps |-> {}, ballistic |-> TRUE],
+   [deps |-> {}, ballistic |-> TRUE] >>
+/\ preD = << [deps |-> {1, 2}, ballistic |-> FALSE],
+   [deps |-> {2}, ballistic |-> FALSE],
+   [deps |-> {}, ballistic |-> FALSE] >>
+/\ seqCtr = 2
+/\ cur = <<[first |-> 0, size |-> 3]>>
+/\ allocatedEver = {1}
+/\ futMismatch = FALSE
+/\ createWaiter = <<FALSE, FALSE, FALSE>>
+/\ pendingReleases = <<>>
+/\ curFreed = {}
+/\ failedVia = <<"NONE", "INSTANT", "NONE">>
+/\ missingFree = FALSE
+/\ rel = <<[first |-> 0, size |-> 3]>>
+/\ readyAtRebuild = FALSE
+/\ pendingAllocs = <<[inst |-> 3, size |-> 2, lastSeq |-> 2]>>
+/\ wasDeferred = {3}
+/\ structuralAssertFailed = FALSE
+/\ fut = <<[first |-> 0, size |-> 3]>>
+/\ eCreated = <<"CLEAN", "POISONED", "UNFIRED">>
+/\ instState = <<"ALLOCATED", "FAILED", "ALLOC_DEFERRED">>
+/\ createRequested = <<TRUE, TRUE, TRUE>>
+/\ unblockFailed = FALSE
+/\ notifyCount = <<0, 0, 0>>
+/\ reqCap = <<0, 0, 0>>
+/\ dupAlloc = FALSE
+/\ poisonReplayBad = FALSE
+/\ destroyWaiter = <<FALSE, FALSE, FALSE>>
+
+State 13: <ClientRequestDestroy line 200, col 3 to line 219, col 60 of module MCDeferredAlloc>
+/\ destroyRequested = <<TRUE, TRUE, TRUE>>
+/\ balC = <<"NONE", "FIRED", "FIRED">>
+/\ balD = <<"NONE", "NONE", "NONE">>
+/\ instOffset = <<0, -2, -1>>
+/\ preC = << [deps |-> {}, ballistic |-> FALSE],
+   [deps |-> {}, ballistic |-> TRUE],
+   [deps |-> {}, ballistic |-> TRUE] >>
+/\ preD = << [deps |-> {1, 2}, ballistic |-> FALSE],
+   [deps |-> {2}, ballistic |-> FALSE],
+   [deps |-> {3}, ballistic |-> FALSE] >>
+/\ seqCtr = 3
+/\ cur = <<[first |-> 0, size |-> 3]>>
+/\ allocatedEver = {1}
+/\ futMismatch = FALSE
+/\ createWaiter = <<FALSE, FALSE, FALSE>>
+/\ pendingReleases = <<[inst |-> 3, isReady |-> FALSE, defNote |-> FALSE, seq |-> 3]>>
+/\ curFreed = {}
+/\ failedVia = <<"NONE", "INSTANT", "NONE">>
+/\ missingFree = FALSE
+/\ rel = <<[first |-> 0, size |-> 3]>>
+/\ readyAtRebuild = FALSE
+/\ pendingAllocs = <<[inst |-> 3, size |-> 2, lastSeq |-> 2]>>
+/\ wasDeferred = {3}
+/\ structuralAssertFailed = FALSE
+/\ fut = <<[first |-> 0, size |-> 3]>>
+/\ eCreated = <<"CLEAN", "POISONED", "UNFIRED">>
+/\ instState = <<"ALLOCATED", "FAILED", "ALLOC_DEFERRED">>
+/\ createRequested = <<TRUE, TRUE, TRUE>>
+/\ unblockFailed = FALSE
+/\ notifyCount = <<0, 0, 0>>
+/\ reqCap = <<0, 0, 0>>
+/\ dupAlloc = FALSE
+/\ poisonReplayBad = FALSE
+/\ destroyWaiter = <<FALSE, FALSE, TRUE>>
+
+469 states generated, 254 distinct states found, 7 states left on queue.
+The depth of the complete state graph search is 14.
+The average outdegree of the complete state graph is 1 (minimum is 0, the maximum 4 and the 95th percentile is 3).
+Finished in 00s at (2026-08-25 23:58:01)
