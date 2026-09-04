@@ -132,15 +132,20 @@ prerequisite for trusting the corresponding code path or fix arm:
   of a duplicate ready pair — identical strictness to the pre-existing
   in-order drain (so not a regression), but the duplicates model must
   account for it when this item is taken up.
-- **Multi-node create ordering** (the remote-create snapshot window): a
-  creation issued on a non-owner node publishes `e_created` at the creator
-  before the owner takes the `release_seqid_cap` snapshot on
-  MemStorageAllocRequest receipt, so a release requested inside that
-  window can slip under the cap and readmit the BUG-1 funding cycle
-  across nodes. Fix directions to evaluate in a multi-node model: take the
-  snapshot at the creator and carry it in the active message, or adjust
-  the cap on the owner at AM receipt (e.g. exclude releases whose request
-  provably raced the create's AM).
+- **Multi-node create ordering** (the remote-create snapshot window) —
+  **adjudicated as `bugs/BUG-8.md`**: a creation issued on a non-owner node
+  publishes `e_created` at the creator before the owner takes the
+  `release_seqid_cap` snapshot on MemStorageAllocRequest receipt, so a
+  release requested inside that window can slip under the cap and readmit
+  the BUG-1 funding cycle across nodes. BUG-8 reframes this via the
+  causal-order soundness theorem (funding ⊆ causally-earlier-issued
+  deletions is sound cross-node; the gap is the owner's inability to
+  observe causal order) and defines the **evidence-tier fix ladder**:
+  Tier 0 = triggered-only funding (zero evidence), Tier 1 = same-source
+  send counters, Tier 2 = client-supplied cross-source counter witness
+  (recommended), Tier 3 = Realm-internal vector clocks (rejected). The
+  two-site model refinement, per-tier toggles, and the watermark
+  re-proof obligation are specified in BUG-8's verification plan.
 - **Dealloc-completion feedback shapes** (clients deriving triggers from
   destruction profiling responses — excluded in DESIGN.md §1).
 - **Multi-memory / remote request paths** (MemStorageAlloc/Release

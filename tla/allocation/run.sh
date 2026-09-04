@@ -19,10 +19,16 @@
 #
 #   ./run.sh                 run the default local sweep (increasing cost)
 #   ./run.sh Safety          run one configuration by name
-#   ./run.sh sany            parse-check DeferredAlloc.tla / MCDeferredAlloc.tla
+#   ./run.sh dist            run the DISTRIBUTED (BUG-8 / event-timestamp)
+#                            matrix - Dist*.cfg against MCDistDeferredAlloc
+#                            (see DIST-EXPECTED.md; deadlock checking stays
+#                            ON for every dist config)
+#   ./run.sh sany            parse-check the .tla modules
 #
-# Module is always MCDeferredAlloc; each <name>.cfg selects constants,
-# invariants, and client shape (see DESIGN.md section 7).
+# Module is MCDeferredAlloc for the v1 configs and MCDistDeferredAlloc for
+# the Dist* configs (selected by name prefix); each <name>.cfg selects
+# constants, invariants, and client shape (DESIGN.md section 7 /
+# DIST-EXPECTED.md).
 #
 # Configurations and expected outcomes (DESIGN.md sections 7-8):
 #
@@ -84,13 +90,32 @@ extra_flags_for() {
         # historical two-toggle deadlock is kept as the BUG-5 witness in
         # traces/Inversion-bug5-deadlock.txt (see the cfg header).
         SmokeFixed|EventLoopFixed|EventLoopCapOnly|GCRipple|Inversion) echo "" ;;
+        # Distributed (BUG-8) matrix: deadlock checking ON for ALL dist
+        # configs - the greens rely on the Done self-loop and the two
+        # expected-FAIL configs (DistBase, DistUEIllegal) exist to produce
+        # deadlock counterexamples (DIST-EXPECTED.md).
+        Dist*)           echo "" ;;
         *)               echo "-deadlock" ;;
+    esac
+}
+
+# v1 configs check MCDeferredAlloc; Dist* configs check MCDistDeferredAlloc.
+module_for() {
+    case $1 in
+        Dist*) echo "MCDistDeferredAlloc" ;;
+        *)     echo "MCDeferredAlloc" ;;
     esac
 }
 
 sany_check() {
     cd "$HERE" || exit 1   # SANY resolves EXTENDS relative to the cwd
-    for m in DeferredAlloc MCDeferredAlloc; do
+    mods="DeferredAlloc MCDeferredAlloc"
+    # dist modules join the check once the spec module exists (the harness
+    # cannot parse without it - see DIST-EXPECTED.md status note)
+    if [ -f "$HERE/DistDeferredAlloc.tla" ]; then
+        mods="$mods DistDeferredAlloc MCDistDeferredAlloc"
+    fi
+    for m in $mods; do
         echo "=== SANY $m.tla"
         "$JAVA" -Djava.io.tmpdir="$JTMP" -cp "$JAR" tla2sany.SANY "$m.tla" \
             || exit 1
@@ -107,8 +132,9 @@ run_cfg() {
         Safety|Poison4|Big|SafetyFixed4|Poison4Fixed|BigFixed)
             echo "note: $cfg is sapling-targeted (see sapling_tlc.sbatch); running locally anyway." ;;
     esac
+    mod=$(module_for "$cfg")
     echo "==========================================================="
-    echo "=== $cfg   (module MCDeferredAlloc)"
+    echo "=== $cfg   (module $mod)"
     echo "==========================================================="
     rm -rf "$HERE/states/$cfg"
     # shellcheck disable=SC2046
@@ -119,13 +145,25 @@ run_cfg() {
         -workers "$WORKERS" \
         -metadir "$HERE/states/$cfg" \
         $(extra_flags_for "$cfg") \
-        "$HERE/MCDeferredAlloc.tla"
+        "$HERE/$mod.tla"
     echo
 }
 
 if [ $# -ge 1 ]; then
     if [ "$1" = "sany" ]; then
         sany_check
+        exit 0
+    fi
+    if [ "$1" = "dist" ]; then
+        # Distributed (BUG-8 / event-timestamp) matrix, increasing cost
+        # order; expectations in DIST-EXPECTED.md.  DistBase and
+        # DistUEIllegal are EXPECTED to end in TLC deadlock reports (the
+        # BUG-8 hole registration and the contract-violation demo).
+        for c in DistLocal DistLocalUnion DistBase DistStamp DistStampOOB \
+                 DistUELegal DistUEIllegal DistHandoff DistHandoffPB \
+                 DistOpen; do
+            run_cfg "$c"
+        done
         exit 0
     fi
     for c in "$@"; do run_cfg "$c"; done

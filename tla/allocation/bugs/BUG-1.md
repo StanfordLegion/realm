@@ -226,6 +226,10 @@ admission rule, plus the ballistic-lite flag if Legion's GC wiring turns out unf
 >   capped rejection cascade only drains cleanly with FIX_RPR in place; without it a trailing
 >   dependent alloc in `remove_pending_release` is stranded forever
 >   (witness: `traces/Inversion-bug5-deadlock.txt`; full analysis in `bugs/BUG-5.md`).
+> - **Remote-origin gap:** the request-time cap is airtight only for creates issued on the
+>   memory's owner node; for remote requesters the handle is published before the owner
+>   snapshots the cap, and the residual cross-node cycle is adjudicated as **`bugs/BUG-8.md`**
+>   (with the causal-order soundness theorem and the evidence-tier fix ladder).
 
 ## Verification plan (model v-next)
 

@@ -140,6 +140,13 @@ insufficient), 12-step trace (`traces/Composite4.txt`), violates
   mixed redistrict-plain prefixes. Pre-existing on main; found during the
   C++ fidelity review of the fix branch; TLC-unverified — first
   pre-registered expected-FAIL for the v2 (redistrict) model.
+- **BUG-8** (`bugs/BUG-8.md`) — remote-origin deferred creates: FIX_CAP's
+  arrival-time cap only approximates causal issue order, leaving a residual
+  BUG-1-shape hang for creates issued off the owner node (not a regression;
+  strictly narrower than main). Adjudicated with the causal-order soundness
+  theorem; fix = evidence-tier ladder (Tier 2, client-supplied counter
+  witness, recommended — cross-node funding must keep working per Mike).
+  TLC-unverified pending the two-site model refinement.
 
 Submit with `SAPLING_JOBS.md`: `sbatch sapling_tlc.sbatch Safety` (est.
 1-6 h), `Poison4` (several hours), `Big` (use `-t 48:00:00`). Checkpoint
