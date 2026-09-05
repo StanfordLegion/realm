@@ -2711,22 +2711,10 @@ namespace PRealm {
     // Wait for any pending dump tasks to complete
     if(last_dump_task.exists())
       last_dump_task.wait();
-    // Drain any remaining items on the dump list
-    ThreadProfiler *head = dump_list.exchange(nullptr);
-    while(head != nullptr) {
-      ThreadProfiler *next = head->next.load();
-      head->finalize();
-      delete head;
-      head = next;
-    }
-    // Finalize all the instances
-    for(std::vector<ThreadProfiler *>::const_iterator it = thread_profilers.begin();
-        it != thread_profilers.end(); it++)
-      (*it)->finalize();
     if(enabled) {
       // Drain any pending backtraces
       drain_pending_backtraces(false /*track_diff*/);
-      // Write all buffered descriptors
+      // Write all buffered descriptors before any remaining profiling records
       for(std::deque<ThreadProfiler::ProcDesc>::const_iterator it =
               processor_descriptions.begin();
           it != processor_descriptions.end(); it++)
@@ -2751,6 +2739,20 @@ namespace PRealm {
       for(std::deque<ProvenanceDesc>::const_iterator it = provenance_descs.begin();
           it != provenance_descs.end(); it++)
         serialize(*it);
+    }
+    // Drain any remaining items on the dump list
+    ThreadProfiler *head = dump_list.exchange(nullptr);
+    while(head != nullptr) {
+      ThreadProfiler *next = head->next.load();
+      head->finalize();
+      delete head;
+      head = next;
+    }
+    // Finalize all the instances
+    for(std::vector<ThreadProfiler *>::const_iterator it = thread_profilers.begin();
+        it != thread_profilers.end(); it++)
+      (*it)->finalize();
+    if(enabled) {
       // Get the calibration error
       const long long calibration_error = Realm::Clock::get_calibration_error();
       int ID = CALIBRATION_ERR_ID;
