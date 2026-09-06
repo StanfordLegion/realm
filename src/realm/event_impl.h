@@ -253,8 +253,12 @@ namespace Realm {
     void process_update(gen_t current_gen, const gen_t *new_poisoned_generations,
                         int new_poisoned_count, TimeLimit work_until);
 
-    // Set the operation that will trigger this event's generation.
-    void set_trigger_op(gen_t gen, Operation *op);
+    // Set the operation that will trigger this event's generation.  On success the
+    // event takes ownership of the caller's reference to 'op' and releases it when
+    // 'gen' triggers, whether or not this node owns the event (see trigger()).
+    // Returns false if 'gen' has already been observed to trigger, in which case the
+    // caller keeps its reference.
+    bool set_trigger_op(gen_t gen, Operation *op);
     // Get the operation that will trigger this event's generation.
     // The returned operation's reference is incremented and must be removed by the
     // caller.
@@ -299,8 +303,11 @@ namespace Realm {
     // everything below here protected by this mutex
     Mutex mutex;
 
-    // The operation that will trigger this generation
+    // The operation that will trigger generation 'current_trigger_op_gen' - the event
+    //  holds a reference to it (see set_trigger_op).  For a remote event our view of
+    //  'generation' can lag the owner's, so the generation is tracked explicitly.
     Operation *current_trigger_op = nullptr;
+    gen_t current_trigger_op_gen = 0;
 
     // local waiters are tracked by generation - an easily-accessed list is used
     //  for the "current" generation, whereas a map-by-generation-id is used for

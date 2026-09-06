@@ -1562,37 +1562,49 @@ namespace Realm {
     }
   }
 
-  void GenEventImpl::set_trigger_op(gen_t gen, Operation *op)
+  bool GenEventImpl::set_trigger_op(gen_t gen, Operation *op)
   {
-    if(REALM_LIKELY(generation.load() + 1 == gen)) {
+    // The owner hands out generations in order, so for a local event 'gen' is always
+    //  generation+1.  For a remote event (i.e. an operation the owner spawned on this
+    //  node) our view of 'generation' only advances on local triggers and owner updates,
+    //  so it can lag behind - accept any generation we have not yet seen trigger, or
+    //  the operation would have no owner for its reference at all.
+    if(REALM_LIKELY(gen > generation.load())) {
       AutoLock<> a(mutex);
-      if(REALM_LIKELY(generation.load() + 1 == gen)) {
+      if(REALM_LIKELY(gen > generation.load())) {
         assert(ID(op->get_finish_event()).event_gen_event_idx() ==
                ID(this->me).event_gen_event_idx());
-        // Make sure to drop the reference of a previous operation
+        assert((Network::my_node_id != owner) || (gen == (generation.load() + 1)));
+        // Make sure to drop the reference of a previous operation - it can only still
+        //  be here if its generation has already triggered but trigger() has not yet
+        //  updated our local state (it sends the trigger message to the owner first)
         if(current_trigger_op != nullptr) {
+          assert(current_trigger_op_gen < gen);
+#ifdef REALM_USE_OPERATION_TABLE
           current_trigger_op->remove_reference();
+#endif
         }
         // No need to add a reference to the operation here
         // as we inherit the reference from the caller
         current_trigger_op = op;
+        current_trigger_op_gen = gen;
         if(Network::my_node_id == owner) {
           get_runtime()->num_untriggered_events.fetch_add(1);
         }
+        return true;
       }
     }
+    return false;
   }
 
   Operation *GenEventImpl::get_trigger_op(gen_t gen)
   {
     Operation *op = nullptr;
-    if(REALM_LIKELY(generation.load() + 1 == gen)) {
+    if(REALM_LIKELY(gen > generation.load())) {
       AutoLock<> a(mutex);
-      if(REALM_LIKELY(generation.load() + 1 == gen)) {
+      if((current_trigger_op != nullptr) && (current_trigger_op_gen == gen)) {
         op = current_trigger_op;
-        if(op != nullptr) {
-          op->add_reference();
-        }
+        op->add_reference();
       }
     }
     return op;
@@ -1737,6 +1749,10 @@ namespace Realm {
                       << " (poisoned=" << poisoned << ")";
 
     EventWaiter::EventWaiterList to_wake;
+    // the operation (if any) whose completion triggered this generation - the event
+    //  holds its reference (see set_trigger_op), which we release below once we are
+    //  outside the mutex
+    Operation *trigger_op_to_release = nullptr;
 
     if(Network::my_node_id == owner) {
       // we own this event
@@ -1771,12 +1787,8 @@ namespace Realm {
 
         // Drop the trigger operation now that this event has been triggered
         if(current_trigger_op != nullptr) {
-#ifdef REALM_USE_OPERATION_TABLE
-          // If the operation table is not in play, the operation will hold it's own
-          // reference and clean it up Otherwise, this is a local operation and the event
-          // owns the reference, so clean it up.
-          current_trigger_op->remove_reference();
-#endif // REALM_USE_OPERATION_TABLE
+          assert(current_trigger_op_gen == gen_triggered);
+          trigger_op_to_release = current_trigger_op;
           current_trigger_op = nullptr;
           get_runtime()->num_untriggered_events.fetch_sub(1);
         }
@@ -1829,6 +1841,16 @@ namespace Realm {
       // now update our version of the data structure
       {
         AutoLock<> a(mutex);
+
+        // if an operation on this node (e.g. a task the owner spawned here) was
+        //  responsible for triggering this generation, the event holds its reference -
+        //  drop it just like the owner does above.  Match on the generation rather than
+        //  on 'generation+1': our view of 'generation' can lag, and a newer operation
+        //  may already have been installed for a later generation (see set_trigger_op)
+        if((current_trigger_op != nullptr) && (current_trigger_op_gen == gen_triggered)) {
+          trigger_op_to_release = current_trigger_op;
+          current_trigger_op = nullptr;
+        }
 
         gen_t cur_gen = generation.load();
         // is this the "next" version?
@@ -1898,6 +1920,18 @@ namespace Realm {
       if(subscribe_needed) {
         event_comm->subscribe(make_event(gen_triggered), owner, previous_subscribe_gen);
       }
+    }
+
+    // release the triggering operation's reference (this may delete it, so do it
+    //  outside the mutex)
+    if(trigger_op_to_release != nullptr) {
+#ifdef REALM_USE_OPERATION_TABLE
+      trigger_op_to_release->remove_reference();
+#else
+      // without the operation table the operation holds its own reference and releases
+      //  it in Operation::trigger_finish_event
+      (void)trigger_op_to_release;
+#endif
     }
 
     // finally, trigger any local waiters
