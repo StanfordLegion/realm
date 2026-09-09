@@ -2707,7 +2707,7 @@ namespace Realm {
   GASNetEXInjector::GASNetEXInjector(GASNetEXInternal *_internal)
     : BackgroundWorkItem("gex-inj")
     , internal(_internal)
-    , work_active(false)
+    , active_workers(0)
   {}
 
   void GASNetEXInjector::add_ready_xpair(XmitSrcDestPair *xpair)
@@ -2738,17 +2738,19 @@ namespace Realm {
 
   size_t GASNetEXInjector::queue_size()
   {
-    // Include work_active so that an xpair that has been popped from
-    //  ready_xpairs but is currently being processed by push_packets is
-    //  still counted as in-flight work.  Without this, the quiescence check
-    //  can declare DONE while a worker has the xpair on its stack, and a
-    //  subsequent re-enqueue from push_packets ends up in a queue that
-    //  detach() has already drained - the locked push_mutex_check then
-    //  trips the MutexChecker assertion at xpair destruction.  This was
-    //  the exact failure that commit 30da2be37b ("Fix GASNet Races") fixed
-    //  by tracking work_active alongside the queue.
+    // Include active_workers so that xpairs that have been popped from
+    //  ready_xpairs but are currently being processed by push_packets are
+    //  still counted as in-flight work.  A count is required because multiple
+    //  background workers can execute this work item concurrently.  Without
+    //  this accounting, the quiescence check can declare DONE while a worker
+    //  has the xpair on its stack, and a subsequent re-enqueue from
+    //  push_packets ends up in a queue that detach() has already drained -
+    //  the locked push_mutex_check then trips the MutexChecker assertion at
+    //  xpair destruction.  This was the exact failure that commit 30da2be37b
+    //  ("Fix GASNet Races") fixed by tracking in-flight activity alongside
+    //  the queue.
     AutoLock<> al(mutex);
-    return ready_xpairs.size() + (work_active.load() ? 1 : 0);
+    return ready_xpairs.size() + active_workers.load();
   }
 
   bool GASNetEXInjector::do_work(TimeLimit work_until)
@@ -2765,7 +2767,7 @@ namespace Realm {
       AutoLock<> al(mutex);
       xpair = ready_xpairs.pop_front();
       more_work = !ready_xpairs.empty();
-      work_active.store(true);
+      active_workers.fetch_add(1);
     }
     assert(xpair);
     if(more_work)
@@ -2777,7 +2779,8 @@ namespace Realm {
     //   runs out of time or hits backpressure
     xpair->push_packets(true /*immediate_mode*/, work_until);
 
-    work_active.store(false);
+    unsigned prev_active = active_workers.fetch_sub(1);
+    assert(prev_active > 0);
 
     ThreadLocal::gex_work_until = nullptr;
 
@@ -3601,12 +3604,11 @@ namespace Realm {
     // queued_items: total count across all four background-work queues
     //  (injector ready_xpairs, completer ready_events, poller
     //  critical_xpairs + pending_events, rgetter pending list).  Each
-    //  queue_size() method adds 1 when its work_active / has_work flag
-    //  shows that an item has been popped from the visible queue but is
-    //  still being processed on a worker's stack - without that the
-    //  quiescence check would declare DONE mid-trigger and a subsequent
-    //  re-enqueue from push_packets could leak a locked push_mutex_check
-    //  past detach() (see commit 30da2be37b).  Reporting an actual count
+    //  queue_size() method includes any workers with items popped from the
+    //  visible queue but still being processed on their stacks - without
+    //  that the quiescence check would declare DONE mid-trigger and a
+    //  subsequent re-enqueue from push_packets could leak a locked
+    //  push_mutex_check past detach() (see commit 30da2be37b).  Reporting an actual count
     //  rather than a 0/1 boolean also keeps a slow drain visible: as
     //  items are processed the sum decreases across rounds, so the
     //  Mattern's stability check correctly classifies the system as
