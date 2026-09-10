@@ -411,6 +411,11 @@ namespace Realm {
       // called with message manager lock held
       Message *append_message(size_t hdr_bytes_needed, size_t payload_bytes_needed);
 
+      // total bytes a message with these requirements would occupy in a freshly
+      //  reset block - a request larger than the configured block size can never
+      //  be satisfied by any block, no matter how many are tried
+      static size_t bytes_needed(size_t hdr_bytes_needed, size_t payload_bytes_needed);
+
       // called _without_ message manager lock held
       void recycle_message(Message *msg, IncomingMessageManager *manager);
 

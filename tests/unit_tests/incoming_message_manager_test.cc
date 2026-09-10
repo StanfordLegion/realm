@@ -84,6 +84,30 @@ namespace {
   std::vector<std::vector<char>> FragmentedMessage::received_payloads;
   std::atomic<int> FragmentedMessage::call_count{0};
 
+  // A fragment-carrying type with NO inline handler, so delivery always goes through
+  //  IncomingMessageManager's block-staging path.  Every other fixture in this file
+  //  defines handle_inline, which returns before the staging allocator is touched -
+  //  which is why an oversized reassembled payload was never exercised here.
+  struct OversizedFragMessage {
+    FragmentInfo frag_info;
+    int dummy{0};
+
+    static std::vector<char> last_payload;
+    static std::atomic<int> call_count;
+
+    static void handle_message(NodeID /*sender*/, const OversizedFragMessage & /*hdr*/,
+                               const void *payload, size_t payload_size, TimeLimit /*tl*/)
+    {
+      const char *c = static_cast<const char *>(payload);
+      OversizedFragMessage::last_payload.assign(c, c + payload_size);
+      call_count.fetch_add(1, std::memory_order_relaxed);
+    }
+  };
+  std::vector<char> OversizedFragMessage::last_payload;
+  std::atomic<int> OversizedFragMessage::call_count{0};
+
+  static ActiveMessageHandlerReg<OversizedFragMessage> oversized_frag_msg_reg;
+
   static ActiveMessageHandlerReg<RegularMessage> reg_msg_reg;
   static ActiveMessageHandlerReg<FragmentedMessage> frag_msg_reg;
 
@@ -177,6 +201,57 @@ namespace {
     const auto &payload0 = FragmentedMessage::received_payloads.front();
     EXPECT_EQ(payload0.size(), full_msg.size());
     EXPECT_EQ(payload0, full_msg);
+    mgr.shutdown();
+  }
+
+  // A reassembled payload larger than one message block cannot be staged out of the
+  //  block allocator - blocks are a fixed size and are never grown, so before the
+  //  oversized-payload fallback this aborted in MessageBlock::append_message (and, in
+  //  a release build, fell through to a null dereference).  The sizes below straddle
+  //  and then clear the ~1MB block size.
+  TEST_F(IncomingMessageManagerTest, OversizedReassembledPayloadIsDelivered)
+  {
+    CoreReservationSet crs(nullptr);
+    IncomingMessageManager mgr(2, /*dedicated_threads=*/0, crs);
+
+    const size_t sizes[] = {1048368, 1048369, 2u << 20, 8u << 20};
+    const size_t max_chunk = 64 * 1024;
+    unsigned short msgid =
+        activemsg_handler_table.lookup_message_id<OversizedFragMessage>();
+
+    for(size_t i = 0; i < (sizeof(sizes) / sizeof(sizes[0])); i++) {
+      const size_t total = sizes[i];
+
+      OversizedFragMessage::last_payload.clear();
+      OversizedFragMessage::call_count.store(0);
+
+      std::vector<char> full(total);
+      for(size_t j = 0; j < total; j++)
+        full[j] = static_cast<char>(j & 0xff);
+
+      const uint32_t total_chunks =
+          static_cast<uint32_t>((total + max_chunk - 1) / max_chunk);
+
+      size_t offset = 0;
+      for(uint32_t chunk_id = 0; chunk_id < total_chunks; chunk_id++) {
+        const size_t chunk_size = std::min(max_chunk, total - offset);
+        OversizedFragMessage hdr;
+        hdr.frag_info = {chunk_id, total_chunks, static_cast<uint64_t>(0x5150 + i)};
+        mgr.add_incoming_message(1, msgid, &hdr, sizeof(hdr), PAYLOAD_COPY,
+                                 full.data() + offset, chunk_size, PAYLOAD_COPY, nullptr,
+                                 0, 0, TimeLimit());
+        offset += chunk_size;
+      }
+
+      // no inline handler, so the reassembled message was queued rather than run -
+      //  drive it from this thread rather than depending on handler threads
+      mgr.do_work(TimeLimit());
+
+      EXPECT_EQ(OversizedFragMessage::call_count.load(), 1) << "size " << total;
+      ASSERT_EQ(OversizedFragMessage::last_payload.size(), total) << "size " << total;
+      EXPECT_EQ(OversizedFragMessage::last_payload, full) << "size " << total;
+    }
+
     mgr.shutdown();
   }
 

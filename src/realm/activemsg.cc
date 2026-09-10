@@ -25,6 +25,7 @@
 #include "realm/mutex.h"
 #include "realm/cmdline.h"
 #include "realm/logging.h"
+#include "realm/realm_assert.h"
 
 #include <math.h>
 
@@ -246,6 +247,21 @@ namespace Realm {
     use_count.store(1);
   }
 
+  /*static*/ size_t
+  IncomingMessageManager::MessageBlock::bytes_needed(size_t hdr_bytes_needed,
+                                                     size_t payload_bytes_needed)
+  {
+    // mirrors the layout arithmetic in append_message(), starting from a block
+    //  that has just been reset()
+    size_t used = (sizeof(MessageBlock) + 15) & ~size_t(15);
+    used = (used + sizeof(Message) + 15) & ~size_t(15);
+    if(hdr_bytes_needed > 0)
+      used = (used + hdr_bytes_needed + 15) & ~size_t(15);
+    if(payload_bytes_needed > 0)
+      used = (used + payload_bytes_needed + 15) & ~size_t(15);
+    return used;
+  }
+
   IncomingMessageManager::Message *
   IncomingMessageManager::MessageBlock::append_message(size_t hdr_bytes_needed,
                                                        size_t payload_bytes_needed)
@@ -283,8 +299,10 @@ namespace Realm {
           ((payload_ofs > 0) ? reinterpret_cast<void *>(base + payload_ofs) : 0);
       return msg;
     } else {
-      // would it have ever fit?
-      assert((new_used - size_used) <= (total_size - sizeof(MessageBlock)));
+      // would it have ever fit?  callers must route an oversized message around
+      //  the block allocator, so reaching here is a bug rather than backpressure -
+      //  REALM_ASSERT so it cannot degrade into a null dereference in a release build
+      REALM_ASSERT((new_used - size_used) <= (total_size - sizeof(MessageBlock)));
 
       // return failure - caller will find a new block
       return 0;
@@ -470,11 +488,34 @@ namespace Realm {
 
     // can't handle inline - need to create a Message object for it
 
+    size_t hdr_bytes_needed = ((hdr_mode == PAYLOAD_COPY) ? hdr_size : 0);
+    size_t payload_bytes_needed = ((payload_mode == PAYLOAD_COPY) ? payload_size : 0);
+
+    // Message blocks are a fixed size and are never grown, so a message that does
+    //  not fit in a freshly reset block cannot be satisfied by retrying with another
+    //  one.  Give its payload a dedicated heap allocation instead and let the normal
+    //  payload_needs_free path reclaim it; only the Message and header still come
+    //  from a block.  This is reachable whenever a chunked or multicast payload is
+    //  reassembled above the block size (and from dispatch_local with no network at
+    //  all), and the copy is deliberately done before the lock is taken, since the
+    //  large copies are precisely the ones that should not be serialized.
+    void *oversized_payload = 0;
+    if((payload_bytes_needed > 0) &&
+       (MessageBlock::bytes_needed(hdr_bytes_needed, payload_bytes_needed) >
+        cfg_message_block_size)) {
+      oversized_payload = malloc(payload_bytes_needed);
+      REALM_ASSERT(oversized_payload != 0);
+      memcpy(oversized_payload, payload, payload_bytes_needed);
+      payload_bytes_needed = 0;
+    }
+    // headers are capped far below the block size by every backend, so there is no
+    //  equivalent fallback for them - but do not let a violation reach append_message
+    REALM_ASSERT(MessageBlock::bytes_needed(hdr_bytes_needed, payload_bytes_needed) <=
+                 cfg_message_block_size);
+
     mutex.lock();
 
     Message *msg = 0;
-    size_t hdr_bytes_needed = ((hdr_mode == PAYLOAD_COPY) ? hdr_size : 0);
-    size_t payload_bytes_needed = ((payload_mode == PAYLOAD_COPY) ? payload_size : 0);
     while(true) {
       // try to stick this message in the current block
       msg = current_block->append_message(hdr_bytes_needed, payload_bytes_needed);
@@ -502,7 +543,7 @@ namespace Realm {
 
         // either way, this must now succeed
         msg = current_block->append_message(hdr_bytes_needed, payload_bytes_needed);
-        assert(msg != 0);
+        REALM_ASSERT(msg != 0);
         break;
       }
 
@@ -535,13 +576,18 @@ namespace Realm {
       msg->hdr_needs_free = (hdr_mode == PAYLOAD_FREE);
 
       if(payload_size > 0) {
-        if(payload_mode == PAYLOAD_COPY)
+        if(oversized_payload != 0)
+          msg->payload = oversized_payload; // already copied, above
+        else if(payload_mode == PAYLOAD_COPY)
           memcpy(msg->payload, payload, payload_size);
         else
           msg->payload = const_cast<void *>(payload);
       }
       msg->payload_size = payload_size;
-      msg->payload_needs_free = (payload_mode == PAYLOAD_FREE);
+      // PAYLOAD_FREE and the oversized fallback are mutually exclusive - the latter
+      //  only ever triggers for PAYLOAD_COPY - but either one means we own the buffer
+      msg->payload_needs_free =
+          ((payload_mode == PAYLOAD_FREE) || (oversized_payload != 0));
     }
 
     if(heads[sender]) {
