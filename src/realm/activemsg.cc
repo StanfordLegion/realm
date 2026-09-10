@@ -211,6 +211,15 @@ namespace Realm {
 
   /*extern*/ ActiveMessageHandlerTable activemsg_handler_table;
 
+  uint64_t next_chunk_message_id(NodeID node_id)
+  {
+    // one counter for the whole process - see the declaration in activemsg.h for why
+    //  this must not live inside ActiveMessage<T>
+    static atomic<uint64_t> counter(0);
+    uint64_t local = counter.fetch_add(1);
+    return ((static_cast<uint64_t>(node_id) << 48) | (local & ((1ULL << 48) - 1)));
+  }
+
   ////////////////////////////////////////////////////////////////////////
   //
   // class IncomingMessageManager::MessageBlock
@@ -425,7 +434,15 @@ namespace Realm {
       const FragmentInfo &frag_info = handler->extract_frag_info.value()(hdr);
 
       if(frag_info.total_chunks > 1) {
-        auto key = std::make_pair(sender, frag_info.msg_id);
+        if(frag_info.chunk_id >= frag_info.total_chunks) {
+          log_amhandler.fatal() << "message fragment out of range: sender=" << sender
+                                << " msgid=" << msgid << " msg_id=" << frag_info.msg_id
+                                << " chunk=" << frag_info.chunk_id << "/"
+                                << frag_info.total_chunks;
+          abort();
+        }
+
+        FragmentKey key{sender, msgid, frag_info.msg_id};
         auto it = frag_message.find(key);
 
         if(it == frag_message.end()) {
@@ -433,10 +450,27 @@ namespace Realm {
                    .emplace(key,
                             std::make_unique<FragmentedMessage>(frag_info.total_chunks))
                    .first;
+        } else if(it->second->expected_chunks() != frag_info.total_chunks) {
+          // two logical messages have landed on one reassembly key, or a fragment
+          //  header is corrupt - either way the reassembled bytes cannot be trusted
+          log_amhandler.fatal() << "message fragment count mismatch: sender=" << sender
+                                << " msgid=" << msgid << " msg_id=" << frag_info.msg_id
+                                << " expected=" << it->second->expected_chunks()
+                                << " got=" << frag_info.total_chunks;
+          abort();
         }
 
-        bool ok = it->second->add_chunk(frag_info.chunk_id, payload, payload_size);
-        assert(ok);
+        if(!it->second->add_chunk(frag_info.chunk_id, payload, payload_size)) {
+          // the chunk id is in range and the totals agree, so this fragment has
+          //  already been received.  Realm's transports deliver exactly once and
+          //  nothing retransmits, so a repeat is a bug upstream rather than
+          //  something to absorb - and absorbing it would mask an id collision
+          log_amhandler.fatal() << "duplicate message fragment: sender=" << sender
+                                << " msgid=" << msgid << " msg_id=" << frag_info.msg_id
+                                << " chunk=" << frag_info.chunk_id << "/"
+                                << frag_info.total_chunks;
+          abort();
+        }
 
         if(!it->second->is_complete()) {
           total_messages_handled += 1;

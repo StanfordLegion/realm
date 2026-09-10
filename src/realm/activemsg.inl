@@ -566,7 +566,7 @@ namespace Realm {
       size_t total_payload = chunk_src_datalen_;
 
       // msg_id only needs to be unique per-sender, so using my_node_id is fine
-      uint64_t msg_id = next_chunk_message_id(Network::my_node_id);
+      uint64_t msg_id = Realm::next_chunk_message_id(Network::my_node_id);
       size_t max_chunk = network_max_payload_;
       uint32_t total_chunks =
           static_cast<uint32_t>((total_payload + max_chunk - 1) / max_chunk);
@@ -599,15 +599,6 @@ namespace Realm {
       chunk_src_datalen_ = 0;
       network_max_payload_ = 0;
     }
-  }
-
-  template <typename T, size_t INLINE_STORAGE>
-  /*static*/ uint64_t
-  ActiveMessage<T, INLINE_STORAGE>::next_chunk_message_id(NodeID node_id)
-  {
-    static std::atomic<uint64_t> counter{0};
-    uint64_t local = counter.fetch_add(1, std::memory_order_relaxed);
-    return (static_cast<uint64_t>(node_id) << 48) | (local & ((1ULL << 48) - 1));
   }
 
   namespace HandlerWrappers {

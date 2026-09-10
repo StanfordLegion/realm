@@ -180,7 +180,6 @@ namespace Realm {
     void init_chunked(NodeID _target, size_t _max_payload_size);
     void init_chunked_data(NodeID _target, const void *_data, size_t _datalen);
     void commit_chunked(void);
-    static uint64_t next_chunk_message_id(NodeID node_id);
   };
 
   // type-erased wrappers for completion callbacks
@@ -244,6 +243,13 @@ namespace Realm {
     uint32_t total_chunks{0};
     uint64_t msg_id{0};
   };
+
+  // Allocates the next chunked-message id for this process.  Deliberately a free
+  //  function rather than a member of ActiveMessage<T>: a function-local static inside
+  //  a member of a class template gets one instance per instantiation, so each message
+  //  type would restart the sequence at zero and hand out ids that collide with every
+  //  other type's.
+  REALM_INTERNAL_API_EXTERNAL_LINKAGE uint64_t next_chunk_message_id(NodeID node_id);
 
   // singleton class that can convert message type->ID and ID->handler
   class ActiveMessageHandlerTable {
@@ -448,15 +454,32 @@ namespace Realm {
     size_t num_available_blocks;
     size_t cfg_max_available_blocks, cfg_message_block_size;
 
-    struct PairHash {
-      std::size_t operator()(const std::pair<NodeID, uint64_t> &p) const
+    // An in-flight reassembly is identified by (sender, message type, sender-chosen
+    //  id).  The message type is part of the key as defence in depth: ids are unique
+    //  per sender process, but including the type means any future regression in id
+    //  allocation fails loudly instead of silently interleaving two messages' bytes.
+    struct FragmentKey {
+      NodeID sender;
+      ActiveMessageHandlerTable::MessageID msgid;
+      uint64_t msg_id;
+
+      bool operator==(const FragmentKey &rhs) const
       {
-        return std::hash<NodeID>()(p.first) ^ (std::hash<uint64_t>()(p.second) << 1);
+        return ((sender == rhs.sender) && (msgid == rhs.msgid) &&
+                (msg_id == rhs.msg_id));
       }
     };
 
-    std::unordered_map<std::pair<NodeID, uint64_t>, std::unique_ptr<FragmentedMessage>,
-                       PairHash>
+    struct FragmentKeyHash {
+      std::size_t operator()(const FragmentKey &k) const
+      {
+        return (std::hash<NodeID>()(k.sender) ^
+                (std::hash<unsigned>()(k.msgid) << 1) ^
+                (std::hash<uint64_t>()(k.msg_id) << 2));
+      }
+    };
+
+    std::unordered_map<FragmentKey, std::unique_ptr<FragmentedMessage>, FragmentKeyHash>
         frag_message;
   };
 
