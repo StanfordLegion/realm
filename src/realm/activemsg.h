@@ -87,8 +87,14 @@ namespace Realm {
     // providing the payload (as a 1D reference, which must be PAYLOAD_KEEP)
     //  up front can avoid a copy if the source location is directly accessible
     //  by the networking hardware
-    //  Per the semantics of PAYLOAD_KEEP, you must keep the payload buffer
-    //  alive and unmodified until the call to commit or cancel returns
+    //  Per the semantics of PAYLOAD_KEEP, you must keep the payload buffer alive
+    //  and unmodified until LOCAL COMPLETION - NOT merely until commit() returns.
+    //  A backend may hand the pointer straight to the network and return before it
+    //  has been read: on UCX, UCPMessageImpl::commit does not copy a contiguous
+    //  source and send_slow_path() submits the request asynchronously.  Use
+    //  add_local_completion() to learn when the buffer is free, or use the
+    //  (target, max_payload_size) constructor with add_payload(), which copies
+    //  during commit().
     ActiveMessage(NodeID _target, const void *_data, size_t _datalen);
     ActiveMessage(NodeID _target, const LocalAddress &_src_payload_addr, size_t _datalen,
                   const RemoteAddress &_dest_payload_addr);
@@ -177,9 +183,23 @@ namespace Realm {
     std::vector<std::byte>
         chunk_alloc_; // owned buffer for network-allocated chunked mode
 
+    // Completion callbacks registered before commit(), held here because chunked mode
+    //  has no ActiveMessageImpl to hand them to until commit() builds the chunks.
+    std::vector<char> chunk_local_comp_;
+    std::vector<char> chunk_remote_comp_;
+
     void init_chunked(NodeID _target, size_t _max_payload_size);
     void init_chunked_data(NodeID _target, const void *_data, size_t _datalen);
     void commit_chunked(void);
+    // makes room for one more completion callback, growing by cloning rather than
+    //  letting the vector memcpy polymorphic objects
+    static void *reserve_chunked_completion(std::vector<char> &buf, size_t bytes);
+    static void discard_chunked_completions(std::vector<char> &buf);
+
+    // so that commit_chunked() can hand a completion to the per-chunk message, which
+    //  is a different instantiation of this same template
+    template <typename, size_t>
+    friend class ActiveMessage;
   };
 
   // type-erased wrappers for completion callbacks
@@ -393,6 +413,16 @@ namespace Realm {
   protected:
     struct MessageBlock;
 
+    // A remote completion rides on one fragment (see ActiveMessage<T>'s chunked mode),
+    //  but "the target has handled it" is only true once the whole message has been
+    //  reassembled and run.  A callback arriving on a fragment is therefore held here
+    //  until then.
+    struct DeferredCallback {
+      CallbackFnptr fnptr;
+      CallbackData data1;
+      CallbackData data2;
+    };
+
     struct Message {
       MessageBlock *block;
       Message *next_msg;
@@ -406,6 +436,9 @@ namespace Realm {
       bool payload_needs_free;
       CallbackFnptr callback_fnptr;
       CallbackData callback_data1, callback_data2;
+      // callbacks that arrived on earlier fragments of this message and could not be
+      //  fired then - null for every message that was not reassembled
+      std::vector<DeferredCallback> *deferred_callbacks;
     };
 
     struct MessageBlock {
@@ -429,6 +462,9 @@ namespace Realm {
       atomic<unsigned> use_count;
       MessageBlock *next_free;
     };
+
+    // fires and releases any callbacks held from this message's fragments
+    static void invoke_deferred_callbacks(Message *msg);
 
     int get_messages(Message *&head, Message **&tail, bool wait);
     bool return_messages(int sender, size_t num_handled, Message *head, Message **tail);
@@ -465,22 +501,24 @@ namespace Realm {
 
       bool operator==(const FragmentKey &rhs) const
       {
-        return ((sender == rhs.sender) && (msgid == rhs.msgid) &&
-                (msg_id == rhs.msg_id));
+        return ((sender == rhs.sender) && (msgid == rhs.msgid) && (msg_id == rhs.msg_id));
       }
     };
 
     struct FragmentKeyHash {
       std::size_t operator()(const FragmentKey &k) const
       {
-        return (std::hash<NodeID>()(k.sender) ^
-                (std::hash<unsigned>()(k.msgid) << 1) ^
+        return (std::hash<NodeID>()(k.sender) ^ (std::hash<unsigned>()(k.msgid) << 1) ^
                 (std::hash<uint64_t>()(k.msg_id) << 2));
       }
     };
 
-    std::unordered_map<FragmentKey, std::unique_ptr<FragmentedMessage>, FragmentKeyHash>
-        frag_message;
+    struct FragmentReassembly {
+      std::unique_ptr<FragmentedMessage> message;
+      std::vector<DeferredCallback> deferred;
+    };
+
+    std::unordered_map<FragmentKey, FragmentReassembly, FragmentKeyHash> frag_message;
   };
 
   template <typename UserHdr>
@@ -557,7 +595,7 @@ namespace Realm {
     //  what the original handler must see as its sender
     NodeID origin_node = 0;
 
-    uint32_t original_payload_size = 0;
+    uint64_t original_payload_size = 0;
     uint32_t target_encoding_size = 0;
     uint32_t completion_size = 0;
     uint32_t flags = 0;
@@ -912,6 +950,20 @@ namespace Realm {
   //  MulticastTargetSet(nodes) - NodeSet itself stays as a general in-memory set.
   //
   // The payload is always copied, so this is the PAYLOAD_COPY/PAYLOAD_KEEP equivalent;
+  //  the caller's buffer is free as soon as this returns.  There is deliberately no
+  //  remote-address/RDMA form (see the comment on MulticastForwarder::send).
+  //
+  // 'on_remote_complete', if given, is invoked exactly once after every target has
+  //  received AND handled the message, and is then deleted; passing null - the normal
+  //  fire-and-forget case - puts no acknowledgement metadata on the wire and creates no
+  //  state anywhere.  Build one with make_multicast_completion().
+  //
+  // Defined in activemsg.inl.
+  template <typename T>
+  inline void multicast_message(const MulticastTargetSet &targets, const T &header,
+                                const void *payload = 0, size_t payload_size = 0,
+                                MulticastMetricsSink *metrics = 0,
+                                MulticastCompletionCallback *on_remote_complete = 0);
 
 } // namespace Realm
 

@@ -318,9 +318,24 @@ namespace Realm {
     }
   }
 
+  /*static*/ void
+  IncomingMessageManager::invoke_deferred_callbacks(IncomingMessageManager::Message *msg)
+  {
+    if(msg->deferred_callbacks == nullptr)
+      return;
+    for(const DeferredCallback &cb : *msg->deferred_callbacks)
+      (cb.fnptr)(msg->sender, cb.data1, cb.data2);
+    delete msg->deferred_callbacks;
+    msg->deferred_callbacks = nullptr;
+  }
+
   void IncomingMessageManager::MessageBlock::recycle_message(
       IncomingMessageManager::Message *msg, IncomingMessageManager *manager)
   {
+    // reaching here means the handler never ran, so release rather than invoke
+    delete msg->deferred_callbacks;
+    msg->deferred_callbacks = nullptr;
+
     // first, free any hdr/payload pointer we were borrowing
     if(msg->hdr_needs_free)
       free(msg->hdr);
@@ -427,6 +442,8 @@ namespace Realm {
         activemsg_handler_table.lookup_message_handler(msgid);
 
     std::vector<char> message;
+    // callbacks accumulated from this message's earlier fragments, if it was one
+    std::vector<DeferredCallback> deferred;
 
     if(handler && handler->extract_frag_info.has_value()) {
       AutoLock<> al(mutex);
@@ -435,10 +452,10 @@ namespace Realm {
 
       if(frag_info.total_chunks > 1) {
         if(frag_info.chunk_id >= frag_info.total_chunks) {
-          log_amhandler.fatal() << "message fragment out of range: sender=" << sender
-                                << " msgid=" << msgid << " msg_id=" << frag_info.msg_id
-                                << " chunk=" << frag_info.chunk_id << "/"
-                                << frag_info.total_chunks;
+          log_amhandler.fatal()
+              << "message fragment out of range: sender=" << sender << " msgid=" << msgid
+              << " msg_id=" << frag_info.msg_id << " chunk=" << frag_info.chunk_id << "/"
+              << frag_info.total_chunks;
           abort();
         }
 
@@ -446,38 +463,49 @@ namespace Realm {
         auto it = frag_message.find(key);
 
         if(it == frag_message.end()) {
-          it = frag_message
-                   .emplace(key,
-                            std::make_unique<FragmentedMessage>(frag_info.total_chunks))
-                   .first;
-        } else if(it->second->expected_chunks() != frag_info.total_chunks) {
+          FragmentReassembly rec;
+          rec.message = std::make_unique<FragmentedMessage>(frag_info.total_chunks);
+          it = frag_message.emplace(key, std::move(rec)).first;
+        } else if(it->second.message->expected_chunks() != frag_info.total_chunks) {
           // two logical messages have landed on one reassembly key, or a fragment
           //  header is corrupt - either way the reassembled bytes cannot be trusted
           log_amhandler.fatal() << "message fragment count mismatch: sender=" << sender
                                 << " msgid=" << msgid << " msg_id=" << frag_info.msg_id
-                                << " expected=" << it->second->expected_chunks()
+                                << " expected=" << it->second.message->expected_chunks()
                                 << " got=" << frag_info.total_chunks;
           abort();
         }
 
-        if(!it->second->add_chunk(frag_info.chunk_id, payload, payload_size)) {
+        if(!it->second.message->add_chunk(frag_info.chunk_id, payload, payload_size)) {
           // the chunk id is in range and the totals agree, so this fragment has
           //  already been received.  Realm's transports deliver exactly once and
           //  nothing retransmits, so a repeat is a bug upstream rather than
           //  something to absorb - and absorbing it would mask an id collision
-          log_amhandler.fatal() << "duplicate message fragment: sender=" << sender
-                                << " msgid=" << msgid << " msg_id=" << frag_info.msg_id
-                                << " chunk=" << frag_info.chunk_id << "/"
-                                << frag_info.total_chunks;
+          log_amhandler.fatal()
+              << "duplicate message fragment: sender=" << sender << " msgid=" << msgid
+              << " msg_id=" << frag_info.msg_id << " chunk=" << frag_info.chunk_id << "/"
+              << frag_info.total_chunks;
           abort();
         }
 
-        if(!it->second->is_complete()) {
+        // A callback on a fragment - in practice a remote completion, which rides
+        //  chunk 0 - cannot fire yet: "handled by the target" is only true once the
+        //  whole message has been reassembled and run.  Hold it until then.
+        if(callback_fnptr != nullptr) {
+          it->second.deferred.push_back(
+              DeferredCallback{callback_fnptr, callback_data1, callback_data2});
+          callback_fnptr = nullptr;
+          callback_data1 = 0;
+          callback_data2 = 0;
+        }
+
+        if(!it->second.message->is_complete()) {
           total_messages_handled += 1;
           return false;
         }
 
-        message = it->second->reassemble();
+        message = it->second.message->reassemble();
+        deferred = std::move(it->second.deferred);
 
         frag_message.erase(it);
       }
@@ -504,6 +532,13 @@ namespace Realm {
           long long t_end = Clock::current_time_in_nanoseconds();
           handler->stats.record(t_start, t_end);
         }
+        // the reassembled message has now been handled, so callbacks held from
+        //  its earlier fragments are due.  This message's own callback_fnptr
+        //  stays unfired: when a handler runs inline the backend reports
+        //  completion through its return value instead
+        //  (gasnetex_internal.cc:5156).
+        for(const DeferredCallback &cb : deferred)
+          (cb.fnptr)(sender, cb.data1, cb.data2);
         if(payload_mode == PAYLOAD_FREE)
           free(const_cast<void *>(payload));
         // see if we need to wake up a thread waiting on a drain
@@ -601,6 +636,11 @@ namespace Realm {
       msg->callback_fnptr = callback_fnptr;
       msg->callback_data1 = callback_data1;
       msg->callback_data2 = callback_data2;
+      // heap allocated because a Message carries only two words of callback data,
+      //  and these fire on a handler thread long after this function returns
+      msg->deferred_callbacks =
+          (deferred.empty() ? nullptr
+                            : new std::vector<DeferredCallback>(std::move(deferred)));
 
       if(hdr_mode == PAYLOAD_COPY)
         memcpy(msg->hdr, hdr, hdr_size);
@@ -883,6 +923,7 @@ namespace Realm {
       if(current_msg->callback_fnptr)
         (current_msg->callback_fnptr)(current_msg->sender, current_msg->callback_data1,
                                       current_msg->callback_data2);
+      invoke_deferred_callbacks(current_msg);
 
       if(do_profile)
         current_msg->handler->stats.record(t_start, t_end);
@@ -964,6 +1005,7 @@ namespace Realm {
         if(current_msg->callback_fnptr)
           (current_msg->callback_fnptr)(current_msg->sender, current_msg->callback_data1,
                                         current_msg->callback_data2);
+        invoke_deferred_callbacks(current_msg);
 
         if(Config::profile_activemsg_handlers)
           current_msg->handler->stats.record(t_start, t_end);
@@ -1262,7 +1304,7 @@ namespace Realm {
       MulticastEnvelopeMessage env;
       env.multicast_id = out.multicast_id;
       env.origin_node = out.origin;
-      env.original_payload_size = static_cast<uint32_t>(out.payload_size);
+      env.original_payload_size = out.payload_size;
       env.target_encoding_size = static_cast<uint32_t>(enc.bytes());
       env.completion_size = static_cast<uint32_t>(comp_size);
       env.flags = out.flags;
@@ -1459,8 +1501,11 @@ namespace Realm {
       MulticastMetricsSink *metrics, MulticastCompletionCallback *on_remote_complete)
   {
     // the envelope's length fields are 16/32 bits wide
-    assert(hdr_size <= 0xffff);
-    assert(payload_size <= 0xffffffffULL);
+    // the envelope's header-length field is 16 bits wide; the payload length is 64,
+    //  so it needs no check.  REALM_ASSERT rather than assert: silently truncating
+    //  in a release build would make the origin and the targets disagree about the
+    //  message, which is far worse than failing here.
+    REALM_ASSERT(hdr_size <= 0xffff);
 
     // plan section 7.5: an empty target set is a successful no-op.  Every one of the
     //  zero targets has trivially already handled the message, so a requested remote

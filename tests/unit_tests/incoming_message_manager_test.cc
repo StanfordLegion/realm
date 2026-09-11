@@ -284,7 +284,6 @@ namespace {
     mgr.shutdown();
   }
 
-
   // Two different chunked message types from one sender used to share a reassembly
   //  key.  next_chunk_message_id's counter was a function-local static inside a member
   //  of the ActiveMessage<T> class template, so every instantiation restarted at zero
@@ -314,7 +313,8 @@ namespace {
 
     const size_t chunk_a = 10; // 3 chunks
     const size_t chunk_b = 10; // 2 chunks
-    unsigned short msgid_a = activemsg_handler_table.lookup_message_id<FragmentedMessage>();
+    unsigned short msgid_a =
+        activemsg_handler_table.lookup_message_id<FragmentedMessage>();
     unsigned short msgid_b =
         activemsg_handler_table.lookup_message_id<SecondFragMessage>();
     ASSERT_NE(msgid_a, msgid_b);
@@ -351,12 +351,155 @@ namespace {
     mgr.shutdown();
   }
 
+  static std::atomic<int> g_deferred_fired{0};
+  static void count_deferred_callback(NodeID /*sender*/,
+                                      IncomingMessageManager::CallbackData /*d1*/,
+                                      IncomingMessageManager::CallbackData /*d2*/)
+  {
+    g_deferred_fired.fetch_add(1, std::memory_order_relaxed);
+  }
+
+  // A remote completion on a chunked message rides one fragment, but "handled by the
+  //  target" is only true once the whole message has been reassembled and run.  The
+  //  callback must therefore be held across the intervening fragments and fire exactly
+  //  once, after the handler.  Covered for both dispatch paths, which fire it in
+  //  different places: inline handlers from add_incoming_message, queued ones from the
+  //  handler loop.
+  TEST_F(IncomingMessageManagerTest, FragmentCallbackWaitsForReassembledHandler_Inline)
+  {
+    CoreReservationSet crs(nullptr);
+    IncomingMessageManager mgr(2, /*dedicated_threads=*/0, crs);
+
+    FragmentedMessage::received_payloads.clear();
+    FragmentedMessage::call_count.store(0);
+    g_deferred_fired.store(0);
+
+    std::vector<char> full(30);
+    for(size_t i = 0; i < full.size(); i++)
+      full[i] = static_cast<char>(i);
+    unsigned short msgid = activemsg_handler_table.lookup_message_id<FragmentedMessage>();
+
+    // Delivered out of order, which is the case that matters: the chunk that triggers
+    //  dispatch is the last to ARRIVE (here chunk 1), not the last one sent.  That is
+    //  why the completion has to be deferred rather than attached to the final chunk.
+    const uint32_t order[3] = {2, 0, 1};
+    for(int i = 0; i < 3; i++) {
+      const uint32_t chunk_id = order[i];
+      FragmentedMessage hdr;
+      hdr.frag_info = {chunk_id, 3, 0xC0FFEEULL};
+      // only chunk 0 carries a callback, exactly as commit_chunked attaches it
+      bool handled = mgr.add_incoming_message(
+          1, msgid, &hdr, sizeof(hdr), PAYLOAD_COPY, full.data() + (chunk_id * 10), 10,
+          PAYLOAD_COPY, (chunk_id == 0) ? &count_deferred_callback : nullptr, 0, 0,
+          TimeLimit());
+      if(i < 2) {
+        EXPECT_FALSE(handled);
+        EXPECT_EQ(g_deferred_fired.load(), 0) << "fired before reassembly completed";
+      } else {
+        EXPECT_TRUE(handled);
+      }
+    }
+
+    EXPECT_EQ(FragmentedMessage::call_count.load(), 1);
+    EXPECT_EQ(g_deferred_fired.load(), 1);
+    ASSERT_EQ(FragmentedMessage::received_payloads.size(), 1u);
+    EXPECT_EQ(FragmentedMessage::received_payloads.front(), full);
+
+    mgr.shutdown();
+  }
+
+  TEST_F(IncomingMessageManagerTest, FragmentCallbackWaitsForReassembledHandler_Queued)
+  {
+    CoreReservationSet crs(nullptr);
+    IncomingMessageManager mgr(2, /*dedicated_threads=*/0, crs);
+
+    OversizedFragMessage::last_payload.clear();
+    OversizedFragMessage::call_count.store(0);
+    g_deferred_fired.store(0);
+
+    std::vector<char> full(30);
+    for(size_t i = 0; i < full.size(); i++)
+      full[i] = static_cast<char>(i);
+    unsigned short msgid =
+        activemsg_handler_table.lookup_message_id<OversizedFragMessage>();
+
+    // out of order again, and this time the callback-carrying chunk arrives LAST, so
+    //  the same dispatch both completes reassembly and owes the callback
+    const uint32_t order[3] = {1, 2, 0};
+    for(int i = 0; i < 3; i++) {
+      const uint32_t chunk_id = order[i];
+      OversizedFragMessage hdr;
+      hdr.frag_info = {chunk_id, 3, 0xC0FFEEULL};
+      mgr.add_incoming_message(1, msgid, &hdr, sizeof(hdr), PAYLOAD_COPY,
+                               full.data() + (chunk_id * 10), 10, PAYLOAD_COPY,
+                               (chunk_id == 0) ? &count_deferred_callback : nullptr, 0, 0,
+                               TimeLimit());
+      EXPECT_EQ(g_deferred_fired.load(), 0) << "fired before the handler ran";
+    }
+
+    // this type has no inline handler, so the reassembled message is queued
+    EXPECT_EQ(OversizedFragMessage::call_count.load(), 0);
+    mgr.do_work(TimeLimit());
+
+    EXPECT_EQ(OversizedFragMessage::call_count.load(), 1);
+    EXPECT_EQ(g_deferred_fired.load(), 1);
+    EXPECT_EQ(OversizedFragMessage::last_payload, full);
+
+    mgr.shutdown();
+  }
 
   class IncomingMessageManagerDeathTest : public IncomingMessageManagerTest {};
 
   // Realm's transports deliver every message exactly once and nothing retransmits, so
   //  a repeated fragment means a bug upstream.  Absorbing it would also mask two
   //  messages colliding on one reassembly key, which is the failure Fix B addresses.
+  // Two logical messages landing on one reassembly key, or a corrupt fragment header,
+  //  show up as a disagreement about how many chunks the message has.  The reassembled
+  //  bytes cannot be trusted, so this must not be absorbed.
+  TEST_F(IncomingMessageManagerDeathTest, FragmentCountMismatchAborts)
+  {
+    auto deliver_conflicting_totals = []() {
+      CoreReservationSet crs(nullptr);
+      IncomingMessageManager mgr(2, /*dedicated_threads=*/0, crs);
+
+      const char data[] = "chunk";
+      unsigned short msgid =
+          activemsg_handler_table.lookup_message_id<FragmentedMessage>();
+
+      FragmentedMessage hdr;
+      hdr.frag_info = {0, 3, 0x2345ULL};
+      mgr.add_incoming_message(1, msgid, &hdr, sizeof(hdr), PAYLOAD_COPY, data,
+                               sizeof(data), PAYLOAD_COPY, nullptr, 0, 0, TimeLimit());
+      // same key, but claiming a different chunk count
+      hdr.frag_info = {1, 2, 0x2345ULL};
+      mgr.add_incoming_message(1, msgid, &hdr, sizeof(hdr), PAYLOAD_COPY, data,
+                               sizeof(data), PAYLOAD_COPY, nullptr, 0, 0, TimeLimit());
+    };
+
+    EXPECT_DEATH(deliver_conflicting_totals(), "");
+  }
+
+  // A chunk id outside the declared range cannot be placed anywhere, and silently
+  //  dropping it would hang the reassembly forever.
+  TEST_F(IncomingMessageManagerDeathTest, OutOfRangeFragmentAborts)
+  {
+    auto deliver_out_of_range_chunk = []() {
+      CoreReservationSet crs(nullptr);
+      IncomingMessageManager mgr(2, /*dedicated_threads=*/0, crs);
+
+      const char data[] = "chunk";
+      unsigned short msgid =
+          activemsg_handler_table.lookup_message_id<FragmentedMessage>();
+
+      FragmentedMessage hdr;
+      hdr.frag_info = {5, 3, 0x3456ULL}; // chunk 5 of 3
+      mgr.add_incoming_message(1, msgid, &hdr, sizeof(hdr), PAYLOAD_COPY, data,
+                               sizeof(data), PAYLOAD_COPY, nullptr, 0, 0, TimeLimit());
+    };
+
+    EXPECT_DEATH(deliver_out_of_range_chunk(), "");
+  }
+
   TEST_F(IncomingMessageManagerDeathTest, DuplicateFragmentAborts)
   {
     // wrapped in a lambda so the commas below are not parsed as macro arguments
