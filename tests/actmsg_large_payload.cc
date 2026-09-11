@@ -34,12 +34,13 @@
 #include "realm/nodeset.h"
 #include "realm/serialize.h"
 
-#include <map>
-
 #include <atomic>
 #include <cassert>
+#include <chrono>
 #include <cstdio>
-#include <unistd.h>
+#include <cstring>
+#include <map>
+#include <thread>
 #include <vector>
 
 using namespace Realm;
@@ -162,7 +163,7 @@ namespace {
   {
     const int want = base + count;
     for(int spins = 0; (g_acks.load() < want) && (spins < 60000); spins++)
-      usleep(1000);
+      std::this_thread::sleep_for(std::chrono::milliseconds(1));
     if(g_acks.load() < want) {
       log_app.error() << what << ": timed out waiting for acks ("
                       << (g_acks.load() - base) << " of " << count << ")";
@@ -269,7 +270,7 @@ namespace {
       return;
 
     for(int spins = 0; (g_remote_comp.load() < 1) && (spins < 60000); spins++)
-      usleep(1000);
+      std::this_thread::sleep_for(std::chrono::milliseconds(1));
 
     if(g_remote_comp.load() != 1) {
       log_app.error() << "remote completion fired " << g_remote_comp.load()
