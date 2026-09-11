@@ -32,9 +32,13 @@ public:
   bool triggered = false;
 };
 
-class MockEventCommunicator : public EventCommunicator {
+class EventTestCommunicator : public EventCommunicator {
 public:
-  virtual void trigger(Event event, NodeID owner, bool poisoned) { sent_trigger_count++; }
+  virtual void trigger(Event event, NodeID owner, bool poisoned)
+  {
+    sent_trigger_count++;
+    last_trigger_poisoned = poisoned;
+  }
 
   virtual void update(Event event, NodeID to_update,
                       span<EventImpl::gen_t> poisoned_generationse)
@@ -51,6 +55,7 @@ public:
   int sent_trigger_count = 0;
   int sent_subscription_count = 0;
   int sent_notification_count = 0;
+  bool last_trigger_poisoned = false;
 };
 
 // An Operation whose only job is to report when it is destroyed.  Constructed against
@@ -82,11 +87,11 @@ public:
 //  operation back on this node.  GenEventImpl::trigger sends the trigger message before
 //  it updates local state, so doing the spawn inside trigger() lands the new operation
 //  in exactly that window.
-class RespawningEventCommunicator : public MockEventCommunicator {
+class RespawningEventCommunicator : public EventTestCommunicator {
 public:
   virtual void trigger(Event event, NodeID owner, bool poisoned)
   {
-    MockEventCommunicator::trigger(event, owner, poisoned);
+    EventTestCommunicator::trigger(event, owner, poisoned);
     if((spawned == nullptr) && (event_impl != nullptr)) {
       spawned = new TestOperation(event_impl, respawn_gen, destroyed);
     }
@@ -102,7 +107,7 @@ class GenEventTest : public ::testing::Test {
 protected:
   void SetUp() override
   {
-    event_comm = new MockEventCommunicator();
+    event_comm = new EventTestCommunicator();
     event_notifier = new EventTriggerNotifier();
   }
 
@@ -117,7 +122,7 @@ protected:
     delete event_notifier;
   }
 
-  MockEventCommunicator *event_comm;
+  EventTestCommunicator *event_comm;
   EventTriggerNotifier *event_notifier;
 };
 
@@ -301,7 +306,7 @@ TEST_F(GenEventTest, RemoteSubscribeNextGen)
 {
   const NodeID owner = 1;
   const GenEventImpl::gen_t subscribe_gen = 2;
-  MockEventCommunicator *event_comm = new MockEventCommunicator();
+  EventTestCommunicator *event_comm = new EventTestCommunicator();
   GenEventImpl event(event_notifier, event_comm);
 
   event.init(ID::make_event(0, 0, 0), owner);
@@ -314,7 +319,7 @@ TEST_F(GenEventTest, RemoteSubscribeCurrGen)
 {
   const NodeID owner = 1;
   const GenEventImpl::gen_t subscribe_gen = 1;
-  MockEventCommunicator *event_comm = new MockEventCommunicator();
+  EventTestCommunicator *event_comm = new EventTestCommunicator();
   GenEventImpl event(event_notifier, event_comm);
 
   event.init(ID::make_event(0, 0, 0), owner);
@@ -539,6 +544,85 @@ TEST_F(GenEventTest, RemoteTriggerOpReplacedBeforeLocalUpdate)
   EXPECT_TRUE(event.has_triggered(2, poisoned));
   EXPECT_EQ(event.current_trigger_op, nullptr);
   EXPECT_TRUE(destroyed_two);
+}
+
+// Poison in a dynamically-added finish precondition must not destroy an operation or
+// report its finish event until the operation's main work item has also finished.
+TEST_F(GenEventTest, RemoteFinishPreconditionPoisonWaitsForOperation)
+{
+  const NodeID owner = 1;
+  const GenEventImpl::gen_t trigger_gen = 1;
+  bool poisoned = false;
+  bool destroyed = false;
+  GenEventImpl event(event_notifier, event_comm);
+  event.init(ID::make_event(0, 0, 0), owner);
+
+  TestOperation *op = new TestOperation(&event, trigger_gen, &destroyed);
+  ASSERT_TRUE(op->mark_ready());
+  ASSERT_TRUE(op->mark_started());
+
+  // Model a finish precondition that was registered by the running operation and then
+  // poisoned.  The merger's initial count represents the still-running main work item.
+  event.merger.get_next_precondition()->event_triggered(true /*poisoned*/,
+                                                        TimeLimit::responsive());
+
+  EXPECT_FALSE(event.has_triggered(trigger_gen, poisoned));
+  EXPECT_FALSE(destroyed);
+  EXPECT_EQ(event.current_trigger_op, op);
+  EXPECT_EQ(event_comm->sent_trigger_count, 0);
+
+  op->mark_finished(true /*successful*/);
+
+  EXPECT_TRUE(event.has_triggered(trigger_gen, poisoned));
+  EXPECT_TRUE(event_comm->last_trigger_poisoned);
+  EXPECT_EQ(event.current_trigger_op, nullptr);
+  EXPECT_TRUE(destroyed);
+}
+
+TEST_F(GenEventTest, LocalEventMergerDefersPoisonUntilAllPreconditions)
+{
+  const NodeID owner = 0;
+  // Prevent this stack-allocated event from being returned to the runtime's free list.
+  const GenEventImpl::gen_t trigger_gen = (1U << ID::EVENT_GENERATION_WIDTH) - 1;
+  bool poisoned = false;
+  GenEventImpl event(event_notifier, event_comm);
+  event.init(ID::make_event(0, 0, 0), owner);
+  event.generation.store(trigger_gen - 1);
+  event.merger.prepare_merger(event.make_event(trigger_gen), false /*ignore faults*/,
+                              std::optional<size_t>(),
+                              EventMerger::FaultPropagation::AFTER_PRECONDITIONS);
+
+  event.merger.get_next_precondition()->event_triggered(true /*poisoned*/,
+                                                        TimeLimit::responsive());
+
+  EXPECT_FALSE(event.has_triggered(trigger_gen, poisoned));
+
+  // The arm models the operation's main work item reaching completion.
+  event.merger.arm_merger();
+
+  EXPECT_TRUE(event.has_triggered(trigger_gen, poisoned));
+  EXPECT_TRUE(poisoned);
+}
+
+// The delayed policy above is operation-specific.  Ordinary event mergers retain their
+// existing eager poison propagation behavior.
+TEST_F(GenEventTest, EventMergerStillPropagatesPoisonEarlyByDefault)
+{
+  const NodeID owner = 1;
+  const GenEventImpl::gen_t trigger_gen = 1;
+  bool poisoned = false;
+  GenEventImpl event(event_notifier, event_comm);
+  event.init(ID::make_event(0, 0, 0), owner);
+  event.merger.prepare_merger(event.make_event(trigger_gen), false /*ignore faults*/);
+
+  event.merger.get_next_precondition()->event_triggered(true /*poisoned*/,
+                                                        TimeLimit::responsive());
+
+  EXPECT_TRUE(event.has_triggered(trigger_gen, poisoned));
+  EXPECT_TRUE(event_comm->last_trigger_poisoned);
+
+  // Supply the merger's arm count so it can retire its precondition storage.
+  event.merger.arm_merger();
 }
 
 TEST_F(GenEventTest, RemoteTrigger)

@@ -126,13 +126,20 @@ namespace Realm {
 
   class EventMerger {
   public:
+    enum class FaultPropagation
+    {
+      EARLY,
+      AFTER_PRECONDITIONS,
+    };
+
     EventMerger(GenEventImpl *_event_impl);
     ~EventMerger(void);
 
     bool is_active(void) const;
 
     void prepare_merger(Event _finish_event, bool _ignore_faults,
-                        std::optional<size_t> expected_events = std::optional<size_t>());
+                        std::optional<size_t> expected_events = std::optional<size_t>(),
+                        FaultPropagation _fault_propagation = FaultPropagation::EARLY);
 
     void add_precondition(Event wait_for);
 
@@ -168,6 +175,7 @@ namespace Realm {
     EventImpl::gen_t finish_gen;
     unsigned precondition_offset;
     bool ignore_faults;
+    FaultPropagation fault_propagation;
     bool recycle_preconditions;
     atomic<int> count_needed;
     atomic<int> faults_observed;

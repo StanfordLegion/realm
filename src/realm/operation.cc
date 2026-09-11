@@ -55,8 +55,9 @@ namespace Realm {
     //  generation triggers (GenEventImpl::trigger) or, if the event declined to take
     //  it, by us in trigger_finish_event()
     finish_event_owns_ref = finish_event->set_trigger_op(finish_gen, this);
-    finish_event->merger.prepare_merger(finish_event->make_event(finish_gen),
-                                        false /*ignore faults*/);
+    finish_event->merger.prepare_merger(
+        finish_event->make_event(finish_gen), false /*ignore faults*/,
+        std::optional<size_t>(), EventMerger::FaultPropagation::AFTER_PRECONDITIONS);
   }
 
   Operation::~Operation(void)
