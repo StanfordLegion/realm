@@ -1809,8 +1809,13 @@ namespace {
     virtual size_t radix(void) const { return fan_radix; }
 
     virtual void send_envelope(NodeID relay, const MulticastEnvelopeMessage &env,
-                               const void *payload, size_t payload_bytes)
+                               const MulticastEnvelopeBody &body)
     {
+      // the simulated network wants one contiguous blob, as before
+      std::vector<unsigned char> flat;
+      body.flatten(flat);
+      const void *payload = flat.data();
+      const size_t payload_bytes = flat.size();
       note_send(cur);
       TraceEvent ev;
       ev.kind = TraceEvent::SEND_ENVELOPE;

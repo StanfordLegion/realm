@@ -146,6 +146,12 @@ namespace Realm {
     void add_payload(const void *data, size_t datalen, int payload_mode = PAYLOAD_COPY);
     void add_payload(const void *data, size_t bytes_per_line, size_t lines,
                      size_t line_stride, int payload_mode = PAYLOAD_COPY);
+    //  (b2) like add_payload, but does NOT copy up front.  The referenced bytes must
+    //       stay alive and unmodified until commit() or cancel() returns.  In chunked
+    //       mode this avoids materializing the whole payload a second time before it is
+    //       split; outside chunked mode it is identical to add_payload.  A message must
+    //       not mix this with add_payload/payload_ptr.
+    void add_payload_ref(const void *data, size_t datalen);
     //  (c) request for a pointer to write into (writes must be completed before
     //       call to commit or cancel)
     void *payload_ptr(size_t datalen);
@@ -182,6 +188,13 @@ namespace Realm {
     size_t chunk_src_datalen_{0};
     std::vector<std::byte>
         chunk_alloc_; // owned buffer for network-allocated chunked mode
+    // Referenced payload pieces, used instead of chunk_alloc_ when every byte arrived
+    //  through add_payload_ref.  commit_chunked() reads chunks straight out of these,
+    //  which removes both the second full copy of the payload and the zero-fill that
+    //  resizing chunk_alloc_ would perform.
+    std::vector<std::pair<const void *, size_t>> chunk_spans_;
+    size_t chunk_spans_bytes_{0};
+    size_t chunk_capacity_{0}; // requested payload size, before chunk_alloc_ exists
 
     // Completion callbacks registered before commit(), held here because chunked mode
     //  has no ActiveMessageImpl to hand them to until commit() builds the chunks.
@@ -191,6 +204,9 @@ namespace Realm {
     void init_chunked(NodeID _target, size_t _max_payload_size);
     void init_chunked_data(NodeID _target, const void *_data, size_t _datalen);
     void commit_chunked(void);
+    // materializes chunk_alloc_ on first copying use; callers that only use
+    //  add_payload_ref never reach it
+    void ensure_chunk_alloc(void);
     // makes room for one more completion callback, growing by cloning rather than
     //  letting the vector memcpy polymorphic objects
     static void *reserve_chunked_completion(std::vector<char> &buf, size_t bytes);
@@ -588,6 +604,26 @@ namespace Realm {
   //  not declare a FragmentInfo member, which means an oversized envelope is handled by
   //  the existing WrappedWithFragInfo fragmentation machinery on every hop and is
   //  reassembled before the relay repartitions it (plan section 7.5).
+  //
+  // Store-and-forward is a deliberate choice, not an oversight.  The alternative -
+  //  "cut-through", where the envelope carries its own chunk_id/total_chunks and a relay
+  //  re-emits each fragment the moment it arrives instead of reassembling first - was
+  //  designed and costed, and deferred.  The reasoning, should a future workload make it
+  //  worth revisiting:
+  //
+  //  - It does NOT save relay memory.  The forwarding tree is built over the target set
+  //    itself (send_one_slice addresses slice.first_node()), so every relay is also a
+  //    target and must reassemble to run its own handler regardless.
+  //  - It does NOT uniquely save copies either; the same reduction is available by
+  //    building the envelope body once and appending it per child, with far less code.
+  //  - Its one real benefit is latency, which scales with tree depth: roughly
+  //    d x (N/B) becomes N/B + d x (fragment/B).  That is worth ~2x at 6 nodes and ~5x
+  //    at ~1000, so it only pays for large payloads multicast to many nodes.
+  //
+  // It costs roughly 450-500 lines across the forwarding core, a wire-format change, and
+  //  a rework of the simulated network in multicast_test.cc.  Large-payload multicast is
+  //  currently rare in Realm, so that price is not justified.  Revisit if profiling ever
+  //  shows deep-tree multicast of multi-megabyte payloads on the critical path.
   struct MulticastEnvelopeMessage {
     // (origin_node, multicast_id) is the globally unique multicast identifier
     uint64_t multicast_id = 0;
@@ -690,6 +726,43 @@ namespace Realm {
   //
   // aggregate remote completion (plan section 7.5)
   //
+
+  // The variable portion of an envelope, as the pieces it is assembled from rather than
+  //  a pre-concatenated buffer.  Within one forwarding step only the target encoding and
+  //  the completion varint differ between children, so passing the pieces separately
+  //  lets every child share one copy of the payload instead of each materializing its
+  //  own.  Wire order is exactly the field order below.
+  struct MulticastEnvelopeBody {
+    const void *targets = nullptr;
+    size_t targets_bytes = 0;
+    const void *hdr = nullptr;
+    size_t hdr_bytes = 0;
+    const void *payload = nullptr;
+    size_t payload_bytes = 0;
+    const void *completion = nullptr;
+    size_t completion_bytes = 0;
+
+    size_t total_bytes() const
+    {
+      return (targets_bytes + hdr_bytes + payload_bytes + completion_bytes);
+    }
+
+    // for implementations that want one contiguous buffer after all
+    void flatten(std::vector<unsigned char> &out) const
+    {
+      out.clear();
+      out.reserve(total_bytes());
+      const unsigned char *p;
+      p = static_cast<const unsigned char *>(targets);
+      out.insert(out.end(), p, p + targets_bytes);
+      p = static_cast<const unsigned char *>(hdr);
+      out.insert(out.end(), p, p + hdr_bytes);
+      p = static_cast<const unsigned char *>(payload);
+      out.insert(out.end(), p, p + payload_bytes);
+      p = static_cast<const unsigned char *>(completion);
+      out.insert(out.end(), p, p + completion_bytes);
+    }
+  };
 
   class MulticastTransport;
 
@@ -816,10 +889,10 @@ namespace Realm {
     virtual size_t radix(void) const = 0;
 
     // Sends one multicast envelope to 'relay', which is by construction the first node
-    //  of the slice the envelope carries.  'payload' is the entire variable portion and
-    //  must be copied before this returns.
+    //  of the slice the envelope carries.  'body' is the entire variable portion, and
+    //  every byte it references must be copied before this returns.
     virtual void send_envelope(NodeID relay, const MulticastEnvelopeMessage &env,
-                               const void *payload, size_t payload_bytes) = 0;
+                               const MulticastEnvelopeBody &body) = 0;
 
     // May the ORIGINAL message be handed to a single target by ordinary unicast?  The
     //  answer is no when the payload would need fragmentation, because fragmentation is

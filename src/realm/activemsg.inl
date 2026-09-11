@@ -244,6 +244,8 @@ namespace Realm {
   void ActiveMessage<T, INLINE_STORAGE>::add_payload(const void *data, size_t datalen,
                                                      int payload_mode /*= PAYLOAD_COPY*/)
   {
+    if(network_max_payload_ != 0)
+      ensure_chunk_alloc();
     bool ok = fbs.append_bytes(data, datalen);
     assert(ok);
     if(payload_mode == PAYLOAD_FREE)
@@ -277,6 +279,7 @@ namespace Realm {
   void *ActiveMessage<T, INLINE_STORAGE>::payload_ptr(size_t datalen)
   {
     if(network_max_payload_ != 0) {
+      ensure_chunk_alloc();
       assert(!chunk_alloc_.empty());
       char *buf_begin = reinterpret_cast<char *>(chunk_alloc_.data());
       char *eob = buf_begin + chunk_src_datalen_;
@@ -371,6 +374,9 @@ namespace Realm {
       header = 0;
       chunk_alloc_.clear();
       chunk_alloc_.shrink_to_fit();
+      chunk_spans_.clear();
+      chunk_spans_bytes_ = 0;
+      chunk_capacity_ = 0;
       chunk_target_ = -1;
       chunk_src_data_ = nullptr;
       chunk_src_datalen_ = 0;
@@ -563,12 +569,44 @@ namespace Realm {
       assert(network_max_payload_ > 0);
 
       chunk_target_ = _target;
-      chunk_alloc_.resize(_max_payload_size);
-      chunk_src_data_ = chunk_alloc_.data();
-      chunk_src_datalen_ = _max_payload_size;
+      // the payload buffer is materialized lazily: a caller that only uses
+      //  add_payload_ref never needs it, and resizing a vector<byte> would zero-fill
+      //  the whole reservation as well as allocate it
+      chunk_capacity_ = _max_payload_size;
+      chunk_src_data_ = nullptr;
+      chunk_src_datalen_ = 0;
       header = new(&inline_capacity) T;
-      fbs.reset(chunk_alloc_.data(), _max_payload_size);
     }
+  }
+
+  // Materializes the owned chunked-mode buffer on first copying use.  Callers that only
+  //  use add_payload_ref never reach this.
+  template <typename T, size_t INLINE_STORAGE>
+  void ActiveMessage<T, INLINE_STORAGE>::ensure_chunk_alloc(void)
+  {
+    assert(chunk_spans_.empty() &&
+           "cannot mix add_payload_ref with add_payload/payload_ptr");
+    if(chunk_alloc_.empty() && (chunk_capacity_ > 0)) {
+      chunk_alloc_.resize(chunk_capacity_);
+      chunk_src_data_ = chunk_alloc_.data();
+      chunk_src_datalen_ = chunk_capacity_;
+      fbs.reset(chunk_alloc_.data(), chunk_capacity_);
+    }
+  }
+
+  template <typename T, size_t INLINE_STORAGE>
+  void ActiveMessage<T, INLINE_STORAGE>::add_payload_ref(const void *data,
+                                                         size_t datalen)
+  {
+    if(network_max_payload_ != 0) {
+      assert(chunk_alloc_.empty() &&
+             "cannot mix add_payload_ref with add_payload/payload_ptr");
+      chunk_spans_.emplace_back(data, datalen);
+      chunk_spans_bytes_ += datalen;
+      return;
+    }
+    // not chunked - there is a network buffer to copy into, so this is just add_payload
+    add_payload(data, datalen);
   }
 
   template <typename T, size_t INLINE_STORAGE>
@@ -601,13 +639,22 @@ namespace Realm {
     if constexpr(is_wrapped_with_frag_info<T>::value) {
       assert(0 && "commit_chunked called on WrappedWithFragInfo type");
     } else {
-      assert(chunk_src_data_ != nullptr);
-      if(!chunk_alloc_.empty()) {
-        // buffer mode: actual payload is what was written via fbs
-        chunk_src_datalen_ -= fbs.bytes_left();
+      const char *payload_data = nullptr;
+      size_t total_payload = 0;
+      if(!chunk_spans_.empty()) {
+        // referenced mode: the payload is still wherever the caller put it
+        total_payload = chunk_spans_bytes_;
+      } else {
+        if(!chunk_alloc_.empty()) {
+          // buffer mode: actual payload is what was written via fbs
+          chunk_src_datalen_ -= fbs.bytes_left();
+        }
+        payload_data = static_cast<const char *>(chunk_src_data_);
+        total_payload = chunk_src_datalen_;
       }
-      const char *payload_data = static_cast<const char *>(chunk_src_data_);
-      size_t total_payload = chunk_src_datalen_;
+
+      // cursor into chunk_spans_, advanced as chunks are emitted
+      size_t span_idx = 0, span_off = 0;
 
       // msg_id only needs to be unique per-sender, so using my_node_id is fine
       uint64_t msg_id = Realm::next_chunk_message_id(Network::my_node_id);
@@ -626,7 +673,27 @@ namespace Realm {
         chunk_msg->frag_info = {chunk_id, total_chunks, msg_id};
         chunk_msg->user = *header;
         if(chunk_size > 0) {
-          chunk_msg.add_payload(payload_data + offset, chunk_size);
+          if(!chunk_spans_.empty()) {
+            // copy this chunk's byte range straight out of the referenced pieces into
+            //  the chunk's network buffer - no intermediate full-payload copy
+            size_t want = chunk_size;
+            while(want > 0) {
+              assert(span_idx < chunk_spans_.size());
+              const size_t avail =
+                  std::min(want, chunk_spans_[span_idx].second - span_off);
+              chunk_msg.add_payload(
+                  static_cast<const char *>(chunk_spans_[span_idx].first) + span_off,
+                  avail);
+              want -= avail;
+              span_off += avail;
+              if(span_off == chunk_spans_[span_idx].second) {
+                span_idx++;
+                span_off = 0;
+              }
+            }
+          } else {
+            chunk_msg.add_payload(payload_data + offset, chunk_size);
+          }
         }
         // A remote completion means "received AND handled by the target", which for a
         //  chunked message is only true once every chunk has arrived and the
@@ -660,6 +727,9 @@ namespace Realm {
       header = 0;
       chunk_alloc_.clear();
       chunk_alloc_.shrink_to_fit();
+      chunk_spans_.clear();
+      chunk_spans_bytes_ = 0;
+      chunk_capacity_ = 0;
       chunk_target_ = -1;
       chunk_src_data_ = nullptr;
       chunk_src_datalen_ = 0;

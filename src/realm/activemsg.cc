@@ -1313,23 +1313,26 @@ namespace Realm {
       env.depth = out.depth;
       env.target_encoding_kind = static_cast<unsigned char>(enc.kind());
 
-      // the variable portion is copied here, which is what makes the caller's
-      //  PAYLOAD_KEEP lifetime guarantee hold across commit() (plan section 7.5)
-      std::vector<unsigned char> buf;
-      buf.reserve(enc.bytes() + out.hdr_size + out.payload_size + comp_size);
-      buf.insert(buf.end(), enc.wire_bytes().begin(), enc.wire_bytes().end());
-      if(out.hdr_size > 0) {
-        const unsigned char *hdr_bytes = static_cast<const unsigned char *>(out.hdr);
-        buf.insert(buf.end(), hdr_bytes, hdr_bytes + out.hdr_size);
-      }
-      if(out.payload_size > 0) {
-        const unsigned char *body = static_cast<const unsigned char *>(out.payload);
-        buf.insert(buf.end(), body, body + out.payload_size);
-      }
+      // Only the target encoding and the completion varint are per-child; the original
+      //  header and payload are the same bytes for every slice, so they are referenced
+      //  rather than concatenated into a private buffer here.  The transport still
+      //  copies everything before returning, which is what keeps the caller's
+      //  PAYLOAD_KEEP lifetime guarantee valid across commit() (plan section 7.5).
+      std::vector<unsigned char> comp;
       if(comp_size > 0)
-        MulticastWire::append_varint(buf, static_cast<uint64_t>(out.completion_parent));
+        MulticastWire::append_varint(comp, static_cast<uint64_t>(out.completion_parent));
 
-      transport.send_envelope(slice.first_node(), env, buf.data(), buf.size());
+      MulticastEnvelopeBody body;
+      body.targets = enc.wire_bytes().data();
+      body.targets_bytes = enc.bytes();
+      body.hdr = out.hdr;
+      body.hdr_bytes = out.hdr_size;
+      body.payload = out.payload;
+      body.payload_bytes = out.payload_size;
+      body.completion = (comp.empty() ? nullptr : comp.data());
+      body.completion_bytes = comp.size();
+
+      transport.send_envelope(slice.first_node(), env, body);
     }
 
     // Partitions 'remaining' into at most R slices WITHOUT sending anything.  Splitting
@@ -1834,14 +1837,23 @@ namespace Realm {
       }
 
       virtual void send_envelope(NodeID relay, const MulticastEnvelopeMessage &env,
-                                 const void *payload, size_t payload_bytes)
+                                 const MulticastEnvelopeBody &body)
       {
         // an oversized envelope is fragmented here by the ordinary ActiveMessage
         //  machinery and reassembled before the relay repartitions it
-        ActiveMessage<MulticastEnvelopeMessage> amsg(relay, payload_bytes);
+        ActiveMessage<MulticastEnvelopeMessage> amsg(relay, body.total_bytes());
         *amsg = env;
-        if(payload_bytes > 0)
-          amsg.add_payload(payload, payload_bytes);
+        // add_payload_ref rather than add_payload: every piece outlives this call, so
+        //  the bytes can be read straight into the wire buffers at commit() time
+        //  instead of being staged through a second full-size buffer first
+        if(body.targets_bytes > 0)
+          amsg.add_payload_ref(body.targets, body.targets_bytes);
+        if(body.hdr_bytes > 0)
+          amsg.add_payload_ref(body.hdr, body.hdr_bytes);
+        if(body.payload_bytes > 0)
+          amsg.add_payload_ref(body.payload, body.payload_bytes);
+        if(body.completion_bytes > 0)
+          amsg.add_payload_ref(body.completion, body.completion_bytes);
         amsg.commit();
       }
 
