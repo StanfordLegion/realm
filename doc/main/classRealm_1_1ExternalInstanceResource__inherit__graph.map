@@ -1,0 +1,19 @@
+<map id="Realm::ExternalInstanceResource" name="Realm::ExternalInstanceResource">
+<area shape="rect" id="Node000001" title=" " alt="" coords="5,159,247,185"/>
+<area shape="rect" id="Node000002" href="$classRealm_1_1ExternalCudaArrayResource.html" title=" " alt="" coords="317,5,512,45"/>
+<area shape="poly" id="edge1_Node000001_Node000002" title=" " alt="" coords="151,148,214,101,253,77,294,55,324,43,326,48,296,60,255,81,217,106,154,153"/>
+<area shape="rect" id="Node000003" href="$classRealm_1_1ExternalCudaMemoryResource.html" title=" " alt="" coords="308,69,521,109"/>
+<area shape="poly" id="edge2_Node000001_Node000003" title=" " alt="" coords="180,153,294,119,337,107,338,112,295,124,182,158"/>
+<area shape="rect" id="Node000004" href="$classRealm_1_1ExternalFileResource.html" title=" " alt="" coords="310,134,519,159"/>
+<area shape="poly" id="edge3_Node000001_Node000004" title=" " alt="" coords="260,158,309,153,310,159,261,163"/>
+<area shape="rect" id="Node000005" href="$classRealm_1_1ExternalHDF5Resource.html" title=" " alt="" coords="303,183,526,209"/>
+<area shape="poly" id="edge4_Node000001_Node000005" title=" " alt="" coords="261,181,304,184,303,189,260,186"/>
+<area shape="rect" id="Node000006" href="$classRealm_1_1ExternalHipMemoryResource.html" title=" " alt="" coords="313,233,516,273"/>
+<area shape="poly" id="edge5_Node000001_Node000006" title=" " alt="" coords="185,186,295,217,343,231,341,236,294,223,183,191"/>
+<area shape="rect" id="Node000007" href="$classRealm_1_1ExternalMemoryResource.html" title=" " alt="" coords="295,298,535,323"/>
+<area shape="poly" id="edge6_Node000001_Node000007" title=" " alt="" coords="154,191,216,238,255,262,296,283,334,295,332,300,294,288,252,267,213,242,151,196"/>
+<area shape="rect" id="Node000008" href="$classRealm_1_1ExternalCudaPinnedHostResource.html" title=" " alt="" coords="583,259,785,299"/>
+<area shape="poly" id="edge7_Node000007_Node000008" title=" " alt="" coords="535,294,582,288,583,293,535,299"/>
+<area shape="rect" id="Node000009" href="$classRealm_1_1ExternalHipPinnedHostResource.html" title=" " alt="" coords="588,323,780,363"/>
+<area shape="poly" id="edge8_Node000007_Node000009" title=" " alt="" coords="535,322,588,329,588,334,535,328"/>
+</map>

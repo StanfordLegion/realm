@@ -1,0 +1,22 @@
+<map id="Realm::ThreadPool::WorkerInfo" name="Realm::ThreadPool::WorkerInfo">
+<area shape="rect" id="Node000001" title=" " alt="" coords="38,332,192,372"/>
+<area shape="rect" id="Node000002" href="$classRealm_1_1atomic.html" title=" " alt="" coords="236,5,400,31"/>
+<area shape="poly" id="edge1_Node000001_Node000002" title=" " alt="" coords="223,29,171,39,119,58,70,85,50,103,32,124,13,160,9,193,16,228,32,268,43,287,56,303,87,330,84,334,52,307,38,290,27,270,11,229,3,194,8,159,28,121,46,99,67,81,116,53,170,34,222,23"/>
+<area shape="rect" id="Node000005" href="$structRealm_1_1ThreadPool_1_1WorkItem.html" title=" " alt="" coords="337,229,490,269"/>
+<area shape="poly" id="edge7_Node000005_Node000002" title=" " alt="" coords="319,44,322,101,328,134,339,165,363,200,391,227,387,231,358,203,334,168,323,136,316,102,314,44"/>
+<area shape="rect" id="Node000007" href="$classRealm_1_1LoopSchedule.html" title=" " alt="" coords="602,132,764,157"/>
+<area shape="poly" id="edge12_Node000007_Node000002" title=" " alt="" coords="360,33,532,96,642,129,641,135,530,101,359,38"/>
+<area shape="rect" id="Node000003" href="$classRealm_1_1ThreadPool.html" title=" " alt="" coords="42,237,188,262"/>
+<area shape="poly" id="edge2_Node000001_Node000003" title=" " alt="" coords="118,276,118,332,112,332,112,276"/>
+<area shape="rect" id="Node000004" href="$classRealm_1_1Processor.html" title=" " alt="" coords="42,132,177,157"/>
+<area shape="poly" id="edge3_Node000003_Node000004" title=" " alt="" coords="114,171,117,236,112,237,108,171"/>
+<area shape="poly" id="edge4_Node000004_Node000004" title=" " alt="" coords="192,135,200,138,204,145,196,153,178,157,177,152,193,149,198,144,197,142,190,140"/>
+<area shape="poly" id="edge5_Node000001_Node000005" title=" " alt="" coords="346,276,172,334,170,329,344,271"/>
+<area shape="poly" id="edge6_Node000005_Node000005" title=" " alt="" coords="505,240,517,249,509,258,491,261,490,256,507,253,512,250,502,245"/>
+<area shape="rect" id="Node000006" href="$classRealm_1_1atomic.html" title=" " alt="" coords="427,5,627,31"/>
+<area shape="poly" id="edge8_Node000005_Node000006" title=" " alt="" coords="518,44,512,56,489,112,464,168,428,230,424,228,459,165,484,110,507,54,513,42"/>
+<area shape="poly" id="edge10_Node000007_Node000006" title=" " alt="" coords="589,33,621,53,631,64,636,74,647,97,674,130,670,133,642,100,631,76,626,67,617,57,586,38"/>
+<area shape="poly" id="edge9_Node000005_Node000007" title=" " alt="" coords="641,165,464,232,462,227,639,160"/>
+<area shape="rect" id="Node000008" href="$classRealm_1_1atomic.html" title=" " alt="" coords="652,5,844,31"/>
+<area shape="poly" id="edge11_Node000007_Node000008" title=" " alt="" coords="744,45,721,100,696,134,692,130,717,97,739,43"/>
+</map>

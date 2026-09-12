@@ -1,0 +1,9 @@
+<map id="Realm::SubgraphInstantiateMessage" name="Realm::SubgraphInstantiateMessage">
+<area shape="rect" id="Node000001" title=" " alt="" coords="107,108,309,148"/>
+<area shape="rect" id="Node000002" href="$classRealm_1_1Subgraph.html" title=" " alt="" coords="5,5,139,31"/>
+<area shape="poly" id="edge1_Node000001_Node000002" title=" " alt="" coords="99,37,186,106,182,110,96,41"/>
+<area shape="poly" id="edge2_Node000002_Node000002" title=" " alt="" coords="154,9,165,18,157,27,139,30,138,25,155,22,160,18,151,13"/>
+<area shape="rect" id="Node000003" href="$classRealm_1_1Event.html" title=" " alt="" coords="292,5,401,31"/>
+<area shape="poly" id="edge3_Node000001_Node000003" title=" " alt="" coords="323,41,234,110,231,106,320,37"/>
+<area shape="poly" id="edge4_Node000003_Node000003" title=" " alt="" coords="416,8,424,11,428,18,420,27,402,30,401,25,417,22,423,18,421,16,414,13"/>
+</map>

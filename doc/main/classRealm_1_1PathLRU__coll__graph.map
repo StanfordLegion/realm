@@ -1,0 +1,11 @@
+<map id="Realm::PathLRU" name="Realm::PathLRU">
+<area shape="rect" id="Node000001" title=" " alt="" coords="5,93,132,119"/>
+<area shape="rect" id="Node000002" href="$classRealm_1_1RWLock.html" title=" " alt="" coords="228,5,352,31"/>
+<area shape="poly" id="edge1_Node000001_Node000002" title=" " alt="" coords="220,36,155,57,118,76,86,96,84,91,115,71,153,52,218,31"/>
+<area shape="rect" id="Node000003" href="$structRealm_1_1RWLock_1_1Writer.html" title=" " alt="" coords="156,93,328,119"/>
+<area shape="poly" id="edge3_Node000003_Node000002" title=" " alt="" coords="231,39,212,56,210,65,213,74,228,91,224,95,208,76,205,65,208,53,227,35"/>
+<area shape="rect" id="Node000004" href="$structRealm_1_1RWLock_1_1Reader.html" title=" " alt="" coords="353,93,531,119"/>
+<area shape="poly" id="edge5_Node000004_Node000002" title=" " alt="" coords="316,37,361,67,412,91,410,96,358,72,313,42"/>
+<area shape="poly" id="edge2_Node000002_Node000003" title=" " alt="" coords="253,80,281,30,286,32,258,82"/>
+<area shape="poly" id="edge4_Node000002_Node000004" title=" " alt="" coords="430,82,422,68,411,57,383,41,351,30,353,25,385,36,414,53,426,65,435,79"/>
+</map>

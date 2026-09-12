@@ -1,0 +1,9 @@
+<map id="Realm::SimpleRemoteChannelInfo" name="Realm::SimpleRemoteChannelInfo">
+<area shape="rect" id="Node000001" title=" " alt="" coords="701,41,948,67"/>
+<area shape="rect" id="Node000002" href="$classRealm_1_1RemoteChannelInfo.html" title=" " alt="" coords="309,5,511,31"/>
+<area shape="poly" id="edge1_Node000001_Node000002" title=" " alt="" coords="525,25,701,41,701,46,524,31"/>
+<area shape="rect" id="Node000003" href="$classRealm_1_1Serialization_1_1PolymorphicSerdezSubclass.html" title=" " alt="" coords="277,55,543,125"/>
+<area shape="poly" id="edge2_Node000001_Node000003" title=" " alt="" coords="556,75,701,62,701,67,557,80"/>
+<area shape="rect" id="Node000004" href="$classRealm_1_1Serialization_1_1PolymorphicSerdezIntfc.html" title=" " alt="" coords="5,70,228,110"/>
+<area shape="poly" id="edge3_Node000003_Node000004" title=" " alt="" coords="242,87,277,87,277,93,242,93"/>
+</map>
