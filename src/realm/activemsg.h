@@ -87,8 +87,14 @@ namespace Realm {
     // providing the payload (as a 1D reference, which must be PAYLOAD_KEEP)
     //  up front can avoid a copy if the source location is directly accessible
     //  by the networking hardware
-    //  Per the semantics of PAYLOAD_KEEP, you must keep the payload buffer
-    //  alive and unmodified until the call to commit or cancel returns
+    //  Per the semantics of PAYLOAD_KEEP, you must keep the payload buffer alive
+    //  and unmodified until LOCAL COMPLETION - NOT merely until commit() returns.
+    //  A backend may hand the pointer straight to the network and return before it
+    //  has been read: on UCX, UCPMessageImpl::commit does not copy a contiguous
+    //  source and send_slow_path() submits the request asynchronously.  Use
+    //  add_local_completion() to learn when the buffer is free, or use the
+    //  (target, max_payload_size) constructor with add_payload(), which copies
+    //  during commit().
     ActiveMessage(NodeID _target, const void *_data, size_t _datalen);
     ActiveMessage(NodeID _target, const LocalAddress &_src_payload_addr, size_t _datalen,
                   const RemoteAddress &_dest_payload_addr);
@@ -140,6 +146,12 @@ namespace Realm {
     void add_payload(const void *data, size_t datalen, int payload_mode = PAYLOAD_COPY);
     void add_payload(const void *data, size_t bytes_per_line, size_t lines,
                      size_t line_stride, int payload_mode = PAYLOAD_COPY);
+    //  (b2) like add_payload, but does NOT copy up front.  The referenced bytes must
+    //       stay alive and unmodified until commit() or cancel() returns.  In chunked
+    //       mode this avoids materializing the whole payload a second time before it is
+    //       split; outside chunked mode it is identical to add_payload.  A message must
+    //       not mix this with add_payload/payload_ptr.
+    void add_payload_ref(const void *data, size_t datalen);
     //  (c) request for a pointer to write into (writes must be completed before
     //       call to commit or cancel)
     void *payload_ptr(size_t datalen);
@@ -176,11 +188,34 @@ namespace Realm {
     size_t chunk_src_datalen_{0};
     std::vector<std::byte>
         chunk_alloc_; // owned buffer for network-allocated chunked mode
+    // Referenced payload pieces, used instead of chunk_alloc_ when every byte arrived
+    //  through add_payload_ref.  commit_chunked() reads chunks straight out of these,
+    //  which removes both the second full copy of the payload and the zero-fill that
+    //  resizing chunk_alloc_ would perform.
+    std::vector<std::pair<const void *, size_t>> chunk_spans_;
+    size_t chunk_spans_bytes_{0};
+    size_t chunk_capacity_{0}; // requested payload size, before chunk_alloc_ exists
+
+    // Completion callbacks registered before commit(), held here because chunked mode
+    //  has no ActiveMessageImpl to hand them to until commit() builds the chunks.
+    std::vector<char> chunk_local_comp_;
+    std::vector<char> chunk_remote_comp_;
 
     void init_chunked(NodeID _target, size_t _max_payload_size);
     void init_chunked_data(NodeID _target, const void *_data, size_t _datalen);
     void commit_chunked(void);
-    static uint64_t next_chunk_message_id(NodeID node_id);
+    // materializes chunk_alloc_ on first copying use; callers that only use
+    //  add_payload_ref never reach it
+    void ensure_chunk_alloc(void);
+    // makes room for one more completion callback, growing by cloning rather than
+    //  letting the vector memcpy polymorphic objects
+    static void *reserve_chunked_completion(std::vector<char> &buf, size_t bytes);
+    static void discard_chunked_completions(std::vector<char> &buf);
+
+    // so that commit_chunked() can hand a completion to the per-chunk message, which
+    //  is a different instantiation of this same template
+    template <typename, size_t>
+    friend class ActiveMessage;
   };
 
   // type-erased wrappers for completion callbacks
@@ -244,6 +279,13 @@ namespace Realm {
     uint32_t total_chunks{0};
     uint64_t msg_id{0};
   };
+
+  // Allocates the next chunked-message id for this process.  Deliberately a free
+  //  function rather than a member of ActiveMessage<T>: a function-local static inside
+  //  a member of a class template gets one instance per instantiation, so each message
+  //  type would restart the sequence at zero and hand out ids that collide with every
+  //  other type's.
+  REALM_INTERNAL_API_EXTERNAL_LINKAGE uint64_t next_chunk_message_id(NodeID node_id);
 
   // singleton class that can convert message type->ID and ID->handler
   class ActiveMessageHandlerTable {
@@ -387,6 +429,16 @@ namespace Realm {
   protected:
     struct MessageBlock;
 
+    // A remote completion rides on one fragment (see ActiveMessage<T>'s chunked mode),
+    //  but "the target has handled it" is only true once the whole message has been
+    //  reassembled and run.  A callback arriving on a fragment is therefore held here
+    //  until then.
+    struct DeferredCallback {
+      CallbackFnptr fnptr;
+      CallbackData data1;
+      CallbackData data2;
+    };
+
     struct Message {
       MessageBlock *block;
       Message *next_msg;
@@ -400,6 +452,9 @@ namespace Realm {
       bool payload_needs_free;
       CallbackFnptr callback_fnptr;
       CallbackData callback_data1, callback_data2;
+      // callbacks that arrived on earlier fragments of this message and could not be
+      //  fired then - null for every message that was not reassembled
+      std::vector<DeferredCallback> *deferred_callbacks;
     };
 
     struct MessageBlock {
@@ -411,6 +466,11 @@ namespace Realm {
       // called with message manager lock held
       Message *append_message(size_t hdr_bytes_needed, size_t payload_bytes_needed);
 
+      // total bytes a message with these requirements would occupy in a freshly
+      //  reset block - a request larger than the configured block size can never
+      //  be satisfied by any block, no matter how many are tried
+      static size_t bytes_needed(size_t hdr_bytes_needed, size_t payload_bytes_needed);
+
       // called _without_ message manager lock held
       void recycle_message(Message *msg, IncomingMessageManager *manager);
 
@@ -418,6 +478,9 @@ namespace Realm {
       atomic<unsigned> use_count;
       MessageBlock *next_free;
     };
+
+    // fires and releases any callbacks held from this message's fragments
+    static void invoke_deferred_callbacks(Message *msg);
 
     int get_messages(Message *&head, Message **&tail, bool wait);
     bool return_messages(int sender, size_t num_handled, Message *head, Message **tail);
@@ -443,16 +506,35 @@ namespace Realm {
     size_t num_available_blocks;
     size_t cfg_max_available_blocks, cfg_message_block_size;
 
-    struct PairHash {
-      std::size_t operator()(const std::pair<NodeID, uint64_t> &p) const
+    // An in-flight reassembly is identified by (sender, message type, sender-chosen
+    //  id).  The message type is part of the key as defence in depth: ids are unique
+    //  per sender process, but including the type means any future regression in id
+    //  allocation fails loudly instead of silently interleaving two messages' bytes.
+    struct FragmentKey {
+      NodeID sender;
+      ActiveMessageHandlerTable::MessageID msgid;
+      uint64_t msg_id;
+
+      bool operator==(const FragmentKey &rhs) const
       {
-        return std::hash<NodeID>()(p.first) ^ (std::hash<uint64_t>()(p.second) << 1);
+        return ((sender == rhs.sender) && (msgid == rhs.msgid) && (msg_id == rhs.msg_id));
       }
     };
 
-    std::unordered_map<std::pair<NodeID, uint64_t>, std::unique_ptr<FragmentedMessage>,
-                       PairHash>
-        frag_message;
+    struct FragmentKeyHash {
+      std::size_t operator()(const FragmentKey &k) const
+      {
+        return (std::hash<NodeID>()(k.sender) ^ (std::hash<unsigned>()(k.msgid) << 1) ^
+                (std::hash<uint64_t>()(k.msg_id) << 2));
+      }
+    };
+
+    struct FragmentReassembly {
+      std::unique_ptr<FragmentedMessage> message;
+      std::vector<DeferredCallback> deferred;
+    };
+
+    std::unordered_map<FragmentKey, FragmentReassembly, FragmentKeyHash> frag_message;
   };
 
   template <typename UserHdr>
@@ -522,6 +604,26 @@ namespace Realm {
   //  not declare a FragmentInfo member, which means an oversized envelope is handled by
   //  the existing WrappedWithFragInfo fragmentation machinery on every hop and is
   //  reassembled before the relay repartitions it (plan section 7.5).
+  //
+  // Store-and-forward is a deliberate choice, not an oversight.  The alternative -
+  //  "cut-through", where the envelope carries its own chunk_id/total_chunks and a relay
+  //  re-emits each fragment the moment it arrives instead of reassembling first - was
+  //  designed and costed, and deferred.  The reasoning, should a future workload make it
+  //  worth revisiting:
+  //
+  //  - It does NOT save relay memory.  The forwarding tree is built over the target set
+  //    itself (send_one_slice addresses slice.first_node()), so every relay is also a
+  //    target and must reassemble to run its own handler regardless.
+  //  - It does NOT uniquely save copies either; the same reduction is available by
+  //    building the envelope body once and appending it per child, with far less code.
+  //  - Its one real benefit is latency, which scales with tree depth: roughly
+  //    d x (N/B) becomes N/B + d x (fragment/B).  That is worth ~2x at 6 nodes and ~5x
+  //    at ~1000, so it only pays for large payloads multicast to many nodes.
+  //
+  // It costs roughly 450-500 lines across the forwarding core, a wire-format change, and
+  //  a rework of the simulated network in multicast_test.cc.  Large-payload multicast is
+  //  currently rare in Realm, so that price is not justified.  Revisit if profiling ever
+  //  shows deep-tree multicast of multi-megabyte payloads on the critical path.
   struct MulticastEnvelopeMessage {
     // (origin_node, multicast_id) is the globally unique multicast identifier
     uint64_t multicast_id = 0;
@@ -529,7 +631,7 @@ namespace Realm {
     //  what the original handler must see as its sender
     NodeID origin_node = 0;
 
-    uint32_t original_payload_size = 0;
+    uint64_t original_payload_size = 0;
     uint32_t target_encoding_size = 0;
     uint32_t completion_size = 0;
     uint32_t flags = 0;
@@ -624,6 +726,43 @@ namespace Realm {
   //
   // aggregate remote completion (plan section 7.5)
   //
+
+  // The variable portion of an envelope, as the pieces it is assembled from rather than
+  //  a pre-concatenated buffer.  Within one forwarding step only the target encoding and
+  //  the completion varint differ between children, so passing the pieces separately
+  //  lets every child share one copy of the payload instead of each materializing its
+  //  own.  Wire order is exactly the field order below.
+  struct MulticastEnvelopeBody {
+    const void *targets = nullptr;
+    size_t targets_bytes = 0;
+    const void *hdr = nullptr;
+    size_t hdr_bytes = 0;
+    const void *payload = nullptr;
+    size_t payload_bytes = 0;
+    const void *completion = nullptr;
+    size_t completion_bytes = 0;
+
+    size_t total_bytes() const
+    {
+      return (targets_bytes + hdr_bytes + payload_bytes + completion_bytes);
+    }
+
+    // for implementations that want one contiguous buffer after all
+    void flatten(std::vector<unsigned char> &out) const
+    {
+      out.clear();
+      out.reserve(total_bytes());
+      const unsigned char *p;
+      p = static_cast<const unsigned char *>(targets);
+      out.insert(out.end(), p, p + targets_bytes);
+      p = static_cast<const unsigned char *>(hdr);
+      out.insert(out.end(), p, p + hdr_bytes);
+      p = static_cast<const unsigned char *>(payload);
+      out.insert(out.end(), p, p + payload_bytes);
+      p = static_cast<const unsigned char *>(completion);
+      out.insert(out.end(), p, p + completion_bytes);
+    }
+  };
 
   class MulticastTransport;
 
@@ -750,10 +889,10 @@ namespace Realm {
     virtual size_t radix(void) const = 0;
 
     // Sends one multicast envelope to 'relay', which is by construction the first node
-    //  of the slice the envelope carries.  'payload' is the entire variable portion and
-    //  must be copied before this returns.
+    //  of the slice the envelope carries.  'body' is the entire variable portion, and
+    //  every byte it references must be copied before this returns.
     virtual void send_envelope(NodeID relay, const MulticastEnvelopeMessage &env,
-                               const void *payload, size_t payload_bytes) = 0;
+                               const MulticastEnvelopeBody &body) = 0;
 
     // May the ORIGINAL message be handed to a single target by ordinary unicast?  The
     //  answer is no when the payload would need fragmentation, because fragmentation is
@@ -884,6 +1023,20 @@ namespace Realm {
   //  MulticastTargetSet(nodes) - NodeSet itself stays as a general in-memory set.
   //
   // The payload is always copied, so this is the PAYLOAD_COPY/PAYLOAD_KEEP equivalent;
+  //  the caller's buffer is free as soon as this returns.  There is deliberately no
+  //  remote-address/RDMA form (see the comment on MulticastForwarder::send).
+  //
+  // 'on_remote_complete', if given, is invoked exactly once after every target has
+  //  received AND handled the message, and is then deleted; passing null - the normal
+  //  fire-and-forget case - puts no acknowledgement metadata on the wire and creates no
+  //  state anywhere.  Build one with make_multicast_completion().
+  //
+  // Defined in activemsg.inl.
+  template <typename T>
+  inline void multicast_message(const MulticastTargetSet &targets, const T &header,
+                                const void *payload = 0, size_t payload_size = 0,
+                                MulticastMetricsSink *metrics = 0,
+                                MulticastCompletionCallback *on_remote_complete = 0);
 
 } // namespace Realm
 
