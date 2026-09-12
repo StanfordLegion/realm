@@ -634,23 +634,6 @@ namespace PRealm {
                                           initial_value_size);
   }
 
-  /*static*/ inline Barrier
-  Barrier::create_barrier(const Barrier::ParticipantInfo *expected_arrivals,
-                          size_t num_participants, ReductionOpID redop,
-                          const void *initial_value, size_t initial_value_size)
-  {
-    return Realm::Barrier::create_barrier(expected_arrivals, num_participants, redop,
-                                          initial_value, initial_value_size);
-  }
-
-  inline Barrier
-  Barrier::set_arrival_pattern(const Barrier::ParticipantInfo *expected_arrivals,
-                               size_t num_participants)
-  {
-    Realm::Barrier barrier = *this;
-    return barrier.set_arrival_pattern(expected_arrivals, num_participants);
-  }
-
   inline void Barrier::destroy_barrier(void)
   {
     Realm::Barrier barrier = *this;

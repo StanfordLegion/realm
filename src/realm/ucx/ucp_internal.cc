@@ -126,20 +126,6 @@ namespace Realm {
       char rkey[0];
     } __attribute__((packed)); // gcc-specific
 
-    struct MCDesc {
-      enum
-      {
-        REQUEST_AM_FLAG_FAILURE = 1ul << 0
-      };
-      uint8_t flags;
-      atomic<size_t> local_pending; // number of targets pending local
-                                    // completion (to support multicast)
-      MCDesc(size_t _local_pending)
-        : flags(0)
-        , local_pending(_local_pending)
-      {}
-    };
-
     struct Request {
       // UCPContext::Request must be the first field because
       // the space preceding it is used internally by ucp
@@ -150,7 +136,6 @@ namespace Realm {
         struct {
           PayloadBaseType payload_base_type;
           CompList *local_comp;
-          MCDesc *mc_desc;
         } am_send;
 
         struct {
@@ -2113,23 +2098,6 @@ namespace Realm {
       }
     }
 
-    UCPMessageImpl::UCPMessageImpl(UCPInternal *_internal, const NodeSet &_targets,
-                                   unsigned short _msgid, size_t _header_size,
-                                   size_t _max_payload_size,
-                                   const void *_src_payload_addr,
-                                   size_t _src_payload_lines,
-                                   size_t _src_payload_line_stride, size_t _storage_size)
-      : UCPMessageImpl(_internal, *_targets.begin(), _msgid, _header_size,
-                       _max_payload_size, _src_payload_addr, _src_payload_lines,
-                       _src_payload_line_stride, nullptr, nullptr, _storage_size)
-    {
-      // treat as multicast if only number of targets is greater than 1
-      if(_targets.size() > 1) {
-        targets = _targets;
-        is_multicast = true;
-      }
-    }
-
     UCPMessageImpl::~UCPMessageImpl() {}
 
     bool UCPMessageImpl::set_inline_payload_base()
@@ -2164,8 +2132,7 @@ namespace Realm {
     void *UCPMessageImpl::add_remote_completion(size_t size)
     {
       if(remote_comp == nullptr) {
-        size_t remote_pending = is_multicast ? targets.size() : 1;
-        remote_comp = new RemoteComp(remote_pending);
+        remote_comp = new RemoteComp(1 /*remote_pending*/);
       }
       size_t ofs = remote_comp->comp_list->bytes;
       remote_comp->comp_list->bytes += size;
@@ -2191,11 +2158,6 @@ namespace Realm {
         }
       }
 
-      if(req->am_send.mc_desc != nullptr) {
-        req->am_send.mc_desc->flags |= MCDesc::REQUEST_AM_FLAG_FAILURE;
-        local_pending = req->am_send.mc_desc->local_pending.fetch_sub_acqrel(1);
-      }
-
       assert(local_pending != 0);
 
       if(local_pending == 1) {
@@ -2212,7 +2174,6 @@ namespace Realm {
       UCPInternal *internal = req->internal;
       CompList *local_comp = req->am_send.local_comp;
       size_t local_pending = 1;
-      uint8_t comp_flags = 0;
 
       log_ucp_am.debug() << "am_local_comp_handler invoked for request " << req;
 
@@ -2220,23 +2181,12 @@ namespace Realm {
 
       internal->notify_msg_sent(1);
 
-      if(req->am_send.mc_desc != nullptr) {
-        local_pending = req->am_send.mc_desc->local_pending.fetch_sub(1);
-        comp_flags = req->am_send.mc_desc->flags;
-      }
-
       assert(local_pending != 0);
 
       if(local_pending == 1) {
-        if(!(comp_flags & MCDesc::REQUEST_AM_FLAG_FAILURE)) {
-          // all senders completed without failure
-          if(local_comp != nullptr) {
-            CompletionCallbackBase::invoke_all(local_comp->storage, local_comp->bytes);
-            CompletionCallbackBase::destroy_all(local_comp->storage, local_comp->bytes);
-          }
-        } else {
-          // TODO: should CompletionCallbackBase::destroy_all() be called here?
-          // TODO: should invoke some higher-level error handler
+        if(local_comp != nullptr) {
+          CompletionCallbackBase::invoke_all(local_comp->storage, local_comp->bytes);
+          CompletionCallbackBase::destroy_all(local_comp->storage, local_comp->bytes);
         }
         UCPMessageImpl::cleanup_request(req, internal);
       }
@@ -2329,20 +2279,8 @@ namespace Realm {
       req->ucp.memtype = memtype;
       req->ucp.flags = 0;
 
-      if(is_multicast) {
-        req->am_send.mc_desc = new MCDesc(targets.size());
-        CHKERR_JUMP(req->am_send.mc_desc == nullptr, "failed to new multicast desc",
-                    log_ucp, err_rel_payload);
-      } else {
-        req->am_send.mc_desc = nullptr;
-      }
-
       return req;
 
-    err_rel_payload:
-      if(payload_base_type == PAYLOAD_BASE_INTERNAL) {
-        internal->pbuf_release(worker, payload_base);
-      }
     err_rel_req:
       internal->request_release(req);
     err:
@@ -2356,7 +2294,6 @@ namespace Realm {
         internal->pbuf_release(req->worker, req->ucp.payload);
       }
       delete req->am_send.local_comp;
-      delete req->am_send.mc_desc;
     }
 
     void UCPMessageImpl::am_put_comp_handler(void *request, ucs_status_t status,
@@ -2453,53 +2390,6 @@ namespace Realm {
       return false;
     }
 
-    bool UCPMessageImpl::commit_multicast(size_t act_payload_size)
-    {
-      size_t to_submit = targets.size();
-      int remote_dev_index =
-          dest_payload_rdma_info ? dest_payload_rdma_info->dev_index : -1;
-      Request *req_prim, *req;
-
-      req_prim = make_request(act_payload_size);
-      CHKERR_JUMP(req_prim == nullptr, "failed to make am request", log_ucp, err);
-
-      for(const NodeID &target : targets) {
-        // shallow-copy the primary request for each target
-        // IMPORTANT: the primary requet must not be released
-        //            until all target copies have been created.
-        //            Otherwise, it may be released upon completion
-        //            which will make furhter copies invalid.
-        req = internal->request_get(worker);
-        if(req == nullptr) {
-          log_ucp.error() << "failed to get additional request for multicast";
-          req = req_prim;
-          goto err_update_pending;
-        }
-        *req = *req_prim;
-        CHKERR_JUMP(!worker->ep_get(target, remote_dev_index, &req->ucp.ep),
-                    "failed to get ep", log_ucp, err);
-        if(!UCPMessageImpl::send_request(req, AM_ID)) {
-          log_ucp.error() << "failed to send multicast am request";
-          goto err_update_pending;
-        }
-
-        to_submit--;
-      }
-
-      internal->request_release(req_prim);
-
-      return true;
-
-    err_update_pending:
-      req->am_send.mc_desc->local_pending.fetch_sub(to_submit);
-      if(remote_comp != nullptr) {
-        ucp_msg_hdr.remote_comp->remote_pending.fetch_sub(to_submit);
-      }
-      UCPMessageImpl::am_local_failure_handler(req, internal);
-    err:
-      return false;
-    }
-
     bool UCPMessageImpl::commit_unicast(size_t act_payload_size)
     {
       int remote_dev_index =
@@ -2573,21 +2463,16 @@ namespace Realm {
         insert_packet_crc(&ucp_msg_hdr, header_size, act_payload_size);
       }
 
-      if(is_multicast) {
-        status = commit_multicast(act_payload_size);
-      } else {
-        status = commit_unicast(act_payload_size);
-      }
+      status = commit_unicast(act_payload_size);
 
       if(!status) {
         log_ucp.error() << "failed to commit am";
       }
 
       log_ucp_am.info()
-          << "msg commit " << (is_multicast ? "multicast" : "unicast") << "context "
-          << context << "worker " << worker << " target " << (is_multicast ? -1 : target)
-          << " hsize " << header_size << " psize " << act_payload_size << " ptype "
-          << payload_base_type
+          << "msg commit unicast context " << context << "worker " << worker << " target "
+          << target << " hsize " << header_size << " psize " << act_payload_size
+          << " ptype " << payload_base_type
 #ifdef REALM_USE_CUDA
           << " src_mem_type " << (context->gpu ? "cuda" : "host") << " dst_mem_type "
           << (dest_payload_rdma_info

@@ -294,11 +294,6 @@ namespace Realm {
                      size_t src_payload_line_stride, const NetworkSegment *_src_segment,
                      const RemoteAddress *_dest_payload_addr, size_t storage_size);
 
-      UCPMessageImpl(UCPInternal *internal, const NodeSet &targets, unsigned short msgid,
-                     size_t header_size, size_t max_payload_size,
-                     const void *src_payload_addr, size_t src_payload_lines,
-                     size_t src_payload_line_stride, size_t storage_size);
-
       virtual ~UCPMessageImpl();
 
       virtual void *add_local_completion(size_t size);
@@ -311,7 +306,6 @@ namespace Realm {
       bool set_inline_payload_base();
       bool commit_with_rma(ucp_ep_h ep);
       bool commit_unicast(size_t act_payload_size);
-      bool commit_multicast(size_t act_payload_size);
       bool send_fast_path(ucp_ep_h ep, size_t act_payload_size);
       bool send_slow_path(ucp_ep_h ep, size_t act_payload_size, uint32_t flags);
       Request *make_request(size_t act_payload_size);
@@ -328,7 +322,6 @@ namespace Realm {
       UCPInternal *internal;
       UCPWorker *worker;
       NodeID target;
-      NodeSet targets;
       const void *src_payload_addr;
       size_t src_payload_lines;
       size_t src_payload_line_stride;
@@ -337,7 +330,6 @@ namespace Realm {
       UCPRDMAInfo *dest_payload_rdma_info{nullptr};
       CompList *local_comp{nullptr};
       RemoteComp *remote_comp{nullptr};
-      bool is_multicast{false};
       ucs_memory_type_t memtype;
 
       UCPMsgHdr ucp_msg_hdr;

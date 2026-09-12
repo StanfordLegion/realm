@@ -266,29 +266,10 @@ namespace Realm {
         &dest_payload_addr, storage_size);
   }
 
-  ActiveMessageImpl *UCPModule::create_active_message_impl(
-      const NodeSet &targets, unsigned short msgid, size_t header_size,
-      size_t max_payload_size, const void *src_payload_addr, size_t src_payload_lines,
-      size_t src_payload_line_stride, void *storage_base, size_t storage_size)
-  {
-    assert(storage_size >= sizeof(Realm::UCP::UCPMessageImpl));
-    return new(storage_base) Realm::UCP::UCPMessageImpl(
-        internal, targets, msgid, header_size, max_payload_size, src_payload_addr,
-        src_payload_lines, src_payload_line_stride, storage_size);
-  }
-
   size_t UCPModule::recommended_max_payload(NodeID target, bool with_congestion,
                                             size_t header_size)
   {
     (void)target;
-    return internal->recommended_max_payload(nullptr, nullptr, nullptr, with_congestion,
-                                             header_size);
-  }
-
-  size_t UCPModule::recommended_max_payload(const NodeSet &targets, bool with_congestion,
-                                            size_t header_size)
-  {
-    (void)targets;
     return internal->recommended_max_payload(nullptr, nullptr, nullptr, with_congestion,
                                              header_size);
   }
@@ -308,16 +289,6 @@ namespace Realm {
                                             size_t header_size)
   {
     (void)target;
-    return internal->recommended_max_payload(data, nullptr, nullptr, with_congestion,
-                                             header_size);
-  }
-
-  size_t UCPModule::recommended_max_payload(const NodeSet &targets, const void *data,
-                                            size_t bytes_per_line, size_t lines,
-                                            size_t line_stride, bool with_congestion,
-                                            size_t header_size)
-  {
-    (void)targets;
     return internal->recommended_max_payload(data, nullptr, nullptr, with_congestion,
                                              header_size);
   }
