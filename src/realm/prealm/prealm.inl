@@ -291,7 +291,8 @@ namespace PRealm {
                           const std::vector<CopySrcDstField> &srcs,
                           const std::vector<CopySrcDstField> &dsts, Event critical);
     void add_task_request(ProfilingRequestSet &requests, Processor::TaskFuncID task_id,
-                          Event critical, Event fevent, timestamp_t spawn_time = 0);
+                          Processor target, Event critical, Event fevent,
+                          timestamp_t spawn_time = 0);
     Event add_inst_request(ProfilingRequestSet &requests, Event critical);
 
   public:

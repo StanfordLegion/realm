@@ -613,8 +613,9 @@ namespace PRealm {
   }
 
   void ThreadProfiler::add_task_request(ProfilingRequestSet &requests,
-                                        Processor::TaskFuncID task_id, Event critical,
-                                        Event fevent, timestamp_t spawn_time)
+                                        Processor::TaskFuncID task_id, Processor target,
+                                        Event critical, Event fevent,
+                                        timestamp_t spawn_time)
   {
     Profiler &profiler = Profiler::get_profiler();
     if(!profiler.enabled)
@@ -636,7 +637,7 @@ namespace PRealm {
     req.add_measurement<ProfilingMeasurements::OperationProcessorUsage>();
     req.add_measurement<ProfilingMeasurements::OperationEventWaits>();
     req.add_measurement<ProfilingMeasurements::OperationFinishEvent>();
-    if(!is_implicit() && (local_proc.kind() == Processor::TOC_PROC))
+    if(!is_implicit() && (target.kind() == Processor::TOC_PROC))
       req.add_measurement<ProfilingMeasurements::OperationTimelineGPU>();
   }
 
@@ -3244,7 +3245,7 @@ namespace PRealm {
     assert(wargs->spawn_time != 0);
     ProfilingRequestSet requests;
     ThreadProfiler::get_thread_profiler().add_task_request(
-        requests, wargs->task_id, wargs->wait_on, wargs->fevent, wargs->spawn_time);
+        requests, wargs->task_id, p, wargs->wait_on, wargs->fevent, wargs->spawn_time);
 
     const Realm::Event done =
         p.spawn(wargs->task_id, (wargs->arglen > 0) ? (void *)(wargs + 1) : nullptr,
@@ -3599,7 +3600,8 @@ namespace PRealm {
     } else {
       // Can spawn this directly locally
       ProfilingRequestSet alt_requests(requests);
-      profiler.add_task_request(alt_requests, func_id, wait_on, profiler.get_fevent());
+      profiler.add_task_request(alt_requests, func_id, *this, wait_on,
+                                profiler.get_fevent());
       return Realm::Processor::spawn(func_id, args, arglen, alt_requests, wait_on,
                                      priority);
     }
