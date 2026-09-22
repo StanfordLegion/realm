@@ -188,8 +188,13 @@ namespace Realm {
     virtual void update(Event event, NodeSet to_update,
                         span<EventImpl::gen_t> poisoned_generations);
 
+    // the trailing taint fields piggyback deferred-allocation taint views on
+    //  the update message (subscription acks and narrowing pushes) -
+    //  taint_gen == 0 means "no taint information carried"
     virtual void update(Event event, NodeID to_update,
-                        span<EventImpl::gen_t> poisoned_generations);
+                        span<EventImpl::gen_t> poisoned_generations,
+                        EventImpl::gen_t taint_gen = 0, uint8_t taint_kind = 0,
+                        realm_id_t taint_inst = 0);
 
     virtual void subscribe(Event event, NodeID owner,
                            EventImpl::gen_t previous_subscribe_gen);
@@ -204,6 +209,73 @@ namespace Realm {
     ~GenEventImpl(void);
 
     void init(ID _me, unsigned _init_owner);
+
+    // --- taint tracking for deferred-allocation funding safety (BUG-8) ---
+    // an event's "taint" is the set of PENDING deferred instance creations
+    //  its trigger may (transitively) depend on - see
+    //  tla/allocation/DIST-DESIGN.md section 5c and
+    //  tla/allocation/bugs/BUG-8.md.  The set is kept in inline-one-id form:
+    //  NONE, exactly one instance, or TOP (may depend on anything - unbound
+    //  user events, unfired barrier generations, and the >=2-id overflow).
+    //  Taint only ever NARROWS (TOP -> one-id -> NONE), so a stale view is
+    //  always conservative; it dies at trigger (a fired event cannot depend
+    //  on any still-pending creation).
+    //
+    // NOTE TO MINT-SITE AUTHORS (safe-by-default): a fresh, untriggered
+    //  generation with NO recorded taint reads as TOP on its owner - suspect
+    //  by construction.  A mint site that stores nothing is therefore always
+    //  SOUND; the cost is only lost funding opportunities (a deletion gated
+    //  on such an event cannot fund remote-origin creations until it fires).
+    //  set_taint / set_taint_from_inputs are NARROWING optimizations, and
+    //  the single obligation on any stored taint is that it DOMINATES the
+    //  event's true transitive dependence on pending instance creations.
+    //  The load-bearing narrowing sites that carry the performance:
+    //   - task spawn (finish event = union of launch preconditions, frozen)
+    //   - event merges (union of inputs, PENDING when unresolved)
+    //   - copy/fill completion (union of the launch precondition)
+    //   - instance ready events (ROOT_UNION: INST(self) u precondition)
+    //   - user-event bind (owner-side narrowing push to subscribers)
+    //
+    // PERFORMANCE INVARIANT (DIST-DESIGN.md section 5e): trigger paths do
+    //  NO taint work.  Death-at-trigger is implemented READ-side (the
+    //  has_triggered check in read_taint plus the taint_gen tag) - nothing
+    //  stores, clears, or sends taint when an event fires, and pure trigger
+    //  propagation carries taint_gen == 0.  Taint cost lives only at event
+    //  CREATION (O(#inputs), TAINT_MAX_INPUTS-bounded storage) and inside
+    //  ALLOCATOR decisions (lazy PENDING resolution, funding filter).  Do
+    //  not add taint reads/writes/messages to trigger or poison paths.
+    enum TaintKind : uint8_t
+    {
+      TAINT_UNKNOWN = 0, // (non-owner view) no taint info delivered yet -
+                         //  MUST be treated as suspect, never fundable
+      TAINT_NONE = 1,    // provably independent of every pending creation
+      TAINT_INST = 2,    // may depend on exactly one pending creation
+      TAINT_TOP = 3,     // may depend on anything
+      TAINT_PENDING = 4, // (owner side) derived event whose inputs' taints
+                         //  were not all resolved at creation - lazily
+                         //  re-resolved via taint_inputs (late reads only
+                         //  ever observe NARROWER input taints, so they
+                         //  remain sound over-approximations)
+    };
+    static const int TAINT_MAX_INPUTS = 2;
+
+    // set the live generation's taint (event-creation sites)
+    void set_taint(uint8_t kind, realm_id_t inst = 0);
+    // derived-event rule: the new event's taint must dominate the union of
+    //  ALL input taints (multi-input obligation, DIST-DESIGN.md 5c) - inputs
+    //  whose taint cannot be resolved yet leave the event TAINT_PENDING
+    void set_taint_from_inputs(span<const Event> inputs);
+    // read the taint of 'e' as visible on this node; triggered events are
+    //  TAINT_NONE by definition; remote events with no delivered view return
+    //  TAINT_UNKNOWN (callers must already hold/register a subscription so
+    //  the view eventually arrives)
+    static uint8_t read_taint(Event e, realm_id_t &inst_out, int depth = 0);
+    // non-owner side: store a taint view delivered by the owner
+    //  (generation-checked; stale-generation updates are dropped)
+    void apply_taint_update(gen_t gen, uint8_t kind, realm_id_t inst);
+    // owner side: recompute/narrow a user event's taint at deferred-trigger
+    //  (bind) time and push the narrowing to current subscribers
+    void narrow_user_event_taint(Event wait_on);
 
     static GenEventImpl *
     create_genevent(void); // TODO: remove this once we get rid of get_runtime()
@@ -341,6 +413,16 @@ namespace Realm {
     //  poisoned merge and the last precondition
     bool free_list_insertion_delayed = false;
     friend class EventMerger;
+
+    // --- taint state (guarded by 'mutex') ---
+    // valid only when taint_gen matches the generation being asked about -
+    //  stale-generation state is never trusted (hygiene rule for impl
+    //  recycling: a fresh generation starts TAINT_NONE on the owner and
+    //  TAINT_UNKNOWN on mirrors)
+    uint8_t taint_kind = TAINT_NONE;
+    gen_t taint_gen = 0;
+    realm_id_t taint_inst = 0;
+    Event taint_inputs[TAINT_MAX_INPUTS];
   };
 }; // namespace Realm
 

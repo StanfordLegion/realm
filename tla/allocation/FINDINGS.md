@@ -22,6 +22,27 @@ locally verified.** Sapling runs pending (see `SAPLING_JOBS.md`). No Realm
 source code has been modified — all proposed fixes are analysis-only,
 recorded in `bugs/`.
 
+**BUG-8 resolution (2026-09-05):** round-trip fix selected by Mike and
+model-confirmed (two-site matrix 6/6, RT review 0 blocking — see
+`bugs/BUG-8.md` RESOLUTION and `DIST-EXPECTED.md`); event timestamps remain
+the verified alternative.  C++ blueprint pending.
+
+**Taint F-round (2026-09-08):** the taint C++ fidelity review found two
+soundness gaps the certified single-memory model could not see — F4
+(cross-memory funding cycle) and F3 (preconditioned-create taint root) —
+plus F7 (prefix funding rule).  Modeled as `FIX_TAINT_FOREIGN_TOP`,
+`FIX_TAINT_ROOT_UNION`, `FIX_TAINT_PREFIX` over a two-memory,
+preconditioned-create extension (DIST-DESIGN.md §5d); new master
+`INV_NoFundingCycle`.  Both hazards registered as constructive violations
+with toggles off (honestly narrowing the 2026-09-07 certification), both
+close green with toggles on; regressions byte-identical.  Full-scale
+cross-memory open sweep is sapling-bound.
+
+**Taint design certified (2026-09-07):** option (c) taint tracking
+formalized and certified in the two-site model (14/14 matrix, 0-blocking
+review) — the third certified BUG-8 fix design; C++ pivot decision pending
+Mike (see bugs/BUG-8.md TAINT verdict).
+
 **Fix-bundle addendum (2026-08-26):** the three candidate fixes are modeled
 as spec toggles — `FIX_CAP` (BUG-1 capped admission), `FIX_SWEEP`
 (BUG-6/BUG-4 stranded-ready sweep), `FIX_RPR` (BUG-5 trailing-alloc replay)

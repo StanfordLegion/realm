@@ -727,6 +727,9 @@ namespace Realm {
       inst->metadata.inst_offset = RegionInstanceImpl::INSTOFFSET_DELAYEDALLOC;
       inst->deferred_create.defer(inst, this, need_alloc_result, release_seqid_cap,
                                   precondition);
+      // the create request has now been processed - splice any deferred
+      //  destroy that out-raced it (BUG-8 early-release hold queue)
+      splice_parked_release(inst);
       return ALLOC_DEFERRED /*asynchronous notification*/;
     }
 
@@ -743,13 +746,30 @@ namespace Realm {
       }
     } else {
       // normal allocation from our managed pool
-      AutoLock<> al(allocator_mutex);
+      bool held = false;
+      {
+        AutoLock<> al(allocator_mutex);
 
-      // the precondition was already triggered at request time, so every
-      //  pending release predates this request and may fund it
-      result = attempt_deferrable_allocation(inst, inst->metadata.layout->bytes_used,
-                                             inst->metadata.layout->alignment_reqd,
-                                             inst_offset, cur_release_seqid);
+        // the precondition was already triggered at request time; for
+        //  owner-local creations every pending release predates this request
+        //  and may fund it (remote-origin creations are re-bounded by the
+        //  taint funding filter inside)
+        result = attempt_deferrable_allocation(inst, inst->metadata.layout->bytes_used,
+                                               inst->metadata.layout->alignment_reqd,
+                                               inst_offset, cur_release_seqid, held);
+        if(held)
+          held_admissions.push_back(
+              HeldAdmission{inst, need_alloc_result, cur_release_seqid});
+      }
+      if(held) {
+        // decision deferred (client-invisible - the result was always
+        //  asynchronous): the notification, INCLUDING a requested alloc
+        //  result, is suppressed until the decision is made.  Splicing here
+        //  is safe: the instance sits in held_admissions, so a re-entered
+        //  early release cannot re-park.
+        splice_parked_release(inst);
+        return ALLOC_DEFERRED;
+      }
     }
 
     // if we needed an alloc result, send deferred responses too
@@ -757,15 +777,213 @@ namespace Realm {
       inst->notify_allocation(result, inst_offset, TimeLimit::responsive());
     }
 
+    // the create request is now FULLY processed - only now may a parked
+    //  early release be spliced back in.  Splicing before notify_allocation
+    //  published the outcome (offset for success, INSTOFFSET_FAILED for
+    //  failure) let the re-entered release satisfy the park condition again
+    //  (instance still INSTOFFSET_UNALLOCATED, in neither queue) and re-park
+    //  forever, silently losing the deletion (F5).  For a DEFERRED result
+    //  the instance sits in pending_allocs, so re-parking is impossible
+    //  regardless of the (possibly skipped) notification.
+    splice_parked_release(inst);
+
     return result;
+  }
+
+  namespace {
+    // TAINT_T1_FUNDING enables the tier-1 same-source counter proof in the
+    //  remote-origin funding filter (certified as TAINT_T1 in
+    //  tla/allocation/DistDeferredAlloc.tla).  Whether to SHIP it is an open
+    //  decision (see bugs/BUG-8.md "T1 trade"): enabling it makes remote
+    //  funding rely on the frozen-ancestry contract rule exactly as
+    //  owner-local funding already does; disabling it makes remote funding
+    //  strictly more robust than local at the cost of same-source
+    //  user-event-gated funding.  Prototyped ON to match owner-local trust.
+    constexpr bool TAINT_T1_FUNDING = true;
+  }; // namespace
+
+  // remote-origin funding bound - must be called with allocator_mutex held!
+  unsigned LocalManagedMemory::compute_taint_funding_cap(RegionInstanceImpl *inst,
+                                                         bool &undecided)
+  {
+    undecided = false;
+    unsigned cap = 0;
+    const NodeID origin = ID(inst->me).instance_creator_node();
+    const unsigned t1_sample = inst->remote_t1_sample;
+    for(std::deque<PendingRelease>::const_iterator it = pending_releases.begin();
+        it != pending_releases.end(); ++it) {
+      // FUNDING FILTER (BUG-8, certified: tla/allocation/DIST-DESIGN.md 5c,
+      //  bugs/BUG-8.md) - a pending deletion may fund a remote-origin
+      //  creation only when it is PROVABLY not (transitively) dependent on
+      //  that creation's ready event:
+      //   (a) its precondition already fired - a triggered event cannot
+      //       depend on any still-pending creation;
+      //   (b) tier-1: it was issued by the creating node BEFORE that node
+      //       sampled its send-counter for the alloc request - i.e. before
+      //       the creation event existed anywhere - and (by the
+      //       frozen-ancestry contract rule) can never legally come to
+      //       depend on it, even through a future user-event bind;
+      //   (c) its precondition's taint view is resolved and does not
+      //       contain this instance (TAINT_NONE funds anything;
+      //       TAINT_INST(j) funds any creation but j; TAINT_TOP and an
+      //       UNKNOWN view fund NOTHING - unknown is suspect, never
+      //       fundable).
+      //  An UNKNOWN view bounds the prefix but may resolve - the caller
+      //  HOLDS the admission decision instead of failing it.
+      bool eligible = false;
+      if(it->is_ready) {
+        eligible = true;
+      } else if(TAINT_T1_FUNDING && (it->src_node == origin) &&
+                (it->src_seq <= t1_sample) && (it->src_seq > 0)) {
+        eligible = true;
+      } else if(it->precondition.exists()) {
+        realm_id_t tinst = 0;
+        uint8_t kind = GenEventImpl::read_taint(it->precondition, tinst);
+        if(kind == GenEventImpl::TAINT_NONE) {
+          eligible = true;
+        } else if((kind == GenEventImpl::TAINT_INST) && (tinst != inst->me.id)) {
+          // FOREIGN_TOP (certified): the INST(j != c) exemption is only
+          //  sound when j is a creation pending against THIS memory - a
+          //  release tainted by a foreign memory's pending create can close
+          //  a funding ring ACROSS memories that neither owner sees, so a
+          //  foreign instance id is treated like TOP (never funds).
+          //  Instance ids identify their memory, so this is a pure id check.
+          Memory taint_mem = ID::make_memory(ID(tinst).instance_owner_node(),
+                                             ID(tinst).instance_mem_idx())
+                                 .convert<Memory>();
+          if(taint_mem == me)
+            eligible = true;
+        } else if(kind == GenEventImpl::TAINT_UNKNOWN) {
+          undecided = true;
+        }
+        // TAINT_TOP, TAINT_INST(this instance), or TAINT_INST(foreign
+        //  memory): decided-ineligible
+      }
+      // entries with no recorded precondition (deferred-destroy-before-
+      //  create and redistrict pushes) are treated like TAINT_TOP
+      if(!eligible)
+        break;
+      cap = it->seqid;
+    }
+    return cap;
+  }
+
+  void LocalManagedMemory::try_decide_held_admissions()
+  {
+    // HELD-DECISION QUEUE (BUG-8, DIST-DESIGN.md 5c): decisions are made
+    //  strictly FIFO - a still-undecidable front blocks everything behind
+    //  it.  A held decision's funding set is computed at DECISION time, so
+    //  it may include deletions that arrived during the hold (the second
+    //  admission-order divergence the certified model covers).
+    while(true) {
+      RegionInstanceImpl *decided_inst = nullptr;
+      AllocationResult res = ALLOC_INSTANT_FAILURE;
+      size_t offset = 0;
+      bool need_result = false;
+      {
+        AutoLock<> al(allocator_mutex);
+        if(held_admissions.empty())
+          break;
+        HeldAdmission &h = held_admissions.front();
+        bool still_held = false;
+        res = attempt_deferrable_allocation(h.inst, h.inst->metadata.layout->bytes_used,
+                                            h.inst->metadata.layout->alignment_reqd,
+                                            offset, h.local_cap, still_held,
+                                            true /*from_held_queue*/);
+        if(still_held)
+          break;
+        decided_inst = h.inst;
+        need_result = h.need_alloc_result;
+        held_admissions.pop_front();
+      }
+      // fire the (previously suppressed) notification outside the mutex
+      if((res != ALLOC_DEFERRED) || need_result)
+        decided_inst->notify_allocation(res, offset, TimeLimit::responsive());
+      // a same-instance destroy arriving between the pop above and the
+      //  notify sees the instance in neither queue with its offset still
+      //  unallocated, so it parks - splice it now that the outcome is
+      //  published (the F5 window, relocated here by the held-decision
+      //  deferral; harmless for DEFERRED decisions, where pending_allocs
+      //  membership already blocks re-parking)
+      splice_parked_release(decided_inst);
+    }
+  }
+
+  void LocalManagedMemory::splice_parked_release(RegionInstanceImpl *inst)
+  {
+    ParkedRelease parked;
+    bool found = false;
+    {
+      AutoLock<> al(allocator_mutex);
+      std::map<RegionInstance, ParkedRelease>::iterator it =
+          parked_releases.find(inst->me);
+      if(it != parked_releases.end()) {
+        parked = it->second;
+        found = true;
+        parked_releases.erase(it);
+      }
+    }
+    if(found) {
+      // re-enter the normal release path: the create request has now been
+      //  processed, so the deletion gets a FRESH seqid - it can never fund
+      //  its own instance's admission (and its taint excludes it anyway)
+      release_storage_deferrable(inst, parked.precondition, parked.src_node,
+                                 parked.src_seq);
+    }
+  }
+
+  /*static*/ void LocalManagedMemory::poke_all_held_admissions()
+  {
+    // called when a taint view arrives - any local memory may have held
+    //  admission decisions that are now decidable
+    RuntimeImpl *rt = get_runtime();
+    if(rt == nullptr)
+      return;
+    Node &n = rt->nodes[Network::my_node_id];
+    for(std::vector<MemoryImpl *>::iterator it = n.memories.begin();
+        it != n.memories.end(); ++it) {
+      LocalManagedMemory *lmm = dynamic_cast<LocalManagedMemory *>(*it);
+      if(lmm != nullptr)
+        lmm->try_decide_held_admissions();
+    }
+  }
+
+  // hook for event_impl.cc (taint updates arrive there)
+  void poke_held_admissions_all_memories()
+  {
+    LocalManagedMemory::poke_all_held_admissions();
   }
 
   // for internal use by allocation routines - must be called with
   //  allocator_mutex held!
   MemoryImpl::AllocationResult LocalManagedMemory::attempt_deferrable_allocation(
       RegionInstanceImpl *inst, size_t bytes, size_t alignment, size_t &inst_offset,
-      unsigned release_seqid_cap)
+      unsigned release_seqid_cap, bool &held, bool from_held_queue /*= false*/)
   {
+    held = false;
+
+    // FIFO OBLIGATION (tla/allocation/DIST-DESIGN.md 5c): while any
+    //  admission decision is held, every new deferrable admission queues
+    //  behind it - held decisions are made strictly FIFO, which preserves
+    //  the monotone last_release_seqid discipline the drain machinery
+    //  relies on (deciding out of order would require re-proving the v1
+    //  queue invariants)
+    if(!from_held_queue && !held_admissions.empty()) {
+      held = true;
+      return ALLOC_DEFERRED;
+    }
+
+    // remote-origin creations cannot use the arrival-order cap: their
+    //  creation event was published on the requesting node a full message
+    //  flight before this node heard of them, so arrival order is not issue
+    //  order (BUG-8).  Fund them instead from the longest provably-safe
+    //  prefix of pending deletions.
+    const bool remote_origin =
+        (NodeID(ID(inst->me).instance_creator_node()) != Network::my_node_id);
+    bool undecided = false;
+    if(remote_origin && Config::deferred_instance_allocation)
+      release_seqid_cap = compute_taint_funding_cap(inst, undecided);
+
 #ifdef DEBUG_REALM
     // ready releases are swept whenever the allocation queue drains, so an
     //  empty queue implies nothing in the release list is ready
@@ -796,8 +1014,15 @@ namespace Realm {
       //  non-decreasing along 'pending_allocs', which the drain and replay
       //  logic depend on (and an inversion between two deferred creations
       //  is exactly the shape that would rebuild a funding cycle)
-      if(release_seqid_cap < pending_allocs.back().last_release_seqid)
+      if(release_seqid_cap < pending_allocs.back().last_release_seqid) {
+        if(undecided) {
+          // an unknown taint view bounds our funding prefix - it may extend
+          //  once the view arrives, so hold the decision instead of failing
+          held = true;
+          return ALLOC_DEFERRED;
+        }
         return ALLOC_INSTANT_FAILURE;
+      }
 
       // fast path: a request whose precondition had already triggered
       //  (cap == cur_release_seqid) can be tested directly against the
@@ -857,6 +1082,13 @@ namespace Realm {
     }
 
     if(!test_allocator.allocate(inst->me, bytes, alignment, inst_offset)) {
+      if(undecided) {
+        // the provably-safe prefix doesn't fit, but it is bounded by a
+        //  deletion whose taint view is still unknown - hold the decision
+        // NOTE: future_allocator is deliberately left untouched here
+        held = true;
+        return ALLOC_DEFERRED;
+      }
       // even the releases we may legally wait for don't make room -
       //  fail immediately (and honestly) rather than risk planning a
       //  funding cycle
@@ -886,6 +1118,15 @@ namespace Realm {
   void LocalManagedMemory::release_storage_deferrable(RegionInstanceImpl *inst,
                                                       Event precondition)
   {
+    // owner-local (or provenance-less) entry - tier-1 same-source funding
+    //  proofs never apply to these (src_node = -1 sentinel)
+    release_storage_deferrable(inst, precondition, NodeID(-1), 0);
+  }
+
+  void LocalManagedMemory::release_storage_deferrable(RegionInstanceImpl *inst,
+                                                      Event precondition, NodeID src_node,
+                                                      unsigned src_seq)
+  {
     // all allocation requests are handled by the memory's owning node for
     //  now - local caching might be possible though
     NodeID target = ID(me).memory_owner_node();
@@ -910,8 +1151,44 @@ namespace Realm {
       // this release may satisfy pending allocation requests
       std::vector<std::pair<RegionInstanceImpl *, size_t>> successful_allocs;
 
+      bool parked = false;
       do { // so we can 'break' out early below
         AutoLock<> al(allocator_mutex);
+
+        // EARLY-RELEASE HOLD QUEUE (BUG-8): a deferred destroy can arrive
+        //  for an instance whose create REQUEST has not arrived yet (the
+        //  destroy was issued on another node against a shipped handle and
+        //  its message out-raced the creation's).  Park it - keyed by
+        //  instance - and splice it in (with a fresh seqid, AFTER the
+        //  create's outcome is published) once the create request shows up.
+        //  Detection: unallocated remote-created instance that is in
+        //  neither the pending-allocation queue nor the held-admission
+        //  queue (i.e. no create request has been processed for it).
+        //  Instance slots are recycled, so notify_deallocation returns the
+        //  owner-side inst_offset to INSTOFFSET_UNALLOCATED when an
+        //  incarnation retires - otherwise a stale valid-or-FAILED offset
+        //  from the previous incarnation would mask a NEW incarnation's
+        //  early destroy here and corrupt the allocator state.
+        if((inst->metadata.inst_offset == RegionInstanceImpl::INSTOFFSET_UNALLOCATED) &&
+           (NodeID(ID(inst->me).instance_creator_node()) != Network::my_node_id)) {
+          bool create_seen = false;
+          for(std::deque<PendingAlloc>::const_iterator it = pending_allocs.begin();
+              !create_seen && (it != pending_allocs.end()); ++it)
+            create_seen = (it->inst == inst);
+          for(std::deque<HeldAdmission>::const_iterator it = held_admissions.begin();
+              !create_seen && (it != held_admissions.end()); ++it)
+            create_seen = (it->inst == inst);
+          if(!create_seen) {
+            // duplicate-destroy tripwire: the client contract allows exactly
+            //  one destroy per instance incarnation, so at most one parked
+            //  entry can exist per key - a second means a duplicate destroy
+            //  or a slot-recycling bookkeeping bug
+            assert(parked_releases.find(inst->me) == parked_releases.end());
+            parked_releases[inst->me] = ParkedRelease{precondition, src_node, src_seq};
+            parked = true;
+            break;
+          }
+        }
 
         // special case: we can get a (deferred only!) destruction of an
         //  instance whose creation precondition hasn't even been satisfied -
@@ -932,7 +1209,8 @@ namespace Realm {
           } else {
             // push the op, but we're not maintaining a future state yet
             pending_releases.emplace_back(
-                PendingRelease(inst, false /*!triggered*/, ++cur_release_seqid));
+                PendingRelease(inst, false /*!triggered*/, ++cur_release_seqid,
+                               precondition, src_node, src_seq));
           }
         } else {
           // even if this destruction is ready, we can't update current
@@ -958,7 +1236,8 @@ namespace Realm {
                 //  current_allocator, so defer notify_deallocation() (and the
                 //  inst-slot recycle it triggers) until this entry is drained
                 PendingRelease &back = pending_releases.emplace_back(
-                    PendingRelease(inst, true /*triggered*/, ++cur_release_seqid));
+                    PendingRelease(inst, true /*triggered*/, ++cur_release_seqid,
+                                   precondition, src_node, src_seq));
                 back.deferred_dealloc_notify = true;
                 defer_dealloc_notify = true;
               }
@@ -968,10 +1247,14 @@ namespace Realm {
             if(inst->metadata.inst_offset != RegionInstanceImpl::INSTOFFSET_FAILED)
               future_allocator.deallocate(inst->me, true /*missing ok*/);
             pending_releases.emplace_back(
-                PendingRelease(inst, false /*!triggered*/, ++cur_release_seqid));
+                PendingRelease(inst, false /*!triggered*/, ++cur_release_seqid,
+                               precondition, src_node, src_seq));
           }
         }
       } while(0);
+
+      if(parked)
+        return; // no ack, no waiter - the splice re-enters this function
 
       if(!successful_allocs.empty()) {
         for(std::vector<std::pair<RegionInstanceImpl *, size_t>>::iterator it =
@@ -997,6 +1280,10 @@ namespace Realm {
     }
     for(RegionInstanceImpl *deferred_inst : deferred_dealloc_notifies)
       deferred_inst->notify_deallocation();
+
+    // a new (or newly-ready) deletion can extend a held admission's funding
+    //  prefix - see if anything is decidable now
+    try_decide_held_admissions();
   }
 
   MemoryImpl::AllocationResult LocalManagedMemory::reuse_storage_deferrable(
@@ -1083,8 +1370,8 @@ namespace Realm {
                                                       alignments, offsets);
         } else {
           // push the op, but we're not maintaining a future state yet
-          PendingRelease &back = pending_releases.emplace_back(
-              PendingRelease(old_inst, false /*!triggered*/, ++cur_release_seqid));
+          PendingRelease &back = pending_releases.emplace_back(PendingRelease(
+              old_inst, false /*!triggered*/, ++cur_release_seqid, precondition));
           back.record_redistrict(new_insts);
         }
       } else {
@@ -1110,8 +1397,8 @@ namespace Realm {
               //  pending release list - old_inst's tag is still live in
               //  current_allocator, so defer the dealloc notify until this
               //  entry is drained from pending_releases
-              PendingRelease &back = pending_releases.emplace_back(
-                  PendingRelease(old_inst, true /*triggered*/, ++cur_release_seqid));
+              PendingRelease &back = pending_releases.emplace_back(PendingRelease(
+                  old_inst, true /*triggered*/, ++cur_release_seqid, precondition));
               back.record_redistrict(new_insts);
               back.deferred_dealloc_notify = true;
               defer_dealloc_notify = true;
@@ -1122,8 +1409,8 @@ namespace Realm {
           if(old_inst->metadata.inst_offset != RegionInstanceImpl::INSTOFFSET_FAILED)
             future_allocator.split_range(old_inst->me, tags, sizes, alignments, offsets,
                                          true /*missing ok*/);
-          PendingRelease &back = pending_releases.emplace_back(
-              PendingRelease(old_inst, false /*!triggered*/, ++cur_release_seqid));
+          PendingRelease &back = pending_releases.emplace_back(PendingRelease(
+              old_inst, false /*!triggered*/, ++cur_release_seqid, precondition));
           back.record_redistrict(new_insts);
         }
       }
@@ -1149,6 +1436,14 @@ namespace Realm {
                                                             : ALLOC_INSTANT_FAILURE,
                                           offsets[idx], TimeLimit::responsive());
       }
+      // redistrict targets are creations too: an early destroy of a target
+      //  may have parked - splice only after the notify above published each
+      //  target's outcome (F5)
+      for(unsigned idx = 0; idx < num_insts; idx++)
+        splice_parked_release(new_insts[idx]);
+      // the redistrict may have queued a pending deletion that could extend
+      //  a held admission's funding prefix (F6)
+      try_decide_held_admissions();
       return ALLOC_INSTANT_SUCCESS;
     } else {
       assert(old_inst->deferred_redistrict.empty());
@@ -1156,6 +1451,11 @@ namespace Realm {
       old_inst->deferred_destroy.defer(old_inst, this, precondition);
       // deferred_dealloc_notifies is necessarily empty here -
       //  attempt_release_reordering is only called on the triggered path
+      // NOTE: no target splice here - the targets are not processed until
+      //  the precondition fires (reuse_storage_immediate), which splices
+      //  after publishing their outcomes.  A pending deletion was queued,
+      //  though, so poke held admissions (F6).
+      try_decide_held_admissions();
       return ALLOC_DEFERRED;
     }
   }
@@ -1168,6 +1468,7 @@ namespace Realm {
   {
     AllocationResult result;
     size_t inst_offset = 0;
+    bool held_this_admission = false;
     {
       AutoLock<> al(allocator_mutex);
 
@@ -1212,10 +1513,18 @@ namespace Realm {
           // fund only from releases that were already requested when this
           //  creation was requested (the snapshot taken at deferral time) -
           //  releases requested in between may depend on our creation event
+          //  (remote-origin creations are re-bounded by the taint funding
+          //  filter inside, ignoring the arrival-time snapshot)
+          bool held = false;
           result = attempt_deferrable_allocation(
               inst, inst->metadata.layout->bytes_used,
               inst->metadata.layout->alignment_reqd, inst_offset,
-              inst->deferred_create.get_release_seqid_cap());
+              inst->deferred_create.get_release_seqid_cap(), held);
+          if(held) {
+            held_admissions.push_back(HeldAdmission{
+                inst, need_alloc_result, inst->deferred_create.get_release_seqid_cap()});
+            held_this_admission = true;
+          }
         }
       }
 
@@ -1223,8 +1532,13 @@ namespace Realm {
       //  add it to our list so that we can find it later
       if(inst->metadata.ext_resource == 0) {
         if(deferred_destroy_exists) {
+          // thread the destroy's own precondition into the push (F8) so the
+          //  taint funding filter can evaluate it; source provenance is not
+          //  recoverable here, so the tier-1 same-source proof never applies
+          //  to these entries (sentinel src)
           PendingRelease &back = pending_releases.emplace_back(
-              PendingRelease(inst, false /*!ready*/, ++cur_release_seqid));
+              PendingRelease(inst, false /*!ready*/, ++cur_release_seqid,
+                             inst->deferred_destroy.get_precondition()));
           // a successful (now or later) allocation should update the future
           //  state, if we have one
           if(((result == ALLOC_INSTANT_SUCCESS) || (result == ALLOC_DEFERRED)) &&
@@ -1234,8 +1548,15 @@ namespace Realm {
         }
         if(deferred_redistrict_exists) {
           assert(!inst->deferred_redistrict.empty());
+          // same precondition threading as the destroy push above (F8).
+          // INVARIANT: reading deferred_destroy here is correct ONLY because
+          //  a deferred redistrict registers through deferred_destroy.defer()
+          //  (reuse_storage_deferrable) - if redistrict ever grows its own
+          //  waiter object this silently reads a stale precondition, which
+          //  is the UNSAFE direction (a wrongly-clean view can fund).
           PendingRelease &back = pending_releases.emplace_back(
-              PendingRelease(inst, false /*!ready*/, ++cur_release_seqid));
+              PendingRelease(inst, false /*!ready*/, ++cur_release_seqid,
+                             inst->deferred_destroy.get_precondition()));
           back.record_redistrict(inst->deferred_redistrict);
           // a successful (now or later) allocation should update the future
           //  state, if we have one
@@ -1247,10 +1568,22 @@ namespace Realm {
       }
     }
 
-    // if we needed an alloc result, send deferred responses too
-    if((result != ALLOC_DEFERRED) || need_alloc_result) {
+    // if we needed an alloc result, send deferred responses too - unless
+    //  the decision is held, in which case ALL notification (including a
+    //  requested alloc result) waits for the decision
+    if(!held_this_admission && ((result != ALLOC_DEFERRED) || need_alloc_result)) {
       inst->notify_allocation(result, inst_offset, work_until);
     }
+
+    // an early release can park during this function's own
+    //  INSTOFFSET_UNALLOCATED window (opened above before the allocation
+    //  attempt) - splice it only now that the outcome is published, for the
+    //  same re-parking reason as in allocate_storage_deferrable (F5)
+    splice_parked_release(inst);
+
+    // a deferred destroy recorded above adds a pending deletion that could
+    //  extend a held admission's funding prefix
+    try_decide_held_admissions();
 
     return result;
   }
@@ -1616,6 +1949,10 @@ namespace Realm {
         assert(offsets[idx] == RegionInstanceImpl::INSTOFFSET_FAILED);
         local_insts[idx]->notify_allocation(ALLOC_CANCELLED, offsets[idx], work_until);
       }
+      // cancelled targets still count as processed creations - splice any
+      //  parked early release now that the outcome is published (F5)
+      for(unsigned idx = 0; idx < local_insts.size(); idx++)
+        splice_parked_release(local_insts[idx]);
       return ALLOC_CANCELLED;
     } else {
       if(!defer_dealloc_notify)
@@ -1629,6 +1966,11 @@ namespace Realm {
                                                               : ALLOC_EVENTUAL_FAILURE,
                                             offsets[idx], work_until);
       }
+      // redistrict targets are creations - splice parked early releases only
+      //  now that their outcomes are published (F5)
+      for(unsigned idx = 0; idx < local_insts.size(); idx++)
+        splice_parked_release(local_insts[idx]);
+      try_decide_held_admissions(); // BUG-8: drained deletions may unhold
       return ALLOC_INSTANT_SUCCESS;
     }
   }
@@ -1964,6 +2306,10 @@ namespace Realm {
     }
     for(RegionInstanceImpl *deferred_inst : deferred_dealloc_notifies)
       deferred_inst->notify_deallocation();
+
+    // completed (or newly-ready) deletions extend held admissions' funding
+    //  prefixes - see if anything is decidable now (BUG-8)
+    try_decide_held_admissions();
   }
 
   ////////////////////////////////////////////////////////////////////////
@@ -1984,12 +2330,17 @@ namespace Realm {
   // class LocalManagedMemory::PendingRelease
   //
 
-  LocalManagedMemory::PendingRelease::PendingRelease(RegionInstanceImpl *_inst,
-                                                     bool _ready, unsigned _seqid)
+  LocalManagedMemory::PendingRelease::PendingRelease(
+      RegionInstanceImpl *_inst, bool _ready, unsigned _seqid,
+      Event _precondition /*= Event::NO_EVENT*/, NodeID _src_node /*= -1*/,
+      unsigned _src_seq /*= 0*/)
     : inst(_inst)
     , is_ready(_ready)
     , seqid(_seqid)
     , deferred_dealloc_notify(false)
+    , precondition(_precondition)
+    , src_node(_src_node)
+    , src_seq(_src_seq)
   {}
 
   void LocalManagedMemory::PendingRelease::record_redistrict(
@@ -2240,6 +2591,11 @@ namespace Realm {
     amsg->inst = inst->me;
     amsg->need_alloc_result = need_alloc_result;
     amsg->precondition = precondition;
+    // tier-1 sample (BUG-8): sampled BEFORE this message commits, which is
+    //  before create_instance returns and hence before the creation event
+    //  exists anywhere on this node - deletions we sent up to this count
+    //  provably predate the handle
+    amsg->rel_seq_sample = release_send_count.load_acquire();
     amsg << *inst->metadata.layout;
     if(inst->metadata.ext_resource != 0)
       amsg << *inst->metadata.ext_resource;
@@ -2258,6 +2614,9 @@ namespace Realm {
     amsg->memory = me;
     amsg->inst = inst->me;
     amsg->precondition = precondition;
+    // per-(this node, this memory) deferred-destroy sequence number (BUG-8
+    //  tier-1 provenance)
+    amsg->src_seq = release_send_count.fetch_add(1) + 1;
     amsg.commit();
   }
 
@@ -2349,6 +2708,10 @@ namespace Realm {
     }
     inst->metadata.layout = ilg; // TODO: mark metadata valid?
     inst->metadata.ext_resource = res;
+    // tier-1 same-source funding sample (BUG-8): the creator's deferred-
+    //  destroy send-count for this memory, sampled before the request was
+    //  committed (hence before the creation event existed anywhere)
+    inst->remote_t1_sample = args.rel_seq_sample;
 
     impl->allocate_storage_deferrable(inst, args.need_alloc_result, args.precondition);
   }
@@ -2381,7 +2744,13 @@ namespace Realm {
     assert(impl != nullptr && "invalid memory handle");
     RegionInstanceImpl *inst = impl->get_instance(args.inst);
 
-    impl->release_storage_deferrable(inst, args.precondition);
+    // carry the tier-1 provenance (sender + per-source sequence number)
+    //  where the owner memory can use it for funding proofs (BUG-8)
+    LocalManagedMemory *lmm = dynamic_cast<LocalManagedMemory *>(impl);
+    if(lmm != nullptr)
+      lmm->release_storage_deferrable(inst, args.precondition, sender, args.src_seq);
+    else
+      impl->release_storage_deferrable(inst, args.precondition);
   }
 
   ////////////////////////////////////////////////////////////////////////

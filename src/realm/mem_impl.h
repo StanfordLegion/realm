@@ -355,6 +355,16 @@ namespace Realm {
 
     virtual void release_storage_deferrable(RegionInstanceImpl *inst, Event precondition);
 
+    // owner-side entry carrying tier-1 provenance (src node + per-source
+    //  sequence number) from MemStorageReleaseRequest - the virtual overload
+    //  above forwards here with owner-local provenance
+    void release_storage_deferrable(RegionInstanceImpl *inst, Event precondition,
+                                    NodeID src_node, unsigned src_seq);
+
+    // poke every local LocalManagedMemory's held-admission queue (called
+    //  when a taint view arrives)
+    static void poke_all_held_admissions();
+
     virtual AllocationResult
     reuse_storage_deferrable(RegionInstanceImpl *old_inst,
                              std::vector<RegionInstanceImpl *> &new_insts,
@@ -381,9 +391,33 @@ namespace Realm {
     //  than the creation request) are considered - a release requested after
     //  the creation request may depend on the instance's creation event, and
     //  planning the allocation out of its space can deadlock
+    // 'held' is set (and ALLOC_DEFERRED returned) when the decision cannot
+    //  be made yet: some candidate deletion's taint view is still unknown,
+    //  or an earlier admission decision is already held (decisions are made
+    //  strictly FIFO - see held_admissions).  A held admission must NOT be
+    //  notified until it is decided.
     AllocationResult attempt_deferrable_allocation(RegionInstanceImpl *inst, size_t bytes,
                                                    size_t alignment, size_t &inst_offset,
-                                                   unsigned release_seqid_cap);
+                                                   unsigned release_seqid_cap, bool &held,
+                                                   bool from_held_queue = false);
+
+    // remote-origin funding bound (BUG-8 taint design): the longest prefix of
+    //  pending_releases every member of which is provably safe to fund
+    //  'inst' - is_ready, taint-clean, or tier-1 same-source-proven.
+    //  Using a fully-eligible PREFIX (rather than an arbitrary eligible
+    //  subset) keeps every funding set a seqid prefix, so the canonical
+    //  replay, drain, unblock-scan and reordering machinery are unchanged.
+    //  Sets 'undecided' if the prefix is bounded by a deletion whose taint
+    //  view is still UNKNOWN (the decision may improve once it resolves).
+    unsigned compute_taint_funding_cap(RegionInstanceImpl *inst, bool &undecided);
+
+    // decide any held admissions that have become decidable (FIFO);
+    //  fires the (previously suppressed) notifications for decided entries
+    void try_decide_held_admissions();
+
+    // splice a parked early release once its instance's create request has
+    //  been processed (must be called WITHOUT allocator_mutex held)
+    void splice_parked_release(RegionInstanceImpl *inst);
 
     // applies (in list order) and erases any ready pending releases - called
     //  whenever 'pending_allocs' has drained so that ready releases (and the
@@ -465,7 +499,18 @@ namespace Realm {
       //  BasicRangeAllocator::deallocate / split_range.
       bool deferred_dealloc_notify;
 
-      PendingRelease(RegionInstanceImpl *_inst, bool _ready, unsigned _seqid);
+      // the (untriggered) precondition this deletion waits on - consulted by
+      //  the taint funding filter for remote-origin creations (BUG-8)
+      Event precondition;
+      // tier-1 provenance: which node issued this deletion and its
+      //  per-(source, memory) sequence number (src_node == -1 for
+      //  owner-local deletions, which never need the tier-1 proof)
+      NodeID src_node;
+      unsigned src_seq;
+
+      PendingRelease(RegionInstanceImpl *_inst, bool _ready, unsigned _seqid,
+                     Event _precondition = Event::NO_EVENT, NodeID _src_node = -1,
+                     unsigned _src_seq = 0);
       void record_redistrict(const std::vector<RegionInstanceImpl *> &insts);
       void release(RangeAllocator &allocator, bool missing_ok = false);
       size_t release(RangeAllocator &allocator, std::vector<size_t> &offsets,
@@ -473,6 +518,35 @@ namespace Realm {
     };
     std::deque<PendingAlloc> pending_allocs;
     std::deque<PendingRelease> pending_releases;
+
+    // admission decisions held on unknown taint views (BUG-8 taint design).
+    //  BLUEPRINT OBLIGATION (DIST-DESIGN.md 5c): held decisions are made
+    //  FIFO among themselves - and any new deferrable admission arriving
+    //  while this queue is non-empty queues behind it - preserving the
+    //  monotone last_release_seqid discipline the drain machinery relies on.
+    //  A held decision's funding set is computed at DECISION time, so it may
+    //  legally include deletions that arrived during the hold (the second
+    //  admission-order divergence recorded in DIST-DESIGN.md 5c).
+    struct HeldAdmission {
+      RegionInstanceImpl *inst;
+      bool need_alloc_result;
+      // owner-local creations decide with the cap sampled when they were
+      //  ENQUEUED (before their creation event became visible) - remote
+      //  ones recompute their taint funding bound at decision time
+      unsigned local_cap;
+    };
+    std::deque<HeldAdmission> held_admissions;
+
+    // early-release hold queue (BUG-8): a deferred destroy can arrive for an
+    //  instance whose create REQUEST has not arrived yet (cross-node message
+    //  race) - park it and splice it in (with a fresh seqid, after the
+    //  create's funding decision) when the create request shows up
+    struct ParkedRelease {
+      Event precondition;
+      NodeID src_node;
+      unsigned src_seq;
+    };
+    std::map<RegionInstance, ParkedRelease> parked_releases;
     ProfilingGauges::AbsoluteGauge<size_t> usage, peak_usage, peak_footprint;
   };
 
@@ -614,6 +688,12 @@ namespace Realm {
     virtual void put_bytes(off_t offset, const void *src, size_t size);
     virtual void *get_direct_ptr(off_t offset, size_t size);
 
+    // tier-1 same-source counter (BUG-8 taint design): number of deferred
+    //  destroy requests this node has sent to this memory.  Sampled by
+    //  allocate_storage_deferrable BEFORE the alloc message commits (hence
+    //  before the creation event exists anywhere on this node).
+    atomic<unsigned> release_send_count{0};
+
   private:
     // For mapped remote memory, this is non-null
     void *base;
@@ -626,6 +706,12 @@ namespace Realm {
     RegionInstance inst;
     bool need_alloc_result;
     Event precondition;
+    // tier-1 same-source funding proof (BUG-8 taint design): the sender's
+    //  count of deferred-destroy requests already sent to this memory,
+    //  sampled BEFORE this message commits (hence before the creation event
+    //  exists anywhere) - deletions from the same source with src_seq <=
+    //  this sample provably predate the handle and may fund this creation
+    unsigned rel_seq_sample;
 
     static void handle_message(NodeID sender, const MemStorageAllocRequest &msg,
                                const void *data, size_t datalen);
@@ -644,6 +730,8 @@ namespace Realm {
     Memory memory;
     RegionInstance inst;
     Event precondition;
+    // per-(sender, memory) deferred-destroy sequence number (tier-1 proof)
+    unsigned src_seq;
 
     static void handle_message(NodeID sender, const MemStorageReleaseRequest &msg,
                                const void *data, size_t datalen);

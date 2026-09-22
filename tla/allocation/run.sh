@@ -91,10 +91,16 @@ extra_flags_for() {
         # traces/Inversion-bug5-deadlock.txt (see the cfg header).
         SmokeFixed|EventLoopFixed|EventLoopCapOnly|GCRipple|Inversion) echo "" ;;
         # Distributed (BUG-8) matrix: deadlock checking ON for ALL dist
-        # configs - the greens rely on the Done self-loop and the two
-        # expected-FAIL configs (DistBase, DistUEIllegal) exist to produce
-        # deadlock counterexamples (DIST-EXPECTED.md).
-        Dist*)           echo "" ;;
+        # and taint configs - the greens rely on the Done self-loop and the
+        # expected-FAIL configs (DistBase, DistUEIllegal, DistRTUEIllegal,
+        # TaintUEPoison-FALSE, TaintIllegalWait) exist to produce deadlock
+        # counterexamples (DIST-EXPECTED.md).
+        TaintOpenLive|TaintXMemOpenLive) echo "-deadlock" ;; # temporal
+        # TaintXMemOpen*, TaintXMemOpen6, TaintOpenUE, TaintOpen3 are
+        # SAPLING-BOUND (see cfg headers) - excluded from the local sweep,
+        # runnable by name.
+        TaintXMemOpen|TaintXMemOpen6|TaintXMemOpenRoot) echo "-gzip" ;;
+        Dist*|Taint*)    echo "" ;;
         *)               echo "-deadlock" ;;
     esac
 }
@@ -102,8 +108,8 @@ extra_flags_for() {
 # v1 configs check MCDeferredAlloc; Dist* configs check MCDistDeferredAlloc.
 module_for() {
     case $1 in
-        Dist*) echo "MCDistDeferredAlloc" ;;
-        *)     echo "MCDeferredAlloc" ;;
+        Dist*|Taint*) echo "MCDistDeferredAlloc" ;;
+        *)            echo "MCDeferredAlloc" ;;
     esac
 }
 
@@ -158,10 +164,20 @@ if [ $# -ge 1 ]; then
         # Distributed (BUG-8 / event-timestamp) matrix, increasing cost
         # order; expectations in DIST-EXPECTED.md.  DistBase and
         # DistUEIllegal are EXPECTED to end in TLC deadlock reports (the
-        # BUG-8 hole registration and the contract-violation demo).
+        # BUG-8 hole registration and the contract-violation demo);
+        # TaintXMemBase and TaintPreRootBase are EXPECTED to violate
+        # INV_NoFundingCycle (the F4 / F3 witnesses, DIST-EXPECTED.md).
         for c in DistLocal DistLocalUnion DistBase DistStamp DistStampOOB \
                  DistUELegal DistUEIllegal DistHandoff DistHandoffPB \
-                 DistOpen; do
+                 DistOpen \
+                 DistRT DistRTOOB DistRTUEIllegal DistRTHandoff \
+                 DistRTSameSrcRace DistRTOpen \
+                 TaintBug8 TaintHold TaintHandoffRun TaintUEPoisonBase \
+                 TaintUEPoison TaintUEGated TaintIllegalWait TaintUnion \
+                 TaintOpen TaintOpenLive \
+                 TaintXMemBase TaintXMem TaintPreRootBase TaintPreRoot \
+                 TaintBug8Prefix TaintHandoffRunPrefix TaintUEGatedPrefix \
+                 TaintUnionPrefix; do
             run_cfg "$c"
         done
         exit 0

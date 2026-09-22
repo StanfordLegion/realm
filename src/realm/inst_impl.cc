@@ -78,6 +78,7 @@ namespace Realm {
   {
     inst = _inst;
     mem = _mem;
+    precondition = wait_on;
     EventImpl::add_waiter(wait_on, this);
   }
 
@@ -769,6 +770,26 @@ namespace Realm {
     {
       // we will probably need an event to track when it is ready
       GenEventImpl *ev = GenEventImpl::create_genevent();
+      // TAINT ROOT (BUG-8): this is the creation event of a PENDING deferred
+      //  allocation - any event derived from it may depend on this instance
+      //  being allocated, and must never fund this instance's own admission.
+      //  The root is INST(self) UNIONED with the taint of the create's own
+      //  precondition (the ready event depends on both) - a second distinct
+      //  instance id overflows the inline-one-id encoding to TOP, and an
+      //  unresolved precondition view is conservatively TOP (the certified
+      //  ROOT_UNION rule; without the union a chain of preconditioned
+      //  creates launders the ancestry, rebuilding the funding ring).  The
+      //  taint dies automatically when the event triggers or poisons (the
+      //  creation is then resolved).  See tla/allocation/bugs/BUG-8.md.
+      {
+        realm_id_t pre_inst = 0;
+        uint8_t pre_kind = GenEventImpl::read_taint(wait_on, pre_inst);
+        if((pre_kind == GenEventImpl::TAINT_NONE) ||
+           ((pre_kind == GenEventImpl::TAINT_INST) && (pre_inst == impl->me.id)))
+          ev->set_taint(GenEventImpl::TAINT_INST, impl->me.id);
+        else
+          ev->set_taint(GenEventImpl::TAINT_TOP);
+      }
       ready_event = ev->current_event();
       bool alloc_done, alloc_successful;
       // use mutex to avoid race on allocation callback
@@ -910,6 +931,18 @@ namespace Realm {
     {
       // we will probably need an event to track when it is ready
       GenEventImpl *ev = GenEventImpl::create_genevent();
+      // TAINT ROOT (BUG-8): creation event of a pending deferred redistrict
+      //  target - root = INST(self) u taint(precondition), overflow to TOP
+      //  (the certified ROOT_UNION rule; see the create_instance site above)
+      {
+        realm_id_t pre_inst = 0;
+        uint8_t pre_kind = GenEventImpl::read_taint(wait_on, pre_inst);
+        if((pre_kind == GenEventImpl::TAINT_NONE) ||
+           ((pre_kind == GenEventImpl::TAINT_INST) && (pre_inst == last->me.id)))
+          ev->set_taint(GenEventImpl::TAINT_INST, last->me.id);
+        else
+          ev->set_taint(GenEventImpl::TAINT_TOP);
+      }
       ready_event = ev->current_event();
       bool alloc_done, alloc_successful;
       // use mutex to avoid race on allocation callback
@@ -1221,6 +1254,18 @@ namespace Realm {
     //  there if it's not us
     NodeID creator_node = ID(me).instance_creator_node();
     if(creator_node != Network::my_node_id) {
+      // this incarnation of the instance slot is now fully retired on this
+      //  (owner) node - return the local metadata to the fresh state BEFORE
+      //  sending the notification that permits the creator to recycle the
+      //  slot.  A stale valid-or-FAILED offset here would make a NEW
+      //  incarnation's early-arriving destroy (BUG-8 hold queue) look like
+      //  it belongs to a processed create and corrupt the allocator state.
+      metadata.inst_offset = INSTOFFSET_UNALLOCATED;
+      // release ordering: the reset must be visible to the AM handler
+      //  threads before the notification (whose receipt is what allows the
+      //  creator to recycle the slot and mint the new incarnation) is sent
+      std::atomic_thread_fence(std::memory_order_release);
+
       ActiveMessage<MemStorageReleaseResponse> amsg(creator_node);
       amsg->inst = me;
       amsg.commit();

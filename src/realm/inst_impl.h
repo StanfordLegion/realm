@@ -86,6 +86,13 @@ namespace Realm {
     };
     DeferredCreate deferred_create;
 
+    // tier-1 same-source funding sample for REMOTE-origin creations (BUG-8
+    //  taint design): the creator node's deferred-destroy send-count for the
+    //  target memory, sampled before the alloc request was committed.  Set
+    //  by MemStorageAllocRequest::handle_message on the memory-owner node;
+    //  meaningless (0) for owner-local creations.
+    unsigned remote_t1_sample = 0;
+
     class DeferredDestroy : public EventWaiter {
     public:
       void defer(RegionInstanceImpl *_inst, MemoryImpl *_mem, Event wait_on);
@@ -93,9 +100,16 @@ namespace Realm {
       virtual void print(std::ostream &os) const;
       virtual Event get_finish_event(void) const;
 
+      // the destroy's own precondition, kept so a DELAYEDDESTROY/REDISTRICT
+      //  push into the pending-release list can carry it for the taint
+      //  funding filter (without it such entries are TOP-equivalent and can
+      //  never fund a remote-origin creation)
+      Event get_precondition(void) const { return precondition; }
+
     protected:
       RegionInstanceImpl *inst;
       MemoryImpl *mem;
+      Event precondition = Event::NO_EVENT;
     };
     DeferredDestroy deferred_destroy;
 

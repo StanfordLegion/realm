@@ -15,7 +15,298 @@ See the License for the specific language governing permissions and
 limitations under the License.
 -->
 
-# Sapling job list — deferred-allocation TLA+ campaign — ROUND 2
+# Sapling job list — deferred-allocation TLA+ campaign
+
+## CURRENT ROUND: taint open sweeps (2026-09-07) — gates the taint C++ landing
+
+The taint fix design (bugs/BUG-8.md resolution; DIST-DESIGN.md §5c) is
+locally certified: full matrix 14/14, 2-node MAX_UE=0 open sweep fully
+exhausted (304M gen / 53M distinct, full battery), adversarial review 0
+blocking. Two open-client sweeps exceeded local capacity and run here.
+**Pre-registered discipline: a violation in either run STOPS the taint C++
+prototype from landing — triage first.** Expected outcome for both: green;
+full exhaustion may be unreachable (the local MAX_UE=1 attempt was still
+growing at 1.17B generated / 291.6M distinct, violation-free) — a
+depth-complete bounded green well past the local depths (local witnesses
+top out at depth 21) is the acceptance criterion, per the fix-bundle
+precedent.
+
+**2026-09-09 update — the gate is now SIX jobs.** The F4 model round
+(cross-memory funding rings; DIST-DESIGN.md §5d) extended the spec with
+FOREIGN_TOP/ROOT_UNION and added the TaintXMem* configs; the C++
+consolidation on `mbauer-deferred-alloc-fixes` implements that final
+design, so the landing gate is the full set below against the CURRENT
+tree. Any TaintOpenUE/TaintOpen3 runs submitted before this update ran
+the pre-F4 spec — their green is real evidence for what they checked but
+does not open the gate; resubmit them. The sbatch script also changed
+(TaintXMemOpenLive now gets the temporal `-deadlock` flag, matching
+run.sh), so THE RSYNC IS MANDATORY — round 3 died from skipping it.
+
+```sh
+# from the laptop first — spec, configs, AND sapling_tlc.sbatch changed:
+rsync -av --exclude states --exclude jtmp --exclude 'slurm-*' \
+    ~/realm/tla/ sapling:realm-tla/
+
+# on sapling:
+cd realm-tla/allocation
+# flat submission (queue permitting): --exclusive keeps each job's state
+# queue alone on its node's /tmp. If the queue is contended, chain them
+# with --parsable + `-d afterany:` as in round 3 instead.
+sbatch --exclusive -t 48:00:00 sapling_tlc.sbatch TaintOpenUE       # 2-node open sweep, user events ON
+sbatch --exclusive -t 48:00:00 sapling_tlc.sbatch TaintOpen3        # 3-node open sweep
+sbatch --exclusive -t 48:00:00 sapling_tlc.sbatch TaintXMemOpen     # 2-memory open sweep (F4 rings)
+sbatch --exclusive -t 48:00:00 sapling_tlc.sbatch TaintXMemOpenRoot # + pre-create roots (ROOT_UNION load-bearing)
+sbatch --exclusive -t 48:00:00 sapling_tlc.sbatch TaintXMemOpen6    # widest cross-memory space
+sbatch --exclusive -t 24:00:00 sapling_tlc.sbatch TaintXMemOpenLive # temporal: no stuck allocs (fairness)
+```
+
+### Taint round 1 OUTCOME (2026-09-12, jobs 78166/78167 + 78237-78246)
+
+**Zero violations anywhere — but the gate is NOT open.** Six of the
+eight runs died on node-local disk exhaustion; the other two ended
+healthy (one operator scancel to free nodes, one 48h time limit). None
+reached the pre-registered bar (clean completed depth well past 21). Per
+the pre-registered discipline this is *insufficient coverage*, not red:
+no triage owed, no landing yet.
+
+| Job | Config | Spec | Completed depth | Distinct states | Productive time / end |
+|---|---|---|---|---|---|
+| 78166 | TaintOpenUE | pre-F4 | 18 | 9.66B (55.0B gen) | 27h13m — disk full; JVM hung 5.7h more until scancel |
+| 78167 | TaintOpen3 | pre-F4 | 14 | 13.65B (75.8B gen) | 32h57m — HEALTHY (41M s/min) at operator scancel |
+| 78237 | TaintOpenUE | gate | 17 | 8.82B (49.3B gen) | 48h00m — HEALTHY at the 48h TIME LIMIT |
+| 78238 | TaintOpen3 | gate | 13 | 9.66B (51.5B gen) | 39h33m — disk full; JVM hung 8.5h more to the limit |
+| 78243 | TaintXMemOpen | gate | 13 | 2.15B (7.98B gen) | 7h44m — disk full; JVM hung ~40h more to the limit |
+| 78244 | TaintXMemOpenRoot | gate | 10 | 1.65B (4.2B gen) | 4h32m — disk full, clean exit |
+| 78245 | TaintXMemOpen6 | gate | 9 | 211M (362M gen) | 36min — disk full (6.4G free at start), clean exit |
+| 78246 | TaintXMemOpenLive | gate | 11 | 79M (235M gen) | 61min — disk full, clean exit |
+
+Positives: ~46B cumulative distinct states, every invariant (incl.
+INV_NoFundingCycle) held; the Live run completed **10 full temporal
+passes** (last over ~60M states) with no liveness violation; the
+`-deadlock` dispatch fix for TaintXMemOpenLive verifiably took effect
+(`extra=' -deadlock -gzip'` in its header).
+
+Log-reading notes for future rounds: (1) a terminal `StatePoolReader:
+... (No such file or directory)` after healthy progress lines is a KILL
+ARTIFACT (the cleanup trap removes the state dir under the still-running
+JVM), not a failure — that is how 78167/78237 look; the real disk deaths
+end in `No space left on device`. (2) TLC's fp-merge disk-full exception
+can leave a dead-but-not-exited JVM squatting on the node (~54 node-hours
+lost across 78166/78238/78243); the script now runs a watchdog that kills
+the JVM 10 minutes after a disk-full report if it hasn't exited itself.
+
+Root cause of the disk deaths, entirely operational: the six gate jobs
+were submitted within two minutes WITHOUT `--exclusive`; the XMem four
+landed co-scheduled on 183G-disk nodes starting with 68/53/16/6.4G free
+(78245 was doomed before it started). c0001's 435G baseline is FOREIGN
+data (identical before 78166 and after its cleanup) — not ours to clean.
+The sbatch script now REFUSES to start below `MIN_AVAIL_G` (default
+300G, per-run overridable) and prints the top disk consumers, so a bad
+placement fails in seconds instead of hours in short of the bar.
+
+Time-limit finding (new binder): 78237 was still healthy at the full 48h
+with disk to spare — for the 2-node open sweeps, TIME, not only disk, now
+binds. At its closing rate (~2.3M ds/min and falling) "well past depth
+21" is realistically a multi-week exhaustive run — submit OpenUE/Open3
+with the longest -t the partition allows and treat their result as a
+bound, while the XMem four (disk-starved at 4-17M ds/min, never
+time-starved) are the runs a clean big node genuinely fixes.
+
+### Taint round 2 — resubmission
+
+```sh
+# from the laptop: re-sync (sapling_tlc.sbatch changed - the disk floor):
+rsync -av --exclude states --exclude jtmp --exclude 'slurm-*' \
+    ~/realm/tla/ sapling:realm-tla/
+
+# on sapling: FIRST clean stale /tmp/mebauer-tlc-* dirs off the compute
+# nodes. The dirs are node-LOCAL, so survey and delete via srun per node.
+# Precondition: `squeue -u $USER -h` is empty (then every mebauer-tlc-*
+# dir anywhere is stale by definition).
+#
+#   # survey (read-only) - also reveals whether a node's consumed disk is
+#   # even ours; other users' /tmp data is invisible-to-du here and NOT
+#   # ours to clean (if a big node is full of foreign data: ask the
+#   # admins, or pin the chain elsewhere with -w):
+#   for n in $(sinfo -N -h -p cpu -o %N | sort -u); do
+#     srun -p cpu -w "$n" -N1 -n1 -t 5 --immediate=30 --quiet bash -c \
+#       'printf "%s: " "$(hostname -s)"; du -sh /tmp/${USER}-tlc-* 2>/dev/null || echo clean'
+#   done
+#   # delete pass (only our own dirs; busy nodes are skipped by
+#   # --immediate - rerun later for stragglers):
+#   for n in $(sinfo -N -h -p cpu -o %N | sort -u); do
+#     srun -p cpu -w "$n" -N1 -n1 -t 5 --immediate=30 --quiet bash -c \
+#       'rm -rf /tmp/${USER}-tlc-*; df -h /tmp | tail -1'
+#   done
+#
+# Then submit as an EXCLUSIVE serial chain PINNED (-w) to the biggest
+# clean c-class node the survey found - the XMem four first (the
+# load-bearing F4 configs, disk-starved in round 1, genuinely fixed by a
+# clean node), then Open3 (died on disk at 39.5h; a clean node buys it
+# the full walltime). Round-1 reference: c0004 showed 306-432G free,
+# c0001 only 261G (435G foreign baseline). The g-nodes' 183G disks
+# cannot hold these runs.
+cd realm-tla/allocation
+# flat submission - the jobs are independent; --exclusive keeps each
+# alone on its node and the MIN_AVAIL_G floor makes a small-disk
+# placement abort in seconds (exit 75) instead of dying hours in:
+sbatch --exclusive -t 48:00:00 sapling_tlc.sbatch TaintXMemOpen
+sbatch --exclusive -t 48:00:00 sapling_tlc.sbatch TaintXMemOpenRoot
+sbatch --exclusive -t 24:00:00 sapling_tlc.sbatch TaintXMemOpen6
+sbatch --exclusive -t 24:00:00 sapling_tlc.sbatch TaintXMemOpenLive
+sbatch --exclusive -t 48:00:00 sapling_tlc.sbatch TaintOpen3
+# CAVEAT: an exit-75 abort is NOT auto-requeued. A few minutes after
+# submitting, check for early deaths and resubmit those pinned to a
+# surveyed big-disk node (they will pend until it frees - that is fine):
+#   sacct -u $USER -S now-1hour -o jobid,jobname%24,state,exitcode
+#   sbatch --exclusive -w <big-node> -t 48:00:00 sapling_tlc.sbatch <Config>
+# All five pinned to ONE node without -d is also fine: exclusivity
+# serializes them; only the order becomes slurm's choice.
+
+# TaintOpenUE: do NOT blindly rerun. A healthy full-48h current-spec
+# bound already exists (78237: completed depth 17, 8.8B distinct, zero
+# violations) and its queue was near c0001's capacity at the limit - an
+# identical rerun reproduces the same datum. Rerun ONLY given BOTH
+# (a) partition MaxTime > 48h (check: sinfo -p cpu -o "%P %l") and
+# (b) a >=400G-free node, e.g.:
+#   sbatch --exclusive -w <big-node> -t 96:00:00 sapling_tlc.sbatch TaintOpenUE
+# Otherwise record 78237 as the OpenUE datum.
+```
+
+Calibration honesty: even a clean 733G node projects OpenUE to completed
+depth ~19-20 at best — likely still short of "well past 21", and 78237
+shows TIME binds it too. If round 2 again ends short of the bar, the
+principled options are (a) record the best-achievable bounded green and
+present it as such, (b) a symmetry/view-reduction model round to deepen
+effective coverage, (c) an explicit, documented revision of the gate. No
+silent weakening.
+
+### Taint round 2 OUTCOME (2026-09-14, jobs 78535-78539)
+
+**Zero violations. One new-best datum; four floor aborts costing seconds
+each (mechanism correct; the stale-dir cleanup step had been skipped).**
+
+- **78535 TaintXMemOpen — NEW BEST:** full 24h on c0004 (306G free),
+  completed depth 15 (round 1: 13), 6.53B distinct (3x round 1), 26.5B
+  generated, healthy 20.5M s/min at the time limit. Now TIME-bound
+  (~200G of 306G used) — 48h rerun on cleaned c0004 = definitive datum.
+- **78536/78537/78538 (Root/Open6/Live):** refused, 224G on c0001 <
+  300G floor (37G stale dir + 435G foreign baseline).
+- **78539 TaintOpen3:** refused 7G short — 293G on c0004 (127G stale
+  from scancel'd 78167 + 13G stranded by 78535's own truncated cleanup).
+
+**Systemic finding: cleanup traps do not survive hard kills** (epilog
+SIGKILL truncates rm -rf: 78167→127G, 78237→37G, 78535→13G stranded).
+Script fix: `#SBATCH --signal=B:TERM@600` + TERM trap that kills TLC
+first, giving cleanup a 10-min grace window.
+
+**Sync discipline:** pulling results with a broad reverse rsync of tla/
+clobbered this file and the script's newest fixes TWICE. Pull results
+with a narrow filter instead:
+`rsync -av 'sapling:realm-tla/allocation/slurm-78*' ~/realm/tla/allocation/`
+
+### Taint round 3 (2026-09-15, nodes pre-cleaned: c0004=432G, c0001=261G)
+
+```sh
+# laptop first - the script changed again (TERM grace):
+rsync -av --exclude states --exclude jtmp --exclude 'slurm-*' \
+    ~/realm/tla/ sapling:realm-tla/
+
+# sapling:
+cd realm-tla/allocation
+# c0004 (432G): the two big runs, pinned; --exclusive serializes them
+sbatch --exclusive -w c0004 -t 48:00:00 sapling_tlc.sbatch TaintOpen3
+sbatch --exclusive -w c0004 -t 48:00:00 sapling_tlc.sbatch TaintXMemOpen
+# c0001 (261G ceiling, foreign baseline): the three never-run configs.
+# Floor lowered to 200G (261G = 2.5x their 100G envelope; the 60G slack
+# means foreign-data drift between the serial runs cannot spuriously
+# abort a successor). PINNED - unpinned they can land on a 183G g-node
+# and abort even at floor 200:
+MIN_AVAIL_G=200 sbatch --exclusive -w c0001 -t 24:00:00 sapling_tlc.sbatch TaintXMemOpenRoot
+MIN_AVAIL_G=200 sbatch --exclusive -w c0001 -t 24:00:00 sapling_tlc.sbatch TaintXMemOpen6
+MIN_AVAIL_G=200 sbatch --exclusive -w c0001 -t 24:00:00 sapling_tlc.sbatch TaintXMemOpenLive
+```
+
+After round 3 every gate config has its best-achievable-on-sapling datum
+and the pre-registered gate decision is on the table: accept documented
+bounds, deepen via model reduction, or revise the gate explicitly.
+
+### Taint round 3 OUTCOME (2026-09-15..18, jobs 78614-78618) — FINAL COVERAGE ROUND
+
+**Zero violations, all five ran to their resource limits, every config
+improved its bound.** Round-3 alone: ~39B distinct / ~152B generated.
+Campaign cumulative across rounds 1-3: **~91B distinct states, zero
+violations anywhere.**
+
+| Job | Config | Completed depth | Distinct | Ran | End |
+|---|---|---|---|---|---|
+| 78614 | TaintOpen3 | 13 | **12.13B** (65.4B gen) | ~48h c0004 | TERM-grace at limit, healthy 22.6M s/min |
+| 78615 | TaintXMemOpen | 15 | **11.98B** (50.6B gen) | 48h c0004 | TERM-grace at limit, healthy |
+| 78616 | TaintXMemOpenRoot | 12 | **7.52B** (21.9B gen) | 21.8h c0001 | disk full → WATCHDOG killed hung JVM (first live firing) |
+| 78617 | TaintXMemOpen6 | 10 | **7.22B** (12.8B gen) | 20.3h c0001 | disk full, clean exit |
+| 78618 | TaintXMemOpenLive | 12 | 378M (1.22B gen), **17 temporal passes**, last over a 1.43B-node behavior graph | ~24h c0001 | TERM-grace at limit |
+
+Infrastructure fully validated in the wild: the TERM-grace cleanup left
+c0004 at its clean 264G-used baseline for the back-to-back 48h runs
+(78615 started seconds after 78614 with full disk), the watchdog fired
+exactly once and correctly (78616), and the floor produced zero spurious
+refusals.
+
+**FINAL GATE LEDGER (best-achievable-on-sapling bounds, current spec,
+all zero-violation):**
+
+| Config | Completed depth | Distinct | Source |
+|---|---|---|---|
+| TaintOpenUE | 17 | 8.82B | 78237 (r1, 48h, time-bound) |
+| TaintOpen3 | 13 | 12.13B | 78614 (r3, 48h, time-bound) |
+| TaintXMemOpen | 15 | 11.98B | 78615 (r3, 48h, time-bound) |
+| TaintXMemOpenRoot | 12 | 7.52B | 78616 (r3, disk-bound @261G) |
+| TaintXMemOpen6 | 10 | 7.22B | 78617 (r3, disk-bound @261G) |
+| TaintXMemOpenLive | 12 + 17 temporal passes | 378M | 78618 (r3, time-bound) |
+
+The pre-registered bar (depth-complete green well past 21) is NOT met by
+any config and is unreachable on this hardware for open sweeps (time- or
+disk-bound at depths 10-17). The pre-registered decision is now due:
+(a) accept these documented bounds as the verification datum,
+(b) a symmetry/view-reduction model round to raise effective depth, or
+(c) an explicit, recorded gate revision. No silent weakening. The
+decision is moot for landing purposes unless the taint C++ goes forward.
+
+### GATE DECISION (2026-09-20, Mike Bauer): option (a) — ACCEPTED
+
+The bounds in the final ledger above are accepted as the verification
+datum for the taint design. Basis: zero violations across ~91B cumulative
+distinct states over three rounds on the current spec; every closed
+(non-open) config in the local matrix fully exhausted; 17 clean temporal
+passes on the cross-memory liveness config; the open sweeps green to
+their hardware-bound depths (10-17), which exceed every depth at which
+any toggles-off counterexample was ever observed in the corresponding
+config. Known limits, stated plainly: the open sweeps are bounded
+verification, not proofs — behaviors longer than the completed depths
+are uncovered, and the original "well past 21" aspiration was set
+before the open spaces' true growth rates were measured.
+
+**Consequence: the verification gate on the taint C++ landing is OPEN.**
+Whether the taint implementation (uncommitted on
+`mbauer-deferred-alloc-fixes`) actually ships remains a separate
+engineering decision (complexity vs the round-trip fallback on
+`mbauer-bug8-roundtrip-fallback`, itself certified by the DistRT*
+matrix). No further sapling runs are owed for either design.
+
+Notes: the sbatch script dispatches Dist*/Taint* configs to
+MCDistDeferredAlloc and keeps the deadlock check ON for them, EXCEPT the
+two temporal Live configs which pass `-deadlock` (mirrors run.sh's flag
+table). Standing storage rules apply automatically (node-local /tmp,
+gzip, checkpoint-sync OFF — size the time limit for one shot). Verify
+each job's log header shows `-gzip` and "checkpoint-sync=OFF" before
+walking away. Bring back the slurm-<jobid>-<config>.out files; the
+deepest completed `Progress(N)` line is the depth datum even if the run
+hits its time limit. On any violation: bring that log back immediately —
+it stops the C++ landing until triaged.
+
+---
+
+# HISTORICAL: fix-bundle rounds — ROUND 2
 
 Round 1 (jobs 77808-77813, 2026-08-26) is complete; results are summarized
 at the bottom of this file and recorded per-config in EXPECTED.md. Round 2

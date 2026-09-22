@@ -5865,6 +5865,12 @@ namespace Realm {
                          indirects, requests);
 
     GenEventImpl *finish_event = GenEventImpl::create_genevent();
+    // TAINT (BUG-8): a copy/fill's completion depends on its launch
+    //  precondition - without this union a deletion gated on a copy into a
+    //  still-pending instance would read as clean at the memory's owner and
+    //  could fund that instance's own creation (the funding cycle, through a
+    //  copy instead of a task)
+    finish_event->set_taint_from_inputs(span<const Event>(&wait_on, 1));
     Event ev = finish_event->current_event();
     TransferOperation *op = new TransferOperation(*tdesc, wait_on, finish_event,
                                                   ID(ev).event_generation(), priority);

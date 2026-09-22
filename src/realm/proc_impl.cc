@@ -88,6 +88,10 @@ namespace Realm {
     assert(p != nullptr && "invalid processor handle");
 
     GenEventImpl *finish_event = GenEventImpl::create_genevent();
+    // the task's completion depends on its launch precondition - derived-
+    //  event taint rule (frozen at launch; mid-task waits on younger events
+    //  are excluded from deletion ancestry by the client contract)
+    finish_event->set_taint_from_inputs(span<const Event>(&wait_on, 1));
     Event e = finish_event->current_event();
 
     p->spawn_task(func_id, args, arglen, ProfilingRequestSet(), wait_on, finish_event,
@@ -103,6 +107,8 @@ namespace Realm {
     assert(p != nullptr && "invalid processor handle");
 
     GenEventImpl *finish_event = GenEventImpl::create_genevent();
+    // see above - derived-event taint frozen at launch
+    finish_event->set_taint_from_inputs(span<const Event>(&wait_on, 1));
     Event e = finish_event->current_event();
 
     p->spawn_task(func_id, args, arglen, reqs, wait_on, finish_event,
