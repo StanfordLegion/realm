@@ -378,6 +378,8 @@ add_integration_test(rsrv_acquire_poisoned "${REALM_TEST_DIR}/rsrv_acquire_poiso
 add_integration_test(refcount_image_test "${REALM_TEST_DIR}/refcount_image_test.cc")
 set(inst_chain_redistrict_ARGS -i 2)
 add_integration_test(inst_chain_redistrict "${REALM_TEST_DIR}/inst_chain_redistrict.cc")
+set(deferred_allocs_ARGS -ll:csize 16)
+add_integration_test(deferred_allocs "${REALM_TEST_DIR}/deferred_allocs.cc")
 add_integration_test(refcount_preimage_test "${REALM_TEST_DIR}/refcount_preimage_test.cc")
 add_integration_test(
   test_profiling "${REALM_TEST_DIR}/test_profiling.cc"

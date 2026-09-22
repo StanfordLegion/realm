@@ -1,0 +1,36 @@
+TLC2 Version 2.19 of 08 August 2024 (rev: 5a47802)
+Running breadth-first search Model-Checking with fp 115 and seed -3870028390920141770 with 4 workers on 10 cores with 3641MB heap and 64MB offheap memory [pid: 94317] (Mac OS X 15.7.7 aarch64, Homebrew 26.0.2 x86_64, MSBDiskFPSet, DiskStateQueue).
+Parsing file /Users/mebauer/realm/tla/allocation/MCDeferredAlloc.tla
+Parsing file /Users/mebauer/realm/tla/allocation/DeferredAlloc.tla
+Parsing file /private/tmp/claude-502/-Users-mebauer-realm-src-realm/e16dc9f9-47a4-47cb-a4d3-fd41b34c5bce/scratchpad/jtmp/Integers.tla
+Parsing file /private/tmp/claude-502/-Users-mebauer-realm-src-realm/e16dc9f9-47a4-47cb-a4d3-fd41b34c5bce/scratchpad/jtmp/Sequences.tla
+Parsing file /private/tmp/claude-502/-Users-mebauer-realm-src-realm/e16dc9f9-47a4-47cb-a4d3-fd41b34c5bce/scratchpad/jtmp/FiniteSets.tla
+Parsing file /private/tmp/claude-502/-Users-mebauer-realm-src-realm/e16dc9f9-47a4-47cb-a4d3-fd41b34c5bce/scratchpad/jtmp/TLC.tla
+Parsing file /private/tmp/claude-502/-Users-mebauer-realm-src-realm/e16dc9f9-47a4-47cb-a4d3-fd41b34c5bce/scratchpad/jtmp/Naturals.tla
+Semantic processing of module Naturals
+Semantic processing of module Integers
+Semantic processing of module Sequences
+Semantic processing of module FiniteSets
+Semantic processing of module TLC
+Semantic processing of module DeferredAlloc
+Semantic processing of module MCDeferredAlloc
+Starting... (2026-08-25 14:36:49)
+Warning: Declaring state or action constraints during liveness checking is dangerous: Please read section 14.3.5 on page 247 of Specifying Systems (https://lamport.azurewebsites.net/tla/book.html) and optionally the discussion at https://discuss.tlapl.us/msg00994.html for more details.
+(Use the -nowarning option to disable this warning.)
+Implied-temporal checking--satisfiability problem has 2 branches.
+Computing initial states...
+Finished computing initial states: 1 distinct state generated at 2026-08-25 14:36:49.
+Checking 2 branches of temporal properties for the current state space with 3130 total distinct states at (2026-08-25 14:36:52)
+Finished checking temporal properties in 00s at 2026-08-25 14:36:52
+Progress(10) at 2026-08-25 14:36:52: 3,013 states generated (3,013 s/min), 1,566 distinct states found (1,566 ds/min), 305 states left on queue.
+Progress(13) at 2026-08-25 14:36:53: 3,929 states generated, 1,987 distinct states found, 0 states left on queue.
+Checking 2 branches of temporal properties for the complete state space with 3974 total distinct states at (2026-08-25 14:36:53)
+Finished checking temporal properties in 00s at 2026-08-25 14:36:53
+Model checking completed. No error has been found.
+  Estimates of the probability that TLC did not check all reachable states
+  because two distinct states had the same fingerprint:
+  calculated (optimistic):  val = 2.1E-13
+3929 states generated, 1987 distinct states found, 0 states left on queue.
+The depth of the complete state graph search is 13.
+The average outdegree of the complete state graph is 1 (minimum is 0, the maximum 7 and the 95th percentile is 3).
+Finished in 04s at (2026-08-25 14:36:53)
