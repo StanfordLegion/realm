@@ -1,9 +1,47 @@
+<!--
+Copyright 2026 Stanford University, NVIDIA Corporation
+SPDX-License-Identifier: Apache-2.0
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+-->
+
 # Realm Deferred Allocation — TLA+ Verification Campaign: Findings
 
 Status: **Phase 4 (local verification) complete; fix bundle modeled and
 locally verified.** Sapling runs pending (see `SAPLING_JOBS.md`). No Realm
 source code has been modified — all proposed fixes are analysis-only,
 recorded in `bugs/`.
+
+**BUG-8 resolution (2026-09-05):** round-trip fix selected by Mike and
+model-confirmed (two-site matrix 6/6, RT review 0 blocking — see
+`bugs/BUG-8.md` RESOLUTION and `DIST-EXPECTED.md`); event timestamps remain
+the verified alternative.  C++ blueprint pending.
+
+**Taint F-round (2026-09-08):** the taint C++ fidelity review found two
+soundness gaps the certified single-memory model could not see — F4
+(cross-memory funding cycle) and F3 (preconditioned-create taint root) —
+plus F7 (prefix funding rule).  Modeled as `FIX_TAINT_FOREIGN_TOP`,
+`FIX_TAINT_ROOT_UNION`, `FIX_TAINT_PREFIX` over a two-memory,
+preconditioned-create extension (DIST-DESIGN.md §5d); new master
+`INV_NoFundingCycle`.  Both hazards registered as constructive violations
+with toggles off (honestly narrowing the 2026-09-07 certification), both
+close green with toggles on; regressions byte-identical.  Full-scale
+cross-memory open sweep is sapling-bound.
+
+**Taint design certified (2026-09-07):** option (c) taint tracking
+formalized and certified in the two-site model (14/14 matrix, 0-blocking
+review) — the third certified BUG-8 fix design; C++ pivot decision pending
+Mike (see bugs/BUG-8.md TAINT verdict).
 
 **Fix-bundle addendum (2026-08-26):** the three candidate fixes are modeled
 as spec toggles — `FIX_CAP` (BUG-1 capped admission), `FIX_SWEEP`
@@ -123,6 +161,13 @@ insufficient), 12-step trace (`traces/Composite4.txt`), violates
   mixed redistrict-plain prefixes. Pre-existing on main; found during the
   C++ fidelity review of the fix branch; TLC-unverified — first
   pre-registered expected-FAIL for the v2 (redistrict) model.
+- **BUG-8** (`bugs/BUG-8.md`) — remote-origin deferred creates: FIX_CAP's
+  arrival-time cap only approximates causal issue order, leaving a residual
+  BUG-1-shape hang for creates issued off the owner node (not a regression;
+  strictly narrower than main). Adjudicated with the causal-order soundness
+  theorem; fix = evidence-tier ladder (Tier 2, client-supplied counter
+  witness, recommended — cross-node funding must keep working per Mike).
+  TLC-unverified pending the two-site model refinement.
 
 Submit with `SAPLING_JOBS.md`: `sbatch sapling_tlc.sbatch Safety` (est.
 1-6 h), `Poison4` (several hours), `Big` (use `-t 48:00:00`). Checkpoint

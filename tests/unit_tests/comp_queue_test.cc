@@ -26,8 +26,14 @@ class MockEventCommunicator : public EventCommunicator {
 public:
   virtual void trigger(Event event, NodeID owner, bool poisoned) { sent_trigger_count++; }
 
+  // NOTE: this class is also defined (same name, same layout) in
+  //  event_test.cc; both unit-test TUs link into one binary, so the linker
+  //  keeps a single vtable - the two definitions must stay identical or
+  //  overrides silently fall back to the base implementation
   virtual void update(Event event, NodeID to_update,
-                      span<EventImpl::gen_t> poisoned_generationse)
+                      span<EventImpl::gen_t> poisoned_generationse,
+                      EventImpl::gen_t taint_gen, uint8_t taint_kind,
+                      realm_id_t taint_inst)
   {
     sent_notification_count++;
   }

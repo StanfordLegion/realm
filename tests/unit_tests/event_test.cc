@@ -35,8 +35,14 @@ class MockEventCommunicator : public EventCommunicator {
 public:
   virtual void trigger(Event event, NodeID owner, bool poisoned) { sent_trigger_count++; }
 
+  // NOTE: this class is also defined (same name, same layout) in
+  //  comp_queue_test.cc; both unit-test TUs link into one binary, so the
+  //  linker keeps a single vtable - the two definitions must stay identical
+  //  or overrides silently fall back to the base implementation
   virtual void update(Event event, NodeID to_update,
-                      span<EventImpl::gen_t> poisoned_generationse)
+                      span<EventImpl::gen_t> poisoned_generationse,
+                      EventImpl::gen_t taint_gen, uint8_t taint_kind,
+                      realm_id_t taint_inst)
   {
     sent_notification_count++;
   }
@@ -374,7 +380,9 @@ TEST_F(GenEventTest, LocalTriggerWithMultipleRemoteSubscriptions)
   event.handle_remote_subscription(sender_b, subscribe_gen, 0);
   event.trigger(subscribe_gen, 0, /*poisoned=*/false, TimeLimit::responsive());
 
-  EXPECT_EQ(event_comm->sent_notification_count, 2);
+  // each recorded subscription is acknowledged (with the generation's taint
+  //  view riding the update message), then the trigger updates both waiters
+  EXPECT_EQ(event_comm->sent_notification_count, 4);
   EXPECT_FALSE(event.remote_waiters.contains(sender_a));
   EXPECT_FALSE(event.remote_waiters.contains(sender_b));
 }
@@ -389,7 +397,9 @@ TEST_F(GenEventTest, HandleRemoteSubscriptionUntriggered)
   event.init(ID::make_event(0, 0, 0), owner);
   event.handle_remote_subscription(sender, subscribe_gen, 0);
 
-  EXPECT_EQ(event_comm->sent_notification_count, 0);
+  // an untriggered subscription is still acknowledged - the ack carries the
+  //  subscribed generation's taint view (explicit answer, never silence)
+  EXPECT_EQ(event_comm->sent_notification_count, 1);
   EXPECT_TRUE(event.remote_waiters.contains(sender));
 }
 

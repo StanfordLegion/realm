@@ -524,6 +524,10 @@ realm_status_t realm_processor_spawn(realm_runtime_t runtime,
       runtime_impl->get_processor_impl(Realm::Processor(target_proc));
 
   Realm::GenEventImpl *finish_event = Realm::GenEventImpl::create_genevent(runtime_impl);
+  // TAINT: the task's completion depends on its launch precondition (frozen
+  //  at launch) - same rule as the C++ Processor::spawn paths
+  Realm::Event cxx_wait_on(wait_on);
+  finish_event->set_taint_from_inputs(Realm::span<const Realm::Event>(&cxx_wait_on, 1));
   Realm::Event cxx_event = finish_event->current_event();
   const Realm::ProfilingRequestSet *prs_cxx = &Realm::empty_prs_cxx;
   if(prs != nullptr) {

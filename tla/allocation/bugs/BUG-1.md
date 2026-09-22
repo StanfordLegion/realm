@@ -1,3 +1,20 @@
+<!--
+Copyright 2026 Stanford University, NVIDIA Corporation
+SPDX-License-Identifier: Apache-2.0
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+-->
+
 # BUG-1: Deferred creates are ordered at precondition-trigger time, not request time — event-loop deadlock
 
 **Status:** machine-confirmed by TLC (EventLoop config: deadlock in 7 states; Smoke config independently, 4,029 states).
@@ -209,6 +226,10 @@ admission rule, plus the ballistic-lite flag if Legion's GC wiring turns out unf
 >   capped rejection cascade only drains cleanly with FIX_RPR in place; without it a trailing
 >   dependent alloc in `remove_pending_release` is stranded forever
 >   (witness: `traces/Inversion-bug5-deadlock.txt`; full analysis in `bugs/BUG-5.md`).
+> - **Remote-origin gap:** the request-time cap is airtight only for creates issued on the
+>   memory's owner node; for remote requesters the handle is published before the owner
+>   snapshots the cap, and the residual cross-node cycle is adjudicated as **`bugs/BUG-8.md`**
+>   (with the causal-order soundness theorem and the evidence-tier fix ladder).
 
 ## Verification plan (model v-next)
 

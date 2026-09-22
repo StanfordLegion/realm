@@ -1,4 +1,4 @@
-# Copyright 2025 Stanford University, NVIDIA Corporation
+# Copyright 2026 Stanford University, NVIDIA Corporation
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -380,6 +380,8 @@ set(inst_chain_redistrict_ARGS -i 2)
 add_integration_test(inst_chain_redistrict "${REALM_TEST_DIR}/inst_chain_redistrict.cc")
 set(deferred_allocs_ARGS -ll:csize 16)
 add_integration_test(deferred_allocs "${REALM_TEST_DIR}/deferred_allocs.cc")
+set(deferred_remote_alloc_ARGS -ll:csize 16)
+add_integration_test(deferred_remote_alloc "${REALM_TEST_DIR}/deferred_remote_alloc.cc")
 add_integration_test(refcount_preimage_test "${REALM_TEST_DIR}/refcount_preimage_test.cc")
 add_integration_test(
   test_profiling "${REALM_TEST_DIR}/test_profiling.cc"
@@ -525,6 +527,29 @@ set_tests_properties(
              LABELS
              "integration"
 )
+
+# deferred_remote_alloc's regression shape (a dependent destroy racing the
+#  creation request to a memory's owner) requires >= 3 ranks to be
+#  detectable: with only 2, the destroy travels behind the creation request
+#  on the same source-destination pair and per-pair transport ordering
+#  shields the race.  Override the blanket 2-rank launcher (set above) with a
+#  3-rank one for this one test so CI actually exercises the regression; 1-
+#  and 2-rank runs still verify functionality.  This uses the same
+#  TEST_LAUNCHER mechanism the default runs rely on.  Also bound the runtime
+#  so a regression shows up as a loud timeout rather than a hang (SIGALRM is
+#  not delivered under mpiexec, so the in-test alarm watchdog only helps in
+#  single-process runs).
+if(MPIEXEC_EXECUTABLE)
+  set(deferred_remote_alloc_LAUNCHER ${CMAKE_TEST_LAUNCHER})
+  list(PREPEND deferred_remote_alloc_LAUNCHER "${MPIEXEC_EXECUTABLE}"
+       ${MPIEXEC_NUMPROC_FLAG} 3 ${MPIEXEC_PREFLAGS}
+  )
+  set_tests_properties(
+    deferred_remote_alloc PROPERTIES TEST_LAUNCHER "${deferred_remote_alloc_LAUNCHER}"
+                                     PROCESSORS 3
+  )
+endif()
+set_tests_properties(deferred_remote_alloc PROPERTIES TIMEOUT 240)
 
 string(REPLACE ";" " " TEST_ARGS "${TEST_ARGS}")
 

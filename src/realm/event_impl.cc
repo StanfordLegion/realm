@@ -393,7 +393,11 @@ namespace Realm {
 
   /*static*/ UserEvent UserEvent::create_user_event(void)
   {
-    Event e = GenEventImpl::create_genevent()->current_event();
+    GenEventImpl *impl = GenEventImpl::create_genevent();
+    // taint: an unbound user event may (legally) later be bound to anything,
+    //  and the read-side default (no record = TOP) says exactly that - the
+    //  owner-side bind narrows it (narrow_user_event_taint)
+    Event e = impl->current_event();
     assert(e.id != 0);
     UserEvent u;
     u.id = e.id;
@@ -435,6 +439,11 @@ namespace Realm {
       event_impl->merger.prepare_merger(*this, ignore_faults, 1);
       event_impl->merger.add_precondition(wait_on);
       event_impl->merger.arm_merger();
+
+      // the bind fixes this user event's dependence to 'wait_on' - narrow
+      //  its taint from TOP and push the narrowing to subscribers (owner-
+      //  side binds only; see narrow_user_event_taint)
+      event_impl->narrow_user_event_taint(wait_on);
     }
   }
 
@@ -999,8 +1008,22 @@ namespace Realm {
     }
   };
 
+  // taint views feed deferred-allocation funding decisions - when one
+  //  arrives, any admission decisions held on unknown views may now be
+  //  decidable (defined in mem_impl.cc)
+  void poke_held_admissions_all_memories();
+
   struct EventUpdateMessage {
     Event event;
+    // taint piggybacks on the update rather than using a message of its own:
+    //  the subscription ack and the user-event-bind narrowing push both ride
+    //  this message.  taint_gen == 0 means "no taint information" (e.g. pure
+    //  trigger propagation, where any reported generation's taint is dead by
+    //  trigger); the receiver's view is then left unchanged, so an absent
+    //  answer can never read as clean - unknown stays suspect
+    realm_id_t taint_inst;
+    EventImpl::gen_t taint_gen;
+    uint8_t taint_kind;
 
     static void handle_message(NodeID sender, const EventUpdateMessage &args,
                                const void *data, size_t datalen, TimeLimit work_until)
@@ -1016,8 +1039,15 @@ namespace Realm {
                                                                 new_poisoned_count);
 
       GenEventImpl *impl = get_runtime()->get_genevent_impl(args.event);
-      impl->process_update(ID(args.event).event_generation(), new_poisoned_gens,
-                           new_poisoned_count, work_until);
+      if(args.taint_gen != 0) {
+        impl->apply_taint_update(args.taint_gen, args.taint_kind, args.taint_inst);
+        poke_held_admissions_all_memories();
+      }
+      // a generation of 0 carries no trigger information (the pure
+      //  subscription-ack / narrowing-push flavor of this message)
+      EventImpl::gen_t upd_gen = ID(args.event).event_generation();
+      if(upd_gen > 0)
+        impl->process_update(upd_gen, new_poisoned_gens, new_poisoned_count, work_until);
     }
   };
 
@@ -1043,11 +1073,16 @@ namespace Realm {
   }
 
   void EventCommunicator::update(Event event, NodeID to_update,
-                                 span<EventImpl::gen_t> poisoned_generations)
+                                 span<EventImpl::gen_t> poisoned_generations,
+                                 EventImpl::gen_t taint_gen, uint8_t taint_kind,
+                                 realm_id_t taint_inst)
   {
     ActiveMessage<EventUpdateMessage> amsg(to_update, poisoned_generations.data(),
                                            poisoned_generations.size());
     amsg->event = event;
+    amsg->taint_gen = taint_gen;
+    amsg->taint_kind = taint_kind;
+    amsg->taint_inst = taint_inst;
     amsg.commit();
   }
 
@@ -1077,6 +1112,223 @@ namespace Realm {
     , event_comm(_event_comm)
     , external_waiter_condvar(external_waiter_mutex)
   {}
+
+  // combine two resolved taints (union in the inline-one-id lattice):
+  //  NONE u X = X, INST(a) u INST(a) = INST(a), INST(a) u INST(b) = TOP,
+  //  TOP u X = TOP
+  static void taint_absorb(uint8_t &kind, realm_id_t &inst, uint8_t k2, realm_id_t i2)
+  {
+    if(k2 == GenEventImpl::TAINT_NONE)
+      return;
+    if(kind == GenEventImpl::TAINT_NONE) {
+      kind = k2;
+      inst = i2;
+      return;
+    }
+    if((kind == GenEventImpl::TAINT_INST) && (k2 == GenEventImpl::TAINT_INST) &&
+       (inst == i2))
+      return;
+    kind = GenEventImpl::TAINT_TOP;
+  }
+
+  void GenEventImpl::set_taint(uint8_t kind, realm_id_t inst /*= 0*/)
+  {
+    AutoLock<> a(mutex);
+    taint_kind = kind;
+    taint_inst = inst;
+    taint_gen = generation.load() + 1; // the live (untriggered) generation
+  }
+
+  void GenEventImpl::set_taint_from_inputs(span<const Event> inputs)
+  {
+    // MULTI-INPUT OBLIGATION (tla/allocation/DIST-DESIGN.md 5c): the derived
+    //  event's taint must dominate the union of ALL inputs' taints - the
+    //  certified model is single-parent, so this rule is carried by the
+    //  implementation and its review, not by TLC
+    uint8_t kind = TAINT_NONE;
+    realm_id_t inst = 0;
+    Event unresolved[TAINT_MAX_INPUTS];
+    int num_unresolved = 0;
+    for(size_t i = 0; (i < inputs.size()) && (kind != TAINT_TOP); i++) {
+      if(!inputs[i].exists())
+        continue;
+      realm_id_t i2 = 0;
+      uint8_t k2 = read_taint(inputs[i], i2);
+      if(k2 == TAINT_UNKNOWN) {
+        // input's taint not deliverable yet - the derived event stays
+        //  PENDING and is lazily re-resolved on read (late reads only see
+        //  narrower values, which remain sound)
+        if(num_unresolved < TAINT_MAX_INPUTS) {
+          unresolved[num_unresolved++] = inputs[i];
+        } else {
+          kind = TAINT_TOP; // conservative overflow
+        }
+        continue;
+      }
+      taint_absorb(kind, inst, k2, i2);
+    }
+
+    AutoLock<> a(mutex);
+    taint_gen = generation.load() + 1;
+    if((kind != TAINT_TOP) && (num_unresolved > 0)) {
+      // some inputs unresolved: park them for lazy re-resolution; the
+      //  resolved-so-far union is preserved in taint_inst (nonzero = the
+      //  partial one-id union; zero = NONE-so-far) and folded back in by
+      //  read_taint's PENDING branch
+      taint_kind = TAINT_PENDING;
+      taint_inst = (kind == TAINT_INST) ? inst : 0;
+      for(int i = 0; i < TAINT_MAX_INPUTS; i++)
+        taint_inputs[i] = (i < num_unresolved) ? unresolved[i] : Event::NO_EVENT;
+    } else {
+      taint_kind = kind;
+      taint_inst = (kind == TAINT_INST) ? inst : 0;
+    }
+  }
+
+  /*static*/ uint8_t GenEventImpl::read_taint(Event e, realm_id_t &inst_out,
+                                              int depth /*= 0*/)
+  {
+    inst_out = 0;
+    if(!e.exists())
+      return TAINT_NONE;
+    // a triggered (or poisoned) event cannot depend on any still-pending
+    //  creation - taint dies at trigger
+    bool poisoned = false;
+    if(e.has_triggered_faultaware(poisoned))
+      return TAINT_NONE;
+    ID id(e);
+    if(!id.is_event()) {
+      // unfired barrier generations are late-binders (arrivals may attach
+      //  preconditions after the handle was distributed) - conservatively
+      //  TOP, exactly like unbound user events (documented conservatism)
+      return TAINT_TOP;
+    }
+    if(depth > 8)
+      return TAINT_TOP; // deep unresolved chains: conservative cutoff
+
+    GenEventImpl *impl = get_runtime()->get_genevent_impl(e);
+    gen_t needed_gen = id.event_generation();
+
+    uint8_t kind;
+    realm_id_t inst;
+    Event pending_inputs[TAINT_MAX_INPUTS];
+    {
+      AutoLock<> a(impl->mutex);
+      if(impl->taint_gen != needed_gen) {
+        // no taint recorded for this generation: on the owner this means the
+        //  mint site did not NARROW the default - suspect by construction
+        //  (TOP), so a missed or future mint site costs funding opportunities
+        //  (the decision holds until trigger), never soundness.  On a mirror
+        //  it means no view has been delivered yet - also suspect, but
+        //  resolvable (UNKNOWN holds instead of refusing outright).
+        return (impl->owner == Network::my_node_id) ? TAINT_TOP : TAINT_UNKNOWN;
+      }
+      kind = impl->taint_kind;
+      inst = impl->taint_inst;
+      if(kind == TAINT_PENDING)
+        for(int i = 0; i < TAINT_MAX_INPUTS; i++)
+          pending_inputs[i] = impl->taint_inputs[i];
+    }
+
+    if(kind != TAINT_PENDING) {
+      inst_out = inst;
+      return kind;
+    }
+
+    // lazily re-resolve the unresolved inputs (outside the lock - the
+    //  recursion may take other impls' mutexes)
+    uint8_t ukind = (inst != 0) ? uint8_t(TAINT_INST) : uint8_t(TAINT_NONE);
+    realm_id_t uinst = inst;
+    bool still_unknown = false;
+    for(int i = 0; (i < TAINT_MAX_INPUTS) && (ukind != TAINT_TOP); i++) {
+      if(!pending_inputs[i].exists())
+        continue;
+      realm_id_t i2 = 0;
+      uint8_t k2 = read_taint(pending_inputs[i], i2, depth + 1);
+      if(k2 == TAINT_UNKNOWN) {
+        still_unknown = true;
+        continue;
+      }
+      taint_absorb(ukind, uinst, k2, i2);
+    }
+    if(still_unknown && (ukind != TAINT_TOP))
+      return TAINT_UNKNOWN;
+
+    // cache the resolved value (if the generation is still the same)
+    {
+      AutoLock<> a(impl->mutex);
+      if((impl->taint_gen == needed_gen) && (impl->taint_kind == TAINT_PENDING)) {
+        impl->taint_kind = ukind;
+        impl->taint_inst = (ukind == TAINT_INST) ? uinst : 0;
+      }
+    }
+    inst_out = (ukind == TAINT_INST) ? uinst : 0;
+    return ukind;
+  }
+
+  void GenEventImpl::apply_taint_update(gen_t gen, uint8_t kind, realm_id_t inst)
+  {
+    AutoLock<> a(mutex);
+    // generation hygiene: taint dies at trigger, so never store for a
+    //  generation this node has already seen trigger (a read for it answers
+    //  NONE via the has-triggered check anyway, and the slot may already
+    //  describe a newer generation).  NOTE: a mirror's local generation view
+    //  may LAG the owner's arbitrarily (this node may never have subscribed
+    //  to earlier generations), so gen being far ahead of generation.load()+1
+    //  is the common case, not staleness - the taint_gen tag plus the
+    //  has-triggered check in read_taint keep per-generation views exact.
+    if(gen <= generation.load())
+      return;
+    // generations are monotone, so a message for an older generation than
+    //  the one we already hold a record for is stale - dropping it keeps a
+    //  newer record from being clobbered by out-of-order delivery
+    if((taint_gen != 0) && (gen < taint_gen))
+      return;
+    // taint only narrows: never overwrite a strictly narrower view of the
+    //  same generation with a wider one (out-of-order delivery of a
+    //  pre-narrowing snapshot); a newer generation always wins
+    if((taint_gen == gen) && ((taint_kind == TAINT_NONE) ||
+                              ((taint_kind == TAINT_INST) && (kind == TAINT_TOP))))
+      return;
+    taint_kind = kind;
+    taint_inst = (kind == TAINT_INST) ? inst : 0;
+    taint_gen = gen;
+  }
+
+  void GenEventImpl::narrow_user_event_taint(Event wait_on)
+  {
+    // owner-side deferred-trigger (bind): the user event's dependence is now
+    //  exactly the bind target's - narrow TOP to taint(wait_on) and push the
+    //  narrowing to current subscribers.  Binds performed on NON-owner nodes
+    //  do not narrow (the owner never learns of the bind until trigger) -
+    //  documented prototype conservatism, sound because TOP only over-refuses.
+    if(owner != Network::my_node_id)
+      return;
+    realm_id_t winst = 0;
+    uint8_t wkind = read_taint(wait_on, winst);
+    if((wkind == TAINT_UNKNOWN) || (wkind == TAINT_TOP))
+      return; // no narrowing available
+    NodeSet to_push;
+    gen_t gen;
+    {
+      AutoLock<> a(mutex);
+      gen = generation.load() + 1;
+      taint_kind = wkind;
+      taint_inst = (wkind == TAINT_INST) ? winst : 0;
+      taint_gen = gen;
+      to_push = remote_waiters;
+    }
+    if(!to_push.empty()) {
+      // the narrowing push rides the trigger-propagation update message with
+      //  a generation of 0 (no trigger information, taint fields only)
+      ID gen_id(me);
+      gen_id.event_generation() = 0;
+      Event ev = gen_id.convert<Event>();
+      for(const NodeID node : to_push)
+        event_comm->update(ev, node, span<EventImpl::gen_t>(nullptr, 0), gen, wkind,
+                           (wkind == TAINT_INST) ? winst : 0);
+    }
+  }
 
   GenEventImpl::~GenEventImpl(void)
   {
@@ -1174,6 +1426,9 @@ namespace Realm {
       m->add_precondition(wait_for[i]);
     }
 
+    // derived-event taint: dominate ALL inputs (multi-input obligation)
+    event_impl->set_taint_from_inputs(wait_for);
+
     // once they're all added - arm the thing (it might go off immediately)
     m->arm_merger();
 
@@ -1193,6 +1448,7 @@ namespace Realm {
     log_event.info() << "event merging: event=" << finish_event
                      << " wait_on=" << wait_for;
     m->add_precondition(wait_for);
+    event_impl->set_taint_from_inputs(span<const Event>(&wait_for, 1));
     m->arm_merger();
     return finish_event;
   }
@@ -1265,6 +1521,12 @@ namespace Realm {
     if(ev6.exists()) {
       log_event.info() << "event merging: event=" << finish_event << " wait_on=" << ev6;
       m->add_precondition(ev6);
+    }
+
+    // derived-event taint: dominate ALL inputs (multi-input obligation)
+    {
+      Event merge_inputs[6] = {ev1, ev2, ev3, ev4, ev5, ev6};
+      event_impl->set_taint_from_inputs(span<const Event>(merge_inputs, 6));
     }
 
     // once they're all added - arm the thing (it might go off immediately)
@@ -1439,8 +1701,46 @@ namespace Realm {
       }
     }
 
+    // the subscription ack carries the subscribed generation's taint so the
+    //  subscriber's view can leave TAINT_UNKNOWN (deferred-allocation
+    //  funding decisions are held while any candidate's view is unknown -
+    //  see tla/allocation/DIST-DESIGN.md 5c).  If our own resolution is
+    //  still pending we send TOP: conservative (funding-safe direction),
+    //  and it keeps decisions live instead of stalling on a view that has
+    //  no other delivery path (documented prototype conservatism).  The
+    //  answer is always explicit - never silence read as clean.
+    realm_id_t tinst = 0;
+    uint8_t tkind = 0;
+    EventImpl::gen_t ack_taint_gen = 0;
     if(subscription_recorded) {
       log_event.debug() << "event subscription recorded: node=" << sender;
+
+      // read our own recorded taint directly - we are the owner and the
+      //  generation is untriggered (we just recorded the subscription).
+      //  Only a PENDING record (unresolved merge inputs) needs the full
+      //  resolution walk, which requires the runtime.
+      bool need_resolve = false;
+      {
+        AutoLock<> a(mutex);
+        if(taint_gen != subscribe_gen) {
+          // no record for an untriggered owner generation = the mint site
+          //  did not narrow = suspect by construction (the read-side
+          //  safe-by-default rule; see read_taint)
+          tkind = TAINT_TOP;
+        } else {
+          tkind = taint_kind;
+          tinst = taint_inst;
+          need_resolve = (tkind == TAINT_PENDING) || (tkind == TAINT_UNKNOWN);
+        }
+      }
+      if(need_resolve) {
+        ID sub_id(me);
+        sub_id.event_generation() = subscribe_gen;
+        tkind = read_taint(sub_id.convert<Event>(), tinst);
+        if(tkind == TAINT_UNKNOWN)
+          tkind = TAINT_TOP;
+      }
+      ack_taint_gen = subscribe_gen;
     }
 
     if(trigger_gen > 0) {
@@ -1453,10 +1753,20 @@ namespace Realm {
       // it is legal to use poisoned generation info like this because it is
       // always updated before the generation - the load_acquire above makes
       // sure we read in the correct order
+      // (the taint ack piggybacks on this update - zero extra messages)
       const int npg_cached = num_poisoned_generations.load_acquire();
       event_comm->update(triggered, sender,
                          span<EventImpl::gen_t>(poisoned_generations,
-                                                npg_cached * sizeof(EventImpl::gen_t)));
+                                                npg_cached * sizeof(EventImpl::gen_t)),
+                         ack_taint_gen, tkind, tinst);
+    } else if(subscription_recorded) {
+      // no older trigger to report, but the ack must still deliver its
+      //  explicit taint answer: send the update with generation 0 (no
+      //  trigger information) - the one case with no base message to ride
+      ID ack_id(me);
+      ack_id.event_generation() = 0;
+      event_comm->update(ack_id.convert<Event>(), sender,
+                         span<EventImpl::gen_t>(nullptr, 0), ack_taint_gen, tkind, tinst);
     }
   }
 

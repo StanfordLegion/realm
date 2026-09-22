@@ -1,4 +1,19 @@
 #!/bin/bash
+# Copyright 2026 Stanford University, NVIDIA Corporation
+# SPDX-License-Identifier: Apache-2.0
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
 # ---------------------------------------------------------------------------
 # Slurm batch script: run TLC on the Realm deferred-allocation spec on sapling.
 #
@@ -48,6 +63,11 @@
 #SBATCH --job-name=tlc-deferred-alloc
 #SBATCH --partition=cpu
 #SBATCH --time=24:00:00
+# deliver TERM to the batch shell 10 min before the hard kill so the
+# cleanup trap can finish - time-limit/scancel kills in taint rounds 1-2
+# truncated rm -rf and left 13-127G stale dirs per node, which then
+# tripped the MIN_AVAIL_G floor for every subsequent round
+#SBATCH --signal=B:TERM@600
 #SBATCH --cpus-per-task=40
 #SBATCH --mem=128G
 #SBATCH --nodes=1
@@ -61,8 +81,15 @@ CONFIG=${1:-Big}
 
 # locate the spec: $ALLOC_DIR override, else the directory we submitted from
 ALLOC_DIR=${ALLOC_DIR:-${SLURM_SUBMIT_DIR:-$(pwd)}}
-if [ ! -f "$ALLOC_DIR/MCDeferredAlloc.tla" ]; then
-    echo "error: MCDeferredAlloc.tla not found in $ALLOC_DIR" >&2
+
+# module dispatch mirrors run.sh: v1 configs check MCDeferredAlloc;
+# Dist*/Taint* configs check the distributed model
+case $CONFIG in
+    Dist*|Taint*) MODULE=MCDistDeferredAlloc ;;
+    *)            MODULE=MCDeferredAlloc ;;
+esac
+if [ ! -f "$ALLOC_DIR/$MODULE.tla" ]; then
+    echo "error: $MODULE.tla not found in $ALLOC_DIR" >&2
     echo "       submit from tla/allocation or set ALLOC_DIR=<path>" >&2
     exit 1
 fi
@@ -87,7 +114,7 @@ if [ -z "${JAVA:-}" ] || ! "$JAVA" -version >/dev/null 2>&1; then
     exit 1
 fi
 
-JAR=${JAR:-$ALLOC_DIR/../barrier/tools/tla2tools.jar}
+JAR=${JAR:-$ALLOC_DIR/../tla2tools.jar}
 if [ ! -f "$JAR" ]; then
     echo "error: tla2tools.jar not found at $JAR (set JAR=<path>)" >&2
     exit 1
@@ -120,6 +147,11 @@ RECOVER_FROM=${RECOVER_FROM:-}
 case $CONFIG in
     Smoke|EventLoop) : ;;
     SmokeFixed|EventLoopFixed|EventLoopCapOnly|GCRipple|Inversion) : ;;
+    TaintOpenLive|TaintXMemOpenLive) TLC_EXTRA="$TLC_EXTRA -deadlock" ;;  # temporal (MCTaintLiveSpec)
+    Dist*|Taint*) : ;;  # distributed-model configs run deadlock check ON
+                        # (Done disjunct makes clean completion a self-loop;
+                        # a TLC deadlock = genuinely stuck state) - mirrors
+                        # run.sh's dist flag table
     *) TLC_EXTRA="$TLC_EXTRA -deadlock" ;;
 esac
 
@@ -142,7 +174,7 @@ mkdir -p "$LOCAL_STATES" "$LOCAL_JTMP"
 
 echo "=== TLC on sapling: config=$CONFIG"
 echo "    java=$JAVA  workers=$WORKERS  heap=$HEAP  extra='$TLC_EXTRA'"
-echo "    spec=$ALLOC_DIR/MCDeferredAlloc.tla"
+echo "    spec=$ALLOC_DIR/$MODULE.tla"
 if [ "$SYNC_CHECKPOINT" = "1" ]; then
     echo "    metadir=$LOCAL_STATES (node-local)  checkpoint-sync=$SHARED_STATES (every ~$(( CHECKPOINT_MIN / 2 ))min)"
 else
@@ -150,11 +182,20 @@ else
 fi
 df -h "$LOCAL_ROOT" | tail -1 | awk '{print "    node-local disk: size="$2" used="$3" avail="$4}'
 AVAIL_G=$(df -BG --output=avail "$LOCAL_ROOT" 2>/dev/null | tail -1 | tr -dc '0-9')
-if [ -n "$AVAIL_G" ] && [ "$AVAIL_G" -lt 100 ]; then
-    echo "    WARNING: only ${AVAIL_G}G free on $LOCAL_ROOT - large runs WILL die with"
-    echo "             'No space left on device'. Check for co-scheduled TLC jobs or"
-    echo "             leftover /tmp junk (du -sh $LOCAL_ROOT/* | sort -h | tail);"
-    echo "             consider sbatch --exclusive so no two jobs share a node."
+# HARD FLOOR (taint round 1 post-mortem): six of the 8 round-1 jobs died
+# on 'No space left on device' - co-scheduled jobs shared a node's /tmp
+# (XMem four started with 68/53/16/6.4G free on 183G nodes) or the node
+# carried a 435G baseline of foreign data (733G c0001).
+# Failing fast beats dying 36min-48h in with the bound short of the gate.
+# Override per-run for small configs: MIN_AVAIL_G=<G> sbatch ...
+MIN_AVAIL_G=${MIN_AVAIL_G:-300}
+if [ -n "$AVAIL_G" ] && [ "$AVAIL_G" -lt "$MIN_AVAIL_G" ]; then
+    echo "error: only ${AVAIL_G}G free on $LOCAL_ROOT (floor MIN_AVAIL_G=${MIN_AVAIL_G}G); refusing to start." >&2
+    echo "       largest consumers on $LOCAL_ROOT:" >&2
+    du -sh "$LOCAL_ROOT"/* 2>/dev/null | sort -h | tail -5 >&2
+    echo "       fixes: submit with --exclusive (no shared /tmp); manually clean stale" >&2
+    echo "       $LOCAL_ROOT/${USER}-tlc-* dirs from dead jobs; or target a big-disk node (-w)." >&2
+    exit 75
 fi
 "$JAVA" -version 2>&1 | head -1
 
@@ -211,8 +252,42 @@ trap cleanup EXIT
     -checkpoint "$CHECKPOINT_MIN" \
     -metadir "$LOCAL_STATES" \
     $TLC_EXTRA \
-    "$ALLOC_DIR/MCDeferredAlloc.tla"
+    "$ALLOC_DIR/$MODULE.tla" &
+JAVA_PID=$!
+# on early TERM (the --signal=B:TERM@600 pre-kill warning, or scancel):
+# stop TLC first so it quits writing, then fall through to the normal
+# tail (wait returns, EXIT trap removes LOCAL_DIR) inside the grace window
+trap 'kill "$JAVA_PID" 2>/dev/null' TERM
+
+# hung-JVM watchdog: TLC's disk-full RuntimeException (fp-set merge path)
+# can kill the checking threads while worker threads hang, leaving a dead
+# JVM holding the node - taint round 1 lost ~54 node-hours this way
+# (78166: 5.7h, 78238: 8.5h, 78243: 40h). If the log reports disk-full
+# and the JVM is still alive one poll later (10 min grace), end it. The
+# clean-exit paths (StatePoolWriter failures, normal completion) are
+# unaffected - the JVM is already gone when the poll fires.
+JOB_LOG="$ALLOC_DIR/slurm-${SLURM_JOB_ID:-nojob}-${CONFIG}.out"
+(
+    seen=0
+    while kill -0 "$JAVA_PID" 2>/dev/null; do
+        sleep 600
+        if grep -q "No space left on device" "$JOB_LOG" 2>/dev/null; then
+            if [ "$seen" = "1" ]; then
+                echo "=== watchdog: disk-full reported and JVM still alive 10min later; terminating TLC"
+                kill "$JAVA_PID" 2>/dev/null
+                sleep 60
+                kill -9 "$JAVA_PID" 2>/dev/null
+                break
+            fi
+            seen=1
+        fi
+    done
+) &
+WATCHDOG_PID=$!
+
+wait "$JAVA_PID"
 rc=$?
+kill "$WATCHDOG_PID" 2>/dev/null
 
 # final sync attempt: if TLC exited on its own (not killed), the last
 # checkpoint is quiescent and worth keeping for a later resume
