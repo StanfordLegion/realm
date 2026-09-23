@@ -86,15 +86,20 @@ jobs:
           restore-keys: |
             cpm-
 
+      # Only main saves ccache; see the build job in ci.yml. The 'coverage-'
+      # prefix keeps ci.yml's Debug keys (a prefix of the old key) from
+      # restoring this cache and vice versa.
       - uses: hendrikmuhs/ccache-action@v1.2
         name: Restore ccache cache
         with:
           variant: ${{ matrix.config.ccache }}
           append-timestamp: true
-          key: ${{ matrix.config.os }}-${{ matrix.config.cc }}-${{ matrix.config.cuda }}-${{ matrix.config.build }}-${{ github.ref_name }}-ccache
+          save: ${{ github.ref == 'refs/heads/main' }}
+          evict-old-files: job
+          key: coverage-${{ matrix.config.os }}-${{ matrix.config.cc }}-${{ matrix.config.cuda }}-${{ matrix.config.build }}-${{ github.ref_name }}
           restore-keys: |
-            ${{ matrix.config.os }}-${{ matrix.config.cc }}-${{ matrix.config.cuda }}-${{ matrix.config.build }}-${{ github.ref_name }}
-            ${{ matrix.config.os }}-${{ matrix.config.cc }}-${{ matrix.config.cuda }}-${{ matrix.config.build }}-main
+            coverage-${{ matrix.config.os }}-${{ matrix.config.cc }}-${{ matrix.config.cuda }}-${{ matrix.config.build }}-${{ github.ref_name }}
+            coverage-${{ matrix.config.os }}-${{ matrix.config.cc }}-${{ matrix.config.cuda }}-${{ matrix.config.build }}-main
 
       - uses: microsoft/setup-msbuild@v2
         if: ${{ matrix.config.os == 'windows-latest' }}

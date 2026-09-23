@@ -81,11 +81,14 @@ jobs:
           restore-keys: |
             cpm-
 
+      # Only main saves ccache; see the build job in ci.yml
       - uses: hendrikmuhs/ccache-action@v1.2
         name: Restore ccache Cache
         with:
           variant: ccache
           append-timestamp: true
+          save: ${{ github.ref == 'refs/heads/main' }}
+          evict-old-files: job
 
           key: legion-${{ env.LEGION_REF }}-realm-${{ github.ref_name }}
           restore-keys: |
