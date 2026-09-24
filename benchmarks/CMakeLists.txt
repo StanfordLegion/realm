@@ -94,6 +94,8 @@ add_benchmark(lock_chains "${REALM_BENCH_DIR}/lock_chains/lock_chains.cc")
 add_benchmark(lock_contention "${REALM_BENCH_DIR}/lock_contention/lock_contention.cc")
 set(reducetest_ARGS -batches 1) # Run short version
 add_benchmark(reducetest "${REALM_BENCH_DIR}/reducetest/reducetest.cc")
+set(barrier_bench_ARGS -sgens 32 -pgens 128 -reps 1 -adopt 8) # Run short version
+add_benchmark(barrier_bench "${REALM_BENCH_DIR}/barrier_bench/barrier_bench.cc")
 
 add_benchmark(
   task_throughput "${REALM_BENCH_DIR}/task_throughput/task_throughput.cc"

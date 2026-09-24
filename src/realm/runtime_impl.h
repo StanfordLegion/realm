@@ -185,6 +185,12 @@ namespace Realm {
 
     // barriers
     int barrier_broadcast_radix = 4;
+    // fan-out of a constructed ARRIVAL plan (distinct from the multicast
+    //  broadcast radix above).  8 keeps a few-thousand-node barrier at depth 4;
+    //  a small value (2) makes relay trees - and with them the rule-10 race
+    //  windows - reachable at single-digit rank counts for testing
+    //  (tla/SCALE_TEST_PLAN.md).
+    int barrier_plan_radix = 8;
 
     // topology of the host
     const HardwareTopology *host_topology = nullptr;
