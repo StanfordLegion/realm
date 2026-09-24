@@ -86,9 +86,6 @@ jobs:
           restore-keys: |
             cpm-
 
-      # Only main saves ccache; see the build job in ci.yml. The 'coverage-'
-      # prefix keeps ci.yml's Debug keys (a prefix of the old key) from
-      # restoring this cache and vice versa.
       - uses: hendrikmuhs/ccache-action@v1.2
         name: Restore ccache cache
         with:

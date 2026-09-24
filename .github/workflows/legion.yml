@@ -81,7 +81,6 @@ jobs:
           restore-keys: |
             cpm-
 
-      # Only main saves ccache; see the build job in ci.yml
       - uses: hendrikmuhs/ccache-action@v1.2
         name: Restore ccache Cache
         with:

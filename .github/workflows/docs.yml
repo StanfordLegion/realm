@@ -29,8 +29,6 @@ jobs:
     strategy:
       fail-fast: false
     steps:
-      # Not cached: cache-apt-pkgs-action skips apt update and saves an empty
-      # cache when a dependency 404s, silently leaving doxygen uninstalled
       - name: Get Linux Packages
         run: |
           sudo apt-get update

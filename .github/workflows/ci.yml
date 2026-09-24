@@ -36,8 +36,6 @@ jobs:
       CCACHE_BASEDIR: ${{ github.workspace }}
       CCACHE_COMPRESS: "true"
       CCACHE_COMPRESS_LEVEL: "6"
-      # Every matrix field that changes compile flags, so configs never restore
-      # each other's ccache
       CONFIG_KEY: ${{ matrix.config.os }}-${{ matrix.config.cc }}-${{ matrix.config.cuda }}-${{ matrix.config.build }}-${{ matrix.config.shared_lib }}-${{ matrix.config.openmp }}-${{ matrix.config.ucx }}-${{ matrix.config.gasnet }}-${{ matrix.config.python }}-${{ matrix.config.kokkos }}-${{ matrix.config.sanitizer }}
     strategy:
       fail-fast: false
@@ -277,9 +275,6 @@ jobs:
           restore-keys: |
             deps-${{ matrix.config.os }}-${{ matrix.config.cc }}-${{ matrix.config.cuda }}-
 
-      # Only main saves ccache: saving on every branch and PR run (up to ~500 MB
-      # per config) overflowed the repo's 10 GB cache limit and evicted
-      # everything within a day. Branches and PRs restore main's latest instead.
       - uses: hendrikmuhs/ccache-action@v1.2
         name: Restore ccache Cache
         with:
@@ -385,9 +380,6 @@ jobs:
         id: run-tests
         if: matrix.config.cuda == '' || steps.check_gpu.outputs.no_gpu != '1'
         env:
-          # Some runners have an Azure MANA NIC, which UCX picks up as a verbs
-          # device; its IB transports then fail (no UD QP support, 8 MB locked
-          # memory limit) and abort every UCX test. Stick to shm/tcp.
           UCX_TLS: "^ib"
         run:
           ctest --output-junit ${{ github.workspace }}/test-results.xml
@@ -492,7 +484,6 @@ jobs:
           restore-keys: |
             cpm-
 
-      # Only main saves ccache; see the build job
       - uses: hendrikmuhs/ccache-action@v1.2
         name: Restore ccache Cache
         with:
@@ -587,8 +578,6 @@ jobs:
     strategy:
       fail-fast: false
     steps:
-      # Not cached: cache-apt-pkgs-action skips apt update and saves an empty
-      # cache when a dependency 404s, silently leaving doxygen uninstalled
       - name: Get Linux Packages
         run: |
           sudo apt-get update
