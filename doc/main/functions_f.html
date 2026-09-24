@@ -44,7 +44,7 @@
    <!-- BEGIN version select -->
     <br />
     <div class="dropdown">
-     <button class="dropbtn">Version 26.7.1+99e913b1</button>
+     <button class="dropbtn">Version 26.7.1+28fb9846</button>
      <div class="dropdown-content"></div>
     </div>
     <script type="text/javascript" src="../selectversion.js"></script>
@@ -191,7 +191,9 @@ $(document).ready(function(){initNavTree('functions_f.html',''); initResizable()
 <li>FastRsrvState&#160;:&#160;<a class="el" href="classRealm_1_1FastReservation.html#a12c3d43030fe2e529dc3a79268482643">Realm::FastReservation</a></li>
 <li>fat_bin&#160;:&#160;<a class="el" href="structRealm_1_1Cuda_1_1RegisteredFunction.html#af48f18634e00770e82da7b1a59753b6e">Realm::Cuda::RegisteredFunction</a>, <a class="el" href="structRealm_1_1Cuda_1_1RegisteredModule.html#af2c5555cb89850f9f6ff309c1e539065">Realm::Cuda::RegisteredModule</a>, <a class="el" href="structRealm_1_1Cuda_1_1RegisteredVariable.html#aa70ff64adc6ef655a9ada20b74249ae7">Realm::Cuda::RegisteredVariable</a></li>
 <li>fatal()&#160;:&#160;<a class="el" href="classRealm_1_1Logger.html#a9ec85193b59db802482fc24700172b19">Realm::Logger</a></li>
+<li>fault_propagation&#160;:&#160;<a class="el" href="classRealm_1_1EventMerger.html#af515814226078d41300b853e3a9c5717">Realm::EventMerger</a></li>
 <li>faultaware&#160;:&#160;<a class="el" href="classRealm_1_1CompQueueImpl_1_1CompQueueWaiter.html#af33a3b096f239346924f0b9c3c8a3f11">Realm::CompQueueImpl::CompQueueWaiter</a></li>
+<li>FaultPropagation&#160;:&#160;<a class="el" href="classRealm_1_1EventMerger.html#a19a3fb2fe4c2f808ca7c7004dbf98053">Realm::EventMerger</a></li>
 <li>faults_observed&#160;:&#160;<a class="el" href="classRealm_1_1EventMerger.html#a3bda2165487e0184f81ba62d6423fadf">Realm::EventMerger</a></li>
 <li>fb_dmem&#160;:&#160;<a class="el" href="classRealm_1_1Cuda_1_1GPU.html#aa9a3133f1aa01fa8c09ad97e08f61f32">Realm::Cuda::GPU</a>, <a class="el" href="classRealm_1_1Hip_1_1GPU.html#a1ec6f08a312676723b1c925b93d1bdfc">Realm::Hip::GPU</a></li>
 <li>fb_ibmem&#160;:&#160;<a class="el" href="classRealm_1_1Cuda_1_1GPU.html#ad4390741e2ce87f4c22d743d41a8aa83">Realm::Cuda::GPU</a>, <a class="el" href="classRealm_1_1Hip_1_1GPU.html#af8b42f4b05f638e0e82e24b55bc5ab84">Realm::Hip::GPU</a></li>
@@ -275,6 +277,7 @@ $(document).ready(function(){initNavTree('functions_f.html',''); initResizable()
 <li>finish_configured&#160;:&#160;<a class="el" href="classRealm_1_1ModuleConfig.html#a5f23b39d07f56eb5832a6e81e558d42d">Realm::ModuleConfig</a></li>
 <li>finish_dispatch()&#160;:&#160;<a class="el" href="classRealm_1_1PartitioningMicroOp.html#ab9c9b9ef0653497391ee6477b39275e8">Realm::PartitioningMicroOp</a></li>
 <li>finish_event&#160;:&#160;<a class="el" href="structRealm_1_1CancelOperationMessage.html#a9ac1952a4f3536ccd65c27325b79da10">Realm::CancelOperationMessage</a>, <a class="el" href="classRealm_1_1Operation.html#a052384ef93a93cb445ae7137111aebfa">Realm::Operation</a>, <a class="el" href="structRealm_1_1OperationTable_1_1TableEntry.html#a381f6bf0e6312bf96027d37959819dc9">Realm::OperationTable::TableEntry</a>, <a class="el" href="structRealm_1_1ProfilingMeasurements_1_1OperationFinishEvent.html#aed98433c82129f4b450dbce1b5d04272">Realm::ProfilingMeasurements::OperationFinishEvent</a>, <a class="el" href="structRealm_1_1SpawnTaskMessage.html#a76f86b4423904249d7f53cde2b36502d">Realm::SpawnTaskMessage</a>, <a class="el" href="structRealm_1_1SubgraphInstantiateMessage.html#a655ec6d1e95f2b6eb8f124e5b0db7ed1">Realm::SubgraphInstantiateMessage</a></li>
+<li>finish_event_owns_ref&#160;:&#160;<a class="el" href="classRealm_1_1Operation.html#a5184c927dc9de9fa8d2a4cd2730e4bbe">Realm::Operation</a></li>
 <li>finish_gen&#160;:&#160;<a class="el" href="classRealm_1_1EventMerger.html#a634a7b31c742e13f685e2274b2c9a588">Realm::EventMerger</a>, <a class="el" href="classRealm_1_1Operation.html#ae2a36f34ba80adb7a85bd676a556f182">Realm::Operation</a></li>
 <li>first&#160;:&#160;<a class="el" href="structRealm_1_1BasicRangeAllocator_1_1Range.html#ada29c9719449bfa46fcbc3b8575afb17">Realm::BasicRangeAllocator&lt; RT, TT &gt;::Range</a>, <a class="el" href="classRealm_1_1Machine.html#a5c902a3c21c055e87540993cb875538a">Realm::Machine</a></li>
 <li>first_alloced_node&#160;:&#160;<a class="el" href="classRealm_1_1DynamicTable.html#a5a6ff4bd7b4bd79e8c21e84b9882080c">Realm::DynamicTable&lt; ALLOCATOR &gt;</a></li>
@@ -294,7 +297,7 @@ $(document).ready(function(){initNavTree('functions_f.html',''); initResizable()
 <li>first_set()&#160;:&#160;<a class="el" href="classRealm_1_1NodeSetBitmask.html#a3dc5624db68afb69e2f3959157eca961">Realm::NodeSetBitmask</a></li>
 <li>fixed_offset&#160;:&#160;<a class="el" href="structRealm_1_1InstanceLayoutConstraints_1_1FieldInfo.html#a902667879c58c611bba57e0ec8b84775">Realm::InstanceLayoutConstraints::FieldInfo</a></li>
 <li>FixedBufferDeserializer()&#160;:&#160;<a class="el" href="classRealm_1_1Serialization_1_1FixedBufferDeserializer.html#aa1269e5277b356d69d9da038344292e4">Realm::Serialization::FixedBufferDeserializer</a></li>
-<li>FixedBufferSerializer()&#160;:&#160;<a class="el" href="classRealm_1_1Serialization_1_1FixedBufferSerializer.html#a2fc94c1cd912d419b0a8709f0fcbded1">Realm::Serialization::FixedBufferSerializer</a></li>
+<li>FixedBufferSerializer()&#160;:&#160;<a class="el" href="classRealm_1_1Serialization_1_1FixedBufferSerializer.html#a8efb423882c85b9c090c71a09fe103a6">Realm::Serialization::FixedBufferSerializer</a></li>
 <li>flags&#160;:&#160;<a class="el" href="classRealm_1_1NetworkSegment.html#a0a16d615bdb308b550246da1e0fb3bef">Realm::NetworkSegment</a>, <a class="el" href="structRealm_1_1UCP_1_1UCPWorker_1_1Request.html#afd06d31ce5c7e9e6e755e13c2447b140">Realm::UCP::UCPWorker::Request</a></li>
 <li>fld_count&#160;:&#160;<a class="el" href="structRealm_1_1TransferGraph_1_1XDTemplate_1_1IO.html#a6a1248f6fa40e74243b4dad544ccd3db">Realm::TransferGraph::XDTemplate::IO</a></li>
 <li>fld_offsets&#160;:&#160;<a class="el" href="classRealm_1_1TransferIteratorIndexSpace.html#ac416f972250b12247f5d38dd03eef5bc">Realm::TransferIteratorIndexSpace&lt; N, T &gt;</a>, <a class="el" href="classRealm_1_1TransferIteratorIndirect.html#a5417e0d4617b92b081a08eaf94172d85">Realm::TransferIteratorIndirect&lt; N, T &gt;</a></li>

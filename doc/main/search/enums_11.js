@@ -1,4 +1,4 @@
 var searchData=
 [
-  ['waitmode_0',['WaitMode',['../classRealm_1_1FastReservation.html#a8e90a653c9d905171e8de6b60d529a27',1,'Realm::FastReservation']]]
+  ['updatetype_0',['UpdateType',['../classRealm_1_1Machine_1_1MachineUpdateSubscriber.html#ae8c3b27d111bec446c2f20a659ebfe66',1,'Realm::Machine::MachineUpdateSubscriber']]]
 ];

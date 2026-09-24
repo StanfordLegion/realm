@@ -1,4 +1,4 @@
 var searchData=
 [
-  ['xferdeskind_0',['XferDesKind',['../namespaceRealm.html#a6c09d16f55cd4dfdd047ed66caec9e43',1,'Realm']]]
+  ['waitmode_0',['WaitMode',['../classRealm_1_1FastReservation.html#a8e90a653c9d905171e8de6b60d529a27',1,'Realm::FastReservation']]]
 ];

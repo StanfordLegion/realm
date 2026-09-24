@@ -1,4 +1,5 @@
 var searchData=
 [
-  ['kind_0',['kind',['../classRealm_1_1Type.html#a4549b7d79b9089853d802ea9fb682173',1,'Realm::Type::Kind'],['../classRealm_1_1Memory.html#a4d4d0769990b3dc75fcbab5ae292e839',1,'Realm::Memory::Kind'],['../classRealm_1_1Processor.html#a66f8f65566762da8bddc6c6c5b48e810',1,'Realm::Processor::Kind']]]
+  ['id_5ftypes_0',['ID_Types',['../classRealm_1_1ID.html#a818a3c1769f1a8279e2ca82e13ee478e',1,'Realm::ID']]],
+  ['iotype_1',['IOType',['../structRealm_1_1TransferGraph_1_1XDTemplate.html#af026a56933556360db16e4b24bedc463',1,'Realm::TransferGraph::XDTemplate']]]
 ];

@@ -1,6 +1,10 @@
 var classRealm_1_1EventMerger =
 [
     [ "MergeEventPrecondition", "classRealm_1_1EventMerger_1_1MergeEventPrecondition.html", "classRealm_1_1EventMerger_1_1MergeEventPrecondition" ],
+    [ "FaultPropagation", "classRealm_1_1EventMerger.html#a19a3fb2fe4c2f808ca7c7004dbf98053", [
+      [ "EARLY", "classRealm_1_1EventMerger.html#a19a3fb2fe4c2f808ca7c7004dbf98053aa79b9a2a9a393db21d39924677c583fc", null ],
+      [ "AFTER_PRECONDITIONS", "classRealm_1_1EventMerger.html#a19a3fb2fe4c2f808ca7c7004dbf98053aa56cb292764be7bc38473243b9bd731c", null ]
+    ] ],
     [ "EventMerger", "classRealm_1_1EventMerger.html#a8eb0a37615951b9de46b2e10a57818de", null ],
     [ "~EventMerger", "classRealm_1_1EventMerger.html#a27d10e2c08b78eebd3a8203b499c9ff2", null ],
     [ "add_precondition", "classRealm_1_1EventMerger.html#a70db7bda92b15b23022930c4f0f2de57", null ],
@@ -8,10 +12,11 @@ var classRealm_1_1EventMerger =
     [ "get_next_precondition", "classRealm_1_1EventMerger.html#a4b12f421be08fd7ccb873da29cff9856", null ],
     [ "is_active", "classRealm_1_1EventMerger.html#af940d55562e61ce7bd9955996766b5ca", null ],
     [ "precondition_triggered", "classRealm_1_1EventMerger.html#af6e019f1cfafc55ba2ced3f5b0b5005d", null ],
-    [ "prepare_merger", "classRealm_1_1EventMerger.html#a70f8ce69ef02fd9de18ddca5c8040fcc", null ],
+    [ "prepare_merger", "classRealm_1_1EventMerger.html#ae00666372365424478963b2aa6249354", null ],
     [ "MergeEventPrecondition", "classRealm_1_1EventMerger.html#af60b19f099be7bba3c2629ea446926ca", null ],
     [ "count_needed", "classRealm_1_1EventMerger.html#a92170ec4a745a255bdcdd5eaef556031", null ],
     [ "event_impl", "classRealm_1_1EventMerger.html#a2019e95384a4023ef2cbca0e9685663f", null ],
+    [ "fault_propagation", "classRealm_1_1EventMerger.html#af515814226078d41300b853e3a9c5717", null ],
     [ "faults_observed", "classRealm_1_1EventMerger.html#a3bda2165487e0184f81ba62d6423fadf", null ],
     [ "finish_gen", "classRealm_1_1EventMerger.html#a634a7b31c742e13f685e2274b2c9a588", null ],
     [ "free_preconditions", "classRealm_1_1EventMerger.html#a9158a3d5306183ae90d98c41b30a1a7e", null ],

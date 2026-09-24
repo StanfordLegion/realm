@@ -1,4 +1,4 @@
 var searchData=
 [
-  ['memorykind_0',['MemoryKind',['../classRealm_1_1MemoryImpl.html#a2556df02a71b9bf1ad4c3a2782db4e03',1,'Realm::MemoryImpl']]]
+  ['logginglevel_0',['LoggingLevel',['../classRealm_1_1Logger.html#a9bdd20658a0fc2014b4d70afee2d8c4d',1,'Realm::Logger']]]
 ];

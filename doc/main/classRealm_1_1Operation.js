@@ -34,6 +34,7 @@ var classRealm_1_1Operation =
     [ "all_work_items", "classRealm_1_1Operation.html#a586f5b6455844fc78b931c339f64cd8a", null ],
     [ "failed_work_items", "classRealm_1_1Operation.html#aacae1db389337108c814eff7374e9351", null ],
     [ "finish_event", "classRealm_1_1Operation.html#a052384ef93a93cb445ae7137111aebfa", null ],
+    [ "finish_event_owns_ref", "classRealm_1_1Operation.html#a5184c927dc9de9fa8d2a4cd2730e4bbe", null ],
     [ "finish_gen", "classRealm_1_1Operation.html#ae2a36f34ba80adb7a85bd676a556f182", null ],
     [ "measurements", "classRealm_1_1Operation.html#ab56d008f6f46f04a7d50f7167b1559f0", null ],
     [ "pending_work_items", "classRealm_1_1Operation.html#a379dcc6ff1ffcd977df33d0bdb95fd98", null ],

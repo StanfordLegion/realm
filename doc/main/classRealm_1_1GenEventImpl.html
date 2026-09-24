@@ -44,7 +44,7 @@
    <!-- BEGIN version select -->
     <br />
     <div class="dropdown">
-     <button class="dropbtn">Version 26.7.1+99e913b1</button>
+     <button class="dropbtn">Version 26.7.1+28fb9846</button>
      <div class="dropdown-content"></div>
     </div>
     <script type="text/javascript" src="../selectversion.js"></script>
@@ -190,8 +190,8 @@ Public Member Functions</h2></td></tr>
 <tr class="separator:a4e3f6c1d908e035dc3df21c6add9ef62"><td class="memSeparator" colspan="2">&#160;</td></tr>
 <tr class="memitem:acd020e1246ec3866b129ffa152500ea6" id="r_acd020e1246ec3866b129ffa152500ea6"><td class="memItemLeft" align="right" valign="top">void&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="classRealm_1_1GenEventImpl.html#acd020e1246ec3866b129ffa152500ea6">process_update</a> (<a class="el" href="classRealm_1_1EventImpl.html#a4808c540801db9b44bbfd0633a212264">gen_t</a> current_gen, const <a class="el" href="classRealm_1_1EventImpl.html#a4808c540801db9b44bbfd0633a212264">gen_t</a> *new_poisoned_generations, int new_poisoned_count, <a class="el" href="classRealm_1_1TimeLimit.html">TimeLimit</a> work_until)</td></tr>
 <tr class="separator:acd020e1246ec3866b129ffa152500ea6"><td class="memSeparator" colspan="2">&#160;</td></tr>
-<tr class="memitem:ada29c489c232682fea7f133952921286" id="r_ada29c489c232682fea7f133952921286"><td class="memItemLeft" align="right" valign="top">void&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="classRealm_1_1GenEventImpl.html#ada29c489c232682fea7f133952921286">set_trigger_op</a> (<a class="el" href="classRealm_1_1EventImpl.html#a4808c540801db9b44bbfd0633a212264">gen_t</a> gen, <a class="el" href="classRealm_1_1Operation.html">Operation</a> *op)</td></tr>
-<tr class="separator:ada29c489c232682fea7f133952921286"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:a2ccf70baa88b1d992a5cbfddd350c8ce" id="r_a2ccf70baa88b1d992a5cbfddd350c8ce"><td class="memItemLeft" align="right" valign="top">bool&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="classRealm_1_1GenEventImpl.html#a2ccf70baa88b1d992a5cbfddd350c8ce">set_trigger_op</a> (<a class="el" href="classRealm_1_1EventImpl.html#a4808c540801db9b44bbfd0633a212264">gen_t</a> gen, <a class="el" href="classRealm_1_1Operation.html">Operation</a> *op)</td></tr>
+<tr class="separator:a2ccf70baa88b1d992a5cbfddd350c8ce"><td class="memSeparator" colspan="2">&#160;</td></tr>
 <tr class="memitem:a4c2b9469422c7a67be83a5b8a746dcb4" id="r_a4c2b9469422c7a67be83a5b8a746dcb4"><td class="memItemLeft" align="right" valign="top"><a class="el" href="classRealm_1_1Operation.html">Operation</a> *&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="classRealm_1_1GenEventImpl.html#a4c2b9469422c7a67be83a5b8a746dcb4">get_trigger_op</a> (<a class="el" href="classRealm_1_1EventImpl.html#a4808c540801db9b44bbfd0633a212264">gen_t</a> gen)</td></tr>
 <tr class="separator:a4c2b9469422c7a67be83a5b8a746dcb4"><td class="memSeparator" colspan="2">&#160;</td></tr>
 <tr class="memitem:a0a52ec1841f2cf55f9785502cbbd1ad8" id="r_a0a52ec1841f2cf55f9785502cbbd1ad8"><td class="memItemLeft" align="right" valign="top">bool&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="classRealm_1_1GenEventImpl.html#a0a52ec1841f2cf55f9785502cbbd1ad8">is_generation_poisoned</a> (<a class="el" href="classRealm_1_1EventImpl.html#a4808c540801db9b44bbfd0633a212264">gen_t</a> gen) const</td></tr>
@@ -250,6 +250,8 @@ Public Attributes</h2></td></tr>
 <tr class="separator:ad5e1bfc9c149d0383cba60a45010aa4d"><td class="memSeparator" colspan="2">&#160;</td></tr>
 <tr class="memitem:a021e0f1262b32b68cbd1f011a38df6f5" id="r_a021e0f1262b32b68cbd1f011a38df6f5"><td class="memItemLeft" align="right" valign="top"><a class="el" href="classRealm_1_1Operation.html">Operation</a> *&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="classRealm_1_1GenEventImpl.html#a021e0f1262b32b68cbd1f011a38df6f5">current_trigger_op</a> = nullptr</td></tr>
 <tr class="separator:a021e0f1262b32b68cbd1f011a38df6f5"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:a0a24ec69becc8a7e3a632fec42c36754" id="r_a0a24ec69becc8a7e3a632fec42c36754"><td class="memItemLeft" align="right" valign="top"><a class="el" href="classRealm_1_1EventImpl.html#a4808c540801db9b44bbfd0633a212264">gen_t</a>&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="classRealm_1_1GenEventImpl.html#a0a24ec69becc8a7e3a632fec42c36754">current_trigger_op_gen</a> = 0</td></tr>
+<tr class="separator:a0a24ec69becc8a7e3a632fec42c36754"><td class="memSeparator" colspan="2">&#160;</td></tr>
 <tr class="memitem:a8354b1cb15a46cc3149e0c8aef95ae4b" id="r_a8354b1cb15a46cc3149e0c8aef95ae4b"><td class="memItemLeft" align="right" valign="top"><a class="el" href="classRealm_1_1EventWaiter.html#a96f9069fda005991627037a99ef995c4">EventWaiter::EventWaiterList</a>&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="classRealm_1_1GenEventImpl.html#a8354b1cb15a46cc3149e0c8aef95ae4b">current_local_waiters</a></td></tr>
 <tr class="separator:a8354b1cb15a46cc3149e0c8aef95ae4b"><td class="memSeparator" colspan="2">&#160;</td></tr>
 <tr class="memitem:ac7d1cd82c23a00090f7479eae98d82da" id="r_ac7d1cd82c23a00090f7479eae98d82da"><td class="memItemLeft" align="right" valign="top">std::map&lt; <a class="el" href="classRealm_1_1EventImpl.html#a4808c540801db9b44bbfd0633a212264">gen_t</a>, <a class="el" href="classRealm_1_1EventWaiter.html#a96f9069fda005991627037a99ef995c4">EventWaiter::EventWaiterList</a> &gt;&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="classRealm_1_1GenEventImpl.html#ac7d1cd82c23a00090f7479eae98d82da">future_local_waiters</a></td></tr>
@@ -928,14 +930,14 @@ Additional Inherited Members</h2></td></tr>
 
 </div>
 </div>
-<a id="ada29c489c232682fea7f133952921286" name="ada29c489c232682fea7f133952921286"></a>
-<h2 class="memtitle"><span class="permalink"><a href="#ada29c489c232682fea7f133952921286">&#9670;&#160;</a></span>set_trigger_op()</h2>
+<a id="a2ccf70baa88b1d992a5cbfddd350c8ce" name="a2ccf70baa88b1d992a5cbfddd350c8ce"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a2ccf70baa88b1d992a5cbfddd350c8ce">&#9670;&#160;</a></span>set_trigger_op()</h2>
 
 <div class="memitem">
 <div class="memproto">
       <table class="memname">
         <tr>
-          <td class="memname">void Realm::GenEventImpl::set_trigger_op </td>
+          <td class="memname">bool Realm::GenEventImpl::set_trigger_op </td>
           <td>(</td>
           <td class="paramtype"><a class="el" href="classRealm_1_1EventImpl.html#a4808c540801db9b44bbfd0633a212264">gen_t</a>&#160;</td>
           <td class="paramname"><em>gen</em>, </td>
@@ -1148,6 +1150,20 @@ Additional Inherited Members</h2></td></tr>
       <table class="memname">
         <tr>
           <td class="memname"><a class="el" href="classRealm_1_1Operation.html">Operation</a>* Realm::GenEventImpl::current_trigger_op = nullptr</td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+
+</div>
+</div>
+<a id="a0a24ec69becc8a7e3a632fec42c36754" name="a0a24ec69becc8a7e3a632fec42c36754"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a0a24ec69becc8a7e3a632fec42c36754">&#9670;&#160;</a></span>current_trigger_op_gen</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname"><a class="el" href="classRealm_1_1EventImpl.html#a4808c540801db9b44bbfd0633a212264">gen_t</a> Realm::GenEventImpl::current_trigger_op_gen = 0</td>
         </tr>
       </table>
 </div><div class="memdoc">
