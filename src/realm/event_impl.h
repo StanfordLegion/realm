@@ -38,6 +38,8 @@
 #include <vector>
 #include <map>
 #include <memory>
+#include <deque>
+#include <optional>
 
 namespace Realm {
 
@@ -165,6 +167,10 @@ namespace Realm {
     //  list
     MergeEventPrecondition *get_next_precondition(void);
 
+    // number of preconditions a merge can have before the merger has to
+    //  heap-allocate overflow storage
+    static constexpr size_t MAX_INLINE_PRECONDITIONS = 6;
+
   protected:
     void precondition_triggered(bool poisoned, TimeLimit work_until,
                                 MergeEventPrecondition *precondition = nullptr);
@@ -180,10 +186,18 @@ namespace Realm {
     atomic<int> count_needed;
     atomic<int> faults_observed;
 
-    static constexpr size_t MAX_INLINE_PRECONDITIONS = 6;
     MergeEventPrecondition inline_preconditions[MAX_INLINE_PRECONDITIONS];
-    // std::deque does not invalidate references on resize
-    std::deque<MergeEventPrecondition> overflow_preconditions;
+    // storage for preconditions beyond MAX_INLINE_PRECONDITIONS - once handed
+    //  out, a precondition's address is registered on another event's waiter
+    //  list, so this container must never relocate its elements: std::deque
+    //  does not invalidate references on growth (std::vector would)
+    // the deque itself is heap-allocated lazily on the first overflow and
+    //  released when the merge completes - a default-constructed std::deque is
+    //  not free (libstdc++ eagerly allocates its map and one 512-byte node),
+    //  and since GenEventImpls are materialized in bulk by DynamicTable leaves
+    //  that cost was paid for every event slot on every node even though very
+    //  few events ever merge more than MAX_INLINE_PRECONDITIONS inputs
+    std::unique_ptr<std::deque<MergeEventPrecondition>> overflow_preconditions;
     EventWaiter::EventWaiterList free_preconditions;
   };
 

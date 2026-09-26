@@ -742,6 +742,8 @@ namespace Realm {
   {
     assert(!is_active());
     assert(free_preconditions.empty());
+    // the overflow storage is released whenever a merge completes
+    assert(!overflow_preconditions);
   }
 
   bool EventMerger::is_active(void) const { return (count_needed.load() != 0); }
@@ -756,8 +758,13 @@ namespace Realm {
     if(expected_events) {
       recycle_preconditions = false;
       if(MAX_INLINE_PRECONDITIONS < *expected_events) {
-        overflow_preconditions.resize(*expected_events - MAX_INLINE_PRECONDITIONS);
-        for(MergeEventPrecondition &pre : overflow_preconditions) {
+        // wide merge - allocate the overflow storage on demand (any earlier
+        //  merge on this event released it when it completed)
+        if(!overflow_preconditions) {
+          overflow_preconditions = std::make_unique<std::deque<MergeEventPrecondition>>();
+        }
+        overflow_preconditions->resize(*expected_events - MAX_INLINE_PRECONDITIONS);
+        for(MergeEventPrecondition &pre : *overflow_preconditions) {
           pre.merger = this;
         }
       }
@@ -814,9 +821,12 @@ namespace Realm {
       return &inline_preconditions[precondition_offset++];
     }
     const unsigned offset = precondition_offset - MAX_INLINE_PRECONDITIONS;
-    if(offset < overflow_preconditions.size()) {
+    // the overflow storage does not exist until the first overflow
+    const size_t overflow_size =
+        overflow_preconditions ? overflow_preconditions->size() : 0;
+    if(offset < overflow_size) {
       precondition_offset++;
-      return &overflow_preconditions[offset];
+      return &(*overflow_preconditions)[offset];
     }
 #ifndef TSAN_ENABLED
     // Can unsafely test this if TSAN is not enabled, we can still lose
@@ -831,9 +841,14 @@ namespace Realm {
       }
     }
     precondition_offset++;
-    assert(offset == overflow_preconditions.size());
-    overflow_preconditions.resize(offset + 1);
-    MergeEventPrecondition &result = overflow_preconditions.back();
+    assert(offset == overflow_size);
+    // grow the overflow storage by one, allocating it on first use - the deque
+    //  constructs the new element in place and leaves the addresses of the
+    //  existing preconditions untouched
+    if(!overflow_preconditions) {
+      overflow_preconditions = std::make_unique<std::deque<MergeEventPrecondition>>();
+    }
+    MergeEventPrecondition &result = overflow_preconditions->emplace_back();
     result.merger = this;
     return &result;
   }
@@ -897,9 +912,7 @@ namespace Realm {
       // if we dynamically allocated space for a wide merger, give that
       //  storage back - the chance that this particular event will have
       //  another wide merge isn't particularly high
-      if(!overflow_preconditions.empty()) {
-        overflow_preconditions.clear();
-      }
+      overflow_preconditions.reset();
       const bool any_faults = (faults_observed.load() != 0);
       // Trigger on the last input unless an eagerly propagated poison already did so.
       // Deferred fault propagation reports the accumulated poison now that all inputs

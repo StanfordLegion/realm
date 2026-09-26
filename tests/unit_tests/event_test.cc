@@ -681,3 +681,186 @@ TEST_F(GenEventTest, EventMergerIsActive)
 
   EXPECT_FALSE(ok);
 }
+
+// A merge with more than MAX_INLINE_PRECONDITIONS inputs spills into the merger's
+// lazily-allocated overflow storage.  Pre-size it through prepare_merger, hand out every
+// precondition, then poison one of the overflow preconditions.  Poison must be reported
+// only once all inputs (including the arm) have arrived, and the merger must be idle
+// afterwards so its storage can be released.
+TEST_F(GenEventTest, EventMergerWideMergePresizedWithPoison)
+{
+  const NodeID owner = 1;
+  const GenEventImpl::gen_t trigger_gen = 1;
+  const size_t num_preconditions = EventMerger::MAX_INLINE_PRECONDITIONS + 10;
+  const size_t poisoned_index = EventMerger::MAX_INLINE_PRECONDITIONS + 3;
+  bool poisoned = false;
+  GenEventImpl event(event_notifier, event_comm);
+  event.init(ID::make_event(0, 0, 0), owner);
+  event.merger.prepare_merger(event.make_event(trigger_gen), false /*ignore faults*/,
+                              num_preconditions,
+                              EventMerger::FaultPropagation::AFTER_PRECONDITIONS);
+
+  std::vector<EventMerger::MergeEventPrecondition *> preconditions;
+  for(size_t i = 0; i < num_preconditions; i++) {
+    EventMerger::MergeEventPrecondition *pre = event.merger.get_next_precondition();
+    ASSERT_NE(pre, nullptr);
+    EXPECT_EQ(pre->merger, &event.merger);
+    for(EventMerger::MergeEventPrecondition *prev : preconditions) {
+      EXPECT_NE(pre, prev);
+    }
+    preconditions.push_back(pre);
+  }
+
+  // trigger in reverse so the overflow preconditions fire before the inline ones
+  for(size_t i = num_preconditions; i > 0; i--) {
+    EXPECT_FALSE(event.has_triggered(trigger_gen, poisoned));
+    preconditions[i - 1]->event_triggered((i - 1) == poisoned_index,
+                                          TimeLimit::responsive());
+  }
+  EXPECT_FALSE(event.has_triggered(trigger_gen, poisoned));
+
+  event.merger.arm_merger();
+
+  EXPECT_TRUE(event.has_triggered(trigger_gen, poisoned));
+  // a non-owner only learns a generation's official poison state from the owner's
+  // update message, so check the poison the merger reported to the owner instead
+  EXPECT_TRUE(event_comm->last_trigger_poisoned);
+  EXPECT_EQ(event_comm->sent_trigger_count, 1);
+  EXPECT_FALSE(event.merger.is_active());
+}
+
+// Grow the overflow storage one precondition at a time (no expected count) while the
+// earlier preconditions are already registered as waiters on a source event.  The
+// source triggers them through the registered addresses, so any relocation of the
+// storage during growth would be caught here.
+TEST_F(GenEventTest, EventMergerWideMergeIncrementalWaitersStayValid)
+{
+  const NodeID owner = 1;
+  const GenEventImpl::gen_t trigger_gen = 1;
+  // enough to span many deque nodes
+  const size_t num_preconditions = 200;
+  bool poisoned = false;
+  GenEventImpl event(event_notifier, event_comm);
+  event.init(ID::make_event(0, 0, 0), owner);
+  EventTestCommunicator *source_comm = new EventTestCommunicator();
+  GenEventImpl source(event_notifier, source_comm);
+  source.init(ID::make_event(0, 1, 0), owner);
+  event.merger.prepare_merger(event.make_event(trigger_gen), false /*ignore faults*/);
+
+  EventMerger::MergeEventPrecondition *first_overflow = nullptr;
+  for(size_t i = 0; i < num_preconditions; i++) {
+    EventMerger::MergeEventPrecondition *pre = event.merger.get_next_precondition();
+    ASSERT_NE(pre, nullptr);
+    if(i == EventMerger::MAX_INLINE_PRECONDITIONS) {
+      first_overflow = pre;
+    }
+    ASSERT_TRUE(source.add_waiter(trigger_gen, pre));
+  }
+  ASSERT_NE(first_overflow, nullptr);
+  // the first overflow element is still intact after all the growth behind it
+  EXPECT_EQ(first_overflow->merger, &event.merger);
+  EXPECT_FALSE(event.has_triggered(trigger_gen, poisoned));
+
+  // wakes every precondition through the address it was registered with
+  source.trigger(trigger_gen, 0, false /*!poisoned*/, TimeLimit::responsive());
+
+  EXPECT_FALSE(event.has_triggered(trigger_gen, poisoned));
+  EXPECT_EQ(event_comm->sent_trigger_count, 0);
+
+  event.merger.arm_merger();
+
+  EXPECT_TRUE(event.has_triggered(trigger_gen, poisoned));
+  EXPECT_FALSE(poisoned);
+  EXPECT_EQ(event_comm->sent_trigger_count, 1);
+  EXPECT_FALSE(event.merger.is_active());
+}
+
+// Without an expected count the merger recycles triggered preconditions through its
+// free list, and every completed merge releases the overflow storage.  Run several
+// generations of merges on one event, mixing the incremental and pre-sized paths, to
+// exercise recycling and re-allocation of the lazily-allocated storage.
+TEST_F(GenEventTest, EventMergerWideMergeRecyclesAcrossGenerations)
+{
+  const NodeID owner = 1;
+  bool poisoned = false;
+  GenEventImpl event(event_notifier, event_comm);
+  event.init(ID::make_event(0, 0, 0), owner);
+
+  // generation 1: incremental growth with recycling of triggered preconditions
+  {
+    const GenEventImpl::gen_t gen = 1;
+    event.merger.prepare_merger(event.make_event(gen), false /*ignore faults*/);
+    std::vector<EventMerger::MergeEventPrecondition *> live;
+    for(size_t i = 0; i < EventMerger::MAX_INLINE_PRECONDITIONS + 3; i++) {
+      live.push_back(event.merger.get_next_precondition());
+    }
+    // retire two overflow preconditions - they land on the merger's free list
+    EventMerger::MergeEventPrecondition *retired_a = live.back();
+    live.pop_back();
+    EventMerger::MergeEventPrecondition *retired_b = live.back();
+    live.pop_back();
+    retired_a->event_triggered(false /*!poisoned*/, TimeLimit::responsive());
+    retired_b->event_triggered(false /*!poisoned*/, TimeLimit::responsive());
+    // the next two requests are satisfied from the free list, not by growing
+    EventMerger::MergeEventPrecondition *reused_a = event.merger.get_next_precondition();
+    EventMerger::MergeEventPrecondition *reused_b = event.merger.get_next_precondition();
+    EXPECT_TRUE((reused_a == retired_a) || (reused_a == retired_b));
+    EXPECT_TRUE((reused_b == retired_a) || (reused_b == retired_b));
+    EXPECT_NE(reused_a, reused_b);
+    live.push_back(reused_a);
+    live.push_back(reused_b);
+    // with the free list empty again the storage has to grow
+    EventMerger::MergeEventPrecondition *fresh = event.merger.get_next_precondition();
+    for(EventMerger::MergeEventPrecondition *pre : live) {
+      EXPECT_NE(fresh, pre);
+    }
+    live.push_back(fresh);
+    for(EventMerger::MergeEventPrecondition *pre : live) {
+      EXPECT_FALSE(event.has_triggered(gen, poisoned));
+      pre->event_triggered(false /*!poisoned*/, TimeLimit::responsive());
+    }
+    event.merger.arm_merger();
+    EXPECT_TRUE(event.has_triggered(gen, poisoned));
+    EXPECT_FALSE(poisoned);
+    EXPECT_FALSE(event.merger.is_active());
+  }
+
+  // generation 2: pre-sized wide merge - the storage was released and is re-created
+  {
+    const GenEventImpl::gen_t gen = 2;
+    const size_t num_preconditions = EventMerger::MAX_INLINE_PRECONDITIONS + 5;
+    event.merger.prepare_merger(event.make_event(gen), false /*ignore faults*/,
+                                num_preconditions);
+    std::vector<EventMerger::MergeEventPrecondition *> preconditions;
+    for(size_t i = 0; i < num_preconditions; i++) {
+      EventMerger::MergeEventPrecondition *pre = event.merger.get_next_precondition();
+      EXPECT_EQ(pre->merger, &event.merger);
+      preconditions.push_back(pre);
+    }
+    for(EventMerger::MergeEventPrecondition *pre : preconditions) {
+      pre->event_triggered(false /*!poisoned*/, TimeLimit::responsive());
+    }
+    event.merger.arm_merger();
+    EXPECT_TRUE(event.has_triggered(gen, poisoned));
+    EXPECT_FALSE(poisoned);
+    EXPECT_FALSE(event.merger.is_active());
+  }
+
+  // generation 3: an inline-only merge on the same event
+  {
+    const GenEventImpl::gen_t gen = 3;
+    event.merger.prepare_merger(event.make_event(gen), false /*ignore faults*/,
+                                EventMerger::MAX_INLINE_PRECONDITIONS);
+    for(size_t i = 0; i < EventMerger::MAX_INLINE_PRECONDITIONS; i++) {
+      event.merger.get_next_precondition()->event_triggered(false /*!poisoned*/,
+                                                            TimeLimit::responsive());
+    }
+    event.merger.arm_merger();
+    EXPECT_TRUE(event.has_triggered(gen, poisoned));
+    EXPECT_FALSE(poisoned);
+  }
+
+  EXPECT_EQ(event_comm->sent_trigger_count, 3);
+  EXPECT_FALSE(event.merger.is_active());
+  // the merger's destructor asserts that the overflow storage was released
+}
