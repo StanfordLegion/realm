@@ -18,6 +18,8 @@
 #include "realm/event_impl.h"
 #include "realm/activemsg.h"
 #include "realm/operation.h"
+#include <atomic>
+#include <thread>
 #include <tuple>
 #include <gtest/gtest.h>
 
@@ -120,6 +122,7 @@ protected:
 #endif
 
     delete event_notifier;
+    delete event_comm;
   }
 
   EventTestCommunicator *event_comm;
@@ -306,7 +309,6 @@ TEST_F(GenEventTest, RemoteSubscribeNextGen)
 {
   const NodeID owner = 1;
   const GenEventImpl::gen_t subscribe_gen = 2;
-  EventTestCommunicator *event_comm = new EventTestCommunicator();
   GenEventImpl event(event_notifier, event_comm);
 
   event.init(ID::make_event(0, 0, 0), owner);
@@ -319,7 +321,6 @@ TEST_F(GenEventTest, RemoteSubscribeCurrGen)
 {
   const NodeID owner = 1;
   const GenEventImpl::gen_t subscribe_gen = 1;
-  EventTestCommunicator *event_comm = new EventTestCommunicator();
   GenEventImpl event(event_notifier, event_comm);
 
   event.init(ID::make_event(0, 0, 0), owner);
@@ -514,7 +515,8 @@ TEST_F(GenEventTest, RemoteTriggerOpReplacedBeforeLocalUpdate)
   bool poisoned = false;
   bool destroyed_one = false;
   bool destroyed_two = false;
-  RespawningEventCommunicator *comm = new RespawningEventCommunicator();
+  RespawningEventCommunicator respawning_comm;
+  RespawningEventCommunicator *comm = &respawning_comm;
   GenEventImpl event(event_notifier, comm);
   event.init(ID::make_event(0, 0, 0), owner);
   comm->event_impl = &event;
@@ -680,4 +682,466 @@ TEST_F(GenEventTest, EventMergerIsActive)
   bool ok = merger.is_active();
 
   EXPECT_FALSE(ok);
+}
+
+// A merge with more than MAX_INLINE_PRECONDITIONS inputs spills into the merger's
+// lazily-allocated overflow storage.  Pre-size it through prepare_merger, hand out every
+// precondition, then poison one of the overflow preconditions.  Poison must be reported
+// only once all inputs (including the arm) have arrived, and the merger must be idle
+// afterwards so its storage can be released.
+TEST_F(GenEventTest, EventMergerWideMergePresizedWithPoison)
+{
+  const NodeID owner = 1;
+  const GenEventImpl::gen_t trigger_gen = 1;
+  const size_t num_preconditions = EventMerger::MAX_INLINE_PRECONDITIONS + 10;
+  const size_t poisoned_index = EventMerger::MAX_INLINE_PRECONDITIONS + 3;
+  bool poisoned = false;
+  GenEventImpl event(event_notifier, event_comm);
+  event.init(ID::make_event(0, 0, 0), owner);
+  event.merger.prepare_merger(event.make_event(trigger_gen), false /*ignore faults*/,
+                              num_preconditions,
+                              EventMerger::FaultPropagation::AFTER_PRECONDITIONS);
+
+  std::vector<EventMerger::MergeEventPrecondition *> preconditions;
+  for(size_t i = 0; i < num_preconditions; i++) {
+    EventMerger::MergeEventPrecondition *pre = event.merger.get_next_precondition();
+    ASSERT_NE(pre, nullptr);
+    EXPECT_EQ(pre->merger, &event.merger);
+    for(EventMerger::MergeEventPrecondition *prev : preconditions) {
+      EXPECT_NE(pre, prev);
+    }
+    preconditions.push_back(pre);
+  }
+
+  // trigger in reverse so the overflow preconditions fire before the inline ones
+  for(size_t i = num_preconditions; i > 0; i--) {
+    EXPECT_FALSE(event.has_triggered(trigger_gen, poisoned));
+    preconditions[i - 1]->event_triggered((i - 1) == poisoned_index,
+                                          TimeLimit::responsive());
+  }
+  EXPECT_FALSE(event.has_triggered(trigger_gen, poisoned));
+
+  event.merger.arm_merger();
+
+  EXPECT_TRUE(event.has_triggered(trigger_gen, poisoned));
+  // a non-owner only learns a generation's official poison state from the owner's
+  // update message, so check the poison the merger reported to the owner instead
+  EXPECT_TRUE(event_comm->last_trigger_poisoned);
+  EXPECT_EQ(event_comm->sent_trigger_count, 1);
+  EXPECT_FALSE(event.merger.is_active());
+}
+
+// Grow the overflow storage one precondition at a time (no expected count) while the
+// earlier preconditions are already registered as waiters on a source event.  The
+// source triggers them through the registered addresses, so any relocation of the
+// storage during growth would be caught here.
+TEST_F(GenEventTest, EventMergerWideMergeIncrementalWaitersStayValid)
+{
+  const NodeID owner = 1;
+  const GenEventImpl::gen_t trigger_gen = 1;
+  // enough to span many deque nodes
+  const size_t num_preconditions = 200;
+  bool poisoned = false;
+  GenEventImpl event(event_notifier, event_comm);
+  event.init(ID::make_event(0, 0, 0), owner);
+  EventTestCommunicator source_comm;
+  GenEventImpl source(event_notifier, &source_comm);
+  source.init(ID::make_event(0, 1, 0), owner);
+  event.merger.prepare_merger(event.make_event(trigger_gen), false /*ignore faults*/);
+
+  EventMerger::MergeEventPrecondition *first_overflow = nullptr;
+  for(size_t i = 0; i < num_preconditions; i++) {
+    EventMerger::MergeEventPrecondition *pre = event.merger.get_next_precondition();
+    ASSERT_NE(pre, nullptr);
+    if(i == EventMerger::MAX_INLINE_PRECONDITIONS) {
+      first_overflow = pre;
+    }
+    ASSERT_TRUE(source.add_waiter(trigger_gen, pre));
+  }
+  ASSERT_NE(first_overflow, nullptr);
+  // the first overflow element is still intact after all the growth behind it
+  EXPECT_EQ(first_overflow->merger, &event.merger);
+  EXPECT_FALSE(event.has_triggered(trigger_gen, poisoned));
+
+  // wakes every precondition through the address it was registered with - use an
+  // unbounded time limit so the notifier fires all of them synchronously here rather
+  // than deferring the tail (responsive() is a 10us budget) to a background worker
+  // that unit tests never run
+  source.trigger(trigger_gen, 0, false /*!poisoned*/, TimeLimit());
+
+  EXPECT_FALSE(event.has_triggered(trigger_gen, poisoned));
+  EXPECT_EQ(event_comm->sent_trigger_count, 0);
+
+  event.merger.arm_merger();
+
+  EXPECT_TRUE(event.has_triggered(trigger_gen, poisoned));
+  EXPECT_FALSE(poisoned);
+  EXPECT_EQ(event_comm->sent_trigger_count, 1);
+  EXPECT_FALSE(event.merger.is_active());
+}
+
+// Without an expected count the merger recycles triggered preconditions through its
+// free list, and every completed merge releases the overflow storage.  Run several
+// generations of merges on one event, mixing the incremental and pre-sized paths, to
+// exercise recycling and re-allocation of the lazily-allocated storage.
+TEST_F(GenEventTest, EventMergerWideMergeRecyclesAcrossGenerations)
+{
+  const NodeID owner = 1;
+  bool poisoned = false;
+  GenEventImpl event(event_notifier, event_comm);
+  event.init(ID::make_event(0, 0, 0), owner);
+
+  // generation 1: incremental growth with recycling of triggered preconditions
+  {
+    const GenEventImpl::gen_t gen = 1;
+    event.merger.prepare_merger(event.make_event(gen), false /*ignore faults*/);
+    std::vector<EventMerger::MergeEventPrecondition *> live;
+    for(size_t i = 0; i < EventMerger::MAX_INLINE_PRECONDITIONS + 3; i++) {
+      live.push_back(event.merger.get_next_precondition());
+    }
+    // retire two overflow preconditions - they land on the merger's free list
+    EventMerger::MergeEventPrecondition *retired_a = live.back();
+    live.pop_back();
+    EventMerger::MergeEventPrecondition *retired_b = live.back();
+    live.pop_back();
+    retired_a->event_triggered(false /*!poisoned*/, TimeLimit::responsive());
+    retired_b->event_triggered(false /*!poisoned*/, TimeLimit::responsive());
+    // the next two requests are satisfied from the free list, not by growing
+    EventMerger::MergeEventPrecondition *reused_a = event.merger.get_next_precondition();
+    EventMerger::MergeEventPrecondition *reused_b = event.merger.get_next_precondition();
+    EXPECT_TRUE((reused_a == retired_a) || (reused_a == retired_b));
+    EXPECT_TRUE((reused_b == retired_a) || (reused_b == retired_b));
+    EXPECT_NE(reused_a, reused_b);
+    live.push_back(reused_a);
+    live.push_back(reused_b);
+    // with the free list empty again the storage has to grow
+    EventMerger::MergeEventPrecondition *fresh = event.merger.get_next_precondition();
+    for(EventMerger::MergeEventPrecondition *pre : live) {
+      EXPECT_NE(fresh, pre);
+    }
+    live.push_back(fresh);
+    for(EventMerger::MergeEventPrecondition *pre : live) {
+      EXPECT_FALSE(event.has_triggered(gen, poisoned));
+      pre->event_triggered(false /*!poisoned*/, TimeLimit::responsive());
+    }
+    event.merger.arm_merger();
+    EXPECT_TRUE(event.has_triggered(gen, poisoned));
+    EXPECT_FALSE(poisoned);
+    EXPECT_FALSE(event.merger.is_active());
+  }
+
+  // generation 2: pre-sized wide merge - the storage was released and is re-created
+  {
+    const GenEventImpl::gen_t gen = 2;
+    const size_t num_preconditions = EventMerger::MAX_INLINE_PRECONDITIONS + 5;
+    event.merger.prepare_merger(event.make_event(gen), false /*ignore faults*/,
+                                num_preconditions);
+    std::vector<EventMerger::MergeEventPrecondition *> preconditions;
+    for(size_t i = 0; i < num_preconditions; i++) {
+      EventMerger::MergeEventPrecondition *pre = event.merger.get_next_precondition();
+      EXPECT_EQ(pre->merger, &event.merger);
+      preconditions.push_back(pre);
+    }
+    for(EventMerger::MergeEventPrecondition *pre : preconditions) {
+      pre->event_triggered(false /*!poisoned*/, TimeLimit::responsive());
+    }
+    event.merger.arm_merger();
+    EXPECT_TRUE(event.has_triggered(gen, poisoned));
+    EXPECT_FALSE(poisoned);
+    EXPECT_FALSE(event.merger.is_active());
+  }
+
+  // generation 3: an inline-only merge on the same event
+  {
+    const GenEventImpl::gen_t gen = 3;
+    event.merger.prepare_merger(event.make_event(gen), false /*ignore faults*/,
+                                EventMerger::MAX_INLINE_PRECONDITIONS);
+    for(size_t i = 0; i < EventMerger::MAX_INLINE_PRECONDITIONS; i++) {
+      event.merger.get_next_precondition()->event_triggered(false /*!poisoned*/,
+                                                            TimeLimit::responsive());
+    }
+    event.merger.arm_merger();
+    EXPECT_TRUE(event.has_triggered(gen, poisoned));
+    EXPECT_FALSE(poisoned);
+  }
+
+  EXPECT_EQ(event_comm->sent_trigger_count, 3);
+  EXPECT_FALSE(event.merger.is_active());
+  // the merger's destructor asserts that the overflow storage was released
+}
+
+namespace {
+  // Spin until a foreign thread has registered itself as an external waiter on 'event'.
+  void wait_for_external_waiter(GenEventImpl &event)
+  {
+    for(;;) {
+      {
+        AutoLock<> al(event.mutex);
+        if(event.has_external_waiters) {
+          return;
+        }
+      }
+      std::this_thread::yield();
+    }
+  }
+} // namespace
+
+// External (non-Realm-thread) waits block on a kernel mutex/condvar pair that an event
+// allocates on the first such wait instead of embedding in every event.  Wait from a
+// foreign thread on an event this node owns and trigger it from the test thread, which
+// exercises the broadcast in the owner's trigger path.
+TEST_F(GenEventTest, ExternalWaitFromForeignThreadLocalOwner)
+{
+  const NodeID owner = 0;
+  const GenEventImpl::gen_t trigger_gen = 1;
+  GenEventImpl event(event_notifier, event_comm);
+  event.init(ID::make_event(0, 0, 0), owner);
+  EXPECT_EQ(event.external_waiter_sync.get(), nullptr);
+
+  bool poisoned = true;
+  std::atomic<bool> woke{false};
+  std::thread waiter([&]() {
+    event.external_wait(trigger_gen, poisoned);
+    woke.store(true);
+  });
+
+  wait_for_external_waiter(event);
+  EXPECT_NE(event.external_waiter_sync.get(), nullptr);
+  EXPECT_FALSE(woke.load());
+
+  event.trigger(trigger_gen, 0, false /*!poisoned*/, TimeLimit::responsive());
+  waiter.join();
+
+  EXPECT_TRUE(woke.load());
+  EXPECT_FALSE(poisoned);
+  EXPECT_FALSE(event.has_external_waiters);
+}
+
+// The same from the non-owner side: the external wait subscribes to the owner and is
+// woken by the owner's update message, which exercises the broadcast in process_update.
+TEST_F(GenEventTest, ExternalWaitFromForeignThreadRemoteOwner)
+{
+  const NodeID owner = 1;
+  const GenEventImpl::gen_t trigger_gen = 1;
+  GenEventImpl event(event_notifier, event_comm);
+  event.init(ID::make_event(0, 0, 0), owner);
+
+  bool poisoned = true;
+  std::atomic<bool> woke{false};
+  std::thread waiter([&]() {
+    event.external_wait(trigger_gen, poisoned);
+    woke.store(true);
+  });
+
+  wait_for_external_waiter(event);
+  EXPECT_NE(event.external_waiter_sync.get(), nullptr);
+  EXPECT_FALSE(woke.load());
+
+  event.process_update(trigger_gen, 0, 0, TimeLimit::responsive());
+  waiter.join();
+
+  EXPECT_TRUE(woke.load());
+  EXPECT_FALSE(poisoned);
+  EXPECT_EQ(event_comm->sent_subscription_count, 1);
+  EXPECT_FALSE(event.has_external_waiters);
+}
+
+// A timed external wait that expires leaves the event untriggered, and the mutex/condvar
+// pair it allocated is reused by later waits rather than re-created.
+TEST_F(GenEventTest, ExternalTimedWaitExpiresThenSucceeds)
+{
+  const NodeID owner = 0;
+  const GenEventImpl::gen_t trigger_gen = 1;
+  GenEventImpl event(event_notifier, event_comm);
+  event.init(ID::make_event(0, 0, 0), owner);
+  EXPECT_EQ(event.external_waiter_sync.get(), nullptr);
+
+  bool poisoned = true;
+  EXPECT_FALSE(event.external_timedwait(trigger_gen, poisoned, 1000000 /*1 ms*/));
+  GenEventImpl::ExternalWaiterSync *sync = event.external_waiter_sync.get();
+  EXPECT_NE(sync, nullptr);
+  EXPECT_FALSE(event.has_triggered(trigger_gen, poisoned));
+
+  event.trigger(trigger_gen, 0, false /*!poisoned*/, TimeLimit::responsive());
+
+  EXPECT_TRUE(event.external_timedwait(trigger_gen, poisoned, 0));
+  EXPECT_FALSE(poisoned);
+  EXPECT_EQ(event.external_waiter_sync.get(), sync);
+}
+
+// Waiters for generations beyond the next one and the outcomes of locally-triggered
+// generations live in a lazily-allocated "lagging view" state that only non-owners
+// need.  Owner-side operations must never create it, and looking for a waiter that was
+// never registered must not create it either (remove_waiter used to insert an empty
+// list through operator[]).
+TEST_F(GenEventTest, LaggingViewNeverAllocatedForOwner)
+{
+  const NodeID owner = 0;
+  const GenEventImpl::gen_t trigger_gen = 1;
+  bool poisoned = false;
+  DeferredOperation waiter;
+  DeferredOperation absent;
+  GenEventImpl event(event_notifier, event_comm);
+  event.init(ID::make_event(0, 0, 0), owner);
+  EXPECT_EQ(event.lagging_view.get(), nullptr);
+
+  EXPECT_TRUE(event.add_waiter(trigger_gen, &waiter));
+  EXPECT_EQ(event.lagging_view.get(), nullptr);
+  EXPECT_FALSE(event.remove_waiter(trigger_gen + 3, &absent));
+  EXPECT_EQ(event.lagging_view.get(), nullptr);
+
+  event.trigger(trigger_gen, 0, false /*!poisoned*/, TimeLimit());
+
+  EXPECT_TRUE(waiter.triggered);
+  EXPECT_TRUE(event.has_triggered(trigger_gen, poisoned));
+  EXPECT_FALSE(poisoned);
+  EXPECT_EQ(event.lagging_view.get(), nullptr);
+}
+
+// A waiter for a generation past the next one allocates the state; the owner's update
+// wakes the waiter and, with nothing left to track, releases the state again.
+TEST_F(GenEventTest, LaggingViewFutureWaiterReleasedByUpdate)
+{
+  const NodeID owner = 1;
+  const GenEventImpl::gen_t future_gen = 3;
+  bool poisoned = true;
+  DeferredOperation waiter;
+  GenEventImpl event(event_notifier, event_comm);
+  event.init(ID::make_event(0, 0, 0), owner);
+
+  EXPECT_TRUE(event.add_waiter(future_gen, &waiter));
+  ASSERT_NE(event.lagging_view.get(), nullptr);
+  EXPECT_EQ(event.lagging_view->future_local_waiters.count(future_gen), 1u);
+  EXPECT_TRUE(event.lagging_view->local_triggers.empty());
+  EXPECT_EQ(event_comm->sent_subscription_count, 1);
+  EXPECT_FALSE(waiter.triggered);
+  EXPECT_FALSE(event.has_triggered(future_gen, poisoned));
+
+  event.process_update(future_gen, 0, 0, TimeLimit());
+
+  EXPECT_TRUE(waiter.triggered);
+  EXPECT_TRUE(event.has_triggered(future_gen, poisoned));
+  EXPECT_FALSE(poisoned);
+  EXPECT_EQ(event.lagging_view.get(), nullptr);
+}
+
+// Removing the last future waiter releases the state, and a second removal of the same
+// waiter reports failure without recreating it.
+TEST_F(GenEventTest, LaggingViewReleasedWhenFutureWaiterRemoved)
+{
+  const NodeID owner = 1;
+  const GenEventImpl::gen_t future_gen = 3;
+  DeferredOperation waiter;
+  GenEventImpl event(event_notifier, event_comm);
+  event.init(ID::make_event(0, 0, 0), owner);
+
+  EXPECT_TRUE(event.add_waiter(future_gen, &waiter));
+  ASSERT_NE(event.lagging_view.get(), nullptr);
+
+  EXPECT_TRUE(event.remove_waiter(future_gen, &waiter));
+  EXPECT_EQ(event.lagging_view.get(), nullptr);
+  EXPECT_FALSE(event.remove_waiter(future_gen, &waiter));
+  EXPECT_EQ(event.lagging_view.get(), nullptr);
+  EXPECT_FALSE(waiter.triggered);
+}
+
+// A non-owner that poisons a generation ahead of its view records it as a local trigger
+// so has_triggered, add_waiter and subscribe answer consistently until the owner's
+// update confirms the poison, at which point the state is released.
+TEST_F(GenEventTest, LaggingViewPoisonedLocalTriggerReleasedByUpdate)
+{
+  const NodeID owner = 1;
+  const GenEventImpl::gen_t trigger_gen = 3;
+  bool poisoned = false;
+  DeferredOperation late_waiter;
+  GenEventImpl event(event_notifier, event_comm);
+  event.init(ID::make_event(0, 0, 0), owner);
+
+  event.trigger(trigger_gen, 0, true /*poisoned*/, TimeLimit());
+
+  ASSERT_NE(event.lagging_view.get(), nullptr);
+  EXPECT_TRUE(event.lagging_view->future_local_waiters.empty());
+  EXPECT_EQ(event.lagging_view->local_triggers.count(trigger_gen), 1u);
+  EXPECT_TRUE(event.has_local_triggers);
+  EXPECT_EQ(event_comm->sent_trigger_count, 1);
+  EXPECT_TRUE(event_comm->last_trigger_poisoned);
+  // the trigger subscribed so that the owner's confirmation arrives
+  EXPECT_EQ(event_comm->sent_subscription_count, 1);
+  EXPECT_TRUE(event.has_triggered(trigger_gen, poisoned));
+  EXPECT_TRUE(poisoned);
+  // a late waiter is triggered immediately with the recorded poison
+  EXPECT_TRUE(event.add_waiter(trigger_gen, &late_waiter));
+  EXPECT_TRUE(late_waiter.triggered);
+  // and the local trigger counts as "already triggered" for subscribe()
+  event.gen_subscribed.store(0);
+  event.subscribe(trigger_gen);
+  EXPECT_EQ(event_comm->sent_subscription_count, 1);
+
+  GenEventImpl::gen_t poisoned_gens[] = {trigger_gen};
+  event.process_update(trigger_gen, poisoned_gens, 1, TimeLimit());
+
+  EXPECT_EQ(event.lagging_view.get(), nullptr);
+  EXPECT_FALSE(event.has_local_triggers);
+  poisoned = false;
+  EXPECT_TRUE(event.has_triggered(trigger_gen, poisoned));
+  EXPECT_TRUE(poisoned);
+}
+
+// A local trigger ahead of the view wakes the future waiters registered for it while
+// keeping the state alive for the trigger record; the owner's update then releases it.
+TEST_F(GenEventTest, LaggingViewLocalTriggerWakesFutureWaiter)
+{
+  const NodeID owner = 1;
+  const GenEventImpl::gen_t trigger_gen = 3;
+  bool poisoned = true;
+  DeferredOperation waiter;
+  GenEventImpl event(event_notifier, event_comm);
+  event.init(ID::make_event(0, 0, 0), owner);
+
+  EXPECT_TRUE(event.add_waiter(trigger_gen, &waiter));
+  event.trigger(trigger_gen, 0, false /*!poisoned*/, TimeLimit());
+
+  EXPECT_TRUE(waiter.triggered);
+  ASSERT_NE(event.lagging_view.get(), nullptr);
+  EXPECT_TRUE(event.lagging_view->future_local_waiters.empty());
+  EXPECT_EQ(event.lagging_view->local_triggers.count(trigger_gen), 1u);
+  EXPECT_TRUE(event.has_triggered(trigger_gen, poisoned));
+  EXPECT_FALSE(poisoned);
+
+  event.process_update(trigger_gen, 0, 0, TimeLimit());
+
+  EXPECT_EQ(event.lagging_view.get(), nullptr);
+  EXPECT_FALSE(event.has_local_triggers);
+}
+
+// Triggering the very next generation promotes the future waiters for the generation
+// after it to the current list; if that empties the state (no poison to record) it is
+// released even though waiters remain on the event.
+TEST_F(GenEventTest, LaggingViewReleasedWhenFutureListBecomesCurrent)
+{
+  const NodeID owner = 1;
+  bool poisoned = true;
+  DeferredOperation waiter_one;
+  DeferredOperation waiter_two;
+  GenEventImpl event(event_notifier, event_comm);
+  event.init(ID::make_event(0, 0, 0), owner);
+
+  EXPECT_TRUE(event.add_waiter(1, &waiter_one));
+  EXPECT_EQ(event.lagging_view.get(), nullptr);
+  EXPECT_TRUE(event.add_waiter(2, &waiter_two));
+  ASSERT_NE(event.lagging_view.get(), nullptr);
+
+  event.trigger(1, 0, false /*!poisoned*/, TimeLimit());
+
+  EXPECT_TRUE(waiter_one.triggered);
+  EXPECT_FALSE(waiter_two.triggered);
+  EXPECT_FALSE(event.current_local_waiters.empty());
+  EXPECT_EQ(event.lagging_view.get(), nullptr);
+
+  event.trigger(2, 0, false /*!poisoned*/, TimeLimit());
+
+  EXPECT_TRUE(waiter_two.triggered);
+  EXPECT_TRUE(event.has_triggered(2, poisoned));
+  EXPECT_FALSE(poisoned);
+  EXPECT_EQ(event.lagging_view.get(), nullptr);
 }

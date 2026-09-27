@@ -374,7 +374,7 @@ namespace Realm {
     size_t num_nodes;
 
     DynamicTable<LocalEventTableAllocator> local_events{
-        GenEventImpl::GenEventImplAllocator(&event_triggerer)};
+        GenEventImpl::GenEventImplAllocator(&event_triggerer, &event_communicator)};
     LocalEventTableAllocator::FreeList *local_event_free_list{nullptr};
     BarrierTableAllocator::FreeList *local_barrier_free_list{nullptr};
     ReservationTableAllocator::FreeList *local_reservation_free_list{nullptr};
@@ -410,6 +410,8 @@ namespace Realm {
     BackgroundWorkManager bgwork;
     IncomingMessageManager *message_manager;
     EventTriggerNotifier event_triggerer;
+    // shared by every GenEventImpl on this node (see GenEventImplAllocator)
+    EventCommunicator event_communicator;
     CopyAnalyzer copy_analyzer;
 
     OperationTable optable;
