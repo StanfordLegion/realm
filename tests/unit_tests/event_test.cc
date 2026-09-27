@@ -968,3 +968,180 @@ TEST_F(GenEventTest, ExternalTimedWaitExpiresThenSucceeds)
   EXPECT_FALSE(poisoned);
   EXPECT_EQ(event.external_waiter_sync.get(), sync);
 }
+
+// Waiters for generations beyond the next one and the outcomes of locally-triggered
+// generations live in a lazily-allocated "lagging view" state that only non-owners
+// need.  Owner-side operations must never create it, and looking for a waiter that was
+// never registered must not create it either (remove_waiter used to insert an empty
+// list through operator[]).
+TEST_F(GenEventTest, LaggingViewNeverAllocatedForOwner)
+{
+  const NodeID owner = 0;
+  const GenEventImpl::gen_t trigger_gen = 1;
+  bool poisoned = false;
+  DeferredOperation waiter;
+  DeferredOperation absent;
+  GenEventImpl event(event_notifier, event_comm);
+  event.init(ID::make_event(0, 0, 0), owner);
+  EXPECT_EQ(event.lagging_view.get(), nullptr);
+
+  EXPECT_TRUE(event.add_waiter(trigger_gen, &waiter));
+  EXPECT_EQ(event.lagging_view.get(), nullptr);
+  EXPECT_FALSE(event.remove_waiter(trigger_gen + 3, &absent));
+  EXPECT_EQ(event.lagging_view.get(), nullptr);
+
+  event.trigger(trigger_gen, 0, false /*!poisoned*/, TimeLimit());
+
+  EXPECT_TRUE(waiter.triggered);
+  EXPECT_TRUE(event.has_triggered(trigger_gen, poisoned));
+  EXPECT_FALSE(poisoned);
+  EXPECT_EQ(event.lagging_view.get(), nullptr);
+}
+
+// A waiter for a generation past the next one allocates the state; the owner's update
+// wakes the waiter and, with nothing left to track, releases the state again.
+TEST_F(GenEventTest, LaggingViewFutureWaiterReleasedByUpdate)
+{
+  const NodeID owner = 1;
+  const GenEventImpl::gen_t future_gen = 3;
+  bool poisoned = true;
+  DeferredOperation waiter;
+  GenEventImpl event(event_notifier, event_comm);
+  event.init(ID::make_event(0, 0, 0), owner);
+
+  EXPECT_TRUE(event.add_waiter(future_gen, &waiter));
+  ASSERT_NE(event.lagging_view.get(), nullptr);
+  EXPECT_EQ(event.lagging_view->future_local_waiters.count(future_gen), 1u);
+  EXPECT_TRUE(event.lagging_view->local_triggers.empty());
+  EXPECT_EQ(event_comm->sent_subscription_count, 1);
+  EXPECT_FALSE(waiter.triggered);
+  EXPECT_FALSE(event.has_triggered(future_gen, poisoned));
+
+  event.process_update(future_gen, 0, 0, TimeLimit());
+
+  EXPECT_TRUE(waiter.triggered);
+  EXPECT_TRUE(event.has_triggered(future_gen, poisoned));
+  EXPECT_FALSE(poisoned);
+  EXPECT_EQ(event.lagging_view.get(), nullptr);
+}
+
+// Removing the last future waiter releases the state, and a second removal of the same
+// waiter reports failure without recreating it.
+TEST_F(GenEventTest, LaggingViewReleasedWhenFutureWaiterRemoved)
+{
+  const NodeID owner = 1;
+  const GenEventImpl::gen_t future_gen = 3;
+  DeferredOperation waiter;
+  GenEventImpl event(event_notifier, event_comm);
+  event.init(ID::make_event(0, 0, 0), owner);
+
+  EXPECT_TRUE(event.add_waiter(future_gen, &waiter));
+  ASSERT_NE(event.lagging_view.get(), nullptr);
+
+  EXPECT_TRUE(event.remove_waiter(future_gen, &waiter));
+  EXPECT_EQ(event.lagging_view.get(), nullptr);
+  EXPECT_FALSE(event.remove_waiter(future_gen, &waiter));
+  EXPECT_EQ(event.lagging_view.get(), nullptr);
+  EXPECT_FALSE(waiter.triggered);
+}
+
+// A non-owner that poisons a generation ahead of its view records it as a local trigger
+// so has_triggered, add_waiter and subscribe answer consistently until the owner's
+// update confirms the poison, at which point the state is released.
+TEST_F(GenEventTest, LaggingViewPoisonedLocalTriggerReleasedByUpdate)
+{
+  const NodeID owner = 1;
+  const GenEventImpl::gen_t trigger_gen = 3;
+  bool poisoned = false;
+  DeferredOperation late_waiter;
+  GenEventImpl event(event_notifier, event_comm);
+  event.init(ID::make_event(0, 0, 0), owner);
+
+  event.trigger(trigger_gen, 0, true /*poisoned*/, TimeLimit());
+
+  ASSERT_NE(event.lagging_view.get(), nullptr);
+  EXPECT_TRUE(event.lagging_view->future_local_waiters.empty());
+  EXPECT_EQ(event.lagging_view->local_triggers.count(trigger_gen), 1u);
+  EXPECT_TRUE(event.has_local_triggers);
+  EXPECT_EQ(event_comm->sent_trigger_count, 1);
+  EXPECT_TRUE(event_comm->last_trigger_poisoned);
+  // the trigger subscribed so that the owner's confirmation arrives
+  EXPECT_EQ(event_comm->sent_subscription_count, 1);
+  EXPECT_TRUE(event.has_triggered(trigger_gen, poisoned));
+  EXPECT_TRUE(poisoned);
+  // a late waiter is triggered immediately with the recorded poison
+  EXPECT_TRUE(event.add_waiter(trigger_gen, &late_waiter));
+  EXPECT_TRUE(late_waiter.triggered);
+  // and the local trigger counts as "already triggered" for subscribe()
+  event.gen_subscribed.store(0);
+  event.subscribe(trigger_gen);
+  EXPECT_EQ(event_comm->sent_subscription_count, 1);
+
+  GenEventImpl::gen_t poisoned_gens[] = {trigger_gen};
+  event.process_update(trigger_gen, poisoned_gens, 1, TimeLimit());
+
+  EXPECT_EQ(event.lagging_view.get(), nullptr);
+  EXPECT_FALSE(event.has_local_triggers);
+  poisoned = false;
+  EXPECT_TRUE(event.has_triggered(trigger_gen, poisoned));
+  EXPECT_TRUE(poisoned);
+}
+
+// A local trigger ahead of the view wakes the future waiters registered for it while
+// keeping the state alive for the trigger record; the owner's update then releases it.
+TEST_F(GenEventTest, LaggingViewLocalTriggerWakesFutureWaiter)
+{
+  const NodeID owner = 1;
+  const GenEventImpl::gen_t trigger_gen = 3;
+  bool poisoned = true;
+  DeferredOperation waiter;
+  GenEventImpl event(event_notifier, event_comm);
+  event.init(ID::make_event(0, 0, 0), owner);
+
+  EXPECT_TRUE(event.add_waiter(trigger_gen, &waiter));
+  event.trigger(trigger_gen, 0, false /*!poisoned*/, TimeLimit());
+
+  EXPECT_TRUE(waiter.triggered);
+  ASSERT_NE(event.lagging_view.get(), nullptr);
+  EXPECT_TRUE(event.lagging_view->future_local_waiters.empty());
+  EXPECT_EQ(event.lagging_view->local_triggers.count(trigger_gen), 1u);
+  EXPECT_TRUE(event.has_triggered(trigger_gen, poisoned));
+  EXPECT_FALSE(poisoned);
+
+  event.process_update(trigger_gen, 0, 0, TimeLimit());
+
+  EXPECT_EQ(event.lagging_view.get(), nullptr);
+  EXPECT_FALSE(event.has_local_triggers);
+}
+
+// Triggering the very next generation promotes the future waiters for the generation
+// after it to the current list; if that empties the state (no poison to record) it is
+// released even though waiters remain on the event.
+TEST_F(GenEventTest, LaggingViewReleasedWhenFutureListBecomesCurrent)
+{
+  const NodeID owner = 1;
+  bool poisoned = true;
+  DeferredOperation waiter_one;
+  DeferredOperation waiter_two;
+  GenEventImpl event(event_notifier, event_comm);
+  event.init(ID::make_event(0, 0, 0), owner);
+
+  EXPECT_TRUE(event.add_waiter(1, &waiter_one));
+  EXPECT_EQ(event.lagging_view.get(), nullptr);
+  EXPECT_TRUE(event.add_waiter(2, &waiter_two));
+  ASSERT_NE(event.lagging_view.get(), nullptr);
+
+  event.trigger(1, 0, false /*!poisoned*/, TimeLimit());
+
+  EXPECT_TRUE(waiter_one.triggered);
+  EXPECT_FALSE(waiter_two.triggered);
+  EXPECT_FALSE(event.current_local_waiters.empty());
+  EXPECT_EQ(event.lagging_view.get(), nullptr);
+
+  event.trigger(2, 0, false /*!poisoned*/, TimeLimit());
+
+  EXPECT_TRUE(waiter_two.triggered);
+  EXPECT_TRUE(event.has_triggered(2, poisoned));
+  EXPECT_FALSE(poisoned);
+  EXPECT_EQ(event.lagging_view.get(), nullptr);
+}

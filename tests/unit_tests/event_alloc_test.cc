@@ -23,7 +23,8 @@
 // path is therefore multiplied by millions of event slots on large runs.  Two such
 // allocations have been removed: a default-constructed std::deque in the EventMerger
 // (~576 bytes of heap per event under libstdc++, more than half of node 0's
-// event-table memory at 128 nodes) and a private EventCommunicator per event.
+// event-table memory at 128 nodes), a private EventCommunicator per event, and two
+// std::maps that MSVC's STL allocates sentinel nodes for on default construction.
 //
 // The test replaces the global operator new/delete with counting versions, which is
 // why it lives in its own executable rather than in realm_unit_tests.
@@ -95,6 +96,17 @@ namespace {
 
     int sent_trigger_count = 0;
     bool last_trigger_poisoned = false;
+  };
+
+  class CountingWaiter : public EventWaiter {
+  public:
+    virtual void event_triggered(bool poisoned, TimeLimit work_until)
+    {
+      triggered = true;
+    }
+    virtual void print(std::ostream &os) const {}
+    virtual Event get_finish_event(void) const { return Event::NO_EVENT; }
+    bool triggered = false;
   };
 
   class GenEventImplAllocTest : public ::testing::Test {
@@ -266,4 +278,32 @@ TEST_F(GenEventImplAllocTest, ExternalWaitAllocatesSyncPairOnce)
   EXPECT_EQ(second_wait, 0);
   EXPECT_EQ(after_trigger, 0);
   std::printf("[   INFO   ] first external wait cost %ld allocation(s)\n", first_wait);
+}
+
+// The state for generations beyond a non-owner's view is allocated only while it is
+// needed and released as soon as the view catches up, so an event pays for it only
+// while it is actually lagging.
+TEST_F(GenEventImplAllocTest, LaggingViewAllocatedOnlyWhileLagging)
+{
+  const NodeID owner = 1;
+  const GenEventImpl::gen_t future_gen = 3;
+  CountingWaiter waiter;
+  GenEventImpl event(event_notifier, event_comm);
+  event.init(ID::make_event(0, 0, 0), owner);
+
+  long while_lagging = -1;
+  {
+    AllocationScope scope;
+    event.add_waiter(future_gen, &waiter);
+    while_lagging = scope.count();
+  }
+  EXPECT_GE(while_lagging, 1);
+  EXPECT_NE(event.lagging_view.get(), nullptr);
+
+  event.process_update(future_gen, 0, 0, TimeLimit());
+
+  EXPECT_TRUE(waiter.triggered);
+  EXPECT_EQ(event.lagging_view.get(), nullptr);
+  std::printf("[   INFO   ] lagging non-owner waiter cost %ld allocation(s)\n",
+              while_lagging);
 }

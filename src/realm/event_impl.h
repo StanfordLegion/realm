@@ -346,8 +346,8 @@ namespace Realm {
     // the flags below are grouped here so that they pack into the word above
     //  instead of each occupying its own padded 8 bytes - every byte of a
     //  GenEventImpl is multiplied by millions of event slots on large runs
-    // tracks whether local_triggers is non-empty - written under the mutex, but
-    //  also read without it as an early-out in has_triggered()
+    // tracks whether lagging_view holds any local triggers - written under the
+    //  mutex, but also read without it as an early-out in has_triggered()
     bool has_local_triggers = false;
     // external waiters on this node are notified via a condition variable
     bool has_external_waiters = false;
@@ -355,12 +355,10 @@ namespace Realm {
     //  poisoned merge and the last precondition
     bool free_list_insertion_delayed = false;
 
-    // local waiters are tracked by generation - an easily-accessed list is used
-    //  for the "current" generation, whereas a map-by-generation-id is used for
-    //  "future" generations (i.e. ones ahead of what we've heard about if we're
-    //  not the owner)
+    // local waiters for the "current" generation (the one after 'generation') -
+    //  waiters for later generations live in the lazily-allocated lagging-view
+    //  state below
     EventWaiter::EventWaiterList current_local_waiters;
-    std::map<gen_t, EventWaiter::EventWaiterList> future_local_waiters;
 
     // external waiters block on a kernel mutex/condvar pair (a kernel mutex is
     //  needed for timedwait) - the pair is allocated by the first external wait
@@ -397,11 +395,33 @@ namespace Realm {
     //  any space
     gen_t *poisoned_generations = 0;
 
-    // local triggerings - if we're not the owner, but we've triggered/poisoned events,
-    //  we need to give consistent answers for those generations, so remember what we've
-    //  done until our view of the distributed event catches up
-    // value stored in map is whether generation was poisoned
-    std::map<gen_t, bool> local_triggers;
+    // state that only a non-owner needs, and only while it is dealing with
+    //  generations beyond its current view of the event: waiters for generations
+    //  past the next one, and the outcomes of generations this node triggered
+    //  itself before the owner has confirmed them.  Owner-side events never touch
+    //  it and non-owners only need it briefly, so it is allocated on first use and
+    //  released as soon as both maps are empty again - embedding the two maps cost
+    //  96 bytes per event under libstdc++ and, under MSVC's STL, two heap
+    //  allocations per event for their sentinel nodes
+    struct LaggingViewState {
+      // local waiters for "future" generations (i.e. ones ahead of what we've
+      //  heard about from the owner), by generation
+      std::map<gen_t, EventWaiter::EventWaiterList> future_local_waiters;
+      // local triggerings - if we've triggered/poisoned generations ourselves, we
+      //  need to give consistent answers for them until our view of the
+      //  distributed event catches up - the value is whether the generation was
+      //  poisoned
+      std::map<gen_t, bool> local_triggers;
+    };
+    // protected by 'mutex' - released whenever both maps become empty
+    std::unique_ptr<LaggingViewState> lagging_view;
+    // caller must hold 'mutex' - allocates the state on first use
+    LaggingViewState &get_lagging_view(void);
+    // caller must hold 'mutex' - releases the state if both maps are empty
+    void release_lagging_view_if_empty(void);
+    // caller must hold 'mutex' - reports whether this node triggered 'gen' itself
+    //  and, if so, whether it was poisoned
+    bool find_local_trigger(gen_t gen, bool &poisoned) const;
 
     friend class EventMerger;
   };
