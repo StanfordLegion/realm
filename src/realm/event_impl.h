@@ -286,7 +286,7 @@ namespace Realm {
     // caller.
     Operation *get_trigger_op(gen_t gen);
 
-    // constructs the GenEventImpls in a DynamicTable leaf - every event shares the
+    // initializes the GenEventImpls in a DynamicTable leaf - every event shares the
     //  runtime's single EventTriggerNotifier and EventCommunicator, neither of
     //  which is owned by the events
     struct GenEventImplAllocator {
@@ -300,10 +300,13 @@ namespace Realm {
         , communicator(c)
       {}
 
+      // the leaf's element array has already default-constructed the event, so
+      //  just hand it the shared notifier and communicator and initialize it
+      //  rather than destroying and rebuilding it
       void construct(GenEventImpl *storage, ID id, unsigned owner) const
       {
-        storage->~GenEventImpl();
-        new(storage) GenEventImpl(triggerer, communicator);
+        storage->event_triggerer = triggerer;
+        storage->event_comm = communicator;
         storage->init(id, owner);
       }
     };

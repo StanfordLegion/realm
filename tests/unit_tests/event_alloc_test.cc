@@ -130,9 +130,8 @@ void operator delete(void *ptr, std::size_t) noexcept { std::free(ptr); }
 void operator delete[](void *ptr, std::size_t) noexcept { std::free(ptr); }
 
 // Mirror a DynamicTable leaf exactly: the leaf's array default-constructs its elements,
-// then GenEventImplAllocator::construct rebuilds each one with the runtime's shared
-// notifier and communicator and initializes it.  Nothing in that path may touch the
-// heap.
+// then GenEventImplAllocator::construct hands each one the runtime's shared notifier
+// and communicator and initializes it.  Nothing in that path may touch the heap.
 TEST_F(GenEventImplAllocTest, ConstructionDoesNotAllocate)
 {
   // one remote lookaside leaf's worth of events
