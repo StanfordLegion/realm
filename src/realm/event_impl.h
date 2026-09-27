@@ -286,19 +286,24 @@ namespace Realm {
     // caller.
     Operation *get_trigger_op(gen_t gen);
 
+    // constructs the GenEventImpls in a DynamicTable leaf - every event shares the
+    //  runtime's single EventTriggerNotifier and EventCommunicator, neither of
+    //  which is owned by the events
     struct GenEventImplAllocator {
       EventTriggerNotifier *triggerer{nullptr};
+      EventCommunicator *communicator{nullptr};
 
       GenEventImplAllocator(void) = default;
 
-      GenEventImplAllocator(EventTriggerNotifier *t)
+      GenEventImplAllocator(EventTriggerNotifier *t, EventCommunicator *c)
         : triggerer(t)
+        , communicator(c)
       {}
 
       void construct(GenEventImpl *storage, ID id, unsigned owner) const
       {
         storage->~GenEventImpl();
-        new(storage) GenEventImpl(triggerer, new EventCommunicator());
+        new(storage) GenEventImpl(triggerer, communicator);
         storage->init(id, owner);
       }
     };
@@ -320,7 +325,12 @@ namespace Realm {
     EventMerger merger;
 
     EventTriggerNotifier *event_triggerer{nullptr};
-    std::unique_ptr<EventCommunicator> event_comm{nullptr};
+    // not owned - the runtime holds a single stateless EventCommunicator that all
+    //  events share (it is reached through a pointer only so that tests can
+    //  substitute a mock), so an event must never heap-allocate one of its own:
+    //  GenEventImpls are materialized in bulk by DynamicTable leaves and any
+    //  per-event allocation is multiplied by millions of event slots on large runs
+    EventCommunicator *event_comm{nullptr};
 
     // everything below here protected by this mutex
     Mutex mutex;

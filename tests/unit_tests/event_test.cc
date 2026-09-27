@@ -120,6 +120,7 @@ protected:
 #endif
 
     delete event_notifier;
+    delete event_comm;
   }
 
   EventTestCommunicator *event_comm;
@@ -306,7 +307,6 @@ TEST_F(GenEventTest, RemoteSubscribeNextGen)
 {
   const NodeID owner = 1;
   const GenEventImpl::gen_t subscribe_gen = 2;
-  EventTestCommunicator *event_comm = new EventTestCommunicator();
   GenEventImpl event(event_notifier, event_comm);
 
   event.init(ID::make_event(0, 0, 0), owner);
@@ -319,7 +319,6 @@ TEST_F(GenEventTest, RemoteSubscribeCurrGen)
 {
   const NodeID owner = 1;
   const GenEventImpl::gen_t subscribe_gen = 1;
-  EventTestCommunicator *event_comm = new EventTestCommunicator();
   GenEventImpl event(event_notifier, event_comm);
 
   event.init(ID::make_event(0, 0, 0), owner);
@@ -514,7 +513,8 @@ TEST_F(GenEventTest, RemoteTriggerOpReplacedBeforeLocalUpdate)
   bool poisoned = false;
   bool destroyed_one = false;
   bool destroyed_two = false;
-  RespawningEventCommunicator *comm = new RespawningEventCommunicator();
+  RespawningEventCommunicator respawning_comm;
+  RespawningEventCommunicator *comm = &respawning_comm;
   GenEventImpl event(event_notifier, comm);
   event.init(ID::make_event(0, 0, 0), owner);
   comm->event_impl = &event;
@@ -742,8 +742,8 @@ TEST_F(GenEventTest, EventMergerWideMergeIncrementalWaitersStayValid)
   bool poisoned = false;
   GenEventImpl event(event_notifier, event_comm);
   event.init(ID::make_event(0, 0, 0), owner);
-  EventTestCommunicator *source_comm = new EventTestCommunicator();
-  GenEventImpl source(event_notifier, source_comm);
+  EventTestCommunicator source_comm;
+  GenEventImpl source(event_notifier, &source_comm);
   source.init(ID::make_event(0, 1, 0), owner);
   event.merger.prepare_merger(event.make_event(trigger_gen), false /*ignore faults*/);
 

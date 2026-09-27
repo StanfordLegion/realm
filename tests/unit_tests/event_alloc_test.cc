@@ -19,10 +19,11 @@
 //
 // Realm materializes GenEventImpls in bulk: 2^16 per leaf of a node's local event
 // table and 2^7 per leaf of the lookaside tables that proxy remote nodes' events, and
-// leaves are never freed while the runtime is up.  Any per-object allocation in the
-// constructor is therefore multiplied by millions of event slots on large runs (a
-// default-constructed std::deque in the EventMerger once cost ~576 bytes of heap per
-// event under libstdc++, more than half of node 0's event-table memory at 128 nodes).
+// leaves are never freed while the runtime is up.  Any per-object allocation in that
+// path is therefore multiplied by millions of event slots on large runs.  Two such
+// allocations have been removed: a default-constructed std::deque in the EventMerger
+// (~576 bytes of heap per event under libstdc++, more than half of node 0's
+// event-table memory at 128 nodes) and a private EventCommunicator per event.
 //
 // The test replaces the global operator new/delete with counting versions, which is
 // why it lives in its own executable rather than in realm_unit_tests.
@@ -98,7 +99,11 @@ namespace {
 
   class GenEventImplAllocTest : public ::testing::Test {
   protected:
-    void SetUp() override { event_notifier = new EventTriggerNotifier(); }
+    void SetUp() override
+    {
+      event_notifier = new EventTriggerNotifier();
+      event_comm = new CountingEventCommunicator();
+    }
 
     void TearDown() override
     {
@@ -106,9 +111,13 @@ namespace {
       event_notifier->shutdown_work_item();
 #endif
       delete event_notifier;
+      delete event_comm;
     }
 
+    // shared by every event in a test, just as the runtime shares its single
+    // notifier and communicator across all of its events
     EventTriggerNotifier *event_notifier = nullptr;
+    CountingEventCommunicator *event_comm = nullptr;
   };
 
 } // namespace
@@ -120,28 +129,26 @@ void operator delete[](void *ptr) noexcept { std::free(ptr); }
 void operator delete(void *ptr, std::size_t) noexcept { std::free(ptr); }
 void operator delete[](void *ptr, std::size_t) noexcept { std::free(ptr); }
 
-// Mirror a DynamicTable leaf: placement-construct a batch of GenEventImpls into raw
-// storage and initialize them.  Nothing in that path may touch the heap.
+// Mirror a DynamicTable leaf exactly: the leaf's array default-constructs its elements,
+// then GenEventImplAllocator::construct rebuilds each one with the runtime's shared
+// notifier and communicator and initializes it.  Nothing in that path may touch the
+// heap.
 TEST_F(GenEventImplAllocTest, ConstructionDoesNotAllocate)
 {
   // one remote lookaside leaf's worth of events
   constexpr size_t num_events = 1 << 7;
-  // the communicators are owned by the events - create them outside the window
-  std::vector<CountingEventCommunicator *> comms(num_events);
-  for(CountingEventCommunicator *&comm : comms) {
-    comm = new CountingEventCommunicator();
-  }
   using Storage = std::aligned_storage_t<sizeof(GenEventImpl), alignof(GenEventImpl)>;
   std::vector<Storage> storage(num_events);
   GenEventImpl *events = reinterpret_cast<GenEventImpl *>(storage.data());
+  GenEventImpl::GenEventImplAllocator allocator(event_notifier, event_comm);
 
   long count = -1;
   long bytes = -1;
   {
     AllocationScope scope;
     for(size_t i = 0; i < num_events; i++) {
-      new(&events[i]) GenEventImpl(event_notifier, comms[i]);
-      events[i].init(ID::make_event(0, i, 0), 0);
+      new(&events[i]) GenEventImpl();
+      allocator.construct(&events[i], ID::make_event(0, i, 0), 0);
     }
     count = scope.count();
     bytes = scope.bytes();
@@ -149,13 +156,19 @@ TEST_F(GenEventImplAllocTest, ConstructionDoesNotAllocate)
 
   EXPECT_EQ(count, 0) << "constructing " << num_events << " GenEventImpls allocated "
                       << bytes << " bytes";
+  // every event refers to the shared notifier and communicator rather than owning
+  // its own
+  for(size_t i = 0; i < num_events; i++) {
+    EXPECT_EQ(events[i].event_triggerer, event_notifier);
+    EXPECT_EQ(events[i].event_comm, static_cast<EventCommunicator *>(event_comm));
+  }
   std::printf("[   INFO   ] sizeof(GenEventImpl)=%zu sizeof(EventMerger)=%zu "
               "sizeof(MergeEventPrecondition)=%zu\n",
               sizeof(GenEventImpl), sizeof(EventMerger),
               sizeof(EventMerger::MergeEventPrecondition));
 
   for(size_t i = 0; i < num_events; i++) {
-    events[i].~GenEventImpl(); // also frees comms[i]
+    events[i].~GenEventImpl();
   }
 }
 
@@ -194,7 +207,7 @@ TEST_F(GenEventImplAllocTest, OnlyOverflowMergesAllocate)
 {
   const NodeID owner = 1;
   bool poisoned = false;
-  GenEventImpl event(event_notifier, new CountingEventCommunicator());
+  GenEventImpl event(event_notifier, event_comm);
   event.init(ID::make_event(0, 0, 0), owner);
 
   EXPECT_EQ(allocations_to_arm_merge(event, 1, EventMerger::MAX_INLINE_PRECONDITIONS), 0);

@@ -1964,7 +1964,8 @@ namespace Realm {
          << BarrierImpl::BARRIER_TIMESTAMP_NODEID_SHIFT) +
         1);
 
-    GenEventImpl::GenEventImplAllocator event_allocator(&event_triggerer);
+    GenEventImpl::GenEventImplAllocator event_allocator(&event_triggerer,
+                                                        &event_communicator);
 
     nodes = new Node[Network::max_node_id + 1];
     num_nodes = Network::max_node_id + 1;
