@@ -763,8 +763,11 @@ TEST_F(GenEventTest, EventMergerWideMergeIncrementalWaitersStayValid)
   EXPECT_EQ(first_overflow->merger, &event.merger);
   EXPECT_FALSE(event.has_triggered(trigger_gen, poisoned));
 
-  // wakes every precondition through the address it was registered with
-  source.trigger(trigger_gen, 0, false /*!poisoned*/, TimeLimit::responsive());
+  // wakes every precondition through the address it was registered with - use an
+  // unbounded time limit so the notifier fires all of them synchronously here rather
+  // than deferring the tail (responsive() is a 10us budget) to a background worker
+  // that unit tests never run
+  source.trigger(trigger_gen, 0, false /*!poisoned*/, TimeLimit());
 
   EXPECT_FALSE(event.has_triggered(trigger_gen, poisoned));
   EXPECT_EQ(event_comm->sent_trigger_count, 0);
