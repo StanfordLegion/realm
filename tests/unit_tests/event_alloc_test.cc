@@ -223,3 +223,47 @@ TEST_F(GenEventImplAllocTest, OnlyOverflowMergesAllocate)
   EXPECT_TRUE(event.has_triggered(3, poisoned));
   EXPECT_FALSE(event.merger.is_active());
 }
+
+// The external-wait mutex/condvar pair is allocated by the first external wait on an
+// event and reused afterwards, so an event that is never waited on from a foreign
+// thread pays nothing for it.
+TEST_F(GenEventImplAllocTest, ExternalWaitAllocatesSyncPairOnce)
+{
+  const NodeID owner = 0;
+  const GenEventImpl::gen_t trigger_gen = 1;
+  bool poisoned = true;
+  GenEventImpl event(event_notifier, event_comm);
+  event.init(ID::make_event(0, 0, 0), owner);
+
+  long first_wait = -1;
+  long second_wait = -1;
+  long after_trigger = -1;
+  bool first_ok = true;
+  bool second_ok = true;
+  bool third_ok = false;
+  {
+    AllocationScope scope;
+    first_ok = event.external_timedwait(trigger_gen, poisoned, 1000000 /*1 ms*/);
+    first_wait = scope.count();
+  }
+  {
+    AllocationScope scope;
+    second_ok = event.external_timedwait(trigger_gen, poisoned, 1000000 /*1 ms*/);
+    second_wait = scope.count();
+  }
+  event.trigger(trigger_gen, 0, false /*!poisoned*/, TimeLimit::responsive());
+  {
+    AllocationScope scope;
+    third_ok = event.external_timedwait(trigger_gen, poisoned, 0);
+    after_trigger = scope.count();
+  }
+
+  EXPECT_FALSE(first_ok);
+  EXPECT_FALSE(second_ok);
+  EXPECT_TRUE(third_ok);
+  EXPECT_FALSE(poisoned);
+  EXPECT_GE(first_wait, 1);
+  EXPECT_EQ(second_wait, 0);
+  EXPECT_EQ(after_trigger, 0);
+  std::printf("[   INFO   ] first external wait cost %ld allocation(s)\n", first_wait);
+}

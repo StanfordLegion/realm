@@ -1092,7 +1092,6 @@ namespace Realm {
 
   GenEventImpl::GenEventImpl(void)
     : merger(this)
-    , external_waiter_condvar(external_waiter_mutex)
   {}
 
   GenEventImpl::GenEventImpl(EventTriggerNotifier *_event_triggerer,
@@ -1100,7 +1099,6 @@ namespace Realm {
     : merger(this)
     , event_triggerer(_event_triggerer)
     , event_comm(_event_comm)
-    , external_waiter_condvar(external_waiter_mutex)
   {}
 
   GenEventImpl::~GenEventImpl(void)
@@ -1571,9 +1569,11 @@ namespace Realm {
       // external waiters need to be signalled inside the lock
       if(has_external_waiters) {
         has_external_waiters = false;
-        // also need external waiter mutex
-        AutoLock<KernelMutex> al2(external_waiter_mutex);
-        external_waiter_condvar.broadcast();
+        // also need external waiter mutex - the pair was allocated before the
+        //  flag was set
+        assert(external_waiter_sync);
+        AutoLock<KernelMutex> al2(external_waiter_sync->mutex);
+        external_waiter_sync->condvar.broadcast();
       }
     }
 
@@ -1707,6 +1707,16 @@ namespace Realm {
     }
   }
 
+  GenEventImpl::ExternalWaiterSync &GenEventImpl::get_external_waiter_sync(void)
+  {
+    // caller holds 'mutex' - the pair is created by the first external wait on
+    //  this event and then lives as long as the event does
+    if(!external_waiter_sync) {
+      external_waiter_sync = std::make_unique<ExternalWaiterSync>();
+    }
+    return *external_waiter_sync;
+  }
+
   void GenEventImpl::external_wait(gen_t gen_needed, bool &poisoned)
   {
     // if the event is remote, make sure we've subscribed
@@ -1718,15 +1728,15 @@ namespace Realm {
 
       // wait until the generation has advanced far enough
       while(gen_needed > generation.load_acquire()) {
+        ExternalWaiterSync &sync = get_external_waiter_sync();
         has_external_waiters = true;
-        // must wait on external_waiter_condvar with external_waiter_mutex
-        //  but NOT with base mutex - hand-over-hand lock on the way in,
-        //  and then release external_waiter mutex before retaking main
-        //  mutex
-        external_waiter_mutex.lock();
+        // must wait on the condvar with its kernel mutex but NOT with base
+        //  mutex - hand-over-hand lock on the way in, and then release the
+        //  kernel mutex before retaking main mutex
+        sync.mutex.lock();
         mutex.unlock();
-        external_waiter_condvar.wait();
-        external_waiter_mutex.unlock();
+        sync.condvar.wait();
+        sync.mutex.unlock();
         mutex.lock();
       }
 
@@ -1746,17 +1756,17 @@ namespace Realm {
         long long now = Clock::current_time_in_nanoseconds();
         if(now >= deadline)
           return false; // trigger has not occurred
+        ExternalWaiterSync &sync = get_external_waiter_sync();
         has_external_waiters = true;
         // we don't actually care what timedwait returns - we'll recheck
         //  the generation ourselves
-        // must wait on external_waiter_condvar with external_waiter_mutex
-        //  but NOT with base mutex - hand-over-hand lock on the way in,
-        //  and then release external_waiter mutex before retaking main
-        //  mutex
-        external_waiter_mutex.lock();
+        // must wait on the condvar with its kernel mutex but NOT with base
+        //  mutex - hand-over-hand lock on the way in, and then release the
+        //  kernel mutex before retaking main mutex
+        sync.mutex.lock();
         mutex.unlock();
-        external_waiter_condvar.timedwait(deadline - now);
-        external_waiter_mutex.unlock();
+        sync.condvar.timedwait(deadline - now);
+        sync.mutex.unlock();
         mutex.lock();
       }
 
@@ -1836,9 +1846,11 @@ namespace Realm {
         // external waiters need to be signalled inside the lock
         if(has_external_waiters) {
           has_external_waiters = false;
-          // also need external waiter mutex
-          AutoLock<KernelMutex> al2(external_waiter_mutex);
-          external_waiter_condvar.broadcast();
+          // also need external waiter mutex - the pair was allocated before the
+          //  flag was set
+          assert(external_waiter_sync);
+          AutoLock<KernelMutex> al2(external_waiter_sync->mutex);
+          external_waiter_sync->condvar.broadcast();
         }
       }
 
@@ -1936,9 +1948,11 @@ namespace Realm {
         // external waiters need to be signalled inside the lock
         if(has_external_waiters) {
           has_external_waiters = false;
-          // also need external waiter mutex
-          AutoLock<KernelMutex> al2(external_waiter_mutex);
-          external_waiter_condvar.broadcast();
+          // also need external waiter mutex - the pair was allocated before the
+          //  flag was set
+          assert(external_waiter_sync);
+          AutoLock<KernelMutex> al2(external_waiter_sync->mutex);
+          external_waiter_sync->condvar.broadcast();
         }
       }
 

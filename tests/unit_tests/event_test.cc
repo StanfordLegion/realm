@@ -18,6 +18,8 @@
 #include "realm/event_impl.h"
 #include "realm/activemsg.h"
 #include "realm/operation.h"
+#include <atomic>
+#include <thread>
 #include <tuple>
 #include <gtest/gtest.h>
 
@@ -863,4 +865,103 @@ TEST_F(GenEventTest, EventMergerWideMergeRecyclesAcrossGenerations)
   EXPECT_EQ(event_comm->sent_trigger_count, 3);
   EXPECT_FALSE(event.merger.is_active());
   // the merger's destructor asserts that the overflow storage was released
+}
+
+namespace {
+  // Spin until a foreign thread has registered itself as an external waiter on 'event'.
+  void wait_for_external_waiter(GenEventImpl &event)
+  {
+    for(;;) {
+      {
+        AutoLock<> al(event.mutex);
+        if(event.has_external_waiters) {
+          return;
+        }
+      }
+      std::this_thread::yield();
+    }
+  }
+} // namespace
+
+// External (non-Realm-thread) waits block on a kernel mutex/condvar pair that an event
+// allocates on the first such wait instead of embedding in every event.  Wait from a
+// foreign thread on an event this node owns and trigger it from the test thread, which
+// exercises the broadcast in the owner's trigger path.
+TEST_F(GenEventTest, ExternalWaitFromForeignThreadLocalOwner)
+{
+  const NodeID owner = 0;
+  const GenEventImpl::gen_t trigger_gen = 1;
+  GenEventImpl event(event_notifier, event_comm);
+  event.init(ID::make_event(0, 0, 0), owner);
+  EXPECT_EQ(event.external_waiter_sync.get(), nullptr);
+
+  bool poisoned = true;
+  std::atomic<bool> woke{false};
+  std::thread waiter([&]() {
+    event.external_wait(trigger_gen, poisoned);
+    woke.store(true);
+  });
+
+  wait_for_external_waiter(event);
+  EXPECT_NE(event.external_waiter_sync.get(), nullptr);
+  EXPECT_FALSE(woke.load());
+
+  event.trigger(trigger_gen, 0, false /*!poisoned*/, TimeLimit::responsive());
+  waiter.join();
+
+  EXPECT_TRUE(woke.load());
+  EXPECT_FALSE(poisoned);
+  EXPECT_FALSE(event.has_external_waiters);
+}
+
+// The same from the non-owner side: the external wait subscribes to the owner and is
+// woken by the owner's update message, which exercises the broadcast in process_update.
+TEST_F(GenEventTest, ExternalWaitFromForeignThreadRemoteOwner)
+{
+  const NodeID owner = 1;
+  const GenEventImpl::gen_t trigger_gen = 1;
+  GenEventImpl event(event_notifier, event_comm);
+  event.init(ID::make_event(0, 0, 0), owner);
+
+  bool poisoned = true;
+  std::atomic<bool> woke{false};
+  std::thread waiter([&]() {
+    event.external_wait(trigger_gen, poisoned);
+    woke.store(true);
+  });
+
+  wait_for_external_waiter(event);
+  EXPECT_NE(event.external_waiter_sync.get(), nullptr);
+  EXPECT_FALSE(woke.load());
+
+  event.process_update(trigger_gen, 0, 0, TimeLimit::responsive());
+  waiter.join();
+
+  EXPECT_TRUE(woke.load());
+  EXPECT_FALSE(poisoned);
+  EXPECT_EQ(event_comm->sent_subscription_count, 1);
+  EXPECT_FALSE(event.has_external_waiters);
+}
+
+// A timed external wait that expires leaves the event untriggered, and the mutex/condvar
+// pair it allocated is reused by later waits rather than re-created.
+TEST_F(GenEventTest, ExternalTimedWaitExpiresThenSucceeds)
+{
+  const NodeID owner = 0;
+  const GenEventImpl::gen_t trigger_gen = 1;
+  GenEventImpl event(event_notifier, event_comm);
+  event.init(ID::make_event(0, 0, 0), owner);
+  EXPECT_EQ(event.external_waiter_sync.get(), nullptr);
+
+  bool poisoned = true;
+  EXPECT_FALSE(event.external_timedwait(trigger_gen, poisoned, 1000000 /*1 ms*/));
+  GenEventImpl::ExternalWaiterSync *sync = event.external_waiter_sync.get();
+  EXPECT_NE(sync, nullptr);
+  EXPECT_FALSE(event.has_triggered(trigger_gen, poisoned));
+
+  event.trigger(trigger_gen, 0, false /*!poisoned*/, TimeLimit::responsive());
+
+  EXPECT_TRUE(event.external_timedwait(trigger_gen, poisoned, 0));
+  EXPECT_FALSE(poisoned);
+  EXPECT_EQ(event.external_waiter_sync.get(), sync);
 }

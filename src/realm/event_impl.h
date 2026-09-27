@@ -317,7 +317,6 @@ namespace Realm {
     atomic<gen_t> generation = atomic<gen_t>(0);
     atomic<gen_t> gen_subscribed = atomic<gen_t>(0);
     atomic<int> num_poisoned_generations = atomic<int>(0);
-    bool has_local_triggers = false;
 
     bool is_generation_poisoned(gen_t gen) const; // helper function - linear search
 
@@ -344,6 +343,18 @@ namespace Realm {
     Operation *current_trigger_op = nullptr;
     gen_t current_trigger_op_gen = 0;
 
+    // the flags below are grouped here so that they pack into the word above
+    //  instead of each occupying its own padded 8 bytes - every byte of a
+    //  GenEventImpl is multiplied by millions of event slots on large runs
+    // tracks whether local_triggers is non-empty - written under the mutex, but
+    //  also read without it as an early-out in has_triggered()
+    bool has_local_triggers = false;
+    // external waiters on this node are notified via a condition variable
+    bool has_external_waiters = false;
+    // these resolve a race condition between the early trigger of a
+    //  poisoned merge and the last precondition
+    bool free_list_insertion_delayed = false;
+
     // local waiters are tracked by generation - an easily-accessed list is used
     //  for the "current" generation, whereas a map-by-generation-id is used for
     //  "future" generations (i.e. ones ahead of what we've heard about if we're
@@ -351,11 +362,24 @@ namespace Realm {
     EventWaiter::EventWaiterList current_local_waiters;
     std::map<gen_t, EventWaiter::EventWaiterList> future_local_waiters;
 
-    // external waiters on this node are notifies via a condition variable
-    bool has_external_waiters = false;
-    // use kernel mutex for timedwait functionality
-    KernelMutex external_waiter_mutex;
-    KernelMutex::CondVar external_waiter_condvar;
+    // external waiters block on a kernel mutex/condvar pair (a kernel mutex is
+    //  needed for timedwait) - the pair is allocated by the first external wait
+    //  on the event and then kept for the life of the event: very few events are
+    //  ever waited on from outside a Realm thread, and embedding the pair cost
+    //  136 bytes and two pthread initializations for every event
+    struct ExternalWaiterSync {
+      ExternalWaiterSync(void)
+        : condvar(mutex)
+      {}
+
+      KernelMutex mutex;
+      KernelMutex::CondVar condvar;
+    };
+    // allocated (under 'mutex') before has_external_waiters is first set, so any
+    //  path that sees the flag can rely on the pair existing
+    std::unique_ptr<ExternalWaiterSync> external_waiter_sync;
+    // returns the pair, allocating it on first use - caller must hold 'mutex'
+    ExternalWaiterSync &get_external_waiter_sync(void);
 
     // remote waiters are kept in a bitmask for the current generation - this is
     //  only maintained on the owner, who never has to worry about more than one
@@ -379,9 +403,6 @@ namespace Realm {
     // value stored in map is whether generation was poisoned
     std::map<gen_t, bool> local_triggers;
 
-    // these resolve a race condition between the early trigger of a
-    //  poisoned merge and the last precondition
-    bool free_list_insertion_delayed = false;
     friend class EventMerger;
   };
 }; // namespace Realm
