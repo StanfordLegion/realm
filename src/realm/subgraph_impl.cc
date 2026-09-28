@@ -481,7 +481,8 @@ namespace Realm {
     // any dependency whose target is before the source is resolved by
     //  moving the target to be after everybody
     // takes at most depth (<= N) passes unless there are loops
-    bool converged = false;
+    // An empty definition is trivially sorted (the loop below would not run).
+    bool converged = (total_ops == 0);
     for(unsigned i = 0; !converged && (i < total_ops); i++) {
       converged = true;
       for(std::vector<SubgraphDefinition::Dependency>::const_iterator it =
