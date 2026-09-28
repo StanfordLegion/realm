@@ -52,6 +52,11 @@ namespace Realm {
 
     // TODO: collective construction
 
+    // Destroys the subgraph once wait_on has triggered. The returned event
+    // triggers when destruction is complete, including the release of any
+    // still-running instantiations' resources; it is NO_EVENT if the
+    // subgraph could be destroyed immediately. Instantiating a subgraph
+    // after requesting its destruction is an error.
     Event destroy(Event wait_on = Event::NO_EVENT) const;
 
     Event instantiate(const void *args, size_t arglen, const ProfilingRequestSet &prs,
@@ -252,12 +257,25 @@ namespace Realm {
     enum ExecutionMode
     {
       // Executed by issuing operations within the subgraph as standard
-      // Realm operations, with some optimizations.
+      // Realm operations, with some optimizations. This is the default.
       INTERPRETED,
-      // Executed by compiling the subgraph and executing the operations
-      // through a specialized component of Realm that offers significantly
-      // lower execution overhead at the cost of some restrictions on the
-      // flexibility of operations within the subgraph.
+      // Executed by compiling the subgraph into per-processor schedules
+      // that Realm's task schedulers run directly, with far lower
+      // per-operation overhead. The current implementation is restricted
+      // and create_subgraph fails (fatally) for definitions outside it:
+      //  - tasks only, on LOC_PROC processors of the calling node, with
+      //    priority 0 and no per-task profiling requests; no copies,
+      //    barrier arrivals, reservation acquires/releases, nested
+      //    instantiations, interpolations, or external pre/postconditions;
+      //  - concurrency_mode must be ONE_SHOT or INSTANTIATION_ORDER, and
+      //    INSTANTIATION_ORDER instantiations are executed strictly in
+      //    order of instantiation;
+      //  - instantiate() must not be given profiling requests or external
+      //    pre/postconditions;
+      //  - tasks must not wait on events, spawn other tasks, or query
+      //    their own finish event. Violations are fatal errors.
+      // A poisoned precondition poisons the instantiation's finish event
+      // without running any of its tasks.
       COMPILED,
     };
     ExecutionMode execution_mode;
