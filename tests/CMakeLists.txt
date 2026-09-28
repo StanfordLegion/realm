@@ -93,7 +93,7 @@ endif()
 list(
   APPEND
   REALM_UNIT_TESTS
-  auto_actmsg_test.cc
+  actmsg_fragmentation_test.cc
   fragmented_message_test.cc
   incoming_message_manager_test.cc
   memcpy_channel_test.cc
@@ -101,6 +101,7 @@ list(
   event_test.cc
   path_cache_test.cc
   transfer_utils_test.cc
+  ib_redistribute_test.cc
   address_list_test.cc
   cmdline_parser_test.cc
   sequence_assembler_test.cc
@@ -111,6 +112,7 @@ list(
   repl_heap_test.cc
   nodeset_test.cc
   transfer_iterator_test.cc
+  idindexed_fields_iterator_test.cc
   lowlevel_dma_test.cc
   circ_queue_test.cc
   gather_scatter_test.cc
@@ -122,6 +124,8 @@ list(
   hpp_runtime_test.cc
   hpp_event_test.cc
   key_value_store_test.cc
+  deferred_alloc_test.cc
+  logging_test.cc
 )
 list(TRANSFORM REALM_UNIT_TESTS PREPEND "${REALM_TEST_DIR}/unit_tests/")
 add_executable(realm_unit_tests ${REALM_UNIT_TESTS})
@@ -149,6 +153,7 @@ list(
   c_runtime_version.cc
   c_runtime_attr.cc
   c_affinity.cc
+  best_affinity_test.cc
 )
 list(TRANSFORM REALM_C_UNIT_TESTS PREPEND "${REALM_TEST_DIR}/unit_tests/")
 add_executable(realm_c_unit_tests ${REALM_C_UNIT_TESTS})
@@ -165,7 +170,14 @@ if((NOT REALM_SANITIZER OR REALM_SANITIZER STREQUAL "NONE")
    AND NOT CMAKE_CROSSCOMPILING
 )
   gtest_discover_tests(realm_unit_tests NO_PRETTY_TYPES NO_PRETTY_VALUES PROPERTIES LABELS "unit")
-  gtest_discover_tests(realm_c_unit_tests NO_PRETTY_TYPES NO_PRETTY_VALUES PROPERTIES LABELS "unit")
+  # Discover c_unit_tests but exclude BestAffinityTest (runtime init not safe for per-test isolation)
+  gtest_discover_tests(realm_c_unit_tests NO_PRETTY_TYPES NO_PRETTY_VALUES 
+                       TEST_FILTER "-BestAffinityTest.*"
+                       PROPERTIES LABELS "unit")
+  # Add BestAffinityTest as a single batch test
+  add_test(NAME BestAffinityTest 
+           COMMAND $<TARGET_FILE:realm_c_unit_tests> "--gtest_filter=BestAffinityTest.*")
+  set_tests_properties(BestAffinityTest PROPERTIES LABELS "unit")
 else()
   add_test(NAME realm_unit_tests COMMAND $<TARGET_FILE:realm_unit_tests>)
   add_test(NAME realm_c_unit_tests COMMAND $<TARGET_FILE:realm_c_unit_tests>)
@@ -288,6 +300,8 @@ set(sparse_construct_ARGS -verbose)
 add_integration_test(sparse_construct "${REALM_TEST_DIR}/sparse_construct.cc")
 add_integration_test(extres_alias "${REALM_TEST_DIR}/extres_alias.cc")
 add_integration_test(reservations "${REALM_TEST_DIR}/reservations.cc")
+set(machine_queries_ARGS -ll:cpu 4 -ll:util 2)
+add_integration_test(machine_queries "${REALM_TEST_DIR}/machine_queries.cc")
 set(machine_config_test_ARGS
     -test_args
     1
@@ -376,10 +390,28 @@ add_integration_test(
 )
 target_link_libraries(memspeed ${TEST_GPU_LIBS})
 set(simple_reduce_ARGS -all)
-if(NOT BUILD_SHARED_LIBS OR NOT REALM_ENABLE_HIP)
+if(REALM_USE_HIP AND TEST_USE_GPU)
+  # HIP variant: hipLaunchKernel accepts host-side void* pointers directly,
+  # so the kernel registration works correctly even with shared libs.
+  add_integration_test(
+    simple_reduce "${REALM_TEST_DIR}/simple_reduce.cc"
+    "${REALM_TEST_DIR}/simple_reduce_gpu.hip"
+  )
+  set_source_files_properties("${REALM_TEST_DIR}/simple_reduce_gpu.hip" PROPERTIES LANGUAGE HIP)
+  # Test that reductions fall back to the basic stride loop when only the 4
+  # basic kernels are registered (advanced/transpose slots remain null).
+  set(hip_reduce_basic_ARGS -ll:gpu 1)
+  set(hip_reduce_basic_RESOURCE_LOCK gpu)
+  add_integration_test(
+    hip_reduce_basic "${REALM_TEST_DIR}/hip_reduce_basic.cc"
+    "${REALM_TEST_DIR}/hip_reduce_basic.hip"
+  )
+  set_source_files_properties("${REALM_TEST_DIR}/hip_reduce_basic.hip" PROPERTIES LANGUAGE HIP)
+  set_target_properties(hip_reduce_basic PROPERTIES ENABLE_EXPORTS TRUE)
+elseif(NOT BUILD_SHARED_LIBS OR NOT REALM_ENABLE_HIP)
   # simple_reduce registers a kernel with the runtime, but uses a different instance of the runtime
   # than in librealm.so, which causes an "invalid device function" error.  This has been solved in
-  # the CUDA module, not the HIP module yet.
+  # the CUDA module but not for HIP + shared libs.
   add_integration_test(
     simple_reduce "${REALM_TEST_DIR}/simple_reduce.cc"
     "$<$<BOOL:TEST_USE_GPU>:${REALM_TEST_DIR}/simple_reduce_gpu.cu>"
@@ -419,6 +451,17 @@ if(TEST_USE_GPU)
     target_link_libraries(cuda_memcpy_test CUDA::cudart)
     target_link_libraries(cuda_scatter_test CUDA::cudart)
     target_link_libraries(test_cuhook CUDA::cudart)
+    set(cuda_reduce_basic_ARGS -ll:gpu 1)
+    set(cuda_reduce_basic_RESOURCE_LOCK gpu)
+    add_integration_test(
+      cuda_reduce_basic "${REALM_TEST_DIR}/cuda_reduce_basic.cc"
+                        "${REALM_TEST_DIR}/cuda_reduce_basic_gpu.cu"
+    )
+    target_link_libraries(cuda_reduce_basic CUDA::cudart)
+    set(multifield_transfer_ARGS -ll:gpu 1)
+    set(multifield_transfer_RESOURCE_LOCK gpu)
+    add_integration_test(multifield_transfer "${REALM_TEST_DIR}/multifield_transfer.cc")
+    target_link_libraries(multifield_transfer CUDA::cudart)
   endif()
   set(transpose_test_gpu_ARGS -ll:gpu 1)
   set(transpose_test_gpu_RESOURCE_LOCK gpu)
@@ -452,9 +495,11 @@ target_link_libraries(c_external_inst ${TEST_GPU_LIBS})
 
 add_integration_test(c_event_poisoned "${REALM_TEST_DIR}/c/test_event_poisoned.cc")
 
-target_link_libraries(
-  machine_config_test ${TEST_GPU_LIBS} $<TARGET_NAME_IF_EXISTS:CUDA::cuda_driver>
-)
+if(REALM_USE_CUDA)
+  target_link_libraries(
+    machine_config_test ${TEST_GPU_LIBS} $<TARGET_NAME_IF_EXISTS:CUDA::cuda_driver>
+  )
+endif()
 target_link_libraries(test_profiling ${TEST_GPU_LIBS})
 if(REALM_USE_LIBDL)
   target_link_libraries(taskreg ${CMAKE_DL_LIBS})
@@ -465,6 +510,7 @@ set_target_properties(taskreg PROPERTIES ENABLE_EXPORTS TRUE)
 set_target_properties(scatter PROPERTIES ENABLE_EXPORTS TRUE)
 if(REALM_USE_CUDA)
   set_target_properties(cuda_scatter_test PROPERTIES ENABLE_EXPORTS TRUE)
+  set_target_properties(cuda_reduce_basic PROPERTIES ENABLE_EXPORTS TRUE)
 endif()
 
 set_tests_properties(

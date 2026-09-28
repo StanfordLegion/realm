@@ -758,9 +758,11 @@ namespace Realm {
     config_map.insert({"pin_util_procs", &pin_util_procs});
     config_map.insert({"use_ext_sysmem", &use_ext_sysmem});
     config_map.insert({"regmem", &reg_mem_size});
+    config_map.insert({"ib_regmem", &reg_ib_mem_size});
     config_map.insert({"report_sparsity_leaks", &report_sparsity_leaks});
     config_map.insert({"barrier_broadcast_radix", &barrier_broadcast_radix});
     config_map.insert({"diskmem", &disk_mem_size});
+    config_map.insert({"dma_multi_field", &dma_multi_field});
 
     resource_map.insert({"cpu", &res_num_cpus});
     resource_map.insert({"sysmem", &res_sysmem_size});
@@ -815,6 +817,7 @@ namespace Realm {
         .add_option_int_units("-ll:ib_rsize", reg_ib_mem_size, 'm')
         .add_option_int_units("-ll:dsize", disk_mem_size, 'm')
         .add_option_int("-ll:dma", dma_worker_threads)
+        .add_option_int("-ll:dma_multi_field", dma_multi_field)
         .add_option_bool("-ll:pin_dma", pin_dma_threads)
         .add_option_int("-ll:dummy_rsrv_ok", dummy_reservation_ok)
         .add_option_bool("-ll:show_rsrv", show_reservations)
@@ -1954,6 +1957,7 @@ namespace Realm {
 
     event_triggerer.add_to_manager(&bgwork);
     subgraph_resource_reaper.add_to_manager(&bgwork);
+    copy_analyzer.add_to_manager(&bgwork);
 
     // initialize barrier timestamp
     BarrierImpl::barrier_adjustment_timestamp.store(
@@ -2882,24 +2886,23 @@ namespace Realm {
     // the operation tables on every rank should be clear of work
     optable.shutdown_check();
 
-    // make sure the network is completely quiescent
+    // make sure the network is completely quiescent.  The check is a
+    //  Mattern's-shaped two-round stability protocol that returns DONE
+    //  (confirmed quiescent) or PROGRESSING (keep iterating).  There is
+    //  intentionally no abort path: without introspection into the network
+    //  layer we cannot distinguish a slow in-flight message from a lost
+    //  one, so any timeout-based abort would be a guess.  If shutdown
+    //  hangs here it is a debuggable state (attach gdb).  A periodic
+    //  warning is emitted from check_for_quiescence when counters stay
+    //  frozen.
     if(Network::max_node_id > 0) {
       int tries = 0;
-      while(true) {
+      while(Network::check_for_quiescence(message_manager) !=
+            Network::QuiescenceStatus::DONE) {
         tries++;
-        bool done = Network::check_for_quiescence(message_manager);
-        if(done) {
-          if(Network::my_node_id == 0)
-            log_runtime.info() << "quiescent after " << tries << " attempts";
-          break;
-        }
-
-        if(tries >= 10) {
-          log_runtime.fatal() << "network still not quiescent after " << tries
-                              << " attempts";
-          abort();
-        }
       }
+      if(Network::my_node_id == 0)
+        log_runtime.info() << "quiescent after " << (tries + 1) << " attempts";
     }
 
     // mark that a shutdown is in progress so that we can hopefully catch
@@ -2946,6 +2949,7 @@ namespace Realm {
 #ifdef DEBUG_REALM
     event_triggerer.shutdown_work_item();
     subgraph_resource_reaper.shutdown_work_item();
+    copy_analyzer.shutdown_work_item();
 #endif
     bgwork.stop_dedicated_workers();
 
@@ -3056,9 +3060,10 @@ namespace Realm {
   bool RuntimeImpl::create_configs(int argc, char **argv)
   {
     // initialize topology
-    assert(topology_init == false);
-    host_topology = HardwareTopology::create_topology();
-    topology_init = true;
+    if(!topology_init) {
+      host_topology = HardwareTopology::create_topology();
+      topology_init = true;
+    }
 
     if(!module_configs_created) {
       std::vector<std::string> cmdline;
@@ -3397,7 +3402,7 @@ namespace Realm {
       assert(0 && "invalid completion queue handle");
     }
 
-    Node *n = &nodes[id.pgroup_owner_node()];
+    Node *n = &nodes[id.compqueue_owner_node()];
     CompQueueImpl *impl =
         n->compqueues.lookup_entry(id.compqueue_cq_idx(), id.compqueue_owner_node());
     assert(impl->me == id.convert<CompletionQueue>());

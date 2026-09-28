@@ -1,5 +1,5 @@
 /*
- * Copyright 2026 Stanford University, NVIDIA Corporation
+ * Copyright 2026 Stanford University, NVIDIA Corporation, Los Alamos National Laboratory
  * SPDX-License-Identifier: Apache-2.0
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -54,6 +54,8 @@
 
 #include "realm/shm.h"
 #include "realm/hardware_topology.h"
+
+#include "realm/transfer/transfer.h"
 
 #include <optional>
 #include <unordered_map>
@@ -145,6 +147,7 @@ namespace Realm {
     size_t reg_mem_size = 0;
     size_t disk_mem_size = 0;
     unsigned dma_worker_threads = 0; // unused - warning on application use
+    bool dma_multi_field = true;
 #ifdef EVENT_TRACING
     size_t event_trace_block_size = 1 << 20;
     double event_trace_exp_arrv_rate = 1e3;
@@ -345,7 +348,8 @@ namespace Realm {
     ReservationImpl *get_lock_impl(ID id);
     MemoryImpl *get_memory_impl(ID id) const;
     IBMemory *get_ib_memory_impl(ID id) const;
-    ProcessorImpl *get_processor_impl(ID id); // TODO: refactor it to const version
+    REALM_INTERNAL_API_EXTERNAL_LINKAGE ProcessorImpl * // needed by librealm_kokkos.so
+    get_processor_impl(ID id); // TODO: refactor it to const version
     ProcessorGroupImpl *get_procgroup_impl(ID id);
     RegionInstanceImpl *get_instance_impl(ID id);
     SparsityMapImplWrapper *get_sparsity_impl(ID id);
@@ -407,6 +411,7 @@ namespace Realm {
     IncomingMessageManager *message_manager;
     EventTriggerNotifier event_triggerer;
     SubgraphResourceReaper subgraph_resource_reaper;
+    CopyAnalyzer copy_analyzer;
 
     OperationTable optable;
 
@@ -491,8 +496,11 @@ namespace Realm {
     std::vector<uint8_t> key_value_store_vtable_data;
   };
 
-  extern RuntimeImpl *runtime_singleton;
-  inline RuntimeImpl *get_runtime(void) { return runtime_singleton; }
+  REALM_INTERNAL_API_EXTERNAL_LINKAGE extern RuntimeImpl *runtime_singleton;
+  REALM_INTERNAL_API_EXTERNAL_LINKAGE inline RuntimeImpl *get_runtime(void)
+  {
+    return runtime_singleton;
+  }
 
   // due to circular dependencies in include files, we need versions of these that
   //  hide the RuntimeImpl intermediate

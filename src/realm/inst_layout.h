@@ -35,8 +35,6 @@ namespace Kokkos {
   template <unsigned>
   struct MemoryTraits;
   struct LayoutStride;
-  template <class, size_t, class>
-  struct Array;
   namespace Experimental {
     template <class, class...>
     class OffsetView;
@@ -227,6 +225,7 @@ namespace Realm {
 
     using FieldMap = std::map<FieldID, FieldLayout>;
     FieldMap fields;
+    bool idindexed_fields{false};
   };
 
   REALM_PUBLIC_API
@@ -420,6 +419,9 @@ namespace Realm {
 
     IndexSpace<N, T> space;
     std::vector<InstancePieceList<N, T>> piece_lists;
+
+    // Pre-computed dimension ordering for idindexed_fields
+    std::vector<int> preferred_dim_order;
 
     static Serialization::PolymorphicSerdezSubclass<InstanceLayoutGeneric,
                                                     InstanceLayout<N, T>>

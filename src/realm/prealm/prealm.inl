@@ -45,6 +45,7 @@ namespace PRealm {
 
     public:
       std::vector<RegionInstance> instances;
+      ReductionOpID redop = 0;
     };
 
     struct ProfilingArgs {
@@ -65,12 +66,18 @@ namespace PRealm {
       } id;
       ProfKind kind;
     };
+    enum EffectKind {
+      ASYNC_EFFECT,
+      MAKE_VALID_EFFECT,
+      FETCH_METADATA_EFFECT,
+    };
     struct ExternalTriggerArgs {
       Event external;
       Event fevent;
       Processor proc;
       unsigned long long provenance;
       std::optional<long long> start_time;
+      EffectKind kind;
     };
     struct ProcDesc {
     public:
@@ -99,6 +106,7 @@ namespace PRealm {
       Event fevent;
       Event event;
       unsigned long long backtrace_id;
+      unsigned long long provenance_id;
     };
     struct EventMergerInfo {
     public:
@@ -153,8 +161,11 @@ namespace PRealm {
     struct InstanceUsageInfo {
     public:
       Event inst_event;
-      unsigned long long op_id;
+      Event fevent;
+      timestamp_t start;
+      timestamp_t stop;
       FieldID field;
+      unsigned privilege;
     };
     struct FillInstInfo {
     public:
@@ -186,6 +197,7 @@ namespace PRealm {
       Event fevent;
       Event creator;
       Event critical;
+      ReductionOpID redop;
       std::vector<CopyInstInfo> inst_infos;
     };
     struct WaitInfo {
@@ -243,6 +255,21 @@ namespace PRealm {
       Event creator, fevent;
       unsigned long long provenance;
     };
+    struct MakeValidInfo {
+    public:
+      Event result;
+      Event fevent;
+      timestamp_t created;
+      timestamp_t triggered;
+    };
+    struct FetchMetadataInfo {
+    public:
+      Event result;
+      Event fevent;
+      Event inst_uid;
+      timestamp_t created;
+      timestamp_t triggered;
+    };
     struct SpawnInfo {
     public:
       Event fevent;
@@ -251,6 +278,9 @@ namespace PRealm {
 
   public:
     ThreadProfiler(Processor p, Realm::Event implicit);
+  private:
+    ThreadProfiler(Processor p, Realm::Event implicit, long long start);
+  public:
     ThreadProfiler(const ThreadProfiler &rhs) = delete;
     ThreadProfiler &operator=(const ThreadProfiler &rhs) = delete;
 
@@ -261,7 +291,8 @@ namespace PRealm {
                           const std::vector<CopySrcDstField> &srcs,
                           const std::vector<CopySrcDstField> &dsts, Event critical);
     void add_task_request(ProfilingRequestSet &requests, Processor::TaskFuncID task_id,
-                          Event critical, Event fevent, timestamp_t spawn_time = 0);
+                          Processor target, Event critical, Event fevent,
+                          timestamp_t spawn_time = 0);
     Event add_inst_request(ProfilingRequestSet &requests, Event critical);
 
   public:
@@ -270,7 +301,8 @@ namespace PRealm {
     Processor get_callback_processor(void) const;
     void process_proc_desc(const Processor &p);
     void process_mem_desc(const Memory &m);
-    void record_event_wait(Event wait_on, Backtrace &bt, long long start, long long stop);
+    void record_event_wait(Event wait_on, Backtrace &bt, long long start, long long stop,
+        const std::string_view& prov = std::string_view());
     void record_event_trigger(Event result, Event precondition);
     void record_event_poison(Event result);
     void record_barrier_use(Event barrier);
@@ -279,14 +311,18 @@ namespace PRealm {
     void record_external_event(
         Realm::Event result, const std::string_view &prov,
         std::optional<long long> start_time = std::optional<long long>());
+    void record_make_valid(Event event);
+    void record_fetch_metadata(Event event, Event inst_uid);
     void record_reservation_acquire(Reservation r, Event result, Event precondition);
     Event record_instance_ready(RegionInstance inst, Event result, Event precondition);
-    void record_instance_usage(RegionInstance inst, FieldID field_id);
+    void record_instance_usage(RegionInstance inst, FieldID field_id, timestamp_t start,
+        timestamp_t stop, bool read, bool write);
     void process_response(ProfilingResponse &response);
     void process_trigger(const void *args, size_t arglen);
     void process_external(ProfilingResponse &response);
     void record_time_range(long long start, const std::string_view &name, Event external);
-    size_t dump_inter(long long target_latency);
+    ThreadProfiler* dump(void);
+    bool dump_inter(long long t_stop);
     void finalize(void);
 
     static ThreadProfiler &get_thread_profiler(void);
@@ -295,6 +331,10 @@ namespace PRealm {
     const Processor local_proc;
     const Realm::Event implicit_fevent;
     const long long start_time;
+  public:
+    // For creating lock-free linked lists of profiler instances for dumping
+    std::atomic<ThreadProfiler*> next = nullptr;
+    size_t footprint = 0;
 
   private:
     std::deque<EventWaitInfo> event_wait_infos;
@@ -314,6 +354,8 @@ namespace PRealm {
     std::deque<ProfTaskInfo> prof_task_infos;
     std::deque<ApplicationInfo> application_infos;
     std::deque<AsyncEffectInfo> async_effect_infos;
+    std::deque<MakeValidInfo> make_valid_infos;
+    std::deque<FetchMetadataInfo> fetch_metadata_infos;
     std::deque<SpawnInfo> spawn_infos;
     std::vector<ProcID> proc_ids;
     std::vector<MemID> mem_ids;
@@ -874,7 +916,9 @@ namespace PRealm {
 
   inline Event RegionInstance::fetch_metadata(Processor target) const
   {
-    return Realm::RegionInstance::fetch_metadata(target);
+    const Event result = Realm::RegionInstance::fetch_metadata(target);
+    ThreadProfiler::get_thread_profiler().record_fetch_metadata(result, unique_event);
+    return result;
   }
 
   template <int N, typename T>
@@ -890,37 +934,66 @@ namespace PRealm {
   }
 
   template <typename FT, int N, typename T>
-  inline GenericAccessor<FT, N, T>::GenericAccessor(RegionInstance inst, FieldID field_id,
+  inline GenericAccessor<FT, N, T>::GenericAccessor(RegionInstance inst, FieldID fid,
                                                     size_t subfield_offset)
-    : Realm::GenericAccessor<FT, N, T>(inst, field_id, subfield_offset)
+    : Realm::GenericAccessor<FT, N, T>(inst, fid, subfield_offset),
+      start(Realm::Clock::current_time_in_nanoseconds()), instance(inst), field_id(fid)
   {
-    ThreadProfiler::get_thread_profiler().record_instance_usage(inst, field_id);
   }
 
   template <typename FT, int N, typename T>
-  inline GenericAccessor<FT, N, T>::GenericAccessor(RegionInstance inst, FieldID field_id,
+  inline GenericAccessor<FT, N, T>::GenericAccessor(RegionInstance inst, FieldID fid,
                                                     const Rect<N, T> &subrect,
                                                     size_t subfield_offset)
-    : Realm::GenericAccessor<FT, N, T>(inst, field_id, subrect, subfield_offset)
+    : Realm::GenericAccessor<FT, N, T>(inst, fid, subrect, subfield_offset),
+      start(Realm::Clock::current_time_in_nanoseconds()), instance(inst), field_id(fid)
   {
-    ThreadProfiler::get_thread_profiler().record_instance_usage(inst, field_id);
   }
 
   template <typename FT, int N, typename T>
-  inline AffineAccessor<FT, N, T>::AffineAccessor(RegionInstance inst, FieldID field_id,
+  inline GenericAccessor<FT, N, T>::~GenericAccessor(void)
+  {
+    ThreadProfiler::get_thread_profiler().record_instance_usage(instance, field_id, start,
+        Realm::Clock::current_time_in_nanoseconds(), did_read, did_write);
+  }
+
+  template <typename FT, int N, typename T>
+  inline FT GenericAccessor<FT, N, T>::read(const Point<N, T> &p)
+  {
+    did_read = true;
+    return Realm::GenericAccessor<FT, N, T>::read(p);
+  }
+
+  template <typename FT, int N, typename T>
+  inline void GenericAccessor<FT, N, T>::write(const Point<N, T> &p, FT newval)
+  {
+    did_write = true;
+    Realm::GenericAccessor<FT, N, T>::write(p, newval);
+  }
+
+  template <typename FT, int N, typename T>
+  inline AccessorRefHelper<FT> GenericAccessor<FT, N, T>::operator[](const Point<N, T> &p)
+  {
+    did_read = true;
+    did_write = true;
+    return Realm::GenericAccessor<FT, N, T>::operator[](p);
+  }
+
+  template <typename FT, int N, typename T>
+  inline AffineAccessor<FT, N, T>::AffineAccessor(RegionInstance inst, FieldID fid,
                                                   size_t subfield_offset)
-    : Realm::AffineAccessor<FT, N, T>(inst, field_id, subfield_offset)
+    : Realm::AffineAccessor<FT, N, T>(inst, fid, subfield_offset)
   {
-    ThreadProfiler::get_thread_profiler().record_instance_usage(inst, field_id);
+    initialize(inst, fid);
   }
 
   template <typename FT, int N, typename T>
-  inline AffineAccessor<FT, N, T>::AffineAccessor(RegionInstance inst, FieldID field_id,
+  inline AffineAccessor<FT, N, T>::AffineAccessor(RegionInstance inst, FieldID fid,
                                                   const Rect<N, T> &subrect,
                                                   size_t subfield_offset)
     : Realm::AffineAccessor<FT, N, T>(inst, field_id, subrect, subfield_offset)
   {
-    ThreadProfiler::get_thread_profiler().record_instance_usage(inst, field_id);
+    initialize(inst, fid);
   }
 
   template <typename FT, int N, typename T>
@@ -928,11 +1001,12 @@ namespace PRealm {
   inline AffineAccessor<FT, N, T>::AffineAccessor(RegionInstance inst,
                                                   const Matrix<N2, N, T2> &transform,
                                                   const Point<N2, T2> &offset,
-                                                  FieldID field_id,
+                                                  FieldID fid,
                                                   size_t subfield_offset)
-    : Realm::AffineAccessor<FT, N, T>(inst, transform, offset, field_id, subfield_offset)
+    : Realm::AffineAccessor<FT, N, T>(inst, transform, offset, fid, subfield_offset)
+
   {
-    ThreadProfiler::get_thread_profiler().record_instance_usage(inst, field_id);
+    initialize(inst, fid);
   }
 
   template <typename FT, int N, typename T>
@@ -940,32 +1014,190 @@ namespace PRealm {
   inline AffineAccessor<FT, N, T>::AffineAccessor(RegionInstance inst,
                                                   const Matrix<N2, N, T2> &transform,
                                                   const Point<N2, T2> &offset,
-                                                  FieldID field_id,
+                                                  FieldID fid,
                                                   const Rect<N, T> &subrect,
                                                   size_t subfield_offset)
-    : Realm::AffineAccessor<FT, N, T>(inst, transform, offset, field_id, subrect,
+    : Realm::AffineAccessor<FT, N, T>(inst, transform, offset, fid, subrect,
                                       subfield_offset)
   {
-    ThreadProfiler::get_thread_profiler().record_instance_usage(inst, field_id);
+    initialize(inst, fid);
   }
 
   template <typename FT, int N, typename T>
-  inline MultiAffineAccessor<FT, N, T>::MultiAffineAccessor(RegionInstance inst,
-                                                            FieldID field_id,
-                                                            size_t subfield_offset)
-    : Realm::MultiAffineAccessor<FT, N, T>(inst, field_id, subfield_offset)
+  inline void AffineAccessor<FT, N, T>::initialize(RegionInstance inst, FieldID fid)
   {
-    ThreadProfiler::get_thread_profiler().record_instance_usage(inst, field_id);
+    start = Realm::Clock::current_time_in_nanoseconds();
+    instance = inst;
+    field_id = fid;
+    Processor current = Realm::Processor::get_executing_processor();
+    if (current.exists() && (current.kind() == Processor::TOC_PROC))
+    {
+      // For the moment we assume that accessors on the GPU are going to escape
+      escaped = true;
+    }
+  }
+
+  template <typename FT, int N, typename T>
+  REALM_CUDA_HD inline AffineAccessor<FT, N, T>::~AffineAccessor(void)
+  {
+#ifndef __CUDA_ARCH__
+    ThreadProfiler::get_thread_profiler().record_instance_usage(instance, field_id, start,
+        escaped ? 0 : Realm::Clock::current_time_in_nanoseconds(), did_read || escaped, did_write || escaped);
+#endif
+  }
+
+  template <typename FT, int N, typename T>
+  REALM_CUDA_HD inline FT* AffineAccessor<FT, N, T>::ptr(const Point<N, T> &p) const
+  {
+#ifndef __CUDA_ARCH__
+    escaped = true;
+#endif
+    return Realm::AffineAccessor<FT, N, T>::ptr(p);
+  }
+
+  template <typename FT, int N, typename T>
+  REALM_CUDA_HD inline FT AffineAccessor<FT, N, T>::read(const Point<N, T> &p) const
+  {
+#ifndef __CUDA_ARCH__
+    did_read = true;
+#endif
+    return Realm::AffineAccessor<FT, N, T>::read(p);
+  }
+
+  template <typename FT, int N, typename T>
+  REALM_CUDA_HD inline void AffineAccessor<FT, N, T>::write(const Point<N, T> &p, FT newval) const
+  {
+#ifndef __CUDA_ARCH__
+    did_write = true;
+#endif
+    Realm::AffineAccessor<FT, N, T>::write(p, newval);
+  }
+
+  template <typename FT, int N, typename T>
+  REALM_CUDA_HD inline FT& AffineAccessor<FT, N, T>::operator[](const Point<N, T> &p) const
+  {
+#ifndef __CUDA_ARCH__
+    escaped = true;
+#endif
+    return Realm::AffineAccessor<FT, N, T>::operator[](p);
   }
 
   template <typename FT, int N, typename T>
   inline MultiAffineAccessor<FT, N, T>::MultiAffineAccessor(RegionInstance inst,
-                                                            FieldID field_id,
+                                                            FieldID fid,
+                                                            size_t subfield_offset)
+    : Realm::MultiAffineAccessor<FT, N, T>(inst, fid, subfield_offset)
+  {
+    initialize(inst, fid);
+  }
+
+  template <typename FT, int N, typename T>
+  inline MultiAffineAccessor<FT, N, T>::MultiAffineAccessor(RegionInstance inst,
+                                                            FieldID fid,
                                                             const Rect<N, T> &subrect,
                                                             size_t subfield_offset)
-    : Realm::MultiAffineAccessor<FT, N, T>(inst, field_id, subrect, subfield_offset)
+    : Realm::MultiAffineAccessor<FT, N, T>(inst, fid, subrect, subfield_offset)
   {
-    ThreadProfiler::get_thread_profiler().record_instance_usage(inst, field_id);
+    initialize(inst, fid);
+  }
+
+  template <typename FT, int N, typename T>
+  REALM_CUDA_HD inline MultiAffineAccessor<FT, N, T>::~MultiAffineAccessor(void)
+  {
+#ifndef __CUDA_ARCH__
+    ThreadProfiler::get_thread_profiler().record_instance_usage(instance, field_id, start,
+        escaped ? 0 : Realm::Clock::current_time_in_nanoseconds(), did_read || escaped, did_write || escaped);
+#endif
+  }
+
+  template <typename FT, int N, typename T>
+  REALM_CUDA_HD inline FT* MultiAffineAccessor<FT, N, T>::ptr(const Point<N, T> &p) const
+  {
+#ifndef __CUDA_ARCH__
+    escaped = true;
+#endif
+    return Realm::MultiAffineAccessor<FT, N, T>::ptr(p);
+  }
+
+  template <typename FT, int N, typename T>
+  REALM_CUDA_HD inline FT* MultiAffineAccessor<FT, N, T>::ptr(const Rect<N, T> &r, size_t strides[N]) const
+  {
+#ifndef __CUDA_ARCH__
+    escaped = true;
+#endif
+    return Realm::MultiAffineAccessor<FT, N, T>::ptr(r, strides);
+  }
+
+  template <typename FT, int N, typename T>
+  REALM_CUDA_HD inline FT MultiAffineAccessor<FT, N, T>::read(const Point<N, T> &p) const
+  {
+#ifndef __CUDA_ARCH__
+    did_read = true;
+#endif
+    return Realm::MultiAffineAccessor<FT, N, T>::read(p);
+  }
+
+  template <typename FT, int N, typename T>
+  REALM_CUDA_HD inline void MultiAffineAccessor<FT, N, T>::write(const Point<N, T> &p, FT newval) const
+  {
+#ifndef __CUDA_ARCH__
+    did_write = true;
+#endif
+    Realm::MultiAffineAccessor<FT, N, T>::write(p, newval);
+  }
+
+  template <typename FT, int N, typename T>
+  REALM_CUDA_HD inline FT& MultiAffineAccessor<FT, N, T>::operator[](const Point<N, T> &p) const
+  {
+#ifndef __CUDA_ARCH__
+    escaped = true;
+#endif
+    return Realm::MultiAffineAccessor<FT, N, T>::operator[](p);
+  }
+
+  template <typename FT, int N, typename T>
+  REALM_CUDA_HD inline FT* MultiAffineAccessor<FT, N, T>::ptr(const Point<N, T> &p)
+  {
+#ifndef __CUDA_ARCH__
+    escaped = true;
+#endif
+    return Realm::MultiAffineAccessor<FT, N, T>::ptr(p);
+  }
+
+  template <typename FT, int N, typename T>
+  REALM_CUDA_HD inline FT* MultiAffineAccessor<FT, N, T>::ptr(const Rect<N, T> &r, size_t strides[N])
+  {
+#ifndef __CUDA_ARCH__
+    escaped = true;
+#endif
+    return Realm::MultiAffineAccessor<FT, N, T>::ptr(r, strides);
+  }
+
+  template <typename FT, int N, typename T>
+  REALM_CUDA_HD inline FT MultiAffineAccessor<FT, N, T>::read(const Point<N, T> &p)
+  {
+#ifndef __CUDA_ARCH__
+    did_read = true;
+#endif
+    return Realm::MultiAffineAccessor<FT, N, T>::read(p);
+  }
+
+  template <typename FT, int N, typename T>
+  REALM_CUDA_HD inline void MultiAffineAccessor<FT, N, T>::write(const Point<N, T> &p, FT newval)
+  {
+#ifndef __CUDA_ARCH__
+    did_write = true;
+#endif
+    Realm::MultiAffineAccessor<FT, N, T>::write(p, newval);
+  }
+
+  template <typename FT, int N, typename T>
+  REALM_CUDA_HD inline FT& MultiAffineAccessor<FT, N, T>::operator[](const Point<N, T> &p)
+  {
+#ifndef __CUDA_ARCH__
+    escaped = true;
+#endif
+    return Realm::MultiAffineAccessor<FT, N, T>::operator[](p);
   }
 
   template <int N, typename T>
@@ -1018,6 +1250,14 @@ namespace PRealm {
       alt_dsts[idx] = dsts[idx];
     return Realm::Rect<N, T>::copy(alt_srcs, alt_dsts, mask, alt_requests, wait_on,
                                    priority);
+  }
+
+  template <int N, typename T>
+  inline Event IndexSpace<N, T>::make_valid(bool precise) const
+  {
+    const Event result = Realm::IndexSpace<N, T>::make_valid(precise);
+    ThreadProfiler::get_thread_profiler().record_make_valid(result);
+    return result;
   }
 
   template <int N, typename T>
@@ -1148,10 +1388,45 @@ namespace PRealm {
   }
 
   inline void prealm_time_range(long long start_time_in_ns, const std::string_view &name,
-                                Event external)
+                                Realm::Event external)
   {
     ThreadProfiler::get_thread_profiler().record_time_range(start_time_in_ns, name,
                                                             external);
   }
 
 } // namespace PRealm
+
+template<>
+struct std::hash<PRealm::Event> {
+  std::size_t operator()(const PRealm::Event& e) const noexcept {
+    return std::hash<realm_id_t>()(e.id);
+  }
+};
+
+template<>
+struct std::hash<PRealm::UserEvent> {
+  std::size_t operator()(const PRealm::UserEvent& e) const noexcept {
+    return std::hash<realm_id_t>()(e.id);
+  }
+};
+
+template<>
+struct std::hash<PRealm::Barrier> {
+  std::size_t operator()(const PRealm::Barrier& e) const noexcept {
+    return std::hash<realm_id_t>()(e.id);
+  }
+};
+
+template<>
+struct std::hash<PRealm::RegionInstance> {
+  std::size_t operator()(const PRealm::RegionInstance& r) const noexcept {
+    return std::hash<realm_id_t>()(r.id);
+  }
+};
+
+template<>
+struct std::hash<PRealm::Processor> {
+  std::size_t operator()(const PRealm::Processor& p) const noexcept {
+    return std::hash<realm_id_t>()(p.id);
+  }
+};
