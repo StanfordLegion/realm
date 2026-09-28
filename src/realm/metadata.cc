@@ -21,6 +21,7 @@
 
 #include "realm/event_impl.h"
 #include "realm/inst_impl.h"
+#include "realm/activemsg.h"
 #include "realm/runtime_impl.h"
 
 namespace Realm {
@@ -180,9 +181,9 @@ namespace Realm {
     if(invals_to_send.empty())
       return true;
 
-    ActiveMessage<MetadataInvalidateMessage> amsg(invals_to_send);
-    amsg->id = id;
-    amsg.commit();
+    MetadataInvalidateMessage msg{};
+    msg.id = id;
+    multicast_message(MulticastTargetSet(invals_to_send), msg);
     // can't free object until we receive all the acks
     return false;
   }
