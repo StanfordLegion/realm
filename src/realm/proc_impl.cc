@@ -125,12 +125,9 @@ namespace Realm {
   {
     Thread *thread = Thread::self();
     if(thread->in_subgraph_task_execution()) {
-      // We will not support getting the finish event during
-      // a compiled subgraph yet, but will relax this restriction
-      // in the future.
-      assert(false && "get_current_finish_event during compiled subgraph task execution "
-                      "is not currently supported");
-      return Event::NO_EVENT;
+      log_task.fatal() << "Processor::get_current_finish_event is not currently supported "
+                          "inside a compiled subgraph task";
+      abort();
     }
 
     Operation *op = Thread::self()->get_operation();

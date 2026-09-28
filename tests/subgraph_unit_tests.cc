@@ -156,6 +156,14 @@ static Memory sysmem()
       .first();
 }
 
+// Progress and verdict output goes to stdout directly: Realm's compile-time
+// minimum log level may exclude Logger::print().
+static void report(const std::string &msg)
+{
+  printf("%s\n", msg.c_str());
+  fflush(stdout);
+}
+
 static const char *mode_name(SubgraphDefinition::ExecutionMode mode)
 {
   return (mode == SubgraphDefinition::COMPILED) ? "COMPILED" : "INTERPRETED";
@@ -1537,9 +1545,9 @@ public:
     completed = wait_with_timeout(Event::merge_events(evs), 4 * config.hang_timeout);
     double t1 = Clock::current_time();
     long rss1 = resident_kb();
-    log_app.print() << name() << ": " << config.many << " instantiations in "
+    { std::ostringstream _os; _os << name() << ": " << config.many << " instantiations in "
                     << (t1 - t0) * 1e3 << " ms (" << (t1 - t0) * 1e6 / config.many
-                    << " us each), resident memory " << rss0 << " -> " << rss1 << " kB";
+                    << " us each), resident memory " << rss0 << " -> " << rss1 << " kB"; report(_os.str()); }
   }
 
   bool check() override
@@ -1679,7 +1687,7 @@ static void waiting_task(const void *, size_t, const void *, size_t, Processor)
 static void finish_event_task(const void *, size_t, const void *, size_t, Processor)
 {
   Event e = Processor::get_current_finish_event();
-  log_app.print() << "finish event inside compiled subgraph task: " << e;
+  { std::ostringstream _os; _os << "finish event inside compiled subgraph task: " << e; report(_os.str()); }
 }
 
 static void noop_task(const void *, size_t, const void *, size_t, Processor) {}
@@ -1827,7 +1835,7 @@ void top_level_task(const void *args, size_t arglen, const void *userdata, size_
   if(!config.death.empty()) {
     for(const DeathScenario &s : death_scenarios) {
       if(config.death == s.name) {
-        log_app.print() << "death scenario: " << s.name;
+        { std::ostringstream _os; _os << "death scenario: " << s.name; report(_os.str()); }
         s.fn();
         printf("DEATH-TEST-SURVIVED\n");
         fflush(stdout);
@@ -1850,9 +1858,9 @@ void top_level_task(const void *args, size_t arglen, const void *userdata, size_
     return;
   }
 
-  log_app.print() << "subgraph tests: " << all_cpus().size() << " CPUs ("
+  { std::ostringstream _os; _os << "subgraph tests: " << all_cpus().size() << " CPUs ("
                   << worker_cpus().size() << " workers), iterations=" << config.iterations
-                  << " seed=" << config.seed;
+                  << " seed=" << config.seed; report(_os.str()); }
   for(auto &test : tests)
     test->register_test();
 
@@ -1866,20 +1874,20 @@ void top_level_task(const void *args, size_t arglen, const void *userdata, size_
     if(config.skip.count(name))
       continue;
     if(!test->can_run()) {
-      log_app.print() << "SKIP " << name << " (insufficient resources)";
+      { std::ostringstream _os; _os << "SKIP " << name << " (insufficient resources)"; report(_os.str()); }
       skipped++;
       continue;
     }
     for(SubgraphDefinition::ExecutionMode mode : test->get_valid_execution_modes()) {
-      log_app.print() << "RUN  " << name << " [" << mode_name(mode) << "]";
+      { std::ostringstream _os; _os << "RUN  " << name << " [" << mode_name(mode) << "]"; report(_os.str()); }
       double t0 = Clock::current_time();
       test->init(mode);
       test->run();
       bool ok = test->check();
       test->cleanup();
       double ms = (Clock::current_time() - t0) * 1e3;
-      log_app.print() << (ok ? "PASS " : "FAIL ") << name << " [" << mode_name(mode) << "] "
-                      << ms << " ms";
+      { std::ostringstream _os; _os << (ok ? "PASS " : "FAIL ") << name << " [" << mode_name(mode) << "] "
+                      << ms << " ms"; report(_os.str()); }
       if(ok)
         passed++;
       else
@@ -1903,7 +1911,7 @@ void top_level_task(const void *args, size_t arglen, const void *userdata, size_
       ss << " " << f;
   }
   if(failed.empty())
-    log_app.print() << ss.str();
+    { std::ostringstream _os; _os << ss.str(); report(_os.str()); }
   else
     log_app.error() << ss.str();
 

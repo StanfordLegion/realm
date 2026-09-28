@@ -298,7 +298,6 @@ namespace Realm {
     // in a "fast-path" mode. Most of that logic is encapsulated within the
     // ProcSubgraphExecutor, but the ThreadedTaskScheduler is somewhat aware of it.
     std::unique_ptr<ProcSubgraphExecutor> subgraph_executor;
-    friend class ProcSubgraphExecutor;
 
     // helper for tracking/sanity-checking worker counts
     void update_worker_count(int active_delta, int unassigned_delta, bool check = true);

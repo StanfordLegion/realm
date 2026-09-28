@@ -1082,6 +1082,7 @@ namespace Realm {
   {
     assert(subgraph_executor != nullptr);
     subgraph_executor->enqueue_subgraph(subgraph);
+    work_counter.increment_counter();
   }
 
   // the main scheduler loop
@@ -1148,13 +1149,34 @@ namespace Realm {
           update_worker_count(0, +1);
         }
 
-        // TODO (rohany): I'm not sure yet if we need to break this method up
-        //  into two pieces (an acquire and execute step) so that we can do the
-        //  worker manipulation that is happening below when a task is acquired.
-        // Try to execute subgraph-related work. If we actually did any, then
-        // we can continue around the loop.
-        if(subgraph_executor && subgraph_executor->execute_subgraph_work()) {
-          continue;
+        // Compiled subgraph work is currently served ahead of ready and
+        // resumable tasks. peek and dequeue are separate so that a
+        // priority-integrated policy only needs to change the decision here.
+        int subgraph_priority = 0;
+        if(subgraph_executor && subgraph_executor->peek(subgraph_priority)) {
+          ProcSubgraphExecutor::ReadyEntry entry;
+          subgraph_executor->dequeue(entry);
+
+          // same worker accounting as for a ready task below
+          if((unassigned_worker_count == 1) &&
+             (active_worker_count < cfg_max_active_workers)) {
+            update_worker_count(+1, 0);
+            worker_create(true);
+          } else {
+            update_worker_count(0, -1);
+          }
+          worker_priorities[Thread::self()] = subgraph_priority;
+
+          lock.unlock();
+          subgraph_executor->execute(entry);
+          lock.lock();
+
+          worker_priorities.erase(Thread::self());
+          update_worker_count(0, +1);
+
+          if(cfg_reuse_workers)
+            continue;
+          break;
         }
 
         // if we have both resumable and new ready tasks, we want the one that
@@ -1357,7 +1379,7 @@ namespace Realm {
 
   KernelThreadTaskScheduler::KernelThreadTaskScheduler(Processor _proc,
                                                        CoreReservation &_core_rsrv)
-    : ThreadedTaskScheduler(std::make_unique<ProcSubgraphExecutor>(_proc, this))
+    : ThreadedTaskScheduler(std::make_unique<ProcSubgraphExecutor>(_proc))
     , proc(_proc)
     , core_rsrv(_core_rsrv)
     , shutdown_condvar(lock)
@@ -1590,8 +1612,7 @@ namespace Realm {
 #ifdef REALM_USE_USER_THREADS
   UserThreadTaskScheduler::UserThreadTaskScheduler(Processor _proc,
                                                    CoreReservation &_core_rsrv)
-    : ThreadedTaskScheduler(
-          std::unique_ptr<ProcSubgraphExecutor>(new ProcSubgraphExecutor(_proc, this)))
+    : ThreadedTaskScheduler(std::make_unique<ProcSubgraphExecutor>(_proc))
     , proc(_proc)
     , core_rsrv(_core_rsrv)
     , host_startup_condvar(lock)

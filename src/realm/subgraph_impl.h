@@ -127,12 +127,16 @@ namespace Realm {
                             bool _is_final_event, bool _is_async)
         : op_kind(_op_kind)
         , op_index(_op_index)
+        , proc_index(-1)
         , is_final_event(_is_final_event)
         , is_async(_is_async)
       {}
 
       SubgraphDefinition::OpKind op_kind;
       unsigned op_index;
+      // Index into subgraph_processors of the processor running this
+      // operation, so edge propagation needs no lookups.
+      int32_t proc_index;
       bool is_final_event;
       bool is_async;
     };
@@ -170,14 +174,32 @@ namespace Realm {
     friend class SubgraphWorkLauncher;
     friend class Subgraph;
 
-    // When concurrency_mode == INSTANTIATION_ORDER, the subgraph will
-    // implicitly order instantiations of the subgraph by tracking
-    // the completion event of the last instantiation.
-    mutable Mutex instantiation_lock;
-    mutable Event previous_instantiation_completion = Event::NO_EVENT;
-    // previous_cleanup_completion tracks cleanup work launched
-    // by subgraph instantiations.
-    mutable Event previous_cleanup_completion = Event::NO_EVENT;
+    // Lifecycle state for compiled subgraphs, all protected by lifecycle_lock:
+    //  - for INSTANTIATION_ORDER, the finish event of the most recent
+    //    instantiation, which the next instantiation must wait for;
+    //  - the number of instantiations whose execution state has not been
+    //    released yet;
+    //  - a pending destroy request, carried out by whoever observes the
+    //    outstanding count reach zero.
+    Mutex lifecycle_lock;
+    Event previous_instantiation_completion = Event::NO_EVENT;
+    int64_t outstanding_instantiations = 0;
+    bool destroy_requested = false;
+    Event destroy_wait_on = Event::NO_EVENT;
+    UserEvent destroy_done = UserEvent::NO_USER_EVENT;
+
+    // Performs (or defers until wait_on) the destruction once no
+    // instantiations are outstanding, returning the event to hand back to
+    // the caller of Subgraph::destroy.
+    Event complete_destroy(Event wait_on, UserEvent done);
+
+  public:
+    // Requests destruction. The returned event triggers once every
+    // outstanding instantiation has released its resources and wait_on has
+    // triggered. Instantiating after this is an error.
+    Event request_destroy(Event wait_on);
+    // Called when an instantiation's execution state has been released.
+    void instantiation_released(void);
 
   public:
     ID me;
@@ -210,27 +232,29 @@ namespace Realm {
                                const void *data, size_t datalen);
   };
 
-  // SubgraphWorkLauncher is a helper class that manages the logic of installing
-  // a subgraph when the preconditions for execution are met.
+  // SubgraphWorkLauncher installs an instantiation onto its processors once
+  // the instantiation's precondition has triggered.
   class SubgraphWorkLauncher : public EventWaiter {
   public:
-    SubgraphWorkLauncher(SubgraphExecutionState *subgraph);
-    static void launch_or_defer(SubgraphExecutionState *subgraph, Event wait_on);
-    void launch();
+    SubgraphWorkLauncher(SubgraphExecutionState *state);
+    static void launch_or_defer(SubgraphExecutionState *state, Event wait_on);
+    // Hands the instantiation to every processor it uses. A poisoned
+    // precondition poisons the instantiation instead of running it.
+    static void launch(SubgraphExecutionState *state, bool poisoned);
 
     virtual void event_triggered(bool poisoned, TimeLimit work_until) override;
     virtual void print(std::ostream &os) const override;
     virtual Event get_finish_event(void) const override;
 
   private:
-    SubgraphExecutionState *subgraph;
+    SubgraphExecutionState *state;
   };
 
-  // SubgraphInstantiationCleanup waits for a subgraph's finish event
-  // and then cleans up the SubgraphExecutionState resources.
+  // SubgraphInstantiationCleanup waits for an instantiation's finish event
+  // and then releases its execution state on a background worker.
   class SubgraphInstantiationCleanup : public EventWaiter {
   public:
-    SubgraphInstantiationCleanup(SubgraphExecutionState *subgraph, UserEvent to_trigger);
+    SubgraphInstantiationCleanup(SubgraphExecutionState *state);
     void cleanup();
 
     virtual void event_triggered(bool poisoned, TimeLimit work_until) override;
@@ -238,13 +262,11 @@ namespace Realm {
     virtual Event get_finish_event(void) const override;
 
   private:
-    SubgraphExecutionState *subgraph;
-    UserEvent to_trigger;
+    SubgraphExecutionState *state;
   };
 
   // SubgraphResourceReaper is a background work item that processes
-  // SubgraphInstantiationCleanup items asynchronously, freeing resources
-  // allocated for subgraph instantiation after the subgraph has finished.
+  // SubgraphInstantiationCleanup items asynchronously.
   class SubgraphResourceReaper : public BackgroundWorkItem {
   public:
     SubgraphResourceReaper();
@@ -258,8 +280,9 @@ namespace Realm {
     std::queue<SubgraphInstantiationCleanup *> pending_cleanups;
   };
 
-  // SubgraphExecutionState describes the state needed for a compiled
-  // subgraph execution.
+  // SubgraphExecutionState is the per-instantiation state of a compiled
+  // subgraph: fresh copies of the precondition counters and per-processor
+  // ready queues, plus the finish tracking.
   class SubgraphExecutionState {
   public:
     SubgraphExecutionState(SubgraphImpl *subgraph, const void *args, size_t arglen,
@@ -269,82 +292,104 @@ namespace Realm {
 
   private:
     friend class ProcSubgraphExecutor;
+    friend class SubgraphWorkLauncher;
 
-    // The subgraph being executed.
     SubgraphImpl *subgraph;
 
-    // The arguments to the subgraph. This is a local copy
-    // that can be modified by the interpolation process (which
-    // will happen in future work).
+    // Local copy of the instantiation arguments (input to interpolation,
+    // which compiled subgraphs do not support yet).
     void *args;
-    size_t arglen [[maybe_unused]];
+    size_t arglen;
 
-    // finish_counter tracks the amount of pending work launched by
-    // this subgraph. Whoever decrements this counter to 0 (whether
-    // a processor, background work item, CUDA stream notifier, etc.)
-    // must trigger finish_event to wake up anyone who needs to know
-    // when this subgraph is complete.
+    // Number of processors (and, in the future, asynchronous work items)
+    // still working on this instantiation. Whoever brings it to zero
+    // triggers finish_event.
     atomic<int64_t> finish_counter;
     UserEvent finish_event;
 
-    // The precondition array that contains the number of pending
-    // preconditions for each operation in subgraph->compiled_subgraph_operations.
+    // Remaining predecessor count for each entry of
+    // SubgraphImpl::compiled_subgraph_operations.
     atomic<int64_t> *preconditions;
 
-    // A single array that contains the per-processor queues for subgraph execution.
+    // All per-processor ready queues, laid out contiguously using the
+    // offsets in SubgraphImpl::initial_processor_queues. A slot holds an
+    // index into compiled_subgraph_operations or SUBGRAPH_EMPTY_QUEUE_ENTRY.
     atomic<int64_t> *processor_queues;
 
-    struct ProcessorLocalState {
-      // Maintains the next available slot in the per-processor queue
-      // to place ready operations. This slot is "zero-indexed", meaning
-      // that it is local to the current processor only and is not a global
-      // index into processor_queues.
+    // Per-processor producer state, one cache line each.
+    struct alignas(64) ProcessorLocalState {
+      // Next free slot, relative to the processor's queue region.
       atomic<uint64_t> queue_back;
-
-      // Ensure processor-local state does not accidentally cause
-      // false sharing between processor cache lines.
-      char _cache_line_padding[64];
     };
     std::vector<ProcessorLocalState> processor_state;
   };
 
-  // ProcSubgraphExecutor manages the logic of what a Processor should
-  // actually do when executing components of a compiled subgraph.
+  // ProcSubgraphExecutor is the per-scheduler component that feeds compiled
+  // subgraph tasks to a processor's scheduler loop.
+  //
+  // Threading: enqueue_subgraph may be called from any thread. peek and
+  // dequeue must be called with the owning scheduler's lock held; execute
+  // must be called without it. The executor never touches the scheduler
+  // lock itself; the scheduler loop treats a dequeued entry exactly like a
+  // ready task (worker accounting, unlock, run, relock).
+  //
+  // Any number of instantiations may be active on one processor at a time.
+  // The executor serves whichever has a ready operation, round robin among
+  // the active ones, so progress never depends on the order in which
+  // processors, or nodes, learned about the instantiations.
   class ProcSubgraphExecutor {
   public:
-    ProcSubgraphExecutor(Processor _proc, ThreadedTaskScheduler *_scheduler);
+    ProcSubgraphExecutor(Processor proc);
     ~ProcSubgraphExecutor();
 
-    // This is the main point of interaction with the ThreadedTaskScheduler.
-    // Executes a unit of subgraph work. Returns true if work was performed.
-    bool execute_subgraph_work();
+    // A unit of work handed to the scheduler loop.
+    struct ReadyEntry {
+      SubgraphExecutionState *state;
+      uint64_t op_index;       // into SubgraphImpl::compiled_subgraph_operations
+      int32_t proc_index;      // this processor's index within the subgraph
+      bool last_for_processor; // nothing more for this processor in this instantiation
+    };
 
-    // Enqueue work onto this subgraph executor. This method is thread-safe.
-    void enqueue_subgraph(SubgraphExecutionState *subgraph);
+    // Thread-safe. The caller is responsible for waking the scheduler.
+    void enqueue_subgraph(SubgraphExecutionState *state);
+
+    // Scheduler lock held. Returns true if an operation is ready to run and
+    // reports the priority it should be scheduled at.
+    bool peek(int &priority);
+    // Scheduler lock held. Removes the operation found by the last
+    // successful peek.
+    void dequeue(ReadyEntry &entry);
+
+    // No lock held. Runs the operation on the calling thread and propagates
+    // its completion: successors become ready on their processors and, if
+    // this was the processor's last operation, the finish counter drops.
+    void execute(const ReadyEntry &entry);
 
   private:
-    // Attempt to acquire a subgraph to execute. Returns true if
-    // a new subgraph was acquired successfully.
-    bool try_acquire_subgraph();
-    // Reset resources from an acquired subgraph.
-    void release_subgraph();
+    struct Cursor {
+      SubgraphExecutionState *state;
+      uint64_t base;  // global index of this processor's first queue slot
+      uint64_t front; // next slot to read, relative to base
+      uint64_t end;   // number of slots (== operations for this processor)
+      int32_t proc_index;
+    };
+    void absorb_pending(void);
 
-    // These context controllers should manage thread-local
-    // state that should be set for the entirety of a subgraphs execution.
-    void push_subgraph_execution_context();
-    void pop_subgraph_execution_context();
-
-    // Check if this executor has an active subgraph to execute.
-    bool has_active_subgraph() const { return current_subgraph != nullptr; }
-
-  private:
-    RWLock pending_subgraphs_lock;
-    std::queue<SubgraphExecutionState *> pending_subgraphs;
-    SubgraphExecutionState *current_subgraph;
     Processor proc;
-    int proc_index;
-    uint64_t queue_front;
-    ThreadedTaskScheduler *scheduler;
+
+    // Instantiations handed to this processor but not yet picked up by the
+    // scheduler loop. Written by launchers, drained under the scheduler lock.
+    Mutex pending_mutex;
+    std::vector<SubgraphExecutionState *> pending;
+    std::vector<SubgraphExecutionState *> pending_scratch;
+    atomic<int64_t> pending_count;
+
+    // Instantiations this processor is working on (scheduler lock).
+    std::vector<Cursor> active;
+    size_t scan_start;
+    // Result of the last successful peek, consumed by dequeue.
+    size_t peeked_cursor;
+    int64_t peeked_op;
   };
 
 }; // namespace Realm

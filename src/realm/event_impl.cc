@@ -237,9 +237,10 @@ namespace Realm {
     // a compiled subgraph task execution. We will relax this restriction
     // in the future.
     if(thread->in_subgraph_task_execution()) {
-      assert(false && "waiting on events during compiled subgraph task execution is not "
-                      "currently supported");
-      return;
+      log_event.fatal() << "waiting on events inside a compiled subgraph task is not "
+                           "currently supported: event="
+                        << *this;
+      abort();
     }
 
     log_event.info() << "thread blocked: thread=" << thread << " event=" << *this;
