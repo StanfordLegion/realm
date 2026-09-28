@@ -365,6 +365,14 @@ namespace Realm {
     // this was the processor's last operation, the finish counter drops.
     void execute(const ReadyEntry &entry);
 
+    // Scheduler lock held; called when the scheduler has nothing else to do.
+    // Returns true if it should keep polling instead of sleeping: subgraph
+    // work ran or arrived on this processor within the last poll_budget_us,
+    // so dependent operations from other processors are likely imminent and
+    // should not pay a wake-up. (-ll:subgraph_poll, 0 disables)
+    bool keep_polling(void);
+    static int poll_budget_us;
+
   private:
     struct Cursor {
       SubgraphExecutionState *state;
@@ -390,6 +398,13 @@ namespace Realm {
     // Result of the last successful peek, consumed by dequeue.
     size_t peeked_cursor;
     int64_t peeked_op;
+
+    // Polling state: activity_epoch is bumped whenever work is dequeued or
+    // an instantiation arrives; keep_polling extends the deadline when it
+    // sees a new epoch.
+    uint64_t activity_epoch;
+    uint64_t polled_epoch;
+    long long poll_deadline_ns;
   };
 
 }; // namespace Realm

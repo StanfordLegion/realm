@@ -22,6 +22,7 @@
 #include "realm/runtime_impl.h"
 #include "realm/proc_impl.h"
 #include "realm/subgraph_impl.h"
+#include "realm/utils.h"
 
 #if defined(REALM_USE_CACHING_ALLOCATOR)
 #include "realm/caching_allocator.h"
@@ -1292,6 +1293,17 @@ namespace Realm {
               worker_terminate(0);
               break;
             }
+          }
+
+          // compiled subgraph work ran or arrived here recently: keep polling
+          // for a bounded time instead of sleeping, so that dependent
+          // operations arriving from other processors do not pay a wake-up
+          if(subgraph_executor && subgraph_executor->keep_polling()) {
+            lock.unlock();
+            for(int i = 0; i < 32; i++)
+              REALM_SPIN_YIELD();
+            lock.lock();
+            continue;
           }
 
           // do we have more unassigned and idle tasks than we need?

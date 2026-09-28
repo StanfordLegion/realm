@@ -25,6 +25,7 @@
 #include "realm/runtime_impl.h"
 #include "realm/subgraph.h"
 #include "realm/tasks.h"
+#include "realm/timers.h"
 
 namespace Realm {
 
@@ -1532,12 +1533,17 @@ namespace Realm {
   // class ProcSubgraphExecutor
   //
 
+  /*static*/ int ProcSubgraphExecutor::poll_budget_us = 100;
+
   ProcSubgraphExecutor::ProcSubgraphExecutor(Processor _proc)
     : proc(_proc)
     , pending_count(0)
     , scan_start(0)
     , peeked_cursor(0)
     , peeked_op(SUBGRAPH_EMPTY_QUEUE_ENTRY)
+    , activity_epoch(0)
+    , polled_epoch(0)
+    , poll_deadline_ns(0)
   {}
 
   ProcSubgraphExecutor::~ProcSubgraphExecutor() {}
@@ -1568,6 +1574,7 @@ namespace Realm {
       active.push_back(c);
     }
     pending_scratch.clear();
+    activity_epoch++;
   }
 
   bool ProcSubgraphExecutor::peek(int &priority)
@@ -1614,6 +1621,19 @@ namespace Realm {
     if(scan_start >= active.size())
       scan_start = 0;
     peeked_op = SUBGRAPH_EMPTY_QUEUE_ENTRY;
+    activity_epoch++;
+  }
+
+  bool ProcSubgraphExecutor::keep_polling(void)
+  {
+    if((poll_budget_us <= 0) || (activity_epoch == 0))
+      return false;
+    long long now = Clock::current_time_in_nanoseconds();
+    if(activity_epoch != polled_epoch) {
+      polled_epoch = activity_epoch;
+      poll_deadline_ns = now + 1000LL * poll_budget_us;
+    }
+    return now < poll_deadline_ns;
   }
 
   void ProcSubgraphExecutor::execute(const ReadyEntry &entry)
