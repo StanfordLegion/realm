@@ -61,7 +61,7 @@ enum
   WORK_TASK,
 };
 
-struct Config {
+struct BenchConfig {
   std::string shape = "chain";
   int n = 64;
   int layers = 8, width = 8;
@@ -74,7 +74,7 @@ struct Config {
   std::string mode = "all";
   unsigned seed = 1;
 };
-static Config cfg;
+static BenchConfig cfg;
 
 struct WorkArgs {
   long spin_ns;
