@@ -944,15 +944,19 @@ namespace Realm {
 
     // we've also computed how many events will contribute to the finish
     //  event, so we can arm the merger as we go
+    // The compiled portion contributes one more precondition (its own finish
+    // event). Only prepare a merger if something feeds it: a merger that is
+    // prepared but never armed leaves the event's generation in a bad state.
+    const bool compiled = (defn->execution_mode == SubgraphDefinition::COMPILED);
+    const size_t num_merger_inputs = num_final_events + (compiled ? 1 : 0);
     GenEventImpl *event_impl = 0;
-    // num_final_events may be zero if all the final events were sucked into
-    // the static part of the subgraph. So we'll arm a finish event no matter
-    // what and include the contribution of the static component. Include
-    // a +1 to num_final_events to account for the static component.
-    event_impl = get_genevent_impl(finish_event);
-    event_impl->merger.prepare_merger(finish_event, false /*!ignore_faults*/,
-                                      num_final_events + 1);
-    event_impl->merger.add_precondition(static_finish_event);
+    if(num_merger_inputs > 0) {
+      event_impl = get_genevent_impl(finish_event);
+      event_impl->merger.prepare_merger(finish_event, false /*!ignore_faults*/,
+                                        num_merger_inputs);
+      if(compiled)
+        event_impl->merger.add_precondition(static_finish_event);
+    }
 
     Event *preconds = static_cast<Event *>(alloca(max_preconditions * sizeof(Event)));
 
@@ -1182,10 +1186,9 @@ namespace Realm {
     // sanity-check that we counted right
     assert(cur_intermediate_events == num_intermediate_events);
 
-    // If we compiled a part of the subgraph or had some finish events
-    // in the dynamic portion, then we need to arm the merger. Otherwise,
-    // final event is ready to trigger as-is.
-    if(num_final_events > 0 || defn->execution_mode == SubgraphDefinition::COMPILED) {
+    // Arm the merger if anything feeds it; otherwise the finish event is
+    // ready to trigger as-is.
+    if(num_merger_inputs > 0) {
       event_impl->merger.arm_merger();
     } else {
       GenEventImpl::trigger(finish_event, false /*!poisoned*/);
