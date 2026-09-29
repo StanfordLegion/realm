@@ -127,9 +127,22 @@ static TestConfig config;
 
 static std::vector<Processor> all_cpus()
 {
+  Machine::ProcessorQuery pq = Machine::ProcessorQuery(Machine::get_machine())
+                                   .only_kind(Processor::LOC_PROC)
+                                   .local_address_space();
+  return std::vector<Processor>(pq.begin(), pq.end());
+}
+
+// A CPU in some other address space, or NO_PROC in a single-rank run.
+static Processor remote_cpu()
+{
+  AddressSpace here = Processor::get_executing_processor().address_space();
   Machine::ProcessorQuery pq =
       Machine::ProcessorQuery(Machine::get_machine()).only_kind(Processor::LOC_PROC);
-  return std::vector<Processor>(pq.begin(), pq.end());
+  for(Processor p : pq)
+    if(p.address_space() != here)
+      return p;
+  return Processor::NO_PROC;
 }
 
 // Processors available for subgraph tasks: everything but the driver's CPU.
@@ -1580,6 +1593,85 @@ private:
 
 ////////////////////////////////////////////////////////////////////////
 //
+// RemoteInstantiateDestroyTest: a task on another address space
+// instantiates a subgraph owned by this node several times and then
+// destroys it. Everything must run on the owner's processors and the
+// destroy event must cover all of it.
+//
+
+struct RemoteDriverArgs {
+  Subgraph sg;
+  UserEvent done;
+  int iters;
+};
+
+static int remote_driver_task_id = 0;
+
+static void remote_driver_task(const void *args, size_t arglen, const void *userdata,
+                               size_t userlen, Processor p)
+{
+  const RemoteDriverArgs *a = static_cast<const RemoteDriverArgs *>(args);
+  std::vector<Event> evs;
+  for(int i = 0; i < a->iters; i++)
+    evs.push_back(a->sg.instantiate(nullptr, 0, ProfilingRequestSet()));
+  // Destroy from the remote node while instantiations may still be running.
+  evs.push_back(a->sg.destroy());
+  a->done.trigger(Event::merge_events(evs));
+}
+
+class RemoteInstantiateDestroyTest : public SubgraphTest {
+public:
+  std::string name() const override { return "RemoteInstantiateDestroy"; }
+  bool can_run() override
+  {
+    return (Machine::get_machine().get_address_space_count() >= 2) &&
+           (worker_cpus().size() >= 1) && remote_cpu().exists();
+  }
+
+  void init(SubgraphDefinition::ExecutionMode mode) override
+  {
+    procs = worker_cpus(2);
+    spec = dag_layers(3, 2, procs.size(), true);
+    state.reset(&spec, procs);
+    sg = build_dag_subgraph(spec, state, mode, SubgraphDefinition::INSTANTIATION_ORDER);
+  }
+
+  void run() override
+  {
+    iters = config.iterations * 4;
+    UserEvent done = UserEvent::create_user_event();
+    RemoteDriverArgs a{sg, done, iters};
+    remote_cpu().spawn(remote_driver_task_id, &a, sizeof(a));
+    completed = wait_with_timeout(done, config.hang_timeout);
+  }
+
+  bool check() override
+  {
+    int64_t expected = int64_t(iters) * spec.size();
+    bool ok = completed && (state.executed.load() == expected) &&
+              (state.violations.load() == 0);
+    if(!ok)
+      log_app.error() << name() << ": completed=" << completed << " executed "
+                      << state.executed.load() << "/" << expected << " violations "
+                      << state.violations.load();
+    return ok;
+  }
+
+  void cleanup() override {} // destroyed by the remote driver
+
+  bool hung() const override { return !completed; }
+
+private:
+  std::vector<Processor> procs;
+  DagSpec spec;
+  DagState state;
+  Subgraph sg;
+  int iters = 0;
+  bool completed = false;
+};
+
+////////////////////////////////////////////////////////////////////////
+//
 // ConcurrentSubgraphsTest: two different subgraphs whose chains cross the
 // same two processors in opposite directions, instantiated concurrently
 // from two different launcher tasks. Any acquisition-order dependence
@@ -1740,6 +1832,23 @@ static void death_profiling_on_compiled_instantiate()
   sg.instantiate(nullptr, 0, prs).wait();
 }
 
+static void death_remote_task_compiled()
+{
+  Processor remote = remote_cpu();
+  if(!remote.exists()) {
+    printf("DEATH-TEST-SKIPPED (single address space)\n");
+    fflush(stdout);
+    Runtime::get_runtime().shutdown(Event::NO_EVENT, 0);
+    return;
+  }
+  SubgraphDefinition sd;
+  sd.execution_mode = SubgraphDefinition::COMPILED;
+  sd.concurrency_mode = SubgraphDefinition::ONE_SHOT;
+  make_task_desc(sd, remote, noop_task_id, nullptr, 0);
+  Subgraph sg;
+  Subgraph::create_subgraph(sg, sd, ProfilingRequestSet()).wait();
+}
+
 static void death_external_precond_compiled_instantiate()
 {
   Subgraph sg = make_one_task_compiled_subgraph(noop_task_id);
@@ -1759,6 +1868,8 @@ static const DeathScenario death_scenarios[] = {
     {"unsupported_op_compiled", death_unsupported_op_compiled},
     {"profiling_on_compiled_instantiate", death_profiling_on_compiled_instantiate},
     {"external_precond_compiled_instantiate", death_external_precond_compiled_instantiate},
+    // multi-rank only; prints DEATH-TEST-SKIPPED in a single-rank run
+    {"remote_task_compiled", death_remote_task_compiled},
 };
 
 ////////////////////////////////////////////////////////////////////////
@@ -1775,6 +1886,8 @@ static void register_common_tasks()
   waiting_task_id = task_id_counter++;
   finish_event_task_id = task_id_counter++;
   noop_task_id = task_id_counter++;
+  remote_driver_task_id = task_id_counter++;
+  rt.register_task(remote_driver_task_id, remote_driver_task);
   rt.register_task(dag_task_id, dag_task);
   rt.register_task(counter_task_id, counter_task);
   rt.register_task(launcher_task_id, launcher_task);
@@ -1822,6 +1935,7 @@ static std::vector<std::unique_ptr<SubgraphTest>> make_tests()
   tests.emplace_back(new ManyInstantiationsTest());
   tests.emplace_back(new PoisonedPreconditionTest());
   tests.emplace_back(new MixedWorkloadTest());
+  tests.emplace_back(new RemoteInstantiateDestroyTest());
   // Last: a hang here leaves executors wedged, so nothing may follow it.
   tests.emplace_back(new ConcurrentSubgraphsTest());
   return tests;
@@ -1830,8 +1944,6 @@ static std::vector<std::unique_ptr<SubgraphTest>> make_tests()
 void top_level_task(const void *args, size_t arglen, const void *userdata, size_t userlen,
                     Processor p)
 {
-  register_common_tasks();
-
   if(!config.death.empty()) {
     for(const DeathScenario &s : death_scenarios) {
       if(config.death == s.name) {
@@ -1858,9 +1970,9 @@ void top_level_task(const void *args, size_t arglen, const void *userdata, size_
     return;
   }
 
-  { std::ostringstream _os; _os << "subgraph tests: " << all_cpus().size() << " CPUs ("
-                  << worker_cpus().size() << " workers), iterations=" << config.iterations
-                  << " seed=" << config.seed; report(_os.str()); }
+  { std::ostringstream _os; _os << "subgraph tests: ranks=" << Machine::get_machine().get_address_space_count()
+                  << " " << all_cpus().size() << " CPUs (" << worker_cpus().size()
+                  << " workers), iterations=" << config.iterations << " seed=" << config.seed; report(_os.str()); }
   for(auto &test : tests)
     test->register_test();
 
@@ -1953,6 +2065,8 @@ int main(int argc, char **argv)
 
   rt.register_task(TOP_LEVEL_TASK, top_level_task);
   rt.register_reduction<SumReduction>(REDOP_INT_ADD);
+  // Common tasks must exist on every rank: remote tests spawn them there.
+  register_common_tasks();
 
   Processor p = Machine::ProcessorQuery(Machine::get_machine())
                     .only_kind(Processor::LOC_PROC)
