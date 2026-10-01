@@ -426,6 +426,9 @@ namespace Realm {
         case SubgraphDefinition::OPKIND_TASK:
           limit = d.tasks.size();
           break;
+        case SubgraphDefinition::OPKIND_COPY:
+          limit = d.copies.size();
+          break;
         case SubgraphDefinition::OPKIND_ARRIVAL:
           limit = d.arrivals.size();
           break;

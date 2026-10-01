@@ -5915,6 +5915,7 @@ namespace Realm {
   }
 
 #define DOIT(N, T)                                                                       \
+  template TransferDomain *TransferDomain::construct<N, T>(const IndexSpace<N, T> &);     \
   template Event IndexSpace<N, T>::copy(                                                 \
       const std::vector<CopySrcDstField> &, const std::vector<CopySrcDstField> &,        \
       const std::vector<const CopyIndirection<N, T>::Base *> &,                          \

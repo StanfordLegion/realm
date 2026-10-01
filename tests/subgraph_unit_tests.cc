@@ -2417,11 +2417,10 @@ public:
 
   void run() override
   {
-    postcond = UserEvent::create_user_event();
-    std::vector<Event> preconds, postconds = {postcond};
+    std::vector<Event> preconds, postconds(1); // filled in by instantiate
     double t0 = Clock::current_time();
     Event e = sg.instantiate(nullptr, 0, ProfilingRequestSet(), preconds, postconds);
-    postcond_ok = wait_with_timeout(postcond, config.hang_timeout);
+    postcond_ok = wait_with_timeout(postconds[0], config.hang_timeout);
     postcond_delay = Clock::current_time() - t0;
     value_at_postcond = buf.ptr[0];
     completed = wait_with_timeout(e, config.hang_timeout);
@@ -2451,7 +2450,6 @@ private:
   Processor gpu;
   ZcBuffer buf;
   std::atomic<int64_t> seen{-1};
-  UserEvent postcond;
   Subgraph sg;
   int value_at_postcond = -1;
   double postcond_delay = 0;
@@ -3471,15 +3469,13 @@ static Subgraph make_one_task_subgraph(int task_id)
 
 static void death_unsupported_op_compiled()
 {
-  RegionInstance inst;
-  IndexSpace<1> is = Rect<1>(0, 9);
-  std::map<FieldID, size_t> field_sizes = {{FID_DATA, sizeof(int)}};
-  RegionInstance::create_instance(inst, sysmem(), is, field_sizes, 0, ProfilingRequestSet())
-      .wait();
+  // nested instantiations are not implemented: compile must refuse them
   SubgraphDefinition sd;
   sd.concurrency_mode = SubgraphDefinition::ONE_SHOT;
-  int fill_value = 0;
-  make_fill_desc(sd, is, inst, FID_DATA, &fill_value, sizeof(fill_value));
+  make_task_desc(sd, worker_cpus()[0], noop_task_id, nullptr, 0);
+  SubgraphDefinition::InstantiationDesc inner;
+  inner.subgraph = make_one_task_subgraph(noop_task_id);
+  sd.instantiations.push_back(inner);
   Subgraph sg;
   Subgraph::create_subgraph(sg, sd, ProfilingRequestSet()).wait();
 }
