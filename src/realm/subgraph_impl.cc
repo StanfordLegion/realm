@@ -261,10 +261,21 @@ namespace Realm {
   void CompiledSubgraph::clear()
   {
     ops.clear();
+    num_direct_ops = 0;
+    task_ops.clear();
+    any_task_profiling = false;
+    roots.clear();
     procs.clear();
     domains.clear();
     proc_index.clear();
     successors.clear();
+    postconds_of.clear();
+    inputs.clear();
+    postconds.clear();
+    interps.clear();
+    input_words = 0;
+    op_inputs.clear();
+    postcond_inputs.clear();
   }
 
   ////////////////////////////////////////////////////////////////////////
