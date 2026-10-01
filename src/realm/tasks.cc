@@ -21,7 +21,7 @@
 
 #include "realm/runtime_impl.h"
 #include "realm/proc_impl.h"
-#include "realm/subgraph_impl.h"
+#include "realm/subgraph/subgraph_impl.h"
 #include "realm/utils.h"
 
 #include <algorithm>

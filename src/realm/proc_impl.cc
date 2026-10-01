@@ -16,7 +16,7 @@
  */
 
 #include "realm/proc_impl.h"
-#include "realm/subgraph_impl.h"
+#include "realm/subgraph/subgraph_impl.h"
 
 #include "realm/timers.h"
 #include "realm/runtime_impl.h"

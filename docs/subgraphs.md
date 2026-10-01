@@ -172,6 +172,17 @@ both directly and as subgraph replays and checks the result.
 See the pull request description for the numbers from the Eos runs (per-task
 cost, instantiation cost, copy replay cost, stencil step time).
 
+## Code layout
+
+- `realm/subgraph.h`, `realm/subgraph.inl`: the public API.
+- `realm/subgraph/subgraph_impl.h`: the compiled form (`CompiledSubgraph`), the
+  per-instantiation state, the per-processor executor and the lifecycle classes.
+- `realm/subgraph/subgraph_compile.cc`: validation and compilation.
+- `realm/subgraph/subgraph_exec.cc`: execution (state, executor, GPU and copy paths).
+- `realm/subgraph/subgraph_api.cc`: the API entry points, lifecycle, messages.
+- Processor hooks live with the processors (`proc_impl.h`, `cuda/cuda_module.cc`);
+  the scheduler integration is in `tasks.cc`.
+
 ## Follow-ups
 
 - XD reuse across replays (after the DMA refactor); inline copy analysis to
@@ -182,4 +193,3 @@ cost, instantiation cost, copy replay cost, stencil step time).
   processors.
 - Task context managers other than the CUDA hooks are not applied to subgraph
   tasks (Cuhook validation and CUPTI correlation included).
-- Moving the implementation into `src/realm/subgraph/`.

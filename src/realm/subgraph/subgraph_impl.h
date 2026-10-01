@@ -27,13 +27,31 @@
 #include "realm/operation.h"
 #include "realm/bgwork.h"
 #include "realm/mutex.h"
+#include "realm/logging.h"
 
 #include <memory>
 #include <queue>
+#include <sstream>
+#include <string>
 #include <unordered_map>
 #include <vector>
 
 namespace Realm {
+
+  extern Logger log_subgraph;
+
+  // Unsupported features and misuse are hard errors: a subgraph that ran
+  // with different semantics than requested would be worse than one that
+  // refuses to run.
+  [[noreturn]] void subgraph_fatal(ID me, const std::string &what);
+#define SUBGRAPH_FATAL(me, expr)                                                         \
+  do {                                                                                   \
+    std::ostringstream _ss;                                                              \
+    _ss << expr;                                                                         \
+    ::Realm::subgraph_fatal((me), _ss.str());                                            \
+  } while(0)
+
+  const char *op_kind_name(SubgraphDefinition::OpKind kind);
 
   class LocalTaskProcessor;
   class ProcSubgraphExecutor;

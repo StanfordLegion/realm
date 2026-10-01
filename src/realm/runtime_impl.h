@@ -37,7 +37,7 @@
 #include "realm/event_impl.h"
 #include "realm/barrier_impl.h"
 #include "realm/rsrv_impl.h"
-#include "realm/subgraph_impl.h"
+#include "realm/subgraph/subgraph_impl.h"
 
 #include "realm/machine_impl.h"
 
