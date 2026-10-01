@@ -1755,7 +1755,12 @@ private:
 };
 
 // A higher-priority instantiation arriving while a lower one is executing
-// runs to completion before the lower one runs anything more.
+// runs to completion before the lower one runs anything more. The high
+// graph's start event is triggered by the low graph's first task; since
+// event waiters may run on a background thread, the high graph becomes
+// active some time later, so the check starts at its first task. Each
+// processor may have dequeued one low task just before the high graph
+// arrived, so up to one low task per processor may still interleave.
 class GraphPriorityPreemptionTest : public SubgraphTest {
 public:
   std::string name() const override { return "GraphPriority.TwoGraphs"; }
@@ -1782,17 +1787,21 @@ public:
   {
     if(!completed)
       return false;
-    int64_t high_min = INT64_MAX, high_max = -1, low_rest_min = INT64_MAX;
+    int64_t high_min = INT64_MAX, high_max = -1;
     for(auto &s : slots_high) {
       high_min = std::min(high_min, s.load());
       high_max = std::max(high_max, s.load());
     }
-    for(size_t i = 1; i < slots_low.size(); i++)
-      low_rest_min = std::min(low_rest_min, slots_low[i].load());
-    bool ok = (high_min > slots_low[0].load()) && (low_rest_min > high_max);
+    size_t interleaved = 0;
+    for(auto &s : slots_low)
+      if((s.load() > high_min) && (s.load() < high_max))
+        interleaved++;
+    bool ok = (high_min > slots_low[0].load()) && (interleaved <= procs.size());
     if(!ok)
       log_app.error() << name() << ": low_first=" << slots_low[0].load() << " high=["
-                      << high_min << "," << high_max << "] low_rest_min=" << low_rest_min;
+                      << high_min << "," << high_max << "] low tasks interleaved during "
+                      << "the high graph: " << interleaved << " (allowed " << procs.size()
+                      << ")";
     return ok;
   }
 
