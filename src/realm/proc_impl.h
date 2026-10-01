@@ -140,6 +140,14 @@ namespace Realm {
 
   // generic local task processor - subclasses must create and configure a task
   // scheduler and pass in with the set_scheduler() method
+  // Completion callback for subgraph tasks on processors whose tasks keep
+  // working after their function returns (see the LocalTaskProcessor hooks).
+  class SubgraphAsyncCompletion {
+  public:
+    virtual ~SubgraphAsyncCompletion(void) {}
+    virtual void async_completed(void) = 0;
+  };
+
   class LocalTaskProcessor : public ProcessorImpl {
   public:
     LocalTaskProcessor(RuntimeImpl *runtime_impl, Processor _me, Processor::Kind _kind,
@@ -174,6 +182,37 @@ namespace Realm {
     void enqueue_subgraph(SubgraphExecutionState *subgraph);
     // OS NUMA node this processor's worker threads run on, or -1 if unknown.
     int numa_node(void) const;
+
+    // ---- compiled subgraph tasks (subgraph_impl.cc) ----
+    // The base implementation describes a processor that runs task functions
+    // synchronously and does not run subgraph tasks at all; CPUs and CUDA
+    // GPUs override what applies to them.
+    enum SubgraphTaskFlags {
+      SUBGRAPH_TASK_REGISTERED = 1,
+      // every effect of the task is enqueued on the stream it is given
+      // (DeferredEffectsProperty, or a stream-aware prototype)
+      SUBGRAPH_TASK_DEFERRED_EFFECTS = 2,
+    };
+    // Flags for a registered task, 0 if it is not registered here.
+    virtual unsigned subgraph_task_flags(Processor::TaskFuncID func_id);
+    // May subgraph tasks run here at all?
+    virtual bool supports_subgraph_tasks(void) const;
+    // Do tasks keep working after their function returns (GPU kernels)?
+    virtual bool subgraph_tasks_are_async(void) const;
+    // Called on the worker thread right before a subgraph task's function.
+    // `tokens` come from end_subgraph_task of deferred-effects predecessors
+    // on this processor whose work this task must follow (null entries are
+    // skipped). The returned context is handed to the other hooks.
+    virtual void *begin_subgraph_task(const void *const *tokens, size_t num_tokens);
+    // Called right after the function returns. Asynchronous processors
+    // return a token that orders dependents after this task's work.
+    virtual void *end_subgraph_task(void *context, bool deferred_effects);
+    // Asynchronous processors only: arms `completion` to fire once the
+    // task's work is done, possibly before this returns.
+    virtual void arm_subgraph_task_completion(void *context, void *token,
+                                              SubgraphAsyncCompletion *completion);
+    // Gives back tokens from end_subgraph_task once nobody can use them.
+    virtual void release_subgraph_tokens(void *const *tokens, size_t num_tokens);
 
   protected:
     void set_scheduler(ThreadedTaskScheduler *_sched);
@@ -218,6 +257,8 @@ namespace Realm {
                       size_t _stack_size, bool _force_kthreads,
                       BackgroundWorkManager *bgwork, long long bgwork_timeslice);
     virtual ~LocalCPUProcessor(void);
+
+    virtual bool supports_subgraph_tasks(void) const { return true; }
 
   protected:
     CoreReservation *core_rsrv;

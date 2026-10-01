@@ -114,9 +114,12 @@ namespace Realm {
 
     struct TaskDesc {
       TaskDesc(); // initializes all fields
-      // currently: proc must be a LOC_PROC of the creating node, priority must
-      //  be 0, prs must be empty; tasks must not wait on events, spawn other
-      //  tasks, or query their own finish event
+      // currently: proc must be a CPU (LOC_PROC) or CUDA GPU (TOC_PROC) of
+      //  the creating node with task_id registered on it, and priority must
+      //  be 0. GPU tasks complete when the work they launched completes; a
+      //  task registered with DeferredEffectsProperty (or a stream-aware
+      //  prototype) lets GPU tasks after it on the same GPU start as soon as
+      //  its function returns, ordered after it on the stream.
 
       // interpolatable: args
       Processor proc;

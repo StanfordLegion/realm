@@ -52,6 +52,9 @@
 #include <cstddef>
 #include <cstdint>
 #include <climits>
+#ifdef SUBGRAPH_TESTS_CUDA
+#include "realm/cuda/cuda_module.h"
+#endif
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
@@ -2136,6 +2139,611 @@ static void prof_response_task(const void *args, size_t arglen, const void *user
   pl->test->handle(resp, *pl);
 }
 
+
+////////////////////////////////////////////////////////////////////////
+//
+// GPU tasks. Built only with CUDA; the tests skip themselves when the run
+// has no GPU. Kernels write to a zero-copy buffer the host can read; they
+// wait a while first so that the tests can tell host-side progress from
+// device-side completion.
+//
+
+#ifdef SUBGRAPH_TESTS_CUDA
+
+extern "C" void subgraph_gpu_spin_add(void *stream, int *dst, const int *src, int add,
+                                      long long spin_ns);
+
+static std::vector<Processor> all_gpus()
+{
+  Machine::ProcessorQuery pq = Machine::ProcessorQuery(Machine::get_machine())
+                                   .only_kind(Processor::TOC_PROC)
+                                   .local_address_space();
+  return std::vector<Processor>(pq.begin(), pq.end());
+}
+
+static Memory zcopy_mem()
+{
+  return Machine::MemoryQuery(Machine::get_machine())
+      .only_kind(Memory::Z_COPY_MEM)
+      .has_capacity(1 << 20)
+      .first();
+}
+
+static bool gpu_tests_can_run()
+{
+  return !all_gpus().empty() && zcopy_mem().exists() && !worker_cpus().empty();
+}
+
+// A zero-copy int buffer: host and device see the same addresses.
+struct ZcBuffer {
+  RegionInstance inst;
+  int *ptr = nullptr;
+
+  void create(size_t count)
+  {
+    std::vector<size_t> field_sizes(1, sizeof(int));
+    RegionInstance::create_instance(inst, zcopy_mem(), IndexSpace<1>(Rect<1>(0, count - 1)),
+                                    field_sizes, 0 /*SOA*/, ProfilingRequestSet())
+        .wait();
+    AffineAccessor<int, 1> acc(inst, 0);
+    ptr = acc.ptr(Point<1>(0));
+    for(size_t i = 0; i < count; i++)
+      ptr[i] = 0;
+  }
+  void destroy()
+  {
+    if(inst.exists())
+      inst.destroy();
+    inst = RegionInstance::NO_INST;
+    ptr = nullptr;
+  }
+};
+
+struct GpuSpinArgs {
+  int *dst;
+  const int *src;
+  int add;
+  long long spin_ns;
+  double *stamp; // host time at which the task function ran, if not null
+};
+
+static int gpu_deferred_task_id = 0; // DeferredEffectsProperty
+static int gpu_plain_task_id = 0;    // the same function without the property
+static int gpu_stream_task_id = 0;   // stream-aware prototype (implicitly deferred)
+static int gpu_fevent_task_id = 0;   // deferred, asks for its finish event
+static int read_int_task_id = 0;     // CPU: copies *src to an atomic
+
+static void gpu_spin_task(const void *args, size_t arglen, const void *userdata,
+                          size_t userlen, Processor p)
+{
+  const GpuSpinArgs *a = static_cast<const GpuSpinArgs *>(args);
+  if(a->stamp)
+    *a->stamp = Clock::current_time();
+  subgraph_gpu_spin_add(Cuda::get_task_cuda_stream(), a->dst, a->src, a->add, a->spin_ns);
+}
+
+static void gpu_spin_stream_task(const void *args, size_t arglen, const void *userdata,
+                                 size_t userlen, Processor p, CUstream_st *stream)
+{
+  const GpuSpinArgs *a = static_cast<const GpuSpinArgs *>(args);
+  if(a->stamp)
+    *a->stamp = Clock::current_time();
+  subgraph_gpu_spin_add(stream, a->dst, a->src, a->add, a->spin_ns);
+}
+
+struct ReadIntArgs {
+  const int *src;
+  std::atomic<int64_t> *out;
+};
+
+static void read_int_task(const void *args, size_t arglen, const void *userdata,
+                          size_t userlen, Processor p)
+{
+  const ReadIntArgs *a = static_cast<const ReadIntArgs *>(args);
+  a->out->store(*a->src);
+}
+
+struct GpuFinishEventArgs {
+  GpuSpinArgs spin;
+  Processor target;
+  std::atomic<int64_t> *out;
+};
+
+static void gpu_fevent_task(const void *args, size_t arglen, const void *userdata,
+                            size_t userlen, Processor p)
+{
+  const GpuFinishEventArgs *a = static_cast<const GpuFinishEventArgs *>(args);
+  gpu_spin_task(&a->spin, sizeof(a->spin), userdata, userlen, p);
+  // the finish event must cover the kernel, not just this function
+  ReadIntArgs r{a->spin.dst, a->out};
+  a->target.spawn(read_int_task_id, &r, sizeof(r), Processor::get_current_finish_event());
+}
+
+static void register_gpu_tasks()
+{
+  gpu_deferred_task_id = task_id_counter++;
+  gpu_plain_task_id = task_id_counter++;
+  gpu_stream_task_id = task_id_counter++;
+  gpu_fevent_task_id = task_id_counter++;
+  read_int_task_id = task_id_counter++;
+  Runtime::get_runtime().register_task(read_int_task_id, read_int_task);
+  if(all_gpus().empty())
+    return;
+  CodeDescriptor deferred(gpu_spin_task);
+  deferred.add_property(new DeferredEffectsProperty);
+  Processor::register_task_by_kind(Processor::TOC_PROC, false /*!global*/,
+                                   gpu_deferred_task_id, deferred, ProfilingRequestSet())
+      .wait();
+  Processor::register_task_by_kind(Processor::TOC_PROC, false /*!global*/,
+                                   gpu_plain_task_id, CodeDescriptor(gpu_spin_task),
+                                   ProfilingRequestSet())
+      .wait();
+  Processor::register_task_by_kind(Processor::TOC_PROC, false /*!global*/,
+                                   gpu_stream_task_id, CodeDescriptor(gpu_spin_stream_task),
+                                   ProfilingRequestSet())
+      .wait();
+  CodeDescriptor fevent(gpu_fevent_task);
+  fevent.add_property(new DeferredEffectsProperty);
+  Processor::register_task_by_kind(Processor::TOC_PROC, false /*!global*/,
+                                   gpu_fevent_task_id, fevent, ProfilingRequestSet())
+      .wait();
+}
+
+// A chain of GPU tasks on one GPU, each kernel waiting `spin_ns` and then
+// writing buf[i] = buf[i-1] + 1. With deferred effects (property or
+// stream-aware prototype) the task functions all run while the first kernel
+// is still waiting and the device orders the kernels; without, each task
+// waits for the previous kernel to complete. Either way the values must
+// come out right and the finish event must wait for the last kernel.
+class GpuChainTest : public SubgraphTest {
+public:
+  GpuChainTest(const char *_name, int *_task_id, bool _expect_ahead)
+    : test_name(_name)
+    , task_id(_task_id)
+    , expect_ahead(_expect_ahead)
+  {}
+  std::string name() const override { return test_name; }
+  bool can_run() override { return gpu_tests_can_run(); }
+
+  void init() override
+  {
+    gpu = all_gpus()[0];
+    buf.create(N);
+    stamps.assign(N, 0.0);
+    SubgraphDefinition sd;
+    sd.concurrency_mode = SubgraphDefinition::ONE_SHOT;
+    for(int i = 0; i < N; i++) {
+      GpuSpinArgs a{buf.ptr + i, (i > 0) ? buf.ptr + (i - 1) : nullptr, 1, spin_ns,
+                    &stamps[i]};
+      int t = make_task_desc(sd, gpu, *task_id, &a, sizeof(a));
+      if(i > 0)
+        add_dependency(sd, SubgraphDefinition::OPKIND_TASK, t - 1,
+                       SubgraphDefinition::OPKIND_TASK, t);
+    }
+    Subgraph::create_subgraph(sg, sd, ProfilingRequestSet()).wait();
+  }
+
+  void run() override
+  {
+    t0 = Clock::current_time();
+    completed = wait_with_timeout(sg.instantiate(nullptr, 0, ProfilingRequestSet()),
+                                  config.hang_timeout);
+    t1 = Clock::current_time();
+  }
+
+  bool check() override
+  {
+    if(!completed)
+      return false;
+    const double total_spin = N * spin_ns * 1e-9;
+    const double bodies = stamps[N - 1] - stamps[0];
+    const double finish = t1 - t0;
+    bool values_ok = true;
+    for(int i = 0; i < N; i++)
+      values_ok = values_ok && (buf.ptr[i] == i + 1);
+    // the finish event waited for the device
+    bool finish_ok = finish >= 0.5 * total_spin;
+    // deferred: the host enqueued everything while the first kernel waited;
+    // otherwise each task waited for the previous kernel
+    bool ahead_ok = expect_ahead ? (bodies < 0.5 * total_spin)
+                                 : (bodies >= 0.5 * (N - 1) * spin_ns * 1e-9);
+    bool ok = values_ok && finish_ok && ahead_ok;
+    std::ostringstream os;
+    os << name() << ": last value " << buf.ptr[N - 1] << " (want " << N
+       << "), task functions spread over " << bodies * 1e3 << " ms, finished after "
+       << finish * 1e3 << " ms (" << N << " kernels of " << spin_ns / 1000 << " us)";
+    if(ok)
+      report(os.str());
+    else
+      log_app.error() << os.str();
+    return ok;
+  }
+
+  void cleanup() override
+  {
+    if(completed)
+      sg.destroy().wait();
+    buf.destroy();
+  }
+
+  bool hung() const override { return !completed; }
+
+private:
+  static constexpr int N = 12;
+  static constexpr long long spin_ns = 200000;
+  std::string test_name;
+  int *task_id;
+  bool expect_ahead;
+  Processor gpu;
+  ZcBuffer buf;
+  std::vector<double> stamps;
+  Subgraph sg;
+  double t0 = 0, t1 = 0;
+  bool completed = false;
+};
+
+// A deferred GPU task followed by a CPU task and an external postcondition:
+// both must see the kernel's result, i.e. wait for the device, not for the
+// task function.
+class GpuToCpuTest : public SubgraphTest {
+public:
+  std::string name() const override { return "Gpu.ToCpu"; }
+  bool can_run() override { return gpu_tests_can_run(); }
+
+  void init() override
+  {
+    gpu = all_gpus()[0];
+    buf.create(1);
+    seen.store(-1);
+    SubgraphDefinition sd;
+    sd.concurrency_mode = SubgraphDefinition::ONE_SHOT;
+    GpuSpinArgs a{buf.ptr, nullptr, 42, 1000000 /*1 ms*/, nullptr};
+    int g = make_task_desc(sd, gpu, gpu_deferred_task_id, &a, sizeof(a));
+    ReadIntArgs r{buf.ptr, &seen};
+    int c = make_task_desc(sd, worker_cpus()[0], read_int_task_id, &r, sizeof(r));
+    add_dependency(sd, SubgraphDefinition::OPKIND_TASK, g, SubgraphDefinition::OPKIND_TASK, c);
+    add_dependency(sd, SubgraphDefinition::OPKIND_TASK, g,
+                   SubgraphDefinition::OPKIND_EXT_POSTCOND, 0);
+    Subgraph::create_subgraph(sg, sd, ProfilingRequestSet()).wait();
+  }
+
+  void run() override
+  {
+    postcond = UserEvent::create_user_event();
+    std::vector<Event> preconds, postconds = {postcond};
+    double t0 = Clock::current_time();
+    Event e = sg.instantiate(nullptr, 0, ProfilingRequestSet(), preconds, postconds);
+    postcond_ok = wait_with_timeout(postcond, config.hang_timeout);
+    postcond_delay = Clock::current_time() - t0;
+    value_at_postcond = buf.ptr[0];
+    completed = wait_with_timeout(e, config.hang_timeout);
+  }
+
+  bool check() override
+  {
+    bool ok = completed && postcond_ok && (seen.load() == 42) && (value_at_postcond == 42) &&
+              (postcond_delay >= 0.5e-3);
+    if(!ok)
+      log_app.error() << name() << ": completed=" << completed << " postcond=" << postcond_ok
+                      << " after " << postcond_delay * 1e3 << " ms, value then "
+                      << value_at_postcond << ", CPU task saw " << seen.load();
+    return ok;
+  }
+
+  void cleanup() override
+  {
+    if(completed)
+      sg.destroy().wait();
+    buf.destroy();
+  }
+
+  bool hung() const override { return !completed; }
+
+private:
+  Processor gpu;
+  ZcBuffer buf;
+  std::atomic<int64_t> seen{-1};
+  UserEvent postcond;
+  Subgraph sg;
+  int value_at_postcond = -1;
+  double postcond_delay = 0;
+  bool completed = false, postcond_ok = false;
+};
+
+// A deferred GPU task asks for its finish event and spawns a CPU task on
+// it: the CPU task must see the kernel's result.
+class GpuFinishEventTest : public SubgraphTest {
+public:
+  std::string name() const override { return "Gpu.FinishEvent"; }
+  bool can_run() override { return gpu_tests_can_run(); }
+
+  void init() override
+  {
+    gpu = all_gpus()[0];
+    buf.create(1);
+    seen.store(-1);
+    SubgraphDefinition sd;
+    sd.concurrency_mode = SubgraphDefinition::ONE_SHOT;
+    GpuFinishEventArgs a{{buf.ptr, nullptr, 7, 1000000 /*1 ms*/, nullptr}, worker_cpus()[0],
+                         &seen};
+    make_task_desc(sd, gpu, gpu_fevent_task_id, &a, sizeof(a));
+    Subgraph::create_subgraph(sg, sd, ProfilingRequestSet()).wait();
+  }
+
+  void run() override
+  {
+    completed = wait_with_timeout(sg.instantiate(nullptr, 0, ProfilingRequestSet()),
+                                  config.hang_timeout);
+    dep_ran = poll_until([&] { return seen.load() >= 0; }, config.hang_timeout);
+  }
+
+  bool check() override
+  {
+    bool ok = completed && dep_ran && (seen.load() == 7);
+    if(!ok)
+      log_app.error() << name() << ": completed=" << completed << " dep_ran=" << dep_ran
+                      << " saw " << seen.load();
+    return ok;
+  }
+
+  void cleanup() override
+  {
+    if(completed)
+      sg.destroy().wait();
+    buf.destroy();
+  }
+
+  bool hung() const override { return !completed; }
+
+private:
+  Processor gpu;
+  ZcBuffer buf;
+  std::atomic<int64_t> seen{-1};
+  Subgraph sg;
+  bool completed = false, dep_ran = false;
+};
+
+// Profiling a GPU task: the timeline's completion comes after its end by at
+// least the kernel's duration, and the processor is the GPU.
+class GpuProfilingTest;
+struct GpuProfPayload {
+  GpuProfilingTest *test;
+};
+static void gpu_prof_response_task(const void *args, size_t arglen, const void *userdata,
+                                   size_t userlen, Processor p);
+static int gpu_prof_response_task_id = 0;
+
+class GpuProfilingTest : public SubgraphTest {
+public:
+  std::string name() const override { return "Gpu.Profiling"; }
+  bool can_run() override { return gpu_tests_can_run(); }
+
+  void handle(const ProfilingResponse &resp)
+  {
+    using namespace ProfilingMeasurements;
+    OperationTimeline tl;
+    OperationProcessorUsage pu;
+    if(resp.get_measurement(tl)) {
+      end_to_complete = (tl.complete_time - tl.end_time) * 1e-9;
+      ordered = (tl.ready_time <= tl.start_time) && (tl.start_time <= tl.end_time) &&
+                (tl.end_time <= tl.complete_time);
+    }
+    if(resp.get_measurement(pu))
+      proc_ok = (pu.proc == gpu);
+    responses.fetch_add(1);
+  }
+
+  void init() override
+  {
+    gpu = all_gpus()[0];
+    buf.create(1);
+    responses.store(0);
+    SubgraphDefinition sd;
+    sd.concurrency_mode = SubgraphDefinition::ONE_SHOT;
+    GpuSpinArgs a{buf.ptr, nullptr, 1, 2000000 /*2 ms*/, nullptr};
+    int t = make_task_desc(sd, gpu, gpu_deferred_task_id, &a, sizeof(a));
+    GpuProfPayload pl{this};
+    sd.tasks[t]
+        .prs.add_request(worker_cpus()[0], gpu_prof_response_task_id, &pl, sizeof(pl))
+        .add_measurement<ProfilingMeasurements::OperationTimeline>()
+        .add_measurement<ProfilingMeasurements::OperationProcessorUsage>();
+    Subgraph::create_subgraph(sg, sd, ProfilingRequestSet()).wait();
+  }
+
+  void run() override
+  {
+    completed = wait_with_timeout(sg.instantiate(nullptr, 0, ProfilingRequestSet()),
+                                  config.hang_timeout);
+    got_response = poll_until([&] { return responses.load() >= 1; }, config.hang_timeout);
+  }
+
+  bool check() override
+  {
+    bool ok = completed && got_response && ordered && proc_ok && (end_to_complete >= 1e-3) &&
+              (buf.ptr[0] == 1);
+    std::ostringstream os;
+    os << name() << ": completed=" << completed << " response=" << got_response
+       << " ordered=" << ordered << " proc_ok=" << proc_ok << " end->complete "
+       << end_to_complete * 1e3 << " ms (kernel 2 ms)";
+    if(ok)
+      report(os.str());
+    else
+      log_app.error() << os.str();
+    return ok;
+  }
+
+  void cleanup() override
+  {
+    if(completed)
+      sg.destroy().wait();
+    buf.destroy();
+  }
+
+  bool hung() const override { return !completed; }
+
+private:
+  Processor gpu;
+  ZcBuffer buf;
+  std::atomic<int> responses{0};
+  Subgraph sg;
+  double end_to_complete = 0;
+  bool ordered = false, proc_ok = false, completed = false, got_response = false;
+};
+
+static void gpu_prof_response_task(const void *args, size_t arglen, const void *userdata,
+                                   size_t userlen, Processor p)
+{
+  ProfilingResponse resp(args, arglen);
+  static_cast<const GpuProfPayload *>(resp.user_data())->test->handle(resp);
+}
+
+// Many replays of a small deferred chain in instantiation order, each adding
+// to the same cell: exercises token and event recycling.
+class GpuReplayTest : public SubgraphTest {
+public:
+  std::string name() const override { return "Gpu.Replay"; }
+  bool can_run() override { return gpu_tests_can_run(); }
+
+  void init() override
+  {
+    gpu = all_gpus()[0];
+    buf.create(1);
+    SubgraphDefinition sd;
+    sd.concurrency_mode = SubgraphDefinition::INSTANTIATION_ORDER;
+    for(int i = 0; i < chain; i++) {
+      GpuSpinArgs a{buf.ptr, buf.ptr, 1, 0, nullptr};
+      int t = make_task_desc(sd, gpu, gpu_deferred_task_id, &a, sizeof(a));
+      if(i > 0)
+        add_dependency(sd, SubgraphDefinition::OPKIND_TASK, t - 1,
+                       SubgraphDefinition::OPKIND_TASK, t);
+    }
+    Subgraph::create_subgraph(sg, sd, ProfilingRequestSet()).wait();
+  }
+
+  void run() override
+  {
+    double t0 = Clock::current_time();
+    Event last = Event::NO_EVENT;
+    for(int i = 0; i < replays; i++)
+      last = sg.instantiate(nullptr, 0, ProfilingRequestSet());
+    completed = wait_with_timeout(last, config.hang_timeout);
+    elapsed = Clock::current_time() - t0;
+  }
+
+  bool check() override
+  {
+    bool ok = completed && (buf.ptr[0] == chain * replays);
+    std::ostringstream os;
+    os << name() << ": " << replays << " replays of " << chain << " kernels in "
+       << elapsed * 1e3 << " ms (" << elapsed * 1e6 / (chain * replays)
+       << " us per kernel), value " << buf.ptr[0] << " (want " << chain * replays << ")";
+    if(ok)
+      report(os.str());
+    else
+      log_app.error() << os.str();
+    return ok;
+  }
+
+  void cleanup() override
+  {
+    if(completed)
+      sg.destroy().wait();
+    buf.destroy();
+  }
+
+  bool hung() const override { return !completed; }
+
+private:
+  static constexpr int chain = 4, replays = 500;
+  Processor gpu;
+  ZcBuffer buf;
+  Subgraph sg;
+  double elapsed = 0;
+  bool completed = false;
+};
+
+// GPU and CPU tasks alternating in a chain through zero-copy memory: a GPU
+// task writes buf[i] from buf[i-1]; the CPU task after it does the same on
+// the host. Both directions of dependency must carry the data.
+struct HostAddArgs {
+  int *dst;
+  const int *src;
+};
+static int host_add_task_id = 0;
+static void host_add_task(const void *args, size_t arglen, const void *userdata,
+                          size_t userlen, Processor p)
+{
+  const HostAddArgs *a = static_cast<const HostAddArgs *>(args);
+  *a->dst = *a->src + 1;
+}
+
+class GpuMixedChainTest : public SubgraphTest {
+public:
+  std::string name() const override { return "Gpu.MixedChain"; }
+  bool can_run() override { return gpu_tests_can_run(); }
+
+  void init() override
+  {
+    gpu = all_gpus()[0];
+    buf.create(N);
+    SubgraphDefinition sd;
+    sd.concurrency_mode = SubgraphDefinition::ONE_SHOT;
+    for(int i = 0; i < N; i++) {
+      int t;
+      if(i % 2 == 0) {
+        GpuSpinArgs a{buf.ptr + i, (i > 0) ? buf.ptr + (i - 1) : nullptr, 1, 100000, nullptr};
+        t = make_task_desc(sd, gpu, gpu_deferred_task_id, &a, sizeof(a));
+      } else {
+        HostAddArgs a{buf.ptr + i, buf.ptr + (i - 1)};
+        t = make_task_desc(sd, worker_cpus()[0], host_add_task_id, &a, sizeof(a));
+      }
+      if(i > 0)
+        add_dependency(sd, SubgraphDefinition::OPKIND_TASK, t - 1,
+                       SubgraphDefinition::OPKIND_TASK, t);
+    }
+    Subgraph::create_subgraph(sg, sd, ProfilingRequestSet()).wait();
+  }
+
+  void run() override
+  {
+    completed = wait_with_timeout(sg.instantiate(nullptr, 0, ProfilingRequestSet()),
+                                  config.hang_timeout);
+  }
+
+  bool check() override
+  {
+    bool ok = completed;
+    for(int i = 0; i < N; i++)
+      ok = ok && (buf.ptr[i] == i + 1);
+    if(!ok) {
+      std::ostringstream os;
+      os << name() << ": completed=" << completed << " values";
+      for(int i = 0; i < N; i++)
+        os << " " << buf.ptr[i];
+      log_app.error() << os.str();
+    }
+    return ok;
+  }
+
+  void cleanup() override
+  {
+    if(completed)
+      sg.destroy().wait();
+    buf.destroy();
+  }
+
+  bool hung() const override { return !completed; }
+
+private:
+  static constexpr int N = 10;
+  Processor gpu;
+  ZcBuffer buf;
+  Subgraph sg;
+  bool completed = false;
+};
+
+#endif // SUBGRAPH_TESTS_CUDA
+
 ////////////////////////////////////////////////////////////////////////
 //
 // RemoteInstantiateDestroyTest: a task on another address space
@@ -2387,6 +2995,12 @@ static void death_dependency_cycle()
   Subgraph::create_subgraph(sg, sd, ProfilingRequestSet()).wait();
 }
 
+static void death_unregistered_task()
+{
+  // a task id nobody registered: compile must refuse it
+  make_one_task_subgraph(task_id_counter + 1000);
+}
+
 static void death_external_precond_compiled_instantiate()
 {
   Subgraph sg = make_one_task_subgraph(noop_task_id);
@@ -2406,6 +3020,7 @@ static const DeathScenario death_scenarios[] = {
     {"external_precond_compiled_instantiate", death_external_precond_compiled_instantiate},
     {"concurrent_mode_unsupported", death_concurrent_mode_unsupported},
     {"dependency_cycle", death_dependency_cycle},
+    {"unregistered_task", death_unregistered_task},
     // multi-rank only; prints DEATH-TEST-SKIPPED in a single-rank run
     {"remote_task_compiled", death_remote_task_compiled},
 };
@@ -2436,6 +3051,13 @@ static void register_common_tasks()
   rt.register_task(counter_task_id, counter_task);
   rt.register_task(launcher_task_id, launcher_task);
   rt.register_task(noop_task_id, noop_task);
+#ifdef SUBGRAPH_TESTS_CUDA
+  host_add_task_id = task_id_counter++;
+  gpu_prof_response_task_id = task_id_counter++;
+  rt.register_task(host_add_task_id, host_add_task);
+  rt.register_task(gpu_prof_response_task_id, gpu_prof_response_task);
+  register_gpu_tasks();
+#endif
 }
 
 static std::vector<std::unique_ptr<SubgraphTest>> make_tests()
@@ -2483,6 +3105,16 @@ static std::vector<std::unique_ptr<SubgraphTest>> make_tests()
   tests.emplace_back(new ProfilingTest());
   tests.emplace_back(new GraphPriorityTest());
   tests.emplace_back(new GraphPriorityPreemptionTest());
+#ifdef SUBGRAPH_TESTS_CUDA
+  tests.emplace_back(new GpuChainTest("Gpu.DeferredChain", &gpu_deferred_task_id, true));
+  tests.emplace_back(new GpuChainTest("Gpu.StreamAwareChain", &gpu_stream_task_id, true));
+  tests.emplace_back(new GpuChainTest("Gpu.PlainChain", &gpu_plain_task_id, false));
+  tests.emplace_back(new GpuToCpuTest());
+  tests.emplace_back(new GpuFinishEventTest());
+  tests.emplace_back(new GpuProfilingTest());
+  tests.emplace_back(new GpuReplayTest());
+  tests.emplace_back(new GpuMixedChainTest());
+#endif
   tests.emplace_back(new RemoteInstantiateDestroyTest());
   // Last: a hang here leaves executors wedged, so nothing may follow it.
   tests.emplace_back(new ConcurrentSubgraphsTest());

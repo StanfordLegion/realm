@@ -168,6 +168,20 @@ namespace Realm {
                                                       FunctionPointerImplementation>
       FunctionPointerImplementation::serdez_subclass;
 
+  ////////////////////////////////////////////////////////////////////////
+  //
+  // class DeferredEffectsProperty
+
+  /*static*/ Serialization::PolymorphicSerdezSubclass<CodeProperty, DeferredEffectsProperty>
+      DeferredEffectsProperty::serdez_subclass;
+
+  CodeProperty *DeferredEffectsProperty::clone(void) const
+  {
+    return new DeferredEffectsProperty;
+  }
+
+  bool DeferredEffectsProperty::is_portable(void) const { return true; }
+
   FunctionPointerImplementation::FunctionPointerImplementation(void)
     : fnptr(0)
   {}

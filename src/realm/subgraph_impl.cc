@@ -270,6 +270,9 @@ namespace Realm {
     domains.clear();
     proc_index.clear();
     successors.clear();
+    late_successors.clear();
+    token_waits.clear();
+    num_async_ops = 0;
     postconds_of.clear();
     inputs.clear();
     postconds.clear();
@@ -322,10 +325,6 @@ namespace Realm {
       const SubgraphDefinition::TaskDesc &t = d.tasks[i];
       if(!t.proc.exists())
         SUBGRAPH_FATAL(me, "task " << i << " has no processor");
-      if(t.proc.kind() != Processor::LOC_PROC)
-        SUBGRAPH_FATAL(me, "task " << i << " runs on " << t.proc
-                                   << ", which is not a LOC_PROC; only CPU tasks are "
-                                      "implemented");
       if(NodeID(t.proc.address_space()) != Network::my_node_id)
         SUBGRAPH_FATAL(me, "task " << i << " runs on " << t.proc
                                    << ", which belongs to another node; only local "
@@ -465,9 +464,11 @@ namespace Realm {
         continue;
       LocalTaskProcessor *impl =
           dynamic_cast<LocalTaskProcessor *>(get_runtime()->get_processor_impl(p));
-      if(!impl)
-        SUBGRAPH_FATAL(me, "task " << i << " runs on " << p
-                                   << ", which is not a task-running processor");
+      if(!impl || !impl->supports_subgraph_tasks())
+        SUBGRAPH_FATAL(me, "task " << i << " runs on " << p << ", a processor of kind "
+                                   << p.kind()
+                                   << "; only CPU (LOC_PROC) and CUDA GPU (TOC_PROC) "
+                                      "tasks are implemented");
       procs_seen.push_back(p);
       proc_impls[p] = impl;
       proc_nodes[p] = impl->numa_node();
@@ -501,6 +502,8 @@ namespace Realm {
       cp.remaining_offset = 0;
       cp.initial_ready = 0;
       cp.pending_inputs = 0;
+      cp.async = cp.impl->subgraph_tasks_are_async();
+      cp.first_async = cp.num_async = 0;
       c.proc_index[cp.proc] = uint32_t(i);
     }
 
@@ -515,17 +518,35 @@ namespace Realm {
       op.counter_offset = 0;
       op.args_domain = -1;
       op.args_offset = op.args_size = 0;
+      op.async = op.deferred = false;
+      op.async_index = -1;
       c.ops.push_back(op);
       return uint32_t(c.ops.size() - 1);
     };
+    c.num_async_ops = 0;
     for(size_t pi = 0; pi < c.procs.size(); pi++) {
       CompiledSubgraph::Proc &cp = c.procs[pi];
       cp.first_op = uint32_t(c.ops.size());
-      for(size_t i = 0; i < ntasks; i++)
-        if(d.tasks[i].proc == cp.proc)
-          task_to_op[i] = new_op(SubgraphDefinition::OPKIND_TASK, unsigned(i), int32_t(pi),
-                                 cp.domain);
+      cp.first_async = c.num_async_ops;
+      for(size_t i = 0; i < ntasks; i++) {
+        if(d.tasks[i].proc != cp.proc)
+          continue;
+        task_to_op[i] = new_op(SubgraphDefinition::OPKIND_TASK, unsigned(i), int32_t(pi),
+                               cp.domain);
+        // the task must be registered already: how it runs depends on it
+        const unsigned flags = cp.impl->subgraph_task_flags(d.tasks[i].task_id);
+        if(!(flags & LocalTaskProcessor::SUBGRAPH_TASK_REGISTERED))
+          SUBGRAPH_FATAL(me, "task " << i << " uses task id " << d.tasks[i].task_id
+                                     << ", which is not registered on " << cp.proc);
+        CompiledSubgraph::Op &op = c.ops.back();
+        op.async = cp.async;
+        op.deferred =
+            cp.async && ((flags & LocalTaskProcessor::SUBGRAPH_TASK_DEFERRED_EFFECTS) != 0);
+        if(cp.async)
+          op.async_index = int32_t(c.num_async_ops++);
+      }
       cp.num_ops = uint32_t(c.ops.size()) - cp.first_op;
+      cp.num_async = c.num_async_ops - cp.first_async;
     }
     for(size_t i = 0; i < d.arrivals.size(); i++)
       arrival_to_op[i] = new_op(SubgraphDefinition::OPKIND_ARRIVAL, unsigned(i), -1, 0);
@@ -637,7 +658,29 @@ namespace Realm {
     for(size_t i = 0; i < n; i++)
       if(pred[i].empty())
         c.roots.push_back(uint32_t(i));
-    c.successors = FlattenedSparseMatrix<uint32_t>(succ);
+    // Successors of an asynchronous operation wait for its work to complete,
+    // except tasks on the same processor after a deferred-effects operation:
+    // they start when its function returns and order their work after it
+    // with the token it leaves behind.
+    std::vector<std::vector<uint32_t>> early_succ(n), late_succ(n), token_wait(n);
+    for(size_t i = 0; i < n; i++) {
+      const CompiledSubgraph::Op &src = c.ops[i];
+      for(uint32_t t : succ[i]) {
+        const CompiledSubgraph::Op &tgt = c.ops[t];
+        if(!src.async) {
+          early_succ[i].push_back(t);
+        } else if(src.deferred && (tgt.kind == SubgraphDefinition::OPKIND_TASK) &&
+                  (tgt.proc == src.proc)) {
+          early_succ[i].push_back(t);
+          token_wait[t].push_back(uint32_t(src.async_index));
+        } else {
+          late_succ[i].push_back(t);
+        }
+      }
+    }
+    c.successors = FlattenedSparseMatrix<uint32_t>(early_succ);
+    c.late_successors = FlattenedSparseMatrix<uint32_t>(late_succ);
+    c.token_waits = FlattenedSparseMatrix<uint32_t>(token_wait);
     c.postconds_of = FlattenedSparseMatrix<uint32_t>(feeds);
 
     // ---- counter placement: with the predecessors when they share a domain
@@ -1211,9 +1254,25 @@ namespace Realm {
     const CompiledSubgraph &c = subgraph->compiled;
     for(size_t dm = 0; dm < c.domains.size(); dm++)
       memcpy(blocks[dm], c.domains[dm].image.data(), c.domains[dm].bytes);
+    if(c.num_async_ops > 0) {
+      async_ops.resize(c.num_async_ops);
+      tokens.assign(c.num_async_ops, nullptr);
+      for(size_t i = 0; i < c.ops.size(); i++)
+        if(c.ops[i].async_index >= 0) {
+          async_ops[c.ops[i].async_index].state = this;
+          async_ops[c.ops[i].async_index].op = uint32_t(i);
+        }
+    }
   }
 
-  SubgraphExecutionState::~SubgraphExecutionState() { subgraph->release_blocks(blocks); }
+  SubgraphExecutionState::~SubgraphExecutionState()
+  {
+    const CompiledSubgraph &c = subgraph->compiled;
+    for(const CompiledSubgraph::Proc &p : c.procs)
+      if(p.num_async > 0)
+        p.impl->release_subgraph_tokens(tokens.data() + p.first_async, p.num_async);
+    subgraph->release_blocks(blocks);
+  }
 
   atomic<int64_t> &SubgraphExecutionState::counter(uint32_t op) const
   {
@@ -1401,11 +1460,21 @@ namespace Realm {
                                                                 << op_kind_name(o.kind)
                                                                 << " cannot be launched directly");
     }
-    op_completed(op);
-    contributor_finished();
+    op_body_done(op);
+    op_finished(op);
   }
 
-  void SubgraphExecutionState::op_completed(uint32_t op)
+  void SubgraphExecutionState::op_body_done(uint32_t op)
+  {
+    const CompiledSubgraph &c = subgraph->compiled;
+    for(uint64_t i = c.successors.offsets[op]; i < c.successors.offsets[op + 1]; i++) {
+      const uint32_t sx = c.successors.data[i];
+      if(counter(sx).fetch_sub_acqrel(1) == 1)
+        op_ready(sx);
+    }
+  }
+
+  void SubgraphExecutionState::op_finished(uint32_t op)
   {
     const CompiledSubgraph &c = subgraph->compiled;
     for(uint64_t i = c.postconds_of.offsets[op]; i < c.postconds_of.offsets[op + 1]; i++) {
@@ -1418,11 +1487,61 @@ namespace Realm {
         pc_poisoned = pc_poisoned || ((bits[w] & poisoned_inputs[w].load_acquire()) != 0);
       GenEventImpl::trigger(postconditions[pc], pc_poisoned);
     }
-    for(uint64_t i = c.successors.offsets[op]; i < c.successors.offsets[op + 1]; i++) {
-      const uint32_t sx = c.successors.data[i];
+    for(uint64_t i = c.late_successors.offsets[op]; i < c.late_successors.offsets[op + 1];
+        i++) {
+      const uint32_t sx = c.late_successors.data[i];
       if(counter(sx).fetch_sub_acqrel(1) == 1)
         op_ready(sx);
     }
+    // Last: a processor's share of the finish counter goes when its last
+    // operation completes, whichever one that is (tasks may block or
+    // complete asynchronously), and the state may be freed right after.
+    const int32_t proc = c.ops[op].proc;
+    if(proc < 0) {
+      contributor_finished();
+    } else if(remaining(uint32_t(proc)).fetch_sub_acqrel(1) == 1) {
+      contributor_finished();
+    }
+  }
+
+  void SubgraphExecutionState::complete_op_profiling(uint32_t op, OpProfiling *pf,
+                                                     Event finish_event, bool skipped)
+  {
+    if(!pf)
+      return;
+    if(pf->wants_timeline) {
+      if(!skipped)
+        pf->timeline.record_complete_time();
+      pf->measurements.add_measurement(pf->timeline);
+    }
+    if(pf->wants_proc) {
+      ProfilingMeasurements::OperationProcessorUsage usage;
+      usage.proc = subgraph->compiled.procs[subgraph->compiled.ops[op].proc].proc;
+      pf->measurements.add_measurement(usage);
+    }
+    if(pf->wants_status) {
+      ProfilingMeasurements::OperationStatus status;
+      status.result = skipped ? ProfilingMeasurements::OperationStatus::CANCELLED
+                              : ProfilingMeasurements::OperationStatus::COMPLETED_SUCCESSFULLY;
+      status.error_code = 0;
+      pf->measurements.add_measurement(status);
+    }
+    if(pf->wants_fevent) {
+      ProfilingMeasurements::OperationFinishEvent fe;
+      fe.finish_event = finish_event;
+      pf->measurements.add_measurement(fe);
+    }
+    pf->measurements.send_responses(pf->requests);
+  }
+
+  void SubgraphExecutionState::AsyncOp::async_completed(void)
+  {
+    // The work this task launched has completed (called from the
+    // processor's completion machinery, e.g. the GPU worker).
+    if(finish_event.exists())
+      GenEventImpl::trigger(finish_event, false /*!poisoned*/);
+    state->complete_op_profiling(op, state->prof(op), finish_event, false /*!skipped*/);
+    state->op_finished(op);
   }
 
   void SubgraphExecutionState::contributor_finished(void)
@@ -1583,68 +1702,72 @@ namespace Realm {
     const CompiledSubgraph::Op &op = c.ops[entry.op];
     assert((op.kind == SubgraphDefinition::OPKIND_TASK) && (op.proc >= 0));
 
+    LocalTaskProcessor *proc_impl = c.procs[op.proc].impl;
     SubgraphExecutionState::OpProfiling *pf = state->prof(entry.op);
-    const bool skipped = state->op_poisoned(entry.op);
-    Event finish_event = Event::NO_EVENT;
-    if(!skipped) {
-      const SubgraphDefinition::TaskDesc &task_desc = impl->defn->tasks[op.index];
-      LocalTaskProcessor *proc_impl = c.procs[op.proc].impl;
 
-      // Run the task on this thread. The task has no Operation; the flag
-      // lets Processor::get_current_finish_event create a finish event on
-      // demand, which is triggered below once the task returns.
-      // TODO: task context managers are not applied to subgraph tasks.
-      Thread *thread = Thread::self();
-      thread->subgraph_finish_event() =
-          (pf && pf->wants_fevent) ? UserEvent::create_user_event().id : 0;
-      if(pf && pf->wants_timeline)
-        pf->timeline.record_start_time();
-      ThreadLocal::current_processor = proc;
-      thread->start_subgraph_task_execution();
-      proc_impl->execute_task(task_desc.task_id, state->op_args(entry.op));
-      thread->stop_subgraph_task_execution();
-      ThreadLocal::current_processor = Processor::NO_PROC;
-      if(pf && pf->wants_timeline) {
-        pf->timeline.record_end_time();
-        pf->timeline.record_complete_time();
-      }
-      finish_event.id = thread->subgraph_finish_event();
-      thread->subgraph_finish_event() = 0;
+    if(state->op_poisoned(entry.op)) {
+      // A task depending on a poisoned input is skipped; its successors
+      // still drain and the finish event ends up poisoned.
+      state->op_body_done(entry.op);
+      state->complete_op_profiling(entry.op, pf, Event::NO_EVENT, true /*skipped*/);
+      state->op_finished(entry.op);
+      return;
+    }
+
+    const SubgraphDefinition::TaskDesc &task_desc = impl->defn->tasks[op.index];
+
+    // Tokens of the deferred-effects predecessors this task's work must follow.
+    const uint64_t tw0 = c.token_waits.offsets[entry.op];
+    const size_t num_tokens = size_t(c.token_waits.offsets[entry.op + 1] - tw0);
+    const void *token_buf[16];
+    std::vector<const void *> token_vec;
+    const void **wait_tokens = token_buf;
+    if(num_tokens > 16) {
+      token_vec.resize(num_tokens);
+      wait_tokens = token_vec.data();
+    }
+    for(size_t k = 0; k < num_tokens; k++)
+      wait_tokens[k] = state->tokens[c.token_waits.data[tw0 + k]];
+
+    // Run the task function on this thread. There is no Operation: the flag
+    // lets Processor::get_current_finish_event create a finish event on
+    // demand, triggered once the task is complete. Context managers are not
+    // applied; the processor's subgraph hooks provide the equivalent.
+    Thread *thread = Thread::self();
+    thread->subgraph_finish_event() =
+        (pf && pf->wants_fevent) ? UserEvent::create_user_event().id : 0;
+    if(pf && pf->wants_timeline)
+      pf->timeline.record_start_time();
+    void *context = proc_impl->begin_subgraph_task(wait_tokens, num_tokens);
+    ThreadLocal::current_processor = proc;
+    thread->start_subgraph_task_execution();
+    proc_impl->execute_task(task_desc.task_id, state->op_args(entry.op));
+    thread->stop_subgraph_task_execution();
+    ThreadLocal::current_processor = Processor::NO_PROC;
+    void *token = proc_impl->end_subgraph_task(context, op.deferred);
+    if(pf && pf->wants_timeline)
+      pf->timeline.record_end_time();
+    Event finish_event;
+    finish_event.id = thread->subgraph_finish_event();
+    thread->subgraph_finish_event() = 0;
+
+    if(!op.async) {
       if(finish_event.exists())
         GenEventImpl::trigger(finish_event, false /*!poisoned*/);
-    }
-    // (a task depending on a poisoned input is skipped; its successors still
-    //  drain and the finish event ends up poisoned)
-
-    if(pf) {
-      if(pf->wants_timeline)
-        pf->measurements.add_measurement(pf->timeline);
-      if(pf->wants_proc) {
-        ProfilingMeasurements::OperationProcessorUsage usage;
-        usage.proc = proc;
-        pf->measurements.add_measurement(usage);
-      }
-      if(pf->wants_status) {
-        ProfilingMeasurements::OperationStatus status;
-        status.result = skipped ? ProfilingMeasurements::OperationStatus::CANCELLED
-                                : ProfilingMeasurements::OperationStatus::COMPLETED_SUCCESSFULLY;
-        status.error_code = 0;
-        pf->measurements.add_measurement(status);
-      }
-      if(pf->wants_fevent) {
-        ProfilingMeasurements::OperationFinishEvent fe;
-        fe.finish_event = finish_event;
-        pf->measurements.add_measurement(fe);
-      }
-      pf->measurements.send_responses(pf->requests);
+      state->op_body_done(entry.op);
+      state->complete_op_profiling(entry.op, pf, finish_event, false /*!skipped*/);
+      state->op_finished(entry.op);
+      return;
     }
 
-    state->op_completed(entry.op);
-    // Tasks may block and complete out of order: this processor's share of
-    // the finish counter goes when its last operation completes, whichever
-    // one that is.
-    if(state->remaining(uint32_t(op.proc)).fetch_sub_acqrel(1) == 1)
-      state->contributor_finished();
+    // The function returned but the work goes on. Successors that may start
+    // now are released first: arming the completion may finish the
+    // instantiation, and free the state, before it returns.
+    SubgraphExecutionState::AsyncOp &ao = state->async_ops[op.async_index];
+    ao.finish_event = finish_event;
+    state->tokens[op.async_index] = token;
+    state->op_body_done(entry.op);
+    proc_impl->arm_subgraph_task_completion(context, token, &ao);
   }
 
   bool ProcSubgraphExecutor::keep_polling(void)

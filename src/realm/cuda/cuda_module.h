@@ -129,6 +129,7 @@ namespace Realm {
       unsigned cfg_task_streams = 12, cfg_d2d_streams = 4;
       bool cfg_use_worker_threads = false, cfg_use_shared_worker = true,
            cfg_pin_sysmem = true;
+      bool cfg_pin_gpu_procs = false; // GPU processors get a dedicated core
       bool cfg_fences_use_callbacks = false;
       bool cfg_suppress_hijack_warning = false;
       unsigned cfg_skip_gpu_count = 0;

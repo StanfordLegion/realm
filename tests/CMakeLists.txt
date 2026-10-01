@@ -294,6 +294,15 @@ add_integration_test(test_nodeset "${REALM_TEST_DIR}/test_nodeset.cc")
 # add_integration_test(subgraphs "${REALM_TEST_DIR}/subgraphs.cc")
 set(subgraph_unit_tests_ARGS -ll:cpu 4)
 add_integration_test(subgraph_unit_tests "${REALM_TEST_DIR}/subgraph_unit_tests.cc")
+if(REALM_ENABLE_CUDA)
+  # GPU tasks in subgraphs: the same binary with kernels, run with a GPU
+  target_sources(subgraph_unit_tests PRIVATE "${REALM_TEST_DIR}/subgraph_unit_tests_gpu.cu")
+  target_compile_definitions(subgraph_unit_tests PRIVATE SUBGRAPH_TESTS_CUDA=1)
+  target_link_libraries(subgraph_unit_tests ${TEST_GPU_LIBS})
+  add_test(NAME subgraph_unit_tests_gpu
+           COMMAND subgraph_unit_tests -ll:cpu 4 -ll:gpu 1 -ll:zsize 32)
+  set_tests_properties(subgraph_unit_tests_gpu PROPERTIES RESOURCE_LOCK gpu TIMEOUT 600)
+endif()
 # Compiled subgraphs must reject unsupported usage fatally. Each scenario runs in
 # its own process and must abort; surviving (exit 0 + marker) is the failure.
 foreach(
@@ -301,6 +310,7 @@ foreach(
   unsupported_op_compiled
   profiling_on_compiled_instantiate
   external_precond_compiled_instantiate
+  unregistered_task
   concurrent_mode_unsupported
   dependency_cycle
 )

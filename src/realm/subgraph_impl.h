@@ -25,6 +25,7 @@
 #include "realm/id.h"
 #include "realm/event_impl.h"
 #include "realm/operation.h"
+#include "realm/proc_impl.h"
 #include "realm/bgwork.h"
 #include "realm/mutex.h"
 
@@ -109,6 +110,15 @@ namespace Realm {
       int32_t args_domain;
       uint32_t args_offset;
       uint32_t args_size;
+      // Tasks on processors whose work outlives the task function (GPUs)
+      // are asynchronous: they complete through the processor's callback.
+      // A deferred-effects task additionally promised that all its work is
+      // on the stream it was given, so tasks after it on the same processor
+      // may start as soon as its function returns, ordering their own work
+      // after it with the token it left behind.
+      bool async;
+      bool deferred;
+      int32_t async_index; // per-instantiation token/completion slot, -1 if not async
     };
     struct Input { // one external precondition
       std::vector<uint32_t> targets; // operations it directly gates
@@ -144,6 +154,10 @@ namespace Realm {
       // seen them all trigger, the processor runs ready work of the graph
       // but does not hold off other work, since it might be waiting on it.
       uint32_t pending_inputs;
+      // Asynchronous operations here occupy async slots [first_async,
+      // first_async + num_async) of the instantiation.
+      bool async;
+      uint32_t first_async, num_async;
     };
     struct Domain {
       int numa_node;           // OS NUMA node, or -1 if unknown
@@ -159,7 +173,14 @@ namespace Realm {
     std::vector<Proc> procs;
     std::vector<Domain> domains;
     std::unordered_map<Processor, uint32_t> proc_index;
-    FlattenedSparseMatrix<uint32_t> successors;  // op -> successor ops
+    // op -> successors released when its function returns (everything for
+    // synchronous operations; same-processor tasks after a deferred one)
+    FlattenedSparseMatrix<uint32_t> successors;
+    // op -> successors released only once its work has completed
+    FlattenedSparseMatrix<uint32_t> late_successors;
+    // op -> async slots of the deferred predecessors whose tokens it waits on
+    FlattenedSparseMatrix<uint32_t> token_waits;
+    uint32_t num_async_ops;
     FlattenedSparseMatrix<uint32_t> postconds_of; // op -> postconditions it feeds
     std::vector<Input> inputs;
     std::vector<Postcond> postconds;
@@ -374,14 +395,33 @@ namespace Realm {
     void start(void);
     // An operation's last precondition has been satisfied.
     void op_ready(uint32_t op);
-    // An operation has run (or been skipped because an input it depends on
-    // was poisoned): propagate to successors, postconditions and completion.
-    void op_completed(uint32_t op);
+    // An operation's function has returned (or it was skipped because an
+    // input it depends on was poisoned): releases the successors that may
+    // start now.
+    void op_body_done(uint32_t op);
+    // An operation's work is complete: releases the remaining successors
+    // and postconditions, then its share of the finish counter. The state
+    // may be freed once this returns.
+    void op_finished(uint32_t op);
+    // Adds and sends the measurements of a completed operation, if any.
+    void complete_op_profiling(uint32_t op, OpProfiling *pf, Event finish_event,
+                               bool skipped);
     // True if the operation depends on a poisoned input and must be skipped.
     bool op_poisoned(uint32_t op) const;
     // Called by each processor after its last operation and by each directly
     // launched operation after completing.
     void contributor_finished(void);
+
+    // Asynchronous operations: the processor notifies the completion once the
+    // work is done; the token orders dependents' work after it.
+    struct AsyncOp : public SubgraphAsyncCompletion {
+      SubgraphExecutionState *state = nullptr;
+      uint32_t op = 0;
+      Event finish_event = Event::NO_EVENT; // created on demand by the task
+      virtual void async_completed(void) override;
+    };
+    std::vector<AsyncOp> async_ops; // by async slot
+    std::vector<void *> tokens;     // by async slot, returned at destruction
 
   private:
     friend class ProcSubgraphExecutor;

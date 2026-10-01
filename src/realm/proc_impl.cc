@@ -1135,6 +1135,37 @@ namespace Realm {
     return true;
   }
 
+  unsigned LocalTaskProcessor::subgraph_task_flags(Processor::TaskFuncID func_id)
+  {
+    RWLock::AutoReaderLock al(task_table_mutex);
+    return (task_table.count(func_id) > 0) ? unsigned(SUBGRAPH_TASK_REGISTERED) : 0;
+  }
+
+  bool LocalTaskProcessor::supports_subgraph_tasks(void) const { return false; }
+
+  bool LocalTaskProcessor::subgraph_tasks_are_async(void) const { return false; }
+
+  void *LocalTaskProcessor::begin_subgraph_task(const void *const *tokens,
+                                                size_t num_tokens)
+  {
+    return nullptr;
+  }
+
+  void *LocalTaskProcessor::end_subgraph_task(void *context, bool deferred_effects)
+  {
+    return nullptr;
+  }
+
+  void LocalTaskProcessor::arm_subgraph_task_completion(void *context, void *token,
+                                                        SubgraphAsyncCompletion *completion)
+  {
+    // only asynchronous processors have anything to wait for
+    assert(0);
+  }
+
+  void LocalTaskProcessor::release_subgraph_tokens(void *const *tokens, size_t num_tokens)
+  {}
+
   void LocalTaskProcessor::execute_task(Processor::TaskFuncID func_id,
                                         const ByteArrayRef &task_args)
   {
