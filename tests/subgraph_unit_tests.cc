@@ -760,7 +760,6 @@ class BarrierArrivalTest : public SubgraphTest {
 public:
   std::string name() const override { return "BarrierArrivalTest"; }
 
-  const char *pending_feature() const override { return "barrier arrivals"; }
 
   bool can_run() override { return true; }
 
@@ -797,7 +796,6 @@ class InterpolationTest : public SubgraphTest {
 public:
   std::string name() const override { return "InterpolationTest"; }
 
-  const char *pending_feature() const override { return "interpolations"; }
 
   struct WriterTaskArgs {
     WriterTaskArgs(RegionInstance inst32, RegionInstance inst64, int32_t value1,
@@ -942,7 +940,6 @@ class ExternalPreconditionTest : public SubgraphTest {
 public:
   std::string name() const override { return "ExternalPreconditionTest"; }
 
-  const char *pending_feature() const override { return "external preconditions"; }
 
   struct WriterTaskArgs {
     RegionInstance inst;
@@ -1067,7 +1064,6 @@ class ExternalPostconditionTest : public SubgraphTest {
 public:
   std::string name() const override { return "ExternalPostconditionTest"; }
 
-  const char *pending_feature() const override { return "external postconditions"; }
 
   struct WriterTaskArgs {
     RegionInstance inst;
@@ -1554,6 +1550,89 @@ private:
   DagState state;
   Subgraph sg;
   bool completed = false;
+};
+
+////////////////////////////////////////////////////////////////////////
+//
+// ExternalPoisonTest: a poisoned external precondition skips exactly the
+// operations depending on it, poisons exactly the postconditions downstream
+// of it, and poisons the finish event.
+//
+
+class ExternalPoisonTest : public SubgraphTest {
+public:
+  std::string name() const override { return "ExternalPoison"; }
+  bool can_run() override { return worker_cpus().size() >= 1; }
+
+  void init() override
+  {
+    Processor cpu = worker_cpus()[0];
+    for(auto &c : counts)
+      c.store(0);
+    SubgraphDefinition sd;
+    sd.concurrency_mode = SubgraphDefinition::ONE_SHOT;
+    CounterTaskArgs a{&counts[0], UserEvent::NO_USER_EVENT};
+    CounterTaskArgs b{&counts[1], UserEvent::NO_USER_EVENT};
+    CounterTaskArgs c{&counts[2], UserEvent::NO_USER_EVENT};
+    int ta = make_task_desc(sd, cpu, counter_task_id, &a, sizeof(a));
+    int tb = make_task_desc(sd, cpu, counter_task_id, &b, sizeof(b));
+    int tc = make_task_desc(sd, cpu, counter_task_id, &c, sizeof(c));
+    // A <- ext 0, B <- ext 1, C <- A and B; postcond 0 <- A, postcond 1 <- B
+    add_dependency(sd, SubgraphDefinition::OPKIND_EXT_PRECOND, 0,
+                   SubgraphDefinition::OPKIND_TASK, ta);
+    add_dependency(sd, SubgraphDefinition::OPKIND_EXT_PRECOND, 1,
+                   SubgraphDefinition::OPKIND_TASK, tb);
+    add_dependency(sd, SubgraphDefinition::OPKIND_TASK, ta, SubgraphDefinition::OPKIND_TASK,
+                   tc);
+    add_dependency(sd, SubgraphDefinition::OPKIND_TASK, tb, SubgraphDefinition::OPKIND_TASK,
+                   tc);
+    add_dependency(sd, SubgraphDefinition::OPKIND_TASK, ta,
+                   SubgraphDefinition::OPKIND_EXT_POSTCOND, 0);
+    add_dependency(sd, SubgraphDefinition::OPKIND_TASK, tb,
+                   SubgraphDefinition::OPKIND_EXT_POSTCOND, 1);
+    Subgraph::create_subgraph(sg, sd, ProfilingRequestSet()).wait();
+  }
+
+  void run() override
+  {
+    UserEvent bad = UserEvent::create_user_event();
+    bad.cancel();
+    UserEvent good = UserEvent::create_user_event();
+    std::vector<Event> pre = {bad, good};
+    std::vector<Event> post(2);
+    Event e = sg.instantiate(nullptr, 0, ProfilingRequestSet(), pre, post);
+    good.trigger();
+    completed = wait_with_timeout(e, config.hang_timeout, &finish_poisoned);
+    if(completed) {
+      post0_done = wait_with_timeout(post[0], config.hang_timeout, &post0_poisoned);
+      post1_done = wait_with_timeout(post[1], config.hang_timeout, &post1_poisoned);
+    }
+  }
+
+  bool check() override
+  {
+    bool ok = completed && finish_poisoned && post0_done && post0_poisoned && post1_done &&
+              !post1_poisoned && (counts[0].load() == 0) && (counts[1].load() == 1) &&
+              (counts[2].load() == 0);
+    if(!ok)
+      log_app.error() << name() << ": completed=" << completed << " finish_poisoned="
+                      << finish_poisoned << " post0=" << post0_done << "/" << post0_poisoned
+                      << " post1=" << post1_done << "/" << post1_poisoned << " A=" << counts[0]
+                      << " B=" << counts[1] << " C=" << counts[2];
+    return ok;
+  }
+
+  void cleanup() override
+  {
+    if(completed)
+      sg.destroy().wait();
+  }
+
+private:
+  Subgraph sg;
+  std::atomic<int64_t> counts[3];
+  bool completed = false, finish_poisoned = false;
+  bool post0_done = false, post0_poisoned = false, post1_done = false, post1_poisoned = false;
 };
 
 ////////////////////////////////////////////////////////////////////////
@@ -2101,6 +2180,7 @@ static std::vector<std::unique_ptr<SubgraphTest>> make_tests()
   tests.emplace_back(new DestroyOrderingTest(false));
   tests.emplace_back(new ManyInstantiationsTest());
   tests.emplace_back(new PoisonedPreconditionTest());
+  tests.emplace_back(new ExternalPoisonTest());
   tests.emplace_back(new MixedWorkloadTest());
   tests.emplace_back(new GraphPriorityTest());
   tests.emplace_back(new GraphPriorityPreemptionTest());

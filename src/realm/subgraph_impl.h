@@ -71,26 +71,57 @@ namespace Realm {
 
   // CompiledSubgraph is the executable form of a SubgraphDefinition.
   //
-  // Operations are numbered so that the operations of one processor are
-  // contiguous and processors of one NUMA domain are contiguous. Each
-  // instantiation owns one memory block per NUMA domain holding the mutable
-  // state the executors touch at run time:
+  // Operations are tasks, which run on a processor's ready queue, and
+  // directly launched operations (barrier arrivals), which whoever satisfies
+  // their last precondition performs inline. Operations are numbered so that
+  // the tasks of one processor are contiguous and processors of one NUMA
+  // domain are contiguous; directly launched operations come last.
+  //
+  // Graph inputs are the start event, an implicit predecessor of every
+  // operation without in-graph predecessors, and the external preconditions
+  // of the definition. Each operation records the set of external inputs it
+  // transitively depends on, so a poisoned input skips exactly the operations
+  // that depend on it and poisons exactly the postconditions and finish event
+  // downstream of it.
+  //
+  // Each instantiation owns one memory block per NUMA domain holding the
+  // mutable state touched at run time:
   //  - one precondition counter per operation, placed in the domain of the
   //    processors that decrement it (the operation's predecessors) when they
   //    all share one, otherwise in the consuming processor's domain;
-  //  - one ready queue per processor (one slot per operation it runs) and
-  //    the queue's tail index, placed in that processor's domain, each padded
-  //    to a cache line.
+  //  - one ready queue per processor (one slot per operation it runs), the
+  //    queue's tail index and the processor's pending-inputs counter, placed
+  //    in that processor's domain, each padded to a cache line;
+  //  - one counter per external postcondition;
+  //  - the arguments of interpolated operations, patched at instantiation.
   // Blocks are allocated once per subgraph on the right NUMA node and
   // recycled across instantiations; `image` is their initial contents.
   struct CompiledSubgraph {
     struct Op {
       SubgraphDefinition::OpKind kind;
       unsigned index;          // into the definition's list for `kind`
-      int32_t proc;            // index into procs; -1 for operations launched directly
+      int32_t proc;            // index into procs; -1 for directly launched operations
       int32_t counter_domain;  // index into domains
       uint32_t counter_offset; // byte offset of the precondition counter in that block
-      bool is_final;           // no successors
+      // Interpolated arguments, if any: a patched copy of the operation's
+      // argument bytes lives in domain args_domain at args_offset.
+      int32_t args_domain;
+      uint32_t args_offset;
+      uint32_t args_size;
+    };
+    struct Input { // one external precondition
+      std::vector<uint32_t> targets; // operations it directly gates
+      std::vector<uint32_t> procs;   // processors with operations depending on it
+    };
+    struct Postcond { // one external postcondition
+      uint32_t num_sources;
+      int32_t counter_domain;
+      uint32_t counter_offset;
+    };
+    struct Interp { // one interpolation into an operation's argument copy
+      uint32_t op;
+      size_t src_offset, bytes, dst_offset;
+      ReductionOpID redop_id;
     };
     struct Proc {
       Processor proc;
@@ -115,10 +146,21 @@ namespace Realm {
     };
 
     std::vector<Op> ops;
+    uint32_t num_direct_ops; // directly launched operations, numbered last
+    std::vector<uint32_t> roots; // operations without in-graph predecessors
     std::vector<Proc> procs;
     std::vector<Domain> domains;
     std::unordered_map<Processor, uint32_t> proc_index;
-    FlattenedSparseMatrix<uint32_t> successors; // op -> successor ops
+    FlattenedSparseMatrix<uint32_t> successors;  // op -> successor ops
+    FlattenedSparseMatrix<uint32_t> postconds_of; // op -> postconditions it feeds
+    std::vector<Input> inputs;
+    std::vector<Postcond> postconds;
+    std::vector<Interp> interps;
+    // Bitsets over inputs, input_words 64-bit words each: per operation and
+    // per postcondition, the external inputs transitively depended on.
+    size_t input_words;
+    std::vector<uint64_t> op_inputs;
+    std::vector<uint64_t> postcond_inputs;
 
     void clear();
   };
@@ -235,6 +277,19 @@ namespace Realm {
     SubgraphExecutionState *state;
   };
 
+  // SubgraphInputWaiter delivers an external precondition to an instantiation.
+  class SubgraphInputWaiter : public EventWaiter {
+  public:
+    SubgraphInputWaiter(SubgraphExecutionState *state, uint32_t input);
+    virtual void event_triggered(bool poisoned, TimeLimit work_until) override;
+    virtual void print(std::ostream &os) const override;
+    virtual Event get_finish_event(void) const override;
+
+  private:
+    SubgraphExecutionState *state;
+    uint32_t input;
+  };
+
   // SubgraphInstantiationCleanup waits for an instantiation's finish event
   // and then releases its execution state on a background worker.
   class SubgraphInstantiationCleanup : public EventWaiter {
@@ -269,8 +324,8 @@ namespace Realm {
   // the NUMA-placed blocks described by CompiledSubgraph plus finish tracking.
   class SubgraphExecutionState {
   public:
-    SubgraphExecutionState(SubgraphImpl *subgraph, const void *args, size_t arglen,
-                           Event finish_event, int priority);
+    SubgraphExecutionState(SubgraphImpl *subgraph, Event finish_event, int priority,
+                           span<const Event> postconditions);
     ~SubgraphExecutionState();
     SubgraphImpl *get_subgraph() const { return subgraph; }
     int get_priority() const { return priority; }
@@ -279,6 +334,28 @@ namespace Realm {
     atomic<int64_t> *queue(uint32_t proc) const;
     atomic<uint64_t> &tail(uint32_t proc) const;
     atomic<int64_t> &pending_inputs(uint32_t proc) const;
+    atomic<int64_t> &postcond_counter(uint32_t pc) const;
+    // Argument bytes for an operation: its interpolated copy if it has one,
+    // otherwise the definition's.
+    ByteArrayRef op_args(uint32_t op) const;
+
+    // Applies the instantiation arguments to the interpolated operations.
+    void interpolate(const void *args, size_t arglen);
+    // Records that external input `input` has triggered (possibly poisoned)
+    // and makes dependent operations ready.
+    void input_triggered(uint32_t input, bool poisoned);
+    // Satisfies the implicit start input of every root operation.
+    void start(void);
+    // An operation's last precondition has been satisfied.
+    void op_ready(uint32_t op);
+    // An operation has run (or been skipped because an input it depends on
+    // was poisoned): propagate to successors, postconditions and completion.
+    void op_completed(uint32_t op);
+    // True if the operation depends on a poisoned input and must be skipped.
+    bool op_poisoned(uint32_t op) const;
+    // Called by each processor after its last operation and by each directly
+    // launched operation after completing.
+    void contributor_finished(void);
 
   private:
     friend class ProcSubgraphExecutor;
@@ -286,15 +363,15 @@ namespace Realm {
 
     SubgraphImpl *subgraph;
 
-    // Local copy of the instantiation arguments (input to interpolation).
-    void *args;
-    size_t arglen;
-
-    // Number of processors (and, later, asynchronous operations) still
-    // working on this instantiation. Whoever brings it to zero triggers
-    // finish_event.
+    // Number of processors and directly launched operations still working
+    // on this instantiation. Whoever brings it to zero triggers finish_event.
     atomic<int64_t> finish_counter;
     Event finish_event;
+    // Events the caller gave for the external postconditions.
+    std::vector<Event> postconditions;
+    // Bitset of external inputs that triggered poisoned.
+    std::vector<atomic<uint64_t>> poisoned_inputs;
+    atomic<bool> poisoned;
 
     // Scheduling priority of this instantiation. While it is active on a
     // processor whose inputs are all satisfied, that processor runs only
