@@ -573,6 +573,7 @@ namespace Realm {
 
         // this event has triggered, so figure out the fence/notification to trigger
         //  and also peek at the next event
+        const CUevent completed = event;
         GPUWorkFence *fence = 0;
         GPUWorkStart *start = 0;
         GPUCompletionNotification *notification = 0;
@@ -596,9 +597,10 @@ namespace Realm {
             event = pending_events.front().event;
         }
 
-        // give event back to GPU for reuse, unless the requester keeps it
+        // give the completed event back to the GPU for reuse, unless the
+        //  requester keeps it (`event` may already be the next one in line)
         if(return_event)
-          gpu->event_pool.return_event(event);
+          gpu->event_pool.return_event(completed);
 
         if(start) {
           start->mark_gpu_work_start();
