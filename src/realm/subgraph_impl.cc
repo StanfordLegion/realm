@@ -1153,7 +1153,7 @@ namespace Realm {
     , finish_counter(int64_t(_subgraph->compiled.procs.size()) +
                      int64_t(_subgraph->compiled.num_direct_ops))
     , finish_event(_finish_event)
-    , postconditions(_postconditions.begin(), _postconditions.end())
+    , postconditions(_postconditions.data(), _postconditions.data() + _postconditions.size())
     , poisoned_inputs(_subgraph->compiled.input_words)
     , poisoned(false)
     , priority(_priority)

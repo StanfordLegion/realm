@@ -178,9 +178,10 @@ namespace Realm {
   protected:
     void set_scheduler(ThreadedTaskScheduler *_sched);
 
-    // Allow the ProcSubgraphExecutor to notify the scheduler
-    // for this processor that new subgraph work might be ready.
+    // Allow the subgraph machinery to notify the scheduler for this
+    // processor that new subgraph work might be ready.
     friend class ProcSubgraphExecutor;
+    friend class SubgraphExecutionState;
     void notify_scheduler_of_new_work();
 
     ThreadedTaskScheduler *sched;
