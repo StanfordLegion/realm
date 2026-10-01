@@ -1923,16 +1923,21 @@ struct FinishEventTaskArgs {
   std::atomic<int64_t> *seq;
   std::atomic<int64_t> *out_self;
   std::atomic<int64_t> *out_dep;
+  double *stamps; // body start, finish event obtained, spawned, body end
 };
 static int finish_event_task_id = 0;
 static void finish_event_task(const void *args, size_t arglen, const void *userdata,
                               size_t userlen, Processor p)
 {
   const FinishEventTaskArgs *a = static_cast<const FinishEventTaskArgs *>(args);
+  a->stamps[0] = Clock::current_time();
   Event fe = Processor::get_current_finish_event();
+  a->stamps[1] = Clock::current_time();
   SeqTaskArgs dep{a->seq, a->out_dep, UserEvent::NO_USER_EVENT, 0};
   a->target.spawn(seq_task_id, &dep, sizeof(dep), fe);
+  a->stamps[2] = Clock::current_time();
   a->out_self->store(a->seq->fetch_add(1));
+  a->stamps[3] = Clock::current_time();
 }
 
 // A graph task asks for its finish event and launches dependent work on it;
@@ -1950,7 +1955,7 @@ public:
     out_dep.store(-1);
     SubgraphDefinition sd;
     sd.concurrency_mode = SubgraphDefinition::ONE_SHOT;
-    FinishEventTaskArgs f{procs[1], &seq, &out_self, &out_dep};
+    FinishEventTaskArgs f{procs[1], &seq, &out_self, &out_dep, stamps};
     make_task_desc(sd, procs[0], finish_event_task_id, &f, sizeof(f));
     Subgraph::create_subgraph(sg, sd, ProfilingRequestSet()).wait();
   }
@@ -1958,14 +1963,18 @@ public:
   void run() override
   {
     double t0 = Clock::current_time();
-    completed = wait_with_timeout(sg.instantiate(nullptr, 0, ProfilingRequestSet()),
-                                  config.hang_timeout);
+    Event e = sg.instantiate(nullptr, 0, ProfilingRequestSet());
+    double t_inst = Clock::current_time();
+    completed = wait_with_timeout(e, config.hang_timeout);
     double t1 = Clock::current_time();
     dep_ran = poll_until([&] { return out_dep.load() >= 0; }, config.hang_timeout);
     double t2 = Clock::current_time();
     std::ostringstream os;
-    os << name() << ": graph finished after " << (t1 - t0) * 1e3
-       << " ms, dependent task ran " << (t2 - t1) * 1e3 << " ms later";
+    os << name() << ": ms after instantiate: returned " << (t_inst - t0) * 1e3
+       << ", body start " << (stamps[0] - t0) * 1e3 << ", finish event "
+       << (stamps[1] - t0) * 1e3 << ", spawned " << (stamps[2] - t0) * 1e3 << ", body end "
+       << (stamps[3] - t0) * 1e3 << ", graph finished " << (t1 - t0) * 1e3
+       << ", dependent seen " << (t2 - t0) * 1e3;
     report(os.str());
   }
 
@@ -1987,6 +1996,7 @@ public:
 private:
   std::vector<Processor> procs;
   std::atomic<int64_t> seq{0}, out_self{-1}, out_dep{-1};
+  double stamps[4] = {0, 0, 0, 0};
   Subgraph sg;
   bool completed = false, dep_ran = false;
 };
