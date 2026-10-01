@@ -56,6 +56,7 @@ namespace Realm {
     , scheduler(_scheduler)
     , current_op(0)
     , in_subgraph_task_exec(false)
+    , subgraph_finish_event_id(0)
     , exception_handler_count(0)
     , signal_count(0)
   {}

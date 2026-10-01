@@ -298,8 +298,6 @@ add_integration_test(subgraph_unit_tests "${REALM_TEST_DIR}/subgraph_unit_tests.
 # its own process and must abort; surviving (exit 0 + marker) is the failure.
 foreach(
   scenario
-  wait_in_compiled_task
-  finish_event_in_compiled_task
   unsupported_op_compiled
   profiling_on_compiled_instantiate
   external_precond_compiled_instantiate

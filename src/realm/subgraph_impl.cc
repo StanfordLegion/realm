@@ -145,6 +145,27 @@ namespace Realm {
                               Event wait_on /*= Event::NO_EVENT*/,
                               int priority_adjust /*= 0*/) const
   {
+    return instantiate(args, arglen, prs, SubgraphInstantiationProfiling(), wait_on,
+                       priority_adjust);
+  }
+
+  Event Subgraph::instantiate(const void *args, size_t arglen,
+                              const ProfilingRequestSet &prs,
+                              const std::vector<Event> &preconditions,
+                              std::vector<Event> &postconditions,
+                              Event wait_on /*= Event::NO_EVENT*/,
+                              int priority_adjust /*= 0*/) const
+  {
+    return instantiate(args, arglen, prs, SubgraphInstantiationProfiling(), preconditions,
+                       postconditions, wait_on, priority_adjust);
+  }
+
+  Event Subgraph::instantiate(const void *args, size_t arglen,
+                              const ProfilingRequestSet &prs,
+                              const SubgraphInstantiationProfiling &profiling,
+                              Event wait_on /*= Event::NO_EVENT*/,
+                              int priority_adjust /*= 0*/) const
+  {
     NodeID target_node = ID(*this).subgraph_owner_node();
 
     Event finish_event = GenEventImpl::create_genevent()->current_event();
@@ -154,14 +175,14 @@ namespace Realm {
 
     if(target_node == Network::my_node_id) {
       SubgraphImpl *impl = get_runtime()->get_subgraph_impl(*this);
-      impl->instantiate(args, arglen, prs, empty_span() /*preconditions*/,
+      impl->instantiate(args, arglen, prs, profiling, empty_span() /*preconditions*/,
                         empty_span() /*postconditions*/, wait_on, finish_event,
                         priority_adjust);
     } else {
       Serialization::ByteCountSerializer bcs;
       {
         bool ok = (bcs.append_bytes(args, arglen) && (bcs << span<const Event>()) &&
-                   (bcs << span<const Event>()) && (bcs << prs));
+                   (bcs << span<const Event>()) && (bcs << prs) && (bcs << profiling));
         assert(ok);
       }
       size_t msglen = bcs.bytes_used();
@@ -174,7 +195,7 @@ namespace Realm {
       {
         amsg.add_payload(args, arglen);
         bool ok = ((amsg << span<const Event>()) && (amsg << span<const Event>()) &&
-                   (amsg << prs));
+                   (amsg << prs) && (amsg << profiling));
         assert(ok);
       }
       amsg.commit();
@@ -184,6 +205,7 @@ namespace Realm {
 
   Event Subgraph::instantiate(const void *args, size_t arglen,
                               const ProfilingRequestSet &prs,
+                              const SubgraphInstantiationProfiling &profiling,
                               const std::vector<Event> &preconditions,
                               std::vector<Event> &postconditions,
                               Event wait_on /*= Event::NO_EVENT*/,
@@ -204,13 +226,13 @@ namespace Realm {
 
     if(target_node == Network::my_node_id) {
       SubgraphImpl *impl = get_runtime()->get_subgraph_impl(*this);
-      impl->instantiate(args, arglen, prs, preconditions, postconditions, wait_on,
-                        finish_event, priority_adjust);
+      impl->instantiate(args, arglen, prs, profiling, preconditions, postconditions,
+                        wait_on, finish_event, priority_adjust);
     } else {
       Serialization::ByteCountSerializer bcs;
       {
         bool ok = (bcs.append_bytes(args, arglen) && (bcs << preconditions) &&
-                   (bcs << postconditions) && (bcs << prs));
+                   (bcs << postconditions) && (bcs << prs) && (bcs << profiling));
         assert(ok);
       }
       size_t msglen = bcs.bytes_used();
@@ -222,7 +244,8 @@ namespace Realm {
       amsg->priority_adjust = priority_adjust;
       {
         amsg.add_payload(args, arglen);
-        bool ok = ((amsg << preconditions) && (amsg << postconditions) && (amsg << prs));
+        bool ok = ((amsg << preconditions) && (amsg << postconditions) && (amsg << prs) &&
+                   (amsg << profiling));
         assert(ok);
       }
       amsg.commit();
@@ -299,10 +322,6 @@ namespace Realm {
         SUBGRAPH_FATAL(me, "task " << i << " has priority " << t.priority
                                    << "; per-task priorities are not implemented (use "
                                       "the instantiation priority)");
-      if(!t.prs.empty())
-        SUBGRAPH_FATAL(me, "task " << i
-                                   << " has profiling requests; per-task profiling is "
-                                      "not implemented");
     }
 
     // interpolations: which arrivals get their barrier from the arguments?
@@ -498,6 +517,10 @@ namespace Realm {
     for(size_t i = 0; i < d.arrivals.size(); i++)
       arrival_to_op[i] = new_op(SubgraphDefinition::OPKIND_ARRIVAL, unsigned(i), -1, 0);
     c.num_direct_ops = uint32_t(d.arrivals.size());
+    c.task_ops = task_to_op;
+    c.any_task_profiling = false;
+    for(const SubgraphDefinition::TaskDesc &t : d.tasks)
+      c.any_task_profiling = c.any_task_profiling || !t.prs.empty();
     const size_t n = c.ops.size();
     auto op_of = [&](OpKind k, unsigned idx) {
       return (k == SubgraphDefinition::OPKIND_TASK) ? task_to_op[idx] : arrival_to_op[idx];
@@ -732,12 +755,15 @@ namespace Realm {
 
   void SubgraphImpl::instantiate(const void *args, size_t arglen,
                                  const ProfilingRequestSet &prs,
+                                 const SubgraphInstantiationProfiling &profiling,
                                  span<const Event> preconditions,
                                  span<const Event> postconditions, Event start_event,
                                  Event finish_event, int priority_adjust)
   {
     if(!prs.empty())
-      SUBGRAPH_FATAL(me, "profiling requests on instantiate are not implemented");
+      SUBGRAPH_FATAL(me, "profiling requests on the instantiation itself are not "
+                         "implemented; use SubgraphInstantiationProfiling for per-"
+                         "operation requests");
     if(preconditions.size() != compiled.inputs.size())
       SUBGRAPH_FATAL(me, "instantiated with " << preconditions.size()
                                               << " external preconditions, but the "
@@ -766,6 +792,7 @@ namespace Realm {
     SubgraphExecutionState *state =
         new SubgraphExecutionState(this, finish_event, priority_adjust, postconditions);
     state->interpolate(args, arglen);
+    state->setup_profiling(profiling);
     // Release the execution state once the instantiation has finished.
     EventImpl::add_waiter(finish_event, new SubgraphInstantiationCleanup(state));
     // Deliver external inputs; nothing can run before start() releases the roots.
@@ -958,12 +985,15 @@ namespace Realm {
     Serialization::FixedBufferDeserializer fbd(data, datalen);
     fbd.extract_bytes(
         0, msg.arglen); // skip over instantiation args - we'll access those directly
+    SubgraphInstantiationProfiling profiling;
     bool ok = ((fbd >> preconditions) && (fbd >> postconditions));
     if(ok && (fbd.bytes_left() > 0))
       ok = (fbd >> prs);
+    if(ok && (fbd.bytes_left() > 0))
+      ok = (fbd >> profiling);
     assert(ok);
 
-    subgraph->instantiate(data, msg.arglen, prs, preconditions, postconditions,
+    subgraph->instantiate(data, msg.arglen, prs, profiling, preconditions, postconditions,
                           msg.wait_on, msg.finish_event, msg.priority_adjust);
   }
 
@@ -1234,6 +1264,49 @@ namespace Realm {
     }
   }
 
+  void SubgraphExecutionState::setup_profiling(
+      const SubgraphInstantiationProfiling &iprof)
+  {
+    const SubgraphDefinition &d = *subgraph->defn;
+    const CompiledSubgraph &c = subgraph->compiled;
+    if(!iprof.copies.empty())
+      SUBGRAPH_FATAL(subgraph->me, "profiling requests for copies, but copies are not "
+                                   "implemented");
+    if(!c.any_task_profiling && iprof.tasks.empty())
+      return;
+    prof_index.assign(c.ops.size(), -1);
+    auto entry_for_task = [&](unsigned task) -> OpProfiling & {
+      if(task >= d.tasks.size())
+        SUBGRAPH_FATAL(subgraph->me, "profiling requested for task " << task
+                                                                     << ", which does not exist");
+      int32_t &idx = prof_index[c.task_ops[task]];
+      if(idx < 0) {
+        idx = int32_t(profiling.size());
+        profiling.emplace_back(new OpProfiling);
+        profiling.back()->requests.import_requests(d.tasks[task].prs);
+      }
+      return *profiling[idx];
+    };
+    for(size_t t = 0; t < d.tasks.size(); t++)
+      if(!d.tasks[t].prs.empty())
+        entry_for_task(unsigned(t));
+    for(const auto &kv : iprof.tasks)
+      entry_for_task(kv.first).requests.import_requests(kv.second);
+    for(auto &p : profiling) {
+      p->measurements.import_requests(p->requests);
+      p->wants_timeline =
+          p->measurements.wants_measurement<ProfilingMeasurements::OperationTimeline>();
+      p->wants_proc =
+          p->measurements.wants_measurement<ProfilingMeasurements::OperationProcessorUsage>();
+      p->wants_status =
+          p->measurements.wants_measurement<ProfilingMeasurements::OperationStatus>();
+      p->wants_fevent =
+          p->measurements.wants_measurement<ProfilingMeasurements::OperationFinishEvent>();
+      if(p->wants_timeline)
+        p->timeline.record_create_time();
+    }
+  }
+
   bool SubgraphExecutionState::op_poisoned(uint32_t op) const
   {
     const CompiledSubgraph &c = subgraph->compiled;
@@ -1271,6 +1344,9 @@ namespace Realm {
   {
     const CompiledSubgraph &c = subgraph->compiled;
     const CompiledSubgraph::Op &o = c.ops[op];
+    if(OpProfiling *pf = prof(op))
+      if(pf->wants_timeline)
+        pf->timeline.record_ready_time();
     if(o.proc >= 0) {
       const uint64_t slot = tail(o.proc).fetch_add_acqrel(1);
       queue(o.proc)[slot].store_release(int64_t(op));
@@ -1479,23 +1555,61 @@ namespace Realm {
     const CompiledSubgraph::Op &op = c.ops[entry.op];
     assert((op.kind == SubgraphDefinition::OPKIND_TASK) && (op.proc >= 0));
 
-    if(!state->op_poisoned(entry.op)) {
+    SubgraphExecutionState::OpProfiling *pf = state->prof(entry.op);
+    const bool skipped = state->op_poisoned(entry.op);
+    Event finish_event = Event::NO_EVENT;
+    if(!skipped) {
       const SubgraphDefinition::TaskDesc &task_desc = impl->defn->tasks[op.index];
       LocalTaskProcessor *proc_impl = c.procs[op.proc].impl;
 
-      // Run the task on this thread, flagged so that operations a subgraph
-      // task may not perform (waiting, querying its finish event) are
-      // rejected.
+      // Run the task on this thread. The task has no Operation; the flag
+      // lets Processor::get_current_finish_event create a finish event on
+      // demand, which is triggered below once the task returns.
       // TODO: task context managers are not applied to subgraph tasks.
       Thread *thread = Thread::self();
+      thread->subgraph_finish_event() =
+          (pf && pf->wants_fevent) ? UserEvent::create_user_event().id : 0;
+      if(pf && pf->wants_timeline)
+        pf->timeline.record_start_time();
       ThreadLocal::current_processor = proc;
       thread->start_subgraph_task_execution();
       proc_impl->execute_task(task_desc.task_id, state->op_args(entry.op));
       thread->stop_subgraph_task_execution();
       ThreadLocal::current_processor = Processor::NO_PROC;
+      if(pf && pf->wants_timeline) {
+        pf->timeline.record_end_time();
+        pf->timeline.record_complete_time();
+      }
+      finish_event.id = thread->subgraph_finish_event();
+      thread->subgraph_finish_event() = 0;
+      if(finish_event.exists())
+        GenEventImpl::trigger(finish_event, false /*!poisoned*/);
     }
     // (a task depending on a poisoned input is skipped; its successors still
     //  drain and the finish event ends up poisoned)
+
+    if(pf) {
+      if(pf->wants_timeline)
+        pf->measurements.add_measurement(pf->timeline);
+      if(pf->wants_proc) {
+        ProfilingMeasurements::OperationProcessorUsage usage;
+        usage.proc = proc;
+        pf->measurements.add_measurement(usage);
+      }
+      if(pf->wants_status) {
+        ProfilingMeasurements::OperationStatus status;
+        status.result = skipped ? ProfilingMeasurements::OperationStatus::CANCELLED
+                                : ProfilingMeasurements::OperationStatus::COMPLETED_SUCCESSFULLY;
+        status.error_code = 0;
+        pf->measurements.add_measurement(status);
+      }
+      if(pf->wants_fevent) {
+        ProfilingMeasurements::OperationFinishEvent fe;
+        fe.finish_event = finish_event;
+        pf->measurements.add_measurement(fe);
+      }
+      pf->measurements.send_responses(pf->requests);
+    }
 
     state->op_completed(entry.op);
     if(entry.last_for_processor)

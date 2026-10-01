@@ -32,6 +32,7 @@ namespace Realm {
 
   // TODO: C equivalent: realm_subgraph_defn_t
   struct SubgraphDefinition;
+  struct SubgraphInstantiationProfiling;
 
   class REALM_PUBLIC_API Subgraph {
   public:
@@ -68,6 +69,17 @@ namespace Realm {
                       Event wait_on = Event::NO_EVENT, int priority_adjust = 0) const;
 
     Event instantiate(const void *args, size_t arglen, const ProfilingRequestSet &prs,
+                      const std::vector<Event> &preconditions,
+                      std::vector<Event> &postconditions, Event wait_on = Event::NO_EVENT,
+                      int priority_adjust = 0) const;
+
+    // Variants with profiling requests for operations of this instantiation
+    // (see SubgraphInstantiationProfiling).
+    Event instantiate(const void *args, size_t arglen, const ProfilingRequestSet &prs,
+                      const SubgraphInstantiationProfiling &profiling,
+                      Event wait_on = Event::NO_EVENT, int priority_adjust = 0) const;
+    Event instantiate(const void *args, size_t arglen, const ProfilingRequestSet &prs,
+                      const SubgraphInstantiationProfiling &profiling,
                       const std::vector<Event> &preconditions,
                       std::vector<Event> &postconditions, Event wait_on = Event::NO_EVENT,
                       int priority_adjust = 0) const;
@@ -268,10 +280,25 @@ namespace Realm {
 
     ConcurrencyMode concurrency_mode;
 
+    // Profiling: a task's prs is honored on every instantiation; see
+    //  SubgraphInstantiationProfiling for per-instantiation requests.
+    //  Supported measurements for tasks: OperationTimeline,
+    //  OperationProcessorUsage, OperationStatus, OperationFinishEvent.
+
     // longer term possibilites:
     //  conditional execution
     //  loops
     //  local "scratchpad" for small-value-communication
+  };
+
+  // Profiling requests for one instantiation, merged with those attached to
+  // operations in the definition. Operations are named by their index in the
+  // definition's list of that kind.
+  struct REALM_PUBLIC_API SubgraphInstantiationProfiling {
+    std::vector<std::pair<unsigned, ProfilingRequestSet>> tasks;
+    std::vector<std::pair<unsigned, ProfilingRequestSet>> copies;
+
+    bool empty() const { return tasks.empty() && copies.empty(); }
   };
 
 }; // namespace Realm

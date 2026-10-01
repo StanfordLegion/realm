@@ -125,9 +125,14 @@ namespace Realm {
   {
     Thread *thread = Thread::self();
     if(thread->in_subgraph_task_execution()) {
-      log_task.fatal() << "Processor::get_current_finish_event is not currently supported "
-                          "inside a compiled subgraph task";
-      abort();
+      // Subgraph tasks have no Operation: the finish event is created on
+      // demand and triggered by the subgraph executor once the task returns.
+      unsigned long long &id = thread->subgraph_finish_event();
+      if(id == 0)
+        id = UserEvent::create_user_event().id;
+      Event e;
+      e.id = id;
+      return e;
     }
 
     Operation *op = Thread::self()->get_operation();

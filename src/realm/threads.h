@@ -185,6 +185,10 @@ namespace Realm {
     void start_subgraph_task_execution();
     void stop_subgraph_task_execution();
     bool in_subgraph_task_execution() const { return in_subgraph_task_exec; }
+    // Finish event (as an Event id, 0 if none) created on demand for the
+    // subgraph task this thread is running; triggered by the subgraph
+    // executor once the task returns.
+    unsigned long long &subgraph_finish_event() { return subgraph_finish_event_id; }
 
 #ifdef REALM_USE_USER_THREADS
     // perform a user-level thread switch
@@ -236,6 +240,7 @@ namespace Realm {
     ThreadScheduler *scheduler;
     Operation *current_op;
     bool in_subgraph_task_exec;
+    unsigned long long subgraph_finish_event_id;
     int exception_handler_count;
     atomic<int> signal_count;
     Mutex signal_mutex;

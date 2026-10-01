@@ -28,6 +28,7 @@
 #include "realm/bgwork.h"
 #include "realm/mutex.h"
 
+#include <memory>
 #include <queue>
 #include <unordered_map>
 #include <vector>
@@ -146,7 +147,9 @@ namespace Realm {
     };
 
     std::vector<Op> ops;
-    uint32_t num_direct_ops; // directly launched operations, numbered last
+    uint32_t num_direct_ops;          // directly launched operations, numbered last
+    std::vector<uint32_t> task_ops;   // task index -> op
+    bool any_task_profiling;          // some task carries profiling requests
     std::vector<uint32_t> roots; // operations without in-graph predecessors
     std::vector<Proc> procs;
     std::vector<Domain> domains;
@@ -183,6 +186,7 @@ namespace Realm {
     void compile(void);
 
     void instantiate(const void *args, size_t arglen, const ProfilingRequestSet &prs,
+                     const SubgraphInstantiationProfiling &profiling,
                      span<const Event> preconditions, span<const Event> postconditions,
                      Event start_event, Event finish_event, int priority_adjust);
 
@@ -341,6 +345,22 @@ namespace Realm {
 
     // Applies the instantiation arguments to the interpolated operations.
     void interpolate(const void *args, size_t arglen);
+    // Sets up profiling for operations with definition-time or
+    // instantiation-time requests.
+    void setup_profiling(const SubgraphInstantiationProfiling &profiling);
+    struct OpProfiling {
+      ProfilingRequestSet requests;
+      ProfilingMeasurementCollection measurements;
+      bool wants_timeline = false, wants_proc = false, wants_status = false,
+           wants_fevent = false;
+      ProfilingMeasurements::OperationTimeline timeline;
+    };
+    OpProfiling *prof(uint32_t op) const
+    {
+      if(prof_index.empty() || (prof_index[op] < 0))
+        return nullptr;
+      return profiling[prof_index[op]].get();
+    }
     // Records that external input `input` has triggered (possibly poisoned)
     // and makes dependent operations ready.
     void input_triggered(uint32_t input, bool poisoned);
@@ -379,6 +399,10 @@ namespace Realm {
     int priority;
 
     std::vector<char *> blocks; // one per CompiledSubgraph::Domain
+
+    // Profiling, only populated when some operation requested it.
+    std::vector<int32_t> prof_index; // per op, -1 if none
+    std::vector<std::unique_ptr<OpProfiling>> profiling;
   };
 
   // ProcSubgraphExecutor is the per-scheduler component that feeds subgraph

@@ -1826,6 +1826,300 @@ private:
 
 ////////////////////////////////////////////////////////////////////////
 //
+// Tasks inside a subgraph may block on events, query their finish event,
+// and be profiled.
+//
+
+static bool poll_until(const std::function<bool()> &pred, double seconds)
+{
+  double deadline = Clock::current_time() + seconds;
+  while(!pred()) {
+    if(Clock::current_time() > deadline)
+      return false;
+    usleep(500);
+  }
+  return true;
+}
+
+struct BlockingTaskArgs {
+  UserEvent gate;
+  std::atomic<int64_t> *seq;
+  std::atomic<int64_t> *out;
+};
+static int blocking_task_id = 0;
+static void blocking_task(const void *args, size_t arglen, const void *userdata,
+                          size_t userlen, Processor p)
+{
+  const BlockingTaskArgs *a = static_cast<const BlockingTaskArgs *>(args);
+  a->gate.wait();
+  a->out->store(a->seq->fetch_add(1));
+}
+
+// A graph task blocks on an event: the processor keeps running the rest of
+// the graph (another task on the same processor completes meanwhile) and
+// the blocked task finishes once the event triggers.
+class BlockingTaskTest : public SubgraphTest {
+public:
+  std::string name() const override { return "BlockingTask"; }
+  bool can_run() override { return worker_cpus().size() >= 2; }
+
+  void init() override
+  {
+    procs = worker_cpus(2);
+    seq.store(0);
+    for(auto &o : outs)
+      o.store(-1);
+    gate = UserEvent::create_user_event();
+    x_done = UserEvent::create_user_event();
+    y_done = UserEvent::create_user_event();
+    SubgraphDefinition sd;
+    sd.concurrency_mode = SubgraphDefinition::ONE_SHOT;
+    BlockingTaskArgs w{gate, &seq, &outs[0]};
+    SeqTaskArgs x{&seq, &outs[1], x_done, 0};
+    SeqTaskArgs y{&seq, &outs[2], y_done, 0};
+    make_task_desc(sd, procs[0], blocking_task_id, &w, sizeof(w));
+    make_task_desc(sd, procs[1], seq_task_id, &x, sizeof(x));
+    make_task_desc(sd, procs[0], seq_task_id, &y, sizeof(y)); // same processor as W
+    Subgraph::create_subgraph(sg, sd, ProfilingRequestSet()).wait();
+  }
+
+  void run() override
+  {
+    Event e = sg.instantiate(nullptr, 0, ProfilingRequestSet());
+    others_done = wait_with_timeout(Event::merge_events(x_done, y_done), config.hang_timeout);
+    gate.trigger();
+    completed = wait_with_timeout(e, config.hang_timeout);
+  }
+
+  bool check() override
+  {
+    bool ok = others_done && completed && (outs[0].load() > outs[1].load()) &&
+              (outs[0].load() > outs[2].load());
+    if(!ok)
+      log_app.error() << name() << ": others_done=" << others_done << " completed=" << completed
+                      << " W=" << outs[0] << " X=" << outs[1] << " Y=" << outs[2];
+    return ok;
+  }
+
+  void cleanup() override
+  {
+    if(completed)
+      sg.destroy().wait();
+  }
+
+  bool hung() const override { return !completed; }
+
+private:
+  std::vector<Processor> procs;
+  std::atomic<int64_t> seq{0};
+  std::atomic<int64_t> outs[3];
+  UserEvent gate, x_done, y_done;
+  Subgraph sg;
+  bool others_done = false, completed = false;
+};
+
+struct FinishEventTaskArgs {
+  Processor target;
+  std::atomic<int64_t> *seq;
+  std::atomic<int64_t> *out_self;
+  std::atomic<int64_t> *out_dep;
+};
+static int finish_event_task_id = 0;
+static void finish_event_task(const void *args, size_t arglen, const void *userdata,
+                              size_t userlen, Processor p)
+{
+  const FinishEventTaskArgs *a = static_cast<const FinishEventTaskArgs *>(args);
+  Event fe = Processor::get_current_finish_event();
+  SeqTaskArgs dep{a->seq, a->out_dep, UserEvent::NO_USER_EVENT, 0};
+  a->target.spawn(seq_task_id, &dep, sizeof(dep), fe);
+  a->out_self->store(a->seq->fetch_add(1));
+}
+
+// A graph task asks for its finish event and launches dependent work on it;
+// the dependent work runs after the task returns.
+class FinishEventTaskTest : public SubgraphTest {
+public:
+  std::string name() const override { return "FinishEventTask"; }
+  bool can_run() override { return worker_cpus().size() >= 2; }
+
+  void init() override
+  {
+    procs = worker_cpus(2);
+    seq.store(0);
+    out_self.store(-1);
+    out_dep.store(-1);
+    SubgraphDefinition sd;
+    sd.concurrency_mode = SubgraphDefinition::ONE_SHOT;
+    FinishEventTaskArgs f{procs[1], &seq, &out_self, &out_dep};
+    make_task_desc(sd, procs[0], finish_event_task_id, &f, sizeof(f));
+    Subgraph::create_subgraph(sg, sd, ProfilingRequestSet()).wait();
+  }
+
+  void run() override
+  {
+    completed = wait_with_timeout(sg.instantiate(nullptr, 0, ProfilingRequestSet()),
+                                  config.hang_timeout);
+    dep_ran = poll_until([&] { return out_dep.load() >= 0; }, config.hang_timeout);
+  }
+
+  bool check() override
+  {
+    bool ok = completed && dep_ran && (out_dep.load() > out_self.load());
+    if(!ok)
+      log_app.error() << name() << ": completed=" << completed << " dep_ran=" << dep_ran
+                      << " self=" << out_self << " dep=" << out_dep;
+    return ok;
+  }
+
+  void cleanup() override
+  {
+    if(completed)
+      sg.destroy().wait();
+  }
+
+private:
+  std::vector<Processor> procs;
+  std::atomic<int64_t> seq{0}, out_self{-1}, out_dep{-1};
+  Subgraph sg;
+  bool completed = false, dep_ran = false;
+};
+
+class ProfilingTest;
+struct ProfPayload {
+  ProfilingTest *test;
+  Processor expected_proc;
+  bool expect_fevent;
+  bool expect_status;
+};
+static int prof_response_task_id = 0;
+static void prof_response_task(const void *args, size_t arglen, const void *userdata,
+                               size_t userlen, Processor p);
+
+// Definition-time and instantiation-time profiling requests on tasks are
+// honored: timeline, processor usage, status and finish event.
+class ProfilingTest : public SubgraphTest {
+public:
+  std::string name() const override { return "Profiling"; }
+  bool can_run() override { return worker_cpus().size() >= 2; }
+
+  void handle(const ProfilingResponse &resp, const ProfPayload &pl)
+  {
+    using namespace ProfilingMeasurements;
+    int problems = 0;
+    OperationTimeline tl;
+    if(resp.get_measurement(tl)) {
+      if(!((tl.create_time <= tl.ready_time) && (tl.ready_time <= tl.start_time) &&
+           (tl.start_time <= tl.end_time) && (tl.end_time <= tl.complete_time))) {
+        log_app.error() << name() << ": timeline out of order " << tl.create_time << " "
+                        << tl.ready_time << " " << tl.start_time << " " << tl.end_time << " "
+                        << tl.complete_time;
+        problems++;
+      }
+    } else {
+      log_app.error() << name() << ": response without timeline";
+      problems++;
+    }
+    OperationProcessorUsage pu;
+    if(resp.get_measurement(pu) && (pu.proc != pl.expected_proc)) {
+      log_app.error() << name() << ": processor " << pu.proc << " != " << pl.expected_proc;
+      problems++;
+    }
+    if(pl.expect_status) {
+      OperationStatus st;
+      if(!resp.get_measurement(st) || (st.result != OperationStatus::COMPLETED_SUCCESSFULLY)) {
+        log_app.error() << name() << ": missing or unexpected status";
+        problems++;
+      }
+    }
+    if(pl.expect_fevent) {
+      OperationFinishEvent fe;
+      if(!resp.get_measurement(fe) || !fe.finish_event.exists() ||
+         !fe.finish_event.has_triggered()) {
+        log_app.error() << name() << ": missing or untriggered finish event";
+        problems++;
+      }
+    }
+    bad.fetch_add(problems);
+    responses.fetch_add(1);
+  }
+
+  void init() override
+  {
+    procs = worker_cpus(2);
+    responses.store(0);
+    bad.store(0);
+    Processor driver = all_cpus()[0];
+    SubgraphDefinition sd;
+    sd.concurrency_mode = SubgraphDefinition::INSTANTIATION_ORDER;
+    counts.store(0);
+    CounterTaskArgs a{&counts, UserEvent::NO_USER_EVENT};
+    int t[4];
+    for(int i = 0; i < 4; i++) {
+      t[i] = make_task_desc(sd, procs[i % 2], counter_task_id, &a, sizeof(a));
+      if(i > 0)
+        add_dependency(sd, SubgraphDefinition::OPKIND_TASK, t[i - 1],
+                       SubgraphDefinition::OPKIND_TASK, t[i]);
+    }
+    // definition-time request on task 0
+    ProfPayload p0{this, procs[0], false, false};
+    sd.tasks[t[0]]
+        .prs.add_request(driver, prof_response_task_id, &p0, sizeof(p0))
+        .add_measurement<ProfilingMeasurements::OperationTimeline>()
+        .add_measurement<ProfilingMeasurements::OperationProcessorUsage>();
+    // instantiation-time request on task 2
+    ProfPayload p2{this, procs[0], true, true};
+    ProfilingRequestSet prs2;
+    prs2.add_request(driver, prof_response_task_id, &p2, sizeof(p2))
+        .add_measurement<ProfilingMeasurements::OperationTimeline>()
+        .add_measurement<ProfilingMeasurements::OperationStatus>()
+        .add_measurement<ProfilingMeasurements::OperationFinishEvent>();
+    iprof.tasks.emplace_back(unsigned(t[2]), prs2);
+    Subgraph::create_subgraph(sg, sd, ProfilingRequestSet()).wait();
+  }
+
+  void run() override
+  {
+    completed = wait_with_timeout(sg.instantiate(nullptr, 0, ProfilingRequestSet(), iprof),
+                                  config.hang_timeout);
+    got_responses = poll_until([&] { return responses.load() >= 2; }, config.hang_timeout);
+  }
+
+  bool check() override
+  {
+    bool ok = completed && got_responses && (responses.load() == 2) && (bad.load() == 0) &&
+              (counts.load() == 4);
+    if(!ok)
+      log_app.error() << name() << ": completed=" << completed << " responses="
+                      << responses.load() << " problems=" << bad.load() << " tasks="
+                      << counts.load();
+    return ok;
+  }
+
+  void cleanup() override
+  {
+    if(completed)
+      sg.destroy().wait();
+  }
+
+private:
+  std::vector<Processor> procs;
+  std::atomic<int64_t> counts{0};
+  std::atomic<int> responses{0}, bad{0};
+  SubgraphInstantiationProfiling iprof;
+  Subgraph sg;
+  bool completed = false, got_responses = false;
+};
+
+static void prof_response_task(const void *args, size_t arglen, const void *userdata,
+                               size_t userlen, Processor p)
+{
+  ProfilingResponse resp(args, arglen);
+  const ProfPayload *pl = static_cast<const ProfPayload *>(resp.user_data());
+  pl->test->handle(resp, *pl);
+}
+
+////////////////////////////////////////////////////////////////////////
+//
 // RemoteInstantiateDestroyTest: a task on another address space
 // instantiates a subgraph owned by this node several times and then
 // destroys it. Everything must run on the owner's processors and the
@@ -2000,20 +2294,7 @@ private:
 // is the failure.
 //
 
-static int waiting_task_id = 0, finish_event_task_id = 0, noop_task_id = 0;
-
-static void waiting_task(const void *, size_t, const void *, size_t, Processor)
-{
-  // Wait on an event nobody will trigger. A correct implementation refuses
-  // this inside a compiled subgraph task; a broken one returns immediately.
-  UserEvent::create_user_event().wait();
-}
-
-static void finish_event_task(const void *, size_t, const void *, size_t, Processor)
-{
-  Event e = Processor::get_current_finish_event();
-  { std::ostringstream _os; _os << "finish event inside compiled subgraph task: " << e; report(_os.str()); }
-}
+static int noop_task_id = 0;
 
 static void noop_task(const void *, size_t, const void *, size_t, Processor) {}
 
@@ -2025,18 +2306,6 @@ static Subgraph make_one_task_subgraph(int task_id)
   Subgraph sg;
   Subgraph::create_subgraph(sg, sd, ProfilingRequestSet()).wait();
   return sg;
-}
-
-static void death_wait_in_compiled_task()
-{
-  Subgraph sg = make_one_task_subgraph(waiting_task_id);
-  sg.instantiate(nullptr, 0, ProfilingRequestSet()).wait();
-}
-
-static void death_finish_event_in_compiled_task()
-{
-  Subgraph sg = make_one_task_subgraph(finish_event_task_id);
-  sg.instantiate(nullptr, 0, ProfilingRequestSet()).wait();
 }
 
 static void death_unsupported_op_compiled()
@@ -2114,8 +2383,6 @@ struct DeathScenario {
 };
 
 static const DeathScenario death_scenarios[] = {
-    {"wait_in_compiled_task", death_wait_in_compiled_task},
-    {"finish_event_in_compiled_task", death_finish_event_in_compiled_task},
     {"unsupported_op_compiled", death_unsupported_op_compiled},
     {"profiling_on_compiled_instantiate", death_profiling_on_compiled_instantiate},
     {"external_precond_compiled_instantiate", death_external_precond_compiled_instantiate},
@@ -2136,18 +2403,20 @@ static void register_common_tasks()
   dag_task_id = task_id_counter++;
   counter_task_id = task_id_counter++;
   launcher_task_id = task_id_counter++;
-  waiting_task_id = task_id_counter++;
-  finish_event_task_id = task_id_counter++;
   noop_task_id = task_id_counter++;
   remote_driver_task_id = task_id_counter++;
   seq_task_id = task_id_counter++;
+  blocking_task_id = task_id_counter++;
+  finish_event_task_id = task_id_counter++;
+  prof_response_task_id = task_id_counter++;
   rt.register_task(remote_driver_task_id, remote_driver_task);
   rt.register_task(seq_task_id, seq_task);
+  rt.register_task(blocking_task_id, blocking_task);
+  rt.register_task(finish_event_task_id, finish_event_task);
+  rt.register_task(prof_response_task_id, prof_response_task);
   rt.register_task(dag_task_id, dag_task);
   rt.register_task(counter_task_id, counter_task);
   rt.register_task(launcher_task_id, launcher_task);
-  rt.register_task(waiting_task_id, waiting_task);
-  rt.register_task(finish_event_task_id, finish_event_task);
   rt.register_task(noop_task_id, noop_task);
 }
 
@@ -2191,6 +2460,9 @@ static std::vector<std::unique_ptr<SubgraphTest>> make_tests()
   tests.emplace_back(new PoisonedPreconditionTest());
   tests.emplace_back(new ExternalPoisonTest());
   tests.emplace_back(new MixedWorkloadTest());
+  tests.emplace_back(new BlockingTaskTest());
+  tests.emplace_back(new FinishEventTaskTest());
+  tests.emplace_back(new ProfilingTest());
   tests.emplace_back(new GraphPriorityTest());
   tests.emplace_back(new GraphPriorityPreemptionTest());
   tests.emplace_back(new RemoteInstantiateDestroyTest());

@@ -44,6 +44,12 @@ namespace Realm {
   {}
 
   template <typename S>
+  bool serdez(S &serdez, const SubgraphInstantiationProfiling &p)
+  {
+    return ((serdez & p.tasks) && (serdez & p.copies));
+  }
+
+  template <typename S>
   bool serdez(S &serdez, const SubgraphDefinition &s)
   {
     return ((serdez & s.tasks) && (serdez & s.copies) && (serdez & s.arrivals) &&
