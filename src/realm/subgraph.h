@@ -70,6 +70,12 @@ namespace Realm {
     // TODO: collective instantiation
   };
 
+  // A subgraph is compiled at creation into per-processor schedules that
+  // Realm's task schedulers execute directly, with far lower per-operation
+  // overhead than issuing the operations individually. Creation fails
+  // fatally, naming the operation and feature, for any definition that uses
+  // something the compiled implementation does not support yet; see the
+  // notes on each field below for the current restrictions.
   struct REALM_PUBLIC_API SubgraphDefinition {
     SubgraphDefinition();
 
@@ -91,6 +97,9 @@ namespace Realm {
 
     struct TaskDesc {
       TaskDesc(); // initializes all fields
+      // currently: proc must be a LOC_PROC of the creating node, priority must
+      //  be 0, prs must be empty; tasks must not wait on events, spawn other
+      //  tasks, or query their own finish event
 
       // interpolatable: args
       Processor proc;
@@ -236,6 +245,8 @@ namespace Realm {
 
     // concurrency mode - more serial versions may allow the compiled form to
     //  pre-allocate and reuse resources, improving efficiency
+    // Only ONE_SHOT and INSTANTIATION_ORDER are implemented at the moment;
+    //  SERIALIZABLE and CONCURRENT are rejected at creation.
     enum ConcurrencyMode
     {
       ONE_SHOT,            // can only be executed once (e.g. probably not
@@ -252,41 +263,11 @@ namespace Realm {
 
     ConcurrencyMode concurrency_mode;
 
-    // Execution mode, which controls the optimization strategy used
-    // to execute the subgraph.
-    enum ExecutionMode
-    {
-      // Executed by issuing operations within the subgraph as standard
-      // Realm operations, with some optimizations. This is the default.
-      INTERPRETED,
-      // Executed by compiling the subgraph into per-processor schedules
-      // that Realm's task schedulers run directly, with far lower
-      // per-operation overhead. The current implementation is restricted
-      // and create_subgraph fails (fatally) for definitions outside it:
-      //  - tasks only, on LOC_PROC processors of the calling node, with
-      //    priority 0 and no per-task profiling requests; no copies,
-      //    barrier arrivals, reservation acquires/releases, nested
-      //    instantiations, interpolations, or external pre/postconditions;
-      //  - concurrency_mode must be ONE_SHOT or INSTANTIATION_ORDER, and
-      //    INSTANTIATION_ORDER instantiations are executed strictly in
-      //    order of instantiation;
-      //  - instantiate() must not be given profiling requests or external
-      //    pre/postconditions;
-      //  - tasks must not wait on events, spawn other tasks, or query
-      //    their own finish event. Violations are fatal errors.
-      // A poisoned precondition poisons the instantiation's finish event
-      // without running any of its tasks.
-      COMPILED,
-    };
-    ExecutionMode execution_mode;
-
     // longer term possibilites:
     //  conditional execution
     //  loops
     //  local "scratchpad" for small-value-communication
   };
-
-  std::ostream &operator<<(std::ostream &os, SubgraphDefinition::ExecutionMode mode);
 
 }; // namespace Realm
 

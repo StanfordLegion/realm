@@ -172,6 +172,8 @@ namespace Realm {
 
     // Enqueue a subgraph for execution onto this processor.
     void enqueue_subgraph(SubgraphExecutionState *subgraph);
+    // OS NUMA node this processor's worker threads run on, or -1 if unknown.
+    int numa_node(void) const;
 
   protected:
     void set_scheduler(ThreadedTaskScheduler *_sched);

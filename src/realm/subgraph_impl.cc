@@ -18,38 +18,78 @@
 // Realm subgraph implementation
 
 #include "realm/subgraph_impl.h"
-#include "realm/event.h"
-#include "realm/memory.h"
+#include "realm/event_impl.h"
 #include "realm/network.h"
+#include "realm/numa/numasysif.h"
 #include "realm/proc_impl.h"
 #include "realm/runtime_impl.h"
-#include "realm/subgraph.h"
 #include "realm/tasks.h"
 #include "realm/timers.h"
+
+#include <algorithm>
+#include <cstdlib>
+#include <cstring>
+#include <sstream>
+
+#ifdef __linux__
+#include <sched.h>
+#endif
 
 namespace Realm {
 
   Logger log_subgraph("subgraph");
 
-  std::ostream &operator<<(std::ostream &os, SubgraphDefinition::ExecutionMode mode)
-  {
-    switch(mode) {
-    case SubgraphDefinition::INTERPRETED:
-      os << "INTERPRETED";
-      break;
-    case SubgraphDefinition::COMPILED:
-      os << "COMPILED";
-      break;
-    default:
-      os << "UNKNOWN";
-      break;
+  namespace {
+    // Unsupported features and misuse are hard errors: a subgraph that ran
+    // with different semantics than requested would be worse than one that
+    // refuses to run.
+    [[noreturn]] void subgraph_fatal(ID me, const std::string &what)
+    {
+      log_subgraph.fatal() << "subgraph " << me << ": " << what;
+      abort();
     }
-    return os;
-  }
+#define SUBGRAPH_FATAL(me, expr)                                                         \
+  do {                                                                                   \
+    std::ostringstream _ss;                                                              \
+    _ss << expr;                                                                         \
+    subgraph_fatal((me), _ss.str());                                                     \
+  } while(0)
+
+    size_t round_up(size_t v, size_t m) { return (v + m - 1) / m * m; }
+
+    const char *op_kind_name(SubgraphDefinition::OpKind kind)
+    {
+      switch(kind) {
+      case SubgraphDefinition::OPKIND_TASK:
+        return "task";
+      case SubgraphDefinition::OPKIND_COPY:
+        return "copy";
+      case SubgraphDefinition::OPKIND_ARRIVAL:
+        return "barrier arrival";
+      case SubgraphDefinition::OPKIND_INSTANTIATION:
+        return "subgraph instantiation";
+      case SubgraphDefinition::OPKIND_ACQUIRE:
+        return "reservation acquire";
+      case SubgraphDefinition::OPKIND_RELEASE:
+        return "reservation release";
+      case SubgraphDefinition::OPKIND_EXT_PRECOND:
+        return "external precondition";
+      case SubgraphDefinition::OPKIND_EXT_POSTCOND:
+        return "external postcondition";
+      case SubgraphDefinition::OPKIND_COLL_PRECOND:
+        return "collective precondition";
+      case SubgraphDefinition::OPKIND_COLL_POSTCOND:
+        return "collective postcondition";
+      default:
+        return "invalid";
+      }
+    }
+  } // namespace
 
   ////////////////////////////////////////////////////////////////////////
   //
   // class Subgraph
+  //
 
   /*static*/ const Subgraph Subgraph::NO_SUBGRAPH = {/* zero-initialization */};
 
@@ -66,20 +106,18 @@ namespace Realm {
 
     impl->defn = new SubgraphDefinition(defn);
 
-    // no handling of preconditions or profiling yet
-    assert(wait_on.has_triggered());
-    assert(prs.empty());
+    if(!wait_on.has_triggered())
+      SUBGRAPH_FATAL(impl->me, "deferred creation (create_subgraph with an untriggered "
+                               "wait_on) is not implemented");
+    if(!prs.empty())
+      SUBGRAPH_FATAL(impl->me, "profiling requests on create_subgraph are not implemented");
 
-    if(impl->compile()) {
-      log_subgraph.info() << "created: subgraph=" << subgraph
-                          << " ops=" << impl->interpreted_schedule.size();
-      return Event::NO_EVENT;
-    } else {
-      // fatal error for now - once we have profiling, return a poisoned event
-      //  if there was a profiling request for OperationStatus
-      log_subgraph.fatal() << "subgraph compilation failed";
-      abort();
-    }
+    impl->compile();
+    log_subgraph.info() << "created: subgraph=" << subgraph
+                        << " ops=" << impl->compiled.ops.size()
+                        << " procs=" << impl->compiled.procs.size()
+                        << " domains=" << impl->compiled.domains.size();
+    return Event::NO_EVENT;
   }
 
   Event Subgraph::destroy(Event wait_on /*= Event::NO_EVENT*/) const
@@ -194,10 +232,27 @@ namespace Realm {
 
   ////////////////////////////////////////////////////////////////////////
   //
+  // struct CompiledSubgraph
+  //
+
+  void CompiledSubgraph::clear()
+  {
+    ops.clear();
+    procs.clear();
+    domains.clear();
+    proc_index.clear();
+    successors.clear();
+  }
+
+  ////////////////////////////////////////////////////////////////////////
+  //
   // class SubgraphImpl
+  //
 
   SubgraphImpl::SubgraphImpl()
     : me(Subgraph::NO_SUBGRAPH)
+    , next_free(nullptr)
+    , defn(nullptr)
   {}
 
   SubgraphImpl::~SubgraphImpl() {}
@@ -208,687 +263,240 @@ namespace Realm {
     assert(NodeID(me.subgraph_owner_node()) == NodeID(_owner));
   }
 
-  static bool
-  has_interpolation(const std::vector<SubgraphDefinition::Interpolation> &interpolations,
-                    unsigned first_interp, unsigned num_interps,
-                    SubgraphDefinition::Interpolation::TargetKind target_kind,
-                    unsigned target_index)
+  void SubgraphImpl::compile(void)
   {
-    for(unsigned i = 0; i < num_interps; i++) {
-      const SubgraphDefinition::Interpolation &it = interpolations[first_interp + i];
-      if((it.target_kind == target_kind) && (it.target_index == target_index))
-        return true;
-    }
-    return false;
-  }
+    const SubgraphDefinition &d = *defn;
+    typedef SubgraphDefinition::OpKind OpKind;
 
-  class InterpolationScratchHelper {
-  public:
-    template <unsigned N>
-    InterpolationScratchHelper(char (&prealloc)[N], size_t _needed)
-      : needed(_needed)
-      , used(0)
-    {
-      if(needed > N) {
-        need_free = true;
-        base = static_cast<char *>(malloc(N));
-        assert(base != 0);
-      } else {
-        need_free = false;
-        base = prealloc;
+    // ---- validation: everything the compiled implementation cannot run yet
+    if((d.concurrency_mode != SubgraphDefinition::ONE_SHOT) &&
+       (d.concurrency_mode != SubgraphDefinition::INSTANTIATION_ORDER))
+      SUBGRAPH_FATAL(me, "concurrency modes SERIALIZABLE and CONCURRENT are not "
+                         "implemented; use ONE_SHOT or INSTANTIATION_ORDER");
+    if(!d.copies.empty())
+      SUBGRAPH_FATAL(me, "copies and fills are not implemented (" << d.copies.size()
+                                                                 << " in definition)");
+    if(!d.arrivals.empty())
+      SUBGRAPH_FATAL(me, "barrier arrivals are not implemented (" << d.arrivals.size()
+                                                                 << " in definition)");
+    if(!d.instantiations.empty())
+      SUBGRAPH_FATAL(me, "nested subgraph instantiations are not implemented ("
+                             << d.instantiations.size() << " in definition)");
+    if(!d.acquires.empty() || !d.releases.empty())
+      SUBGRAPH_FATAL(me, "reservation acquires and releases are not implemented");
+    if(!d.interpolations.empty())
+      SUBGRAPH_FATAL(me, "interpolations are not implemented (" << d.interpolations.size()
+                                                               << " in definition)");
+
+    for(size_t i = 0; i < d.tasks.size(); i++) {
+      const SubgraphDefinition::TaskDesc &t = d.tasks[i];
+      if(!t.proc.exists())
+        SUBGRAPH_FATAL(me, "task " << i << " has no processor");
+      if(t.proc.kind() != Processor::LOC_PROC)
+        SUBGRAPH_FATAL(me, "task " << i << " runs on " << t.proc
+                                   << ", which is not a LOC_PROC; only CPU tasks are "
+                                      "implemented");
+      if(NodeID(t.proc.address_space()) != Network::my_node_id)
+        SUBGRAPH_FATAL(me, "task " << i << " runs on " << t.proc
+                                   << ", which belongs to another node; only local "
+                                      "tasks are implemented");
+      if(t.priority != 0)
+        SUBGRAPH_FATAL(me, "task " << i << " has priority " << t.priority
+                                   << "; per-task priorities are not implemented");
+      if(!t.prs.empty())
+        SUBGRAPH_FATAL(me, "task " << i
+                                   << " has profiling requests; per-task profiling is "
+                                      "not implemented");
+    }
+
+    for(size_t i = 0; i < d.dependencies.size(); i++) {
+      const SubgraphDefinition::Dependency &dep = d.dependencies[i];
+      for(OpKind k : {dep.src_op_kind, dep.tgt_op_kind}) {
+        if((k == SubgraphDefinition::OPKIND_EXT_PRECOND) ||
+           (k == SubgraphDefinition::OPKIND_EXT_POSTCOND))
+          SUBGRAPH_FATAL(me, "dependency " << i
+                                           << " uses an external pre/postcondition; "
+                                              "external conditions are not implemented");
+        if(k != SubgraphDefinition::OPKIND_TASK)
+          SUBGRAPH_FATAL(me, "dependency " << i << " refers to a " << op_kind_name(k)
+                                           << ", which is not implemented");
       }
+      if((dep.src_op_index >= d.tasks.size()) || (dep.tgt_op_index >= d.tasks.size()))
+        SUBGRAPH_FATAL(me, "dependency " << i << " refers to task "
+                                         << std::max(dep.src_op_index, dep.tgt_op_index)
+                                         << ", but the definition has " << d.tasks.size()
+                                         << " tasks");
+      if((dep.src_op_port != 0) || (dep.tgt_op_port != 0))
+        SUBGRAPH_FATAL(me, "dependency " << i
+                                         << " uses a nonzero port; ports are not "
+                                            "implemented");
     }
 
-    ~InterpolationScratchHelper()
-    {
-      if(need_free)
-        free(base);
-    }
-
-    void *next(size_t bytes)
-    {
-      void *p = base + used;
-      used += bytes;
-      assert(used <= needed);
-      return p;
-    }
-
-  protected:
-    size_t needed, used;
-    bool need_free;
-    char *base;
-  };
-
-  // performs any necessary interpolations, making a copy of the destination
-  //  in the supplied scratch memory if needed, and returns a pointer to either
-  //  the original if no changes were made or the scratch if the copy was
-  //  performed
-  static const void *
-  do_interpolation(const std::vector<SubgraphDefinition::Interpolation> &interpolations,
-                   unsigned first_interp, unsigned num_interps,
-                   SubgraphDefinition::Interpolation::TargetKind target_kind,
-                   unsigned target_index, const void *srcdata, size_t srclen,
-                   const void *dstdata, size_t dstlen,
-                   InterpolationScratchHelper &scratch_helper)
-  {
-    void *scratch_buffer = 0;
-    for(unsigned i = 0; i < num_interps; i++) {
-      const SubgraphDefinition::Interpolation &it = interpolations[first_interp + i];
-      if((it.target_kind != target_kind) || (it.target_index != target_index))
+    // ---- processors and NUMA domains
+    // Processors in order of first appearance, then sorted by NUMA node so
+    // that each domain's processors are contiguous.
+    const size_t n = d.tasks.size();
+    std::vector<Processor> procs_seen;
+    std::unordered_map<Processor, LocalTaskProcessor *> proc_impls;
+    std::unordered_map<Processor, int> proc_nodes;
+    for(size_t i = 0; i < n; i++) {
+      Processor p = d.tasks[i].proc;
+      if(proc_impls.count(p))
         continue;
+      LocalTaskProcessor *impl =
+          dynamic_cast<LocalTaskProcessor *>(get_runtime()->get_processor_impl(p));
+      if(!impl)
+        SUBGRAPH_FATAL(me, "task " << i << " runs on " << p
+                                   << ", which is not a task-running processor");
+      procs_seen.push_back(p);
+      proc_impls[p] = impl;
+      proc_nodes[p] = impl->numa_node();
+    }
+    std::stable_sort(procs_seen.begin(), procs_seen.end(),
+                     [&](Processor a, Processor b) { return proc_nodes[a] < proc_nodes[b]; });
 
-      // match - make the copy if we haven't already
-      if(scratch_buffer == 0) {
-        scratch_buffer = scratch_helper.next(dstlen);
-        memcpy(scratch_buffer, dstdata, dstlen);
-      }
+    CompiledSubgraph &c = compiled;
+    c.clear();
+    std::vector<int> domain_nodes; // sorted unique
+    for(Processor p : procs_seen) {
+      int node = proc_nodes[p];
+      if(domain_nodes.empty() || (domain_nodes.back() != node))
+        domain_nodes.push_back(node);
+    }
+    c.domains.resize(domain_nodes.size());
+    for(size_t i = 0; i < domain_nodes.size(); i++)
+      c.domains[i].numa_node = domain_nodes[i];
 
-      assert((it.offset + it.bytes) <= srclen);
-      if(it.redop_id == 0) {
-        // overwrite
-        assert((it.target_offset + it.bytes) <= dstlen);
-        memcpy(reinterpret_cast<char *>(scratch_buffer) + it.target_offset,
-               reinterpret_cast<const char *>(srcdata) + it.offset, it.bytes);
-      } else {
-        const ReductionOpUntyped *redop =
-            get_runtime()->reduce_op_table.get(it.redop_id, 0);
-        assert((it.target_offset + redop->sizeof_lhs) <= dstlen);
-        (redop->cpu_apply_excl_fn)(reinterpret_cast<char *>(scratch_buffer) +
-                                       it.target_offset,
-                                   0, reinterpret_cast<const char *>(srcdata) + it.offset,
-                                   0, 1 /*count*/, redop->userdata);
-      }
+    c.procs.resize(procs_seen.size());
+    for(size_t i = 0; i < procs_seen.size(); i++) {
+      CompiledSubgraph::Proc &cp = c.procs[i];
+      cp.proc = procs_seen[i];
+      cp.impl = proc_impls[cp.proc];
+      cp.domain = int32_t(std::lower_bound(domain_nodes.begin(), domain_nodes.end(),
+                                           proc_nodes[cp.proc]) -
+                          domain_nodes.begin());
+      cp.first_op = cp.num_ops = cp.queue_offset = cp.tail_offset = cp.initial_ready = 0;
+      c.proc_index[cp.proc] = uint32_t(i);
     }
 
-    return ((scratch_buffer != 0) ? scratch_buffer : dstdata);
-  }
-
-  // a typed version for interpolating small values
-  template <typename T>
-  static T
-  do_interpolation(const std::vector<SubgraphDefinition::Interpolation> &interpolations,
-                   unsigned first_interp, unsigned num_interps,
-                   SubgraphDefinition::Interpolation::TargetKind target_kind,
-                   unsigned target_index, const void *srcdata, size_t srclen, T dstdata)
-  {
-    T val = dstdata;
-
-    for(unsigned i = 0; i < num_interps; i++) {
-      const SubgraphDefinition::Interpolation &it = interpolations[first_interp + i];
-      if((it.target_kind != target_kind) || (it.target_index != target_index))
-        continue;
-
-      assert((it.offset + it.bytes) <= srclen);
-      if(it.redop_id == 0) {
-        // overwrite
-        assert((it.target_offset + it.bytes) <= sizeof(T));
-        memcpy(reinterpret_cast<char *>(&val) + it.target_offset,
-               reinterpret_cast<const char *>(srcdata) + it.offset, it.bytes);
-      } else {
-        const ReductionOpUntyped *redop =
-            get_runtime()->reduce_op_table.get(it.redop_id, 0);
-        assert((it.target_offset + redop->sizeof_lhs) <= sizeof(T));
-        (redop->cpu_apply_excl_fn)(reinterpret_cast<char *>(&val) + it.target_offset, 0,
-                                   reinterpret_cast<const char *>(srcdata) + it.offset, 0,
-                                   1 /*count*/, redop->userdata);
-      }
-    }
-
-    return val;
-  }
-
-  class SortInterpolationsByKindAndIndex {
-  public:
-    bool operator()(const SubgraphDefinition::Interpolation &a,
-                    const SubgraphDefinition::Interpolation &b) const
-    {
-      // ignore bottom 8 bits of interpolation kinds so we're just looking
-      //  at the operation kind
-      unsigned a_opkind = a.target_kind >> 8;
-      unsigned b_opkind = b.target_kind >> 8;
-      return ((a_opkind < b_opkind) ||
-              ((a_opkind == b_opkind) && (a.target_index < b.target_index)));
-    }
-  };
-
-  bool SubgraphImpl::compile(void)
-  {
-
-    // Some kind of initial checks for compilation and execution. Many of these
-    // checks will be relaxed as the compiled subgraph implementation proceeds.
-    if(defn->execution_mode == SubgraphDefinition::COMPILED) {
-      // We currently are not going to support the SERIALIZABLE and CONCURRENT concurrency
-      // modes.
-      if(defn->concurrency_mode != SubgraphDefinition::ONE_SHOT &&
-         defn->concurrency_mode != SubgraphDefinition::INSTANTIATION_ORDER) {
-        log_subgraph.error() << "compiled subgraphs are only supported for one-shot or "
-                                "instantiation-order concurrency modes";
-        return false;
-      }
-
-      // In the version of the compiled subgraph path that lands first, we're only
-      // going to support subgraphs that contain tasks running on the CPU and no
-      // features like external pre/post-conditions, copies, barrier arrivals, etc.
-      for(auto &task : defn->tasks) {
-        if(task.proc.kind() != Processor::LOC_PROC) {
-          log_subgraph.error()
-              << "compiled subgraphs are currently only supported for LOC_PROC tasks";
-          return false;
-        }
-        // The tasks should also be on this node.
-        if(NodeID(task.proc.address_space()) != Network::my_node_id) {
-          log_subgraph.error() << "compiled subgraphs are currently only supported for "
-                                  "tasks running on the local node";
-          return false;
-        }
-        if(task.priority != 0) {
-          log_subgraph.error()
-              << "compiled subgraphs do not currently support tasks with priorities";
-          return false;
-        }
-        if(!task.prs.empty()) {
-          log_subgraph.error() << "compiled subgraphs do not currently support tasks "
-                                  "with profiling requests";
-          return false;
-        }
-      }
-      if(!defn->copies.empty()) {
-        log_subgraph.error() << "compiled subgraphs do not currently support copies";
-        return false;
-      }
-      if(!defn->arrivals.empty()) {
-        log_subgraph.error()
-            << "compiled subgraphs do not currently support barrier arrivals";
-        return false;
-      }
-      if(!defn->instantiations.empty()) {
-        log_subgraph.error() << "compiled subgraphs do not currently support recursive "
-                                "subgraph instantiations";
-        return false;
-      }
-      if(!defn->acquires.empty()) {
-        log_subgraph.error()
-            << "compiled subgraphs do not currently support reservation acquires";
-        return false;
-      }
-      if(!defn->releases.empty()) {
-        log_subgraph.error()
-            << "compiled subgraphs do not currently support reservation releases";
-        return false;
-      }
-      if(!defn->interpolations.empty()) {
-        log_subgraph.error()
-            << "compiled subgraphs do not currently support interpolations";
-        return false;
-      }
-
-      // The dependencies between operations should only be between operations
-      // in the subgraph, no external dependencies supported in the first land.
-      for(auto &dependency : defn->dependencies) {
-        if(dependency.src_op_kind == SubgraphDefinition::OPKIND_EXT_PRECOND ||
-           dependency.src_op_kind == SubgraphDefinition::OPKIND_EXT_POSTCOND ||
-           dependency.tgt_op_kind == SubgraphDefinition::OPKIND_EXT_PRECOND ||
-           dependency.tgt_op_kind == SubgraphDefinition::OPKIND_EXT_POSTCOND) {
-          log_subgraph.error()
-              << "compiled subgraphs do not currently support external dependencies";
-          return false;
-        }
-      }
-
-      log_subgraph.info() << "Compiling Realm Subgraph.";
-    }
-
-    typedef std::pair<SubgraphDefinition::OpKind, unsigned> OpInfo;
-    typedef std::map<OpInfo, unsigned> TopoMap;
-    TopoMap toposort;
-
-    unsigned nextval = 0;
-    for(unsigned i = 0; i < defn->tasks.size(); i++)
-      toposort[std::make_pair(SubgraphDefinition::OPKIND_TASK, i)] = nextval++;
-    for(unsigned i = 0; i < defn->copies.size(); i++)
-      toposort[std::make_pair(SubgraphDefinition::OPKIND_COPY, i)] = nextval++;
-    for(unsigned i = 0; i < defn->arrivals.size(); i++)
-      toposort[std::make_pair(SubgraphDefinition::OPKIND_ARRIVAL, i)] = nextval++;
-    for(unsigned i = 0; i < defn->instantiations.size(); i++)
-      toposort[std::make_pair(SubgraphDefinition::OPKIND_INSTANTIATION, i)] = nextval++;
-    for(unsigned i = 0; i < defn->acquires.size(); i++)
-      toposort[std::make_pair(SubgraphDefinition::OPKIND_ACQUIRE, i)] = nextval++;
-    for(unsigned i = 0; i < defn->releases.size(); i++)
-      toposort[std::make_pair(SubgraphDefinition::OPKIND_RELEASE, i)] = nextval++;
-    unsigned total_ops = nextval;
-
-    // for subgraph instantiations, we need to do a pass over the dependencies
-    //  to see which ports are used
-    std::vector<unsigned> inst_pre_max_port(defn->instantiations.size(), 0);
-    std::vector<unsigned> inst_post_max_port(defn->instantiations.size(), 0);
-
-    for(std::vector<SubgraphDefinition::Dependency>::const_iterator it =
-            defn->dependencies.begin();
-        it != defn->dependencies.end(); ++it) {
-      if(it->src_op_kind == SubgraphDefinition::OPKIND_INSTANTIATION) {
-        inst_post_max_port[it->src_op_index] =
-            std::max(inst_post_max_port[it->src_op_index], it->src_op_port);
-      } else
-        assert(it->src_op_port == 0);
-
-      if(it->tgt_op_kind == SubgraphDefinition::OPKIND_INSTANTIATION) {
-        inst_pre_max_port[it->tgt_op_index] =
-            std::max(inst_pre_max_port[it->tgt_op_index], it->tgt_op_port);
-      } else
-        assert(it->tgt_op_port == 0);
-    }
-
-    // sort by performing passes over dependency list...
-    // any dependency whose target is before the source is resolved by
-    //  moving the target to be after everybody
-    // takes at most depth (<= N) passes unless there are loops
-    // An empty definition is trivially sorted (the loop below would not run).
-    bool converged = (total_ops == 0);
-    for(unsigned i = 0; !converged && (i < total_ops); i++) {
-      converged = true;
-      for(std::vector<SubgraphDefinition::Dependency>::const_iterator it =
-              defn->dependencies.begin();
-          it != defn->dependencies.end(); ++it) {
-        // external pre/post-conditions are always satisfied
-        if(it->src_op_kind == SubgraphDefinition::OPKIND_EXT_PRECOND)
+    // ---- operations: the tasks of each processor, contiguous per processor
+    std::vector<uint32_t> task_to_op(n);
+    c.ops.reserve(n);
+    for(size_t pi = 0; pi < c.procs.size(); pi++) {
+      CompiledSubgraph::Proc &cp = c.procs[pi];
+      cp.first_op = uint32_t(c.ops.size());
+      for(size_t i = 0; i < n; i++) {
+        if(d.tasks[i].proc != cp.proc)
           continue;
-        if(it->tgt_op_kind == SubgraphDefinition::OPKIND_EXT_POSTCOND)
-          continue;
-
-        TopoMap::const_iterator src =
-            toposort.find(std::make_pair(it->src_op_kind, it->src_op_index));
-        assert(src != toposort.end());
-
-        TopoMap::iterator tgt =
-            toposort.find(std::make_pair(it->tgt_op_kind, it->tgt_op_index));
-        assert(tgt != toposort.end());
-
-        if(src->second > tgt->second) {
-          tgt->second = nextval++;
-          converged = false;
-        }
+        task_to_op[i] = uint32_t(c.ops.size());
+        CompiledSubgraph::Op op;
+        op.kind = SubgraphDefinition::OPKIND_TASK;
+        op.index = unsigned(i);
+        op.proc = int32_t(pi);
+        op.counter_domain = cp.domain;
+        op.counter_offset = 0;
+        op.is_final = true;
+        c.ops.push_back(op);
       }
-    }
-    if(!converged) {
-      log_subgraph.error() << "subgraph sort did not converge - has a cycle?";
-      return false;
+      cp.num_ops = uint32_t(c.ops.size()) - cp.first_op;
     }
 
-    // re-compact the ordering indices
-    unsigned curval = 0;
-    while(curval < total_ops) {
-      TopoMap::iterator best = toposort.end();
-      for(TopoMap::iterator it = toposort.begin(); it != toposort.end(); ++it)
-        if((it->second >= curval) &&
-           ((best == toposort.end()) || (best->second > it->second)))
-          best = it;
-      assert(best != toposort.end());
-      best->second = curval++;
+    // ---- edges (deduplicated), predecessor counts, cycle check
+    std::vector<std::vector<uint32_t>> succ(n), pred(n);
+    for(const SubgraphDefinition::Dependency &dep : d.dependencies) {
+      uint32_t s = task_to_op[dep.src_op_index];
+      uint32_t t = task_to_op[dep.tgt_op_index];
+      if(s == t)
+        SUBGRAPH_FATAL(me, "task " << dep.src_op_index << " depends on itself");
+      succ[s].push_back(t);
+      pred[t].push_back(s);
     }
+    for(size_t i = 0; i < n; i++) {
+      for(std::vector<uint32_t> *v : {&succ[i], &pred[i]}) {
+        std::sort(v->begin(), v->end());
+        v->erase(std::unique(v->begin(), v->end()), v->end());
+      }
+      c.ops[i].is_final = succ[i].empty();
+    }
+    {
+      // Kahn's algorithm: every operation must become ready eventually.
+      std::vector<uint32_t> indeg(n), ready;
+      for(size_t i = 0; i < n; i++) {
+        indeg[i] = uint32_t(pred[i].size());
+        if(indeg[i] == 0)
+          ready.push_back(uint32_t(i));
+      }
+      size_t done = 0;
+      while(!ready.empty()) {
+        uint32_t o = ready.back();
+        ready.pop_back();
+        done++;
+        for(uint32_t s : succ[o])
+          if(--indeg[s] == 0)
+            ready.push_back(s);
+      }
+      if(done != n)
+        SUBGRAPH_FATAL(me, "the dependencies contain a cycle (" << (n - done)
+                                                                << " tasks can never run)");
+    }
+    c.successors = FlattenedSparseMatrix<uint32_t>(succ);
 
-    // if there are any external postconditions, add them to the end of the
-    //  toposort
-    unsigned num_ext_postcond = 0;
-    for(std::vector<SubgraphDefinition::Dependency>::const_iterator it =
-            defn->dependencies.begin();
-        it != defn->dependencies.end(); ++it) {
-      if(it->tgt_op_kind != SubgraphDefinition::OPKIND_EXT_POSTCOND)
+    // ---- counter placement: with the predecessors when they share a domain
+    for(size_t i = 0; i < n; i++) {
+      if(pred[i].empty())
         continue;
-      if(it->tgt_op_index >= num_ext_postcond)
-        num_ext_postcond = it->tgt_op_index + 1;
-    }
-    for(unsigned i = 0; i < num_ext_postcond; i++)
-      toposort[std::make_pair(SubgraphDefinition::OPKIND_EXT_POSTCOND, i)] = total_ops++;
-
-    interpreted_schedule.resize(total_ops);
-    for(TopoMap::const_iterator it = toposort.begin(); it != toposort.end(); ++it) {
-      interpreted_schedule[it->second].op_kind = it->first.first;
-      interpreted_schedule[it->second].op_index = it->first.second;
+      int32_t dom = c.procs[c.ops[pred[i][0]].proc].domain;
+      bool same = true;
+      for(uint32_t p : pred[i])
+        same = same && (c.procs[c.ops[p].proc].domain == dom);
+      if(same)
+        c.ops[i].counter_domain = dom;
     }
 
-    // sort the interpolations so that each operation has a compact range
-    //  to iterate through
-    std::sort(defn->interpolations.begin(), defn->interpolations.end(),
-              SortInterpolationsByKindAndIndex());
-    for(std::vector<SubgraphScheduleEntry>::iterator it = interpreted_schedule.begin();
-        it != interpreted_schedule.end(); ++it) {
-      // binary search to find an interpolation for this operation
-      unsigned lo = 0;
-      unsigned hi = defn->interpolations.size();
-      while(true) {
-        if(lo >= hi) {
-          // search failed - no interpolations
-          it->first_interp = it->num_interps = 0;
-          break;
-        }
-        unsigned mid = (lo + hi) >> 1;
-        int mid_opkind = defn->interpolations[mid].target_kind >> 8;
-        if(it->op_kind < mid_opkind) {
-          hi = mid;
-        } else if(it->op_kind > mid_opkind) {
-          lo = mid + 1;
-        } else {
-          if(it->op_index < defn->interpolations[mid].target_index) {
-            hi = mid;
-          } else if(it->op_index > defn->interpolations[mid].target_index) {
-            lo = mid + 1;
-          } else {
-            // found a value - now scan linearly up and down for full range
-            lo = mid;
-            while((lo > 0) &&
-                  ((defn->interpolations[lo - 1].target_kind >> 8) == it->op_kind) &&
-                  (defn->interpolations[lo - 1].target_index == it->op_index))
-              lo--;
-            hi = mid + 1;
-            while((hi < defn->interpolations.size()) &&
-                  ((defn->interpolations[hi].target_kind >> 8) == it->op_kind) &&
-                  (defn->interpolations[hi].target_index == it->op_index))
-              hi++;
-            it->first_interp = lo;
-            it->num_interps = hi - lo;
-            break;
-          }
-        }
-      }
+    // ---- block layout per domain and initial images
+    std::vector<size_t> off(c.domains.size(), 0);
+    for(size_t i = 0; i < n; i++) {
+      CompiledSubgraph::Op &op = c.ops[i];
+      op.counter_offset = uint32_t(off[op.counter_domain]);
+      off[op.counter_domain] += sizeof(int64_t);
+    }
+    for(size_t dm = 0; dm < c.domains.size(); dm++)
+      off[dm] = round_up(off[dm], SUBGRAPH_CACHE_LINE_BYTES);
+    for(CompiledSubgraph::Proc &cp : c.procs) {
+      cp.queue_offset = uint32_t(off[cp.domain]);
+      off[cp.domain] += round_up(size_t(cp.num_ops) * sizeof(int64_t),
+                                 SUBGRAPH_CACHE_LINE_BYTES);
+      cp.tail_offset = uint32_t(off[cp.domain]);
+      off[cp.domain] += SUBGRAPH_CACHE_LINE_BYTES;
+    }
+    for(size_t dm = 0; dm < c.domains.size(); dm++) {
+      CompiledSubgraph::Domain &dom = c.domains[dm];
+      dom.bytes = std::max(off[dm], SUBGRAPH_CACHE_LINE_BYTES);
+      dom.image.assign(dom.bytes, 0);
+    }
+    for(size_t i = 0; i < n; i++) {
+      const CompiledSubgraph::Op &op = c.ops[i];
+      int64_t count = int64_t(pred[i].size());
+      memcpy(c.domains[op.counter_domain].image.data() + op.counter_offset, &count,
+             sizeof(count));
+    }
+    for(CompiledSubgraph::Proc &cp : c.procs) {
+      std::vector<char> &img = c.domains[cp.domain].image;
+      int64_t *slots = reinterpret_cast<int64_t *>(img.data() + cp.queue_offset);
+      for(uint32_t k = 0; k < cp.num_ops; k++)
+        slots[k] = SUBGRAPH_EMPTY_QUEUE_ENTRY;
+      uint32_t ready = 0;
+      for(uint32_t o = cp.first_op; o < cp.first_op + cp.num_ops; o++)
+        if(pred[o].empty())
+          slots[ready++] = int64_t(o);
+      cp.initial_ready = ready;
+      uint64_t tail = ready;
+      memcpy(img.data() + cp.tail_offset, &tail, sizeof(tail));
     }
 
-    // also sanity-check that any interpolation using a reduction op has it
-    //  defined and sizes match up
-    for(std::vector<SubgraphDefinition::Interpolation>::iterator it =
-            defn->interpolations.begin();
-        it != defn->interpolations.end(); ++it) {
-      if(it->redop_id != 0) {
-        const ReductionOpUntyped *redop =
-            get_runtime()->reduce_op_table.get(it->redop_id, 0);
-        if(redop == 0) {
-          log_subgraph.error() << "no reduction op registered for ID " << it->redop_id;
-          return false;
-        }
-        if(redop->sizeof_rhs != it->bytes) {
-          log_subgraph.error() << "reduction op size mismatch";
-          return false;
-        }
-      }
-    }
-
-    // Perform final event analysis before partitioning the schedule.
-    num_final_events = 0;
-    for(std::vector<SubgraphScheduleEntry>::iterator it = interpreted_schedule.begin();
-        it != interpreted_schedule.end(); ++it) {
-      if(it->op_kind != SubgraphDefinition::OPKIND_EXT_POSTCOND) {
-        // We'll clear this later if we find our contribution to the final
-        //  event is done transitively
-        it->is_final_event = true;
-        num_final_events++;
-      } else
-        it->is_final_event = false;
-    }
-
-    // Any operation that points into a final event is not a final event.
-    for(std::vector<SubgraphDefinition::Dependency>::const_iterator it =
-            defn->dependencies.begin();
-        it != defn->dependencies.end(); ++it) {
-      if(it->src_op_kind == SubgraphDefinition::OPKIND_EXT_PRECOND)
-        continue;
-      TopoMap::const_iterator src =
-          toposort.find(std::make_pair(it->src_op_kind, it->src_op_index));
-      // If we are depending on port 0 of another node and we're not an
-      //  external postcondition, then the preceeding node is not final.
-      if((it->src_op_port == 0) &&
-         (it->tgt_op_kind != SubgraphDefinition::OPKIND_EXT_POSTCOND) &&
-         (interpreted_schedule[src->second].is_final_event)) {
-        interpreted_schedule[src->second].is_final_event = false;
-        num_final_events--;
-      }
-    }
-
-    // Compile the subgraph. This will also eventually involve splitting the subgraph
-    // into a compiled component and an interpreted component. Some of the analysis
-    // for interpreted subgraphs will be done only on the interpreted component.
-    if(defn->execution_mode == SubgraphDefinition::COMPILED) {
-      // Separate the dynamic and static parts of the schedule.
-      std::vector<SubgraphScheduleEntry> static_schedule;
-      std::vector<SubgraphScheduleEntry> dynamic_schedule;
-      // Maintain reverse mappings operations into their positions in
-      // the corresponding schedules.
-      std::map<OpInfo, unsigned> static_op_to_index;
-      std::map<OpInfo, unsigned> dynamic_op_to_index;
-
-      // Clear toposort because we will produce a new toposort of leftover operations
-      // that can't be part of the compiled graph. In the current phase this should be
-      // empty, but will be extended in future work.
-      toposort.clear();
-      for(auto &it : interpreted_schedule) {
-        OpInfo key = std::make_pair(it.op_kind, it.op_index);
-
-        // We should only be compiling tasks right now, but I'll keep
-        // the code structure to make it clear what will happen in the
-        // near future.
-        assert(it.op_kind == SubgraphDefinition::OPKIND_TASK);
-        if(it.op_kind == SubgraphDefinition::OPKIND_TASK) {
-          static_op_to_index[key] = static_schedule.size();
-          static_schedule.push_back(it);
-          // If we're moving an operation into the static part of the schedule,
-          // its contribution to the final event in the subgraph will be done
-          // separately, so remove it from the "dynamic" set of final events.
-          if(it.is_final_event) {
-            num_final_events--;
-          }
-        } else {
-          toposort[key] = dynamic_schedule.size();
-          // This is a little redundant with toposort, but toposort is used in
-          // other parts of the code and it's easier to read if there is symmetry
-          // between the static and dynamic parts of the schedule.
-          dynamic_op_to_index[key] = dynamic_schedule.size();
-          dynamic_schedule.push_back(it);
-        }
-      }
-      // Now, schedule is only the dynamic schedule.
-      interpreted_schedule = dynamic_schedule;
-
-      // Construct the compiled_subgraph_operations vector.
-      // TODO (rohany): Something to investigate is potentially sorting
-      //  compiled_subgraph_operations by some key so that there is more
-      //  locality in data accessed by each processor / background worker.
-      compiled_subgraph_operations.reserve(static_schedule.size());
-      for(unsigned i = 0; i < static_schedule.size(); i++) {
-        compiled_subgraph_operations.emplace_back(
-            static_schedule[i].op_kind, static_schedule[i].op_index,
-            static_schedule[i].is_final_event,
-            // TODO (rohany): In future work, we'll handle tasks that launch
-            //  asynchronous work items.
-            false /* is_async */
-        );
-      }
-
-      // There are two main phases of subgraph compilation. The first is
-      // to construct data structures for each processor to manage the pending
-      // work quickly. The second (and will be implemented in the future) is
-      // to do something similar for all background work items.
-
-      // Perform a group-by on the dependencies list to have quick access
-      // to the incoming and outgoing edges for each operation.
-      std::map<OpInfo, std::vector<OpInfo>> incoming_edges;
-      std::map<OpInfo, std::vector<OpInfo>> outgoing_edges;
-      for(auto &it : defn->dependencies) {
-        OpInfo src = std::make_pair(it.src_op_kind, it.src_op_index);
-        OpInfo tgt = std::make_pair(it.tgt_op_kind, it.tgt_op_index);
-        incoming_edges[tgt].push_back(src);
-        outgoing_edges[src].push_back(tgt);
-      }
-
-      // Set up the incoming and outgoing edges for each operation.
-      std::vector<std::vector<EdgeInfo>> op_incoming_edges(static_schedule.size());
-      std::vector<std::vector<EdgeInfo>> op_outgoing_edges(static_schedule.size());
-      operation_precondition_counters.resize(static_schedule.size());
-      for(unsigned i = 0; i < static_schedule.size(); i++) {
-        OpInfo desc =
-            std::make_pair(static_schedule[i].op_kind, static_schedule[i].op_index);
-        for(auto &it : incoming_edges[desc]) {
-          // For now, all incoming edges should be part of the static schedule. A future
-          // improvement will allow edges to cross the boundary between the static and
-          // dynamic components of the graph.
-          auto it2 = static_op_to_index.find(it);
-          assert(it2 != static_op_to_index.end());
-          op_incoming_edges[i].push_back(EdgeInfo(it2->second));
-        }
-        for(auto &it : outgoing_edges[desc]) {
-          // Same comment as above.
-          auto it2 = static_op_to_index.find(it);
-          assert(it2 != static_op_to_index.end());
-          op_outgoing_edges[i].push_back(EdgeInfo(it2->second));
-        }
-        operation_precondition_counters[i] = op_incoming_edges[i].size();
-      }
-
-      // Collect all processors used in this subgraph (which may be none).
-      // To avoid indirections later, we'll map processors to indices.
-      for(auto &task : defn->tasks) {
-        if(processor_to_index.find(task.proc) == processor_to_index.end()) {
-          processor_to_index[task.proc] = subgraph_processors.size();
-          subgraph_processors.push_back(task.proc);
-          LocalTaskProcessor *ltp = dynamic_cast<LocalTaskProcessor *>(
-              get_runtime()->get_processor_impl(task.proc));
-          assert(ltp != nullptr);
-          subgraph_processor_impls.push_back(ltp);
-        }
-      }
-
-      // Record each operation's processor index so that edge propagation
-      // during execution needs no lookups.
-      for(SubgraphOperationDesc &op : compiled_subgraph_operations) {
-        assert(op.op_kind == SubgraphDefinition::OPKIND_TASK);
-        op.proc_index = processor_to_index.at(defn->tasks[op.op_index].proc);
-      }
-
-      // Collect the tasks per processor. We'll use this information
-      // to construct arenas per processor to place lightweight queues for ready tasks.
-      std::map<Processor, std::vector<unsigned>> tasks_per_processor;
-      for(unsigned i = 0; i < static_schedule.size(); i++) {
-        const SubgraphScheduleEntry &it = static_schedule[i];
-        switch(it.op_kind) {
-        case SubgraphDefinition::OPKIND_TASK:
-        {
-          const SubgraphDefinition::TaskDesc &td = defn->tasks[it.op_index];
-          tasks_per_processor[td.proc].push_back(i);
-          break;
-        }
-        default:
-        {
-          assert(false);
-          break;
-        }
-        }
-      }
-
-      // Construct the initial queue for each processor. This will contain all operations
-      // that do not have any preconditions, followed by a default value for all other
-      // entries in the queue.
-      std::vector<std::vector<int64_t>> processor_queues(subgraph_processors.size());
-      initial_queue_entry_counts.resize(subgraph_processors.size());
-      for(unsigned i = 0; i < subgraph_processors.size(); i++) {
-        Processor proc = subgraph_processors[i];
-        const std::vector<unsigned> &tasks = tasks_per_processor.at(proc);
-        processor_queues[i] =
-            std::vector<int64_t>(tasks.size(), SUBGRAPH_EMPTY_QUEUE_ENTRY);
-        unsigned idx = 0;
-        for(auto task_idx : tasks) {
-          // If the task has no incoming edges, we can add it to the queue
-          // directly. The queue will contain indices into compiled_subgraph_operations.
-          const SubgraphScheduleEntry &task = static_schedule[task_idx];
-          OpInfo desc = std::make_pair(task.op_kind, task.op_index);
-          if(incoming_edges[desc].size() == 0) {
-            processor_queues[i][idx++] = task_idx;
-          }
-        }
-        initial_queue_entry_counts[i] = idx;
-      }
-
-      // Flatten the nested metadata produced from the compilation process.
-      operation_incoming_edges = op_incoming_edges;
-      operation_outgoing_edges = op_outgoing_edges;
-      initial_processor_queues = processor_queues;
-    }
-
-    // Once the subgraph compilation has completed, the subgraph has also been
-    // partitioned into a compiled component and an interpreted component. Once this
-    // has been done, we can finish the calculation of intermediate events. Note that
-    // instantiations can produce more than one intermediate event.
-    num_intermediate_events = 0;
-    for(std::vector<SubgraphScheduleEntry>::iterator it = interpreted_schedule.begin();
-        it != interpreted_schedule.end(); ++it) {
-      it->intermediate_event_base = num_intermediate_events;
-      if(it->op_kind == SubgraphDefinition::OPKIND_INSTANTIATION)
-        it->intermediate_event_count = inst_post_max_port[it->op_index] + 1;
-      else if(it->op_kind != SubgraphDefinition::OPKIND_EXT_POSTCOND)
-        it->intermediate_event_count = 1;
-      else
-        it->intermediate_event_count = 0;
-      num_intermediate_events += it->intermediate_event_count;
-    }
-
-    for(std::vector<SubgraphDefinition::Dependency>::const_iterator it =
-            defn->dependencies.begin();
-        it != defn->dependencies.end(); ++it) {
-      TopoMap::const_iterator tgt =
-          toposort.find(std::make_pair(it->tgt_op_kind, it->tgt_op_index));
-      // If we can't find the target, that means the target is part
-      // of the static schedule, and will be handled by that logic.
-      if(tgt == toposort.end()) {
-        continue;
-      }
-      assert(tgt != toposort.end());
-
-      switch(it->src_op_kind) {
-      case SubgraphDefinition::OPKIND_EXT_PRECOND:
-      {
-        // external preconditions are encoded as negative indices
-        int idx = -1 - (int)(it->src_op_index);
-        interpreted_schedule[tgt->second].preconditions.push_back(
-            std::make_pair(it->tgt_op_port, idx));
-        break;
-      }
-
-      default:
-      {
-        TopoMap::const_iterator src =
-            toposort.find(std::make_pair(it->src_op_kind, it->src_op_index));
-        // Same story for the source edge.
-        if(src == toposort.end())
-          continue;
-        unsigned ev_idx =
-            interpreted_schedule[src->second].intermediate_event_base + it->src_op_port;
-        interpreted_schedule[tgt->second].preconditions.push_back(
-            std::make_pair(it->tgt_op_port, ev_idx));
-        break;
-      }
-      }
-    }
-
-    // Now sort the preconditions for each entry - allows us to group by port
-    // and also notice duplicates.
-    max_preconditions = 1; // have to count global precondition when needed
-    for(std::vector<SubgraphScheduleEntry>::iterator it = interpreted_schedule.begin();
-        it != interpreted_schedule.end(); ++it) {
-      if(it->preconditions.empty())
-        continue;
-
-      std::sort(it->preconditions.begin(), it->preconditions.end());
-      // look for duplicates past the first event
-      size_t num_unique = 1;
-      for(size_t i = 1; i < it->preconditions.size(); i++)
-        if(it->preconditions[i] != it->preconditions[num_unique - 1]) {
-          if(num_unique < i)
-            it->preconditions[num_unique] = it->preconditions[i];
-          num_unique++;
-        }
-      if(num_unique < it->preconditions.size())
-        it->preconditions.resize(num_unique);
-      if(num_unique >= max_preconditions)
-        max_preconditions = num_unique + 1;
-    }
-
-    return true;
+    for(size_t dm = 0; dm < c.domains.size(); dm++)
+      log_subgraph.info() << "subgraph " << me << ": domain " << dm << " numa_node="
+                          << c.domains[dm].numa_node << " bytes=" << c.domains[dm].bytes;
   }
 
   void SubgraphImpl::instantiate(const void *args, size_t arglen,
@@ -897,319 +505,46 @@ namespace Realm {
                                  span<const Event> postconditions, Event start_event,
                                  Event finish_event, int priority_adjust)
   {
-    // Compiled subgraphs do not support every instantiate-time feature yet.
-    // Anything unsupported is a hard error: continuing would run the
-    // subgraph with the wrong semantics.
-    UserEvent static_finish_event = UserEvent::NO_USER_EVENT;
-    if(defn->execution_mode == SubgraphDefinition::COMPILED) {
-      if(!prs.empty()) {
-        log_subgraph.fatal() << "compiled subgraphs do not currently support profiling";
-        abort();
-      }
-      if(!preconditions.empty() || !postconditions.empty()) {
-        log_subgraph.fatal() << "compiled subgraphs do not currently support external "
-                                "preconditions or postconditions";
-        abort();
-      }
+    if(!prs.empty())
+      SUBGRAPH_FATAL(me, "profiling requests on instantiate are not implemented");
+    if(!preconditions.empty() || !postconditions.empty())
+      SUBGRAPH_FATAL(me, "external preconditions and postconditions are not implemented");
+    if(priority_adjust != 0)
+      SUBGRAPH_FATAL(me, "instantiation priorities are not implemented");
 
-      static_finish_event = UserEvent::create_user_event();
-      {
-        AutoLock<> al(lifecycle_lock);
-        if(destroy_requested) {
-          log_subgraph.fatal() << "subgraph " << me << " instantiated after destroy";
-          abort();
-        }
-        outstanding_instantiations++;
-        if(defn->concurrency_mode == SubgraphDefinition::INSTANTIATION_ORDER) {
-          // Instantiations run in order: this one starts once the previous
-          // one has finished, and the next one will wait for this one.
-          start_event =
-              Event::merge_events(start_event, previous_instantiation_completion);
-          previous_instantiation_completion = finish_event;
-        }
+    {
+      AutoLock<> al(lifecycle_lock);
+      if(destroy_requested)
+        SUBGRAPH_FATAL(me, "instantiated after destroy");
+      outstanding_instantiations++;
+      if(defn->concurrency_mode == SubgraphDefinition::INSTANTIATION_ORDER) {
+        // Instantiations run in order: this one starts once the previous one
+        // has finished, and the next one will wait for this one.
+        start_event = Event::merge_events(start_event, previous_instantiation_completion);
+        previous_instantiation_completion = finish_event;
       }
-
-      SubgraphExecutionState *exec_state =
-          new SubgraphExecutionState(this, args, arglen, static_finish_event);
-      // Release the execution state once the whole instantiation has finished.
-      EventImpl::add_waiter(finish_event, new SubgraphInstantiationCleanup(exec_state));
-      // Start the compiled portion once its precondition is satisfied.
-      SubgraphWorkLauncher::launch_or_defer(exec_state, start_event);
     }
 
-    // we precomputed the number of intermediate events we need, so put them
-    //  on the stack
-    Event *intermediate_events =
-        static_cast<Event *>(alloca(num_intermediate_events * sizeof(Event)));
-    size_t cur_intermediate_events = 0;
-
-    // we've also computed how many events will contribute to the finish
-    //  event, so we can arm the merger as we go
-    // The compiled portion contributes one more precondition (its own finish
-    // event). Only prepare a merger if something feeds it: a merger that is
-    // prepared but never armed leaves the event's generation in a bad state.
-    const bool compiled = (defn->execution_mode == SubgraphDefinition::COMPILED);
-    const size_t num_merger_inputs = num_final_events + (compiled ? 1 : 0);
-    GenEventImpl *event_impl = 0;
-    if(num_merger_inputs > 0) {
-      event_impl = get_genevent_impl(finish_event);
-      event_impl->merger.prepare_merger(finish_event, false /*!ignore_faults*/,
-                                        num_merger_inputs);
-      if(compiled)
-        event_impl->merger.add_precondition(static_finish_event);
-    }
-
-    Event *preconds = static_cast<Event *>(alloca(max_preconditions * sizeof(Event)));
-
-    for(std::vector<SubgraphScheduleEntry>::const_iterator it =
-            interpreted_schedule.begin();
-        it != interpreted_schedule.end(); ++it) {
-      // assemble precondition
-      size_t num_preconds = 0;
-      bool need_global_precond = start_event.exists();
-
-      size_t pc_idx = 0;
-      while(pc_idx < it->preconditions.size()) {
-        // if we see something for a nonzero port, save those for later
-        if(it->preconditions[pc_idx].first != 0)
-          break;
-
-        if(it->preconditions[pc_idx].second >= 0) {
-          // this is a dependency on another operation
-          assert(unsigned(it->preconditions[pc_idx].second) < cur_intermediate_events);
-          preconds[num_preconds++] =
-              intermediate_events[it->preconditions[pc_idx].second];
-          // we get the global precondition transitively...
-          need_global_precond = false;
-        } else {
-          // external precondition
-          int idx = -1 - it->preconditions[pc_idx].second;
-          if((idx < int(preconditions.size())) && preconditions[idx].exists())
-            preconds[num_preconds++] = preconditions[idx];
-        }
-
-        pc_idx++;
-      }
-      if(need_global_precond)
-        preconds[num_preconds++] = start_event;
-
-      assert(num_preconds <= max_preconditions);
-
-      // for external postconditions, merge the preconditions directly into the
-      //  returned event
-      if(it->op_kind == SubgraphDefinition::OPKIND_EXT_POSTCOND) {
-        // only bother if the caller wanted the event
-        if(it->op_index < postconditions.size()) {
-          Event post_event = postconditions[it->op_index];
-          if(num_preconds > 0) {
-            GenEventImpl *post_impl = get_genevent_impl(post_event);
-            post_impl->merger.prepare_merger(post_event, false /*!ignore_faults*/,
-                                             num_preconds);
-            for(size_t i = 0; i < num_preconds; i++)
-              post_impl->merger.add_precondition(preconds[i]);
-            post_impl->merger.arm_merger();
-          } else
-            GenEventImpl::trigger(post_event, false /*!poisoned*/);
-        }
-        continue;
-      }
-
-      span<const Event> s(preconds, num_preconds);
-      Event pre = GenEventImpl::merge_events(s, false);
-#if 0
-      Event pre = GenEventImpl::merge_events(make_span<const Event>(preconds,
-								    num_preconds),
-					     false /*!ignore_faults*/);
-#endif
-      // scratch buffer used for interpolations
-      const size_t SCRATCH_SIZE = 1024;
-      char interp_scratch[SCRATCH_SIZE];
-
-      Event e = Event::NO_EVENT;
-
-      switch(it->op_kind) {
-      case SubgraphDefinition::OPKIND_TASK:
-      {
-        const SubgraphDefinition::TaskDesc &td = defn->tasks[it->op_index];
-        Processor proc = td.proc;
-        Processor::TaskFuncID task_id = td.task_id;
-        int priority = td.priority;
-
-        size_t scratch_needed = 0;
-        if(has_interpolation(defn->interpolations, it->first_interp, it->num_interps,
-                             SubgraphDefinition::Interpolation::TARGET_TASK_ARGS,
-                             it->op_index))
-          scratch_needed += td.args.size();
-
-        InterpolationScratchHelper ish(interp_scratch, scratch_needed);
-
-        const void *task_args = do_interpolation(
-            defn->interpolations, it->first_interp, it->num_interps,
-            SubgraphDefinition::Interpolation::TARGET_TASK_ARGS, it->op_index, args,
-            arglen, td.args.base(), td.args.size(), ish);
-
-        e = proc.spawn(task_id, task_args, td.args.size(), td.prs, pre,
-                       priority + priority_adjust);
-        intermediate_events[cur_intermediate_events++] = e;
-        break;
-      }
-
-      case SubgraphDefinition::OPKIND_COPY:
-      {
-        const SubgraphDefinition::CopyDesc &cd = defn->copies[it->op_index];
-        e = cd.space.copy(cd.srcs, cd.dsts, cd.prs, pre);
-        intermediate_events[cur_intermediate_events++] = e;
-        break;
-      }
-
-      case SubgraphDefinition::OPKIND_ARRIVAL:
-      {
-        const SubgraphDefinition::ArrivalDesc &ad = defn->arrivals[it->op_index];
-
-        InterpolationScratchHelper ish(interp_scratch, ad.reduce_value.size());
-
-        Barrier b =
-            do_interpolation(defn->interpolations, it->first_interp, it->num_interps,
-                             SubgraphDefinition::Interpolation::TARGET_ARRIVAL_BARRIER,
-                             it->op_index, args, arglen, ad.barrier);
-        const void *red_val = do_interpolation(
-            defn->interpolations, it->first_interp, it->num_interps,
-            SubgraphDefinition::Interpolation::TARGET_ARRIVAL_VALUE, it->op_index, args,
-            arglen, ad.reduce_value.base(), ad.reduce_value.size(), ish);
-        unsigned count = ad.count;
-        b.arrive(count, pre, red_val, ad.reduce_value.size());
-
-        // "finish event" is precondition
-        intermediate_events[cur_intermediate_events++] = e = pre;
-        break;
-      }
-
-      case SubgraphDefinition::OPKIND_ACQUIRE:
-      {
-        const SubgraphDefinition::AcquireDesc &ad = defn->acquires[it->op_index];
-        Reservation rsrv = ad.rsrv;
-        unsigned mode = ad.mode;
-        bool excl = ad.exclusive;
-        e = rsrv.acquire(mode, excl, pre);
-        intermediate_events[cur_intermediate_events++] = e;
-        break;
-      }
-
-      case SubgraphDefinition::OPKIND_RELEASE:
-      {
-        const SubgraphDefinition::ReleaseDesc &rd = defn->releases[it->op_index];
-        Reservation rsrv = rd.rsrv;
-        rsrv.release(pre);
-        // "finish event" is precondition
-        intermediate_events[cur_intermediate_events++] = e = pre;
-        break;
-      }
-
-      case SubgraphDefinition::OPKIND_INSTANTIATION:
-      {
-        const SubgraphDefinition::InstantiationDesc &id =
-            defn->instantiations[it->op_index];
-        Subgraph sg_inner = id.subgraph;
-        int priority_adjust = id.priority_adjust;
-
-        size_t scratch_needed = 0;
-        if(has_interpolation(defn->interpolations, it->first_interp, it->num_interps,
-                             SubgraphDefinition::Interpolation::TARGET_INSTANCE_ARGS,
-                             it->op_index))
-          scratch_needed += id.args.size();
-
-        InterpolationScratchHelper ish(interp_scratch, scratch_needed);
-
-        const void *inst_args = do_interpolation(
-            defn->interpolations, it->first_interp, it->num_interps,
-            SubgraphDefinition::Interpolation::TARGET_INSTANCE_ARGS, it->op_index, args,
-            arglen, id.args.base(), id.args.size(), ish);
-
-        // TODO: avoid dynamic allocation?
-        std::vector<Event> inst_preconds, inst_postconds;
-
-        // how many preconditions do we need to form?
-        unsigned num_inst_preconds =
-            (it->preconditions.empty() ? 0 : it->preconditions.rbegin()->first);
-        // log_subgraph.print() << "inst_preconds = " << num_inst_preconds;
-        if(num_inst_preconds > 0) {
-          inst_preconds.resize(num_inst_preconds);
-          for(unsigned i = 0; i < num_inst_preconds; i++) {
-            std::vector<Event> evs;
-            // continue scanning preconditions where the previous scan(s) stopped
-            while((pc_idx < it->preconditions.size()) &&
-                  (it->preconditions[pc_idx].first == (i + 1))) {
-              if(it->preconditions[pc_idx].second >= 0) {
-                // this is a dependency on another operation
-                assert(unsigned(it->preconditions[pc_idx].second) <
-                       cur_intermediate_events);
-                evs.push_back(intermediate_events[it->preconditions[pc_idx].second]);
-              } else {
-                // external precondition
-                int idx = -1 - it->preconditions[pc_idx].second;
-                if((idx < int(preconditions.size())) && preconditions[idx].exists())
-                  evs.push_back(preconditions[idx]);
-              }
-
-              pc_idx++;
-            }
-
-            inst_preconds[i] = GenEventImpl::merge_events(evs, false /*!ignore_faults*/);
-          }
-        }
-
-        if(it->intermediate_event_count > 1) {
-          // log_subgraph.print() << "inst_postconds = " << (it->intermediate_event_count
-          // - 1);
-          inst_postconds.resize(it->intermediate_event_count - 1);
-        }
-
-        e = sg_inner.instantiate(inst_args, id.args.size(), id.prs, inst_preconds,
-                                 inst_postconds, pre, priority_adjust);
-
-        intermediate_events[cur_intermediate_events] = e;
-        if(it->intermediate_event_count > 1)
-          memcpy(&intermediate_events[cur_intermediate_events + 1], inst_postconds.data(),
-                 (it->intermediate_event_count - 1) * sizeof(Event));
-        cur_intermediate_events += it->intermediate_event_count;
-        break;
-      }
-
-      default:
-        assert(0);
-      }
-
-      // contribute to the final event if we need to
-      if(it->is_final_event)
-        event_impl->merger.add_precondition(e);
-    }
-
-    // sanity-check that we counted right
-    assert(cur_intermediate_events == num_intermediate_events);
-
-    // Arm the merger if anything feeds it; otherwise the finish event is
-    // ready to trigger as-is.
-    if(num_merger_inputs > 0) {
-      event_impl->merger.arm_merger();
-    } else {
-      GenEventImpl::trigger(finish_event, false /*!poisoned*/);
-    }
+    SubgraphExecutionState *state =
+        new SubgraphExecutionState(this, args, arglen, finish_event);
+    // Release the execution state once the instantiation has finished.
+    EventImpl::add_waiter(finish_event, new SubgraphInstantiationCleanup(state));
+    // Start once the precondition is satisfied.
+    SubgraphWorkLauncher::launch_or_defer(state, start_event);
   }
 
   void SubgraphImpl::destroy(void)
   {
     delete defn;
-    interpreted_schedule.clear();
+    defn = nullptr;
+    compiled.clear();
 
-    subgraph_processors.clear();
-    subgraph_processor_impls.clear();
-    processor_to_index.clear();
-    compiled_subgraph_operations.clear();
-    operation_incoming_edges.clear();
-    operation_outgoing_edges.clear();
-    operation_precondition_counters.clear();
-    initial_processor_queues.clear();
-    initial_queue_entry_counts.clear();
+    {
+      AutoLock<> al(block_pool_lock);
+      for(std::vector<char *> &blocks : block_pool)
+        free_blocks(blocks);
+      block_pool.clear();
+    }
 
     previous_instantiation_completion = Event::NO_EVENT;
     outstanding_instantiations = 0;
@@ -1231,10 +566,8 @@ namespace Realm {
   {
     {
       AutoLock<> al(lifecycle_lock);
-      if(destroy_requested) {
-        log_subgraph.fatal() << "subgraph " << me << " destroyed twice";
-        abort();
-      }
+      if(destroy_requested)
+        SUBGRAPH_FATAL(me, "destroyed twice");
       destroy_requested = true;
       if(outstanding_instantiations > 0) {
         // The last instantiation to release its state completes the destroy.
@@ -1278,6 +611,57 @@ namespace Realm {
     complete_destroy(wait_on, done);
   }
 
+  // Blocks are placed on the processors' NUMA nodes, which is page-granular
+  // and costs system calls, so they are allocated once and recycled.
+  void SubgraphImpl::acquire_blocks(std::vector<char *> &blocks)
+  {
+    {
+      AutoLock<> al(block_pool_lock);
+      if(!block_pool.empty()) {
+        blocks.swap(block_pool.back());
+        block_pool.pop_back();
+        return;
+      }
+    }
+    static const bool numa_available = numasysif_numa_available();
+    blocks.resize(compiled.domains.size(), nullptr);
+    for(size_t dm = 0; dm < compiled.domains.size(); dm++) {
+      const CompiledSubgraph::Domain &dom = compiled.domains[dm];
+      void *p = nullptr;
+      if(numa_available && (dom.numa_node >= 0))
+        p = numasysif_alloc_mem(dom.numa_node, dom.bytes, false /*!pin*/);
+      if(!p) {
+        if(posix_memalign(&p, SUBGRAPH_CACHE_LINE_BYTES, dom.bytes) != 0)
+          p = nullptr;
+      }
+      if(!p)
+        SUBGRAPH_FATAL(me, "failed to allocate " << dom.bytes
+                                                 << " bytes of instantiation state");
+      blocks[dm] = static_cast<char *>(p);
+    }
+  }
+
+  void SubgraphImpl::release_blocks(std::vector<char *> &blocks)
+  {
+    AutoLock<> al(block_pool_lock);
+    block_pool.emplace_back();
+    block_pool.back().swap(blocks);
+  }
+
+  void SubgraphImpl::free_blocks(std::vector<char *> &blocks)
+  {
+    static const bool numa_available = numasysif_numa_available();
+    for(size_t dm = 0; dm < blocks.size(); dm++) {
+      const CompiledSubgraph::Domain &dom = compiled.domains[dm];
+      bool freed = false;
+      if(numa_available && (dom.numa_node >= 0))
+        freed = numasysif_free_mem(dom.numa_node, blocks[dm], dom.bytes);
+      if(!freed)
+        free(blocks[dm]);
+    }
+    blocks.clear();
+  }
+
   ////////////////////////////////////////////////////////////////////////
   //
   // class SubgraphImpl::DeferredDestroy
@@ -1293,7 +677,8 @@ namespace Realm {
 
   void SubgraphImpl::DeferredDestroy::event_triggered(bool poisoned, TimeLimit work_until)
   {
-    assert(!poisoned);
+    if(poisoned)
+      SUBGRAPH_FATAL(subgraph->me, "destroy precondition was poisoned");
     subgraph->destroy();
     to_trigger.trigger();
   }
@@ -1311,6 +696,7 @@ namespace Realm {
   ////////////////////////////////////////////////////////////////////////
   //
   // class SubgraphInstantiateMessage
+  //
 
   /*static*/ void
   SubgraphInstantiateMessage::handle_message(NodeID sender,
@@ -1339,6 +725,7 @@ namespace Realm {
   ////////////////////////////////////////////////////////////////////////
   //
   // class SubgraphDestroyMessage
+  //
 
   /*static*/ void
   SubgraphDestroyMessage::handle_message(NodeID sender, const SubgraphDestroyMessage &msg,
@@ -1375,21 +762,19 @@ namespace Realm {
                                                bool poisoned)
   {
     if(poisoned) {
-      // Nothing runs. Poisoning the compiled portion's finish event poisons
-      // the instantiation's finish event; cleanup proceeds as usual.
+      // Nothing runs; the finish event is poisoned and cleanup proceeds as usual.
       log_subgraph.info() << "poisoned precondition: subgraph=" << state->subgraph->me;
-      state->finish_event.cancel();
+      GenEventImpl::trigger(state->finish_event, true /*poisoned*/);
       return;
     }
-    const std::vector<LocalTaskProcessor *> &procs =
-        state->subgraph->subgraph_processor_impls;
+    const std::vector<CompiledSubgraph::Proc> &procs = state->subgraph->compiled.procs;
     if(procs.empty()) {
-      // A compiled subgraph without operations has nothing to wait for.
-      state->finish_event.trigger();
+      // A subgraph without operations has nothing to wait for.
+      GenEventImpl::trigger(state->finish_event, false /*!poisoned*/);
       return;
     }
-    for(LocalTaskProcessor *proc : procs)
-      proc->enqueue_subgraph(state);
+    for(const CompiledSubgraph::Proc &p : procs)
+      p.impl->enqueue_subgraph(state);
   }
 
   void SubgraphWorkLauncher::event_triggered(bool poisoned, TimeLimit work_until)
@@ -1485,47 +870,46 @@ namespace Realm {
 
   SubgraphExecutionState::SubgraphExecutionState(SubgraphImpl *_subgraph,
                                                  const void *_args, size_t _arglen,
-                                                 UserEvent _finish_event)
+                                                 Event _finish_event)
     : subgraph(_subgraph)
     , args(nullptr)
     , arglen(_arglen)
-    , finish_counter(0)
+    , finish_counter(int64_t(_subgraph->compiled.procs.size()))
     , finish_event(_finish_event)
-    , preconditions(nullptr)
-    , processor_queues(nullptr)
   {
     if((_args != nullptr) && (arglen > 0)) {
       args = malloc(arglen);
       memcpy(args, _args, arglen);
     }
-
-    // Fresh copies of the precondition counters and ready queues. Plain
-    // stores suffice here: the state is published to other threads through
-    // the enqueue path, which has release semantics.
-    const std::vector<int64_t> &counters = subgraph->operation_precondition_counters;
-    preconditions = new atomic<int64_t>[counters.size()];
-    for(size_t i = 0; i < counters.size(); i++)
-      preconditions[i].store(counters[i]);
-
-    const std::vector<int64_t> &queues = subgraph->initial_processor_queues.data;
-    processor_queues = new atomic<int64_t>[queues.size()];
-    for(size_t i = 0; i < queues.size(); i++)
-      processor_queues[i].store(queues[i]);
-
-    // Each processor decrements the finish counter once, after running its
-    // last operation of this instantiation.
-    const size_t num_procs = subgraph->subgraph_processors.size();
-    finish_counter.store(int64_t(num_procs));
-    processor_state.resize(num_procs);
-    for(size_t i = 0; i < num_procs; i++)
-      processor_state[i].queue_back.store(uint64_t(subgraph->initial_queue_entry_counts[i]));
+    subgraph->acquire_blocks(blocks);
+    const CompiledSubgraph &c = subgraph->compiled;
+    for(size_t dm = 0; dm < c.domains.size(); dm++)
+      memcpy(blocks[dm], c.domains[dm].image.data(), c.domains[dm].bytes);
   }
 
   SubgraphExecutionState::~SubgraphExecutionState()
   {
     free(args);
-    delete[] preconditions;
-    delete[] processor_queues;
+    subgraph->release_blocks(blocks);
+  }
+
+  atomic<int64_t> &SubgraphExecutionState::counter(uint32_t op) const
+  {
+    const CompiledSubgraph::Op &o = subgraph->compiled.ops[op];
+    return *reinterpret_cast<atomic<int64_t> *>(blocks[o.counter_domain] +
+                                                o.counter_offset);
+  }
+
+  atomic<int64_t> *SubgraphExecutionState::queue(uint32_t proc) const
+  {
+    const CompiledSubgraph::Proc &p = subgraph->compiled.procs[proc];
+    return reinterpret_cast<atomic<int64_t> *>(blocks[p.domain] + p.queue_offset);
+  }
+
+  atomic<uint64_t> &SubgraphExecutionState::tail(uint32_t proc) const
+  {
+    const CompiledSubgraph::Proc &p = subgraph->compiled.procs[proc];
+    return *reinterpret_cast<atomic<uint64_t> *>(blocks[p.domain] + p.tail_offset);
   }
 
   ////////////////////////////////////////////////////////////////////////
@@ -1537,6 +921,7 @@ namespace Realm {
 
   ProcSubgraphExecutor::ProcSubgraphExecutor(Processor _proc)
     : proc(_proc)
+    , numa_node_(-2)
     , pending_count(0)
     , scan_start(0)
     , peeked_cursor(0)
@@ -1547,6 +932,24 @@ namespace Realm {
   {}
 
   ProcSubgraphExecutor::~ProcSubgraphExecutor() {}
+
+  void ProcSubgraphExecutor::note_worker_started(void)
+  {
+    if(numa_node_ != -2)
+      return;
+    int node = -1;
+#ifdef __linux__
+    int cpu = sched_getcpu();
+    if((cpu >= 0) && numasysif_numa_available()) {
+      const HardwareTopology &topo = get_runtime()->host_topology;
+      for(int dm = 0; (dm < 1024) && (node < 0); dm++)
+        if(topo.numa_domain_has_processors(dm) &&
+           topo.get_processors_by_domain(dm).count(cpu))
+          node = dm;
+    }
+#endif
+    numa_node_ = node;
+  }
 
   void ProcSubgraphExecutor::enqueue_subgraph(SubgraphExecutionState *state)
   {
@@ -1563,15 +966,17 @@ namespace Realm {
       pending_count.store(0);
     }
     for(SubgraphExecutionState *state : pending_scratch) {
-      const SubgraphImpl *impl = state->subgraph;
-      Cursor c;
-      c.state = state;
-      c.proc_index = impl->processor_to_index.at(proc);
-      c.base = impl->initial_processor_queues.offsets[c.proc_index];
-      c.end = impl->initial_processor_queues.offsets[c.proc_index + 1] - c.base;
-      c.front = 0;
-      assert(c.end > 0);
-      active.push_back(c);
+      const CompiledSubgraph &c = state->subgraph->compiled;
+      auto it = c.proc_index.find(proc);
+      assert(it != c.proc_index.end());
+      Cursor cur;
+      cur.state = state;
+      cur.proc = it->second;
+      cur.queue = state->queue(cur.proc);
+      cur.front = 0;
+      cur.end = c.procs[cur.proc].num_ops;
+      assert(cur.end > 0);
+      active.push_back(cur);
     }
     pending_scratch.clear();
     activity_epoch++;
@@ -1588,11 +993,11 @@ namespace Realm {
       if(i >= n)
         i -= n;
       const Cursor &c = active[i];
-      int64_t op = c.state->processor_queues[c.base + c.front].load_acquire();
+      int64_t op = c.queue[c.front].load_acquire();
       if(op != SUBGRAPH_EMPTY_QUEUE_ENTRY) {
         peeked_cursor = i;
         peeked_op = op;
-        // Task priorities are not supported in compiled subgraphs yet.
+        // Task priorities are not supported in subgraphs yet.
         priority = 0;
         return true;
       }
@@ -1605,8 +1010,7 @@ namespace Realm {
     assert((peeked_cursor < active.size()) && (peeked_op != SUBGRAPH_EMPTY_QUEUE_ENTRY));
     Cursor &c = active[peeked_cursor];
     entry.state = c.state;
-    entry.op_index = uint64_t(peeked_op);
-    entry.proc_index = c.proc_index;
+    entry.op = uint32_t(peeked_op);
     c.front++;
     entry.last_for_processor = (c.front == c.end);
     if(entry.last_for_processor) {
@@ -1624,6 +1028,59 @@ namespace Realm {
     activity_epoch++;
   }
 
+  namespace {
+    [[noreturn]] void launch_direct(SubgraphExecutionState *state, uint32_t op)
+    {
+      SUBGRAPH_FATAL(state->get_subgraph()->me,
+                     "internal error: operation " << op
+                                                  << " is not bound to a processor");
+    }
+  } // namespace
+
+  void ProcSubgraphExecutor::execute(const ReadyEntry &entry)
+  {
+    SubgraphExecutionState *state = entry.state;
+    SubgraphImpl *impl = state->subgraph;
+    const CompiledSubgraph &c = impl->compiled;
+    const CompiledSubgraph::Op &op = c.ops[entry.op];
+    assert((op.kind == SubgraphDefinition::OPKIND_TASK) && (op.proc >= 0));
+    const SubgraphDefinition::TaskDesc &task_desc = impl->defn->tasks[op.index];
+    LocalTaskProcessor *proc_impl = c.procs[op.proc].impl;
+
+    // Run the task on this thread, flagged so that operations a subgraph task
+    // may not perform (waiting, querying its finish event) are rejected.
+    // TODO: task context managers are not applied to subgraph tasks.
+    Thread *thread = Thread::self();
+    ThreadLocal::current_processor = proc;
+    thread->start_subgraph_task_execution();
+    proc_impl->execute_task(task_desc.task_id, task_desc.args);
+    thread->stop_subgraph_task_execution();
+    ThreadLocal::current_processor = Processor::NO_PROC;
+
+    // Satisfy outgoing edges. A successor whose last predecessor this was
+    // becomes ready on its own processor's queue.
+    for(uint64_t i = c.successors.offsets[entry.op]; i < c.successors.offsets[entry.op + 1];
+        i++) {
+      const uint32_t s = c.successors.data[i];
+      if(state->counter(s).fetch_sub_acqrel(1) != 1)
+        continue;
+      const CompiledSubgraph::Op &so = c.ops[s];
+      if(so.proc < 0)
+        launch_direct(state, s);
+      const uint64_t slot = state->tail(so.proc).fetch_add_acqrel(1);
+      state->queue(so.proc)[slot].store_release(int64_t(s));
+      c.procs[so.proc].impl->notify_scheduler_of_new_work();
+    }
+
+    if(entry.last_for_processor) {
+      // Copy out what is needed first: once the counter reaches zero and the
+      // event triggers, the state may be released at any moment.
+      Event finish_event = state->finish_event;
+      if(state->finish_counter.fetch_sub_acqrel(1) == 1)
+        GenEventImpl::trigger(finish_event, false /*!poisoned*/);
+    }
+  }
+
   bool ProcSubgraphExecutor::keep_polling(void)
   {
     if((poll_budget_us <= 0) || (activity_epoch == 0))
@@ -1634,52 +1091,6 @@ namespace Realm {
       poll_deadline_ns = now + 1000LL * poll_budget_us;
     }
     return now < poll_deadline_ns;
-  }
-
-  void ProcSubgraphExecutor::execute(const ReadyEntry &entry)
-  {
-    SubgraphExecutionState *state = entry.state;
-    SubgraphImpl *impl = state->subgraph;
-    const SubgraphImpl::SubgraphOperationDesc &op =
-        impl->compiled_subgraph_operations[entry.op_index];
-    assert(op.op_kind == SubgraphDefinition::OPKIND_TASK);
-    const SubgraphDefinition::TaskDesc &task_desc = impl->defn->tasks[op.op_index];
-    LocalTaskProcessor *proc_impl = impl->subgraph_processor_impls[entry.proc_index];
-
-    // Run the task on this thread, flagged so that operations a compiled
-    // subgraph task may not perform (waiting, querying its finish event)
-    // are rejected.
-    // TODO: task context managers are not applied to compiled subgraph tasks.
-    Thread *thread = Thread::self();
-    ThreadLocal::current_processor = proc;
-    thread->start_subgraph_task_execution();
-    proc_impl->execute_task(task_desc.task_id, task_desc.args);
-    thread->stop_subgraph_task_execution();
-    ThreadLocal::current_processor = Processor::NO_PROC;
-
-    // Satisfy outgoing edges. A successor whose last predecessor this was
-    // becomes ready on its own processor's queue.
-    const auto &out = impl->operation_outgoing_edges;
-    for(uint64_t i = out.offsets[entry.op_index]; i < out.offsets[entry.op_index + 1];
-        i++) {
-      const uint64_t target = out.data[i].index;
-      if(state->preconditions[target].fetch_sub_acqrel(1) != 1)
-        continue;
-      const int32_t target_proc = impl->compiled_subgraph_operations[target].proc_index;
-      const uint64_t slot =
-          state->processor_state[target_proc].queue_back.fetch_add_acqrel(1);
-      state->processor_queues[impl->initial_processor_queues.offsets[target_proc] + slot]
-          .store_release(int64_t(target));
-      impl->subgraph_processor_impls[target_proc]->notify_scheduler_of_new_work();
-    }
-
-    if(entry.last_for_processor) {
-      // Copy out what is needed first: once the counter reaches zero and the
-      // event triggers, the state may be released at any moment.
-      UserEvent finish_event = state->finish_event;
-      if(state->finish_counter.fetch_sub_acqrel(1) == 1)
-        finish_event.trigger();
-    }
   }
 
 }; // namespace Realm

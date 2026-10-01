@@ -1086,9 +1086,19 @@ namespace Realm {
     work_counter.increment_counter();
   }
 
+  int ThreadedTaskScheduler::subgraph_numa_node(void) const
+  {
+    return subgraph_executor ? subgraph_executor->numa_node() : -1;
+  }
+
   // the main scheduler loop
   void ThreadedTaskScheduler::scheduler_loop(void)
   {
+    // record where this processor's workers run (used for NUMA placement of
+    //  subgraph state)
+    if(subgraph_executor)
+      subgraph_executor->note_worker_started();
+
     // the entire body of this method, except for when running an actual task, is
     //   a critical section - lock should be taken by caller
     {

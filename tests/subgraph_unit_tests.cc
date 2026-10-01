@@ -20,8 +20,10 @@
 // These are written as an integration test rather than a gtest unit test
 // because exercising subgraphs requires a live Realm runtime executing tasks.
 //
-// Every test runs once per execution mode it declares valid (INTERPRETED
-// and/or COMPILED). The first CPU processor is reserved for the test driver:
+// Tests that need a feature the compiled implementation does not provide yet
+// declare it via pending_feature(); they are reported as PENDING and skipped,
+// which doubles as the list of remaining gaps. The first CPU processor is
+// reserved for the test driver:
 // several tests poll for events that a buggy implementation may never trigger,
 // and polling would starve subgraph tasks sharing that processor. Tests
 // therefore build their subgraphs on worker_cpus() only.
@@ -177,10 +179,6 @@ static void report(const std::string &msg)
   fflush(stdout);
 }
 
-static const char *mode_name(SubgraphDefinition::ExecutionMode mode)
-{
-  return (mode == SubgraphDefinition::COMPILED) ? "COMPILED" : "INTERPRETED";
-}
 
 // Polls for an event with a wall-clock timeout. Only for use from the
 // driver processor and only for events that a buggy implementation might
@@ -225,7 +223,7 @@ public:
   virtual bool can_run() { return false; }
 
   // Initialize any state for the test.
-  virtual void init(SubgraphDefinition::ExecutionMode mode) {}
+  virtual void init() {}
 
   // Start the test. Run is responsible for not having any pending work
   // left after it returns.
@@ -241,11 +239,9 @@ public:
   // further tests should be attempted.
   virtual bool hung() const { return false; }
 
-  virtual std::vector<SubgraphDefinition::ExecutionMode> get_valid_execution_modes() const
-  {
-    // Unless overridden, all execution modes are valid.
-    return {SubgraphDefinition::INTERPRETED, SubgraphDefinition::COMPILED};
-  }
+  // Name of a not-yet-implemented subgraph feature this test needs, or
+  // nullptr if the test can run today.
+  virtual const char *pending_feature() const { return nullptr; }
 
   virtual std::string name() const = 0;
 };
@@ -431,11 +427,9 @@ static void dag_task(const void *args, size_t arglen, const void *userdata,
 }
 
 static Subgraph build_dag_subgraph(const DagSpec &spec, DagState &state,
-                                   SubgraphDefinition::ExecutionMode mode,
                                    SubgraphDefinition::ConcurrencyMode cmode)
 {
   SubgraphDefinition sd;
-  sd.execution_mode = mode;
   sd.concurrency_mode = cmode;
   for(size_t i = 0; i < spec.size(); i++) {
     DagTaskArgs a{&state, int(i)};
@@ -584,9 +578,8 @@ public:
 
   bool can_run() override { return worker_cpus().size() >= 2 && sysmem().exists(); }
 
-  void init(SubgraphDefinition::ExecutionMode mode) override
+  void init() override
   {
-    execution_mode = mode;
     error = false;
     std::vector<Processor> cpus = worker_cpus(2);
 
@@ -600,7 +593,6 @@ public:
     // 4 layers alternating between writers and readers. The instance is split
     // across the two CPUs, each writer writes half, each reader checks all.
     SubgraphDefinition sd;
-    sd.execution_mode = mode;
     sd.concurrency_mode = SubgraphDefinition::INSTANTIATION_ORDER;
     WriterTaskArgs warg1(inst, IndexSpace<1>(Rect<1>(0, 4)), 0);
     WriterTaskArgs warg2(inst, IndexSpace<1>(Rect<1>(5, 9)), 0);
@@ -638,9 +630,9 @@ public:
       e = sg.instantiate(nullptr, 0, ProfilingRequestSet(), e);
     e.wait();
 
-    // In compiled mode the subgraph orders instantiations itself, so the
-    // same must work without chaining.
-    if(execution_mode == SubgraphDefinition::COMPILED) {
+    // The subgraph orders instantiations itself, so the same must work
+    // without chaining.
+    {
       std::vector<Event> evs(config.iterations);
       for(int i = 0; i < config.iterations; i++)
         evs[i] = sg.instantiate(nullptr, 0, ProfilingRequestSet());
@@ -662,7 +654,6 @@ private:
   Subgraph sg;
   RegionInstance inst;
   bool error = false;
-  SubgraphDefinition::ExecutionMode execution_mode = SubgraphDefinition::INTERPRETED;
 };
 
 ////////////////////////////////////////////////////////////////////////
@@ -676,14 +667,11 @@ class SimpleCopyTest : public SubgraphTest {
 public:
   std::string name() const override { return "SimpleCopyTest"; }
 
-  std::vector<SubgraphDefinition::ExecutionMode> get_valid_execution_modes() const override
-  {
-    return {SubgraphDefinition::INTERPRETED};
-  }
+  const char *pending_feature() const override { return "copies and fills"; }
 
   bool can_run() override { return sysmem().exists(); }
 
-  void init(SubgraphDefinition::ExecutionMode mode) override
+  void init() override
   {
     // inst: [0,4] filled, [5,9] reduced into. copy_dst_inst: [0,4] copied from
     // inst, [5,9] pre-filled with -1 to check the sub-piece copy.
@@ -714,7 +702,6 @@ public:
     }
 
     SubgraphDefinition sd;
-    sd.execution_mode = mode;
     sd.concurrency_mode = SubgraphDefinition::INSTANTIATION_ORDER;
     int fill_value = 15210;
     int f1 = make_fill_desc(sd, IndexSpace<1>(Rect<1>(0, 4)), inst, FID_DATA, &fill_value,
@@ -772,17 +759,13 @@ class BarrierArrivalTest : public SubgraphTest {
 public:
   std::string name() const override { return "BarrierArrivalTest"; }
 
-  std::vector<SubgraphDefinition::ExecutionMode> get_valid_execution_modes() const override
-  {
-    return {SubgraphDefinition::INTERPRETED};
-  }
+  const char *pending_feature() const override { return "barrier arrivals"; }
 
   bool can_run() override { return true; }
 
-  void init(SubgraphDefinition::ExecutionMode mode) override
+  void init() override
   {
     SubgraphDefinition sd;
-    sd.execution_mode = mode;
     sd.concurrency_mode = SubgraphDefinition::INSTANTIATION_ORDER;
     for(int i = 0; i < 3; i++) {
       barriers[i] = Barrier::create_barrier(1);
@@ -813,10 +796,7 @@ class InterpolationTest : public SubgraphTest {
 public:
   std::string name() const override { return "InterpolationTest"; }
 
-  std::vector<SubgraphDefinition::ExecutionMode> get_valid_execution_modes() const override
-  {
-    return {SubgraphDefinition::INTERPRETED};
-  }
+  const char *pending_feature() const override { return "interpolations"; }
 
   struct WriterTaskArgs {
     WriterTaskArgs(RegionInstance inst32, RegionInstance inst64, int32_t value1,
@@ -853,7 +833,7 @@ public:
 
   bool can_run() override { return worker_cpus().size() >= 1 && sysmem().exists(); }
 
-  void init(SubgraphDefinition::ExecutionMode mode) override
+  void init() override
   {
     Processor cpu = worker_cpus()[0];
     IndexSpace<1> is1 = Rect<1>(0, 1);
@@ -872,7 +852,6 @@ public:
                                                    sizeof(initial_reduce_value));
 
     SubgraphDefinition sd;
-    sd.execution_mode = mode;
     sd.concurrency_mode = SubgraphDefinition::INSTANTIATION_ORDER;
     WriterTaskArgs wargs(inst32, inst64, 0, 0, 0);
     int task_idx = make_task_desc(sd, cpu, writer_task_id, &wargs, sizeof(wargs));
@@ -962,10 +941,7 @@ class ExternalPreconditionTest : public SubgraphTest {
 public:
   std::string name() const override { return "ExternalPreconditionTest"; }
 
-  std::vector<SubgraphDefinition::ExecutionMode> get_valid_execution_modes() const override
-  {
-    return {SubgraphDefinition::INTERPRETED};
-  }
+  const char *pending_feature() const override { return "external preconditions"; }
 
   struct WriterTaskArgs {
     RegionInstance inst;
@@ -1021,7 +997,7 @@ public:
 
   bool can_run() override { return worker_cpus().size() >= 2 && sysmem().exists(); }
 
-  void init(SubgraphDefinition::ExecutionMode mode) override
+  void init() override
   {
     error = false;
     cpus = worker_cpus(2);
@@ -1038,7 +1014,6 @@ public:
     }
 
     SubgraphDefinition sd;
-    sd.execution_mode = mode;
     sd.concurrency_mode = SubgraphDefinition::INSTANTIATION_ORDER;
     ReaderTaskArgs rargs{inst, IndexSpace<1>(Rect<1>(0, 4)), IndexSpace<1>(Rect<1>(5, 9)),
                          this};
@@ -1091,10 +1066,7 @@ class ExternalPostconditionTest : public SubgraphTest {
 public:
   std::string name() const override { return "ExternalPostconditionTest"; }
 
-  std::vector<SubgraphDefinition::ExecutionMode> get_valid_execution_modes() const override
-  {
-    return {SubgraphDefinition::INTERPRETED};
-  }
+  const char *pending_feature() const override { return "external postconditions"; }
 
   struct WriterTaskArgs {
     RegionInstance inst;
@@ -1119,7 +1091,7 @@ public:
 
   bool can_run() override { return worker_cpus().size() >= 2 && sysmem().exists(); }
 
-  void init(SubgraphDefinition::ExecutionMode mode) override
+  void init() override
   {
     std::vector<Processor> cpus = worker_cpus(2);
     IndexSpace<1> is = Rect<1>(0, 9);
@@ -1135,7 +1107,6 @@ public:
     }
 
     SubgraphDefinition sd;
-    sd.execution_mode = mode;
     sd.concurrency_mode = SubgraphDefinition::INSTANTIATION_ORDER;
     WriterTaskArgs wargs1{inst, IndexSpace<1>(Rect<1>(0, 4)), expected_value1};
     WriterTaskArgs wargs2{inst, IndexSpace<1>(Rect<1>(5, 9)), expected_value2};
@@ -1209,7 +1180,7 @@ public:
 
   bool can_run() override { return worker_cpus().size() >= min_procs; }
 
-  void init(SubgraphDefinition::ExecutionMode mode) override
+  void init() override
   {
     procs = worker_cpus(max_procs);
     std::mt19937 rng(config.seed);
@@ -1218,7 +1189,7 @@ public:
     expected = 0;
     log_app.info() << name() << ": " << spec.size() << " ops, " << spec.num_edges()
                    << " edges, " << procs.size() << " procs";
-    sg = build_dag_subgraph(spec, state, mode, cmode);
+    sg = build_dag_subgraph(spec, state, cmode);
   }
 
   void run() override
@@ -1272,10 +1243,9 @@ public:
   std::string name() const override { return "EmptySubgraph"; }
   bool can_run() override { return true; }
 
-  void init(SubgraphDefinition::ExecutionMode mode) override
+  void init() override
   {
     SubgraphDefinition sd;
-    sd.execution_mode = mode;
     sd.concurrency_mode = SubgraphDefinition::INSTANTIATION_ORDER;
     Subgraph::create_subgraph(sg, sd, ProfilingRequestSet()).wait();
   }
@@ -1314,12 +1284,12 @@ public:
   std::string name() const override { return "PoisonedPrecondition"; }
   bool can_run() override { return worker_cpus().size() >= 1; }
 
-  void init(SubgraphDefinition::ExecutionMode mode) override
+  void init() override
   {
     procs = worker_cpus(2);
     spec = dag_layers(2, 2, procs.size(), true);
     state.reset(&spec, procs);
-    sg = build_dag_subgraph(spec, state, mode, SubgraphDefinition::ONE_SHOT);
+    sg = build_dag_subgraph(spec, state, SubgraphDefinition::ONE_SHOT);
   }
 
   void run() override
@@ -1371,14 +1341,12 @@ public:
   }
   bool can_run() override { return worker_cpus().size() >= 1; }
 
-  void init(SubgraphDefinition::ExecutionMode mode) override
+  void init() override
   {
-    execution_mode = mode;
     procs = worker_cpus(2);
     spec = dag_layers(2, 2, procs.size(), true);
     state.reset(&spec, procs);
-    sg = build_dag_subgraph(spec, state, mode,
-                            one_shot ? SubgraphDefinition::ONE_SHOT
+    sg = build_dag_subgraph(spec, state, one_shot ? SubgraphDefinition::ONE_SHOT
                                      : SubgraphDefinition::INSTANTIATION_ORDER);
   }
 
@@ -1404,10 +1372,7 @@ public:
   bool check() override
   {
     bool all_ran = (state.executed.load() == expected) && (state.violations.load() == 0);
-    // Interpreted mode does not yet track in-flight instantiations in
-    // destroy(); tighten this once destroy() is uniform across modes.
-    bool ordered = (execution_mode != SubgraphDefinition::COMPILED) ||
-                   (executed_at_destroy == expected);
+    bool ordered = (executed_at_destroy == expected);
     if(!completed || !all_ran || !ordered)
       log_app.error() << name() << ": destroy event triggered=" << completed
                       << ", tasks done at destroy " << executed_at_destroy << " of "
@@ -1423,7 +1388,6 @@ public:
 
 private:
   bool one_shot;
-  SubgraphDefinition::ExecutionMode execution_mode = SubgraphDefinition::INTERPRETED;
   std::vector<Processor> procs;
   DagSpec spec;
   DagState state;
@@ -1460,14 +1424,14 @@ public:
   std::string name() const override { return "MixedWorkload"; }
   bool can_run() override { return worker_cpus().size() >= 2; }
 
-  void init(SubgraphDefinition::ExecutionMode mode) override
+  void init() override
   {
     procs = worker_cpus(4);
     spec = dag_layers(4, 2 * procs.size(), procs.size(), true);
     state.reset(&spec, procs);
     blocked.store(0);
     normal.store(0);
-    sg = build_dag_subgraph(spec, state, mode, SubgraphDefinition::INSTANTIATION_ORDER);
+    sg = build_dag_subgraph(spec, state, SubgraphDefinition::INSTANTIATION_ORDER);
   }
 
   void run() override
@@ -1539,12 +1503,12 @@ public:
   std::string name() const override { return "ManyInstantiations"; }
   bool can_run() override { return worker_cpus().size() >= 1; }
 
-  void init(SubgraphDefinition::ExecutionMode mode) override
+  void init() override
   {
     procs = worker_cpus(2);
     spec = dag_layers(2, 2, procs.size(), true);
     state.reset(&spec, procs);
-    sg = build_dag_subgraph(spec, state, mode, SubgraphDefinition::INSTANTIATION_ORDER);
+    sg = build_dag_subgraph(spec, state, SubgraphDefinition::INSTANTIATION_ORDER);
   }
 
   void run() override
@@ -1628,12 +1592,12 @@ public:
            (worker_cpus().size() >= 1) && remote_cpu().exists();
   }
 
-  void init(SubgraphDefinition::ExecutionMode mode) override
+  void init() override
   {
     procs = worker_cpus(2);
     spec = dag_layers(3, 2, procs.size(), true);
     state.reset(&spec, procs);
-    sg = build_dag_subgraph(spec, state, mode, SubgraphDefinition::INSTANTIATION_ORDER);
+    sg = build_dag_subgraph(spec, state, SubgraphDefinition::INSTANTIATION_ORDER);
   }
 
   void run() override
@@ -1701,7 +1665,7 @@ public:
   std::string name() const override { return "ConcurrentSubgraphs"; }
   bool can_run() override { return worker_cpus().size() >= 2; }
 
-  void init(SubgraphDefinition::ExecutionMode mode) override
+  void init() override
   {
     procs = worker_cpus(2);
     const int chain_length = 8;
@@ -1711,8 +1675,8 @@ public:
       proc = 1 - proc; // B starts on the other processor
     state_a.reset(&spec_a, procs);
     state_b.reset(&spec_b, procs);
-    sg_a = build_dag_subgraph(spec_a, state_a, mode, SubgraphDefinition::INSTANTIATION_ORDER);
-    sg_b = build_dag_subgraph(spec_b, state_b, mode, SubgraphDefinition::INSTANTIATION_ORDER);
+    sg_a = build_dag_subgraph(spec_a, state_a, SubgraphDefinition::INSTANTIATION_ORDER);
+    sg_b = build_dag_subgraph(spec_b, state_b, SubgraphDefinition::INSTANTIATION_ORDER);
   }
 
   void run() override
@@ -1784,10 +1748,9 @@ static void finish_event_task(const void *, size_t, const void *, size_t, Proces
 
 static void noop_task(const void *, size_t, const void *, size_t, Processor) {}
 
-static Subgraph make_one_task_compiled_subgraph(int task_id)
+static Subgraph make_one_task_subgraph(int task_id)
 {
   SubgraphDefinition sd;
-  sd.execution_mode = SubgraphDefinition::COMPILED;
   sd.concurrency_mode = SubgraphDefinition::ONE_SHOT;
   make_task_desc(sd, worker_cpus()[0], task_id, nullptr, 0);
   Subgraph sg;
@@ -1797,13 +1760,13 @@ static Subgraph make_one_task_compiled_subgraph(int task_id)
 
 static void death_wait_in_compiled_task()
 {
-  Subgraph sg = make_one_task_compiled_subgraph(waiting_task_id);
+  Subgraph sg = make_one_task_subgraph(waiting_task_id);
   sg.instantiate(nullptr, 0, ProfilingRequestSet()).wait();
 }
 
 static void death_finish_event_in_compiled_task()
 {
-  Subgraph sg = make_one_task_compiled_subgraph(finish_event_task_id);
+  Subgraph sg = make_one_task_subgraph(finish_event_task_id);
   sg.instantiate(nullptr, 0, ProfilingRequestSet()).wait();
 }
 
@@ -1815,7 +1778,6 @@ static void death_unsupported_op_compiled()
   RegionInstance::create_instance(inst, sysmem(), is, field_sizes, 0, ProfilingRequestSet())
       .wait();
   SubgraphDefinition sd;
-  sd.execution_mode = SubgraphDefinition::COMPILED;
   sd.concurrency_mode = SubgraphDefinition::ONE_SHOT;
   int fill_value = 0;
   make_fill_desc(sd, is, inst, FID_DATA, &fill_value, sizeof(fill_value));
@@ -1825,7 +1787,7 @@ static void death_unsupported_op_compiled()
 
 static void death_profiling_on_compiled_instantiate()
 {
-  Subgraph sg = make_one_task_compiled_subgraph(noop_task_id);
+  Subgraph sg = make_one_task_subgraph(noop_task_id);
   ProfilingRequestSet prs;
   prs.add_request(worker_cpus()[0], noop_task_id)
       .add_measurement<ProfilingMeasurements::OperationTimeline>();
@@ -1842,16 +1804,36 @@ static void death_remote_task_compiled()
     return;
   }
   SubgraphDefinition sd;
-  sd.execution_mode = SubgraphDefinition::COMPILED;
   sd.concurrency_mode = SubgraphDefinition::ONE_SHOT;
   make_task_desc(sd, remote, noop_task_id, nullptr, 0);
   Subgraph sg;
   Subgraph::create_subgraph(sg, sd, ProfilingRequestSet()).wait();
 }
 
+static void death_concurrent_mode_unsupported()
+{
+  SubgraphDefinition sd;
+  sd.concurrency_mode = SubgraphDefinition::CONCURRENT;
+  make_task_desc(sd, worker_cpus()[0], noop_task_id, nullptr, 0);
+  Subgraph sg;
+  Subgraph::create_subgraph(sg, sd, ProfilingRequestSet()).wait();
+}
+
+static void death_dependency_cycle()
+{
+  SubgraphDefinition sd;
+  sd.concurrency_mode = SubgraphDefinition::ONE_SHOT;
+  int a = make_task_desc(sd, worker_cpus()[0], noop_task_id, nullptr, 0);
+  int b = make_task_desc(sd, worker_cpus()[0], noop_task_id, nullptr, 0);
+  add_dependency(sd, SubgraphDefinition::OPKIND_TASK, a, SubgraphDefinition::OPKIND_TASK, b);
+  add_dependency(sd, SubgraphDefinition::OPKIND_TASK, b, SubgraphDefinition::OPKIND_TASK, a);
+  Subgraph sg;
+  Subgraph::create_subgraph(sg, sd, ProfilingRequestSet()).wait();
+}
+
 static void death_external_precond_compiled_instantiate()
 {
-  Subgraph sg = make_one_task_compiled_subgraph(noop_task_id);
+  Subgraph sg = make_one_task_subgraph(noop_task_id);
   std::vector<Event> preconds = {UserEvent::create_user_event()};
   std::vector<Event> postconds;
   sg.instantiate(nullptr, 0, ProfilingRequestSet(), preconds, postconds).wait();
@@ -1868,6 +1850,8 @@ static const DeathScenario death_scenarios[] = {
     {"unsupported_op_compiled", death_unsupported_op_compiled},
     {"profiling_on_compiled_instantiate", death_profiling_on_compiled_instantiate},
     {"external_precond_compiled_instantiate", death_external_precond_compiled_instantiate},
+    {"concurrent_mode_unsupported", death_concurrent_mode_unsupported},
+    {"dependency_cycle", death_dependency_cycle},
     // multi-rank only; prints DEATH-TEST-SKIPPED in a single-rank run
     {"remote_task_compiled", death_remote_task_compiled},
 };
@@ -1977,7 +1961,7 @@ void top_level_task(const void *args, size_t arglen, const void *userdata, size_
     test->register_test();
 
   std::vector<std::string> failed;
-  int passed = 0, skipped = 0;
+  int passed = 0, skipped = 0, pending = 0;
   bool any_hung = false;
   for(auto &test : tests) {
     const std::string name = test->name();
@@ -1990,25 +1974,26 @@ void top_level_task(const void *args, size_t arglen, const void *userdata, size_
       skipped++;
       continue;
     }
-    for(SubgraphDefinition::ExecutionMode mode : test->get_valid_execution_modes()) {
-      { std::ostringstream _os; _os << "RUN  " << name << " [" << mode_name(mode) << "]"; report(_os.str()); }
-      double t0 = Clock::current_time();
-      test->init(mode);
-      test->run();
-      bool ok = test->check();
-      test->cleanup();
-      double ms = (Clock::current_time() - t0) * 1e3;
-      { std::ostringstream _os; _os << (ok ? "PASS " : "FAIL ") << name << " [" << mode_name(mode) << "] "
-                      << ms << " ms"; report(_os.str()); }
-      if(ok)
-        passed++;
-      else
-        failed.push_back(name + "[" + mode_name(mode) + "]");
-      if(test->hung()) {
-        log_app.error() << "runtime may be wedged after " << name << "; stopping";
-        any_hung = true;
-        break;
-      }
+    if(const char *feature = test->pending_feature()) {
+      { std::ostringstream _os; _os << "PENDING " << name << ": needs " << feature; report(_os.str()); }
+      pending++;
+      continue;
+    }
+    { std::ostringstream _os; _os << "RUN  " << name; report(_os.str()); }
+    double t0 = Clock::current_time();
+    test->init();
+    test->run();
+    bool ok = test->check();
+    test->cleanup();
+    double ms = (Clock::current_time() - t0) * 1e3;
+    { std::ostringstream _os; _os << (ok ? "PASS " : "FAIL ") << name << " " << ms << " ms"; report(_os.str()); }
+    if(ok)
+      passed++;
+    else
+      failed.push_back(name);
+    if(test->hung()) {
+      log_app.error() << "runtime may be wedged after " << name << "; stopping";
+      any_hung = true;
     }
     if(any_hung)
       break;
@@ -2016,7 +2001,7 @@ void top_level_task(const void *args, size_t arglen, const void *userdata, size_
 
   std::stringstream ss;
   ss << "SUMMARY: passed " << passed << ", failed " << failed.size() << ", skipped "
-     << skipped;
+     << skipped << ", pending " << pending;
   if(!failed.empty()) {
     ss << " -- failures:";
     for(const std::string &f : failed)

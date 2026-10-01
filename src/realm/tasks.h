@@ -250,6 +250,8 @@ namespace Realm {
     void notify_of_new_work();
     // Enqueue a subgraph for execution on this scheduler's subgraph executor.
     void add_subgraph(SubgraphExecutionState *subgraph);
+    // OS NUMA node the workers run on (recorded by the first worker), or -1.
+    int subgraph_numa_node(void) const;
 
   public:
     // the main scheduler loop - lock should be held before calling

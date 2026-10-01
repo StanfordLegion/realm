@@ -1205,6 +1205,11 @@ namespace Realm {
     sched->add_subgraph(subgraph);
   }
 
+  int LocalTaskProcessor::numa_node(void) const
+  {
+    return sched ? sched->subgraph_numa_node() : -1;
+  }
+
   ////////////////////////////////////////////////////////////////////////
   //
   // class LocalCPUProcessor

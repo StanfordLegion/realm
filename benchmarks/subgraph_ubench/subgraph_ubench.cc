@@ -20,8 +20,7 @@
 // Replays one task graph many times three ways and reports the cost per
 // instantiation and per task:
 //   spawn        plain Processor::spawn with event dependencies (baseline)
-//   interpreted  SubgraphDefinition::INTERPRETED
-//   compiled     SubgraphDefinition::COMPILED
+//   compiled     subgraph instantiation
 //
 // The first CPU runs the driver; the graph's tasks use the remaining CPUs.
 //
@@ -34,7 +33,7 @@
 //   -iters I        measured instantiations per subgraph (default 1000)
 //   -warmup W       unmeasured instantiations (default 100)
 //   -work NS        busy-wait per task in nanoseconds (default 0)
-//   -mode M         spawn|interpreted|compiled|all (default all)
+//   -mode M         spawn|compiled|all (default all)
 //   -seed S         seed for the random shape
 //
 // Output lines start with RESULT and are key=value so they can be grepped
@@ -176,11 +175,9 @@ static Dag make_dag(int nprocs)
 // Replay strategies
 //
 
-static Subgraph build_subgraph(const Dag &dag, const std::vector<Processor> &procs,
-                               SubgraphDefinition::ExecutionMode mode)
+static Subgraph build_subgraph(const Dag &dag, const std::vector<Processor> &procs)
 {
   SubgraphDefinition sd;
-  sd.execution_mode = mode;
   sd.concurrency_mode = SubgraphDefinition::INSTANTIATION_ORDER;
   WorkArgs wa{cfg.work_ns};
   for(size_t i = 0; i < dag.size(); i++) {
@@ -328,18 +325,13 @@ void top_level_task(const void *args, size_t arglen, const void *userdata, size_
     Result r = measure_spawn(dag, procs);
     print_result("spawn", true, dag, nprocs, r);
   }
-  for(int m = 0; m < 2; m++) {
-    SubgraphDefinition::ExecutionMode mode =
-        (m == 0) ? SubgraphDefinition::INTERPRETED : SubgraphDefinition::COMPILED;
-    const char *name = (m == 0) ? "interpreted" : "compiled";
-    if(!all && (cfg.mode != name))
-      continue;
+  if(all || (cfg.mode == "compiled")) {
     std::vector<Subgraph> sgs;
     for(int j = 0; j < cfg.k; j++)
-      sgs.push_back(build_subgraph(dag, procs, mode));
+      sgs.push_back(build_subgraph(dag, procs));
     for(int chained = 1; chained >= 0; chained--) {
       Result r = measure_subgraphs(sgs, chained != 0);
-      print_result(name, chained != 0, dag, nprocs, r);
+      print_result("compiled", chained != 0, dag, nprocs, r);
     }
     std::vector<Event> done;
     for(Subgraph &sg : sgs)

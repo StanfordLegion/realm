@@ -26,32 +26,25 @@
 #include "realm/event_impl.h"
 #include "realm/operation.h"
 #include "realm/bgwork.h"
+#include "realm/mutex.h"
 
 #include <queue>
+#include <unordered_map>
+#include <vector>
 
 namespace Realm {
 
   class LocalTaskProcessor;
   class ProcSubgraphExecutor;
-  class ThreadedTaskScheduler;
   class SubgraphExecutionState;
   class SubgraphWorkLauncher;
+  class SubgraphInstantiationCleanup;
 
-  struct SubgraphScheduleEntry {
-    SubgraphDefinition::OpKind op_kind;
-    unsigned op_index;
-    std::vector<std::pair<unsigned, int>> preconditions;
-    unsigned first_interp, num_interps;
-    unsigned intermediate_event_base, intermediate_event_count;
-    bool is_final_event;
-  };
-
-  // Sentinel value for empty entries in the processor-local queues.
+  // Sentinel value for empty slots in the per-processor ready queues.
   constexpr int64_t SUBGRAPH_EMPTY_QUEUE_ENTRY = -1;
+  constexpr size_t SUBGRAPH_CACHE_LINE_BYTES = 64;
 
-  // FlattenedSparseMatrix is a helper class that represents a sparse
-  // matrix in a flattened format for better cache locality. It is
-  // basically a CSR representation of a sparse matrix.
+  // CSR representation of a list of lists, for cache-friendly iteration.
   template <typename T>
   struct FlattenedSparseMatrix {
     FlattenedSparseMatrix() {}
@@ -60,7 +53,7 @@ namespace Realm {
       uint64_t count = 0;
       for(size_t i = 0; i < input.size(); i++) {
         offsets.push_back(count);
-        for(auto &it : input[i]) {
+        for(const T &it : input[i]) {
           data.push_back(it);
           count++;
         }
@@ -76,21 +69,70 @@ namespace Realm {
     std::vector<T> data;
   };
 
+  // CompiledSubgraph is the executable form of a SubgraphDefinition.
+  //
+  // Operations are numbered so that the operations of one processor are
+  // contiguous and processors of one NUMA domain are contiguous. Each
+  // instantiation owns one memory block per NUMA domain holding the mutable
+  // state the executors touch at run time:
+  //  - one precondition counter per operation, placed in the domain of the
+  //    processors that decrement it (the operation's predecessors) when they
+  //    all share one, otherwise in the consuming processor's domain;
+  //  - one ready queue per processor (one slot per operation it runs) and
+  //    the queue's tail index, placed in that processor's domain, each padded
+  //    to a cache line.
+  // Blocks are allocated once per subgraph on the right NUMA node and
+  // recycled across instantiations; `image` is their initial contents.
+  struct CompiledSubgraph {
+    struct Op {
+      SubgraphDefinition::OpKind kind;
+      unsigned index;          // into the definition's list for `kind`
+      int32_t proc;            // index into procs; -1 for operations launched directly
+      int32_t counter_domain;  // index into domains
+      uint32_t counter_offset; // byte offset of the precondition counter in that block
+      bool is_final;           // no successors
+    };
+    struct Proc {
+      Processor proc;
+      LocalTaskProcessor *impl;
+      int32_t domain;         // index into domains
+      uint32_t first_op;      // ops[first_op .. first_op + num_ops) run here
+      uint32_t num_ops;
+      uint32_t queue_offset;  // byte offset of the ready queue in the domain block
+      uint32_t tail_offset;   // byte offset of the queue tail (atomic<uint64_t>)
+      uint32_t initial_ready; // operations ready when the instantiation starts
+    };
+    struct Domain {
+      int numa_node;           // OS NUMA node, or -1 if unknown
+      size_t bytes;            // block size, a multiple of the cache line
+      std::vector<char> image; // initial block contents
+    };
+
+    std::vector<Op> ops;
+    std::vector<Proc> procs;
+    std::vector<Domain> domains;
+    std::unordered_map<Processor, uint32_t> proc_index;
+    FlattenedSparseMatrix<uint32_t> successors; // op -> successor ops
+
+    void clear();
+  };
+
   class SubgraphImpl {
   public:
     SubgraphImpl();
-
     ~SubgraphImpl();
 
     void init(ID _me, int _owner);
 
+    // used by the dynamic table that allocates SubgraphImpls
     static ID make_id(const SubgraphImpl &dummy, int owner, ID::IDType index)
     {
       return ID::make_subgraph(owner, 0, index);
     }
 
-    // compile/analyze the subgraph
-    bool compile(void);
+    // Compiles `defn`, aborting with a message naming the operation and
+    // feature for anything unsupported.
+    void compile(void);
 
     void instantiate(const void *args, size_t arglen, const ProfilingRequestSet &prs,
                      span<const Event> preconditions, span<const Event> postconditions,
@@ -110,90 +152,6 @@ namespace Realm {
       UserEvent to_trigger;
     };
 
-  protected:
-    // Fields populated by the compilation step in the compiled
-    // execution mode of subgraphs.
-
-    // Maintain the processors and a mapping from each processor its index.
-    // We extract the LocalTaskProcessor* implementations from each processor
-    // so that we don't have to query the runtime for these during the execution
-    // of the subgraph.
-    std::vector<Processor> subgraph_processors;
-    std::vector<LocalTaskProcessor *> subgraph_processor_impls;
-    std::unordered_map<Processor, int32_t> processor_to_index;
-
-    struct SubgraphOperationDesc {
-      SubgraphOperationDesc(SubgraphDefinition::OpKind _op_kind, unsigned _op_index,
-                            bool _is_final_event, bool _is_async)
-        : op_kind(_op_kind)
-        , op_index(_op_index)
-        , proc_index(-1)
-        , is_final_event(_is_final_event)
-        , is_async(_is_async)
-      {}
-
-      SubgraphDefinition::OpKind op_kind;
-      unsigned op_index;
-      // Index into subgraph_processors of the processor running this
-      // operation, so edge propagation needs no lookups.
-      int32_t proc_index;
-      bool is_final_event;
-      bool is_async;
-    };
-    // Holds all operations in the compiled subgraph.
-    std::vector<SubgraphOperationDesc> compiled_subgraph_operations;
-
-    // EdgeInfo contains the necessary metadata about an edge
-    // in the compiled subgraph to trigger dependencies.
-    struct EdgeInfo {
-      EdgeInfo(uint64_t _index)
-        : index(_index)
-      {}
-      uint64_t index;
-    };
-    // operation_{incoming,outgoing}_edges contains the edges that
-    // every operation in compiled_subgraph_operations needs to
-    // {wait for, notify} for when the operation {begins, finishes}.
-    FlattenedSparseMatrix<EdgeInfo> operation_incoming_edges;
-    FlattenedSparseMatrix<EdgeInfo> operation_outgoing_edges;
-    // operation_precondition_counters contains for each entry of
-    // compiled_subgraph_operations the number of predecessor operations
-    // that must complete before the subgraph operation can begin.
-    // This data will not be modified,
-    std::vector<int64_t> operation_precondition_counters;
-
-    // initial_processor_queues contains the initial queue entries
-    // for each processor.
-    FlattenedSparseMatrix<int64_t> initial_processor_queues;
-    // initial_queue_entry_counts contains the number of initial
-    // queue entries for each processor.
-    std::vector<int64_t> initial_queue_entry_counts;
-
-    friend class ProcSubgraphExecutor;
-    friend class SubgraphExecutionState;
-    friend class SubgraphWorkLauncher;
-    friend class Subgraph;
-
-    // Lifecycle state for compiled subgraphs, all protected by lifecycle_lock:
-    //  - for INSTANTIATION_ORDER, the finish event of the most recent
-    //    instantiation, which the next instantiation must wait for;
-    //  - the number of instantiations whose execution state has not been
-    //    released yet;
-    //  - a pending destroy request, carried out by whoever observes the
-    //    outstanding count reach zero.
-    Mutex lifecycle_lock;
-    Event previous_instantiation_completion = Event::NO_EVENT;
-    int64_t outstanding_instantiations = 0;
-    bool destroy_requested = false;
-    Event destroy_wait_on = Event::NO_EVENT;
-    UserEvent destroy_done = UserEvent::NO_USER_EVENT;
-
-    // Performs (or defers until wait_on) the destruction once no
-    // instantiations are outstanding, returning the event to hand back to
-    // the caller of Subgraph::destroy.
-    Event complete_destroy(Event wait_on, UserEvent done);
-
-  public:
     // Requests destruction. The returned event triggers once every
     // outstanding instantiation has released its resources and wait_on has
     // triggered. Instantiating after this is an error.
@@ -201,14 +159,35 @@ namespace Realm {
     // Called when an instantiation's execution state has been released.
     void instantiation_released(void);
 
+    // Per-instantiation memory blocks (one per NUMA domain), recycled.
+    void acquire_blocks(std::vector<char *> &blocks);
+    void release_blocks(std::vector<char *> &blocks);
+
   public:
     ID me;
     SubgraphImpl *next_free;
     SubgraphDefinition *defn;
-    std::vector<SubgraphScheduleEntry> interpreted_schedule;
-    size_t num_intermediate_events, num_final_events, max_preconditions;
-
     DeferredDestroy deferred_destroy;
+    CompiledSubgraph compiled;
+
+  protected:
+    Event complete_destroy(Event wait_on, UserEvent done);
+
+    // Lifecycle state, protected by lifecycle_lock: the finish event of the
+    // most recent instantiation (INSTANTIATION_ORDER chains the next one
+    // after it), the number of instantiations whose state is still alive,
+    // and a pending destroy request carried out by whoever observes the
+    // count reach zero.
+    Mutex lifecycle_lock;
+    Event previous_instantiation_completion = Event::NO_EVENT;
+    int64_t outstanding_instantiations = 0;
+    bool destroy_requested = false;
+    Event destroy_wait_on = Event::NO_EVENT;
+    UserEvent destroy_done = UserEvent::NO_USER_EVENT;
+
+    Mutex block_pool_lock;
+    std::vector<std::vector<char *>> block_pool;
+    void free_blocks(std::vector<char *> &blocks);
   };
 
   // active messages
@@ -280,15 +259,18 @@ namespace Realm {
     std::queue<SubgraphInstantiationCleanup *> pending_cleanups;
   };
 
-  // SubgraphExecutionState is the per-instantiation state of a compiled
-  // subgraph: fresh copies of the precondition counters and per-processor
-  // ready queues, plus the finish tracking.
+  // SubgraphExecutionState is the per-instantiation state of a subgraph:
+  // the NUMA-placed blocks described by CompiledSubgraph plus finish tracking.
   class SubgraphExecutionState {
   public:
     SubgraphExecutionState(SubgraphImpl *subgraph, const void *args, size_t arglen,
-                           UserEvent finish_event);
+                           Event finish_event);
     ~SubgraphExecutionState();
     SubgraphImpl *get_subgraph() const { return subgraph; }
+
+    atomic<int64_t> &counter(uint32_t op) const;
+    atomic<int64_t> *queue(uint32_t proc) const;
+    atomic<uint64_t> &tail(uint32_t proc) const;
 
   private:
     friend class ProcSubgraphExecutor;
@@ -296,36 +278,21 @@ namespace Realm {
 
     SubgraphImpl *subgraph;
 
-    // Local copy of the instantiation arguments (input to interpolation,
-    // which compiled subgraphs do not support yet).
+    // Local copy of the instantiation arguments (input to interpolation).
     void *args;
     size_t arglen;
 
-    // Number of processors (and, in the future, asynchronous work items)
-    // still working on this instantiation. Whoever brings it to zero
-    // triggers finish_event.
+    // Number of processors (and, later, asynchronous operations) still
+    // working on this instantiation. Whoever brings it to zero triggers
+    // finish_event.
     atomic<int64_t> finish_counter;
-    UserEvent finish_event;
+    Event finish_event;
 
-    // Remaining predecessor count for each entry of
-    // SubgraphImpl::compiled_subgraph_operations.
-    atomic<int64_t> *preconditions;
-
-    // All per-processor ready queues, laid out contiguously using the
-    // offsets in SubgraphImpl::initial_processor_queues. A slot holds an
-    // index into compiled_subgraph_operations or SUBGRAPH_EMPTY_QUEUE_ENTRY.
-    atomic<int64_t> *processor_queues;
-
-    // Per-processor producer state, one cache line each.
-    struct alignas(64) ProcessorLocalState {
-      // Next free slot, relative to the processor's queue region.
-      atomic<uint64_t> queue_back;
-    };
-    std::vector<ProcessorLocalState> processor_state;
+    std::vector<char *> blocks; // one per CompiledSubgraph::Domain
   };
 
-  // ProcSubgraphExecutor is the per-scheduler component that feeds compiled
-  // subgraph tasks to a processor's scheduler loop.
+  // ProcSubgraphExecutor is the per-scheduler component that feeds subgraph
+  // tasks to a processor's scheduler loop.
   //
   // Threading: enqueue_subgraph may be called from any thread. peek and
   // dequeue must be called with the owning scheduler's lock held; execute
@@ -342,11 +309,9 @@ namespace Realm {
     ProcSubgraphExecutor(Processor proc);
     ~ProcSubgraphExecutor();
 
-    // A unit of work handed to the scheduler loop.
     struct ReadyEntry {
       SubgraphExecutionState *state;
-      uint64_t op_index;       // into SubgraphImpl::compiled_subgraph_operations
-      int32_t proc_index;      // this processor's index within the subgraph
+      uint32_t op;             // into CompiledSubgraph::ops
       bool last_for_processor; // nothing more for this processor in this instantiation
     };
 
@@ -373,17 +338,24 @@ namespace Realm {
     bool keep_polling(void);
     static int poll_budget_us;
 
+    // Called by each worker thread of the owning scheduler when it starts;
+    // records the NUMA node the processor's workers run on.
+    void note_worker_started(void);
+    // OS NUMA node of this processor's workers, or -1 if unknown.
+    int numa_node(void) const { return numa_node_; }
+
   private:
     struct Cursor {
       SubgraphExecutionState *state;
-      uint64_t base;  // global index of this processor's first queue slot
-      uint64_t front; // next slot to read, relative to base
-      uint64_t end;   // number of slots (== operations for this processor)
-      int32_t proc_index;
+      atomic<int64_t> *queue; // this processor's ready queue in the state
+      uint32_t front;         // next slot to read
+      uint32_t end;           // number of slots (== operations for this processor)
+      uint32_t proc;          // this processor's index within the subgraph
     };
     void absorb_pending(void);
 
     Processor proc;
+    int numa_node_;
 
     // Instantiations handed to this processor but not yet picked up by the
     // scheduler loop. Written by launchers, drained under the scheduler lock.
