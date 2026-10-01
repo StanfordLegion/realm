@@ -311,6 +311,7 @@ foreach(
   profiling_on_compiled_instantiate
   external_precond_compiled_instantiate
   unregistered_task
+  indirection_type_mismatch
   concurrent_mode_unsupported
   dependency_cycle
 )

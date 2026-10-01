@@ -4418,6 +4418,14 @@ namespace Realm {
 
   bool TransferDesc::perform_analysis(TransferOperation *op, TimeLimit work_until)
   {
+    if(!analyze(work_until))
+      return false;
+    // start allocating intermediate buffers
+    return op->allocate_ibs(work_until);
+  }
+
+  bool TransferDesc::analyze(TimeLimit work_until)
+  {
     if(!analysis_init_done) {
       // initialize profiling data
       prof_usage.source = Memory::NO_MEMORY;
@@ -4430,7 +4438,7 @@ namespace Realm {
         analysis_domain_size = 0;
         analysis_init_done = true;
         analysis_field_idx = srcs.size();
-        return op->allocate_ibs(work_until);
+        return true;
       }
 
       // first, scan over the sources and figure out how much space we need
@@ -4466,7 +4474,7 @@ namespace Realm {
     // if we've already finished enumerating per-field paths on a prior call,
     //  everything below is already done and we go straight to allocate_ibs
     if(analysis_field_idx >= srcs.size()) {
-      return op->allocate_ibs(work_until);
+      return true;
     }
 
     size_t domain_size = analysis_domain_size;
@@ -5016,8 +5024,7 @@ namespace Realm {
       }
     }
 
-    // start allocating intermediate buffers
-    return op->allocate_ibs(work_until);
+    return true;
   }
 
   ////////////////////////////////////////////////////////////////////////
@@ -5120,7 +5127,15 @@ namespace Realm {
   TransferOperation::TransferOperation(TransferDesc &_desc, Event _precondition,
                                        GenEventImpl *_finish_event,
                                        EventImpl::gen_t _finish_gen, int _priority)
-    : Operation(_finish_event, _finish_gen, _desc.prs)
+    : TransferOperation(_desc, _precondition, _finish_event, _finish_gen, _priority,
+                        _desc.prs)
+  {}
+
+  TransferOperation::TransferOperation(TransferDesc &_desc, Event _precondition,
+                                       GenEventImpl *_finish_event,
+                                       EventImpl::gen_t _finish_gen, int _priority,
+                                       const ProfilingRequestSet &_requests)
+    : Operation(_finish_event, _finish_gen, _requests)
     , deferred_start(this)
     , desc(_desc)
     , precondition(_precondition)

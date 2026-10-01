@@ -40,6 +40,7 @@ namespace Realm {
   class SubgraphExecutionState;
   class SubgraphWorkLauncher;
   class SubgraphInstantiationCleanup;
+  class TransferDesc;
 
   // Sentinel value for empty slots in the per-processor ready queues.
   constexpr int64_t SUBGRAPH_EMPTY_QUEUE_ENTRY = -1;
@@ -167,6 +168,10 @@ namespace Realm {
     std::vector<Op> ops;
     uint32_t num_direct_ops;          // directly launched operations, numbered last
     std::vector<uint32_t> task_ops;   // task index -> op
+    std::vector<uint32_t> copy_ops;   // copy index -> op
+    // One analyzed transfer plan per copy, shared by all instantiations
+    // (a reference is held; released by clear()).
+    std::vector<TransferDesc *> copy_plans;
     bool any_task_profiling;          // some task carries profiling requests
     std::vector<uint32_t> roots; // operations without in-graph predecessors
     std::vector<Proc> procs;
@@ -403,6 +408,9 @@ namespace Realm {
     void start(void);
     // An operation's last precondition has been satisfied.
     void op_ready(uint32_t op);
+    // Starts a copy operation on its compiled plan; it completes through
+    // op_body_done/op_finished when the transfer finishes.
+    void launch_copy(uint32_t op);
     // An operation's function has returned (or it was skipped because an
     // input it depends on was poisoned): releases the successors that may
     // start now.
@@ -457,6 +465,9 @@ namespace Realm {
     // Profiling, only populated when some operation requested it.
     std::vector<int32_t> prof_index; // per op, -1 if none
     std::vector<std::unique_ptr<OpProfiling>> profiling;
+    // Per copy, the definition's requests merged with this instantiation's;
+    // empty when the instantiation added none (the plan's requests apply).
+    std::vector<ProfilingRequestSet> copy_prs;
   };
 
   // ProcSubgraphExecutor is the per-scheduler component that feeds subgraph

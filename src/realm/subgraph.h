@@ -129,17 +129,38 @@ namespace Realm {
       ProfilingRequestSet prs;
     };
 
+    // A copy indirection (some CopyIndirection<N,T>::Base) with the index
+    // space type it belongs to, so that CopyDesc can carry indirections for
+    // any dimension and coordinate type without being a template. The
+    // object it points to must stay valid until Subgraph::create_subgraph
+    // returns; the compiled plan keeps what it needs.
+    struct IndirectionRef {
+      const void *ptr;
+      TypeTag type_tag; // NT_TemplateHelper::encode_tag<N,T>() of the copy's space
+    };
+
     struct CopyDesc {
       CopyDesc(); // initializes all fields
 
-      // interpolatable: none?
+      // Compiled once into a transfer plan and replayed by every
+      // instantiation (fresh transfer descriptors each time). The plan
+      // depends on the instances, so they must outlive the subgraph.
+      // interpolatable: none
       IndexSpaceGeneric space; // type-erase here to avoid template explosion
       std::vector<CopySrcDstField> srcs;
       std::vector<CopySrcDstField> dsts;
+      // indirections referenced by the fields' indirect_index, see
+      // add_indirection
+      std::vector<IndirectionRef> indirects;
       ProfilingRequestSet prs;
+      // applied to every destination field that has no reduction of its own
       ReductionOpID redop_id /*= 0*/;
       bool red_fold /*= false*/;
+      // added to the instantiation's priority
       int priority /*= 0*/;
+
+      template <int N, typename T>
+      CopyDesc &add_indirection(const typename CopyIndirection<N, T>::Base *indirection);
     };
 
     struct ArrivalDesc {

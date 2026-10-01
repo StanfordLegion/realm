@@ -72,6 +72,7 @@ struct BenchConfig {
   long work_ns = 0;
   std::string mode = "all";
   unsigned seed = 1;
+  int copy_elems = 256; // ints per copy for -shape copychain
 };
 static BenchConfig cfg;
 
@@ -235,6 +236,96 @@ struct Result {
   double inst_us;  // end-to-end wall time, per instantiation
 };
 
+////////////////////////////////////////////////////////////////////////
+//
+// Copy chains: n copies alternating A->B, B->A on two sysmem instances,
+// as individual copies (plan computed every time) and as a compiled
+// subgraph (plan computed once, transfer descriptors created per replay).
+//
+
+enum
+{
+  FID_X = 100
+};
+
+struct CopyBench {
+  IndexSpace<1> is;
+  RegionInstance a, b;
+  std::vector<CopySrcDstField> src_a, dst_a, src_b, dst_b;
+};
+
+static void setup_copy_bench(CopyBench &cb)
+{
+  Memory mem = Machine::MemoryQuery(Machine::get_machine())
+                   .only_kind(Memory::SYSTEM_MEM)
+                   .has_affinity_to(Processor::get_executing_processor())
+                   .first();
+  assert(mem.exists());
+  cb.is = Rect<1>(0, cfg.copy_elems - 1);
+  std::map<FieldID, size_t> sizes = {{FID_X, sizeof(int)}};
+  RegionInstance::create_instance(cb.a, mem, cb.is, sizes, 0, ProfilingRequestSet()).wait();
+  RegionInstance::create_instance(cb.b, mem, cb.is, sizes, 0, ProfilingRequestSet()).wait();
+  cb.src_a.resize(1);
+  cb.src_a[0].set_field(cb.a, FID_X, sizeof(int));
+  cb.dst_a = cb.src_a;
+  cb.src_b.resize(1);
+  cb.src_b[0].set_field(cb.b, FID_X, sizeof(int));
+  cb.dst_b = cb.src_b;
+  int zero = 0;
+  cb.is.fill(cb.dst_a, ProfilingRequestSet(), &zero, sizeof(zero)).wait();
+}
+
+static Event replay_copy_spawn(const CopyBench &cb, Event chain)
+{
+  for(int i = 0; i < cfg.n; i++)
+    chain = cb.is.copy((i % 2 == 0) ? cb.src_a : cb.src_b,
+                       (i % 2 == 0) ? cb.dst_b : cb.dst_a, ProfilingRequestSet(), chain);
+  return chain;
+}
+
+static Subgraph build_copy_subgraph(const CopyBench &cb)
+{
+  SubgraphDefinition sd;
+  sd.concurrency_mode = SubgraphDefinition::INSTANTIATION_ORDER;
+  for(int i = 0; i < cfg.n; i++) {
+    SubgraphDefinition::CopyDesc cd;
+    cd.space = cb.is;
+    cd.srcs = (i % 2 == 0) ? cb.src_a : cb.src_b;
+    cd.dsts = (i % 2 == 0) ? cb.dst_b : cb.dst_a;
+    sd.copies.push_back(cd);
+    if(i > 0) {
+      SubgraphDefinition::Dependency dep;
+      dep.src_op_kind = SubgraphDefinition::OPKIND_COPY;
+      dep.src_op_index = i - 1;
+      dep.tgt_op_kind = SubgraphDefinition::OPKIND_COPY;
+      dep.tgt_op_index = i;
+      sd.dependencies.push_back(dep);
+    }
+  }
+  Subgraph sg;
+  Subgraph::create_subgraph(sg, sd, ProfilingRequestSet()).wait();
+  return sg;
+}
+
+static Result measure_copy_spawn(const CopyBench &cb)
+{
+  Event chain = Event::NO_EVENT;
+  for(int i = 0; i < cfg.warmup; i++)
+    chain = replay_copy_spawn(cb, chain);
+  chain.wait();
+  chain = Event::NO_EVENT;
+  double t0 = Clock::current_time();
+  for(int i = 0; i < cfg.iters; i++)
+    chain = replay_copy_spawn(cb, chain);
+  double t1 = Clock::current_time();
+  chain.wait();
+  double t2 = Clock::current_time();
+  Result r;
+  r.issue_us = (t1 - t0) * 1e6 / cfg.iters;
+  r.inst_us = (t2 - t0) * 1e6 / cfg.iters;
+  return r;
+}
+
 static void print_result(const char *mode, bool chained, const Dag &dag, int nprocs,
                          const Result &r)
 {
@@ -313,6 +404,35 @@ void top_level_task(const void *args, size_t arglen, const void *userdata, size_
     procs.resize(cfg.p);
   const int nprocs = procs.size();
 
+  if(cfg.shape == "copychain") {
+    Dag dag; // only for printing
+    for(int i = 0; i < cfg.n; i++)
+      dag.add_op(0, (i > 0) ? std::vector<int>{i - 1} : std::vector<int>{});
+    dag.finalize();
+    printf("subgraph_ubench: shape=copychain copies=%d elems=%d (%zu bytes) iters=%d "
+           "warmup=%d\n",
+           cfg.n, cfg.copy_elems, size_t(cfg.copy_elems) * sizeof(int), cfg.iters,
+           cfg.warmup);
+    fflush(stdout);
+    CopyBench cb;
+    setup_copy_bench(cb);
+    const bool all = (cfg.mode == "all");
+    if(all || (cfg.mode == "spawn")) {
+      Result r = measure_copy_spawn(cb);
+      print_result("spawn", true, dag, 0, r);
+    }
+    if(all || (cfg.mode == "compiled")) {
+      std::vector<Subgraph> sgs(1, build_copy_subgraph(cb));
+      Result r = measure_subgraphs(sgs, true);
+      print_result("compiled", true, dag, 0, r);
+      sgs[0].destroy().wait();
+    }
+    cb.a.destroy();
+    cb.b.destroy();
+    Runtime::get_runtime().shutdown(Event::NO_EVENT, 0);
+    return;
+  }
+
   Dag dag = make_dag(nprocs);
   printf("subgraph_ubench: shape=%s ops=%zu edges=%zu procs=%d k=%d iters=%d warmup=%d "
          "work_ns=%ld\n",
@@ -372,6 +492,8 @@ int main(int argc, char **argv)
       cfg.mode = argv[++i];
     else if(!strcmp(argv[i], "-seed") && (i + 1 < argc))
       cfg.seed = strtoul(argv[++i], 0, 10);
+    else if(!strcmp(argv[i], "-copy_elems") && (i + 1 < argc))
+      cfg.copy_elems = atoi(argv[++i]);
   }
 
   rt.register_task(TOP_LEVEL_TASK, top_level_task);

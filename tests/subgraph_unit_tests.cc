@@ -86,6 +86,7 @@ static int32_t task_id_counter = TOP_LEVEL_TASK + 1;
 enum
 {
   FID_DATA = 100,
+  FID_PTR = 101,
 };
 
 // Common reduction operation IDs.
@@ -671,7 +672,6 @@ class SimpleCopyTest : public SubgraphTest {
 public:
   std::string name() const override { return "SimpleCopyTest"; }
 
-  const char *pending_feature() const override { return "copies and fills"; }
 
   bool can_run() override { return sysmem().exists(); }
 
@@ -2752,6 +2752,533 @@ private:
 
 #endif // SUBGRAPH_TESTS_CUDA
 
+
+////////////////////////////////////////////////////////////////////////
+//
+// Copies: compiled once into a transfer plan, replayed per instantiation.
+//
+
+// Every replay writes a different value, copies it and reads it back: the
+// shared plan must move the right data every time, and the reader must see
+// it (the copy completes asynchronously through the DMA system).
+class CopyReplayTest : public SubgraphTest {
+public:
+  std::string name() const override { return "CopyReplay"; }
+
+  struct WriterArgs {
+    RegionInstance inst;
+    int value;
+  };
+  struct ReaderArgs {
+    RegionInstance inst;
+    std::atomic<int64_t> *slots;
+    int slot;
+  };
+
+  static void writer_task(const void *args, size_t arglen, const void *userdata,
+                          size_t userlen, Processor p)
+  {
+    const WriterArgs *a = static_cast<const WriterArgs *>(args);
+    AffineAccessor<int, 1> acc(a->inst, FID_DATA);
+    for(int i = 0; i < N; i++)
+      acc[i] = a->value + i;
+  }
+
+  static void reader_task(const void *args, size_t arglen, const void *userdata,
+                          size_t userlen, Processor p)
+  {
+    const ReaderArgs *a = static_cast<const ReaderArgs *>(args);
+    AffineAccessor<int, 1> acc(a->inst, FID_DATA);
+    bool ok = true;
+    for(int i = 0; i < N; i++)
+      ok = ok && (acc[i] == acc[0] + i);
+    a->slots[a->slot].store(ok ? acc[0] : -2);
+  }
+
+  void register_test() override
+  {
+    writer_task_id = task_id_counter++;
+    reader_task_id = task_id_counter++;
+    Runtime::get_runtime().register_task(writer_task_id, writer_task);
+    Runtime::get_runtime().register_task(reader_task_id, reader_task);
+  }
+
+  bool can_run() override { return (worker_cpus().size() >= 1) && sysmem().exists(); }
+
+  void init() override
+  {
+    Processor cpu = worker_cpus()[0];
+    IndexSpace<1> is = Rect<1>(0, N - 1);
+    std::map<FieldID, size_t> field_sizes = {{FID_DATA, sizeof(int)}};
+    RegionInstance::create_instance(src, sysmem(), is, field_sizes, 0, ProfilingRequestSet())
+        .wait();
+    RegionInstance::create_instance(dst, sysmem(), is, field_sizes, 0, ProfilingRequestSet())
+        .wait();
+    slots = std::vector<std::atomic<int64_t>>(replays);
+    for(auto &s : slots)
+      s.store(-1);
+
+    SubgraphDefinition sd;
+    sd.concurrency_mode = SubgraphDefinition::INSTANTIATION_ORDER;
+    WriterArgs w{src, 0};
+    ReaderArgs r{dst, slots.data(), 0};
+    int tw = make_task_desc(sd, cpu, writer_task_id, &w, sizeof(w));
+    int c = make_copy_desc(sd, is, src, dst, FID_DATA, sizeof(int));
+    int tr = make_task_desc(sd, cpu, reader_task_id, &r, sizeof(r));
+    add_dependency(sd, SubgraphDefinition::OPKIND_TASK, tw, SubgraphDefinition::OPKIND_COPY,
+                   c);
+    add_dependency(sd, SubgraphDefinition::OPKIND_COPY, c, SubgraphDefinition::OPKIND_TASK,
+                   tr);
+    add_dependency(sd, SubgraphDefinition::OPKIND_COPY, c,
+                   SubgraphDefinition::OPKIND_EXT_POSTCOND, 0);
+    // instantiation args: {int value; int slot}
+    SubgraphDefinition::Interpolation iv, is_;
+    iv.offset = 0;
+    iv.bytes = sizeof(int);
+    iv.target_kind = SubgraphDefinition::Interpolation::TARGET_TASK_ARGS;
+    iv.target_index = tw;
+    iv.target_offset = offsetof(WriterArgs, value);
+    iv.redop_id = 0;
+    sd.interpolations.push_back(iv);
+    is_.offset = sizeof(int);
+    is_.bytes = sizeof(int);
+    is_.target_kind = SubgraphDefinition::Interpolation::TARGET_TASK_ARGS;
+    is_.target_index = tr;
+    is_.target_offset = offsetof(ReaderArgs, slot);
+    is_.redop_id = 0;
+    sd.interpolations.push_back(is_);
+    Subgraph::create_subgraph(sg, sd, ProfilingRequestSet()).wait();
+  }
+
+  void run() override
+  {
+    double t0 = Clock::current_time();
+    Event last = Event::NO_EVENT;
+    std::vector<Event> preconds;
+    posts.resize(replays);
+    for(int i = 0; i < replays; i++) {
+      int args[2] = {1000 + i, i};
+      std::vector<Event> post(1);
+      last = sg.instantiate(args, sizeof(args), ProfilingRequestSet(), preconds, post);
+      posts[i] = post[0];
+    }
+    completed = wait_with_timeout(last, config.hang_timeout);
+    elapsed = Clock::current_time() - t0;
+  }
+
+  bool check() override
+  {
+    bool ok = completed;
+    int bad = 0;
+    for(int i = 0; i < replays; i++)
+      if(slots[i].load() != 1000 + i)
+        bad++;
+    for(int i = 0; i < replays; i++)
+      ok = ok && posts[i].has_triggered();
+    ok = ok && (bad == 0);
+    std::ostringstream os;
+    os << name() << ": " << replays << " replays in " << elapsed * 1e3 << " ms ("
+       << elapsed * 1e6 / replays << " us each), " << bad << " wrong";
+    if(ok)
+      report(os.str());
+    else
+      log_app.error() << os.str() << " completed=" << completed;
+    return ok;
+  }
+
+  void cleanup() override
+  {
+    if(completed)
+      sg.destroy().wait();
+    src.destroy();
+    dst.destroy();
+  }
+
+  bool hung() const override { return !completed; }
+
+private:
+  static constexpr int N = 64, replays = 50;
+  int writer_task_id = 0, reader_task_id = 0;
+  RegionInstance src, dst;
+  std::vector<std::atomic<int64_t>> slots;
+  std::vector<Event> posts;
+  Subgraph sg;
+  double elapsed = 0;
+  bool completed = false;
+};
+
+// Profiling requests on copies, from the definition and from the
+// instantiation, are answered by Realm's transfer machinery.
+class CopyProfilingTest;
+struct CopyProfPayload {
+  CopyProfilingTest *test;
+  int which;
+};
+static int copy_prof_response_task_id = 0;
+static void copy_prof_response_task(const void *args, size_t arglen, const void *userdata,
+                                    size_t userlen, Processor p);
+
+class CopyProfilingTest : public SubgraphTest {
+public:
+  std::string name() const override { return "CopyProfiling"; }
+  bool can_run() override { return (worker_cpus().size() >= 1) && sysmem().exists(); }
+
+  void handle(const ProfilingResponse &resp, int which)
+  {
+    using namespace ProfilingMeasurements;
+    int problems = 0;
+    OperationTimeline tl;
+    if(!resp.get_measurement(tl) || !(tl.start_time <= tl.end_time) ||
+       !(tl.end_time <= tl.complete_time))
+      problems++;
+    if(which == 0) {
+      OperationMemoryUsage mu;
+      if(!resp.get_measurement(mu) || (mu.target != sysmem()) || (mu.size != N * sizeof(int)))
+        problems++;
+    } else {
+      OperationCopyInfo ci;
+      if(!resp.get_measurement(ci) || ci.inst_info.empty())
+        problems++;
+    }
+    bad.fetch_add(problems);
+    responses.fetch_add(1);
+  }
+
+  void init() override
+  {
+    IndexSpace<1> is = Rect<1>(0, N - 1);
+    std::map<FieldID, size_t> field_sizes = {{FID_DATA, sizeof(int)}};
+    RegionInstance::create_instance(src, sysmem(), is, field_sizes, 0, ProfilingRequestSet())
+        .wait();
+    RegionInstance::create_instance(dst, sysmem(), is, field_sizes, 0, ProfilingRequestSet())
+        .wait();
+    responses.store(0);
+    bad.store(0);
+    SubgraphDefinition sd;
+    sd.concurrency_mode = SubgraphDefinition::ONE_SHOT;
+    int v = 3;
+    int f = make_fill_desc(sd, is, src, FID_DATA, &v, sizeof(v));
+    int c = make_copy_desc(sd, is, src, dst, FID_DATA, sizeof(int));
+    add_dependency(sd, SubgraphDefinition::OPKIND_COPY, f, SubgraphDefinition::OPKIND_COPY,
+                   c);
+    CopyProfPayload p0{this, 0};
+    sd.copies[c]
+        .prs.add_request(worker_cpus()[0], copy_prof_response_task_id, &p0, sizeof(p0))
+        .add_measurement<ProfilingMeasurements::OperationTimeline>()
+        .add_measurement<ProfilingMeasurements::OperationMemoryUsage>();
+    CopyProfPayload p1{this, 1};
+    ProfilingRequestSet prs1;
+    prs1.add_request(worker_cpus()[0], copy_prof_response_task_id, &p1, sizeof(p1))
+        .add_measurement<ProfilingMeasurements::OperationTimeline>()
+        .add_measurement<ProfilingMeasurements::OperationCopyInfo>();
+    iprof.copies.emplace_back(unsigned(f), prs1);
+    Subgraph::create_subgraph(sg, sd, ProfilingRequestSet()).wait();
+  }
+
+  void run() override
+  {
+    completed = wait_with_timeout(sg.instantiate(nullptr, 0, ProfilingRequestSet(), iprof),
+                                  config.hang_timeout);
+    got_responses = poll_until([&] { return responses.load() >= 2; }, config.hang_timeout);
+  }
+
+  bool check() override
+  {
+    AffineAccessor<int, 1> acc(dst, FID_DATA);
+    bool data_ok = true;
+    for(int i = 0; i < N; i++)
+      data_ok = data_ok && (acc[i] == 3);
+    bool ok = completed && got_responses && (responses.load() == 2) && (bad.load() == 0) &&
+              data_ok;
+    if(!ok)
+      log_app.error() << name() << ": completed=" << completed << " responses="
+                      << responses.load() << " problems=" << bad.load()
+                      << " data_ok=" << data_ok;
+    return ok;
+  }
+
+  void cleanup() override
+  {
+    if(completed)
+      sg.destroy().wait();
+    src.destroy();
+    dst.destroy();
+  }
+
+  bool hung() const override { return !completed; }
+
+private:
+  static constexpr int N = 32;
+  RegionInstance src, dst;
+  std::atomic<int> responses{0}, bad{0};
+  SubgraphInstantiationProfiling iprof;
+  Subgraph sg;
+  bool completed = false, got_responses = false;
+};
+
+static void copy_prof_response_task(const void *args, size_t arglen, const void *userdata,
+                                    size_t userlen, Processor p)
+{
+  ProfilingResponse resp(args, arglen);
+  const CopyProfPayload *pl = static_cast<const CopyProfPayload *>(resp.user_data());
+  pl->test->handle(resp, pl->which);
+}
+
+// A copy behind a poisoned precondition is skipped (its destination keeps
+// its old contents) while an independent copy still runs.
+class CopyPoisonTest : public SubgraphTest {
+public:
+  std::string name() const override { return "CopyPoison"; }
+  bool can_run() override { return sysmem().exists(); }
+
+  void init() override
+  {
+    IndexSpace<1> is = Rect<1>(0, N - 1);
+    std::map<FieldID, size_t> field_sizes = {{FID_DATA, sizeof(int)}};
+    RegionInstance::create_instance(a, sysmem(), is, field_sizes, 0, ProfilingRequestSet())
+        .wait();
+    RegionInstance::create_instance(b, sysmem(), is, field_sizes, 0, ProfilingRequestSet())
+        .wait();
+    int zero = 0;
+    std::vector<CopySrcDstField> da(1), db(1);
+    da[0].set_field(a, FID_DATA, sizeof(int));
+    db[0].set_field(b, FID_DATA, sizeof(int));
+    is.fill(da, ProfilingRequestSet(), &zero, sizeof(zero)).wait();
+    is.fill(db, ProfilingRequestSet(), &zero, sizeof(zero)).wait();
+    SubgraphDefinition sd;
+    sd.concurrency_mode = SubgraphDefinition::ONE_SHOT;
+    int va = 11, vb = 22;
+    int fa = make_fill_desc(sd, is, a, FID_DATA, &va, sizeof(va));
+    int fb = make_fill_desc(sd, is, b, FID_DATA, &vb, sizeof(vb));
+    add_dependency(sd, SubgraphDefinition::OPKIND_EXT_PRECOND, 0,
+                   SubgraphDefinition::OPKIND_COPY, fa);
+    add_dependency(sd, SubgraphDefinition::OPKIND_COPY, fa,
+                   SubgraphDefinition::OPKIND_EXT_POSTCOND, 0);
+    add_dependency(sd, SubgraphDefinition::OPKIND_COPY, fb,
+                   SubgraphDefinition::OPKIND_EXT_POSTCOND, 1);
+    Subgraph::create_subgraph(sg, sd, ProfilingRequestSet()).wait();
+  }
+
+  void run() override
+  {
+    UserEvent bad = UserEvent::create_user_event();
+    bad.cancel();
+    std::vector<Event> pre = {bad};
+    std::vector<Event> post(2);
+    Event e = sg.instantiate(nullptr, 0, ProfilingRequestSet(), pre, post);
+    completed = wait_with_timeout(e, config.hang_timeout, &finish_poisoned);
+    if(completed) {
+      post0_done = wait_with_timeout(post[0], config.hang_timeout, &post0_poisoned);
+      post1_done = wait_with_timeout(post[1], config.hang_timeout, &post1_poisoned);
+    }
+  }
+
+  bool check() override
+  {
+    AffineAccessor<int, 1> acc_a(a, FID_DATA), acc_b(b, FID_DATA);
+    bool ok = completed && finish_poisoned && post0_done && post0_poisoned && post1_done &&
+              !post1_poisoned && (acc_a[0] == 0) && (acc_b[0] == 22);
+    if(!ok)
+      log_app.error() << name() << ": completed=" << completed << " finish_poisoned="
+                      << finish_poisoned << " post0=" << post0_done << "/" << post0_poisoned
+                      << " post1=" << post1_done << "/" << post1_poisoned << " a=" << acc_a[0]
+                      << " b=" << acc_b[0];
+    return ok;
+  }
+
+  void cleanup() override
+  {
+    if(completed)
+      sg.destroy().wait();
+    a.destroy();
+    b.destroy();
+  }
+
+  bool hung() const override { return !completed; }
+
+private:
+  static constexpr int N = 8;
+  RegionInstance a, b;
+  Subgraph sg;
+  bool completed = false, finish_poisoned = false;
+  bool post0_done = false, post0_poisoned = false, post1_done = false, post1_poisoned = false;
+};
+
+// A gather through a typed indirection: dst[i] = src[idx[i]].
+class IndirectCopyTest : public SubgraphTest {
+public:
+  std::string name() const override { return "IndirectCopy"; }
+  bool can_run() override { return sysmem().exists(); }
+
+  void init() override
+  {
+    IndexSpace<1> is = Rect<1>(0, N - 1);
+    std::map<FieldID, size_t> data_sizes = {{FID_DATA, sizeof(int)}};
+    std::map<FieldID, size_t> ptr_sizes = {{FID_PTR, sizeof(Point<1>)}};
+    RegionInstance::create_instance(src, sysmem(), is, data_sizes, 0, ProfilingRequestSet())
+        .wait();
+    RegionInstance::create_instance(dst, sysmem(), is, data_sizes, 0, ProfilingRequestSet())
+        .wait();
+    RegionInstance::create_instance(idx, sysmem(), is, ptr_sizes, 0, ProfilingRequestSet())
+        .wait();
+    {
+      AffineAccessor<int, 1> acc_src(src, FID_DATA), acc_dst(dst, FID_DATA);
+      AffineAccessor<Point<1>, 1> acc_idx(idx, FID_PTR);
+      for(int i = 0; i < N; i++) {
+        acc_src[i] = 10 * i;
+        acc_dst[i] = -1;
+        acc_idx[i] = Point<1>(N - 1 - i);
+      }
+    }
+    CopyIndirection<1, int>::Unstructured<1, int> ind(
+        idx, std::vector<IndexSpace<1>>(1, is), std::vector<RegionInstance>(1, src), FID_PTR);
+    ind.next_indirection = nullptr;
+    SubgraphDefinition sd;
+    sd.concurrency_mode = SubgraphDefinition::INSTANTIATION_ORDER;
+    SubgraphDefinition::CopyDesc cd;
+    cd.space = is;
+    cd.srcs.resize(1);
+    cd.srcs[0].set_indirect(0, FID_DATA, sizeof(int));
+    cd.dsts.resize(1);
+    cd.dsts[0].set_field(dst, FID_DATA, sizeof(int));
+    cd.add_indirection<1, int>(&ind);
+    sd.copies.push_back(cd);
+    Subgraph::create_subgraph(sg, sd, ProfilingRequestSet()).wait();
+    // `ind` may go away now: the plan took what it needed
+  }
+
+  void run() override
+  {
+    Event e = Event::NO_EVENT;
+    for(int i = 0; i < 3; i++)
+      e = sg.instantiate(nullptr, 0, ProfilingRequestSet());
+    completed = wait_with_timeout(e, config.hang_timeout);
+  }
+
+  bool check() override
+  {
+    AffineAccessor<int, 1> acc(dst, FID_DATA);
+    bool ok = completed;
+    for(int i = 0; i < N; i++)
+      ok = ok && (acc[i] == 10 * (N - 1 - i));
+    if(!ok) {
+      std::ostringstream os;
+      os << name() << ": completed=" << completed << " dst";
+      for(int i = 0; i < N; i++)
+        os << " " << acc[i];
+      log_app.error() << os.str();
+    }
+    return ok;
+  }
+
+  void cleanup() override
+  {
+    if(completed)
+      sg.destroy().wait();
+    src.destroy();
+    dst.destroy();
+    idx.destroy();
+  }
+
+  bool hung() const override { return !completed; }
+
+private:
+  static constexpr int N = 16;
+  RegionInstance src, dst, idx;
+  Subgraph sg;
+  bool completed = false;
+};
+
+// Multi-rank: copies to and from an instance on another node create their
+// transfer descriptors remotely on every replay.
+static Memory remote_sysmem()
+{
+  AddressSpace here = Processor::get_executing_processor().address_space();
+  Machine::MemoryQuery mq =
+      Machine::MemoryQuery(Machine::get_machine()).only_kind(Memory::SYSTEM_MEM);
+  for(Memory m : mq)
+    if((m.address_space() != here) && (m.capacity() >= (1 << 20)))
+      return m;
+  return Memory::NO_MEMORY;
+}
+
+class RemoteCopyTest : public SubgraphTest {
+public:
+  std::string name() const override { return "RemoteCopy"; }
+  bool can_run() override { return sysmem().exists() && remote_sysmem().exists(); }
+
+  void init() override
+  {
+    IndexSpace<1> is = Rect<1>(0, N - 1);
+    std::map<FieldID, size_t> field_sizes = {{FID_DATA, sizeof(int)}};
+    RegionInstance::create_instance(a, sysmem(), is, field_sizes, 0, ProfilingRequestSet())
+        .wait();
+    RegionInstance::create_instance(b, sysmem(), is, field_sizes, 0, ProfilingRequestSet())
+        .wait();
+    RegionInstance::create_instance(r, remote_sysmem(), is, field_sizes, 0,
+                                    ProfilingRequestSet())
+        .wait();
+    {
+      AffineAccessor<int, 1> acc_a(a, FID_DATA), acc_b(b, FID_DATA);
+      for(int i = 0; i < N; i++) {
+        acc_a[i] = 7 * i + 1;
+        acc_b[i] = 0;
+      }
+    }
+    SubgraphDefinition sd;
+    sd.concurrency_mode = SubgraphDefinition::INSTANTIATION_ORDER;
+    int c1 = make_copy_desc(sd, is, a, r, FID_DATA, sizeof(int));
+    int c2 = make_copy_desc(sd, is, r, b, FID_DATA, sizeof(int));
+    add_dependency(sd, SubgraphDefinition::OPKIND_COPY, c1, SubgraphDefinition::OPKIND_COPY,
+                   c2);
+    Subgraph::create_subgraph(sg, sd, ProfilingRequestSet()).wait();
+  }
+
+  void run() override
+  {
+    double t0 = Clock::current_time();
+    Event e = Event::NO_EVENT;
+    for(int i = 0; i < replays; i++)
+      e = sg.instantiate(nullptr, 0, ProfilingRequestSet());
+    completed = wait_with_timeout(e, config.hang_timeout);
+    elapsed = Clock::current_time() - t0;
+  }
+
+  bool check() override
+  {
+    AffineAccessor<int, 1> acc(b, FID_DATA);
+    bool ok = completed;
+    for(int i = 0; i < N; i++)
+      ok = ok && (acc[i] == 7 * i + 1);
+    std::ostringstream os;
+    os << name() << ": " << replays << " round trips in " << elapsed * 1e3 << " ms ("
+       << elapsed * 1e6 / replays << " us each)";
+    if(ok)
+      report(os.str());
+    else
+      log_app.error() << os.str() << " completed=" << completed << " b[0]=" << acc[0];
+    return ok;
+  }
+
+  void cleanup() override
+  {
+    if(completed)
+      sg.destroy().wait();
+    a.destroy();
+    b.destroy();
+    r.destroy();
+  }
+
+  bool hung() const override { return !completed; }
+
+private:
+  static constexpr int N = 256, replays = 20;
+  RegionInstance a, b, r;
+  Subgraph sg;
+  double elapsed = 0;
+  bool completed = false;
+};
+
 ////////////////////////////////////////////////////////////////////////
 //
 // RemoteInstantiateDestroyTest: a task on another address space
@@ -3003,6 +3530,32 @@ static void death_dependency_cycle()
   Subgraph::create_subgraph(sg, sd, ProfilingRequestSet()).wait();
 }
 
+static void death_indirection_type_mismatch()
+{
+  // a 2-D indirection on a 1-D copy: compile must refuse it
+  IndexSpace<1> is = Rect<1>(0, 7);
+  std::map<FieldID, size_t> sizes = {{FID_DATA, sizeof(int)}};
+  RegionInstance src, dst, idx;
+  RegionInstance::create_instance(src, sysmem(), is, sizes, 0, ProfilingRequestSet()).wait();
+  RegionInstance::create_instance(dst, sysmem(), is, sizes, 0, ProfilingRequestSet()).wait();
+  RegionInstance::create_instance(idx, sysmem(), is, sizes, 0, ProfilingRequestSet()).wait();
+  CopyIndirection<2, int>::Unstructured<1, int> ind(
+      idx, std::vector<IndexSpace<1>>(1, is), std::vector<RegionInstance>(1, src), FID_DATA);
+  ind.next_indirection = nullptr;
+  SubgraphDefinition sd;
+  sd.concurrency_mode = SubgraphDefinition::ONE_SHOT;
+  SubgraphDefinition::CopyDesc cd;
+  cd.space = is;
+  cd.srcs.resize(1);
+  cd.srcs[0].set_indirect(0, FID_DATA, sizeof(int));
+  cd.dsts.resize(1);
+  cd.dsts[0].set_field(dst, FID_DATA, sizeof(int));
+  cd.add_indirection<2, int>(&ind);
+  sd.copies.push_back(cd);
+  Subgraph sg;
+  Subgraph::create_subgraph(sg, sd, ProfilingRequestSet()).wait();
+}
+
 static void death_unregistered_task()
 {
   // a task id nobody registered: compile must refuse it
@@ -3029,6 +3582,7 @@ static const DeathScenario death_scenarios[] = {
     {"concurrent_mode_unsupported", death_concurrent_mode_unsupported},
     {"dependency_cycle", death_dependency_cycle},
     {"unregistered_task", death_unregistered_task},
+    {"indirection_type_mismatch", death_indirection_type_mismatch},
     // multi-rank only; prints DEATH-TEST-SKIPPED in a single-rank run
     {"remote_task_compiled", death_remote_task_compiled},
 };
@@ -3059,6 +3613,8 @@ static void register_common_tasks()
   rt.register_task(counter_task_id, counter_task);
   rt.register_task(launcher_task_id, launcher_task);
   rt.register_task(noop_task_id, noop_task);
+  copy_prof_response_task_id = task_id_counter++;
+  rt.register_task(copy_prof_response_task_id, copy_prof_response_task);
 #ifdef SUBGRAPH_TESTS_CUDA
   host_add_task_id = task_id_counter++;
   gpu_prof_response_task_id = task_id_counter++;
@@ -3113,6 +3669,11 @@ static std::vector<std::unique_ptr<SubgraphTest>> make_tests()
   tests.emplace_back(new ProfilingTest());
   tests.emplace_back(new GraphPriorityTest());
   tests.emplace_back(new GraphPriorityPreemptionTest());
+  tests.emplace_back(new CopyReplayTest());
+  tests.emplace_back(new CopyProfilingTest());
+  tests.emplace_back(new CopyPoisonTest());
+  tests.emplace_back(new IndirectCopyTest());
+  tests.emplace_back(new RemoteCopyTest());
 #ifdef SUBGRAPH_TESTS_CUDA
   tests.emplace_back(new GpuChainTest("Gpu.DeferredChain", &gpu_deferred_task_id, true));
   tests.emplace_back(new GpuChainTest("Gpu.StreamAwareChain", &gpu_stream_task_id, true));

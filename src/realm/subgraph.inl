@@ -78,6 +78,17 @@ namespace Realm {
     , priority(0)
   {}
 
+  template <int N, typename T>
+  inline SubgraphDefinition::CopyDesc &SubgraphDefinition::CopyDesc::add_indirection(
+      const typename CopyIndirection<N, T>::Base *indirection)
+  {
+    IndirectionRef ref;
+    ref.ptr = indirection;
+    ref.type_tag = NT_TemplateHelper::encode_tag<N, T>();
+    indirects.push_back(ref);
+    return *this;
+  }
+
   ////////////////////////////////////////////////////////////////////////
   //
   // struct SubgraphDefinition::ArrivalDesc

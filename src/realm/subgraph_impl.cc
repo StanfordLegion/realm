@@ -25,6 +25,8 @@
 #include "realm/runtime_impl.h"
 #include "realm/tasks.h"
 #include "realm/timers.h"
+#include "realm/transfer/transfer.h"
+#include "realm/idx_impl.h"
 
 #include <algorithm>
 #include <climits>
@@ -264,6 +266,11 @@ namespace Realm {
     ops.clear();
     num_direct_ops = 0;
     task_ops.clear();
+    copy_ops.clear();
+    for(TransferDesc *plan : copy_plans)
+      if(plan)
+        plan->remove_reference();
+    copy_plans.clear();
     any_task_profiling = false;
     roots.clear();
     procs.clear();
@@ -312,9 +319,22 @@ namespace Realm {
        (d.concurrency_mode != SubgraphDefinition::INSTANTIATION_ORDER))
       SUBGRAPH_FATAL(me, "concurrency modes SERIALIZABLE and CONCURRENT are not "
                          "implemented; use ONE_SHOT or INSTANTIATION_ORDER");
-    if(!d.copies.empty())
-      SUBGRAPH_FATAL(me, "copies and fills are not implemented (" << d.copies.size()
-                                                                 << " in definition)");
+    for(size_t i = 0; i < d.copies.size(); i++) {
+      const SubgraphDefinition::CopyDesc &cd = d.copies[i];
+      if(!cd.space.impl)
+        SUBGRAPH_FATAL(me, "copy " << i << " has no index space");
+      if(cd.srcs.empty() || (cd.srcs.size() != cd.dsts.size()))
+        SUBGRAPH_FATAL(me, "copy " << i << " has " << cd.srcs.size() << " sources and "
+                                   << cd.dsts.size()
+                                   << " destinations; they must match and not be empty");
+      for(size_t f = 0; f < cd.srcs.size(); f++) {
+        const int si = cd.srcs[f].indirect_index, di = cd.dsts[f].indirect_index;
+        if((si >= int(cd.indirects.size())) || (di >= int(cd.indirects.size())))
+          SUBGRAPH_FATAL(me, "copy " << i << " field " << f
+                                     << " refers to an indirection that was not added "
+                                        "(see CopyDesc::add_indirection)");
+      }
+    }
     if(!d.instantiations.empty())
       SUBGRAPH_FATAL(me, "nested subgraph instantiations are not implemented ("
                              << d.instantiations.size() << " in definition)");
@@ -508,7 +528,8 @@ namespace Realm {
     }
 
     // ---- operations: each processor's tasks, then directly launched ones
-    std::vector<uint32_t> task_to_op(ntasks), arrival_to_op(d.arrivals.size());
+    std::vector<uint32_t> task_to_op(ntasks), arrival_to_op(d.arrivals.size()),
+        copy_to_op(d.copies.size());
     auto new_op = [&](OpKind kind, unsigned index, int32_t proc, int32_t domain) {
       CompiledSubgraph::Op op;
       op.kind = kind;
@@ -550,15 +571,57 @@ namespace Realm {
     }
     for(size_t i = 0; i < d.arrivals.size(); i++)
       arrival_to_op[i] = new_op(SubgraphDefinition::OPKIND_ARRIVAL, unsigned(i), -1, 0);
-    c.num_direct_ops = uint32_t(d.arrivals.size());
+    for(size_t i = 0; i < d.copies.size(); i++)
+      copy_to_op[i] = new_op(SubgraphDefinition::OPKIND_COPY, unsigned(i), -1, 0);
+    c.num_direct_ops = uint32_t(d.arrivals.size() + d.copies.size());
     c.task_ops = task_to_op;
+    c.copy_ops = copy_to_op;
     c.any_task_profiling = false;
     for(const SubgraphDefinition::TaskDesc &t : d.tasks)
       c.any_task_profiling = c.any_task_profiling || !t.prs.empty();
     const size_t n = c.ops.size();
     auto op_of = [&](OpKind k, unsigned idx) {
-      return (k == SubgraphDefinition::OPKIND_TASK) ? task_to_op[idx] : arrival_to_op[idx];
+      switch(k) {
+      case SubgraphDefinition::OPKIND_TASK:
+        return task_to_op[idx];
+      case SubgraphDefinition::OPKIND_COPY:
+        return copy_to_op[idx];
+      default:
+        return arrival_to_op[idx];
+      }
     };
+
+    // ---- copy plans: built and analyzed once, replayed by every instantiation
+    // (analysis is not thread-safe, and concurrent instantiations would
+    //  otherwise race to perform it)
+    c.copy_plans.assign(d.copies.size(), nullptr);
+    for(size_t i = 0; i < d.copies.size(); i++) {
+      const SubgraphDefinition::CopyDesc &cd = d.copies[i];
+      std::vector<CopySrcDstField> dsts = cd.dsts;
+      if(cd.redop_id != 0)
+        for(CopySrcDstField &f : dsts)
+          if(f.redop_id == 0)
+            f.set_redop(cd.redop_id, cd.red_fold);
+      TransferDesc *plan = cd.space.impl->make_transfer_desc(cd.srcs, dsts, cd.indirects,
+                                                             cd.prs);
+      if(!plan)
+        SUBGRAPH_FATAL(me, "copy " << i << " has an indirection for a different index "
+                                      "space type than the copy's");
+      c.copy_plans[i] = plan;
+      std::vector<Event> preconditions;
+      plan->check_analysis_preconditions(preconditions);
+      if(!preconditions.empty()) {
+        // instance metadata, typically for remote instances
+        Event e = Event::merge_events(preconditions);
+        if(!e.has_triggered()) {
+          log_subgraph.info() << "copy " << i << " of subgraph " << me
+                              << ": waiting for instance metadata before compiling";
+          e.wait();
+        }
+      }
+      while(!plan->analyze(TimeLimit::relative(1000000000LL /*1 s*/)))
+        ;
+    }
 
     // ---- edges (deduplicated), inputs, postconditions
     std::vector<std::vector<uint32_t>> succ(n), pred(n), feeds(n);
@@ -1351,9 +1414,19 @@ namespace Realm {
   {
     const SubgraphDefinition &d = *subgraph->defn;
     const CompiledSubgraph &c = subgraph->compiled;
-    if(!iprof.copies.empty())
-      SUBGRAPH_FATAL(subgraph->me, "profiling requests for copies, but copies are not "
-                                   "implemented");
+    if(!iprof.copies.empty()) {
+      // copies profile through Realm's transfer operations: hand each one
+      // the definition's requests merged with this instantiation's
+      copy_prs.resize(d.copies.size());
+      for(size_t i = 0; i < d.copies.size(); i++)
+        copy_prs[i].import_requests(d.copies[i].prs);
+      for(const auto &kv : iprof.copies) {
+        if(kv.first >= d.copies.size())
+          SUBGRAPH_FATAL(subgraph->me, "profiling requested for copy "
+                                           << kv.first << ", which does not exist");
+        copy_prs[kv.first].import_requests(kv.second);
+      }
+    }
     if(!c.any_task_profiling && iprof.tasks.empty())
       return;
     prof_index.assign(c.ops.size(), -1);
@@ -1454,6 +1527,12 @@ namespace Realm {
       }
       break;
     }
+    case SubgraphDefinition::OPKIND_COPY:
+      if(!op_poisoned(op)) {
+        launch_copy(op); // completes asynchronously
+        return;
+      }
+      break;
     default:
       SUBGRAPH_FATAL(subgraph->me, "internal error: operation " << op
                                                                 << " of kind "
@@ -1462,6 +1541,54 @@ namespace Realm {
     }
     op_body_done(op);
     op_finished(op);
+  }
+
+  namespace {
+    // A transfer on a compiled plan that reports back to the instantiation
+    // when the data has moved. Realm's own bookkeeping (profiling responses,
+    // the operation's finish event) runs first.
+    class SubgraphTransferOperation : public TransferOperation {
+    public:
+      SubgraphTransferOperation(TransferDesc &desc, GenEventImpl *finish_event,
+                                EventImpl::gen_t finish_gen, int priority,
+                                const ProfilingRequestSet &prs,
+                                SubgraphExecutionState *_state, uint32_t _op)
+        : TransferOperation(desc, Event::NO_EVENT, finish_event, finish_gen, priority, prs)
+        , state(_state)
+        , op(_op)
+      {}
+
+    protected:
+      virtual void mark_completed(void) override
+      {
+        SubgraphExecutionState *s = state;
+        const uint32_t o = op;
+        TransferOperation::mark_completed(); // may delete this operation
+        s->op_body_done(o);
+        s->op_finished(o);
+      }
+
+      SubgraphExecutionState *state;
+      uint32_t op;
+    };
+  } // namespace
+
+  void SubgraphExecutionState::launch_copy(uint32_t op)
+  {
+    const CompiledSubgraph &c = subgraph->compiled;
+    const CompiledSubgraph::Op &o = c.ops[op];
+    const SubgraphDefinition::CopyDesc &cd = subgraph->defn->copies[o.index];
+    TransferDesc *plan = c.copy_plans[o.index];
+    // every transfer operation needs a finish event of its own
+    GenEventImpl *finish_event = GenEventImpl::create_genevent();
+    Event ev = finish_event->current_event();
+    const ProfilingRequestSet &prs = copy_prs.empty() ? cd.prs : copy_prs[o.index];
+    SubgraphTransferOperation *top = new SubgraphTransferOperation(
+        *plan, finish_event, ID(ev).event_generation(), priority + cd.priority, prs, this,
+        op);
+    // the plan is analyzed and the graph satisfied the preconditions: this
+    // allocates intermediate buffers and creates the transfer descriptors
+    top->start_or_defer();
   }
 
   void SubgraphExecutionState::op_body_done(uint32_t op)

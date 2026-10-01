@@ -21,8 +21,11 @@
 #define REALM_IDX_IMPL_H
 
 #include "realm/indexspace.h"
+#include "realm/subgraph.h"
 
 namespace Realm {
+
+  class TransferDesc;
 
   class IndexSpaceGenericImpl {
   public:
@@ -39,6 +42,15 @@ namespace Realm {
                        const void *indirects_data, size_t indirect_len,
                        const ProfilingRequestSet &requests, Event wait_on,
                        int priority) const = 0;
+
+    // builds a reference-counted (and not yet analyzed) transfer plan for a
+    //  copy on this space, for compiled subgraphs to replay; returns null if
+    //  an indirection is not for this space's dimension and coordinate type
+    virtual TransferDesc *
+    make_transfer_desc(const std::vector<CopySrcDstField> &srcs,
+                       const std::vector<CopySrcDstField> &dsts,
+                       const std::vector<SubgraphDefinition::IndirectionRef> &indirects,
+                       const ProfilingRequestSet &requests) const = 0;
 
     // given an instance layout, attempts to provide bounds (start relative to
     //  the base of the instance and relative limit - i.e. first nonaccessibly
@@ -67,6 +79,12 @@ namespace Realm {
                        const void *indirects_data, size_t indirect_len,
                        const ProfilingRequestSet &requests, Event wait_on,
                        int priority) const;
+
+    virtual TransferDesc *
+    make_transfer_desc(const std::vector<CopySrcDstField> &srcs,
+                       const std::vector<CopySrcDstField> &dsts,
+                       const std::vector<SubgraphDefinition::IndirectionRef> &indirects,
+                       const ProfilingRequestSet &requests) const;
 
     virtual bool compute_affine_bounds(const InstanceLayoutGeneric *ilg, FieldID fid,
                                        uintptr_t &rel_base, uintptr_t &limit) const;

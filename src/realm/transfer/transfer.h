@@ -492,10 +492,17 @@ namespace Realm {
       CustomSerdezID serdez_id;
     };
 
+    // The plan may be shared by many operations (compiled subgraphs replay
+    //  one plan per copy): events that must trigger before it can be
+    //  analyzed, and the analysis itself, which returns true once complete
+    //  and may be resumed if the time limit expires. Analysis is not
+    //  thread-safe; a shared plan must be analyzed before it is shared.
+    void check_analysis_preconditions(std::vector<Event> &preconditions) const;
+    [[nodiscard]] bool analyze(TimeLimit work_until);
+
   protected:
     atomic<int> refcount;
 
-    void check_analysis_preconditions(std::vector<Event> &preconditions) const;
     [[nodiscard]] bool perform_analysis(TransferOperation *op, TimeLimit work_until);
 
     friend class TransferOperation;
@@ -675,6 +682,10 @@ namespace Realm {
     TransferOperation(TransferDesc &_desc, Event _precondition,
                       GenEventImpl *_finish_event, EventImpl::gen_t _finish_gen,
                       int priority);
+    // with profiling requests other than the plan's
+    TransferOperation(TransferDesc &_desc, Event _precondition,
+                      GenEventImpl *_finish_event, EventImpl::gen_t _finish_gen,
+                      int priority, const ProfilingRequestSet &_requests);
 
     ~TransferOperation();
 
