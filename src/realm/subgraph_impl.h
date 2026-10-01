@@ -133,6 +133,11 @@ namespace Realm {
       uint32_t queue_offset;  // byte offset of the ready queue in the domain block
       uint32_t tail_offset;   // byte offset of the queue tail (atomic<uint64_t>)
       uint32_t inputs_offset; // byte offset of the pending-inputs counter (atomic<int64_t>)
+      // byte offset of the count of operations still to complete here
+      // (atomic<int64_t>); the processor's share of the finish counter is
+      // released when it reaches zero, so tasks that block and finish out of
+      // order are accounted for
+      uint32_t remaining_offset;
       uint32_t initial_ready; // operations ready when the instantiation starts
       // Number of graph inputs (external preconditions) that operations on
       // this processor transitively depend on. Until an instantiation has
@@ -338,6 +343,7 @@ namespace Realm {
     atomic<int64_t> *queue(uint32_t proc) const;
     atomic<uint64_t> &tail(uint32_t proc) const;
     atomic<int64_t> &pending_inputs(uint32_t proc) const;
+    atomic<int64_t> &remaining(uint32_t proc) const;
     atomic<int64_t> &postcond_counter(uint32_t pc) const;
     // Argument bytes for an operation: its interpolated copy if it has one,
     // otherwise the definition's.
@@ -427,7 +433,6 @@ namespace Realm {
       SubgraphExecutionState *state;
       uint32_t op;             // into CompiledSubgraph::ops
       int priority;            // the instantiation's priority
-      bool last_for_processor; // nothing more for this processor in this instantiation
     };
 
     // Thread-safe. The caller is responsible for waking the scheduler.
@@ -435,11 +440,13 @@ namespace Realm {
 
     // Scheduler lock held. Returns true if an operation is ready to run and
     // reports its priority; among several ready instantiations the highest
-    // priority wins, ties round robin.
+    // priority wins, ties round robin. Work of instantiations below the
+    // active floor (see below) is not offered.
     bool peek(int &priority);
     // Scheduler lock held. Highest priority among active instantiations
-    // whose inputs are all satisfied, or `none` if there is none. Normal
-    // work below this priority must wait on this processor.
+    // whose inputs are all satisfied, or `none` if there is none. Work below
+    // this priority, normal tasks and other instantiations alike, must wait
+    // on this processor.
     int active_floor(int none) const;
     // Scheduler lock held. Removes the operation found by the last
     // successful peek.

@@ -27,6 +27,7 @@
 #include "realm/timers.h"
 
 #include <algorithm>
+#include <climits>
 #include <cstdlib>
 #include <cstring>
 #include <sstream>
@@ -497,6 +498,7 @@ namespace Realm {
                                            proc_nodes[cp.proc]) -
                           domain_nodes.begin());
       cp.first_op = cp.num_ops = cp.queue_offset = cp.tail_offset = cp.inputs_offset = 0;
+      cp.remaining_offset = 0;
       cp.initial_ready = 0;
       cp.pending_inputs = 0;
       c.proc_index[cp.proc] = uint32_t(i);
@@ -700,9 +702,11 @@ namespace Realm {
       cp.queue_offset = uint32_t(off[cp.domain]);
       off[cp.domain] += round_up(size_t(cp.num_ops) * sizeof(int64_t),
                                  SUBGRAPH_CACHE_LINE_BYTES);
-      // tail and pending-inputs counter share one rarely written line
+      // tail, pending-inputs and remaining-operations counters share one
+      // line that is written once per operation at most
       cp.tail_offset = uint32_t(off[cp.domain]);
       cp.inputs_offset = cp.tail_offset + uint32_t(sizeof(uint64_t));
+      cp.remaining_offset = cp.inputs_offset + uint32_t(sizeof(int64_t));
       off[cp.domain] += SUBGRAPH_CACHE_LINE_BYTES;
     }
     for(size_t i = 0; i < n; i++) {
@@ -757,6 +761,8 @@ namespace Realm {
       memcpy(img.data() + cp.tail_offset, &tail, sizeof(tail));
       int64_t inputs = cp.pending_inputs;
       memcpy(img.data() + cp.inputs_offset, &inputs, sizeof(inputs));
+      int64_t remaining = cp.num_ops;
+      memcpy(img.data() + cp.remaining_offset, &remaining, sizeof(remaining));
     }
 
     for(size_t dm = 0; dm < c.domains.size(); dm++)
@@ -1234,6 +1240,12 @@ namespace Realm {
     return *reinterpret_cast<atomic<int64_t> *>(blocks[p.domain] + p.inputs_offset);
   }
 
+  atomic<int64_t> &SubgraphExecutionState::remaining(uint32_t proc) const
+  {
+    const CompiledSubgraph::Proc &p = subgraph->compiled.procs[proc];
+    return *reinterpret_cast<atomic<int64_t> *>(blocks[p.domain] + p.remaining_offset);
+  }
+
   atomic<int64_t> &SubgraphExecutionState::postcond_counter(uint32_t pc) const
   {
     const CompiledSubgraph::Postcond &p = subgraph->compiled.postconds[pc];
@@ -1500,6 +1512,9 @@ namespace Realm {
       absorb_pending();
 
     // Highest-priority ready instantiation wins; ties go round robin.
+    // Instantiations below the floor wait, like normal tasks do, even if
+    // the ones holding the processor have nothing ready right now.
+    const int floor = active_floor(INT_MIN);
     const size_t n = active.size();
     bool found = false;
     for(size_t k = 0; k < n; k++) {
@@ -1507,6 +1522,8 @@ namespace Realm {
       if(i >= n)
         i -= n;
       const Cursor &c = active[i];
+      if(c.priority < floor)
+        continue;
       if(found && (c.priority <= priority))
         continue;
       int64_t op = c.queue[c.front].load_acquire();
@@ -1542,10 +1559,10 @@ namespace Realm {
     entry.op = uint32_t(peeked_op);
     entry.priority = c.priority;
     c.front++;
-    entry.last_for_processor = (c.front == c.end);
-    if(entry.last_for_processor) {
-      // Drop the cursor now: once the operation completes, this processor's
-      // finish decrement may let the state be released at any time.
+    if(c.front == c.end) {
+      // Drop the cursor now: once this processor's operations have all
+      // completed, its finish decrement may let the state be released at
+      // any time.
       active[peeked_cursor] = active.back();
       active.pop_back();
       scan_start = peeked_cursor;
@@ -1623,7 +1640,10 @@ namespace Realm {
     }
 
     state->op_completed(entry.op);
-    if(entry.last_for_processor)
+    // Tasks may block and complete out of order: this processor's share of
+    // the finish counter goes when its last operation completes, whichever
+    // one that is.
+    if(state->remaining(uint32_t(op.proc)).fetch_sub_acqrel(1) == 1)
       state->contributor_finished();
   }
 

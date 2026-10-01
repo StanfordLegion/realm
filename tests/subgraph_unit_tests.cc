@@ -1957,9 +1957,16 @@ public:
 
   void run() override
   {
+    double t0 = Clock::current_time();
     completed = wait_with_timeout(sg.instantiate(nullptr, 0, ProfilingRequestSet()),
                                   config.hang_timeout);
+    double t1 = Clock::current_time();
     dep_ran = poll_until([&] { return out_dep.load() >= 0; }, config.hang_timeout);
+    double t2 = Clock::current_time();
+    std::ostringstream os;
+    os << name() << ": graph finished after " << (t1 - t0) * 1e3
+       << " ms, dependent task ran " << (t2 - t1) * 1e3 << " ms later";
+    report(os.str());
   }
 
   bool check() override
@@ -2048,7 +2055,8 @@ public:
     procs = worker_cpus(2);
     responses.store(0);
     bad.store(0);
-    Processor driver = all_cpus()[0];
+    // Responses run as tasks on a worker CPU: the driver CPU is busy polling.
+    Processor responder = procs[1];
     SubgraphDefinition sd;
     sd.concurrency_mode = SubgraphDefinition::INSTANTIATION_ORDER;
     counts.store(0);
@@ -2063,13 +2071,13 @@ public:
     // definition-time request on task 0
     ProfPayload p0{this, procs[0], false, false};
     sd.tasks[t[0]]
-        .prs.add_request(driver, prof_response_task_id, &p0, sizeof(p0))
+        .prs.add_request(responder, prof_response_task_id, &p0, sizeof(p0))
         .add_measurement<ProfilingMeasurements::OperationTimeline>()
         .add_measurement<ProfilingMeasurements::OperationProcessorUsage>();
     // instantiation-time request on task 2
     ProfPayload p2{this, procs[0], true, true};
     ProfilingRequestSet prs2;
-    prs2.add_request(driver, prof_response_task_id, &p2, sizeof(p2))
+    prs2.add_request(responder, prof_response_task_id, &p2, sizeof(p2))
         .add_measurement<ProfilingMeasurements::OperationTimeline>()
         .add_measurement<ProfilingMeasurements::OperationStatus>()
         .add_measurement<ProfilingMeasurements::OperationFinishEvent>();
