@@ -443,7 +443,7 @@ void top_level_task(const void *_args, size_t arglen, const void *userdata,
          "run, %d rounds per mode (first is warm-up), ranks=%u\n",
          (long long)g.nx, (long long)g.ny, (long long)g.px, (long long)g.py, workers.size(),
          gpus.empty() ? "CPUs" : "GPUs", (long long)args->steps, args->rounds,
-         Machine::get_machine().get_address_space_count());
+         unsigned(Machine::get_machine().get_address_space_count()));
   fflush(stdout);
 
   int64_t total_steps = 0;
