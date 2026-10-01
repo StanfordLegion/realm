@@ -59,6 +59,11 @@ namespace Realm {
     // after requesting its destruction is an error.
     Event destroy(Event wait_on = Event::NO_EVENT) const;
 
+    // priority_adjust is the priority of the instantiation as a whole. While
+    // an instantiation of priority P is executing on a processor, that
+    // processor runs only work of priority P or higher (tasks that already
+    // started may always resume); a higher-priority instantiation takes
+    // precedence over a lower one sharing processors.
     Event instantiate(const void *args, size_t arglen, const ProfilingRequestSet &prs,
                       Event wait_on = Event::NO_EVENT, int priority_adjust = 0) const;
 

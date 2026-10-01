@@ -375,7 +375,9 @@ namespace Realm {
       cp.domain = int32_t(std::lower_bound(domain_nodes.begin(), domain_nodes.end(),
                                            proc_nodes[cp.proc]) -
                           domain_nodes.begin());
-      cp.first_op = cp.num_ops = cp.queue_offset = cp.tail_offset = cp.initial_ready = 0;
+      cp.first_op = cp.num_ops = cp.queue_offset = cp.tail_offset = cp.inputs_offset = 0;
+      cp.initial_ready = 0;
+      cp.pending_inputs = 0; // no external inputs are implemented yet
       c.proc_index[cp.proc] = uint32_t(i);
     }
 
@@ -466,7 +468,9 @@ namespace Realm {
       cp.queue_offset = uint32_t(off[cp.domain]);
       off[cp.domain] += round_up(size_t(cp.num_ops) * sizeof(int64_t),
                                  SUBGRAPH_CACHE_LINE_BYTES);
+      // tail and pending-inputs counter share one rarely written line
       cp.tail_offset = uint32_t(off[cp.domain]);
+      cp.inputs_offset = cp.tail_offset + uint32_t(sizeof(uint64_t));
       off[cp.domain] += SUBGRAPH_CACHE_LINE_BYTES;
     }
     for(size_t dm = 0; dm < c.domains.size(); dm++) {
@@ -492,6 +496,8 @@ namespace Realm {
       cp.initial_ready = ready;
       uint64_t tail = ready;
       memcpy(img.data() + cp.tail_offset, &tail, sizeof(tail));
+      int64_t inputs = cp.pending_inputs;
+      memcpy(img.data() + cp.inputs_offset, &inputs, sizeof(inputs));
     }
 
     for(size_t dm = 0; dm < c.domains.size(); dm++)
@@ -509,8 +515,6 @@ namespace Realm {
       SUBGRAPH_FATAL(me, "profiling requests on instantiate are not implemented");
     if(!preconditions.empty() || !postconditions.empty())
       SUBGRAPH_FATAL(me, "external preconditions and postconditions are not implemented");
-    if(priority_adjust != 0)
-      SUBGRAPH_FATAL(me, "instantiation priorities are not implemented");
 
     {
       AutoLock<> al(lifecycle_lock);
@@ -525,8 +529,9 @@ namespace Realm {
       }
     }
 
+    // priority_adjust is the priority of this instantiation as a whole
     SubgraphExecutionState *state =
-        new SubgraphExecutionState(this, args, arglen, finish_event);
+        new SubgraphExecutionState(this, args, arglen, finish_event, priority_adjust);
     // Release the execution state once the instantiation has finished.
     EventImpl::add_waiter(finish_event, new SubgraphInstantiationCleanup(state));
     // Start once the precondition is satisfied.
@@ -870,12 +875,13 @@ namespace Realm {
 
   SubgraphExecutionState::SubgraphExecutionState(SubgraphImpl *_subgraph,
                                                  const void *_args, size_t _arglen,
-                                                 Event _finish_event)
+                                                 Event _finish_event, int _priority)
     : subgraph(_subgraph)
     , args(nullptr)
     , arglen(_arglen)
     , finish_counter(int64_t(_subgraph->compiled.procs.size()))
     , finish_event(_finish_event)
+    , priority(_priority)
   {
     if((_args != nullptr) && (arglen > 0)) {
       args = malloc(arglen);
@@ -910,6 +916,12 @@ namespace Realm {
   {
     const CompiledSubgraph::Proc &p = subgraph->compiled.procs[proc];
     return *reinterpret_cast<atomic<uint64_t> *>(blocks[p.domain] + p.tail_offset);
+  }
+
+  atomic<int64_t> &SubgraphExecutionState::pending_inputs(uint32_t proc) const
+  {
+    const CompiledSubgraph::Proc &p = subgraph->compiled.procs[proc];
+    return *reinterpret_cast<atomic<int64_t> *>(blocks[p.domain] + p.inputs_offset);
   }
 
   ////////////////////////////////////////////////////////////////////////
@@ -975,6 +987,7 @@ namespace Realm {
       cur.queue = state->queue(cur.proc);
       cur.front = 0;
       cur.end = c.procs[cur.proc].num_ops;
+      cur.priority = state->get_priority();
       assert(cur.end > 0);
       active.push_back(cur);
     }
@@ -987,22 +1000,39 @@ namespace Realm {
     if(pending_count.load_acquire() > 0)
       absorb_pending();
 
+    // Highest-priority ready instantiation wins; ties go round robin.
     const size_t n = active.size();
+    bool found = false;
     for(size_t k = 0; k < n; k++) {
       size_t i = scan_start + k;
       if(i >= n)
         i -= n;
       const Cursor &c = active[i];
+      if(found && (c.priority <= priority))
+        continue;
       int64_t op = c.queue[c.front].load_acquire();
       if(op != SUBGRAPH_EMPTY_QUEUE_ENTRY) {
         peeked_cursor = i;
         peeked_op = op;
-        // Task priorities are not supported in subgraphs yet.
-        priority = 0;
-        return true;
+        priority = c.priority;
+        found = true;
       }
     }
-    return false;
+    return found;
+  }
+
+  int ProcSubgraphExecutor::active_floor(int none) const
+  {
+    int floor = none;
+    bool any = false;
+    for(const Cursor &c : active) {
+      if(c.state->pending_inputs(c.proc).load_acquire() != 0)
+        continue; // may still be waiting on work this processor would block
+      if(!any || (c.priority > floor))
+        floor = c.priority;
+      any = true;
+    }
+    return floor;
   }
 
   void ProcSubgraphExecutor::dequeue(ReadyEntry &entry)
@@ -1011,6 +1041,7 @@ namespace Realm {
     Cursor &c = active[peeked_cursor];
     entry.state = c.state;
     entry.op = uint32_t(peeked_op);
+    entry.priority = c.priority;
     c.front++;
     entry.last_for_processor = (c.front == c.end);
     if(entry.last_for_processor) {
@@ -1085,6 +1116,10 @@ namespace Realm {
   {
     if((poll_budget_us <= 0) || (activity_epoch == 0))
       return false;
+    // While an instantiation holds this processor, nothing else may run
+    // here anyway: keep polling until it is done.
+    if(!active.empty())
+      return true;
     long long now = Clock::current_time_in_nanoseconds();
     if(activity_epoch != polled_epoch) {
       polled_epoch = activity_epoch;

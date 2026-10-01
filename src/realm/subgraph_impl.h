@@ -100,7 +100,13 @@ namespace Realm {
       uint32_t num_ops;
       uint32_t queue_offset;  // byte offset of the ready queue in the domain block
       uint32_t tail_offset;   // byte offset of the queue tail (atomic<uint64_t>)
+      uint32_t inputs_offset; // byte offset of the pending-inputs counter (atomic<int64_t>)
       uint32_t initial_ready; // operations ready when the instantiation starts
+      // Number of graph inputs (external preconditions) that operations on
+      // this processor transitively depend on. Until an instantiation has
+      // seen them all trigger, the processor runs ready work of the graph
+      // but does not hold off other work, since it might be waiting on it.
+      uint32_t pending_inputs;
     };
     struct Domain {
       int numa_node;           // OS NUMA node, or -1 if unknown
@@ -264,13 +270,15 @@ namespace Realm {
   class SubgraphExecutionState {
   public:
     SubgraphExecutionState(SubgraphImpl *subgraph, const void *args, size_t arglen,
-                           Event finish_event);
+                           Event finish_event, int priority);
     ~SubgraphExecutionState();
     SubgraphImpl *get_subgraph() const { return subgraph; }
+    int get_priority() const { return priority; }
 
     atomic<int64_t> &counter(uint32_t op) const;
     atomic<int64_t> *queue(uint32_t proc) const;
     atomic<uint64_t> &tail(uint32_t proc) const;
+    atomic<int64_t> &pending_inputs(uint32_t proc) const;
 
   private:
     friend class ProcSubgraphExecutor;
@@ -287,6 +295,11 @@ namespace Realm {
     // finish_event.
     atomic<int64_t> finish_counter;
     Event finish_event;
+
+    // Scheduling priority of this instantiation. While it is active on a
+    // processor whose inputs are all satisfied, that processor runs only
+    // work of equal or higher priority (plus tasks that already started).
+    int priority;
 
     std::vector<char *> blocks; // one per CompiledSubgraph::Domain
   };
@@ -312,6 +325,7 @@ namespace Realm {
     struct ReadyEntry {
       SubgraphExecutionState *state;
       uint32_t op;             // into CompiledSubgraph::ops
+      int priority;            // the instantiation's priority
       bool last_for_processor; // nothing more for this processor in this instantiation
     };
 
@@ -319,8 +333,13 @@ namespace Realm {
     void enqueue_subgraph(SubgraphExecutionState *state);
 
     // Scheduler lock held. Returns true if an operation is ready to run and
-    // reports the priority it should be scheduled at.
+    // reports its priority; among several ready instantiations the highest
+    // priority wins, ties round robin.
     bool peek(int &priority);
+    // Scheduler lock held. Highest priority among active instantiations
+    // whose inputs are all satisfied, or `none` if there is none. Normal
+    // work below this priority must wait on this processor.
+    int active_floor(int none) const;
     // Scheduler lock held. Removes the operation found by the last
     // successful peek.
     void dequeue(ReadyEntry &entry);
@@ -351,6 +370,7 @@ namespace Realm {
       uint32_t front;         // next slot to read
       uint32_t end;           // number of slots (== operations for this processor)
       uint32_t proc;          // this processor's index within the subgraph
+      int priority;
     };
     void absorb_pending(void);
 

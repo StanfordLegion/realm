@@ -51,6 +51,7 @@
 #include <atomic>
 #include <cstddef>
 #include <cstdint>
+#include <climits>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
@@ -1557,6 +1558,186 @@ private:
 
 ////////////////////////////////////////////////////////////////////////
 //
+// Graph priority tests. Each task records the global order in which it ran;
+// a graph task may trigger a user event so that competing work becomes
+// ready only once the graph is executing on its processors.
+//
+
+struct SeqTaskArgs {
+  std::atomic<int64_t> *seq; // global sequence counter
+  std::atomic<int64_t> *out; // where this task records its sequence number
+  UserEvent to_trigger;      // triggered after recording, if it exists
+  long spin_ns;
+};
+
+static int seq_task_id = 0;
+
+static void seq_task(const void *args, size_t arglen, const void *userdata, size_t userlen,
+                     Processor p)
+{
+  const SeqTaskArgs *a = static_cast<const SeqTaskArgs *>(args);
+  if(a->spin_ns > 0) {
+    long long t0 = Clock::current_time_in_nanoseconds();
+    while(Clock::current_time_in_nanoseconds() - t0 < a->spin_ns) {
+    }
+  }
+  a->out->store(a->seq->fetch_add(1));
+  if(a->to_trigger.exists())
+    a->to_trigger.trigger();
+}
+
+// A chain of seq tasks alternating over `procs`; the first task triggers
+// `started`. Returns the subgraph; `slots` receives one sequence slot per task.
+static Subgraph build_seq_chain(const std::vector<Processor> &procs, int length,
+                                long spin_ns, std::atomic<int64_t> *seq,
+                                std::vector<std::atomic<int64_t>> &slots,
+                                UserEvent started)
+{
+  slots = std::vector<std::atomic<int64_t>>(length);
+  for(auto &slot : slots)
+    slot.store(-1);
+  SubgraphDefinition sd;
+  sd.concurrency_mode = SubgraphDefinition::ONE_SHOT;
+  for(int i = 0; i < length; i++) {
+    SeqTaskArgs a{seq, &slots[i], (i == 0) ? started : UserEvent::NO_USER_EVENT, spin_ns};
+    make_task_desc(sd, procs[i % procs.size()], seq_task_id, &a, sizeof(a));
+    if(i > 0)
+      add_dependency(sd, SubgraphDefinition::OPKIND_TASK, i - 1,
+                     SubgraphDefinition::OPKIND_TASK, i);
+  }
+  Subgraph sg;
+  Subgraph::create_subgraph(sg, sd, ProfilingRequestSet()).wait();
+  return sg;
+}
+
+// Normal tasks of lower, equal and higher priority become ready once an
+// instantiation of priority 1 is executing: lower must wait for the graph to
+// finish, equal and higher must run while it is executing.
+class GraphPriorityTest : public SubgraphTest {
+public:
+  std::string name() const override { return "GraphPriority.NormalTasks"; }
+  bool can_run() override { return worker_cpus().size() >= 2; }
+
+  void init() override
+  {
+    procs = worker_cpus(2);
+    seq.store(0);
+    started = UserEvent::create_user_event();
+    // odd length: the chain ends on procs[0], where the low-priority task
+    // waits, so "after the graph" is exact there
+    sg = build_seq_chain(procs, 41, 20000 /*20us*/, &seq, slots, started);
+    for(auto &o : outs)
+      o.store(-1);
+  }
+
+  void run() override
+  {
+    Event graph_done = sg.instantiate(nullptr, 0, ProfilingRequestSet(), Event::NO_EVENT,
+                                      1 /*priority*/);
+    // Competing normal tasks, gated on the graph having started.
+    SeqTaskArgs low{&seq, &outs[0], UserEvent::NO_USER_EVENT, 0};
+    SeqTaskArgs equal{&seq, &outs[1], UserEvent::NO_USER_EVENT, 0};
+    SeqTaskArgs high{&seq, &outs[2], UserEvent::NO_USER_EVENT, 0};
+    std::vector<Event> evs = {graph_done,
+                              procs[0].spawn(seq_task_id, &low, sizeof(low), started, 0),
+                              procs[1].spawn(seq_task_id, &equal, sizeof(equal), started, 1),
+                              procs[0].spawn(seq_task_id, &high, sizeof(high), started, 2)};
+    completed = wait_with_timeout(Event::merge_events(evs), config.hang_timeout);
+  }
+
+  bool check() override
+  {
+    int64_t graph_last = slots.back().load();
+    bool ok = completed && (outs[0].load() > graph_last) && (outs[1].load() < graph_last) &&
+              (outs[2].load() < graph_last);
+    if(!ok)
+      log_app.error() << name() << ": completed=" << completed << " graph_last=" << graph_last
+                      << " low=" << outs[0].load() << " equal=" << outs[1].load()
+                      << " high=" << outs[2].load();
+    return ok;
+  }
+
+  void cleanup() override
+  {
+    if(completed)
+      sg.destroy().wait();
+  }
+
+  bool hung() const override { return !completed; }
+
+private:
+  std::vector<Processor> procs;
+  std::atomic<int64_t> seq{0};
+  std::vector<std::atomic<int64_t>> slots;
+  std::atomic<int64_t> outs[3];
+  UserEvent started;
+  Subgraph sg;
+  bool completed = false;
+};
+
+// A higher-priority instantiation arriving while a lower one is executing
+// runs to completion before the lower one runs anything more.
+class GraphPriorityPreemptionTest : public SubgraphTest {
+public:
+  std::string name() const override { return "GraphPriority.TwoGraphs"; }
+  bool can_run() override { return worker_cpus().size() >= 2; }
+
+  void init() override
+  {
+    procs = worker_cpus(2);
+    seq.store(0);
+    started = UserEvent::create_user_event();
+    sg_low = build_seq_chain(procs, 60, 20000, &seq, slots_low, started);
+    sg_high = build_seq_chain(procs, 20, 20000, &seq, slots_high, UserEvent::NO_USER_EVENT);
+  }
+
+  void run() override
+  {
+    Event low_done = sg_low.instantiate(nullptr, 0, ProfilingRequestSet(), Event::NO_EVENT, 0);
+    Event high_done = sg_high.instantiate(nullptr, 0, ProfilingRequestSet(), started, 2);
+    completed =
+        wait_with_timeout(Event::merge_events(low_done, high_done), config.hang_timeout);
+  }
+
+  bool check() override
+  {
+    if(!completed)
+      return false;
+    int64_t high_min = INT64_MAX, high_max = -1, low_rest_min = INT64_MAX;
+    for(auto &s : slots_high) {
+      high_min = std::min(high_min, s.load());
+      high_max = std::max(high_max, s.load());
+    }
+    for(size_t i = 1; i < slots_low.size(); i++)
+      low_rest_min = std::min(low_rest_min, slots_low[i].load());
+    bool ok = (high_min > slots_low[0].load()) && (low_rest_min > high_max);
+    if(!ok)
+      log_app.error() << name() << ": low_first=" << slots_low[0].load() << " high=["
+                      << high_min << "," << high_max << "] low_rest_min=" << low_rest_min;
+    return ok;
+  }
+
+  void cleanup() override
+  {
+    if(completed) {
+      sg_low.destroy().wait();
+      sg_high.destroy().wait();
+    }
+  }
+
+  bool hung() const override { return !completed; }
+
+private:
+  std::vector<Processor> procs;
+  std::atomic<int64_t> seq{0};
+  std::vector<std::atomic<int64_t>> slots_low, slots_high;
+  UserEvent started;
+  Subgraph sg_low, sg_high;
+  bool completed = false;
+};
+
+////////////////////////////////////////////////////////////////////////
+//
 // RemoteInstantiateDestroyTest: a task on another address space
 // instantiates a subgraph owned by this node several times and then
 // destroys it. Everything must run on the owner's processors and the
@@ -1871,7 +2052,9 @@ static void register_common_tasks()
   finish_event_task_id = task_id_counter++;
   noop_task_id = task_id_counter++;
   remote_driver_task_id = task_id_counter++;
+  seq_task_id = task_id_counter++;
   rt.register_task(remote_driver_task_id, remote_driver_task);
+  rt.register_task(seq_task_id, seq_task);
   rt.register_task(dag_task_id, dag_task);
   rt.register_task(counter_task_id, counter_task);
   rt.register_task(launcher_task_id, launcher_task);
@@ -1919,6 +2102,8 @@ static std::vector<std::unique_ptr<SubgraphTest>> make_tests()
   tests.emplace_back(new ManyInstantiationsTest());
   tests.emplace_back(new PoisonedPreconditionTest());
   tests.emplace_back(new MixedWorkloadTest());
+  tests.emplace_back(new GraphPriorityTest());
+  tests.emplace_back(new GraphPriorityPreemptionTest());
   tests.emplace_back(new RemoteInstantiateDestroyTest());
   // Last: a hang here leaves executors wedged, so nothing may follow it.
   tests.emplace_back(new ConcurrentSubgraphsTest());
