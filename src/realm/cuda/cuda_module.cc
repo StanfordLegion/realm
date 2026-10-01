@@ -18,6 +18,7 @@
 #include "realm/cuda/cuda_module.h"
 #include "realm/cuda/cuda_access.h"
 #include "realm/cuda/cuda_internal.h"
+#include "realm/subgraph_impl.h"
 #include "realm/cuda/cuda_memcpy.h"
 
 #include "realm/tasks.h"

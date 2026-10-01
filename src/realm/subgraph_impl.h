@@ -25,7 +25,6 @@
 #include "realm/id.h"
 #include "realm/event_impl.h"
 #include "realm/operation.h"
-#include "realm/proc_impl.h"
 #include "realm/bgwork.h"
 #include "realm/mutex.h"
 
@@ -348,6 +347,15 @@ namespace Realm {
   private:
     Mutex mutex;
     std::queue<SubgraphInstantiationCleanup *> pending_cleanups;
+  };
+
+  // Completion callback for subgraph tasks on processors whose tasks keep
+  // working after their function returns (see the LocalTaskProcessor hooks
+  // in proc_impl.h).
+  class SubgraphAsyncCompletion {
+  public:
+    virtual ~SubgraphAsyncCompletion(void) {}
+    virtual void async_completed(void) = 0;
   };
 
   // SubgraphExecutionState is the per-instantiation state of a subgraph:

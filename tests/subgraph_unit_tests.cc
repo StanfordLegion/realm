@@ -2182,8 +2182,9 @@ struct ZcBuffer {
   void create(size_t count)
   {
     std::vector<size_t> field_sizes(1, sizeof(int));
-    RegionInstance::create_instance(inst, zcopy_mem(), IndexSpace<1>(Rect<1>(0, count - 1)),
-                                    field_sizes, 0 /*SOA*/, ProfilingRequestSet())
+    Rect<1> bounds(Point<1>(0), Point<1>(static_cast<long long>(count) - 1));
+    RegionInstance::create_instance(inst, zcopy_mem(), IndexSpace<1>(bounds), field_sizes,
+                                    0 /*SOA*/, ProfilingRequestSet())
         .wait();
     AffineAccessor<int, 1> acc(inst, 0);
     ptr = acc.ptr(Point<1>(0));
@@ -2325,6 +2326,13 @@ public:
 
   void run() override
   {
+    // once to warm up (module loading, streams), then the measured run
+    completed = wait_with_timeout(sg.instantiate(nullptr, 0, ProfilingRequestSet()),
+                                  config.hang_timeout);
+    if(!completed)
+      return;
+    for(int i = 0; i < N; i++)
+      buf.ptr[i] = 0;
     t0 = Clock::current_time();
     completed = wait_with_timeout(sg.instantiate(nullptr, 0, ProfilingRequestSet()),
                                   config.hang_timeout);

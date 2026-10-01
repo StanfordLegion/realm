@@ -42,6 +42,7 @@ namespace Realm {
   class ProcessorGroupImpl;
   class ProcSubgraphExecutor;
   class SubgraphExecutionState;
+  class SubgraphAsyncCompletion; // subgraph_impl.h
 
   namespace ThreadLocal {
     // if nonzero, prevents application thread from yielding execution
@@ -140,14 +141,6 @@ namespace Realm {
 
   // generic local task processor - subclasses must create and configure a task
   // scheduler and pass in with the set_scheduler() method
-  // Completion callback for subgraph tasks on processors whose tasks keep
-  // working after their function returns (see the LocalTaskProcessor hooks).
-  class SubgraphAsyncCompletion {
-  public:
-    virtual ~SubgraphAsyncCompletion(void) {}
-    virtual void async_completed(void) = 0;
-  };
-
   class LocalTaskProcessor : public ProcessorImpl {
   public:
     LocalTaskProcessor(RuntimeImpl *runtime_impl, Processor _me, Processor::Kind _kind,
