@@ -366,12 +366,19 @@ namespace Realm {
       ~ContextSynchronizer();
 
       void add_fence(GPUWorkFence *fence);
+      // like a fence, but for work that has no Operation (subgraph tasks)
+      void add_notification(GPUCompletionNotification *notification);
 
       void shutdown_threads();
 
       void thread_main();
 
     protected:
+      // with the mutex held: wakes or asks for a thread to perform a sync;
+      //  returns true if the caller must start one (without the mutex)
+      bool request_sync_locked();
+      void start_worker_thread();
+
       GPU *gpu;
       CUcontext context;
       int max_threads;
@@ -379,6 +386,7 @@ namespace Realm {
       Mutex::CondVar condvar;
       bool shutdown_flag;
       GPUWorkFence::FenceList fences;
+      std::vector<GPUCompletionNotification *> notifications;
       int total_threads, sleeping_threads, syncing_threads;
       std::vector<Thread *> worker_threads;
       CoreReservation *core_rsrv;
