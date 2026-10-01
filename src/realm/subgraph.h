@@ -136,7 +136,9 @@ namespace Realm {
     // returns; the compiled plan keeps what it needs.
     struct IndirectionRef {
       const void *ptr;
-      TypeTag type_tag; // NT_TemplateHelper::encode_tag<N,T>() of the copy's space
+      // the (N,T) of the copy's index space, as the DynamicTemplates tag
+      // used throughout Realm (NT_TemplateHelper::encode_tag<N,T>())
+      DynamicTemplates::TagType type_tag;
     };
 
     struct CopyDesc {

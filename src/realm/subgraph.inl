@@ -84,7 +84,8 @@ namespace Realm {
   {
     IndirectionRef ref;
     ref.ptr = indirection;
-    ref.type_tag = NT_TemplateHelper::encode_tag<N, T>();
+    ref.type_tag = DynamicTemplates::ListProduct2<DIMCOUNTS, DIMTYPES>::encode_tag<
+        DynamicTemplates::Int<N>, T>();
     indirects.push_back(ref);
     return *this;
   }
