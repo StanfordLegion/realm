@@ -3701,11 +3701,23 @@ static void remote_full_driver_task(const void *args, size_t arglen, const void 
 {
   const RemoteFullDriverArgs *a = static_cast<const RemoteFullDriverArgs *>(args);
   remote_prof_responses.store(0);
+  // the response runs as a task on this node, on a processor other than the
+  // one this driver is busy polling on
+  Processor responder = Processor::NO_PROC;
+  for(Processor c : all_cpus())
+    if(c != p) {
+      responder = c;
+      break;
+    }
+  if(!responder.exists()) {
+    a->done.cancel();
+    return;
+  }
   UserEvent pre = UserEvent::create_user_event();
   std::vector<Event> preconds = {pre};
   std::vector<Event> posts(1);
   ProfilingRequestSet prs;
-  prs.add_request(p, remote_prof_response_task_id, nullptr, 0)
+  prs.add_request(responder, remote_prof_response_task_id, nullptr, 0)
       .add_measurement<ProfilingMeasurements::OperationTimeline>();
   SubgraphInstantiationProfiling iprof;
   iprof.tasks.emplace_back(0u, prs);
