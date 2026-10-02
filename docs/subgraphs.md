@@ -150,20 +150,30 @@ DMA refactor.
 
 - CPU: simple tasks, copies/fills/reductions, arrivals, interpolation, external
   pre/postconditions, random DAGs over many processors, destroy ordering,
-  thousands of instantiations, poison, mixed normal and subgraph work,
-  blocking tasks, finish events, profiling, graph priority (normal tasks and
-  two graphs), copy replay with interpolated values, copy profiling, poisoned
-  copies, indirect gather, concurrent subgraphs.
-- GPU (`-ll:gpu 1 -ll:zsize 32`, built with CUDA): deferred, stream-aware and
-  plain chains (checking that the host ran ahead or did not), GPU to CPU
-  dependencies and postconditions, finish events, profiling, 500 replays,
-  mixed GPU/CPU chains.
-- Two ranks (`-only Remote`): remote instantiate/destroy, copies to and from a
-  remote instance.
-- Death scenarios (`-death NAME`, one per process, must abort): unsupported
-  operation, profiling on the legacy instantiate, external preconditions on
-  the legacy instantiate, concurrent mode, dependency cycle, unregistered
-  task, indirection type mismatch.
+  thousands of instantiations, poison (tasks, and fills/arrivals/profiled
+  tasks/multi-source postconditions), mixed normal and subgraph work,
+  blocking tasks, finish events, profiling, graph priority (normal tasks, two
+  graphs, and a high-priority graph fed by lower-priority work on its own
+  processor), copy replay with interpolated values, copy profiling, poisoned
+  copies, indirect gather and scatter, multi-field copies, large fills,
+  concurrent subgraphs.
+- GPU (`-ll:gpu 1` or `2`, `-ll:zsize 32`, built with CUDA): deferred,
+  stream-aware and plain chains (checking that the host ran ahead or did
+  not), a chain alternating between two GPUs, GPU to CPU dependencies and
+  postconditions, a GPU task feeding a copy out of frame-buffer memory,
+  finish events, profiling, poison, 500 replays, mixed GPU/CPU chains.
+- Two ranks (`-only Remote`): remote instantiate/destroy, remote instantiation
+  with interpolated arguments, pre/postconditions and instantiation-time
+  profiling, copies to and from a remote instance, copies between two remote
+  instances.
+- Death scenarios (`-death NAME`, one per process, must abort; run with
+  `-ll:util 1`, plus `-ll:gpu 1` for the GPU one): unsupported operation,
+  profiling on the legacy instantiate, external preconditions on the legacy
+  instantiate, concurrent mode, dependency cycle, unregistered task,
+  indirection type mismatch, interpolation out of range, reduction size
+  mismatch, deferred creation, task on a utility processor, destroy twice,
+  instantiate after destroy, deferred-effects GPU task asking for a context
+  synchronization.
 
 `benchmarks/subgraph_ubench` compares plain spawns with compiled replays for
 several graph shapes (`-shape chain|layers|random|copychain`), and
