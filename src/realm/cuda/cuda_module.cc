@@ -1668,8 +1668,17 @@ namespace Realm {
         CHECK_CU(CUDA_DRIVER_FNPTR(cuStreamWaitEvent)(s->get_stream(), e, 0));
         gpu->event_pool.return_event(e);
       }
-      // a deferred-effects task promised that all its work is on the stream,
-      //  so it gets no context synchronization unless it asked for one
+      // a deferred-effects task promised that all its work is on the stream:
+      //  its dependents were ordered after that stream alone at compile time,
+      //  so asking for a context synchronization now cannot be honored
+      if(deferred_effects && (ThreadLocal::context_sync_required > 0)) {
+        log_gpu.fatal() << "subgraph task on " << me
+                        << " was registered with deferred effects (DeferredEffectsProperty "
+                           "or a stream-aware prototype) but called "
+                           "Cuda::set_task_ctxsync_required(true); put all work on the "
+                           "task's stream or register it without the promise";
+        abort();
+      }
       const bool ctxsync = (ThreadLocal::context_sync_required > 0) ||
                            ((ThreadLocal::context_sync_required < 0) && !deferred_effects &&
                             gpu->module->config->cfg_task_context_sync);

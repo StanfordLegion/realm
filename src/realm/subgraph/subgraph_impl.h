@@ -232,6 +232,9 @@ namespace Realm {
     // Compiles `defn`, aborting with a message naming the operation and
     // feature for anything unsupported.
     void compile(void);
+    // Set by compile, cleared by destroy: catches use after destroy for as
+    // long as this slot is not reused (subgraph ids carry no generation).
+    bool alive = false;
 
     void instantiate(const void *args, size_t arglen, const ProfilingRequestSet &prs,
                      const SubgraphInstantiationProfiling &profiling,

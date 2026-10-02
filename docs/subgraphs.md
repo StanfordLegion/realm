@@ -57,6 +57,8 @@ Everything the compiled implementation cannot run makes `create_subgraph` (or
 | Tasks on another node's processors | Only local tasks are compiled; remote work goes through copies. |
 | Tasks on processors other than CPUs and CUDA GPUs | Utility, I/O, OpenMP, Python and HIP processors have no subgraph hooks yet. |
 | A task id not registered on its processor at compile time | The deferred-effects decision needs the registration. |
+| `instantiate` or `destroy` on a subgraph that was destroyed | Detected while the handle's slot has not been reused (subgraph ids carry no generation). |
+| A deferred-effects GPU task calling `Cuda::set_task_ctxsync_required(true)` | Contradicts the promise the compile relied on. |
 | `TaskDesc::priority != 0` | The executor schedules by instantiation priority only. |
 | Collective pre/postconditions | Not implemented. |
 | `create_subgraph` with an untriggered `wait_on`, or with profiling requests | Compile is synchronous and unprofiled. |
@@ -113,8 +115,9 @@ its work is on the stream it was given. Then:
 - GPU tasks on the same GPU that depend on it start as soon as its function
   returns, with `cuStreamWaitEvent` on its token, so the host can enqueue a
   whole chain while the device is still working on the first kernel.
-- No context synchronization is used for its completion (unless it calls
-  `Cuda::set_task_ctxsync_required(true)`).
+- No context synchronization is used for its completion. Calling
+  `Cuda::set_task_ctxsync_required(true)` from such a task is fatal, since
+  its dependents were ordered after its stream alone when the graph compiled.
 
 Tasks without the promise follow Realm's usual rule: completion covers the
 whole context (`cuCtxRecordEvent` on drivers that have it, the context

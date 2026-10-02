@@ -87,6 +87,8 @@ enum
 {
   FID_DATA = 100,
   FID_PTR = 101,
+  FID_B = 102,
+  FID_BIG = 103,
 };
 
 // Common reduction operation IDs.
@@ -2213,6 +2215,12 @@ static int gpu_plain_task_id = 0;    // the same function without the property
 static int gpu_stream_task_id = 0;   // stream-aware prototype (implicitly deferred)
 static int gpu_fevent_task_id = 0;   // deferred, asks for its finish event
 static int read_int_task_id = 0;     // CPU: copies *src to an atomic
+static int gpu_fb_write_task_id = 0; // deferred, writes frame-buffer memory
+static int gpu_ctxsync_task_id = 0;  // deferred but asks for a context sync (death scenario)
+static void gpu_fb_write_task(const void *args, size_t arglen, const void *userdata,
+                              size_t userlen, Processor p);
+static void gpu_ctxsync_task(const void *args, size_t arglen, const void *userdata,
+                             size_t userlen, Processor p);
 
 static void gpu_spin_task(const void *args, size_t arglen, const void *userdata,
                           size_t userlen, Processor p)
@@ -2267,9 +2275,23 @@ static void register_gpu_tasks()
   gpu_stream_task_id = task_id_counter++;
   gpu_fevent_task_id = task_id_counter++;
   read_int_task_id = task_id_counter++;
+  gpu_fb_write_task_id = task_id_counter++;
+  gpu_ctxsync_task_id = task_id_counter++;
   Runtime::get_runtime().register_task(read_int_task_id, read_int_task);
   if(all_gpus().empty())
     return;
+  {
+    CodeDescriptor fbw(gpu_fb_write_task);
+    fbw.add_property(new DeferredEffectsProperty);
+    Processor::register_task_by_kind(Processor::TOC_PROC, false /*!global*/,
+                                     gpu_fb_write_task_id, fbw, ProfilingRequestSet())
+        .wait();
+    CodeDescriptor cs(gpu_ctxsync_task);
+    cs.add_property(new DeferredEffectsProperty);
+    Processor::register_task_by_kind(Processor::TOC_PROC, false /*!global*/,
+                                     gpu_ctxsync_task_id, cs, ProfilingRequestSet())
+        .wait();
+  }
   CodeDescriptor deferred(gpu_spin_task);
   deferred.add_property(new DeferredEffectsProperty);
   Processor::register_task_by_kind(Processor::TOC_PROC, false /*!global*/,
@@ -2748,6 +2770,257 @@ private:
   bool completed = false;
 };
 
+
+// Edges between tasks on different GPUs take the completion path: each
+// task waits for the previous kernel to finish before its function runs.
+class GpuCrossChainTest : public SubgraphTest {
+public:
+  std::string name() const override { return "Gpu.CrossGpuChain"; }
+  bool can_run() override { return gpu_tests_can_run() && (all_gpus().size() >= 2); }
+
+  void init() override
+  {
+    gpus = all_gpus();
+    buf.create(N);
+    stamps.assign(N, 0.0);
+    SubgraphDefinition sd;
+    sd.concurrency_mode = SubgraphDefinition::ONE_SHOT;
+    for(int i = 0; i < N; i++) {
+      GpuSpinArgs a{buf.ptr + i, (i > 0) ? buf.ptr + (i - 1) : nullptr, 1, spin_ns,
+                    &stamps[i]};
+      int t = make_task_desc(sd, gpus[i % 2], gpu_deferred_task_id, &a, sizeof(a));
+      if(i > 0)
+        add_dependency(sd, SubgraphDefinition::OPKIND_TASK, t - 1,
+                       SubgraphDefinition::OPKIND_TASK, t);
+    }
+    Subgraph::create_subgraph(sg, sd, ProfilingRequestSet()).wait();
+  }
+
+  void run() override
+  {
+    // warm up both GPUs, then measure
+    completed = wait_with_timeout(sg.instantiate(nullptr, 0, ProfilingRequestSet()),
+                                  config.hang_timeout);
+    if(!completed)
+      return;
+    for(int i = 0; i < N; i++)
+      buf.ptr[i] = 0;
+    completed = wait_with_timeout(sg.instantiate(nullptr, 0, ProfilingRequestSet()),
+                                  config.hang_timeout);
+  }
+
+  bool check() override
+  {
+    if(!completed)
+      return false;
+    bool values_ok = true;
+    for(int i = 0; i < N; i++)
+      values_ok = values_ok && (buf.ptr[i] == i + 1);
+    const double spread = stamps[N - 1] - stamps[0];
+    const bool waited = spread >= 0.5 * (N - 1) * spin_ns * 1e-9;
+    bool ok = values_ok && waited;
+    std::ostringstream os;
+    os << name() << ": last value " << buf.ptr[N - 1] << " (want " << N
+       << "), task functions spread over " << spread * 1e3 << " ms (" << N << " kernels of "
+       << spin_ns / 1000 << " us alternating between 2 GPUs)";
+    if(ok)
+      report(os.str());
+    else
+      log_app.error() << os.str();
+    return ok;
+  }
+
+  void cleanup() override
+  {
+    if(completed)
+      sg.destroy().wait();
+    buf.destroy();
+  }
+
+  bool hung() const override { return !completed; }
+
+private:
+  static constexpr int N = 8;
+  static constexpr long long spin_ns = 100000;
+  std::vector<Processor> gpus;
+  ZcBuffer buf;
+  std::vector<double> stamps;
+  Subgraph sg;
+  bool completed = false;
+};
+
+// A deferred GPU task writes frame-buffer memory, a copy moves it to system
+// memory, a CPU task reads it: the copy must wait for the kernel.
+struct FbWriteArgs {
+  RegionInstance inst;
+  int value;
+  long long spin_ns;
+};
+static void gpu_fb_write_task(const void *args, size_t arglen, const void *userdata,
+                              size_t userlen, Processor p)
+{
+  const FbWriteArgs *a = static_cast<const FbWriteArgs *>(args);
+  AffineAccessor<int, 1> acc(a->inst, FID_DATA);
+  subgraph_gpu_spin_add(Cuda::get_task_cuda_stream(), acc.ptr(Point<1>(0)), nullptr, a->value,
+                        a->spin_ns);
+}
+
+class GpuTaskThenCopyTest : public SubgraphTest {
+public:
+  std::string name() const override { return "Gpu.TaskThenCopy"; }
+  bool can_run() override
+  {
+    if(!gpu_tests_can_run() || !sysmem().exists())
+      return false;
+    return Machine::MemoryQuery(Machine::get_machine())
+        .only_kind(Memory::GPU_FB_MEM)
+        .best_affinity_to(all_gpus()[0])
+        .first()
+        .exists();
+  }
+
+  void init() override
+  {
+    gpu = all_gpus()[0];
+    Memory fb = Machine::MemoryQuery(Machine::get_machine())
+                    .only_kind(Memory::GPU_FB_MEM)
+                    .best_affinity_to(gpu)
+                    .first();
+    IndexSpace<1> is = Rect<1>(0, 0);
+    std::map<FieldID, size_t> sizes = {{FID_DATA, sizeof(int)}};
+    RegionInstance::create_instance(fb_inst, fb, is, sizes, 0, ProfilingRequestSet()).wait();
+    RegionInstance::create_instance(sys_inst, sysmem(), is, sizes, 0, ProfilingRequestSet())
+        .wait();
+    AffineAccessor<int, 1> acc(sys_inst, FID_DATA);
+    acc[0] = -1;
+    sys_ptr = acc.ptr(Point<1>(0));
+    seen.store(-1);
+    SubgraphDefinition sd;
+    sd.concurrency_mode = SubgraphDefinition::ONE_SHOT;
+    FbWriteArgs w{fb_inst, 77, 1000000 /*1 ms*/};
+    int g = make_task_desc(sd, gpu, gpu_fb_write_task_id, &w, sizeof(w));
+    int c = make_copy_desc(sd, is, fb_inst, sys_inst, FID_DATA, sizeof(int));
+    ReadIntArgs r{sys_ptr, &seen};
+    int t = make_task_desc(sd, worker_cpus()[0], read_int_task_id, &r, sizeof(r));
+    add_dependency(sd, SubgraphDefinition::OPKIND_TASK, g, SubgraphDefinition::OPKIND_COPY, c);
+    add_dependency(sd, SubgraphDefinition::OPKIND_COPY, c, SubgraphDefinition::OPKIND_TASK, t);
+    Subgraph::create_subgraph(sg, sd, ProfilingRequestSet()).wait();
+  }
+
+  void run() override
+  {
+    completed = wait_with_timeout(sg.instantiate(nullptr, 0, ProfilingRequestSet()),
+                                  config.hang_timeout);
+  }
+
+  bool check() override
+  {
+    bool ok = completed && (seen.load() == 77) && (*sys_ptr == 77);
+    if(!ok)
+      log_app.error() << name() << ": completed=" << completed << " seen=" << seen.load()
+                      << " sysmem=" << *sys_ptr;
+    return ok;
+  }
+
+  void cleanup() override
+  {
+    if(completed)
+      sg.destroy().wait();
+    fb_inst.destroy();
+    sys_inst.destroy();
+  }
+
+  bool hung() const override { return !completed; }
+
+private:
+  Processor gpu;
+  RegionInstance fb_inst, sys_inst;
+  int *sys_ptr = nullptr;
+  std::atomic<int64_t> seen{-1};
+  Subgraph sg;
+  bool completed = false;
+};
+
+// A poisoned input skips a GPU task and poisons the finish event.
+class GpuPoisonTest : public SubgraphTest {
+public:
+  std::string name() const override { return "Gpu.Poison"; }
+  bool can_run() override { return gpu_tests_can_run(); }
+
+  void init() override
+  {
+    gpu = all_gpus()[0];
+    buf.create(1);
+    SubgraphDefinition sd;
+    sd.concurrency_mode = SubgraphDefinition::ONE_SHOT;
+    GpuSpinArgs a{buf.ptr, nullptr, 42, 0, nullptr};
+    int g = make_task_desc(sd, gpu, gpu_deferred_task_id, &a, sizeof(a));
+    add_dependency(sd, SubgraphDefinition::OPKIND_EXT_PRECOND, 0,
+                   SubgraphDefinition::OPKIND_TASK, g);
+    Subgraph::create_subgraph(sg, sd, ProfilingRequestSet()).wait();
+  }
+
+  void run() override
+  {
+    UserEvent bad = UserEvent::create_user_event();
+    bad.cancel();
+    std::vector<Event> pre = {bad}, post;
+    completed = wait_with_timeout(sg.instantiate(nullptr, 0, ProfilingRequestSet(), pre, post),
+                                  config.hang_timeout, &poisoned);
+    usleep(2000); // a kernel that ran anyway would have written by now
+  }
+
+  bool check() override
+  {
+    bool ok = completed && poisoned && (buf.ptr[0] == 0);
+    if(!ok)
+      log_app.error() << name() << ": completed=" << completed << " poisoned=" << poisoned
+                      << " value=" << buf.ptr[0];
+    return ok;
+  }
+
+  void cleanup() override
+  {
+    if(completed)
+      sg.destroy().wait();
+    buf.destroy();
+  }
+
+  bool hung() const override { return !completed; }
+
+private:
+  Processor gpu;
+  ZcBuffer buf;
+  Subgraph sg;
+  bool completed = false, poisoned = false;
+};
+
+// For the death scenario: a deferred-effects task that breaks its promise.
+static void gpu_ctxsync_task(const void *args, size_t arglen, const void *userdata,
+                             size_t userlen, Processor p)
+{
+  const GpuSpinArgs *a = static_cast<const GpuSpinArgs *>(args);
+  Cuda::set_task_ctxsync_required(true);
+  subgraph_gpu_spin_add(Cuda::get_task_cuda_stream(), a->dst, a->src, a->add, a->spin_ns);
+}
+
+static void death_deferred_task_requests_ctxsync_impl()
+{
+  if(!gpu_tests_can_run()) {
+    printf("DEATH-TEST-SKIPPED\n");
+    return;
+  }
+  ZcBuffer buf;
+  buf.create(1);
+  SubgraphDefinition sd;
+  sd.concurrency_mode = SubgraphDefinition::ONE_SHOT;
+  GpuSpinArgs a{buf.ptr, nullptr, 1, 0, nullptr};
+  make_task_desc(sd, all_gpus()[0], gpu_ctxsync_task_id, &a, sizeof(a));
+  Subgraph sg;
+  Subgraph::create_subgraph(sg, sd, ProfilingRequestSet()).wait();
+  sg.instantiate(nullptr, 0, ProfilingRequestSet()).wait();
+}
+
 #endif // SUBGRAPH_TESTS_CUDA
 
 
@@ -2822,6 +3095,7 @@ public:
     ReaderArgs r{dst, slots.data(), 0};
     int tw = make_task_desc(sd, cpu, writer_task_id, &w, sizeof(w));
     int c = make_copy_desc(sd, is, src, dst, FID_DATA, sizeof(int));
+    sd.copies[c].priority = 1; // added to the instantiation's priority
     int tr = make_task_desc(sd, cpu, reader_task_id, &r, sizeof(r));
     add_dependency(sd, SubgraphDefinition::OPKIND_TASK, tw, SubgraphDefinition::OPKIND_COPY,
                    c);
@@ -3277,6 +3551,629 @@ private:
   bool completed = false;
 };
 
+
+////////////////////////////////////////////////////////////////////////
+//
+// Second batch: priority with external inputs, remote instantiation with
+// the full payload, copy variants, poison across operation kinds.
+//
+
+// A high-priority graph waits on an external precondition produced by
+// lower-priority work (a normal task or a lower-priority graph) on one of
+// its processors. The compile-time analysis of which inputs each processor
+// depends on keeps that processor open until the input has triggered, so
+// the producer runs and the graph completes instead of deadlocking.
+class GraphPriorityInputTest : public SubgraphTest {
+public:
+  explicit GraphPriorityInputTest(bool _producer_is_graph)
+    : producer_is_graph(_producer_is_graph)
+  {}
+  std::string name() const override
+  {
+    return producer_is_graph ? "GraphPriority.InputFromGraph" : "GraphPriority.InputFromTask";
+  }
+  bool can_run() override { return worker_cpus().size() >= 2; }
+
+  void init() override
+  {
+    procs = worker_cpus(2);
+    seq.store(0);
+    slots = std::vector<std::atomic<int64_t>>(N);
+    for(auto &s : slots)
+      s.store(-1);
+    producer_slot.store(-1);
+    SubgraphDefinition sd;
+    sd.concurrency_mode = SubgraphDefinition::ONE_SHOT;
+    for(int i = 0; i < N; i++) {
+      SeqTaskArgs a{&seq, &slots[i], UserEvent::NO_USER_EVENT, 20000};
+      make_task_desc(sd, procs[i % 2], seq_task_id, &a, sizeof(a));
+      if(i > 0)
+        add_dependency(sd, SubgraphDefinition::OPKIND_TASK, i - 1,
+                       SubgraphDefinition::OPKIND_TASK, i);
+    }
+    add_dependency(sd, SubgraphDefinition::OPKIND_EXT_PRECOND, 0,
+                   SubgraphDefinition::OPKIND_TASK, 0);
+    Subgraph::create_subgraph(sg_high, sd, ProfilingRequestSet()).wait();
+    if(producer_is_graph) {
+      // the event to trigger is only known at run time: interpolate it
+      SubgraphDefinition pd;
+      pd.concurrency_mode = SubgraphDefinition::ONE_SHOT;
+      SeqTaskArgs a{&seq, &producer_slot, UserEvent::NO_USER_EVENT, 2000000 /*2 ms*/};
+      int t = make_task_desc(pd, procs[0], seq_task_id, &a, sizeof(a));
+      SubgraphDefinition::Interpolation ip;
+      ip.offset = 0;
+      ip.bytes = sizeof(UserEvent);
+      ip.target_kind = SubgraphDefinition::Interpolation::TARGET_TASK_ARGS;
+      ip.target_index = t;
+      ip.target_offset = offsetof(SeqTaskArgs, to_trigger);
+      ip.redop_id = 0;
+      pd.interpolations.push_back(ip);
+      Subgraph::create_subgraph(sg_low, pd, ProfilingRequestSet()).wait();
+    }
+  }
+
+  void run() override
+  {
+    UserEvent input = UserEvent::create_user_event();
+    std::vector<Event> pre = {input}, post;
+    Event high = sg_high.instantiate(nullptr, 0, ProfilingRequestSet(), pre, post,
+                                     Event::NO_EVENT, 2 /*priority*/);
+    usleep(2000); // let the high graph become active on both processors
+    Event low;
+    if(producer_is_graph) {
+      low = sg_low.instantiate(&input, sizeof(input), ProfilingRequestSet(), Event::NO_EVENT,
+                               0 /*priority*/);
+    } else {
+      SeqTaskArgs a{&seq, &producer_slot, input, 2000000 /*2 ms*/};
+      low = procs[0].spawn(seq_task_id, &a, sizeof(a), Event::NO_EVENT, 0 /*priority*/);
+    }
+    completed = wait_with_timeout(Event::merge_events(high, low), config.hang_timeout);
+  }
+
+  bool check() override
+  {
+    bool ok = completed && (producer_slot.load() >= 0);
+    for(auto &s : slots)
+      ok = ok && (s.load() > producer_slot.load());
+    if(!ok)
+      log_app.error() << name() << ": completed=" << completed
+                      << " producer=" << producer_slot.load()
+                      << " first graph task=" << slots[0].load();
+    return ok;
+  }
+
+  void cleanup() override
+  {
+    if(completed) {
+      sg_high.destroy().wait();
+      if(producer_is_graph)
+        sg_low.destroy().wait();
+    }
+  }
+
+  bool hung() const override { return !completed; }
+
+private:
+  static constexpr int N = 6;
+  bool producer_is_graph;
+  std::vector<Processor> procs;
+  std::atomic<int64_t> seq{0}, producer_slot{-1};
+  std::vector<std::atomic<int64_t>> slots;
+  Subgraph sg_high, sg_low;
+  bool completed = false;
+};
+
+// Remote instantiation with everything in the payload: interpolated
+// arguments, a precondition event from the remote node, a postcondition the
+// remote node waits on, and instantiation-time profiling answered on the
+// remote node.
+struct StoreArgs {
+  std::atomic<int64_t> *slot;
+  int64_t value;
+};
+static int store_value_task_id = 0;
+static void store_value_task(const void *args, size_t arglen, const void *userdata,
+                             size_t userlen, Processor p)
+{
+  const StoreArgs *a = static_cast<const StoreArgs *>(args);
+  a->slot->store(a->value);
+}
+
+static std::atomic<int> remote_prof_responses{0}; // on the node that runs the driver
+static int remote_prof_response_task_id = 0;
+static void remote_prof_response_task(const void *args, size_t arglen, const void *userdata,
+                                      size_t userlen, Processor p)
+{
+  ProfilingResponse resp(args, arglen);
+  ProfilingMeasurements::OperationTimeline tl;
+  if(resp.get_measurement(tl))
+    remote_prof_responses.fetch_add(1);
+}
+
+struct RemoteFullDriverArgs {
+  Subgraph sg;
+  UserEvent done;
+  int64_t value;
+};
+static int remote_full_driver_task_id = 0;
+static void remote_full_driver_task(const void *args, size_t arglen, const void *userdata,
+                                    size_t userlen, Processor p)
+{
+  const RemoteFullDriverArgs *a = static_cast<const RemoteFullDriverArgs *>(args);
+  remote_prof_responses.store(0);
+  UserEvent pre = UserEvent::create_user_event();
+  std::vector<Event> preconds = {pre};
+  std::vector<Event> posts(1);
+  ProfilingRequestSet prs;
+  prs.add_request(p, remote_prof_response_task_id, nullptr, 0)
+      .add_measurement<ProfilingMeasurements::OperationTimeline>();
+  SubgraphInstantiationProfiling iprof;
+  iprof.tasks.emplace_back(0u, prs);
+  int64_t v = a->value;
+  Event e = a->sg.instantiate(&v, sizeof(v), ProfilingRequestSet(), iprof, preconds, posts);
+  pre.trigger();
+  e.wait();
+  posts[0].wait();
+  double deadline = Clock::current_time() + 10.0;
+  while((remote_prof_responses.load() < 1) && (Clock::current_time() < deadline))
+    usleep(500);
+  if(remote_prof_responses.load() == 1)
+    a->done.trigger();
+  else
+    a->done.cancel();
+}
+
+class RemoteFullInstantiateTest : public SubgraphTest {
+public:
+  std::string name() const override { return "RemoteFullInstantiate"; }
+  bool can_run() override
+  {
+    return (Machine::get_machine().get_address_space_count() >= 2) &&
+           (worker_cpus().size() >= 1) && remote_cpu().exists();
+  }
+
+  void init() override
+  {
+    slot.store(-1);
+    SubgraphDefinition sd;
+    sd.concurrency_mode = SubgraphDefinition::ONE_SHOT;
+    StoreArgs a{&slot, 0};
+    int t = make_task_desc(sd, worker_cpus()[0], store_value_task_id, &a, sizeof(a));
+    add_dependency(sd, SubgraphDefinition::OPKIND_EXT_PRECOND, 0,
+                   SubgraphDefinition::OPKIND_TASK, t);
+    add_dependency(sd, SubgraphDefinition::OPKIND_TASK, t,
+                   SubgraphDefinition::OPKIND_EXT_POSTCOND, 0);
+    SubgraphDefinition::Interpolation ip;
+    ip.offset = 0;
+    ip.bytes = sizeof(int64_t);
+    ip.target_kind = SubgraphDefinition::Interpolation::TARGET_TASK_ARGS;
+    ip.target_index = t;
+    ip.target_offset = offsetof(StoreArgs, value);
+    ip.redop_id = 0;
+    sd.interpolations.push_back(ip);
+    Subgraph::create_subgraph(sg, sd, ProfilingRequestSet()).wait();
+  }
+
+  void run() override
+  {
+    UserEvent done = UserEvent::create_user_event();
+    RemoteFullDriverArgs d{sg, done, 4242};
+    remote_cpu().spawn(remote_full_driver_task_id, &d, sizeof(d));
+    completed = wait_with_timeout(done, config.hang_timeout, &poisoned);
+  }
+
+  bool check() override
+  {
+    bool ok = completed && !poisoned && (slot.load() == 4242);
+    if(!ok)
+      log_app.error() << name() << ": completed=" << completed << " poisoned=" << poisoned
+                      << " (profiling response missing on the remote node) slot="
+                      << slot.load();
+    return ok;
+  }
+
+  void cleanup() override
+  {
+    if(completed)
+      sg.destroy().wait();
+  }
+
+  bool hung() const override { return !completed; }
+
+private:
+  std::atomic<int64_t> slot{-1};
+  Subgraph sg;
+  bool completed = false, poisoned = false;
+};
+
+// Two fields moved by one copy operation.
+class CopyMultiFieldTest : public SubgraphTest {
+public:
+  std::string name() const override { return "CopyMultiField"; }
+  bool can_run() override { return sysmem().exists(); }
+
+  void init() override
+  {
+    IndexSpace<1> is = Rect<1>(0, N - 1);
+    std::map<FieldID, size_t> sizes = {{FID_DATA, sizeof(int)}, {FID_B, sizeof(int)}};
+    RegionInstance::create_instance(src, sysmem(), is, sizes, 0, ProfilingRequestSet()).wait();
+    RegionInstance::create_instance(dst, sysmem(), is, sizes, 0, ProfilingRequestSet()).wait();
+    AffineAccessor<int, 1> sa(src, FID_DATA), sb(src, FID_B), da(dst, FID_DATA), db(dst, FID_B);
+    for(int i = 0; i < N; i++) {
+      sa[i] = i;
+      sb[i] = 100 + i;
+      da[i] = db[i] = -1;
+    }
+    SubgraphDefinition sd;
+    sd.concurrency_mode = SubgraphDefinition::ONE_SHOT;
+    SubgraphDefinition::CopyDesc cd;
+    cd.space = is;
+    cd.srcs.resize(2);
+    cd.dsts.resize(2);
+    cd.srcs[0].set_field(src, FID_DATA, sizeof(int));
+    cd.dsts[0].set_field(dst, FID_DATA, sizeof(int));
+    cd.srcs[1].set_field(src, FID_B, sizeof(int));
+    cd.dsts[1].set_field(dst, FID_B, sizeof(int));
+    sd.copies.push_back(cd);
+    Subgraph::create_subgraph(sg, sd, ProfilingRequestSet()).wait();
+  }
+
+  void run() override
+  {
+    completed = wait_with_timeout(sg.instantiate(nullptr, 0, ProfilingRequestSet()),
+                                  config.hang_timeout);
+  }
+
+  bool check() override
+  {
+    AffineAccessor<int, 1> da(dst, FID_DATA), db(dst, FID_B);
+    bool ok = completed;
+    for(int i = 0; i < N; i++)
+      ok = ok && (da[i] == i) && (db[i] == 100 + i);
+    if(!ok)
+      log_app.error() << name() << ": completed=" << completed << " dst[0]=" << da[0] << "/"
+                      << db[0];
+    return ok;
+  }
+
+  void cleanup() override
+  {
+    if(completed)
+      sg.destroy().wait();
+    src.destroy();
+    dst.destroy();
+  }
+
+  bool hung() const override { return !completed; }
+
+private:
+  static constexpr int N = 16;
+  RegionInstance src, dst;
+  Subgraph sg;
+  bool completed = false;
+};
+
+// A scatter through a typed indirection: dst[idx[i]] = src[i].
+class CopyScatterTest : public SubgraphTest {
+public:
+  std::string name() const override { return "CopyScatter"; }
+  bool can_run() override { return sysmem().exists(); }
+
+  void init() override
+  {
+    IndexSpace<1> is = Rect<1>(0, N - 1);
+    std::map<FieldID, size_t> data_sizes = {{FID_DATA, sizeof(int)}};
+    std::map<FieldID, size_t> ptr_sizes = {{FID_PTR, sizeof(Point<1>)}};
+    RegionInstance::create_instance(src, sysmem(), is, data_sizes, 0, ProfilingRequestSet())
+        .wait();
+    RegionInstance::create_instance(dst, sysmem(), is, data_sizes, 0, ProfilingRequestSet())
+        .wait();
+    RegionInstance::create_instance(idx, sysmem(), is, ptr_sizes, 0, ProfilingRequestSet())
+        .wait();
+    {
+      AffineAccessor<int, 1> acc_src(src, FID_DATA), acc_dst(dst, FID_DATA);
+      AffineAccessor<Point<1>, 1> acc_idx(idx, FID_PTR);
+      for(int i = 0; i < N; i++) {
+        acc_src[i] = 10 * i;
+        acc_dst[i] = -1;
+        acc_idx[i] = Point<1>(N - 1 - i);
+      }
+    }
+    CopyIndirection<1, int>::Unstructured<1, int> ind(
+        idx, std::vector<IndexSpace<1>>(1, is), std::vector<RegionInstance>(1, dst), FID_PTR);
+    ind.next_indirection = nullptr;
+    SubgraphDefinition sd;
+    sd.concurrency_mode = SubgraphDefinition::ONE_SHOT;
+    SubgraphDefinition::CopyDesc cd;
+    cd.space = is;
+    cd.srcs.resize(1);
+    cd.srcs[0].set_field(src, FID_DATA, sizeof(int));
+    cd.dsts.resize(1);
+    cd.dsts[0].set_indirect(0, FID_DATA, sizeof(int));
+    cd.add_indirection<1, int>(&ind);
+    sd.copies.push_back(cd);
+    Subgraph::create_subgraph(sg, sd, ProfilingRequestSet()).wait();
+  }
+
+  void run() override
+  {
+    completed = wait_with_timeout(sg.instantiate(nullptr, 0, ProfilingRequestSet()),
+                                  config.hang_timeout);
+  }
+
+  bool check() override
+  {
+    AffineAccessor<int, 1> acc(dst, FID_DATA);
+    bool ok = completed;
+    for(int i = 0; i < N; i++)
+      ok = ok && (acc[N - 1 - i] == 10 * i);
+    if(!ok)
+      log_app.error() << name() << ": completed=" << completed << " dst[N-1]=" << acc[N - 1];
+    return ok;
+  }
+
+  void cleanup() override
+  {
+    if(completed)
+      sg.destroy().wait();
+    src.destroy();
+    dst.destroy();
+    idx.destroy();
+  }
+
+  bool hung() const override { return !completed; }
+
+private:
+  static constexpr int N = 16;
+  RegionInstance src, dst, idx;
+  Subgraph sg;
+  bool completed = false;
+};
+
+// A fill whose value is larger than the inline fill buffer of a copy field.
+struct BigValue {
+  int v[6];
+};
+class CopyLargeFillTest : public SubgraphTest {
+public:
+  std::string name() const override { return "CopyLargeFill"; }
+  bool can_run() override { return sysmem().exists(); }
+
+  void init() override
+  {
+    IndexSpace<1> is = Rect<1>(0, N - 1);
+    std::map<FieldID, size_t> sizes = {{FID_BIG, sizeof(BigValue)}};
+    RegionInstance::create_instance(dst, sysmem(), is, sizes, 0, ProfilingRequestSet()).wait();
+    SubgraphDefinition sd;
+    sd.concurrency_mode = SubgraphDefinition::ONE_SHOT;
+    BigValue fill = {{1, 2, 3, 4, 5, 6}};
+    SubgraphDefinition::CopyDesc cd;
+    cd.space = is;
+    cd.srcs.resize(1);
+    cd.srcs[0].set_fill(&fill, sizeof(fill));
+    cd.dsts.resize(1);
+    cd.dsts[0].set_field(dst, FID_BIG, sizeof(BigValue));
+    sd.copies.push_back(cd);
+    Subgraph::create_subgraph(sg, sd, ProfilingRequestSet()).wait();
+  }
+
+  void run() override
+  {
+    completed = wait_with_timeout(sg.instantiate(nullptr, 0, ProfilingRequestSet()),
+                                  config.hang_timeout);
+  }
+
+  bool check() override
+  {
+    AffineAccessor<BigValue, 1> acc(dst, FID_BIG);
+    bool ok = completed;
+    for(int i = 0; i < N; i++)
+      for(int k = 0; k < 6; k++)
+        ok = ok && (acc[i].v[k] == k + 1);
+    if(!ok)
+      log_app.error() << name() << ": completed=" << completed << " dst[0]=" << acc[0].v[0]
+                      << ".." << acc[0].v[5];
+    return ok;
+  }
+
+  void cleanup() override
+  {
+    if(completed)
+      sg.destroy().wait();
+    dst.destroy();
+  }
+
+  bool hung() const override { return !completed; }
+
+private:
+  static constexpr int N = 8;
+  RegionInstance dst;
+  Subgraph sg;
+  bool completed = false;
+};
+
+// Multi-rank: a copy whose endpoints are both on another node, followed by
+// a copy back so the result can be checked here.
+class RemoteCopyRemoteEndpointsTest : public SubgraphTest {
+public:
+  std::string name() const override { return "RemoteCopyRemoteEndpoints"; }
+  bool can_run() override { return sysmem().exists() && remote_sysmem().exists(); }
+
+  void init() override
+  {
+    IndexSpace<1> is = Rect<1>(0, N - 1);
+    std::map<FieldID, size_t> sizes = {{FID_DATA, sizeof(int)}};
+    Memory rm = remote_sysmem();
+    RegionInstance::create_instance(ra, rm, is, sizes, 0, ProfilingRequestSet()).wait();
+    RegionInstance::create_instance(rb, rm, is, sizes, 0, ProfilingRequestSet()).wait();
+    RegionInstance::create_instance(local, sysmem(), is, sizes, 0, ProfilingRequestSet())
+        .wait();
+    int five = 5, zero = 0;
+    std::vector<CopySrcDstField> fa(1), fl(1);
+    fa[0].set_field(ra, FID_DATA, sizeof(int));
+    fl[0].set_field(local, FID_DATA, sizeof(int));
+    is.fill(fa, ProfilingRequestSet(), &five, sizeof(five)).wait();
+    is.fill(fl, ProfilingRequestSet(), &zero, sizeof(zero)).wait();
+    SubgraphDefinition sd;
+    sd.concurrency_mode = SubgraphDefinition::INSTANTIATION_ORDER;
+    int c1 = make_copy_desc(sd, is, ra, rb, FID_DATA, sizeof(int));
+    int c2 = make_copy_desc(sd, is, rb, local, FID_DATA, sizeof(int));
+    add_dependency(sd, SubgraphDefinition::OPKIND_COPY, c1, SubgraphDefinition::OPKIND_COPY,
+                   c2);
+    Subgraph::create_subgraph(sg, sd, ProfilingRequestSet()).wait();
+  }
+
+  void run() override
+  {
+    Event e = Event::NO_EVENT;
+    for(int i = 0; i < 5; i++)
+      e = sg.instantiate(nullptr, 0, ProfilingRequestSet());
+    completed = wait_with_timeout(e, config.hang_timeout);
+  }
+
+  bool check() override
+  {
+    AffineAccessor<int, 1> acc(local, FID_DATA);
+    bool ok = completed;
+    for(int i = 0; i < N; i++)
+      ok = ok && (acc[i] == 5);
+    if(!ok)
+      log_app.error() << name() << ": completed=" << completed << " local[0]=" << acc[0];
+    return ok;
+  }
+
+  void cleanup() override
+  {
+    if(completed)
+      sg.destroy().wait();
+    ra.destroy();
+    rb.destroy();
+    local.destroy();
+  }
+
+  bool hung() const override { return !completed; }
+
+private:
+  static constexpr int N = 64;
+  RegionInstance ra, rb, local;
+  Subgraph sg;
+  bool completed = false;
+};
+
+// A poisoned input skips a fill, the arrival behind it and a profiled task
+// (whose status comes back CANCELLED), poisons a postcondition with one
+// poisoned source among two, and leaves an unrelated task and postcondition
+// alone.
+struct StatusPayload {
+  std::atomic<int> *result;
+};
+static int status_response_task_id = 0;
+static void status_response_task(const void *args, size_t arglen, const void *userdata,
+                                 size_t userlen, Processor p)
+{
+  ProfilingResponse resp(args, arglen);
+  const StatusPayload *pl = static_cast<const StatusPayload *>(resp.user_data());
+  ProfilingMeasurements::OperationStatus st;
+  pl->result->store(resp.get_measurement(st) ? int(st.result) : -1);
+}
+
+class PoisonKindsTest : public SubgraphTest {
+public:
+  std::string name() const override { return "PoisonKinds"; }
+  bool can_run() override { return (worker_cpus().size() >= 1) && sysmem().exists(); }
+
+  void init() override
+  {
+    Processor cpu = worker_cpus()[0];
+    IndexSpace<1> is = Rect<1>(0, 7);
+    std::map<FieldID, size_t> sizes = {{FID_DATA, sizeof(int)}};
+    RegionInstance::create_instance(dst, sysmem(), is, sizes, 0, ProfilingRequestSet()).wait();
+    int zero = 0;
+    std::vector<CopySrcDstField> f(1);
+    f[0].set_field(dst, FID_DATA, sizeof(int));
+    is.fill(f, ProfilingRequestSet(), &zero, sizeof(zero)).wait();
+    barrier = Barrier::create_barrier(1);
+    counts.store(0);
+    status.store(INT_MIN);
+
+    SubgraphDefinition sd;
+    sd.concurrency_mode = SubgraphDefinition::ONE_SHOT;
+    int eleven = 11;
+    int fill = make_fill_desc(sd, is, dst, FID_DATA, &eleven, sizeof(eleven));
+    SubgraphDefinition::ArrivalDesc ad;
+    ad.barrier = barrier;
+    ad.count = 1;
+    sd.arrivals.push_back(ad);
+    int arr = int(sd.arrivals.size() - 1);
+    CounterTaskArgs c{&counts, UserEvent::NO_USER_EVENT};
+    int clean = make_task_desc(sd, cpu, counter_task_id, &c, sizeof(c));
+    int skipped = make_task_desc(sd, cpu, counter_task_id, &c, sizeof(c));
+    StatusPayload pl{&status};
+    sd.tasks[skipped]
+        .prs.add_request(cpu, status_response_task_id, &pl, sizeof(pl))
+        .add_measurement<ProfilingMeasurements::OperationStatus>();
+    typedef SubgraphDefinition D;
+    add_dependency(sd, D::OPKIND_EXT_PRECOND, 0, D::OPKIND_COPY, fill);
+    add_dependency(sd, D::OPKIND_EXT_PRECOND, 0, D::OPKIND_TASK, skipped);
+    add_dependency(sd, D::OPKIND_COPY, fill, D::OPKIND_ARRIVAL, arr);
+    add_dependency(sd, D::OPKIND_COPY, fill, D::OPKIND_EXT_POSTCOND, 0);
+    add_dependency(sd, D::OPKIND_TASK, clean, D::OPKIND_EXT_POSTCOND, 0);
+    add_dependency(sd, D::OPKIND_TASK, clean, D::OPKIND_EXT_POSTCOND, 1);
+    Subgraph::create_subgraph(sg, sd, ProfilingRequestSet()).wait();
+  }
+
+  void run() override
+  {
+    UserEvent bad = UserEvent::create_user_event();
+    bad.cancel();
+    std::vector<Event> pre = {bad};
+    std::vector<Event> post(2);
+    Event e = sg.instantiate(nullptr, 0, ProfilingRequestSet(), pre, post);
+    completed = wait_with_timeout(e, config.hang_timeout, &finish_poisoned);
+    if(completed) {
+      post0_done = wait_with_timeout(post[0], config.hang_timeout, &post0_poisoned);
+      post1_done = wait_with_timeout(post[1], config.hang_timeout, &post1_poisoned);
+      got_status = poll_until([&] { return status.load() != INT_MIN; }, config.hang_timeout);
+    }
+  }
+
+  bool check() override
+  {
+    AffineAccessor<int, 1> acc(dst, FID_DATA);
+    const int cancelled = int(ProfilingMeasurements::OperationStatus::CANCELLED);
+    bool ok = completed && finish_poisoned && post0_done && post0_poisoned && post1_done &&
+              !post1_poisoned && (acc[0] == 0) && !barrier.has_triggered() &&
+              (counts.load() == 1) && got_status && (status.load() == cancelled);
+    if(!ok)
+      log_app.error() << name() << ": completed=" << completed << " finish_poisoned="
+                      << finish_poisoned << " post0=" << post0_done << "/" << post0_poisoned
+                      << " post1=" << post1_done << "/" << post1_poisoned
+                      << " dst=" << acc[0] << " barrier_triggered=" << barrier.has_triggered()
+                      << " tasks=" << counts.load() << " status=" << status.load()
+                      << " (cancelled=" << cancelled << ")";
+    return ok;
+  }
+
+  void cleanup() override
+  {
+    barrier.arrive(); // let the skipped arrival's generation complete
+    if(completed)
+      sg.destroy().wait();
+    dst.destroy();
+  }
+
+  bool hung() const override { return !completed; }
+
+private:
+  RegionInstance dst;
+  Barrier barrier;
+  std::atomic<int64_t> counts{0};
+  std::atomic<int> status{INT_MIN};
+  Subgraph sg;
+  bool completed = false, finish_poisoned = false, got_status = false;
+  bool post0_done = false, post0_poisoned = false, post1_done = false, post1_poisoned = false;
+};
+
 ////////////////////////////////////////////////////////////////////////
 //
 // RemoteInstantiateDestroyTest: a task on another address space
@@ -3566,6 +4463,94 @@ static void death_external_precond_compiled_instantiate()
   sg.instantiate(nullptr, 0, ProfilingRequestSet(), preconds, postconds).wait();
 }
 
+
+static void death_interpolation_out_of_range()
+{
+  // 8 bytes written at offset 4 of an 8-byte argument block
+  SubgraphDefinition sd;
+  sd.concurrency_mode = SubgraphDefinition::ONE_SHOT;
+  int64_t pad = 0;
+  int t = make_task_desc(sd, worker_cpus()[0], noop_task_id, &pad, sizeof(pad));
+  SubgraphDefinition::Interpolation ip;
+  ip.offset = 0;
+  ip.bytes = 8;
+  ip.target_kind = SubgraphDefinition::Interpolation::TARGET_TASK_ARGS;
+  ip.target_index = t;
+  ip.target_offset = 4;
+  ip.redop_id = 0;
+  sd.interpolations.push_back(ip);
+  Subgraph sg;
+  Subgraph::create_subgraph(sg, sd, ProfilingRequestSet()).wait();
+}
+
+static void death_redop_size_mismatch()
+{
+  // the int add reduction expects 4 bytes, the interpolation provides 8
+  SubgraphDefinition sd;
+  sd.concurrency_mode = SubgraphDefinition::ONE_SHOT;
+  int64_t pad = 0;
+  int t = make_task_desc(sd, worker_cpus()[0], noop_task_id, &pad, sizeof(pad));
+  SubgraphDefinition::Interpolation ip;
+  ip.offset = 0;
+  ip.bytes = 8;
+  ip.target_kind = SubgraphDefinition::Interpolation::TARGET_TASK_ARGS;
+  ip.target_index = t;
+  ip.target_offset = 0;
+  ip.redop_id = REDOP_INT_ADD;
+  sd.interpolations.push_back(ip);
+  Subgraph sg;
+  Subgraph::create_subgraph(sg, sd, ProfilingRequestSet()).wait();
+}
+
+static void death_deferred_creation()
+{
+  SubgraphDefinition sd;
+  sd.concurrency_mode = SubgraphDefinition::ONE_SHOT;
+  make_task_desc(sd, worker_cpus()[0], noop_task_id, nullptr, 0);
+  Subgraph sg;
+  Subgraph::create_subgraph(sg, sd, ProfilingRequestSet(), UserEvent::create_user_event());
+}
+
+static void death_task_on_utility_proc()
+{
+  Processor util = Machine::ProcessorQuery(Machine::get_machine())
+                       .only_kind(Processor::UTIL_PROC)
+                       .local_address_space()
+                       .first();
+  if(!util.exists()) {
+    printf("DEATH-TEST-SKIPPED (no utility processor; run with -ll:util 1)\n");
+    return;
+  }
+  SubgraphDefinition sd;
+  sd.concurrency_mode = SubgraphDefinition::ONE_SHOT;
+  make_task_desc(sd, util, noop_task_id, nullptr, 0);
+  Subgraph sg;
+  Subgraph::create_subgraph(sg, sd, ProfilingRequestSet()).wait();
+}
+
+static void death_destroy_twice()
+{
+  Subgraph sg = make_one_task_subgraph(noop_task_id);
+  sg.destroy().wait();
+  sg.destroy();
+}
+
+static void death_instantiate_after_destroy()
+{
+  Subgraph sg = make_one_task_subgraph(noop_task_id);
+  sg.destroy().wait();
+  sg.instantiate(nullptr, 0, ProfilingRequestSet());
+}
+
+static void death_deferred_task_requests_ctxsync()
+{
+#ifdef SUBGRAPH_TESTS_CUDA
+  death_deferred_task_requests_ctxsync_impl();
+#else
+  printf("DEATH-TEST-SKIPPED (built without CUDA)\n");
+#endif
+}
+
 struct DeathScenario {
   const char *name;
   void (*fn)();
@@ -3579,6 +4564,14 @@ static const DeathScenario death_scenarios[] = {
     {"dependency_cycle", death_dependency_cycle},
     {"unregistered_task", death_unregistered_task},
     {"indirection_type_mismatch", death_indirection_type_mismatch},
+    {"interpolation_out_of_range", death_interpolation_out_of_range},
+    {"redop_size_mismatch", death_redop_size_mismatch},
+    {"deferred_creation", death_deferred_creation},
+    {"task_on_utility_proc", death_task_on_utility_proc},
+    {"destroy_twice", death_destroy_twice},
+    {"instantiate_after_destroy", death_instantiate_after_destroy},
+    // GPU only; prints DEATH-TEST-SKIPPED without CUDA or a GPU
+    {"deferred_task_requests_ctxsync", death_deferred_task_requests_ctxsync},
     // multi-rank only; prints DEATH-TEST-SKIPPED in a single-rank run
     {"remote_task_compiled", death_remote_task_compiled},
 };
@@ -3611,6 +4604,14 @@ static void register_common_tasks()
   rt.register_task(noop_task_id, noop_task);
   copy_prof_response_task_id = task_id_counter++;
   rt.register_task(copy_prof_response_task_id, copy_prof_response_task);
+  store_value_task_id = task_id_counter++;
+  remote_prof_response_task_id = task_id_counter++;
+  remote_full_driver_task_id = task_id_counter++;
+  status_response_task_id = task_id_counter++;
+  rt.register_task(store_value_task_id, store_value_task);
+  rt.register_task(remote_prof_response_task_id, remote_prof_response_task);
+  rt.register_task(remote_full_driver_task_id, remote_full_driver_task);
+  rt.register_task(status_response_task_id, status_response_task);
 #ifdef SUBGRAPH_TESTS_CUDA
   host_add_task_id = task_id_counter++;
   gpu_prof_response_task_id = task_id_counter++;
@@ -3670,6 +4671,14 @@ static std::vector<std::unique_ptr<SubgraphTest>> make_tests()
   tests.emplace_back(new CopyPoisonTest());
   tests.emplace_back(new IndirectCopyTest());
   tests.emplace_back(new RemoteCopyTest());
+  tests.emplace_back(new GraphPriorityInputTest(false));
+  tests.emplace_back(new GraphPriorityInputTest(true));
+  tests.emplace_back(new CopyMultiFieldTest());
+  tests.emplace_back(new CopyScatterTest());
+  tests.emplace_back(new CopyLargeFillTest());
+  tests.emplace_back(new PoisonKindsTest());
+  tests.emplace_back(new RemoteFullInstantiateTest());
+  tests.emplace_back(new RemoteCopyRemoteEndpointsTest());
 #ifdef SUBGRAPH_TESTS_CUDA
   tests.emplace_back(new GpuChainTest("Gpu.DeferredChain", &gpu_deferred_task_id, true));
   tests.emplace_back(new GpuChainTest("Gpu.StreamAwareChain", &gpu_stream_task_id, true));
@@ -3679,6 +4688,9 @@ static std::vector<std::unique_ptr<SubgraphTest>> make_tests()
   tests.emplace_back(new GpuProfilingTest());
   tests.emplace_back(new GpuReplayTest());
   tests.emplace_back(new GpuMixedChainTest());
+  tests.emplace_back(new GpuCrossChainTest());
+  tests.emplace_back(new GpuTaskThenCopyTest());
+  tests.emplace_back(new GpuPoisonTest());
 #endif
   tests.emplace_back(new RemoteInstantiateDestroyTest());
   // Last: a hang here leaves executors wedged, so nothing may follow it.

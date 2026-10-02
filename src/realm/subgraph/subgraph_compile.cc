@@ -307,6 +307,7 @@ namespace Realm {
 
     CompiledSubgraph &c = compiled;
     c.clear();
+    alive = true;
     std::vector<int> domain_nodes; // sorted unique
     for(Processor p : procs_seen) {
       int node = proc_nodes[p];
