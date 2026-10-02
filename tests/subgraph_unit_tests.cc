@@ -3558,6 +3558,75 @@ private:
 };
 
 
+
+// A normal task on a processor that just ran subgraph tasks waits on an
+// event twice. With user threads every task on the processor shares the
+// host thread's state; an executor that disturbed it would make the second
+// wait look like an external thread's and deadlock the processor.
+struct WaitAfterGraphArgs {
+  Subgraph sg;
+  Processor self;
+  std::atomic<int64_t> *count;
+  UserEvent done;
+};
+static int wait_after_graph_task_id = 0;
+static void wait_after_graph_task(const void *args, size_t arglen, const void *userdata,
+                                  size_t userlen, Processor p)
+{
+  const WaitAfterGraphArgs *a = static_cast<const WaitAfterGraphArgs *>(args);
+  a->sg.instantiate(nullptr, 0, ProfilingRequestSet()).wait(); // graph task runs here
+  CounterTaskArgs c{a->count, UserEvent::NO_USER_EVENT};
+  a->self.spawn(counter_task_id, &c, sizeof(c)).wait(); // must still be a task wait
+  a->done.trigger();
+}
+
+class WaitAfterGraphTest : public SubgraphTest {
+public:
+  std::string name() const override { return "WaitAfterGraph"; }
+  bool can_run() override { return worker_cpus().size() >= 1; }
+
+  void init() override
+  {
+    proc = worker_cpus()[0];
+    count.store(0);
+    SubgraphDefinition sd;
+    sd.concurrency_mode = SubgraphDefinition::ONE_SHOT;
+    CounterTaskArgs c{&count, UserEvent::NO_USER_EVENT};
+    make_task_desc(sd, proc, counter_task_id, &c, sizeof(c));
+    Subgraph::create_subgraph(sg, sd, ProfilingRequestSet()).wait();
+  }
+
+  void run() override
+  {
+    UserEvent done = UserEvent::create_user_event();
+    WaitAfterGraphArgs a{sg, proc, &count, done};
+    proc.spawn(wait_after_graph_task_id, &a, sizeof(a));
+    completed = wait_with_timeout(done, config.hang_timeout);
+  }
+
+  bool check() override
+  {
+    bool ok = completed && (count.load() == 2);
+    if(!ok)
+      log_app.error() << name() << ": completed=" << completed << " count=" << count.load();
+    return ok;
+  }
+
+  void cleanup() override
+  {
+    if(completed)
+      sg.destroy().wait();
+  }
+
+  bool hung() const override { return !completed; }
+
+private:
+  Processor proc;
+  std::atomic<int64_t> count{0};
+  Subgraph sg;
+  bool completed = false;
+};
+
 ////////////////////////////////////////////////////////////////////////
 //
 // Second batch: priority with external inputs, remote instantiation with
@@ -4626,6 +4695,8 @@ static void register_common_tasks()
   remote_prof_response_task_id = task_id_counter++;
   remote_full_driver_task_id = task_id_counter++;
   status_response_task_id = task_id_counter++;
+  wait_after_graph_task_id = task_id_counter++;
+  rt.register_task(wait_after_graph_task_id, wait_after_graph_task);
   rt.register_task(store_value_task_id, store_value_task);
   rt.register_task(remote_prof_response_task_id, remote_prof_response_task);
   rt.register_task(remote_full_driver_task_id, remote_full_driver_task);
@@ -4680,6 +4751,7 @@ static std::vector<std::unique_ptr<SubgraphTest>> make_tests()
   tests.emplace_back(new ExternalPoisonTest());
   tests.emplace_back(new MixedWorkloadTest());
   tests.emplace_back(new BlockingTaskTest());
+  tests.emplace_back(new WaitAfterGraphTest());
   tests.emplace_back(new FinishEventTaskTest());
   tests.emplace_back(new ProfilingTest());
   tests.emplace_back(new GraphPriorityTest());
