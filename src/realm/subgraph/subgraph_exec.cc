@@ -614,11 +614,14 @@ namespace Realm {
     if(pf && pf->wants_timeline)
       pf->timeline.record_start_time();
     void *context = proc_impl->begin_subgraph_task(wait_tokens, num_tokens);
+    // Set, and like Task::execute_on_processor never cleared: with user
+    // threads this thread-local belongs to the host thread and is shared by
+    // every task running on it, so clearing it here would make the next
+    // normal task on this processor look like an external thread.
     ThreadLocal::current_processor = proc;
     thread->start_subgraph_task_execution();
     proc_impl->execute_task(task_desc.task_id, state->op_args(entry.op));
     thread->stop_subgraph_task_execution();
-    ThreadLocal::current_processor = Processor::NO_PROC;
     void *token = proc_impl->end_subgraph_task(context, op.deferred);
     if(pf && pf->wants_timeline)
       pf->timeline.record_end_time();
