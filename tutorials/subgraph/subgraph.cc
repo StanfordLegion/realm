@@ -312,6 +312,11 @@ void main_task(const void *args, size_t arglen, const void *userdata, size_t use
   sd.dependencies[8].tgt_op_kind = SubgraphDefinition::OPKIND_EXT_POSTCOND;
   sd.dependencies[8].tgt_op_index = 0;
 
+  // Instantiations are chained through their postconditions below, so they
+  // never overlap; INSTANTIATION_ORDER lets the runtime rely on that. (The
+  // compiled implementation rejects the default, CONCURRENT.)
+  sd.concurrency_mode = SubgraphDefinition::INSTANTIATION_ORDER;
+
   Subgraph sg;
   Subgraph::create_subgraph(sg, sd, ProfilingRequestSet()).wait();
 
