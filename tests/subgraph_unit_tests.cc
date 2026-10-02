@@ -67,7 +67,7 @@
 #include <string>
 #include <vector>
 
-#include <unistd.h>
+#include "osdep.h" // usleep on every platform
 
 using namespace Realm;
 
@@ -206,12 +206,18 @@ static bool wait_with_timeout(Event e, double seconds, bool *poisoned = nullptr)
   }
 }
 
+// Resident set size in kB, or 0 where /proc is not available (the memory
+// check then degenerates to "did not grow", which is still true).
 static long resident_kb()
 {
+#ifdef __linux__
   std::ifstream f("/proc/self/statm");
   long size = 0, resident = 0;
   f >> size >> resident;
   return resident * (sysconf(_SC_PAGESIZE) / 1024);
+#else
+  return 0;
+#endif
 }
 
 ////////////////////////////////////////////////////////////////////////

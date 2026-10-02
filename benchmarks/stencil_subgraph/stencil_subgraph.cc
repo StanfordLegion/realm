@@ -33,6 +33,7 @@
 #include "stencil_subgraph.h"
 #include "realm/subgraph.h"
 
+#include <atomic>
 #include <cstdio>
 #include <cstring>
 #include <iomanip>

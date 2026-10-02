@@ -393,8 +393,12 @@ namespace Realm {
       if(numa_available && (dom.numa_node >= 0))
         p = numasysif_alloc_mem(dom.numa_node, dom.bytes, false /*!pin*/);
       if(!p) {
+#ifdef _MSC_VER
+        p = _aligned_malloc(dom.bytes, SUBGRAPH_CACHE_LINE_BYTES);
+#else
         if(posix_memalign(&p, SUBGRAPH_CACHE_LINE_BYTES, dom.bytes) != 0)
           p = nullptr;
+#endif
       }
       if(!p)
         SUBGRAPH_FATAL(me, "failed to allocate " << dom.bytes
@@ -418,8 +422,13 @@ namespace Realm {
       bool freed = false;
       if(numa_available && (dom.numa_node >= 0))
         freed = numasysif_free_mem(dom.numa_node, blocks[dm], dom.bytes);
-      if(!freed)
+      if(!freed) {
+#ifdef _MSC_VER
+        _aligned_free(blocks[dm]);
+#else
         free(blocks[dm]);
+#endif
+      }
     }
     blocks.clear();
   }

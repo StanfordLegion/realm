@@ -302,11 +302,14 @@ if(REALM_ENABLE_CUDA)
   add_test(NAME subgraph_unit_tests_gpu
            COMMAND subgraph_unit_tests -ll:cpu 4 -ll:gpu 1 -ll:zsize 32)
   set_tests_properties(subgraph_unit_tests_gpu PROPERTIES RESOURCE_LOCK gpu TIMEOUT 600)
-  add_test(NAME subgraph_death_deferred_task_requests_ctxsync
-           COMMAND sh -c "! $<TARGET_FILE:subgraph_unit_tests> -ll:cpu 4 -ll:gpu 1 -death deferred_task_requests_ctxsync")
-  set_tests_properties(subgraph_death_deferred_task_requests_ctxsync
-                       PROPERTIES FAIL_REGULAR_EXPRESSION "DEATH-TEST-SURVIVED" RESOURCE_LOCK gpu TIMEOUT 120)
+  if(NOT WIN32)
+    add_test(NAME subgraph_death_deferred_task_requests_ctxsync
+             COMMAND sh -c "! $<TARGET_FILE:subgraph_unit_tests> -ll:cpu 4 -ll:gpu 1 -death deferred_task_requests_ctxsync")
+    set_tests_properties(subgraph_death_deferred_task_requests_ctxsync
+                         PROPERTIES FAIL_REGULAR_EXPRESSION "DEATH-TEST-SURVIVED" RESOURCE_LOCK gpu TIMEOUT 120)
+  endif()
 endif()
+if(NOT WIN32) # the scenarios run through sh
 # Compiled subgraphs must reject unsupported usage fatally. Each scenario runs in
 # its own process and must abort; surviving (exit 0 + marker) is the failure.
 foreach(
@@ -331,6 +334,7 @@ foreach(
     subgraph_death_${scenario} PROPERTIES FAIL_REGULAR_EXPRESSION "DEATH-TEST-SURVIVED" TIMEOUT 120
   )
 endforeach()
+endif()
 add_integration_test(large_tls "${REALM_TEST_DIR}/large_tls.cc")
 add_integration_test(memmodel "${REALM_TEST_DIR}/memmodel.cc")
 add_integration_test(coverings "${REALM_TEST_DIR}/coverings.cc")
