@@ -659,6 +659,18 @@ namespace Realm {
     return 0;
   }
 
+  template <typename T>
+  const T *CodeDescriptor::find_property(void) const
+  {
+    for(std::vector<CodeProperty *>::const_iterator it = m_props.begin();
+        it != m_props.end(); it++) {
+      const T *p = dynamic_cast<const T *>(*it);
+      if(p)
+        return p;
+    }
+    return 0;
+  }
+
   template <typename S>
   bool CodeDescriptor::serialize(S &s, bool portable) const
   {
@@ -685,6 +697,20 @@ namespace Realm {
           return false;
     }
 
+    // properties: only portable ones can travel
+    {
+      size_t n = 0;
+      for(size_t i = 0; i < m_props.size(); i++)
+        if(m_props[i]->is_portable())
+          n++;
+      if(!(s << n))
+        return false;
+      for(size_t i = 0; i < m_props.size(); i++)
+        if(m_props[i]->is_portable())
+          if(!(s << *m_props[i]))
+            return false;
+    }
+
     return true;
   }
 
@@ -700,6 +726,17 @@ namespace Realm {
     m_impls.resize(n);
     for(size_t i = 0; i < n; i++)
       m_impls[i] = CodeImplementation::deserialize_new(s);
+
+    size_t np;
+    if(!(s >> np))
+      return false;
+    m_props.clear();
+    m_props.resize(np);
+    for(size_t i = 0; i < np; i++) {
+      m_props[i] = CodeProperty::deserialize_new(s);
+      if(!m_props[i])
+        return false;
+    }
 
     return true;
   }
@@ -822,6 +859,39 @@ namespace Realm {
   inline CodeProperty::CodeProperty(void) {}
 
   inline CodeProperty::~CodeProperty(void) {}
+
+  template <typename S>
+  inline bool serialize(S &serializer, const CodeProperty &cp)
+  {
+    return Serialization::PolymorphicSerdezHelper<CodeProperty>::serialize(serializer, cp);
+  }
+
+  template <typename S>
+  /*static*/ inline CodeProperty *CodeProperty::deserialize_new(S &deserializer)
+  {
+    return Serialization::PolymorphicSerdezHelper<CodeProperty>::deserialize_new(
+        deserializer);
+  }
+
+  ////////////////////////////////////////////////////////////////////////
+  //
+  // class DeferredEffectsProperty
+
+  inline DeferredEffectsProperty::DeferredEffectsProperty(void) {}
+
+  inline DeferredEffectsProperty::~DeferredEffectsProperty(void) {}
+
+  template <typename S>
+  inline bool DeferredEffectsProperty::serialize(S &serializer) const
+  {
+    return true; // nothing beyond its presence
+  }
+
+  template <typename S>
+  /*static*/ inline CodeProperty *DeferredEffectsProperty::deserialize_new(S &deserializer)
+  {
+    return new DeferredEffectsProperty;
+  }
 
   ////////////////////////////////////////////////////////////////////////
   //

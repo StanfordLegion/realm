@@ -33,9 +33,13 @@
 #include "realm/mutex.h"
 #include "realm/bgwork.h"
 
+#include <memory>
+
 namespace Realm {
 
   class ProcessorImpl;
+  class ProcSubgraphExecutor;
+  class SubgraphExecutionState;
 
   // information for a task launch
   class Task final : public Operation {
@@ -214,7 +218,8 @@ namespace Realm {
   //  user or kernel threads
   class ThreadedTaskScheduler : public ThreadScheduler {
   public:
-    ThreadedTaskScheduler(void);
+    ThreadedTaskScheduler(
+        std::unique_ptr<ProcSubgraphExecutor> _subgraph_executor = nullptr);
 
     virtual ~ThreadedTaskScheduler(void);
 
@@ -239,6 +244,14 @@ namespace Realm {
     virtual void set_thread_priority(Thread *thread, int new_priority);
 
     void add_internal_task(InternalTask *itask);
+
+    // Notify the scheduler that new work is available. This will
+    // bump the scheduler's work counter.
+    void notify_of_new_work();
+    // Enqueue a subgraph for execution on this scheduler's subgraph executor.
+    void add_subgraph(SubgraphExecutionState *subgraph);
+    // OS NUMA node the workers run on (recorded by the first worker), or -1.
+    int subgraph_numa_node(void) const;
 
   public:
     // the main scheduler loop - lock should be held before calling
@@ -282,6 +295,11 @@ namespace Realm {
     atomic<bool> shutdown_flag;
     int active_worker_count;     // workers that are awake (i.e. using a core)
     int unassigned_worker_count; // awake but unassigned workers
+
+    // The ThreadedTaskScheduler also handles executing compiled subgraphs
+    // in a "fast-path" mode. Most of that logic is encapsulated within the
+    // ProcSubgraphExecutor, but the ThreadedTaskScheduler is somewhat aware of it.
+    std::unique_ptr<ProcSubgraphExecutor> subgraph_executor;
 
     // helper for tracking/sanity-checking worker counts
     void update_worker_count(int active_delta, int unassigned_delta, bool check = true);

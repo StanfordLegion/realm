@@ -32,6 +32,7 @@ namespace Realm {
 
   // TODO: C equivalent: realm_subgraph_defn_t
   struct SubgraphDefinition;
+  struct SubgraphInstantiationProfiling;
 
   class REALM_PUBLIC_API Subgraph {
   public:
@@ -52,8 +53,18 @@ namespace Realm {
 
     // TODO: collective construction
 
-    void destroy(Event wait_on = Event::NO_EVENT) const;
+    // Destroys the subgraph once wait_on has triggered. The returned event
+    // triggers when destruction is complete, including the release of any
+    // still-running instantiations' resources; it is NO_EVENT if the
+    // subgraph could be destroyed immediately. Instantiating a subgraph
+    // after requesting its destruction is an error.
+    Event destroy(Event wait_on = Event::NO_EVENT) const;
 
+    // priority_adjust is the priority of the instantiation as a whole. While
+    // an instantiation of priority P is executing on a processor, that
+    // processor runs only work of priority P or higher (tasks that already
+    // started may always resume); a higher-priority instantiation takes
+    // precedence over a lower one sharing processors.
     Event instantiate(const void *args, size_t arglen, const ProfilingRequestSet &prs,
                       Event wait_on = Event::NO_EVENT, int priority_adjust = 0) const;
 
@@ -62,9 +73,26 @@ namespace Realm {
                       std::vector<Event> &postconditions, Event wait_on = Event::NO_EVENT,
                       int priority_adjust = 0) const;
 
+    // Variants with profiling requests for operations of this instantiation
+    // (see SubgraphInstantiationProfiling).
+    Event instantiate(const void *args, size_t arglen, const ProfilingRequestSet &prs,
+                      const SubgraphInstantiationProfiling &profiling,
+                      Event wait_on = Event::NO_EVENT, int priority_adjust = 0) const;
+    Event instantiate(const void *args, size_t arglen, const ProfilingRequestSet &prs,
+                      const SubgraphInstantiationProfiling &profiling,
+                      const std::vector<Event> &preconditions,
+                      std::vector<Event> &postconditions, Event wait_on = Event::NO_EVENT,
+                      int priority_adjust = 0) const;
+
     // TODO: collective instantiation
   };
 
+  // A subgraph is compiled at creation into per-processor schedules that
+  // Realm's task schedulers execute directly, with far lower per-operation
+  // overhead than issuing the operations individually. Creation fails
+  // fatally, naming the operation and feature, for any definition that uses
+  // something the compiled implementation does not support yet; see the
+  // notes on each field below for the current restrictions.
   struct REALM_PUBLIC_API SubgraphDefinition {
     SubgraphDefinition();
 
@@ -86,6 +114,12 @@ namespace Realm {
 
     struct TaskDesc {
       TaskDesc(); // initializes all fields
+      // currently: proc must be a CPU (LOC_PROC) or CUDA GPU (TOC_PROC) of
+      //  the creating node with task_id registered on it, and priority must
+      //  be 0. GPU tasks complete when the work they launched completes; a
+      //  task registered with DeferredEffectsProperty (or a stream-aware
+      //  prototype) lets GPU tasks after it on the same GPU start as soon as
+      //  its function returns, ordered after it on the stream.
 
       // interpolatable: args
       Processor proc;
@@ -95,17 +129,40 @@ namespace Realm {
       ProfilingRequestSet prs;
     };
 
+    // A copy indirection (some CopyIndirection<N,T>::Base) with the index
+    // space type it belongs to, so that CopyDesc can carry indirections for
+    // any dimension and coordinate type without being a template. The
+    // object it points to must stay valid until Subgraph::create_subgraph
+    // returns; the compiled plan keeps what it needs.
+    struct IndirectionRef {
+      const void *ptr;
+      // the (N,T) of the copy's index space, as the DynamicTemplates tag
+      // used throughout Realm (NT_TemplateHelper::encode_tag<N,T>())
+      DynamicTemplates::TagType type_tag;
+    };
+
     struct CopyDesc {
       CopyDesc(); // initializes all fields
 
-      // interpolatable: none?
+      // Compiled once into a transfer plan and replayed by every
+      // instantiation (fresh transfer descriptors each time). The plan
+      // depends on the instances, so they must outlive the subgraph.
+      // interpolatable: none
       IndexSpaceGeneric space; // type-erase here to avoid template explosion
       std::vector<CopySrcDstField> srcs;
       std::vector<CopySrcDstField> dsts;
+      // indirections referenced by the fields' indirect_index, see
+      // add_indirection
+      std::vector<IndirectionRef> indirects;
       ProfilingRequestSet prs;
+      // applied to every destination field that has no reduction of its own
       ReductionOpID redop_id /*= 0*/;
       bool red_fold /*= false*/;
+      // added to the instantiation's priority
       int priority /*= 0*/;
+
+      template <int N, typename T>
+      CopyDesc &add_indirection(const typename CopyIndirection<N, T>::Base *indirection);
     };
 
     struct ArrivalDesc {
@@ -231,6 +288,8 @@ namespace Realm {
 
     // concurrency mode - more serial versions may allow the compiled form to
     //  pre-allocate and reuse resources, improving efficiency
+    // Only ONE_SHOT and INSTANTIATION_ORDER are implemented at the moment;
+    //  SERIALIZABLE and CONCURRENT are rejected at creation.
     enum ConcurrencyMode
     {
       ONE_SHOT,            // can only be executed once (e.g. probably not
@@ -247,10 +306,25 @@ namespace Realm {
 
     ConcurrencyMode concurrency_mode;
 
+    // Profiling: a task's prs is honored on every instantiation; see
+    //  SubgraphInstantiationProfiling for per-instantiation requests.
+    //  Supported measurements for tasks: OperationTimeline,
+    //  OperationProcessorUsage, OperationStatus, OperationFinishEvent.
+
     // longer term possibilites:
     //  conditional execution
     //  loops
     //  local "scratchpad" for small-value-communication
+  };
+
+  // Profiling requests for one instantiation, merged with those attached to
+  // operations in the definition. Operations are named by their index in the
+  // definition's list of that kind.
+  struct REALM_PUBLIC_API SubgraphInstantiationProfiling {
+    std::vector<std::pair<unsigned, ProfilingRequestSet>> tasks;
+    std::vector<std::pair<unsigned, ProfilingRequestSet>> copies;
+
+    bool empty() const { return tasks.empty() && copies.empty(); }
   };
 
 }; // namespace Realm

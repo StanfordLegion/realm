@@ -43,7 +43,9 @@ set(REALM_SOURCES
     rsrv_impl.cc
     runtime_impl.cc
     sampling_impl.cc
-    subgraph_impl.cc
+    subgraph/subgraph_api.cc
+    subgraph/subgraph_compile.cc
+    subgraph/subgraph_exec.cc
     tasks.cc
     threads.cc
     shm.cc

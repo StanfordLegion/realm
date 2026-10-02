@@ -1868,6 +1868,7 @@ namespace Realm {
       CommandLineParser cp;
       cp.add_option_int("-realm:eventloopcheck", Config::event_loop_detection_limit);
       cp.add_option_bool("-ll:force_kthreads", Config::force_kernel_threads);
+      cp.add_option_int("-ll:subgraph_poll", ProcSubgraphExecutor::poll_budget_us);
       cp.add_option_bool("-ll:frsrv_fallback", Config::use_fast_reservation_fallback);
       cp.add_option_int("-ll:machine_query_cache", Config::use_machine_query_cache);
       cp.add_option_int("-ll:defalloc", Config::deferred_instance_allocation);
@@ -1956,6 +1957,7 @@ namespace Realm {
 #endif
 
     event_triggerer.add_to_manager(&bgwork);
+    subgraph_resource_reaper.add_to_manager(&bgwork);
     copy_analyzer.add_to_manager(&bgwork);
 
     // initialize barrier timestamp
@@ -2947,6 +2949,7 @@ namespace Realm {
 
 #ifdef DEBUG_REALM
     event_triggerer.shutdown_work_item();
+    subgraph_resource_reaper.shutdown_work_item();
     copy_analyzer.shutdown_work_item();
 #endif
     bgwork.stop_dedicated_workers();

@@ -16,6 +16,7 @@
  */
 
 #include "realm/proc_impl.h"
+#include "realm/subgraph/subgraph_impl.h"
 
 #include "realm/timers.h"
 #include "realm/runtime_impl.h"
@@ -122,6 +123,18 @@ namespace Realm {
   // returns the finish event for the currently running task
   /*static*/ Event Processor::get_current_finish_event(void)
   {
+    Thread *thread = Thread::self();
+    if(thread->in_subgraph_task_execution()) {
+      // Subgraph tasks have no Operation: the finish event is created on
+      // demand and triggered by the subgraph executor once the task returns.
+      unsigned long long &id = thread->subgraph_finish_event();
+      if(id == 0)
+        id = UserEvent::create_user_event().id;
+      Event e;
+      e.id = id;
+      return e;
+    }
+
     Operation *op = Thread::self()->get_operation();
     assert(op != 0);
     return op->get_finish_event();
@@ -1122,6 +1135,37 @@ namespace Realm {
     return true;
   }
 
+  unsigned LocalTaskProcessor::subgraph_task_flags(Processor::TaskFuncID func_id)
+  {
+    RWLock::AutoReaderLock al(task_table_mutex);
+    return (task_table.count(func_id) > 0) ? unsigned(SUBGRAPH_TASK_REGISTERED) : 0;
+  }
+
+  bool LocalTaskProcessor::supports_subgraph_tasks(void) const { return false; }
+
+  bool LocalTaskProcessor::subgraph_tasks_are_async(void) const { return false; }
+
+  void *LocalTaskProcessor::begin_subgraph_task(const void *const *tokens,
+                                                size_t num_tokens)
+  {
+    return nullptr;
+  }
+
+  void *LocalTaskProcessor::end_subgraph_task(void *context, bool deferred_effects)
+  {
+    return nullptr;
+  }
+
+  void LocalTaskProcessor::arm_subgraph_task_completion(void *context, void *token,
+                                                        SubgraphAsyncCompletion *completion)
+  {
+    // only asynchronous processors have anything to wait for
+    assert(0);
+  }
+
+  void LocalTaskProcessor::release_subgraph_tokens(void *const *tokens, size_t num_tokens)
+  {}
+
   void LocalTaskProcessor::execute_task(Processor::TaskFuncID func_id,
                                         const ByteArrayRef &task_args)
   {
@@ -1188,6 +1232,18 @@ namespace Realm {
   void LocalTaskProcessor::add_internal_task(InternalTask *task)
   {
     sched->add_internal_task(task);
+  }
+
+  void LocalTaskProcessor::notify_scheduler_of_new_work() { sched->notify_of_new_work(); }
+
+  void LocalTaskProcessor::enqueue_subgraph(SubgraphExecutionState *subgraph)
+  {
+    sched->add_subgraph(subgraph);
+  }
+
+  int LocalTaskProcessor::numa_node(void) const
+  {
+    return sched ? sched->subgraph_numa_node() : -1;
   }
 
   ////////////////////////////////////////////////////////////////////////

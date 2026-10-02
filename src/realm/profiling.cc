@@ -88,6 +88,13 @@ namespace Realm {
       delete *it;
   }
 
+  void ProfilingRequestSet::import_requests(const ProfilingRequestSet &rhs)
+  {
+    for(std::vector<ProfilingRequest *>::const_iterator it = rhs.requests.begin();
+        it != rhs.requests.end(); ++it)
+      requests.push_back(new ProfilingRequest(**it));
+  }
+
   ProfilingRequestSet &ProfilingRequestSet::operator=(const ProfilingRequestSet &rhs)
   {
     for(std::vector<ProfilingRequest *>::iterator it = requests.begin();

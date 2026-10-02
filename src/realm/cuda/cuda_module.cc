@@ -18,6 +18,7 @@
 #include "realm/cuda/cuda_module.h"
 #include "realm/cuda/cuda_access.h"
 #include "realm/cuda/cuda_internal.h"
+#include "realm/subgraph/subgraph_impl.h"
 #include "realm/cuda/cuda_memcpy.h"
 
 #include "realm/tasks.h"
@@ -149,6 +150,9 @@ namespace Realm {
       thread_local GPUStream *current_gpu_stream = nullptr;
       thread_local std::set<GPUStream *> *created_gpu_streams = nullptr;
       static thread_local int context_sync_required = 0;
+      // set by GPUProcessor::end_subgraph_task when the task's completion
+      //  must come from the context synchronizer rather than its stream
+      static thread_local bool subgraph_ctxsync_pending = false;
       thread_local bool block_on_synchronize = false;
     }; // namespace ThreadLocal
 
@@ -476,7 +480,7 @@ namespace Realm {
 
     void GPUStream::add_event(CUevent event, GPUWorkFence *fence,
                               GPUCompletionNotification *notification,
-                              GPUWorkStart *start)
+                              GPUWorkStart *start, bool return_event)
     {
       bool add_to_worker = false;
       {
@@ -491,6 +495,7 @@ namespace Realm {
         e.fence = fence;
         e.start = start;
         e.notification = notification;
+        e.return_event = return_event;
 
         pending_events.push_back(e);
       }
@@ -566,14 +571,13 @@ namespace Realm {
         log_stream.debug() << "CUDA event " << event << " triggered on stream " << stream
                            << " (GPU " << gpu << ")";
 
-        // give event back to GPU for reuse
-        gpu->event_pool.return_event(event);
-
         // this event has triggered, so figure out the fence/notification to trigger
         //  and also peek at the next event
+        const CUevent completed = event;
         GPUWorkFence *fence = 0;
         GPUWorkStart *start = 0;
         GPUCompletionNotification *notification = 0;
+        bool return_event = true;
 
         {
           AutoLock<> al(mutex);
@@ -583,6 +587,7 @@ namespace Realm {
           fence = e.fence;
           start = e.start;
           notification = e.notification;
+          return_event = e.return_event;
           pending_events.pop_front();
 
           if(pending_events.empty()) {
@@ -591,6 +596,11 @@ namespace Realm {
           } else
             event = pending_events.front().event;
         }
+
+        // give the completed event back to the GPU for reuse, unless the
+        //  requester keeps it (`event` may already be the next one in line)
+        if(return_event)
+          gpu->event_pool.return_event(completed);
 
         if(start) {
           start->mark_gpu_work_start();
@@ -886,52 +896,71 @@ namespace Realm {
       shutdown_flag = false;
     }
 
+    bool ContextSynchronizer::request_sync_locked()
+    {
+      // if all the current threads are asleep or busy syncing, we
+      //  need to do something
+      if((sleeping_threads + syncing_threads) == total_threads) {
+        // is there a sleeping thread we can wake up to handle this?
+        if(sleeping_threads > 0) {
+          // just poke one of them
+          condvar.signal();
+        } else {
+          // can we start a new thread?  (if not, we'll just have to
+          //  be patient)
+          if(total_threads < max_threads) {
+            total_threads++;
+            syncing_threads++; // threads starts as if it's syncing
+            return true;
+          }
+        }
+      }
+      return false;
+    }
+
+    void ContextSynchronizer::start_worker_thread()
+    {
+      Realm::ThreadLaunchParameters tlp;
+
+      Thread *t = Realm::Thread::create_kernel_thread<ContextSynchronizer,
+                                                      &ContextSynchronizer::thread_main>(
+          this, tlp, *core_rsrv, 0);
+      // need the mutex to put this thread in the list
+      {
+        AutoLock<> al(mutex);
+        worker_threads.push_back(t);
+      }
+    }
+
     void ContextSynchronizer::add_fence(GPUWorkFence *fence)
     {
       bool start_new_thread = false;
       {
         AutoLock<> al(mutex);
-
         fences.push_back(fence);
-
-        // if all the current threads are asleep or busy syncing, we
-        //  need to do something
-        if((sleeping_threads + syncing_threads) == total_threads) {
-          // is there a sleeping thread we can wake up to handle this?
-          if(sleeping_threads > 0) {
-            // just poke one of them
-            condvar.signal();
-          } else {
-            // can we start a new thread?  (if not, we'll just have to
-            //  be patient)
-            if(total_threads < max_threads) {
-              total_threads++;
-              syncing_threads++; // threads starts as if it's syncing
-              start_new_thread = true;
-            }
-          }
-        }
+        start_new_thread = request_sync_locked();
       }
+      if(start_new_thread)
+        start_worker_thread();
+    }
 
-      if(start_new_thread) {
-        Realm::ThreadLaunchParameters tlp;
-
-        Thread *t =
-            Realm::Thread::create_kernel_thread<ContextSynchronizer,
-                                                &ContextSynchronizer::thread_main>(
-                this, tlp, *core_rsrv, 0);
-        // need the mutex to put this thread in the list
-        {
-          AutoLock<> al(mutex);
-          worker_threads.push_back(t);
-        }
+    void ContextSynchronizer::add_notification(GPUCompletionNotification *notification)
+    {
+      bool start_new_thread = false;
+      {
+        AutoLock<> al(mutex);
+        notifications.push_back(notification);
+        start_new_thread = request_sync_locked();
       }
+      if(start_new_thread)
+        start_worker_thread();
     }
 
     void ContextSynchronizer::thread_main()
     {
       while(true) {
         GPUWorkFence::FenceList my_fences;
+        std::vector<GPUCompletionNotification *> my_notifications;
 
         // attempt to get a non-empty list of fences to synchronize,
         //  sleeping when needed and paying attention to the shutdown
@@ -945,7 +974,7 @@ namespace Realm {
             if(shutdown_flag)
               return;
 
-            if(fences.empty()) {
+            if(fences.empty() && notifications.empty()) {
               // sleep until somebody tells us there's stuff to do
               sleeping_threads++;
               condvar.wait();
@@ -955,13 +984,14 @@ namespace Realm {
               //  was pushed ahead of it)
               syncing_threads++;
               my_fences.swap(fences);
+              my_notifications.swap(notifications);
               break;
             }
           }
         }
 
-        // shouldn't get here with an empty list
-        assert(!my_fences.empty());
+        // shouldn't get here with nothing to do
+        assert(!my_fences.empty() || !my_notifications.empty());
 
         log_stream.debug() << "starting ctx sync: ctx=" << context;
 
@@ -993,6 +1023,8 @@ namespace Realm {
           GPUWorkFence *fence = my_fences.pop_front();
           fence->mark_finished(true /*successful*/);
         }
+        for(GPUCompletionNotification *n : my_notifications)
+          n->request_completed();
 
         // and go back around for more...
       }
@@ -1020,6 +1052,36 @@ namespace Realm {
       : gpu(_gpu)
       , proc(_proc)
     {}
+
+    // the first task to complete on a GPU decides whether tasks need a full
+    //  context synchronization to be "complete" (unless configured explicitly)
+    static void resolve_task_context_sync_default(GPU *gpu)
+    {
+      if(gpu->module->config->cfg_task_context_sync >= 0)
+        return;
+      // if legacy stream sync was requested, default for ctxsync is off
+      if(gpu->module->config->cfg_task_legacy_sync) {
+        gpu->module->config->cfg_task_context_sync = 0;
+      } else {
+#ifdef REALM_USE_CUDART_HIJACK
+        // normally hijack code will catch all the work and put it on the
+        //  right stream, but if we haven't seen it used, there may be a
+        //  static copy of the cuda runtime that's in use and foiling the
+        //  hijack
+        if(cudart_hijack_active) {
+          gpu->module->config->cfg_task_context_sync = 0;
+        } else {
+          if(!gpu->module->config->cfg_suppress_hijack_warning)
+            log_gpu.warning() << "CUDART hijack code not active"
+                              << " - device synchronizations required after every GPU task!";
+          gpu->module->config->cfg_task_context_sync = 1;
+        }
+#else
+        // without hijack or legacy sync requested, ctxsync is needed
+        gpu->module->config->cfg_task_context_sync = 1;
+#endif
+      }
+    }
 
     void *GPUContextManager::create_context(Task *task) const
     {
@@ -1077,31 +1139,7 @@ namespace Realm {
       // if this is our first task, we might need to decide whether
       //  full context synchronization is required for a task to be
       //  "complete"
-      if(gpu->module->config->cfg_task_context_sync < 0) {
-        // if legacy stream sync was requested, default for ctxsync is off
-        if(gpu->module->config->cfg_task_legacy_sync) {
-          gpu->module->config->cfg_task_context_sync = 0;
-        } else {
-#ifdef REALM_USE_CUDART_HIJACK
-          // normally hijack code will catch all the work and put it on the
-          //  right stream, but if we haven't seen it used, there may be a
-          //  static copy of the cuda runtime that's in use and foiling the
-          //  hijack
-          if(cudart_hijack_active) {
-            gpu->module->config->cfg_task_context_sync = 0;
-          } else {
-            if(!gpu->module->config->cfg_suppress_hijack_warning)
-              log_gpu.warning()
-                  << "CUDART hijack code not active"
-                  << " - device synchronizations required after every GPU task!";
-            gpu->module->config->cfg_task_context_sync = 1;
-          }
-#else
-          // without hijack or legacy sync requested, ctxsync is needed
-          gpu->module->config->cfg_task_context_sync = 1;
-#endif
-        }
-      }
+      resolve_task_context_sync_default(gpu);
 
       // if requested, use a cuda event to couple legacy stream work into
       //  the current task's stream
@@ -1236,8 +1274,15 @@ namespace Realm {
         }
       }
       params.set_num_cores(1);
-      params.set_alu_usage(params.CORE_USAGE_SHARED);
-      params.set_fpu_usage(params.CORE_USAGE_SHARED);
+      if(_gpu->module->config->cfg_pin_gpu_procs) {
+        // a dedicated core (-ll:pin_gpu): the scheduler thread may poll for
+        //  subgraph work and should not share with other runtime threads
+        params.set_alu_usage(params.CORE_USAGE_EXCLUSIVE);
+        params.set_fpu_usage(params.CORE_USAGE_EXCLUSIVE);
+      } else {
+        params.set_alu_usage(params.CORE_USAGE_SHARED);
+        params.set_fpu_usage(params.CORE_USAGE_SHARED);
+      }
       params.set_ldst_usage(params.CORE_USAGE_SHARED);
       params.set_max_stack_size(_stack_size);
 
@@ -1475,19 +1520,12 @@ namespace Realm {
 
         GPUTaskTableEntry &tte = gpu_task_table[func_id];
 
-        // figure out what type of function we have
-        if(codedesc.type() == TypeConv::from_cpp_type<Processor::TaskFuncPtr>()) {
-          tte.fnptr = (Processor::TaskFuncPtr)(fpi->fnptr);
-          tte.stream_aware_fnptr = 0;
-        } else if(codedesc.type() ==
-                  TypeConv::from_cpp_type<Cuda::StreamAwareTaskFuncPtr>()) {
-          tte.fnptr = 0;
-          tte.stream_aware_fnptr = (Cuda::StreamAwareTaskFuncPtr)(fpi->fnptr);
-        } else {
-          log_taskreg.fatal() << "attempt to register a task function of improper type: "
-                              << codedesc.type();
-          assert(0);
-        }
+        // stream-aware functions promise all their work is on the stream;
+        //  other functions can promise the same with a property
+        tte.deferred_effects =
+            (codedesc.type() == TypeConv::from_cpp_type<Cuda::StreamAwareTaskFuncPtr>()) ||
+            (codedesc.find_property<DeferredEffectsProperty>() != nullptr);
+
         // figure out what type of function we have
         if(codedesc.type() == TypeConv::from_cpp_type<Processor::TaskFuncPtr>()) {
           tte.fnptr = (Processor::TaskFuncPtr)(fpi->fnptr);
@@ -1550,6 +1588,148 @@ namespace Realm {
         (tte->fnptr)(task_args.base(), task_args.size(), tte->user_data.base(),
                      tte->user_data.size(), me);
       }
+    }
+
+    ////////////////////////////////////////////////////////////////////////
+    //
+    // compiled subgraph tasks on a GPU processor
+    //
+    // The scheduler thread runs the task function directly, so these hooks
+    // do what GPUContextManager does for normal tasks: push the context,
+    // hand the task a stream, and track completion of the work it launched.
+    // Each task leaves behind a token, a CUDA event recorded after its work,
+    // which doubles as its completion fence and as the thing dependent GPU
+    // tasks on this processor make their streams wait on.
+
+    namespace {
+      class SubgraphGPUNotification : public GPUCompletionNotification {
+      public:
+        SubgraphGPUNotification(SubgraphAsyncCompletion *_completion)
+          : completion(_completion)
+        {}
+
+        virtual void request_completed(void)
+        {
+          completion->async_completed();
+          delete this;
+        }
+
+      protected:
+        SubgraphAsyncCompletion *completion;
+      };
+    } // namespace
+
+    unsigned GPUProcessor::subgraph_task_flags(Processor::TaskFuncID func_id)
+    {
+      RWLock::AutoReaderLock al(task_table_mutex);
+      std::map<Processor::TaskFuncID, GPUTaskTableEntry>::const_iterator it =
+          gpu_task_table.find(func_id);
+      if(it == gpu_task_table.end())
+        return 0;
+      return SUBGRAPH_TASK_REGISTERED |
+             (it->second.deferred_effects ? SUBGRAPH_TASK_DEFERRED_EFFECTS : 0);
+    }
+
+    bool GPUProcessor::supports_subgraph_tasks(void) const { return true; }
+
+    bool GPUProcessor::subgraph_tasks_are_async(void) const { return true; }
+
+    void *GPUProcessor::begin_subgraph_task(const void *const *tokens, size_t num_tokens)
+    {
+      gpu->push_context();
+      assert(ThreadLocal::current_gpu_stream == nullptr);
+      GPUStream *s = gpu->get_next_task_stream();
+      ThreadLocal::current_gpu_stream = s;
+      assert(!ThreadLocal::created_gpu_streams);
+      // a task can force context sync on or off; -1 means no preference
+      ThreadLocal::context_sync_required = -1;
+      // this task's work follows that of its deferred-effects predecessors
+      for(size_t i = 0; i < num_tokens; i++)
+        if(tokens[i])
+          CHECK_CU(CUDA_DRIVER_FNPTR(cuStreamWaitEvent)(
+              s->get_stream(), static_cast<CUevent>(const_cast<void *>(tokens[i])), 0));
+      return s;
+    }
+
+    void *GPUProcessor::end_subgraph_task(void *context, bool deferred_effects)
+    {
+      GPUStream *s = static_cast<GPUStream *>(context);
+      assert(ThreadLocal::current_gpu_stream == s);
+      // if the task created other streams, our stream waits on them too
+      if(ThreadLocal::created_gpu_streams) {
+        s->wait_on_streams(*ThreadLocal::created_gpu_streams);
+        delete ThreadLocal::created_gpu_streams;
+        ThreadLocal::created_gpu_streams = nullptr;
+      }
+      resolve_task_context_sync_default(gpu);
+      if(gpu->module->config->cfg_task_legacy_sync) {
+        CUevent e = gpu->event_pool.get_event();
+        CHECK_CU(CUDA_DRIVER_FNPTR(cuEventRecord)(e, CU_STREAM_LEGACY));
+        CHECK_CU(CUDA_DRIVER_FNPTR(cuStreamWaitEvent)(s->get_stream(), e, 0));
+        gpu->event_pool.return_event(e);
+      }
+      // a deferred-effects task promised that all its work is on the stream:
+      //  its dependents were ordered after that stream alone at compile time,
+      //  so asking for a context synchronization now cannot be honored
+      if(deferred_effects && (ThreadLocal::context_sync_required > 0)) {
+        log_gpu.fatal() << "subgraph task on " << me
+                        << " was registered with deferred effects (DeferredEffectsProperty "
+                           "or a stream-aware prototype) but called "
+                           "Cuda::set_task_ctxsync_required(true); put all work on the "
+                           "task's stream or register it without the promise";
+        abort();
+      }
+      const bool ctxsync = (ThreadLocal::context_sync_required > 0) ||
+                           ((ThreadLocal::context_sync_required < 0) && !deferred_effects &&
+                            gpu->module->config->cfg_task_context_sync);
+      ThreadLocal::subgraph_ctxsync_pending = false;
+      if(ctxsync) {
+#if(CUDA_VERSION >= 12050)
+        if(CUDA_DRIVER_HAS_FNPTR(cuCtxRecordEvent)) {
+          // fold the whole context's work into our stream, cheaply
+          CUevent e = gpu->event_pool.get_event();
+          CHECK_CU(CUDA_DRIVER_FNPTR(cuCtxRecordEvent)(gpu->context, e));
+          CHECK_CU(CUDA_DRIVER_FNPTR(cuStreamWaitEvent)(s->get_stream(), e, 0));
+          gpu->event_pool.return_event(e);
+        } else
+#endif
+        {
+          // older drivers: a context synchronizer thread completes the task
+          ThreadLocal::subgraph_ctxsync_pending = true;
+        }
+      }
+      // the token: everything the task did is complete once it fires
+      // (only deferred-effects tasks hand it to dependents, and those never
+      //  take the context synchronizer path)
+      CUevent token = gpu->event_pool.get_event();
+      CHECK_CU(CUDA_DRIVER_FNPTR(cuEventRecord)(token, s->get_stream()));
+      gpu->pop_context();
+      ThreadLocal::current_gpu_stream = nullptr;
+      return token;
+    }
+
+    void GPUProcessor::arm_subgraph_task_completion(void *context, void *token,
+                                                    SubgraphAsyncCompletion *completion)
+    {
+      GPUStream *s = static_cast<GPUStream *>(context);
+      if(ThreadLocal::subgraph_ctxsync_pending) {
+        // completion comes from a full context synchronization; the token
+        //  is never waited on and goes back with release_subgraph_tokens
+        ThreadLocal::subgraph_ctxsync_pending = false;
+        gpu->ctxsync.add_notification(new SubgraphGPUNotification(completion));
+        return;
+      }
+      // the subgraph keeps the token until release_subgraph_tokens
+      s->add_event(static_cast<CUevent>(token), nullptr,
+                   new SubgraphGPUNotification(completion), nullptr,
+                   false /*!return_event*/);
+    }
+
+    void GPUProcessor::release_subgraph_tokens(void *const *tokens, size_t num_tokens)
+    {
+      for(size_t i = 0; i < num_tokens; i++)
+        if(tokens[i])
+          gpu->event_pool.return_event(static_cast<CUevent>(tokens[i]));
     }
 
     void GPUProcessor::shutdown(void)
@@ -2778,6 +2958,7 @@ namespace Realm {
       config_map.insert({"dynfb_max_size", &cfg_dynfb_max_size});
       config_map.insert({"task_streams", &cfg_task_streams});
       config_map.insert({"d2d_streams", &cfg_d2d_streams});
+      config_map.insert({"pin_gpu_procs", &cfg_pin_gpu_procs});
 
       resource_map.insert({"gpu", &res_num_gpus});
       resource_map.insert({"fbmem", &res_min_fbmem_size});
@@ -2829,6 +3010,7 @@ namespace Realm {
           .add_option_int("-ll:gpuworkthread", cfg_use_worker_threads)
           .add_option_int("-ll:gpuworker", cfg_use_shared_worker)
           .add_option_int("-ll:pin", cfg_pin_sysmem)
+          .add_option_bool("-ll:pin_gpu", cfg_pin_gpu_procs)
           .add_option_bool("-cuda:callbacks", cfg_fences_use_callbacks)
           .add_option_bool("-cuda:nohijack", cfg_suppress_hijack_warning)
           .add_option_int("-cuda:skipgpus", cfg_skip_gpu_count)

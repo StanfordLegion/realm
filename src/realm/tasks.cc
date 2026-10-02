@@ -21,6 +21,10 @@
 
 #include "realm/runtime_impl.h"
 #include "realm/proc_impl.h"
+#include "realm/subgraph/subgraph_impl.h"
+#include "realm/utils.h"
+
+#include <algorithm>
 
 #if defined(REALM_USE_CACHING_ALLOCATOR)
 #include "realm/caching_allocator.h"
@@ -750,10 +754,12 @@ namespace Realm {
   // class ThreadedTaskScheduler
   //
 
-  ThreadedTaskScheduler::ThreadedTaskScheduler(void)
+  ThreadedTaskScheduler::ThreadedTaskScheduler(
+      std::unique_ptr<ProcSubgraphExecutor> _subgraph_executor /*= nullptr*/)
     : shutdown_flag(false)
     , active_worker_count(0)
     , unassigned_worker_count(0)
+    , subgraph_executor(std::move(_subgraph_executor))
     , wcu_task_queues(this)
     , wcu_resume_queue(this)
     , bgworker_interrupt(false)
@@ -1073,9 +1079,28 @@ namespace Realm {
     work_counter.increment_counter();
   }
 
+  void ThreadedTaskScheduler::notify_of_new_work() { work_counter.increment_counter(); }
+
+  void ThreadedTaskScheduler::add_subgraph(SubgraphExecutionState *subgraph)
+  {
+    assert(subgraph_executor != nullptr);
+    subgraph_executor->enqueue_subgraph(subgraph);
+    work_counter.increment_counter();
+  }
+
+  int ThreadedTaskScheduler::subgraph_numa_node(void) const
+  {
+    return subgraph_executor ? subgraph_executor->numa_node() : -1;
+  }
+
   // the main scheduler loop
   void ThreadedTaskScheduler::scheduler_loop(void)
   {
+    // record where this processor's workers run (used for NUMA placement of
+    //  subgraph state)
+    if(subgraph_executor)
+      subgraph_executor->note_worker_started();
+
     // the entire body of this method, except for when running an actual task, is
     //   a critical section - lock should be taken by caller
     {
@@ -1137,21 +1162,34 @@ namespace Realm {
           update_worker_count(0, +1);
         }
 
-        // if we have both resumable and new ready tasks, we want the one that
-        //  is the highest priority, with ties going to resumable tasks - we
-        //  can do this cleanly by taking advantage of the fact that the
-        //  resumable_workers queue uses the scheduler lock, so can't change
-        //  during this call
-        // peek at the top thing (if any) in that queue, and then try to find
-        //  a ready task with higher priority
+        // Decide between ready tasks, subgraph work and resumable workers.
+        //  - a ready task runs if its priority is strictly higher than any
+        //    ready subgraph work (ties go to the subgraph) and than the best
+        //    resumable worker (ties go to the resumable worker), and, while an
+        //    instantiation holds this processor, only if its priority is at
+        //    least the instantiation's;
+        //  - otherwise ready subgraph work runs unless a resumable worker has
+        //    higher priority;
+        //  - otherwise the best resumable worker continues.
+        // The resumable_workers queue uses the scheduler lock, so it can't
+        // change during this decision.
         int resumable_priority = ResumableQueue::PRI_NEG_INF;
         resumable_workers.peek(&resumable_priority);
 
-        // try to get a new task then
+        int subgraph_priority = 0;
+        bool have_subgraph_work =
+            subgraph_executor && subgraph_executor->peek(subgraph_priority);
         int task_priority = resumable_priority;
+        if(have_subgraph_work) {
+          task_priority = std::max(task_priority, subgraph_priority);
+        } else if(subgraph_executor) {
+          int floor = subgraph_executor->active_floor(TaskQueue::PRI_NEG_INF);
+          if(floor > TaskQueue::PRI_NEG_INF)
+            task_priority = std::max(task_priority, floor - 1);
+        }
         Task *task = TaskQueue::get_best_task(task_queues, task_priority);
 
-        // did we find work to do?
+        // did we find a ready task to run?
         if(task) {
           // we've now got some assigned work, so fire up a new idle worker if we were the
           // last
@@ -1214,8 +1252,36 @@ namespace Realm {
           break;
         }
 
-        // having checked for higher-priority ready tasks, we can always
-        //  take the highest-priority resumable task, if any, and run it
+        // subgraph work next, unless a resumable worker outranks it
+        if(have_subgraph_work &&
+           (resumable_workers.empty() || (subgraph_priority >= resumable_priority))) {
+          ProcSubgraphExecutor::ReadyEntry entry;
+          subgraph_executor->dequeue(entry);
+
+          // same worker accounting as for a ready task above
+          if((unassigned_worker_count == 1) &&
+             (active_worker_count < cfg_max_active_workers)) {
+            update_worker_count(+1, 0);
+            worker_create(true);
+          } else {
+            update_worker_count(0, -1);
+          }
+          worker_priorities[Thread::self()] = entry.priority;
+
+          lock.unlock();
+          subgraph_executor->execute(entry);
+          lock.lock();
+
+          worker_priorities.erase(Thread::self());
+          update_worker_count(0, +1);
+
+          if(cfg_reuse_workers)
+            continue;
+          break;
+        }
+
+        // no ready task above the threshold and no subgraph work: take the
+        //  highest-priority resumable task, if any, and run it
         if(!resumable_workers.empty()) {
           Thread *yield_to = resumable_workers.get(0); // priority is irrelevant
           assert(yield_to != Thread::self());
@@ -1250,6 +1316,17 @@ namespace Realm {
               worker_terminate(0);
               break;
             }
+          }
+
+          // compiled subgraph work ran or arrived here recently: keep polling
+          // for a bounded time instead of sleeping, so that dependent
+          // operations arriving from other processors do not pay a wake-up
+          if(subgraph_executor && subgraph_executor->keep_polling()) {
+            lock.unlock();
+            for(int i = 0; i < 32; i++)
+              REALM_SPIN_YIELD();
+            lock.lock();
+            continue;
           }
 
           // do we have more unassigned and idle tasks than we need?
@@ -1337,7 +1414,8 @@ namespace Realm {
 
   KernelThreadTaskScheduler::KernelThreadTaskScheduler(Processor _proc,
                                                        CoreReservation &_core_rsrv)
-    : proc(_proc)
+    : ThreadedTaskScheduler(std::make_unique<ProcSubgraphExecutor>(_proc))
+    , proc(_proc)
     , core_rsrv(_core_rsrv)
     , shutdown_condvar(lock)
   {}
@@ -1569,7 +1647,8 @@ namespace Realm {
 #ifdef REALM_USE_USER_THREADS
   UserThreadTaskScheduler::UserThreadTaskScheduler(Processor _proc,
                                                    CoreReservation &_core_rsrv)
-    : proc(_proc)
+    : ThreadedTaskScheduler(std::make_unique<ProcSubgraphExecutor>(_proc))
+    , proc(_proc)
     , core_rsrv(_core_rsrv)
     , host_startup_condvar(lock)
     , cfg_num_host_threads(1)
