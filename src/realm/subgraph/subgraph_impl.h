@@ -234,7 +234,8 @@ namespace Realm {
     void compile(void);
     // Set by compile, cleared by destroy: catches use after destroy for as
     // long as this slot is not reused (subgraph ids carry no generation).
-    bool alive = false;
+    // Read without the lifecycle lock, so atomic.
+    atomic<bool> alive{false};
 
     void instantiate(const void *args, size_t arglen, const ProfilingRequestSet &prs,
                      const SubgraphInstantiationProfiling &profiling,
@@ -549,7 +550,9 @@ namespace Realm {
     // records the NUMA node the processor's workers run on.
     void note_worker_started(void);
     // OS NUMA node of this processor's workers, or -1 if unknown.
-    int numa_node(void) const { return numa_node_; }
+    // Written once by the first worker to start, read by compile() on other
+    // threads: -2 until known, -1 if unknown.
+    int numa_node(void) const { return numa_node_.load_acquire(); }
 
   private:
     struct Cursor {
@@ -563,7 +566,7 @@ namespace Realm {
     void absorb_pending(void);
 
     Processor proc;
-    int numa_node_;
+    atomic<int> numa_node_;
 
     // Instantiations handed to this processor but not yet picked up by the
     // scheduler loop. Written by launchers, drained under the scheduler lock.

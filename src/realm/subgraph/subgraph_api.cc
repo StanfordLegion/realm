@@ -241,7 +241,7 @@ namespace Realm {
                                  span<const Event> postconditions, Event start_event,
                                  Event finish_event, int priority_adjust)
   {
-    if(!alive)
+    if(!alive.load_acquire())
       SUBGRAPH_FATAL(me, "instantiate of a subgraph that was destroyed (or never created)");
     if(!prs.empty())
       SUBGRAPH_FATAL(me, "profiling requests on the instantiation itself are not "
@@ -293,7 +293,7 @@ namespace Realm {
 
   void SubgraphImpl::destroy(void)
   {
-    alive = false;
+    alive.store_release(false);
     delete defn;
     defn = nullptr;
     compiled.clear();
@@ -325,7 +325,7 @@ namespace Realm {
   {
     {
       AutoLock<> al(lifecycle_lock);
-      if(!alive)
+      if(!alive.load_acquire())
         SUBGRAPH_FATAL(me, "destroy of a subgraph that was already destroyed (or never "
                            "created)");
       if(destroy_requested)

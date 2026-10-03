@@ -452,7 +452,7 @@ namespace Realm {
 
   void ProcSubgraphExecutor::note_worker_started(void)
   {
-    if(numa_node_ != -2)
+    if(numa_node_.load() != -2)
       return;
     int node = -1;
 #ifdef __linux__
@@ -465,7 +465,7 @@ namespace Realm {
           node = dm;
     }
 #endif
-    numa_node_ = node;
+    numa_node_.store_release(node);
   }
 
   void ProcSubgraphExecutor::enqueue_subgraph(SubgraphExecutionState *state)
