@@ -408,12 +408,16 @@ void top_level_task(const void *_args, size_t arglen, const void *userdata,
   std::map<FieldID, size_t> field_sizes = {{FID_INPUT, sizeof(float)},
                                            {FID_OUTPUT, sizeof(float)}};
   {
+    // Instances are created eagerly (a deferred creation, chained on an
+    // event, races with Realm's allocation callback under TSAN); only the
+    // fills are chained.
     Event e = Event::NO_EVENT;
     for(int64_t i = 0; i < g.px; i++)
       for(int64_t j = 0; j < g.py; j++) {
         Tile t(i, j);
-        e = RegionInstance::create_instance(g.inst[t], mems[t], bloated[t], field_sizes, 0,
-                                            ProfilingRequestSet(), e);
+        RegionInstance::create_instance(g.inst[t], mems[t], bloated[t], field_sizes, 0,
+                                        ProfilingRequestSet())
+            .wait();
         std::vector<CopySrcDstField> f(1);
         f[0].set_field(g.inst[t], FID_INPUT, sizeof(float));
         float zero = 0;
