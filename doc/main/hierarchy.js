@@ -606,8 +606,6 @@ var hierarchy =
     [ "is_copy_serializable", "structis__copy__serializable.html", null ],
     [ "Realm::Cuda::KernelVariantDesc", "structRealm_1_1Cuda_1_1KernelVariantDesc.html", null ],
     [ "Realm::Runtime::KeyValueStoreVtable", "structRealm_1_1Runtime_1_1KeyValueStoreVtable.html", null ],
-    [ "std::less< Realm::Point< N, T > >", "structstd_1_1less_3_01Realm_1_1Point_3_01N_00_01T_01_4_01_4.html", null ],
-    [ "std::less< Realm::Rect< N, T > >", "structstd_1_1less_3_01Realm_1_1Rect_3_01N_00_01T_01_4_01_4.html", null ],
     [ "Realm::LinearizedIndexSpaceIntfc", "classRealm_1_1LinearizedIndexSpaceIntfc.html", [
       [ "Realm::LinearizedIndexSpace< N, T >", "classRealm_1_1LinearizedIndexSpace.html", [
         [ "Realm::AffineLinearizedIndexSpace< N, T >", "classRealm_1_1AffineLinearizedIndexSpace.html", null ]

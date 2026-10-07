@@ -20,6 +20,7 @@ var indexspace_8h =
     [ "DIMCOUNTS", "indexspace_8h.html#aa622a123c7b2966425ef8ac531348a2f", null ],
     [ "DIMTYPES", "indexspace_8h.html#a55144d226eed6e1ea47f0173f86b03f2", null ],
     [ "FLDTYPES", "indexspace_8h.html#abbb27bfdf0c8f28c7beb15a3640be149", null ],
+    [ "operator<", "indexspace_8h.html#a8c7f6768aa4d8b0560ee464ea75b0ea9", null ],
     [ "operator<<", "indexspace_8h.html#ae9ee84b55cf4b6ec96977e19d2f495be", null ],
     [ "operator<<", "indexspace_8h.html#a1500117d4def00c5423c80e8cf6bbac7", null ]
 ];

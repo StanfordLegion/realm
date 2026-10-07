@@ -44,7 +44,7 @@
    <!-- BEGIN version select -->
     <br />
     <div class="dropdown">
-     <button class="dropbtn">Version 26.7.1+14d69ddc</button>
+     <button class="dropbtn">Version 26.9.1+dd2844dd</button>
      <div class="dropdown-content"></div>
     </div>
     <script type="text/javascript" src="../selectversion.js"></script>
@@ -467,13 +467,13 @@ $(document).ready(function(){initNavTree('inst__layout_8h_source.html',''); init
 <div class="line"><a id="l00373" name="l00373"></a><span class="lineno">  373</span>    template &lt;typename S&gt;</div>
 <div class="line"><a id="l00374" name="l00374"></a><span class="lineno"><a class="line" href="classRealm_1_1InstancePieceList.html#a75fb1b97d0d715c4f3f72617ba4889e8">  374</a></span>    <span class="keywordtype">bool</span> deserialize(S &amp;deserializer);</div>
 <div class="line"><a id="l00375" name="l00375"></a><span class="lineno">  375</span> </div>
-<div class="line"><a id="l00376" name="l00376"></a><span class="lineno"><a class="line" href="classRealm_1_1InstancePieceList.html#a5275fdc2ea71d62bf4c4ad90c943e4bf">  376</a></span>    <a class="code hl_namespace" href="namespacestd.html">std</a>::vector&lt;<a class="code hl_class" href="classRealm_1_1InstanceLayoutPiece.html">InstanceLayoutPiece</a>&lt;N, T&gt; *&gt; pieces;</div>
+<div class="line"><a id="l00376" name="l00376"></a><span class="lineno"><a class="line" href="classRealm_1_1InstancePieceList.html#a5275fdc2ea71d62bf4c4ad90c943e4bf">  376</a></span>    std::vector&lt;<a class="code hl_class" href="classRealm_1_1InstanceLayoutPiece.html">InstanceLayoutPiece</a>&lt;N, T&gt; *&gt; pieces;</div>
 <div class="line"><a id="l00377" name="l00377"></a><span class="lineno">  377</span>    <span class="comment">// placeholder for lookup structure (e.g. K-D tree)</span></div>
 <div class="line"><a id="l00378" name="l00378"></a><span class="lineno">  378</span>  };</div>
 </div>
 <div class="line"><a id="l00379" name="l00379"></a><span class="lineno">  379</span> </div>
 <div class="line"><a id="l00380" name="l00380"></a><span class="lineno">  380</span>  template &lt;<span class="keywordtype">int</span> N, typename T&gt;</div>
-<div class="line"><a id="l00381" name="l00381"></a><span class="lineno"><a class="line" href="namespaceRealm.html#a8fa0d2f3723bc9f43863eefe1feda67f">  381</a></span>  <a class="code hl_define" href="compiler__support_8h.html#ae64e2333a603c784e4c6d0eb99529c63">REALM_PUBLIC_API</a> <a class="code hl_namespace" href="namespacestd.html">std</a>::ostream &amp;operator&lt;&lt;(<a class="code hl_namespace" href="namespacestd.html">std</a>::ostream &amp;os,</div>
+<div class="line"><a id="l00381" name="l00381"></a><span class="lineno"><a class="line" href="namespaceRealm.html#a8fa0d2f3723bc9f43863eefe1feda67f">  381</a></span>  <a class="code hl_define" href="compiler__support_8h.html#ae64e2333a603c784e4c6d0eb99529c63">REALM_PUBLIC_API</a> std::ostream &amp;operator&lt;&lt;(std::ostream &amp;os,</div>
 <div class="line"><a id="l00382" name="l00382"></a><span class="lineno">  382</span>                                            const <a class="code hl_class" href="classRealm_1_1InstancePieceList.html">InstancePieceList</a>&lt;N, T&gt; &amp;ipl);</div>
 <div class="line"><a id="l00383" name="l00383"></a><span class="lineno">  383</span> </div>
 <div class="line"><a id="l00388" name="l00388"></a><span class="lineno">  388</span>  template &lt;<span class="keywordtype">int</span> N, typename T = <span class="keywordtype">int</span>&gt;</div>
@@ -586,7 +586,7 @@ $(document).ready(function(){initNavTree('inst__layout_8h_source.html',''); init
 <div class="line"><a id="l00499" name="l00499"></a><span class="lineno">  499</span> </div>
 <div class="line"><a id="l00500" name="l00500"></a><span class="lineno">  500</span>  protected:</div>
 <div class="line"><a id="l00501" name="l00501"></a><span class="lineno">  501</span>    template &lt;typename T&gt;</div>
-<div class="line"><a id="l00502" name="l00502"></a><span class="lineno"><a class="line" href="classRealm_1_1AccessorRefHelper.html#a07eca488f0c54d0e359c1a9de379f5ea">  502</a></span>    friend <a class="code hl_namespace" href="namespacestd.html">std</a>::ostream &amp;operator&lt;&lt;(<a class="code hl_namespace" href="namespacestd.html">std</a>::ostream &amp;os, const <a class="code hl_class" href="classRealm_1_1AccessorRefHelper.html">AccessorRefHelper</a>&lt;T&gt; &amp;arh);</div>
+<div class="line"><a id="l00502" name="l00502"></a><span class="lineno"><a class="line" href="classRealm_1_1AccessorRefHelper.html#a07eca488f0c54d0e359c1a9de379f5ea">  502</a></span>    friend std::ostream &amp;operator&lt;&lt;(std::ostream &amp;os, const <a class="code hl_class" href="classRealm_1_1AccessorRefHelper.html">AccessorRefHelper</a>&lt;T&gt; &amp;arh);</div>
 <div class="line"><a id="l00503" name="l00503"></a><span class="lineno">  503</span> </div>
 <div class="line"><a id="l00504" name="l00504"></a><span class="lineno"><a class="line" href="classRealm_1_1AccessorRefHelper.html#a08511c97376f80a3535b92d50aa760cc">  504</a></span>    <a class="code hl_class" href="classRealm_1_1RegionInstance.html">RegionInstance</a> inst;</div>
 <div class="line"><a id="l00505" name="l00505"></a><span class="lineno"><a class="line" href="classRealm_1_1AccessorRefHelper.html#a75be94a0cbc6d077837ad862930a6998">  505</a></span>    <span class="keywordtype">size_t</span> offset;</div>
@@ -834,7 +834,7 @@ $(document).ready(function(){initNavTree('inst__layout_8h_source.html',''); init
 <div class="line"><a id="l00841" name="l00841"></a><span class="lineno"><a class="line" href="classRealm_1_1MultiAffineAccessor.html#a81ca05a4be055b65d0662e07e17b6945">  841</a></span>    FT &amp;operator[](const <a class="code hl_struct" href="structRealm_1_1Point.html">Point</a>&lt;N, T&gt; &amp;p);</div>
 <div class="line"><a id="l00842" name="l00842"></a><span class="lineno">  842</span> </div>
 <div class="line"><a id="l00843" name="l00843"></a><span class="lineno">  843</span>  protected:</div>
-<div class="line"><a id="l00844" name="l00844"></a><span class="lineno"><a class="line" href="classRealm_1_1MultiAffineAccessor.html#a078e0421e1a8392155276e4ce754d990">  844</a></span>    friend <a class="code hl_namespace" href="namespacestd.html">std</a>::ostream &amp;operator&lt;&lt; &lt;FT, N, T&gt;(<a class="code hl_namespace" href="namespacestd.html">std</a>::ostream &amp;os,</div>
+<div class="line"><a id="l00844" name="l00844"></a><span class="lineno"><a class="line" href="classRealm_1_1MultiAffineAccessor.html#a078e0421e1a8392155276e4ce754d990">  844</a></span>    friend std::ostream &amp;operator&lt;&lt; &lt;FT, N, T&gt;(std::ostream &amp;os,</div>
 <div class="line"><a id="l00845" name="l00845"></a><span class="lineno">  845</span>                                               const <a class="code hl_class" href="classRealm_1_1MultiAffineAccessor.html">MultiAffineAccessor</a>&lt;FT, N, T&gt; &amp;a);</div>
 <div class="line"><a id="l00846" name="l00846"></a><span class="lineno">  846</span> </div>
 <div class="line"><a id="l00847" name="l00847"></a><span class="lineno">  847</span>    <span class="comment">// cached info from the most recent piece, or authoritative info for</span></div>
@@ -990,7 +990,6 @@ $(document).ready(function(){initNavTree('inst__layout_8h_source.html',''); init
 <div class="ttc" id="anamespaceRealm_html"><div class="ttname"><a href="namespaceRealm.html">Realm</a></div><div class="ttdef"><b>Definition</b> activemsg.h:42</div></div>
 <div class="ttc" id="anamespaceRealm_html_a1bcbfeafb7a5e617a548a0f7655007f3"><div class="ttname"><a href="namespaceRealm.html#a1bcbfeafb7a5e617a548a0f7655007f3">Realm::FieldID</a></div><div class="ttdeci">realm_field_id_t FieldID</div><div class="ttdef"><b>Definition</b> instance.h:45</div></div>
 <div class="ttc" id="anamespaceRealm_html_aeb485e1cab646f2f4e2efc44163d88f8"><div class="ttname"><a href="namespaceRealm.html#aeb485e1cab646f2f4e2efc44163d88f8">Realm::operator&lt;&lt;</a></div><div class="ttdeci">std::ostream &amp; operator&lt;&lt;(std::ostream &amp;os, const DenseRectangleList&lt; N, T &gt; &amp;drl)</div></div>
-<div class="ttc" id="anamespacestd_html"><div class="ttname"><a href="namespacestd.html">std</a></div><div class="ttdef"><b>Definition</b> indexspace.h:1279</div></div>
 <div class="ttc" id="aserialize_8h_html"><div class="ttname"><a href="serialize_8h.html">serialize.h</a></div></div>
 <div class="ttc" id="astructRealm_1_1IndexSpace_html"><div class="ttname"><a href="structRealm_1_1IndexSpace.html">Realm::IndexSpace</a></div><div class="ttdef"><b>Definition</b> indexspace.h:323</div></div>
 <div class="ttc" id="astructRealm_1_1InstanceLayoutConstraints_1_1FieldInfo_html"><div class="ttname"><a href="structRealm_1_1InstanceLayoutConstraints_1_1FieldInfo.html">Realm::InstanceLayoutConstraints::FieldInfo</a></div><div class="ttdef"><b>Definition</b> inst_layout.h:81</div></div>
@@ -1003,7 +1002,7 @@ $(document).ready(function(){initNavTree('inst__layout_8h_source.html',''); init
 <div class="ttc" id="astructRealm_1_1InstanceLayoutGeneric_1_1FieldLayout_html_a377674d601cdf4797262fe354d56b7af"><div class="ttname"><a href="structRealm_1_1InstanceLayoutGeneric_1_1FieldLayout.html#a377674d601cdf4797262fe354d56b7af">Realm::InstanceLayoutGeneric::FieldLayout::list_idx</a></div><div class="ttdeci">int list_idx</div><div class="ttdef"><b>Definition</b> inst_layout.h:221</div></div>
 <div class="ttc" id="astructRealm_1_1InstanceLayoutGeneric_1_1FieldLayout_html_ad17e325586ecdf5241184da9c2daf93c"><div class="ttname"><a href="structRealm_1_1InstanceLayoutGeneric_1_1FieldLayout.html#ad17e325586ecdf5241184da9c2daf93c">Realm::InstanceLayoutGeneric::FieldLayout::size_in_bytes</a></div><div class="ttdeci">int size_in_bytes</div><div class="ttdef"><b>Definition</b> inst_layout.h:223</div></div>
 <div class="ttc" id="astructRealm_1_1InstanceLayoutGeneric_1_1FieldLayout_html_aed8c4b05ae3b3c245a088ccfc2bf4b62"><div class="ttname"><a href="structRealm_1_1InstanceLayoutGeneric_1_1FieldLayout.html#aed8c4b05ae3b3c245a088ccfc2bf4b62">Realm::InstanceLayoutGeneric::FieldLayout::rel_offset</a></div><div class="ttdeci">size_t rel_offset</div><div class="ttdef"><b>Definition</b> inst_layout.h:222</div></div>
-<div class="ttc" id="astructRealm_1_1Matrix_html"><div class="ttname"><a href="structRealm_1_1Matrix.html">Realm::Matrix</a></div><div class="ttdef"><b>Definition</b> point.h:230</div></div>
+<div class="ttc" id="astructRealm_1_1Matrix_html"><div class="ttname"><a href="structRealm_1_1Matrix.html">Realm::Matrix</a></div><div class="ttdef"><b>Definition</b> point.h:237</div></div>
 <div class="ttc" id="astructRealm_1_1PieceLookup_1_1AffinePiece_html"><div class="ttname"><a href="structRealm_1_1PieceLookup_1_1AffinePiece.html">Realm::PieceLookup::AffinePiece</a></div><div class="ttdef"><b>Definition</b> inst_layout.h:446</div></div>
 <div class="ttc" id="astructRealm_1_1PieceLookup_1_1AffinePiece_html_a01bbcaa0e7c33ba6735c72eb981139c2"><div class="ttname"><a href="structRealm_1_1PieceLookup_1_1AffinePiece.html#a01bbcaa0e7c33ba6735c72eb981139c2">Realm::PieceLookup::AffinePiece::base</a></div><div class="ttdeci">uintptr_t base</div><div class="ttdef"><b>Definition</b> inst_layout.h:455</div></div>
 <div class="ttc" id="astructRealm_1_1PieceLookup_1_1AffinePiece_html_a284d29a5c320aff1ae86731864ee663f"><div class="ttname"><a href="structRealm_1_1PieceLookup_1_1AffinePiece.html#a284d29a5c320aff1ae86731864ee663f">Realm::PieceLookup::AffinePiece::bounds</a></div><div class="ttdeci">Rect&lt; N, T &gt; bounds</div><div class="ttdef"><b>Definition</b> inst_layout.h:454</div></div>
@@ -1031,7 +1030,7 @@ $(document).ready(function(){initNavTree('inst__layout_8h_source.html',''); init
 <div class="ttc" id="astructRealm_1_1PieceLookup_1_1SplitPlane_html_ac7d68788dd8215ceed05911f31176485"><div class="ttname"><a href="structRealm_1_1PieceLookup_1_1SplitPlane.html#ac7d68788dd8215ceed05911f31176485">Realm::PieceLookup::SplitPlane::next</a></div><div class="ttdeci">REALM_CUDA_HD const Instruction * next(const Point&lt; N, T &gt; &amp;p) const</div></div>
 <div class="ttc" id="astructRealm_1_1PieceLookup_1_1SplitPlane_html_acc00d66f8bfce2486a5010b1c91c6cd6"><div class="ttname"><a href="structRealm_1_1PieceLookup_1_1SplitPlane.html#acc00d66f8bfce2486a5010b1c91c6cd6">Realm::PieceLookup::SplitPlane::delta</a></div><div class="ttdeci">REALM_CUDA_HD unsigned delta() const</div></div>
 <div class="ttc" id="astructRealm_1_1Point_html"><div class="ttname"><a href="structRealm_1_1Point.html">Realm::Point</a></div><div class="ttdef"><b>Definition</b> point.h:55</div></div>
-<div class="ttc" id="astructRealm_1_1Rect_html"><div class="ttname"><a href="structRealm_1_1Rect.html">Realm::Rect</a></div><div class="ttdef"><b>Definition</b> point.h:143</div></div>
+<div class="ttc" id="astructRealm_1_1Rect_html"><div class="ttname"><a href="structRealm_1_1Rect.html">Realm::Rect</a></div><div class="ttdef"><b>Definition</b> point.h:146</div></div>
 </div><!-- fragment --></div><!-- contents -->
 </div><!-- doc-content -->
 <!-- HTML footer for doxygen 1.9.1-->
