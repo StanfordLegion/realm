@@ -1238,6 +1238,16 @@ namespace Realm {
     return os;
   }
 
+  template <int N, typename T>
+  inline bool operator<(const IndexSpace<N, T> &lhs, const IndexSpace<N, T> &rhs)
+  {
+    if(lhs.bounds < rhs.bounds)
+      return true;
+    if(rhs.bounds < lhs.bounds)
+      return false;
+    return (lhs.sparsity < rhs.sparsity);
+  }
+
   ////////////////////////////////////////////////////////////////////////
   //
   // class IndexSpaceIterator<N,T>
@@ -1482,19 +1492,3 @@ namespace Realm {
   }
 
 }; // namespace Realm
-
-namespace std {
-
-  template <int N, typename T>
-  inline bool
-  less<Realm::IndexSpace<N, T>>::operator()(const Realm::IndexSpace<N, T> &is1,
-                                            const Realm::IndexSpace<N, T> &is2) const
-  {
-    if(std::less<Realm::Rect<N, T>>()(is1.bounds, is2.bounds))
-      return true;
-    if(std::less<Realm::Rect<N, T>>()(is2.bounds, is1.bounds))
-      return false;
-    return (is1.sparsity < is2.sparsity);
-  }
-
-}; // namespace std

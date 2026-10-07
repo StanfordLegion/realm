@@ -1104,6 +1104,11 @@ namespace Realm {
   template <int N, typename T>
   REALM_PUBLIC_API std::ostream &operator<<(std::ostream &os, const IndexSpace<N, T> &p);
 
+  // ordering by bounds, then sparsity map, allows IndexSpace<N,T> to be used in STL
+  //  containers
+  template <int N, typename T>
+  bool operator<(const IndexSpace<N, T> &lhs, const IndexSpace<N, T> &rhs);
+
   class IndexSpaceGenericImpl;
 
   /**
@@ -1273,16 +1278,6 @@ namespace Realm {
   };
 
 }; // namespace Realm
-
-// specializations of std::less<T> for IndexSpace<N,T> allow
-//  them to be used in STL containers
-namespace std {
-  template <int N, typename T>
-  struct less<Realm::IndexSpace<N, T>> {
-    bool operator()(const Realm::IndexSpace<N, T> &is1,
-                    const Realm::IndexSpace<N, T> &is2) const;
-  };
-}; // namespace std
 
 #include "realm/indexspace.inl"
 

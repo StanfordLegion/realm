@@ -114,6 +114,9 @@ namespace Realm {
   REALM_CUDA_HD bool operator==(const Point<N, T> &lhs, const Point<N, T2> &rhs);
   template <int N, typename T, typename T2>
   REALM_CUDA_HD bool operator!=(const Point<N, T> &lhs, const Point<N, T2> &rhs);
+  // lexicographic ordering, allows Point<N,T> to be used in STL containers
+  template <int N, typename T>
+  REALM_CUDA_HD bool operator<(const Point<N, T> &lhs, const Point<N, T> &rhs);
 
   template <int N, typename T, typename T2>
   REALM_CUDA_HD Point<N, T> operator+(const Point<N, T> &lhs, const Point<N, T2> &rhs);
@@ -215,6 +218,10 @@ namespace Realm {
   REALM_CUDA_HD bool operator==(const Rect<N, T> &lhs, const Rect<N, T2> &rhs);
   template <int N, typename T, typename T2>
   REALM_CUDA_HD bool operator!=(const Rect<N, T> &lhs, const Rect<N, T2> &rhs);
+  // lexicographic ordering (by lo, then hi), allows Rect<N,T> to be used in STL
+  //  containers
+  template <int N, typename T>
+  REALM_CUDA_HD bool operator<(const Rect<N, T> &lhs, const Rect<N, T> &rhs);
 
   // rectangles may be displaced by a vector (i.e. point)
   template <int N, typename T, typename T2>
@@ -274,20 +281,6 @@ namespace Realm {
   };
 
 }; // namespace Realm
-
-// specializations of std::less<T> for Point/Rect<N,T> allow
-//  them to be used in STL containers
-namespace std {
-  template <int N, typename T>
-  struct less<Realm::Point<N, T>> {
-    bool operator()(const Realm::Point<N, T> &p1, const Realm::Point<N, T> &p2) const;
-  };
-
-  template <int N, typename T>
-  struct less<Realm::Rect<N, T>> {
-    bool operator()(const Realm::Rect<N, T> &r1, const Realm::Rect<N, T> &r2) const;
-  };
-}; // namespace std
 
 #include "realm/point.inl"
 
