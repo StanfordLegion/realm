@@ -5,8 +5,8 @@ var classRealm_1_1GASNetEXInjector =
     [ "do_work", "classRealm_1_1GASNetEXInjector.html#aa6505ed47049598e5d357426b01a305e", null ],
     [ "drain_xpairs", "classRealm_1_1GASNetEXInjector.html#a2bddd6dd7241eca797f9e7aaa63b3e4a", null ],
     [ "queue_size", "classRealm_1_1GASNetEXInjector.html#a9e2482671c1f26ad9b644dbaccd5819d", null ],
+    [ "active_workers", "classRealm_1_1GASNetEXInjector.html#a1d8839f4896a1b1e5f2c50bffd699ba6", null ],
     [ "internal", "classRealm_1_1GASNetEXInjector.html#a3f1e170f1cf91f5713c610c31c768848", null ],
     [ "mutex", "classRealm_1_1GASNetEXInjector.html#ad0f08583b391c5b5cc11980a10f69ee0", null ],
-    [ "ready_xpairs", "classRealm_1_1GASNetEXInjector.html#ac3cb793260acc27978c625ee96447c1f", null ],
-    [ "work_active", "classRealm_1_1GASNetEXInjector.html#aa39d70306106d7cf86fc2247388a0540", null ]
+    [ "ready_xpairs", "classRealm_1_1GASNetEXInjector.html#ac3cb793260acc27978c625ee96447c1f", null ]
 ];
