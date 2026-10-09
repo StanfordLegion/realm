@@ -276,6 +276,9 @@ add_integration_test(ctxswitch "${REALM_TEST_DIR}/ctxswitch.cc")
 add_integration_test(barrier_reduce "${REALM_TEST_DIR}/barrier_reduce.cc")
 # barrier_arrivals.cc existed but was never registered, so it was neither built nor run.
 add_integration_test(barrier_arrivals "${REALM_TEST_DIR}/barrier_arrivals.cc")
+# the deviation driver (tla/SCALE_TEST_PLAN.md) - forces the protocol cases the
+#  other barrier tests never reach, and destroys its barriers so counters dump
+add_integration_test(barrier_scale_test "${REALM_TEST_DIR}/barrier_scale_test.cc")
 add_integration_test(taskreg "${REALM_TEST_DIR}/taskreg.cc")
 add_integration_test(idcheck "${REALM_TEST_DIR}/idcheck.cc")
 add_integration_test(inst_reuse "${REALM_TEST_DIR}/inst_reuse.cc")
