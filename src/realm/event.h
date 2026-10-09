@@ -252,34 +252,6 @@ namespace Realm {
                                   const void *initial_value = 0,
                                   size_t initial_value_size = 0);
 
-    struct ParticipantInfo {
-      AddressSpace address_space;
-      unsigned count;
-    };
-
-    /**
-     * Creates a barrier
-     * \param expected_arrivals information about the arrival pattern
-     * \param num_participants the size of expected arrivals
-     * \param redop_id ID of a reduction operator
-     * \param initial_value initial reduction value
-     * \param initial_value_size size of the initial reduction value.
-     * \return barrier handle
-     */
-    static Barrier create_barrier(const Barrier::ParticipantInfo *expected_arrivals,
-                                  size_t num_participants, ReductionOpID redop_id = 0,
-                                  const void *initial_value = 0,
-                                  size_t initial_value_size = 0);
-
-    /**
-     * Sets the arrival pattern
-     * \param expected_arrivals information about the arrival pattern
-     * \param num_participants the size of expected arrivals
-     * \return barrier handle
-     */
-    Barrier set_arrival_pattern(const Barrier::ParticipantInfo *expected_arrivals,
-                                size_t num_participants);
-
     void destroy_barrier(void);
 
     static const ::realm_event_gen_t MAX_PHASES;
@@ -287,20 +259,62 @@ namespace Realm {
     /*
      * Advance a barrier to the next phase, returning a new barrier
      * handle. Attemps to advance beyond the last phase return NO_BARRIER
-     * instead.
+     * instead. The causal timestamp of this handle (see alter_arrival_count)
+     * is preserved: an adjustment branch is not reset at a phase boundary.
      * \return the new barrier handle.
      */
     Barrier advance_barrier(void) const;
 
     /*
      * Alter the arrival count of a barrier.
+     *
+     * The change is PERSISTENT: `delta` applies to this generation and to every
+     * subsequent generation of the barrier, not just to the phase the handle names.
+     * Sibling alterations accumulate, so two alterations of +2 and +3 issued on the
+     * same handle leave a net persistent change of +5.
+     *
+     * The returned handle carries a causal timestamp identifying this alteration and
+     * must be used for any subsequent work on that adjustment branch. Specifically,
+     * every returned handle must be used by at least one of:
+     *   - an `arrive()` performed on that handle;
+     *   - another `alter_arrival_count()` invoked on that handle;
+     *   - a descendant chain of alterations that ends in such an arrival;
+     *   - the terminal-negative exception described below.
+     * "At least one use" is the contract - the handle is not single-use, and multiple
+     * arrivals may be made on it.
+     *
+     * Sibling alterations (two or more alterations invoked on the same input handle)
+     * are allowed and do not have to be ordered with respect to each other. However,
+     * each sibling requires its OWN distinct outstanding arrival: an arrival made on
+     * one sibling's handle does not witness an incomparable sibling, and an arrival
+     * on a descendant witnesses only the ancestors on its own causal path. Before
+     * issuing an alteration the application must still hold at least one unissued
+     * arrival from the pre-alteration expected count; that reserved arrival is what
+     * prevents the barrier from triggering before it learns of the alteration.
+     *
+     * A negative alteration that makes the current generation's remaining arrival
+     * count exactly zero is the only case that needs no arrival on the returned
+     * handle. Such a terminal negative closes only its own causal branch - it never
+     * satisfies the outstanding-arrival obligation of an incomparable sibling.
+     *
+     * The expected arrival count for the current and every future generation must
+     * remain positive and within the supported range.
+     *
+     * Violating any of the above is a fatal application error, but because the
+     * runtime can only reason about alterations it has actually received, the
+     * violation may be detected late (or, in the worst case, show up as a barrier
+     * that triggered too early).
+     *
+     * This call is nonblocking and performs no round trip to the barrier's owner.
+     *
      * \param delta the amount to adjust the arrival count by
-     * \return the new barrier handle.
+     * \return the new barrier handle, carrying this alteration's causal timestamp.
      */
     Barrier alter_arrival_count(int delta) const;
 
     /*
-     * Get the previous phase of a barrier.
+     * Get the previous phase of a barrier. As with advance_barrier(), the
+     * causal timestamp of this handle is preserved.
      * \return the previous phase of the barrier
      */
     Barrier get_previous_phase(void) const;

@@ -29,6 +29,7 @@
 #include "realm/transfer/channel.h"
 #include "realm/transfer/ib_memory.h"
 
+#include "realm/activemsg.h"
 #include "realm/mutex.h"
 #include "realm/utils.h"
 
@@ -2945,9 +2946,9 @@ namespace Realm {
           hipipc_responses_needed.fetch_add(ipc_peers.size());
           hipipc_releases_needed.fetch_add(ipc_peers.size());
 
-          ActiveMessage<HipIpcRequest> amsg(ipc_peers);
-          amsg->hostid = gethostid();
-          amsg.commit();
+          HipIpcRequest msg{};
+          msg.hostid = gethostid();
+          multicast_message(MulticastTargetSet(ipc_peers), msg);
 
           // wait for responses
           {
@@ -2995,8 +2996,8 @@ namespace Realm {
         }
 
         if(!ipc_peers.empty()) {
-          ActiveMessage<HipIpcRelease> amsg(ipc_peers);
-          amsg.commit();
+          HipIpcRelease msg{};
+          multicast_message(MulticastTargetSet(ipc_peers), msg);
         }
 
         // now wait for similar notifications from any peers we gave mappings

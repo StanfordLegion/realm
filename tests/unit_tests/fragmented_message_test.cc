@@ -39,13 +39,15 @@ TEST_F(FragmentedMessageTest, AddChunkWorksCorrectly)
   EXPECT_EQ(message->size(), sizeof(chunk1) - 1);
 }
 
-TEST_F(FragmentedMessageTest, AddDuplicateChunkIgnored)
+TEST_F(FragmentedMessageTest, AddDuplicateChunkRejected)
 {
   const char chunk1[] = "Data";
   message->add_chunk(0, chunk1, sizeof(chunk1));
   EXPECT_EQ(message->size(), sizeof(chunk1));
-  message->add_chunk(0, chunk1, sizeof(chunk1)); // duplicate
-  EXPECT_EQ(message->size(), sizeof(chunk1));    // unchanged
+  // rejected rather than absorbed - callers treat this as a protocol violation,
+  //  since Realm's transports deliver exactly once and nothing retransmits
+  EXPECT_FALSE(message->add_chunk(0, chunk1, sizeof(chunk1))); // duplicate
+  EXPECT_EQ(message->size(), sizeof(chunk1));                  // unchanged
 }
 
 TEST_F(FragmentedMessageTest, IsCompleteReturnsCorrectly)
