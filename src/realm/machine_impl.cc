@@ -875,20 +875,22 @@ namespace Realm {
   {
     // TODO: consider using a reader/writer lock here instead
     AutoLock<> al(mutex);
-    for(std::vector<Machine::ProcessorMemoryAffinity>::const_iterator it =
-            proc_mem_affinities.begin();
-        it != proc_mem_affinities.end(); it++) {
-      if(it->p != p)
-        continue;
-      if(it->m != m)
-        continue;
-      if(details) {
-        details->bandwidth = it->bandwidth;
-        details->latency = it->latency;
-      }
-      return true;
+    // indexed lookup: node -> processor -> memory
+    const MachineNodeInfo *ni = get_nodeinfo(p);
+    if(!ni)
+      return false;
+    std::map<Processor, MachineProcInfo *>::const_iterator it = ni->procs.find(p);
+    if(it == ni->procs.end())
+      return false;
+    std::map<Memory, Machine::ProcessorMemoryAffinity *>::const_iterator it2 =
+        it->second->pmas.all.find(m);
+    if(it2 == it->second->pmas.all.end())
+      return false;
+    if(details) {
+      details->bandwidth = it2->second->bandwidth;
+      details->latency = it2->second->latency;
     }
-    return false;
+    return true;
   }
 
   bool MachineImpl::has_affinity(Memory m1, Memory m2,
@@ -896,25 +898,22 @@ namespace Realm {
   {
     // TODO: consider using a reader/writer lock here instead
     AutoLock<> al(mutex);
-
-    MachineNodeInfo *nodeInfo = get_nodeinfo(m1);
-    if(nodeInfo == nullptr) {
+    // indexed lookup: node -> memory -> memory (must not insert into the maps)
+    const MachineNodeInfo *ni = get_nodeinfo(m1);
+    if(!ni)
       return false;
-    }
-    MachineMemInfo *memInfo = nodeInfo->mems[m1];
-    if(memInfo == nullptr) {
+    std::map<Memory, MachineMemInfo *>::const_iterator it = ni->mems.find(m1);
+    if(it == ni->mems.end())
       return false;
+    std::map<Memory, Machine::MemoryMemoryAffinity *>::const_iterator it2 =
+        it->second->mmas_out.all.find(m2);
+    if(it2 == it->second->mmas_out.all.end())
+      return false;
+    if(details) {
+      details->bandwidth = it2->second->bandwidth;
+      details->latency = it2->second->latency;
     }
-    std::map<Memory, Machine::MemoryMemoryAffinity *>::const_iterator it =
-        memInfo->mmas_out.all.find(m2);
-    if(it != memInfo->mmas_out.all.end()) {
-      if(details != nullptr) {
-        details->bandwidth = it->second->bandwidth;
-        details->latency = it->second->latency;
-      }
-      return true;
-    }
-    return false;
+    return true;
   }
 
   int MachineImpl::get_proc_mem_affinity(
