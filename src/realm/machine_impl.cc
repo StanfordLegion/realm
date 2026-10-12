@@ -470,7 +470,7 @@ namespace Realm {
   void MachineImpl::parse_node_announce_data(int node_id, const void *args, size_t arglen,
                                              bool remote)
   {
-    AutoLock<> al(mutex);
+    RWLock::AutoWriterLock al(mutex);
 
     REALM_ASSERT(node_id <= Network::max_node_id);
     Node &n = runtime_impl->nodes[node_id];
@@ -644,8 +644,7 @@ namespace Realm {
 
   void MachineImpl::get_all_memories(std::set<Memory> &mset) const
   {
-    // TODO: consider using a reader/writer lock here instead
-    AutoLock<> al(mutex);
+    RWLock::AutoReaderLock al(mutex);
 #ifdef USE_OLD_AFFINITIES
     for(std::vector<Machine::ProcessorMemoryAffinity>::const_iterator it =
             proc_mem_affinities.begin();
@@ -664,8 +663,7 @@ namespace Realm {
 
   void MachineImpl::get_all_processors(std::set<Processor> &pset) const
   {
-    // TODO: consider using a reader/writer lock here instead
-    AutoLock<> al(mutex);
+    RWLock::AutoReaderLock al(mutex);
 #ifdef USE_OLD_AFFINITIES
     for(std::vector<Machine::ProcessorMemoryAffinity>::const_iterator it =
             proc_mem_affinities.begin();
@@ -703,8 +701,7 @@ namespace Realm {
 
   void MachineImpl::get_local_processors(std::set<Processor> &pset) const
   {
-    // TODO: consider using a reader/writer lock here instead
-    AutoLock<> al(mutex);
+    RWLock::AutoReaderLock al(mutex);
 #ifdef USE_OLD_AFFINITIES
     for(std::vector<Machine::ProcessorMemoryAffinity>::const_iterator it =
             proc_mem_affinities.begin();
@@ -725,8 +722,7 @@ namespace Realm {
   void MachineImpl::get_local_processors_by_kind(std::set<Processor> &pset,
                                                  Processor::Kind kind) const
   {
-    // TODO: consider using a reader/writer lock here instead
-    AutoLock<> al(mutex);
+    RWLock::AutoReaderLock al(mutex);
 #ifdef USE_OLD_AFFINITIES
     for(std::vector<Machine::ProcessorMemoryAffinity>::const_iterator it =
             proc_mem_affinities.begin();
@@ -753,8 +749,7 @@ namespace Realm {
   void MachineImpl::get_visible_memories(Processor p, std::set<Memory> &mset,
                                          bool local_only) const
   {
-    // TODO: consider using a reader/writer lock here instead
-    AutoLock<> al(mutex);
+    RWLock::AutoReaderLock al(mutex);
 #ifdef USE_OLD_AFFINITIES
     for(std::vector<Machine::ProcessorMemoryAffinity>::const_iterator it =
             proc_mem_affinities.begin();
@@ -783,8 +778,7 @@ namespace Realm {
   void MachineImpl::get_visible_memories(Memory m, std::set<Memory> &mset,
                                          bool local_only) const
   {
-    // TODO: consider using a reader/writer lock here instead
-    AutoLock<> al(mutex);
+    RWLock::AutoReaderLock al(mutex);
 #ifdef USE_OLD_AFFINITIES
     for(std::vector<Machine::MemoryMemoryAffinity>::const_iterator it =
             mem_mem_affinities.begin();
@@ -831,8 +825,7 @@ namespace Realm {
   void MachineImpl::get_shared_processors(Memory m, std::set<Processor> &pset,
                                           bool local_only) const
   {
-    // TODO: consider using a reader/writer lock here instead
-    AutoLock<> al(mutex);
+    RWLock::AutoReaderLock al(mutex);
 #ifdef USE_OLD_AFFINITIES
     for(std::vector<Machine::ProcessorMemoryAffinity>::const_iterator it =
             proc_mem_affinities.begin();
@@ -873,8 +866,7 @@ namespace Realm {
   bool MachineImpl::has_affinity(Processor p, Memory m,
                                  Machine::AffinityDetails *details /*= 0*/) const
   {
-    // TODO: consider using a reader/writer lock here instead
-    AutoLock<> al(mutex);
+    RWLock::AutoReaderLock al(mutex);
     // indexed lookup: node -> processor -> memory
     const MachineNodeInfo *ni = get_nodeinfo(p);
     if(!ni)
@@ -896,8 +888,7 @@ namespace Realm {
   bool MachineImpl::has_affinity(Memory m1, Memory m2,
                                  Machine::AffinityDetails *details /*= 0*/) const
   {
-    // TODO: consider using a reader/writer lock here instead
-    AutoLock<> al(mutex);
+    RWLock::AutoReaderLock al(mutex);
     // indexed lookup: node -> memory -> memory (must not insert into the maps)
     const MachineNodeInfo *ni = get_nodeinfo(m1);
     if(!ni)
@@ -925,8 +916,7 @@ namespace Realm {
     result.clear();
 
     {
-      // TODO: consider using a reader/writer lock here instead
-      AutoLock<> al(mutex);
+      RWLock::AutoReaderLock al(mutex);
 #ifdef USE_OLD_AFFINITIES
       for(std::vector<Machine::ProcessorMemoryAffinity>::const_iterator it =
               proc_mem_affinities.begin();
@@ -1024,8 +1014,7 @@ namespace Realm {
     int count = 0;
 
     {
-      // TODO: consider using a reader/writer lock here instead
-      AutoLock<> al(mutex);
+      RWLock::AutoReaderLock al(mutex);
       if(restrict_mem1.exists()) {
         const MachineNodeInfo *nm1 = get_nodeinfo(restrict_mem1);
         if(!nm1)
@@ -1101,7 +1090,7 @@ namespace Realm {
                                           bool lock_held /*= false*/)
   {
     if(!lock_held)
-      mutex.lock();
+      mutex.wrlock();
 
     proc_mem_affinities.push_back(pma);
 
@@ -1130,13 +1119,13 @@ namespace Realm {
 
   void MachineImpl::add_subscription(Machine::MachineUpdateSubscriber *subscriber)
   {
-    AutoLock<> al(mutex);
+    RWLock::AutoWriterLock al(mutex);
     subscribers.insert(subscriber);
   }
 
   void MachineImpl::remove_subscription(Machine::MachineUpdateSubscriber *subscriber)
   {
-    AutoLock<> al(mutex);
+    RWLock::AutoWriterLock al(mutex);
     subscribers.erase(subscriber);
   }
 
@@ -1173,7 +1162,7 @@ namespace Realm {
 
   void MachineImpl::enumerate_mem_mem_affinities(void)
   {
-    AutoLock<> al(mutex);
+    RWLock::AutoWriterLock al(mutex);
     // This only enumerates the local-local, local-remote, and remote-local
     // memory affinities to save on cache space
     Realm::MachineNodeInfo *src_nodeInfo = nodeinfos[Network::my_node_id];
@@ -1214,7 +1203,7 @@ namespace Realm {
                                      bool lock_held /*= false*/)
   {
     if(!lock_held) {
-      mutex.lock();
+      mutex.wrlock();
     }
     MachineNodeInfo *&ptr = nodeinfos[node_id];
     if(!ptr) {
