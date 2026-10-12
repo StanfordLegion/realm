@@ -207,7 +207,12 @@ namespace Realm {
     ProcessorQueryImpl(const Machine &_machine);
     ProcessorQueryImpl(const MachineImpl *_machine_impl);
 
-    static unsigned int init, cache_invalid_count;
+    // shared query cache: processors by kind, and by kind and memory affinity,
+    // built on first use and dropped when the machine changes. cache_lock
+    // guards the maps and global_valid_cache; cache_invalid_count is the
+    // generation that query objects compare their private state against.
+    static RWLock cache_lock;
+    static atomic<unsigned int> cache_invalid_count;
     static bool global_valid_cache;
     static std::map<Processor::Kind, std::vector<Processor>> _proc_cache;
     static std::map<Processor::Kind, std::map<Memory, std::vector<Processor>>>
@@ -278,13 +283,11 @@ namespace Realm {
     mutable bool shared_cached_list, valid_cache;
     mutable std::vector<Processor> *cur_cached_list;
     mutable unsigned int invalid_count;
-    unsigned int cur_index;
     // cached list of processors
     std::vector<Processor> *cached_list() const;
     bool cached_query(Processor p, Processor &pval);
     bool cached_query(Processor &pval, QueryType q) const;
     bool cached_query(size_t &count) const;
-    Processor mutated_cached_query(Processor p);
     Processor next(Processor after);
     // helper to compute best affinity filtered results and store in cur_cached_list
     Processor build_best_affinity_cache() const;
@@ -329,7 +332,9 @@ namespace Realm {
     MemoryQueryImpl(const Machine &_machine);
     MemoryQueryImpl(const MachineImpl *_machine_impl);
 
-    static unsigned int init, cache_invalid_count;
+    // shared query cache: memories by kind (see ProcessorQueryImpl)
+    static RWLock cache_lock;
+    static atomic<unsigned int> cache_invalid_count;
     static bool global_valid_cache;
     static std::map<Memory::Kind, std::vector<Memory>> _mem_cache;
 
@@ -357,7 +362,6 @@ namespace Realm {
     bool cached_query(Memory p, Memory &pval);
     bool cached_query(Memory &pval, QueryType q) const;
     bool cached_query(size_t &count) const;
-    Memory mutated_cached_query(Memory p);
 
   public:
     // Best affinity cost function structures
@@ -391,7 +395,6 @@ namespace Realm {
     mutable bool shared_cached_list, valid_cache;
     mutable std::vector<Memory> *cur_cached_list;
     mutable unsigned int invalid_count;
-    unsigned int cur_index;
     std::vector<MemoryQueryPredicate *> predicates;
 
     // Best affinity cost functions (not predicates)
