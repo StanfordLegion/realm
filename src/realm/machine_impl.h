@@ -146,7 +146,8 @@ namespace Realm {
     void add_process_info(int node_id, const Machine::ProcessInfo &process_info,
                           bool lock_held = false);
 
-    mutable Mutex mutex;
+    // readers: every query; writers: node announcements and affinity updates
+    mutable RWLock mutex;
     std::vector<Machine::ProcessorMemoryAffinity> proc_mem_affinities;
     std::set<Machine::MachineUpdateSubscriber *> subscribers;
 
