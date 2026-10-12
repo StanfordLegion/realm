@@ -285,6 +285,9 @@ namespace Realm {
     mutable unsigned int invalid_count;
     // cached list of processors
     std::vector<Processor> *cached_list() const;
+    // remembers a shared list so later calls on this query skip the cache lock
+    std::vector<Processor> *attach_shared(std::vector<Processor> *list,
+                                          unsigned int generation) const;
     bool cached_query(Processor p, Processor &pval);
     bool cached_query(Processor &pval, QueryType q) const;
     bool cached_query(size_t &count) const;
@@ -407,6 +410,8 @@ namespace Realm {
     std::optional<BestMemAffinityCostFn> best_mem_affinity_cost;
 
     std::vector<Memory> *cached_list() const;
+    std::vector<Memory> *attach_shared(std::vector<Memory> *list,
+                                       unsigned int generation) const;
     // the affinity map of a processor the query is anchored to, or NULL
     const std::map<Memory, Machine::ProcessorMemoryAffinity *> *
     anchor_affinities(Processor p, bool local_only) const;
