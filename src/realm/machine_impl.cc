@@ -2243,18 +2243,23 @@ namespace Realm {
       if(is_restricted_kind) {
         std::map<Processor::Kind, std::map<Processor, MachineProcInfo *>>::const_iterator
             it2 = it->second->proc_by_kind.find(restricted_kind);
-        if(it2 != it->second->proc_by_kind.end()) {
+        if(it2 != it->second->proc_by_kind.end())
           plist = &(it2->second);
-          if(!predicates.size())
-            return it2->second.size();
-        } else
+        else
           plist = 0;
       } else
         plist = &(it->second->procs);
 
       if(plist) {
-        if((is_restricted_node) && (!predicates.size()))
-          return plist->size();
+        // no predicates: the whole list matches; a node-restricted query is
+        // done, an unrestricted one must keep summing over the other nodes
+        if(predicates.empty()) {
+          if(is_restricted_node)
+            return plist->size();
+          count += plist->size();
+          ++it;
+          continue;
+        }
 
         std::map<Processor, MachineProcInfo *>::const_iterator it2 = plist->begin();
         while(it2 != plist->end()) {
