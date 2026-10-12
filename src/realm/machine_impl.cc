@@ -1672,10 +1672,12 @@ namespace Realm {
       restricted_node_id = new_node_id;
     }
     // any constraint to processor query will invalidate cached list
-    if(valid_cache && cur_cached_list) {
-      delete cur_cached_list;
+    if(cur_cached_list) {
+      if(!shared_cached_list)
+        delete cur_cached_list;
       cur_cached_list = NULL;
     }
+    shared_cached_list = false;
     valid_cache = false;
   }
 
@@ -1690,10 +1692,12 @@ namespace Realm {
       is_restricted_kind = true;
       restricted_kind = new_kind;
     }
-    if(valid_cache && cur_cached_list) {
-      delete cur_cached_list;
+    if(cur_cached_list) {
+      if(!shared_cached_list)
+        delete cur_cached_list;
       cur_cached_list = NULL;
     }
+    shared_cached_list = false;
     valid_cache = false;
   }
 
@@ -1701,10 +1705,12 @@ namespace Realm {
   {
     // a writer is always unique, so no need for mutexes
     predicates.push_back(pred);
-    if(valid_cache && cur_cached_list) {
-      delete cur_cached_list;
+    if(cur_cached_list) {
+      if(!shared_cached_list)
+        delete cur_cached_list;
       cur_cached_list = NULL;
     }
+    shared_cached_list = false;
     valid_cache = false;
   }
 
@@ -1724,6 +1730,19 @@ namespace Realm {
   // predicate walk the machine directly. Must not be called with cache_lock
   // held; the machine lock is only taken while a list is being built, and
   // never while cache_lock is held.
+  std::vector<Processor> *
+  ProcessorQueryImpl::attach_shared(std::vector<Processor> *list,
+                                    unsigned int generation) const
+  {
+    if(cur_cached_list && !shared_cached_list)
+      delete cur_cached_list;
+    cur_cached_list = list;
+    shared_cached_list = true;
+    valid_cache = true;
+    invalid_count = generation;
+    return list;
+  }
+
   std::vector<Processor> *ProcessorQueryImpl::cached_list() const
   {
     if((invalid_count == cache_invalid_count.load()) && valid_cache)
@@ -1736,11 +1755,12 @@ namespace Realm {
     {
       RWLock::AutoReaderLock al(cache_lock);
       if(global_valid_cache) {
+        const unsigned int current = cache_invalid_count.load();
         if(!is_cached_mem) {
           std::map<Processor::Kind, std::vector<Processor>>::iterator it =
               _proc_cache.find(restricted_kind);
           if(it != _proc_cache.end())
-            return &(it->second);
+            return attach_shared(&(it->second), current);
         } else {
           std::map<Processor::Kind, std::map<Memory, std::vector<Processor>>>::iterator it =
               _proc_cache_affinity.find(restricted_kind);
@@ -1748,7 +1768,7 @@ namespace Realm {
             std::map<Memory, std::vector<Processor>>::iterator it2 =
                 it->second.find(cached_mem);
             if(it2 != it->second.end())
-              return &(it2->second);
+              return attach_shared(&(it2->second), current);
           }
         }
       }
@@ -1800,7 +1820,7 @@ namespace Realm {
       std::vector<Processor> &slot = _proc_cache[restricted_kind];
       if(slot.empty())
         slot.swap(by_kind);
-      return &slot;
+      return attach_shared(&slot, generation);
     } else {
       for(std::map<Processor::Kind, std::map<Memory, std::vector<Processor>>>::iterator it =
               by_affinity.begin();
@@ -1813,7 +1833,7 @@ namespace Realm {
             slot.swap(it2->second);
         }
       }
-      return &(_proc_cache_affinity[restricted_kind][cached_mem]);
+      return attach_shared(&(_proc_cache_affinity[restricted_kind][cached_mem]), generation);
     }
   }
 
@@ -1857,13 +1877,9 @@ namespace Realm {
       valid_cache = false;
       invalid_count = cache_invalid_count.load();
     }
-    std::vector<Processor> *clist = cached_list();
-    if(clist == NULL)
+    if(cached_list() == NULL)
       return false;
-    if(!valid_cache)
-      shared_cached_list = true;
-    cur_cached_list = clist;
-    pval = next(p);
+    pval = next(p); // cached_list() attached the shared list
     return true;
 #else
     return false;
@@ -2572,10 +2588,12 @@ namespace Realm {
       is_restricted_node = true;
       restricted_node_id = new_node_id;
     }
-    if(valid_cache && cur_cached_list) {
-      delete cur_cached_list;
+    if(cur_cached_list) {
+      if(!shared_cached_list)
+        delete cur_cached_list;
       cur_cached_list = NULL;
     }
+    shared_cached_list = false;
     valid_cache = false;
   }
 
@@ -2590,20 +2608,24 @@ namespace Realm {
       is_restricted_kind = true;
       restricted_kind = new_kind;
     }
-    if(valid_cache && cur_cached_list) {
-      delete cur_cached_list;
+    if(cur_cached_list) {
+      if(!shared_cached_list)
+        delete cur_cached_list;
       cur_cached_list = NULL;
     }
+    shared_cached_list = false;
     valid_cache = false;
   }
 
   void MemoryQueryImpl::restrict_by_capacity(size_t new_min_bytes)
   {
     restricted_min_capacity = std::max(restricted_min_capacity, new_min_bytes);
-    if(valid_cache && cur_cached_list) {
-      delete cur_cached_list;
+    if(cur_cached_list) {
+      if(!shared_cached_list)
+        delete cur_cached_list;
       cur_cached_list = NULL;
     }
+    shared_cached_list = false;
     valid_cache = false;
   }
 
@@ -2613,10 +2635,12 @@ namespace Realm {
     predicates.push_back(pred);
     if(predicates.size() > 1)
       affinity_proc = Processor::NO_PROC;
-    if(valid_cache && cur_cached_list) {
-      delete cur_cached_list;
+    if(cur_cached_list) {
+      if(!shared_cached_list)
+        delete cur_cached_list;
       cur_cached_list = NULL;
     }
+    shared_cached_list = false;
     valid_cache = false;
   }
 
@@ -2674,6 +2698,18 @@ namespace Realm {
 
   // Returns the shared list that can serve this query, or NULL when the
   // shared cache does not cover it (see ProcessorQueryImpl::cached_list).
+  std::vector<Memory> *MemoryQueryImpl::attach_shared(std::vector<Memory> *list,
+                                                      unsigned int generation) const
+  {
+    if(cur_cached_list && !shared_cached_list)
+      delete cur_cached_list;
+    cur_cached_list = list;
+    shared_cached_list = true;
+    valid_cache = true;
+    invalid_count = generation;
+    return list;
+  }
+
   std::vector<Memory> *MemoryQueryImpl::cached_list() const
   {
     if((invalid_count == cache_invalid_count.load()) && valid_cache)
@@ -2689,7 +2725,7 @@ namespace Realm {
         std::map<Memory::Kind, std::vector<Memory>>::iterator it =
             _mem_cache.find(restricted_kind);
         if(it != _mem_cache.end())
-          return &(it->second);
+          return attach_shared(&(it->second), cache_invalid_count.load());
       }
     }
 
@@ -2718,7 +2754,7 @@ namespace Realm {
     std::vector<Memory> &slot = _mem_cache[restricted_kind];
     if(slot.empty())
       slot.swap(by_kind);
-    return &slot;
+    return attach_shared(&slot, generation);
   }
 
   bool MemoryQueryImpl::cached_query(Memory &mval, QueryType q) const
@@ -2759,13 +2795,9 @@ namespace Realm {
       valid_cache = false;
       invalid_count = cache_invalid_count.load();
     }
-    std::vector<Memory> *clist = cached_list();
-    if(clist == NULL)
+    if(cached_list() == NULL)
       return false;
-    if(!valid_cache)
-      shared_cached_list = true;
-    cur_cached_list = clist;
-    mval = next(m);
+    mval = next(m); // cached_list() attached the shared list
     return true;
 #else
     return false;
