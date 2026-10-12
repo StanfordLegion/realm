@@ -353,6 +353,10 @@ namespace Realm {
     void restrict_to_kind(Memory::Kind new_kind);
     void restrict_by_capacity(size_t new_min_bytes);
     void add_predicate(MemoryQueryPredicate *pred);
+    // records the processor of a has_affinity_to(Processor) predicate when it
+    // is the query's only predicate, so matches can be enumerated from that
+    // processor's affinity map instead of every memory in the machine
+    void set_affinity_proc(Processor p);
 
     Memory first_match(void) const;
     Memory next_match(Memory after) const;
@@ -396,12 +400,18 @@ namespace Realm {
     mutable std::vector<Memory> *cur_cached_list;
     mutable unsigned int invalid_count;
     std::vector<MemoryQueryPredicate *> predicates;
+    Processor affinity_proc; // see set_affinity_proc
 
     // Best affinity cost functions (not predicates)
     std::optional<BestProcAffinityCostFn> best_proc_affinity_cost;
     std::optional<BestMemAffinityCostFn> best_mem_affinity_cost;
 
     std::vector<Memory> *cached_list() const;
+    // the affinity map of a processor the query is anchored to, or NULL
+    const std::map<Memory, Machine::ProcessorMemoryAffinity *> *
+    anchor_affinities(Processor p, bool local_only) const;
+    // applies the node, kind, capacity and predicate restrictions to one memory
+    bool candidate_matches(Memory m) const;
     Memory next(Memory after);
     // helper to compute best affinity filtered results and store in cur_cached_list
     Memory build_best_affinity_cache() const;

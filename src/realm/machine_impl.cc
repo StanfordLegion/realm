@@ -1466,6 +1466,7 @@ namespace Realm {
     ((MemoryQueryImpl *)impl)
         ->add_predicate(
             new MemoryHasProcAffinityPredicate(p, min_bandwidth, max_latency));
+    ((MemoryQueryImpl *)impl)->set_affinity_proc(p);
     return *this;
   }
 
@@ -2494,6 +2495,7 @@ namespace Realm {
     , valid_cache(false)
     , cur_cached_list(NULL)
     , invalid_count(cache_invalid_count.load())
+    , affinity_proc(Processor::NO_PROC)
   {}
 
   MemoryQueryImpl::MemoryQueryImpl(const MemoryQueryImpl &copy_from)
@@ -2508,6 +2510,7 @@ namespace Realm {
     , valid_cache(copy_from.valid_cache)
     , cur_cached_list(copy_from.cur_cached_list)
     , invalid_count(cache_invalid_count.load())
+    , affinity_proc(copy_from.affinity_proc)
     , best_proc_affinity_cost(copy_from.best_proc_affinity_cost)
     , best_mem_affinity_cost(copy_from.best_mem_affinity_cost)
   {
@@ -2603,11 +2606,65 @@ namespace Realm {
   {
     // a writer is always unique, so no need for mutexes
     predicates.push_back(pred);
+    if(predicates.size() > 1)
+      affinity_proc = Processor::NO_PROC;
     if(valid_cache && cur_cached_list) {
       delete cur_cached_list;
       cur_cached_list = NULL;
     }
     valid_cache = false;
+  }
+
+  void MemoryQueryImpl::set_affinity_proc(Processor p)
+  {
+    affinity_proc = (predicates.size() == 1) ? p : Processor::NO_PROC;
+  }
+
+  const std::map<Memory, Machine::ProcessorMemoryAffinity *> *
+  MemoryQueryImpl::anchor_affinities(Processor p, bool local_only) const
+  {
+    std::map<NodeID, MachineNodeInfo *>::const_iterator nit =
+        machine->nodeinfos.find(ID(p).proc_owner_node());
+    if(nit == machine->nodeinfos.end())
+      return NULL;
+    std::map<Processor, MachineProcInfo *>::const_iterator pit = nit->second->procs.find(p);
+    if(pit == nit->second->procs.end())
+      return NULL;
+    return local_only ? &(pit->second->pmas.local) : &(pit->second->pmas.all);
+  }
+
+  bool MemoryQueryImpl::candidate_matches(Memory m) const
+  {
+    const NodeID node = ID(m).memory_owner_node();
+    if(is_restricted_node && (node != NodeID(restricted_node_id)))
+      return false;
+    std::map<NodeID, MachineNodeInfo *>::const_iterator nit = machine->nodeinfos.find(node);
+    if(nit == machine->nodeinfos.end())
+      return false;
+    const MachineMemInfo *info = NULL;
+    if(is_restricted_kind) {
+      std::map<Memory::Kind, std::map<Memory, MachineMemInfo *>>::const_iterator kit =
+          nit->second->mem_by_kind.find(restricted_kind);
+      if(kit == nit->second->mem_by_kind.end())
+        return false;
+      std::map<Memory, MachineMemInfo *>::const_iterator mit = kit->second.find(m);
+      if(mit == kit->second.end())
+        return false;
+      info = mit->second;
+    } else {
+      std::map<Memory, MachineMemInfo *>::const_iterator mit = nit->second->mems.find(m);
+      if(mit == nit->second->mems.end())
+        return false;
+      info = mit->second;
+    }
+    if((restricted_min_capacity > 0) &&
+       (MemoryImpl::get_memory_size(machine->get_runtime_impl(), m) < restricted_min_capacity))
+      return false;
+    for(std::vector<MemoryQueryPredicate *>::const_iterator it = predicates.begin();
+        it != predicates.end(); ++it)
+      if(!(*it)->matches_predicate(machine, m, info))
+        return false;
+    return true;
   }
 
   // Returns the shared list that can serve this query, or NULL when the
@@ -2753,6 +2810,53 @@ namespace Realm {
     shared_cached_list = false;
     cur_cached_list = new std::vector<Memory>();
     valid_cache = true;
+
+    if(best_proc_affinity_cost.has_value()) {
+      // only memories with a local affinity to the processor can score, so walk
+      // that processor's affinity map instead of every memory of the kind
+      std::optional<int> best_score;
+      std::vector<Memory> candidates;
+      std::vector<Machine::MemoryMemoryAffinity> mem_affinities;
+      bool mem_affinities_fetched = false;
+      const std::map<Memory, Machine::ProcessorMemoryAffinity *> *pmas =
+          anchor_affinities(best_proc_affinity_cost->proc, true /*local_only*/);
+      if(pmas) {
+        for(std::map<Memory, Machine::ProcessorMemoryAffinity *>::const_iterator it =
+                pmas->begin();
+            it != pmas->end(); ++it) {
+          if(!candidate_matches(it->first))
+            continue;
+          int score = (it->second->bandwidth * best_proc_affinity_cost->bandwidth_weight) +
+                      (it->second->latency * best_proc_affinity_cost->latency_weight);
+          if(best_mem_affinity_cost.has_value()) {
+            if(!mem_affinities_fetched) {
+              machine->get_mem_mem_affinity(mem_affinities, best_mem_affinity_cost->memory);
+              mem_affinities_fetched = true;
+            }
+            bool found = false;
+            for(const Machine::MemoryMemoryAffinity &a : mem_affinities) {
+              if(a.m2 == it->first) {
+                score += (a.bandwidth * best_mem_affinity_cost->bandwidth_weight) +
+                         (a.latency * best_mem_affinity_cost->latency_weight);
+                found = true;
+                break;
+              }
+            }
+            if(!found)
+              continue;
+          }
+          if(!best_score || (score > *best_score)) {
+            best_score = score;
+            candidates.clear();
+            candidates.push_back(it->first);
+          } else if(score == *best_score) {
+            candidates.push_back(it->first);
+          }
+        }
+      }
+      *cur_cached_list = std::move(candidates);
+      return cur_cached_list->empty() ? Memory::NO_MEMORY : cur_cached_list->front();
+    }
 
     std::optional<int> best_score;
     std::vector<Memory> candidates_with_best_score;
@@ -2910,6 +3014,18 @@ namespace Realm {
       return build_best_affinity_cache();
     }
 
+    if(affinity_proc.exists()) {
+      const std::map<Memory, Machine::ProcessorMemoryAffinity *> *pmas =
+          anchor_affinities(affinity_proc, false /*!local_only*/);
+      if(pmas)
+        for(std::map<Memory, Machine::ProcessorMemoryAffinity *>::const_iterator it =
+                pmas->begin();
+            it != pmas->end(); ++it)
+          if(candidate_matches(it->first))
+            return it->first;
+      return Memory::NO_MEMORY;
+    }
+
     Memory mval = Memory::NO_MEMORY;
     if(cached_query(mval, QUERY_FIRST))
       return mval;
@@ -3014,6 +3130,18 @@ namespace Realm {
           return cur_cached_list->at(i);
         }
       }
+      return Memory::NO_MEMORY;
+    }
+
+    if(affinity_proc.exists()) {
+      const std::map<Memory, Machine::ProcessorMemoryAffinity *> *pmas =
+          anchor_affinities(affinity_proc, false /*!local_only*/);
+      if(pmas)
+        for(std::map<Memory, Machine::ProcessorMemoryAffinity *>::const_iterator it =
+                pmas->upper_bound(after);
+            it != pmas->end(); ++it)
+          if(candidate_matches(it->first))
+            return it->first;
       return Memory::NO_MEMORY;
     }
 
@@ -3128,6 +3256,19 @@ namespace Realm {
       return cur_cached_list->size();
     }
 
+    if(affinity_proc.exists()) {
+      size_t count = 0;
+      const std::map<Memory, Machine::ProcessorMemoryAffinity *> *pmas =
+          anchor_affinities(affinity_proc, false /*!local_only*/);
+      if(pmas)
+        for(std::map<Memory, Machine::ProcessorMemoryAffinity *>::const_iterator it =
+                pmas->begin();
+            it != pmas->end(); ++it)
+          if(candidate_matches(it->first))
+            count++;
+      return count;
+    }
+
     size_t count = 0;
     if(cached_query(count))
       return count;
@@ -3232,6 +3373,23 @@ namespace Realm {
         return cur_cached_list->at(idx);
       }
       return Memory::NO_MEMORY;
+    }
+
+    if(affinity_proc.exists()) {
+      Memory chosen = Memory::NO_MEMORY;
+      int count = 0;
+      const std::map<Memory, Machine::ProcessorMemoryAffinity *> *pmas =
+          anchor_affinities(affinity_proc, false /*!local_only*/);
+      if(pmas)
+        for(std::map<Memory, Machine::ProcessorMemoryAffinity *>::const_iterator it =
+                pmas->begin();
+            it != pmas->end(); ++it)
+          if(candidate_matches(it->first)) {
+            count++;
+            if((count == 1) || ((lrand48() % count) == 0))
+              chosen = it->first;
+          }
+      return chosen;
     }
 
     Memory mval = Memory::NO_MEMORY;
