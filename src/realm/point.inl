@@ -286,6 +286,20 @@ namespace Realm {
     return false;
   }
 
+  template <int N, typename T>
+  REALM_CUDA_HD inline bool operator<(const Point<N, T> &lhs, const Point<N, T> &rhs)
+  {
+    for(int i = 0; i < N; i++) {
+      if(lhs[i] < rhs[i]) {
+        return true;
+      }
+      if(lhs[i] > rhs[i]) {
+        return false;
+      }
+    }
+    return false;
+  }
+
   template <int N, typename T, typename T2>
   REALM_CUDA_HD inline Point<N, T> operator+(const Point<N, T> &lhs,
                                              const Point<N, T2> &rhs)
@@ -587,6 +601,18 @@ namespace Realm {
     return (lhs.lo != rhs.lo) || (lhs.hi != rhs.hi);
   }
 
+  template <int N, typename T>
+  REALM_CUDA_HD inline bool operator<(const Rect<N, T> &lhs, const Rect<N, T> &rhs)
+  {
+    if(lhs.lo < rhs.lo) {
+      return true;
+    }
+    if(rhs.lo < lhs.lo) {
+      return false;
+    }
+    return (lhs.hi < rhs.hi);
+  }
+
   // rectangles may be displaced by a vector (i.e. point)
   template <int N, typename T, typename T2>
   REALM_CUDA_HD inline Rect<N, T> operator+(const Rect<N, T> &lhs,
@@ -797,40 +823,6 @@ namespace Realm {
 }; // namespace Realm
 
 namespace std {
-  template <int N, typename T>
-  inline bool less<Realm::Point<N, T>>::operator()(const Realm::Point<N, T> &p1,
-                                                   const Realm::Point<N, T> &p2) const
-  {
-    for(int i = 0; i < N; i++) {
-      if(p1[i] < p2[i]) {
-        return true;
-      }
-      if(p1[i] > p2[i]) {
-        return false;
-      }
-    }
-    return false;
-  }
-
-  template <int N, typename T>
-  inline bool less<Realm::Rect<N, T>>::operator()(const Realm::Rect<N, T> &r1,
-                                                  const Realm::Rect<N, T> &r2) const
-  {
-    if(std::less<Realm::Point<N, T>>()(r1.lo, r2.lo)) {
-      return true;
-    }
-    if(std::less<Realm::Point<N, T>>()(r2.lo, r1.lo)) {
-      return false;
-    }
-    if(std::less<Realm::Point<N, T>>()(r1.hi, r2.hi)) {
-      return true;
-    }
-    if(std::less<Realm::Point<N, T>>()(r2.hi, r1.hi)) {
-      return false;
-    }
-    return false;
-  }
-
   template<int N, typename T>
   struct hash<Realm::Point<N, T> > {
     std::size_t operator()(const Realm::Point<N, T>& p) const noexcept {
