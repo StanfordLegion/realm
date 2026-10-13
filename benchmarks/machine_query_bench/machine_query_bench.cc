@@ -144,12 +144,23 @@ namespace {
           it; ++it)
         s.local_mems.push_back(*it);
     }
-    s.cpu = Machine::ProcessorQuery(m).local_address_space().only_kind(Processor::LOC_PROC).first();
-    s.gpu = Machine::ProcessorQuery(m).local_address_space().only_kind(Processor::TOC_PROC).first();
+    s.cpu = Machine::ProcessorQuery(m)
+                .local_address_space()
+                .only_kind(Processor::LOC_PROC)
+                .first();
+    s.gpu = Machine::ProcessorQuery(m)
+                .local_address_space()
+                .only_kind(Processor::TOC_PROC)
+                .first();
     s.p = s.gpu.exists() ? s.gpu : s.cpu;
-    s.sysmem =
-        Machine::MemoryQuery(m).local_address_space().only_kind(Memory::SYSTEM_MEM).first();
-    s.fb = Machine::MemoryQuery(m).local_address_space().only_kind(Memory::GPU_FB_MEM).first();
+    s.sysmem = Machine::MemoryQuery(m)
+                   .local_address_space()
+                   .only_kind(Memory::SYSTEM_MEM)
+                   .first();
+    s.fb = Machine::MemoryQuery(m)
+               .local_address_space()
+               .only_kind(Memory::GPU_FB_MEM)
+               .first();
     s.best_kind = s.fb.exists() ? Memory::GPU_FB_MEM : Memory::SYSTEM_MEM;
     if(!s.cpu.exists() || !s.sysmem.exists()) {
       log_app.error() << "need at least one local CPU processor and system memory";
@@ -226,13 +237,15 @@ namespace {
     };
 
     // --- processor queries ------------------------------------------------
-    add("procs_kind_count_global",
+    add(
+        "procs_kind_count_global",
         [=]() -> uint64_t {
           return Machine::ProcessorQuery(machine).only_kind(Processor::LOC_PROC).count();
         },
         Machine::ProcessorQuery(machine).only_kind(Processor::LOC_PROC).count());
     iterate(Machine::ProcessorQuery(machine).only_kind(Processor::LOC_PROC), &n);
-    add("procs_kind_iter_global",
+    add(
+        "procs_kind_iter_global",
         [=]() -> uint64_t {
           return iterate(Machine::ProcessorQuery(machine).only_kind(Processor::LOC_PROC));
         },
@@ -240,13 +253,15 @@ namespace {
     iterate(Machine::ProcessorQuery(machine).local_address_space().only_kind(
                 Processor::LOC_PROC),
             &n);
-    add("procs_kind_iter_local",
+    add(
+        "procs_kind_iter_local",
         [=]() -> uint64_t {
           return iterate(Machine::ProcessorQuery(machine).local_address_space().only_kind(
               Processor::LOC_PROC));
         },
         n);
-    add("procs_kind_first_local",
+    add(
+        "procs_kind_first_local",
         [=]() -> uint64_t {
           return Machine::ProcessorQuery(machine)
               .local_address_space()
@@ -255,20 +270,24 @@ namespace {
               .id;
         },
         1);
-    iterate(Machine::ProcessorQuery(machine).only_kind(Processor::LOC_PROC).has_affinity_to(
-                sysmem),
+    iterate(Machine::ProcessorQuery(machine)
+                .only_kind(Processor::LOC_PROC)
+                .has_affinity_to(sysmem),
             &n);
-    add("procs_sharing_mem_iter",
+    add(
+        "procs_sharing_mem_iter",
         [=]() -> uint64_t {
           return iterate(Machine::ProcessorQuery(machine)
                              .only_kind(Processor::LOC_PROC)
                              .has_affinity_to(sysmem));
         },
         n);
-    iterate(Machine::ProcessorQuery(machine).same_address_space_as(sysmem).has_affinity_to(
-                sysmem),
-            &n);
-    add("procs_sharing_mem_iter_local",
+    iterate(
+        Machine::ProcessorQuery(machine).same_address_space_as(sysmem).has_affinity_to(
+            sysmem),
+        &n);
+    add(
+        "procs_sharing_mem_iter_local",
         [=]() -> uint64_t {
           return iterate(Machine::ProcessorQuery(machine)
                              .same_address_space_as(sysmem)
@@ -277,25 +296,30 @@ namespace {
         n);
 
     // --- memory queries ---------------------------------------------------
-    add("mems_kind_count_global",
+    add(
+        "mems_kind_count_global",
         [=]() -> uint64_t {
           return Machine::MemoryQuery(machine).only_kind(Memory::SYSTEM_MEM).count();
         },
         Machine::MemoryQuery(machine).only_kind(Memory::SYSTEM_MEM).count());
     iterate(Machine::MemoryQuery(machine).has_affinity_to(p), &n);
-    add("mems_visible_iter_global",
+    add(
+        "mems_visible_iter_global",
         [=]() -> uint64_t {
           return iterate(Machine::MemoryQuery(machine).has_affinity_to(p));
         },
         n);
-    iterate(Machine::MemoryQuery(machine).same_address_space_as(p).has_affinity_to(p), &n);
-    add("mems_visible_iter_local",
+    iterate(Machine::MemoryQuery(machine).same_address_space_as(p).has_affinity_to(p),
+            &n);
+    add(
+        "mems_visible_iter_local",
         [=]() -> uint64_t {
           return iterate(
               Machine::MemoryQuery(machine).same_address_space_as(p).has_affinity_to(p));
         },
         n);
-    add("mems_visible_kind_first_global",
+    add(
+        "mems_visible_kind_first_global",
         [=]() -> uint64_t {
           return Machine::MemoryQuery(machine)
               .only_kind(best_kind)
@@ -304,7 +328,8 @@ namespace {
               .id;
         },
         1);
-    add("mems_visible_kind_first_local",
+    add(
+        "mems_visible_kind_first_local",
         [=]() -> uint64_t {
           return Machine::MemoryQuery(machine)
               .same_address_space_as(p)
@@ -314,7 +339,8 @@ namespace {
               .id;
         },
         1);
-    add("mems_best_for_proc_global",
+    add(
+        "mems_best_for_proc_global",
         [=]() -> uint64_t {
           return Machine::MemoryQuery(machine)
               .only_kind(best_kind)
@@ -323,7 +349,8 @@ namespace {
               .id;
         },
         1);
-    add("mems_best_for_proc_local",
+    add(
+        "mems_best_for_proc_local",
         [=]() -> uint64_t {
           return Machine::MemoryQuery(machine)
               .same_address_space_as(p)
@@ -335,7 +362,8 @@ namespace {
         1);
 
     // --- direct affinity lookups -----------------------------------------
-    add("pma_proc_mem",
+    add(
+        "pma_proc_mem",
         [=]() -> uint64_t {
           std::vector<Machine::ProcessorMemoryAffinity> v;
           return machine.get_proc_mem_affinity(v, cpu, sysmem);
@@ -345,31 +373,37 @@ namespace {
       std::vector<Machine::ProcessorMemoryAffinity> v;
       n = machine.get_proc_mem_affinity(v, cpu);
     }
-    add("pma_proc_all",
+    add(
+        "pma_proc_all",
         [=]() -> uint64_t {
           std::vector<Machine::ProcessorMemoryAffinity> v;
           return machine.get_proc_mem_affinity(v, cpu);
         },
         n);
-    add("mma_mem_mem",
+    add(
+        "mma_mem_mem",
         [=]() -> uint64_t {
           std::vector<Machine::MemoryMemoryAffinity> v;
           return machine.get_mem_mem_affinity(v, mm_src, mm_dst);
         },
         1);
-    add("has_affinity_pm_hit",
+    add(
+        "has_affinity_pm_hit",
         [=]() -> uint64_t { return machine.has_affinity(cpu, mem_hit) ? 1 : 0; }, 1);
-    add("has_affinity_pm_miss",
+    add(
+        "has_affinity_pm_miss",
         [=]() -> uint64_t { return machine.has_affinity(cpu, mem_miss) ? 1 : 0; }, 1,
         mem_miss.exists());
-    add("has_affinity_mm",
+    add(
+        "has_affinity_mm",
         [=]() -> uint64_t { return machine.has_affinity(mm_src, mm_dst) ? 1 : 0; }, 1);
     {
       std::set<Memory> ms;
       machine.get_visible_memories(cpu, ms);
       n = ms.size();
     }
-    add("visible_memories_set",
+    add(
+        "visible_memories_set",
         [=]() -> uint64_t {
           std::set<Memory> ms;
           machine.get_visible_memories(cpu, ms);
@@ -381,7 +415,8 @@ namespace {
       machine.get_shared_processors(sysmem, ps);
       n = ps.size();
     }
-    add("shared_processors_set",
+    add(
+        "shared_processors_set",
         [=]() -> uint64_t {
           std::set<Processor> ps;
           machine.get_shared_processors(sysmem, ps);
@@ -393,7 +428,8 @@ namespace {
     {
       std::shared_ptr<std::atomic<size_t>> cursor =
           std::make_shared<std::atomic<size_t>>(0);
-      add("handle_props",
+      add(
+          "handle_props",
           [=]() -> uint64_t {
             size_t i = cursor->fetch_add(1);
             Processor pp = sampled_procs[i % sampled_procs.size()];
@@ -405,7 +441,8 @@ namespace {
     }
 
     // --- composite patterns taken from Legion's DefaultMapper -----------
-    add("composite_must_epoch",
+    add(
+        "composite_must_epoch",
         [=]() -> uint64_t {
           uint64_t acc = 0;
           for(size_t i = 0; i < local_procs.size(); i++)
@@ -414,7 +451,8 @@ namespace {
           return acc;
         },
         local_procs.size() * local_mems.size());
-    add("composite_select_sources",
+    add(
+        "composite_select_sources",
         [=]() -> uint64_t {
           uint64_t acc = 0;
           std::vector<Machine::MemoryMemoryAffinity> v;
@@ -508,7 +546,8 @@ namespace {
       fflush(stdout);
       return;
     }
-    size_t gpus = Machine::ProcessorQuery(s.machine).only_kind(Processor::TOC_PROC).count();
+    size_t gpus =
+        Machine::ProcessorQuery(s.machine).only_kind(Processor::TOC_PROC).count();
     printf("MACHINE ranks=%zu procs=%zu mems=%zu local_procs=%zu local_mems=%zu "
            "pmas_all=%zu gpus=%zu best_kind=%d\n",
            s.machine.get_address_space_count(), s.all_procs.size(), s.all_mems.size(),
@@ -584,8 +623,9 @@ int main(int argc, char **argv)
   rt.register_task(TOP_LEVEL_TASK, top_level_task);
 
   // the first CPU processor in the machine runs the measurement
-  Processor p =
-      Machine::ProcessorQuery(Machine::get_machine()).only_kind(Processor::LOC_PROC).first();
+  Processor p = Machine::ProcessorQuery(Machine::get_machine())
+                    .only_kind(Processor::LOC_PROC)
+                    .first();
   assert(p.exists());
   Event e = rt.collective_spawn(p, TOP_LEVEL_TASK, 0, 0);
   rt.shutdown(e);
