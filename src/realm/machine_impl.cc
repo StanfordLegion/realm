@@ -1730,9 +1730,8 @@ namespace Realm {
   // predicate walk the machine directly. Must not be called with cache_lock
   // held; the machine lock is only taken while a list is being built, and
   // never while cache_lock is held.
-  std::vector<Processor> *
-  ProcessorQueryImpl::attach_shared(std::vector<Processor> *list,
-                                    unsigned int generation) const
+  std::vector<Processor> *ProcessorQueryImpl::attach_shared(std::vector<Processor> *list,
+                                                            unsigned int generation) const
   {
     if(cur_cached_list && !shared_cached_list)
       delete cur_cached_list;
@@ -1762,8 +1761,8 @@ namespace Realm {
           if(it != _proc_cache.end())
             return attach_shared(&(it->second), current);
         } else {
-          std::map<Processor::Kind, std::map<Memory, std::vector<Processor>>>::iterator it =
-              _proc_cache_affinity.find(restricted_kind);
+          std::map<Processor::Kind, std::map<Memory, std::vector<Processor>>>::iterator
+              it = _proc_cache_affinity.find(restricted_kind);
           if(it != _proc_cache_affinity.end()) {
             std::map<Memory, std::vector<Processor>>::iterator it2 =
                 it->second.find(cached_mem);
@@ -1822,8 +1821,8 @@ namespace Realm {
         slot.swap(by_kind);
       return attach_shared(&slot, generation);
     } else {
-      for(std::map<Processor::Kind, std::map<Memory, std::vector<Processor>>>::iterator it =
-              by_affinity.begin();
+      for(std::map<Processor::Kind, std::map<Memory, std::vector<Processor>>>::iterator
+              it = by_affinity.begin();
           it != by_affinity.end(); ++it) {
         std::map<Memory, std::vector<Processor>> &dst = _proc_cache_affinity[it->first];
         for(std::map<Memory, std::vector<Processor>>::iterator it2 = it->second.begin();
@@ -1833,7 +1832,8 @@ namespace Realm {
             slot.swap(it2->second);
         }
       }
-      return attach_shared(&(_proc_cache_affinity[restricted_kind][cached_mem]), generation);
+      return attach_shared(&(_proc_cache_affinity[restricted_kind][cached_mem]),
+                           generation);
     }
   }
 
@@ -2656,7 +2656,8 @@ namespace Realm {
         machine->nodeinfos.find(ID(p).proc_owner_node());
     if(nit == machine->nodeinfos.end())
       return NULL;
-    std::map<Processor, MachineProcInfo *>::const_iterator pit = nit->second->procs.find(p);
+    std::map<Processor, MachineProcInfo *>::const_iterator pit =
+        nit->second->procs.find(p);
     if(pit == nit->second->procs.end())
       return NULL;
     return local_only ? &(pit->second->pmas.local) : &(pit->second->pmas.all);
@@ -2667,7 +2668,8 @@ namespace Realm {
     const NodeID node = ID(m).memory_owner_node();
     if(is_restricted_node && (node != NodeID(restricted_node_id)))
       return false;
-    std::map<NodeID, MachineNodeInfo *>::const_iterator nit = machine->nodeinfos.find(node);
+    std::map<NodeID, MachineNodeInfo *>::const_iterator nit =
+        machine->nodeinfos.find(node);
     if(nit == machine->nodeinfos.end())
       return false;
     const MachineMemInfo *info = NULL;
@@ -2687,7 +2689,8 @@ namespace Realm {
       info = mit->second;
     }
     if((restricted_min_capacity > 0) &&
-       (MemoryImpl::get_memory_size(machine->get_runtime_impl(), m) < restricted_min_capacity))
+       (MemoryImpl::get_memory_size(machine->get_runtime_impl(), m) <
+        restricted_min_capacity))
       return false;
     for(std::vector<MemoryQueryPredicate *>::const_iterator it = predicates.begin();
         it != predicates.end(); ++it)
@@ -2731,7 +2734,8 @@ namespace Realm {
 
     const unsigned int generation = cache_invalid_count.load();
     std::vector<Memory> by_kind;
-    for(std::map<NodeID, MachineNodeInfo *>::const_iterator it = machine->nodeinfos.begin();
+    for(std::map<NodeID, MachineNodeInfo *>::const_iterator it =
+            machine->nodeinfos.begin();
         it != machine->nodeinfos.end(); ++it) {
       std::map<Memory::Kind, std::map<Memory, MachineMemInfo *>>::const_iterator it2 =
           it->second->mem_by_kind.find(restricted_kind);
@@ -2863,11 +2867,13 @@ namespace Realm {
             it != pmas->end(); ++it) {
           if(!candidate_matches(it->first))
             continue;
-          int score = (it->second->bandwidth * best_proc_affinity_cost->bandwidth_weight) +
-                      (it->second->latency * best_proc_affinity_cost->latency_weight);
+          int score =
+              (it->second->bandwidth * best_proc_affinity_cost->bandwidth_weight) +
+              (it->second->latency * best_proc_affinity_cost->latency_weight);
           if(best_mem_affinity_cost.has_value()) {
             if(!mem_affinities_fetched) {
-              machine->get_mem_mem_affinity(mem_affinities, best_mem_affinity_cost->memory);
+              machine->get_mem_mem_affinity(mem_affinities,
+                                            best_mem_affinity_cost->memory);
               mem_affinities_fetched = true;
             }
             bool found = false;
