@@ -182,8 +182,11 @@ namespace Realm {
 
     static constexpr size_t MAX_INLINE_PRECONDITIONS = 6;
     MergeEventPrecondition inline_preconditions[MAX_INLINE_PRECONDITIONS];
-    // std::deque does not invalidate references on resize
-    std::deque<MergeEventPrecondition> overflow_preconditions;
+    // std::deque does not invalidate references on resize; it is allocated
+    //  lazily because even an empty std::deque allocates ~576 bytes, and
+    //  every GenEventImpl (including every remote event proxy) embeds a
+    //  merger that almost never needs overflow storage
+    std::unique_ptr<std::deque<MergeEventPrecondition>> overflow_preconditions;
     EventWaiter::EventWaiterList free_preconditions;
   };
 

@@ -756,8 +756,10 @@ namespace Realm {
     if(expected_events) {
       recycle_preconditions = false;
       if(MAX_INLINE_PRECONDITIONS < *expected_events) {
-        overflow_preconditions.resize(*expected_events - MAX_INLINE_PRECONDITIONS);
-        for(MergeEventPrecondition &pre : overflow_preconditions) {
+        if(!overflow_preconditions)
+          overflow_preconditions = std::make_unique<std::deque<MergeEventPrecondition>>();
+        overflow_preconditions->resize(*expected_events - MAX_INLINE_PRECONDITIONS);
+        for(MergeEventPrecondition &pre : *overflow_preconditions) {
           pre.merger = this;
         }
       }
@@ -814,9 +816,9 @@ namespace Realm {
       return &inline_preconditions[precondition_offset++];
     }
     const unsigned offset = precondition_offset - MAX_INLINE_PRECONDITIONS;
-    if(offset < overflow_preconditions.size()) {
+    if(overflow_preconditions && (offset < overflow_preconditions->size())) {
       precondition_offset++;
-      return &overflow_preconditions[offset];
+      return &(*overflow_preconditions)[offset];
     }
 #ifndef TSAN_ENABLED
     // Can unsafely test this if TSAN is not enabled, we can still lose
@@ -831,9 +833,11 @@ namespace Realm {
       }
     }
     precondition_offset++;
-    assert(offset == overflow_preconditions.size());
-    overflow_preconditions.resize(offset + 1);
-    MergeEventPrecondition &result = overflow_preconditions.back();
+    if(!overflow_preconditions)
+      overflow_preconditions = std::make_unique<std::deque<MergeEventPrecondition>>();
+    assert(offset == overflow_preconditions->size());
+    overflow_preconditions->resize(offset + 1);
+    MergeEventPrecondition &result = overflow_preconditions->back();
     result.merger = this;
     return &result;
   }
@@ -897,8 +901,8 @@ namespace Realm {
       // if we dynamically allocated space for a wide merger, give that
       //  storage back - the chance that this particular event will have
       //  another wide merge isn't particularly high
-      if(!overflow_preconditions.empty()) {
-        overflow_preconditions.clear();
+      if(overflow_preconditions) {
+        overflow_preconditions.reset();
       }
       const bool any_faults = (faults_observed.load() != 0);
       // Trigger on the last input unless an eagerly propagated poison already did so.
