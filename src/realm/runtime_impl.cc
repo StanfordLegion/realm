@@ -2792,14 +2792,22 @@ namespace Realm {
     // if we're the master, we need to notify everyone else first
     NodeID shutdown_master_node = 0;
     if((Network::my_node_id == shutdown_master_node) && (Network::max_node_id > 0)) {
-      NodeSet targets;
-      for(NodeID i = 0; i <= Network::max_node_id; i++)
-        if(i != Network::my_node_id)
-          targets.add(i);
+      // every node except us - one run (or two, if the master is ever moved off node
+      //  0), so the encoder can name the whole machine in a handful of bytes no matter
+      //  how large it is (ALL_EXCEPT in practice, RANGES for the slices)
+      MulticastTargetSet targets;
+      if(Network::my_node_id > 0)
+        targets.add_range(0, Network::my_node_id - 1);
+      if(Network::my_node_id < Network::max_node_id)
+        targets.add_range(Network::my_node_id + 1, Network::max_node_id);
 
-      ActiveMessage<RuntimeShutdownMessage> amsg(targets);
-      amsg->result_code = shutdown_result_code;
-      amsg.commit();
+      // Multicast (rather than one message per node) so that the master's fan-out is
+      //  bounded by the radix.  Relays forward before delivering shutdown locally,
+      //  which is exactly why plan section 7.3 requires forward-before-deliver: a node
+      //  that shut itself down first would strand its entire subtree.
+      RuntimeShutdownMessage msg{};
+      msg.result_code = shutdown_result_code;
+      multicast_message(targets, msg);
     }
 
     {
