@@ -1006,6 +1006,8 @@ namespace Realm {
     {
       assert(initialized_boot);
 
+      ucc_comm->UCC_Finalize();
+
       delete rcba_mp;
 
       destroy_workers();
