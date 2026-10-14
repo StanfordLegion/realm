@@ -20,107 +20,227 @@
 
 #include "realm/realm_config.h"
 
+// Realm's NVTX support is built on the nvtx3 C++ API. The C-only headers
+// (<nvtx3/nvToolsExt.h>) are intentionally not used as a fallback.
 #if __has_include(<nvtx3/nvtx3.hpp>)
 #include <nvtx3/nvtx3.hpp>
-#elif __has_include(<nvtx3/nvToolsExt.h>)
-#include <nvtx3/nvToolsExt.h>
 #else
-#error "Configuration failed to find suitable NVTX headers"
+#error "Realm NVTX support requires the nvtx3 C++ headers (<nvtx3/nvtx3.hpp>)"
 #endif
 
 #include <map>
+#include <optional>
 #include <string>
 #include <vector>
 
 namespace Realm {
 
-  struct NvtxARGB {
-    constexpr NvtxARGB(uint8_t red_, uint8_t green_, uint8_t blue_,
-                       uint8_t alpha_ = 0xFF) noexcept
-      : red{red_}
-      , green{green_}
-      , blue{blue_}
-      , alpha{alpha_}
-    {}
-    constexpr uint32_t to_uint(void) const
-    {
-      return uint32_t{alpha} << 24 | uint32_t{red} << 16 | uint32_t{green} << 8 |
-             uint32_t{blue};
-    }
-    uint8_t const red{};
-    uint8_t const green{};
-    uint8_t const blue{};
-    uint8_t const alpha{};
+  // Named colors for NVTX events, as nvtx3::color values (fully opaque ARGB,
+  // since rgb{} fills the alpha channel). Pass one of these to an annotation
+  // call, or pass std::nullopt to fall back to the category's default color.
+  namespace nvtx_color {
+    inline constexpr nvtx3::color white{nvtx3::rgb{255, 255, 255}};
+    inline constexpr nvtx3::color red{nvtx3::rgb{255, 0, 0}};
+    inline constexpr nvtx3::color green{nvtx3::rgb{0, 255, 0}};
+    inline constexpr nvtx3::color blue{nvtx3::rgb{0, 0, 255}};
+    inline constexpr nvtx3::color purple{nvtx3::rgb{128, 0, 128}};
+    inline constexpr nvtx3::color lawn_green{nvtx3::rgb{124, 252, 0}};
+    inline constexpr nvtx3::color cyan{nvtx3::rgb{0, 255, 255}};
+    inline constexpr nvtx3::color maroon{nvtx3::rgb{128, 0, 0}};
+    inline constexpr nvtx3::color navy{nvtx3::rgb{0, 0, 128}};
+    inline constexpr nvtx3::color magenta{nvtx3::rgb{255, 0, 255}};
+    inline constexpr nvtx3::color yellow{nvtx3::rgb{255, 255, 0}};
+    inline constexpr nvtx3::color gray{nvtx3::rgb{128, 128, 128}};
+    inline constexpr nvtx3::color teal{nvtx3::rgb{0, 128, 128}};
+    inline constexpr nvtx3::color olive{nvtx3::rgb{128, 128, 0}};
+  } // namespace nvtx_color
+
+  // The single NVTX domain that groups all of Realm's annotations. This is an
+  // nvtx3 domain tag type: it just needs a static `name` member.
+  struct realm_nvtx_domain {
+    static constexpr char const *name{"Realm"};
   };
 
-  enum nvtx_color : uint32_t
-  {
-    white = NvtxARGB(255, 255, 255).to_uint(),
-    red = NvtxARGB(255, 0, 0).to_uint(),
-    green = NvtxARGB(0, 255, 0).to_uint(),
-    blue = NvtxARGB(0, 0, 255).to_uint(),
-    purple = NvtxARGB(128, 0, 128).to_uint(),
-    lawn_green = NvtxARGB(124, 252, 0).to_uint(),
-    cyan = NvtxARGB(0, 255, 255).to_uint(),
-    maroon = NvtxARGB(128, 0, 0).to_uint(),
-    navy = NvtxARGB(0, 0, 128).to_uint(),
-    magenta = NvtxARGB(255, 0, 255).to_uint(),
-    yellow = NvtxARGB(255, 255, 0).to_uint(),
-    gray = NvtxARGB(128, 128, 128).to_uint(),
-    teal = NvtxARGB(0, 128, 128).to_uint(),
-    olive = NvtxARGB(128, 128, 0).to_uint(),
-  };
+  // Sentinel payload meaning "no payload". NVTX ignores the payload value when
+  // its type is NVTX_PAYLOAD_UNKNOWN, so events built with this carry no
+  // payload at all (rather than an int32 value of 0). Used as the default for
+  // the annotation calls below so callers can simply omit the payload.
+  inline constexpr nvtx3::payload nvtx_no_payload{NVTX_PAYLOAD_UNKNOWN,
+                                                  nvtx3::payload::value_type{}};
 
+  // Metadata for one NVTX category. Immutable after construction. Categories are
+  // created only during init_nvtx (on the main thread, before worker threads are
+  // started), so no synchronization is needed.
+  //
+  // `category` carries the category id (via get_id()) and, on construction,
+  // registers the id<->name association with NVTX so tools display the name.
   struct NvtxCategory {
-    NvtxCategory(const std::string &category_name, uint32_t category_id, uint32_t color);
-    const std::string name;
-    nvtxEventAttributes_t nvtx_event;
+    NvtxCategory(const std::string &category_name, uint32_t category_id,
+                 nvtx3::color color)
+      : name(category_name)
+      , category(category_id, category_name.c_str())
+      , default_color(color)
+    {}
+    std::string name;
+    nvtx3::named_category_in<realm_nvtx_domain> category;
+    nvtx3::color default_color;
   };
 
-  struct nvtxScopedRange {
-    nvtxScopedRange(NvtxCategory *category, char const *message, int32_t payload);
-    nvtxScopedRange(const std::string &name, char const *message, int32_t payload);
-    ~nvtxScopedRange();
-  };
+  // Handles to the predefined categories. Each is non-null only if its module
+  // was enabled via -ll:nvtx_modules; otherwise it stays null and annotation
+  // calls on it are cheap no-ops. Call sites pass these directly, with no name
+  // lookup. Defined in nvtx.cc.
+  extern NvtxCategory *nvtx_amsg;
+  extern NvtxCategory *nvtx_bgwork;
+#ifdef REALM_USE_CUDA
+  extern NvtxCategory *nvtx_cuda;
+#endif
+#ifdef REALM_USE_HIP
+  extern NvtxCategory *nvtx_hip;
+#endif
+#ifdef REALM_USE_GASNET1
+  extern NvtxCategory *nvtx_gasnet1;
+#endif
+#ifdef REALM_USE_GASNETEX
+  extern NvtxCategory *nvtx_gasnetex;
+#endif
+#ifdef REALM_USE_MPI
+  extern NvtxCategory *nvtx_mpi;
+#endif
+#ifdef REALM_USE_OPENMP
+  extern NvtxCategory *nvtx_openmp;
+#endif
+#ifdef REALM_USE_PYTHON
+  extern NvtxCategory *nvtx_python;
+#endif
 
-  static constexpr uint32_t nvtx_proc_starting_category_id = 1000;
-
-  // called by each kernel thread to init thread local variables.
+  // Called by each kernel thread to name the OS thread in NVTX tools.
   void init_nvtx_thread(const char *thread_name);
 
-  // called by RuntimeImpl::configure_from_command_line from the main thread to init nvtx
-  //   and its thread local variables.
+  // Called by RuntimeImpl::configure_from_command_line on the main thread to
+  // create the enabled categories. Must run before worker threads start.
   void init_nvtx(std::vector<std::string> &nvtx_modules);
 
-  // called by each kernel thread to delete thread local variables.
-  void finalize_nvtx_thread(void);
-
-  // called by RuntimeImpl::wait_for_shutdown from the main thread to finalize nvtx
-  //   and delete its thread local variables.
+  // Called by RuntimeImpl::wait_for_shutdown on the main thread.
   void finalize_nvtx(void);
 
-  // TODO(@Wei Wu): template it wih type T for payload
-  void nvtx_range_push(NvtxCategory *category, const char *message,
-                       uint32_t color = nvtx_color::white, int32_t payload = 0);
+  // Returns the next available category id.
+  uint32_t nvtx_get_next_category_id(void);
 
-  void nvtx_range_push(const std::string &name, const char *message,
-                       uint32_t color = nvtx_color::white, int32_t payload = 0);
+  // Returns the next auto-assigned color, cycling through a fixed palette of
+  // visually distinct colors. Handy for giving dynamically created categories
+  // distinguishable colors without picking one by hand.
+  nvtx3::color nvtx_get_next_color(void);
 
-  void nvtx_range_pop(void);
+  // Internal helpers for the inline annotation calls below. Kept in the header
+  // (inline) so the thin wrappers fully inline at call sites; in particular the
+  // common "disabled module" case (null category) collapses to nothing.
 
-  // TODO(@Wei Wu): template it wih type T for payload
-  nvtxRangeId_t nvtx_range_start(NvtxCategory *category, const char *message,
-                                 uint32_t color = nvtx_color::white, int32_t payload = 0);
-  nvtxRangeId_t nvtx_range_start(const std::string &name, const char *message,
-                                 uint32_t color = nvtx_color::white, int32_t payload = 0);
+  // Build a fresh event on the stack for each annotation. NVTX consumes the
+  // attributes synchronously, so there is no need to keep one around. An empty
+  // `color` means "use the category's default color".
+  inline nvtx3::event_attributes nvtx_make_event(const NvtxCategory &category,
+                                                 const char *message,
+                                                 std::optional<nvtx3::color> color,
+                                                 nvtx3::payload payload)
+  {
+    return nvtx3::event_attributes{category.category,
+                                   color.value_or(category.default_color), payload,
+                                   nvtx3::message{message}};
+  }
 
-  void nvtx_range_end(nvtxRangeId_t id);
+  inline nvtxDomainHandle_t nvtx_realm_domain()
+  {
+    return nvtx3::domain::get<realm_nvtx_domain>();
+  }
 
-  // TODO(@Wei Wu): template it wih type T for payload
-  void nvtx_mark(NvtxCategory *category, const char *message,
-                 uint32_t color = nvtx_color::white, int32_t payload = 0);
-  void nvtx_mark(const std::string &name, const char *message,
-                 uint32_t color = nvtx_color::white, int32_t payload = 0);
+  // RAII nested range. A null `category` (disabled module) pushes nothing and
+  // the destructor pops nothing, keeping the NVTX range stack balanced.
+  struct [[nodiscard]] nvtxScopedRange {
+    nvtxScopedRange(NvtxCategory *category, char const *message,
+                    nvtx3::payload payload = nvtx_no_payload) noexcept
+      : active(false)
+    {
+      if(category) {
+        nvtx3::event_attributes attr =
+            nvtx_make_event(*category, message, std::nullopt, payload);
+        nvtxDomainRangePushEx(nvtx_realm_domain(), attr.get());
+        active = true;
+      }
+    }
+    ~nvtxScopedRange()
+    {
+      if(active) {
+        nvtxDomainRangePop(nvtx_realm_domain());
+      }
+    }
+
+  private:
+    bool active;
+  };
+
+  inline void nvtx_range_push(NvtxCategory *category, const char *message,
+                              std::optional<nvtx3::color> color = std::nullopt,
+                              nvtx3::payload payload = nvtx_no_payload)
+  {
+    if(!category) {
+      return;
+    }
+    nvtx3::event_attributes attr = nvtx_make_event(*category, message, color, payload);
+    nvtxDomainRangePushEx(nvtx_realm_domain(), attr.get());
+  }
+
+  inline void nvtx_range_pop(void) { nvtxDomainRangePop(nvtx_realm_domain()); }
+
+  inline nvtx3::range_handle nvtx_range_start(NvtxCategory *category,
+                                              const char *message,
+                                              std::optional<nvtx3::color> color = std::nullopt,
+                                              nvtx3::payload payload = nvtx_no_payload)
+  {
+    if(!category) {
+      return nullptr;
+    }
+    nvtx3::event_attributes attr = nvtx_make_event(*category, message, color, payload);
+    return nvtx3::start_range_in<realm_nvtx_domain>(attr);
+  }
+
+  inline void nvtx_range_end(nvtx3::range_handle id)
+  {
+    if(id) {
+      nvtx3::end_range_in<realm_nvtx_domain>(id);
+    }
+  }
+
+  // RAII range built on the Start/End API (nvtxDomainRangeStartEx/End) rather
+  // than Push/Pop. Start/End ranges are process-scoped, so NVTX tools display
+  // them grouped by category under a single domain row (and, for ranges whose
+  // start and end land on the same thread, also under that thread) instead of
+  // only nesting under the originating thread. A null `category` (disabled
+  // module) starts nothing and the destructor ends nothing.
+  struct [[nodiscard]] nvtxUniqueRange {
+    explicit nvtxUniqueRange(NvtxCategory *category, char const *message,
+                             nvtx3::payload payload = nvtx_no_payload)
+      : handle(nvtx_range_start(category, message, std::nullopt, payload))
+    {}
+    ~nvtxUniqueRange() { nvtx_range_end(handle); }
+
+    nvtxUniqueRange(const nvtxUniqueRange &) = delete;
+    nvtxUniqueRange &operator=(const nvtxUniqueRange &) = delete;
+
+  private:
+    nvtx3::range_handle handle;
+  };
+
+  inline void nvtx_mark(NvtxCategory *category, const char *message,
+                        std::optional<nvtx3::color> color = std::nullopt,
+                        nvtx3::payload payload = nvtx_no_payload)
+  {
+    if(!category) {
+      return;
+    }
+    nvtx3::event_attributes attr = nvtx_make_event(*category, message, color, payload);
+    nvtx3::mark_in<realm_nvtx_domain>(attr);
+  }
 
 }; // namespace Realm
 

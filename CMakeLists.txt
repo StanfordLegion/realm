@@ -423,17 +423,11 @@ if(REALM_ENABLE_CUDA OR (REALM_ENABLE_HIP AND CMAKE_HIP_PLATFORM STREQUAL "nvidi
       PATH_SUFFIXES include ../include extras/CUPTI/include ../extras/CUPTI/include
     )
 
-    # Deal with the library name change in older versions of cmake.
-    #
-    # nvtx3 was added in cmake 3.25, and while later versions (at least 3.30+) claim that
-    # the CUDA::nvtx3 and CUDA::nvToolsExt targets are mutually exclusive, they don't
-    # appear to be so in earlier versions. So if we have nvtx3, prefer that, otherwise
-    # fall back to nvToolsExt.
+    # We use the header-only NVTX v3 C++ API, which is exposed via the
+    # CUDA::nvtx3 target (added in cmake 3.25). Require it; otherwise disable NVTX.
     set(REALM_USE_NVTX ${REALM_ENABLE_NVTX})
     if(TARGET CUDA::nvtx3)
       list(APPEND REALM_LIBRARIES CUDA::nvtx3)
-    elseif(TARGET CUDA::nvToolsExt)
-      list(APPEND REALM_LIBRARIES CUDA::nvToolsExt)
     else()
       # Silently disable NVTX if we cannot find it
       set(REALM_USE_NVTX OFF)
