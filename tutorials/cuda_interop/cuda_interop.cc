@@ -321,14 +321,15 @@ static void main_task(const void *data, size_t datalen, const void *userdata,
   }
 
   // Clean up everything
-  check_instance.destroy(check_task_done_event);
-  array_instance.destroy(copy_done_event);
-  linear_instance.destroy(copy_done_event);
+  Event cleanup_inst_events[3];
+  cleanup_inst_events[0] = check_instance.destroy(check_task_done_event);
+  cleanup_inst_events[1] = array_instance.destroy(copy_done_event);
+  cleanup_inst_events[2] = linear_instance.destroy(copy_done_event);
 
   // Because we use cuda here, we need to either spawn a separate task to free up the
-  // external resources after the copy_done_event has fired, or wait here to do so,
-  // otherwise we can leak the cuda array
-  copy_done_event.wait();
+  // external resources after the instances have been successfully destroyed has
+  // fired, or wait here to do so, otherwise we can leak the cuda array
+  Event::merge_events(cleanup_inst_events, 3).wait();
   CHECK_CUDART(cudaDestroySurfaceObject(surface_obj));
   CHECK_CUDART(cudaFreeArray(array));
 

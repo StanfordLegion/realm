@@ -183,7 +183,7 @@ void top_level_task(const void *args, size_t arglen, const void *userdata, size_
   Event e1 = inst1.fetch_metadata(reader_cpus[0]);
 
   UserEvent destroy_event = UserEvent::create_user_event();
-  inst1.destroy(destroy_event);
+  Event inst1_destroyed = inst1.destroy(destroy_event);
 
   std::vector<Event> user_events;
 
@@ -288,7 +288,7 @@ void top_level_task(const void *args, size_t arglen, const void *userdata, size_
   assert(inst_status_result == 0);
 
   destroy_event.trigger();
-  usleep(100000);
+  inst1_destroyed.wait();
 }
 
 void worker_task(const void *args, size_t arglen, const void *userdata, size_t userlen,
@@ -412,12 +412,12 @@ void worker_task(const void *args, size_t arglen, const void *userdata, size_t u
     bounds = next_bounds;
     inst = insts[0];
     if(!needs_ext) {
-      insts[1].destroy();
+      insts[1].destroy().wait();
     }
   }
 
   if(!needs_ext) {
-    inst.destroy();
+    inst.destroy().wait();
     alloc_event.wait();
     musage_event.wait();
     timel_event.wait();

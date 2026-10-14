@@ -197,7 +197,7 @@ struct CopyOperation {
   ~CopyOperation()
   {
     for(Realm::RegionInstance &inst : owned_instances) {
-      inst.destroy();
+      inst.destroy().wait();
     }
   }
   size_t get_total_size() const

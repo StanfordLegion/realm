@@ -22,8 +22,9 @@
 #include <cassert>
 #include <cstring>
 #include <cmath>
-
-#include <time.h>
+#include <ctime>
+#include <thread>
+#include <chrono>
 
 #include "osdep.h"
 
@@ -99,7 +100,7 @@ void sleep_task(const void *args, size_t arglen, const void *userdata, size_t us
   printf("starting sleep task on processor " IDFMT "\n", p.id);
 #endif
 
-  usleep(c_args.sleep_useconds);
+  std::this_thread::sleep_for(std::chrono::microseconds(c_args.sleep_useconds));
 
 #ifdef DEBUG_CHILDREN
   printf("ending sleep task on processor " IDFMT "\n", p.id);

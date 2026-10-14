@@ -190,8 +190,8 @@ bool test_case(Processor curr_proc, Processor write_proc, IndexSpace<N, T> space
     }
   }
 
-  inst_check.destroy();
-  inst_write.destroy();
+  inst_check.destroy().wait();
+  inst_write.destroy().wait();
 
   return (errors == 0);
 }
@@ -235,9 +235,6 @@ void top_level_task(const void *args, size_t arglen, const void *userdata, size_
                   test_id))
       errors++;
   }
-
-  // HACK: there's a shutdown race condition related to instance destruction
-  usleep(100000);
 
   Runtime::get_runtime().shutdown(Event::NO_EVENT, errors == 0 ? 0 : 1);
 }
