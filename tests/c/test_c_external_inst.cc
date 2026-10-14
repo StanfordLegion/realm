@@ -101,7 +101,7 @@ bool create_instance_and_copy_and_verify(
       .external_resource = external_mem_res,
   };
   realm_event_t event = REALM_NO_EVENT;
-  CHECK_REALM(realm_region_instance_create(runtime, &src_instance_params, nullptr,
+  CHECK_REALM(realm_region_instance_create(runtime, &src_instance_params, nullptr, 0,
                                            REALM_NO_EVENT, &src_inst, &event));
   CHECK_REALM(realm_event_wait(runtime, event, REALM_WAIT_INFINITE, nullptr));
 
@@ -129,8 +129,8 @@ bool create_instance_and_copy_and_verify(
       .sparsity_map = nullptr,
   };
 
-  CHECK_REALM(realm_region_instance_copy(runtime, &copy_params, nullptr, REALM_NO_EVENT,
-                                         0, &event));
+  CHECK_REALM(realm_region_instance_copy(runtime, &copy_params, nullptr, 0,
+                                         REALM_NO_EVENT, 0, &event));
   CHECK_REALM(realm_event_wait(runtime, event, REALM_WAIT_INFINITE, nullptr));
 
   Realm::RegionInstance dst_inst_cxx = Realm::RegionInstance(dst_inst);
@@ -192,7 +192,7 @@ static void test_copy(realm_runtime_t runtime, realm_memory_t dst_mem,
       .external_resource = nullptr,
   };
   realm_region_instance_t dst_inst;
-  CHECK_REALM(realm_region_instance_create(runtime, &dst_instance_params, nullptr,
+  CHECK_REALM(realm_region_instance_create(runtime, &dst_instance_params, nullptr, 0,
                                            REALM_NO_EVENT, &dst_inst, &event));
   CHECK_REALM(realm_event_wait(runtime, event, REALM_WAIT_INFINITE, nullptr));
 
