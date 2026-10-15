@@ -18,7 +18,7 @@
 // Verifies that constructing a GenEventImpl performs no heap allocations.
 //
 // Realm materializes GenEventImpls in bulk: 2^16 per leaf of a node's local event
-// table and 2^7 per leaf of the lookaside tables that proxy remote nodes' events, and
+// table and 2^4 per leaf of the lookaside tables that proxy remote nodes' events, and
 // leaves are never freed while the runtime is up.  Any per-object allocation in that
 // path is therefore multiplied by millions of event slots on large runs.  Two such
 // allocations have been removed: a default-constructed std::deque in the EventMerger
@@ -146,7 +146,7 @@ void operator delete[](void *ptr, std::size_t) noexcept { std::free(ptr); }
 // and communicator and initializes it.  Nothing in that path may touch the heap.
 TEST_F(GenEventImplAllocTest, ConstructionDoesNotAllocate)
 {
-  // one remote lookaside leaf's worth of events
+  // several remote lookaside leaves' worth of events
   constexpr size_t num_events = 1 << 7;
   using Storage = std::aligned_storage_t<sizeof(GenEventImpl), alignof(GenEventImpl)>;
   std::vector<Storage> storage(num_events);
