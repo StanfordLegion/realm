@@ -30,9 +30,10 @@ frames are found by function name rather than by number, and the program
 itself checks, once resumed, that nothing the debugger did corrupted it.
 
 In a live process a parked user thread is shown for one command at a time
-(`realm-thread apply PTR COMMAND`), so a test looks at it from inside such a
-command with Context.within, which runs a Python function there.  In a core
-file `realm-thread PTR` also keeps it shown (Context.show and back).
+(`realm-thread apply PTR COMMAND`, or `rt COMMAND` after `realm-thread PTR`
+selected it), so a test looks at it from inside such a command with
+Context.within, which runs a Python function there.  In a core file
+`realm-thread PTR` keeps it shown (Context.show and back).
 
 Output protocol (parsed by the driver): lines starting with "RGT: ".
 """
@@ -577,6 +578,18 @@ class Context(object):
         self.last_within_output = out
         return box["result"]
 
+    def select(self, role_or_ptr):
+        """`realm-thread PTR` in a live process (a selection for `rt`)."""
+        out = self.run("realm-thread {:#x}".format(self.ptr(role_or_ptr)))
+        self.check_no_python_error("realm-thread", out)
+        return out
+
+    def rt(self, cmd):
+        """`rt CMD`'s output; any error fails the test."""
+        out = self.run("rt " + cmd)
+        self.check_no_python_error("rt", out)
+        return out
+
     def show(self, role_or_ptr):
         """Core files: `realm-thread PTR`."""
         out = self.run("realm-thread {:#x}".format(self.ptr(role_or_ptr)))
@@ -904,10 +917,16 @@ def test_loaded_twice(t):
     """Sourcing the script a second time (e.g. an installed copy on top of
     the embedded one) leaves everything working, with no duplicated output
     or notices about its own hooks."""
+    t.select("chain1")
     out = t.run("source {}".format(t.config["script"]))
     t.check_not_in("you defined", out, "notices on reloading")
     t.check_not_in("could not define", out, "notices on reloading")
     yield
+    t.check_in("rgt_chain_level3", t.rt("bt"), "rt bt after reloading")
+    t.check_eq(gdb.prompt_hook("(gdb) "), "[realm-thread {:#x}] (gdb) ".format(
+        t.ut("chain1")), "prompt after reloading")
+    t.run("realm-thread back")
+    t.check(gdb.prompt_hook is None, "a prompt hook left in place")
     before = t.regs()
     out = t.run("thread apply all bt")
     t.check_eq(out.count("Parked Realm user threads"), 1,
@@ -939,7 +958,7 @@ def test_user_hook_kept(t):
     out = t.run("source {}".format(t.config["script"]))
     for cmd in ("step", "continue"):
         t.check(re.search(r"you defined hook-{0}, so '{0}' is not refused in "
-                          r"'realm-thread apply'.*may corrupt or crash the "
+                          r"'rt', 'realm-thread apply'.*may corrupt or crash the "
                           r"program".format(cmd), out) is not None,
                 "notice about hook-{}:\n{}".format(cmd, out))
     t.check_not_in("you defined hook-next", out)
@@ -1224,7 +1243,10 @@ def test_completion(t):
                        ("realm-thread apply al", "realm-thread apply all"),
                        ("realm-thread apply all bac", "realm-thread apply all backtrace"),
                        ("realm-thread apply 0x1234 print realm_gdb_test_ad",
-                        "realm-thread apply 0x1234 print realm_gdb_test_add")):
+                        "realm-thread apply 0x1234 print realm_gdb_test_add"),
+                       ("realm-thread ba", "realm-thread back"),
+                       ("rt bac", "rt backtrace"),
+                       ("rt print realm_gdb_test_ad", "rt print realm_gdb_test_add")):
         out = t.run("complete " + text)
         t.check_in(want, out, "completions of {!r}".format(text))
     yield
@@ -1398,6 +1420,14 @@ def test_two_inferiors(t):
         if only2:
             t.expect_error("realm-thread apply {:#x} bt".format(min(only2)),
                            "is a user thread of inferior 2")
+        t.select(chain0_1)
+        t.run("thread 2.{}".format(stop2))
+        t.expect_error("rt bt", r"inferior 1 has one")
+        # (Inferior 2 runs to the end; inferior 1's selection stays.)
+        t.run("continue")
+        t.run("thread 1.{}".format(stop1))
+        t.check_in("rgt_chain_level3", t.rt("bt"), "rt bt in inferior 1")
+        t.run("realm-thread back")
     else:
         # A call in inferior 2 while it shows a parked thread holds
         # inferior 1 (whose stopped thread would otherwise finish).
@@ -1412,9 +1442,10 @@ def test_two_inferiors(t):
         t.check_eq(t.eval_int("realm_gdb_test_state.num_finished"), 0,
                    "inferior 1's finished tasks")
     yield
-    t.run("thread 2.{}".format(stop2))
-    t.run("continue")
-    t.run("thread 1.{}".format(stop1))
+    if t.variant != "one":
+        t.run("thread 2.{}".format(stop2))
+        t.run("continue")
+        t.run("thread 1.{}".format(stop1))
     t.continue_to_exit()
     t.check_eq(sorted(t.exit_codes), [0, 0], "exit codes")
 
@@ -1624,12 +1655,11 @@ def test_apply_all(t):
     ("syntax_error", "(1 +)")])
 def test_apply_bad_pointer(t):
     """Anything that isn't a parked user thread is refused cleanly, without
-    changing anything (and in a core file, by `realm-thread PTR` too)."""
+    changing anything, by `realm-thread apply PTR` and `realm-thread PTR`."""
     before = t.regs()
     t.expect_error("realm-thread apply {} bt".format(t.variant))
-    if t.is_core:
-        t.expect_error("realm-thread " + t.variant)
-        t.check_in("nothing to restore", t.run("realm-thread back"))
+    t.expect_error("realm-thread " + t.variant)
+    t.check_in("nothing to restore", t.run("realm-thread back"))
     yield
     t.check_regs(before)
     t.check_host_stack()
@@ -1671,14 +1701,11 @@ def test_apply_expressions(t):
 
 @test(scenarios=("live",))
 def test_apply_usage(t):
-    """`realm-thread apply` without a command says how to use it; plain
-    `realm-thread PTR` in a live process says to use `realm-thread apply`."""
+    """`realm-thread apply` and `rt` without a command say how to use them."""
     for cmd in ("realm-thread apply", "realm-thread apply all",
                 "realm-thread apply {:#x}".format(t.ut("chain0"))):
         t.expect_error(cmd, "usage: realm-thread apply")
-    msg = t.expect_error("realm-thread {:#x}".format(t.ut("chain0")))
-    t.check_in("realm-thread apply {:#x}".format(t.ut("chain0")), msg,
-               "realm-thread PTR in a live process")
+    t.expect_error("rt", "usage: rt COMMAND")
     t.check_in("nothing to restore", t.run("realm-thread back"))
     t.check_host_stack()
     yield
@@ -1774,6 +1801,291 @@ def test_apply_nested_refused(t):
     yield
     t.check_regs(before)
     t.check_host_stack()
+    t.continue_to_exit()
+
+
+# ---- realm-thread <ptr> and rt -------------------------------------------
+
+def _frame_names_of(t, role, count=2):
+    """The names of a parked thread's innermost frames (they depend on how
+    Realm was compiled)."""
+    return re.findall(_BT_LINE + r"([\w:~<>]+)", t.apply(role, "bt {}".format(count)),
+                      re.M)
+
+
+def _rt_frame_name(t):
+    """The function of the frame `rt` has selected on the selected thread."""
+    m = re.match(r"#\d+\s+(?:0x[0-9a-f]+(?: \[PAC\])? in )?([\w:~<>]+)", t.rt("frame"))
+    t.check(m, "no frame line from 'rt frame'")
+    return m.group(1)
+
+
+@test(scenarios=("live", "attach", "freeze"))
+def test_select(t):
+    """In a live process `realm-thread <ptr>` selects a parked thread, which
+    `rt COMMAND` then works on, keeping the frame selected on it (`rt frame
+    N`, `rt up`, `rt down`), function calls included, while nothing in the
+    program changes between commands: plain commands act on the thread as
+    it really is."""
+    t.run("frame 1")
+    before = t.regs()
+    out = t.select("chain0")
+    t.check_in("selected user thread {:#x}".format(t.ut("chain0")), out, "realm-thread PTR")
+    t.check(re.search(r"^#0\s+.*" + re.escape(USER_SWITCH), out, re.M),
+            "frame #0 shown on selecting:\n" + out)
+    t.check(re.search(r"{:#x}\s+parked\s+\(selected\)".format(t.ut("chain0")),
+                      t.run("realm-thread")), "realm-thread list")
+    t.check_regs(before)
+    t.check_eq(t.selected_level(), 1, "the thread's own selected frame")
+    yield
+    names = re.findall(_BT_LINE + r"([\w:~<>]+)", t.rt("bt"), re.M)
+    t.check_names_in_order(CHAIN_FRAMES, names, "rt bt")
+    level = names.index("rgt_chain_level3")
+    t.check_in("rgt_chain_level3", t.rt("frame {}".format(level)), "rt frame N")
+    yield
+    m = t.chain_marker(0)
+    t.check_in("= {}".format(m), t.rt("print chain_marker"), "rt print, a command later")
+    t.check_in("chain_marker = {}".format(m), t.rt("info locals"), "rt info locals")
+    t.check_in('"chain-0"', t.rt("print chain_tag"), "rt print chain_tag")
+    t.check_in("rgt_chain_level2", t.rt("up"), "rt up")
+    t.check_in("= 0", t.rt("print widget.id"), "rt print, one frame up")
+    t.check_in("rgt_chain_level3", t.rt("down"), "rt down")
+    t.check_in("rgt_chain_level1", t.rt("up 2"), "rt up 2")
+    t.check_in("rgt_chain_level3", t.rt("down 2"), "rt down 2")
+    t.check_in(USER_SWITCH, t.rt("down 999"), "rt down 999 (as far as it goes)")
+    t.expect_error("rt down", "Bottom \\(innermost\\) frame selected; you cannot go down")
+    t.expect_error("rt frame 9999", "No frame at level 9999")
+    t.check_in("rgt_chain_level3", t.rt("f {}".format(level)), "rt f N")
+    t.check_in("= {}".format(m + 1), t.rt("print realm_gdb_test_add(chain_marker, 1)"),
+               "a function call")
+    t.check_eq(_rt_frame_name(t), "rgt_chain_level3", "rt's frame after the call")
+    yield
+    t.check_host_stack()
+    t.check_regs(before)
+    t.check_eq(t.selected_level(), 1, "the thread's own selected frame")
+    t.check_in("no parked user thread is selected now", t.run("realm-thread back"))
+    t.expect_error("rt bt", "no parked user thread is selected")
+    t.check(gdb.prompt_hook is None, "a prompt hook left in place")
+    yield
+    _finish(t)
+
+
+@test(scenarios=("live",))
+def test_select_nested(t):
+    """Selections nest, each with its own selected frame: `realm-thread
+    back` goes back to the one before."""
+    t.select("chain0")
+    level = re.findall(_BT_LINE + r"([\w:~<>]+)", t.rt("bt"), re.M).index("rgt_chain_level3")
+    t.rt("frame {}".format(level))
+    yield
+    t.select("chain1")
+    t.check_eq(_rt_frame_name(t), USER_SWITCH, "chain1's frame")
+    t.rt("frame {}".format(level))
+    t.check_in("= {}".format(t.chain_marker(1)), t.rt("print chain_marker"),
+               "chain1's chain_marker")
+    yield
+    t.check_in("back to user thread {:#x}".format(t.ut("chain0")), t.run("realm-thread back"))
+    t.check_eq(_rt_frame_name(t), "rgt_chain_level3", "chain0's frame, remembered")
+    t.check_in("= {}".format(t.chain_marker(0)), t.rt("print chain_marker"), "chain0's")
+    t.check_in("no parked user thread is selected now", t.run("realm-thread back"))
+    t.check_in("nothing to restore", t.run("realm-thread back"))
+    yield
+    t.continue_to_exit()
+
+
+@test(scenarios=("live",), variants=["next", "stepi", "finish", "tbreak_continue",
+                                     "signal_0"])
+def test_select_dropped_when_running(t):
+    """Letting the program run (with any command but a function call) ends a
+    selection, since Realm may then resume the parked thread; realm-gdb says
+    so."""
+    t.select("chain0")
+    v = t.variant
+    yield
+    if v == "tbreak_continue":
+        t.run("tbreak realm_gdb_test_opaque")
+        out = t.run("continue")
+    elif v == "signal_0":
+        t.run("tbreak realm_gdb_test_opaque")
+        out = t.run("signal 0")
+    else:
+        out = t.run(v)
+    t.check_in("no longer selecting user thread {:#x}".format(t.ut("chain0")), out,
+               "the note when the program runs")
+    t.expect_error("rt bt", "no parked user thread is selected")
+    t.check_not_in("(selected", t.run("realm-thread"), "realm-thread list")
+    t.check(gdb.prompt_hook is None, "a prompt hook left in place")
+    yield
+    t.run("delete")
+    t.continue_to_exit()
+
+
+@test(scenarios=("live",), variants=["context", "running", "gone"])
+def test_select_stale(t):
+    """A selected parked thread that is no longer parked as it was (its saved
+    context changed, it is running, it left the registry) isn't shown: `rt`
+    says why and drops the selection."""
+    ut = "((Realm::UserThread *){:#x})".format(t.ut("chain0"))
+    t.select("chain0")
+    if t.variant == "context":
+        field = "{}->ctx.uc_mcontext.{}".format(ut, "gregs[16]" if _is_x86_64() else "pc")
+        saved = t.eval_int(field)
+        t.run("set var {} = {:#x}".format(field, saved + 1))
+        why = "has run since it was selected"
+    elif t.variant == "running":
+        field = "{}->running".format(ut)
+        saved = t.eval_int(field)
+        t.run("set var {} = 1".format(field))
+        why = "it is running"
+    else:
+        # (Unlink it: it is the head, or follows another user thread.)
+        uts = t.user_threads()
+        i = [u.ptr for u in uts].index(t.ut("chain0"))
+        if i == 0:
+            field = "Realm::user_thread_registry_head"
+        else:
+            field = "((Realm::UserThread *){:#x})->registry_next".format(uts[i - 1].ptr)
+        saved = t.eval_int("(unsigned long){}".format(field))
+        t.run("set var {} = {}->registry_next".format(field, ut))
+        why = "is no longer a Realm user thread"
+    yield
+    msg = t.expect_error("rt bt")
+    t.check_in(why, msg, "rt on a stale selection")
+    t.check_in("no longer selecting it", msg, "rt on a stale selection")
+    t.expect_error("rt bt", "no parked user thread is selected")
+    t.run("set var {} = {:#x}".format(field, saved) if t.variant != "gone" else
+          "set var {} = (Realm::UserThread *){:#x}".format(field, saved))
+    yield
+    t.continue_to_exit()
+
+
+@test(scenarios=("live",), variants=["continue", "step", "detach", "return"])
+def test_select_refused(t):
+    """Commands that would let the program run (or act on the thread showing
+    the parked one) are refused in `rt`, saying to leave out `rt`; the
+    selection stays."""
+    before = t.regs()
+    t.select("chain0")
+    msg = t.expect_error("rt " + t.variant)
+    t.check(re.search(r"refusing '{}'.*leave out 'rt'".format(t.variant), msg),
+            "refusal: " + msg)
+    t.check_in("rgt_chain_level3", t.rt("bt"), "rt bt after a refusal")
+    yield
+    t.check_regs(before)
+    t.run("realm-thread back")
+    t.continue_to_exit()
+
+
+@test(scenarios=("live",))
+def test_select_prompt(t):
+    """While a parked thread is selected, the prompt says which, after
+    whatever prompt hook the user has; afterwards the user's hook is put
+    back, and one set meanwhile is left alone."""
+    mine = lambda current: "(mine) "
+    gdb.prompt_hook = mine
+    try:
+        t.select("chain0")
+        t.check_eq(gdb.prompt_hook("(gdb) "), "[realm-thread {:#x}] (mine) ".format(
+            t.ut("chain0")), "the prompt")
+        yield
+        t.select("chain1")
+        t.check_eq(gdb.prompt_hook("(gdb) "), "[realm-thread {:#x}] (mine) ".format(
+            t.ut("chain1")), "the prompt, nested")
+        t.run("realm-thread back")
+        t.check_eq(gdb.prompt_hook("(gdb) "), "[realm-thread {:#x}] (mine) ".format(
+            t.ut("chain0")), "the prompt, back")
+        t.run("realm-thread back")
+        t.check(gdb.prompt_hook is mine, "the user's prompt hook afterwards")
+        yield
+        t.select("chain2")
+        other = lambda current: "(other) "
+        gdb.prompt_hook = other
+        t.run("realm-thread back")
+        t.check(gdb.prompt_hook is other, "a prompt hook set meanwhile")
+    finally:
+        gdb.prompt_hook = None
+    yield
+    t.continue_to_exit()
+
+
+@test(scenarios=("live",))
+def test_select_errors(t):
+    """What can't be selected or run is refused cleanly, selecting nothing:
+    a running user thread, `rt` without a selection, and selecting or `rt`
+    from inside `rt` or `realm-thread apply`."""
+    t.expect_error("rt bt", "no parked user thread is selected")
+    t.expect_error("realm-thread {:#x}".format(t.ut("probe")), "running")
+    t.check_not_in("(selected", t.run("realm-thread"))
+    t.select("chain0")
+    for cmd in ("rt rt bt", "rt realm-thread {:#x}".format(t.ut("chain1")),
+                "realm-thread apply {:#x} realm-thread {:#x}".format(
+                    t.ut("chain1"), t.ut("chain2")),
+                "rt realm-thread back"):
+        error, out = t.run_capturing(cmd)
+        t.check(error is not None and "inside" in error, "{!r}: {} / {}".format(
+            cmd, error, out))
+    t.check_eq(_rt_frame_name(t), USER_SWITCH, "the selection afterwards")
+    t.run("realm-thread back")
+    t.check(gdb.prompt_hook is None, "a prompt hook left in place")
+    yield
+    t.continue_to_exit()
+
+
+@test(scenarios=("live",))
+def test_select_from_other_thread(t):
+    """`rt` shows the selected parked thread on whichever thread is selected,
+    keeping its frame, and leaves every thread's registers as they were."""
+    other = min(th.num for th in gdb.selected_inferior().threads()
+                if th.num != t.stop_thread)
+    before_stop = t.regs()
+    before_other = t.regs(other)
+    frame1 = _frame_names_of(t, "chain0")[1]
+    t.select("chain0")
+    t.rt("up")
+    t.run("thread {}".format(other))
+    yield
+    t.check_eq(_rt_frame_name(t), frame1, "the frame selected on the other thread")
+    t.check_in("rgt_chain_level3", t.rt("bt"), "rt bt on another thread")
+    t.check_regs(before_other, other, "the other thread's registers")
+    t.check_regs(before_stop, t.stop_thread, "the stopped thread's registers")
+    t.run("thread {}".format(t.stop_thread))
+    t.run("realm-thread back")
+    yield
+    t.continue_to_exit()
+
+
+@test(scenarios=("core",))
+def test_select_core(t):
+    """In a core file, `rt COMMAND` after `realm-thread <ptr>` is COMMAND,
+    with the parked thread shown; without one shown it says so."""
+    t.expect_error("rt bt", "no parked user thread is shown")
+    t.show("chain0")
+    out = t.rt("bt")
+    t.check_in("<parked Realm user thread {:#x}>".format(t.ut("chain0")), out, "rt bt")
+    t.check_in("rgt_chain_level3", out, "rt bt")
+    t.select_frame("rgt_chain_level3")
+    t.check_in("= {}".format(t.chain_marker(0)), t.rt("print chain_marker"), "rt print")
+    t.back()
+    t.expect_error("rt bt", "no parked user thread is shown")
+    yield
+
+
+@test(scenarios=("live",), interaction="mi")
+def test_mi_select(t):
+    """MI's -interpreter-exec console runs `realm-thread <ptr>` and `rt`, as
+    an IDE's debug console would."""
+    before = t.regs()
+    frame1 = _frame_names_of(t, "chain0")[1]
+    yield typed('-interpreter-exec console "realm-thread {:#x}"'.format(t.ut("chain0")))
+    t.check_mi_result("done")
+    yield typed('-interpreter-exec console "rt up"')
+    t.check_mi_result("done")
+    yield typed('-interpreter-exec console "rt print realm_gdb_test_add(2, 3)"')
+    t.check_mi_result("done")
+    t.check_eq(_rt_frame_name(t), frame1, "rt's frame")
+    t.check_regs(before)
+    t.run("realm-thread back")
+    yield
     t.continue_to_exit()
 
 
@@ -2636,10 +2948,13 @@ def test_kill_and_rerun(t):
     """`kill` after showing parked threads, then `run` again: everything
     works on the new process."""
     _check_parked_section(t, t.run("thread apply all bt"))
+    t.select("chain0")
     yield
     t.run("kill")
+    t.check(gdb.prompt_hook is None, "the prompt hook after kill")
     yield
     t.run_program()
+    t.expect_error("rt bt", "no parked user thread is selected")
     t.check_eq(t.frame_name(gdb.selected_frame()), "realm_gdb_test_stop", "stopped in")
     t.check_host_stack("stack after re-run")
     t.stop_thread = gdb.selected_thread().num
@@ -2666,6 +2981,8 @@ def test_leave(t):
         t.select_frame("rgt_hot_wait")
         t.check_eq(t.eval_int("realm_gdb_test_add(2, 3)"), 5, "add()")
     t.within("hot", inside)
+    t.select("hot")
+    t.rt("frame 1")
     t.release()
     yield
     if t.variant == "eof":
@@ -2943,6 +3260,8 @@ def test_non_stop(t):
         t.run("thread {}".format(num))
         _check_says_why(t, t.expect_error("realm-thread apply {:#x} bt".format(
             t.ut("chain0"))), "realm-thread apply")
+        _check_says_why(t, t.expect_error("realm-thread {:#x}".format(
+            t.ut("chain0"))), "realm-thread PTR")
     out = t.run("realm-thread")
     t.check(re.search(r"{:#x}\s+parked".format(t.ut("chain0")), out),
             "realm-thread list:\n" + out)
@@ -2983,6 +3302,8 @@ def test_running_in_background(t):
     why = "the program is running"
     _check_says_why(t, t.expect_error("realm-thread apply {:#x} bt".format(
         t.ut("chain0"))), "realm-thread apply", why)
+    _check_says_why(t, t.expect_error("realm-thread {:#x}".format(
+        t.ut("chain0"))), "realm-thread PTR", why)
     out = t.run("realm-thread")
     _check_says_why(t, out, "realm-thread list", why)
     if dash_c:
