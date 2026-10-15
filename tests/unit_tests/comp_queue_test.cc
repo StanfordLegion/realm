@@ -51,7 +51,7 @@ protected:
     event_triggerer = new EventTriggerNotifier();
   }
 
-  void TearDown() override {}
+  void TearDown() override { delete event_comm; }
 
   EventTriggerNotifier *event_triggerer;
   MockEventCommunicator *event_comm;
@@ -90,8 +90,8 @@ TEST_F(CompQueueTest, AddEvent)
   const int index = 0;
   const size_t max_size = 16;
   CompQueueImpl compqueue;
-  GenEventImpl event_a(event_triggerer, new MockEventCommunicator());
-  GenEventImpl event_b(event_triggerer, new MockEventCommunicator());
+  GenEventImpl event_a(event_triggerer, event_comm);
+  GenEventImpl event_b(event_triggerer, event_comm);
 
   event_a.init(ID::make_event(owner, index, 0), 0);
   event_b.init(ID::make_event(owner, index, 0), 0);
@@ -115,7 +115,7 @@ TEST_F(CompQueueTest, AddAndCompleteEventRemote)
   bool poisoned_a = false;
   bool poisoned_b = true;
   CompQueueImpl compqueue;
-  GenEventImpl event_a(event_triggerer, new MockEventCommunicator());
+  GenEventImpl event_a(event_triggerer, event_comm);
   GenEventImpl event_b(event_triggerer, event_comm);
 
   event_a.init(ID::make_event(owner, index, 0), 0);
@@ -155,7 +155,7 @@ public:
     event_triggerer = new EventTriggerNotifier();
   }
 
-  void TearDown() override {}
+  void TearDown() override { delete event_comm; }
 
   EventTriggerNotifier *event_triggerer;
   MockEventCommunicator *event_comm;
@@ -173,7 +173,7 @@ TEST_P(PopEventsTest, Base)
 
   int index = 0;
   for(size_t i = 0; i < test_case.num_events; i++) {
-    events.push_back(new GenEventImpl(event_triggerer, new MockEventCommunicator));
+    events.push_back(new GenEventImpl(event_triggerer, event_comm));
     events[i]->init(ID::make_event(owner, index++, 0), 0);
     completed_events.push_back(events[i]->current_event());
   }
@@ -260,7 +260,7 @@ TEST_F(CompQueueTest, DISABLED_AddRemoteProgressEvent)
   const size_t max_size = 1;
   CompQueueImpl compqueue;
   GenEventImpl event_a(event_triggerer, event_comm);
-  GenEventImpl event_b(event_triggerer, new MockEventCommunicator());
+  GenEventImpl event_b(event_triggerer, event_comm);
 
   event_a.init(ID::make_event(owner, index, 0), 0);
   compqueue.init(ID::make_compqueue(owner, index).convert<CompletionQueue>(), 0);

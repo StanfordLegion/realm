@@ -164,12 +164,25 @@ target_link_libraries(
   realm_c_unit_tests PRIVATE realm_obj GTest::gmock_main ${REALM_LIBRARIES} ${REALM_EXTRA_OBJS}
 )
 
+# Verifies that constructing a GenEventImpl performs no heap allocations.  It replaces
+# the global operator new/delete to count allocations, so it lives in its own
+# executable and is skipped under sanitizers (which install their own allocator hooks).
+if(NOT REALM_SANITIZER OR REALM_SANITIZER STREQUAL "NONE")
+  add_executable(realm_event_alloc_test "${REALM_TEST_DIR}/unit_tests/event_alloc_test.cc")
+  target_link_libraries(
+    realm_event_alloc_test PRIVATE realm_obj GTest::gmock_main ${REALM_LIBRARIES}
+                                   ${REALM_EXTRA_OBJS}
+  )
+endif()
+
 include(GoogleTest)
 if((NOT REALM_SANITIZER OR REALM_SANITIZER STREQUAL "NONE")
    AND NOT WIN32
    AND NOT CMAKE_CROSSCOMPILING
 )
   gtest_discover_tests(realm_unit_tests NO_PRETTY_TYPES NO_PRETTY_VALUES PROPERTIES LABELS "unit")
+  gtest_discover_tests(realm_event_alloc_test NO_PRETTY_TYPES NO_PRETTY_VALUES
+                       PROPERTIES LABELS "unit")
   # Discover c_unit_tests but exclude BestAffinityTest (runtime init not safe for per-test isolation)
   gtest_discover_tests(realm_c_unit_tests NO_PRETTY_TYPES NO_PRETTY_VALUES 
                        TEST_FILTER "-BestAffinityTest.*"
@@ -182,6 +195,10 @@ else()
   add_test(NAME realm_unit_tests COMMAND $<TARGET_FILE:realm_unit_tests>)
   add_test(NAME realm_c_unit_tests COMMAND $<TARGET_FILE:realm_c_unit_tests>)
   set_tests_properties(realm_unit_tests realm_c_unit_tests PROPERTIES LABELS "unit")
+  if(TARGET realm_event_alloc_test)
+    add_test(NAME realm_event_alloc_test COMMAND $<TARGET_FILE:realm_event_alloc_test>)
+    set_tests_properties(realm_event_alloc_test PROPERTIES LABELS "unit")
+  endif()
 endif()
 
 if(REALM_SANITIZER STREQUAL "ASAN")
