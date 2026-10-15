@@ -997,7 +997,8 @@ class _Window(object):
     `with` block puts the thread's own registers back.  One window may show
     several parked threads in turn."""
 
-    def __init__(self):
+    def __init__(self, via=None):
+        self.via = via  # the command that opened it, if not the usual ones
         self.resumed = False
         self.calls = 0
         self.breakpoints_skipped = False
@@ -1171,6 +1172,8 @@ def _on_cont(event):
         # Views are for core files (see "Core-file views"): whatever runs
         # isn't one.
         _drop_views(lambda v: _thread_running(v["thread_object"]))
+    if _infcall_depth == 0 and _window is None and _selections:
+        _drop_running_selections(event)
 
 
 def _thread_running(thread):
@@ -1185,6 +1188,7 @@ def _on_exited(event):
     global _infcall_depth
     inferior = getattr(event, "inferior", None)
     _drop_views(lambda v: inferior is None or v["inferior"] == inferior.num)
+    _drop_selections(lambda sel: inferior is None or sel["inferior"] == inferior.num)
     for window in list(_unrestored):
         try:
             if not window.thread.is_valid():
@@ -1256,12 +1260,16 @@ def _target_subcommands():
 
 def _guard(cmd):
     if _window is not None:
+        num = _window.thread_num
         raise gdb.GdbError(
             "realm-gdb: refusing '{}' while thread {} shows a parked Realm user "
-            "thread (in 'realm-thread apply' or 'thread apply all bt'): that "
-            "thread has the parked thread's registers until the command is "
-            "over, so letting the program run, or letting go of it, would "
-            "corrupt it.".format(cmd, _window.thread_num))
+            "thread (in {}): that thread has the parked thread's registers until "
+            "the command is over, so letting the program run, or letting go of "
+            "it, would corrupt it.{}".format(
+                cmd, num, "'rt'" if _window.via == "rt" else
+                "'realm-thread apply' or 'thread apply all bt'",
+                "  To run it on thread {} as it really is, leave out 'rt'.".format(num)
+                if _window.via == "rt" else ""))
     if _unrestored and not _retry_unrestored():
         raise gdb.GdbError(
             "realm-gdb: refusing '{}': thread {} still has a parked Realm user "
@@ -1275,9 +1283,9 @@ class RealmThreadGuard(gdb.Command):
     """realm-thread-guard COMMAND
 
     Used by realm-gdb.py's hook-COMMAND definitions: fails while a thread
-    has a parked Realm user thread's registers (inside `realm-thread apply`
-    or `thread apply all bt`), which stops COMMAND, one that would let the
-    program run or let go of it, from running."""
+    has a parked Realm user thread's registers (inside `rt`, `realm-thread
+    apply` or `thread apply all bt`), which stops COMMAND, one that would
+    let the program run or let go of it, from running."""
 
     def __init__(self):
         super(RealmThreadGuard, self).__init__("realm-thread-guard",
@@ -1316,9 +1324,9 @@ def _install_guards():
                 existing = ""
             if "realm-thread-guard" not in existing:
                 print("realm-gdb: you defined {}, so '{}' is not refused in "
-                      "'realm-thread apply' or 'thread apply all bt' commands, "
-                      "where it would act on a thread holding a parked Realm user "
-                      "thread's registers and may corrupt or crash the "
+                      "'rt', 'realm-thread apply' or 'thread apply all bt' "
+                      "commands, where it would act on a thread holding a parked "
+                      "Realm user thread's registers and may corrupt or crash the "
                       "program.".format(hook, c))
                 continue
         try:
@@ -2101,16 +2109,74 @@ def _call_room(ut):
     return sp - base >= _CALL_HEADROOM
 
 
-def _run_in_window(window, ut, command, notes):
+# The words for gdb's `frame`, `up` and `down` (aliases and abbreviations).
+_FRAME_WORDS = ("f", "fr", "fra", "fram", "frame")
+_UP_WORDS = ("up",)
+_DOWN_WORDS = ("do", "dow", "down")
+
+
+def _frame_motion(command):
+    """`frame N` (or `frame level N`), `up [N]` or `down [N]`, as gdb does
+    them (same frame, same errors), but selecting the frame from Python, and
+    printing it with a plain `frame`, returning that output; None for any
+    other command.  gdb itself prints the frame these select from its
+    notification that the selected frame changed, which goes straight to
+    the console (on every gdb from 8.2 to 17), where it can't be collected
+    to be printed once the window is closed (see _apply), and to an MI
+    front end as `=thread-selected` with a parked frame in it."""
+    words = command.split()
+    if not words:
+        return None
+    word, args = words[0], words[1:]
+    if word in _FRAME_WORDS:
+        if args[:1] == ["level"]:
+            args = args[1:]
+        if len(args) != 1 or not re.match(r"\d+$", args[0]):
+            return None
+        frame = gdb.newest_frame()
+        for _ in range(int(args[0])):
+            frame = frame.older()
+            if frame is None:
+                raise gdb.GdbError("No frame at level {}.".format(args[0]))
+    elif word in _UP_WORDS + _DOWN_WORDS:
+        if len(args) > 1:
+            return None
+        up = word in _UP_WORDS
+        count = int(gdb.parse_and_eval(args[0])) if args else 1
+        if not up:
+            count = -count
+        frame = gdb.selected_frame()
+        while count > 0 and frame.older() is not None:
+            frame, count = frame.older(), count - 1
+        while count < 0 and frame.newer() is not None:
+            frame, count = frame.newer(), count + 1
+        if count != 0 and not args:
+            raise gdb.GdbError("Initial frame selected; you cannot go up." if up else
+                               "Bottom (innermost) frame selected; you cannot go down.")
+    else:
+        return None
+    frame.select()
+    return gdb.execute("frame", to_string=True)
+
+
+def _run_in_window(window, ut, command, notes, selection=None):
     """Run `command` with user thread `ut` shown in register window
-    `window`, returning its output (see "Register windows")."""
+    `window`, returning its output (see "Register windows").  With a
+    `selection` (see "Selecting a parked thread"), its frame is selected
+    first, and the frame `command` leaves selected is remembered."""
     room = _call_room(ut)
     if not room and not _can_refuse_calls:
         raise _Unshowable("too little of its stack is free below its stack pointer "
                           "for function calls, which this gdb can't refuse")
     regs, ut_notes = _arch.context_regs(ut)
     window.show(ut, regs, calls=room)
-    out = gdb.execute(command, to_string=True)
+    if selection is not None:
+        _select_level(selection["level"])
+    out = _frame_motion(command)
+    if out is None:
+        out = gdb.execute(command, to_string=True)
+    if selection is not None and gdb.selected_thread() == window.thread:
+        selection["level"] = _selected_level()
     notes += ["realm-gdb: user thread {:#x}: {}.".format(int(ut), n) for n in ut_notes]
     if not room:
         notes.append("realm-gdb: user thread {:#x} has under {} KiB of its stack free "
@@ -2123,11 +2189,12 @@ class _Unshowable(Exception):
     """A parked user thread that turns out not to be showable."""
 
 
-def _apply(targets, command, header):
+def _apply(targets, command, header, selection=None):
     """Run `command` on each parked user thread in `targets` ([(ut,
     problem)] of the selected inferior), shown on the selected thread, and
     print its output.  With `header`, each output gets a "User thread
-    PTR:" line first.  Returns the first error, if any (gdb.error).  (The
+    PTR:" line first.  A `selection` is for `rt` (see _run_in_window).
+    Returns the first error, if any (gdb.error).  (The
     output is printed once the window is closed: gdb's pager may wait for
     input, and so let another UI run a command; see "Register windows".)"""
     how = _how_shown()
@@ -2139,14 +2206,16 @@ def _apply(targets, command, header):
     notes = []
     printed = []
     unshowable = None
-    window = _Window() if how == "window" else None
+    window = None
+    if how == "window":
+        window = _Window(via="rt" if selection is not None else None)
     with (window if window is not None else _NoWindow()):
         for ut, problem in targets:
             out = None
             if problem is None:
                 try:
                     if window is not None:
-                        out = _run_in_window(window, ut, command, notes)
+                        out = _run_in_window(window, ut, command, notes, selection)
                     else:
                         out = _run_in_view(ut, command)
                 except _Unshowable as e:
@@ -2164,7 +2233,8 @@ def _apply(targets, command, header):
             elif isinstance(out, gdb.error):
                 if not first_error:
                     first_error.append(out)
-                printed.append("  <{} failed: {}>\n".format(what, out))
+                if header:  # (A single thread's error is the command's.)
+                    printed.append("  <{} failed: {}>\n".format(what, out))
             else:
                 printed.append(out)
     gdb.write("".join(printed))
@@ -2417,6 +2487,207 @@ def _lookup_user_thread(expr):
     return ut
 
 
+# --------------------------------------------------------------------------
+# Selecting a parked thread (live processes)
+# --------------------------------------------------------------------------
+#
+# In a live process, `realm-thread <ptr>` selects a parked user thread without
+# changing anything in the program: realm-gdb only remembers it, and the frame
+# selected on it.  `rt COMMAND` then runs COMMAND on it in a register window
+# (see "Register windows"), with that frame selected, and remembers the frame
+# COMMAND left selected; so `rt frame 3` then `rt print VAR` work as `frame 3`
+# then `print VAR` would on a running thread.  Selections nest: `realm-thread
+# back` goes back to the one before.  The prompt shows the latest one.
+#
+# A selection is dropped when its program runs (it can't be checked from
+# gdb.events.cont whether the parked thread moved meanwhile), and checked
+# before each `rt` against the registry: the user thread must still be
+# parked, with the saved context it had.  (One that ran and parked again with
+# an identical context isn't noticed; nor was it on the other approach.)
+#
+# A selection is a dict:
+#   inferior, pid:  its inferior and process
+#   user_thread:    the UserThread*, as an int
+#   regs:           unwind_regs_from_ctx() of it as it was selected
+#   level:          the frame selected on it
+
+_selections = globals().get("_selections", [])
+
+# The prompt hook realm-gdb installed while a thread is selected, and the one
+# it replaced (called first).
+_prompt_hooks = globals().get("_prompt_hooks", {"ours": None, "theirs": None})
+
+
+def _selection():
+    """The latest selection in the selected inferior, if any."""
+    try:
+        inferior = gdb.selected_inferior()
+    except gdb.error:
+        return None
+    for sel in reversed(_selections):
+        if sel["inferior"] == inferior.num and sel["pid"] == inferior.pid:
+            return sel
+    return None
+
+
+def _drop_selections(which, why=None):
+    dropped = [sel for sel in _selections if which(sel)]
+    _selections[:] = [sel for sel in _selections if not which(sel)]
+    if dropped and why:
+        print("realm-thread: {}; no longer selecting user thread{} {}.".format(
+            why, "s" if len(dropped) > 1 else "",
+            ", ".join("{:#x}".format(sel["user_thread"]) for sel in dropped)))
+    if not _selections:
+        _remove_prompt_hook()
+
+
+def _drop_running_selections(event):
+    """From gdb.events.cont: the selected inferior's program runs (or every
+    inferior's, with schedule-multiple), so Realm may resume a selected
+    parked thread.  (Not Inferior.threads(), which gdb 12 can't refresh in
+    the middle of resuming.)"""
+    thread = getattr(event, "inferior_thread", None)
+    if _parameter("schedule-multiple", False):
+        which = lambda sel: True
+    else:
+        num = thread.inferior.num if thread is not None else gdb.selected_inferior().num
+        which = lambda sel: sel["inferior"] == num
+    _drop_selections(which, "the program is running")
+
+
+def _check_selection(sel, sps):
+    """The selected user thread, if it is still parked as it was selected;
+    else drop the selection and raise gdb.GdbError saying why."""
+    try:
+        ut = _find_user_thread(sel["user_thread"])
+    except gdb.error as e:
+        raise gdb.GdbError("realm-thread: cannot read the Realm user thread "
+                           "registry: {}".format(e))
+    why = None
+    if ut is None:
+        why = "is no longer a Realm user thread"
+    else:
+        problem = _parked_problem(ut, sps)
+        if problem is not None:
+            why = "can't be shown: " + problem
+        else:
+            try:
+                if _arch.unwind_regs_from_ctx(ut) != sel["regs"]:
+                    why = "has run since it was selected"
+            except gdb.error as e:
+                why = "can't be read: {}".format(e)
+    if why is not None:
+        _drop_selections(lambda s: s is sel)
+        raise gdb.GdbError("realm-thread: user thread {:#x} {}; no longer selecting "
+                           "it.".format(sel["user_thread"], why))
+    return ut
+
+
+def _realm_prompt(current):
+    """The prompt (gdb.prompt_hook) while a parked thread is selected: the
+    user's, after a reminder of the selection."""
+    prompt = current
+    theirs = _prompt_hooks["theirs"]
+    try:
+        if theirs is not None:
+            got = theirs(current)
+            if got is not None:
+                prompt = got
+        sel = _selection()
+        if sel is not None:
+            prompt = "[realm-thread {:#x}] {}".format(sel["user_thread"], prompt)
+    except Exception:
+        _debug_exc()
+    return prompt
+
+
+def _install_prompt_hook():
+    if _prompt_hooks["ours"] is not None and gdb.prompt_hook is _prompt_hooks["ours"]:
+        return
+    namespace = globals()
+    _prompt_hooks["theirs"] = gdb.prompt_hook
+    _prompt_hooks["ours"] = lambda current: namespace["_realm_prompt"](current)
+    gdb.prompt_hook = _prompt_hooks["ours"]
+
+
+def _remove_prompt_hook():
+    """Put the prompt hook back as it was, unless something else has
+    replaced realm-gdb's meanwhile."""
+    if _prompt_hooks["ours"] is not None and gdb.prompt_hook is _prompt_hooks["ours"]:
+        gdb.prompt_hook = _prompt_hooks["theirs"]
+    _prompt_hooks["ours"] = None
+    _prompt_hooks["theirs"] = None
+
+
+def _live_checks(what):
+    """The checks before showing a parked thread in a live process: a
+    target, a showable state, a stopped selected thread."""
+    if _window is not None:
+        raise gdb.GdbError("realm-thread: can't {} from inside 'rt', 'realm-thread "
+                           "apply' or 'thread apply all bt'.".format(what))
+    if not _has_target():
+        raise gdb.GdbError("realm-thread: no process or core file.")
+    how = _how_shown()
+    if isinstance(how, _NotShown):
+        raise gdb.GdbError("realm-thread: can't show parked user threads: " +
+                           how.sentence())
+    thread = gdb.selected_thread()
+    if thread is None or not thread.is_stopped():
+        raise gdb.GdbError("realm-thread: the selected thread must be stopped.")
+    return how
+
+
+class RealmThreadRun(gdb.Command):
+    """Run a command on the selected parked Realm user thread.
+
+    Usage: rt COMMAND
+
+    Runs COMMAND (`bt`, `frame 3`, `up`, `info locals`, `print VAR`, ...) on
+    the parked user thread that `realm-thread <ptr>` selected, as `realm-thread
+    apply <ptr> COMMAND` would, but with the frame last selected on it (by an
+    earlier `rt frame N`, `rt up`, ...) selected first.  Commands that would
+    let the program run or let go of it are refused: run them without `rt`
+    (which then no longer selects the parked thread, since Realm may resume it).
+    In a core file, where `realm-thread <ptr>` keeps the parked thread shown,
+    `rt COMMAND` is just COMMAND."""
+
+    def __init__(self):
+        super(RealmThreadRun, self).__init__("rt", gdb.COMMAND_STACK)
+
+    def invoke(self, arg, from_tty):
+        _printing_over()
+        command = arg.strip()
+        if not command:
+            raise gdb.GdbError("usage: rt COMMAND (after 'realm-thread <ptr>')")
+        if _has_target() and _window is None and _how_shown() == "view":
+            view = _current_view()
+            if view is None or view["temporary"]:
+                raise gdb.GdbError("realm-thread: no parked user thread is shown on "
+                                   "this thread: run 'realm-thread <ptr>' first.")
+            gdb.execute(command, from_tty=from_tty)
+            return
+        _live_checks("run 'rt'")
+        sel = _selection()
+        if sel is None:
+            elsewhere = sorted(set(s["inferior"] for s in _selections))
+            raise gdb.GdbError(
+                "realm-thread: no parked user thread is selected{}: run "
+                "'realm-thread <ptr>' first, or 'realm-thread apply <ptr> COMMAND'"
+                ".".format(" in this inferior (inferior {} has one)".format(
+                    elsewhere[-1]) if elsewhere else ""))
+        with _KeepSelection():
+            sps, _ = _host_sps()
+            ut = _check_selection(sel, sps)
+            error = _apply([(ut, None)], command, header=False, selection=sel)
+        if error is not None:
+            raise gdb.GdbError(str(error))
+
+    def complete(self, text, word):
+        if word is None:
+            word = re.split(r"[ \t]", text)[-1]
+        return _complete_command(text, word)
+
+
 class RealmThread(gdb.Command):
     """realm-thread [apply <ptr>|all COMMAND | <ptr> | back]
 
@@ -2440,12 +2711,19 @@ class RealmThread(gdb.Command):
     unwound.  Not in non-stop mode, or while the program runs or is recorded
     (realm-thread says how to see them then).
 
+    `realm-thread <ptr>` selects the parked user thread at <ptr>, until
+    `realm-thread back` (or `restore`); selections nest.  In a live process
+    this changes nothing in the program: `rt COMMAND` then runs COMMAND on
+    it, as `realm-thread apply <ptr> COMMAND` does, with the frame selected
+    by an earlier `rt frame N` (or `rt up`, ...) selected first.  The prompt
+    shows the selection.  It is dropped once the program runs.
+
     In a core file, a Python unwinder shows the parked thread's stack on the
     selected thread instead: frame #0 stays the thread's own frame (which
     backtraces show as a `<parked Realm user thread ...>` line), and the
-    user thread's stack starts at frame #1.  There `realm-thread <ptr>` also
-    keeps it shown, so that `bt`, `frame N`, `info locals` and `print VAR`
-    operate on it, until `realm-thread back` (or `restore`); calls nest."""
+    user thread's stack starts at frame #1.  There `realm-thread <ptr>` keeps
+    it shown, so that `bt`, `frame N`, `info locals` and `print VAR` (and
+    `rt COMMAND`, which is the same there) operate on it."""
 
     def __init__(self):
         super(RealmThread, self).__init__("realm-thread", gdb.COMMAND_USER)
@@ -2453,6 +2731,9 @@ class RealmThread(gdb.Command):
     def invoke(self, arg, from_tty):
         _printing_over()
         arg = arg.strip()
+        if arg and _window is not None:
+            raise gdb.GdbError("realm-thread: can't change what is shown from inside "
+                               "'rt', 'realm-thread apply' or 'thread apply all bt'.")
         if not arg:
             self._list()
         elif arg in ("back", "restore"):
@@ -2491,6 +2772,9 @@ class RealmThread(gdb.Command):
             for view in stack:
                 if view["inferior"] == inferior and not view["temporary"]:
                     shown.setdefault(view["user_thread"], []).append(view["thread_num"])
+        selected = set(sel["user_thread"] for sel in _selections
+                       if sel["inferior"] == inferior
+                       and sel["pid"] == gdb.selected_inferior().pid)
         found = False
         try:
             # (Read the registry through a stopped thread if there is one:
@@ -2510,6 +2794,11 @@ class RealmThread(gdb.Command):
                     elif int(ut) in shown:
                         state = "parked  (shown on thread {})".format(
                             ", ".join(str(n) for n in sorted(shown[int(ut)])))
+                    elif int(ut) in selected:
+                        current = _selection()
+                        state = "parked  (selected{})".format(
+                            "" if current is not None and current["user_thread"] == int(ut)
+                            else " earlier")
                     else:
                         state = "parked"
                     print("  {:#x}  {}".format(int(ut), state))
@@ -2584,12 +2873,7 @@ class RealmThread(gdb.Command):
             raise gdb.GdbError("realm-thread: no process or core file.")
         how = _how_shown()
         if how == "window":
-            raise gdb.GdbError(
-                "realm-thread: in a live process a parked user thread is shown for "
-                "one command at a time: run 'realm-thread apply {0} COMMAND', for "
-                "example 'realm-thread apply {0} bt full'{1}.".format(
-                    expr, " or 'realm-thread apply {} frame apply level 2 print "
-                    "VAR'".format(expr) if _has_frame_apply() else ""))
+            return self._select(expr)
         if isinstance(how, _NotShown):
             raise gdb.GdbError("realm-thread: can't show a parked user thread: " +
                                how.sentence())
@@ -2622,13 +2906,49 @@ class RealmThread(gdb.Command):
         print("Use 'bt', 'frame N', 'info locals', 'print VAR' as normal.  "
               "Run 'realm-thread back' to undo.")
 
+    def _select(self, expr):
+        """`realm-thread <ptr>` in a live process (see "Selecting a parked
+        thread")."""
+        _live_checks("select a parked user thread")
+        with _KeepSelection():
+            ut = _lookup_user_thread(expr)
+            sps, _ = _host_sps()
+            problem = _parked_problem(ut, sps)
+            if problem is not None:
+                raise gdb.GdbError("realm-thread: can't show user thread {:#x}: "
+                                   "{}.".format(int(ut), problem))
+            inferior = gdb.selected_inferior()
+            sel = {"inferior": inferior.num, "pid": inferior.pid,
+                   "user_thread": int(ut), "regs": _arch.unwind_regs_from_ctx(ut),
+                   "level": 0}
+        _selections.append(sel)
+        _install_prompt_hook()
+        print("realm-thread: selected user thread {:#x}.  'rt COMMAND' runs COMMAND "
+              "on it (e.g. 'rt bt', 'rt frame 2', 'rt print VAR'), with its saved "
+              "registers in place on the selected thread for that command only; "
+              "nothing in the program changes in between.  Run 'realm-thread back' "
+              "to undo.".format(int(ut)))
+        with _KeepSelection():
+            error = _apply([(ut, None)], "frame", header=False, selection=sel)
+        if error is not None:
+            print("realm-thread: {}".format(error))
+
     def _back(self):
         if _unrestored:
             _retry_unrestored()
             return
         view = _current_view()
         if view is None:
-            print("realm-thread: nothing to restore.")
+            sel = _selection()
+            if sel is None:
+                print("realm-thread: nothing to restore.")
+                return
+            _drop_selections(lambda s: s is sel)
+            sel = _selection()
+            if sel is not None:
+                print("realm-thread: back to user thread {:#x}.".format(sel["user_thread"]))
+            else:
+                print("realm-thread: no parked user thread is selected now.")
             return
         _remove_view(view)
         _refresh_frames("parked")
@@ -2637,14 +2957,6 @@ class RealmThread(gdb.Command):
             print("realm-thread: back to user thread {:#x}.".format(view["user_thread"]))
         else:
             print("realm-thread: restored.")
-
-
-def _has_frame_apply():
-    try:
-        gdb.execute("help frame apply", to_string=True)
-        return True
-    except gdb.error:
-        return False
 
 
 _HELP_BANNER = """\
@@ -2664,10 +2976,12 @@ realm-gdb.py loaded.  Realm user-thread debugging commands:
                             of them): e.g. 'bt full', or 'frame apply
                             level 3 print VAR'.
 
-  realm-thread <ptr>        (Core files.)  Keep a parked user thread's
-  realm-thread back         stack shown on the selected thread, so that
-                            'bt', 'frame N', 'print VAR' etc. work on it;
-                            'back' undoes that.
+  realm-thread <ptr>        Select a parked user thread; then 'rt COMMAND'
+  rt COMMAND                runs COMMAND on it ('rt bt', 'rt frame 2',
+  realm-thread back         'rt print VAR', ...), keeping the frame you
+                            select.  'back' undoes the selection.  (In a
+                            core file, plain 'bt', 'frame N', ... work on
+                            it too.)
 
   realm-help                Reprint this banner.
 
@@ -2700,6 +3014,7 @@ class RealmHelp(gdb.Command):
 if _supported():
     ThreadApplyAll()
     RealmThread()
+    RealmThreadRun()
     RealmThreadGuard()
     RealmHelp()
     _install_guards()
