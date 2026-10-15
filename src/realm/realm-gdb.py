@@ -16,11 +16,18 @@
 #     `realm-thread back` to restore the original registers.
 #   - `realm-thread` with no arguments lists parked user threads.
 #
+# Core files can't take register writes.  There, a Python unwinder makes
+# the selected pthread's innermost frame unwind into the parked user
+# thread's saved context instead: frame #0 becomes a placeholder and the
+# user thread's stack starts at frame #1.  See "Read-only targets" below.
+#
 # Linux/FreeBSD on x86-64 or aarch64.  On other targets the script loads
 # as a no-op.
 
 import gdb
+import gdb.unwinder
 import platform
+from gdb.FrameDecorator import FrameDecorator
 
 
 # --------------------------------------------------------------------------
@@ -39,6 +46,11 @@ import platform
 # passed from current_regs()/saved_regs_from_ctx() into set_regs().  The
 # only constraint is that an arch's set_regs() must accept the same dict
 # its own current_regs()/saved_regs_from_ctx() produced.
+#
+# For read-only targets, each arch also provides unwind_regs_from_ctx(),
+# which returns {gdb register name: value} for the PC, SP and every
+# callee-saved register in a UserThread::ctx, and names its PC and SP
+# registers in pc_reg / sp_reg.
 #
 # 64-bit unsigned mask used to coerce gdb's signed-int reads into the
 # unsigned address space the kernel saved.
@@ -64,6 +76,17 @@ class _Arch:
     def set_regs(regs):
         raise NotImplementedError
 
+    @staticmethod
+    def unwind_regs_from_ctx(ut):
+        raise NotImplementedError
+
+
+def _select_newest_frame():
+    """`$pc`, `$sp` etc. name the *selected* frame's registers, and writing
+    one in an outer frame overwrites its saved slot on the stack.  The
+    thread's own registers are frame #0's, so select that before writing."""
+    gdb.newest_frame().select()
+
 
 # Per-CPU bases: current_regs() / set_regs() depend only on the CPU
 # architecture (gdb register names are the same regardless of OS).
@@ -76,18 +99,23 @@ class _Arch:
 
 
 class _X86_64Base(_Arch):
+    pc_reg = "rip"
+    sp_reg = "rsp"
+
     @staticmethod
     def current_regs():
         t = gdb.selected_thread()
+        f = gdb.newest_frame()
         return {
             "thread_num": t.num if (t is not None and t.is_valid()) else None,
-            "rip": int(gdb.parse_and_eval("(unsigned long)$rip")),
-            "rsp": int(gdb.parse_and_eval("(unsigned long)$rsp")),
-            "rbp": int(gdb.parse_and_eval("(unsigned long)$rbp")),
+            "rip": int(f.read_register("rip")) & _U64,
+            "rsp": int(f.read_register("rsp")) & _U64,
+            "rbp": int(f.read_register("rbp")) & _U64,
         }
 
     @staticmethod
     def set_regs(regs):
+        _select_newest_frame()
         gdb.execute("set $rip = {:#x}".format(regs["rip"]), to_string=True)
         gdb.execute("set $rsp = {:#x}".format(regs["rsp"]), to_string=True)
         gdb.execute("set $rbp = {:#x}".format(regs["rbp"]), to_string=True)
@@ -99,6 +127,8 @@ class _X86_64Linux(_X86_64Base):
     _REG_RBP = 10
     _REG_RSP = 15
     _REG_RIP = 16
+    _UNWIND_GREGS = (("r12", 4), ("r13", 5), ("r14", 6), ("r15", 7),
+                     ("rbp", 10), ("rbx", 11), ("rsp", 15), ("rip", 16))
 
     @staticmethod
     def matches():
@@ -113,6 +143,12 @@ class _X86_64Linux(_X86_64Base):
             "rsp": int(gregs[_X86_64Linux._REG_RSP]) & _U64,
             "rbp": int(gregs[_X86_64Linux._REG_RBP]) & _U64,
         }
+
+    @staticmethod
+    def unwind_regs_from_ctx(ut):
+        gregs = ut["ctx"]["uc_mcontext"]["gregs"]
+        return {name: int(gregs[i]) & _U64
+                for name, i in _X86_64Linux._UNWIND_GREGS}
 
 
 class _X86_64FreeBSD(_X86_64Base):
@@ -134,21 +170,33 @@ class _X86_64FreeBSD(_X86_64Base):
             "rbp": int(mc["mc_rbp"]) & _U64,
         }
 
+    @staticmethod
+    def unwind_regs_from_ctx(ut):
+        mc = ut["ctx"]["uc_mcontext"]
+        return {name: int(mc["mc_" + name]) & _U64
+                for name in ("r12", "r13", "r14", "r15",
+                             "rbp", "rbx", "rsp", "rip")}
+
 
 class _AArch64Base(_Arch):
+    pc_reg = "pc"
+    sp_reg = "sp"
+
     @staticmethod
     def current_regs():
         t = gdb.selected_thread()
+        f = gdb.newest_frame()
         return {
             "thread_num": t.num if (t is not None and t.is_valid()) else None,
-            "pc":  int(gdb.parse_and_eval("(unsigned long)$pc")),
-            "sp":  int(gdb.parse_and_eval("(unsigned long)$sp")),
-            "x29": int(gdb.parse_and_eval("(unsigned long)$x29")),
-            "x30": int(gdb.parse_and_eval("(unsigned long)$x30")),
+            "pc":  int(f.read_register("pc")) & _U64,
+            "sp":  int(f.read_register("sp")) & _U64,
+            "x29": int(f.read_register("x29")) & _U64,
+            "x30": int(f.read_register("x30")) & _U64,
         }
 
     @staticmethod
     def set_regs(regs):
+        _select_newest_frame()
         gdb.execute("set $pc  = {:#x}".format(regs["pc"]),  to_string=True)
         gdb.execute("set $sp  = {:#x}".format(regs["sp"]),  to_string=True)
         gdb.execute("set $x29 = {:#x}".format(regs["x29"]), to_string=True)
@@ -186,6 +234,16 @@ class _AArch64Linux(_AArch64Base):
             "x30": int(regs[_AArch64Linux._REG_LR]) & _U64,
         }
 
+    @staticmethod
+    def unwind_regs_from_ctx(ut):
+        # x19..x28 are callee-saved; x29/x30 are FP/LR.
+        mc = ut["ctx"]["uc_mcontext"]
+        regs = mc["regs"]
+        out = {"x{}".format(i): int(regs[i]) & _U64 for i in range(19, 31)}
+        out["sp"] = int(mc["sp"]) & _U64
+        out["pc"] = int(mc["pc"]) & _U64
+        return out
+
 
 class _AArch64FreeBSD(_AArch64Base):
     name = "freebsd/aarch64"
@@ -217,6 +275,15 @@ class _AArch64FreeBSD(_AArch64Base):
             "x29": int(gpr["gp_x"][_AArch64FreeBSD._REG_FP]) & _U64,
             "x30": int(gpr["gp_lr"]) & _U64,
         }
+
+    @staticmethod
+    def unwind_regs_from_ctx(ut):
+        gpr = ut["ctx"]["uc_mcontext"]["mc_gpregs"]
+        out = {"x{}".format(i): int(gpr["gp_x"][i]) & _U64 for i in range(19, 30)}
+        out["x30"] = int(gpr["gp_lr"]) & _U64
+        out["sp"] = int(gpr["gp_sp"]) & _U64
+        out["pc"] = int(gpr["gp_elr"]) & _U64
+        return out
 
 
 def _detect_arch():
@@ -320,6 +387,261 @@ def _apply_snapshot(entry):
     return True
 
 
+def _write_regs_or_restore(regs, original):
+    """Write `regs` to the selected thread.  If the target refuses (a core
+    file can't take register writes), put back anything already written
+    and return False so the caller can fall back to a virtual view."""
+    try:
+        _set_regs(regs)
+        return True
+    except gdb.error:
+        try:
+            _set_regs(original)
+        except gdb.error:
+            pass
+        return False
+
+
+# --------------------------------------------------------------------------
+# Read-only targets (core files)
+# --------------------------------------------------------------------------
+#
+# When registers can't be written, a "view" stands in for impersonation.
+# The unwinder below makes the selected thread's innermost frame report
+# the parked user thread's saved context as its caller's registers, so
+# frame #0 is a placeholder and frames #1 and up are the parked stack.
+# The frame filter prints the placeholder as a marker line in `bt`.
+# Nothing in the inferior changes, so dropping the view only needs the
+# frame cache flushed.
+#
+# The unwinder never reads registers.  In gdb 9, PendingFrame.read_register
+# hits an internal error ("get_frame_id: Assertion `fi->level == 0'
+# failed") when the frame just inside the pending one is an inline frame,
+# which is common in both host and parked stacks.  Instead, the view is
+# "armed" whenever the viewed thread's frame cache is rebuilt from scratch,
+# and the unwinder claims the first frame it is asked about on that thread,
+# which is its innermost non-inline frame.  Everything the unwinder returns
+# is computed up front by _make_view().
+#
+# A view is a dict:
+#   thread_num:       gdb thread whose innermost frame is the placeholder
+#   host_pc, host_sp: that frame's real PC and SP, which is how the frame
+#                     filter recognises it
+#   regs:             unwind_regs_from_ctx() of the parked user thread
+#   values:           regs as gdb.Values of each register's type
+#   frame_id:         the placeholder frame's ID
+#   user_thread_ptr:  the UserThread pointer (informational)
+#   armed:            True until the unwinder claims the innermost frame
+_view = None
+
+# gdb thread the unwinder last ran for.  gdb rebuilds the frame cache on
+# every thread switch, so a change means the viewed thread's frames are
+# being rebuilt (see _ParkedThreadUnwinder).
+_last_unwound_thread = None
+
+
+def _make_view(ut):
+    frame = gdb.newest_frame()
+    regs = _arch.unwind_regs_from_ctx(ut)
+    values = {name: gdb.Value(value).cast(frame.read_register(name).type)
+              for name, value in regs.items()}
+    pc_type = frame.read_register(_arch.pc_reg).type
+    # gdb stops unwinding at a caller whose frame ID is inner to (below)
+    # this frame's, and the parked stack can be anywhere relative to the
+    # host's.  So give the placeholder an ID at the parked thread's SP,
+    # which is just inside the parked thread's innermost frame.
+    frame_id = _FrameId(values[_arch.sp_reg], gdb.Value(frame.pc()).cast(pc_type))
+    return {
+        "thread_num": gdb.selected_thread().num,
+        "host_pc": frame.pc(),
+        "host_sp": int(frame.read_register(_arch.sp_reg)) & _U64,
+        "regs": regs,
+        "values": values,
+        "frame_id": frame_id,
+        "user_thread_ptr": int(ut),
+        "armed": False,
+    }
+
+
+def _view_applies(view):
+    if view is None:
+        return False
+    t = gdb.selected_thread()
+    return t is not None and t.num == view["thread_num"]
+
+
+def _is_host_frame(frame, view):
+    """True for the frame the view replaces (and any inline frames at the
+    same PC and SP, which share its registers)."""
+    try:
+        return (frame.pc() == view["host_pc"]
+                and int(frame.read_register(_arch.sp_reg)) & _U64 == view["host_sp"])
+    except gdb.error:
+        return False
+
+
+def _first_parked_frame(view):
+    """The parked thread's innermost frame, or None if the view isn't in
+    effect in the current frame cache."""
+    frame = gdb.newest_frame()
+    while frame is not None and _is_host_frame(frame, view):
+        frame = frame.older()
+    if frame is None:
+        return None
+    regs = view["regs"]
+    if (frame.pc() != regs[_arch.pc_reg]
+            or int(frame.read_register(_arch.sp_reg)) & _U64 != regs[_arch.sp_reg]):
+        return None
+    return frame
+
+
+def _set_view(view, select=False):
+    """Make `view` (or None) the active view.  With select=True, also
+    select the parked thread's innermost frame so that `info locals` and
+    friends start there."""
+    global _view
+    if view is not None:
+        view["armed"] = True
+    _view = view
+    gdb.invalidate_cached_frames()
+    if not (select and _view_applies(view)):
+        return
+    frame = _first_parked_frame(view)
+    if frame is not None:
+        frame.select()
+
+
+def _on_before_prompt():
+    """Re-apply the view if something rebuilt the frame cache without a
+    thread switch (e.g. `flushregs` or `set backtrace limit`)."""
+    view = _view
+    if not _view_applies(view):
+        return
+    try:
+        if _first_parked_frame(view) is None:
+            _set_view(view, select=True)
+    except gdb.error:
+        pass
+
+
+def _not_started(view):
+    """A user thread that has never run still holds makecontext()'s
+    context, whose PC is its entry point rather than a return address.
+    gdb would look up the caller frame at PC-1, inside whatever function
+    precedes the entry point, so there is no meaningful stack to show.
+    Returns the entry function's name for such a thread, else None."""
+    pc = view["regs"][_arch.pc_reg]
+    try:
+        block = gdb.block_for_pc(pc)
+    except RuntimeError:
+        return None
+    while block is not None and block.function is None:
+        block = block.superblock
+    if block is None or int(block.function.value().address) != pc:
+        return None
+    return block.function.print_name
+
+
+class _FrameId(object):
+    def __init__(self, sp, pc):
+        self.sp = sp
+        self.pc = pc
+
+
+class _ParkedThreadUnwinder(gdb.unwinder.Unwinder):
+    def __init__(self):
+        super(_ParkedThreadUnwinder, self).__init__("realm-parked-thread")
+
+    def __call__(self, pending_frame):
+        global _last_unwound_thread
+        view = _view
+        if view is None:
+            return None
+        t = gdb.selected_thread()
+        num = t.num if t is not None else None
+        if num != _last_unwound_thread:
+            _last_unwound_thread = num
+            if num == view["thread_num"]:
+                view["armed"] = True
+        if not view["armed"] or num != view["thread_num"]:
+            return None
+        view["armed"] = False
+        info = pending_frame.create_unwind_info(view["frame_id"])
+        for name, value in view["values"].items():
+            info.add_saved_register(name, value)
+        return info
+
+
+class _ParkedThreadMarker(FrameDecorator):
+    def __init__(self, base, user_thread_ptr):
+        super(_ParkedThreadMarker, self).__init__(base)
+        self._user_thread_ptr = user_thread_ptr
+
+    def function(self):
+        return "<parked Realm user thread {:#x}>".format(self._user_thread_ptr)
+
+    def address(self):
+        return None
+
+    def filename(self):
+        return None
+
+    def line(self):
+        return None
+
+    def frame_args(self):
+        return None
+
+    def frame_locals(self):
+        return None
+
+
+class _ParkedThreadFrameFilter(object):
+    def __init__(self):
+        self.name = "realm-parked-thread"
+        self.priority = 100
+        self._user_enabled = True
+
+    # Any enabled frame filter sends every `bt` through gdb's Python frame
+    # printer, which formats frames differently.  Report enabled only while
+    # a view applies so ordinary backtraces are left alone.
+    @property
+    def enabled(self):
+        return self._user_enabled and _view_applies(_view)
+
+    @enabled.setter
+    def enabled(self, value):
+        self._user_enabled = value
+
+    def filter(self, frame_iter):
+        view = _view
+        if not _view_applies(view):
+            return frame_iter
+        return self._mark(iter(frame_iter), view)
+
+    @staticmethod
+    def _mark(frame_iter, view):
+        # Collapse the host frame and any inline frames at the same spot
+        # into one marker line, then pass the parked stack through.
+        marked = False
+        for dec in frame_iter:
+            if _is_host_frame(dec.inferior_frame(), view):
+                if not marked:
+                    marked = True
+                    yield _ParkedThreadMarker(dec, view["user_thread_ptr"])
+                continue
+            yield dec
+            break
+        for dec in frame_iter:
+            yield dec
+
+
+def _install_view_support():
+    gdb.unwinder.register_unwinder(None, _ParkedThreadUnwinder(), replace=True)
+    gdb.frame_filters["realm-parked-thread"] = _ParkedThreadFrameFilter()
+    gdb.events.before_prompt.connect(_on_before_prompt)
+
+
 # Stack of impersonation entries for nested `realm-thread`/`realm-thread back`.
 # Each entry is a dict:
 #   host_regs:        snapshot of the host pthread's registers BEFORE impersonation
@@ -327,11 +649,29 @@ def _apply_snapshot(entry):
 #   parked_regs:      the parked user thread's saved context (re-applied after an
 #                     inferior function call, which temporarily swaps host_regs back)
 #   user_thread_ptr:  the UserThread pointer the user named (informational)
+#   view:             only on read-only targets: the view (see "Read-only
+#                     targets") standing in for the register writes.  No
+#                     registers were changed, so host_regs/parked_regs are
+#                     not written back.
 # Both host_regs and parked_regs are snapshots as returned by _current_regs:
 # {thread_num, rip, rsp, rbp}.  thread_num identifies which gdb thread the
 # entry applies to so restore writes to the right thread even if the
 # selected thread has shifted.
 _impersonate_stack = []
+
+
+def _pop_impersonation():
+    """Undo the newest impersonation entry.  Returns True on success."""
+    top = _impersonate_stack[-1]
+    if "view" in top:
+        _impersonate_stack.pop()
+        below = _impersonate_stack[-1] if _impersonate_stack else {}
+        _set_view(below.get("view"), select=True)
+        return True
+    if not _apply_snapshot(top["host_regs"]):
+        return False
+    _impersonate_stack.pop()
+    return True
 
 
 # True while gdb is inside an inferior function call on the impersonated
@@ -363,9 +703,8 @@ def _restore_all_impersonations():
     except gdb.error:
         pass
     while _impersonate_stack:
-        if not _apply_snapshot(_impersonate_stack[-1]["host_regs"]):
+        if not _pop_impersonation():
             break
-        _impersonate_stack.pop()
     # Best-effort: leave selected thread as it was before the restore.
     try:
         if saved_cur is not None and saved_cur.is_valid():
@@ -405,6 +744,9 @@ def _on_inferior_call_pre(event):
     if _call_suspended or not _impersonate_stack:
         return
     top = _impersonate_stack[-1]
+    if "view" in top:
+        # The host's registers were never replaced.
+        return
     target_num = top["host_regs"].get("thread_num")
     if target_num is None:
         return
@@ -560,6 +902,12 @@ def _dump_parked_threads():
         safe_host = _impersonate_stack[0]["host_regs"]
     else:
         safe_host = saved
+    # On a read-only target (a core file) the register writes fail, so
+    # once one does, or if a view is already active, show the remaining
+    # parked stacks through views instead.
+    saved_view = _view
+    use_view = saved_view is not None
+    wrote_regs = False
     try:
         for ut in parked:
             try:
@@ -567,29 +915,47 @@ def _dump_parked_threads():
             except gdb.error as e:
                 print("\nUser thread {:#x}: <cannot read ctx: {}>".format(int(ut), e))
                 continue
-            parked_tagged = dict(regs, thread_num=saved["thread_num"])
-            # Push a synthetic impersonation entry so the inferior_call
-            # event handler will swap to safe_host if a pretty-printer,
-            # display expression, or conditional breakpoint expression
-            # fires a function call while we're walking the parked stack.
-            _impersonate_stack.append({
-                "host_regs": safe_host,
-                "parked_regs": parked_tagged,
-                "user_thread_ptr": int(ut),
-            })
             print("\nUser thread {:#x}:".format(int(ut)))
+            if not use_view:
+                parked_tagged = dict(regs, thread_num=saved["thread_num"])
+                # Push a synthetic impersonation entry so the inferior_call
+                # event handler will swap to safe_host if a pretty-printer,
+                # display expression, or conditional breakpoint expression
+                # fires a function call while we're walking the parked stack.
+                _impersonate_stack.append({
+                    "host_regs": safe_host,
+                    "parked_regs": parked_tagged,
+                    "user_thread_ptr": int(ut),
+                })
+                try:
+                    if _write_regs_or_restore(parked_tagged, saved):
+                        wrote_regs = True
+                        gdb.execute("bt", to_string=False)
+                        continue
+                    use_view = True
+                except gdb.error as e:
+                    print("  <bt failed: {}>".format(e))
+                    continue
+                finally:
+                    _impersonate_stack.pop()
             try:
-                _set_regs(parked_tagged)
+                view = _make_view(ut)
+                start = _not_started(view)
+                if start is not None:
+                    print("  <not started yet; will begin in {}>".format(start))
+                    continue
+                _set_view(view)
                 gdb.execute("bt", to_string=False)
             except gdb.error as e:
                 print("  <bt failed: {}>".format(e))
-            finally:
-                _impersonate_stack.pop()
     finally:
-        try:
-            _set_regs(saved)
-        except gdb.error as e:
-            print("realm-gdb: WARNING: failed to restore registers: {}".format(e))
+        if wrote_regs:
+            try:
+                _set_regs(saved)
+            except gdb.error as e:
+                print("realm-gdb: WARNING: failed to restore registers: {}".format(e))
+        if use_view:
+            _set_view(saved_view, select=True)
 
 
 def _looks_like_bt(tokens):
@@ -696,7 +1062,9 @@ class RealmThread(gdb.Command):
     With no args, list parked Realm user threads.
     With a UserThread pointer, redirect the currently selected pthread's
     registers to that user thread's saved context so that `bt`, `frame N`,
-    `info locals`, and `print VAR` operate on its stack.
+    `info locals`, and `print VAR` operate on its stack.  On a core file,
+    frame #0 becomes a placeholder and the user thread's stack starts at
+    frame #1.
     `realm-thread back` restores the previous registers (stack of saves)."""
 
     def __init__(self):
@@ -750,14 +1118,33 @@ class RealmThread(gdb.Command):
             "parked_regs": parked_with_thread,
             "user_thread_ptr": int(ut),
         }
-        _impersonate_stack.append(entry)
-        try:
-            _set_regs(parked_with_thread)
-        except gdb.error as e:
+        if _view is None:
+            _impersonate_stack.append(entry)
+            if _write_regs_or_restore(parked_with_thread, host):
+                print("realm-thread: now impersonating user thread {:#x}.".format(int(ut)))
+                print("Use 'bt', 'frame N', 'info locals', 'print VAR' as normal.")
+                print("Run 'realm-thread back' to restore.")
+                return
             _impersonate_stack.pop()
-            print("realm-thread: failed to set registers: {}".format(e))
+        # Registers are read-only (e.g. a core file), or we're already in
+        # a view: show the parked stack through a view instead.
+        try:
+            view = _make_view(ut)
+        except gdb.error as e:
+            print("realm-thread: cannot read ctx: {}".format(e))
             return
-        print("realm-thread: now impersonating user thread {:#x}.".format(int(ut)))
+        start = _not_started(view)
+        if start is not None:
+            print("realm-thread: user thread {:#x} has not started yet; it will "
+                  "begin in {}.".format(int(ut), start))
+            return
+        entry["view"] = view
+        _impersonate_stack.append(entry)
+        _set_view(view, select=True)
+        print("realm-thread: now viewing user thread {:#x}.  Registers can't be "
+              "written here,".format(int(ut)))
+        print("so frame #0 is a placeholder and the user thread's stack starts "
+              "at frame #1.")
         print("Use 'bt', 'frame N', 'info locals', 'print VAR' as normal.")
         print("Run 'realm-thread back' to restore.")
 
@@ -765,11 +1152,10 @@ class RealmThread(gdb.Command):
         if not _impersonate_stack:
             print("realm-thread: nothing to restore.")
             return
-        # Use _apply_snapshot so the restore writes back to the originating
-        # thread by number, not to whatever thread is currently selected.
-        if not _apply_snapshot(_impersonate_stack[-1]["host_regs"]):
+        # _pop_impersonation restores to the originating thread by number,
+        # not to whatever thread is currently selected.
+        if not _pop_impersonation():
             return
-        _impersonate_stack.pop()
         print("realm-thread: restored.")
 
 
@@ -811,6 +1197,11 @@ Safety net:
     duration, then re-impersonate.  Without this, the call would run on
     the parked user thread's small mmap'd stack and likely overflow it.
 
+Core files:
+  * Registers can't be written, so both commands use a virtual unwinder
+    instead.  Frame #0 is a placeholder ('<parked Realm user thread
+    ...>' in 'bt') and the user thread's stack starts at frame #1.
+
 Linux / FreeBSD on x86-64 or aarch64.  Source: src/realm/realm-gdb.py.
 ======================================================================"""
 
@@ -832,6 +1223,7 @@ if _supported():
     RealmThread()
     RealmHelp()
     _install_safety_hooks()
+    _install_view_support()
     print(_HELP_BANNER)
 else:
     # Other platforms / architectures: do nothing rather than provide a
