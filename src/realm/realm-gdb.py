@@ -1344,8 +1344,9 @@ _GUARDED_COMMANDS = (
 _TERMINAL_COMMANDS = ("python-interactive",)
 
 # Commands that work with the selected thread or frame, shown a selected
-# parked thread ("PREFIX *" is every subcommand of PREFIX, but those refused
-# below).  `set var X = V` and `print X = V` change X on the parked thread,
+# parked thread ("PREFIX *" is every subcommand of PREFIX, theirs included,
+# but those refused below): those that look at it, those that evaluate an
+# expression in its scope, and those that take a location relative to it.  `set var X = V` and `print X = V` change X on the parked thread,
 # though not lastingly if X is in a register (the window puts the host's
 # back; realm-gdb says so); a breakpoint command without a location uses the
 # parked thread's selected frame.
@@ -1356,7 +1357,11 @@ _SHOWING_COMMANDS = (
     "info vector", "info float", "info line", "info source", "info symbol",
     "info address", "info scope", "list", "print", "call", "output", "printf",
     "x", "ptype", "whatis", "display", "disassemble", "find", "set", "set variable",
-    "break", "tbreak", "hbreak", "thbreak", "dprintf", "clear")
+    "eval", "init-if-undefined", "print-object", "dump *", "append *", "restore",
+    "mem", "memory-tag *", "info vtbl", "info common", "info macro", "info macros",
+    "macro expand", "macro expand-once", "break", "tbreak", "hbreak", "thbreak",
+    "dprintf", "clear", "break-range", "trace", "ftrace", "strace", "skip",
+    "skip function", "skip file")
 # Commands refused while a parked thread is selected: they would act on the
 # selected thread as it really is.  `rt` runs those of _RT_COMMANDS on the
 # parked thread.  (`thread apply` and `frame apply` run other commands: see
@@ -1414,10 +1419,19 @@ def _subcommands(prefix):
 
 
 def _expand(names):
-    """`names`, with each "PREFIX *" replaced by PREFIX's subcommands."""
+    """`names`, with each "PREFIX *" replaced by PREFIX's subcommands, and
+    theirs (`dump binary memory`).  (`help PREFIX` only for a PREFIX this
+    gdb has: see _install_hooks.)"""
     out = []
     for name in names:
-        out += _subcommands(name[:-2]) if name.endswith(" *") else [name]
+        if not name.endswith(" *"):
+            out.append(name)
+            continue
+        prefixes = _existing_commands([name[:-2]])
+        while prefixes:
+            subs = _subcommands(prefixes.pop())
+            out += subs
+            prefixes += subs
     return out
 
 
@@ -1560,9 +1574,10 @@ def _hook_name(command, kind):
 
 def _install_hooks():
     # This runs while librealm is being loaded, often in the middle of
-    # `run`; a command that fails here makes gdb 12 return from `run`
-    # without waiting for the program to stop.  So find the hooks that
-    # already exist without asking for ones that don't.
+    # `run`; a command that fails here makes gdb 10 and 12 (at least)
+    # return from `run` without waiting for the program to stop.  So find
+    # the commands and hooks that exist without asking for ones that don't
+    # (`help memory-tag` fails before gdb 11).
     try:
         defined = _execute("help user-defined")
     except gdb.error:
