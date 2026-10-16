@@ -864,6 +864,13 @@ def _finish(t):
         t.release()
 
 
+def _has_save_group():
+    try:
+        return bool(list(gdb.selected_frame().architecture().registers("save")))
+    except Exception:
+        return False
+
+
 def _arch_name():
     return gdb.selected_frame().architecture().name()
 
@@ -921,6 +928,8 @@ def test_loaded_twice(t):
     out = t.run("source {}".format(t.config["script"]))
     t.check_not_in("you defined", out, "notices on reloading")
     t.check_not_in("could not define", out, "notices on reloading")
+    t.check_in("realm-gdb.py loaded again.", out, "what reloading says")
+    t.check_not_in("debugging commands", out, "the banner again")
     yield
     t.check_in("rgt_chain_level3", t.rt("bt"), "rt bt after reloading")
     t.check_eq(gdb.prompt_hook("(gdb) "), "[realm-thread {:#x}] (gdb) ".format(
@@ -1870,6 +1879,127 @@ def test_select(t):
     _finish(t)
 
 
+@test(scenarios=("live", "attach"))
+def test_select_external(t):
+    """Commands that start another program don't show the parked thread
+    meanwhile, as /proc shows the host thread's registers: `rt shell` (`!`),
+    `rt edit`, `realm-thread apply PTR shell`, and pipe's shell command.
+    `rt pipe COMMAND | SHELL` still runs COMMAND on the parked thread, and
+    `rt edit *$pc` edits where the parked thread's pc is."""
+    tmp = t.config["tmp"]
+    proc = "/proc/{}/task/{}/syscall".format(gdb.selected_inferior().pid,
+                                             gdb.selected_thread().ptid[1])
+    out = os.path.join(tmp, "external.out")
+
+    def written(cmd):
+        if os.path.exists(out):
+            os.unlink(out)
+        t.run(cmd.format(proc=proc, out=out))
+        with open(out) as f:
+            return f.read()
+
+    def sp_pc(text):  # (/proc's syscall line ends with SP and PC)
+        m = re.search(r"(0x[0-9a-f]+) (0x[0-9a-f]+)\s*$", text, re.M)
+        return m.groups() if m else None
+    own = sp_pc(written("shell cat {proc} > {out}"))
+    t.check(own is not None, "the host thread's SP and PC, from " + proc)
+    t.select("chain0")
+    parked_sp = re.search(r"0x[0-9a-f]+", t.rt("print $sp")).group(0)
+    t.check(parked_sp != own[0], "the parked thread's SP differs from the host's")
+    yield
+    for cmd in ("rt shell cat {proc} > {out}", "rt !cat {proc} > {out}",
+                "realm-thread apply %#x shell cat {proc} > {out}" % t.ut("chain0")):
+        t.check_eq(sp_pc(written(cmd)), own, "{}: the host's own SP and PC meanwhile".format(
+            cmd.split(" cat")[0]))
+    editor = os.path.join(tmp, "editor.sh")
+    with open(editor, "w") as f:
+        f.write('echo "$@" > {}; cat {} >> {}\n'.format(out, proc, out))
+    saved = os.environ.get("EDITOR")
+    os.environ["EDITOR"] = "sh " + editor
+    try:
+        t.check_eq(sp_pc(written("rt edit")), own, "rt edit: the host's own SP and PC")
+        where = re.search(r"Line (\d+) of \"([^\"]+)\"", t.rt("info line *$pc"))
+        shown = t.run("rt edit *$pc")
+        t.check_in(USER_SWITCH, shown, "rt edit *$pc: where it says the pc is")
+        with open(out) as f:
+            text = f.read()
+        t.check(where and text.startswith("+{} ".format(where.group(1))) and
+                os.path.basename(where.group(2)) in text.splitlines()[0],
+                "rt edit *$pc: the editor at the parked thread's pc ({} vs {!r})".format(
+                    where and where.groups(), text))
+        t.check_eq(sp_pc(text), own, "rt edit *$pc: the host's own SP and PC meanwhile")
+    finally:
+        if saved is None:
+            os.environ.pop("EDITOR", None)
+        else:
+            os.environ["EDITOR"] = saved
+    yield
+    if t.try_run("help pipe")[0]:
+        sp_out = os.path.join(tmp, "external.sp")
+        text = written("rt pipe print $sp | (cat > %s; cat {proc} > {out})" % sp_out)
+        with open(sp_out) as f:
+            t.check_in(parked_sp, f.read(), "rt pipe: COMMAND on the parked thread")
+        t.check_eq(sp_pc(text), own, "rt pipe: the host's own SP and PC for SHELL")
+        text = written("rt | print $sp | (cat > %s; cat {proc} > {out})" % sp_out)
+        t.check_eq(sp_pc(text), own, "rt | ... |: the same")
+        t.check_eq(sp_pc(written("rt pipe shell cat {proc} > {out} | cat")), own,
+                   "rt pipe shell ... |: the host's own SP and PC")
+        t.run("rt pipe -d XX print 1 XX sh -c 'cat > /dev/null; exit 3'")
+        t.check_in("= 3", t.run("print $_shell_exitcode"), "rt pipe: $_shell_exitcode")
+        t.expect_error("rt pipe | cat", "needs a COMMAND")
+    yield
+    t.check_regs(t.regs())
+    t.run("realm-thread back")
+    yield
+    _finish(t)
+
+
+@test(scenarios=("live", "attach", "core"))
+def test_terminal_input_refused(t):
+    """Inside `rt` or `realm-thread apply`, a command that reads the terminal
+    (`explore`'s questions, Python's input() or sys.stdin, Python's REPL) is
+    refused at once: its output only shows once it is over, and in a window
+    the thread showing the parked one would keep its registers meanwhile."""
+    ptr = "{:#x}".format(t.ut("chain0"))
+    before = t.regs() if t.scenario != "core" else None
+    t.expect_error("realm-thread apply {} explore realm_gdb_test_state".format(ptr),
+                   "reads the terminal")
+    # (gdb <= 12 reports any error from the `python` command so.)
+    passes_on = "rgt-probe" in (t.try_run('python raise gdb.GdbError("rgt-probe")')[1])
+    for cmd in ("realm-thread apply {} python input()".format(ptr),
+                "realm-thread apply {} python import sys; sys.stdin.readline()".format(ptr)):
+        t.expect_error(cmd, "reads the terminal" if passes_on
+                       else "Error while executing Python code")
+    if t.scenario != "core":
+        t.select("chain0")
+        names = re.findall(_BT_LINE + r"([\w:~<>]+)", t.rt("bt"), re.M)
+        t.rt("frame {}".format(names.index("rgt_chain_level2")))
+        t.expect_error("rt explore widget", "reads the terminal")
+        t.expect_error("rt pi", "refusing 'python-interactive'")
+        t.check_in("= 1", t.rt("print 1"), "rt afterwards")
+        t.run("realm-thread back")
+    t.check_eq(t.run("python print(input.__name__)").strip(), "input",
+               "Python's input() as it was afterwards")
+    yield
+    if before is not None:
+        t.check_regs(before)
+        t.check_host_stack()
+    _finish(t)
+
+
+@test(scenarios=("core",))
+def test_core_external(t):
+    """In a core file, `realm-thread apply PTR pipe COMMAND | SHELL` gives
+    SHELL COMMAND's output for the parked thread."""
+    if not t.try_run("help pipe")[0]:
+        raise TestSkip("this gdb has no pipe")
+    out = os.path.join(t.config["tmp"], "external.out")
+    t.run("realm-thread apply {:#x} pipe bt 1 | cat > {}".format(t.ut("chain0"), out))
+    with open(out) as f:
+        t.check_in(USER_SWITCH, f.read(), "pipe's SHELL got the parked thread's bt")
+    yield
+
+
 @test(scenarios=("live",))
 def test_select_nested(t):
     """Selections nest, each with its own selected frame: `realm-thread
@@ -2009,6 +2139,36 @@ def test_select_prompt(t):
 
 
 @test(scenarios=("live",))
+def test_select_prompt_setting(t):
+    """gdb makes the prompt a prompt hook returns its `prompt` setting: the
+    reminder is in it once however many prompts go by (each step ends at
+    one), and goes once nothing is selected, leaving the user's prompt as it
+    was, spaces at either end and all; also when the program runs."""
+    t.run("set prompt \\040(rgt)\\040")
+    mine = " (rgt) "
+    t.check_eq(gdb.parameter("prompt"), mine, "the prompt set")
+    remind = lambda role: "[realm-thread {:#x}] ".format(t.ut(role))
+    t.select("chain0")
+    yield
+    yield
+    t.check_eq(gdb.parameter("prompt"), remind("chain0") + mine, "the prompt, after prompts")
+    t.select("chain1")
+    yield
+    t.check_eq(gdb.parameter("prompt"), remind("chain1") + mine, "the prompt, nested")
+    t.run("realm-thread back")
+    yield
+    t.check_eq(gdb.parameter("prompt"), remind("chain0") + mine, "the prompt, back")
+    t.run("realm-thread back")
+    t.check_eq(gdb.parameter("prompt"), mine, "the prompt, nothing selected")
+    yield
+    t.check_eq(gdb.parameter("prompt"), mine, "the prompt, after a prompt")
+    t.select("chain2")
+    yield
+    t.continue_to_exit()
+    t.check_eq(gdb.parameter("prompt"), mine, "the prompt, once the program ran")
+
+
+@test(scenarios=("live",))
 def test_select_errors(t):
     """What can't be selected or run is refused cleanly, selecting nothing:
     a running user thread, `rt` without a selection, and selecting or `rt`
@@ -2142,6 +2302,7 @@ def test_window_registers_exact(t):
         t.run("set var $xmm0.v2_int64[0] = 0x1122334455667788")
     before = t.regs()
     v = t.variant
+    out = ""
     if v == "dump":
         t.run("thread apply all bt full")
     elif v == "call":
@@ -2151,20 +2312,27 @@ def test_window_registers_exact(t):
         t.within("chain0", lambda: t.expect_error("print realm_gdb_test_fault()",
                                                   "signal"))
     elif v == "set_reg":
-        t.apply("chain0", "set var ${} = 0x1234".format(_callee_saved_reg()))
+        out = t.apply("chain0", "set var ${} = 0x1234".format(_callee_saved_reg()))
     elif v == "set_pc":
-        t.apply("chain0", "set var $pc = realm_gdb_test_add")
+        out = t.apply("chain0", "set var $pc = realm_gdb_test_add")
     elif v == "set_vector":
-        t.apply("chain0", "set var $xmm1.v2_int64[0] = 0x5" if _is_x86_64()
-                else "set var $v1.d.u[0] = 0x5")
+        out = t.apply("chain0", "set var $xmm1.v2_int64[0] = 0x5" if _is_x86_64()
+                      else "set var $v1.d.u[0] = 0x5")
     elif v == "set_flags":
-        t.apply("chain0", "set var $eflags = $eflags ^ 0x1" if _is_x86_64()
-                else "set var $cpsr = $cpsr ^ 0x20000000")
+        out = t.apply("chain0", "set var $eflags = $eflags ^ 0x1" if _is_x86_64()
+                      else "set var $cpsr = $cpsr ^ 0x20000000")
     elif v == "execute_mi_return":
         t.apply("chain0", "python gdb.execute_mi('-exec-return')")
     else:
         t.expect_error("realm-thread apply {:#x} print no_such_variable_xyz".format(
             t.ut("chain0")), "no_such_variable_xyz")
+    # (Before gdb 10 a window keeps only the general registers: see
+    # _snapshot_names.)
+    if v.startswith("set_") and (v != "set_vector" or _has_save_group()):
+        t.check(re.search(r"changed \$\w+.*, which doesn't last", out),
+                "a note that the register change doesn't last:\n" + out)
+    else:
+        t.check_not_in("doesn't last", out, "no note")
     yield
     t.check_regs(before, what="registers after " + v)
     t.check_host_stack()
