@@ -327,6 +327,136 @@ def test_terminal_repeat(t):
     s.finish()
 
 
+def _syscall_sp_pc(shown):
+    """The SP and PC at the end of a /proc/PID/task/TID/syscall line."""
+    m = re.findall(r"(0x[0-9a-f]+) (0x[0-9a-f]+)\s*$", shown, re.M)
+    return m[-1] if m else None
+
+
+@test("terminal.plain")
+def test_terminal_plain(t):
+    """With gdb on a terminal, after `realm-thread PTR`: plain commands show
+    the parked thread, printing as gdb does (`frame N`, `up`, `x` and its
+    repeat), while the thread shows its own registers in /proc between
+    commands, after a command that fails, and after Ctrl-C in a function
+    call; `step` is refused, and `continue` ends the selection and runs."""
+    s = t.gdb(t.realm_args())
+    shown = s.read(timeout=t.args.timeout)
+    if not t.check("the program stops in realm_gdb_test_stop",
+                   "realm_gdb_test_stop" in shown, shown):
+        return
+    shown = s.step("find chain0's user thread", "source {}\r".format(
+        t.file("find_chain.py", FIND_CHAIN)))
+    m = re.search(r"CHAIN0=(0x[0-9a-f]+)", shown)
+    if not t.check("chain0's user thread found", m is not None, shown):
+        return
+    ptr = m.group(1)
+    pid = re.search(r"process (\d+)", s.step("", "info inferiors\r")).group(1)
+    tid = re.search(r"LWP (\d+)", s.step("", "thread\r")).group(1)
+    proc = "shell cat /proc/{}/task/{}/syscall\r".format(pid, tid)
+    own = _syscall_sp_pc(s.step("", proc))
+    t.check("the thread's own SP and PC, from /proc", own is not None, "")
+    s.step("realm-thread PTR", "realm-thread {}\r".format(ptr),
+           r"commands that work with the selected frame[\s\S]*#0 .*user_switch")
+    shown = s.step("bt: the parked stack", "bt\r", r"#0 .*user_switch[\s\S]*rgt_chain_level3")
+    m = re.search(r"#(\d+) .* rgt_chain_level3 ", shown)
+    level = m.group(1) if m else "0"
+    s.step("frame N: prints the frame", "frame {}\r".format(level),
+           r"#{} .*rgt_chain_level3".format(level))
+    s.step("print a parked local", "print chain_marker\r", r"= 4242")
+    s.step("up: prints the frame", "up\r", r"rgt_chain_level2")
+    s.step("down: prints the frame", "down\r", r"rgt_chain_level3")
+    s.step("a function call", "print realm_gdb_test_add(chain_marker, 1)\r", r"= 4243")
+    t.check("/proc: the thread's own SP and PC between commands",
+            _syscall_sp_pc(s.step("", proc)) == own, "")
+    addr = re.compile(r"^(0x[0-9a-f]+)(?: <[^>]*>)?:", re.M)
+    first = addr.findall(s.step("x/2gx $sp", "x/2gx $sp\r", r"0x"))
+    again = addr.findall(s.step("  Enter: gdb's repeat, further on", "\r", r"0x"))
+    t.check("  16 bytes further on", first and again and
+            int(again[0], 16) == int(first[0], 16) + 16, "{} {}".format(first, again))
+    s.step("a command that fails", "print rgt_nosuchvar\r", r"No symbol")
+    t.check("/proc: the thread's own SP and PC at the prompt",
+            _syscall_sp_pc(s.step("", proc)) == own, "")
+    s.step("  still parked, in the same frame", "print chain_marker\r", r"= 4242")
+    s.send("print realm_gdb_test_nap(3000000)\r")
+    time.sleep(1)
+    s.step("Ctrl-C in a function call", "\x03", r"[Ii]nterrupt|Quit|signaled", timeout=20)
+    t.check("/proc: the thread's own SP and PC after it",
+            _syscall_sp_pc(s.step("", proc)) == own, "")
+    s.step("  still parked", "print chain_marker\r", r"= 4242")
+    s.step("step: refused", "step\r",
+           r"refusing 'step' while user thread {} is selected[\s\S]*realm-thread back".format(ptr))
+    s.step("continue: ends the selection, and the program finishes", "continue\r",
+           r"continuing; no longer selecting user thread {}[\s\S]*REALM_GDB_TEST: PASS"
+           r"[\s\S]*exited normally".format(ptr), timeout=t.args.timeout)
+    s.finish()
+
+
+@test("terminal.plain_startup")
+def test_terminal_plain_startup(t):
+    """With gdb on a terminal, commands given with -ex run before the first
+    prompt: one that fails while it shows a selected parked thread leaves it
+    shown no longer than until the next command (`continue` here, which
+    ends the selection and runs), even with realm-gdb.py loaded again in
+    between."""
+    find = t.file("find_chain.py", FIND_CHAIN.replace(
+        'print("CHAIN0=%#x" % int(h))',
+        'gdb.execute("set $rgt_chain0 = %#x" % int(h), to_string=True)'))
+    s = t.gdb(t.realm_args(["-ex", "source " + find, "-ex", "realm-thread $rgt_chain0",
+                            "-ex", "print rgt_nosuchvar", "-ex", "bt 1",
+                            "-ex", "print rgt_nosuchvar",
+                            "-ex", "source " + os.path.join(SOURCE, "realm-gdb.py"),
+                            "-ex", "continue"]))
+    shown = s.read(timeout=t.args.timeout)
+    t.check("selected, then bt: the parked thread", re.search(
+        r"selected user thread[\s\S]*No symbol[\s\S]*#0 .*user_switch[\s\S]*No symbol"
+        r"[\s\S]*realm-gdb.py loaded again", shown), shown)
+    t.check("continue: ends the selection, and the program finishes", re.search(
+        r"continuing; no longer selecting user thread[\s\S]*REALM_GDB_TEST: PASS[\s\S]*"
+        r"exited normally", shown), shown)
+    s.finish()
+
+
+@test("terminal.plain_detach")
+def test_terminal_plain_detach(t):
+    """With gdb on a terminal, attached: detaching with a parked thread
+    selected, right after a command that failed while it showed it, lets
+    the program carry on cleanly."""
+    prog = base.Proc([t.args.program] + base.program_args() +
+                     ["-mode", "attach", "-timeout", "120"], base.clean_env(), t.tmp)
+    try:
+        m = prog.wait_for(r"REALM_GDB_TEST: READY (\d+)", 60)
+        if not t.check("the program is ready to attach to", m is not None, prog.output):
+            return
+        s = t.gdb(["-nx", "-q", "-iex", "set height 0", "-iex", "set width 0",
+                   "-p", m.group(1), t.args.program])
+        s.read(timeout=t.args.timeout)
+        s.step("", "thread apply all bt\r", r"rgt_hot_probe", timeout=60)
+        num = re.search(r"Thread (\d+) [^\n]*\n(?:#[^\n]*\n)*#\d+ [^\n]*rgt_hot_probe",
+                        clean(s.out))
+        if num:
+            s.step("", "thread {}\r".format(num.group(1)))
+        shown = s.step("find chain0's user thread", "source {}\r".format(
+            t.file("find_chain.py", FIND_CHAIN)))
+        m = re.search(r"CHAIN0=(0x[0-9a-f]+)", shown)
+        if not t.check("chain0's user thread found", m is not None, shown):
+            return
+        s.step("realm-thread PTR", "realm-thread {}\r".format(m.group(1)),
+               r"commands that work with the selected frame")
+        s.step("bt: the parked thread", "bt 1\r", r"user_switch")
+        s.step("release the program (rt: plain set var is refused)",
+               "rt set var realm_gdb_test_release = 1\r", unwanted="refusing")
+        s.step("a command that fails", "print rgt_nosuchvar\r", r"No symbol")
+        s.step("detach", "detach\r", r"Detaching|detached", unwanted="refusing")
+        s.finish()
+        rc = prog.wait(90)
+        t.check("the program carries on, and finishes cleanly",
+                rc == 0 and "REALM_GDB_TEST: PASS" in prog.output,
+                "status {}\n{}".format(rc, prog.output[-2000:]))
+    finally:
+        prog.kill()
+
+
 # ---- the driver ---------------------------------------------------------
 
 def run_test(args, name):
