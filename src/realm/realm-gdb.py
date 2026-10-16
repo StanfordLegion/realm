@@ -13,8 +13,12 @@
 #   - `realm-thread apply <ptr>|all COMMAND` runs COMMAND (`bt full`,
 #     `frame apply level 3 print VAR`, ...) on a parked user thread, or on
 #     each of them.
-#   - In a core file, `realm-thread <ptr>` also shows a parked user thread's
-#     stack on the selected thread until `realm-thread back`.
+#   - `realm-thread <ptr>` selects a parked user thread until `realm-thread
+#     back`.  Meanwhile `bt`, `frame N`, `print VAR`, `info locals`, `set
+#     var`, `break` and the like show it, and commands that would act on the
+#     selected thread as it really is (`step`, `finish`, `return`, ...) are
+#     refused; `continue` and `thread N` end the selection.  (In a live process, only in a console gdb session:
+#     elsewhere `rt COMMAND` shows it.)
 #
 # How a parked user thread is shown depends on the target (see "Register
 # windows" and "Core-file views" below):
@@ -70,6 +74,38 @@ def _has_parameter(name):
         return False
 
 
+# An MI stream record (console, target or log output) on a line of its own.
+_MI_STREAM_RECORD = re.compile(r'[~@&]"((?:[^"\\]|\\.)*)"\n?$', re.S)
+_C_ESCAPES = {"n": "\n", "t": "\t", "r": "\r", "f": "\f", "v": "\v", "a": "\a",
+              "b": "\b", "e": "\x1b"}
+
+
+def _execute(command):
+    """gdb.execute(command, to_string=True): the command's output, as the
+    CLI would print it.  (Under MI, gdb 18 returns some of it, line by line,
+    as MI stream records: ~"text\\n".)"""
+    out = gdb.execute(command, to_string=True)
+    if not re.search(r'(?:^|\n)[~@&]"', out):
+        return out
+    return "".join(_mi_unquote(line) for line in out.splitlines(True))
+
+
+def _mi_unquote(line):
+    """An MI stream record's text (any other line as it is)."""
+    m = _MI_STREAM_RECORD.match(line)
+    if m is None:
+        return line
+    text = bytearray()
+    for piece in re.findall(r"\\[0-7]{1,3}|\\.|[^\\]+", m.group(1), re.S):
+        if piece[0] != "\\":
+            text += piece.encode("utf-8", "surrogateescape")
+        elif piece[1] in "01234567":
+            text.append(int(piece[1:], 8) & 0xff)
+        else:
+            text += _C_ESCAPES.get(piece[1], piece[1]).encode("utf-8")
+    return text.decode("utf-8", "replace")
+
+
 # --------------------------------------------------------------------------
 # Architecture abstraction
 # --------------------------------------------------------------------------
@@ -90,9 +126,11 @@ def _has_parameter(name):
 #
 # fallback_regs are the registers to keep and put back around a register
 # window with gdbs that can't list the "save" register group (gdb < 10):
-# those a window writes, and those gdb itself writes meanwhile (a function
-# call sets orig_rax on x86-64 Linux, which decides whether the kernel
-# restarts an interrupted system call, until it returns).
+# the group's members, those of them this gdb has.  That is those a window
+# writes, those gdb itself writes meanwhile (a function call sets orig_rax
+# on x86-64 Linux, which decides whether the kernel restarts an interrupted
+# system call, until it returns), and any the user changes meanwhile (`set
+# var $xmm1 = ...`), which would otherwise stay changed on the thread.
 
 class _Arch(object):
     pc_reg = None
@@ -119,12 +157,22 @@ class _Arch(object):
 _X86_64_GP_REGS = ("rax", "rbx", "rcx", "rdx", "rsi", "rdi", "rbp", "rsp",
                    "r8", "r9", "r10", "r11", "r12", "r13", "r14", "r15",
                    "rip", "eflags")
+# The rest of gdb's "save" group on x86-64 (raw registers only: ymm0h is
+# ymm0's upper half, zmm0h zmm0's).
+_X86_64_OTHER_REGS = (
+    ("cs", "ss", "ds", "es", "fs", "gs")
+    + tuple("st{}".format(i) for i in range(8))
+    + ("fctrl", "fstat", "ftag", "fiseg", "fioff", "foseg", "fooff", "fop")
+    + tuple("xmm{}".format(i) for i in range(32)) + ("mxcsr",)
+    + tuple("ymm{}h".format(i) for i in range(32))
+    + tuple("k{}".format(i) for i in range(8))
+    + tuple("zmm{}h".format(i) for i in range(32)) + ("pkru", "fs_base", "gs_base"))
 
 
 class _X86_64Linux(_Arch):
     pc_reg = "rip"
     sp_reg = "rsp"
-    fallback_regs = _X86_64_GP_REGS + ("orig_rax",)
+    fallback_regs = _X86_64_GP_REGS + _X86_64_OTHER_REGS + ("orig_rax",)
     # glibc x86-64 ucontext gregs[] indices (see /usr/include/sys/ucontext.h).
     # getcontext()/swapcontext() save the callee-saved registers, the
     # argument registers, and RIP/RSP as of the return from the call.  (No
@@ -157,7 +205,7 @@ class _X86_64Linux(_Arch):
 class _X86_64FreeBSD(_Arch):
     pc_reg = "rip"
     sp_reg = "rsp"
-    fallback_regs = _X86_64_GP_REGS
+    fallback_regs = _X86_64_GP_REGS + _X86_64_OTHER_REGS
     # FreeBSD mcontext_t (sys/x86/include/ucontext.h) uses named fields
     # (mc_rip, mc_rsp, ...), not a gregs[] array.
     _CTX = ("r8", "r9", "r12", "r13", "r14", "r15", "rdi", "rsi", "rbp",
@@ -192,8 +240,9 @@ _AARCH64_GP_REGS = tuple("x{}".format(i) for i in range(31)) + ("sp", "pc", "cps
 # are the low 128 bits of z8..z15, and writing v8 clears the rest of z8, so
 # keep z8..z15 too.
 _AARCH64_FP_SAVED = tuple("v{}".format(i) for i in range(8, 16))
-_AARCH64_FALLBACK = (_AARCH64_GP_REGS + _AARCH64_FP_SAVED
-                     + tuple("z{}".format(i) for i in range(8, 16)) + ("fpsr", "fpcr"))
+_AARCH64_FALLBACK = (_AARCH64_GP_REGS + tuple("v{}".format(i) for i in range(32))
+                     + tuple("z{}".format(i) for i in range(32))
+                     + tuple("p{}".format(i) for i in range(16)) + ("ffr", "fpsr", "fpcr"))
 
 
 def _read_bytes(addr, size):
@@ -634,7 +683,7 @@ class _NotShown(object):
 
 def _target_stack():
     try:
-        return gdb.execute("maint print target-stack", to_string=True)
+        return _execute("maint print target-stack")
     except gdb.error:
         return ""
 
@@ -762,8 +811,9 @@ def _parked_problem(ut, sps):
 # realm-gdb says the program may crash.
 
 # The open window, if any; windows whose host's registers could not be put
-# back (the program must not run until they are).
-_window = None
+# back (the program must not run until they are).  (Kept if the script is
+# loaded again: a window a failed plain command left open is still open.)
+_window = globals().get("_window")
 _unrestored = globals().get("_unrestored", [])
 
 # Inferior calls in progress (in or out of a window); the user breakpoints
@@ -824,6 +874,24 @@ def _raw(value):
         return None
 
 
+def _int_writable(value):
+    """Whether a register's value can be written back as an integer."""
+    return value.type.code in _SCALAR_REG_TYPES and value.type.sizeof <= 8
+
+
+def _keep_in_gdb(saved):
+    """Without gdb.set_convenience_variable (gdb < 8.3): keep a copy of each
+    register in `saved` that can't be written back as an integer (vector
+    and x87 registers) in a gdb convenience variable, for _write_reg."""
+    if hasattr(gdb, "set_convenience_variable"):
+        return
+    gdb.newest_frame().select()
+    for name, value in saved.items():
+        if not _int_writable(value):
+            gdb.execute("set var $_realm_gdb_saved_{0} = ${0}".format(name),
+                        to_string=True)
+
+
 def _write_reg(name, value):
     """Set the selected thread's register `name` to `value`: a gdb.Value of
     its type (as read), an int, or (lo, hi) 64-bit halves of an aarch64
@@ -837,6 +905,9 @@ def _write_reg(name, value):
     elif isinstance(value, gdb.Value) and hasattr(gdb, "set_convenience_variable"):
         gdb.set_convenience_variable("_realm_gdb_reg", value)
         gdb.execute("set var ${} = $_realm_gdb_reg".format(name), to_string=True)
+    elif isinstance(value, gdb.Value) and not _int_writable(value):
+        # (A window's own copy: see _keep_in_gdb.)
+        gdb.execute("set var ${0} = $_realm_gdb_saved_{0}".format(name), to_string=True)
     else:
         gdb.execute("set var ${} = {:#x}".format(name, int(value) & _U64),
                     to_string=True)
@@ -892,11 +963,14 @@ def _set(name, value):
 class _CallSettings(object):
     """The settings function calls made in a window need (see "Register
     windows"), and the user's, put back afterwards.  The user's
-    may-call-functions is kept too, for set_calls."""
+    may-call-functions is kept too, for set_calls.  With paging=False, gdb's
+    pager is off too (in a window whose command prints as it goes)."""
 
-    def __init__(self):
+    def __init__(self, paging=True):
         settings = [("scheduler-locking", "on"), ("unwindonsignal", "on"),
                     ("unwind-on-terminating-exception", "on"), ("confirm", "off")]
+        if not paging:
+            settings.append(("pagination", "off"))
         for name in ("direct-call-timeout", "indirect-call-timeout"):
             user = _parameter(name)
             if user is None or user > _CALL_TIMEOUT:  # (None: unlimited)
@@ -1003,7 +1077,10 @@ class _Window(object):
     several parked threads in turn."""
 
     def __init__(self, via=None):
-        self.via = via  # the command that opened it, if not the usual ones
+        # What opened it, if not `realm-thread apply` or `thread apply all
+        # bt`: "rt", or the plain command it was opened for (see "Plain
+        # commands on a selected parked thread").
+        self.via = via
         self.resumed = False
         self.calls = 0
         self.breakpoints_skipped = False
@@ -1022,11 +1099,16 @@ class _Window(object):
         self.saved = _read_regs(frame, _snapshot_names(frame))
         self.signals = _HeldSignals().__enter__()
         try:
-            self.settings = _CallSettings().__enter__()
+            self.settings = _CallSettings(paging=self.via in (None, "rt")).__enter__()
         except BaseException:
             self.signals.__exit__(None, None, None)
             raise
         _window = self
+        try:
+            _keep_in_gdb(self.saved)
+        except BaseException:
+            self.__exit__(None, None, None)
+            raise
         return self
 
     def show(self, ut, regs, calls=True):
@@ -1208,6 +1290,10 @@ def _on_exited(event):
 def _on_gdb_exiting(event):
     """gdb >= 12: put back any host's registers before gdb lets go of the
     program, however it exits."""
+    global _plain
+    if _plain is not None and _plain["input"] is not None:
+        _plain["input"].__exit__(None, None, None)
+    _plain = None
     if _window is not None:
         try:
             _window.close()
@@ -1217,16 +1303,28 @@ def _on_gdb_exiting(event):
 
 
 # --------------------------------------------------------------------------
-# Refusing commands
+# Hooks
 # --------------------------------------------------------------------------
 #
+# For the commands below, realm-gdb defines a hook-COMMAND that runs
+# `realm-thread-guard COMMAND`, and for some a hookpost-COMMAND that runs
+# `realm-thread-guard --after COMMAND`.  gdb runs a command's hooks however
+# the command comes: by an alias or an abbreviation, from a script, a
+# user-defined command, Python's gdb.execute or MI's `-interpreter-exec
+# console`.  It doesn't run them for MI's own commands.  A hook gets no
+# arguments, and a hook that fails stops its command.  If the user already
+# has such a hook it is left alone, and realm-gdb says what that means.
+#
 # Inside a window, CLI commands that would let the program run, or let go of
-# it, are refused: a hook-COMMAND runs `realm-thread-guard COMMAND`, which
-# fails then (and so does the command).  Outside windows the hooks do nothing,
-# unless a host's registers couldn't be put back.  If the user already has
-# such a hook it is left alone, and realm-gdb says what that means.  MI
-# commands bypass CLI hooks, but inside a window they can only come from the
-# CLI's `interpreter-exec` (refused) or Python's gdb.execute_mi.
+# it, are refused (_GUARDED_COMMANDS), and so are those that read the
+# terminal themselves (_TERMINAL_COMMANDS).  Outside windows they aren't,
+# unless a host's registers couldn't be put back.  MI commands bypass CLI
+# hooks, but inside a window they can only come from the CLI's
+# `interpreter-exec` (refused) or Python's gdb.execute_mi.
+#
+# While a parked thread is selected, commands that look at the selected
+# thread or frame show it, and commands that would act on the thread as it
+# really is are refused (see "Plain commands on a selected parked thread").
 
 # (Each that this gdb has; and every `target` subcommand, since connecting
 # to a new target kills the program, which a window's `confirm off` doesn't
@@ -1240,19 +1338,64 @@ _GUARDED_COMMANDS = (
     "checkpoint", "restart", "record", "record full", "record btrace",
     "interpreter-exec")
 # Commands that read the terminal themselves (Python's REPL), refused in a
-# window too: its output is collected until the command is over, so what
-# they ask wouldn't show, and the window would stay open while they wait.
-# (Python's input() and sys.stdin are _NoTerminalInput's.)
+# window too: in `rt`, the output is collected until the command is over,
+# so what they ask wouldn't show; and the window would stay open while they
+# wait.  (Python's input() and sys.stdin are _NoTerminalInput's.)
 _TERMINAL_COMMANDS = ("python-interactive",)
+
+# Commands that work with the selected thread or frame, shown a selected
+# parked thread ("PREFIX *" is every subcommand of PREFIX, but those refused
+# below).  `set var X = V` and `print X = V` change X on the parked thread,
+# though not lastingly if X is in a register (the window puts the host's
+# back; realm-gdb says so); a breakpoint command without a location uses the
+# parked thread's selected frame.
+_SHOWING_COMMANDS = (
+    "backtrace", "info stack", "frame", "frame *", "select-frame", "select-frame *",
+    "up", "down", "up-silently", "down-silently", "info frame", "info frame *",
+    "info locals", "info args", "info registers", "info all-registers",
+    "info vector", "info float", "info line", "info source", "info symbol",
+    "info address", "info scope", "list", "print", "call", "output", "printf",
+    "x", "ptype", "whatis", "display", "disassemble", "find", "set", "set variable",
+    "break", "tbreak", "hbreak", "thbreak", "dprintf", "clear")
+# Commands refused while a parked thread is selected: they would act on the
+# selected thread as it really is.  `rt` runs those of _RT_COMMANDS on the
+# parked thread.  (`thread apply` and `frame apply` run other commands: see
+# "Plain commands on a selected parked thread".)
+_ACTING_COMMANDS = (
+    "signal", "queue-signal", "step", "stepi", "next", "nexti",
+    "finish", "until", "advance", "jump", "return", "reverse-step",
+    "reverse-stepi", "reverse-next", "reverse-nexti", "reverse-finish",
+    "reverse-continue", "watch", "rwatch", "awatch", "thread apply",
+    "interpreter-exec", "python-interactive", "guile-repl", "explore", "explore *",
+    "compile", "compile *")
+_RT_COMMANDS = ("python", "guile", "frame apply", "frame apply *", "faas")
+# Commands that end the selection (all of the inferior's) before they run,
+# rather than being refused: the user means to leave it.
+_LEAVING_COMMANDS = ("continue",)
+# Commands that end it once they have switched to another thread (`thread
+# N`; `thread` alone, or naming the thread already selected, keeps it).
+_SWITCHING_COMMANDS = ("thread",)
+# Commands after which plain commands no longer show a selected parked
+# thread.
+_SESSION_COMMANDS = ("new-ui",)
+
+# The commands hooked, by what their hooks do: "guarded" (_GUARDED_COMMANDS
+# and _TERMINAL_COMMANDS), "acting", "rt" (a subset of "acting"), "leaving",
+# "switching", "showing" and "session".
+_hooked = {}
+
+# Where a switching command was run from, while it runs: (thread, inferior
+# number) of the selected thread then.
+_switch_from = None
 
 
 def _existing_commands(names):
     """Those of `names` that this gdb has, found without running a command
-    that fails (see _install_guards): `complete NAME` lists NAME itself."""
+    that fails (see _install_hooks): `complete NAME` lists NAME itself."""
     found = []
     for name in names:
         try:
-            out = gdb.execute("complete " + name, to_string=True)
+            out = _execute("complete " + name)
         except gdb.error:
             continue
         if name in [line.strip() for line in out.splitlines()]:
@@ -1260,35 +1403,63 @@ def _existing_commands(names):
     return found
 
 
-def _target_subcommands():
+def _subcommands(prefix):
+    """The subcommands of `prefix` (none if it isn't a prefix command)."""
     try:
-        out = gdb.execute("help target", to_string=True)
+        out = _execute("help " + prefix)
     except gdb.error:
         return []
-    return sorted(set(re.findall(r"^target ([\w-]+)(?: --|,)", out, re.M)))
+    return sorted(set(prefix + " " + word for word in re.findall(
+        r"^{} ([\w-]+)(?: --|,)".format(re.escape(prefix)), out, re.M)))
+
+
+def _expand(names):
+    """`names`, with each "PREFIX *" replaced by PREFIX's subcommands."""
+    out = []
+    for name in names:
+        out += _subcommands(name[:-2]) if name.endswith(" *") else [name]
+    return out
+
+
+def _target_subcommands():
+    return _subcommands("target")
+
+
+def _window_words(window):
+    """What opened `window`, for messages."""
+    if window.via is None:
+        return "'realm-thread apply' or 'thread apply all bt'"
+    if window.via == "rt":
+        return "'rt'"
+    return "'{}', which shows the selected one".format(window.via)
 
 
 def _guard(cmd):
     if _window is not None and cmd in _TERMINAL_COMMANDS:
         raise gdb.GdbError(
             "realm-gdb: refusing '{}' while thread {} shows a parked Realm user "
-            "thread: it reads the terminal, and inside {} its output is only shown "
-            "once the command is over.".format(
-                cmd, _window.thread_num, "'rt'" if _window.via == "rt" else
-                "'realm-thread apply' or 'thread apply all bt'"))
+            "thread (in {}): it reads the terminal, and {}.".format(
+                cmd, _window.thread_num, _window_words(_window),
+                "its output is only shown once the command is over"
+                if _window.via in (None, "rt") else "the thread would keep the "
+                "parked thread's registers while it waits"))
     if cmd in _TERMINAL_COMMANDS:
         return
     if _window is not None:
         num = _window.thread_num
+        hint = ""
+        if _window.via == "rt":
+            # (Plain commands that would act on the thread as it really is
+            # are refused while they show the selection.)
+            hint = ("  To run it on thread {} as it really is, run 'realm-thread back' "
+                    "first.".format(num) if _plain_off_why is None and
+                    cmd in _hooked.get("acting", ()) else
+                    "  To run it on thread {} as it really is, leave out 'rt'.".format(num))
         raise gdb.GdbError(
             "realm-gdb: refusing '{}' while thread {} shows a parked Realm user "
             "thread (in {}): that thread has the parked thread's registers until "
             "the command is over, so letting the program run, or letting go of "
-            "it, would corrupt it.{}".format(
-                cmd, num, "'rt'" if _window.via == "rt" else
-                "'realm-thread apply' or 'thread apply all bt'",
-                "  To run it on thread {} as it really is, leave out 'rt'.".format(num)
-                if _window.via == "rt" else ""))
+            "it, would corrupt it.{}".format(cmd, num, _window_words(_window), hint))
     if _unrestored and not _retry_unrestored():
         raise gdb.GdbError(
             "realm-gdb: refusing '{}': thread {} still has a parked Realm user "
@@ -1298,61 +1469,171 @@ def _guard(cmd):
                 cmd, ", ".join(str(w.thread_num) for w in _unrestored)))
 
 
-class RealmThreadGuard(gdb.Command):
-    """realm-thread-guard COMMAND
+def _outer_frames(frame):
+    """The Python frames, innermost first, from `frame` out: those of
+    whatever ran the gdb command that called realm-gdb's invoke(), whose
+    caller `frame` is (None if no Python ran it)."""
+    frames = []
+    while frame is not None:
+        frames.append(frame)
+        frame = frame.f_back
+    return tuple(frames)
 
-    Used by realm-gdb.py's hook-COMMAND definitions: fails while a thread
-    has a parked Realm user thread's registers (inside `rt`, `realm-thread
-    apply` or `thread apply all bt`), which stops COMMAND, one that would
-    let the program run or let go of it, from running."""
+
+def _hook(cmd, after, outer):
+    """realm-thread-guard: hook-CMD's work (hookpost-CMD's, `after`), run
+    from Python frames `outer` (see _outer_frames)."""
+    global _switch_from
+    if after:
+        if cmd in _hooked.get("switching", ()):
+            _switched(cmd)
+        _plain_after(cmd, outer)
+        return
+    _close_stale(outer)
+    if cmd in _hooked.get("guarded", ()):
+        _guard(cmd)
+    if cmd in _hooked.get("session", ()):
+        _plain_off("a second UI was opened ('{}')".format(cmd))
+    if cmd in _hooked.get("acting", ()):
+        _refuse_acting(cmd)
+    if cmd in _hooked.get("leaving", ()) and _plain_shows() is not None:
+        inferior = gdb.selected_inferior().num
+        _drop_selections(lambda sel: sel["inferior"] == inferior, "continuing")
+    if cmd in _hooked.get("switching", ()):
+        _switch_from = None
+        if _plain_shows() is not None:
+            _switch_from = (gdb.selected_thread(), gdb.selected_inferior().num)
+    if cmd in _hooked.get("showing", ()):
+        _plain_before(cmd, outer)
+
+
+class RealmThreadGuard(gdb.Command):
+    """realm-thread-guard [--after] COMMAND
+
+    Used by realm-gdb.py's hook-COMMAND and hookpost-COMMAND definitions.
+    Fails, which stops COMMAND from running, if COMMAND would let the program
+    run or let go of it while a thread has a parked Realm user thread's
+    registers (inside `rt`, `realm-thread apply` or `thread apply all bt`);
+    or, while a parked thread is selected (by `realm-thread <ptr>`), if it
+    would act on the selected thread as it really is.  If COMMAND looks at
+    the selected thread or frame, a selected parked thread is shown for its
+    duration."""
 
     def __init__(self):
         super(RealmThreadGuard, self).__init__("realm-thread-guard",
                                                gdb.COMMAND_MAINTENANCE)
 
     def invoke(self, arg, from_tty):
-        cmd = arg.strip()
+        after = arg.startswith("--after ")
+        cmd = (arg[len("--after "):] if after else arg).strip()
         try:
-            _guard(cmd)
+            _hook(cmd, after, _outer_frames(sys._getframe().f_back))
         except gdb.GdbError:
             raise
         except Exception:
             _debug_exc()
 
 
-def _install_guards():
+def _switched(cmd):
+    """hookpost-CMD of a switching command: if it switched to another
+    thread while plain commands showed a selection, end the selection (all
+    of the inferior's), saying so."""
+    global _switch_from
+    if _switch_from is None:
+        return
+    (old, inferior), _switch_from = _switch_from, None
+    new = gdb.selected_thread()
+    if new is None or new == old:
+        return
+    where = (str(new.num) if new.inferior.num == inferior else
+             "{}.{}".format(new.inferior.num, new.num))
+    _drop_selections(lambda sel: sel["inferior"] == inferior,
+                     "switched to thread {}".format(where))
+
+
+def _hook_name(command, kind):
+    """`define`'s name for COMMAND's hook (kind "hook") or hookpost: `detach
+    inferiors` is hooked by `detach hook-inferiors`."""
+    prefix, _, word = command.rpartition(" ")
+    return (prefix + " " if prefix else "") + kind + "-" + word
+
+
+def _install_hooks():
     # This runs while librealm is being loaded, often in the middle of
     # `run`; a command that fails here makes gdb 12 return from `run`
     # without waiting for the program to stop.  So find the hooks that
     # already exist without asking for ones that don't.
     try:
-        defined = gdb.execute("help user-defined", to_string=True)
+        defined = _execute("help user-defined")
     except gdb.error:
         defined = ""
-    commands = _existing_commands(_GUARDED_COMMANDS + _TERMINAL_COMMANDS) + [
-        "target " + sub for sub in _target_subcommands()]
-    for c in commands:
-        # (`detach inferiors` is hooked by `detach hook-inferiors`.)
-        prefix, _, word = c.rpartition(" ")
-        hook = (prefix + " " if prefix else "") + "hook-" + word
+    kinds = {
+        "guarded": set(_existing_commands(_GUARDED_COMMANDS + _TERMINAL_COMMANDS) +
+                       _target_subcommands()),
+        "rt": set(_existing_commands(_expand(_RT_COMMANDS))),
+        "acting": set(_existing_commands(_expand(_ACTING_COMMANDS))),
+        "leaving": set(_existing_commands(_LEAVING_COMMANDS)),
+        "switching": set(_existing_commands(_SWITCHING_COMMANDS)),
+        "session": set(_existing_commands(_SESSION_COMMANDS)),
+    }
+    kinds["acting"] |= kinds["rt"]
+    kinds["showing"] = set(_existing_commands(_expand(_SHOWING_COMMANDS))) - kinds["acting"]
+    _hooked.clear()
+    for c in sorted(set().union(*kinds.values())):
+        hooks = [_hook_name(c, "hook")]
+        if c in kinds["showing"] or c in kinds["switching"]:
+            hooks.append(_hook_name(c, "hookpost"))
         # Leave the user's own hooks alone.
-        if re.search(r"^{} -- ".format(re.escape(hook)), defined, re.M):
-            try:
-                existing = gdb.execute("show user " + hook, to_string=True)
-            except gdb.error:
-                existing = ""
-            if "realm-thread-guard" not in existing:
-                print("realm-gdb: you defined {}, so '{}' is not refused in "
-                      "'rt', 'realm-thread apply' or 'thread apply all bt' "
-                      "commands, where it would act on a thread holding a parked "
-                      "Realm user thread's registers and may corrupt or crash the "
-                      "program.".format(hook, c))
-                continue
+        theirs = []
+        for hook in hooks:
+            if re.search(r"^{} -- ".format(re.escape(hook)), defined, re.M):
+                try:
+                    existing = _execute("show user " + hook)
+                except gdb.error:
+                    existing = ""
+                if "realm-thread-guard" not in existing:
+                    theirs.append(hook)
+        if theirs:
+            print(_their_hook_note(c, theirs[0], kinds))
+            if c in kinds["session"]:
+                _plain_off("you defined {}, so realm-gdb can't tell when a second "
+                           "UI is opened".format(theirs[0]))
+            continue
         try:
-            gdb.execute("define {}\nrealm-thread-guard {}\nend\n".format(hook, c),
-                        to_string=True)
+            for hook in hooks:
+                gdb.execute("define {}\nrealm-thread-guard {}{}\nend\n".format(
+                    hook, "--after " if "hookpost-" in hook else "", c), to_string=True)
         except gdb.error as e:
             print("realm-gdb: could not define {}: {}".format(hook, e))
+            continue
+        for kind, commands in kinds.items():
+            if c in commands:
+                _hooked.setdefault(kind, set()).add(c)
+
+
+def _their_hook_note(c, hook, kinds):
+    """What it means that the user's own `hook` for command `c` was left."""
+    if c in kinds["guarded"]:
+        return ("realm-gdb: you defined {}, so '{}' is not refused in 'rt', "
+                "'realm-thread apply' or 'thread apply all bt' commands, where it "
+                "would act on a thread holding a parked Realm user thread's "
+                "registers and may corrupt or crash the program.".format(hook, c))
+    if c in kinds["acting"]:
+        return ("realm-gdb: you defined {}, so '{}' is not refused while a parked "
+                "Realm user thread is selected, though it acts on the selected "
+                "thread as it really is.".format(hook, c))
+    if c in kinds["leaving"]:
+        return ("realm-gdb: you defined {}, so a selected parked Realm user thread "
+                "is only dropped once '{}' lets the program run.".format(hook, c))
+    if c in kinds["switching"]:
+        return ("realm-gdb: you defined {}, so '{} N' doesn't end the selection of a "
+                "parked Realm user thread, which plain commands then show on thread "
+                "N.".format(hook, c))
+    if c in kinds["showing"]:
+        return ("realm-gdb: you defined {}, so '{}' shows a selected parked Realm "
+                "user thread only as 'rt {}'.".format(hook, c, c))
+    return ("realm-gdb: you defined {}, so plain commands show a selected parked "
+            "Realm user thread only with 'rt'.".format(hook))
 
 
 # --------------------------------------------------------------------------
@@ -1957,6 +2238,8 @@ def _on_before_prompt():
     unwinder knowing (e.g. `thread apply 1 2 3 print 1`), going back to the
     frame the user had selected."""
     global _infcall_depth
+    if _plain is not None:
+        _close_plain(_plain)  # (its command failed: see "Plain commands ...")
     _printing_over()
     if _window is None and _infcall_depth:
         _infcall_depth = 0
@@ -2112,7 +2395,7 @@ def _run_in_view(ut, command):
                 if limit and limit <= view["host_level"] + 1 else ""))
         if callable(command):  # (see _apply_external)
             return command()
-        return gdb.execute(_view_command(command, view), to_string=True)
+        return _execute(_view_command(command, view))
     finally:
         _remove_view(view)
         if limit:
@@ -2178,14 +2461,13 @@ def _frame_motion(command):
     else:
         return None
     frame.select()
-    return gdb.execute("frame", to_string=True)
+    return _execute("frame")
 
 
-def _run_in_window(window, ut, command, notes, selection=None):
-    """Run `command` with user thread `ut` shown in register window
-    `window`, returning its output (see "Register windows").  With a
-    `selection` (see "Selecting a parked thread"), its frame is selected
-    first, and the frame `command` leaves selected is remembered."""
+def _show_in_window(window, ut, selection=None):
+    """Show user thread `ut` in register window `window` (see "Register
+    windows"), with `selection`'s frame selected (see "Selecting a parked
+    thread").  Returns what _window_done needs."""
     room = _call_room(ut)
     if not room and not _can_refuse_calls:
         raise _Unshowable("too little of its stack is free below its stack pointer "
@@ -2194,31 +2476,49 @@ def _run_in_window(window, ut, command, notes, selection=None):
     window.show(ut, regs, calls=room)
     if selection is not None:
         _select_level(selection["level"])
-    shown = _raw_regs(gdb.newest_frame())
-    if callable(command):  # (see _apply_external)
-        out = command()
-    else:
-        out = _frame_motion(command)
-        if out is None:
-            out = gdb.execute(command, to_string=True)
+    return {"ut": ut, "selection": selection, "room": room, "notes": ut_notes,
+            "regs": _raw_regs(gdb.newest_frame())}
+
+
+def _window_done(window, shown, what):
+    """After command `what` (its first word) has run with _show_in_window's
+    `shown` in `window`: remember the frame it left selected, and return the
+    notes to print once the window is closed."""
+    ut = shown["ut"]
+    notes = []
     if gdb.selected_thread() == window.thread:
         changed = sorted(n for n, v in _raw_regs(gdb.newest_frame()).items()
-                         if n in shown and v != shown[n])
+                         if n in shown["regs"] and v != shown["regs"][n])
         if changed:
             # (The window puts the thread's own registers back.)
             notes.append("realm-gdb: user thread {:#x}: '{}' changed {}, which doesn't "
                          "last: a parked thread's saved registers aren't changed, and "
                          "thread {}'s own are put back.".format(
-                             int(ut), command.split()[0] if not callable(command)
-                             else "edit", ", ".join("$" + n for n in changed),
+                             int(ut), what, ", ".join("$" + n for n in changed),
                              window.thread_num))
-    if selection is not None and gdb.selected_thread() == window.thread:
-        selection["level"] = _selected_level()
-    notes += ["realm-gdb: user thread {:#x}: {}.".format(int(ut), n) for n in ut_notes]
-    if not room:
+        if shown["selection"] is not None:
+            shown["selection"]["level"] = _selected_level()
+    notes += ["realm-gdb: user thread {:#x}: {}.".format(int(ut), n) for n in shown["notes"]]
+    if not shown["room"]:
         notes.append("realm-gdb: user thread {:#x} has under {} KiB of its stack free "
                      "below its stack pointer, so function calls were refused while "
                      "it was shown.".format(int(ut), _CALL_HEADROOM >> 10))
+    return notes
+
+
+def _run_in_window(window, ut, command, notes, selection=None):
+    """Run `command` with user thread `ut` shown in register window
+    `window`, returning its output (see "Register windows").  With a
+    `selection` (see "Selecting a parked thread"), its frame is selected
+    first, and the frame `command` leaves selected is remembered."""
+    shown = _show_in_window(window, ut, selection)
+    if callable(command):  # (see _apply_external)
+        out = command()
+    else:
+        out = _frame_motion(command)
+        if out is None:
+            out = _execute(command)
+    notes += _window_done(window, shown, "edit" if callable(command) else command.split()[0])
     return out
 
 
@@ -2451,16 +2751,23 @@ def _edit_at(pc, symtab, line, function):
 
 
 class _NoTerminalInput(object):
-    """While `rt` or `realm-thread apply` runs a command: Python's input()
-    and sys.stdin refuse, rather than wait (`explore` asks its questions so).
-    The command's output is collected until it is over, so the question
-    wouldn't show; and in a window the thread would hold the parked
-    thread's registers meanwhile, with SIGTERM and SIGHUP held."""
+    """While `rt` or `realm-thread apply` runs a command, or a plain command
+    shows a selected parked thread: Python's input() and sys.stdin refuse,
+    rather than wait (`explore` asks its questions so).  In `rt`, the
+    command's output is collected until it is over, so the question wouldn't
+    show; and in a window the thread would hold the parked thread's
+    registers meanwhile, with SIGTERM and SIGHUP held."""
 
     def __init__(self, what, window):
         self.what, self.window = what, window
 
     def refuse(self, *args, **kwargs):
+        if self.window is not None and self.window.via not in (None, "rt"):
+            raise gdb.GdbError(
+                "realm-gdb: '{}' reads the terminal, which can't be done while "
+                "thread {} shows a parked Realm user thread: it would keep the "
+                "parked thread's registers while it waits.".format(
+                    self.what, self.window.thread_num))
         raise gdb.GdbError(
             "realm-gdb: '{}' reads the terminal, which can't be done inside 'rt' or "
             "'realm-thread apply': its output, and so its question, only shows once "
@@ -2632,6 +2939,7 @@ class ThreadApplyAll(gdb.Command):
         return flags, rest
 
     def invoke(self, arg, from_tty):
+        _close_stale(_outer_frames(sys._getframe().f_back))
         _printing_over()
         flags, rest = self._split_flags(arg.strip())
         if not rest:
@@ -2646,6 +2954,7 @@ class ThreadApplyAll(gdb.Command):
             self._invoke(flags, rest, bt, from_tty)
 
     def _invoke(self, flags, rest, bt, from_tty):
+        global _plain_suppressed
         ascending = any(len(f) > 1 and "-ascending".startswith(f) for f in flags)
         flags = [f for f in flags if not (len(f) > 1 and "-ascending".startswith(f))]
         threads = []
@@ -2656,8 +2965,13 @@ class ThreadApplyAll(gdb.Command):
         try:
             if threads:
                 ids = " ".join("{}.{}".format(i, t) for i, t in threads)
-                gdb.execute("thread apply {} {}{}".format(
-                    ids, "".join(f + " " for f in flags), rest), from_tty=from_tty)
+                # (Threads as they are, even with a parked thread selected.)
+                _plain_suppressed += 1
+                try:
+                    gdb.execute("thread apply {} {}{}".format(
+                        ids, "".join(f + " " for f in flags), rest), from_tty=from_tty)
+                finally:
+                    _plain_suppressed -= 1
         except gdb.error as e:
             # Show the parked threads even so (e.g. after a running thread in
             # non-stop mode), but not after a quit (e.g. 'q' at the pager),
@@ -2687,7 +3001,7 @@ def _complete_command(rest, word):
     gdb's `thread apply 1 COMMAND` completes it."""
     prefix = "thread apply 1 "
     try:
-        out = gdb.execute("complete " + prefix + rest, to_string=True)
+        out = _execute("complete " + prefix + rest)
     except gdb.error:
         return []
     start = len(rest) - len(word)
@@ -2904,6 +3218,329 @@ def _live_checks(what):
     return how
 
 
+# --------------------------------------------------------------------------
+# Plain commands on a selected parked thread (live processes)
+# --------------------------------------------------------------------------
+#
+# While a parked thread is selected (in a console gdb session), a command
+# that works with the selected thread or frame (_SHOWING_COMMANDS: `bt`,
+# `frame N`, `up`, `print VAR`, `info locals`, `x`, `list`, `set var`,
+# `break`, ...) shows it,
+# as `rt COMMAND` would: its hook-COMMAND opens a register window showing
+# it, with its selected frame selected, and its hookpost-COMMAND remembers
+# the frame left selected and closes the window.  So gdb runs its own
+# command, as it was typed, on the parked thread's registers, and prints as
+# it goes (not collected, as `rt` collects it; so gdb's pager is off in such
+# a window).  A command that would act on the selected thread as it really
+# is (_ACTING_COMMANDS: `step`, `next`, `finish`, `return`, `watch`,
+# `python`, `thread apply`, ...) is refused, saying to run `realm-thread
+# back` first, or `rt COMMAND` where that works.  Two end the
+# selection instead (all of the inferior's), since the user means to leave
+# it: `continue`, before it runs (the program running would end it anyway:
+# see "Selecting a parked thread"); and `thread N`, once it has switched to
+# another thread.  realm-gdb's own `thread apply all` shows threads as they
+# are.
+#
+# gdb doesn't run a hookpost when its command fails (an error, Ctrl-C), so a
+# window can be left open.  The next top-level prompt closes it
+# (gdb.events.before_prompt), and so does gdb exiting (gdb.events.
+# gdb_exiting, gdb >= 12), and so does the next hooked command, or realm-gdb
+# command, that isn't part of the failed one.  Python's stack tells which:
+# a command run as part of another (by a pretty-printer's gdb.execute, say)
+# is called from newer Python frames than the other was, the other's still
+# where they were; one run after it isn't.  A command run as part of another
+# without Python, as `frame apply` and `thread apply` run theirs, couldn't
+# be told from one run after it: so those two are refused (realm-gdb's own
+# `thread apply all` runs gdb's `thread apply` with plain commands showing
+# nothing).  Until a window left open is closed, its guards refuse what
+# would let the program run or let go of it.
+#
+# Where a window left open might not be closed in time, plain commands
+# don't show a selected parked thread, nor are any refused, and realm-gdb
+# says so on selecting it:
+#   - MI and DAP sessions: MI's own commands run no hooks, so an IDE's
+#     -exec-continue would resume the program with a window left open;
+#   - batch mode without gdb.events.gdb_exiting (gdb < 12): gdb would let
+#     go of the program at the end with a window left open;
+#   - once a second UI is open (`new-ui`), whose MI commands could come
+#     with a window left open.
+# They are found from gdb's own command line (/proc/self/cmdline, or ps)
+# and, on Linux, the terminals gdb has open, and from hook-new-ui.
+#
+# Python's gdb.execute_mi runs no hooks either: realm-gdb has it close a
+# failed command's window first (_install_execute_mi).  Inside a plain
+# command (a pretty-printer's), it can resume the program with the window
+# open, as inside `rt` (see "Register windows").
+
+# The window a plain command opened, if any: a dict
+#   window:   the _Window
+#   command:  the command
+#   outer:    the Python frames it was run from (_outer_frames), and
+#   lasti:    the innermost one's f_lasti then
+#   shown:    _show_in_window's
+#   input:    its _NoTerminalInput
+_plain = globals().get("_plain")
+
+# Plain commands on realm-gdb's behalf that show threads as they are (in
+# `thread apply all`).
+_plain_suppressed = 0
+
+# Why plain commands don't show a selected parked thread in this session,
+# if they don't (see _plain_off).
+_plain_off_why = globals().get("_plain_off_why")
+
+
+def _gdb_args():
+    """gdb's own command line (Linux: /proc; else ps), or None."""
+    try:
+        with open("/proc/self/cmdline", "rb") as f:
+            return [a.decode("utf-8", "replace") for a in f.read().split(b"\0") if a]
+    except OSError:
+        pass
+    try:
+        import subprocess
+        out = subprocess.run(["ps", "-ww", "-o", "args=", "-p", str(os.getpid())],
+                             stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
+                             timeout=10).stdout
+        # (Arguments with spaces come apart, which can only find too much.)
+        return out.decode("utf-8", "replace").split() or None
+    except Exception:
+        return None
+
+
+# gdb's options that take a value.
+_GDB_VALUE_OPTIONS = ("ex", "eval-command", "iex", "init-eval-command", "x", "command",
+                      "ix", "init-command", "p", "pid", "c", "core", "cd", "d",
+                      "directory", "s", "symbols", "e", "exec", "se", "data-directory",
+                      "D", "tty", "t", "b", "l")
+
+
+def _session_problem():
+    """Why plain commands can't show a selected parked thread in this gdb
+    session, judged from gdb's command line; or None."""
+    args = _gdb_args()
+    if args is None:
+        return "realm-gdb can't tell whether this is an MI session"
+    interpreter, batch = None, False
+    i = 1
+    while i < len(args):
+        a = args[i]
+        if a in ("--args", "-args", "--") or not a.startswith("-"):
+            if a.startswith("new-ui"):  # (a command, for -ex)
+                return "a second UI is open ('new-ui')"
+            if a in ("--args", "-args", "--"):
+                break
+            i += 1
+            continue
+        name, eq, value = a.lstrip("-").partition("=")
+        if name in ("i", "interpreter"):
+            interpreter = value if eq else (args[i + 1] if i + 1 < len(args) else "")
+        elif name in ("batch", "batch-silent"):
+            batch = True
+        elif name in ("ex", "eval-command", "iex", "init-eval-command") and eq:
+            if value.lstrip().startswith("new-ui"):
+                return "a second UI is open ('new-ui')"
+        if name in _GDB_VALUE_OPTIONS and not eq:
+            i += 1
+            if name in ("ex", "eval-command", "iex", "init-eval-command") and \
+                    i < len(args) and args[i].lstrip().startswith("new-ui"):
+                return "a second UI is open ('new-ui')"
+        i += 1
+    if interpreter and not interpreter.startswith(("console", "tui")):
+        return "this is {} {} session".format(
+            "a" if interpreter.startswith("dap") else "an",
+            re.match(r"[A-Za-z]*", interpreter).group(0).upper() or interpreter)
+    if batch and not hasattr(gdb.events, "gdb_exiting"):
+        return ("in batch mode, this gdb (< 12) could let go of the program at the "
+                "end with a parked thread's registers in place")
+    return None
+
+
+def _other_terminal():
+    """Whether gdb has a terminal open besides its standard input, output
+    and error: a second UI ('new-ui'), most likely.  (Linux only.  Not a
+    pseudo-terminal's master side, which a UI isn't on.)"""
+    try:
+        fds = sorted(int(fd) for fd in os.listdir("/proc/self/fd"))
+    except (OSError, ValueError):
+        return False
+    paths = {}
+    for fd in fds:
+        try:
+            paths[fd] = os.readlink("/proc/self/fd/{}".format(fd))
+        except OSError:
+            pass
+    own = set(paths.get(fd) for fd in (0, 1, 2))
+    for fd, path in paths.items():
+        try:
+            if (fd > 2 and path.startswith("/dev/") and path not in own and
+                    path != "/dev/ptmx" and os.isatty(fd)):
+                return True
+        except OSError:
+            pass
+    return False
+
+
+def _plain_off(why):
+    """From now on, plain commands don't show a selected parked thread."""
+    global _plain_off_why
+    if _plain_off_why is not None:
+        return
+    _plain_off_why = why
+    if _selections:
+        print("realm-gdb: {}, so from now on plain commands show threads as they "
+              "really are: use 'rt COMMAND' for a selected parked Realm user "
+              "thread.".format(why[0].upper() + why[1:]))
+
+
+def _plain_shows():
+    """The selection that plain commands show now, if any."""
+    if _plain_off_why is not None or _plain_suppressed or _window is not None:
+        return None
+    if not _has_target():
+        return None
+    return _selection()
+
+
+def _refuse_acting(cmd):
+    """hook-CMD of a command that would act on the selected thread as it
+    really is: refuse it while plain commands show a selected parked
+    thread."""
+    sel = _plain_shows()
+    if sel is None:
+        return
+    if cmd in ("thread apply", "frame apply") or cmd.startswith("frame apply ") or \
+            cmd == "faas":
+        why = "realm-gdb can't show the user thread to the commands it runs"
+    else:
+        why = "it would act on thread {} as it really is".format(
+            gdb.selected_thread().num)
+    raise gdb.GdbError(
+        "realm-thread: refusing '{}' while user thread {:#x} is selected: {}.  Run "
+        "'realm-thread back' first{}.".format(
+            cmd, sel["user_thread"], why,
+            ", or 'rt {} ...' to run it on the user thread".format(cmd)
+            if cmd in _hooked.get("rt", ()) else
+            ", or use 'thread apply all'" if cmd == "thread apply" else ""))
+
+
+def _plain_before(cmd, outer):
+    """hook-CMD of a command that looks at the selected thread or frame
+    (run from Python frames `outer`): open a window showing a selected
+    parked thread for it."""
+    global _plain
+    if _plain is not None:
+        return  # (CMD is part of the command that opened it)
+    sel = _plain_shows()
+    if sel is None:
+        return
+    try:
+        _live_checks("show a parked user thread")
+        sps, _ = _host_sps()
+        ut = _check_selection(sel, sps)
+        window = _Window(via=cmd)
+        window.__enter__()
+    except (gdb.error, gdb.GdbError) as e:
+        raise gdb.GdbError("{}  ('{}' was not run.)".format(e, cmd))
+    except Exception as e:  # (shouldn't be: but CMD mustn't run on the host)
+        _debug_exc()
+        raise gdb.GdbError("realm-thread: can't show user thread {:#x}: {}  ('{}' "
+                           "was not run.)".format(sel["user_thread"], e, cmd))
+    try:
+        entry = {"window": window, "command": cmd, "outer": outer,
+                 "lasti": outer[0].f_lasti if outer else None, "input": None}
+        entry["shown"] = _show_in_window(window, ut, sel)
+        entry["input"] = _NoTerminalInput(cmd, window).__enter__()
+        _plain = entry
+    except BaseException as e:
+        if entry["input"] is not None:
+            entry["input"].__exit__(None, None, None)
+        window.__exit__(None, None, None)
+        if isinstance(e, (_Unshowable, gdb.error)):
+            raise gdb.GdbError("realm-thread: can't show user thread {:#x}: {}.  ('{}' "
+                               "was not run.)".format(int(ut), e, cmd))
+        raise
+
+
+def _same_frames(entry, outer):
+    mine = entry["outer"]
+    return (len(outer) == len(mine) and all(a is b for a, b in zip(outer, mine)) and
+            (not mine or mine[0].f_lasti == entry["lasti"]))
+
+
+def _inside(entry, outer):
+    """Whether code running from Python frames `outer` is part of the command
+    that opened `entry`'s window (see above)."""
+    mine = entry["outer"]
+    if len(outer) <= len(mine):
+        return False
+    if not all(a is b for a, b in zip(outer[len(outer) - len(mine):], mine)):
+        return False
+    return not mine or mine[0].f_lasti == entry["lasti"]
+
+
+def _plain_after(cmd, outer):
+    """hookpost-CMD: close the window CMD opened."""
+    entry = _plain
+    if entry is not None and entry["command"] == cmd and _same_frames(entry, outer):
+        _close_plain(entry)
+
+
+def _close_stale(outer):
+    """Close a plain command's window if the code now running (from Python
+    frames `outer`) isn't part of that command, which then failed.  (Not in
+    the middle of a function call, which only a command can be making.)"""
+    entry = _plain
+    if entry is not None and not _infcall_depth and not _inside(entry, outer):
+        _close_plain(entry)
+
+
+def _install_execute_mi():
+    """Python's gdb.execute_mi (gdb >= 14) runs MI commands, which run no
+    hooks: have it close a failed plain command's window first, as a hooked
+    command would (a script that catches the failure, then resumes the
+    program with -exec-continue, would otherwise resume it with the window
+    open)."""
+    real = getattr(gdb, "execute_mi", None)
+    if real is None or getattr(real, "_realm_gdb", False):
+        return
+    namespace = globals()
+
+    def execute_mi(*args, **kwargs):
+        try:
+            namespace["_close_stale"](namespace["_outer_frames"](sys._getframe().f_back))
+        except Exception:
+            _debug_exc()
+        return real(*args, **kwargs)
+    execute_mi._realm_gdb = True
+    execute_mi.__doc__ = real.__doc__
+    gdb.execute_mi = execute_mi
+
+
+def _close_plain(entry):
+    """Close the window a plain command opened, and print its notes."""
+    global _plain
+    if _plain is entry:
+        _plain = None
+    window, notes = entry["window"], []
+    try:
+        if entry["input"] is not None:
+            entry["input"].__exit__(None, None, None)
+        if not window.resumed:
+            try:
+                notes = _window_done(window, entry["shown"], entry["command"])
+            except gdb.error:
+                _debug_exc()
+    finally:
+        window.__exit__(None, None, None)
+    for note in notes:
+        print(note)
+    if window.breakpoints_skipped:
+        print("realm-gdb: breakpoints were ignored in the function calls made "
+              "meanwhile (a call made while a parked Realm user thread is shown "
+              "can't stop).")
+
+
 class RealmThreadRun(gdb.Command):
     """Run a command on the selected parked Realm user thread.
 
@@ -2912,9 +3549,15 @@ class RealmThreadRun(gdb.Command):
     Runs COMMAND (`bt`, `frame 3`, `up`, `info locals`, `print VAR`, ...) on
     the parked user thread that `realm-thread <ptr>` selected, as `realm-thread
     apply <ptr> COMMAND` would, but with the frame last selected on it (by an
-    earlier `rt frame N`, `rt up`, ...) selected first.  Commands that would
-    let the program run or let go of it are refused: run them without `rt`
-    (which then no longer selects the parked thread, since Realm may resume it).
+    earlier `rt frame N`, `rt up`, ...) selected first.  In a console gdb
+    session, plain commands that work with the selected frame do the same
+    without `rt` (see `help realm-thread`); `rt` also runs those refused
+    there that work on a parked thread (`rt python ...`, `rt frame apply
+    ...`), and works in MI and DAP sessions too.  Commands
+    that would let the program run or let go of it are refused: run them
+    without `rt` (after `realm-thread back`, for those refused there too),
+    which then no longer selects the parked thread, since Realm may resume
+    it.
     Commands that start another program and look at nothing of the parked
     thread's (`shell`, `!`, `make`, `edit`) run as they would without `rt`;
     `pipe COMMAND | SHELL` runs COMMAND on it, then SHELL, and `edit *EXPR`
@@ -2926,6 +3569,7 @@ class RealmThreadRun(gdb.Command):
         super(RealmThreadRun, self).__init__("rt", gdb.COMMAND_STACK)
 
     def invoke(self, arg, from_tty):
+        _close_stale(_outer_frames(sys._getframe().f_back))
         _printing_over()
         command = arg.strip()
         if not command:
@@ -2989,6 +3633,28 @@ class RealmThread(gdb.Command):
     by an earlier `rt frame N` (or `rt up`, ...) selected first.  The prompt
     shows the selection.  It is dropped once the program runs.
 
+    In a console gdb session, plain commands that work with the selected
+    frame do the same as `rt COMMAND` meanwhile: `bt`, `frame N`, `up`,
+    `down`, `print VAR`, `call`, `info locals`, `info frame`, `info
+    registers`, `list`, `x`, `ptype`, `display`, `disassemble`, `set var`,
+    `break`, `tbreak`, `clear`, ...  (gdb's pager is off in them, and its
+    queries take their default answers: so `break` makes no pending
+    breakpoint unless `set breakpoint pending on`.)  `set var` and `print X =
+    V` change a variable that lives in a register only until the command is
+    over (realm-gdb says so), and a thread-local variable is the selected
+    thread's own.  Commands that would act on the selected thread as it
+    really is are refused meanwhile, saying to run `realm-thread back` first:
+    `step`, `next`, `finish`, `return`, `until`, `jump`, `signal`, `watch`,
+    `python`, `thread apply` and `frame apply` among them.  `rt` runs some
+    of those on the parked thread (`rt python`, `rt frame apply`).  `continue` ends the selection,
+    then runs; `thread N` switches to thread N, then ends it (unless N is
+    the thread already selected).  `thread apply all bt` shows threads as
+    they are.
+    Commands written in Python (other than these) see threads as they are.
+    Not in MI or DAP sessions (an IDE's own MI commands can't be followed),
+    nor after a second UI is opened (`new-ui`), nor in batch mode with gdb <
+    12: there `rt` is needed, and nothing is refused.
+
     In a core file, a Python unwinder shows the parked thread's stack on the
     selected thread instead: frame #0 stays the thread's own frame (which
     backtraces show as a `<parked Realm user thread ...>` line), and the
@@ -3000,6 +3666,7 @@ class RealmThread(gdb.Command):
         super(RealmThread, self).__init__("realm-thread", gdb.COMMAND_USER)
 
     def invoke(self, arg, from_tty):
+        _close_stale(_outer_frames(sys._getframe().f_back))
         _printing_over()
         arg = arg.strip()
         if arg and _window is not None:
@@ -3194,13 +3861,28 @@ class RealmThread(gdb.Command):
             sel = {"inferior": inferior.num, "pid": inferior.pid,
                    "user_thread": int(ut), "regs": _arch.unwind_regs_from_ctx(ut),
                    "level": 0}
+        if _plain_off_why is None and _other_terminal():
+            _plain_off("a second UI may be open (gdb has another terminal open)")
         _selections.append(sel)
         _install_prompt_hook()
-        print("realm-thread: selected user thread {:#x}.  'rt COMMAND' runs COMMAND "
-              "on it (e.g. 'rt bt', 'rt frame 2', 'rt print VAR'), with its saved "
-              "registers in place on the selected thread for that command only; "
-              "nothing in the program changes in between.  Run 'realm-thread back' "
-              "to undo.".format(int(ut)))
+        host = gdb.selected_thread().num
+        if _plain_off_why is None:
+            print("realm-thread: selected user thread {:#x}.  Until 'realm-thread "
+                  "back', commands that work with the selected frame ('bt', 'frame N', "
+                  "'up', 'print VAR', 'info locals', 'x', 'set var', 'break', ...) show "
+                  "it, with its saved registers in place on thread {} for each command "
+                  "only; nothing in the program changes in between.  Commands that "
+                  "would act on thread {} as it really is ('step', 'finish', 'return', "
+                  "'watch', 'python', ...) are refused meanwhile; 'continue', or "
+                  "'thread N' to another thread, ends the selection.".format(
+                      int(ut), host, host))
+        else:
+            print("realm-thread: selected user thread {:#x}.  'rt COMMAND' runs "
+                  "COMMAND on it (e.g. 'rt bt', 'rt frame 2', 'rt print VAR'), with "
+                  "its saved registers in place on the selected thread for that "
+                  "command only; nothing in the program changes in between.  Plain "
+                  "commands show thread {} as it really is: {}.  Run 'realm-thread "
+                  "back' to undo.".format(int(ut), host, _plain_off_why))
         with _KeepSelection():
             error = _apply([(ut, None)], "frame", header=False, selection=sel)
         if error is not None:
@@ -3249,12 +3931,15 @@ realm-gdb.py loaded.  Realm user-thread debugging commands:
                             of them): e.g. 'bt full', or 'frame apply
                             level 3 print VAR'.
 
-  realm-thread <ptr>        Select a parked user thread; then 'rt COMMAND'
-  rt COMMAND                runs COMMAND on it ('rt bt', 'rt frame 2',
-  realm-thread back         'rt print VAR', ...), keeping the frame you
-                            select.  'back' undoes the selection.  (In a
-                            core file, plain 'bt', 'frame N', ... work on
-                            it too.)
+  realm-thread <ptr>        Select a parked user thread: then plain 'bt',
+  realm-thread back         'frame N', 'up', 'print VAR', 'info locals', ...
+                            show it, keeping the frame you select, and
+                            'step', 'finish', 'return', 'watch', ... are
+                            refused, until 'back' undoes the selection
+                            ('continue' and 'thread N' undo it too).
+  rt COMMAND                Run COMMAND on the selected parked thread
+                            (also in MI and DAP sessions, where plain
+                            commands show threads as they really are).
 
   realm-help                Reprint this banner.
 
@@ -3290,7 +3975,10 @@ if _supported():
     RealmThreadRun()
     RealmThreadGuard()
     RealmHelp()
-    _install_guards()
+    _install_hooks()
+    _install_execute_mi()
+    if _plain_off_why is None:
+        _plain_off_why = _session_problem()
     # Registering the unwinder rebuilds the frames; if this is a reload
     # while a parked thread is shown, keep the user's frame selected.
     _reload_level = _selected_level() if _current_view() is not None else None

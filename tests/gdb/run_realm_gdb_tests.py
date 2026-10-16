@@ -309,8 +309,7 @@ def drive(gdb_proc, protocol, timeout, mi=False):
     Returns False if a step timed out."""
     send = gdb_proc.send
 
-    step = ('-interpreter-exec console "python rgt.step()"\n' if mi
-            else "python rgt.step()\n")
+    step = '-interpreter-exec console "rgt-step"\n' if mi else "rgt-step\n"
     n = 0
     ok = send(step)
     while ok:
