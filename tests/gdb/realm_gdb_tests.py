@@ -2347,7 +2347,8 @@ def test_mi_select(t):
 def test_plain_commands(t):
     """In a console gdb, after `realm-thread <ptr>`, commands that work with
     the selected frame (`bt`, `frame N`, `up`, `print VAR`, `info locals`,
-    `x`, `set var`, `break`, ...) show the parked thread as `rt` would,
+    `x`, `eval`, `dump`, `skip`, `set var`, `break`, ...) show the parked
+    thread as `rt` would,
     keeping the frame selected on it, while nothing in the program changes
     between commands but what they change.  `thread apply all bt` shows
     threads as they are."""
@@ -2409,6 +2410,19 @@ def test_plain_commands(t):
     t.check(re.search(r"'set variable' changed \${}, which doesn't last".format(
         _callee_saved_reg()), out), "the note on set var of a register:\n" + out)
     t.run("frame {}".format(level))
+    # Commands that evaluate an expression in the parked frame's scope.
+    t.check_in("= {}".format(m), t.run('eval "print %d", chain_marker'), "eval")
+    t.run("init-if-undefined $rgt_init = chain_marker")
+    t.check_in("= {}".format(m), t.run("print $rgt_init"), "init-if-undefined")
+    dumped = os.path.join(t.config["tmp"], "chain_marker.bin")
+    t.run("dump value {} chain_marker".format(dumped))
+    with open(dumped, "rb") as f:
+        t.check_eq(int.from_bytes(f.read(), sys.byteorder), m, "dump value")
+    t.check_in("rgt_chain_level3", t.run("skip"), "skip (the selected frame's function)")
+    t.run("skip delete")
+    t.run("up")
+    t.check_not_in("No symbol", t.run("info vtbl widget"), "info vtbl, one frame up")
+    t.run("down")
     # A breakpoint without a location is at the parked frame's.
     breakpoints = len(gdb.breakpoints() or ())
     pc = re.match(r"#\d+\s+(0x[0-9a-f]+) in rgt_chain_level3", t.run("frame"))
