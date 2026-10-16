@@ -103,3 +103,28 @@ add_test(NAME gdb.dap COMMAND ${_rgt_cmd} --dap-test)
 set_tests_properties(
   gdb.dap PROPERTIES LABELS "gdb" SKIP_RETURN_CODE 77 TIMEOUT 600 PROCESSORS 2
 )
+
+# gdb on a terminal, where it shows its prompt and repeats a command for an
+# empty line (run_realm_gdb_terminal_tests.py).
+set(_rgt_term_driver "${CMAKE_CURRENT_SOURCE_DIR}/run_realm_gdb_terminal_tests.py")
+set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS "${_rgt_term_driver}")
+execute_process(
+  COMMAND "${Python3_EXECUTABLE}" "${_rgt_term_driver}" --list
+  OUTPUT_VARIABLE _rgt_term_names
+  RESULT_VARIABLE _rgt_result
+  ERROR_VARIABLE _rgt_error
+  OUTPUT_STRIP_TRAILING_WHITESPACE
+)
+if(NOT _rgt_result EQUAL 0)
+  message(WARNING "Not testing realm-gdb.py on a terminal: cannot list its tests:\n${_rgt_error}")
+  return()
+endif()
+string(REPLACE "\n" ";" _rgt_term_names "${_rgt_term_names}")
+foreach(_name IN LISTS _rgt_term_names)
+  add_test(NAME gdb.${_name} COMMAND "${Python3_EXECUTABLE}" "${_rgt_term_driver}" --gdb
+                                     "${REALM_GDB_EXECUTABLE}" --program $<TARGET_FILE:realm_gdb_test> "${_name}"
+  )
+  set_tests_properties(
+    gdb.${_name} PROPERTIES LABELS "gdb" SKIP_RETURN_CODE 77 TIMEOUT 600 PROCESSORS 2
+  )
+endforeach()
