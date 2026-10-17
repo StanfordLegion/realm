@@ -369,6 +369,9 @@ def check_gdb_output(name, out, protocol, rc=None):
     fails = re.findall(r"^RGT: FAIL (.*)$", protocol, re.M)
     if fails:
         return "FAIL", fails[0]
+    # (What the test expects gdb to print: see Context.allow_output.)
+    for allowed in re.findall(r"^RGT: ALLOW-OUTPUT (.*)$", protocol, re.M):
+        out = out.replace(allowed, "")
     for bad in BAD_OUTPUT:
         if bad in out:
             return "FAIL", "gdb output contains {!r}".format(bad)

@@ -82,6 +82,7 @@ _C_ESCAPES = {"n": "\n", "t": "\t", "r": "\r", "f": "\f", "v": "\v", "a": "\a",
 
 # realm-gdb's own commands in progress (see _internal).
 _internal_depth = 0
+_internal_commands = []
 
 
 def _internal(command):
@@ -89,9 +90,11 @@ def _internal(command):
     leave it alone (`return` to pop a dummy frame in a window, say)."""
     global _internal_depth
     _internal_depth += 1
+    _internal_commands.append(command)
     try:
         return gdb.execute(command, to_string=True)
     finally:
+        _internal_commands.pop()
         _internal_depth -= 1
 
 
@@ -555,7 +558,7 @@ def _select_inferior(inferior):
     threads = [t for t in inferior.threads() if t.is_valid()]
     if not threads:
         return False
-    selected = gdb.selected_thread()
+    selected = _selected_thread()
     if (selected is not None and selected.is_valid() and selected.is_stopped()
             and selected.inferior.num == inferior.num):
         return True
@@ -604,11 +607,27 @@ def _not_started(pc):
 # Frames, threads and selection
 # --------------------------------------------------------------------------
 
-def _selected_thread_num():
+def _selected_thread():
+    """gdb.selected_thread(), or None: also where gdb has lost its selected
+    thread, after the program died in a function call (SystemError)."""
     try:
-        t = gdb.selected_thread()
+        return gdb.selected_thread()
     except (gdb.error, SystemError):
         return None
+
+
+def _stopped_thread():
+    """The selected thread, which must be stopped (else gdb.GdbError)."""
+    thread = _selected_thread()
+    if thread is None:
+        raise gdb.GdbError("realm-thread: no thread is selected (see 'info threads').")
+    if not thread.is_stopped():
+        raise gdb.GdbError("realm-thread: the selected thread must be stopped.")
+    return thread
+
+
+def _selected_thread_num():
+    t = _selected_thread()
     if t is None or not t.is_valid():
         return None
     return t.global_num
@@ -666,16 +685,21 @@ class _KeepSelection(object):
 
     def __enter__(self):
         try:
-            self.thread = gdb.selected_thread()
+            self.thread = _selected_thread()
             self.level = _selected_level() if self.thread is not None else 0
         except gdb.error:
             self.thread = None
+        if self.thread is None and gdb.selected_inferior().threads():
+            # (gdb has lost its selected thread: see _selected_thread.  A
+            # thread switched to now couldn't be switched back from, and if
+            # its registers can't be read, every command would then fail.)
+            raise gdb.GdbError("realm-gdb: no thread is selected (see 'info threads').")
         return self
 
     def __exit__(self, *exc):
         try:
             if self.thread is not None and self.thread.is_valid():
-                if gdb.selected_thread() != self.thread:
+                if _selected_thread() != self.thread:
                     self.thread.switch()
                 if self.thread.is_stopped():
                     _refresh_frames(self.level)
@@ -730,6 +754,12 @@ def _how_shown():
         return _NotShown("there is no process or core file", "start the program")
     if _is_core():
         return "view"
+    if _unguarded:
+        return _NotShown(
+            "realm-gdb couldn't install its guards on commands that would let the "
+            "program run or let go of it ({}), which must be refused while one is "
+            "shown".format(", ".join("'{}'".format(c) for c in _unguarded)),
+            "write a core file ('gcore FILE') and load it in another gdb")
     if _parameter("non-stop", False):
         return _NotShown(
             "the program is in non-stop mode, where realm-gdb can't show them: it "
@@ -740,6 +770,13 @@ def _how_shown():
     if any(t.is_valid() and not t.is_stopped() for t in gdb.selected_inferior().threads()):
         return _NotShown("the program is running", "stop it ('interrupt') and rerun "
                          "this command")
+    running = [inf.num for inf in gdb.inferiors()
+               if any(t.is_valid() and not t.is_stopped() for t in inf.threads())]
+    if running:
+        # (A window's function calls disable breakpoints, which are every
+        # inferior's: that program would run past them.)
+        return _NotShown("inferior {}'s program is running".format(running[0]),
+                         "stop it ('interrupt -a') and rerun this command")
     if _recording():
         return _NotShown(
             "the program is being recorded (record/replay), and showing them "
@@ -811,16 +848,24 @@ def _parked_problem(ut, sps):
 #     so it must stay on until then; otherwise a faulting call would be left
 #     on the parked stack, with its signal still to come), or throws past
 #     std::terminate, or (gdb >= 15) runs longer than _CALL_TIMEOUT seconds.
-#     User breakpoints are disabled while a call runs, so that it can't stop
-#     at one.  The user's settings are put back afterwards.
+#     User breakpoints of every kind are disabled while a call runs, so that
+#     it can't stop at one.  The user's settings are put back afterwards.  A
+#     call left stopped nonetheless is popped before the next parked thread
+#     is shown (see _Window.pop_calls).
 #   - Output isn't paged, and queries are answered (`confirm off`), inside a
 #     window: gdb's pager and queries wait for input in a nested event loop,
 #     where another UI (a second MI `new-ui`, say) could run a command.
 #   - SIGTERM and SIGHUP to gdb are held off until the window is closed (gdb
 #     acts on them by killing or detaching from the program and exiting, in
-#     the middle of a command if need be).  Ctrl-C is not: an interrupted
-#     command closes its window on the way out.
-#   - gdb.events.gdb_exiting (gdb >= 12) closes any window left open.
+#     the middle of a command if need be), and so are those whose default
+#     action, which gdb leaves them, ends gdb (SIGUSR1, SIGALRM, SIGXCPU,
+#     ...).  Ctrl-C is not: an interrupted command closes its window on the
+#     way out.
+#   - gdb.events.gdb_exiting (gdb >= 12) closes any window left open, and so
+#     does Python's exit (a SystemExit, which ends gdb 14 and older at once).
+#   - A command in the window that selects another thread (`thread N`) or
+#     inferior leaves the window on the host: the next parked thread is
+#     shown there again, and the host's own registers put back there.
 #   - Function calls are refused in windows if gdb can't write the extended
 #     registers (x87, SSE, AVX state), which a call changes: gdb 13 and older
 #     can't where the kernel's XSAVE area is bigger than their buffer (with
@@ -852,12 +897,10 @@ _unrestored = globals().get("_unrestored", [])
 _extended_unwritable = {}
 
 # Inferior calls in progress (in or out of a window); the user breakpoints
-# disabled for the one in a window.
+# disabled for the one in a window: (number, gdb.Breakpoint or None if
+# Python can't see it, enable count) (see _disable_breakpoints).
 _infcall_depth = 0
 _disabled_breakpoints = []
-# The numbers of the catchpoints disabled for it, on gdbs whose Python can't
-# see them (see _hidden_catchpoints).
-_disabled_catchpoints = []
 
 # Seconds a call made in a window may run (gdb >= 15), after which gdb
 # unwinds it.
@@ -917,38 +960,39 @@ def _int_writable(value):
     return value.type.code in _SCALAR_REG_TYPES and value.type.sizeof <= 8
 
 
-def _keep_in_gdb(saved):
+def _keep_in_gdb(saved, tag):
     """Without gdb.set_convenience_variable (gdb < 8.3): keep a copy of each
     register in `saved` that can't be written back as an integer (vector
-    and x87 registers) in a gdb convenience variable, for _write_reg."""
+    and x87 registers) in a gdb convenience variable, for _write_reg; `tag`
+    tells the window's copies from those of windows that couldn't put them
+    back (see _unrestored)."""
     if hasattr(gdb, "set_convenience_variable"):
         return
     gdb.newest_frame().select()
     for name, value in saved.items():
         if not _int_writable(value):
-            gdb.execute("set var $_realm_gdb_saved_{0} = ${0}".format(name),
-                        to_string=True)
+            _internal("set var $_realm_gdb_saved_{1}_{0} = ${0}".format(name, tag))
 
 
-def _write_reg(name, value):
+def _write_reg(name, value, tag=0):
     """Set the selected thread's register `name` to `value`: a gdb.Value of
     its type (as read), an int, or (lo, hi) 64-bit halves of an aarch64
     vector register.  (A register is written in the selected frame: in an
-    outer frame that would be the frame's saved copy, on the stack.)"""
+    outer frame that would be the frame's saved copy, on the stack.  And as
+    realm-gdb's own: a `set var` of the user's shows a selected parked
+    thread.)"""
     gdb.newest_frame().select()
     if isinstance(value, tuple):
         for i, half in enumerate(value):
-            gdb.execute("set var ${}.d.u[{}] = {:#x}".format(name, i, half),
-                        to_string=True)
+            _internal("set var ${}.d.u[{}] = {:#x}".format(name, i, half))
     elif isinstance(value, gdb.Value) and hasattr(gdb, "set_convenience_variable"):
         gdb.set_convenience_variable("_realm_gdb_reg", value)
-        gdb.execute("set var ${} = $_realm_gdb_reg".format(name), to_string=True)
+        _internal("set var ${} = $_realm_gdb_reg".format(name))
     elif isinstance(value, gdb.Value) and not _int_writable(value):
         # (A window's own copy: see _keep_in_gdb.)
-        gdb.execute("set var ${0} = $_realm_gdb_saved_{0}".format(name), to_string=True)
+        _internal("set var ${0} = $_realm_gdb_saved_{1}_{0}".format(name, tag))
     else:
-        gdb.execute("set var ${} = {:#x}".format(name, int(value) & _U64),
-                    to_string=True)
+        _internal("set var ${} = {:#x}".format(name, int(value) & _U64))
 
 
 def _raw_regs(frame):
@@ -956,12 +1000,12 @@ def _raw_regs(frame):
     return {n: _raw(v) for n, v in _read_regs(frame, _snapshot_names(frame)).items()}
 
 
-def _put_back(saved, errors=None):
-    """Write every register in `saved` that differs back into the selected
-    thread, until they all match.  Returns what still differs ([] when
-    done), with gdb's error writing each in `errors`, a dict, if given.  An
-    interruption (Ctrl-C) is retried, so that a half-restored thread is
-    never left."""
+def _put_back(saved, errors=None, tag=0):
+    """Write every register in `saved` (kept with `tag`: see _keep_in_gdb)
+    that differs back into the selected thread, until they all match.
+    Returns what still differs ([] when done), with gdb's error writing each
+    in `errors`, a dict, if given.  An interruption (Ctrl-C) is retried, so
+    that a half-restored thread is never left."""
     left = list(saved)
     for _ in range(10):
         try:
@@ -970,13 +1014,21 @@ def _put_back(saved, errors=None):
                     if _raw(frame.read_register(n)) != _raw(v)]
             if not left:
                 return []
+            if _parameter("may-write-registers") is False:
+                # (Turned off by a command in the window, after the window
+                # wrote its registers: allowed again until they are back.)
+                _set("may-write-registers", "on")
+                try:
+                    return _put_back(saved, errors, tag)
+                finally:
+                    _set("may-write-registers", "off")
             for name in left:
                 # (One that can't be written mustn't keep the rest from
                 # being: e.g. gdb 13 and older can't write the SSE registers
                 # where the kernel's XSAVE area is bigger than gdb's own
                 # buffer (with AMX), and $orig_rax must still be put back.)
                 try:
-                    _write_reg(name, saved[name])
+                    _write_reg(name, saved[name], tag)
                 except gdb.error as e:
                     _debug_exc()
                     if errors is not None:
@@ -999,13 +1051,34 @@ def _setting_words(value):
 
 
 def _set(name, value):
-    """`set NAME VALUE`, retried if interrupted (Ctrl-C)."""
+    """`set NAME VALUE` (`maint set ...` for "maint NAME"), retried if
+    interrupted (Ctrl-C)."""
+    command = ("maint set " + name[len("maint "):] if name.startswith("maint ")
+               else "set " + name)
     for _ in range(10):
         try:
-            gdb.execute("set {} {}".format(name, value), to_string=True)
+            gdb.execute("{} {}".format(command, value), to_string=True)
             return
         except KeyboardInterrupt:
             continue
+
+
+# (A setting this gdb doesn't have.)
+_NO_SETTING = object()
+
+
+def _get_setting(name):
+    """Setting `name`'s value, as gdb.parameter has it; for "maint NAME",
+    which gdb.parameter can't read, the word `maint show NAME` gives.
+    _NO_SETTING if this gdb has no such setting."""
+    if not name.startswith("maint "):
+        return _parameter(name) if _has_parameter(name) else _NO_SETTING
+    try:
+        out = _execute("maint show " + name[len("maint "):])
+    except gdb.error:
+        return _NO_SETTING
+    m = re.search(r' is "?([\w-]+)"?\.\s*$', out)
+    return m.group(1) if m else _NO_SETTING
 
 
 class _CallSettings(object):
@@ -1014,9 +1087,17 @@ class _CallSettings(object):
     may-call-functions is kept too, for set_calls.  With paging=False, gdb's
     pager is off too (in a window whose command prints as it goes)."""
 
+    # Not put back before each call (for_call): they aren't about calls, or
+    # are kept lower if the user has them lower.
+    _WINDOW_ONLY = ("confirm", "pagination", "direct-call-timeout",
+                    "indirect-call-timeout", "multiple-symbols")
+
     def __init__(self, paging=True):
         settings = [("scheduler-locking", "on"), ("unwindonsignal", "on"),
-                    ("unwind-on-terminating-exception", "on"), ("confirm", "off")]
+                    ("unwind-on-terminating-exception", "on"),
+                    ("stop-on-solib-events", "0"), ("may-insert-breakpoints", "on"),
+                    ("follow-fork-mode", "parent"), ("confirm", "off"),
+                    ("multiple-symbols", "all")]
         if not paging:
             settings.append(("pagination", "off"))
         for name in ("direct-call-timeout", "indirect-call-timeout"):
@@ -1025,19 +1106,28 @@ class _CallSettings(object):
                 settings.append((name, str(_CALL_TIMEOUT)))
         settings.append(("unwind-on-timeout", "on"))
         self.settings = settings
+        # gdb's internal problems end gdb with `confirm off`, whatever the
+        # problem: in a window they end the command instead.
+        self.maint_settings = [
+            ("maint " + problem, "no") for problem in (
+                "internal-error quit", "internal-error corefile",
+                "internal-warning quit", "internal-warning corefile",
+                "demangler-warning quit")]
         self.user_calls = _parameter("may-call-functions")
         self.calls = self.user_calls
+        self.saved = []
 
     def __enter__(self):
-        self.saved = []
-        for name, value in self.settings:
-            if not _has_parameter(name):
-                continue
-            old = _parameter(name)
-            if _setting_words(old) == value:
-                continue
-            _set(name, value)
-            self.saved.append((name, old))
+        try:
+            for name, value in self.settings + self.maint_settings:
+                old = _get_setting(name)
+                if old is _NO_SETTING or _setting_words(old) == value:
+                    continue
+                self.saved.append((name, old))
+                _set(name, value)
+        except BaseException:
+            self.__exit__(None, None, None)
+            raise
         return self
 
     def set_calls(self, allowed):
@@ -1054,8 +1144,7 @@ class _CallSettings(object):
         sets it, Python).  Returns what was put back, as "NAME VALUE"."""
         put = []
         for name, value in self.settings:
-            if (name in ("confirm", "pagination") or name.endswith("call-timeout")
-                    or not _has_parameter(name)):
+            if name in self._WINDOW_ONLY or not _has_parameter(name):
                 continue
             if _setting_words(_parameter(name)) != value:
                 _set(name, value)
@@ -1078,50 +1167,86 @@ class _CallSettings(object):
         try:
             self.set_calls(True)
         finally:
-            for name, old in reversed(self.saved):
+            saved, self.saved = self.saved, []
+            mine = dict(self.settings + self.maint_settings)
+            for name, old in reversed(saved):
                 try:
-                    _set(name, _setting_words(old))
+                    # (Only if it still has the window's value: else something
+                    # changed it since, such as `with SETTING V -- COMMAND`
+                    # putting it back as COMMAND, which opened the window,
+                    # failed.)
+                    now = _get_setting(name)
+                    if now is _NO_SETTING or _setting_words(now) == mine[name]:
+                        _set(name, _setting_words(old))
                 except gdb.error:
                     _debug_exc()
         return False
 
 
 class _HeldSignals(object):
-    """Hold off SIGTERM and SIGHUP to gdb (see "Register windows"), and
-    deliver one that came meanwhile once the window is closed.  gdb's
-    handler is swapped for one that just notes the signal (installed by
-    Python, which runs it on gdb's main thread), and put back as it was
-    (with libc's sigaction(), which Python's signal module can't do for a
-    handler it didn't install).  Without ctypes, the signals are only
-    blocked on gdb's main thread, which before gdb 10 is its only thread."""
+    """Hold off the signals that would end gdb (see "Register windows"):
+    SIGTERM and SIGHUP, which gdb handles by killing or detaching from the
+    program and exiting, and those that gdb leaves to kill it (SIGUSR1,
+    SIGALRM, SIGXCPU, ...); and deliver one that came meanwhile once the
+    window is closed.  The handler is swapped for one that just notes the
+    signal (installed by Python, which runs it on gdb's main thread), and
+    put back as it was (with libc's sigaction(), which Python's signal
+    module can't do for a handler it didn't install).  Without ctypes, the
+    signals are only blocked on gdb's main thread, which before gdb 10 is
+    its only thread."""
 
     _SIGNALS = ("SIGTERM", "SIGHUP")
+    # (Held only while their action is the default, which ends gdb; and the
+    # real-time signals.  Not SIGILL, SIGTRAP or SIGSYS, which a fault in
+    # gdb itself raises: a handler that only notes them would return to the
+    # fault, again and again.)
+    _FATAL_BY_DEFAULT = ("SIGUSR1", "SIGUSR2", "SIGALRM", "SIGVTALRM", "SIGPROF",
+                         "SIGXCPU", "SIGXFSZ", "SIGPIPE", "SIGIO", "SIGPWR",
+                         "SIGSTKFLT", "SIGLOST", "SIGEMT")
 
-    def __enter__(self):
-        import signal
+    def __init__(self):
         self.came = []
         self.swapped = []
         self.blocked = None
+
+    def __enter__(self):
+        import signal
         sigs = [getattr(signal, s) for s in self._SIGNALS if hasattr(signal, s)]
+        defaults = [getattr(signal, s) for s in self._FATAL_BY_DEFAULT
+                    if hasattr(signal, s)]
+        if sys.platform.startswith("linux") and not hasattr(signal, "SIGSTKFLT"):
+            defaults.append(16)  # (SIGSTKFLT, which Python names from 3.11.)
+        if hasattr(signal, "SIGRTMIN") and hasattr(signal, "SIGRTMAX"):
+            defaults += range(int(signal.SIGRTMIN), int(signal.SIGRTMAX) + 1)
         try:
-            import ctypes
-            libc = ctypes.CDLL(None, use_errno=True)
-            self._sigaction = libc.sigaction
-            self._sigaction.argtypes = (ctypes.c_int, ctypes.c_void_p, ctypes.c_void_p)
-            for sig in sigs:
-                # (struct sigaction is well under 256 bytes on every libc.)
-                old = ctypes.create_string_buffer(256)
-                if self._sigaction(sig, None, old) != 0:
-                    continue
-                signal.signal(sig, self._note)
-                self.swapped.append((sig, old))
-        except Exception:
-            _debug_exc()
-            self._put_back()
             try:
-                self.blocked = signal.pthread_sigmask(signal.SIG_BLOCK, sigs)
+                import ctypes
+                libc = ctypes.CDLL(None, use_errno=True)
+                self._sigaction = libc.sigaction
+                self._sigaction.argtypes = (ctypes.c_int, ctypes.c_void_p,
+                                            ctypes.c_void_p)
+                for sig in sorted(set(sigs + defaults)):
+                    # (struct sigaction is well under 256 bytes on every
+                    # libc, and begins with the handler: SIG_DFL is 0.)
+                    old = ctypes.create_string_buffer(256)
+                    if self._sigaction(sig, None, old) != 0:
+                        continue
+                    if sig not in sigs and ctypes.c_void_p.from_buffer(old).value:
+                        continue
+                    self.swapped.append((sig, old))
+                    signal.signal(sig, self._note)
             except Exception:
-                self.blocked = None
+                _debug_exc()
+                self._put_back()
+                try:
+                    self.blocked = signal.pthread_sigmask(
+                        signal.SIG_BLOCK, sigs + [s for s in defaults
+                                                  if signal.getsignal(s) == signal.SIG_DFL])
+                except Exception:
+                    self.blocked = None
+        except BaseException:  # (Ctrl-C: don't leave any held.)
+            self.__exit__(None, None, None)
+            raise
         return self
 
     def _note(self, sig, frame):
@@ -1139,8 +1264,10 @@ class _HeldSignals(object):
         import signal
         self._put_back()
         if self.blocked is not None:
-            signal.pthread_sigmask(signal.SIG_SETMASK, self.blocked)
-        for sig in sorted(set(self.came)):
+            blocked, self.blocked = self.blocked, None
+            signal.pthread_sigmask(signal.SIG_SETMASK, blocked)
+        came, self.came = sorted(set(self.came)), []
+        for sig in came:
             os.kill(os.getpid(), sig)
         return False
 
@@ -1162,17 +1289,31 @@ class _Window(object):
         # Settings its function calls needed put back ("NAME VALUE"), and
         # whether a call was refused after all (see _on_inferior_call).
         self.settings_put_back = []
-        self.call_refused = False
+        self.refused = 0
         self.refusals = []
-        # Whether a call made in it was left stopped (None: not looked yet).
-        self.abandoned = None
+        # The entry points of the calls it refused (see _for_call).
+        self.refused_pcs = set()
+        # The watchpoints gdb didn't mean to delete as its last call began,
+        # and those it marked to delete since (see _note_lost_watchpoints).
+        self.watchpoints = []
+        self.lost_watchpoints = set()
+        # The function calls made in it that were left stopped, and popped
+        # (see pop_calls): the user thread shown for each, and whether it
+        # was one it refused (which didn't run); the calls made, and
+        # refused, when it last looked; and, for one that couldn't be
+        # popped, the user thread shown and gdb's error.
+        self.abandoned = []
+        self.looked = (0, 0)
+        self.stuck = None
         self.showing = None
         # What close() could not put back, and gdb's errors writing them.
         self.left = []
         self.left_errors = {}
         # The note to print if it found that calls must be refused (see
-        # _calls_unwritable).
-        self.unwritable_note = None
+        # _calls_refused).
+        self.calls_note = None
+        # Whether close() is done, and __exit__.
+        self.done = self.exited = False
 
     def __enter__(self):
         global _window
@@ -1180,28 +1321,48 @@ class _Window(object):
             raise gdb.GdbError("realm-gdb: can't show a parked Realm user thread "
                                "from inside 'realm-thread apply' or 'thread apply "
                                "all bt'.")
-        self.thread = gdb.selected_thread()
+        self.thread = _stopped_thread()
         self.thread_num = self.thread.num
+        self.depth = _infcall_depth  # (Function calls in progress: see _release.)
+        # (For its copies of the registers, on gdb < 8.3: see _keep_in_gdb.)
+        used = set(getattr(w, "tag", 0) for w in _unrestored)
+        self.tag = min(set(range(len(used) + 1)) - used)
         self.selection = _KeepSelection().__enter__()
         frame = gdb.newest_frame()
         self.saved = _read_regs(frame, _snapshot_names(frame))
-        self.signals = _HeldSignals().__enter__()
+        # (Made first, so that a Ctrl-C while they take effect can't leave
+        # either half done: each undoes itself on the way out.)
+        self.signals = _HeldSignals()
+        self.settings = _CallSettings(paging=self.via in (None, "rt"))
         try:
-            self.settings = _CallSettings(paging=self.via in (None, "rt")).__enter__()
+            self.signals.__enter__()
+            self.settings.__enter__()
         except BaseException:
-            self.signals.__exit__(None, None, None)
+            try:
+                self.settings.__exit__(None, None, None)
+            finally:
+                self.signals.__exit__(None, None, None)
             raise
         _window = self
         try:
-            _keep_in_gdb(self.saved)
+            _keep_in_gdb(self.saved, self.tag)
         except BaseException:
             self.__exit__(None, None, None)
             raise
         return self
 
+    def to_host(self):
+        """Select the host again, if a command in the window selected
+        another thread (`thread N`, `inferior N`): only the host's
+        registers are kept, so only the host may show a parked thread.
+        (Unless the host has gone: the program died in a function call.)"""
+        if _selected_thread() != self.thread and self.thread.is_valid():
+            self.thread.switch()
+
     def show(self, ut, regs, calls=True):
         """Put user thread `ut`'s context `regs` in place (see
         context_regs), with function calls refused unless `calls`."""
+        self.to_host()
         self.showing = int(ut)
         self.settings.set_calls(calls)
         try:
@@ -1213,89 +1374,155 @@ class _Window(object):
         gdb.newest_frame().select()
 
     def __exit__(self, *exc):
-        global _window
         try:
             self.close()
-        finally:
-            _window = None
-            try:
-                self.settings.__exit__(None, None, None)
-            finally:
-                self.signals.__exit__(None, None, None)
+        except KeyboardInterrupt:
+            if not self.done:
+                raise  # (Left open, for the next prompt: see _on_before_prompt.)
+            self._release()
+            raise
+        except BaseException:
+            self._release()
+            raise
+        self._release()
         return False
+
+    def _release(self):
+        global _window, _infcall_depth
+        if self.exited:
+            return
+        self.exited = True
+        if _window is self:
+            _window = None
+        try:
+            # (No call made in it is running now.  One that failed before it
+            # ran (too few arguments, a stack it couldn't write) got no
+            # inferior_call_post: its breakpoints would stay disabled, and
+            # its refusal breakpoint set.)
+            _end_refusals(self)
+            if _infcall_depth > self.depth:
+                _infcall_depth = self.depth
+            if not _infcall_depth:
+                _enable_breakpoints()
+            self.settings.__exit__(None, None, None)
+        finally:
+            self.signals.__exit__(None, None, None)
 
     def close(self):
         """Put the host's own registers back, and select what was selected.
         (Ctrl-C can't stop it before they are back: it is held till then.)"""
+        if self.done:
+            return
         thread = self.thread
         try:
-            if not thread.is_valid():
-                return  # (the program has gone)
+            gone = not thread.is_valid()
         except RuntimeError:
-            return
-        if self.resumed or thread.is_running():
-            print("realm-gdb: WARNING: the program ran while thread {} had user thread "
-                  "{:#x}'s registers (something resumed it without a gdb command, "
-                  "e.g. Python's gdb.execute_mi()): it may crash.".format(
-                      self.thread_num, self.showing or 0))
+            gone = True
+        if gone or self.resumed or thread.is_running():
+            self.done = True
+            if not gone:
+                print("realm-gdb: WARNING: the program ran while thread {} had user "
+                      "thread {:#x}'s registers (something resumed it without a gdb "
+                      "command, e.g. Python's gdb.execute_mi()): it may crash.".format(
+                          self.thread_num, self.showing or 0))
             return
         interrupted = False
         left = list(self.saved)
         for _ in range(10):
             try:
-                if gdb.selected_thread() != thread:
-                    thread.switch()
-                if self.abandoned is None:
-                    self._pop_abandoned_call()
+                self.to_host()
+                self.pop_calls()
                 self.left_errors = {}
-                left = _put_back(self.saved, self.left_errors)
-                if left and self not in _unrestored:
-                    _unrestored.append(self)
+                left = _put_back(self.saved, self.left_errors, self.tag)
                 break
             except KeyboardInterrupt:
                 interrupted = True
         self.left = left
+        if (left or self.stuck) and self not in _unrestored:
+            _unrestored.append(self)
+        self.done = True
         if left:
             print("realm-gdb: WARNING: could not put back {}.  Don't let the program "
-                  "run; run 'realm-thread back' to try again.".format(
-                      _unrestored_words(self)))
+                  "run; run 'realm-thread back' to try again.".format(_left_words(self)))
         if hasattr(gdb, "set_convenience_variable"):
             gdb.set_convenience_variable("_realm_gdb_reg", None)
         self.selection.__exit__(None, None, None)
-        if self.abandoned and not self.call_refused:  # (Those didn't run.)
-            print("realm-gdb: WARNING: a function call made on thread {} while it "
-                  "showed user thread {:#x} stopped (at a catchpoint?), and has been "
-                  "abandoned: the program may be left inconsistent (a lock the "
-                  "function held, say).".format(self.thread_num, self.showing or 0))
+        abandoned = [ut for ut, refused in self.abandoned if not refused]
+        if abandoned:  # (Those refused didn't run.)
+            uts = sorted(set(abandoned))
+            print("realm-gdb: WARNING: {} made on thread {} while it showed user "
+                  "thread{} {} stopped, and {} been abandoned: the program may be left "
+                  "inconsistent (a lock the function held, say).".format(
+                      "a function call" if len(abandoned) == 1 else
+                      "{} function calls".format(len(abandoned)), self.thread_num,
+                      "s" if len(uts) > 1 else "", ", ".join("{:#x}".format(u or 0)
+                                                             for u in uts),
+                      "has" if len(abandoned) == 1 else "have"))
+        if self.stuck is not None:
+            print("realm-gdb: WARNING: could not put back {}: gdb would put the call's "
+                  "breakpoint into that user thread's stack whenever the program ran.  "
+                  "Don't let it run: 'kill' it.".format(_stuck_words(self)))
         if interrupted:
             raise KeyboardInterrupt
 
-    def _pop_abandoned_call(self):
-        """If a function call made in the window is stopped on the host (it
-        shouldn't be: see "Register windows"), pop its dummy frame, which
-        comes before the parked thread's frames: that puts back gdb's state
-        of the host from before the call (otherwise, resumed, the host would
-        stop again at once where it had stopped, or get a signal the call
-        stopped with).  Sets self.abandoned."""
-        self.abandoned = False
-        if not self.calls:
+    def pop_calls(self):
+        """Pop each function call made in the window, since it last looked,
+        that was left stopped on the host (it shouldn't be: see "Register
+        windows"), as `return` in its dummy frame does, which comes before
+        the shown thread's frames.  That puts back gdb's state of the host
+        from before the call: otherwise gdb would keep the call's breakpoint
+        in the parked thread's stack, inserting it whenever the program
+        runs, and the host would stop again at once where the call stopped,
+        or get the signal it stopped with.  Each goes in self.abandoned; one
+        that can't be popped, in self.stuck."""
+        if (self.calls, self.refused) == self.looked or not self.thread.is_valid():
             return
-        try:
-            frame = gdb.newest_frame()
-            for _ in range(64):
-                if frame is None or frame.type() == gdb.DUMMY_FRAME:
-                    break
-                frame = frame.older()
-        except gdb.error:
-            frame = None
-        if frame is None or frame.type() != gdb.DUMMY_FRAME:
-            return
-        self.abandoned = True
-        try:
-            frame.select()
-            _internal("return")
-        except gdb.error:
-            _debug_exc()
+        self.to_host()
+        error = None
+        frame = _dummy_frame()
+        for _ in range(16):
+            if frame is None:
+                break
+            # (One refused stopped at its function's first instruction.)
+            try:
+                called = frame.newer()
+                refused = called is not None and int(called.pc()) & _U64 in \
+                    getattr(self, "refused_pcs", ())
+            except gdb.error:
+                refused = False
+            self.abandoned.append((self.showing, refused))
+            try:
+                # (gdb writes back only the registers that differ from what
+                # it has read of them: so read them all first, or it would
+                # write the x87, SSE and AVX ones too, unchanged by a call
+                # stopped at its first instruction, which gdb 13 and older
+                # can't with AMX on.)
+                newest = gdb.newest_frame()
+                _read_regs(newest, _snapshot_names(newest))
+                frame.select()
+                _internal("return")
+            except gdb.error as e:
+                _debug_exc()
+                error = str(e)
+                break
+            frame = _dummy_frame()
+        if frame is not None:
+            self.stuck = (self.showing, error or "it is still there")
+        self.looked = (self.calls, self.refused)
+
+
+def _dummy_frame():
+    """The selected thread's innermost dummy frame (a function call's, made
+    by gdb), if any."""
+    try:
+        frame = gdb.newest_frame()
+        for _ in range(100000):
+            if frame is None or frame.type() == gdb.DUMMY_FRAME:
+                return frame
+            frame = frame.older()
+    except gdb.error:
+        _debug_exc()
+    return None
 
 
 def _probe_extended():
@@ -1310,7 +1537,7 @@ def _probe_extended():
         return None  # (Nothing to check with.)
     try:
         for value in (old ^ 1, old):
-            gdb.execute("set var {} = {}".format(expr, value), to_string=True)
+            _internal("set var {} = {}".format(expr, value))
     except gdb.error as e:
         return str(e)
     return None
@@ -1319,7 +1546,7 @@ def _probe_extended():
 def _calls_unwritable(window):
     """gdb's error writing the selected thread's extended registers, if it
     can't (see "Register windows"), else None.  Checked once per process;
-    the window that finds it gets the note to print (unwritable_note)."""
+    the window that finds it gets the note to print (calls_note)."""
     if _arch.probe_reg is None:
         return None
     inf = gdb.selected_inferior()
@@ -1328,8 +1555,55 @@ def _calls_unwritable(window):
         error = _probe_extended()
         _extended_unwritable[key] = error
         if error is not None:
-            window.unwritable_note = _unwritable_note(error)
+            window.calls_note = _unwritable_note(error)
     return _extended_unwritable[key]
+
+
+# Why a second UI (`new-ui`) is open, once realm-gdb has seen one (see
+# _calls_second_ui); and whether it has said what that means for calls.
+_second_ui = globals().get("_second_ui")
+_second_ui_noted = globals().get("_second_ui_noted", False)
+
+
+def _calls_second_ui(window):
+    """Why a second UI may be open, or None.  gdb blocks only the UI that
+    makes a function call while the call runs: another UI's commands run
+    meanwhile, MI's -exec-continue and -target-detach among them, which no
+    hook sees, while the host has the parked thread's registers and the
+    call is using its stack.  So calls are refused in windows then.  The
+    first window that finds it, in the session, gets the note to print."""
+    global _second_ui_noted
+    why = _second_ui
+    if why is None and _other_terminal():
+        why = "gdb has another terminal open (a second UI, perhaps)"
+    if why is not None and not _second_ui_noted:
+        _second_ui_noted = True
+        window.calls_note = _second_ui_note(why)
+    return why
+
+
+def _second_ui_note(why):
+    while_call = ("gdb runs another UI's commands even while a function call runs, "
+                  "which could let the program run, or let go of it, with the parked "
+                  "thread's registers in place")
+    if not _can_refuse_calls:
+        return ("realm-gdb: WARNING: {}, and {}; this gdb can't refuse function calls, "
+                "so don't make any while a parked Realm user thread is shown.".format(
+                    why[0].upper() + why[1:], while_call))
+    return ("realm-gdb: function calls are refused while a parked Realm user thread "
+            "is shown, in this session: {}, and {}.".format(why, while_call))
+
+
+def _calls_refused(window):
+    """Why function calls must be refused in `window` (for gdb's
+    "may-call-functions is off" error), or None: where gdb can't write the
+    extended registers, or a second UI may be open."""
+    if _calls_unwritable(window) is not None:
+        return ("in this program: this gdb can't write the x87, SSE and AVX "
+                "registers, which a call changes")
+    if _calls_second_ui(window) is not None:
+        return "in this session: a second UI may be open, whose commands run during a call"
+    return None
 
 
 def _unwritable_note(error):
@@ -1347,7 +1621,7 @@ def _unwritable_note(error):
             "is shown, in this program: {}.{}".format(why, gdb_too))
 
 
-def _unrestored_words(window):
+def _left_words(window):
     """"thread N's own registers ($a, $b: gdb's error)", for a window that
     could not put them all back."""
     left = getattr(window, "left", None) or []  # (A window of an earlier load's.)
@@ -1358,10 +1632,27 @@ def _unrestored_words(window):
         ": " + "; ".join(why) if why else "")
 
 
+def _stuck_words(window):
+    """What a window that could not pop a function call left (see
+    _Window.pop_calls)."""
+    ut, error = window.stuck
+    return ("thread {}'s state from before a function call that stopped while it "
+            "showed user thread {:#x} (popping the call failed: {})".format(
+                window.thread_num, ut or 0, error.rstrip(".")))
+
+
+def _unrestored_words(window):
+    stuck = getattr(window, "stuck", None)  # (See _left_words.)
+    words = [_left_words(window)] if getattr(window, "left", None) or not stuck else []
+    return " and ".join(words + ([_stuck_words(window)] if stuck else []))
+
+
 def _retry_unrestored(report=False):
     """Try again to put back the registers of hosts whose windows couldn't
     (see _Window.close).  Returns whether none are left.  With `report`,
-    says so for those still left."""
+    says so for those still left.  (A function call that could not be
+    popped can't be tried again: its dummy frame is in the parked thread's
+    stack, which the host no longer shows.)"""
     for window in list(_unrestored):
         try:
             thread = window.thread
@@ -1371,16 +1662,17 @@ def _retry_unrestored(report=False):
             with _KeepSelection():
                 thread.switch()
                 errors = {}
-                left = _put_back(window.saved, errors)
+                left = _put_back(window.saved, errors, getattr(window, "tag", 0))
                 window.left, window.left_errors = left, errors
-                if not left:
-                    _unrestored.remove(window)
-                    print("realm-gdb: put back thread {}'s own registers.".format(
-                        window.thread_num))
-                elif report:
-                    print("realm-gdb: WARNING: still could not put back {}.  Don't let "
-                          "the program run: 'kill' it, or run 'realm-thread back' to try "
-                          "again.".format(_unrestored_words(window)))
+            if not left and getattr(window, "stuck", None) is None:
+                _unrestored.remove(window)
+                print("realm-gdb: put back thread {}'s own registers.".format(
+                    window.thread_num))
+            elif report:
+                print("realm-gdb: WARNING: still could not put back {}.  Don't let the "
+                      "program run: 'kill' it{}.".format(
+                          _unrestored_words(window),
+                          ", or run 'realm-thread back' to try again" if left else ""))
         except Exception:
             _debug_exc()
     return not _unrestored
@@ -1402,29 +1694,18 @@ def _on_inferior_call(event):
         _infcall_depth += 1
         if _window is not None and _infcall_depth == 1:
             _window.calls += 1
-            for bp in _breakpoints():
-                try:
-                    if bp.is_valid() and bp.enabled:
-                        bp.enabled = False
-                        _disabled_breakpoints.append(bp)
-                except Exception:
-                    _debug_exc()
-            for num in _hidden_catchpoints():
-                try:
-                    gdb.execute("disable " + num, to_string=True)
-                    _disabled_catchpoints.append(num)
-                except gdb.error:
-                    _debug_exc()
-            if _disabled_breakpoints or _disabled_catchpoints:
-                _window.breakpoints_skipped = True
+            _window.watchpoints = _disable_breakpoints()
         if _window is not None:
             _for_call(_window, event)
     elif isinstance(event, getattr(gdb, "InferiorCallPostEvent", ())):
         _infcall_depth = max(0, _infcall_depth - 1)
         if _infcall_depth == 0:
+            if _window is not None and _disabled_breakpoints and not _window.refusals:
+                _window.breakpoints_skipped = True  # (The call ran.)
             _enable_breakpoints()
             if _window is not None:
                 _end_refusals(_window)
+                _note_lost_watchpoints(_window)
 
 
 def _for_call(window, event):
@@ -1440,7 +1721,8 @@ def _for_call(window, event):
             if item not in window.settings_put_back:
                 window.settings_put_back.append(item)
         if window.settings.calls_refused():
-            window.call_refused = True
+            window.refused += 1
+            window.refused_pcs.add(int(event.address) & _U64)
             bp = gdb.Breakpoint("*{:#x}".format(int(event.address) & _U64),
                                 internal=True)
             window.refusals.append(bp)
@@ -1464,53 +1746,116 @@ def _call_notes(window):
     """The notes on the function calls made in `window`, or refused in it,
     to print once it is closed."""
     notes = []
-    if getattr(window, "unwritable_note", None):  # (Once: see _calls_unwritable.)
-        notes.append(window.unwritable_note)
-        window.unwritable_note = None
+    if getattr(window, "calls_note", None):  # (Once: see _calls_refused.)
+        notes.append(window.calls_note)
+        window.calls_note = None
     if window.breakpoints_skipped:
         notes.append("realm-gdb: breakpoints were ignored in the function calls made "
                      "meanwhile (a call made while a parked Realm user thread is shown "
                      "can't stop).")
+    lost = sorted(getattr(window, "lost_watchpoints", ()))
+    if lost:
+        notes.append("realm-gdb: WARNING: gdb will delete watchpoint{} {} at the next stop: "
+                     "a function call made meanwhile had it look for {} frame among the "
+                     "parked Realm user thread's.  Set {} again afterwards ('watch -l' "
+                     "has no frame).".format(
+                         "s" if len(lost) > 1 else "", ", ".join(map(str, lost)),
+                         "their" if len(lost) > 1 else "its",
+                         "them" if len(lost) > 1 else "it"))
     put = getattr(window, "settings_put_back", None)  # (See _end_refusals.)
     if put:
         notes.append("realm-gdb: the function calls made meanwhile ran with {} all the "
                      "same, as a call made while a parked Realm user thread is shown "
                      "must.".format(", ".join(put[:-1]) + " and " + put[-1]
                                     if len(put) > 1 else put[0]))
-    if getattr(window, "call_refused", False):
+    if getattr(window, "refused", 0):
         notes.append("realm-gdb: function calls were refused all the same, with "
                      "may-call-functions turned on meanwhile: stopped at their first "
                      "instruction, and abandoned, so that nothing of them ran.")
     return notes
 
 
-def _hidden_catchpoints():
-    """The numbers of the enabled catchpoints, on gdbs whose gdb.breakpoints()
-    leaves them out (before gdb 11).  A call that stopped at one would be
-    abandoned, perhaps in a system call, which putting the registers back
-    doesn't undo (and on aarch64, where gdb has no register for the system
-    call's number, the host would make that call when resumed)."""
-    if hasattr(gdb, "BP_CATCHPOINT"):
-        return []
+def _breakpoint_table():
+    """{number: [enabled, enable count, disposition, whether a watchpoint]}
+    of the user's breakpoints of every kind, from `info breakpoints`: gdb.breakpoints() leaves some out
+    (dprintfs; before gdb 11, hardware breakpoints and catchpoints, at one
+    of which a call would be abandoned, perhaps in a system call, which
+    putting the registers back doesn't undo), and doesn't tell an enable
+    count (`enable count N`), which enabling one drops."""
     try:
         out = _execute("info breakpoints")
     except gdb.error:
-        return []
-    return re.findall(r"(?m)^(\d+)\s+catchpoint\s+\S+\s+y\b", out)
+        return {}
+    table = {}
+    row = None
+    for line in out.splitlines():
+        m = re.match(r"(\d+)\s+(.*?)\s+(keep|del|dis|dstp)\s+([yn])", line)
+        if m:
+            row = table[int(m.group(1))] = [m.group(4) == "y", 0, m.group(3),
+                                            "watchpoint" in m.group(2)]
+            continue
+        m = re.search(r"\sdisable after (?:next|additional) (\d+) hits", line)
+        if m and row is not None:
+            row[1] = int(m.group(1))
+    return table
+
+
+def _disable_breakpoints():
+    """Disable the user's enabled breakpoints, for a function call in a
+    window, to be enabled again as they were (_enable_breakpoints).  Returns
+    the watchpoints that gdb doesn't mean to delete (see
+    _note_lost_watchpoints)."""
+    objects = {}
+    for bp in _breakpoints():
+        try:
+            if bp.is_valid():
+                objects[bp.number] = bp
+        except Exception:
+            _debug_exc()
+    table = _breakpoint_table()
+    for num in sorted(set(objects) | set(table)):
+        bp = objects.get(num)
+        enabled, count = table.get(num, (bp is not None and bp.enabled, 0))[:2]
+        try:
+            if bp is not None and bp.enabled:
+                bp.enabled = False
+            elif bp is None and enabled:
+                gdb.execute("disable {}".format(num), to_string=True)
+            else:
+                continue
+            _disabled_breakpoints.append((num, bp, count))
+        except (gdb.error, RuntimeError):
+            _debug_exc()
+    return [num for num, row in table.items() if row[3] and row[2] != "dstp"]
+
+
+def _note_lost_watchpoints(window):
+    """After a function call in `window`: note the watchpoints gdb marked to
+    delete meanwhile.  As a call resumes the host, gdb checks each hardware
+    watchpoint set on the host's own frames, disabled or not, looks for its
+    frame among the frames the host now has, the parked thread's, and
+    deletes it at the next stop when it doesn't find it.  Nothing stops
+    that."""
+    if not getattr(window, "watchpoints", None):
+        return
+    table = _breakpoint_table()
+    for num in window.watchpoints:
+        if num not in table or table[num][2] == "dstp":
+            window.lost_watchpoints.add(num)
 
 
 def _enable_breakpoints():
     while _disabled_breakpoints:
-        bp = _disabled_breakpoints.pop()
+        num, bp, count = _disabled_breakpoints.pop()
         try:
-            if bp.is_valid():
-                bp.enabled = True
-        except Exception:
-            _debug_exc()
-    while _disabled_catchpoints:
-        try:
-            gdb.execute("enable " + _disabled_catchpoints.pop(), to_string=True)
-        except gdb.error:
+            if count > 1:
+                gdb.execute("enable count {} {}".format(count, num), to_string=True)
+            elif bp is not None:
+                if bp.is_valid():
+                    bp.enabled = True
+            else:
+                gdb.execute("enable {}".format(num), to_string=True)
+        except (gdb.error, RuntimeError):
             _debug_exc()
 
 
@@ -1522,6 +1867,23 @@ def _on_cont(event):
         print("realm-gdb: WARNING: the program is resuming while thread {} has user "
               "thread {:#x}'s registers, and realm-gdb can't put its own back now: "
               "the program may crash.".format(_window.thread_num, _window.showing or 0))
+    elif _window is not None:
+        # (In a function call, which runs the host alone: something else is
+        # resuming another thread, which could resume the parked one onto the
+        # stack the call is using.  In all-stop mode the event names no
+        # thread.)
+        try:
+            others = [t.num for t in _window.thread.inferior.threads()
+                      if t.is_valid() and t != _window.thread and t.is_running()]
+        except Exception:
+            others = []
+        if others:
+            print("realm-gdb: WARNING: thread{} {} resuming during a function call made "
+                  "while thread {} has user thread {:#x}'s registers (another UI's "
+                  "command?): the program may crash.".format(
+                      "s" if len(others) > 1 else "", ", ".join(map(str, others)) +
+                      (" are" if len(others) > 1 else " is"), _window.thread_num,
+                      _window.showing or 0))
     if _infcall_depth == 0 and _views:
         # Views are for core files (see "Core-file views"): whatever runs
         # isn't one.
@@ -1566,7 +1928,48 @@ def _on_gdb_exiting(event):
             _window.close()
         except BaseException:
             _debug_exc()
-    _retry_unrestored()
+    if not _retry_unrestored():
+        _kill_unrestored()
+
+
+def _kill_unrestored():
+    """As gdb lets go of the programs: kill each attached one whose host's
+    registers still couldn't be put back, rather than let it run on
+    corrupted.  (gdb kills a program it started itself.)"""
+    for window in list(_unrestored):
+        try:
+            if not window.thread.is_valid():
+                continue
+            inferior = window.thread.inferior
+            if not getattr(inferior, "was_attached", True):
+                continue
+            print("realm-gdb: WARNING: killing process {}, as gdb lets go of it: "
+                  "realm-gdb could not put back {}, so it would run on "
+                  "corrupted.".format(inferior.pid, _unrestored_words(window)))
+            confirm = _parameter("confirm")
+            _set("confirm", "off")
+            try:
+                _internal("kill inferiors {}".format(inferior.num))
+            finally:
+                _set("confirm", _setting_words(confirm))
+            _unrestored.remove(window)
+        except Exception:
+            _debug_exc()
+
+
+def _install_atexit():
+    """Python's SystemExit (`python sys.exit()`, or a sourced script's
+    `exit()`) ends gdb 14 and older at once, without gdb.events.gdb_exiting
+    (or before gdb 12, which has none): have Python's own exit handling put
+    back any host's registers then, as _on_gdb_exiting does.  (Once per gdb
+    session; elsewhere it finds nothing to do, as gdb has let go of the
+    program by the time Python exits.)"""
+    if getattr(gdb, "_realm_gdb_atexit", False):
+        return
+    import atexit
+    namespace = globals()
+    atexit.register(lambda: _guarded(namespace["_on_gdb_exiting"])(None))
+    gdb._realm_gdb_atexit = True
 
 
 # --------------------------------------------------------------------------
@@ -1595,7 +1998,9 @@ def _on_gdb_exiting(event):
 
 # (Each that this gdb has; and every `target` subcommand, since connecting
 # to a new target kills the program, which a window's `confirm off` doesn't
-# ask about.)
+# ask about; nor does `record full restore`, which loads a core file the
+# same way.  `queue-signal` too, which would give the signal to the host;
+# and on a remote target `monitor` and `maint packet`, which can do anything.)
 _GUARDED_COMMANDS = (
     "continue", "signal", "step", "stepi", "next", "nexti", "finish", "until",
     "advance", "jump", "return", "reverse-step", "reverse-stepi", "reverse-next",
@@ -1603,12 +2008,13 @@ _GUARDED_COMMANDS = (
     "detach inferiors", "disconnect", "kill", "kill inferiors", "quit", "run",
     "start", "starti", "attach", "core-file", "generate-core-file", "load",
     "checkpoint", "restart", "record", "record full", "record btrace",
-    "interpreter-exec")
+    "interpreter-exec", "queue-signal", "monitor", "maintenance packet",
+    "record full restore")
 # Commands that read the terminal themselves (Python's REPL), refused in a
 # window too: in `rt`, the output is collected until the command is over,
 # so what they ask wouldn't show; and the window would stay open while they
 # wait.  (Python's input() and sys.stdin are _NoTerminalInput's.)
-_TERMINAL_COMMANDS = ("python-interactive",)
+_TERMINAL_COMMANDS = ("python-interactive", "guile-repl")
 
 # Commands that work with the selected thread or frame, shown a selected
 # parked thread ("PREFIX *" is every subcommand of PREFIX, theirs included,
@@ -1633,7 +2039,10 @@ _SHOWING_COMMANDS = (
 # Commands refused while a parked thread is selected: they would act on the
 # selected thread as it really is.  `rt` runs those of _RT_COMMANDS on the
 # parked thread.  (`thread apply` and `frame apply` run other commands: see
-# "Plain commands on a selected parked thread".)
+# "Plain commands on a selected parked thread".  So does `pipe COMMAND |
+# SHELL`, whose COMMAND, shown the parked thread, would keep its window
+# open for as long as SHELL took to read COMMAND's output; `rt pipe` runs
+# SHELL once the window is closed.)
 _ACTING_COMMANDS = (
     "signal", "queue-signal", "step", "stepi", "next", "nexti",
     "finish", "until", "advance", "jump", "return", "reverse-step",
@@ -1641,7 +2050,8 @@ _ACTING_COMMANDS = (
     "reverse-continue", "watch", "rwatch", "awatch", "thread apply",
     "interpreter-exec", "python-interactive", "guile-repl", "explore", "explore *",
     "compile", "compile *")
-_RT_COMMANDS = ("python", "guile", "frame apply", "frame apply *", "faas")
+_RT_COMMANDS = ("python", "guile", "frame apply", "frame apply *", "faas", "pipe",
+                "python-interactive")
 # Commands that end the selection (all of the inferior's) before they run,
 # rather than being refused: the user means to leave it.
 _LEAVING_COMMANDS = ("continue",)
@@ -1651,6 +2061,17 @@ _SWITCHING_COMMANDS = ("thread",)
 # Commands after which plain commands no longer show a selected parked
 # thread.
 _SESSION_COMMANDS = ("new-ui",)
+# Commands that only close a failed plain command's window (see _close_stale)
+# when run after it: a Python script sourced then would otherwise count as
+# part of a command typed at the top level (see _inside), and `inferior N`'s
+# switch would be undone when the window closed later.
+_CLOSING_COMMANDS = ("source", "inferior")
+# Commands that read the lines after them (see _BODY_COMMANDS), refused in a
+# window whose command's output is collected (`rt`, `realm-thread apply`),
+# however they come there (`rt with ... -- define`, `rt eval "commands 2"`,
+# a user-defined command), which can't pass those lines on.
+_BODY_HOOKED = ("commands", "define", "document", "while-stepping", "actions", "while",
+                "if")
 # Commands that start another program (see "Commands that start another
 # program"), refused inside a window: `rt` runs them without one, but in a
 # command that has one (a user-defined command run with `rt`, `eval` shown a
@@ -1660,7 +2081,7 @@ _EXTERNAL_COMMANDS = ("shell", "make", "pipe", "edit")
 
 # The commands hooked, by what their hooks do: "guarded" (_GUARDED_COMMANDS
 # and _TERMINAL_COMMANDS), "acting", "rt" (a subset of "acting"), "leaving",
-# "switching", "showing", "session" and "external".
+# "switching", "showing", "session", "external", "closing" and "body".
 _hooked = {}
 
 # Where a switching command was run from, while it runs: (thread, inferior
@@ -1670,16 +2091,25 @@ _switch_from = None
 
 def _existing_commands(names):
     """Those of `names` that this gdb has, found without running a command
-    that fails (see _install_hooks): `complete NAME` lists NAME itself."""
-    found = []
-    for name in names:
-        try:
-            out = _execute("complete " + name)
-        except gdb.error:
-            continue
-        if name in [line.strip() for line in out.splitlines()]:
-            found.append(name)
-    return found
+    that fails (see _install_hooks): `complete NAME` lists NAME itself.
+    (With completions limited below gdb's default, `set max-completions 0`
+    for one, it would list nothing: they are unlimited meanwhile.)"""
+    limit = _parameter("max-completions")  # (None: unlimited, or none such)
+    if limit is not None and limit < 200:
+        _set("max-completions", "unlimited")
+    try:
+        found = []
+        for name in names:
+            try:
+                out = _execute("complete " + name)
+            except gdb.error:
+                continue
+            if name in [line.strip() for line in out.splitlines()]:
+                found.append(name)
+        return found
+    finally:
+        if limit is not None and limit < 200:
+            _set("max-completions", str(limit))
 
 
 def _subcommands(prefix):
@@ -1723,6 +2153,10 @@ def _window_words(window):
 
 
 def _guard(cmd):
+    global _pi_allowed
+    if cmd == "python-interactive" and _pi_allowed:
+        _pi_allowed = False  # (`rt pi EXPR`, which reads no terminal: see _check_command.)
+        return
     if _window is not None and cmd in _TERMINAL_COMMANDS:
         raise gdb.GdbError(
             "realm-gdb: refusing '{}' while thread {} shows a parked Realm user "
@@ -1743,19 +2177,51 @@ def _guard(cmd):
                     "first.".format(num) if _plain_off_why is None and
                     cmd in _hooked.get("acting", ()) else
                     "  To run it on thread {} as it really is, leave out 'rt'.".format(num))
+        why = ("the signal would be for thread {} itself".format(num)
+               if cmd == "queue-signal" else
+               "that thread has the parked thread's registers until the command is "
+               "over, so letting the program run, or letting go of it, would corrupt "
+               "it")
         raise gdb.GdbError(
             "realm-gdb: refusing '{}' while thread {} shows a parked Realm user "
-            "thread (in {}): that thread has the parked thread's registers until "
-            "the command is over, so letting the program run, or letting go of "
-            "it, would corrupt it.{}".format(cmd, num, _window_words(_window), hint))
+            "thread (in {}): {}.{}".format(cmd, num, _window_words(_window), why, hint))
     # (Killing the program is the way out, as the message says.)
-    if _unrestored and cmd.split()[0] != "kill" and not _retry_unrestored():
+    if _unrestored and cmd.split()[0] not in ("kill", "queue-signal") and \
+            not _retry_unrestored():
+        if cmd == "quit" and (not _stdin_is_terminal() or not _attached_unrestored()):
+            # (gdb kills a program it started as it quits.  And from a
+            # script, rather than a user who can do as the message says, a
+            # `quit` would come again at every end of its input.)
+            _kill_unrestored()
+            return
+        retry = any(getattr(w, "left", None) for w in _unrestored)
         raise gdb.GdbError(
             "realm-gdb: refusing '{}': realm-gdb could not put back {} after it "
             "showed a parked Realm user thread there, so letting the program run, or "
-            "letting go of it, could corrupt it.  Run 'realm-thread back' to try "
-            "again, or 'kill' the program.".format(
-                cmd, "; ".join(_unrestored_words(w) for w in _unrestored)))
+            "letting go of it, could corrupt it.  {}.".format(
+                cmd, "; ".join(_unrestored_words(w) for w in _unrestored),
+                "Run 'realm-thread back' to try again, or 'kill' the program" if retry
+                else "'kill' the program"))
+
+
+def _attached_unrestored():
+    """Whether a program whose host's registers couldn't be put back was
+    attached to, rather than started by gdb."""
+    for window in _unrestored:
+        try:
+            if window.thread.is_valid() and getattr(window.thread.inferior,
+                                                    "was_attached", True):
+                return True
+        except RuntimeError:
+            pass
+    return False
+
+
+def _stdin_is_terminal():
+    try:
+        return os.isatty(0)
+    except OSError:
+        return False
 
 
 def _outer_frames(frame):
@@ -1772,17 +2238,31 @@ def _outer_frames(frame):
 def _hook(cmd, after, outer):
     """realm-thread-guard: hook-CMD's work (hookpost-CMD's, `after`), run
     from Python frames `outer` (see _outer_frames)."""
-    global _switch_from
+    global _switch_from, _second_ui
     if _internal_depth:
+        # (A command run meanwhile by something else, say another extension's
+        # handler of gdb.events.register_changed, is still guarded.)
+        if after or cmd not in _hooked.get("guarded", ()) or \
+                _internal_commands[-1].startswith(cmd):
+            return
+        _guard(cmd)
         return
     if after:
         if cmd in _hooked.get("switching", ()):
             _switched(cmd)
+        if cmd == "define":
+            _rewrap_user_hooks()
         _plain_after(cmd, outer)
         return
     _close_stale(outer)
     if cmd in _hooked.get("guarded", ()):
         _guard(cmd)
+    if cmd in _hooked.get("body", ()) and _window is not None and \
+            _window.via in (None, "rt"):
+        raise gdb.GdbError(
+            "realm-gdb: refusing '{}' in {}: it reads the lines after it, up to "
+            "'end', which can't come with a command run there.  Run it on its "
+            "own.".format(cmd, _window_words(_window)))
     if cmd in _hooked.get("external", ()) and _window is not None:
         raise gdb.GdbError(
             "realm-gdb: refusing '{}' while thread {} shows a parked Realm user "
@@ -1790,7 +2270,8 @@ def _hook(cmd, after, outer):
             "holding the parked thread's registers.  Run it on its own.".format(
                 cmd, _window.thread_num, _window_words(_window)))
     if cmd in _hooked.get("session", ()):
-        _plain_off("a second UI was opened ('{}')".format(cmd))
+        _second_ui = "a second UI was opened ('{}')".format(cmd)
+        _plain_off(_second_ui)
     if cmd in _hooked.get("acting", ()):
         _refuse_acting(cmd)
     if cmd in _hooked.get("leaving", ()) and _plain_shows() is not None:
@@ -1799,7 +2280,7 @@ def _hook(cmd, after, outer):
     if cmd in _hooked.get("switching", ()):
         _switch_from = None
         if _plain_shows() is not None:
-            _switch_from = (gdb.selected_thread(), gdb.selected_inferior().num)
+            _switch_from = (_selected_thread(), gdb.selected_inferior().num)
     if cmd in _hooked.get("showing", ()):
         _plain_before(cmd, outer)
 
@@ -1827,8 +2308,13 @@ class RealmThreadGuard(gdb.Command):
             _hook(cmd, after, _outer_frames(sys._getframe().f_back))
         except gdb.GdbError:
             raise
-        except Exception:
+        except Exception as e:
             _debug_exc()
+            # (Not let through for want of the check, where it may matter.)
+            if not after and (_window is not None or _unrestored or _selections) and \
+                    any(cmd in _hooked.get(k, ()) for k in ("guarded", "external", "acting")):
+                raise gdb.GdbError("realm-gdb: refusing '{}': realm-gdb's check of it "
+                                   "failed ({}: {}).".format(cmd, type(e).__name__, e))
 
 
 def _switched(cmd):
@@ -1839,7 +2325,7 @@ def _switched(cmd):
     if _switch_from is None:
         return
     (old, inferior), _switch_from = _switch_from, None
-    new = gdb.selected_thread()
+    new = _selected_thread()
     if new is None or new == old:
         return
     where = (str(new.num) if new.inferior.num == inferior else
@@ -1865,6 +2351,17 @@ def _install_hooks():
         defined = _execute("help user-defined")
     except gdb.error:
         defined = ""
+    # (Redefining a hook asks at a terminal, as librealm loads.)
+    confirm = _parameter("confirm")
+    _set("confirm", "off")
+    try:
+        _define_hooks(defined)
+    finally:
+        _set("confirm", _setting_words(confirm))
+
+
+def _define_hooks(defined):
+    """_install_hooks's work, given `help user-defined`."""
     kinds = {
         "guarded": set(_existing_commands(_GUARDED_COMMANDS + _TERMINAL_COMMANDS) +
                        _target_subcommands()),
@@ -1874,70 +2371,98 @@ def _install_hooks():
         "switching": set(_existing_commands(_SWITCHING_COMMANDS)),
         "session": set(_existing_commands(_SESSION_COMMANDS)),
         "external": set(_existing_commands(_EXTERNAL_COMMANDS)),
+        "closing": set(_existing_commands(_CLOSING_COMMANDS)),
+        "body": set(_existing_commands(_BODY_HOOKED)),
     }
     kinds["acting"] |= kinds["rt"]
     kinds["showing"] = set(_existing_commands(_expand(_SHOWING_COMMANDS))) - kinds["acting"]
-    _hooked.clear()
+    # (Built here, then put in place: an interrupted load leaves the guards
+    # counted missing, and windows refused, rather than half there.)
+    hooked = {}
     for c in sorted(set().union(*kinds.values())):
-        hooks = [_hook_name(c, "hook")]
-        if c in kinds["showing"] or c in kinds["switching"]:
-            hooks.append(_hook_name(c, "hookpost"))
-        # Leave the user's own hooks alone.
-        theirs = []
+        hooks = _hook_names(c, kinds)
+        # The user's own hooks are kept, after realm-gdb's check.
+        bodies = {}
         for hook in hooks:
             if re.search(r"^{} -- ".format(re.escape(hook)), defined, re.M):
-                try:
-                    existing = _execute("show user " + hook)
-                except gdb.error:
-                    existing = ""
-                if "realm-thread-guard" not in existing:
-                    theirs.append(hook)
-        if theirs:
-            print(_their_hook_note(c, theirs[0], kinds))
-            if c in kinds["session"]:
-                _plain_off("you defined {}, so realm-gdb can't tell when a second "
-                           "UI is opened".format(theirs[0]))
-            continue
+                bodies[hook] = _user_hook_body(hook)
         try:
             for hook in hooks:
-                gdb.execute("define {}\nrealm-thread-guard {}{}\nend\n".format(
-                    hook, "--after " if "hookpost-" in hook else "", c), to_string=True)
+                _define_hook(hook, c, bodies.get(hook, []))
         except gdb.error as e:
             print("realm-gdb: could not define {}: {}".format(hook, e))
             continue
         for kind, commands in kinds.items():
             if c in commands:
-                _hooked.setdefault(kind, set()).add(c)
+                hooked.setdefault(kind, set()).add(c)
+    _hooked.clear()
+    _hooked.update(hooked)
+    _unguarded[:] = [c for c in _REQUIRED_GUARDS if c not in _hooked.get("guarded", ())]
 
 
-def _their_hook_note(c, hook, kinds):
-    """What it means that the user's own `hook` for command `c` was left."""
-    if c in kinds["guarded"]:
-        return ("realm-gdb: you defined {}, so '{}' is not refused in 'rt', "
-                "'realm-thread apply' or 'thread apply all bt' commands, where it "
-                "would act on a thread holding a parked Realm user thread's "
-                "registers and may corrupt or crash the program.".format(hook, c))
-    if c in kinds["acting"]:
-        return ("realm-gdb: you defined {}, so '{}' is not refused while a parked "
-                "Realm user thread is selected, though it acts on the selected "
-                "thread as it really is.".format(hook, c))
-    if c in kinds["leaving"]:
-        return ("realm-gdb: you defined {}, so a selected parked Realm user thread "
-                "is only dropped once '{}' lets the program run.".format(hook, c))
-    if c in kinds["switching"]:
-        return ("realm-gdb: you defined {}, so '{} N' doesn't end the selection of a "
-                "parked Realm user thread, which plain commands then show on thread "
-                "N.".format(hook, c))
-    if c in kinds["showing"]:
-        return ("realm-gdb: you defined {}, so '{}' shows a selected parked Realm "
-                "user thread only as 'rt {}'.".format(hook, c, c))
-    if c in kinds["external"]:
-        return ("realm-gdb: you defined {}, so '{}' is not refused inside a command "
-                "that shows a parked Realm user thread, where the program it starts "
-                "would run with a thread holding the parked thread's registers."
-                .format(hook, c))
-    return ("realm-gdb: you defined {}, so plain commands show a selected parked "
-            "Realm user thread only with 'rt'.".format(hook))
+def _hook_names(c, kinds):
+    """The hooks realm-gdb defines for command `c` (`kinds`: kind -> its
+    commands): hook-C, and hookpost-C for some."""
+    hooks = [_hook_name(c, "hook")]
+    if c in kinds.get("showing", ()) or c in kinds.get("switching", ()) or c == "define":
+        hooks.append(_hook_name(c, "hookpost"))
+    return hooks
+
+
+def _define_hook(hook, c, body):
+    """Define `hook` of command `c`: realm-gdb's check, then the lines of
+    the user's own `body`, if any (saying so)."""
+    _internal("define {}\nrealm-thread-guard {}{}\n{}end\n".format(
+        hook, "--after " if "hookpost-" in hook else "", c,
+        "".join(line + "\n" for line in body)))
+    if body:
+        print("realm-gdb: your {} now runs realm-gdb's check of '{}' first.".format(hook, c))
+
+
+def _rewrap_user_hooks():
+    """After a `define`: put realm-gdb's check back in front of a hook of
+    its that the user has just replaced with their own."""
+    try:
+        defined = _execute("help user-defined")
+    except gdb.error:
+        return
+    confirm = _parameter("confirm")
+    _set("confirm", "off")
+    try:
+        for c in sorted(set().union(*_hooked.values())):
+            for hook in _hook_names(c, _hooked):
+                if not re.search(r"^{} -- ".format(re.escape(hook)), defined, re.M):
+                    continue
+                try:
+                    if "realm-thread-guard" not in _execute("show user " + hook):
+                        _define_hook(hook, c, _user_hook_body(hook))
+                except gdb.error:
+                    _debug_exc()
+    finally:
+        _set("confirm", _setting_words(confirm))
+
+
+# Commands every gdb has, without a guard on which windows mustn't open (see
+# _how_shown); and those of them that have none, if realm-gdb couldn't
+# define it.
+_REQUIRED_GUARDS = ("continue", "step", "next", "finish", "detach", "kill", "quit", "run")
+_unguarded = list(_REQUIRED_GUARDS)
+
+
+def _user_hook_body(hook):
+    """The lines of the user's own `hook` (a user-defined command), without
+    any realm-gdb check in it (from an earlier load); [] if none."""
+    try:
+        out = _execute("show user " + hook)
+    except gdb.error:
+        return []
+    lines = []
+    for line in out.splitlines()[1:]:  # (After `User command "HOOK":`.)
+        line = line[2:] if line.startswith("  ") else line
+        if not line.strip() or line.startswith("realm-thread-guard "):
+            continue
+        lines.append(line)
+    return lines
 
 
 # --------------------------------------------------------------------------
@@ -2564,18 +3089,51 @@ def _frame0_words(thread_num):
         "a marker for " if _marker_drawn() else "", thread_num)
 
 
+def _close_at_prompt():
+    """At a top-level prompt, which is never inside a window: close one left
+    open, by a command that failed (see "Plain commands ...") or by a Ctrl-C
+    as it closed (see _Window.__exit__).  (Not another UI's prompt during a
+    function call, made in a window that is open.)"""
+    if _call_running():
+        return
+    if _plain is not None:
+        _close_plain(_plain)
+    elif _window is not None:
+        _window.__exit__(None, None, None)
+
+
+def _call_running():
+    """Whether a function call is running: one counted by
+    gdb.events.inferior_call while a thread is running.  A count that a call
+    which failed before it ran left up (gdb sends no post event then) is
+    dropped, and its breakpoints enabled."""
+    global _infcall_depth
+    if not _infcall_depth:
+        return False
+    try:
+        if any(t.is_valid() and t.is_running()
+               for inf in gdb.inferiors() for t in inf.threads()):
+            return True
+    except Exception:
+        _debug_exc()
+        return True
+    _infcall_depth = 0
+    _enable_breakpoints()
+    return False
+
+
 def _on_before_prompt():
     """Tidy up after a command (see "the marker line"), and on gdb < 11 show
     the selected thread's view again if gdb rebuilt its frames without the
     unwinder knowing (e.g. `thread apply 1 2 3 print 1`), going back to the
     frame the user had selected."""
     global _infcall_depth
-    if _plain is not None:
-        _close_plain(_plain)  # (its command failed: see "Plain commands ...")
+    _close_at_prompt()
+    if _selections:
+        _install_prompt_hook()  # (Around one set since: see _realm_prompt.)
     _printing_over()
-    if _window is None and _infcall_depth:
-        _infcall_depth = 0
-        _enable_breakpoints()
+    if _window is None:
+        _call_running()  # (Drops a count of calls left up: see there.)
     view = _current_view()
     if view is None or _have_level:
         return
@@ -2646,6 +3204,8 @@ def _bt_args(command):
     word, rest = m.group(1), m.group(2)
     if word in ("bt", "where") or (len(word) >= 2 and "backtrace".startswith(word)):
         return rest.strip()
+    if word not in ("i", "info") and _command_named(word, ("backtrace",)):
+        return rest.strip()  # (An alias of the user's.)
     if word == "i" or (len(word) >= 3 and "info".startswith(word)):
         m = re.match(r"(\S+)\s*(.*)$", rest, re.S)
         if m is not None and "stack".startswith(m.group(1)):
@@ -2765,6 +3325,9 @@ def _frame_motion(command):
     if not words:
         return None
     word, args = words[0], words[1:]
+    if word not in _FRAME_WORDS + _UP_WORDS + _DOWN_WORDS:
+        alias = _command_named(word, ("frame", "up", "down"))  # (The user's.)
+        word = {"frame": "frame", "up": "up", "down": "down"}.get(alias, word)
     if word in _FRAME_WORDS:
         if args[:1] == ["level"]:
             args = args[1:]
@@ -2800,19 +3363,20 @@ def _show_in_window(window, ut, selection=None):
     """Show user thread `ut` in register window `window` (see "Register
     windows"), with `selection`'s frame selected (see "Selecting a parked
     thread").  Returns what _window_done needs."""
+    window.to_host()  # (Reading `ut` through the host's inferior, too.)
     room = _call_room(ut)
     if not room and not _can_refuse_calls:
         raise _Unshowable("too little of its stack is free below its stack pointer "
                           "for function calls, which this gdb can't refuse")
-    unwritable = None
+    refused = None
     if room and window.settings.user_calls is not False:
-        unwritable = _calls_unwritable(window)
+        refused = _calls_refused(window)
     regs, ut_notes = _arch.context_regs(ut)
-    window.show(ut, regs, calls=room and unwritable is None)
+    window.show(ut, regs, calls=room and refused is None)
     if selection is not None:
         _select_level(selection["level"])
     return {"ut": ut, "selection": selection, "room": room, "notes": ut_notes,
-            "regs": _raw_regs(gdb.newest_frame()), "unwritable": unwritable}
+            "regs": _raw_regs(gdb.newest_frame()), "refused": refused}
 
 
 def _window_done(window, shown, what):
@@ -2821,7 +3385,7 @@ def _window_done(window, shown, what):
     notes to print once the window is closed."""
     ut = shown["ut"]
     notes = []
-    if gdb.selected_thread() == window.thread:
+    if _selected_thread() == window.thread:
         changed = sorted(n for n, v in _raw_regs(gdb.newest_frame()).items()
                          if n in shown["regs"] and v != shown["regs"][n])
         if changed:
@@ -2848,27 +3412,107 @@ def _run_in_window(window, ut, command, notes, selection=None):
     first, and the frame `command` leaves selected is remembered."""
     shown = _show_in_window(window, ut, selection)
     try:
-        if callable(command):  # (see _apply_external)
-            out = command()
-        else:
-            out = _frame_motion(command)
-            if out is None:
-                out = _execute(command)
-    except gdb.error as e:
-        if shown["unwritable"] is None or "may-call-functions" not in str(e):
-            raise
-        # (gdb's message alone would leave the user wondering why.)
-        note, window.unwritable_note = window.unwritable_note, None
-        raise gdb.error("{}\n{}".format(e, note) if note else (
-            "{}  (realm-gdb: function calls are refused while a parked Realm user "
-            "thread is shown, in this program: this gdb can't write the x87, SSE and "
-            "AVX registers, which a call changes.)".format(e)))
-    notes += _window_done(window, shown, "edit" if callable(command) else command.split()[0])
+        try:
+            if callable(command):  # (see _apply_external)
+                out = command()
+            else:
+                out = _frame_motion(command)
+                if out is None:
+                    out = _execute(command)
+        except gdb.error as e:
+            if shown["refused"] is None or "may-call-functions" not in str(e):
+                raise
+            # (gdb's message alone would leave the user wondering why.)
+            note, window.calls_note = window.calls_note, None
+            raise gdb.error("{}\n{}".format(e, note) if note else (
+                "{}  (realm-gdb: function calls are refused while a parked Realm user "
+                "thread is shown, {}.)".format(e, shown["refused"])))
+        notes += _window_done(window, shown,
+                              "edit" if callable(command) else command.split()[0])
+    finally:
+        # (Before the next parked thread is shown over it: see pop_calls.)
+        window.pop_calls()
     return out
 
 
 class _Unshowable(Exception):
     """A parked user thread that turns out not to be showable."""
+
+
+# Commands that read the lines after them, up to `end`, which a command run
+# by `rt` or `realm-thread apply` can't have: run from Python, gdb >= 13
+# takes them from the command's own text, so there are none (`rt define
+# foo` would empty foo), and older gdbs read them from the terminal, with
+# the window open.  Those after them read lines only when given no argument.
+_BODY_COMMANDS = ("commands", "define", "document", "while", "if", "while-stepping",
+                  "actions")
+_BODY_COMMANDS_BARE = ("python", "guile", "compile")
+_WATCH_COMMANDS = ("watch", "rwatch", "awatch")
+# Whether `python-interactive` (`pi`), refused in a window as it reads the
+# terminal, may run there now: given an expression, by `rt` (see _guard).
+_pi_allowed = False
+
+
+def _command_named(word, names):
+    """Which of commands `names` gdb takes command word `word` for (an
+    abbreviation or an alias of it, the user's too), if any: the one whose
+    `help` it gets.  (Not cached: an alias defined later changes `help`'s
+    text.  It takes a tenth of a millisecond.)"""
+    if not re.match(r"[\w-]+$", word):
+        return None
+    try:
+        text = _execute("help " + word)
+    except gdb.error:
+        return None  # (Ambiguous, or no such command.)
+    for name in names:
+        try:
+            if _execute("help " + name) == text:
+                return name
+        except gdb.error:
+            pass
+    return None
+
+
+def _check_command(command, where):
+    """Refuse a command that `rt` or `realm-thread apply` (`where`) can't
+    run as it would run on its own (see _BODY_COMMANDS), or that would be
+    undone at once (a watchpoint tied to a parked frame)."""
+    global _pi_allowed
+    words = command.split(None, 1)
+    if not words or "\n" in command:
+        return
+    # (`with SETTING -- COMMAND`: COMMAND's.)
+    while len(words) > 1 and " -- " in words[1] and _command_named(words[0], ("with",)):
+        command = words[1].split(" -- ", 1)[1]
+        words = command.split(None, 1)
+        if not words:
+            return
+    rest = words[1].strip() if len(words) > 1 else ""
+    name = _command_named(words[0], _BODY_COMMANDS + _BODY_COMMANDS_BARE +
+                          _WATCH_COMMANDS + ("python-interactive",))
+    bare = not rest or name == "compile" and re.match(r"c(o(de?)?)?$", rest)
+    if name in _BODY_COMMANDS or name in _BODY_COMMANDS_BARE and bare:
+        raise gdb.GdbError(
+            "realm-gdb: refusing '{}' in {}: it reads the lines after it, up to "
+            "'end', which {} can't pass on.  {}".format(
+                command, where, where,
+                "Give it its code on one line, or run '{} source FILE'.".format(
+                    where.strip("'").split()[0] if where == "'rt'" else
+                    "realm-thread apply PTR") if name in _BODY_COMMANDS_BARE else
+                "Run it without {}.".format(where)))
+    if name in _WATCH_COMMANDS and not re.match(r"-l(o(c(a(t(i(on?)?)?)?)?)?)?(\s|$)", rest):
+        raise gdb.GdbError(
+            "realm-gdb: refusing '{}' in {}: gdb ties a watchpoint to the frame it was "
+            "set in, and looks for that frame on the thread it checks, where a parked "
+            "thread's isn't, so it would delete the watchpoint at once.  '{} -l EXPR' "
+            "watches the memory EXPR is in instead.".format(command, where, words[0]))
+    if name == "python-interactive" and rest:
+        _pi_allowed = True
+    if re.search(r"\$_shell\s*\(", command):
+        raise gdb.GdbError(
+            "realm-gdb: refusing '{}' in {}: $_shell starts a shell command, which "
+            "would run with the thread showing the parked one holding its registers.  "
+            "Run it on its own.".format(command, where))
 
 
 def _apply(targets, command, header, selection=None, collect=None):
@@ -2881,6 +3525,17 @@ def _apply(targets, command, header, selection=None, collect=None):
     gdb's pager may wait for input, and so let another UI run a command; see
     "Register windows".)  A command that starts another program is
     _apply_external's."""
+    global _pi_allowed
+    if not callable(command):
+        _check_command(command, "'rt'" if selection is not None else
+                       "'realm-thread apply'")
+    try:
+        return _apply_checked(targets, command, header, selection, collect)
+    finally:
+        _pi_allowed = False
+
+
+def _apply_checked(targets, command, header, selection, collect):
     external = _external(command) if collect is None and not callable(command) else None
     if external is not None:
         return _apply_external(targets, command, header, selection, external)
@@ -2970,7 +3625,8 @@ def _external(command):
     word, rest = m.group(1), command[m.end():].strip()
 
     def abbreviates(name, least):
-        return name.startswith(word) and word.startswith(least)
+        return name.startswith(word) and word.startswith(least) or alias == name
+    alias = _command_named(word, ("shell", "make", "edit", "pipe"))  # (The user's.)
     if word == "!" or abbreviates("shell", "she") or abbreviates("make", "mak"):
         return ("direct",)
     if abbreviates("edit", "ed"):
@@ -3014,7 +3670,7 @@ def _apply_external(targets, command, header, selection, external):
             continue
         try:
             if external[0] == "direct":
-                gdb.execute(command, to_string=False)
+                _run_unshown(command)
             elif external[0] == "pipe":
                 out = []
                 error = _apply([(ut, None)], external[1], False, selection, collect=out)
@@ -3034,6 +3690,17 @@ def _apply_external(targets, command, header, selection, external):
             if header:
                 gdb.write("  <{} failed: {}>\n".format(command.split()[0], e))
     return first_error
+
+
+def _run_unshown(command):
+    """Run `command` as it is, with plain commands showing nothing (`rt pipe
+    shell ... | ...` mustn't be refused as a plain `pipe` is)."""
+    global _plain_suppressed
+    _plain_suppressed += 1
+    try:
+        gdb.execute(command, to_string=False)
+    finally:
+        _plain_suppressed -= 1
 
 
 def _run_shell(shell, text):
@@ -3220,7 +3887,12 @@ def _dump_inferior_parked_threads(command):
             print("realm-gdb: {}; there may be more parked threads.".format(loop))
         print(end)
         return
-    host = gdb.selected_thread()
+    host = _selected_thread()
+    if host is None:
+        how = _NotShown("no thread is selected", "select one ('thread N')")
+        _print_not_shown(where, len(parked), how)
+        print(end)
+        return
     if how == "window":
         print("\n=== Parked Realm user threads{} ({}), each shown on thread {} (whose "
               "thread-local variables they show) ===".format(where, len(parked),
@@ -3500,13 +4172,23 @@ def _check_selection(sel, sps):
 def _realm_prompt(current):
     """The prompt (gdb.prompt_hook) while a parked thread is selected: the
     user's, after a reminder of the selection."""
+    global _plain_suppressed
     prompt = current = _PROMPT_REMINDER.sub("", current)
     theirs = _prompt_hooks["theirs"]
     try:
         if theirs is not None:
-            got = theirs(current)
+            # (Its commands see threads as they are: the prompt is never
+            # inside a window.)
+            _plain_suppressed += 1
+            try:
+                got = theirs(current)
+            finally:
+                _plain_suppressed -= 1
             if got is not None:
                 prompt = got
+        # (The last Python code to run before the prompt: a before_prompt
+        # handler that runs after realm-gdb's may have left a window open.)
+        _close_at_prompt()
         sel = _selection()
         if sel is not None:
             prompt = "[realm-thread {:#x}] {}".format(sel["user_thread"], prompt)
@@ -3555,9 +4237,7 @@ def _live_checks(what):
     if isinstance(how, _NotShown):
         raise gdb.GdbError("realm-thread: can't show parked user threads: " +
                            how.sentence())
-    thread = gdb.selected_thread()
-    if thread is None or not thread.is_stopped():
-        raise gdb.GdbError("realm-thread: the selected thread must be stopped.")
+    _stopped_thread()
     return how
 
 
@@ -3651,11 +4331,43 @@ def _gdb_args():
         return None
 
 
-# gdb's options that take a value.
-_GDB_VALUE_OPTIONS = ("ex", "eval-command", "iex", "init-eval-command", "x", "command",
-                      "ix", "init-command", "p", "pid", "c", "core", "cd", "d",
-                      "directory", "s", "symbols", "e", "exec", "se", "data-directory",
-                      "D", "tty", "t", "b", "l")
+# gdb's command-line options (its getopt_long_only table, gdb 8.2 to 18):
+# those that take a value, and those that don't; and the names that are
+# one option.
+_GDB_OPTIONS_WITH_VALUE = (
+    "annotate", "b", "baud", "c", "cd", "command", "core", "d", "D", "data-directory",
+    "directory", "e", "early-init-command", "early-init-eval-command", "editor-command",
+    "eiex", "eix", "eval-command", "ex", "exec", "i", "iex", "init-command",
+    "init-eval-command", "interpreter", "ix", "l", "p", "pid", "s", "se", "symbols",
+    "tclcommand", "tty", "ui", "x")
+_GDB_OPTIONS_WITHOUT_VALUE = (
+    "args", "batch", "batch-silent", "binary-output", "configuration", "dbx",
+    "enable-external-editor", "f", "fullname", "help", "n", "nh", "nowindows", "nw", "nx",
+    "q", "quiet", "r", "readnever", "readnow", "return-child-result", "silent",
+    "statistics", "tui", "version", "w", "windows", "write")
+_GDB_OPTION_NAMES = {
+    "i": "interpreter", "ui": "interpreter", "ex": "eval-command",
+    "iex": "init-eval-command", "eiex": "early-init-eval-command", "x": "command",
+    "ix": "init-command", "eix": "early-init-command", "b": "baud", "c": "core",
+    "d": "directory", "D": "data-directory", "e": "exec", "p": "pid", "s": "symbols",
+    "f": "fullname", "n": "nx", "q": "quiet", "silent": "quiet", "r": "readnow",
+    "nw": "nowindows", "w": "windows"}
+
+
+def _gdb_option(word):
+    """The option that `word` (an argument without its dashes and value)
+    names, as gdb's getopt_long_only takes it: an exact name, else the one
+    option it abbreviates (`-interp`, `--batch-s`); None if none (an
+    ambiguous or unknown one, which gdb refuses to start with)."""
+    names = _GDB_OPTIONS_WITH_VALUE + _GDB_OPTIONS_WITHOUT_VALUE
+    if word in names:
+        return _GDB_OPTION_NAMES.get(word, word)
+    found = set(_GDB_OPTION_NAMES.get(n, n) for n in names if word and n.startswith(word))
+    return found.pop() if len(found) == 1 else None
+
+
+# (_session_problem's word for a `new-ui` among gdb's `-ex` commands.)
+_NEW_UI_ON_COMMAND_LINE = "a second UI is open ('new-ui')"
 
 
 def _session_problem():
@@ -3664,31 +4376,32 @@ def _session_problem():
     args = _gdb_args()
     if args is None:
         return "realm-gdb can't tell whether this is an MI session"
+    takes_value = set(_GDB_OPTION_NAMES.get(n, n) for n in _GDB_OPTIONS_WITH_VALUE)
     interpreter, batch = None, False
     i = 1
     while i < len(args):
         a = args[i]
-        if a in ("--args", "-args", "--") or not a.startswith("-"):
-            if a.startswith("new-ui"):  # (a command, for -ex)
-                return "a second UI is open ('new-ui')"
-            if a in ("--args", "-args", "--"):
-                break
-            i += 1
-            continue
-        name, eq, value = a.lstrip("-").partition("=")
-        if name in ("i", "interpreter"):
-            interpreter = value if eq else (args[i + 1] if i + 1 < len(args) else "")
-        elif name in ("batch", "batch-silent"):
-            batch = True
-        elif name in ("ex", "eval-command", "iex", "init-eval-command") and eq:
-            if value.lstrip().startswith("new-ui"):
-                return "a second UI is open ('new-ui')"
-        if name in _GDB_VALUE_OPTIONS and not eq:
-            i += 1
-            if name in ("ex", "eval-command", "iex", "init-eval-command") and \
-                    i < len(args) and args[i].lstrip().startswith("new-ui"):
-                return "a second UI is open ('new-ui')"
         i += 1
+        if a == "--":
+            break
+        if not a.startswith("-") or a == "-":
+            continue  # (the program, a core file, a process)
+        word, eq, value = a.lstrip("-").partition("=")
+        option = _gdb_option(word)
+        if option is None:
+            return "realm-gdb can't tell what kind of session this is (gdb's {!r})".format(a)
+        if option == "args":
+            break
+        if option in takes_value and not eq:
+            value = args[i] if i < len(args) else ""
+            i += 1
+        if option == "interpreter":
+            interpreter = value
+        elif option in ("batch", "batch-silent"):
+            batch = True
+        elif option in ("eval-command", "init-eval-command", "early-init-eval-command") \
+                and value.lstrip().startswith("new-ui"):
+            return _NEW_UI_ON_COMMAND_LINE
     if interpreter and not interpreter.startswith(("console", "tui")):
         return "this is {} {} session".format(
             "a" if interpreter.startswith("dap") else "an",
@@ -3724,6 +4437,34 @@ def _other_terminal():
     return False
 
 
+# Whether realm-gdb has said what the TUI shows while a parked thread is
+# selected (once per session).
+_tui_noted = globals().get("_tui_noted", False)
+
+
+def _tui_note():
+    """If the TUI is on as a parked thread is selected, say once what its
+    windows show.  (It draws them from the selected thread and frame
+    between commands, when the host has its own registers.)  Not checked at
+    each prompt: before gdb 10, a command run then (`info win`) would be
+    the one an empty line repeats."""
+    global _tui_noted
+    if _tui_noted or _selection() is None:
+        return
+    try:
+        out = _execute("info win")  # (Its windows, while the TUI is on.)
+    except gdb.error:
+        return
+    if not out.strip() or "not active" in out:
+        return
+    _tui_noted = True
+    thread = _selected_thread()
+    print("realm-gdb: the TUI's source, assembly and register windows, and its status "
+          "line, show thread {} as it really is, not the selected parked Realm user "
+          "thread: only commands' own output shows that.".format(
+              thread.num if thread is not None else "N"))
+
+
 def _plain_off(why):
     """From now on, plain commands don't show a selected parked thread."""
     global _plain_off_why
@@ -3742,7 +4483,13 @@ def _plain_shows():
         return None
     if not _has_target():
         return None
-    return _selection()
+    sel = _selection()
+    if sel is not None and _selected_thread() is None:
+        # (gdb has lost its selected thread: see _selected_thread.)
+        _drop_selections(lambda s: s["inferior"] == sel["inferior"],
+                         "no thread is selected")
+        return None
+    return sel
 
 
 def _refuse_acting(cmd):
@@ -3755,6 +4502,9 @@ def _refuse_acting(cmd):
     if cmd in ("thread apply", "frame apply") or cmd.startswith("frame apply ") or \
             cmd == "faas":
         why = "realm-gdb can't show the user thread to the commands it runs"
+    elif cmd == "pipe":
+        why = ("thread {} would keep the user thread's registers while the shell "
+               "command runs".format(gdb.selected_thread().num))
     else:
         why = "it would act on thread {} as it really is".format(
             gdb.selected_thread().num)
@@ -3764,6 +4514,8 @@ def _refuse_acting(cmd):
             cmd, sel["user_thread"], why,
             ", or 'rt {} ...' to run it on the user thread".format(cmd)
             if cmd in _hooked.get("rt", ()) else
+            ", or 'rt {} -l EXPR' to watch the memory EXPR is in".format(cmd)
+            if cmd in _WATCH_COMMANDS else
             ", or use 'thread apply all'" if cmd == "thread apply" else ""))
 
 
@@ -3774,6 +4526,8 @@ def _plain_before(cmd, outer):
     global _plain
     if _plain is not None:
         return  # (CMD is part of the command that opened it)
+    if _infcall_depth:
+        return  # (A dprintf's `printf`, in a function call: threads are running.)
     sel = _plain_shows()
     if sel is None:
         return
@@ -3819,7 +4573,12 @@ def _inside(entry, outer):
         return False
     if not all(a is b for a, b in zip(outer[len(outer) - len(mine):], mine)):
         return False
-    return not mine or mine[0].f_lasti == entry["lasti"]
+    if not mine:
+        # (After a command run from no Python, at the top level: a Python
+        # script run by gdb (`-x FILE.py`, which runs no `source` hook)
+        # comes after it, and its outermost frame is the script's own.)
+        return outer[-1].f_code.co_name != "<module>"
+    return mine[0].f_lasti == entry["lasti"]
 
 
 def _plain_after(cmd, outer):
@@ -3838,12 +4597,21 @@ def _close_stale(outer):
         _close_plain(entry)
 
 
+# MI commands that would let the program run, or let go of it (refused by
+# gdb.execute_mi, as the CLI's are by their hooks: see _install_execute_mi).
+_MI_GUARDED = re.compile(r"-(exec-(continue|finish|jump|next|next-instruction|run|step|"
+                         r"step-instruction|until)|target-(attach|detach|disconnect|select)|"
+                         r"gdb-exit|interpreter-exec|file-exec-and-symbols|file-exec-file)$")
+
+
 def _install_execute_mi():
     """Python's gdb.execute_mi (gdb >= 14) runs MI commands, which run no
     hooks: have it close a failed plain command's window first, as a hooked
     command would (a script that catches the failure, then resumes the
     program with -exec-continue, would otherwise resume it with the window
-    open)."""
+    open), and refuse those that would let the program run or let go of it
+    where the CLI's are refused (in a window: one left open by a failed
+    command that can't be told from the code now running, say)."""
     real = getattr(gdb, "execute_mi", None)
     if real is None or getattr(real, "_realm_gdb", False):
         return
@@ -3854,6 +4622,11 @@ def _install_execute_mi():
             namespace["_close_stale"](namespace["_outer_frames"](sys._getframe().f_back))
         except Exception:
             _debug_exc()
+        if args and isinstance(args[0], str) and namespace["_MI_GUARDED"].match(args[0]):
+            try:
+                namespace["_guard"](args[0])
+            except gdb.GdbError as e:
+                raise gdb.error(str(e))  # (As execute_mi's own errors are.)
         return real(*args, **kwargs)
     execute_mi._realm_gdb = True
     execute_mi.__doc__ = real.__doc__
@@ -3863,10 +4636,10 @@ def _install_execute_mi():
 def _close_plain(entry):
     """Close the window a plain command opened, and print its notes."""
     global _plain
-    if _plain is entry:
-        _plain = None
     window, notes = entry["window"], []
     try:
+        if _plain is entry:
+            _plain = None
         if entry["input"] is not None:
             entry["input"].__exit__(None, None, None)
         if not window.resumed:
@@ -4011,6 +4784,11 @@ class RealmThread(gdb.Command):
         if arg and _window is not None:
             raise gdb.GdbError("realm-thread: can't change what is shown from inside "
                                "'rt', 'realm-thread apply' or 'thread apply all bt'.")
+        if _window is not None:
+            # (The thread showing one has its stack pointer, which would
+            # make it look as if it were switching to it.)
+            raise gdb.GdbError("realm-thread: can't list the user threads from inside "
+                               "'rt', 'realm-thread apply' or 'thread apply all bt'.")
         if not arg:
             self._list()
         elif arg in ("back", "restore"):
@@ -4120,9 +4898,7 @@ class RealmThread(gdb.Command):
         if isinstance(how, _NotShown):
             raise gdb.GdbError("realm-thread: can't show parked user threads: " +
                                how.sentence())
-        thread = gdb.selected_thread()
-        if thread is None or not thread.is_stopped():
-            raise gdb.GdbError("realm-thread: the selected thread must be stopped.")
+        _stopped_thread()
         with _KeepSelection():
             sps, _ = _host_sps()
             if target == "all":
@@ -4156,9 +4932,7 @@ class RealmThread(gdb.Command):
         if isinstance(how, _NotShown):
             raise gdb.GdbError("realm-thread: can't show a parked user thread: " +
                                how.sentence())
-        thread = gdb.selected_thread()
-        if thread is None or not thread.is_stopped():
-            raise gdb.GdbError("realm-thread: the selected thread must be stopped.")
+        thread = _stopped_thread()
         ut = _lookup_user_thread(expr)
         sps, _ = _host_sps()
         problem = _parked_problem(ut, sps)
@@ -4226,6 +5000,7 @@ class RealmThread(gdb.Command):
             error = _apply([(ut, None)], "frame", header=False, selection=sel)
         if error is not None:
             print("realm-thread: {}".format(error))
+        _tui_note()
 
     def _back(self):
         if _unrestored:
@@ -4308,7 +5083,9 @@ class RealmHelp(gdb.Command):
         print(_HELP_BANNER)
 
 
-if _supported():
+def _load():
+    """Set realm-gdb up: its commands, hooks and event handlers."""
+    global _plain_off_why, _second_ui, _banner_printed
     ThreadApplyAll()
     RealmThread()
     RealmThreadRun()
@@ -4316,8 +5093,11 @@ if _supported():
     RealmHelp()
     _install_hooks()
     _install_execute_mi()
+    _install_atexit()
     if _plain_off_why is None:
         _plain_off_why = _session_problem()
+        if _plain_off_why == _NEW_UI_ON_COMMAND_LINE:
+            _second_ui = _plain_off_why
     # Registering the unwinder rebuilds the frames; if this is a reload
     # while a parked thread is shown, keep the user's frame selected.
     _reload_level = _selected_level() if _current_view() is not None else None
@@ -4333,6 +5113,16 @@ if _supported():
     else:
         print(_HELP_BANNER)
     _banner_printed = True
+
+
+if _supported():
+    try:
+        _load()
+    except BaseException:  # (Ctrl-C, say, as librealm loads.)
+        print("realm-gdb: loading realm-gdb.py was interrupted, so it doesn't show "
+              "parked Realm user threads in a live process: load it again (`source` "
+              "it) to finish.")
+        raise
 else:
     # Other platforms / architectures: do nothing rather than provide a
     # half-working command.
