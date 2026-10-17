@@ -562,7 +562,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        ubuntu: ['22.04', '24.04', '26.04']
+        ubuntu: ['24.04', '26.04']
         arch: [x86_64, aarch64]
         # The build types that embed the script.
         build: [Debug, RelWithDebInfo]
