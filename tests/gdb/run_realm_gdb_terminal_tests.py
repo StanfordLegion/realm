@@ -49,6 +49,11 @@ sys.path.insert(0, HERE)
 sys.dont_write_bytecode = True  # keep the source tree clean
 import run_realm_gdb_tests as base  # noqa: E402
 
+# A parked thread's innermost frame in a backtrace: user_switch, where it
+# called swapcontext; on FreeBSD, whose swapcontext is a system call, libc's
+# stub making it.
+FRAME0 = "_swapcontext" if sys.platform.startswith("freebsd") else "user_switch"
+
 SOURCE = os.path.join(HERE, "..", "..", "src", "realm")
 PROMPT = rb"\(gdb\) $"
 # Terminal control sequences, taken out of what tests look at.
@@ -258,7 +263,7 @@ class Context(object):
         s.step("realm-thread PTR selects it", "realm-thread {}\r".format(ptr),
                r"selected user thread " + ptr)
         shown = s.step("bt: the parked thread's stack", rt + "bt\r",
-                       r"#0 .*Realm::UserThread::user_switch[\s\S]*rgt_chain_level3")
+                       r"#0 .*" + FRAME0 + r"[\s\S]*rgt_chain_level3")
         m = re.search(r"#(\d+) .* rgt_chain_level3 ", shown)
         level = m.group(1) if m else "0"
         s.step("frame N", rt + "frame {}\r".format(level), r"rgt_chain_level3")
@@ -353,12 +358,15 @@ def test_terminal_plain(t):
     ptr = m.group(1)
     pid = re.search(r"process (\d+)", s.step("", "info inferiors\r")).group(1)
     tid = re.search(r"LWP (\d+)", s.step("", "thread\r")).group(1)
-    proc = "shell cat /proc/{}/task/{}/syscall\r".format(pid, tid)
-    own = _syscall_sp_pc(s.step("", proc))
-    t.check("the thread's own SP and PC, from /proc", own is not None, "")
+    proc = None
+    if os.path.isdir("/proc/{}/task".format(pid)):  # (Linux's)
+        proc = "shell cat /proc/{}/task/{}/syscall\r".format(pid, tid)
+        own = _syscall_sp_pc(s.step("", proc))
+        t.check("the thread's own SP and PC, from /proc", own is not None, "")
     s.step("realm-thread PTR", "realm-thread {}\r".format(ptr),
-           r"commands that work with the selected frame[\s\S]*#0 .*user_switch")
-    shown = s.step("bt: the parked stack", "bt\r", r"#0 .*user_switch[\s\S]*rgt_chain_level3")
+           r"commands that work with the selected frame[\s\S]*#0 .*" + FRAME0)
+    shown = s.step("bt: the parked stack", "bt\r",
+                   r"#0 .*" + FRAME0 + r"[\s\S]*rgt_chain_level3")
     m = re.search(r"#(\d+) .* rgt_chain_level3 ", shown)
     level = m.group(1) if m else "0"
     s.step("frame N: prints the frame", "frame {}\r".format(level),
@@ -367,22 +375,25 @@ def test_terminal_plain(t):
     s.step("up: prints the frame", "up\r", r"rgt_chain_level2")
     s.step("down: prints the frame", "down\r", r"rgt_chain_level3")
     s.step("a function call", "print realm_gdb_test_add(chain_marker, 1)\r", r"= 4243")
-    t.check("/proc: the thread's own SP and PC between commands",
-            _syscall_sp_pc(s.step("", proc)) == own, "")
+    if proc:
+        t.check("/proc: the thread's own SP and PC between commands",
+                _syscall_sp_pc(s.step("", proc)) == own, "")
     addr = re.compile(r"^(0x[0-9a-f]+)(?: <[^>]*>)?:", re.M)
     first = addr.findall(s.step("x/2gx $sp", "x/2gx $sp\r", r"0x"))
     again = addr.findall(s.step("  Enter: gdb's repeat, further on", "\r", r"0x"))
     t.check("  16 bytes further on", first and again and
             int(again[0], 16) == int(first[0], 16) + 16, "{} {}".format(first, again))
     s.step("a command that fails", "print rgt_nosuchvar\r", r"No symbol")
-    t.check("/proc: the thread's own SP and PC at the prompt",
-            _syscall_sp_pc(s.step("", proc)) == own, "")
+    if proc:
+        t.check("/proc: the thread's own SP and PC at the prompt",
+                _syscall_sp_pc(s.step("", proc)) == own, "")
     s.step("  still parked, in the same frame", "print chain_marker\r", r"= 4242")
     s.send("print realm_gdb_test_nap(3000000)\r")
     time.sleep(1)
     s.step("Ctrl-C in a function call", "\x03", r"[Ii]nterrupt|Quit|signaled", timeout=20)
-    t.check("/proc: the thread's own SP and PC after it",
-            _syscall_sp_pc(s.step("", proc)) == own, "")
+    if proc:
+        t.check("/proc: the thread's own SP and PC after it",
+                _syscall_sp_pc(s.step("", proc)) == own, "")
     s.step("  still parked", "print chain_marker\r", r"= 4242")
     s.step("step: refused", "step\r",
            r"refusing 'step' while user thread {} is selected[\s\S]*realm-thread back".format(ptr))
@@ -409,7 +420,7 @@ def test_terminal_plain_startup(t):
                             "-ex", "continue"]))
     shown = s.read(timeout=t.args.timeout)
     t.check("selected, then bt: the parked thread", re.search(
-        r"selected user thread[\s\S]*No symbol[\s\S]*#0 .*user_switch[\s\S]*No symbol"
+        r"selected user thread[\s\S]*No symbol[\s\S]*#0 .*" + FRAME0 + r"[\s\S]*No symbol"
         r"[\s\S]*realm-gdb.py loaded again", shown), shown)
     t.check("continue: ends the selection, and the program finishes", re.search(
         r"continuing; no longer selecting user thread[\s\S]*REALM_GDB_TEST: PASS[\s\S]*"
@@ -443,7 +454,7 @@ def test_terminal_plain_detach(t):
             return
         s.step("realm-thread PTR", "realm-thread {}\r".format(m.group(1)),
                r"commands that work with the selected frame")
-        s.step("bt: the parked thread", "bt 1\r", r"user_switch")
+        s.step("bt: the parked thread", "bt 1\r", FRAME0)
         s.step("release the program (rt: plain set var is refused)",
                "rt set var realm_gdb_test_release = 1\r", unwanted="refusing")
         s.step("a command that fails", "print rgt_nosuchvar\r", r"No symbol")
