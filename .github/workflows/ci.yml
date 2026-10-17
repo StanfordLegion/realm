@@ -1,27 +1,92 @@
-# DEBUG ONLY: does gdb's write of the x86 extended registers fail on some
-# runners, and for which gdbs?  Plain gdb, no realm-gdb.
+# DEBUG ONLY: hunt for a runner whose XSAVE area is bigger than gdb 13's
+# 2696-byte buffer, and run plain gdb 12, 15 and 17 there.
 name: ci
 on:
   push:
 jobs:
   xstate:
-    name: xstate-probe-${{ matrix.n }}
+    name: xstate-hunt-${{ matrix.n }}
     runs-on: ubuntu-latest
     timeout-minutes: 20
     strategy:
       fail-fast: false
       matrix:
-        n: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16]
+        n: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53, 54, 55, 56, 57, 58, 59, 60]
     steps:
-      - uses: actions/checkout@v4.2.2
       - name: Runner
+        id: runner
         run: |
           echo "PROBE $(grep -m 1 'model name' /proc/cpuinfo)"
           echo "PROBE kernel $(uname -r)"
-          echo "PROBE flags: $(grep -m 1 '^flags' /proc/cpuinfo | grep -o -w 'amx_[a-z0-9]*\|avx512f\|pku' | tr '\n' ' ')"
-          gcc -O2 -o xsprobe xstate-probe/xsprobe.c
-          ./xsprobe | sed 's/^/PROBE /'
+          echo "PROBE flags: $(grep -m 1 '^flags' /proc/cpuinfo | grep -o -w 'amx_[a-z0-9]*\|avx512f\|pku\|ospke' | tr '\n' ' ')"
+          cat > xsprobe.c <<'SRC'
+          /* What the kernel's xstate regset expects, against what gdb <= 13 sends. */
+          #define _GNU_SOURCE
+          #include <cpuid.h>
+          #include <errno.h>
+          #include <signal.h>
+          #include <stdint.h>
+          #include <stdio.h>
+          #include <string.h>
+          #include <sys/ptrace.h>
+          #include <sys/uio.h>
+          #include <sys/wait.h>
+          #include <unistd.h>
+
+          #define NT_X86_XSTATE 0x202
+          #define GDB13_SIZE 2696 /* X86_XSTATE_MAX_SIZE in gdb 8.2 to 13.2 */
+
+          static void setregset(pid_t pid, size_t len)
+          {
+            static char buf[65536];
+            struct iovec iov = {buf, len};
+            long r = ptrace(PTRACE_GETREGSET, pid, (void *)NT_X86_XSTATE, &iov);
+            if (r < 0) {
+              printf("GETREGSET(%zu): %s\n", len, strerror(errno));
+              return;
+            }
+            size_t got = iov.iov_len;
+            r = ptrace(PTRACE_SETREGSET, pid, (void *)NT_X86_XSTATE, &iov);
+            printf("get %zu bytes then set them back: %s\n", got, r < 0 ? strerror(errno) : "ok");
+          }
+
+          int main(void)
+          {
+            unsigned a, b, c, d, lo, hi;
+            __cpuid_count(7, 0, a, b, c, d);
+            printf("cpuid 7: avx512f=%u amx-tile=%u amx-bf16=%u amx-int8=%u\n", (b >> 16) & 1,
+                   (d >> 24) & 1, (d >> 22) & 1, (d >> 25) & 1);
+            __cpuid_count(0xd, 0, a, b, c, d);
+            __asm__ volatile("xgetbv" : "=a"(lo), "=d"(hi) : "c"(0));
+            printf("xcr0=%#llx  xsave size for xcr0 (cpuid 0xd ebx)=%u  max (ecx)=%u\n",
+                   ((unsigned long long)hi << 32) | lo, b, c);
+
+            pid_t pid = fork();
+            if (pid == 0) {
+              ptrace(PTRACE_TRACEME, 0, 0, 0);
+              raise(SIGSTOP);
+              _exit(0);
+            }
+            int st;
+            waitpid(pid, &st, 0);
+            static char buf[65536];
+            struct iovec iov = {buf, sizeof buf};
+            if (ptrace(PTRACE_GETREGSET, pid, (void *)NT_X86_XSTATE, &iov) == 0)
+              printf("kernel's xstate regset: %zu bytes\n", iov.iov_len);
+            setregset(pid, GDB13_SIZE);
+            setregset(pid, sizeof buf);
+            kill(pid, SIGKILL);
+            return 0;
+          }
+          SRC
+          gcc -O2 -o xsprobe xsprobe.c
+          ./xsprobe | tee out.txt | sed 's/^/PROBE /'
+          size=$(sed -n "s/^kernel's xstate regset: \([0-9]*\) bytes/\1/p" out.txt)
+          [ "${size:-0}" -gt 2696 ] && echo "big=1" >> "$GITHUB_OUTPUT" || true
+      - uses: actions/checkout@v4.2.2
+        if: steps.runner.outputs.big == '1'
       - name: gdb 12, 15, 17 on this runner
+        if: steps.runner.outputs.big == '1'
         run: |
           for u in 22.04 24.04 26.04; do
             docker run --rm --cap-add=SYS_PTRACE --security-opt seccomp=unconfined \
