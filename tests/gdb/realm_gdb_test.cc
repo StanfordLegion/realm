@@ -52,7 +52,8 @@
 #include <sys/prctl.h>
 #endif
 
-#if defined(__GNUC__)
+// (FreeBSD's alloca() is in stdlib.h.)
+#if defined(__GNUC__) && !defined(__FreeBSD__)
 #include <alloca.h>
 #endif
 
@@ -137,13 +138,14 @@ RGT_NOINLINE int realm_gdb_test_widget_sum(const RealmGdbTestWidget *w)
 }
 
 // Uses `kb` KiB of stack, to see whose stack an inferior call runs on.
+// (signed char: plain char is unsigned on aarch64.)
 RGT_NOINLINE long realm_gdb_test_stack_hog(long kb)
 {
   size_t bytes = size_t(kb) * 1024;
-  volatile char *buf = static_cast<volatile char *>(alloca(bytes));
+  volatile signed char *buf = static_cast<volatile signed char *>(alloca(bytes));
   long sum = 0;
   for(size_t i = 0; i < bytes; i += 512)
-    buf[i] = char(i >> 9);
+    buf[i] = static_cast<signed char>(i >> 9);
   for(size_t i = 0; i < bytes; i += 512)
     sum += buf[i];
   return sum;

@@ -1192,6 +1192,14 @@ namespace Realm {
     } while(0);
 #endif
 
+#ifdef REALM_ON_FREEBSD
+    // FreeBSD's libthr doesn't take static TLS out of a thread's stack, so
+    //  there's nothing to detect (and the test below would crash: a thread
+    //  that exits loads the unwinder, libgcc_s, on its tiny stack)
+    static_tls_size = 0;
+    return;
+#endif
+
 #ifdef REALM_USE_PTHREADS
     // case 4: empirically determine it by trying to create threads with small
     //  stacks (test up to 16MB)
@@ -1552,8 +1560,14 @@ namespace Realm {
     // Round up to the next page, and add a page for a red zone to protect against stack
     // overflows
     stack_size = ((stack_size + pg_size - 1) & ~(pg_size - 1));
-    stack_base = mmap(nullptr, stack_size + pg_size, PROT_NONE,
-                      MAP_PRIVATE | MAP_ANONYMOUS | MAP_STACK, -1, 0);
+#if defined(REALM_ON_FREEBSD)
+    // (FreeBSD's MAP_STACK is a region that grows down, which must be mapped
+    //  readable and writable)
+    const int stack_flags = MAP_PRIVATE | MAP_ANONYMOUS;
+#else
+    const int stack_flags = MAP_PRIVATE | MAP_ANONYMOUS | MAP_STACK;
+#endif
+    stack_base = mmap(nullptr, stack_size + pg_size, PROT_NONE, stack_flags, -1, 0);
     if(stack_base == MAP_FAILED) {
       log_thread.error() << "mmap failed: " << strerror(errno);
     }
