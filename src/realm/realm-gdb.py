@@ -151,6 +151,10 @@ class _Arch(object):
     pc_reg = None
     sp_reg = None
     fallback_regs = ()
+    # An extended register (x87, SSE, AVX state) that a window writes once,
+    # and back, to see whether gdb can (see _calls_unwritable); None: not
+    # checked.
+    probe_reg = None
     # Registers that a parked user thread shares with whichever thread shows
     # it, which gdb may need to unwind its frames; a core-file view passes
     # them through from the host frame (those that exist).
@@ -188,6 +192,7 @@ class _X86_64Linux(_Arch):
     pc_reg = "rip"
     sp_reg = "rsp"
     fallback_regs = _X86_64_GP_REGS + _X86_64_OTHER_REGS + ("orig_rax",)
+    probe_reg = "xmm15.v2_int64[0]"
     # glibc x86-64 ucontext gregs[] indices (see /usr/include/sys/ucontext.h).
     # getcontext()/swapcontext() save the callee-saved registers, the
     # argument registers, and RIP/RSP as of the return from the call.  (No
@@ -221,6 +226,7 @@ class _X86_64FreeBSD(_Arch):
     pc_reg = "rip"
     sp_reg = "rsp"
     fallback_regs = _X86_64_GP_REGS + _X86_64_OTHER_REGS
+    probe_reg = "xmm15.v2_int64[0]"
     # FreeBSD mcontext_t (sys/x86/include/ucontext.h) uses named fields
     # (mc_rip, mc_rsp, ...), not a gregs[] array.
     _CTX = ("r8", "r9", "r12", "r13", "r14", "r15", "rdi", "rsi", "rbp",
@@ -815,6 +821,15 @@ def _parked_problem(ut, sps):
 #     the middle of a command if need be).  Ctrl-C is not: an interrupted
 #     command closes its window on the way out.
 #   - gdb.events.gdb_exiting (gdb >= 12) closes any window left open.
+#   - Function calls are refused in windows if gdb can't write the extended
+#     registers (x87, SSE, AVX state), which a call changes: gdb 13 and older
+#     can't where the kernel's XSAVE area is bigger than their buffer (with
+#     AMX on).  Then gdb itself can't put back what a call changed (it gives
+#     up at the first of them, leaving $orig_rax changed too), nor can the
+#     window, and the program mustn't run until it is (see _unrestored).
+#     The first window that would allow calls checks it, once per process
+#     (_calls_unwritable): once gdb has started a call it is too late, as
+#     stopping one cleanly needs those writes too.
 #
 # What can't be covered: gdb itself dying (kill -9, a crash) with a window
 # open leaves an attached process running the parked thread's context on the
@@ -831,6 +846,10 @@ def _parked_problem(ut, sps):
 # loaded again: a window a failed plain command left open is still open.)
 _window = globals().get("_window")
 _unrestored = globals().get("_unrestored", [])
+
+# Per process ((inferior number, pid)): gdb's error writing an extended
+# register, or None if it can (see _calls_unwritable).
+_extended_unwritable = {}
 
 # Inferior calls in progress (in or out of a window); the user breakpoints
 # disabled for the one in a window.
@@ -937,11 +956,12 @@ def _raw_regs(frame):
     return {n: _raw(v) for n, v in _read_regs(frame, _snapshot_names(frame)).items()}
 
 
-def _put_back(saved):
+def _put_back(saved, errors=None):
     """Write every register in `saved` that differs back into the selected
     thread, until they all match.  Returns what still differs ([] when
-    done).  An interruption (Ctrl-C) is retried, so that a half-restored
-    thread is never left."""
+    done), with gdb's error writing each in `errors`, a dict, if given.  An
+    interruption (Ctrl-C) is retried, so that a half-restored thread is
+    never left."""
     left = list(saved)
     for _ in range(10):
         try:
@@ -951,7 +971,16 @@ def _put_back(saved):
             if not left:
                 return []
             for name in left:
-                _write_reg(name, saved[name])
+                # (One that can't be written mustn't keep the rest from
+                # being: e.g. gdb 13 and older can't write the SSE registers
+                # where the kernel's XSAVE area is bigger than gdb's own
+                # buffer (with AMX), and $orig_rax must still be put back.)
+                try:
+                    _write_reg(name, saved[name])
+                except gdb.error as e:
+                    _debug_exc()
+                    if errors is not None:
+                        errors[name] = str(e)
         except KeyboardInterrupt:
             continue
         except gdb.error:
@@ -1138,6 +1167,12 @@ class _Window(object):
         # Whether a call made in it was left stopped (None: not looked yet).
         self.abandoned = None
         self.showing = None
+        # What close() could not put back, and gdb's errors writing them.
+        self.left = []
+        self.left_errors = {}
+        # The note to print if it found that calls must be refused (see
+        # _calls_unwritable).
+        self.unwritable_note = None
 
     def __enter__(self):
         global _window
@@ -1212,16 +1247,18 @@ class _Window(object):
                     thread.switch()
                 if self.abandoned is None:
                     self._pop_abandoned_call()
-                left = _put_back(self.saved)
+                self.left_errors = {}
+                left = _put_back(self.saved, self.left_errors)
                 if left and self not in _unrestored:
                     _unrestored.append(self)
                 break
             except KeyboardInterrupt:
                 interrupted = True
+        self.left = left
         if left:
-            print("realm-gdb: WARNING: could not put back thread {}'s own registers "
-                  "({}).  Don't let the program run; run 'realm-thread back' to try "
-                  "again.".format(self.thread_num, ", ".join("$" + n for n in left)))
+            print("realm-gdb: WARNING: could not put back {}.  Don't let the program "
+                  "run; run 'realm-thread back' to try again.".format(
+                      _unrestored_words(self)))
         if hasattr(gdb, "set_convenience_variable"):
             gdb.set_convenience_variable("_realm_gdb_reg", None)
         self.selection.__exit__(None, None, None)
@@ -1261,9 +1298,70 @@ class _Window(object):
             _debug_exc()
 
 
-def _retry_unrestored():
+def _probe_extended():
+    """Write _arch.probe_reg of the selected thread, changed, then back:
+    gdb's error if it can't, else None."""
+    gdb.newest_frame().select()  # (An outer frame's would be its saved copy.)
+    expr = "$" + _arch.probe_reg
+    try:
+        old = int(gdb.parse_and_eval(expr))
+    except gdb.error:
+        _debug_exc()
+        return None  # (Nothing to check with.)
+    try:
+        for value in (old ^ 1, old):
+            gdb.execute("set var {} = {}".format(expr, value), to_string=True)
+    except gdb.error as e:
+        return str(e)
+    return None
+
+
+def _calls_unwritable(window):
+    """gdb's error writing the selected thread's extended registers, if it
+    can't (see "Register windows"), else None.  Checked once per process;
+    the window that finds it gets the note to print (unwritable_note)."""
+    if _arch.probe_reg is None:
+        return None
+    inf = gdb.selected_inferior()
+    key = (inf.num, inf.pid)
+    if key not in _extended_unwritable:
+        error = _probe_extended()
+        _extended_unwritable[key] = error
+        if error is not None:
+            window.unwritable_note = _unwritable_note(error)
+    return _extended_unwritable[key]
+
+
+def _unwritable_note(error):
+    why = ("this gdb can't write the x87, SSE and AVX registers of this program's "
+           "threads (\"{}\"), which a function call changes, so they couldn't be "
+           "put back after one".format(error.rstrip(".")))
+    gdb_too = ("  (gdb's own function calls fail here the same way, and leave those "
+               "registers changed.  With AMX on, gdb 13 and older can't write them; "
+               "gdb 14 and later can.)")
+    if not _can_refuse_calls:
+        return ("realm-gdb: WARNING: {}, and it can't refuse function calls: don't make "
+                "any while a parked Realm user thread is shown, or the program can't "
+                "run again until they are put back.{}".format(why, gdb_too))
+    return ("realm-gdb: function calls are refused while a parked Realm user thread "
+            "is shown, in this program: {}.{}".format(why, gdb_too))
+
+
+def _unrestored_words(window):
+    """"thread N's own registers ($a, $b: gdb's error)", for a window that
+    could not put them all back."""
+    left = getattr(window, "left", None) or []  # (A window of an earlier load's.)
+    errors = getattr(window, "left_errors", {})
+    why = sorted(set(errors[n].rstrip(".") for n in left if n in errors))
+    return "thread {}'s own registers ({}{})".format(
+        window.thread_num, ", ".join("$" + n for n in left),
+        ": " + "; ".join(why) if why else "")
+
+
+def _retry_unrestored(report=False):
     """Try again to put back the registers of hosts whose windows couldn't
-    (see _Window.close).  Returns whether none are left."""
+    (see _Window.close).  Returns whether none are left.  With `report`,
+    says so for those still left."""
     for window in list(_unrestored):
         try:
             thread = window.thread
@@ -1272,10 +1370,17 @@ def _retry_unrestored():
                 continue
             with _KeepSelection():
                 thread.switch()
-                if not _put_back(window.saved):
+                errors = {}
+                left = _put_back(window.saved, errors)
+                window.left, window.left_errors = left, errors
+                if not left:
                     _unrestored.remove(window)
                     print("realm-gdb: put back thread {}'s own registers.".format(
                         window.thread_num))
+                elif report:
+                    print("realm-gdb: WARNING: still could not put back {}.  Don't let "
+                          "the program run: 'kill' it, or run 'realm-thread back' to try "
+                          "again.".format(_unrestored_words(window)))
         except Exception:
             _debug_exc()
     return not _unrestored
@@ -1356,9 +1461,12 @@ def _end_refusals(window):
 
 
 def _call_notes(window):
-    """The notes on the function calls made in `window`, to print once it
-    is closed."""
+    """The notes on the function calls made in `window`, or refused in it,
+    to print once it is closed."""
     notes = []
+    if getattr(window, "unwritable_note", None):  # (Once: see _calls_unwritable.)
+        notes.append(window.unwritable_note)
+        window.unwritable_note = None
     if window.breakpoints_skipped:
         notes.append("realm-gdb: breakpoints were ignored in the function calls made "
                      "meanwhile (a call made while a parked Realm user thread is shown "
@@ -1643,11 +1751,11 @@ def _guard(cmd):
     # (Killing the program is the way out, as the message says.)
     if _unrestored and cmd.split()[0] != "kill" and not _retry_unrestored():
         raise gdb.GdbError(
-            "realm-gdb: refusing '{}': thread {} still has a parked Realm user "
-            "thread's registers, which realm-gdb could not put back, so letting "
-            "the program run, or letting go of it, would corrupt it.  Run "
-            "'realm-thread back' to try again, or 'kill' the program.".format(
-                cmd, ", ".join(str(w.thread_num) for w in _unrestored)))
+            "realm-gdb: refusing '{}': realm-gdb could not put back {} after it "
+            "showed a parked Realm user thread there, so letting the program run, or "
+            "letting go of it, could corrupt it.  Run 'realm-thread back' to try "
+            "again, or 'kill' the program.".format(
+                cmd, "; ".join(_unrestored_words(w) for w in _unrestored)))
 
 
 def _outer_frames(frame):
@@ -2696,12 +2804,15 @@ def _show_in_window(window, ut, selection=None):
     if not room and not _can_refuse_calls:
         raise _Unshowable("too little of its stack is free below its stack pointer "
                           "for function calls, which this gdb can't refuse")
+    unwritable = None
+    if room and window.settings.user_calls is not False:
+        unwritable = _calls_unwritable(window)
     regs, ut_notes = _arch.context_regs(ut)
-    window.show(ut, regs, calls=room)
+    window.show(ut, regs, calls=room and unwritable is None)
     if selection is not None:
         _select_level(selection["level"])
     return {"ut": ut, "selection": selection, "room": room, "notes": ut_notes,
-            "regs": _raw_regs(gdb.newest_frame())}
+            "regs": _raw_regs(gdb.newest_frame()), "unwritable": unwritable}
 
 
 def _window_done(window, shown, what):
@@ -2736,12 +2847,22 @@ def _run_in_window(window, ut, command, notes, selection=None):
     `selection` (see "Selecting a parked thread"), its frame is selected
     first, and the frame `command` leaves selected is remembered."""
     shown = _show_in_window(window, ut, selection)
-    if callable(command):  # (see _apply_external)
-        out = command()
-    else:
-        out = _frame_motion(command)
-        if out is None:
-            out = _execute(command)
+    try:
+        if callable(command):  # (see _apply_external)
+            out = command()
+        else:
+            out = _frame_motion(command)
+            if out is None:
+                out = _execute(command)
+    except gdb.error as e:
+        if shown["unwritable"] is None or "may-call-functions" not in str(e):
+            raise
+        # (gdb's message alone would leave the user wondering why.)
+        note, window.unwritable_note = window.unwritable_note, None
+        raise gdb.error("{}\n{}".format(e, note) if note else (
+            "{}  (realm-gdb: function calls are refused while a parked Realm user "
+            "thread is shown, in this program: this gdb can't write the x87, SSE and "
+            "AVX registers, which a call changes.)".format(e)))
     notes += _window_done(window, shown, "edit" if callable(command) else command.split()[0])
     return out
 
@@ -4108,7 +4229,7 @@ class RealmThread(gdb.Command):
 
     def _back(self):
         if _unrestored:
-            _retry_unrestored()
+            _retry_unrestored(report=True)
             return
         view = _current_view()
         if view is None:

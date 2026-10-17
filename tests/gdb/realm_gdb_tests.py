@@ -3746,8 +3746,8 @@ def test_window_unrestored(t):
     main = sys.modules["__main__"]
     real = main._put_back
 
-    def put_back(saved):  # (Puts them back, but says it couldn't.)
-        return real(saved) or [sorted(saved)[0]]
+    def put_back(saved, *args):  # (Puts them back, but says it couldn't.)
+        return real(saved, *args) or [sorted(saved)[0]]
     main._put_back = put_back
     try:
         out = t.run("realm-thread apply {:#x} bt 1".format(t.ut("chain0")))
@@ -3761,6 +3761,133 @@ def test_window_unrestored(t):
     yield
     t.run_program()
     t.check_eq(t.frame_name(gdb.selected_frame()), "realm_gdb_test_stop", "stopped in")
+    t.continue_to_exit()
+
+
+@test(scenarios=("live", "attach"))
+def test_window_unwritable_register(t):
+    """A register a window can't put back (simulated here; gdb 13 and older
+    can't write the SSE registers where the kernel's XSAVE area is bigger
+    than gdb's buffer, as with AMX) doesn't keep it from putting back the
+    registers after it: $mxcsr, and $orig_rax, which says whether the system
+    call the thread stopped in is restarted.  `realm-thread back` puts the
+    rest back once it can."""
+    if not _is_x86_64():
+        raise TestSkip("x86-64 registers")
+    regs = ["mxcsr"] + (["orig_rax"] if not _is_freebsd() else [])
+    before = {r: t.eval_int("$" + r) for r in regs + ["xmm0.v2_int64[0]"]}
+    changes = ["set var $xmm0.v2_int64[0] = {:#x}".format(before["xmm0.v2_int64[0]"] ^ 0x5a5a)]
+    changes += ["set var ${} = {:#x}".format(r, before[r] ^ 0x6000) for r in regs]
+    main = sys.modules["__main__"]
+    real = main._write_reg
+
+    def write_reg(name, value):
+        if name.startswith("xmm"):
+            raise gdb.error("Couldn't write extended state status: Bad address.")
+        real(name, value)
+    main._write_reg = write_reg
+    try:
+        out = t.run("realm-thread apply {:#x} python {}".format(
+            t.ut("chain0"), "; ".join("gdb.execute({!r})".format(c) for c in changes)))
+        why = "own registers ($xmm0: Couldn't write extended state status: Bad address)"
+        t.check_in(why, out, "the warning")
+        for r in regs:
+            t.check_eq(t.eval_int("$" + r), before[r], "$" + r + ", put back all the same")
+        msg = t.expect_error("continue", "could not put back")
+        t.check_in(why, msg, "the refusal")
+        out = t.run("realm-thread back")
+        t.check_in("still could not put back thread", out, "'realm-thread back', failing")
+    finally:
+        main._write_reg = real
+    t.check_in("put back thread", t.run("realm-thread back"), "'realm-thread back'")
+    t.check(not main._unrestored, "threads still to put back")
+    for r, v in sorted(before.items()):
+        t.check_eq(t.eval_int("$" + r), v, "$" + r)
+    yield
+    t.check_host_stack()
+    _finish(t)
+
+
+@test(scenarios=("live", "attach"), variants=[None, "failing"])
+def test_window_calls_unwritable(t):
+    """Where gdb can't write the extended registers (simulated here; gdb 13
+    and older can't with AMX on), function calls are refused while a parked
+    thread is shown, as neither gdb nor the window could put back what a call
+    changes.  realm-gdb says why once (also if the command that found it
+    failed, in the "failing" variant), and with gdb's error when a call is
+    refused; everything else works, and the program carries on cleanly."""
+    if not _is_x86_64():
+        raise TestSkip("x86-64 registers")
+    main = sys.modules["__main__"]
+    real = main._probe_extended
+    main._probe_extended = lambda: "Couldn't write extended state status: Bad address."
+    main._extended_unwritable.clear()
+    note = ("function calls are refused" if main._can_refuse_calls else
+            "can't refuse function calls")
+    try:
+        if t.variant == "failing":
+            error, out = t.run_capturing("realm-thread apply {:#x} print rgt_nosuchvar"
+                                         .format(t.ut("chain0")))
+            t.check(error is not None, "print rgt_nosuchvar:\n" + out)
+            t.check_in(note, out, "the note, after a failure")
+        out = t.apply("chain0", "bt 3")
+        t.check_eq(_parked_frame_count(out), 3, "bt 3")
+        if t.variant == "failing":
+            t.check_not_in("Couldn't write", out, "the note, again")
+        else:
+            t.check_in("(\"Couldn't write extended state status: Bad address\")", out,
+                       "the note")
+            t.check_in(note, out, "the note")
+        if main._can_refuse_calls and t.variant is None:
+            t.check_not_in("refused", t.apply("chain0", "bt 1"), "the note, again")
+            why = "can't write the x87, SSE and AVX registers"
+            msg = t.expect_error("realm-thread apply {:#x} print realm_gdb_test_add(1, 2)"
+                                 .format(t.ut("chain0")), "may-call-functions is off")
+            t.check_in(why, msg, "the error")
+            t.select("chain0")
+            t.check_in(why, t.expect_error("rt print realm_gdb_test_add(1, 2)"), "rt's error")
+            if t.plain:
+                t.expect_error("print realm_gdb_test_add(1, 2)", "may-call-functions is off")
+            t.run("realm-thread back")
+            t.check_in("is on", t.run("show may-call-functions"), "may-call-functions after")
+    finally:
+        main._probe_extended = real
+    t.check(not main._unrestored, "threads to put back")
+    t.check_host_stack()
+    yield
+    _finish(t)
+
+
+@test(scenarios=("live",))
+def test_window_extended_check_once(t):
+    """Whether gdb can write the extended registers is checked once per
+    process, by the first window that would allow function calls, and the
+    check leaves them as they were."""
+    if not _is_x86_64():
+        raise TestSkip("x86-64 registers")
+    main = sys.modules["__main__"]
+    before = t.regs()
+    t.check_eq(main._probe_extended(), None, "the check, on its own")
+    t.check_regs(before, what="registers after the check")
+    real = main._probe_extended
+    made = []
+
+    def probe():
+        made.append(1)
+        return real()
+    main._probe_extended = probe
+    main._extended_unwritable.clear()
+    try:
+        for _ in range(3):
+            t.apply("chain0", "bt 1")
+        t.run("thread apply all bt")
+        t.within("chain0", lambda: t.check_eq(t.eval_int("realm_gdb_test_add(1, 2)"), 3,
+                                              "add()"))
+    finally:
+        main._probe_extended = real
+    t.check_eq(len(made), 1, "checks made")
+    t.check_regs(before)
+    yield
     t.continue_to_exit()
 
 
