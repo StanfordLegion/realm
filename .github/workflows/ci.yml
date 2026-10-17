@@ -589,6 +589,9 @@ jobs:
         run: |
           gdb --version | head -n 1
           gdb -nx -batch -ex 'python import sys; print("Python " + sys.version)'
+          # (gdb 12 has failed every register write, "Couldn't write extended
+          # state status", on some runners: probably their CPUs.)
+          grep -m 1 "model name" /proc/cpuinfo || true
 
       # (One dimension is all the tests need, and much quicker to build.)
       - name: Configure
@@ -611,6 +614,140 @@ jobs:
                 --output-junit "$GITHUB_WORKSPACE/test-results.xml"
                 --output-on-failure
                 --parallel $(nproc)
+
+      - uses: test-summary/action@v2
+        name: Upload Test Results
+        if: always() && hashFiles('test-results.xml')
+        with:
+          paths: "test-results.xml"
+
+  freebsd:
+    # Realm's build and tests on FreeBSD, with its own compiler (clang), in a
+    # VM on a Linux runner (freebsd-vm.sh).
+    name: freebsd-${{ matrix.release }}-x86_64-clang-Release
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    strategy:
+      fail-fast: false
+      matrix:
+        release: ['14.5', '15.1']
+    steps:
+      - uses: actions/checkout@v4.2.2
+        with:
+          fetch-tags: true
+          fetch-depth: 100
+
+      - name: Get Packages
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends qemu-system-x86 qemu-utils genisoimage
+          # (So that QEMU can use KVM.)
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+
+      - name: Start FreeBSD
+        run: |
+          .github/workflows/freebsd-vm.sh start ${{ matrix.release }}
+          .github/workflows/freebsd-vm.sh run 'env ASSUME_ALWAYS_YES=yes pkg install -y cmake git ninja python3'
+          .github/workflows/freebsd-vm.sh push . /root/realm
+
+      - name: Configure
+        run: >
+          .github/workflows/freebsd-vm.sh run
+          'cmake -S /root/realm -B /root/build -G Ninja
+          -DCMAKE_BUILD_TYPE=Release
+          -DREALM_BUILD_TESTS=ON -DREALM_BUILD_BENCHMARKS=ON -DREALM_BUILD_TUTORIALS=ON -DREALM_BUILD_EXAMPLES=ON
+          -DREALM_BUILD_GDB_TESTS=OFF'
+
+      - name: Build
+        run: >
+          .github/workflows/freebsd-vm.sh run
+          'cmake --build /root/build --parallel $(sysctl -n hw.ncpu)'
+
+      - name: Run Tests
+        run: >
+          .github/workflows/freebsd-vm.sh run
+          'ctest --test-dir /root/build
+          --output-junit /root/test-results.xml
+          --output-on-failure
+          --timeout 240
+          --parallel 4'
+
+      - name: Get Test Results
+        if: always()
+        run: .github/workflows/freebsd-vm.sh pull /root/test-results.xml test-results.xml || rm -f test-results.xml
+
+      - uses: test-summary/action@v2
+        name: Upload Test Results
+        if: always() && hashFiles('test-results.xml')
+        with:
+          paths: "test-results.xml"
+
+  gdb-freebsd:
+    # The tests of the gdb script (see the gdb job) with the gdb FreeBSD's
+    # packages ship, in a VM as the freebsd job.
+    name: gdb-freebsd-${{ matrix.release }}-x86_64-${{ matrix.build }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    strategy:
+      fail-fast: false
+      matrix:
+        release: ['14.5', '15.1']
+        build: [Debug, RelWithDebInfo]
+    steps:
+      - uses: actions/checkout@v4.2.2
+        with:
+          fetch-tags: true
+          fetch-depth: 100
+
+      - name: Get Packages
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends qemu-system-x86 qemu-utils genisoimage
+          # (So that QEMU can use KVM.)
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+
+      - name: Start FreeBSD
+        run: |
+          .github/workflows/freebsd-vm.sh start ${{ matrix.release }}
+          .github/workflows/freebsd-vm.sh run 'env ASSUME_ALWAYS_YES=yes pkg install -y cmake gdb git ninja python3'
+          .github/workflows/freebsd-vm.sh push . /root/realm
+
+      - name: Show gdb
+        run: |
+          .github/workflows/freebsd-vm.sh run 'gdb --version | head -n 1'
+          .github/workflows/freebsd-vm.sh run "gdb -nx -batch -ex 'python import sys; print(\"Python \" + sys.version)'"
+
+      - name: Configure
+        run: >
+          .github/workflows/freebsd-vm.sh run
+          'cmake -S /root/realm -B /root/build -G Ninja
+          -DCMAKE_BUILD_TYPE=${{ matrix.build }}
+          -DREALM_BUILD_TESTS=ON
+          -DREALM_BUILD_GDB_TESTS=ON
+          -DREALM_MAX_DIM=1'
+
+      - name: Build
+        run: >
+          .github/workflows/freebsd-vm.sh run
+          'cmake --build /root/build --target realm_gdb_test --parallel $(sysctl -n hw.ncpu)'
+
+      - name: Run Tests
+        run: >
+          .github/workflows/freebsd-vm.sh run
+          'ctest --test-dir /root/build
+          --label-regex gdb
+          --no-tests=error
+          --output-junit /root/test-results.xml
+          --output-on-failure
+          --parallel $(sysctl -n hw.ncpu)'
+
+      - name: Get Test Results
+        if: always()
+        run: .github/workflows/freebsd-vm.sh pull /root/test-results.xml test-results.xml || rm -f test-results.xml
 
       - uses: test-summary/action@v2
         name: Upload Test Results

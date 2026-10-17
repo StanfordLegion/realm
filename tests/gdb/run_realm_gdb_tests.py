@@ -446,10 +446,18 @@ class CoreFiles(object):
 
 
 def kernel_core_pattern():
+    """Where the kernel writes core files: Linux's core_pattern, or FreeBSD's
+    kern.corefile."""
     try:
         with open("/proc/sys/kernel/core_pattern") as f:
             return f.read().strip()
     except OSError:
+        pass
+    try:
+        out = subprocess.run(["sysctl", "-n", "kern.corefile"], stdout=subprocess.PIPE,
+                             stderr=subprocess.DEVNULL, timeout=10)
+        return out.stdout.decode().strip() or None if out.returncode == 0 else None
+    except (OSError, subprocess.SubprocessError):
         return None
 
 
@@ -473,7 +481,8 @@ def make_kernel_core(args, tmp):
              preexec_fn=unlimited_core)
     p.wait(args.timeout)
     p.kill()
-    cores = [f for f in os.listdir(cwd) if f.startswith("core")]
+    # (Linux's default is core or core.PID, FreeBSD's PROGRAM.core.)
+    cores = [f for f in os.listdir(cwd) if f.startswith("core") or f.endswith(".core")]
     if not cores:
         return None, "SKIP", "the kernel didn't write a core file " \
             "(core_pattern {!r}, hard RLIMIT_CORE?)".format(pattern)
@@ -766,7 +775,8 @@ def dap_test(args):
                 chain = ptr
                 break
         check(chain is not None, "a chain task's stack:\n{}".format(out))
-        check(re.match(r"#0\s+.*Realm::UserThread::user_switch", out),
+        check(re.match(r"#0\s+.*" + ("_swapcontext" if sys.platform.startswith("freebsd")
+                                       else "Realm::UserThread::user_switch"), out),
               "its frame #0 is the parked thread's own")
         if chain is not None:
             check("= 5" in dap.repl("realm-thread apply {} print realm_gdb_test_add(2, 3)"

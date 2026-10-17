@@ -954,21 +954,41 @@ def _is_x86_64():
     return "x86-64" in name or "x86_64" in name
 
 
+def _is_freebsd():
+    return sys.platform.startswith("freebsd")
+
+
+def _ctx_field(ut, reg):
+    """The expression for the saved "pc" or "sp" in user thread `ut`'s
+    context (a ucontext_t, laid out per CPU and OS)."""
+    if _is_freebsd():
+        field = {"pc": "mc_rip", "sp": "mc_rsp"} if _is_x86_64() else {
+            "pc": "mc_gpregs.gp_elr", "sp": "mc_gpregs.gp_sp"}
+    else:
+        field = {"pc": "gregs[16]", "sp": "gregs[15]"} if _is_x86_64() else {
+            "pc": "pc", "sp": "sp"}
+    return "((Realm::UserThread *){:#x})->ctx.uc_mcontext.{}".format(int(ut), field[reg])
+
+
 def _starts(name, prefix):
     return name.startswith(prefix)
 
 
 USER_SWITCH = "Realm::UserThread::user_switch"
+# The parked thread's innermost frame: user_switch, where it called
+# swapcontext; on FreeBSD, whose swapcontext is a system call, libc's stub
+# making it (with libthr's wrapper's frame between them), as for any thread
+# there blocked in a system call.
+PARKED_FRAME0 = "_swapcontext" if _is_freebsd() else USER_SWITCH
 
 
 def _check_parked_frame0(t, what):
     """Inside a register window, frame #0 is the parked thread's own
-    (user_switch, where it called swapcontext); in a core-file view it is
-    the host's."""
+    (see PARKED_FRAME0); in a core-file view it is the host's."""
     if not t.is_core:
-        t.check(_starts(t.frame_name(gdb.newest_frame()), USER_SWITCH),
+        t.check(_starts(t.frame_name(gdb.newest_frame()), PARKED_FRAME0),
                 "{}: frame #0 is {}, not {}".format(
-                    what, t.frame_name(gdb.newest_frame()), USER_SWITCH))
+                    what, t.frame_name(gdb.newest_frame()), PARKED_FRAME0))
 
 
 # ---- loading ------------------------------------------------------------
@@ -1365,10 +1385,10 @@ def test_thread_apply_all_whitespace(t):
 
 def _parked_frame_count(section):
     """Frames of the parked stack in one parked thread's backtrace text:
-    everything from its innermost frame (user_switch) on, or every frame if
-    that isn't shown (`bt -N`)."""
+    everything from its innermost frame (PARKED_FRAME0) on, or every frame
+    if that isn't shown (`bt -N`)."""
     names = re.findall(_BT_LINE + r"(\S+)", section, re.M)
-    starts = [i for i, n in enumerate(names) if "user_switch" in n]
+    starts = [i for i, n in enumerate(names) if PARKED_FRAME0.split("::")[-1] in n]
     return len(names) - (starts[0] if starts else 0)
 
 
@@ -1626,7 +1646,7 @@ def test_apply_show(t):
     out = t.apply("chain0", "bt full")
     t.check_in("chain_marker = {}".format(t.chain_marker(0)), out, "bt full")
     if not t.is_core:
-        t.check(re.match(r"#0\s+.*" + re.escape(USER_SWITCH), out),
+        t.check(re.match(r"#0\s+.*" + re.escape(PARKED_FRAME0), out),
                 "frame #0 of 'realm-thread apply PTR bt full':\n" + out)
     if t.supports("frame apply 1 print 1"):
         out = t.apply("chain0", "frame apply all -q -s print chain_marker")
@@ -1661,13 +1681,23 @@ def test_apply_callee_saved_fp(t):
     not the host thread's.  A value may be <optimized out> (compilers don't
     always say where one is, and a core file's view has no floating-point
     registers to give on aarch64), but never wrong."""
+    unreadable = []
+
     def inside():
         t.select_frame("rgt_fhot_wait")
         shown = 0
         for k in range(NUM_FHOT):
             expected = float(gdb.parse_and_eval(
                 "realm_gdb_test_state.fhot_wait_expected[{}]".format(k)))
-            val = gdb.parse_and_eval("fhot{}".format(k))
+            try:
+                val = gdb.parse_and_eval("fhot{}".format(k))
+            except gdb.error as e:
+                # (FreeBSD's clang says where a double is with DW_OP_deref_size
+                # 16, which gdb 15 can't read on any thread.)
+                if "more than 8 bytes" not in str(e):
+                    raise
+                unreadable.append(str(e))
+                continue
             if val.is_optimized_out:
                 continue
             t.check_eq(float(val), expected, "fhot{}".format(k))
@@ -1677,7 +1707,8 @@ def test_apply_callee_saved_fp(t):
     yield
     _finish(t)
     if not shown:
-        raise TestSkip("every fhot value is <optimized out> where rgt_fhot_wait waits")
+        raise TestSkip(unreadable[0] if unreadable else
+                       "every fhot value is <optimized out> where rgt_fhot_wait waits")
 
 
 @test(scenarios=("live", "core"))
@@ -1887,7 +1918,7 @@ def test_apply_nested_refused(t):
         t.check(error is not None and ("nest" in error or "inside" in error),
                 "{!r} inside realm-thread apply: {} / {}".format(inner, error, out))
     out = t.apply("chain0", "thread apply {} bt 1".format(t.stop_thread))
-    t.check_in(USER_SWITCH.split("::")[-1], out, "thread apply N bt inside")
+    t.check_in(PARKED_FRAME0.split("::")[-1], out, "thread apply N bt inside")
     out = t.apply("chain0", "thread apply all print $_thread")
     t.check_not_in("Parked Realm user threads", out, "thread apply all print inside")
     yield
@@ -1923,7 +1954,7 @@ def test_select(t):
     before = t.regs()
     out = t.select("chain0")
     t.check_in("selected user thread {:#x}".format(t.ut("chain0")), out, "realm-thread PTR")
-    t.check(re.search(r"^#0\s+.*" + re.escape(USER_SWITCH), out, re.M),
+    t.check(re.search(r"^#0\s+.*" + re.escape(PARKED_FRAME0), out, re.M),
             "frame #0 shown on selecting:\n" + out)
     t.check(re.search(r"{:#x}\s+parked\s+\(selected\)".format(t.ut("chain0")),
                       t.run("realm-thread")), "realm-thread list")
@@ -1944,7 +1975,7 @@ def test_select(t):
     t.check_in("rgt_chain_level3", t.rt("down"), "rt down")
     t.check_in("rgt_chain_level1", t.rt("up 2"), "rt up 2")
     t.check_in("rgt_chain_level3", t.rt("down 2"), "rt down 2")
-    t.check_in(USER_SWITCH, t.rt("down 999"), "rt down 999 (as far as it goes)")
+    t.check_in(PARKED_FRAME0, t.rt("down 999"), "rt down 999 (as far as it goes)")
     t.expect_error("rt down", "Bottom \\(innermost\\) frame selected; you cannot go down")
     t.expect_error("rt frame 9999", "No frame at level 9999")
     t.check_in("rgt_chain_level3", t.rt("f {}".format(level)), "rt f N")
@@ -1972,6 +2003,8 @@ def test_select_external(t):
     tmp = t.config["tmp"]
     proc = "/proc/{}/task/{}/syscall".format(gdb.selected_inferior().pid,
                                              gdb.selected_thread().ptid[1])
+    if not os.path.exists(proc):
+        raise TestSkip("no " + proc)  # (Linux's)
     out = os.path.join(tmp, "external.out")
 
     def written(cmd):
@@ -2031,8 +2064,46 @@ def test_select_external(t):
         t.check_in("= 3", t.run("print $_shell_exitcode"), "rt pipe: $_shell_exitcode")
         t.expect_error("rt pipe | cat", "needs a COMMAND")
     yield
+    t.check_eq(sp_pc(written("shell cat {proc} > {out}")), own,
+               "shell, with the parked thread selected")
+    if t.plain:
+        # (A plain command's window is closed by the next command it runs
+        # that has a hook: as for a command that failed, see _close_stale.)
+        t.check_eq(sp_pc(written('eval "shell cat %s > %s"' % (proc, out))), own,
+                   "eval 'shell ...', with the parked thread selected")
+    yield
     t.check_regs(t.regs())
     t.run("realm-thread back")
+    yield
+    _finish(t)
+
+
+@test(scenarios=("live",))
+def test_external_nested_refused(t):
+    """Inside a command that shows a parked thread (`rt eval ...`, a
+    user-defined command run with `rt`, Python's gdb.execute in `rt`),
+    commands that start another program are refused: it would run while the
+    host has the parked thread's registers.  (`rt` itself runs them without
+    showing it: see test_select_external.)"""
+    t.run("define rgt-shell\nshell true\nend")
+    t.select("chain0")
+    nested = ['rt eval "shell true"', "rt rgt-shell", 'rt eval "edit"',
+              'rt python gdb.execute("shell true")']
+    if t.try_run("help pipe")[0]:
+        nested.append('rt eval "pipe print 1 | cat"')
+    for cmd in nested:
+        if cmd.startswith("rt python"):  # (Its errors come by way of Python.)
+            ok, msg = t.try_run(cmd)
+            t.check(not ok, "{} ran".format(cmd))
+        else:
+            msg = t.expect_error(cmd)
+        # (Before gdb 15, a command's error in Python is "Error while executing
+        # Python code".)
+        if msg.strip() != "Error while executing Python code.":
+            t.check(re.search(r"refusing '(shell|edit|pipe)'.*the program it starts", msg),
+                    "{}: {}".format(cmd, msg))
+    t.run("shell true")  # (Outside them, it runs.)
+    t.back()
     yield
     _finish(t)
 
@@ -2079,7 +2150,7 @@ def test_core_external(t):
     out = os.path.join(t.config["tmp"], "external.out")
     t.run("realm-thread apply {:#x} pipe bt 1 | cat > {}".format(t.ut("chain0"), out))
     with open(out) as f:
-        t.check_in(USER_SWITCH, f.read(), "pipe's SHELL got the parked thread's bt")
+        t.check_in(PARKED_FRAME0, f.read(), "pipe's SHELL got the parked thread's bt")
     yield
 
 
@@ -2092,7 +2163,7 @@ def test_select_nested(t):
     t.rt("frame {}".format(level))
     yield
     t.select("chain1")
-    t.check_eq(_rt_frame_name(t), USER_SWITCH, "chain1's frame")
+    t.check_eq(_rt_frame_name(t), PARKED_FRAME0, "chain1's frame")
     t.rt("frame {}".format(level))
     t.check_in("= {}".format(t.chain_marker(1)), t.rt("print chain_marker"),
                "chain1's chain_marker")
@@ -2135,6 +2206,18 @@ def test_select_dropped_when_running(t):
     t.continue_to_exit()
 
 
+def _poke(lhs, rhs):
+    """`set var LHS = RHS` in the program's memory, from Python, which works
+    in the frame selected on the thread as it really is: plain commands
+    would show a selected parked thread, whose frame #0 needn't be in C++
+    (see PARKED_FRAME0)."""
+    target = gdb.parse_and_eval(lhs)
+    size = target.type.sizeof
+    value = int(gdb.parse_and_eval(rhs).cast(target.type)) & ((1 << (8 * size)) - 1)
+    gdb.selected_inferior().write_memory(int(target.address),
+                                         value.to_bytes(size, sys.byteorder))
+
+
 @test(scenarios=("live",), variants=["context", "running", "gone"])
 def test_select_stale(t):
     """A selected parked thread that is no longer parked as it was (its saved
@@ -2143,15 +2226,14 @@ def test_select_stale(t):
     ut = "((Realm::UserThread *){:#x})".format(t.ut("chain0"))
     t.select("chain0")
     if t.variant == "context":
-        field = "{}->ctx.uc_mcontext.{}".format(ut, "gregs[16]" if _is_x86_64() else "pc")
+        field = _ctx_field(t.ut("chain0"), "pc")
         saved = t.eval_int(field)
-        # (`rt`: plain `set var` is refused while a parked thread is selected.)
-        t.rt("set var {} = {:#x}".format(field, saved + 1))
+        _poke(field, "{:#x}".format(saved + 1))
         why = "has run since it was selected"
     elif t.variant == "running":
         field = "{}->running".format(ut)
         saved = t.eval_int(field)
-        t.rt("set var {} = 1".format(field))
+        _poke(field, "1")
         why = "it is running"
     else:
         # (Unlink it: it is the head, or follows another user thread.)
@@ -2162,7 +2244,7 @@ def test_select_stale(t):
         else:
             field = "((Realm::UserThread *){:#x})->registry_next".format(uts[i - 1].ptr)
         saved = t.eval_int("(unsigned long){}".format(field))
-        t.rt("set var {} = {}->registry_next".format(field, ut))
+        _poke(field, "{}->registry_next".format(ut))
         why = "is no longer a Realm user thread"
     yield
     msg = t.expect_error("rt bt")
@@ -2273,7 +2355,7 @@ def test_select_errors(t):
         error, out = t.run_capturing(cmd)
         t.check(error is not None and "inside" in error, "{!r}: {} / {}".format(
             cmd, error, out))
-    t.check_eq(_rt_frame_name(t), USER_SWITCH, "the selection afterwards")
+    t.check_eq(_rt_frame_name(t), PARKED_FRAME0, "the selection afterwards")
     t.run("realm-thread back")
     t.check(gdb.prompt_hook is None, "a prompt hook left in place")
     yield
@@ -2357,7 +2439,7 @@ def test_plain_commands(t):
     t.check(t.plain, "plain commands show the selection:\n" + out)
     names = re.findall(_BT_LINE + r"([\w:~<>]+)", t.run("bt"), re.M)
     t.check_names_in_order(CHAIN_FRAMES, names, "bt")
-    t.check_eq(names[0], USER_SWITCH, "bt's frame #0")
+    t.check_eq(names[0], PARKED_FRAME0, "bt's frame #0")
     level = names.index("rgt_chain_level3")
     # (`frame N`, `up` and `down` print the frame they select straight to
     # gdb's console, so `frame` shows it here.)
@@ -2375,8 +2457,8 @@ def test_plain_commands(t):
     t.run("down")
     t.check_in("rgt_chain_level3", t.run("frame"), "down")
     t.check_in("rgt_chain_level3", t.run("info frame"), "info frame")
-    t.check_in(USER_SWITCH, t.run("where 1"), "where")
-    t.check_in(USER_SWITCH, t.run("info stack 1"), "info stack")
+    t.check_in(PARKED_FRAME0, t.run("where 1"), "where")
+    t.check_in(PARKED_FRAME0, t.run("info stack 1"), "info stack")
     t.check_in("chain_marker", t.run("list"), "list")
     t.check_in("= {}".format(m + 1), t.run("print realm_gdb_test_add(chain_marker, 1)"),
                "a function call")
@@ -2442,7 +2524,7 @@ def test_plain_commands(t):
     t.check_regs(before)
     t.run("realm-thread back")
     out = t.run("bt 1")
-    t.check_not_in(USER_SWITCH, out, "bt after realm-thread back")
+    t.check_not_in(PARKED_FRAME0, out, "bt after realm-thread back")
     yield
     _finish(t)
 
@@ -2515,7 +2597,7 @@ def test_plain_thread(t):
     for cmd in ("thread", "thread {}".format(t.stop_thread)):
         t.check_not_in("no longer selecting", t.run(cmd), cmd)
     t.expect_error("thread 9999", "thread")
-    t.check_in(USER_SWITCH, t.run("bt 1"), "plain bt: still selected")
+    t.check_in(PARKED_FRAME0, t.run("bt 1"), "plain bt: still selected")
     yield
     out = t.run("thread {}".format(other))
     t.check(re.search(r"realm-thread: switched to thread {}; no longer selecting user "
@@ -2660,6 +2742,41 @@ def test_window_output_after(t):
         gdb.write = real
     t.check_eq(open_writes, [], "output printed while a parked thread was shown")
     t.continue_to_exit()
+
+
+@test(scenarios=("live", "attach"))
+def test_window_close_interrupted(t):
+    """Ctrl-C as a window closes (here a KeyboardInterrupt raised in
+    realm-gdb's code just before it puts the host's registers back) doesn't
+    leave the host with the parked thread's registers: they are put back
+    first, then the interruption goes on."""
+    main = sys.modules["__main__"]
+    name = next(n for n in ("_pop_abandoned_call", "_abandoned_call")
+                if hasattr(main._Window, n))
+    real = getattr(main._Window, name)
+    raised = []
+
+    def interrupted(self, *args):
+        if not raised:
+            raised.append(True)
+            raise KeyboardInterrupt
+        return real(self, *args)
+    before = t.regs()
+    setattr(main._Window, name, interrupted)
+    try:
+        try:
+            gdb.execute("realm-thread apply {:#x} bt 1".format(t.ut("chain0")),
+                        to_string=True)
+        except (KeyboardInterrupt, gdb.error):
+            pass
+    finally:
+        setattr(main._Window, name, real)
+    t.check(raised, "the interruption")
+    t.check(main._window is None, "a window left open")
+    t.check_regs(before, what="registers after the interrupted close")
+    t.check_host_stack()
+    yield
+    _finish(t)
 
 
 def _callee_saved_reg():
@@ -2824,12 +2941,93 @@ def test_window_holds_threads(t):
     t.continue_to_exit()
 
 
+@test(scenarios=("live",), cpus=2, variants=[
+    "with_locking", "define_locking", "python_locking", "plain_with_locking",
+    "with_unwind", "define_unwind", "python_unwind"])
+def test_window_settings_kept(t):
+    """A command in a window can't take away what its function calls need:
+    one that turns scheduler-locking or unwindonsignal off (with `with
+    SETTING off -- print f()`, in a user-defined command, from Python)
+    still holds the other threads during the call, and has a call that
+    faults unwound, so the program runs on to a clean exit."""
+    host = _main_thread(t)
+    t.run("thread {}".format(host))
+    how, _, which = t.variant.rpartition("_")
+    setting = "scheduler-locking" if which == "locking" else "unwindonsignal"
+    call = "realm_gdb_test_nap(100000)" if which == "locking" else "realm_gdb_test_fault()"
+    if how.endswith("with") and not t.supports("with print pretty -- echo"):
+        raise TestSkip("this gdb has no 'with'")
+    before = t.run("show " + setting)
+    if how == "define":
+        t.run("define rgt-off-call\nset {} off\nprint {}\nend".format(setting, call))
+        cmd = "rgt-off-call"
+    elif how == "python":
+        cmd = 'python gdb.execute("set {} off"); gdb.execute("print {}")'.format(
+            setting, call)
+    else:
+        cmd = "with {} off -- print {}".format(setting, call)
+    t.select("chain0")
+    if how == "plain_with":
+        if not t.plain:
+            raise TestSkip("plain commands don't show parked threads here")
+    else:
+        cmd = "rt " + cmd
+    for _ in range(3 if which == "locking" else 1):
+        error, out = t.run_capturing(cmd)
+        if which == "locking":
+            t.check(error is None, "{} failed: {}\n{}".format(cmd, error, out))
+            t.check_in("100000", out, cmd)
+        else:
+            # (Before gdb 15, a command's error in Python is "Error while
+            # executing Python code".)
+            t.check(error is not None and ("signal" in error or how == "python"),
+                    "{}: {}\n{}".format(cmd, error, out))
+    t.back()
+    if how != "define" and how != "python":
+        t.check_eq(t.run("show " + setting), before, setting + " afterwards")
+    t.run("set {} off".format(setting))
+    t.run("thread {}".format(t.stop_thread))
+    t.check_host_stack()
+    t.check_eq(t.eval_int("realm_gdb_test_state.num_finished"), 0, "finished tasks")
+    yield
+    t.continue_to_exit()
+    if not how.startswith("plain"):
+        t.check_in("{} on".format(setting), out, "the note")
+
+
+@test(scenarios=("live",))
+def test_window_catchpoint_in_call(t):
+    """A function call in a window doesn't stop at a catchpoint either, even
+    where Python can't see them (before gdb 11): it would be abandoned in
+    the middle of a system call, which putting the registers back doesn't
+    undo.  The program then runs on to a clean exit, without stopping again
+    at once where it had stopped."""
+    catch = None
+    for names in ("nanosleep clock_nanosleep", "nanosleep"):
+        ok, out = t.try_run("catch syscall " + names)
+        if ok:
+            catch = re.search(r"Catchpoint (\d+)", out).group(1)
+            break
+    if catch is None:
+        raise TestSkip("catch syscall: " + out)
+    t.select("chain0")
+    out = t.rt("print realm_gdb_test_nap(1000)")
+    t.check_in("1000", out, "nap()")
+    t.check_in("breakpoints were ignored", out, "the note")
+    t.back()
+    t.check_in("catchpoint     keep y", t.run("info breakpoints " + catch),
+               "the catchpoint afterwards")
+    t.run("delete " + catch)
+    t.check_host_stack()
+    yield
+    t.continue_to_exit()
+
+
 @test(scenarios=("live",))
 def test_window_bad_context(t):
     """A parked thread whose saved stack pointer isn't on its stack (a
     corrupt UserThread) isn't shown: a function call would run there."""
-    reg = "gregs[15]" if _is_x86_64() else "sp"
-    field = "((Realm::UserThread *){:#x})->ctx.uc_mcontext.{}".format(t.ut("chain0"), reg)
+    field = _ctx_field(t.ut("chain0"), "sp")
     saved = t.eval_int(field)
     t.run("set var {} = 0x10".format(field))
     yield
@@ -2870,6 +3068,20 @@ def test_window_low_headroom(t):
                                      "(1, 2)".format(t.ut("chain0")))
         t.check(error is not None, "a call was made:\n" + out)
         t.check_in("is on", t.run("show may-call-functions"), "may-call-functions after")
+        # Nor if a command in the window turns calls back on: the call is
+        # stopped before it starts, and abandoned.
+        commands = ["python gdb.execute('set may-call-functions on'); "
+                    "gdb.execute('print realm_gdb_test_add(1, 2)')"]
+        if t.supports("with print pretty -- echo"):
+            commands.append("with may-call-functions on -- print realm_gdb_test_add(1, 2)")
+        for cmd in commands:
+            error, out = t.run_capturing("realm-thread apply {:#x} {}".format(
+                t.ut("chain0"), cmd))
+            t.check(error is not None, "{}: a call was made:\n{}".format(cmd, out))
+            t.check_in("refused all the same", out, "the note")
+            t.check_not_in("WARNING", out, "a warning")
+        t.check_in("is on", t.run("show may-call-functions"), "may-call-functions after")
+        t.check_host_stack()
     else:
         t.expect_error("realm-thread apply {:#x} bt".format(t.ut("chain0")),
                        "too little")
@@ -3303,8 +3515,8 @@ def test_printer_calls(t):
 @test(scenarios=("live",), variants=["bt full", "bt", "thread apply all bt full"])
 def test_optimized_out(t):
     """In a live process, values entirely optimized out are printed by gdb's
-    own printer, as `<optimized out>` (or, for an argument in plain `bt`,
-    `...`), even with a pretty-printer that, like libstdc++'s, can't print
+    own printer, as `<optimized out>` (or, for an argument, in its frame's
+    line, `...`), even with a pretty-printer that, like libstdc++'s, can't print
     them.  (gdb 10's own printer gives them to the pretty-printer for
     locals: not checked there.)"""
     install_pair_printer()
@@ -3329,10 +3541,12 @@ def test_optimized_out(t):
     shown = dict(local_values)
     shown.update(_frame_line_parts(line)[1])
     for name in gone:
-        if name == "given" and t.variant == "bt":
+        if name == "given":
+            # (An argument is shown in its frame's line, where gdb shows a
+            # structure as `...`: `print frame-arguments scalars`.)
             t.check(shown.get(name) in ("...", "<optimized out>"),
                     "argument {}={} in:\n{}".format(name, shown.get(name), out))
-        elif (name == "given" or t.variant != "bt") and _native_checks():
+        elif t.variant != "bt" and _native_checks():
             t.check_eq(shown.get(name), "<optimized out>", "{} in:\n{}".format(name, out))
     if _native_checks():
         t.check_not_in("Python Exception", out, "Python errors")
@@ -3519,6 +3733,34 @@ def test_kill_and_rerun(t):
     t.within("chain2", lambda: t.check_chain_stack(2))
     _check_parked_section(t, t.run("thread apply all bt"))
     yield
+    t.continue_to_exit()
+
+
+@test(scenarios=("live",))
+def test_window_unrestored(t):
+    """If a window can't put the host's registers back (simulated here: it
+    has never been seen, but a gdb that can't write some register would do
+    it), realm-gdb says so, and refuses to let the program run, or to let go
+    of it, until they are back; `kill`, the other way out it suggests, still
+    works."""
+    main = sys.modules["__main__"]
+    real = main._put_back
+
+    def put_back(saved):  # (Puts them back, but says it couldn't.)
+        return real(saved) or [sorted(saved)[0]]
+    main._put_back = put_back
+    try:
+        out = t.run("realm-thread apply {:#x} bt 1".format(t.ut("chain0")))
+        t.check_in("could not put back", out, "the warning")
+        for cmd in ("continue", "detach", "quit"):
+            t.expect_error(cmd, "could not put back")
+        t.run("kill")
+    finally:
+        main._put_back = real
+    t.check(not main._unrestored, "a killed program's threads still to put back")
+    yield
+    t.run_program()
+    t.check_eq(t.frame_name(gdb.selected_frame()), "realm_gdb_test_stop", "stopped in")
     t.continue_to_exit()
 
 
@@ -3774,7 +4016,10 @@ def _restart_non_stop(t):
     mode, stopped at the same place."""
     t.run("kill")
     t.run("set non-stop on")
-    t.run_program()
+    ok, out = t.try_run("run {} < /dev/null".format(t.program_args()))
+    if not ok and "does not support running in non-stop mode" in out:
+        raise TestSkip(out)  # (FreeBSD's native target)
+    t.check(ok, "run in non-stop mode: " + out)
     # In non-stop mode gdb doesn't switch to the thread that stopped.
     stopped = [th for th in gdb.selected_inferior().threads() if th.is_stopped()]
     t.check_eq(len(stopped), 1, "stopped threads")
@@ -4255,7 +4500,7 @@ def _opt_values(t):
 @test(scenarios=("core",), variants=["bt full", "bt", "thread apply all bt full"])
 def test_marker_optimized_out(t):
     """In a core file, values entirely optimized out are printed as
-    `<optimized out>` (or, for an argument in plain `bt`, `...`) by
+    `<optimized out>` (or, for an argument, in its frame's line, `...`) by
     backtraces with the marker line, as gdb itself prints them, rather than
     by a pretty-printer that, like libstdc++'s, can't print them; those
     partly optimized out are left to it, as gdb leaves them."""
@@ -4280,10 +4525,11 @@ def test_marker_optimized_out(t):
     shown = dict(local_values)
     shown.update(_frame_line_parts(line)[1])
     for name in gone:
-        if name == "given" and t.variant == "bt":
+        if name == "given":
+            # (In its frame's line: see test_optimized_out.)
             t.check(shown.get(name) in ("...", "<optimized out>"),
                     "argument {}={} in:\n{}".format(name, shown.get(name), out))
-        elif name == "given" or t.variant != "bt":
+        elif t.variant != "bt":
             t.check_eq(shown.get(name), "<optimized out>", "{} in:\n{}".format(name, out))
     t.check_eq(out.count("Python Exception"), native.count("Python Exception"),
                "Python errors:\n" + out)
@@ -4312,8 +4558,10 @@ def test_marker_printing_left_open(t):
     t.show("chain0")
     frames = gdb.frames.execute_frame_filters(gdb.newest_frame(), 0, -1)
     next(frames)  # (the marker line)
-    args = iter(next(frames).frame_args())
-    next(args)
+    for dec in frames:  # (the first parked frame with arguments: see PARKED_FRAME0)
+        args = iter(dec.frame_args() or ())
+        if next(args, None) is not None:
+            break
     _left_open[:] = [frames, args]
     t.check(_printing_lookups(), "nothing in place while printing a frame's values")
     yield

@@ -285,6 +285,14 @@ if(UNIX AND NOT APPLE)
   endif()
 endif()
 
+# backtrace() (faults.cc): in libc on Linux and macOS, libexecinfo on FreeBSD.
+if(UNIX AND NOT REALM_ENABLE_CPPTRACE)
+  find_package(Backtrace)
+  if(Backtrace_LIBRARIES)
+    list(APPEND REALM_LIBRARIES ${Backtrace_LIBRARIES})
+  endif()
+endif()
+
 if(REALM_BUILD_DOCS)
   find_package(Doxygen REQUIRED)
 endif()
