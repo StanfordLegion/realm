@@ -428,6 +428,27 @@ def test_terminal_plain_startup(t):
     s.finish()
 
 
+@test("terminal.plain_x_script")
+def test_terminal_plain_x_script(t):
+    """A Python script given with -x after an -ex command that fails while
+    it shows a selected parked thread (gdb runs no `source` hook for -x)
+    isn't taken for part of that command: its `continue` ends the selection
+    and runs, rather than being refused inside the failed command's
+    window."""
+    find = t.file("find_chain.py", FIND_CHAIN.replace(
+        'print("CHAIN0=%#x" % int(h))',
+        'gdb.execute("set $rgt_chain0 = %#x" % int(h), to_string=True)'))
+    script = t.file("cont.py", 'gdb.execute("continue")\n')
+    s = t.gdb(t.realm_args(["-ex", "source " + find, "-ex", "realm-thread $rgt_chain0",
+                            "-ex", "print rgt_nosuchvar", "-x", script]))
+    shown = s.read(timeout=t.args.timeout)
+    t.check("the failure, then the script's continue runs", re.search(
+        r"No symbol[\s\S]*continuing; no longer selecting user thread[\s\S]*"
+        r"REALM_GDB_TEST: PASS[\s\S]*exited normally", shown), shown)
+    t.check("  not refused", "refusing" not in shown, shown)
+    s.finish()
+
+
 @test("terminal.plain_detach")
 def test_terminal_plain_detach(t):
     """With gdb on a terminal, attached: detaching with a parked thread
