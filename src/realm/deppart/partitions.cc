@@ -850,18 +850,6 @@ namespace Realm {
     delete rsrv;
   }
 
-  /*static*/ void PartitioningOpQueue::configure_from_cmdline(std::vector<std::string>& cmdline)
-  {
-    CommandLineParser cp;
-
-    cp.add_option_int("-dp:workers", DeppartConfig::cfg_num_partitioning_workers);
-    cp.add_option_bool("-dp:noisectopt", DeppartConfig::cfg_disable_intersection_optimization);
-    cp.add_option_int("-dp:sleep", DeppartConfig::cfg_worker_threads_sleep);
-    cp.add_option_int("-dp:inline_ok", DeppartConfig::cfg_allow_inline_operations);
-
-    cp.parse_command_line(cmdline);
-  }
-
   /*static*/ void PartitioningOpQueue::start_worker_threads(CoreReservationSet& crs,
 				     BackgroundWorkManager *_bgwork)
   {

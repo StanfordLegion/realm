@@ -4470,10 +4470,8 @@ namespace Realm {
     }
 
     size_t domain_size = analysis_domain_size;
-    size_t ib_regmem_limit = 0;
-    RealmStatus ib_regmem_status = get_runtime()->get_module_config("core")->get_property(
-        "ib_regmem", ib_regmem_limit);
-    assert(ib_regmem_status == REALM_SUCCESS);
+    size_t ib_regmem_limit =
+        get_runtime()->get_module_config<CoreModuleConfig>()->reg_ib_mem_size;
     std::map<Memory, size_t> ib_caps;
 
     // TODO: look at layouts and decide if fields should be grouped into
@@ -4785,11 +4783,8 @@ namespace Realm {
               xdn.scatter_control_input = -1;
               xdn.target_node = path_info.xd_channels[j]->node;
 
-              bool enable_multi_field = false;
-              RealmStatus success =
-                  get_runtime()->get_module_config("core")->get_property(
-                      "dma_multi_field", enable_multi_field);
-              assert(success == REALM_SUCCESS);
+              bool enable_multi_field =
+                  get_runtime()->get_module_config<CoreModuleConfig>()->dma_multi_field;
 
               xdn.idindexed_fields =
                   enable_multi_field &&

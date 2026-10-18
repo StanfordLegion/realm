@@ -196,7 +196,6 @@ namespace Realm {
 			BackgroundWorkManager *_bgwork);
     virtual ~PartitioningOpQueue(void);
 
-    static void configure_from_cmdline(std::vector<std::string>& cmdline);
     static void start_worker_threads(CoreReservationSet& crs,
 				     BackgroundWorkManager *_bgwork);
     static void stop_worker_threads(void);

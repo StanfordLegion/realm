@@ -19,26 +19,11 @@
 #define REALM_PROCSET_MODULE_H
 
 #include "realm/module.h"
+#include "realm/procset/procset_module_config.h"
 
 namespace Realm {
 
   namespace ProcSet {
-
-    class ProcSetModuleConfig : public ModuleConfig {
-      friend class ProcSetModule;
-
-    protected:
-      ProcSetModuleConfig(void);
-
-    public:
-      virtual void configure_from_cmdline(std::vector<std::string> &cmdline);
-
-    protected:
-      int cfg_num_mp_threads = 0; // threads per ProcSet
-      int cfg_num_mp_procs = 0;   // number of ProcSets
-      int cfg_num_mp_cpus = 0;    // additional cpus on any non ProcSet nodes
-      size_t cfg_stack_size = 2 << 20;
-    };
 
     // our interface to the rest of the runtime
     class ProcSetModule : public Module {

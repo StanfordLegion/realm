@@ -82,8 +82,13 @@ namespace Realm {
     // class ProcSetModuleConfig
 
     ProcSetModuleConfig::ProcSetModuleConfig(void)
-      : ModuleConfig("procset")
-    {}
+      : ModuleConfig(MODULE_NAME)
+    {
+      config_map.insert({"num_mp_threads", &cfg_num_mp_threads});
+      config_map.insert({"num_mp_procs", &cfg_num_mp_procs});
+      config_map.insert({"num_mp_cpus", &cfg_num_mp_cpus});
+      config_map.insert({"stack_size", &cfg_stack_size});
+    }
 
     void ProcSetModuleConfig::configure_from_cmdline(std::vector<std::string> &cmdline)
     {
@@ -127,8 +132,8 @@ namespace Realm {
       // create a module to fill in with stuff
       ProcSetModule *m = new ProcSetModule;
 
-      ProcSetModuleConfig *config =
-          checked_cast<ProcSetModuleConfig *>(runtime->get_module_config("procset"));
+      ProcSetModuleConfig *config = checked_cast<ProcSetModuleConfig *>(
+          runtime->get_module_config(ProcSetModuleConfig::MODULE_NAME));
       assert(config != nullptr);
       assert(config->finish_configured);
       assert(m->name == config->get_name());

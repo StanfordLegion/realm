@@ -21,6 +21,7 @@
 #define GASNETEX_MODULE_H
 
 #include "realm/network.h"
+#include "realm/gasnetex/gasnetex_module_config.h"
 
 namespace Realm {
 
@@ -42,8 +43,10 @@ namespace Realm {
     // Enumerates all the peers that the current node could potentially share memory with
     virtual void get_shared_peers(NodeSet &shared_peers);
 
-    // actual parsing of the command line should wait until here if at all
-    //  possible
+    // creates this module's configuration object (see NetworkModule)
+    virtual ModuleConfig *create_module_config(RuntimeImpl *runtime);
+
+    // acts on the (complete) configuration before the network is attached
     virtual void parse_command_line(RuntimeImpl *runtime,
                                     std::vector<std::string> &cmdline);
 
@@ -122,26 +125,7 @@ namespace Realm {
     virtual size_t max_payload_size(size_t header_size, const void *src_payload_addr);
 
   public:
-    bool cfg_use_immediate;
-    bool cfg_use_negotiated;
-    long long cfg_crit_timeout;
-    size_t cfg_max_medium;
-    size_t cfg_max_long;
-    bool cfg_bind_hostmem;
-#ifdef REALM_USE_CUDA
-    bool cfg_bind_cudamem;
-#endif
-#ifdef REALM_USE_HIP
-    bool cfg_bind_hipmem;
-#endif
-    bool cfg_do_checksums;
-    bool cfg_batch_messages;
-    // number and size of "outbufs", used to put pkt header and/or data in
-    //  registered memory for RDMA goodness
-    size_t cfg_outbuf_count, cfg_outbuf_size;
-    bool cfg_force_rma;
-    bool cfg_use_rma_put;
-    int cfg_am_limit; // upper bound on AMs in flight to any given peer
+    GASNetEXModuleConfig *config;
 
   protected:
     GASNetEXInternal *internal;

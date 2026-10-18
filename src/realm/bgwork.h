@@ -48,7 +48,8 @@ namespace Realm {
       long long work_item_timeslice = 100000;
     };
 
-    void configure_from_cmdline(std::vector<std::string> &cmdline);
+    // settings come from CoreModuleConfig (see RuntimeImpl::finish_configure)
+    void configure(const Config &_cfg);
 
     void start_dedicated_workers(Realm::CoreReservationSet &crs);
 

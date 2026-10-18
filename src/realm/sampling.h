@@ -170,6 +170,8 @@ namespace Realm {
 
   }; // namespace ProfilingGauges
 
+  class CoreModuleConfig;
+
   class SamplingProfiler {
   public:
     // there can be only one "default" sampling profiler - attempts to create a second
@@ -177,8 +179,8 @@ namespace Realm {
     SamplingProfiler(bool is_default);
     ~SamplingProfiler(void);
 
-    void configure_from_cmdline(std::vector<std::string> &cmdline,
-                                CoreReservationSet &crs);
+    // settings (the realmprof_* members) come from the core module's config
+    void configure(const CoreModuleConfig &config, CoreReservationSet &crs);
     void flush_data(void);
     void shutdown(void);
 

@@ -29,12 +29,35 @@
 
 namespace Realm {
 
+  // Base class for the per-module configuration objects that are created by
+  //  Runtime::create_configs() and handed out (by pointer) by
+  //  Runtime::get_module_config().  Each module defines a subclass (e.g.
+  //  Realm::Cuda::CudaModuleConfig) whose settings are plain public data
+  //  members, and which declares a `static constexpr const char *const
+  //  MODULE_NAME` naming the module.  The headers declaring these subclasses
+  //  contain only plain data types and are installed with every Realm build,
+  //  whether or not the corresponding module is compiled in, so an application
+  //  may always refer to them and use the typed
+  //  Runtime::get_module_config<T>() to find out (via a null return) whether a
+  //  module is actually present.
+  //
+  // The string-based set_property()/get_property()/get_resource() interface
+  //  below is retained for applications that prefer to avoid naming the
+  //  configuration types at compile time.
   class REALM_PUBLIC_API ModuleConfig {
   protected:
     ModuleConfig(const std::string &name);
 
   public:
     virtual ~ModuleConfig(void);
+
+    // configuration objects are owned by the runtime and only ever handed out
+    //  by pointer - copying one would alias the member addresses stored in
+    //  config_map/resource_map (so the copy would silently modify the
+    //  original), so copies are not permitted
+    ModuleConfig(const ModuleConfig &) = delete;
+    ModuleConfig &operator=(const ModuleConfig &) = delete;
+
     template <typename T>
     RealmStatus set_property(const std::string &name, T value);
     template <typename T>

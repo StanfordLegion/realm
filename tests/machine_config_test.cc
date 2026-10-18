@@ -295,6 +295,125 @@ void top_level_task(const void *args, size_t arglen, const void *userdata, size_
     log_app.print("python is not loaded");
   }
 
+  // typed access to the same configurations - every *ModuleConfig type can be
+  //  named unconditionally (the headers are always installed), and the typed
+  //  getter returns a null pointer for modules that are not present
+  {
+    CoreModuleConfig *core = rt.get_module_config<CoreModuleConfig>();
+    assert(core != nullptr);
+    assert(static_cast<ModuleConfig *>(core) == rt.get_module_config("core"));
+    assert(core->num_cpu_procs == TestConfig::num_cpu_procs);
+    assert(core->num_util_procs == TestConfig::num_util_procs);
+    assert(core->num_io_procs == TestConfig::num_io_procs);
+    assert(core->sysmem_size == TestConfig::sysmem_size);
+    assert(core->stack_size == TestConfig::stack_size);
+    assert(core->pin_util_procs == TestConfig::pin_util_procs);
+    assert(core->use_ext_sysmem == TestConfig::use_ext_sysmem);
+    assert(core->reg_mem_size == TestConfig::regmem_size);
+    // the "pick based on node count" default must have been resolved by now
+    assert(core->reg_ib_mem_size != ~size_t(0));
+
+    Numa::NumaModuleConfig *numa = rt.get_module_config<Numa::NumaModuleConfig>();
+    Cuda::CudaModuleConfig *cuda = rt.get_module_config<Cuda::CudaModuleConfig>();
+    Hip::HipModuleConfig *hip = rt.get_module_config<Hip::HipModuleConfig>();
+    OpenMP::OpenMPModuleConfig *openmp =
+        rt.get_module_config<OpenMP::OpenMPModuleConfig>();
+    Python::PythonModuleConfig *python =
+        rt.get_module_config<Python::PythonModuleConfig>();
+    HDF5::HDF5ModuleConfig *hdf5 = rt.get_module_config<HDF5::HDF5ModuleConfig>();
+    ProcSet::ProcSetModuleConfig *procset =
+        rt.get_module_config<ProcSet::ProcSetModuleConfig>();
+    GASNetEXModuleConfig *gasnetex = rt.get_module_config<GASNetEXModuleConfig>();
+    UCPModuleConfig *ucx = rt.get_module_config<UCPModuleConfig>();
+    MPIModuleConfig *mpi = rt.get_module_config<MPIModuleConfig>();
+
+    // typed and string-based lookups must agree
+    assert(static_cast<ModuleConfig *>(numa) == rt.get_module_config("numa"));
+    assert(static_cast<ModuleConfig *>(cuda) == rt.get_module_config("cuda"));
+    assert(static_cast<ModuleConfig *>(hip) == rt.get_module_config("hip"));
+    assert(static_cast<ModuleConfig *>(openmp) == rt.get_module_config("openmp"));
+    assert(static_cast<ModuleConfig *>(python) == rt.get_module_config("python"));
+    assert(static_cast<ModuleConfig *>(hdf5) == rt.get_module_config("hdf5"));
+    assert(static_cast<ModuleConfig *>(procset) == rt.get_module_config("procset"));
+    assert(static_cast<ModuleConfig *>(gasnetex) == rt.get_module_config("gasnetex"));
+    assert(static_cast<ModuleConfig *>(ucx) == rt.get_module_config("ucx"));
+    assert(static_cast<ModuleConfig *>(mpi) == rt.get_module_config("mpi"));
+
+    // modules that are not compiled in must not have a config
+    assert(procset != nullptr);
+#ifndef REALM_USE_CUDA
+    assert(cuda == nullptr);
+#endif
+#ifndef REALM_USE_HIP
+    assert(hip == nullptr);
+#endif
+#ifndef REALM_USE_OPENMP
+    assert(openmp == nullptr);
+#endif
+#ifndef REALM_USE_PYTHON
+    assert(python == nullptr);
+#endif
+#ifndef REALM_USE_HDF5
+    assert(hdf5 == nullptr);
+#endif
+#ifndef REALM_USE_GASNETEX
+    assert(gasnetex == nullptr);
+#endif
+#ifndef REALM_USE_UCX
+    assert(ucx == nullptr);
+#endif
+#ifndef REALM_USE_MPI
+    assert(mpi == nullptr);
+#endif
+
+    if(numa && !numa->res_numa_mems.empty()) {
+      assert(numa->cfg_numa_mem_size == TestConfig::numa_mem_size);
+      assert(numa->cfg_numa_nocpu_mem_size ==
+             static_cast<ssize_t>(TestConfig::numa_nocpu_mem_size));
+      assert(numa->cfg_num_numa_cpus == TestConfig::num_numa_cpus);
+      assert(numa->cfg_pin_memory == TestConfig::numa_pin_memory);
+    }
+    if(cuda) {
+      assert(cuda->cfg_num_gpus == TestConfig::num_gpus);
+      assert(cuda->cfg_fb_mem_size == TestConfig::fb_mem_size);
+      assert(cuda->cfg_zc_mem_size == TestConfig::zc_mem_size);
+      assert(cuda->cfg_fb_ib_size == TestConfig::fb_ib_size);
+      assert(cuda->cfg_zc_ib_size == TestConfig::zc_ib_size);
+      assert(cuda->cfg_uvm_mem_size == TestConfig::uvm_mem_size);
+      assert(cuda->cfg_use_dynamic_fb == TestConfig::use_dynamic_fb);
+      assert(cuda->cfg_dynfb_max_size == TestConfig::dynfb_max_size);
+      assert(cuda->cfg_task_streams == TestConfig::task_streams);
+      assert(cuda->cfg_d2d_streams == TestConfig::d2d_streams);
+    }
+    if(hip) {
+      assert(hip->cfg_num_gpus == TestConfig::num_gpus);
+      assert(hip->cfg_fb_mem_size == TestConfig::fb_mem_size);
+      assert(hip->cfg_zc_mem_size == TestConfig::zc_mem_size);
+      assert(hip->cfg_fb_ib_size == TestConfig::fb_ib_size);
+      assert(hip->cfg_zc_ib_size == TestConfig::zc_ib_size);
+      assert(hip->cfg_use_dynamic_fb == TestConfig::use_dynamic_fb);
+      assert(hip->cfg_dynfb_max_size == TestConfig::dynfb_max_size);
+      assert(hip->cfg_task_streams == TestConfig::task_streams);
+      assert(hip->cfg_d2d_streams == TestConfig::d2d_streams);
+    }
+    if(openmp) {
+      assert(openmp->cfg_num_openmp_cpus == TestConfig::num_openmp_cpus);
+      assert(openmp->cfg_num_threads_per_cpu == TestConfig::num_threads_per_cpu);
+      assert(openmp->cfg_use_numa == TestConfig::openmp_use_numa);
+      assert(openmp->cfg_stack_size == TestConfig::openmp_stack_size);
+    }
+    if(python) {
+      assert(python->cfg_num_python_cpus == TestConfig::num_python_cpus);
+      assert(python->cfg_stack_size == TestConfig::py_stack_size);
+    }
+    log_app.print("typed module configs: core cpus=%d, present: numa=%d cuda=%d hip=%d "
+                  "openmp=%d python=%d hdf5=%d procset=%d gasnetex=%d ucx=%d mpi=%d",
+                  core->num_cpu_procs, numa != nullptr, cuda != nullptr, hip != nullptr,
+                  openmp != nullptr, python != nullptr, hdf5 != nullptr,
+                  procset != nullptr, gasnetex != nullptr, ucx != nullptr,
+                  mpi != nullptr);
+  }
+
   if(Network::my_node_id == 0) {
     int num_cpu_procs = 0;
     int num_util_procs = 0;
@@ -643,6 +762,86 @@ int main(int argc, char **argv)
       ret_value =
           python_config->set_property("set_error_openmp", TestConfig::num_openmp_cpus);
       assert(ret_value == REALM_MODULE_CONFIG_ERROR_INVALID_NAME);
+    } else {
+      log_app.print("python is not loaded");
+    }
+  } else if(test_args == 2) {
+    // configure through the typed structs instead of the string API - the
+    //  config types for modules that are not compiled in can still be named
+    //  here, their pointers are simply null
+    CoreModuleConfig *core = rt.get_module_config<CoreModuleConfig>();
+    assert(core != nullptr);
+    log_app.print("Discover number of CPU cores %d, sysmem %zu", core->res_num_cpus,
+                  core->res_sysmem_size);
+    core->num_cpu_procs = TestConfig::num_cpu_procs;
+    core->num_util_procs = TestConfig::num_util_procs;
+    core->num_io_procs = TestConfig::num_io_procs;
+    core->sysmem_size = TestConfig::sysmem_size;
+    core->stack_size = TestConfig::stack_size;
+    core->pin_util_procs = TestConfig::pin_util_procs;
+    core->use_ext_sysmem = TestConfig::use_ext_sysmem;
+    core->reg_mem_size = TestConfig::regmem_size;
+
+    Numa::NumaModuleConfig *numa = rt.get_module_config<Numa::NumaModuleConfig>();
+    if(numa && !numa->res_numa_mems.empty()) {
+      log_app.info() << "numa mems:" << PrettyVector<size_t>(numa->res_numa_mems);
+      numa->cfg_numa_mem_size = TestConfig::numa_mem_size;
+      numa->cfg_numa_nocpu_mem_size = TestConfig::numa_nocpu_mem_size;
+      numa->cfg_num_numa_cpus = TestConfig::num_numa_cpus;
+      numa->cfg_pin_memory = TestConfig::numa_pin_memory;
+    } else {
+      log_app.print("numa is not available");
+    }
+
+    Cuda::CudaModuleConfig *cuda = rt.get_module_config<Cuda::CudaModuleConfig>();
+    if(cuda) {
+      log_app.print("number of cuda GPUs %d, fbmem size %zu", cuda->res_num_gpus,
+                    cuda->res_min_fbmem_size);
+      cuda->cfg_num_gpus = TestConfig::num_gpus;
+      cuda->cfg_zc_mem_size = TestConfig::zc_mem_size;
+      cuda->cfg_fb_mem_size = TestConfig::fb_mem_size;
+      cuda->cfg_fb_ib_size = TestConfig::fb_ib_size;
+      cuda->cfg_zc_ib_size = TestConfig::zc_ib_size;
+      cuda->cfg_uvm_mem_size = TestConfig::uvm_mem_size;
+      cuda->cfg_use_dynamic_fb = TestConfig::use_dynamic_fb;
+      cuda->cfg_dynfb_max_size = TestConfig::dynfb_max_size;
+      cuda->cfg_task_streams = TestConfig::task_streams;
+      cuda->cfg_d2d_streams = TestConfig::d2d_streams;
+    }
+    Hip::HipModuleConfig *hip = rt.get_module_config<Hip::HipModuleConfig>();
+    if(hip) {
+      log_app.print("number of hip GPUs %d, fbmem size %zu", hip->res_num_gpus,
+                    hip->res_min_fbmem_size);
+      hip->cfg_num_gpus = TestConfig::num_gpus;
+      hip->cfg_zc_mem_size = TestConfig::zc_mem_size;
+      hip->cfg_fb_mem_size = TestConfig::fb_mem_size;
+      hip->cfg_fb_ib_size = TestConfig::fb_ib_size;
+      hip->cfg_zc_ib_size = TestConfig::zc_ib_size;
+      hip->cfg_use_dynamic_fb = TestConfig::use_dynamic_fb;
+      hip->cfg_dynfb_max_size = TestConfig::dynfb_max_size;
+      hip->cfg_task_streams = TestConfig::task_streams;
+      hip->cfg_d2d_streams = TestConfig::d2d_streams;
+    }
+    if(!cuda && !hip) {
+      log_app.print("cuda/hip is not loaded");
+    }
+
+    OpenMP::OpenMPModuleConfig *openmp =
+        rt.get_module_config<OpenMP::OpenMPModuleConfig>();
+    if(openmp) {
+      openmp->cfg_num_openmp_cpus = TestConfig::num_openmp_cpus;
+      openmp->cfg_num_threads_per_cpu = TestConfig::num_threads_per_cpu;
+      openmp->cfg_use_numa = TestConfig::openmp_use_numa;
+      openmp->cfg_stack_size = TestConfig::openmp_stack_size;
+    } else {
+      log_app.print("openmp is not loaded");
+    }
+
+    Python::PythonModuleConfig *python =
+        rt.get_module_config<Python::PythonModuleConfig>();
+    if(python) {
+      python->cfg_num_python_cpus = TestConfig::num_python_cpus;
+      python->cfg_stack_size = TestConfig::py_stack_size;
     } else {
       log_app.print("python is not loaded");
     }

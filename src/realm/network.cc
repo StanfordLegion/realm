@@ -229,6 +229,11 @@ namespace Realm {
     : Module(_name)
   {}
 
+  ModuleConfig *NetworkModule::create_module_config(RuntimeImpl *runtime)
+  {
+    return nullptr;
+  }
+
   void NetworkModule::parse_command_line(RuntimeImpl *runtime,
                                          std::vector<std::string> &cmdline)
   {}

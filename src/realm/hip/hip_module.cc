@@ -2325,7 +2325,7 @@ namespace Realm {
     // class HipModuleConfig
 
     HipModuleConfig::HipModuleConfig(void)
-      : ModuleConfig("hip")
+      : ModuleConfig(MODULE_NAME)
     {
       config_map.insert({"gpu", &cfg_num_gpus});
       config_map.insert({"zcmem", &cfg_zc_mem_size});
@@ -2337,6 +2337,19 @@ namespace Realm {
       config_map.insert({"dynfb_max_size", &cfg_dynfb_max_size});
       config_map.insert({"task_streams", &cfg_task_streams});
       config_map.insert({"d2d_streams", &cfg_d2d_streams});
+      config_map.insert({"d2d_stream_priority", &cfg_d2d_stream_priority});
+      config_map.insert({"use_worker_threads", &cfg_use_worker_threads});
+      config_map.insert({"use_shared_worker", &cfg_use_shared_worker});
+      config_map.insert({"pin_sysmem", &cfg_pin_sysmem});
+      config_map.insert({"fences_use_callbacks", &cfg_fences_use_callbacks});
+      config_map.insert({"skip_gpu_count", &cfg_skip_gpu_count});
+      config_map.insert({"skip_busy_gpus", &cfg_skip_busy_gpus});
+      config_map.insert({"min_avail_mem", &cfg_min_avail_mem});
+      config_map.insert({"task_context_sync", &cfg_task_context_sync});
+      config_map.insert({"max_ctxsync_threads", &cfg_max_ctxsync_threads});
+      config_map.insert({"multithread_dma", &cfg_multithread_dma});
+      config_map.insert({"hostreg_limit", &cfg_hostreg_limit});
+      config_map.insert({"use_hip_ipc", &cfg_use_hip_ipc});
 
       resource_map.insert({"gpu", &res_num_gpus});
       resource_map.insert({"fbmem", &res_min_fbmem_size});
@@ -2450,8 +2463,8 @@ namespace Realm {
     /*static*/ Module *HipModule::create_module(RuntimeImpl *runtime)
     {
       HipModule *m = new HipModule(runtime);
-      HipModuleConfig *config =
-          checked_cast<HipModuleConfig *>(runtime->get_module_config("hip"));
+      HipModuleConfig *config = checked_cast<HipModuleConfig *>(
+          runtime->get_module_config(HipModuleConfig::MODULE_NAME));
       assert(config != nullptr);
       assert(config->finish_configured);
       assert(m->name == config->get_name());

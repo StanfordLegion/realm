@@ -1092,10 +1092,11 @@ namespace Realm {
     // class PythonModuleConfig
 
     PythonModuleConfig::PythonModuleConfig(void)
-      : ModuleConfig("python")
+      : ModuleConfig(MODULE_NAME)
     {
       config_map.insert({"pyproc", &cfg_num_python_cpus});
       config_map.insert({"pystack", &cfg_stack_size});
+      config_map.insert({"pyomp_threads", &cfg_pyomp_threads});
     }
 
     void PythonModuleConfig::configure_from_cmdline(std::vector<std::string> &cmdline)
@@ -1152,8 +1153,8 @@ namespace Realm {
       //  disabled
       PythonModule *m = new PythonModule;
 
-      PythonModuleConfig *config =
-          checked_cast<PythonModuleConfig *>(runtime->get_module_config("python"));
+      PythonModuleConfig *config = checked_cast<PythonModuleConfig *>(
+          runtime->get_module_config(PythonModuleConfig::MODULE_NAME));
       assert(config != nullptr);
       assert(config->finish_configured);
       assert(m->name == config->get_name());

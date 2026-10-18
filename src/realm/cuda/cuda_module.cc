@@ -2766,7 +2766,7 @@ namespace Realm {
     // class CudaModuleConfig
 
     CudaModuleConfig::CudaModuleConfig(void)
-      : ModuleConfig("cuda")
+      : ModuleConfig(MODULE_NAME)
     {
       config_map.insert({"gpu", &cfg_num_gpus});
       config_map.insert({"zcmem", &cfg_zc_mem_size});
@@ -2778,6 +2778,26 @@ namespace Realm {
       config_map.insert({"dynfb_max_size", &cfg_dynfb_max_size});
       config_map.insert({"task_streams", &cfg_task_streams});
       config_map.insert({"d2d_streams", &cfg_d2d_streams});
+      config_map.insert({"d2d_stream_priority", &cfg_d2d_stream_priority});
+      config_map.insert({"use_worker_threads", &cfg_use_worker_threads});
+      config_map.insert({"use_shared_worker", &cfg_use_shared_worker});
+      config_map.insert({"pin_sysmem", &cfg_pin_sysmem});
+      config_map.insert({"fences_use_callbacks", &cfg_fences_use_callbacks});
+      config_map.insert({"suppress_hijack_warning", &cfg_suppress_hijack_warning});
+      config_map.insert({"skip_gpu_count", &cfg_skip_gpu_count});
+      config_map.insert({"skip_busy_gpus", &cfg_skip_busy_gpus});
+      config_map.insert({"min_avail_mem", &cfg_min_avail_mem});
+      config_map.insert({"task_legacy_sync", &cfg_task_legacy_sync});
+      config_map.insert({"task_context_sync", &cfg_task_context_sync});
+      config_map.insert({"max_ctxsync_threads", &cfg_max_ctxsync_threads});
+      config_map.insert({"lmem_resize_to_max", &cfg_lmem_resize_to_max});
+      config_map.insert({"multithread_dma", &cfg_multithread_dma});
+      config_map.insert({"hostreg_limit", &cfg_hostreg_limit});
+      config_map.insert({"use_cuda_ipc", &cfg_use_cuda_ipc});
+      config_map.insert({"pageable_access", &cfg_pageable_access});
+      config_map.insert({"enable_cupti", &cfg_enable_cupti});
+      config_map.insert({"enable_cuhook", &cfg_enable_cuhook});
+      config_map.insert({"hijack_nongpu_sync", &cfg_hijack_nongpu_sync});
 
       resource_map.insert({"gpu", &res_num_gpus});
       resource_map.insert({"fbmem", &res_min_fbmem_size});
@@ -2843,10 +2863,8 @@ namespace Realm {
           .add_option_int("-cuda:pageable_access", cfg_pageable_access)
           .add_option_int("-cuda:cupti", cfg_enable_cupti)
           .add_option_int("-cuda:ipc", cfg_use_cuda_ipc)
-          .add_option_bool("-cuda:validation", cfg_enable_cuhook);
-#ifdef REALM_USE_CUDART_HIJACK
-      cp.add_option_int("-cuda:nongpusync", Cuda::cudart_hijack_nongpu_sync);
-#endif
+          .add_option_bool("-cuda:validation", cfg_enable_cuhook)
+          .add_option_int("-cuda:nongpusync", cfg_hijack_nongpu_sync);
 
       bool ok = cp.parse_command_line(cmdline);
       if(!ok) {
@@ -3333,7 +3351,8 @@ namespace Realm {
 
     /*static*/ Module *CudaModule::create_module(RuntimeImpl *runtime)
     {
-      ModuleConfig *uncasted_config = runtime->get_module_config("cuda");
+      ModuleConfig *uncasted_config =
+          runtime->get_module_config(CudaModuleConfig::MODULE_NAME);
       if(!uncasted_config) {
         return nullptr;
       }
@@ -3346,6 +3365,9 @@ namespace Realm {
       assert(m->name == config->get_name());
       assert(m->config == nullptr);
       m->config = config;
+#ifdef REALM_USE_CUDART_HIJACK
+      cudart_hijack_nongpu_sync = config->cfg_hijack_nongpu_sync;
+#endif
 
       // check if gpus have been requested
       bool init_required =

@@ -89,12 +89,13 @@ namespace Realm {
     // class NumaModuleConfig
 
     NumaModuleConfig::NumaModuleConfig(void)
-      : ModuleConfig("numa")
+      : ModuleConfig(MODULE_NAME)
     {
       config_map.insert({"numamem", &cfg_numa_mem_size});
       config_map.insert({"numa_nocpumem", &cfg_numa_nocpu_mem_size});
       config_map.insert({"numacpus", &cfg_num_numa_cpus});
       config_map.insert({"pin_memory", &cfg_pin_memory});
+      config_map.insert({"stack_size", &cfg_stack_size});
 
       resource_map.insert({"numa_mems", &res_numa_mems});
     }
@@ -161,8 +162,8 @@ namespace Realm {
       //  disabled
       NumaModule *m = new NumaModule;
 
-      NumaModuleConfig *config =
-          checked_cast<NumaModuleConfig *>(runtime->get_module_config("numa"));
+      NumaModuleConfig *config = checked_cast<NumaModuleConfig *>(
+          runtime->get_module_config(NumaModuleConfig::MODULE_NAME));
       assert(config != nullptr);
       assert(config->finish_configured);
       assert(m->name == config->get_name());
