@@ -189,14 +189,14 @@ namespace Realm {
     // class OpenMPModuleConfig
 
     HDF5ModuleConfig::HDF5ModuleConfig(void)
-      : ModuleConfig(MODULE_NAME)
+      : ModuleConfig(MODULE_NAME, cmdline_parser_for<HDF5ModuleConfig>())
     {
       config_map.insert({"showerrors", &cfg_showerrors});
       config_map.insert({"max_open_files", &cfg_max_open_files});
       config_map.insert({"force_read_write", &cfg_force_read_write});
     }
 
-    void HDF5ModuleConfig::configure_from_cmdline(std::vector<std::string> &cmdline)
+    void HDF5ModuleConfig::parse_cmdline(std::vector<std::string> &cmdline)
     {
       // first order of business - read command line parameters
       CommandLineParser cp;

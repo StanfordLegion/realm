@@ -747,7 +747,7 @@ namespace Realm {
   }; // namespace Config
 
   CoreModuleConfig::CoreModuleConfig(void)
-    : ModuleConfig(MODULE_NAME)
+    : ModuleConfig(MODULE_NAME, cmdline_parser_for<CoreModuleConfig>())
   {
     config_map.insert({"cpu", &num_cpu_procs});
     config_map.insert({"util", &num_util_procs});
@@ -821,7 +821,7 @@ namespace Realm {
     return resource_discover_finished;
   }
 
-  void CoreModuleConfig::configure_from_cmdline(std::vector<std::string> &cmdline)
+  void CoreModuleConfig::parse_cmdline(std::vector<std::string> &cmdline)
   {
     assert(finish_configured == false);
     // parse command line arguments

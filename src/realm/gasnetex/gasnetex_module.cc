@@ -361,7 +361,7 @@ namespace Realm {
   //
 
   GASNetEXModuleConfig::GASNetEXModuleConfig(void)
-    : ModuleConfig(MODULE_NAME)
+    : ModuleConfig(MODULE_NAME, cmdline_parser_for<GASNetEXModuleConfig>())
   {
     config_map.insert({"use_immediate", &cfg_use_immediate});
     config_map.insert({"use_negotiated", &cfg_use_negotiated});
@@ -380,7 +380,7 @@ namespace Realm {
     config_map.insert({"am_limit", &cfg_am_limit});
   }
 
-  void GASNetEXModuleConfig::configure_from_cmdline(std::vector<std::string> &cmdline)
+  void GASNetEXModuleConfig::parse_cmdline(std::vector<std::string> &cmdline)
   {
     CommandLineParser cp;
     cp.add_option_int("-gex:immediate", cfg_use_immediate)

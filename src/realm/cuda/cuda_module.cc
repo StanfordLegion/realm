@@ -2766,7 +2766,7 @@ namespace Realm {
     // class CudaModuleConfig
 
     CudaModuleConfig::CudaModuleConfig(void)
-      : ModuleConfig(MODULE_NAME)
+      : ModuleConfig(MODULE_NAME, cmdline_parser_for<CudaModuleConfig>())
     {
       config_map.insert({"gpu", &cfg_num_gpus});
       config_map.insert({"zcmem", &cfg_zc_mem_size});
@@ -2828,7 +2828,7 @@ namespace Realm {
       return resource_discover_finished;
     }
 
-    void CudaModuleConfig::configure_from_cmdline(std::vector<std::string> &cmdline)
+    void CudaModuleConfig::parse_cmdline(std::vector<std::string> &cmdline)
     {
       assert(finish_configured == false);
       // first order of business - read command line parameters

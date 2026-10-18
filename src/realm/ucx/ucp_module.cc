@@ -41,7 +41,7 @@ namespace Realm {
   //
 
   UCPModuleConfig::UCPModuleConfig(void)
-    : ModuleConfig(MODULE_NAME)
+    : ModuleConfig(MODULE_NAME, cmdline_parser_for<UCPModuleConfig>())
   {
     config_map.insert({"bind_hostmem", &cfg_bind_hostmem});
     config_map.insert({"pollers_max", &cfg_pollers_max});
@@ -66,7 +66,7 @@ namespace Realm {
     config_map.insert({"bind_cudamem", &cfg_bind_cudamem});
   }
 
-  void UCPModuleConfig::configure_from_cmdline(std::vector<std::string> &cmdline)
+  void UCPModuleConfig::parse_cmdline(std::vector<std::string> &cmdline)
   {
     CommandLineParser cp;
     // deferred_allocs realm test always passes -ll:gsize

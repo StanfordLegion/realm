@@ -26,8 +26,9 @@ namespace Realm {
   // class ModuleConfig
   //
 
-  ModuleConfig::ModuleConfig(const std::string &name)
+  ModuleConfig::ModuleConfig(const std::string &name, CmdlineParserFn parser)
     : module_name(name)
+    , cmdline_parser(parser)
   {}
 
   ModuleConfig::~ModuleConfig(void) {}
@@ -42,10 +43,12 @@ namespace Realm {
 
   void ModuleConfig::configure_from_cmdline(std::vector<std::string> &cmdline)
   {
-    log_moduleconfig.error(
-        "Module %s does not have implemented for configure_cmdline size_t",
-        module_name.c_str());
-    abort();
+    if(cmdline_parser == nullptr) {
+      log_moduleconfig.error("Module %s did not register a command-line parser",
+                             module_name.c_str());
+      abort();
+    }
+    cmdline_parser(*this, cmdline);
   }
 
 }; // namespace Realm

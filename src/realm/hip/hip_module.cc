@@ -2325,7 +2325,7 @@ namespace Realm {
     // class HipModuleConfig
 
     HipModuleConfig::HipModuleConfig(void)
-      : ModuleConfig(MODULE_NAME)
+      : ModuleConfig(MODULE_NAME, cmdline_parser_for<HipModuleConfig>())
     {
       config_map.insert({"gpu", &cfg_num_gpus});
       config_map.insert({"zcmem", &cfg_zc_mem_size});
@@ -2376,7 +2376,7 @@ namespace Realm {
       return resource_discover_finished;
     }
 
-    void HipModuleConfig::configure_from_cmdline(std::vector<std::string> &cmdline)
+    void HipModuleConfig::parse_cmdline(std::vector<std::string> &cmdline)
     {
       // first order of business - read command line parameters
       CommandLineParser cp;

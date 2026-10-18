@@ -31,7 +31,7 @@ namespace Realm {
 
   namespace Numa {
 
-    class NumaModuleConfig : public ModuleConfig {
+    class REALM_PUBLIC_API NumaModuleConfig : public ModuleConfig {
       friend class NumaModule;
 
     public:
@@ -43,7 +43,10 @@ namespace Realm {
       bool discover_resource(void);
 
     public:
-      virtual void configure_from_cmdline(std::vector<std::string> &cmdline);
+      // parses this module's command-line options - invoked by the runtime via
+      //  ModuleConfig::configure_from_cmdline(), not for application use (and
+      //  deliberately not virtual - see the note in module_config.h)
+      void parse_cmdline(std::vector<std::string> &cmdline);
 
     public:
       // configurations

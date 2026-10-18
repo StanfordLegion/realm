@@ -35,7 +35,7 @@ namespace Realm {
   //  (system, registered, disk) used by Realm - its configuration also carries
   //  the runtime-wide settings that do not belong to any other module
   //  (background workers, dependent partitioning, the sampling profiler, ...)
-  class CoreModuleConfig : public ModuleConfig {
+  class REALM_PUBLIC_API CoreModuleConfig : public ModuleConfig {
     friend class CoreModule;
     friend class RuntimeImpl;
 
@@ -48,7 +48,10 @@ namespace Realm {
     bool discover_resource(const HardwareTopology &topo);
 
   public:
-    virtual void configure_from_cmdline(std::vector<std::string> &cmdline);
+    // parses this module's command-line options - invoked by the runtime via
+    //  ModuleConfig::configure_from_cmdline(), not for application use (and
+    //  deliberately not virtual - see the note in module_config.h)
+    void parse_cmdline(std::vector<std::string> &cmdline);
 
   public:
     // configurations

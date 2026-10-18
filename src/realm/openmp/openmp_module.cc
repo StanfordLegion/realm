@@ -201,7 +201,7 @@ namespace Realm {
     // class OpenMPModuleConfig
 
     OpenMPModuleConfig::OpenMPModuleConfig(void)
-      : ModuleConfig(MODULE_NAME)
+      : ModuleConfig(MODULE_NAME, cmdline_parser_for<OpenMPModuleConfig>())
     {
       config_map.insert({"ocpu", &cfg_num_openmp_cpus});
       config_map.insert({"othr", &cfg_num_threads_per_cpu});
@@ -210,7 +210,7 @@ namespace Realm {
       config_map.insert({"fake_cpukind", &cfg_fake_cpukind});
     }
 
-    void OpenMPModuleConfig::configure_from_cmdline(std::vector<std::string> &cmdline)
+    void OpenMPModuleConfig::parse_cmdline(std::vector<std::string> &cmdline)
     {
       // first order of business - read command line parameters
       CommandLineParser cp;

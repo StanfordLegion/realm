@@ -89,7 +89,7 @@ namespace Realm {
     // class NumaModuleConfig
 
     NumaModuleConfig::NumaModuleConfig(void)
-      : ModuleConfig(MODULE_NAME)
+      : ModuleConfig(MODULE_NAME, cmdline_parser_for<NumaModuleConfig>())
     {
       config_map.insert({"numamem", &cfg_numa_mem_size});
       config_map.insert({"numa_nocpumem", &cfg_numa_nocpu_mem_size});
@@ -117,7 +117,7 @@ namespace Realm {
       return resource_discover_finished;
     }
 
-    void NumaModuleConfig::configure_from_cmdline(std::vector<std::string> &cmdline)
+    void NumaModuleConfig::parse_cmdline(std::vector<std::string> &cmdline)
     {
       // first order of business - read command line parameters
       CommandLineParser cp;

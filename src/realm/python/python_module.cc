@@ -1092,14 +1092,14 @@ namespace Realm {
     // class PythonModuleConfig
 
     PythonModuleConfig::PythonModuleConfig(void)
-      : ModuleConfig(MODULE_NAME)
+      : ModuleConfig(MODULE_NAME, cmdline_parser_for<PythonModuleConfig>())
     {
       config_map.insert({"pyproc", &cfg_num_python_cpus});
       config_map.insert({"pystack", &cfg_stack_size});
       config_map.insert({"pyomp_threads", &cfg_pyomp_threads});
     }
 
-    void PythonModuleConfig::configure_from_cmdline(std::vector<std::string> &cmdline)
+    void PythonModuleConfig::parse_cmdline(std::vector<std::string> &cmdline)
     {
       // first order of business - read command line parameters
       CommandLineParser cp;

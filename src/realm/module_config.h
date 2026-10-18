@@ -46,7 +46,32 @@ namespace Realm {
   //  configuration types at compile time.
   class REALM_PUBLIC_API ModuleConfig {
   protected:
-    ModuleConfig(const std::string &name);
+    // NOTE for module authors: subclasses must NOT declare any virtual
+    //  functions (in particular they must not override
+    //  configure_from_cmdline).  A class with no non-inline virtual functions
+    //  has no "key function", so the compiler emits its vtable and typeinfo
+    //  with vague linkage in every translation unit that needs them.  That is
+    //  what lets an application name the configuration class of a module that
+    //  is not compiled into this build of Realm - including under
+    //  -fsanitize=vptr or via dynamic_cast, both of which reference the
+    //  typeinfo - without an unresolved symbol at link time.  A subclass
+    //  instead provides a non-virtual
+    //    void parse_cmdline(std::vector<std::string> &cmdline);
+    //  and registers it by passing cmdline_parser_for<Subclass>() to this
+    //  constructor.  The parser is only ever referenced from the subclass's
+    //  own constructor, i.e. from the module's own translation unit.
+    typedef void (*CmdlineParserFn)(ModuleConfig &config,
+                                    std::vector<std::string> &cmdline);
+
+    ModuleConfig(const std::string &name, CmdlineParserFn parser = nullptr);
+
+    template <typename T>
+    static CmdlineParserFn cmdline_parser_for(void)
+    {
+      return [](ModuleConfig &config, std::vector<std::string> &cmdline) {
+        static_cast<T &>(config).parse_cmdline(cmdline);
+      };
+    }
 
   public:
     virtual ~ModuleConfig(void);
@@ -66,6 +91,9 @@ namespace Realm {
     const std::string &get_name(void) const;
     template <typename T>
     RealmStatus get_resource(const std::string &name, T &value) const;
+    // parses the module's command-line options by invoking the parser the
+    //  subclass registered (see the note above) - called by the runtime during
+    //  Runtime::init()
     virtual void configure_from_cmdline(std::vector<std::string> &cmdline);
 
   protected:
@@ -78,6 +106,9 @@ namespace Realm {
     std::unordered_map<std::string, void *const> resource_map;
 
     std::string module_name;
+
+    // registered by the subclass constructor via cmdline_parser_for<>()
+    CmdlineParserFn cmdline_parser = nullptr;
 
     bool resource_discover_finished = false;
 

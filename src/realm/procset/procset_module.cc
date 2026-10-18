@@ -82,7 +82,7 @@ namespace Realm {
     // class ProcSetModuleConfig
 
     ProcSetModuleConfig::ProcSetModuleConfig(void)
-      : ModuleConfig(MODULE_NAME)
+      : ModuleConfig(MODULE_NAME, cmdline_parser_for<ProcSetModuleConfig>())
     {
       config_map.insert({"num_mp_threads", &cfg_num_mp_threads});
       config_map.insert({"num_mp_procs", &cfg_num_mp_procs});
@@ -90,7 +90,7 @@ namespace Realm {
       config_map.insert({"stack_size", &cfg_stack_size});
     }
 
-    void ProcSetModuleConfig::configure_from_cmdline(std::vector<std::string> &cmdline)
+    void ProcSetModuleConfig::parse_cmdline(std::vector<std::string> &cmdline)
     {
       // read command line parameters
       CommandLineParser cp;

@@ -599,12 +599,12 @@ namespace Realm {
   //
 
   MPIModuleConfig::MPIModuleConfig(void)
-    : ModuleConfig(MODULE_NAME)
+    : ModuleConfig(MODULE_NAME, cmdline_parser_for<MPIModuleConfig>())
   {
     config_map.insert({"global_mem_size", &cfg_global_mem_size});
   }
 
-  void MPIModuleConfig::configure_from_cmdline(std::vector<std::string> &cmdline)
+  void MPIModuleConfig::parse_cmdline(std::vector<std::string> &cmdline)
   {
     CommandLineParser cp;
     cp.add_option_int_units("-ll:gsize", cfg_global_mem_size, 'm');
