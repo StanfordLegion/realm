@@ -77,6 +77,7 @@ RECURSE_DEPTH = 40
 #   exits     (live)   the test ran the program to completion itself
 #   release   (attach) the test released the program; it must exit cleanly
 #   alive     (freeze) the process must still be alive (and frozen) afterwards
+#   killed    (attach) realm-gdb must have killed the program as gdb left
 #   none      nothing to check about the program
 #
 # `interaction` is "interactive" (commands on stdin, so gdb shows a prompt
@@ -313,6 +314,12 @@ class Context(object):
         """Let gdb print `text`, which the driver fails a test for otherwise
         (its BAD_OUTPUT)."""
         _out("ALLOW-OUTPUT " + text)
+
+    def await_exit(self):
+        """Have the driver, once the test is over, wait for gdb to end by
+        itself (say, on a signal the test sends it at its prompt) rather than
+        close gdb's stdin, which gdb treats as `quit`."""
+        _out("AWAIT-EXIT")
 
     def supports(self, cmd):
         """Whether this gdb accepts `cmd` (run it on a plain thread, before
@@ -1079,7 +1086,7 @@ def test_user_hook_kept(t):
         t.expect_error("realm-thread apply {:#x} {}".format(t.ut("chain0"), cmd), "refusing")
     t.select("chain0")
     out = t.run("print $pc")
-    t.check_in(USER_SWITCH, out, "plain print, shown the selection")
+    t.check_in(PARKED_FRAME0, out, "plain print, shown the selection")
     t.check_in("user-hookpost-print", out, "the user's hookpost-print, after it")
     t.check_in("rgt_chain_level3", t.run("bt"), "plain bt")
     t.run("realm-thread back")
@@ -3077,6 +3084,32 @@ def test_window_bad_context(t):
 
 
 @test(scenarios=("live",))
+def test_window_user_calls_off(t):
+    """With the user's own may-call-functions off, a command in a window
+    that turns it back on for a call (`with may-call-functions on --`) makes
+    the call, as it would elsewhere: it isn't taken for a call the window
+    refused."""
+    if not t.supports("with print pretty -- echo"):
+        raise TestSkip("`with` (gdb >= 10)")
+    before = t.regs()
+    t.run("set may-call-functions off")
+    try:
+        out = t.apply("chain0", "with may-call-functions on -- print "
+                      "realm_gdb_test_add(2, 3)")
+        t.check_in("= 5", out, "the call")
+        t.check_not_in("refused", out, "a note")
+        t.check_in("is off", t.run("show may-call-functions"), "may-call-functions after")
+        t.expect_error("realm-thread apply {:#x} print realm_gdb_test_add(2, 3)".format(
+            t.ut("chain0")), "may-call-functions is off")
+    finally:
+        t.run("set may-call-functions on")
+    t.check_regs(before)
+    t.check_host_stack()
+    yield
+    t.continue_to_exit()
+
+
+@test(scenarios=("live",))
 def test_window_low_headroom(t):
     """With little of its stack free below a parked thread's saved stack
     pointer, function calls are refused while it is shown (Realm's stacks
@@ -3117,6 +3150,17 @@ def test_window_low_headroom(t):
             t.check_not_in("WARNING", out, "a warning")
             t.check_not_in("breakpoints were ignored", out, "the note for calls that ran")
         t.check_in("is on", t.run("show may-call-functions"), "may-call-functions after")
+        if t.supports("with print pretty -- echo"):
+            # Nor if the user has calls off too.
+            t.run("set may-call-functions off")
+            try:
+                error, out = t.run_capturing(
+                    "realm-thread apply {:#x} with may-call-functions on -- print "
+                    "realm_gdb_test_add(1, 2)".format(t.ut("chain0")))
+            finally:
+                t.run("set may-call-functions on")
+            t.check(error is not None, "user's calls off: a call was made:\n" + out)
+            t.check_in("refused all the same", out, "the note, with the user's calls off")
         t.check_host_stack()
     else:
         t.expect_error("realm-thread apply {:#x} bt".format(t.ut("chain0")),
@@ -3806,6 +3850,35 @@ def test_window_unrestored(t):
     t.continue_to_exit()
 
 
+@test(scenarios=("live",))
+def test_window_close_fails(t):
+    """If putting a host's registers back fails unexpectedly (a bug in
+    realm-gdb, simulated here), the window isn't forgotten: realm-gdb says
+    so, and refuses to let the program run until 'realm-thread back' has put
+    them back."""
+    before = t.regs()
+    main = sys.modules["__main__"]
+    real = main._put_back
+
+    def put_back(saved, *args):
+        raise RuntimeError("simulated")
+    main._put_back = put_back
+    try:
+        error, out = t.run_capturing("realm-thread apply {:#x} bt 1".format(t.ut("chain0")))
+        out += error or ""
+        t.check_in("could not put back thread", out, "the warning")
+        t.check_in("realm-gdb failed: simulated", out, "why")
+        t.expect_error("continue", "could not put back")  # (It tries again first.)
+    finally:
+        main._put_back = real
+    t.check_in("put back thread", t.run("realm-thread back"), "'realm-thread back'")
+    t.check(not main._unrestored, "threads still to put back")
+    t.check_regs(before)
+    t.check_host_stack()
+    yield
+    t.continue_to_exit()
+
+
 @test(scenarios=("live", "attach"))
 def test_window_unwritable_register(t):
     """A register a window can't put back (simulated here; gdb 13 and older
@@ -4263,17 +4336,64 @@ def test_window_solib_events(t):
     thread is shown that loads a library (dlopen) doesn't stop at the event
     (it would be abandoned holding the dynamic loader's lock, and the
     program would hang at exit), and the program runs on to a clean exit."""
+    # (A library the program hasn't loaded, which this system has.)
+    names = ("libresolv.so.2", "libz.so.6", "libutil.so.9", "libz.so.1")
     t.run("set stop-on-solib-events 1")
     try:
-        error, out = t.run_capturing("realm-thread apply {:#x} print (long)dlopen("
-                                     "\"libresolv.so.2\", 2)".format(t.ut("chain0")))
+        for name in names:
+            error, out = t.run_capturing("realm-thread apply {:#x} print (long)dlopen("
+                                         "\"{}\", 2)".format(t.ut("chain0"), name))
+            if error is not None or not re.search(r"= 0$", out, re.M):
+                break
     finally:
         t.run("set stop-on-solib-events 0")
     if error is not None and "No symbol" in error:
         raise TestSkip("no dlopen here: " + error)
-    t.check(error is None and re.search(r"= [1-9]\d*", out), "dlopen():\n{}\n{}".format(
-        error, out))
+    if error is None and re.search(r"= 0$", out, re.M):
+        raise TestSkip("none of {} here".format(", ".join(names)))
+    t.check(error is None and re.search(r"= [1-9]\d*", out), "dlopen({}):\n{}\n{}".format(
+        name, error, out))
     t.check_not_in("abandoned", out, "a warning")
+    t.check_host_stack()
+    yield
+    t.continue_to_exit()
+
+
+@test(scenarios=("live",))
+def test_window_reload_in_call(t):
+    """realm-gdb.py loaded again during a function call made in a window (as
+    the embedded copy in a library the call loads would be) keeps what the
+    window disabled for the call: the user's breakpoints are enabled again
+    afterwards, with the note that they were ignored."""
+    names = ("libresolv.so.2", "libz.so.6", "libutil.so.9", "libz.so.1")
+    main = sys.modules["__main__"]
+    t.run("break realm_gdb_test_add")
+    loads = []
+
+    def on_new_objfile(event):
+        if not loads and any(n in event.new_objfile.filename for n in names):
+            loads.append(event.new_objfile.filename)
+            gdb.execute("source {}".format(t.config["script"]), to_string=True)
+    gdb.events.new_objfile.connect(on_new_objfile)
+    try:
+        for name in names:
+            error, out = t.run_capturing("realm-thread apply {:#x} print (long)dlopen("
+                                         "\"{}\", 2)".format(t.ut("chain0"), name))
+            if error is not None or not re.search(r"= 0$", out, re.M):
+                break
+    finally:
+        gdb.events.new_objfile.disconnect(on_new_objfile)
+    if error is not None and "No symbol" in error:
+        raise TestSkip("no dlopen here: " + error)
+    if not loads:
+        raise TestSkip("none of {} loaded here".format(", ".join(names)))
+    t.check(error is None, "dlopen({}): {}".format(name, error))
+    t.check_in("breakpoints were ignored", out, "the note")
+    t.check_eq(main._infcall_depth, 0, "calls in progress afterwards")
+    t.check_eq(main._disabled_breakpoints, [], "breakpoints still disabled")
+    t.check(re.search(r"^\d+\s+breakpoint\s+keep\s+y", t.run("info breakpoints"), re.M),
+            "the breakpoint, enabled again")
+    t.run("delete")
     t.check_host_stack()
     yield
     t.continue_to_exit()
@@ -4300,6 +4420,28 @@ def test_window_unrestored_quit(t):
     t.check_eq(gdb.selected_inferior().pid, 0, "the program's process afterwards")
     t.check(not main._unrestored, "threads still to put back")
     yield
+
+
+@test(scenarios=("attach",), ending="killed", variants=["TERM", "HUP"])
+def test_window_unrestored_signal(t):
+    """SIGTERM or SIGHUP to gdb at its prompt, after a host's registers
+    couldn't be put back (simulated here), kills the attached program,
+    saying so, rather than let gdb detach and leave it to run on corrupted:
+    also on gdb 12 and 13, whose quit raises KeyboardInterrupt as the first
+    gdb_exiting handler starts."""
+    if not hasattr(gdb.events, "gdb_exiting"):
+        raise TestSkip("gdb.events.gdb_exiting (gdb >= 12)")
+    main = sys.modules["__main__"]
+    real = main._put_back
+
+    def put_back(saved, *args):  # (Puts them back, but says it couldn't.)
+        return real(saved, *args) or [sorted(saved)[0]]
+    main._put_back = put_back  # (Kept: realm-gdb tries again as gdb exits.)
+    t.check_in("could not put back", t.apply("chain0", "bt 1"), "the warning")
+    t.release()  # (So that it would end soon, if it were let go.)
+    t.allow_output("Python Exception <class 'KeyboardInterrupt'>")
+    t.await_exit()
+    yield typed_final("python rgt._signal_gdb_later('{}', 0.5)".format(t.variant))
 
 
 @test(scenarios=("live",))
@@ -4452,7 +4594,9 @@ def test_window_program_died(t):
         both = (error or "") + out
         t.check_not_in("Python Exception", both, cmd)
         t.check_not_in("SystemError", both, cmd)
-    t.check(not sys.modules["__main__"]._selections, "the selection afterwards")
+    main = sys.modules["__main__"]
+    if main._selected_thread() is None:  # (FreeBSD's gdb keeps a thread.)
+        t.check(not main._selections, "the selection afterwards")
     t.run("kill")
     yield
 
@@ -4508,7 +4652,11 @@ def test_window_call_failed_early(t):
     t.check(error is not None, "the call failed:\n" + out)
     t.check_eq(main._infcall_depth, 0, "calls counted in progress")
     t.check_eq(t.run("info breakpoints"), before, "info breakpoints afterwards")
-    t.check_not_in("breakpoints were ignored", out, "the note, for calls that didn't run")
+    if "abandoned" not in out:
+        # (On aarch64, with no stack to write, the call starts, and fails
+        # only as gdb inserts its breakpoint; gdb then sends the post event,
+        # and realm-gdb pops it.)
+        t.check_not_in("breakpoints were ignored", out, "the note, for calls that didn't run")
     t.check_host_stack()
     yield
     t.run("delete")
@@ -4604,6 +4752,45 @@ def test_window_watchpoint_lost(t):
     t.check_in("will delete watchpoint {} at the next stop".format(local), out, "the warning")
     t.check_not_in("watchpoint {} at".format(location), out, "watch -l's")
     t.check_in("keep y", t.run("info breakpoints " + location), "watch -l's afterwards")
+    yield
+    t.run("delete")
+    t.continue_to_exit()
+
+
+@test(scenarios=("live",), variants=["call", "stopped_call"])
+def test_window_finish_breakpoint(t):
+    """A Python FinishBreakpoint on the host's own frame outlasts a function
+    call made while a parked thread is shown; but gdb deletes it if the call
+    stops (one refused, simulated here, but let through by `with
+    may-call-functions on`), looking for its frame among the parked
+    thread's, and realm-gdb says so."""
+    if not hasattr(gdb, "FinishBreakpoint"):
+        raise TestSkip("no gdb.FinishBreakpoint")
+    if t.variant == "stopped_call" and not t.supports("with print pretty -- echo"):
+        raise TestSkip("`with` (gdb >= 10)")
+    t.select_frame("probe_task")
+    finish = gdb.FinishBreakpoint(gdb.selected_frame(), internal=False)
+    num = finish.number
+    t.run("frame 0")
+    call = "print realm_gdb_test_add(2, 3)"
+    if t.variant == "call":
+        out = t.apply("chain0", call)
+        t.check_in("= 5", out, "add()")
+        t.check(finish.is_valid(), "the FinishBreakpoint, afterwards")
+        t.check_not_in("deleted breakpoint", out, "a warning")
+    else:
+        main = sys.modules["__main__"]
+        real = main._calls_refused
+        main._calls_refused = lambda window: "simulated"
+        try:
+            error, out = t.run_capturing("realm-thread apply {:#x} with may-call-functions "
+                                         "on -- {}".format(t.ut("chain0"), call))
+        finally:
+            main._calls_refused = real
+        t.check_in("refused all the same", out, "the call's note")
+        t.check(not finish.is_valid(), "the FinishBreakpoint, afterwards (gdb kept it)")
+        t.check_in("deleted breakpoint {} as a function call".format(num), out, "the warning")
+    t.check_host_stack()
     yield
     t.run("delete")
     t.continue_to_exit()

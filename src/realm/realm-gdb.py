@@ -80,9 +80,10 @@ _C_ESCAPES = {"n": "\n", "t": "\t", "r": "\r", "f": "\f", "v": "\v", "a": "\a",
               "b": "\b", "e": "\x1b"}
 
 
-# realm-gdb's own commands in progress (see _internal).
-_internal_depth = 0
-_internal_commands = []
+# realm-gdb's own commands in progress (see _internal).  (Kept if the script
+# is loaded again, as the state below is: in the middle of one, perhaps.)
+_internal_depth = globals().get("_internal_depth", 0)
+_internal_commands = globals().get("_internal_commands", [])
 
 
 def _internal(command):
@@ -894,13 +895,14 @@ _unrestored = globals().get("_unrestored", [])
 
 # Per process ((inferior number, pid)): gdb's error writing an extended
 # register, or None if it can (see _calls_unwritable).
-_extended_unwritable = {}
+_extended_unwritable = globals().get("_extended_unwritable", {})
 
 # Inferior calls in progress (in or out of a window); the user breakpoints
 # disabled for the one in a window: (number, gdb.Breakpoint or None if
-# Python can't see it, enable count) (see _disable_breakpoints).
-_infcall_depth = 0
-_disabled_breakpoints = []
+# Python can't see it, enable count) (see _disable_breakpoints).  (Kept if
+# the script is loaded again, as by a library a call in a window loads.)
+_infcall_depth = globals().get("_infcall_depth", 0)
+_disabled_breakpoints = globals().get("_disabled_breakpoints", [])
 
 # Seconds a call made in a window may run (gdb >= 15), after which gdb
 # unwinds it.
@@ -1115,6 +1117,7 @@ class _CallSettings(object):
                 "demangler-warning quit")]
         self.user_calls = _parameter("may-call-functions")
         self.calls = self.user_calls
+        self.refusing = False
         self.saved = []
 
     def __enter__(self):
@@ -1132,6 +1135,7 @@ class _CallSettings(object):
 
     def set_calls(self, allowed):
         """Allow function calls (as the user has it), or refuse them."""
+        self.refusing = not allowed
         want = self.user_calls if allowed else False
         if self.user_calls is not None and want != self.calls:
             _set("may-call-functions", _setting_words(want))
@@ -1160,8 +1164,9 @@ class _CallSettings(object):
 
     def calls_refused(self):
         """Whether the window refuses function calls, but a command in it
-        turned may-call-functions back on."""
-        return self.calls is False and bool(_parameter("may-call-functions"))
+        turned may-call-functions back on.  (Not when it is the user who has
+        them off, and the window allows them.)"""
+        return self.refusing and bool(_parameter("may-call-functions"))
 
     def __exit__(self, *exc):
         try:
@@ -1208,6 +1213,7 @@ class _HeldSignals(object):
         self.came = []
         self.swapped = []
         self.blocked = None
+        self.done = False
 
     def __enter__(self):
         import signal
@@ -1250,7 +1256,12 @@ class _HeldSignals(object):
         return self
 
     def _note(self, sig, frame):
-        self.came.append(sig)
+        if self.done:
+            # (Python runs a handler some time after the signal: this one
+            # came as the window closed.  gdb's handler is back by now.)
+            os.kill(os.getpid(), sig)
+        else:
+            self.came.append(sig)
 
     def _put_back(self):
         while self.swapped:
@@ -1266,6 +1277,7 @@ class _HeldSignals(object):
         if self.blocked is not None:
             blocked, self.blocked = self.blocked, None
             signal.pthread_sigmask(signal.SIG_SETMASK, blocked)
+        self.done = True
         came, self.came = sorted(set(self.came)), []
         for sig in came:
             os.kill(os.getpid(), sig)
@@ -1297,6 +1309,9 @@ class _Window(object):
         # and those it marked to delete since (see _note_lost_watchpoints).
         self.watchpoints = []
         self.lost_watchpoints = set()
+        # The breakpoints disabled for a call that gdb deleted meanwhile (see
+        # _enable_breakpoints).
+        self.lost_breakpoints = set()
         # The function calls made in it that were left stopped, and popped
         # (see pop_calls): the user thread shown for each, and whether it
         # was one it refused (which didn't run); the calls made, and
@@ -1381,11 +1396,27 @@ class _Window(object):
                 raise  # (Left open, for the next prompt: see _on_before_prompt.)
             self._release()
             raise
-        except BaseException:
+        except BaseException as e:
+            if not self.done:
+                self._fail_closed(e)
             self._release()
             raise
         self._release()
         return False
+
+    def _fail_closed(self, error):
+        """close() failed before the host's registers were back, other than
+        by Ctrl-C (a bug in realm-gdb, say): rather than forget the window,
+        keep the program from running, as when registers can't be put back,
+        and let 'realm-thread back' try again."""
+        self.done = True
+        why = "realm-gdb failed: {}".format(str(error) or type(error).__name__)
+        self.left = sorted(self.saved)
+        self.left_errors = {n: why for n in self.left}
+        if self not in _unrestored:
+            _unrestored.append(self)
+        print("realm-gdb: WARNING: could not put back {}.  Don't let the program run; "
+              "run 'realm-thread back' to try again.".format(_left_words(self)))
 
     def _release(self):
         global _window, _infcall_depth
@@ -1627,9 +1658,11 @@ def _left_words(window):
     left = getattr(window, "left", None) or []  # (A window of an earlier load's.)
     errors = getattr(window, "left_errors", {})
     why = sorted(set(errors[n].rstrip(".") for n in left if n in errors))
+    names = ", ".join("$" + n for n in left[:6])
+    if len(left) > 6:
+        names += " and {} more".format(len(left) - 6)
     return "thread {}'s own registers ({}{})".format(
-        window.thread_num, ", ".join("$" + n for n in left),
-        ": " + "; ".join(why) if why else "")
+        window.thread_num, names, ": " + "; ".join(why) if why else "")
 
 
 def _stuck_words(window):
@@ -1762,6 +1795,15 @@ def _call_notes(window):
                          "s" if len(lost) > 1 else "", ", ".join(map(str, lost)),
                          "their" if len(lost) > 1 else "its",
                          "them" if len(lost) > 1 else "it"))
+    gone = sorted(getattr(window, "lost_breakpoints", ()))
+    if gone:
+        notes.append("realm-gdb: WARNING: gdb deleted breakpoint{} {} as a function call "
+                     "made meanwhile stopped: it looked for {} frame among the parked Realm "
+                     "user thread's (a Python FinishBreakpoint, say).  Set {} again "
+                     "afterwards.".format("s" if len(gone) > 1 else "",
+                                          ", ".join(map(str, gone)),
+                                          "their" if len(gone) > 1 else "its",
+                                          "them" if len(gone) > 1 else "it"))
     put = getattr(window, "settings_put_back", None)  # (See _end_refusals.)
     if put:
         notes.append("realm-gdb: the function calls made meanwhile ran with {} all the "
@@ -1845,18 +1887,29 @@ def _note_lost_watchpoints(window):
 
 
 def _enable_breakpoints():
+    """Enable again the breakpoints _disable_breakpoints disabled.  Those
+    gdb deleted meanwhile are noted in the open window: as a call stopped
+    (one the window refused, let through), gdb looked for a Python
+    FinishBreakpoint's frame among the frames the host had then, the parked
+    thread's, and deleted it, as it does watchpoints (_note_lost_watchpoints)."""
+    lost = []
     while _disabled_breakpoints:
         num, bp, count = _disabled_breakpoints.pop()
         try:
-            if count > 1:
+            if bp is not None and not bp.is_valid():
+                lost.append(num)
+            elif count > 1:
                 gdb.execute("enable count {} {}".format(count, num), to_string=True)
             elif bp is not None:
-                if bp.is_valid():
-                    bp.enabled = True
+                bp.enabled = True
             else:
                 gdb.execute("enable {}".format(num), to_string=True)
-        except (gdb.error, RuntimeError):
+        except (gdb.error, RuntimeError) as e:
+            if "No breakpoint number" in str(e):
+                lost.append(num)
             _debug_exc()
+    if lost and _window is not None and hasattr(_window, "lost_breakpoints"):
+        _window.lost_breakpoints.update(lost)
 
 
 def _on_cont(event):
@@ -1949,12 +2002,59 @@ def _kill_unrestored():
             confirm = _parameter("confirm")
             _set("confirm", "off")
             try:
-                _internal("kill inferiors {}".format(inferior.num))
+                with _KillNudge(inferior):
+                    _internal("kill inferiors {}".format(inferior.num))
             finally:
                 _set("confirm", _setting_words(confirm))
             _unrestored.remove(window)
         except Exception:
             _debug_exc()
+
+
+class _KillNudge(object):
+    """On FreeBSD (15.1, with gdb 15.1), gdb's kill of a program it attached
+    to, and hasn't let run since, lets the program run on unkilled, and then
+    waits for it to end, for good.  So until the kill is over, send the
+    program SIGKILL every few milliseconds: one sent while it is stopped is
+    lost too, but the first once it runs ends it.  (A native process only:
+    a remote one's pid isn't ours to signal.  gdb.execute lets other Python
+    threads run from gdb 12.)"""
+
+    def __init__(self, inferior):
+        self.pid = None
+        connection = getattr(inferior, "connection", None)
+        if sys.platform.startswith("freebsd") and inferior.pid > 0 and \
+                getattr(connection, "type", None) == "native":
+            self.pid = inferior.pid
+
+    def __enter__(self):
+        if self.pid is not None:
+            import threading
+            self.lock = threading.Lock()
+            self.done = threading.Event()
+            thread = threading.Thread(target=self._nudge, name="realm-gdb kill")
+            thread.daemon = True
+            thread.start()
+        return self
+
+    def _nudge(self):
+        import signal
+        while not self.done.wait(0.005):
+            # (Under the lock, so not once gdb has reaped the process and the
+            # kill is over: its pid could be another's by then.)
+            with self.lock:
+                if self.done.is_set():
+                    return
+                try:
+                    os.kill(self.pid, signal.SIGKILL)
+                except OSError:
+                    return  # (Gone.)
+
+    def __exit__(self, *exc):
+        if self.pid is not None:
+            with self.lock:
+                self.done.set()
+        return False
 
 
 def _install_atexit():
@@ -3168,11 +3268,12 @@ def _guarded(handler):
     return run
 
 
-def _connect(registry_name, handler_name):
-    """Connect a handler once per gdb session, even if this script is loaded
-    again (by another copy of librealm, or by hand).  The connection looks
-    the handler up by name, so the most recently loaded copy runs."""
-    flag = "_realm_gdb_connected_" + registry_name
+def _connect(registry_name, handler_name, tag=""):
+    """Connect a handler once per gdb session (and `tag`), even if this
+    script is loaded again (by another copy of librealm, or by hand).  The
+    connection looks the handler up by name, so the most recently loaded
+    copy runs."""
+    flag = "_realm_gdb_connected_" + registry_name + tag
     registry = getattr(gdb.events, registry_name, None)
     if registry is None or getattr(gdb, flag, False):
         return
@@ -3189,6 +3290,10 @@ def _install_event_handlers():
     _connect("inferior_call", "_on_inferior_call")
     _connect("before_prompt", "_on_before_prompt")
     _connect("gdb_exiting", "_on_gdb_exiting")
+    # (Twice: on gdb 12 and 13, the quit a SIGTERM makes raises
+    # KeyboardInterrupt as the first one starts, and gdb carries on to the
+    # next.  When the first one has run, the second finds nothing to do.)
+    _connect("gdb_exiting", "_on_gdb_exiting", "_again")
 
 
 # --------------------------------------------------------------------------
@@ -4600,7 +4705,7 @@ def _close_stale(outer):
 # MI commands that would let the program run, or let go of it (refused by
 # gdb.execute_mi, as the CLI's are by their hooks: see _install_execute_mi).
 _MI_GUARDED = re.compile(r"-(exec-(continue|finish|jump|next|next-instruction|run|step|"
-                         r"step-instruction|until)|target-(attach|detach|disconnect|select)|"
+                         r"step-instruction|until)|target-(attach|detach|disconnect|download|select)|"
                          r"gdb-exit|interpreter-exec|file-exec-and-symbols|file-exec-file)$")
 
 
@@ -4984,7 +5089,8 @@ class RealmThread(gdb.Command):
                   "back', commands that work with the selected frame ('bt', 'frame N', "
                   "'up', 'print VAR', 'info locals', 'x', 'set var', 'break', ...) show "
                   "it, with its saved registers in place on thread {} for each command "
-                  "only; nothing in the program changes in between.  Commands that "
+                  "only: at gdb's prompt, nothing in the program has changed.  "
+                  "Commands that "
                   "would act on thread {} as it really is ('step', 'finish', 'return', "
                   "'watch', 'python', ...) are refused meanwhile; 'continue', or "
                   "'thread N' to another thread, ends the selection.".format(
@@ -4993,7 +5099,8 @@ class RealmThread(gdb.Command):
             print("realm-thread: selected user thread {:#x}.  'rt COMMAND' runs "
                   "COMMAND on it (e.g. 'rt bt', 'rt frame 2', 'rt print VAR'), with "
                   "its saved registers in place on the selected thread for that "
-                  "command only; nothing in the program changes in between.  Plain "
+                  "command only: at gdb's prompt, nothing in the program has "
+                  "changed.  Plain "
                   "commands show thread {} as it really is: {}.  Run 'realm-thread "
                   "back' to undo.".format(int(ut), host, _plain_off_why))
         with _KeepSelection():
@@ -5059,13 +5166,14 @@ realm-gdb.py loaded.  Realm user-thread debugging commands:
 
 In a live process, a parked user thread is shown by putting its saved
 registers into the selected thread for the duration of one command, then
-putting that thread's own back.  Between commands nothing in the program
-is changed.  During such a command, commands that would let the program
-run or let go of it (continue, step, detach, quit, ...) are refused,
-function calls hold the other threads, can't stop at breakpoints, and
-are unwound if they get a signal.  (So if gdb itself were killed in the
-middle of one, an attached program would be left corrupted.)  Parked
-user threads can't be shown in non-stop mode or while the program runs.
+putting that thread's own back, so that at gdb's prompt nothing in the
+program has changed.  During such a command, commands that would let the
+program run or let go of it (continue, step, detach, quit, ...) are
+refused, function calls hold the other threads, can't stop at
+breakpoints, and are unwound if they get a signal.  (So if gdb itself
+were killed in the middle of one, an attached program would be left
+corrupted.)  Parked user threads can't be shown in non-stop mode or
+while the program runs.
 
 Linux / FreeBSD on x86-64 or aarch64.  Source: src/realm/realm-gdb.py.
 ======================================================================"""
