@@ -140,9 +140,17 @@ class Proc(object):
     def __init__(self, cmd, env, cwd, stdin=subprocess.DEVNULL, preexec_fn=None,
                  ui=None):
         self.cmd = cmd
+
+        def preexec():
+            # (SIGINT not ignored, as a shell's background job has it, which
+            # gdb 10 and older keep: tests that send gdb one would test
+            # nothing.)
+            signal.signal(signal.SIGINT, signal.SIG_DFL)
+            if preexec_fn is not None:
+                preexec_fn()
         self.p = subprocess.Popen(cmd, stdin=stdin, stdout=subprocess.PIPE,
                                   stderr=subprocess.STDOUT, env=env, cwd=cwd,
-                                  preexec_fn=preexec_fn, start_new_session=True)
+                                  preexec_fn=preexec, start_new_session=True)
         self.chunks = []
         self.ui = ui
         self.ui_chunks = []
@@ -329,13 +337,19 @@ def drive(gdb_proc, protocol, timeout, mi=False):
             # (Context.mi_result).
             token = 1000 + n
             ok = send("{}{}\n".format(token, cmd))
-            r = gdb_proc.wait_for(r"^{}\^(\w+)(.*)$".format(token), timeout, flags=re.M)
+            # (The whole line: gdb may not have written all of it yet.)
+            r = gdb_proc.wait_for(r"^{}\^(\w+)([^\n]*?)\r?\n".format(token), timeout,
+                                  flags=re.M)
             with open(protocol.path, "a") as f:
                 f.write("RGT-MI-RESULT {}\n".format(
                     "{} {}".format(r.group(1), r.group(2)) if r else "none"))
         elif cmd is not None:
             ok = send(cmd + "\n")
         ok = ok and send(step)
+    # A test that has gdb end by itself (Context.await_exit) is given the
+    # time to, before EOF, which gdb treats as `quit`.
+    if re.search(r"^RGT: AWAIT-EXIT$", protocol.text(), re.M):
+        gdb_proc.wait(min(timeout, 30))
     # EOF, which gdb treats as `quit`.
     try:
         gdb_proc.p.stdin.close()
@@ -375,6 +389,10 @@ def check_gdb_output(name, out, protocol, rc=None):
     for bad in BAD_OUTPUT:
         if bad in out:
             return "FAIL", "gdb output contains {!r}".format(bad)
+    # (What the test expects gdb to print: see Context.require_output.)
+    for required in re.findall(r"^RGT: REQUIRE-OUTPUT (.*)$", protocol, re.M):
+        if required not in out.replace("RGT: REQUIRE-OUTPUT " + required, ""):
+            return "FAIL", "gdb output lacks {!r}".format(required)
     problem = exit_status_problem(rc)
     if problem:
         return "FAIL", "gdb failed: " + problem
@@ -566,6 +584,16 @@ def run_test(args, info, cores):
                     how = ("killed by signal {}".format(-rc) if rc < 0
                            else "exit code {}".format(rc))
                     status, detail = "FAIL", "the program failed after gdb left ({})".format(how)
+        elif info.ending == "killed" and program is not None and status == "PASS":
+            rc = program.wait(60)
+            log.append("--- program output ---\n" + program.output)
+            if rc != -signal.SIGKILL:
+                how = ("it is still running" if rc is None else
+                       "killed by signal {}".format(-rc) if rc < 0 else
+                       "exit code {}".format(rc))
+                status, detail = "FAIL", "the program wasn't killed as gdb left ({})".format(how)
+            elif "realm-gdb: WARNING: killing process" not in out:
+                status, detail = "FAIL", "gdb didn't say it was killing the program"
         elif info.ending == "alive" and program is not None:
             time.sleep(1)
             log.append("--- program output ---\n" + program.output)
