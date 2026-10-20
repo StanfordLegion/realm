@@ -547,8 +547,9 @@ endif()
 #region GDB Script Tests
 # realm-gdb.py is only embedded in librealm for Debug and RelWithDebInfo
 # builds on ELF platforms (see src/CMakeLists.txt).  The tests drive a real
-# gdb, so they need one, plus Python 3 for the test driver.
-option(REALM_BUILD_GDB_TESTS "Test realm-gdb.py, if gdb is available" ON)
+# gdb, so they need one, plus Python 3 for the test driver.  Off by default:
+# the gdb CI jobs turn them on.
+option(REALM_BUILD_GDB_TESTS "Test realm-gdb.py, if gdb is available" OFF)
 if(REALM_BUILD_GDB_TESTS
    AND REALM_EMBED_GDB_SCRIPT
    AND NOT CMAKE_CROSSCOMPILING

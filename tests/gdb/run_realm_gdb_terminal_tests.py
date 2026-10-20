@@ -74,6 +74,16 @@ while int(h):
     h = h["registry_next"]
 """
 
+# Sets $rgt_chain0 to it instead.
+FIND_CHAIN_VAR = FIND_CHAIN.replace(
+    'print("CHAIN0=%#x" % int(h))',
+    'gdb.execute("set $rgt_chain0 = %#x" % int(h), to_string=True)')
+
+# The SP of `maint print raw-registers` (realm-gdb hooks no maint command):
+# what the selected thread's register cache has.
+RAW_SP = re.compile(r"^ ?(?:rsp|sp) .*?(0x[0-9a-f]+)\s*$", re.M)
+
+
 def clean(data):
     return CONTROL.sub(b"", data).decode("utf-8", "replace")
 
@@ -242,10 +252,11 @@ class Context(object):
         env.update(extra or {})
         return env
 
-    def gdb(self, args, env=None):
-        """gdb ARGS, at a terminal, with realm-gdb.py sourced first."""
+    def gdb(self, args, env=None, size=(50, 200)):
+        """gdb ARGS, at a terminal (`size`: rows, columns), with realm-gdb.py
+        sourced first."""
         s = Term(self, [shutil.which(self.args.gdb), "-iex", "set auto-load python-scripts off",
-                        "-iex", "source " + self.args.script] + args, self.env(env))
+                        "-iex", "source " + self.args.script] + args, self.env(env), size)
         self.sessions.append(s)
         return s
 
@@ -272,7 +283,7 @@ class Context(object):
             raise Skip("(failed)")
         ptr = m.group(1)
         s.step("realm-thread PTR selects it", "realm-thread {}\r".format(ptr),
-               r"selected user thread " + ptr)
+               r"selected user thread \d+ \(" + ptr)
         shown = s.step("bt: the parked thread's stack", rt + "bt\r",
                        r"#0 .*" + FRAME0 + r"[\s\S]*rgt_chain_level3")
         m = re.search(r"#(\d+) .* rgt_chain_level3 ", shown)
@@ -297,11 +308,11 @@ def test_terminal_prompt(t):
     ptr, _ = t.select_chain0(s, rt="rt ")
     for i in range(3):
         s.step("prompt {}: the selection, once".format(i + 1), "echo\r",
-               r"\n\[realm-thread 0x[0-9a-f]+\] \(gdb\) $", unwanted=r"\] \[realm-thread")
+               r"\n\[realm-thread (?:0x[0-9a-f]+|\d+)\] \(gdb\) $", unwanted=r"\] \[realm-thread")
     s.step("realm-thread back", "realm-thread back\r", r"no parked user thread is selected now")
     s.step("  then gdb's prompt", "echo\r", r"(?:^|\n)echo\n\(gdb\) $")
     s.step("  and setting", "show prompt\r", r"Gdb's prompt is \"\(gdb\) \"\.")
-    s.step("select again", "realm-thread {}\r".format(ptr), r"selected")
+    s.step("select again", "realm-thread {}\r".format(ptr), r"\[Selecting user thread")
     s.step("continue: the program finishes", "continue\r",
            r"REALM_GDB_TEST: PASS[\s\S]*exited normally", timeout=t.args.timeout)
     s.step("  then gdb's prompt", "show prompt\r", r"Gdb's prompt is \"\(gdb\) \"\.\n\(gdb\) $")
@@ -312,34 +323,60 @@ def test_terminal_prompt(t):
 def test_terminal_output(t):
     """realm-gdb.py with gdb on a terminal: output of `rt` and `realm-thread
     apply` that doesn't end a line (`output`'s) comes before the prompt, as
-    without them."""
+    without them; a backtrace they run that stops short says so, as gdb's
+    own does at a terminal."""
     s = t.gdb(t.realm_args())
     ptr, _ = t.select_chain0(s, rt="rt ")
     early = rb"\(gdb\) $|\(gdb\) 1234$"
     s.step("rt output: before the prompt", "rt output 1234\r",
-           r"rt output 1234\n1234\[realm-thread 0x[0-9a-f]+\] \(gdb\) $", until=early)
+           r"rt output 1234\n1234\[realm-thread (?:0x[0-9a-f]+|\d+)\] \(gdb\) $", until=early)
     s.step("  not after the next command's output", "print 77\r", r"\$\d+ = 77\n",
            unwanted="1234")
     s.step("realm-thread apply PTR output: before the prompt",
            "realm-thread apply {} output 4321\r".format(ptr),
-           r"\n4321\[realm-thread 0x[0-9a-f]+\] \(gdb\) $")
+           r"\n4321\[realm-thread (?:0x[0-9a-f]+|\d+)\] \(gdb\) $")
+    # (As gdb's own backtraces typed at a terminal.)
+    s.step("rt bt 1: says more frames follow", "rt bt 1\r",
+           r"#0 [^\n]*\n\(More stack frames follow\.\.\.\)")
+    s.step("realm-thread apply PTR bt 1: too",
+           "realm-thread apply {} bt 1\r".format(ptr),
+           r"#0 [^\n]*\n\(More stack frames follow\.\.\.\)")
+    s.step("thread apply all bt 1: in the parked section too", "thread apply all bt 1\r",
+           r"=== Parked[^\n]*\n\nUser thread[^\n]*\n#0 [^\n]*\n"
+           r"\(More stack frames follow\.\.\.\)")
+    # (gdb.execute keeps styling from gdb 17.)
+    probe = s.step("", "python exec(\"try:\\n gdb.execute('echo', to_string=True, "
+                   "styling=True)\\n print('RGT-' + 'STYLES')\\nexcept TypeError:\\n "
+                   "print('RGT-' + 'PLAIN')\")\r")
+    styles = "RGT-STYLES" in probe
+    mark = len(s.out)
+    s.step("rt bt 1", "rt bt 1\r", r"#0 ")
+    t.check("  styled as gdb's own bt is, where gdb.execute can keep it ({})".format(
+        "gdb >= 17" if styles else "not before gdb 17"),
+        bool(re.search(rb"\x1b\[[0-9;]*m", s.out[mark:])) == styles, repr(s.out[mark:]))
+    if styles:
+        s.step("rt pipe bt 1 | cat -v: unstyled, as gdb's pipe gives it", "rt pipe bt 1 | cat -v\r",
+               r"#0 ", unwanted=r"\^\[")
     s.finish()
 
 
 @test("terminal.repeat")
 def test_terminal_repeat(t):
     """realm-gdb.py with gdb on a terminal: an empty line after `realm-thread
-    PTR` or `realm-thread back` doesn't select, or go back, again."""
+    PTR` or `realm-thread back` doesn't select, or go back, again.  The
+    thread selected again starts over at frame #0, rather than being
+    selected twice; `realm-thread back` prints the frame it is back at."""
     s = t.gdb(t.realm_args())
     ptr, _ = t.select_chain0(s, rt="rt ")
-    s.step("realm-thread PTR, again", "realm-thread {}\r".format(ptr), r"selected")
-    s.step("  Enter", "\r", None)
+    s.step("realm-thread PTR, again", "realm-thread {}\r".format(ptr),
+           r"\[Selecting user thread")
+    s.step("  Enter", "\r", None, unwanted=r"selected user thread|\[Selecting")
     shown = s.step("realm-thread: one selection", "realm-thread\r", r"\(selected\)")
-    t.check("  and one earlier (from select_chain0's and this)",
-            shown.count("selected earlier") <= 1, shown)
-    s.step("realm-thread back", "realm-thread back\r", r"back to user thread")
-    s.step("  Enter", "\r", None)
-    s.step("  one still selected", "realm-thread\r", r"\(selected\)")
+    t.check("  and none earlier", "selected earlier" not in shown, shown)
+    s.step("  at frame #0", "frame\r", r"#0 .*" + FRAME0)
+    s.step("realm-thread back: the thread's own frame", "realm-thread back\r",
+           r"no parked user thread is selected now\.\n#0 [^\n]*realm_gdb_test_stop")
+    s.step("  Enter", "\r", None, unwanted="no parked user thread is selected")
     s.finish()
 
 
@@ -376,7 +413,7 @@ def test_terminal_plain(t):
         own = _syscall_sp_pc(s.step("", proc))
         t.check("the thread's own SP and PC, from /proc", own is not None, "")
     s.step("realm-thread PTR", "realm-thread {}\r".format(ptr),
-           r"commands that work with the selected frame[\s\S]*#0 .*" + FRAME0)
+           r"show it, and 'step'[\s\S]*#0 .*" + FRAME0)
     shown = s.step("bt: the parked stack", "bt\r",
                    r"#0 .*" + FRAME0 + r"[\s\S]*rgt_chain_level3")
     m = re.search(r"#(\d+) .* rgt_chain_level3 ", shown)
@@ -430,10 +467,11 @@ def test_terminal_plain(t):
                         _syscall_sp_pc(s.step("", proc)) == own, "")
     s.step("  still parked", "print chain_marker\r", r"= 4242")
     s.step("step: refused", "step\r",
-           r"refusing 'step' while user thread {} is selected[\s\S]*realm-thread back".format(ptr))
+           r"refusing 'step' while user thread \d+ \({}\) is selected[\s\S]*realm-thread "
+           r"back".format(ptr))
     s.step("continue: ends the selection, and the program finishes", "continue\r",
-           r"continuing; no longer selecting user thread {}[\s\S]*REALM_GDB_TEST: PASS"
-           r"[\s\S]*exited normally".format(ptr), timeout=t.args.timeout)
+           r"continuing; no longer selecting user thread \d+ \({}\)[\s\S]*REALM_GDB_TEST: "
+           r"PASS[\s\S]*exited normally".format(ptr), timeout=t.args.timeout)
     s.finish()
 
 
@@ -495,18 +533,20 @@ def test_terminal_body_lines(t):
     body = rb"\n>\s*$"
     lines = ["for i in range(1):", "  continue", 'print("PY-AT", gdb.selected_frame().name())']
     s.step("bare python: a note", "python\r", r"'python' runs on thread \d+ as it really "
-           r"is, not on user thread " + ptr, until=body)
+           r"is, not on user thread \d+ \(" + ptr, until=body)
     for line in lines:
         s.step("", line + "\r", until=body)
     s.step("  its body runs on the thread as it really is", "end\r",
            r"PY-AT realm_gdb_test_stop", unwanted=r"Continuing|refusing")
     for cmd in ("rt python", "realm-thread apply {} python".format(ptr)):
-        s.step("", cmd + "\r", until=body)
+        s.step(cmd + ": says first that it is refused, and its lines dropped", cmd + "\r",
+               r"refuses 'python', which reads the lines after it: type them, up to 'end', "
+               r"to have them dropped", until=body)
         for line in lines:
             s.step("", line + "\r", until=body)
         s.step(cmd + ": refused, its lines dropped", "end\r",
-               r"refusing 'python' in '[^']+': it reads the lines after it[^\n]*\(the 4 "
-               r"lines given were dropped\)", unwanted=r"Continuing|PY-AT")
+               r"refusing 'python' in '[^']+': it reads the lines after it[^\n]*\(the "
+               r"lines typed were dropped\)", unwanted=r"Continuing|PY-AT")
     s.step("the program never ran", "info program\r", r"stopped|Program stopped|It stopped",
            unwanted=r"is running|not being run")
     s.step("continue: the program finishes", "continue\r",
@@ -560,7 +600,7 @@ def test_terminal_pager_notes(t):
         if key == "\x03" and not safe:
             continue
         s.step("realm-thread apply all: the pager stops it",
-               "realm-thread apply all print {} = 7\r".format(reg), r"User thread 0x",
+               "realm-thread apply all print {} = 7\r".format(reg), r"User thread \d",
                until=pager)
         shown = s.step("", key, until=PROMPT + b"|" + pager)
         for _ in range(20):  # (The notes may fill a screen too.)
@@ -576,6 +616,172 @@ def test_terminal_pager_notes(t):
     s.step("continue: the program finishes", "continue\r",
            r"REALM_GDB_TEST: PASS[\s\S]*exited normally", timeout=t.args.timeout)
     s.finish()
+
+
+@test("terminal.banner_pager")
+def test_terminal_banner_pager(t):
+    """realm-gdb.py's banner on a 24-line terminal: two lines, which leave
+    room for gdb's messages of attaching to a process (`gdb -p PID`, say)
+    before gdb's pager stops them; `q` at the pager, should it come as
+    realm-gdb.py loads, stops the banner without saying that loading
+    realm-gdb.py failed, and its commands work."""
+    s = t.gdb(["-nx", "-q", "-ex", "set height 0", "-ex", "set width 0",
+               "-ex", "break realm_gdb_test_stop", "-ex", "run",
+               "--args", t.args.program] + base.program_args() + ["-mode", "stop"],
+              size=(24, 80))
+    # (gdb 8's prompt is "---Type <return> to continue, or q <return> to quit---".)
+    pager = rb"Type <(?:RET|return)>[^\n]*-+\s*$"
+    shown = s.read(rb"(?:" + pager + rb")|(?:" + PROMPT + rb")", timeout=t.args.timeout)
+    m = re.search(r"realm-gdb\.py loaded: [\s\S]*see 'realm-help'\.", shown)
+    t.check("the banner, two lines", m is not None and m.group(0).count("\n") == 1, shown)
+    if re.search(pager, shown.encode()):
+        shown = s.step("q at the pager: no message that loading failed", "q\r", None,
+                       timeout=t.args.timeout)
+        t.check("  none", re.search(r"interrupted|Python Exception|Traceback", shown) is None,
+                shown)
+    t.select_chain0(s, shown=shown if "realm_gdb_test_stop" in shown else None)
+    s.step("continue: the program finishes", "continue\r",
+           r"REALM_GDB_TEST: PASS[\s\S]*exited normally", timeout=t.args.timeout)
+    s.finish()
+
+
+@test("terminal.breakpoint_commands")
+def test_terminal_breakpoint_commands(t):
+    """Breakpoint commands, which gdb runs itself at a stop that a typed
+    `continue` comes to: `thread apply all bt` (the parked threads too), a
+    function call in `realm-thread apply all`, selecting a parked thread
+    and a plain `bt` of it, then `continue`, which ends the selection and
+    runs; the program finishes cleanly."""
+    find = t.file("find_chain.py", FIND_CHAIN_VAR)
+    bp = t.file("bp.gdb", "break realm_gdb_test_release_parked\ncommands\n"
+                "thread apply all bt 1\n"
+                "realm-thread apply all print realm_gdb_test_add(1, 2)\n"
+                "realm-thread $rgt_chain0\n"
+                "bt 1\n"
+                "continue\n"
+                "end\n")
+    s = t.gdb(t.realm_args())
+    shown = s.read(timeout=t.args.timeout)
+    if not t.check("the program stops in realm_gdb_test_stop",
+                   "realm_gdb_test_stop" in shown, shown):
+        return
+    s.step("", "source {}\r".format(find))
+    s.step("", "source {}\r".format(bp))
+    shown = s.step("continue: the breakpoint's commands run", "continue\r",
+                   r"exited normally", timeout=t.args.timeout)
+    t.check("  thread apply all bt: the parked threads too",
+            re.search(r"Parked Realm user threads[\s\S]*User thread \d+ \(0x[0-9a-f]+\)[^\n]*\n"
+                      r"#0 [^\n]*" + FRAME0, shown), shown)
+    t.check("  realm-thread apply all: the function calls",
+            re.search(r"User thread \d+ \(0x[0-9a-f]+\):?[^\n]*\n\$\d+ = 3\n", shown), shown)
+    t.check("  the selection, a plain bt of it, then continue ends it", re.search(
+        r"selected user thread[\s\S]*#0 [^\n]*" + FRAME0 + r"[\s\S]*continuing; no "
+        r"longer selecting user thread[\s\S]*REALM_GDB_TEST: PASS", shown), shown)
+    t.check("  nothing refused", "refusing" not in shown, shown)
+    s.finish()
+
+
+@test("terminal.plain_failed_background")
+def test_terminal_plain_failed_background(t):
+    """A plain command that fails, with a parked thread selected, in the
+    breakpoint commands of a stop in the background (`continue &`), where
+    gdb gives no prompt event: the window it opened is closed as soon as gdb
+    is back in its event loop (realm-gdb posts a closer, from gdb 15), so
+    the thread has its own registers while gdb waits; `continue` ends the
+    selection and the program finishes cleanly."""
+    find = t.file("find_chain.py", FIND_CHAIN_VAR)
+    bp = t.file("bp.gdb", "break realm_gdb_test_release_parked\ncommands\n"
+                "printf \"RGT-OWN-SP %#lx\\n\", $sp\n"
+                "realm-thread $rgt_chain0\n"
+                "print rgt_nosuchvar\n"
+                "end\n")
+    s = t.gdb(t.realm_args())
+    shown = s.read(timeout=t.args.timeout)
+    if not t.check("the program stops in realm_gdb_test_stop",
+                   "realm_gdb_test_stop" in shown, shown):
+        return
+    if "RGT-POSTED True" not in s.step("", 'python print("RGT-POSTED", '
+                                       'hasattr(gdb, "interrupt"))\r'):
+        s.finish()
+        raise Skip("gdb 9 to 14 die exiting with a posted event left: none is posted")
+    s.step("", "source {}\r".format(find))
+    parked = re.search(r"= (0x[0-9a-f]+)", s.step(
+        "", "realm-thread apply $rgt_chain0 p/x $sp\r"))
+    s.step("", "source {}\r".format(bp))
+    shown = s.step("continue &: the breakpoint's commands, and the failure", "continue &\r",
+                   r"No symbol", until=rb"No symbol[^\n]*\n", timeout=t.args.timeout)
+    own = re.search(r"RGT-OWN-SP (0x[0-9a-f]+)", shown)
+    time.sleep(1)
+    s.read(None, 0.5)
+    raw = RAW_SP.search(s.step("", "maint print raw-registers\r"))
+    t.check("the thread's own SP while gdb waits, not the parked thread's",
+            own and raw and parked and int(raw.group(1), 16) == int(own.group(1), 16) and
+            int(raw.group(1), 16) != int(parked.group(1), 16),
+            "own {} raw {} parked {}".format(own and own.group(1), raw and raw.group(1),
+                                             parked and parked.group(1)))
+    s.step("continue: ends the selection, and the program finishes", "continue\r",
+           r"continuing; no longer selecting user thread[\s\S]*REALM_GDB_TEST: PASS"
+           r"[\s\S]*exited normally", timeout=t.args.timeout)
+    s.finish()
+
+
+@test("terminal.plain_x_gdb_script")
+def test_terminal_plain_x_gdb_script(t):
+    """A gdb script given with -x whose plain command fails while it shows a
+    selected parked thread (which ends the script there), followed by -ex
+    commands: one realm-gdb doesn't hook (`maint print raw-registers`), and
+    `continue`, which ends the selection and runs, rather than being refused
+    inside the failed command's window; the program finishes cleanly."""
+    find = t.file("find_chain.py", FIND_CHAIN_VAR)
+    script = t.file("sel_fail.gdb", "source {}\nrealm-thread $rgt_chain0\n"
+                    "print rgt_nosuchvar\necho RGT-NOT-REACHED\\n\n".format(find))
+    s = t.gdb(t.realm_args(["-x", script, "-ex", "maint print raw-registers",
+                            "-ex", "continue"]))
+    shown = s.read(timeout=t.args.timeout)
+    t.check("the failure ends the script; then the -ex commands", re.search(
+        r"No symbol[\s\S]*Raw value[\s\S]*continuing; no longer selecting user thread"
+        r"[\s\S]*REALM_GDB_TEST: PASS[\s\S]*exited normally", shown), shown)
+    t.check("  the rest of the script doesn't run", "RGT-NOT-REACHED" not in shown, shown)
+    t.check("  not refused", "refusing" not in shown, shown)
+    s.finish()
+
+
+@test("terminal.piped_stdin")
+def test_terminal_piped_stdin(t):
+    """gdb reading its commands from a pipe, not a terminal: a plain command
+    that fails while a parked thread is selected leaves no window open at
+    the next command, one realm-gdb doesn't hook (`maint print
+    raw-registers`: the thread's own SP); `continue` ends the selection and
+    the program finishes cleanly."""
+    import subprocess
+    find = t.file("find_chain.py", FIND_CHAIN_VAR)
+    commands = "\n".join([
+        "source " + find, 'printf "RGT-OWN-SP %#lx\\n", $sp',
+        "realm-thread apply $rgt_chain0 p/x $sp", "realm-thread $rgt_chain0",
+        "bt 1", "print rgt_nosuchvar", "maint print raw-registers", "continue", ""])
+    argv = [shutil.which(t.args.gdb), "-iex", "set auto-load python-scripts off",
+            "-iex", "source " + t.args.script] + t.realm_args()
+    try:
+        out = subprocess.run(argv, input=commands.encode(), stdout=subprocess.PIPE,
+                             stderr=subprocess.STDOUT, cwd=t.tmp, env=t.env(),
+                             timeout=t.args.timeout + 60).stdout
+    except subprocess.TimeoutExpired as e:
+        t.check("gdb finishes", False, clean(e.stdout or b""))
+        return
+    shown = clean(out)
+    own = re.search(r"RGT-OWN-SP (0x[0-9a-f]+)", shown)
+    parked = re.search(r"\$\d+ = (0x[0-9a-f]+)", shown)
+    raw = RAW_SP.search(shown[shown.find("No symbol"):])
+    t.check("the selection, a plain bt of it, the failure", re.search(
+        r"selected user thread[\s\S]*#0 [^\n]*" + FRAME0 + r"[\s\S]*No symbol", shown), shown)
+    t.check("the thread's own SP at the next command, not the parked thread's",
+            own and raw and parked and int(raw.group(1), 16) == int(own.group(1), 16) and
+            int(raw.group(1), 16) != int(parked.group(1), 16), shown)
+    t.check("continue: ends the selection, and the program finishes", re.search(
+        r"continuing; no longer selecting user thread[\s\S]*REALM_GDB_TEST: PASS"
+        r"[\s\S]*exited normally", shown), shown)
+    bad = [b for b in base.BAD_OUTPUT if b in shown]
+    t.check("no errors of gdb's or Python's ({})".format(bad), not bad, shown)
 
 
 @test("terminal.plain_ctrl_c_calls")
@@ -627,6 +833,61 @@ def test_terminal_plain_ctrl_c_calls(t):
                 "Python Exception" in shown.replace(
                     "Python Exception <class 'KeyboardInterrupt'>" if gdb8 else "\0", "")):
             bad = "after Ctrl-C {}:\n{}\n{}".format(i + 1, shown[-2000:], chk[-500:])
+            break
+    t.check("40 Ctrl-Cs, {} cutting a command short: nothing left behind".format(quits),
+            bad is None, bad or "")
+    s.step("realm-thread back", "realm-thread back\r", r"no parked user thread is selected")
+    s.step("", "delete 2\r")
+    s.step("continue: the program finishes", "continue\r",
+           r"REALM_GDB_TEST: PASS[\s\S]*exited normally", timeout=t.args.timeout)
+    s.finish()
+
+
+@test("terminal.rt_ctrl_c_calls")
+def test_terminal_rt_ctrl_c_calls(t):
+    """As plain_ctrl_c_calls, through `rt` and `realm-thread apply`, which
+    let Ctrl-C through for their command where Ctrl-C can land while Python
+    runs one (gdb >= 10): Ctrl-C at random moments in commands that make
+    several calls cuts some short, and leaves nothing behind (breakpoints
+    enabled, scheduler-locking as it was, no dummy frames), the host has its
+    own registers, and the program passes."""
+    s = t.gdb(t.realm_args())
+    ptr, level = t.select_chain0(s, rt="rt ")
+    s.step("", "set scheduler-locking replay\r")
+    s.step("a breakpoint in the called function", "break realm_gdb_test_add\r",
+           r"Breakpoint 2")
+    expr = "+".join(["realm_gdb_test_add(1, 2)"] * 8)
+    check = ('python print("RGT-CHK", all(b.enabled for b in gdb.breakpoints()), '
+             'gdb.parameter("scheduler-locking"), '
+             'gdb.execute("maint print dummy-frames", to_string=True).count("id="), '
+             'gdb.selected_thread().num, hex(int(gdb.parse_and_eval("$sp"))), "END")\r')
+    s.step("realm-thread back", "realm-thread back\r")
+    base_chk = s.step("", check, until=rb"RGT-CHK .* END\s*\n[\s\S]*\(gdb\) $", timeout=10)
+    want = re.search(r"RGT-CHK (.*) END", base_chk).group(1)
+    s.step("select again", "realm-thread {}\r".format(ptr))
+    rng = random.Random(2)
+    bad, quits = None, 0
+    for i in range(40):
+        cmd = ("rt print {}" if i % 2 == 0 else
+               "realm-thread apply " + ptr + " print {}").format(expr)
+        s.send(cmd + "\r")
+        time.sleep(rng.uniform(0, 0.06))
+        s.send("\x03")
+        shown = s.read(PROMPT, 30)
+        quits += "= 24" not in shown
+        s.step("", "realm-thread back\r")
+        chk, m = "", None
+        for _ in range(4):
+            chk += s.step("", check, until=rb"RGT-CHK .* END\s*\n[\s\S]*\(gdb\) $", timeout=10)
+            m = re.search(r"RGT-CHK (.*) END", chk)
+            if m is not None:
+                break
+        s.step("", "realm-thread {}\r".format(ptr))
+        if m is None or m.group(1) != want or re.search(
+                r"WARNING|hit Breakpoint|doesn't last", shown) or (
+                "Python Exception" in shown):
+            bad = "after Ctrl-C {}:\n{}\n{}\nwant {}".format(i + 1, shown[-2000:], chk[-500:],
+                                                               want)
             break
     t.check("40 Ctrl-Cs, {} cutting a command short: nothing left behind".format(quits),
             bad is None, bad or "")
@@ -690,7 +951,7 @@ def test_terminal_plain_detach(t):
         if not t.check("chain0's user thread found", m is not None, shown):
             return
         s.step("realm-thread PTR", "realm-thread {}\r".format(m.group(1)),
-               r"commands that work with the selected frame")
+               r"show it, and 'step'")
         s.step("bt: the parked thread", "bt 1\r", FRAME0)
         s.step("release the program (a global: rt or not, the same)",
                "rt set var realm_gdb_test_release = 1\r", unwanted="refusing")
@@ -703,6 +964,63 @@ def test_terminal_plain_detach(t):
                 "status {}\n{}".format(rc, prog.output[-2000:]))
     finally:
         prog.kill()
+
+
+@test("terminal.attach_gdb_killed")
+def test_terminal_attach_gdb_killed(t):
+    """gdb killed (SIGKILL) while a window has an attached program's thread
+    hold a parked thread's registers: the kernel kills the program too
+    (PTRACE_O_EXITKILL, see _ExitKill), rather than let it run on
+    corrupted.  Killed once the window is over, gdb leaves the program to
+    carry on and finish cleanly.  (Linux.)"""
+    import subprocess
+    if not sys.platform.startswith("linux"):
+        raise Skip("PTRACE_O_EXITKILL is Linux's")
+    for when, mi in (("in a window", False), ("after one", False), ("in a window", True)):
+        marker = os.path.join(t.tmp, "rgt-marker")
+        if os.path.exists(marker):
+            os.unlink(marker)
+        sleep = 'python open("{}", "w").close(); import time; time.sleep(120)'.format(marker)
+        cmds = ["set var realm_gdb_test_release = 1"] + (
+            ["realm-thread apply all " + sleep] if when == "in a window" else
+            ["realm-thread apply all bt 1", sleep])
+        prog = base.Proc([t.args.program] + base.program_args() +
+                         ["-mode", "attach", "-timeout", "120"], base.clean_env(), t.tmp)
+        g = None
+        try:
+            m = prog.wait_for(r"REALM_GDB_TEST: READY (\d+)", 60)
+            if not t.check("the program is ready to attach to", m is not None, prog.output):
+                return
+            argv = [shutil.which(t.args.gdb), "-nx", "-q", "-batch"] + (
+                ["--interpreter=mi"] if mi else []) + [
+                    "-iex", "set auto-load python-scripts off",
+                    "-iex", "source " + t.args.script]
+            for cmd in cmds:
+                argv += ["-ex", cmd]
+            g = base.Proc(argv + ["-p", m.group(1), t.args.program], t.env(), t.tmp)
+            deadline = time.time() + t.args.timeout + 60
+            while not os.path.exists(marker) and g.p.poll() is None and \
+                    time.time() < deadline:
+                time.sleep(0.05)
+            when = when + (" (MI)" if mi else "")
+            if not t.check("gdb gets to the sleep " + when, os.path.exists(marker),
+                           g.output):
+                return
+            g.p.kill()
+            g.p.wait()
+            rc = prog.wait(90)
+            if when.startswith("in a window"):
+                t.check("killed in a window: the program is killed too",
+                        rc == -signal.SIGKILL and "REALM_GDB_TEST: PASS" not in prog.output,
+                        "status {}\n{}\n{}".format(rc, prog.output[-2000:], g.output))
+            else:
+                t.check("killed after one: the program carries on, and finishes cleanly",
+                        rc == 0 and "REALM_GDB_TEST: PASS" in prog.output,
+                        "status {}\n{}\n{}".format(rc, prog.output[-2000:], g.output))
+        finally:
+            if g is not None:
+                g.kill()
+            prog.kill()
 
 
 # ---- the driver ---------------------------------------------------------

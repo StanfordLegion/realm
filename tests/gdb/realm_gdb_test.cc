@@ -132,6 +132,21 @@ RGT_NOINLINE int realm_gdb_test_add(int a, int b)
   return sum;
 }
 
+// Its code begins with an inlined call: stopped at a breakpoint on it, gdb
+// shows the call as not entered yet (see test_window_inline_entered).
+static inline __attribute__((always_inline)) int rgt_inline_first(int x)
+{
+  int y = x * 3;
+  realm_gdb_test_opaque(y);
+  return y + 1;
+}
+
+RGT_NOINLINE int realm_gdb_test_inline_start(int x)
+{
+  int r = rgt_inline_first(x);
+  return r + 2;
+}
+
 RGT_NOINLINE int realm_gdb_test_widget_sum(const RealmGdbTestWidget *w)
 {
   return w->sum();
