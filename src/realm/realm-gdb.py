@@ -1,11 +1,12 @@
-# Copyright 2025 Stanford University, NVIDIA Corporation
+# Copyright 2026 Stanford University, NVIDIA Corporation
 # SPDX-License-Identifier: Apache-2.0
 #
 # Auto-loaded by gdb (via the .debug_gdb_scripts section in librealm) to make
 # Realm's user-level threads visible to the debugger.
 #
-# REALM_GDB.md, alongside this script, describes its design: how parked user
-# threads are shown, why, how it is tested, and its known limits.
+# REALM_GDB.md, alongside this script, describes the design: how parked user
+# threads are shown, why, how it is tested, and the script's known limits.
+# IMPORTANT: keep the design doc up to date if you modify this script!
 #
 # Provides `thread apply all bt` with the stack of every PARKED user thread
 # after gdb's own (a RUNNING one is its host pthread's stack already), and
