@@ -784,6 +784,23 @@ def test_terminal_piped_stdin(t):
     t.check("no errors of gdb's or Python's ({})".format(bad), not bad, shown)
 
 
+def continue_after_ctrl_cs(t, s):
+    """Continue the program to its end, after a test's Ctrl-Cs at random
+    moments.  One that lands as a call's thread stops, before gdb takes the
+    terminal back from the program (gdb's own race, with or without
+    realm-gdb), goes to the program, which gdb then stops at that SIGINT as
+    it resumes it: continued past, once, if the terminal sent it (not
+    realm-gdb, see _our_sigint)."""
+    done = r"REALM_GDB_TEST: PASS[\s\S]*exited normally"
+    shown = s.step("", "continue\r", timeout=t.args.timeout)
+    if re.search(done, shown) is None and "received signal SIGINT" in shown:
+        why = s.step("", 'python import __main__ as rgt_m; print("RGT-SIGINT", '
+                     'rgt_m._stopped_by_sigint(), rgt_m._our_sigint())\r')
+        if "RGT-SIGINT True False" in why:
+            shown += why + s.step("", "continue\r", timeout=t.args.timeout)
+    t.check("continue: the program finishes", re.search(done, shown) is not None, shown)
+
+
 @test("terminal.plain_ctrl_c_calls")
 def test_terminal_plain_ctrl_c_calls(t):
     """With gdb on a terminal and a parked thread selected, typed plain
@@ -838,8 +855,7 @@ def test_terminal_plain_ctrl_c_calls(t):
             bad is None, bad or "")
     s.step("realm-thread back", "realm-thread back\r", r"no parked user thread is selected")
     s.step("", "delete 2\r")
-    s.step("continue: the program finishes", "continue\r",
-           r"REALM_GDB_TEST: PASS[\s\S]*exited normally", timeout=t.args.timeout)
+    continue_after_ctrl_cs(t, s)
     s.finish()
 
 
@@ -893,8 +909,7 @@ def test_terminal_rt_ctrl_c_calls(t):
             bad is None, bad or "")
     s.step("realm-thread back", "realm-thread back\r", r"no parked user thread is selected")
     s.step("", "delete 2\r")
-    s.step("continue: the program finishes", "continue\r",
-           r"REALM_GDB_TEST: PASS[\s\S]*exited normally", timeout=t.args.timeout)
+    continue_after_ctrl_cs(t, s)
     s.finish()
 
 
