@@ -6156,6 +6156,38 @@ def test_window_apply_call_interrupted(t):
     t.continue_to_exit()
 
 
+@test(scenarios=("live",))
+def test_prompt_hook_interrupted(t):
+    """A Ctrl-C (here a SIGINT gdb sends itself) that lands in realm-gdb's
+    prompt hook, which gdb runs at its prompt while a parked thread is
+    selected, says "Quit", as gdb does at its prompt, rather than raise a
+    Python exception, which gdb would print; and the prompt is as it should
+    be."""
+    import signal
+    main = sys.modules["__main__"]
+    if signal.getsignal(signal.SIGINT) == signal.SIG_IGN:
+        raise TestSkip("this gdb ignores SIGINT")
+    t.select("chain0")
+    real, sent = main._close_at_prompt, []
+
+    def close_at_prompt():
+        if not sent:
+            sent.append(True)
+            os.kill(os.getpid(), signal.SIGINT)
+        return real()
+    raised = None
+    with t.patched("_close_at_prompt", close_at_prompt):
+        try:
+            prompt = gdb.prompt_hook("(gdb) ")
+        except KeyboardInterrupt as e:
+            raised, prompt = e, None
+    t.check(sent and raised is None, "the Ctrl-C raised in the prompt hook")
+    t.check_eq(prompt, t.remind("chain0") + "(gdb) ", "the prompt")
+    t.back()
+    yield
+    t.continue_to_exit()
+
+
 @test(scenarios=("live",), variants=["apply_all", "notes"])
 def test_window_interrupt_held(t):
     """A Ctrl-C (here a SIGINT gdb sends itself) during `realm-thread
