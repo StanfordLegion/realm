@@ -349,7 +349,6 @@ jobs:
                 -DGASNET_CONDUIT=mpi
                 -DREALM_ENABLE_GASNETEX=${{ matrix.config.gasnet }}
                 -DREALM_SANITIZER=${{ matrix.config.sanitizer }}
-                -DREALM_BUILD_GDB_TESTS=OFF
 
       - name: Build
         run:
@@ -648,8 +647,7 @@ jobs:
           .github/workflows/freebsd-vm.sh run
           'cmake -S /root/realm -B /root/build -G Ninja
           -DCMAKE_BUILD_TYPE=Release
-          -DREALM_BUILD_TESTS=ON -DREALM_BUILD_BENCHMARKS=ON -DREALM_BUILD_TUTORIALS=ON -DREALM_BUILD_EXAMPLES=ON
-          -DREALM_BUILD_GDB_TESTS=OFF'
+          -DREALM_BUILD_TESTS=ON -DREALM_BUILD_BENCHMARKS=ON -DREALM_BUILD_TUTORIALS=ON -DREALM_BUILD_EXAMPLES=ON'
 
       - name: Build
         run: >
