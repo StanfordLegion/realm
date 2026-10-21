@@ -6061,7 +6061,7 @@ def _inner_command(command, withs=None):
             command = applied
         else:
             # (`eval "TEXT"`, with nothing to format: TEXT's.  With
-            # arguments, what it runs can't be told from here: see §8.2.)
+            # arguments, what it runs can't be told from here: see §7.2.)
             literal = re.match(r'"((?:[^"\\]|\\.)*)"\s*$', words[1].strip())
             if literal is None or not _command_named(words[0], ("eval",)):
                 break
