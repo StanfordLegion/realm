@@ -338,7 +338,8 @@ static void recurse_task(const void *args, size_t arglen, const void *userdata,
 // Inlined into hot_task, with more to do once rgt_hot_wait returns, so that
 // it returns into the middle of an inlined function: were the thread moved
 // to that return address, its innermost frame would be an inline one.
-static inline __attribute__((always_inline)) int rgt_inline_hot_wait(const ParkedArgs &pargs)
+static inline __attribute__((always_inline)) int
+rgt_inline_hot_wait(const ParkedArgs &pargs)
 {
   int bad = rgt_hot_wait(1000, pargs.release, pargs.parked);
   realm_gdb_test_opaque(bad);

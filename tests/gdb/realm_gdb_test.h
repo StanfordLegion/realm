@@ -48,22 +48,22 @@ struct RgtPair {
 // checking whose stack contains them), and compares what the debugger shows
 // against the expected values recorded here.
 struct RealmGdbTestState {
-  int num_parked;                       // tasks that arrived at the parked barrier
-  int chain_markers[RGT_NUM_CHAIN];     // chain_marker in rgt_chain_level3
-  void *chain_locals[RGT_NUM_CHAIN];    // &chain_marker in rgt_chain_level3
-  void *recurse_local;                  // &recurse_depth in the innermost rgt_recurse
-  void *hot_local;                      // a local in rgt_hot_task's frame
-  void *fhot_local;                     // a local in rgt_fhot_task's frame
-  void *opt_local;                      // a local in opt_task's frame
-  long opt_sum;                         // computed by rgt_opt_wait
-  long hot_wait_expected[RGT_NUM_HOT];  // hot0..hot4 in rgt_hot_wait
-  long hot_probe_expected[RGT_NUM_HOT]; // hot0..hot4 in rgt_hot_probe
+  int num_parked;                           // tasks that arrived at the parked barrier
+  int chain_markers[RGT_NUM_CHAIN];         // chain_marker in rgt_chain_level3
+  void *chain_locals[RGT_NUM_CHAIN];        // &chain_marker in rgt_chain_level3
+  void *recurse_local;                      // &recurse_depth in the innermost rgt_recurse
+  void *hot_local;                          // a local in rgt_hot_task's frame
+  void *fhot_local;                         // a local in rgt_fhot_task's frame
+  void *opt_local;                          // a local in opt_task's frame
+  long opt_sum;                             // computed by rgt_opt_wait
+  long hot_wait_expected[RGT_NUM_HOT];      // hot0..hot4 in rgt_hot_wait
+  long hot_probe_expected[RGT_NUM_HOT];     // hot0..hot4 in rgt_hot_probe
   double fhot_wait_expected[RGT_NUM_FHOT];  // fhot0..fhot3 in rgt_fhot_wait
   double fhot_probe_expected[RGT_NUM_FHOT]; // fhot0..fhot3 in rgt_hot_probe
-  void *probe_local;                    // a local in rgt_probe_task's frame
-  int widget_sums[RGT_NUM_CHAIN];       // widget.sum() of each chain task
-  int num_finished;                     // parked tasks that have finished
-  int failures;                         // problems found after resuming
+  void *probe_local;                        // a local in rgt_probe_task's frame
+  int widget_sums[RGT_NUM_CHAIN];           // widget.sum() of each chain task
+  int num_finished;                         // parked tasks that have finished
+  int failures;                             // problems found after resuming
 };
 
 extern "C" {
