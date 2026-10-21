@@ -224,12 +224,12 @@ namespace Realm {
           spin = true;
         } else {
           // on the first iteration, set the next_sleep_time - on others,
-          //  check it
+          //  keep spinning until it has passed
           if(next_sleep_time == -1) {
             next_sleep_time = (Clock::current_time_in_nanoseconds() + sleep_timeout);
             spin = true;
           } else {
-            spin = (Clock::current_time_in_nanoseconds() >= next_sleep_time);
+            spin = (Clock::current_time_in_nanoseconds() < next_sleep_time);
           }
         }
         break;
