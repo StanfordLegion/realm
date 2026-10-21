@@ -393,6 +393,10 @@ jobs:
                 --timeout 240
                 --parallel 4
 
+      - name: DEBUG stack_guard output
+        if: always() && (matrix.config.cuda == '' || steps.check_gpu.outputs.no_gpu != '1')
+        run: ctest --test-dir build --build-config ${{ matrix.config.build }} -R stack_guard -V
+
       - uses: test-summary/action@v2
         name: Upload Test Results
         if: always() && hashFiles('test-results.xml')
@@ -538,6 +542,12 @@ jobs:
                 --timeout 240
                 --parallel 4
 
+      - name: DEBUG stack_guard output
+        if: always()
+        env:
+          QEMU_LD_PREFIX: "/usr/${{ matrix.config.gcc_arch }}-linux-gnu"
+        run: ctest --test-dir build --build-config Release -R stack_guard -V
+
       - uses: test-summary/action@v2
         name: Upload Test Results
         if: always() && hashFiles('test-results.xml')
@@ -662,6 +672,10 @@ jobs:
           --output-on-failure
           --timeout 240
           --parallel 4'
+
+      - name: DEBUG stack_guard output
+        if: always()
+        run: .github/workflows/freebsd-vm.sh run 'ctest --test-dir /root/build -R stack_guard -V'
 
       - name: Get Test Results
         if: always()
