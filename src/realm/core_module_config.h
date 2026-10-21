@@ -137,7 +137,9 @@ namespace Realm {
     bool deppart_worker_threads_sleep = true;
     bool deppart_allow_inline_ops = false;
 
-    // sampling profiler
+    // sampling profiler - consumed when the profiler is started during
+    //  Runtime::finish_configure(), so these may be modified after
+    //  parse_command_line() like every other setting here
     int realmprof_nodes = 0;                        // profile nodes [0, realmprof_nodes)
     std::string realmprof_file = "realmprof_%.dat"; // '%' is replaced by the node id
     size_t realmprof_buffer_size = 1 << 20;

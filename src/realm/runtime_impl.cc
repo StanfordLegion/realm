@@ -1936,19 +1936,10 @@ namespace Realm {
         it != network_modules.end(); it++)
       (*it)->parse_command_line(this, cmdline);
 
-    // load the CoreModuleConfig
-    CoreModuleConfig *config = get_module_config<CoreModuleConfig>();
-    assert(config != nullptr);
-
-    if(!config->hyperthread_sharing) {
-      host_topology.remove_hyperthreads();
-    }
-    core_reservations = new CoreReservationSet(&host_topology);
-
-    // std::vector<const HardwareTopology::Proc *> pm;
-    // pm = host_topology->distribute_procs_across_domains();
-
-    sampling_profiler.configure(*config, *core_reservations);
+    // NOTE: nothing below this point may consume the contents of a module
+    //  config - an application is permitted to modify the configs between
+    //  parse_command_line() and finish_configure(), so anything that acts on
+    //  configuration values must live in finish_configure()
 
     // now that we've done all of our argument parsing, scan through what's
     //  left and see if anything starts with -ll: - probably a misspelled
@@ -2001,6 +1992,13 @@ namespace Realm {
         config->deppart_disable_intersection_opt;
     DeppartConfig::cfg_worker_threads_sleep = config->deppart_worker_threads_sleep;
     DeppartConfig::cfg_allow_inline_operations = config->deppart_allow_inline_ops;
+
+    if(!config->hyperthread_sharing) {
+      host_topology.remove_hyperthreads();
+    }
+    core_reservations = new CoreReservationSet(&host_topology);
+
+    sampling_profiler.configure(*config, *core_reservations);
 
     // start up the threading subsystem - modules will likely want threads
     if(!Threading::initialize())
