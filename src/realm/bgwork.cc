@@ -508,9 +508,14 @@ namespace Realm {
         BitMask unknown_bit = (unknown_mask & ~(unknown_mask - 1));
         unsigned unknown_slot = (elem * BITMASK_BITS) + ctz(unknown_bit);
 
-        // attempt to increment the user count for this slot so we can
-        //  peek at information that tells us if we want to service it
-        int prev_count = manager->work_item_usecounts[unknown_slot].fetch_add_acqrel(1);
+        // acquire a reference only while the slot is live - incrementing a
+        //  zero count could let another discoverer access a released slot
+        atomic<int> &usecount = manager->work_item_usecounts[unknown_slot];
+        int prev_count = usecount.load_acquire();
+        while(prev_count > 0) {
+          if(usecount.compare_exchange(prev_count, prev_count + 1))
+            break;
+        }
         if(prev_count > 0) {
           // slot pointer is valid and can't change until we decrement the
           //  use count again
@@ -536,9 +541,10 @@ namespace Realm {
 
           if(allowed)
             allowed_work_item_mask[elem] |= unknown_bit;
+
+          // release our reads before release_slot can clear the slot pointer
+          usecount.fetch_sub_acqrel(1);
         }
-        // unconditional decrement to match the increment
-        manager->work_item_usecounts[unknown_slot].fetch_sub(1);
 
         known_work_item_mask[elem] |= unknown_bit;
         unknown_mask &= ~unknown_bit;
