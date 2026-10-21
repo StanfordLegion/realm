@@ -1437,6 +1437,17 @@ namespace Realm {
   Mutex user_thread_registry_mutex;
   UserThread *user_thread_registry_head = nullptr;
 
+#if defined(REALM_ON_LINUX) || defined(REALM_ON_MACOS) || defined(REALM_ON_FREEBSD)
+  // Size of the inaccessible guard region below each user thread's stack: at least
+  // 64 KiB, as GCC's -fstack-clash-protection on aarch64 assumes, where a frame smaller
+  // than that may touch the stack first near its bottom (glibc's pthread stacks there
+  // have the same minimum guard)
+  static size_t user_stack_guard_size(void)
+  {
+    return std::max<size_t>(sysconf(_SC_PAGESIZE), 64 << 10);
+  }
+#endif
+
   UserThread::UserThread(void *_target, void (*_entry_wrapper)(void *),
                          ThreadScheduler *_scheduler)
     : Thread(_scheduler)
@@ -1473,8 +1484,9 @@ namespace Realm {
 
 #if defined(REALM_ON_LINUX) || defined(REALM_ON_MACOS) || defined(REALM_ON_FREEBSD)
     if(stack_base != nullptr) {
-      // Make sure to include the red-zone page at the end of the stack
-      munmap(stack_base, stack_size + sysconf(_SC_PAGESIZE));
+      // Make sure to include the guard region below the stack
+      size_t guard_size = user_stack_guard_size();
+      munmap(static_cast<char *>(stack_base) - guard_size, stack_size + guard_size);
     }
 #endif
 #ifdef REALM_ON_WINDOWS
@@ -1557,9 +1569,10 @@ namespace Realm {
 
 #if defined(REALM_ON_LINUX) || defined(REALM_ON_MACOS) || defined(REALM_ON_FREEBSD)
     long pg_size = sysconf(_SC_PAGESIZE);
-    // Round up to the next page, and add a page for a red zone to protect against stack
-    // overflows
+    // Round up to the next page, and add a guard region below the stack (which grows
+    // down), so that an overflow faults instead of writing over whatever is mapped below
     stack_size = ((stack_size + pg_size - 1) & ~(pg_size - 1));
+    size_t guard_size = user_stack_guard_size();
 #if defined(REALM_ON_FREEBSD)
     // (FreeBSD's MAP_STACK is a region that grows down, which must be mapped
     //  readable and writable)
@@ -1567,12 +1580,18 @@ namespace Realm {
 #else
     const int stack_flags = MAP_PRIVATE | MAP_ANONYMOUS | MAP_STACK;
 #endif
-    stack_base = mmap(nullptr, stack_size + pg_size, PROT_NONE, stack_flags, -1, 0);
-    if(stack_base == MAP_FAILED) {
-      log_thread.error() << "mmap failed: " << strerror(errno);
+    void *mapping = mmap(nullptr, guard_size + stack_size, PROT_NONE, stack_flags, -1, 0);
+    if(mapping == MAP_FAILED) {
+      log_thread.fatal() << "mmap failed: " << strerror(errno);
+      ::abort();
     }
-    // Mark the stack as RW (leaving the last page as PROT_NONE for the red-zone)
-    CHECK_LIBC(mprotect(stack_base, stack_size, PROT_READ | PROT_WRITE));
+    // Mark the stack as RW, leaving the guard region below it PROT_NONE (stack_base
+    // and stack_size describe just the stack, as the gdb script expects)
+    stack_base = static_cast<char *>(mapping) + guard_size;
+    if(mprotect(stack_base, stack_size, PROT_READ | PROT_WRITE) != 0) {
+      log_thread.fatal() << "mprotect failed: " << strerror(errno);
+      ::abort();
+    }
 
     CHECK_LIBC(getcontext(&ctx));
 
