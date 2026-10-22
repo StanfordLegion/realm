@@ -41,8 +41,13 @@ not obvious from the header, how it is tested, and what remains to be done.
 - Each copy is turned into a transfer plan (`TransferDesc`) and analyzed once.
   Instantiations replay the plan with fresh transfer descriptors (XDs). Remote
   XDs are created through the existing factory messages on every replay.
-- Blocks for all of the above are allocated on the right NUMA node, pooled per
-  subgraph and recycled across instantiations.
+- Blocks for all of the above are allocated on the right NUMA node, carved
+  from per-domain slabs. The execution state of an instantiation (blocks,
+  launch and cleanup waiters, one waiter per external input) is pooled per
+  subgraph and recycled, so an instantiation allocates nothing but its finish
+  event. The state is recycled in the finish event's trigger context, or on a
+  background worker when the instantiation holds processor tokens (GPU tasks
+  with deferred effects).
 
 Everything the compiled implementation cannot run makes `create_subgraph` (or
 `instantiate`) abort with a message naming the operation and the feature.

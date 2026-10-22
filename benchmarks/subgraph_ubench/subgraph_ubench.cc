@@ -37,6 +37,8 @@
 //   -depth D        also measure D instantiations issued ahead of time behind
 //                   one gate (states allocated while nothing runs), released
 //                   together: the task-bench pattern (default 0 = off)
+//   -cold K         before any warmup, time create_subgraph and the first K
+//                   instantiations one at a time and print each (default 0)
 //   -seed S         seed for the random shape
 //
 // Output lines start with RESULT and are key=value so they can be grepped
@@ -77,6 +79,7 @@ struct BenchConfig {
   unsigned seed = 1;
   int copy_elems = 256; // ints per copy for -shape copychain
   int depth = 0;        // pending instantiations per round for the depth mode
+  int cold = 0;         // first instantiations to time individually
 };
 static BenchConfig cfg;
 
@@ -180,6 +183,24 @@ static Dag make_dag(int nprocs)
 // Replay strategies
 //
 
+// Cold start: how long the first instantiations of a fresh subgraph take,
+// one at a time (each waits for the previous), before any pool has warmed up.
+static void measure_cold(Subgraph &sg)
+{
+  if(cfg.cold <= 0)
+    return;
+  Event prev = Event::NO_EVENT;
+  printf("COLD");
+  for(int i = 0; i < cfg.cold; i++) {
+    double t0 = Clock::current_time();
+    prev = sg.instantiate(nullptr, 0, ProfilingRequestSet(), prev);
+    prev.wait();
+    printf(" %.1f", (Clock::current_time() - t0) * 1e6);
+  }
+  printf(" us\n");
+  fflush(stdout);
+}
+
 static Subgraph build_subgraph(const Dag &dag, const std::vector<Processor> &procs)
 {
   SubgraphDefinition sd;
@@ -202,7 +223,11 @@ static Subgraph build_subgraph(const Dag &dag, const std::vector<Processor> &pro
       sd.dependencies.push_back(dep);
     }
   Subgraph sg;
+  double t0 = Clock::current_time();
   Subgraph::create_subgraph(sg, sd, ProfilingRequestSet()).wait();
+  if(cfg.cold > 0)
+    printf("COLD create_subgraph %.1f us\n", (Clock::current_time() - t0) * 1e6);
+  measure_cold(sg);
   return sg;
 }
 
@@ -307,7 +332,11 @@ static Subgraph build_copy_subgraph(const CopyBench &cb)
     }
   }
   Subgraph sg;
+  double t0 = Clock::current_time();
   Subgraph::create_subgraph(sg, sd, ProfilingRequestSet()).wait();
+  if(cfg.cold > 0)
+    printf("COLD create_subgraph %.1f us\n", (Clock::current_time() - t0) * 1e6);
+  measure_cold(sg);
   return sg;
 }
 
@@ -543,6 +572,8 @@ int main(int argc, char **argv)
       cfg.copy_elems = atoi(argv[++i]);
     else if(!strcmp(argv[i], "-depth") && (i + 1 < argc))
       cfg.depth = atoi(argv[++i]);
+    else if(!strcmp(argv[i], "-cold") && (i + 1 < argc))
+      cfg.cold = atoi(argv[++i]);
   }
 
   rt.register_task(TOP_LEVEL_TASK, top_level_task);
