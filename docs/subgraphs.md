@@ -52,6 +52,14 @@ not obvious from the header, how it is tested, and what remains to be done.
 Everything the compiled implementation cannot run makes `create_subgraph` (or
 `instantiate`) abort with a message naming the operation and the feature.
 
+A note on first use: the first event a thread creates on behalf of a processor
+makes Realm allocate that processor's event table (65536 entries), which takes
+tens of milliseconds. Instantiations create a finish event, and copies create
+one per transfer on whichever thread launches them, so the first replay of a
+graph may pay this once per processor and DMA thread involved; replays after
+that do not. `subgraph_ubench -cold K` and the stencil benchmark's warm-up
+round show the effect.
+
 ## Supported
 
 | Feature | Notes |
