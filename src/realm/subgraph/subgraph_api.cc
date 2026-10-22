@@ -258,6 +258,7 @@ namespace Realm {
                                                  "definition declares "
                                               << compiled.postconds.size());
 
+    Event order_event = Event::NO_EVENT;
     {
       AutoLock<> al(lifecycle_lock);
       if(destroy_requested)
@@ -266,19 +267,19 @@ namespace Realm {
       if(defn->concurrency_mode == SubgraphDefinition::INSTANTIATION_ORDER) {
         // Instantiations run in order: this one starts once the previous one
         // has finished, and the next one will wait for this one.
-        start_event = Event::merge_events(start_event, previous_instantiation_completion);
+        order_event = previous_instantiation_completion;
         previous_instantiation_completion = finish_event;
       }
     }
 
     // priority_adjust is the priority of this instantiation as a whole
-    SubgraphExecutionState *state =
-        new SubgraphExecutionState(this, finish_event, priority_adjust, postconditions);
+    SubgraphExecutionState *state = acquire_state();
+    state->reset(finish_event, priority_adjust, postconditions);
     state->interpolate(args, arglen);
     state->setup_profiling(profiling);
-    // Release the execution state once the instantiation has finished.
+    // Recycle the execution state once the instantiation has finished.
     get_runtime()->subgraph_resource_reaper.instantiation_created();
-    EventImpl::add_waiter(finish_event, new SubgraphInstantiationCleanup(state));
+    EventImpl::add_waiter(finish_event, &state->cleanup);
     // Deliver external inputs; nothing can run before start() releases the roots.
     for(size_t i = 0; i < preconditions.size(); i++) {
       Event e = preconditions[i];
@@ -286,10 +287,10 @@ namespace Realm {
       if(!e.exists() || e.has_triggered_faultaware(poisoned))
         state->input_triggered(uint32_t(i), poisoned);
       else
-        EventImpl::add_waiter(e, new SubgraphInputWaiter(state, uint32_t(i)));
+        EventImpl::add_waiter(e, &state->input_waiters[i]);
     }
-    // Start once the precondition is satisfied.
-    SubgraphWorkLauncher::launch_or_defer(state, start_event);
+    // Start once the preconditions are satisfied.
+    state->launcher.arm(start_event, order_event);
   }
 
   void SubgraphImpl::destroy(void)
@@ -298,8 +299,18 @@ namespace Realm {
     delete defn;
     defn = nullptr;
     {
+      // No instantiation is outstanding: every state is in the pool. Their
+      // destructors return the blocks (taking the pool lock), then the
+      // slabs go, before compiled.clear(): the slabs' domains live there.
+      std::vector<SubgraphExecutionState *> states;
+      {
+        AutoLock<> al(block_pool_lock);
+        states.swap(state_pool);
+      }
+      for(SubgraphExecutionState *st : states)
+        delete st;
       AutoLock<> al(block_pool_lock);
-      free_slabs(); // before compiled.clear(): the slabs' domains live there
+      free_slabs();
     }
     compiled.clear();
 
@@ -380,6 +391,26 @@ namespace Realm {
       grow_pool_locked();
     blocks.swap(block_pool.back());
     block_pool.pop_back();
+  }
+
+  SubgraphExecutionState *SubgraphImpl::acquire_state(void)
+  {
+    {
+      AutoLock<> al(block_pool_lock);
+      if(!state_pool.empty()) {
+        SubgraphExecutionState *st = state_pool.back();
+        state_pool.pop_back();
+        return st;
+      }
+    }
+    return new SubgraphExecutionState(this);
+  }
+
+  void SubgraphImpl::recycle_state(SubgraphExecutionState *state)
+  {
+    state->retire();
+    AutoLock<> al(block_pool_lock);
+    state_pool.push_back(state);
   }
 
   void SubgraphImpl::release_blocks(std::vector<char *> &blocks)
@@ -538,18 +569,39 @@ namespace Realm {
 
   SubgraphWorkLauncher::SubgraphWorkLauncher(SubgraphExecutionState *_state)
     : state(_state)
-  {}
-
-  /*static*/ void SubgraphWorkLauncher::launch_or_defer(SubgraphExecutionState *state,
-                                                        Event wait_on)
   {
-    bool poisoned = false;
-    if(!wait_on.exists() || wait_on.has_triggered_faultaware(poisoned)) {
-      launch(state, poisoned);
-    } else {
-      // The launcher deletes itself once the precondition triggers.
-      EventImpl::add_waiter(wait_on, new SubgraphWorkLauncher(state));
+    for(Input &in : inputs)
+      in.owner = this;
+  }
+
+  void SubgraphWorkLauncher::arm(Event start_event, Event order_event)
+  {
+    // The count starts at one so that inputs already triggered (add_waiter
+    // calls back right away) cannot launch before both have been examined.
+    pending.store(1);
+    poisoned.store(false);
+    const Event evs[2] = {start_event, order_event};
+    for(int k = 0; k < 2; k++) {
+      if(!evs[k].exists())
+        continue;
+      bool p = false;
+      if(evs[k].has_triggered_faultaware(p)) {
+        if(p)
+          poisoned.store(true);
+        continue;
+      }
+      pending.fetch_add(1);
+      EventImpl::add_waiter(evs[k], &inputs[k]);
     }
+    input_triggered(false);
+  }
+
+  void SubgraphWorkLauncher::input_triggered(bool p)
+  {
+    if(p)
+      poisoned.store(true);
+    if(pending.fetch_sub_acqrel(1) == 1)
+      launch(state, poisoned.load());
   }
 
   /*static*/ void SubgraphWorkLauncher::launch(SubgraphExecutionState *state,
@@ -577,18 +629,18 @@ namespace Realm {
     state->start();
   }
 
-  void SubgraphWorkLauncher::event_triggered(bool poisoned, TimeLimit work_until)
+  void SubgraphWorkLauncher::Input::event_triggered(bool poisoned, TimeLimit work_until)
   {
-    launch(state, poisoned);
-    delete this;
+    owner->input_triggered(poisoned);
   }
 
-  void SubgraphWorkLauncher::print(std::ostream &os) const
+  void SubgraphWorkLauncher::Input::print(std::ostream &os) const
   {
-    os << "SubgraphWorkLauncher: subgraph=" << state->subgraph->me;
+    os << "SubgraphWorkLauncher: subgraph=" << owner->state->get_subgraph()->me;
   }
 
-  Event SubgraphWorkLauncher::get_finish_event(void) const { return Event::NO_EVENT; }
+  Event SubgraphWorkLauncher::Input::get_finish_event(void) const { return Event::NO_EVENT; }
+
 
   ////////////////////////////////////////////////////////////////////////
   //
@@ -602,16 +654,23 @@ namespace Realm {
 
   void SubgraphInstantiationCleanup::cleanup()
   {
+    // Nothing may touch the state after this: the next instantiation can
+    // take it from the pool at once. Recycling may complete a pending
+    // destroy, which deletes the pooled states, so it comes last.
     SubgraphImpl *subgraph = state->get_subgraph();
-    delete state;
-    state = nullptr;
-    // After the state is gone: this may complete a pending destroy.
+    subgraph->recycle_state(state);
+    get_runtime()->subgraph_resource_reaper.instantiation_released();
     subgraph->instantiation_released();
   }
 
   void SubgraphInstantiationCleanup::event_triggered(bool poisoned, TimeLimit work_until)
   {
-    // Defer to a background worker to keep the event trigger path cheap.
+    if(state->retires_inline()) {
+      // A lock and a push: cheaper than waking a background worker, and
+      // the launcher of the next instantiation in order runs right after.
+      cleanup();
+      return;
+    }
     get_runtime()->subgraph_resource_reaper.enqueue_cleanup(this);
   }
 
@@ -638,7 +697,6 @@ namespace Realm {
   void SubgraphInputWaiter::event_triggered(bool poisoned, TimeLimit work_until)
   {
     state->input_triggered(input, poisoned);
-    delete this;
   }
 
   void SubgraphInputWaiter::print(std::ostream &os) const
@@ -682,9 +740,7 @@ namespace Realm {
     if(!item)
       return false;
 
-    item->cleanup();
-    delete item;
-    outstanding.fetch_sub_acqrel(1);
+    item->cleanup(); // decrements outstanding
     return left > 0;
   }
 

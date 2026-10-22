@@ -263,6 +263,12 @@ namespace Realm {
     // Called when an instantiation's execution state has been released.
     void instantiation_released(void);
 
+    // Execution states are recycled: an instantiation takes one from the
+    // pool (or builds one, with its NUMA-placed blocks) and returns it once
+    // the instantiation has been released.
+    SubgraphExecutionState *acquire_state(void);
+    void recycle_state(SubgraphExecutionState *state);
+
     // Per-instantiation memory blocks (one per NUMA domain), recycled.
     void acquire_blocks(std::vector<char *> &blocks);
     void release_blocks(std::vector<char *> &blocks);
@@ -301,6 +307,7 @@ namespace Realm {
     };
     Mutex block_pool_lock;
     std::vector<std::vector<char *>> block_pool; // released block sets
+    std::vector<SubgraphExecutionState *> state_pool; // released states
     std::vector<Slab> slabs;
     void grow_pool_locked(void); // carves one more slab per domain into the pool
     void free_slabs(void);
@@ -329,20 +336,33 @@ namespace Realm {
 
   // SubgraphWorkLauncher installs an instantiation onto its processors once
   // the instantiation's precondition has triggered.
-  class SubgraphWorkLauncher : public EventWaiter {
+  // The waiters below are members of the execution state, so an
+  // instantiation allocates nothing beyond its finish event: they are armed
+  // once per instantiation and are free again once the state is recycled.
+
+  // Starts the instantiation once its start event and, for
+  // INSTANTIATION_ORDER, the previous instantiation's finish event have
+  // triggered. Two inputs instead of a merged event: no event allocation
+  // and one trigger hop less on the critical path between instantiations.
+  class SubgraphWorkLauncher {
   public:
-    SubgraphWorkLauncher(SubgraphExecutionState *state);
-    static void launch_or_defer(SubgraphExecutionState *state, Event wait_on);
-    // Hands the instantiation to every processor it uses. A poisoned
-    // precondition poisons the instantiation instead of running it.
+    explicit SubgraphWorkLauncher(SubgraphExecutionState *state);
+    void arm(Event start_event, Event order_event);
     static void launch(SubgraphExecutionState *state, bool poisoned);
 
-    virtual void event_triggered(bool poisoned, TimeLimit work_until) override;
-    virtual void print(std::ostream &os) const override;
-    virtual Event get_finish_event(void) const override;
-
   private:
+    struct Input : public EventWaiter {
+      SubgraphWorkLauncher *owner = nullptr;
+      virtual void event_triggered(bool poisoned, TimeLimit work_until) override;
+      virtual void print(std::ostream &os) const override;
+      virtual Event get_finish_event(void) const override;
+    };
+    void input_triggered(bool poisoned);
+
     SubgraphExecutionState *state;
+    Input inputs[2];
+    atomic<int> pending{0};
+    atomic<bool> poisoned{false};
   };
 
   // SubgraphInputWaiter delivers an external precondition to an instantiation.
@@ -360,9 +380,12 @@ namespace Realm {
 
   // SubgraphInstantiationCleanup waits for an instantiation's finish event
   // and then releases its execution state on a background worker.
+  // Recycles the state once the finish event has triggered: inline in the
+  // trigger context when that is cheap (no processor tokens to return),
+  // otherwise on the resource reaper's background worker.
   class SubgraphInstantiationCleanup : public EventWaiter {
   public:
-    SubgraphInstantiationCleanup(SubgraphExecutionState *state);
+    explicit SubgraphInstantiationCleanup(SubgraphExecutionState *state);
     void cleanup();
 
     virtual void event_triggered(bool poisoned, TimeLimit work_until) override;
@@ -389,6 +412,7 @@ namespace Realm {
     // waiting for the returned event and shut down: the runtime waits here
     // before tearing down, since the release looks events up.
     void instantiation_created(void) { outstanding.fetch_add(1); }
+    void instantiation_released(void) { outstanding.fetch_sub_acqrel(1); }
     bool idle(void) const { return outstanding.load_acquire() == 0; }
     void wait_for_idle(void);
 
@@ -411,9 +435,19 @@ namespace Realm {
   // the NUMA-placed blocks described by CompiledSubgraph plus finish tracking.
   class SubgraphExecutionState {
   public:
-    SubgraphExecutionState(SubgraphImpl *subgraph, Event finish_event, int priority,
-                           span<const Event> postconditions);
+    explicit SubgraphExecutionState(SubgraphImpl *subgraph);
     ~SubgraphExecutionState();
+    // Prepares the (new or recycled) state for one instantiation.
+    void reset(Event finish_event, int priority, span<const Event> postconditions);
+    // Returns processor resources after the instantiation has finished.
+    void retire(void);
+    // True when retire() has nothing to hand back to a processor, so the
+    // state can be recycled in the finish event's trigger context.
+    bool retires_inline(void) const;
+
+    SubgraphWorkLauncher launcher;
+    SubgraphInstantiationCleanup cleanup;
+    std::vector<SubgraphInputWaiter> input_waiters; // one per external input
     SubgraphImpl *get_subgraph() const { return subgraph; }
     int get_priority() const { return priority; }
 

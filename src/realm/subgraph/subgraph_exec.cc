@@ -47,24 +47,21 @@ namespace Realm {
   // class SubgraphExecutionState
   //
 
-  SubgraphExecutionState::SubgraphExecutionState(SubgraphImpl *_subgraph,
-                                                 Event _finish_event, int _priority,
-                                                 span<const Event> _postconditions)
-    : subgraph(_subgraph)
-    , finish_counter(int64_t(_subgraph->compiled.procs.size()) +
-                     int64_t(_subgraph->compiled.num_direct_ops))
-    , finish_event(_finish_event)
-    , postconditions(_postconditions.data(), _postconditions.data() + _postconditions.size())
+  SubgraphExecutionState::SubgraphExecutionState(SubgraphImpl *_subgraph)
+    : launcher(this)
+    , cleanup(this)
+    , subgraph(_subgraph)
+    , finish_counter(0)
+    , finish_event(Event::NO_EVENT)
     , poisoned_inputs(_subgraph->compiled.input_words)
     , poisoned(false)
-    , priority(_priority)
+    , priority(0)
   {
-    for(auto &w : poisoned_inputs)
-      w.store(0);
-    subgraph->acquire_blocks(blocks);
     const CompiledSubgraph &c = subgraph->compiled;
-    for(size_t dm = 0; dm < c.domains.size(); dm++)
-      memcpy(blocks[dm], c.domains[dm].image.data(), c.domains[dm].bytes);
+    subgraph->acquire_blocks(blocks);
+    input_waiters.reserve(c.inputs.size());
+    for(size_t i = 0; i < c.inputs.size(); i++)
+      input_waiters.emplace_back(this, uint32_t(i));
     if(c.num_async_ops > 0) {
       async_ops.resize(c.num_async_ops);
       tokens.assign(c.num_async_ops, nullptr);
@@ -78,11 +75,44 @@ namespace Realm {
 
   SubgraphExecutionState::~SubgraphExecutionState()
   {
+    subgraph->release_blocks(blocks);
+  }
+
+  void SubgraphExecutionState::reset(Event _finish_event, int _priority,
+                                     span<const Event> _postconditions)
+  {
+    const CompiledSubgraph &c = subgraph->compiled;
+    finish_counter.store(int64_t(c.procs.size()) + int64_t(c.num_direct_ops));
+    finish_event = _finish_event;
+    postconditions.assign(_postconditions.data(),
+                          _postconditions.data() + _postconditions.size());
+    for(auto &w : poisoned_inputs)
+      w.store(0);
+    poisoned.store(false);
+    priority = _priority;
+    // Counters, queues and interpolated arguments start from the compiled image.
+    for(size_t dm = 0; dm < c.domains.size(); dm++)
+      memcpy(blocks[dm], c.domains[dm].image.data(), c.domains[dm].bytes);
+    for(AsyncOp &ao : async_ops)
+      ao.finish_event = Event::NO_EVENT;
+    if(!tokens.empty())
+      std::fill(tokens.begin(), tokens.end(), nullptr);
+    prof_index.clear();
+    profiling.clear();
+    copy_prs.clear();
+  }
+
+  void SubgraphExecutionState::retire(void)
+  {
     const CompiledSubgraph &c = subgraph->compiled;
     for(const CompiledSubgraph::Proc &p : c.procs)
       if(p.num_async > 0)
         p.impl->release_subgraph_tokens(tokens.data() + p.first_async, p.num_async);
-    subgraph->release_blocks(blocks);
+  }
+
+  bool SubgraphExecutionState::retires_inline(void) const
+  {
+    return subgraph->compiled.num_async_ops == 0;
   }
 
   atomic<int64_t> &SubgraphExecutionState::counter(uint32_t op) const
