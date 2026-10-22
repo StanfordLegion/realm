@@ -2876,6 +2876,10 @@ namespace Realm {
       log_runtime.info() << "local processor shutdown tasks complete";
     }
 
+    // subgraph instantiations release their state on a background worker
+    //  after their finish event; let that drain (it may complete deferred
+    //  destroys, which look events up)
+    subgraph_resource_reaper.wait_for_idle();
     {
       size_t n = num_untriggered_events.load();
       if(n != 0) {
