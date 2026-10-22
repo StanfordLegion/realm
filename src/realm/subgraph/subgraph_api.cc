@@ -297,14 +297,11 @@ namespace Realm {
     alive.store_release(false);
     delete defn;
     defn = nullptr;
-    compiled.clear();
-
     {
       AutoLock<> al(block_pool_lock);
-      for(std::vector<char *> &blocks : block_pool)
-        free_blocks(blocks);
-      block_pool.clear();
+      free_slabs(); // before compiled.clear(): the slabs' domains live there
     }
+    compiled.clear();
 
     previous_instantiation_completion = Event::NO_EVENT;
     outstanding_instantiations = 0;
@@ -378,34 +375,11 @@ namespace Realm {
   // and costs system calls, so they are allocated once and recycled.
   void SubgraphImpl::acquire_blocks(std::vector<char *> &blocks)
   {
-    {
-      AutoLock<> al(block_pool_lock);
-      if(!block_pool.empty()) {
-        blocks.swap(block_pool.back());
-        block_pool.pop_back();
-        return;
-      }
-    }
-    static const bool numa_available = numasysif_numa_available();
-    blocks.resize(compiled.domains.size(), nullptr);
-    for(size_t dm = 0; dm < compiled.domains.size(); dm++) {
-      const CompiledSubgraph::Domain &dom = compiled.domains[dm];
-      void *p = nullptr;
-      if(numa_available && (dom.numa_node >= 0))
-        p = numasysif_alloc_mem(dom.numa_node, dom.bytes, false /*!pin*/);
-      if(!p) {
-#ifdef _MSC_VER
-        p = _aligned_malloc(dom.bytes, SUBGRAPH_CACHE_LINE_BYTES);
-#else
-        if(posix_memalign(&p, SUBGRAPH_CACHE_LINE_BYTES, dom.bytes) != 0)
-          p = nullptr;
-#endif
-      }
-      if(!p)
-        SUBGRAPH_FATAL(me, "failed to allocate " << dom.bytes
-                                                 << " bytes of instantiation state");
-      blocks[dm] = static_cast<char *>(p);
-    }
+    AutoLock<> al(block_pool_lock);
+    if(block_pool.empty())
+      grow_pool_locked();
+    blocks.swap(block_pool.back());
+    block_pool.pop_back();
   }
 
   void SubgraphImpl::release_blocks(std::vector<char *> &blocks)
@@ -415,23 +389,68 @@ namespace Realm {
     block_pool.back().swap(blocks);
   }
 
-  void SubgraphImpl::free_blocks(std::vector<char *> &blocks)
+  // Slab size: enough blocks to amortize the allocation, at least 64 KiB
+  // and at least 8 instantiations' worth, rounded to pages.
+  void SubgraphImpl::grow_pool_locked(void)
   {
     static const bool numa_available = numasysif_numa_available();
-    for(size_t dm = 0; dm < blocks.size(); dm++) {
+    const size_t ndom = compiled.domains.size();
+    size_t count = 8;
+    for(size_t dm = 0; dm < ndom; dm++) {
+      const size_t bytes = std::max<size_t>(compiled.domains[dm].bytes, 1);
+      count = std::max(count, (size_t(64) << 10) / bytes);
+    }
+    std::vector<char *> bases(ndom, nullptr);
+    for(size_t dm = 0; dm < ndom; dm++) {
       const CompiledSubgraph::Domain &dom = compiled.domains[dm];
+      Slab slab;
+      slab.domain = int32_t(dm);
+      slab.bytes = count * dom.bytes;
+      slab.numa = false;
+      void *p = nullptr;
+      if(numa_available && (dom.numa_node >= 0)) {
+        p = numasysif_alloc_mem(dom.numa_node, slab.bytes, false /*!pin*/);
+        slab.numa = (p != nullptr);
+      }
+      if(!p) {
+#ifdef _MSC_VER
+        p = _aligned_malloc(slab.bytes, SUBGRAPH_CACHE_LINE_BYTES);
+#else
+        if(posix_memalign(&p, SUBGRAPH_CACHE_LINE_BYTES, slab.bytes) != 0)
+          p = nullptr;
+#endif
+      }
+      if(!p)
+        SUBGRAPH_FATAL(me, "failed to allocate " << slab.bytes
+                                                 << " bytes of instantiation state");
+      slab.base = static_cast<char *>(p);
+      slabs.push_back(slab);
+      bases[dm] = slab.base;
+    }
+    for(size_t i = 0; i < count; i++) {
+      block_pool.emplace_back(ndom, nullptr);
+      for(size_t dm = 0; dm < ndom; dm++)
+        block_pool.back()[dm] = bases[dm] + i * compiled.domains[dm].bytes;
+    }
+  }
+
+  void SubgraphImpl::free_slabs(void)
+  {
+    for(const Slab &slab : slabs) {
       bool freed = false;
-      if(numa_available && (dom.numa_node >= 0))
-        freed = numasysif_free_mem(dom.numa_node, blocks[dm], dom.bytes);
+      if(slab.numa)
+        freed = numasysif_free_mem(compiled.domains[slab.domain].numa_node, slab.base,
+                                   slab.bytes);
       if(!freed) {
 #ifdef _MSC_VER
-        _aligned_free(blocks[dm]);
+        _aligned_free(slab.base);
 #else
-        free(blocks[dm]);
+        free(slab.base);
 #endif
       }
     }
-    blocks.clear();
+    slabs.clear();
+    block_pool.clear();
   }
 
   ////////////////////////////////////////////////////////////////////////

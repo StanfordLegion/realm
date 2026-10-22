@@ -289,9 +289,21 @@ namespace Realm {
     Event destroy_wait_on = Event::NO_EVENT;
     UserEvent destroy_done = UserEvent::NO_USER_EVENT;
 
+    // Blocks come from per-domain slabs placed on the domain's NUMA node:
+    // one mmap per slab, not per instantiation (an application may have
+    // hundreds of instantiations in flight, and a page-granular NUMA
+    // allocation costs hundreds of microseconds).
+    struct Slab {
+      int32_t domain;
+      char *base;
+      size_t bytes;
+      bool numa; // allocated with numasysif_alloc_mem
+    };
     Mutex block_pool_lock;
-    std::vector<std::vector<char *>> block_pool;
-    void free_blocks(std::vector<char *> &blocks);
+    std::vector<std::vector<char *>> block_pool; // released block sets
+    std::vector<Slab> slabs;
+    void grow_pool_locked(void); // carves one more slab per domain into the pool
+    void free_slabs(void);
   };
 
   // active messages
