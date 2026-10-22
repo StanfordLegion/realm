@@ -226,7 +226,15 @@ namespace Realm {
     , defn(nullptr)
   {}
 
-  SubgraphImpl::~SubgraphImpl() {}
+  SubgraphImpl::~SubgraphImpl()
+  {
+    // A subgraph that was still alive at runtime teardown was never
+    // destroyed by the application: free what destroy() would have freed.
+    // Nothing else references this object by now (the tables are being
+    // deleted, the background workers have stopped).
+    if(alive.load_acquire())
+      release_resources();
+  }
 
   void SubgraphImpl::init(ID _me, int _owner)
   {
@@ -291,7 +299,7 @@ namespace Realm {
     state->launcher.arm(start_event, order_event);
   }
 
-  void SubgraphImpl::destroy(void)
+  void SubgraphImpl::release_resources(void)
   {
     alive.store_release(false);
     delete defn;
@@ -311,6 +319,11 @@ namespace Realm {
       free_slabs();
     }
     compiled.clear();
+  }
+
+  void SubgraphImpl::destroy(void)
+  {
+    release_resources();
 
     previous_instantiation_completion = Event::NO_EVENT;
     outstanding_instantiations = 0;

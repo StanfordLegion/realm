@@ -4865,17 +4865,34 @@ static const DeathScenario death_scenarios[] = {
 ////////////////////////////////////////////////////////////////////////
 //
 // Exit scenarios: usage patterns that race the runtime's own teardown. Each
-// runs in its own process and must exit cleanly (exit 0). State is leaked on
-// purpose: the process is about to end and nothing may wait on completion.
+// runs in its own process and must exit cleanly (exit 0). The DAG state must
+// outlive the scenario (tasks still run while the runtime shuts down) and
+// nothing may wait on completion, so it is parked in static storage: still
+// reachable at exit, which keeps LeakSanitizer quiet.
 //
+
+static std::vector<std::unique_ptr<DagSpec>> exit_specs;
+static std::vector<std::unique_ptr<DagState>> exit_states;
+
+static DagSpec *exit_spec(DagSpec &&spec)
+{
+  exit_specs.emplace_back(new DagSpec(std::move(spec)));
+  return exit_specs.back().get();
+}
+
+static DagState *exit_state(const DagSpec *spec, const std::vector<Processor> &procs)
+{
+  exit_states.emplace_back(new DagState);
+  exit_states.back()->reset(spec, procs);
+  return exit_states.back().get();
+}
 
 static void exit_destroy_without_wait()
 {
   // Instantiate, destroy without waiting on the returned event, shut down.
   std::vector<Processor> procs = worker_cpus(2);
-  DagSpec *spec = new DagSpec(dag_layers(2, 2, procs.size(), true));
-  DagState *state = new DagState;
-  state->reset(spec, procs);
+  DagSpec *spec = exit_spec(dag_layers(2, 2, procs.size(), true));
+  DagState *state = exit_state(spec, procs);
   Subgraph sg = build_dag_subgraph(*spec, *state, SubgraphDefinition::INSTANTIATION_ORDER);
   for(int i = 0; i < 500; i++)
     sg.instantiate(nullptr, 0, ProfilingRequestSet());
@@ -4886,9 +4903,8 @@ static void exit_destroy_many_without_wait()
 {
   // A burst of destroys of many graphs, each with work in flight.
   std::vector<Processor> procs = worker_cpus(4);
-  DagSpec *spec = new DagSpec(dag_layers(2, procs.size(), procs.size(), true));
-  DagState *state = new DagState;
-  state->reset(spec, procs);
+  DagSpec *spec = exit_spec(dag_layers(2, procs.size(), procs.size(), true));
+  DagState *state = exit_state(spec, procs);
   std::vector<Subgraph> sgs;
   for(int g = 0; g < 32; g++)
     sgs.push_back(build_dag_subgraph(*spec, *state, SubgraphDefinition::INSTANTIATION_ORDER));
@@ -4906,9 +4922,8 @@ static void exit_destroy_as_shutdown_precondition()
   // The destroy event is the shutdown precondition: the runtime must accept
   // a shutdown whose precondition is completed by the subgraph reaper.
   std::vector<Processor> procs = worker_cpus(2);
-  DagSpec *spec = new DagSpec(dag_chain(16, procs.size()));
-  DagState *state = new DagState;
-  state->reset(spec, procs);
+  DagSpec *spec = exit_spec(dag_chain(16, procs.size()));
+  DagState *state = exit_state(spec, procs);
   Subgraph sg = build_dag_subgraph(*spec, *state, SubgraphDefinition::INSTANTIATION_ORDER);
   for(int i = 0; i < 200; i++)
     sg.instantiate(nullptr, 0, ProfilingRequestSet());
@@ -4920,9 +4935,8 @@ static void exit_pending_instantiations_released_late()
   // Instantiations gated on a user event that is triggered from a task on
   // another processor right before shutdown is requested.
   std::vector<Processor> procs = worker_cpus(2);
-  DagSpec *spec = new DagSpec(dag_layers(2, 2, procs.size(), true));
-  DagState *state = new DagState;
-  state->reset(spec, procs);
+  DagSpec *spec = exit_spec(dag_layers(2, 2, procs.size(), true));
+  DagState *state = exit_state(spec, procs);
   Subgraph sg = build_dag_subgraph(*spec, *state, SubgraphDefinition::INSTANTIATION_ORDER);
   UserEvent gate = UserEvent::create_user_event();
   std::vector<Event> evs;

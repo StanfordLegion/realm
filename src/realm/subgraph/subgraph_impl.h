@@ -314,6 +314,10 @@ namespace Realm {
     std::vector<Slab> slabs;
     void grow_pool_locked(void); // carves one more slab per domain into the pool
     void free_slabs(void);
+    // Frees the definition, the pooled states and slabs, and the compiled
+    // form. Used by destroy, and by the destructor for a subgraph the
+    // application never destroyed (runtime teardown).
+    void release_resources(void);
   };
 
   // active messages
