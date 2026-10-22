@@ -451,12 +451,20 @@ namespace Realm {
 
   void SubgraphExecutionState::contributor_finished(void)
   {
-    // Copy out what is needed first: once the counter reaches zero and the
-    // event triggers, this state may be released at any moment.
-    Event fe = finish_event;
-    bool p = poisoned.load_acquire();
     if(finish_counter.fetch_sub_acqrel(1) == 1)
-      GenEventImpl::trigger(fe, p);
+      finish(poisoned.load_acquire());
+  }
+
+  void SubgraphExecutionState::finish(bool p)
+  {
+    // The trigger runs the finish event's waiters, among them the launcher
+    // of the next instantiation in order: that one starts before this
+    // state is recycled. Nothing here reads the state after cleanup().
+    GenEventImpl::trigger(finish_event, p);
+    if(retires_inline())
+      cleanup.cleanup();
+    else
+      get_runtime()->subgraph_resource_reaper.enqueue_cleanup(&cleanup);
   }
 
   ////////////////////////////////////////////////////////////////////////

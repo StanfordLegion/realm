@@ -307,6 +307,9 @@ namespace Realm {
     };
     Mutex block_pool_lock;
     std::vector<std::vector<char *>> block_pool; // released block sets
+    // Its own lock: a state is recycled on the critical path between two
+    // instantiations in order, and must not wait behind slab allocation.
+    Mutex state_pool_lock;
     std::vector<SubgraphExecutionState *> state_pool; // released states
     std::vector<Slab> slabs;
     void grow_pool_locked(void); // carves one more slab per domain into the pool
@@ -380,17 +383,16 @@ namespace Realm {
 
   // SubgraphInstantiationCleanup waits for an instantiation's finish event
   // and then releases its execution state on a background worker.
-  // Recycles the state once the finish event has triggered: inline in the
-  // trigger context when that is cheap (no processor tokens to return),
-  // otherwise on the resource reaper's background worker.
-  class SubgraphInstantiationCleanup : public EventWaiter {
+  // Recycles the state after the finish event has been triggered. Not an
+  // event waiter: the trigger's waiters include the launcher of the next
+  // instantiation in order, and the trigger context's time budget is small,
+  // so nothing may run ahead of them. The state's finishing path calls
+  // cleanup() itself once the trigger has returned, inline when that is
+  // cheap (no processor tokens to return), otherwise through the reaper.
+  class SubgraphInstantiationCleanup {
   public:
     explicit SubgraphInstantiationCleanup(SubgraphExecutionState *state);
     void cleanup();
-
-    virtual void event_triggered(bool poisoned, TimeLimit work_until) override;
-    virtual void print(std::ostream &os) const override;
-    virtual Event get_finish_event(void) const override;
 
   private:
     SubgraphExecutionState *state;
@@ -441,6 +443,10 @@ namespace Realm {
     void reset(Event finish_event, int priority, span<const Event> postconditions);
     // Returns processor resources after the instantiation has finished.
     void retire(void);
+    // Triggers the finish event (launching whatever waits on it, including
+    // the next instantiation in order) and then recycles this state.
+    // Nothing may touch the state after calling this.
+    void finish(bool poisoned);
     // True when retire() has nothing to hand back to a processor, so the
     // state can be recycled in the finish event's trigger context.
     bool retires_inline(void) const;

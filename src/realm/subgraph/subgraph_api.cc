@@ -277,9 +277,7 @@ namespace Realm {
     state->reset(finish_event, priority_adjust, postconditions);
     state->interpolate(args, arglen);
     state->setup_profiling(profiling);
-    // Recycle the execution state once the instantiation has finished.
     get_runtime()->subgraph_resource_reaper.instantiation_created();
-    EventImpl::add_waiter(finish_event, &state->cleanup);
     // Deliver external inputs; nothing can run before start() releases the roots.
     for(size_t i = 0; i < preconditions.size(); i++) {
       Event e = preconditions[i];
@@ -304,7 +302,7 @@ namespace Realm {
       // slabs go, before compiled.clear(): the slabs' domains live there.
       std::vector<SubgraphExecutionState *> states;
       {
-        AutoLock<> al(block_pool_lock);
+        AutoLock<> al(state_pool_lock);
         states.swap(state_pool);
       }
       for(SubgraphExecutionState *st : states)
@@ -396,7 +394,7 @@ namespace Realm {
   SubgraphExecutionState *SubgraphImpl::acquire_state(void)
   {
     {
-      AutoLock<> al(block_pool_lock);
+      AutoLock<> al(state_pool_lock);
       if(!state_pool.empty()) {
         SubgraphExecutionState *st = state_pool.back();
         state_pool.pop_back();
@@ -409,7 +407,7 @@ namespace Realm {
   void SubgraphImpl::recycle_state(SubgraphExecutionState *state)
   {
     state->retire();
-    AutoLock<> al(block_pool_lock);
+    AutoLock<> al(state_pool_lock);
     state_pool.push_back(state);
   }
 
@@ -614,14 +612,14 @@ namespace Realm {
       log_subgraph.info() << "poisoned precondition: subgraph=" << state->subgraph->me;
       for(Event pc : state->postconditions)
         GenEventImpl::trigger(pc, true /*poisoned*/);
-      GenEventImpl::trigger(state->finish_event, true /*poisoned*/);
+      state->finish(true /*poisoned*/);
       return;
     }
     if(c.ops.empty()) {
       // Nothing to wait for.
       for(Event pc : state->postconditions)
         GenEventImpl::trigger(pc, false /*!poisoned*/);
-      GenEventImpl::trigger(state->finish_event, false /*!poisoned*/);
+      state->finish(false /*!poisoned*/);
       return;
     }
     for(const CompiledSubgraph::Proc &p : c.procs)
@@ -663,26 +661,6 @@ namespace Realm {
     subgraph->instantiation_released();
   }
 
-  void SubgraphInstantiationCleanup::event_triggered(bool poisoned, TimeLimit work_until)
-  {
-    if(state->retires_inline()) {
-      // A lock and a push: cheaper than waking a background worker, and
-      // the launcher of the next instantiation in order runs right after.
-      cleanup();
-      return;
-    }
-    get_runtime()->subgraph_resource_reaper.enqueue_cleanup(this);
-  }
-
-  void SubgraphInstantiationCleanup::print(std::ostream &os) const
-  {
-    os << "SubgraphInstantiationCleanup: state=" << static_cast<void *>(state);
-  }
-
-  Event SubgraphInstantiationCleanup::get_finish_event(void) const
-  {
-    return Event::NO_EVENT;
-  }
 
   ////////////////////////////////////////////////////////////////////////
   //
