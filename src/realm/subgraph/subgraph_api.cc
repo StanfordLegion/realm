@@ -277,6 +277,7 @@ namespace Realm {
     state->interpolate(args, arglen);
     state->setup_profiling(profiling);
     // Release the execution state once the instantiation has finished.
+    get_runtime()->subgraph_resource_reaper.instantiation_created();
     EventImpl::add_waiter(finish_event, new SubgraphInstantiationCleanup(state));
     // Deliver external inputs; nothing can run before start() releases the roots.
     for(size_t i = 0; i < preconditions.size(); i++) {
@@ -664,7 +665,24 @@ namespace Realm {
 
     item->cleanup();
     delete item;
+    outstanding.fetch_sub_acqrel(1);
     return left > 0;
+  }
+
+  void SubgraphResourceReaper::wait_for_idle(void)
+  {
+    // called from the shutdown path with background workers still running
+    long long warned_at = 0;
+    while(!idle()) {
+      Thread::yield();
+      long long now = Clock::current_time_in_nanoseconds();
+      if((warned_at == 0) || (now - warned_at > 5000000000LL)) {
+        if(warned_at != 0)
+          log_subgraph.warning() << "shutdown waiting for " << outstanding.load()
+                                 << " subgraph instantiation(s) to be released";
+        warned_at = now;
+      }
+    }
   }
 
 

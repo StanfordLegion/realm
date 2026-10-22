@@ -371,9 +371,19 @@ namespace Realm {
 
     virtual bool do_work(TimeLimit work_until) override;
 
+    // Instantiations whose state has not been released yet (and whose
+    // release may complete a deferred destroy). An application is allowed
+    // to see an instantiation's finish event, destroy the subgraph without
+    // waiting for the returned event and shut down: the runtime waits here
+    // before tearing down, since the release looks events up.
+    void instantiation_created(void) { outstanding.fetch_add(1); }
+    bool idle(void) const { return outstanding.load_acquire() == 0; }
+    void wait_for_idle(void);
+
   private:
     Mutex mutex;
     std::queue<SubgraphInstantiationCleanup *> pending_cleanups;
+    atomic<int64_t> outstanding{0};
   };
 
   // Completion callback for subgraph tasks on processors whose tasks keep
