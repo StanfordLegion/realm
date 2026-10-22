@@ -300,7 +300,7 @@ if(REALM_ENABLE_CUDA)
   target_compile_definitions(subgraph_unit_tests PRIVATE SUBGRAPH_TESTS_CUDA=1)
   target_link_libraries(subgraph_unit_tests ${TEST_GPU_LIBS})
   add_test(NAME subgraph_unit_tests_gpu
-           COMMAND subgraph_unit_tests -ll:cpu 4 -ll:gpu 1 -ll:zsize 32)
+           COMMAND $<TARGET_FILE:subgraph_unit_tests> -ll:cpu 4 -ll:gpu 1 -ll:zsize 32)
   set_tests_properties(subgraph_unit_tests_gpu PROPERTIES RESOURCE_LOCK gpu TIMEOUT 600)
   if(NOT WIN32)
     add_test(NAME subgraph_death_deferred_task_requests_ctxsync
@@ -343,8 +343,10 @@ foreach(
   destroy_as_shutdown_precondition
   pending_instantiations_released_late
 )
+  # $<TARGET_FILE:...> like every other test: a bare target name makes CMake
+  # prepend CMAKE_CROSSCOMPILING_EMULATOR, which the cross CI job cannot run.
   add_test(NAME subgraph_exit_${scenario}
-           COMMAND subgraph_unit_tests -ll:cpu 4 -exit ${scenario})
+           COMMAND $<TARGET_FILE:subgraph_unit_tests> -ll:cpu 4 -exit ${scenario})
   set_tests_properties(subgraph_exit_${scenario} PROPERTIES TIMEOUT 120)
 endforeach()
 add_integration_test(large_tls "${REALM_TEST_DIR}/large_tls.cc")
