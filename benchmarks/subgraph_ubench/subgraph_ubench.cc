@@ -34,6 +34,9 @@
 //   -warmup W       unmeasured instantiations (default 100)
 //   -work NS        busy-wait per task in nanoseconds (default 0)
 //   -mode M         spawn|compiled|all (default all)
+//   -depth D        also measure D instantiations issued ahead of time behind
+//                   one gate (states allocated while nothing runs), released
+//                   together: the task-bench pattern (default 0 = off)
 //   -seed S         seed for the random shape
 //
 // Output lines start with RESULT and are key=value so they can be grepped
@@ -73,6 +76,7 @@ struct BenchConfig {
   std::string mode = "all";
   unsigned seed = 1;
   int copy_elems = 256; // ints per copy for -shape copychain
+  int depth = 0;        // pending instantiations per round for the depth mode
 };
 static BenchConfig cfg;
 
@@ -327,13 +331,13 @@ static Result measure_copy_spawn(const CopyBench &cb)
 }
 
 static void print_result(const char *mode, bool chained, const Dag &dag, int nprocs,
-                         const Result &r)
+                         const Result &r, int depth = 0)
 {
   double ns_per_task = r.inst_us * 1e3 / dag.size();
-  printf("RESULT shape=%s n=%zu edges=%zu p=%d k=%d work_ns=%ld mode=%s chained=%d iters=%d "
-         "issue_us=%.3f inst_us=%.3f ns_per_task=%.1f\n",
+  printf("RESULT shape=%s n=%zu edges=%zu p=%d k=%d work_ns=%ld mode=%s chained=%d depth=%d "
+         "iters=%d issue_us=%.3f inst_us=%.3f ns_per_task=%.1f\n",
          cfg.shape.c_str(), dag.size(), dag.num_edges(), nprocs, cfg.k, cfg.work_ns, mode,
-         chained ? 1 : 0, cfg.iters, r.issue_us, r.inst_us, ns_per_task);
+         chained ? 1 : 0, depth, cfg.iters, r.issue_us, r.inst_us, ns_per_task);
   fflush(stdout);
 }
 
@@ -380,6 +384,44 @@ static Result measure_subgraphs(std::vector<Subgraph> &sgs, bool chained)
   Result r;
   r.issue_us = (t1 - t0) * 1e6 / (double(cfg.iters) * k);
   r.inst_us = (t2 - t0) * 1e6 / (double(cfg.iters) * k);
+  return r;
+}
+
+// Depth mode: `depth` instantiations are issued behind one untriggered
+// user event, so their execution state is allocated while none of them can
+// run, then the gate is released and the whole batch drains. issue_us is
+// the cost of issuing one pending instantiation (what a runtime that queues
+// work ahead of time pays), inst_us the end-to-end time per instantiation
+// including the drain. Rounds repeat until `iters` instantiations are done.
+static Result measure_pending(Subgraph &sg, bool chained)
+{
+  const int depth = cfg.depth;
+  const int rounds = (cfg.iters + depth - 1) / depth;
+  std::vector<Event> evs(depth);
+  auto round = [&](double *issue_s) {
+    UserEvent gate = UserEvent::create_user_event();
+    double t0 = Clock::current_time();
+    Event prev = gate;
+    for(int j = 0; j < depth; j++) {
+      evs[j] = sg.instantiate(nullptr, 0, ProfilingRequestSet(), chained ? prev : gate);
+      prev = evs[j];
+    }
+    double t1 = Clock::current_time();
+    gate.trigger();
+    Event::merge_events(evs).wait();
+    if(issue_s)
+      *issue_s += (t1 - t0);
+  };
+  for(int w = 0; w < (cfg.warmup + depth - 1) / depth; w++)
+    round(nullptr);
+  double issue_s = 0;
+  double t0 = Clock::current_time();
+  for(int r = 0; r < rounds; r++)
+    round(&issue_s);
+  double t1 = Clock::current_time();
+  Result r;
+  r.issue_us = issue_s * 1e6 / (double(rounds) * depth);
+  r.inst_us = (t1 - t0) * 1e6 / (double(rounds) * depth);
   return r;
 }
 
@@ -453,6 +495,11 @@ void top_level_task(const void *args, size_t arglen, const void *userdata, size_
       Result r = measure_subgraphs(sgs, chained != 0);
       print_result("compiled", chained != 0, dag, nprocs, r);
     }
+    if(cfg.depth > 0)
+      for(int chained = 1; chained >= 0; chained--) {
+        Result r = measure_pending(sgs[0], chained != 0);
+        print_result("pending", chained != 0, dag, nprocs, r, cfg.depth);
+      }
     std::vector<Event> done;
     for(Subgraph &sg : sgs)
       done.push_back(sg.destroy());
@@ -494,6 +541,8 @@ int main(int argc, char **argv)
       cfg.seed = strtoul(argv[++i], 0, 10);
     else if(!strcmp(argv[i], "-copy_elems") && (i + 1 < argc))
       cfg.copy_elems = atoi(argv[++i]);
+    else if(!strcmp(argv[i], "-depth") && (i + 1 < argc))
+      cfg.depth = atoi(argv[++i]);
   }
 
   rt.register_task(TOP_LEVEL_TASK, top_level_task);

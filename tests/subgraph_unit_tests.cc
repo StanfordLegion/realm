@@ -37,6 +37,8 @@
 //   -only PREFIX     run only tests whose name starts with PREFIX
 //   -skip NAME       skip a test (repeatable)
 //   -list            list test names and exit
+//   -exit SCENARIO   run one teardown scenario (destroy racing shutdown and the
+//                    like); the process must exit 0
 //   -death SCENARIO  run one "must abort" scenario; printing DEATH-TEST-SURVIVED
 //                    and exiting 0 means the runtime failed to reject the misuse
 
@@ -48,6 +50,7 @@
 #include "realm/subgraph.h"
 #include "realm/timers.h"
 
+#include <algorithm>
 #include <atomic>
 #include <cstddef>
 #include <cstdint>
@@ -130,6 +133,7 @@ struct TestConfig {
   std::string only;
   std::set<std::string> skip;
   std::string death;
+  std::string exit_scenario;
   bool list = false;
 };
 static TestConfig config;
@@ -1561,6 +1565,201 @@ private:
   DagState state;
   Subgraph sg;
   bool completed = false;
+};
+
+////////////////////////////////////////////////////////////////////////
+//
+// PendingDepthTest: many instantiations issued ahead of time while none of
+// them can run (each behind its own user event, every fourth one also
+// chained on the previous instantiation), then released in random order.
+// Execution state for every pending instantiation exists at once, which is
+// the pattern a runtime that queues work ahead of time produces (task-bench
+// issues hundreds of instantiations before the first one can start).
+//
+
+class PendingDepthTest : public SubgraphTest {
+public:
+  std::string name() const override { return "PendingDepth"; }
+  bool can_run() override { return worker_cpus().size() >= 1; }
+
+  void init() override
+  {
+    procs = worker_cpus(4);
+    spec = dag_layers(3, procs.size(), procs.size(), true);
+    state.reset(&spec, procs);
+    sg = build_dag_subgraph(spec, state, SubgraphDefinition::INSTANTIATION_ORDER);
+  }
+
+  void run() override
+  {
+    depth = std::max(64, config.many / 8);
+    long rss0 = resident_kb();
+    std::vector<UserEvent> gates(depth);
+    std::vector<Event> evs(depth);
+    Event prev = Event::NO_EVENT;
+    double t0 = Clock::current_time();
+    for(int i = 0; i < depth; i++) {
+      gates[i] = UserEvent::create_user_event();
+      Event pre = gates[i];
+      if((i % 4 == 3) && prev.exists())
+        pre = Event::merge_events(gates[i], prev);
+      evs[i] = sg.instantiate(nullptr, 0, ProfilingRequestSet(), pre);
+      prev = evs[i];
+    }
+    double t1 = Clock::current_time();
+    long rss1 = resident_kb();
+    ran_early = state.executed.load();
+
+    std::vector<int> order(depth);
+    for(int i = 0; i < depth; i++)
+      order[i] = i;
+    std::mt19937 rng(config.seed);
+    std::shuffle(order.begin(), order.end(), rng);
+    for(int i : order)
+      gates[i].trigger();
+    completed = wait_with_timeout(Event::merge_events(evs), 4 * config.hang_timeout);
+    double t2 = Clock::current_time();
+    { std::ostringstream _os; _os << name() << ": " << depth << " pending instantiations issued in "
+                    << (t1 - t0) * 1e6 / depth << " us each, drained in " << (t2 - t1) * 1e3
+                    << " ms, resident memory " << rss0 << " -> " << rss1 << " kB while pending"; report(_os.str()); }
+  }
+
+  bool check() override
+  {
+    int64_t expected = int64_t(depth) * spec.size();
+    bool ok = completed && (ran_early == 0) && (state.executed.load() == expected) &&
+              (state.violations.load() == 0);
+    if(!ok)
+      log_app.error() << name() << ": completed=" << completed << " ran before release "
+                      << ran_early << " executed " << state.executed.load() << "/"
+                      << expected << " violations " << state.violations.load();
+    return ok;
+  }
+
+  void cleanup() override
+  {
+    if(completed)
+      sg.destroy().wait();
+  }
+
+  bool hung() const override { return !completed; }
+
+private:
+  std::vector<Processor> procs;
+  DagSpec spec;
+  DagState state;
+  Subgraph sg;
+  int depth = 0;
+  int64_t ran_early = 0;
+  bool completed = false;
+};
+
+////////////////////////////////////////////////////////////////////////
+//
+// DefaultsTest: every public descriptor used as constructed, with only the
+// fields that have no meaningful default filled in. A bad default in any
+// of them shows up here rather than in the first user's program. (The
+// definition's own concurrency_mode default is CONCURRENT, which the
+// compiled engine refuses; that one is set explicitly and checked by the
+// concurrent_mode_unsupported death scenario.)
+//
+
+class DefaultsTest : public SubgraphTest {
+public:
+  std::string name() const override { return "Defaults"; }
+  bool can_run() override { return worker_cpus().size() >= 1; }
+
+  void init() override
+  {
+    procs = worker_cpus(1);
+    spec = dag_chain(2, 1);
+    state.reset(&spec, procs);
+    is = Rect<1>(0, 15);
+    std::map<FieldID, size_t> sizes = {{FID, sizeof(int)}};
+    RegionInstance::create_instance(src, sysmem(), is, sizes, 0, ProfilingRequestSet()).wait();
+    RegionInstance::create_instance(dst, sysmem(), is, sizes, 0, ProfilingRequestSet()).wait();
+    int v = 7;
+    std::vector<CopySrcDstField> f(1);
+    f[0].set_field(src, FID, sizeof(int));
+    is.fill(f, ProfilingRequestSet(), &v, sizeof(v)).wait();
+    v = 0;
+    f[0].set_field(dst, FID, sizeof(int));
+    is.fill(f, ProfilingRequestSet(), &v, sizeof(v)).wait();
+  }
+
+  void run() override
+  {
+    SubgraphDefinition sd;
+    sd.concurrency_mode = SubgraphDefinition::INSTANTIATION_ORDER;
+    for(size_t i = 0; i < spec.size(); i++) {
+      SubgraphDefinition::TaskDesc td; // default priority, no args, no profiling
+      td.proc = procs[0];
+      td.task_id = dag_task_id;
+      DagTaskArgs a{&state, int(i)};
+      td.args.set(&a, sizeof(a));
+      sd.tasks.push_back(td);
+    }
+    {
+      SubgraphDefinition::CopyDesc cd; // default redop, priority, no indirections
+      cd.space = is;
+      cd.srcs.resize(1);
+      cd.srcs[0].set_field(src, FID, sizeof(int));
+      cd.dsts.resize(1);
+      cd.dsts[0].set_field(dst, FID, sizeof(int));
+      sd.copies.push_back(cd);
+    }
+    {
+      // Kinds have no default (OPKIND_INVALID is rejected by name); ports do.
+      SubgraphDefinition::Dependency dep;
+      dep.src_op_kind = SubgraphDefinition::OPKIND_TASK;
+      dep.src_op_index = 0;
+      dep.tgt_op_kind = SubgraphDefinition::OPKIND_TASK;
+      dep.tgt_op_index = 1;
+      sd.dependencies.push_back(dep);
+      dep.tgt_op_kind = SubgraphDefinition::OPKIND_COPY;
+      dep.tgt_op_index = 0;
+      sd.dependencies.push_back(dep);
+    }
+    Subgraph sg;
+    created = Subgraph::create_subgraph(sg, sd, ProfilingRequestSet()).has_triggered();
+    SubgraphInstantiationProfiling prof; // nothing requested
+    Event e1 = sg.instantiate(nullptr, 0, ProfilingRequestSet());
+    Event e2 = sg.instantiate(nullptr, 0, ProfilingRequestSet(), prof, e1);
+    completed = wait_with_timeout(e2, config.hang_timeout);
+    destroyed = wait_with_timeout(sg.destroy(), config.hang_timeout);
+  }
+
+  bool check() override
+  {
+    int sum = 0;
+    {
+      AffineAccessor<int, 1> acc(dst, FID);
+      for(int i = 0; i < 16; i++)
+        sum += acc[i];
+    }
+    bool ok = created && completed && destroyed && (state.executed.load() == 4) &&
+              (state.violations.load() == 0) && (sum == 7 * 16);
+    if(!ok)
+      log_app.error() << name() << ": created=" << created << " completed=" << completed
+                      << " destroyed=" << destroyed << " executed " << state.executed.load()
+                      << "/4 violations " << state.violations.load() << " sum " << sum;
+    return ok;
+  }
+
+  void cleanup() override
+  {
+    src.destroy();
+    dst.destroy();
+  }
+
+private:
+  enum { FID = 1 };
+  std::vector<Processor> procs;
+  DagSpec spec;
+  DagState state;
+  IndexSpace<1> is;
+  RegionInstance src, dst;
+  bool created = false, completed = false, destroyed = false;
 };
 
 ////////////////////////////////////////////////////////////////////////
@@ -4665,6 +4864,84 @@ static const DeathScenario death_scenarios[] = {
 
 ////////////////////////////////////////////////////////////////////////
 //
+// Exit scenarios: usage patterns that race the runtime's own teardown. Each
+// runs in its own process and must exit cleanly (exit 0). State is leaked on
+// purpose: the process is about to end and nothing may wait on completion.
+//
+
+static void exit_destroy_without_wait()
+{
+  // Instantiate, destroy without waiting on the returned event, shut down.
+  std::vector<Processor> procs = worker_cpus(2);
+  DagSpec *spec = new DagSpec(dag_layers(2, 2, procs.size(), true));
+  DagState *state = new DagState;
+  state->reset(spec, procs);
+  Subgraph sg = build_dag_subgraph(*spec, *state, SubgraphDefinition::INSTANTIATION_ORDER);
+  for(int i = 0; i < 500; i++)
+    sg.instantiate(nullptr, 0, ProfilingRequestSet());
+  sg.destroy();
+}
+
+static void exit_destroy_many_without_wait()
+{
+  // A burst of destroys of many graphs, each with work in flight.
+  std::vector<Processor> procs = worker_cpus(4);
+  DagSpec *spec = new DagSpec(dag_layers(2, procs.size(), procs.size(), true));
+  DagState *state = new DagState;
+  state->reset(spec, procs);
+  std::vector<Subgraph> sgs;
+  for(int g = 0; g < 32; g++)
+    sgs.push_back(build_dag_subgraph(*spec, *state, SubgraphDefinition::INSTANTIATION_ORDER));
+  for(int i = 0; i < 50; i++)
+    for(Subgraph &sg : sgs)
+      sg.instantiate(nullptr, 0, ProfilingRequestSet());
+  for(Subgraph &sg : sgs)
+    sg.destroy();
+}
+
+static Event exit_shutdown_precondition = Event::NO_EVENT;
+
+static void exit_destroy_as_shutdown_precondition()
+{
+  // The destroy event is the shutdown precondition: the runtime must accept
+  // a shutdown whose precondition is completed by the subgraph reaper.
+  std::vector<Processor> procs = worker_cpus(2);
+  DagSpec *spec = new DagSpec(dag_chain(16, procs.size()));
+  DagState *state = new DagState;
+  state->reset(spec, procs);
+  Subgraph sg = build_dag_subgraph(*spec, *state, SubgraphDefinition::INSTANTIATION_ORDER);
+  for(int i = 0; i < 200; i++)
+    sg.instantiate(nullptr, 0, ProfilingRequestSet());
+  exit_shutdown_precondition = sg.destroy();
+}
+
+static void exit_pending_instantiations_released_late()
+{
+  // Instantiations gated on a user event that is triggered from a task on
+  // another processor right before shutdown is requested.
+  std::vector<Processor> procs = worker_cpus(2);
+  DagSpec *spec = new DagSpec(dag_layers(2, 2, procs.size(), true));
+  DagState *state = new DagState;
+  state->reset(spec, procs);
+  Subgraph sg = build_dag_subgraph(*spec, *state, SubgraphDefinition::INSTANTIATION_ORDER);
+  UserEvent gate = UserEvent::create_user_event();
+  std::vector<Event> evs;
+  for(int i = 0; i < 300; i++)
+    evs.push_back(sg.instantiate(nullptr, 0, ProfilingRequestSet(), gate));
+  Event d = sg.destroy();
+  gate.trigger();
+  exit_shutdown_precondition = Event::merge_events(d, Event::merge_events(evs));
+}
+
+static const DeathScenario exit_scenarios[] = {
+    {"destroy_without_wait", exit_destroy_without_wait},
+    {"destroy_many_without_wait", exit_destroy_many_without_wait},
+    {"destroy_as_shutdown_precondition", exit_destroy_as_shutdown_precondition},
+    {"pending_instantiations_released_late", exit_pending_instantiations_released_late},
+};
+
+////////////////////////////////////////////////////////////////////////
+//
 // Driver
 //
 
@@ -4747,6 +5024,8 @@ static std::vector<std::unique_ptr<SubgraphTest>> make_tests()
   tests.emplace_back(new DestroyOrderingTest(true));
   tests.emplace_back(new DestroyOrderingTest(false));
   tests.emplace_back(new ManyInstantiationsTest());
+  tests.emplace_back(new PendingDepthTest());
+  tests.emplace_back(new DefaultsTest());
   tests.emplace_back(new PoisonedPreconditionTest());
   tests.emplace_back(new ExternalPoisonTest());
   tests.emplace_back(new MixedWorkloadTest());
@@ -4807,12 +5086,30 @@ void top_level_task(const void *args, size_t arglen, const void *userdata, size_
     return;
   }
 
+  if(!config.exit_scenario.empty()) {
+    for(const DeathScenario &s : exit_scenarios) {
+      if(config.exit_scenario == s.name) {
+        { std::ostringstream _os; _os << "exit scenario: " << s.name; report(_os.str()); }
+        s.fn();
+        printf("EXIT-SCENARIO-ISSUED\n");
+        fflush(stdout);
+        Runtime::get_runtime().shutdown(exit_shutdown_precondition, 0);
+        return;
+      }
+    }
+    log_app.error() << "unknown exit scenario: " << config.exit_scenario;
+    Runtime::get_runtime().shutdown(Event::NO_EVENT, 2);
+    return;
+  }
+
   std::vector<std::unique_ptr<SubgraphTest>> tests = make_tests();
   if(config.list) {
     for(auto &test : tests)
       printf("%s\n", test->name().c_str());
     for(const DeathScenario &s : death_scenarios)
       printf("death:%s\n", s.name);
+    for(const DeathScenario &s : exit_scenarios)
+      printf("exit:%s\n", s.name);
     Runtime::get_runtime().shutdown(Event::NO_EVENT, 0);
     return;
   }
@@ -4907,6 +5204,8 @@ int main(int argc, char **argv)
       config.skip.insert(argv[++i]);
     else if(!strcmp(argv[i], "-death") && (i + 1 < argc))
       config.death = argv[++i];
+    else if(!strcmp(argv[i], "-exit") && (i + 1 < argc))
+      config.exit_scenario = argv[++i];
     else if(!strcmp(argv[i], "-list"))
       config.list = true;
   }

@@ -246,6 +246,10 @@ namespace Realm {
           SUBGRAPH_FATAL(me, "dependency " << i
                                            << " uses collective conditions, which are not "
                                               "implemented");
+        case SubgraphDefinition::OPKIND_INVALID:
+          SUBGRAPH_FATAL(me, "dependency " << i << " " << role
+                                           << " kind was never set (a default-constructed "
+                                              "Dependency has no source or target)");
         default:
           SUBGRAPH_FATAL(me, "dependency " << i << " " << role << " is a "
                                            << op_kind_name(k)

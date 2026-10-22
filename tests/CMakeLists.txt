@@ -335,6 +335,18 @@ foreach(
   )
 endforeach()
 endif()
+# Teardown scenarios: destroy without waiting, then shutdown. Each must exit 0.
+foreach(
+  scenario
+  destroy_without_wait
+  destroy_many_without_wait
+  destroy_as_shutdown_precondition
+  pending_instantiations_released_late
+)
+  add_test(NAME subgraph_exit_${scenario}
+           COMMAND subgraph_unit_tests -ll:cpu 4 -exit ${scenario})
+  set_tests_properties(subgraph_exit_${scenario} PROPERTIES TIMEOUT 120)
+endforeach()
 add_integration_test(large_tls "${REALM_TEST_DIR}/large_tls.cc")
 add_integration_test(memmodel "${REALM_TEST_DIR}/memmodel.cc")
 add_integration_test(coverings "${REALM_TEST_DIR}/coverings.cc")
