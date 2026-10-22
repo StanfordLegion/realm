@@ -578,7 +578,10 @@ namespace Realm {
     // calls back right away) cannot launch before both have been examined.
     pending.store(1);
     poisoned.store(false);
-    const Event evs[2] = {start_event, order_event};
+    // Chained replays pass the previous finish event as the start event, which
+    // is also the order event: one waiter is enough then.
+    const Event evs[2] = {start_event,
+                          (order_event == start_event) ? Event::NO_EVENT : order_event};
     for(int k = 0; k < 2; k++) {
       if(!evs[k].exists())
         continue;
