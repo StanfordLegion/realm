@@ -1109,8 +1109,35 @@ namespace PRealm {
   using Realm::Subgraph;
   using Realm::SubgraphDefinition;
 
-  // from module_config.h
+  // from module_config.h and the *_module_config.h headers - the module
+  //  configuration types are always available, even when the corresponding
+  //  module is not compiled in (see Runtime::get_module_config<T>())
+  using Realm::CoreModuleConfig;
+  using Realm::GASNetEXModuleConfig;
   using Realm::ModuleConfig;
+  using Realm::MPIModuleConfig;
+  using Realm::UCPModuleConfig;
+  namespace Cuda {
+    using Realm::Cuda::CudaModuleConfig;
+  }
+  namespace Hip {
+    using Realm::Hip::HipModuleConfig;
+  }
+  namespace HDF5 {
+    using Realm::HDF5::HDF5ModuleConfig;
+  }
+  namespace Numa {
+    using Realm::Numa::NumaModuleConfig;
+  }
+  namespace OpenMP {
+    using Realm::OpenMP::OpenMPModuleConfig;
+  }
+  namespace ProcSet {
+    using Realm::ProcSet::ProcSetModuleConfig;
+  }
+  namespace Python {
+    using Realm::Python::PythonModuleConfig;
+  }
 
 #ifdef REALM_USE_CUDA
   using Realm::CudaArrayLayoutPiece;
@@ -1119,7 +1146,6 @@ namespace PRealm {
   using Realm::ExternalCudaMemoryResource;
   using Realm::ExternalCudaPinnedHostResource;
   namespace Cuda {
-    using Realm::Cuda::CudaModuleConfig;
     using Realm::Cuda::CudaRedOpDesc;
     using Realm::Cuda::get_cuda_device_id;
     using Realm::Cuda::get_cuda_device_uuid;

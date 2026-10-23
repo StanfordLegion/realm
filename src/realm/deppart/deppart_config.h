@@ -30,6 +30,7 @@ namespace Realm {
     extern bool cfg_disable_intersection_optimization;
     extern int cfg_max_rects_in_approximation;
     extern bool cfg_worker_threads_sleep;
+    extern bool cfg_allow_inline_operations;
 
   };
 

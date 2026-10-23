@@ -350,6 +350,7 @@ typedef enum realm_status_enum
   REALM_CUDA_ERROR_NOT_ENABLED = -14001,
   REALM_MODULE_CONFIG_ERROR_INVALID_NAME = -16001,
   REALM_MODULE_CONFIG_ERROR_NO_RESOURCE = -16002,
+  REALM_MODULE_CONFIG_ERROR_INVALID_TYPE = -16003,
 } realm_status_t;
 
 typedef realm_status_t RealmStatus;

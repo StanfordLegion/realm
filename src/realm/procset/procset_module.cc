@@ -81,11 +81,7 @@ namespace Realm {
     //
     // class ProcSetModuleConfig
 
-    ProcSetModuleConfig::ProcSetModuleConfig(void)
-      : ModuleConfig("procset")
-    {}
-
-    void ProcSetModuleConfig::configure_from_cmdline(std::vector<std::string> &cmdline)
+    void ProcSetModuleConfig::parse_cmdline(std::vector<std::string> &cmdline)
     {
       // read command line parameters
       CommandLineParser cp;
@@ -118,7 +114,15 @@ namespace Realm {
 
     /*static*/ ModuleConfig *ProcSetModule::create_module_config(RuntimeImpl *runtime)
     {
+      static constexpr ModuleConfig::Property properties[] = {
+          ModuleConfig::property<&ProcSetModuleConfig::cfg_num_mp_threads>(
+              "num_mp_threads"),
+          ModuleConfig::property<&ProcSetModuleConfig::cfg_num_mp_procs>("num_mp_procs"),
+          ModuleConfig::property<&ProcSetModuleConfig::cfg_num_mp_cpus>("num_mp_cpus"),
+          ModuleConfig::property<&ProcSetModuleConfig::cfg_stack_size>("stack_size"),
+      };
       ProcSetModuleConfig *config = new ProcSetModuleConfig();
+      ModuleConfig::bind<ProcSetModuleConfig>(properties);
       return config;
     }
 
@@ -127,8 +131,7 @@ namespace Realm {
       // create a module to fill in with stuff
       ProcSetModule *m = new ProcSetModule;
 
-      ProcSetModuleConfig *config =
-          checked_cast<ProcSetModuleConfig *>(runtime->get_module_config("procset"));
+      ProcSetModuleConfig *config = runtime->get_module_config<ProcSetModuleConfig>();
       assert(config != nullptr);
       assert(config->finish_configured);
       assert(m->name == config->get_name());

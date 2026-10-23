@@ -527,8 +527,8 @@ namespace Realm {
   {
     remote_subscribe_gens.clear();
     remote_trigger_gens.clear();
-    assert(get_runtime()->get_module_config("core")->get_property(
-               "barrier_broadcast_radix", broadcast_radix) == REALM_SUCCESS);
+    broadcast_radix =
+        get_runtime()->get_module_config<CoreModuleConfig>()->barrier_broadcast_radix;
   }
 
   BarrierImpl::BarrierImpl(BarrierCommunicator *_barrier_comm, int _broadcast_radix)

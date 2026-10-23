@@ -357,30 +357,48 @@ namespace Realm {
 
   ////////////////////////////////////////////////////////////////////////
   //
+  // class GASNetEXModuleConfig
+  //
+
+  void GASNetEXModuleConfig::parse_cmdline(std::vector<std::string> &cmdline)
+  {
+    CommandLineParser cp;
+    cp.add_option_int("-gex:immediate", cfg_use_immediate)
+        .add_option_int("-gex:negotiated", cfg_use_negotiated)
+        .add_option_int_units("-gex:maxmed", cfg_max_medium)
+        .add_option_int_units("-gex:maxlong", cfg_max_long, 'm')
+        .add_option_int("-gex:crittime", cfg_crit_timeout)
+        .add_option_int("-gex:bindhost", cfg_bind_hostmem)
+        .add_option_int("-gex:bindcuda", cfg_bind_cudamem)
+        .add_option_int("-gex:bindhip", cfg_bind_hipmem)
+        .add_option_int("-gex:cksum", cfg_do_checksums)
+        .add_option_int("-gex:batch", cfg_batch_messages)
+        .add_option_int("-gex:obcount", cfg_outbuf_count)
+        .add_option_int_units("-gex:obsize", cfg_outbuf_size)
+        .add_option_int("-gex:forcerma", cfg_force_rma)
+        .add_option_int("-gex:rmaput", cfg_use_rma_put)
+        .add_option_int("-gex:amlimit", cfg_am_limit);
+    size_t deprecated_gsize = 0;
+    cp.add_option_int_units("-ll:gsize", deprecated_gsize, 'm');
+
+    bool ok = cp.parse_command_line(cmdline);
+    assert(ok);
+
+    if(deprecated_gsize > 0) {
+      log_gex.fatal() << "Realm GASNetEX implementation does not provide a 'global' "
+                         "memory - '-ll:gsize' not permitted";
+      abort();
+    }
+  }
+
+  ////////////////////////////////////////////////////////////////////////
+  //
   // class GASNetEXModule
   //
 
   GASNetEXModule::GASNetEXModule()
-    : NetworkModule("gasnetex")
-    , cfg_use_immediate(true)
-    , cfg_use_negotiated(true)
-    , cfg_crit_timeout(50000 /* 50us */)
-    , cfg_max_medium(0 /* use GASNet limit */)
-    , cfg_max_long(4 << 20 /* 4 MB */)
-    , cfg_bind_hostmem(true)
-#ifdef REALM_USE_CUDA
-    , cfg_bind_cudamem(true)
-#endif
-#ifdef REALM_USE_HIP
-    , cfg_bind_hipmem(true)
-#endif
-    , cfg_do_checksums(true) // TODO
-    , cfg_batch_messages(true)
-    , cfg_outbuf_count(64)
-    , cfg_outbuf_size(256 << 10 /* 256 KB*/)
-    , cfg_force_rma(false)
-    , cfg_use_rma_put(true)
-    , cfg_am_limit(0)
+    : NetworkModule(GASNetEXModuleConfig::MODULE_NAME)
+    , config(nullptr)
     , internal(nullptr)
   {}
 
@@ -411,13 +429,41 @@ namespace Realm {
       return nullptr;
     }
 
+    return mod;
+  }
+
+  ModuleConfig *GASNetEXModule::create_module_config(RuntimeImpl *runtime)
+  {
+    assert(config == nullptr);
+    static constexpr ModuleConfig::Property properties[] = {
+        ModuleConfig::property<&GASNetEXModuleConfig::cfg_use_immediate>("use_immediate"),
+        ModuleConfig::property<&GASNetEXModuleConfig::cfg_use_negotiated>(
+            "use_negotiated"),
+        ModuleConfig::property<&GASNetEXModuleConfig::cfg_crit_timeout>("crit_timeout"),
+        ModuleConfig::property<&GASNetEXModuleConfig::cfg_max_medium>("max_medium"),
+        ModuleConfig::property<&GASNetEXModuleConfig::cfg_max_long>("max_long"),
+        ModuleConfig::property<&GASNetEXModuleConfig::cfg_bind_hostmem>("bind_hostmem"),
+        ModuleConfig::property<&GASNetEXModuleConfig::cfg_bind_cudamem>("bind_cudamem"),
+        ModuleConfig::property<&GASNetEXModuleConfig::cfg_bind_hipmem>("bind_hipmem"),
+        ModuleConfig::property<&GASNetEXModuleConfig::cfg_do_checksums>("do_checksums"),
+        ModuleConfig::property<&GASNetEXModuleConfig::cfg_batch_messages>(
+            "batch_messages"),
+        ModuleConfig::property<&GASNetEXModuleConfig::cfg_outbuf_count>("outbuf_count"),
+        ModuleConfig::property<&GASNetEXModuleConfig::cfg_outbuf_size>("outbuf_size"),
+        ModuleConfig::property<&GASNetEXModuleConfig::cfg_force_rma>("force_rma"),
+        ModuleConfig::property<&GASNetEXModuleConfig::cfg_use_rma_put>("use_rma_put"),
+        ModuleConfig::property<&GASNetEXModuleConfig::cfg_am_limit>("am_limit"),
+    };
+    config = new GASNetEXModuleConfig;
+    ModuleConfig::bind<GASNetEXModuleConfig>(properties);
+
     // in GASNet releases before 2021.8.3, bugs 4148 and 4150 made RMA puts
     // unsafe to use for ibv + CUDA_UVA memory, so disable them by default
     if(gex_wrapper_handle.GEX_RELEASE < 20210803) {
-      mod->cfg_use_rma_put = false;
+      config->cfg_use_rma_put = false;
     }
 
-    return mod;
+    return config;
   }
 
   void GASNetEXModule::get_shared_peers(NodeSet &shared_peers)
@@ -425,55 +471,24 @@ namespace Realm {
     internal->get_shared_peers(shared_peers);
   }
 
-  // actual parsing of the command line should wait until here if at all
-  //  possible
-  void GASNetEXModule::parse_command_line(RuntimeImpl *runtime,
-                                          std::vector<std::string> &cmdline)
+  // acts on the (complete) configuration before the network is attached
+  void GASNetEXModule::finish_configure(RuntimeImpl *runtime)
   {
-    CommandLineParser cp;
-    cp.add_option_int("-gex:immediate", cfg_use_immediate)
-        .add_option_int("-gex:negotiated", cfg_use_negotiated)
-        .add_option_int_units("-gex:maxmed", cfg_max_medium)
-        .add_option_int_units("-gex:maxlong", cfg_max_long, 'm')
-        .add_option_int("-gex:crittime", cfg_crit_timeout)
-        .add_option_int("-gex:bindhost", cfg_bind_hostmem)
-#ifdef REALM_USE_CUDA
-        .add_option_int("-gex:bindcuda", cfg_bind_cudamem)
-#endif
-#ifdef REALM_USE_HIP
-        .add_option_int("-gex:bindhip", cfg_bind_hipmem)
-#endif
-        .add_option_int("-gex:cksum", cfg_do_checksums)
-        .add_option_int("-gex:batch", cfg_batch_messages)
-        .add_option_int("-gex:obcount", cfg_outbuf_count)
-        .add_option_int_units("-gex:obsize", cfg_outbuf_size)
-        .add_option_int("-gex:forcerma", cfg_force_rma)
-        .add_option_int("-gex:rmaput", cfg_use_rma_put)
-        .add_option_int("-gex:amlimit", cfg_am_limit);
-    size_t deprecated_gsize = 0;
-    cp.add_option_int_units("-ll:gsize", deprecated_gsize, 'm');
-
-    bool ok = cp.parse_command_line(cmdline);
-    assert(ok);
-
-    if(deprecated_gsize > 0) {
-      log_gex.fatal() << "Realm GASNetEX implementation does not provide a 'global' "
-                         "memory - '-ll:gsize' not permitted";
-      abort();
-    }
+    assert(config != nullptr);
 
     // enforce a minimum outbuf count for now - right now we need at least one
     //  pktbuf and at least one databuf per rank (TODO: shrink this by stealing
     //  outbufs from idle endpoints)
     const size_t min_obufs = 2 * size_t(Network::max_node_id /* i.e. prim_size - 1 */);
-    if(cfg_outbuf_count < min_obufs) {
+    if(config->cfg_outbuf_count < min_obufs) {
       // issue a warning unless the user asked for 0 to mean "minimum"
-      if((cfg_outbuf_count > 0) && (Network::my_node_id == 0))
-        log_gex.warning() << "outbuf count raised from requested " << cfg_outbuf_count
-                          << " to required minimum " << min_obufs
+      if((config->cfg_outbuf_count > 0) && (Network::my_node_id == 0))
+        log_gex.warning() << "outbuf count raised from requested "
+                          << config->cfg_outbuf_count << " to required minimum "
+                          << min_obufs
                           << " - if memory capacity issues result, reduce outbuf size "
                              "using -gex:obsize";
-      cfg_outbuf_count = min_obufs;
+      config->cfg_outbuf_count = min_obufs;
     }
 
     // the gasnet UDP job spawner (amudprun) seems to buffer stdout, so make stderr the
@@ -636,7 +651,7 @@ namespace Realm {
   {
     // if checksums are enabled, we'll tack it on to the end of the header
     //  to avoid any alignment issues
-    if(cfg_do_checksums)
+    if(config->cfg_do_checksums)
       header_size =
           roundup_pow2(header_size + sizeof(gex_am_arg_t), sizeof(gex_am_arg_t));
 
@@ -655,7 +670,7 @@ namespace Realm {
   {
     // if checksums are enabled, we'll tack it on to the end of the header
     //  to avoid any alignment issues
-    if(cfg_do_checksums)
+    if(config->cfg_do_checksums)
       header_size =
           roundup_pow2(header_size + sizeof(gex_am_arg_t), sizeof(gex_am_arg_t));
 
@@ -677,7 +692,7 @@ namespace Realm {
   {
     // if checksums are enabled, we'll tack it on to the end of the header
     //  to avoid any alignment issues
-    if(cfg_do_checksums)
+    if(config->cfg_do_checksums)
       header_size =
           roundup_pow2(header_size + sizeof(gex_am_arg_t), sizeof(gex_am_arg_t));
 
@@ -695,7 +710,7 @@ namespace Realm {
   {
     // if checksums are enabled, we'll tack it on to the end of the header
     //  to avoid any alignment issues
-    if(cfg_do_checksums)
+    if(config->cfg_do_checksums)
       header_size =
           roundup_pow2(header_size + sizeof(gex_am_arg_t), sizeof(gex_am_arg_t));
 
@@ -719,7 +734,7 @@ namespace Realm {
   size_t GASNetEXModule::recommended_max_payload(NodeID target, bool with_congestion,
                                                  size_t header_size)
   {
-    if(cfg_do_checksums)
+    if(config->cfg_do_checksums)
       header_size =
           roundup_pow2(header_size + sizeof(gex_am_arg_t), sizeof(gex_am_arg_t));
 
@@ -730,7 +745,7 @@ namespace Realm {
   size_t GASNetEXModule::recommended_max_payload(const NodeSet &targets,
                                                  bool with_congestion, size_t header_size)
   {
-    if(cfg_do_checksums)
+    if(config->cfg_do_checksums)
       header_size =
           roundup_pow2(header_size + sizeof(gex_am_arg_t), sizeof(gex_am_arg_t));
 
@@ -749,7 +764,7 @@ namespace Realm {
                                                  const RemoteAddress &dest_payload_addr,
                                                  bool with_congestion, size_t header_size)
   {
-    if(cfg_do_checksums)
+    if(config->cfg_do_checksums)
       header_size =
           roundup_pow2(header_size + sizeof(gex_am_arg_t), sizeof(gex_am_arg_t));
 

@@ -21,6 +21,7 @@
 #define MPI_MODULE_H
 
 #include "realm/network.h"
+#include "realm/mpi/mpi_module_config.h"
 #include <mpi.h>
 
 namespace Realm {
@@ -40,10 +41,8 @@ namespace Realm {
     // Enumerates all the peers that the current node could potentially share memory with
     virtual void get_shared_peers(NodeSet &shared_peers);
 
-    // actual parsing of the command line should wait until here if at all
-    //  possible
-    virtual void parse_command_line(RuntimeImpl *runtime,
-                                    std::vector<std::string> &cmdline);
+    // creates this module's configuration object (see NetworkModule)
+    virtual ModuleConfig *create_module_config(RuntimeImpl *runtime);
 
     // "attaches" to the network, if that is meaningful - attempts to
     //  bind/register/(pick your network-specific verb) the requested memory
@@ -119,11 +118,12 @@ namespace Realm {
 
     virtual size_t max_payload_size(size_t header_size, const void *src_payload_addr);
 
+  public:
+    MPIModuleConfig *config;
+
   protected:
     MPI_Win g_am_win; /* global window for RMA memory */
-    ;
     void **g_am_bases;
-    size_t global_mem_size;
   };
 
 }; // namespace Realm

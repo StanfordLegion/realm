@@ -37,11 +37,92 @@ namespace Realm {
 
   ////////////////////////////////////////////////////////////////////////
   //
+  // class UCPModuleConfig
+  //
+
+  void UCPModuleConfig::parse_cmdline(std::vector<std::string> &cmdline)
+  {
+    CommandLineParser cp;
+    // deferred_allocs realm test always passes -ll:gsize
+    size_t deprecated_gsize = 0;
+    cp.add_option_int_units("-ll:gsize", deprecated_gsize, 'm');
+
+    cp.add_option_string("-ucx:am_mode", cfg_am_mode);
+
+    cp.add_option_string("-ucx:host_nics", cfg_host_nics);
+
+    cp.add_option_int("-ucx:bindhost", cfg_bind_hostmem);
+
+    // maximum number of background work items to use for UCP polling
+    cp.add_option_int("-ucx:pollers_max", cfg_pollers_max);
+
+    // number of message priority levels to support
+    cp.add_option_int("-ucx:num_priorities", cfg_num_priorities);
+
+    // maximum message size that is sent with higher priority
+    cp.add_option_int_units("-ucx:priority_size_max", cfg_priority_size_max);
+
+    // check memory pools for leak
+    cp.add_option_bool("-ucx:mpool_leakcheck", cfg_mpool_leakcheck);
+
+    // CRC check
+    cp.add_option_int("-ucx:crc_check", cfg_crc_check);
+
+    cp.add_option_bool("-ucx:hbuf_malloc", cfg_hbuf_malloc);
+    cp.add_option_bool("-ucx:pbuf_malloc", cfg_pbuf_malloc);
+
+    // use UCX wakeup feature for progress
+    cp.add_option_bool("-ucx:use_wakeup", cfg_use_wakeup);
+
+    cp.add_option_int("-ucx:prog_boff_max", cfg_prog_boff_max);
+    cp.add_option_int("-ucx:prog_itr_max", cfg_prog_itr_max);
+    cp.add_option_int("-ucx:rdesc_rel_max", cfg_rdesc_rel_max);
+
+    // pbuf mpool
+    cp.add_option_int("-ucx:pb_mp_init_count", cfg_pbuf_mp_init_count);
+    cp.add_option_int("-ucx:pb_mp_max_count", cfg_pbuf_mp_max_count);
+    cp.add_option_int_units("-ucx:pb_mp_max_size", cfg_pbuf_mp_max_size);
+    cp.add_option_int_units("-ucx:pb_mp_max_chunk_size", cfg_pbuf_mp_max_chunk_size);
+    cp.add_option_int_units("-ucx:pb_mp_thresh", cfg_pbuf_mp_thresh);
+
+    // malloc mpool
+    cp.add_option_int_units("-ucx:mmp_max_obj_size", cfg_mmp_max_obj_size);
+
+    // max size for which we try the fast path first
+    cp.add_option_int_units("-ucx:fp_max", cfg_fp_max);
+
+    cp.add_option_string("-ucx:ib_seg_size", cfg_ib_seg_size);
+
+    cp.add_option_int("-ucx:oreqs_limit", cfg_outstanding_reqs_limit);
+
+    cp.add_option_string("-ucx:zcopy_host", cfg_zcopy_thresh_host);
+    cp.add_option_string("-ucx:tls_host", cfg_tls_host);
+
+    // GPU memory settings are accepted whether or not CUDA support is compiled
+    //  in - they are simply not used if it is not
+    cp.add_option_int("-ucx:bindcuda", cfg_bind_cudamem);
+    cp.add_option_string("-ucx:gpu_nics", cfg_gpu_nics);
+    cp.add_option_string("-ucx:zcopy_dev", cfg_zcopy_thresh_dev);
+    cp.add_option_string("-ucx:tls_dev", cfg_tls_dev);
+
+    bool ok = cp.parse_command_line(cmdline);
+    assert(ok);
+
+    if(deprecated_gsize > 0) {
+      log_ucp.fatal() << "Realm UCX backend does not provide a 'global' memory."
+                      << " '-ll:gsize' not permitted";
+      abort();
+    }
+  }
+
+  ////////////////////////////////////////////////////////////////////////
+  //
   // class UCPModule
   //
 
   UCPModule::UCPModule(Realm::RuntimeImpl *runtime)
     : NetworkModule("ucp")
+    , config(nullptr)
   {
     internal = new Realm::UCP::UCPInternal(this, runtime);
     assert(internal);
@@ -71,101 +152,96 @@ namespace Realm {
     internal->get_shared_peers(shared_peers);
   }
 
-  void UCPModule::parse_command_line(RuntimeImpl *runtime,
-                                     std::vector<std::string> &cmdline)
+  ModuleConfig *UCPModule::create_module_config(RuntimeImpl *runtime)
   {
-    CommandLineParser cp;
-    Realm::UCP::UCPInternal::Config config;
-    // deferred_allocs realm test always passes -ll:gsize
-    size_t deprecated_gsize = 0;
-    cp.add_option_int_units("-ll:gsize", deprecated_gsize, 'm');
+    assert(config == nullptr);
+    static constexpr ModuleConfig::Property properties[] = {
+        ModuleConfig::property<&UCPModuleConfig::cfg_bind_hostmem>("bind_hostmem"),
+        ModuleConfig::property<&UCPModuleConfig::cfg_pollers_max>("pollers_max"),
+        ModuleConfig::property<&UCPModuleConfig::cfg_num_priorities>("num_priorities"),
+        ModuleConfig::property<&UCPModuleConfig::cfg_priority_size_max>(
+            "priority_size_max"),
+        ModuleConfig::property<&UCPModuleConfig::cfg_mpool_leakcheck>("mpool_leakcheck"),
+        ModuleConfig::property<&UCPModuleConfig::cfg_crc_check>("crc_check"),
+        ModuleConfig::property<&UCPModuleConfig::cfg_hbuf_malloc>("hbuf_malloc"),
+        ModuleConfig::property<&UCPModuleConfig::cfg_pbuf_malloc>("pbuf_malloc"),
+        ModuleConfig::property<&UCPModuleConfig::cfg_use_wakeup>("use_wakeup"),
+        ModuleConfig::property<&UCPModuleConfig::cfg_prog_boff_max>("prog_boff_max"),
+        ModuleConfig::property<&UCPModuleConfig::cfg_prog_itr_max>("prog_itr_max"),
+        ModuleConfig::property<&UCPModuleConfig::cfg_rdesc_rel_max>("rdesc_rel_max"),
+        ModuleConfig::property<&UCPModuleConfig::cfg_pbuf_mp_init_count>(
+            "pbuf_mp_init_count"),
+        ModuleConfig::property<&UCPModuleConfig::cfg_pbuf_mp_max_count>(
+            "pbuf_mp_max_count"),
+        ModuleConfig::property<&UCPModuleConfig::cfg_pbuf_mp_max_size>(
+            "pbuf_mp_max_size"),
+        ModuleConfig::property<&UCPModuleConfig::cfg_pbuf_mp_max_chunk_size>(
+            "pbuf_mp_max_chunk_size"),
+        ModuleConfig::property<&UCPModuleConfig::cfg_pbuf_mp_thresh>("pbuf_mp_thresh"),
+        ModuleConfig::property<&UCPModuleConfig::cfg_mmp_max_obj_size>(
+            "mmp_max_obj_size"),
+        ModuleConfig::property<&UCPModuleConfig::cfg_fp_max>("fp_max"),
+        ModuleConfig::property<&UCPModuleConfig::cfg_outstanding_reqs_limit>(
+            "outstanding_reqs_limit"),
+        ModuleConfig::property<&UCPModuleConfig::cfg_bind_cudamem>("bind_cudamem"),
+    };
+    config = new UCPModuleConfig;
+    ModuleConfig::bind<UCPModuleConfig>(properties);
+    return config;
+  }
 
-    std::string am_mode;
-    cp.add_option_string("-ucx:am_mode", am_mode);
+  void UCPModule::finish_configure(RuntimeImpl *runtime)
+  {
+    assert(config != nullptr);
 
-    cp.add_option_string("-ucx:host_nics", config.host_nics);
+    //// set internal config ////
+    Realm::UCP::UCPInternal::Config internal_config;
 
-    cp.add_option_int("-ucx:bindhost", config.bind_hostmem);
-
-    // maximum number of background work items to use for UCP polling
-    cp.add_option_int("-ucx:pollers_max", config.pollers_max);
-
-    // number of message priority levels to support
-    cp.add_option_int("-ucx:num_priorities", config.num_priorities);
-
-    // maximum message size that is sent with higher priority
-    cp.add_option_int_units("-ucx:priority_size_max", config.priority_size_max);
-
-    // check memory pools for leak
-    cp.add_option_bool("-ucx:mpool_leakcheck", config.mpool_leakcheck);
-
-    // CRC check
-    cp.add_option_int("-ucx:crc_check", config.crc_check);
-
-    cp.add_option_bool("-ucx:hbuf_malloc", config.hbuf_malloc);
-    cp.add_option_bool("-ucx:pbuf_malloc", config.pbuf_malloc);
-
-    // use UCX wakeup feature for progress
-    cp.add_option_bool("-ucx:use_wakeup", config.use_wakeup);
-
-    cp.add_option_int("-ucx:prog_boff_max", config.prog_boff_max);
-    cp.add_option_int("-ucx:prog_itr_max", config.prog_itr_max);
-    cp.add_option_int("-ucx:rdesc_rel_max", config.rdesc_rel_max);
-
-    // pbuf mpool
-    cp.add_option_int("-ucx:pb_mp_init_count", config.pbuf_mp_init_count);
-    cp.add_option_int("-ucx:pb_mp_max_count", config.pbuf_mp_max_count);
-    cp.add_option_int_units("-ucx:pb_mp_max_size", config.pbuf_mp_max_size);
-    cp.add_option_int_units("-ucx:pb_mp_max_chunk_size", config.pbuf_mp_max_chunk_size);
-    cp.add_option_int_units("-ucx:pb_mp_thresh", config.pbuf_mp_thresh);
-
-    // malloc mpool
-    cp.add_option_int_units("-ucx:mmp_max_obj_size", config.mmp_max_obj_size);
-
-    // max size for which we try the fast path first
-    cp.add_option_int_units("-ucx:fp_max", config.fp_max);
-
-    cp.add_option_string("-ucx:ib_seg_size", config.ib_seg_size);
-
-    cp.add_option_int("-ucx:oreqs_limit", config.outstanding_reqs_limit);
-
-    cp.add_option_string("-ucx:zcopy_host", config.zcopy_thresh_host);
-    cp.add_option_string("-ucx:tls_host", config.tls_host);
-
-#ifdef REALM_USE_CUDA
-    cp.add_option_int("-ucx:bindcuda", config.bind_cudamem);
-    cp.add_option_string("-ucx:gpu_nics", config.gpu_nics);
-    cp.add_option_string("-ucx:zcopy_dev", config.zcopy_thresh_dev);
-    cp.add_option_string("-ucx:tls_dev", config.tls_dev);
-#endif
-
-    bool ok = cp.parse_command_line(cmdline);
-    assert(ok);
-
-    if(deprecated_gsize > 0) {
-      log_ucp.fatal() << "Realm UCX backend does not provide a 'global' memory."
-                      << " '-ll:gsize' not permitted";
+    // am-with-remote-address config
+    if(config->cfg_am_mode.empty() || (config->cfg_am_mode == "auto")) {
+      internal_config.am_wra_mode = Realm::UCP::AM_WITH_REMOTE_ADDR_MODE_AUTO;
+    } else if(config->cfg_am_mode == "put") {
+      internal_config.am_wra_mode = Realm::UCP::AM_WITH_REMOTE_ADDR_MODE_PUT;
+    } else if(config->cfg_am_mode == "am") {
+      internal_config.am_wra_mode = Realm::UCP::AM_WITH_REMOTE_ADDR_MODE_AM;
+    } else {
+      log_ucp.fatal() << "invalid mode for am with remote address " << config->cfg_am_mode
+                      << ". Valid choices: auto, put, am";
       abort();
     }
 
-    //// set internal config ////
+    internal_config.bind_hostmem = config->cfg_bind_hostmem;
+    internal_config.pollers_max = config->cfg_pollers_max;
+    internal_config.num_priorities = config->cfg_num_priorities;
+    internal_config.prog_boff_max = config->cfg_prog_boff_max;
+    internal_config.prog_itr_max = config->cfg_prog_itr_max;
+    internal_config.rdesc_rel_max = config->cfg_rdesc_rel_max;
+    internal_config.mpool_leakcheck = config->cfg_mpool_leakcheck;
+    internal_config.crc_check = config->cfg_crc_check;
+    internal_config.hbuf_malloc = config->cfg_hbuf_malloc;
+    internal_config.pbuf_malloc = config->cfg_pbuf_malloc;
+    internal_config.use_wakeup = config->cfg_use_wakeup;
+    internal_config.priority_size_max = config->cfg_priority_size_max;
+    internal_config.fp_max = config->cfg_fp_max;
+    internal_config.pbuf_mp_max_size = config->cfg_pbuf_mp_max_size;
+    internal_config.pbuf_mp_max_chunk_size = config->cfg_pbuf_mp_max_chunk_size;
+    internal_config.pbuf_mp_max_count = config->cfg_pbuf_mp_max_count;
+    internal_config.pbuf_mp_init_count = config->cfg_pbuf_mp_init_count;
+    internal_config.pbuf_mp_thresh = config->cfg_pbuf_mp_thresh;
+    internal_config.mmp_max_obj_size = config->cfg_mmp_max_obj_size;
+    internal_config.outstanding_reqs_limit = config->cfg_outstanding_reqs_limit;
+    internal_config.ib_seg_size = config->cfg_ib_seg_size;
+    internal_config.host_nics = config->cfg_host_nics;
+    internal_config.zcopy_thresh_host = config->cfg_zcopy_thresh_host;
+    internal_config.tls_host = config->cfg_tls_host;
+#ifdef REALM_USE_CUDA
+    internal_config.bind_cudamem = config->cfg_bind_cudamem;
+    internal_config.gpu_nics = config->cfg_gpu_nics;
+    internal_config.zcopy_thresh_dev = config->cfg_zcopy_thresh_dev;
+    internal_config.tls_dev = config->cfg_tls_dev;
+#endif
 
-    // am-with-remote-address config
-    if(!am_mode.empty()) {
-      if(am_mode == "auto") {
-        config.am_wra_mode = Realm::UCP::AM_WITH_REMOTE_ADDR_MODE_AUTO;
-      } else if(am_mode == "put") {
-        config.am_wra_mode = Realm::UCP::AM_WITH_REMOTE_ADDR_MODE_PUT;
-      } else if(am_mode == "am") {
-        config.am_wra_mode = Realm::UCP::AM_WITH_REMOTE_ADDR_MODE_AM;
-      } else {
-        log_ucp.fatal() << "invalid mode for am with remote address " << am_mode
-                        << ". Valid choices: auto, put, am";
-        abort();
-      }
-    }
-
-    if(!internal->init(config)) {
+    if(!internal->init(internal_config)) {
       log_ucp.fatal() << "internal init failed";
       abort();
     }

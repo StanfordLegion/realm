@@ -20,6 +20,7 @@
 
 #include "realm/realm_config.h"
 #include "realm/module.h"
+#include "realm/hip/hip_module_config.h"
 #include "realm/processor.h"
 #include "realm/network.h"
 #include "realm/atomics.h"
@@ -95,47 +96,6 @@ namespace Realm {
     struct GPUInfo;
     class GPUZCMemory;
     class GPUReplHeapListener;
-
-    class HipModuleConfig : public ModuleConfig {
-      friend class HipModule;
-
-    protected:
-      HipModuleConfig(void);
-
-      bool discover_resource(void);
-
-    public:
-      virtual void configure_from_cmdline(std::vector<std::string> &cmdline);
-
-    public:
-      // configurations
-      size_t cfg_zc_mem_size = 64 << 20, cfg_zc_ib_size = 256 << 20;
-      size_t cfg_fb_mem_size = 256 << 20, cfg_fb_ib_size = 128 << 20;
-      size_t cfg_uvm_mem_size = 0;
-      bool cfg_use_dynamic_fb = true;
-      size_t cfg_dynfb_max_size = ~size_t(0);
-      int cfg_num_gpus = 0;
-      std::string cfg_gpu_idxs;
-      unsigned cfg_task_streams = 12, cfg_d2d_streams = 4;
-      bool cfg_use_worker_threads = false, cfg_use_shared_worker = true,
-           cfg_pin_sysmem = true;
-      bool cfg_fences_use_callbacks = false;
-      unsigned cfg_skip_gpu_count = 0;
-      bool cfg_skip_busy_gpus = false;
-      size_t cfg_min_avail_mem = 0;
-      int cfg_task_context_sync = -1; // 0 = no, 1 = yes, -1 = default (based on hijack)
-      int cfg_max_ctxsync_threads = 4;
-      bool cfg_multithread_dma = false;
-      size_t cfg_hostreg_limit = 1 << 30;
-      int cfg_d2d_stream_priority = -1;
-      bool cfg_use_hip_ipc = true;
-
-      // resources
-      bool resource_discovered = false;
-      int res_num_gpus = 0;
-      size_t res_min_fbmem_size = 0;
-      std::vector<size_t> res_fbmem_sizes;
-    };
 
     // Descriptor for explicitly registering HIP reduction kernels with the HipModule.
     // This is the HIP equivalent of CudaRedOpDesc. Unlike CUDA (which caches

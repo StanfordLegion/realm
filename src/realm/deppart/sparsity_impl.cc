@@ -212,8 +212,8 @@ namespace Realm {
   SparsityMapImplWrapper::SparsityMapImplWrapper(void)
     : communicator(std::make_unique<SparsityWrapperCommunicator>())
   {
-    get_runtime()->get_module_config("core")->get_property("report_sparsity_leaks",
-                                                           report_leaks);
+    report_leaks =
+        get_runtime()->get_module_config<CoreModuleConfig>()->report_sparsity_leaks;
   }
 
   SparsityMapImplWrapper::SparsityMapImplWrapper(

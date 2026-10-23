@@ -262,6 +262,8 @@ endif()
 
 #region Integration Tests
 set(_integ_list)
+# tests that reuse an integration test executable with different arguments
+set(_integ_extra_tests)
 
 # Given target and list of sources, compiles the executable and adds it as a test, with the default benchmark arguments
 # TODO(cperry): make a cmake script that will allow to override test arguments at runtime
@@ -391,6 +393,17 @@ if(REALM_USE_PYTHON)
   list(APPEND machine_config_test_ARGS -ll:py 1 -ll:pystack 4)
 endif()
 add_integration_test(machine_config_test "${REALM_TEST_DIR}/machine_config_test.cc")
+# the same test again, but configured through the typed module config structs
+#  rather than the command line (see test_args in machine_config_test.cc)
+add_test(NAME machine_config_test_typed COMMAND $<TARGET_FILE:machine_config_test>
+                                                -test_args 2
+)
+set_property(
+  TEST machine_config_test_typed
+  PROPERTY RESOURCE_LOCK $<REMOVE_DUPLICATES:${TEST_RESOURCE_LOCK}
+           ${machine_config_test_RESOURCE_LOCK}>
+)
+list(APPEND _integ_extra_tests machine_config_test_typed)
 add_integration_test(rsrv_acquire_poisoned "${REALM_TEST_DIR}/rsrv_acquire_poisoned.cc")
 add_integration_test(refcount_image_test "${REALM_TEST_DIR}/refcount_image_test.cc")
 set(inst_chain_redistrict_ARGS -i 2)
@@ -530,7 +543,7 @@ if(REALM_USE_CUDA)
 endif()
 
 set_tests_properties(
-  ${_integ_list}
+  ${_integ_list} ${_integ_extra_tests}
   PROPERTIES TEST_LAUNCHER
              "${TEST_LAUNCHER}"
              PROCESSORS
@@ -545,14 +558,14 @@ string(REPLACE ";" " " TEST_ARGS "${TEST_ARGS}")
 
 if(MSVC)
   set_tests_properties(
-    ${_integ_list}
+    ${_integ_list} ${_integ_extra_tests}
     PROPERTIES
       ENVIRONMENT_MODIFICATION
       "REALM_DEFAULT_ARGS=string_prepend:${TEST_ARGS} ;PATH=path_list_append:${TEST_LIB_PATH}"
   )
 else()
   set_tests_properties(
-    ${_integ_list}
+    ${_integ_list} ${_integ_extra_tests}
     PROPERTIES
       ENVIRONMENT_MODIFICATION
       "REALM_DEFAULT_ARGS=string_prepend:${TEST_ARGS} ;LD_LIBRARY_PATH=path_list_append:${TEST_LIB_PATH}"
