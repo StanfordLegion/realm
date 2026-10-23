@@ -64,6 +64,17 @@ namespace Realm {
 
     void execute_on_processor(Processor p);
 
+    // spawns a task on 'p' (a local processor or processor group) that
+    //  delivers the batched profiling responses queued on 'queue' (see
+    //  ProfilingRequest::set_batched_delivery)
+    static void spawn_profiling_delivery(Processor p, void *queue, int priority);
+
+  protected:
+    // runs the task's function, or for a profiling delivery task the
+    //  response task's function for each queued response
+    void execute_body(ProcessorImpl *proc_impl);
+
+  public:
     Processor proc;
     Processor::TaskFuncID func_id;
 
@@ -77,6 +88,8 @@ namespace Realm {
 
     Event before_event;
     int priority;
+    // the queue of batched profiling responses this task delivers, if any
+    void *profiling_delivery_queue;
 
     // intrusive task list - used for pending, ready, and suspended tasks
     IntrusivePriorityListLink<Task> tl_link;

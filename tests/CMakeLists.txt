@@ -318,6 +318,8 @@ add_integration_test(extres_alias "${REALM_TEST_DIR}/extres_alias.cc")
 add_integration_test(reservations "${REALM_TEST_DIR}/reservations.cc")
 set(machine_queries_ARGS -ll:cpu 4 -ll:util 2)
 add_integration_test(machine_queries "${REALM_TEST_DIR}/machine_queries.cc")
+set(profiling_batch_ARGS -ll:cpu 4)
+add_integration_test(profiling_batch "${REALM_TEST_DIR}/profiling_batch.cc")
 set(machine_config_test_ARGS
     -test_args
     1
