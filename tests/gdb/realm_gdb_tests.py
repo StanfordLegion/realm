@@ -703,6 +703,13 @@ class Context(object):
                    "continue_to_exit only makes sense for a live process")
         ok, out = self.try_run(cmd)
         sys.stdout.write(out if ok else ("error: " + out + "\n"))
+        for _ in range(3):
+            if self.exited or not _stray_rtld_trap():
+                break
+            sys.stdout.write("RGT: continuing past gdb's own trap in r_debug_state\n")
+            ok, more = self.try_run("continue")
+            sys.stdout.write(more if ok else ("error: " + more + "\n"))
+            out += more
         if not self.exited:
             where = ""
             if gdb.selected_inferior().pid != 0:
@@ -965,10 +972,21 @@ def run_all():
         _current.step()
 
 
+# gdb's notice of a thread that came or went as a command let the program run
+# (a function call's), which it prints wherever the command's output is:
+# "widget = [New LWP 103912 of process 5130]\nwidget sum=46" (FreeBSD, a
+# thread born before the stop and reported as the call resumed the program).
+_THREAD_NOTICE = re.compile(r"\[(?:New (?:Thread|LWP) [^\]\n]*|(?:Thread|LWP) [^\]\n]* exited)\]\n")
+
+
 def _cli_text(out):
     """Output gdb.execute(..., to_string=True) collected, as the CLI shows
-    it: under MI, gdb 18 returns some of it, line by line, as MI stream
-    records (~"text\\n")."""
+    it, without gdb's notices of threads (_THREAD_NOTICE): under MI, gdb 18
+    returns some of it, line by line, as MI stream records (~"text\\n")."""
+    return _THREAD_NOTICE.sub("", _cli_unquoted(out))
+
+
+def _cli_unquoted(out):
     def unquote(m):
         text = bytearray()
         for piece in re.findall(r"\\[0-7]{1,3}|\\.|[^\\]+", m.group(1), re.S):
@@ -3682,6 +3700,28 @@ def test_window_after_exit(t):
     t.check_in("no process", t.expect_error("realm-thread apply all bt"))
 
 
+def _stray_rtld_trap():
+    """Whether the program is stopped (FreeBSD) at a single-step trap
+    (TRAP_TRACE) in rtld's r_debug_state, gdb's own breakpoint for shared
+    library events, which gdb didn't take for the end of its own step over
+    that breakpoint.  FreeBSD's gdb 15.1 stopped there once in CI, as the
+    program exited and a thread's exit loaded libgcc_s (libthr's unwinder),
+    with no window open; realm-gdb steps no thread."""
+    import signal
+    trap_trace = 2  # (FreeBSD's TRAP_TRACE.)
+    if not sys.platform.startswith("freebsd"):
+        return False
+    try:
+        if gdb.selected_inferior().pid == 0:
+            return False
+        info = gdb.parse_and_eval("$_siginfo")
+        return (int(info["si_signo"]) == int(signal.SIGTRAP) and
+                int(info["si_code"]) == trap_trace and
+                gdb.newest_frame().name() == "r_debug_state")
+    except gdb.error:
+        return False
+
+
 def _signal_gdb_later(sig, delay):
     """Have SIG<sig> sent to gdb in `delay` seconds (from another process:
     gdb doesn't release Python's lock while it waits for a call; started
@@ -5635,7 +5675,8 @@ def test_window_unrestored_signal(t):
     couldn't be put back (simulated here), kills the attached program,
     saying so, rather than let gdb detach and leave it to run on corrupted:
     also on gdb 12 and 13, whose quit raises KeyboardInterrupt as the first
-    gdb_exiting handler starts."""
+    gdb_exiting handler starts; and on FreeBSD, where gdb's own kill would
+    let it run on (see _KillNudge)."""
     if not hasattr(gdb.events, "gdb_exiting"):
         raise TestSkip("gdb.events.gdb_exiting (gdb >= 12)")
     main = sys.modules["__main__"]
@@ -5644,6 +5685,10 @@ def test_window_unrestored_signal(t):
     def put_back(saved, *args):  # (Puts them back, but says it couldn't.)
         return real(saved, *args) or [sorted(saved)[0]]
     main._put_back = put_back  # (Kept: realm-gdb tries again as gdb exits.)
+    # (FreeBSD: SIGKILLs to the program after gdb's kill let it run slowed
+    # down, so that it would end first, but for its threads' own, sent
+    # before: see _KillNudge.)
+    main._KillNudge.INTERVAL = 0.5
     t.check_in("could not put back", t.apply("chain0", "bt 1"), "the warning")
     t.release()  # (So that it would end soon, if it were let go.)
     t.allow_output("Python Exception <class 'KeyboardInterrupt'>")
@@ -5995,7 +6040,10 @@ def test_window_program_died(t):
     main = sys.modules["__main__"]
     if main._selected_thread() is None:  # (FreeBSD's gdb keeps a thread.)
         t.check(not main._selections, "the selection afterwards")
-    t.run("kill")
+    # (gdb usually says only that the call stopped, keeping the dying
+    # process, but may see it exit first, with nothing left to kill.)
+    if gdb.selected_inferior().pid:
+        t.run("kill")
     yield
 
 
