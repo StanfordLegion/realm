@@ -1138,8 +1138,9 @@ _CALL_TIMEOUT = 10
 
 # Free stack below a parked thread's saved SP under which function calls are
 # refused in its window (gdb >= 9; older gdbs don't show it).  Realm's stacks
-# have no guard page below them, so a call that overran the stack would
-# write over whatever is mapped there.
+# have a guard region of at least 64 KiB below them, which a call that
+# overruns the stack faults in, but a frame bigger than that can step over it
+# and write over whatever is mapped below.
 _CALL_HEADROOM = 64 << 10
 
 _can_refuse_calls = _has_parameter("may-call-functions")

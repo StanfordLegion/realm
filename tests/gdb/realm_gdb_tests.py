@@ -3609,8 +3609,9 @@ def test_window_user_calls_off(t):
 @test(scenarios=("live",))
 def test_window_low_headroom(t):
     """With little of its stack free below a parked thread's saved stack
-    pointer, function calls are refused while it is shown (Realm's stacks
-    have no guard page below them), and realm-gdb says so; on gdbs that
+    pointer, function calls are refused while it is shown (rather than left
+    to fault in the guard region below Realm's stacks, or to step over it
+    with a frame bigger than the guard), and realm-gdb says so; on gdbs that
     can't refuse them (gdb 8), it isn't shown."""
     ut = "((Realm::UserThread *){:#x})".format(t.ut("chain0"))
     base = t.eval_int("(unsigned long){}->stack_base".format(ut))
