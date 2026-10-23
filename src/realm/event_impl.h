@@ -38,6 +38,8 @@
 #include <vector>
 #include <map>
 #include <memory>
+#include <deque>
+#include <optional>
 
 namespace Realm {
 
@@ -165,6 +167,10 @@ namespace Realm {
     //  list
     MergeEventPrecondition *get_next_precondition(void);
 
+    // number of preconditions a merge can have before the merger has to
+    //  heap-allocate overflow storage
+    static constexpr size_t MAX_INLINE_PRECONDITIONS = 6;
+
   protected:
     void precondition_triggered(bool poisoned, TimeLimit work_until,
                                 MergeEventPrecondition *precondition = nullptr);
@@ -180,10 +186,18 @@ namespace Realm {
     atomic<int> count_needed;
     atomic<int> faults_observed;
 
-    static constexpr size_t MAX_INLINE_PRECONDITIONS = 6;
     MergeEventPrecondition inline_preconditions[MAX_INLINE_PRECONDITIONS];
-    // std::deque does not invalidate references on resize
-    std::deque<MergeEventPrecondition> overflow_preconditions;
+    // storage for preconditions beyond MAX_INLINE_PRECONDITIONS - once handed
+    //  out, a precondition's address is registered on another event's waiter
+    //  list, so this container must never relocate its elements: std::deque
+    //  does not invalidate references on growth (std::vector would)
+    // the deque itself is heap-allocated lazily on the first overflow and
+    //  released when the merge completes - a default-constructed std::deque is
+    //  not free (libstdc++ eagerly allocates its map and one 512-byte node),
+    //  and since GenEventImpls are materialized in bulk by DynamicTable leaves
+    //  that cost was paid for every event slot on every node even though very
+    //  few events ever merge more than MAX_INLINE_PRECONDITIONS inputs
+    std::unique_ptr<std::deque<MergeEventPrecondition>> overflow_preconditions;
     EventWaiter::EventWaiterList free_preconditions;
   };
 
@@ -272,19 +286,27 @@ namespace Realm {
     // caller.
     Operation *get_trigger_op(gen_t gen);
 
+    // initializes the GenEventImpls in a DynamicTable leaf - every event shares the
+    //  runtime's single EventTriggerNotifier and EventCommunicator, neither of
+    //  which is owned by the events
     struct GenEventImplAllocator {
       EventTriggerNotifier *triggerer{nullptr};
+      EventCommunicator *communicator{nullptr};
 
       GenEventImplAllocator(void) = default;
 
-      GenEventImplAllocator(EventTriggerNotifier *t)
+      GenEventImplAllocator(EventTriggerNotifier *t, EventCommunicator *c)
         : triggerer(t)
+        , communicator(c)
       {}
 
+      // the leaf's element array has already default-constructed the event, so
+      //  just hand it the shared notifier and communicator and initialize it
+      //  rather than destroying and rebuilding it
       void construct(GenEventImpl *storage, ID id, unsigned owner) const
       {
-        storage->~GenEventImpl();
-        new(storage) GenEventImpl(triggerer, new EventCommunicator());
+        storage->event_triggerer = triggerer;
+        storage->event_comm = communicator;
         storage->init(id, owner);
       }
     };
@@ -295,7 +317,6 @@ namespace Realm {
     atomic<gen_t> generation = atomic<gen_t>(0);
     atomic<gen_t> gen_subscribed = atomic<gen_t>(0);
     atomic<int> num_poisoned_generations = atomic<int>(0);
-    bool has_local_triggers = false;
 
     bool is_generation_poisoned(gen_t gen) const; // helper function - linear search
 
@@ -306,7 +327,12 @@ namespace Realm {
     EventMerger merger;
 
     EventTriggerNotifier *event_triggerer{nullptr};
-    std::unique_ptr<EventCommunicator> event_comm{nullptr};
+    // not owned - the runtime holds a single stateless EventCommunicator that all
+    //  events share (it is reached through a pointer only so that tests can
+    //  substitute a mock), so an event must never heap-allocate one of its own:
+    //  GenEventImpls are materialized in bulk by DynamicTable leaves and any
+    //  per-event allocation is multiplied by millions of event slots on large runs
+    EventCommunicator *event_comm{nullptr};
 
     // everything below here protected by this mutex
     Mutex mutex;
@@ -317,18 +343,41 @@ namespace Realm {
     Operation *current_trigger_op = nullptr;
     gen_t current_trigger_op_gen = 0;
 
-    // local waiters are tracked by generation - an easily-accessed list is used
-    //  for the "current" generation, whereas a map-by-generation-id is used for
-    //  "future" generations (i.e. ones ahead of what we've heard about if we're
-    //  not the owner)
-    EventWaiter::EventWaiterList current_local_waiters;
-    std::map<gen_t, EventWaiter::EventWaiterList> future_local_waiters;
-
-    // external waiters on this node are notifies via a condition variable
+    // the flags below are grouped here so that they pack into the word above
+    //  instead of each occupying its own padded 8 bytes - every byte of a
+    //  GenEventImpl is multiplied by millions of event slots on large runs
+    // tracks whether lagging_view holds any local triggers - written under the
+    //  mutex, but also read without it as an early-out in has_triggered()
+    bool has_local_triggers = false;
+    // external waiters on this node are notified via a condition variable
     bool has_external_waiters = false;
-    // use kernel mutex for timedwait functionality
-    KernelMutex external_waiter_mutex;
-    KernelMutex::CondVar external_waiter_condvar;
+    // these resolve a race condition between the early trigger of a
+    //  poisoned merge and the last precondition
+    bool free_list_insertion_delayed = false;
+
+    // local waiters for the "current" generation (the one after 'generation') -
+    //  waiters for later generations live in the lazily-allocated lagging-view
+    //  state below
+    EventWaiter::EventWaiterList current_local_waiters;
+
+    // external waiters block on a kernel mutex/condvar pair (a kernel mutex is
+    //  needed for timedwait) - the pair is allocated by the first external wait
+    //  on the event and then kept for the life of the event: very few events are
+    //  ever waited on from outside a Realm thread, and embedding the pair cost
+    //  136 bytes and two pthread initializations for every event
+    struct ExternalWaiterSync {
+      ExternalWaiterSync(void)
+        : condvar(mutex)
+      {}
+
+      KernelMutex mutex;
+      KernelMutex::CondVar condvar;
+    };
+    // allocated (under 'mutex') before has_external_waiters is first set, so any
+    //  path that sees the flag can rely on the pair existing
+    std::unique_ptr<ExternalWaiterSync> external_waiter_sync;
+    // returns the pair, allocating it on first use - caller must hold 'mutex'
+    ExternalWaiterSync &get_external_waiter_sync(void);
 
     // remote waiters are kept in a bitmask for the current generation - this is
     //  only maintained on the owner, who never has to worry about more than one
@@ -346,15 +395,34 @@ namespace Realm {
     //  any space
     gen_t *poisoned_generations = 0;
 
-    // local triggerings - if we're not the owner, but we've triggered/poisoned events,
-    //  we need to give consistent answers for those generations, so remember what we've
-    //  done until our view of the distributed event catches up
-    // value stored in map is whether generation was poisoned
-    std::map<gen_t, bool> local_triggers;
+    // state that only a non-owner needs, and only while it is dealing with
+    //  generations beyond its current view of the event: waiters for generations
+    //  past the next one, and the outcomes of generations this node triggered
+    //  itself before the owner has confirmed them.  Owner-side events never touch
+    //  it and non-owners only need it briefly, so it is allocated on first use and
+    //  released as soon as both maps are empty again - embedding the two maps cost
+    //  96 bytes per event under libstdc++ and, under MSVC's STL, two heap
+    //  allocations per event for their sentinel nodes
+    struct LaggingViewState {
+      // local waiters for "future" generations (i.e. ones ahead of what we've
+      //  heard about from the owner), by generation
+      std::map<gen_t, EventWaiter::EventWaiterList> future_local_waiters;
+      // local triggerings - if we've triggered/poisoned generations ourselves, we
+      //  need to give consistent answers for them until our view of the
+      //  distributed event catches up - the value is whether the generation was
+      //  poisoned
+      std::map<gen_t, bool> local_triggers;
+    };
+    // protected by 'mutex' - released whenever both maps become empty
+    std::unique_ptr<LaggingViewState> lagging_view;
+    // caller must hold 'mutex' - allocates the state on first use
+    LaggingViewState &get_lagging_view(void);
+    // caller must hold 'mutex' - releases the state if both maps are empty
+    void release_lagging_view_if_empty(void);
+    // caller must hold 'mutex' - reports whether this node triggered 'gen' itself
+    //  and, if so, whether it was poisoned
+    bool find_local_trigger(gen_t gen, bool &poisoned) const;
 
-    // these resolve a race condition between the early trigger of a
-    //  poisoned merge and the last precondition
-    bool free_list_insertion_delayed = false;
     friend class EventMerger;
   };
 }; // namespace Realm

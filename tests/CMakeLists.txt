@@ -164,12 +164,25 @@ target_link_libraries(
   realm_c_unit_tests PRIVATE realm_obj GTest::gmock_main ${REALM_LIBRARIES} ${REALM_EXTRA_OBJS}
 )
 
+# Verifies that constructing a GenEventImpl performs no heap allocations.  It replaces
+# the global operator new/delete to count allocations, so it lives in its own
+# executable and is skipped under sanitizers (which install their own allocator hooks).
+if(NOT REALM_SANITIZER OR REALM_SANITIZER STREQUAL "NONE")
+  add_executable(realm_event_alloc_test "${REALM_TEST_DIR}/unit_tests/event_alloc_test.cc")
+  target_link_libraries(
+    realm_event_alloc_test PRIVATE realm_obj GTest::gmock_main ${REALM_LIBRARIES}
+                                   ${REALM_EXTRA_OBJS}
+  )
+endif()
+
 include(GoogleTest)
 if((NOT REALM_SANITIZER OR REALM_SANITIZER STREQUAL "NONE")
    AND NOT WIN32
    AND NOT CMAKE_CROSSCOMPILING
 )
   gtest_discover_tests(realm_unit_tests NO_PRETTY_TYPES NO_PRETTY_VALUES PROPERTIES LABELS "unit")
+  gtest_discover_tests(realm_event_alloc_test NO_PRETTY_TYPES NO_PRETTY_VALUES
+                       PROPERTIES LABELS "unit")
   # Discover c_unit_tests but exclude BestAffinityTest (runtime init not safe for per-test isolation)
   gtest_discover_tests(realm_c_unit_tests NO_PRETTY_TYPES NO_PRETTY_VALUES 
                        TEST_FILTER "-BestAffinityTest.*"
@@ -182,6 +195,10 @@ else()
   add_test(NAME realm_unit_tests COMMAND $<TARGET_FILE:realm_unit_tests>)
   add_test(NAME realm_c_unit_tests COMMAND $<TARGET_FILE:realm_c_unit_tests>)
   set_tests_properties(realm_unit_tests realm_c_unit_tests PROPERTIES LABELS "unit")
+  if(TARGET realm_event_alloc_test)
+    add_test(NAME realm_event_alloc_test COMMAND $<TARGET_FILE:realm_event_alloc_test>)
+    set_tests_properties(realm_event_alloc_test PROPERTIES LABELS "unit")
+  endif()
 endif()
 
 if(REALM_SANITIZER STREQUAL "ASAN")
@@ -557,8 +574,32 @@ endif()
 
 #endregion
 
+#region GDB Script Tests
+# realm-gdb.py is only embedded in librealm for Debug and RelWithDebInfo
+# builds on ELF platforms (see src/CMakeLists.txt).  The tests drive a real
+# gdb, so they need one, plus Python 3 for the test driver.  Off by default:
+# the gdb CI jobs turn them on.
+option(REALM_BUILD_GDB_TESTS "Test realm-gdb.py, if gdb is available" OFF)
+if(REALM_BUILD_GDB_TESTS
+   AND REALM_EMBED_GDB_SCRIPT
+   AND NOT CMAKE_CROSSCOMPILING
+   AND (NOT REALM_SANITIZER OR REALM_SANITIZER STREQUAL "NONE")
+)
+  find_program(REALM_GDB_EXECUTABLE gdb)
+  find_package(Python3 COMPONENTS Interpreter)
+  if(REALM_GDB_EXECUTABLE AND Python3_Interpreter_FOUND)
+    add_subdirectory(gdb)
+  else()
+    message(STATUS "gdb or Python 3 not found: not testing realm-gdb.py")
+  endif()
+endif()
+#endregion
+
 add_custom_target(
   check
   DEPENDS ${_integ_list} realm_unit_tests realm_c_unit_tests
   COMMAND ${CMAKE_CTEST_COMMAND} -j --output-on-failure
 )
+if(TARGET realm_gdb_test)
+  add_dependencies(check realm_gdb_test)
+endif()
