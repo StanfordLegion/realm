@@ -47,8 +47,7 @@ namespace Realm {
     virtual ModuleConfig *create_module_config(RuntimeImpl *runtime);
 
     // acts on the (complete) configuration before the network is attached
-    virtual void parse_command_line(RuntimeImpl *runtime,
-                                    std::vector<std::string> &cmdline);
+    virtual void finish_configure(RuntimeImpl *runtime);
 
     // "attaches" to the network, if that is meaningful - attempts to
     //  bind/register/(pick your network-specific verb) the requested memory

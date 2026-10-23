@@ -40,32 +40,6 @@ namespace Realm {
   // class UCPModuleConfig
   //
 
-  UCPModuleConfig::UCPModuleConfig(void)
-    : ModuleConfig(MODULE_NAME, cmdline_parser_for<UCPModuleConfig>())
-  {
-    config_map.insert({"bind_hostmem", &cfg_bind_hostmem});
-    config_map.insert({"pollers_max", &cfg_pollers_max});
-    config_map.insert({"num_priorities", &cfg_num_priorities});
-    config_map.insert({"priority_size_max", &cfg_priority_size_max});
-    config_map.insert({"mpool_leakcheck", &cfg_mpool_leakcheck});
-    config_map.insert({"crc_check", &cfg_crc_check});
-    config_map.insert({"hbuf_malloc", &cfg_hbuf_malloc});
-    config_map.insert({"pbuf_malloc", &cfg_pbuf_malloc});
-    config_map.insert({"use_wakeup", &cfg_use_wakeup});
-    config_map.insert({"prog_boff_max", &cfg_prog_boff_max});
-    config_map.insert({"prog_itr_max", &cfg_prog_itr_max});
-    config_map.insert({"rdesc_rel_max", &cfg_rdesc_rel_max});
-    config_map.insert({"pbuf_mp_init_count", &cfg_pbuf_mp_init_count});
-    config_map.insert({"pbuf_mp_max_count", &cfg_pbuf_mp_max_count});
-    config_map.insert({"pbuf_mp_max_size", &cfg_pbuf_mp_max_size});
-    config_map.insert({"pbuf_mp_max_chunk_size", &cfg_pbuf_mp_max_chunk_size});
-    config_map.insert({"pbuf_mp_thresh", &cfg_pbuf_mp_thresh});
-    config_map.insert({"mmp_max_obj_size", &cfg_mmp_max_obj_size});
-    config_map.insert({"fp_max", &cfg_fp_max});
-    config_map.insert({"outstanding_reqs_limit", &cfg_outstanding_reqs_limit});
-    config_map.insert({"bind_cudamem", &cfg_bind_cudamem});
-  }
-
   void UCPModuleConfig::parse_cmdline(std::vector<std::string> &cmdline)
   {
     CommandLineParser cp;
@@ -181,12 +155,42 @@ namespace Realm {
   ModuleConfig *UCPModule::create_module_config(RuntimeImpl *runtime)
   {
     assert(config == nullptr);
+    static constexpr ModuleConfig::Property properties[] = {
+        ModuleConfig::property<&UCPModuleConfig::cfg_bind_hostmem>("bind_hostmem"),
+        ModuleConfig::property<&UCPModuleConfig::cfg_pollers_max>("pollers_max"),
+        ModuleConfig::property<&UCPModuleConfig::cfg_num_priorities>("num_priorities"),
+        ModuleConfig::property<&UCPModuleConfig::cfg_priority_size_max>(
+            "priority_size_max"),
+        ModuleConfig::property<&UCPModuleConfig::cfg_mpool_leakcheck>("mpool_leakcheck"),
+        ModuleConfig::property<&UCPModuleConfig::cfg_crc_check>("crc_check"),
+        ModuleConfig::property<&UCPModuleConfig::cfg_hbuf_malloc>("hbuf_malloc"),
+        ModuleConfig::property<&UCPModuleConfig::cfg_pbuf_malloc>("pbuf_malloc"),
+        ModuleConfig::property<&UCPModuleConfig::cfg_use_wakeup>("use_wakeup"),
+        ModuleConfig::property<&UCPModuleConfig::cfg_prog_boff_max>("prog_boff_max"),
+        ModuleConfig::property<&UCPModuleConfig::cfg_prog_itr_max>("prog_itr_max"),
+        ModuleConfig::property<&UCPModuleConfig::cfg_rdesc_rel_max>("rdesc_rel_max"),
+        ModuleConfig::property<&UCPModuleConfig::cfg_pbuf_mp_init_count>(
+            "pbuf_mp_init_count"),
+        ModuleConfig::property<&UCPModuleConfig::cfg_pbuf_mp_max_count>(
+            "pbuf_mp_max_count"),
+        ModuleConfig::property<&UCPModuleConfig::cfg_pbuf_mp_max_size>(
+            "pbuf_mp_max_size"),
+        ModuleConfig::property<&UCPModuleConfig::cfg_pbuf_mp_max_chunk_size>(
+            "pbuf_mp_max_chunk_size"),
+        ModuleConfig::property<&UCPModuleConfig::cfg_pbuf_mp_thresh>("pbuf_mp_thresh"),
+        ModuleConfig::property<&UCPModuleConfig::cfg_mmp_max_obj_size>(
+            "mmp_max_obj_size"),
+        ModuleConfig::property<&UCPModuleConfig::cfg_fp_max>("fp_max"),
+        ModuleConfig::property<&UCPModuleConfig::cfg_outstanding_reqs_limit>(
+            "outstanding_reqs_limit"),
+        ModuleConfig::property<&UCPModuleConfig::cfg_bind_cudamem>("bind_cudamem"),
+    };
     config = new UCPModuleConfig;
+    ModuleConfig::bind<UCPModuleConfig>(properties);
     return config;
   }
 
-  void UCPModule::parse_command_line(RuntimeImpl *runtime,
-                                     std::vector<std::string> &cmdline)
+  void UCPModule::finish_configure(RuntimeImpl *runtime)
   {
     assert(config != nullptr);
 

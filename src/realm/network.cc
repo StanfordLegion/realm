@@ -238,6 +238,8 @@ namespace Realm {
                                          std::vector<std::string> &cmdline)
   {}
 
+  void NetworkModule::finish_configure(RuntimeImpl *runtime) {}
+
   bool NetworkModule::custom_quiescence_check(IncomingMessageManager *message_manager,
                                               Network::QuiescenceStatus &status)
   {

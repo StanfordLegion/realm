@@ -202,13 +202,18 @@ namespace Realm {
     //  return a null pointer (the default)
     virtual ModuleConfig *create_module_config(RuntimeImpl *runtime);
 
-    // called once all module configs (including this module's own) have been
-    //  configured from the command line - a module that needs to act on its
-    //  configuration before 'attach' (e.g. to initialize its internals) should
-    //  do so here, and any remaining network-specific command line options may
-    //  be parsed here as well
+    // called from Runtime::parse_command_line once all module configs
+    //  (including this module's own) have been configured from the command
+    //  line - any remaining network-specific command line options may be
+    //  parsed here, but the module's configuration must NOT be consumed yet
+    //  (an application may still modify it before finish_configure)
     virtual void parse_command_line(RuntimeImpl *runtime,
                                     std::vector<std::string> &cmdline);
+
+    // called from Runtime::finish_configure once the module configs are
+    //  final - a module that needs to act on its configuration before
+    //  'attach' (e.g. to initialize its internals) should do so here
+    virtual void finish_configure(RuntimeImpl *runtime);
 
     // "attaches" to the network, if that is meaningful - attempts to
     //  bind/register/(pick your network-specific verb) the requested memory

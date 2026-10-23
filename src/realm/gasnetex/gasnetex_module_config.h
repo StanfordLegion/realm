@@ -36,13 +36,15 @@ namespace Realm {
   public:
     static constexpr const char *const MODULE_NAME = "gasnetex";
 
-  protected:
-    GASNetEXModuleConfig(void);
+    // a default-constructed object holds Realm's default settings - it may be
+    //  copied freely and assigned to the object owned by the runtime (see the
+    //  notes on copying in module_config.h)
+    GASNetEXModuleConfig(void)
+      : ModuleConfig(MODULE_NAME)
+    {}
 
-  public:
     // parses this module's command-line options - invoked by the runtime via
-    //  ModuleConfig::configure_from_cmdline(), not for application use (and
-    //  deliberately not virtual - see the note in module_config.h)
+    //  ModuleConfig::configure_from_cmdline(), not for application use
     void parse_cmdline(std::vector<std::string> &cmdline);
 
   public:

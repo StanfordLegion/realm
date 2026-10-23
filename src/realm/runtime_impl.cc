@@ -753,68 +753,6 @@ namespace Realm {
     unsigned long long job_id = 0;
   }; // namespace Config
 
-  CoreModuleConfig::CoreModuleConfig(void)
-    : ModuleConfig(MODULE_NAME, cmdline_parser_for<CoreModuleConfig>())
-  {
-    config_map.insert({"cpu", &num_cpu_procs});
-    config_map.insert({"util", &num_util_procs});
-    config_map.insert({"io", &num_io_procs});
-    config_map.insert({"sysmem", &sysmem_size});
-    config_map.insert({"sysmem_ipc_limit", &sysmem_ipc_limit});
-    config_map.insert({"stack_size", &stack_size});
-    config_map.insert({"pin_util_procs", &pin_util_procs});
-    config_map.insert({"use_ext_sysmem", &use_ext_sysmem});
-    config_map.insert({"regmem", &reg_mem_size});
-    config_map.insert({"ib_regmem", &reg_ib_mem_size});
-    config_map.insert({"report_sparsity_leaks", &report_sparsity_leaks});
-    config_map.insert({"barrier_broadcast_radix", &barrier_broadcast_radix});
-    config_map.insert({"diskmem", &disk_mem_size});
-    config_map.insert({"dma_multi_field", &dma_multi_field});
-    config_map.insert({"concurrent_io_threads", &concurrent_io_threads});
-    config_map.insert({"cpu_bgwork_timeslice", &cpu_bgwork_timeslice});
-    config_map.insert({"util_bgwork_timeslice", &util_bgwork_timeslice});
-    config_map.insert({"dma_worker_threads", &dma_worker_threads});
-    config_map.insert({"pin_dma_threads", &pin_dma_threads});
-    config_map.insert({"dummy_reservation_ok", &dummy_reservation_ok});
-    config_map.insert({"show_reservations", &show_reservations});
-    config_map.insert({"hyperthread_sharing", &hyperthread_sharing});
-    config_map.insert({"bitset_chunk_size", &bitset_chunk_size});
-    config_map.insert({"bitset_twolevel", &bitset_twolevel});
-    config_map.insert({"active_msg_handler_threads", &active_msg_handler_threads});
-    config_map.insert({"active_msg_handler_bgwork", &active_msg_handler_bgwork});
-    config_map.insert({"replheap_size", &replheap_size});
-    config_map.insert({"path_cache_lru_size", &path_cache_lru_size});
-    config_map.insert({"event_trace_block_size", &event_trace_block_size});
-    config_map.insert({"event_trace_exp_arrv_rate", &event_trace_exp_arrv_rate});
-    config_map.insert({"lock_trace_block_size", &lock_trace_block_size});
-    config_map.insert({"lock_trace_exp_arrv_rate", &lock_trace_exp_arrv_rate});
-    config_map.insert({"event_loop_detection_limit", &event_loop_detection_limit});
-    config_map.insert({"force_kernel_threads", &force_kernel_threads});
-    config_map.insert({"use_fast_reservation_fallback", &use_fast_reservation_fallback});
-    config_map.insert({"use_machine_query_cache", &use_machine_query_cache});
-    config_map.insert({"deferred_instance_allocation", &deferred_instance_allocation});
-    config_map.insert({"profile_activemsg_handlers", &profile_activemsg_handlers});
-    config_map.insert({"max_inline_message_time", &max_inline_message_time});
-    config_map.insert({"bgwork_generic_workers", &bgwork_generic_workers});
-    config_map.insert({"bgwork_per_numa_workers", &bgwork_per_numa_workers});
-    config_map.insert({"bgwork_pin_generic", &bgwork_pin_generic});
-    config_map.insert({"bgwork_pin_numa", &bgwork_pin_numa});
-    config_map.insert({"bgwork_worker_stacksize_in_kb", &bgwork_worker_stacksize_in_kb});
-    config_map.insert({"bgwork_worker_spin_interval", &bgwork_worker_spin_interval});
-    config_map.insert({"bgwork_work_item_timeslice", &bgwork_work_item_timeslice});
-    config_map.insert({"deppart_num_workers", &deppart_num_workers});
-    config_map.insert(
-        {"deppart_disable_intersection_opt", &deppart_disable_intersection_opt});
-    config_map.insert({"deppart_worker_threads_sleep", &deppart_worker_threads_sleep});
-    config_map.insert({"deppart_allow_inline_ops", &deppart_allow_inline_ops});
-    config_map.insert({"realmprof_nodes", &realmprof_nodes});
-    config_map.insert({"realmprof_buffer_size", &realmprof_buffer_size});
-    config_map.insert({"realmprof_sample_interval", &realmprof_sample_interval});
-
-    resource_map.insert({"cpu", &res_num_cpus});
-    resource_map.insert({"sysmem", &res_sysmem_size});
-  }
-
   bool CoreModuleConfig::discover_resource(const HardwareTopology &topo)
   {
     res_num_cpus = topo.num_physical_cores();
@@ -963,7 +901,102 @@ namespace Realm {
 
   /*static*/ ModuleConfig *CoreModule::create_module_config(RuntimeImpl *runtime)
   {
+    static constexpr ModuleConfig::Property properties[] = {
+        ModuleConfig::property<&CoreModuleConfig::num_cpu_procs>("cpu"),
+        ModuleConfig::property<&CoreModuleConfig::num_util_procs>("util"),
+        ModuleConfig::property<&CoreModuleConfig::num_io_procs>("io"),
+        ModuleConfig::property<&CoreModuleConfig::sysmem_size>("sysmem"),
+        ModuleConfig::property<&CoreModuleConfig::sysmem_ipc_limit>("sysmem_ipc_limit"),
+        ModuleConfig::property<&CoreModuleConfig::stack_size>("stack_size"),
+        ModuleConfig::property<&CoreModuleConfig::pin_util_procs>("pin_util_procs"),
+        ModuleConfig::property<&CoreModuleConfig::use_ext_sysmem>("use_ext_sysmem"),
+        ModuleConfig::property<&CoreModuleConfig::reg_mem_size>("regmem"),
+        ModuleConfig::property<&CoreModuleConfig::reg_ib_mem_size>("ib_regmem"),
+        ModuleConfig::property<&CoreModuleConfig::report_sparsity_leaks>(
+            "report_sparsity_leaks"),
+        ModuleConfig::property<&CoreModuleConfig::barrier_broadcast_radix>(
+            "barrier_broadcast_radix"),
+        ModuleConfig::property<&CoreModuleConfig::disk_mem_size>("diskmem"),
+        ModuleConfig::property<&CoreModuleConfig::dma_multi_field>("dma_multi_field"),
+        ModuleConfig::property<&CoreModuleConfig::concurrent_io_threads>(
+            "concurrent_io_threads"),
+        ModuleConfig::property<&CoreModuleConfig::cpu_bgwork_timeslice>(
+            "cpu_bgwork_timeslice"),
+        ModuleConfig::property<&CoreModuleConfig::util_bgwork_timeslice>(
+            "util_bgwork_timeslice"),
+        ModuleConfig::property<&CoreModuleConfig::dma_worker_threads>(
+            "dma_worker_threads"),
+        ModuleConfig::property<&CoreModuleConfig::pin_dma_threads>("pin_dma_threads"),
+        ModuleConfig::property<&CoreModuleConfig::dummy_reservation_ok>(
+            "dummy_reservation_ok"),
+        ModuleConfig::property<&CoreModuleConfig::show_reservations>("show_reservations"),
+        ModuleConfig::property<&CoreModuleConfig::hyperthread_sharing>(
+            "hyperthread_sharing"),
+        ModuleConfig::property<&CoreModuleConfig::bitset_chunk_size>("bitset_chunk_size"),
+        ModuleConfig::property<&CoreModuleConfig::bitset_twolevel>("bitset_twolevel"),
+        ModuleConfig::property<&CoreModuleConfig::active_msg_handler_threads>(
+            "active_msg_handler_threads"),
+        ModuleConfig::property<&CoreModuleConfig::active_msg_handler_bgwork>(
+            "active_msg_handler_bgwork"),
+        ModuleConfig::property<&CoreModuleConfig::replheap_size>("replheap_size"),
+        ModuleConfig::property<&CoreModuleConfig::path_cache_lru_size>(
+            "path_cache_lru_size"),
+        ModuleConfig::property<&CoreModuleConfig::event_trace_block_size>(
+            "event_trace_block_size"),
+        ModuleConfig::property<&CoreModuleConfig::event_trace_exp_arrv_rate>(
+            "event_trace_exp_arrv_rate"),
+        ModuleConfig::property<&CoreModuleConfig::lock_trace_block_size>(
+            "lock_trace_block_size"),
+        ModuleConfig::property<&CoreModuleConfig::lock_trace_exp_arrv_rate>(
+            "lock_trace_exp_arrv_rate"),
+        ModuleConfig::property<&CoreModuleConfig::event_loop_detection_limit>(
+            "event_loop_detection_limit"),
+        ModuleConfig::property<&CoreModuleConfig::force_kernel_threads>(
+            "force_kernel_threads"),
+        ModuleConfig::property<&CoreModuleConfig::use_fast_reservation_fallback>(
+            "use_fast_reservation_fallback"),
+        ModuleConfig::property<&CoreModuleConfig::use_machine_query_cache>(
+            "use_machine_query_cache"),
+        ModuleConfig::property<&CoreModuleConfig::deferred_instance_allocation>(
+            "deferred_instance_allocation"),
+        ModuleConfig::property<&CoreModuleConfig::profile_activemsg_handlers>(
+            "profile_activemsg_handlers"),
+        ModuleConfig::property<&CoreModuleConfig::max_inline_message_time>(
+            "max_inline_message_time"),
+        ModuleConfig::property<&CoreModuleConfig::bgwork_generic_workers>(
+            "bgwork_generic_workers"),
+        ModuleConfig::property<&CoreModuleConfig::bgwork_per_numa_workers>(
+            "bgwork_per_numa_workers"),
+        ModuleConfig::property<&CoreModuleConfig::bgwork_pin_generic>(
+            "bgwork_pin_generic"),
+        ModuleConfig::property<&CoreModuleConfig::bgwork_pin_numa>("bgwork_pin_numa"),
+        ModuleConfig::property<&CoreModuleConfig::bgwork_worker_stacksize_in_kb>(
+            "bgwork_worker_stacksize_in_kb"),
+        ModuleConfig::property<&CoreModuleConfig::bgwork_worker_spin_interval>(
+            "bgwork_worker_spin_interval"),
+        ModuleConfig::property<&CoreModuleConfig::bgwork_work_item_timeslice>(
+            "bgwork_work_item_timeslice"),
+        ModuleConfig::property<&CoreModuleConfig::deppart_num_workers>(
+            "deppart_num_workers"),
+        ModuleConfig::property<&CoreModuleConfig::deppart_disable_intersection_opt>(
+            "deppart_disable_intersection_opt"),
+        ModuleConfig::property<&CoreModuleConfig::deppart_worker_threads_sleep>(
+            "deppart_worker_threads_sleep"),
+        ModuleConfig::property<&CoreModuleConfig::deppart_allow_inline_ops>(
+            "deppart_allow_inline_ops"),
+        ModuleConfig::property<&CoreModuleConfig::realmprof_nodes>("realmprof_nodes"),
+        ModuleConfig::property<&CoreModuleConfig::realmprof_buffer_size>(
+            "realmprof_buffer_size"),
+        ModuleConfig::property<&CoreModuleConfig::realmprof_sample_interval>(
+            "realmprof_sample_interval"),
+    };
+    static constexpr ModuleConfig::Property resources[] = {
+        ModuleConfig::property<CoreModuleConfig, &CoreModuleConfig::res_num_cpus>("cpu"),
+        ModuleConfig::property<CoreModuleConfig, &CoreModuleConfig::res_sysmem_size>(
+            "sysmem"),
+    };
     CoreModuleConfig *config = new CoreModuleConfig();
+    ModuleConfig::bind<CoreModuleConfig>(properties, resources);
     config->discover_resource(runtime->host_topology);
     return config;
   }
@@ -1937,8 +1970,9 @@ namespace Realm {
       module_config->configure_from_cmdline(cmdline);
     }
 
-    // give the network modules a chance to act on their (now complete)
-    //  configuration
+    // let the network modules parse any remaining network-specific options
+    //  (they must not act on their configuration yet - that happens in
+    //  finish_configure)
     for(std::vector<NetworkModule *>::const_iterator it = network_modules.begin();
         it != network_modules.end(); it++)
       (*it)->parse_command_line(this, cmdline);
@@ -1967,6 +2001,12 @@ namespace Realm {
       ModuleConfig *module_config = it->second;
       module_config->finish_configure();
     }
+
+    // give the network modules a chance to act on their (now final)
+    //  configuration
+    for(std::vector<NetworkModule *>::const_iterator it = network_modules.begin();
+        it != network_modules.end(); it++)
+      (*it)->finish_configure(this);
 
     // load the CoreModuleConfig
     CoreModuleConfig *config = get_module_config<CoreModuleConfig>();
@@ -3114,7 +3154,7 @@ namespace Realm {
       // e.g. the sparsity map impl class
       for(std::map<std::string, ModuleConfig *>::iterator it = module_configs.begin();
           it != module_configs.end(); it++) {
-        delete(it->second);
+        ModuleConfig::destroy(it->second);
         it->second = nullptr;
       }
 

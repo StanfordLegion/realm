@@ -360,26 +360,6 @@ namespace Realm {
   // class GASNetEXModuleConfig
   //
 
-  GASNetEXModuleConfig::GASNetEXModuleConfig(void)
-    : ModuleConfig(MODULE_NAME, cmdline_parser_for<GASNetEXModuleConfig>())
-  {
-    config_map.insert({"use_immediate", &cfg_use_immediate});
-    config_map.insert({"use_negotiated", &cfg_use_negotiated});
-    config_map.insert({"crit_timeout", &cfg_crit_timeout});
-    config_map.insert({"max_medium", &cfg_max_medium});
-    config_map.insert({"max_long", &cfg_max_long});
-    config_map.insert({"bind_hostmem", &cfg_bind_hostmem});
-    config_map.insert({"bind_cudamem", &cfg_bind_cudamem});
-    config_map.insert({"bind_hipmem", &cfg_bind_hipmem});
-    config_map.insert({"do_checksums", &cfg_do_checksums});
-    config_map.insert({"batch_messages", &cfg_batch_messages});
-    config_map.insert({"outbuf_count", &cfg_outbuf_count});
-    config_map.insert({"outbuf_size", &cfg_outbuf_size});
-    config_map.insert({"force_rma", &cfg_force_rma});
-    config_map.insert({"use_rma_put", &cfg_use_rma_put});
-    config_map.insert({"am_limit", &cfg_am_limit});
-  }
-
   void GASNetEXModuleConfig::parse_cmdline(std::vector<std::string> &cmdline)
   {
     CommandLineParser cp;
@@ -455,7 +435,27 @@ namespace Realm {
   ModuleConfig *GASNetEXModule::create_module_config(RuntimeImpl *runtime)
   {
     assert(config == nullptr);
+    static constexpr ModuleConfig::Property properties[] = {
+        ModuleConfig::property<&GASNetEXModuleConfig::cfg_use_immediate>("use_immediate"),
+        ModuleConfig::property<&GASNetEXModuleConfig::cfg_use_negotiated>(
+            "use_negotiated"),
+        ModuleConfig::property<&GASNetEXModuleConfig::cfg_crit_timeout>("crit_timeout"),
+        ModuleConfig::property<&GASNetEXModuleConfig::cfg_max_medium>("max_medium"),
+        ModuleConfig::property<&GASNetEXModuleConfig::cfg_max_long>("max_long"),
+        ModuleConfig::property<&GASNetEXModuleConfig::cfg_bind_hostmem>("bind_hostmem"),
+        ModuleConfig::property<&GASNetEXModuleConfig::cfg_bind_cudamem>("bind_cudamem"),
+        ModuleConfig::property<&GASNetEXModuleConfig::cfg_bind_hipmem>("bind_hipmem"),
+        ModuleConfig::property<&GASNetEXModuleConfig::cfg_do_checksums>("do_checksums"),
+        ModuleConfig::property<&GASNetEXModuleConfig::cfg_batch_messages>(
+            "batch_messages"),
+        ModuleConfig::property<&GASNetEXModuleConfig::cfg_outbuf_count>("outbuf_count"),
+        ModuleConfig::property<&GASNetEXModuleConfig::cfg_outbuf_size>("outbuf_size"),
+        ModuleConfig::property<&GASNetEXModuleConfig::cfg_force_rma>("force_rma"),
+        ModuleConfig::property<&GASNetEXModuleConfig::cfg_use_rma_put>("use_rma_put"),
+        ModuleConfig::property<&GASNetEXModuleConfig::cfg_am_limit>("am_limit"),
+    };
     config = new GASNetEXModuleConfig;
+    ModuleConfig::bind<GASNetEXModuleConfig>(properties);
 
     // in GASNet releases before 2021.8.3, bugs 4148 and 4150 made RMA puts
     // unsafe to use for ibv + CUDA_UVA memory, so disable them by default
@@ -472,8 +472,7 @@ namespace Realm {
   }
 
   // acts on the (complete) configuration before the network is attached
-  void GASNetEXModule::parse_command_line(RuntimeImpl *runtime,
-                                          std::vector<std::string> &cmdline)
+  void GASNetEXModule::finish_configure(RuntimeImpl *runtime)
   {
     assert(config != nullptr);
 

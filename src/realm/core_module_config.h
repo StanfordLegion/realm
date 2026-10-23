@@ -31,27 +31,51 @@ namespace Realm {
 
   class HardwareTopology;
 
+  // the resources the CoreModule discovers when its configuration is created
+  //  (and reports through ModuleConfig::get_resource()) - these are not
+  //  settings, so they are kept apart from them: a copy of a configuration
+  //  carries them along, but assigning one configuration to another leaves
+  //  the destination's discovered resources alone
+  struct REALM_PUBLIC_API CoreModuleResources {
+  public:
+    // true once the module has successfully discovered its resources
+    bool resources_discovered(void) const { return resource_discover_finished; }
+
+  protected:
+    CoreModuleResources(void) = default;
+    CoreModuleResources(const CoreModuleResources &) = default;
+    CoreModuleResources &operator=(const CoreModuleResources &) { return *this; }
+
+    bool resource_discover_finished = false;
+    int res_num_cpus = 0;
+    size_t res_sysmem_size = 0;
+  };
+
   // the core module provides the basic processors (cpu/util/io) and memories
   //  (system, registered, disk) used by Realm - its configuration also carries
   //  the runtime-wide settings that do not belong to any other module
   //  (background workers, dependent partitioning, the sampling profiler, ...)
-  class REALM_PUBLIC_API CoreModuleConfig : public ModuleConfig {
+  class REALM_PUBLIC_API CoreModuleConfig : public ModuleConfig,
+                                            public CoreModuleResources {
     friend class CoreModule;
     friend class RuntimeImpl;
 
   public:
     static constexpr const char *const MODULE_NAME = "core";
 
-  protected:
-    CoreModuleConfig(void);
+    // a default-constructed object holds Realm's default settings - it may be
+    //  copied freely and assigned to the object owned by the runtime (see the
+    //  notes on copying in module_config.h)
+    CoreModuleConfig(void)
+      : ModuleConfig(MODULE_NAME)
+    {}
 
-    bool discover_resource(const HardwareTopology &topo);
-
-  public:
     // parses this module's command-line options - invoked by the runtime via
-    //  ModuleConfig::configure_from_cmdline(), not for application use (and
-    //  deliberately not virtual - see the note in module_config.h)
+    //  ModuleConfig::configure_from_cmdline(), not for application use
     void parse_cmdline(std::vector<std::string> &cmdline);
+
+  protected:
+    bool discover_resource(const HardwareTopology &topo);
 
   public:
     // configurations
@@ -146,10 +170,6 @@ namespace Realm {
     size_t realmprof_sample_interval = 10000000; // 10 ms (in nanoseconds)
     // each entry is a comma-separated list of gauge name patterns to sample
     std::vector<std::string> realmprof_patterns;
-
-    // resources
-    int res_num_cpus = 0;
-    size_t res_sysmem_size = 0;
 
     // sparsity maps
     bool report_sparsity_leaks = false;

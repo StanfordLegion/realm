@@ -598,12 +598,6 @@ namespace Realm {
   // class MPIModuleConfig
   //
 
-  MPIModuleConfig::MPIModuleConfig(void)
-    : ModuleConfig(MODULE_NAME, cmdline_parser_for<MPIModuleConfig>())
-  {
-    config_map.insert({"global_mem_size", &cfg_global_mem_size});
-  }
-
   void MPIModuleConfig::parse_cmdline(std::vector<std::string> &cmdline)
   {
     CommandLineParser cp;
@@ -706,7 +700,11 @@ namespace Realm {
   ModuleConfig *MPIModule::create_module_config(RuntimeImpl *runtime)
   {
     assert(config == nullptr);
+    static constexpr ModuleConfig::Property properties[] = {
+        ModuleConfig::property<&MPIModuleConfig::cfg_global_mem_size>("global_mem_size"),
+    };
     config = new MPIModuleConfig;
+    ModuleConfig::bind<MPIModuleConfig>(properties);
     return config;
   }
 

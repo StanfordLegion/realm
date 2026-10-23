@@ -23,8 +23,8 @@
 #include "realm/realm_config.h"
 #include "realm/realm_c.h"
 
+#include <cstddef>
 #include <string>
-#include <unordered_map>
 #include <vector>
 
 namespace Realm {
@@ -41,76 +41,160 @@ namespace Realm {
   //  Runtime::get_module_config<T>() to find out (via a null return) whether a
   //  module is actually present.
   //
+  // Every subclass is default constructible and copyable.  A default
+  //  constructed object holds Realm's default settings, and copies hold the
+  //  values of the settings - assigning one configuration to another changes
+  //  the destination's settings but not the resources that were discovered
+  //  for it (see the *ModuleResources structs), so an application may prepare
+  //  a configuration by value and then assign it to the object owned by the
+  //  runtime:
+  //
+  //    CoreModuleConfig cfg;
+  //    cfg.num_cpu_procs = 4;
+  //    *runtime.get_module_config<CoreModuleConfig>() = cfg;
+  //
+  // This class holds nothing but the module's name, so a subclass whose
+  //  settings are all of trivially copyable types is itself trivially
+  //  copyable.
+  //
   // The string-based set_property()/get_property()/get_resource() interface
   //  below is retained for applications that prefer to avoid naming the
-  //  configuration types at compile time.
+  //  configuration types at compile time.  It works on any object of a
+  //  configuration class whose module is present in the current runtime.
+  //
+  // NOTE for module authors: this class, and therefore every subclass, has
+  //  no virtual functions - a class with no non-inline virtual functions has
+  //  no "key function", so the compiler emits whatever vtable and typeinfo it
+  //  needs with vague linkage in every translation unit that uses the class.
+  //  That is what lets an application name the configuration class of a
+  //  module that is not compiled into this build of Realm - including under
+  //  -fsanitize=vptr, which references the typeinfo - without an unresolved
+  //  symbol at link time.  Subclasses must not add virtual functions either.
+  //  Module-specific behavior is instead reached through a process-wide
+  //  registry of per-module function pointers and tables, keyed by module
+  //  name, that the module's factory fills in with bind<>() below.
   class REALM_PUBLIC_API ModuleConfig {
-  protected:
-    // NOTE for module authors: subclasses must NOT declare any virtual
-    //  functions (in particular they must not override
-    //  configure_from_cmdline).  A class with no non-inline virtual functions
-    //  has no "key function", so the compiler emits its vtable and typeinfo
-    //  with vague linkage in every translation unit that needs them.  That is
-    //  what lets an application name the configuration class of a module that
-    //  is not compiled into this build of Realm - including under
-    //  -fsanitize=vptr or via dynamic_cast, both of which reference the
-    //  typeinfo - without an unresolved symbol at link time.  A subclass
-    //  instead provides a non-virtual
-    //    void parse_cmdline(std::vector<std::string> &cmdline);
-    //  and registers it by passing cmdline_parser_for<Subclass>() to this
-    //  constructor.  The parser is only ever referenced from the subclass's
-    //  own constructor, i.e. from the module's own translation unit.
-    typedef void (*CmdlineParserFn)(ModuleConfig &config,
-                                    std::vector<std::string> &cmdline);
-
-    ModuleConfig(const std::string &name, CmdlineParserFn parser = nullptr);
-
-    template <typename T>
-    static CmdlineParserFn cmdline_parser_for(void)
-    {
-      return [](ModuleConfig &config, std::vector<std::string> &cmdline) {
-        static_cast<T &>(config).parse_cmdline(cmdline);
-      };
-    }
-
   public:
-    virtual ~ModuleConfig(void);
+    // the types a setting or resource may have - the string-based interface
+    //  checks the type an application asks for against the actual type of the
+    //  member (there is no RTTI involved, so the list is explicit)
+    enum PropertyType
+    {
+      PROPERTY_TYPE_UNKNOWN = 0,
+      PROPERTY_TYPE_BOOL,
+      PROPERTY_TYPE_INT,
+      PROPERTY_TYPE_UNSIGNED,
+      PROPERTY_TYPE_LONG,
+      PROPERTY_TYPE_UNSIGNED_LONG,
+      PROPERTY_TYPE_LONG_LONG,
+      PROPERTY_TYPE_UNSIGNED_LONG_LONG,
+      PROPERTY_TYPE_FLOAT,
+      PROPERTY_TYPE_DOUBLE,
+      PROPERTY_TYPE_STRING,
+      PROPERTY_TYPE_SIZE_T_VECTOR,
+      PROPERTY_TYPE_STRING_VECTOR,
+    };
+    static const char *property_type_name(PropertyType type);
 
-    // configuration objects are owned by the runtime and only ever handed out
-    //  by pointer - copying one would alias the member addresses stored in
-    //  config_map/resource_map (so the copy would silently modify the
-    //  original), so copies are not permitted
-    ModuleConfig(const ModuleConfig &) = delete;
-    ModuleConfig &operator=(const ModuleConfig &) = delete;
+    // a named setting (or discovered resource) of a configuration class - the
+    //  accessor returns the address of the corresponding data member of the
+    //  given instance, so a table of these is a property of the class, not of
+    //  any object, and can be shared by every instance
+    struct Property {
+      const char *name;
+      void *(*access)(ModuleConfig &config);
+      PropertyType type;
+    };
+
+    // builds the table entry for a data member of a configuration class, e.g.
+    //    property<&CudaModuleConfig::cfg_num_gpus>("gpu")
+    template <auto MemberPtr>
+    static constexpr Property property(const char *name);
+
+    // the same for a member that was inherited from a base class of the
+    //  configuration class (where the class can not be deduced from the member
+    //  pointer), e.g. property<CudaModuleConfig, &CudaModuleConfig::res_num_gpus>("gpu")
+    template <typename Config, auto MemberPtr>
+    static constexpr Property property(const char *name);
+
+    // the accessor used by the entries built above
+    template <typename Config, auto MemberPtr>
+    static void *member_accessor(ModuleConfig &config);
+
+    ModuleConfig(const ModuleConfig &other) = default;
+    ModuleConfig &operator=(const ModuleConfig &other) = default;
 
     template <typename T>
     RealmStatus set_property(const std::string &name, T value);
     template <typename T>
     RealmStatus get_property(const std::string &name, T &value) const;
     void finish_configure(void);
-    const std::string &get_name(void) const;
+    std::string get_name(void) const;
     template <typename T>
     RealmStatus get_resource(const std::string &name, T &value) const;
+
     // parses the module's command-line options by invoking the parser the
-    //  subclass registered (see the note above) - called by the runtime during
-    //  Runtime::init()
-    virtual void configure_from_cmdline(std::vector<std::string> &cmdline);
+    //  module registered - called by the runtime during Runtime::init()
+    void configure_from_cmdline(std::vector<std::string> &cmdline);
+
+    // destroys a configuration object created by a module's factory (the
+    //  runtime owns those objects and uses this to clean them up)
+    static void destroy(ModuleConfig *config);
+
+    // binds a configuration class to its module: this registers the module's
+    //  non-virtual command-line parser
+    //    void T::parse_cmdline(std::vector<std::string> &cmdline);
+    //  and the tables that name its settings and (if any) discovered resources
+    //  for the string-based interface - a module's factory calls this when it
+    //  creates a configuration object, so the symbols it references are only
+    //  ever referenced from the module's own translation unit (the tables
+    //  must have static storage duration)
+    template <typename T, size_t NumProperties>
+    static void bind(const Property (&property_table)[NumProperties]);
+    template <typename T, size_t NumProperties, size_t NumResources>
+    static void bind(const Property (&property_table)[NumProperties],
+                     const Property (&resource_table)[NumResources]);
+
+    typedef void (*CmdlineParserFn)(ModuleConfig &config,
+                                    std::vector<std::string> &cmdline);
+    typedef void (*DeleterFn)(ModuleConfig *config);
+    typedef bool (*ResourcesDiscoveredFn)(const ModuleConfig &config);
+
+    // everything the runtime and the string-based interface need to know
+    //  about a configuration class - one of these exists per module, not per
+    //  object
+    struct Binding {
+      const char *name = nullptr;
+      CmdlineParserFn cmdline_parser = nullptr;
+      DeleterFn deleter = nullptr;
+      const Property *properties = nullptr;
+      size_t num_properties = 0;
+      const Property *resources = nullptr;
+      size_t num_resources = 0;
+      ResourcesDiscoveredFn resources_discovered = nullptr;
+    };
 
   protected:
-    // these maps store a map between configuration name and address of configurations,
-    //  so that we can access these configurations using the name
-    std::unordered_map<std::string, void *const> config_map;
+    // constructs a default-valued configuration for the named module (the name
+    //  must have static storage duration - subclasses pass their MODULE_NAME)
+    ModuleConfig(const char *name);
 
-    // these maps store a map between resource name and address of resource,
-    //  so that we can access these resources using the name
-    std::unordered_map<std::string, void *const> resource_map;
+    template <typename T>
+    static Binding make_binding(void);
+    static void register_binding(const Binding &binding);
+    // the binding of this object's module, or null (with a complaint logged)
+    //  if the module is not present
+    const Binding *find_binding(void) const;
 
-    std::string module_name;
+    // finds the named entry of a table
+    static const Property *find(const Property *table, size_t count,
+                                const std::string &name);
+    // checks the type of a table entry against the type an application
+    //  requested, logging a complaint if they differ
+    bool check_type(const Property &prop, PropertyType requested) const;
 
-    // registered by the subclass constructor via cmdline_parser_for<>()
-    CmdlineParserFn cmdline_parser = nullptr;
-
-    bool resource_discover_finished = false;
+    // the module this configuration belongs to (its MODULE_NAME)
+    const char *module_name = nullptr;
 
     bool finish_configured = false;
   };

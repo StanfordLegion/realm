@@ -32,22 +32,47 @@ namespace Realm {
 
   namespace Hip {
 
-    class REALM_PUBLIC_API HipModuleConfig : public ModuleConfig {
+    // the resources the HipModule discovers when its configuration is created
+    //  (and reports through ModuleConfig::get_resource()) - these are not
+    //  settings, so they are kept apart from them: a copy of a configuration
+    //  carries them along, but assigning one configuration to another leaves
+    //  the destination's discovered resources alone
+    struct REALM_PUBLIC_API HipModuleResources {
+    public:
+      // true once the module has successfully discovered its resources
+      bool resources_discovered(void) const { return resource_discover_finished; }
+
+    protected:
+      HipModuleResources(void) = default;
+      HipModuleResources(const HipModuleResources &) = default;
+      HipModuleResources &operator=(const HipModuleResources &) { return *this; }
+
+      bool resource_discover_finished = false;
+      int res_num_gpus = 0;
+      size_t res_min_fbmem_size = 0;
+      std::vector<size_t> res_fbmem_sizes;
+    };
+
+    class REALM_PUBLIC_API HipModuleConfig : public ModuleConfig,
+                                             public HipModuleResources {
       friend class HipModule;
 
     public:
       static constexpr const char *const MODULE_NAME = "hip";
 
-    protected:
-      HipModuleConfig(void);
+      // a default-constructed object holds Realm's default settings - it may be
+      //  copied freely and assigned to the object owned by the runtime (see the
+      //  notes on copying in module_config.h)
+      HipModuleConfig(void)
+        : ModuleConfig(MODULE_NAME)
+      {}
 
-      bool discover_resource(void);
-
-    public:
       // parses this module's command-line options - invoked by the runtime via
-      //  ModuleConfig::configure_from_cmdline(), not for application use (and
-      //  deliberately not virtual - see the note in module_config.h)
+      //  ModuleConfig::configure_from_cmdline(), not for application use
       void parse_cmdline(std::vector<std::string> &cmdline);
+
+    protected:
+      bool discover_resource(void);
 
     public:
       // configurations
@@ -71,12 +96,6 @@ namespace Realm {
       size_t cfg_hostreg_limit = 1 << 30;
       int cfg_d2d_stream_priority = -1;
       bool cfg_use_hip_ipc = true;
-
-      // resources
-      bool resource_discovered = false;
-      int res_num_gpus = 0;
-      size_t res_min_fbmem_size = 0;
-      std::vector<size_t> res_fbmem_sizes;
     };
 
   }; // namespace Hip

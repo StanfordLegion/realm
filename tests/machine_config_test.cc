@@ -366,7 +366,9 @@ void top_level_task(const void *args, size_t arglen, const void *userdata, size_
     assert(mpi == nullptr);
 #endif
 
-    if(numa && !numa->res_numa_mems.empty()) {
+    std::vector<size_t> numa_mems;
+    if(numa && (numa->get_resource("numa_mems", numa_mems) == REALM_SUCCESS) &&
+       !numa_mems.empty()) {
       assert(numa->cfg_numa_mem_size == TestConfig::numa_mem_size);
       assert(numa->cfg_numa_nocpu_mem_size ==
              static_cast<ssize_t>(TestConfig::numa_nocpu_mem_size));
@@ -654,6 +656,16 @@ int main(int argc, char **argv)
       // test wrong config
       ret_value = core_config->set_property("set_error_core", TestConfig::sysmem_size);
       assert(ret_value == REALM_MODULE_CONFIG_ERROR_INVALID_NAME);
+      // test wrong type - "cpu" is an int, so neither a size_t write nor a
+      //  bool read may touch it
+      ret_value = core_config->set_property<size_t>("cpu", 1);
+      assert(ret_value == REALM_MODULE_CONFIG_ERROR_INVALID_TYPE);
+      bool wrong_type = true;
+      ret_value = core_config->get_property("cpu", wrong_type);
+      assert(ret_value == REALM_MODULE_CONFIG_ERROR_INVALID_TYPE);
+      int cpus_after = 0;
+      ASSERT_REALM(core_config->get_property("cpu", cpus_after));
+      assert(cpus_after == TestConfig::num_cpu_procs);
     }
 
     // numa module
@@ -771,20 +783,71 @@ int main(int argc, char **argv)
     //  here, their pointers are simply null
     CoreModuleConfig *core = rt.get_module_config<CoreModuleConfig>();
     assert(core != nullptr);
-    log_app.print("Discover number of CPU cores %d, sysmem %zu", core->res_num_cpus,
-                  core->res_sysmem_size);
-    core->num_cpu_procs = TestConfig::num_cpu_procs;
-    core->num_util_procs = TestConfig::num_util_procs;
-    core->num_io_procs = TestConfig::num_io_procs;
-    core->sysmem_size = TestConfig::sysmem_size;
-    core->stack_size = TestConfig::stack_size;
-    core->pin_util_procs = TestConfig::pin_util_procs;
-    core->use_ext_sysmem = TestConfig::use_ext_sysmem;
-    core->reg_mem_size = TestConfig::regmem_size;
+    {
+      int ncores = 0;
+      size_t sysmem = 0;
+      ASSERT_REALM(core->get_resource("cpu", ncores));
+      ASSERT_REALM(core->get_resource("sysmem", sysmem));
+      log_app.print("Discover number of CPU cores %d, sysmem %zu", ncores, sysmem);
+
+      // a configuration can be prepared by value (starting from Realm's
+      //  defaults, or as a copy of the runtime's object) and then assigned to
+      //  the runtime's object - that copies the settings, but leaves the
+      //  discovered resources (which are not settings) alone
+      CoreModuleConfig cfg;
+      assert(cfg.num_cpu_procs == 1); // Realm's default
+      cfg.num_cpu_procs = TestConfig::num_cpu_procs;
+      cfg.num_util_procs = TestConfig::num_util_procs;
+      cfg.num_io_procs = TestConfig::num_io_procs;
+      cfg.sysmem_size = TestConfig::sysmem_size;
+      cfg.stack_size = TestConfig::stack_size;
+      cfg.pin_util_procs = TestConfig::pin_util_procs;
+      cfg.use_ext_sysmem = TestConfig::use_ext_sysmem;
+      cfg.reg_mem_size = TestConfig::regmem_size;
+      *core = cfg;
+      assert(core->num_cpu_procs == TestConfig::num_cpu_procs);
+      assert(core->get_name() == CoreModuleConfig::MODULE_NAME);
+      int ncores_after = 0;
+      size_t sysmem_after = 0;
+      ASSERT_REALM(core->get_resource("cpu", ncores_after));
+      ASSERT_REALM(core->get_resource("sysmem", sysmem_after));
+      assert((ncores_after == ncores) && (sysmem_after == sysmem));
+
+      // a copy of the runtime's object agrees with it, including through the
+      //  string interface, and modifying the copy does not touch the original
+      CoreModuleConfig copy(*core);
+      int copied_cpus = 0;
+      ASSERT_REALM(copy.get_property("cpu", copied_cpus));
+      assert(copied_cpus == TestConfig::num_cpu_procs);
+      ASSERT_REALM(copy.get_resource("cpu", ncores_after));
+      assert(ncores_after == ncores);
+      copy.num_cpu_procs = TestConfig::num_cpu_procs + 1;
+      assert(core->num_cpu_procs == TestConfig::num_cpu_procs);
+
+      // the string interface works on any object of a present module's
+      //  configuration class, not just the runtime's own
+      CoreModuleConfig fresh;
+      ASSERT_REALM(fresh.set_property<int>("cpu", 7));
+      assert(fresh.num_cpu_procs == 7);
+      // ... but a fresh object has not discovered any resources
+      assert(fresh.get_resource("cpu", ncores_after) ==
+             REALM_MODULE_CONFIG_ERROR_NO_RESOURCE);
+      // the configuration class of a module that is not present can be
+      //  constructed and copied, but has nothing to look names up in
+      assert(sizeof(MPIModuleConfig) > 0);
+#ifndef REALM_USE_MPI
+      MPIModuleConfig absent;
+      size_t gsize = 0;
+      assert(absent.get_property("global_mem_size", gsize) ==
+             REALM_MODULE_CONFIG_ERROR_INVALID_NAME);
+#endif
+    }
 
     Numa::NumaModuleConfig *numa = rt.get_module_config<Numa::NumaModuleConfig>();
-    if(numa && !numa->res_numa_mems.empty()) {
-      log_app.info() << "numa mems:" << PrettyVector<size_t>(numa->res_numa_mems);
+    std::vector<size_t> numa_mems;
+    if(numa && (numa->get_resource("numa_mems", numa_mems) == REALM_SUCCESS) &&
+       !numa_mems.empty()) {
+      log_app.info() << "numa mems:" << PrettyVector<size_t>(numa_mems);
       numa->cfg_numa_mem_size = TestConfig::numa_mem_size;
       numa->cfg_numa_nocpu_mem_size = TestConfig::numa_nocpu_mem_size;
       numa->cfg_num_numa_cpus = TestConfig::num_numa_cpus;
@@ -795,8 +858,11 @@ int main(int argc, char **argv)
 
     Cuda::CudaModuleConfig *cuda = rt.get_module_config<Cuda::CudaModuleConfig>();
     if(cuda) {
-      log_app.print("number of cuda GPUs %d, fbmem size %zu", cuda->res_num_gpus,
-                    cuda->res_min_fbmem_size);
+      int ngpus = 0;
+      size_t fbmem = 0;
+      ASSERT_REALM(cuda->get_resource("gpu", ngpus));
+      ASSERT_REALM(cuda->get_resource("fbmem", fbmem));
+      log_app.print("number of cuda GPUs %d, fbmem size %zu", ngpus, fbmem);
       cuda->cfg_num_gpus = TestConfig::num_gpus;
       cuda->cfg_zc_mem_size = TestConfig::zc_mem_size;
       cuda->cfg_fb_mem_size = TestConfig::fb_mem_size;
@@ -810,8 +876,11 @@ int main(int argc, char **argv)
     }
     Hip::HipModuleConfig *hip = rt.get_module_config<Hip::HipModuleConfig>();
     if(hip) {
-      log_app.print("number of hip GPUs %d, fbmem size %zu", hip->res_num_gpus,
-                    hip->res_min_fbmem_size);
+      int ngpus = 0;
+      size_t fbmem = 0;
+      ASSERT_REALM(hip->get_resource("gpu", ngpus));
+      ASSERT_REALM(hip->get_resource("fbmem", fbmem));
+      log_app.print("number of hip GPUs %d, fbmem size %zu", ngpus, fbmem);
       hip->cfg_num_gpus = TestConfig::num_gpus;
       hip->cfg_zc_mem_size = TestConfig::zc_mem_size;
       hip->cfg_fb_mem_size = TestConfig::fb_mem_size;

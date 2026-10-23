@@ -188,14 +188,6 @@ namespace Realm {
     //
     // class OpenMPModuleConfig
 
-    HDF5ModuleConfig::HDF5ModuleConfig(void)
-      : ModuleConfig(MODULE_NAME, cmdline_parser_for<HDF5ModuleConfig>())
-    {
-      config_map.insert({"showerrors", &cfg_showerrors});
-      config_map.insert({"max_open_files", &cfg_max_open_files});
-      config_map.insert({"force_read_write", &cfg_force_read_write});
-    }
-
     void HDF5ModuleConfig::parse_cmdline(std::vector<std::string> &cmdline)
     {
       // first order of business - read command line parameters
@@ -234,7 +226,14 @@ namespace Realm {
 
     /*static*/ ModuleConfig *HDF5Module::create_module_config(RuntimeImpl *runtime)
     {
+      static constexpr ModuleConfig::Property properties[] = {
+          ModuleConfig::property<&HDF5ModuleConfig::cfg_showerrors>("showerrors"),
+          ModuleConfig::property<&HDF5ModuleConfig::cfg_max_open_files>("max_open_files"),
+          ModuleConfig::property<&HDF5ModuleConfig::cfg_force_read_write>(
+              "force_read_write"),
+      };
       HDF5ModuleConfig *config = new HDF5ModuleConfig();
+      ModuleConfig::bind<HDF5ModuleConfig>(properties);
       return config;
     }
 
@@ -244,8 +243,7 @@ namespace Realm {
       //  disabled
       HDF5Module *m = new HDF5Module;
 
-      HDF5ModuleConfig *config = checked_cast<HDF5ModuleConfig *>(
-          runtime->get_module_config(HDF5ModuleConfig::MODULE_NAME));
+      HDF5ModuleConfig *config = runtime->get_module_config<HDF5ModuleConfig>();
       assert(config != nullptr);
       assert(config->finish_configured);
       assert(m->name == config->get_name());
