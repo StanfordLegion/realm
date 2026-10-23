@@ -401,6 +401,7 @@ var hierarchy =
         [ "Realm::ExternalHipPinnedHostResource", "classRealm_1_1ExternalHipPinnedHostResource.html", null ]
       ] ]
     ] ],
+    [ "Realm::GenEventImpl::ExternalWaiterSync", "structRealm_1_1GenEventImpl_1_1ExternalWaiterSync.html", null ],
     [ "std::false_type", null, [
       [ "Realm::is_wrapped_with_frag_info< T >", "structRealm_1_1is__wrapped__with__frag__info.html", null ]
     ] ],
@@ -606,6 +607,7 @@ var hierarchy =
     [ "is_copy_serializable", "structis__copy__serializable.html", null ],
     [ "Realm::Cuda::KernelVariantDesc", "structRealm_1_1Cuda_1_1KernelVariantDesc.html", null ],
     [ "Realm::Runtime::KeyValueStoreVtable", "structRealm_1_1Runtime_1_1KeyValueStoreVtable.html", null ],
+    [ "Realm::GenEventImpl::LaggingViewState", "structRealm_1_1GenEventImpl_1_1LaggingViewState.html", null ],
     [ "Realm::LinearizedIndexSpaceIntfc", "classRealm_1_1LinearizedIndexSpaceIntfc.html", [
       [ "Realm::LinearizedIndexSpace< N, T >", "classRealm_1_1LinearizedIndexSpace.html", [
         [ "Realm::AffineLinearizedIndexSpace< N, T >", "classRealm_1_1AffineLinearizedIndexSpace.html", null ]

@@ -25,5 +25,6 @@ var searchData=
   ['externalhipmemoryresource_22',['ExternalHipMemoryResource',['../classRealm_1_1ExternalHipMemoryResource.html',1,'Realm']]],
   ['externalhippinnedhostresource_23',['ExternalHipPinnedHostResource',['../classRealm_1_1ExternalHipPinnedHostResource.html',1,'Realm']]],
   ['externalinstanceresource_24',['ExternalInstanceResource',['../classRealm_1_1ExternalInstanceResource.html',1,'Realm']]],
-  ['externalmemoryresource_25',['ExternalMemoryResource',['../classRealm_1_1ExternalMemoryResource.html',1,'Realm']]]
+  ['externalmemoryresource_25',['ExternalMemoryResource',['../classRealm_1_1ExternalMemoryResource.html',1,'Realm']]],
+  ['externalwaitersync_26',['ExternalWaiterSync',['../structRealm_1_1GenEventImpl_1_1ExternalWaiterSync.html',1,'Realm::GenEventImpl']]]
 ];

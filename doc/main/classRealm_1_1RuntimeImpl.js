@@ -68,6 +68,7 @@ var classRealm_1_1RuntimeImpl =
     [ "core_reservations", "classRealm_1_1RuntimeImpl.html#abb0792038ca8aead5585f5cfc8cb1d15", null ],
     [ "custom_serdez_table", "classRealm_1_1RuntimeImpl.html#a219069db7bdc1873d87db40c140ba68d", null ],
     [ "deferred_shutdown", "classRealm_1_1RuntimeImpl.html#a431b4c4fce5e659317bf245b6f1deb53", null ],
+    [ "event_communicator", "classRealm_1_1RuntimeImpl.html#af8a7840fa7dc999c6919176fe5716f58", null ],
     [ "event_triggerer", "classRealm_1_1RuntimeImpl.html#a70a6b0674f6a63e4d4f5384a6e836f9a", null ],
     [ "host_topology", "classRealm_1_1RuntimeImpl.html#a8feb8de94dba6f1df33fb2bd4ae87881", null ],
     [ "key_value_store_vtable", "classRealm_1_1RuntimeImpl.html#a3d3641426e9fcc6291d9cef99cb26466", null ],

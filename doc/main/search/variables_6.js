@@ -110,5 +110,5 @@ var searchData=
   ['function_5fname_107',['function_name',['../classRealm_1_1PythonSourceImplementation.html#a663c5d399f4db1810ce6b72622c170f7',1,'Realm::PythonSourceImplementation']]],
   ['functions_108',['functions',['../classRealm_1_1Cuda_1_1GlobalRegistrations.html#adb8f5bba5fbac5a18d59d64b71d2f64f',1,'Realm::Cuda::GlobalRegistrations']]],
   ['future_5fallocator_109',['future_allocator',['../classRealm_1_1LocalManagedMemory.html#adfdabcd7e82d8846996abaf4316d7d16',1,'Realm::LocalManagedMemory']]],
-  ['future_5flocal_5fwaiters_110',['future_local_waiters',['../classRealm_1_1GenEventImpl.html#ac7d1cd82c23a00090f7479eae98d82da',1,'Realm::GenEventImpl']]]
+  ['future_5flocal_5fwaiters_110',['future_local_waiters',['../structRealm_1_1GenEventImpl_1_1LaggingViewState.html#a779b33b8de749d98179f39cc72d92c56',1,'Realm::GenEventImpl::LaggingViewState']]]
 ];

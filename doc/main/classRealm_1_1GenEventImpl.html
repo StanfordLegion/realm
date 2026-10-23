@@ -44,7 +44,7 @@
    <!-- BEGIN version select -->
     <br />
     <div class="dropdown">
-     <button class="dropbtn">Version 26.9.1+c73867bc</button>
+     <button class="dropbtn">Version 26.9.1+871033ae</button>
      <div class="dropdown-content"></div>
     </div>
     <script type="text/javascript" src="../selectversion.js"></script>
@@ -152,12 +152,16 @@ Inheritance diagram for Realm::GenEventImpl:</div>
 <div class="dynheader">
 Collaboration diagram for Realm::GenEventImpl:</div>
 <div class="dyncontent">
-<div class="center"><iframe scrolling="no" frameborder="0" src="classRealm_1_1GenEventImpl__coll__graph.svg" width="3175" height="1283"><p><b>This browser is not able to show SVG: try Firefox, Chrome, Safari, or Opera instead.</b></p></iframe></div>
+<div class="center"><iframe scrolling="no" frameborder="0" src="classRealm_1_1GenEventImpl__coll__graph.svg" width="3174" height="1152"><p><b>This browser is not able to show SVG: try Firefox, Chrome, Safari, or Opera instead.</b></p></iframe></div>
 <center><span class="legend">[<a target="top" href="graph_legend.html">legend</a>]</span></center></div>
 <table class="memberdecls">
 <tr class="heading"><td colspan="2"><h2 class="groupheader"><a id="nested-classes" name="nested-classes"></a>
 Classes</h2></td></tr>
+<tr class="memitem:"><td class="memItemLeft" align="right" valign="top">struct &#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="structRealm_1_1GenEventImpl_1_1ExternalWaiterSync.html">ExternalWaiterSync</a></td></tr>
+<tr class="separator:"><td class="memSeparator" colspan="2">&#160;</td></tr>
 <tr class="memitem:"><td class="memItemLeft" align="right" valign="top">struct &#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="structRealm_1_1GenEventImpl_1_1GenEventImplAllocator.html">GenEventImplAllocator</a></td></tr>
+<tr class="separator:"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:"><td class="memItemLeft" align="right" valign="top">struct &#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="structRealm_1_1GenEventImpl_1_1LaggingViewState.html">LaggingViewState</a></td></tr>
 <tr class="separator:"><td class="memSeparator" colspan="2">&#160;</td></tr>
 </table><table class="memberdecls">
 <tr class="heading"><td colspan="2"><h2 class="groupheader"><a id="pub-methods" name="pub-methods"></a>
@@ -196,6 +200,14 @@ Public Member Functions</h2></td></tr>
 <tr class="separator:a4c2b9469422c7a67be83a5b8a746dcb4"><td class="memSeparator" colspan="2">&#160;</td></tr>
 <tr class="memitem:a0a52ec1841f2cf55f9785502cbbd1ad8" id="r_a0a52ec1841f2cf55f9785502cbbd1ad8"><td class="memItemLeft" align="right" valign="top">bool&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="classRealm_1_1GenEventImpl.html#a0a52ec1841f2cf55f9785502cbbd1ad8">is_generation_poisoned</a> (<a class="el" href="classRealm_1_1EventImpl.html#a4808c540801db9b44bbfd0633a212264">gen_t</a> gen) const</td></tr>
 <tr class="separator:a0a52ec1841f2cf55f9785502cbbd1ad8"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:af29a15966ad5b89f8b702afac9ee4fb7" id="r_af29a15966ad5b89f8b702afac9ee4fb7"><td class="memItemLeft" align="right" valign="top"><a class="el" href="structRealm_1_1GenEventImpl_1_1ExternalWaiterSync.html">ExternalWaiterSync</a> &amp;&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="classRealm_1_1GenEventImpl.html#af29a15966ad5b89f8b702afac9ee4fb7">get_external_waiter_sync</a> (void)</td></tr>
+<tr class="separator:af29a15966ad5b89f8b702afac9ee4fb7"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:aa6d099b9c67fc1a83dd5abc7fbde23ab" id="r_aa6d099b9c67fc1a83dd5abc7fbde23ab"><td class="memItemLeft" align="right" valign="top"><a class="el" href="structRealm_1_1GenEventImpl_1_1LaggingViewState.html">LaggingViewState</a> &amp;&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="classRealm_1_1GenEventImpl.html#aa6d099b9c67fc1a83dd5abc7fbde23ab">get_lagging_view</a> (void)</td></tr>
+<tr class="separator:aa6d099b9c67fc1a83dd5abc7fbde23ab"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:ae4f197e5e8e13701363fdf313c927d0d" id="r_ae4f197e5e8e13701363fdf313c927d0d"><td class="memItemLeft" align="right" valign="top">void&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="classRealm_1_1GenEventImpl.html#ae4f197e5e8e13701363fdf313c927d0d">release_lagging_view_if_empty</a> (void)</td></tr>
+<tr class="separator:ae4f197e5e8e13701363fdf313c927d0d"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:ad75ed9bdfd690bd850c50b740143d78f" id="r_ad75ed9bdfd690bd850c50b740143d78f"><td class="memItemLeft" align="right" valign="top">bool&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="classRealm_1_1GenEventImpl.html#ad75ed9bdfd690bd850c50b740143d78f">find_local_trigger</a> (<a class="el" href="classRealm_1_1EventImpl.html#a4808c540801db9b44bbfd0633a212264">gen_t</a> gen, bool &amp;poisoned) const</td></tr>
+<tr class="separator:ad75ed9bdfd690bd850c50b740143d78f"><td class="memSeparator" colspan="2">&#160;</td></tr>
 <tr class="inherit_header pub_methods_classRealm_1_1EventImpl"><td colspan="2" onclick="javascript:toggleInherit('pub_methods_classRealm_1_1EventImpl')"><img src="closed.png" alt="-"/>&#160;Public Member Functions inherited from <a class="el" href="classRealm_1_1EventImpl.html">Realm::EventImpl</a></td></tr>
 <tr class="memitem:ac065f96612076bb9e9a444272d08b27a inherit pub_methods_classRealm_1_1EventImpl" id="r_ac065f96612076bb9e9a444272d08b27a"><td class="memItemLeft" align="right" valign="top">&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="classRealm_1_1EventImpl.html#ac065f96612076bb9e9a444272d08b27a">EventImpl</a> (void)</td></tr>
 <tr class="separator:ac065f96612076bb9e9a444272d08b27a inherit pub_methods_classRealm_1_1EventImpl"><td class="memSeparator" colspan="2">&#160;</td></tr>
@@ -236,40 +248,36 @@ Public Attributes</h2></td></tr>
 <tr class="separator:a22b3743025413df55dbd54de66e5bfcd"><td class="memSeparator" colspan="2">&#160;</td></tr>
 <tr class="memitem:aaff8fc2a0cb2465c4aa31ec6d0016cd7" id="r_aaff8fc2a0cb2465c4aa31ec6d0016cd7"><td class="memItemLeft" align="right" valign="top"><a class="el" href="classRealm_1_1atomic.html">atomic</a>&lt; int &gt;&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="classRealm_1_1GenEventImpl.html#aaff8fc2a0cb2465c4aa31ec6d0016cd7">num_poisoned_generations</a> = <a class="el" href="classRealm_1_1atomic.html">atomic</a>&lt;int&gt;(0)</td></tr>
 <tr class="separator:aaff8fc2a0cb2465c4aa31ec6d0016cd7"><td class="memSeparator" colspan="2">&#160;</td></tr>
-<tr class="memitem:abe91cf07c24b373c683c9b5772459703" id="r_abe91cf07c24b373c683c9b5772459703"><td class="memItemLeft" align="right" valign="top">bool&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="classRealm_1_1GenEventImpl.html#abe91cf07c24b373c683c9b5772459703">has_local_triggers</a> = false</td></tr>
-<tr class="separator:abe91cf07c24b373c683c9b5772459703"><td class="memSeparator" colspan="2">&#160;</td></tr>
 <tr class="memitem:ada2ca48cfc819842eab6cb31432942d3" id="r_ada2ca48cfc819842eab6cb31432942d3"><td class="memItemLeft" align="right" valign="top"><a class="el" href="classRealm_1_1GenEventImpl.html">GenEventImpl</a> *&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="classRealm_1_1GenEventImpl.html#ada2ca48cfc819842eab6cb31432942d3">next_free</a> {nullptr}</td></tr>
 <tr class="separator:ada2ca48cfc819842eab6cb31432942d3"><td class="memSeparator" colspan="2">&#160;</td></tr>
 <tr class="memitem:a9be819d53390544bf459f61061887ba7" id="r_a9be819d53390544bf459f61061887ba7"><td class="memItemLeft" align="right" valign="top"><a class="el" href="classRealm_1_1EventMerger.html">EventMerger</a>&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="classRealm_1_1GenEventImpl.html#a9be819d53390544bf459f61061887ba7">merger</a></td></tr>
 <tr class="separator:a9be819d53390544bf459f61061887ba7"><td class="memSeparator" colspan="2">&#160;</td></tr>
 <tr class="memitem:a767ecf6b0197ca176e7fb2c669fc05cc" id="r_a767ecf6b0197ca176e7fb2c669fc05cc"><td class="memItemLeft" align="right" valign="top"><a class="el" href="classRealm_1_1EventTriggerNotifier.html">EventTriggerNotifier</a> *&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="classRealm_1_1GenEventImpl.html#a767ecf6b0197ca176e7fb2c669fc05cc">event_triggerer</a> {nullptr}</td></tr>
 <tr class="separator:a767ecf6b0197ca176e7fb2c669fc05cc"><td class="memSeparator" colspan="2">&#160;</td></tr>
-<tr class="memitem:a499dc52a6582961abc510146f62c4b5e" id="r_a499dc52a6582961abc510146f62c4b5e"><td class="memItemLeft" align="right" valign="top">std::unique_ptr&lt; <a class="el" href="classRealm_1_1EventCommunicator.html">EventCommunicator</a> &gt;&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="classRealm_1_1GenEventImpl.html#a499dc52a6582961abc510146f62c4b5e">event_comm</a> {nullptr}</td></tr>
-<tr class="separator:a499dc52a6582961abc510146f62c4b5e"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:a763efb94ccda2c4dfa32fd46c0934fb2" id="r_a763efb94ccda2c4dfa32fd46c0934fb2"><td class="memItemLeft" align="right" valign="top"><a class="el" href="classRealm_1_1EventCommunicator.html">EventCommunicator</a> *&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="classRealm_1_1GenEventImpl.html#a763efb94ccda2c4dfa32fd46c0934fb2">event_comm</a> {nullptr}</td></tr>
+<tr class="separator:a763efb94ccda2c4dfa32fd46c0934fb2"><td class="memSeparator" colspan="2">&#160;</td></tr>
 <tr class="memitem:ad5e1bfc9c149d0383cba60a45010aa4d" id="r_ad5e1bfc9c149d0383cba60a45010aa4d"><td class="memItemLeft" align="right" valign="top"><a class="el" href="namespaceRealm.html#a4713e57139284efc3da66bd4bbc20ebe">Mutex</a>&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="classRealm_1_1GenEventImpl.html#ad5e1bfc9c149d0383cba60a45010aa4d">mutex</a></td></tr>
 <tr class="separator:ad5e1bfc9c149d0383cba60a45010aa4d"><td class="memSeparator" colspan="2">&#160;</td></tr>
 <tr class="memitem:a021e0f1262b32b68cbd1f011a38df6f5" id="r_a021e0f1262b32b68cbd1f011a38df6f5"><td class="memItemLeft" align="right" valign="top"><a class="el" href="classRealm_1_1Operation.html">Operation</a> *&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="classRealm_1_1GenEventImpl.html#a021e0f1262b32b68cbd1f011a38df6f5">current_trigger_op</a> = nullptr</td></tr>
 <tr class="separator:a021e0f1262b32b68cbd1f011a38df6f5"><td class="memSeparator" colspan="2">&#160;</td></tr>
 <tr class="memitem:a0a24ec69becc8a7e3a632fec42c36754" id="r_a0a24ec69becc8a7e3a632fec42c36754"><td class="memItemLeft" align="right" valign="top"><a class="el" href="classRealm_1_1EventImpl.html#a4808c540801db9b44bbfd0633a212264">gen_t</a>&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="classRealm_1_1GenEventImpl.html#a0a24ec69becc8a7e3a632fec42c36754">current_trigger_op_gen</a> = 0</td></tr>
 <tr class="separator:a0a24ec69becc8a7e3a632fec42c36754"><td class="memSeparator" colspan="2">&#160;</td></tr>
-<tr class="memitem:a8354b1cb15a46cc3149e0c8aef95ae4b" id="r_a8354b1cb15a46cc3149e0c8aef95ae4b"><td class="memItemLeft" align="right" valign="top"><a class="el" href="classRealm_1_1EventWaiter.html#a96f9069fda005991627037a99ef995c4">EventWaiter::EventWaiterList</a>&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="classRealm_1_1GenEventImpl.html#a8354b1cb15a46cc3149e0c8aef95ae4b">current_local_waiters</a></td></tr>
-<tr class="separator:a8354b1cb15a46cc3149e0c8aef95ae4b"><td class="memSeparator" colspan="2">&#160;</td></tr>
-<tr class="memitem:ac7d1cd82c23a00090f7479eae98d82da" id="r_ac7d1cd82c23a00090f7479eae98d82da"><td class="memItemLeft" align="right" valign="top">std::map&lt; <a class="el" href="classRealm_1_1EventImpl.html#a4808c540801db9b44bbfd0633a212264">gen_t</a>, <a class="el" href="classRealm_1_1EventWaiter.html#a96f9069fda005991627037a99ef995c4">EventWaiter::EventWaiterList</a> &gt;&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="classRealm_1_1GenEventImpl.html#ac7d1cd82c23a00090f7479eae98d82da">future_local_waiters</a></td></tr>
-<tr class="separator:ac7d1cd82c23a00090f7479eae98d82da"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:abe91cf07c24b373c683c9b5772459703" id="r_abe91cf07c24b373c683c9b5772459703"><td class="memItemLeft" align="right" valign="top">bool&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="classRealm_1_1GenEventImpl.html#abe91cf07c24b373c683c9b5772459703">has_local_triggers</a> = false</td></tr>
+<tr class="separator:abe91cf07c24b373c683c9b5772459703"><td class="memSeparator" colspan="2">&#160;</td></tr>
 <tr class="memitem:a85d94189a9cc8f59c4500d980670f2f0" id="r_a85d94189a9cc8f59c4500d980670f2f0"><td class="memItemLeft" align="right" valign="top">bool&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="classRealm_1_1GenEventImpl.html#a85d94189a9cc8f59c4500d980670f2f0">has_external_waiters</a> = false</td></tr>
 <tr class="separator:a85d94189a9cc8f59c4500d980670f2f0"><td class="memSeparator" colspan="2">&#160;</td></tr>
-<tr class="memitem:a46bfe2fec7ab8c9323d42ac7c60e71cb" id="r_a46bfe2fec7ab8c9323d42ac7c60e71cb"><td class="memItemLeft" align="right" valign="top"><a class="el" href="classRealm_1_1KernelMutex.html">KernelMutex</a>&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="classRealm_1_1GenEventImpl.html#a46bfe2fec7ab8c9323d42ac7c60e71cb">external_waiter_mutex</a></td></tr>
-<tr class="separator:a46bfe2fec7ab8c9323d42ac7c60e71cb"><td class="memSeparator" colspan="2">&#160;</td></tr>
-<tr class="memitem:a5c292b41d772284af0043c8316564d1e" id="r_a5c292b41d772284af0043c8316564d1e"><td class="memItemLeft" align="right" valign="top"><a class="el" href="classRealm_1_1KernelMutex.html#a4ff333e0cb953c240ef67c0e28085f56">KernelMutex::CondVar</a>&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="classRealm_1_1GenEventImpl.html#a5c292b41d772284af0043c8316564d1e">external_waiter_condvar</a></td></tr>
-<tr class="separator:a5c292b41d772284af0043c8316564d1e"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:a631bc150102ca805381ab5db0a064a40" id="r_a631bc150102ca805381ab5db0a064a40"><td class="memItemLeft" align="right" valign="top">bool&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="classRealm_1_1GenEventImpl.html#a631bc150102ca805381ab5db0a064a40">free_list_insertion_delayed</a> = false</td></tr>
+<tr class="separator:a631bc150102ca805381ab5db0a064a40"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:a8354b1cb15a46cc3149e0c8aef95ae4b" id="r_a8354b1cb15a46cc3149e0c8aef95ae4b"><td class="memItemLeft" align="right" valign="top"><a class="el" href="classRealm_1_1EventWaiter.html#a96f9069fda005991627037a99ef995c4">EventWaiter::EventWaiterList</a>&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="classRealm_1_1GenEventImpl.html#a8354b1cb15a46cc3149e0c8aef95ae4b">current_local_waiters</a></td></tr>
+<tr class="separator:a8354b1cb15a46cc3149e0c8aef95ae4b"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:ae3384b5dacb403674540b450ff8433d5" id="r_ae3384b5dacb403674540b450ff8433d5"><td class="memItemLeft" align="right" valign="top">std::unique_ptr&lt; <a class="el" href="structRealm_1_1GenEventImpl_1_1ExternalWaiterSync.html">ExternalWaiterSync</a> &gt;&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="classRealm_1_1GenEventImpl.html#ae3384b5dacb403674540b450ff8433d5">external_waiter_sync</a></td></tr>
+<tr class="separator:ae3384b5dacb403674540b450ff8433d5"><td class="memSeparator" colspan="2">&#160;</td></tr>
 <tr class="memitem:a3605a9fea45fda4398a0b3f1460b1dc4" id="r_a3605a9fea45fda4398a0b3f1460b1dc4"><td class="memItemLeft" align="right" valign="top"><a class="el" href="classRealm_1_1NodeSet.html">NodeSet</a>&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="classRealm_1_1GenEventImpl.html#a3605a9fea45fda4398a0b3f1460b1dc4">remote_waiters</a></td></tr>
 <tr class="separator:a3605a9fea45fda4398a0b3f1460b1dc4"><td class="memSeparator" colspan="2">&#160;</td></tr>
 <tr class="memitem:a31025997abc30452c524a2956c21f321" id="r_a31025997abc30452c524a2956c21f321"><td class="memItemLeft" align="right" valign="top"><a class="el" href="classRealm_1_1EventImpl.html#a4808c540801db9b44bbfd0633a212264">gen_t</a> *&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="classRealm_1_1GenEventImpl.html#a31025997abc30452c524a2956c21f321">poisoned_generations</a> = 0</td></tr>
 <tr class="separator:a31025997abc30452c524a2956c21f321"><td class="memSeparator" colspan="2">&#160;</td></tr>
-<tr class="memitem:a0eb94e830d82f8cf6c4e0ca92190da14" id="r_a0eb94e830d82f8cf6c4e0ca92190da14"><td class="memItemLeft" align="right" valign="top">std::map&lt; <a class="el" href="classRealm_1_1EventImpl.html#a4808c540801db9b44bbfd0633a212264">gen_t</a>, bool &gt;&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="classRealm_1_1GenEventImpl.html#a0eb94e830d82f8cf6c4e0ca92190da14">local_triggers</a></td></tr>
-<tr class="separator:a0eb94e830d82f8cf6c4e0ca92190da14"><td class="memSeparator" colspan="2">&#160;</td></tr>
-<tr class="memitem:a631bc150102ca805381ab5db0a064a40" id="r_a631bc150102ca805381ab5db0a064a40"><td class="memItemLeft" align="right" valign="top">bool&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="classRealm_1_1GenEventImpl.html#a631bc150102ca805381ab5db0a064a40">free_list_insertion_delayed</a> = false</td></tr>
-<tr class="separator:a631bc150102ca805381ab5db0a064a40"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:a2442c8d45f63366686240c64e0bd07ff" id="r_a2442c8d45f63366686240c64e0bd07ff"><td class="memItemLeft" align="right" valign="top">std::unique_ptr&lt; <a class="el" href="structRealm_1_1GenEventImpl_1_1LaggingViewState.html">LaggingViewState</a> &gt;&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="classRealm_1_1GenEventImpl.html#a2442c8d45f63366686240c64e0bd07ff">lagging_view</a></td></tr>
+<tr class="separator:a2442c8d45f63366686240c64e0bd07ff"><td class="memSeparator" colspan="2">&#160;</td></tr>
 <tr class="inherit_header pub_attribs_classRealm_1_1EventImpl"><td colspan="2" onclick="javascript:toggleInherit('pub_attribs_classRealm_1_1EventImpl')"><img src="closed.png" alt="-"/>&#160;Public Attributes inherited from <a class="el" href="classRealm_1_1EventImpl.html">Realm::EventImpl</a></td></tr>
 <tr class="memitem:abd2aaa81a5b04c621416dfef0085d184 inherit pub_attribs_classRealm_1_1EventImpl" id="r_abd2aaa81a5b04c621416dfef0085d184"><td class="memItemLeft" align="right" valign="top"><a class="el" href="classRealm_1_1ID.html">ID</a>&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="classRealm_1_1EventImpl.html#abd2aaa81a5b04c621416dfef0085d184">me</a></td></tr>
 <tr class="separator:abd2aaa81a5b04c621416dfef0085d184 inherit pub_attribs_classRealm_1_1EventImpl"><td class="memSeparator" colspan="2">&#160;</td></tr>
@@ -549,6 +557,70 @@ Additional Inherited Members</h2></td></tr>
 </div><div class="memdoc">
 
 <p>Implements <a class="el" href="classRealm_1_1EventImpl.html#a2087e8f07bc01a631aabac810539a4e2">Realm::EventImpl</a>.</p>
+
+</div>
+</div>
+<a id="ad75ed9bdfd690bd850c50b740143d78f" name="ad75ed9bdfd690bd850c50b740143d78f"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#ad75ed9bdfd690bd850c50b740143d78f">&#9670;&#160;</a></span>find_local_trigger()</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname">bool Realm::GenEventImpl::find_local_trigger </td>
+          <td>(</td>
+          <td class="paramtype"><a class="el" href="classRealm_1_1EventImpl.html#a4808c540801db9b44bbfd0633a212264">gen_t</a>&#160;</td>
+          <td class="paramname"><em>gen</em>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype">bool &amp;&#160;</td>
+          <td class="paramname"><em>poisoned</em>&#160;</td>
+        </tr>
+        <tr>
+          <td></td>
+          <td>)</td>
+          <td></td><td> const</td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+
+</div>
+</div>
+<a id="af29a15966ad5b89f8b702afac9ee4fb7" name="af29a15966ad5b89f8b702afac9ee4fb7"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#af29a15966ad5b89f8b702afac9ee4fb7">&#9670;&#160;</a></span>get_external_waiter_sync()</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname"><a class="el" href="structRealm_1_1GenEventImpl_1_1ExternalWaiterSync.html">ExternalWaiterSync</a> &amp; Realm::GenEventImpl::get_external_waiter_sync </td>
+          <td>(</td>
+          <td class="paramtype">void&#160;</td>
+          <td class="paramname"></td><td>)</td>
+          <td></td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+
+</div>
+</div>
+<a id="aa6d099b9c67fc1a83dd5abc7fbde23ab" name="aa6d099b9c67fc1a83dd5abc7fbde23ab"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#aa6d099b9c67fc1a83dd5abc7fbde23ab">&#9670;&#160;</a></span>get_lagging_view()</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname"><a class="el" href="structRealm_1_1GenEventImpl_1_1LaggingViewState.html">LaggingViewState</a> &amp; Realm::GenEventImpl::get_lagging_view </td>
+          <td>(</td>
+          <td class="paramtype">void&#160;</td>
+          <td class="paramname"></td><td>)</td>
+          <td></td>
+        </tr>
+      </table>
+</div><div class="memdoc">
 
 </div>
 </div>
@@ -892,6 +964,24 @@ Additional Inherited Members</h2></td></tr>
 
 </div>
 </div>
+<a id="ae4f197e5e8e13701363fdf313c927d0d" name="ae4f197e5e8e13701363fdf313c927d0d"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#ae4f197e5e8e13701363fdf313c927d0d">&#9670;&#160;</a></span>release_lagging_view_if_empty()</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname">void Realm::GenEventImpl::release_lagging_view_if_empty </td>
+          <td>(</td>
+          <td class="paramtype">void&#160;</td>
+          <td class="paramname"></td><td>)</td>
+          <td></td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+
+</div>
+</div>
 <a id="a6579fcd14c5eb674b106fc7257d6d420" name="a6579fcd14c5eb674b106fc7257d6d420"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#a6579fcd14c5eb674b106fc7257d6d420">&#9670;&#160;</a></span>remove_waiter()</h2>
 
@@ -1170,14 +1260,14 @@ Additional Inherited Members</h2></td></tr>
 
 </div>
 </div>
-<a id="a499dc52a6582961abc510146f62c4b5e" name="a499dc52a6582961abc510146f62c4b5e"></a>
-<h2 class="memtitle"><span class="permalink"><a href="#a499dc52a6582961abc510146f62c4b5e">&#9670;&#160;</a></span>event_comm</h2>
+<a id="a763efb94ccda2c4dfa32fd46c0934fb2" name="a763efb94ccda2c4dfa32fd46c0934fb2"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a763efb94ccda2c4dfa32fd46c0934fb2">&#9670;&#160;</a></span>event_comm</h2>
 
 <div class="memitem">
 <div class="memproto">
       <table class="memname">
         <tr>
-          <td class="memname">std::unique_ptr&lt;<a class="el" href="classRealm_1_1EventCommunicator.html">EventCommunicator</a>&gt; Realm::GenEventImpl::event_comm {nullptr}</td>
+          <td class="memname"><a class="el" href="classRealm_1_1EventCommunicator.html">EventCommunicator</a>* Realm::GenEventImpl::event_comm {nullptr}</td>
         </tr>
       </table>
 </div><div class="memdoc">
@@ -1198,28 +1288,14 @@ Additional Inherited Members</h2></td></tr>
 
 </div>
 </div>
-<a id="a5c292b41d772284af0043c8316564d1e" name="a5c292b41d772284af0043c8316564d1e"></a>
-<h2 class="memtitle"><span class="permalink"><a href="#a5c292b41d772284af0043c8316564d1e">&#9670;&#160;</a></span>external_waiter_condvar</h2>
+<a id="ae3384b5dacb403674540b450ff8433d5" name="ae3384b5dacb403674540b450ff8433d5"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#ae3384b5dacb403674540b450ff8433d5">&#9670;&#160;</a></span>external_waiter_sync</h2>
 
 <div class="memitem">
 <div class="memproto">
       <table class="memname">
         <tr>
-          <td class="memname"><a class="el" href="classRealm_1_1KernelMutex.html#a4ff333e0cb953c240ef67c0e28085f56">KernelMutex::CondVar</a> Realm::GenEventImpl::external_waiter_condvar</td>
-        </tr>
-      </table>
-</div><div class="memdoc">
-
-</div>
-</div>
-<a id="a46bfe2fec7ab8c9323d42ac7c60e71cb" name="a46bfe2fec7ab8c9323d42ac7c60e71cb"></a>
-<h2 class="memtitle"><span class="permalink"><a href="#a46bfe2fec7ab8c9323d42ac7c60e71cb">&#9670;&#160;</a></span>external_waiter_mutex</h2>
-
-<div class="memitem">
-<div class="memproto">
-      <table class="memname">
-        <tr>
-          <td class="memname"><a class="el" href="classRealm_1_1KernelMutex.html">KernelMutex</a> Realm::GenEventImpl::external_waiter_mutex</td>
+          <td class="memname">std::unique_ptr&lt;<a class="el" href="structRealm_1_1GenEventImpl_1_1ExternalWaiterSync.html">ExternalWaiterSync</a>&gt; Realm::GenEventImpl::external_waiter_sync</td>
         </tr>
       </table>
 </div><div class="memdoc">
@@ -1234,20 +1310,6 @@ Additional Inherited Members</h2></td></tr>
       <table class="memname">
         <tr>
           <td class="memname">bool Realm::GenEventImpl::free_list_insertion_delayed = false</td>
-        </tr>
-      </table>
-</div><div class="memdoc">
-
-</div>
-</div>
-<a id="ac7d1cd82c23a00090f7479eae98d82da" name="ac7d1cd82c23a00090f7479eae98d82da"></a>
-<h2 class="memtitle"><span class="permalink"><a href="#ac7d1cd82c23a00090f7479eae98d82da">&#9670;&#160;</a></span>future_local_waiters</h2>
-
-<div class="memitem">
-<div class="memproto">
-      <table class="memname">
-        <tr>
-          <td class="memname">std::map&lt;<a class="el" href="classRealm_1_1EventImpl.html#a4808c540801db9b44bbfd0633a212264">gen_t</a>, <a class="el" href="classRealm_1_1EventWaiter.html#a96f9069fda005991627037a99ef995c4">EventWaiter::EventWaiterList</a>&gt; Realm::GenEventImpl::future_local_waiters</td>
         </tr>
       </table>
 </div><div class="memdoc">
@@ -1332,14 +1394,14 @@ Additional Inherited Members</h2></td></tr>
 
 </div>
 </div>
-<a id="a0eb94e830d82f8cf6c4e0ca92190da14" name="a0eb94e830d82f8cf6c4e0ca92190da14"></a>
-<h2 class="memtitle"><span class="permalink"><a href="#a0eb94e830d82f8cf6c4e0ca92190da14">&#9670;&#160;</a></span>local_triggers</h2>
+<a id="a2442c8d45f63366686240c64e0bd07ff" name="a2442c8d45f63366686240c64e0bd07ff"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a2442c8d45f63366686240c64e0bd07ff">&#9670;&#160;</a></span>lagging_view</h2>
 
 <div class="memitem">
 <div class="memproto">
       <table class="memname">
         <tr>
-          <td class="memname">std::map&lt;<a class="el" href="classRealm_1_1EventImpl.html#a4808c540801db9b44bbfd0633a212264">gen_t</a>, bool&gt; Realm::GenEventImpl::local_triggers</td>
+          <td class="memname">std::unique_ptr&lt;<a class="el" href="structRealm_1_1GenEventImpl_1_1LaggingViewState.html">LaggingViewState</a>&gt; Realm::GenEventImpl::lagging_view</td>
         </tr>
       </table>
 </div><div class="memdoc">

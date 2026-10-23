@@ -8,5 +8,7 @@ var event__impl_8h =
     [ "Realm::EventCommunicator", "classRealm_1_1EventCommunicator.html", "classRealm_1_1EventCommunicator" ],
     [ "Realm::GenEventImpl", "classRealm_1_1GenEventImpl.html", "classRealm_1_1GenEventImpl" ],
     [ "Realm::GenEventImpl::GenEventImplAllocator", "structRealm_1_1GenEventImpl_1_1GenEventImplAllocator.html", "structRealm_1_1GenEventImpl_1_1GenEventImplAllocator" ],
+    [ "Realm::GenEventImpl::ExternalWaiterSync", "structRealm_1_1GenEventImpl_1_1ExternalWaiterSync.html", "structRealm_1_1GenEventImpl_1_1ExternalWaiterSync" ],
+    [ "Realm::GenEventImpl::LaggingViewState", "structRealm_1_1GenEventImpl_1_1LaggingViewState.html", "structRealm_1_1GenEventImpl_1_1LaggingViewState" ],
     [ "log_poison", "event__impl_8h.html#a0bc1e32fd83e0c414739bacdc5b3857f", null ]
 ];

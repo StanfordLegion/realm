@@ -1,0 +1,11 @@
+<map id="Realm::GenEventImpl::ExternalWaiterSync" name="Realm::GenEventImpl::ExternalWaiterSync">
+<area shape="rect" id="Node000001" title=" " alt="" coords="5,256,169,296"/>
+<area shape="rect" id="Node000002" href="$classRealm_1_1KernelMutex.html" title=" " alt="" coords="29,80,183,105"/>
+<area shape="poly" id="edge1_Node000001_Node000002" title=" " alt="" coords="97,119,82,168,80,215,86,255,80,256,75,215,77,168,92,117"/>
+<area shape="rect" id="Node000004" href="$classRealm_1_1KernelCondVar.html" title=" " alt="" coords="137,168,304,193"/>
+<area shape="poly" id="edge5_Node000004_Node000002" title=" " alt="" coords="127,114,157,142,197,166,194,170,154,146,123,118"/>
+<area shape="rect" id="Node000003" href="$classRealm_1_1noncopyable.html" title=" " alt="" coords="86,5,241,31"/>
+<area shape="poly" id="edge2_Node000002_Node000003" title=" " alt="" coords="148,43,117,81,113,78,143,40"/>
+<area shape="poly" id="edge4_Node000004_Node000003" title=" " alt="" coords="180,41,198,79,213,127,221,167,216,168,207,129,193,81,175,44"/>
+<area shape="poly" id="edge3_Node000001_Node000004" title=" " alt="" coords="195,203,116,258,113,254,192,199"/>
+</map>

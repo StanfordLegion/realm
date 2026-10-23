@@ -1,7 +1,7 @@
 <map id="Graphical Class Hierarchy" name="Graphical Class Hierarchy">
-<area shape="rect" id="Node000000" href="$classRealm_1_1XferDesFactory.html" title=" " alt="" coords="5,42,176,67"/>
-<area shape="rect" id="Node000001" href="$classRealm_1_1AddressSplitXferDesFactory.html" title=" " alt="" coords="229,5,435,45"/>
-<area shape="poly" id="edge377_Node000000_Node000001" title=" " alt="" coords="189,40,229,35,230,40,190,45"/>
-<area shape="rect" id="Node000002" href="$classRealm_1_1SimpleXferDesFactory.html" title=" " alt="" coords="224,70,440,95"/>
-<area shape="poly" id="edge378_Node000000_Node000002" title=" " alt="" coords="190,63,224,67,224,73,189,69"/>
+<area shape="rect" id="Node000000" href="$structRealm_1_1XferDesCreateMessageBase.html" title=" " alt="" coords="5,45,263,70"/>
+<area shape="rect" id="Node000001" href="$structRealm_1_1AddressSplitXferDesCreateMessage.html" title=" " alt="" coords="314,5,519,45"/>
+<area shape="poly" id="edge375_Node000000_Node000001" title=" " alt="" coords="260,40,314,34,314,40,260,46"/>
+<area shape="rect" id="Node000002" href="$structRealm_1_1SimpleXferDesCreateMessage.html" title=" " alt="" coords="311,69,523,109"/>
+<area shape="poly" id="edge376_Node000000_Node000002" title=" " alt="" coords="260,69,311,75,310,80,260,74"/>
 </map>
