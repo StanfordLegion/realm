@@ -675,7 +675,7 @@ jobs:
 
   gdb_freebsd:
     # realm-gdb.py script on FreeBSD
-    name: gdb-freebsd-${{ matrix.release }}-x86_64-${{ matrix.build }}
+    name: gdb-freebsd-${{ matrix.release }}-x86_64-${{ matrix.build }}-${{ matrix.rep }}
     runs-on: ubuntu-latest
     timeout-minutes: 120
     strategy:
@@ -683,6 +683,7 @@ jobs:
       matrix:
         release: ['15.1']
         build: [Debug, RelWithDebInfo]
+        rep: [1, 2, 3, 4]
     steps:
       - uses: actions/checkout@v4.2.2
         with:
