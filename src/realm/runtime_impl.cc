@@ -249,7 +249,9 @@ namespace Realm {
       AutoLock<> a2(e->mutex);
 
       // print anything with either local or remote waiters
-      if(e->current_local_waiters.empty() && e->future_local_waiters.empty() &&
+      const bool has_future_waiters =
+          e->lagging_view && !e->lagging_view->future_local_waiters.empty();
+      if(e->current_local_waiters.empty() && !has_future_waiters &&
          e->remote_waiters.empty())
         continue;
 
@@ -260,7 +262,9 @@ namespace Realm {
       EventImpl::gen_t gen = e->generation.load();
       os << "Event " << e->me << ": gen=" << gen << " subscr=" << e->gen_subscribed.load()
          << " local=" << clw_size // e->current_local_waiters.size()
-         << "+" << e->future_local_waiters.size()
+         << "+"
+         << (has_future_waiters ? e->lagging_view->future_local_waiters.size()
+                                : size_t(0))
          << " remote=" << e->remote_waiters.size() << "\n";
       for(EventWaiter *pos = e->current_local_waiters.head.next; pos;
           pos = pos->ew_list_link.next) {
@@ -268,13 +272,16 @@ namespace Realm {
         pos /*(*it)*/->print(os);
         os << "\n";
       }
-      for(std::map<EventImpl::gen_t, EventWaiter::EventWaiterList>::const_iterator it =
-              e->future_local_waiters.begin();
-          it != e->future_local_waiters.end(); it++) {
-        for(EventWaiter *pos = it->second.head.next; pos; pos = pos->ew_list_link.next) {
-          os << "  [" << (it->first) << "] L:" << pos /*(*it2)*/ << " - ";
-          pos /*(*it2)*/->print(os);
-          os << "\n";
+      if(has_future_waiters) {
+        for(std::map<EventImpl::gen_t, EventWaiter::EventWaiterList>::const_iterator it =
+                e->lagging_view->future_local_waiters.begin();
+            it != e->lagging_view->future_local_waiters.end(); it++) {
+          for(EventWaiter *pos = it->second.head.next; pos;
+              pos = pos->ew_list_link.next) {
+            os << "  [" << (it->first) << "] L:" << pos /*(*it2)*/ << " - ";
+            pos /*(*it2)*/->print(os);
+            os << "\n";
+          }
         }
       }
       // for(std::map<Event::gen_t, NodeMask>::const_iterator it =
@@ -1964,7 +1971,8 @@ namespace Realm {
          << BarrierImpl::BARRIER_TIMESTAMP_NODEID_SHIFT) +
         1);
 
-    GenEventImpl::GenEventImplAllocator event_allocator(&event_triggerer);
+    GenEventImpl::GenEventImplAllocator event_allocator(&event_triggerer,
+                                                        &event_communicator);
 
     nodes = new Node[Network::max_node_id + 1];
     num_nodes = Network::max_node_id + 1;
