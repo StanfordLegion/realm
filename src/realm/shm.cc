@@ -41,7 +41,7 @@ namespace Realm {
 
   Logger log_shm("shm");
 
-#if defined(REALM_ON_LINUX) || defined(REALM_ON_MACOS)
+#if defined(REALM_ON_LINUX) || defined(REALM_ON_MACOS) || defined(REALM_ON_FREEBSD)
   // Helper function for mapping and sizing up the shared memory region, and migrating to
   // the correct numa node
   static bool setup_shm(void *&base, Realm::OsHandle hdl, size_t sz, int numa_node)
@@ -96,7 +96,7 @@ namespace Realm {
     }
     info.handle = hMapFile;
     return true;
-#elif defined(REALM_ON_LINUX) || defined(REALM_ON_MACOS)
+#elif defined(REALM_ON_LINUX) || defined(REALM_ON_MACOS) || defined(REALM_ON_FREEBSD)
     OsHandle fd = INVALID_OS_HANDLE;
     if(name != nullptr) {
       // Create named shared memory
@@ -143,6 +143,8 @@ namespace Realm {
     log_shm.spew() << "Created " << info.name;
     info.handle = fd;
     return true;
+#else
+    return false;
 #endif
   }
 
@@ -166,7 +168,7 @@ namespace Realm {
     }
     info.handle = hMapFile;
     return true;
-#elif defined(REALM_ON_LINUX) || defined(REALM_ON_MACOS)
+#elif defined(REALM_ON_LINUX) || defined(REALM_ON_MACOS) || defined(REALM_ON_FREEBSD)
     std::string path = '/' + name;
     int fd = shm_open(path.c_str(), O_RDWR, 0);
     if(fd < 0) {
@@ -196,7 +198,7 @@ namespace Realm {
     info.handle = handle;
 #if defined(REALM_ON_WINDOWS)
     info.base = MapViewOfFile(handle, FILE_MAP_ALL_ACCESS, 0, 0, size);
-#elif defined(REALM_ON_LINUX)
+#elif defined(REALM_ON_LINUX) || defined(REALM_ON_FREEBSD)
     info.base = mmap(nullptr, size, PROT_READ | PROT_WRITE, MAP_SHARED, handle, 0);
 #endif
     return info.base != nullptr;
@@ -258,7 +260,7 @@ namespace Realm {
     unlink();
 #if defined(REALM_ON_WINDOWS)
     UnmapViewOfFile(base);
-#elif defined(REALM_ON_LINUX)
+#elif defined(REALM_ON_LINUX) || defined(REALM_ON_FREEBSD)
     munmap(base, size);
 #endif
     base = nullptr;
@@ -271,7 +273,7 @@ namespace Realm {
       handle = Realm::INVALID_OS_HANDLE;
     }
     if(owner && !name.empty()) {
-#if defined(REALM_ON_LINUX) || defined(REALM_ON_MACOS)
+#if defined(REALM_ON_LINUX) || defined(REALM_ON_MACOS) || defined(REALM_ON_FREEBSD)
       log_shm.spew() << "Unlinking shm " << name;
       std::string path = '/' + name;
       shm_unlink(path.c_str());

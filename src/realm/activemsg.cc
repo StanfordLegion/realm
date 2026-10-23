@@ -488,22 +488,28 @@ namespace Realm {
           abort();
         }
 
-        // A callback on a fragment - in practice a remote completion, which rides
-        //  chunk 0 - cannot fire yet: "handled by the target" is only true once the
-        //  whole message has been reassembled and run.  Hold it until then.
-        if(callback_fnptr != nullptr) {
-          it->second.deferred.push_back(
-              DeferredCallback{callback_fnptr, callback_data1, callback_data2});
-          callback_fnptr = nullptr;
-          callback_data1 = 0;
-          callback_data2 = 0;
-        }
-
         if(!it->second.message->is_complete()) {
+          // This fragment does not complete the message, so "received AND handled by
+          //  the target" is not true yet and its callback must not fire.  Hold it; the
+          //  dispatch that completes reassembly runs it after the handler.
+          if(callback_fnptr != nullptr) {
+            it->second.deferred.push_back(
+                DeferredCallback{callback_fnptr, callback_data1, callback_data2});
+            callback_fnptr = nullptr;
+            callback_data1 = 0;
+            callback_data2 = 0;
+          }
           total_messages_handled += 1;
           return false;
         }
 
+        // The COMPLETING fragment keeps its own callback, which from here follows the
+        //  ordinary contract: fired by the handler loop if the message is queued, or
+        //  reported by the caller itself from our `true` return if it is handled
+        //  inline.  Carrying it in 'deferred' too would signal completion twice - the
+        //  inline path fires it here and then the backend fires it again (see
+        //  UCPInternal::am_msg_recv_data_ready, ucp_internal.cc:1191-1193, and the
+        //  equivalent reply-on-return in the GASNet-EX module).
         message = it->second.message->reassemble();
         deferred = std::move(it->second.deferred);
 

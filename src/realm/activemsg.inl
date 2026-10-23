@@ -235,6 +235,8 @@ namespace Realm {
   template <typename T2>
   bool ActiveMessage<T, INLINE_STORAGE>::operator<<(const T2 &to_append)
   {
+    if(network_max_payload_ != 0)
+      ensure_chunk_alloc();
     bool ok = (fbs << to_append);
     return ok;
   }
@@ -258,6 +260,8 @@ namespace Realm {
                                                      size_t line_stride,
                                                      int payload_mode /*= PAYLOAD_COPY*/)
   {
+    if(network_max_payload_ != 0)
+      ensure_chunk_alloc();
     // detect case where 2d collapses to 1d
     if(line_stride == bytes_per_line) {
       bool ok = fbs.append_bytes(data, bytes_per_line * lines);

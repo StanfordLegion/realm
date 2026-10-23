@@ -448,6 +448,80 @@ namespace {
     mgr.shutdown();
   }
 
+  // A callback on the fragment that COMPLETES reassembly must NOT be fired by the
+  //  manager when the message is handled inline.  add_incoming_message returns true, and
+  //  every backend reads that as "you own the completion" and signals it itself - UCX
+  //  calls am_realm_comp_handler directly (ucp_internal.cc:1191-1193), GASNet-EX replies
+  //  from its return value.  Firing it here too would release the same resources twice.
+  TEST_F(IncomingMessageManagerTest, CompletingFragmentCallbackNotFiredWhenHandledInline)
+  {
+    CoreReservationSet crs(nullptr);
+    IncomingMessageManager mgr(2, /*dedicated_threads=*/0, crs);
+
+    FragmentedMessage::received_payloads.clear();
+    FragmentedMessage::call_count.store(0);
+    g_deferred_fired.store(0);
+
+    std::vector<char> full(30);
+    for(size_t i = 0; i < full.size(); i++)
+      full[i] = static_cast<char>(i);
+    unsigned short msgid = activemsg_handler_table.lookup_message_id<FragmentedMessage>();
+
+    for(uint32_t chunk_id = 0; chunk_id < 3; chunk_id++) {
+      FragmentedMessage hdr;
+      hdr.frag_info = {chunk_id, 3, 0xBEEFULL};
+      // the callback rides the last fragment, which is the one that completes
+      bool handled = mgr.add_incoming_message(
+          1, msgid, &hdr, sizeof(hdr), PAYLOAD_COPY, full.data() + (chunk_id * 10), 10,
+          PAYLOAD_COPY, (chunk_id == 2) ? &count_deferred_callback : nullptr, 0, 0,
+          TimeLimit());
+      EXPECT_EQ(handled, (chunk_id == 2));
+    }
+
+    EXPECT_EQ(FragmentedMessage::call_count.load(), 1);
+    EXPECT_EQ(g_deferred_fired.load(), 0)
+        << "completing fragment's callback fired even though handled=true was returned, "
+        << "so the caller will signal completion a second time";
+
+    mgr.shutdown();
+  }
+
+  // The queued half of the same case: with no inline handler the manager owns the
+  //  callback, so the completing fragment's own callback must fire exactly once, after
+  //  the handler has run.
+  TEST_F(IncomingMessageManagerTest, CompletingFragmentCallbackFiresOnceWhenQueued)
+  {
+    CoreReservationSet crs(nullptr);
+    IncomingMessageManager mgr(2, /*dedicated_threads=*/0, crs);
+
+    OversizedFragMessage::last_payload.clear();
+    OversizedFragMessage::call_count.store(0);
+    g_deferred_fired.store(0);
+
+    std::vector<char> full(30);
+    for(size_t i = 0; i < full.size(); i++)
+      full[i] = static_cast<char>(i);
+    unsigned short msgid =
+        activemsg_handler_table.lookup_message_id<OversizedFragMessage>();
+
+    for(uint32_t chunk_id = 0; chunk_id < 3; chunk_id++) {
+      OversizedFragMessage hdr;
+      hdr.frag_info = {chunk_id, 3, 0xBEE5ULL};
+      mgr.add_incoming_message(1, msgid, &hdr, sizeof(hdr), PAYLOAD_COPY,
+                               full.data() + (chunk_id * 10), 10, PAYLOAD_COPY,
+                               (chunk_id == 2) ? &count_deferred_callback : nullptr, 0, 0,
+                               TimeLimit());
+      EXPECT_EQ(g_deferred_fired.load(), 0) << "fired before the handler ran";
+    }
+
+    mgr.do_work(TimeLimit());
+
+    EXPECT_EQ(OversizedFragMessage::call_count.load(), 1);
+    EXPECT_EQ(g_deferred_fired.load(), 1);
+
+    mgr.shutdown();
+  }
+
   class IncomingMessageManagerDeathTest : public IncomingMessageManagerTest {};
 
   // Realm's transports deliver every message exactly once and nothing retransmits, so
