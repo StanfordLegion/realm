@@ -1835,6 +1835,15 @@ _my_codes = _code_tree(sys._getframe().f_code, globals().get("_my_codes", {}))
 # (see _hand_sigint_to_gdb).  (Kept if the script is loaded again.)
 _entry_codes = globals().get("_entry_codes", set())
 
+# The code of realm-gdb's prompt hook, which gdb calls at its prompt (see
+# _install_prompt_hook), and of what realm-gdb posts, which gdb runs in its
+# event loop (see _post): between commands, unless a function call or the
+# program runs (see _nothing_runs).  A Ctrl-C landing as one begins, then,
+# has nothing left to quit (see _on_python_sigint).  (Kept if the script is
+# loaded again.)
+_idle_codes = globals().get("_idle_codes", set())
+_posted_codes = globals().get("_posted_codes", set())
+
 # The frame of the code that has let Ctrl-C through for what gdb does next,
 # while it runs, and what for: "command" (see _hand_sigint_to_gdb) or "call"
 # (see _let_sigint_for_call).
@@ -1875,7 +1884,7 @@ def _on_python_sigint(signum, frame):
     returns: Python would raise it again before then, in here.)  At gdb's
     prompt, with no window open, it says "Quit", as gdb does there."""
     letting = None
-    calls = mine = idle = False
+    calls = mine = idle = posted = False
     f = frame
     # (Between the code that lets it through for a window's command and the
     # code it lands in: see _interruptibly.)
@@ -1889,8 +1898,10 @@ def _on_python_sigint(signum, frame):
         if f.f_code in _dispatch_codes:
             calls = calls or _dispatching(f, "_on_inferior_call")
             idle = idle or _dispatching(f, "_on_before_prompt")
-        # (Or in realm-gdb's prompt hook, which gdb runs at its prompt too.)
-        idle = idle or f.f_code is _realm_prompt.__code__
+        # (Or in realm-gdb's prompt hook, which gdb runs at its prompt too,
+        # or what it posted: see _idle_codes.)
+        idle = idle or f.f_code is _realm_prompt.__code__ or f.f_code in _idle_codes
+        posted = posted or f.f_code in _posted_codes
         if id(f.f_code) in _my_codes and not (
                 _sigint_letting is not None and _sigint_letting[1] == "rt" and
                 f.f_code in passing):
@@ -1901,17 +1912,28 @@ def _on_python_sigint(signum, frame):
             return
     elif letting in (None, "rt") and mine and _window is not None and _hold_sigint():
         return
-    elif idle:
+    elif idle or posted and _nothing_runs():
         # (At gdb's prompt, with nothing left to quit: one pressed as a line
-        # was typed, say, which gdb hands realm-gdb's prompt handler or
-        # prompt hook.  "Quit", as gdb says of one at its prompt, not a
-        # Python exception.)
+        # was typed, or as a command ended, say, which gdb hands realm-gdb's
+        # prompt handler, prompt hook, or what it posted.  "Quit", as gdb
+        # says of one at its prompt, not a Python exception.)
         gdb.write("Quit\n", gdb.STDERR)
         return
     prev = _python_sigint_prev
     if callable(prev):
         return prev(signum, frame)
     # (Python ignores Ctrl-C with SIG_IGN or SIG_DFL as its handler.)
+
+
+def _nothing_runs():
+    """Whether gdb runs no function call (one counted, see _call_running) and
+    no thread of the program, as it runs its event loop: between commands,
+    rather than waiting for a call or a resume to stop."""
+    try:
+        return not _infcall_depth and not any(
+            t.is_valid() and t.is_running() for t in gdb.selected_inferior().threads())
+    except Exception:
+        return False
 
 
 def _dispatching(frame, name):
@@ -3388,8 +3410,8 @@ def _enable_breakpoints():
 
 def _signal_thread(pid, lwp, sig):
     """Send signal `sig` to thread `lwp` of native process `pid` alone
-    (Linux's tgkill, FreeBSD's thr_kill2): whether it could.  (Not without
-    ctypes.)"""
+    (Linux's tgkill, FreeBSD's thr_kill2, where `lwp` -1 is each of its
+    threads): whether it could.  (Not without ctypes.)"""
     try:
         import ctypes
         libc = ctypes.CDLL(None, use_errno=True)
@@ -3706,14 +3728,25 @@ def _kill_unrestored():
 class _KillNudge(object):
     """On FreeBSD (15.1, with gdb 15.1), gdb's kill of a program it attached
     to, and hasn't let run since, lets the program run on unkilled, and then
-    waits for it to end, for good.  So until the kill is over, send the
-    program SIGKILL every few milliseconds: one sent while it is stopped is
-    lost too, but the first once it runs ends it.  (A native process only:
-    a remote one's pid isn't ours to signal.  gdb.execute lets other Python
-    threads run from gdb 12.)"""
+    waits for it to end, for good: after the kernel's transparent attach
+    (debug.ptrace_attach_transparent), no thread has reported a stop for
+    PT_KILL to give its SIGKILL to.  A SIGKILL sent to the program while it
+    is stopped is no help: the kernel leaves it to one thread, which may
+    sleep on while the others run.  So first send each of its threads a
+    SIGKILL of its own, while it is stopped (thr_kill2 to every thread, or
+    else to each one gdb lists): the kernel then ends the program as the
+    first of them would return to the program's code, before it runs any.
+    And until the kill is over, send the program SIGKILL every
+    few milliseconds (INTERVAL): one sent once gdb has let it run wakes a
+    thread, which dies of it, where every thread might otherwise sleep on.
+    (A native process only: a remote one's pid isn't ours to signal.
+    gdb.execute lets other Python threads run from gdb 12.)"""
+
+    INTERVAL = 0.005
 
     def __init__(self, inferior):
         self.pid = None
+        self.inferior = inferior
         # (Inferior.connection only there: gdb 12 to 14 die of it as they
         # exit, see _native_pid.)
         if sys.platform.startswith("freebsd") and inferior.pid > 0 and \
@@ -3722,17 +3755,29 @@ class _KillNudge(object):
 
     def __enter__(self):
         if self.pid is not None:
+            import signal
             import threading
+            if not _signal_thread(self.pid, -1, int(signal.SIGKILL)):
+                try:
+                    threads = self.inferior.threads()
+                except Exception:
+                    _debug_exc()
+                    threads = ()
+                for thread in threads:
+                    try:
+                        _signal_thread(self.pid, thread.ptid[1], int(signal.SIGKILL))
+                    except Exception:
+                        _debug_exc()
             self.lock = threading.Lock()
             self.done = threading.Event()
-            thread = threading.Thread(target=self._nudge, name="realm-gdb kill")
-            thread.daemon = True
-            thread.start()
+            nudge = threading.Thread(target=self._nudge, name="realm-gdb kill")
+            nudge.daemon = True
+            nudge.start()
         return self
 
     def _nudge(self):
         import signal
-        while not self.done.wait(0.005):
+        while not self.done.wait(self.INTERVAL):
             # (Under the lock, so not once the kill is over.  Between gdb
             # reaping the process and the kill returning, the pid would have
             # to be reused at once to be another's.)
@@ -3918,6 +3963,9 @@ def _post(event):
     came with it)."""
     if hasattr(gdb, "interrupt"):
         try:
+            code = getattr(event, "__code__", None)
+            if code is not None:
+                _posted_codes.add(code)
             gdb.post_event(event)
         except Exception:
             _debug_exc()
@@ -7313,10 +7361,12 @@ def _any_kept_views():
 
 def _install_prompt_hook():
     if _prompt_hooks["ours"] is not None and gdb.prompt_hook is _prompt_hooks["ours"]:
+        _idle_codes.add(_prompt_hooks["ours"].__code__)  # (An earlier load's, say.)
         return
     namespace = globals()
     _prompt_hooks["theirs"] = gdb.prompt_hook
     _prompt_hooks["ours"] = lambda current: namespace["_realm_prompt"](current)
+    _idle_codes.add(_prompt_hooks["ours"].__code__)
     gdb.prompt_hook = _prompt_hooks["ours"]
 
 

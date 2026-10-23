@@ -913,6 +913,71 @@ def test_terminal_rt_ctrl_c_calls(t):
     s.finish()
 
 
+# Has realm-gdb's handler of Ctrl-C in Python take one landing as gdb starts
+# realm-gdb's prompt hook, and one landing as gdb starts what realm-gdb
+# posted (gdb >= 15): a Ctrl-C that came as a command ended, which gdb hands
+# the next Python it runs.  (Called with the frame, rather than a signal sent:
+# Python >= 3.12 runs signal handlers only at some points, a function's first
+# line, after a call, and the like, so one sent as the hook begins would land
+# past its first line.)
+IDLE_SIGINT = """\
+import gdb, signal, sys
+import __main__ as rgt_m
+
+
+def rgt_landing(what, frame):
+    try:
+        rgt_m._on_python_sigint(signal.SIGINT, frame)
+        print("RGT-IDLE-SIGINT", what, "handled")
+    except KeyboardInterrupt:
+        print("RGT-IDLE-SIGINT", what, "raised")
+
+
+rgt_real_prompt = rgt_m._realm_prompt
+
+
+def rgt_prompt(current):
+    rgt_m._realm_prompt = rgt_real_prompt
+    rgt_landing("prompt", sys._getframe(1))
+    return rgt_real_prompt(current)
+
+
+def rgt_posted():
+    rgt_landing("posted", sys._getframe())
+
+
+rgt_m._realm_prompt = rgt_prompt
+"""
+
+
+@test("terminal.idle_ctrl_c")
+def test_terminal_idle_ctrl_c(t):
+    """With gdb on a terminal and a parked thread selected, a Ctrl-C that
+    lands as gdb starts realm-gdb's prompt hook, as one that came as a
+    command ended does, or what realm-gdb posted (gdb >= 15): "Quit", as gdb
+    says of one at its prompt, rather than a Python exception; the prompt
+    still shows the selection."""
+    s = t.gdb(t.realm_args())
+    t.select_chain0(s)
+    shown = s.step("as the prompt hook starts: Quit", "source {}\r".format(
+        t.file("idle_sigint.py", IDLE_SIGINT)), r"RGT-IDLE-SIGINT prompt handled",
+        unwanted=r"raised|Python Exception")
+    t.check("  saying so", "Quit" in shown, shown)
+    t.check("  the prompt shows the selection",
+            re.search(r"\n\[realm-thread \d+\] \(gdb\) $", shown), shown)
+    if "RGT-POSTED True" in s.step("", 'python print("RGT-POSTED", hasattr(gdb, "interrupt"))\r'):
+        # (gdb runs it once back in its event loop, after the prompt.)
+        s.step("as what realm-gdb posted starts: Quit", "python rgt_m._post(rgt_posted)\r",
+               r"Quit\s+RGT-IDLE-SIGINT posted handled",
+               until=rb"RGT-IDLE-SIGINT posted (?:handled|raised)\b",
+               unwanted=r"raised|Python Exception")
+        s.step("", "echo\r")
+    s.step("realm-thread back", "realm-thread back\r", r"no parked user thread is selected")
+    s.step("continue: the program finishes", "continue\r",
+           r"REALM_GDB_TEST: PASS[\s\S]*exited normally", timeout=t.args.timeout)
+    s.finish()
+
+
 @test("terminal.plain_handoff_interrupted")
 def test_terminal_plain_handoff_interrupted(t):
     """With gdb on a terminal and a parked thread selected, a Ctrl-C that
