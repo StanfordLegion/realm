@@ -60,7 +60,7 @@ namespace TestConfig {
 
   // numa module
   size_t numa_mem_size = 2 * 1024 * 1024;
-  size_t numa_nocpu_mem_size = 1 * 1024 * 1024;
+  ssize_t numa_nocpu_mem_size = 1 * 1024 * 1024;
   int num_numa_cpus = 1;
   bool numa_pin_memory = true;
 
@@ -175,7 +175,7 @@ void top_level_task(const void *args, size_t arglen, const void *userdata, size_
     ret_value = numa_config->get_resource("numa_mems", numa_mems);
     if(ret_value == REALM_SUCCESS) {
       size_t numa_mem_size = 0;
-      size_t numa_nocpu_mem_size = 0;
+      ssize_t numa_nocpu_mem_size = 0;
       int num_numa_cpus = 0;
       bool numa_pin_memory = false;
       ASSERT_REALM(numa_config->get_property("numamem", numa_mem_size));
@@ -189,7 +189,7 @@ void top_level_task(const void *args, size_t arglen, const void *userdata, size_
       // test wrong property
       ret_value = numa_config->get_property("get_error_numa", wrong_config);
       assert(ret_value == REALM_MODULE_CONFIG_ERROR_INVALID_NAME);
-      log_app.print("numa numamem %zu, numa_nocpumem %zu, numacpsus %d, numa_pin_memory "
+      log_app.print("numa numamem %zu, numa_nocpumem %zd, numacpsus %d, numa_pin_memory "
                     "%d",
                     numa_mem_size, numa_nocpu_mem_size, num_numa_cpus, numa_pin_memory);
     } else {
@@ -370,8 +370,7 @@ void top_level_task(const void *args, size_t arglen, const void *userdata, size_
     if(numa && (numa->get_resource("numa_mems", numa_mems) == REALM_SUCCESS) &&
        !numa_mems.empty()) {
       assert(numa->cfg_numa_mem_size == TestConfig::numa_mem_size);
-      assert(numa->cfg_numa_nocpu_mem_size ==
-             static_cast<ssize_t>(TestConfig::numa_nocpu_mem_size));
+      assert(numa->cfg_numa_nocpu_mem_size == TestConfig::numa_nocpu_mem_size);
       assert(numa->cfg_num_numa_cpus == TestConfig::num_numa_cpus);
       assert(numa->cfg_pin_memory == TestConfig::numa_pin_memory);
     }
@@ -678,8 +677,8 @@ int main(int argc, char **argv)
         log_app.info() << "numa mems:" << PrettyVector<size_t>(numa_mems);
         ASSERT_REALM(
             numa_config->set_property<size_t>("numamem", TestConfig::numa_mem_size));
-        ASSERT_REALM(numa_config->set_property<size_t>("numa_nocpumem",
-                                                       TestConfig::numa_nocpu_mem_size));
+        ASSERT_REALM(numa_config->set_property<ssize_t>("numa_nocpumem",
+                                                        TestConfig::numa_nocpu_mem_size));
         ASSERT_REALM(
             numa_config->set_property<int>("numacpus", TestConfig::num_numa_cpus));
         ASSERT_REALM(
