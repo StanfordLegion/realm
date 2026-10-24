@@ -26,6 +26,7 @@
 #include "realm/mutex.h"
 #include "realm/serialize.h"
 #include "realm/nodeset.h"
+#include "realm/multicast.h"
 #include "realm/network.h"
 #include "realm/atomics.h"
 #include "realm/threads.h"
@@ -71,24 +72,32 @@ namespace Realm {
     // constructs an INACTIVE message object - call init(...) as needed
     ActiveMessage();
 
-    // construct a new active message for either a single recipient or a mask
-    //  of recipients
+    // construct a new active message for a single recipient
     // in addition to the header struct (T), a message can include a variable
     //  payload which can be delivered to a particular destination address
+    // NOTE: there is deliberately no NodeSet ("send this to many nodes")
+    //  constructor - a multi-target send fans out one message per target at
+    //  the SOURCE, which does not scale.  Use multicast_message<T>(...) from
+    //  realm/activemsg.h instead: it forwards over a bounded-radix
+    //  tree of ordinary unicast messages (plan sections 7.1-7.6).
     ActiveMessage(NodeID _target, size_t _max_payload_size = 0);
     ActiveMessage(NodeID _target, size_t _max_payload_size,
                   const RemoteAddress &_dest_payload_addr);
-    ActiveMessage(const Realm::NodeSet &_targets, size_t _max_payload_size = 0);
 
     // providing the payload (as a 1D reference, which must be PAYLOAD_KEEP)
     //  up front can avoid a copy if the source location is directly accessible
     //  by the networking hardware
-    //  Per the semantics of PAYLOAD_KEEP, you must keep the payload buffer
-    //  alive and unmodified until the call to commit or cancel returns
+    //  Per the semantics of PAYLOAD_KEEP, you must keep the payload buffer alive
+    //  and unmodified until LOCAL COMPLETION - NOT merely until commit() returns.
+    //  A backend may hand the pointer straight to the network and return before it
+    //  has been read: on UCX, UCPMessageImpl::commit does not copy a contiguous
+    //  source and send_slow_path() submits the request asynchronously.  Use
+    //  add_local_completion() to learn when the buffer is free, or use the
+    //  (target, max_payload_size) constructor with add_payload(), which copies
+    //  during commit().
     ActiveMessage(NodeID _target, const void *_data, size_t _datalen);
     ActiveMessage(NodeID _target, const LocalAddress &_src_payload_addr, size_t _datalen,
                   const RemoteAddress &_dest_payload_addr);
-    ActiveMessage(const Realm::NodeSet &_targets, const void *_data, size_t _datalen);
     ActiveMessage(NodeID _target, const LocalAddress &_src_payload_addr,
                   size_t _bytes_per_line, size_t _lines, size_t _line_stride,
                   const RemoteAddress &_dest_payload_addr);
@@ -99,11 +108,9 @@ namespace Realm {
     void init(NodeID _target, size_t _max_payload_size = 0);
     void init(NodeID _target, size_t _max_payload_size,
               const RemoteAddress &_dest_payload_addr);
-    void init(const Realm::NodeSet &_targets, size_t _max_payload_size = 0);
     void init(NodeID _target, const void *_data, size_t _datalen);
     void init(NodeID _target, const LocalAddress &_src_payload_addr, size_t _datalen,
               const RemoteAddress &_dest_payload_addr);
-    void init(const Realm::NodeSet &_targets, const void *_data, size_t _datalen);
     void init(NodeID _target, const LocalAddress &_src_payload_addr,
               size_t _bytes_per_line, size_t _lines, size_t _line_stride,
               const RemoteAddress &_dest_payload_addr);
@@ -116,14 +123,10 @@ namespace Realm {
     // a call that sets `with_congestion` may get a smaller value (maybe
     //  even 0) if the path to the named target(s) is getting full
     static size_t recommended_max_payload(NodeID target, bool with_congestion);
-    static size_t recommended_max_payload(const NodeSet &targets, bool with_congestion);
     static size_t recommended_max_payload(NodeID target,
                                           const RemoteAddress &dest_payload_addr,
                                           bool with_congestion);
     static size_t recommended_max_payload(NodeID target, const void *data,
-                                          size_t bytes_per_line, size_t lines,
-                                          size_t line_stride, bool with_congestion);
-    static size_t recommended_max_payload(const NodeSet &targets, const void *data,
                                           size_t bytes_per_line, size_t lines,
                                           size_t line_stride, bool with_congestion);
     static size_t
@@ -143,6 +146,12 @@ namespace Realm {
     void add_payload(const void *data, size_t datalen, int payload_mode = PAYLOAD_COPY);
     void add_payload(const void *data, size_t bytes_per_line, size_t lines,
                      size_t line_stride, int payload_mode = PAYLOAD_COPY);
+    //  (b2) like add_payload, but does NOT copy up front.  The referenced bytes must
+    //       stay alive and unmodified until commit() or cancel() returns.  In chunked
+    //       mode this avoids materializing the whole payload a second time before it is
+    //       split; outside chunked mode it is identical to add_payload.  A message must
+    //       not mix this with add_payload/payload_ptr.
+    void add_payload_ref(const void *data, size_t datalen);
     //  (c) request for a pointer to write into (writes must be completed before
     //       call to commit or cancel)
     void *payload_ptr(size_t datalen);
@@ -174,18 +183,39 @@ namespace Realm {
     // chunked-mode state: only used when the requested payload exceeds the
     //  network's hard limit for a single message
     size_t network_max_payload_{0}; // 0 = normal (non-chunked) mode
-    NodeSet chunk_targets_;
+    NodeID chunk_target_{-1};
     const void *chunk_src_data_{nullptr};
     size_t chunk_src_datalen_{0};
     std::vector<std::byte>
         chunk_alloc_; // owned buffer for network-allocated chunked mode
+    // Referenced payload pieces, used instead of chunk_alloc_ when every byte arrived
+    //  through add_payload_ref.  commit_chunked() reads chunks straight out of these,
+    //  which removes both the second full copy of the payload and the zero-fill that
+    //  resizing chunk_alloc_ would perform.
+    std::vector<std::pair<const void *, size_t>> chunk_spans_;
+    size_t chunk_spans_bytes_{0};
+    size_t chunk_capacity_{0}; // requested payload size, before chunk_alloc_ exists
+
+    // Completion callbacks registered before commit(), held here because chunked mode
+    //  has no ActiveMessageImpl to hand them to until commit() builds the chunks.
+    std::vector<char> chunk_local_comp_;
+    std::vector<char> chunk_remote_comp_;
 
     void init_chunked(NodeID _target, size_t _max_payload_size);
-    void init_chunked(const NodeSet &_targets, size_t _max_payload_size);
     void init_chunked_data(NodeID _target, const void *_data, size_t _datalen);
-    void init_chunked_data(const NodeSet &_targets, const void *_data, size_t _datalen);
     void commit_chunked(void);
-    static uint64_t next_chunk_message_id(NodeID node_id);
+    // materializes chunk_alloc_ on first copying use; callers that only use
+    //  add_payload_ref never reach it
+    void ensure_chunk_alloc(void);
+    // makes room for one more completion callback, growing by cloning rather than
+    //  letting the vector memcpy polymorphic objects
+    static void *reserve_chunked_completion(std::vector<char> &buf, size_t bytes);
+    static void discard_chunked_completions(std::vector<char> &buf);
+
+    // so that commit_chunked() can hand a completion to the per-chunk message, which
+    //  is a different instantiation of this same template
+    template <typename, size_t>
+    friend class ActiveMessage;
   };
 
   // type-erased wrappers for completion callbacks
@@ -249,6 +279,13 @@ namespace Realm {
     uint32_t total_chunks{0};
     uint64_t msg_id{0};
   };
+
+  // Allocates the next chunked-message id for this process.  Deliberately a free
+  //  function rather than a member of ActiveMessage<T>: a function-local static inside
+  //  a member of a class template gets one instance per instantiation, so each message
+  //  type would restart the sequence at zero and hand out ids that collide with every
+  //  other type's.
+  REALM_INTERNAL_API_EXTERNAL_LINKAGE uint64_t next_chunk_message_id(NodeID node_id);
 
   // singleton class that can convert message type->ID and ID->handler
   class ActiveMessageHandlerTable {
@@ -392,6 +429,16 @@ namespace Realm {
   protected:
     struct MessageBlock;
 
+    // A remote completion rides on one fragment (see ActiveMessage<T>'s chunked mode),
+    //  but "the target has handled it" is only true once the whole message has been
+    //  reassembled and run.  A callback arriving on a fragment is therefore held here
+    //  until then.
+    struct DeferredCallback {
+      CallbackFnptr fnptr;
+      CallbackData data1;
+      CallbackData data2;
+    };
+
     struct Message {
       MessageBlock *block;
       Message *next_msg;
@@ -405,6 +452,9 @@ namespace Realm {
       bool payload_needs_free;
       CallbackFnptr callback_fnptr;
       CallbackData callback_data1, callback_data2;
+      // callbacks that arrived on earlier fragments of this message and could not be
+      //  fired then - null for every message that was not reassembled
+      std::vector<DeferredCallback> *deferred_callbacks;
     };
 
     struct MessageBlock {
@@ -416,6 +466,11 @@ namespace Realm {
       // called with message manager lock held
       Message *append_message(size_t hdr_bytes_needed, size_t payload_bytes_needed);
 
+      // total bytes a message with these requirements would occupy in a freshly
+      //  reset block - a request larger than the configured block size can never
+      //  be satisfied by any block, no matter how many are tried
+      static size_t bytes_needed(size_t hdr_bytes_needed, size_t payload_bytes_needed);
+
       // called _without_ message manager lock held
       void recycle_message(Message *msg, IncomingMessageManager *manager);
 
@@ -423,6 +478,9 @@ namespace Realm {
       atomic<unsigned> use_count;
       MessageBlock *next_free;
     };
+
+    // fires and releases any callbacks held from this message's fragments
+    static void invoke_deferred_callbacks(Message *msg);
 
     int get_messages(Message *&head, Message **&tail, bool wait);
     bool return_messages(int sender, size_t num_handled, Message *head, Message **tail);
@@ -448,16 +506,35 @@ namespace Realm {
     size_t num_available_blocks;
     size_t cfg_max_available_blocks, cfg_message_block_size;
 
-    struct PairHash {
-      std::size_t operator()(const std::pair<NodeID, uint64_t> &p) const
+    // An in-flight reassembly is identified by (sender, message type, sender-chosen
+    //  id).  The message type is part of the key as defence in depth: ids are unique
+    //  per sender process, but including the type means any future regression in id
+    //  allocation fails loudly instead of silently interleaving two messages' bytes.
+    struct FragmentKey {
+      NodeID sender;
+      ActiveMessageHandlerTable::MessageID msgid;
+      uint64_t msg_id;
+
+      bool operator==(const FragmentKey &rhs) const
       {
-        return std::hash<NodeID>()(p.first) ^ (std::hash<uint64_t>()(p.second) << 1);
+        return ((sender == rhs.sender) && (msgid == rhs.msgid) && (msg_id == rhs.msg_id));
       }
     };
 
-    std::unordered_map<std::pair<NodeID, uint64_t>, std::unique_ptr<FragmentedMessage>,
-                       PairHash>
-        frag_message;
+    struct FragmentKeyHash {
+      std::size_t operator()(const FragmentKey &k) const
+      {
+        return (std::hash<NodeID>()(k.sender) ^ (std::hash<unsigned>()(k.msgid) << 1) ^
+                (std::hash<uint64_t>()(k.msg_id) << 2));
+      }
+    };
+
+    struct FragmentReassembly {
+      std::unique_ptr<FragmentedMessage> message;
+      std::vector<DeferredCallback> deferred;
+    };
+
+    std::unordered_map<FragmentKey, FragmentReassembly, FragmentKeyHash> frag_message;
   };
 
   template <typename UserHdr>
@@ -476,6 +553,490 @@ namespace Realm {
   struct is_wrapped_with_frag_info : std::false_type {};
   template <typename U>
   struct is_wrapped_with_frag_info<WrappedWithFragInfo<U>> : std::true_type {};
+
+  ////////////////////////////////////////////////////////////////////////
+  //
+  // multicast envelope and bounded-radix forwarding (plan sections 7.3-7.5)
+  //
+  // Layered strictly above backend unicast: a multicast is an ordinary unicast
+  //  ActiveMessage carrying an envelope, which each relay repartitions and forwards
+  //  BEFORE delivering the original typed message locally.  The target set and its wire
+  //  encoding live in realm/multicast.h, which deliberately has no dependency on this
+  //  file, so that codec stays unit-testable on its own.
+  //
+
+  // forwarding radix used when no core module config is available (matches the
+  //  -ll:barrier_radix / barrier_broadcast_radix default)
+  static const size_t MULTICAST_DEFAULT_RADIX = 4;
+
+  ////////////////////////////////////////////////////////////////////////
+  //
+  // struct MulticastEnvelopeMessage
+  //
+
+  // Flags carried in the envelope.  A fire-and-forget multicast sets none of these and
+  //  carries no completion metadata at all (plan section 7.5).
+  namespace MulticastEnvelopeFlags {
+    enum : uint32_t
+    {
+      // the envelope carries completion metadata after the original payload and the
+      //  parent expects exactly one acknowledgement from this subtree
+      COMPLETION_TRACKED = 1U << 0,
+
+      // every bit that is defined - anything else in 'flags' is a protocol violation
+      ALL_KNOWN = COMPLETION_TRACKED,
+    };
+  }; // namespace MulticastEnvelopeFlags
+
+  // The multicast envelope (plan section 7.4).  The variable portion that follows is,
+  //  in order:
+  //
+  //     [target_encoding_size]  encoded target slice (realm/multicast.h wire form)
+  //     [original_header_size]  original typed header bytes
+  //     [original_payload_size] original payload bytes
+  //     [completion_size]       optional completion metadata - a single varint holding
+  //                             the node this subtree must acknowledge to, present if
+  //                             and only if COMPLETION_TRACKED is set
+  //
+  // This type deliberately does NOT declare a `handle_inline`: plan section 22 requires
+  //  that child sends not be issued recursively from an inline handler, so an envelope
+  //  is always queued and forwarded from the normal active-message path.  It also does
+  //  not declare a FragmentInfo member, which means an oversized envelope is handled by
+  //  the existing WrappedWithFragInfo fragmentation machinery on every hop and is
+  //  reassembled before the relay repartitions it (plan section 7.5).
+  //
+  // Store-and-forward is a deliberate choice, not an oversight.  The alternative -
+  //  "cut-through", where the envelope carries its own chunk_id/total_chunks and a relay
+  //  re-emits each fragment the moment it arrives instead of reassembling first - was
+  //  designed and costed, and deferred.  The reasoning, should a future workload make it
+  //  worth revisiting:
+  //
+  //  - It does NOT save relay memory.  The forwarding tree is built over the target set
+  //    itself (send_one_slice addresses slice.first_node()), so every relay is also a
+  //    target and must reassemble to run its own handler regardless.
+  //  - It does NOT uniquely save copies either; the same reduction is available by
+  //    building the envelope body once and appending it per child, with far less code.
+  //  - Its one real benefit is latency, which scales with tree depth: roughly
+  //    d x (N/B) becomes N/B + d x (fragment/B).  That is worth ~2x at 6 nodes and ~5x
+  //    at ~1000, so it only pays for large payloads multicast to many nodes.
+  //
+  // It costs roughly 450-500 lines across the forwarding core, a wire-format change, and
+  //  a rework of the simulated network in multicast_test.cc.  Large-payload multicast is
+  //  currently rare in Realm, so that price is not justified.  Revisit if profiling ever
+  //  shows deep-tree multicast of multi-megabyte payloads on the critical path.
+  struct MulticastEnvelopeMessage {
+    // (origin_node, multicast_id) is the globally unique multicast identifier
+    uint64_t multicast_id = 0;
+    // the node that ORIGINATED the multicast - this, and never the previous hop, is
+    //  what the original handler must see as its sender
+    NodeID origin_node = 0;
+
+    uint64_t original_payload_size = 0;
+    uint32_t target_encoding_size = 0;
+    uint32_t completion_size = 0;
+    uint32_t flags = 0;
+    // hops from the origin: the origin's own first-hop envelopes carry 1.  This is 32
+    //  bits rather than 16 because with a radix of 1 the tree degenerates to a chain
+    //  one hop long per target.
+    uint32_t depth = 0;
+
+    // message ID of the ORIGINAL typed message, looked up in the same
+    //  ActiveMessageHandlerTable at both ends
+    unsigned short original_message_id = 0;
+    uint16_t original_header_size = 0;
+    // redundant copy of the first payload byte, so that a receiver can report the
+    //  claimed encoding in a fatal diagnostic even if the payload is truncated
+    unsigned char target_encoding_kind = 0;
+
+    static void handle_message(NodeID sender, const MulticastEnvelopeMessage &hdr,
+                               const void *payload, size_t payload_size,
+                               TimeLimit work_until);
+  };
+
+  ////////////////////////////////////////////////////////////////////////
+  //
+  // struct MulticastAckMessage
+  //
+
+  // The single acknowledgement a completion-tracked subtree sends to its parent once it
+  //  has delivered locally AND collected an acknowledgement from every child (plan
+  //  section 7.5).  These exist only for the lifetime of one explicitly
+  //  completion-tracked multicast; a fire-and-forget multicast never sends one.
+  //
+  // Like the envelope, this deliberately has no inline handler: handling an
+  //  acknowledgement can send the next acknowledgement up the tree, and plan section 22
+  //  requires that not to happen recursively out of an inline handler.
+  struct MulticastAckMessage {
+    // (origin_node, multicast_id) identifies which multicast is being acknowledged; the
+    //  child that sent it is the ordinary active-message sender
+    uint64_t multicast_id = 0;
+    NodeID origin_node = 0;
+
+    static void handle_message(NodeID sender, const MulticastAckMessage &hdr,
+                               const void *payload, size_t payload_size,
+                               TimeLimit work_until);
+  };
+
+  ////////////////////////////////////////////////////////////////////////
+  //
+  // fatal diagnostics (plan section 21.1)
+  //
+
+  // Everything plan section 21.1 requires of a multicast fatal error.  Fields that are
+  //  not knowable in a given failure (e.g. a header that did not decode) stay at their
+  //  defaults.
+  struct MulticastFatalContext {
+    NodeID local_node = 0;
+    // the PREVIOUS HOP the envelope arrived from, which is not in general the origin
+    NodeID sender = 0;
+    NodeID origin_node = 0;
+    uint64_t multicast_id = 0;
+    unsigned original_message_id = 0;
+    unsigned target_encoding_kind = 0;
+    size_t target_encoding_size = 0;
+    size_t original_header_size = 0;
+    size_t original_payload_size = 0;
+    size_t received_payload_size = 0;
+    unsigned depth = 0;
+    MulticastDecodeStatus status = MulticastDecodeStatus::OK;
+    // plain-language statement of the protocol rule that was violated
+    const char *rule = "";
+
+    void describe(std::ostream &os) const;
+    std::string to_string(void) const;
+  };
+
+  // Injectable fatal-error hook, mirroring BarrierFatalReporter.  The default reporter
+  //  logs the full context and aborts; a test installs its own so it can assert on the
+  //  diagnostic without dying.  A reporter that returns normally means "this envelope
+  //  is dropped", so every call site unwinds cleanly without delivering or forwarding.
+  class MulticastFatalReporter {
+  public:
+    virtual ~MulticastFatalReporter(void) {}
+    virtual void report(const MulticastFatalContext &ctx) = 0;
+  };
+
+  // returns the previously installed reporter (null means "the default"), so tests can
+  //  restore it
+  MulticastFatalReporter *set_multicast_fatal_reporter(MulticastFatalReporter *reporter);
+  MulticastFatalReporter *get_multicast_fatal_reporter(void);
+  void report_multicast_fatal(const MulticastFatalContext &ctx);
+
+  ////////////////////////////////////////////////////////////////////////
+  //
+  // aggregate remote completion (plan section 7.5)
+  //
+
+  // The variable portion of an envelope, as the pieces it is assembled from rather than
+  //  a pre-concatenated buffer.  Within one forwarding step only the target encoding and
+  //  the completion varint differ between children, so passing the pieces separately
+  //  lets every child share one copy of the payload instead of each materializing its
+  //  own.  Wire order is exactly the field order below.
+  struct MulticastEnvelopeBody {
+    const void *targets = nullptr;
+    size_t targets_bytes = 0;
+    const void *hdr = nullptr;
+    size_t hdr_bytes = 0;
+    const void *payload = nullptr;
+    size_t payload_bytes = 0;
+    const void *completion = nullptr;
+    size_t completion_bytes = 0;
+
+    size_t total_bytes() const
+    {
+      return (targets_bytes + hdr_bytes + payload_bytes + completion_bytes);
+    }
+
+    // for implementations that want one contiguous buffer after all
+    void flatten(std::vector<unsigned char> &out) const
+    {
+      out.clear();
+      out.reserve(total_bytes());
+      const unsigned char *p;
+      p = static_cast<const unsigned char *>(targets);
+      out.insert(out.end(), p, p + targets_bytes);
+      p = static_cast<const unsigned char *>(hdr);
+      out.insert(out.end(), p, p + hdr_bytes);
+      p = static_cast<const unsigned char *>(payload);
+      out.insert(out.end(), p, p + payload_bytes);
+      p = static_cast<const unsigned char *>(completion);
+      out.insert(out.end(), p, p + completion_bytes);
+    }
+  };
+
+  class MulticastTransport;
+
+  // What the origin of a completion-tracked multicast wants run - exactly once, after
+  //  the message has been received AND HANDLED by every target.  The forwarding layer
+  //  takes ownership: the object is deleted as soon as it has been invoked.
+  class MulticastCompletionCallback {
+  public:
+    virtual ~MulticastCompletionCallback(void);
+    virtual void invoke(void) = 0;
+  };
+
+  // (origin, multicast_id) is globally unique, and partitions are disjoint, so a node
+  //  is part of at most one subtree per multicast and this is a sufficient key
+  struct MulticastCompletionKey {
+    NodeID origin = 0;
+    uint64_t multicast_id = 0;
+
+    bool operator<(const MulticastCompletionKey &rhs) const
+    {
+      if(origin != rhs.origin)
+        return (origin < rhs.origin);
+      return (multicast_id < rhs.multicast_id);
+    }
+    bool operator==(const MulticastCompletionKey &rhs) const
+    {
+      return (origin == rhs.origin) && (multicast_id == rhs.multicast_id);
+    }
+  };
+
+  // The TRANSIENT acknowledgement state of plan section 7.5.  There is exactly one of
+  //  these per node (the runtime transport owns a process-global one; a unit test owns
+  //  one per simulated node), and it is empty except while a completion-tracked
+  //  multicast is actually in flight.  Nothing here is a reusable multicast plan: no
+  //  target set, no encoding and no routing information is retained, and every record is
+  //  reclaimed the instant its subtree is complete (plan section 2, final bullet).
+  class MulticastCompletionState {
+  public:
+    MulticastCompletionState(void);
+    ~MulticastCompletionState(void);
+
+    // What the caller must do once a record's outstanding count reaches zero.  The
+    //  record is already gone from the table by then - state is reclaimed before the
+    //  acknowledgement is sent, never after.
+    struct Notification {
+      enum Action
+      {
+        NOTHING,         // still waiting on other children or on local delivery
+        ACK_PARENT,      // relay: send exactly one acknowledgement to 'parent'
+        INVOKE_CALLBACK, // origin: run 'callback' once, then delete it
+        UNKNOWN,         // no such record - a protocol violation
+      };
+      Action action = NOTHING;
+      NodeID parent = 0;
+      MulticastCompletionCallback *callback = nullptr;
+    };
+
+    // Origin side: retain the callback under (origin, multicast_id).  'outstanding' is
+    //  the number of first-hop envelopes plus one if the origin is itself a target.
+    void begin_origin(NodeID origin, uint64_t multicast_id, size_t outstanding,
+                      MulticastCompletionCallback *callback);
+
+    // Relay side: retain the parent to acknowledge and the number of outstanding
+    //  units, which is one per child envelope plus one for this node's own delivery.
+    void begin_relay(NodeID origin, uint64_t multicast_id, NodeID parent,
+                     size_t outstanding);
+
+    // one unit of progress - either this node's local delivery finished being HANDLED,
+    //  or one child acknowledged its whole subtree
+    Notification note_completion(NodeID origin, uint64_t multicast_id);
+
+    // number of multicasts currently being tracked here - zero except while a
+    //  completion-tracked multicast is in flight
+    size_t num_pending(void) const;
+
+    // high-water mark since construction or the last reset_peak(), so a test can prove
+    //  that a fire-and-forget multicast created no acknowledgement state at all
+    size_t peak_pending(void) const;
+    void reset_peak(void);
+
+  protected:
+    struct Record {
+      NodeID parent = 0;
+      size_t outstanding = 0;
+      MulticastCompletionCallback *callback = nullptr;
+      bool is_origin = false;
+    };
+
+    mutable Mutex mutex;
+    std::map<MulticastCompletionKey, Record> pending;
+    size_t peak = 0;
+  };
+
+  // Everything the deferred half of a local delivery needs in order to settle one unit
+  //  of completion.  It is captured explicitly rather than rederived from the transport
+  //  because the notification can run on a handler thread long after the forwarding call
+  //  that created it returned.
+  struct MulticastCompletionToken {
+    MulticastTransport *transport = nullptr;
+    MulticastCompletionState *state = nullptr;
+    NodeID local = 0; // the node whose record this settles
+    NodeID origin = 0;
+    uint64_t multicast_id = 0;
+  };
+
+  ////////////////////////////////////////////////////////////////////////
+  //
+  // class MulticastTransport
+  //
+
+  // Everything the forwarding algorithm needs from the rest of the runtime.  The
+  //  production implementation (get_runtime_multicast_transport()) sends ordinary
+  //  unicast active messages and delivers through the runtime's IncomingMessageManager;
+  //  unit tests supply an in-process implementation that captures sends so that a whole
+  //  forwarding tree can be exercised without a real network.
+  class MulticastTransport {
+  public:
+    virtual ~MulticastTransport(void);
+
+    virtual NodeID my_node_id(void) const = 0;
+    // configured node count - both ends of an encoding must agree on this
+    virtual NodeID num_nodes(void) const = 0;
+    // bounded forwarding radix R (plan section 7.3); must be at least 1
+    virtual size_t radix(void) const = 0;
+
+    // Sends one multicast envelope to 'relay', which is by construction the first node
+    //  of the slice the envelope carries.  'body' is the entire variable portion, and
+    //  every byte it references must be copied before this returns.
+    virtual void send_envelope(NodeID relay, const MulticastEnvelopeMessage &env,
+                               const MulticastEnvelopeBody &body) = 0;
+
+    // May the ORIGINAL message be handed to a single target by ordinary unicast?  The
+    //  answer is no when the payload would need fragmentation, because fragmentation is
+    //  driven by the compile-time message type and this layer only has a message ID -
+    //  such a send goes through an envelope instead and gets fragmented there.
+    virtual bool can_send_original(size_t hdr_size, size_t payload_size) const = 0;
+
+    // Sends the ORIGINAL typed message to 'target' by ordinary unicast.  Only legal
+    //  when the local node is the origin, because the receiver sees the local node as
+    //  the sender (plan section 7.4).
+    //
+    // A non-null 'completion' must be settled once the target has received AND HANDLED
+    //  the message - i.e. it is an ordinary active-message remote completion.
+    virtual void send_original(NodeID target, ActiveMessageHandlerTable::MessageID msgid,
+                               const void *hdr, size_t hdr_size, const void *payload,
+                               size_t payload_size,
+                               const MulticastCompletionToken *completion) = 0;
+
+    // Sends one acknowledgement for 'multicast_id' from 'from' to 'parent'.  'from' is
+    //  passed explicitly because an acknowledgement can be produced by a deferred local
+    //  delivery, i.e. from a context that is no longer "on" the sending node.
+    virtual void send_ack(NodeID from, NodeID parent, NodeID origin,
+                          uint64_t multicast_id) = 0;
+
+    // Final local delivery.  'origin' MUST be presented to the original handler as its
+    //  sender; a relay never becomes the apparent sender just because it transmitted
+    //  the final hop (plan section 7.4).
+    //
+    // A non-null 'completion' must be settled once the original handler has actually
+    //  RUN, which for a message that could not be handled inline is later than this
+    //  call returns; MulticastForwarder::dispatch_local does this correctly.
+    virtual void deliver_local(NodeID origin, ActiveMessageHandlerTable::MessageID msgid,
+                               const void *hdr, size_t hdr_size, const void *payload,
+                               size_t payload_size, TimeLimit work_until,
+                               const MulticastCompletionToken *completion) = 0;
+
+    // The transient acknowledgement state of this node (plan section 7.5).  Empty
+    //  except while a completion-tracked multicast is in flight.
+    virtual MulticastCompletionState &completion_state(void) = 0;
+  };
+
+  // The transport used by the registered envelope handler and by the typed helpers
+  //  below.  Its radix comes from the core module config value that also backs
+  //  -ll:barrier_radix, read once and cached.
+  MulticastTransport &get_runtime_multicast_transport(void);
+
+  ////////////////////////////////////////////////////////////////////////
+  //
+  // class MulticastForwarder
+  //
+
+  // The bounded-radix forwarding algorithm of plan section 7.3.  It is expressed purely
+  //  in terms of MulticastTransport, so the whole tree is exercisable in one process.
+  class MulticastForwarder {
+  public:
+    // Origin-side entry point.  'targets' is the complete logical target set; the local
+    //  node may or may not be a member.  'hdr'/'payload' are copied before this returns
+    //  so a PAYLOAD_KEEP-style caller buffer may be reused immediately (plan 7.5) -
+    //  equivalently, LOCAL completion has already happened when this returns and this
+    //  layer no longer references any caller-owned data.
+    //
+    // An empty target set is a successful no-op, and a single remote target uses the
+    //  ordinary unicast fast path.
+    //
+    // 'on_remote_complete', if given, is invoked EXACTLY ONCE after the message has
+    //  been received and handled by every target, and is then deleted.  Ownership
+    //  transfers to this call.  Passing null - the normal fire-and-forget case - means
+    //  no acknowledgement metadata is put on the wire and no acknowledgement state is
+    //  created anywhere (plan section 7.5).
+    static void send(MulticastTransport &transport, const MulticastTargetSet &targets,
+                     ActiveMessageHandlerTable::MessageID msgid, const void *hdr,
+                     size_t hdr_size, const void *payload, size_t payload_size,
+                     TimeLimit work_until = TimeLimit(),
+                     MulticastMetricsSink *metrics = 0,
+                     MulticastCompletionCallback *on_remote_complete = 0);
+
+    // Relay-side entry point, called by MulticastEnvelopeMessage::handle_message.
+    //  'sender' is the previous hop and is used only for diagnostics.
+    static void forward(MulticastTransport &transport, NodeID sender,
+                        const MulticastEnvelopeMessage &env, const void *payload,
+                        size_t payload_size, TimeLimit work_until,
+                        MulticastMetricsSink *metrics = 0);
+
+    // Acknowledgement-side entry point, called by MulticastAckMessage::handle_message.
+    static void handle_ack(MulticastTransport &transport, NodeID sender,
+                           const MulticastAckMessage &ack);
+
+    // Records one unit of progress against a retained completion record and performs
+    //  whatever that completes: acknowledging a parent, or invoking (and deleting) the
+    //  origin's callback.  Public because it is also the deferred local-delivery
+    //  notification and the unicast fast path's remote completion.
+    static void settle(const MulticastCompletionToken &token);
+
+    // Invokes the ALREADY REGISTERED handler for 'msgid' with 'sender' as the apparent
+    //  sender, reusing the ordinary incoming-message machinery so that inline-handler
+    //  and TimeLimit behavior is identical to a directly received message.  Handler
+    //  signature detection is never duplicated here (plan section 7.4).
+    //
+    // If 'completion' is non-null it is settled once the handler has actually run -
+    //  immediately if the message was handled inline, and otherwise from the ordinary
+    //  post-handler callback so that "handled by every target" really means handled.
+    //  The original message type must not be one that carries its own FragmentInfo,
+    //  because an incomplete fragment never reaches a handler and so could never be
+    //  observed as handled (checked in debug builds).
+    static bool dispatch_local(IncomingMessageManager *manager, NodeID sender,
+                               ActiveMessageHandlerTable::MessageID msgid,
+                               const void *hdr, size_t hdr_size, const void *payload,
+                               size_t payload_size, TimeLimit work_until,
+                               const MulticastCompletionToken *completion = 0);
+
+    // local half of the globally unique (origin_node, counter) multicast ID
+    static uint64_t next_multicast_id(void);
+  };
+
+  ////////////////////////////////////////////////////////////////////////
+  //
+  // typed helpers
+  //
+
+  // Multicasts one already-built typed header (and an optional copied 1-D payload) to
+  //  'targets' over the runtime transport.  This REPLACES the old ActiveMessage(NodeSet)
+  //  constructor, which fanned out one message per target at the source; that
+  //  constructor, Network::create_active_message_impl(NodeSet, ...), the NodeSet
+  //  recommended_max_payload overloads and every backend's multicast source loop are all
+  //  gone (plan section 7.6).
+  //
+  // A caller holding a Realm::NodeSet converts explicitly with
+  //  MulticastTargetSet(nodes) - NodeSet itself stays as a general in-memory set.
+  //
+  // The payload is always copied, so this is the PAYLOAD_COPY/PAYLOAD_KEEP equivalent;
+  //  the caller's buffer is free as soon as this returns.  There is deliberately no
+  //  remote-address/RDMA form (see the comment on MulticastForwarder::send).
+  //
+  // 'on_remote_complete', if given, is invoked exactly once after every target has
+  //  received AND handled the message, and is then deleted; passing null - the normal
+  //  fire-and-forget case - puts no acknowledgement metadata on the wire and creates no
+  //  state anywhere.  Build one with make_multicast_completion().
+  //
+  // Defined in activemsg.inl.
+  template <typename T>
+  inline void multicast_message(const MulticastTargetSet &targets, const T &header,
+                                const void *payload = 0, size_t payload_size = 0,
+                                MulticastMetricsSink *metrics = 0,
+                                MulticastCompletionCallback *on_remote_complete = 0);
 
 } // namespace Realm
 

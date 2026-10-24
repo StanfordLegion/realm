@@ -51,8 +51,11 @@ namespace Realm {
    *     a contiguous `std::vector<char>` containing the payload in order.
    *
    * A few design notes:
-   *   • Duplicate fragments are ignored, allowing simple resend logic on the
-   *     transmit path.
+   *   • `add_chunk()` returns false for a duplicate or out-of-range
+   *     `chunk_id` rather than absorbing it.  Realm's transports deliver every
+   *     message exactly once and nothing retransmits, so a caller should treat
+   *     either as a protocol violation - see
+   *     IncomingMessageManager::add_incoming_message.
    *   • No per-fragment dynamic allocations are performed – each chunk's
    *     storage is reserved exactly once when its size becomes known.
    */
@@ -65,6 +68,11 @@ namespace Realm {
 
     bool is_complete() const;
     size_t size() const;
+
+    // number of chunks this message was created expecting - a fragment claiming a
+    //  different total means two messages have collided on one reassembly key, or
+    //  the fragment header is corrupt
+    uint32_t expected_chunks() const { return total_chunks; }
     std::vector<char> reassemble() const;
 
   private:

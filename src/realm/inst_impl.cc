@@ -20,6 +20,7 @@
 #include "realm/event_impl.h"
 #include "realm/mem_impl.h"
 #include "realm/logging.h"
+#include "realm/activemsg.h"
 #include "realm/runtime_impl.h"
 #include "realm/deppart/inst_helper.h"
 
@@ -967,25 +968,20 @@ namespace Realm {
     Serialization::DynamicBufferSerializer dbs(4096);
     metadata.serialize_msg(dbs);
 
-    // fragment serialized metadata if needed
-    size_t offset = 0;
+    // The whole blob goes out as a single multicast: the source-side loop that used
+    //  to chunk it against recommended_max_payload(NodeSet, ...) is gone, because an
+    //  oversized multicast envelope is fragmented (and reassembled before the relay
+    //  repartitions it) by the ordinary active-message machinery on every hop - see
+    //  plan section 7.5.  The receiver's offset/total_bytes reassembly is still needed
+    //  for the unicast response path in metadata.cc, and handles a single full-size
+    //  message as the "complete message" case.
     size_t total_bytes = dbs.bytes_used();
 
-    while(offset < total_bytes) {
-      size_t to_send =
-          std::min(total_bytes - offset,
-                   ActiveMessage<MetadataResponseMessage>::recommended_max_payload(
-                       early_reqs, false /*without congestion*/));
-
-      ActiveMessage<MetadataResponseMessage> amsg(early_reqs, to_send);
-      amsg->id = ID(me).id;
-      amsg->offset = offset;
-      amsg->total_bytes = total_bytes;
-      amsg.add_payload(static_cast<const char *>(dbs.get_buffer()) + offset, to_send);
-      amsg.commit();
-
-      offset += to_send;
-    }
+    MetadataResponseMessage msg{};
+    msg.id = ID(me).id;
+    msg.offset = 0;
+    msg.total_bytes = total_bytes;
+    multicast_message(MulticastTargetSet(early_reqs), msg, dbs.get_buffer(), total_bytes);
   }
 
   void RegionInstanceImpl::notify_allocation(MemoryImpl::AllocationResult result,

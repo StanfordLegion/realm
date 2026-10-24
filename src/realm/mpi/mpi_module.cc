@@ -352,11 +352,6 @@ namespace Realm {
                    size_t _max_payload_size, const void *_src_payload_addr,
                    size_t _src_payload_lines, size_t _src_payload_line_stride,
                    const RemoteAddress &_dest_payload_addr);
-    MPIMessageImpl(const Realm::NodeSet &_targets, unsigned short _msgid,
-                   size_t _header_size, size_t _max_payload_size,
-                   const void *_src_payload_addr, size_t _src_payload_lines,
-                   size_t _src_payload_line_stride);
-
     virtual ~MPIMessageImpl();
 
     // reserves space for a local/remote completion - caller will
@@ -370,8 +365,6 @@ namespace Realm {
   protected:
     /* header_base, payload_base, playload_size */
     NodeID target;
-    Realm::NodeSet targets;
-    bool is_multicast;
     const void *src_payload_addr;
     size_t src_payload_lines;
     size_t src_payload_line_stride;
@@ -389,7 +382,6 @@ namespace Realm {
                                  const void *_src_payload_addr, size_t _src_payload_lines,
                                  size_t _src_payload_line_stride)
     : target(_target)
-    , is_multicast(false)
     , src_payload_addr(_src_payload_addr)
     , src_payload_lines(_src_payload_lines)
     , src_payload_line_stride(_src_payload_line_stride)
@@ -414,35 +406,10 @@ namespace Realm {
                                  size_t _src_payload_line_stride,
                                  const RemoteAddress &_dest_payload_addr)
     : target(_target)
-    , is_multicast(false)
     , src_payload_addr(_src_payload_addr)
     , src_payload_lines(_src_payload_lines)
     , src_payload_line_stride(_src_payload_line_stride)
     , dest_payload_offset(_dest_payload_addr.ptr)
-    , header_size(_header_size)
-    , local_comp(0)
-    , remote_comp(0)
-    , msgid(_msgid)
-  {
-    if(_max_payload_size && (src_payload_addr == 0)) {
-      payload_base = reinterpret_cast<char *>(malloc(_max_payload_size));
-    } else {
-      payload_base = 0;
-    }
-    payload_size = _max_payload_size;
-    header_base = &msg_header;
-  }
-
-  MPIMessageImpl::MPIMessageImpl(const Realm::NodeSet &_targets, unsigned short _msgid,
-                                 size_t _header_size, size_t _max_payload_size,
-                                 const void *_src_payload_addr, size_t _src_payload_lines,
-                                 size_t _src_payload_line_stride)
-    : targets(_targets)
-    , is_multicast(true)
-    , src_payload_addr(_src_payload_addr)
-    , src_payload_lines(_src_payload_lines)
-    , src_payload_line_stride(_src_payload_line_stride)
-    , dest_payload_offset(-1)
     , header_size(_header_size)
     , local_comp(0)
     , remote_comp(0)
@@ -485,26 +452,13 @@ namespace Realm {
 
   void MPIMessageImpl::commit(size_t act_payload_size)
   {
-    if(is_multicast) {
-      assert(dest_payload_offset < 0);
-      assert(remote_comp == 0);
-      for(NodeSet::const_iterator it = targets.begin(); it != targets.end(); ++it)
-        if(src_payload_addr != 0)
-          enqueue_message(*it, msgid, &msg_header, header_size, src_payload_addr,
-                          act_payload_size, src_payload_lines, src_payload_line_stride,
-                          -1, 0);
-        else
-          enqueue_message(*it, msgid, &msg_header, header_size, payload_base,
-                          act_payload_size, 0, 0, -1, 0);
-    } else {
-      if(src_payload_addr != 0)
-        enqueue_message(target, msgid, &msg_header, header_size, src_payload_addr,
-                        act_payload_size, src_payload_lines, src_payload_line_stride,
-                        dest_payload_offset, remote_comp);
-      else
-        enqueue_message(target, msgid, &msg_header, header_size, payload_base,
-                        act_payload_size, 0, 0, dest_payload_offset, remote_comp);
-    }
+    if(src_payload_addr != 0)
+      enqueue_message(target, msgid, &msg_header, header_size, src_payload_addr,
+                      act_payload_size, src_payload_lines, src_payload_line_stride,
+                      dest_payload_offset, remote_comp);
+    else
+      enqueue_message(target, msgid, &msg_header, header_size, payload_base,
+                      act_payload_size, 0, 0, dest_payload_offset, remote_comp);
     if(payload_size && (src_payload_addr == 0))
       free(payload_base);
     // we're only doing blocking transfers right now, so we can always do
@@ -935,25 +889,7 @@ namespace Realm {
     return impl;
   }
 
-  ActiveMessageImpl *MPIModule::create_active_message_impl(
-      const NodeSet &targets, unsigned short msgid, size_t header_size,
-      size_t max_payload_size, const void *src_payload_addr, size_t src_payload_lines,
-      size_t src_payload_line_stride, void *storage_base, size_t storage_size)
-  {
-    assert(storage_size >= sizeof(MPIMessageImpl));
-    MPIMessageImpl *impl = new(storage_base)
-        MPIMessageImpl(targets, msgid, header_size, max_payload_size, src_payload_addr,
-                       src_payload_lines, src_payload_line_stride);
-    return impl;
-  }
-
   size_t MPIModule::recommended_max_payload(NodeID target, bool with_congestion,
-                                            size_t header_size)
-  {
-    return (AM_BUF_SIZE - header_size);
-  }
-
-  size_t MPIModule::recommended_max_payload(const NodeSet &targets, bool with_congestion,
                                             size_t header_size)
   {
     return (AM_BUF_SIZE - header_size);
@@ -976,15 +912,6 @@ namespace Realm {
   {
     // we don't care about source data location
     return recommended_max_payload(target, with_congestion, header_size);
-  }
-
-  size_t MPIModule::recommended_max_payload(const NodeSet &targets, const void *data,
-                                            size_t bytes_per_line, size_t lines,
-                                            size_t line_stride, bool with_congestion,
-                                            size_t header_size)
-  {
-    // we don't care about source data location
-    return recommended_max_payload(targets, with_congestion, header_size);
   }
 
   size_t MPIModule::recommended_max_payload(NodeID target,
