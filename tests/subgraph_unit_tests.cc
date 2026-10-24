@@ -2291,6 +2291,238 @@ private:
 
 ////////////////////////////////////////////////////////////////////////
 //
+// The priority hold is released while a graph has nothing it could run on
+// a processor (its tasks there are blocked), so a graph that waits on
+// lower-priority work needing that processor cannot deadlock.
+//
+
+struct WaitChildTaskArgs {
+  Processor target;          // where to spawn the child
+  int child_priority;
+  std::atomic<int64_t> *seq;
+  std::atomic<int64_t> *out_child;
+  std::atomic<int64_t> *out_self;
+  UserEvent started;         // triggered before waiting, if it exists
+  long spin_ns;              // spin before spawning (keeps the processor busy)
+};
+static int wait_child_task_id = 0;
+static void wait_child_task(const void *args, size_t arglen, const void *userdata,
+                            size_t userlen, Processor p)
+{
+  const WaitChildTaskArgs *a = static_cast<const WaitChildTaskArgs *>(args);
+  if(a->spin_ns > 0) {
+    long long t0 = Clock::current_time_in_nanoseconds();
+    while(Clock::current_time_in_nanoseconds() - t0 < a->spin_ns) {
+    }
+  }
+  SeqTaskArgs child{a->seq, a->out_child, UserEvent::NO_USER_EVENT, 0};
+  Event e = a->target.spawn(seq_task_id, &child, sizeof(child), Event::NO_EVENT,
+                            a->child_priority);
+  if(a->started.exists())
+    a->started.trigger();
+  e.wait();
+  a->out_self->store(a->seq->fetch_add(1));
+}
+
+// A high-priority graph task waits on a lower-priority child on its own
+// processor, with another graph task after it on that processor.
+class GraphPriorityChildWaitTest : public SubgraphTest {
+public:
+  std::string name() const override { return "GraphPriority.ChildWait"; }
+  bool can_run() override { return worker_cpus().size() >= 1; }
+
+  void init() override
+  {
+    Processor cpu = worker_cpus()[0];
+    seq.store(0);
+    for(auto &o : outs)
+      o.store(-1);
+    SubgraphDefinition sd;
+    sd.concurrency_mode = SubgraphDefinition::ONE_SHOT;
+    WaitChildTaskArgs w{cpu, 0, &seq, &outs[0], &outs[1], UserEvent::NO_USER_EVENT, 0};
+    SeqTaskArgs y{&seq, &outs[2], UserEvent::NO_USER_EVENT, 0};
+    int tw = make_task_desc(sd, cpu, wait_child_task_id, &w, sizeof(w));
+    int ty = make_task_desc(sd, cpu, seq_task_id, &y, sizeof(y));
+    add_dependency(sd, SubgraphDefinition::OPKIND_TASK, tw, SubgraphDefinition::OPKIND_TASK,
+                   ty);
+    Subgraph::create_subgraph(sg, sd, ProfilingRequestSet()).wait();
+  }
+
+  void run() override
+  {
+    Event e = sg.instantiate(nullptr, 0, ProfilingRequestSet(), Event::NO_EVENT, 10);
+    completed = wait_with_timeout(e, config.hang_timeout);
+  }
+
+  bool check() override
+  {
+    bool ok = completed && (outs[0].load() < outs[1].load()) && (outs[1].load() < outs[2].load());
+    if(!ok)
+      log_app.error() << name() << ": completed=" << completed << " child=" << outs[0]
+                      << " W=" << outs[1] << " Y=" << outs[2];
+    return ok;
+  }
+
+  void cleanup() override
+  {
+    if(completed)
+      sg.destroy().wait();
+  }
+
+  bool hung() const override { return !completed; }
+
+private:
+  std::atomic<int64_t> seq{0};
+  std::atomic<int64_t> outs[3];
+  Subgraph sg;
+  bool completed = false;
+};
+
+// Two graphs of different priorities on two processors, each with a task
+// that waits on a child of lower priority needing the processor where the
+// other graph is busy. Both must complete.
+class GraphPriorityCrossHoldTest : public SubgraphTest {
+public:
+  std::string name() const override { return "GraphPriority.CrossHold"; }
+  bool can_run() override { return worker_cpus().size() >= 2; }
+
+  Subgraph build(int busy_tasks, Processor busy_proc, Processor wait_proc, int child_priority)
+  {
+    SubgraphDefinition sd;
+    sd.concurrency_mode = SubgraphDefinition::ONE_SHOT;
+    // W on wait_proc waits on a child spawned on busy_proc at child_priority;
+    // a chain of spinning tasks keeps busy_proc busy meanwhile, and a
+    // successor of W on wait_proc keeps the graph on wait_proc.
+    outs.emplace_back(new std::atomic<int64_t>(-1));
+    outs.emplace_back(new std::atomic<int64_t>(-1));
+    WaitChildTaskArgs w{busy_proc, child_priority, &seq, outs[outs.size() - 2].get(),
+                        outs.back().get(), UserEvent::NO_USER_EVENT, 0};
+    int tw = make_task_desc(sd, wait_proc, wait_child_task_id, &w, sizeof(w));
+    outs.emplace_back(new std::atomic<int64_t>(-1));
+    SeqTaskArgs y{&seq, outs.back().get(), UserEvent::NO_USER_EVENT, 0};
+    int ty = make_task_desc(sd, wait_proc, seq_task_id, &y, sizeof(y));
+    add_dependency(sd, SubgraphDefinition::OPKIND_TASK, tw, SubgraphDefinition::OPKIND_TASK,
+                   ty);
+    int prev = -1;
+    for(int i = 0; i < busy_tasks; i++) {
+      outs.emplace_back(new std::atomic<int64_t>(-1));
+      SeqTaskArgs b{&seq, outs.back().get(), UserEvent::NO_USER_EVENT, 50000 /*50us*/};
+      int tb = make_task_desc(sd, busy_proc, seq_task_id, &b, sizeof(b));
+      if(prev >= 0)
+        add_dependency(sd, SubgraphDefinition::OPKIND_TASK, prev,
+                       SubgraphDefinition::OPKIND_TASK, tb);
+      prev = tb;
+    }
+    Subgraph sg;
+    Subgraph::create_subgraph(sg, sd, ProfilingRequestSet()).wait();
+    return sg;
+  }
+
+  void init() override
+  {
+    procs = worker_cpus(2);
+    seq.store(0);
+    // A (priority 10): busy on procs[0], waits on procs[1] for a child at 0
+    // B (priority 5): busy on procs[1], waits on procs[0] for a child at 5
+    sg_a = build(40, procs[0], procs[1], 0);
+    sg_b = build(40, procs[1], procs[0], 5);
+  }
+
+  void run() override
+  {
+    Event ea = sg_a.instantiate(nullptr, 0, ProfilingRequestSet(), Event::NO_EVENT, 10);
+    Event eb = sg_b.instantiate(nullptr, 0, ProfilingRequestSet(), Event::NO_EVENT, 5);
+    completed = wait_with_timeout(Event::merge_events(ea, eb), config.hang_timeout);
+  }
+
+  bool check() override
+  {
+    if(!completed)
+      log_app.error() << name() << ": did not complete";
+    return completed;
+  }
+
+  void cleanup() override
+  {
+    if(completed) {
+      sg_a.destroy().wait();
+      sg_b.destroy().wait();
+    }
+  }
+
+  bool hung() const override { return !completed; }
+
+private:
+  std::vector<Processor> procs;
+  std::atomic<int64_t> seq{0};
+  std::vector<std::unique_ptr<std::atomic<int64_t>>> outs;
+  Subgraph sg_a, sg_b;
+  bool completed = false;
+};
+
+// While a graph's only task on a processor is blocked, a lower-priority
+// normal task may run there; the graph task resumes afterwards.
+class GraphPriorityBlockedYieldsTest : public SubgraphTest {
+public:
+  std::string name() const override { return "GraphPriority.BlockedYields"; }
+  bool can_run() override { return worker_cpus().size() >= 1; }
+
+  void init() override
+  {
+    cpu = worker_cpus()[0];
+    seq.store(0);
+    for(auto &o : outs)
+      o.store(-1);
+    started = UserEvent::create_user_event();
+    SubgraphDefinition sd;
+    sd.concurrency_mode = SubgraphDefinition::ONE_SHOT;
+    // W triggers `started`, then waits on a lower-priority child on its own
+    // processor; it is the graph's only operation there
+    WaitChildTaskArgs w{cpu, 0, &seq, &outs[0], &outs[1], started, 0};
+    make_task_desc(sd, cpu, wait_child_task_id, &w, sizeof(w));
+    Subgraph::create_subgraph(sg, sd, ProfilingRequestSet()).wait();
+  }
+
+  void run() override
+  {
+    Event e = sg.instantiate(nullptr, 0, ProfilingRequestSet(), Event::NO_EVENT, 10);
+    // a lower-priority normal task, ready once the graph task is running
+    SeqTaskArgs low{&seq, &outs[2], UserEvent::NO_USER_EVENT, 0};
+    Event l = cpu.spawn(seq_task_id, &low, sizeof(low), started, 0);
+    completed = wait_with_timeout(Event::merge_events(e, l), config.hang_timeout);
+  }
+
+  bool check() override
+  {
+    // the lower-priority child ran while W was blocked (it is W's only way
+    // to resume), the low task ran at some point; nothing hung
+    bool ok = completed && (outs[0].load() >= 0) && (outs[1].load() > outs[0].load()) &&
+              (outs[2].load() >= 0);
+    if(!ok)
+      log_app.error() << name() << ": completed=" << completed << " child=" << outs[0]
+                      << " W=" << outs[1] << " low=" << outs[2];
+    return ok;
+  }
+
+  void cleanup() override
+  {
+    if(completed)
+      sg.destroy().wait();
+  }
+
+  bool hung() const override { return !completed; }
+
+private:
+  Processor cpu;
+  std::atomic<int64_t> seq{0};
+  std::atomic<int64_t> outs[3];
+  UserEvent started;
+  Subgraph sg;
+  bool completed = false;
+};
+
+////////////////////////////////////////////////////////////////////////
+//
 // Tasks inside a subgraph may block on events, query their finish event,
 // and be profiled.
 //
@@ -5214,11 +5446,13 @@ static void register_common_tasks()
   remote_driver_task_id = task_id_counter++;
   seq_task_id = task_id_counter++;
   blocking_task_id = task_id_counter++;
+  wait_child_task_id = task_id_counter++;
   finish_event_task_id = task_id_counter++;
   prof_response_task_id = task_id_counter++;
   rt.register_task(remote_driver_task_id, remote_driver_task);
   rt.register_task(seq_task_id, seq_task);
   rt.register_task(blocking_task_id, blocking_task);
+  rt.register_task(wait_child_task_id, wait_child_task);
   rt.register_task(finish_event_task_id, finish_event_task);
   rt.register_task(prof_response_task_id, prof_response_task);
   rt.register_task(dag_task_id, dag_task);
@@ -5298,6 +5532,9 @@ static std::vector<std::unique_ptr<SubgraphTest>> make_tests()
   tests.emplace_back(new ProfilingTest());
   tests.emplace_back(new GraphPriorityTest());
   tests.emplace_back(new GraphPriorityPreemptionTest());
+  tests.emplace_back(new GraphPriorityChildWaitTest());
+  tests.emplace_back(new GraphPriorityCrossHoldTest());
+  tests.emplace_back(new GraphPriorityBlockedYieldsTest());
   tests.emplace_back(new CopyReplayTest());
   tests.emplace_back(new CopyProfilingTest());
   tests.emplace_back(new CopyPoisonTest());

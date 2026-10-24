@@ -924,6 +924,18 @@ namespace Realm {
     log_sched.debug() << "scheduler worker blocking: sched=" << this
                       << " worker=" << thread;
 
+    // a blocked graph task no longer holds the processor at its priority
+    //  (see ProcSubgraphExecutor::active_floor); it holds it again once
+    //  it resumes below
+    int subgraph_task_priority = 0;
+    const bool subgraph_task = subgraph_executor && thread->in_subgraph_task_execution();
+    if(subgraph_task) {
+      std::map<Thread *, int>::const_iterator it = worker_priorities.find(thread);
+      assert(it != worker_priorities.end());
+      subgraph_task_priority = it->second;
+      subgraph_executor->task_blocked(subgraph_task_priority);
+    }
+
     while(true) { // thread->get_state() != Thread::STATE_READY) {
       bool alerted =
           try_update_thread_state(thread, Thread::STATE_ALERTED, Thread::STATE_BLOCKED);
@@ -1006,6 +1018,8 @@ namespace Realm {
     assert(blocked_workers.count(thread) == 1);
 #endif
     blocked_workers.erase(thread);
+    if(subgraph_task)
+      subgraph_executor->task_resumed(subgraph_task_priority);
   }
 
   void ThreadedTaskScheduler::thread_ready(Thread *thread)
@@ -1165,9 +1179,10 @@ namespace Realm {
         // Decide between ready tasks, subgraph work and resumable workers.
         //  - a ready task runs if its priority is strictly higher than any
         //    ready subgraph work (ties go to the subgraph) and than the best
-        //    resumable worker (ties go to the resumable worker), and, while an
-        //    instantiation holds this processor, only if its priority is at
-        //    least the instantiation's;
+        //    resumable worker (ties go to the resumable worker), and, while
+        //    the processor is held at a priority floor (an instantiation has
+        //    work ready here or a graph task is running here), only if its
+        //    priority is at least the floor;
         //  - otherwise ready subgraph work runs unless a resumable worker has
         //    higher priority;
         //  - otherwise the best resumable worker continues.
@@ -1252,11 +1267,13 @@ namespace Realm {
           break;
         }
 
-        // subgraph work next, unless a resumable worker outranks it
+        // subgraph work next, unless a resumable worker outranks or ties it
+        // (ties go to resumable workers, as for ready tasks)
         if(have_subgraph_work &&
-           (resumable_workers.empty() || (subgraph_priority >= resumable_priority))) {
+           (resumable_workers.empty() || (subgraph_priority > resumable_priority))) {
           ProcSubgraphExecutor::ReadyEntry entry;
           subgraph_executor->dequeue(entry);
+          subgraph_executor->task_started(entry.priority);
 
           // same worker accounting as for a ready task above
           if((unassigned_worker_count == 1) &&
@@ -1272,6 +1289,7 @@ namespace Realm {
           subgraph_executor->execute(entry);
           lock.lock();
 
+          subgraph_executor->task_finished(entry.priority);
           worker_priorities.erase(Thread::self());
           update_worker_count(0, +1);
 

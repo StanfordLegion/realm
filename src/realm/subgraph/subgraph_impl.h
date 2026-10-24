@@ -29,6 +29,7 @@
 #include "realm/mutex.h"
 #include "realm/logging.h"
 
+#include <map>
 #include <memory>
 #include <queue>
 #include <sstream>
@@ -610,11 +611,26 @@ namespace Realm {
     // priority wins, ties round robin. Work of instantiations below the
     // active floor (see below) is not offered.
     bool peek(int &priority);
-    // Scheduler lock held. Highest priority among active instantiations
-    // whose inputs are all satisfied, or `none` if there is none. Work below
-    // this priority, normal tasks and other instantiations alike, must wait
-    // on this processor.
+    // Scheduler lock held. The priority floor this processor is held at,
+    // or `none` if it is not held: the highest priority among the
+    // instantiations that have an operation ready to run here and the graph
+    // tasks running here that have not blocked. Work below the floor,
+    // normal tasks and other instantiations alike, must wait. An
+    // instantiation that has nothing it could run here right now (its
+    // operations wait on other processors, on external inputs, or its tasks
+    // here are all blocked) does not hold the processor: holding it would
+    // idle the processor and, if the graph is waiting on lower-priority
+    // work that needs it, deadlock. Started tasks always resume, so the
+    // floor returns as soon as a graph task resumes or an operation becomes
+    // ready.
     int active_floor(int none) const;
+    // Scheduler lock held. Running graph tasks on this processor, for the
+    // floor: started when dequeued, finished when execute returns, and
+    // blocked/resumed around a wait inside the task.
+    void task_started(int priority);
+    void task_finished(int priority);
+    void task_blocked(int priority);
+    void task_resumed(int priority);
     // Scheduler lock held. Removes the operation found by the last
     // successful peek.
     void dequeue(ReadyEntry &entry);
@@ -628,7 +644,10 @@ namespace Realm {
     // Returns true if it should keep polling instead of sleeping: subgraph
     // work ran or arrived on this processor within the last poll_budget_us,
     // so dependent operations from other processors are likely imminent and
-    // should not pay a wake-up. (-ll:subgraph_poll, 0 disables)
+    // should not pay a wake-up. The budget applies even while instantiations
+    // are active here: one that is stalled (on another processor's work or
+    // on an external input) must not keep this processor spinning for the
+    // whole wait. (-ll:subgraph_poll, 0 disables)
     bool keep_polling(void);
     static int poll_budget_us;
 
@@ -664,6 +683,9 @@ namespace Realm {
     // Instantiations this processor is working on (scheduler lock).
     std::vector<Cursor> active;
     size_t scan_start;
+    // Graph tasks running (started and not blocked) here: priority -> count
+    // (scheduler lock).
+    std::map<int, int> running;
     // Result of the last successful peek, consumed by dequeue.
     size_t peeked_cursor;
     int64_t peeked_op;

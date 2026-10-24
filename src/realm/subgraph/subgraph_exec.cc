@@ -599,15 +599,41 @@ namespace Realm {
   {
     int floor = none;
     bool any = false;
+    // A cursor whose inputs are all satisfied and whose next operation is
+    // ready holds the processor at its priority. (Ready operations behind
+    // a pending input are offered, but do not hold the processor: the
+    // graph may be waiting on work this processor would otherwise block.)
     for(const Cursor &c : active) {
       if(c.state->pending_inputs(c.proc).load_acquire() != 0)
-        continue; // may still be waiting on work this processor would block
+        continue;
+      if(c.queue[c.front].load_acquire() == SUBGRAPH_EMPTY_QUEUE_ENTRY)
+        continue;
       if(!any || (c.priority > floor))
         floor = c.priority;
       any = true;
     }
+    // So does a graph task that is running (and not blocked) here.
+    if(!running.empty()) {
+      const int top = running.rbegin()->first;
+      if(!any || (top > floor))
+        floor = top;
+    }
     return floor;
   }
+
+  void ProcSubgraphExecutor::task_started(int priority) { running[priority]++; }
+
+  void ProcSubgraphExecutor::task_finished(int priority)
+  {
+    std::map<int, int>::iterator it = running.find(priority);
+    assert((it != running.end()) && (it->second > 0));
+    if(--it->second == 0)
+      running.erase(it);
+  }
+
+  void ProcSubgraphExecutor::task_blocked(int priority) { task_finished(priority); }
+
+  void ProcSubgraphExecutor::task_resumed(int priority) { task_started(priority); }
 
   void ProcSubgraphExecutor::dequeue(ReadyEntry &entry)
   {
@@ -716,10 +742,6 @@ namespace Realm {
   {
     if((poll_budget_us <= 0) || (activity_epoch == 0))
       return false;
-    // While an instantiation holds this processor, nothing else may run
-    // here anyway: keep polling until it is done.
-    if(!active.empty())
-      return true;
     long long now = Clock::current_time_in_nanoseconds();
     if(activity_epoch != polled_epoch) {
       polled_epoch = activity_epoch;
