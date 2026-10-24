@@ -282,20 +282,13 @@ namespace Realm {
 
     // priority_adjust is the priority of this instantiation as a whole
     SubgraphExecutionState *state = acquire_state();
-    state->reset(finish_event, priority_adjust, postconditions);
+    state->reset(finish_event, priority_adjust, preconditions, postconditions);
     state->interpolate(args, arglen);
     state->setup_profiling(profiling);
     get_runtime()->subgraph_resource_reaper.instantiation_created();
-    // Deliver external inputs; nothing can run before start() releases the roots.
-    for(size_t i = 0; i < preconditions.size(); i++) {
-      Event e = preconditions[i];
-      bool poisoned = false;
-      if(!e.exists() || e.has_triggered_faultaware(poisoned))
-        state->input_triggered(uint32_t(i), poisoned);
-      else
-        EventImpl::add_waiter(e, &state->input_waiters[i]);
-    }
-    // Start once the preconditions are satisfied.
+    // Start once the start event (and the previous instantiation, in order)
+    // has triggered; the external preconditions are delivered then. Nothing
+    // may touch the state after this: it may already be finished and recycled.
     state->launcher.arm(start_event, order_event);
   }
 
@@ -363,7 +356,11 @@ namespace Realm {
 
   Event SubgraphImpl::complete_destroy(Event wait_on, UserEvent done)
   {
-    if(wait_on.has_triggered()) {
+    // A poisoned precondition does not keep a subgraph from being destroyed.
+    bool poisoned = false;
+    if(wait_on.has_triggered_faultaware(poisoned)) {
+      if(poisoned)
+        log_subgraph.warning() << "destroy precondition was poisoned: subgraph=" << me;
       destroy();
       if(done.exists()) {
         done.trigger();
@@ -431,17 +428,18 @@ namespace Realm {
     block_pool.back().swap(blocks);
   }
 
-  // Slab size: enough blocks to amortize the allocation, at least 64 KiB
-  // and at least 8 instantiations' worth, rounded to pages.
+  // Slab size: enough blocks to amortize the allocation, at least 8
+  // instantiations' worth and at least 64 KiB for the largest domain's
+  // slab (the same count applies to every domain, so the largest block
+  // decides, or a tiny domain would make a huge one allocate megabytes).
   void SubgraphImpl::grow_pool_locked(void)
   {
     static const bool numa_available = numasysif_numa_available();
     const size_t ndom = compiled.domains.size();
-    size_t count = 8;
-    for(size_t dm = 0; dm < ndom; dm++) {
-      const size_t bytes = std::max<size_t>(compiled.domains[dm].bytes, 1);
-      count = std::max(count, (size_t(64) << 10) / bytes);
-    }
+    size_t largest = 1;
+    for(size_t dm = 0; dm < ndom; dm++)
+      largest = std::max(largest, compiled.domains[dm].bytes);
+    const size_t count = std::max<size_t>(8, (size_t(64) << 10) / largest);
     std::vector<char *> bases(ndom, nullptr);
     for(size_t dm = 0; dm < ndom; dm++) {
       const CompiledSubgraph::Domain &dom = compiled.domains[dm];
@@ -510,10 +508,15 @@ namespace Realm {
 
   void SubgraphImpl::DeferredDestroy::event_triggered(bool poisoned, TimeLimit work_until)
   {
+    // destroy() returns the SubgraphImpl, and with it this waiter, to the
+    // free list: a new subgraph may reuse both before destroy() returns, so
+    // nothing of *this is read afterwards.
+    SubgraphImpl *sg = subgraph;
+    UserEvent done = to_trigger;
     if(poisoned)
-      SUBGRAPH_FATAL(subgraph->me, "destroy precondition was poisoned");
-    subgraph->destroy();
-    to_trigger.trigger();
+      log_subgraph.warning() << "destroy precondition was poisoned: subgraph=" << sg->me;
+    sg->destroy();
+    done.trigger();
   }
 
   void SubgraphImpl::DeferredDestroy::print(std::ostream &os) const
@@ -583,6 +586,7 @@ namespace Realm {
   {
     for(Input &in : inputs)
       in.owner = this;
+    inputs[1].carries_poison = false; // the order event
   }
 
   void SubgraphWorkLauncher::arm(Event start_event, Event order_event)
@@ -600,7 +604,7 @@ namespace Realm {
         continue;
       bool p = false;
       if(evs[k].has_triggered_faultaware(p)) {
-        if(p)
+        if(p && inputs[k].carries_poison)
           poisoned.store(true);
         continue;
       }
@@ -622,6 +626,8 @@ namespace Realm {
                                                bool poisoned)
   {
     const CompiledSubgraph &c = state->subgraph->compiled;
+    // No input waiter is registered yet and no processor knows the state,
+    // so the two early exits below may finish directly.
     if(poisoned) {
       // Nothing runs; the finish event and every postcondition are
       // poisoned and cleanup proceeds as usual.
@@ -640,12 +646,17 @@ namespace Realm {
     }
     for(const CompiledSubgraph::Proc &p : c.procs)
       p.impl->enqueue_subgraph(state);
+    // The launcher's share of the finish counter (taken by reset) keeps the
+    // state alive while inputs are delivered and the roots released, even
+    // though processors may start, and finish, operations meanwhile.
+    state->deliver_inputs();
     state->start();
+    state->contributor_finished(); // may finish and recycle the state
   }
 
   void SubgraphWorkLauncher::Input::event_triggered(bool poisoned, TimeLimit work_until)
   {
-    owner->input_triggered(poisoned);
+    owner->input_triggered(poisoned && carries_poison);
   }
 
   void SubgraphWorkLauncher::Input::print(std::ostream &os) const
@@ -668,13 +679,15 @@ namespace Realm {
 
   void SubgraphInstantiationCleanup::cleanup()
   {
-    // Nothing may touch the state after this: the next instantiation can
-    // take it from the pool at once. Recycling may complete a pending
-    // destroy, which deletes the pooled states, so it comes last.
+    // Nothing may touch the state (and so *this) after recycling: the next
+    // instantiation can take it from the pool at once, and completing a
+    // pending destroy deletes the pooled states. The reaper's count goes
+    // last: the runtime's shutdown waits on it, and the destroy that the
+    // release may complete still looks events up.
     SubgraphImpl *subgraph = state->get_subgraph();
     subgraph->recycle_state(state);
-    get_runtime()->subgraph_resource_reaper.instantiation_released();
     subgraph->instantiation_released();
+    get_runtime()->subgraph_resource_reaper.instantiation_released();
   }
 
 
@@ -690,7 +703,11 @@ namespace Realm {
 
   void SubgraphInputWaiter::event_triggered(bool poisoned, TimeLimit work_until)
   {
-    state->input_triggered(input, poisoned);
+    // This waiter's share keeps the state alive until the delivery has
+    // returned; releasing it may finish and recycle the state (and *this).
+    SubgraphExecutionState *s = state;
+    s->input_triggered(input, poisoned);
+    s->contributor_finished();
   }
 
   void SubgraphInputWaiter::print(std::ostream &os) const
@@ -740,15 +757,22 @@ namespace Realm {
 
   void SubgraphResourceReaper::wait_for_idle(void)
   {
-    // called from the shutdown path with background workers still running
-    long long warned_at = 0;
+    // Called from the shutdown path with background workers still running.
+    // Bounded: an instantiation that never finishes (an application bug)
+    // must end in the runtime's pending-operations diagnostic, not a hang.
+    const long long started_at = Clock::current_time_in_nanoseconds();
+    long long warned_at = started_at;
     while(!idle()) {
       Thread::yield();
       long long now = Clock::current_time_in_nanoseconds();
-      if((warned_at == 0) || (now - warned_at > 5000000000LL)) {
-        if(warned_at != 0)
-          log_subgraph.warning() << "shutdown waiting for " << outstanding.load()
-                                 << " subgraph instantiation(s) to be released";
+      if(now - started_at > 30000000000LL) {
+        log_subgraph.error() << "shutdown gave up waiting for " << outstanding.load()
+                             << " subgraph instantiation(s) to be released";
+        return;
+      }
+      if(now - warned_at > 5000000000LL) {
+        log_subgraph.warning() << "shutdown waiting for " << outstanding.load()
+                               << " subgraph instantiation(s) to be released";
         warned_at = now;
       }
     }

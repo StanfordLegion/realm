@@ -79,11 +79,15 @@ namespace Realm {
   }
 
   void SubgraphExecutionState::reset(Event _finish_event, int _priority,
+                                     span<const Event> _preconditions,
                                      span<const Event> _postconditions)
   {
     const CompiledSubgraph &c = subgraph->compiled;
-    finish_counter.store(int64_t(c.procs.size()) + int64_t(c.num_direct_ops));
+    // processors + directly launched operations + the launcher's share
+    finish_counter.store(int64_t(c.procs.size()) + int64_t(c.num_direct_ops) + 1);
     finish_event = _finish_event;
+    preconditions.assign(_preconditions.data(),
+                         _preconditions.data() + _preconditions.size());
     postconditions.assign(_postconditions.data(),
                           _postconditions.data() + _postconditions.size());
     for(auto &w : poisoned_inputs)
@@ -266,8 +270,26 @@ namespace Realm {
         op_ready(t);
   }
 
+  void SubgraphExecutionState::deliver_inputs(void)
+  {
+    // Caller holds a finish share (the launcher's), so the inline deliveries
+    // and the waiter registrations below cannot race with the state's
+    // release. Each waiter takes its own share before it is registered.
+    for(size_t i = 0; i < preconditions.size(); i++) {
+      Event e = preconditions[i];
+      bool p = false;
+      if(!e.exists() || e.has_triggered_faultaware(p)) {
+        input_triggered(uint32_t(i), p);
+      } else {
+        finish_counter.fetch_add(1);
+        EventImpl::add_waiter(e, &input_waiters[i]);
+      }
+    }
+  }
+
   void SubgraphExecutionState::start(void)
   {
+    // Caller holds a finish share: see deliver_inputs.
     for(uint32_t r : subgraph->compiled.roots)
       if(counter(r).fetch_sub_acqrel(1) == 1)
         op_ready(r);
@@ -275,6 +297,10 @@ namespace Realm {
 
   void SubgraphExecutionState::op_ready(uint32_t op)
   {
+    // The caller holds a share of the finish counter (an operation's
+    // processor or direct share, the launcher's, or an input waiter's), so
+    // the state and the compiled form stay valid after the publication below
+    // even though the processor may run the operation at once.
     const CompiledSubgraph &c = subgraph->compiled;
     const CompiledSubgraph::Op &o = c.ops[op];
     if(OpProfiling *pf = prof(op))

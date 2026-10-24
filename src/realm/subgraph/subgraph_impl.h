@@ -360,6 +360,10 @@ namespace Realm {
   private:
     struct Input : public EventWaiter {
       SubgraphWorkLauncher *owner = nullptr;
+      // Only the start event's poison poisons the instantiation. The order
+      // event is the previous instantiation's finish event: its poison was
+      // that instantiation's, and must not cascade down the chain.
+      bool carries_poison = true;
       virtual void event_triggered(bool poisoned, TimeLimit work_until) override;
       virtual void print(std::ostream &os) const override;
       virtual Event get_finish_event(void) const override;
@@ -373,6 +377,11 @@ namespace Realm {
   };
 
   // SubgraphInputWaiter delivers an external precondition to an instantiation.
+  // Registered by the launcher once the instantiation has started (nothing
+  // can run before then anyway, and an instantiation whose start was
+  // poisoned never registers them). Each registered waiter holds a share of
+  // the finish counter until its callback has returned, so the state is
+  // never recycled while a waiter is still registered or running.
   class SubgraphInputWaiter : public EventWaiter {
   public:
     SubgraphInputWaiter(SubgraphExecutionState *state, uint32_t input);
@@ -444,7 +453,8 @@ namespace Realm {
     explicit SubgraphExecutionState(SubgraphImpl *subgraph);
     ~SubgraphExecutionState();
     // Prepares the (new or recycled) state for one instantiation.
-    void reset(Event finish_event, int priority, span<const Event> postconditions);
+    void reset(Event finish_event, int priority, span<const Event> preconditions,
+               span<const Event> postconditions);
     // Returns processor resources after the instantiation has finished.
     void retire(void);
     // Triggers the finish event (launching whatever waits on it, including
@@ -492,6 +502,9 @@ namespace Realm {
     // Records that external input `input` has triggered (possibly poisoned)
     // and makes dependent operations ready.
     void input_triggered(uint32_t input, bool poisoned);
+    // Delivers the external preconditions: those already triggered at once,
+    // the rest through input_waiters, each holding a finish share.
+    void deliver_inputs(void);
     // Satisfies the implicit start input of every root operation.
     void start(void);
     // An operation's last precondition has been satisfied.
@@ -512,8 +525,7 @@ namespace Realm {
                                bool skipped);
     // True if the operation depends on a poisoned input and must be skipped.
     bool op_poisoned(uint32_t op) const;
-    // Called by each processor after its last operation and by each directly
-    // launched operation after completing.
+    // Releases one share of the finish counter (see finish_counter).
     void contributor_finished(void);
 
     // Asynchronous operations: the processor notifies the completion once the
@@ -533,11 +545,19 @@ namespace Realm {
 
     SubgraphImpl *subgraph;
 
-    // Number of processors and directly launched operations still working
-    // on this instantiation. Whoever brings it to zero triggers finish_event.
+    // Lifetime of this state during one instantiation. Every party that may
+    // read the state holds one share: each processor (released when its
+    // last operation completes), each directly launched operation, the
+    // launcher (while it delivers inputs and starts the roots) and each
+    // registered input waiter (until its callback returns). Making an
+    // operation ready publishes it to a processor that may run it, complete
+    // the instantiation and recycle the state at once, so whoever publishes
+    // must hold a share for as long as it goes on reading the state.
+    // Whoever brings the count to zero triggers finish_event and recycles.
     atomic<int64_t> finish_counter;
     Event finish_event;
-    // Events the caller gave for the external postconditions.
+    // Events the caller gave for the external preconditions and postconditions.
+    std::vector<Event> preconditions;
     std::vector<Event> postconditions;
     // Bitset of external inputs that triggered poisoned.
     std::vector<atomic<uint64_t>> poisoned_inputs;

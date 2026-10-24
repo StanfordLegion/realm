@@ -210,6 +210,17 @@ static bool wait_with_timeout(Event e, double seconds, bool *poisoned = nullptr)
   }
 }
 
+static bool poll_until(const std::function<bool()> &pred, double seconds)
+{
+  double deadline = Clock::current_time() + seconds;
+  while(!pred()) {
+    if(Clock::current_time() > deadline)
+      return false;
+    usleep(500);
+  }
+  return true;
+}
+
 // Resident set size in kB, or 0 where /proc is not available (the memory
 // check then degenerates to "did not grow", which is still true).
 static long resident_kb()
@@ -1847,6 +1858,250 @@ private:
 
 ////////////////////////////////////////////////////////////////////////
 //
+// Lifetime tests around external preconditions. An instantiation's external
+// inputs are delivered once it has started; a poisoned start must leave no
+// waiter behind on a precondition that is still pending, and an input that
+// gates nothing must still be waited for (its poison reaches the finish
+// event).
+//
+
+static SubgraphDefinition single_counter_definition(Processor cpu, std::atomic<int64_t> *count,
+                                                    unsigned input_index,
+                                                    SubgraphDefinition::ConcurrencyMode mode)
+{
+  SubgraphDefinition sd;
+  sd.concurrency_mode = mode;
+  CounterTaskArgs a{count, UserEvent::NO_USER_EVENT};
+  int ta = make_task_desc(sd, cpu, counter_task_id, &a, sizeof(a));
+  add_dependency(sd, SubgraphDefinition::OPKIND_EXT_PRECOND, input_index,
+                 SubgraphDefinition::OPKIND_TASK, ta);
+  return sd;
+}
+
+class PoisonedStartPendingInputTest : public SubgraphTest {
+public:
+  std::string name() const override { return "PoisonedStartPendingInput"; }
+  bool can_run() override { return worker_cpus().size() >= 1; }
+
+  void init() override
+  {
+    count.store(0);
+    SubgraphDefinition sd = single_counter_definition(worker_cpus()[0], &count, 0,
+                                                      SubgraphDefinition::ONE_SHOT);
+    Subgraph::create_subgraph(sg, sd, ProfilingRequestSet()).wait();
+    Subgraph::create_subgraph(sg2, sd, ProfilingRequestSet()).wait();
+  }
+
+  void run() override
+  {
+    UserEvent start = UserEvent::create_user_event();
+    start.cancel();
+    pending = UserEvent::create_user_event();
+    std::vector<Event> pre = {pending};
+    std::vector<Event> post;
+    Event e = sg.instantiate(nullptr, 0, ProfilingRequestSet(), pre, post, start);
+    completed = wait_with_timeout(e, config.hang_timeout, &poisoned);
+    if(!completed)
+      return;
+    // The instantiation is over while its precondition is still pending:
+    // destroy the subgraph (freeing its states) and reuse the memory with
+    // another one before the precondition finally triggers.
+    sg.destroy().wait();
+    destroyed = true;
+    std::vector<Event> pre2 = {Event::NO_EVENT};
+    Event e2 = sg2.instantiate(nullptr, 0, ProfilingRequestSet(), pre2, post);
+    second_ok = wait_with_timeout(e2, config.hang_timeout);
+    pending.trigger();
+  }
+
+  bool check() override
+  {
+    bool ok = completed && poisoned && destroyed && second_ok && (count.load() == 1);
+    if(!ok)
+      log_app.error() << name() << ": completed=" << completed << " poisoned=" << poisoned
+                      << " destroyed=" << destroyed << " second=" << second_ok
+                      << " count=" << count.load() << " (expected 1)";
+    return ok;
+  }
+
+  void cleanup() override
+  {
+    if(completed && !destroyed)
+      sg.destroy().wait();
+    sg2.destroy().wait();
+  }
+
+private:
+  Subgraph sg, sg2;
+  UserEvent pending;
+  std::atomic<int64_t> count;
+  bool completed = false, poisoned = false, destroyed = false, second_ok = false;
+};
+
+class UnusedInputTest : public SubgraphTest {
+public:
+  std::string name() const override { return "UnusedInput"; }
+  bool can_run() override { return worker_cpus().size() >= 1; }
+
+  void init() override
+  {
+    count.store(0);
+    // input 1 gates the task; input 0 gates nothing
+    SubgraphDefinition sd = single_counter_definition(worker_cpus()[0], &count, 1,
+                                                      SubgraphDefinition::ONE_SHOT);
+    Subgraph::create_subgraph(sg, sd, ProfilingRequestSet()).wait();
+  }
+
+  void run() override
+  {
+    UserEvent unused = UserEvent::create_user_event();
+    std::vector<Event> pre = {unused, Event::NO_EVENT};
+    std::vector<Event> post;
+    Event e = sg.instantiate(nullptr, 0, ProfilingRequestSet(), pre, post);
+    // the task runs, but the instantiation is not over until input 0 triggers
+    task_ran = poll_until([&] { return count.load() == 1; }, config.hang_timeout);
+    bool p = false;
+    early = e.has_triggered_faultaware(p);
+    unused.cancel();
+    completed = wait_with_timeout(e, config.hang_timeout, &poisoned);
+  }
+
+  bool check() override
+  {
+    bool ok = task_ran && !early && completed && poisoned && (count.load() == 1);
+    if(!ok)
+      log_app.error() << name() << ": task_ran=" << task_ran << " early=" << early
+                      << " completed=" << completed << " poisoned=" << poisoned
+                      << " count=" << count.load();
+    return ok;
+  }
+
+  void cleanup() override
+  {
+    if(completed)
+      sg.destroy().wait();
+  }
+
+private:
+  Subgraph sg;
+  std::atomic<int64_t> count;
+  bool task_ran = false, early = false, completed = false, poisoned = false;
+};
+
+////////////////////////////////////////////////////////////////////////
+//
+// OrderPoisonIsolationTest: in INSTANTIATION_ORDER mode a poisoned
+// instantiation must not poison the ones after it (their start is chained
+// on its finish event, but that is ordering, not a precondition).
+//
+
+class OrderPoisonIsolationTest : public SubgraphTest {
+public:
+  std::string name() const override { return "OrderPoisonIsolation"; }
+  bool can_run() override { return worker_cpus().size() >= 1; }
+
+  void init() override
+  {
+    count.store(0);
+    SubgraphDefinition sd = single_counter_definition(
+        worker_cpus()[0], &count, 0, SubgraphDefinition::INSTANTIATION_ORDER);
+    Subgraph::create_subgraph(sg, sd, ProfilingRequestSet()).wait();
+  }
+
+  void run() override
+  {
+    UserEvent bad = UserEvent::create_user_event();
+    bad.cancel();
+    std::vector<Event> pre1 = {bad};
+    std::vector<Event> pre2 = {Event::NO_EVENT};
+    std::vector<Event> post;
+    Event e1 = sg.instantiate(nullptr, 0, ProfilingRequestSet(), pre1, post);
+    Event e2 = sg.instantiate(nullptr, 0, ProfilingRequestSet(), pre2, post);
+    Event e3 = sg.instantiate(nullptr, 0, ProfilingRequestSet(), pre2, post);
+    done1 = wait_with_timeout(e1, config.hang_timeout, &poisoned1);
+    done2 = wait_with_timeout(e2, config.hang_timeout, &poisoned2);
+    done3 = wait_with_timeout(e3, config.hang_timeout, &poisoned3);
+  }
+
+  bool check() override
+  {
+    bool ok = done1 && poisoned1 && done2 && !poisoned2 && done3 && !poisoned3 &&
+              (count.load() == 2);
+    if(!ok)
+      log_app.error() << name() << ": e1=" << done1 << "/" << poisoned1 << " e2=" << done2
+                      << "/" << poisoned2 << " e3=" << done3 << "/" << poisoned3
+                      << " count=" << count.load() << " (expected 2)";
+    return ok;
+  }
+
+  void cleanup() override
+  {
+    if(done1 && done2 && done3)
+      sg.destroy().wait();
+  }
+
+private:
+  Subgraph sg;
+  std::atomic<int64_t> count;
+  bool done1 = false, poisoned1 = false, done2 = false, poisoned2 = false, done3 = false,
+       poisoned3 = false;
+};
+
+////////////////////////////////////////////////////////////////////////
+//
+// DestroyPoisonedWaitOnTest: a poisoned destroy precondition destroys the
+// subgraph anyway (triggered already, or later through the deferred path).
+//
+
+class DestroyPoisonedWaitOnTest : public SubgraphTest {
+public:
+  std::string name() const override { return "DestroyPoisonedWaitOn"; }
+  bool can_run() override { return worker_cpus().size() >= 1; }
+
+  void init() override
+  {
+    count.store(0);
+    SubgraphDefinition sd = single_counter_definition(worker_cpus()[0], &count, 0,
+                                                      SubgraphDefinition::ONE_SHOT);
+    Subgraph::create_subgraph(sg_now, sd, ProfilingRequestSet()).wait();
+    Subgraph::create_subgraph(sg_later, sd, ProfilingRequestSet()).wait();
+  }
+
+  void run() override
+  {
+    std::vector<Event> pre = {Event::NO_EVENT};
+    std::vector<Event> post;
+    sg_now.instantiate(nullptr, 0, ProfilingRequestSet(), pre, post).wait();
+    sg_later.instantiate(nullptr, 0, ProfilingRequestSet(), pre, post).wait();
+    UserEvent bad = UserEvent::create_user_event();
+    bad.cancel();
+    Event d1 = sg_now.destroy(bad);
+    UserEvent later = UserEvent::create_user_event();
+    Event d2 = sg_later.destroy(later);
+    bool p = false;
+    early = d2.has_triggered_faultaware(p);
+    later.cancel();
+    done1 = wait_with_timeout(d1, config.hang_timeout);
+    done2 = wait_with_timeout(d2, config.hang_timeout);
+  }
+
+  bool check() override
+  {
+    bool ok = done1 && done2 && !early && (count.load() == 2);
+    if(!ok)
+      log_app.error() << name() << ": done1=" << done1 << " done2=" << done2
+                      << " early=" << early << " count=" << count.load();
+    return ok;
+  }
+
+private:
+  Subgraph sg_now, sg_later;
+  std::atomic<int64_t> count;
+  bool done1 = false, done2 = false, early = false;
+};
+
+////////////////////////////////////////////////////////////////////////
+//
 // Graph priority tests. Each task records the global order in which it ran;
 // a graph task may trigger a user event so that competing work becomes
 // ready only once the graph is executing on its processors.
@@ -2040,16 +2295,6 @@ private:
 // and be profiled.
 //
 
-static bool poll_until(const std::function<bool()> &pred, double seconds)
-{
-  double deadline = Clock::current_time() + seconds;
-  while(!pred()) {
-    if(Clock::current_time() > deadline)
-      return false;
-    usleep(500);
-  }
-  return true;
-}
 
 struct BlockingTaskArgs {
   UserEvent gate;
@@ -5042,6 +5287,10 @@ static std::vector<std::unique_ptr<SubgraphTest>> make_tests()
   tests.emplace_back(new DefaultsTest());
   tests.emplace_back(new PoisonedPreconditionTest());
   tests.emplace_back(new ExternalPoisonTest());
+  tests.emplace_back(new PoisonedStartPendingInputTest());
+  tests.emplace_back(new UnusedInputTest());
+  tests.emplace_back(new OrderPoisonIsolationTest());
+  tests.emplace_back(new DestroyPoisonedWaitOnTest());
   tests.emplace_back(new MixedWorkloadTest());
   tests.emplace_back(new BlockingTaskTest());
   tests.emplace_back(new WaitAfterGraphTest());
