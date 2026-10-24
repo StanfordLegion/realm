@@ -371,6 +371,10 @@ if(REALM_ENABLE_COVERAGE)
     )
   else()
     include(${CMAKE_CURRENT_SOURCE_DIR}/cmake/CodeCoverage.cmake)
+    if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
+      # Concurrent tests must update GCC's coverage counters atomically.
+      string(APPEND COVERAGE_COMPILER_FLAGS " -fprofile-update=atomic")
+    endif()
   endif()
 endif()
 
