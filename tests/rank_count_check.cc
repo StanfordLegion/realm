@@ -67,9 +67,8 @@ int main(int argc, char **argv)
   Runtime rt;
   rt.init(&argc, &argv);
 
-  Processor::register_task_by_kind(Processor::LOC_PROC, false /*!global*/,
-                                   TOP_LEVEL_TASK, CodeDescriptor(top_level_task),
-                                   ProfilingRequestSet())
+  Processor::register_task_by_kind(Processor::LOC_PROC, false /*!global*/, TOP_LEVEL_TASK,
+                                   CodeDescriptor(top_level_task), ProfilingRequestSet())
       .external_wait();
 
   Processor p = Machine::ProcessorQuery(Machine::get_machine())

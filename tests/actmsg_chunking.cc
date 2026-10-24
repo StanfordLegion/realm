@@ -26,9 +26,9 @@
 //   - a global task registration whose user data is larger than one message block
 //
 // Needs at least 2 ranks and -ll:cpu 3; with fewer ranks there is no remote target and
-//  CTest reports it as skipped.  Networks with no per-message limit (UCX) never fragment, but still
-//  carry every payload here in one piece.  Waits on events, not timeouts: a lost
-//  message shows up as the test harness's timeout.
+//  CTest reports it as skipped.  Networks with no per-message limit (UCX) never fragment,
+//  but still carry every payload here in one piece.  Waits on events, not timeouts: a
+//  lost message shows up as the test harness's timeout.
 
 #include "realm.h"
 #include "realm/activemsg.h"
@@ -100,8 +100,8 @@ namespace {
                                size_t)
     {
       if(!args.ok) {
-        log_app.error() << "rank " << sender << " received a corrupted payload, seq="
-                        << args.seq;
+        log_app.error() << "rank " << sender
+                        << " received a corrupted payload, seq=" << args.seq;
         g_errors.fetch_add(1);
       }
       if((g_acks.fetch_add(1) + 1) == g_expected_acks)

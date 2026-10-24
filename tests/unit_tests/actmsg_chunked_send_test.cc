@@ -159,18 +159,16 @@ namespace {
     {
       assert(storage_size >= sizeof(MockMessageImpl));
       return new(storage_base)
-          MockMessageImpl(this, std::vector<NodeID>(1, target), false, msgid,
-                          header_size, max_payload_size, src_payload_addr);
+          MockMessageImpl(this, std::vector<NodeID>(1, target), false, msgid, header_size,
+                          max_payload_size, src_payload_addr);
     }
 
     // not virtual overrides: the NodeSet forms of these are slated for removal (PR
     //  465), and without 'override' this file keeps compiling once they are gone
-    virtual ActiveMessageImpl *
-    create_active_message_impl(const NodeSet &targets, unsigned short msgid,
-                               size_t header_size, size_t max_payload_size,
-                               const void *src_payload_addr, size_t src_payload_lines,
-                               size_t src_payload_line_stride, void *storage_base,
-                               size_t storage_size)
+    virtual ActiveMessageImpl *create_active_message_impl(
+        const NodeSet &targets, unsigned short msgid, size_t header_size,
+        size_t max_payload_size, const void *src_payload_addr, size_t src_payload_lines,
+        size_t src_payload_line_stride, void *storage_base, size_t storage_size)
     {
       assert(storage_size >= sizeof(MockMessageImpl));
       std::vector<NodeID> v(targets.begin(), targets.end());
@@ -179,10 +177,11 @@ namespace {
     }
 
     // the rest is never used by these tests
-    virtual ActiveMessageImpl *
-    create_active_message_impl(NodeID, unsigned short, size_t, size_t,
-                               const LocalAddress &, size_t, size_t,
-                               const RemoteAddress &, void *, size_t)
+    virtual ActiveMessageImpl *create_active_message_impl(NodeID, unsigned short, size_t,
+                                                          size_t, const LocalAddress &,
+                                                          size_t, size_t,
+                                                          const RemoteAddress &, void *,
+                                                          size_t)
     {
       abort();
     }
@@ -237,8 +236,8 @@ namespace {
     {
       abort();
     }
-    virtual IBMemory *create_remote_ib_memory(RuntimeImpl *, Memory, size_t,
-                                              Memory::Kind, const ByteArray &)
+    virtual IBMemory *create_remote_ib_memory(RuntimeImpl *, Memory, size_t, Memory::Kind,
+                                              const ByteArray &)
     {
       abort();
     }
@@ -288,8 +287,7 @@ namespace {
   // queued: no inline handler, so a delivery always goes through the message blocks
   struct QueuedMsg {
     int seq;
-    static void handle_message(NodeID, const QueuedMsg &hdr, const void *data,
-                               size_t len)
+    static void handle_message(NodeID, const QueuedMsg &hdr, const void *data, size_t len)
     {
       const char *c = static_cast<const char *>(data);
       received.push_back({"QueuedMsg", hdr.seq, std::vector<char>(c, c + len)});
@@ -404,8 +402,9 @@ namespace {
     const uint64_t id = wrapped<QueuedMsg>(net.sent[0]).frag_info.msg_id;
     for(size_t i = 0; i < net.sent.size(); i++) {
       const WrappedWithFragInfo<QueuedMsg> &w = wrapped<QueuedMsg>(net.sent[i]);
-      EXPECT_EQ(net.sent[i].msgid,
-                activemsg_handler_table.lookup_message_id<WrappedWithFragInfo<QueuedMsg>>());
+      EXPECT_EQ(
+          net.sent[i].msgid,
+          activemsg_handler_table.lookup_message_id<WrappedWithFragInfo<QueuedMsg>>());
       EXPECT_EQ(w.frag_info.chunk_id, i);
       EXPECT_EQ(w.frag_info.total_chunks, expected);
       EXPECT_EQ(w.frag_info.msg_id, id);

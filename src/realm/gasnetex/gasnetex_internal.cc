@@ -857,11 +857,13 @@ namespace Realm {
     assert(num_groups.load() == 0);
     if(index_bits < PendingCompletionGroup::LOG2_GROUPSIZE)
       return false;
-    unsigned log2_groups = std::min(unsigned(LOG2_MAXGROUPS),
-                                    unsigned(index_bits - PendingCompletionGroup::LOG2_GROUPSIZE));
+    unsigned log2_groups =
+        std::min(unsigned(LOG2_MAXGROUPS),
+                 unsigned(index_bits - PendingCompletionGroup::LOG2_GROUPSIZE));
     max_groups = 1 << log2_groups;
     // the soft limit stays at 50% of max capacity
-    pending_soft_limit = (size_t(max_groups) << PendingCompletionGroup::LOG2_GROUPSIZE) / 2;
+    pending_soft_limit =
+        (size_t(max_groups) << PendingCompletionGroup::LOG2_GROUPSIZE) / 2;
     return true;
   }
 
@@ -905,7 +907,8 @@ namespace Realm {
       //  is a hard limit rather than one more group to allocate
       if(REALM_UNLIKELY(grp_index >= max_groups)) {
         log_gex_comp.fatal() << "out of pending completions: all "
-                             << (size_t(max_groups) << PendingCompletionGroup::LOG2_GROUPSIZE)
+                             << (size_t(max_groups)
+                                 << PendingCompletionGroup::LOG2_GROUPSIZE)
                              << " are in use";
         abort();
       }
@@ -3391,8 +3394,8 @@ namespace Realm {
       MSGID_BITS = bits;
       if(bits > MIN_MSGID_BITS)
         log_gex.info() << num_handlers << " active message handlers: using " << bits
-                       << "-bit message IDs and at most "
-                       << (size_t(1) << index_bits) << " pending completions";
+                       << "-bit message IDs and at most " << (size_t(1) << index_bits)
+                       << " pending completions";
     }
 
     // the primordial segment consists of:
