@@ -244,7 +244,14 @@ namespace Realm {
          p->measurements.wants_measurement<ProfilingMeasurements::InstanceAllocResult>() ||
          p->measurements.wants_measurement<ProfilingMeasurements::InstanceTimeline>() ||
          p->measurements.wants_measurement<ProfilingMeasurements::InstanceMemoryUsage>() ||
-         p->measurements.wants_measurement<ProfilingMeasurements::CachePerfCounters>() ||
+         p->measurements.wants_measurement<
+             ProfilingMeasurements::CachePerfCounters<PMID_PCTRS_CACHE_L1I>>() ||
+         p->measurements.wants_measurement<
+             ProfilingMeasurements::CachePerfCounters<PMID_PCTRS_CACHE_L1D>>() ||
+         p->measurements.wants_measurement<
+             ProfilingMeasurements::CachePerfCounters<PMID_PCTRS_CACHE_L2>>() ||
+         p->measurements.wants_measurement<
+             ProfilingMeasurements::CachePerfCounters<PMID_PCTRS_CACHE_L3>>() ||
          p->measurements.wants_measurement<ProfilingMeasurements::IPCPerfCounters>() ||
          p->measurements.wants_measurement<ProfilingMeasurements::TLBPerfCounters>() ||
          p->measurements
