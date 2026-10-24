@@ -377,6 +377,7 @@ foreach(
   set_tests_properties(subgraph_exit_${scenario} PROPERTIES TIMEOUT 120)
 endforeach()
 add_integration_test(large_tls "${REALM_TEST_DIR}/large_tls.cc")
+add_integration_test(stack_guard "${REALM_TEST_DIR}/stack_guard.cc")
 add_integration_test(memmodel "${REALM_TEST_DIR}/memmodel.cc")
 add_integration_test(coverings "${REALM_TEST_DIR}/coverings.cc")
 set(alltoall_ARGS -ll:csize 1024)
