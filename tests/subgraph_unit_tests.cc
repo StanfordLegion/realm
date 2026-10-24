@@ -3016,7 +3016,7 @@ public:
     buf.create(N);
     stamps.assign(N, 0.0);
     SubgraphDefinition sd;
-    sd.concurrency_mode = SubgraphDefinition::ONE_SHOT;
+    sd.concurrency_mode = SubgraphDefinition::INSTANTIATION_ORDER; // instantiated twice
     for(int i = 0; i < N; i++) {
       GpuSpinArgs a{buf.ptr + i, (i > 0) ? buf.ptr + (i - 1) : nullptr, 1, spin_ns,
                     &stamps[i]};
@@ -3466,7 +3466,7 @@ public:
     buf.create(N);
     stamps.assign(N, 0.0);
     SubgraphDefinition sd;
-    sd.concurrency_mode = SubgraphDefinition::ONE_SHOT;
+    sd.concurrency_mode = SubgraphDefinition::INSTANTIATION_ORDER; // instantiated twice
     for(int i = 0; i < N; i++) {
       GpuSpinArgs a{buf.ptr + i, (i > 0) ? buf.ptr + (i - 1) : nullptr, 1, spin_ns,
                     &stamps[i]};

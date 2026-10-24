@@ -358,7 +358,7 @@ foreach(
   set_tests_properties(
     subgraph_death_${scenario}
     PROPERTIES FAIL_REGULAR_EXPRESSION "DEATH-TEST-SURVIVED"
-               PASS_REGULAR_EXPRESSION "\\{subgraph\\}: subgraph " TIMEOUT 120
+               PASS_REGULAR_EXPRESSION "[{]subgraph[}]: subgraph " TIMEOUT 120
   )
 endforeach()
 endif()
