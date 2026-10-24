@@ -232,8 +232,9 @@ static Subgraph build_subgraph(const Dag &dag, const std::vector<Processor> &pro
 }
 
 // One replay of the graph with plain spawns. Roots wait on `chain`.
-static Event replay_spawn(const Dag &dag, const std::vector<Processor> &procs, Event chain,
-                          std::vector<Event> &events, std::vector<Event> &scratch)
+static Event replay_spawn(const Dag &dag, const std::vector<Processor> &procs,
+                          Event chain, std::vector<Event> &events,
+                          std::vector<Event> &scratch)
 {
   WorkArgs wa{cfg.work_ns};
   events.resize(dag.size());
@@ -292,8 +293,10 @@ static void setup_copy_bench(CopyBench &cb)
   assert(mem.exists());
   cb.is = Rect<1>(0, cfg.copy_elems - 1);
   std::map<FieldID, size_t> sizes = {{FID_X, sizeof(int)}};
-  RegionInstance::create_instance(cb.a, mem, cb.is, sizes, 0, ProfilingRequestSet()).wait();
-  RegionInstance::create_instance(cb.b, mem, cb.is, sizes, 0, ProfilingRequestSet()).wait();
+  RegionInstance::create_instance(cb.a, mem, cb.is, sizes, 0, ProfilingRequestSet())
+      .wait();
+  RegionInstance::create_instance(cb.b, mem, cb.is, sizes, 0, ProfilingRequestSet())
+      .wait();
   cb.src_a.resize(1);
   cb.src_a[0].set_field(cb.a, FID_X, sizeof(int));
   cb.dst_a = cb.src_a;
@@ -363,10 +366,11 @@ static void print_result(const char *mode, bool chained, const Dag &dag, int npr
                          const Result &r, int depth = 0)
 {
   double ns_per_task = r.inst_us * 1e3 / dag.size();
-  printf("RESULT shape=%s n=%zu edges=%zu p=%d k=%d work_ns=%ld mode=%s chained=%d depth=%d "
-         "iters=%d issue_us=%.3f inst_us=%.3f ns_per_task=%.1f\n",
-         cfg.shape.c_str(), dag.size(), dag.num_edges(), nprocs, cfg.k, cfg.work_ns, mode,
-         chained ? 1 : 0, depth, cfg.iters, r.issue_us, r.inst_us, ns_per_task);
+  printf(
+      "RESULT shape=%s n=%zu edges=%zu p=%d k=%d work_ns=%ld mode=%s chained=%d depth=%d "
+      "iters=%d issue_us=%.3f inst_us=%.3f ns_per_task=%.1f\n",
+      cfg.shape.c_str(), dag.size(), dag.num_edges(), nprocs, cfg.k, cfg.work_ns, mode,
+      chained ? 1 : 0, depth, cfg.iters, r.issue_us, r.inst_us, ns_per_task);
   fflush(stdout);
 }
 

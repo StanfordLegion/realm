@@ -82,7 +82,8 @@ namespace Realm {
       SUBGRAPH_FATAL(impl->me, "deferred creation (create_subgraph with an untriggered "
                                "wait_on) is not implemented");
     if(!prs.empty())
-      SUBGRAPH_FATAL(impl->me, "profiling requests on create_subgraph are not implemented");
+      SUBGRAPH_FATAL(impl->me,
+                     "profiling requests on create_subgraph are not implemented");
 
     impl->compile();
     log_subgraph.info() << "created: subgraph=" << subgraph
@@ -245,7 +246,8 @@ namespace Realm {
   Event RemoteSubgraphInstantiations::take(Subgraph subgraph)
   {
     AutoLock<> al(mutex);
-    std::unordered_map<ID::IDType, Event>::iterator it = last_finish.find(ID(subgraph).id);
+    std::unordered_map<ID::IDType, Event>::iterator it =
+        last_finish.find(ID(subgraph).id);
     if(it == last_finish.end())
       return Event::NO_EVENT;
     Event e = it->second;
@@ -283,7 +285,8 @@ namespace Realm {
                                  Event finish_event, int priority_adjust)
   {
     if(!alive.load_acquire())
-      SUBGRAPH_FATAL(me, "instantiate of a subgraph that was destroyed (or never created)");
+      SUBGRAPH_FATAL(me,
+                     "instantiate of a subgraph that was destroyed (or never created)");
     if(!prs.empty())
       SUBGRAPH_FATAL(me, "profiling requests on the instantiation itself are not "
                          "implemented; use SubgraphInstantiationProfiling for per-"
@@ -701,8 +704,10 @@ namespace Realm {
     os << "SubgraphWorkLauncher: subgraph=" << owner->state->get_subgraph()->me;
   }
 
-  Event SubgraphWorkLauncher::Input::get_finish_event(void) const { return Event::NO_EVENT; }
-
+  Event SubgraphWorkLauncher::Input::get_finish_event(void) const
+  {
+    return Event::NO_EVENT;
+  }
 
   ////////////////////////////////////////////////////////////////////////
   //
@@ -727,13 +732,13 @@ namespace Realm {
     get_runtime()->subgraph_resource_reaper.instantiation_released();
   }
 
-
   ////////////////////////////////////////////////////////////////////////
   //
   // class SubgraphInputWaiter
   //
 
-  SubgraphInputWaiter::SubgraphInputWaiter(SubgraphExecutionState *_state, uint32_t _input)
+  SubgraphInputWaiter::SubgraphInputWaiter(SubgraphExecutionState *_state,
+                                           uint32_t _input)
     : state(_state)
     , input(_input)
   {}
@@ -814,6 +819,5 @@ namespace Realm {
       }
     }
   }
-
 
 }; // namespace Realm

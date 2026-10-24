@@ -180,7 +180,8 @@ namespace Realm {
     // The base implementation describes a processor that runs task functions
     // synchronously and does not run subgraph tasks at all; CPUs and CUDA
     // GPUs override what applies to them.
-    enum SubgraphTaskFlags {
+    enum SubgraphTaskFlags
+    {
       SUBGRAPH_TASK_REGISTERED = 1,
       // every effect of the task is enqueued on the stream it is given
       // (DeferredEffectsProperty, or a stream-aware prototype)

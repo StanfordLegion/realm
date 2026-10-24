@@ -155,13 +155,15 @@ void run_stencil_direct(const Grid &g, int64_t steps)
         dst[0].set_field(g.inst.at(t), FID_INPUT, sizeof(float));
         if(i > 0) {
           src[0].set_field(g.inst.at(Tile(i - 1, j)), FID_INPUT, sizeof(float));
-          in_north[t] = g.north.at(t).copy(src, dst, ProfilingRequestSet(),
-                                           Event::merge_events(cur, done[Tile(i - 1, j)]));
+          in_north[t] =
+              g.north.at(t).copy(src, dst, ProfilingRequestSet(),
+                                 Event::merge_events(cur, done[Tile(i - 1, j)]));
         }
         if(i < g.px - 1) {
           src[0].set_field(g.inst.at(Tile(i + 1, j)), FID_INPUT, sizeof(float));
-          in_south[t] = g.south.at(t).copy(src, dst, ProfilingRequestSet(),
-                                           Event::merge_events(cur, done[Tile(i + 1, j)]));
+          in_south[t] =
+              g.south.at(t).copy(src, dst, ProfilingRequestSet(),
+                                 Event::merge_events(cur, done[Tile(i + 1, j)]));
         }
         if(j > 0) {
           src[0].set_field(g.inst.at(Tile(i, j - 1)), FID_INPUT, sizeof(float));
@@ -222,7 +224,8 @@ Subgraph compile_stencil(const Grid &g, int64_t sgsteps)
   sd.concurrency_mode = SubgraphDefinition::INSTANTIATION_ORDER;
   std::map<Key, unsigned> stencil, increment, cn, cs, cw, ce;
 
-  auto add_copy = [&](const IndexSpace<2> &space, RegionInstance from, RegionInstance to) {
+  auto add_copy = [&](const IndexSpace<2> &space, RegionInstance from,
+                      RegionInstance to) {
     SubgraphDefinition::CopyDesc copy;
     copy.space = space;
     copy.srcs.resize(1);
@@ -232,8 +235,8 @@ Subgraph compile_stencil(const Grid &g, int64_t sgsteps)
     sd.copies.push_back(copy);
     return unsigned(sd.copies.size() - 1);
   };
-  auto dep = [&](SubgraphDefinition::OpKind sk, unsigned si, SubgraphDefinition::OpKind tk,
-                 unsigned ti) {
+  auto dep = [&](SubgraphDefinition::OpKind sk, unsigned si,
+                 SubgraphDefinition::OpKind tk, unsigned ti) {
     SubgraphDefinition::Dependency d;
     d.src_op_kind = sk;
     d.src_op_index = si;
@@ -249,13 +252,17 @@ Subgraph compile_stencil(const Grid &g, int64_t sgsteps)
       for(int64_t j = 0; j < g.py; j++) {
         Tile t(i, j);
         if(i > 0)
-          cn[Key(i, j, step)] = add_copy(g.north.at(t), g.inst.at(Tile(i - 1, j)), g.inst.at(t));
+          cn[Key(i, j, step)] =
+              add_copy(g.north.at(t), g.inst.at(Tile(i - 1, j)), g.inst.at(t));
         if(i < g.px - 1)
-          cs[Key(i, j, step)] = add_copy(g.south.at(t), g.inst.at(Tile(i + 1, j)), g.inst.at(t));
+          cs[Key(i, j, step)] =
+              add_copy(g.south.at(t), g.inst.at(Tile(i + 1, j)), g.inst.at(t));
         if(j > 0)
-          cw[Key(i, j, step)] = add_copy(g.west.at(t), g.inst.at(Tile(i, j - 1)), g.inst.at(t));
+          cw[Key(i, j, step)] =
+              add_copy(g.west.at(t), g.inst.at(Tile(i, j - 1)), g.inst.at(t));
         if(j < g.py - 1)
-          ce[Key(i, j, step)] = add_copy(g.east.at(t), g.inst.at(Tile(i, j + 1)), g.inst.at(t));
+          ce[Key(i, j, step)] =
+              add_copy(g.east.at(t), g.inst.at(Tile(i, j + 1)), g.inst.at(t));
       }
     for(int64_t i = 0; i < g.px; i++)
       for(int64_t j = 0; j < g.py; j++) {
@@ -387,7 +394,8 @@ void top_level_task(const void *_args, size_t arglen, const void *userdata,
           .best_affinity_to(g.procs[t]);
       mems[t] = mq.first();
       if(!mems[t].exists()) {
-        fprintf(stderr, "no memory for processor %llx\n", (unsigned long long)g.procs[t].id);
+        fprintf(stderr, "no memory for processor %llx\n",
+                (unsigned long long)g.procs[t].id);
         Runtime::get_runtime().shutdown(Event::NO_EVENT, 1);
         return;
       }
@@ -400,9 +408,9 @@ void top_level_task(const void *_args, size_t arglen, const void *userdata,
       Tile t(i, j);
       int64_t x0 = i * lx, x1 = (i + 1) * lx, y0 = j * ly, y1 = (j + 1) * ly;
       g.local[t] = Rect<2>(Point<2>(x0, y0), Point<2>(x1 - 1, y1 - 1));
-      bloated[t] = Rect<2>(Point<2>((i == 0) ? x0 : x0 - 1, (j == 0) ? y0 : y0 - 1),
-                           Point<2>((i == g.px - 1) ? x1 - 1 : x1,
-                                    (j == g.py - 1) ? y1 - 1 : y1));
+      bloated[t] =
+          Rect<2>(Point<2>((i == 0) ? x0 : x0 - 1, (j == 0) ? y0 : y0 - 1),
+                  Point<2>((i == g.px - 1) ? x1 - 1 : x1, (j == g.py - 1) ? y1 - 1 : y1));
     }
 
   std::map<FieldID, size_t> field_sizes = {{FID_INPUT, sizeof(float)},
@@ -446,19 +454,21 @@ void top_level_task(const void *_args, size_t arglen, const void *userdata,
     e.wait();
   }
 
-  printf("stencil_subgraph: %lld x %lld grid, %lld x %lld tiles on %zu %s, %lld steps per "
-         "run, %d rounds per mode (first is warm-up), ranks=%u\n",
-         (long long)g.nx, (long long)g.ny, (long long)g.px, (long long)g.py, workers.size(),
-         gpus.empty() ? "CPUs" : "GPUs", (long long)args->steps, args->rounds,
-         unsigned(Machine::get_machine().get_address_space_count()));
+  printf(
+      "stencil_subgraph: %lld x %lld grid, %lld x %lld tiles on %zu %s, %lld steps per "
+      "run, %d rounds per mode (first is warm-up), ranks=%u\n",
+      (long long)g.nx, (long long)g.ny, (long long)g.px, (long long)g.py, workers.size(),
+      gpus.empty() ? "CPUs" : "GPUs", (long long)args->steps, args->rounds,
+      unsigned(Machine::get_machine().get_address_space_count()));
   fflush(stdout);
 
   int64_t total_steps = 0;
   auto report = [&](const char *mode, double seconds, int round) {
-    printf("RESULT mode=%s round=%d nx=%lld ny=%lld px=%lld py=%lld steps=%lld time_ms=%.3f "
-           "us_per_step=%.2f\n",
-           mode, round, (long long)g.nx, (long long)g.ny, (long long)g.px, (long long)g.py,
-           (long long)args->steps, seconds * 1e3, seconds * 1e6 / args->steps);
+    printf(
+        "RESULT mode=%s round=%d nx=%lld ny=%lld px=%lld py=%lld steps=%lld time_ms=%.3f "
+        "us_per_step=%.2f\n",
+        mode, round, (long long)g.nx, (long long)g.ny, (long long)g.px, (long long)g.py,
+        (long long)args->steps, seconds * 1e3, seconds * 1e6 / args->steps);
     fflush(stdout);
   };
   if(args->direct) {

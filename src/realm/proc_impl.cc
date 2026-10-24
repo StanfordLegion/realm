@@ -116,8 +116,9 @@ namespace Realm {
   {
     if(Thread::self()->in_subgraph_task_execution()) {
       // graph tasks have no Operation; the instantiation's priority applies
-      log_taskreg.fatal() << "Processor::set_current_task_priority is not supported inside "
-                             "a compiled subgraph task";
+      log_taskreg.fatal()
+          << "Processor::set_current_task_priority is not supported inside "
+             "a compiled subgraph task";
       abort();
     }
     // set the priority field in the task object and it'll update the thread
@@ -1162,8 +1163,9 @@ namespace Realm {
     return nullptr;
   }
 
-  void LocalTaskProcessor::arm_subgraph_task_completion(void *context, void *token,
-                                                        SubgraphAsyncCompletion *completion)
+  void
+  LocalTaskProcessor::arm_subgraph_task_completion(void *context, void *token,
+                                                   SubgraphAsyncCompletion *completion)
   {
     // only asynchronous processors have anything to wait for
     assert(0);

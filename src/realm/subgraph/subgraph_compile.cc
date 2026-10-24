@@ -175,7 +175,8 @@ namespace Realm {
         break;
       case Interpolation::TARGET_ARRIVAL_BARRIER:
         if(ip.target_index >= d.arrivals.size())
-          SUBGRAPH_FATAL(me, "interpolation " << i << " targets arrival " << ip.target_index
+          SUBGRAPH_FATAL(me, "interpolation " << i << " targets arrival "
+                                              << ip.target_index
                                               << ", which does not exist");
         if((ip.target_offset != 0) || (ip.bytes != sizeof(Barrier)) || (ip.redop_id != 0))
           SUBGRAPH_FATAL(me, "interpolation " << i
@@ -187,22 +188,25 @@ namespace Realm {
         break;
       case Interpolation::TARGET_ARRIVAL_VALUE:
         if(ip.target_index >= d.arrivals.size())
-          SUBGRAPH_FATAL(me, "interpolation " << i << " targets arrival " << ip.target_index
+          SUBGRAPH_FATAL(me, "interpolation " << i << " targets arrival "
+                                              << ip.target_index
                                               << ", which does not exist");
         target_size = d.arrivals[ip.target_index].reduce_value.size();
         break;
       case Interpolation::TARGET_INSTANCE_ARGS:
-        SUBGRAPH_FATAL(me, "interpolation " << i
-                                            << " targets a nested instantiation, which is "
-                                               "not implemented");
+        SUBGRAPH_FATAL(me, "interpolation "
+                               << i
+                               << " targets a nested instantiation, which is "
+                                  "not implemented");
       default:
         SUBGRAPH_FATAL(me, "interpolation " << i << " has an invalid target kind");
       }
       if(ip.redop_id == 0) {
-        if((ip.target_offset > target_size) || (ip.bytes > target_size - ip.target_offset))
+        if((ip.target_offset > target_size) ||
+           (ip.bytes > target_size - ip.target_offset))
           SUBGRAPH_FATAL(me, "interpolation " << i << " writes past its target ("
-                                              << ip.target_offset << "+" << ip.bytes << " > "
-                                              << target_size << ")");
+                                              << ip.target_offset << "+" << ip.bytes
+                                              << " > " << target_size << ")");
       } else {
         const ReductionOpUntyped *redop =
             get_runtime()->reduce_op_table.get(ip.redop_id, nullptr);
@@ -220,7 +224,8 @@ namespace Realm {
     }
     for(size_t i = 0; i < d.arrivals.size(); i++)
       if(!d.arrivals[i].barrier.exists() && !arrival_barrier_interpolated[i])
-        SUBGRAPH_FATAL(me, "arrival " << i << " has no barrier and no interpolation "
+        SUBGRAPH_FATAL(me, "arrival " << i
+                                      << " has no barrier and no interpolation "
                                          "providing one");
 
     // dependencies
@@ -244,13 +249,15 @@ namespace Realm {
           return; // any index: defines how many there are
         case SubgraphDefinition::OPKIND_COLL_PRECOND:
         case SubgraphDefinition::OPKIND_COLL_POSTCOND:
-          SUBGRAPH_FATAL(me, "dependency " << i
-                                           << " uses collective conditions, which are not "
-                                              "implemented");
+          SUBGRAPH_FATAL(me, "dependency "
+                                 << i
+                                 << " uses collective conditions, which are not "
+                                    "implemented");
         case SubgraphDefinition::OPKIND_INVALID:
-          SUBGRAPH_FATAL(me, "dependency " << i << " " << role
-                                           << " kind was never set (a default-constructed "
-                                              "Dependency has no source or target)");
+          SUBGRAPH_FATAL(me, "dependency "
+                                 << i << " " << role
+                                 << " kind was never set (a default-constructed "
+                                    "Dependency has no source or target)");
         default:
           SUBGRAPH_FATAL(me, "dependency " << i << " " << role << " is a "
                                            << op_kind_name(k)
@@ -264,14 +271,15 @@ namespace Realm {
       check_index(dep.src_op_kind, dep.src_op_index, "source");
       check_index(dep.tgt_op_kind, dep.tgt_op_index, "target");
       if(dep.src_op_kind == SubgraphDefinition::OPKIND_ARRIVAL)
-        SUBGRAPH_FATAL(me, "dependency " << i << " has arrival " << dep.src_op_index
-                                         << " as its source, but arrivals have no outputs");
+        SUBGRAPH_FATAL(me, "dependency "
+                               << i << " has arrival " << dep.src_op_index
+                               << " as its source, but arrivals have no outputs");
       if(dep.src_op_kind == SubgraphDefinition::OPKIND_EXT_POSTCOND)
-        SUBGRAPH_FATAL(me, "dependency " << i
-                                         << " has an external postcondition as its source");
+        SUBGRAPH_FATAL(me, "dependency "
+                               << i << " has an external postcondition as its source");
       if(dep.tgt_op_kind == SubgraphDefinition::OPKIND_EXT_PRECOND)
-        SUBGRAPH_FATAL(me, "dependency " << i
-                                         << " has an external precondition as its target");
+        SUBGRAPH_FATAL(me, "dependency "
+                               << i << " has an external precondition as its target");
       if((dep.src_op_kind == SubgraphDefinition::OPKIND_EXT_PRECOND) &&
          (dep.tgt_op_kind == SubgraphDefinition::OPKIND_EXT_POSTCOND))
         SUBGRAPH_FATAL(me, "dependency " << i
@@ -307,8 +315,9 @@ namespace Realm {
       proc_impls[p] = impl;
       proc_nodes[p] = impl->numa_node();
     }
-    std::stable_sort(procs_seen.begin(), procs_seen.end(),
-                     [&](Processor a, Processor b) { return proc_nodes[a] < proc_nodes[b]; });
+    std::stable_sort(procs_seen.begin(), procs_seen.end(), [&](Processor a, Processor b) {
+      return proc_nodes[a] < proc_nodes[b];
+    });
 
     CompiledSubgraph &c = compiled;
     c.clear();
@@ -367,8 +376,8 @@ namespace Realm {
       for(size_t i = 0; i < ntasks; i++) {
         if(d.tasks[i].proc != cp.proc)
           continue;
-        task_to_op[i] = new_op(SubgraphDefinition::OPKIND_TASK, unsigned(i), int32_t(pi),
-                               cp.domain);
+        task_to_op[i] =
+            new_op(SubgraphDefinition::OPKIND_TASK, unsigned(i), int32_t(pi), cp.domain);
         // the task must be registered already: how it runs depends on it
         const unsigned flags = cp.impl->subgraph_task_flags(d.tasks[i].task_id);
         if(!(flags & LocalTaskProcessor::SUBGRAPH_TASK_REGISTERED))
@@ -376,8 +385,8 @@ namespace Realm {
                                      << ", which is not registered on " << cp.proc);
         CompiledSubgraph::Op &op = c.ops.back();
         op.async = cp.async;
-        op.deferred =
-            cp.async && ((flags & LocalTaskProcessor::SUBGRAPH_TASK_DEFERRED_EFFECTS) != 0);
+        op.deferred = cp.async &&
+                      ((flags & LocalTaskProcessor::SUBGRAPH_TASK_DEFERRED_EFFECTS) != 0);
         if(cp.async)
           op.async_index = int32_t(c.num_async_ops++);
       }
@@ -417,10 +426,11 @@ namespace Realm {
         for(CopySrcDstField &f : dsts)
           if(f.redop_id == 0)
             f.set_redop(cd.redop_id, cd.red_fold);
-      TransferDesc *plan = cd.space.impl->make_transfer_desc(cd.srcs, dsts, cd.indirects,
-                                                             cd.prs);
+      TransferDesc *plan =
+          cd.space.impl->make_transfer_desc(cd.srcs, dsts, cd.indirects, cd.prs);
       if(!plan)
-        SUBGRAPH_FATAL(me, "copy " << i << " has an indirection for a different index "
+        SUBGRAPH_FATAL(me, "copy " << i
+                                   << " has an indirection for a different index "
                                       "space type than the copy's");
       c.copy_plans[i] = plan;
       std::vector<Event> preconditions;
@@ -440,8 +450,10 @@ namespace Realm {
 
     // ---- edges (deduplicated), inputs, postconditions
     std::vector<std::vector<uint32_t>> succ(n), pred(n), feeds(n);
-    std::vector<std::vector<uint32_t>> input_targets(num_inputs), postcond_sources(num_postconds);
-    std::vector<std::vector<uint32_t>> direct_inputs(n); // external inputs gating an op directly
+    std::vector<std::vector<uint32_t>> input_targets(num_inputs),
+        postcond_sources(num_postconds);
+    std::vector<std::vector<uint32_t>> direct_inputs(
+        n); // external inputs gating an op directly
     for(const SubgraphDefinition::Dependency &dep : d.dependencies) {
       if(dep.src_op_kind == SubgraphDefinition::OPKIND_EXT_PRECOND) {
         uint32_t t = op_of(dep.tgt_op_kind, dep.tgt_op_index);
@@ -455,8 +467,8 @@ namespace Realm {
         uint32_t src = op_of(dep.src_op_kind, dep.src_op_index);
         uint32_t t = op_of(dep.tgt_op_kind, dep.tgt_op_index);
         if(src == t)
-          SUBGRAPH_FATAL(me, op_kind_name(dep.src_op_kind) << " " << dep.src_op_index
-                                                           << " depends on itself");
+          SUBGRAPH_FATAL(me, op_kind_name(dep.src_op_kind)
+                                 << " " << dep.src_op_index << " depends on itself");
         succ[src].push_back(t);
         pred[t].push_back(src);
       }
@@ -599,9 +611,8 @@ namespace Realm {
       c.interps.push_back(it);
     }
     std::stable_sort(c.interps.begin(), c.interps.end(),
-                     [](const CompiledSubgraph::Interp &x, const CompiledSubgraph::Interp &y) {
-                       return x.op < y.op;
-                     });
+                     [](const CompiledSubgraph::Interp &x,
+                        const CompiledSubgraph::Interp &y) { return x.op < y.op; });
     std::vector<bool> interpolated(n, false);
     for(const CompiledSubgraph::Interp &it : c.interps)
       interpolated[it.op] = true;
@@ -621,8 +632,8 @@ namespace Realm {
       off[dm] = round_up(off[dm], SUBGRAPH_CACHE_LINE_BYTES);
     for(CompiledSubgraph::Proc &cp : c.procs) {
       cp.queue_offset = uint32_t(off[cp.domain]);
-      off[cp.domain] += round_up(size_t(cp.num_ops) * sizeof(int64_t),
-                                 SUBGRAPH_CACHE_LINE_BYTES);
+      off[cp.domain] +=
+          round_up(size_t(cp.num_ops) * sizeof(int64_t), SUBGRAPH_CACHE_LINE_BYTES);
       // tail, pending-inputs and remaining-operations counters share one
       // line that is written once per operation at most
       cp.tail_offset = uint32_t(off[cp.domain]);
@@ -635,9 +646,10 @@ namespace Realm {
         continue;
       CompiledSubgraph::Op &op = c.ops[i];
       op.args_domain = domain_of_op(uint32_t(i));
-      op.args_size = (op.kind == SubgraphDefinition::OPKIND_TASK)
-                         ? uint32_t(d.tasks[op.index].args.size())
-                         : uint32_t(sizeof(Barrier) + d.arrivals[op.index].reduce_value.size());
+      op.args_size =
+          (op.kind == SubgraphDefinition::OPKIND_TASK)
+              ? uint32_t(d.tasks[op.index].args.size())
+              : uint32_t(sizeof(Barrier) + d.arrivals[op.index].reduce_value.size());
       op.args_offset = uint32_t(off[op.args_domain]);
       off[op.args_domain] += round_up(op.args_size, sizeof(uint64_t));
     }
@@ -687,9 +699,9 @@ namespace Realm {
     }
 
     for(size_t dm = 0; dm < c.domains.size(); dm++)
-      log_subgraph.info() << "subgraph " << me << ": domain " << dm << " numa_node="
-                          << c.domains[dm].numa_node << " bytes=" << c.domains[dm].bytes;
+      log_subgraph.info() << "subgraph " << me << ": domain " << dm
+                          << " numa_node=" << c.domains[dm].numa_node
+                          << " bytes=" << c.domains[dm].bytes;
   }
-
 
 }; // namespace Realm

@@ -1072,8 +1072,9 @@ namespace Realm {
           gpu->module->config->cfg_task_context_sync = 0;
         } else {
           if(!gpu->module->config->cfg_suppress_hijack_warning)
-            log_gpu.warning() << "CUDART hijack code not active"
-                              << " - device synchronizations required after every GPU task!";
+            log_gpu.warning()
+                << "CUDART hijack code not active"
+                << " - device synchronizations required after every GPU task!";
           gpu->module->config->cfg_task_context_sync = 1;
         }
 #else
@@ -1680,21 +1681,23 @@ namespace Realm {
       //  its dependents were ordered after that stream alone at compile time,
       //  so asking for a context synchronization now cannot be honored
       if(deferred_effects && (ThreadLocal::context_sync_required > 0)) {
-        log_gpu.fatal() << "subgraph task on " << me
-                        << " was registered with deferred effects (DeferredEffectsProperty "
-                           "or a stream-aware prototype) but called "
-                           "Cuda::set_task_ctxsync_required(true); put all work on the "
-                           "task's stream or register it without the promise";
+        log_gpu.fatal()
+            << "subgraph task on " << me
+            << " was registered with deferred effects (DeferredEffectsProperty "
+               "or a stream-aware prototype) but called "
+               "Cuda::set_task_ctxsync_required(true); put all work on the "
+               "task's stream or register it without the promise";
         fflush(stdout); // the default log stream, buffered when not a terminal
         fflush(stderr);
         abort();
       }
-      const bool ctxsync = (ThreadLocal::context_sync_required > 0) ||
-                           ((ThreadLocal::context_sync_required < 0) && !deferred_effects &&
-                            gpu->module->config->cfg_task_context_sync);
+      const bool ctxsync =
+          (ThreadLocal::context_sync_required > 0) ||
+          ((ThreadLocal::context_sync_required < 0) && !deferred_effects &&
+           gpu->module->config->cfg_task_context_sync);
       ThreadLocal::subgraph_ctxsync_pending = false;
       if(ctxsync) {
-#if(CUDA_VERSION >= 12050)
+#if (CUDA_VERSION >= 12050)
         if(CUDA_DRIVER_HAS_FNPTR(cuCtxRecordEvent)) {
           // fold the whole context's work into our stream, cheaply
           CUevent e = gpu->event_pool.get_event();

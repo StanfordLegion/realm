@@ -73,10 +73,7 @@ namespace Realm {
     }
   }
 
-  SubgraphExecutionState::~SubgraphExecutionState()
-  {
-    subgraph->release_blocks(blocks);
-  }
+  SubgraphExecutionState::~SubgraphExecutionState() { subgraph->release_blocks(blocks); }
 
   void SubgraphExecutionState::reset(Event _finish_event, int _priority,
                                      span<const Event> _preconditions,
@@ -175,10 +172,11 @@ namespace Realm {
     const CompiledSubgraph &c = subgraph->compiled;
     for(const CompiledSubgraph::Interp &it : c.interps) {
       if((it.src_offset > arglen) || (it.bytes > arglen - it.src_offset))
-        SUBGRAPH_FATAL(subgraph->me, "interpolation reads " << it.src_offset << "+" << it.bytes
-                                                            << " bytes of the instantiation "
-                                                               "arguments, but only "
-                                                            << arglen << " were given");
+        SUBGRAPH_FATAL(subgraph->me, "interpolation reads "
+                                         << it.src_offset << "+" << it.bytes
+                                         << " bytes of the instantiation "
+                                            "arguments, but only "
+                                         << arglen << " were given");
       const CompiledSubgraph::Op &o = c.ops[it.op];
       char *dst = blocks[o.args_domain] + o.args_offset + it.dst_offset;
       const char *src = static_cast<const char *>(args) + it.src_offset;
@@ -192,8 +190,8 @@ namespace Realm {
     }
   }
 
-  void SubgraphExecutionState::setup_profiling(
-      const SubgraphInstantiationProfiling &iprof)
+  void
+  SubgraphExecutionState::setup_profiling(const SubgraphInstantiationProfiling &iprof)
   {
     const SubgraphDefinition &d = *subgraph->defn;
     const CompiledSubgraph &c = subgraph->compiled;
@@ -215,8 +213,8 @@ namespace Realm {
     prof_index.assign(c.ops.size(), -1);
     auto entry_for_task = [&](unsigned task) -> OpProfiling & {
       if(task >= d.tasks.size())
-        SUBGRAPH_FATAL(subgraph->me, "profiling requested for task " << task
-                                                                     << ", which does not exist");
+        SUBGRAPH_FATAL(subgraph->me, "profiling requested for task "
+                                         << task << ", which does not exist");
       int32_t &idx = prof_index[c.task_ops[task]];
       if(idx < 0) {
         idx = int32_t(profiling.size());
@@ -233,17 +231,24 @@ namespace Realm {
     for(auto &p : profiling) {
       p->measurements.import_requests(p->requests);
       // everything else is dropped silently by Realm; here that is an error
-      if(p->measurements.wants_measurement<ProfilingMeasurements::OperationAbnormalStatus>() ||
+      if(p->measurements
+             .wants_measurement<ProfilingMeasurements::OperationAbnormalStatus>() ||
          p->measurements.wants_measurement<ProfilingMeasurements::OperationBacktrace>() ||
-         p->measurements.wants_measurement<ProfilingMeasurements::OperationTimelineGPU>() ||
-         p->measurements.wants_measurement<ProfilingMeasurements::OperationEventWaits>() ||
-         p->measurements.wants_measurement<ProfilingMeasurements::OperationMemoryUsage>() ||
+         p->measurements
+             .wants_measurement<ProfilingMeasurements::OperationTimelineGPU>() ||
+         p->measurements
+             .wants_measurement<ProfilingMeasurements::OperationEventWaits>() ||
+         p->measurements
+             .wants_measurement<ProfilingMeasurements::OperationMemoryUsage>() ||
          p->measurements.wants_measurement<ProfilingMeasurements::OperationCopyInfo>() ||
-         p->measurements.wants_measurement<ProfilingMeasurements::OperationSubgraphInfo>() ||
+         p->measurements
+             .wants_measurement<ProfilingMeasurements::OperationSubgraphInfo>() ||
          p->measurements.wants_measurement<ProfilingMeasurements::InstanceStatus>() ||
-         p->measurements.wants_measurement<ProfilingMeasurements::InstanceAllocResult>() ||
+         p->measurements
+             .wants_measurement<ProfilingMeasurements::InstanceAllocResult>() ||
          p->measurements.wants_measurement<ProfilingMeasurements::InstanceTimeline>() ||
-         p->measurements.wants_measurement<ProfilingMeasurements::InstanceMemoryUsage>() ||
+         p->measurements
+             .wants_measurement<ProfilingMeasurements::InstanceMemoryUsage>() ||
          p->measurements.wants_measurement<
              ProfilingMeasurements::CachePerfCounters<PMID_PCTRS_CACHE_L1I>>() ||
          p->measurements.wants_measurement<
@@ -256,18 +261,21 @@ namespace Realm {
          p->measurements.wants_measurement<ProfilingMeasurements::TLBPerfCounters>() ||
          p->measurements
              .wants_measurement<ProfilingMeasurements::BranchPredictionPerfCounters>())
-        SUBGRAPH_FATAL(subgraph->me,
-                       "a task requests a profiling measurement that compiled subgraphs do "
-                       "not provide (supported: OperationTimeline, OperationProcessorUsage, "
-                       "OperationStatus, OperationFinishEvent)");
+        SUBGRAPH_FATAL(
+            subgraph->me,
+            "a task requests a profiling measurement that compiled subgraphs do "
+            "not provide (supported: OperationTimeline, OperationProcessorUsage, "
+            "OperationStatus, OperationFinishEvent)");
       p->wants_timeline =
           p->measurements.wants_measurement<ProfilingMeasurements::OperationTimeline>();
       p->wants_proc =
-          p->measurements.wants_measurement<ProfilingMeasurements::OperationProcessorUsage>();
+          p->measurements
+              .wants_measurement<ProfilingMeasurements::OperationProcessorUsage>();
       p->wants_status =
           p->measurements.wants_measurement<ProfilingMeasurements::OperationStatus>();
       p->wants_fevent =
-          p->measurements.wants_measurement<ProfilingMeasurements::OperationFinishEvent>();
+          p->measurements
+              .wants_measurement<ProfilingMeasurements::OperationFinishEvent>();
       if(p->wants_timeline)
         p->timeline.record_create_time();
     }
@@ -370,10 +378,9 @@ namespace Realm {
       }
       break;
     default:
-      SUBGRAPH_FATAL(subgraph->me, "internal error: operation " << op
-                                                                << " of kind "
-                                                                << op_kind_name(o.kind)
-                                                                << " cannot be launched directly");
+      SUBGRAPH_FATAL(subgraph->me, "internal error: operation "
+                                       << op << " of kind " << op_kind_name(o.kind)
+                                       << " cannot be launched directly");
     }
     op_body_done(op);
     op_finished(op);
@@ -389,7 +396,8 @@ namespace Realm {
                                 EventImpl::gen_t finish_gen, int priority,
                                 const ProfilingRequestSet &prs,
                                 SubgraphExecutionState *_state, uint32_t _op)
-        : TransferOperation(desc, Event::NO_EVENT, finish_event, finish_gen, priority, prs)
+        : TransferOperation(desc, Event::NO_EVENT, finish_event, finish_gen, priority,
+                            prs)
         , state(_state)
         , op(_op)
       {}
@@ -429,9 +437,9 @@ namespace Realm {
     GenEventImpl *finish_event = GenEventImpl::create_genevent();
     Event ev = finish_event->current_event();
     const ProfilingRequestSet &prs = copy_prs.empty() ? cd.prs : copy_prs[o.index];
-    SubgraphTransferOperation *top = new SubgraphTransferOperation(
-        *plan, finish_event, ID(ev).event_generation(), priority + cd.priority, prs, this,
-        op);
+    SubgraphTransferOperation *top =
+        new SubgraphTransferOperation(*plan, finish_event, ID(ev).event_generation(),
+                                      priority + cd.priority, prs, this, op);
     // the plan is analyzed and the graph satisfied the preconditions: this
     // allocates intermediate buffers and creates the transfer descriptors
     top->start_or_defer();
@@ -453,7 +461,8 @@ namespace Realm {
   void SubgraphExecutionState::op_finished(uint32_t op)
   {
     const CompiledSubgraph &c = subgraph->compiled;
-    for(uint64_t i = c.postconds_of.offsets[op]; i < c.postconds_of.offsets[op + 1]; i++) {
+    for(uint64_t i = c.postconds_of.offsets[op]; i < c.postconds_of.offsets[op + 1];
+        i++) {
       const uint32_t pc = c.postconds_of.data[i];
       if(postcond_counter(pc).fetch_sub_acqrel(1) != 1)
         continue;
@@ -497,8 +506,9 @@ namespace Realm {
     }
     if(pf->wants_status) {
       ProfilingMeasurements::OperationStatus status;
-      status.result = skipped ? ProfilingMeasurements::OperationStatus::CANCELLED
-                              : ProfilingMeasurements::OperationStatus::COMPLETED_SUCCESSFULLY;
+      status.result =
+          skipped ? ProfilingMeasurements::OperationStatus::CANCELLED
+                  : ProfilingMeasurements::OperationStatus::COMPLETED_SUCCESSFULLY;
       status.error_code = 0;
       pf->measurements.add_measurement(status);
     }
@@ -804,6 +814,5 @@ namespace Realm {
     }
     return now < poll_deadline_ns;
   }
-
 
 }; // namespace Realm

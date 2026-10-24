@@ -172,7 +172,8 @@ namespace Realm {
   //
   // class DeferredEffectsProperty
 
-  /*static*/ Serialization::PolymorphicSerdezSubclass<CodeProperty, DeferredEffectsProperty>
+  /*static*/ Serialization::PolymorphicSerdezSubclass<CodeProperty,
+                                                      DeferredEffectsProperty>
       DeferredEffectsProperty::serdez_subclass;
 
   CodeProperty *DeferredEffectsProperty::clone(void) const

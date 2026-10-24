@@ -139,7 +139,7 @@ namespace Realm {
       bool deferred;
       int32_t async_index; // per-instantiation token/completion slot, -1 if not async
     };
-    struct Input { // one external precondition
+    struct Input {                   // one external precondition
       std::vector<uint32_t> targets; // operations it directly gates
       std::vector<uint32_t> procs;   // processors with operations depending on it
     };
@@ -156,12 +156,13 @@ namespace Realm {
     struct Proc {
       Processor proc;
       LocalTaskProcessor *impl;
-      int32_t domain;         // index into domains
-      uint32_t first_op;      // ops[first_op .. first_op + num_ops) run here
+      int32_t domain;    // index into domains
+      uint32_t first_op; // ops[first_op .. first_op + num_ops) run here
       uint32_t num_ops;
-      uint32_t queue_offset;  // byte offset of the ready queue in the domain block
-      uint32_t tail_offset;   // byte offset of the queue tail (atomic<uint64_t>)
-      uint32_t inputs_offset; // byte offset of the pending-inputs counter (atomic<int64_t>)
+      uint32_t queue_offset; // byte offset of the ready queue in the domain block
+      uint32_t tail_offset;  // byte offset of the queue tail (atomic<uint64_t>)
+      uint32_t
+          inputs_offset; // byte offset of the pending-inputs counter (atomic<int64_t>)
       // byte offset of the count of operations still to complete here
       // (atomic<int64_t>); the processor's share of the finish counter is
       // released when it reaches zero, so tasks that block and finish out of
@@ -185,13 +186,13 @@ namespace Realm {
     };
 
     std::vector<Op> ops;
-    uint32_t num_direct_ops;          // directly launched operations, numbered last
-    std::vector<uint32_t> task_ops;   // task index -> op
-    std::vector<uint32_t> copy_ops;   // copy index -> op
+    uint32_t num_direct_ops;        // directly launched operations, numbered last
+    std::vector<uint32_t> task_ops; // task index -> op
+    std::vector<uint32_t> copy_ops; // copy index -> op
     // One analyzed transfer plan per copy, shared by all instantiations
     // (a reference is held; released by clear()).
     std::vector<TransferDesc *> copy_plans;
-    bool any_task_profiling;          // some task carries profiling requests
+    bool any_task_profiling;     // some task carries profiling requests
     std::vector<uint32_t> roots; // operations without in-graph predecessors
     std::vector<Proc> procs;
     std::vector<Domain> domains;
@@ -621,8 +622,8 @@ namespace Realm {
 
     struct ReadyEntry {
       SubgraphExecutionState *state;
-      uint32_t op;             // into CompiledSubgraph::ops
-      int priority;            // the instantiation's priority
+      uint32_t op;  // into CompiledSubgraph::ops
+      int priority; // the instantiation's priority
     };
 
     // Thread-safe. The caller is responsible for waking the scheduler.
