@@ -291,7 +291,7 @@ namespace Realm {
       core_rsrvs[i] = new CoreReservation(
           stringbuilder() << _name_prefix << " (worker " << (i + 1) << ")", crs, params);
 
-    // these will be filled in as workers show up
+    // these will be filled in by start_worker_threads
     worker_threads.resize(num_workers, 0);
 
     worker_infos.resize(num_workers + 1);
@@ -357,10 +357,6 @@ namespace Realm {
       assert(id <= num_workers);
     }
 
-    // subtract 1 because we don't keep a Thread * for master
-    assert(worker_threads[id - 1] == 0);
-    worker_threads[id - 1] = Thread::self();
-
     WorkerInfo *wi = &worker_infos[id];
     ThreadLocal::threadpool_workerinfo = wi;
     log_pool.debug() << "worker: " << Thread::self() << " "
@@ -412,10 +408,12 @@ namespace Realm {
       }
 
       for(int i = 0; i < num_workers; i++) {
-        // the threads we launch will assign ids themselves
+        // Workers assign their own ids, but only the launching thread touches
+        // worker_threads.  A worker can publish IDLE before this call returns.
         ThreadLaunchParameters tlp;
-        Thread::create_kernel_thread<ThreadPool, &ThreadPool::worker_entry>(
-            this, tlp, *core_rsrvs[i]);
+        worker_threads[i] =
+            Thread::create_kernel_thread<ThreadPool, &ThreadPool::worker_entry>(
+                this, tlp, *core_rsrvs[i]);
       }
 
       workers_running = true;
@@ -429,9 +427,13 @@ namespace Realm {
       // tell all workers to shutdown
       for(int i = 0; i < num_workers; i++) {
         int expval = WorkerInfo::WORKER_IDLE;
-        bool ok = worker_infos[i + 1].status.compare_exchange(
-            expval, WorkerInfo::WORKER_SHUTDOWN);
-        assert(ok);
+        while(!worker_infos[i + 1].status.compare_exchange(expval,
+                                                           WorkerInfo::WORKER_SHUTDOWN)) {
+          // An unused pool may shut down before its workers finish starting.
+          assert(expval == WorkerInfo::WORKER_STARTING);
+          std::this_thread::yield();
+          expval = WorkerInfo::WORKER_IDLE;
+        }
       }
 
       // now join on all threads
