@@ -127,6 +127,9 @@ list(
   deferred_alloc_test.cc
   logging_test.cc
 )
+if(REALM_USE_OPENMP AND NOT REALM_OPENMP_SYSTEM_RUNTIME)
+  list(APPEND REALM_UNIT_TESTS openmp_threadpool_test.cc)
+endif()
 list(TRANSFORM REALM_UNIT_TESTS PREPEND "${REALM_TEST_DIR}/unit_tests/")
 add_executable(realm_unit_tests ${REALM_UNIT_TESTS})
 # Needed for designated initializers
