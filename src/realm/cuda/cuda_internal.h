@@ -257,9 +257,10 @@ namespace Realm {
       void add_fence(GPUWorkFence *fence);
       void add_start_event(GPUWorkStart *start);
       void add_notification(GPUCompletionNotification *notification);
+      // `return_event` false leaves the event with the caller after it fires
       void add_event(CUevent event, GPUWorkFence *fence,
                      GPUCompletionNotification *notification = NULL,
-                     GPUWorkStart *start = NULL);
+                     GPUWorkStart *start = NULL, bool return_event = true);
       void wait_on_streams(const std::set<GPUStream *> &other_streams);
 
       // atomically checks rate limit counters and returns true if 'bytes'
@@ -284,6 +285,7 @@ namespace Realm {
         GPUWorkFence *fence;
         GPUWorkStart *start;
         GPUCompletionNotification *notification;
+        bool return_event;
       };
 #ifdef USE_CQ
       Realm::CircularQueue<PendingEvent> pending_events;
@@ -364,12 +366,19 @@ namespace Realm {
       ~ContextSynchronizer();
 
       void add_fence(GPUWorkFence *fence);
+      // like a fence, but for work that has no Operation (subgraph tasks)
+      void add_notification(GPUCompletionNotification *notification);
 
       void shutdown_threads();
 
       void thread_main();
 
     protected:
+      // with the mutex held: wakes or asks for a thread to perform a sync;
+      //  returns true if the caller must start one (without the mutex)
+      bool request_sync_locked();
+      void start_worker_thread();
+
       GPU *gpu;
       CUcontext context;
       int max_threads;
@@ -377,6 +386,7 @@ namespace Realm {
       Mutex::CondVar condvar;
       bool shutdown_flag;
       GPUWorkFence::FenceList fences;
+      std::vector<GPUCompletionNotification *> notifications;
       int total_threads, sleeping_threads, syncing_threads;
       std::vector<Thread *> worker_threads;
       CoreReservation *core_rsrv;
@@ -563,6 +573,18 @@ namespace Realm {
 
       virtual void shutdown(void);
 
+      // compiled subgraph tasks (see LocalTaskProcessor): the scheduler
+      //  thread runs the task function itself, with these providing the
+      //  context, stream and completion tracking GPUContextManager would
+      virtual unsigned subgraph_task_flags(Processor::TaskFuncID func_id);
+      virtual bool supports_subgraph_tasks(void) const;
+      virtual bool subgraph_tasks_are_async(void) const;
+      virtual void *begin_subgraph_task(const void *const *tokens, size_t num_tokens);
+      virtual void *end_subgraph_task(void *context, bool deferred_effects);
+      virtual void arm_subgraph_task_completion(void *context, void *token,
+                                                SubgraphAsyncCompletion *completion);
+      virtual void release_subgraph_tokens(void *const *tokens, size_t num_tokens);
+
     protected:
       virtual void execute_task(Processor::TaskFuncID func_id,
                                 const ByteArrayRef &task_args);
@@ -577,6 +599,7 @@ namespace Realm {
         Processor::TaskFuncPtr fnptr;
         Cuda::StreamAwareTaskFuncPtr stream_aware_fnptr;
         ByteArray user_data;
+        bool deferred_effects; // all work goes on the task's stream
       };
 
       // we're not using the parent's task table, but we can use the mutex

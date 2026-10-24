@@ -288,6 +288,9 @@ namespace Realm {
     template <typename T>
     const T *find_impl(void) const;
 
+    template <typename T>
+    const T *find_property(void) const;
+
     // pretty-printing
     friend std::ostream &operator<<(std::ostream &os, const CodeDescriptor &cd);
 
@@ -357,7 +360,40 @@ namespace Realm {
     // is this implementation meaningful in another address space?
     virtual bool is_portable(void) const = 0;
 
-    // TODO: serialization/deserialization stuff
+    // portable properties are serialized polymorphically, like implementations
+    template <typename S>
+    static CodeProperty *deserialize_new(S &deserializer);
+  };
+
+  template <typename S>
+  bool serialize(S &serializer, const CodeProperty &cp);
+
+  // Marks a task function whose effects are all enqueued asynchronously on
+  // the stream (or equivalent) the processor hands it: when the function
+  // returns, nothing it did need be complete, but all of it is ordered on
+  // that stream. Compiled subgraphs use this to let a dependent task on the
+  // same processor start as soon as the function returns, with the
+  // processor ordering the dependent's work after this task's. Functions
+  // with the Cuda::StreamAwareTaskFuncPtr prototype are treated this way
+  // implicitly. The property has no effect on processors that run tasks
+  // synchronously, such as CPUs.
+  class REALM_PUBLIC_API DeferredEffectsProperty : public CodeProperty {
+  public:
+    DeferredEffectsProperty(void);
+    virtual ~DeferredEffectsProperty(void);
+
+    virtual CodeProperty *clone(void) const;
+    virtual bool is_portable(void) const;
+
+    template <typename S>
+    bool serialize(S &serializer) const;
+
+    template <typename S>
+    static CodeProperty *deserialize_new(S &deserializer);
+
+  protected:
+    static Serialization::PolymorphicSerdezSubclass<CodeProperty, DeferredEffectsProperty>
+        serdez_subclass;
   };
 
   // abstract class that describes a code translator that can convert a code
