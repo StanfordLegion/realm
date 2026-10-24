@@ -1685,6 +1685,8 @@ namespace Realm {
                            "or a stream-aware prototype) but called "
                            "Cuda::set_task_ctxsync_required(true); put all work on the "
                            "task's stream or register it without the promise";
+        fflush(stdout); // the default log stream, buffered when not a terminal
+        fflush(stderr);
         abort();
       }
       const bool ctxsync = (ThreadLocal::context_sync_required > 0) ||

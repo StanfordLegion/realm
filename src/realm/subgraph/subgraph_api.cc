@@ -35,6 +35,7 @@
 
 #include <algorithm>
 #include <climits>
+#include <cstdio>
 #include <cstdlib>
 #include <cstring>
 #include <sstream>
@@ -50,6 +51,10 @@ namespace Realm {
   void subgraph_fatal(ID me, const std::string &what)
   {
     log_subgraph.fatal() << "subgraph " << me << ": " << what;
+    // the default log stream is stdout, fully buffered when it is not a
+    // terminal: flush, or the message dies with the process
+    fflush(stdout);
+    fflush(stderr);
     abort();
   }
 
