@@ -22,8 +22,10 @@
 #include "realm/mutex.h"
 #include "realm/cmdline.h"
 #include "realm/logging.h"
+#include "realm/realm_assert.h"
 
 #include <math.h>
+#include <cstring>
 
 namespace Realm {
 
@@ -179,6 +181,9 @@ namespace Realm {
 
   void ActiveMessageHandlerTable::construct_handler_table(void)
   {
+    // rebuild from the full registration list, so that constructing the table again
+    //  (as the unit tests do for every test) does not duplicate every entry
+    handlers.clear();
     for(ActiveMessageHandlerRegBase *nextreg = pending_handlers; nextreg;
         nextreg = nextreg->next_handler) {
       HandlerEntry e;
@@ -195,6 +200,27 @@ namespace Realm {
 
     std::sort(handlers.begin(), handlers.end(), hash_less);
 
+    // a MessageID has to be able to name every entry
+    if(handlers.size() > (size_t(std::numeric_limits<MessageID>::max()) + 1)) {
+      log_amhandler.fatal() << "too many active message handlers: " << handlers.size()
+                            << " registered, at most "
+                            << (size_t(std::numeric_limits<MessageID>::max()) + 1)
+                            << " can be addressed";
+      abort();
+    }
+
+    // lookup_message_id finds an entry by its type hash alone, so two types with the
+    //  same hash would have every message of one delivered to the other's handler (the
+    //  same type registered twice is harmless: both entries dispatch identically)
+    for(size_t i = 1; i < handlers.size(); i++)
+      if((handlers[i].hash == handlers[i - 1].hash) &&
+         (strcmp(handlers[i].name, handlers[i - 1].name) != 0)) {
+        log_amhandler.fatal() << "active message handler type hash collision: '"
+                              << handlers[i - 1].name << "' and '" << handlers[i].name
+                              << "' both hash to " << handlers[i].hash;
+        abort();
+      }
+
     // handler ids are the same everywhere, so only log on node 0
     if(Network::my_node_id == 0)
       for(size_t i = 0; i < handlers.size(); i++)
@@ -206,6 +232,28 @@ namespace Realm {
   /*static*/ ActiveMessageHandlerRegBase *ActiveMessageHandlerTable::pending_handlers = 0;
 
   /*extern*/ ActiveMessageHandlerTable activemsg_handler_table;
+
+  uint64_t next_chunk_message_id(NodeID node_id)
+  {
+    // one counter for the whole process - see the declaration in activemsg.h for why
+    //  this must not live inside ActiveMessage<T>
+    static atomic<uint64_t> counter(0);
+    uint64_t local = counter.fetch_add(1);
+    return ((static_cast<uint64_t>(node_id) << 48) | (local & ((1ULL << 48) - 1)));
+  }
+
+  void report_unfragmentable_message(unsigned short msgid, size_t header_size,
+                                     size_t wrapped_header_size, size_t payload_size)
+  {
+    log_amhandler.fatal()
+        << "active message " << activemsg_handler_table.lookup_message_name(msgid)
+        << ": a payload of " << payload_size
+        << " bytes is larger than the network can send in one message ("
+        << Network::max_payload_size(header_size, nullptr) << " bytes with a "
+        << header_size << "-byte header), and the " << wrapped_header_size
+        << "-byte fragment header is too large for the network to send it in pieces";
+    abort();
+  }
 
   ////////////////////////////////////////////////////////////////////////
   //
@@ -241,6 +289,21 @@ namespace Realm {
     size_used = sizeof(MessageBlock);
     size_used = (size_used + 15) & ~size_t(15); // 16B alignment
     use_count.store(1);
+  }
+
+  /*static*/ size_t
+  IncomingMessageManager::MessageBlock::bytes_needed(size_t hdr_bytes_needed,
+                                                     size_t payload_bytes_needed)
+  {
+    // mirrors the layout arithmetic in append_message(), starting from a block
+    //  that has just been reset()
+    size_t used = (sizeof(MessageBlock) + 15) & ~size_t(15);
+    used = (used + sizeof(Message) + 15) & ~size_t(15);
+    if(hdr_bytes_needed > 0)
+      used = (used + hdr_bytes_needed + 15) & ~size_t(15);
+    if(payload_bytes_needed > 0)
+      used = (used + payload_bytes_needed + 15) & ~size_t(15);
+    return used;
   }
 
   IncomingMessageManager::Message *
@@ -280,17 +343,34 @@ namespace Realm {
           ((payload_ofs > 0) ? reinterpret_cast<void *>(base + payload_ofs) : 0);
       return msg;
     } else {
-      // would it have ever fit?
-      assert((new_used - size_used) <= (total_size - sizeof(MessageBlock)));
+      // would it have ever fit?  callers must route an oversized message around
+      //  the block allocator, so reaching here is a bug rather than backpressure -
+      //  REALM_ASSERT so it cannot degrade into a null dereference in a release build
+      REALM_ASSERT((new_used - size_used) <= (total_size - sizeof(MessageBlock)));
 
       // return failure - caller will find a new block
       return 0;
     }
   }
 
+  /*static*/ void
+  IncomingMessageManager::invoke_deferred_callbacks(IncomingMessageManager::Message *msg)
+  {
+    if(msg->deferred_callbacks == nullptr)
+      return;
+    for(const DeferredCallback &cb : *msg->deferred_callbacks)
+      (cb.fnptr)(msg->sender, cb.data1, cb.data2);
+    delete msg->deferred_callbacks;
+    msg->deferred_callbacks = nullptr;
+  }
+
   void IncomingMessageManager::MessageBlock::recycle_message(
       IncomingMessageManager::Message *msg, IncomingMessageManager *manager)
   {
+    // reaching here means the handler never ran, so release rather than invoke
+    delete msg->deferred_callbacks;
+    msg->deferred_callbacks = nullptr;
+
     // first, free any hdr/payload pointer we were borrowing
     if(msg->hdr_needs_free)
       free(msg->hdr);
@@ -397,6 +477,8 @@ namespace Realm {
         activemsg_handler_table.lookup_message_handler(msgid);
 
     std::vector<char> message;
+    // callbacks accumulated from this message's earlier fragments, if it was one
+    std::vector<DeferredCallback> deferred;
 
     if(handler && handler->extract_frag_info.has_value()) {
       AutoLock<> al(mutex);
@@ -404,25 +486,67 @@ namespace Realm {
       const FragmentInfo &frag_info = handler->extract_frag_info.value()(hdr);
 
       if(frag_info.total_chunks > 1) {
-        auto key = std::make_pair(sender, frag_info.msg_id);
+        if(frag_info.chunk_id >= frag_info.total_chunks) {
+          log_amhandler.fatal()
+              << "message fragment out of range: sender=" << sender << " msgid=" << msgid
+              << " msg_id=" << frag_info.msg_id << " chunk=" << frag_info.chunk_id << "/"
+              << frag_info.total_chunks;
+          abort();
+        }
+
+        FragmentKey key{sender, msgid, frag_info.msg_id};
         auto it = frag_message.find(key);
 
         if(it == frag_message.end()) {
-          it = frag_message
-                   .emplace(key,
-                            std::make_unique<FragmentedMessage>(frag_info.total_chunks))
-                   .first;
+          FragmentReassembly rec;
+          rec.message = std::make_unique<FragmentedMessage>(frag_info.total_chunks);
+          it = frag_message.emplace(key, std::move(rec)).first;
+        } else if(it->second.message->expected_chunks() != frag_info.total_chunks) {
+          // two logical messages have landed on one reassembly key, or a fragment
+          //  header is corrupt - either way the reassembled bytes cannot be trusted
+          log_amhandler.fatal() << "message fragment count mismatch: sender=" << sender
+                                << " msgid=" << msgid << " msg_id=" << frag_info.msg_id
+                                << " expected=" << it->second.message->expected_chunks()
+                                << " got=" << frag_info.total_chunks;
+          abort();
         }
 
-        bool ok = it->second->add_chunk(frag_info.chunk_id, payload, payload_size);
-        assert(ok);
+        if(!it->second.message->add_chunk(frag_info.chunk_id, payload, payload_size)) {
+          // the chunk id is in range and the totals agree, so this fragment has
+          //  already been received.  Realm's transports deliver exactly once and
+          //  nothing retransmits, so a repeat is a bug upstream rather than
+          //  something to absorb - and absorbing it would mask an id collision
+          log_amhandler.fatal()
+              << "duplicate message fragment: sender=" << sender << " msgid=" << msgid
+              << " msg_id=" << frag_info.msg_id << " chunk=" << frag_info.chunk_id << "/"
+              << frag_info.total_chunks;
+          abort();
+        }
 
-        if(!it->second->is_complete()) {
+        if(!it->second.message->is_complete()) {
+          // This fragment does not complete the message, so "received AND handled by
+          //  the target" is not true yet and its callback must not fire.  Hold it; the
+          //  dispatch that completes reassembly runs it after the handler.
+          if(callback_fnptr != nullptr) {
+            it->second.deferred.push_back(
+                DeferredCallback{callback_fnptr, callback_data1, callback_data2});
+            callback_fnptr = nullptr;
+            callback_data1 = 0;
+            callback_data2 = 0;
+          }
           total_messages_handled += 1;
           return false;
         }
 
-        message = it->second->reassemble();
+        // The COMPLETING fragment keeps its own callback, which from here follows the
+        //  ordinary contract: fired by the handler loop if the message is queued, or
+        //  reported by the caller itself from our `true` return if it is handled
+        //  inline.  Carrying it in 'deferred' too would signal completion twice - the
+        //  inline path fires it here and then the backend fires it again (see
+        //  UCPInternal::am_msg_recv_data_ready, ucp_internal.cc:1191-1193, and the
+        //  equivalent reply-on-return in the GASNet-EX module).
+        message = it->second.message->reassemble();
+        deferred = std::move(it->second.deferred);
 
         frag_message.erase(it);
       }
@@ -449,6 +573,13 @@ namespace Realm {
           long long t_end = Clock::current_time_in_nanoseconds();
           handler->stats.record(t_start, t_end);
         }
+        // the reassembled message has now been handled, so callbacks held from
+        //  its earlier fragments are due.  This message's own callback_fnptr
+        //  stays unfired: when a handler runs inline the backend reports
+        //  completion through its return value instead
+        //  (gasnetex_internal.cc:5156).
+        for(const DeferredCallback &cb : deferred)
+          (cb.fnptr)(sender, cb.data1, cb.data2);
         if(payload_mode == PAYLOAD_FREE)
           free(const_cast<void *>(payload));
         // see if we need to wake up a thread waiting on a drain
@@ -467,11 +598,34 @@ namespace Realm {
 
     // can't handle inline - need to create a Message object for it
 
+    size_t hdr_bytes_needed = ((hdr_mode == PAYLOAD_COPY) ? hdr_size : 0);
+    size_t payload_bytes_needed = ((payload_mode == PAYLOAD_COPY) ? payload_size : 0);
+
+    // Message blocks are a fixed size and are never grown, so a message that does
+    //  not fit in a freshly reset block cannot be satisfied by retrying with another
+    //  one.  Give its payload a dedicated heap allocation instead and let the normal
+    //  payload_needs_free path reclaim it; only the Message and header still come
+    //  from a block.  This is reachable whenever a chunked or multicast payload is
+    //  reassembled above the block size, and the copy is deliberately done before the
+    //  lock is taken, since the large copies are precisely the ones that should not be
+    //  serialized.
+    void *oversized_payload = 0;
+    if((payload_bytes_needed > 0) &&
+       (MessageBlock::bytes_needed(hdr_bytes_needed, payload_bytes_needed) >
+        cfg_message_block_size)) {
+      oversized_payload = malloc(payload_bytes_needed);
+      REALM_ASSERT(oversized_payload != 0);
+      memcpy(oversized_payload, payload, payload_bytes_needed);
+      payload_bytes_needed = 0;
+    }
+    // headers are capped far below the block size by every backend, so there is no
+    //  equivalent fallback for them - but do not let a violation reach append_message
+    REALM_ASSERT(MessageBlock::bytes_needed(hdr_bytes_needed, payload_bytes_needed) <=
+                 cfg_message_block_size);
+
     mutex.lock();
 
     Message *msg = 0;
-    size_t hdr_bytes_needed = ((hdr_mode == PAYLOAD_COPY) ? hdr_size : 0);
-    size_t payload_bytes_needed = ((payload_mode == PAYLOAD_COPY) ? payload_size : 0);
     while(true) {
       // try to stick this message in the current block
       msg = current_block->append_message(hdr_bytes_needed, payload_bytes_needed);
@@ -499,7 +653,7 @@ namespace Realm {
 
         // either way, this must now succeed
         msg = current_block->append_message(hdr_bytes_needed, payload_bytes_needed);
-        assert(msg != 0);
+        REALM_ASSERT(msg != 0);
         break;
       }
 
@@ -523,6 +677,11 @@ namespace Realm {
       msg->callback_fnptr = callback_fnptr;
       msg->callback_data1 = callback_data1;
       msg->callback_data2 = callback_data2;
+      // heap allocated because a Message carries only two words of callback data,
+      //  and these fire on a handler thread long after this function returns
+      msg->deferred_callbacks =
+          (deferred.empty() ? nullptr
+                            : new std::vector<DeferredCallback>(std::move(deferred)));
 
       if(hdr_mode == PAYLOAD_COPY)
         memcpy(msg->hdr, hdr, hdr_size);
@@ -532,13 +691,18 @@ namespace Realm {
       msg->hdr_needs_free = (hdr_mode == PAYLOAD_FREE);
 
       if(payload_size > 0) {
-        if(payload_mode == PAYLOAD_COPY)
+        if(oversized_payload != 0)
+          msg->payload = oversized_payload; // already copied, above
+        else if(payload_mode == PAYLOAD_COPY)
           memcpy(msg->payload, payload, payload_size);
         else
           msg->payload = const_cast<void *>(payload);
       }
       msg->payload_size = payload_size;
-      msg->payload_needs_free = (payload_mode == PAYLOAD_FREE);
+      // PAYLOAD_FREE and the oversized fallback are mutually exclusive - the latter
+      //  only ever triggers for PAYLOAD_COPY - but either one means we own the buffer
+      msg->payload_needs_free =
+          ((payload_mode == PAYLOAD_FREE) || (oversized_payload != 0));
     }
 
     if(heads[sender]) {
@@ -800,6 +964,7 @@ namespace Realm {
       if(current_msg->callback_fnptr)
         (current_msg->callback_fnptr)(current_msg->sender, current_msg->callback_data1,
                                       current_msg->callback_data2);
+      invoke_deferred_callbacks(current_msg);
 
       if(do_profile)
         current_msg->handler->stats.record(t_start, t_end);
@@ -881,6 +1046,7 @@ namespace Realm {
         if(current_msg->callback_fnptr)
           (current_msg->callback_fnptr)(current_msg->sender, current_msg->callback_data1,
                                         current_msg->callback_data2);
+        invoke_deferred_callbacks(current_msg);
 
         if(Config::profile_activemsg_handlers)
           current_msg->handler->stats.record(t_start, t_end);
