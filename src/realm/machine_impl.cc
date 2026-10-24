@@ -914,11 +914,19 @@ namespace Realm {
       Processor restrict_proc /*= Processor::NO_PROC*/,
       Memory restrict_memory /*= Memory::NO_MEMORY*/, bool local_only /*= true*/) const
   {
+    RWLock::AutoReaderLock al(mutex);
+    return get_proc_mem_affinity_unlocked(result, restrict_proc, restrict_memory,
+                                          local_only);
+  }
+
+  int MachineImpl::get_proc_mem_affinity_unlocked(
+      std::vector<Machine::ProcessorMemoryAffinity> &result, Processor restrict_proc,
+      Memory restrict_memory, bool local_only) const
+  {
     int count = 0;
     result.clear();
 
     {
-      RWLock::AutoReaderLock al(mutex);
 #ifdef USE_OLD_AFFINITIES
       for(std::vector<Machine::ProcessorMemoryAffinity>::const_iterator it =
               proc_mem_affinities.begin();
@@ -1010,13 +1018,21 @@ namespace Realm {
       Memory restrict_mem1 /*= Memory::NO_MEMORY*/,
       Memory restrict_mem2 /*= Memory::NO_MEMORY*/, bool local_only /*= true*/) const
   {
+    RWLock::AutoReaderLock al(mutex);
+    return get_mem_mem_affinity_unlocked(result, restrict_mem1, restrict_mem2,
+                                         local_only);
+  }
+
+  int MachineImpl::get_mem_mem_affinity_unlocked(
+      std::vector<Machine::MemoryMemoryAffinity> &result, Memory restrict_mem1,
+      Memory restrict_mem2, bool local_only) const
+  {
     // Clear the vector in case it has old data
     result.clear();
 
     int count = 0;
 
     {
-      RWLock::AutoReaderLock al(mutex);
       if(restrict_mem1.exists()) {
         const MachineNodeInfo *nm1 = get_nodeinfo(restrict_mem1);
         if(!nm1)
@@ -1345,6 +1361,9 @@ namespace Realm {
         ProcessorQueryImpl::BestAffinityCostFn{m, bandwidth_weight, latency_weight};
 
     impl_ptr->reset_cached_mem();
+    // any result computed so far (e.g. the plain by-kind list) no longer
+    //  describes this query
+    impl_ptr->reset_cached_list();
     return *this;
   }
 
@@ -1455,6 +1474,8 @@ namespace Realm {
     impl_ptr->best_mem_affinity_cost =
         MemoryQueryImpl::BestMemAffinityCostFn{m, bandwidth_weight, latency_weight};
 
+    // any result computed so far no longer describes this query
+    impl_ptr->reset_cached_list();
     return *this;
   }
 
@@ -1489,6 +1510,8 @@ namespace Realm {
     impl_ptr->best_proc_affinity_cost =
         MemoryQueryImpl::BestProcAffinityCostFn{p, bandwidth_weight, latency_weight};
 
+    // any result computed so far no longer describes this query
+    impl_ptr->reset_cached_list();
     return *this;
   }
 
@@ -1579,8 +1602,9 @@ namespace Realm {
   atomic<unsigned int> ProcessorQueryImpl::cache_invalid_count(0);
   bool ProcessorQueryImpl::global_valid_cache = true;
 
-  std::map<Processor::Kind, std::vector<Processor>> ProcessorQueryImpl::_proc_cache;
-  std::map<Processor::Kind, std::map<Memory, std::vector<Processor>>>
+  std::map<Processor::Kind, ProcessorQueryImpl::CachedList>
+      ProcessorQueryImpl::_proc_cache;
+  std::map<Processor::Kind, std::map<Memory, ProcessorQueryImpl::CachedList>>
       ProcessorQueryImpl::_proc_cache_affinity;
 
   ProcessorQueryImpl::ProcessorQueryImpl(const Machine &_machine)
@@ -1594,9 +1618,6 @@ namespace Realm {
     , is_restricted_kind(false)
     , cached_mem(Memory::NO_MEMORY)
     , is_cached_mem(false)
-    , shared_cached_list(false)
-    , valid_cache(false)
-    , cur_cached_list(nullptr)
     , invalid_count(cache_invalid_count.load())
   {}
 
@@ -1610,10 +1631,7 @@ namespace Realm {
     , best_affinity_cost(copy_from.best_affinity_cost)
     , cached_mem(copy_from.cached_mem)
     , is_cached_mem(copy_from.is_cached_mem)
-    , shared_cached_list(copy_from.shared_cached_list)
-    , valid_cache(copy_from.valid_cache)
-    , cur_cached_list(copy_from.cur_cached_list)
-    , invalid_count(copy_from.invalid_count)
+    , invalid_count(0)
   {
     predicates.reserve(copy_from.predicates.size());
     for(std::vector<ProcQueryPredicate *>::const_iterator it =
@@ -1621,9 +1639,12 @@ namespace Realm {
         it != copy_from.predicates.end(); it++)
       predicates.push_back((*it)->clone());
 
-    if(!shared_cached_list) {
-      cur_cached_list = NULL;
-      valid_cache = false;
+    // the source is still shared with other query objects that may be using
+    //  it right now (that is why we are being copied), so take its lock
+    {
+      AutoLock<UnfairMutex> al(copy_from.cache_mutex);
+      cur_cached_list = copy_from.cur_cached_list;
+      invalid_count = copy_from.invalid_count;
     }
   }
 
@@ -1633,11 +1654,6 @@ namespace Realm {
     for(std::vector<ProcQueryPredicate *>::iterator it = predicates.begin();
         it != predicates.end(); it++)
       delete *it;
-
-    if(!shared_cached_list && cur_cached_list) {
-      delete cur_cached_list;
-      cur_cached_list = NULL;
-    }
   }
 
   void ProcessorQueryImpl::add_reference(void) { references.fetch_add(1); }
@@ -1672,13 +1688,7 @@ namespace Realm {
       restricted_node_id = new_node_id;
     }
     // any constraint to processor query will invalidate cached list
-    if(cur_cached_list) {
-      if(!shared_cached_list)
-        delete cur_cached_list;
-      cur_cached_list = NULL;
-    }
-    shared_cached_list = false;
-    valid_cache = false;
+    reset_cached_list();
   }
 
   void ProcessorQueryImpl::restrict_to_kind(Processor::Kind new_kind)
@@ -1692,92 +1702,97 @@ namespace Realm {
       is_restricted_kind = true;
       restricted_kind = new_kind;
     }
-    if(cur_cached_list) {
-      if(!shared_cached_list)
-        delete cur_cached_list;
-      cur_cached_list = NULL;
-    }
-    shared_cached_list = false;
-    valid_cache = false;
+    reset_cached_list();
   }
 
   void ProcessorQueryImpl::add_predicate(ProcQueryPredicate *pred)
   {
     // a writer is always unique, so no need for mutexes
     predicates.push_back(pred);
-    if(cur_cached_list) {
-      if(!shared_cached_list)
-        delete cur_cached_list;
-      cur_cached_list = NULL;
-    }
-    shared_cached_list = false;
-    valid_cache = false;
+    reset_cached_list();
   }
 
-  Processor ProcessorQueryImpl::next(Processor after)
+  /*static*/ Processor ProcessorQueryImpl::next(const std::vector<Processor> &list,
+                                                Processor after)
   {
     // cached lists are sorted by id, so the successor is a binary search
-    if(!cur_cached_list || cur_cached_list->empty())
-      return Processor::NO_PROC;
     std::vector<Processor>::const_iterator it =
-        std::upper_bound(cur_cached_list->begin(), cur_cached_list->end(), after);
-    return (it != cur_cached_list->end()) ? *it : Processor::NO_PROC;
+        std::upper_bound(list.begin(), list.end(), after);
+    return (it != list.end()) ? *it : Processor::NO_PROC;
   }
 
-  // Returns the shared list that can serve this query, or NULL when the
+  ProcessorQueryImpl::CachedList ProcessorQueryImpl::attach(const CachedList &list,
+                                                            unsigned int generation) const
+  {
+    AutoLock<UnfairMutex> al(cache_mutex);
+    cur_cached_list = list;
+    invalid_count = generation;
+    return list;
+  }
+
+  ProcessorQueryImpl::CachedList ProcessorQueryImpl::attached_list() const
+  {
+    AutoLock<UnfairMutex> al(cache_mutex);
+    if(cur_cached_list && (invalid_count == cache_invalid_count.load()))
+      return cur_cached_list;
+    return CachedList();
+  }
+
+  void ProcessorQueryImpl::reset_cached_list()
+  {
+    // the caller holds the only reference to this query (see
+    //  writeable_reference), so this is uncontended - but hold the lock
+    //  anyway so the invariant is simply "cur_cached_list needs cache_mutex"
+    AutoLock<UnfairMutex> al(cache_mutex);
+    cur_cached_list.reset();
+  }
+
+  // Returns the shared list that can serve this query, or null when the
   // shared cache does not cover it: node-restricted queries, best-affinity
   // queries, and predicated queries other than the single memory-affinity
   // predicate walk the machine directly. Must not be called with cache_lock
   // held; the machine lock is only taken while a list is being built, and
   // never while cache_lock is held.
-  std::vector<Processor> *ProcessorQueryImpl::attach_shared(std::vector<Processor> *list,
-                                                            unsigned int generation) const
+  ProcessorQueryImpl::CachedList ProcessorQueryImpl::cached_list() const
   {
-    if(cur_cached_list && !shared_cached_list)
-      delete cur_cached_list;
-    cur_cached_list = list;
-    shared_cached_list = true;
-    valid_cache = true;
-    invalid_count = generation;
-    return list;
-  }
-
-  std::vector<Processor> *ProcessorQueryImpl::cached_list() const
-  {
-    if((invalid_count == cache_invalid_count.load()) && valid_cache)
-      return cur_cached_list;
+    CachedList list = attached_list();
+    if(list)
+      return list;
     if(!is_restricted_kind || is_restricted_node || best_affinity_cost.has_value() ||
        (!predicates.empty() && !is_cached_mem))
-      return NULL;
+      return list;
 
     // fast path: the list already exists
+    unsigned int generation;
     {
       RWLock::AutoReaderLock al(cache_lock);
+      generation = cache_invalid_count.load();
       if(global_valid_cache) {
-        const unsigned int current = cache_invalid_count.load();
         if(!is_cached_mem) {
-          std::map<Processor::Kind, std::vector<Processor>>::iterator it =
+          std::map<Processor::Kind, CachedList>::const_iterator it =
               _proc_cache.find(restricted_kind);
           if(it != _proc_cache.end())
-            return attach_shared(&(it->second), current);
+            list = it->second;
         } else {
-          std::map<Processor::Kind, std::map<Memory, std::vector<Processor>>>::iterator
-              it = _proc_cache_affinity.find(restricted_kind);
+          std::map<Processor::Kind, std::map<Memory, CachedList>>::const_iterator it =
+              _proc_cache_affinity.find(restricted_kind);
           if(it != _proc_cache_affinity.end()) {
-            std::map<Memory, std::vector<Processor>>::iterator it2 =
+            std::map<Memory, CachedList>::const_iterator it2 =
                 it->second.find(cached_mem);
             if(it2 != it->second.end())
-              return attach_shared(&(it2->second), current);
+              list = it2->second;
           }
         }
       }
     }
+    if(list)
+      return attach(list, generation);
 
     // slow path: build the list outside the cache lock, then install it
-    const unsigned int generation = cache_invalid_count.load();
     std::vector<Processor> by_kind;
     std::map<Processor::Kind, std::map<Memory, std::vector<Processor>>> by_affinity;
     if(!is_cached_mem) {
+      RWLock::AutoReaderLock al(machine->mutex);
       for(std::map<NodeID, MachineNodeInfo *>::const_iterator it =
               machine->nodeinfos.begin();
           it != machine->nodeinfos.end(); ++it) {
@@ -1791,7 +1806,7 @@ namespace Realm {
           by_kind.push_back(it3->first);
       }
       if(by_kind.empty())
-        return NULL;
+        return list;
     } else {
       // same-node affinities only, as before
       std::vector<Machine::ProcessorMemoryAffinity> pmas;
@@ -1804,37 +1819,49 @@ namespace Realm {
       std::map<Processor::Kind, std::map<Memory, std::vector<Processor>>>::iterator it =
           by_affinity.find(restricted_kind);
       if((it == by_affinity.end()) || (it->second.find(cached_mem) == it->second.end()))
-        return NULL;
-    }
-
-    RWLock::AutoWriterLock al(cache_lock);
-    if(!global_valid_cache) {
-      _proc_cache.clear();
-      _proc_cache_affinity.clear();
-      global_valid_cache = true;
-    }
-    if(generation != cache_invalid_count.load())
-      return NULL; // the machine changed underneath us; walk it instead
-    if(!is_cached_mem) {
-      std::vector<Processor> &slot = _proc_cache[restricted_kind];
-      if(slot.empty())
-        slot.swap(by_kind);
-      return attach_shared(&slot, generation);
-    } else {
-      for(std::map<Processor::Kind, std::map<Memory, std::vector<Processor>>>::iterator
-              it = by_affinity.begin();
-          it != by_affinity.end(); ++it) {
-        std::map<Memory, std::vector<Processor>> &dst = _proc_cache_affinity[it->first];
+        return list;
+      // next() binary-searches these, so they must be sorted (and a processor
+      //  with two affinities to the same memory must appear once)
+      for(it = by_affinity.begin(); it != by_affinity.end(); ++it)
         for(std::map<Memory, std::vector<Processor>>::iterator it2 = it->second.begin();
             it2 != it->second.end(); ++it2) {
-          std::vector<Processor> &slot = dst[it2->first];
-          if(slot.empty())
-            slot.swap(it2->second);
+          std::sort(it2->second.begin(), it2->second.end());
+          it2->second.erase(std::unique(it2->second.begin(), it2->second.end()),
+                            it2->second.end());
         }
-      }
-      return attach_shared(&(_proc_cache_affinity[restricted_kind][cached_mem]),
-                           generation);
     }
+
+    {
+      RWLock::AutoWriterLock al(cache_lock);
+      if(!global_valid_cache) {
+        _proc_cache.clear();
+        _proc_cache_affinity.clear();
+        global_valid_cache = true;
+      }
+      if(generation != cache_invalid_count.load())
+        return list; // the machine changed underneath us; walk it instead
+      if(!is_cached_mem) {
+        CachedList &slot = _proc_cache[restricted_kind];
+        if(!slot)
+          slot = std::make_shared<const std::vector<Processor>>(std::move(by_kind));
+        list = slot;
+      } else {
+        for(std::map<Processor::Kind, std::map<Memory, std::vector<Processor>>>::iterator
+                it = by_affinity.begin();
+            it != by_affinity.end(); ++it) {
+          std::map<Memory, CachedList> &dst = _proc_cache_affinity[it->first];
+          for(std::map<Memory, std::vector<Processor>>::iterator it2 = it->second.begin();
+              it2 != it->second.end(); ++it2) {
+            CachedList &slot = dst[it2->first];
+            if(!slot)
+              slot =
+                  std::make_shared<const std::vector<Processor>>(std::move(it2->second));
+          }
+        }
+        list = _proc_cache_affinity[restricted_kind][cached_mem];
+      }
+    }
+    return attach(list, generation);
   }
 
   bool ProcessorQueryImpl::cached_query(Processor &pval, QueryType q) const
@@ -1842,8 +1869,8 @@ namespace Realm {
     if(!Config::use_machine_query_cache)
       return false;
 #ifndef REALM_DISABLE_MACHINE_QUERY_CACHE
-    std::vector<Processor> *clist = cached_list();
-    if(clist == NULL)
+    CachedList clist = cached_list();
+    if(!clist)
       return false;
     switch(q) {
     case QUERY_FIRST:
@@ -1867,19 +1894,12 @@ namespace Realm {
     if(!Config::use_machine_query_cache)
       return false;
 #ifndef REALM_DISABLE_MACHINE_QUERY_CACHE
-    if(invalid_count != cache_invalid_count.load()) {
-      // the machine changed since this query last touched the cache: drop the
-      // list we were walking (it may have been rebuilt) and start over
-      if(cur_cached_list && !shared_cached_list)
-        delete cur_cached_list;
-      cur_cached_list = NULL;
-      shared_cached_list = false;
-      valid_cache = false;
-      invalid_count = cache_invalid_count.load();
-    }
-    if(cached_list() == NULL)
+    // if the machine changed since this query last touched the cache, this
+    //  attaches to the rebuilt list and we continue walking from 'p' in it
+    CachedList clist = cached_list();
+    if(!clist)
       return false;
-    pval = next(p); // cached_list() attached the shared list
+    pval = next(*clist, p);
     return true;
 #else
     return false;
@@ -1891,8 +1911,8 @@ namespace Realm {
     if(!Config::use_machine_query_cache)
       return false;
 #ifndef REALM_DISABLE_MACHINE_QUERY_CACHE
-    std::vector<Processor> *clist = cached_list();
-    if(clist == NULL)
+    CachedList clist = cached_list();
+    if(!clist)
       return false;
     count = clist->size();
     return true;
@@ -1901,37 +1921,27 @@ namespace Realm {
 #endif
   }
 
-  Processor ProcessorQueryImpl::build_best_affinity_cache() const
+  ProcessorQueryImpl::CachedList ProcessorQueryImpl::best_affinity_list() const
   {
-    // Check if the machine model has been invalidated since this query was created
-    if(invalid_count != cache_invalid_count.load()) {
-      // Cache is invalid, update the invalid_count and clear any stale cache
-      invalid_count = cache_invalid_count.load();
-      valid_cache = false;
-      if(cur_cached_list && !shared_cached_list) {
-        delete cur_cached_list;
-        cur_cached_list = nullptr;
-      }
-    }
+    CachedList list = attached_list();
+    if(list)
+      return list;
+    // read the generation before walking the machine, so a change during the
+    //  walk makes the result stale and the next call rebuilds it
+    const unsigned int generation = cache_invalid_count.load();
+    std::vector<Processor> result;
+    build_best_affinity_list(result);
+    return attach(std::make_shared<const std::vector<Processor>>(std::move(result)),
+                  generation);
+  }
 
-    // If we already have a valid cache, just return the first element
-    if(valid_cache && cur_cached_list) {
-      return cur_cached_list->empty() ? Processor::NO_PROC : cur_cached_list->front();
-    }
-
-    // Clean up any existing cache before allocating a new one
-    if(cur_cached_list && !shared_cached_list) {
-      delete cur_cached_list;
-      cur_cached_list = nullptr;
-    }
-
-    // Allocate the instance-specific cache
-    shared_cached_list = false;
-    cur_cached_list = new std::vector<Processor>();
-    valid_cache = true;
-
+  void ProcessorQueryImpl::build_best_affinity_list(std::vector<Processor> &result) const
+  {
     std::optional<int> best_score;
     std::vector<Processor> candidates_with_best_score;
+
+    // the whole walk reads the machine model
+    RWLock::AutoReaderLock al(machine->mutex);
 
     // Iterate through all candidates matching other predicates
     std::map<NodeID, MachineNodeInfo *>::const_iterator it;
@@ -1973,8 +1983,9 @@ namespace Realm {
           if(ok) {
             // Calculate affinity score for this candidate
             if(best_affinities.empty()) {
-              machine->get_proc_mem_affinity(best_affinities, Processor::NO_PROC,
-                                             best_affinity_cost->memory);
+              machine->get_proc_mem_affinity_unlocked(best_affinities, Processor::NO_PROC,
+                                                      best_affinity_cost->memory,
+                                                      true /*local_only*/);
             }
             for(const Machine::ProcessorMemoryAffinity &affinity : best_affinities) {
               if(affinity.p == it2->first) {
@@ -1997,10 +2008,8 @@ namespace Realm {
       ++it;
     }
 
-    // Store only the best candidates in the cache
-    *cur_cached_list = std::move(candidates_with_best_score);
-
-    return cur_cached_list->empty() ? Processor::NO_PROC : cur_cached_list->front();
+    // only the best candidates are the result (in machine order, i.e. sorted)
+    result = std::move(candidates_with_best_score);
   }
 
   Processor ProcessorQueryImpl::first_match(void) const
@@ -2037,7 +2046,8 @@ namespace Realm {
     // If best affinity is specified, we need to collect all candidates
     // and filter by best affinity cost
     if(best_affinity_cost.has_value()) {
-      return build_best_affinity_cache();
+      CachedList best = best_affinity_list();
+      return best->empty() ? Processor::NO_PROC : best->front();
     }
 
     // optimize if restricted kind without predicates and restricted_node attached to the
@@ -2047,6 +2057,7 @@ namespace Realm {
       return pval;
 
     // general case where restricted_node_id or predicates are defined
+    RWLock::AutoReaderLock al(machine->mutex);
     std::map<NodeID, MachineNodeInfo *>::const_iterator it;
     if(is_restricted_node)
       it = machine->nodeinfos.lower_bound(restricted_node_id);
@@ -2131,20 +2142,11 @@ namespace Realm {
     // If best affinity is specified, the results should already be in the Level 2 cache
     // from first_match(). Just iterate through the cached list.
     if(best_affinity_cost.has_value()) {
-      // If cache not built yet, build it now
-      if(!valid_cache || !cur_cached_list) {
-        build_best_affinity_cache();
-      }
-
-      // Find the next processor in the cache after the given one
-      for(size_t i = 0; i < cur_cached_list->size(); ++i) {
-        if(cur_cached_list->at(i).id > after.id) {
-          return cur_cached_list->at(i);
-        }
-      }
-      return Processor::NO_PROC;
+      // Find the next processor in the (sorted) results after the given one
+      return next(*best_affinity_list(), after);
     }
 
+    RWLock::AutoReaderLock al(machine->mutex);
     std::map<NodeID, MachineNodeInfo *>::const_iterator it;
     // start where we left off
     it = machine->nodeinfos.find(ID(after).proc_owner_node());
@@ -2235,17 +2237,14 @@ namespace Realm {
 #else
     // If best affinity is specified, use the Level 2 cache
     if(best_affinity_cost.has_value()) {
-      // If cache not built yet, build it now
-      if(!valid_cache || !cur_cached_list) {
-        build_best_affinity_cache();
-      }
-      return cur_cached_list->size();
+      return best_affinity_list()->size();
     }
 
     size_t count = 0;
     if(cached_query(count))
       return count;
 
+    RWLock::AutoReaderLock al(machine->mutex);
     std::map<NodeID, MachineNodeInfo *>::const_iterator it;
     if(is_restricted_node)
       it = machine->nodeinfos.lower_bound(restricted_node_id);
@@ -2334,14 +2333,10 @@ namespace Realm {
     // If best affinity is specified, the results should be in the Level 2 cache
     // Pick randomly from those
     if(best_affinity_cost.has_value()) {
-      // If cache not built yet, build it now
-      if(!valid_cache || !cur_cached_list) {
-        build_best_affinity_cache();
-      }
-
-      if(!cur_cached_list->empty()) {
-        size_t idx = lrand48() % cur_cached_list->size();
-        return cur_cached_list->at(idx);
+      CachedList best = best_affinity_list();
+      if(!best->empty()) {
+        size_t idx = lrand48() % best->size();
+        return (*best)[idx];
       }
       return Processor::NO_PROC;
     }
@@ -2351,6 +2346,7 @@ namespace Realm {
     Processor pval = Processor::NO_PROC;
     if(cached_query(pval, QUERY_RANDOM))
       return pval;
+    RWLock::AutoReaderLock al(machine->mutex);
     int count = 0;
     std::map<NodeID, MachineNodeInfo *>::const_iterator it;
     if(is_restricted_node)
@@ -2500,7 +2496,7 @@ namespace Realm {
   atomic<unsigned int> MemoryQueryImpl::cache_invalid_count(0);
   bool MemoryQueryImpl::global_valid_cache = true;
 
-  std::map<Memory::Kind, std::vector<Memory>> MemoryQueryImpl::_mem_cache;
+  std::map<Memory::Kind, MemoryQueryImpl::CachedList> MemoryQueryImpl::_mem_cache;
 
   MemoryQueryImpl::MemoryQueryImpl(const Machine &_machine)
     : MemoryQueryImpl(static_cast<const MachineImpl *>(_machine.impl))
@@ -2512,9 +2508,6 @@ namespace Realm {
     , is_restricted_node(false)
     , is_restricted_kind(false)
     , restricted_min_capacity(0)
-    , shared_cached_list(false)
-    , valid_cache(false)
-    , cur_cached_list(NULL)
     , invalid_count(cache_invalid_count.load())
     , affinity_proc(Processor::NO_PROC)
   {}
@@ -2527,10 +2520,7 @@ namespace Realm {
     , is_restricted_kind(copy_from.is_restricted_kind)
     , restricted_kind(copy_from.restricted_kind)
     , restricted_min_capacity(copy_from.restricted_min_capacity)
-    , shared_cached_list(copy_from.shared_cached_list)
-    , valid_cache(copy_from.valid_cache)
-    , cur_cached_list(copy_from.cur_cached_list)
-    , invalid_count(cache_invalid_count.load())
+    , invalid_count(0)
     , affinity_proc(copy_from.affinity_proc)
     , best_proc_affinity_cost(copy_from.best_proc_affinity_cost)
     , best_mem_affinity_cost(copy_from.best_mem_affinity_cost)
@@ -2541,9 +2531,11 @@ namespace Realm {
         it != copy_from.predicates.end(); it++)
       predicates.push_back((*it)->clone());
 
-    if(!shared_cached_list) {
-      cur_cached_list = NULL;
-      valid_cache = false;
+    // see ProcessorQueryImpl's copy constructor
+    {
+      AutoLock<UnfairMutex> al(copy_from.cache_mutex);
+      cur_cached_list = copy_from.cur_cached_list;
+      invalid_count = copy_from.invalid_count;
     }
   }
 
@@ -2553,8 +2545,6 @@ namespace Realm {
     for(std::vector<MemoryQueryPredicate *>::iterator it = predicates.begin();
         it != predicates.end(); it++)
       delete *it;
-    if(!shared_cached_list && cur_cached_list)
-      delete cur_cached_list;
   }
 
   void MemoryQueryImpl::add_reference(void) { references.fetch_add(1); }
@@ -2588,13 +2578,7 @@ namespace Realm {
       is_restricted_node = true;
       restricted_node_id = new_node_id;
     }
-    if(cur_cached_list) {
-      if(!shared_cached_list)
-        delete cur_cached_list;
-      cur_cached_list = NULL;
-    }
-    shared_cached_list = false;
-    valid_cache = false;
+    reset_cached_list();
   }
 
   void MemoryQueryImpl::restrict_to_kind(Memory::Kind new_kind)
@@ -2608,25 +2592,13 @@ namespace Realm {
       is_restricted_kind = true;
       restricted_kind = new_kind;
     }
-    if(cur_cached_list) {
-      if(!shared_cached_list)
-        delete cur_cached_list;
-      cur_cached_list = NULL;
-    }
-    shared_cached_list = false;
-    valid_cache = false;
+    reset_cached_list();
   }
 
   void MemoryQueryImpl::restrict_by_capacity(size_t new_min_bytes)
   {
     restricted_min_capacity = std::max(restricted_min_capacity, new_min_bytes);
-    if(cur_cached_list) {
-      if(!shared_cached_list)
-        delete cur_cached_list;
-      cur_cached_list = NULL;
-    }
-    shared_cached_list = false;
-    valid_cache = false;
+    reset_cached_list();
   }
 
   void MemoryQueryImpl::add_predicate(MemoryQueryPredicate *pred)
@@ -2635,13 +2607,38 @@ namespace Realm {
     predicates.push_back(pred);
     if(predicates.size() > 1)
       affinity_proc = Processor::NO_PROC;
-    if(cur_cached_list) {
-      if(!shared_cached_list)
-        delete cur_cached_list;
-      cur_cached_list = NULL;
-    }
-    shared_cached_list = false;
-    valid_cache = false;
+    reset_cached_list();
+  }
+
+  /*static*/ Memory MemoryQueryImpl::next(const std::vector<Memory> &list, Memory after)
+  {
+    // cached lists are sorted by id, so the successor is a binary search
+    std::vector<Memory>::const_iterator it =
+        std::upper_bound(list.begin(), list.end(), after);
+    return (it != list.end()) ? *it : Memory::NO_MEMORY;
+  }
+
+  MemoryQueryImpl::CachedList MemoryQueryImpl::attach(const CachedList &list,
+                                                      unsigned int generation) const
+  {
+    AutoLock<UnfairMutex> al(cache_mutex);
+    cur_cached_list = list;
+    invalid_count = generation;
+    return list;
+  }
+
+  MemoryQueryImpl::CachedList MemoryQueryImpl::attached_list() const
+  {
+    AutoLock<UnfairMutex> al(cache_mutex);
+    if(cur_cached_list && (invalid_count == cache_invalid_count.load()))
+      return cur_cached_list;
+    return CachedList();
+  }
+
+  void MemoryQueryImpl::reset_cached_list()
+  {
+    AutoLock<UnfairMutex> al(cache_mutex);
+    cur_cached_list.reset();
   }
 
   void MemoryQueryImpl::set_affinity_proc(Processor p)
@@ -2649,6 +2646,8 @@ namespace Realm {
     affinity_proc = (predicates.size() == 1) ? p : Processor::NO_PROC;
   }
 
+  // the caller holds the machine's reader lock (and keeps holding it while it
+  //  uses the returned map)
   const std::map<Memory, Machine::ProcessorMemoryAffinity *> *
   MemoryQueryImpl::anchor_affinities(Processor p, bool local_only) const
   {
@@ -2663,6 +2662,7 @@ namespace Realm {
     return local_only ? &(pit->second->pmas.local) : &(pit->second->pmas.all);
   }
 
+  // the caller holds the machine's reader lock
   bool MemoryQueryImpl::candidate_matches(Memory m) const
   {
     const NodeID node = ID(m).memory_owner_node();
@@ -2699,66 +2699,64 @@ namespace Realm {
     return true;
   }
 
-  // Returns the shared list that can serve this query, or NULL when the
+  // Returns the shared list that can serve this query, or null when the
   // shared cache does not cover it (see ProcessorQueryImpl::cached_list).
-  std::vector<Memory> *MemoryQueryImpl::attach_shared(std::vector<Memory> *list,
-                                                      unsigned int generation) const
+  MemoryQueryImpl::CachedList MemoryQueryImpl::cached_list() const
   {
-    if(cur_cached_list && !shared_cached_list)
-      delete cur_cached_list;
-    cur_cached_list = list;
-    shared_cached_list = true;
-    valid_cache = true;
-    invalid_count = generation;
-    return list;
-  }
-
-  std::vector<Memory> *MemoryQueryImpl::cached_list() const
-  {
-    if((invalid_count == cache_invalid_count.load()) && valid_cache)
-      return cur_cached_list;
+    CachedList list = attached_list();
+    if(list)
+      return list;
     if(!is_restricted_kind || is_restricted_node || !predicates.empty() ||
        (restricted_min_capacity != 0) || best_proc_affinity_cost.has_value() ||
        best_mem_affinity_cost.has_value())
-      return NULL;
+      return list;
 
+    unsigned int generation;
     {
       RWLock::AutoReaderLock al(cache_lock);
+      generation = cache_invalid_count.load();
       if(global_valid_cache) {
-        std::map<Memory::Kind, std::vector<Memory>>::iterator it =
+        std::map<Memory::Kind, CachedList>::const_iterator it =
             _mem_cache.find(restricted_kind);
         if(it != _mem_cache.end())
-          return attach_shared(&(it->second), cache_invalid_count.load());
+          list = it->second;
       }
     }
+    if(list)
+      return attach(list, generation);
 
-    const unsigned int generation = cache_invalid_count.load();
     std::vector<Memory> by_kind;
-    for(std::map<NodeID, MachineNodeInfo *>::const_iterator it =
-            machine->nodeinfos.begin();
-        it != machine->nodeinfos.end(); ++it) {
-      std::map<Memory::Kind, std::map<Memory, MachineMemInfo *>>::const_iterator it2 =
-          it->second->mem_by_kind.find(restricted_kind);
-      if(it2 == it->second->mem_by_kind.end())
-        continue;
-      for(std::map<Memory, MachineMemInfo *>::const_iterator it3 = it2->second.begin();
-          it3 != it2->second.end(); ++it3)
-        by_kind.push_back(it3->first);
+    {
+      RWLock::AutoReaderLock al(machine->mutex);
+      for(std::map<NodeID, MachineNodeInfo *>::const_iterator it =
+              machine->nodeinfos.begin();
+          it != machine->nodeinfos.end(); ++it) {
+        std::map<Memory::Kind, std::map<Memory, MachineMemInfo *>>::const_iterator it2 =
+            it->second->mem_by_kind.find(restricted_kind);
+        if(it2 == it->second->mem_by_kind.end())
+          continue;
+        for(std::map<Memory, MachineMemInfo *>::const_iterator it3 = it2->second.begin();
+            it3 != it2->second.end(); ++it3)
+          by_kind.push_back(it3->first);
+      }
     }
     if(by_kind.empty())
-      return NULL;
+      return list;
 
-    RWLock::AutoWriterLock al(cache_lock);
-    if(!global_valid_cache) {
-      _mem_cache.clear();
-      global_valid_cache = true;
+    {
+      RWLock::AutoWriterLock al(cache_lock);
+      if(!global_valid_cache) {
+        _mem_cache.clear();
+        global_valid_cache = true;
+      }
+      if(generation != cache_invalid_count.load())
+        return list; // the machine changed underneath us; walk it instead
+      CachedList &slot = _mem_cache[restricted_kind];
+      if(!slot)
+        slot = std::make_shared<const std::vector<Memory>>(std::move(by_kind));
+      list = slot;
     }
-    if(generation != cache_invalid_count.load())
-      return NULL;
-    std::vector<Memory> &slot = _mem_cache[restricted_kind];
-    if(slot.empty())
-      slot.swap(by_kind);
-    return attach_shared(&slot, generation);
+    return attach(list, generation);
   }
 
   bool MemoryQueryImpl::cached_query(Memory &mval, QueryType q) const
@@ -2766,8 +2764,8 @@ namespace Realm {
     if(!Config::use_machine_query_cache)
       return false;
 #ifndef REALM_DISABLE_MACHINE_QUERY_CACHE
-    std::vector<Memory> *clist = cached_list();
-    if(clist == NULL)
+    CachedList clist = cached_list();
+    if(!clist)
       return false;
     switch(q) {
     case QUERY_FIRST:
@@ -2791,17 +2789,10 @@ namespace Realm {
     if(!Config::use_machine_query_cache)
       return false;
 #ifndef REALM_DISABLE_MACHINE_QUERY_CACHE
-    if(invalid_count != cache_invalid_count.load()) {
-      if(cur_cached_list && !shared_cached_list)
-        delete cur_cached_list;
-      cur_cached_list = NULL;
-      shared_cached_list = false;
-      valid_cache = false;
-      invalid_count = cache_invalid_count.load();
-    }
-    if(cached_list() == NULL)
+    CachedList clist = cached_list();
+    if(!clist)
       return false;
-    mval = next(m); // cached_list() attached the shared list
+    mval = next(*clist, m);
     return true;
 #else
     return false;
@@ -2813,8 +2804,8 @@ namespace Realm {
     if(!Config::use_machine_query_cache)
       return false;
 #ifndef REALM_DISABLE_MACHINE_QUERY_CACHE
-    std::vector<Memory> *clist = cached_list();
-    if(clist == NULL)
+    CachedList clist = cached_list();
+    if(!clist)
       return false;
     count = clist->size();
     return true;
@@ -2823,34 +2814,22 @@ namespace Realm {
 #endif
   }
 
-  Memory MemoryQueryImpl::build_best_affinity_cache() const
+  MemoryQueryImpl::CachedList MemoryQueryImpl::best_affinity_list() const
   {
-    // Check if the machine model has been invalidated since this query was created
-    if(invalid_count != cache_invalid_count.load()) {
-      // Cache is invalid, update the invalid_count and clear any stale cache
-      invalid_count = cache_invalid_count.load();
-      valid_cache = false;
-      if(cur_cached_list && !shared_cached_list) {
-        delete cur_cached_list;
-        cur_cached_list = nullptr;
-      }
-    }
+    CachedList list = attached_list();
+    if(list)
+      return list;
+    const unsigned int generation = cache_invalid_count.load();
+    std::vector<Memory> result;
+    build_best_affinity_list(result);
+    return attach(std::make_shared<const std::vector<Memory>>(std::move(result)),
+                  generation);
+  }
 
-    // If we already have a valid cache, just return the first element
-    if(valid_cache && cur_cached_list) {
-      return cur_cached_list->empty() ? Memory::NO_MEMORY : cur_cached_list->front();
-    }
-
-    // Clean up any existing cache before allocating a new one
-    if(cur_cached_list && !shared_cached_list) {
-      delete cur_cached_list;
-      cur_cached_list = nullptr;
-    }
-
-    // Allocate the instance-specific cache
-    shared_cached_list = false;
-    cur_cached_list = new std::vector<Memory>();
-    valid_cache = true;
+  void MemoryQueryImpl::build_best_affinity_list(std::vector<Memory> &result) const
+  {
+    // the whole walk reads the machine model
+    RWLock::AutoReaderLock al(machine->mutex);
 
     if(best_proc_affinity_cost.has_value()) {
       // only memories with a local affinity to the processor can score, so walk
@@ -2872,8 +2851,9 @@ namespace Realm {
               (it->second->latency * best_proc_affinity_cost->latency_weight);
           if(best_mem_affinity_cost.has_value()) {
             if(!mem_affinities_fetched) {
-              machine->get_mem_mem_affinity(mem_affinities,
-                                            best_mem_affinity_cost->memory);
+              machine->get_mem_mem_affinity_unlocked(
+                  mem_affinities, best_mem_affinity_cost->memory, Memory::NO_MEMORY,
+                  true /*local_only*/);
               mem_affinities_fetched = true;
             }
             bool found = false;
@@ -2897,8 +2877,9 @@ namespace Realm {
           }
         }
       }
-      *cur_cached_list = std::move(candidates);
-      return cur_cached_list->empty() ? Memory::NO_MEMORY : cur_cached_list->front();
+      // the affinity map is keyed by memory, so this is already sorted
+      result = std::move(candidates);
+      return;
     }
 
     std::optional<int> best_score;
@@ -2953,8 +2934,9 @@ namespace Realm {
             // Add processor affinity score if specified
             if(best_proc_affinity_cost.has_value()) {
               if(best_proc_affinities.empty()) {
-                machine->get_proc_mem_affinity(best_proc_affinities,
-                                               best_proc_affinity_cost->proc);
+                machine->get_proc_mem_affinity_unlocked(
+                    best_proc_affinities, best_proc_affinity_cost->proc,
+                    Memory::NO_MEMORY, true /*local_only*/);
               }
               bool found_proc_affinity = false;
               for(const Machine::ProcessorMemoryAffinity &affinity :
@@ -2976,8 +2958,9 @@ namespace Realm {
             // Add memory affinity score if specified
             if(has_required_affinity && best_mem_affinity_cost.has_value()) {
               if(best_mem_affinities.empty()) {
-                machine->get_mem_mem_affinity(best_mem_affinities,
-                                              best_mem_affinity_cost->memory);
+                machine->get_mem_mem_affinity_unlocked(
+                    best_mem_affinities, best_mem_affinity_cost->memory,
+                    Memory::NO_MEMORY, true /*local_only*/);
               }
               bool found_mem_affinity = false;
               for(const Machine::MemoryMemoryAffinity &affinity : best_mem_affinities) {
@@ -3012,10 +2995,8 @@ namespace Realm {
       ++it;
     }
 
-    // Store only the best candidates in the cache
-    *cur_cached_list = std::move(candidates_with_best_score);
-
-    return cur_cached_list->empty() ? Memory::NO_MEMORY : cur_cached_list->front();
+    // only the best candidates are the result (in machine order, i.e. sorted)
+    result = std::move(candidates_with_best_score);
   }
 
   Memory MemoryQueryImpl::first_match(void) const
@@ -3054,10 +3035,12 @@ namespace Realm {
     // If best affinity is specified, we need to collect all candidates
     // and filter by best affinity cost
     if(best_proc_affinity_cost.has_value() || best_mem_affinity_cost.has_value()) {
-      return build_best_affinity_cache();
+      CachedList best = best_affinity_list();
+      return best->empty() ? Memory::NO_MEMORY : best->front();
     }
 
     if(affinity_proc.exists()) {
+      RWLock::AutoReaderLock al(machine->mutex);
       const std::map<Memory, Machine::ProcessorMemoryAffinity *> *pmas =
           anchor_affinities(affinity_proc, false /*!local_only*/);
       if(pmas)
@@ -3073,6 +3056,7 @@ namespace Realm {
     if(cached_query(mval, QUERY_FIRST))
       return mval;
 
+    RWLock::AutoReaderLock al(machine->mutex);
     std::map<NodeID, MachineNodeInfo *>::const_iterator it;
     if(is_restricted_node)
       it = machine->nodeinfos.lower_bound(restricted_node_id);
@@ -3162,20 +3146,11 @@ namespace Realm {
     // If best affinity is specified, the results should already be in the Level 2 cache
     // from first_match(). Just iterate through the cached list.
     if(best_proc_affinity_cost.has_value() || best_mem_affinity_cost.has_value()) {
-      // If cache not built yet, build it now
-      if(!valid_cache || !cur_cached_list) {
-        build_best_affinity_cache();
-      }
-
-      // Find the next memory in the cache after the given one
-      for(size_t i = 0; i < cur_cached_list->size(); ++i) {
-        if(cur_cached_list->at(i).id > after.id) {
-          return cur_cached_list->at(i);
-        }
-      }
-      return Memory::NO_MEMORY;
+      // Find the next memory in the (sorted) results after the given one
+      return next(*best_affinity_list(), after);
     }
 
+    RWLock::AutoReaderLock al(machine->mutex);
     if(affinity_proc.exists()) {
       const std::map<Memory, Machine::ProcessorMemoryAffinity *> *pmas =
           anchor_affinities(affinity_proc, false /*!local_only*/);
@@ -3237,16 +3212,6 @@ namespace Realm {
 #endif
   }
 
-  Memory MemoryQueryImpl::next(Memory after)
-  {
-    // cached lists are sorted by id, so the successor is a binary search
-    if(!cur_cached_list || cur_cached_list->empty())
-      return Memory::NO_MEMORY;
-    std::vector<Memory>::const_iterator it =
-        std::upper_bound(cur_cached_list->begin(), cur_cached_list->end(), after);
-    return (it != cur_cached_list->end()) ? *it : Memory::NO_MEMORY;
-  }
-
   Memory MemoryQueryImpl::cache_next(Memory after)
   {
     log_query.debug("cache_next: memory input id =  %llx\n", after.id);
@@ -3292,14 +3257,11 @@ namespace Realm {
 #else
     // If best affinity is specified, use the Level 2 cache
     if(best_proc_affinity_cost.has_value() || best_mem_affinity_cost.has_value()) {
-      // If cache not built yet, build it now
-      if(!valid_cache || !cur_cached_list) {
-        build_best_affinity_cache();
-      }
-      return cur_cached_list->size();
+      return best_affinity_list()->size();
     }
 
     if(affinity_proc.exists()) {
+      RWLock::AutoReaderLock al(machine->mutex);
       size_t count = 0;
       const std::map<Memory, Machine::ProcessorMemoryAffinity *> *pmas =
           anchor_affinities(affinity_proc, false /*!local_only*/);
@@ -3315,6 +3277,7 @@ namespace Realm {
     size_t count = 0;
     if(cached_query(count))
       return count;
+    RWLock::AutoReaderLock al(machine->mutex);
     std::map<NodeID, MachineNodeInfo *>::const_iterator it;
     if(is_restricted_node)
       it = machine->nodeinfos.lower_bound(restricted_node_id);
@@ -3406,19 +3369,16 @@ namespace Realm {
     // If best affinity is specified, the results should be in the Level 2 cache
     // Pick randomly from those
     if(best_proc_affinity_cost.has_value() || best_mem_affinity_cost.has_value()) {
-      // If cache not built yet, build it now
-      if(!valid_cache || !cur_cached_list) {
-        build_best_affinity_cache();
-      }
-
-      if(!cur_cached_list->empty()) {
-        size_t idx = lrand48() % cur_cached_list->size();
-        return cur_cached_list->at(idx);
+      CachedList best = best_affinity_list();
+      if(!best->empty()) {
+        size_t idx = lrand48() % best->size();
+        return (*best)[idx];
       }
       return Memory::NO_MEMORY;
     }
 
     if(affinity_proc.exists()) {
+      RWLock::AutoReaderLock al(machine->mutex);
       Memory chosen = Memory::NO_MEMORY;
       int count = 0;
       const std::map<Memory, Machine::ProcessorMemoryAffinity *> *pmas =
@@ -3439,6 +3399,7 @@ namespace Realm {
     if(cached_query(mval, QUERY_RANDOM))
       return mval;
 
+    RWLock::AutoReaderLock al(machine->mutex);
     size_t count = 0;
     std::map<NodeID, MachineNodeInfo *>::const_iterator it;
     if(is_restricted_node)

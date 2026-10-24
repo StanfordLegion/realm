@@ -28,6 +28,7 @@
 #include <vector>
 #include <set>
 #include <optional>
+#include <memory>
 
 namespace Realm {
 
@@ -146,7 +147,11 @@ namespace Realm {
     void add_process_info(int node_id, const Machine::ProcessInfo &process_info,
                           bool lock_held = false);
 
-    // readers: every query; writers: node announcements and affinity updates
+    // guards nodeinfos and everything reachable from it. Readers: the
+    //  accessors above and every machine walk in the query implementations
+    //  below (which may not call the locking accessors while they hold it -
+    //  the lock is not recursive - and use the *_unlocked variants instead).
+    //  Writers: node announcements and affinity updates.
     mutable RWLock mutex;
     std::vector<Machine::ProcessorMemoryAffinity> proc_mem_affinities;
     std::set<Machine::MachineUpdateSubscriber *> subscribers;
@@ -154,6 +159,18 @@ namespace Realm {
     std::map<int, MachineNodeInfo *> nodeinfos;
 
   protected:
+    friend class ProcessorQueryImpl;
+    friend class MemoryQueryImpl;
+
+    // the bodies of the public accessors, for callers already holding 'mutex'
+    int
+    get_proc_mem_affinity_unlocked(std::vector<Machine::ProcessorMemoryAffinity> &result,
+                                   Processor restrict_proc, Memory restrict_memory,
+                                   bool local_only) const;
+    int get_mem_mem_affinity_unlocked(std::vector<Machine::MemoryMemoryAffinity> &result,
+                                      Memory restrict_mem1, Memory restrict_mem2,
+                                      bool local_only) const;
+
     MachineNodeInfo *get_nodeinfo(int node) const;
     MachineNodeInfo *get_nodeinfo(Processor p) const;
     MachineNodeInfo *get_nodeinfo(Memory m) const;
@@ -207,6 +224,13 @@ namespace Realm {
     ProcessorQueryImpl(const Machine &_machine);
     ProcessorQueryImpl(const MachineImpl *_machine_impl);
 
+    // a query result is an immutable, sorted list that is shared by reference
+    // count: between the global cache and every query attached to it, or
+    // between the copies of one query. Invalidation publishes new lists and
+    // leaves the old ones to die with their last reader, so a query never
+    // dereferences freed storage.
+    typedef std::shared_ptr<const std::vector<Processor>> CachedList;
+
     // shared query cache: processors by kind, and by kind and memory affinity,
     // built on first use and dropped when the machine changes. cache_lock
     // guards the maps and global_valid_cache; cache_invalid_count is the
@@ -214,9 +238,8 @@ namespace Realm {
     static RWLock cache_lock;
     static atomic<unsigned int> cache_invalid_count;
     static bool global_valid_cache;
-    static std::map<Processor::Kind, std::vector<Processor>> _proc_cache;
-    static std::map<Processor::Kind, std::map<Memory, std::vector<Processor>>>
-        _proc_cache_affinity;
+    static std::map<Processor::Kind, CachedList> _proc_cache;
+    static std::map<Processor::Kind, std::map<Memory, CachedList>> _proc_cache_affinity;
 
   protected:
     // these things are refcounted and copied-on-write
@@ -280,20 +303,35 @@ namespace Realm {
 
     Memory cached_mem;
     bool is_cached_mem;
-    mutable bool shared_cached_list, valid_cache;
-    mutable std::vector<Processor> *cur_cached_list;
+
+    // the list this query last attached to (a global cache entry, or a list
+    // built for this query's best-affinity cost), and the cache generation it
+    // belongs to. Copies of a query share this object, and read-only
+    // operations on them may run concurrently, so these are only touched
+    // with cache_mutex held - and only briefly: lists are built and the
+    // global cache is consulted with it released.
+    mutable UnfairMutex cache_mutex;
+    mutable CachedList cur_cached_list;
     mutable unsigned int invalid_count;
-    // cached list of processors
-    std::vector<Processor> *cached_list() const;
-    // remembers a shared list so later calls on this query skip the cache lock
-    std::vector<Processor> *attach_shared(std::vector<Processor> *list,
-                                          unsigned int generation) const;
+
+    // the shared list that serves this query (attaching to it as a side
+    // effect), or null if the shared cache does not cover this query
+    CachedList cached_list() const;
+    // the list of this query's best-affinity results, building it if needed
+    CachedList best_affinity_list() const;
+    // builds the best-affinity results of this query into 'result'
+    void build_best_affinity_list(std::vector<Processor> &result) const;
+    // publishes a list as this query's current result for the given generation
+    CachedList attach(const CachedList &list, unsigned int generation) const;
+    // this query's attached list if it is still current, else null
+    CachedList attached_list() const;
+    // drops the attached list - every change to the query's constraints does this
+    void reset_cached_list();
     bool cached_query(Processor p, Processor &pval);
     bool cached_query(Processor &pval, QueryType q) const;
     bool cached_query(size_t &count) const;
-    Processor next(Processor after);
-    // helper to compute best affinity filtered results and store in cur_cached_list
-    Processor build_best_affinity_cache() const;
+    // the successor of 'after' in a sorted list
+    static Processor next(const std::vector<Processor> &list, Processor after);
   };
 
   typedef QueryPredicate<Memory, MachineMemInfo> MemoryQueryPredicate;
@@ -335,11 +373,14 @@ namespace Realm {
     MemoryQueryImpl(const Machine &_machine);
     MemoryQueryImpl(const MachineImpl *_machine_impl);
 
+    // see ProcessorQueryImpl::CachedList
+    typedef std::shared_ptr<const std::vector<Memory>> CachedList;
+
     // shared query cache: memories by kind (see ProcessorQueryImpl)
     static RWLock cache_lock;
     static atomic<unsigned int> cache_invalid_count;
     static bool global_valid_cache;
-    static std::map<Memory::Kind, std::vector<Memory>> _mem_cache;
+    static std::map<Memory::Kind, CachedList> _mem_cache;
 
   protected:
     // these things are refcounted and copied-on-write
@@ -399,8 +440,9 @@ namespace Realm {
     bool is_restricted_kind;
     Memory::Kind restricted_kind;
     size_t restricted_min_capacity;
-    mutable bool shared_cached_list, valid_cache;
-    mutable std::vector<Memory> *cur_cached_list;
+    // see ProcessorQueryImpl
+    mutable UnfairMutex cache_mutex;
+    mutable CachedList cur_cached_list;
     mutable unsigned int invalid_count;
     std::vector<MemoryQueryPredicate *> predicates;
     Processor affinity_proc; // see set_affinity_proc
@@ -409,17 +451,19 @@ namespace Realm {
     std::optional<BestProcAffinityCostFn> best_proc_affinity_cost;
     std::optional<BestMemAffinityCostFn> best_mem_affinity_cost;
 
-    std::vector<Memory> *cached_list() const;
-    std::vector<Memory> *attach_shared(std::vector<Memory> *list,
-                                       unsigned int generation) const;
+    // see ProcessorQueryImpl
+    CachedList cached_list() const;
+    CachedList best_affinity_list() const;
+    void build_best_affinity_list(std::vector<Memory> &result) const;
+    CachedList attach(const CachedList &list, unsigned int generation) const;
+    CachedList attached_list() const;
+    void reset_cached_list();
+    static Memory next(const std::vector<Memory> &list, Memory after);
     // the affinity map of a processor the query is anchored to, or NULL
     const std::map<Memory, Machine::ProcessorMemoryAffinity *> *
     anchor_affinities(Processor p, bool local_only) const;
     // applies the node, kind, capacity and predicate restrictions to one memory
     bool candidate_matches(Memory m) const;
-    Memory next(Memory after);
-    // helper to compute best affinity filtered results and store in cur_cached_list
-    Memory build_best_affinity_cache() const;
   };
 
   extern MachineImpl *machine_singleton;
