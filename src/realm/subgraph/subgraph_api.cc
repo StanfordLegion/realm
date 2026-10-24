@@ -97,6 +97,10 @@ namespace Realm {
       SubgraphImpl *subgraph = get_runtime()->get_subgraph_impl(*this);
       return subgraph->request_destroy(wait_on);
     } else {
+      // after the instantiations this node sent (see RemoteSubgraphInstantiations)
+      Event last = get_runtime()->remote_subgraph_instantiations.take(*this);
+      if(last.exists())
+        wait_on = Event::merge_events(wait_on, last);
       UserEvent done = UserEvent::create_user_event();
       ActiveMessage<SubgraphDestroyMessage> amsg(owner);
       amsg->subgraph = *this;
@@ -165,6 +169,7 @@ namespace Realm {
                    (amsg << prs) && (amsg << profiling));
         assert(ok);
       }
+      get_runtime()->remote_subgraph_instantiations.note(*this, finish_event);
       amsg.commit();
     }
     return finish_event;
@@ -215,9 +220,32 @@ namespace Realm {
                    (amsg << profiling));
         assert(ok);
       }
+      get_runtime()->remote_subgraph_instantiations.note(*this, finish_event);
       amsg.commit();
     }
     return finish_event;
+  }
+
+  ////////////////////////////////////////////////////////////////////////
+  //
+  // class RemoteSubgraphInstantiations
+  //
+
+  void RemoteSubgraphInstantiations::note(Subgraph subgraph, Event finish_event)
+  {
+    AutoLock<> al(mutex);
+    last_finish[ID(subgraph).id] = finish_event;
+  }
+
+  Event RemoteSubgraphInstantiations::take(Subgraph subgraph)
+  {
+    AutoLock<> al(mutex);
+    std::unordered_map<ID::IDType, Event>::iterator it = last_finish.find(ID(subgraph).id);
+    if(it == last_finish.end())
+      return Event::NO_EVENT;
+    Event e = it->second;
+    last_finish.erase(it);
+    return e;
   }
 
   SubgraphImpl::SubgraphImpl()
@@ -271,6 +299,9 @@ namespace Realm {
       AutoLock<> al(lifecycle_lock);
       if(destroy_requested)
         SUBGRAPH_FATAL(me, "instantiated after destroy");
+      if((defn->concurrency_mode == SubgraphDefinition::ONE_SHOT) && instantiated)
+        SUBGRAPH_FATAL(me, "ONE_SHOT subgraph instantiated a second time");
+      instantiated = true;
       outstanding_instantiations++;
       if(defn->concurrency_mode == SubgraphDefinition::INSTANTIATION_ORDER) {
         // Instantiations run in order: this one starts once the previous one
@@ -320,6 +351,7 @@ namespace Realm {
 
     previous_instantiation_completion = Event::NO_EVENT;
     outstanding_instantiations = 0;
+    instantiated = false;
     destroy_requested = false;
     destroy_wait_on = Event::NO_EVENT;
     destroy_done = UserEvent::NO_USER_EVENT;

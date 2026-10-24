@@ -137,6 +137,7 @@ namespace Realm {
       size_t cfg_min_avail_mem = 0;
       int cfg_task_legacy_sync = 0;   // 0 = no, 1 = yes
       int cfg_task_context_sync = -1; // 0 = no, 1 = yes, -1 = default (based on hijack)
+      bool cfg_task_context_sync_explicit = false; // set on the command line
       int cfg_max_ctxsync_threads = 4;
       bool cfg_lmem_resize_to_max = false;
       bool cfg_multithread_dma = false;

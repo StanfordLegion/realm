@@ -305,10 +305,13 @@ add_integration_test(event_subscribe "${REALM_TEST_DIR}/event_subscribe.cc")
 set(compqueue_ARGS -ll:cpu 4 -timeout 120)
 add_integration_test(compqueue "${REALM_TEST_DIR}/compqueue.cc")
 add_integration_test(test_nodeset "${REALM_TEST_DIR}/test_nodeset.cc")
-# subgraphs.cc exercises copies, arrivals, nested instantiations, reservations
-# and interpolations, none of which the compiled subgraph implementation
-# supports yet (creation fails fatally); re-enable as those land.
+# subgraphs.cc exercises nested instantiations and reservations, which the
+# compiled subgraph implementation does not support yet (creation fails
+# fatally); re-enable as those land. subgraphs_compiled.cc is the same test
+# with those two inlined (see its header comment).
 # add_integration_test(subgraphs "${REALM_TEST_DIR}/subgraphs.cc")
+set(subgraphs_compiled_ARGS -ll:cpu 2)
+add_integration_test(subgraphs_compiled "${REALM_TEST_DIR}/subgraphs_compiled.cc")
 set(subgraph_unit_tests_ARGS -ll:cpu 4)
 add_integration_test(subgraph_unit_tests "${REALM_TEST_DIR}/subgraph_unit_tests.cc")
 if(REALM_ENABLE_CUDA)
@@ -323,7 +326,9 @@ if(REALM_ENABLE_CUDA)
     add_test(NAME subgraph_death_deferred_task_requests_ctxsync
              COMMAND sh -c "! $<TARGET_FILE:subgraph_unit_tests> -ll:cpu 4 -ll:gpu 1 -death deferred_task_requests_ctxsync")
     set_tests_properties(subgraph_death_deferred_task_requests_ctxsync
-                         PROPERTIES FAIL_REGULAR_EXPRESSION "DEATH-TEST-SURVIVED" RESOURCE_LOCK gpu TIMEOUT 120)
+                         PROPERTIES FAIL_REGULAR_EXPRESSION "DEATH-TEST-SURVIVED"
+                                    PASS_REGULAR_EXPRESSION "registered with deferred effects"
+                                    RESOURCE_LOCK gpu TIMEOUT 120)
   endif()
 endif()
 if(NOT WIN32) # the scenarios run through sh
@@ -341,14 +346,19 @@ foreach(
   deferred_creation
   task_on_utility_proc
   destroy_twice
+  one_shot_twice
   instantiate_after_destroy
   concurrent_mode_unsupported
   dependency_cycle
 )
   add_test(NAME subgraph_death_${scenario}
            COMMAND sh -c "! $<TARGET_FILE:subgraph_unit_tests> -ll:cpu 4 -ll:util 1 -death ${scenario}")
+  # The process must die of the subgraph implementation's own diagnostic (not
+  # of just anything): the fatal message names the subgraph.
   set_tests_properties(
-    subgraph_death_${scenario} PROPERTIES FAIL_REGULAR_EXPRESSION "DEATH-TEST-SURVIVED" TIMEOUT 120
+    subgraph_death_${scenario}
+    PROPERTIES FAIL_REGULAR_EXPRESSION "DEATH-TEST-SURVIVED"
+               PASS_REGULAR_EXPRESSION "\\{subgraph\\}: subgraph " TIMEOUT 120
   )
 endforeach()
 endif()

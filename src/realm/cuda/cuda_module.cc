@@ -1521,10 +1521,18 @@ namespace Realm {
         GPUTaskTableEntry &tte = gpu_task_table[func_id];
 
         // stream-aware functions promise all their work is on the stream;
-        //  other functions can promise the same with a property
+        //  other functions can promise the same with a property. A context
+        //  synchronization requested explicitly on the command line
+        //  (-cuda:contextsync 1) overrides the inference: only the property
+        //  then makes a task deferred-effects (compiled subgraphs order the
+        //  dependents of such a task after its stream alone).
+        const bool stream_aware =
+            (codedesc.type() == TypeConv::from_cpp_type<Cuda::StreamAwareTaskFuncPtr>());
+        const bool ctxsync_forced = gpu->module->config->cfg_task_context_sync_explicit &&
+                                    (gpu->module->config->cfg_task_context_sync > 0);
         tte.deferred_effects =
-            (codedesc.type() == TypeConv::from_cpp_type<Cuda::StreamAwareTaskFuncPtr>()) ||
-            (codedesc.find_property<DeferredEffectsProperty>() != nullptr);
+            (codedesc.find_property<DeferredEffectsProperty>() != nullptr) ||
+            (stream_aware && !ctxsync_forced);
 
         // figure out what type of function we have
         if(codedesc.type() == TypeConv::from_cpp_type<Processor::TaskFuncPtr>()) {
@@ -3031,6 +3039,7 @@ namespace Realm {
 #endif
 
       bool ok = cp.parse_command_line(cmdline);
+      cfg_task_context_sync_explicit = (cfg_task_context_sync >= 0);
       if(!ok) {
         printf("error reading CUDA command line parameters\n");
         exit(1);

@@ -44,8 +44,9 @@ not obvious from the header, how it is tested, and what remains to be done.
 - Blocks for all of the above are allocated on the right NUMA node, carved
   from per-domain slabs. The execution state of an instantiation (blocks,
   launch and cleanup waiters, one waiter per external input) is pooled per
-  subgraph and recycled, so an instantiation allocates nothing but its finish
-  event. The state is recycled in the finish event's trigger context, or on a
+  subgraph and recycled, so an instantiation without copies or profiling
+  allocates nothing but its finish event (copies create Realm transfer
+  operations with a finish event each; profiling allocates its records). The state is recycled in the finish event's trigger context, or on a
   background worker when the instantiation holds processor tokens (GPU tasks
   with deferred effects).
 
@@ -71,7 +72,7 @@ round show the effect.
 | Barrier arrivals | Performed by whoever satisfies the arrival's last precondition. |
 | Interpolation | Into task arguments and into an arrival's barrier or reduction value, with or without a reduction operator. |
 | External preconditions and postconditions | Counted inputs and outputs; precise poison propagation. |
-| `ONE_SHOT`, `INSTANTIATION_ORDER` | Instantiation order is enforced by chaining the start on the previous finish. |
+| `ONE_SHOT`, `INSTANTIATION_ORDER` | Instantiation order is enforced by chaining the start on the previous finish. `INSTANTIATION_ORDER` is the default; a `ONE_SHOT` subgraph instantiated twice is fatal. |
 | Priorities | `priority_adjust` of `instantiate` is the instantiation's priority (see below). `CopyDesc::priority` is added to it for the copy. |
 | Profiling | Definition-time requests on tasks and copies; instantiation-time requests through `SubgraphInstantiationProfiling` (sparse lists per kind, serializable for remote instantiation), merged with the definition's. Tasks report timeline, processor usage, status and finish event; copies report whatever Realm's transfer operations report. |
 | Remote `instantiate` and `destroy` | Messages to the owner; `destroy` returns an event that covers outstanding instantiations. |
@@ -90,6 +91,9 @@ round show the effect.
 | `instantiate` or `destroy` on a subgraph that was destroyed | Detected while the handle's slot has not been reused (subgraph ids carry no generation). |
 | A deferred-effects GPU task calling `Cuda::set_task_ctxsync_required(true)` | Contradicts the promise the compile relied on. |
 | `TaskDesc::priority != 0` | The executor schedules by instantiation priority only. |
+| `Processor::set_current_task_priority` inside a graph task | Graph tasks have no `Operation`; the instantiation's priority applies. (`Processor::add_finish_event_precondition` returns `REALM_PROCESSOR_ERROR_OUTSIDE_TASK` there, for the same reason.) |
+| A copy that fails or is cancelled | Its successors would run on bad data; nothing in a graph can recover. |
+| Profiling measurements on tasks other than `OperationTimeline`, `OperationProcessorUsage`, `OperationStatus`, `OperationFinishEvent` | Realm would drop them silently. |
 | Collective pre/postconditions | Not implemented. |
 | `create_subgraph` with an untriggered `wait_on`, or with profiling requests | Compile is synchronous and unprofiled. |
 | Profiling requests on the `instantiate` overloads that take a `ProfilingRequestSet` for the instantiation itself | Use `SubgraphInstantiationProfiling`. |
@@ -125,7 +129,12 @@ last operation completes, whichever one that is. Tasks that block and finish
 out of order, and GPU tasks whose work outlives their function, are accounted
 for correctly.
 
-**Poison.** Only poisoned external preconditions propagate poison. Operations
+**Poison.** Only a poisoned start event or poisoned external preconditions
+propagate poison; in `INSTANTIATION_ORDER` mode the previous instantiation's
+poison does not reach the next one (the chain is ordering, not a
+precondition). An external precondition that gates no operation is still
+waited for, and its poison still poisons the finish event. A poisoned
+`destroy` precondition destroys the subgraph anyway (with a warning). Operations
 downstream are skipped (tasks and copies are not run, arrivals are not
 performed); their successors still drain. Misuse is fatal, not poisoned.
 
@@ -146,8 +155,13 @@ remaining successors, postconditions and finish accounting. Tokens are returned
 to the GPU's event pool when the instantiation is released.
 
 A task registered with `DeferredEffectsProperty` (`realm/codedesc.h`), or with
-the stream-aware prototype `Cuda::StreamAwareTaskFuncPtr`, promises that all of
-its work is on the stream it was given. Then:
+the stream-aware prototype `Cuda::StreamAwareTaskFuncPtr` (the one that takes
+a `CUstream` argument), promises that all of its work is on the stream it was
+given. The inference from the prototype is overridden by an explicit
+`-cuda:contextsync 1` on the command line: then only the property makes a task
+deferred-effects, and stream-aware tasks without it get the conservative path
+(dependents released on completion, context synchronization honored). Then,
+for a deferred-effects task:
 
 - GPU tasks on the same GPU that depend on it start as soon as its function
   returns, with `cuStreamWaitEvent` on its token, so the host can enqueue a

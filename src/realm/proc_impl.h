@@ -176,7 +176,7 @@ namespace Realm {
     // OS NUMA node this processor's worker threads run on, or -1 if unknown.
     int numa_node(void) const;
 
-    // ---- compiled subgraph tasks (subgraph_impl.cc) ----
+    // ---- compiled subgraph tasks (subgraph/subgraph_impl.h) ----
     // The base implementation describes a processor that runs task functions
     // synchronously and does not run subgraph tasks at all; CPUs and CUDA
     // GPUs override what applies to them.

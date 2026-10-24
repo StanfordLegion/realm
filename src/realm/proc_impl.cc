@@ -114,6 +114,12 @@ namespace Realm {
   // changes the priority of the currently running task
   /*static*/ void Processor::set_current_task_priority(int new_priority)
   {
+    if(Thread::self()->in_subgraph_task_execution()) {
+      // graph tasks have no Operation; the instantiation's priority applies
+      log_taskreg.fatal() << "Processor::set_current_task_priority is not supported inside "
+                             "a compiled subgraph task";
+      abort();
+    }
     // set the priority field in the task object and it'll update the thread
     Operation *op = Thread::self()->get_operation();
     assert(op != 0);

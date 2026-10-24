@@ -415,6 +415,7 @@ namespace Realm {
     IncomingMessageManager *message_manager;
     EventTriggerNotifier event_triggerer;
     SubgraphResourceReaper subgraph_resource_reaper;
+    RemoteSubgraphInstantiations remote_subgraph_instantiations;
     // shared by every GenEventImpl on this node (see GenEventImplAllocator)
     EventCommunicator event_communicator;
     CopyAnalyzer copy_analyzer;

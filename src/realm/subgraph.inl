@@ -40,7 +40,7 @@ namespace Realm {
   // struct SubgraphDefinition
 
   inline SubgraphDefinition::SubgraphDefinition()
-    : concurrency_mode(CONCURRENT)
+    : concurrency_mode(INSTANTIATION_ORDER)
   {}
 
   template <typename S>

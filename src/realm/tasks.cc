@@ -25,6 +25,7 @@
 #include "realm/utils.h"
 
 #include <algorithm>
+#include <climits>
 
 #if defined(REALM_USE_CACHING_ALLOCATOR)
 #include "realm/caching_allocator.h"
@@ -503,6 +504,11 @@ namespace Realm {
     // remember where a task has come from in case we want to put it back
     Task *task = nullptr;
     TaskQueue *task_source = nullptr;
+
+    // nothing outranks the maximum priority (and task_priority + 1 below
+    //  would overflow)
+    if(task_priority == INT_MAX)
+      return nullptr;
 
     for(TaskQueue *task_queue : queues) {
       Task *new_task = nullptr;
@@ -1341,8 +1347,18 @@ namespace Realm {
           // operations arriving from other processors do not pay a wake-up
           if(subgraph_executor && subgraph_executor->keep_polling()) {
             lock.unlock();
-            for(int i = 0; i < 32; i++)
-              REALM_SPIN_YIELD();
+            if(max_bgwork_timeslice > 0) {
+              // be useful meanwhile: a slice of background work bounded by
+              //  the poll budget, interrupted when work arrives here
+              bgworker_interrupt.store(false);
+              bgworker.do_work(
+                  std::min<long long>(max_bgwork_timeslice,
+                                      1000LL * ProcSubgraphExecutor::poll_budget_us),
+                  &bgworker_interrupt);
+            } else {
+              for(int i = 0; i < 32; i++)
+                REALM_SPIN_YIELD();
+            }
             lock.lock();
             continue;
           }

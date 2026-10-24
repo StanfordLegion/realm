@@ -292,6 +292,7 @@ namespace Realm {
     Mutex lifecycle_lock;
     Event previous_instantiation_completion = Event::NO_EVENT;
     int64_t outstanding_instantiations = 0;
+    bool instantiated = false; // ONE_SHOT: a second instantiate is an error
     bool destroy_requested = false;
     Event destroy_wait_on = Event::NO_EVENT;
     UserEvent destroy_done = UserEvent::NO_USER_EVENT;
@@ -319,6 +320,21 @@ namespace Realm {
     // form. Used by destroy, and by the destructor for a subgraph the
     // application never destroyed (runtime teardown).
     void release_resources(void);
+  };
+
+  // Instantiations this node has sent to remote owners, by subgraph: the
+  // finish event of the most recent one. A remote destroy waits on it before
+  // its message is sent, so the destroy cannot be delivered ahead of (and
+  // abort) an instantiate sent earlier: active messages of different types
+  // are not ordered with respect to each other.
+  class RemoteSubgraphInstantiations {
+  public:
+    void note(Subgraph subgraph, Event finish_event);
+    Event take(Subgraph subgraph); // NO_EVENT if none; removes the entry
+
+  private:
+    Mutex mutex;
+    std::unordered_map<ID::IDType, Event> last_finish;
   };
 
   // active messages

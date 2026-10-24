@@ -173,7 +173,7 @@ namespace Realm {
   {
     const CompiledSubgraph &c = subgraph->compiled;
     for(const CompiledSubgraph::Interp &it : c.interps) {
-      if((it.src_offset + it.bytes) > arglen)
+      if((it.src_offset > arglen) || (it.bytes > arglen - it.src_offset))
         SUBGRAPH_FATAL(subgraph->me, "interpolation reads " << it.src_offset << "+" << it.bytes
                                                             << " bytes of the instantiation "
                                                                "arguments, but only "
@@ -231,6 +231,27 @@ namespace Realm {
       entry_for_task(kv.first).requests.import_requests(kv.second);
     for(auto &p : profiling) {
       p->measurements.import_requests(p->requests);
+      // everything else is dropped silently by Realm; here that is an error
+      if(p->measurements.wants_measurement<ProfilingMeasurements::OperationAbnormalStatus>() ||
+         p->measurements.wants_measurement<ProfilingMeasurements::OperationBacktrace>() ||
+         p->measurements.wants_measurement<ProfilingMeasurements::OperationTimelineGPU>() ||
+         p->measurements.wants_measurement<ProfilingMeasurements::OperationEventWaits>() ||
+         p->measurements.wants_measurement<ProfilingMeasurements::OperationMemoryUsage>() ||
+         p->measurements.wants_measurement<ProfilingMeasurements::OperationCopyInfo>() ||
+         p->measurements.wants_measurement<ProfilingMeasurements::OperationSubgraphInfo>() ||
+         p->measurements.wants_measurement<ProfilingMeasurements::InstanceStatus>() ||
+         p->measurements.wants_measurement<ProfilingMeasurements::InstanceAllocResult>() ||
+         p->measurements.wants_measurement<ProfilingMeasurements::InstanceTimeline>() ||
+         p->measurements.wants_measurement<ProfilingMeasurements::InstanceMemoryUsage>() ||
+         p->measurements.wants_measurement<ProfilingMeasurements::CachePerfCounters>() ||
+         p->measurements.wants_measurement<ProfilingMeasurements::IPCPerfCounters>() ||
+         p->measurements.wants_measurement<ProfilingMeasurements::TLBPerfCounters>() ||
+         p->measurements
+             .wants_measurement<ProfilingMeasurements::BranchPredictionPerfCounters>())
+        SUBGRAPH_FATAL(subgraph->me,
+                       "a task requests a profiling measurement that compiled subgraphs do "
+                       "not provide (supported: OperationTimeline, OperationProcessorUsage, "
+                       "OperationStatus, OperationFinishEvent)");
       p->wants_timeline =
           p->measurements.wants_measurement<ProfilingMeasurements::OperationTimeline>();
       p->wants_proc =
@@ -246,6 +267,8 @@ namespace Realm {
 
   bool SubgraphExecutionState::op_poisoned(uint32_t op) const
   {
+    if(!poisoned.load_acquire())
+      return false; // the common case: no input poisoned
     const CompiledSubgraph &c = subgraph->compiled;
     const uint64_t *bits = c.op_inputs.data() + size_t(op) * c.input_words;
     for(size_t w = 0; w < c.input_words; w++)
@@ -367,7 +390,17 @@ namespace Realm {
       {
         SubgraphExecutionState *s = state;
         const uint32_t o = op;
+        // A copy that failed or was cancelled cannot be recovered from
+        // inside a graph (its successors would run on bad data): fatal,
+        // like every other misuse. Decided before the base call, which may
+        // delete this operation.
+        const bool failed = (failed_work_items.load() != 0) ||
+                            (Operation::state.load() != Status::RUNNING);
         TransferOperation::mark_completed(); // may delete this operation
+        if(failed)
+          SUBGRAPH_FATAL(s->get_subgraph()->me,
+                         "copy " << s->get_subgraph()->compiled.ops[o].index
+                                 << " failed or was cancelled");
         s->op_body_done(o);
         s->op_finished(o);
       }

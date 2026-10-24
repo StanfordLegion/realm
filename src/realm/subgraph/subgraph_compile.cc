@@ -199,7 +199,7 @@ namespace Realm {
         SUBGRAPH_FATAL(me, "interpolation " << i << " has an invalid target kind");
       }
       if(ip.redop_id == 0) {
-        if((ip.target_offset + ip.bytes) > target_size)
+        if((ip.target_offset > target_size) || (ip.bytes > target_size - ip.target_offset))
           SUBGRAPH_FATAL(me, "interpolation " << i << " writes past its target ("
                                               << ip.target_offset << "+" << ip.bytes << " > "
                                               << target_size << ")");
@@ -213,7 +213,8 @@ namespace Realm {
           SUBGRAPH_FATAL(me, "interpolation " << i << " provides " << ip.bytes
                                               << " bytes but reduction op " << ip.redop_id
                                               << " expects " << redop->sizeof_rhs);
-        if((ip.target_offset + redop->sizeof_lhs) > target_size)
+        if((ip.target_offset > target_size) ||
+           (redop->sizeof_lhs > target_size - ip.target_offset))
           SUBGRAPH_FATAL(me, "interpolation " << i << " reduces past its target");
       }
     }

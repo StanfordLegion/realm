@@ -5291,6 +5291,17 @@ static void death_task_on_utility_proc()
   Subgraph::create_subgraph(sg, sd, ProfilingRequestSet()).wait();
 }
 
+static void death_one_shot_twice()
+{
+  SubgraphDefinition sd;
+  sd.concurrency_mode = SubgraphDefinition::ONE_SHOT;
+  make_task_desc(sd, worker_cpus()[0], noop_task_id, nullptr, 0);
+  Subgraph sg;
+  Subgraph::create_subgraph(sg, sd, ProfilingRequestSet()).wait();
+  sg.instantiate(nullptr, 0, ProfilingRequestSet()).wait();
+  sg.instantiate(nullptr, 0, ProfilingRequestSet());
+}
+
 static void death_destroy_twice()
 {
   Subgraph sg = make_one_task_subgraph(noop_task_id);
@@ -5332,6 +5343,7 @@ static const DeathScenario death_scenarios[] = {
     {"deferred_creation", death_deferred_creation},
     {"task_on_utility_proc", death_task_on_utility_proc},
     {"destroy_twice", death_destroy_twice},
+    {"one_shot_twice", death_one_shot_twice},
     {"instantiate_after_destroy", death_instantiate_after_destroy},
     // GPU only; prints DEATH-TEST-SKIPPED without CUDA or a GPU
     {"deferred_task_requests_ctxsync", death_deferred_task_requests_ctxsync},
