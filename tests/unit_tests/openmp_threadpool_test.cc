@@ -26,6 +26,10 @@ namespace {
 
   class OpenMPThreadPoolTest : public ::testing::Test {
   protected:
+    // Zero requests PTHREAD_STACK_MIN, which is too small for worker startup/exit
+    // on FreeBSD. Use the same stack size as the machine_config_test workers.
+    static constexpr size_t worker_stack_size = 4 << 20;
+
     // Synthetic cores avoid affinity restrictions and work on small CI runners.
     static HardwareTopology make_topology()
     {
@@ -46,7 +50,8 @@ namespace {
 
   TEST_F(OpenMPThreadPoolTest, ShutdownAfterDeferredStartup)
   {
-    ThreadPool pool(Processor::NO_PROC, 4, "openmp test", -1, 0, reservations);
+    ThreadPool pool(Processor::NO_PROC, 4, "openmp test", -1, worker_stack_size,
+                    reservations);
 
     // Match runtime startup: creation is deferred until reservations are satisfied.
     pool.start_worker_threads();
@@ -56,7 +61,8 @@ namespace {
 
   TEST_F(OpenMPThreadPoolTest, ImmediateShutdownAndRestart)
   {
-    ThreadPool pool(Processor::NO_PROC, 4, "openmp test", -1, 0, reservations);
+    ThreadPool pool(Processor::NO_PROC, 4, "openmp test", -1, worker_stack_size,
+                    reservations);
     ASSERT_TRUE(reservations.satisfy_reservations());
 
     // No work submission or barrier may hide a missing startup/shutdown handoff.
@@ -69,7 +75,8 @@ namespace {
 
   TEST_F(OpenMPThreadPoolTest, EmptyPool)
   {
-    ThreadPool pool(Processor::NO_PROC, 0, "openmp test", -1, 0, reservations);
+    ThreadPool pool(Processor::NO_PROC, 0, "openmp test", -1, worker_stack_size,
+                    reservations);
     pool.start_worker_threads();
     pool.stop_worker_threads();
     pool.stop_worker_threads();
