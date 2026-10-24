@@ -584,6 +584,12 @@ namespace Realm {
     // processor whose inputs are all satisfied, that processor runs only
     // work of equal or higher priority (plus tasks that already started).
     int priority;
+    // Operations ready, in flight or running (not blocked) anywhere: while
+    // nonzero the instantiation is making progress and holds its
+    // processors (see ProcSubgraphExecutor::active_floor). Incremented when
+    // an operation becomes ready, decremented when its function returns
+    // (or the copy completes), and around a graph task blocking.
+    atomic<int64_t> active_work;
 
     std::vector<char *> blocks; // one per CompiledSubgraph::Domain
 
@@ -628,25 +634,30 @@ namespace Realm {
     // active floor (see below) is not offered.
     bool peek(int &priority);
     // Scheduler lock held. The priority floor this processor is held at,
-    // or `none` if it is not held: the highest priority among the
-    // instantiations that have an operation ready to run here and the graph
-    // tasks running here that have not blocked. Work below the floor,
-    // normal tasks and other instantiations alike, must wait. An
-    // instantiation that has nothing it could run here right now (its
-    // operations wait on other processors, on external inputs, or its tasks
-    // here are all blocked) does not hold the processor: holding it would
-    // idle the processor and, if the graph is waiting on lower-priority
-    // work that needs it, deadlock. Started tasks always resume, so the
-    // floor returns as soon as a graph task resumes or an operation becomes
-    // ready.
+    // or `none` if it is not held: the highest priority among the graph
+    // tasks running here that have not blocked, and the instantiations with
+    // operations still to run here whose inputs here have all triggered and
+    // that are making progress somewhere (a task of theirs is running, or
+    // an operation is ready or in flight: SubgraphExecutionState::
+    // active_work). Work below the floor, normal tasks and other
+    // instantiations alike, must wait. An instantiation that is stalled
+    // everywhere (every started task of it is blocked and nothing is ready)
+    // does not hold its processors: holding them would only idle them and,
+    // if the graph is waiting on lower-priority work that needs one of
+    // them, deadlock. Started tasks always resume, so the holds return as
+    // soon as a task of it resumes. A held floor is thus always backed by
+    // work that is executing or about to, and nothing can wait forever on
+    // it (the highest-priority ready operation on a processor is never
+    // excluded).
     int active_floor(int none) const;
     // Scheduler lock held. Running graph tasks on this processor, for the
     // floor: started when dequeued, finished when execute returns, and
-    // blocked/resumed around a wait inside the task.
+    // blocked/resumed around a wait inside the task (the latter two also
+    // maintain the instantiation's active_work).
     void task_started(int priority);
     void task_finished(int priority);
-    void task_blocked(int priority);
-    void task_resumed(int priority);
+    void task_blocked(int priority, SubgraphExecutionState *state);
+    void task_resumed(int priority, SubgraphExecutionState *state);
     // Scheduler lock held. Removes the operation found by the last
     // successful peek.
     void dequeue(ReadyEntry &entry);

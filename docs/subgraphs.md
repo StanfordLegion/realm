@@ -106,23 +106,26 @@ implementation.
 
 ## Semantics worth knowing
 
-**Priority.** While an instantiation of priority P has an operation ready to
-run on a processor, or a task of it is running there, that processor runs
-only work of priority P or higher: normal tasks and other instantiations
-alike. Equal priority still runs. Tasks that already started always resume.
-The processor is held only while the graph has something it could run on it:
-an instantiation whose operations on a processor are waiting on other
-processors, on an external input (the analysis of which inputs each
-processor depends on is done at compile time), or whose tasks there are all
-blocked, does not hold that processor, since holding it would only idle the
-processor and, if the graph is waiting on lower-priority work that needs it,
-deadlock. The hold returns as soon as an operation becomes ready or a task
-resumes. Consequences: lower-priority work can start on a processor while a
-graph's task there is blocked (or, for a GPU, while a deferred-effects task's
-work is still on the stream), and the graph then waits for that work to
-finish or block before its own task resumes. Nothing ever waits forever on
-the hold itself. A deferred-effects GPU task that has returned counts as
-nothing to run.
+**Priority.** While an instantiation of priority P is active on a processor
+(it has operations still to run there, and the external inputs they depend
+on have triggered), and the instantiation is making progress somewhere (a
+task of it is running, or an operation of it is ready or in flight), that
+processor runs only work of priority P or higher: normal tasks and other
+instantiations alike. Equal priority still runs. Tasks that already started
+always resume. A processor whose last operation of the graph has been
+dequeued stays held while that task runs. The analysis of which inputs each
+processor depends on is done at compile time, so a processor is not held
+hostage by a graph that is waiting on something that processor might have to
+produce. An instantiation that is stalled everywhere (every started task of
+it is blocked and nothing of it is ready) holds nothing: holding would only
+idle its processors and, if a blocked task waits on lower-priority work that
+needs one of them, deadlock. The holds return as soon as a task of it
+resumes. Consequences: lower-priority work can start on a graph's processors
+while the whole graph is blocked (or, for a GPU, once a deferred-effects
+task's function has returned and nothing else of the graph is running), and
+the graph then waits for that work to finish or block before its task
+resumes; nothing ever waits forever on a hold. A deferred-effects GPU task
+that has returned counts as not running.
 
 **Completion.** A processor's share of the finish counter is released when its
 last operation completes, whichever one that is. Tasks that block and finish

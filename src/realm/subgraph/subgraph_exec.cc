@@ -94,6 +94,7 @@ namespace Realm {
       w.store(0);
     poisoned.store(false);
     priority = _priority;
+    active_work.store(0);
     // Counters, queues and interpolated arguments start from the compiled image.
     for(size_t dm = 0; dm < c.domains.size(); dm++)
       memcpy(blocks[dm], c.domains[dm].image.data(), c.domains[dm].bytes);
@@ -329,6 +330,7 @@ namespace Realm {
     if(OpProfiling *pf = prof(op))
       if(pf->wants_timeline)
         pf->timeline.record_ready_time();
+    active_work.fetch_add_acqrel(1); // until op_body_done
     if(o.proc >= 0) {
       const uint64_t slot = tail(o.proc).fetch_add_acqrel(1);
       queue(o.proc)[slot].store_release(int64_t(op));
@@ -431,11 +433,14 @@ namespace Realm {
   void SubgraphExecutionState::op_body_done(uint32_t op)
   {
     const CompiledSubgraph &c = subgraph->compiled;
+    // Successors first: whichever of them becomes ready keeps the
+    // instantiation's progress count nonzero across this operation's end.
     for(uint64_t i = c.successors.offsets[op]; i < c.successors.offsets[op + 1]; i++) {
       const uint32_t sx = c.successors.data[i];
       if(counter(sx).fetch_sub_acqrel(1) == 1)
         op_ready(sx);
     }
+    active_work.fetch_sub_acqrel(1);
   }
 
   void SubgraphExecutionState::op_finished(uint32_t op)
@@ -632,20 +637,22 @@ namespace Realm {
   {
     int floor = none;
     bool any = false;
-    // A cursor whose inputs are all satisfied and whose next operation is
-    // ready holds the processor at its priority. (Ready operations behind
-    // a pending input are offered, but do not hold the processor: the
-    // graph may be waiting on work this processor would otherwise block.)
+    // An instantiation with operations still to run here, whose inputs
+    // here have all triggered, holds the processor while it is making
+    // progress somewhere. (Behind a pending input it does not: the graph
+    // may be waiting on work this processor would otherwise block. Stalled
+    // everywhere it does not either: see the header.)
     for(const Cursor &c : active) {
       if(c.state->pending_inputs(c.proc).load_acquire() != 0)
         continue;
-      if(c.queue[c.front].load_acquire() == SUBGRAPH_EMPTY_QUEUE_ENTRY)
+      if(c.state->active_work.load_acquire() == 0)
         continue;
       if(!any || (c.priority > floor))
         floor = c.priority;
       any = true;
     }
-    // So does a graph task that is running (and not blocked) here.
+    // So does a graph task that is running (and not blocked) here, even
+    // after this processor's last operation was dequeued.
     if(!running.empty()) {
       const int top = running.rbegin()->first;
       if(!any || (top > floor))
@@ -664,9 +671,17 @@ namespace Realm {
       running.erase(it);
   }
 
-  void ProcSubgraphExecutor::task_blocked(int priority) { task_finished(priority); }
+  void ProcSubgraphExecutor::task_blocked(int priority, SubgraphExecutionState *state)
+  {
+    task_finished(priority);
+    state->active_work.fetch_sub_acqrel(1);
+  }
 
-  void ProcSubgraphExecutor::task_resumed(int priority) { task_started(priority); }
+  void ProcSubgraphExecutor::task_resumed(int priority, SubgraphExecutionState *state)
+  {
+    state->active_work.fetch_add_acqrel(1);
+    task_started(priority);
+  }
 
   void ProcSubgraphExecutor::dequeue(ReadyEntry &entry)
   {
@@ -742,7 +757,7 @@ namespace Realm {
     // every task running on it, so clearing it here would make the next
     // normal task on this processor look like an external thread.
     ThreadLocal::current_processor = proc;
-    thread->start_subgraph_task_execution();
+    thread->start_subgraph_task_execution(state);
     proc_impl->execute_task(task_desc.task_id, state->op_args(entry.op));
     thread->stop_subgraph_task_execution();
     void *token = proc_impl->end_subgraph_task(context, op.deferred);

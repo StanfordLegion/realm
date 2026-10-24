@@ -934,12 +934,15 @@ namespace Realm {
     //  (see ProcSubgraphExecutor::active_floor); it holds it again once
     //  it resumes below
     int subgraph_task_priority = 0;
+    SubgraphExecutionState *subgraph_task_state = nullptr;
     const bool subgraph_task = subgraph_executor && thread->in_subgraph_task_execution();
     if(subgraph_task) {
       std::map<Thread *, int>::const_iterator it = worker_priorities.find(thread);
       assert(it != worker_priorities.end());
       subgraph_task_priority = it->second;
-      subgraph_executor->task_blocked(subgraph_task_priority);
+      subgraph_task_state =
+          static_cast<SubgraphExecutionState *>(thread->subgraph_task_state());
+      subgraph_executor->task_blocked(subgraph_task_priority, subgraph_task_state);
     }
 
     while(true) { // thread->get_state() != Thread::STATE_READY) {
@@ -1025,7 +1028,7 @@ namespace Realm {
 #endif
     blocked_workers.erase(thread);
     if(subgraph_task)
-      subgraph_executor->task_resumed(subgraph_task_priority);
+      subgraph_executor->task_resumed(subgraph_task_priority, subgraph_task_state);
   }
 
   void ThreadedTaskScheduler::thread_ready(Thread *thread)
