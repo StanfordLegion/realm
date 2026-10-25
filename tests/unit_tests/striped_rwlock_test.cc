@@ -17,8 +17,8 @@
 
 // Tests of StripedRWLock: readers and a writer exclude each other, readers
 //  run concurrently, a writer is not starved by a steady stream of readers,
-//  and threads that share a reader slot (more threads than slots) still get
-//  mutual exclusion.
+//  readers are not starved by back-to-back writers, and threads that share a
+//  reader slot (more threads than slots) still get mutual exclusion.
 
 #include "realm/mutex.h"
 #include "realm/timers.h"
@@ -167,6 +167,34 @@ TEST(StripedRWLockTest, WriterNotStarvedByReaders)
   // generous: a preempted reader can hold the lock for a scheduler quantum
   EXPECT_LT(worst, 1000000000LL);
   EXPECT_EQ(long(g.a), 200L);
+}
+
+TEST(StripedRWLockTest, ReadersNotStarvedByWriters)
+{
+  // the writer holds the lock long enough for a reader to give up spinning
+  //  and sleep, then releases and re-acquires it at once, 100 times over;
+  //  the reader must get in at the first release instead of having to win
+  //  a race against the next acquire
+  Guarded g;
+  std::atomic<bool> held(false);
+  std::thread writer([&] {
+    for(int i = 0; i < 100; i++) {
+      StripedRWLock::AutoWriterLock al(g.lock);
+      held.store(true);
+      spin_for(5000000); // 5 ms
+    }
+  });
+  while(!held.load())
+    ;
+  long long t0 = Clock::current_time_in_nanoseconds();
+  {
+    StripedRWLock::AutoReaderLock al(g.lock);
+  }
+  long long waited = Clock::current_time_in_nanoseconds() - t0;
+  writer.join();
+  // one hold (5 ms) plus wake-up latency; a reader that has to race the next
+  //  acquire typically waits for most of the 100 holds
+  EXPECT_LT(waited, 50000000LL) << "the reader waited " << waited << " ns";
 }
 
 TEST(StripedRWLockTest, MoreThreadsThanSlots)

@@ -540,6 +540,9 @@ namespace Realm {
 
     // nonzero while a writer is waiting for readers to drain or holds the lock
     std::atomic<int> writer_active;
+    // readers that backed off for a writer and have not got in yet: the next
+    //  writer lets them in first, so back-to-back writers can not starve them
+    std::atomic<int> waiting_readers;
     // serializes writers
     Mutex writer_mutex;
     // readers that found a writer active sleep here until it is done

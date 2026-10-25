@@ -1208,6 +1208,7 @@ namespace Realm {
 
   StripedRWLock::StripedRWLock()
     : writer_active(0)
+    , waiting_readers(0)
     , writer_done(wait_mutex)
   {}
 
@@ -1234,15 +1235,24 @@ namespace Realm {
   {
     const unsigned slot = my_slot();
     Slot &s = slots[slot];
+    bool waiting = false;
     while(true) {
       // count ourselves in, then look for a writer - both with sequential
       //  consistency so that this and the writer's announce-then-look can
       //  not both miss each other (the writer does the same in wrlock)
       s.readers.fetch_add(1, std::memory_order_seq_cst);
-      if(writer_active.load(std::memory_order_seq_cst) == 0)
+      if(writer_active.load(std::memory_order_seq_cst) == 0) {
+        if(waiting)
+          waiting_readers.fetch_sub(1, std::memory_order_release);
         return slot;
-      // a writer is waiting or working: get out of its way and wait for it
+      }
+      // a writer is waiting or working: get out of its way and wait for it,
+      //  but count ourselves as waiting so the next writer lets us in first
       s.readers.fetch_sub(1, std::memory_order_release);
+      if(!waiting) {
+        waiting_readers.fetch_add(1, std::memory_order_seq_cst);
+        waiting = true;
+      }
       wait_for_writer();
     }
   }
@@ -1268,6 +1278,18 @@ namespace Realm {
   void StripedRWLock::wrlock()
   {
     writer_mutex.lock();
+    // readers that backed off for the previous writer go first, so that
+    //  back-to-back writers can not starve them (they are quick: each one
+    //  only has to count itself in)
+    {
+      int spins = 0;
+      while(waiting_readers.load(std::memory_order_seq_cst) != 0) {
+        if(++spins < 1024)
+          REALM_SPIN_YIELD();
+        else
+          Thread::yield();
+      }
+    }
     // announce ourselves (new readers now wait), then wait for the readers
     //  already counted in to leave
     writer_active.store(1, std::memory_order_seq_cst);
