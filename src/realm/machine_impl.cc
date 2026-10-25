@@ -1732,14 +1732,66 @@ namespace Realm {
     reset_cached_list();
   }
 
-  /*static*/ Processor ProcessorQueryImpl::next(const std::vector<Processor> &list,
-                                                Processor after)
-  {
-    // cached lists are sorted by id, so the successor is a binary search
-    std::vector<Processor>::const_iterator it =
-        std::upper_bound(list.begin(), list.end(), after);
-    return (it != list.end()) ? *it : Processor::NO_PROC;
-  }
+  // Cached result lists are sorted by id, and ids order by owning node
+  //  before anything else, so the entries one node owns form a contiguous
+  //  run. These answer a node-restricted query from such a list the way a
+  //  walk of the machine would ('node' is never -1 here; an unrestricted
+  //  query reads the list directly).
+  namespace {
+    inline unsigned owner_node(Processor p) { return ID(p).proc_owner_node(); }
+    inline unsigned owner_node(Memory m) { return ID(m).memory_owner_node(); }
+
+    template <typename T>
+    typename std::vector<T>::const_iterator run_begin(const std::vector<T> &items,
+                                                      unsigned node)
+    {
+      return std::lower_bound(items.begin(), items.end(), node,
+                              [](const T &t, unsigned n) { return owner_node(t) < n; });
+    }
+
+    template <typename T>
+    typename std::vector<T>::const_iterator
+    run_end(const std::vector<T> &items, typename std::vector<T>::const_iterator from,
+            unsigned node)
+    {
+      return std::upper_bound(from, items.end(), node,
+                              [](unsigned n, const T &t) { return n < owner_node(t); });
+    }
+
+    template <typename T>
+    size_t run_size(const std::vector<T> &items, int node)
+    {
+      typename std::vector<T>::const_iterator b = run_begin(items, unsigned(node));
+      return run_end(items, b, unsigned(node)) - b;
+    }
+
+    template <typename T>
+    T first_in_run(const std::vector<T> &items, int node, T none)
+    {
+      typename std::vector<T>::const_iterator it = run_begin(items, unsigned(node));
+      return ((it != items.end()) && (owner_node(*it) == unsigned(node))) ? *it : none;
+    }
+
+    template <typename T>
+    T random_in_run(const std::vector<T> &items, int node, T none)
+    {
+      typename std::vector<T>::const_iterator b = run_begin(items, unsigned(node));
+      typename std::vector<T>::const_iterator e = run_end(items, b, unsigned(node));
+      return (b == e) ? none : b[lrand48() % (e - b)];
+    }
+
+    // the successor of 'after' within the run; like the walk, an 'after' on
+    //  another node has no successor
+    template <typename T>
+    T next_in_run(const std::vector<T> &items, T after, int node, T none)
+    {
+      if(owner_node(after) != unsigned(node))
+        return none;
+      typename std::vector<T>::const_iterator it =
+          std::upper_bound(items.begin(), items.end(), after);
+      return ((it != items.end()) && (owner_node(*it) == unsigned(node))) ? *it : none;
+    }
+  } // namespace
 
   const ProcessorQueryImpl::CachedList *
   ProcessorQueryImpl::attach(const CachedList *list) const
@@ -1764,18 +1816,20 @@ namespace Realm {
   }
 
   // Returns the shared list that can serve this query, or null when the
-  // shared cache does not cover it: node-restricted queries, best-affinity
-  // queries, and predicated queries other than the single memory-affinity
-  // predicate walk the machine directly. Reads nothing but the current
-  // snapshot unless that is stale, in which case a new one is built (under
-  // the machine's reader lock) and published.
+  // shared cache does not cover it: best-affinity queries, predicated queries
+  // other than the single memory-affinity predicate, and queries restricted
+  // to two different nodes (which match nothing) walk the machine directly.
+  // A query restricted to one node is answered by that node's run of the
+  // shared list (see range()). Reads nothing but the current snapshot unless
+  // that is stale, in which case a new one is built (under the machine's
+  // reader lock) and published.
   const ProcessorQueryImpl::CachedList *ProcessorQueryImpl::cached_list() const
   {
     const CachedList *list = attached_list();
     if(list)
       return list;
-    if(!is_restricted_kind || is_restricted_node || best_affinity_cost.has_value() ||
-       (!predicates.empty() && !is_cached_mem) ||
+    if(!is_restricted_kind || (is_restricted_node && (restricted_node_id < 0)) ||
+       best_affinity_cost.has_value() || (!predicates.empty() && !is_cached_mem) ||
        (unsigned(restricted_kind) >= NUM_PROCESSOR_KINDS))
       return nullptr;
 
@@ -1883,10 +1937,16 @@ namespace Realm {
     const std::vector<Processor> &items = clist->items;
     switch(q) {
     case QUERY_FIRST:
-      pval = items.empty() ? Processor::NO_PROC : items.front();
+      if(!is_restricted_node)
+        pval = items.empty() ? Processor::NO_PROC : items.front();
+      else
+        pval = first_in_run(items, restricted_node_id, Processor::NO_PROC);
       break;
     case QUERY_RANDOM:
-      pval = items.empty() ? Processor::NO_PROC : items[lrand48() % items.size()];
+      if(!is_restricted_node)
+        pval = items.empty() ? Processor::NO_PROC : items[lrand48() % items.size()];
+      else
+        pval = random_in_run(items, restricted_node_id, Processor::NO_PROC);
       break;
     default:
       log_query.fatal() << "unexpected cached query type " << int(q);
@@ -1908,7 +1968,14 @@ namespace Realm {
     const CachedList *clist = cached_list();
     if(!clist)
       return false;
-    pval = next(clist->items, p);
+    const std::vector<Processor> &items = clist->items;
+    if(!is_restricted_node) {
+      // the list is sorted by id, so the successor is a binary search
+      std::vector<Processor>::const_iterator it =
+          std::upper_bound(items.begin(), items.end(), p);
+      pval = (it != items.end()) ? *it : Processor::NO_PROC;
+    } else
+      pval = next_in_run(items, p, restricted_node_id, Processor::NO_PROC);
     return true;
 #else
     return false;
@@ -1923,7 +1990,8 @@ namespace Realm {
     const CachedList *clist = cached_list();
     if(!clist)
       return false;
-    count = clist->items.size();
+    count = is_restricted_node ? run_size(clist->items, restricted_node_id)
+                               : clist->items.size();
     return true;
 #else
     return false;
@@ -2159,7 +2227,10 @@ namespace Realm {
     // from first_match(). Just iterate through the cached list.
     if(best_affinity_cost.has_value()) {
       // Find the next processor in the (sorted) results after the given one
-      return next(best_affinity_list()->items, after);
+      const std::vector<Processor> &items = best_affinity_list()->items;
+      std::vector<Processor>::const_iterator it =
+          std::upper_bound(items.begin(), items.end(), after);
+      return (it != items.end()) ? *it : Processor::NO_PROC;
     }
 
     StripedRWLock::AutoReaderLock al(machine->mutex);
@@ -2617,14 +2688,6 @@ namespace Realm {
     reset_cached_list();
   }
 
-  /*static*/ Memory MemoryQueryImpl::next(const std::vector<Memory> &list, Memory after)
-  {
-    // cached lists are sorted by id, so the successor is a binary search
-    std::vector<Memory>::const_iterator it =
-        std::upper_bound(list.begin(), list.end(), after);
-    return (it != list.end()) ? *it : Memory::NO_MEMORY;
-  }
-
   const MemoryQueryImpl::CachedList *MemoryQueryImpl::attach(const CachedList *list) const
   {
     attached.store_release(list);
@@ -2710,9 +2773,9 @@ namespace Realm {
     const CachedList *list = attached_list();
     if(list)
       return list;
-    if(!is_restricted_kind || is_restricted_node || !predicates.empty() ||
-       (restricted_min_capacity != 0) || best_proc_affinity_cost.has_value() ||
-       best_mem_affinity_cost.has_value() ||
+    if(!is_restricted_kind || (is_restricted_node && (restricted_node_id < 0)) ||
+       !predicates.empty() || (restricted_min_capacity != 0) ||
+       best_proc_affinity_cost.has_value() || best_mem_affinity_cost.has_value() ||
        (unsigned(restricted_kind) >= NUM_MEMORY_KINDS))
       return nullptr;
 
@@ -2765,10 +2828,16 @@ namespace Realm {
     const std::vector<Memory> &items = clist->items;
     switch(q) {
     case QUERY_FIRST:
-      mval = items.empty() ? Memory::NO_MEMORY : items.front();
+      if(!is_restricted_node)
+        mval = items.empty() ? Memory::NO_MEMORY : items.front();
+      else
+        mval = first_in_run(items, restricted_node_id, Memory::NO_MEMORY);
       break;
     case QUERY_RANDOM:
-      mval = items.empty() ? Memory::NO_MEMORY : items[lrand48() % items.size()];
+      if(!is_restricted_node)
+        mval = items.empty() ? Memory::NO_MEMORY : items[lrand48() % items.size()];
+      else
+        mval = random_in_run(items, restricted_node_id, Memory::NO_MEMORY);
       break;
     default:
       log_query.fatal() << "unexpected cached query type " << int(q);
@@ -2788,7 +2857,14 @@ namespace Realm {
     const CachedList *clist = cached_list();
     if(!clist)
       return false;
-    mval = next(clist->items, m);
+    const std::vector<Memory> &items = clist->items;
+    if(!is_restricted_node) {
+      // the list is sorted by id, so the successor is a binary search
+      std::vector<Memory>::const_iterator it =
+          std::upper_bound(items.begin(), items.end(), m);
+      mval = (it != items.end()) ? *it : Memory::NO_MEMORY;
+    } else
+      mval = next_in_run(items, m, restricted_node_id, Memory::NO_MEMORY);
     return true;
 #else
     return false;
@@ -2803,7 +2879,8 @@ namespace Realm {
     const CachedList *clist = cached_list();
     if(!clist)
       return false;
-    count = clist->items.size();
+    count = is_restricted_node ? run_size(clist->items, restricted_node_id)
+                               : clist->items.size();
     return true;
 #else
     return false;
@@ -3149,7 +3226,10 @@ namespace Realm {
     // from first_match(). Just iterate through the cached list.
     if(best_proc_affinity_cost.has_value() || best_mem_affinity_cost.has_value()) {
       // Find the next memory in the (sorted) results after the given one
-      return next(best_affinity_list()->items, after);
+      const std::vector<Memory> &items = best_affinity_list()->items;
+      std::vector<Memory>::const_iterator it =
+          std::upper_bound(items.begin(), items.end(), after);
+      return (it != items.end()) ? *it : Memory::NO_MEMORY;
     }
 
     StripedRWLock::AutoReaderLock al(machine->mutex);
