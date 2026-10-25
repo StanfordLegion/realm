@@ -261,11 +261,17 @@ namespace {
     }
   }
 
+  // set while a delivery is inside add_incoming_message, which a backend calls from
+  //  its receive path (on GASNet-EX, an AM handler) - a callback that fires there
+  //  might not be legal for the backend it belongs to
+  bool in_receive_path = false;
+
   // the IncomingMessageManager callback a backend would register for a message with
   //  remote completions: data1 points at the SentMessage's completion storage
   void remote_completion_callback(NodeID, IncomingMessageManager::CallbackData data1,
                                   IncomingMessageManager::CallbackData)
   {
+    EXPECT_FALSE(in_receive_path) << "callback fired inside add_incoming_message";
     std::vector<char> *comp = reinterpret_cast<std::vector<char> *>(data1);
     CompletionCallbackBase::invoke_all(comp->data(), comp->size());
     CompletionCallbackBase::destroy_all(comp->data(), comp->size());
@@ -350,8 +356,9 @@ namespace {
     void TearDown() override { Network::single_network = saved_network; }
 
     // hands one recorded message to the manager the way a backend would, including
-    //  the remote-completion callback and its "handled inline" contract
-    void deliver(IncomingMessageManager &mgr, const SentMessage &m, NodeID sender = 1)
+    //  the remote-completion callback and its "handled inline" contract, and returns
+    //  whether the manager handled it immediately
+    bool deliver(IncomingMessageManager &mgr, const SentMessage &m, NodeID sender = 1)
     {
       IncomingMessageManager::CallbackFnptr fn = nullptr;
       IncomingMessageManager::CallbackData d1 = 0;
@@ -359,12 +366,15 @@ namespace {
         fn = remote_completion_callback;
         d1 = reinterpret_cast<IncomingMessageManager::CallbackData>(m.remote_comp.get());
       }
+      in_receive_path = true;
       bool handled = mgr.add_incoming_message(
           sender, m.msgid, m.header.data(), m.header.size(), PAYLOAD_COPY,
           m.payload.data(), m.payload.size(), PAYLOAD_COPY, fn, d1, 0, TimeLimit());
+      in_receive_path = false;
       // a message handled immediately gets no callback - the backend completes it
       if(handled && (fn != nullptr))
         fn(sender, d1, 0);
+      return handled;
     }
 
     MockNetworkModule net;
@@ -427,11 +437,11 @@ namespace {
     EXPECT_EQ(received[0].payload, data);
   }
 
-  // The regression behind A-01: each ActiveMessage<T> instantiation used to number its
-  //  chunked messages from 0, and the receiver keyed reassembly on (sender, id) alone,
-  //  so the first chunked message of two types collided.  Send one of each type (and
-  //  one through a different INLINE_STORAGE, which used to be a third counter), check
-  //  their ids differ, and deliver their fragments interleaved.
+  // Each ActiveMessage<T> instantiation used to number its chunked messages from 0,
+  //  and the receiver keyed reassembly on (sender, id) alone, so the first chunked
+  //  message of two types collided.  Send one of each type (and one through a
+  //  different INLINE_STORAGE, which used to be a third counter), check their ids
+  //  differ, and deliver their fragments interleaved.
   TEST_F(ActMsgChunkedSendTest, DifferentTypesDoNotShareReassembly)
   {
     std::vector<char> a = pattern(300, 3), b = pattern(250, 4), c = pattern(200, 5);
@@ -492,8 +502,8 @@ namespace {
     }
   }
 
-  // A-02 through the send path: a message reassembled above one message block (~1MB),
-  //  for a handler that is never run inline
+  // Through the send path, a message reassembled above one message block (~1MB), for
+  //  a handler that is never run inline
   TEST_F(ActMsgChunkedSendTest, ReassemblyLargerThanOneMessageBlock)
   {
     net.limit = 64 << 10;
@@ -569,9 +579,11 @@ namespace {
     }
   }
 
-  // A-05: completions on a message that is chunked.  The local one fires once commit()
+  // Completions on a message that is chunked.  The local one fires once commit()
   //  has copied everything; the remote one rides chunk 0 and fires once, and only after
-  //  the reassembled message has been handled - whichever fragment arrives last.
+  //  the reassembled message has been handled - whichever fragment arrives last.  It
+  //  never fires inside add_incoming_message: while chunk 0's callback is held, even a
+  //  message with an inline handler is queued.
   TEST_F(ActMsgChunkedSendTest, CompletionsOnAChunkedMessage)
   {
     for(int order = 0; order < 2; order++) {
@@ -606,15 +618,22 @@ namespace {
         std::vector<size_t> seq(net.sent.size());
         for(size_t i = 0; i < seq.size(); i++)
           seq[i] = (order == 0) ? i : (seq.size() - 1 - i);
+        bool handled = false;
         for(size_t i = 0; i < seq.size(); i++) {
-          deliver(mgr, net.sent[seq[i]]);
+          handled = deliver(mgr, net.sent[seq[i]]);
           if(i + 1 < seq.size())
             EXPECT_EQ(remote.load(), 0) << "fired after " << (i + 1) << " fragments";
         }
-        // an inline handler has already run; a queued one runs here (do_work insists
-        //  on there being something queued)
-        if(!use_inline)
+        // only an inline handler with nothing held runs immediately: in order, chunk 0
+        //  (and its callback) arrived first and is held; reversed, it completes the
+        //  message itself and the backend fires its callback
+        EXPECT_EQ(handled, (use_inline && (order == 1)))
+            << "order " << order << " inline " << use_inline;
+        // a queued message runs here (do_work insists on there being something queued)
+        if(!handled) {
+          EXPECT_EQ(remote.load(), 0) << "fired before the handler ran";
           mgr.do_work(TimeLimit());
+        }
         mgr.shutdown();
 
         EXPECT_EQ(remote.load(), 1) << "order " << order << " inline " << use_inline;
@@ -671,7 +690,7 @@ namespace {
     }
   }
 
-  // A-06: a payload above the limit whose fragment header the network cannot carry
+  // A payload above the limit whose fragment header the network cannot carry
   //  fails at the first such send, naming the type, rather than overrunning the
   //  network's header buffer
   TEST_F(ActMsgChunkedSendTest, UnfragmentableHeaderIsReportedByName)
@@ -688,6 +707,21 @@ namespace {
         },
         // the fatal message names the type, but logging is not configured in the
         //  unit tests, so (like the other death tests here) only the death is checked
+        "");
+  }
+
+  // the same when the plain header alone is already too large, so that no payload
+  //  can be sent at all
+  TEST_F(ActMsgChunkedSendTest, OversizedPlainHeaderIsReportedByName)
+  {
+    net.max_header = sizeof(BigHeaderMsg) - 8;
+    std::vector<char> data = pattern(10, 13);
+    EXPECT_DEATH(
+        {
+          ActiveMessage<BigHeaderMsg> m(1, data.size());
+          m.add_payload(data.data(), data.size());
+          m.commit();
+        },
         "");
   }
 

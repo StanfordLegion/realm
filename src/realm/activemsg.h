@@ -411,6 +411,9 @@ namespace Realm {
     // returns true if the call was handled immediately (in which case the
     //  callback, if present, will NOT be called), or false if the message
     //  will be processed later
+    // a callback is only ever invoked where queued messages are handled (a handler
+    //  thread or do_work), never from within this call, so a backend may call it
+    //  where its own callback would not be legal (GASNet-EX: inside an AM handler)
     bool add_incoming_message(NodeID sender, ActiveMessageHandlerTable::MessageID msgid,
                               const void *hdr, size_t hdr_size, int hdr_mode,
                               const void *payload, size_t payload_size, int payload_mode,

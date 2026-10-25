@@ -747,7 +747,9 @@ namespace Realm {
 
       // a single target is sent the way an unchunked message to one target would be:
       //  some networks' multi-target path cannot carry a remote completion (MPI's
-      //  asserts that it has none), and the unicast path is cheaper everywhere
+      //  asserts that it has none), and the unicast path is cheaper everywhere.  Two
+      //  or more targets still take the multi-target path, remote completion and all,
+      //  so on MPI that assertion applies to them just as it does unchunked.
       const bool unicast = (chunk_targets_.size() == 1);
       const NodeID unicast_target = (unicast ? *(chunk_targets_.begin()) : NodeID(-1));
 

@@ -23,6 +23,9 @@
 //     used to share a reassembly on the receiver and abort it (or, with fragments
 //     arriving out of order, corrupt both and lose one)
 //   - local and remote completions on a fragmented message, each fired exactly once
+//   - a handler with an inline variant, fragmented and not, with and without
+//     completions: a held remote completion must not be fired from the network's
+//     receive path, and a message with none must not be answered with an empty one
 //   - a global task registration whose user data is larger than one message block
 //
 // Needs at least 2 ranks and -ll:cpu 3; with fewer ranks there is no remote target and
@@ -61,6 +64,8 @@ namespace {
   Logger log_app("actmsg_chunking");
 
   std::atomic<int> g_errors{0};
+  // acks from a receiver whose handler ran inline
+  std::atomic<int> g_inline_acks{0};
 
   // acknowledgements for the phase in progress: the phase's event triggers once the
   //  expected number has arrived
@@ -95,6 +100,7 @@ namespace {
   struct AckMessage {
     int seq;
     int ok;
+    int handled_inline;
 
     static void handle_message(NodeID sender, const AckMessage &args, const void *,
                                size_t)
@@ -104,16 +110,19 @@ namespace {
                         << " received a corrupted payload, seq=" << args.seq;
         g_errors.fetch_add(1);
       }
+      if(args.handled_inline)
+        g_inline_acks.fetch_add(1);
       if((g_acks.fetch_add(1) + 1) == g_expected_acks)
         g_phase_done.trigger();
     }
   };
 
-  void ack(NodeID to, int seq, bool ok)
+  void ack(NodeID to, int seq, bool ok, bool handled_inline = false)
   {
     ActiveMessage<AckMessage> amsg(to);
     amsg->seq = seq;
     amsg->ok = ok ? 1 : 0;
+    amsg->handled_inline = handled_inline ? 1 : 0;
     amsg.commit();
   }
 
@@ -144,9 +153,33 @@ namespace {
     }
   };
 
+  // with an inline handler, which the receiver's message manager runs straight from
+  //  the network's receive path when it can, and queues otherwise (sending the ack
+  //  from there is fine: GASNet-EX queues a message it cannot inject from a handler)
+  struct InlineBigMessage {
+    int seq;
+    size_t total;
+    NodeID reply_to;
+
+    static bool handle_inline(NodeID, const InlineBigMessage &args, const void *data,
+                              size_t len, TimeLimit)
+    {
+      ack(args.reply_to, args.seq, check_payload(args.seq, args.total, data, len),
+          true /*handled_inline*/);
+      return true;
+    }
+
+    static void handle_message(NodeID, const InlineBigMessage &args, const void *data,
+                               size_t len)
+    {
+      ack(args.reply_to, args.seq, check_payload(args.seq, args.total, data, len));
+    }
+  };
+
   ActiveMessageHandlerReg<AckMessage> ack_message_handler;
   ActiveMessageHandlerReg<BigMessage> big_message_handler;
   ActiveMessageHandlerReg<OtherBigMessage> other_big_message_handler;
+  ActiveMessageHandlerReg<InlineBigMessage> inline_big_message_handler;
 
   void begin_phase(int expected)
   {
@@ -294,6 +327,74 @@ namespace {
            remote.load());
   }
 
+  // Messages for a handler with an inline variant.  On GASNet-EX the receive path is
+  //  an AM handler: a remote completion held from fragment 0 used to be fired from
+  //  there, sending a request GASNet forbids, and a message with no completion that
+  //  was handled there was answered with an empty completion, which the sender
+  //  asserts on.  Repeated, since whether a message is handled inline depends on
+  //  timing.
+  void test_inline_handler(NodeID target, size_t limit)
+  {
+    struct Variant {
+      const char *name;
+      size_t bytes;
+      bool completions;
+    };
+    const size_t big = std::min(size_t(3) * limit, size_t(512) << 10);
+    const Variant variants[] = {
+        {"fragmented, with completions", big, true},
+        {"fragmented, no completions", big, false},
+        {"small, with completions", 512, true},
+        {"small, no completions", 512, false},
+    };
+    const int rounds = 20;
+    for(const Variant &v : variants) {
+      g_inline_acks.store(0);
+      for(int r = 0; r < rounds; r++) {
+        static std::atomic<int> local{0}, remote{0};
+        local.store(0);
+        remote.store(0);
+        const int seq = 50 + r;
+        std::vector<unsigned char> buf = make_payload(v.bytes, seq);
+        begin_phase(1);
+        UserEvent local_done = UserEvent::create_user_event();
+        UserEvent remote_done = UserEvent::create_user_event();
+        {
+          ActiveMessage<InlineBigMessage> amsg(target, buf.size());
+          amsg->seq = seq;
+          amsg->total = buf.size();
+          amsg->reply_to = Network::my_node_id;
+          amsg.add_payload(buf.data(), buf.size());
+          if(v.completions) {
+            amsg.add_local_completion([local_done]() {
+              local.fetch_add(1);
+              local_done.trigger();
+            });
+            amsg.add_remote_completion([remote_done]() {
+              remote.fetch_add(1);
+              remote_done.trigger();
+            });
+          }
+          amsg.commit();
+        }
+        g_phase_done.wait();
+        if(v.completions) {
+          local_done.wait();
+          remote_done.wait();
+          if((local.load() != 1) || (remote.load() != 1)) {
+            log_app.error() << "inline handler, " << v.name << ": local fired "
+                            << local.load() << " times, remote " << remote.load()
+                            << " times, expected 1 and 1";
+            g_errors.fetch_add(1);
+          }
+        }
+      }
+      printf("[actmsg_chunking] inline handler, %s: %d rounds of %zu bytes, %d handled "
+             "inline\n",
+             v.name, rounds, v.bytes, g_inline_acks.load());
+    }
+  }
+
   // the user data of a global registration travels in one RegisterTaskMessage per
   //  rank, of whatever size the caller chose
   const size_t USERDATA_BYTES = 2 << 20;
@@ -338,6 +439,7 @@ namespace {
     test_multicast(num_nodes);
     test_concurrent_types(target, std::min(limit, size_t(64) << 10));
     test_completions(target, std::min(limit, size_t(64) << 10));
+    test_inline_handler(target, std::min(limit, size_t(64) << 10));
     test_global_registration(target);
     printf("[actmsg_chunking] done: errors=%d\n", g_errors.load());
     fflush(stdout);

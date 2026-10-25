@@ -22,6 +22,23 @@
 #include "realm/activemsg.h"
 #include <vector>
 #include <atomic>
+#include <cstdlib>
+#include <cstring>
+
+// AddressSanitizer's allocator can say how many bytes are in use, which is how
+//  PayloadFreeFragmentsAreReleased sees a leak with leak detection off
+#if defined(__SANITIZE_ADDRESS__)
+#define REALM_TEST_ALLOCATED_BYTES
+#elif defined(__has_feature)
+#if __has_feature(address_sanitizer)
+#define REALM_TEST_ALLOCATED_BYTES
+#endif
+#endif
+#ifdef REALM_TEST_ALLOCATED_BYTES
+// from sanitizer/allocator_interface.h, which GCC does not install (its libasan
+//  does export the function)
+extern "C" size_t __sanitizer_get_current_allocated_bytes(void);
+#endif
 
 using namespace Realm;
 
@@ -362,9 +379,11 @@ namespace {
   // A remote completion on a chunked message rides one fragment, but "handled by the
   //  target" is only true once the whole message has been reassembled and run.  The
   //  callback must therefore be held across the intervening fragments and fire exactly
-  //  once, after the handler.  Covered for both dispatch paths, which fire it in
-  //  different places: inline handlers from add_incoming_message, queued ones from the
-  //  handler loop.
+  //  once, after the handler.  Covered for both kinds of handler: either way it fires
+  //  from the handler loop, never from inside add_incoming_message, which a backend
+  //  calls from its receive path (on GASNet-EX, an AM handler, where its callback would
+  //  send an illegal request).  So even a message with an inline handler is queued
+  //  while a callback is held for it.
   TEST_F(IncomingMessageManagerTest, FragmentCallbackWaitsForReassembledHandler_Inline)
   {
     CoreReservationSet crs(nullptr);
@@ -383,22 +402,26 @@ namespace {
     //  dispatch is the last to ARRIVE (here chunk 1), not the last one sent.  That is
     //  why the completion has to be deferred rather than attached to the final chunk.
     const uint32_t order[3] = {2, 0, 1};
+    bool handled = false;
     for(int i = 0; i < 3; i++) {
       const uint32_t chunk_id = order[i];
       FragmentedMessage hdr;
       hdr.frag_info = {chunk_id, 3, 0xC0FFEEULL};
       // only chunk 0 carries a callback, exactly as commit_chunked attaches it
-      bool handled = mgr.add_incoming_message(
+      handled = mgr.add_incoming_message(
           1, msgid, &hdr, sizeof(hdr), PAYLOAD_COPY, full.data() + (chunk_id * 10), 10,
           PAYLOAD_COPY, (chunk_id == 0) ? &count_deferred_callback : nullptr, 0, 0,
           TimeLimit());
-      if(i < 2) {
-        EXPECT_FALSE(handled);
-        EXPECT_EQ(g_deferred_fired.load(), 0) << "fired before reassembly completed";
-      } else {
-        EXPECT_TRUE(handled);
-      }
+      EXPECT_FALSE(handled) << "fragment " << i;
+      EXPECT_EQ(g_deferred_fired.load(), 0) << "fired inside add_incoming_message";
     }
+
+    // the last fragment completed reassembly, but with chunk 0's callback held the
+    //  message was queued rather than run inline (do_work insists on there being
+    //  something queued)
+    EXPECT_EQ(FragmentedMessage::call_count.load(), 0);
+    if(!handled)
+      mgr.do_work(TimeLimit());
 
     EXPECT_EQ(FragmentedMessage::call_count.load(), 1);
     EXPECT_EQ(g_deferred_fired.load(), 1);
@@ -451,8 +474,9 @@ namespace {
   // A callback on the fragment that COMPLETES reassembly must NOT be fired by the
   //  manager when the message is handled inline.  add_incoming_message returns true, and
   //  every backend reads that as "you own the completion" and signals it itself - UCX
-  //  calls am_realm_comp_handler directly (ucp_internal.cc:1191-1193), GASNet-EX replies
-  //  from its return value.  Firing it here too would release the same resources twice.
+  //  calls am_realm_comp_handler directly, GASNet-EX replies from its return value.
+  //  Firing it here too would release the same resources twice.  With no callback held
+  //  from an earlier fragment, an inline handler does still run inline.
   TEST_F(IncomingMessageManagerTest, CompletingFragmentCallbackNotFiredWhenHandledInline)
   {
     CoreReservationSet crs(nullptr);
@@ -522,11 +546,81 @@ namespace {
     mgr.shutdown();
   }
 
+  // A fragment handed over with PAYLOAD_FREE (as MPI does for a payload it receives
+  //  with its own MPI_Recv) is copied into the reassembly, and nothing else ever sees
+  //  its buffer, so the manager has to free it - for the completing fragment as well as
+  //  the others, and for inline and queued handlers alike.  The leak itself is only
+  //  measured under AddressSanitizer, whose allocator reports the bytes in use.
+  TEST_F(IncomingMessageManagerTest, PayloadFreeFragmentsAreReleased)
+  {
+    const size_t chunk = 1 << 20;
+    const uint32_t chunks = 4;
+    // the handlers' copies, and whatever earlier tests left in them, are not what is
+    //  being measured
+    auto release_handler_copies = []() {
+      std::vector<std::vector<char>>().swap(FragmentedMessage::received_payloads);
+      std::vector<char>().swap(OversizedFragMessage::last_payload);
+    };
+    release_handler_copies();
+#ifdef REALM_TEST_ALLOCATED_BYTES
+    const size_t before = __sanitizer_get_current_allocated_bytes();
+#endif
+    {
+      CoreReservationSet crs(nullptr);
+      IncomingMessageManager mgr(2, /*dedicated_threads=*/0, crs);
+
+      FragmentedMessage::call_count.store(0);
+      OversizedFragMessage::call_count.store(0);
+
+      std::vector<char> full(chunks * chunk);
+      for(size_t i = 0; i < full.size(); i++)
+        full[i] = static_cast<char>((i * 7) & 0xff);
+
+      unsigned short inline_msgid =
+          activemsg_handler_table.lookup_message_id<FragmentedMessage>();
+      unsigned short queued_msgid =
+          activemsg_handler_table.lookup_message_id<OversizedFragMessage>();
+      // out of order, so that the completing fragment is not the last one sent
+      const uint32_t order[chunks] = {3, 1, 0, 2};
+      for(uint32_t i = 0; i < chunks; i++) {
+        const uint32_t chunk_id = order[i];
+        FragmentedMessage ihdr;
+        ihdr.frag_info = {chunk_id, chunks, 0xF4EEULL};
+        void *ibuf = malloc(chunk);
+        memcpy(ibuf, full.data() + (chunk_id * chunk), chunk);
+        EXPECT_EQ(mgr.add_incoming_message(1, inline_msgid, &ihdr, sizeof(ihdr),
+                                           PAYLOAD_COPY, ibuf, chunk, PAYLOAD_FREE,
+                                           nullptr, 0, 0, TimeLimit()),
+                  (i == (chunks - 1)));
+
+        OversizedFragMessage qhdr;
+        qhdr.frag_info = {chunk_id, chunks, 0xF4EEULL};
+        void *qbuf = malloc(chunk);
+        memcpy(qbuf, full.data() + (chunk_id * chunk), chunk);
+        EXPECT_FALSE(mgr.add_incoming_message(1, queued_msgid, &qhdr, sizeof(qhdr),
+                                              PAYLOAD_COPY, qbuf, chunk, PAYLOAD_FREE,
+                                              nullptr, 0, 0, TimeLimit()));
+      }
+      mgr.do_work(TimeLimit());
+
+      EXPECT_EQ(FragmentedMessage::call_count.load(), 1);
+      ASSERT_EQ(FragmentedMessage::received_payloads.size(), 1u);
+      EXPECT_EQ(FragmentedMessage::received_payloads.front(), full);
+      EXPECT_EQ(OversizedFragMessage::call_count.load(), 1);
+      EXPECT_EQ(OversizedFragMessage::last_payload, full);
+
+      mgr.shutdown();
+      release_handler_copies();
+    }
+#ifdef REALM_TEST_ALLOCATED_BYTES
+    const size_t after = __sanitizer_get_current_allocated_bytes();
+    // every fragment buffer leaked would be 8 MiB in all
+    EXPECT_LT(after, before + chunk) << "fragment buffers were not freed";
+#endif
+  }
+
   class IncomingMessageManagerDeathTest : public IncomingMessageManagerTest {};
 
-  // Realm's transports deliver every message exactly once and nothing retransmits, so
-  //  a repeated fragment means a bug upstream.  Absorbing it would also mask two
-  //  messages colliding on one reassembly key, which is the failure Fix B addresses.
   // Two logical messages landing on one reassembly key, or a corrupt fragment header,
   //  show up as a disagreement about how many chunks the message has.  The reassembled
   //  bytes cannot be trusted, so this must not be absorbed.
@@ -574,6 +668,10 @@ namespace {
     EXPECT_DEATH(deliver_out_of_range_chunk(), "");
   }
 
+  // Realm's transports deliver every message exactly once and nothing retransmits, so
+  //  a repeated fragment means a bug upstream.  Absorbing it would also mask two
+  //  messages colliding on one reassembly key, as fragments of different message
+  //  types used to.
   TEST_F(IncomingMessageManagerDeathTest, DuplicateFragmentAborts)
   {
     // wrapped in a lambda so the commas below are not parsed as macro arguments

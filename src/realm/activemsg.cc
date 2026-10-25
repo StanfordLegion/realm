@@ -245,13 +245,21 @@ namespace Realm {
   void report_unfragmentable_message(unsigned short msgid, size_t header_size,
                                      size_t wrapped_header_size, size_t payload_size)
   {
-    log_amhandler.fatal()
-        << "active message " << activemsg_handler_table.lookup_message_name(msgid)
-        << ": a payload of " << payload_size
-        << " bytes is larger than the network can send in one message ("
-        << Network::max_payload_size(header_size, nullptr) << " bytes with a "
-        << header_size << "-byte header), and the " << wrapped_header_size
-        << "-byte fragment header is too large for the network to send it in pieces";
+    const char *name = activemsg_handler_table.lookup_message_name(msgid);
+    size_t limit = Network::max_payload_size(header_size, nullptr);
+    if(limit == 0)
+      // no payload fits at all, so fragmenting was never going to help
+      log_amhandler.fatal() << "active message " << name << ": the " << header_size
+                            << "-byte header is too large for the network to send "
+                            << "with any payload (this one has " << payload_size
+                            << " bytes)";
+    else
+      log_amhandler.fatal()
+          << "active message " << name << ": a payload of " << payload_size
+          << " bytes is larger than the network can send in one message (" << limit
+          << " bytes with a " << header_size << "-byte header), and the "
+          << wrapped_header_size
+          << "-byte fragment header is too large for the network to send it in pieces";
     abort();
   }
 
@@ -523,10 +531,21 @@ namespace Realm {
           abort();
         }
 
+        // add_chunk copied the bytes, so a buffer handed over with PAYLOAD_FREE is
+        //  done with: neither the early return below nor the reassembled message
+        //  that replaces it passes the pointer on
+        if(payload_mode == PAYLOAD_FREE)
+          free(const_cast<void *>(payload));
+
         if(!it->second.message->is_complete()) {
           // This fragment does not complete the message, so "received AND handled by
-          //  the target" is not true yet and its callback must not fire.  Hold it; the
-          //  dispatch that completes reassembly runs it after the handler.
+          //  the target" is not true yet and its callback must not fire.  Hold it; it
+          //  fires after the handler that runs the reassembled message.
+          // The callback is also a backend's only signal that we are done with the
+          //  fragment, so anything a backend releases from it stays held as well -
+          //  UCX, for one, returns the fragment's receive buffer from its callback.
+          //  No backend fragments that way today (UCX reports no payload limit), but
+          //  one that does would want a separate "payload consumed" notification.
           if(callback_fnptr != nullptr) {
             it->second.deferred.push_back(
                 DeferredCallback{callback_fnptr, callback_data1, callback_data2});
@@ -541,26 +560,30 @@ namespace Realm {
         // The COMPLETING fragment keeps its own callback, which from here follows the
         //  ordinary contract: fired by the handler loop if the message is queued, or
         //  reported by the caller itself from our `true` return if it is handled
-        //  inline.  Carrying it in 'deferred' too would signal completion twice - the
-        //  inline path fires it here and then the backend fires it again (see
-        //  UCPInternal::am_msg_recv_data_ready, ucp_internal.cc:1191-1193, and the
-        //  equivalent reply-on-return in the GASNet-EX module).
+        //  inline.  Carrying it in 'deferred' too would signal completion twice, as
+        //  the backends act on a `true` return themselves (see
+        //  UCPInternal::am_msg_recv_data_ready and GASNetEXInternal::handle_medium).
         message = it->second.message->reassemble();
         deferred = std::move(it->second.deferred);
 
         frag_message.erase(it);
+
+        // unconditionally, even if the message is empty, as the fragment's own
+        //  payload may have been freed above
+        payload = message.data();
+        payload_size = message.size();
+        payload_mode = PAYLOAD_COPY;
       }
     }
 
-    if(!message.empty()) {
-      payload = message.data();
-      payload_size = message.size();
-      payload_mode = PAYLOAD_COPY;
-    }
-
     // if we have an inline handler and enough time to run it, give it
-    //  a go
-    if((handler->handler_inline != 0) && (Config::max_inline_message_time > 0) &&
+    //  a go - unless callbacks are held from this message's earlier fragments.
+    //  Those must fire after the handler, but we are called from the network's
+    //  receive path, where a backend's callback need not be legal (GASNet-EX's
+    //  sends an AM request, which is forbidden inside an AM handler).  Callbacks
+    //  only ever fire where queued messages are handled, so it is queued instead.
+    if((handler->handler_inline != 0) && deferred.empty() &&
+       (Config::max_inline_message_time > 0) &&
        !work_until.will_expire(Config::max_inline_message_time)) {
       long long t_start = 0;
       if(Config::profile_activemsg_handlers)
@@ -573,13 +596,6 @@ namespace Realm {
           long long t_end = Clock::current_time_in_nanoseconds();
           handler->stats.record(t_start, t_end);
         }
-        // the reassembled message has now been handled, so callbacks held from
-        //  its earlier fragments are due.  This message's own callback_fnptr
-        //  stays unfired: when a handler runs inline the backend reports
-        //  completion through its return value instead
-        //  (gasnetex_internal.cc:5156).
-        for(const DeferredCallback &cb : deferred)
-          (cb.fnptr)(sender, cb.data1, cb.data2);
         if(payload_mode == PAYLOAD_FREE)
           free(const_cast<void *>(payload));
         // see if we need to wake up a thread waiting on a drain

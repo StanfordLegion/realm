@@ -1582,8 +1582,10 @@ namespace Realm {
 #endif
 
     // attempt an immediate send if they are enabled and we don't appear
-    //  to have any completion replies queued up
-    if(internal->module->cfg_use_immediate && (comp_reply_count.load() == 0)) {
+    //  to have any completion replies queued up - as for packets, we can't
+    //  inject if we're inside an AM request/reply handler
+    if(internal->module->cfg_use_immediate && !ThreadLocal::in_am_handler &&
+       (comp_reply_count.load() == 0)) {
       // always in immediate mode
       gex_flags_t flags = GEX_WRAPPER_FLAG_IMMEDIATE;
 
@@ -5164,7 +5166,11 @@ namespace Realm {
       // if the message was handled immediately, we can use a reply for
       //  completion information
       // set MSB to indicate this is coming in a reply (for AM credit counting)
-      return comp_info | (1U << 31);
+      if(comp_info != 0)
+        return comp_info | (1U << 31);
+      // with nothing to complete, the only reply is the dummy for AM credits -
+      //  an MSB-only word would read as a completion with neither bit set
+      return (module->cfg_am_limit ? ~0U : 0);
     } else {
       // remote isn't done and there's no local completion for shorts
       //  but we have to send a dummy response if we're counting AM credits
@@ -5213,7 +5219,11 @@ namespace Realm {
     if(handled) {
       // if the message was handled immediately, we can use a reply for
       //  completion information
-      return comp_info | (1U << 31);
+      if(comp_info != 0)
+        return comp_info | (1U << 31);
+      // with nothing to complete, the only reply is the dummy for AM credits
+      //  (see handle_short)
+      return (module->cfg_am_limit ? ~0U : 0);
     } else {
       if((comp_info & PendingCompletion::LOCAL_PENDING_BIT) != 0) {
         // reply is allowed for local completion, but remote isn't done
@@ -5264,7 +5274,11 @@ namespace Realm {
     if(handled) {
       // if the message was handled immediately, we can use a reply for
       //  completion information
-      return comp_info | (1U << 31);
+      if(comp_info != 0)
+        return comp_info | (1U << 31);
+      // with nothing to complete, the only reply is the dummy for AM credits
+      //  (see handle_short)
+      return (module->cfg_am_limit ? ~0U : 0);
     } else {
       if((comp_info & PendingCompletion::LOCAL_PENDING_BIT) != 0) {
         // reply is allowed for local completion, but remote isn't done
