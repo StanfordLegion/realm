@@ -2577,8 +2577,7 @@ public:
     std::vector<Event> first_post(1), second_post(1);
     Event e0 = sg.instantiate(nullptr, 0, ProfilingRequestSet(), first_pre, first_post);
     std::vector<Event> second_pre = {Event::NO_EVENT};
-    Event e1 =
-        sg.instantiate(nullptr, 0, ProfilingRequestSet(), second_pre, second_post);
+    Event e1 = sg.instantiate(nullptr, 0, ProfilingRequestSet(), second_pre, second_post);
     first_input.trigger(second_post[0]); // 0 runs after 1
     completed = wait_with_timeout(Event::merge_events(e0, e1), config.hang_timeout);
   }
@@ -5739,7 +5738,8 @@ static void exit_shutdown_blocked_graph_task()
   // a graph task blocked forever inside the graph
   std::vector<Processor> procs = worker_cpus(1);
   SubgraphDefinition sd;
-  BlockingTaskArgs a{UserEvent::create_user_event(), &exit_blocked_seq, &exit_blocked_out};
+  BlockingTaskArgs a{UserEvent::create_user_event(), &exit_blocked_seq,
+                     &exit_blocked_out};
   make_task_desc(sd, procs[0], blocking_task_id, &a, sizeof(a));
   Subgraph sg;
   Subgraph::create_subgraph(sg, sd, ProfilingRequestSet()).wait();

@@ -273,8 +273,8 @@ namespace Realm {
       send_now(owner, subgraph, wait_on, to_trigger);
       return;
     }
-    DeferredRemoteDestroy *w = new DeferredRemoteDestroy(owner, subgraph, wait_on,
-                                                         to_trigger);
+    DeferredRemoteDestroy *w =
+        new DeferredRemoteDestroy(owner, subgraph, wait_on, to_trigger);
     EventImpl::add_waiter(after, w);
   }
 

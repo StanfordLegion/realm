@@ -351,8 +351,8 @@ namespace Realm {
   public:
     // Sends at once if `after` has triggered (poisoned or not), otherwise
     // when it does.
-    static void send(NodeID owner, Subgraph subgraph, Event wait_on,
-                     UserEvent to_trigger, Event after);
+    static void send(NodeID owner, Subgraph subgraph, Event wait_on, UserEvent to_trigger,
+                     Event after);
 
     virtual void event_triggered(bool poisoned, TimeLimit work_until);
     virtual void print(std::ostream &os) const;

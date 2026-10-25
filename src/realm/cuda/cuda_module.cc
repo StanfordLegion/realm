@@ -1697,7 +1697,7 @@ namespace Realm {
            gpu->module->config->cfg_task_context_sync);
       ThreadLocal::subgraph_ctxsync_pending = false;
       if(ctxsync) {
-#if(CUDA_VERSION >= 12050)
+#if (CUDA_VERSION >= 12050)
         if(CUDA_DRIVER_HAS_FNPTR(cuCtxRecordEvent)) {
           // fold the whole context's work into our stream, cheaply
           CUevent e = gpu->event_pool.get_event();
