@@ -288,9 +288,12 @@ namespace Realm {
 
     // concurrency mode - more serial versions may allow the compiled form to
     //  pre-allocate and reuse resources, improving efficiency
-    // Only ONE_SHOT and INSTANTIATION_ORDER are implemented at the moment;
-    //  SERIALIZABLE and CONCURRENT are rejected at creation. The default is
-    //  INSTANTIATION_ORDER. A ONE_SHOT subgraph may be instantiated once.
+    // ONE_SHOT, INSTANTIATION_ORDER and CONCURRENT are implemented;
+    //  SERIALIZABLE is rejected at creation. The default is CONCURRENT:
+    //  instantiations run independently, ordered only by the events the
+    //  application gives them. INSTANTIATION_ORDER starts each one after
+    //  the previous one has finished. A ONE_SHOT subgraph may be
+    //  instantiated once.
     enum ConcurrencyMode
     {
       ONE_SHOT,            // can only be executed once (e.g. probably not

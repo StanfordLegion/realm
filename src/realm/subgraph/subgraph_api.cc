@@ -103,16 +103,12 @@ namespace Realm {
       SubgraphImpl *subgraph = get_runtime()->get_subgraph_impl(*this);
       return subgraph->request_destroy(wait_on);
     } else {
-      // after the instantiations this node sent (see RemoteSubgraphInstantiations)
-      Event last = get_runtime()->remote_subgraph_instantiations.take(*this);
-      if(last.exists())
-        wait_on = Event::merge_events(wait_on, last);
+      // The message goes out once the instantiations this node sent have
+      // finished (see RemoteSubgraphInstantiations); wait_on is passed to
+      // the owner as given.
       UserEvent done = UserEvent::create_user_event();
-      ActiveMessage<SubgraphDestroyMessage> amsg(owner);
-      amsg->subgraph = *this;
-      amsg->wait_on = wait_on;
-      amsg->to_trigger = done;
-      amsg.commit();
+      Event last = get_runtime()->remote_subgraph_instantiations.take(*this);
+      DeferredRemoteDestroy::send(owner, *this, wait_on, done, last);
       return done;
     }
   }
@@ -255,6 +251,56 @@ namespace Realm {
     return e;
   }
 
+  ////////////////////////////////////////////////////////////////////////
+  //
+  // class DeferredRemoteDestroy
+  //
+
+  DeferredRemoteDestroy::DeferredRemoteDestroy(NodeID _owner, Subgraph _subgraph,
+                                               Event _wait_on, UserEvent _to_trigger)
+    : owner(_owner)
+    , subgraph(_subgraph)
+    , wait_on(_wait_on)
+    , to_trigger(_to_trigger)
+  {}
+
+  /*static*/ void DeferredRemoteDestroy::send(NodeID owner, Subgraph subgraph,
+                                              Event wait_on, UserEvent to_trigger,
+                                              Event after)
+  {
+    bool poisoned = false; // irrelevant: the event only orders the send
+    if(!after.exists() || after.has_triggered_faultaware(poisoned)) {
+      send_now(owner, subgraph, wait_on, to_trigger);
+      return;
+    }
+    DeferredRemoteDestroy *w = new DeferredRemoteDestroy(owner, subgraph, wait_on,
+                                                         to_trigger);
+    EventImpl::add_waiter(after, w);
+  }
+
+  /*static*/ void DeferredRemoteDestroy::send_now(NodeID owner, Subgraph subgraph,
+                                                  Event wait_on, UserEvent to_trigger)
+  {
+    ActiveMessage<SubgraphDestroyMessage> amsg(owner);
+    amsg->subgraph = subgraph;
+    amsg->wait_on = wait_on;
+    amsg->to_trigger = to_trigger;
+    amsg.commit();
+  }
+
+  void DeferredRemoteDestroy::event_triggered(bool poisoned, TimeLimit work_until)
+  {
+    send_now(owner, subgraph, wait_on, to_trigger);
+    delete this;
+  }
+
+  void DeferredRemoteDestroy::print(std::ostream &os) const
+  {
+    os << "deferred remote subgraph destroy: subgraph=" << subgraph << " owner=" << owner;
+  }
+
+  Event DeferredRemoteDestroy::get_finish_event(void) const { return to_trigger; }
+
   SubgraphImpl::SubgraphImpl()
     : me(Subgraph::NO_SUBGRAPH)
     , next_free(nullptr)
@@ -313,7 +359,9 @@ namespace Realm {
       outstanding_instantiations++;
       if(defn->concurrency_mode == SubgraphDefinition::INSTANTIATION_ORDER) {
         // Instantiations run in order: this one starts once the previous one
-        // has finished, and the next one will wait for this one.
+        // has finished, and the next one will wait for this one. (CONCURRENT
+        // and ONE_SHOT instantiations are independent: the engine runs any
+        // number of them at once.)
         order_event = previous_instantiation_completion;
         previous_instantiation_completion = finish_event;
       }
@@ -799,22 +847,19 @@ namespace Realm {
 
   void SubgraphResourceReaper::wait_for_idle(void)
   {
-    // Called from the shutdown path with background workers still running.
-    // Bounded: an instantiation that never finishes (an application bug)
-    // must end in the runtime's pending-operations diagnostic, not a hang.
-    const long long started_at = Clock::current_time_in_nanoseconds();
-    long long warned_at = started_at;
+    // Called from the shutdown path, after the check that every
+    // instantiation has finished, with the background workers still
+    // running: only the release of finished states is left, which depends
+    // on no application event. Not bounded: a bound would be a guess that
+    // eventually misfires on a slow but correct teardown. A periodic
+    // warning makes a stuck wait (a runtime bug) diagnosable.
+    long long warned_at = Clock::current_time_in_nanoseconds();
     while(!idle()) {
       Thread::yield();
       long long now = Clock::current_time_in_nanoseconds();
-      if(now - started_at > 30000000000LL) {
-        log_subgraph.error() << "shutdown gave up waiting for " << outstanding.load()
-                             << " subgraph instantiation(s) to be released";
-        return;
-      }
       if(now - warned_at > 5000000000LL) {
         log_subgraph.warning() << "shutdown waiting for " << outstanding.load()
-                               << " subgraph instantiation(s) to be released";
+                               << " finished subgraph instantiation(s) to be released";
         warned_at = now;
       }
     }

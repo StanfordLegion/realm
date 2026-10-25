@@ -722,7 +722,7 @@ namespace Realm {
     size_t n;
     if(!(s >> n))
       return false;
-    m_impls.clear();
+    delete_container_contents(m_impls); // anything deserialized into before
     m_impls.resize(n);
     for(size_t i = 0; i < n; i++)
       m_impls[i] = CodeImplementation::deserialize_new(s);
@@ -730,7 +730,7 @@ namespace Realm {
     size_t np;
     if(!(s >> np))
       return false;
-    m_props.clear();
+    delete_container_contents(m_props);
     m_props.resize(np);
     for(size_t i = 0; i < np; i++) {
       m_props[i] = CodeProperty::deserialize_new(s);

@@ -26,6 +26,7 @@
 #include "realm/utils.h"
 #include "realm/activemsg.h"
 
+#include <cstdio>
 #include <sys/types.h>
 
 namespace Realm {
@@ -119,6 +120,8 @@ namespace Realm {
       log_taskreg.fatal()
           << "Processor::set_current_task_priority is not supported inside "
              "a compiled subgraph task";
+      fflush(stdout); // the log may be a buffered pipe
+      fflush(stderr);
       abort();
     }
     // set the priority field in the task object and it'll update the thread

@@ -46,9 +46,10 @@ not obvious from the header, how it is tested, and what remains to be done.
   launch and cleanup waiters, one waiter per external input) is pooled per
   subgraph and recycled, so an instantiation without copies or profiling
   allocates nothing but its finish event (copies create Realm transfer
-  operations with a finish event each; profiling allocates its records). The state is recycled in the finish event's trigger context, or on a
-  background worker when the instantiation holds processor tokens (GPU tasks
-  with deferred effects).
+  operations with a finish event each; profiling allocates its records). The
+  state is recycled in the finish event's trigger context, or on a
+  background worker when the subgraph has GPU tasks (any GPU task's work may
+  outlive its function, so those states hold processor tokens).
 
 Everything the compiled implementation cannot run makes `create_subgraph` (or
 `instantiate`) abort with a message naming the operation and the feature.
@@ -72,17 +73,19 @@ round show the effect.
 | Barrier arrivals | Performed by whoever satisfies the arrival's last precondition. |
 | Interpolation | Into task arguments and into an arrival's barrier or reduction value, with or without a reduction operator. |
 | External preconditions and postconditions | Counted inputs and outputs; precise poison propagation. |
-| `ONE_SHOT`, `INSTANTIATION_ORDER` | Instantiation order is enforced by chaining the start on the previous finish. `INSTANTIATION_ORDER` is the default; a `ONE_SHOT` subgraph instantiated twice is fatal. |
+| `CONCURRENT`, `INSTANTIATION_ORDER`, `ONE_SHOT` | `CONCURRENT` (the default, as before) runs instantiations independently, ordered only by the events the application gives them. `INSTANTIATION_ORDER` chains each start on the previous finish. A `ONE_SHOT` subgraph instantiated twice is fatal. |
 | Priorities | `priority_adjust` of `instantiate` is the instantiation's priority (see below). `CopyDesc::priority` is added to it for the copy. |
 | Profiling | Definition-time requests on tasks and copies; instantiation-time requests through `SubgraphInstantiationProfiling` (sparse lists per kind, serializable for remote instantiation), merged with the definition's. Tasks report timeline, processor usage, status and finish event; copies report whatever Realm's transfer operations report. |
-| Remote `instantiate` and `destroy` | Messages to the owner; `destroy` returns an event that covers outstanding instantiations. |
+| Remote `instantiate` and `destroy` | Messages to the owner; `destroy` returns an event that covers outstanding instantiations. A remote `destroy` message is sent only after the instantiations that node sent before it have finished (messages of different types are not ordered), and the destroy's own precondition is passed to the owner as given. |
 | Many instantiations in flight | Any number per processor, round robin among the ready ones. |
 
 ## Refused (fatal), and why
 
 | Request | Reason |
 | --- | --- |
-| `SERIALIZABLE`, `CONCURRENT` | Not implemented in the first pass; nothing in the engine makes them harder later. |
+| `SERIALIZABLE` | Not implemented in the first pass; nothing in the engine makes it harder later. |
+| An arrival as a dependency source, an external postcondition as a source, an external precondition as a target, or a precondition wired directly to a postcondition | Arrivals and postconditions have no outputs, preconditions have no inputs, and a postcondition must be fed by an operation. |
+| An external postcondition index with no source | Every declared postcondition must be fed by some operation (indices are dense). |
 | Nested instantiations (`instantiations`) | Not implemented. |
 | Reservation acquires and releases | Not implemented. |
 | Tasks on another node's processors | Only local tasks are compiled; remote work goes through copies. |
@@ -111,8 +114,9 @@ implementation.
 on have triggered), and the instantiation is making progress somewhere (a
 task of it is running, or an operation of it is ready or in flight), that
 processor runs only work of priority P or higher: normal tasks and other
-instantiations alike. Equal priority still runs. Tasks that already started
-always resume. A processor whose last operation of the graph has been
+instantiations alike. Equal priority still runs, and at equal priority a ready
+normal task runs before subgraph work (so a graph replayed back to back cannot
+starve equal-priority tasks). Tasks that already started always resume. A processor whose last operation of the graph has been
 dequeued stays held while that task runs. The analysis of which inputs each
 processor depends on is done at compile time, so a processor is not held
 hostage by a graph that is waiting on something that processor might have to
@@ -121,16 +125,24 @@ it is blocked and nothing of it is ready) holds nothing: holding would only
 idle its processors and, if a blocked task waits on lower-priority work that
 needs one of them, deadlock. The holds return as soon as a task of it
 resumes. Consequences: lower-priority work can start on a graph's processors
-while the whole graph is blocked (or, for a GPU, once a deferred-effects
-task's function has returned and nothing else of the graph is running), and
-the graph then waits for that work to finish or block before its task
-resumes; nothing ever waits forever on a hold. A deferred-effects GPU task
-that has returned counts as not running.
+while the whole graph is blocked (or, for a GPU, once a GPU task's function
+has returned and nothing else of the graph is running), and the graph then
+waits for that work to finish or block before its task resumes; nothing ever
+waits forever on a hold. A GPU task whose function has returned counts as
+not running, whether or not its work on the stream is complete.
 
 **Completion.** A processor's share of the finish counter is released when its
 last operation completes, whichever one that is. Tasks that block and finish
 out of order, and GPU tasks whose work outlives their function, are accounted
 for correctly.
+
+**Shutdown.** An instantiation whose finish event has not triggered when the
+runtime shuts down (after the shutdown precondition and the processors' flush
+tasks) is pending application work, exactly like an operation whose finish
+event has not triggered, and the runtime aborts with a diagnostic naming the
+count ("pending subgraph instantiation(s) during shutdown"). The check is
+eager and exact; no timer is involved. The release of finished instantiations'
+states, bounded work on the background workers, is waited for.
 
 **Poison.** Only a poisoned start event or poisoned external preconditions
 propagate poison; in `INSTANTIATION_ORDER` mode the previous instantiation's
@@ -208,9 +220,10 @@ DMA refactor.
   tasks/multi-source postconditions), mixed normal and subgraph work,
   blocking tasks, finish events, profiling, graph priority (normal tasks, two
   graphs, and a high-priority graph fed by lower-priority work on its own
-  processor), copy replay with interpolated values, copy profiling, poisoned
-  copies, indirect gather and scatter, multi-field copies, large fills,
-  concurrent subgraphs.
+  processor, equal-priority fairness under replay), default-mode
+  instantiations that depend on later ones, copy replay with interpolated
+  values, copy profiling, poisoned copies, indirect gather and scatter,
+  multi-field copies, large fills, concurrent subgraphs.
 - GPU (`-ll:gpu 1` or `2`, `-ll:zsize 32`, built with CUDA): deferred,
   stream-aware and plain chains (checking that the host ran ahead or did
   not), a chain alternating between two GPUs, GPU to CPU dependencies and
@@ -223,11 +236,14 @@ DMA refactor.
 - Death scenarios (`-death NAME`, one per process, must abort; run with
   `-ll:util 1`, plus `-ll:gpu 1` for the GPU one): unsupported operation,
   profiling on the legacy instantiate, external preconditions on the legacy
-  instantiate, concurrent mode, dependency cycle, unregistered task,
+  instantiate, serializable mode, dependency cycle, unregistered task,
   indirection type mismatch, interpolation out of range, reduction size
   mismatch, deferred creation, task on a utility processor, destroy twice,
   instantiate after destroy, deferred-effects GPU task asking for a context
-  synchronization.
+  synchronization. Each must die of its own diagnostic. Two shutdown
+  scenarios (`-exit NAME`) must abort with the pending-instantiation
+  diagnostic: an instantiation gated on an event nobody triggers, and a
+  graph task blocked forever.
 
 `benchmarks/subgraph_ubench` compares plain spawns with compiled replays for
 several graph shapes (`-shape chain|layers|random|copychain`), and
@@ -254,8 +270,8 @@ cost, instantiation cost, copy replay cost, stencil step time).
 
 - XD reuse across replays (after the DMA refactor); inline copy analysis to
   skip the analyzer hop is already the common case since plans are analyzed.
-- Nested instantiations, reservations, `SERIALIZABLE`/`CONCURRENT`, remote
-  tasks, collective conditions.
+- Nested instantiations, reservations, `SERIALIZABLE`, remote tasks,
+  collective conditions.
 - Subgraph hooks for utility processors (trivial), HIP, OpenMP and Python
   processors.
 - Task context managers other than the CUDA hooks are not applied to subgraph

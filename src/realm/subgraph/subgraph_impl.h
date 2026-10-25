@@ -324,10 +324,17 @@ namespace Realm {
   };
 
   // Instantiations this node has sent to remote owners, by subgraph: the
-  // finish event of the most recent one. A remote destroy waits on it before
-  // its message is sent, so the destroy cannot be delivered ahead of (and
-  // abort) an instantiate sent earlier: active messages of different types
-  // are not ordered with respect to each other.
+  // finish event of the most recent one. A remote destroy's message is sent
+  // only once that event has triggered (DeferredRemoteDestroy), so the
+  // destroy cannot be handled by the owner ahead of (and abort on) an
+  // instantiate sent earlier: active messages of different types are not
+  // ordered with respect to each other, and the owner marks the subgraph
+  // destroyed as soon as it handles the message. The event's poison is
+  // irrelevant to the destroy and is never merged into its precondition.
+  // Entries are keyed by the reusable subgraph id and removed by the destroy
+  // from this node; one left behind (a subgraph this node instantiated but
+  // did not destroy) refers to a long-triggered event and only delays the
+  // send of an unrelated later destroy by nothing.
   class RemoteSubgraphInstantiations {
   public:
     void note(Subgraph subgraph, Event finish_event);
@@ -336,6 +343,31 @@ namespace Realm {
   private:
     Mutex mutex;
     std::unordered_map<ID::IDType, Event> last_finish;
+  };
+
+  // Sends a destroy message to a subgraph's owner once the instantiations
+  // this node sent before it have finished (see RemoteSubgraphInstantiations).
+  class DeferredRemoteDestroy : public EventWaiter {
+  public:
+    // Sends at once if `after` has triggered (poisoned or not), otherwise
+    // when it does.
+    static void send(NodeID owner, Subgraph subgraph, Event wait_on,
+                     UserEvent to_trigger, Event after);
+
+    virtual void event_triggered(bool poisoned, TimeLimit work_until);
+    virtual void print(std::ostream &os) const;
+    virtual Event get_finish_event(void) const;
+
+  protected:
+    DeferredRemoteDestroy(NodeID _owner, Subgraph _subgraph, Event _wait_on,
+                          UserEvent _to_trigger);
+    static void send_now(NodeID owner, Subgraph subgraph, Event wait_on,
+                         UserEvent to_trigger);
+
+    NodeID owner;
+    Subgraph subgraph;
+    Event wait_on;
+    UserEvent to_trigger;
   };
 
   // active messages
@@ -439,19 +471,36 @@ namespace Realm {
 
     virtual bool do_work(TimeLimit work_until) override;
 
-    // Instantiations whose state has not been released yet (and whose
-    // release may complete a deferred destroy). An application is allowed
-    // to see an instantiation's finish event, destroy the subgraph without
-    // waiting for the returned event and shut down: the runtime waits here
-    // before tearing down, since the release looks events up.
-    void instantiation_created(void) { outstanding.fetch_add(1); }
+    // Two counts of the instantiations owned by this node, for shutdown:
+    //  - unfinished: instantiated, finish event not yet triggered. This is
+    //    pending application work, exactly like an Operation whose finish
+    //    event has not triggered: once the shutdown precondition and the
+    //    processors' flush tasks are done, a nonzero count is an application
+    //    bug and the runtime aborts at once, as it does for operations. No
+    //    waiting (and no timer) is involved.
+    //  - outstanding: instantiated, state not yet released. After the finish
+    //    event has triggered, releasing the state is bounded internal work
+    //    on the background workers (recycle it, instantiation_released, and
+    //    possibly a deferred destroy, which looks events up), so the runtime
+    //    waits for it before tearing down. An application is allowed to see
+    //    an instantiation's finish event, destroy the subgraph without
+    //    waiting for the returned event and shut down. The wait depends on
+    //    no application event and so always ends.
+    void instantiation_created(void)
+    {
+      unfinished.fetch_add(1);
+      outstanding.fetch_add(1);
+    }
+    void instantiation_finished(void) { unfinished.fetch_sub_acqrel(1); }
     void instantiation_released(void) { outstanding.fetch_sub_acqrel(1); }
+    int64_t num_unfinished(void) const { return unfinished.load_acquire(); }
     bool idle(void) const { return outstanding.load_acquire() == 0; }
     void wait_for_idle(void);
 
   private:
     Mutex mutex;
     std::queue<SubgraphInstantiationCleanup *> pending_cleanups;
+    atomic<int64_t> unfinished{0};
     atomic<int64_t> outstanding{0};
   };
 
@@ -488,6 +537,7 @@ namespace Realm {
     std::vector<SubgraphInputWaiter> input_waiters; // one per external input
     SubgraphImpl *get_subgraph() const { return subgraph; }
     int get_priority() const { return priority; }
+    Event get_finish_event() const { return finish_event; }
 
     atomic<int64_t> &counter(uint32_t op) const;
     atomic<int64_t> *queue(uint32_t proc) const;
@@ -711,9 +761,10 @@ namespace Realm {
     // Instantiations this processor is working on (scheduler lock).
     std::vector<Cursor> active;
     size_t scan_start;
-    // Graph tasks running (started and not blocked) here: priority -> count
-    // (scheduler lock).
-    std::map<int, int> running;
+    // Graph tasks running (started and not blocked) here, as (priority,
+    // count) pairs: a handful of entries at most, searched linearly, so a
+    // task costs no allocation (scheduler lock).
+    std::vector<std::pair<int, int>> running;
     // Result of the last successful peek, consumed by dequeue.
     size_t peeked_cursor;
     int64_t peeked_op;

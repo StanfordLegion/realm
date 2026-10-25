@@ -538,9 +538,15 @@ namespace Realm {
 
   void SubgraphExecutionState::finish(bool p)
   {
+    // Uncounted as pending work before the trigger becomes visible: an
+    // application that waited on the finish event and then shut down must
+    // not see this instantiation reported as unfinished.
+    get_runtime()->subgraph_resource_reaper.instantiation_finished();
     // The trigger runs the finish event's waiters, among them the launcher
-    // of the next instantiation in order: that one starts before this
-    // state is recycled. Nothing here reads the state after cleanup().
+    // of the next instantiation in order (unless Realm defers the nested
+    // trigger; the next instantiation acquired its own state in
+    // instantiate(), so it never needs this one). Nothing here reads the
+    // state after cleanup().
     GenEventImpl::trigger(finish_event, p);
     if(retires_inline())
       cleanup.cleanup();
@@ -670,22 +676,38 @@ namespace Realm {
     }
     // So does a graph task that is running (and not blocked) here, even
     // after this processor's last operation was dequeued.
-    if(!running.empty()) {
-      const int top = running.rbegin()->first;
-      if(!any || (top > floor))
-        floor = top;
+    for(const std::pair<int, int> &r : running) {
+      if(!any || (r.first > floor))
+        floor = r.first;
+      any = true;
     }
     return floor;
   }
 
-  void ProcSubgraphExecutor::task_started(int priority) { running[priority]++; }
+  void ProcSubgraphExecutor::task_started(int priority)
+  {
+    for(std::pair<int, int> &r : running) {
+      if(r.first == priority) {
+        r.second++;
+        return;
+      }
+    }
+    running.emplace_back(priority, 1);
+  }
 
   void ProcSubgraphExecutor::task_finished(int priority)
   {
-    std::map<int, int>::iterator it = running.find(priority);
-    assert((it != running.end()) && (it->second > 0));
-    if(--it->second == 0)
-      running.erase(it);
+    for(size_t i = 0; i < running.size(); i++) {
+      if(running[i].first != priority)
+        continue;
+      assert(running[i].second > 0);
+      if(--running[i].second == 0) {
+        running[i] = running.back();
+        running.pop_back();
+      }
+      return;
+    }
+    assert(0 && "task_finished for a priority that is not running");
   }
 
   void ProcSubgraphExecutor::task_blocked(int priority, SubgraphExecutionState *state)

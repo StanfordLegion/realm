@@ -25,10 +25,11 @@
 //  - the nested instantiation of an inner subgraph that performed the
 //    barrier arrival is now an arrival operation of the outer graph;
 //  - the reservation acquire/release pair that serialized the instantiations
-//    is gone: the (default) INSTANTIATION_ORDER mode orders them, and the
-//    external precondition of each instantiation is chained on the previous
-//    one's external postcondition instead of the reverse order the
-//    reservation test used.
+//    is gone: INSTANTIATION_ORDER mode orders them, and the external
+//    precondition of each instantiation is chained on the previous one's
+//    external postcondition instead of the reverse order the reservation
+//    test used (which the default CONCURRENT mode would allow, but the
+//    chain here also carries the written values forward).
 
 #include "realm.h"
 
@@ -223,8 +224,8 @@ void top_level_task(const void *args, size_t arglen, const void *userdata, size_
   int ival = 77;
   Barrier barrier = Barrier::create_barrier(5, REDOP_INT_ADD, &ival, sizeof(ival));
 
-  // the concurrency mode is left at its default (INSTANTIATION_ORDER)
   SubgraphDefinition sd;
+  sd.concurrency_mode = SubgraphDefinition::INSTANTIATION_ORDER;
   sd.tasks.resize(2);
   sd.tasks[0].proc = p;
   sd.tasks[0].task_id = WRITER_TASK;

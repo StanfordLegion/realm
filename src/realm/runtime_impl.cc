@@ -50,6 +50,7 @@
 #include "realm/nvtx.h"
 #endif
 
+#include <cstdio>
 #include <string.h>
 #include <thread>
 #include <sstream>
@@ -2829,6 +2830,14 @@ namespace Realm {
       if(op != 0) {
         log_runtime.debug() << "shutdown merging finish event=" << op->get_finish_event();
         wait_on = Event::merge_events(wait_on, op->get_finish_event());
+      } else if(Thread::self()->in_subgraph_task_execution()) {
+        // a compiled subgraph task has no Operation: the instantiation's
+        //  finish event covers it
+        SubgraphExecutionState *state =
+            static_cast<SubgraphExecutionState *>(Thread::self()->subgraph_task_state());
+        log_runtime.debug() << "shutdown merging instantiation finish event="
+                            << state->get_finish_event();
+        wait_on = Event::merge_events(wait_on, state->get_finish_event());
       }
     }
 
@@ -2884,9 +2893,21 @@ namespace Realm {
       log_runtime.info() << "local processor shutdown tasks complete";
     }
 
-    // subgraph instantiations release their state on a background worker
-    //  after their finish event; let that drain (it may complete deferred
-    //  destroys, which look events up)
+    // a subgraph instantiation whose finish event has not triggered by now
+    //  is pending application work, exactly like an untriggered operation
+    //  below: an error, caught eagerly (no waiting, no timer)
+    {
+      int64_t n = subgraph_resource_reaper.num_unfinished();
+      if(n != 0) {
+        log_runtime.fatal() << n << " pending subgraph instantiation(s) during shutdown!";
+        fflush(stdout);
+        fflush(stderr);
+        abort();
+      }
+    }
+    // finished instantiations release their state on a background worker;
+    //  let that drain (it may complete deferred destroys, which look events
+    //  up) - bounded work that depends on no application event
     subgraph_resource_reaper.wait_for_idle();
     {
       size_t n = num_untriggered_events.load();

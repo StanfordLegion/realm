@@ -34,6 +34,7 @@
 
 #include <algorithm>
 #include <climits>
+#include <cstdint>
 #include <cstdlib>
 #include <cstring>
 #include <sstream>
@@ -121,10 +122,14 @@ namespace Realm {
     typedef SubgraphDefinition::Interpolation Interpolation;
 
     // ---- validation: everything the compiled implementation cannot run yet
+    if(d.concurrency_mode == SubgraphDefinition::SERIALIZABLE)
+      SUBGRAPH_FATAL(me, "concurrency mode SERIALIZABLE is not implemented; use "
+                         "ONE_SHOT, INSTANTIATION_ORDER or CONCURRENT");
     if((d.concurrency_mode != SubgraphDefinition::ONE_SHOT) &&
-       (d.concurrency_mode != SubgraphDefinition::INSTANTIATION_ORDER))
-      SUBGRAPH_FATAL(me, "concurrency modes SERIALIZABLE and CONCURRENT are not "
-                         "implemented; use ONE_SHOT or INSTANTIATION_ORDER");
+       (d.concurrency_mode != SubgraphDefinition::INSTANTIATION_ORDER) &&
+       (d.concurrency_mode != SubgraphDefinition::CONCURRENT))
+      SUBGRAPH_FATAL(me, "concurrency mode " << int(d.concurrency_mode)
+                                             << " is not a valid ConcurrencyMode");
     for(size_t i = 0; i < d.copies.size(); i++) {
       const SubgraphDefinition::CopyDesc &cd = d.copies[i];
       if(!cd.space.impl)
@@ -309,8 +314,10 @@ namespace Realm {
       if(!impl || !impl->supports_subgraph_tasks())
         SUBGRAPH_FATAL(me, "task " << i << " runs on " << p << ", a processor of kind "
                                    << p.kind()
-                                   << "; only CPU (LOC_PROC) and CUDA GPU (TOC_PROC) "
-                                      "tasks are implemented");
+                                   << " that has no compiled-subgraph hooks; only "
+                                      "the local CPU and CUDA GPU processors do "
+                                      "(not utility, I/O, OpenMP, Python, HIP or "
+                                      "NUMA-emulated processors)");
       procs_seen.push_back(p);
       proc_impls[p] = impl;
       proc_nodes[p] = impl->numa_node();
@@ -655,6 +662,11 @@ namespace Realm {
     }
     for(size_t dm = 0; dm < c.domains.size(); dm++) {
       CompiledSubgraph::Domain &dom = c.domains[dm];
+      // offsets within a block are stored as uint32_t
+      if(off[dm] > size_t(UINT32_MAX))
+        SUBGRAPH_FATAL(me, "the instantiation state for NUMA domain "
+                               << dom.numa_node << " needs " << off[dm]
+                               << " bytes; at most 4 GiB per domain is supported");
       dom.bytes = std::max(round_up(off[dm], SUBGRAPH_CACHE_LINE_BYTES),
                            SUBGRAPH_CACHE_LINE_BYTES);
       dom.image.assign(dom.bytes, 0);

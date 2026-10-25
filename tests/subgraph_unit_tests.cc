@@ -1678,9 +1678,8 @@ private:
 // DefaultsTest: every public descriptor used as constructed, with only the
 // fields that have no meaningful default filled in. A bad default in any
 // of them shows up here rather than in the first user's program. (The
-// definition's own concurrency_mode default is CONCURRENT, which the
-// compiled engine refuses; that one is set explicitly and checked by the
-// concurrent_mode_unsupported death scenario.)
+// definition's concurrency_mode default, CONCURRENT, is used too: the two
+// instantiations are ordered by an explicit event.)
 //
 
 class DefaultsTest : public SubgraphTest {
@@ -1710,8 +1709,7 @@ public:
 
   void run() override
   {
-    SubgraphDefinition sd;
-    sd.concurrency_mode = SubgraphDefinition::INSTANTIATION_ORDER;
+    SubgraphDefinition sd; // default concurrency mode (CONCURRENT)
     for(size_t i = 0; i < spec.size(); i++) {
       SubgraphDefinition::TaskDesc td; // default priority, no args, no profiling
       td.proc = procs[0];
@@ -2538,6 +2536,181 @@ private:
   std::atomic<int64_t> seq{0};
   std::atomic<int64_t> outs[3];
   UserEvent started;
+  Subgraph sg;
+  bool completed = false;
+};
+
+////////////////////////////////////////////////////////////////////////
+//
+// In the default mode (CONCURRENT) instantiations are independent, ordered
+// only by the events the application gives them, so an earlier one may
+// depend on a later one: instantiation 0's external precondition is
+// triggered by instantiation 1's external postcondition, the pattern of
+// the original tests/subgraphs.cc. (Under INSTANTIATION_ORDER this would
+// deadlock, since 1 would wait for 0 to finish.)
+//
+
+class DefaultModeReverseChainTest : public SubgraphTest {
+public:
+  std::string name() const override { return "DefaultModeReverseChain"; }
+  bool can_run() override { return worker_cpus().size() >= 1; }
+
+  void init() override
+  {
+    cpu = worker_cpus()[0];
+    seq.store(0);
+    out.store(-1);
+    SubgraphDefinition sd; // default concurrency mode
+    SeqTaskArgs a{&seq, &out, UserEvent::NO_USER_EVENT, 0};
+    int t = make_task_desc(sd, cpu, seq_task_id, &a, sizeof(a));
+    add_dependency(sd, SubgraphDefinition::OPKIND_EXT_PRECOND, 0,
+                   SubgraphDefinition::OPKIND_TASK, t);
+    add_dependency(sd, SubgraphDefinition::OPKIND_TASK, t,
+                   SubgraphDefinition::OPKIND_EXT_POSTCOND, 0);
+    Subgraph::create_subgraph(sg, sd, ProfilingRequestSet()).wait();
+  }
+
+  void run() override
+  {
+    UserEvent first_input = UserEvent::create_user_event();
+    std::vector<Event> first_pre = {first_input};
+    std::vector<Event> first_post(1), second_post(1);
+    Event e0 = sg.instantiate(nullptr, 0, ProfilingRequestSet(), first_pre, first_post);
+    std::vector<Event> second_pre = {Event::NO_EVENT};
+    Event e1 =
+        sg.instantiate(nullptr, 0, ProfilingRequestSet(), second_pre, second_post);
+    first_input.trigger(second_post[0]); // 0 runs after 1
+    completed = wait_with_timeout(Event::merge_events(e0, e1), config.hang_timeout);
+  }
+
+  bool check() override
+  {
+    bool ok = completed && (seq.load() == 2);
+    if(!ok)
+      log_app.error() << name() << ": completed=" << completed << " ran=" << seq.load();
+    return ok;
+  }
+
+  void cleanup() override
+  {
+    if(completed)
+      sg.destroy().wait();
+  }
+
+  bool hung() const override { return !completed; }
+
+private:
+  Processor cpu;
+  std::atomic<int64_t> seq{0};
+  std::atomic<int64_t> out{-1};
+  Subgraph sg;
+  bool completed = false;
+};
+
+////////////////////////////////////////////////////////////////////////
+//
+// At equal priority a ready normal task runs before subgraph work, so a
+// graph replayed back to back cannot starve it: a task that became ready
+// during the first instantiation runs before any task of the instantiations
+// issued after it.
+//
+
+struct GateSpinTaskArgs {
+  std::atomic<int> *started; // set when the task begins
+  std::atomic<int> *gate;    // spin until nonzero
+  std::atomic<int64_t> *runs;
+};
+static int gate_spin_task_id = 0;
+static void gate_spin_task(const void *args, size_t arglen, const void *userdata,
+                           size_t userlen, Processor p)
+{
+  const GateSpinTaskArgs *a = static_cast<const GateSpinTaskArgs *>(args);
+  a->started->store(1);
+  while(a->gate->load() == 0) {
+  }
+  a->runs->fetch_add(1);
+}
+
+struct RecordRunsTaskArgs {
+  std::atomic<int64_t> *runs;
+  std::atomic<int64_t> *out;
+};
+static int record_runs_task_id = 0;
+static void record_runs_task(const void *args, size_t arglen, const void *userdata,
+                             size_t userlen, Processor p)
+{
+  const RecordRunsTaskArgs *a = static_cast<const RecordRunsTaskArgs *>(args);
+  a->out->store(a->runs->load());
+}
+
+class EqualPriorityFairnessTest : public SubgraphTest {
+public:
+  std::string name() const override { return "GraphPriority.EqualPriorityFairness"; }
+  bool can_run() override { return worker_cpus().size() >= 1; }
+
+  void init() override
+  {
+    cpu = worker_cpus()[0];
+    started.store(0);
+    gate.store(0);
+    runs.store(0);
+    normal_saw.store(-1);
+    SubgraphDefinition sd;
+    sd.concurrency_mode = SubgraphDefinition::INSTANTIATION_ORDER;
+    GateSpinTaskArgs a{&started, &gate, &runs};
+    for(int i = 0; i < graph_tasks; i++) // independent: all ready at once
+      make_task_desc(sd, cpu, gate_spin_task_id, &a, sizeof(a));
+    Subgraph::create_subgraph(sg, sd, ProfilingRequestSet()).wait();
+  }
+
+  void run() override
+  {
+    std::vector<Event> evs;
+    evs.push_back(sg.instantiate(nullptr, 0, ProfilingRequestSet()));
+    // the first graph task is running (spinning on the gate) ...
+    if(!poll_until([&]() { return started.load() != 0; }, config.hang_timeout)) {
+      completed = false;
+      gate.store(1);
+      return;
+    }
+    // ... when an equal-priority normal task becomes ready, followed by
+    // more instantiations
+    RecordRunsTaskArgs r{&runs, &normal_saw};
+    evs.push_back(cpu.spawn(record_runs_task_id, &r, sizeof(r), Event::NO_EVENT, 0));
+    for(int i = 0; i < extra_instantiations; i++)
+      evs.push_back(sg.instantiate(nullptr, 0, ProfilingRequestSet()));
+    gate.store(1);
+    completed = wait_with_timeout(Event::merge_events(evs), config.hang_timeout);
+  }
+
+  bool check() override
+  {
+    // the normal task ran before the first instantiation was over, so
+    // before any task of the later ones
+    const int64_t saw = normal_saw.load();
+    bool ok = completed && (saw >= 0) && (saw < graph_tasks);
+    if(!ok)
+      log_app.error() << name() << ": completed=" << completed
+                      << " normal task ran after " << saw << " of "
+                      << graph_tasks * (1 + extra_instantiations) << " graph tasks ("
+                      << graph_tasks << " per instantiation)";
+    return ok;
+  }
+
+  void cleanup() override
+  {
+    if(completed)
+      sg.destroy().wait();
+  }
+
+  bool hung() const override { return !completed; }
+
+private:
+  static const int graph_tasks = 8;
+  static const int extra_instantiations = 3;
+  Processor cpu;
+  std::atomic<int> started{0}, gate{0};
+  std::atomic<int64_t> runs{0}, normal_saw{-1};
   Subgraph sg;
   bool completed = false;
 };
@@ -5021,8 +5194,26 @@ static void remote_driver_task(const void *args, size_t arglen, const void *user
   std::vector<Event> evs;
   for(int i = 0; i < a->iters; i++)
     evs.push_back(a->sg.instantiate(nullptr, 0, ProfilingRequestSet()));
-  // Destroy from the remote node while instantiations may still be running.
-  evs.push_back(a->sg.destroy());
+  // The last instantiation this node sends ends poisoned (cancelled start).
+  // The destroy that follows it, issued while instantiations may still be
+  // running, must still honor its own precondition: the ordering of the
+  // destroy after this node's instantiations is not allowed to carry the
+  // poison into it. `done` is poisoned if the destroy completed early.
+  UserEvent bad = UserEvent::create_user_event();
+  bad.cancel();
+  bool poisoned = false;
+  wait_with_timeout(a->sg.instantiate(nullptr, 0, ProfilingRequestSet(), bad),
+                    config.hang_timeout, &poisoned);
+  UserEvent gate = UserEvent::create_user_event();
+  Event d = a->sg.destroy(gate);
+  usleep(50000); // time enough for a destroy that ignored the gate to complete
+  if(d.has_triggered()) {
+    log_app.error() << "remote destroy completed before its precondition";
+    a->done.cancel();
+    return;
+  }
+  gate.trigger();
+  evs.push_back(d);
   a->done.trigger(Event::merge_events(evs));
 }
 
@@ -5049,16 +5240,17 @@ public:
     UserEvent done = UserEvent::create_user_event();
     RemoteDriverArgs a{sg, done, iters};
     remote_cpu().spawn(remote_driver_task_id, &a, sizeof(a));
-    completed = wait_with_timeout(done, config.hang_timeout);
+    completed = wait_with_timeout(done, config.hang_timeout, &destroy_early);
   }
 
   bool check() override
   {
     int64_t expected = int64_t(iters) * spec.size();
-    bool ok = completed && (state.executed.load() == expected) &&
+    bool ok = completed && !destroy_early && (state.executed.load() == expected) &&
               (state.violations.load() == 0);
     if(!ok)
-      log_app.error() << name() << ": completed=" << completed << " executed "
+      log_app.error() << name() << ": completed=" << completed
+                      << " destroy_early=" << destroy_early << " executed "
                       << state.executed.load() << "/" << expected << " violations "
                       << state.violations.load();
     return ok;
@@ -5075,6 +5267,7 @@ private:
   Subgraph sg;
   int iters = 0;
   bool completed = false;
+  bool destroy_early = false;
 };
 
 ////////////////////////////////////////////////////////////////////////
@@ -5227,10 +5420,10 @@ static void death_remote_task_compiled()
   Subgraph::create_subgraph(sg, sd, ProfilingRequestSet()).wait();
 }
 
-static void death_concurrent_mode_unsupported()
+static void death_serializable_mode_unsupported()
 {
   SubgraphDefinition sd;
-  sd.concurrency_mode = SubgraphDefinition::CONCURRENT;
+  sd.concurrency_mode = SubgraphDefinition::SERIALIZABLE;
   make_task_desc(sd, worker_cpus()[0], noop_task_id, nullptr, 0);
   Subgraph sg;
   Subgraph::create_subgraph(sg, sd, ProfilingRequestSet()).wait();
@@ -5403,7 +5596,7 @@ static const DeathScenario death_scenarios[] = {
     {"profiling_on_compiled_instantiate", death_profiling_on_compiled_instantiate},
     {"external_precond_compiled_instantiate",
      death_external_precond_compiled_instantiate},
-    {"concurrent_mode_unsupported", death_concurrent_mode_unsupported},
+    {"serializable_mode_unsupported", death_serializable_mode_unsupported},
     {"dependency_cycle", death_dependency_cycle},
     {"unregistered_task", death_unregistered_task},
     {"indirection_type_mismatch", death_indirection_type_mismatch},
@@ -5509,11 +5702,45 @@ static void exit_pending_instantiations_released_late()
   exit_shutdown_precondition = Event::merge_events(d, Event::merge_events(evs));
 }
 
+// The next two must abort: an instantiation that cannot finish is pending
+// application work at shutdown, exactly like a task whose finish event
+// never triggers, and the runtime reports it ("pending subgraph
+// instantiation(s) during shutdown") instead of hanging or exiting 0.
+
+static void exit_shutdown_unfinished_instantiation()
+{
+  // gated on an event nobody triggers
+  std::vector<Processor> procs = worker_cpus(1);
+  SubgraphDefinition sd;
+  make_task_desc(sd, procs[0], noop_task_id, nullptr, 0);
+  Subgraph sg;
+  Subgraph::create_subgraph(sg, sd, ProfilingRequestSet()).wait();
+  sg.instantiate(nullptr, 0, ProfilingRequestSet(), UserEvent::create_user_event());
+}
+
+static std::atomic<int64_t> exit_blocked_seq{0}, exit_blocked_out{-1};
+
+static void exit_shutdown_blocked_graph_task()
+{
+  // a graph task blocked forever inside the graph
+  std::vector<Processor> procs = worker_cpus(1);
+  SubgraphDefinition sd;
+  BlockingTaskArgs a{UserEvent::create_user_event(), &exit_blocked_seq, &exit_blocked_out};
+  make_task_desc(sd, procs[0], blocking_task_id, &a, sizeof(a));
+  Subgraph sg;
+  Subgraph::create_subgraph(sg, sd, ProfilingRequestSet()).wait();
+  sg.instantiate(nullptr, 0, ProfilingRequestSet());
+  usleep(100000); // let the task start and block
+}
+
 static const DeathScenario exit_scenarios[] = {
     {"destroy_without_wait", exit_destroy_without_wait},
     {"destroy_many_without_wait", exit_destroy_many_without_wait},
     {"destroy_as_shutdown_precondition", exit_destroy_as_shutdown_precondition},
     {"pending_instantiations_released_late", exit_pending_instantiations_released_late},
+    // these two abort during shutdown
+    {"shutdown_unfinished_instantiation", exit_shutdown_unfinished_instantiation},
+    {"shutdown_blocked_graph_task", exit_shutdown_blocked_graph_task},
 };
 
 ////////////////////////////////////////////////////////////////////////
@@ -5532,12 +5759,16 @@ static void register_common_tasks()
   seq_task_id = task_id_counter++;
   blocking_task_id = task_id_counter++;
   wait_child_task_id = task_id_counter++;
+  gate_spin_task_id = task_id_counter++;
+  record_runs_task_id = task_id_counter++;
   finish_event_task_id = task_id_counter++;
   prof_response_task_id = task_id_counter++;
   rt.register_task(remote_driver_task_id, remote_driver_task);
   rt.register_task(seq_task_id, seq_task);
   rt.register_task(blocking_task_id, blocking_task);
   rt.register_task(wait_child_task_id, wait_child_task);
+  rt.register_task(gate_spin_task_id, gate_spin_task);
+  rt.register_task(record_runs_task_id, record_runs_task);
   rt.register_task(finish_event_task_id, finish_event_task);
   rt.register_task(prof_response_task_id, prof_response_task);
   rt.register_task(dag_task_id, dag_task);
@@ -5622,6 +5853,8 @@ static std::vector<std::unique_ptr<SubgraphTest>> make_tests()
   tests.emplace_back(new GraphPriorityChildWaitTest());
   tests.emplace_back(new GraphPriorityCrossHoldTest());
   tests.emplace_back(new GraphPriorityBlockedYieldsTest());
+  tests.emplace_back(new EqualPriorityFairnessTest());
+  tests.emplace_back(new DefaultModeReverseChainTest());
   tests.emplace_back(new CopyReplayTest());
   tests.emplace_back(new CopyProfilingTest());
   tests.emplace_back(new CopyPoisonTest());

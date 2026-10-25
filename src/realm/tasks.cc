@@ -1205,7 +1205,12 @@ namespace Realm {
             subgraph_executor && subgraph_executor->peek(subgraph_priority);
         int task_priority = resumable_priority;
         if(have_subgraph_work) {
-          task_priority = std::max(task_priority, subgraph_priority);
+          // a ready task of equal priority runs before the subgraph work
+          //  (so a graph replayed back to back cannot starve equal-priority
+          //  tasks; ready tasks still never preempt a resumable worker of
+          //  equal priority)
+          if(subgraph_priority > task_priority)
+            task_priority = subgraph_priority - 1;
         } else if(subgraph_executor) {
           int floor = subgraph_executor->active_floor(TaskQueue::PRI_NEG_INF);
           if(floor > TaskQueue::PRI_NEG_INF)
@@ -1355,7 +1360,7 @@ namespace Realm {
               //  the poll budget, interrupted when work arrives here
               bgworker_interrupt.store(false);
               bgworker.do_work(
-                  std::min<long long>(max_bgwork_timeslice,
+                  std::min<long long>(1000LL * max_bgwork_timeslice, // us -> ns
                                       1000LL * ProcSubgraphExecutor::poll_budget_us),
                   &bgworker_interrupt);
             } else {

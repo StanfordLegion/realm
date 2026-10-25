@@ -332,33 +332,44 @@ if(REALM_ENABLE_CUDA)
   endif()
 endif()
 if(NOT WIN32) # the scenarios run through sh
-# Compiled subgraphs must reject unsupported usage fatally. Each scenario runs in
-# its own process and must abort; surviving (exit 0 + marker) is the failure.
-foreach(
-  scenario
-  unsupported_op_compiled
-  profiling_on_compiled_instantiate
-  external_precond_compiled_instantiate
-  unregistered_task
-  indirection_type_mismatch
-  interpolation_out_of_range
-  redop_size_mismatch
-  deferred_creation
-  task_on_utility_proc
-  destroy_twice
-  one_shot_twice
-  instantiate_after_destroy
-  concurrent_mode_unsupported
-  dependency_cycle
-)
+# Compiled subgraphs must reject unsupported usage fatally. Each scenario runs
+# in its own process and must die of the subgraph implementation's own
+# diagnostic for that scenario (the fatal message names the subgraph and the
+# reason); surviving (the marker) is a failure. With PASS_REGULAR_EXPRESSION
+# set, ctest ignores the exit status, so the expected text is what is checked.
+function(add_subgraph_death_test scenario expected)
   add_test(NAME subgraph_death_${scenario}
            COMMAND sh -c "! $<TARGET_FILE:subgraph_unit_tests> -ll:cpu 4 -ll:util 1 -death ${scenario}")
-  # The process must die of the subgraph implementation's own diagnostic (not
-  # of just anything): the fatal message names the subgraph.
   set_tests_properties(
     subgraph_death_${scenario}
     PROPERTIES FAIL_REGULAR_EXPRESSION "DEATH-TEST-SURVIVED"
-               PASS_REGULAR_EXPRESSION "[{]subgraph[}]: subgraph " TIMEOUT 120
+               PASS_REGULAR_EXPRESSION "[{]subgraph[}]: subgraph .*${expected}" TIMEOUT 120
+  )
+endfunction()
+add_subgraph_death_test(unsupported_op_compiled "nested subgraph instantiations are not implemented")
+add_subgraph_death_test(profiling_on_compiled_instantiate "profiling requests on the instantiation itself")
+add_subgraph_death_test(external_precond_compiled_instantiate "external preconditions, but the definition declares 0")
+add_subgraph_death_test(unregistered_task "uses task id")
+add_subgraph_death_test(indirection_type_mismatch "indirection for a different index space type")
+add_subgraph_death_test(interpolation_out_of_range "writes past its target")
+add_subgraph_death_test(redop_size_mismatch "provides 8 bytes")
+add_subgraph_death_test(deferred_creation "deferred creation")
+add_subgraph_death_test(task_on_utility_proc "has no compiled-subgraph hooks")
+add_subgraph_death_test(destroy_twice "destroyed twice")
+add_subgraph_death_test(one_shot_twice "ONE_SHOT subgraph instantiated a second time")
+add_subgraph_death_test(instantiate_after_destroy "instantiate of a subgraph that was destroyed")
+add_subgraph_death_test(serializable_mode_unsupported "SERIALIZABLE is not implemented")
+add_subgraph_death_test(dependency_cycle "contain a cycle")
+# Shutdown with an instantiation that cannot finish (gated on an event nobody
+# triggers; a graph task blocked forever): pending application work, reported
+# by the same eager check that reports an untriggered operation. No timer.
+foreach(scenario shutdown_unfinished_instantiation shutdown_blocked_graph_task)
+  add_test(NAME subgraph_exit_${scenario}
+           COMMAND sh -c "! $<TARGET_FILE:subgraph_unit_tests> -ll:cpu 4 -exit ${scenario}")
+  set_tests_properties(
+    subgraph_exit_${scenario}
+    PROPERTIES PASS_REGULAR_EXPRESSION "pending subgraph instantiation\\(s\\) during shutdown"
+               TIMEOUT 120
   )
 endforeach()
 endif()
