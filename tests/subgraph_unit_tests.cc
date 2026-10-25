@@ -2706,8 +2706,11 @@ public:
   bool hung() const override { return !completed; }
 
 private:
-  static const int graph_tasks = 8;
-  static const int extra_instantiations = 3;
+  enum
+  {
+    graph_tasks = 8,
+    extra_instantiations = 3
+  };
   Processor cpu;
   std::atomic<int> started{0}, gate{0};
   std::atomic<int64_t> runs{0}, normal_saw{-1};
@@ -5638,6 +5641,15 @@ static DagState *exit_state(const DagSpec *spec, const std::vector<Processor> &p
   return exit_states.back().get();
 }
 
+static Event exit_shutdown_precondition = Event::NO_EVENT;
+
+// The shutdown precondition covers the instantiations' finish events in
+// every scenario: as for any other operation, an instantiation that has not
+// finished when the runtime shuts down is an error (see the two abort
+// scenarios below). What these scenarios leave unwaited is the destroy's
+// returned event, that is the release of the states and the completion of
+// the destroy, which the runtime must drain itself before tearing down.
+
 static void exit_destroy_without_wait()
 {
   // Instantiate, destroy without waiting on the returned event, shut down.
@@ -5646,9 +5658,11 @@ static void exit_destroy_without_wait()
   DagState *state = exit_state(spec, procs);
   Subgraph sg =
       build_dag_subgraph(*spec, *state, SubgraphDefinition::INSTANTIATION_ORDER);
+  std::vector<Event> evs;
   for(int i = 0; i < 500; i++)
-    sg.instantiate(nullptr, 0, ProfilingRequestSet());
+    evs.push_back(sg.instantiate(nullptr, 0, ProfilingRequestSet()));
   sg.destroy();
+  exit_shutdown_precondition = Event::merge_events(evs);
 }
 
 static void exit_destroy_many_without_wait()
@@ -5661,14 +5675,14 @@ static void exit_destroy_many_without_wait()
   for(int g = 0; g < 32; g++)
     sgs.push_back(
         build_dag_subgraph(*spec, *state, SubgraphDefinition::INSTANTIATION_ORDER));
+  std::vector<Event> evs;
   for(int i = 0; i < 50; i++)
     for(Subgraph &sg : sgs)
-      sg.instantiate(nullptr, 0, ProfilingRequestSet());
+      evs.push_back(sg.instantiate(nullptr, 0, ProfilingRequestSet()));
   for(Subgraph &sg : sgs)
     sg.destroy();
+  exit_shutdown_precondition = Event::merge_events(evs);
 }
-
-static Event exit_shutdown_precondition = Event::NO_EVENT;
 
 static void exit_destroy_as_shutdown_precondition()
 {
