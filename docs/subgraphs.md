@@ -136,13 +136,17 @@ last operation completes, whichever one that is. Tasks that block and finish
 out of order, and GPU tasks whose work outlives their function, are accounted
 for correctly.
 
-**Shutdown.** An instantiation whose finish event has not triggered when the
-runtime shuts down (after the shutdown precondition and the processors' flush
-tasks) is pending application work, exactly like an operation whose finish
-event has not triggered, and the runtime aborts with a diagnostic naming the
-count ("pending subgraph instantiation(s) during shutdown"). The check is
-eager and exact; no timer is involved. The release of finished instantiations'
-states, bounded work on the background workers, is waited for.
+**Shutdown.** The contract is the one every Realm operation has: an
+application must chain the events Realm hands it (instantiation finish events,
+external postconditions) into the precondition it gives `Runtime::shutdown`,
+in some form. An instantiation whose finish event has not triggered when the
+runtime shuts down (after that precondition and the processors' flush tasks)
+is pending application work, and the runtime aborts with a diagnostic naming
+the count ("pending subgraph instantiation(s) during shutdown"), as it does
+for an untriggered operation. The check is eager and exact; no timer is
+involved. The event a `destroy` returns need not be waited for: the release of
+finished instantiations' states and the destroy it may complete are bounded
+work on the background workers, which the runtime drains itself.
 
 **Poison.** Only a poisoned start event or poisoned external preconditions
 propagate poison; in `INSTANTIATION_ORDER` mode the previous instantiation's
