@@ -1660,16 +1660,17 @@ namespace Realm {
 
   void ProcessorQueryImpl::remove_reference(void)
   {
-    int left = references.fetch_sub(1) - 1;
+    // acquire/release: another holder's last use of this object must be
+    //  complete before it is deleted (or, below, modified in place)
+    int left = references.fetch_sub_acqrel(1) - 1;
     if(left == 0)
       delete this;
   }
 
   ProcessorQueryImpl *ProcessorQueryImpl::writeable_reference(void)
   {
-    // safe to test without an atomic because we are a reference, and if the count is 1,
-    //  there can be no others
-    if(references.load() == 1) {
+    // we hold a reference, so a count of 1 means there are no others
+    if(references.load_acquire() == 1) {
       return this;
     } else {
       ProcessorQueryImpl *copy = new ProcessorQueryImpl(*this);
@@ -2551,16 +2552,16 @@ namespace Realm {
 
   void MemoryQueryImpl::remove_reference(void)
   {
-    int left = references.fetch_sub(1) - 1;
+    // see ProcessorQueryImpl::remove_reference
+    int left = references.fetch_sub_acqrel(1) - 1;
     if(left == 0)
       delete this;
   }
 
   MemoryQueryImpl *MemoryQueryImpl::writeable_reference(void)
   {
-    // safe to test without an atomic because we are a reference, and if the count is 1,
-    //  there can be no others
-    if(references.load() == 1) {
+    // we hold a reference, so a count of 1 means there are no others
+    if(references.load_acquire() == 1) {
       return this;
     } else {
       MemoryQueryImpl *copy = new MemoryQueryImpl(*this);
