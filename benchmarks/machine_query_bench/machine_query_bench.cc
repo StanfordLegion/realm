@@ -22,9 +22,12 @@
 // best memory for a processor, point affinity lookups, bandwidth between two
 // memories, ...) both from a single thread and from several concurrent
 // threads, so that the per-query cost and the contention inside the machine
-// model can be measured as the machine grows.  Only the first processor in
-// the machine runs the measurement; all other ranks only contribute to the
-// size of the machine model.
+// model can be measured as the machine grows.  Shapes come in fresh-query
+// form (a query object is built, run and destroyed per operation) and, for a
+// few, in reused form (one query object run repeatedly by every thread) and
+// cache-miss form (a kind and memory with no affinity).  Only the first
+// processor in the machine runs the measurement; all other ranks only
+// contribute to the size of the machine model.
 //
 // Output is one RESULT line per (shape, thread count):
 //   RESULT shape=<name> threads=<T> iters=<n> elems=<k> ns_per_op=<median>
@@ -104,7 +107,7 @@ namespace {
     std::vector<Processor> local_procs, all_procs, sampled_procs;
     std::vector<Memory> local_mems, all_mems, sampled_mems, source_mems;
     Processor cpu, gpu, p;
-    Memory sysmem, fb, mem_hit, mem_miss, mm_src, mm_dst;
+    Memory sysmem, fb, mem_hit, mem_miss, mm_src, mm_dst, kind_miss;
     Memory::Kind best_kind;
     size_t pmas_all;
     Sample(void)
@@ -175,6 +178,16 @@ namespace {
         s.mem_miss = *it;
         break;
       }
+    // a memory no CPU processor has an affinity to (a cache miss for the
+    // kind-and-memory lists)
+    s.kind_miss = Memory::NO_MEMORY;
+    for(std::vector<Memory>::reverse_iterator it = s.all_mems.rbegin();
+        it != s.all_mems.rend(); ++it)
+      if(Machine::ProcessorQuery(m).only_kind(Processor::LOC_PROC).has_affinity_to(*it).count() ==
+         0) {
+        s.kind_miss = *it;
+        break;
+      }
     // a memory pair with a copy path from local system memory
     s.mm_src = s.sysmem;
     s.mm_dst = Memory::NO_MEMORY;
@@ -216,7 +229,7 @@ namespace {
     const Machine machine = s.machine;
     const Processor cpu = s.cpu, p = s.p;
     const Memory sysmem = s.sysmem, mem_hit = s.mem_hit, mem_miss = s.mem_miss;
-    const Memory mm_src = s.mm_src, mm_dst = s.mm_dst;
+    const Memory mm_src = s.mm_src, mm_dst = s.mm_dst, kind_miss = s.kind_miss;
     const Memory::Kind best_kind = s.best_kind;
     const std::vector<Processor> local_procs = s.local_procs;
     const std::vector<Processor> sampled_procs = s.sampled_procs;
@@ -243,6 +256,15 @@ namespace {
           return Machine::ProcessorQuery(machine).only_kind(Processor::LOC_PROC).count();
         },
         Machine::ProcessorQuery(machine).only_kind(Processor::LOC_PROC).count());
+    {
+      // one query object, executed again and again (and by every thread at
+      // once): the cost of a query that is already attached to its result
+      Machine::ProcessorQuery reused(machine);
+      reused.only_kind(Processor::LOC_PROC);
+      add(
+          "procs_kind_count_reused", [=]() -> uint64_t { return reused.count(); },
+          reused.count());
+    }
     iterate(Machine::ProcessorQuery(machine).only_kind(Processor::LOC_PROC), &n);
     add(
         "procs_kind_iter_global",
@@ -282,6 +304,35 @@ namespace {
                              .has_affinity_to(sysmem));
         },
         n);
+    add(
+        "procs_sharing_mem_count",
+        [=]() -> uint64_t {
+          return Machine::ProcessorQuery(machine)
+              .only_kind(Processor::LOC_PROC)
+              .has_affinity_to(sysmem)
+              .count();
+        },
+        n);
+    // a kind and memory with no affinity between them
+    add(
+        "procs_kind_affinity_miss",
+        [=]() -> uint64_t {
+          return Machine::ProcessorQuery(machine)
+              .only_kind(Processor::LOC_PROC)
+              .has_affinity_to(kind_miss)
+              .count();
+        },
+        0, kind_miss.exists());
+    add(
+        "procs_best_for_mem_global",
+        [=]() -> uint64_t {
+          return Machine::ProcessorQuery(machine)
+              .only_kind(Processor::LOC_PROC)
+              .best_affinity_to(sysmem)
+              .first()
+              .id;
+        },
+        1);
     iterate(
         Machine::ProcessorQuery(machine).same_address_space_as(sysmem).has_affinity_to(
             sysmem),
@@ -302,6 +353,13 @@ namespace {
           return Machine::MemoryQuery(machine).only_kind(Memory::SYSTEM_MEM).count();
         },
         Machine::MemoryQuery(machine).only_kind(Memory::SYSTEM_MEM).count());
+    {
+      Machine::MemoryQuery reused(machine);
+      reused.only_kind(Memory::SYSTEM_MEM);
+      add(
+          "mems_kind_count_reused", [=]() -> uint64_t { return reused.count(); },
+          reused.count());
+    }
     iterate(Machine::MemoryQuery(machine).has_affinity_to(p), &n);
     add(
         "mems_visible_iter_global",
