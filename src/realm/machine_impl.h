@@ -407,8 +407,6 @@ namespace Realm {
     bool cached_query(Processor p, Processor &pval);
     bool cached_query(Processor &pval, QueryType q) const;
     bool cached_query(size_t &count) const;
-    // the successor of 'after' in a sorted list
-    static Processor next(const std::vector<Processor> &list, Processor after);
   };
 
   typedef QueryPredicate<Memory, MachineMemInfo> MemoryQueryPredicate;
@@ -535,7 +533,6 @@ namespace Realm {
     const CachedList *attach(const CachedList *list) const;
     const CachedList *attached_list() const;
     void reset_cached_list();
-    static Memory next(const std::vector<Memory> &list, Memory after);
     // the affinity map of a processor the query is anchored to, or NULL
     const std::map<Memory, Machine::ProcessorMemoryAffinity *> *
     anchor_affinities(Processor p, bool local_only) const;

@@ -661,3 +661,103 @@ TEST_F(MachineQueryCacheMultiNodeTest, NonLocalAffinity)
   EXPECT_EQ(MachineQueryCacheTest::results(visible), (std::set<Memory>{mems[0], mems[1]}));
   MachineQueryCacheTest::expect_cache_agrees_with_walk(visible);
 }
+
+// a query restricted to one node is served the run of the shared by-kind
+//  (or by-kind-and-memory) list that node owns: every accessor must see
+//  exactly that node's entries, before and after the machine changes
+TEST_F(MachineQueryCacheMultiNodeTest, NodeRestrictedQueries)
+{
+  Machine machine = Machine::get_machine();
+  typedef std::set<Processor> PSet;
+  typedef std::set<Memory> MSet;
+
+  Machine::ProcessorQuery node1(machine);
+  node1.only_kind(Processor::LOC_PROC).same_address_space_as(procs[2]);
+  EXPECT_EQ(MachineQueryCacheTest::results(node1), (PSet{procs[2], procs[3]}));
+  MachineQueryCacheTest::expect_cache_agrees_with_walk(node1);
+
+  Machine::ProcessorQuery node0(machine);
+  node0.only_kind(Processor::LOC_PROC).same_address_space_as(mems[0]);
+  EXPECT_EQ(MachineQueryCacheTest::results(node0), (PSet{procs[0], procs[1]}));
+  MachineQueryCacheTest::expect_cache_agrees_with_walk(node0);
+
+  // this process is node 0 in the mock machine
+  Machine::ProcessorQuery local(machine);
+  local.local_address_space().only_kind(Processor::LOC_PROC);
+  EXPECT_EQ(MachineQueryCacheTest::results(local), (PSet{procs[0], procs[1]}));
+  MachineQueryCacheTest::expect_cache_agrees_with_walk(local);
+
+  // the node's run of a by-kind-and-memory list: only p2 on node 1 reaches m0
+  Machine::ProcessorQuery sharing1(machine);
+  sharing1.only_kind(Processor::LOC_PROC).has_affinity_to(mems[0]).same_address_space_as(
+      procs[3]);
+  EXPECT_EQ(MachineQueryCacheTest::results(sharing1), (PSet{procs[2]}));
+  MachineQueryCacheTest::expect_cache_agrees_with_walk(sharing1);
+  Machine::ProcessorQuery sharing0(machine);
+  sharing0.same_address_space_as(procs[0]).only_kind(Processor::LOC_PROC).has_affinity_to(
+      mems[0]);
+  EXPECT_EQ(MachineQueryCacheTest::results(sharing0), (PSet{procs[0], procs[1]}));
+  MachineQueryCacheTest::expect_cache_agrees_with_walk(sharing0);
+
+  // a kind the node does not have, and two different nodes, match nothing
+  Machine::ProcessorQuery no_kind(machine);
+  no_kind.only_kind(Processor::TOC_PROC).same_address_space_as(procs[0]);
+  EXPECT_TRUE(MachineQueryCacheTest::results(no_kind).empty());
+  MachineQueryCacheTest::expect_cache_agrees_with_walk(no_kind);
+  Machine::ProcessorQuery two_nodes(machine);
+  two_nodes.only_kind(Processor::LOC_PROC)
+      .same_address_space_as(procs[0])
+      .same_address_space_as(procs[2]);
+  EXPECT_TRUE(MachineQueryCacheTest::results(two_nodes).empty());
+  MachineQueryCacheTest::expect_cache_agrees_with_walk(two_nodes);
+
+  // memories by kind, per node
+  Machine::MemoryQuery mnode1(machine);
+  mnode1.only_kind(Memory::SYSTEM_MEM).same_address_space_as(procs[2]);
+  EXPECT_EQ(MachineQueryCacheTest::results(mnode1), (MSet{mems[1]}));
+  MachineQueryCacheTest::expect_cache_agrees_with_walk(mnode1);
+  Machine::MemoryQuery mlocal(machine);
+  mlocal.local_address_space().only_kind(Memory::SYSTEM_MEM);
+  EXPECT_EQ(MachineQueryCacheTest::results(mlocal), (MSet{mems[0]}));
+  MachineQueryCacheTest::expect_cache_agrees_with_walk(mlocal);
+  Machine::MemoryQuery mno_kind(machine);
+  mno_kind.only_kind(Memory::GPU_FB_MEM).same_address_space_as(procs[0]);
+  EXPECT_TRUE(MachineQueryCacheTest::results(mno_kind).empty());
+  MachineQueryCacheTest::expect_cache_agrees_with_walk(mno_kind);
+  Machine::MemoryQuery mtwo_nodes(machine);
+  mtwo_nodes.only_kind(Memory::SYSTEM_MEM)
+      .same_address_space_as(procs[0])
+      .same_address_space_as(procs[2]);
+  EXPECT_TRUE(MachineQueryCacheTest::results(mtwo_nodes).empty());
+  MachineQueryCacheTest::expect_cache_agrees_with_walk(mtwo_nodes);
+
+  // next() from an entry outside the node has no successor, as in a walk
+  {
+    const bool saved = Config::use_machine_query_cache;
+    for(bool cache : {true, false}) {
+      Config::use_machine_query_cache = cache;
+      EXPECT_EQ(node1.next(procs[0]), Processor::NO_PROC);
+      EXPECT_EQ(node1.next(procs[2]), procs[3]);
+      EXPECT_EQ(node1.next(procs[3]), Processor::NO_PROC);
+      EXPECT_EQ(node0.next(procs[1]), Processor::NO_PROC);
+      EXPECT_EQ(node0.next(procs[2]), Processor::NO_PROC);
+      EXPECT_EQ(sharing1.next(procs[0]), Processor::NO_PROC);
+      EXPECT_EQ(mnode1.next(mems[0]), Memory::NO_MEMORY);
+      EXPECT_EQ(mlocal.next(mems[0]), Memory::NO_MEMORY);
+    }
+    Config::use_machine_query_cache = saved;
+  }
+
+  // a machine update (p3 now reaches m0 too) is seen by the executed queries
+  Machine::ProcessorMemoryAffinity pma;
+  pma.p = procs[3];
+  pma.m = mems[0];
+  pma.bandwidth = 10;
+  pma.latency = 1000;
+  runtime_impl_->machine->add_proc_mem_affinity(pma);
+  EXPECT_EQ(MachineQueryCacheTest::results(sharing1), (PSet{procs[2], procs[3]}));
+  MachineQueryCacheTest::expect_cache_agrees_with_walk(sharing1);
+  EXPECT_EQ(MachineQueryCacheTest::results(sharing0), (PSet{procs[0], procs[1]}));
+  EXPECT_EQ(MachineQueryCacheTest::results(node1), (PSet{procs[2], procs[3]}));
+  MachineQueryCacheTest::expect_cache_agrees_with_walk(node1);
+}
