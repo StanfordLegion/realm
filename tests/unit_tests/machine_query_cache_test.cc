@@ -495,8 +495,10 @@ TEST_F(MachineQueryCacheTest, KindAndMemoryWithoutAffinity)
   no_kind.only_kind(Processor::TOC_PROC).has_affinity_to(mems[0]);
   EXPECT_EQ(no_kind.count(), 0u);
   EXPECT_FALSE(no_kind.first().exists());
-  EXPECT_EQ(Machine::ProcessorQuery(machine()).only_kind(Processor::TOC_PROC).count(), 0u);
-  EXPECT_FALSE(Machine::ProcessorQuery(machine()).only_kind(Processor::TOC_PROC).first().exists());
+  EXPECT_EQ(Machine::ProcessorQuery(machine()).only_kind(Processor::TOC_PROC).count(),
+            0u);
+  EXPECT_FALSE(
+      Machine::ProcessorQuery(machine()).only_kind(Processor::TOC_PROC).first().exists());
   EXPECT_EQ(Machine::MemoryQuery(machine()).only_kind(Memory::DISK_MEM).count(), 0u);
 
   // give p2 an affinity to the framebuffer: the same query object and a
@@ -526,7 +528,8 @@ TEST_F(MachineQueryCacheTest, CacheAgreesWithWalk)
                                     .has_affinity_to(mems[1], 85 /*min bw*/));
   expect_cache_agrees_with_walk(
       Machine::MemoryQuery(machine()).only_kind(Memory::SYSTEM_MEM));
-  expect_cache_agrees_with_walk(Machine::MemoryQuery(machine()).has_affinity_to(procs[3]));
+  expect_cache_agrees_with_walk(
+      Machine::MemoryQuery(machine()).has_affinity_to(procs[3]));
   Machine::ProcessorQuery refined(machine());
   refined.only_kind(Processor::LOC_PROC);
   EXPECT_EQ(refined.count(), 4u);
@@ -658,7 +661,8 @@ TEST_F(MachineQueryCacheMultiNodeTest, NonLocalAffinity)
   MachineQueryCacheTest::expect_cache_agrees_with_walk(all);
   Machine::MemoryQuery visible(machine);
   visible.has_affinity_to(procs[2]);
-  EXPECT_EQ(MachineQueryCacheTest::results(visible), (std::set<Memory>{mems[0], mems[1]}));
+  EXPECT_EQ(MachineQueryCacheTest::results(visible),
+            (std::set<Memory>{mems[0], mems[1]}));
   MachineQueryCacheTest::expect_cache_agrees_with_walk(visible);
 }
 
@@ -689,13 +693,15 @@ TEST_F(MachineQueryCacheMultiNodeTest, NodeRestrictedQueries)
 
   // the node's run of a by-kind-and-memory list: only p2 on node 1 reaches m0
   Machine::ProcessorQuery sharing1(machine);
-  sharing1.only_kind(Processor::LOC_PROC).has_affinity_to(mems[0]).same_address_space_as(
-      procs[3]);
+  sharing1.only_kind(Processor::LOC_PROC)
+      .has_affinity_to(mems[0])
+      .same_address_space_as(procs[3]);
   EXPECT_EQ(MachineQueryCacheTest::results(sharing1), (PSet{procs[2]}));
   MachineQueryCacheTest::expect_cache_agrees_with_walk(sharing1);
   Machine::ProcessorQuery sharing0(machine);
-  sharing0.same_address_space_as(procs[0]).only_kind(Processor::LOC_PROC).has_affinity_to(
-      mems[0]);
+  sharing0.same_address_space_as(procs[0])
+      .only_kind(Processor::LOC_PROC)
+      .has_affinity_to(mems[0]);
   EXPECT_EQ(MachineQueryCacheTest::results(sharing0), (PSet{procs[0], procs[1]}));
   MachineQueryCacheTest::expect_cache_agrees_with_walk(sharing0);
 

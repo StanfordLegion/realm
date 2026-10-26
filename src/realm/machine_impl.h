@@ -225,7 +225,8 @@ namespace Realm {
   // the number of values of Processor::Kind and Memory::Kind, for the arrays
   //  indexed by kind below
 #define REALM_COUNT_KIND(name, desc) +1
-  static constexpr unsigned NUM_PROCESSOR_KINDS = 0 REALM_PROCESSOR_KINDS(REALM_COUNT_KIND);
+  static constexpr unsigned NUM_PROCESSOR_KINDS =
+      0 REALM_PROCESSOR_KINDS(REALM_COUNT_KIND);
   static constexpr unsigned NUM_MEMORY_KINDS = 0 REALM_MEMORY_KINDS(REALM_COUNT_KIND);
 #undef REALM_COUNT_KIND
 
