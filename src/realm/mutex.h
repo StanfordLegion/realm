@@ -530,13 +530,20 @@ namespace Realm {
 
     void wait_for_writer();
 
-    struct alignas(64) Slot {
+    // one cache line per slot: the slots are laid out a line apart, so the
+    //  counters of different slots never share a line whatever the alignment
+    //  of the array (no alignas - an over-aligned member would make every
+    //  class that holds a lock over-aligned too)
+    struct Slot {
       Slot()
         : readers(0)
       {}
       std::atomic<int> readers;
+      char pad[64 - sizeof(std::atomic<int>)];
     };
     Slot slots[NUM_SLOTS];
+    // keeps the writer's fields a line away from the last slot's counter
+    char slots_pad[64];
 
     // nonzero while a writer is waiting for readers to drain or holds the lock
     std::atomic<int> writer_active;
