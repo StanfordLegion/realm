@@ -103,12 +103,12 @@ namespace Realm {
       SubgraphImpl *subgraph = get_runtime()->get_subgraph_impl(*this);
       return subgraph->request_destroy(wait_on);
     } else {
-      // The message goes out once the instantiations this node sent have
+      // The message goes out once every instantiation this node sent has
       // finished (see RemoteSubgraphInstantiations); wait_on is passed to
       // the owner as given.
       UserEvent done = UserEvent::create_user_event();
-      Event last = get_runtime()->remote_subgraph_instantiations.take(*this);
-      DeferredRemoteDestroy::send(owner, *this, wait_on, done, last);
+      Event unfinished = get_runtime()->remote_subgraph_instantiations.take(*this);
+      DeferredRemoteDestroy::send(owner, *this, wait_on, done, unfinished);
       return done;
     }
   }
@@ -171,7 +171,8 @@ namespace Realm {
                    (amsg << prs) && (amsg << profiling));
         assert(ok);
       }
-      get_runtime()->remote_subgraph_instantiations.note(*this, finish_event);
+      get_runtime()->remote_subgraph_instantiations.note(*this, finish_event, amsg->seq,
+                                                         amsg->base);
       amsg.commit();
     }
     return finish_event;
@@ -222,7 +223,8 @@ namespace Realm {
                    (amsg << profiling));
         assert(ok);
       }
-      get_runtime()->remote_subgraph_instantiations.note(*this, finish_event);
+      get_runtime()->remote_subgraph_instantiations.note(*this, finish_event, amsg->seq,
+                                                         amsg->base);
       amsg.commit();
     }
     return finish_event;
@@ -233,22 +235,46 @@ namespace Realm {
   // class RemoteSubgraphInstantiations
   //
 
-  void RemoteSubgraphInstantiations::note(Subgraph subgraph, Event finish_event)
+  void RemoteSubgraphInstantiations::note(Subgraph subgraph, Event finish_event,
+                                          uint64_t &seq, uint64_t &base)
   {
     AutoLock<> al(mutex);
-    last_finish[ID(subgraph).id] = finish_event;
+    Entry &e = entries[ID(subgraph).id];
+    seq = e.next_seq++;
+    // The base must be exact: a finished entry left in front would lower
+    // it, and when the owner has since destroyed the subgraph and reused
+    // its id, ask the new subgraph for a sequence number it never sees.
+    while(!e.sent.empty()) {
+      bool poisoned = false;
+      if(!e.sent.front().finish.has_triggered_faultaware(poisoned))
+        break;
+      e.sent.pop_front();
+    }
+    base = e.sent.empty() ? seq : e.sent.front().seq;
+    e.sent.push_back(Sent{seq, finish_event});
   }
 
   Event RemoteSubgraphInstantiations::take(Subgraph subgraph)
   {
-    AutoLock<> al(mutex);
-    std::unordered_map<ID::IDType, Event>::iterator it =
-        last_finish.find(ID(subgraph).id);
-    if(it == last_finish.end())
+    std::vector<Event> evs;
+    {
+      AutoLock<> al(mutex);
+      std::unordered_map<ID::IDType, Entry>::iterator it =
+          entries.find(ID(subgraph).id);
+      if(it == entries.end())
+        return Event::NO_EVENT;
+      for(const Sent &sent : it->second.sent) {
+        bool poisoned = false;
+        if(!sent.finish.has_triggered_faultaware(poisoned))
+          evs.push_back(sent.finish);
+      }
+      entries.erase(it);
+    }
+    if(evs.empty())
       return Event::NO_EVENT;
-    Event e = it->second;
-    last_finish.erase(it);
-    return e;
+    if(evs.size() == 1)
+      return evs[0];
+    return Event::merge_events_ignorefaults(evs.data(), evs.size());
   }
 
   ////////////////////////////////////////////////////////////////////////
@@ -330,6 +356,18 @@ namespace Realm {
                                  span<const Event> postconditions, Event start_event,
                                  Event finish_event, int priority_adjust)
   {
+    instantiate(args, arglen, prs, profiling, preconditions, postconditions, start_event,
+                finish_event, priority_adjust, nullptr /*remote*/);
+  }
+
+  void SubgraphImpl::instantiate(const void *args, size_t arglen,
+                                 const ProfilingRequestSet &prs,
+                                 const SubgraphInstantiationProfiling &profiling,
+                                 span<const Event> preconditions,
+                                 span<const Event> postconditions, Event start_event,
+                                 Event finish_event, int priority_adjust,
+                                 const RemoteMessage *remote)
+  {
     if(!alive.load_acquire())
       SUBGRAPH_FATAL(me,
                      "instantiate of a subgraph that was destroyed (or never created)");
@@ -352,12 +390,26 @@ namespace Realm {
     {
       AutoLock<> al(lifecycle_lock);
       if(destroy_requested)
-        SUBGRAPH_FATAL(me, "instantiated after destroy");
+        SUBGRAPH_FATAL(me, "instantiated after destroy (the destroy's precondition had "
+                           "triggered)");
       if((defn->concurrency_mode == SubgraphDefinition::ONE_SHOT) && instantiated)
         SUBGRAPH_FATAL(me, "ONE_SHOT subgraph instantiated a second time");
-      instantiated = true;
-      outstanding_instantiations++;
       if(defn->concurrency_mode == SubgraphDefinition::INSTANTIATION_ORDER) {
+        if(remote && !remote_order_ready_locked(remote->order, true /*record*/)) {
+          // An earlier instantiate from the same node has not arrived yet:
+          // hold this one until it has (handle_remote_instantiate).
+          HeldInstantiate *held = new HeldInstantiate;
+          held->msg = *remote;
+          held->payload.assign(static_cast<const char *>(remote->data),
+                               static_cast<const char *>(remote->data) + remote->datalen);
+          held->msg.data = held->payload.data();
+          sender_order[remote->order.sender].held.push_back(held);
+          log_subgraph.info() << "instantiate held for order: subgraph=" << me
+                              << " sender=" << remote->order.sender
+                              << " seq=" << remote->order.seq
+                              << " base=" << remote->order.base;
+          return;
+        }
         // Instantiations run in order: this one starts once the previous one
         // has finished, and the next one will wait for this one. (CONCURRENT
         // and ONE_SHOT instantiations are independent: the engine runs any
@@ -365,6 +417,8 @@ namespace Realm {
         order_event = previous_instantiation_completion;
         previous_instantiation_completion = finish_event;
       }
+      instantiated = true;
+      outstanding_instantiations++;
     }
 
     // priority_adjust is the priority of this instantiation as a whole
@@ -408,9 +462,17 @@ namespace Realm {
     previous_instantiation_completion = Event::NO_EVENT;
     outstanding_instantiations = 0;
     instantiated = false;
+    destroy_pending = false;
     destroy_requested = false;
-    destroy_wait_on = Event::NO_EVENT;
     destroy_done = UserEvent::NO_USER_EVENT;
+    for(std::unordered_map<NodeID, SenderOrder>::iterator it = sender_order.begin();
+        it != sender_order.end(); ++it) {
+      // a held instantiate here is one issued after the destroy took effect
+      // (its predecessor arrives later and aborts the same way)
+      for(HeldInstantiate *h : it->second.held)
+        delete h;
+    }
+    sender_order.clear();
 
     // TODO: when we create subgraphs on remote nodes, send a message to the
     //  creator node so they can add it to their free list
@@ -424,47 +486,69 @@ namespace Realm {
 
   Event SubgraphImpl::request_destroy(Event wait_on)
   {
+    // The destroy takes effect when its precondition triggers. Until then,
+    // instantiations are still accepted and counted: an application orders
+    // them before the destroy by ordering their finish events before
+    // wait_on (and across nodes that is the only way it can). A poisoned
+    // precondition does not keep a subgraph from being destroyed.
+    bool poisoned = false;
+    bool triggered = wait_on.has_triggered_faultaware(poisoned);
+    UserEvent done;
     {
       AutoLock<> al(lifecycle_lock);
       if(!alive.load_acquire())
         SUBGRAPH_FATAL(me, "destroy of a subgraph that was already destroyed (or never "
                            "created)");
-      if(destroy_requested)
-        SUBGRAPH_FATAL(me, "destroyed twice");
-      destroy_requested = true;
-      if(outstanding_instantiations > 0) {
-        // The last instantiation to release its state completes the destroy.
-        destroy_wait_on = wait_on;
+      if(destroy_pending)
+        SUBGRAPH_FATAL(me, "destroyed twice (a destroy was already pending)");
+      destroy_pending = true;
+      if(!triggered) {
         destroy_done = UserEvent::create_user_event();
-        return destroy_done;
+        done = destroy_done;
+      } else {
+        destroy_requested = true;
+        if(outstanding_instantiations > 0) {
+          // The last instantiation to release its state completes the destroy.
+          destroy_done = UserEvent::create_user_event();
+          return destroy_done;
+        }
       }
     }
-    return complete_destroy(wait_on, UserEvent::NO_USER_EVENT);
+    if(!triggered) {
+      // Registered without the lock: the event may trigger meanwhile and
+      // call destroy_precondition_triggered right here.
+      get_runtime()->subgraph_resource_reaper.destroy_deferred();
+      deferred_destroy.defer(this, wait_on);
+      return done;
+    }
+    if(poisoned)
+      log_subgraph.warning() << "destroy precondition was poisoned: subgraph=" << me;
+    destroy();
+    return Event::NO_EVENT;
   }
 
-  Event SubgraphImpl::complete_destroy(Event wait_on, UserEvent done)
+  void SubgraphImpl::destroy_precondition_triggered(bool poisoned)
   {
-    // A poisoned precondition does not keep a subgraph from being destroyed.
-    bool poisoned = false;
-    if(wait_on.has_triggered_faultaware(poisoned)) {
-      if(poisoned)
-        log_subgraph.warning() << "destroy precondition was poisoned: subgraph=" << me;
-      destroy();
-      if(done.exists()) {
-        done.trigger();
-        return done;
-      }
-      return Event::NO_EVENT;
+    if(poisoned)
+      log_subgraph.warning() << "destroy precondition was poisoned: subgraph=" << me;
+    get_runtime()->subgraph_resource_reaper.destroy_precondition_triggered();
+    UserEvent done;
+    {
+      AutoLock<> al(lifecycle_lock);
+      assert(destroy_pending && !destroy_requested);
+      destroy_requested = true;
+      if(outstanding_instantiations > 0)
+        return; // the last release completes the destroy
+      done = destroy_done;
     }
-    if(!done.exists())
-      done = UserEvent::create_user_event();
-    deferred_destroy.defer(this, wait_on, done);
-    return done;
+    // destroy() returns this object to the free list, so nothing of it is
+    // read afterwards
+    destroy();
+    done.trigger();
   }
 
   void SubgraphImpl::instantiation_released(void)
   {
-    Event wait_on;
     UserEvent done;
     {
       AutoLock<> al(lifecycle_lock);
@@ -472,10 +556,88 @@ namespace Realm {
       outstanding_instantiations--;
       if((outstanding_instantiations > 0) || !destroy_requested)
         return;
-      wait_on = destroy_wait_on;
       done = destroy_done;
     }
-    complete_destroy(wait_on, done);
+    destroy();
+    done.trigger();
+  }
+
+  bool SubgraphImpl::remote_order_ready_locked(const RemoteOrder &order, bool record)
+  {
+    SenderOrder &so = sender_order[order.sender];
+    if(order.base > so.next) {
+      // everything below the base had finished, so it was handled
+      so.next = order.base;
+      so.handled.erase(so.handled.begin(), so.handled.lower_bound(so.next));
+      while(!so.handled.empty() && (*so.handled.begin() == so.next)) {
+        so.handled.erase(so.handled.begin());
+        so.next++;
+      }
+    }
+    // in order (the common case): nothing to look up
+    for(uint64_t q = std::max(order.base, so.next); q < order.seq; q++)
+      if(so.handled.count(q) == 0)
+        return false;
+    if(record) {
+      if(order.seq == so.next) {
+        so.next++;
+        while(!so.handled.empty() && (*so.handled.begin() == so.next)) {
+          so.handled.erase(so.handled.begin());
+          so.next++;
+        }
+      } else if(order.seq > so.next) {
+        so.handled.insert(order.seq);
+      }
+    }
+    return true;
+  }
+
+  SubgraphImpl::HeldInstantiate *SubgraphImpl::pop_ready_held(NodeID sender)
+  {
+    AutoLock<> al(lifecycle_lock);
+    std::unordered_map<NodeID, SenderOrder>::iterator it = sender_order.find(sender);
+    if(it == sender_order.end())
+      return nullptr;
+    std::vector<HeldInstantiate *> &held = it->second.held;
+    for(size_t i = 0; i < held.size(); i++) {
+      if(remote_order_ready_locked(held[i]->msg.order, false /*record*/)) {
+        HeldInstantiate *h = held[i];
+        held[i] = held.back();
+        held.pop_back();
+        return h;
+      }
+    }
+    return nullptr;
+  }
+
+  void SubgraphImpl::handle_remote_instantiate(const RemoteMessage &first)
+  {
+    const RemoteMessage *msg = &first;
+    HeldInstantiate *held = nullptr;
+    while(true) {
+      span<const Event> preconditions, postconditions;
+      ProfilingRequestSet prs;
+      SubgraphInstantiationProfiling profiling;
+      Serialization::FixedBufferDeserializer fbd(msg->data, msg->datalen);
+      // skip over the instantiation args - they are accessed directly
+      fbd.extract_bytes(0, msg->arglen);
+      bool ok = ((fbd >> preconditions) && (fbd >> postconditions));
+      if(ok && (fbd.bytes_left() > 0))
+        ok = (fbd >> prs);
+      if(ok && (fbd.bytes_left() > 0))
+        ok = (fbd >> profiling);
+      assert(ok);
+
+      instantiate(msg->data, msg->arglen, prs, profiling, preconditions, postconditions,
+                  msg->start_event, msg->finish_event, msg->priority_adjust, msg);
+      delete held;
+
+      // this may have been the predecessor an earlier arrival waits for
+      held = pop_ready_held(first.order.sender);
+      if(!held)
+        return;
+      msg = &held->msg;
+    }
   }
 
   // Blocks are placed on the processors' NUMA nodes, which is page-granular
@@ -586,25 +748,16 @@ namespace Realm {
   // class SubgraphImpl::DeferredDestroy
   //
 
-  void SubgraphImpl::DeferredDestroy::defer(SubgraphImpl *_subgraph, Event wait_on,
-                                            UserEvent _to_trigger)
+  void SubgraphImpl::DeferredDestroy::defer(SubgraphImpl *_subgraph, Event wait_on)
   {
     subgraph = _subgraph;
-    to_trigger = _to_trigger;
     EventImpl::add_waiter(wait_on, this);
   }
 
   void SubgraphImpl::DeferredDestroy::event_triggered(bool poisoned, TimeLimit work_until)
   {
-    // destroy() returns the SubgraphImpl, and with it this waiter, to the
-    // free list: a new subgraph may reuse both before destroy() returns, so
-    // nothing of *this is read afterwards.
-    SubgraphImpl *sg = subgraph;
-    UserEvent done = to_trigger;
-    if(poisoned)
-      log_subgraph.warning() << "destroy precondition was poisoned: subgraph=" << sg->me;
-    sg->destroy();
-    done.trigger();
+    // may return the SubgraphImpl, and with it this waiter, to the free list
+    subgraph->destroy_precondition_triggered(poisoned);
   }
 
   void SubgraphImpl::DeferredDestroy::print(std::ostream &os) const
@@ -628,22 +781,17 @@ namespace Realm {
                                              const void *data, size_t datalen)
   {
     SubgraphImpl *subgraph = get_runtime()->get_subgraph_impl(msg.subgraph);
-    span<const Event> preconditions, postconditions;
-    ProfilingRequestSet prs;
-
-    Serialization::FixedBufferDeserializer fbd(data, datalen);
-    fbd.extract_bytes(
-        0, msg.arglen); // skip over instantiation args - we'll access those directly
-    SubgraphInstantiationProfiling profiling;
-    bool ok = ((fbd >> preconditions) && (fbd >> postconditions));
-    if(ok && (fbd.bytes_left() > 0))
-      ok = (fbd >> prs);
-    if(ok && (fbd.bytes_left() > 0))
-      ok = (fbd >> profiling);
-    assert(ok);
-
-    subgraph->instantiate(data, msg.arglen, prs, profiling, preconditions, postconditions,
-                          msg.wait_on, msg.finish_event, msg.priority_adjust);
+    SubgraphImpl::RemoteMessage rm;
+    rm.order.sender = sender;
+    rm.order.seq = msg.seq;
+    rm.order.base = msg.base;
+    rm.start_event = msg.wait_on;
+    rm.finish_event = msg.finish_event;
+    rm.priority_adjust = msg.priority_adjust;
+    rm.arglen = msg.arglen;
+    rm.data = data;
+    rm.datalen = datalen;
+    subgraph->handle_remote_instantiate(rm);
   }
 
   ActiveMessageHandlerReg<SubgraphInstantiateMessage>

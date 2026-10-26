@@ -53,11 +53,16 @@ namespace Realm {
 
     // TODO: collective construction
 
-    // Destroys the subgraph once wait_on has triggered. The returned event
-    // triggers when destruction is complete, including the release of any
-    // still-running instantiations' resources; it is NO_EVENT if the
-    // subgraph could be destroyed immediately. Instantiating a subgraph
-    // after requesting its destruction is an error.
+    // Destroys the subgraph once wait_on has triggered. The destroy takes
+    // effect at that point: instantiations handled before it are covered
+    // (the subgraph goes away once the last of them has released its
+    // resources), so "d = destroy(G); e = instantiate(); G.trigger(e)" is
+    // valid. Every instantiation must either be issued on the destroying
+    // node before the destroy call, or be ordered before wait_on (by its
+    // finish event, or something that follows it); instantiating after
+    // wait_on has triggered is an error, as is a second destroy while one
+    // is pending. The returned event triggers when destruction is complete;
+    // it is NO_EVENT if the subgraph could be destroyed immediately.
     Event destroy(Event wait_on = Event::NO_EVENT) const;
 
     // priority_adjust is the priority of the instantiation as a whole. While

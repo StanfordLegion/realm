@@ -2893,13 +2893,23 @@ namespace Realm {
       log_runtime.info() << "local processor shutdown tasks complete";
     }
 
-    // a subgraph instantiation whose finish event has not triggered by now
-    //  is pending application work, exactly like an untriggered operation
-    //  below: an error, caught eagerly (no waiting, no timer)
+    // a subgraph instantiation whose finish event has not triggered by now,
+    //  or a subgraph destroy whose precondition has not, is pending
+    //  application work, exactly like an untriggered operation below: an
+    //  error, caught eagerly (no waiting, no timer)
     {
       int64_t n = subgraph_resource_reaper.num_unfinished();
       if(n != 0) {
         log_runtime.fatal() << n << " pending subgraph instantiation(s) during shutdown!";
+        fflush(stdout);
+        fflush(stderr);
+        abort();
+      }
+      int64_t d = subgraph_resource_reaper.num_pending_destroys();
+      if(d != 0) {
+        log_runtime.fatal() << d
+                            << " subgraph destroy(s) whose precondition has not "
+                               "triggered during shutdown!";
         fflush(stdout);
         fflush(stderr);
         abort();

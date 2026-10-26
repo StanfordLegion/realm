@@ -29,8 +29,11 @@
 #include "realm/mutex.h"
 #include "realm/logging.h"
 
+#include <cstdint>
+#include <deque>
 #include <map>
 #include <memory>
+#include <set>
 #include <queue>
 #include <sstream>
 #include <string>
@@ -246,24 +249,50 @@ namespace Realm {
 
     void destroy(void);
 
+    // Waits for a destroy's precondition (see request_destroy).
     class DeferredDestroy : public EventWaiter {
     public:
-      void defer(SubgraphImpl *_subgraph, Event wait_on, UserEvent to_trigger);
+      void defer(SubgraphImpl *_subgraph, Event wait_on);
       virtual void event_triggered(bool poisoned, TimeLimit work_until);
       virtual void print(std::ostream &os) const;
       virtual Event get_finish_event(void) const;
 
     protected:
       SubgraphImpl *subgraph;
-      UserEvent to_trigger;
     };
 
-    // Requests destruction. The returned event triggers once every
-    // outstanding instantiation has released its resources and wait_on has
-    // triggered. Instantiating after this is an error.
+    // Requests destruction. The destroy takes effect when wait_on triggers:
+    // instantiations handled before that point (whether or not the destroy
+    // was requested first) are covered by it, and the subgraph is destroyed
+    // once the last of them has released its resources. Instantiating after
+    // wait_on has triggered is an error. The returned event triggers when
+    // the destroy is complete, NO_EVENT if it was completed on the spot.
     Event request_destroy(Event wait_on);
+    // Called by DeferredDestroy when the destroy's precondition triggers.
+    void destroy_precondition_triggered(bool poisoned);
     // Called when an instantiation's execution state has been released.
     void instantiation_released(void);
+
+    // A remote instantiate: who sent it and where it stands in that node's
+    // sequence of instantiates of this subgraph (see
+    // RemoteSubgraphInstantiations), plus the message payload, which is
+    // copied if the instantiate has to be held back.
+    struct RemoteOrder {
+      NodeID sender;
+      uint64_t seq, base;
+    };
+    struct RemoteMessage {
+      RemoteOrder order;
+      Event start_event, finish_event;
+      int priority_adjust;
+      size_t arglen;
+      const void *data; // the payload: args, then the serialized rest
+      size_t datalen;
+    };
+    // Handles a remote instantiate, holding it back if an earlier one from
+    // the same node has not arrived yet and the mode is INSTANTIATION_ORDER,
+    // then any held ones from that node that are ready now.
+    void handle_remote_instantiate(const RemoteMessage &msg);
 
     // Execution states are recycled: an instantiation takes one from the
     // pool (or builds one, with its NUMA-placed blocks) and returns it once
@@ -283,20 +312,51 @@ namespace Realm {
     CompiledSubgraph compiled;
 
   protected:
-    Event complete_destroy(Event wait_on, UserEvent done);
+    void instantiate(const void *args, size_t arglen, const ProfilingRequestSet &prs,
+                     const SubgraphInstantiationProfiling &profiling,
+                     span<const Event> preconditions, span<const Event> postconditions,
+                     Event start_event, Event finish_event, int priority_adjust,
+                     const RemoteMessage *remote);
+    // A remote instantiate held until its predecessors from the same node
+    // have been handled (INSTANTIATION_ORDER): a copy of the message.
+    struct HeldInstantiate {
+      RemoteMessage msg; // msg.data points into payload
+      std::vector<char> payload;
+    };
+    // Per sending node, which of its instantiates have been handled and
+    // which arrived early. Every sequence number below `next` has been
+    // handled (or, below a message's `base`, had finished, which implies
+    // handled); `handled` holds the ones at or above `next`.
+    struct SenderOrder {
+      uint64_t next = 0;
+      std::set<uint64_t> handled;
+      std::vector<HeldInstantiate *> held;
+    };
+    // With lifecycle_lock held: whether every instantiate in [base, seq)
+    // from the sender has been handled; if `record`, and it is, records seq
+    // as handled. Recording happens in the same critical section as the
+    // chaining (instantiate), so a later instantiate from the node cannot
+    // slip in between.
+    bool remote_order_ready_locked(const RemoteOrder &order, bool record);
+    // Pops a held instantiate from the sender whose predecessors have all
+    // been handled, if any; the caller handles it (readiness only grows).
+    HeldInstantiate *pop_ready_held(NodeID sender);
 
     // Lifecycle state, protected by lifecycle_lock: the finish event of the
     // most recent instantiation (INSTANTIATION_ORDER chains the next one
     // after it), the number of instantiations whose state is still alive,
-    // and a pending destroy request carried out by whoever observes the
-    // count reach zero.
+    // and the destroy request. A destroy is `pending` from the request
+    // until its precondition triggers (a second request is an error) and
+    // `requested` from then on (an instantiate is an error); whoever sees
+    // it requested with the count at zero completes it.
     Mutex lifecycle_lock;
     Event previous_instantiation_completion = Event::NO_EVENT;
     int64_t outstanding_instantiations = 0;
     bool instantiated = false; // ONE_SHOT: a second instantiate is an error
+    bool destroy_pending = false;
     bool destroy_requested = false;
-    Event destroy_wait_on = Event::NO_EVENT;
     UserEvent destroy_done = UserEvent::NO_USER_EVENT;
+    std::unordered_map<NodeID, SenderOrder> sender_order; // INSTANTIATION_ORDER only
 
     // Blocks come from per-domain slabs placed on the domain's NUMA node:
     // one mmap per slab, not per instantiation (an application may have
@@ -323,26 +383,48 @@ namespace Realm {
     void release_resources(void);
   };
 
-  // Instantiations this node has sent to remote owners, by subgraph: the
-  // finish event of the most recent one. A remote destroy's message is sent
-  // only once that event has triggered (DeferredRemoteDestroy), so the
-  // destroy cannot be handled by the owner ahead of (and abort on) an
-  // instantiate sent earlier: active messages of different types are not
-  // ordered with respect to each other, and the owner marks the subgraph
-  // destroyed as soon as it handles the message. The event's poison is
-  // irrelevant to the destroy and is never merged into its precondition.
+  // Instantiations this node has sent to remote owners, by subgraph. Two
+  // things are derived from them, because active messages are not ordered:
+  // not across message types, and not within one type either (a payload
+  // large enough for a rendezvous protocol reaches the owner's handler
+  // after smaller messages sent later).
+  //  - A remote destroy's message is sent only once every instantiation
+  //    this node sent before it has finished (DeferredRemoteDestroy), so
+  //    the owner cannot handle the destroy ahead of one of them. The finish
+  //    events' poison is irrelevant to the destroy and is never merged
+  //    into its precondition.
+  //  - Each instantiate carries its sequence number among this node's
+  //    instantiates of the subgraph, and the lowest sequence number still
+  //    unfinished when it was sent (`base`): everything below `base` had
+  //    finished, so the owner needs only [base, seq) to have been handled
+  //    before this one to preserve the issue order (INSTANTIATION_ORDER).
   // Entries are keyed by the reusable subgraph id and removed by the destroy
   // from this node; one left behind (a subgraph this node instantiated but
-  // did not destroy) refers to a long-triggered event and only delays the
-  // send of an unrelated later destroy by nothing.
+  // did not destroy) is harmless: its events are long triggered and a new
+  // subgraph with the same id starts with a fresh order on the owner, which
+  // `base` accounts for.
   class RemoteSubgraphInstantiations {
   public:
-    void note(Subgraph subgraph, Event finish_event);
-    Event take(Subgraph subgraph); // NO_EVENT if none; removes the entry
+    // Records an instantiate about to be sent: its sequence number and base.
+    void note(Subgraph subgraph, Event finish_event, uint64_t &seq, uint64_t &base);
+    // The finish events of this node's unfinished instantiations of the
+    // subgraph, merged ignoring faults (NO_EVENT if none); removes the entry.
+    Event take(Subgraph subgraph);
 
   private:
+    struct Sent {
+      uint64_t seq;
+      Event finish;
+    };
+    struct Entry {
+      uint64_t next_seq = 0;
+      // in sequence order; the finished prefix is popped by each note, so
+      // the front is the oldest unfinished one (finished ones behind it
+      // wait their turn: each entry is popped once, O(1) amortized)
+      std::deque<Sent> sent;
+    };
     Mutex mutex;
-    std::unordered_map<ID::IDType, Event> last_finish;
+    std::unordered_map<ID::IDType, Entry> entries;
   };
 
   // Sends a destroy message to a subgraph's owner once the instantiations
@@ -376,6 +458,7 @@ namespace Realm {
     Subgraph subgraph;
     Event wait_on, finish_event;
     size_t arglen;
+    uint64_t seq, base; // see RemoteSubgraphInstantiations
     int priority_adjust;
 
     static void handle_message(NodeID sender, const SubgraphInstantiateMessage &msg,
@@ -486,6 +569,11 @@ namespace Realm {
     //    an instantiation's finish event, destroy the subgraph without
     //    waiting for the returned event and shut down. The wait depends on
     //    no application event and so always ends.
+    //  - pending_destroys: destroys requested on this node whose
+    //    precondition has not triggered. The precondition is an application
+    //    event, so this too is pending application work at shutdown (and a
+    //    destroy that never takes effect would leave its waiter registered
+    //    on an event through teardown).
     void instantiation_created(void)
     {
       unfinished.fetch_add(1);
@@ -493,7 +581,10 @@ namespace Realm {
     }
     void instantiation_finished(void) { unfinished.fetch_sub_acqrel(1); }
     void instantiation_released(void) { outstanding.fetch_sub_acqrel(1); }
+    void destroy_deferred(void) { pending_destroys.fetch_add(1); }
+    void destroy_precondition_triggered(void) { pending_destroys.fetch_sub_acqrel(1); }
     int64_t num_unfinished(void) const { return unfinished.load_acquire(); }
+    int64_t num_pending_destroys(void) const { return pending_destroys.load_acquire(); }
     bool idle(void) const { return outstanding.load_acquire() == 0; }
     void wait_for_idle(void);
 
@@ -502,6 +593,7 @@ namespace Realm {
     std::queue<SubgraphInstantiationCleanup *> pending_cleanups;
     atomic<int64_t> unfinished{0};
     atomic<int64_t> outstanding{0};
+    atomic<int64_t> pending_destroys{0};
   };
 
   // Completion callback for subgraph tasks on processors whose tasks keep

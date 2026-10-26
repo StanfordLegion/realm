@@ -1187,11 +1187,17 @@ namespace Realm {
 
         // Decide between ready tasks, subgraph work and resumable workers.
         //  - a ready task runs if its priority is strictly higher than any
-        //    ready subgraph work (ties go to the subgraph) and than the best
-        //    resumable worker (ties go to the resumable worker), and, while
-        //    the processor is held at a priority floor (an instantiation has
+        //    ready subgraph work and than the best resumable worker (ties
+        //    with a resumable worker go to the worker), and, while the
+        //    processor is held at a priority floor (an instantiation has
         //    work ready here or a graph task is running here), only if its
         //    priority is at least the floor;
+        //  - a tie between a ready task and subgraph work alternates: the
+        //    side that lost the previous tie wins this one. A fixed rule in
+        //    either direction starves the other side (a graph replayed back
+        //    to back would starve equal-priority tasks; a task that keeps
+        //    respawning itself would starve the graph); alternating bounds
+        //    both to an even share;
         //  - otherwise ready subgraph work runs unless a resumable worker has
         //    higher priority;
         //  - otherwise the best resumable worker continues.
@@ -1205,18 +1211,33 @@ namespace Realm {
             subgraph_executor && subgraph_executor->peek(subgraph_priority);
         int task_priority = resumable_priority;
         if(have_subgraph_work) {
-          // a ready task of equal priority runs before the subgraph work
-          //  (so a graph replayed back to back cannot starve equal-priority
-          //  tasks; ready tasks still never preempt a resumable worker of
-          //  equal priority)
-          if(subgraph_priority > task_priority)
-            task_priority = subgraph_priority - 1;
+          // a ready task must beat the subgraph work, or tie it when it is
+          //  the task's turn (ready tasks still never preempt a resumable
+          //  worker of equal priority)
+          int beat = (subgraph_tie_to_task ? (subgraph_priority - 1) : subgraph_priority);
+          if(beat > task_priority)
+            task_priority = beat;
         } else if(subgraph_executor) {
           int floor = subgraph_executor->active_floor(TaskQueue::PRI_NEG_INF);
           if(floor > TaskQueue::PRI_NEG_INF)
             task_priority = std::max(task_priority, floor - 1);
         }
         Task *task = TaskQueue::get_best_task(task_queues, task_priority);
+        if(have_subgraph_work) {
+          // was this a tie, and who won it? (the queues' top priorities are
+          //  a snapshot, which is all the alternation needs)
+          if(task) {
+            if(task->priority == subgraph_priority)
+              subgraph_tie_to_task = false;
+          } else if(!subgraph_tie_to_task) {
+            for(TaskQueue *q : task_queues)
+              if((q->task_count.load() > 0) &&
+                 (q->top_priority.load() == subgraph_priority)) {
+                subgraph_tie_to_task = true;
+                break;
+              }
+          }
+        }
 
         // did we find a ready task to run?
         if(task) {

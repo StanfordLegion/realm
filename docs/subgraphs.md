@@ -76,7 +76,7 @@ round show the effect.
 | `CONCURRENT`, `INSTANTIATION_ORDER`, `ONE_SHOT` | `CONCURRENT` (the default, as before) runs instantiations independently, ordered only by the events the application gives them. `INSTANTIATION_ORDER` chains each start on the previous finish. A `ONE_SHOT` subgraph instantiated twice is fatal. |
 | Priorities | `priority_adjust` of `instantiate` is the instantiation's priority (see below). `CopyDesc::priority` is added to it for the copy. |
 | Profiling | Definition-time requests on tasks and copies; instantiation-time requests through `SubgraphInstantiationProfiling` (sparse lists per kind, serializable for remote instantiation), merged with the definition's. Tasks report timeline, processor usage, status and finish event; copies report whatever Realm's transfer operations report. |
-| Remote `instantiate` and `destroy` | Messages to the owner; `destroy` returns an event that covers outstanding instantiations. A remote `destroy` message is sent only after the instantiations that node sent before it have finished (messages of different types are not ordered), and the destroy's own precondition is passed to the owner as given. |
+| Remote `instantiate` and `destroy` | Messages to the owner; `destroy` returns an event that covers outstanding instantiations. Active messages are not delivered in order (not across types, and a large payload can arrive after a smaller one sent later), so the node's own issue order is carried explicitly: a remote `destroy` message is sent only after every instantiation that node sent before it has finished, and each instantiate carries a per-node sequence number that the owner uses to run an `INSTANTIATION_ORDER` subgraph's instantiations in the order each node issued them (across nodes, the owner's arrival order). The destroy's own precondition is passed to the owner as given. |
 | Many instantiations in flight | Any number per processor, round robin among the ready ones. |
 
 ## Refused (fatal), and why
@@ -114,9 +114,10 @@ implementation.
 on have triggered), and the instantiation is making progress somewhere (a
 task of it is running, or an operation of it is ready or in flight), that
 processor runs only work of priority P or higher: normal tasks and other
-instantiations alike. Equal priority still runs, and at equal priority a ready
-normal task runs before subgraph work (so a graph replayed back to back cannot
-starve equal-priority tasks). Tasks that already started always resume. A processor whose last operation of the graph has been
+instantiations alike. Equal priority still runs, and ties between a ready
+normal task and subgraph work alternate: the side that lost the previous tie
+wins the next one, so neither a graph replayed back to back nor a task that
+keeps respawning itself can starve the other. Tasks that already started always resume. A processor whose last operation of the graph has been
 dequeued stays held while that task runs. The analysis of which inputs each
 processor depends on is done at compile time, so a processor is not held
 hostage by a graph that is waiting on something that processor might have to
@@ -143,10 +144,23 @@ in some form. An instantiation whose finish event has not triggered when the
 runtime shuts down (after that precondition and the processors' flush tasks)
 is pending application work, and the runtime aborts with a diagnostic naming
 the count ("pending subgraph instantiation(s) during shutdown"), as it does
-for an untriggered operation. The check is eager and exact; no timer is
-involved. The event a `destroy` returns need not be waited for: the release of
-finished instantiations' states and the destroy it may complete are bounded
-work on the background workers, which the runtime drains itself.
+for an untriggered operation. The same holds for a `destroy` whose
+precondition has not triggered ("subgraph destroy(s) whose precondition has
+not triggered during shutdown"): that precondition is an application event.
+The check is eager and exact; no timer is involved. The event a `destroy`
+returns need not be waited for once its precondition has triggered: what
+remains is the release of finished instantiations' states and the destroy
+itself, bounded work on the background workers, which the runtime drains.
+
+**Destroy.** A destroy takes effect when its precondition triggers, not when
+it is called. Instantiations handled before that point are covered by it
+(the subgraph goes away once the last of them has released its resources),
+so `d = sg.destroy(G); e = sg.instantiate(); G.trigger(e)` is valid, on one
+node or across nodes. Every instantiation must either be issued on the
+destroying node before the destroy call, or be ordered before the destroy's
+precondition (by its finish event, or something that follows it).
+Instantiating after the precondition has triggered is fatal, as is a second
+destroy while one is pending.
 
 **Poison.** Only a poisoned start event or poisoned external preconditions
 propagate poison; in `INSTANTIATION_ORDER` mode the previous instantiation's

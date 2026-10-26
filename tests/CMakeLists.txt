@@ -356,19 +356,22 @@ add_subgraph_death_test(redop_size_mismatch "provides 8 bytes")
 add_subgraph_death_test(deferred_creation "deferred creation")
 add_subgraph_death_test(task_on_utility_proc "has no compiled-subgraph hooks")
 add_subgraph_death_test(destroy_twice "already destroyed")
+add_subgraph_death_test(destroy_twice_pending "destroyed twice")
 add_subgraph_death_test(one_shot_twice "ONE_SHOT subgraph instantiated a second time")
 add_subgraph_death_test(instantiate_after_destroy "instantiate of a subgraph that was destroyed")
+add_subgraph_death_test(instantiate_after_destroy_requested "instantiated after destroy")
 add_subgraph_death_test(serializable_mode_unsupported "SERIALIZABLE is not implemented")
 add_subgraph_death_test(dependency_cycle "contain a cycle")
 # Shutdown with an instantiation that cannot finish (gated on an event nobody
 # triggers; a graph task blocked forever): pending application work, reported
 # by the same eager check that reports an untriggered operation. No timer.
-foreach(scenario shutdown_unfinished_instantiation shutdown_blocked_graph_task)
+foreach(scenario shutdown_unfinished_instantiation shutdown_blocked_graph_task
+    shutdown_pending_destroy)
   add_test(NAME subgraph_exit_${scenario}
            COMMAND sh -c "! $<TARGET_FILE:subgraph_unit_tests> -ll:cpu 4 -exit ${scenario}")
   set_tests_properties(
     subgraph_exit_${scenario}
-    PROPERTIES PASS_REGULAR_EXPRESSION "pending subgraph instantiation\\(s\\) during shutdown"
+    PROPERTIES PASS_REGULAR_EXPRESSION "(pending subgraph instantiation\\(s\\)|destroy\\(s\\) whose precondition has not triggered) during shutdown"
                TIMEOUT 120
   )
 endforeach()

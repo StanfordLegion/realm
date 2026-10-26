@@ -2719,6 +2719,164 @@ private:
 
 ////////////////////////////////////////////////////////////////////////
 //
+// The other side of the tie: a normal task that keeps itself ready
+// (respawning itself until the graph is done, a way of polling without
+// blocking a thread) must not starve equal-priority subgraph work either.
+// Ties alternate, so the graph finishes after a bounded number of polls.
+//
+
+struct RespawnPollTaskArgs {
+  Event graph_done;
+  std::atomic<int64_t> *polls;
+  int64_t cap;
+  UserEvent done;
+};
+static int respawn_poll_task_id = 0;
+static void respawn_poll_task(const void *args, size_t arglen, const void *userdata,
+                              size_t userlen, Processor p)
+{
+  const RespawnPollTaskArgs *a = static_cast<const RespawnPollTaskArgs *>(args);
+  int64_t n = a->polls->fetch_add(1) + 1;
+  if(a->graph_done.has_triggered() || (n >= a->cap)) {
+    a->done.trigger();
+    return;
+  }
+  p.spawn(respawn_poll_task_id, a, sizeof(*a), Event::NO_EVENT, 0 /*priority*/);
+}
+
+class EqualPriorityRespawnTest : public SubgraphTest {
+public:
+  std::string name() const override { return "GraphPriority.EqualPriorityRespawn"; }
+  bool can_run() override { return worker_cpus().size() >= 1; }
+
+  void init() override
+  {
+    cpu = worker_cpus()[0];
+    started.store(0);
+    gate.store(0);
+    runs.store(0);
+    polls.store(0);
+    SubgraphDefinition sd;
+    GateSpinTaskArgs a{&started, &gate, &runs};
+    for(int i = 0; i < graph_tasks; i++) // independent: all ready at once
+      make_task_desc(sd, cpu, gate_spin_task_id, &a, sizeof(a));
+    Subgraph::create_subgraph(sg, sd, ProfilingRequestSet()).wait();
+  }
+
+  void run() override
+  {
+    Event e = sg.instantiate(nullptr, 0, ProfilingRequestSet());
+    // the first graph task is running (spinning on the gate) while the
+    // poller is spawned at the same priority ...
+    if(!poll_until([&]() { return started.load() != 0; }, config.hang_timeout)) {
+      completed = false;
+      gate.store(1);
+      return;
+    }
+    UserEvent poller_done = UserEvent::create_user_event();
+    RespawnPollTaskArgs a{e, &polls, cap, poller_done};
+    cpu.spawn(respawn_poll_task_id, &a, sizeof(a), Event::NO_EVENT, 0 /*priority*/);
+    // ... and from here on the poller and the graph's remaining tasks tie
+    // on every scheduling decision
+    gate.store(1);
+    completed =
+        wait_with_timeout(Event::merge_events(e, Event(poller_done)), config.hang_timeout);
+    graph_done = e.has_triggered();
+  }
+
+  bool check() override
+  {
+    // the graph ran before the poller gave up, so each tie did not go to
+    // the poller
+    bool ok = completed && graph_done && (polls.load() < cap);
+    if(!ok)
+      log_app.error() << name() << ": completed=" << completed << " graph_done=" << graph_done
+                      << " polls=" << polls.load() << " (cap " << cap << ")";
+    return ok;
+  }
+
+  void cleanup() override
+  {
+    if(completed)
+      sg.destroy().wait();
+  }
+
+  bool hung() const override { return !completed; }
+
+private:
+  enum
+  {
+    graph_tasks = 8,
+    cap = 100000
+  };
+  Processor cpu;
+  std::atomic<int> started{0}, gate{0};
+  std::atomic<int64_t> runs{0}, polls{0};
+  Subgraph sg;
+  bool completed = false, graph_done = false;
+};
+
+////////////////////////////////////////////////////////////////////////
+//
+// A destroy takes effect when its precondition triggers, so the usual
+// Realm idiom "destroy once these are done", d = destroy(G); e =
+// instantiate(); G.trigger(e), is valid: the instantiation issued after the
+// destroy call is covered by the destroy.
+//
+
+class DestroyGuardedByInstantiationTest : public SubgraphTest {
+public:
+  std::string name() const override { return "DestroyGuardedByInstantiation"; }
+  bool can_run() override { return worker_cpus().size() >= 2; }
+
+  void init() override
+  {
+    procs = worker_cpus(2);
+    spec = dag_layers(2, 2, procs.size(), true);
+    state.reset(&spec, procs);
+    sg = build_dag_subgraph(spec, state, SubgraphDefinition::CONCURRENT);
+  }
+
+  void run() override
+  {
+    UserEvent guard = UserEvent::create_user_event();
+    Event d = sg.destroy(guard);
+    std::vector<Event> evs;
+    for(int i = 0; i < 4; i++)
+      evs.push_back(sg.instantiate(nullptr, 0, ProfilingRequestSet()));
+    Event all = Event::merge_events(evs);
+    usleep(20000); // time enough for a destroy that ignored the guard
+    destroy_early = d.has_triggered();
+    guard.trigger(all);
+    completed = wait_with_timeout(d, config.hang_timeout);
+  }
+
+  bool check() override
+  {
+    int64_t expected = 4 * int64_t(spec.size());
+    bool ok = completed && !destroy_early && (state.executed.load() == expected) &&
+              (state.violations.load() == 0);
+    if(!ok)
+      log_app.error() << name() << ": completed=" << completed
+                      << " destroy_early=" << destroy_early << " executed "
+                      << state.executed.load() << "/" << expected;
+    return ok;
+  }
+
+  void cleanup() override {} // destroyed by run
+
+  bool hung() const override { return !completed; }
+
+private:
+  std::vector<Processor> procs;
+  DagSpec spec;
+  DagState state;
+  Subgraph sg;
+  bool completed = false, destroy_early = false;
+};
+
+////////////////////////////////////////////////////////////////////////
+//
 // Tasks inside a subgraph may block on events, query their finish event,
 // and be profiled.
 //
@@ -5274,6 +5432,207 @@ private:
 
 ////////////////////////////////////////////////////////////////////////
 //
+// RemoteGuardedDestroyTest: the owner destroys with a guard; another node
+// instantiates afterwards and triggers the guard after its instantiation.
+// Across nodes this is the only way to order instantiations before a
+// destroy, and the destroy must cover them.
+//
+
+struct RemoteGuardedArgs {
+  Subgraph sg;
+  UserEvent guard, done;
+  int iters;
+};
+
+static int remote_guarded_task_id = 0;
+
+static void remote_guarded_task(const void *args, size_t arglen, const void *userdata,
+                                size_t userlen, Processor p)
+{
+  const RemoteGuardedArgs *a = static_cast<const RemoteGuardedArgs *>(args);
+  std::vector<Event> evs;
+  for(int i = 0; i < a->iters; i++)
+    evs.push_back(a->sg.instantiate(nullptr, 0, ProfilingRequestSet()));
+  Event all = Event::merge_events(evs);
+  a->guard.trigger(all);
+  a->done.trigger(all);
+}
+
+class RemoteGuardedDestroyTest : public SubgraphTest {
+public:
+  std::string name() const override { return "RemoteGuardedDestroy"; }
+  bool can_run() override
+  {
+    return (Machine::get_machine().get_address_space_count() >= 2) &&
+           (worker_cpus().size() >= 1) && remote_cpu().exists();
+  }
+
+  void init() override
+  {
+    procs = worker_cpus(2);
+    spec = dag_layers(3, 2, procs.size(), true);
+    state.reset(&spec, procs);
+    sg = build_dag_subgraph(spec, state, SubgraphDefinition::CONCURRENT);
+  }
+
+  void run() override
+  {
+    iters = config.iterations * 4;
+    UserEvent guard = UserEvent::create_user_event();
+    Event d = sg.destroy(guard); // the owner, first
+    UserEvent done = UserEvent::create_user_event();
+    RemoteGuardedArgs a{sg, guard, done, iters};
+    remote_cpu().spawn(remote_guarded_task_id, &a, sizeof(a));
+    completed = wait_with_timeout(Event::merge_events(d, Event(done)), config.hang_timeout);
+  }
+
+  bool check() override
+  {
+    int64_t expected = int64_t(iters) * spec.size();
+    bool ok = completed && (state.executed.load() == expected) &&
+              (state.violations.load() == 0);
+    if(!ok)
+      log_app.error() << name() << ": completed=" << completed << " executed "
+                      << state.executed.load() << "/" << expected << " violations "
+                      << state.violations.load();
+    return ok;
+  }
+
+  void cleanup() override {} // destroyed by run
+
+  bool hung() const override { return !completed; }
+
+private:
+  std::vector<Processor> procs;
+  DagSpec spec;
+  DagState state;
+  Subgraph sg;
+  int iters = 0;
+  bool completed = false;
+};
+
+////////////////////////////////////////////////////////////////////////
+//
+// RemoteOrderTest: one node's instantiates of an INSTANTIATION_ORDER
+// subgraph run in the order it issued them even when the network delivers
+// them out of order (a large payload takes a rendezvous path and reaches
+// the owner after a small one sent later), and a destroy issued right
+// after them (deferred until they have finished) covers both.
+//
+
+struct OrderRecordTaskArgs {
+  std::atomic<int> *first; // tag of the instantiation that ran first
+  std::atomic<int> *runs;
+  int tag; // interpolated from the instantiation arguments
+};
+
+static int order_record_task_id = 0;
+
+static void order_record_task(const void *args, size_t arglen, const void *userdata,
+                              size_t userlen, Processor p)
+{
+  const OrderRecordTaskArgs *a = static_cast<const OrderRecordTaskArgs *>(args);
+  int expected = 0;
+  a->first->compare_exchange_strong(expected, a->tag);
+  a->runs->fetch_add(1);
+}
+
+enum
+{
+  remote_order_subgraphs = 32,
+  remote_order_big_bytes = 1 << 20
+};
+
+struct RemoteOrderArgs {
+  UserEvent done;
+  int n;
+  Subgraph sgs[remote_order_subgraphs];
+};
+
+static int remote_order_driver_task_id = 0;
+
+static void remote_order_driver_task(const void *args, size_t arglen,
+                                     const void *userdata, size_t userlen, Processor p)
+{
+  const RemoteOrderArgs *a = static_cast<const RemoteOrderArgs *>(args);
+  std::vector<int> big(remote_order_big_bytes / sizeof(int), 0);
+  big[0] = 1;
+  const int small = 2;
+  std::vector<Event> evs;
+  for(int i = 0; i < a->n; i++) {
+    evs.push_back(a->sgs[i].instantiate(big.data(), remote_order_big_bytes,
+                                        ProfilingRequestSet()));
+    evs.push_back(a->sgs[i].instantiate(&small, sizeof(small), ProfilingRequestSet()));
+    evs.push_back(a->sgs[i].destroy()); // deferred until both have finished
+  }
+  a->done.trigger(Event::merge_events(evs));
+}
+
+class RemoteOrderTest : public SubgraphTest {
+public:
+  std::string name() const override { return "RemoteOrder"; }
+  bool can_run() override
+  {
+    return (Machine::get_machine().get_address_space_count() >= 2) &&
+           (worker_cpus().size() >= 1) && remote_cpu().exists();
+  }
+
+  void init() override
+  {
+    cpu = worker_cpus()[0];
+    runs.store(0);
+    for(int i = 0; i < remote_order_subgraphs; i++) {
+      first[i].store(0);
+      SubgraphDefinition sd;
+      sd.concurrency_mode = SubgraphDefinition::INSTANTIATION_ORDER;
+      OrderRecordTaskArgs a{&first[i], &runs, 0};
+      int t = make_task_desc(sd, cpu, order_record_task_id, &a, sizeof(a));
+      add_task_interpolation(sd, t, 0, sizeof(int), offsetof(OrderRecordTaskArgs, tag));
+      Subgraph::create_subgraph(sgs[i], sd, ProfilingRequestSet()).wait();
+    }
+  }
+
+  void run() override
+  {
+    UserEvent done = UserEvent::create_user_event();
+    RemoteOrderArgs a;
+    a.done = done;
+    a.n = remote_order_subgraphs;
+    for(int i = 0; i < remote_order_subgraphs; i++)
+      a.sgs[i] = sgs[i];
+    remote_cpu().spawn(remote_order_driver_task_id, &a, sizeof(a));
+    completed = wait_with_timeout(done, config.hang_timeout);
+  }
+
+  bool check() override
+  {
+    int out_of_order = 0;
+    for(int i = 0; i < remote_order_subgraphs; i++)
+      if(first[i].load() != 1)
+        out_of_order++;
+    bool ok = completed && (out_of_order == 0) &&
+              (runs.load() == 2 * remote_order_subgraphs);
+    if(!ok)
+      log_app.error() << name() << ": completed=" << completed << " runs=" << runs.load()
+                      << "/" << 2 * remote_order_subgraphs << " subgraphs whose second "
+                      << "instantiation ran first: " << out_of_order;
+    return ok;
+  }
+
+  void cleanup() override {} // destroyed by the remote driver
+
+  bool hung() const override { return !completed; }
+
+private:
+  Processor cpu;
+  std::atomic<int> first[remote_order_subgraphs];
+  std::atomic<int> runs{0};
+  Subgraph sgs[remote_order_subgraphs];
+  bool completed = false;
+};
+
+////////////////////////////////////////////////////////////////////////
+//
 // ConcurrentSubgraphsTest: two different subgraphs whose chains cross the
 // same two processors in opposite directions, instantiated concurrently
 // from two different launcher tasks. Any acquisition-order dependence
@@ -5579,6 +5938,36 @@ static void death_instantiate_after_destroy()
   sg.instantiate(nullptr, 0, ProfilingRequestSet());
 }
 
+static Subgraph make_concurrent_task_subgraph(int task_id)
+{
+  SubgraphDefinition sd;
+  sd.concurrency_mode = SubgraphDefinition::CONCURRENT;
+  make_task_desc(sd, worker_cpus()[0], task_id, nullptr, 0);
+  Subgraph sg;
+  Subgraph::create_subgraph(sg, sd, ProfilingRequestSet()).wait();
+  return sg;
+}
+
+static void death_destroy_twice_pending()
+{
+  // a second destroy while the first one's precondition has not triggered
+  Subgraph sg = make_concurrent_task_subgraph(noop_task_id);
+  UserEvent guard = UserEvent::create_user_event();
+  sg.destroy(guard);
+  sg.destroy(guard);
+}
+
+static void death_instantiate_after_destroy_requested()
+{
+  // the destroy has taken effect (its precondition triggered) but waits for
+  // an instantiation to be released; a new instantiate is an error
+  Subgraph sg = make_concurrent_task_subgraph(noop_task_id);
+  UserEvent gate = UserEvent::create_user_event();
+  sg.instantiate(nullptr, 0, ProfilingRequestSet(), gate);
+  sg.destroy();
+  sg.instantiate(nullptr, 0, ProfilingRequestSet());
+}
+
 static void death_deferred_task_requests_ctxsync()
 {
 #ifdef SUBGRAPH_TESTS_CUDA
@@ -5607,8 +5996,10 @@ static const DeathScenario death_scenarios[] = {
     {"deferred_creation", death_deferred_creation},
     {"task_on_utility_proc", death_task_on_utility_proc},
     {"destroy_twice", death_destroy_twice},
+    {"destroy_twice_pending", death_destroy_twice_pending},
     {"one_shot_twice", death_one_shot_twice},
     {"instantiate_after_destroy", death_instantiate_after_destroy},
+    {"instantiate_after_destroy_requested", death_instantiate_after_destroy_requested},
     // GPU only; prints DEATH-TEST-SKIPPED without CUDA or a GPU
     {"deferred_task_requests_ctxsync", death_deferred_task_requests_ctxsync},
     // multi-rank only; prints DEATH-TEST-SKIPPED in a single-rank run
@@ -5747,14 +6138,29 @@ static void exit_shutdown_blocked_graph_task()
   usleep(100000); // let the task start and block
 }
 
+static void exit_shutdown_pending_destroy()
+{
+  // a destroy whose precondition nobody triggers: its precondition is
+  // application work too ("subgraph destroy(s) whose precondition has not
+  // triggered during shutdown")
+  std::vector<Processor> procs = worker_cpus(1);
+  SubgraphDefinition sd;
+  make_task_desc(sd, procs[0], noop_task_id, nullptr, 0);
+  Subgraph sg;
+  Subgraph::create_subgraph(sg, sd, ProfilingRequestSet()).wait();
+  exit_shutdown_precondition = sg.instantiate(nullptr, 0, ProfilingRequestSet());
+  sg.destroy(UserEvent::create_user_event());
+}
+
 static const DeathScenario exit_scenarios[] = {
     {"destroy_without_wait", exit_destroy_without_wait},
     {"destroy_many_without_wait", exit_destroy_many_without_wait},
     {"destroy_as_shutdown_precondition", exit_destroy_as_shutdown_precondition},
     {"pending_instantiations_released_late", exit_pending_instantiations_released_late},
-    // these two abort during shutdown
+    // these three abort during shutdown
     {"shutdown_unfinished_instantiation", exit_shutdown_unfinished_instantiation},
     {"shutdown_blocked_graph_task", exit_shutdown_blocked_graph_task},
+    {"shutdown_pending_destroy", exit_shutdown_pending_destroy},
 };
 
 ////////////////////////////////////////////////////////////////////////
@@ -5777,6 +6183,14 @@ static void register_common_tasks()
   record_runs_task_id = task_id_counter++;
   finish_event_task_id = task_id_counter++;
   prof_response_task_id = task_id_counter++;
+  respawn_poll_task_id = task_id_counter++;
+  remote_guarded_task_id = task_id_counter++;
+  order_record_task_id = task_id_counter++;
+  remote_order_driver_task_id = task_id_counter++;
+  rt.register_task(respawn_poll_task_id, respawn_poll_task);
+  rt.register_task(remote_guarded_task_id, remote_guarded_task);
+  rt.register_task(order_record_task_id, order_record_task);
+  rt.register_task(remote_order_driver_task_id, remote_order_driver_task);
   rt.register_task(remote_driver_task_id, remote_driver_task);
   rt.register_task(seq_task_id, seq_task);
   rt.register_task(blocking_task_id, blocking_task);
@@ -5868,7 +6282,9 @@ static std::vector<std::unique_ptr<SubgraphTest>> make_tests()
   tests.emplace_back(new GraphPriorityCrossHoldTest());
   tests.emplace_back(new GraphPriorityBlockedYieldsTest());
   tests.emplace_back(new EqualPriorityFairnessTest());
+  tests.emplace_back(new EqualPriorityRespawnTest());
   tests.emplace_back(new DefaultModeReverseChainTest());
+  tests.emplace_back(new DestroyGuardedByInstantiationTest());
   tests.emplace_back(new CopyReplayTest());
   tests.emplace_back(new CopyProfilingTest());
   tests.emplace_back(new CopyPoisonTest());
@@ -5896,6 +6312,8 @@ static std::vector<std::unique_ptr<SubgraphTest>> make_tests()
   tests.emplace_back(new GpuPoisonTest());
 #endif
   tests.emplace_back(new RemoteInstantiateDestroyTest());
+  tests.emplace_back(new RemoteGuardedDestroyTest());
+  tests.emplace_back(new RemoteOrderTest());
   // Last: a hang here leaves executors wedged, so nothing may follow it.
   tests.emplace_back(new ConcurrentSubgraphsTest());
   return tests;
