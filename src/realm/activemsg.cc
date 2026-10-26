@@ -484,13 +484,12 @@ namespace Realm {
     ActiveMessageHandlerTable::HandlerEntry *handler =
         activemsg_handler_table.lookup_message_handler(msgid);
 
-    std::vector<char> message;
+    // set when this fragment completes a message, which is then ours alone
+    std::unique_ptr<FragmentedMessage> reassembly;
     // callbacks accumulated from this message's earlier fragments, if it was one
     std::vector<DeferredCallback> deferred;
 
     if(handler && handler->extract_frag_info.has_value()) {
-      AutoLock<> al(mutex);
-
       const FragmentInfo &frag_info = handler->extract_frag_info.value()(hdr);
 
       if(frag_info.total_chunks > 1) {
@@ -501,6 +500,18 @@ namespace Realm {
               << frag_info.total_chunks;
           abort();
         }
+
+        // Every copy of the payload is made without the lock, which handler threads
+        //  need to dequeue work: fragments can be large, and the reassembled message
+        //  larger still.  Only the bookkeeping is done under it.
+        const char *bytes = static_cast<const char *>(payload);
+        std::vector<char> chunk(bytes, bytes + payload_size);
+        // a buffer handed over with PAYLOAD_FREE is done with once copied: neither
+        //  the early return below nor the reassembled message passes the pointer on
+        if(payload_mode == PAYLOAD_FREE)
+          free(const_cast<void *>(payload));
+
+        AutoLock<> al(mutex);
 
         FragmentKey key{sender, msgid, frag_info.msg_id};
         auto it = frag_message.find(key);
@@ -519,7 +530,7 @@ namespace Realm {
           abort();
         }
 
-        if(!it->second.message->add_chunk(frag_info.chunk_id, payload, payload_size)) {
+        if(!it->second.message->add_chunk(frag_info.chunk_id, std::move(chunk))) {
           // the chunk id is in range and the totals agree, so this fragment has
           //  already been received.  Realm's transports deliver exactly once and
           //  nothing retransmits, so a repeat is a bug upstream rather than
@@ -531,21 +542,14 @@ namespace Realm {
           abort();
         }
 
-        // add_chunk copied the bytes, so a buffer handed over with PAYLOAD_FREE is
-        //  done with: neither the early return below nor the reassembled message
-        //  that replaces it passes the pointer on
-        if(payload_mode == PAYLOAD_FREE)
-          free(const_cast<void *>(payload));
-
         if(!it->second.message->is_complete()) {
           // This fragment does not complete the message, so "received AND handled by
           //  the target" is not true yet and its callback must not fire.  Hold it; it
           //  fires after the handler that runs the reassembled message.
           // The callback is also a backend's only signal that we are done with the
-          //  fragment, so anything a backend releases from it stays held as well -
-          //  UCX, for one, returns the fragment's receive buffer from its callback.
-          //  No backend fragments that way today (UCX reports no payload limit), but
-          //  one that does would want a separate "payload consumed" notification.
+          //  fragment, so anything a backend releases from it, such as a receive
+          //  buffer, stays held as well.  A backend that fragments and releases
+          //  buffers that way would want a separate "payload consumed" notification.
           if(callback_fnptr != nullptr) {
             it->second.deferred.push_back(
                 DeferredCallback{callback_fnptr, callback_data1, callback_data2});
@@ -561,27 +565,38 @@ namespace Realm {
         //  ordinary contract: fired by the handler loop if the message is queued, or
         //  reported by the caller itself from our `true` return if it is handled
         //  inline.  Carrying it in 'deferred' too would signal completion twice, as
-        //  the backends act on a `true` return themselves (see
-        //  UCPInternal::am_msg_recv_data_ready and GASNetEXInternal::handle_medium).
-        message = it->second.message->reassemble();
+        //  the backends act on a `true` return themselves.
+        reassembly = std::move(it->second.message);
         deferred = std::move(it->second.deferred);
 
         frag_message.erase(it);
-
-        // unconditionally, even if the message is empty, as the fragment's own
-        //  payload may have been freed above
-        payload = message.data();
-        payload_size = message.size();
-        payload_mode = PAYLOAD_COPY;
       }
+    }
+
+    if(reassembly) {
+      // concatenate (without the lock) into a buffer that the message then owns, so
+      //  the queued path below takes it over instead of copying it once more
+      payload_size = reassembly->size();
+      if(payload_size > 0) {
+        void *buffer = malloc(payload_size);
+        REALM_ASSERT(buffer != 0);
+        reassembly->reassemble(buffer);
+        payload = buffer;
+        payload_mode = PAYLOAD_FREE;
+      } else {
+        // nothing to own - and the fragment's own payload may have been freed above
+        payload = nullptr;
+        payload_mode = PAYLOAD_NONE;
+      }
+      reassembly.reset();
     }
 
     // if we have an inline handler and enough time to run it, give it
     //  a go - unless callbacks are held from this message's earlier fragments.
     //  Those must fire after the handler, but we are called from the network's
-    //  receive path, where a backend's callback need not be legal (GASNet-EX's
-    //  sends an AM request, which is forbidden inside an AM handler).  Callbacks
-    //  only ever fire where queued messages are handled, so it is queued instead.
+    //  receive path, where a backend's callback need not be legal (it may send a
+    //  message, which a receive path need not allow).  Callbacks only ever fire
+    //  where queued messages are handled, so it is queued instead.
     if((handler->handler_inline != 0) && deferred.empty() &&
        (Config::max_inline_message_time > 0) &&
        !work_until.will_expire(Config::max_inline_message_time)) {
@@ -621,9 +636,10 @@ namespace Realm {
     //  not fit in a freshly reset block cannot be satisfied by retrying with another
     //  one.  Give its payload a dedicated heap allocation instead and let the normal
     //  payload_needs_free path reclaim it; only the Message and header still come
-    //  from a block.  This is reachable whenever a chunked or multicast payload is
-    //  reassembled above the block size, and the copy is deliberately done before the
-    //  lock is taken, since the large copies are precisely the ones that should not be
+    //  from a block.  This is reachable whenever a network hands over a payload above
+    //  the block size to be copied (a reassembled message is not: it arrives in a
+    //  buffer of its own), and the copy is deliberately done before the lock is
+    //  taken, since the large copies are precisely the ones that should not be
     //  serialized.
     void *oversized_payload = 0;
     if((payload_bytes_needed > 0) &&
@@ -693,7 +709,7 @@ namespace Realm {
       msg->callback_fnptr = callback_fnptr;
       msg->callback_data1 = callback_data1;
       msg->callback_data2 = callback_data2;
-      // heap allocated because a Message carries only two words of callback data,
+      // heap allocated because a Message has room for only its own callback's data,
       //  and these fire on a handler thread long after this function returns
       msg->deferred_callbacks =
           (deferred.empty() ? nullptr

@@ -586,6 +586,10 @@ namespace Realm {
     //  fragmented messages of any type can be reassembled
     if constexpr(!is_wrapped_with_frag_info<T>::value &&
                  std::is_same<T, T2>::value) {
+      static_assert((sizeof(WrappedWithFragInfo<T>) <= MAX_FRAGMENT_HEADER_BYTES) ||
+                        allow_unfragmentable_header<T>::value,
+                    "this message header is too large to send in fragments on every "
+                    "network - see MAX_FRAGMENT_HEADER_BYTES in activemsg.h");
       auto *wrapped_reg = new ActiveMessageHandlerReg<WrappedWithFragInfo<T>, T>();
       (void)wrapped_reg; // leaked intentionally - lives for program lifetime
     }
@@ -746,10 +750,10 @@ namespace Realm {
       }
 
       // a single target is sent the way an unchunked message to one target would be:
-      //  some networks' multi-target path cannot carry a remote completion (MPI's
-      //  asserts that it has none), and the unicast path is cheaper everywhere.  Two
-      //  or more targets still take the multi-target path, remote completion and all,
-      //  so on MPI that assertion applies to them just as it does unchunked.
+      //  some networks' multi-target path cannot carry a remote completion, and the
+      //  unicast path is cheaper everywhere.  Two or more targets still take the
+      //  multi-target path, remote completion and all, so such a network's limits
+      //  apply to them just as they do unchunked.
       const bool unicast = (chunk_targets_.size() == 1);
       const NodeID unicast_target = (unicast ? *(chunk_targets_.begin()) : NodeID(-1));
 

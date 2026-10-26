@@ -141,7 +141,7 @@ namespace {
     {}
 
     // payload limit for one message, and the largest header the network can carry
-    //  (max_payload_size() is 0 above that, as GASNet-EX's is)
+    //  (max_payload_size() is 0 above that, as a real network's may be)
     size_t limit{64};
     size_t max_header{256};
     std::vector<SentMessage> sent;
@@ -262,8 +262,8 @@ namespace {
   }
 
   // set while a delivery is inside add_incoming_message, which a backend calls from
-  //  its receive path (on GASNet-EX, an AM handler) - a callback that fires there
-  //  might not be legal for the backend it belongs to
+  //  its receive path - a callback that fires there might not be legal for the
+  //  backend it belongs to
   bool in_receive_path = false;
 
   // the IncomingMessageManager callback a backend would register for a message with
@@ -317,12 +317,24 @@ namespace {
     }
   };
 
-  // a header too large for the mock network to fragment (see BigHeaderLimit below)
+  // a header larger than MAX_FRAGMENT_HEADER_BYTES, which the tests below also make
+  //  too large for the mock network to fragment (by lowering its max_header)
   struct BigHeaderMsg {
     int seq;
     char pad[60];
     static void handle_message(NodeID, const BigHeaderMsg &, const void *, size_t) {}
   };
+
+} // namespace
+
+// let BigHeaderMsg past ActiveMessageHandlerReg's fragment header check, which is what
+//  stops a real message type from reaching report_unfragmentable_message
+namespace Realm {
+  template <>
+  struct allow_unfragmentable_header<BigHeaderMsg> : std::true_type {};
+} // namespace Realm
+
+namespace {
 
   ActiveMessageHandlerReg<QueuedMsg> queued_msg_reg;
   ActiveMessageHandlerReg<InlineMsg> inline_msg_reg;
@@ -502,8 +514,8 @@ namespace {
     }
   }
 
-  // Through the send path, a message reassembled above one message block (~1MB), for
-  //  a handler that is never run inline
+  // Through the send path, a message reassembled above the size of one message
+  //  block, for a handler that is never run inline
   TEST_F(ActMsgChunkedSendTest, ReassemblyLargerThanOneMessageBlock)
   {
     net.limit = 64 << 10;
@@ -658,9 +670,10 @@ namespace {
     EXPECT_EQ(remote.load(), 0);
   }
 
-  // NodeSet sends: a single target is sent like a unicast (so MPI can carry a remote
-  //  completion), two or more go through the network's multi-target path.  Remove
-  //  together with ActiveMessage(NodeSet, ...) (PR 465).
+  // NodeSet sends: a single target is sent like a unicast (so that a network whose
+  //  multi-target path cannot carry a remote completion still gets one), two or more
+  //  go through the network's multi-target path.  Remove together with
+  //  ActiveMessage(NodeSet, ...).
   TEST_F(ActMsgChunkedSendTest, NodeSetTargets)
   {
     std::vector<char> data = pattern(200, 11);

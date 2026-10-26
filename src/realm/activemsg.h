@@ -86,11 +86,9 @@ namespace Realm {
     //  Per the semantics of PAYLOAD_KEEP, you must keep the payload buffer alive
     //  and unmodified until LOCAL COMPLETION - NOT merely until commit() returns.
     //  A backend may hand the pointer straight to the network and return before it
-    //  has been read: on UCX, UCPMessageImpl::commit does not copy a contiguous
-    //  source and send_slow_path() submits the request asynchronously.  Use
-    //  add_local_completion() to learn when the buffer is free, or use the
-    //  (target, max_payload_size) constructor with add_payload(), which copies
-    //  during commit().
+    //  has been read.  Use add_local_completion() to learn when the buffer is free,
+    //  or use the (target, max_payload_size) constructor with add_payload(), which
+    //  copies during commit().
     ActiveMessage(NodeID _target, const void *_data, size_t _datalen);
     ActiveMessage(NodeID _target, const LocalAddress &_src_payload_addr, size_t _datalen,
                   const RemoteAddress &_dest_payload_addr);
@@ -413,7 +411,7 @@ namespace Realm {
     //  will be processed later
     // a callback is only ever invoked where queued messages are handled (a handler
     //  thread or do_work), never from within this call, so a backend may call it
-    //  where its own callback would not be legal (GASNet-EX: inside an AM handler)
+    //  from a receive path where its own callback would not be legal
     bool add_incoming_message(NodeID sender, ActiveMessageHandlerTable::MessageID msgid,
                               const void *hdr, size_t hdr_size, int hdr_mode,
                               const void *payload, size_t payload_size, int payload_mode,
@@ -559,6 +557,22 @@ namespace Realm {
   struct is_wrapped_with_frag_info : std::false_type {};
   template <typename U>
   struct is_wrapped_with_frag_info<WrappedWithFragInfo<U>> : std::true_type {};
+
+  // The largest fragment header, sizeof(WrappedWithFragInfo<T>), that every network
+  //  must be able to send; a network with a tight header limit checks this against
+  //  it where that limit is defined.  ActiveMessageHandlerReg checks every type
+  //  against it, so a header that grows too large fails the build, rather than
+  //  aborting in report_unfragmentable_message the first time the type carries a
+  //  large payload.
+  static constexpr size_t MAX_FRAGMENT_HEADER_BYTES = 56;
+
+  // Specialize to std::true_type to register a type whose fragment header exceeds
+  //  MAX_FRAGMENT_HEADER_BYTES anyway.  It can still be sent, but where the network
+  //  cannot fit its fragment header a payload too large for one message aborts in
+  //  report_unfragmentable_message.  Only test types, which never travel over a real
+  //  network, should need this.
+  template <typename T>
+  struct allow_unfragmentable_header : std::false_type {};
 
 } // namespace Realm
 

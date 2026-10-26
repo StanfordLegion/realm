@@ -721,6 +721,10 @@ namespace Realm {
   //  arrays), and the first carries the message ID, so this is the most header -
   //  checksum included - that any message can have.
   static const size_t MAX_HEADER_BYTES = 15 * sizeof(gex_am_arg_t);
+  // ActiveMessageHandlerReg holds every fragment header to this budget, so it must
+  //  still fit once the checksum is added
+  static_assert((MAX_FRAGMENT_HEADER_BYTES + sizeof(gex_am_arg_t)) <= MAX_HEADER_BYTES,
+                "MAX_FRAGMENT_HEADER_BYTES does not fit in GASNet-EX's AM arguments");
 
   size_t GASNetEXModule::recommended_max_payload(NodeID target, bool with_congestion,
                                                  size_t header_size)
