@@ -1201,16 +1201,19 @@ namespace Realm {
   //
 
   namespace {
-    // slot ids are handed out to threads on their first read acquire
+    // slot ids are handed out to threads on their first read acquire; a
+    //  thread remembers its id plus one, so that zero means "none yet"
     std::atomic<unsigned> next_striped_slot_id(0);
-    thread_local unsigned striped_slot_id = 0; // 0 = none yet, else id + 1
+    thread_local unsigned striped_slot_id = 0;
   } // namespace
 
   StripedRWLock::StripedRWLock()
     : writer_active(0)
     , waiting_readers(0)
     , writer_done(wait_mutex)
-  {}
+  {
+    static_assert(sizeof(Slot) == 64, "reader slots must be a cache line apart");
+  }
 
   StripedRWLock::~StripedRWLock()
   {

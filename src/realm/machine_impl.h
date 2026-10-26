@@ -266,6 +266,9 @@ namespace Realm {
     QueryCacheSlot(void)
       : current(nullptr)
     {}
+    // whatever is left at exit (a runtime that was never shut down) goes
+    //  here, so that it is not reported as leaked
+    ~QueryCacheSlot(void) { cleanup(); }
 
     // the published snapshot if it is for 'generation', else null
     const S *get(unsigned generation) const
