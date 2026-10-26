@@ -35,6 +35,7 @@
 
 #include <algorithm>
 #include <climits>
+#include <cstdint>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
@@ -154,8 +155,9 @@ namespace Realm {
     } else {
       Serialization::ByteCountSerializer bcs;
       {
-        bool ok = (bcs.append_bytes(args, arglen) && (bcs << span<const Event>()) &&
-                   (bcs << span<const Event>()) && (bcs << prs) && (bcs << profiling));
+        bool ok = ((bcs << uint64_t(arglen)) && bcs.append_bytes(args, arglen) &&
+                   (bcs << span<const Event>()) && (bcs << span<const Event>()) &&
+                   (bcs << prs) && (bcs << profiling));
         assert(ok);
       }
       size_t msglen = bcs.bytes_used();
@@ -163,16 +165,25 @@ namespace Realm {
       amsg->subgraph = *this;
       amsg->wait_on = wait_on;
       amsg->finish_event = finish_event;
-      amsg->arglen = arglen;
       amsg->priority_adjust = priority_adjust;
       {
+        bool ok = (amsg << uint64_t(arglen));
+        assert(ok);
         amsg.add_payload(args, arglen);
-        bool ok = ((amsg << span<const Event>()) && (amsg << span<const Event>()) &&
-                   (amsg << prs) && (amsg << profiling));
+        ok = ((amsg << span<const Event>()) && (amsg << span<const Event>()) &&
+              (amsg << prs) && (amsg << profiling));
         assert(ok);
       }
-      get_runtime()->remote_subgraph_instantiations.note(*this, finish_event, amsg->seq,
-                                                         amsg->base);
+      {
+        uint64_t base = 0;
+        get_runtime()->remote_subgraph_instantiations.note(*this, finish_event, amsg->seq,
+                                                           base);
+        // never reached: see base_back (fatal rather than a silent wrap)
+        if((amsg->seq - base) > uint64_t(UINT32_MAX))
+          SUBGRAPH_FATAL(*this, "more than 4 billion unfinished remote instantiations "
+                                "from this node");
+        amsg->base_back = uint32_t(amsg->seq - base);
+      }
       amsg.commit();
     }
     return finish_event;
@@ -206,8 +217,9 @@ namespace Realm {
     } else {
       Serialization::ByteCountSerializer bcs;
       {
-        bool ok = (bcs.append_bytes(args, arglen) && (bcs << preconditions) &&
-                   (bcs << postconditions) && (bcs << prs) && (bcs << profiling));
+        bool ok = ((bcs << uint64_t(arglen)) && bcs.append_bytes(args, arglen) &&
+                   (bcs << preconditions) && (bcs << postconditions) && (bcs << prs) &&
+                   (bcs << profiling));
         assert(ok);
       }
       size_t msglen = bcs.bytes_used();
@@ -215,16 +227,25 @@ namespace Realm {
       amsg->subgraph = *this;
       amsg->wait_on = wait_on;
       amsg->finish_event = finish_event;
-      amsg->arglen = arglen;
       amsg->priority_adjust = priority_adjust;
       {
+        bool ok = (amsg << uint64_t(arglen));
+        assert(ok);
         amsg.add_payload(args, arglen);
-        bool ok = ((amsg << preconditions) && (amsg << postconditions) && (amsg << prs) &&
-                   (amsg << profiling));
+        ok = ((amsg << preconditions) && (amsg << postconditions) && (amsg << prs) &&
+              (amsg << profiling));
         assert(ok);
       }
-      get_runtime()->remote_subgraph_instantiations.note(*this, finish_event, amsg->seq,
-                                                         amsg->base);
+      {
+        uint64_t base = 0;
+        get_runtime()->remote_subgraph_instantiations.note(*this, finish_event, amsg->seq,
+                                                           base);
+        // never reached: see base_back (fatal rather than a silent wrap)
+        if((amsg->seq - base) > uint64_t(UINT32_MAX))
+          SUBGRAPH_FATAL(*this, "more than 4 billion unfinished remote instantiations "
+                                "from this node");
+        amsg->base_back = uint32_t(amsg->seq - base);
+      }
       amsg.commit();
     }
     return finish_event;
@@ -625,16 +646,20 @@ namespace Realm {
       ProfilingRequestSet prs;
       SubgraphInstantiationProfiling profiling;
       Serialization::FixedBufferDeserializer fbd(msg->data, msg->datalen);
-      // skip over the instantiation args - they are accessed directly
-      fbd.extract_bytes(0, msg->arglen);
-      bool ok = ((fbd >> preconditions) && (fbd >> postconditions));
+      uint64_t arglen = 0;
+      bool ok = (fbd >> arglen);
+      assert(ok);
+      // the instantiation args follow and are accessed directly
+      const void *args = static_cast<const char *>(msg->data) + (msg->datalen - fbd.bytes_left());
+      fbd.extract_bytes(0, arglen);
+      ok = ((fbd >> preconditions) && (fbd >> postconditions));
       if(ok && (fbd.bytes_left() > 0))
         ok = (fbd >> prs);
       if(ok && (fbd.bytes_left() > 0))
         ok = (fbd >> profiling);
       assert(ok);
 
-      instantiate(msg->data, msg->arglen, prs, profiling, preconditions, postconditions,
+      instantiate(args, size_t(arglen), prs, profiling, preconditions, postconditions,
                   msg->start_event, msg->finish_event, msg->priority_adjust, msg);
       delete held;
 
@@ -790,11 +815,10 @@ namespace Realm {
     SubgraphImpl::RemoteMessage rm;
     rm.order.sender = sender;
     rm.order.seq = msg.seq;
-    rm.order.base = msg.base;
+    rm.order.base = msg.seq - msg.base_back;
     rm.start_event = msg.wait_on;
     rm.finish_event = msg.finish_event;
     rm.priority_adjust = msg.priority_adjust;
-    rm.arglen = msg.arglen;
     rm.data = data;
     rm.datalen = datalen;
     subgraph->handle_remote_instantiate(rm);

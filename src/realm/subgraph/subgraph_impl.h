@@ -285,8 +285,7 @@ namespace Realm {
       RemoteOrder order;
       Event start_event, finish_event;
       int priority_adjust;
-      size_t arglen;
-      const void *data; // the payload: args, then the serialized rest
+      const void *data; // the payload (see SubgraphInstantiateMessage)
       size_t datalen;
     };
     // Handles a remote instantiate, holding it back if an earlier one from
@@ -454,16 +453,29 @@ namespace Realm {
 
   // active messages
 
+  // The header must fit every network's budget. GASNet-EX packs a medium
+  // request's header into 15 four-byte arguments (60 bytes), and a payload
+  // too large for one message is fragmented, which prepends a 16-byte
+  // FragmentInfo: 44 bytes remain for this struct, which with 8-byte
+  // alignment means 40. (The RelWithDebInfo build compiles the check in
+  // gasnetex_handlers.cc out; a header over the budget shows up as a
+  // fortify "buffer overflow detected" on the sender.) The payload is:
+  // uint64_t arglen, the instantiation arguments, then the serialized
+  // preconditions, postconditions, profiling request set and profiling.
   struct SubgraphInstantiateMessage {
     Subgraph subgraph;
     Event wait_on, finish_event;
-    size_t arglen;
-    uint64_t seq, base; // see RemoteSubgraphInstantiations
+    uint64_t seq;       // see RemoteSubgraphInstantiations
+    uint32_t base_back; // seq - base: the unfinished window never reaches 2^32
+                        // (a node cannot hold that many live finish events)
     int priority_adjust;
 
     static void handle_message(NodeID sender, const SubgraphInstantiateMessage &msg,
                                const void *data, size_t datalen);
   };
+  static_assert(sizeof(SubgraphInstantiateMessage) <= 44,
+                "SubgraphInstantiateMessage must fit GASNet-EX's 60-byte medium header "
+                "budget minus the 16-byte FragmentInfo of a fragmented message");
 
   struct SubgraphDestroyMessage {
     Subgraph subgraph;
