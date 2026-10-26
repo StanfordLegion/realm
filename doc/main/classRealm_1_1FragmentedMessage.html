@@ -44,7 +44,7 @@
    <!-- BEGIN version select -->
     <br />
     <div class="dropdown">
-     <button class="dropbtn">Version 26.9.1+331cc9de</button>
+     <button class="dropbtn">Version 26.9.1+de9790e1</button>
      <div class="dropdown-content"></div>
     </div>
     <script type="text/javascript" src="../selectversion.js"></script>
@@ -146,12 +146,18 @@ Public Member Functions</h2></td></tr>
 <tr class="separator:ab5aad22fd7c597559c09dae0282be7a5"><td class="memSeparator" colspan="2">&#160;</td></tr>
 <tr class="memitem:a7358f067e97dadabb5ecfebe98ff599b" id="r_a7358f067e97dadabb5ecfebe98ff599b"><td class="memItemLeft" align="right" valign="top">bool&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="classRealm_1_1FragmentedMessage.html#a7358f067e97dadabb5ecfebe98ff599b">add_chunk</a> (uint32_t chunk_id, const void *data, size_t <a class="el" href="classRealm_1_1FragmentedMessage.html#ab66d43e2c1a430cfb454ab2b48970b43">size</a>)</td></tr>
 <tr class="separator:a7358f067e97dadabb5ecfebe98ff599b"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:afe4bfadd44657378048c1e4fec874200" id="r_afe4bfadd44657378048c1e4fec874200"><td class="memItemLeft" align="right" valign="top">bool&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="classRealm_1_1FragmentedMessage.html#afe4bfadd44657378048c1e4fec874200">add_chunk</a> (uint32_t chunk_id, std::vector&lt; char &gt; &amp;&amp;data)</td></tr>
+<tr class="separator:afe4bfadd44657378048c1e4fec874200"><td class="memSeparator" colspan="2">&#160;</td></tr>
 <tr class="memitem:a4dd8c6b0b7a96902291889c77f4b13d8" id="r_a4dd8c6b0b7a96902291889c77f4b13d8"><td class="memItemLeft" align="right" valign="top">bool&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="classRealm_1_1FragmentedMessage.html#a4dd8c6b0b7a96902291889c77f4b13d8">is_complete</a> () const</td></tr>
 <tr class="separator:a4dd8c6b0b7a96902291889c77f4b13d8"><td class="memSeparator" colspan="2">&#160;</td></tr>
 <tr class="memitem:ab66d43e2c1a430cfb454ab2b48970b43" id="r_ab66d43e2c1a430cfb454ab2b48970b43"><td class="memItemLeft" align="right" valign="top">size_t&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="classRealm_1_1FragmentedMessage.html#ab66d43e2c1a430cfb454ab2b48970b43">size</a> () const</td></tr>
 <tr class="separator:ab66d43e2c1a430cfb454ab2b48970b43"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:ae8d2fc6320eaf66f21ffea2aa58c7469" id="r_ae8d2fc6320eaf66f21ffea2aa58c7469"><td class="memItemLeft" align="right" valign="top">uint32_t&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="classRealm_1_1FragmentedMessage.html#ae8d2fc6320eaf66f21ffea2aa58c7469">expected_chunks</a> () const</td></tr>
+<tr class="separator:ae8d2fc6320eaf66f21ffea2aa58c7469"><td class="memSeparator" colspan="2">&#160;</td></tr>
 <tr class="memitem:a03a677f68f0f260582eaebc24b59ada9" id="r_a03a677f68f0f260582eaebc24b59ada9"><td class="memItemLeft" align="right" valign="top">std::vector&lt; char &gt;&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="classRealm_1_1FragmentedMessage.html#a03a677f68f0f260582eaebc24b59ada9">reassemble</a> () const</td></tr>
 <tr class="separator:a03a677f68f0f260582eaebc24b59ada9"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:a9b8a011ff158a1172c82553113787c51" id="r_a9b8a011ff158a1172c82553113787c51"><td class="memItemLeft" align="right" valign="top">void&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="classRealm_1_1FragmentedMessage.html#a9b8a011ff158a1172c82553113787c51">reassemble</a> (void *dst) const</td></tr>
+<tr class="separator:a9b8a011ff158a1172c82553113787c51"><td class="memSeparator" colspan="2">&#160;</td></tr>
 </table>
 <h2 class="groupheader">Constructor &amp; Destructor Documentation</h2>
 <a id="ab5aad22fd7c597559c09dae0282be7a5" name="ab5aad22fd7c597559c09dae0282be7a5"></a>
@@ -182,7 +188,7 @@ Public Member Functions</h2></td></tr>
 </div>
 <h2 class="groupheader">Member Function Documentation</h2>
 <a id="a7358f067e97dadabb5ecfebe98ff599b" name="a7358f067e97dadabb5ecfebe98ff599b"></a>
-<h2 class="memtitle"><span class="permalink"><a href="#a7358f067e97dadabb5ecfebe98ff599b">&#9670;&#160;</a></span>add_chunk()</h2>
+<h2 class="memtitle"><span class="permalink"><a href="#a7358f067e97dadabb5ecfebe98ff599b">&#9670;&#160;</a></span>add_chunk() <span class="overload">[1/2]</span></h2>
 
 <div class="memitem">
 <div class="memproto">
@@ -215,6 +221,59 @@ Public Member Functions</h2></td></tr>
 
 </div>
 </div>
+<a id="afe4bfadd44657378048c1e4fec874200" name="afe4bfadd44657378048c1e4fec874200"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#afe4bfadd44657378048c1e4fec874200">&#9670;&#160;</a></span>add_chunk() <span class="overload">[2/2]</span></h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname">bool Realm::FragmentedMessage::add_chunk </td>
+          <td>(</td>
+          <td class="paramtype">uint32_t&#160;</td>
+          <td class="paramname"><em>chunk_id</em>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype">std::vector&lt; char &gt; &amp;&amp;&#160;</td>
+          <td class="paramname"><em>data</em>&#160;</td>
+        </tr>
+        <tr>
+          <td></td>
+          <td>)</td>
+          <td></td><td></td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+
+</div>
+</div>
+<a id="ae8d2fc6320eaf66f21ffea2aa58c7469" name="ae8d2fc6320eaf66f21ffea2aa58c7469"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#ae8d2fc6320eaf66f21ffea2aa58c7469">&#9670;&#160;</a></span>expected_chunks()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">uint32_t Realm::FragmentedMessage::expected_chunks </td>
+          <td>(</td>
+          <td class="paramname"></td><td>)</td>
+          <td> const</td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel">inline</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+</div>
+</div>
 <a id="a4dd8c6b0b7a96902291889c77f4b13d8" name="a4dd8c6b0b7a96902291889c77f4b13d8"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#a4dd8c6b0b7a96902291889c77f4b13d8">&#9670;&#160;</a></span>is_complete()</h2>
 
@@ -233,7 +292,7 @@ Public Member Functions</h2></td></tr>
 </div>
 </div>
 <a id="a03a677f68f0f260582eaebc24b59ada9" name="a03a677f68f0f260582eaebc24b59ada9"></a>
-<h2 class="memtitle"><span class="permalink"><a href="#a03a677f68f0f260582eaebc24b59ada9">&#9670;&#160;</a></span>reassemble()</h2>
+<h2 class="memtitle"><span class="permalink"><a href="#a03a677f68f0f260582eaebc24b59ada9">&#9670;&#160;</a></span>reassemble() <span class="overload">[1/2]</span></h2>
 
 <div class="memitem">
 <div class="memproto">
@@ -242,6 +301,24 @@ Public Member Functions</h2></td></tr>
           <td class="memname">std::vector&lt; char &gt; Realm::FragmentedMessage::reassemble </td>
           <td>(</td>
           <td class="paramname"></td><td>)</td>
+          <td> const</td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+
+</div>
+</div>
+<a id="a9b8a011ff158a1172c82553113787c51" name="a9b8a011ff158a1172c82553113787c51"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a9b8a011ff158a1172c82553113787c51">&#9670;&#160;</a></span>reassemble() <span class="overload">[2/2]</span></h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname">void Realm::FragmentedMessage::reassemble </td>
+          <td>(</td>
+          <td class="paramtype">void *&#160;</td>
+          <td class="paramname"><em>dst</em></td><td>)</td>
           <td> const</td>
         </tr>
       </table>

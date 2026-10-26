@@ -44,7 +44,7 @@
    <!-- BEGIN version select -->
     <br />
     <div class="dropdown">
-     <button class="dropbtn">Version 26.9.1+331cc9de</button>
+     <button class="dropbtn">Version 26.9.1+de9790e1</button>
      <div class="dropdown-content"></div>
     </div>
     <script type="text/javascript" src="../selectversion.js"></script>
@@ -242,6 +242,8 @@ Classes</h2></td></tr>
 <tr class="memitem:"><td class="memItemLeft" align="right" valign="top">class &#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="classRealm_1_1AffineLinearizedIndexSpace.html">AffineLinearizedIndexSpace</a></td></tr>
 <tr class="separator:"><td class="memSeparator" colspan="2">&#160;</td></tr>
 <tr class="memitem:"><td class="memItemLeft" align="right" valign="top">class &#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="classRealm_1_1AffineTransform.html">AffineTransform</a></td></tr>
+<tr class="separator:"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:"><td class="memItemLeft" align="right" valign="top">struct &#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="structRealm_1_1allow__unfragmentable__header.html">allow_unfragmentable_header</a></td></tr>
 <tr class="separator:"><td class="memSeparator" colspan="2">&#160;</td></tr>
 <tr class="memitem:"><td class="memItemLeft" align="right" valign="top">class &#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="classRealm_1_1ApplicationException.html">ApplicationException</a></td></tr>
 <tr class="separator:"><td class="memSeparator" colspan="2">&#160;</td></tr>
@@ -1213,6 +1215,10 @@ Enumerations</h2></td></tr>
 </table><table class="memberdecls">
 <tr class="heading"><td colspan="2"><h2 class="groupheader"><a id="func-members" name="func-members"></a>
 Functions</h2></td></tr>
+<tr class="memitem:a74824de56be09b6ad7faaff53b1fe233" id="r_a74824de56be09b6ad7faaff53b1fe233"><td class="memItemLeft" align="right" valign="top"><a class="el" href="compiler__support_8h.html#a0fcea358ba9f4a1ddd8bf87ae21772f7">REALM_INTERNAL_API_EXTERNAL_LINKAGE</a> uint64_t&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="namespaceRealm.html#a74824de56be09b6ad7faaff53b1fe233">next_chunk_message_id</a> (<a class="el" href="namespaceRealm.html#a4ae47f41d88cffb2debee742cbbfe2dd">NodeID</a> node_id)</td></tr>
+<tr class="separator:a74824de56be09b6ad7faaff53b1fe233"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:a8fac8ec3bdf91b619e0fa55cfc94f44d" id="r_a8fac8ec3bdf91b619e0fa55cfc94f44d"><td class="memItemLeft" align="right" valign="top"><a class="el" href="compiler__support_8h.html#a0fcea358ba9f4a1ddd8bf87ae21772f7">REALM_INTERNAL_API_EXTERNAL_LINKAGE</a> void&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="namespaceRealm.html#a8fac8ec3bdf91b619e0fa55cfc94f44d">report_unfragmentable_message</a> (unsigned short <a class="el" href="ucp__internal_8h.html#a7d869ff9ce2e00bbf9d2e642bbf1dc5b">msgid</a>, size_t header_size, size_t wrapped_header_size, size_t payload_size)</td></tr>
+<tr class="separator:a8fac8ec3bdf91b619e0fa55cfc94f44d"><td class="memSeparator" colspan="2">&#160;</td></tr>
 <tr class="memitem:a72bab2e727f78bdc4182fa740f617665" id="r_a72bab2e727f78bdc4182fa740f617665"><td class="memTemplParams" colspan="2">template&lt;typename S &gt; </td></tr>
 <tr class="memitem:a72bab2e727f78bdc4182fa740f617665"><td class="memTemplItemLeft" align="right" valign="top">bool&#160;</td><td class="memTemplItemRight" valign="bottom"><a class="el" href="namespaceRealm.html#a72bab2e727f78bdc4182fa740f617665">serialize</a> (S &amp;serdez, const <a class="el" href="classRealm_1_1ByteArrayRef.html">ByteArrayRef</a> &amp;a)</td></tr>
 <tr class="separator:a72bab2e727f78bdc4182fa740f617665"><td class="memSeparator" colspan="2">&#160;</td></tr>
@@ -3781,6 +3787,24 @@ template&lt;typename T &gt; </div>
 
 </div>
 </div>
+<a id="a74824de56be09b6ad7faaff53b1fe233" name="a74824de56be09b6ad7faaff53b1fe233"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a74824de56be09b6ad7faaff53b1fe233">&#9670;&#160;</a></span>next_chunk_message_id()</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname"><a class="el" href="compiler__support_8h.html#a0fcea358ba9f4a1ddd8bf87ae21772f7">REALM_INTERNAL_API_EXTERNAL_LINKAGE</a> uint64_t Realm::next_chunk_message_id </td>
+          <td>(</td>
+          <td class="paramtype"><a class="el" href="namespaceRealm.html#a4ae47f41d88cffb2debee742cbbfe2dd">NodeID</a>&#160;</td>
+          <td class="paramname"><em>node_id</em></td><td>)</td>
+          <td></td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+
+</div>
+</div>
 <a id="aa8847e3eef24a3f67765318bdf2ca9d6" name="aa8847e3eef24a3f67765318bdf2ca9d6"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#aa8847e3eef24a3f67765318bdf2ca9d6">&#9670;&#160;</a></span>next_subrect()</h2>
 
@@ -5959,6 +5983,46 @@ template&lt;int N, typename T , typename T2 &gt; </div>
           <td class="paramtype">int&#160;</td>
           <td class="paramname"><em>err</em></td><td>)</td>
           <td></td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+
+</div>
+</div>
+<a id="a8fac8ec3bdf91b619e0fa55cfc94f44d" name="a8fac8ec3bdf91b619e0fa55cfc94f44d"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a8fac8ec3bdf91b619e0fa55cfc94f44d">&#9670;&#160;</a></span>report_unfragmentable_message()</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname"><a class="el" href="compiler__support_8h.html#a0fcea358ba9f4a1ddd8bf87ae21772f7">REALM_INTERNAL_API_EXTERNAL_LINKAGE</a> void Realm::report_unfragmentable_message </td>
+          <td>(</td>
+          <td class="paramtype">unsigned short&#160;</td>
+          <td class="paramname"><em>msgid</em>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype">size_t&#160;</td>
+          <td class="paramname"><em>header_size</em>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype">size_t&#160;</td>
+          <td class="paramname"><em>wrapped_header_size</em>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype">size_t&#160;</td>
+          <td class="paramname"><em>payload_size</em>&#160;</td>
+        </tr>
+        <tr>
+          <td></td>
+          <td>)</td>
+          <td></td><td></td>
         </tr>
       </table>
 </div><div class="memdoc">

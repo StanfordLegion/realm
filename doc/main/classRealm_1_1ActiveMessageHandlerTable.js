@@ -12,6 +12,7 @@ var classRealm_1_1ActiveMessageHandlerTable =
     [ "lookup_message_handler", "classRealm_1_1ActiveMessageHandlerTable.html#adbf0b3032a3af9cc08fb0067302c225b", null ],
     [ "lookup_message_id", "classRealm_1_1ActiveMessageHandlerTable.html#a2cf1e56a18e15062ac68174833909897", null ],
     [ "lookup_message_name", "classRealm_1_1ActiveMessageHandlerTable.html#a00670c6436d6c7576a87acb46860cfd4", null ],
+    [ "num_handlers", "classRealm_1_1ActiveMessageHandlerTable.html#a98474cfc1e743bc9ce0bda2677fbde13", null ],
     [ "record_message_handler_call", "classRealm_1_1ActiveMessageHandlerTable.html#a9efc7aa5e39ca77d9bbb4fcc05f72d73", null ],
     [ "report_message_handler_stats", "classRealm_1_1ActiveMessageHandlerTable.html#a3f855a2aac0c5e6f9a6ea709f63060fa", null ],
     [ "handlers", "classRealm_1_1ActiveMessageHandlerTable.html#af507b8bf84b3842021908c61f917fb21", null ]

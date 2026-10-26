@@ -44,7 +44,7 @@
    <!-- BEGIN version select -->
     <br />
     <div class="dropdown">
-     <button class="dropbtn">Version 26.9.1+331cc9de</button>
+     <button class="dropbtn">Version 26.9.1+de9790e1</button>
      <div class="dropdown-content"></div>
     </div>
     <script type="text/javascript" src="../selectversion.js"></script>
@@ -133,6 +133,7 @@ $(document).ready(function(){initNavTree('activemsg_8h.html',''); initResizable(
 <a href="#nested-classes">Classes</a> &#124;
 <a href="#namespaces">Namespaces</a> &#124;
 <a href="#enum-members">Enumerations</a> &#124;
+<a href="#func-members">Functions</a> &#124;
 <a href="#var-members">Variables</a>  </div>
   <div class="headertitle"><div class="title">activemsg.h File Reference</div></div>
 </div><!--header-->
@@ -191,17 +192,25 @@ Classes</h2></td></tr>
 <tr class="separator:"><td class="memSeparator" colspan="2">&#160;</td></tr>
 <tr class="memitem:"><td class="memItemLeft" align="right" valign="top">class &#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="classRealm_1_1IncomingMessageManager.html">Realm::IncomingMessageManager</a></td></tr>
 <tr class="separator:"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:"><td class="memItemLeft" align="right" valign="top">struct &#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="structRealm_1_1IncomingMessageManager_1_1DeferredCallback.html">Realm::IncomingMessageManager::DeferredCallback</a></td></tr>
+<tr class="separator:"><td class="memSeparator" colspan="2">&#160;</td></tr>
 <tr class="memitem:"><td class="memItemLeft" align="right" valign="top">struct &#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="structRealm_1_1IncomingMessageManager_1_1Message.html">Realm::IncomingMessageManager::Message</a></td></tr>
 <tr class="separator:"><td class="memSeparator" colspan="2">&#160;</td></tr>
 <tr class="memitem:"><td class="memItemLeft" align="right" valign="top">struct &#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="structRealm_1_1IncomingMessageManager_1_1MessageBlock.html">Realm::IncomingMessageManager::MessageBlock</a></td></tr>
 <tr class="separator:"><td class="memSeparator" colspan="2">&#160;</td></tr>
-<tr class="memitem:"><td class="memItemLeft" align="right" valign="top">struct &#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="structRealm_1_1IncomingMessageManager_1_1PairHash.html">Realm::IncomingMessageManager::PairHash</a></td></tr>
+<tr class="memitem:"><td class="memItemLeft" align="right" valign="top">struct &#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="structRealm_1_1IncomingMessageManager_1_1FragmentKey.html">Realm::IncomingMessageManager::FragmentKey</a></td></tr>
+<tr class="separator:"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:"><td class="memItemLeft" align="right" valign="top">struct &#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="structRealm_1_1IncomingMessageManager_1_1FragmentKeyHash.html">Realm::IncomingMessageManager::FragmentKeyHash</a></td></tr>
+<tr class="separator:"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:"><td class="memItemLeft" align="right" valign="top">struct &#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="structRealm_1_1IncomingMessageManager_1_1FragmentReassembly.html">Realm::IncomingMessageManager::FragmentReassembly</a></td></tr>
 <tr class="separator:"><td class="memSeparator" colspan="2">&#160;</td></tr>
 <tr class="memitem:"><td class="memItemLeft" align="right" valign="top">struct &#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="structRealm_1_1WrappedWithFragInfo.html">Realm::WrappedWithFragInfo&lt; UserHdr &gt;</a></td></tr>
 <tr class="separator:"><td class="memSeparator" colspan="2">&#160;</td></tr>
 <tr class="memitem:"><td class="memItemLeft" align="right" valign="top">struct &#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="structRealm_1_1is__wrapped__with__frag__info.html">Realm::is_wrapped_with_frag_info&lt; T &gt;</a></td></tr>
 <tr class="separator:"><td class="memSeparator" colspan="2">&#160;</td></tr>
 <tr class="memitem:"><td class="memItemLeft" align="right" valign="top">struct &#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="structRealm_1_1is__wrapped__with__frag__info_3_01WrappedWithFragInfo_3_01U_01_4_01_4.html">Realm::is_wrapped_with_frag_info&lt; WrappedWithFragInfo&lt; U &gt; &gt;</a></td></tr>
+<tr class="separator:"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:"><td class="memItemLeft" align="right" valign="top">struct &#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="structRealm_1_1allow__unfragmentable__header.html">Realm::allow_unfragmentable_header&lt; T &gt;</a></td></tr>
 <tr class="separator:"><td class="memSeparator" colspan="2">&#160;</td></tr>
 </table><table class="memberdecls">
 <tr class="heading"><td colspan="2"><h2 class="groupheader"><a id="namespaces" name="namespaces"></a>
@@ -228,6 +237,13 @@ Enumerations</h2></td></tr>
 <br />
  }</td></tr>
 <tr class="separator:a8fa47d3416557dd11071ff35e503ba92"><td class="memSeparator" colspan="2">&#160;</td></tr>
+</table><table class="memberdecls">
+<tr class="heading"><td colspan="2"><h2 class="groupheader"><a id="func-members" name="func-members"></a>
+Functions</h2></td></tr>
+<tr class="memitem:a74824de56be09b6ad7faaff53b1fe233" id="r_a74824de56be09b6ad7faaff53b1fe233"><td class="memItemLeft" align="right" valign="top"><a class="el" href="compiler__support_8h.html#a0fcea358ba9f4a1ddd8bf87ae21772f7">REALM_INTERNAL_API_EXTERNAL_LINKAGE</a> uint64_t&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="namespaceRealm.html#a74824de56be09b6ad7faaff53b1fe233">Realm::next_chunk_message_id</a> (<a class="el" href="namespaceRealm.html#a4ae47f41d88cffb2debee742cbbfe2dd">NodeID</a> node_id)</td></tr>
+<tr class="separator:a74824de56be09b6ad7faaff53b1fe233"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:a8fac8ec3bdf91b619e0fa55cfc94f44d" id="r_a8fac8ec3bdf91b619e0fa55cfc94f44d"><td class="memItemLeft" align="right" valign="top"><a class="el" href="compiler__support_8h.html#a0fcea358ba9f4a1ddd8bf87ae21772f7">REALM_INTERNAL_API_EXTERNAL_LINKAGE</a> void&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="namespaceRealm.html#a8fac8ec3bdf91b619e0fa55cfc94f44d">Realm::report_unfragmentable_message</a> (unsigned short <a class="el" href="ucp__internal_8h.html#a7d869ff9ce2e00bbf9d2e642bbf1dc5b">msgid</a>, size_t header_size, size_t wrapped_header_size, size_t payload_size)</td></tr>
+<tr class="separator:a8fac8ec3bdf91b619e0fa55cfc94f44d"><td class="memSeparator" colspan="2">&#160;</td></tr>
 </table><table class="memberdecls">
 <tr class="heading"><td colspan="2"><h2 class="groupheader"><a id="var-members" name="var-members"></a>
 Variables</h2></td></tr>

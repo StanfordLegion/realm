@@ -4,6 +4,7 @@ var structRealm_1_1IncomingMessageManager_1_1Message =
     [ "callback_data1", "structRealm_1_1IncomingMessageManager_1_1Message.html#a2c4e322c1bcb861fca594c964b2f4be6", null ],
     [ "callback_data2", "structRealm_1_1IncomingMessageManager_1_1Message.html#a0289cd335d641bf3401523e53a117604", null ],
     [ "callback_fnptr", "structRealm_1_1IncomingMessageManager_1_1Message.html#a01c07f49ad324c6c51ddd05777b718f6", null ],
+    [ "deferred_callbacks", "structRealm_1_1IncomingMessageManager_1_1Message.html#aa4e2c3e599c07dad89c37cd0aa78df20", null ],
     [ "handler", "structRealm_1_1IncomingMessageManager_1_1Message.html#a7c394603c4d2d7f324e36a57df3a0dca", null ],
     [ "hdr", "structRealm_1_1IncomingMessageManager_1_1Message.html#a4f2fcd9eaa843ac92ca79921d0fa0219", null ],
     [ "hdr_needs_free", "structRealm_1_1IncomingMessageManager_1_1Message.html#a44767d2f5a165afefcf931bb279d87fa", null ],

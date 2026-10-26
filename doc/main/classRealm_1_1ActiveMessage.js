@@ -26,6 +26,7 @@ var classRealm_1_1ActiveMessage =
     [ "operator->", "classRealm_1_1ActiveMessage.html#a5467ac9d00ad21a2d19df09b85275f2c", null ],
     [ "operator<<", "classRealm_1_1ActiveMessage.html#a80c85bf72376f21b9c6142aeae923dc1", null ],
     [ "payload_ptr", "classRealm_1_1ActiveMessage.html#a37544a11d5ade7dc6cf208f43f2f980e", null ],
+    [ "ActiveMessage", "classRealm_1_1ActiveMessage.html#ac32a256e1ffd631e50d453fcd4817152", null ],
     [ "fbs", "classRealm_1_1ActiveMessage.html#a05e2b3fe9979deeb3adc4c69fbe79730", null ],
     [ "header", "classRealm_1_1ActiveMessage.html#a547324b5be22369513104c7da77e704e", null ],
     [ "impl", "classRealm_1_1ActiveMessage.html#a1ae22c47b3fbd280f60f1568b2131221", null ],

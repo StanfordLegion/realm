@@ -294,6 +294,7 @@ var annotated_dup =
       [ "AffineLayoutPiece", "classRealm_1_1AffineLayoutPiece.html", "classRealm_1_1AffineLayoutPiece" ],
       [ "AffineLinearizedIndexSpace", "classRealm_1_1AffineLinearizedIndexSpace.html", "classRealm_1_1AffineLinearizedIndexSpace" ],
       [ "AffineTransform", "classRealm_1_1AffineTransform.html", "classRealm_1_1AffineTransform" ],
+      [ "allow_unfragmentable_header", "structRealm_1_1allow__unfragmentable__header.html", null ],
       [ "ApplicationException", "classRealm_1_1ApplicationException.html", "classRealm_1_1ApplicationException" ],
       [ "ApproxImageResponseMessage", "structRealm_1_1ApproxImageResponseMessage.html", "structRealm_1_1ApproxImageResponseMessage" ],
       [ "AsyncFileIOContext", "classRealm_1_1AsyncFileIOContext.html", "classRealm_1_1AsyncFileIOContext" ],

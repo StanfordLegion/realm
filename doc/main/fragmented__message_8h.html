@@ -44,7 +44,7 @@
    <!-- BEGIN version select -->
     <br />
     <div class="dropdown">
-     <button class="dropbtn">Version 26.9.1+331cc9de</button>
+     <button class="dropbtn">Version 26.9.1+de9790e1</button>
      <div class="dropdown-content"></div>
     </div>
     <script type="text/javascript" src="../selectversion.js"></script>
@@ -168,8 +168,8 @@ Namespaces</h2></td></tr>
 <a name="details" id="details"></a><h2 class="groupheader">Detailed Description</h2>
 <div class="textblock"><p>Helper utility for reconstructing large ActiveMessages that were split into multiple network packets. </p>
 <p><a class="el" href="namespaceRealm.html">Realm</a> (and the underlying network transports such as GASNet-EX or UCX) may have an upper bound on the size of a single <em>medium</em> or <em>long</em> active message. When an application attempts to send a payload larger than that limit, the <code>FragmentedActiveMessage</code> helper in <a class="el" href="activemsg_8h.html">activemsg.h</a> automatically chops the data into <code>N</code> smaller packets. On the receiver side those packets must be collected and concatenated <em>before</em> the logical AM handler can be invoked.</p>
-<p>The <code>FragmentedMessage</code> class performs exactly that role: – The sender embeds a small <code>FragmentInfo</code> structure in every fragment that conveys a 0-based <code>chunk_id</code>, the total number of chunks, and a unique <code>msg_id</code>. – The receiver creates one <code>FragmentedMessage</code> instance (looked up by the <code>&lt;sender, msg_id&gt;</code> pair) and calls <code>add_chunk()</code> each time a fragment arrives. – When all <code>total_chunks</code> pieces have been delivered, <code>is_complete()</code> returns <em>true</em> and the caller can safely call <code>reassemble()</code> to obtain a contiguous <code>std::vector&lt;char&gt;</code> containing the payload in order.</p>
-<p>A few design notes: • Duplicate fragments are ignored, allowing simple resend logic on the transmit path. • No per-fragment dynamic allocations are performed – each chunk's storage is reserved exactly once when its size becomes known. </p>
+<p>The <code>FragmentedMessage</code> class performs exactly that role: – The sender embeds a small <code>FragmentInfo</code> structure in every fragment that conveys a 0-based <code>chunk_id</code>, the total number of chunks, and a unique <code>msg_id</code>. – The receiver creates one <code>FragmentedMessage</code> instance (looked up by the <code>&lt;sender, msg_id&gt;</code> pair) and calls <code>add_chunk()</code> each time a fragment arrives. – When all <code>total_chunks</code> pieces have been delivered, <code>is_complete()</code> returns <em>true</em> and the caller can safely call <code>reassemble()</code> to obtain a contiguous <code>std::vector&lt;char&gt;</code> containing the payload in order, or to copy it into a buffer of the caller's own.</p>
+<p>A few design notes: • <code>add_chunk()</code> returns false for a duplicate or out-of-range <code>chunk_id</code> rather than absorbing it. <a class="el" href="namespaceRealm.html">Realm</a>'s transports deliver every message exactly once and nothing retransmits, so a caller should treat either as a protocol violation - see IncomingMessageManager::add_incoming_message. • No per-fragment dynamic allocations are performed – each chunk's storage is reserved exactly once when its size becomes known. </p>
 </div></div><!-- contents -->
 </div><!-- doc-content -->
 <!-- HTML footer for doxygen 1.9.1-->
