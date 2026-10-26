@@ -1867,8 +1867,9 @@ namespace Realm {
       for(std::map<NodeID, MachineNodeInfo *>::const_iterator it =
               machine->nodeinfos.begin();
           it != machine->nodeinfos.end(); ++it)
-        for(std::map<Processor::Kind, std::map<Processor, MachineProcInfo *>>::
-                const_iterator it2 = it->second->proc_by_kind.begin();
+        for(std::map<Processor::Kind,
+                     std::map<Processor, MachineProcInfo *>>::const_iterator it2 =
+                it->second->proc_by_kind.begin();
             it2 != it->second->proc_by_kind.end(); ++it2) {
           if(unsigned(it2->first) >= NUM_PROCESSOR_KINDS)
             continue;
@@ -1899,8 +1900,9 @@ namespace Realm {
       for(std::map<NodeID, MachineNodeInfo *>::const_iterator it =
               machine->nodeinfos.begin();
           it != machine->nodeinfos.end(); ++it)
-        for(std::map<Processor::Kind, std::map<Processor, MachineProcInfo *>>::
-                const_iterator it2 = it->second->proc_by_kind.begin();
+        for(std::map<Processor::Kind,
+                     std::map<Processor, MachineProcInfo *>>::const_iterator it2 =
+                it->second->proc_by_kind.begin();
             it2 != it->second->proc_by_kind.end(); ++it2) {
           if(unsigned(it2->first) >= NUM_PROCESSOR_KINDS)
             continue;
@@ -1910,8 +1912,8 @@ namespace Realm {
               it3 != it2->second.end(); ++it3) {
             const std::map<Memory, Machine::ProcessorMemoryAffinity *> &pmas =
                 it3->second->pmas.all;
-            for(std::map<Memory, Machine::ProcessorMemoryAffinity *>::const_iterator
-                    it4 = pmas.begin();
+            for(std::map<Memory, Machine::ProcessorMemoryAffinity *>::const_iterator it4 =
+                    pmas.begin();
                 it4 != pmas.end(); ++it4)
               by_mem[it4->first].items.push_back(it3->first);
           }

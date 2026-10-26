@@ -183,8 +183,10 @@ namespace {
     s.kind_miss = Memory::NO_MEMORY;
     for(std::vector<Memory>::reverse_iterator it = s.all_mems.rbegin();
         it != s.all_mems.rend(); ++it)
-      if(Machine::ProcessorQuery(m).only_kind(Processor::LOC_PROC).has_affinity_to(*it).count() ==
-         0) {
+      if(Machine::ProcessorQuery(m)
+             .only_kind(Processor::LOC_PROC)
+             .has_affinity_to(*it)
+             .count() == 0) {
         s.kind_miss = *it;
         break;
       }
