@@ -53,6 +53,7 @@
 #include <algorithm>
 #include <atomic>
 #include <cstddef>
+#include <map>
 #include <cstdint>
 #include <climits>
 #ifdef SUBGRAPH_TESTS_CUDA
@@ -5513,16 +5514,34 @@ private:
 
 ////////////////////////////////////////////////////////////////////////
 //
-// RemoteOrderTest: one node's instantiates of an INSTANTIATION_ORDER
-// subgraph run in the order it issued them even when the network delivers
-// them out of order (a large payload takes a rendezvous path and reaches
-// the owner after a small one sent later), and a destroy issued right
-// after them (deferred until they have finished) covers both.
+// RemoteOrderTest: each node's instantiates of an INSTANTIATION_ORDER
+// subgraph run in the order that node issued them even when the network
+// delivers them out of order (a large payload takes a rendezvous path and
+// reaches the owner after a small one sent later). Every remote address
+// space sends; across senders the order is the owner's arrival order, which
+// the test does not constrain. One sender then destroys the subgraph with a
+// precondition covering the other senders' instantiations: its own are
+// covered by the deferred send, the others by the precondition.
+//
+// RemoteOrderStressTest: the same with many instantiates per sender and
+// subgraph, of mixed sizes, all released at once by a gate.
 //
 
+enum
+{
+  remote_order_subgraphs = 16,
+  remote_order_log_cap = 4096,
+  remote_order_big_bytes = 1 << 20,
+  remote_order_max_senders = 8
+};
+
+struct OrderLog {
+  std::atomic<int> n{0};
+  int tags[remote_order_log_cap];
+};
+
 struct OrderRecordTaskArgs {
-  std::atomic<int> *first; // tag of the instantiation that ran first
-  std::atomic<int> *runs;
+  OrderLog *log;
   int tag; // interpolated from the instantiation arguments
 };
 
@@ -5532,19 +5551,17 @@ static void order_record_task(const void *args, size_t arglen, const void *userd
                               size_t userlen, Processor p)
 {
   const OrderRecordTaskArgs *a = static_cast<const OrderRecordTaskArgs *>(args);
-  int expected = 0;
-  a->first->compare_exchange_strong(expected, a->tag);
-  a->runs->fetch_add(1);
+  int i = a->log->n.fetch_add(1);
+  if(i < remote_order_log_cap)
+    a->log->tags[i] = a->tag;
 }
 
-enum
-{
-  remote_order_subgraphs = 32,
-  remote_order_big_bytes = 1 << 20
-};
-
 struct RemoteOrderArgs {
-  UserEvent done;
+  UserEvent issued;      // this sender: all its instantiations have finished
+  Event others_issued;   // the destroyer only: the other senders' `issued`
+  UserEvent gate;        // stress: instantiations start when it triggers
+  int sender, per_sender; // per_sender > 1: stress
+  bool destroyer;
   int n;
   Subgraph sgs[remote_order_subgraphs];
 };
@@ -5555,22 +5572,62 @@ static void remote_order_driver_task(const void *args, size_t arglen,
                                      const void *userdata, size_t userlen, Processor p)
 {
   const RemoteOrderArgs *a = static_cast<const RemoteOrderArgs *>(args);
-  std::vector<int> big(remote_order_big_bytes / sizeof(int), 0);
-  big[0] = 1;
-  const int small = 2;
+  std::vector<int> buf(remote_order_big_bytes / sizeof(int), 0);
+  static const size_t sizes[8] = {sizeof(int), 4096,        65536, sizeof(int),
+                                  16384,       sizeof(int), 262144, remote_order_big_bytes};
   std::vector<Event> evs;
   for(int i = 0; i < a->n; i++) {
-    evs.push_back(a->sgs[i].instantiate(big.data(), remote_order_big_bytes,
-                                        ProfilingRequestSet()));
-    evs.push_back(a->sgs[i].instantiate(&small, sizeof(small), ProfilingRequestSet()));
-    evs.push_back(a->sgs[i].destroy()); // deferred until both have finished
+    if(a->per_sender == 1) {
+      buf[0] = a->sender * 2 + 1; // large, then small
+      evs.push_back(a->sgs[i].instantiate(buf.data(), remote_order_big_bytes,
+                                          ProfilingRequestSet()));
+      buf[0] = a->sender * 2 + 2;
+      evs.push_back(a->sgs[i].instantiate(buf.data(), sizeof(int), ProfilingRequestSet()));
+    } else {
+      for(int j = 0; j < a->per_sender; j++) {
+        buf[0] = a->sender * a->per_sender + j;
+        evs.push_back(a->sgs[i].instantiate(buf.data(), sizes[j % 8], ProfilingRequestSet(),
+                                            a->gate));
+      }
+    }
   }
-  a->done.trigger(Event::merge_events(evs));
+  Event mine = Event::merge_events(evs);
+  a->issued.trigger(mine);
+  if(a->destroyer) {
+    std::vector<Event> ds;
+    for(int i = 0; i < a->n; i++)
+      ds.push_back(a->sgs[i].destroy(a->others_issued)); // deferred on its own ones
+    Event all = Event::merge_events(ds);
+    // the destroy event covers everything: wait here so a hang is a hang
+    all.wait();
+  }
+}
+
+// one CPU in each remote address space
+static std::vector<Processor> remote_cpus_one_per_space()
+{
+  AddressSpace here = Processor::get_executing_processor().address_space();
+  std::map<AddressSpace, Processor> by_space;
+  Machine::ProcessorQuery pq =
+      Machine::ProcessorQuery(Machine::get_machine()).only_kind(Processor::LOC_PROC);
+  for(Processor p : pq)
+    if((p.address_space() != here) && (by_space.count(p.address_space()) == 0))
+      by_space[p.address_space()] = p;
+  std::vector<Processor> out;
+  for(const auto &kv : by_space)
+    out.push_back(kv.second);
+  if(out.size() > remote_order_max_senders)
+    out.resize(remote_order_max_senders);
+  return out;
 }
 
 class RemoteOrderTest : public SubgraphTest {
 public:
-  std::string name() const override { return "RemoteOrder"; }
+  RemoteOrderTest(const char *_name, int _per_sender)
+    : test_name(_name)
+    , per_sender(_per_sender)
+  {}
+  std::string name() const override { return test_name; }
   bool can_run() override
   {
     return (Machine::get_machine().get_address_space_count() >= 2) &&
@@ -5580,12 +5637,11 @@ public:
   void init() override
   {
     cpu = worker_cpus()[0];
-    runs.store(0);
     for(int i = 0; i < remote_order_subgraphs; i++) {
-      first[i].store(0);
+      logs[i].n.store(0);
       SubgraphDefinition sd;
       sd.concurrency_mode = SubgraphDefinition::INSTANTIATION_ORDER;
-      OrderRecordTaskArgs a{&first[i], &runs, 0};
+      OrderRecordTaskArgs a{&logs[i], 0};
       int t = make_task_desc(sd, cpu, order_record_task_id, &a, sizeof(a));
       add_task_interpolation(sd, t, 0, sizeof(int), offsetof(OrderRecordTaskArgs, tag));
       Subgraph::create_subgraph(sgs[i], sd, ProfilingRequestSet()).wait();
@@ -5594,28 +5650,65 @@ public:
 
   void run() override
   {
-    UserEvent done = UserEvent::create_user_event();
-    RemoteOrderArgs a;
-    a.done = done;
-    a.n = remote_order_subgraphs;
-    for(int i = 0; i < remote_order_subgraphs; i++)
-      a.sgs[i] = sgs[i];
-    remote_cpu().spawn(remote_order_driver_task_id, &a, sizeof(a));
-    completed = wait_with_timeout(done, config.hang_timeout);
+    senders = remote_cpus_one_per_space();
+    const int S = senders.size();
+    std::vector<UserEvent> issued(S);
+    for(int s = 0; s < S; s++)
+      issued[s] = UserEvent::create_user_event();
+    UserEvent gate = UserEvent::create_user_event();
+    std::vector<Event> evs;
+    for(int s = 0; s < S; s++) {
+      RemoteOrderArgs a;
+      a.issued = issued[s];
+      std::vector<Event> others;
+      for(int o = 0; o < S; o++)
+        if(o != s)
+          others.push_back(issued[o]);
+      a.others_issued = Event::merge_events(others);
+      a.gate = gate;
+      a.sender = s;
+      a.per_sender = per_sender;
+      a.destroyer = (s == 0);
+      a.n = remote_order_subgraphs;
+      for(int i = 0; i < remote_order_subgraphs; i++)
+        a.sgs[i] = sgs[i];
+      evs.push_back(senders[s].spawn(remote_order_driver_task_id, &a, sizeof(a)));
+    }
+    gate.trigger(); // stress: everything is in flight (or about to be) at once
+    completed = wait_with_timeout(Event::merge_events(evs), config.hang_timeout);
   }
 
   bool check() override
   {
-    int out_of_order = 0;
-    for(int i = 0; i < remote_order_subgraphs; i++)
-      if(first[i].load() != 1)
-        out_of_order++;
-    bool ok = completed && (out_of_order == 0) &&
-              (runs.load() == 2 * remote_order_subgraphs);
+    const int S = senders.size();
+    int bad = 0;
+    int64_t total = 0;
+    for(int i = 0; i < remote_order_subgraphs; i++) {
+      int n = std::min(logs[i].n.load(), int(remote_order_log_cap));
+      total += logs[i].n.load();
+      // per sender, the tags it issued must appear in issue order
+      for(int s = 0; s < S; s++) {
+        int last = -1;
+        for(int k = 0; k < n; k++) {
+          int tag = logs[i].tags[k];
+          int who = (per_sender == 1) ? (tag - 1) / 2 : tag / per_sender;
+          if(who != s)
+            continue;
+          if(tag < last) {
+            bad++;
+            log_app.error() << name() << ": subgraph " << i << " sender " << s << " ran tag "
+                            << tag << " after tag " << last;
+          }
+          last = tag;
+        }
+      }
+    }
+    int64_t expected =
+        int64_t(remote_order_subgraphs) * S * ((per_sender == 1) ? 2 : per_sender);
+    bool ok = completed && (bad == 0) && (total == expected);
     if(!ok)
-      log_app.error() << name() << ": completed=" << completed << " runs=" << runs.load()
-                      << "/" << 2 * remote_order_subgraphs << " subgraphs whose second "
-                      << "instantiation ran first: " << out_of_order;
+      log_app.error() << name() << ": completed=" << completed << " runs=" << total << "/"
+                      << expected << " order violations=" << bad << " senders=" << S;
     return ok;
   }
 
@@ -5624,9 +5717,11 @@ public:
   bool hung() const override { return !completed; }
 
 private:
+  std::string test_name;
+  int per_sender;
   Processor cpu;
-  std::atomic<int> first[remote_order_subgraphs];
-  std::atomic<int> runs{0};
+  std::vector<Processor> senders;
+  OrderLog logs[remote_order_subgraphs];
   Subgraph sgs[remote_order_subgraphs];
   bool completed = false;
 };
@@ -6313,7 +6408,8 @@ static std::vector<std::unique_ptr<SubgraphTest>> make_tests()
 #endif
   tests.emplace_back(new RemoteInstantiateDestroyTest());
   tests.emplace_back(new RemoteGuardedDestroyTest());
-  tests.emplace_back(new RemoteOrderTest());
+  tests.emplace_back(new RemoteOrderTest("RemoteOrder", 1));
+  tests.emplace_back(new RemoteOrderTest("RemoteOrderStress", 48));
   // Last: a hang here leaves executors wedged, so nothing may follow it.
   tests.emplace_back(new ConcurrentSubgraphsTest());
   return tests;

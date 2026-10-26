@@ -467,10 +467,16 @@ namespace Realm {
     destroy_done = UserEvent::NO_USER_EVENT;
     for(std::unordered_map<NodeID, SenderOrder>::iterator it = sender_order.begin();
         it != sender_order.end(); ++it) {
-      // a held instantiate here is one issued after the destroy took effect
-      // (its predecessor arrives later and aborts the same way)
-      for(HeldInstantiate *h : it->second.held)
-        delete h;
+      // An instantiate still held here was neither issued before the
+      // destroy on its node (the destroy message would have waited for it
+      // to finish) nor ordered before the destroy's precondition: misuse,
+      // caught here rather than when its predecessor arrives, by which time
+      // this slot may belong to another subgraph.
+      if(!it->second.held.empty())
+        SUBGRAPH_FATAL(me, "destroyed with " << it->second.held.size()
+                                             << " instantiate(s) from node " << it->first
+                                             << " still held for ordering (issued after "
+                                                "the destroy took effect)");
     }
     sender_order.clear();
 
