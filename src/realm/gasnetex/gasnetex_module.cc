@@ -588,12 +588,27 @@ namespace Realm {
     return impl;
   }
 
+  // The Realm header travels in AM arguments: GASNet-EX allows 16 of them (the
+  //  gex_AM_MaxArgs() of every conduit, and the size of the wrapper's argument
+  //  arrays), and the first carries the message ID, so this is the most header -
+  //  checksum included - that any message can have.
+  static const size_t MAX_HEADER_BYTES = 15 * sizeof(gex_am_arg_t);
+  // ActiveMessageHandlerReg holds every fragment header to this budget, so it must
+  //  still fit once the checksum is added
+  static_assert((MAX_FRAGMENT_HEADER_BYTES + sizeof(gex_am_arg_t)) <= MAX_HEADER_BYTES,
+                "MAX_FRAGMENT_HEADER_BYTES does not fit in GASNet-EX's AM arguments");
+
   size_t GASNetEXModule::recommended_max_payload(NodeID target, bool with_congestion,
                                                  size_t header_size)
   {
     if(cfg_do_checksums)
       header_size =
           roundup_pow2(header_size + sizeof(gex_am_arg_t), sizeof(gex_am_arg_t));
+
+    // a header that does not fit leaves room for no payload at all (and asking
+    //  GASNet about it would exceed gex_AM_MaxArgs())
+    if(header_size > MAX_HEADER_BYTES)
+      return 0;
 
     return internal->recommended_max_payload(target, 0 /*ep_index*/, with_congestion,
                                              header_size, 0 /*no dest_ptr*/);
@@ -642,6 +657,8 @@ namespace Realm {
     // without a RemoteAddress destination, GASNet-EX always uses Medium
     //  messages regardless of whether the source is in a registered segment
     //  (Long messages require a dest_payload_addr)
+    // this is 0 if the header itself is too large for the AM arguments, which
+    //  ActiveMessage reports by name when it needs to fragment such a message
     (void)src_payload_addr;
     return recommended_max_payload(Network::my_node_id, false /*with_congestion*/,
                                    header_size);

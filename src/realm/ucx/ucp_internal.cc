@@ -23,6 +23,7 @@
 #include "realm/transfer/ib_memory.h"
 #include "realm/logging.h"
 #include "unistd.h"
+#include <atomic>
 #include <cstdint>
 #include <chrono>
 
@@ -1982,10 +1983,19 @@ namespace Realm {
         // use mmp (capped at mmp_max_obj_size). Fall back to plain malloc.
         // The buffer will not be pre-registered with UCP, so transfers
         // using it will pay an on-the-fly registration cost (once).
-        log_ucp.warning() << "payload size " << size - AM_ALIGNMENT
+        // This happens for every such payload, on the sender and the receiver,
+        // so only the first one is a warning.
+        static std::atomic<bool> warned_oversize{false};
+        if(!warned_oversize.exchange(true))
+          log_ucp.warning() << "payload size " << size - AM_ALIGNMENT
+                            << " exceeds pbuf_mp_max_size " << config.pbuf_mp_max_size
+                            << "; falling back to malloc (consider increasing "
+                            << "-ucx:pb_mp_max_size) - further payloads above the "
+                            << "limit are reported at debug level";
+        else
+          log_ucp.debug() << "payload size " << size - AM_ALIGNMENT
                           << " exceeds pbuf_mp_max_size " << config.pbuf_mp_max_size
-                          << "; falling back to malloc (consider increasing "
-                          << "-ucx:pb_mp_max_size)";
+                          << "; falling back to malloc";
         buf = reinterpret_cast<char *>(malloc(size));
         CHKERR_JUMP(!buf, "failed to malloc payload buffer of size " << size, log_ucp,
                     err);

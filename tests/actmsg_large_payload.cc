@@ -236,10 +236,11 @@ namespace {
     wait_for_acks(base, 2, "concurrent types");
   }
 
-  // Completion callbacks on a payload large enough to be chunked.  Local completion is
-  //  satisfied once commit() returns, since every chunk has been copied into a network
-  //  buffer by then; remote completion must wait for the target to reassemble and run
-  //  the handler.
+  // Completion callbacks on a payload large enough to be chunked.  When it is chunked,
+  //  local completion is satisfied once commit() returns, since every chunk has been
+  //  copied into a network buffer by then; a network with no per-message limit (UCX)
+  //  sends it as one message instead and may complete it later, so it is waited for.
+  //  Remote completion must wait for the target to reassemble and run the handler.
   void test_chunked_completions(NodeID target)
   {
     const int seq = 5;
@@ -260,11 +261,15 @@ namespace {
     amsg.add_remote_completion([]() { g_remote_comp.fetch_add(1); });
     amsg.commit();
 
-    if(g_local_comp.load() != 1) {
+    // the same test ActiveMessage's constructor applies to decide on chunking
+    const bool chunked = (sz > Network::max_payload_size(sizeof(BigMessage), nullptr));
+    if(chunked && (g_local_comp.load() != 1)) {
       log_app.error() << "local completion did not fire by the time commit() returned: "
                       << g_local_comp.load();
       g_errors.fetch_add(1, std::memory_order_relaxed);
     }
+    for(int spins = 0; (g_local_comp.load() < 1) && (spins < 60000); spins++)
+      std::this_thread::sleep_for(std::chrono::milliseconds(1));
 
     if(!wait_for_acks(base, 1, "completions"))
       return;

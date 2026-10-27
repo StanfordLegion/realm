@@ -1716,6 +1716,18 @@ namespace {
                                TimeLimit work_until);
   };
 
+} // namespace
+
+// SimEnvelopeMessage only travels over the simulated network above, which has no
+//  header limit, so the fragment header budget that every real network must meet does
+//  not apply to it
+namespace Realm {
+  template <>
+  struct allow_unfragmentable_header<SimEnvelopeMessage> : std::true_type {};
+} // namespace Realm
+
+namespace {
+
   ActiveMessageHandlerReg<McastTestMessage> mcast_test_message_reg;
   ActiveMessageHandlerReg<McastDeferredMessage> mcast_deferred_message_reg;
   ActiveMessageHandlerReg<McastShutdownMessage> mcast_shutdown_message_reg;
@@ -2352,8 +2364,8 @@ namespace {
     built.env.original_payload_size = 0;
     built.env.target_encoding_size = static_cast<uint32_t>(enc.bytes());
     built.env.completion_size = static_cast<uint32_t>(completion_meta.size());
-    built.env.flags = flags;
-    built.env.depth = depth;
+    built.env.flags = static_cast<uint16_t>(flags);
+    built.env.depth = static_cast<uint16_t>(depth);
     built.env.original_message_id = test_msgid();
     built.env.original_header_size = sizeof(McastTestMessage);
     built.env.target_encoding_kind = static_cast<unsigned char>(enc.kind());

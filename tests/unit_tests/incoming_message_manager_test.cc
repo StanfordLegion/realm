@@ -22,6 +22,23 @@
 #include "realm/activemsg.h"
 #include <vector>
 #include <atomic>
+#include <cstdlib>
+#include <cstring>
+
+// AddressSanitizer's allocator can say how many bytes are in use, which is how
+//  PayloadFreeFragmentsAreReleased sees a leak with leak detection off
+#if defined(__SANITIZE_ADDRESS__)
+#define REALM_TEST_ALLOCATED_BYTES
+#elif defined(__has_feature)
+#if __has_feature(address_sanitizer)
+#define REALM_TEST_ALLOCATED_BYTES
+#endif
+#endif
+#ifdef REALM_TEST_ALLOCATED_BYTES
+// from sanitizer/allocator_interface.h, which GCC does not install (its libasan
+//  does export the function)
+extern "C" size_t __sanitizer_get_current_allocated_bytes(void);
+#endif
 
 using namespace Realm;
 
@@ -234,10 +251,9 @@ namespace {
   }
 
   // A reassembled payload larger than one message block cannot be staged out of the
-  //  block allocator - blocks are a fixed size and are never grown, so before the
-  //  oversized-payload fallback this aborted in MessageBlock::append_message (and, in
-  //  a release build, fell through to a null dereference).  The sizes below straddle
-  //  and then clear the ~1MB block size.
+  //  block allocator, whose blocks are a fixed size and are never grown.  This once
+  //  aborted in MessageBlock::append_message (and, in a release build, fell through to
+  //  a null dereference).  The sizes below straddle and then clear the block size.
   TEST_F(IncomingMessageManagerTest, OversizedReassembledPayloadIsDelivered)
   {
     CoreReservationSet crs(nullptr);
@@ -280,6 +296,82 @@ namespace {
       ASSERT_EQ(OversizedFragMessage::last_payload.size(), total) << "size " << total;
       EXPECT_EQ(OversizedFragMessage::last_payload, full) << "size " << total;
     }
+
+    mgr.shutdown();
+  }
+
+  // A reassembled message arrives in a buffer of its own, so what still needs the
+  //  oversized-payload fallback is a single message, above the block size, that the
+  //  network hands over to be copied.
+  TEST_F(IncomingMessageManagerTest, OversizedUnfragmentedPayloadIsDelivered)
+  {
+    CoreReservationSet crs(nullptr);
+    IncomingMessageManager mgr(2, /*dedicated_threads=*/0, crs);
+
+    unsigned short msgid =
+        activemsg_handler_table.lookup_message_id<OversizedFragMessage>();
+    OversizedFragMessage::last_payload.clear();
+    OversizedFragMessage::call_count.store(0);
+
+    std::vector<char> full(2u << 20);
+    for(size_t j = 0; j < full.size(); j++)
+      full[j] = static_cast<char>((j * 3) & 0xff);
+
+    // one chunk of one: not a fragment, so nothing is reassembled
+    OversizedFragMessage hdr;
+    hdr.frag_info = {0, 1, 0x5160ULL};
+    EXPECT_FALSE(mgr.add_incoming_message(1, msgid, &hdr, sizeof(hdr), PAYLOAD_COPY,
+                                          full.data(), full.size(), PAYLOAD_COPY, nullptr,
+                                          0, 0, TimeLimit()));
+    mgr.do_work(TimeLimit());
+
+    EXPECT_EQ(OversizedFragMessage::call_count.load(), 1);
+    EXPECT_EQ(OversizedFragMessage::last_payload, full);
+
+    mgr.shutdown();
+  }
+
+  // Our sender never fragments an empty payload, but a message whose fragments are
+  //  all empty must still reassemble to an empty one, for inline and queued handlers
+  //  alike, without anything being freed that was not allocated
+  TEST_F(IncomingMessageManagerTest, EmptyReassembledMessageIsDelivered)
+  {
+    CoreReservationSet crs(nullptr);
+    IncomingMessageManager mgr(2, /*dedicated_threads=*/0, crs);
+
+    unsigned short inline_msgid =
+        activemsg_handler_table.lookup_message_id<FragmentedMessage>();
+    unsigned short queued_msgid =
+        activemsg_handler_table.lookup_message_id<OversizedFragMessage>();
+    OversizedFragMessage::last_payload.assign(1, 'x');
+    OversizedFragMessage::call_count.store(0);
+
+    for(uint32_t chunk_id = 0; chunk_id < 2; chunk_id++) {
+      // one PAYLOAD_FREE fragment and one with no payload at all
+      void *buf = ((chunk_id == 0) ? malloc(1) : nullptr);
+      int mode = ((chunk_id == 0) ? PAYLOAD_FREE : PAYLOAD_NONE);
+
+      FragmentedMessage ihdr;
+      ihdr.frag_info = {chunk_id, 2, 0xE0ULL};
+      EXPECT_EQ(mgr.add_incoming_message(1, inline_msgid, &ihdr, sizeof(ihdr),
+                                         PAYLOAD_COPY, buf, 0, mode, nullptr, 0, 0,
+                                         TimeLimit()),
+                (chunk_id == 1));
+
+      void *qbuf = ((chunk_id == 0) ? malloc(1) : nullptr);
+      OversizedFragMessage qhdr;
+      qhdr.frag_info = {chunk_id, 2, 0xE0ULL};
+      EXPECT_FALSE(mgr.add_incoming_message(1, queued_msgid, &qhdr, sizeof(qhdr),
+                                            PAYLOAD_COPY, qbuf, 0, mode, nullptr, 0, 0,
+                                            TimeLimit()));
+    }
+    mgr.do_work(TimeLimit());
+
+    EXPECT_EQ(FragmentedMessage::call_count.load(), 1);
+    ASSERT_EQ(FragmentedMessage::received_payloads.size(), 1u);
+    EXPECT_TRUE(FragmentedMessage::received_payloads.front().empty());
+    EXPECT_EQ(OversizedFragMessage::call_count.load(), 1);
+    EXPECT_TRUE(OversizedFragMessage::last_payload.empty());
 
     mgr.shutdown();
   }
@@ -362,9 +454,10 @@ namespace {
   // A remote completion on a chunked message rides one fragment, but "handled by the
   //  target" is only true once the whole message has been reassembled and run.  The
   //  callback must therefore be held across the intervening fragments and fire exactly
-  //  once, after the handler.  Covered for both dispatch paths, which fire it in
-  //  different places: inline handlers from add_incoming_message, queued ones from the
-  //  handler loop.
+  //  once, after the handler.  Covered for both kinds of handler: either way it fires
+  //  from the handler loop, never from inside add_incoming_message, which a backend
+  //  calls from its receive path (where its callback need not be legal).  So even a
+  //  message with an inline handler is queued while a callback is held for it.
   TEST_F(IncomingMessageManagerTest, FragmentCallbackWaitsForReassembledHandler_Inline)
   {
     CoreReservationSet crs(nullptr);
@@ -383,22 +476,26 @@ namespace {
     //  dispatch is the last to ARRIVE (here chunk 1), not the last one sent.  That is
     //  why the completion has to be deferred rather than attached to the final chunk.
     const uint32_t order[3] = {2, 0, 1};
+    bool handled = false;
     for(int i = 0; i < 3; i++) {
       const uint32_t chunk_id = order[i];
       FragmentedMessage hdr;
       hdr.frag_info = {chunk_id, 3, 0xC0FFEEULL};
       // only chunk 0 carries a callback, exactly as commit_chunked attaches it
-      bool handled = mgr.add_incoming_message(
+      handled = mgr.add_incoming_message(
           1, msgid, &hdr, sizeof(hdr), PAYLOAD_COPY, full.data() + (chunk_id * 10), 10,
           PAYLOAD_COPY, (chunk_id == 0) ? &count_deferred_callback : nullptr, 0, 0,
           TimeLimit());
-      if(i < 2) {
-        EXPECT_FALSE(handled);
-        EXPECT_EQ(g_deferred_fired.load(), 0) << "fired before reassembly completed";
-      } else {
-        EXPECT_TRUE(handled);
-      }
+      EXPECT_FALSE(handled) << "fragment " << i;
+      EXPECT_EQ(g_deferred_fired.load(), 0) << "fired inside add_incoming_message";
     }
+
+    // the last fragment completed reassembly, but with chunk 0's callback held the
+    //  message was queued rather than run inline (do_work insists on there being
+    //  something queued)
+    EXPECT_EQ(FragmentedMessage::call_count.load(), 0);
+    if(!handled)
+      mgr.do_work(TimeLimit());
 
     EXPECT_EQ(FragmentedMessage::call_count.load(), 1);
     EXPECT_EQ(g_deferred_fired.load(), 1);
@@ -450,9 +547,9 @@ namespace {
 
   // A callback on the fragment that COMPLETES reassembly must NOT be fired by the
   //  manager when the message is handled inline.  add_incoming_message returns true, and
-  //  every backend reads that as "you own the completion" and signals it itself - UCX
-  //  calls am_realm_comp_handler directly (ucp_internal.cc:1191-1193), GASNet-EX replies
-  //  from its return value.  Firing it here too would release the same resources twice.
+  //  every backend reads that as "you own the completion" and signals it itself.
+  //  Firing it here too would release the same resources twice.  With no callback held
+  //  from an earlier fragment, an inline handler does still run inline.
   TEST_F(IncomingMessageManagerTest, CompletingFragmentCallbackNotFiredWhenHandledInline)
   {
     CoreReservationSet crs(nullptr);
@@ -522,11 +619,142 @@ namespace {
     mgr.shutdown();
   }
 
+  // A fragment handed over with PAYLOAD_FREE (a buffer the backend allocated for it)
+  //  is copied into the reassembly, and nothing else ever sees its buffer, so the
+  //  manager has to free it - for the completing fragment as well as the others, and
+  //  for inline and queued handlers alike - and the buffer the message is reassembled
+  //  into as well.  The leak itself is only measured under AddressSanitizer, whose
+  //  allocator reports the bytes in use.
+  TEST_F(IncomingMessageManagerTest, PayloadFreeFragmentsAreReleased)
+  {
+    const size_t chunk = 1 << 20;
+    const uint32_t chunks = 4;
+    // the handlers' copies, and whatever earlier tests left in them, are not what is
+    //  being measured
+    auto release_handler_copies = []() {
+      std::vector<std::vector<char>>().swap(FragmentedMessage::received_payloads);
+      std::vector<char>().swap(OversizedFragMessage::last_payload);
+    };
+    release_handler_copies();
+#ifdef REALM_TEST_ALLOCATED_BYTES
+    const size_t before = __sanitizer_get_current_allocated_bytes();
+#endif
+    {
+      CoreReservationSet crs(nullptr);
+      IncomingMessageManager mgr(2, /*dedicated_threads=*/0, crs);
+
+      FragmentedMessage::call_count.store(0);
+      OversizedFragMessage::call_count.store(0);
+
+      std::vector<char> full(chunks * chunk);
+      for(size_t i = 0; i < full.size(); i++)
+        full[i] = static_cast<char>((i * 7) & 0xff);
+
+      unsigned short inline_msgid =
+          activemsg_handler_table.lookup_message_id<FragmentedMessage>();
+      unsigned short queued_msgid =
+          activemsg_handler_table.lookup_message_id<OversizedFragMessage>();
+      // out of order, so that the completing fragment is not the last one sent
+      const uint32_t order[chunks] = {3, 1, 0, 2};
+      for(uint32_t i = 0; i < chunks; i++) {
+        const uint32_t chunk_id = order[i];
+        FragmentedMessage ihdr;
+        ihdr.frag_info = {chunk_id, chunks, 0xF4EEULL};
+        void *ibuf = malloc(chunk);
+        memcpy(ibuf, full.data() + (chunk_id * chunk), chunk);
+        EXPECT_EQ(mgr.add_incoming_message(1, inline_msgid, &ihdr, sizeof(ihdr),
+                                           PAYLOAD_COPY, ibuf, chunk, PAYLOAD_FREE,
+                                           nullptr, 0, 0, TimeLimit()),
+                  (i == (chunks - 1)));
+
+        OversizedFragMessage qhdr;
+        qhdr.frag_info = {chunk_id, chunks, 0xF4EEULL};
+        void *qbuf = malloc(chunk);
+        memcpy(qbuf, full.data() + (chunk_id * chunk), chunk);
+        EXPECT_FALSE(mgr.add_incoming_message(1, queued_msgid, &qhdr, sizeof(qhdr),
+                                              PAYLOAD_COPY, qbuf, chunk, PAYLOAD_FREE,
+                                              nullptr, 0, 0, TimeLimit()));
+      }
+      mgr.do_work(TimeLimit());
+
+      EXPECT_EQ(FragmentedMessage::call_count.load(), 1);
+      ASSERT_EQ(FragmentedMessage::received_payloads.size(), 1u);
+      EXPECT_EQ(FragmentedMessage::received_payloads.front(), full);
+      EXPECT_EQ(OversizedFragMessage::call_count.load(), 1);
+      EXPECT_EQ(OversizedFragMessage::last_payload, full);
+
+      mgr.shutdown();
+      release_handler_copies();
+    }
+#ifdef REALM_TEST_ALLOCATED_BYTES
+    const size_t after = __sanitizer_get_current_allocated_bytes();
+    // leaking even one fragment buffer, or one reassembled message, fails this
+    EXPECT_LT(after, before + chunk) << "fragment buffers were not freed";
+#endif
+  }
+
+  // A multicast relay delivers the original message to its own handler through
+  //  add_local_message.  No network packet is behind such a delivery, so it must not
+  //  count toward the drain target, which the quiescence check derives from the
+  //  packets the network received: otherwise one relayed delivery leaves the handled
+  //  count permanently ahead of the received count, and the drain's count condition
+  //  is met before the packets it was meant to wait for have been handled.
+  class CountingManager : public IncomingMessageManager {
+  public:
+    using IncomingMessageManager::IncomingMessageManager;
+    size_t handled(void) const { return total_messages_handled; }
+  };
+
+  TEST_F(IncomingMessageManagerTest, LocalDeliveriesDoNotCountTowardTheDrainTarget)
+  {
+    CoreReservationSet crs(nullptr);
+    CountingManager mgr(2, /*dedicated_threads=*/0, crs);
+
+    unsigned short inline_msgid =
+        activemsg_handler_table.lookup_message_id<RegularMessage>();
+    unsigned short queued_msgid =
+        activemsg_handler_table.lookup_message_id<OversizedFragMessage>();
+    RegularMessage::call_count.store(0);
+    OversizedFragMessage::call_count.store(0);
+    const char data[4] = {'a', 'b', 'c', 'd'};
+
+    // three messages off the wire: two handled inline, one queued
+    RegularMessage rhdr;
+    for(int i = 0; i < 2; i++)
+      EXPECT_TRUE(mgr.add_incoming_message(1, inline_msgid, &rhdr, sizeof(rhdr),
+                                           PAYLOAD_COPY, data, sizeof(data), PAYLOAD_COPY,
+                                           nullptr, 0, 0, TimeLimit()));
+    OversizedFragMessage qhdr;
+    qhdr.frag_info = {0, 1, 0x3001ULL};
+    EXPECT_FALSE(mgr.add_incoming_message(1, queued_msgid, &qhdr, sizeof(qhdr),
+                                          PAYLOAD_COPY, data, sizeof(data), PAYLOAD_COPY,
+                                          nullptr, 0, 0, TimeLimit()));
+
+    // two local deliveries: one handled inline, one queued
+    EXPECT_TRUE(mgr.add_local_message(1, inline_msgid, &rhdr, sizeof(rhdr), PAYLOAD_COPY,
+                                      data, sizeof(data), PAYLOAD_COPY, nullptr, 0, 0,
+                                      TimeLimit()));
+    qhdr.frag_info = {0, 1, 0x3002ULL};
+    EXPECT_FALSE(mgr.add_local_message(1, queued_msgid, &qhdr, sizeof(qhdr),
+                                       PAYLOAD_COPY, data, sizeof(data), PAYLOAD_COPY,
+                                       nullptr, 0, 0, TimeLimit()));
+
+    for(int i = 0; (i < 4) && (OversizedFragMessage::call_count.load() < 2); i++)
+      mgr.do_work(TimeLimit());
+    EXPECT_EQ(RegularMessage::call_count.load(), 3);
+    EXPECT_EQ(OversizedFragMessage::call_count.load(), 2);
+
+    // every delivery was handled, but only the three that arrived off the wire count,
+    //  so the handled count still matches what the network received...
+    EXPECT_EQ(mgr.handled(), 3u);
+    // ...and a drain that waits for those three returns at once
+    mgr.drain_incoming_messages(3);
+
+    mgr.shutdown();
+  }
+
   class IncomingMessageManagerDeathTest : public IncomingMessageManagerTest {};
 
-  // Realm's transports deliver every message exactly once and nothing retransmits, so
-  //  a repeated fragment means a bug upstream.  Absorbing it would also mask two
-  //  messages colliding on one reassembly key, which is the failure Fix B addresses.
   // Two logical messages landing on one reassembly key, or a corrupt fragment header,
   //  show up as a disagreement about how many chunks the message has.  The reassembled
   //  bytes cannot be trusted, so this must not be absorbed.
@@ -574,6 +802,10 @@ namespace {
     EXPECT_DEATH(deliver_out_of_range_chunk(), "");
   }
 
+  // Realm's transports deliver every message exactly once and nothing retransmits, so
+  //  a repeated fragment means a bug upstream.  Absorbing it would also mask two
+  //  messages colliding on one reassembly key, as fragments of different message
+  //  types used to.
   TEST_F(IncomingMessageManagerDeathTest, DuplicateFragmentAborts)
   {
     // wrapped in a lambda so the commas below are not parsed as macro arguments
