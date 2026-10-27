@@ -153,11 +153,13 @@ namespace Realm {
                         empty_span() /*postconditions*/, wait_on, finish_event,
                         priority_adjust);
     } else {
+      static const char zeros[8] = {0};
+      const size_t pad = (8 - (arglen % 8)) % 8; // the spans that follow are 8-aligned
       Serialization::ByteCountSerializer bcs;
       {
         bool ok = ((bcs << uint64_t(arglen)) && bcs.append_bytes(args, arglen) &&
-                   (bcs << span<const Event>()) && (bcs << span<const Event>()) &&
-                   (bcs << prs) && (bcs << profiling));
+                   bcs.append_bytes(zeros, pad) && (bcs << span<const Event>()) &&
+                   (bcs << span<const Event>()) && (bcs << prs) && (bcs << profiling));
         assert(ok);
       }
       size_t msglen = bcs.bytes_used();
@@ -170,6 +172,7 @@ namespace Realm {
         bool ok = (amsg << uint64_t(arglen));
         assert(ok);
         amsg.add_payload(args, arglen);
+        amsg.add_payload(zeros, pad);
         ok = ((amsg << span<const Event>()) && (amsg << span<const Event>()) &&
               (amsg << prs) && (amsg << profiling));
         assert(ok);
@@ -215,11 +218,13 @@ namespace Realm {
       impl->instantiate(args, arglen, prs, profiling, preconditions, postconditions,
                         wait_on, finish_event, priority_adjust);
     } else {
+      static const char zeros[8] = {0};
+      const size_t pad = (8 - (arglen % 8)) % 8; // the spans that follow are 8-aligned
       Serialization::ByteCountSerializer bcs;
       {
         bool ok = ((bcs << uint64_t(arglen)) && bcs.append_bytes(args, arglen) &&
-                   (bcs << preconditions) && (bcs << postconditions) && (bcs << prs) &&
-                   (bcs << profiling));
+                   bcs.append_bytes(zeros, pad) && (bcs << preconditions) &&
+                   (bcs << postconditions) && (bcs << prs) && (bcs << profiling));
         assert(ok);
       }
       size_t msglen = bcs.bytes_used();
@@ -232,6 +237,7 @@ namespace Realm {
         bool ok = (amsg << uint64_t(arglen));
         assert(ok);
         amsg.add_payload(args, arglen);
+        amsg.add_payload(zeros, pad);
         ok = ((amsg << preconditions) && (amsg << postconditions) && (amsg << prs) &&
               (amsg << profiling));
         assert(ok);
@@ -279,8 +285,11 @@ namespace Realm {
           entries.find(ID(subgraph).id);
       if(it == entries.end())
         return Event::NO_EVENT;
+      // The entry stays: this node may still instantiate the subgraph after
+      // the destroy call (ordered before the destroy's precondition), and
+      // the sequence numbering must continue, as it continues across the
+      // slot's reuse by a later subgraph (see RemoteOrderTracker).
       it->second.unfinished(finish_event_done, evs);
-      entries.erase(it);
     }
     if(evs.empty())
       return Event::NO_EVENT;
@@ -507,7 +516,8 @@ namespace Realm {
                                                << " still held for ordering (issued "
                                                   "after the destroy took effect)");
       }
-      sender_order.clear();
+      // sender_order itself is kept: the sequence numbering of each sending
+      // node continues across this slot's reuse (see RemoteOrderTracker)
       alive.store_release(false);
       previous_instantiation_completion = Event::NO_EVENT;
       outstanding_instantiations = 0;
@@ -553,6 +563,8 @@ namespace Realm {
         destroy_requested = true;
         if(outstanding_instantiations > 0) {
           // The last instantiation to release its state completes the destroy.
+          if(poisoned)
+            log_subgraph.warning() << "destroy precondition was poisoned: subgraph=" << me;
           destroy_done = UserEvent::create_user_event();
           return destroy_done;
         }
@@ -575,20 +587,24 @@ namespace Realm {
   {
     if(poisoned)
       log_subgraph.warning() << "destroy precondition was poisoned: subgraph=" << me;
-    get_runtime()->subgraph_resource_reaper.destroy_precondition_triggered();
     UserEvent done;
     {
       AutoLock<> al(lifecycle_lock);
       assert(destroy_pending && !destroy_requested);
       destroy_requested = true;
-      if(outstanding_instantiations > 0)
-        return; // the last release completes the destroy
+      if(outstanding_instantiations > 0) {
+        // the last release completes the destroy; the reaper's outstanding
+        // count covers that work from here on
+        get_runtime()->subgraph_resource_reaper.destroy_precondition_triggered();
+        return;
+      }
       done = destroy_done;
     }
     // destroy() returns this object to the free list, so nothing of it is
-    // read afterwards
+    // read afterwards; the pending count drops only once the work is done
     destroy();
     done.trigger();
+    get_runtime()->subgraph_resource_reaper.destroy_precondition_triggered();
   }
 
   void SubgraphImpl::instantiation_released(void)
@@ -621,7 +637,7 @@ namespace Realm {
       // the instantiation args follow and are accessed directly
       const void *args =
           static_cast<const char *>(msg->data) + (msg->datalen - fbd.bytes_left());
-      fbd.extract_bytes(0, arglen);
+      fbd.extract_bytes(0, arglen + ((8 - (arglen % 8)) % 8)); // args and padding
       ok = ((fbd >> preconditions) && (fbd >> postconditions));
       if(ok && (fbd.bytes_left() > 0))
         ok = (fbd >> prs);

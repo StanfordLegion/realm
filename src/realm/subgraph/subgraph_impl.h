@@ -353,7 +353,9 @@ namespace Realm {
     bool destroy_pending = false;
     bool destroy_requested = false;
     UserEvent destroy_done = UserEvent::NO_USER_EVENT;
-    // per sending node, INSTANTIATION_ORDER only (see subgraph_order.h)
+    // per sending node, INSTANTIATION_ORDER only (see subgraph_order.h and
+    // RemoteSubgraphInstantiations); kept across destroy() and reuse of the
+    // slot, since the senders' numbering continues too
     std::unordered_map<NodeID, RemoteOrderTracker> sender_order;
 
     // Blocks come from per-domain slabs placed on the domain's NUMA node:
@@ -396,11 +398,14 @@ namespace Realm {
   //    unfinished when it was sent (`base`): everything below `base` had
   //    finished, so the owner needs only [base, seq) to have been handled
   //    before this one to preserve the issue order (INSTANTIATION_ORDER).
-  // Entries are keyed by the reusable subgraph id and removed by the destroy
-  // from this node; one left behind (a subgraph this node instantiated but
-  // did not destroy) is harmless: its events are long triggered and a new
-  // subgraph with the same id starts with a fresh order on the owner, which
-  // `base` accounts for.
+  // Entries are keyed by the subgraph id and never removed: a node's
+  // sequence numbering for a slot continues across the slot's destroy and
+  // reuse by a later subgraph, and so does the owner's tracker for that
+  // node (SubgraphImpl::sender_order survives destroy()). Neither side can
+  // tell one lifetime of a slot from the next (subgraph ids carry no
+  // generation), and this node's view of which finish events have
+  // triggered lags the owner's, so neither "reset at destroy" nor "fresh
+  // tracker per subgraph" is sound: a continuous numbering is.
   class RemoteSubgraphInstantiations {
   public:
     // Records an instantiate about to be sent: its sequence number and base.
@@ -448,8 +453,9 @@ namespace Realm {
   // alignment means 40. (The RelWithDebInfo build compiles the check in
   // gasnetex_handlers.cc out; a header over the budget shows up as a
   // fortify "buffer overflow detected" on the sender.) The payload is:
-  // uint64_t arglen, the instantiation arguments, then the serialized
-  // preconditions, postconditions, profiling request set and profiling.
+  // uint64_t arglen, the instantiation arguments padded to 8 bytes, then
+  // the serialized preconditions, postconditions, profiling request set and
+  // profiling.
   struct SubgraphInstantiateMessage {
     Subgraph subgraph;
     Event wait_on, finish_event;
@@ -461,9 +467,11 @@ namespace Realm {
     static void handle_message(NodeID sender, const SubgraphInstantiateMessage &msg,
                                const void *data, size_t datalen);
   };
-  static_assert(sizeof(SubgraphInstantiateMessage) <= 44,
-                "SubgraphInstantiateMessage must fit GASNet-EX's 60-byte medium header "
-                "budget minus the 16-byte FragmentInfo of a fragmented message");
+  // Realm's registration enforces sizeof(WrappedWithFragInfo<T>) <= 56
+  // (activemsg.inl), i.e. 40 bytes for T; this one says why that matters.
+  static_assert(sizeof(SubgraphInstantiateMessage) <= 40,
+                "SubgraphInstantiateMessage must fit GASNet-EX's medium header budget "
+                "minus the 16-byte FragmentInfo of a fragmented message");
 
   struct SubgraphDestroyMessage {
     Subgraph subgraph;

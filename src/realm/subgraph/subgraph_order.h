@@ -31,11 +31,20 @@
 // reused its id, a stale lower base would ask the new subgraph for sequence
 // numbers it never sees.
 //
+// Subgraph ids carry no generation, and a node's view of which finish
+// events have triggered lags the owner's. So neither side may reset its
+// numbering when a subgraph is destroyed or its slot reused: a sender's
+// RemoteOrderSender for a slot and the owner's RemoteOrderTracker for
+// (slot, sender) live for as long as the runtime and count continuously
+// across the slot's lifetimes. (Resetting either side can hold a message
+// forever: the owner would wait for a sequence number that belonged to the
+// previous subgraph, or treat a renumbered message as already handled.)
+//
 // These two classes hold no Realm state so that they can be driven by a
 // randomized model in tests/unit_tests/subgraph_order_test.cc. The owner
-// keeps one RemoteOrderTracker per (subgraph, sending node), under the
-// subgraph's lifecycle lock; a node keeps one RemoteOrderSender per subgraph
-// it has instantiated remotely.
+// keeps one RemoteOrderTracker per (slot, sending node), under the
+// subgraph's lifecycle lock; a node keeps one RemoteOrderSender per slot it
+// has instantiated remotely.
 
 #ifndef REALM_SUBGRAPH_ORDER_H
 #define REALM_SUBGRAPH_ORDER_H

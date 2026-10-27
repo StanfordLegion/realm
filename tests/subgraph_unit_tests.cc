@@ -5728,6 +5728,8 @@ struct RemoteOrderArgs {
   UserEvent gate;        // stress: instantiations start when it triggers
   int sender, per_sender; // per_sender > 1: stress
   bool destroyer;
+  bool destroy_first; // the destroyer calls destroy(G) before its own
+                      // instantiates, G covering them (the guarded idiom)
   int n;
   Subgraph sgs[remote_order_subgraphs];
 };
@@ -5741,7 +5743,14 @@ static void remote_order_driver_task(const void *args, size_t arglen,
   std::vector<int> buf(remote_order_big_bytes / sizeof(int), 0);
   static const size_t sizes[8] = {sizeof(int), 4096,        65536, sizeof(int),
                                   16384,       sizeof(int), 262144, remote_order_big_bytes};
-  std::vector<Event> evs;
+  std::vector<Event> evs, ds;
+  if(a->destroyer && a->destroy_first) {
+    // destroy(G) first; G covers every sender's instantiations, including
+    // this node's own, issued below: the issue order of those must survive
+    Event guard = Event::merge_events(a->others_issued, Event(a->issued));
+    for(int i = 0; i < a->n; i++)
+      ds.push_back(a->sgs[i].destroy(guard));
+  }
   for(int i = 0; i < a->n; i++) {
     if(a->per_sender == 1) {
       buf[0] = a->sender * 2 + 1; // large, then small
@@ -5760,9 +5769,9 @@ static void remote_order_driver_task(const void *args, size_t arglen,
   Event mine = Event::merge_events(evs);
   a->issued.trigger(mine);
   if(a->destroyer) {
-    std::vector<Event> ds;
-    for(int i = 0; i < a->n; i++)
-      ds.push_back(a->sgs[i].destroy(a->others_issued)); // deferred on its own ones
+    if(!a->destroy_first)
+      for(int i = 0; i < a->n; i++)
+        ds.push_back(a->sgs[i].destroy(a->others_issued)); // deferred on its own ones
     Event all = Event::merge_events(ds);
     // the destroy event covers everything: wait here so a hang is a hang
     all.wait();
@@ -5789,9 +5798,15 @@ static std::vector<Processor> remote_cpus_one_per_space()
 
 class RemoteOrderTest : public SubgraphTest {
 public:
-  RemoteOrderTest(const char *_name, int _per_sender)
+  // rounds > 1: the subgraphs are destroyed and created again between
+  // rounds, so later rounds reuse the slots while the senders' bookkeeping
+  // for them persists (ids carry no generation)
+  RemoteOrderTest(const char *_name, int _per_sender, bool _destroy_first = false,
+                  int _rounds = 1)
     : test_name(_name)
     , per_sender(_per_sender)
+    , destroy_first(_destroy_first)
+    , rounds(_rounds)
   {}
   std::string name() const override { return test_name; }
   bool can_run() override
@@ -5800,9 +5815,8 @@ public:
            (worker_cpus().size() >= 1) && remote_cpu().exists();
   }
 
-  void init() override
+  void create_subgraphs()
   {
-    cpu = worker_cpus()[0];
     for(int i = 0; i < remote_order_subgraphs; i++) {
       logs[i].n.store(0);
       SubgraphDefinition sd;
@@ -5814,9 +5828,14 @@ public:
     }
   }
 
-  void run() override
+  void init() override
   {
-    senders = remote_cpus_one_per_space();
+    cpu = worker_cpus()[0];
+    create_subgraphs();
+  }
+
+  bool run_round()
+  {
     const int S = senders.size();
     std::vector<UserEvent> issued(S);
     for(int s = 0; s < S; s++)
@@ -5835,16 +5854,17 @@ public:
       a.sender = s;
       a.per_sender = per_sender;
       a.destroyer = (s == 0);
+      a.destroy_first = destroy_first;
       a.n = remote_order_subgraphs;
       for(int i = 0; i < remote_order_subgraphs; i++)
         a.sgs[i] = sgs[i];
       evs.push_back(senders[s].spawn(remote_order_driver_task_id, &a, sizeof(a)));
     }
     gate.trigger(); // stress: everything is in flight (or about to be) at once
-    completed = wait_with_timeout(Event::merge_events(evs), config.hang_timeout);
+    return wait_with_timeout(Event::merge_events(evs), config.hang_timeout);
   }
 
-  bool check() override
+  bool check_round(int round)
   {
     const int S = senders.size();
     int bad = 0;
@@ -5862,8 +5882,9 @@ public:
             continue;
           if(tag < last) {
             bad++;
-            log_app.error() << name() << ": subgraph " << i << " sender " << s << " ran tag "
-                            << tag << " after tag " << last;
+            log_app.error() << name() << ": round " << round << " subgraph " << i
+                            << " sender " << s << " ran tag " << tag << " after tag "
+                            << last;
           }
           last = tag;
         }
@@ -5871,10 +5892,34 @@ public:
     }
     int64_t expected =
         int64_t(remote_order_subgraphs) * S * ((per_sender == 1) ? 2 : per_sender);
-    bool ok = completed && (bad == 0) && (total == expected);
+    bool ok = (bad == 0) && (total == expected);
     if(!ok)
-      log_app.error() << name() << ": completed=" << completed << " runs=" << total << "/"
+      log_app.error() << name() << ": round " << round << " runs=" << total << "/"
                       << expected << " order violations=" << bad << " senders=" << S;
+    return ok;
+  }
+
+  void run() override
+  {
+    senders = remote_cpus_one_per_space();
+    completed = true;
+    rounds_ok = true;
+    for(int r = 0; r < rounds; r++) {
+      if(r > 0)
+        create_subgraphs(); // the previous round's were destroyed: slots reused
+      if(!run_round()) {
+        completed = false;
+        return;
+      }
+      rounds_ok = check_round(r) && rounds_ok;
+    }
+  }
+
+  bool check() override
+  {
+    bool ok = completed && rounds_ok;
+    if(!ok)
+      log_app.error() << name() << ": completed=" << completed << " rounds_ok=" << rounds_ok;
     return ok;
   }
 
@@ -5885,11 +5930,13 @@ public:
 private:
   std::string test_name;
   int per_sender;
+  bool destroy_first;
+  int rounds;
   Processor cpu;
   std::vector<Processor> senders;
   OrderLog logs[remote_order_subgraphs];
   Subgraph sgs[remote_order_subgraphs];
-  bool completed = false;
+  bool completed = false, rounds_ok = false;
 };
 
 ////////////////////////////////////////////////////////////////////////
@@ -6581,6 +6628,8 @@ static std::vector<std::unique_ptr<SubgraphTest>> make_tests()
   tests.emplace_back(new RemoteInstantiateDestroyTest());
   tests.emplace_back(new RemoteGuardedDestroyTest());
   tests.emplace_back(new RemoteOrderTest("RemoteOrder", 1));
+  tests.emplace_back(new RemoteOrderTest("RemoteOrderDestroyFirst", 1, true));
+  tests.emplace_back(new RemoteOrderTest("RemoteOrderReuse", 1, false, 3));
   tests.emplace_back(new RemoteOrderTest("RemoteOrderStress", 48));
   // Last: a hang here leaves executors wedged, so nothing may follow it.
   tests.emplace_back(new ConcurrentSubgraphsTest());
