@@ -38,7 +38,7 @@ namespace {
 
   struct Message {
     int sender;
-    RemoteOrderTracker::Item item;
+    uint64_t seq;
     int issue_index; // position in the sender's issue order
   };
 
@@ -53,20 +53,20 @@ namespace {
     void deliver(const Message &m)
     {
       RemoteOrderTracker &t = trackers[m.sender];
-      if(t.ready(m.item, true /*record*/)) {
+      if(t.ready(m.seq, true /*record*/)) {
         handled[m.sender].push_back(m.issue_index);
       } else {
         storage.push_back(m);
-        t.hold(m.item, reinterpret_cast<void *>(storage.size())); // 1-based index
+        t.hold(m.seq, reinterpret_cast<void *>(storage.size())); // 1-based index
       }
       // this may have been the predecessor an earlier arrival waits for
       while(true) {
-        RemoteOrderTracker::Item it;
-        void *p = t.pop_ready(&it);
+        uint64_t seq;
+        void *p = t.pop_ready(&seq);
         if(!p)
           break;
         const Message &h = storage[reinterpret_cast<size_t>(p) - 1];
-        ASSERT_TRUE(t.ready(h.item, true /*record*/)); // readiness only grows
+        ASSERT_TRUE(t.ready(h.seq, true /*record*/)); // readiness only grows
         handled[h.sender].push_back(h.issue_index);
       }
       max_window = std::max(max_window, t.window());
@@ -98,7 +98,7 @@ namespace {
         m.sender = who;
         m.issue_index = int(finish_time.size()) - 1;
         auto finished = [&](int tok) { return finish_time[tok] <= now; };
-        order.note(m.issue_index, finished, m.item.seq, m.item.base);
+        m.seq = order.note(m.issue_index, finished);
         out.push_back(m);
         now++;
       }
@@ -170,32 +170,32 @@ TEST(SubgraphOrder, RandomReorderPreservesIssueOrderPerSender)
   }
 }
 
-TEST(SubgraphOrder, BaseIsExactAndAdvancesWithFinishedPrefix)
+TEST(SubgraphOrder, SenderDropsFinishedTokensInBatches)
 {
   std::mt19937 rng(7);
   std::vector<Sender> s(1);
-  // no delay, no run time: message i is delivered at time i and finishes at
-  // i + 1, so when message i+1 is issued (time i+1) everything before it has
-  // finished: base == seq for every message, and only the newest is kept
-  std::vector<Message> msgs = s[0].issue(0, 5, rng, 0, 0);
-  for(const Message &m : msgs)
-    EXPECT_EQ(m.item.base, m.item.seq);
-  EXPECT_EQ(s[0].order.num_tracked(), 1u);
+  // no delay, no run time: every instantiation finishes right after the
+  // next one is issued, so the tracked set never grows past one batch
+  std::vector<Message> msgs = s[0].issue(0, 1000, rng, 0, 0);
+  for(int i = 0; i < 1000; i++)
+    EXPECT_EQ(msgs[i].seq, uint64_t(i)); // continuous numbering
+  EXPECT_LE(s[0].order.num_tracked(), 32u);
+  std::vector<int> un;
+  auto finished = [&](int tok) { return s[0].finish_time[tok] <= s[0].now; };
+  s[0].order.unfinished(finished, un);
+  EXPECT_EQ(un.size(), 0u);
 }
 
 TEST(SubgraphOrder, UnfinishedTokensAreReported)
 {
   Sender s;
   s.finish_time = {100, 0, 100}; // tokens 0 and 2 never finish, 1 finishes at once
-  uint64_t seq, base;
   auto finished = [&](int tok) { return s.finish_time[tok] <= s.now; };
-  s.order.note(0, finished, seq, base);
+  EXPECT_EQ(s.order.note(0, finished), 0u);
   s.now = 1;
-  s.order.note(1, finished, seq, base);
-  EXPECT_EQ(base, 0u); // 0 is unfinished, so the base stays at 0
+  EXPECT_EQ(s.order.note(1, finished), 1u);
   s.now = 2;
-  s.order.note(2, finished, seq, base);
-  EXPECT_EQ(base, 0u);
+  EXPECT_EQ(s.order.note(2, finished), 2u);
   std::vector<int> un;
   s.order.unfinished(finished, un);
   ASSERT_EQ(un.size(), 2u);
@@ -203,17 +203,23 @@ TEST(SubgraphOrder, UnfinishedTokensAreReported)
   EXPECT_EQ(un[1], 2);
 }
 
-TEST(SubgraphOrder, IdReuseWithFreshOwnerState)
+TEST(SubgraphOrder, SlotReuseKeepsBothSidesCounting)
 {
-  // A sender instantiated an earlier subgraph with this id 37 times, all
-  // finished; the owner destroyed it and a new subgraph reuses the id. The
-  // sender keeps counting from 37; the new owner state starts at 0.
+  // A sender instantiated an earlier subgraph in this slot 37 times; the
+  // owner destroyed it and a new subgraph reuses the slot. Neither side
+  // resets: the sender numbers on from 37 and the owner's tracker for the
+  // slot has recorded 0..36, so the new subgraph's messages are judged in
+  // the same numbering whatever the sender believes about its old events.
   std::mt19937 rng(3);
   std::vector<Sender> s(1);
   std::vector<Message> old = s[0].issue(0, 37, rng, 3, 3);
-  s[0].now += 1000; // everything old has long finished
+  Owner o;
+  for(const Message &m : deliver_order(s, old, rng))
+    o.deliver(m);
+  ASSERT_EQ(o.handled[0].size(), 37u);
+  // the previous subgraph is gone; the tracker stays (as in SubgraphImpl)
+  o.handled[0].clear();
   std::vector<Message> fresh = s[0].issue(0, 20, rng, 6, 10);
-  Owner o; // fresh tracker: next == 0
   for(const Message &m : deliver_order(s, fresh, rng))
     o.deliver(m);
   ASSERT_EQ(o.handled[0].size(), 20u);
@@ -222,16 +228,21 @@ TEST(SubgraphOrder, IdReuseWithFreshOwnerState)
   EXPECT_EQ(o.trackers[0].num_held(), 0u);
 }
 
-TEST(SubgraphOrder, StaleLowerBaseIsTolerated)
+TEST(SubgraphOrder, RecordingWithoutHoldingKeepsTheNumberingConsistent)
 {
-  // A base lower than the exact one is a weaker (still true) claim and must
-  // not block: here message 5 claims base 2 although 2..4 are long handled.
+  // A mode that never holds (CONCURRENT) still records every sequence
+  // number, so a later INSTANTIATION_ORDER subgraph in the slot starts
+  // consistent with the sender's numbering: 0..4 recorded out of order,
+  // then 5 and 6 judged normally.
   RemoteOrderTracker t;
-  for(uint64_t q = 0; q < 5; q++)
-    EXPECT_TRUE(t.ready(RemoteOrderTracker::Item{q, q}, true));
-  EXPECT_TRUE(t.ready(RemoteOrderTracker::Item{5, 2}, true));
-  EXPECT_EQ(t.next_unhandled(), 6u);
+  for(uint64_t q : {3, 0, 4, 1, 2})
+    t.record(q);
+  EXPECT_EQ(t.next_unhandled(), 5u);
   EXPECT_EQ(t.window(), 0u);
+  EXPECT_FALSE(t.ready(6, true));
+  EXPECT_TRUE(t.ready(5, true));
+  EXPECT_TRUE(t.ready(6, true));
+  EXPECT_EQ(t.next_unhandled(), 7u);
 }
 
 TEST(SubgraphOrder, HeldMessageReleasedByPredecessor)
@@ -239,21 +250,21 @@ TEST(SubgraphOrder, HeldMessageReleasedByPredecessor)
   RemoteOrderTracker t;
   int payload_b = 2, payload_c = 3;
   // b (seq 1) and c (seq 2) arrive before a (seq 0); c depends on both
-  EXPECT_FALSE(t.ready(RemoteOrderTracker::Item{1, 0}, true));
-  t.hold(RemoteOrderTracker::Item{1, 0}, &payload_b);
-  EXPECT_FALSE(t.ready(RemoteOrderTracker::Item{2, 0}, true));
-  t.hold(RemoteOrderTracker::Item{2, 0}, &payload_c);
+  EXPECT_FALSE(t.ready(1, true));
+  t.hold(1, &payload_b);
+  EXPECT_FALSE(t.ready(2, true));
+  t.hold(2, &payload_c);
   EXPECT_EQ(t.pop_ready(), nullptr);
-  EXPECT_TRUE(t.ready(RemoteOrderTracker::Item{0, 0}, true));
-  RemoteOrderTracker::Item it;
-  void *p = t.pop_ready(&it);
+  EXPECT_TRUE(t.ready(0, true));
+  uint64_t seq = 99;
+  void *p = t.pop_ready(&seq);
   ASSERT_EQ(p, &payload_b); // only b is ready: c still needs b handled
-  EXPECT_EQ(it.seq, 1u);
+  EXPECT_EQ(seq, 1u);
   EXPECT_EQ(t.pop_ready(), nullptr);
-  EXPECT_TRUE(t.ready(it, true));
-  p = t.pop_ready(&it);
+  EXPECT_TRUE(t.ready(seq, true));
+  p = t.pop_ready(&seq);
   ASSERT_EQ(p, &payload_c);
-  EXPECT_TRUE(t.ready(it, true));
+  EXPECT_TRUE(t.ready(seq, true));
   EXPECT_EQ(t.num_held(), 0u);
   EXPECT_EQ(t.next_unhandled(), 3u);
 }

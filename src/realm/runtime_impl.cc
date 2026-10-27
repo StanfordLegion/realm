@@ -2894,9 +2894,11 @@ namespace Realm {
     }
 
     // a subgraph instantiation whose finish event has not triggered by now,
-    //  or a subgraph destroy whose precondition has not, is pending
-    //  application work, exactly like an untriggered operation below: an
-    //  error, caught eagerly (no waiting, no timer)
+    //  or a subgraph destroy that has not taken effect (its returned event
+    //  must be chained into the shutdown precondition like every other event
+    //  Realm hands out), is pending application work, exactly like an
+    //  untriggered operation below: an error, caught eagerly (no waiting, no
+    //  timer)
     {
       int64_t n = subgraph_resource_reaper.num_unfinished();
       if(n != 0) {
@@ -2908,8 +2910,9 @@ namespace Realm {
       int64_t d = subgraph_resource_reaper.num_pending_destroys();
       if(d != 0) {
         log_runtime.fatal() << d
-                            << " subgraph destroy(s) whose precondition has not "
-                               "triggered during shutdown!";
+                            << " subgraph destroy(s) not yet in effect during shutdown "
+                               "(chain the event destroy returns into the shutdown "
+                               "precondition)!";
         fflush(stdout);
         fflush(stderr);
         abort();

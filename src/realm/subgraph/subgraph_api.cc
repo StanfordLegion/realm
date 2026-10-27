@@ -177,16 +177,7 @@ namespace Realm {
               (amsg << prs) && (amsg << profiling));
         assert(ok);
       }
-      {
-        uint64_t base = 0;
-        get_runtime()->remote_subgraph_instantiations.note(*this, finish_event, amsg->seq,
-                                                           base);
-        // never reached: see base_back (fatal rather than a silent wrap)
-        if((amsg->seq - base) > uint64_t(UINT32_MAX))
-          SUBGRAPH_FATAL(*this, "more than 4 billion unfinished remote instantiations "
-                                "from this node");
-        amsg->base_back = uint32_t(amsg->seq - base);
-      }
+      amsg->seq = get_runtime()->remote_subgraph_instantiations.note(*this, finish_event);
       amsg.commit();
     }
     return finish_event;
@@ -242,16 +233,7 @@ namespace Realm {
               (amsg << profiling));
         assert(ok);
       }
-      {
-        uint64_t base = 0;
-        get_runtime()->remote_subgraph_instantiations.note(*this, finish_event, amsg->seq,
-                                                           base);
-        // never reached: see base_back (fatal rather than a silent wrap)
-        if((amsg->seq - base) > uint64_t(UINT32_MAX))
-          SUBGRAPH_FATAL(*this, "more than 4 billion unfinished remote instantiations "
-                                "from this node");
-        amsg->base_back = uint32_t(amsg->seq - base);
-      }
+      amsg->seq = get_runtime()->remote_subgraph_instantiations.note(*this, finish_event);
       amsg.commit();
     }
     return finish_event;
@@ -269,11 +251,10 @@ namespace Realm {
     return e.has_triggered_faultaware(poisoned);
   }
 
-  void RemoteSubgraphInstantiations::note(Subgraph subgraph, Event finish_event,
-                                          uint64_t &seq, uint64_t &base)
+  uint64_t RemoteSubgraphInstantiations::note(Subgraph subgraph, Event finish_event)
   {
     AutoLock<> al(mutex);
-    entries[ID(subgraph).id].note(finish_event, finish_event_done, seq, base);
+    return entries[ID(subgraph).id].note(finish_event, finish_event_done);
   }
 
   Event RemoteSubgraphInstantiations::take(Subgraph subgraph)
@@ -381,13 +362,11 @@ namespace Realm {
                 finish_event, priority_adjust, nullptr /*remote*/);
   }
 
-  SubgraphImpl::HeldInstantiate *
-  SubgraphImpl::instantiate(const void *args, size_t arglen, const ProfilingRequestSet &prs,
-                            const SubgraphInstantiationProfiling &profiling,
-                            span<const Event> preconditions,
-                            span<const Event> postconditions, Event start_event,
-                            Event finish_event, int priority_adjust,
-                            const RemoteMessage *remote)
+  SubgraphImpl::HeldInstantiate *SubgraphImpl::instantiate(
+      const void *args, size_t arglen, const ProfilingRequestSet &prs,
+      const SubgraphInstantiationProfiling &profiling, span<const Event> preconditions,
+      span<const Event> postconditions, Event start_event, Event finish_event,
+      int priority_adjust, const RemoteMessage *remote)
   {
     if(!prs.empty())
       SUBGRAPH_FATAL(me, "profiling requests on the instantiation itself are not "
@@ -419,29 +398,35 @@ namespace Realm {
                                                 << compiled.postconds.size());
       if((defn->concurrency_mode == SubgraphDefinition::ONE_SHOT) && instantiated)
         SUBGRAPH_FATAL(me, "ONE_SHOT subgraph instantiated a second time");
-      if(defn->concurrency_mode == SubgraphDefinition::INSTANTIATION_ORDER) {
-        if(remote) {
-          RemoteOrderTracker &tracker = sender_order[remote->order.sender];
-          RemoteOrderTracker::Item item{remote->order.seq, remote->order.base};
-          if(!tracker.ready(item, true /*record*/)) {
+      if(remote) {
+        // every remote instantiate is recorded, in every mode, so that the
+        // numbering stays consistent across the slot's reuse by another mode
+        RemoteOrderTracker &tracker = sender_order[remote->order.sender];
+        if(defn->concurrency_mode == SubgraphDefinition::INSTANTIATION_ORDER) {
+          if(!tracker.ready(remote->order.seq, true /*record*/)) {
             // An earlier instantiate from the same node has not arrived yet:
-            // hold this one until it has (handle_remote_instantiate).
+            // hold this one until it has (handle_remote_instantiate). It is
+            // unfinished application work from now on.
             HeldInstantiate *held = new HeldInstantiate;
             held->msg = *remote;
             held->payload.assign(static_cast<const char *>(remote->data),
                                  static_cast<const char *>(remote->data) +
                                      remote->datalen);
             held->msg.data = held->payload.data();
-            tracker.hold(item, held);
-            log_subgraph.info() << "instantiate held for order: subgraph=" << me
-                                << " sender=" << remote->order.sender
-                                << " seq=" << remote->order.seq
-                                << " base=" << remote->order.base;
+            tracker.hold(remote->order.seq, held);
+            get_runtime()->subgraph_resource_reaper.instantiation_held();
+            log_subgraph.info()
+                << "instantiate held for order: subgraph=" << me
+                << " sender=" << remote->order.sender << " seq=" << remote->order.seq;
             return nullptr;
           }
           // this may have been the predecessor an earlier arrival waits for
           next = static_cast<HeldInstantiate *>(tracker.pop_ready());
+        } else {
+          tracker.record(remote->order.seq);
         }
+      }
+      if(defn->concurrency_mode == SubgraphDefinition::INSTANTIATION_ORDER) {
         // Instantiations run in order: this one starts once the previous one
         // has finished, and the next one will wait for this one. (CONCURRENT
         // and ONE_SHOT instantiations are independent: the engine runs any
@@ -464,7 +449,10 @@ namespace Realm {
     state->reset(finish_event, priority_adjust, preconditions, postconditions);
     state->interpolate(args, arglen);
     state->setup_profiling(profiling);
-    get_runtime()->subgraph_resource_reaper.instantiation_created();
+    if(remote && remote->was_held)
+      get_runtime()->subgraph_resource_reaper.held_instantiation_created();
+    else
+      get_runtime()->subgraph_resource_reaper.instantiation_created();
     // Start once the start event (and the previous instantiation, in order)
     // has triggered; the external preconditions are delivered then. Nothing
     // may touch the state after this: it may already be finished and
@@ -512,7 +500,8 @@ namespace Realm {
         // time this slot may belong to another subgraph.
         if(it->second.num_held() != 0)
           SUBGRAPH_FATAL(me, "destroyed with " << it->second.num_held()
-                                               << " instantiate(s) from node " << it->first
+                                               << " instantiate(s) from node "
+                                               << it->first
                                                << " still held for ordering (issued "
                                                   "after the destroy took effect)");
       }
@@ -564,7 +553,8 @@ namespace Realm {
         if(outstanding_instantiations > 0) {
           // The last instantiation to release its state completes the destroy.
           if(poisoned)
-            log_subgraph.warning() << "destroy precondition was poisoned: subgraph=" << me;
+            log_subgraph.warning()
+                << "destroy precondition was poisoned: subgraph=" << me;
           destroy_done = UserEvent::create_user_event();
           return destroy_done;
         }
@@ -654,6 +644,7 @@ namespace Realm {
       if(!next)
         return;
       held = next;
+      held->msg.was_held = true; // already counted as unfinished when held
       msg = &held->msg;
     }
   }
@@ -802,7 +793,7 @@ namespace Realm {
     SubgraphImpl::RemoteMessage rm;
     rm.order.sender = sender;
     rm.order.seq = msg.seq;
-    rm.order.base = msg.seq - msg.base_back;
+    rm.was_held = false;
     rm.start_event = msg.wait_on;
     rm.finish_event = msg.finish_event;
     rm.priority_adjust = msg.priority_adjust;

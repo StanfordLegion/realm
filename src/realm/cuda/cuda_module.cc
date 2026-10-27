@@ -1655,8 +1655,8 @@ namespace Realm {
       if(tte.stream_aware_fnptr) {
         // begin_subgraph_task set the stream
         assert(ThreadLocal::current_gpu_stream != nullptr);
-        (tte.stream_aware_fnptr)(task_args.base(), task_args.size(),
-                                 tte.user_data.base(), tte.user_data.size(), me,
+        (tte.stream_aware_fnptr)(task_args.base(), task_args.size(), tte.user_data.base(),
+                                 tte.user_data.size(), me,
                                  ThreadLocal::current_gpu_stream->get_stream());
       } else {
         (tte.fnptr)(task_args.base(), task_args.size(), tte.user_data.base(),

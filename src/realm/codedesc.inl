@@ -863,7 +863,8 @@ namespace Realm {
   template <typename S>
   inline bool serialize(S &serializer, const CodeProperty &cp)
   {
-    return Serialization::PolymorphicSerdezHelper<CodeProperty>::serialize(serializer, cp);
+    return Serialization::PolymorphicSerdezHelper<CodeProperty>::serialize(serializer,
+                                                                           cp);
   }
 
   template <typename S>
@@ -888,7 +889,8 @@ namespace Realm {
   }
 
   template <typename S>
-  /*static*/ inline CodeProperty *DeferredEffectsProperty::deserialize_new(S &deserializer)
+  /*static*/ inline CodeProperty *
+  DeferredEffectsProperty::deserialize_new(S &deserializer)
   {
     return new DeferredEffectsProperty;
   }

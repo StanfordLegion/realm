@@ -283,7 +283,7 @@ namespace Realm {
     // copied if the instantiate has to be held back.
     struct RemoteOrder {
       NodeID sender;
-      uint64_t seq, base;
+      uint64_t seq;
     };
     struct RemoteMessage {
       RemoteOrder order;
@@ -291,6 +291,7 @@ namespace Realm {
       int priority_adjust;
       const void *data; // the payload (see SubgraphInstantiateMessage)
       size_t datalen;
+      bool was_held; // handled after being held (counted as unfinished then)
     };
     // Handles a remote instantiate, holding it back if an earlier one from
     // the same node has not arrived yet and the mode is INSTANTIATION_ORDER,
@@ -383,33 +384,18 @@ namespace Realm {
     void release_resources(void);
   };
 
-  // Instantiations this node has sent to remote owners, by subgraph. Two
-  // things are derived from them, because active messages are not ordered:
-  // not across message types, and not within one type either (a payload
-  // large enough for a rendezvous protocol reaches the owner's handler
-  // after smaller messages sent later).
-  //  - A remote destroy's message is sent only once every instantiation
-  //    this node sent before it has finished (DeferredRemoteDestroy), so
-  //    the owner cannot handle the destroy ahead of one of them. The finish
-  //    events' poison is irrelevant to the destroy and is never merged
-  //    into its precondition.
-  //  - Each instantiate carries its sequence number among this node's
-  //    instantiates of the subgraph, and the lowest sequence number still
-  //    unfinished when it was sent (`base`): everything below `base` had
-  //    finished, so the owner needs only [base, seq) to have been handled
-  //    before this one to preserve the issue order (INSTANTIATION_ORDER).
-  // Entries are keyed by the subgraph id and never removed: a node's
-  // sequence numbering for a slot continues across the slot's destroy and
-  // reuse by a later subgraph, and so does the owner's tracker for that
-  // node (SubgraphImpl::sender_order survives destroy()). Neither side can
-  // tell one lifetime of a slot from the next (subgraph ids carry no
-  // generation), and this node's view of which finish events have
-  // triggered lags the owner's, so neither "reset at destroy" nor "fresh
-  // tracker per subgraph" is sound: a continuous numbering is.
+  // Instantiations this node has sent to remote owners, by subgraph slot
+  // (see subgraph_order.h): the sequence number each instantiate carries,
+  // and the finish events of the ones not yet finished, which a remote
+  // destroy from this node waits for before its message is sent (the owner
+  // cannot handle the destroy ahead of one of them; the events' poison is
+  // irrelevant to the destroy and never merged into its precondition).
+  // Entries are keyed by the subgraph id and never removed: the numbering
+  // continues across the slot's destroy and reuse.
   class RemoteSubgraphInstantiations {
   public:
-    // Records an instantiate about to be sent: its sequence number and base.
-    void note(Subgraph subgraph, Event finish_event, uint64_t &seq, uint64_t &base);
+    // Records an instantiate about to be sent; returns its sequence number.
+    uint64_t note(Subgraph subgraph, Event finish_event);
     // The finish events of this node's unfinished instantiations of the
     // subgraph, merged ignoring faults (NO_EVENT if none); removes the entry.
     Event take(Subgraph subgraph);
@@ -454,32 +440,19 @@ namespace Realm {
 
   // active messages
 
-  // The header must fit every network's budget. GASNet-EX packs a medium
-  // request's header into 15 four-byte arguments (60 bytes), and a payload
-  // too large for one message is fragmented, which prepends a 16-byte
-  // FragmentInfo: 44 bytes remain for this struct, which with 8-byte
-  // alignment means 40. (The RelWithDebInfo build compiles the check in
-  // gasnetex_handlers.cc out; a header over the budget shows up as a
-  // fortify "buffer overflow detected" on the sender.) The payload is:
-  // uint64_t arglen, the instantiation arguments padded to 8 bytes, then
-  // the serialized preconditions, postconditions, profiling request set and
-  // profiling.
+  // The payload is: uint64_t arglen, the instantiation arguments padded to 8
+  // bytes, then the serialized preconditions, postconditions, profiling
+  // request set and profiling. (Realm checks every message header against
+  // the networks' fragment budget at registration, activemsg.h.)
   struct SubgraphInstantiateMessage {
     Subgraph subgraph;
     Event wait_on, finish_event;
-    uint64_t seq;       // see RemoteSubgraphInstantiations
-    uint32_t base_back; // seq - base: the unfinished window never reaches 2^32
-                        // (a node cannot hold that many live finish events)
+    uint64_t seq; // see subgraph_order.h
     int priority_adjust;
 
     static void handle_message(NodeID sender, const SubgraphInstantiateMessage &msg,
                                const void *data, size_t datalen);
   };
-  // Realm's registration enforces sizeof(WrappedWithFragInfo<T>) <= 56
-  // (activemsg.inl), i.e. 40 bytes for T; this one says why that matters.
-  static_assert(sizeof(SubgraphInstantiateMessage) <= 40,
-                "SubgraphInstantiateMessage must fit GASNet-EX's medium header budget "
-                "minus the 16-byte FragmentInfo of a fragmented message");
 
   struct SubgraphDestroyMessage {
     Subgraph subgraph;
@@ -595,6 +568,11 @@ namespace Realm {
       unfinished.fetch_add(1);
       outstanding.fetch_add(1);
     }
+    // a remote instantiate held for ordering is unfinished application work
+    // from the moment it arrives; when it is finally handled only the
+    // outstanding count is added
+    void instantiation_held(void) { unfinished.fetch_add(1); }
+    void held_instantiation_created(void) { outstanding.fetch_add(1); }
     void instantiation_finished(void) { unfinished.fetch_sub_acqrel(1); }
     void instantiation_released(void) { outstanding.fetch_sub_acqrel(1); }
     void destroy_deferred(void) { pending_destroys.fetch_add(1); }

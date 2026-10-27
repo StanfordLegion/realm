@@ -388,7 +388,7 @@ foreach(scenario shutdown_unfinished_instantiation shutdown_blocked_graph_task
            COMMAND sh -c "! $<TARGET_FILE:subgraph_unit_tests> -ll:cpu 4 -exit ${scenario}")
   set_tests_properties(
     subgraph_exit_${scenario}
-    PROPERTIES PASS_REGULAR_EXPRESSION "(pending subgraph instantiation\\(s\\)|destroy\\(s\\) whose precondition has not triggered) during shutdown"
+    PROPERTIES PASS_REGULAR_EXPRESSION "(pending subgraph instantiation\\(s\\)|destroy\\(s\\) not yet in effect) during shutdown"
                TIMEOUT 120
   )
 endforeach()
@@ -399,6 +399,7 @@ foreach(
   destroy_without_wait
   destroy_many_without_wait
   destroy_as_shutdown_precondition
+  destroy_many_waiters_chained
   pending_instantiations_released_late
 )
   # $<TARGET_FILE:...> like every other test: a bare target name makes CMake

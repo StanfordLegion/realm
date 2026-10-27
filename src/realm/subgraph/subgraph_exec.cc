@@ -821,16 +821,17 @@ namespace Realm {
     thread->start_subgraph_task_execution(state);
     try {
       proc_impl->execute_subgraph_task(op.task_entry, state->op_args(entry.op));
-    } catch(...) {
+    }
+    catch(...) {
       // A normal task that throws poisons its own event; a graph task has
       // none of its own to poison, and its processor's share of the graph
       // would never be released: report and stop instead of unwinding into
       // the scheduler with the thread still marked as inside a graph task.
       thread->stop_subgraph_task_execution();
-      SUBGRAPH_FATAL(state->get_subgraph()->me,
-                     "an exception escaped graph task " << op.index << " on " << proc
-                                                        << "; graph tasks cannot be "
-                                                           "poisoned, so this is fatal");
+      SUBGRAPH_FATAL(state->get_subgraph()->me, "an exception escaped graph task "
+                                                    << op.index << " on " << proc
+                                                    << "; graph tasks cannot be "
+                                                       "poisoned, so this is fatal");
     }
     thread->stop_subgraph_task_execution();
     void *token = proc_impl->end_subgraph_task(context, op.deferred);

@@ -1934,8 +1934,8 @@ public:
 
   bool check() override
   {
-    bool ok = completed && !early && poisoned && destroyed && second_ok &&
-              (count.load() == 1);
+    bool ok =
+        completed && !early && poisoned && destroyed && second_ok && (count.load() == 1);
     if(!ok)
       log_app.error() << name() << ": completed=" << completed << " early=" << early
                       << " poisoned=" << poisoned << " destroyed=" << destroyed
@@ -2786,8 +2786,8 @@ public:
     // ... and from here on the poller and the graph's remaining tasks tie
     // on every scheduling decision
     gate.store(1);
-    completed =
-        wait_with_timeout(Event::merge_events(e, Event(poller_done)), config.hang_timeout);
+    completed = wait_with_timeout(Event::merge_events(e, Event(poller_done)),
+                                  config.hang_timeout);
     graph_done = e.has_triggered();
   }
 
@@ -2797,8 +2797,9 @@ public:
     // the poller
     bool ok = completed && graph_done && (polls.load() < cap);
     if(!ok)
-      log_app.error() << name() << ": completed=" << completed << " graph_done=" << graph_done
-                      << " polls=" << polls.load() << " (cap " << cap << ")";
+      log_app.error() << name() << ": completed=" << completed
+                      << " graph_done=" << graph_done << " polls=" << polls.load()
+                      << " (cap " << cap << ")";
     return ok;
   }
 
@@ -2874,8 +2875,8 @@ public:
     int t1 = make_task_desc(sd, procs[1], hold_wait_task_id, &a1, sizeof(a1)); // Q
     CounterTaskArgs a2{&a2_runs, UserEvent::NO_USER_EVENT};
     int t2 = make_task_desc(sd, procs[0], counter_task_id, &a2, sizeof(a2)); // P
-    add_dependency(sd, SubgraphDefinition::OPKIND_TASK, t1, SubgraphDefinition::OPKIND_TASK,
-                   t2);
+    add_dependency(sd, SubgraphDefinition::OPKIND_TASK, t1,
+                   SubgraphDefinition::OPKIND_TASK, t2);
     Subgraph::create_subgraph(sg, sd, ProfilingRequestSet()).wait();
   }
 
@@ -2901,8 +2902,9 @@ public:
   bool check() override
   {
     if(!completed)
-      log_app.error() << name() << ": the graph did not finish: P was never woken to run "
-                                   "the task that unblocks it";
+      log_app.error() << name()
+                      << ": the graph did not finish: P was never woken to run "
+                         "the task that unblocks it";
     return completed;
   }
 
@@ -2966,7 +2968,8 @@ public:
 
   bool check() override
   {
-    bool ok = completed && !early && finish_poisoned && post_poisoned && (runs.load() == 0);
+    bool ok =
+        completed && !early && finish_poisoned && post_poisoned && (runs.load() == 0);
     if(!ok)
       log_app.error() << name() << ": completed=" << completed << " early=" << early
                       << " finish_poisoned=" << finish_poisoned
@@ -5656,7 +5659,8 @@ public:
     UserEvent done = UserEvent::create_user_event();
     RemoteGuardedArgs a{sg, guard, done, iters};
     remote_cpu().spawn(remote_guarded_task_id, &a, sizeof(a));
-    completed = wait_with_timeout(Event::merge_events(d, Event(done)), config.hang_timeout);
+    completed =
+        wait_with_timeout(Event::merge_events(d, Event(done)), config.hang_timeout);
   }
 
   bool check() override
@@ -5729,9 +5733,9 @@ static void order_record_task(const void *args, size_t arglen, const void *userd
 }
 
 struct RemoteOrderArgs {
-  UserEvent issued;      // this sender: all its instantiations have finished
-  Event others_issued;   // the destroyer only: the other senders' `issued`
-  UserEvent gate;        // stress: instantiations start when it triggers
+  UserEvent issued;       // this sender: all its instantiations have finished
+  Event others_issued;    // the destroyer only: the other senders' `issued`
+  UserEvent gate;         // stress: instantiations start when it triggers
   int sender, per_sender; // per_sender > 1: stress
   bool destroyer;
   bool destroy_first; // the destroyer calls destroy(G) before its own
@@ -5747,8 +5751,9 @@ static void remote_order_driver_task(const void *args, size_t arglen,
 {
   const RemoteOrderArgs *a = static_cast<const RemoteOrderArgs *>(args);
   std::vector<int> buf(remote_order_big_bytes / sizeof(int), 0);
-  static const size_t sizes[8] = {sizeof(int), 4096,        65536, sizeof(int),
-                                  16384,       sizeof(int), 262144, remote_order_big_bytes};
+  static const size_t sizes[8] = {
+      sizeof(int), 4096,        65536,  sizeof(int),
+      16384,       sizeof(int), 262144, remote_order_big_bytes};
   std::vector<Event> evs, ds;
   if(a->destroyer && a->destroy_first) {
     // destroy(G) first; G covers every sender's instantiations, including
@@ -5763,12 +5768,13 @@ static void remote_order_driver_task(const void *args, size_t arglen,
       evs.push_back(a->sgs[i].instantiate(buf.data(), remote_order_big_bytes,
                                           ProfilingRequestSet()));
       buf[0] = a->sender * 2 + 2;
-      evs.push_back(a->sgs[i].instantiate(buf.data(), sizeof(int), ProfilingRequestSet()));
+      evs.push_back(
+          a->sgs[i].instantiate(buf.data(), sizeof(int), ProfilingRequestSet()));
     } else {
       for(int j = 0; j < a->per_sender; j++) {
         buf[0] = a->sender * a->per_sender + j;
-        evs.push_back(a->sgs[i].instantiate(buf.data(), sizes[j % 8], ProfilingRequestSet(),
-                                            a->gate));
+        evs.push_back(a->sgs[i].instantiate(buf.data(), sizes[j % 8],
+                                            ProfilingRequestSet(), a->gate));
       }
     }
   }
@@ -5925,7 +5931,8 @@ public:
   {
     bool ok = completed && rounds_ok;
     if(!ok)
-      log_app.error() << name() << ": completed=" << completed << " rounds_ok=" << rounds_ok;
+      log_app.error() << name() << ": completed=" << completed
+                      << " rounds_ok=" << rounds_ok;
     return ok;
   }
 
@@ -6246,7 +6253,8 @@ static void death_unsupported_task_measurement()
   sd.concurrency_mode = SubgraphDefinition::ONE_SHOT;
   Processor cpu = worker_cpus()[0];
   int t = make_task_desc(sd, cpu, noop_task_id, nullptr, 0);
-  sd.tasks[t].prs.add_request(cpu, noop_task_id)
+  sd.tasks[t]
+      .prs.add_request(cpu, noop_task_id)
       .add_measurement<ProfilingMeasurements::OperationBacktrace>();
   Subgraph sg;
   Subgraph::create_subgraph(sg, sd, ProfilingRequestSet()).wait();
@@ -6417,6 +6425,28 @@ static void exit_destroy_as_shutdown_precondition()
   exit_shutdown_precondition = sg.destroy();
 }
 
+static void exit_destroy_many_waiters_chained()
+{
+  // The destroy's precondition has many other waiters, so the destroy's own
+  // waiter may run on a background worker after the trigger returns; the
+  // destroy's event is chained into the shutdown precondition as the
+  // contract requires, so shutdown waits for it instead of reporting it.
+  std::vector<Processor> procs = worker_cpus(1);
+  SubgraphDefinition sd;
+  make_task_desc(sd, procs[0], noop_task_id, nullptr, 0);
+  Subgraph sg;
+  Subgraph::create_subgraph(sg, sd, ProfilingRequestSet()).wait();
+  Event fe = sg.instantiate(nullptr, 0, ProfilingRequestSet());
+  UserEvent g = UserEvent::create_user_event();
+  std::vector<Event> others;
+  for(int i = 0; i < 20000; i++)
+    others.push_back(Event::merge_events(g, fe)); // 20000 waiters on g
+  Event d = sg.destroy(g);
+  g.trigger();
+  others.push_back(d);
+  exit_shutdown_precondition = Event::merge_events(others);
+}
+
 static void exit_pending_instantiations_released_late()
 {
   // Instantiations gated on a user event that is triggered from a task on
@@ -6486,6 +6516,7 @@ static const DeathScenario exit_scenarios[] = {
     {"destroy_many_without_wait", exit_destroy_many_without_wait},
     {"destroy_as_shutdown_precondition", exit_destroy_as_shutdown_precondition},
     {"pending_instantiations_released_late", exit_pending_instantiations_released_late},
+    {"destroy_many_waiters_chained", exit_destroy_many_waiters_chained},
     // these three abort during shutdown
     {"shutdown_unfinished_instantiation", exit_shutdown_unfinished_instantiation},
     {"shutdown_blocked_graph_task", exit_shutdown_blocked_graph_task},

@@ -151,8 +151,9 @@ namespace Realm {
   void ProfilingMeasurementCollection::get_requested_measurement_ids(
       std::set<ProfilingMeasurementID> &ids) const
   {
-    for(std::map<ProfilingMeasurementID, std::vector<const ProfilingRequest *>>::const_iterator
-            it = requested_measurements.begin();
+    for(std::map<ProfilingMeasurementID,
+                 std::vector<const ProfilingRequest *>>::const_iterator it =
+            requested_measurements.begin();
         it != requested_measurements.end(); ++it)
       ids.insert(it->first);
   }

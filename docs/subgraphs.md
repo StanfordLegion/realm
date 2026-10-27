@@ -76,7 +76,7 @@ round show the effect.
 | `CONCURRENT`, `INSTANTIATION_ORDER`, `ONE_SHOT` | `CONCURRENT` (the default, as before) runs instantiations independently, ordered only by the events the application gives them. `INSTANTIATION_ORDER` chains each start on the previous finish. A `ONE_SHOT` subgraph instantiated twice is fatal. |
 | Priorities | `priority_adjust` of `instantiate` is the instantiation's priority (see below). `CopyDesc::priority` is added to it for the copy. |
 | Profiling | Definition-time requests on tasks and copies; instantiation-time requests through `SubgraphInstantiationProfiling` (sparse lists per kind, serializable for remote instantiation), merged with the definition's. Tasks report timeline, processor usage, status and finish event; copies report whatever Realm's transfer operations report. |
-| Remote `instantiate` and `destroy` | Messages to the owner; `destroy` returns an event that covers outstanding instantiations. Active messages are not delivered in order (not across types, and a large payload can arrive after a smaller one sent later), so the node's own issue order is carried explicitly: a remote `destroy` message is sent only after every instantiation that node sent before it has finished, and each instantiate carries a per-node sequence number that the owner uses to run an `INSTANTIATION_ORDER` subgraph's instantiations in the order each node issued them (across nodes, the owner's arrival order); the numbering continues across a subgraph's destroy and the reuse of its slot, since ids carry no generation. The destroy's own precondition is passed to the owner as given. |
+| Remote `instantiate` and `destroy` | Messages to the owner; `destroy` returns an event that covers outstanding instantiations. Active messages are not delivered in order (not across types, and a large payload can arrive after a smaller one sent later), so the node's own issue order is carried explicitly: a remote `destroy` message is sent only after every instantiation that node sent before it has finished, and each instantiate carries a per-node sequence number that the owner uses to run an `INSTANTIATION_ORDER` subgraph's instantiations in the order each node issued them (across nodes, the owner's arrival order). The numbering never resets, on either side: it continues across a subgraph's destroy and the reuse of its slot, since ids carry no generation. The destroy's own precondition is passed to the owner as given. |
 | Many instantiations in flight | Any number per processor, round robin among the ready ones. |
 
 ## Refused (fatal), and why
@@ -152,13 +152,17 @@ in some form. An instantiation whose finish event has not triggered when the
 runtime shuts down (after that precondition and the processors' flush tasks)
 is pending application work, and the runtime aborts with a diagnostic naming
 the count ("pending subgraph instantiation(s) during shutdown"), as it does
-for an untriggered operation. The same holds for a `destroy` whose
-precondition has not triggered ("subgraph destroy(s) whose precondition has
-not triggered during shutdown"): that precondition is an application event.
-The check is eager and exact; no timer is involved. The event a `destroy`
-returns need not be waited for once its precondition has triggered: what
-remains is the release of finished instantiations' states and the destroy
-itself, bounded work on the background workers, which the runtime drains.
+for an untriggered operation. The event a `destroy` returns is no exception:
+like every event Realm hands out, it must be chained into the shutdown
+precondition (or waited for), and a destroy that has not taken effect when the
+runtime shuts down is reported the same way ("subgraph destroy(s) not yet in
+effect during shutdown"). A destroy that returned `NO_EVENT` took effect on
+the spot and needs nothing. The check is eager and exact for programs that
+follow this rule: the destroy's event triggers only after the destroy has
+taken effect, so nothing is ever counted that the application had already
+been told was done. What the runtime drains on its own is only the internal
+work behind those events: the release of finished instantiations' states and
+the destroy itself.
 
 **Destroy.** A destroy takes effect when its precondition triggers, not when
 it is called. Instantiations handled before that point are covered by it
